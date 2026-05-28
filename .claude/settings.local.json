@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp -r \"/c/Users/Андрей/Desktop/setis\" \"/c/Users/Андрей/Desktop/setis-handoff\")",
+      "Bash(rm -rf \"/c/Users/Андрей/Desktop/setis-handoff/.git\" \"/c/Users/Андрей/Desktop/setis-handoff/.vscode\")",
+      "Read(//c/Users/Андрей/Desktop/**)"
+    ]
+  }
+}

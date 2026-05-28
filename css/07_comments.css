@@ -1,0 +1,420 @@
+/* ═══════════════════════════════════════════════════════════════
+   НОВАЯ ЭРА — COMMENTS  ·  07_comments.css
+   Подключи после 06_system.css
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Секция целиком ────────────────────────────────────────── */
+.cmt-section {
+  margin-top: 48px;
+  padding-top: 32px;
+  border-top: 1px solid var(--w2);
+}
+
+/* ── Заголовок секции ──────────────────────────────────────── */
+.cmt-section-hdr {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.cmt-section-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: var(--te);
+  text-transform: uppercase;
+}
+
+.cmt-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--t4);
+  letter-spacing: 1px;
+  margin-left: auto;
+}
+
+.cmt-divider {
+  height: 1px;
+  background: linear-gradient(to right, var(--te), transparent 60%);
+  margin-bottom: 24px;
+  opacity: 0.4;
+}
+
+/* ── Форма ввода ───────────────────────────────────────────── */
+.cmt-form {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 28px;
+}
+
+.cmt-form-av {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.cmt-form-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cmt-textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 14px;
+  background: var(--b3);
+  border: 1px solid var(--w2);
+  color: var(--t1);
+  font-family: 'Exo 2', sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color .2s;
+  box-sizing: border-box;
+}
+
+.cmt-textarea:focus {
+  border-color: var(--te);
+  box-shadow: 0 0 0 2px var(--te-glow, rgba(200,146,10,.12));
+}
+
+.cmt-textarea::placeholder {
+  color: var(--t4);
+  font-style: italic;
+}
+
+.cmt-form-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cmt-hint {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--t4);
+  letter-spacing: .5px;
+  flex: 1;
+}
+
+.cmt-char {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--t4);
+  letter-spacing: .5px;
+  transition: color .2s;
+}
+
+/* ── Заглушка «войдите» ────────────────────────────────────── */
+.cmt-login-prompt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--b3);
+  border: 1px solid var(--w2);
+  border-left: 3px solid var(--te);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--t3);
+  letter-spacing: .5px;
+  margin-bottom: 24px;
+}
+
+.cmt-login-ico {
+  font-size: 18px;
+  color: var(--te);
+  flex-shrink: 0;
+}
+
+/* ── Список комментариев ───────────────────────────────────── */
+.cmt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Загрузка ──────────────────────────────────────────────── */
+.cmt-loading {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+  opacity: .5;
+}
+
+/* ── Пустое состояние ──────────────────────────────────────── */
+.cmt-empty {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--t4);
+  letter-spacing: 1px;
+  text-align: center;
+  padding: 28px 0;
+  opacity: .7;
+}
+
+/* ── Один комментарий ──────────────────────────────────────── */
+.cmt-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  animation: cmt-in .25s ease both;
+  margin-left: calc(var(--depth, 0) * 32px);
+  position: relative;
+}
+
+@keyframes cmt-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* Ограничение глубины вложенности */
+.cmt-item[style*="--depth:4"],
+.cmt-item[style*="--depth:5"],
+.cmt-item[style*="--depth:6"],
+.cmt-item[style*="--depth:7"],
+.cmt-item[style*="--depth:8"],
+.cmt-item[style*="--depth:9"] {
+  margin-left: calc(3 * 32px);
+}
+
+/* Соединительная линия для ответов */
+.cmt-item[style*="--depth"]:not([style*="--depth:0"])::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 20px;
+  width: 12px;
+  height: 1px;
+  background: var(--w2);
+  opacity: 0.5;
+}
+
+.cmt-av {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.cmt-bubble {
+  flex: 1;
+  background: var(--b3);
+  border: 1px solid var(--w2);
+  padding: 10px 14px;
+  transition: border-color .2s;
+}
+
+.cmt-own .cmt-bubble {
+  border-left: 2px solid var(--te);
+}
+
+.cmt-bubble:hover {
+  border-color: var(--w3, rgba(255,255,255,.16));
+}
+
+/* ── Мета-строка ───────────────────────────────────────────── */
+.cmt-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.cmt-author {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--te);
+}
+
+.cmt-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--t4);
+  letter-spacing: .5px;
+}
+
+.cmt-reply-btn {
+  background: var(--b2);
+  border: 1px solid var(--w2);
+  color: var(--t3);
+  font-size: 9px;
+  cursor: pointer;
+  padding: 3px 8px;
+  opacity: 0;
+  transition: all .2s;
+  line-height: 1;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.cmt-bubble:hover .cmt-reply-btn {
+  opacity: 1;
+}
+
+.cmt-reply-btn:hover {
+  background: var(--b3);
+  border-color: var(--te);
+  color: var(--te);
+  box-shadow: 0 0 8px var(--te-glow, rgba(200,146,10,.2));
+}
+
+.cmt-edit-btn {
+  background: none;
+  border: none;
+  color: var(--t4);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  opacity: 0;
+  transition: all .2s;
+  line-height: 1;
+}
+
+.cmt-bubble:hover .cmt-edit-btn {
+  opacity: 1;
+}
+
+.cmt-edit-btn:hover {
+  color: var(--te);
+}
+
+.cmt-del-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--t4);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 4px;
+  opacity: 0;
+  transition: opacity .15s, color .15s;
+  line-height: 1;
+}
+
+.cmt-bubble:hover .cmt-del-btn {
+  opacity: 1;
+}
+
+.cmt-del-btn:hover {
+  color: var(--err);
+}
+
+/* ── Тело комментария ──────────────────────────────────────── */
+.cmt-body {
+  font-family: 'Exo 2', sans-serif;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--t2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Контейнер для ответов ─────────────────────────────────── */
+.cmt-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* ── Индикатор ответа ──────────────────────────────────────── */
+.cmt-reply-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--b3);
+  border: 1px solid var(--te);
+  border-left: 3px solid var(--te);
+  margin-bottom: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--t3);
+  animation: reply-in .2s ease both;
+}
+
+@keyframes reply-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+.cmt-reply-text {
+  flex: 1;
+  letter-spacing: .5px;
+}
+
+.cmt-reply-text strong {
+  color: var(--te);
+  font-weight: 700;
+}
+
+.cmt-reply-cancel {
+  background: none;
+  border: none;
+  color: var(--t4);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+  transition: color .15s;
+}
+
+.cmt-reply-cancel:hover {
+  color: var(--err);
+}
+
+/* ── Мобильная адаптация ───────────────────────────────────── */
+@media (max-width: 768px) {
+  .cmt-section { margin-top: 32px; padding-top: 20px; }
+  .cmt-form    { gap: 8px; }
+  .cmt-hint    { display: none; }
+  .cmt-del-btn { opacity: 1; } /* на мобиле кнопка всегда видна */
+  .cmt-reply-btn { opacity: 1; } /* на мобиле кнопка всегда видна */
+  .cmt-edit-btn { opacity: 1; } /* на мобиле кнопка всегда видна */
+  
+  /* Уменьшаем отступы для вложенных комментариев на мобиле */
+  .cmt-item {
+    margin-left: calc(var(--depth, 0) * 20px);
+  }
+  
+  .cmt-item[style*="--depth:4"],
+  .cmt-item[style*="--depth:5"],
+  .cmt-item[style*="--depth:6"],
+  .cmt-item[style*="--depth:7"],
+  .cmt-item[style*="--depth:8"],
+  .cmt-item[style*="--depth:9"] {
+    margin-left: calc(3 * 20px);
+  }
+}
+
+@media (max-width: 480px) {
+  .cmt-form-av { display: none; }
+  .cmt-meta    { flex-wrap: wrap; }
+  
+  /* Еще меньше отступы на маленьких экранах */
+  .cmt-item {
+    margin-left: calc(var(--depth, 0) * 12px);
+  }
+  
+  .cmt-item[style*="--depth:4"],
+  .cmt-item[style*="--depth:5"],
+  .cmt-item[style*="--depth:6"],
+  .cmt-item[style*="--depth:7"],
+  .cmt-item[style*="--depth:8"],
+  .cmt-item[style*="--depth:9"] {
+    margin-left: calc(3 * 12px);
+  }
+  
+  .cmt-reply-indicator {
+    font-size: 10px;
+    padding: 8px 10px;
+  }
+}

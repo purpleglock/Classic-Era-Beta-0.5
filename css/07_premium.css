@@ -1,0 +1,1083 @@
+/* ══════════════════════════════════════════════════════════════════
+   НОВАЯ ЭРА  ·  07_premium.css
+   ──────────────────────────────────────────────────────────────────
+   Импортировать ПОСЛЕДНИМ. Перебивает всё предыдущее.
+══════════════════════════════════════════════════════════════════ */
+
+
+/* ── ФОН ── */
+
+html, body { background: #000 !important; }
+body { -webkit-font-smoothing: antialiased; }
+body::before {
+  content: '' !important;
+  position: fixed !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  background-image:
+    linear-gradient(rgba(168,105,44,.003) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(168,105,44,.003) 1px, transparent 1px) !important;
+  background-size: 
+    30px 30px,
+    30px 30px !important;
+  background-position:
+    0 0,
+    0 0 !important;
+  background-repeat: repeat, repeat !important;
+}
+body::after  {
+  content: '' !important;
+  position: fixed !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  background: transparent !important;
+}
+
+#app { border-left: 1px solid rgba(255,255,255,.04) !important; border-right: 1px solid rgba(255,255,255,.04) !important; background: transparent !important; }
+#cw  { background: var(--b0) !important; }
+#pg  { padding: 0 28px 80px !important; }
+.ch-root { margin: 0 -28px; }
+
+
+/* ── ЕДИНЫЕ ШРИФТЫ ── */
+
+body { font-family: 'Exo 2', sans-serif !important; font-size: 14px !important; line-height: 1.7 !important; }
+
+.prose {
+  font-family: 'Exo 2', sans-serif !important;
+  font-size: 15px !important; line-height: 1.85 !important;
+  color: hsl(220 15% 70%) !important;
+}
+.prose p       { color: hsl(220 12% 66%) !important; margin-bottom: 14px !important; }
+.prose h1      { 
+  font-family: 'Orbitron', sans-serif !important; 
+  color: hsl(220 20% 85%) !important; 
+  font-size: 24px !important; 
+  letter-spacing: 3px !important; 
+  border-left: 4px solid hsl(38 65% 52%) !important;
+  background: linear-gradient(90deg, hsla(38, 65%, 52%, 0.15), transparent) !important;
+  padding: 14px 20px !important;
+  margin: 40px 0 20px !important; 
+  text-transform: uppercase !important; 
+  font-weight: 700 !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+}
+.prose h2      { 
+  font-family: 'Orbitron', sans-serif !important; 
+  font-size: 18px !important; 
+  letter-spacing: 2.5px !important; 
+  color: hsl(220 18% 76%) !important; 
+  margin: 32px 0 14px !important; 
+  text-transform: uppercase !important; 
+  font-weight: 700 !important;
+  background: linear-gradient(90deg, hsla(200, 60%, 50%, 0.1), transparent) !important;
+  border-left: 3px solid hsla(200, 60%, 50%, 0.5) !important;
+  padding: 10px 16px !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2) !important;
+}
+.prose h2::before { content: '◈' !important; font-size: 11px !important; opacity: .7 !important; color: hsl(38 65% 52%) !important; margin-right: 12px !important; }
+.prose h3      { 
+  font-family: 'Orbitron', sans-serif !important; 
+  font-size: 15px !important; 
+  font-weight: 600 !important; 
+  color: hsl(220 16% 70%) !important; 
+  letter-spacing: 1.5px !important; 
+  text-transform: uppercase !important; 
+  margin: 24px 0 10px !important; 
+  opacity: .9 !important;
+  background: hsla(0, 0%, 100%, 0.03) !important;
+  border-left: 2px solid hsla(0, 0%, 100%, 0.15) !important;
+  padding: 8px 14px !important;
+}
+.prose strong  { color: hsl(220 18% 84%) !important; font-weight: 700 !important; }
+.prose em      { color: hsl(200 60% 64%) !important; }
+.prose a       { color: hsl(200 65% 62%) !important; border-bottom: 1px solid hsl(200 55% 50% / .25) !important; text-decoration: none !important; transition: color .15s, border-color .15s !important; }
+.prose a:hover { color: hsl(200 75% 72%) !important; border-bottom-color: hsl(200 60% 55% / .5) !important; }
+.prose blockquote { 
+  border: 1px solid hsl(280 50% 60% / .3) !important;
+  border-left: 4px solid hsl(280 50% 60%) !important; 
+  background: transparent !important; 
+  color: hsl(280 30% 70%) !important; 
+  padding: 24px 32px !important;
+  margin: 32px 20px !important;
+  font-style: italic !important;
+  position: relative !important;
+  opacity: 0.85 !important;
+  font-size: 14px !important;
+  line-height: 1.9 !important;
+  border-radius: 4px !important;
+}
+.prose blockquote::before {
+  content: '❝' !important;
+  position: absolute !important;
+  left: 8px !important;
+  top: 4px !important;
+  font-size: 28px !important;
+  color: hsl(280 50% 60% / .4) !important;
+  line-height: 1 !important;
+}
+.prose blockquote::after {
+  content: '❞' !important;
+  position: absolute !important;
+  right: 8px !important;
+  bottom: 4px !important;
+  font-size: 28px !important;
+  color: hsl(280 50% 60% / .4) !important;
+  line-height: 1 !important;
+}
+.prose ul li::before { color: hsl(200 60% 52%) !important; }
+.prose code    { font-family: 'JetBrains Mono', monospace !important; background: rgba(255,255,255,.06) !important; border: 1px solid rgba(255,255,255,.08) !important; color: hsl(200 65% 65%) !important; }
+.prose img     { border: 1px solid rgba(255,255,255,.07) !important; }
+
+
+/* ── САЙДБАР ── */
+
+#sb { background: hsl(222 24% 9%) !important; border-right: 1px solid rgba(255,255,255,.05) !important; box-shadow: 2px 0 20px rgba(0,0,0,.4) !important; }
+#sb::after { display: none !important; }
+
+/* Компактный логотип — одна строка, минимум места */
+.logo {
+  padding: 0 !important;
+  border-bottom: 1px solid rgba(255,255,255,.05) !important;
+  background: transparent !important;
+  display: flex !important; align-items: center !important;
+  height: 48px !important; flex-shrink: 0 !important;
+}
+.logo::before, .logo::after { display: none !important; }
+/* Скрываем лишние элементы */
+.logo-top { display: none !important; }
+.logo-main {
+  display: flex !important; align-items: center !important;
+  gap: 10px !important; padding: 0 16px !important;
+  width: 100% !important; text-align: left !important;
+}
+.lc { display: none !important; }
+.logo-name {
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: 13px !important; font-weight: 900 !important;
+  letter-spacing: 5px !important;
+  background: linear-gradient(135deg, hsl(42 72% 62%), hsl(38 62% 48%)) !important;
+  -webkit-background-clip: text !important; background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important; animation: none !important;
+  display: inline !important;
+}
+.logo-sub {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 6.5px !important; letter-spacing: 2px !important;
+  color: hsl(220 10% 30%) !important; opacity: 1 !important;
+  display: inline !important; margin: 0 0 0 2px !important;
+  vertical-align: middle !important;
+}
+
+.sb-srch { padding: 9px 14px !important; border-bottom: 1px solid rgba(255,255,255,.05) !important; background: transparent !important; }
+#srch {
+  background: rgba(0,0,0,.25) !important; border: 1px solid rgba(255,255,255,.07) !important;
+  border-radius: 2px !important; color: hsl(220 15% 72%) !important;
+  font-family: 'Exo 2', sans-serif !important; font-size: 12px !important;
+}
+#srch:focus { border-color: hsl(200 55% 48% / .4) !important; box-shadow: 0 0 0 2px hsl(200 55% 48% / .05) !important; }
+#srch::placeholder { color: hsl(220 12% 32%) !important; }
+
+.sb-foot { border-top: 1px solid rgba(255,255,255,.05) !important; background: transparent !important; }
+/* Убиваем псевдо-линию футера из 04_ui */
+.sb-foot::before { display: none !important; }
+.sb-cnt { font-family: 'JetBrains Mono', monospace !important; color: hsl(220 12% 32%) !important; }
+
+
+/* ══════════════════════════════════════════════════════
+   SIDEBAR NAV — redesigned hierarchy
+   L1 section:    ORBITRON 7px CAPS, full-width label strip
+   L2 subsection: Exo 2 semibold, indented, left-bar
+   L3 page:       Exo 2 regular, deep indent, subtle
+   ══════════════════════════════════════════════════════ */
+
+.nav-divider {
+  height: 1px !important; margin: 2px 0 !important;
+  background: rgba(255,255,255,.04) !important;
+}
+.nav-divider::after { display: none !important; }
+
+/* ── L0: HOME ─────────────────────────────────────── */
+.n-home {
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: 8px !important; letter-spacing: 2.5px !important;
+  color: hsl(220 14% 40%) !important;
+  border: none !important; border-radius: 0 !important;
+  padding: 8px 16px !important; margin: 0 !important;
+  background: transparent !important;
+  border-left: 2px solid transparent !important;
+  transition: color .15s, background .15s, border-color .15s !important;
+  width: 100% !important;
+}
+.n-home:hover {
+  color: hsl(220 16% 68%) !important;
+  background: rgba(255,255,255,.025) !important;
+  border-left-color: rgba(255,255,255,.15) !important;
+}
+.n-home.on {
+  color: hsl(38 72% 62%) !important;
+  background: hsl(38 50% 20% / .1) !important;
+  border-left: 2px solid hsl(38 65% 52%) !important;
+}
+.n-home-icon { color: inherit !important; font-size: 9px !important; opacity: .7 !important; }
+.n-home.on .n-home-icon { opacity: 1 !important; }
+
+/* ── L1: SECTION ──────────────────────────────────── */
+/* Section header — full-width label like a category strip */
+.nl-hdr {
+  padding: 10px 16px 8px !important;
+  border-left: none !important;
+  border-top: 1px solid rgba(255,255,255,.04) !important;
+  background: rgba(0,0,0,.2) !important;
+  transition: background .15s !important;
+  margin-top: 2px !important;
+}
+.nl-hdr:hover { background: rgba(255,255,255,.03) !important; box-shadow: none !important; }
+.nl-hdr.on    { background: hsl(38 50% 20% / .08) !important; box-shadow: none !important; }
+
+.nl-ico { opacity: .45 !important; transition: opacity .15s !important; font-size: 10px !important; }
+.nl-hdr:hover .nl-ico, .nl-hdr.on .nl-ico { opacity: .8 !important; }
+
+.nl-name {
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: 7.5px !important; font-weight: 900 !important;
+  letter-spacing: 3px !important; text-transform: uppercase !important;
+  color: hsl(220 14% 38%) !important;
+  transition: color .15s !important;
+}
+.nl-hdr:hover .nl-name { color: hsl(220 16% 58%) !important; }
+.nl-hdr.on .nl-name    { color: hsl(38 68% 60%) !important; }
+
+.nl-cnt {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 7px !important; color: hsl(220 10% 28%) !important;
+  background: none !important; border: none !important; letter-spacing: 0 !important;
+}
+.nl-hdr:hover .nl-cnt, .nl-hdr.on .nl-cnt { color: hsl(38 55% 48%) !important; }
+
+.nl-arr { color: hsl(220 10% 28%) !important; font-size: 7px !important; }
+.ns.op > .nl-hdr > .nl-arr { color: hsl(200 55% 50%) !important; }
+
+/* L1 body background — slightly inset */
+.nl-body { background: transparent !important; }
+
+/* ── L2: SUBSECTION ───────────────────────────────── */
+.ng-hdr {
+  padding: 5px 10px 5px 18px !important;
+  border-left: 2px solid rgba(255,255,255,.06) !important;
+  margin-left: 12px !important;
+  background: transparent !important;
+  transition: border-left-color .15s, background .15s, color .15s !important;
+}
+.ng-hdr:hover {
+  background: rgba(255,255,255,.025) !important;
+  border-left-color: hsl(200 55% 52% / .45) !important;
+}
+.ng-hdr.on {
+  border-left-color: hsl(200 60% 54%) !important;
+  background: hsl(200 55% 45% / .07) !important;
+}
+.ng.op > .ng-hdr {
+  border-left-color: hsl(200 55% 50% / .5) !important;
+}
+
+.ng-t {
+  font-family: 'Exo 2', sans-serif !important;
+  font-size: 12px !important; font-weight: 600 !important;
+  color: hsl(220 14% 42%) !important; letter-spacing: .1px !important;
+}
+.ng-hdr:hover .ng-t { color: hsl(220 18% 68%) !important; }
+.ng.op > .ng-hdr > .ng-t { color: hsl(220 16% 62%) !important; }
+.ng-hdr.on .ng-t { color: hsl(200 62% 68%) !important; }
+
+.ng-cnt {
+  font-family: 'JetBrains Mono', monospace !important;
+  color: hsl(220 10% 26%) !important; font-size: 7px !important; letter-spacing: 0 !important;
+}
+.ng-hdr:hover .ng-cnt, .ng.op > .ng-hdr > .ng-cnt { color: hsl(200 50% 50%) !important; }
+
+.ng-body {
+  border-left: 1px solid rgba(255,255,255,.05) !important;
+  margin-left: 22px !important;
+}
+
+/* ── L3: PAGE ─────────────────────────────────────── */
+.np {
+  font-family: 'Exo 2', sans-serif !important;
+  font-size: 12px !important; font-weight: 400 !important;
+  color: hsl(220 10% 34%) !important;
+  padding: 4px 10px 4px 12px !important;
+  border-left: 1px solid transparent !important;
+  margin: 0 !important;
+  transition: color .12s, background .12s, border-color .12s !important;
+}
+.nl-body > .np {
+  padding-left: 28px !important;
+  border-left: none !important;
+}
+.nl-body > .np::before { display: none !important; }
+
+.np:hover {
+  color: hsl(220 16% 62%) !important;
+  background: rgba(255,255,255,.02) !important;
+  border-left-color: rgba(255,255,255,.1) !important;
+}
+.np.on {
+  color: hsl(200 68% 68%) !important;
+  background: hsl(200 55% 45% / .08) !important;
+  border-left-color: hsl(200 62% 54%) !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+}
+
+.np-d {
+  border: none !important; background: none !important;
+  color: hsl(38 55% 45% / .45) !important; font-size: 6.5px !important;
+}
+
+/* ── STATIC LABEL ─────────────────────────────────── */
+.nl-static {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 6.5px !important; letter-spacing: 2.5px !important;
+  color: hsl(220 10% 24%) !important;
+  padding: 14px 16px 5px !important;
+  border-top: 1px solid rgba(255,255,255,.04) !important;
+  margin-top: 4px !important;
+}
+.nl-static::after {
+  background: linear-gradient(to right, rgba(255,255,255,.06), transparent) !important;
+}
+
+/* ── NAV SEARCH ───────────────────────────────────── */
+.nav-search-count {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 8px !important; letter-spacing: 2px !important;
+  color: hsl(200 55% 52%) !important;
+  padding: 10px 16px 8px !important;
+  background: rgba(200,160,60,.04) !important;
+  border-bottom: 1px solid rgba(255,255,255,.05) !important;
+}
+.nav-no-results {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 9px !important; color: hsl(220 10% 30%) !important;
+  letter-spacing: 1.5px !important;
+}
+
+
+/* ── ТОПБАР ── */
+
+#top {
+  background: hsl(222 24% 8% / .96) !important;
+  border-bottom: 1px solid rgba(255,255,255,.06) !important;
+  backdrop-filter: blur(12px) !important; -webkit-backdrop-filter: blur(12px) !important;
+  height: 50px !important;
+  /* Убиваем box-shadow из 04_ui */
+  box-shadow: none !important;
+}
+/* УБИВАЕМ декоративную линию — одна линия = border-bottom */
+#top::after { display: none !important; }
+
+.bc-item { font-family: 'JetBrains Mono', monospace !important; color: hsl(220 12% 36%) !important; font-size: 10px !important; letter-spacing: .3px !important; }
+.bc-item:hover { color: hsl(200 58% 60%) !important; }
+.bc-sep   { opacity: .2 !important; }
+/* Убиваем gold text-shadow из 04_ui */
+.bc-current { font-family: 'JetBrains Mono', monospace !important; color: hsl(200 58% 58%) !important; font-weight: 700 !important; text-shadow: none !important; }
+
+.tbtn {
+  display: flex !important; align-items: center !important; gap: 6px !important;
+  padding: 0 14px !important; height: 32px !important;
+  font-family: 'Orbitron', sans-serif !important; font-size: 9px !important;
+  font-weight: 700 !important; letter-spacing: 1.5px !important;
+  text-transform: uppercase !important; cursor: pointer !important;
+  position: relative !important; border: none !important;
+  background: transparent !important; color: var(--t2) !important;
+  z-index: 1 !important; transition: transform .2s, color .2s !important;
+  border-radius: 0 !important;
+}
+.tbtn::before {
+  content: '' !important; position: absolute !important; inset: 0 !important; z-index: -2 !important;
+  background: var(--w2) !important;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%) !important;
+  transition: background .2s !important;
+}
+.tbtn::after {
+  content: '' !important; position: absolute !important; inset: 1px !important; z-index: -1 !important;
+  background: var(--b1) !important;
+  clip-path: polygon(0 0, calc(100% - 5.3px) 0, 100% 5.3px, 100% 100%, 0 100%) !important;
+  transition: background .2s !important;
+}
+.tbtn:hover { color: var(--tel) !important; }
+.tbtn:hover::before { background: var(--te) !important; }
+.tbtn:hover::after  { background: var(--teb) !important; }
+.tbtn.edit-on { color: var(--gdl) !important; }
+.tbtn.edit-on::before { background: var(--gd) !important; }
+.tbtn.edit-on::after  { background: var(--gdb) !important; }
+.tbtn.log-in { color: var(--t1) !important; }
+.tbtn.log-in::before { background: var(--w2) !important; }
+.tbtn.log-in::after  { background: var(--b1) !important; }
+.tbtn.log-in:hover { color: var(--ok) !important; }
+.tbtn.log-in:hover::before { background: var(--ok) !important; }
+.tbtn.log-in:hover::after  { background: rgba(34,144,90,.1) !important; }
+
+.adot { width: 5px !important; height: 5px !important; border-radius: 50% !important; background: hsl(220 14% 30%) !important; }
+.log-in .adot { background: hsl(142 60% 44%) !important; box-shadow: 0 0 5px hsl(142 60% 44% / .5) !important; }
+.tbtn.edit-on .adot { background: hsl(38 70% 56%) !important; }
+
+.top-lang button { font-family: 'Orbitron', sans-serif !important; color: hsl(220 12% 36%) !important; font-size: 7.5px !important; }
+.top-lang button:hover { color: hsl(200 62% 62%) !important; }
+.top-lang button.on { color: hsl(200 65% 66%) !important; background: hsl(200 55% 45% / .1) !important; box-shadow: none !important; }
+
+
+/* ── ГЕРОЙ ГЛАВНОЙ — чисто, без сетки ── */
+
+.hp-hero { margin: 0 -28px 8px !important; height: 320px !important; }
+.hp-hero-bg { background: transparent !important; }
+
+/* Убиваем сетку из 04_ui — она там с !important */
+.hp-hero-bg::before { display: none !important; content: none !important; background-image: none !important; }
+
+.hp-hero-bg::after {
+  content: '' !important; position: absolute !important;
+  bottom: 0; left: 0; right: 0 !important; height: 130px !important;
+  background: linear-gradient(to top, hsl(222 20% 8%) 0%, transparent 100%) !important;
+  z-index: 2 !important;
+}
+
+/* Убиваем text-shadow и анимацию из 04_ui */
+.hp-logo {
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: 62px !important; font-weight: 900 !important;
+  letter-spacing: 8px !important;
+  color: transparent !important;
+  background: linear-gradient(160deg, hsl(42 78% 70%) 0%, hsl(38 68% 55%) 50%, hsl(36 58% 44%) 100%) !important;
+  -webkit-background-clip: text !important; background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+  filter: drop-shadow(0 2px 20px hsl(38 68% 52% / .4)) !important;
+}
+
+/* Убиваем мигающий курсор из 04_ui */
+.hp-tagline {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 7.5px !important; letter-spacing: 4px !important;
+  color: hsl(200 55% 52%) !important; opacity: .5 !important;
+}
+.hp-tagline::after { display: none !important; content: none !important; animation: none !important; }
+
+
+/* ── СЕКЦИИ ГЛАВНОЙ — пустые блоки и дублирующиеся линии ── */
+
+.hp-secs { gap: 4px !important; }
+
+.hps {
+  /* Убираем старую рамку */
+  border: none !important;
+  border-left: none !important;
+  padding: 0 !important;
+  position: relative !important;
+  
+  /* Футуристичная форма с скошенными углами */
+  clip-path: polygon(
+    12px 0,
+    calc(100% - 8px) 0,
+    100% 8px,
+    100% calc(100% - 12px),
+    calc(100% - 12px) 100%,
+    8px 100%,
+    0 calc(100% - 8px),
+    0 12px
+  ) !important;
+}
+
+/* ЗАДНИЙ ФОН с градиентом для обводки через ::before */
+.hps::before {
+  content: '' !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background: linear-gradient(135deg, rgba(168,105,44,0.7) 0%, rgba(107,184,212,0.6) 100%) !important;
+  z-index: -1 !important;
+  
+  /* Футуристичная форма */
+  clip-path: polygon(
+    12px 0,
+    calc(100% - 8px) 0,
+    100% 8px,
+    100% calc(100% - 12px),
+    calc(100% - 12px) 100%,
+    8px 100%,
+    0 calc(100% - 8px),
+    0 12px
+  ) !important;
+}
+
+/* Основной контейнер с отступом от заднего фона */
+.hps::after {
+  content: '' !important;
+  position: absolute !important;
+  inset: 2px !important;
+  background: var(--b2) !important;
+  z-index: 0 !important;
+  
+  /* Футуристичная форма с учетом отступа */
+  clip-path: polygon(
+    10px 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    6px 100%,
+    0 calc(100% - 6px),
+    0 10px
+  ) !important;
+  
+  transition: background 0.3s !important;
+}
+
+/* Фон картинки */
+.hps-bg {
+  position: absolute !important;
+  inset: 2px !important;
+  z-index: 1 !important;
+  
+  /* Обрезаем по форме внутреннего контейнера */
+  clip-path: polygon(
+    10px 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    6px 100%,
+    0 calc(100% - 6px),
+    0 10px
+  ) !important;
+}
+
+/* Оверлей */
+.hps-ov {
+  position: absolute !important;
+  inset: 2px !important;
+  z-index: 2 !important;
+  
+  /* Обрезаем по форме внутреннего контейнера */
+  clip-path: polygon(
+    10px 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    6px 100%,
+    0 calc(100% - 6px),
+    0 10px
+  ) !important;
+}
+
+/* Контент поверх всего */
+.hps-content {
+  position: relative !important;
+  z-index: 3 !important;
+}
+
+.hps:hover::before {
+  background: linear-gradient(135deg, rgba(168,105,44,1) 0%, rgba(107,184,212,0.9) 100%) !important;
+}
+
+.hps:hover::after {
+  background: var(--b3) !important;
+}
+
+.hps:hover {
+  transform: translateX(4px) !important;
+  box-shadow: 
+    0 0 25px rgba(168,105,44,0.5),
+    0 0 50px rgba(107,184,212,0.3) !important;
+}
+  background: hsl(222 22% 10%) !important;
+  min-height: 90px !important; border-radius: 3px !important;
+  overflow: hidden !important;
+  transition: border-color .22s, box-shadow .22s, transform .22s !important;
+}
+
+/* УБИВАЕМ золотую левую черту из 04_ui */
+.hps::before { display: none !important; content: none !important; }
+  /* Убиваем inset glow из 04_ui */
+  box-shadow: -4px 0 0 hsl(38 62% 50% / .3), 0 8px 32px rgba(0,0,0,.4) !important;
+}
+
+.hps-bg img {
+  filter: brightness(.2) saturate(15%) !important;
+  transition: filter .5s, transform .65s !important;
+}
+.hps:hover .hps-bg img { filter: brightness(.42) saturate(55%) !important; transform: scale(1.06) !important; }
+
+.hps-ov { background: linear-gradient(to right, transparent 120px, hsl(222 22% 10%) 280px) !important; }
+
+.hps-name { font-family: 'Orbitron', sans-serif !important; font-size: 13px !important; letter-spacing: 1.5px !important; color: hsl(220 16% 58%) !important; transition: color .22s !important; }
+.hps:hover .hps-name { color: hsl(38 68% 62%) !important; }
+
+/* Убиваем линию */
+.hps-line { display: none !important; }
+
+.hps-cnt { font-family: 'JetBrains Mono', monospace !important; color: hsl(220 12% 30%) !important; letter-spacing: 1px !important; }
+.hps:hover .hps-cnt { color: hsl(200 55% 52%) !important; }
+
+/* УБИВАЕМ opacity из 04_ui, чтобы стрелка была видна */
+.hps-arrow { color: rgba(255,255,255,.14) !important; font-size: 18px !important; opacity: 1 !important; transition: color .22s, transform .22s !important; }
+.hps:hover .hps-arrow { color: hsl(38 65% 56%) !important; opacity: 1 !important; transform: translateY(-50%) translateX(6px) !important; }
+
+.hps-pill { font-family: 'Exo 2', sans-serif !important; background: rgba(0,0,0,.45) !important; border: 1px solid rgba(255,255,255,.08) !important; font-size: 10px !important; font-weight: 600 !important; color: hsl(220 14% 45%) !important; clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%) !important; padding: 4px 10px !important; }
+.hps-pill.has-img { 
+  position: relative !important;
+  background: rgba(168,105,44,.8) !important; 
+  border: none !important;
+  padding: 0 !important; 
+  height: 64px !important; 
+  width: 220px !important; 
+  flex-shrink: 0 !important;
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px) !important;
+}
+.hps-pill.has-img .hps-pill-bg {
+  clip-path: polygon(13.5px 1.5px, calc(100% - 1.5px) 1.5px, calc(100% - 1.5px) calc(100% - 13.5px), calc(100% - 13.5px) calc(100% - 1.5px), 1.5px calc(100% - 1.5px), 1.5px 13.5px) !important;
+}
+.hps-pill.has-img .hps-pill-overlay {
+  clip-path: polygon(13.5px 1.5px, calc(100% - 1.5px) 1.5px, calc(100% - 1.5px) calc(100% - 13.5px), calc(100% - 13.5px) calc(100% - 1.5px), 1.5px calc(100% - 1.5px), 1.5px 13.5px) !important;
+}
+.hps-pill:hover { border-color: hsl(38 60% 50% / .4) !important; color: hsl(38 68% 62%) !important; background: hsl(38 45% 18% / .2) !important; }
+.hps-pill.has-img:hover { border-color: hsl(38 80% 60%) !important; }
+
+
+/* ── ОБЛОЖКА СТАТЬИ ── */
+
+.art-cov { margin: 0 -28px 0 !important; height: var(--cov-h, 380px) !important; position: relative !important; }
+
+/* Убиваем filter из 04_ui */
+.art-cov img       { filter: brightness(.52) saturate(62%) !important; transition: filter .6s !important; }
+.art-cov:hover img { filter: brightness(.62) saturate(76%) !important; }
+.art-cov-scan { display: none !important; }
+
+/* Убиваем двойную высоту из 04_ui (height: 2px !important там) — нам нужна одна 1px */
+.art-cov::before {
+  height: 1px !important;
+  background: linear-gradient(90deg, transparent, hsl(200 65% 55% / .3) 30%, hsl(38 68% 54% / .25) 65%, transparent) !important;
+  opacity: 1 !important;
+}
+.art-cov::after { display: none !important; }
+.art-cov-hud, .art-cov-hud-line, .art-cov-hud-dot { display: none !important; }
+
+.art-cov-fade {
+  height: 85% !important;
+  background: linear-gradient(to top, hsl(222 20% 8%) 0%, hsl(222 20% 8% / .88) 15%, hsl(222 20% 8% / .55) 40%, transparent 100%) !important;
+}
+
+
+/* ── ЗАГОЛОВОК СТАТЬИ ПОВЕРХ ОБЛОЖКИ ── */
+
+.art-page-header {
+  position: relative !important;
+  margin-top: -120px !important;
+  margin-bottom: 28px !important;
+  padding-bottom: 0 !important;
+  /* Убиваем border-bottom из 04_ui */
+  border-bottom: none !important;
+  z-index: 5 !important;
+}
+
+.art-page-sec-label {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 9px !important; letter-spacing: 2px !important;
+  border: 1px solid hsl(200 55% 48% / .25) !important;
+  background: hsl(200 55% 45% / .12) !important;
+  color: hsl(200 65% 65%) !important; border-radius: 2px !important;
+  clip-path: none !important; padding: 3px 10px !important;
+  display: inline-block !important; margin-bottom: 10px !important;
+  backdrop-filter: blur(4px) !important;
+}
+/* Убиваем ◈ из 04_ui */
+.art-page-sec-label::before { display: none !important; content: none !important; }
+.art-page-sec-label:hover { border-color: hsl(200 58% 52% / .4) !important; }
+
+/* ГЛАВНЫЙ ЗАГОЛОВОК — крупный, на обложке
+   Убиваем ::before и ::after из 04_ui (они создают двойную черту) */
+.art-h1 {
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: 38px !important; font-weight: 900 !important;
+  letter-spacing: 2px !important;
+  color: hsl(220 20% 92%) !important;
+  text-shadow: 0 2px 24px rgba(0,0,0,.8) !important;
+  position: relative !important;
+  padding-left: 0 !important;
+  line-height: 1.1 !important;
+}
+.art-h1::before { display: none !important; content: none !important; }
+.art-h1::after  { display: none !important; content: none !important; }
+
+/* ЗАГОЛОВОК РАЗДЕЛА */
+.sec-page-header {
+  border: none !important;
+  margin-top: -100px !important;
+  position: relative !important; z-index: 5 !important;
+}
+
+.sec-h1 {
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: 30px !important; font-weight: 900 !important; letter-spacing: 2px !important;
+  color: hsl(220 20% 90%) !important;
+  text-shadow: 0 2px 20px rgba(0,0,0,.7) !important;
+  position: relative !important; padding-left: 0 !important;
+}
+.sec-h1::before { display: none !important; content: none !important; }
+.sec-h1::after  { display: none !important; content: none !important; }
+
+.sec-page-kicker { font-family: 'JetBrains Mono', monospace !important; font-size: 9px !important; letter-spacing: 3px !important; color: hsl(200 60% 62%) !important; }
+.sec-page-stats  { font-family: 'JetBrains Mono', monospace !important; color: hsl(220 14% 40%) !important; }
+
+.art-cov-spacer { height: 24px !important; display: block !important; }
+
+/* Breadcrumb статьи */
+.art-bc-item { font-family: 'JetBrains Mono', monospace !important; color: hsl(220 12% 28%) !important; font-size: 9.5px !important; }
+.art-bc-item:hover { color: hsl(200 58% 58%) !important; }
+.art-bc-sep  { opacity: .2 !important; }
+.art-bc-current { font-family: 'JetBrains Mono', monospace !important; color: hsl(200 58% 55%) !important; }
+
+/* Meta */
+.art-meta { font-family: 'JetBrains Mono', monospace !important; color: hsl(220 12% 30%) !important; border-top-color: rgba(255,255,255,.06) !important; }
+
+/* История */
+.hp-cl { margin-top: 48px !important; }
+.hp-cl-hdr { font-family: 'Orbitron', sans-serif !important; color: hsl(220 14% 34%) !important; letter-spacing: 3px !important; }
+.hp-cl-hdr::after { background: linear-gradient(to right, rgba(255,255,255,.06), transparent) !important; }
+.hcl-row { border-bottom: 1px solid rgba(255,255,255,.04) !important; }
+.hcl-row:hover { background: rgba(255,255,255,.02) !important; }
+
+
+/* ── КАРТОЧКИ ── */
+
+.cgrid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important; gap: 8px !important; }
+
+.card {
+  clip-path: none !important; border: 1px solid rgba(255,255,255,.07) !important;
+  border-left: none !important;
+  border-radius: 3px !important; background: hsl(222 22% 10%) !important;
+  overflow: hidden !important; transition: transform .28s, border-color .28s, box-shadow .28s !important;
+}
+.card::before { display: none !important; }
+.card::after  { display: none !important; }
+
+.card img { filter: saturate(42%) brightness(.6) !important; transition: transform .55s, filter .4s !important; }
+
+.card:hover {
+  transform: translateY(-5px) !important;
+  border-color: hsl(38 62% 50% / .3) !important;
+  box-shadow: 0 16px 40px rgba(0,0,0,.6), 0 0 0 1px hsl(38 62% 50% / .1) !important;
+}
+.card:hover img { transform: scale(1.07) !important; filter: saturate(80%) brightness(.82) !important; }
+
+.card-ov { background: linear-gradient(to top, hsl(222 24% 7% / .95) 0%, hsl(222 22% 10% / .5) 45%, transparent 100%) !important; }
+.card-nm { font-family: 'Orbitron', sans-serif !important; font-size: 10px !important; letter-spacing: 1.5px !important; color: hsl(220 18% 80%) !important; padding: 14px 12px 12px !important; }
+.card:hover .card-nm { color: hsl(38 68% 64%) !important; }
+
+/* Убиваем flat-row стиль из 04_ui */
+.flat-row {
+  font-family: 'Exo 2', sans-serif !important;
+  border: 1px solid rgba(255,255,255,.05) !important; background: rgba(255,255,255,.015) !important;
+  font-size: 13px !important; color: hsl(220 14% 52%) !important;
+  border-radius: 2px !important; transition: border-color .15s, background .15s, padding-left .12s !important;
+}
+.flat-row::before, .flat-row::after { display: none !important; }
+.flat-row:hover { border-color: rgba(255,255,255,.1) !important; background: rgba(255,255,255,.03) !important; padding-left: 20px !important; color: hsl(220 16% 68%) !important; box-shadow: none !important; }
+
+/* Убиваем inset box-shadow из 04_ui */
+.grp-hdr::after { background: linear-gradient(to right, rgba(255,255,255,.07), transparent) !important; }
+.grp-hdr-t { font-family: 'Orbitron', sans-serif !important; font-size: 9px !important; letter-spacing: 1.5px !important; color: hsl(200 52% 52%) !important; }
+
+
+/* ── БЛОКИ КОНТЕНТА ── */
+
+.blk-infobox { clip-path: none !important; border: 1px solid rgba(255,255,255,.08) !important; background: hsl(222 22% 9.5%) !important; border-radius: 3px !important; overflow: hidden !important; }
+.blk-infobox::before { top: 0 !important; left: 0 !important; right: 0 !important; height: 1px !important; background: linear-gradient(90deg, hsl(200 60% 52% / .3), hsl(38 65% 52% / .3), transparent) !important; opacity: 1 !important; }
+.blk-infobox::after { display: none !important; }
+.ib-head { background: hsl(222 24% 11%) !important; border-bottom: 1px solid rgba(255,255,255,.06) !important; }
+.ib-head-label { font-family: 'JetBrains Mono', monospace !important; color: hsl(200 58% 54%) !important; }
+.ib-head-title { font-family: 'Orbitron', sans-serif !important; color: hsl(38 68% 60%) !important; }
+.ib-section { font-family: 'Orbitron', sans-serif !important; background: hsl(220 24% 10%) !important; border-bottom: 1px solid rgba(255,255,255,.05) !important; color: hsl(200 52% 50%) !important; font-size: 7px !important; letter-spacing: 2px !important; }
+.ib-row { border-bottom: 1px solid rgba(255,255,255,.04) !important; }
+.ib-row:hover { background: rgba(255,255,255,.025) !important; }
+.ib-key { font-family: 'JetBrains Mono', monospace !important; color: hsl(220 12% 36%) !important; }
+.ib-val { font-family: 'JetBrains Mono', monospace !important; color: hsl(220 15% 62%) !important; }
+
+.blk-frame { clip-path: none !important; border: 1px solid rgba(255,255,255,.08) !important; border-radius: 3px !important; overflow: hidden !important; }
+.blk-frame::before { background: linear-gradient(90deg, hsl(200 62% 54%), hsl(38 66% 54%), transparent) !important; opacity: .22 !important; right: 0 !important; }
+.blk-frame::after  { display: none !important; }
+.blk-frame-label { font-family: 'Orbitron', sans-serif !important; background: hsl(222 24% 10%) !important; border-bottom: 1px solid rgba(255,255,255,.06) !important; color: hsl(200 55% 52%) !important; font-size: 7px !important; letter-spacing: 2px !important; }
+
+.blk-table { border: 1px solid rgba(255,255,255,.07) !important; border-radius: 3px !important; overflow: hidden !important; }
+.blk-table::before { background: linear-gradient(90deg, hsl(200 62% 54%), hsl(38 66% 54%), transparent) !important; opacity: .18 !important; }
+.blk-table th { font-family: 'Orbitron', sans-serif !important; background: hsl(222 24% 10%) !important; border-bottom: 1px solid rgba(255,255,255,.07) !important; color: hsl(200 52% 55%) !important; font-size: 8px !important; letter-spacing: 2px !important; }
+.blk-table td { font-family: 'Exo 2', sans-serif !important; border-bottom: 1px solid rgba(255,255,255,.04) !important; color: hsl(220 14% 55%) !important; }
+.blk-table tr:hover td { background: rgba(255,255,255,.025) !important; color: hsl(220 16% 68%) !important; }
+
+.blk-stat-row { border: 1px solid rgba(255,255,255,.07) !important; border-radius: 3px !important; overflow: hidden !important; }
+.blk-stat-item { background: hsl(220 22% 9%) !important; border-right: 1px solid rgba(255,255,255,.05) !important; }
+.blk-stat-item::before { top: 0 !important; bottom: auto !important; background: linear-gradient(90deg, transparent, hsl(200 62% 57%), transparent) !important; height: 1px !important; }
+.blk-stat-item:hover { background: hsl(220 22% 10.5%) !important; }
+.blk-stat-item:hover::before { opacity: 1 !important; }
+.blk-stat-val { font-family: 'Orbitron', sans-serif !important; font-size: 28px !important; color: hsl(200 62% 62%) !important; }
+.blk-stat-lbl { font-family: 'JetBrains Mono', monospace !important; color: hsl(220 12% 32%) !important; }
+
+.blk-timeline { border-left: 1px solid rgba(255,255,255,.08) !important; }
+.blk-timeline::before { background: linear-gradient(to bottom, hsl(200 62% 54% / .55), transparent) !important; }
+.blk-timeline-item::before { border: 1px solid hsl(200 58% 50% / .45) !important; border-radius: 1px !important; background: hsl(222 20% 8%) !important; }
+.blk-timeline-date  { font-family: 'Orbitron', sans-serif !important; color: hsl(38 66% 56%) !important; font-size: 8px !important; letter-spacing: 2px !important; }
+.blk-timeline-title { font-family: 'Exo 2', sans-serif !important; color: hsl(220 16% 72%) !important; }
+.blk-timeline-text  { font-family: 'Exo 2', sans-serif !important; color: hsl(220 12% 50%) !important; }
+
+.blk-quote { border: 1px solid rgba(255,255,255,.06) !important; background: hsl(220 22% 9%) !important; border-radius: 3px !important; }
+.blk-quote::before { color: hsl(38 62% 44%) !important; opacity: .2 !important; }
+.blk-quote-text   { font-family: 'Exo 2', sans-serif !important; color: hsl(220 14% 60%) !important; font-size: 16px !important; }
+.blk-quote-author { font-family: 'JetBrains Mono', monospace !important; color: hsl(38 64% 52%) !important; }
+
+.blk-gallery img { border: 1px solid rgba(255,255,255,.06) !important; filter: saturate(48%) brightness(.65) !important; border-radius: 2px !important; }
+.blk-gallery img:hover { filter: saturate(100%) brightness(.92) !important; border-color: hsl(38 62% 50% / .35) !important; }
+
+.blk-spoiler { border: 1px solid rgba(255,255,255,.07) !important; border-radius: 3px !important; overflow: hidden !important; }
+.blk-spoiler-toggle { font-family: 'Orbitron', sans-serif !important; background: hsl(220 22% 9.5%) !important; color: hsl(220 14% 44%) !important; font-size: 8px !important; letter-spacing: 1.5px !important; }
+.blk-spoiler-toggle:hover { background: hsl(220 22% 11%) !important; color: hsl(200 60% 60%) !important; }
+
+.blk-heading.h-scan { font-family: 'Orbitron', sans-serif !important; font-size: 22px !important; letter-spacing: 4px !important; color: hsl(200 62% 62%) !important; }
+.blk-heading.h-scan::after { background: linear-gradient(90deg, hsl(200 62% 54%), transparent) !important; width: 52px !important; }
+.blk-heading.h-gold { font-family: 'Orbitron', sans-serif !important; font-size: 24px !important; letter-spacing: 5px !important; color: hsl(38 70% 60%) !important; text-shadow: 0 0 24px hsl(38 70% 58% / .2) !important; }
+.blk-heading.h-glitch { border-left: 2px solid hsl(200 62% 54%) !important; background: linear-gradient(90deg, hsl(200 55% 45% / .07), transparent) !important; padding-top: 8px !important; padding-bottom: 8px !important; }
+.blk-heading.h-sub { font-family: 'Exo 2', sans-serif !important; font-size: 18px !important; color: hsl(220 16% 65%) !important; border-bottom: 1px solid rgba(255,255,255,.06) !important; }
+
+.blk-alert { border-radius: 3px !important; }
+.blk-callout { border-radius: 3px !important; }
+.blk-callout-title { font-family: 'Orbitron', sans-serif !important; }
+.blk-callout-body  { font-family: 'Exo 2', sans-serif !important; color: hsl(220 14% 60%) !important; }
+
+
+/* ── МОДАЛКИ ── */
+
+.ov { 
+  background: rgba(0, 0, 0, 0.92) !important; 
+  backdrop-filter: none !important; 
+  -webkit-backdrop-filter: none !important; 
+}
+
+.mo {
+  background: linear-gradient(150deg, hsl(222 24% 10%) 0%, hsl(220 22% 8.5%) 100%) !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  clip-path: none !important; border-radius: 4px !important; overflow: hidden !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.03), 0 30px 70px rgba(0,0,0,.8) !important;
+}
+.mo::before {
+  content: '' !important; position: absolute !important; inset: 0 !important;
+  pointer-events: none !important; z-index: 10 !important;
+  background:
+    linear-gradient(hsl(38 68% 54%), hsl(38 68% 54%)) top left  / 18px 1px no-repeat,
+    linear-gradient(hsl(38 68% 54%), hsl(38 68% 54%)) top left  / 1px 18px no-repeat,
+    linear-gradient(hsl(38 68% 54%), hsl(38 68% 54%)) top right / 18px 1px no-repeat,
+    linear-gradient(hsl(38 68% 54%), hsl(38 68% 54%)) top right / 1px 18px no-repeat,
+    linear-gradient(hsl(38 68% 54%), hsl(38 68% 54%)) bottom left  / 18px 1px no-repeat,
+    linear-gradient(hsl(38 68% 54%), hsl(38 68% 54%)) bottom left  / 1px 18px no-repeat,
+    linear-gradient(hsl(38 68% 54%), hsl(38 68% 54%)) bottom right / 18px 1px no-repeat,
+    linear-gradient(hsl(38 68% 54%), hsl(38 68% 54%)) bottom right / 1px 18px no-repeat !important;
+  opacity: .3 !important;
+}
+.mo-corner { display: none !important; }
+.mo-hdr { font-family: 'Orbitron', sans-serif !important; background: hsl(222 24% 10.5%) !important; border-bottom: 1px solid rgba(255,255,255,.06) !important; }
+.mo-t   { font-family: 'Orbitron', sans-serif !important; font-size: 9.5px !important; letter-spacing: 3.5px !important; color: hsl(200 60% 58%) !important; }
+.mo-body { font-family: 'Exo 2', sans-serif !important; }
+.mo-ftr { background: hsl(220 22% 9%) !important; border-top: 1px solid rgba(255,255,255,.05) !important; }
+
+.xb { border: 1px solid rgba(255,255,255,.08) !important; color: hsl(220 12% 38%) !important; border-radius: 3px !important; }
+.xb:hover { border-color: hsl(355 62% 50% / .4) !important; color: hsl(355 80% 64%) !important; background: hsl(355 60% 45% / .09) !important; }
+
+.bp-modal { border: 1px solid rgba(255,255,255,.08) !important; border-radius: 4px !important; overflow: hidden !important; background: hsl(222 24% 9%) !important; }
+.bp-modal::before { background: linear-gradient(90deg, hsl(200 62% 54%), hsl(38 66% 54%), transparent) !important; opacity: .2 !important; }
+.bp-modal-hdr { background: hsl(222 24% 9.5%) !important; border-bottom: 1px solid rgba(255,255,255,.06) !important; }
+.bp-modal-hdr-t { font-family: 'Orbitron', sans-serif !important; font-size: 9.5px !important; letter-spacing: 3px !important; color: hsl(200 57% 55%) !important; }
+.bp-search { border: 1px solid rgba(255,255,255,.08) !important; border-radius: 2px !important; background: rgba(0,0,0,.3) !important; font-family: 'Exo 2', sans-serif !important; }
+.bp-search:focus { border-color: hsl(200 55% 50% / .4) !important; }
+.bp-cats  { background: hsl(222 24% 9%) !important; border-bottom: 1px solid rgba(255,255,255,.06) !important; }
+.bp-cat   { font-family: 'Orbitron', sans-serif !important; font-size: 7.5px !important; letter-spacing: 1px !important; color: hsl(220 12% 32%) !important; border-bottom-width: 1px !important; }
+.bp-cat:hover { color: hsl(200 60% 58%) !important; }
+.bp-cat.on { color: hsl(200 62% 62%) !important; border-bottom-color: hsl(200 62% 54%) !important; background: hsl(200 55% 45% / .07) !important; }
+.bpr { clip-path: none !important; border-radius: 3px !important; border: 1px solid rgba(255,255,255,.05) !important; }
+.bpr::before { display: none !important; }
+.bpr:hover { border-color: rgba(255,255,255,.11) !important; background: hsl(222 24% 11%) !important; transform: translateY(-1px) !important; box-shadow: 0 6px 18px rgba(0,0,0,.4) !important; }
+.bpr-n { font-family: 'Orbitron', sans-serif !important; font-size: 7.5px !important; color: hsl(220 16% 55%) !important; }
+.bpr-d { font-family: 'Exo 2', sans-serif !important; color: hsl(220 12% 34%) !important; font-size: 11px !important; }
+
+
+/* ── ФОРМЫ И КНОПКИ ── */
+
+.fl { font-family: 'Orbitron', sans-serif !important; font-size: 7px !important; letter-spacing: 2px !important; color: hsl(220 12% 32%) !important; }
+.fi { font-family: 'Exo 2', sans-serif !important; background: rgba(0,0,0,.3) !important; border: 1px solid rgba(255,255,255,.08) !important; border-radius: 3px !important; color: hsl(220 15% 72%) !important; font-size: 13px !important; transition: border-color .2s, box-shadow .2s !important; }
+.fi:focus { border-color: hsl(200 55% 50% / .4) !important; box-shadow: 0 0 0 2px hsl(200 55% 50% / .06) !important; outline: none !important; }
+.fi::placeholder { color: hsl(220 12% 26%) !important; }
+
+/* ── BUTTONS — restore sci-fi clipped corners ─────────────── */
+.btn {
+  font-family: 'Orbitron', sans-serif !important;
+  border-radius: 0 !important;
+  font-size: 8px !important;
+  letter-spacing: 1.5px !important;
+  height: 32px !important;
+  transition: transform .2s, color .2s !important;
+  background: transparent !important;
+  border: none !important;
+}
+.btn::before {
+  content: '' !important; position: absolute !important; inset: 0 !important; z-index: -2 !important;
+  background: var(--w2) !important;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%) !important;
+  transition: background .2s !important;
+}
+.btn::after {
+  content: '' !important; position: absolute !important; inset: 1px !important; z-index: -1 !important;
+  background: var(--b2) !important;
+  clip-path: polygon(0 0, calc(100% - 5.3px) 0, 100% 5.3px, 100% 100%, 0 100%) !important;
+  transition: background .2s !important;
+}
+.btn:hover  { transform: translateY(-1px) !important; color: var(--tel) !important; }
+.btn:active { transform: translateY(0) !important; }
+.btn-sm { height: 26px !important; padding: 0 12px !important; font-size: 8px !important; }
+.btn-sm::before { clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 0 100%) !important; }
+.btn-sm::after  { clip-path: polygon(0 0, calc(100% - 3.3px) 0, 100% 3.3px, 100% 100%, 0 100%) !important; }
+
+.btn-gd { color: var(--gdl) !important; }
+.btn-gd::before { background: var(--gds) !important; }
+.btn-gd::after  { background: var(--gdb) !important; }
+.btn-gd:hover { color: var(--t1) !important; }
+.btn-gd:hover::before { background: var(--gd) !important; }
+.btn-gd:hover::after  { background: var(--gds) !important; }
+
+.btn-gh::before { background: var(--w3) !important; }
+.btn-gh::after  { background: var(--b3) !important; }
+.btn-gh:hover::before { background: var(--te) !important; }
+.btn-gh:hover::after  { background: var(--teb) !important; }
+
+.btn-sv { color: var(--ok) !important; }
+.btn-sv::before { background: rgba(34,144,90,.35) !important; }
+.btn-sv::after  { background: rgba(34,144,90,.08) !important; }
+.btn-sv:hover { color: #fff !important; }
+.btn-sv:hover::before { background: #4ade80 !important; }
+.btn-sv:hover::after  { background: rgba(34,144,90,.3) !important; }
+
+.btn-rd { color: #ff4466 !important; }
+.btn-rd::before { background: rgba(190,46,70,.4) !important; }
+.btn-rd::after  { background: rgba(190,46,70,.08) !important; }
+.btn-rd:hover { color: #fff !important; }
+.btn-rd:hover::before { background: var(--err) !important; }
+.btn-rd:hover::after  { background: rgba(190,46,70,.3) !important; }
+
+.btn-fw { width: 100% !important; }
+
+
+/* ── ADMIN ── */
+
+#ap { background: linear-gradient(180deg, hsl(222 24% 9%) 0%, hsl(220 22% 7.5%) 100%) !important; border-left: 1px solid rgba(255,255,255,.06) !important; }
+#ap::before { background: linear-gradient(180deg, hsl(200 62% 54%), transparent 25%, transparent 75%, hsl(38 66% 54%)) !important; opacity: .15 !important; }
+#ap.open { box-shadow: -24px 0 60px rgba(0,0,0,.6) !important; }
+.ap-hdr { background: hsl(222 24% 10%) !important; border-bottom: 1px solid rgba(255,255,255,.06) !important; }
+.ap-hdr::after { display: none !important; }
+.ap-un { font-family: 'Orbitron', sans-serif !important; }
+.apt { font-family: 'Orbitron', sans-serif !important; font-size: 7.5px !important; letter-spacing: 2px !important; color: hsl(220 12% 32%) !important; }
+.apt:hover { color: hsl(200 58% 58%) !important; }
+.apt.on { color: hsl(200 62% 62%) !important; border-bottom-color: hsl(200 62% 54%) !important; }
+.ir { background: transparent !important; border: 1px solid rgba(255,255,255,.05) !important; border-radius: 2px !important; }
+.ir:hover { border-color: rgba(255,255,255,.09) !important; }
+.ir-n { font-family: 'Exo 2', sans-serif !important; color: hsl(220 14% 48%) !important; }
+.ir-n:hover { color: hsl(200 60% 58%) !important; }
+.edit-bar { background: hsl(222 24% 9%) !important; border-bottom: 1px solid hsl(38 62% 48% / .15) !important; }
+.edit-bar::before { display: none !important; }
+.eb-tag { font-family: 'Orbitron', sans-serif !important; color: hsl(38 70% 58%) !important; border-color: hsl(38 62% 48% / .22) !important; background: hsl(38 46% 17% / .2) !important; font-size: 7.5px !important; }
+
+
+/* ── ТОСТЫ ── */
+
+.toast { font-family: 'JetBrains Mono', monospace !important; background: hsl(222 24% 10%) !important; border-left-width: 2px !important; font-size: 10.5px !important; box-shadow: 0 10px 34px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.05) !important; }
+.tok  { border-left-color: hsl(142 60% 44%) !important; color: hsl(142 62% 54%) !important; border-color: rgba(255,255,255,.06) !important; }
+.terr { border-left-color: hsl(355 65% 52%) !important; color: hsl(355 80% 66%) !important; border-color: rgba(255,255,255,.06) !important; }
+.twrn { border-left-color: hsl(38 70% 54%) !important; color: hsl(38 70% 60%) !important; border-color: rgba(255,255,255,.06) !important; }
+
+
+/* ── CONTRIBUTORS ── */
+
+.contrib-av { font-family: 'Orbitron', sans-serif !important; }
+.cmp-left { border-right: 1px solid rgba(255,255,255,.05) !important; background: hsl(222 24% 9.5%) !important; }
+.cmp-label { font-family: 'JetBrains Mono', monospace !important; font-size: 7px !important; letter-spacing: 2.5px !important; color: hsl(220 12% 28%) !important; }
+.cmp-av-frame { border: 1px solid rgba(255,255,255,.1) !important; }
+.cmp-right-title { font-family: 'JetBrains Mono', monospace !important; font-size: 7px !important; letter-spacing: 3px !important; color: hsl(220 12% 28%) !important; }
+.cmp-right-line { background: linear-gradient(to right, rgba(255,255,255,.06), transparent) !important; }
+
+
+/* ── MISC ── */
+
+::-webkit-scrollbar { width: 2px !important; height: 2px !important; }
+::-webkit-scrollbar-track { background: transparent !important; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08) !important; border-radius: 1px !important; }
+::-webkit-scrollbar-thumb:hover { background: hsl(200 52% 50% / .35) !important; }
+
+/* Убиваем spin из 04_ui (с двумя кольцами) */
+.spin { width: 28px !important; height: 28px !important; position: relative !important; }
+.spin::before {
+  content: '' !important; position: absolute !important; inset: 0 !important;
+  border: 1.5px solid rgba(255,255,255,.06) !important;
+  border-top-color: hsl(38 70% 56%) !important;
+  border-right-color: hsl(200 62% 54% / .5) !important;
+  border-radius: 50% !important;
+  animation: sp .9s linear infinite !important;
+}
+.spin::after { display: none !important; }
+
+.pgi { animation: page-in .3s cubic-bezier(.2,.6,.3,1) both !important; }
+@keyframes page-in { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+@keyframes mo-in   { from { opacity:0; transform:scale(.97) translateY(10px); } to { opacity:1; transform:none; } }
+
+.auth-ey { font-family: 'Orbitron', sans-serif !important; font-size: 15px !important; letter-spacing: 6px !important; background: linear-gradient(135deg, hsl(38 70% 60%), hsl(200 62% 60%)) !important; -webkit-background-clip: text !important; background-clip: text !important; -webkit-text-fill-color: transparent !important; }
+.auth-ey::after { background: linear-gradient(90deg, hsl(38 65% 52%), hsl(200 62% 54%)) !important; opacity: .28 !important; }
+.auth-sw { font-family: 'JetBrains Mono', monospace !important; color: hsl(220 12% 32%) !important; }
+.auth-sw a { color: hsl(38 68% 58%) !important; }
+.auth-info { font-family: 'JetBrains Mono', monospace !important; background: rgba(0,0,0,.25) !important; border: 1px solid rgba(255,255,255,.06) !important; border-radius: 2px !important; color: hsl(220 14% 42%) !important; }
+.auth-info strong { color: hsl(200 60% 55%) !important; }
+
+.sec-sub-link { font-family: 'Orbitron', sans-serif !important; clip-path: none !important; border-radius: 3px !important; }
+.scp-draft-banner { font-family: 'Orbitron', sans-serif !important; background: hsl(0 38% 16% / .12) !important; border: 1px solid hsl(0 55% 46% / .2) !important; border-left: 2px solid hsl(0 65% 52%) !important; color: hsl(0 72% 62%) !important; font-size: 8px !important; }
+
+
+/* ── АДАПТИВ ── */
+
+@media (max-width: 768px) {
+  #pg { padding: 0 16px 60px !important; }
+
+  .art-h1 { font-size: 24px !important; letter-spacing: 1.5px !important; }
+  .sec-h1 { font-size: 20px !important; letter-spacing: 1.5px !important; }
+  .art-page-header { margin-top: -80px !important; }
+  .sec-page-header { margin-top: -70px !important; }
+
+  .hp-logo { font-size: 36px !important; letter-spacing: 5px !important; }
+
+  .hps-right { display: flex !important; flex-wrap: wrap !important; gap: 5px !important; }
+  .hps-content { padding: 12px 36px 12px 14px !important; }
+  .hps-bg { display: none !important; }
+  .hps-ov { display: none !important; }
+
+  .cgrid { grid-template-columns: 1fr 1fr !important; gap: 6px !important; }
+
+  .mob-btn { border: 1px solid rgba(255,255,255,.09) !important; color: hsl(200 58% 56%) !important; border-radius: 2px !important; background: rgba(255,255,255,.025) !important; }
+  .top-bc .bc-item:not(:last-of-type), .top-bc .bc-sep { display: none !important; }
+
+  .art-cov { height: 200px !important; margin: 0 -16px 0 !important; }
+  .art-page-header { margin-top: -72px !important; }
+}
+
+@media (max-width: 480px) {
+  .hp-logo { font-size: 26px !important; letter-spacing: 4px !important; }
+  .art-h1  { font-size: 20px !important; letter-spacing: 1px !important; }
+  .sec-h1  { font-size: 17px !important; letter-spacing: 1px !important; }
+  .art-page-header { margin-top: -60px !important; }
+  .cgrid { grid-template-columns: 1fr !important; }
+}

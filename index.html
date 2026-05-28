@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<!--
+
+-->
+<!-- CSP removed: was causing Web Locks + reconnect issues -->
+<title>НОВАЯ ЭРА</title>
+<script>
+// КРИТИЧНО: Применяем фон и favicon ДО загрузки CSS
+(function() {
+  const cachedBg = localStorage.getItem('wk_background_url_cache');
+  const cachedFavicon = localStorage.getItem('wk_favicon_url_cache');
+  if (cachedBg) {
+    document.documentElement.style.setProperty('--bg-image', "url('" + cachedBg + "')");
+  }
+  // Favicon применится после загрузки DOM
+  if (cachedFavicon) {
+    document.addEventListener('DOMContentLoaded', function() {
+      const favicon = document.getElementById('favicon');
+      if (favicon) favicon.href = cachedFavicon;
+    });
+  }
+})();
+</script>
+<link rel="icon" type="image/png" id="favicon" href="">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Exo+2:ital,wght@0,200;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/index.css?v=1774210141">
+<link rel="stylesheet" href="css/11_calendar.css?v=1774210141">
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="app">
+<div id="sb-overlay" onclick="closeMobSb()"></div>
+<nav id="sb">
+  <div class="logo">
+    <div class="logo-top"><div class="lc"></div><div class="lc"></div></div>
+    <div class="logo-main"><span class="logo-name" id="logo-name">Вики</span><span class="logo-sub" id="logo-sub">новой эры</span></div>
+  </div>
+  <div class="sb-srch"><input id="srch" type="text" placeholder="Поиск..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="search-wiki" data-form-type="other"></div>
+  <div id="nav"></div>
+  <div id="related-articles-block"></div>
+  <div class="sb-foot">
+    <span class="sb-cnt" id="sb-cnt"></span>
+    <span class="sb-ver" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);letter-spacing:1px;opacity:.5">v12</span>
+  </div>
+</nav>
+<div id="main">
+  <div id="top">
+    <button class="mob-btn" onclick="openMobSb()">☰</button>
+    <div class="top-bc" id="top-bc"></div>
+    <div class="top-r">
+      <div class="top-lang"><button id="lb-ru" onclick="setLang('ru')">RU</button><button id="lb-en" onclick="setLang('en')">EN</button></div>
+      <button class="tbtn" id="edit-btn" style="display:none" onclick="toggleEdit()">✎ <span id="edit-btn-text">Редактировать</span></button>
+      <button class="tbtn" id="auth-btn" onclick="authClick()"><span class="adot" id="adot"></span><span id="auth-av" class="top-av" style="display:none"></span><span id="auth-lbl">Войти</span></button>
+    </div>
+  </div>
+  <div id="cw"><div id="pg"><div class="sload"><div class="quote-loader" id="initial-loader">Загрузка...</div></div></div></div>
+</div>
+</div>
+
+<div id="ap">
+  <div class="ap-hdr">
+    <div class="ap-ui"><div class="ap-un" id="ap-un">—</div><div class="ap-ur" id="ap-ur"></div></div>
+    <button class="btn btn-gh btn-sm" onclick="doLogout()">Выйти</button>
+    <button class="xb" onclick="closeAp()">✕</button>
+  </div>
+  <div class="ap-tabs" id="ap-tabs"></div>
+  <div class="ap-body" id="ap-body"></div>
+</div>
+
+<div class="ov" id="mo-contrib">
+  <div class="mo mo-contrib-panel">
+    <button class="xb cmp-close" onclick="cm('mo-contrib')">✕</button>
+
+    <!-- LEFT: identity column -->
+    <div class="cmp-left">
+      <div class="cmp-av-zone">
+        <div class="cmp-av-frame">
+          <div class="cmp-av-corner cmp-av-corner--tl"></div>
+          <div class="cmp-av-corner cmp-av-corner--tr"></div>
+          <div class="cmp-av-corner cmp-av-corner--bl"></div>
+          <div class="cmp-av-corner cmp-av-corner--br"></div>
+          <div class="contrib-mo-av" id="contrib-mo-av"></div>
+        </div>
+        <div class="cmp-scanbeam"></div>
+      </div>
+      <div class="cmp-id">
+        <div class="cmp-label">◈ ИДЕНТИФИКАТОР</div>
+        <div class="contrib-mo-name" id="contrib-mo-name"></div>
+        <div class="contrib-mo-email" id="contrib-mo-email"></div>
+      </div>
+      <div class="cmp-stat-block">
+        <div class="cmp-stat-item">
+          <span class="cmp-stat-val" id="contrib-mo-cnt">—</span>
+          <span class="cmp-stat-key">СТРАНИЦ</span>
+        </div>
+      </div>
+      <div id="contrib-mo-role-wrap"></div>
+      <button class="cmp-edit-btn" id="contrib-mo-edit-btn" style="display:none" onclick="cm('mo-contrib');openAp();setApTab('profile')">
+        <span class="cmp-edit-icon">✎</span> РЕДАКТИРОВАТЬ ПРОФИЛЬ
+      </button>
+    </div>
+
+    <!-- RIGHT: pages list -->
+    <div class="cmp-right">
+      <div class="cmp-right-hdr">
+        <span class="cmp-right-title">СТРАНИЦЫ</span>
+        <span class="cmp-right-line"></span>
+      </div>
+      <div class="cmp-pages-list" id="contrib-mo-pages"></div>
+    </div>
+  </div>
+</div>
+<div class="ov" id="mo-profile">
+  <div class="mo mo-sm"><div class="mo-corner"></div>
+    <div class="mo-hdr"><span class="mo-t">МОЙ ПРОФИЛЬ</span><button class="xb" onclick="cm('mo-profile')">✕</button></div>
+    <div class="mo-body">
+      <div class="prof-av-center">
+        <div class="prof-av-preview" id="prof-av-preview"></div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);letter-spacing:1px;margin-top:8px">АВАТАР</div>
+      </div>
+      <div class="fg"><label class="fl">URL аватара</label><input class="fi" id="prof-avatar" type="url" placeholder="https://..." oninput="previewProfileAv()"></div>
+      <div style="text-align:center;margin:-6px 0 14px;font-family:JetBrains Mono,monospace;font-size:9px;color:var(--t4)">— или —</div>
+      <div class="fg" id="prof-mo-upload-wrap"><label class="fl">Загрузить изображение</label><input type="file" id="prof-av-file" accept="image/*" style="display:none" onchange="uploadProfileAv(this)"><button class="btn btn-gh btn-fw" onclick="document.getElementById('prof-av-file').click()">📁 Выбрать файл</button></div>
+      <div class="fg"><label class="fl">Отображаемое имя</label><input class="fi" id="prof-name" placeholder="Ваше имя в вики"></div>
+    </div>
+    <div class="mo-ftr"><button class="btn btn-gh" onclick="cm('mo-profile')">Отмена</button><button class="btn btn-gd" onclick="saveProfileFromForm()">Сохранить</button></div>
+  </div>
+</div>
+<div class="ov" id="mo-auth">
+  <div class="mo mo-sm"><div class="mo-corner"></div>
+    <div class="mo-hdr"><span class="mo-t" id="auth-mo-t">ВХОД</span><button class="xb" onclick="cm('mo-auth')">✕</button></div>
+    <div class="mo-body" id="auth-form"></div>
+  </div>
+</div>
+<div class="ov" id="mo-sec">
+  <div class="mo mo-sm"><div class="mo-corner"></div>
+    <div class="mo-hdr"><span class="mo-t" id="mo-sec-t">РАЗДЕЛ</span><button class="xb" onclick="cm('mo-sec')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="es-id">
+      <div class="fgr">
+        <div class="fg"><label class="fl">Название RU *</label><input class="fi" id="es-nru"></div>
+        <div class="fg"><label class="fl">Name EN</label><input class="fi" id="es-nen"></div>
+        <div class="fg"><label class="fl">Slug *</label><input class="fi" id="es-sl"></div>
+        <div class="fg">
+          <label class="fl">Иконка раздела</label>
+          <div id="es-ico-input-wrap" style="display:flex;gap:8px">
+            <input class="fi" id="es-ico" type="url" placeholder="https://..." style="flex:1;font-size:11px" oninput="esIconPreview()">
+            <label class="btn btn-gh btn-sm" style="cursor:pointer;padding:7px 12px;flex-shrink:0">📁<input type="file" accept="image/*" style="display:none" onchange="uploadSecIcon(this)"></label>
+          </div>
+          <div id="es-ico-preview" style="display:none;margin-top:5px;background:var(--b3);border:1px solid var(--w2);padding:8px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <img id="es-ico-preview-img" src="" style="width:48px;height:48px;object-fit:contain;flex-shrink:0">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace;margin-bottom:4px">URL:</div>
+                <div id="es-ico-url-display" style="font-size:9px;color:var(--t2);font-family:'JetBrains Mono',monospace;word-break:break-all;line-height:1.4"></div>
+              </div>
+              <button type="button" class="btn btn-gh btn-sm" onclick="clearSecIcon()" style="flex-shrink:0;padding:6px 10px">✖</button>
+            </div>
+          </div>
+        </div>
+        <div class="fg">
+          <label class="fl">Обложка раздела</label>
+          <div style="display:flex;gap:8px">
+            <input class="fi" id="es-img" type="url" placeholder="https://..." style="flex:1" oninput="esImgPreview()">
+            <label class="btn btn-gh btn-sm" style="cursor:pointer;padding:7px 12px">📁<input type="file" accept="image/*" style="display:none" onchange="uploadSecImg(this)"></label>
+          </div>
+          <div id="es-img-preview" style="display:none;margin-top:5px;height:60px;background:var(--b3);border:1px solid var(--w2);overflow:hidden"><img id="es-img-preview-img" src="" style="width:100%;height:100%;object-fit:cover"></div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;margin-top:8px">
+            <input type="checkbox" id="es-exclude-collage" style="cursor:pointer">
+            <span style="font-size:12px;color:var(--t3)">Не показывать в коллаже главной</span>
+          </label>
+        </div>
+        <div class="fg"><label class="fl">Родительский раздел</label><select class="fi" id="es-par"><option value="">— Верхний уровень —</option></select></div>
+        <div class="fg half"><label class="fl">Порядок</label><input class="fi" id="es-ord" type="number" value="0"></div>
+      </div>
+    </div>
+    <div class="mo-ftr"><button class="btn btn-gh" onclick="cm('mo-sec')">Отмена</button><button class="btn btn-gd" onclick="doSaveSec()">Сохранить</button></div>
+  </div>
+</div>
+<div class="ov" id="mo-usr">
+  <div class="mo mo-sm"><div class="mo-corner"></div>
+    <div class="mo-hdr"><span class="mo-t" id="mo-usr-t">ПОЛЬЗОВАТЕЛЬ</span><button class="xb" onclick="cm('mo-usr')">✕</button></div>
+    <div class="mo-body">
+      <input type="hidden" id="eu-id">
+      <div class="auth-info">⚠️ Роль меняется только через <strong>Supabase Dashboard</strong> → таблица <strong>user_roles</strong>. Это исключает подделку ролей клиентом.</div>
+      <div class="fg"><label class="fl">Email</label><input class="fi" id="eu-nm" readonly style="opacity:.5"></div>
+      <div class="fg"><label class="fl">Текущая роль</label><input class="fi" id="eu-role" readonly style="opacity:.5"></div>
+      <div class="fg"><label class="fl">Статус</label><select class="fi" id="eu-ban"><option value="false">Активен</option><option value="true">Заблокирован</option></select></div>
+    </div>
+    <div class="mo-ftr"><button class="btn btn-gh" onclick="cm('mo-usr')">Отмена</button><button class="btn btn-gd" onclick="doSaveUsr()">Сохранить</button></div>
+  </div>
+</div>
+<div class="ov" id="mo-del">
+  <div class="mo mo-sm"><div class="mo-corner"></div>
+    <div class="mo-hdr"><span class="mo-t" style="color:var(--err)">УДАЛЕНИЕ</span><button class="xb" onclick="cm('mo-del')">✕</button></div>
+    <div class="mo-body"><div style="text-align:center;font-size:36px;padding:10px 0 16px">⚠️</div><p id="del-txt" style="text-align:center;font-size:14px;color:var(--t1);line-height:1.8"></p></div>
+    <div class="mo-ftr"><button class="btn btn-gh" onclick="cm('mo-del')">Отмена</button><button class="btn btn-rd" id="del-ok">Удалить</button></div>
+  </div>
+</div>
+<div class="ov" id="mo-cover">
+  <div class="mo mo-sm"><div class="mo-corner"></div>
+    <div class="mo-hdr"><span class="mo-t" id="cov-mo-title">ОБЛОЖКА</span><button class="xb" onclick="if(editData) editData.exclude_from_collage = document.getElementById('cov-exclude-collage')?.checked || false; cm('mo-cover')">✕</button></div>
+    <div class="mo-body">
+      <div class="fg">
+        <label class="fl">Загрузить файл</label>
+        <input type="file" id="hero-cov-file" accept="image/*" style="display:none" onchange="heroCoverFileChange(this)">
+        <button class="btn btn-gh btn-fw" onclick="document.getElementById('hero-cov-file').click()">📁 Выбрать изображение</button>
+      </div>
+      <div style="text-align:center;margin:8px 0 14px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4)">— или вставьте URL —</div>
+      <div class="fg"><label class="fl">URL изображения</label><input class="fi" id="cov-url" type="url" placeholder="https://..." oninput="heroCoverUrlPreview()"></div>
+      <div id="hero-cov-preview" style="margin-top:10px;height:120px;background:var(--b3);border:1px solid var(--w2);overflow:hidden;display:none;position:relative">
+        <img id="hero-cov-preview-img" src="" style="width:100%;height:100%;object-fit:cover;transition:object-position .3s">
+      </div>
+
+      <div class="fg" style="margin-top:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none" onclick="setTimeout(() => { const cb = document.getElementById('cov-exclude-collage'); if(editData && cb) editData.exclude_from_collage = cb.checked; }, 0)">
+          <input type="checkbox" id="cov-exclude-collage" style="cursor:pointer">
+          <span style="font-size:13px;color:var(--t2)">Не показывать в коллаже главной</span>
+        </label>
+      </div>
+
+      <!-- PC-only controls -->
+      <div id="cov-pc-controls" style="display:none">
+        <div style="height:1px;background:var(--w1);margin:18px 0 16px"></div>
+        <div class="fg">
+          <label class="fl">Высота обложки (ПК) — <span id="cov-h-val">340</span>px</label>
+          <input type="range" id="cov-h-range" min="160" max="640" step="20" value="340"
+            style="width:100%;accent-color:var(--gd);cursor:pointer;margin-top:6px"
+            oninput="document.getElementById('cov-h-val').textContent=this.value;covPosPreview()">
+        </div>
+        <div class="fg">
+          <label class="fl">Фокус изображения</label>
+          <div class="cov-pos-grid" id="cov-pos-grid">
+            <button class="cpb" data-pos="top left"     onclick="setCovPos(this)">↖</button>
+            <button class="cpb" data-pos="top center"   onclick="setCovPos(this)">↑</button>
+            <button class="cpb" data-pos="top right"    onclick="setCovPos(this)">↗</button>
+            <button class="cpb" data-pos="center left"  onclick="setCovPos(this)">←</button>
+            <button class="cpb on" data-pos="center center" onclick="setCovPos(this)">·</button>
+            <button class="cpb" data-pos="center right" onclick="setCovPos(this)">→</button>
+            <button class="cpb" data-pos="bottom left"  onclick="setCovPos(this)">↙</button>
+            <button class="cpb" data-pos="bottom center" onclick="setCovPos(this)">↓</button>
+            <button class="cpb" data-pos="bottom right" onclick="setCovPos(this)">↘</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mo-ftr">
+      <button class="btn btn-gh" onclick="cm('mo-cover')">Отмена</button>
+      <button class="btn btn-gh btn-sm" id="cov-remove-btn" style="color:var(--err)" onclick="applyCov('')">Убрать</button>
+      <button class="btn btn-gd" id="cov-apply-btn" onclick="applyHeroCovFromModal()">Применить</button>
+    </div>
+  </div>
+</div>
+<div class="ov" id="mo-new">
+  <div class="mo mo-sm"><div class="mo-corner"></div>
+    <div class="mo-hdr"><span class="mo-t">НОВАЯ СТРАНИЦА</span><button class="xb" onclick="cm('mo-new')">✕</button></div>
+    <div class="mo-body">
+      <div class="fg">
+        <label class="fl">Тип страницы</label>
+        <select class="fi" id="np-type" onchange="document.getElementById('np-type-hint').textContent=({article:'Обычная статья с блоками',character:'Карточка персонажа — имя, класс, статы, снаряжение',faction:'Страница фракции / государства',item:'Карточка снаряжения — редкость, слот, бонусы',ability:'Карточка способности — тип, эффект, дальность',unit:'Юнит / Корабль — конструктор с модулями',preview:'Превью характеристик с фильтром и кнопками'})[this.value]||''">
+          <option value="article">📄 Статья</option>
+          <option value="character">◉ Персонаж</option>
+          <option value="faction">⬡ Фракция / Государство</option>
+          <option value="item">⚔ Снаряжение / Предмет</option>
+          <option value="ability">◈ Способность</option>
+          <option value="unit">⊕ Юнит / Корабль</option>
+          <option value="preview">◈ Превью</option>
+        </select>
+        <div id="np-type-hint" style="font-size:10px;color:var(--t4);margin-top:3px">Обычная статья с блоками</div>
+      </div>
+      <div class="fg"><label class="fl">Заголовок RU *</label><input class="fi" id="np-t" placeholder="Название"></div>
+      <div class="fg"><label class="fl">Slug *</label><input class="fi" id="np-sl"><div class="fh">Только латиница, цифры, дефисы</div></div>
+      <div class="fg"><label class="fl">Раздел</label><select class="fi" id="np-sec"><option value="">— Нет —</option></select></div>
+      <div class="fg"><label class="fl">Родительская страница</label><select class="fi" id="np-par"><option value="">— Нет —</option></select></div>
+    </div>
+    <div class="mo-ftr"><button class="btn btn-gh" onclick="cm('mo-new')">Отмена</button><button class="btn btn-gd" onclick="doCreateNew()">Создать</button></div>
+  </div>
+</div>
+
+<!-- Модальное окно для просмотра картинки из коллажа -->
+<div class="ov" id="mo-collage-img" onclick="if(event.target.id==='mo-collage-img')cm('mo-collage-img')">
+  <div class="mo mo-img"><div class="mo-corner"></div>
+    <div class="mo-hdr"><span class="mo-t">ИЗОБРАЖЕНИЕ</span><button class="xb" onclick="cm('mo-collage-img')">✕</button></div>
+    <div class="mo-body" style="padding:0;max-height:80vh;overflow:auto">
+      <img id="collage-modal-img" src="" style="width:100%;height:auto;display:block">
+    </div>
+  </div>
+</div>
+
+<!-- Конструктор фракций -->
+<div class="ov" id="faction-reg-screen" style="display:none">
+  <div class="mo mo-lg"><div class="mo-corner"></div>
+    <div class="mo-hdr"><span class="mo-t">◈ КОНСТРУКТОР ФРАКЦИЙ</span><button class="xb" onclick="fracClose()">✕</button></div>
+    <div class="mo-body" style="padding:0">
+      <div id="freg-steps" style="padding:20px 24px;border-bottom:1px solid var(--w2);background:var(--b2)"></div>
+      <div id="freg-content" style="padding:24px;max-height:60vh;overflow-y:auto"></div>
+      <div id="freg-actions" style="padding:16px 24px;border-top:1px solid var(--w2);background:var(--b2);display:flex;align-items:center;justify-content:space-between"></div>
+    </div>
+  </div>
+</div>
+
+
+<div class="bp-overlay" id="bp-ov" onclick="closePicker()"></div>
+<div class="bp-modal-ov" id="bp-modal-ov">
+  <div class="bp-modal">
+    <div class="bp-modal-hdr">
+      <span class="bp-modal-hdr-t">◈ Добавить блок</span>
+      <input class="bp-search" id="bp-search" placeholder="Поиск блока..." oninput="filterPicker(this.value)" autocomplete="off">
+      <button class="xb" onclick="closePicker()">✕</button>
+    </div>
+    <div class="bp-cats" id="bp-cats"></div>
+    <div class="bp-grid" id="blk-picker"></div>
+  </div>
+</div>
+<div id="toasts"></div>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img class="lightbox-img" id="lightbox-img" src="" alt="" onclick="event.stopPropagation()">
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<!-- <script src="starfield.js?v=1774210141"></script> -->
+<script src="core.js?v=1774210141"></script>
+<script src="auth.js?v=1774210141"></script>
+<script src="data.js?v=1774210141"></script>
+<script src="armor_system.js?v=1774210141"></script>
+	<script src="weapon_system.js?v=1774210141"></script>
+<script src="coefficients.js?v=1774210141"></script>
+<script src="faction_system.js?v=1774210141"></script>
+<script src="render.js?v=1774210141"></script>
+<script src="editor.js?v=1774210141"></script>
+<script src="character.js?v=1774210141"></script>
+<script src="battlemap.js?v=1774210141"></script>
+<script src="comments.js?v=1774210141"></script>
+<script src="calendar.js?v=1774210141"></script>
+<script>
+// Устанавливаем рандомную цитату для начального загрузчика
+const initialLoader = document.getElementById('initial-loader');
+if (initialLoader && typeof getRandomQuote === 'function') {
+  initialLoader.innerHTML = getRandomQuote();
+}
+// Запускаем инициализацию
+init();
+</script>
+</body>
+</html>

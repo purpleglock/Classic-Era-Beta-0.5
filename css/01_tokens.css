@@ -1,0 +1,323 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   НОВАЯ ЭРА — WIKI UI  ·  DESIGN TOKENS  v15 (CLEAN SCI-FI EDITION)
+   ───────────────────────────────────────────────────────────────────── */
+
+/* ╔═══════════════════════════════════════════════════════════════════╗
+   ║  TIER 1 · PRIMITIVE TOKENS                                        ║
+   ╚═══════════════════════════════════════════════════════════════════╝ */
+   :root {
+
+    /* ── Цветовые каналы (Чистые и дорогие оттенки) ─────────────────── */
+    --hue-space:  215;   /* Дорогой графитовый/сланцевый цвет, меньше синевы */
+    --hue-gold:    35;   /* Яркий, чистый кибер-оранж/золото */
+    --hue-cyan:   190;   /* Светящийся, чистый неон-циан */
+    --hue-red:    350;   /* Холодный красный (не такой ржавый) */
+    --hue-purple: 260;   /* Яркий аметист */
+  
+    --sat-space:   12%;  /* Убираем лишнюю "синюшность" из фона */
+    --sat-gold:    85%;  /* Делаем акценты сочными */
+    --sat-cyan:    80%;
+    --sat-red:     75%;
+    --sat-purple:  70%;
+  
+    /* ── Фоновые поверхности (Вытаскиваем из кромешной тьмы) ───────── */
+    --primitive-surface-0: hsl(var(--hue-space) var(--sat-space)   8%);  /* void */
+    --primitive-surface-1: hsl(var(--hue-space) var(--sat-space)  11%);  /* base bg */
+    --primitive-surface-2: hsl(var(--hue-space) var(--sat-space)  14%);  /* panels */
+    --primitive-surface-3: hsl(var(--hue-space) var(--sat-space)  17%);  /* cards */
+    --primitive-surface-4: hsl(var(--hue-space) var(--sat-space)  21%);  /* raised */
+    --primitive-surface-5: hsl(var(--hue-space) var(--sat-space)  26%);  /* hover */
+  
+    /* ── Белые оверлеи (бордеры, делители - чуть прозрачнее) ───────── */
+    --primitive-white-4:  rgba(255, 255, 255, 0.03);
+    --primitive-white-8:  rgba(255, 255, 255, 0.06);
+    --primitive-white-13: rgba(255, 255, 255, 0.10);
+    --primitive-white-22: rgba(255, 255, 255, 0.18);
+    --primitive-white-38: rgba(255, 255, 255, 0.30);
+  
+    /* ── Золото ─────────────────────────────────────────────────────── */
+    --primitive-gold-900: hsl(var(--hue-gold) var(--sat-gold)  12% / 0.5); 
+    --primitive-gold-600: hsl(var(--hue-gold) var(--sat-gold)  45%); 
+    --primitive-gold-500: hsl(var(--hue-gold) var(--sat-gold)  55%); /* default */
+    --primitive-gold-400: hsl(var(--hue-gold) var(--sat-gold)  65%); /* hover */
+    --primitive-gold-300: hsl(var(--hue-gold) var(--sat-gold)  75%); /* active */
+    --primitive-gold-glow-sm: hsl(var(--hue-gold) var(--sat-gold) 55% / 0.15);
+    --primitive-gold-glow-md: hsl(var(--hue-gold) var(--sat-gold) 55% / 0.30);
+  
+    /* ── Циан ───────────────────────────────────────────────────────── */
+    --primitive-cyan-900: hsl(var(--hue-cyan) var(--sat-cyan)  12% / 0.5);
+    --primitive-cyan-600: hsl(var(--hue-cyan) var(--sat-cyan)  45%);
+    --primitive-cyan-500: hsl(var(--hue-cyan) var(--sat-cyan)  55%); /* default */
+    --primitive-cyan-400: hsl(var(--hue-cyan) var(--sat-cyan)  65%); /* hover */
+    --primitive-cyan-300: hsl(var(--hue-cyan) var(--sat-cyan)  75%); /* active */
+    --primitive-cyan-glow-sm: hsl(var(--hue-cyan) var(--sat-cyan) 55% / 0.15);
+    --primitive-cyan-glow-md: hsl(var(--hue-cyan) var(--sat-cyan) 55% / 0.30);
+  
+    /* ── Красный ────────────────────────────────────────────────────── */
+    --primitive-red-900: hsl(var(--hue-red) var(--sat-red)  15% / 0.4);
+    --primitive-red-600: hsl(var(--hue-red) var(--sat-red)  50%);
+    --primitive-red-500: hsl(var(--hue-red) var(--sat-red)  60%);
+    --primitive-red-400: hsl(var(--hue-red) var(--sat-red)  70%);
+    --primitive-red-300: hsl(var(--hue-red) var(--sat-red)  80%);
+  
+    /* ── Фиолетовый ─────────────────────────────────────────────────── */
+    --primitive-purple-900: hsl(var(--hue-purple) var(--sat-purple)  15% / 0.4);
+    --primitive-purple-600: hsl(var(--hue-purple) var(--sat-purple)  55%);
+    --primitive-purple-500: hsl(var(--hue-purple) var(--sat-purple)  65%);
+    --primitive-purple-400: hsl(var(--hue-purple) var(--sat-purple)  75%);
+    --primitive-purple-300: hsl(var(--hue-purple) var(--sat-purple)  85%);
+  
+    /* ── Текст (Больше контраста) ───────────────────────────────────── */
+    --primitive-text-100: hsl(var(--hue-space)  10% 95%);  /* primary - чистый белый */
+    --primitive-text-300: hsl(var(--hue-space)  10% 75%);  /* secondary */
+    --primitive-text-500: hsl(var(--hue-space)  15% 55%);  /* muted */
+    --primitive-text-700: hsl(var(--hue-space)  20% 35%);  /* disabled */
+  
+    /* ── Статус ─────────────────────────────────────────────────────── */
+    --primitive-green-500: hsl(150, 70%, 45%);
+    --primitive-green-900: hsl(150, 70%, 45%, 0.1);
+    --primitive-rose-500:  hsl(350, 80%, 60%);
+    --primitive-rose-900:  hsl(350, 80%, 60%, 0.1);
+    --primitive-amber-500: hsl(35, 90%, 55%);
+    --primitive-amber-900: hsl(35, 90%, 55%, 0.1);
+  
+  }
+  
+  /* ╔═══════════════════════════════════════════════════════════════════╗
+     ║  TIER 2 · SEMANTIC TOKENS                                         ║
+     ╚═══════════════════════════════════════════════════════════════════╝ */
+  :root {
+    --color-canvas:          var(--primitive-surface-0);
+    --color-bg:              var(--primitive-surface-1);
+    --color-surface:         var(--primitive-surface-2);
+    --color-surface-raised:  var(--primitive-surface-3);
+    --color-surface-overlay: var(--primitive-surface-4);
+    --color-surface-top:     var(--primitive-surface-5);
+  
+    --color-border-subtle:  var(--primitive-white-4);
+    --color-border:         var(--primitive-white-8);
+    --color-border-medium:  var(--primitive-white-13);
+    --color-border-strong:  var(--primitive-white-22);
+    --color-border-focus:   var(--primitive-white-38);
+  
+    --color-text:           var(--primitive-text-100);
+    --color-text-muted:     var(--primitive-text-300);
+    --color-text-faint:     var(--primitive-text-500);
+    --color-text-disabled:  var(--primitive-text-700);
+  
+    --color-accent-bg:      var(--primitive-gold-900);
+    --color-accent:         var(--primitive-gold-500);
+    --color-accent-hover:   var(--primitive-gold-400);
+    --color-accent-active:  var(--primitive-gold-300);
+    --color-accent-glow:    var(--primitive-gold-glow-sm);
+    --color-accent-glow-strong: var(--primitive-gold-glow-md);
+  
+    --color-link-bg:        var(--primitive-cyan-900);
+    --color-link:           var(--primitive-cyan-500);
+    --color-link-hover:     var(--primitive-cyan-400);
+    --color-link-active:    var(--primitive-cyan-300);
+    --color-link-glow:      var(--primitive-cyan-glow-sm);
+  
+    --color-danger-bg:      var(--primitive-red-900);
+    --color-danger:         var(--primitive-red-500);
+    --color-danger-hover:   var(--primitive-red-400);
+  
+    --color-lore-bg:        var(--primitive-purple-900);
+    --color-lore:           var(--primitive-purple-500);
+    --color-lore-hover:     var(--primitive-purple-400);
+  
+    --color-success:        var(--primitive-green-500);
+    --color-success-bg:     var(--primitive-green-900);
+    --color-error:          var(--primitive-rose-500);
+    --color-error-bg:       var(--primitive-rose-900);
+    --color-warning:        var(--primitive-amber-500);
+    --color-warning-bg:     var(--primitive-amber-900);
+    --color-info:           var(--color-link);
+    --color-info-bg:        var(--color-link-bg);
+  
+    /* ── Тени (Сделали чище, меньше непрозрачности, убрали грязь) ──── */
+    --shadow-sm: 0 2px 4px rgba(0,0,0,0.2), 0 0 0 1px var(--color-border-subtle);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.3), 0 0 0 1px var(--color-border);
+    --shadow-lg: 0 12px 24px rgba(0,0,0,0.4), 0 0 0 1px var(--color-border-medium);
+    --shadow-xl: 0 24px 48px rgba(0,0,0,0.5), 0 0 0 1px var(--color-border-medium);
+  
+    /* ── Свечения акцентов (Более мягкие и дорогие) ─────────────────── */
+    --glow-accent: 0 0 12px var(--color-accent-glow);
+    --glow-link:   0 0 12px var(--color-link-glow);
+    --glow-danger: 0 0 12px hsl(var(--hue-red) var(--sat-red) 60% / 0.2);
+  
+    --ring-accent: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent);
+    --ring-link:   0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-link);
+    --ring-danger: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-danger);
+  
+    --gradient-page-top: radial-gradient(ellipse 80% 50% at 50% 0%, hsl(var(--hue-space) 20% 18% / 0.5) 0%, transparent 70%);
+    --gradient-surface:  linear-gradient(180deg, var(--color-surface-raised) 0%, var(--color-surface) 100%);
+    --gradient-accent:   linear-gradient(90deg, var(--color-accent) 0%, var(--color-accent-hover) 100%);
+    --gradient-link:     linear-gradient(90deg, var(--color-link) 0%, var(--color-link-hover) 100%);
+    --gradient-fade-down:linear-gradient(180deg, transparent 0%, var(--color-bg) 100%);
+    --gradient-divider:  linear-gradient(90deg, transparent 0%, var(--color-border-medium) 25%, var(--color-border-medium) 75%, transparent 100%);
+    
+    --glass-bg:       hsl(var(--hue-space) var(--sat-space) 12% / 0.6);
+    --glass-blur:     saturate(1.2) blur(12px);
+    --glass-border:   1px solid var(--color-border-medium);
+  
+    /* ── Типографика ────────────────────────────────────────────────── */
+    --font-display: 'Orbitron', 'Rajdhani', sans-serif;
+    --font-body:    'Inter', 'Exo 2', system-ui, sans-serif; /* Добавил Inter для чистоты */
+    --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+  
+    --text-xs:  0.70rem;
+    --text-sm:  0.85rem;
+    --text-md:  1.00rem;
+    --text-lg:  1.15rem;
+    --text-xl:  1.50rem;
+    --text-2xl: 2.00rem;
+    --text-3xl: 2.50rem;
+    --text-4xl: 3.00rem;
+  
+    --fw-regular:  400;
+    --fw-medium:   500;
+    --fw-semibold: 600;
+    --fw-bold:     700;
+    --fw-black:    900;
+  
+    --lh-tight:   1.25;
+    --lh-snug:    1.40;
+    --lh-normal:  1.60;
+    --lh-relaxed: 1.80;
+  
+    --ls-tight:  -0.01em;
+    --ls-normal:  0em;
+    --ls-wide:    0.02em;
+    --ls-wider:   0.05em;
+    --ls-caps:    0.10em;
+  
+    /* ── Скругления (Чуть мягче для современного вида) ──────────────── */
+    --radius-sm:   6px;
+    --radius-md:   10px;
+    --radius-lg:  16px;
+    --radius-xl:  24px;
+    --radius-pill: 9999px;
+    --cut:        10px;
+  
+    --duration-instant:  80ms;
+    --duration-fast:    150ms;
+    --duration-normal:  250ms;
+    --duration-slow:    400ms;
+    --duration-slower:  600ms;
+    --duration-crawl:   900ms;
+  
+    --ease-out:    cubic-bezier(0.16, 1, 0.3, 1); /* Более резвый и современный эйзинг */
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-in:     cubic-bezier(0.55, 0.06, 0.68, 0.19);
+    --ease-inout:  cubic-bezier(0.65, 0, 0.35, 1);
+  
+    --transition-fast:   var(--duration-fast)   var(--ease-out);
+    --transition-normal: var(--duration-normal) var(--ease-out);
+    --transition-slow:   var(--duration-slow)   var(--ease-out);
+    --transition-spring: var(--duration-normal) var(--ease-spring);
+  
+    --z-below:    -1;
+    --z-base:      0;
+    --z-raised:   10;
+    --z-sticky:   20;
+    --z-dropdown: 30;
+    --z-overlay:  40;
+    --z-modal:    50;
+    --z-toast:    60;
+    --z-hud:      70;
+    --z-cursor:   9999;
+  
+    --layout-sidebar-width: 268px;
+    --layout-topbar-height: 56px; /* Чуть просторнее */
+  }
+  
+  /* ╔═══════════════════════════════════════════════════════════════════╗
+     ║  TIER 3 · COMPONENT TOKENS  (defaults)                            ║
+     ╚═══════════════════════════════════════════════════════════════════╝ */
+  :root {
+    --btn-bg:           var(--color-surface-raised);
+    --btn-bg-hover:     var(--color-surface-overlay);
+    --btn-border:       var(--color-border);
+    --btn-text:         var(--color-text);
+    --btn-radius:       var(--radius-md);
+    --btn-primary-bg:   var(--color-accent);
+    --btn-primary-text: var(--color-canvas);
+  
+    --input-bg:         var(--color-surface);
+    --input-border:     var(--color-border);
+    --input-border-focus: var(--color-accent);
+    --input-text:       var(--color-text);
+    --input-placeholder:var(--color-text-faint);
+    --input-radius:     var(--radius-md);
+  
+    --card-bg:          var(--color-surface-raised);
+    --card-border:      var(--color-border);
+    --card-radius:      var(--radius-lg);
+    --card-shadow:      var(--shadow-md);
+  
+    --sidebar-bg:       var(--color-surface);
+    --sidebar-border:   var(--color-border);
+    --sidebar-width:    var(--layout-sidebar-width);
+  
+    --topbar-bg:        var(--glass-bg);
+    --topbar-border:    var(--color-border);
+    --topbar-height:    var(--layout-topbar-height);
+  
+    --badge-bg:         var(--color-surface-overlay);
+    --badge-text:       var(--color-text-muted);
+    --badge-radius:     var(--radius-sm);
+  
+    --tooltip-bg:       var(--primitive-surface-5);
+    --tooltip-text:     var(--color-text);
+    --tooltip-shadow:   var(--shadow-lg);
+  }
+  
+  /* ╔═══════════════════════════════════════════════════════════════════╗
+     ║  LEGACY BRIDGE                                                    ║
+     ╚═══════════════════════════════════════════════════════════════════╝ */
+  :root {
+    --b0: var(--color-canvas);
+    --b1: var(--color-bg);
+    --b2: var(--color-surface);
+    --b3: var(--color-surface-raised);
+    --b4: var(--color-surface-overlay);
+    --b5: var(--color-surface-top);
+  
+    --w0: var(--color-border-subtle);
+    --w1: var(--color-border);
+    --w2: var(--color-border-medium);
+    --w3: var(--color-border-strong);
+    --w4: var(--color-border-focus);
+  
+    --gdb: var(--color-accent-bg);
+    --gds: var(--color-accent-glow);
+    --gdd: var(--color-accent-glow-strong);
+    --gd:  var(--color-accent);
+    --gdl: var(--color-accent-hover);
+  
+    --teb: var(--color-link-bg);
+    --teg: var(--color-link-bg);
+    --tes: var(--color-link-glow);
+    --te:  var(--color-link);
+    --tel: var(--color-link-hover);
+  
+    --amb: var(--color-danger-bg);
+    --am:  var(--color-danger);
+    --aml: var(--color-danger-hover);
+  
+    --pub: var(--color-lore-bg);
+    --pu:  var(--color-lore);
+    --pul: var(--color-lore-hover);
+  
+    --t1: var(--color-text);
+    --t2: var(--color-text-muted);
+    --t3: var(--color-text-faint);
+    --t4: var(--color-text-disabled);
+  
+    --ok:  var(--color-success);
+    --err: var(--color-error);
+  
+    --sb: var(--layout-sidebar-width);
+    --th: var(--layout-topbar-height);
+  }

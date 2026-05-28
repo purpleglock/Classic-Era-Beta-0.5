@@ -1,0 +1,30 @@
+
+/* ── Gear action buttons (unequip / sell) ── */
+.cs-gear-item { position: relative; }
+.cs-gear-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.cs-gear-item:hover .cs-gear-actions { opacity: 1; }
+.cs-gear-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,.1);
+  color: rgba(255,255,255,.4);
+  font-size: 11px;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .15s;
+  padding: 0;
+  line-height: 1;
+}
+.cs-gear-unequip:hover { border-color: rgba(100,180,255,.5); color: rgba(100,180,255,.9); background: rgba(100,180,255,.08); }
+.cs-gear-sell:hover    { border-color: rgba(168,105,44,.6);  color: rgba(210,170,80,.9);  background: rgba(168,105,44,.1); }
+@media (max-width: 768px) { .cs-gear-actions { opacity: 1; } }

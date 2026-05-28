@@ -1,0 +1,830 @@
+/* ═══════════════════════════════════════════════════════════════
+   CALENDAR v2  ·  11_calendar.css
+═══════════════════════════════════════════════════════════════ */
+
+#cal-block {
+  margin-top: 56px;
+  padding-top: 32px;
+}
+
+/* ── Обёртка календаря ───────────────────────────────────── */
+.cal-wrap {
+  border-left: 1px solid var(--w2);
+  border-right: 1px solid var(--w2);
+  border-bottom: 1px solid var(--w2);
+  background: var(--b1);
+  overflow: hidden;
+  margin-top: 14px;
+}
+
+/* ── Шапка ───────────────────────────────────────────────── */
+.cal-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px; background: var(--b2);
+  flex-wrap: wrap;
+}
+.cal-nav { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.cal-nav-btn {
+  background: none; border: 1px solid var(--w2); color: var(--te);
+  font-size: 20px; width: 30px; height: 30px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+  transition: all .15s; flex-shrink: 0;
+}
+.cal-nav-btn:hover { background: rgba(168,105,44,.12); border-color: var(--te); }
+.cal-month-label {
+  font-family: 'Orbitron',sans-serif; font-size: 11px; font-weight: 700;
+  letter-spacing: 2px; color: var(--t1); min-width: 160px; text-align: center;
+  white-space: nowrap;
+}
+.cal-vk-btn {
+  font-family: 'Orbitron',sans-serif; font-size: 8px; font-weight: 700;
+  letter-spacing: 1px; padding: 7px 14px; border: 1px solid rgba(74,118,168,.5);
+  background: none; color: #4a76a8; cursor: pointer; transition: all .15s; margin-left: auto;
+}
+.cal-vk-btn:hover { background: rgba(74,118,168,.12); border-color: #4a76a8; }
+
+/* ── Дни недели ──────────────────────────────────────────── */
+.cal-grid-wrap { padding: 16px 20px 20px; }
+.cal-dow-row {
+  display: grid; grid-template-columns: repeat(7,1fr);
+  margin-bottom: 8px; padding-bottom: 8px;
+}
+.cal-dow-row span {
+  font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700;
+  letter-spacing: 2px; color: rgba(255, 255, 255, 0.3); text-transform: uppercase;
+  text-align: center;
+}
+.cal-dow-we { color: rgba(168,105,44,.7) !important; }
+
+/* ── Сетка ───────────────────────────────────────────────── */
+.cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; }
+
+.cal-cell {
+  position: relative; aspect-ratio: 1 / 1.1;
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,.03);
+  background: rgba(255, 255, 255, 0.015);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  transition: all .2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  min-height: 48px;
+}
+
+/* Эффект наведения: легкое поднятие карточки вместо кривого зума всей ячейки */
+.cal-cell:hover {
+  border-color: rgba(168,105,44,.5);
+  background: rgba(168,105,44,.05);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0,0,0,.4);
+  z-index: 2;
+}
+
+.cal-cell.cal-empty { background: transparent; border-color: transparent; cursor: default; pointer-events: none; }
+.cal-cell.cal-we .cal-day-num { color: rgba(168,105,44,.6); }
+
+/* Сегодняшний день (мягкий градиент и акцент) */
+.cal-cell.cal-today {
+  border-color: rgba(168,105,44,.8) !important;
+  background: radial-gradient(circle at top left, rgba(168,105,44,.15) 0%, transparent 70%);
+}
+.cal-cell.cal-today .cal-day-num { color: #fff; font-weight: 900; }
+
+/* Выбранный день (внутреннее свечение) */
+.cal-cell.cal-sel {
+  border-color: var(--te);
+  box-shadow: inset 0 0 0 1px var(--te), 0 0 20px rgba(0, 200, 255, 0.1); 
+  z-index: 3;
+  background: radial-gradient(circle at center, rgba(0, 200, 255, 0.05) 0%, transparent 100%);
+}
+.cal-cell.cal-sel:hover { transform: translateY(0); /* Фиксируем выбранный, чтобы не прыгал */ }
+
+.cal-cell.cal-has-ev { border-color: rgba(255,255,255,.08); }
+
+/* Картинка-фон ячейки */
+.cal-cell-img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; opacity: 0.35; transition: opacity .3s, transform .4s;
+}
+/* Теперь зумится только картинка внутри, а не ломается сетка */
+.cal-cell:hover .cal-cell-img { opacity: 0.6; transform: scale(1.08); }
+.cal-cell.cal-sel .cal-cell-img { opacity: 0.8; }
+
+.cal-cell-inner {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column;
+  align-items: flex-start; padding: 8px 10px; height: 100%;
+  background: linear-gradient(to bottom, rgba(0,0,0,.7) 0%, transparent 40%, rgba(0,0,0,.8) 100%);
+}
+.cal-cell:not(.cal-has-ev) .cal-cell-inner { background: none; }
+
+.cal-day-num {
+  font-family: 'Orbitron',sans-serif; font-size: 12px;
+  color: rgba(255,255,255,0.3); line-height: 1; font-weight: 700;
+  transition: color 0.2s;
+}
+.cal-cell:hover .cal-day-num { color: rgba(255,255,255,0.9); }
+
+.cal-cell-name {
+  font-size: 9px; font-family: 'Exo 2',sans-serif; font-weight: 600;
+  color: rgba(255,255,255,.9); line-height: 1.3; 
+  margin-top: auto; /* Прижимает текст события к низу ячейки */
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+}
+
+/* ── Карточка дня ─────────────────────────────────────────
+   Теперь рендерится МЕЖДУ шапкой и сеткой               */
+.cal-day-panel {
+  border-bottom: 1px solid var(--w2);
+  animation: cal-card-in .25s cubic-bezier(.2,.8,.2,1) both;
+}
+
+@keyframes cal-card-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cal-card { position: relative; }
+
+/* ── С картинкой ─────────────────────────────────────────── */
+.cal-card-img-wrap { position: relative; max-height: 380px; overflow: hidden; }
+.cal-card-img {
+  width: 100%; max-height: 380px; object-fit: cover;
+  display: block; cursor: zoom-in; transition: transform .4s;
+}
+.cal-card-img-wrap:hover .cal-card-img { transform: scale(1.03); }
+
+.cal-card-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(4,5,10,.85) 0%, rgba(4,5,10,.2) 50%, transparent 100%);
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 24px 28px;
+  pointer-events: none;
+}
+.cal-card-date-badge {
+  display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px;
+}
+.cal-card-day-big {
+  font-family: 'Orbitron',sans-serif; font-size: 56px; font-weight: 900;
+  color: #fff; line-height: 1; text-shadow: 0 2px 20px rgba(0,0,0,.6);
+}
+.cal-card-month-sm {
+  font-family: 'Orbitron',sans-serif; font-size: 12px; font-weight: 700;
+  letter-spacing: 3px; color: rgba(210,170,80,.9); text-transform: uppercase;
+}
+.cal-card-title {
+  font-family: 'Orbitron',sans-serif; font-size: 18px; font-weight: 700;
+  letter-spacing: 2px; color: #fff; text-transform: uppercase;
+  text-shadow: 0 2px 12px rgba(0,0,0,.7); line-height: 1.2;
+}
+
+/* ══════════════════════════════════════════════════════════
+   БЕЗ КАРТИНКИ — полный редизайн
+   ══════════════════════════════════════════════════════════ */
+.cal-card-noimg {
+  position: relative;
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    linear-gradient(160deg,
+      rgba(22,14,6,1)   0%,
+      rgba(4,5,10,1)   55%,
+      rgba(10,6,20,1) 100%
+    );
+}
+
+/* Сканлайны */
+.cal-noimg-scan {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent, transparent 2px,
+    rgba(0,0,0,.055) 2px, rgba(0,0,0,.055) 3px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Мягкое свечение под числом */
+.cal-noimg-glow {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 280px; height: 280px;
+  background: radial-gradient(circle,
+    rgba(168,105,44,.12) 0%,
+    transparent 65%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Внутренняя рамка-декор */
+.cal-card-noimg::before {
+  content: '';
+  position: absolute;
+  inset: 16px;
+  border: 1px solid rgba(168,105,44,.14);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Угловые штрихи */
+.cal-card-noimg::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(to right,
+    transparent 0%,
+    rgba(168,105,44,.5) 30%,
+    rgba(168,105,44,.5) 70%,
+    transparent 100%
+  );
+  z-index: 2;
+}
+
+/* Контент */
+.cal-noimg-body {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0;
+}
+
+.cal-noimg-eyebrow {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 5px;
+  color: rgba(210,170,80,.6);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.cal-noimg-num {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 100px;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+  letter-spacing: -3px;
+  text-shadow:
+    0 0 40px rgba(168,105,44,.22),
+    0 0 80px rgba(168,105,44,.1),
+    0 2px 4px rgba(0,0,0,.8);
+}
+
+.cal-noimg-name {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: rgba(210,170,80,.9);
+  text-transform: uppercase;
+  margin-top: 16px;
+  padding: 0 8px;
+}
+
+.cal-noimg-void {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 4px;
+  color: rgba(255,255,255,.18);
+  margin-top: 16px;
+}
+
+/* ── Тело карточки (текст события) ──────────────────────── */
+.cal-card-body {
+  padding: 18px 24px; font-family: 'Exo 2',sans-serif;
+  font-size: 14px; line-height: 1.7; color: var(--t2);
+  border-top: 1px solid var(--w2); background: var(--b2);
+}
+
+/* ── Форма редактора ─────────────────────────────────────── */
+.cal-edit-wrap {
+  padding: 24px 28px;
+  background: var(--b1);
+  border-top: 1px solid rgba(168,105,44,.15);
+  display: flex;
+  flex-direction: column;
+  gap: 16px; /* Увеличили отступы между элементами для "воздуха" */
+}
+
+.cal-edit-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(168,105,44,.12);
+}
+
+.cal-edit-label {
+  font-family: 'Orbitron',sans-serif; font-size: 10px; font-weight: 700;
+  letter-spacing: 2px; color: rgba(168,105,44,.9); text-transform: uppercase;
+}
+
+.cal-del-btn {
+  background: rgba(204,72,72,.05); border: 1px solid rgba(204,72,72,.3); 
+  color: rgba(204,72,72,.8);
+  font-family: 'JetBrains Mono',monospace; font-size: 10px; padding: 6px 12px;
+  cursor: pointer; transition: all .2s; letter-spacing: 1px; border-radius: 2px;
+}
+.cal-del-btn:hover { background: rgba(204,72,72,.15); color: #ff6b6b; border-color: rgba(204,72,72,.8); }
+
+/* Общие стили для полей ввода - делаем их более "утопленными" и чистыми */
+.cal-input, .cal-textarea {
+  width: 100%; padding: 12px 14px; 
+  background: rgba(0, 0, 0, 0.2); /* Темнее фона */
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--t1); font-family: 'Exo 2',sans-serif; font-size: 13px;
+  outline: none; transition: all .2s; box-sizing: border-box;
+  border-radius: 2px;
+}
+
+.cal-input:focus, .cal-textarea:focus { 
+  border-color: rgba(168,105,44,.5); 
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 10px rgba(168,105,44,.05); 
+}
+
+.cal-img-row { display: flex; gap: 8px; }
+.cal-img-row .cal-input { flex: 1; }
+
+.cal-upload-btn {
+  width: 42px; height: 42px; flex-shrink: 0; display: flex; align-items: center;
+  justify-content: center; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08);
+  cursor: pointer; font-size: 16px; transition: all .2s; border-radius: 2px; color: var(--t2);
+}
+.cal-upload-btn:hover { border-color: rgba(168,105,44,.5); background: rgba(168,105,44,.1); color: #fff; }
+
+.cal-textarea { line-height: 1.6; resize: vertical; min-height: 80px; }
+
+.cal-form-hint { font-family: 'JetBrains Mono',monospace; font-size: 10px; color: rgba(255,255,255,0.3); letter-spacing: .5px; }
+
+.cal-form-btns { display: flex; gap: 12px; margin-top: 8px; }
+
+
+
+.cal-btn-save {
+  font-family: 'Orbitron',sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 2px;
+  padding: 12px 24px; border: 1px solid rgba(78,201,106,.4); background: rgba(78,201,106,.05); 
+  color: #4ec96a; cursor: pointer; transition: all .2s; border-radius: 2px;
+}
+.cal-btn-save:hover { background: rgba(78,201,106,.15); border-color: #4ec96a; color: #fff; box-shadow: 0 0 15px rgba(78,201,106,.1); }
+
+.cal-btn-vk {
+  font-family: 'Orbitron',sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 2px;
+  padding: 12px 24px; border: 1px solid rgba(74,118,168,.5); background: rgba(74,118,168,.05); 
+  color: #4a76a8; cursor: pointer; transition: all .2s; border-radius: 2px;
+}
+.cal-btn-vk:hover { background: rgba(74,118,168,.15); border-color: #5b88bd; color: #fff; box-shadow: 0 0 15px rgba(74,118,168,.1); }
+
+.cal-btn-preview {
+  font-family: 'Orbitron',sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 2px;
+  padding: 12px 24px; border: 1px solid rgba(210,160,60,.4); background: rgba(210,160,60,.05); 
+  color: #d2a03c; cursor: pointer; transition: all .2s; border-radius: 2px;
+}
+.cal-btn-preview:hover { 
+  background: rgba(210,160,60,.15); border-color: #d2a03c; color: #fff; box-shadow: 0 0 15px rgba(210,160,60,.1); 
+}
+
+/* ── Мобайл — список вместо сетки ──────────────────────── */
+@media (max-width: 768px) {
+  .cal-dow-row { display: none; }
+  
+  .cal-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  
+  .cal-cell {
+    min-height: auto;
+    aspect-ratio: auto;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    padding: 12px 16px;
+    border: none;
+    border-bottom: 1px solid rgba(255,255,255,.05);
+    background: rgba(255,255,255,.02);
+  }
+  
+  .cal-cell.cal-empty { display: none !important; }
+  
+  .cal-cell-img {
+    position: relative !important;
+    inset: auto !important;
+    width: 60px !important;
+    height: 60px !important;
+    border-radius: 4px;
+    opacity: 1 !important;
+    margin-right: 14px;
+    flex-shrink: 0;
+    object-fit: cover;
+  }
+  
+  .cal-cell-inner {
+    position: static !important;
+    padding: 0 !important;
+    flex: 1;
+    background: none !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 14px;
+    height: auto !important;
+  }
+  
+  .cal-day-num {
+    font-size: 20px !important;
+    font-weight: 900 !important;
+    color: rgba(255,255,255,0.6) !important;
+    min-width: 32px;
+    flex-shrink: 0;
+    margin: 0 !important;
+  }
+  
+  .cal-cell-name {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 1.4 !important;
+    -webkit-line-clamp: 2;
+    text-shadow: none !important;
+    color: rgba(255,255,255,0.85) !important;
+    flex: 1;
+    margin: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+  
+  .cal-cell.cal-today {
+    background: rgba(168,105,44,.12) !important;
+    border-left: 3px solid rgba(168,105,44,.8) !important;
+  }
+  
+  .cal-cell.cal-today .cal-day-num {
+    color: var(--te) !important;
+  }
+  
+  .cal-cell.cal-we .cal-day-num {
+    color: rgba(168,105,44,.7) !important;
+  }
+  
+  .cal-cell:hover {
+    background: rgba(168,105,44,.08) !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  
+  .cal-cell:not(.cal-has-ev) .cal-cell-img {
+    display: none;
+  }
+
+  .cal-grid-wrap { padding: 0; }
+
+  .cal-card-noimg { min-height: 200px; }
+  .cal-noimg-num  { font-size: 72px; }
+  .cal-noimg-name { font-size: 11px; letter-spacing: 2px; }
+  .cal-noimg-eyebrow { letter-spacing: 3px; }
+
+  .cal-card-day-big  { font-size: 40px; }
+  .cal-card-title    { font-size: 14px; }
+  .cal-card-overlay  { padding: 16px; }
+
+  .cal-edit-wrap     { padding: 16px; }
+  .cal-form-btns     { flex-direction: column; }
+  .cal-btn-save, .cal-btn-vk { width: 100%; text-align: center; }
+  .cal-vk-btn        { display: none; }
+  
+  .cal-header { padding: 10px 12px; gap: 8px; }
+  .cal-nav { gap: 6px; }
+  .cal-month-label { min-width: 100px; font-size: 10px; }
+}
+
+@media (max-width: 480px) {
+  .cal-cell { padding: 10px 12px !important; }
+  .cal-cell-img { width: 50px !important; height: 50px !important; margin-right: 12px !important; }
+  .cal-day-num { font-size: 18px !important; min-width: 28px !important; }
+  .cal-cell-name { font-size: 12px !important; }
+  
+  .cal-noimg-num  { font-size: 56px; }
+  .cal-card-noimg { min-height: 160px; }
+  .cal-card-noimg::before { inset: 10px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CALENDAR MODAL — обновленный дизайн
+═══════════════════════════════════════════════════════════════ */
+
+.cal-modal-ov {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  pointer-events: none;
+  /* Убрали blur, оставили только плавное затемнение */
+  transition: background 0.3s ease;
+}
+
+.cal-modal-ov--open {
+  background: rgba(4, 5, 10, 0.9); /* Плотное темное затемнение фона */
+  pointer-events: all;
+}
+
+.cal-modal {
+  position: relative;
+  width: 100%;
+  max-width: 860px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--b1);
+  /* Более аккуратная рамка и глубокая тень для объема */
+  border: 1px solid rgba(168, 105, 44, 0.25);
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.8),
+    0 0 30px rgba(168,105,44,0.08);
+  transform: translateY(15px) scale(0.98);
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168,105,44,0.3) transparent;
+}
+
+.cal-modal-ov--open .cal-modal {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+/* Декоративная полоска сверху */
+.cal-modal::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(to right,
+    transparent 0%,
+    rgba(210,160,60,0.8) 50%,
+    transparent 100%
+  );
+  z-index: 10;
+}
+
+/* Крестик закрытия — теперь абсолютный и не ломает верстку */
+.cal-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+  width: 40px;
+  height: 40px;
+  background: rgba(4, 5, 10, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.cal-modal-close:hover {
+  background: rgba(204, 72, 72, 0.9);
+  border-color: #cc4848;
+  color: #fff;
+  transform: scale(1.08);
+  box-shadow: 0 4px 16px rgba(204, 72, 72, 0.4);
+}
+
+.cal-modal .cal-card { border: none; }
+.cal-modal .cal-card-img { max-height: 420px; width: 100%; display: block; }
+
+/* Кастомный скроллбар */
+.cal-modal::-webkit-scrollbar { width: 6px; }
+.cal-modal::-webkit-scrollbar-track { background: transparent; }
+.cal-modal::-webkit-scrollbar-thumb { background: rgba(168,105,44,0.3); border-radius: 3px; }
+.cal-modal::-webkit-scrollbar-thumb:hover { background: rgba(168,105,44,0.5); }
+
+/* Мобилка */
+@media (max-width: 600px) {
+  .cal-modal-ov { padding: 0; align-items: flex-end; }
+  .cal-modal {
+    max-width: 100%;
+    max-height: 92vh;
+    border-bottom: none;
+    transform: translateY(100%);
+  }
+  .cal-modal-ov--open .cal-modal { transform: translateY(0); }
+  
+  /* Кнопка закрытия на мобильном — больше, контрастнее, всегда видна */
+  .cal-modal-close {
+    top: 10px;
+    right: 10px;
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+    background: rgba(4, 5, 10, 0.95);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+  }
+}
+/* ── Строка выбора времени постинга ─────────────────────── */
+.cal-schedule-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.cal-schedule-label {
+  font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700;
+  letter-spacing: 2px; color: rgba(74,118,168,.9); text-transform: uppercase;
+  white-space: nowrap;
+}
+.cal-time-input {
+  width: 110px !important; flex: none !important;
+  font-family: 'JetBrains Mono', monospace; font-size: 14px;
+  color-scheme: dark;
+}
+.cal-time-reset {
+  background: none; border: 1px solid rgba(255,255,255,.1);
+  color: rgba(255,255,255,.4); font-size: 16px; width: 32px; height: 32px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .2s; flex-shrink: 0; border-radius: 2px;
+}
+.cal-time-reset:hover { border-color: rgba(74,118,168,.6); color: #4a76a8; }
+
+/* ── Новые кнопки редактора ──────────────────────────────── */
+.cal-edit-hdr-btns {
+  display: flex; gap: 6px; align-items: center;
+}
+
+.cal-icon-btn {
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+  border-radius: 4px; cursor: pointer; font-size: 14px;
+  transition: all .2s; flex-shrink: 0;
+}
+.cal-icon-copy:hover { background: rgba(107,184,212,.15); border-color: rgba(107,184,212,.4); }
+.cal-icon-dl:hover   { background: rgba(78,201,106,.15);  border-color: rgba(78,201,106,.4);  }
+.cal-icon-del:hover  { background: rgba(204,72,72,.15);   border-color: rgba(204,72,72,.5); color: #ff6b6b; }
+
+/* ── Модал шире и выше ───────────────────────────────────── */
+.cal-modal {
+  max-height: 94vh;
+}
+.cal-modal .cal-card-img { max-height: 480px; }
+.cal-card-img-wrap { max-height: 480px; }
+
+/* ── Textarea больше ─────────────────────────────────────── */
+.cal-textarea { min-height: 100px; }
+
+/* ── Кнопки редактора — одна строка ─────────────────────── */
+.cal-form-btns {
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+.cal-btn-save, .cal-btn-preview {
+  flex: 1; min-width: 120px; text-align: center;
+}
+
+/* ══════════════════════════════════════════════════════════
+   МНОЖЕСТВЕННЫЕ СОБЫТИЯ В ОДНОМ ДНЕ
+══════════════════════════════════════════════════════════ */
+
+.cal-events-list {
+  padding: 20px 28px 8px;
+  border-top: 1px solid rgba(168,105,44,.18);
+  background: linear-gradient(to bottom, rgba(20,12,4,0.6) 0%, var(--b2) 100%);
+}
+
+.cal-event-item {
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.cal-event-item:last-child { border-bottom: none; }
+.cal-event-item--first { padding-top: 6px; }
+
+.cal-event-item-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; gap: 10px;
+}
+
+.cal-event-item-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px; font-weight: 700; letter-spacing: 2px;
+  color: #fff;
+}
+
+.cal-event-item-actions {
+  display: flex; gap: 5px; flex-shrink: 0;
+}
+
+.cal-icon-edit:hover { background: rgba(168,105,44,.15); border-color: rgba(168,105,44,.5); }
+
+/* ── Аккордеон: несколько событий в день ── */
+.cal-event-item--multi .cal-event-item-header {
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background .15s;
+}
+.cal-event-item--multi .cal-event-item-header:hover { background: rgba(168,105,44,.08); }
+.cal-event-item--multi.cal-event-item--active .cal-event-item-header { background: rgba(168,105,44,.06); }
+
+.cal-ev-chevron {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: rgba(168,105,44,.5);
+  transition: transform .2s, color .15s;
+  margin-right: 6px;
+}
+.cal-event-item--active .cal-ev-chevron { transform: rotate(90deg); color: rgba(210,170,80,.8); }
+
+.cal-ev-arrow { display: none; }
+.cal-event-item-title--link { cursor: pointer; user-select: none; flex: 1; }
+.cal-event-item--active { background: transparent; }
+.cal-event-body-wrap { overflow: hidden; }
+
+@media (max-width: 600px) {
+  .cal-event-item-title { font-size: 12px; }
+}
+
+.cal-btn-add-event {
+  display: block; width: calc(100% - 56px); margin: 0 28px 20px;
+  padding: 11px; text-align: center;
+  font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 2px;
+  border: 1px dashed rgba(168,105,44,.35); background: rgba(168,105,44,.04);
+  color: rgba(168,105,44,.8); cursor: pointer; transition: all .2s; border-radius: 2px;
+}
+.cal-btn-add-event:hover {
+  background: rgba(168,105,44,.12); border-color: rgba(168,105,44,.7); color: #fff;
+}
+
+.cal-edit-wrap { display: flex; flex-direction: column; gap: 16px; }
+
+.cal-card-body-sign {
+  margin-top: 16px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px; letter-spacing: 3px;
+  color: rgba(168,105,44,.6);
+}
+
+/* ── Стрелки навигации модала ─────────────────────────────── */
+.cal-modal-nav {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 9100;
+  background: rgba(4, 5, 10, 0.75);
+  border: 1px solid rgba(168, 105, 44, 0.3);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 30px;
+  width: 44px;
+  height: 64px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .2s;
+  border-radius: 2px;
+  line-height: 1;
+  padding: 0;
+  pointer-events: all;
+  backdrop-filter: blur(4px);
+}
+.cal-modal-nav-prev { left: 12px; }
+.cal-modal-nav-next { right: 12px; }
+.cal-modal-nav:hover {
+  background: rgba(168, 105, 44, 0.2);
+  border-color: rgba(168, 105, 44, 0.7);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(168, 105, 44, 0.15);
+}
+@media (max-width: 600px) {
+  .cal-modal-nav {
+    top: auto;
+    transform: none;
+    bottom: 6px;
+    width: 46px;
+    height: 46px;
+    font-size: 22px;
+    border-radius: 50%;
+    background: rgba(10, 8, 20, 0.95);
+    border-color: rgba(168,105,44,0.6);
+  }
+  .cal-modal-nav-prev { left: calc(50% - 56px); right: auto; }
+  .cal-modal-nav-next { left: calc(50% + 10px); right: auto; }
+
+  /* Отступ снизу модала чтобы стрелки не перекрывали контент */
+  .cal-modal { padding-bottom: 64px; }
+}
