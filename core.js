@@ -11,8 +11,8 @@
 //     SB_URL  = Project URL
 //     SB_ANON = anon / public key
 //     Подробности в SETUP.md
-const SB_URL  = 'https://YOUR-PROJECT-REF.supabase.co';
-const SB_ANON = 'YOUR-SUPABASE-ANON-KEY';
+const SB_URL  = 'https://pgngkkiiopymvrcozvvr.supabase.co';
+const SB_ANON = 'sb_secret_QWEryo3E3NsmrtofAZn3Og_DOC-d8-J';
 
 // ────────────────────────────────────────────────────────────────────────────────────────────────────
 // SUPABASE CLIENT
