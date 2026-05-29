@@ -101,10 +101,14 @@
 
 /* ── Обложка главной: убрана неудачная стилизация ─────────── */
 
+/* ── APP SHELL (Прозрачный, чтобы видеть фон) ─────────── */
+#app { background: transparent !important; }
+
 /* ── Сайдбар и Навигация: Скругления, отступы, новый спайн ─────────── */
 #sb {
-  background: var(--b0) !important;
+  background: hsl(var(--hue-space) var(--sat-space) 5% / 0.85) !important;
   border-right: 1px solid var(--w1) !important;
+  box-shadow: 4px 0 24px rgba(0,0,0,0.4) !important;
 }
 .logo, .sb-srch, .sb-foot {
   background: transparent !important;
@@ -112,19 +116,22 @@
 }
 #srch {
   border-radius: 8px !important;
-  background: var(--b1) !important;
+  background: hsl(var(--hue-space) var(--sat-space) 15% / 0.6) !important;
   border-color: var(--w1) !important;
 }
 .n-home, .nl-hdr, .ng-hdr, .np {
   border-radius: 8px !important;
-  margin: 2px 8px !important;
+  margin: 2px 12px !important;
   border-left: none !important;
+  transition: all .25s var(--ease-out) !important;
 }
 .n-home:hover, .nl-hdr:hover, .ng-hdr:hover, .np:hover {
-  background: var(--b2) !important;
+  background: hsl(var(--hue-space) var(--sat-space) 25% / 0.35) !important;
 }
 .n-home.on, .nl-hdr.on, .ng-hdr.on, .np.on {
-  background: var(--b3) !important;
+  background: linear-gradient(90deg, hsl(var(--hue-space) var(--sat-space) 25% / 0.5), transparent) !important;
+  box-shadow: inset 2px 0 0 var(--gd) !important;
+  color: var(--gdl) !important;
 }
 /* Скрываем старые линии у навигации */
 .nl-hdr.on::after, .np.on::after, .n-home.on::after {
@@ -134,9 +141,13 @@
   display: none !important;
 }
 
-/* ── Полотно (Canvas) ──────────────────────────────────────────────── */
+/* ── Полотно (Canvas) и Topbar ──────────────────────────────────────── */
+#top {
+  background: hsl(var(--hue-space) var(--sat-space) 7% / 0.85) !important;
+  border-bottom: 1px solid var(--w1) !important;
+}
 #cw {
-  background: var(--b1) !important;
+  background: hsl(var(--hue-space) var(--sat-space) 8% / 0.9) !important;
 }
 #pg {
   padding-top: 24px !important;
