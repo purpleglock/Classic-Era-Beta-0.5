@@ -86,6 +86,32 @@ const FR_BLD_DESC = {
 };
 function frSetDesc(elId, map, key) { const el = document.getElementById(elId); if (el) el.textContent = map[key] || ''; }
 
+// ── Совместимость: какие режимы допустимы при форме правления ──
+// (исключает абсурд вроде Республика + Тоталитарный)
+const FR_GOV_REGIME = {
+  'Республика': ['Демократический', 'Эгалитарный', 'Меритократический', 'Плутократический', 'Олигархический'],
+  'Монархия': ['Авторитарный', 'Деспотичный', 'Олигархический', 'Меритократический'],
+  'Империя': ['Авторитарный', 'Тоталитарный', 'Деспотичный', 'Олигархический', 'Меритократический'],
+  'Олигархия': ['Олигархический', 'Плутократический', 'Авторитарный', 'Меритократический'],
+  'Диктатура': ['Авторитарный', 'Тоталитарный', 'Деспотичный'],
+  'Теократия': ['Авторитарный', 'Тоталитарный', 'Деспотичный', 'Олигархический'],
+  'Технократия': ['Меритократический', 'Авторитарный', 'Олигархический', 'Эгалитарный'],
+  'Корпоратократия': ['Плутократический', 'Олигархический', 'Авторитарный'],
+  'Коллективный разум': ['Эгалитарный', 'Тоталитарный', 'Авторитарный'],
+  'Машинный разум (ИИ)': ['Тоталитарный', 'Авторитарный', 'Меритократический'],
+};
+function frAllowedRegimes(gov) { return FR_GOV_REGIME[gov] || FR_REGIME; }
+function frOnGovChange(gov) {
+  FR.data.gov = gov;
+  frSetDesc('f-gov-d', FR_GOV_DESC, gov);
+  const allowed = frAllowedRegimes(gov);
+  const sel = document.getElementById('f-regime'); if (!sel) return;
+  const val = allowed.includes(sel.value) ? sel.value : allowed[0];
+  sel.innerHTML = allowed.map(o => `<option${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('');
+  FR.data.regime = val;
+  frSetDesc('f-regime-d', FR_REGIME_DESC, val);
+}
+
 const FR = { data: null, step: 0, freeSystems: null, allSystems: null, busy: false };
 
 function frBlank() {
@@ -109,6 +135,16 @@ function frRgbaToHex(rgba) {
   return '#' + [p[0], p[1], p[2]].map(x => (x || 0).toString(16).padStart(2, '0')).join('');
 }
 function frSolid(rgba) { const m = /rgba?\(([^)]+)\)/.exec(rgba || ''); if (!m) return '#5096ff'; const p = m[1].split(',').map(s => s.trim()); return `rgb(${p[0]},${p[1]},${p[2]})`; }
+// цвет, читаемый на тёмном фоне (тёмные осветляет, сохраняя оттенок)
+function frReadable(c) {
+  let r, g, b; const m = /rgba?\(([^)]+)\)/.exec(c || '');
+  if (c && c[0] === '#') { const n = parseInt(c.slice(1), 16); r = (n >> 16) & 255; g = (n >> 8) & 255; b = n & 255; }
+  else if (m) { const p = m[1].split(',').map(s => parseFloat(s)); r = p[0] | 0; g = p[1] | 0; b = p[2] | 0; }
+  else return '#cfe3ff';
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  if (lum < 0.5) { const f = 0.45 + (0.5 - lum) * 0.8; r = Math.round(r + (255 - r) * f); g = Math.round(g + (255 - g) * f); b = Math.round(b + (255 - b) * f); }
+  return `rgb(${r},${g},${b})`;
+}
 
 // ── Загрузка моей анкеты ─────────────────────────────────────
 async function frLoadMine() {
@@ -132,12 +168,12 @@ async function renderFactionWizard() {
   }
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
   const mine = await frLoadMine();
-  if (mine && (mine.status === 'pending' || mine.status === 'approved')) {
-    // уже подана/одобрена — не даём вторую, показываем статус
+  if (mine && mine.status === 'pending') {
+    // на модерации — редактировать нельзя, показываем статус
     setPg(frStatusCard(mine));
     return;
   }
-  // продолжаем черновик/отклонённую, либо новая
+  FR.editApproved = !!(mine && mine.status === 'approved'); // редактирование своей фракции
   FR.data = mine ? { ...frBlank(), ...mine, buildings: mine.buildings || [] } : frBlank();
   FR.step = 0;
   FR.freeSystems = null; FR.allSystems = null;
@@ -170,19 +206,23 @@ function frRenderStep() {
   const dots = FR_STEPS.map((s, i) =>
     `<div class="fr-dot${i === FR.step ? ' on' : ''}${i < FR.step ? ' done' : ''}" onclick="frGoStep(${i})"><span>${i + 1}</span><label>${s}</label></div>`).join('');
   const isLast = FR.step === FR_STEPS.length - 1;
-  setPg(`<div class="fr-wrap">
-    <div class="fr-head"><h1>Регистрация государства</h1>
-      <div class="fr-steps">${dots}</div></div>
+  setPg(`<div class="fr-wrap fr-wizard">
+    <div class="fr-hero">
+      <div class="fr-eyebrow">◈ ВСТУПЛЕНИЕ В ИГРУ</div>
+      <h1 class="fr-title">${FR.editApproved ? 'Редактирование фракции' : 'Регистрация государства'}</h1>
+      <div class="fr-sub">Шаг ${FR.step + 1} / ${FR_STEPS.length} — ${esc(FR_STEPS[FR.step])}</div>
+    </div>
+    <div class="fr-steps">${dots}</div>
     <div class="fr-body" id="fr-body">${body}</div>
     <div class="fr-foot">
       <button class="btn btn-gh" onclick="frPrev()" ${FR.step === 0 ? 'disabled' : ''}>← Назад</button>
-      <button class="btn btn-gh" onclick="frSaveDraft()">💾 Сохранить черновик</button>
+      ${FR.editApproved ? '' : `<button class="btn btn-gh" onclick="frSaveDraft()">💾 Сохранить черновик</button>`}
       ${isLast
-        ? `<button class="btn btn-gd" onclick="frSubmit()">Отправить на модерацию ✓</button>`
+        ? `<button class="btn btn-gd" onclick="frSubmit()">${FR.editApproved ? 'Сохранить изменения ✓' : 'Отправить на модерацию ✓'}</button>`
         : `<button class="btn btn-gd" onclick="frNext()">Далее →</button>`}
     </div>
   </div>`);
-  if (FR.step === 2) frRenderSystemPicker();
+  if (FR.step === 2 && !FR.editApproved) frRenderSystemPicker();
 }
 
 // ── Шаги ─────────────────────────────────────────────────────
@@ -197,11 +237,11 @@ function frStepPolitics(d) {
       <input class="fi" id="f-name" value="${esc(d.name)}" placeholder="Например: Объединённые Земные Нации"></div>
     <div class="fgr2">
       <div class="fg"><label class="fl">Форма правления</label>
-        ${frSel('f-gov', FR_GOV, d.gov, "frSetDesc('f-gov-d',FR_GOV_DESC,this.value)")}
+        ${frSel('f-gov', FR_GOV, d.gov, "frOnGovChange(this.value)")}
         <div class="fr-opt-desc" id="f-gov-d">${esc(FR_GOV_DESC[d.gov] || '')}</div></div>
-      <div class="fg"><label class="fl">Политический режим</label>
-        ${frSel('f-regime', FR_REGIME, d.regime, "frSetDesc('f-regime-d',FR_REGIME_DESC,this.value)")}
-        <div class="fr-opt-desc" id="f-regime-d">${esc(FR_REGIME_DESC[d.regime] || '')}</div></div>
+      ${(() => { const allowed = frAllowedRegimes(d.gov); const rv = allowed.includes(d.regime) ? d.regime : allowed[0]; d.regime = rv; return `<div class="fg"><label class="fl">Политический режим <span class="fr-hint-i" title="Список зависит от формы правления">ⓘ</span></label>
+        ${frSel('f-regime', allowed, rv, "frSetDesc('f-regime-d',FR_REGIME_DESC,this.value)")}
+        <div class="fr-opt-desc" id="f-regime-d">${esc(FR_REGIME_DESC[rv] || '')}</div></div>`; })()}
     </div>
     <div class="fgr2">
       <div class="fg"><label class="fl">Глава фракции</label><input class="fi" id="f-leader" value="${esc(d.leader)}" placeholder="Имя и титул"></div>
@@ -223,6 +263,13 @@ function frStepColor(d) {
     </div>`;
 }
 function frStepSystem(d) {
+  if (FR.editApproved) {
+    return `<h3 class="fr-h3">Столичная система</h3>
+      <div class="fr-locked">🔒 Стартовая система закреплена за фракцией и не может быть изменена.</div>
+      <div class="fr-sys-picked">Столица: <b>${esc(d.system_name || '—')}</b></div>
+      <div class="fg" style="margin-top:12px"><label class="fl">Название столичной планеты</label>
+        <input class="fi" id="f-planet" value="${esc(d.planet_name)}" placeholder="Планета"></div>`;
+  }
   return `<h3 class="fr-h3">Столичная система</h3>
     <p class="fr-note">Выберите <b>свободную</b> звезду. На мини-карте видно её положение: <span style="color:var(--gd)">голубые</span> свободны, серые заняты.</p>
     <div class="fr-minimap" id="f-minimap"><div class="sload" style="min-height:60px"><div class="pulse-loader"></div></div></div>
@@ -234,6 +281,15 @@ function frStepSystem(d) {
 }
 function frStepBuildings(d) {
   const free = frFreeBuilding(d.civ_type);
+  if (FR.editApproved) {
+    const chosen = [free, ...d.buildings.filter(b => b !== free)];
+    const rows = chosen.map(id => { const b = FR_BUILDINGS.find(x => x.id === id); if (!b) return ''; return `<div class="fr-bld" style="cursor:default">
+      <div class="fr-bld-txt"><span class="fr-bld-name">${esc(b.name)}${id === free ? ' (беспл.)' : ''}</span><span class="fr-bld-desc">${esc(FR_BLD_DESC[id] || '')}</span></div></div>`; }).join('');
+    return `<h3 class="fr-h3">Стартовые бонусы</h3>
+      <div class="fr-locked">🔒 Стартовые постройки закреплены и не меняются после одобрения.</div>
+      <div class="fr-bld-grid">${rows}</div>
+      ${d.bonus_money ? '<div class="fr-bld" style="cursor:default;margin-top:8px"><div class="fr-bld-txt"><span class="fr-bld-name">+ 500 галактических стандартов</span></div></div>' : ''}`;
+  }
   const spent = frSpent(d);
   const rows = FR_BUILDINGS.map(b => {
     const isFree = b.id === free;
@@ -398,7 +454,7 @@ function frPickSystem(id, name) {
 }
 
 // ── Сохранение ──────────────────────────────────────────────
-async function frUpsert(status) {
+async function frUpsert(status, extra) {
   frSyncStep();
   const d = FR.data;
   const body = {
@@ -408,6 +464,7 @@ async function frUpsert(status) {
     buildings: d.buildings, bonus_money: d.bonus_money,
     race: d.race, ideology: d.ideology, culture: d.culture, history: d.history, link: d.link, herald_url: d.herald_url,
     updated_at: new Date().toISOString(),
+    ...(extra || {}),
   };
   if (d.id) { await dbPatch('faction_applications', 'id=eq.' + d.id, body); return d.id; }
   const rows = await dbPost('faction_applications', body);
@@ -427,7 +484,11 @@ async function frSubmit() {
   if (!FR.data.name) { toast('Укажите название', 'err'); FR.step = 0; frRenderStep(); return; }
   if (!FR.data.system_id) { toast('Выберите систему', 'err'); FR.step = 2; frRenderStep(); return; }
   FR.busy = true;
-  try { await frUpsert('pending'); toast('Анкета отправлена на модерацию!', 'ok'); go('factions'); }
+  try {
+    if (FR.editApproved) { await frUpsert('approved', { pending_review: true }); toast('Изменения отправлены на проверку администрации', 'ok'); }
+    else { await frUpsert('pending'); toast('Анкета отправлена на модерацию!', 'ok'); }
+    go('factions');
+  }
   catch (e) { toast('Ошибка: ' + e.message, 'err'); }
   finally { FR.busy = false; }
 }
@@ -456,8 +517,8 @@ async function renderFactionsPage() {
   }
 
   const cards = approved.map(f => `<div class="fr-card" onclick="frViewFaction('${f.id}')">
-      <div class="fr-card-bar" style="background:${frSolid(f.color)}"></div>
-      <div class="fr-card-herald">${f.herald_url ? `<img src="${esc(f.herald_url)}">` : '<span style="color:' + frSolid(f.color) + '">◈</span>'}</div>
+      <div class="fr-card-bar" style="background:${frReadable(f.color)}"></div>
+      <div class="fr-card-herald">${f.herald_url ? `<img src="${esc(f.herald_url)}">` : '<span style="color:' + frReadable(f.color) + '">◈</span>'}</div>
       <div class="fr-card-main">
         <div class="fr-card-name">${esc(f.name)}</div>
         <div class="fr-card-sub">${esc(f.gov || '')}${f.leader ? ' · ' + esc(f.leader) : ''}</div>
@@ -485,7 +546,7 @@ async function frViewFaction(id) {
   modal.innerHTML = `<div class="fr-modal">
     <button class="gm-close" onclick="frCloseView()">✕</button>
     <div class="fr-view-hd">
-      <div class="fr-view-herald" style="border-color:${frSolid(f.color)}">${f.herald_url ? `<img src="${esc(f.herald_url)}">` : `<span style="color:${frSolid(f.color)}">◈</span>`}</div>
+      <div class="fr-view-herald" style="border-color:${frReadable(f.color)}">${f.herald_url ? `<img src="${esc(f.herald_url)}">` : `<span style="color:${frReadable(f.color)}">◈</span>`}</div>
       <div><div class="fr-card-name" style="font-size:22px">${esc(f.name)}</div>
       <div class="fr-card-sub">${esc(f.gov || '')} · ${esc(f.regime || '')}</div></div>
     </div>
@@ -510,19 +571,23 @@ function frCloseView() { document.getElementById('fr-modal')?.classList.remove('
 async function frRenderAppsTab(b) {
   b.innerHTML = `<div class="sload" style="min-height:60px"><div class="quote-loader">Загрузка...</div></div>`;
   let apps = [];
-  try { apps = await dbGet('faction_applications', 'status=eq.pending&order=updated_at.asc') || []; } catch (e) { b.innerHTML = `<p style="color:var(--err)">Ошибка: ${esc(e.message)}</p>`; return; }
+  try { apps = await dbGet('faction_applications', 'or=(status.eq.pending,pending_review.eq.true)&order=updated_at.asc') || []; } catch (e) { b.innerHTML = `<p style="color:var(--err)">Ошибка: ${esc(e.message)}</p>`; return; }
   if (!apps.length) { b.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--t3)">Нет анкет на модерации</div>`; return; }
   b.innerHTML = `<div style="margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--te)">${apps.length} на модерации</div>` +
-    apps.map(a => `<div class="fr-app" id="fr-app-${a.id}">
-      <div class="fr-app-hd"><span class="fr-swatch" style="background:${a.color}"></span>
+    apps.map(a => {
+      const isEdit = a.status === 'approved' && a.pending_review;
+      const badge = isEdit ? `<span class="fr-app-badge edit">ИЗМЕНЕНИЯ</span>` : `<span class="fr-app-badge new">НОВАЯ</span>`;
+      return `<div class="fr-app" id="fr-app-${a.id}">
+      <div class="fr-app-hd">${badge}<span class="fr-swatch" style="background:${a.color}"></span>
         <b>${esc(a.name || 'Без названия')}</b>
         <span class="fr-app-by">${esc(a.owner_email || '')}</span></div>
       <div class="fr-app-meta">★ ${esc(a.system_name || '—')} · ${esc(a.gov || '')} · ${esc(a.race || '')}</div>
       <div class="fr-app-acts">
         <button class="btn btn-gh btn-sm" onclick="frViewFaction('${a.id}')">Детали</button>
-        <button class="btn btn-gd btn-sm" onclick="frApprove('${a.id}')">✓ Одобрить</button>
-        <button class="btn btn-rd btn-sm" onclick="frReject('${a.id}')">✕ Отклонить</button>
-      </div></div>`).join('');
+        <button class="btn btn-gd btn-sm" onclick="frApprove('${a.id}')">✓ ${isEdit ? 'Принять изменения' : 'Одобрить'}</button>
+        ${isEdit ? '' : `<button class="btn btn-rd btn-sm" onclick="frReject('${a.id}')">✕ Отклонить</button>`}
+      </div></div>`;
+    }).join('');
 }
 async function frApprove(id) {
   if (!confirm('Одобрить анкету? Система окрасится, автор станет игроком.')) return;

@@ -23,6 +23,9 @@ create table if not exists public.faction_applications (
   updated_at timestamptz default now()
 );
 
+-- флаг «внесены изменения, ждут проверки» (для редактирования уже одобренной)
+alter table public.faction_applications add column if not exists pending_review boolean default false;
+
 alter table public.faction_applications enable row level security;
 
 drop policy if exists "fa_select" on public.faction_applications;
@@ -77,9 +80,9 @@ begin
     update public.map_systems set faction = fid where id = app.system_id;
   end if;
 
-  -- статус анкеты
+  -- статус анкеты (сбрасываем флаг изменений)
   update public.faction_applications
-    set status = 'approved', faction_id = fid, reviewed_by = auth.jwt() ->> 'email', updated_at = now()
+    set status = 'approved', pending_review = false, faction_id = fid, reviewed_by = auth.jwt() ->> 'email', updated_at = now()
     where id = p_id;
 
   -- роль игрока (не понижая стафф/суперадмина)

@@ -95,6 +95,14 @@
 .gm-panel-title,.gm-form-title{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:22px;letter-spacing:1px;color:#eaf3fb;margin:0 24px 8px 0}
 .gm-fac-badge{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:3px 9px;border:1px solid;border-radius:6px;margin-bottom:10px}
 .gm-fac-badge.gm-neutral{color:var(--t3);border-color:var(--w3)}
+/* карточка фракции с флагом */
+.gm-fac-card{display:flex;align-items:center;gap:10px;padding:9px 10px;margin-bottom:12px;border-radius:10px;border:1px solid color-mix(in srgb, var(--fcol) 45%, transparent)}
+.gm-fac-flag{width:42px;height:42px;flex-shrink:0;border-radius:8px;overflow:hidden;border:2px solid;display:flex;align-items:center;justify-content:center;font-size:20px;background:rgba(0,0,0,.35)}
+.gm-fac-flag img{width:100%;height:100%;object-fit:cover}
+.gm-fac-info{flex:1;min-width:0}
+.gm-fac-name{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;letter-spacing:.5px;line-height:1.1;text-shadow:0 1px 4px rgba(0,0,0,.6)}
+.gm-fac-leader{font-size:11px;color:var(--t2);margin-top:1px}
+.gm-fac-swatch{width:16px;height:16px;border-radius:4px;border:1px solid;flex-shrink:0}
 .gm-panel-desc{font-size:13px;color:var(--t2);line-height:1.6;margin:0 0 14px}
 .gm-panel-sub{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gdl);border-bottom:1px solid var(--w2);padding-bottom:6px;margin-bottom:10px}
 .gm-empty{font-size:12px;color:var(--t3);font-style:italic}

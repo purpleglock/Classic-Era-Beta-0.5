@@ -36,6 +36,12 @@ async function loadGalaxyData() {
     GM.lanes = lanes || [];
     GM.factions = facs || [];
     GM.loaded = true;
+    // мета фракций (флаг/герб, лидер) из анкет — необязательно
+    GM.facMeta = {};
+    try {
+      const apps = await dbGet('faction_applications', 'status=eq.approved&select=faction_id,herald_url,leader,gov,name');
+      (apps || []).forEach(a => { if (a.faction_id) GM.facMeta[a.faction_id] = a; });
+    } catch (e) { /* таблицы анкет может не быть */ }
   } catch (e) {
     console.warn('[map] load error', e);
     toast('Ошибка загрузки карты: ' + e.message, 'err');
@@ -377,6 +383,21 @@ function gmSolidColor(rgba) {
   const p = m[1].split(',').map(s => s.trim());
   return `rgba(${p[0]},${p[1]},${p[2]},0.6)`;
 }
+// парсит цвет в [r,g,b]
+function gmRgb(c) {
+  if (!c) return [140, 160, 190];
+  if (c[0] === '#') { const n = parseInt(c.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  const m = /rgba?\(([^)]+)\)/.exec(c);
+  if (m) { const p = m[1].split(',').map(s => parseFloat(s)); return [p[0] | 0, p[1] | 0, p[2] | 0]; }
+  return [140, 160, 190];
+}
+// возвращает цвет, гарантированно читаемый на тёмном фоне (тёмные осветляет, сохраняя оттенок)
+function gmReadable(c) {
+  let [r, g, b] = gmRgb(c);
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  if (lum < 0.5) { const f = 0.45 + (0.5 - lum) * 0.8; r = Math.round(r + (255 - r) * f); g = Math.round(g + (255 - g) * f); b = Math.round(b + (255 - b) * f); }
+  return `rgb(${r},${g},${b})`;
+}
 
 function gmDrawStars() {
   const layer = document.getElementById('gm-stars');
@@ -419,11 +440,26 @@ function gmOpenPanel(sys) {
   const fac = gmFaction(sys.faction);
   const planets = (sys.planets || []).map((p, i) => gmPlanetView(p, i)).join('')
     || `<p class="gm-empty">Система ещё не исследована. Данные о планетах отсутствуют.</p>`;
+  const meta = fac && GM.facMeta ? GM.facMeta[fac.id] : null;
+  const facBlock = fac ? (() => {
+    const col = gmReadable(fac.color);
+    const flag = meta && meta.herald_url
+      ? `<div class="gm-fac-flag" style="border-color:${col}"><img src="${esc(meta.herald_url)}" onerror="this.parentElement.style.display='none'"></div>`
+      : `<div class="gm-fac-flag" style="border-color:${col};color:${col}">⬡</div>`;
+    return `<div class="gm-fac-card" style="--fcol:${col};background:${gmSolidColor(fac.color).replace('0.6', '0.14')}">
+      ${flag}
+      <div class="gm-fac-info">
+        <div class="gm-fac-name" style="color:${col}">${esc(fac.name)}</div>
+        ${meta && meta.leader ? `<div class="gm-fac-leader">${esc(meta.leader)}</div>` : ''}
+      </div>
+      <span class="gm-fac-swatch" style="background:${fac.color};border-color:${col}" title="Цвет фракции"></span>
+    </div>`;
+  })() : `<div class="gm-fac-badge gm-neutral">Нейтральная система</div>`;
   panel.className = '';
   panel.innerHTML = `
     <button class="gm-close" onclick="gmClosePanel()">✕</button>
     <h2 class="gm-panel-title">${esc(sys.name)}</h2>
-    ${fac ? `<div class="gm-fac-badge" style="border-color:${gmSolidColor(fac.color)};color:${gmSolidColor(fac.color)}">${esc(fac.name)}</div>` : `<div class="gm-fac-badge gm-neutral">Нейтральная</div>`}
+    ${facBlock}
     <p class="gm-panel-desc">${esc(sys.description || '')}</p>
     <div class="gm-panel-sub">Состав системы <span class="gm-sub-hint">★ от звезды наружу →</span></div>
     <div class="gm-orblist">${planets}</div>`;

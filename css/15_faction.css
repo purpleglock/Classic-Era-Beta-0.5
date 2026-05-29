@@ -10,17 +10,38 @@
 .fr-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
 .fr-head h1{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:26px;letter-spacing:2px;text-transform:uppercase;color:#eaf3fb}
 
-/* шаги */
-.fr-steps{display:flex;flex-wrap:wrap;gap:6px;width:100%;margin-top:6px}
-.fr-dot{display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 8px;border:1px solid var(--w2);border-radius:8px;background:var(--b2);transition:all .2s}
-.fr-dot span{width:18px;height:18px;border-radius:50%;background:var(--b4);color:var(--t3);display:flex;align-items:center;justify-content:center;font-size:10px;font-family:'JetBrains Mono',monospace}
-.fr-dot label{font-size:11px;color:var(--t3);cursor:pointer;font-family:'Rajdhani',sans-serif;letter-spacing:.5px}
-.fr-dot.on{border-color:var(--gd);box-shadow:0 0 10px hsl(206 72% 50% / .25)}
-.fr-dot.on span{background:var(--gd);color:#04101c}
+/* ── Героическая шапка визарда ── */
+.fr-hero{position:relative;text-align:center;padding:22px 16px 18px;margin-bottom:18px;
+  border:1px solid var(--w2);border-radius:16px;overflow:hidden;
+  background:radial-gradient(120% 120% at 50% -20%, hsl(206 60% 22% / .45), transparent 60%), linear-gradient(180deg, var(--b3), var(--b1))}
+.fr-hero::after{content:'';position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:200px;height:2px;background:var(--gd);box-shadow:0 0 18px var(--gd)}
+.fr-eyebrow{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:6px;color:var(--gdl);opacity:.85;margin-bottom:8px}
+.fr-title{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:30px;letter-spacing:3px;text-transform:uppercase;color:#eaf3fb;line-height:1;text-shadow:0 0 30px hsl(206 72% 50% / .35)}
+.fr-sub{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--te);margin-top:8px}
+
+/* шаги — прогресс-рейка с линией */
+.fr-steps{position:relative;display:flex;flex-wrap:wrap;gap:6px;width:100%;margin-bottom:16px;justify-content:center}
+.fr-dot{display:flex;align-items:center;gap:6px;cursor:pointer;padding:5px 9px;border:1px solid var(--w2);border-radius:9px;background:var(--b2);transition:all .2s}
+.fr-dot:hover{border-color:var(--w3)}
+.fr-dot span{width:20px;height:20px;border-radius:50%;background:var(--b4);color:var(--t3);display:flex;align-items:center;justify-content:center;font-size:10px;font-family:'JetBrains Mono',monospace;transition:all .2s}
+.fr-dot label{font-size:11px;color:var(--t3);cursor:pointer;font-family:'Rajdhani',sans-serif;letter-spacing:.5px;font-weight:600}
+.fr-dot.on{border-color:var(--gd);box-shadow:0 0 12px hsl(206 72% 50% / .3);background:hsl(206 40% 16% / .5)}
+.fr-dot.on span{background:var(--gd);color:#04101c;box-shadow:0 0 10px var(--gd)}
 .fr-dot.on label{color:var(--gdl)}
 .fr-dot.done span{background:var(--ok);color:#04101c}
+.fr-dot.done label{color:var(--t2)}
 
-.fr-body{background:var(--b2);border:1px solid var(--w2);border-radius:14px;padding:20px;min-height:240px}
+.fr-body{position:relative;background:linear-gradient(180deg, var(--b2), var(--b1));border:1px solid var(--w2);border-radius:14px;padding:22px;min-height:260px;box-shadow:0 10px 36px rgba(0,0,0,.4)}
+.fr-body::before{content:'';position:absolute;top:0;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,var(--gd),transparent);opacity:.5}
+
+/* замок (нельзя менять) и подсказки */
+.fr-locked{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--gdl);background:hsl(206 40% 16% / .5);border:1px solid hsl(206 50% 40% / .4);border-radius:8px;padding:9px 12px;margin-bottom:12px}
+.fr-hint-i{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;background:var(--b4);color:var(--t3);font-size:9px;cursor:help}
+
+/* бейджи в модерации */
+.fr-app-badge{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;padding:2px 6px;border-radius:4px;border:1px solid}
+.fr-app-badge.new{color:var(--ok);border-color:var(--ok)}
+.fr-app-badge.edit{color:var(--color-warning);border-color:var(--color-warning)}
 .fr-h3{font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:1px;color:var(--gdl);margin:0 0 14px;font-size:16px}
 .fr-note{font-size:12px;color:var(--t3);margin-bottom:14px;line-height:1.5}
 .fgr2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
