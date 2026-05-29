@@ -74,6 +74,11 @@ async function go(slug, push=true) {
   }
 
   if (slug==='home') { await renderHome(); return; }
+  if (slug==='map') {
+    if (typeof renderGalaxyMap === 'function') { await renderGalaxyMap(); }
+    else { setPg('<div class="sempty">galaxy_map.js не загружен</div>'); }
+    return;
+  }
   if (slug==='armor-config') {
     if (typeof renderArmorConfigPage === 'function') { renderArmorConfigPage(); }
     else { setPg('<div class="sempty">renderArmorConfigPage не найден</div>'); }

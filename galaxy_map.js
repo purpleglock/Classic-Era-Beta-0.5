@@ -1,0 +1,676 @@
+// ════════════════════════════════════════════════════════════
+// GALAXY MAP — интерактивная карта галактики (часть вики)
+// Данные: Supabase (map_systems / map_hyperlanes / map_factions)
+// Зависит от: core.js (dbGet/dbPost/dbPatch/dbDel, esc, toast, SB_URL),
+//             auth.js (user), d3-delaunay (CDN)
+// ════════════════════════════════════════════════════════════
+
+const GM_W = 3300, GM_H = 2062;
+const GM_BASE = 'assets/map/';
+const GM_STAR_TYPES = ['yellow', 'red', 'blue', 'white', 'green'];
+
+const GM = {
+  systems: [], lanes: [], factions: [],
+  scale: 1, tx: 0, ty: 0,
+  edit: false, mode: 'select',   // select | link | add
+  linkFrom: null,
+  drag: null,                    // {sys, moved}
+  panning: false, panStart: null,
+  loaded: false,
+  showBorders: true, fullscreen: false,
+  touch: null,                   // {mode:'pan'|'pinch', ...}
+};
+
+function gmCanEdit() { return !!(user && ['superadmin', 'editor'].includes(user.role)); }
+function gmFaction(id) { return GM.factions.find(f => f.id === id) || null; }
+
+// ── Загрузка данных ─────────────────────────────────────────
+async function loadGalaxyData() {
+  try {
+    const [sys, lanes, facs] = await Promise.all([
+      dbGet('map_systems', 'select=*'),
+      dbGet('map_hyperlanes', 'select=*'),
+      dbGet('map_factions', 'select=*&order=sort.asc'),
+    ]);
+    GM.systems = (sys || []).map(s => ({ ...s, x: +s.x, y: +s.y, planets: s.planets || [] }));
+    GM.lanes = lanes || [];
+    GM.factions = facs || [];
+    GM.loaded = true;
+  } catch (e) {
+    console.warn('[map] load error', e);
+    toast('Ошибка загрузки карты: ' + e.message, 'err');
+  }
+}
+
+// ── Точка входа (вызывается из go('map')) ───────────────────
+async function renderGalaxyMap() {
+  const host = document.getElementById('pg');
+  host.className = 'pgi';
+  host.innerHTML = `<div class="sload"><div class="pulse-loader"></div></div>`;
+  await loadGalaxyData();
+  if (document.getElementById('pg') !== host) return; // ушли со страницы
+
+  // сброс временного состояния (DOM пересоздаётся при каждом входе)
+  GM.edit = false; GM.mode = 'select'; GM.linkFrom = null;
+  GM.drag = null; GM.panning = false; GM.fullscreen = false; GM.touch = null;
+
+  const canEdit = gmCanEdit();
+  host.innerHTML = `
+    <div id="gm-wrap">
+      <div id="gm-viewport">
+        <div id="gm-canvas">
+          <img id="gm-bg" src="${GM_BASE}background_galaxy.png" draggable="false" alt="">
+          <svg id="gm-svg" viewBox="0 0 ${GM_W} ${GM_H}" preserveAspectRatio="none"></svg>
+          <div id="gm-stars"></div>
+        </div>
+      </div>
+      <div id="gm-coord">X: 0 | Y: 0</div>
+      <div id="gm-controls">
+        <button class="gm-ctl${GM.showBorders ? ' gm-active' : ''}" title="Границы" id="gm-ctl-borders" onclick="gmToggleBorders()">⬡</button>
+        <button class="gm-ctl" title="Приблизить" onclick="gmZoomBtn(1)">＋</button>
+        <button class="gm-ctl" title="Отдалить" onclick="gmZoomBtn(-1)">－</button>
+        <button class="gm-ctl" title="Вся карта" onclick="gmFit()">⤢</button>
+        <button class="gm-ctl" title="На весь экран" id="gm-ctl-fs" onclick="gmToggleFullscreen()">⛶</button>
+      </div>
+      ${canEdit ? gmToolbarHtml() : ''}
+      <div id="gm-panel" class="gm-hidden"></div>
+      <div id="gm-form" class="gm-hidden"></div>
+    </div>`;
+
+  gmBindViewport();
+  gmFit();
+  gmDraw();
+}
+
+function gmToolbarHtml() {
+  return `<div id="gm-toolbar">
+    <button class="gm-tb-btn" id="gm-edit-toggle" onclick="gmToggleEdit()">✎ Редактировать карту</button>
+    <div id="gm-edit-tools" class="gm-hidden">
+      <button class="gm-tb-btn" data-mode="select" onclick="gmSetMode('select')">✥ Двигать</button>
+      <button class="gm-tb-btn" data-mode="add" onclick="gmSetMode('add')">＋ Звезда</button>
+      <button class="gm-tb-btn" data-mode="link" onclick="gmSetMode('link')">⟿ Гиперпуть</button>
+      <span class="gm-tb-hint" id="gm-tb-hint"></span>
+    </div>
+  </div>`;
+}
+
+// ── Камера: fit / clamp / apply ─────────────────────────────
+function gmMinScale() {
+  const vp = document.getElementById('gm-viewport');
+  if (!vp) return 0.1;
+  // contain: видно всю галактику целиком
+  return Math.min(vp.clientWidth / GM_W, vp.clientHeight / GM_H);
+}
+function gmFit() {
+  const vp = document.getElementById('gm-viewport');
+  if (!vp) return;
+  const w = vp.clientWidth, h = vp.clientHeight;
+  GM.scale = gmMinScale();
+  GM.tx = (w - GM_W * GM.scale) / 2;
+  GM.ty = (h - GM_H * GM.scale) / 2;
+  gmApply();
+}
+function gmClamp() {
+  const vp = document.getElementById('gm-viewport');
+  if (!vp) return;
+  const w = vp.clientWidth, h = vp.clientHeight;
+  const minScale = gmMinScale();
+  GM.scale = Math.min(Math.max(GM.scale, minScale), 4.0);
+  const mw = GM_W * GM.scale, mh = GM_H * GM.scale;
+  GM.tx = Math.min(0, Math.max(GM.tx, w - mw));
+  GM.ty = Math.min(0, Math.max(GM.ty, h - mh));
+  if (mw < w) GM.tx = (w - mw) / 2;
+  if (mh < h) GM.ty = (h - mh) / 2;
+}
+function gmApply() {
+  gmClamp();
+  const c = document.getElementById('gm-canvas');
+  if (c) c.style.transform = `translate(${GM.tx}px, ${GM.ty}px) scale(${GM.scale})`;
+  gmUpdateStrokes();
+}
+
+// ── Привязка событий вьюпорта ───────────────────────────────
+function gmBindViewport() {
+  const vp = document.getElementById('gm-viewport');
+  if (!vp) return;
+
+  vp.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = vp.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const px = (mx - GM.tx) / GM.scale, py = (my - GM.ty) / GM.scale;
+    GM.scale += (e.deltaY > 0 ? -1 : 1) * 0.12 * GM.scale;
+    GM.scale = Math.min(Math.max(GM.scale, gmMinScale()), 4.0);
+    GM.tx = mx - px * GM.scale;
+    GM.ty = my - py * GM.scale;
+    gmApply();
+  }, { passive: false });
+
+  // ── Touch: 1 палец — пан, 2 пальца — пинч-зум ──
+  vp.addEventListener('touchstart', gmTouchStart, { passive: false });
+  vp.addEventListener('touchmove', gmTouchMove, { passive: false });
+  vp.addEventListener('touchend', gmTouchEnd);
+  vp.addEventListener('touchcancel', gmTouchEnd);
+
+  // координаты курсора в системе карты
+  vp.addEventListener('mousemove', (e) => {
+    const r = vp.getBoundingClientRect();
+    const x = Math.round((e.clientX - r.left - GM.tx) / GM.scale);
+    const y = Math.round((e.clientY - r.top - GM.ty) / GM.scale);
+    const cp = document.getElementById('gm-coord');
+    if (cp && x >= 0 && y >= 0 && x <= GM_W && y <= GM_H) cp.textContent = `X: ${x} | Y: ${y}`;
+  });
+
+  // старт панорамирования / добавление звезды по пустому месту
+  vp.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.gm-star') || e.target.closest('#gm-panel') ||
+        e.target.closest('#gm-form') || e.target.closest('#gm-toolbar')) return;
+    if (GM.edit && GM.mode === 'add') {
+      const r = vp.getBoundingClientRect();
+      const x = Math.round((e.clientX - r.left - GM.tx) / GM.scale);
+      const y = Math.round((e.clientY - r.top - GM.ty) / GM.scale);
+      gmAddStar(x, y);
+      return;
+    }
+    GM.panning = true;
+    vp.classList.add('gm-grabbing');
+    GM.panStart = { x: e.clientX - GM.tx, y: e.clientY - GM.ty };
+  });
+
+  // глобальные слушатели (живут, пока вьюпорт в DOM)
+  window.addEventListener('mousemove', gmWindowMove);
+  window.addEventListener('mouseup', gmWindowUp);
+  window.addEventListener('resize', gmOnResize);
+}
+
+function gmOnResize() { if (document.getElementById('gm-viewport')) gmApply(); }
+
+function gmWindowMove(e) {
+  const vp = document.getElementById('gm-viewport');
+  if (!vp) { window.removeEventListener('mousemove', gmWindowMove); return; }
+  if (GM.drag) {
+    const r = vp.getBoundingClientRect();
+    const x = (e.clientX - r.left - GM.tx) / GM.scale;
+    const y = (e.clientY - r.top - GM.ty) / GM.scale;
+    GM.drag.sys.x = Math.max(0, Math.min(GM_W, Math.round(x)));
+    GM.drag.sys.y = Math.max(0, Math.min(GM_H, Math.round(y)));
+    GM.drag.moved = true;
+    gmDraw();
+    return;
+  }
+  if (GM.panning && GM.panStart) {
+    GM.tx = e.clientX - GM.panStart.x;
+    GM.ty = e.clientY - GM.panStart.y;
+    gmApply();
+  }
+}
+
+async function gmWindowUp() {
+  const vp = document.getElementById('gm-viewport');
+  if (vp) vp.classList.remove('gm-grabbing');
+  GM.panning = false; GM.panStart = null;
+  if (GM.drag) {
+    const d = GM.drag; GM.drag = null;
+    if (d.moved) {
+      try { await dbPatch('map_systems', 'id=eq.' + encodeURIComponent(d.sys.id), { x: d.sys.x, y: d.sys.y }); }
+      catch (e) { toast('Не сохранилось: ' + e.message, 'err'); }
+    }
+  }
+}
+
+// ── Touch (мобильные жесты) ─────────────────────────────────
+function gmTouchDist(t) {
+  const dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+  return Math.hypot(dx, dy);
+}
+function gmTouchStart(e) {
+  const vp = document.getElementById('gm-viewport');
+  if (!vp) return;
+  if (e.touches.length === 1) {
+    const tt = e.touches[0];
+    // тап по звезде — не панорамируем (даём сработать click)
+    if (tt.target.closest && tt.target.closest('.gm-star')) { GM.touch = null; return; }
+    e.preventDefault();
+    GM.touch = { mode: 'pan', x: tt.clientX - GM.tx, y: tt.clientY - GM.ty };
+  } else if (e.touches.length === 2) {
+    e.preventDefault();
+    const r = vp.getBoundingClientRect();
+    const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+    const my = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+    GM.touch = { mode: 'pinch', dist: gmTouchDist(e.touches), scale: GM.scale,
+      px: (mx - GM.tx) / GM.scale, py: (my - GM.ty) / GM.scale, mx, my };
+  }
+}
+function gmTouchMove(e) {
+  if (!GM.touch) return;
+  const vp = document.getElementById('gm-viewport');
+  if (!vp) return;
+  e.preventDefault();
+  if (GM.touch.mode === 'pan' && e.touches.length === 1) {
+    GM.tx = e.touches[0].clientX - GM.touch.x;
+    GM.ty = e.touches[0].clientY - GM.touch.y;
+    gmApply();
+  } else if (GM.touch.mode === 'pinch' && e.touches.length === 2) {
+    const d = gmTouchDist(e.touches);
+    GM.scale = Math.min(Math.max(GM.touch.scale * (d / GM.touch.dist), gmMinScale()), 4.0);
+    GM.tx = GM.touch.mx - GM.touch.px * GM.scale;
+    GM.ty = GM.touch.my - GM.touch.py * GM.scale;
+    gmApply();
+  }
+}
+function gmTouchEnd() { GM.touch = null; }
+
+// ── Контролы (границы / зум / фуллскрин) ────────────────────
+function gmToggleBorders() {
+  GM.showBorders = !GM.showBorders;
+  document.getElementById('gm-svg')?.classList.toggle('gm-noborders', !GM.showBorders);
+  document.getElementById('gm-ctl-borders')?.classList.toggle('gm-active', GM.showBorders);
+}
+function gmZoomBtn(dir) {
+  const vp = document.getElementById('gm-viewport');
+  if (!vp) return;
+  const w = vp.clientWidth, h = vp.clientHeight;
+  const px = (w / 2 - GM.tx) / GM.scale, py = (h / 2 - GM.ty) / GM.scale;
+  GM.scale = Math.min(Math.max(GM.scale * (dir > 0 ? 1.3 : 1 / 1.3), gmMinScale()), 4.0);
+  GM.tx = w / 2 - px * GM.scale;
+  GM.ty = h / 2 - py * GM.scale;
+  gmApply();
+}
+function gmToggleFullscreen() {
+  const wrap = document.getElementById('gm-wrap');
+  if (!wrap) return;
+  const nativeFs = document.fullscreenElement || document.webkitFullscreenElement;
+  const fallbackFs = !nativeFs && wrap.classList.contains('gm-fullscreen');
+  if (nativeFs) {                            // выйти из нативного
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    return;
+  }
+  if (fallbackFs) { gmFallbackFs(false); return; }  // выйти из фолбэка
+  const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen;   // войти
+  if (req) req.call(wrap).catch(() => gmFallbackFs(true));
+  else gmFallbackFs(true);
+}
+// CSS-фолбэк: переносим карту в <body>, чтобы overflow/transform родителей не мешали
+function gmFallbackFs(on) {
+  const wrap = document.getElementById('gm-wrap');
+  if (!wrap) return;
+  if (on) {
+    if (!GM._fsHome) { GM._fsHome = wrap.parentNode; }
+    document.body.appendChild(wrap);
+    wrap.classList.add('gm-fullscreen');
+  } else {
+    wrap.classList.remove('gm-fullscreen');
+    if (GM._fsHome) { GM._fsHome.appendChild(wrap); GM._fsHome = null; }
+  }
+  document.getElementById('gm-ctl-fs')?.classList.toggle('gm-active', on);
+  requestAnimationFrame(() => { gmClamp(); gmApply(); });
+}
+function gmOnFsChange() {
+  const wrap = document.getElementById('gm-wrap');
+  if (!wrap) return;
+  const fs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  wrap.classList.toggle('gm-fullscreen', fs);
+  document.getElementById('gm-ctl-fs')?.classList.toggle('gm-active', fs);
+  requestAnimationFrame(() => { gmClamp(); gmApply(); });
+}
+if (!window._gmFsBound) {
+  window._gmFsBound = true;
+  document.addEventListener('fullscreenchange', gmOnFsChange);
+  document.addEventListener('webkitfullscreenchange', gmOnFsChange);
+}
+
+// ── Отрисовка (Вороной + гиперпути + звёзды) ────────────────
+function gmDraw() {
+  gmDrawSvg();
+  gmDrawStars();
+}
+
+function gmVoronoiCells() {
+  if (!window.d3 || !d3.Delaunay || GM.systems.length < 1) return [];
+  try {
+    const pts = GM.systems.map(s => [s.x, s.y]);
+    const del = d3.Delaunay.from(pts);
+    const vor = del.voronoi([0, 0, GM_W, GM_H]);
+    return GM.systems.map((s, i) => ({ sys: s, poly: vor.cellPolygon(i) }));
+  } catch (e) { console.warn('[map] voronoi', e); return []; }
+}
+
+function gmDrawSvg() {
+  const svg = document.getElementById('gm-svg');
+  if (!svg) return;
+  const cells = gmVoronoiCells();
+  const cellHtml = cells.map(({ sys, poly }) => {
+    if (!poly) return '';
+    const fac = gmFaction(sys.faction);
+    const fill = fac ? fac.color : 'rgba(120,140,170,0.05)';
+    const stroke = fac ? gmSolidColor(fac.color) : 'rgba(150,170,200,0.18)';
+    const d = 'M' + poly.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + 'Z';
+    return `<path class="vor-cell" d="${d}" fill="${fill}" stroke="${stroke}"></path>`;
+  }).join('');
+
+  const laneHtml = GM.lanes.map(l => {
+    const a = GM.systems.find(s => s.id === l.a_id), b = GM.systems.find(s => s.id === l.b_id);
+    if (!a || !b) return '';
+    const del = GM.edit && GM.mode === 'link' ? ` onclick="gmDeleteLane('${l.id}')"` : '';
+    const cls = 'hyperlane' + (GM.edit && GM.mode === 'link' ? ' gm-deletable' : '');
+    return `<line class="${cls}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"${del}></line>`;
+  }).join('');
+
+  svg.innerHTML = `<g class="vor-layer">${cellHtml}</g><g class="lane-layer">${laneHtml}</g>`;
+  svg.classList.toggle('gm-noborders', !GM.showBorders);
+  gmUpdateStrokes();
+}
+
+// толщина обводок постоянна на экране: ширина_в_юнитах = px / scale
+function gmUpdateStrokes() {
+  const svg = document.getElementById('gm-svg');
+  if (!svg) return;
+  const s = GM.scale || 1;
+  svg.style.setProperty('--lane-w', (3 / s).toFixed(2));
+  svg.style.setProperty('--cell-w', (1.4 / s).toFixed(2));
+}
+
+// превращает rgba(r,g,b,a) в более плотный контур
+function gmSolidColor(rgba) {
+  const m = /rgba?\(([^)]+)\)/.exec(rgba || '');
+  if (!m) return 'rgba(120,140,170,0.5)';
+  const p = m[1].split(',').map(s => s.trim());
+  return `rgba(${p[0]},${p[1]},${p[2]},0.6)`;
+}
+
+function gmDrawStars() {
+  const layer = document.getElementById('gm-stars');
+  if (!layer) return;
+  layer.innerHTML = GM.systems.map(s => {
+    const giant = s.is_giant ? ' gm-giant' : '';
+    const sel = (GM.linkFrom === s.id) ? ' gm-linksel' : '';
+    return `<div class="gm-star${giant}${sel}" data-id="${esc(s.id)}" style="left:${s.x}px;top:${s.y}px"
+        onmousedown="gmStarDown(event,'${esc(s.id)}')" onclick="gmStarClick(event,'${esc(s.id)}')">
+        <img src="${GM_BASE}stars/star_${esc(s.star_type || 'yellow')}.png" draggable="false" alt="">
+        <span class="gm-label">${esc(s.name)}</span>
+      </div>`;
+  }).join('');
+}
+
+// ── Взаимодействие со звёздами ──────────────────────────────
+function gmStarDown(e, id) {
+  if (!(GM.edit && GM.mode === 'select')) return;
+  e.stopPropagation();
+  const sys = GM.systems.find(s => s.id === id);
+  if (sys) GM.drag = { sys, moved: false };
+}
+
+function gmStarClick(e, id) {
+  e.stopPropagation();
+  const sys = GM.systems.find(s => s.id === id);
+  if (!sys) return;
+  if (GM.edit && GM.mode === 'link') { gmLinkClick(sys); return; }
+  if (GM.edit && GM.mode === 'select') {
+    if (GM.drag && GM.drag.moved) return; // это было перетаскивание
+    gmOpenForm(sys); return;
+  }
+  gmOpenPanel(sys);
+}
+
+// ── Панель просмотра системы ────────────────────────────────
+function gmOpenPanel(sys) {
+  const panel = document.getElementById('gm-panel');
+  if (!panel) return;
+  const fac = gmFaction(sys.faction);
+  const planets = (sys.planets || []).map(p => gmPlanetView(p)).join('')
+    || `<p class="gm-empty">Система ещё не исследована. Данные о планетах отсутствуют.</p>`;
+  panel.className = '';
+  panel.innerHTML = `
+    <button class="gm-close" onclick="gmClosePanel()">✕</button>
+    <h2 class="gm-panel-title">${esc(sys.name)}</h2>
+    ${fac ? `<div class="gm-fac-badge" style="border-color:${gmSolidColor(fac.color)};color:${gmSolidColor(fac.color)}">${esc(fac.name)}</div>` : `<div class="gm-fac-badge gm-neutral">Нейтральная</div>`}
+    <p class="gm-panel-desc">${esc(sys.description || '')}</p>
+    <div class="gm-panel-sub">Планетарный состав</div>
+    <div class="gm-planets">${planets}</div>`;
+}
+function gmClosePanel() { document.getElementById('gm-panel')?.classList.add('gm-hidden'); }
+
+// ── Режим редактирования ────────────────────────────────────
+function gmToggleEdit() {
+  GM.edit = !GM.edit;
+  GM.mode = 'select'; GM.linkFrom = null;
+  document.getElementById('gm-edit-tools')?.classList.toggle('gm-hidden', !GM.edit);
+  const btn = document.getElementById('gm-edit-toggle');
+  if (btn) { btn.textContent = GM.edit ? '✓ Готово' : '✎ Редактировать карту'; btn.classList.toggle('gm-active', GM.edit); }
+  document.getElementById('gm-wrap')?.classList.toggle('gm-editing', GM.edit);
+  gmSetMode('select');
+  gmDraw();
+}
+function gmSetMode(m) {
+  GM.mode = m; GM.linkFrom = null;
+  document.querySelectorAll('#gm-edit-tools .gm-tb-btn').forEach(b =>
+    b.classList.toggle('gm-active', b.dataset.mode === m));
+  const hint = document.getElementById('gm-tb-hint');
+  if (hint) hint.textContent = m === 'add' ? 'Клик по пустому месту — новая звезда'
+    : m === 'link' ? 'Клик две звезды — связать; клик по линии — удалить'
+    : 'Тащи звезду мышью; клик — редактировать';
+  gmDraw();
+}
+
+function gmLinkClick(sys) {
+  if (!GM.linkFrom) { GM.linkFrom = sys.id; gmDrawStars(); return; }
+  if (GM.linkFrom === sys.id) { GM.linkFrom = null; gmDrawStars(); return; }
+  const a = GM.linkFrom, b = sys.id;
+  if (GM.lanes.some(l => (l.a_id === a && l.b_id === b) || (l.a_id === b && l.b_id === a))) {
+    toast('Такой путь уже есть', 'inf'); GM.linkFrom = null; gmDrawStars(); return;
+  }
+  gmCreateLane(a, b);
+}
+async function gmCreateLane(a, b) {
+  try {
+    const rows = await dbPost('map_hyperlanes', { a_id: a, b_id: b });
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (row && row.id) GM.lanes.push(row); else await loadGalaxyData();
+    GM.linkFrom = null; gmDraw();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); GM.linkFrom = null; gmDrawStars(); }
+}
+async function gmDeleteLane(id) {
+  if (!(GM.edit && GM.mode === 'link')) return;
+  try { await dbDel('map_hyperlanes', 'id=eq.' + encodeURIComponent(id)); GM.lanes = GM.lanes.filter(l => l.id !== id); gmDrawSvg(); }
+  catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+async function gmAddStar(x, y) {
+  const id = 'sys_' + Date.now().toString(36);
+  const obj = { id, name: 'Новая система', star_type: 'yellow', x, y, is_giant: false, faction: null, description: '', planets: [] };
+  try {
+    const rows = await dbPost('map_systems', obj);
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    GM.systems.push(row ? { ...row, x: +row.x, y: +row.y, planets: row.planets || [] } : obj);
+    gmDraw();
+    gmOpenForm(GM.systems[GM.systems.length - 1]);
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+// ── Рендер тела состава (просмотр) ──────────────────────────
+function gmResChips(res) {
+  if (!res || !res.length) return '';
+  return `<div class="gm-res">` + res.map(r =>
+    `<span class="gm-res-tag r-${r.r || 'common'}">${r.icon || ''} ${esc(r.name)}<i>${esc(r.amt || '')}</i></span>`).join('') + `</div>`;
+}
+function gmSlotsBadge(p) {
+  if (p.slotsP === undefined && p.slotsK === undefined) return '';
+  return `<span class="gm-slots"><b>${p.slotsP || 0}</b>&nbsp;П&nbsp;+&nbsp;<b>${p.slotsK || 0}</b>&nbsp;К</span>`;
+}
+function gmPlanetView(p) {
+  if (p && p.kind) { // богатый формат (из генератора)
+    const sat = (p.rings ? `◎ ${p.rings}` : '') + (p.rings && p.moons ? ' · ' : '') + (p.moons ? `🌑 ${p.moons}` : '');
+    return `<div class="gm-planet gm-planet-rich">
+      <div class="gm-pl-ico">${p.icon || '🪐'}</div>
+      <div class="gm-planet-info">
+        <div class="gm-pl-top"><span class="gm-planet-name">${esc(p.name)}</span>${gmSlotsBadge(p)}</div>
+        <div class="gm-planet-type">${esc(p.type || '')}${p.zone ? ' · ' + esc(p.zone) : ''}${sat ? ' · ' + sat : ''}</div>
+        ${gmResChips(p.resources)}
+      </div>
+    </div>`;
+  }
+  // старый формат {name,type,owner,img}
+  return `<div class="gm-planet">
+    <div class="gm-planet-img"><img src="${GM_BASE}${esc(p.img || '')}" onerror="this.style.visibility='hidden'"></div>
+    <div class="gm-planet-info">
+      <div class="gm-planet-name">${esc(p.name || '—')}</div>
+      <div class="gm-planet-type">${esc(p.type || 'Неизвестно')}</div>
+      <div class="gm-planet-owner">Контроль: ${esc(p.owner || 'Ничейная')}</div>
+    </div>
+  </div>`;
+}
+
+// ── Форма редактирования системы ────────────────────────────
+function gmOpenForm(sys) {
+  const form = document.getElementById('gm-form');
+  if (!form) return;
+  GM.editId = sys.id;
+  GM.formPlanets = JSON.parse(JSON.stringify(sys.planets || []));
+  const facOpts = `<option value="">— Нейтральная —</option>` +
+    GM.factions.map(f => `<option value="${esc(f.id)}"${sys.faction === f.id ? ' selected' : ''}>${esc(f.name)}</option>`).join('');
+  const typeOpts = GM_STAR_TYPES.map(t => `<option value="${t}"${(sys.star_type || 'yellow') === t ? ' selected' : ''}>${t}</option>`).join('');
+  form.className = '';
+  form.innerHTML = `
+    <button class="gm-close" onclick="gmCloseForm()">✕</button>
+    <h3 class="gm-form-title">Система: ${esc(sys.name)}</h3>
+    <input type="hidden" id="gmf-id" value="${esc(sys.id)}">
+    <label class="gm-fl">Название</label>
+    <input class="gm-fi" id="gmf-name" value="${esc(sys.name || '')}">
+    <div class="gm-frow">
+      <div><label class="gm-fl">Тип звезды</label><select class="gm-fi" id="gmf-type">${typeOpts}</select></div>
+      <div><label class="gm-fl">Фракция</label><select class="gm-fi" id="gmf-faction">${facOpts}</select></div>
+    </div>
+    <label class="gm-fl"><input type="checkbox" id="gmf-giant" ${sys.is_giant ? 'checked' : ''}> Гигант</label>
+    <label class="gm-fl">Описание</label>
+    <textarea class="gm-fi" id="gmf-desc" rows="3">${esc(sys.description || '')}</textarea>
+    <div class="gm-fl gm-planets-hdr">Состав системы
+      <span>
+        <button class="gm-mini-btn gm-gen-btn" onclick="gmOpenGen()">🎲 Генератор</button>
+        <button class="gm-mini-btn" onclick="gmAddPlanetManual()">＋ вручную</button>
+      </span>
+    </div>
+    <div id="gmf-planets"></div>
+    <div class="gm-form-actions">
+      <button class="gm-tb-btn gm-danger" onclick="gmDeleteStar('${esc(sys.id)}')">Удалить систему</button>
+      <button class="gm-tb-btn gm-active" onclick="gmSaveForm()">Сохранить</button>
+    </div>`;
+  gmRenderFormPlanets();
+}
+
+function gmRenderFormPlanets() {
+  const box = document.getElementById('gmf-planets');
+  if (!box) return;
+  if (!GM.formPlanets.length) { box.innerHTML = `<div class="gm-empty" style="padding:6px 0">Состав пуст. Сгенерируй 🎲 или добавь вручную.</div>`; return; }
+  box.innerHTML = GM.formPlanets.map((p, i) => {
+    if (p && p.kind) {
+      return `<div class="gm-fp-rich">
+        <span class="gm-fp-ico">${p.icon || '🪐'}</span>
+        <span class="gm-fp-name">${esc(p.name)}</span>
+        <span class="gm-fp-meta">${esc(p.type || '')} · ${p.slotsP || 0}П+${p.slotsK || 0}К</span>
+        <button class="gm-mini-btn gm-danger" onclick="gmRemovePlanet(${i})">✕</button>
+      </div>`;
+    }
+    return `<div class="gm-planet-row">
+      <input class="gm-fi gm-fi-sm" placeholder="Имя" value="${esc(p.name || '')}" oninput="GM.formPlanets[${i}].name=this.value">
+      <input class="gm-fi gm-fi-sm" placeholder="Тип" value="${esc(p.type || '')}" oninput="GM.formPlanets[${i}].type=this.value">
+      <input class="gm-fi gm-fi-sm" placeholder="Контроль" value="${esc(p.owner || '')}" oninput="GM.formPlanets[${i}].owner=this.value">
+      <input class="gm-fi gm-fi-sm" placeholder="img" value="${esc(p.img || '')}" oninput="GM.formPlanets[${i}].img=this.value">
+      <button class="gm-mini-btn gm-danger" onclick="gmRemovePlanet(${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+function gmAddPlanetManual() { GM.formPlanets.push({ name: '', type: '', owner: '', img: '' }); gmRenderFormPlanets(); }
+function gmRemovePlanet(i) { GM.formPlanets.splice(i, 1); gmRenderFormPlanets(); }
+function gmCloseForm() { document.getElementById('gm-form')?.classList.add('gm-hidden'); gmCloseGen(); }
+
+async function gmSaveForm() {
+  const id = document.getElementById('gmf-id').value;
+  const planets = GM.formPlanets.filter(p => (p.name || '').trim());
+  const body = {
+    name: document.getElementById('gmf-name').value.trim() || 'Без имени',
+    star_type: document.getElementById('gmf-type').value,
+    faction: document.getElementById('gmf-faction').value || null,
+    is_giant: document.getElementById('gmf-giant').checked,
+    description: document.getElementById('gmf-desc').value.trim(),
+    planets,
+  };
+  try {
+    await dbPatch('map_systems', 'id=eq.' + encodeURIComponent(id), body);
+    const s = GM.systems.find(x => x.id === id);
+    if (s) Object.assign(s, body);
+    gmCloseForm(); gmDraw(); toast('Сохранено', 'ok');
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+async function gmDeleteStar(id) {
+  if (!confirm('Удалить систему и связанные гиперпути?')) return;
+  try {
+    await dbDel('map_systems', 'id=eq.' + encodeURIComponent(id));
+    GM.systems = GM.systems.filter(s => s.id !== id);
+    GM.lanes = GM.lanes.filter(l => l.a_id !== id && l.b_id !== id);
+    gmCloseForm(); gmDraw(); toast('Удалено', 'ok');
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+// ── Генератор состава ───────────────────────────────────────
+function gmOpenGen() {
+  let modal = document.getElementById('gm-gen');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'gm-gen';
+    document.getElementById('gm-wrap')?.appendChild(modal);
+  }
+  const clsOpts = (window.GalaxyGen?.STAR_CLASSES || ['random']).map(c =>
+    `<option value="${c}">${c === 'random' ? '— Случайный класс —' : c}</option>`).join('');
+  modal.className = '';
+  modal.innerHTML = `
+    <button class="gm-close" onclick="gmCloseGen()">✕</button>
+    <h3 class="gm-form-title">🎲 Генератор состава</h3>
+    <div class="gm-frow">
+      <div><label class="gm-fl">Класс звезды</label><select class="gm-fi" id="gmg-cls">${clsOpts}</select></div>
+      <div><label class="gm-fl">Насыщенность <span id="gmg-rval">5</span></label>
+        <input type="range" class="gm-range" id="gmg-rich" min="1" max="10" value="5" oninput="document.getElementById('gmg-rval').textContent=this.value">
+      </div>
+    </div>
+    <div class="gm-gen-actions">
+      <button class="gm-tb-btn gm-active" onclick="gmRollGen()">🎲 Крутить</button>
+      <button class="gm-tb-btn" id="gmg-apply" onclick="gmApplyGen()" disabled>✓ Применить состав</button>
+    </div>
+    <div id="gmg-result" class="gm-gen-result"><div class="gm-empty" style="padding:10px 0">Нажми «Крутить» — выпадет вариант состава. Не нравится — крути ещё.</div></div>`;
+}
+function gmCloseGen() { document.getElementById('gm-gen')?.classList.add('gm-hidden'); }
+
+function gmRollGen() {
+  if (!window.GalaxyGen) { toast('Генератор не загружен', 'err'); return; }
+  const richness = +document.getElementById('gmg-rich').value;
+  const starCls = document.getElementById('gmg-cls').value;
+  GM.genResult = GalaxyGen.generate({ richness, starCls });
+  const r = GM.genResult;
+  const bodies = r.bodies.map(b => `
+    <div class="gm-gen-body">
+      <span class="gm-fp-ico">${b.icon}</span>
+      <div style="flex:1;min-width:0">
+        <div class="gm-gb-top"><span class="gm-fp-name">${esc(b.name)}</span>${b.kind === 'planet' ? gmSlotsBadge(b) : `<span class="gm-slots gm-slots-k"><b>${b.slotsK || 0}</b>&nbsp;К</span>`}</div>
+        <div class="gm-fp-meta">${esc(b.type)} · ${esc(b.zone)}${b.rings ? ' · ◎' + b.rings : ''}${b.moons ? ' · 🌑' + b.moons : ''}</div>
+        ${gmResChips(b.resources)}
+      </div>
+    </div>`).join('');
+  document.getElementById('gmg-result').innerHTML =
+    `<div class="gm-gen-summary">★ ${r.star.icon} ${esc(r.star.name)} (${r.star.cls}) · тел: ${r.bodies.length}</div>${bodies}`;
+  const ap = document.getElementById('gmg-apply'); if (ap) ap.disabled = false;
+}
+function gmApplyGen() {
+  if (!GM.genResult) return;
+  GM.formPlanets = JSON.parse(JSON.stringify(GM.genResult.bodies));
+  gmRenderFormPlanets();
+  gmCloseGen();
+  toast('Состав применён — не забудь «Сохранить»', 'ok');
+}
+async function gmDeleteStar(id) {
+  if (!confirm('Удалить систему и связанные гиперпути?')) return;
+  try {
+    await dbDel('map_systems', 'id=eq.' + encodeURIComponent(id));
+    GM.systems = GM.systems.filter(s => s.id !== id);
+    GM.lanes = GM.lanes.filter(l => l.a_id !== id && l.b_id !== id);
+    gmCloseForm(); gmDraw(); toast('Удалено', 'ok');
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
