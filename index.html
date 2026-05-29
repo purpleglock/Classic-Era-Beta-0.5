@@ -259,13 +259,12 @@
     <div class="mo-body">
       <div class="fg">
         <label class="fl">Тип страницы</label>
-        <select class="fi" id="np-type" onchange="document.getElementById('np-type-hint').textContent=({article:'Обычная статья с блоками',character:'Карточка персонажа — имя, класс, статы, снаряжение',faction:'Страница фракции / государства',item:'Карточка снаряжения — редкость, слот, бонусы',ability:'Карточка способности — тип, эффект, дальность',unit:'Юнит / Корабль — конструктор с модулями',preview:'Превью характеристик с фильтром и кнопками'})[this.value]||''">
+        <select class="fi" id="np-type" onchange="document.getElementById('np-type-hint').textContent=({article:'Обычная статья с блоками',character:'Карточка персонажа — имя, класс, статы, снаряжение',faction:'Страница фракции / государства',item:'Карточка снаряжения — редкость, слот, бонусы',ability:'Карточка способности — тип, эффект, дальность',preview:'Превью характеристик с фильтром и кнопками'})[this.value]||''">
           <option value="article">📄 Статья</option>
           <option value="character">◉ Персонаж</option>
           <option value="faction">⬡ Фракция / Государство</option>
           <option value="item">⚔ Снаряжение / Предмет</option>
           <option value="ability">◈ Способность</option>
-          <option value="unit">⊕ Юнит / Корабль</option>
           <option value="preview">◈ Превью</option>
         </select>
         <div id="np-type-hint" style="font-size:10px;color:var(--t4);margin-top:3px">Обычная статья с блоками</div>
@@ -328,7 +327,6 @@
 <script src="data.js?v=20260529c"></script>
 <script src="armor_system.js?v=20260529c"></script>
 	<script src="weapon_system.js?v=20260529c"></script>
-<script src="coefficients.js?v=20260529c"></script>
 <script src="faction_system.js?v=20260529c"></script>
 <script src="render.js?v=20260529c"></script>
 <script src="editor.js?v=20260529c"></script>

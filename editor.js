@@ -1601,7 +1601,6 @@ async function doCreateNew(){
     let initContent='[]';
     if(pgType==='item')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Предмет',title:t,sections:[{name:'Параметры',rows:[{key:'Редкость',val:'common'},{key:'Слот',val:'weapon'},{key:'Калибр',val:''},{key:'Вес',val:''},{key:'Темп стрельбы',val:''},{key:'Тип технологии',val:'conventional'},{key:'Тип урона',val:'kinetic'},{key:'Класс оружия',val:'rifle'},{key:'Дальность',val:''},{key:'Требования',val:''},{key:'Описание',val:''}]}]}]);
     if(pgType==='ability')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Способность',title:t,sections:[{name:'Параметры',rows:[{key:'Тип',val:'passive'},{key:'Дальность',val:''},{key:'Стоимость',val:''},{key:'Эффект',val:''},{key:'Иммунитеты',val:''},{key:'Бонус КЗ',val:'0'},{key:'Бонус СИЛ',val:'0'}]}]}]);
-    if(pgType==='unit')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Юнит',title:t,sections:[{name:'Параметры',rows:[{key:'Класс',val:'tanki'},{key:'Масса',val:''},{key:'Экипаж',val:''},{key:'Вместимость',val:''},{key:'Габарит',val:''},{key:'Статус',val:'активен'}]}]}]);
     if(pgType==='faction')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Фракция',title:t,sections:[{name:'Основное',rows:[{key:'Тип',val:''},{key:'Столица',val:''},{key:'Лидер',val:''},{key:'Основана',val:''},{key:'Идеология',val:''}]}]},{type:'text',id:uid(),content:''}]);
     if(pgType==='preview')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Превью',title:t,sections:[{name:'Базовые',rows:[{key:'Скорость',val:''},{key:'Мощность',val:''},{key:'Точность',val:''}]},{name:'Дополнительно',rows:[{key:'Класс',val:''},{key:'Роль',val:''},{key:'Особенность',val:''}]}]},{type:'text',id:uid(),content:''}]);
     await dbPost('pages',{slug:sl,title:t,section:sec,parent_slug:par,status:'draft',sort_order:0,content:initContent,page_type:pgType,created_at:now,updated_at:now,created_by:user.email});
@@ -1622,7 +1621,7 @@ function renderAp(){
   if (!apAvEl) { apAvEl = document.createElement('div'); apAvEl.id = 'ap-av-wrap'; apAvEl.style.cssText = 'display:flex;align-items:center;margin-right:6px;flex-shrink:0;cursor:pointer'; apAvEl.onclick = openProfileModal; document.querySelector('.ap-ui').parentNode.insertBefore(apAvEl, document.querySelector('.ap-ui')); }
   apAvEl.innerHTML = avHtml;
   const canEdit=['superadmin','editor','moderator'].includes(user.role); const canSec=['superadmin','editor'].includes(user.role); const isSA=user.role==='superadmin';
-  const tabs=[['profile','Профиль'],['mypages','Мои стр.']]; if(canEdit) tabs.push(['pages','Страницы']); if(canSec) tabs.push(['sections','Разделы'],['devlog','Девлог'],['coefficients','Коэффициенты']); if(isSA) tabs.push(['users','Польз.'],['settings','Настройки']);
+  const tabs=[['profile','Профиль'],['mypages','Мои стр.']]; if(canEdit) tabs.push(['pages','Страницы']); if(canSec) tabs.push(['sections','Разделы'],['devlog','Девлог']); if(isSA) tabs.push(['users','Польз.'],['settings','Настройки']);
   if(!tabs.find(t=>t[0]===apTab)) apTab=tabs[0]?.[0]||'profile';
   document.getElementById('ap-tabs').innerHTML=tabs.map(([id,l])=>`<button class="apt${apTab===id?' on':''}" onclick="setApTab('${id}')">${l}</button>`).join('');
   renderApTab();
@@ -1842,10 +1841,6 @@ async function renderApTab(){
     await renderIconsTab(b);
   } else if(apTab==='devlog'){
     await renderDevlogTab(b);
-  } else if(apTab==='coefficients'){
-    // Открываем страницу коэффициентов
-    closeAp();
-    go('coefficients');
   } else if(apTab==='settings'){
     const bgUrl = await getSiteSetting('wk_background_url') || '';
     const faviconUrl = await getSiteSetting('wk_favicon_url') || '';

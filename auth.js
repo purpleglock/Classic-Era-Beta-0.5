@@ -31,7 +31,16 @@ async function init() {
   }
 
   await restoreSession();
-  await Promise.all([loadSecs(), loadPgs(), loadHomePage(), loadProfiles(), loadCoefficients()]);
+  await Promise.all([loadSecs(), loadPgs(), loadHomePage(), loadProfiles()]);
+  // Sync profile from DB if localStorage had nothing (e.g. fresh Vercel deploy)
+  if (user && !userProfile.display_name && !userProfile.avatar_url) {
+    const dbProf = allProfiles.find(p => p.email === user.email);
+    if (dbProf) {
+      userProfile.display_name = dbProf.display_name || '';
+      userProfile.avatar_url = dbProf.avatar_url || '';
+      localStorage.setItem('wk_profile_' + user.id, JSON.stringify(userProfile));
+    }
+  }
   await loadHeroCoverFromDb();
   // Background loaded by loadSiteSettings() at startup
   buildNav();
@@ -163,12 +172,11 @@ async function loadUserRole(authUser) {
   try {
     const token = await getTokenFresh();
     const url = `${SB_URL}/rest/v1/user_roles?user_id=eq.${authUser.id}&select=role,is_banned`;
-    console.log('[role] fetching', url, 'tokenIsAnon=', token === SB_ANON);
+
     const r = await fetch(url, { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token } });
-    console.log('[role] status', r.status);
+
     let rows = [];
-    if (r.ok) { rows = await r.json(); console.log('[role] rows', rows); }
-    else { console.warn('[role] HTTP error', r.status, await r.text().catch(()=>'')); }
+    if (r.ok) { rows = await r.json(); }
 
     // Fallback 1: запрос без фильтра — вдруг сравнение по user_id ломается
     if (!rows.length) {
@@ -176,11 +184,11 @@ async function loadUserRole(authUser) {
         const r2 = await fetch(`${SB_URL}/rest/v1/user_roles?select=user_id,role,is_banned`, { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token } });
         if (r2.ok) {
           const all = await r2.json();
-          console.log('[role] fallback all rows:', all);
+
           const mine = all.find(x => String(x.user_id).toLowerCase() === String(authUser.id).toLowerCase());
           if (mine) rows = [mine];
         }
-      } catch(e) { console.warn('[role] fallback failed', e); }
+      } catch(e) {}
     }
 
     let rawRole = rows[0]?.role;
@@ -189,7 +197,7 @@ async function loadUserRole(authUser) {
     if (rawRole && roleAlias[String(rawRole).toLowerCase()]) rawRole = roleAlias[String(rawRole).toLowerCase()];
 
     const role = VALID_ROLES.includes(rawRole) ? rawRole : 'viewer';
-    console.log('[role] resolved role =', role, 'raw =', rows[0]?.role);
+
     user = { id:authUser.id, email:authUser.email, role, is_banned:!!rows[0]?.is_banned };
     try {
       const { data: { user: mu } } = await sb.auth.getUser();

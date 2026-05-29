@@ -4586,11 +4586,13 @@ function createRedactedModal() {
       <div class="redacted-modal-icon">🔒</div>
       <div class="redacted-modal-title">Засекреченные данные</div>
       <div class="redacted-modal-desc">Доступ к конфиденциальной информации ограничен. Требуется авторизация.</div>
+      <form onsubmit="event.preventDefault();checkRedactedPassword()">
       <input type="password" class="redacted-modal-input" id="redacted-password-input" placeholder="••••••••" autocomplete="off">
       <div class="redacted-modal-actions">
-        <button class="redacted-modal-btn redacted-modal-btn-cancel" id="redacted-cancel">Отмена</button>
-        <button class="redacted-modal-btn redacted-modal-btn-submit" id="redacted-submit">Разблокировать</button>
+        <button type="button" class="redacted-modal-btn redacted-modal-btn-cancel" id="redacted-cancel">Отмена</button>
+        <button type="submit" class="redacted-modal-btn redacted-modal-btn-submit" id="redacted-submit">Разблокировать</button>
       </div>
+      </form>
     </div>
   `;
   document.body.appendChild(modal);

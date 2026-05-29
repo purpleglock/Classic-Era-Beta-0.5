@@ -74,11 +74,6 @@ async function go(slug, push=true) {
   }
 
   if (slug==='home') { await renderHome(); return; }
-  if (slug==='coefficients') {
-    if (typeof renderCoefficientsPage === 'function') { renderCoefficientsPage(); }
-    else { setPg('<div class="sempty">renderCoefficientsPage не найден</div>'); }
-    return;
-  }
   if (slug==='armor-config') {
     if (typeof renderArmorConfigPage === 'function') { renderArmorConfigPage(); }
     else { setPg('<div class="sempty">renderArmorConfigPage не найден</div>'); }
