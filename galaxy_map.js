@@ -417,7 +417,7 @@ function gmOpenPanel(sys) {
   const panel = document.getElementById('gm-panel');
   if (!panel) return;
   const fac = gmFaction(sys.faction);
-  const planets = (sys.planets || []).map(p => gmPlanetView(p)).join('')
+  const planets = (sys.planets || []).map((p, i) => gmPlanetView(p, i)).join('')
     || `<p class="gm-empty">Система ещё не исследована. Данные о планетах отсутствуют.</p>`;
   panel.className = '';
   panel.innerHTML = `
@@ -425,8 +425,8 @@ function gmOpenPanel(sys) {
     <h2 class="gm-panel-title">${esc(sys.name)}</h2>
     ${fac ? `<div class="gm-fac-badge" style="border-color:${gmSolidColor(fac.color)};color:${gmSolidColor(fac.color)}">${esc(fac.name)}</div>` : `<div class="gm-fac-badge gm-neutral">Нейтральная</div>`}
     <p class="gm-panel-desc">${esc(sys.description || '')}</p>
-    <div class="gm-panel-sub">Планетарный состав</div>
-    <div class="gm-planets">${planets}</div>`;
+    <div class="gm-panel-sub">Состав системы <span class="gm-sub-hint">★ от звезды наружу →</span></div>
+    <div class="gm-orblist">${planets}</div>`;
 }
 function gmClosePanel() { document.getElementById('gm-panel')?.classList.add('gm-hidden'); }
 
@@ -497,25 +497,36 @@ function gmSlotsBadge(p) {
   if (p.slotsP === undefined && p.slotsK === undefined) return '';
   return `<span class="gm-slots"><b>${p.slotsP || 0}</b>&nbsp;П&nbsp;+&nbsp;<b>${p.slotsK || 0}</b>&nbsp;К</span>`;
 }
-function gmPlanetView(p) {
+function gmZoneColor(z) {
+  return { 'Пекло': '#ff4422', 'Внутр.': '#ff8800', 'Обитаемая': '#7fdd55', 'Холод': '#33bce8', 'Пустота': '#8e8eff' }[z] || '#8aa0bd';
+}
+function gmPlanetView(p, i) {
+  const idx = String((i || 0) + 1).padStart(2, '0');
   if (p && p.kind) { // богатый формат (из генератора)
-    const sat = (p.rings ? `◎ ${p.rings}` : '') + (p.rings && p.moons ? ' · ' : '') + (p.moons ? `🌑 ${p.moons}` : '');
-    return `<div class="gm-planet gm-planet-rich">
-      <div class="gm-pl-ico">${p.icon || '🪐'}</div>
-      <div class="gm-planet-info">
-        <div class="gm-pl-top"><span class="gm-planet-name">${esc(p.name)}</span>${gmSlotsBadge(p)}</div>
-        <div class="gm-planet-type">${esc(p.type || '')}${p.zone ? ' · ' + esc(p.zone) : ''}${sat ? ' · ' + sat : ''}</div>
+    const zc = gmZoneColor(p.zone);
+    const kindCls = p.kind === 'belt' ? ' gm-dot-belt' : p.kind === 'anomaly' ? ' gm-dot-anom' : '';
+    const sat = [];
+    if (p.rings) sat.push(`кольца ×${p.rings}`);
+    if (p.moons) sat.push(`спутники ×${p.moons}`);
+    const satStr = sat.length ? ` · ${sat.join(' · ')}` : '';
+    const dist = (p.dist != null) ? `<span class="gm-orb-dist">${p.dist} а.е.</span>` : '';
+    return `<div class="gm-orb">
+      <div class="gm-orb-idx">${idx}</div>
+      <div class="gm-orb-dot${kindCls}" style="--zc:${zc}"></div>
+      <div class="gm-orb-main">
+        <div class="gm-orb-top"><span class="gm-orb-name">${esc(p.name)}</span>${dist}${gmSlotsBadge(p)}</div>
+        <div class="gm-orb-sub">${esc(p.type || '')}${p.zone ? ` · <span style="color:${zc}">${esc(p.zone)} зона</span>` : ''}${satStr}</div>
         ${gmResChips(p.resources)}
       </div>
     </div>`;
   }
   // старый формат {name,type,owner,img}
-  return `<div class="gm-planet">
+  return `<div class="gm-orb gm-orb-legacy">
+    <div class="gm-orb-idx">${idx}</div>
     <div class="gm-planet-img"><img src="${GM_BASE}${esc(p.img || '')}" onerror="this.style.visibility='hidden'"></div>
-    <div class="gm-planet-info">
-      <div class="gm-planet-name">${esc(p.name || '—')}</div>
-      <div class="gm-planet-type">${esc(p.type || 'Неизвестно')}</div>
-      <div class="gm-planet-owner">Контроль: ${esc(p.owner || 'Ничейная')}</div>
+    <div class="gm-orb-main">
+      <div class="gm-orb-top"><span class="gm-orb-name">${esc(p.name || '—')}</span></div>
+      <div class="gm-orb-sub">${esc(p.type || 'Неизвестно')} · Контроль: ${esc(p.owner || 'ничейная')}</div>
     </div>
   </div>`;
 }
@@ -563,10 +574,11 @@ function gmRenderFormPlanets() {
   if (!GM.formPlanets.length) { box.innerHTML = `<div class="gm-empty" style="padding:6px 0">Состав пуст. Сгенерируй 🎲 или добавь вручную.</div>`; return; }
   box.innerHTML = GM.formPlanets.map((p, i) => {
     if (p && p.kind) {
+      const kc = p.kind === 'belt' ? ' gm-dot-belt' : p.kind === 'anomaly' ? ' gm-dot-anom' : '';
       return `<div class="gm-fp-rich">
-        <span class="gm-fp-ico">${p.icon || '🪐'}</span>
+        <span class="gm-orb-dot${kc}" style="--zc:${gmZoneColor(p.zone)}"></span>
         <span class="gm-fp-name">${esc(p.name)}</span>
-        <span class="gm-fp-meta">${esc(p.type || '')} · ${p.slotsP || 0}П+${p.slotsK || 0}К</span>
+        <span class="gm-fp-meta">${p.dist != null ? p.dist + ' а.е. · ' : ''}${esc(p.type || '')} · ${p.slotsP || 0}П+${p.slotsK || 0}К</span>
         <button class="gm-mini-btn gm-danger" onclick="gmRemovePlanet(${i})">✕</button>
       </div>`;
     }
@@ -645,15 +657,19 @@ function gmRollGen() {
   const starCls = document.getElementById('gmg-cls').value;
   GM.genResult = GalaxyGen.generate({ richness, starCls });
   const r = GM.genResult;
-  const bodies = r.bodies.map(b => `
-    <div class="gm-gen-body">
-      <span class="gm-fp-ico">${b.icon}</span>
+  const bodies = r.bodies.map((b, i) => {
+    const kc = b.kind === 'belt' ? ' gm-dot-belt' : b.kind === 'anomaly' ? ' gm-dot-anom' : '';
+    const sat = (b.rings ? ' · кольца ×' + b.rings : '') + (b.moons ? ' · спутн. ×' + b.moons : '');
+    return `<div class="gm-gen-body">
+      <span class="gm-orb-idx">${String(i + 1).padStart(2, '0')}</span>
+      <span class="gm-orb-dot${kc}" style="--zc:${gmZoneColor(b.zone)}"></span>
       <div style="flex:1;min-width:0">
-        <div class="gm-gb-top"><span class="gm-fp-name">${esc(b.name)}</span>${b.kind === 'planet' ? gmSlotsBadge(b) : `<span class="gm-slots gm-slots-k"><b>${b.slotsK || 0}</b>&nbsp;К</span>`}</div>
-        <div class="gm-fp-meta">${esc(b.type)} · ${esc(b.zone)}${b.rings ? ' · ◎' + b.rings : ''}${b.moons ? ' · 🌑' + b.moons : ''}</div>
+        <div class="gm-gb-top"><span class="gm-fp-name">${esc(b.name)}</span>${b.dist != null ? `<span class="gm-orb-dist">${b.dist} а.е.</span>` : ''}${b.kind === 'planet' ? gmSlotsBadge(b) : `<span class="gm-slots gm-slots-k"><b>${b.slotsK || 0}</b>&nbsp;К</span>`}</div>
+        <div class="gm-fp-meta">${esc(b.type)} · <span style="color:${gmZoneColor(b.zone)}">${esc(b.zone)}</span>${sat}</div>
         ${gmResChips(b.resources)}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   document.getElementById('gmg-result').innerHTML =
     `<div class="gm-gen-summary">★ ${r.star.icon} ${esc(r.star.name)} (${r.star.cls}) · тел: ${r.bodies.length}</div>${bodies}`;
   const ap = document.getElementById('gmg-apply'); if (ap) ap.disabled = false;

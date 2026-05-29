@@ -9,7 +9,8 @@
 }
 #gm-viewport.gm-grabbing{cursor:grabbing}
 #gm-canvas{position:absolute;top:0;left:0;width:3300px;height:2062px;transform-origin:0 0}
-#gm-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+#gm-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;
+  filter:brightness(.4) saturate(.8) contrast(1.05)}
 #gm-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
 
 /* Вороной (толщина обводки = var, выставляется из JS обратно зуму → постоянна на экране) */
@@ -118,6 +119,27 @@ textarea.gm-fi{resize:vertical}
 .gm-mini-btn:hover{border-color:var(--gd);color:var(--gdl)}
 .gm-mini-btn.gm-danger{color:var(--err)}
 .gm-form-actions{display:flex;justify-content:space-between;gap:8px;margin-top:16px}
+
+/* ── Орбитальный список состава ── */
+.gm-sub-hint{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.5px;color:var(--t4);float:right;text-transform:none}
+.gm-orblist{display:flex;flex-direction:column;gap:0;position:relative}
+/* вертикальная «ось орбит» */
+.gm-orblist::before{content:'';position:absolute;left:31px;top:6px;bottom:6px;width:2px;background:linear-gradient(180deg,hsl(206 70% 55% / .5),transparent)}
+.gm-orb{display:flex;align-items:flex-start;gap:10px;padding:9px 4px;border-bottom:1px solid var(--w1);position:relative}
+.gm-orb:last-child{border-bottom:none}
+.gm-orb-idx{flex-shrink:0;width:20px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);padding-top:2px}
+.gm-orb-dot{flex-shrink:0;width:16px;height:16px;margin-top:1px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--zc) 70%, #fff), var(--zc) 70%);
+  border:1px solid var(--zc);box-shadow:0 0 8px color-mix(in srgb, var(--zc) 50%, transparent);z-index:1}
+.gm-orb-dot.gm-dot-belt{background:none;border:2px dashed var(--zc);box-shadow:none}
+.gm-orb-dot.gm-dot-anom{background:var(--err);border-color:var(--err);box-shadow:0 0 10px var(--err)}
+.gm-orb-main{flex:1;min-width:0}
+.gm-orb-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gm-orb-name{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:#eaf3fb}
+.gm-orb-dist{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te);background:hsl(206 30% 14% / .6);border:1px solid var(--w2);border-radius:4px;padding:1px 5px}
+.gm-orb-sub{font-size:11px;color:var(--t3);margin-top:2px}
+.gm-orb-legacy .gm-planet-img{width:34px;height:34px;border-radius:8px;overflow:hidden;background:#0a0e16;flex-shrink:0}
+.gm-orb-legacy .gm-planet-img img{width:100%;height:100%;object-fit:cover}
 
 /* ── Богатый состав (генератор) в панели просмотра ── */
 .gm-planet-rich{align-items:flex-start}
