@@ -21,7 +21,72 @@ const FR_BUILDINGS = [
 const FR_POINTS = 20;
 const FR_STEPS = ['Политика', 'Цвет', 'Система', 'Постройки', 'Культура', 'История', 'Обзор'];
 
-const FR = { data: null, step: 0, freeSystems: null, busy: false };
+// ── Описания вариантов (влияние на государство — для погружения) ──
+const FR_GOV_DESC = {
+  'Республика': 'Власть выборна. + стабильность и дипломатия, решения принимаются медленнее.',
+  'Монархия': 'Наследная власть. + легитимность и крепость элиты, риск застоя.',
+  'Империя': 'Экспансия и армия. + военная мощь и территория, дороже управление.',
+  'Олигархия': 'Власть немногих богатых. + экономика, выше социальное неравенство.',
+  'Диктатура': 'Единоличная власть. + скорость решений и мобилизация, хрупкая стабильность.',
+  'Теократия': 'Власть веры. + единство и боевой дух, слабее наука.',
+  'Технократия': 'Власть учёных. + исследования и эффективность, холодная социалка.',
+  'Корпоратократия': 'Власть корпораций. + торговля и производство, слабая лояльность.',
+  'Коллективный разум': 'Единое сознание. идеальная координация, нет индивидуальности.',
+  'Машинный разум (ИИ)': 'Правит ИИ. + логика и эффективность, страх и недоверие органиков.',
+};
+const FR_REGIME_DESC = {
+  'Демократический': 'Свободы и выборы. + счастье граждан, медленнее переход на военные рельсы.',
+  'Эгалитарный': 'Равенство всех. + сплочённость, ниже элитные бонусы.',
+  'Меритократический': 'Власть по заслугам. + рост талантов и науки.',
+  'Плутократический': 'Правят деньги. + экономика, риск протестов бедноты.',
+  'Олигархический': 'Узкий круг власти. + стабильность верхушки, выше коррупция.',
+  'Авторитарный': 'Жёсткий контроль. + порядок и армия, меньше свобод.',
+  'Тоталитарный': 'Тотальный контроль. + максимум мобилизации, низкое счастье.',
+  'Деспотичный': 'Власть страха. + мгновенная воля правителя, риск бунтов.',
+  'Анархический': 'Нет центральной власти. + свобода и гибкость, хаос и слабая армия.',
+};
+const FR_CIV_DESC = {
+  frontier: 'Молодая колония под защитой Фонда: меньше стартовых ресурсов, но свобода роста и бонус к экспансии. Бесплатно: Центр Спецслужб.',
+  colony: 'Состоявшееся планетарное государство: крепкая экономика и производство, но выше обязательства. Бесплатно: Гражданская фабрика.',
+};
+const FR_RACE_DESC = {
+  'Гуманоиды': 'Универсалы. Сбалансированы во всём, без штрафов.',
+  'Млекопитающие': 'Живучие и социальные. + рост населения.',
+  'Рептилоиды': 'Выносливые хищники. + армия, медленный рост.',
+  'Авианы (Птицеподобные)': 'Лёгкие и быстрые. + скорость флота и разведка.',
+  'Инсектоиды': 'Роевые. + численность и производство, низкая ценность жизни.',
+  'Акватики (Водные)': 'Дети океанов. + бонус на водных мирах, штраф на суше.',
+  'Плантоиды (Растениевидные)': 'Самодостаточны. + производство еды, медлительны.',
+  'Литоиды (Каменные)': 'Едят минералы, живучи в космосе, очень медленный рост.',
+  'Синтетики / Киборги': 'Машинная плоть. не нужна еда, + наука, дорогой ремонт.',
+  'Энергетические сущности': 'Чистая энергия. экзотичная мощь, уязвимы к ЭМ-оружию.',
+};
+const FR_IDEO_DESC = {
+  'Технократия (Культ науки)': 'Прогресс превыше всего. + наука.',
+  'Милитаризм (Культ силы)': 'Война — путь. + армия и флот.',
+  'Пацифизм': 'Мир и рост. + экономика и счастье, слабая армия.',
+  'Экспансионизм': 'Расширение границ. дешевле колонии и захват систем.',
+  'Изоляционизм': 'Закрытость. + оборона и стабильность, слабая дипломатия.',
+  'Ксенофилия': 'Союз с чужаками. + дипломатия и торговля.',
+  'Ксенофобия': 'Превосходство своей расы. + война с чужими, штраф к союзам.',
+  'Спиритуализм': 'Вера и религия. + единство и боевой дух.',
+  'Трансгуманизм': 'Улучшение тела. + наука и боеспособность.',
+  'Экоцентризм': 'Гармония с природой. + ресурсы планет, против тяжёлой индустрии.',
+  'Индустриализм': 'Производство превыше всего. + фабрики, вред экологии.',
+};
+const FR_BLD_DESC = {
+  encom: 'Производит товары и развивает экономику колонии.',
+  ind: 'Добыча руды и минералов с планеты.',
+  unit: 'Торговые маршруты и доход кредитами.',
+  sci: 'Исследования и новые технологии.',
+  emb: 'Обучение специалистов и офицеров.',
+  com: 'Разведка, контрразведка и спецоперации.',
+  yard: 'Производство наземной техники и войск.',
+  mil: 'Постройка и ремонт космических кораблей.',
+};
+function frSetDesc(elId, map, key) { const el = document.getElementById(elId); if (el) el.textContent = map[key] || ''; }
+
+const FR = { data: null, step: 0, freeSystems: null, allSystems: null, busy: false };
 
 function frBlank() {
   return {
@@ -75,7 +140,7 @@ async function renderFactionWizard() {
   // продолжаем черновик/отклонённую, либо новая
   FR.data = mine ? { ...frBlank(), ...mine, buildings: mine.buildings || [] } : frBlank();
   FR.step = 0;
-  FR.freeSystems = null;
+  FR.freeSystems = null; FR.allSystems = null;
   frRenderStep();
 }
 
@@ -127,19 +192,25 @@ function frSel(id, opts, val, onch) {
 }
 function frStepPolitics(d) {
   return `<h3 class="fr-h3">I. Политические сведения</h3>
+    <p class="fr-note">Эти решения формируют облик и сильные стороны вашего государства.</p>
     <div class="fg"><label class="fl">Полное название фракции *</label>
       <input class="fi" id="f-name" value="${esc(d.name)}" placeholder="Например: Объединённые Земные Нации"></div>
     <div class="fgr2">
-      <div class="fg"><label class="fl">Форма правления</label>${frSel('f-gov', FR_GOV, d.gov)}</div>
-      <div class="fg"><label class="fl">Политический режим</label>${frSel('f-regime', FR_REGIME, d.regime)}</div>
+      <div class="fg"><label class="fl">Форма правления</label>
+        ${frSel('f-gov', FR_GOV, d.gov, "frSetDesc('f-gov-d',FR_GOV_DESC,this.value)")}
+        <div class="fr-opt-desc" id="f-gov-d">${esc(FR_GOV_DESC[d.gov] || '')}</div></div>
+      <div class="fg"><label class="fl">Политический режим</label>
+        ${frSel('f-regime', FR_REGIME, d.regime, "frSetDesc('f-regime-d',FR_REGIME_DESC,this.value)")}
+        <div class="fr-opt-desc" id="f-regime-d">${esc(FR_REGIME_DESC[d.regime] || '')}</div></div>
     </div>
     <div class="fgr2">
       <div class="fg"><label class="fl">Глава фракции</label><input class="fi" id="f-leader" value="${esc(d.leader)}" placeholder="Имя и титул"></div>
       <div class="fg"><label class="fl">Тип цивилизации</label>
-        <select class="fi" id="f-type">
+        <select class="fi" id="f-type" onchange="frSetDesc('f-type-d',FR_CIV_DESC,this.value)">
           <option value="frontier"${d.civ_type === 'frontier' ? ' selected' : ''}>Зарождающийся фронтир</option>
           <option value="colony"${d.civ_type === 'colony' ? ' selected' : ''}>Самостоятельная колония</option>
-        </select></div>
+        </select>
+        <div class="fr-opt-desc" id="f-type-d">${esc(FR_CIV_DESC[d.civ_type] || '')}</div></div>
     </div>`;
 }
 function frStepColor(d) {
@@ -153,10 +224,11 @@ function frStepColor(d) {
 }
 function frStepSystem(d) {
   return `<h3 class="fr-h3">Столичная система</h3>
-    <p class="fr-note">Выберите <b>свободную</b> звезду — она станет столицей и при одобрении окрасится в ваш цвет.</p>
+    <p class="fr-note">Выберите <b>свободную</b> звезду. На мини-карте видно её положение: <span style="color:var(--gd)">голубые</span> свободны, серые заняты.</p>
+    <div class="fr-minimap" id="f-minimap"><div class="sload" style="min-height:60px"><div class="pulse-loader"></div></div></div>
     <div class="fg"><input class="fi" id="f-sys-search" placeholder="Поиск системы..." oninput="frFilterSystems(this.value)"></div>
     <div class="fr-sys-picked" id="f-sys-picked">${d.system_id ? `Выбрано: <b>${esc(d.system_name)}</b>` : 'Система не выбрана'}</div>
-    <div class="fr-sys-list" id="f-sys-list"><div class="sload" style="min-height:60px"><div class="pulse-loader"></div></div></div>
+    <div class="fr-sys-list" id="f-sys-list"></div>
     <div class="fg" style="margin-top:12px"><label class="fl">Название столичной планеты</label>
       <input class="fi" id="f-planet" value="${esc(d.planet_name)}" placeholder="Планета"></div>`;
 }
@@ -168,7 +240,7 @@ function frStepBuildings(d) {
     const checked = isFree || d.buildings.includes(b.id);
     return `<label class="fr-bld${isFree ? ' free' : ''}">
       <input type="checkbox" data-bid="${b.id}" data-price="${b.price}" ${checked ? 'checked' : ''} ${isFree ? 'disabled' : ''} onchange="frToggleBld()">
-      <span class="fr-bld-name">${esc(b.name)}</span>
+      <div class="fr-bld-txt"><span class="fr-bld-name">${esc(b.name)}</span><span class="fr-bld-desc">${esc(FR_BLD_DESC[b.id] || '')}</span></div>
       <span class="fr-bld-price">${isFree ? 'БЕСПЛАТНО' : b.price + ' оч.'}</span>
     </label>`;
   }).join('');
@@ -184,8 +256,12 @@ function frStepBuildings(d) {
 function frStepCulture(d) {
   return `<h3 class="fr-h3">III. Культурные сведения</h3>
     <div class="fgr2">
-      <div class="fg"><label class="fl">Биологический вид (раса)</label>${frSel('c-race', FR_RACE, d.race)}</div>
-      <div class="fg"><label class="fl">Идеология / Этика</label>${frSel('c-ideo', FR_IDEO, d.ideology)}</div>
+      <div class="fg"><label class="fl">Биологический вид (раса)</label>
+        ${frSel('c-race', FR_RACE, d.race, "frSetDesc('c-race-d',FR_RACE_DESC,this.value)")}
+        <div class="fr-opt-desc" id="c-race-d">${esc(FR_RACE_DESC[d.race] || '')}</div></div>
+      <div class="fg"><label class="fl">Идеология / Этика</label>
+        ${frSel('c-ideo', FR_IDEO, d.ideology, "frSetDesc('c-ideo-d',FR_IDEO_DESC,this.value)")}
+        <div class="fr-opt-desc" id="c-ideo-d">${esc(FR_IDEO_DESC[d.ideology] || '')}</div></div>
     </div>
     <div class="fg"><label class="fl">Культурные особенности</label>
       <textarea class="fi" id="c-features" rows="4" placeholder="Традиции, менталитет, быт...">${esc(d.culture)}</textarea></div>`;
@@ -269,19 +345,42 @@ async function frUploadHerald(input) {
 
 // ── Система: список свободных ───────────────────────────────
 async function frRenderSystemPicker() {
-  if (FR.freeSystems === null) {
+  if (FR.allSystems === null) {
     let sys = [], taken = new Set();
-    try { sys = await dbGet('map_systems', 'select=id,name,faction,star_type') || []; } catch (e) { sys = []; }
+    try { sys = await dbGet('map_systems', 'select=id,name,faction,star_type,x,y') || []; } catch (e) { sys = []; }
     // занятые чужими анкетами — необязательный запрос (таблица может отсутствовать)
     try {
       const apps = await dbGet('faction_applications', 'select=system_id,status&status=in.(pending,approved)');
       taken = new Set((apps || []).map(a => a.system_id).filter(Boolean));
     } catch (e) { /* нет таблицы анкет — игнорируем */ }
-    FR.freeSystems = sys.filter(s => !s.faction && (!taken.has(s.id) || s.id === FR.data.system_id))
+    FR.allSystems = sys.map(s => ({ ...s, x: +s.x, y: +s.y }));
+    FR.freeSystems = FR.allSystems.filter(s => !s.faction && (!taken.has(s.id) || s.id === FR.data.system_id))
       .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   }
+  frRenderMinimap();
   frFilterSystems(document.getElementById('f-sys-search')?.value || '');
 }
+function GM_BASE_SAFE() { return (typeof GM_BASE !== 'undefined') ? GM_BASE : 'assets/map/'; }
+
+function frRenderMinimap() {
+  const box = document.getElementById('f-minimap'); if (!box) return;
+  const all = FR.allSystems || [];
+  if (!all.length) { box.innerHTML = `<div class="fr-empty">Карта недоступна</div>`; return; }
+  const W = (typeof GM_W !== 'undefined') ? GM_W : 3300, H = (typeof GM_H !== 'undefined') ? GM_H : 2062;
+  const freeIds = new Set((FR.freeSystems || []).map(s => s.id));
+  const sel = FR.data.system_id;
+  const dots = all.map(s => {
+    const isFree = freeIds.has(s.id), isSel = s.id === sel;
+    const r = isSel ? 38 : isFree ? 24 : 15;
+    const cls = 'fr-mm-dot' + (isFree ? ' free' : ' taken') + (isSel ? ' sel' : '');
+    const click = isFree ? ` onclick="frPickSystem('${esc(s.id)}','${esc(s.name).replace(/'/g, '&#39;')}')"` : '';
+    return `<circle class="${cls}" cx="${s.x}" cy="${s.y}" r="${r}"${click}><title>${esc(s.name)}${isFree ? ' (свободна)' : ' (занята)'}</title></circle>`;
+  }).join('');
+  const selSys = all.find(s => s.id === sel);
+  const lbl = selSys ? `<text x="${selSys.x}" y="${selSys.y - 52}" class="fr-mm-lbl" text-anchor="middle">${esc(selSys.name)}</text>` : '';
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${dots}${lbl}</svg>`;
+}
+
 function frFilterSystems(q) {
   const box = document.getElementById('f-sys-list'); if (!box) return;
   q = (q || '').toLowerCase().trim();
@@ -291,11 +390,11 @@ function frFilterSystems(q) {
     <img src="${GM_BASE_SAFE()}stars/star_${esc(s.star_type || 'yellow')}.png" onerror="this.style.visibility='hidden'">
     <span>${esc(s.name)}</span>${FR.data.system_id === s.id ? '<i>✓</i>' : ''}</div>`).join('');
 }
-function GM_BASE_SAFE() { return (typeof GM_BASE !== 'undefined') ? GM_BASE : 'assets/map/'; }
 function frPickSystem(id, name) {
   FR.data.system_id = id; FR.data.system_name = name;
   const p = document.getElementById('f-sys-picked'); if (p) p.innerHTML = `Выбрано: <b>${esc(name)}</b>`;
   frFilterSystems(document.getElementById('f-sys-search')?.value || '');
+  frRenderMinimap();
 }
 
 // ── Сохранение ──────────────────────────────────────────────
