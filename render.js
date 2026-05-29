@@ -1414,6 +1414,15 @@ function buildNav(filt='') {
   let h=`<div class="n-home${curSlug==='home'?' on':''}" id="ntl-h" onclick="go('home')"><span class="n-home-icon">⌂</span>${T('home')}</div>`;
   h+=`<div class="n-home${curSlug==='map'?' on':''}" id="ntl-map" onclick="go('map')"><span class="n-home-icon">🜨</span>${lang==='ru'?'Карта галактики':'Galaxy map'}</div>`;
   h+=`<div class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" onclick="go('factions')"><span class="n-home-icon">⬡</span>${lang==='ru'?'Фракции':'Factions'}</div>`;
+  // Конструкторы — только для игроков с одобренной анкетой и стаффа
+  if (typeof cnNavEnsure==='function') cnNavEnsure();
+  if (typeof cnCanAccess==='function' && cnCanAccess()) {
+    const cnOn = (curSlug==='constructors'||(curSlug||'').startsWith('build-'))?' on':'';
+    h+=`<div class="n-home${cnOn}" id="ntl-con" onclick="go('constructors')"><span class="n-home-icon">⚒</span>${lang==='ru'?'Конструкторы':'Constructors'}</div>`;
+  }
+  // Каталоги юнитов фракций — видны всем
+  const cnCats=[['cat-ships','🚀',lang==='ru'?'Флот':'Fleet'],['cat-ground','🛡',lang==='ru'?'Наземная техника':'Ground'],['cat-aviation','✈',lang==='ru'?'Авиация':'Aviation'],['cat-divisions','⛬',lang==='ru'?'Дивизии':'Divisions']];
+  cnCats.forEach(([sl,ic,nm])=>{ h+=`<div class="n-home${curSlug===sl?' on':''}" onclick="go('${sl}')"><span class="n-home-icon">${ic}</span>${nm}</div>`; });
   h+=`<div class="nav-divider"></div>`;
 
   if (q) {

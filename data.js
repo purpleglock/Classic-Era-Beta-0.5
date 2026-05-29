@@ -94,6 +94,23 @@ async function go(slug, push=true) {
     else { setPg('<div class="sempty">renderArmorConfigPage не найден</div>'); }
     return;
   }
+  // ── Конструкторы юнитов фракций ──
+  const CN_ROUTES = {
+    'constructors': 'cnRenderHub',
+    'build-ship': 'cnRenderShip', 'build-ground': 'cnRenderGround',
+    'build-aviation': 'cnRenderAviation', 'build-division': 'cnRenderDivision',
+  };
+  if (CN_ROUTES[slug]) {
+    const fn = window[CN_ROUTES[slug]];
+    if (typeof fn === 'function') { await fn(); } else { setPg('<div class="sempty">constructors.js не загружен</div>'); }
+    return;
+  }
+  const CN_CATS = { 'cat-ships': 'ship', 'cat-ground': 'ground', 'cat-aviation': 'aviation', 'cat-divisions': 'division' };
+  if (CN_CATS[slug]) {
+    if (typeof cnRenderCatalog === 'function') { await cnRenderCatalog(CN_CATS[slug]); }
+    else { setPg('<div class="sempty">constructors.js не загружен</div>'); }
+    return;
+  }
   if (_pgCache.has(slug)) {
     const cached = _pgCache.get(slug);
     // Проверяем что в кэше полная запись (с content), а не урезанная из liveItems

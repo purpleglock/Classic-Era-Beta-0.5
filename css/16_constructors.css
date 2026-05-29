@@ -1,0 +1,129 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   CONSTRUCTORS — конструкторы юнитов фракций + каталоги
+   Чистая sci-fi тема на токенах. Без тяжёлых эффектов.
+   ───────────────────────────────────────────────────────────────────── */
+
+.cn-wrap { max-width: 1120px; margin: 0 auto; padding: 22px 22px 60px; }
+.cn-head { margin-bottom: 8px; }
+.cn-head h1 { font-family: var(--font-display); font-weight: 700; font-size: var(--text-2xl); color: var(--t1); margin: 2px 0; letter-spacing: var(--ls-tight); }
+.cn-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em; color: var(--te); text-transform: uppercase; }
+.cn-back { margin-top: 4px; }
+.cn-back a, .cn-hub-cats a { color: var(--te); cursor: pointer; font-size: 12px; }
+.cn-back a:hover, .cn-hub-cats a:hover { color: var(--tel); text-decoration: underline; }
+
+/* ── Гейт-заглушка ── */
+.cn-gate { max-width: 520px; margin: 56px auto; text-align: center; padding: 32px 24px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-lg); }
+.cn-gate-ico { font-size: 44px; opacity: .35; }
+.cn-gate h2 { font-family: var(--font-display); font-weight: 700; color: var(--t1); margin: 10px 0 8px; }
+.cn-gate p { color: var(--t2); font-size: 13px; line-height: 1.6; margin: 6px 0; }
+.cn-gate-sub { color: var(--t3) !important; font-size: 12px !important; }
+.cn-gate .btn { margin-top: 14px; }
+
+/* ── Хаб ── */
+.cn-hub-faction { font-size: 12px; color: var(--t3); margin-top: 4px; }
+.cn-hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin-top: 18px; }
+.cn-hub-card { display: flex; gap: 14px; align-items: center; padding: 16px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-lg); cursor: pointer; transition: border-color var(--transition-fast), transform var(--transition-fast); }
+.cn-hub-card:hover { border-color: var(--gd); transform: translateY(-2px); }
+.cn-hub-ico { font-size: 30px; flex: 0 0 auto; }
+.cn-hub-main { flex: 1; min-width: 0; }
+.cn-hub-name { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--t1); }
+.cn-hub-desc { font-size: 12px; color: var(--t3); margin-top: 3px; line-height: 1.5; }
+.cn-hub-arr { margin-left: auto; color: var(--gd); font-size: 18px; flex: 0 0 auto; }
+.cn-hub-cats { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 22px; font-size: 12px; color: var(--t3); }
+
+/* ── Билдер: сетка ── */
+.cn-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; margin-top: 16px; align-items: start; }
+.cn-config { display: flex; flex-direction: column; gap: 14px; }
+.cn-side { min-width: 0; }
+.cn-sticky { position: sticky; top: 14px; }
+
+.cn-panel { background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-lg); padding: 16px 16px 18px; }
+.cn-panel h3 { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--t1); margin: 0 0 12px; letter-spacing: var(--ls-wide); }
+
+/* ── Поля ── */
+.cn-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.cn-field:last-child { margin-bottom: 0; }
+.cn-field > label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--t3); }
+.cn-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cn-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+.cn-builder input, .cn-builder select, .cn-fac-line select {
+  width: 100%; box-sizing: border-box; background: var(--b1); border: 1px solid var(--w2);
+  border-radius: var(--radius-sm); color: var(--t1); padding: 8px 10px;
+  font-family: var(--font-body); font-size: 13px; outline: none; transition: border-color var(--transition-fast);
+}
+.cn-builder input:focus, .cn-builder select:focus, .cn-fac-line select:focus { border-color: var(--gd); }
+.cn-builder select { cursor: pointer; }
+
+/* ── Строки оружия / модулей ── */
+.cn-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.cn-row select { flex: 1; min-width: 0; }
+.cn-qty { width: 64px !important; flex: 0 0 auto; text-align: center; }
+.cn-del { flex: 0 0 auto; width: 32px; height: 32px; border: 1px solid var(--w2); background: var(--b3); color: var(--t3); border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; line-height: 1; transition: color var(--transition-fast), border-color var(--transition-fast); }
+.cn-del:hover { color: var(--err); border-color: var(--err); }
+
+/* ── Ангары ── */
+.cn-hangar { background: var(--b1); border: 1px solid var(--w1); border-left: 3px solid var(--te); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 10px; }
+.cn-hangar-hd { display: flex; gap: 8px; align-items: center; }
+.cn-hangar-hd select { flex: 1; min-width: 0; }
+.cn-h-units { margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.cn-h-status { font-family: var(--font-mono); font-size: 10px; color: var(--t3); margin-bottom: 8px; }
+.cn-h-status.over { color: var(--err); }
+.cn-h-cargo { font-size: 11px; color: var(--t4); }
+
+/* ── Панель ТТХ ── */
+.cn-stat { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--w1); font-size: 13px; }
+.cn-stat:last-child { border-bottom: 0; }
+.cn-stat span { color: var(--t3); }
+.cn-stat b { color: var(--t1); font-family: var(--font-display); font-weight: 600; }
+.cn-warn { color: var(--color-warning) !important; }
+
+.cn-fac-line { margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--w1); font-size: 12px; color: var(--t3); }
+.cn-fac-line label { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 5px; }
+.cn-fac-hint { font-size: 10.5px; color: var(--t4); margin-top: 5px; line-height: 1.45; }
+
+.cn-div-sum-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--t3); margin: 12px 0 6px; }
+.cn-div-summary { font-size: 12px; color: var(--t1); line-height: 1.7; max-height: 160px; overflow: auto; }
+.cn-divblock .cn-d-type { flex: 0 0 32%; }
+.cn-divblock .cn-d-model { flex: 1; }
+.cn-divblock .cn-d-count { width: 64px !important; flex: 0 0 auto; text-align: center; }
+
+/* ── Каталог ── */
+.cn-cat-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.cn-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.cn-chip-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-pill); color: var(--t2); padding: 5px 12px; font-size: 12px; cursor: pointer; transition: border-color var(--transition-fast), color var(--transition-fast); }
+.cn-chip-btn i { font-style: normal; font-family: var(--font-mono); font-size: 10px; color: var(--t4); }
+.cn-chip-btn:hover { color: var(--t1); border-color: var(--w3); }
+.cn-chip-btn.on { border-color: var(--c, var(--gd)); color: var(--t1); box-shadow: inset 0 0 0 1px var(--c, var(--gd)); }
+
+.cn-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 14px; }
+.cn-card { position: relative; display: flex; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-md); overflow: hidden; cursor: pointer; transition: border-color var(--transition-fast); }
+.cn-card:hover { border-color: var(--w3); }
+.cn-card-bar { width: 5px; flex: 0 0 auto; background: var(--w2); }
+.cn-card-body { padding: 12px 14px; flex: 1; min-width: 0; }
+.cn-card-name { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--t1); }
+.cn-card-fac { font-size: 11px; font-weight: 600; margin-top: 2px; }
+.cn-card-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.cn-mini { font-size: 10px; color: var(--t3); background: var(--b1); border: 1px solid var(--w1); border-radius: var(--radius-sm); padding: 2px 6px; white-space: nowrap; }
+.cn-mini b { color: var(--t2); font-weight: 600; }
+.cn-card-acts { display: flex; flex-direction: column; gap: 4px; padding: 8px; }
+.cn-card-acts button { width: 26px; height: 26px; border: 1px solid var(--w2); background: var(--b3); color: var(--t3); border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1; }
+.cn-card-acts button:hover { color: var(--t1); border-color: var(--w3); }
+
+/* ── Модалка просмотра ── */
+.cn-modal-ov { position: fixed; inset: 0; background: rgba(0, 0, 0, .62); display: none; align-items: center; justify-content: center; z-index: var(--z-modal); padding: 20px; }
+.cn-modal-ov.show { display: flex; }
+.cn-modal { position: relative; width: min(560px, 96vw); max-height: 88vh; overflow: auto; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-lg); padding: 22px; box-shadow: var(--shadow-xl); }
+.cn-modal-x { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border: 1px solid var(--w2); background: var(--b3); color: var(--t3); border-radius: var(--radius-sm); cursor: pointer; }
+.cn-modal-x:hover { color: var(--t1); }
+.cn-modal-bar { height: 4px; width: 60px; border-radius: var(--radius-pill); background: var(--w2); margin-bottom: 12px; }
+.cn-modal-name { font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--t1); }
+.cn-spec { white-space: pre-wrap; font-family: var(--font-mono); font-size: 11.5px; color: var(--te); background: var(--b1); border: 1px solid var(--w1); border-radius: var(--radius-sm); padding: 12px; margin: 4px 0 0; line-height: 1.55; }
+.cn-modal-acts { display: flex; gap: 8px; margin-top: 14px; }
+
+/* ── Адаптив ── */
+@media (max-width: 900px) {
+  .cn-grid { grid-template-columns: 1fr; }
+  .cn-sticky { position: static; }
+  .cn-row3 { grid-template-columns: 1fr; }
+}

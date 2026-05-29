@@ -331,6 +331,63 @@ function gmDraw() {
   gmDrawStars();
 }
 
+// Детерминированный шум: одинаков для двух соседних ячеек на общем ребре,
+// чтобы границы оставались стыкованными.
+function gmEdgeHash(x, y) {
+  const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+  return s - Math.floor(s);
+}
+function gmPerturbPoly(poly, amp = 2.2, steps = 4) {
+  if (!poly || poly.length < 2) return poly;
+  const onBox = (p) => p[0] <= 0.5 || p[1] <= 0.5 || p[0] >= GM_W - 0.5 || p[1] >= GM_H - 0.5;
+  const out = [];
+  for (let i = 0; i < poly.length - 1; i++) {
+    const a = poly[i], b = poly[i + 1];
+    out.push(a);
+    // Не трогаем рёбра bbox карты — иначе появятся щели у краёв
+    if (onBox(a) && onBox(b)) continue;
+    const swap = (a[0] > b[0]) || (a[0] === b[0] && a[1] > b[1]);
+    const p = swap ? b : a, q = swap ? a : b;
+    const cdx = q[0] - p[0], cdy = q[1] - p[1];
+    const clen = Math.hypot(cdx, cdy);
+    if (clen < 8) continue;
+    const nx = -cdy / clen, ny = cdx / clen;
+    const localAmp = Math.min(amp, clen * 0.18);
+    const subs = [];
+    for (let s = 1; s < steps; s++) {
+      const tc = s / steps;
+      const h1 = gmEdgeHash(p[0] + q[0] * 0.37 + tc * 53.1, p[1] + q[1] * 0.29 + tc * 91.7);
+      const h2 = gmEdgeHash(p[0] * 0.71 + tc * 17.3, q[1] * 0.83 + tc * 31.5);
+      const off = ((h1 + h2) * 0.5 - 0.5) * 2 * localAmp;
+      subs.push([p[0] + cdx * tc + nx * off, p[1] + cdy * tc + ny * off]);
+    }
+    if (swap) subs.reverse();
+    for (const s of subs) out.push(s);
+  }
+  return out;
+}
+// Catmull-Rom → cubic-Bezier, замкнутый путь, мягкое скругление углов
+function gmSmoothPath(pts) {
+  const n = pts.length;
+  if (n < 3) return pts.slice(1).map(p => 'L' + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('');
+  const k = 0.18; // натяжение — небольшое, чтобы не «надувать» ячейки
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n];
+    const p1 = pts[i];
+    const p2 = pts[(i + 1) % n];
+    const p3 = pts[(i + 2) % n];
+    const c1x = p1[0] + (p2[0] - p0[0]) * k;
+    const c1y = p1[1] + (p2[1] - p0[1]) * k;
+    const c2x = p2[0] - (p3[0] - p1[0]) * k;
+    const c2y = p2[1] - (p3[1] - p1[1]) * k;
+    d += 'C' + c1x.toFixed(1) + ',' + c1y.toFixed(1)
+       + ' ' + c2x.toFixed(1) + ',' + c2y.toFixed(1)
+       + ' ' + p2[0].toFixed(1) + ',' + p2[1].toFixed(1);
+  }
+  return d;
+}
+
 function gmVoronoiCells() {
   if (!window.d3 || !d3.Delaunay || GM.systems.length < 1) return [];
   try {
@@ -350,8 +407,10 @@ function gmDrawSvg() {
     const fac = gmFaction(sys.faction);
     const fill = fac ? fac.color : 'rgba(120,140,170,0.05)';
     const stroke = fac ? gmSolidColor(fac.color) : 'rgba(150,170,200,0.18)';
-    const d = 'M' + poly.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + 'Z';
-    return `<path class="vor-cell" d="${d}" fill="${fill}" stroke="${stroke}"></path>`;
+    const pts = gmPerturbPoly(poly);
+    const d = 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + 'Z';
+    const cls = 'vor-cell' + (fac ? ' vor-claimed' : ' vor-neutral');
+    return `<path class="${cls}" d="${d}" fill="${fill}" stroke="${stroke}"></path>`;
   }).join('');
 
   const laneHtml = GM.lanes.map(l => {
@@ -452,7 +511,6 @@ function gmOpenPanel(sys) {
         <div class="gm-fac-name" style="color:${col}">${esc(fac.name)}</div>
         ${meta && meta.leader ? `<div class="gm-fac-leader">${esc(meta.leader)}</div>` : ''}
       </div>
-      <span class="gm-fac-swatch" style="background:${fac.color};border-color:${col}" title="Цвет фракции"></span>
     </div>`;
   })() : `<div class="gm-fac-badge gm-neutral">Нейтральная система</div>`;
   panel.className = '';
