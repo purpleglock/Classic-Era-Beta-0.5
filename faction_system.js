@@ -161,7 +161,7 @@ function _fH2() {
     <div class="creg-step-eyebrow">ШАГ 2</div>
     <div class="creg-step-title">КОНЦЕПТ</div>
     <div class="creg-step-desc">Отражает историю государства: внешнеполитическую, экономическую и военную составляющие.</div>
-    ${!fromPages?'<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(168,105,44,.4);margin-top:8px">◈ Создайте статьи с page_type=faction_concept для кастомных концептов</div>':''}
+    ${!fromPages?'<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(28,100,148,.4);margin-top:8px">◈ Создайте статьи с page_type=faction_concept для кастомных концептов</div>':''}
   </div>
   <div class="creg-class-grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))">
     ${items.map(c => `
@@ -181,7 +181,7 @@ function _fH3() {
     <div class="creg-step-eyebrow">ШАГ 3</div>
     <div class="creg-step-title">КУЛЬТУРА</div>
     <div class="creg-step-desc">Отражает общественные процессы, идеологию и культурное наследие фракции.</div>
-    ${!fromPages?'<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(168,105,44,.4);margin-top:8px">◈ Создайте статьи с page_type=faction_culture для кастомных культур</div>':''}
+    ${!fromPages?'<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(28,100,148,.4);margin-top:8px">◈ Создайте статьи с page_type=faction_culture для кастомных культур</div>':''}
   </div>
   <div class="creg-class-grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))">
     ${items.map(c => `
@@ -202,17 +202,17 @@ function _fH4() {
     <div class="creg-step-eyebrow">ШАГ 4</div>
     <div class="creg-step-title">АКЦЕНТ</div>
     <div class="creg-step-desc">Текущий политический курс. Определяет еженедельный бонус к доходу всех участников фракции.</div>
-    ${!fromPages?'<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(168,105,44,.4);margin-top:8px">◈ Создайте статьи с page_type=faction_accent для кастомных акцентов</div>':''}
+    ${!fromPages?'<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:rgba(28,100,148,.4);margin-top:8px">◈ Создайте статьи с page_type=faction_accent для кастомных акцентов</div>':''}
   </div>
   ${Object.entries(cats).map(([cat, items]) => `
     <div style="margin-bottom:24px">
-      <div style="font-family:'Orbitron',sans-serif;font-size:9px;font-weight:700;letter-spacing:3px;color:rgba(168,105,44,.6);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(168,105,44,.15)">${esc(cat)}</div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:3px;color:rgba(28,100,148,.6);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(28,100,148,.15)">${esc(cat)}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
         ${items.map(a => `
           <div class="creg-class-card ${_fracData.accent===a.slug?'sel':''}" onclick="_fracData.accent='${esc(a.slug)}';_fracRender()">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
               <div class="creg-cc-name" style="font-size:9px">${esc(a.name)}</div>
-              <div style="font-family:'Orbitron',sans-serif;font-size:11px;font-weight:900;color:var(--gdl);white-space:nowrap;margin-left:8px">+${a.income_bonus} ЭК</div>
+              <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:900;color:var(--gdl);white-space:nowrap;margin-left:8px">+${a.income_bonus} ЭК</div>
             </div>
             <div class="creg-cc-desc">${esc(a.desc)}</div>
             ${_fracData.accent===a.slug?'<div class="creg-cc-sel-mark">✓ ВЫБРАНО</div>':''}

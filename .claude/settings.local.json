@@ -3,7 +3,10 @@
     "allow": [
       "Bash(cp -r \"/c/Users/Андрей/Desktop/setis\" \"/c/Users/Андрей/Desktop/setis-handoff\")",
       "Bash(rm -rf \"/c/Users/Андрей/Desktop/setis-handoff/.git\" \"/c/Users/Андрей/Desktop/setis-handoff/.vscode\")",
-      "Read(//c/Users/Андрей/Desktop/**)"
+      "Read(//c/Users/Андрей/Desktop/**)",
+      "PowerShell(node --check 'C:\\\\Users\\\\���३\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\editor.js')",
+      "PowerShell(if \\($?\\) { \"editor.js OK\" })",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

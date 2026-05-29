@@ -64,7 +64,7 @@ const ARMOR_RESOURCES = {
     density:     0.8,
     thermal:     0.1,  // практически нет теплопроводности → высокая защита от лазера
     tensile:     5000,
-    color:'#d4924a',
+    color:'#4e9ed8',
     icon:'✦',
   },
 };
@@ -150,7 +150,7 @@ function calcArmorFull({ armorClass, resources = {}, density_pts = 0, tensile_pt
   laser_pct = Math.round(ablation * 100);
   if (ablation >= 0.80)      { laser_label = `Иммунитет к лазеру (${laser_pct}%)`;         laser_color = '#4ec96a'; }
   else if (ablation >= 0.50) { laser_label = `Сопротивление лазеру (${laser_pct}%)`;        laser_color = '#6bb8d4'; }
-  else if (ablation >= 0.25) { laser_label = `Частичная защита (${laser_pct}%)`;            laser_color = '#d4924a'; }
+  else if (ablation >= 0.25) { laser_label = `Частичная защита (${laser_pct}%)`;            laser_color = '#4e9ed8'; }
   else                        { laser_label = `Полный урон лазера (защита ${laser_pct}%)`;  laser_color = '#cc4848'; }
 
   return {

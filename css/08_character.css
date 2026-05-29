@@ -38,8 +38,8 @@
 .ch-draft-bar {
   background: rgba(255,150,0,.08);
   border-bottom: 2px solid rgba(255,150,0,.4);
-  color: #ffb432;
-  font-family: 'Orbitron', sans-serif;
+  color: #4cb4ec;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 10px; font-weight: 900; letter-spacing: 4px;
   text-align: center; padding: 8px;
 }
@@ -147,7 +147,7 @@
   width: 20px; height: 20px;
 }
 .ch-hero-corner--tl { top: 14px; left: 14px; border-top: 1px solid rgba(107,184,212,.55); border-left: 1px solid rgba(107,184,212,.55); }
-.ch-hero-corner--tr { top: 14px; right: 14px; border-top: 1px solid rgba(168,105,44,.5); border-right: 1px solid rgba(168,105,44,.5); }
+.ch-hero-corner--tr { top: 14px; right: 14px; border-top: 1px solid rgba(28,100,148,.5); border-right: 1px solid rgba(28,100,148,.5); }
 
 /* Контент героя — текст слева */
 .ch-hero-info {
@@ -157,7 +157,7 @@
 }
 
 .ch-name {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 44px; font-weight: 900;
   letter-spacing: 2px; text-transform: uppercase;
   color: #fff; line-height: 1.05;
@@ -170,14 +170,14 @@
 }
 
 .ch-badge-faction {
-  font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
   letter-spacing: 2.5px; text-transform: uppercase;
   color: rgba(245,200,100,.95);
-  background: linear-gradient(135deg, rgba(168,105,44,.15) 0%, rgba(6,7,15,.92) 100%);
-  border: 1px solid rgba(168,105,44,.6);
+  background: linear-gradient(135deg, rgba(28,100,148,.15) 0%, rgba(6,7,15,.92) 100%);
+  border: 1px solid rgba(28,100,148,.6);
   padding: 6px 14px;
   display: flex; align-items: center; gap: 7px; white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(168,105,44,.15), inset 0 1px 0 rgba(255,255,255,.05);
+  box-shadow: 0 2px 8px rgba(28,100,148,.15), inset 0 1px 0 rgba(255,255,255,.05);
   position: relative;
   overflow: hidden;
 }
@@ -187,7 +187,7 @@
   position: absolute;
   top: 0; left: -100%;
   width: 100%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(168,105,44,.15), transparent);
+  background: linear-gradient(90deg, transparent, rgba(28,100,148,.15), transparent);
   animation: badge-shine 3s infinite;
 }
 
@@ -205,7 +205,7 @@
 }
 
 .ch-badge-status {
-  font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
   letter-spacing: 2.5px; text-transform: uppercase;
   background: linear-gradient(135deg, rgba(255,255,255,.08) 0%, rgba(6,7,15,.92) 100%);
   border: 1px solid currentColor;
@@ -227,17 +227,17 @@
 }
 
 .ch-badge-level {
-  font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
   letter-spacing: 2.5px; color: rgba(245,200,100,.95);
-  background: linear-gradient(135deg, rgba(168,105,44,.15) 0%, rgba(6,7,15,.92) 100%);
-  border: 1px solid rgba(168,105,44,.5);
+  background: linear-gradient(135deg, rgba(28,100,148,.15) 0%, rgba(6,7,15,.92) 100%);
+  border: 1px solid rgba(28,100,148,.5);
   padding: 6px 14px;
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(168,105,44,.15), inset 0 1px 0 rgba(255,255,255,.05);
+  box-shadow: 0 2px 8px rgba(28,100,148,.15), inset 0 1px 0 rgba(255,255,255,.05);
 }
 
 .ch-badge-hp {
-  font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
   letter-spacing: 2.5px; color: #4ec96a;
   background: linear-gradient(135deg, rgba(78,201,106,.12) 0%, rgba(6,7,15,.92) 100%);
   border: 1px solid rgba(78,201,106,.5);
@@ -256,7 +256,7 @@
 .ch-statbar {
   display: flex; flex-wrap: nowrap; overflow-x: auto;
   background: var(--b2);
-  border-bottom: 1px solid rgba(168,105,44,.15);
+  border-bottom: 1px solid rgba(28,100,148,.15);
   /* ch-root уже имеет margin: 0 -28px — дополнительный margin не нужен */
   scrollbar-width: none;
   position: sticky; top: 0; z-index: 20;
@@ -274,14 +274,14 @@
   min-width: 60px;
 }
 .ch-sbi:last-child { border-right: none; }
-.ch-sbi:hover { background: rgba(168,105,44,.06); }
+.ch-sbi:hover { background: rgba(28,100,148,.06); }
 .ch-sbi-k {
-  font-family: 'Orbitron', sans-serif; font-size: 7px; font-weight: 700;
-  letter-spacing: 2px; color: rgba(168,105,44,.5); text-transform: uppercase;
+  font-family: 'Rajdhani', sans-serif; font-size: 7px; font-weight: 700;
+  letter-spacing: 2px; color: rgba(28,100,148,.5); text-transform: uppercase;
   margin-bottom: 4px;
 }
 .ch-sbi-v {
-  font-family: 'Orbitron', sans-serif; font-size: 17px; font-weight: 900;
+  font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 900;
   color: #fff; line-height: 1;
 }
 .ch-sbi-v--hp { color: #4caf50; }
@@ -292,7 +292,7 @@
 .ch-tabs {
   display: flex;
   background: var(--b2);
-  border-bottom: 1px solid rgba(168,105,44,.14);
+  border-bottom: 1px solid rgba(28,100,148,.14);
   /* ch-root уже имеет margin: 0 -28px */
   overflow-x: auto; scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -302,18 +302,18 @@
 .ch-tabs::-webkit-scrollbar { display: none; }
 
 .ch-tab {
-  font-family: 'Orbitron', sans-serif; font-size: 8px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 8px; font-weight: 700;
   letter-spacing: 2.5px; text-transform: uppercase; white-space: nowrap;
   color: rgba(255,255,255,.22); background: none; border: none;
   border-bottom: 2px solid transparent;
   padding: 14px 22px; cursor: pointer; flex-shrink: 0;
   transition: color .18s, border-color .18s, background .18s;
 }
-.ch-tab:hover { color: rgba(168,105,44,.75); }
+.ch-tab:hover { color: rgba(28,100,148,.75); }
 .ch-tab.on {
   color: rgba(210,170,80,.95);
-  border-bottom-color: rgba(168,105,44,.9);
-  background: rgba(168,105,44,.05);
+  border-bottom-color: rgba(28,100,148,.9);
+  background: rgba(28,100,148,.05);
 }
 
 
@@ -323,7 +323,7 @@
 .ch-panel.on { display: block; }
 
 .ch-section-label {
-  font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 900;
+  font-family: 'Rajdhani', sans-serif; font-size: 9px; font-weight: 900;
   letter-spacing: 4px; color: rgba(210,170,80,.9); text-transform: uppercase;
   margin: 0 0 16px; padding-bottom: 9px;
   border-bottom: 1px solid rgba(210,170,80,.15);
@@ -354,18 +354,18 @@
 
 .ch-stats-grid {
   display: grid; grid-template-columns: repeat(6, 1fr);
-  border: 1px solid rgba(168,105,44,.12);
+  border: 1px solid rgba(28,100,148,.12);
   background: var(--b2);
 }
 
 .ch-stat {
   padding: 20px 8px; text-align: center;
-  border-right: 1px solid rgba(168,105,44,.09);
+  border-right: 1px solid rgba(28,100,148,.09);
   cursor: default; transition: background .14s;
   position: relative;
 }
 .ch-stat:last-child { border-right: none; }
-.ch-stat:hover { background: rgba(168,105,44,.07); }
+.ch-stat:hover { background: rgba(28,100,148,.07); }
 .ch-stat::after {
   content: ''; position: absolute; bottom: 0; left: 50%;
   transform: translateX(-50%); width: 0; height: 2px;
@@ -374,16 +374,16 @@
 .ch-stat:hover::after { width: 60%; }
 
 .ch-stat-name {
-  font-family: 'Orbitron', sans-serif; font-size: 7px; letter-spacing: 2px;
-  color: rgba(168,105,44,.45); text-transform: uppercase; margin-bottom: 10px;
+  font-family: 'Rajdhani', sans-serif; font-size: 7px; letter-spacing: 2px;
+  color: rgba(28,100,148,.45); text-transform: uppercase; margin-bottom: 10px;
 }
 .ch-stat-val {
-  font-family: 'Orbitron', sans-serif; font-size: 30px; font-weight: 900;
+  font-family: 'Rajdhani', sans-serif; font-size: 30px; font-weight: 900;
   color: #fff; line-height: 1;
 }
 .ch-stat-mod {
   font-family: 'JetBrains Mono', monospace; font-size: 11px;
-  color: rgba(168,105,44,.75); margin-top: 5px;
+  color: rgba(28,100,148,.75); margin-top: 5px;
 }
 .ch-stat-bonus {
   font-family: 'JetBrains Mono', monospace; font-size: 9px;
@@ -394,14 +394,14 @@
 }
 .ch-stat-fill {
   height: 100%;
-  background: linear-gradient(to right, rgba(168,105,44,.45), rgba(210,170,80,.85));
+  background: linear-gradient(to right, rgba(28,100,148,.45), rgba(210,170,80,.85));
 }
 
 
 /* ─── §7 Derived params ──────────────────────────────────────── */
 
 .ch-derived {
-  border: 1px solid rgba(168,105,44,.1); border-top: none;
+  border: 1px solid rgba(28,100,148,.1); border-top: none;
   margin-top: 24px;
 }
 
@@ -413,7 +413,7 @@
   cursor: default; transition: background .12s;
 }
 .ch-dr-row:last-child { border-bottom: none; }
-.ch-dr-row:hover { background: rgba(168,105,44,.04); }
+.ch-dr-row:hover { background: rgba(28,100,148,.04); }
 
 .ch-dr-k {
   font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1px;
@@ -421,10 +421,10 @@
 }
 .ch-dr-sub {
   font-family: 'JetBrains Mono', monospace; font-size: 8px;
-  color: rgba(168,105,44,.4); white-space: nowrap;
+  color: rgba(28,100,148,.4); white-space: nowrap;
 }
 .ch-dr-v {
-  font-family: 'Orbitron', sans-serif; font-size: 13px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700;
   color: rgba(255,255,255,.85); text-align: right; white-space: nowrap;
 }
 
@@ -448,7 +448,7 @@
   /* position:relative для кнопок gear_extra.css */
   position: relative;
 }
-.ch-gear-row:hover { background: rgba(168,105,44,.05); transform: translateX(2px); }
+.ch-gear-row:hover { background: rgba(28,100,148,.05); transform: translateX(2px); }
 
 .ch-gear-img {
   width: 54px; height: 54px; object-fit: cover;
@@ -465,7 +465,7 @@
 
 .ch-gear-body { flex: 1; min-width: 0; }
 .ch-gear-name {
-  font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
   color: #fff; margin-bottom: 4px; letter-spacing: .8px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -499,8 +499,8 @@
   background: rgba(100,180,255,.08);
 }
 .ch-gear-btn--sell:hover {
-  border-color: rgba(168,105,44,.6); color: rgba(210,170,80,.9);
-  background: rgba(168,105,44,.1);
+  border-color: rgba(28,100,148,.6); color: rgba(210,170,80,.9);
+  background: rgba(28,100,148,.1);
 }
 
 
@@ -515,11 +515,11 @@
 .ch-ab-card {
   background: rgba(10,12,18,.6);
   border: 1px solid rgba(255,255,255,.05);
-  border-top: 2px solid var(--tc, rgba(168,105,44,.5));
+  border-top: 2px solid var(--tc, rgba(28,100,148,.5));
   padding: 15px 17px;
   transition: background .18s, transform .18s;
 }
-.ch-ab-card:hover { background: rgba(168,105,44,.04); transform: translateY(-1px); }
+.ch-ab-card:hover { background: rgba(28,100,148,.04); transform: translateY(-1px); }
 
 .ch-ab-top {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -527,15 +527,15 @@
   padding-bottom: 9px; margin-bottom: 9px;
 }
 .ch-ab-name {
-  font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700;
   color: #fff; letter-spacing: .8px; flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ch-ab-type {
   font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
   letter-spacing: 1px; padding: 2px 8px;
-  border: 1px solid var(--tc, rgba(168,105,44,.5));
-  color: var(--tc, rgba(168,105,44,.85));
+  border: 1px solid var(--tc, rgba(28,100,148,.5));
+  color: var(--tc, rgba(28,100,148,.85));
   text-transform: uppercase; flex-shrink: 0;
 }
 .ch-ab-desc {
@@ -551,8 +551,8 @@
 #rpg-tooltip {
   position: fixed; z-index: 9999;
   background: rgba(12,14,22,.97);
-  border: 1px solid rgba(168,105,44,.35);
-  border-left: 2px solid rgba(168,105,44,.7);
+  border: 1px solid rgba(28,100,148,.35);
+  border-left: 2px solid rgba(28,100,148,.7);
   padding: 8px 13px;
   font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.7;
   color: rgba(255,255,255,.82); max-width: 260px;
@@ -571,12 +571,12 @@
 }
 .fac-card {
   background: var(--b3);
-  border: 1px solid rgba(168,105,44,.25); border-top: 2px solid var(--gdl);
+  border: 1px solid rgba(28,100,148,.25); border-top: 2px solid var(--gdl);
   padding: 20px; position: sticky; top: 80px;
 }
 .fac-card-hdr {
-  font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700;
-  letter-spacing: 3px; color: rgba(168,105,44,.7); text-transform: uppercase;
+  font-family: 'Rajdhani', sans-serif; font-size: 9px; font-weight: 700;
+  letter-spacing: 3px; color: rgba(28,100,148,.7); text-transform: uppercase;
   margin-bottom: 16px;
 }
 .fac-row {
@@ -589,10 +589,10 @@
   color: rgba(255,255,255,.35); text-transform: uppercase; flex-shrink: 0;
 }
 .fac-v { font-family: 'Exo 2', sans-serif; font-size: 12px; color: rgba(255,255,255,.8); text-align: right; }
-.fac-income { font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 700; color: var(--gdl); }
-.fac-divider { height: 1px; background: rgba(168,105,44,.2); margin: 8px 0; }
+.fac-income { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; color: var(--gdl); }
+.fac-divider { height: 1px; background: rgba(28,100,148,.2); margin: 8px 0; }
 .fac-members-hdr {
-  font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 9px; font-weight: 700;
   letter-spacing: 3px; color: var(--te); text-transform: uppercase;
   margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(61,122,160,.2);
 }
@@ -605,13 +605,13 @@
 .fac-member:hover { border-color: var(--te); }
 .fac-member-av {
   width: 40px; height: 40px; object-fit: cover; flex-shrink: 0;
-  border: 1px solid rgba(168,105,44,.3);
+  border: 1px solid rgba(28,100,148,.3);
 }
 .fac-member-av--ph {
-  background: rgba(168,105,44,.1); border: 1px solid rgba(168,105,44,.3);
+  background: rgba(28,100,148,.1); border: 1px solid rgba(28,100,148,.3);
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Orbitron', sans-serif; font-size: 13px; font-weight: 900;
-  color: rgba(168,105,44,.7);
+  font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 900;
+  color: rgba(28,100,148,.7);
 }
 .fac-member-info { flex: 1; min-width: 0; }
 .fac-member-name { font-size: 13px; font-weight: 600; color: var(--t1); }
@@ -620,7 +620,7 @@
   color: var(--t4); margin-top: 2px;
 }
 .fac-member-status {
-  font-family: 'Orbitron', sans-serif; font-size: 8px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 8px; font-weight: 700;
   letter-spacing: 1px; padding: 2px 6px; border: 1px solid; flex-shrink: 0;
 }
 .st-active  { color: #4caf50; border-color: rgba(76,175,80,.3); }
@@ -643,37 +643,37 @@
 .creg-step-num {
   width: 26px; height: 26px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 900;
-  border: 1px solid rgba(168,105,44,.4); color: rgba(168,105,44,.8);
+  font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 900;
+  border: 1px solid rgba(28,100,148,.4); color: rgba(28,100,148,.8);
 }
-.creg-step.active .creg-step-num { background: rgba(168,105,44,.15); border-color: rgba(168,105,44,.8); color: rgba(210,170,80,.9); }
+.creg-step.active .creg-step-num { background: rgba(28,100,148,.15); border-color: rgba(28,100,148,.8); color: rgba(210,170,80,.9); }
 .creg-step.done   .creg-step-num { background: rgba(78,201,106,.1); border-color: rgba(78,201,106,.5); color: #4ec96a; }
-.creg-step-label { font-family: 'Orbitron', sans-serif; font-size: 8px; font-weight: 700; letter-spacing: 2px; color: var(--t3); text-transform: uppercase; }
+.creg-step-label { font-family: 'Rajdhani', sans-serif; font-size: 8px; font-weight: 700; letter-spacing: 2px; color: var(--t3); text-transform: uppercase; }
 .creg-step.active .creg-step-label { color: rgba(210,170,80,.9); }
-.creg-step-cur { font-family: 'JetBrains Mono', monospace; font-size: 7px; color: rgba(168,105,44,.5); letter-spacing: 1px; margin-top: 2px; }
+.creg-step-cur { font-family: 'JetBrains Mono', monospace; font-size: 7px; color: rgba(28,100,148,.5); letter-spacing: 1px; margin-top: 2px; }
 
 .creg-step-header { margin-bottom: 20px; }
-.creg-step-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 4px; color: rgba(168,105,44,.5); text-transform: uppercase; margin-bottom: 6px; }
-.creg-step-title { font-family: 'Orbitron', sans-serif; font-size: 22px; font-weight: 900; letter-spacing: 3px; color: #fff; text-transform: uppercase; }
+.creg-step-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 4px; color: rgba(28,100,148,.5); text-transform: uppercase; margin-bottom: 6px; }
+.creg-step-title { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 900; letter-spacing: 3px; color: #fff; text-transform: uppercase; }
 .creg-step-desc { font-size: 13px; color: var(--t3); margin-top: 6px; }
 
 .creg-form { display: flex; flex-direction: column; gap: 14px; }
 .creg-field { display: flex; flex-direction: column; gap: 6px; }
-.creg-label { font-family: 'Orbitron', sans-serif; font-size: 8px; font-weight: 700; letter-spacing: 2px; color: rgba(168,105,44,.7); text-transform: uppercase; }
+.creg-label { font-family: 'Rajdhani', sans-serif; font-size: 8px; font-weight: 700; letter-spacing: 2px; color: rgba(28,100,148,.7); text-transform: uppercase; }
 .creg-input {
-  background: rgba(0,0,0,.4); border: 1px solid rgba(168,105,44,.25);
+  background: rgba(0,0,0,.4); border: 1px solid rgba(28,100,148,.25);
   color: var(--t1); padding: 10px 14px; font-size: 13px; font-family: 'Exo 2', sans-serif;
   outline: none; transition: border-color .2s, box-shadow .2s;
 }
-.creg-input:focus { border-color: rgba(168,105,44,.7); box-shadow: inset 2px 0 0 rgba(168,105,44,.6); }
-.creg-input-lg { font-size: 18px; font-family: 'Orbitron', sans-serif; font-weight: 700; }
+.creg-input:focus { border-color: rgba(28,100,148,.7); box-shadow: inset 2px 0 0 rgba(28,100,148,.6); }
+.creg-input-lg { font-size: 18px; font-family: 'Rajdhani', sans-serif; font-weight: 700; }
 .creg-upload-btn {
   background: var(--b3); border: 1px solid var(--w2);
   color: var(--t3); padding: 10px 14px; display: flex;
   align-items: center; justify-content: center;
   transition: all .15s;
 }
-.creg-upload-btn:hover { border-color: rgba(168,105,44,.5); color: rgba(210,170,80,.8); }
+.creg-upload-btn:hover { border-color: rgba(28,100,148,.5); color: rgba(210,170,80,.8); }
 .creg-img-preview { position: relative; }
 .creg-img-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 60%, rgba(6,7,15,.9) 100%); pointer-events: none; }
 .creg-img-empty { display: flex; align-items: center; justify-content: center; height: 120px; border: 1px dashed rgba(255,255,255,.08); font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 3px; color: rgba(255,255,255,.15); }
@@ -683,43 +683,43 @@
   border: 1px solid rgba(255,255,255,.07); background: var(--b3); padding: 14px;
   cursor: pointer; transition: all .15s; position: relative;
 }
-.creg-class-card:hover { border-color: rgba(168,105,44,.4); background: rgba(168,105,44,.05); }
-.creg-class-card.sel { border-color: rgba(168,105,44,.8); background: rgba(168,105,44,.1); }
+.creg-class-card:hover { border-color: rgba(28,100,148,.4); background: rgba(28,100,148,.05); }
+.creg-class-card.sel { border-color: rgba(28,100,148,.8); background: rgba(28,100,148,.1); }
 .creg-cc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .creg-cc-icon { font-size: 22px; }
-.creg-cc-start { font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700; color: var(--gdl); }
-.creg-cc-name { font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: rgba(255,255,255,.9); text-transform: uppercase; margin-bottom: 4px; }
+.creg-cc-start { font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700; color: var(--gdl); }
+.creg-cc-name { font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: rgba(255,255,255,.9); text-transform: uppercase; margin-bottom: 4px; }
 .creg-cc-desc { font-size: 11px; color: var(--t3); line-height: 1.4; }
 .creg-cc-sel-mark { position: absolute; top: 8px; right: 8px; font-family: 'JetBrains Mono', monospace; font-size: 8px; color: #4ec96a; }
 
 .creg-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .creg-stat-block { background: var(--b3); border: 1px solid rgba(255,255,255,.07); padding: 12px; text-align: center; }
-.creg-stat-label { font-family: 'Orbitron', sans-serif; font-size: 8px; letter-spacing: 2px; color: rgba(168,105,44,.6); text-transform: uppercase; margin-bottom: 8px; }
+.creg-stat-label { font-family: 'Rajdhani', sans-serif; font-size: 8px; letter-spacing: 2px; color: rgba(28,100,148,.6); text-transform: uppercase; margin-bottom: 8px; }
 .creg-stat-controls { display: flex; align-items: center; justify-content: center; gap: 10px; }
 .creg-stat-btn {
   background: var(--b2); border: 1px solid var(--w2); color: var(--t2);
   width: 28px; height: 28px; font-size: 16px; cursor: pointer; transition: all .15s;
   display: flex; align-items: center; justify-content: center;
 }
-.creg-stat-btn:hover:not(:disabled) { border-color: rgba(168,105,44,.6); color: rgba(210,170,80,.9); }
+.creg-stat-btn:hover:not(:disabled) { border-color: rgba(28,100,148,.6); color: rgba(210,170,80,.9); }
 .creg-stat-btn:disabled { opacity: .3; cursor: not-allowed; }
 .creg-stat-btn--plus:hover:not(:disabled) { border-color: rgba(78,201,106,.5); color: #4ec96a; }
-.creg-stat-num { font-family: 'Orbitron', sans-serif; font-size: 20px; font-weight: 900; color: #fff; }
+.creg-stat-num { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 900; color: #fff; }
 .creg-stat-bonus { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #4ec96a; }
 .creg-stat-bar { height: 2px; background: rgba(255,255,255,.06); margin: 8px 4px 0; }
-.creg-stat-bar-fill { height: 100%; background: linear-gradient(to right, rgba(168,105,44,.4), rgba(210,170,80,.8)); }
-.creg-stat-mod { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(168,105,44,.6); margin-top: 4px; }
+.creg-stat-bar-fill { height: 100%; background: linear-gradient(to right, rgba(28,100,148,.4), rgba(210,170,80,.8)); }
+.creg-stat-mod { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,100,148,.6); margin-top: 4px; }
 
 .creg-faction-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 14px; }
 .creg-faction-card {
   border: 1px solid rgba(255,255,255,.07); background: var(--b3);
   cursor: pointer; transition: all .15s; position: relative; overflow: hidden;
 }
-.creg-faction-card:hover { border-color: rgba(168,105,44,.4); }
-.creg-faction-card.sel { border-color: rgba(168,105,44,.8); background: rgba(168,105,44,.1); }
+.creg-faction-card:hover { border-color: rgba(28,100,148,.4); }
+.creg-faction-card.sel { border-color: rgba(28,100,148,.8); background: rgba(28,100,148,.1); }
 .creg-ff-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; filter: brightness(.6) saturate(.7); }
-.creg-ff-noimg { height: 60px; display: flex; align-items: center; justify-content: center; font-family: 'Orbitron', sans-serif; font-size: 18px; font-weight: 900; color: rgba(168,105,44,.5); background: rgba(168,105,44,.06); }
-.creg-ff-name { font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,.8); padding: 8px 10px 10px; text-transform: uppercase; }
+.creg-ff-noimg { height: 60px; display: flex; align-items: center; justify-content: center; font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 900; color: rgba(28,100,148,.5); background: rgba(28,100,148,.06); }
+.creg-ff-name { font-family: 'Rajdhani', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,.8); padding: 8px 10px 10px; text-transform: uppercase; }
 .creg-ff-check { position: absolute; top: 6px; right: 6px; color: #4ec96a; font-size: 12px; }
 
 .creg-ab-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -727,27 +727,27 @@
   border: 1px solid rgba(255,255,255,.07); background: var(--b3); padding: 10px;
   cursor: pointer; transition: all .15s; display: flex; gap: 8px; align-items: flex-start;
 }
-.creg-ab-card:hover { border-color: rgba(168,105,44,.4); }
-.creg-ab-card.sel { border-color: rgba(168,105,44,.8); background: rgba(168,105,44,.1); }
+.creg-ab-card:hover { border-color: rgba(28,100,148,.4); }
+.creg-ab-card.sel { border-color: rgba(28,100,148,.8); background: rgba(28,100,148,.1); }
 
 .creg-summary { display: flex; flex-direction: column; gap: 10px; }
 .creg-summ-row { display: flex; gap: 12px; padding: 10px 14px; background: var(--b3); border: 1px solid rgba(255,255,255,.06); }
-.creg-summ-k { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(168,105,44,.5); letter-spacing: 1px; text-transform: uppercase; min-width: 100px; flex-shrink: 0; }
+.creg-summ-k { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,100,148,.5); letter-spacing: 1px; text-transform: uppercase; min-width: 100px; flex-shrink: 0; }
 .creg-summ-v { font-size: 13px; color: var(--t1); flex: 1; }
 
 .creg-rules { background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.07); padding: 14px 16px; }
-.creg-rules-head { font-family: 'Orbitron', sans-serif; font-size: 8px; font-weight: 700; letter-spacing: 3px; color: rgba(168,105,44,.6); text-transform: uppercase; margin-bottom: 10px; }
+.creg-rules-head { font-family: 'Rajdhani', sans-serif; font-size: 8px; font-weight: 700; letter-spacing: 3px; color: rgba(28,100,148,.6); text-transform: uppercase; margin-bottom: 10px; }
 
 .creg-selected-badge {
   display: flex; align-items: center; gap: 8px;
   font-family: 'JetBrains Mono', monospace; font-size: 11px;
-  color: rgba(168,105,44,.9); padding: 8px 14px;
-  background: rgba(168,105,44,.08); border: 1px solid rgba(168,105,44,.25);
+  color: rgba(28,100,148,.9); padding: 8px 14px;
+  background: rgba(28,100,148,.08); border: 1px solid rgba(28,100,148,.25);
 }
 
 .creg-btn-back {
   background: transparent; border: 1px solid var(--w2); color: var(--t3);
-  font-family: 'Orbitron', sans-serif; font-size: 8px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 8px; font-weight: 700;
   letter-spacing: 2px; text-transform: uppercase; padding: 0 16px; height: 34px;
   cursor: pointer; transition: all .15s;
 }
@@ -764,8 +764,8 @@
 /* Inventory slot cells */
 .cs-inv-slots { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
 .cs-inv-slot-label {
-  font-family: 'Orbitron', sans-serif; font-size: 8px; font-weight: 700;
-  letter-spacing: 2px; color: rgba(168,105,44,.6); text-transform: uppercase; margin-bottom: 6px;
+  font-family: 'Rajdhani', sans-serif; font-size: 8px; font-weight: 700;
+  letter-spacing: 2px; color: rgba(28,100,148,.6); text-transform: uppercase; margin-bottom: 6px;
 }
 .cs-inv-slot-cells { display: flex; flex-wrap: wrap; gap: 6px; }
 .cs-inv-cell {
@@ -788,14 +788,14 @@
   display: flex; align-items: center; gap: 12px; padding: 14px 16px;
   border-bottom: 1px solid var(--w2); background: var(--b2); flex-shrink: 0;
 }
-.mkt-title { font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 3px; color: var(--te); flex: 1; }
+.mkt-title { font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 3px; color: var(--te); flex: 1; }
 .mkt-balance { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .mkt-bal-lbl { font-family: 'JetBrains Mono', monospace; font-size: 8px; color: var(--t4); letter-spacing: 1px; }
-.mkt-bal-val { font-family: 'Orbitron', sans-serif; font-size: 13px; font-weight: 700; color: var(--gdl); }
+.mkt-bal-val { font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 700; color: var(--gdl); }
 .mkt-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 12px; border-bottom: 1px solid var(--w2); background: var(--b2); flex-shrink: 0; }
 .mkt-flt {
   background: transparent; border: 1px solid var(--w2); color: var(--t3);
-  font-family: 'Orbitron', sans-serif; font-size: 8px; font-weight: 700;
+  font-family: 'Rajdhani', sans-serif; font-size: 8px; font-weight: 700;
   letter-spacing: 1px; text-transform: uppercase; padding: 5px 9px; cursor: pointer; transition: all .15s;
 }
 .mkt-flt:hover, .mkt-flt.on { border-color: var(--gd); color: var(--gdl); background: var(--gdb); }
@@ -817,7 +817,7 @@
 .mkt-item-name { font-size: 13px; color: rgba(255,255,255,.9); margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mkt-item-meta { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--t4); letter-spacing: .5px; }
 .mkt-item-buy { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
-.mkt-price { font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 700; color: var(--gdl); }
+.mkt-price { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; color: var(--gdl); }
 .mkt-price.free { color: #4ec96a; }
 .mkt-price.cant { color: var(--err); }
 .mkt-owned { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #4ec96a; letter-spacing: 1px; }
@@ -859,7 +859,7 @@
     padding: 0 14px 14px;
   }
   .ch-mob-name {
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Rajdhani', sans-serif;
     font-size: 22px; font-weight: 900; letter-spacing: 1px;
     text-transform: uppercase; color: #fff; line-height: 1.1;
     margin: 0 0 8px;
@@ -868,13 +868,13 @@
   }
   .ch-mob-badges { display: flex; flex-wrap: wrap; gap: 4px; }
   .ch-mob-badge {
-    font-family: 'Orbitron', sans-serif; font-size: 8px; font-weight: 700;
+    font-family: 'Rajdhani', sans-serif; font-size: 8px; font-weight: 700;
     letter-spacing: .5px; text-transform: uppercase;
     padding: 3px 8px; border: 1px solid currentColor;
     background: rgba(6,7,15,.8); color: rgba(255,255,255,.7);
     white-space: nowrap; flex-shrink: 0;
   }
-  .ch-mob-badge--faction { color: rgba(168,105,44,.9); }
+  .ch-mob-badge--faction { color: rgba(28,100,148,.9); }
   .ch-mob-badge--hp      { color: #4ec96a; }
 
   /* Мобильная полоска статов */
@@ -883,7 +883,7 @@
     grid-template-columns: repeat(5, 1fr);
     /* ch-root уже имеет margin: 0 -28px */
     background: rgba(10,11,18,.98);
-    border-bottom: 1px solid rgba(168,105,44,.2);
+    border-bottom: 1px solid rgba(28,100,148,.2);
   }
   .ch-mob-stat {
     display: flex; flex-direction: column; align-items: center;
@@ -892,11 +892,11 @@
   }
   .ch-mob-stat:last-child { border-right: none; }
   .ch-mob-stat-k {
-    font-family: 'Orbitron', sans-serif; font-size: 6px; letter-spacing: .8px;
-    color: rgba(168,105,44,.6); text-transform: uppercase; margin-bottom: 4px;
+    font-family: 'Rajdhani', sans-serif; font-size: 6px; letter-spacing: .8px;
+    color: rgba(28,100,148,.6); text-transform: uppercase; margin-bottom: 4px;
   }
   .ch-mob-stat-v {
-    font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 900;
+    font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 900;
     color: #fff; line-height: 1;
   }
   .ch-mob-stat-v--hp { color: #4ec96a; }
@@ -908,7 +908,7 @@
     /* ch-root уже имеет margin: 0 -28px */
     top: 0 !important;
     background: rgba(10,11,18,.95) !important;
-    border-bottom: 1px solid rgba(168,105,44,.2) !important;
+    border-bottom: 1px solid rgba(28,100,148,.2) !important;
     box-shadow: none !important;
     overflow: hidden !important;
   }

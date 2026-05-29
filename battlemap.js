@@ -733,7 +733,7 @@ function renderBattleMapBlock(b){
 
   const legendHtml=fac.map(f=>`<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
     <div style="width:16px;height:2px;background:${esc(f.color)};border-radius:1px;box-shadow:0 0 5px ${esc(f.color)}"></div>
-    <span style="font-family:Orbitron,sans-serif;font-size:7.5px;letter-spacing:1px;color:${esc(f.color)}">${esc((f.label||f.id).toUpperCase())}</span>
+    <span style="font-family:Rajdhani,sans-serif;font-size:7.5px;letter-spacing:1px;color:${esc(f.color)}">${esc((f.label||f.id).toUpperCase())}</span>
   </div>`).join('');
 
   const forceBarsHtml=fac.map(f=>{
@@ -741,7 +741,7 @@ function renderBattleMapBlock(b){
     const avgHp=fu.length?fu.reduce((s,u)=>s+(u.maxHp>0?u.hp/u.maxHp:1),0)/fu.length:1;
     return`<div style="margin-bottom:7px">
       <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-        <span style="font-size:9px;color:${esc(f.color)};font-family:Orbitron,sans-serif">${esc(f.label||f.id)}</span>
+        <span style="font-size:9px;color:${esc(f.color)};font-family:Rajdhani,sans-serif">${esc(f.label||f.id)}</span>
         <span id="bm-ftxt-${bid}-${esc(f.id)}" style="font-size:9px;color:${esc(f.color)};font-family:Share Tech Mono,monospace">${fu.length} ед</span>
       </div>
       <div style="height:3px;background:rgba(255,255,255,.05);border-radius:2px">
@@ -766,7 +766,7 @@ function renderBattleMapBlock(b){
       <div style="width:8px;height:8px;background:#00d4ff;box-shadow:0 0 12px #00d4ff,0 0 24px rgba(0,212,255,.4);transform:rotate(45deg)"></div>
     </div>
     <div>
-      <div style="font-family:Orbitron,sans-serif;font-size:13px;font-weight:700;color:#e8f8ff;text-shadow:0 0 20px rgba(0,212,255,.4);letter-spacing:1px">${esc(data.title)}</div>
+      <div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:#e8f8ff;text-shadow:0 0 20px rgba(0,212,255,.4);letter-spacing:1px">${esc(data.title)}</div>
       ${data.date||data.subtitle?`<div style="font-size:8px;color:rgba(0,212,255,.45);font-family:Share Tech Mono,monospace;letter-spacing:1.5px;margin-top:1px">${esc(data.date)}${data.date&&data.subtitle?' ·· ':''}${esc(data.subtitle)}</div>`:''}
     </div>
   </div>
@@ -779,14 +779,14 @@ function renderBattleMapBlock(b){
     <svg id="bm-outer-${bid}" style="position:absolute;top:0;left:0;width:100%;height:100%" xmlns="http://www.w3.org/2000/svg">
       <g id="bm-g-${bid}">
         <svg id="bm-svg-${bid}" width="${BM_W}" height="${BM_H}" data-bm="${dataJson}">
-          <text x="50%" y="50%" text-anchor="middle" fill="rgba(0,212,255,.1)" font-size="12" font-family="Orbitron,monospace">Initializing...</text>
+          <text x="50%" y="50%" text-anchor="middle" fill="rgba(0,212,255,.1)" font-size="12" font-family="Rajdhani,monospace">Initializing...</text>
         </svg>
       </g>
     </svg>
 
     <!-- turn counter top-left -->
     <div style="position:absolute;top:10px;left:12px;z-index:8;pointer-events:none">
-      <div id="bm-ctr-${bid}" style="font-family:Orbitron,sans-serif;font-size:7.5px;letter-spacing:2px;color:rgba(0,212,255,.5);background:rgba(0,0,0,.6);padding:3px 8px;border:1px solid rgba(0,212,255,.16);border-radius:1px">НАЧ / ${maxSlider}</div>
+      <div id="bm-ctr-${bid}" style="font-family:Rajdhani,sans-serif;font-size:7.5px;letter-spacing:2px;color:rgba(0,212,255,.5);background:rgba(0,0,0,.6);padding:3px 8px;border:1px solid rgba(0,212,255,.16);border-radius:1px">НАЧ / ${maxSlider}</div>
     </div>
 
     <!-- territory watermark label — рендерится как часть поля боя -->
@@ -795,7 +795,7 @@ function renderBattleMapBlock(b){
     <!-- zoom top-right -->
     <div style="position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:3px;z-index:10">
       <button onclick="bmZoomBtn('${bid}',1)" style="width:26px;height:26px;background:rgba(0,0,0,.65);border:1px solid rgba(0,212,255,.28);color:#00d4ff;font-size:15px;cursor:pointer;border-radius:2px;line-height:1">+</button>
-      <button onclick="bmZoomReset('${bid}')" style="width:26px;height:26px;background:rgba(0,0,0,.65);border:1px solid rgba(0,212,255,.18);color:rgba(0,212,255,.55);font-size:7px;cursor:pointer;border-radius:2px;font-family:Orbitron,monospace">FIT</button>
+      <button onclick="bmZoomReset('${bid}')" style="width:26px;height:26px;background:rgba(0,0,0,.65);border:1px solid rgba(0,212,255,.18);color:rgba(0,212,255,.55);font-size:7px;cursor:pointer;border-radius:2px;font-family:Rajdhani,monospace">FIT</button>
       <button onclick="bmZoomBtn('${bid}',-1)" style="width:26px;height:26px;background:rgba(0,0,0,.65);border:1px solid rgba(0,212,255,.28);color:#00d4ff;font-size:17px;cursor:pointer;border-radius:2px;line-height:1">−</button>
     </div>
 
@@ -809,7 +809,7 @@ function renderBattleMapBlock(b){
       <div style="padding:10px 12px 8px;border-bottom:1px solid rgba(0,212,255,.15);display:flex;justify-content:space-between;align-items:center;background:rgba(0,212,255,.04)">
         <div style="display:flex;align-items:center;gap:7px">
           <div style="width:3px;height:18px;background:linear-gradient(to bottom,#00d4ff,rgba(0,212,255,.2))"></div>
-          <span id="bm-uinfo-title-${bid}" style="font-family:Orbitron,sans-serif;font-size:10px;color:#00d4ff;letter-spacing:1.5px">ОБЪЕКТ</span>
+          <span id="bm-uinfo-title-${bid}" style="font-family:Rajdhani,sans-serif;font-size:10px;color:#00d4ff;letter-spacing:1.5px">ОБЪЕКТ</span>
         </div>
         <button onclick="bmCloseUinfo('${bid}')" style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);color:rgba(0,212,255,.6);cursor:pointer;font-size:11px;line-height:1;padding:3px 7px;border-radius:2px;transition:all .2s" onmouseenter="this.style.background='rgba(0,212,255,.18)'" onmouseleave="this.style.background='rgba(0,212,255,.08)'">✕</button>
       </div>
@@ -826,9 +826,9 @@ function renderBattleMapBlock(b){
       </div>
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-          <div id="bm-dlg-name-${bid}" style="font-family:Orbitron,sans-serif;font-size:10px;color:#00d4ff;letter-spacing:2px"></div>
+          <div id="bm-dlg-name-${bid}" style="font-family:Rajdhani,sans-serif;font-size:10px;color:#00d4ff;letter-spacing:2px"></div>
           <div style="flex:1;height:1px;background:linear-gradient(to right,rgba(0,212,255,.4),transparent)"></div>
-          <button onclick="bmCloseDlg('${bid}')" style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.28);color:rgba(0,212,255,.7);cursor:pointer;font-size:8px;font-family:Orbitron,monospace;padding:3px 10px;border-radius:2px;letter-spacing:1px">ЗАКРЫТЬ ▶</button>
+          <button onclick="bmCloseDlg('${bid}')" style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.28);color:rgba(0,212,255,.7);cursor:pointer;font-size:8px;font-family:Rajdhani,monospace;padding:3px 10px;border-radius:2px;letter-spacing:1px">ЗАКРЫТЬ ▶</button>
         </div>
         <div id="bm-dlg-text-${bid}" style="font-size:11px;color:rgba(220,240,255,.9);font-family:Share Tech Mono,monospace;line-height:1.7;border-left:2px solid rgba(0,212,255,.35);padding-left:12px"></div>
       </div>
@@ -839,11 +839,11 @@ function renderBattleMapBlock(b){
   <div id="bm-brief-${bid}" style="display:none;border-top:1px solid rgba(0,212,255,.12);background:rgba(4,12,24,.97);max-height:160px;overflow-y:auto">
     <div style="padding:10px 16px;display:flex;gap:22px;flex-wrap:wrap">
       <div style="flex:1;min-width:180px">
-        <div style="font-family:Orbitron,sans-serif;font-size:8px;letter-spacing:1.5px;color:rgba(0,212,255,.38);margin-bottom:7px">FORCE STATUS</div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:8px;letter-spacing:1.5px;color:rgba(0,212,255,.38);margin-bottom:7px">FORCE STATUS</div>
         ${forceBarsHtml}
       </div>
       <div style="flex:2;min-width:200px">
-        <div style="font-family:Orbitron,sans-serif;font-size:8px;letter-spacing:1.5px;color:rgba(0,212,255,.38);margin-bottom:7px">LEGEND</div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:8px;letter-spacing:1.5px;color:rgba(0,212,255,.38);margin-bottom:7px">LEGEND</div>
         <div style="display:flex;flex-wrap:wrap;gap:4px 12px">
           ${BM_UNIT_TYPES.map(type=>`<div style="display:flex;align-items:center;gap:5px">
             <svg width="14" height="14" viewBox="-12 -12 24 24">${bmIcon(type,'rgba(0,212,255,.6)',BM_OBJECT_TYPES.has(type)?8:5)}</svg>
@@ -859,9 +859,9 @@ function renderBattleMapBlock(b){
 <div style="padding:8px 14px 10px;border-top:1px solid rgba(0,212,255,.1);background:linear-gradient(to bottom,rgba(0,5,15,.9),rgba(0,0,0,.95));display:flex;align-items:center;gap:7px;position:relative">
   <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(to right,transparent,rgba(0,212,255,.25),transparent)"></div>
   <button onclick="bmGoTurn('${bid}',(_bmStates['${bid}']?.turnIdx??-1)-1)" style="width:26px;height:26px;background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);color:#00d4ff;font-size:9px;cursor:pointer;border-radius:3px;flex-shrink:0;transition:all .2s" onmouseenter="this.style.background='rgba(0,212,255,.16)'" onmouseleave="this.style.background='rgba(0,212,255,.06)'">◀</button>
-  <button id="bm-play-${bid}" onclick="bmTogglePlay('${bid}')" style="height:26px;padding:0 12px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.22);color:#00d4ff;font-size:8.5px;font-family:Orbitron,monospace;cursor:pointer;border-radius:3px;flex-shrink:0;min-width:72px;letter-spacing:1px;transition:all .2s">▶ PLAY</button>
+  <button id="bm-play-${bid}" onclick="bmTogglePlay('${bid}')" style="height:26px;padding:0 12px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.22);color:#00d4ff;font-size:8.5px;font-family:Rajdhani,monospace;cursor:pointer;border-radius:3px;flex-shrink:0;min-width:72px;letter-spacing:1px;transition:all .2s">▶ PLAY</button>
   <button onclick="bmGoTurn('${bid}',(_bmStates['${bid}']?.turnIdx??-1)+1)" style="width:26px;height:26px;background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);color:#00d4ff;font-size:9px;cursor:pointer;border-radius:3px;flex-shrink:0;transition:all .2s" onmouseenter="this.style.background='rgba(0,212,255,.16)'" onmouseleave="this.style.background='rgba(0,212,255,.06)'">▶</button>
-  <button onclick="bmToggleBrief('${bid}')" id="bm-briefbtn-${bid}" style="height:26px;padding:0 10px;background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.16);color:rgba(0,212,255,.5);font-size:8px;font-family:Orbitron,monospace;cursor:pointer;border-radius:3px;flex-shrink:0;letter-spacing:1px">◈ BRIEFING</button>
+  <button onclick="bmToggleBrief('${bid}')" id="bm-briefbtn-${bid}" style="height:26px;padding:0 10px;background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.16);color:rgba(0,212,255,.5);font-size:8px;font-family:Rajdhani,monospace;cursor:pointer;border-radius:3px;flex-shrink:0;letter-spacing:1px">◈ BRIEFING</button>
   <div style="flex:1;position:relative">
     <input id="bm-slider-${bid}" type="range" min="0" max="${maxSlider}" step="1" value="0"
       oninput="bmGoTurn('${bid}',+this.value-1)"
@@ -931,7 +931,7 @@ function bmClickUnit(bid,uid2){
   if(title)title.textContent=(u.name||u.id).toUpperCase();
   if(title)title.style.color=col;
   if(body)body.innerHTML=`
-    <div style="font-family:Orbitron,sans-serif;font-size:8px;color:rgba(0,212,255,.4);letter-spacing:1px;margin-bottom:4px">${BM_TYPE_LABELS[u.type]||u.type}</div>
+    <div style="font-family:Rajdhani,sans-serif;font-size:8px;color:rgba(0,212,255,.4);letter-spacing:1px;margin-bottom:4px">${BM_TYPE_LABELS[u.type]||u.type}</div>
     <div style="margin-bottom:6px;color:${col}">${esc(fl)}</div>
     ${u.maxHp>0?`<div style="margin-bottom:4px">
       <div style="display:flex;justify-content:space-between;font-size:9px"><span>HP</span><span style="color:${hpPct>55?col:hpPct>25?'#ffd06a':'#ff3a6e'}">${Math.round(u.hp||0)} / ${u.maxHp} (${hpPct}%)</span></div>
@@ -971,7 +971,7 @@ function bmShowDlg(bid,turn,data){
     if(chr?.imgUrl){
       portrait.innerHTML=`<img src="${esc(chr.imgUrl)}" style="width:100%;height:100%;object-fit:cover;object-position:top">`;
     } else {
-      portrait.innerHTML=`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:Orbitron,sans-serif;font-size:20px;font-weight:900;color:hsl(${hue},60%,65%)">${esc(charName.slice(0,2).toUpperCase())}</div>`;
+      portrait.innerHTML=`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:Rajdhani,sans-serif;font-size:20px;font-weight:900;color:hsl(${hue},60%,65%)">${esc(charName.slice(0,2).toUpperCase())}</div>`;
       portrait.style.borderColor=`hsl(${hue},50%,40%)`;
     }
   }
@@ -1051,7 +1051,7 @@ function bmCasualtyPopup(bid,lines){
     font-family:Share Tech Mono,monospace;pointer-events:none;border-radius:3px;
     box-shadow:0 0 20px rgba(255,50,50,.15);animation:bmcas-in .25s ease;
     border-left:3px solid #ff3050`;
-  el.innerHTML=`<div style="font-family:Orbitron,sans-serif;font-size:8px;letter-spacing:2px;color:#ff5050;margin-bottom:6px;display:flex;align-items:center;gap:5px">
+  el.innerHTML=`<div style="font-family:Rajdhani,sans-serif;font-size:8px;letter-spacing:2px;color:#ff5050;margin-bottom:6px;display:flex;align-items:center;gap:5px">
     <svg width="12" height="12" viewBox="0 0 12 12"><text y="10" font-size="10">☠</text></svg> БОЕВЫЕ ПОТЕРИ
   </div>`+lines.map(l=>`<div style="font-size:9px;color:rgba(255,180,180,.85);margin:2px 0;line-height:1.4">${l}</div>`).join('');
   vp.appendChild(el);
@@ -1124,11 +1124,11 @@ function bmUpdateWatermark(bid, label, desc) {
     const r2=parseInt(c2.slice(1,3),16)||0, g2=parseInt(c2.slice(3,5),16)||0, b2=parseInt(c2.slice(5,7),16)||0;
     // Левая половина — фракция 1, правая — фракция 2; диагональный срез
     splitOverlay = `
-      <text x="22%" y="88%" text-anchor="middle" font-family="Orbitron,sans-serif"
+      <text x="22%" y="88%" text-anchor="middle" font-family="Rajdhani,sans-serif"
         font-size="9" font-weight="700" letter-spacing="3"
         fill="rgba(${r1},${g1},${b1},.22)" text-transform="uppercase"
         transform="rotate(-4,22%,88%)">${esc((fac[0].label||fac[0].id).toUpperCase())}</text>
-      <text x="78%" y="88%" text-anchor="middle" font-family="Orbitron,sans-serif"
+      <text x="78%" y="88%" text-anchor="middle" font-family="Rajdhani,sans-serif"
         font-size="9" font-weight="700" letter-spacing="3"
         fill="rgba(${r2},${g2},${b2},.22)" text-transform="uppercase"
         transform="rotate(-4,78%,88%)">${esc((fac[1].label||fac[1].id).toUpperCase())}</text>
@@ -1143,7 +1143,7 @@ function bmUpdateWatermark(bid, label, desc) {
     <text
       x="50%" y="50%"
       text-anchor="middle" dominant-baseline="middle"
-      font-family="Orbitron,sans-serif"
+      font-family="Rajdhani,sans-serif"
       font-size="clamp(18px, 5vw, 52px)"
       font-weight="900"
       letter-spacing="0.14em"
@@ -1200,7 +1200,7 @@ function bmCineOverlay(bid,turn){
       <text
         x="50%" y="52%"
         text-anchor="middle" dominant-baseline="middle"
-        font-family="Orbitron,sans-serif"
+        font-family="Rajdhani,sans-serif"
         font-size="min(4.5vw,42px)"
         font-weight="900"
         letter-spacing="0.12em"
@@ -1427,7 +1427,7 @@ function bmeRefreshUnitList(bid){
              opacity:${isDead?.45:1}">
       <svg width="12" height="12" viewBox="-10 -10 20 20">${bmIcon(u.type,col,BM_OBJECT_TYPES.has(u.type)?8:5)}</svg>
       <div style="flex:1;min-width:0">
-        <div style="font-size:9px;color:${col};font-family:Orbitron,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.name||u.id)}</div>
+        <div style="font-size:9px;color:${col};font-family:Rajdhani,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.name||u.id)}</div>
         ${u.maxHp>0?`<div style="height:1.5px;background:rgba(255,255,255,.08);border-radius:1px;margin-top:2px"><div style="height:100%;width:${hpPct}%;background:${hpPct>55?col:hpPct>25?'#ffd06a':'#ff3a6e'}"></div></div>`:''}
       </div>
     </div>`;
@@ -1481,7 +1481,7 @@ function bmeShowProps(bid,uid2){
   p.innerHTML=`
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(0,212,255,.1)">
       <svg width="16" height="16" viewBox="-12 -12 24 24">${bmIcon(u.type,col,BM_OBJECT_TYPES.has(u.type)?9:6)}</svg>
-      <span style="font-family:Orbitron,sans-serif;font-size:9px;color:${col};letter-spacing:.5px">${BM_TYPE_LABELS[u.type]||u.type}</span>
+      <span style="font-family:Rajdhani,sans-serif;font-size:9px;color:${col};letter-spacing:.5px">${BM_TYPE_LABELS[u.type]||u.type}</span>
     </div>
     <div class="fg"><label class="fl">Название</label>
       <input class="be-fi" value="${esc(u.name||u.id||'')}" oninput="bmeUpdIU('${bid}','${uid2}','name',this.value)"></div>
@@ -1490,7 +1490,7 @@ function bmeShowProps(bid,uid2){
     <div class="fg"><label class="fl">Фракция</label>
       <select class="be-fi" onchange="bmeUpdIU('${bid}','${uid2}','faction',this.value);bmeRedraw('${bid}');bmeShowProps('${bid}','${uid2}')">${facOpts}</select></div>
     <div style="height:1px;background:rgba(0,212,255,.08);margin:8px 0"></div>
-    <div style="font-family:Orbitron,sans-serif;font-size:7.5px;color:rgba(0,212,255,.35);letter-spacing:1px;margin-bottom:6px">ХАРАКТЕРИСТИКИ</div>
+    <div style="font-family:Rajdhani,sans-serif;font-size:7.5px;color:rgba(0,212,255,.35);letter-spacing:1px;margin-bottom:6px">ХАРАКТЕРИСТИКИ</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
       <div class="fg" style="margin:0"><label class="fl">Max HP</label><input class="be-fi" type="number" value="${u.maxHp||0}" oninput="bmeUpdIU('${bid}','${uid2}','maxHp',+this.value)"></div>
       <div class="fg" style="margin:0"><label class="fl">HP</label><input class="be-fi" type="number" value="${Math.round(u.hp||0)}" oninput="bmeUpdIU('${bid}','${uid2}','hp',+this.value)"></div>
@@ -1502,7 +1502,7 @@ function bmeShowProps(bid,uid2){
     </div>
     <div style="height:1px;background:rgba(0,212,255,.08);margin:8px 0"></div>
     ${st.si>=0?`
-    <div style="font-family:Orbitron,sans-serif;font-size:7.5px;color:rgba(0,212,255,.35);letter-spacing:1px;margin-bottom:6px">СОБЫТИЯ ХОДА ${st.si+1}</div>
+    <div style="font-family:Rajdhani,sans-serif;font-size:7.5px;color:rgba(0,212,255,.35);letter-spacing:1px;margin-bottom:6px">СОБЫТИЯ ХОДА ${st.si+1}</div>
     <div id="bme-atk-hint-${bid}" style="display:none;padding:5px 8px;background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.3);color:#00d4ff;font-size:8.5px;font-family:Share Tech Mono,monospace;border-radius:2px;margin-bottom:6px;text-align:center"></div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
       <button class="bme-ev-btn" onclick="bmeEvMove('${bid}','${uid2}')">➟ Задать точку движения</button>
@@ -1749,7 +1749,7 @@ function bmeRefreshEvList(bid){
     return`<div style="display:flex;align-items:center;gap:5px;padding:3px 5px;margin:2px 0;background:rgba(0,212,255,.04);border:1px solid rgba(0,212,255,.08);border-radius:2px">
       <span style="font-size:11px;flex-shrink:0">${ico[ev.type]||'?'}</span>
       <div style="flex:1;min-width:0">
-        <span style="font-size:7.5px;color:rgba(0,212,255,.4);font-family:Orbitron,monospace">${nm[ev.type]||ev.type} </span>
+        <span style="font-size:7.5px;color:rgba(0,212,255,.4);font-family:Rajdhani,monospace">${nm[ev.type]||ev.type} </span>
         <span style="font-size:8.5px;color:rgba(200,230,255,.65);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${desc}</span>
       </div>
       <button onclick="bmeDelEv('${bid}',${ei})" style="background:rgba(255,60,60,.1);border:1px solid rgba(255,60,60,.22);color:#ff5050;font-size:9px;cursor:pointer;border-radius:2px;width:18px;height:18px;flex-shrink:0;line-height:1">✕</button>
@@ -1972,7 +1972,7 @@ function bmeShowUnitPreview(bid) {
   if (!page)  { el.innerHTML = ''; return; }
   const s = bmWikiToUnit(page);
   el.innerHTML =
-    `<div style="font-size:8px;color:rgba(0,212,255,.55);font-family:Orbitron,monospace;margin-top:4px;line-height:1.8;border-top:1px solid rgba(0,212,255,.1);padding-top:4px">` +
+    `<div style="font-size:8px;color:rgba(0,212,255,.55);font-family:Rajdhani,monospace;margin-top:4px;line-height:1.8;border-top:1px solid rgba(0,212,255,.1);padding-top:4px">` +
     `<span style="color:rgba(0,212,255,.35)">Класс:</span> ${BM_TYPE_LABELS[s.type]||s.type}<br>` +
     `<span style="color:rgba(0,212,255,.35)">HP:</span> ${s.hp} &nbsp; ` +
     `<span style="color:rgba(0,212,255,.35)">Щиты:</span> ${s.shields}<br>` +
@@ -2063,7 +2063,7 @@ function battleMapEditorHtml(b,i){
       <button class="bw-del" onclick="editBlocks[${i}].chars.splice(${ci},1);renderBlockEditor()">✖</button>
       <div style="grid-column:1/-1;display:flex;gap:4px;align-items:center">
         <input class="be-fi" style="flex:1" placeholder="URL аватара (или загрузи файл →)" value="${esc(c.imgUrl||'')}" oninput="editBlocks[${i}].chars[${ci}].imgUrl=this.value">
-        <label style="cursor:pointer;padding:4px 8px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.25);color:#00d4ff;font-size:8px;font-family:Orbitron,monospace;border-radius:2px;white-space:nowrap" title="Загрузить фото персонажа">
+        <label style="cursor:pointer;padding:4px 8px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.25);color:#00d4ff;font-size:8px;font-family:Rajdhani,monospace;border-radius:2px;white-space:nowrap" title="Загрузить фото персонажа">
           📷 Фото
           <input type="file" accept="image/*" style="display:none" onchange="bmCharImgUpload(this,${i},${ci})">
         </label>
@@ -2080,12 +2080,12 @@ function battleMapEditorHtml(b,i){
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
   <div style="padding:8px;background:var(--b3);border:1px solid var(--w2)">
-    <div style="font-family:Orbitron,sans-serif;font-size:8px;color:var(--te);letter-spacing:1.5px;margin-bottom:7px">${lang==='ru'?'ФРАКЦИИ':'FACTIONS'}</div>
+    <div style="font-family:Rajdhani,sans-serif;font-size:8px;color:var(--te);letter-spacing:1.5px;margin-bottom:7px">${lang==='ru'?'ФРАКЦИИ':'FACTIONS'}</div>
     <div id="bme-facrows-${bid}">${facHtml}</div>
     <button class="add-blk" style="padding:4px" onclick="editBlocks[${i}].factions.push({id:'F'+(editBlocks[${i}].factions.length+1),label:'${lang==='ru'?'Новая':'New'}',color:'#aaaaaa'});bmeFacRefresh('${bid}',${i})">+ ${lang==='ru'?'Фракция':'Faction'}</button>
   </div>
   <div style="padding:8px;background:var(--b3);border:1px solid var(--w2)">
-    <div style="font-family:Orbitron,sans-serif;font-size:8px;color:var(--te);letter-spacing:1.5px;margin-bottom:7px">${lang==='ru'?'ПЕРСОНАЖИ (для диалогов)':'CHARACTERS (for dialogues)'}</div>
+    <div style="font-family:Rajdhani,sans-serif;font-size:8px;color:var(--te);letter-spacing:1.5px;margin-bottom:7px">${lang==='ru'?'ПЕРСОНАЖИ (для диалогов)':'CHARACTERS (for dialogues)'}</div>
     <div>${charsHtml}</div>
     <button class="add-blk" style="padding:4px" onclick="if(!editBlocks[${i}].chars)editBlocks[${i}].chars=[];editBlocks[${i}].chars.push({id:'ch'+(Date.now()%10000),name:'${lang==='ru'?'Персонаж':'Character'}',imgUrl:''});renderBlockEditor()">+ ${lang==='ru'?'Персонаж':'Character'}</button>
   </div>
@@ -2095,14 +2095,14 @@ function battleMapEditorHtml(b,i){
 
   <!-- TURNS BAR -->
   <div style="padding:5px 10px;border-bottom:1px solid rgba(0,212,255,.1);background:rgba(0,0,0,.4);display:flex;align-items:center;gap:4px;overflow-x:auto">
-    <span style="font-family:Orbitron,sans-serif;font-size:7.5px;color:rgba(0,212,255,.32);letter-spacing:1px;flex-shrink:0;margin-right:4px">${lang==='ru'?'ХОДЫ:':'TURNS:'}</span>
+    <span style="font-family:Rajdhani,sans-serif;font-size:7.5px;color:rgba(0,212,255,.32);letter-spacing:1px;flex-shrink:0;margin-right:4px">${lang==='ru'?'ХОДЫ:':'TURNS:'}</span>
     <button id="bme-ttab-${bid}-init" onclick="bmeSelTurn('${bid}',-1)"
-      style="padding:3px 10px;font-size:8.5px;font-family:Orbitron,sans-serif;cursor:pointer;border-radius:2px;flex-shrink:0;white-space:nowrap;background:rgba(0,212,255,.2);border:1px solid rgba(0,212,255,.55);color:#00d4ff">
+      style="padding:3px 10px;font-size:8.5px;font-family:Rajdhani,sans-serif;cursor:pointer;border-radius:2px;flex-shrink:0;white-space:nowrap;background:rgba(0,212,255,.2);border:1px solid rgba(0,212,255,.55);color:#00d4ff">
       ${lang==='ru'?'НАЧАЛО':'START'}
     </button>
     ${turns.map((t,ti)=>`
     <button id="bme-ttab-${bid}-${ti}" onclick="bmeSelTurn('${bid}',${ti})"
-      style="padding:3px 10px;font-size:8.5px;font-family:Orbitron,sans-serif;cursor:pointer;border-radius:2px;flex-shrink:0;white-space:nowrap;background:transparent;border:1px solid rgba(0,212,255,.12);color:rgba(0,212,255,.4)">
+      style="padding:3px 10px;font-size:8.5px;font-family:Rajdhani,sans-serif;cursor:pointer;border-radius:2px;flex-shrink:0;white-space:nowrap;background:transparent;border:1px solid rgba(0,212,255,.12);color:rgba(0,212,255,.4)">
       ${ti+1}. ${esc((t.label||'').slice(0,16))}
     </button>
     <button onclick="bmDelTurn('${bid}',${i},${ti})" title="${lang==='ru'?'Удалить':'Delete'}" style="padding:2px 6px;background:rgba(180,40,40,.1);border:1px solid rgba(180,40,40,.22);color:var(--err);font-size:9px;cursor:pointer;border-radius:2px;flex-shrink:0">✕</button>`).join('')}
@@ -2131,23 +2131,23 @@ function battleMapEditorHtml(b,i){
     <!-- LEFT: unit list + events -->
     <div style="width:200px;flex-shrink:0;border-right:1px solid rgba(0,212,255,.1);background:rgba(0,0,0,.35);display:flex;flex-direction:column">
       <div style="padding:7px 8px;border-bottom:1px solid rgba(0,212,255,.08)">
-        <div style="font-family:Orbitron,sans-serif;font-size:7.5px;color:rgba(0,212,255,.32);letter-spacing:1px;margin-bottom:5px">${lang==='ru'?'ЮНИТЫ':'UNITS'}</div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:7.5px;color:rgba(0,212,255,.32);letter-spacing:1px;margin-bottom:5px">${lang==='ru'?'ЮНИТЫ':'UNITS'}</div>
         <div id="bme-ulist-${bid}" style="overflow-y:auto;max-height:200px">
           <div style="font-size:9px;color:rgba(0,212,255,.25)">No units</div>
         </div>
         <!-- Add unit -->
         <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,212,255,.08)">
-          <div style="font-family:Orbitron,sans-serif;font-size:7.5px;color:rgba(0,212,255,.32);letter-spacing:1px;margin-bottom:4px">+ ${lang==='ru'?'ДОБАВИТЬ ЮНИТ':'ADD UNIT'}</div>
+          <div style="font-family:Rajdhani,sans-serif;font-size:7.5px;color:rgba(0,212,255,.32);letter-spacing:1px;margin-bottom:4px">+ ${lang==='ru'?'ДОБАВИТЬ ЮНИТ':'ADD UNIT'}</div>
           <select id="bme-char-${bid}" class="be-fi" style="font-size:9px;margin-bottom:3px">
             <option value="">— выберите юнит —</option>
           </select>
           <div id="bme-upreview-${bid}"></div>
           <select id="bme-ufac-${bid}" class="be-fi" style="font-size:9px;margin-bottom:3px">${facOpts}</select>
-          <button onclick="bmePlaceCharacter('${bid}')" style="width:100%;padding:4px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.28);color:#00d4ff;font-size:8.5px;font-family:Orbitron,monospace;cursor:pointer;border-radius:2px">✦ ${lang==='ru'?'Разместить':'Place'}</button>
+          <button onclick="bmePlaceCharacter('${bid}')" style="width:100%;padding:4px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.28);color:#00d4ff;font-size:8.5px;font-family:Rajdhani,monospace;cursor:pointer;border-radius:2px">✦ ${lang==='ru'?'Разместить':'Place'}</button>
         </div>
       </div>
       <div style="padding:7px 8px;flex:1;overflow-y:auto">
-        <div style="font-family:Orbitron,sans-serif;font-size:7.5px;color:rgba(0,212,255,.32);letter-spacing:1px;margin-bottom:5px">${lang==='ru'?'СОБЫТИЯ ХОДА':'TURN EVENTS'}</div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:7.5px;color:rgba(0,212,255,.32);letter-spacing:1px;margin-bottom:5px">${lang==='ru'?'СОБЫТИЯ ХОДА':'TURN EVENTS'}</div>
         <div id="bme-evlist-${bid}">
           <div style="font-size:8.5px;color:rgba(0,212,255,.25);line-height:1.6">${lang==='ru'?'Выберите ход':'Select a turn'}</div>
         </div>
@@ -2172,11 +2172,11 @@ function battleMapEditorHtml(b,i){
     <div style="width:210px;flex-shrink:0;border-left:1px solid rgba(0,212,255,.1);background:rgba(0,0,0,.3);display:flex;flex-direction:column">
       <div style="padding:8px;border-bottom:1px solid rgba(0,212,255,.08);display:flex;gap:3px">
         <button onclick="bmeZoomBtn('${bid}',1)" style="flex:1;height:26px;background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.18);color:rgba(0,212,255,.6);font-size:15px;cursor:pointer;border-radius:2px">+</button>
-        <button onclick="bmeZoomFit('${bid}')" style="flex:1;height:26px;background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.16);color:rgba(0,212,255,.45);font-size:7px;cursor:pointer;border-radius:2px;font-family:Orbitron,monospace">FIT</button>
+        <button onclick="bmeZoomFit('${bid}')" style="flex:1;height:26px;background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.16);color:rgba(0,212,255,.45);font-size:7px;cursor:pointer;border-radius:2px;font-family:Rajdhani,monospace">FIT</button>
         <button onclick="bmeZoomBtn('${bid}',-1)" style="flex:1;height:26px;background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.18);color:rgba(0,212,255,.6);font-size:17px;cursor:pointer;border-radius:2px">−</button>
       </div>
       <div style="padding:8px;flex:1;overflow-y:auto">
-        <div style="font-family:Orbitron,sans-serif;font-size:7.5px;color:rgba(0,212,255,.32);letter-spacing:1px;margin-bottom:7px">${lang==='ru'?'СВОЙСТВА':'PROPERTIES'}</div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:7.5px;color:rgba(0,212,255,.32);letter-spacing:1px;margin-bottom:7px">${lang==='ru'?'СВОЙСТВА':'PROPERTIES'}</div>
         <div id="bme-props-${bid}">
           <div style="font-size:9px;color:rgba(0,212,255,.28);line-height:1.7">${lang==='ru'?'Кликни на юнит чтобы редактировать':'Click a unit to edit'}</div>
         </div>

@@ -101,7 +101,7 @@
   .hps-empty {
     font-size: 10px !important;
   }
-  .hps:hover { transform:none;box-shadow:-3px 0 0 rgba(168,105,44,.5); }
+  .hps:hover { transform:none;box-shadow:-3px 0 0 rgba(28,100,148,.5); }
 
   /* Cards */
   .cgrid { grid-template-columns:1fr 1fr;gap:8px; }

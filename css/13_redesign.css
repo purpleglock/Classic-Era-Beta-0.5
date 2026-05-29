@@ -1,0 +1,156 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   КЛАССИЧЕСКАЯ ЭРА — REDESIGN LAYER (v2)
+   Новый sci-fi язык: скруглённые «голо»-панели вместо угловатых скосов.
+   Грузится последним — переопределяет старую геометрию.
+   ───────────────────────────────────────────────────────────────────── */
+
+/* ── Заголовки блоков главной ───────────────────────────────────────── */
+.home-block{margin:26px 0 0}
+.home-block:first-of-type{margin-top:18px}
+.hb-head{
+  position:relative;margin:0 0 16px;padding-bottom:9px;
+  border-bottom:1px solid var(--w2);
+}
+.hb-head::after{
+  content:'';position:absolute;left:0;bottom:-1px;width:64px;height:2px;
+  background:var(--gd);box-shadow:0 0 12px var(--gd);
+}
+.hb-tag{
+  font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;
+  letter-spacing:4px;text-transform:uppercase;color:var(--gdl);
+}
+
+/* ── Разделы: сетка плиток ──────────────────────────────────────────── */
+.sec-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(248px,1fr));
+  gap:14px;
+}
+.sec-tile{
+  position:relative;display:block;height:152px;border-radius:14px;overflow:hidden;
+  background:var(--b2);border:1px solid var(--w2);cursor:pointer;text-decoration:none;
+  box-shadow:0 6px 18px rgba(0,0,0,.35);
+  transition:transform .35s var(--ease-out), box-shadow .35s, border-color .35s;
+}
+.sec-tile:hover{
+  transform:translateY(-4px);border-color:var(--gd);
+  box-shadow:0 14px 40px rgba(0,0,0,.5), 0 0 0 1px var(--gd), 0 0 26px hsl(206 72% 50% / .25);
+}
+.st-media{position:absolute;inset:0;z-index:0}
+.st-media img{
+  width:100%;height:100%;object-fit:cover;
+  filter:brightness(.6) saturate(.9) contrast(1.05);
+  transition:transform .6s var(--ease-out), filter .4s;
+}
+.sec-tile:hover .st-media img{transform:scale(1.08);filter:brightness(.78) saturate(1.05)}
+.st-scrim{
+  position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(to top, var(--b0) 3%, rgba(8,10,16,.5) 46%, rgba(8,10,16,.05) 100%);
+}
+.st-top{
+  position:absolute;top:10px;left:10px;right:10px;z-index:2;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.st-ico{
+  width:34px;height:34px;border-radius:9px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  background:hsl(216 20% 7% / .62);backdrop-filter:blur(6px);
+  border:1px solid var(--w2);color:var(--gdl);font-size:16px;
+}
+.st-ico img{width:18px;height:18px;object-fit:contain}
+.st-glyph{line-height:1}
+.st-count{
+  font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;letter-spacing:1px;
+  color:var(--gdl);padding:3px 9px;border-radius:7px;
+  background:hsl(216 20% 7% / .62);backdrop-filter:blur(6px);border:1px solid var(--w2);
+}
+.st-foot{position:absolute;left:14px;right:14px;bottom:12px;z-index:2;display:flex;flex-direction:column;gap:3px}
+.st-name{
+  font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px;
+  letter-spacing:1.5px;text-transform:uppercase;color:#eaf3fb;line-height:1.08;
+  text-shadow:0 2px 8px rgba(0,0,0,.7);
+}
+.st-meta{
+  font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;
+  color:var(--t3);text-transform:uppercase;
+}
+.st-edge{
+  position:absolute;left:0;top:0;bottom:0;width:3px;z-index:3;
+  background:var(--gd);opacity:0;transition:opacity .35s;
+}
+.sec-tile:hover .st-edge{opacity:1;box-shadow:0 0 14px var(--gd)}
+
+/* ── История изменений (changelog) — скруглённые строки со спайном ──── */
+.cl-list{display:flex;flex-direction:column;gap:6px;max-height:none;overflow:visible}
+.cl-row{
+  display:flex!important;align-items:center;gap:12px;padding:10px 14px!important;
+  background:var(--b2)!important;border:1px solid var(--w1)!important;
+  border-radius:10px!important;clip-path:none!important;
+  position:relative;overflow:hidden;cursor:pointer;
+  transition:border-color .2s, background .2s, transform .2s!important;
+}
+.cl-row::before{
+  content:''!important;display:block!important;
+  position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--gd);opacity:0;transition:opacity .2s;
+}
+.cl-row:hover{border-color:var(--gd)!important;background:var(--b3)!important;transform:translateX(2px)}
+.cl-row:hover::before{opacity:1}
+.cl-type{border-radius:6px!important;clip-path:none!important}
+.cl-sec-tag{border-radius:6px!important;clip-path:none!important}
+
+/* ── Обложка главной: убрана неудачная стилизация ─────────── */
+
+/* ── Сайдбар и Навигация: Скругления, отступы, новый спайн ─────────── */
+#sb {
+  background: var(--b0) !important;
+  border-right: 1px solid var(--w1) !important;
+}
+.logo, .sb-srch, .sb-foot {
+  background: transparent !important;
+  border-bottom-color: var(--w1) !important;
+}
+#srch {
+  border-radius: 8px !important;
+  background: var(--b1) !important;
+  border-color: var(--w1) !important;
+}
+.n-home, .nl-hdr, .ng-hdr, .np {
+  border-radius: 8px !important;
+  margin: 2px 8px !important;
+  border-left: none !important;
+}
+.n-home:hover, .nl-hdr:hover, .ng-hdr:hover, .np:hover {
+  background: var(--b2) !important;
+}
+.n-home.on, .nl-hdr.on, .ng-hdr.on, .np.on {
+  background: var(--b3) !important;
+}
+/* Скрываем старые линии у навигации */
+.nl-hdr.on::after, .np.on::after, .n-home.on::after {
+  display: none !important;
+}
+.nl-body > .np::before {
+  display: none !important;
+}
+
+/* ── Полотно (Canvas) ──────────────────────────────────────────────── */
+#cw {
+  background: var(--b1) !important;
+}
+#pg {
+  padding-top: 24px !important;
+}
+
+/* ── Кнопки: скругление вместо скосов ──────────────────────────────── */
+.tbtn, .btn{clip-path:none!important;border-radius:9px!important}
+
+/* ── Мобильная адаптация плиток ────────────────────────────────────── */
+@media (max-width:600px){
+  .sec-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .sec-tile{height:130px}
+  .st-name{font-size:15px}
+}
+@media (max-width:400px){
+  .sec-grid{grid-template-columns:1fr}
+}

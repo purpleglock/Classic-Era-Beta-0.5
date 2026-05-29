@@ -16,19 +16,6 @@ body{
   background:var(--b0);
   position:relative;
 }
-body::before{
-  content:'';
-  position:fixed;
-  inset:0;
-  pointer-events:none;
-  z-index:-1;
-  background-image: var(--bg-image, url('https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920'));
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  filter: blur(10px) brightness(0.25) saturate(0.6);
-  transform: scale(1.1);
-}
 body::after{
   content:'';
   position:fixed;
@@ -112,7 +99,7 @@ button,input,select,textarea{font-family:inherit;}
 .top-r{display:flex;align-items:center;gap:12px;flex-shrink:0}
 .tbtn{
   display:flex;align-items:center;gap:6px;padding:0 14px;height:32px;
-  font-family:'Orbitron',sans-serif;font-size:9px;font-weight:700;
+  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
   letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;
   position:relative;border:none;background:transparent;color:var(--t2);
   z-index:1;transition:transform .2s var(--ease-out),color .2s;
@@ -178,7 +165,7 @@ button,input,select,textarea{font-family:inherit;}
 }
 .logo-main{text-align:center}
 .logo-name{
-  font-family:'Orbitron',sans-serif;font-size:22px;font-weight:900;
+  font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:900;
   letter-spacing:6px;text-transform:uppercase;display:block;
   color:var(--t1);
   text-shadow: 0 0 10px var(--gds);
@@ -247,7 +234,7 @@ button,input,select,textarea{font-family:inherit;}
 .lang-sw{display:flex;border:1px solid var(--w2);height:26px;overflow:hidden}
 .lang-sw button{
   background:var(--b1);border:none;border-right:1px solid var(--w2);
-  color:var(--t3);font-family:'Orbitron',sans-serif;font-size:8px;font-weight:700;
+  color:var(--t3);font-family:'Rajdhani',sans-serif;font-size:8px;font-weight:700;
   letter-spacing:1.5px;padding:0 10px;cursor:pointer;transition:all .15s;
 }
 .lang-sw button:last-child{border-right:none}
@@ -261,7 +248,7 @@ button,input,select,textarea{font-family:inherit;}
   display:flex;align-items:center;gap:10px;
   padding:8px 16px;margin:4px 10px;
   cursor:pointer;
-  font-family:'Orbitron',sans-serif;font-size:9px;font-weight:700;
+  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
   color:var(--t2);text-transform:uppercase;letter-spacing:2px;
   border:1px solid transparent;
   transition:all .15s;
@@ -309,7 +296,7 @@ button,input,select,textarea{font-family:inherit;}
 
 .nl-name{
   flex:1;min-width:0;
-  font-family:'Orbitron',sans-serif;font-size:9px;font-weight:700;
+  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
   letter-spacing:1.5px;text-transform:uppercase;line-height:1.5;
   color:var(--t2);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -419,7 +406,7 @@ button,input,select,textarea{font-family:inherit;}
 /* ── STATIC LABEL ── */
 .nl-static{
   padding:14px 16px 6px;margin-top:8px;
-  font-family:'Orbitron',sans-serif;font-size:7px;font-weight:900;
+  font-family:'Rajdhani',sans-serif;font-size:7px;font-weight:900;
   letter-spacing:3px;color:var(--t4);text-transform:uppercase;
   display:flex;align-items:center;gap:10px;
 }
@@ -447,7 +434,7 @@ button,input,select,textarea{font-family:inherit;}
 }
 .top-lang button{
   background:transparent;border:none;
-  color:var(--t3);font-family:'Orbitron',sans-serif;font-size:9px;font-weight:700;
+  color:var(--t3);font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
   letter-spacing:1.5px;padding:0 14px;cursor:pointer;
   transition:all .2s;position:relative;z-index:1;
   display:flex;align-items:center;justify-content:center;
@@ -476,7 +463,7 @@ button,input,select,textarea{font-family:inherit;}
 .top-av{
   width:24px;height:24px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  font-family:'Orbitron',sans-serif;font-size:9px;font-weight:900;
+  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:900;
   position:relative;border:none;background:transparent;z-index:1;
 }
 .top-av::before{
@@ -539,7 +526,7 @@ button,input,select,textarea{font-family:inherit;}
 }
 
 .related-header {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -659,7 +646,7 @@ button,input,select,textarea{font-family:inherit;}
 }
 
 .nl-hdr:hover .nl-big-icon img {
-  filter: brightness(0.7) saturate(0.6) contrast(1.2) drop-shadow(0 0 8px rgba(168,105,44,.25));
+  filter: brightness(0.7) saturate(0.6) contrast(1.2) drop-shadow(0 0 8px rgba(28,100,148,.25));
 }
 
 .nl-hdr.on .nl-big-icon {
@@ -669,5 +656,5 @@ button,input,select,textarea{font-family:inherit;}
 }
 
 .nl-hdr.on .nl-big-icon img {
-  filter: brightness(0.9) saturate(0.8) contrast(1.3) drop-shadow(0 0 12px rgba(168,105,44,.4));
+  filter: brightness(0.9) saturate(0.8) contrast(1.3) drop-shadow(0 0 12px rgba(28,100,148,.4));
 }

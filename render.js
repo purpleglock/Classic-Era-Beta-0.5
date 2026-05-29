@@ -11,53 +11,23 @@ async function renderHome() {
   const topSecs = sections.filter(s=>!s.parent_id).sort((a,b)=>a.sort_order-b.sort_order);
   const strips = topSecs.map(sec => {
     const subSecs = sections.filter(s=>s.parent_id===sec.id);
-    const directPgs = pages.filter(p=>isVisiblePage(p)&&p.section===sec.slug&&!p.parent_slug).slice(0,6);
     const cnt = pages.filter(p=>isVisiblePage(p)&&(p.section===sec.slug||subSecs.some(s=>s.slug===p.section))).length;
     if (!cnt && !user) return '';
-    const pills = directPgs.map(p=>{
-      const imgUrl = p.image_url || '';
-      if(imgUrl) {
-        return `<span class="hps-pill has-img" onclick="go('${esc(p.slug)}');event.stopPropagation()"><span class="hps-pill-bg" style="background-image:url('${esc(imgUrl)}')"></span><span class="hps-pill-overlay"></span><span class="hps-pill-text">${esc(pT(p))}</span></span>`;
-      }
-      return `<span class="hps-pill" onclick="go('${esc(p.slug)}');event.stopPropagation()">${esc(pT(p))}</span>`;
-    }).join('');
-    const subLabels = subSecs.slice(0,4).map(s=>{
-      const spgs=pages.filter(p=>isVisiblePage(p)&&p.section===s.slug&&!p.parent_slug).slice(0,3);
-      if(!spgs.length) return '';
-      return `<div class="hps-sub-lbl">${sN(s)}</div>`+spgs.map(p=>{
-        const imgUrl = p.image_url || '';
-        if(imgUrl) {
-          return `<span class="hps-pill has-img" onclick="go('${esc(p.slug)}');event.stopPropagation()"><span class="hps-pill-bg" style="background-image:url('${esc(imgUrl)}')"></span><span class="hps-pill-overlay"></span><span class="hps-pill-text">${esc(pT(p))}</span></span>`;
-        }
-        return `<span class="hps-pill" onclick="go('${esc(p.slug)}');event.stopPropagation()">${esc(pT(p))}</span>`;
-      }).join('');
-    }).join('');
     const imgUrl = sec.image_url || 'https://images.unsplash.com/photo-1614729939124-03290b5609ce?q=80&w=800&auto=format&fit=crop';
     const secName = esc(sN(sec));
-    const iconHtml = sec.icon && sec.icon.startsWith('http') 
-      ? `<img src="${esc(sec.icon)}" alt="" style="width:20px;height:20px;object-fit:contain">` 
-      : (sec.icon || '◈');
-    const bigIconHtml = sec.icon && sec.icon.startsWith('http')
-      ? `<div class="hps-big-icon"><img src="${esc(sec.icon)}" alt=""></div>`
-      : '';
-    return `<div class="hps" onclick="go('sec:${esc(sec.slug)}')">
-      <div class="hps-bg">
-        <img src="${esc(imgUrl)}" loading="lazy">
+    const iconHtml = sec.icon && sec.icon.startsWith('http')
+      ? `<img src="${esc(sec.icon)}" alt="">`
+      : `<span class="st-glyph">${esc(sec.icon||'◇')}</span>`;
+    return `<a class="sec-tile" onclick="go('sec:${esc(sec.slug)}')">
+      <div class="st-media"><img src="${esc(imgUrl)}" loading="lazy" alt=""></div>
+      <div class="st-scrim"></div>
+      <div class="st-top"><span class="st-ico">${iconHtml}</span><span class="st-count">${esc(String(cnt).padStart(2,'0'))}</span></div>
+      <div class="st-foot">
+        <span class="st-name">${secName}</span>
+        <span class="st-meta">${cnt}&nbsp;${T('articles')}</span>
       </div>
-      <div class="hps-ov"></div>
-      ${bigIconHtml}
-      <div class="hps-num">${esc(String(cnt).padStart(2,'0'))}</div>
-      <div class="hps-content">
-        <div class="hps-hdr">
-          <span class="hps-icon">${iconHtml}</span>
-          <span class="hps-name">${secName}</span>
-          <span class="hps-cnt">${cnt}&nbsp;${T('articles')}</span>
-        </div>
-        <div class="hps-line"></div>
-        <div class="hps-right">${pills||subLabels||`<span class="hps-empty">${T('noArticles')}</span>`}</div>
-      </div>
-      <div class="hps-arrow">›</div>
-    </div>`;
+      <div class="st-edge"></div>
+    </a>`;
   }).filter(Boolean).join('');
 
   const sorted = [...pages].filter(isVisiblePage).sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0)).slice(0,10);
@@ -72,12 +42,12 @@ async function renderHome() {
   allProfiles.forEach(prof=>{ if(prof.email && !contribMap[prof.email]) contribMap[prof.email]=0; });
   const sortedContribs = Object.entries(contribMap).sort((a,b)=>b[1]-a[1]).slice(0,12);
   const maxCnt = Math.max(100, sortedContribs.length ? sortedContribs[0][1] : 1);
-  const contribsHtml = sortedContribs.length ? `<div class="hp-contribs"><div class="hp-cl-hdr">◈ ${T('contributors')}</div><div class="contrib-grid">${sortedContribs.map(([email, cnt], idx) => {
+  const contribsHtml = sortedContribs.length ? `<section class="home-block hp-contribs"><div class="hb-head"><span class="hb-tag">${T('contributors')}</span></div><div class="contrib-grid">${sortedContribs.map(([email, cnt], idx) => {
     const rank = idx + 1;
     const rankClass = rank <= 3 ? ` rank-${rank}` : '';
     const emailAttr = esc(email).replace(/'/g,'&#39;'); const name = email.includes('@') ? email.split('@')[0] : email; const hue = [...email].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
     const prof = getProfileOf(email); const displayName = prof.display_name || name; const avUrl = prof.avatar_url || '';
-    const avHtml = avUrl ? `<img src="${esc(avUrl)}" loading="lazy">` : `<span style="font-size:20px;font-family:Orbitron,sans-serif;font-weight:900;color:hsl(${hue},60%,72%)">${esc(displayName.slice(0,2).toUpperCase())}</span>`;
+    const avHtml = avUrl ? `<img src="${esc(avUrl)}" loading="lazy">` : `<span style="font-size:20px;font-family:Rajdhani,sans-serif;font-weight:900;color:hsl(${hue},60%,72%)">${esc(displayName.slice(0,2).toUpperCase())}</span>`;
     const barPct = Math.min(100, Math.round((cnt / 100) * 100));
     const rankNumHtml = rank <= 9 ? `<div class="contrib-rank-num">${rank}</div>` : '';
     const tier = Math.min(Math.floor(cnt / 5), 20);
@@ -91,174 +61,23 @@ async function renderHome() {
     const barSat = Math.min(40 + tier * 3, 80);
     const barLight = Math.min(45 + tier * 1.5, 65);
     return `<div class="contrib-card${rankClass}" onclick="openContribModal('${emailAttr}','${esc(displayName).replace(/'/g,'&#39;')}','${esc(avUrl).replace(/'/g,'&#39;')}',${hue},${cnt})" title="Посмотреть профиль" style="background:linear-gradient(145deg, hsl(${tierHue},${tierSat}%,${tierLight}%) 0%, hsl(${tierHue},${tierSat - 4}%,${tierLight - 3}%) 100%); border-color:hsl(${tierHue},${tierBorderSat}%,${tierBorderLight}%); ${tierGlow}"><div class="contrib-scan"></div><div class="contrib-card-top"><div class="contrib-av-wrap"><div class="contrib-av" style="background:linear-gradient(135deg, hsl(${tierHue},${tierSat + 5}%,${tierLight + 4}%) 0%, hsl(${tierHue},${tierSat}%,${tierLight}%) 100%);border-color:hsl(${tierHue},${tierBorderSat + 10}%,${tierBorderLight + 8}%)">${avHtml}</div><div class="contrib-av-ring" style="color:hsl(${tierHue},${tierSat + 25}%,${50 + tier * 1.5}%)"></div>${rankNumHtml}</div><div class="contrib-card-info"><div class="contrib-name">${esc(displayName)}</div></div></div><div class="contrib-card-bottom"><div class="contrib-stat-bar"><div class="contrib-stat-fill" style="width:${barPct}%; background:linear-gradient(90deg, hsl(${barHue},${barSat}%,${barLight}%) 0%, hsl(${barHue},${barSat + 10}%,${barLight + 8}%) 100%); box-shadow: 0 0 ${tier * 1.5}px hsla(${barHue}, ${barSat}%, ${barLight}%, ${Math.min(tier * 0.05, 0.6)});"></div></div><div class="contrib-cnt">${cnt}&nbsp;СТР</div></div></div>`;
-  }).join('')}</div></div>` : '';
+  }).join('')}</div></section>` : '';
 
-  // Собираем картинки для коллажа
-  const _collageImgs = [
-    ...pages.filter(p=>isVisiblePage(p)&&p.image_url&&p.status==='published'&&!p.exclude_from_collage).map(p=>p.image_url),
-    ...sections.filter(s=>s.image_url&&!s.exclude_from_collage).map(s=>s.image_url),
-  ];
-  if (_heroCoverUrl && !_collageImgs.includes(_heroCoverUrl)) _collageImgs.unshift(_heroCoverUrl);
-  
-  // КРИТИЧНО: Убираем дубли ДО фильтрации (нормализуем URL)
-  const _normalizedImgs = [...new Set(_collageImgs.map(url => {
-    try {
-      // Убираем trailing slash и query params для нормализации
-      const u = new URL(url);
-      return u.origin + u.pathname.replace(/\/$/, '');
-    } catch {
-      return url; // Если не валидный URL, оставляем как есть
+  // ── Единая обложка главной (одно изображение) ──
+  const heroHtml = buildHero(_heroCoverUrl, user);
+
+  const sectionsHtml = strips ? `<section class="home-block"><div class="hb-head"><span class="hb-tag">${T('sections')}</span></div><div class="sec-grid">${strips}</div></section>` : `<p class="hp-empty-note">${user?'Создайте разделы и статьи.':'Войдите для редактирования.'}</p>`;
+
+  setPg(`${heroHtml}${customHtml}${sectionsHtml}${clRows ? `<section class="home-block"><div class="hb-head"><span class="hb-tag">${T('recentChanges')}</span></div><div class="cl-list">${clRows}</div></section>` : ''}${contribsHtml}`);
+
+  // Клик по обложке открывает изображение в полном размере
+  requestAnimationFrame(() => {
+    const heroImg = document.querySelector('#hp-hero-cover .hp-hero-img');
+    if (heroImg && heroImg.getAttribute('data-img-url')) {
+      heroImg.style.cursor = 'pointer';
+      heroImg.addEventListener('click', () => openCollageImageModal(heroImg.getAttribute('data-img-url')));
     }
-  }))];
-  
-  // Фильтруем только горизонтальные картинки (aspect ratio > 1.2) - параллельно
-  const _filterPromises = _normalizedImgs.map(url => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      // НЕ используем crossOrigin - может вызвать CORS проблемы на Vercel
-      let resolved = false;
-      
-      img.onload = () => {
-        if (resolved) return;
-        resolved = true;
-        const aspectRatio = img.width / img.height;
-        resolve(aspectRatio > 1.2 ? url : null); // Только горизонтальные
-      };
-      
-      img.onerror = () => {
-        if (resolved) return;
-        resolved = true;
-        console.warn('Failed to preload image:', url);
-        // Все равно пробуем использовать - может загрузится в SVG
-        const aspectRatio = 1.5; // Предполагаем горизонтальную
-        resolve(url); // Не отбрасываем, даем шанс
-      };
-      
-      img.src = url;
-      
-      // Увеличенный таймаут - если не загрузилась за 5000мс, все равно пробуем
-      setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        resolve(url); // Даем шанс загрузиться в SVG
-      }, 5000);
-    });
   });
-  
-  const _filterResults = await Promise.all(_filterPromises);
-  const _filteredImgs = _filterResults.filter(url => url !== null);
-  
-  // Убираем дубли еще раз на всякий случай (уже должны быть уникальные)
-  const _uniqueImgs = [...new Set(_filteredImgs)];
-
-  // Всегда показываем коллаж
-  const heroHtml = buildCollageHero(_uniqueImgs.length > 0 ? _uniqueImgs : [_heroCoverUrl].filter(Boolean), user);
-
-  const sectionsHtml = strips ? `<div class="hp-secs-wrap"><div class="hp-cl-hdr">◈ ${T('sections')}</div><div class="hp-secs">${strips}</div></div>` : `<p class="hp-empty-note">${user?'Создайте разделы и статьи.':'Войдите для редактирования.'}</p>`;
-
-  setPg(`${heroHtml}${customHtml}${sectionsHtml}${clRows ? `<div class="hp-cl"><div class="hp-cl-hdr">◈ ${T('recentChanges')}</div><div class="cl-list">${clRows}</div></div>` : ''}${contribsHtml}<div id="cal-block"></div>`);
-
-  // КРИТИЧНО: Принудительно загружаем все картинки в SVG после рендера
-  if (_uniqueImgs.length >= 4) {
-    requestAnimationFrame(() => {
-      const svg = document.getElementById('collage-svg');
-      if (!svg) return;
-      
-      // Находим все image элементы в SVG
-      const imageElements = svg.querySelectorAll('image.ci');
-      
-      // ВРЕМЕННО убираем фильтр для ускорения загрузки
-      imageElements.forEach(el => {
-        el.style.opacity = '0';
-        el.removeAttribute('filter');
-      });
-      
-      // Принудительно перезагружаем каждую картинку
-      const loadPromises = Array.from(imageElements).map((imgEl, idx) => {
-        return new Promise((resolve) => {
-          const url = imgEl.getAttribute('data-img-url');
-          if (!url) { resolve(); return; }
-          
-          // Создаем временный Image для принудительной загрузки
-          const tempImg = new Image();
-          // НЕ используем crossOrigin если это может вызвать CORS проблемы
-          // tempImg.crossOrigin = 'anonymous';
-          
-          let loaded = false;
-          
-          tempImg.onload = () => {
-            if (loaded) return;
-            loaded = true;
-            
-            // После загрузки обновляем оба атрибута и возвращаем фильтр
-            imgEl.setAttribute('href', url);
-            imgEl.setAttributeNS('http://www.w3.org/1999/xlink', 'href', url);
-            
-            // Плавно показываем картинку
-            requestAnimationFrame(() => {
-              imgEl.setAttribute('filter', 'url(#holo)');
-              imgEl.style.opacity = '1';
-              imgEl.style.transition = 'opacity 0.3s ease-in';
-            });
-            
-            resolve();
-          };
-          
-          tempImg.onerror = () => {
-            if (loaded) return;
-            loaded = true;
-            console.warn('Failed to load collage image:', url);
-            
-            // Все равно пытаемся показать
-            imgEl.setAttribute('href', url);
-            imgEl.setAttributeNS('http://www.w3.org/1999/xlink', 'href', url);
-            imgEl.setAttribute('filter', 'url(#holo)');
-            imgEl.style.opacity = '1';
-            
-            resolve();
-          };
-          
-          // Таймаут на случай зависания - УВЕЛИЧЕН до 8 секунд
-          setTimeout(() => {
-            if (loaded) return;
-            loaded = true;
-            
-            // Принудительно показываем что есть
-            imgEl.setAttribute('href', url);
-            imgEl.setAttributeNS('http://www.w3.org/1999/xlink', 'href', url);
-            imgEl.setAttribute('filter', 'url(#holo)');
-            imgEl.style.opacity = '1';
-            
-            resolve();
-          }, 8000);
-          
-          tempImg.src = url;
-        });
-      });
-      
-      // Ждем загрузки всех картинок
-      Promise.all(loadPromises).then(() => {
-        console.log('All collage images loaded');
-        
-        // Добавляем обработчики кликов
-        const collageImgs = document.querySelectorAll('.clickable-collage-img');
-        collageImgs.forEach(img => {
-          img.style.cursor = 'pointer';
-          img.addEventListener('click', () => {
-            const url = img.getAttribute('data-img-url') || img.getAttribute('href');
-            if (url) openCollageImageModal(url);
-          });
-        });
-        
-        // Запускаем ротацию через 3 секунды после загрузки всех картинок
-        setTimeout(() => {
-          startCollageRotation(_uniqueImgs);
-        }, 3000);
-      });
-    });
-  }
-  // Рендерим календарь
-  requestAnimationFrame(() => renderCalendarBlock());
 }
 
 async function renderPage(pg) {
@@ -330,7 +149,7 @@ function _renderAbilityPageInline(pg) {
     setPg(`${cover}<div class="prose">${renderBlocks(pC(pg))}</div>`);
     renderCommentsSection(pg.slug); return;
   }
-  const ABTYPES = { passive:{ru:'Пассивная',c:'#d4900a'}, action:{ru:'Действие',c:'#2d9fd8'}, bonus:{ru:'Бонусное',c:'#3db855'}, reaction:{ru:'Реакция',c:'#d83040'}, '1/day':{ru:'1/День',c:'#9040e8'}, '1/rest':{ru:'1/Отдых',c:'#d86828'} };
+  const ABTYPES = { passive:{ru:'Пассивная',c:'#1f8fd8'}, action:{ru:'Действие',c:'#2d9fd8'}, bonus:{ru:'Бонусное',c:'#3db855'}, reaction:{ru:'Реакция',c:'#d83040'}, '1/day':{ru:'1/День',c:'#9040e8'}, '1/rest':{ru:'1/Отдых',c:'#d86828'} };
   const type = (extra['тип']||extra['type']||'passive').toLowerCase();
   const AT = ABTYPES[type] || ABTYPES.passive;
   const range = extra['дальность']||extra['range']||'';
@@ -745,7 +564,7 @@ function renderWeaponPreviewPage(pg, kids, otherBlocks) {
   const cardsHtml = weapons.map(w => {
     const rarityColors = {
       common: '#9a9aaa', uncommon: '#4ec96a', rare: '#4aaaf0',
-      epic: '#b060f8', legendary: '#f5a020'
+      epic: '#b060f8', legendary: '#3ca8e8'
     };
     const rarityColor = rarityColors[w.rarity] || rarityColors.common;
     
@@ -1092,7 +911,7 @@ function renderArmorPreviewPage(pg, kids, otherBlocks) {
   const cardsHtml = armors.map(a => {
     const rarityColors = {
       common: '#9a9aaa', uncommon: '#4ec96a', rare: '#4aaaf0',
-      epic: '#b060f8', legendary: '#f5a020'
+      epic: '#b060f8', legendary: '#3ca8e8'
     };
     const rarityColor = rarityColors[a.rarity] || rarityColors.common;
     
@@ -1853,7 +1672,7 @@ function initRelGraph(id, nodes, edges) {
       }
       const initials = (n.label || '?').slice(0, 2).toUpperCase();
       ctx.fillStyle = c.text;
-      ctx.font = `700 ${Math.round(r * 0.55)}px Orbitron, sans-serif`;
+      ctx.font = `700 ${Math.round(r * 0.55)}px Rajdhani, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.globalAlpha = 1;
@@ -2175,7 +1994,7 @@ function initWikiChart(id, d) {
       const lx = cx + Math.cos(midA) * (r * 0.7);
       const ly = cy + Math.sin(midA) * (r * 0.7);
       ctx.fillStyle = 'hsl(220 15% 92%)';
-      ctx.font = 'bold 11px Orbitron, sans-serif';
+      ctx.font = 'bold 11px Rajdhani, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (slice > 0.25) ctx.fillText(labels[i] || '', lx, ly);
@@ -2194,388 +2013,38 @@ function initWikiChart(id, d) {
 
 
 // ════════════════════════════════════════════════════════════
-// HERO COLLAGE — SVG с clipPath, точная раскладка как в НЭ
+// HERO — единая обложка главной (одно изображение + заголовок)
 // ════════════════════════════════════════════════════════════
-
-// Структура (viewBox 1000x340):
-// ┌────────┬──────────┬──────────────────────┬─────────────┬──────────┐
-// │   P1   │    P2    │         P3           │     P4      │    P5    │
-// │  верх  │  полный  │       верх           │   полный    │   верх   │
-// │        │          ├──────┬───────┬───────┤             │          │
-// │  низ   │          │  G   │   H   │   I   │             │   низ    │
-// └────────┴──────────┴──────┴───────┴───────┴─────────────┴──────────┘
-//
-// Скос между полосами: 18px (1.8% от 1000)
-// Ряд делится на 55% верх / 45% низ
-// P3 (центр) — только верх, внизу три ячейки G/H/I
-
-
-const _PX={'А':'01110,10001,10001,11111,10001,10001,10001','Б':'11111,10000,11110,10001,10001,10001,11110','В':'11110,10001,10001,11110,10001,10001,11110','Г':'11111,10000,10000,10000,10000,10000,10000','Д':'00110,01010,01010,01010,10001,11111,10001','Е':'11111,10000,10000,11110,10000,10000,11111','Ж':'10101,10101,10101,11111,10101,10101,10101','З':'11110,00001,00001,01110,00001,00001,11110','И':'10001,10011,10101,11001,10001,10001,10001','Й':'01110,00000,10001,10011,10101,11001,10001','К':'10001,10010,10100,11000,10100,10010,10001','Л':'01111,01001,01001,01001,01001,01001,10001','М':'10001,11011,10101,10001,10001,10001,10001','Н':'10001,10001,10001,11111,10001,10001,10001','О':'01110,10001,10001,10001,10001,10001,01110','П':'11111,10001,10001,10001,10001,10001,10001','Р':'11110,10001,10001,11110,10000,10000,10000','С':'01110,10001,10000,10000,10000,10001,01110','Т':'11111,00100,00100,00100,00100,00100,00100','У':'10001,10001,10001,01111,00001,10001,01110','Ф':'00100,01110,10101,10101,01110,00100,00100','Х':'10001,01010,00100,00100,00100,01010,10001','Ц':'10010,10010,10010,10010,10010,11111,00001','Ч':'10001,10001,10001,01111,00001,00001,00001','Ш':'10101,10101,10101,10101,10101,10101,11111','Щ':'10101,10101,10101,10101,10101,11111,00001','Ы':'10001,10001,11101,10011,11101,10001,10001','Ь':'10000,10000,10000,11110,10001,10001,11110','Э':'01110,10001,00001,00111,00001,10001,01110','Ю':'10010,10101,10101,11101,10101,10101,10010','Я':'01111,10001,10001,01111,00101,01001,10001','A':'01110,10001,10001,11111,10001,10001,10001','B':'11110,10001,10001,11110,10001,10001,11110','C':'01110,10001,10000,10000,10000,10001,01110','D':'11110,10001,10001,10001,10001,10001,11110','E':'11111,10000,10000,11110,10000,10000,11111','F':'11111,10000,10000,11110,10000,10000,10000','G':'01110,10001,10000,10111,10001,10001,01110','H':'10001,10001,10001,11111,10001,10001,10001','I':'01110,00100,00100,00100,00100,00100,01110','K':'10001,10010,10100,11000,10100,10010,10001','L':'10000,10000,10000,10000,10000,10000,11111','M':'10001,11011,10101,10001,10001,10001,10001','N':'10001,11001,10101,10011,10001,10001,10001','O':'01110,10001,10001,10001,10001,10001,01110','P':'11110,10001,10001,11110,10000,10000,10000','R':'11110,10001,10001,11110,10100,10010,10001','S':'01110,10001,10000,01110,00001,10001,01110','T':'11111,00100,00100,00100,00100,00100,00100','U':'10001,10001,10001,10001,10001,10001,01110','V':'10001,10001,10001,10001,01010,01010,00100','W':'10001,10001,10001,10101,10101,11011,10001','X':'10001,01010,00100,00100,00100,01010,10001','Y':'10001,01010,00100,00100,00100,00100,00100','Z':'11111,00001,00010,00100,01000,10000,11111',' ':'00000,00000,00000,00000,00000,00000,00000'};
-
-function buildCollageHero(imgs, user) {
-  const pool = [...new Set(imgs)].sort(() => Math.random() - 0.5);
-
-  const W = 1200, H = 480;
-
-  // Читаем заголовок из кеша home — редактируется через редактор главной
+function buildHero(coverUrl, user) {
   const _homePg = _pgCache.get('home');
-  // title = RU надпись, title_ru = EN надпись (так сложилось исторически в схеме)
-  const _titleRu = (_homePg?.title||'НОВАЯ ЭРА').trim().toUpperCase();
-  const _titleEn = (_homePg?.title_ru||'NEW ERA').trim().toUpperCase();
-  // Две строки: разбиваем по пробелу если одна строка, иначе первые два слова
-  function splitTwo(str) {
-    const words = str.split(/\s+/);
-    if (words.length <= 1) return [str, ''];
-    const mid = Math.ceil(words.length / 2);
-    return [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
-  }
-  const [_line1Ru, _line2Ru] = splitTwo(_titleRu);
-  const [_line1En, _line2En] = splitTwo(_titleEn);
-  const _L1 = lang==='en' ? _line1En : _line1Ru;
-  const _L2 = lang==='en' ? _line2En : _line2Ru;
+  // title = RU надпись, title_ru = EN надпись (исторически так в схеме)
+  const _titleRu = (_homePg?.title || 'КЛАССИЧЕСКАЯ ЭРА').trim().toUpperCase();
+  const _titleEn = (_homePg?.title_ru || 'CLASSIC ERA').trim().toUpperCase();
+  const title = (lang === 'en' ? _titleEn : _titleRu) || 'КЛАССИЧЕСКАЯ ЭРА';
+  const eyebrow = lang === 'en' ? 'WIKI' : 'ВИКИ';
 
-  // Точные координаты полигонов со всеми скосами как на референсе
-  // bx, by, bw, bh — это bounding box, чтобы картинка обрезалась ровно по центру фигуры
-  const polygons = [
-    { id: 0, pts: "0,0 280,0 250,160 0,160", bx: 0, by: 0, bw: 280, bh: 160 }, // Левая верхняя (карта) - ВЫШЕ
-    { id: 1, pts: "280,0 1200,0 1200,140 1020,160 250,160", bx: 250, by: 0, bw: 950, bh: 160 }, // Верхняя длинная - ВЫШЕ
-    { id: 2, pts: "0,160 120,160 140,340 0,340", bx: 0, by: 160, bw: 140, bh: 180 }, // Левый крайний портрет
-    { id: 3, pts: "120,160 350,160 350,340 140,340", bx: 120, by: 160, bw: 230, bh: 180 }, // Левый внутренний (сидящий)
-    { id: 4, pts: "750,160 1020,160 980,340 750,340", bx: 750, by: 160, bw: 270, bh: 180 }, // Правые офицеры
-    { id: 5, pts: "1020,160 1200,140 1200,340 980,340", bx: 980, by: 140, bw: 220, bh: 200 }, // Правые солдаты
-    { id: 6, pts: "0,340 350,340 330,480 0,480", bx: 0, by: 340, bw: 350, bh: 140 }, // Левый нижний угол
-    { id: 7, pts: "350,340 550,340 530,480 330,480", bx: 330, by: 340, bw: 220, bh: 140 }, // Нижняя 1
-    { id: 8, pts: "550,340 750,340 750,480 530,480", bx: 530, by: 340, bw: 220, bh: 140 }, // Нижняя 2
-    { id: 9, pts: "750,340 1200,340 1200,480 750,480", bx: 750, by: 340, bw: 450, bh: 140 }  // Правый нижний угол
-  ];
-
-  const ap = polygons.slice(0, pool.length);
-
-  // Эффект голограммы: синий тинт, scanlines, хроматическая аберрация
-  const filterDef = `
-<filter id="holo" x="-2%" y="-2%" width="104%" height="104%" color-interpolation-filters="sRGB">
-  <!-- Синий холодный тинт -->
-  <feColorMatrix type="matrix"
-    values="0.6  0.1  0.2  0  0.02
-            0.05 0.7  0.2  0  0.05
-            0.1  0.2  1.1  0  0.08
-            0    0    0    1  0"/>
-  <!-- Scanlines через повторяющийся градиент -->
-  <feTurbulence type="fractalNoise" baseFrequency="0 0.5" numOctaves="1"
-    seed="2" stitchTiles="stitch" result="scan"/>
-  <feColorMatrix in="scan" type="saturate" values="0" result="scanGray"/>
-  <feComponentTransfer in="scanGray" result="scanLines">
-    <feFuncA type="discrete" tableValues="0 0 0 0 0 0 0.08 0.08"/>
-  </feComponentTransfer>
-  <feBlend in="SourceGraphic" in2="scanLines" mode="multiply" result="withScan"/>
-  <!-- Лёгкое синее свечение -->
-  <feGaussianBlur in="withScan" stdDeviation="1.2" result="blur"/>
-  <feColorMatrix in="blur" type="matrix"
-    values="0 0 0.3 0 0
-            0 0 0.5 0 0
-            0 0 0.8 0 0
-            0 0 0   0 0.35"/>
-  <feBlend in="withScan" mode="screen"/>
-</filter>`;
-
-  const defs = filterDef + ap.map(p =>
-    `<clipPath id="cp${p.id}"><polygon points="${p.pts}"/></clipPath>`
-  ).join('');
-
-  const imagesHtml = ap.map((p, i) =>
-    `<image href="${esc(pool[i])}" xlink:href="${esc(pool[i])}" x="${p.bx}" y="${p.by}" width="${p.bw}" height="${p.bh}" preserveAspectRatio="xMidYMid slice" clip-path="url(#cp${p.id})" filter="url(#holo)" class="ci clickable-collage-img" data-idx="${p.id}" data-img-url="${esc(pool[i])}"/>`
-  ).join('');
-
-  // Линии стыков для отрисовки золотых рамок
-  const lines = [
-    [280, 0, 250, 160],   // Скос вверху слева
-    [0, 160, 1020, 160],  // Горизонталь под верхней линией
-    [1020, 160, 1200, 140],// Скос вверху справа
-    [120, 160, 140, 340], // Скос между левыми портретами
-    [350, 160, 350, 340], // Левая граница текста
-    [750, 160, 750, 340], // Правая граница текста
-    [1020, 160, 980, 340],// Скос справа
-    [0, 340, 1200, 340],  // Горизонталь над нижним рядом
-    [350, 340, 330, 480], // Скос внизу слева
-    [550, 340, 530, 480], // Скос внизу по центру
-    [750, 340, 750, 480]  // Прямая внизу справа
-  ];
-
-  // Двойные границы: толстая черная основа (эффект зазора) + тонкая золотая линия
-  const bordersHtml = lines.map(([x1, y1, x2, y2]) =>
-    `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#07090d" stroke-width="8"/>` +
-    `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#d4af37" stroke-width="2"/>`
-  ).join('');
-
-  // Внешняя рамка
-  const outerBorder = `<rect x="4" y="4" width="1192" height="472" fill="none" stroke="#07090d" stroke-width="8"/><rect x="4" y="4" width="1192" height="472" fill="none" stroke="#d4af37" stroke-width="2"/>`;
+  const url = (coverUrl || '').trim();
+  const imgLayer = url
+    ? `<img class="hp-hero-img" src="${esc(url)}" data-img-url="${esc(url)}" alt="" loading="eager">`
+    : `<div class="hp-hero-noimg"></div>`;
 
   const uploadBtn = user?.role === 'superadmin'
-    ? `<button class="hp-hero-upload-btn" id="hero-upload-btn" onclick="triggerHeroCoverUpload()" style="display:block; z-index:20;">✎ Обложка</button>`
+    ? `<button class="hp-hero-upload-btn" id="hero-upload-btn" onclick="triggerHeroCoverUpload()" style="display:block;z-index:20;">✎ Обложка</button>`
     : '';
 
-  return `<div class="hp-collage" id="hp-collage">
-    <svg id="collage-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%">
-      <defs>
-        ${defs}
-        
-        <!-- Минималистичные паттерны звезд -->
-        <pattern id="stars" width="80" height="80" patternUnits="userSpaceOnUse">
-          <circle cx="20" cy="20" r="1.5" fill="#fff" opacity="0.6"/>
-          <circle cx="60" cy="50" r="1" fill="#8cf" opacity="0.4"/>
-          <circle cx="40" cy="70" r="1.2" fill="#fff" opacity="0.5"/>
-        </pattern>
-        
-        <pattern id="stars2" width="100" height="100" patternUnits="userSpaceOnUse">
-          <circle cx="30" cy="30" r="1.3" fill="#6cf" opacity="0.5"/>
-          <circle cx="70" cy="60" r="0.9" fill="#fff" opacity="0.45"/>
-          <circle cx="50" cy="85" r="1.4" fill="#8df" opacity="0.55"/>
-        </pattern>
-        
-        <!-- Градиент для гиперпутей -->
-        <linearGradient id="hyperpath">
-          <stop offset="0%" style="stop-color:#4a7fa5;stop-opacity:0.2"/>
-          <stop offset="50%" style="stop-color:#6a8fb5;stop-opacity:0.5"/>
-          <stop offset="100%" style="stop-color:#4a7fa5;stop-opacity:0.2"/>
-        </linearGradient>
-        
-        <!-- Градиент туманности -->
-        <radialGradient id="nebula">
-          <stop offset="0%" style="stop-color:#4a7fa5;stop-opacity:0.4"/>
-          <stop offset="60%" style="stop-color:#5a6fa5;stop-opacity:0.2"/>
-          <stop offset="100%" style="stop-color:#2a3f55;stop-opacity:0"/>
-        </radialGradient>
-        
-        <!-- Градиент для падающих звезд -->
-        <linearGradient id="shootingStar" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#fff;stop-opacity:0"/>
-          <stop offset="50%" style="stop-color:#fff;stop-opacity:0.9"/>
-          <stop offset="100%" style="stop-color:#8cf;stop-opacity:0"/>
-        </linearGradient>
-        
-        <!-- Градиент для световых лучей -->
-        <linearGradient id="lightRay" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" style="stop-color:#4a7fa5;stop-opacity:0"/>
-          <stop offset="50%" style="stop-color:#6a8fb5;stop-opacity:0.15"/>
-          <stop offset="100%" style="stop-color:#4a7fa5;stop-opacity:0"/>
-        </linearGradient>
-        
-        <!-- Эффект свечения для ярких звезд -->
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
-          <feMerge>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
-        </filter>
-      </defs>
-      
-      <!-- Статичный фоновый слой, чтобы не было мигания черного фона -->
-      <rect x="0" y="0" width="${W}" height="${H}" fill="#0a0c10"/>
-      
-      ${imagesHtml}
-      
-      ${bordersHtml}
-      ${outerBorder}
-
-      <g id="wiki-title-block">
-        <rect x="350" y="160" width="400" height="180" fill="rgba(4,5,10,0.82)"/>
-        <rect x="350" y="160" width="400" height="180" fill="none" stroke="rgba(168,105,44,0.45)" stroke-width="1"/>
-        ${(()=>{
-          const title=(_L2?_L1+' '+_L2:_L1)||'НОВАЯ ЭРА';
-          const maxW=360;
-          const fs=Math.max(14,Math.min(52,Math.floor(maxW/(title.length*0.62))));
-          const ls=Math.max(1,Math.round(fs*0.08));
-          const estW=title.length*(fs*0.62+ls);
-          const tl=estW>maxW?maxW:null;
-          return `<text x="550" y="260" text-anchor="middle" dominant-baseline="middle"
-            font-family="Orbitron,sans-serif" font-size="${fs}" font-weight="900"
-            letter-spacing="${ls}" fill="rgba(210,170,80,0.95)"
-            ${tl?`textLength="${tl}" lengthAdjust="spacingAndGlyphs"`:''}>${title}</text>`;
-        })()}
-      </g>
-    </svg>
+  return `<div class="hp-hero-cover" id="hp-hero-cover">
+    ${imgLayer}
+    <div class="hp-hero-grad"></div>
+    <div class="hp-hero-frame"></div>
+    <span class="hpc-corner hpc-tl"></span><span class="hpc-corner hpc-tr"></span>
+    <span class="hpc-corner hpc-bl"></span><span class="hpc-corner hpc-br"></span>
+    <div class="hp-hero-titlewrap">
+      <div class="hp-hero-eyebrow">◈&nbsp;&nbsp;${esc(eyebrow)}&nbsp;&nbsp;◈</div>
+      <h1 class="hp-hero-title">${esc(title)}</h1>
+      <div class="hp-hero-rule"></div>
+    </div>
     ${uploadBtn}
   </div>`;
-}
-
-// Ротация — меняем одну картинку каждые 6 секунд
-function startCollageRotation(allImgs) {
-  const svg = document.getElementById('collage-svg');
-  if (!svg) return;
-
-  const pool = [...allImgs].sort(() => Math.random() - 0.5);
-  const imageEls = Array.from(svg.querySelectorAll('image.ci'));
-  if (!imageEls.length) return;
-
-  let usedUrls = new Set(imageEls.map(el => el.getAttribute('href')));
-
-  function getNext(exclude) {
-    const avail = pool.filter(u => !exclude.has(u));
-    // Если доступных картинок нет, берем любую из пула
-    if (avail.length === 0) return pool[Math.floor(Math.random() * pool.length)];
-    // Иначе берем из доступных
-    return avail[Math.floor(Math.random() * avail.length)];
-  }
-
-  let queue = imageEls.map((_, i) => i).sort(() => Math.random() - 0.5);
-  let qi = 0;
-
-  function swapOne() {
-    const svg = document.getElementById('collage-svg');
-    if (!svg) return;
-    const idx = queue[qi % queue.length];
-    qi++;
-    if (qi >= queue.length) { queue = queue.sort(() => Math.random() - 0.5); qi = 0; }
-
-    const el = imageEls[idx];
-    const oldUrl = el.getAttribute('href');
-    
-    // Обновляем usedUrls ПЕРЕД выбором новой картинки
-    const currentUrls = new Set(imageEls.map(e => e.getAttribute('href')));
-    usedUrls = currentUrls;
-    
-    const next = getNext(usedUrls);
-    if (!next || next === oldUrl) return;
-    
-    // Резервируем новую картинку СРАЗУ
-    usedUrls.delete(oldUrl);
-    usedUrls.add(next);
-    
-    // ПРЕДЗАГРУЗКА: убеждаемся что картинка загружена перед сменой
-    const preloadImg = new Image();
-    // НЕ используем crossOrigin
-    
-    preloadImg.onload = () => {
-      // Картинка загружена, можно начинать эффект
-      performSwap();
-    };
-    
-    preloadImg.onerror = () => {
-      // Если не загрузилась, все равно пробуем показать
-      console.warn('Preload failed for:', next);
-      performSwap(); // Пробуем все равно
-    };
-    
-    preloadImg.src = next;
-    
-    // Таймаут на загрузку - если не загрузилась за 5 секунд, все равно пробуем
-    setTimeout(() => {
-      if (!preloadImg.complete) {
-        console.warn('Preload timeout for:', next);
-        performSwap(); // Пробуем все равно
-      }
-    }, 5000);
-    
-    function performSwap() {
-    // HARDCORE GLITCH EFFECT with RGB split
-    const parent = el.closest('g') || el.parentElement;
-    
-    // Create RGB split clones
-    const redClone = el.cloneNode(true);
-    const blueClone = el.cloneNode(true);
-    redClone.style.mixBlendMode = 'screen';
-    blueClone.style.mixBlendMode = 'screen';
-    redClone.style.opacity = '0';
-    blueClone.style.opacity = '0';
-    parent.appendChild(redClone);
-    parent.appendChild(blueClone);
-    
-    el.style.transition = 'none';
-    
-    // Phase 1: Intense glitch out
-    let glitchFrame = 0;
-    const glitchOut = setInterval(() => {
-      const intensity = Math.random();
-      const offsetX = (Math.random() - 0.5) * 8;
-      const offsetY = (Math.random() - 0.5) * 4;
-      
-      // Main image distortion - НЕ делаем полностью прозрачным
-      el.style.opacity = intensity > 0.3 ? '1' : '0.4';
-      el.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
-      el.style.filter = `saturate(${1 + Math.random() * 0.5}) contrast(${1 + Math.random() * 0.3})`;
-      
-      // RGB split effect
-      if (intensity > 0.5) {
-        redClone.style.opacity = '0.6';
-        redClone.style.transform = `translate(${offsetX - 4}px, ${offsetY}px)`;
-        redClone.style.filter = 'sepia(1) saturate(3) hue-rotate(-30deg)';
-        
-        blueClone.style.opacity = '0.6';
-        blueClone.style.transform = `translate(${offsetX + 4}px, ${offsetY}px)`;
-        blueClone.style.filter = 'sepia(1) saturate(3) hue-rotate(180deg)';
-      } else {
-        redClone.style.opacity = '0';
-        blueClone.style.opacity = '0';
-      }
-      
-      glitchFrame++;
-      if (glitchFrame >= 12) {
-        clearInterval(glitchOut);
-        el.style.opacity = '0.3'; // Оставляем минимальную видимость
-        redClone.style.opacity = '0';
-        blueClone.style.opacity = '0';
-        
-        setTimeout(() => {
-          if (!document.getElementById('collage-svg')) return;
-          
-          // Swap image (usedUrls уже обновлен выше)
-          el.setAttribute('href', next);
-          el.setAttributeNS('http://www.w3.org/1999/xlink', 'href', next);
-          el.setAttribute('data-img-url', next); // Обновляем data-img-url для клика
-          redClone.setAttribute('href', next);
-          redClone.setAttributeNS('http://www.w3.org/1999/xlink', 'href', next);
-          blueClone.setAttribute('href', next);
-          blueClone.setAttributeNS('http://www.w3.org/1999/xlink', 'href', next);
-          
-          // Phase 2: Glitch in
-          let glitchInFrame = 0;
-          const glitchIn = setInterval(() => {
-            const intensity = 1 - (glitchInFrame / 8);
-            const offsetX = (Math.random() - 0.5) * 6 * intensity;
-            const offsetY = (Math.random() - 0.5) * 3 * intensity;
-            
-            el.style.opacity = Math.random() > 0.2 ? '1' : '0.5';
-            el.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
-            
-            if (intensity > 0.4) {
-              redClone.style.opacity = '0.5';
-              redClone.style.transform = `translate(${offsetX - 3 * intensity}px, ${offsetY}px)`;
-              redClone.style.filter = 'sepia(1) saturate(3) hue-rotate(-30deg)';
-              
-              blueClone.style.opacity = '0.5';
-              blueClone.style.transform = `translate(${offsetX + 3 * intensity}px, ${offsetY}px)`;
-              blueClone.style.filter = 'sepia(1) saturate(3) hue-rotate(180deg)';
-            }
-            
-            glitchInFrame++;
-            if (glitchInFrame >= 8) {
-              clearInterval(glitchIn);
-              el.style.opacity = '1';
-              el.style.transform = 'translate(0, 0)';
-              el.style.filter = 'none';
-              redClone.style.opacity = '0';
-              blueClone.style.opacity = '0';
-              
-              // Cleanup
-              setTimeout(() => {
-                if (redClone.parentNode) redClone.parentNode.removeChild(redClone);
-                if (blueClone.parentNode) blueClone.parentNode.removeChild(blueClone);
-              }, 100);
-            }
-          }, 45);
-        }, 100);
-      }
-    }, 50);
-    } // конец performSwap
-  }
-
-  setTimeout(swapOne, 5000);
-  const iv = setInterval(() => {
-    if (!document.getElementById('collage-svg')) { clearInterval(iv); return; }
-    swapOne();
-  }, 6000);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2975,7 +2444,7 @@ async function renderItemPage(pg) {
     uncommon:  { ru:'Необычный',   c:'#4ec96a', g:'rgba(78,201,106,.18)',  scan:'rgba(78,201,106,.05)'  },
     rare:      { ru:'Редкий',      c:'#4aaaf0', g:'rgba(74,170,240,.2)',   scan:'rgba(74,170,240,.06)'  },
     epic:      { ru:'Эпический',   c:'#b060f8', g:'rgba(176,96,248,.22)',  scan:'rgba(176,96,248,.07)'  },
-    legendary: { ru:'Легендарный', c:'#f5a020', g:'rgba(245,160,32,.28)',  scan:'rgba(245,160,32,.08)'  },
+    legendary: { ru:'Легендарный', c:'#3ca8e8', g:'rgba(245,160,32,.28)',  scan:'rgba(245,160,32,.08)'  },
   };
   const SLOT_LABEL = {
     weapon:'Оружие',armor:'Броня',artifact:'Артефакт',consumable:'Расходник',
@@ -3056,7 +2525,7 @@ async function renderItemPage(pg) {
     // Resolve laser color
     if (armorLaser.includes('Иммунитет'))  armorLaserColor = '#4ec96a';
     else if (armorLaser.includes('Сопрот')) armorLaserColor = '#6bb8d4';
-    else if (armorLaser.includes('Частич')) armorLaserColor = '#d4924a';
+    else if (armorLaser.includes('Частич')) armorLaserColor = '#4e9ed8';
   }
   // Armor class label
   const armorClassName = (typeof ARMOR_CLASSES !== 'undefined' && ARMOR_CLASSES[armorClassKey])
@@ -3119,11 +2588,11 @@ async function renderItemPage(pg) {
     _row('📦 ШТРАФ',_iv('Штраф вместимости')?'−'+_iv('Штраф вместимости')+' ед.':'','#c87060');
   } else if (slot==='armor') {
     if(armorHp) _row('HP БРОНИ',armorHp.toLocaleString('ru'),'#82c4a0');
-    if(armorPenMm) _row('ПРОБИТИЕ',typeof fmtPen==='function'?fmtPen(armorPenMm):armorPenMm+'мм','#d4924a');
+    if(armorPenMm) _row('ПРОБИТИЕ',typeof fmtPen==='function'?fmtPen(armorPenMm):armorPenMm+'мм','#4e9ed8');
     if(armorLaser) _row('ЛАЗЕР',armorLaser,armorLaserColor);
     _row('КЛАСС БРОНИ',armorClassName,null);
   } else if (slot==='reactor') {
-    _row('⚡ МОЩНОСТЬ',_iv('Мощность')?_iv('Мощность')+' МВт':'','#c9a14a');
+    _row('⚡ МОЩНОСТЬ',_iv('Мощность')?_iv('Мощность')+' МВт':'','#4e9ed8');
     _row('✦ СИЛА',_iv('Сила реактора'),'#5aaac0');
     _row('🚀 БСК',_iv('Буст скорости')?_iv('Буст скорости')+'%':'','#82c4a0');
     _row('◎ БРДР',_iv('Буст радаров')?_iv('Буст радаров')+'%':'','#5aaac0');
@@ -3153,7 +2622,7 @@ async function renderItemPage(pg) {
   } else {
     allStats.forEach(([k,v,col])=>_row(k,v,col));
   }
-  _row('💰 ЦЕНА',_iv('Цена')?_iv('Цена')+' ЭК':'','#c9a14a');
+  _row('💰 ЦЕНА',_iv('Цена')?_iv('Цена')+' ЭК':'','#4e9ed8');
 
   const _CLS_LABEL = {
     peh:'Пехота',btr:'БТР',tanki:'Танк',arta:'Артиллерия',
@@ -3173,10 +2642,10 @@ async function renderItemPage(pg) {
 
   // Build stats HUD HTML (used in hero on desktop, inline on mobile)
   const statsHudHtml = (allStats.length || armorHp || armorPenMm || armorLaser || weaponCalcOn) ? `<div class="itm-stats-hud">
-      ${armorClassName ? `<div class="itm-hud-row" style="border-bottom:1px solid rgba(168,105,44,.15);padding-bottom:5px;margin-bottom:5px">
-        <span class="itm-hud-k" style="color:rgba(168,105,44,.6)">КЛАСС</span>
+      ${armorClassName ? `<div class="itm-hud-row" style="border-bottom:1px solid rgba(28,100,148,.15);padding-bottom:5px;margin-bottom:5px">
+        <span class="itm-hud-k" style="color:rgba(28,100,148,.6)">КЛАСС</span>
         <span class="itm-hud-sep"></span>
-        <span class="itm-hud-v" style="color:rgba(168,105,44,.85);font-size:9px">${esc(armorClassName)}</span>
+        <span class="itm-hud-v" style="color:rgba(28,100,148,.85);font-size:9px">${esc(armorClassName)}</span>
       </div>` : ''}
       ${armorHp ? `<div class="itm-hud-row" style="border-bottom:1px solid rgba(78,201,106,.2);padding-bottom:8px;margin-bottom:4px">
         <span class="itm-hud-k">HP БРОНИ</span>
@@ -3186,7 +2655,7 @@ async function renderItemPage(pg) {
       ${armorPenMm ? `<div class="itm-hud-row" style="border-bottom:1px solid rgba(212,146,74,.2);padding-bottom:6px;margin-bottom:4px">
         <span class="itm-hud-k">ПРОБИТИЕ</span>
         <span class="itm-hud-sep"></span>
-        <span class="itm-hud-v" style="color:#d4924a;font-size:10px">${esc(typeof fmtPen === 'function' ? fmtPen(armorPenMm) : armorPenMm + 'мм')}</span>
+        <span class="itm-hud-v" style="color:#4e9ed8;font-size:10px">${esc(typeof fmtPen === 'function' ? fmtPen(armorPenMm) : armorPenMm + 'мм')}</span>
       </div>` : ''}
       ${armorLaser ? `<div class="itm-hud-row" style="padding-bottom:4px;margin-bottom:4px">
         <span class="itm-hud-k">ЛАЗЕР</span>
@@ -3268,7 +2737,7 @@ async function renderItemPage(pg) {
 
 function renderArmorConfigPage() {
   if (!user || user.role !== 'superadmin') {
-    setPg(`<div class="sempty"><div style="font-size:40px;opacity:.15">🔒</div><div style="font-family:Orbitron,sans-serif;font-size:11px;letter-spacing:2px">ДОСТУП ЗАПРЕЩЁН</div></div>`);
+    setPg(`<div class="sempty"><div style="font-size:40px;opacity:.15">🔒</div><div style="font-family:Rajdhani,sans-serif;font-size:11px;letter-spacing:2px">ДОСТУП ЗАПРЕЩЁН</div></div>`);
     return;
   }
   // Обновляем breadcrumb
@@ -3319,7 +2788,7 @@ function renderArmorConfigPage() {
     const bw = saved['cls_'+k+'_baseWeight'] ?? cls.baseWeight;
     const ll = saved['cls_'+k+'_loadLimit']  ?? cls.loadLimit;
     return `<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
-      <td style="padding:6px 10px;font-family:Orbitron,sans-serif;font-size:9px;color:var(--te);letter-spacing:1px">${cls.ru}</td>
+      <td style="padding:6px 10px;font-family:Rajdhani,sans-serif;font-size:9px;color:var(--te);letter-spacing:1px">${cls.ru}</td>
       <td style="padding:4px 6px"><input class="fi" type="number" step="1" value="${bw}" style="width:80px" onchange="_asCfg['cls_${k}_baseWeight']=parseFloat(this.value)||${cls.baseWeight}"></td>
       <td style="padding:4px 6px"><input class="fi" type="number" step="1" value="${ll}" style="width:100px" onchange="_asCfg['cls_${k}_loadLimit']=parseFloat(this.value)||${cls.loadLimit}"></td>
     </tr>`;
@@ -3327,7 +2796,7 @@ function renderArmorConfigPage() {
 
   const fieldRows = FIELDS.map(f => `
     <div class="fg" style="grid-column:span 1">
-      <label class="fl" title="${esc(f.hint)}">${f.label} <span style="color:rgba(168,105,44,.4);font-size:9px">?</span></label>
+      <label class="fl" title="${esc(f.hint)}">${f.label} <span style="color:rgba(28,100,148,.4);font-size:9px">?</span></label>
       <input class="fi" type="number" step="${f.step}" value="${getVal(f.key)}"
         onchange="_asCfg['${f.key}']=parseFloat(this.value)">
       <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t4);margin-top:3px">${esc(f.hint)}</div>
@@ -3335,7 +2804,7 @@ function renderArmorConfigPage() {
 
   const resHtml = RESOURCES_FIELDS.map(r => `
     <div style="border:1px solid var(--w2);padding:12px 14px;margin-bottom:8px;background:var(--b3)">
-      <div style="font-family:Orbitron,sans-serif;font-size:9px;font-weight:700;letter-spacing:2px;color:var(--te);margin-bottom:10px">${r.label}</div>
+      <div style="font-family:Rajdhani,sans-serif;font-size:9px;font-weight:700;letter-spacing:2px;color:var(--te);margin-bottom:10px">${r.label}</div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
         ${r.fields.map(f=>`<div class="fg">
           <label class="fl">${f.l}</label>
@@ -3346,27 +2815,27 @@ function renderArmorConfigPage() {
     </div>`).join('');
 
   setPg(`<div style="padding-bottom:80px">
-<div style="font-family:Orbitron,sans-serif;font-size:10px;font-weight:700;letter-spacing:4px;color:var(--te);padding:0 0 16px;border-bottom:1px solid var(--w2);margin-bottom:24px;display:flex;align-items:center;gap:12px">
+<div style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;letter-spacing:4px;color:var(--te);padding:0 0 16px;border-bottom:1px solid var(--w2);margin-bottom:24px;display:flex;align-items:center;gap:12px">
   <span>⚙ КОНФИГУРАТОР БРОНИ</span>
   <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t4);letter-spacing:1px;font-weight:400">СУПЕРАДМИН</span>
 </div>
 
-<div style="background:rgba(168,105,44,.06);border:1px solid rgba(168,105,44,.2);border-left:3px solid var(--gdl);padding:10px 14px;margin-bottom:24px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);line-height:1.8">
+<div style="background:rgba(28,100,148,.06);border:1px solid rgba(28,100,148,.2);border-left:3px solid var(--gdl);padding:10px 14px;margin-bottom:24px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);line-height:1.8">
   Значения сохраняются в localStorage и применяются поверх defaults из armor_system.js.<br>
   Для применения изменений к уже существующим предметам — пересохрани их в редакторе.
 </div>
 
-<div style="font-family:Orbitron,sans-serif;font-size:8px;letter-spacing:3px;color:var(--te);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--w2)">ГЛОБАЛЬНЫЕ КОЭФФИЦИЕНТЫ</div>
+<div style="font-family:Rajdhani,sans-serif;font-size:8px;letter-spacing:3px;color:var(--te);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--w2)">ГЛОБАЛЬНЫЕ КОЭФФИЦИЕНТЫ</div>
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:28px">
   ${fieldRows}
 </div>
 
-<div style="font-family:Orbitron,sans-serif;font-size:8px;letter-spacing:3px;color:var(--te);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--w2)">РЕСУРСЫ — ФИЗИЧЕСКИЕ СВОЙСТВА</div>
+<div style="font-family:Rajdhani,sans-serif;font-size:8px;letter-spacing:3px;color:var(--te);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--w2)">РЕСУРСЫ — ФИЗИЧЕСКИЕ СВОЙСТВА</div>
 <div style="margin-bottom:28px">${resHtml}</div>
 
-<div style="font-family:Orbitron,sans-serif;font-size:8px;letter-spacing:3px;color:var(--te);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--w2)">КЛАССЫ БРОНИ — ВЕС И ЛИМИТ НАГРУЗКИ</div>
+<div style="font-family:Rajdhani,sans-serif;font-size:8px;letter-spacing:3px;color:var(--te);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--w2)">КЛАССЫ БРОНИ — ВЕС И ЛИМИТ НАГРУЗКИ</div>
 <table style="width:100%;border-collapse:collapse;margin-bottom:28px">
-  <thead><tr style="font-family:Orbitron,sans-serif;font-size:7px;letter-spacing:1px;color:rgba(168,105,44,.5)">
+  <thead><tr style="font-family:Rajdhani,sans-serif;font-size:7px;letter-spacing:1px;color:rgba(28,100,148,.5)">
     <th style="text-align:left;padding:4px 10px">Класс</th>
     <th style="text-align:left;padding:4px 6px">Баз. вес (кг)</th>
     <th style="text-align:left;padding:4px 6px">Лимит нагрузки (кг)</th>
@@ -3467,7 +2936,7 @@ function renderAbilityPage(pg) {
   }
 
   const TYPES = {
-    passive:  { ru:'Пассивная',  c:'#d4900a' },
+    passive:  { ru:'Пассивная',  c:'#1f8fd8' },
     action:   { ru:'Действие',   c:'#2d9fd8' },
     bonus:    { ru:'Бонусное',   c:'#3db855' },
     reaction: { ru:'Реакция',    c:'#d83040' },
@@ -3958,7 +3427,7 @@ async function renderUnitPage(pg) {
         +(_boostStr ? '<div class="un-ic-stat" style="color:#4caf50">'+_boostStr+'</div>' : '')
         +'</div>'
       : '')
-    +'<div class="un-install-card" style="border-top-color:rgba(168,105,44,.9)">'
+    +'<div class="un-install-card" style="border-top-color:rgba(28,100,148,.9)">'
       +'<div class="un-ic-label">⊕ КОРПУС</div>'
       +'<div class="un-ic-name">'+esc(classLabel2)+(hullName?' · '+esc(hullName):'')+'</div>'
       +'<div class="un-ic-stat">'+unitMass.toLocaleString('ru')+' кг'+(unitGabarit?' · габарит '+unitGabarit:'')+'</div>'
@@ -4039,7 +3508,7 @@ async function renderUnitPage(pg) {
         '<div class="ch-hero-badges">'+
           '<div class="ch-badge-faction"><span class="ch-faction-gem"></span>'+esc(classLabel2)+'</div>'+
           '<div class="ch-badge-status" style="color:'+st2.color+';border-color:'+st2.color+'">'+st2.label+'</div>'+
-          (reactorName?'<div class="ch-badge-faction" style="border-color:rgba(201,161,74,.35);color:#c9a14a">⚛ '+esc(reactorName)+'</div>':'')+
+          (reactorName?'<div class="ch-badge-faction" style="border-color:rgba(201,161,74,.35);color:#4e9ed8">⚛ '+esc(reactorName)+'</div>':'')+
         '</div>'+
       '</div>'+
     '</div>'+
@@ -4051,7 +3520,7 @@ async function renderUnitPage(pg) {
         '<div class="ch-mob-badges">'+
           '<span class="ch-mob-badge ch-mob-badge--faction">'+esc(classLabel2)+'</span>'+
           '<span class="ch-mob-badge" style="color:'+st2.color+';border-color:'+st2.color+'">'+st2.label+'</span>'+
-          (reactorName?'<span class="ch-mob-badge" style="color:#c9a14a">⚛ '+esc(reactorName)+'</span>':'')+
+          (reactorName?'<span class="ch-mob-badge" style="color:#4e9ed8">⚛ '+esc(reactorName)+'</span>':'')+
         '</div>'+
       '</div>'+
     '</div>'+
@@ -4163,7 +3632,7 @@ async function renderCharacterPage(pg) {
   const STATUS   = {
     active: {label:'АКТИВЕН', color:'#4caf50'},
     dead:   {label:'ПОГИБ',   color:'#f44336'},
-    retired:{label:'НА ПОКОЕ',color:'rgba(168,105,44,.85)'},
+    retired:{label:'НА ПОКОЕ',color:'rgba(28,100,148,.85)'},
   };
   const st = STATUS[ch.status] || STATUS.active;
 
@@ -4332,7 +3801,7 @@ async function renderCharacterPage(pg) {
           ${slt?`<span style="color:rgba(255,255,255,0.3)">/</span><span style="color:rgba(255,255,255,0.5)">${SL[slt]||slt}</span>`:''}
         </div>
         ${(wsDmg > 0 || wsRange) ? `<div style="display:flex;gap:12px;margin-top:5px;align-items:center">
-          ${wsDmg > 0 ? `<div style="font-family:Orbitron,sans-serif;font-size:11px;font-weight:900;color:#f07070" title="Расчётный урон">⚔ ${wsDmg}</div>` : (dmg ? `<div style="font-family:Orbitron,sans-serif;font-size:11px;color:#f07070">⚔ ${esc(dmg)}</div>` : '')}
+          ${wsDmg > 0 ? `<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:900;color:#f07070" title="Расчётный урон">⚔ ${wsDmg}</div>` : (dmg ? `<div style="font-family:Rajdhani,sans-serif;font-size:11px;color:#f07070">⚔ ${esc(dmg)}</div>` : '')}
           ${wsRange ? `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6bb8d4" title="Дальность">◎ ${esc(wsRange)}</div>` : ''}
         </div>` : ''}
         ${tags.length?`<div class="ch-tags">${tags.map(t=>`<span class="ch-tag">${esc(t)}</span>`).join('')}</div>`:''}
@@ -4343,7 +3812,7 @@ async function renderCharacterPage(pg) {
   
   // ── Способности ───────────────────────────────────────────
   const abPages = pages.filter(p => isVisiblePage(p) && p.page_type==='ability');
-  const TC={passive:'rgba(168,105,44,.85)',action:'rgba(80,160,220,.85)',bonus:'rgba(80,200,120,.85)',reaction:'rgba(200,80,80,.85)','1/day':'rgba(160,80,200,.85)','1/rest':'rgba(200,140,80,.85)'};
+  const TC={passive:'rgba(28,100,148,.85)',action:'rgba(80,160,220,.85)',bonus:'rgba(80,200,120,.85)',reaction:'rgba(200,80,80,.85)','1/day':'rgba(160,80,200,.85)','1/rest':'rgba(200,140,80,.85)'};
   const TT={passive:'Пассивная — работает постоянно',action:'Действие — тратит действие в бою',bonus:'Бонусное действие',reaction:'Реакция — в ответ на событие','1/day':'Раз в день','1/rest':'Раз в отдых'};
 
   const abHtml = abilities.length ? abilities.map(a => {

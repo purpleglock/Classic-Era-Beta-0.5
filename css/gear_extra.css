@@ -26,5 +26,5 @@
   line-height: 1;
 }
 .cs-gear-unequip:hover { border-color: rgba(100,180,255,.5); color: rgba(100,180,255,.9); background: rgba(100,180,255,.08); }
-.cs-gear-sell:hover    { border-color: rgba(168,105,44,.6);  color: rgba(210,170,80,.9);  background: rgba(168,105,44,.1); }
+.cs-gear-sell:hover    { border-color: rgba(28,100,148,.6);  color: rgba(210,170,80,.9);  background: rgba(28,100,148,.1); }
 @media (max-width: 768px) { .cs-gear-actions { opacity: 1; } }

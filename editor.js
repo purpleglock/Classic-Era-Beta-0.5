@@ -130,11 +130,11 @@ function renderEditUI(pg, titleVal, isHome) {
              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 6px">
                <div>
                  <label style="display:block;font-size:9px;letter-spacing:1px;color:var(--gdl);margin-bottom:4px;font-family:'JetBrains Mono',monospace">НАДПИСЬ RU</label>
-                 <input class="ed-mi" id="ei-title-ru" value="${esc(_pgCache.get('home')?.title||'НОВАЯ ЭРА')}" placeholder="НОВАЯ ЭРА" style="font-family:'Orbitron',sans-serif;font-size:12px;font-weight:700;letter-spacing:2px">
+                 <input class="ed-mi" id="ei-title-ru" value="${esc(_pgCache.get('home')?.title||'КЛАССИЧЕСКАЯ ЭРА')}" placeholder="КЛАССИЧЕСКАЯ ЭРА" style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:2px">
                </div>
                <div>
                  <label style="display:block;font-size:9px;letter-spacing:1px;color:var(--te);margin-bottom:4px;font-family:'JetBrains Mono',monospace">НАДПИСЬ EN</label>
-                 <input class="ed-mi" id="ei-title-en" value="${esc(_pgCache.get('home')?.title_ru||'NEW ERA')}" placeholder="NEW ERA" style="font-family:'Orbitron',sans-serif;font-size:12px;font-weight:700;letter-spacing:2px">
+                 <input class="ed-mi" id="ei-title-en" value="${esc(_pgCache.get('home')?.title_ru||'CLASSIC ERA')}" placeholder="CLASSIC ERA" style="font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:2px">
                </div>
              </div>
              <div style="font-size:9px;color:var(--t4);margin-bottom:12px;padding:4px 8px;background:var(--b3);border-left:2px solid var(--gdl);font-family:'JetBrains Mono',monospace">Текст коллажа. Разбивается на 2 строки по пробелу.</div>`
@@ -210,8 +210,8 @@ async function saveEdit() {
   if (editData?.isHome) {
     try {
       const content=JSON.stringify(editBlocks); const now=new Date().toISOString();
-      const _tRu=document.getElementById('ei-title-ru')?.value?.trim()||'НОВАЯ ЭРА';
-      const _tEn=document.getElementById('ei-title-en')?.value?.trim()||'NEW ERA';
+      const _tRu=document.getElementById('ei-title-ru')?.value?.trim()||'КЛАССИЧЕСКАЯ ЭРА';
+      const _tEn=document.getElementById('ei-title-en')?.value?.trim()||'CLASSIC ERA';
       const _hb={content,updated_at:now,title:_tRu,title_ru:_tEn};
       if (editData._homeId) { await dbPatch('pages',`id=eq.${editData._homeId}`,_hb); }
       else { await dbPost('pages',{slug:'home',..._hb,content_ru:'',status:'published',sort_order:-1,created_by:user.email,created_at:now}); localStorage.removeItem('wk_home_content'); }
@@ -220,8 +220,6 @@ async function saveEdit() {
   }
   const title=document.getElementById('ei-h1')?.value?.trim();
   if (!title) { toast(lang==='ru'?'Заголовок обязателен':'Title is required','err'); return; }
-  // Запоминаем предыдущий статус ДО сохранения (чтобы детектировать переход draft→published)
-  const _prevStatus = editData._origStatus || editData.status || 'draft';
   const body={ title, content:JSON.stringify(editBlocks), updated_at:new Date().toISOString(), title_ru:document.getElementById('ei-ten')?.value?.trim()||'', content_ru:'', status:editData.status||'draft', section:document.getElementById('ei-sec')?.value||null, parent_slug:document.getElementById('ei-par')?.value||null, image_url:editData.image_url||null, cover_height:editData.cover_height||null, cover_pos:editData.cover_pos||null, cover_type:editData.cover_type||'standard', exclude_from_collage:editData.exclude_from_collage||false, tags:editData.tags||null, page_type:document.getElementById('ei-pgtype')?.value||editData.page_type||'article' };
   try {
     if(editData.id) await dbPatch('pages',`id=eq.${editData.id}`,body);
@@ -229,12 +227,6 @@ async function saveEdit() {
     await loadPgs(); buildNav();
     const finalSlug=document.getElementById('ei-slug')?.value?.trim()||editData.slug;
     _pgCache.delete(finalSlug); exitEdit(true); go(finalSlug, false); toast(T('saveOk'),'ok');
-    // ── VK автопостинг: только при переходе draft → published ──
-    const nowPublished = body.status === 'published';
-    const wasNotPublished = _prevStatus !== 'published';
-    if (nowPublished && wasNotPublished) {
-      vkAutoPost({ slug: finalSlug, title: body.title || body.title_ru, image_url: body.image_url, content: body.content });
-    }
   } catch(e) { toast(T('saveErr')+' '+e.message,'err'); }
 }
 function exitEdit(restore=false) { editMode=false; editData=null; editBlocks=[]; _edSelIdx=null; const eb=document.getElementById('edit-btn'); if(eb){eb.textContent='✎ '+(lang==='ru'?'Редактировать':'Edit');eb.className='tbtn';} updAuthUI(); if(!restore) go(curSlug, false); }
@@ -432,7 +424,7 @@ function blockEditorHtml(b,i){
 <button class="mdt" title="${isRu?'Цитата':'Quote'}" onclick="mdIns('> ','','${isRu?'текст':'text'}',${i})">"</button>
 <button class="mdt" title="${isRu?'Ссылка':'Link'}" onclick="mdIns('[','](https://)','${isRu?'текст':'text'}',${i})">🔗</button>
 <div class="mdt-sep"></div>
-<button class="mdt" title="${isRu?'Цвет: Золото':'Color: Gold'}" style="color:#d4924a;border-color:rgba(176,112,48,.4)" onclick="mdIns('[c:gold]','[/c]','${isRu?'текст':'text'}',${i})">Au</button>
+<button class="mdt" title="${isRu?'Цвет: Золото':'Color: Gold'}" style="color:#4e9ed8;border-color:rgba(176,112,48,.4)" onclick="mdIns('[c:gold]','[/c]','${isRu?'текст':'text'}',${i})">Au</button>
 <button class="mdt" title="${isRu?'Цвет: Циан':'Color: Cyan'}" style="color:#6bb8d4;border-color:rgba(74,127,165,.4)" onclick="mdIns('[c:cyan]','[/c]','${isRu?'текст':'text'}',${i})">Cy</button>
 <button class="mdt" title="${isRu?'Цвет: Красный':'Color: Red'}" style="color:#cc4848;border-color:rgba(168,48,48,.4)" onclick="mdIns('[c:red]','[/c]','${isRu?'текст':'text'}',${i})">Re</button>
 <button class="mdt" title="${isRu?'Цвет: Фиолетовый':'Color: Purple'}" style="color:#a070e8;border-color:rgba(112,64,200,.4)" onclick="mdIns('[c:purple]','[/c]','${isRu?'текст':'text'}',${i})">Pu</button>
@@ -440,7 +432,7 @@ function blockEditorHtml(b,i){
 <button class="mdt" title="${isRu?'Цвет: Тусклый':'Color: Dim'}" style="color:var(--t4)" onclick="mdIns('[c:dim]','[/c]','${isRu?'текст':'text'}',${i})">Di</button>
 <div class="mdt-sep"></div>
 <button class="mdt" title="Bg: Cyber" style="background:rgba(74,127,165,.15);border-color:rgba(74,127,165,.4);color:#6bb8d4" onclick="mdIns('[bg:cyber]','[/bg]','${isRu?'текст':'text'}',${i})">▌Cy</button>
-<button class="mdt" title="Bg: Gold" style="background:rgba(176,112,48,.15);border-color:rgba(176,112,48,.4);color:#d4924a" onclick="mdIns('[bg:gold]','[/bg]','${isRu?'текст':'text'}',${i})">▌Au</button>
+<button class="mdt" title="Bg: Gold" style="background:rgba(176,112,48,.15);border-color:rgba(176,112,48,.4);color:#4e9ed8" onclick="mdIns('[bg:gold]','[/bg]','${isRu?'текст':'text'}',${i})">▌Au</button>
 <button class="mdt" title="Bg: Danger" style="background:rgba(168,48,48,.15);border-color:rgba(168,48,48,.4);color:#cc4848" onclick="mdIns('[bg:danger]','[/bg]','${isRu?'текст':'text'}',${i})">▌⚠</button>
 <button class="mdt" title="Bg: Lore" style="background:rgba(112,64,200,.15);border-color:rgba(112,64,200,.4);color:#a070e8" onclick="mdIns('[bg:lore]','[/bg]','${isRu?'текст':'text'}',${i})">▌Lr</button>
 <button class="mdt" title="Bg: Redacted" style="background:#111;border-color:#333;color:#555" onclick="mdIns('[bg:redacted]','[/bg]','${isRu?'текст':'text'}',${i})">▌██</button>
@@ -614,8 +606,8 @@ function ibEditor(b,i){
       : '';
 
     const armorSection = (isArmor && canCalc) ? `
-      <div style="margin-top:12px;border-top:1px solid rgba(168,105,44,.25);padding-top:12px">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:2px;color:rgba(168,105,44,.8);margin-bottom:6px">◈ ФИЗИКА БРОНИ · Лимит нагрузки <span style="color:var(--t4);font-size:7px">(только редактор)</span></div>
+      <div style="margin-top:12px;border-top:1px solid rgba(28,100,148,.25);padding-top:12px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:2px;color:rgba(28,100,148,.8);margin-bottom:6px">◈ ФИЗИКА БРОНИ · Лимит нагрузки <span style="color:var(--t4);font-size:7px">(только редактор)</span></div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);margin-bottom:10px;line-height:1.6">
           HP = Σ(ресурс × кг/ед × HP/кг) × Мультипликатор_материала<br>
           HP_на_юните = HP_брони ÷ (Габарит_юнита × 0.8)
@@ -637,7 +629,7 @@ function ibEditor(b,i){
             <input class="be-fi" type="number" min="0" step="1" value="${esc(Math.round((parseFloat(val('ОЧ Термостойкость'))||0)/20))}" oninput="armorRpUpdate(${i},'thermal',this.value,20)" id="ac-ed-thermal-${i}"></div>
         </div>
 
-        <div id="ac-ed-preview-${i}" style="background:var(--b3);border:1px solid rgba(168,105,44,.3);padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)">
+        <div id="ac-ed-preview-${i}" style="background:var(--b3);border:1px solid rgba(28,100,148,.3);padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)">
           ← заполни очки для расчёта
         </div>
       </div>` : '';
@@ -1072,8 +1064,8 @@ function ibEditor(b,i){
       </div>
 
       <!-- Корпус -->
-      <div style="border:1px solid rgba(168,105,44,.25);padding:10px 12px;background:var(--b3)">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:1.5px;color:rgba(168,105,44,.8);margin-bottom:8px" data-tip="Корпус\n\nЗадаёт класс юнита, массу и количество слотов орудий/брони.\nМасса влияет на скорость и вместимость.">КОРПУС ℹ</div>
+      <div style="border:1px solid rgba(28,100,148,.25);padding:10px 12px;background:var(--b3)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:1.5px;color:rgba(28,100,148,.8);margin-bottom:8px" data-tip="Корпус\n\nЗадаёт класс юнита, массу и количество слотов орудий/брони.\nМасса влияет на скорость и вместимость.">КОРПУС ℹ</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div class="fg"><label class="fl">Класс</label>
             <select class="be-fi" onchange="ibSmartSet(${i},'Класс',this.value);renderBlockEditor()">${classOpts}</select></div>
@@ -1091,7 +1083,7 @@ function ibEditor(b,i){
               oninput="ibSmartSet(${i},'Габарит',this.value)"></div>
         </div>
         ${slotRow('Корпус',bySlot('hull'),'статья корпуса (опционально)...',
-          hullName?{t:'⚔ '+maxWeapons+' ор.  🛡 '+maxArmors+' бр.',c:'rgba(168,105,44,.9)'}:{t:'орудий по классу: '+maxWeapons,c:'var(--t4)'},hullName?true:false)}
+          hullName?{t:'⚔ '+maxWeapons+' ор.  🛡 '+maxArmors+' бр.',c:'rgba(28,100,148,.9)'}:{t:'орудий по классу: '+maxWeapons,c:'var(--t4)'},hullName?true:false)}
       </div>
 
       <!-- Реактор -->
@@ -1259,7 +1251,7 @@ function armorCalcPreview(bi) {
 
   // Weight bar
   const wPct      = Math.min(100, Math.round((res1.total_weight / res1.load_limit) * 100));
-  const wColor    = res1.overload_pct > 0 ? '#cc4848' : wPct > 75 ? '#d4924a' : '#4ec96a';
+  const wColor    = res1.overload_pct > 0 ? '#cc4848' : wPct > 75 ? '#4e9ed8' : '#4ec96a';
   const wLabel    = res1.overload_pct > 0
     ? `⚠ ПЕРЕГРУЗ ${res1.overload_pct.toFixed(0)}% · штраф скорости: -${res1.speed_penalty}`
     : `✓ В пределах лимита (${wPct}%)`;
@@ -1276,12 +1268,12 @@ function armorCalcPreview(bi) {
   const matPct = Math.round((res1.mat_mul - 1) * 100);
   const rpTotal = density_pts + tensile_pts + thermal_pts;
   const rpPct = Math.min(100, Math.round((rpTotal / cls.rpLimit) * 100));
-  const rpColor = rpTotal >= cls.rpLimit ? 'var(--gdl)' : rpTotal > cls.rpLimit * 0.75 ? '#d4924a' : '#4ec96a';
+  const rpColor = rpTotal >= cls.rpLimit ? 'var(--gdl)' : rpTotal > cls.rpLimit * 0.75 ? '#4e9ed8' : '#4ec96a';
 
   el.innerHTML = `
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
   <div>
-    <div style="font-size:7px;letter-spacing:2px;color:rgba(168,105,44,.5);font-family:Orbitron,sans-serif;margin-bottom:4px">РП-ОЧКИ</div>
+    <div style="font-size:7px;letter-spacing:2px;color:rgba(28,100,148,.5);font-family:Rajdhani,sans-serif;margin-bottom:4px">РП-ОЧКИ</div>
     <div style="font-size:11px;color:${rpColor};margin-bottom:4px">${rpTotal} / ${cls.rpLimit} оч</div>
     <div style="height:4px;background:var(--w2);border-radius:2px;margin-bottom:3px">
       <div style="height:100%;width:${rpPct}%;background:${rpColor};border-radius:2px;transition:width .3s"></div>
@@ -1289,22 +1281,22 @@ function armorCalcPreview(bi) {
     <div style="font-size:9px;color:${rpColor};line-height:1.4">${rpTotal >= cls.rpLimit ? '⚠ Лимит достигнут' : `✓ Доступно ${cls.rpLimit - rpTotal} оч`}</div>
   </div>
   <div>
-    <div style="font-size:7px;letter-spacing:2px;color:rgba(168,105,44,.5);font-family:Orbitron,sans-serif;margin-bottom:4px">МНОЖИТЕЛЬ МАТЕРИАЛА</div>
-    <div style="font-size:18px;font-weight:900;font-family:Orbitron,sans-serif;color:var(--t1)">×${res1.mat_mul.toFixed(2)}</div>
-    ${matPct > 0 ? `<div style="font-size:9px;color:rgba(168,105,44,.7)">+${matPct}% от РП-очков</div>` : ''}
+    <div style="font-size:7px;letter-spacing:2px;color:rgba(28,100,148,.5);font-family:Rajdhani,sans-serif;margin-bottom:4px">МНОЖИТЕЛЬ МАТЕРИАЛА</div>
+    <div style="font-size:18px;font-weight:900;font-family:Rajdhani,sans-serif;color:var(--t1)">×${res1.mat_mul.toFixed(2)}</div>
+    ${matPct > 0 ? `<div style="font-size:9px;color:rgba(28,100,148,.7)">+${matPct}% от РП-очков</div>` : ''}
   </div>
 </div>
 <div style="border-top:1px solid var(--w2);margin:8px 0 6px"></div>
-<div style="font-size:7px;letter-spacing:2px;color:rgba(168,105,44,.5);font-family:Orbitron,sans-serif;margin-bottom:6px">HP НА ЮНИТЕ (по габариту)</div>
+<div style="font-size:7px;letter-spacing:2px;color:rgba(28,100,148,.5);font-family:Rajdhani,sans-serif;margin-bottom:6px">HP НА ЮНИТЕ (по габариту)</div>
 <div style="font-size:10px;line-height:1.8">${gabHtml}</div>
 <div style="border-top:1px solid var(--w2);margin:8px 0 6px"></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
   <div>
-    <div style="font-size:7px;letter-spacing:2px;color:rgba(168,105,44,.5);font-family:Orbitron,sans-serif;margin-bottom:3px">ПРОБИТИЕ (рейтинг)</div>
-    <div style="font-size:11px;color:#d4924a;font-weight:700">${fmtPen(res1.pen_mm)}</div>
+    <div style="font-size:7px;letter-spacing:2px;color:rgba(28,100,148,.5);font-family:Rajdhani,sans-serif;margin-bottom:3px">ПРОБИТИЕ (рейтинг)</div>
+    <div style="font-size:11px;color:#4e9ed8;font-weight:700">${fmtPen(res1.pen_mm)}</div>
   </div>
   <div>
-    <div style="font-size:7px;letter-spacing:2px;color:rgba(168,105,44,.5);font-family:Orbitron,sans-serif;margin-bottom:3px">ЛАЗЕР (абляция)</div>
+    <div style="font-size:7px;letter-spacing:2px;color:rgba(28,100,148,.5);font-family:Rajdhani,sans-serif;margin-bottom:3px">ЛАЗЕР (абляция)</div>
     <div style="font-size:11px;font-weight:700;color:${res1.laser_color}">${res1.laser_label}</div>
   </div>
 </div>
@@ -1350,18 +1342,18 @@ function weaponCalcPreview(bi) {
   el.innerHTML = `
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:8px">
   <div>
-    <div style="font-size:7px;letter-spacing:2px;color:rgba(240,112,112,.5);font-family:Orbitron,sans-serif;margin-bottom:4px">ИТОГОВЫЙ УРОН</div>
-    <div style="font-size:26px;font-weight:900;font-family:Orbitron,sans-serif;color:#f07070;line-height:1">${ws.damage}</div>
+    <div style="font-size:7px;letter-spacing:2px;color:rgba(240,112,112,.5);font-family:Rajdhani,sans-serif;margin-bottom:4px">ИТОГОВЫЙ УРОН</div>
+    <div style="font-size:26px;font-weight:900;font-family:Rajdhani,sans-serif;color:#f07070;line-height:1">${ws.damage}</div>
     <div style="font-size:8px;color:var(--t4);margin-top:3px">ед. за попадание</div>
   </div>
   <div>
-    <div style="font-size:7px;letter-spacing:2px;color:rgba(107,184,212,.5);font-family:Orbitron,sans-serif;margin-bottom:4px">ДАЛЬНОСТЬ</div>
-    <div style="font-size:18px;font-weight:900;font-family:Orbitron,sans-serif;color:#6bb8d4;line-height:1">${ws.finalRange > 0 ? ws.rangeLabel : '—'}</div>
+    <div style="font-size:7px;letter-spacing:2px;color:rgba(107,184,212,.5);font-family:Rajdhani,sans-serif;margin-bottom:4px">ДАЛЬНОСТЬ</div>
+    <div style="font-size:18px;font-weight:900;font-family:Rajdhani,sans-serif;color:#6bb8d4;line-height:1">${ws.finalRange > 0 ? ws.rangeLabel : '—'}</div>
     <div style="font-size:8px;color:var(--t4);margin-top:3px">для пехоты / техники</div>
   </div>
   <div>
-    <div style="font-size:7px;letter-spacing:2px;color:rgba(168,105,44,.5);font-family:Orbitron,sans-serif;margin-bottom:4px">ТЕМП</div>
-    <div style="font-size:14px;font-weight:700;font-family:Orbitron,sans-serif;color:var(--te);line-height:1">${ws.fireRate > 0 ? ws.fireRate : '—'}</div>
+    <div style="font-size:7px;letter-spacing:2px;color:rgba(28,100,148,.5);font-family:Rajdhani,sans-serif;margin-bottom:4px">ТЕМП</div>
+    <div style="font-size:14px;font-weight:700;font-family:Rajdhani,sans-serif;color:var(--te);line-height:1">${ws.fireRate > 0 ? ws.fireRate : '—'}</div>
     <div style="font-size:8px;color:var(--t4);margin-top:3px">${ws.fireRate > 0 ? `×${ws.rateMod.toFixed(2)} rateMod` : 'выст/мин'}</div>
   </div>
 </div>
@@ -1698,7 +1690,7 @@ async function renderApTab(){
     `;
   } else if(apTab==='mypages'){
     const myPgs = pages.filter(p=>isVisiblePage(p)&&(p.created_by===user.email||p.created_by===user.id));
-    if(!myPgs.length){b.innerHTML=`<div style="text-align:center;padding:24px 0"><div style="font-size:36px;opacity:.15;margin-bottom:10px">◈</div><div style="font-family:Orbitron,sans-serif;font-size:10px;letter-spacing:2px;color:var(--t3)">Нет страниц</div></div>`;return;}
+    if(!myPgs.length){b.innerHTML=`<div style="text-align:center;padding:24px 0"><div style="font-size:36px;opacity:.15;margin-bottom:10px">◈</div><div style="font-family:Rajdhani,sans-serif;font-size:10px;letter-spacing:2px;color:var(--t3)">Нет страниц</div></div>`;return;}
     const rows=myPgs.sort((a,x)=>new Date(x.updated_at||0)-new Date(a.updated_at||0)).map(p=>`<div class="ir"><div class="ir-n" onclick="go('${esc(p.slug)}');closeAp()">${esc(pT(p))}</div><span style="font-family:JetBrains Mono,monospace;font-size:8px;color:var(--t4);flex-shrink:0">${timeAgo(p.updated_at)}</span><span class="ir-b ${p.status==='published'?'bp-b':'bd-b'}">${p.status==='published'?'PUB':'DFT'}</span></div>`).join('');
     b.innerHTML=`<div style="margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--te)">${myPgs.length} страниц</div><div class="il">${rows}</div>`;
   } else if(apTab==='pages'){
@@ -1776,7 +1768,7 @@ async function renderApTab(){
         
         const avHtml = avatarUrl 
           ? `<img src="${esc(avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` 
-          : `<div style="width:100%;height:100%;border-radius:50%;background:hsl(${hue},60%,45%);display:flex;align-items:center;justify-content:center;font-family:Orbitron,sans-serif;font-size:20px;font-weight:900;color:#fff">${esc(displayName.slice(0,2).toUpperCase())}</div>`;
+          : `<div style="width:100%;height:100%;border-radius:50%;background:hsl(${hue},60%,45%);display:flex;align-items:center;justify-content:center;font-family:Rajdhani,sans-serif;font-size:20px;font-weight:900;color:#fff">${esc(displayName.slice(0,2).toUpperCase())}</div>`;
         
         const roleColor = u.role==='superadmin'?'gd':u.role==='editor'?'te':u.role==='moderator'?'pul':'w3';
         const roleTextColor = u.role==='superadmin'?'gdl':u.role==='editor'?'tel':u.role==='moderator'?'pul':'t3';
@@ -1794,11 +1786,11 @@ async function renderApTab(){
               </div>
               
               <div style="flex:1;min-width:0">
-                <div style="font-family:Orbitron,sans-serif;font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(displayName)}</div>
+                <div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(displayName)}</div>
                 ${email ? `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(email)}">${esc(email)}</div>` : `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t5);margin-bottom:2px">Email не найден</div>`}
                 <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t5);margin-bottom:8px" title="${esc(u.user_id)}">ID: ${esc(u.user_id.slice(0, 8))}...</div>
                 
-                <div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--b1);border:1px solid var(--${roleColor});font-family:Orbitron,sans-serif;font-size:7px;letter-spacing:1.5px;color:var(--${roleTextColor})">
+                <div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--b1);border:1px solid var(--${roleColor});font-family:Rajdhani,sans-serif;font-size:7px;letter-spacing:1.5px;color:var(--${roleTextColor})">
                   <span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>
                   ${roleLabels[u.role] || u.role.toUpperCase()}
                 </div>
@@ -1810,15 +1802,15 @@ async function renderApTab(){
             ${userPages.length > 0 ? `
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--w2)">
               <div style="text-align:center">
-                <div style="font-family:Orbitron,sans-serif;font-size:18px;font-weight:700;color:var(--t1)">${userPages.length}</div>
+                <div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:var(--t1)">${userPages.length}</div>
                 <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--t4);letter-spacing:1px;margin-top:2px">ВСЕГО</div>
               </div>
               <div style="text-align:center">
-                <div style="font-family:Orbitron,sans-serif;font-size:18px;font-weight:700;color:var(--ok)">${pubCount}</div>
+                <div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:var(--ok)">${pubCount}</div>
                 <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--t4);letter-spacing:1px;margin-top:2px">ОПУБЛ.</div>
               </div>
               <div style="text-align:center">
-                <div style="font-family:Orbitron,sans-serif;font-size:18px;font-weight:700;color:var(--gd)">${draftCount}</div>
+                <div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:var(--gd)">${draftCount}</div>
                 <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--t4);letter-spacing:1px;margin-top:2px">ЧЕРНОВИК</div>
               </div>
             </div>
@@ -1832,7 +1824,7 @@ async function renderApTab(){
       }).join('');
       
       b.innerHTML=`
-        <div style="font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:2px;color:var(--te);margin-bottom:12px;padding:10px 12px;background:var(--b3);border:1px solid var(--w2)">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:9px;letter-spacing:2px;color:var(--te);margin-bottom:12px;padding:10px 12px;background:var(--b3);border:1px solid var(--w2)">
           ◈ УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (${allUsers.length})
           <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t4);margin-top:6px;letter-spacing:0.5px">
             Для смены роли: <strong style="color:var(--te)">Supabase Dashboard → user_roles</strong>
@@ -1860,7 +1852,7 @@ async function renderApTab(){
     
     b.innerHTML=`
       <div style="margin-bottom:24px">
-        <div style="font-family:Orbitron,sans-serif;font-size:9px;letter-spacing:2px;color:var(--te);margin-bottom:8px">◈ FAVICON (ИКОНКА САЙТА)</div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:9px;letter-spacing:2px;color:var(--te);margin-bottom:8px">◈ FAVICON (ИКОНКА САЙТА)</div>
         <div class="fg">
           <label class="fl">URL иконки (рекомендуется 32x32 или 64x64 px)</label>
           <input class="fi" id="favicon-url" type="url" value="${esc(faviconUrl)}" placeholder="https://...">
@@ -1872,7 +1864,7 @@ async function renderApTab(){
       </div>
       
       <div style="margin-bottom:16px">
-        <div style="font-family:Orbitron,sans-serif;font-size:9px;letter-spacing:2px;color:var(--te);margin-bottom:8px">◈ ФОНОВОЕ ИЗОБРАЖЕНИЕ</div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:9px;letter-spacing:2px;color:var(--te);margin-bottom:8px">◈ ФОНОВОЕ ИЗОБРАЖЕНИЕ</div>
         <div class="fg">
           <label class="fl">URL изображения</label>
           <input class="fi" id="bg-url" type="url" value="${esc(bgUrl)}" placeholder="https://...">
@@ -1931,14 +1923,14 @@ async function saveProfileFromApForm() {
 async function openContribModal(email, displayName, avUrl, hue, cnt) {
   const isSA = user && user.role === 'superadmin';
   const isMe = user && user.email === email;
-  const avHtml = avUrl ? `<img src="${esc(avUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" loading="lazy">` : `<span style="font-size:22px;font-family:Orbitron,sans-serif;font-weight:700;color:hsl(${hue},60%,70%)">${esc(displayName.slice(0,2).toUpperCase())}</span>`;
+  const avHtml = avUrl ? `<img src="${esc(avUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" loading="lazy">` : `<span style="font-size:22px;font-family:Rajdhani,sans-serif;font-weight:700;color:hsl(${hue},60%,70%)">${esc(displayName.slice(0,2).toUpperCase())}</span>`;
 
   const myPgs = pages.filter(p=>isVisiblePage(p)&&p.created_by===email).sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0)).slice(0,8);
   const pgsHtml = myPgs.length ? myPgs.map(p=>{ const s=p.section?sections.find(s=>s.slug===p.section):null; return `<div class="contrib-pg-row" onclick="cm('mo-contrib');go('${esc(p.slug)}')"><div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(pT(p))}</div>${s?`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--t4)">${esc(sN(s))}</div>`:''}</div><span style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--t4);flex-shrink:0">${timeAgo(p.updated_at)}</span><span class="ir-b ${p.status==='published'?'bp-b':'bd-b'}">${p.status==='published'?'PUB':'DFT'}</span></div>`; }).join('') : `<p style="color:var(--t3);font-size:12px;text-align:center;padding:16px 0">Нет страниц</p>`;
 
   let roleHtml = ''; let banHtml = '';
   if (isSA) {
-    roleHtml = `<div style="margin-bottom:8px"><div style="font-family:Orbitron,sans-serif;font-size:8px;letter-spacing:1.5px;color:var(--t4);margin-bottom:4px">СТАТИСТИКА</div><div id="contrib-role-display" style="font-family:Orbitron,sans-serif;font-size:10px;color:var(--te)">${cnt} созданных страниц</div></div>`;
+    roleHtml = `<div style="margin-bottom:8px"><div style="font-family:Rajdhani,sans-serif;font-size:8px;letter-spacing:1.5px;color:var(--t4);margin-bottom:4px">СТАТИСТИКА</div><div id="contrib-role-display" style="font-family:Rajdhani,sans-serif;font-size:10px;color:var(--te)">${cnt} созданных страниц</div></div>`;
   }
 
   const mo = document.getElementById('mo-contrib'); if (!mo) return;
@@ -2323,8 +2315,8 @@ function renderCharEditUI(pg,ch){
     const v=autoStats[k]||10;
     const mod=Math.floor((v-10)/2);
     return `<div style="background:var(--b3);border:1px solid var(--w2);padding:8px;text-align:center">
-      <div style="font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:2px;color:var(--t4);margin-bottom:4px">${l}${k===primStat?` <span style="color:var(--gdl)">★</span>`:''}</div>
-      <div style="font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;color:var(--t1)">${v}</div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:7px;letter-spacing:2px;color:var(--t4);margin-bottom:4px">${l}${k===primStat?` <span style="color:var(--gdl)">★</span>`:''}</div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:900;color:var(--t1)">${v}</div>
       <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--te)">${mod>=0?'+':''}${mod}</div>
     </div>`;
   }).join('');
@@ -2403,7 +2395,7 @@ function renderCharEditUI(pg,ch){
         <button class="mdt" title="Цитата" onclick="mdInsBio('> ','','текст')">"</button>
         <button class="mdt" title="Ссылка" onclick="mdInsBio('[','](https://)','текст')">🔗</button>
         <div class="mdt-sep"></div>
-        <button class="mdt" title="Цвет: Золото" style="color:#d4924a;border-color:rgba(176,112,48,.4)" onclick="mdInsBio('[c:gold]','[/c]','текст')">Au</button>
+        <button class="mdt" title="Цвет: Золото" style="color:#4e9ed8;border-color:rgba(176,112,48,.4)" onclick="mdInsBio('[c:gold]','[/c]','текст')">Au</button>
         <button class="mdt" title="Цвет: Циан" style="color:#6bb8d4;border-color:rgba(74,127,165,.4)" onclick="mdInsBio('[c:cyan]','[/c]','текст')">Cy</button>
         <button class="mdt" title="Цвет: Красный" style="color:#cc4848;border-color:rgba(168,48,48,.4)" onclick="mdInsBio('[c:red]','[/c]','текст')">Re</button>
         <button class="mdt" title="Цвет: Фиолетовый" style="color:#a070e8;border-color:rgba(112,64,200,.4)" onclick="mdInsBio('[c:purple]','[/c]','текст')">Pu</button>
@@ -2411,7 +2403,7 @@ function renderCharEditUI(pg,ch){
         <button class="mdt" title="Цвет: Тусклый" style="color:var(--t4)" onclick="mdInsBio('[c:dim]','[/c]','текст')">Di</button>
         <div class="mdt-sep"></div>
         <button class="mdt" title="Bg: Cyber" style="background:rgba(74,127,165,.15);border-color:rgba(74,127,165,.4);color:#6bb8d4" onclick="mdInsBio('[bg:cyber]','[/bg]','текст')">▌Cy</button>
-        <button class="mdt" title="Bg: Gold" style="background:rgba(176,112,48,.15);border-color:rgba(176,112,48,.4);color:#d4924a" onclick="mdInsBio('[bg:gold]','[/bg]','текст')">▌Au</button>
+        <button class="mdt" title="Bg: Gold" style="background:rgba(176,112,48,.15);border-color:rgba(176,112,48,.4);color:#4e9ed8" onclick="mdInsBio('[bg:gold]','[/bg]','текст')">▌Au</button>
         <button class="mdt" title="Bg: Danger" style="background:rgba(168,48,48,.15);border-color:rgba(168,48,48,.4);color:#cc4848" onclick="mdInsBio('[bg:danger]','[/bg]','текст')">▌⚠</button>
         <button class="mdt" title="Bg: Lore" style="background:rgba(112,64,200,.15);border-color:rgba(112,64,200,.4);color:#a070e8" onclick="mdInsBio('[bg:lore]','[/bg]','текст')">▌Lr</button>
         <button class="mdt" title="Bg: Redacted" style="background:#111;border-color:#333;color:#555" onclick="mdInsBio('[bg:redacted]','[/bg]','текст')">▌██</button>
@@ -2425,7 +2417,7 @@ function renderCharEditUI(pg,ch){
 
     <!-- ABILITIES -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid var(--w2)">
-      <span style="font-family:'Orbitron',sans-serif;font-size:8px;font-weight:700;letter-spacing:3px;color:var(--te)">◈ СПОСОБНОСТИ</span>
+      <span style="font-family:'Rajdhani',sans-serif;font-size:8px;font-weight:700;letter-spacing:3px;color:var(--te)">◈ СПОСОБНОСТИ</span>
       <span id="ch-ab-cnt" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${(ch.abilities||[]).length>=maxAb?'var(--err)':'var(--t4)'}">${(ch.abilities||[]).length}/${maxAb} (ур.${lvl})</span>
     </div>
     ${!abPages.length?`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);margin-bottom:8px;padding:8px;background:var(--b3);border:1px solid var(--w2)">Создай страницы типа «Способность» — они появятся здесь</div>`:''}
@@ -2434,7 +2426,7 @@ function renderCharEditUI(pg,ch){
 
     <!-- GEAR -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px;padding-bottom:5px;border-bottom:1px solid var(--w2)">
-      <span style="font-family:'Orbitron',sans-serif;font-size:8px;font-weight:700;letter-spacing:3px;color:var(--te)">◈ СНАРЯЖЕНИЕ</span>
+      <span style="font-family:'Rajdhani',sans-serif;font-size:8px;font-weight:700;letter-spacing:3px;color:var(--te)">◈ СНАРЯЖЕНИЕ</span>
     </div>
     <div class="cs-slot-summary" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">${slotSummary}</div>
     ${!itemPages.length?`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);margin-bottom:8px;padding:8px;background:var(--b3);border:1px solid var(--w2)">Создай страницы типа «Снаряжение» — они появятся здесь</div>`:''}
@@ -2449,12 +2441,12 @@ function renderCharEditUI(pg,ch){
 
   <!-- RIGHT: auto stats + autoroster -->
   <div style="overflow-y:auto;padding:16px">
-    <div style="font-family:'Orbitron',sans-serif;font-size:8px;font-weight:700;letter-spacing:3px;color:var(--te);margin-bottom:6px">◈ ХАРАКТЕРИСТИКИ</div>
+    <div style="font-family:'Rajdhani',sans-serif;font-size:8px;font-weight:700;letter-spacing:3px;color:var(--te);margin-bottom:6px">◈ ХАРАКТЕРИСТИКИ</div>
     <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t4);margin-bottom:10px;line-height:1.5">
       Авто по классу и уровню.<br>★ — главная стата класса.
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px" id="ch-stats-display">${statsDisplay}</div>
-    <div style="font-family:'Orbitron',sans-serif;font-size:8px;font-weight:700;letter-spacing:3px;color:var(--te);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--w2)">◈ АВТОРАСЧЁТ</div>
+    <div style="font-family:'Rajdhani',sans-serif;font-size:8px;font-weight:700;letter-spacing:3px;color:var(--te);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--w2)">◈ АВТОРАСЧЁТ</div>
     <div id="ch-auto"></div>
   </div>
 </div></div>`;
@@ -2503,8 +2495,8 @@ function charUpdateAuto(){
       const v=autoStats[k]||10;
       const mod=Math.floor((v-10)/2);
       return`<div style="background:var(--b3);border:1px solid var(--w2);padding:8px;text-align:center">
-        <div style="font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:2px;color:var(--t4);margin-bottom:4px">${l}${k===primStat?` <span style="color:var(--gdl)">★</span>`:''}</div>
-        <div style="font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;color:var(--t1)">${v}</div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:7px;letter-spacing:2px;color:var(--t4);margin-bottom:4px">${l}${k===primStat?` <span style="color:var(--gdl)">★</span>`:''}</div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:900;color:var(--t1)">${v}</div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--te)">${mod>=0?'+':''}${mod}</div>
       </div>`;
     }).join('');
@@ -2547,13 +2539,13 @@ function charUpdateAuto(){
     ['Воля',sign(wis+pb)],
     ['Макс. способн.',maxAb],
   ];
-  el.innerHTML=rows.map(([k,v])=>`<div style="display:grid;grid-template-columns:1fr auto;padding:4px 8px;background:var(--b3);border:1px solid var(--w2);margin-bottom:2px"><span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t4);letter-spacing:.5px;text-transform:uppercase">${k}</span><span style="font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;color:var(--gdl)">${v}</span></div>`).join('');
+  el.innerHTML=rows.map(([k,v])=>`<div style="display:grid;grid-template-columns:1fr auto;padding:4px 8px;background:var(--b3);border:1px solid var(--w2);margin-bottom:2px"><span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t4);letter-spacing:.5px;text-transform:uppercase">${k}</span><span style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--gdl)">${v}</span></div>`).join('');
 }
 
 function charAbRow(a,i,abPages){
   abPages=abPages||pages.filter(p=>isVisiblePage(p)&&p.page_type==='ability');
   const opts=abPages.map(p=>`<option value="${esc(pT(p))}"${a.name===pT(p)?' selected':''}>${esc(pT(p))}</option>`).join('');
-  return`<div style="margin-bottom:4px;padding:6px 10px;background:var(--b3);border:1px solid var(--w2);border-left:2px solid rgba(168,105,44,.4);display:flex;align-items:center;gap:8px">
+  return`<div style="margin-bottom:4px;padding:6px 10px;background:var(--b3);border:1px solid var(--w2);border-left:2px solid rgba(28,100,148,.4);display:flex;align-items:center;gap:8px">
     ${abPages.length
       ?`<select class="ed-mi" style="flex:1;font-size:12px" onchange="if(editData?._char?.abilities)editData._char.abilities[${i}].name=this.value">
           <option value="">— выбрать способность —</option>${opts}
@@ -2820,11 +2812,11 @@ function applyBackgroundImage(url) {
 
 async function renderDevlogTab(b) {
   b.innerHTML = `
-    <div style="font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:2px;color:var(--te);margin-bottom:12px">◈ ГЕНЕРАТОР ДЕВЛОГ-ИЗОБРАЖЕНИЙ</div>
+    <div style="font-family:'Rajdhani',sans-serif;font-size:9px;letter-spacing:2px;color:var(--te);margin-bottom:12px">◈ ГЕНЕРАТОР ДЕВЛОГ-ИЗОБРАЖЕНИЙ</div>
     
     <div class="fg" style="margin-bottom:10px">
       <label class="fl">Название проекта</label>
-      <input class="fi" id="devlog-project" value="НОВАЯ ЭРА" placeholder="Название проекта">
+      <input class="fi" id="devlog-project" value="КЛАССИЧЕСКАЯ ЭРА" placeholder="Название проекта">
     </div>
     
     <div class="fg" style="margin-bottom:10px">
@@ -2902,7 +2894,7 @@ async function uploadDevlogBg(input) {
 }
 
 async function generateDevlogPreview() {
-  const project = document.getElementById('devlog-project')?.value?.trim() || 'НОВАЯ ЭРА';
+  const project = document.getElementById('devlog-project')?.value?.trim() || 'КЛАССИЧЕСКАЯ ЭРА';
   const number = document.getElementById('devlog-number')?.value?.trim() || '1';
   const author = document.getElementById('devlog-author')?.value?.trim() || getDisplayName();
   const bgUrl = document.getElementById('devlog-bg')?.value?.trim() || '';
@@ -3042,10 +3034,10 @@ async function generateDevlogImage(project, number, author, bgUrl) {
   
   // 4. Project name (top left)
   ctx.textBaseline = 'top';
-  drawCleanText(project.toUpperCase(), pad + 40, pad + 50, 56, '"Orbitron", "Arial Black", sans-serif', 'gold');
+  drawCleanText(project.toUpperCase(), pad + 40, pad + 50, 56, '"Rajdhani", "Arial Black", sans-serif', 'gold');
   
   // 5. "DEV DIARY" label
-  drawCleanText('DEV DIARY', pad + 40, pad + 120, 28, '"Orbitron", "Arial", sans-serif', 'white');
+  drawCleanText('DEV DIARY', pad + 40, pad + 120, 28, '"Rajdhani", "Arial", sans-serif', 'white');
   
   // 6. Number (large, centered vertically)
   ctx.textBaseline = 'middle';

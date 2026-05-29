@@ -143,7 +143,7 @@
 }
 
 .pv-c-title {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 20px;
   font-weight: 800;
   letter-spacing: 1.6px;
@@ -185,7 +185,7 @@
   font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.8px;text-transform:uppercase;color:rgba(137,194,255,.8);
 }
 .pv-c-main-v{
-  font-family:'Orbitron',sans-serif;font-size:12px;font-weight:700;color:rgba(236,244,255,.96);
+  font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;color:rgba(236,244,255,.96);
 }
 .pv-c-main--empty .pv-c-main-v{opacity:.6}
 
@@ -465,7 +465,7 @@
 }
 
 .wpv-filter-title {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.2px;
@@ -683,7 +683,7 @@
 .wpv-noimg-icon {
   font-size: 56px;
   color: rgba(100, 150, 220, .2);
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-weight: 900;
   text-shadow: 0 0 20px rgba(100, 150, 220, .15);
 }
@@ -773,14 +773,14 @@
 .wpv-icon {
   font-size: 20px;
   color: rgba(140, 190, 250, .85);
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-weight: 900;
   line-height: 1;
   text-shadow: 0 0 12px rgba(140, 190, 250, .4);
 }
 
 .wpv-title {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 17px;
   font-weight: 800;
   letter-spacing: 1.2px;
@@ -831,7 +831,7 @@
 .wpv-stat-icon {
   font-size: 18px;
   line-height: 1;
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-weight: 900;
 }
 
@@ -868,7 +868,7 @@
 }
 
 .wpv-stat-value {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 14px;
   font-weight: 700;
   color: rgba(240, 246, 255, .98);
@@ -916,7 +916,7 @@
   background: linear-gradient(135deg, rgba(61, 43, 19, .75), rgba(44, 31, 14, .75));
   border: 1px solid rgba(200, 150, 80, .45);
   border-radius: 3px;
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 14px;
   font-weight: 700;
   color: rgba(255, 224, 158, .98);

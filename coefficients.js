@@ -380,7 +380,7 @@ async function renderCoefficientsPage() {
     return;
   }
 
-  setPg(`<div class="sload"><div style="width:60px;height:60px;position:relative;transform:rotate(45deg)"><div style="content:'';position:absolute;inset:0;border:3px solid #a8692c;animation:pulse-wave 2s ease-in-out infinite"></div><div style="content:'';position:absolute;inset:0;border:3px solid #6bb8d4;animation:pulse-wave 2s ease-in-out infinite;animation-delay:1s"></div></div><style>@keyframes pulse-wave{0%{transform:scale(0.5);opacity:1}50%{transform:scale(1.2);opacity:0.3}100%{transform:scale(0.5);opacity:1}}</style></div>`);
+  setPg(`<div class="sload"><div style="width:60px;height:60px;position:relative;transform:rotate(45deg)"><div style="content:'';position:absolute;inset:0;border:3px solid #1c6494;animation:pulse-wave 2s ease-in-out infinite"></div><div style="content:'';position:absolute;inset:0;border:3px solid #6bb8d4;animation:pulse-wave 2s ease-in-out infinite;animation-delay:1s"></div></div><style>@keyframes pulse-wave{0%{transform:scale(0.5);opacity:1}50%{transform:scale(1.2);opacity:0.3}100%{transform:scale(0.5);opacity:1}}</style></div>`);
   
   const coefs = await loadCoefficients();
   

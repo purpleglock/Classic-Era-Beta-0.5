@@ -103,7 +103,7 @@ async function go(slug, push=true) {
     if (!r.ok) throw new Error('HTTP '+r.status);
     const rows = await r.json();
     if (seq!==_navSeq) return;
-    if (!rows?.length) { setPg(`<div class="sempty"><div style="font-size:48px;opacity:.15">◈</div><div style="font-family:Orbitron,sans-serif;font-size:12px;letter-spacing:2px;margin-top:8px">${T('notFound')}</div></div>`); return; }
+    if (!rows?.length) { setPg(`<div class="sempty"><div style="font-size:48px;opacity:.15">◈</div><div style="font-family:Rajdhani,sans-serif;font-size:12px;letter-spacing:2px;margin-top:8px">${T('notFound')}</div></div>`); return; }
     _pgCache.set(slug, rows[0]); await renderPage(rows[0]);
   } catch(e) { if (e.name==='AbortError') return; if (seq!==_navSeq) return; setPg(`<div class="sempty"><div>${esc(e.message)}</div></div>`); }
 }

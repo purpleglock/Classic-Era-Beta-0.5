@@ -36,11 +36,10 @@ const SB_ANON = '<ТВОЙ-ANON-KEY>';
 | `factions`      | фракции (faction_system.js) |
 | `coefficients`  | коэффициенты (coefficients.js) |
 | `comments`      | комментарии (comments.js) |
-| `user_roles`    | роли (admin / user / banned) — auth.js |
-| `settings`      | глобальные настройки (calendar.js) |
+| `user_roles`    | роли (superadmin / editor / moderator / viewer) — auth.js |
+| `settings`      | глобальные настройки |
 | `site_settings` | настройки сайта (core.js, editor.js) |
 | `images`        | картинки (editor.js) |
-| календарная таблица | см. `CAL_TABLE` в calendar.js |
 
 ## 4. Включить и настроить RLS
 
@@ -65,21 +64,7 @@ Dashboard → **Authentication**:
 - Providers → включить **Email** (или то, чем будете логиниться).
 - **URL Configuration** → Site URL = адрес, где будет крутиться `index.html` (GitHub Pages / Netlify / `http://localhost:5500` для разработки).
 
-## 7. Задеплоить Edge Function `vk-posts` (если нужна интеграция с VK)
-
-Локально папка `supabase/functions/vk-posts/` пустая — заполни своим кодом функции (получи у автора репо `index.ts`).
-
-```bash
-npm i -g supabase
-supabase login
-supabase link --project-ref <ТВОЙ-REF>
-supabase functions deploy vk-posts
-supabase secrets set VK_TOKEN=xxxxx VK_GROUP_ID=xxxxx
-```
-
-Если VK-интеграция не нужна — можно не деплоить, сайт будет работать без неё (просто не будут постится новости в группу).
-
-## 8. Создать первого админа
+## 7. Создать первого админа
 
 1. Открой `index.html` в браузере, зарегистрируйся через форму.
 2. Узнай свой `user_id` (Dashboard → Authentication → Users).
@@ -87,12 +72,12 @@ supabase secrets set VK_TOKEN=xxxxx VK_GROUP_ID=xxxxx
 
 ```sql
 insert into user_roles (user_id, role, is_banned)
-values ('<твой-uuid>', 'admin', false);
+values ('<твой-uuid>', 'superadmin', false);
 ```
 
 Перелогинься — теперь у тебя доступ к редактору.
 
-## 9. Запустить сайт
+## 8. Запустить сайт
 
 Сайт статический, бэкенда нет. Варианты:
 
@@ -112,7 +97,7 @@ values ('<твой-uuid>', 'admin', false);
 
 - [ ] Открыл сайт, не падает в консоли.
 - [ ] Зарегался → попал внутрь.
-- [ ] Назначил себе `admin` в `user_roles` → видишь редактор.
+- [ ] Назначил себе `superadmin` в `user_roles` → видишь редактор.
 - [ ] Создал тестовую страницу → она сохранилась (проверь таблицу `pages`).
 - [ ] Загрузил картинку в редакторе → она появилась в bucket `wiki-images`.
 - [ ] Оставил комментарий → запись в `comments`.

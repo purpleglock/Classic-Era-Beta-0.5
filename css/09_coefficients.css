@@ -18,7 +18,7 @@
   position: relative;
   height: 280px;
   overflow: hidden;
-  border: 1px solid rgba(168,105,44,.25);
+  border: 1px solid rgba(28,100,148,.25);
   border-bottom: none;
   margin-bottom: 0;
 }
@@ -56,7 +56,7 @@
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px;
   letter-spacing: 5px;
-  color: rgba(168,105,44,.65);
+  color: rgba(28,100,148,.65);
   text-transform: uppercase;
   margin-bottom: 12px;
   display: flex;
@@ -69,11 +69,11 @@
   display: block;
   width: 22px;
   height: 1px;
-  background: rgba(168,105,44,.6);
+  background: rgba(28,100,148,.6);
 }
 
 .coef-title {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 48px;
   font-weight: 900;
   letter-spacing: 4px;
@@ -96,14 +96,14 @@
   gap: 8px;
   padding: 16px 24px;
   background: var(--b2);
-  border: 1px solid rgba(168,105,44,.18);
+  border: 1px solid rgba(28,100,148,.18);
   border-top: none;
   border-bottom: none;
   flex-wrap: wrap;
 }
 
 .coef-btn {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -138,7 +138,7 @@
 /* ─── Preview ────────────────────────────────────────────────── */
 .coef-preview {
   background: var(--b2);
-  border: 1px solid rgba(168,105,44,.18);
+  border: 1px solid rgba(28,100,148,.18);
   border-top: none;
   border-bottom: none;
   padding: 20px 24px;
@@ -150,7 +150,7 @@
   gap: 10px;
   margin-bottom: 16px;
   padding-bottom: 10px;
-  border-bottom: 1px solid rgba(168,105,44,.18);
+  border-bottom: 1px solid rgba(28,100,148,.18);
 }
 
 .coef-preview-icon {
@@ -158,11 +158,11 @@
 }
 
 .coef-preview-title {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 3px;
-  color: rgba(168,105,44,.85);
+  color: rgba(28,100,148,.85);
   text-transform: uppercase;
 }
 
@@ -174,13 +174,13 @@
 
 .coef-prev-section {
   background: var(--b3);
-  border: 1px solid rgba(168,105,44,.15);
-  border-left: 3px solid rgba(168,105,44,.5);
+  border: 1px solid rgba(28,100,148,.15);
+  border-left: 3px solid rgba(28,100,148,.5);
   padding: 16px;
 }
 
 .coef-prev-label {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -207,7 +207,7 @@
 
 .coef-prev-divider {
   height: 1px;
-  background: rgba(168,105,44,.15);
+  background: rgba(28,100,148,.15);
   margin: 12px 0;
 }
 
@@ -227,7 +227,7 @@
 .coef-prev-row.coef-prev-result {
   margin-top: 8px;
   padding-top: 12px;
-  border-top: 1px solid rgba(168,105,44,.2);
+  border-top: 1px solid rgba(28,100,148,.2);
 }
 
 .coef-prev-k {
@@ -237,14 +237,14 @@
 }
 
 .coef-prev-v {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 12px;
   font-weight: 700;
   color: rgba(255,255,255,.85);
 }
 
 .coef-prev-v-big {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 20px;
   font-weight: 900;
   color: var(--gdl);
@@ -255,7 +255,7 @@
 .coef-content {
   padding: 28px 24px;
   background: var(--b1);
-  border: 1px solid rgba(168,105,44,.14);
+  border: 1px solid rgba(28,100,148,.14);
   border-top: none;
 }
 
@@ -268,15 +268,15 @@
 }
 
 .coef-section-head {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 3px;
-  color: rgba(168,105,44,.85);
+  color: rgba(28,100,148,.85);
   text-transform: uppercase;
   padding: 0 0 10px;
   margin: 0 0 16px;
-  border-bottom: 1px solid rgba(168,105,44,.18);
+  border-bottom: 1px solid rgba(28,100,148,.18);
   display: flex;
   align-items: center;
   gap: 9px;
@@ -304,13 +304,13 @@
   padding: 14px 18px;
   background: var(--b3);
   border: 1px solid rgba(255,255,255,.06);
-  border-left: 3px solid rgba(168,105,44,.3);
+  border-left: 3px solid rgba(28,100,148,.3);
   transition: all .15s;
 }
 
 .coef-row:hover {
-  background: rgba(168,105,44,.04);
-  border-left-color: rgba(168,105,44,.6);
+  background: rgba(28,100,148,.04);
+  border-left-color: rgba(28,100,148,.6);
 }
 
 .coef-label {
@@ -345,7 +345,7 @@
   font-weight: 600;
   color: #fff;
   background: rgba(0,0,0,.3);
-  border: 1px solid rgba(168,105,44,.3);
+  border: 1px solid rgba(28,100,148,.3);
   padding: 8px 12px;
   width: 120px;
   text-align: right;
@@ -354,12 +354,12 @@
 }
 
 .coef-input:focus {
-  border-color: rgba(168,105,44,.7);
+  border-color: rgba(28,100,148,.7);
   background: rgba(0,0,0,.5);
 }
 
 .coef-reset {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 14px;
   font-weight: 700;
   color: rgba(255,153,102,.8);
@@ -381,7 +381,7 @@
 .coef-footer {
   padding: 20px 24px;
   background: var(--b2);
-  border: 1px solid rgba(168,105,44,.14);
+  border: 1px solid rgba(28,100,148,.14);
   border-top: none;
 }
 
@@ -411,7 +411,7 @@
 }
 
 .coef-lock-text {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 10px;
   letter-spacing: 3px;
   color: var(--t4);
@@ -494,34 +494,34 @@
 /* ─── Explainer Block ────────────────────────────────────────── */
 .coef-explainer {
   background: var(--b2);
-  border: 1px solid rgba(168,105,44,.18);
+  border: 1px solid rgba(28,100,148,.18);
   border-top: none;
   border-bottom: none;
   padding: 24px;
 }
 
 .coef-expl-head {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 3px;
-  color: rgba(168,105,44,.85);
+  color: rgba(28,100,148,.85);
   text-transform: uppercase;
   padding-bottom: 16px;
   margin-bottom: 20px;
-  border-bottom: 1px solid rgba(168,105,44,.18);
+  border-bottom: 1px solid rgba(28,100,148,.18);
 }
 
 .coef-expl-section {
   background: var(--b3);
-  border: 1px solid rgba(168,105,44,.15);
-  border-left: 3px solid rgba(168,105,44,.5);
+  border: 1px solid rgba(28,100,148,.15);
+  border-left: 3px solid rgba(28,100,148,.5);
   padding: 20px;
   margin-bottom: 16px;
 }
 
 .coef-expl-title {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -544,12 +544,12 @@
 }
 
 .coef-expl-num {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Rajdhani', sans-serif;
   font-size: 14px;
   font-weight: 900;
   color: var(--gdl);
-  background: rgba(168,105,44,.15);
-  border: 1px solid rgba(168,105,44,.3);
+  background: rgba(28,100,148,.15);
+  border: 1px solid rgba(28,100,148,.3);
   width: 28px;
   height: 28px;
   display: flex;
@@ -584,7 +584,7 @@
   color: rgba(255,255,255,.6);
   line-height: 1.8;
   background: rgba(0,0,0,.3);
-  border: 1px solid rgba(168,105,44,.2);
+  border: 1px solid rgba(28,100,148,.2);
   padding: 12px;
   margin-top: 12px;
 }

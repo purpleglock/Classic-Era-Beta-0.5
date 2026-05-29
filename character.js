@@ -213,7 +213,7 @@ function _rH2(){return`
         </div>
         <div class="creg-cc-name">${v.label}</div>
         <div class="creg-cc-desc">${v.desc}</div>
-        ${Object.keys(v.stat_bonus||{}).length?`<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:rgba(168,105,44,.55);letter-spacing:.5px">${Object.entries(v.stat_bonus).map(([s,n])=>`+${n} ${STAT_NAMES[s]}`).join(' · ')}</div>`:''}
+        ${Object.keys(v.stat_bonus||{}).length?`<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:rgba(28,100,148,.55);letter-spacing:.5px">${Object.entries(v.stat_bonus).map(([s,n])=>`+${n} ${STAT_NAMES[s]}`).join(' · ')}</div>`:''}
         ${_regData.class===k?`<div class="creg-cc-sel-mark">✓ ВЫБРАНО</div>`:''}
       </div>`).join('')}
   </div>`;}
@@ -228,9 +228,9 @@ function _rH3(){
     <div class="creg-step-title">НАВЫКИ</div>
   </div>
   <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
-    <span style="font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700;color:${left>0?'var(--gdl)':'rgba(255,80,80,.9)'}">Очков: ${left}</span>
+    <span style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:${left>0?'var(--gdl)':'rgba(255,80,80,.9)'}">Очков: ${left}</span>
     <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,.3)">База: ${REG_STAT_BASE} · Макс: ${REG_STAT_MAX}</span>
-    ${Object.keys(bonus).length?`<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(168,105,44,.5)">Бонус «${cls.label}»: ${Object.entries(bonus).map(([s,n])=>`+${n} ${STAT_NAMES[s]}`).join(', ')}</span>`:''}
+    ${Object.keys(bonus).length?`<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(28,100,148,.5)">Бонус «${cls.label}»: ${Object.entries(bonus).map(([s,n])=>`+${n} ${STAT_NAMES[s]}`).join(', ')}</span>`:''}
   </div>
   <div class="creg-stat-grid">
     ${Object.entries(STAT_NAMES).map(([key,label])=>{
@@ -532,7 +532,7 @@ function rpPickerSearch(q){const lq=q.toLowerCase();document.getElementById('rp-
 // ═══════════════════════════════════════════════════════════════
 function _rpPickerShell(title) {
   return`<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--w2);background:var(--b2);flex-shrink:0">
-    <span style="font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--te);flex:1">${title}</span>
+    <span style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--te);flex:1">${title}</span>
     <input style="background:var(--b3);border:1px solid var(--w2);color:var(--t1);padding:5px 10px;font-size:11px;outline:none;width:130px" placeholder="Поиск..." oninput="rpPickerSearch(this.value)" id="rp-pick-search">
     <button onclick="closeRpPicker()" style="background:none;border:none;color:var(--t4);font-size:16px;cursor:pointer;padding:2px 6px">✕</button>
   </div><div id="rp-pick-body" style="overflow-y:auto;padding:6px">`;
@@ -599,11 +599,11 @@ function openGrantCredits(charSlug,charName){
   if(!user||!['superadmin','editor','moderator'].includes(user.role))return;
   _showRpPicker('',`
     <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--w2);background:var(--b2);flex-shrink:0">
-      <span style="font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--te);flex:1">⭐ ВЫДАТЬ КРЕДИТЫ · ${esc(charName)}</span>
+      <span style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--te);flex:1">⭐ ВЫДАТЬ КРЕДИТЫ · ${esc(charName)}</span>
       <button onclick="closeRpPicker()" style="background:none;border:none;color:var(--t4);font-size:16px;cursor:pointer;padding:2px 6px">✕</button>
     </div>
     <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
-      <div class="fg"><label class="fl">Сумма (ЭК)</label><input class="fi" id="grant-amt" type="number" value="500" min="1" style="font-size:18px;text-align:center;font-family:Orbitron,sans-serif"></div>
+      <div class="fg"><label class="fl">Сумма (ЭК)</label><input class="fi" id="grant-amt" type="number" value="500" min="1" style="font-size:18px;text-align:center;font-family:Rajdhani,sans-serif"></div>
       <div class="fg"><label class="fl">Причина</label><input class="fi" id="grant-reason" value="Выдача от администрации"></div>
       <button class="btn btn-gd btn-fw" onclick="doGrantCredits('${esc(charSlug)}')">✓ Начислить</button>
     </div>`);

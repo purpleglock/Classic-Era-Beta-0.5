@@ -97,7 +97,7 @@ function getAvatarHtml(email, avatarUrl, displayName, size=28) {
   const name = displayName || (email||'').split('@')[0] || '?';
   const initials = name.slice(0,2).toUpperCase();
   const hue = [...(email||'')].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
-  return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:hsl(${hue},35%,20%);border:1px solid hsl(${hue},45%,35%);display:inline-flex;align-items:center;justify-content:center;font-family:Orbitron,sans-serif;font-size:${Math.round(size/3.2)}px;font-weight:700;color:hsl(${hue},60%,70%);flex-shrink:0">${esc(initials)}</span>`;
+  return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:hsl(${hue},35%,20%);border:1px solid hsl(${hue},45%,35%);display:inline-flex;align-items:center;justify-content:center;font-family:Rajdhani,sans-serif;font-size:${Math.round(size/3.2)}px;font-weight:700;color:hsl(${hue},60%,70%);flex-shrink:0">${esc(initials)}</span>`;
 }
 function timeAgo(dateStr) {
   if (!dateStr) return '—';
@@ -162,12 +162,35 @@ async function loadUserRole(authUser) {
   if (!authUser?.id) { user = null; return; }
   try {
     const token = await getTokenFresh();
-    const r = await fetch(`${SB_URL}/rest/v1/user_roles?user_id=eq.${authUser.id}&select=role,is_banned`, { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token } });
-    if (!r.ok) { user = { id:authUser.id, email:authUser.email, role:'viewer', is_banned:false }; return; }
-    const rows = await r.json();
-    if (!rows?.length) { user = { id:authUser.id, email:authUser.email, role:'viewer', is_banned:false }; return; }
-    const role = VALID_ROLES.includes(rows[0].role) ? rows[0].role : 'viewer';
-    user = { id:authUser.id, email:authUser.email, role, is_banned:!!rows[0].is_banned };
+    const url = `${SB_URL}/rest/v1/user_roles?user_id=eq.${authUser.id}&select=role,is_banned`;
+    console.log('[role] fetching', url, 'tokenIsAnon=', token === SB_ANON);
+    const r = await fetch(url, { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token } });
+    console.log('[role] status', r.status);
+    let rows = [];
+    if (r.ok) { rows = await r.json(); console.log('[role] rows', rows); }
+    else { console.warn('[role] HTTP error', r.status, await r.text().catch(()=>'')); }
+
+    // Fallback 1: запрос без фильтра — вдруг сравнение по user_id ломается
+    if (!rows.length) {
+      try {
+        const r2 = await fetch(`${SB_URL}/rest/v1/user_roles?select=user_id,role,is_banned`, { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token } });
+        if (r2.ok) {
+          const all = await r2.json();
+          console.log('[role] fallback all rows:', all);
+          const mine = all.find(x => String(x.user_id).toLowerCase() === String(authUser.id).toLowerCase());
+          if (mine) rows = [mine];
+        }
+      } catch(e) { console.warn('[role] fallback failed', e); }
+    }
+
+    let rawRole = rows[0]?.role;
+    // Маппинг старых названий ролей
+    const roleAlias = { admin: 'superadmin', super: 'superadmin', editor: 'editor', mod: 'moderator', moderator: 'moderator' };
+    if (rawRole && roleAlias[String(rawRole).toLowerCase()]) rawRole = roleAlias[String(rawRole).toLowerCase()];
+
+    const role = VALID_ROLES.includes(rawRole) ? rawRole : 'viewer';
+    console.log('[role] resolved role =', role, 'raw =', rows[0]?.role);
+    user = { id:authUser.id, email:authUser.email, role, is_banned:!!rows[0]?.is_banned };
     try {
       const { data: { user: mu } } = await sb.auth.getUser();
       if (mu?.user_metadata?.display_name !== undefined) {
