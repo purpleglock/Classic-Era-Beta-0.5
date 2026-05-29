@@ -1413,6 +1413,7 @@ function buildNav(filt='') {
   const q=(filt||'').toLowerCase().trim();
   let h=`<div class="n-home${curSlug==='home'?' on':''}" id="ntl-h" onclick="go('home')"><span class="n-home-icon">⌂</span>${T('home')}</div>`;
   h+=`<div class="n-home${curSlug==='map'?' on':''}" id="ntl-map" onclick="go('map')"><span class="n-home-icon">🜨</span>${lang==='ru'?'Карта галактики':'Galaxy map'}</div>`;
+  h+=`<div class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" onclick="go('factions')"><span class="n-home-icon">⬡</span>${lang==='ru'?'Фракции':'Factions'}</div>`;
   h+=`<div class="nav-divider"></div>`;
 
   if (q) {

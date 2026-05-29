@@ -105,7 +105,7 @@ let secSlugLk = false, npSlugLk2 = false;
 let pickerInsertIdx = -1;
 let _pickerCat = 'all', _pickerQ = '';
 const _pgCache = new Map();  
-const VALID_ROLES = ['superadmin','editor','moderator','viewer'];
+const VALID_ROLES = ['superadmin','editor','moderator','player','viewer'];
 const MOS = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
 
 let userProfile = { display_name: '', avatar_url: '' };

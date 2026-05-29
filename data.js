@@ -79,6 +79,16 @@ async function go(slug, push=true) {
     else { setPg('<div class="sempty">galaxy_map.js не загружен</div>'); }
     return;
   }
+  if (slug==='factions') {
+    if (typeof renderFactionsPage === 'function') { await renderFactionsPage(); }
+    else { setPg('<div class="sempty">faction_reg.js не загружен</div>'); }
+    return;
+  }
+  if (slug==='faction-new') {
+    if (typeof renderFactionWizard === 'function') { await renderFactionWizard(); }
+    else { setPg('<div class="sempty">faction_reg.js не загружен</div>'); }
+    return;
+  }
   if (slug==='armor-config') {
     if (typeof renderArmorConfigPage === 'function') { renderArmorConfigPage(); }
     else { setPg('<div class="sempty">renderArmorConfigPage не найден</div>'); }

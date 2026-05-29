@@ -1615,13 +1615,13 @@ function closeAp(){apOpen=false;document.getElementById('ap').classList.remove('
 function renderAp(){
   if(!user)return;
   const dn = getDisplayName(); const avHtml = getAvatarHtml(user.email, userProfile.avatar_url, userProfile.display_name, 40);
-  const rl={superadmin:'Superadmin',editor:'Editor',moderator:'Moderator',viewer:'Viewer'}; const rc={superadmin:'r-sa',editor:'r-ed',moderator:'r-mo',viewer:'r-vi'};
+  const rl={superadmin:'Superadmin',editor:'Editor',moderator:'Moderator',player:'Игрок',viewer:'Viewer'}; const rc={superadmin:'r-sa',editor:'r-ed',moderator:'r-mo',player:'r-pl',viewer:'r-vi'};
   document.getElementById('ap-un').textContent = dn; document.getElementById('ap-ur').textContent=rl[user.role]||user.role; document.getElementById('ap-ur').className='ap-ur '+(rc[user.role]||'');
   let apAvEl = document.getElementById('ap-av-wrap');
   if (!apAvEl) { apAvEl = document.createElement('div'); apAvEl.id = 'ap-av-wrap'; apAvEl.style.cssText = 'display:flex;align-items:center;margin-right:6px;flex-shrink:0;cursor:pointer'; apAvEl.onclick = openProfileModal; document.querySelector('.ap-ui').parentNode.insertBefore(apAvEl, document.querySelector('.ap-ui')); }
   apAvEl.innerHTML = avHtml;
   const canEdit=['superadmin','editor','moderator'].includes(user.role); const canSec=['superadmin','editor'].includes(user.role); const isSA=user.role==='superadmin';
-  const tabs=[['profile','Профиль'],['mypages','Мои стр.']]; if(canEdit) tabs.push(['pages','Страницы']); if(canSec) tabs.push(['sections','Разделы'],['devlog','Девлог']); if(isSA) tabs.push(['users','Польз.'],['settings','Настройки']);
+  const tabs=[['profile','Профиль'],['mypages','Мои стр.']]; if(canEdit) tabs.push(['pages','Страницы']); if(canSec) tabs.push(['sections','Разделы'],['devlog','Девлог'],['apps','Анкеты']); if(isSA) tabs.push(['users','Польз.'],['settings','Настройки']);
   if(!tabs.find(t=>t[0]===apTab)) apTab=tabs[0]?.[0]||'profile';
   document.getElementById('ap-tabs').innerHTML=tabs.map(([id,l])=>`<button class="apt${apTab===id?' on':''}" onclick="setApTab('${id}')">${l}</button>`).join('');
   renderApTab();
@@ -1632,7 +1632,7 @@ async function renderApTab(){
   if(apTab==='profile'){
     const dn=getDisplayName(); const avBig=getAvatarHtml(user.email,userProfile.avatar_url,userProfile.display_name||user.email.split('@')[0],72);
     const myPgs = pages.filter(p=>isVisiblePage(p)&&(p.created_by===user.email||p.created_by===user.id)); const myPgCount = myPgs.length; const myPubCount = myPgs.filter(p=>p.status==='published').length; const myDftCount = myPgs.filter(p=>p.status==='draft').length;
-    const rl={superadmin:'SUPERADMIN',editor:'EDITOR',moderator:'MODERATOR',viewer:'VIEWER'}; const rc={superadmin:'var(--gdl)',editor:'var(--tel)',moderator:'var(--pul)',viewer:'var(--t3)'};
+    const rl={superadmin:'SUPERADMIN',editor:'EDITOR',moderator:'MODERATOR',player:'ИГРОК',viewer:'VIEWER'}; const rc={superadmin:'var(--gdl)',editor:'var(--tel)',moderator:'var(--pul)',player:'var(--ok)',viewer:'var(--t3)'};
     const _COOLDOWN = 7 * 24 * 60 * 60 * 1000;
     const _lastChanged = parseInt(localStorage.getItem('wk_profile_changed_' + user.id) || '0');
     const _cooldownActive = Date.now() - _lastChanged < _COOLDOWN;
@@ -1703,6 +1703,9 @@ async function renderApTab(){
   } else if(apTab==='sections'){
     const rows=[...sections].sort((a,x)=>a.sort_order-x.sort_order).map(s=>{const par=sections.find(x=>x.id===s.parent_id);const iconHtml=s.icon?`<img src="${esc(s.icon)}" alt="" style="width:16px;height:16px;object-fit:contain;vertical-align:middle;margin-right:4px">`:'<span style="margin-right:4px">◈</span>';return `<div class="ir"><div class="ir-n">${iconHtml}${esc(sN(s))}${par?`<span style="color:var(--t3);font-size:10px"> ↳ ${sN(par)}</span>`:''}</div><button class="ib-btn" onclick="openEditSec('${s.id}')">✎</button>${user.role==='superadmin'?`<button class="ib-btn del" onclick="askDel('section','${s.id}','${esc(sN(s))}')" >✖</button>`:''}</div>`;}).join('');
     b.innerHTML=`<button class="btn btn-gd btn-fw" style="margin-bottom:12px" onclick="openEditSec(null)">+ Новый раздел</button><div class="il">${rows||'<p style="color:var(--t3);font-size:12px">Нет разделов</p>'}</div>`;
+  } else if(apTab==='apps'){
+    if(typeof frRenderAppsTab==='function'){ await frRenderAppsTab(b); } else { b.innerHTML='<p style="color:var(--err)">faction_reg.js не загружен</p>'; }
+    return;
   } else if(apTab==='users'){
     try {
       const ul=await dbGet('user_roles','select=user_id,role&order=role.desc,user_id.asc')||[];
