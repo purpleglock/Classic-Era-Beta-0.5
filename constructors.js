@@ -297,6 +297,33 @@ const CN_DEFS = {
 };
 
 // ════════════════════════════════════════════════════════════
+// ИССЛЕДОВАНИЯ — что доступно без исследования + гейтинг
+// ════════════════════════════════════════════════════════════
+const CN_BASE = {
+  classes: { ship: ['corvette'], ground: ['light'], aviation: ['light'] },
+  weapons: { ship: ['Легкие', 'Средние'], ground: ['Противопехотное', 'Противотанковое'], aviation: ['Курсовое вооружение'] },
+};
+async function cnLoadResearch() {
+  CN.unlocked = new Set(); CN.staffAll = false;
+  if (cnIsStaff()) { CN.staffAll = true; return; }
+  const fid = CN.myApp && CN.myApp.faction_id;
+  if (!fid) return;
+  try {
+    const rows = await dbGet('faction_economy', `faction_id=eq.${encodeURIComponent(fid)}&select=research`);
+    const r = rows && rows[0] && rows[0].research;
+    (r || []).forEach(k => CN.unlocked.add(k));
+  } catch (e) {}
+}
+function cnUnlocked(key) { return CN.staffAll || (CN.unlocked && CN.unlocked.has(key)); }
+function cnClassUnlocked(cat, k) { return (CN_BASE.classes[cat] || []).includes(k) || cnUnlocked('cls.' + cat + '.' + k); }
+function cnWpnUnlocked(cat, g) { return (CN_BASE.weapons[cat] || []).includes(g) || cnUnlocked('wpn.' + cat + '.' + g); }
+function cnCompUnlocked(cat, t) { return cnUnlocked('comp.' + cat + '.' + t); }
+function cnCompOptions(cat, type, list, labelFn) {
+  const open = cnCompUnlocked(cat, type);
+  return list.map((it, i) => { const locked = i >= 1 && !open; return `<option value="${i}"${locked ? ' disabled' : ''}>${locked ? '🔒 ' : ''}${esc(labelFn(it, i))}</option>`; }).join('');
+}
+
+// ════════════════════════════════════════════════════════════
 // ДВИЖОК БИЛДЕРА ТЕХНИКИ (ship / ground / aviation)
 // ════════════════════════════════════════════════════════════
 function cnRenderShip() { return cnVehRender('ship'); }
@@ -308,6 +335,7 @@ async function cnVehRender(cat) {
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
   await cnLoadMyFaction();
   if (!cnCanAccess()) { cnGate(); return; }
+  await cnLoadResearch();
   const def = CN_DEFS[cat];
   CN.cat = cat; CN.def = def; CN.last = null; CN.editUnit = edit || null;
 
@@ -378,9 +406,13 @@ async function cnVehRender(cat) {
 }
 
 function cnVehInit() {
-  const def = CN.def;
-  // value класса = ключ объекта data (corvette/light/...), не индекс
-  cnId('cn-class').innerHTML = Object.keys(def.db.data).map(k => `<option value="${k}">${esc(def.db.data[k].name)}</option>`).join('');
+  const def = CN.def, cat = CN.cat;
+  // только разблокированные классы (value = ключ); сохранённый класс при правке — включаем всегда
+  let keys = Object.keys(def.db.data).filter(k => cnClassUnlocked(cat, k));
+  const ek = CN.editUnit && CN.editUnit.data && CN.editUnit.data.class;
+  if (ek && def.db.data[ek] && !keys.includes(ek)) keys.push(ek);
+  if (!keys.length) keys = [Object.keys(def.db.data)[0]];
+  cnId('cn-class').innerHTML = keys.map(k => `<option value="${k}">${esc(def.db.data[k].name)}</option>`).join('');
   cnVehClassDeps();
 }
 function cnVehHandleClass() {
@@ -390,12 +422,12 @@ function cnVehHandleClass() {
   cnVehClassDeps();
 }
 function cnVehClassDeps() {
-  const def = CN.def, k = cnId('cn-class').value;
+  const def = CN.def, k = cnId('cn-class').value, cat = CN.cat;
   if (def.hasType) cnId('cn-type').innerHTML = def.db.data[k].types.map((t, i) => `<option value="${i}">${esc(t.name)}</option>`).join('');
-  if (def.hasReactor) cnId('cn-reactor').innerHTML = def.db.reactors[k].map((r, i) => `<option value="${i}">${esc(r.name)} (${r.energy} E)</option>`).join('');
-  cnId('cn-armor').innerHTML = def.db.armors[k].map((a, i) => `<option value="${i}">${esc(a.name)} (+${cnNum(a.armor)} AR)</option>`).join('');
-  cnId('cn-shield').innerHTML = def.db.shields[k].map((s, i) => `<option value="${i}">${esc(s.name)}</option>`).join('');
-  cnId('cn-engine').innerHTML = def.db.engines[k].map((e, i) => `<option value="${i}">${esc(e.name)} (${e.speed} у.е.)</option>`).join('');
+  if (def.hasReactor) cnId('cn-reactor').innerHTML = cnCompOptions(cat, 'reactor', def.db.reactors[k], r => `${r.name} (${r.energy} E)`);
+  cnId('cn-armor').innerHTML = cnCompOptions(cat, 'armor', def.db.armors[k], a => `${a.name} (+${cnNum(a.armor)} AR)`);
+  cnId('cn-shield').innerHTML = cnCompOptions(cat, 'shield', def.db.shields[k], s => s.name);
+  cnId('cn-engine').innerHTML = cnCompOptions(cat, 'engine', def.db.engines[k], e => `${e.name} (${e.speed} у.е.)`);
   cnVehCalc();
 }
 
@@ -409,6 +441,8 @@ function cnVehAddItem(type, preset) {
   sel.onchange = cnVehCalc;
   for (const group in source) {
     if (type === 'weapon' && def.excl(k, group)) continue;
+    // не исследованные группы оружия скрываем (при правке/перезагрузке — preset — показываем все)
+    if (type === 'weapon' && !preset && !cnWpnUnlocked(CN.cat, group)) continue;
     const g = document.createElement('optgroup');
     g.label = group;
     source[group].forEach((item, i) => {

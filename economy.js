@@ -252,11 +252,11 @@ function ecTreasuryHtml() {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', 'Обзор'], ['colonies', 'Колонии'], ['military', 'Армия и флот'], ['territory', 'Территория'], ['diplomacy', 'Дипломатия'], ['intel', 'Разведка']];
+  const tabs = [['overview', 'Обзор'], ['colonies', 'Колонии'], ['military', 'Армия и флот'], ['research', 'Исследования'], ['territory', 'Территория'], ['diplomacy', 'Дипломатия'], ['intel', 'Разведка']];
   const tabsHtml = tabs.map(([id, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')">${l}</button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'military' ? ecTabMilitary()
-    : EC.tab === 'territory' ? ecTabTerritory() : EC.tab === 'diplomacy' ? ecTabDiplomacy()
-    : EC.tab === 'intel' ? ecTabIntel() : ecTabColonies();
+    : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
+    : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'intel' ? ecTabIntel() : ecTabColonies();
   setPg(`<div class="ec-wrap">
     <div class="ec-head"><div class="ec-eyebrow">◈ КАБИНЕТ ИГРОКА</div><h1 style="border-bottom:2px solid ${col}">${esc(EC.app.name || 'Моя фракция')}</h1></div>
     ${ecTreasuryHtml()}
@@ -463,6 +463,9 @@ function ecErr(m) {
   if (m.includes('no free trade hub')) return 'Нет свободных слотов Торгового хаба';
   if (m.includes('has no economy')) return 'У второй стороны нет экономики (не заходила в кабинет)';
   if (m.includes('no agents')) return 'Нет агентов';
+  if (m.includes('research in progress')) return 'Уже идёт исследование';
+  if (m.includes('already researched')) return 'Уже изучено';
+  if (m.includes('not enough science')) return 'Недостаточно ОН';
   if (m.includes('self')) return 'Нельзя с самим собой';
   if (m.includes('forbidden')) return 'Недостаточно прав';
   return 'Ошибка: ' + m;
@@ -596,6 +599,75 @@ function ecTabIntel() {
     ${opForm}
     <div class="ec-section-title">Журнал операций</div>
     <div class="ec-queue">${log}</div>`;
+}
+
+// ── Каталог исследований (из данных конструкторов) ──────────
+function ecBuildResearch() {
+  if (EC._research) return EC._research;
+  const out = [];
+  const base = (typeof CN_BASE !== 'undefined') ? CN_BASE : { classes: {}, weapons: {} };
+  const CATS = [['ship', 'Корабли', (typeof CN_SHIP !== 'undefined' ? CN_SHIP : null), true], ['ground', 'Наземная техника', (typeof CN_GROUND !== 'undefined' ? CN_GROUND : null), false], ['aviation', 'Авиация', (typeof CN_AIR !== 'undefined' ? CN_AIR : null), true]];
+  CATS.forEach(([cat, catLabel, db, hasReactor]) => {
+    if (!db) return;
+    const baseCls = base.classes[cat] || [];
+    let prev = null, i = 0;
+    Object.keys(db.data).forEach(k => {
+      if (baseCls.includes(k)) return;
+      const id = 'cls.' + cat + '.' + k;
+      out.push({ id, cat, catLabel, group: 'Классы', name: 'Класс: ' + db.data[k].name, cost: 5 * Math.pow(2, i), prereq: prev ? [prev] : [] });
+      prev = id; i++;
+    });
+    const baseW = base.weapons[cat] || [];
+    let wi = 0;
+    Object.keys(db.weapons || {}).forEach(g => {
+      if (baseW.includes(g)) return;
+      out.push({ id: 'wpn.' + cat + '.' + g, cat, catLabel, group: 'Оружие', name: 'Оружие: ' + g, cost: 10 + wi * 6, prereq: [] });
+      wi++;
+    });
+    const comps = [['armor', 'броня', 10], ['shield', 'щиты', 12], ['engine', 'двигатели', 8]];
+    if (hasReactor) comps.unshift(['reactor', 'реакторы', 12]);
+    comps.forEach(([t, lbl, cost]) => out.push({ id: 'comp.' + cat + '.' + t, cat, catLabel, group: 'Компоненты', name: 'Продвинутые ' + lbl, cost, prereq: [] }));
+  });
+  EC._research = out;
+  return out;
+}
+function ecTabResearch() {
+  const cat = ecBuildResearch();
+  const done = new Set(EC.eco.research || []);
+  const active = EC.eco.research_active;
+  const readyMs = EC.eco.research_ready ? new Date(EC.eco.research_ready).getTime() - Date.now() : 0;
+  const sci = EC.eco.science || 0;
+  const sciInc = EC.buildings.filter(b => b.btype === 'science').reduce((a, b) => a + (b.slots_open || 0), 0);
+  let activeHtml = '';
+  if (active) { const node = cat.find(n => n.id === active); const t = readyMs <= 0 ? 'готово на след. ходу' : `через ${Math.max(0, Math.floor(readyMs / 3600000))} ч`; activeHtml = `<div class="ec-cap">⏳ Изучается: <b>${esc(node ? node.name : active)}</b> — ${t}</div>`; }
+  const nodeCard = n => {
+    const isDone = done.has(n.id), isActive = active === n.id, prereqOk = (n.prereq || []).every(p => done.has(p));
+    let badge, btn = '';
+    if (isDone) badge = '<span class="ec-rs-badge ok">✓ изучено</span>';
+    else if (isActive) badge = '<span class="ec-rs-badge cur">⏳ изучается</span>';
+    else if (!prereqOk) { const need = (n.prereq || []).map(p => { const pn = cat.find(x => x.id === p); return pn ? pn.name : p; }).join(', '); badge = `<span class="ec-rs-badge lock">🔒 нужно: ${esc(need)}</span>`; }
+    else { badge = '<span class="ec-rs-badge av">🔓 доступно</span>'; const can = !active && sci >= n.cost; btn = `<button class="btn ${can ? 'btn-gd' : 'btn-gh'} btn-xs" ${can ? '' : 'disabled'} onclick="ecResearch('${n.id}')">Исследовать · ${ecNum(n.cost)} ОН</button>`; }
+    return `<div class="ec-rs-node${isDone ? ' done' : ''}"><div class="ec-rs-name">${esc(n.name)}</div><div class="ec-rs-foot">${badge}${btn}</div></div>`;
+  };
+  const byCat = {};
+  cat.forEach(n => { (byCat[n.catLabel] = byCat[n.catLabel] || []).push(n); });
+  const body = Object.keys(byCat).map(cl => `<div class="ec-rs-cat"><div class="ec-rs-cat-t">${esc(cl)}</div><div class="ec-rs-grid">${byCat[cl].map(nodeCard).join('')}</div></div>`).join('');
+  return `<div class="ec-treasury" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+      <div class="ec-res"><span class="ec-res-k">Очки науки</span><span class="ec-res-v" style="color:var(--pu)">${ecNum(sci)} ОН</span></div>
+      <div class="ec-res"><span class="ec-res-k">Доход</span><span class="ec-res-v" style="font-size:15px">+${sciInc} ОН/ход</span></div>
+    </div>
+    ${activeHtml}
+    <div class="ec-section-title">Дерево исследований <span class="ec-hint">— 1 проект за раз, 1 ход на исследование; открывает контент в конструкторах</span></div>
+    ${body}`;
+}
+function ecResearch(nodeId) {
+  const n = ecBuildResearch().find(x => x.id === nodeId); if (!n) { toast('Узел не найден', 'err'); return; }
+  const done = new Set(EC.eco.research || []);
+  if (EC.eco.research_active) { toast('Уже идёт исследование', 'err'); return; }
+  if (done.has(nodeId)) { toast('Уже изучено', 'inf'); return; }
+  if (!(n.prereq || []).every(p => done.has(p))) { toast('Сначала изучите предшественников', 'err'); return; }
+  if ((EC.eco.science || 0) < n.cost) { toast(`Недостаточно ОН: нужно ${ecNum(n.cost)}`, 'err'); return; }
+  ecRpcAct('economy_research', { p_node: nodeId, p_cost: n.cost }, 'Исследование начато (1 ход)');
 }
 
 // ── Действия дипломатии/разведки ────────────────────────────

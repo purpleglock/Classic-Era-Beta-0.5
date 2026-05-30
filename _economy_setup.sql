@@ -48,6 +48,10 @@ create index if not exists cb_faction_idx         on public.colony_buildings(fac
 -- v5: склад ресурсов фракции и снимок ресурсов планеты на колонии
 alter table public.faction_economy add column if not exists resources jsonb default '{}'::jsonb;
 alter table public.colonies        add column if not exists resources jsonb default '[]'::jsonb;
+-- v6: исследования (открытые узлы + текущий проект, 1 активный)
+alter table public.faction_economy add column if not exists research jsonb default '[]'::jsonb;
+alter table public.faction_economy add column if not exists research_active text;
+alter table public.faction_economy add column if not exists research_ready  timestamptz;
 
 -- ── RLS ─────────────────────────────────────────────────────
 alter table public.faction_economy  enable row level security;
@@ -699,6 +703,15 @@ begin
 
   update public.unit_production set status='done' where faction_id=eco.faction_id and status='queued' and ready_at<=now();
 
+  -- завершение исследования (1 ход)
+  if eco.research_active is not null and eco.research_ready is not null and eco.research_ready <= now() then
+    update public.faction_economy
+      set research = coalesce(research,'[]'::jsonb) || to_jsonb(eco.research_active::text),
+          research_active = null, research_ready = null
+      where faction_id = eco.faction_id;
+    select * into eco from public.faction_economy where faction_id = eco.faction_id;
+  end if;
+
   d := floor(extract(epoch from (now()-eco.last_tick))/86400.0);
 
   for r in select btype, slots_open from public.colony_buildings where faction_id=eco.faction_id loop
@@ -765,3 +778,27 @@ begin
 end$$;
 revoke all on function public.economy_tick() from public;
 grant execute on function public.economy_tick() to authenticated;
+
+-- ════════════════════════════════════════════════════════════
+-- v6: ИССЛЕДОВАНИЯ — старт проекта (ОН + 1 ход, 1 активный)
+-- ════════════════════════════════════════════════════════════
+create or replace function public.economy_research(p_node text, p_cost numeric)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare app public.faction_applications; eco public.faction_economy;
+begin
+  if p_node is null or p_node = '' then raise exception 'bad node'; end if;
+  if p_cost is null or p_cost < 0 then raise exception 'bad cost'; end if;
+  select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
+  if not found then raise exception 'no approved faction'; end if;
+  select * into eco from public.faction_economy where faction_id=app.faction_id;
+  if not found then raise exception 'no economy'; end if;
+  if eco.research_active is not null then raise exception 'research in progress'; end if;
+  if coalesce(eco.research,'[]'::jsonb) ? p_node then raise exception 'already researched'; end if;
+  if coalesce(eco.science,0) < p_cost then raise exception 'not enough science'; end if;
+  update public.faction_economy
+    set science = science - p_cost, research_active = p_node, research_ready = now() + interval '1 day'
+    where faction_id = app.faction_id;
+  return jsonb_build_object('ok', true, 'ready_at', now() + interval '1 day');
+end$$;
+revoke all on function public.economy_research(text,numeric) from public;
+grant execute on function public.economy_research(text,numeric) to authenticated;

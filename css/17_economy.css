@@ -158,6 +158,20 @@
 .ec-res-click { cursor: pointer; }
 .ec-res-click:hover { border-color: var(--w3); }
 
+/* ── Дерево исследований ── */
+.ec-rs-cat { margin-bottom: 16px; }
+.ec-rs-cat-t { font-family: var(--font-display); font-weight: 600; font-size: 13px; color: var(--pu); margin: 6px 0 8px; letter-spacing: var(--ls-wide); }
+.ec-rs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.ec-rs-node { background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 11px 12px; display: flex; flex-direction: column; gap: 8px; }
+.ec-rs-node.done { opacity: .7; border-color: color-mix(in srgb, var(--ok) 35%, var(--w2)); }
+.ec-rs-name { font-family: var(--font-display); font-weight: 600; font-size: 13px; color: var(--t1); }
+.ec-rs-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; flex-wrap: wrap; }
+.ec-rs-badge { font-size: 10px; font-family: var(--font-mono); padding: 2px 7px; border-radius: var(--radius-pill); border: 1px solid; white-space: nowrap; }
+.ec-rs-badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.ec-rs-badge.cur { color: var(--te); border-color: color-mix(in srgb, var(--te) 50%, transparent); }
+.ec-rs-badge.av { color: var(--gd); border-color: color-mix(in srgb, var(--gd) 50%, transparent); }
+.ec-rs-badge.lock { color: var(--t4); border-color: var(--w2); }
+
 @media (max-width: 720px) {
   .ec-colonies { grid-template-columns: 1fr; }
   .ec-colonize-row { flex-direction: column; align-items: stretch; }
