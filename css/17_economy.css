@@ -1,0 +1,147 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   ECONOMY — экономический слой (казна · колонии · застройка)
+   На токенах темы. Без тяжёлых эффектов.
+   ───────────────────────────────────────────────────────────────────── */
+
+.ec-wrap { max-width: 1120px; margin: 0 auto; padding: 22px 22px 60px; }
+.ec-head { margin-bottom: 14px; }
+.ec-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em; color: var(--gd); text-transform: uppercase; }
+.ec-head h1 { font-family: var(--font-display); font-weight: 700; font-size: var(--text-2xl); color: var(--t1); margin: 2px 0 0; padding-bottom: 8px; display: inline-block; }
+
+/* Гейт */
+.ec-gate { max-width: 520px; margin: 56px auto; text-align: center; padding: 32px 24px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-lg); }
+.ec-gate-ico { font-size: 42px; }
+.ec-gate h2 { font-family: var(--font-display); font-weight: 700; color: var(--t1); margin: 10px 0 8px; }
+.ec-gate p { color: var(--t2); font-size: 13px; line-height: 1.6; margin: 6px 0 14px; }
+
+/* Казна */
+.ec-treasury { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.ec-res { background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.ec-res-k { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); }
+.ec-res-v { font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--t1); }
+.ec-res-inc { background: var(--b1); }
+.ec-res-inc .ec-res-v { font-size: 14px; }
+.ec-next { font-size: 10.5px; color: var(--t4); font-family: var(--font-mono); }
+
+/* Секции */
+.ec-section-title { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--t1); margin: 22px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--w1); }
+.ec-hint { font-family: var(--font-body); font-weight: 400; font-size: 11px; color: var(--t4); }
+.ec-empty { color: var(--t3); font-size: 12px; padding: 14px; background: var(--b1); border: 1px dashed var(--w2); border-radius: var(--radius-md); }
+
+/* Колонии */
+.ec-colonies { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.ec-colony { background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; }
+.ec-colony-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+.ec-colony-name { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--t1); }
+.ec-colony-sub { display: block; font-size: 11px; color: var(--t3); margin-top: 2px; }
+.ec-colony-cells { font-family: var(--font-mono); font-size: 12px; color: var(--t2); background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); padding: 3px 8px; white-space: nowrap; }
+.ec-warn { color: var(--color-warning); border-color: var(--color-warning); }
+
+.ec-bld-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 12px; flex: 1; }
+.ec-bld { background: var(--b1); border: 1px solid var(--w1); border-radius: var(--radius-md); padding: 10px 11px; display: flex; flex-direction: column; gap: 8px; }
+.ec-bld-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
+.ec-bld-name { font-family: var(--font-display); font-weight: 600; font-size: 13px; color: var(--t1); line-height: 1.25; }
+.ec-bld-del { background: none; border: 0; color: var(--t4); cursor: pointer; font-size: 12px; padding: 0 2px; flex-shrink: 0; line-height: 1; }
+.ec-bld-del:hover { color: var(--err); }
+.ec-slots { display: flex; gap: 4px; }
+.ec-slot { width: 100%; max-width: 22px; height: 8px; border-radius: 2px; background: var(--b4); border: 1px solid var(--w2); }
+.ec-slot.on { background: var(--gd); border-color: var(--gd); }
+.ec-bld-inc { font-size: 11px; color: var(--te); font-weight: 600; line-height: 1.35; min-height: 15px; }
+.ec-bld-act { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
+.ec-bld-act .btn { white-space: nowrap; flex-shrink: 0; }
+.ec-tnp { font-size: 10px; color: var(--t3); display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+.ec-slot-count { font-family: var(--font-mono); font-size: 10px; color: var(--t4); }
+.ec-maxed { font-size: 10px; color: var(--t4); font-family: var(--font-mono); }
+
+.ec-colony-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ec-build-sel { flex: 1; min-width: 120px; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 7px 8px; font-size: 12px; outline: none; cursor: pointer; }
+.ec-build-sel:focus { border-color: var(--gd); }
+.ec-danger:hover { color: var(--err) !important; border-color: var(--err) !important; }
+
+/* Колонизация */
+.ec-colonize { display: flex; flex-direction: column; gap: 8px; }
+.ec-colonize-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 10px 14px; }
+.ec-cz-name { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--t1); }
+.ec-cz-sub { display: block; font-size: 11px; color: var(--t3); margin-top: 1px; }
+
+/* Кнопка-мини */
+.btn-xs { padding: 3px 8px !important; font-size: 10px !important; }
+
+/* ── Вкладки кабинета ── */
+.ec-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--w2); margin: 18px 0 16px; }
+.ec-tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--t3); font-family: var(--font-display); font-weight: 600; font-size: 14px; padding: 8px 14px; cursor: pointer; margin-bottom: -1px; }
+.ec-tab:hover { color: var(--t1); }
+.ec-tab.on { color: var(--gd); border-bottom-color: var(--gd); }
+
+/* ── Обзор ── */
+.ec-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.ec-ov-card { background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 16px; text-align: center; }
+.ec-ov-v { font-family: var(--font-display); font-weight: 700; font-size: 26px; color: var(--t1); }
+.ec-ov-k { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); margin-top: 4px; }
+.ec-race-note { font-size: 12px; color: var(--t2); background: var(--b1); border: 1px solid var(--w1); border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 14px; }
+.ec-ov-links { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ── Бейджи пригодности планет ── */
+.ec-cz-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.ec-pl-bad { font-size: 10px; font-family: var(--font-mono); padding: 2px 7px; border-radius: var(--radius-pill); border: 1px solid; white-space: nowrap; }
+.ec-pl-native { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.ec-pl-foreign { color: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 50%, transparent); }
+.ec-pl-no { color: var(--t4); border-color: var(--w2); }
+
+/* ── Производство ── */
+.ec-prod-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.ec-prod-form select { flex: 1; min-width: 160px; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 8px 10px; font-size: 13px; outline: none; }
+.ec-prod-form select:focus { border-color: var(--gd); }
+.ec-prod-qty { width: 70px !important; flex: 0 0 auto; text-align: center; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 8px; }
+.ec-cap { font-size: 11px; color: var(--t3); font-family: var(--font-mono); margin-bottom: 6px; }
+.ec-cap b { color: var(--t2); font-weight: 600; }
+.ec-queue, .ec-roster { display: flex; flex-direction: column; gap: 6px; }
+.ec-q-row, .ec-r-row { display: flex; align-items: center; gap: 10px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-sm); padding: 8px 12px; }
+.ec-q-row .ec-r-name, .ec-r-name { flex: 1; min-width: 0; color: var(--t1); font-size: 13px; }
+.ec-q-t { font-size: 11px; color: var(--te); font-family: var(--font-mono); }
+.ec-r-cat { font-size: 15px; flex-shrink: 0; }
+.ec-r-qty { font-family: var(--font-display); font-weight: 700; color: var(--gd); }
+
+/* ── Выбор столичной планеты в регистрации ── */
+.fr-planet-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 6px; max-height: 240px; overflow-y: auto; }
+.fr-pl { position: relative; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); padding: 9px 10px; cursor: pointer; transition: border-color .15s; }
+.fr-pl:hover { border-color: var(--w3); }
+.fr-pl.on { border-color: var(--gd); box-shadow: inset 0 0 0 1px var(--gd); }
+.fr-pl-no { opacity: .55; cursor: not-allowed; }
+.fr-pl-name { display: block; font-family: var(--font-display); font-weight: 600; font-size: 13px; color: var(--t1); }
+.fr-pl-sub { display: block; font-size: 10px; color: var(--t3); margin-top: 1px; }
+.fr-pl-tag { display: inline-block; margin-top: 5px; font-size: 9px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: var(--radius-pill); border: 1px solid; }
+.fr-pl-tag.native { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.fr-pl-tag.foreign { color: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 50%, transparent); }
+.fr-pl-tag.no { color: var(--t4); border-color: var(--w2); }
+.fr-pl > i { position: absolute; top: 8px; right: 8px; color: var(--gd); font-style: normal; }
+
+/* ── Миникарта территории ── */
+.ec-minimap { background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 8px; overflow: hidden; }
+.ec-minimap svg { width: 100%; height: auto; max-height: 420px; display: block; }
+.ec-mm-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 2px 4px; font-size: 11px; color: var(--t3); }
+.ec-mm-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.ec-mm-legend i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+/* ── Секции ростера ── */
+.ec-r-sec { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); margin: 12px 0 5px; }
+.ec-r-sec:first-child { margin-top: 0; }
+
+/* ── Карточки комплектования дивизий ── */
+.ec-div-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.ec-div-card { background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.ec-div-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ec-div-name { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--t1); }
+.ec-div-cost { font-family: var(--font-display); font-weight: 700; color: var(--gd); white-space: nowrap; }
+.ec-div-comp { font-size: 11.5px; color: var(--t2); line-height: 1.45; }
+.ec-div-need { display: flex; flex-wrap: wrap; gap: 6px; }
+.ec-need { font-size: 10px; font-family: var(--font-mono); padding: 2px 7px; border-radius: var(--radius-pill); border: 1px solid; white-space: nowrap; }
+.ec-need.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.ec-need.no { color: var(--err); border-color: color-mix(in srgb, var(--err) 50%, transparent); }
+.ec-div-act { display: flex; gap: 8px; align-items: center; margin-top: auto; }
+.ec-div-act .btn { flex: 1; }
+
+@media (max-width: 720px) {
+  .ec-colonies { grid-template-columns: 1fr; }
+  .ec-colonize-row { flex-direction: column; align-items: stretch; }
+}

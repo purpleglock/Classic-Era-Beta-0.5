@@ -518,6 +518,8 @@ function gmOpenPanel(sys) {
     <button class="gm-close" onclick="gmClosePanel()">✕</button>
     <h2 class="gm-panel-title">${esc(sys.name)}</h2>
     ${facBlock}
+    ${(typeof ecCanAccess === 'function' && ecCanAccess() && typeof EC !== 'undefined' && EC.app && EC.app.faction_id === sys.faction)
+      ? `<button class="btn btn-gh btn-sm" style="margin:6px 0 2px" onclick="gmClosePanel();go('economy')">🛰 Открыть кабинет</button>` : ''}
     <p class="gm-panel-desc">${esc(sys.description || '')}</p>
     <div class="gm-panel-sub">Состав системы <span class="gm-sub-hint">★ от звезды наружу →</span></div>
     <div class="gm-orblist">${planets}</div>`;

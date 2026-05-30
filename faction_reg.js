@@ -118,7 +118,7 @@ function frBlank() {
   return {
     id: null, status: 'draft', name: '', color: 'rgba(80,150,255,0.34)',
     gov: FR_GOV[0], regime: FR_REGIME[0], leader: '', civ_type: 'frontier',
-    system_id: null, system_name: '', planet_name: '',
+    system_id: null, system_name: '', planet_name: '', planet_type: '',
     buildings: [], bonus_money: false,
     race: FR_RACE[0], ideology: FR_IDEO[0], culture: '', history: '', link: '', herald_url: '',
   };
@@ -276,8 +276,43 @@ function frStepSystem(d) {
     <div class="fg"><input class="fi" id="f-sys-search" placeholder="Поиск системы..." oninput="frFilterSystems(this.value)"></div>
     <div class="fr-sys-picked" id="f-sys-picked">${d.system_id ? `Выбрано: <b>${esc(d.system_name)}</b>` : 'Система не выбрана'}</div>
     <div class="fr-sys-list" id="f-sys-list"></div>
-    <div class="fg" style="margin-top:12px"><label class="fl">Название столичной планеты</label>
-      <input class="fi" id="f-planet" value="${esc(d.planet_name)}" placeholder="Планета"></div>`;
+    <div class="fgr2" style="margin-top:14px">
+      <div class="fg"><label class="fl">Раса (для пригодности планет)</label>
+        ${frSel('f-reg-race', FR_RACE, d.race, "frOnRegRace(this.value)")}</div>
+      <div class="fg"><label class="fl">Столичная планета</label>
+        <div class="fr-sys-picked" id="f-planet-picked">${d.planet_name ? `Столица: <b>${esc(d.planet_name)}</b>` : 'Планета не выбрана'}</div></div>
+    </div>
+    <div class="fr-planet-pick" id="f-planet-pick"><div class="fr-empty">Сначала выберите систему выше.</div></div>`;
+}
+// Список планет выбранной системы с учётом расы (использует классификаторы из economy.js)
+function frRenderPlanetPick() {
+  const box = document.getElementById('f-planet-pick'); if (!box) return;
+  const sys = (FR.allSystems || []).find(s => s.id === FR.data.system_id);
+  if (!sys) { box.innerHTML = `<div class="fr-empty">Сначала выберите систему выше.</div>`; return; }
+  const planets = (sys.planets || []).filter(p => p && p.name);
+  if (!planets.length) { box.innerHTML = `<div class="fr-empty">В системе нет данных о планетах. Впишите столицу вручную ниже.</div>
+    <input class="fi" id="f-planet" value="${esc(FR.data.planet_name || '')}" placeholder="Название столицы" oninput="FR.data.planet_name=this.value">`; return; }
+  const race = FR.data.race;
+  const grp = typeof ecPlanetGroup === 'function' ? ecPlanetGroup : (() => 'unknown');
+  const canCol = typeof ecColonizable === 'function' ? ecColonizable : (() => true);
+  const isNat = typeof ecNative === 'function' ? ecNative : (() => true);
+  const lbl = (typeof EC_GRP_LABEL !== 'undefined') ? EC_GRP_LABEL : {};
+  box.innerHTML = planets.map(p => {
+    const g = grp(p), gl = lbl[g] || g, cells = (+p.slotsP) || 6, sel = FR.data.planet_name === p.name;
+    let cls = 'fr-pl', tag = '';
+    if (!canCol(p)) { cls += ' fr-pl-no'; tag = `<span class="fr-pl-tag no">непригодна</span>`; }
+    else if (isNat(p, race)) { cls += ' fr-pl-native'; tag = `<span class="fr-pl-tag native">родная</span>`; }
+    else { cls += ' fr-pl-foreign'; tag = `<span class="fr-pl-tag foreign">чужая</span>`; }
+    if (sel) cls += ' on';
+    const click = canCol(p) ? ` onclick="frPickPlanet(${JSON.stringify(p.name).replace(/"/g, '&quot;')},${JSON.stringify(p.type || '').replace(/"/g, '&quot;')})"` : '';
+    return `<div class="${cls}"${click}><span class="fr-pl-name">${esc(p.name)}</span><span class="fr-pl-sub">${esc(gl)} · ⬚ ${cells}</span>${tag}${sel ? '<i>✓</i>' : ''}</div>`;
+  }).join('');
+}
+function frOnRegRace(v) { FR.data.race = v; frRenderPlanetPick(); }
+function frPickPlanet(name, type) {
+  FR.data.planet_name = name; FR.data.planet_type = type || '';
+  const pk = document.getElementById('f-planet-picked'); if (pk) pk.innerHTML = `Столица: <b>${esc(name)}</b>`;
+  frRenderPlanetPick();
 }
 function frStepBuildings(d) {
   const free = frFreeBuilding(d.civ_type);
@@ -403,18 +438,19 @@ async function frUploadHerald(input) {
 async function frRenderSystemPicker() {
   if (FR.allSystems === null) {
     let sys = [], taken = new Set();
-    try { sys = await dbGet('map_systems', 'select=id,name,faction,star_type,x,y') || []; } catch (e) { sys = []; }
+    try { sys = await dbGet('map_systems', 'select=id,name,faction,star_type,x,y,planets') || []; } catch (e) { sys = []; }
     // занятые чужими анкетами — необязательный запрос (таблица может отсутствовать)
     try {
       const apps = await dbGet('faction_applications', 'select=system_id,status&status=in.(pending,approved)');
       taken = new Set((apps || []).map(a => a.system_id).filter(Boolean));
     } catch (e) { /* нет таблицы анкет — игнорируем */ }
-    FR.allSystems = sys.map(s => ({ ...s, x: +s.x, y: +s.y }));
+    FR.allSystems = sys.map(s => ({ ...s, x: +s.x, y: +s.y, planets: s.planets || [] }));
     FR.freeSystems = FR.allSystems.filter(s => !s.faction && (!taken.has(s.id) || s.id === FR.data.system_id))
       .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   }
   frRenderMinimap();
   frFilterSystems(document.getElementById('f-sys-search')?.value || '');
+  frRenderPlanetPick();
 }
 function GM_BASE_SAFE() { return (typeof GM_BASE !== 'undefined') ? GM_BASE : 'assets/map/'; }
 
@@ -448,9 +484,13 @@ function frFilterSystems(q) {
 }
 function frPickSystem(id, name) {
   FR.data.system_id = id; FR.data.system_name = name;
+  // сменили систему — сбросить выбранную планету
+  FR.data.planet_name = ''; FR.data.planet_type = '';
+  const pk = document.getElementById('f-planet-picked'); if (pk) pk.innerHTML = 'Планета не выбрана';
   const p = document.getElementById('f-sys-picked'); if (p) p.innerHTML = `Выбрано: <b>${esc(name)}</b>`;
   frFilterSystems(document.getElementById('f-sys-search')?.value || '');
   frRenderMinimap();
+  frRenderPlanetPick();
 }
 
 // ── Сохранение ──────────────────────────────────────────────

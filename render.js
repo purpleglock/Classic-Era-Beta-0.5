@@ -1420,6 +1420,11 @@ function buildNav(filt='') {
     const cnOn = (curSlug==='constructors'||(curSlug||'').startsWith('build-'))?' on':'';
     h+=`<div class="n-home${cnOn}" id="ntl-con" onclick="go('constructors')"><span class="n-home-icon">⚒</span>${lang==='ru'?'Конструкторы':'Constructors'}</div>`;
   }
+  // Экономика — игрокам с одобренной анкетой и стаффу
+  if (typeof ecNavEnsure==='function') ecNavEnsure();
+  if (typeof ecCanAccess==='function' && ecCanAccess()) {
+    h+=`<div class="n-home${curSlug==='economy'?' on':''}" id="ntl-eco" onclick="go('economy')"><span class="n-home-icon">🛰</span>${lang==='ru'?'Кабинет игрока':'Cabinet'}</div>`;
+  }
   // Каталоги юнитов фракций — видны всем
   const cnCats=[['cat-ships','🚀',lang==='ru'?'Флот':'Fleet'],['cat-ground','🛡',lang==='ru'?'Наземная техника':'Ground'],['cat-aviation','✈',lang==='ru'?'Авиация':'Aviation'],['cat-divisions','⛬',lang==='ru'?'Дивизии':'Divisions']];
   cnCats.forEach(([sl,ic,nm])=>{ h+=`<div class="n-home${curSlug===sl?' on':''}" onclick="go('${sl}')"><span class="n-home-icon">${ic}</span>${nm}</div>`; });

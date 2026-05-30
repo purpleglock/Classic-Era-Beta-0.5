@@ -664,6 +664,7 @@ async function cnRenderDivision() {
   await cnLoadMyFaction();
   if (!cnCanAccess()) { cnGate(); return; }
   CN.cat = 'division'; CN.def = null; CN.lastDiv = null; CN.editUnit = edit || null;
+  await cnLoadDivUnits();
   const facBlock = await cnFactionPublishBlock();
   setPg(`<div class="cn-wrap cn-builder">
     <div class="cn-head">
@@ -681,6 +682,7 @@ async function cnRenderDivision() {
         <div class="cn-panel">
           <h3>Состав</h3>
           <div id="cn-div-area"></div>
+          <div class="cn-fac-hint">В списке «Тип войск» доступна и ★ зарегистрированная техника (своя + общедоступная) — она участвует во всех расчётах. Технику других игроков здесь не видно. Доступно техники: ${(CN.divUnits || []).length}.</div>
         </div>
       </div>
       <div class="cn-side">
@@ -702,12 +704,41 @@ async function cnRenderDivision() {
   else cnDivTotals();
 }
 function cnDivName() { /* имя берётся при публикации; отдельного дисплея нет */ }
+// Доступная для дивизий техника: своя (owner_id == me) + общедоступная (без фракции). Чужую не показываем.
+async function cnLoadDivUnits() {
+  let all = [];
+  try { all = await dbGet('faction_units', 'order=updated_at.desc') || []; } catch (e) { all = []; }
+  CN.divUnits = all.filter(u => u.category !== 'division' && ((user && u.owner_id === user.id) || !u.faction_id));
+  return CN.divUnits;
+}
+// Габарит зарегистрированной техники в дивизии (на 1 ед.). Можно тонко настроить.
+const CN_TECH_SIZE = { ship: 2000, ground: 200, aviation: 50 };
+// Единый поиск модели: штатная (CN_DIV_DATA) или зарегистрированная техника ('tech:<id>')
+function cnDivModelById(id) {
+  if (!id) return null;
+  if (id.indexOf('tech:') === 0) {
+    const u = (CN.divUnits || []).find(x => x.id === id.slice(5));
+    if (!u) return null;
+    const sm = u.summary || {};
+    return {
+      id, name: u.name, type: 'tech', tech: true, public: cnIsPublic(u),
+      cost: sm.cost || 0,
+      size: CN_TECH_SIZE[u.category] || 200,
+      armorhp: (sm.armor || 0) + (sm.hp || 0),
+      atack: sm.dmg || 0,
+      dalnost: sm.dalnost || 0,
+    };
+  }
+  return CN_DIV_DATA.find(m => m.id === id) || null;
+}
 function cnDivAddBlock(preset) {
   const area = cnId('cn-div-area');
   const div = document.createElement('div');
   div.className = 'cn-divblock cn-row';
+  const types = CN_DIV_TYPES.slice();
+  if ((CN.divUnits || []).length) types.push(['tech', '★ Зарегистрированная техника']);
   const typeOpts = `<option value="" disabled${preset ? '' : ' selected'}>Тип войск</option>` +
-    CN_DIV_TYPES.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+    types.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
   div.innerHTML = `
     <select class="cn-d-type" onchange="cnDivTypeChange(this)">${typeOpts}</select>
     <select class="cn-d-model" onchange="cnDivTotals()"><option value="">Сначала выберите тип</option></select>
@@ -723,10 +754,25 @@ function cnDivAddBlock(preset) {
 }
 function cnDivTypeChange(sel) {
   const modelSel = sel.closest('.cn-divblock').querySelector('.cn-d-model');
-  const models = CN_DIV_DATA.filter(m => m.type === sel.value);
-  modelSel.innerHTML = models.length
-    ? models.map(m => `<option value="${m.id}">${esc(m.name)} — атк ${m.atack} · бр ${m.armorhp} · дал ${m.dalnost}</option>`).join('')
-    : '<option value="">Нет доступных моделей</option>';
+  if (sel.value === 'tech') {
+    const list = CN.divUnits || [];
+    const cats = [['ship', 'Корабли'], ['ground', 'Наземная техника'], ['aviation', 'Авиация']];
+    let html = '';
+    cats.forEach(([c, lbl]) => {
+      const items = list.filter(u => u.category === c);
+      if (!items.length) return;
+      html += `<optgroup label="${esc(lbl)}">` + items.map(u => {
+        const sm = u.summary || {};
+        return `<option value="tech:${esc(u.id)}">${esc(u.name)}${cnIsPublic(u) ? ' ★' : ''} — атк ${cnNum(sm.dmg || 0)} · бр ${cnNum((sm.armor || 0) + (sm.hp || 0))}</option>`;
+      }).join('') + `</optgroup>`;
+    });
+    modelSel.innerHTML = html || '<option value="">Нет доступной техники</option>';
+  } else {
+    const models = CN_DIV_DATA.filter(m => m.type === sel.value);
+    modelSel.innerHTML = models.length
+      ? models.map(m => `<option value="${m.id}">${esc(m.name)} — атк ${m.atack} · бр ${m.armorhp} · дал ${m.dalnost}</option>`).join('')
+      : '<option value="">Нет доступных моделей</option>';
+  }
   cnDivTotals();
 }
 function cnDivTotals() {
@@ -735,9 +781,9 @@ function cnDivTotals() {
   document.querySelectorAll('#cn-div-area .cn-divblock').forEach(b => {
     const id = b.querySelector('.cn-d-model').value;
     const c = parseInt(b.querySelector('.cn-d-count').value) || 0;
-    const m = CN_DIV_DATA.find(x => x.id === id);
+    const m = cnDivModelById(id);
     if (m && c > 0) {
-      list.push(`• ${m.name} (${cnNum(c)} ед.)`);
+      list.push(`• ${m.name}${m.public ? ' ★' : ''} (${cnNum(c)} ед.)`);
       cost += m.cost * c; size += m.size * c;
       sa += (m.armorhp || 0) * c; st += (m.atack || 0) * c; sd += (m.dalnost || 0) * c; count += c;
       if (m.armorhp > ma) ma = m.armorhp; if (m.atack > mt) mt = m.atack; if (m.dalnost > md) md = m.dalnost;

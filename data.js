@@ -54,6 +54,8 @@ function route() { if (_pushingHash) return; if (editMode) exitEdit(false); go(l
 
 async function go(slug, push=true) {
   if (editMode) exitEdit(false);
+  // На мобильных закрываем боковое меню при переходе (категория/раздел/страница)
+  if (typeof closeMobSb === 'function') closeMobSb();
   if (_navAbort) { _navAbort.abort(); _navAbort=null; }
   const seq = ++_navSeq;
 
@@ -109,6 +111,11 @@ async function go(slug, push=true) {
   if (CN_CATS[slug]) {
     if (typeof cnRenderCatalog === 'function') { await cnRenderCatalog(CN_CATS[slug]); }
     else { setPg('<div class="sempty">constructors.js не загружен</div>'); }
+    return;
+  }
+  if (slug==='economy') {
+    if (typeof ecRenderDashboard === 'function') { await ecRenderDashboard(); }
+    else { setPg('<div class="sempty">economy.js не загружен</div>'); }
     return;
   }
   if (_pgCache.has(slug)) {
