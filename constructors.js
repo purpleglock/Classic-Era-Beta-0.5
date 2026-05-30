@@ -305,14 +305,18 @@ const CN_BASE = {
 };
 async function cnLoadResearch() {
   CN.unlocked = new Set(); CN.staffAll = false;
-  if (cnIsStaff()) { CN.staffAll = true; return; }
   const fid = CN.myApp && CN.myApp.faction_id;
-  if (!fid) return;
-  try {
-    const rows = await dbGet('faction_economy', `faction_id=eq.${encodeURIComponent(fid)}&select=research`);
-    const r = rows && rows[0] && rows[0].research;
-    (r || []).forEach(k => CN.unlocked.add(k));
-  } catch (e) {}
+  // Есть фракция → гейтим по ЕЁ исследованиям (даже для стаффа-игрока)
+  if (fid) {
+    try {
+      const rows = await dbGet('faction_economy', `faction_id=eq.${encodeURIComponent(fid)}&select=research`);
+      const r = rows && rows[0] && rows[0].research;
+      (r || []).forEach(k => CN.unlocked.add(k));
+    } catch (e) {}
+    return;
+  }
+  // Стафф без своей фракции — всё открыто (тест/модерация)
+  if (cnIsStaff()) CN.staffAll = true;
 }
 function cnUnlocked(key) { return CN.staffAll || (CN.unlocked && CN.unlocked.has(key)); }
 function cnClassUnlocked(cat, k) { return (CN_BASE.classes[cat] || []).includes(k) || cnUnlocked('cls.' + cat + '.' + k); }
