@@ -93,9 +93,21 @@ function getDisplayName() {
   return userProfile.display_name || user.email.split('@')[0];
 }
 async function loadProfiles() {
-  try { allProfiles = await dbGet('profiles', 'select=email,display_name,avatar_url') || []; } catch(e) { allProfiles = []; }
+  try {
+    const rows = await dbGet('profiles', 'select=email,display_name,avatar_url') || [];
+    // дедуп по email (в таблице бывают дубли) — последняя запись побеждает
+    const map = new Map();
+    rows.forEach(r => { if (r && r.email) map.set(r.email, r); });
+    allProfiles = [...map.values()];
+  } catch(e) { allProfiles = []; }
 }
-function getProfileOf(email) { return allProfiles.find(x => x.email === email) || {}; }
+function getProfileOf(email) {
+  // для текущего пользователя — его актуальный профиль (минуя возможные дубли/устаревшие строки в таблице)
+  if (user && email === user.email && (userProfile.display_name || userProfile.avatar_url)) {
+    return { email, display_name: userProfile.display_name || '', avatar_url: userProfile.avatar_url || '' };
+  }
+  return allProfiles.find(x => x.email === email) || {};
+}
 function userLabel(email) {
   const prof = getProfileOf(email);
   if (prof.display_name?.trim()) return prof.display_name.trim();

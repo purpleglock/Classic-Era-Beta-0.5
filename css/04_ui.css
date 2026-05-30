@@ -398,98 +398,91 @@ textarea.fi { resize: vertical; min-height: 80px; line-height: 1.6; }
 
 .sload {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 18px;
   min-height: 200px;
   padding: 40px;
+  animation: ld-fade-in .35s ease both;
 }
+@keyframes ld-fade-in { from { opacity: 0; } to { opacity: 1; } }
 
-/* Simple spinner for fast page transitions */
+/* ── Современный спиннер (только transform — GPU) ── */
 .pulse-loader {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(28,100,148, 0.2);
-  border-top-color: #1c6494;
+  width: 42px;
+  aspect-ratio: 1;
   border-radius: 50%;
-  animation: spin-simple 0.8s linear infinite;
+  /* кольцо: ведущая точка + конический градиент-хвост, центр вырезан маской */
+  background:
+    radial-gradient(farthest-side, var(--gd) 94%, transparent) top/4px 4px no-repeat,
+    conic-gradient(transparent 18%, var(--gd));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  filter: drop-shadow(0 0 6px var(--color-accent-glow, rgba(74,140,200,.25)));
+  animation: ld-spin .85s linear infinite;
+  will-change: transform;
 }
+@keyframes ld-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .pulse-loader { animation-duration: 1.8s; } }
 
-@keyframes spin-simple {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Quote loader for slow operations */
+/* ── Цитаты загрузки ── */
 .quote-loader {
-  font-family: 'Rajdhani', sans-serif;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--gdl);
+  font-family: 'Exo 2', sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: .2px;
+  color: var(--t2);
   text-align: center;
-  max-width: 500px;
-  line-height: 1.6;
-  text-shadow: 0 0 20px rgba(28,100,148, 0.4);
+  max-width: 580px;
+  line-height: 1.7;
+  padding: 4px 24px;
   position: relative;
-  padding: 20px 24px;
+  animation: ld-quote-in .5s var(--ease-out, ease) both;
 }
+@keyframes ld-quote-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-/* Цитата с автором - красивое оформление */
+/* Цитата с автором */
 .quote-loader .quote-text {
   font-family: 'Exo 2', sans-serif;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 400;
-  letter-spacing: 0.5px;
-  text-transform: none;
-  color: var(--t1);
-  line-height: 1.7;
-  margin-bottom: 12px;
   font-style: italic;
+  color: var(--t1);
+  line-height: 1.65;
+  margin: 0 auto 14px;
+  max-width: 540px;
   position: relative;
-  padding: 0 20px;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
 }
-
-/* Декоративные кавычки */
 .quote-loader .quote-text::before {
-  content: '«';
-  position: absolute;
-  left: 0;
-  top: -8px;
-  font-size: 32px;
-  color: var(--gd);
-  opacity: 0.4;
-  font-family: 'Georgia', serif;
-  line-height: 1;
+  content: '“'; color: var(--gd); opacity: .55;
+  font-family: 'Georgia', serif; font-size: 26px; line-height: 0;
+  vertical-align: -3px; margin-right: 4px;
 }
-
 .quote-loader .quote-text::after {
-  content: '»';
-  position: absolute;
-  right: 0;
-  bottom: -12px;
-  font-size: 32px;
-  color: var(--gd);
-  opacity: 0.4;
-  font-family: 'Georgia', serif;
-  line-height: 1;
+  content: '”'; color: var(--gd); opacity: .55;
+  font-family: 'Georgia', serif; font-size: 26px; line-height: 0;
+  vertical-align: -10px; margin-left: 2px;
 }
-
-/* Автор цитаты */
+/* Автор цитаты — мелким моноширинным с акцентной чёрточкой */
 .quote-loader .quote-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
   font-weight: 400;
-  letter-spacing: 1.5px;
+  font-style: normal;
+  letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--te);
-  opacity: 0.7;
-  margin-top: 8px;
-  text-align: right;
-  padding-right: 20px;
-  text-shadow: none;
-  position: relative;
+  opacity: .85;
+}
+.quote-loader .quote-author::before {
+  content: '';
+  width: 24px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--te));
 }
 
 /* ── INLINE BACKGROUND HIGHLIGHTS ── */
