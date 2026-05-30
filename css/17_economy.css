@@ -141,6 +141,23 @@
 .ec-div-act { display: flex; gap: 8px; align-items: center; margin-top: auto; }
 .ec-div-act .btn { flex: 1; }
 
+/* ── Дипломатия / разведка ── */
+.ec-dip-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.ec-dip-card { background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 14px; }
+.ec-dip-t { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--t1); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ec-loan-note { width: 100%; box-sizing: border-box; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 7px 9px; font-size: 12px; outline: none; }
+.ec-loan-note:focus { border-color: var(--gd); }
+.ec-q-row .btn-xs { flex-shrink: 0; }
+
+/* ── Караван-форма + кликабельная карточка ресурсов ── */
+.ec-caravan-form { display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center; margin-bottom: 4px; }
+.ec-caravan-form label { font-size: 11px; color: var(--t3); white-space: nowrap; }
+.ec-caravan-form select, .ec-caravan-form input { width: 100%; box-sizing: border-box; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 6px 8px; font-size: 12px; outline: none; }
+.ec-caravan-form select:focus, .ec-caravan-form input:focus { border-color: var(--gd); }
+.ec-caravan-form button { grid-column: 1 / -1; margin-top: 4px; }
+.ec-res-click { cursor: pointer; }
+.ec-res-click:hover { border-color: var(--w3); }
+
 @media (max-width: 720px) {
   .ec-colonies { grid-template-columns: 1fr; }
   .ec-colonize-row { flex-direction: column; align-items: stretch; }
