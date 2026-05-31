@@ -129,14 +129,26 @@ function ecNavEnsure() {
 
 async function ecRpc(fn, body) {
   const token = await getTokenFresh();
-  const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
-    method: 'POST',
-    headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {}),
-  });
-  if (!r.ok) { const t = await r.text(); throw new Error(t || ('HTTP ' + r.status)); }
-  if (r.status === 204) return null;
-  return r.json();
+  // Таймаут 18 с — сырой fetch без AbortController вешал страницу
+  // насмерть, если Supabase «просыпался» (cold start).
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 18000);
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+      signal: ctrl.signal,
+    });
+    clearTimeout(tid);
+    if (!r.ok) { const t = await r.text(); throw new Error(t || ('HTTP ' + r.status)); }
+    if (r.status === 204) return null;
+    return r.json();
+  } catch (e) {
+    clearTimeout(tid);
+    if (e.name === 'AbortError') throw new Error('сервер не ответил вовремя');
+    throw e;
+  }
 }
 
 // ── Точка входа (#economy) ──────────────────────────────────
@@ -161,12 +173,17 @@ async function ecRenderDashboard() {
       if (tick.income.tnp) parts.push(`+${ecNum(tick.income.tnp * tick.days)} ТНП`);
       if (parts.length) toast(`Доход за ${tick.days} сут.: ${parts.join(' · ')}`, 'ok');
     }
+    await ecLoad();
+    ecPaintCabinet();
   } catch (e) {
-    setPg(`<div class="ec-wrap"><div class="sempty">Экономика недоступна: ${esc(e.message)}<br><span style="font-size:11px;color:var(--t4)">Возможно, не выполнен _economy_setup.sql в Supabase.</span></div></div>`);
-    return;
+    // Никакого вечного спиннера — показываем причину и кнопку повтора
+    setPg(`<div class="ec-wrap"><div class="sempty" style="gap:12px;flex-direction:column">
+      <div style="font-size:32px;opacity:.2">⏱</div>
+      <div style="font-size:13px;color:var(--t2)">Не удалось загрузить экономику</div>
+      <div style="font-size:11px;color:var(--t4);max-width:320px;text-align:center">${esc(e.message)}<br>Если повторяется — возможно, не выполнен _economy_setup.sql, либо сервер ещё «просыпается».</div>
+      <button class="btn btn-gh" onclick="go('economy',false)">↺ Повторить</button>
+    </div></div>`);
   }
-  await ecLoad();
-  ecPaintCabinet();
 }
 
 function ecGate() {
@@ -185,9 +202,9 @@ async function ecLoad() {
   const fid = encodeURIComponent(EC.fid);
   const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
-    dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`),
-    dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`),
-    dbGet('map_systems', `faction=eq.${fid}&select=id,name,planets`),
+    dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
+    dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
+    dbGet('map_systems', `faction=eq.${fid}&select=id,name,planets`).catch(() => []),
     dbGet('faction_units', `or=(faction_id.eq.${fid},faction_id.is.null)&order=name.asc`).catch(() => []),
     dbGet('unit_production', `faction_id=eq.${fid}&order=created_at.desc`).catch(() => []),
     dbGet('map_systems', `select=id,name,faction,x,y`).catch(() => []),

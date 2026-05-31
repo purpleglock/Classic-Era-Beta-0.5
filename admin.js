@@ -77,7 +77,12 @@ async function adRenderConsole() {
     await adLoad();
     adPaint();
   } catch (e) {
-    setPg(`<div class="sempty">Ошибка загрузки: ${esc(e.message)}</div>`);
+    setPg(`<div class="sempty" style="gap:12px;flex-direction:column">
+      <div style="font-size:32px;opacity:.2">⏱</div>
+      <div style="font-size:13px;color:var(--t2)">Не удалось загрузить консоль</div>
+      <div style="font-size:11px;color:var(--t4);max-width:300px;text-align:center">${esc(e.message)}</div>
+      <button class="btn btn-gh" onclick="go('admin',false)">↺ Повторить</button>
+    </div>`);
   }
 }
 
