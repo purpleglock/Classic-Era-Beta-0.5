@@ -129,10 +129,10 @@ function ecNavEnsure() {
 
 async function ecRpc(fn, body) {
   const token = await getTokenFresh();
-  // Таймаут 18 с — сырой fetch без AbortController вешал страницу
-  // насмерть, если Supabase «просыпался» (cold start).
+  // Таймаут 28 с — сырой fetch без AbortController вешал страницу
+  // насмерть, если Supabase «просыпался» (cold start ~25 с).
   const ctrl = new AbortController();
-  const tid = setTimeout(() => ctrl.abort(), 18000);
+  const tid = setTimeout(() => ctrl.abort(), 28000);
   try {
     const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
       method: 'POST',

@@ -80,9 +80,10 @@ async function apiFetch(path, opts = {}) {
     ...(opts.method === 'POST' || opts.method === 'PATCH' ? { 'Prefer': 'return=representation' } : {}),
     ...extraHeaders,
   };
-  // Таймаут 12 с — защита от зависших запросов к Supabase (cold start / rate-limit)
+  // Таймаут 28 с — «холодный» старт Supabase (free-tier) занимает до ~25 с,
+  // поэтому 12 с было мало: запрос обрывался ровно перед пробуждением базы.
   const ctrl = new AbortController();
-  const tid = setTimeout(() => ctrl.abort(), 12000);
+  const tid = setTimeout(() => ctrl.abort(), 28000);
   try {
     const r = await fetch(SB_URL + '/rest/v1/' + path, { ...opts, headers, signal: ctrl.signal });
     clearTimeout(tid);
@@ -92,6 +93,7 @@ async function apiFetch(path, opts = {}) {
     return d;
   } catch (e) {
     clearTimeout(tid);
+    if (e.name === 'AbortError') throw new Error('таймаут: сервер не ответил за 28 с');
     throw e;
   }
 }

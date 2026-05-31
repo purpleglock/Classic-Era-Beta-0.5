@@ -45,7 +45,8 @@ async function loadSecs() {
     sections = await dbGet('sections','select=*&order=sort_order.asc,name_ru.asc') || [];
     _cacheSecs();
   } catch(e) {
-    console.error('Error loading sections:', e);
+    // AbortError/таймаут ожидаемы при «холодном» сервере — кеш уже показан, не шумим
+    console.warn('sections: фон не обновился (' + (e.message||e) + ')');
     // НЕ затираем sections — оставляем то, что уже есть (из кеша)
   }
 }
@@ -174,7 +175,7 @@ async function go(slug, push=true) {
 
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
 
-  // Таймаут 12 с: если сервер не ответил — показываем кнопку «Повторить»
+  // Таймаут 28 с: если сервер не ответил — показываем кнопку «Повторить»
   let _fetchTimedOut = false;
   const _fetchTid = setTimeout(() => {
     if (seq !== _navSeq) return;
@@ -185,7 +186,7 @@ async function go(slug, push=true) {
       <div style="font-size:12px;color:var(--t4);max-width:280px;text-align:center">Supabase мог уйти в паузу. Попробуйте ещё раз или зайдите позже.</div>
       <button onclick="go('${esc(slug)}',false)" class="btn btn-gh" style="margin-top:4px">↺ Повторить</button>
     </div>`);
-  }, 12000);
+  }, 28000);
 
   try {
     const abort = new AbortController(); _navAbort = abort;
