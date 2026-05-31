@@ -309,26 +309,30 @@ async function subLogin() {
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
-    // Основное обновление UI после логина — в отдельном try, чтобы не ломать сам вход
-    try {
-      await loadUserRole(data.user);
-      loadProfile();
-      updAuthUI();
-      _pgCache.clear();
-      await Promise.all([loadPgs(), loadProfiles(), loadHomePage()]);
-      await loadHeroCoverFromDb();
-      // Background loaded by loadSiteSettings() at startup
-      buildNav();
-      if (curSlug==='home') await renderHome(); else go(curSlug||'home', false);
-    } catch(e2) {
-      console.warn('[wiki] post-login refresh failed:', e2);
-    }
-
+    // Вход удался — ЗАКРЫВАЕМ модалку и приветствуем СРАЗУ.
+    // Раньше cm('mo-auth') стоял ПОСЛЕ await loadPgs/loadProfiles/… —
+    // на медленном Supabase это держало окно входа открытым 10-30 с
+    // и логин выглядел зависшим.
     cm('mo-auth');
     toast('Добро пожаловать!','ok');
-    if (btn) btn.disabled = false;
-  } catch(e) { toast(e.message||'Ошибка входа','err'); if(btn) btn.disabled=false; }
-  finally { _authBusy=false; }
+
+    // Обновление UI/данных — в фоне, не блокирует вход (onAuthStateChange тоже подхватит)
+    (async () => {
+      try {
+        await loadUserRole(data.user);
+        loadProfile();
+        updAuthUI();
+        _pgCache.clear();
+        await Promise.all([loadPgs(), loadProfiles(), loadHomePage()]);
+        await loadHeroCoverFromDb();
+        buildNav();
+        if (curSlug==='home' || !curSlug) renderHome(); else go(curSlug, false);
+      } catch(e2) {
+        console.warn('[wiki] post-login refresh failed:', e2);
+      }
+    })();
+  } catch(e) { toast(e.message||'Ошибка входа','err'); }
+  finally { _authBusy=false; if(btn) btn.disabled=false; }
 }
 
 async function subReg() {
