@@ -42,9 +42,11 @@ async function loadPgs() {
 
 async function loadHomePage() {
   try {
-    const r = await fetch(`${SB_URL}/rest/v1/pages?slug=eq.home&select=*&limit=1`, { headers: { 'apikey':SB_ANON, 'Authorization':'Bearer '+getToken() } });
-    if (r.ok) { const rows = await r.json(); if (rows?.length) { _pgCache.set('home', rows[0]); return; } }
+    // Используем dbGet() — он имеет 12-сек таймаут (защита от зависания)
+    const rows = await dbGet('pages', 'slug=eq.home&select=*&limit=1');
+    if (rows?.length) { _pgCache.set('home', rows[0]); return; }
   } catch(e) {}
+  // Fallback: localStorage-кеш с предыдущего визита
   const lsSaved = localStorage.getItem('wk_home_content');
   if (lsSaved) { try { const parsed = JSON.parse(lsSaved); if (Array.isArray(parsed) && parsed.length) { _pgCache.set('home', { content: lsSaved, _fromLS: true }); } } catch {} }
 }
@@ -135,16 +137,38 @@ async function go(slug, push=true) {
 
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
 
+  // Таймаут 12 с: если сервер не ответил — показываем кнопку «Повторить»
+  let _fetchTimedOut = false;
+  const _fetchTid = setTimeout(() => {
+    if (seq !== _navSeq) return;
+    _fetchTimedOut = true;
+    setPg(`<div class="sempty" style="gap:12px">
+      <div style="font-size:32px;opacity:.2">⏱</div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:12px;letter-spacing:2px;color:var(--t3)">СЕРВЕР НЕ ОТВЕЧАЕТ</div>
+      <div style="font-size:12px;color:var(--t4);max-width:280px;text-align:center">Supabase мог уйти в паузу. Попробуйте ещё раз или зайдите позже.</div>
+      <button onclick="go('${esc(slug)}',false)" class="btn btn-gh" style="margin-top:4px">↺ Повторить</button>
+    </div>`);
+  }, 12000);
+
   try {
     const abort = new AbortController(); _navAbort = abort;
     const r = await fetch(`${SB_URL}/rest/v1/pages?slug=eq.${encodeURIComponent(slug)}&select=*&limit=1`, { headers:{'apikey':SB_ANON,'Authorization':'Bearer '+getToken()}, signal:abort.signal });
-    if (seq!==_navSeq) return; _navAbort = null;
+    clearTimeout(_fetchTid);
+    if (_fetchTimedOut || seq!==_navSeq) return; _navAbort = null;
     if (!r.ok) throw new Error('HTTP '+r.status);
     const rows = await r.json();
     if (seq!==_navSeq) return;
     if (!rows?.length) { setPg(`<div class="sempty"><div style="font-size:48px;opacity:.15">◈</div><div style="font-family:Rajdhani,sans-serif;font-size:12px;letter-spacing:2px;margin-top:8px">${T('notFound')}</div></div>`); return; }
     _pgCache.set(slug, rows[0]); await renderPage(rows[0]);
-  } catch(e) { if (e.name==='AbortError') return; if (seq!==_navSeq) return; setPg(`<div class="sempty"><div>${esc(e.message)}</div></div>`); }
+  } catch(e) {
+    clearTimeout(_fetchTid);
+    if (e.name==='AbortError') return; if (seq!==_navSeq) return;
+    setPg(`<div class="sempty" style="gap:12px">
+      <div style="font-size:32px;opacity:.2">⚠</div>
+      <div style="font-size:13px;color:var(--t2)">${esc(e.message)}</div>
+      <button onclick="go('${esc(slug)}',false)" class="btn btn-gh" style="margin-top:4px">↺ Повторить</button>
+    </div>`);
+  }
 }
 function setPg(html) {
   const el=document.getElementById('pg');
