@@ -30,20 +30,26 @@ async function init() {
     });
   }
 
-  try {
-    await restoreSession();
-  } catch(e) { console.warn('restoreSession failed:', e); }
-
-  // ── МГНОВЕННЫЙ ПЕРВЫЙ РЕНДЕР ИЗ КЕША (stale-while-revalidate) ──
-  // Если в localStorage есть каркас вики с прошлого визита — рисуем его
-  // СРАЗУ, не дожидаясь сети. Свежие данные подгрузим в фоне ниже.
+  // ── МГНОВЕННЫЙ ПЕРВЫЙ РЕНДЕР ИЗ КЕША (ДО любых сетевых вызовов!) ──
+  // Критично: рисуем каркас из localStorage ПЕРЕД restoreSession/сетью,
+  // иначе медленный auth-запрос вешает всю загрузку и не видно даже крошек.
   const hadCache = (typeof hydrateFromCache === 'function') ? hydrateFromCache() : false;
   window.addEventListener('hashchange', route);
   if (hadCache) {
     buildNav();
     updAuthUI();
-    route();               // первый кадр из кеша — сайт открылся мгновенно
+    route();               // первый кадр из кеша — мгновенно, без ожидания сети
   }
+
+  // ── Восстановление сессии (с жёстким таймаутом 10 с) ──
+  // loadUserRole() ходит в сеть сырым fetch — без гонки с таймаутом
+  // «спящий» сервер вешал бы инициализацию насмерть.
+  try {
+    await Promise.race([
+      restoreSession(),
+      new Promise(res => setTimeout(res, 10000)),
+    ]);
+  } catch(e) { console.warn('restoreSession failed:', e); }
 
   // ── ФОНОВАЯ ЗАГРУЗКА СВЕЖИХ ДАННЫХ ──
   try {
