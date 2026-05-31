@@ -30,19 +30,36 @@ async function init() {
     });
   }
 
-  await restoreSession();
-  await Promise.all([loadSecs(), loadPgs(), loadHomePage(), loadProfiles()]);
-  // Sync profile from DB if localStorage had nothing (e.g. fresh Vercel deploy)
-  if (user && !userProfile.display_name && !userProfile.avatar_url) {
-    const dbProf = allProfiles.find(p => p.email === user.email);
-    if (dbProf) {
-      userProfile.display_name = dbProf.display_name || '';
-      userProfile.avatar_url = dbProf.avatar_url || '';
-      localStorage.setItem('wk_profile_' + user.id, JSON.stringify(userProfile));
-    }
+  try {
+    await restoreSession();
+  } catch(e) { console.warn('restoreSession failed:', e); }
+
+  try {
+    await Promise.all([loadSecs(), loadPgs(), loadHomePage(), loadProfiles()]);
+  } catch(e) { console.warn('Initial data load failed:', e); }
+
+  // Retry если данные пустые (Supabase cold-start / таймаут)
+  if (!pages.length && !sections.length) {
+    const retryEl = document.getElementById('initial-loader');
+    if (retryEl) retryEl.innerHTML = '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:var(--te);letter-spacing:.1em">Подключение... повтор через 3 с</div>';
+    await new Promise(r => setTimeout(r, 3000));
+    try { await Promise.all([loadSecs(), loadPgs()]); } catch(e) {}
   }
-  await loadHeroCoverFromDb();
-  // Background loaded by loadSiteSettings() at startup
+
+  // Sync profile from DB if localStorage had nothing (e.g. fresh Vercel deploy)
+  try {
+    if (user && !userProfile.display_name && !userProfile.avatar_url) {
+      const dbProf = allProfiles.find(p => p.email === user.email);
+      if (dbProf) {
+        userProfile.display_name = dbProf.display_name || '';
+        userProfile.avatar_url = dbProf.avatar_url || '';
+        localStorage.setItem('wk_profile_' + user.id, JSON.stringify(userProfile));
+      }
+    }
+  } catch(e) {}
+
+  try { await loadHeroCoverFromDb(); } catch(e) {}
+
   buildNav();
   route();
   window.addEventListener('hashchange', route);

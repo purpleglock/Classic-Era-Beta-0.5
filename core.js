@@ -80,11 +80,20 @@ async function apiFetch(path, opts = {}) {
     ...(opts.method === 'POST' || opts.method === 'PATCH' ? { 'Prefer': 'return=representation' } : {}),
     ...extraHeaders,
   };
-  const r = await fetch(SB_URL + '/rest/v1/' + path, { ...opts, headers });
-  if (r.status === 204) return null;
-  const d = await r.json();
-  if (!r.ok) throw new Error(d?.message || d?.error || 'HTTP ' + r.status);
-  return d;
+  // Таймаут 12 с — защита от зависших запросов к Supabase (cold start / rate-limit)
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const r = await fetch(SB_URL + '/rest/v1/' + path, { ...opts, headers, signal: ctrl.signal });
+    clearTimeout(tid);
+    if (r.status === 204) return null;
+    const d = await r.json();
+    if (!r.ok) throw new Error(d?.message || d?.error || 'HTTP ' + r.status);
+    return d;
+  } catch (e) {
+    clearTimeout(tid);
+    throw e;
+  }
 }
 const dbGet  = (t, q='')    => apiFetch(`${t}?${q}`);
 const dbPost = (t, b)       => apiFetch(t,       { method:'POST',  body: JSON.stringify(b) });

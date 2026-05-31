@@ -4,6 +4,9 @@
 // SQL не нужен — RLS уже разрешает стаффу писать в любую строку.
 // ================================================================
 
+// Экранирование строки для onclick="fn('значение')" — обёртка в одинарные кавычки
+const adArg = s => "'" + String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+
 const AD = {
   apps:      [],        // faction_applications (approved)
   ecos:      [],        // faction_economy (all)
@@ -232,8 +235,8 @@ function adTabResources(e) {
           <span class="ad-res-name">${esc(k)}</span>
           <span class="ad-rarity ad-rarity-${info.r || 'common'}">${info.r || 'common'}</span>
           <input class="fi ad-res-val" id="ad-rv-${esc(k)}" type="number" value="${res[k]}" min="0">
-          <button class="btn btn-gh btn-xs" onclick="adUpdateResource(${JSON.stringify(k)})">Сохранить</button>
-          <button class="btn btn-rd btn-xs" onclick="adZeroResource(${JSON.stringify(k)})">✕</button>
+          <button class="btn btn-gh btn-xs" onclick="adUpdateResource(${adArg(k)})">Сохранить</button>
+          <button class="btn btn-rd btn-xs" onclick="adZeroResource(${adArg(k)})">✕</button>
         </div>`;
       }).join('')
     : `<div class="ad-empty">Нет ресурсов</div>`;
@@ -318,7 +321,7 @@ function adTabResearch(e) {
           return `<div class="ad-rs-node${isDone ? ' done' : ''}">
             <div class="ad-rs-gp">${esc(n.group)}</div>
             <div class="ad-rs-name">${esc(n.name)}</div>
-            <button class="btn ${isDone ? 'btn-rd' : 'btn-gd'} btn-xs" onclick="adToggleResearch(${JSON.stringify(n.id)})">
+            <button class="btn ${isDone ? 'btn-rd' : 'btn-gd'} btn-xs" onclick="adToggleResearch(${adArg(n.id)})">
               ${isDone ? '✕ Отозвать' : '✓ Выдать'}
             </button>
           </div>`;
@@ -404,8 +407,8 @@ function adTabTerritory(e) {
     <span class="ad-sys-name">${esc(s.name || s.id)}</span>
     <span class="ad-sys-owner ${s.faction ? (isOwn ? 'mine' : 'other') : 'neutral'}">${esc(facName(s.faction))}</span>
     <span class="ad-sys-acts">
-      ${!isOwn ? `<button class="btn btn-gd btn-xs" onclick="adGrantSystem(${JSON.stringify(s.id)})">→ Взять</button>` : ''}
-      ${s.faction ? `<button class="btn btn-rd btn-xs" onclick="adReleaseSystem(${JSON.stringify(s.id)})">✕ Освободить</button>` : ''}
+      ${!isOwn ? `<button class="btn btn-gd btn-xs" onclick="adGrantSystem(${adArg(s.id)})">→ Взять</button>` : ''}
+      ${s.faction ? `<button class="btn btn-rd btn-xs" onclick="adReleaseSystem(${adArg(s.id)})">✕ Освободить</button>` : ''}
     </span>
   </div>`;
 
@@ -482,11 +485,11 @@ function adTabColonies(e) {
       return `<div class="ad-bld-row">
         <span class="ad-bld-name">${d ? esc(d.name) : esc(b.btype)}</span>
         <span class="ad-bld-slots">
-          <button class="btn btn-gh btn-xs" onclick="adSetSlots(${JSON.stringify(b.id)},${Math.max(1,b.slots_open-1)})" ${b.slots_open<=1?'disabled':''}>−</button>
+          <button class="btn btn-gh btn-xs" onclick="adSetSlots(${adArg(b.id)},${Math.max(1,b.slots_open-1)})" ${b.slots_open<=1?'disabled':''}>−</button>
           <span class="ad-slot-val">${b.slots_open}/6</span>
-          <button class="btn btn-gh btn-xs" onclick="adSetSlots(${JSON.stringify(b.id)},${Math.min(6,b.slots_open+1)})" ${b.slots_open>=6?'disabled':''}>+</button>
+          <button class="btn btn-gh btn-xs" onclick="adSetSlots(${adArg(b.id)},${Math.min(6,b.slots_open+1)})" ${b.slots_open>=6?'disabled':''}>+</button>
         </span>
-        <button class="btn btn-rd btn-xs" onclick="adRemoveBuilding(${JSON.stringify(b.id)})">✕</button>
+        <button class="btn btn-rd btn-xs" onclick="adRemoveBuilding(${adArg(b.id)})">✕</button>
       </div>`;
     }).join('') || `<div class="ad-empty" style="padding:4px 0;font-size:11px">Пусто</div>`;
 
@@ -503,8 +506,8 @@ function adTabColonies(e) {
       <div class="ad-bld-list">${bldRows}</div>
       <div class="ad-col-foot">
         <select id="ad-bsel-${c.id}" class="fi" style="flex:1">${bldOpts}</select>
-        <button class="btn btn-gh btn-sm" ${full ? 'disabled' : ''} onclick="adAddBuilding(${JSON.stringify(c.id)})">+ Постройка</button>
-        <button class="btn btn-rd btn-sm" onclick="adRemoveColony(${JSON.stringify(c.id)})">✕ Колонию</button>
+        <button class="btn btn-gh btn-sm" ${full ? 'disabled' : ''} onclick="adAddBuilding(${adArg(c.id)})">+ Постройка</button>
+        <button class="btn btn-rd btn-sm" onclick="adRemoveColony(${adArg(c.id)})">✕ Колонию</button>
       </div>
     </div>`;
   }).join('') || `<div class="ad-empty">Нет колоний</div>`;
@@ -609,7 +612,7 @@ function adTabArmy(e) {
         <span class="ad-unit-cat">${esc(p.category || '')}</span>
         <span class="ad-unit-name">${esc(p.unit_name || '—')}</span>
         <span class="ad-unit-qty">×${p.qty || 1}</span>
-        <button class="btn btn-rd btn-xs" onclick="adRemoveUnit(${JSON.stringify(p.id)})">✕</button>
+        <button class="btn btn-rd btn-xs" onclick="adRemoveUnit(${adArg(p.id)})">✕</button>
       </div>`).join('')
     : `<div class="ad-empty">Нет юнитов в ростере</div>`;
 
