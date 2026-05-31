@@ -28,53 +28,64 @@ function adCanAccess() { return !!(user && ['superadmin', 'editor'].includes(use
 function adEntry(fid)  { return AD.byFid.get(fid); }
 function adNum(n)      { return Number(n || 0).toLocaleString('ru-RU'); }
 
-// ── Загрузка данных ─────────────────────────────────────────────
-async function adLoad() {
-  const [apps, ecos, cols, blds, prod, systems, designs] = await Promise.all([
-    dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,owner_id,owner_email,race,civ_type,system_id,system_name&order=name.asc').catch(() => []),
-    dbGet('faction_economy',  'select=*').catch(() => []),
-    dbGet('colonies',         'select=*&order=faction_id.asc').catch(() => []),
-    dbGet('colony_buildings', 'select=*&order=faction_id.asc').catch(() => []),
-    dbGet('unit_production',  'select=*&order=faction_id.asc').catch(() => []),
-    dbGet('map_systems',      'select=id,name,faction,planets,x,y').catch(() => []),
-    dbGet('faction_units',    'select=*&order=name.asc').catch(() => []),
-  ]);
-
-  AD.apps      = apps      || [];
-  AD.ecos      = ecos      || [];
-  AD.colonies  = cols      || [];
-  AD.buildings = blds      || [];
-  AD.prod      = prod      || [];
-  AD.systems   = systems   || [];
-  AD.designs   = designs   || [];
-
+// ── Загрузка данных (прогрессивно: сначала лёгкое ядро, потом детали) ──
+function adBuildIndex() {
   AD.byFid = new Map();
-  AD.apps.forEach(app => {
+  (AD.apps || []).forEach(app => {
     AD.byFid.set(app.faction_id, {
       app,
-      eco:      AD.ecos.find(e => e.faction_id === app.faction_id) || null,
-      colonies: AD.colonies.filter(c => c.faction_id === app.faction_id),
-      buildings:AD.buildings.filter(b => b.faction_id === app.faction_id),
-      roster:   AD.prod.filter(p => p.faction_id === app.faction_id && p.status === 'done'),
-      queue:    AD.prod.filter(p => p.faction_id === app.faction_id && p.status === 'queued'),
-      designs:  AD.designs.filter(d => d.faction_id === app.faction_id),
-      systems:  AD.systems.filter(s => s.faction === app.faction_id),
+      eco:      (AD.ecos || []).find(e => e.faction_id === app.faction_id) || null,
+      colonies: (AD.colonies || []).filter(c => c.faction_id === app.faction_id),
+      buildings:(AD.buildings || []).filter(b => b.faction_id === app.faction_id),
+      roster:   (AD.prod || []).filter(p => p.faction_id === app.faction_id && p.status === 'done'),
+      queue:    (AD.prod || []).filter(p => p.faction_id === app.faction_id && p.status === 'queued'),
+      designs:  (AD.designs || []).filter(d => d.faction_id === app.faction_id),
+      systems:  (AD.systems || []).filter(s => s.faction === app.faction_id),
     });
   });
-
-  // Карта редкости ресурсов из планет всех систем
+  // Карта редкости ресурсов (если planets подгружены — иначе пусто, ввод вручную)
   AD.resInfo = {};
-  AD.systems.forEach(s => (s.planets || []).forEach(p => (p.resources || []).forEach(r => {
+  (AD.systems || []).forEach(s => (s.planets || []).forEach(p => (p.resources || []).forEach(r => {
     if (r && r.name && !AD.resInfo[r.name]) AD.resInfo[r.name] = { r: r.r || 'common', icon: r.icon || '◈' };
   })));
 }
+
+// Ядро — лёгкие запросы, нужные для таблицы фракций (грузится за ~1 c)
+async function adLoadCore() {
+  const [apps, ecos] = await Promise.all([
+    dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,owner_id,owner_email,race,civ_type,system_id,system_name&order=name.asc').catch(() => []),
+    dbGet('faction_economy',  'select=*').catch(() => []),
+  ]);
+  AD.apps = apps || [];
+  AD.ecos = ecos || [];
+}
+
+// Детали — счётчики и содержимое вкладок (без тяжёлого planets jsonb)
+async function adLoadDetails() {
+  const [cols, blds, prod, systems, designs] = await Promise.all([
+    dbGet('colonies',         'select=*').catch(() => []),
+    dbGet('colony_buildings', 'select=*').catch(() => []),
+    dbGet('unit_production',  'select=*').catch(() => []),
+    dbGet('map_systems',      'select=id,name,faction').catch(() => []),               // без planets/x,y — экономим ~25 КБ
+    dbGet('faction_units',    'select=id,category,name,faction_id&order=name.asc').catch(() => []), // без тяжёлых data/summary
+  ]);
+  AD.colonies  = cols    || [];
+  AD.buildings = blds    || [];
+  AD.prod      = prod    || [];
+  AD.systems   = systems || [];
+  AD.designs   = designs || [];
+}
+
+async function adLoad() { await adLoadCore(); await adLoadDetails(); adBuildIndex(); }
 
 // ── Рендер ──────────────────────────────────────────────────────
 async function adRenderConsole() {
   if (!adCanAccess()) { setPg('<div class="sempty">Нет доступа</div>'); return; }
   setPg('<div class="sload"><div class="pulse-loader"></div></div>');
+  // 1) Ядро — показываем таблицу фракций как можно быстрее
   try {
-    await adLoad();
+    await adLoadCore();
+    adBuildIndex();
     adPaint();
   } catch (e) {
     setPg(`<div class="sempty" style="gap:12px;flex-direction:column">
@@ -83,7 +94,14 @@ async function adRenderConsole() {
       <div style="font-size:11px;color:var(--t4);max-width:300px;text-align:center">${esc(e.message)}</div>
       <button class="btn btn-gh" onclick="go('admin',false)">↺ Повторить</button>
     </div>`);
+    return;
   }
+  // 2) Детали — в фоне; таблица уже на экране, счётчики дозаполнятся
+  try {
+    await adLoadDetails();
+    adBuildIndex();
+    adPaint();
+  } catch (e) { /* детали не критичны — фракции уже видны */ }
 }
 
 function adPaint() {
