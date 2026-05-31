@@ -118,6 +118,11 @@ async function go(slug, push=true) {
     else { setPg('<div class="sempty">economy.js не загружен</div>'); }
     return;
   }
+  if (slug==='admin') {
+    if (typeof adRenderConsole === 'function') { await adRenderConsole(); }
+    else { setPg('<div class="sempty">admin.js не загружен</div>'); }
+    return;
+  }
   if (_pgCache.has(slug)) {
     const cached = _pgCache.get(slug);
     // Проверяем что в кэше полная запись (с content), а не урезанная из liveItems

@@ -1425,6 +1425,10 @@ function buildNav(filt='') {
   if (typeof ecCanAccess==='function' && ecCanAccess()) {
     h+=`<div class="n-home${curSlug==='economy'?' on':''}" id="ntl-eco" onclick="go('economy')"><span class="n-home-icon">🛰</span>${lang==='ru'?'Кабинет игрока':'Cabinet'}</div>`;
   }
+  // Администрирование — только суперадмины и эдиторы
+  if (typeof adCanAccess==='function' && adCanAccess()) {
+    h+=`<div class="n-home${curSlug==='admin'?' on':''}" id="ntl-adm" onclick="go('admin')"><span class="n-home-icon">🛠</span>${lang==='ru'?'Управление':'Admin'}</div>`;
+  }
   // Каталоги юнитов фракций — видны всем
   const cnCats=[['cat-ships','🚀',lang==='ru'?'Флот':'Fleet'],['cat-ground','🛡',lang==='ru'?'Наземная техника':'Ground'],['cat-aviation','✈',lang==='ru'?'Авиация':'Aviation'],['cat-divisions','⛬',lang==='ru'?'Дивизии':'Divisions']];
   cnCats.forEach(([sl,ic,nm])=>{ h+=`<div class="n-home${curSlug===sl?' on':''}" onclick="go('${sl}')"><span class="n-home-icon">${ic}</span>${nm}</div>`; });
