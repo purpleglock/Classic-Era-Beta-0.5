@@ -2,15 +2,51 @@
 // DATA — loadSecs, loadPgs, routing
 // ════════════════════════════════════════════════════════════
 
+// ── Кеш каркаса вики (stale-while-revalidate) ───────────────
+// Чтобы сайт открывался МГНОВЕННО из localStorage, а свежие данные
+// подгружались в фоне — как на «нормальных» сайтах. Кешируем только
+// лёгкие поля (без тяжёлого content) — его догружает go() по странице.
+const CACHE_SECS_KEY = 'wk_cache_secs_v1';
+const CACHE_PGS_KEY  = 'wk_cache_pgs_v1';
 
-
+function _cacheSecs() {
+  try { localStorage.setItem(CACHE_SECS_KEY, JSON.stringify(sections)); } catch(e) {}
+}
+function _cachePgs() {
+  try {
+    const slim = pages.map(p => ({
+      id: p.id, slug: p.slug, title: p.title, title_ru: p.title_ru,
+      section: p.section, parent_slug: p.parent_slug, status: p.status,
+      page_type: p.page_type, sort_order: p.sort_order, created_by: p.created_by,
+      updated_at: p.updated_at, created_at: p.created_at, image_url: p.image_url,
+      infobox: p.infobox
+    }));
+    localStorage.setItem(CACHE_PGS_KEY, JSON.stringify(slim));
+  } catch(e) {}
+}
+// Гидрация из кеша до сети — мгновенный первый рендер
+function hydrateFromCache() {
+  let ok = false;
+  try { const s = localStorage.getItem(CACHE_SECS_KEY); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length) { sections = a; ok = true; } } } catch(e) {}
+  try { const p = localStorage.getItem(CACHE_PGS_KEY);  if (p) { const a = JSON.parse(p); if (Array.isArray(a) && a.length) { pages = a; ok = true; } } } catch(e) {}
+  // Сеем кеш главной, чтобы renderHome() не ждал сеть на мгновенном кадре
+  try {
+    if (!_pgCache.has('home')) {
+      const hc = localStorage.getItem('wk_home_content');
+      if (hc) { const parsed = JSON.parse(hc); if (Array.isArray(parsed) && parsed.length) { _pgCache.set('home', { content: hc, _fromLS: true }); } }
+      else { _pgCache.set('home', { content: '[]', _placeholder: true }); } // пустышка → renderHome не блокируется сетью
+    }
+  } catch(e) {}
+  return ok;
+}
 
 async function loadSecs() {
-  try { 
-    sections = await dbGet('sections','select=*&order=sort_order.asc,name_ru.asc') || []; 
-  } catch(e) { 
+  try {
+    sections = await dbGet('sections','select=*&order=sort_order.asc,name_ru.asc') || [];
+    _cacheSecs();
+  } catch(e) {
     console.error('Error loading sections:', e);
-    sections = []; 
+    // НЕ затираем sections — оставляем то, что уже есть (из кеша)
   }
 }
 function canSeeDrafts() {
@@ -36,8 +72,9 @@ async function loadPgs() {
         }
       } catch(e) {}
     });
+    _cachePgs();
     const sc = document.getElementById('sb-cnt'); if (sc) sc.textContent = pages.length + (lang==='en'?' pgs':' стр.');
-  } catch(e) { pages = []; }
+  } catch(e) { /* НЕ затираем pages — оставляем кеш */ }
 }
 
 async function loadHomePage() {

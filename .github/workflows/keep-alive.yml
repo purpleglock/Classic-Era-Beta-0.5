@@ -1,0 +1,31 @@
+name: Keep Supabase Alive
+
+# Суть: Supabase Free Tier засыпает после 7 дней без запросов.
+# Этот workflow пингует БД каждый день в 07:00 UTC,
+# не давая проекту уйти на паузу.
+# Ключ anon публичный (уже в client-side JS) — хранить в секретах нет нужды.
+
+on:
+  schedule:
+    - cron: '0 7 * * *'   # каждый день 07:00 UTC
+  workflow_dispatch:        # ручной запуск для проверки
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Supabase (keep-alive)
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/pages?select=id&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnbmdra2lpb3B5bXZyY296dnZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MzU5MjgsImV4cCI6MjA5NTUxMTkyOH0.ejFOy6cDNsAj9yCnWOVub0L2tunm9l32BfkgBI_mZFk" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnbmdra2lpb3B5bXZyY296dnZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MzU5MjgsImV4cCI6MjA5NTUxMTkyOH0.ejFOy6cDNsAj9yCnWOVub0L2tunm9l32BfkgBI_mZFk" \
+            --max-time 30)
+          echo "Supabase ping status: $STATUS"
+          if [ "$STATUS" = "200" ] || [ "$STATUS" = "206" ]; then
+            echo "✅ Supabase is alive"
+          else
+            echo "⚠️  Unexpected status $STATUS (may be waking up)"
+            exit 0
+          fi

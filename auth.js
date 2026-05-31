@@ -34,16 +34,43 @@ async function init() {
     await restoreSession();
   } catch(e) { console.warn('restoreSession failed:', e); }
 
+  // ── МГНОВЕННЫЙ ПЕРВЫЙ РЕНДЕР ИЗ КЕША (stale-while-revalidate) ──
+  // Если в localStorage есть каркас вики с прошлого визита — рисуем его
+  // СРАЗУ, не дожидаясь сети. Свежие данные подгрузим в фоне ниже.
+  const hadCache = (typeof hydrateFromCache === 'function') ? hydrateFromCache() : false;
+  window.addEventListener('hashchange', route);
+  if (hadCache) {
+    buildNav();
+    updAuthUI();
+    route();               // первый кадр из кеша — сайт открылся мгновенно
+  }
+
+  // ── ФОНОВАЯ ЗАГРУЗКА СВЕЖИХ ДАННЫХ ──
   try {
     await Promise.all([loadSecs(), loadPgs(), loadHomePage(), loadProfiles()]);
   } catch(e) { console.warn('Initial data load failed:', e); }
 
-  // Retry если данные пустые (Supabase cold-start / таймаут)
-  if (!pages.length && !sections.length) {
+  // Retry-цикл только если кеша НЕ было и сеть не ответила (первый визит на «спящий» сервер)
+  if (!hadCache && !pages.length && !sections.length) {
     const retryEl = document.getElementById('initial-loader');
-    if (retryEl) retryEl.innerHTML = '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:var(--te);letter-spacing:.1em">Подключение... повтор через 3 с</div>';
-    await new Promise(r => setTimeout(r, 3000));
-    try { await Promise.all([loadSecs(), loadPgs()]); } catch(e) {}
+    const setMsg = (msg) => { if (retryEl) retryEl.innerHTML = msg; };
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const waitSec = attempt === 1 ? 6 : 8;
+      setMsg(`<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--te,#3ec0d0);letter-spacing:.1em;text-align:center">
+        <div>Сервер запускается</div>
+        <div style="margin-top:4px;opacity:.6">попытка ${attempt} / 3 — ждём ${waitSec} с...</div>
+      </div>`);
+      await new Promise(r => setTimeout(r, waitSec * 1000));
+      try { await Promise.all([loadSecs(), loadPgs(), loadHomePage()]); } catch(e) {}
+      if (pages.length || sections.length) break;
+    }
+    if (!pages.length && !sections.length) {
+      setMsg(`<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--err,#e05050);letter-spacing:.1em;text-align:center">
+        <div>Сервер не отвечает</div>
+        <button onclick="location.reload()" style="margin-top:8px;padding:6px 16px;background:var(--gd,#2a7fc1);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;letter-spacing:.08em">↺ ОБНОВИТЬ</button>
+      </div>`);
+      await new Promise(r => setTimeout(r, 3000));
+    }
   }
 
   // Sync profile from DB if localStorage had nothing (e.g. fresh Vercel deploy)
@@ -60,10 +87,17 @@ async function init() {
 
   try { await loadHeroCoverFromDb(); } catch(e) {}
 
+  // Перерисовка свежими данными
   buildNav();
-  route();
-  window.addEventListener('hashchange', route);
   updAuthUI();
+  if (hadCache) {
+    // Уже показали кадр из кеша → обновляем текущий вид свежими данными.
+    // Для главной/раздела это дёшево; статьи свежий content тянут сами через go().
+    if (curSlug === 'home' || !curSlug) renderHome();
+    else route();
+  } else {
+    route(); // первый кадр (кеша не было)
+  }
 
   setInterval(() => { sb.auth.refreshSession().catch(() => {}); }, 4 * 60 * 1000);
 
