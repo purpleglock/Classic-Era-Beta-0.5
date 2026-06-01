@@ -810,3 +810,146 @@ begin
 end$$;
 revoke all on function public.economy_research(text,numeric) from public;
 grant execute on function public.economy_research(text,numeric) to authenticated;
+
+-- ════════════════════════════════════════════════════════════
+-- v7: АВТОНАЧИСЛЕНИЕ — доход капает САМ (планировщик), а не «по клику»
+-- ════════════════════════════════════════════════════════════
+
+-- Ядро начисления для ОДНОЙ фракции по faction_id (с FOR UPDATE — без гонок).
+-- Используется и economy_tick (свой кабинет — фолбэк/мгновенная актуализация),
+-- и economy_tick_all (ежедневный планировщик для ВСЕХ).
+create or replace function public.economy_accrue(p_fid text)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare
+  eco public.faction_economy; d int;
+  inc_gc numeric:=0; inc_sci numeric:=0; inc_agents int:=0; trade_gc numeric:=0; pirate boolean:=false;
+  r record; col record; relem jsonb; thr jsonb;
+  res_add jsonb := '{}'::jsonb; res_sub jsonb := '{}'::jsonb; merged jsonb; k text;
+  rname text; rr text; rate numeric; escorted boolean; attacked boolean; chance numeric; avail numeric; shipped numeric;
+begin
+  select * into eco from public.faction_economy where faction_id = p_fid for update;
+  if not found then return jsonb_build_object('faction_id',p_fid,'days',0); end if;
+
+  update public.unit_production set status='done' where faction_id=p_fid and status='queued' and ready_at<=now();
+
+  if eco.research_active is not null and eco.research_ready is not null and eco.research_ready <= now() then
+    update public.faction_economy
+      set research = coalesce(research,'[]'::jsonb) || to_jsonb(eco.research_active::text),
+          research_active = null, research_ready = null
+      where faction_id = p_fid;
+    select * into eco from public.faction_economy where faction_id = p_fid;
+  end if;
+
+  d := floor(extract(epoch from (now()-eco.last_tick))/86400.0);
+
+  for r in select btype, slots_open from public.colony_buildings where faction_id=p_fid loop
+    if r.btype in ('factory','mining','trade') then inc_gc := inc_gc + r.slots_open*100;
+    elsif r.btype='science' then inc_sci := inc_sci + r.slots_open*1;
+    elsif r.btype='intel' then inc_agents := inc_agents + r.slots_open*1;
+    end if;
+  end loop;
+
+  if d >= 1 then
+    for col in
+      select c.resources as cres,
+             (select coalesce(sum(cb.slots_open),0) from public.colony_buildings cb where cb.colony_id=c.id and cb.btype='mining') as mslots
+      from public.colonies c where c.faction_id=p_fid
+    loop
+      if col.mslots > 0 and col.cres is not null then
+        for relem in select value from jsonb_array_elements(col.cres) loop
+          rname := relem->>'name'; if rname is null then continue; end if;
+          rr := coalesce(relem->>'r','common');
+          rate := case rr when 'uncommon' then 12 when 'rare' then 5 when 'epic' then 2 when 'legendary' then 1 else 25 end;
+          res_add := jsonb_set(res_add, array[rname], to_jsonb(coalesce((res_add->>rname)::numeric,0) + col.mslots*rate*d), true);
+        end loop;
+      end if;
+    end loop;
+
+    for r in select volume, resource, price, convoy, threats, b_fid from public.trade_routes where status='active' and a_fid=p_fid loop
+      escorted := coalesce(r.convoy,0) > 0; attacked := false;
+      for thr in select value from jsonb_array_elements(coalesce(r.threats,'[]'::jsonb)) loop
+        if (thr->>'type') = 'ancient' then chance := case when escorted then 0.65 else 0.80 end;
+        else chance := case when escorted then 0.40 else 0.80 end; end if;
+        if random() < chance then attacked := true; end if;
+      end loop;
+      if attacked then pirate := true; continue; end if;
+      avail := coalesce((eco.resources->>r.resource)::numeric,0) + coalesce((res_add->>r.resource)::numeric,0) - coalesce((res_sub->>r.resource)::numeric,0);
+      shipped := least(coalesce(r.volume,0)*d, avail);
+      if shipped <= 0 then continue; end if;
+      res_sub := jsonb_set(res_sub, array[r.resource], to_jsonb(coalesce((res_sub->>r.resource)::numeric,0)+shipped), true);
+      trade_gc := trade_gc + shipped * coalesce(r.price,0);
+      update public.faction_economy set gc = gc + round(shipped*coalesce(r.price,0)*0.33) where faction_id = r.b_fid;
+    end loop;
+
+    merged := coalesce(eco.resources,'{}'::jsonb);
+    for k in select jsonb_object_keys(res_add) loop
+      merged := jsonb_set(merged, array[k], to_jsonb(coalesce((merged->>k)::numeric,0) + (res_add->>k)::numeric), true);
+    end loop;
+    for k in select jsonb_object_keys(res_sub) loop
+      merged := jsonb_set(merged, array[k], to_jsonb(greatest(0, coalesce((merged->>k)::numeric,0) - (res_sub->>k)::numeric)), true);
+    end loop;
+
+    update public.faction_economy
+      set gc = gc + inc_gc*d + trade_gc,
+          science = science + inc_sci*d,
+          agents = agents + inc_agents*d,
+          resources = merged,
+          last_tick = last_tick + (d || ' days')::interval
+      where faction_id=p_fid returning * into eco;
+  end if;
+
+  return jsonb_build_object('faction_id',eco.faction_id,'gc',eco.gc,'science',eco.science,'agents',eco.agents,
+    'resources',eco.resources,'last_tick',eco.last_tick,'days',d,
+    'income', jsonb_build_object('gc',inc_gc,'science',inc_sci,'agents',inc_agents,'trade',trade_gc,'pirate',pirate));
+end$$;
+
+-- economy_tick(): начисление СВОЕЙ фракции (вызывается при заходе — мгновенная
+-- актуализация; идемпотентно, не двоит благодаря FOR UPDATE в economy_accrue).
+create or replace function public.economy_tick()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare fid text;
+begin
+  select faction_id into fid from public.faction_economy where owner_id=auth.uid() order by created_at asc limit 1;
+  if fid is null then raise exception 'no economy'; end if;
+  return public.economy_accrue(fid);
+end$$;
+
+-- economy_tick_all(): начисление ВСЕМ фракциям (для ежедневного планировщика).
+-- Идемпотентно (двигает last_tick на целые сутки) — безопасно дёргать хоть anon.
+create or replace function public.economy_tick_all()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare f record; n int := 0;
+begin
+  for f in select faction_id from public.faction_economy loop
+    begin perform public.economy_accrue(f.faction_id); n := n + 1;
+    exception when others then null; end;  -- одна сбойная фракция не валит весь прогон
+  end loop;
+  return jsonb_build_object('ok', true, 'factions', n, 'at', now());
+end$$;
+
+revoke all on function public.economy_accrue(text) from public;     -- внутренняя
+revoke all on function public.economy_tick() from public;
+revoke all on function public.economy_tick_all() from public;
+grant execute on function public.economy_tick() to authenticated;
+grant execute on function public.economy_tick_all() to anon, authenticated;
+
+-- ── Планировщик: ежедневное автоначисление через pg_cron (00:05 UTC) ──
+-- Если pg_cron недоступен — резервом служит GitHub Action keep-alive.yml,
+-- который раз в сутки дёргает RPC economy_tick_all (см. .github/workflows).
+do $$
+begin
+  if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
+    begin
+      create extension if not exists pg_cron;
+      if exists (select 1 from cron.job where jobname = 'economy-daily-tick') then
+        perform cron.unschedule('economy-daily-tick');
+      end if;
+      perform cron.schedule('economy-daily-tick', '5 0 * * *', 'select public.economy_tick_all();');
+      raise notice 'pg_cron: ежедневный economy_tick_all запланирован (00:05 UTC)';
+    exception when others then
+      raise notice 'pg_cron настроить не удалось (%) — используйте GitHub Action keep-alive', sqlerrm;
+    end;
+  else
+    raise notice 'pg_cron недоступен — ежедневный тик обеспечит GitHub Action keep-alive.yml';
+  end if;
+end$$;

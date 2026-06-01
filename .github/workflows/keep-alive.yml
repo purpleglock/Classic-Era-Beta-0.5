@@ -27,5 +27,16 @@ jobs:
             echo "✅ Supabase is alive"
           else
             echo "⚠️  Unexpected status $STATUS (may be waking up)"
-            exit 0
           fi
+
+      - name: Daily economy tick (начисляет доход всем фракциям)
+        run: |
+          # Резерв на случай, если pg_cron не включён: раз в сутки начисляем
+          # доход всем фракциям. economy_tick_all идемпотентна (двигает last_tick
+          # на целые сутки), повторный вызов в тот же день ничего не удвоит.
+          KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnbmdra2lpb3B5bXZyY296dnZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MzU5MjgsImV4cCI6MjA5NTUxMTkyOH0.ejFOy6cDNsAj9yCnWOVub0L2tunm9l32BfkgBI_mZFk"
+          RESP=$(curl -s -X POST \
+            "https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/rpc/economy_tick_all" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+            -H "Content-Type: application/json" --data '{}' --max-time 60)
+          echo "economy_tick_all -> $RESP"

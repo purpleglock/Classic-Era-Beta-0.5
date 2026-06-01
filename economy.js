@@ -151,20 +151,17 @@ async function ecRpc(fn, body) {
   }
 }
 
-// ── Инициализация+тик ОДИН раз за загрузку (защита от двойного начисления) ──
-// Если ecRenderDashboard вызовется дважды подряд (напр. повторный route()
-// после загрузки роли), параллельные economy_tick читали бы один last_tick
-// и начисляли доход ДВАЖДЫ. Дедупим: в полёте — один общий промис.
-let _ecBoot = null;
-async function ecBootOnce() {
-  if (_ecBoot) return _ecBoot;
-  _ecBoot = (async () => {
-    await ecRpc('economy_init');
-    return await ecRpc('economy_tick');
-  })();
-  // сбрасываем через 2 с после завершения — следующий заход сможет тикнуть снова
-  _ecBoot.finally(() => setTimeout(() => { _ecBoot = null; }, 2000));
-  return _ecBoot;
+// ── Инициализация экономики (без начисления!) ───────────────
+// Доход НЕ начисляется по клику/заходу — его раз в сутки начисляет сервер
+// (pg_cron -> economy_tick_all, либо GitHub Action keep-alive как резерв).
+// Кабинет только СОЗДАЁТ строку экономики (если её нет) и ЧИТАЕТ состояние.
+// Дедуп — чтобы повторный рендер не слал лишних economy_init.
+let _ecInit = null;
+async function ecInitOnce() {
+  if (_ecInit) return _ecInit;
+  _ecInit = ecRpc('economy_init');
+  _ecInit.finally(() => setTimeout(() => { _ecInit = null; }, 2000));
+  return _ecInit;
 }
 
 // ── Точка входа (#economy) ──────────────────────────────────
@@ -180,14 +177,7 @@ async function ecRenderDashboard() {
     return;
   }
   try {
-    const tick = await ecBootOnce();
-    if (tick && tick.days >= 1) {
-      const parts = [];
-      if (tick.income.gc) parts.push(`+${ecNum(tick.income.gc * tick.days)} ГС`);
-      if (tick.income.science) parts.push(`+${ecNum(tick.income.science * tick.days)} ОН`);
-      if (tick.income.tnp) parts.push(`+${ecNum(tick.income.tnp * tick.days)} ТНП`);
-      if (parts.length) toast(`Доход за ${tick.days} сут.: ${parts.join(' · ')}`, 'ok');
-    }
+    await ecInitOnce();   // только создаём экономику при первом заходе; доход начисляет сервер сам
     await ecLoad();
     ecPaintCabinet();
   } catch (e) {
