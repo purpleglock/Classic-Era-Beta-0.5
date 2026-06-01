@@ -240,36 +240,40 @@ async function loadUserRole(authUser) {
   if (!authUser?.id) { user = null; return; }
   try {
     const token = await getTokenFresh();
-    const url = `${SB_URL}/rest/v1/user_roles?user_id=eq.${authUser.id}&select=role,is_banned`;
+    const hdr = { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token };
+    // Запрос роли с таймаутом — раньше сырой fetch без отмены мог висеть,
+    // из-за чего роль не подгружалась и стафф-пункты меню не появлялись.
+    const getJSON = async (url, ms = 15000) => {
+      const c = new AbortController(); const t = setTimeout(() => c.abort(), ms);
+      try { const r = await fetch(url, { headers: hdr, signal: c.signal }); clearTimeout(t); return r.ok ? await r.json() : []; }
+      catch (e) { clearTimeout(t); return []; }
+    };
 
-    const r = await fetch(url, { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token } });
-
-    let rows = [];
-    if (r.ok) { rows = await r.json(); }
-
-    // Fallback 1: запрос без фильтра — вдруг сравнение по user_id ломается
+    let rows = await getJSON(`${SB_URL}/rest/v1/user_roles?user_id=eq.${authUser.id}&select=role,is_banned`);
+    // Fallback: запрос без фильтра — вдруг сравнение по user_id ломается
     if (!rows.length) {
-      try {
-        const r2 = await fetch(`${SB_URL}/rest/v1/user_roles?select=user_id,role,is_banned`, { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token } });
-        if (r2.ok) {
-          const all = await r2.json();
-
-          const mine = all.find(x => String(x.user_id).toLowerCase() === String(authUser.id).toLowerCase());
-          if (mine) rows = [mine];
-        }
-      } catch(e) {}
+      const all = await getJSON(`${SB_URL}/rest/v1/user_roles?select=user_id,role,is_banned`);
+      const mine = (all || []).find(x => String(x.user_id).toLowerCase() === String(authUser.id).toLowerCase());
+      if (mine) rows = [mine];
     }
 
     let rawRole = rows[0]?.role;
-    // Маппинг старых названий ролей
     const roleAlias = { admin: 'superadmin', super: 'superadmin', editor: 'editor', mod: 'moderator', moderator: 'moderator' };
     if (rawRole && roleAlias[String(rawRole).toLowerCase()]) rawRole = roleAlias[String(rawRole).toLowerCase()];
 
     const role = VALID_ROLES.includes(rawRole) ? rawRole : 'viewer';
 
     user = { id:authUser.id, email:authUser.email, role, is_banned:!!rows[0]?.is_banned };
+
+    // Роль известна — СРАЗУ перестраиваем меню и шапку. Без этого пункт
+    // «Управление» (и др. стафф-пункты) не появлялись на ПК, если ответ
+    // о роли приходил уже после первичного рендера навигации (медленный канал).
+    try { if (typeof buildNav === 'function') buildNav(); if (typeof updAuthUI === 'function') updAuthUI(); } catch(e) {}
+
+    // Метаданные профиля — вторично, с таймаутом 4 с (не должны вешать роль/меню)
     try {
-      const { data: { user: mu } } = await sb.auth.getUser();
+      const res = await Promise.race([ sb.auth.getUser(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)) ]);
+      const mu = res?.data?.user;
       if (mu?.user_metadata?.display_name !== undefined) {
         userProfile.display_name = mu.user_metadata.display_name || '';
         userProfile.avatar_url   = mu.user_metadata.avatar_url   || '';
