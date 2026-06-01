@@ -79,10 +79,15 @@ async function adLoadDetails() {
 async function adLoad() { await adLoadCore(); await adLoadDetails(); adBuildIndex(); }
 
 // ── Рендер ──────────────────────────────────────────────────────
+let _adRenderTok = 0;
 async function adRenderConsole() {
   if (!adCanAccess()) { setPg('<div class="sempty">Нет доступа</div>'); return; }
-  // ГАРАНТИРОВАННЫЙ первый кадр прямо тут (без вызова adPaint) — экран
-  // физически не может остаться пустым, даже если что-то ниже упадёт/зависнет.
+  const tok = ++_adRenderTok;
+  // Анти-спам: если данные уже загружены недавно (init дёргает рендер
+  // несколько раз) — просто перерисовать, без сети и без мигания каркасом.
+  // Иначе постоянная замена DOM не даёт кликать.
+  if (AD.byFid.size && AD._loadedAt && (Date.now() - AD._loadedAt < 8000)) { adPaint(); return; }
+  // ГАРАНТИРОВАННЫЙ первый кадр (без adPaint) — экран не может остаться пустым.
   setPg(`<div class="ad-console"><div class="ad-header"><div>
       <div class="ad-title">🛠 Консоль управления</div>
       <div class="ad-summary"><span>Загрузка данных…</span></div></div>
@@ -93,6 +98,7 @@ async function adRenderConsole() {
   // 1) Ядро — фракции + казна
   try {
     await adLoadCore();
+    if (tok !== _adRenderTok) return;   // более новый рендер уже идёт — не спамим
     adBuildIndex();
     AD.loading = false;
     adPaint();
@@ -105,6 +111,8 @@ async function adRenderConsole() {
   // 2) Детали — в фоне; таблица фракций уже на экране, счётчики дозаполнятся
   try {
     await adLoadDetails();
+    if (tok !== _adRenderTok) return;
+    AD._loadedAt = Date.now();
     adBuildIndex();
     adPaint();
   } catch (e) { console.error('[admin] details load', e); }
