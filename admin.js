@@ -81,22 +81,24 @@ async function adLoad() { await adLoadCore(); await adLoadDetails(); adBuildInde
 // ── Рендер ──────────────────────────────────────────────────────
 async function adRenderConsole() {
   if (!adCanAccess()) { setPg('<div class="sempty">Нет доступа</div>'); return; }
-  setPg('<div class="sload"><div class="pulse-loader"></div></div>');
-  // 1) Ядро — показываем таблицу фракций как можно быстрее
+  // КАРКАС рисуем СРАЗУ (заголовок + область таблицы со статусом загрузки),
+  // ещё до любых сетевых запросов — чтобы страница никогда не была пустой,
+  // даже если сеть медленная/мёртвая.
+  AD.loading = true; AD.loadError = null;
+  adBuildIndex();
+  adPaint();
+  // 1) Ядро — фракции + казна
   try {
     await adLoadCore();
     adBuildIndex();
+    AD.loading = false;
     adPaint();
   } catch (e) {
-    setPg(`<div class="sempty" style="gap:12px;flex-direction:column">
-      <div style="font-size:32px;opacity:.2">⏱</div>
-      <div style="font-size:13px;color:var(--t2)">Не удалось загрузить консоль</div>
-      <div style="font-size:11px;color:var(--t4);max-width:300px;text-align:center">${esc(e.message)}</div>
-      <button class="btn btn-gh" onclick="go('admin',false)">↺ Повторить</button>
-    </div>`);
+    AD.loading = false; AD.loadError = e.message || String(e);
+    adPaint();
     return;
   }
-  // 2) Детали — в фоне; таблица уже на экране, счётчики дозаполнятся
+  // 2) Детали — в фоне; таблица фракций уже на экране, счётчики дозаполнятся
   try {
     await adLoadDetails();
     adBuildIndex();
@@ -132,7 +134,13 @@ function adPaint() {
 }
 
 function adStatsTable() {
-  if (!AD.byFid.size) return `<div class="ad-empty">Нет одобренных фракций</div>`;
+  if (!AD.byFid.size) {
+    if (AD.loading) return `<div class="sload" style="min-height:120px"><div class="pulse-loader"></div></div>`;
+    if (AD.loadError) return `<div class="ad-empty" style="display:flex;flex-direction:column;gap:10px;align-items:center;padding:24px">
+      <span>Не удалось загрузить: ${esc(AD.loadError)}</span>
+      <button class="btn btn-gh btn-sm" onclick="go('admin',false)">↺ Повторить</button></div>`;
+    return `<div class="ad-empty">Нет одобренных фракций</div>`;
+  }
   const rows = [...AD.byFid.entries()].map(([fid, e]) => {
     const eco = e.eco || {};
     const isSel = AD.sel === fid;

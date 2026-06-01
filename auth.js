@@ -42,14 +42,16 @@ async function init() {
   }
 
   // ── Восстановление сессии (с жёстким таймаутом 10 с) ──
-  // loadUserRole() ходит в сеть сырым fetch — без гонки с таймаутом
-  // «спящий» сервер вешал бы инициализацию насмерть.
-  try {
-    await Promise.race([
-      restoreSession(),
-      new Promise(res => setTimeout(res, 10000)),
-    ]);
-  } catch(e) { console.warn('restoreSession failed:', e); }
+  // Когда роль реально подгрузится (даже позже таймаута) — обновляем навигацию
+  // и ПЕРЕРИСОВЫВАЕМ текущую страницу: если это была стафф-страница
+  // (#admin/#economy), показавшая «нет доступа»/пусто до загрузки роли,
+  // теперь она отрисуется правильно.
+  const _restoreDone = restoreSession().then(() => {
+    try { if (typeof buildNav === 'function') buildNav(); } catch(e) {}
+    try { if (typeof updAuthUI === 'function') updAuthUI(); } catch(e) {}
+    try { if (user && curSlug && curSlug !== 'home' && !String(curSlug).startsWith('sec:')) route(); } catch(e) {}
+  }).catch(() => {});
+  await Promise.race([ _restoreDone, new Promise(res => setTimeout(res, 10000)) ]);
 
   // ── ФОНОВАЯ ЗАГРУЗКА СВЕЖИХ ДАННЫХ ──
   try {
