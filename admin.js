@@ -142,7 +142,9 @@ function adPaint() {
     </div>`;
     const stats = adStatsTable();
     const panel = AD.sel && AD.byFid.has(AD.sel) ? adFacPanel() : '';
-    body = stats + panel;
+    // Панель ВЫШЕ таблицы — чтобы при клике она появлялась сразу на виду,
+    // а не на ~800px ниже (длинная таблица фракций) за пределами экрана.
+    body = panel + stats;
   } catch (e) {
     console.error('[ADMIN] adPaint build error', e);
     body = `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px;margin-top:12px">Ошибка отрисовки: ${esc(e.message || String(e))}<br><button class="btn btn-gh btn-sm" onclick="go('admin',false)" style="margin-top:8px">↺ Повторить</button></div>`;
@@ -199,7 +201,11 @@ function adSelectFaction(fid) {
   AD.subtab = 'treasury';
   AD.sysSearch = '';
   adPaint();
-  if (AD.sel) setTimeout(() => document.getElementById('ad-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  // Панель теперь сверху — просто проматываем страницу/контейнер вверх к ней.
+  if (AD.sel) setTimeout(() => {
+    try { document.getElementById('ad-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e) {}
+    try { (document.getElementById('cw') || document.getElementById('main') || window).scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) {}
+  }, 50);
 }
 function adSetSubtab(t) { AD.subtab = t; adPaint(); }
 
@@ -210,16 +216,20 @@ function adFacPanel() {
   const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="ad-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
   const bodyMap = { treasury: adTabTreasury, resources: adTabResources, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, danger: adTabDanger };
   const renderFn = bodyMap[AD.subtab] || adTabTreasury;
-  return `<div class="ad-panel" id="ad-panel">
-    <div class="ad-panel-hd">
+  let tabBody = '';
+  try { tabBody = renderFn(e); }
+  catch (ex) { tabBody = `<div style="color:#ff7a7a;padding:12px">Ошибка вкладки: ${esc(ex.message || String(ex))}</div>`; }
+  // Инлайн-стили — панель видна и не схлопывается независимо от CSS.
+  return `<div class="ad-panel" id="ad-panel" style="display:block;border:1px solid var(--gd,#3a7fbf);border-radius:10px;background:var(--b2,#141a22);margin-bottom:18px;overflow:hidden">
+    <div class="ad-panel-hd" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;background:color-mix(in srgb,var(--gd,#3a7fbf) 8%,transparent);border-bottom:1px solid var(--w2,#2a3340)">
       <div>
-        <div class="ad-panel-title">${esc(e.app.name)}</div>
-        <div class="ad-panel-sub">${esc(e.app.faction_id)} · ${esc(e.app.race || '—')} · <a class="ad-link" href="mailto:${esc(e.app.owner_email || '')}">${esc(e.app.owner_email || '—')}</a></div>
+        <div class="ad-panel-title" style="font-family:var(--font-display,sans-serif);font-size:18px;font-weight:700;color:var(--gdl,#5fb0e6)">${esc(e.app.name)}</div>
+        <div class="ad-panel-sub" style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88);margin-top:4px">${esc(e.app.faction_id)} · ${esc(e.app.race || '—')} · <a class="ad-link" style="color:var(--te,#3ec0d0)" href="mailto:${esc(e.app.owner_email || '')}">${esc(e.app.owner_email || '—')}</a></div>
       </div>
-      <button class="btn btn-gh btn-xs" onclick="adSelectFaction('${esc(AD.sel)}')">✕</button>
+      <button class="btn btn-gh btn-xs" onclick="adSelectFaction('${esc(AD.sel)}')">✕ Закрыть</button>
     </div>
-    <div class="ad-stabs">${tabBtns}</div>
-    <div class="ad-tab-body">${renderFn(e)}</div>
+    <div class="ad-stabs" style="display:flex;flex-wrap:wrap;gap:4px;padding:10px 14px;background:var(--b3,#0f141b);border-bottom:1px solid var(--w2,#2a3340)">${tabBtns}</div>
+    <div class="ad-tab-body" style="padding:18px 20px">${tabBody}</div>
   </div>`;
 }
 
