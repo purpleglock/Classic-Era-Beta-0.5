@@ -140,8 +140,11 @@ function adPaint() {
     body = `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px;margin-top:12px">Ошибка отрисовки: ${esc(e.message || String(e))}<br><button class="btn btn-gh btn-sm" onclick="go('admin',false)" style="margin-top:8px">↺ Повторить</button></div>`;
   }
   console.log('[ADMIN] paint: factions=' + AD.byFid.size + ', loading=' + AD.loading + ', err=' + (AD.loadError||'-'));
-  // Инлайн-стили на контейнере — видно, даже если css/18_admin.css не подхватился
-  setPg(`<div class="ad-console" style="max-width:1200px;margin:0 auto;padding:24px 16px 60px;color:var(--t1,#e8edf2);display:flex;flex-direction:column;gap:18px">${header}${body}</div>`);
+  // ВАЖНО: display:block, НЕ flex. Раньше .ad-console был flex-column, и внутри
+  // .ad-table-wrap (overflow-x:auto) схлопывался в 0 высоты в Chromium/Yandex
+  // (flex min-height:0 + overflow) -> таблица была в DOM, но не видна (consoleH=86).
+  // Блочный поток всегда отдаёт таблице её высоту.
+  setPg(`<div class="ad-console" style="max-width:1200px;margin:0 auto;padding:24px 16px 60px;color:var(--t1,#e8edf2);display:block">${header}<div style="margin-top:18px">${body}</div></div>`);
   // ФОРС видимости #pg: многократные перерисовки могли оставить анимацию .pgi
   // на opacity:0. Гасим анимацию и форсим видимость.
   var _pg = document.getElementById('pg');
