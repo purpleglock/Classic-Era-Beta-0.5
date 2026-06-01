@@ -269,8 +269,8 @@ function ecTreasuryHtml() {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', 'Обзор'], ['colonies', 'Колонии'], ['military', 'Армия и флот'], ['research', 'Исследования'], ['territory', 'Территория'], ['diplomacy', 'Дипломатия'], ['intel', 'Разведка']];
-  const tabsHtml = tabs.map(([id, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')">${l}</button>`).join('');
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['military', '⚔', 'Армия и флот'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['diplomacy', '🤝', 'Дипломатия'], ['intel', '🕵', 'Разведка']];
+  const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'military' ? ecTabMilitary()
     : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'intel' ? ecTabIntel() : ecTabColonies();
@@ -284,21 +284,57 @@ function ecPaintCabinet() {
 function ecSetTab(t) { EC.tab = t; ecPaintCabinet(); }
 
 function ecTabOverview() {
-  const rosterCount = EC.roster.reduce((a, r) => a + (r.qty || 0), 0);
-  const stat = (k, v) => `<div class="ec-ov-card"><div class="ec-ov-v">${v}</div><div class="ec-ov-k">${esc(k)}</div></div>`;
-  return `<div class="ec-ov-grid">
-    ${stat('Колоний', ecNum(EC.colonies.length))}
-    ${stat('Построек', ecNum(EC.buildings.length))}
-    ${stat('Систем', ecNum(EC.systems.length))}
-    ${stat('Юнитов в ростере', ecNum(rosterCount))}
-  </div>
-  <div class="ec-race-note">Раса: <b>${esc(EC.app.race || '—')}</b> · родные миры: ${(EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—'}. Чужие типы планет доступны через терраформ.</div>
-  <div class="ec-ov-links">
-    <button class="btn btn-gh" onclick="go('constructors')">⚒ Конструкторы</button>
-    <button class="btn btn-gh" onclick="go('cat-ships')">🚀 Каталоги</button>
-    <button class="btn btn-gh" onclick="go('map')">🜨 Карта галактики</button>
-    <button class="btn btn-gh" onclick="go('factions')">⬡ Фракции</button>
-  </div>`;
+  const sumCat = c => EC.roster.filter(r => r.category === c).reduce((a, r) => a + (r.qty || 0), 0);
+  const ships = sumCat('ship'), divs = sumCat('division'), ground = sumCat('ground'), avia = sumCat('aviation');
+  const queued = EC.queue.reduce((a, r) => a + (r.qty || 0), 0);
+  const totalCells = EC.colonies.reduce((a, c) => a + (c.cells || EC_DEFAULT_CELLS), 0);
+  const usedCells = EC.buildings.length;
+  const researchAll = (typeof ecBuildResearch === 'function') ? ecBuildResearch() : [];
+  const researchDone = Array.isArray(EC.eco.research) ? EC.eco.research.length : 0;
+  const activeProj = EC.eco.research_active;
+  const activeName = activeProj ? ((researchAll.find(n => n.id === activeProj) || {}).name || activeProj) : '';
+  const myRoutes = (EC.routes || []).filter(r => (r.a_fid === EC.fid || r.b_fid === EC.fid) && r.status === 'active').length;
+  const myLoans = (EC.loans || []).filter(l => (l.lender_fid === EC.fid || l.borrower_fid === EC.fid) && l.status === 'active').length;
+  const agents = EC.eco.agents || 0;
+  const resTop = ecResEntries().slice(0, 8);
+  const inc = ecIncomePreview();
+
+  const card = (v, k, color, click) => `<div class="ec-ov-card${click ? ' ec-ov-clk' : ''}"${click ? ` onclick="ecSetTab('${click}')"` : ''}><div class="ec-ov-v"${color ? ` style="color:${color}"` : ''}>${v}</div><div class="ec-ov-k">${esc(k)}</div></div>`;
+  const sect = (title, cards) => `<div class="ec-ov-sect"><div class="ec-ov-sect-t">${esc(title)}</div><div class="ec-ov-grid">${cards.filter(Boolean).join('')}</div></div>`;
+
+  const empire = sect('🏛 Держава', [
+    card(ecNum(EC.systems.length), 'Систем', null, 'territory'),
+    card(ecNum(EC.colonies.length), 'Колоний', null, 'colonies'),
+    card(`${ecNum(usedCells)}/${ecNum(totalCells)}`, 'Ячейки застройки', null, 'colonies'),
+    card(ecNum(EC.buildings.length), 'Построек', null, 'colonies'),
+  ]);
+  const army = sect('⚔ Армия и флот', [
+    card(ecNum(ships), 'Корабли', 'var(--te)', 'military'),
+    card(ecNum(divs), 'Дивизии', 'var(--gd)', 'military'),
+    card(ecNum(ground), 'Наземка', null, 'military'),
+    card(ecNum(avia), 'Авиация', null, 'military'),
+    queued ? card(ecNum(queued), 'В очереди', 'var(--color-warning, #e0a030)', 'military') : '',
+  ]);
+  const sciDip = sect('🔬 Наука · Дипломатия · Разведка', [
+    card(`${ecNum(researchDone)}/${ecNum(researchAll.length)}`, 'Технологий', 'var(--pu)', 'research'),
+    card(ecNum(agents), 'Агенты', null, 'intel'),
+    card(ecNum(myRoutes), 'Торг. пути', null, 'diplomacy'),
+    card(ecNum(myLoans), 'Активные займы', null, 'diplomacy'),
+  ]);
+  const activeHtml = activeProj
+    ? `<div class="ec-ov-active">🔬 Исследуется: <b>${esc(activeName)}</b><span class="ec-ov-active-x">завершится в конце хода</span></div>` : '';
+  const incLine = (inc.gc || inc.science)
+    ? `<div class="ec-ov-inc">📈 Доход: ${inc.gc ? `<b style="color:var(--gd)">+${ecNum(inc.gc)} ГС</b>` : ''}${inc.gc && inc.science ? ' · ' : ''}${inc.science ? `<b style="color:var(--pu)">+${ecNum(inc.science)} ОН</b>` : ''} в сутки</div>` : '';
+  const resHtml = resTop.length
+    ? `<div class="ec-ov-sect"><div class="ec-ov-sect-t">📦 Ресурсы на складе</div><div class="ec-ov-res">${resTop.map(([n, v]) => `<span class="ec-ov-res-chip"><span class="ec-ov-res-ic">${esc(ecResIcon(n))}</span><span class="ec-ov-res-n">${esc(n)}</span><b>${ecNum(v)}</b></span>`).join('')}</div></div>` : '';
+
+  return `${empire}${army}${sciDip}${activeHtml}${incLine}${resHtml}
+    <div class="ec-race-note">Раса: <b>${esc(EC.app.race || '—')}</b> · родные миры: ${(EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—'}. Чужие типы планет — через терраформ.</div>
+    <div class="ec-ov-links">
+      <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
+      <button class="btn btn-gh btn-sm" onclick="go('cat-ships')">🚀 Каталоги</button>
+      <button class="btn btn-gh btn-sm" onclick="go('map')">🜨 Карта</button>
+    </div>`;
 }
 
 function ecTabColonies() {

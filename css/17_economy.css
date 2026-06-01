@@ -6,7 +6,7 @@
 .ec-wrap { max-width: 1120px; margin: 0 auto; padding: 22px 22px 60px; }
 .ec-head { margin-bottom: 14px; }
 .ec-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em; color: var(--gd); text-transform: uppercase; }
-.ec-head h1 { font-family: var(--font-display); font-weight: 700; font-size: var(--text-2xl); color: var(--t1); margin: 2px 0 0; padding-bottom: 8px; display: inline-block; }
+.ec-head h1 { font-family: var(--font-display); font-weight: 700; font-size: var(--text-2xl); color: var(--t1); margin: 2px 0 0; padding-bottom: 8px; display: inline-block; max-width: 100%; overflow-wrap: anywhere; line-height: 1.15; }
 
 /* Гейт */
 .ec-gate { max-width: 520px; margin: 56px auto; text-align: center; padding: 32px 24px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-lg); }
@@ -68,17 +68,43 @@
 .btn-xs { padding: 3px 8px !important; font-size: 10px !important; }
 
 /* ── Вкладки кабинета ── */
-.ec-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--w2); margin: 18px 0 16px; }
-.ec-tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--t3); font-family: var(--font-display); font-weight: 600; font-size: 14px; padding: 8px 14px; cursor: pointer; margin-bottom: -1px; }
+/* ── Вкладки (прокручиваются по горизонтали на телефоне) ── */
+.ec-tabs {
+  display: flex; gap: 4px; border-bottom: 1px solid var(--w2); margin: 18px 0 16px; padding-bottom: 1px;
+  overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity;
+}
+.ec-tabs::-webkit-scrollbar { display: none; }
+.ec-tab {
+  flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  color: var(--t3); font-family: var(--font-display); font-weight: 600; font-size: 14px;
+  padding: 8px 14px; cursor: pointer; margin-bottom: -1px; transition: color .15s, border-color .15s;
+}
+.ec-tab-ic { font-size: 13px; opacity: .8; }
 .ec-tab:hover { color: var(--t1); }
 .ec-tab.on { color: var(--gd); border-bottom-color: var(--gd); }
+.ec-tab.on .ec-tab-ic { opacity: 1; }
 
 /* ── Обзор ── */
-.ec-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.ec-ov-card { background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 16px; text-align: center; }
-.ec-ov-v { font-family: var(--font-display); font-weight: 700; font-size: 26px; color: var(--t1); }
+.ec-ov-sect { margin-bottom: 18px; }
+.ec-ov-sect-t { font-family: var(--font-display); font-weight: 700; font-size: 13px; letter-spacing: .03em; color: var(--t2); margin-bottom: 8px; }
+.ec-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 4px; }
+.ec-ov-card { background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 16px 12px; text-align: center; }
+.ec-ov-clk { cursor: pointer; transition: border-color .15s; }
+.ec-ov-clk:hover { border-color: var(--gd); }
+.ec-ov-v { font-family: var(--font-display); font-weight: 700; font-size: 26px; color: var(--t1); line-height: 1.1; }
 .ec-ov-k { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); margin-top: 4px; }
-.ec-race-note { font-size: 12px; color: var(--t2); background: var(--b1); border: 1px solid var(--w1); border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 14px; }
+.ec-ov-active { background: color-mix(in srgb, var(--pu) 10%, var(--b2)); border: 1px solid color-mix(in srgb, var(--pu) 32%, transparent); border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 14px; font-size: 13px; color: var(--t1); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ec-ov-active-x { font-family: var(--font-mono); font-size: 10px; color: var(--t3); }
+.ec-ov-inc { font-size: 13px; color: var(--t2); margin-bottom: 16px; }
+.ec-ov-res { display: flex; flex-wrap: wrap; gap: 8px; }
+.ec-ov-res-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--b2); border: 1px solid var(--w2); border-radius: 999px; padding: 5px 12px; font-size: 12px; color: var(--t2); max-width: 100%; }
+.ec-ov-res-chip b { color: var(--t1); }
+.ec-ov-res-ic { font-size: 13px; flex-shrink: 0; }
+.ec-ov-res-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+.ec-race-note { font-size: 12px; color: var(--t2); background: var(--b1); border: 1px solid var(--w1); border-radius: var(--radius-md); padding: 10px 12px; margin: 4px 0 14px; }
 .ec-ov-links { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* ── Бейджи пригодности планет ── */
@@ -173,6 +199,22 @@
 .ec-rs-badge.lock { color: var(--t4); border-color: var(--w2); }
 
 @media (max-width: 720px) {
+  .ec-wrap { padding: 16px 12px 48px; }
+  .ec-head h1 { font-size: 20px; }
+  .ec-treasury { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .ec-res { padding: 10px 12px; }
+  .ec-res-v { font-size: 16px; }
+  .ec-res-inc { grid-column: 1 / -1; }
+  .ec-tabs { margin: 14px 0; gap: 2px; }
+  .ec-tab { padding: 7px 11px; font-size: 13px; }
+  .ec-ov-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ec-ov-card { padding: 12px 8px; }
+  .ec-ov-v { font-size: 20px; }
   .ec-colonies { grid-template-columns: 1fr; }
   .ec-colonize-row { flex-direction: column; align-items: stretch; }
+}
+@media (max-width: 400px) {
+  .ec-ov-grid { gap: 6px; }
+  .ec-ov-v { font-size: 18px; }
+  /* таб-бар прокручивается по горизонтали — подписи остаются видны */
 }
