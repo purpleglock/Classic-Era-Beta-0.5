@@ -111,31 +111,37 @@ async function adRenderConsole() {
 }
 
 function adPaint() {
-  // НЕ выходим молча по доступу (раньше тут был ранний return -> пустой экран,
-  // если adCanAccess давал false в момент отрисовки). Доступ уже проверен выше.
-  const totalCols  = AD.colonies.length;
-  const totalSys   = AD.systems.filter(s => s.faction).length;
-  const totalUnits = AD.prod.filter(p => p.status === 'done').reduce((a, p) => a + (p.qty || 0), 0);
-  const fCount     = AD.byFid.size;
-
-  const panel = AD.sel && AD.byFid.has(AD.sel) ? adFacPanel() : '';
-
-  setPg(`<div class="ad-console">
-    <div class="ad-header">
+  // Собираем тело в try/catch: если adStatsTable/adFacPanel упадёт, раньше
+  // падал ВЕСЬ template setPg(...) ДО вставки -> пустой .ad-console. Теперь
+  // ошибка попадает в видимый блок, а не превращается в пустоту.
+  let header = '', body = '';
+  try {
+    const totalCols  = AD.colonies.length;
+    const totalSys   = (AD.systems || []).filter(s => s.faction).length;
+    const totalUnits = (AD.prod || []).filter(p => p.status === 'done').reduce((a, p) => a + (p.qty || 0), 0);
+    const fCount     = AD.byFid.size;
+    header = `<div class="ad-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
       <div>
-        <div class="ad-title">🛠 Консоль управления</div>
-        <div class="ad-summary">
-          <span>Фракций: <b>${fCount}</b></span>
-          <span>Колоний: <b>${totalCols}</b></span>
-          <span>Систем занято: <b>${totalSys}</b></span>
-          <span>Юнитов: <b>${totalUnits}</b></span>
+        <div class="ad-title" style="font-family:var(--font-display,sans-serif);font-size:22px;font-weight:700;color:var(--gdl,#5fb0e6);letter-spacing:1px">🛠 Консоль управления</div>
+        <div class="ad-summary" style="display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12px;color:var(--t3,#8aa0b0);margin-top:6px">
+          <span>Фракций: <b style="color:var(--t1,#e8edf2)">${fCount}</b></span>
+          <span>Колоний: <b style="color:var(--t1,#e8edf2)">${totalCols}</b></span>
+          <span>Систем занято: <b style="color:var(--t1,#e8edf2)">${totalSys}</b></span>
+          <span>Юнитов: <b style="color:var(--t1,#e8edf2)">${totalUnits}</b></span>
         </div>
       </div>
       <button class="btn btn-gh btn-sm" onclick="adReloadPaint()">↻ Обновить</button>
-    </div>
-    ${adStatsTable()}
-    ${panel}
-  </div>`);
+    </div>`;
+    const stats = adStatsTable();
+    const panel = AD.sel && AD.byFid.has(AD.sel) ? adFacPanel() : '';
+    body = stats + panel;
+  } catch (e) {
+    console.error('[ADMIN] adPaint build error', e);
+    body = `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px;margin-top:12px">Ошибка отрисовки: ${esc(e.message || String(e))}<br><button class="btn btn-gh btn-sm" onclick="go('admin',false)" style="margin-top:8px">↺ Повторить</button></div>`;
+  }
+  console.log('[ADMIN] paint: factions=' + AD.byFid.size + ', loading=' + AD.loading + ', err=' + (AD.loadError||'-'));
+  // Инлайн-стили на контейнере — видно, даже если css/18_admin.css не подхватился
+  setPg(`<div class="ad-console" style="max-width:1200px;margin:0 auto;padding:24px 16px 60px;color:var(--t1,#e8edf2);display:flex;flex-direction:column;gap:18px">${header}${body}</div>`);
 }
 
 function adStatsTable() {
