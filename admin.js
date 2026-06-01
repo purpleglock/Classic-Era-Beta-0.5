@@ -140,11 +140,23 @@ function adPaint() {
       </div>
       <button class="btn btn-gh btn-sm" onclick="adReloadPaint()">↻ Обновить</button>
     </div>`;
-    const stats = adStatsTable();
-    const panel = AD.sel && AD.byFid.has(AD.sel) ? adFacPanel() : '';
-    // Панель ВЫШЕ таблицы — чтобы при клике она появлялась сразу на виду,
-    // а не на ~800px ниже (длинная таблица фракций) за пределами экрана.
-    body = panel + stats;
+    // ── Выпадающий выбор фракции (надёжно, без кликов по строкам) ──
+    const opts = [...AD.byFid.entries()].map(([fid, e]) =>
+      `<option value="${esc(fid)}"${AD.sel === fid ? ' selected' : ''}>${esc(e.app.name)}${e.eco ? '' : ' (нет экономики)'}</option>`
+    ).join('');
+    const selector = `<div style="margin:18px 0;display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+      <label style="font-family:var(--font-display,sans-serif);font-size:13px;font-weight:600;color:var(--t2,#c0ccd6)">Фракция:</label>
+      <select id="ad-fac-select" onchange="adSelectFaction(this.value)" style="flex:1;min-width:220px;max-width:420px;padding:10px 12px;font-size:14px;background:var(--b2,#141a22);color:var(--t1,#e8edf2);border:1px solid var(--gd,#3a7fbf);border-radius:8px;cursor:pointer">
+        <option value="">— выберите фракцию для управления —</option>
+        ${opts}
+      </select>
+    </div>`;
+    const panel = AD.sel && AD.byFid.has(AD.sel)
+      ? adFacPanel()
+      : `<div style="padding:22px;border:1px dashed var(--w2,#2a3340);border-radius:10px;color:var(--t3,#8aa0b0);font-size:13px;text-align:center">Выберите фракцию из списка выше — откроется управление её казной, ресурсами, технологиями, территорией, колониями и армией.</div>`;
+    const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
+    // Селектор -> панель выбранной фракции -> сводная таблица снизу.
+    body = selector + panel + stats;
   } catch (e) {
     console.error('[ADMIN] adPaint build error', e);
     body = `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px;margin-top:12px">Ошибка отрисовки: ${esc(e.message || String(e))}<br><button class="btn btn-gh btn-sm" onclick="go('admin',false)" style="margin-top:8px">↺ Повторить</button></div>`;
@@ -197,15 +209,10 @@ function adStatsTable() {
 }
 
 function adSelectFaction(fid) {
-  AD.sel = (AD.sel === fid) ? null : fid;
+  AD.sel = fid || null;        // выбор из списка (без переключения)
   AD.subtab = 'treasury';
   AD.sysSearch = '';
   adPaint();
-  // Панель теперь сверху — просто проматываем страницу/контейнер вверх к ней.
-  if (AD.sel) setTimeout(() => {
-    try { document.getElementById('ad-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e) {}
-    try { (document.getElementById('cw') || document.getElementById('main') || window).scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) {}
-  }, 50);
 }
 function adSetSubtab(t) { AD.subtab = t; adPaint(); }
 
