@@ -151,12 +151,11 @@ function adPaint() {
         ${opts}
       </select>
     </div>`;
-    const panel = AD.sel && AD.byFid.has(AD.sel)
-      ? adFacPanel()
-      : `<div style="padding:22px;border:1px dashed var(--w2,#2a3340);border-radius:10px;color:var(--t3,#8aa0b0);font-size:13px;text-align:center">Выберите фракцию из списка выше — откроется управление её казной, ресурсами, технологиями, территорией, колониями и армией.</div>`;
+    // Панель кладём в ВЫДЕЛЕННЫЙ слот. При выборе фракции меняем ТОЛЬКО его
+    // содержимое (adSelectFaction), без перерисовки всей страницы — это
+    // надёжнее (полный re-render #pg на Vercel почему-то не показывал панель).
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
-    // Селектор -> панель выбранной фракции -> сводная таблица снизу.
-    body = selector + panel + stats;
+    body = selector + `<div id="ad-panel-slot">${adPanelSlotHtml()}</div>` + stats;
   } catch (e) {
     console.error('[ADMIN] adPaint build error', e);
     body = `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px;margin-top:12px">Ошибка отрисовки: ${esc(e.message || String(e))}<br><button class="btn btn-gh btn-sm" onclick="go('admin',false)" style="margin-top:8px">↺ Повторить</button></div>`;
@@ -208,13 +207,29 @@ function adStatsTable() {
   return `<div style="border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);overflow:hidden">${head}${rows}</div>`;
 }
 
+// HTML панели для слота (панель выбранной фракции или подсказка)
+function adPanelSlotHtml() {
+  if (AD.sel && AD.byFid.has(AD.sel)) {
+    try { return adFacPanel(); }
+    catch (e) { return `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px">Ошибка панели: ${esc(e.message || String(e))}</div>`; }
+  }
+  return `<div style="padding:22px;border:1px dashed var(--w2,#2a3340);border-radius:10px;color:var(--t3,#8aa0b0);font-size:13px;text-align:center">Выберите фракцию из списка выше — откроется управление её казной, ресурсами, технологиями, территорией, колониями и армией.</div>`;
+}
+// Обновить ТОЛЬКО слот панели (без перерисовки всей консоли)
+function adRenderSlot() {
+  const slot = document.getElementById('ad-panel-slot');
+  if (slot) { slot.innerHTML = adPanelSlotHtml(); return true; }
+  return false;
+}
 function adSelectFaction(fid) {
   AD.sel = fid || null;        // выбор из списка (без переключения)
   AD.subtab = 'treasury';
   AD.sysSearch = '';
-  adPaint();
+  console.log('[ADMIN] select faction:', AD.sel, 'inIndex=', AD.sel ? AD.byFid.has(AD.sel) : '-');
+  if (!adRenderSlot()) adPaint();   // если слота нет — полный рендер
+  const s = document.getElementById('ad-fac-select'); if (s && s.value !== (AD.sel || '')) s.value = AD.sel || '';
 }
-function adSetSubtab(t) { AD.subtab = t; adPaint(); }
+function adSetSubtab(t) { AD.subtab = t; if (!adRenderSlot()) adPaint(); }
 
 function adFacPanel() {
   const e = adEntry(AD.sel);
