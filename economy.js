@@ -151,6 +151,22 @@ async function ecRpc(fn, body) {
   }
 }
 
+// ── Инициализация+тик ОДИН раз за загрузку (защита от двойного начисления) ──
+// Если ecRenderDashboard вызовется дважды подряд (напр. повторный route()
+// после загрузки роли), параллельные economy_tick читали бы один last_tick
+// и начисляли доход ДВАЖДЫ. Дедупим: в полёте — один общий промис.
+let _ecBoot = null;
+async function ecBootOnce() {
+  if (_ecBoot) return _ecBoot;
+  _ecBoot = (async () => {
+    await ecRpc('economy_init');
+    return await ecRpc('economy_tick');
+  })();
+  // сбрасываем через 2 с после завершения — следующий заход сможет тикнуть снова
+  _ecBoot.finally(() => setTimeout(() => { _ecBoot = null; }, 2000));
+  return _ecBoot;
+}
+
 // ── Точка входа (#economy) ──────────────────────────────────
 async function ecRenderDashboard() {
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
@@ -164,8 +180,7 @@ async function ecRenderDashboard() {
     return;
   }
   try {
-    await ecRpc('economy_init');
-    const tick = await ecRpc('economy_tick');
+    const tick = await ecBootOnce();
     if (tick && tick.days >= 1) {
       const parts = [];
       if (tick.income.gc) parts.push(`+${ecNum(tick.income.gc * tick.days)} ГС`);

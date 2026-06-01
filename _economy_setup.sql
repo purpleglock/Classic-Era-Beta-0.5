@@ -578,7 +578,11 @@ declare
   trade_gc numeric:=0; pirate boolean:=false;
   r record;
 begin
-  select * into eco from public.faction_economy where owner_id=auth.uid() order by created_at asc limit 1;
+  -- FOR UPDATE: блокируем строку казны на время тика. Два параллельных
+  -- economy_tick (напр. двойной рендер/две вкладки) сериализуются — второй
+  -- дождётся первого, прочитает уже сдвинутый last_tick и d=0 -> без двойного
+  -- начисления дохода/ресурсов/торговли.
+  select * into eco from public.faction_economy where owner_id=auth.uid() order by created_at asc limit 1 for update;
   if not found then raise exception 'no economy'; end if;
 
   update public.unit_production set status='done' where faction_id=eco.faction_id and status='queued' and ready_at<=now();
@@ -698,7 +702,11 @@ declare
   res_add jsonb := '{}'::jsonb; res_sub jsonb := '{}'::jsonb; merged jsonb; k text;
   rname text; rr text; rate numeric; escorted boolean; attacked boolean; chance numeric; avail numeric; shipped numeric;
 begin
-  select * into eco from public.faction_economy where owner_id=auth.uid() order by created_at asc limit 1;
+  -- FOR UPDATE: блокируем строку казны на время тика. Два параллельных
+  -- economy_tick (напр. двойной рендер/две вкладки) сериализуются — второй
+  -- дождётся первого, прочитает уже сдвинутый last_tick и d=0 -> без двойного
+  -- начисления дохода/ресурсов/торговли.
+  select * into eco from public.faction_economy where owner_id=auth.uid() order by created_at asc limit 1 for update;
   if not found then raise exception 'no economy'; end if;
 
   update public.unit_production set status='done' where faction_id=eco.faction_id and status='queued' and ready_at<=now();
