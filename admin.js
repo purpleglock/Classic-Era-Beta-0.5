@@ -85,8 +85,9 @@ async function adRenderConsole() {
   // ещё до любых сетевых запросов — чтобы страница никогда не была пустой,
   // даже если сеть медленная/мёртвая.
   AD.loading = true; AD.loadError = null;
-  adBuildIndex();
-  adPaint();
+  // Защита: любая ошибка мгновенного каркаса -> видимое сообщение, не пустой экран
+  try { adBuildIndex(); adPaint(); }
+  catch (e) { setPg(`<div class="sempty" style="flex-direction:column;gap:10px"><span>Ошибка консоли: ${esc(e.message||e)}</span><button class="btn btn-gh btn-sm" onclick="go('admin',false)">↺ Повторить</button></div>`); return; }
   // 1) Ядро — фракции + казна
   try {
     await adLoadCore();
