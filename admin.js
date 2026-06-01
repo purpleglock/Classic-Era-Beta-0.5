@@ -147,7 +147,6 @@ function adPaint() {
     console.error('[ADMIN] adPaint build error', e);
     body = `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px;margin-top:12px">Ошибка отрисовки: ${esc(e.message || String(e))}<br><button class="btn btn-gh btn-sm" onclick="go('admin',false)" style="margin-top:8px">↺ Повторить</button></div>`;
   }
-  console.log('[ADMIN] paint: factions=' + AD.byFid.size + ', loading=' + AD.loading + ', err=' + (AD.loadError||'-'));
   // ВАЖНО: display:block, НЕ flex. Раньше .ad-console был flex-column, и внутри
   // .ad-table-wrap (overflow-x:auto) схлопывался в 0 высоты в Chromium/Yandex
   // (flex min-height:0 + overflow) -> таблица была в DOM, но не видна (consoleH=86).
@@ -157,14 +156,6 @@ function adPaint() {
   // на opacity:0. Гасим анимацию и форсим видимость.
   var _pg = document.getElementById('pg');
   if (_pg) { _pg.style.animation = 'none'; _pg.style.opacity = '1'; _pg.style.transform = 'none'; }
-  // Диагностика: что реально в #pg ПОСЛЕ вставки (вычистил ли кто-то / скрыто ли)
-  setTimeout(function(){
-    try {
-      var el = document.getElementById('pg');
-      var c = el && el.querySelector('.ad-console');
-      console.log('[ADMIN] settled: consoleH=' + (c?c.offsetHeight:'NONE') + ' rows=' + (el?el.querySelectorAll('[onclick^="adSelectFaction"]').length:'?') + ' pgH=' + (el?el.offsetHeight:'?'));
-    } catch(e){}
-  }, 350);
 }
 
 function adStatsTable() {

@@ -1462,7 +1462,8 @@ function buildNav(filt='') {
       subSecs.some(sub=>pages.filter(p=>isVisiblePage(p)&&p.section===sub.slug).some(p=>p.slug===curSlug));
     const isOpen = isSecPage || hasActivePg;
 
-    const iconHtml = sec.icon ? `<span class="nl-ico"><img src="${esc(sec.icon)}" alt=""></span>` : `<span class="nl-ico" style="font-size:9px;color:var(--t4)">◈</span>`;
+    const _secIconUrl = sec.icon && /^(https?:|data:)/i.test(sec.icon);
+    const iconHtml = _secIconUrl ? `<span class="nl-ico"><img src="${esc(sec.icon)}" alt=""></span>` : `<span class="nl-ico" style="font-size:9px;color:var(--t4)">◈</span>`;
     const bigIconHtml = sec.icon && sec.icon.startsWith('http') ? `<div class="nl-big-icon"><img src="${esc(sec.icon)}" alt=""></div>` : '';
     const cntHtml = totalCnt ? `<span class="nl-cnt">${totalCnt}</span>` : '';
 
