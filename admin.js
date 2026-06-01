@@ -81,13 +81,15 @@ async function adLoad() { await adLoadCore(); await adLoadDetails(); adBuildInde
 // ── Рендер ──────────────────────────────────────────────────────
 async function adRenderConsole() {
   if (!adCanAccess()) { setPg('<div class="sempty">Нет доступа</div>'); return; }
-  // КАРКАС рисуем СРАЗУ (заголовок + область таблицы со статусом загрузки),
-  // ещё до любых сетевых запросов — чтобы страница никогда не была пустой,
-  // даже если сеть медленная/мёртвая.
+  // ГАРАНТИРОВАННЫЙ первый кадр прямо тут (без вызова adPaint) — экран
+  // физически не может остаться пустым, даже если что-то ниже упадёт/зависнет.
+  setPg(`<div class="ad-console"><div class="ad-header"><div>
+      <div class="ad-title">🛠 Консоль управления</div>
+      <div class="ad-summary"><span>Загрузка данных…</span></div></div>
+      <button class="btn btn-gh btn-sm" onclick="go('admin',false)">↻ Обновить</button></div>
+    <div class="sload" style="min-height:140px"><div class="pulse-loader"></div></div></div>`);
   AD.loading = true; AD.loadError = null;
-  // Защита: любая ошибка мгновенного каркаса -> видимое сообщение, не пустой экран
-  try { adBuildIndex(); adPaint(); }
-  catch (e) { setPg(`<div class="sempty" style="flex-direction:column;gap:10px"><span>Ошибка консоли: ${esc(e.message||e)}</span><button class="btn btn-gh btn-sm" onclick="go('admin',false)">↺ Повторить</button></div>`); return; }
+  try { adBuildIndex(); adPaint(); } catch (e) { console.error('[admin] paint shell', e); }
   // 1) Ядро — фракции + казна
   try {
     await adLoadCore();
@@ -95,8 +97,9 @@ async function adRenderConsole() {
     AD.loading = false;
     adPaint();
   } catch (e) {
+    console.error('[admin] core load', e);
     AD.loading = false; AD.loadError = e.message || String(e);
-    adPaint();
+    try { adPaint(); } catch(_) {}
     return;
   }
   // 2) Детали — в фоне; таблица фракций уже на экране, счётчики дозаполнятся
@@ -104,11 +107,12 @@ async function adRenderConsole() {
     await adLoadDetails();
     adBuildIndex();
     adPaint();
-  } catch (e) { /* детали не критичны — фракции уже видны */ }
+  } catch (e) { console.error('[admin] details load', e); }
 }
 
 function adPaint() {
-  if (!adCanAccess()) return;
+  // НЕ выходим молча по доступу (раньше тут был ранний return -> пустой экран,
+  // если adCanAccess давал false в момент отрисовки). Доступ уже проверен выше.
   const totalCols  = AD.colonies.length;
   const totalSys   = AD.systems.filter(s => s.faction).length;
   const totalUnits = AD.prod.filter(p => p.status === 'done').reduce((a, p) => a + (p.qty || 0), 0);
