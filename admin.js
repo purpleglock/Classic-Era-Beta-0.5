@@ -142,6 +142,18 @@ function adPaint() {
   console.log('[ADMIN] paint: factions=' + AD.byFid.size + ', loading=' + AD.loading + ', err=' + (AD.loadError||'-'));
   // Инлайн-стили на контейнере — видно, даже если css/18_admin.css не подхватился
   setPg(`<div class="ad-console" style="max-width:1200px;margin:0 auto;padding:24px 16px 60px;color:var(--t1,#e8edf2);display:flex;flex-direction:column;gap:18px">${header}${body}</div>`);
+  // ФОРС видимости #pg: многократные перерисовки могли оставить анимацию .pgi
+  // на opacity:0. Гасим анимацию и форсим видимость.
+  var _pg = document.getElementById('pg');
+  if (_pg) { _pg.style.animation = 'none'; _pg.style.opacity = '1'; _pg.style.transform = 'none'; }
+  // Диагностика: что реально в #pg ПОСЛЕ вставки (вычистил ли кто-то / скрыто ли)
+  setTimeout(function(){
+    try {
+      var el = document.getElementById('pg');
+      var c = el && el.querySelector('.ad-console');
+      console.log('[ADMIN] settled: pgLen=' + (el?el.innerHTML.length:'?') + ' pgH=' + (el?el.offsetHeight:'?') + ' pgOpacity=' + (el?getComputedStyle(el).opacity:'?') + ' pgDisplay=' + (el?getComputedStyle(el).display:'?') + ' consoleH=' + (c?c.offsetHeight:'NONE') + ' rows=' + (el?el.querySelectorAll('.ad-row').length:'?') + ' curSlug=' + (typeof curSlug!=='undefined'?curSlug:'?'));
+    } catch(e){}
+  }, 350);
 }
 
 function adStatsTable() {
