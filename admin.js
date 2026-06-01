@@ -154,7 +154,7 @@ function adPaint() {
     try {
       var el = document.getElementById('pg');
       var c = el && el.querySelector('.ad-console');
-      console.log('[ADMIN] settled: pgLen=' + (el?el.innerHTML.length:'?') + ' pgH=' + (el?el.offsetHeight:'?') + ' pgOpacity=' + (el?getComputedStyle(el).opacity:'?') + ' pgDisplay=' + (el?getComputedStyle(el).display:'?') + ' consoleH=' + (c?c.offsetHeight:'NONE') + ' rows=' + (el?el.querySelectorAll('.ad-row').length:'?') + ' curSlug=' + (typeof curSlug!=='undefined'?curSlug:'?'));
+      console.log('[ADMIN] settled: consoleH=' + (c?c.offsetHeight:'NONE') + ' rows=' + (el?el.querySelectorAll('[onclick^="adSelectFaction"]').length:'?') + ' pgH=' + (el?el.offsetHeight:'?'));
     } catch(e){}
   }, 350);
 }
@@ -167,38 +167,32 @@ function adStatsTable() {
       <button class="btn btn-gh btn-sm" onclick="go('admin',false)">↺ Повторить</button></div>`;
     return `<div class="ad-empty">Нет одобренных фракций</div>`;
   }
+  // БЕЗ <table>: только div'ы с инлайн-стилями. Раньше <table> в этом
+  // окружении схлопывался в 0 высоты на Vercel/Yandex (localhost — нет).
+  // div-строки с контентом не могут схлопнуться ни в одном браузере.
+  const numCols = ['ГС', 'ОН', 'Агенты', 'Колонии', 'Постройки', 'Системы', 'Юниты', 'Технол.'];
+  const cellBase = 'flex:1 1 56px;min-width:46px;text-align:right;font-family:monospace;font-size:12px;color:var(--t2,#c0ccd6)';
+  const head = `<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--w2,#2a3340);background:var(--b3,#0f141b);font-family:monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3,#8aa0b0)">
+    <div style="flex:2 1 170px;min-width:140px">Фракция / Раса / Владелец</div>
+    ${numCols.map(c => `<div style="flex:1 1 56px;min-width:46px;text-align:right">${c}</div>`).join('')}
+  </div>`;
   const rows = [...AD.byFid.entries()].map(([fid, e]) => {
     const eco = e.eco || {};
     const isSel = AD.sel === fid;
     const hasEco = !!e.eco;
-    const researchCount = Array.isArray(eco.research) ? eco.research.length : 0;
+    const tech = Array.isArray(eco.research) ? eco.research.length : 0;
     const rosterQty = e.roster.reduce((a, p) => a + (p.qty || 0), 0);
-    return `<tr class="ad-row${isSel ? ' sel' : ''}" onclick="adSelectFaction('${esc(fid)}')">
-      <td class="ad-fac-cell">
-        <div class="ad-fac-title">${esc(e.app.name)}</div>
-        <div class="ad-fac-meta">${esc(e.app.race || '—')} · <span class="ad-fac-email">${esc(e.app.owner_email || '—')}</span></div>
-      </td>
-      <td class="ad-num ${hasEco ? '' : 'ad-no-eco-cell'}">${hasEco ? adNum(eco.gc) : '—'}</td>
-      <td class="ad-num">${hasEco ? adNum(eco.science) : '—'}</td>
-      <td class="ad-num">${hasEco ? adNum(eco.agents) : '—'}</td>
-      <td class="ad-num">${e.colonies.length}</td>
-      <td class="ad-num">${e.buildings.length}</td>
-      <td class="ad-num">${e.systems.length}</td>
-      <td class="ad-num">${rosterQty}</td>
-      <td class="ad-num">${researchCount}</td>
-    </tr>`;
+    const c = v => `<div style="${cellBase}">${v}</div>`;
+    return `<div onclick="adSelectFaction('${esc(fid)}')" style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--w1,#1e2630);cursor:pointer;background:${isSel ? 'color-mix(in srgb,var(--gd,#3a7fbf) 12%,transparent)' : 'transparent'}">
+      <div style="flex:2 1 170px;min-width:140px">
+        <div style="font-weight:600;color:var(--t1,#e8edf2);margin-bottom:2px">${esc(e.app.name)}</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(e.app.race || '—')} · <span style="color:var(--te,#3ec0d0)">${esc(e.app.owner_email || '—')}</span></div>
+      </div>
+      ${c(hasEco ? adNum(eco.gc) : '—')}${c(hasEco ? adNum(eco.science) : '—')}${c(hasEco ? adNum(eco.agents) : '—')}
+      ${c(e.colonies.length)}${c(e.buildings.length)}${c(e.systems.length)}${c(rosterQty)}${c(tech)}
+    </div>`;
   }).join('');
-  return `<div class="ad-table-wrap">
-    <table class="ad-table">
-      <thead><tr>
-        <th>Фракция / Раса / Владелец</th>
-        <th>ГС</th><th>ОН</th><th>Агенты</th>
-        <th>Колонии</th><th>Постройки</th><th>Системы</th>
-        <th>Юниты</th><th>Технологии</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>`;
+  return `<div style="border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);overflow:hidden">${head}${rows}</div>`;
 }
 
 function adSelectFaction(fid) {
