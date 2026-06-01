@@ -349,9 +349,17 @@ async function subReg() {
     const { data, error } = await sb.auth.signUp({ email, password: pass });
     if (error) throw error;
     if (data.user && !data.session) { toast('Проверьте email для подтверждения','inf'); cm('mo-auth'); }
-    else if (data.session) { await loadUserRole(data.user); cm('mo-auth'); updAuthUI(); await loadPgs(); buildNav(); toast('Аккаунт создан!','ok'); }
-  } catch(e) { toast(e.message||'Ошибка','err'); if(btn) btn.disabled=false; }
-  finally { _authBusy=false; }
+    else if (data.session) {
+      // Закрываем модалку сразу, данные подтягиваем в фоне
+      cm('mo-auth');
+      toast('Аккаунт создан!','ok');
+      (async () => {
+        try { await loadUserRole(data.user); updAuthUI(); await loadPgs(); buildNav(); }
+        catch(e2) { console.warn('[wiki] post-register refresh failed:', e2); }
+      })();
+    }
+  } catch(e) { toast(e.message||'Ошибка','err'); }
+  finally { _authBusy=false; if(btn) btn.disabled=false; }
 }
 
 // ВАЖНО: Разлочили кнопку Выхода. Мы больше не ждем ответа от зависшего SDK.
