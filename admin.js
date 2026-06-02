@@ -595,8 +595,21 @@ function adTabColonies(e) {
   }).join('') || `<div class="ad-empty">Нет колоний</div>`;
 
   const sysOpts = e.systems.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  // системы, где реально лежат колонии (для информации о рассинхроне)
+  const colSysIds = [...new Set(e.colonies.map(c => c.system_id))];
+  const ownIds = new Set(e.systems.map(s => s.id));
+  const orphanSys = colSysIds.filter(id => !ownIds.has(id));
+  const orphanNote = orphanSys.length
+    ? `<div class="ad-empty" style="color:var(--color-warning,#e0a030);padding:8px 0">⚠ Часть колоний в системах, которыми фракция не владеет (рассинхрон спавна/переезда). Перенесите их в свою систему ниже.</div>` : '';
   return `<div class="ad-colonies">
     <div class="ad-cols-grid">${colCards}</div>
+    <div class="ad-section-title" style="margin-top:16px">⇄ Перенести ВСЕ колонии фракции в систему</div>
+    ${orphanNote}
+    <div class="ad-col-form">
+      <select class="fi" id="ad-move-sys" style="min-width:150px">${sysOpts || '<option value="">Нет систем у фракции</option>'}</select>
+      <button class="btn btn-gh btn-sm" onclick="adMoveColonies()">⇄ Перенести все (${e.colonies.length})</button>
+      <span class="ad-dim" style="font-size:11px">постройки и доход сохранятся, имена колоний останутся</span>
+    </div>
     <div class="ad-section-title" style="margin-top:16px">+ Добавить колонию</div>
     <div class="ad-col-form">
       <select class="fi" id="ad-col-sys" style="min-width:130px">${sysOpts || '<option value="">Нет систем</option>'}</select>
@@ -606,6 +619,24 @@ function adTabColonies(e) {
       <button class="btn btn-gd btn-sm" onclick="adAddColony()">+ Добавить</button>
     </div>
   </div>`;
+}
+
+async function adMoveColonies() {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e) return;
+  const sysId = document.getElementById('ad-move-sys')?.value;
+  if (!sysId) { toast('Выберите систему', 'err'); return; }
+  if (!e.colonies.length) { toast('У фракции нет колоний', 'inf'); return; }
+  const sys = e.systems.find(s => s.id === sysId) || (AD.systems || []).find(s => s.id === sysId);
+  if (!confirm(`Перенести все ${e.colonies.length} колоний фракции в систему «${sys ? sys.name : sysId}»? Постройки и доход сохранятся.`)) return;
+  AD.busy = true;
+  try {
+    await dbPatch('colonies', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { system_id: sysId });
+    e.colonies.forEach(c => { c.system_id = sysId; });
+    AD.colonies.forEach(c => { if (c.faction_id === AD.sel) c.system_id = sysId; });
+    toast('Колонии перенесены в систему', 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
 }
 
 async function adAddColony() {
