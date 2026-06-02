@@ -152,16 +152,20 @@ async function ecRpc(fn, body) {
 }
 
 // ── Инициализация экономики (без начисления!) ───────────────
-// Доход НЕ начисляется по клику/заходу — его раз в сутки начисляет сервер
-// (pg_cron -> economy_tick_all, либо GitHub Action keep-alive как резерв).
-// Кабинет только СОЗДАЁТ строку экономики (если её нет) и ЧИТАЕТ состояние.
-// Дедуп — чтобы повторный рендер не слал лишних economy_init.
-let _ecInit = null;
-async function ecInitOnce() {
-  if (_ecInit) return _ecInit;
-  _ecInit = ecRpc('economy_init');
-  _ecInit.finally(() => setTimeout(() => { _ecInit = null; }, 2000));
-  return _ecInit;
+// Доход начисляется И сервером (pg_cron -> economy_tick_all раз в сутки для
+// всех), И при заходе в кабинет (economy_tick — «догоняет» накопленные сутки
+// сразу, чтобы не висело «готов к начислению»). Двойного начисления нет:
+// economy_tick делает FOR UPDATE и двигает last_tick на целые сутки.
+// Дедуп промиса — чтобы повторный рендер не дёргал тик параллельно.
+let _ecBoot = null;
+async function ecBootOnce() {
+  if (_ecBoot) return _ecBoot;
+  _ecBoot = (async () => {
+    await ecRpc('economy_init');
+    return await ecRpc('economy_tick');
+  })();
+  _ecBoot.finally(() => setTimeout(() => { _ecBoot = null; }, 2000));
+  return _ecBoot;
 }
 
 // ── Точка входа (#economy) ──────────────────────────────────
@@ -177,7 +181,13 @@ async function ecRenderDashboard() {
     return;
   }
   try {
-    await ecInitOnce();   // только создаём экономику при первом заходе; доход начисляет сервер сам
+    const tick = await ecBootOnce();   // создаём экономику + начисляем накопленный доход
+    if (tick && tick.days >= 1) {
+      const parts = [];
+      if (tick.income && tick.income.gc) parts.push(`+${ecNum(tick.income.gc * tick.days)} ГС`);
+      if (tick.income && tick.income.science) parts.push(`+${ecNum(tick.income.science * tick.days)} ОН`);
+      if (parts.length) toast(`Доход за ${tick.days} сут.: ${parts.join(' · ')}`, 'ok');
+    }
     await ecLoad();
     ecPaintCabinet();
   } catch (e) {
