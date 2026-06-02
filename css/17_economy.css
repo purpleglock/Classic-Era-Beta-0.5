@@ -250,6 +250,34 @@
 .ec-caravan-form select, .ec-caravan-form input { width: 100%; box-sizing: border-box; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 6px 8px; font-size: 12px; outline: none; }
 .ec-caravan-form select:focus, .ec-caravan-form input:focus { border-color: var(--gd); }
 .ec-caravan-form button { grid-column: 1 / -1; margin-top: 4px; }
+/* ── Переработанная форма каравана ── */
+.ec-dip-trade { grid-column: 1 / -1; }
+.ec-trade-form { display: flex; flex-direction: column; gap: 8px; }
+.ec-trade-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--gdl, var(--gd)); margin-top: 4px; }
+.ec-trade-label .ec-hint { text-transform: none; letter-spacing: 0; color: var(--t4); }
+.ec-trade-reslist { display: flex; flex-wrap: wrap; gap: 6px; }
+.ec-trade-res { display: inline-flex; align-items: center; gap: 6px; background: var(--b1); border: 1px solid var(--w2); border-radius: 8px; padding: 6px 10px; cursor: pointer; color: var(--t2); font-size: 12px; transition: border-color .12s, background .12s; }
+.ec-trade-res:hover { background: var(--b3); }
+.ec-trade-res.on { border-color: var(--gd); background: color-mix(in srgb, var(--gd) 12%, var(--b1)); color: var(--t1); }
+.ec-trade-res-ic { font-size: 14px; }
+.ec-trade-res-n { font-weight: 600; }
+.ec-trade-res-meta { font-family: var(--font-mono); font-size: 10px; color: var(--t4); }
+.ec-trade-res.on .ec-trade-res-meta { color: var(--t3); }
+.ec-trade-volrow { display: flex; align-items: center; gap: 10px; }
+.ec-trade-volrow label { font-size: 11px; color: var(--t3); white-space: nowrap; min-width: 92px; }
+.ec-trade-volrow input[type=range] { flex: 1; accent-color: var(--gd); }
+.ec-trade-volnum { width: 72px; box-sizing: border-box; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 6px 8px; font-size: 12px; outline: none; text-align: right; }
+.ec-trade-volnum:focus { border-color: var(--gd); }
+.ec-trade-route { display: flex; align-items: center; gap: 6px; }
+.ec-trade-route select { flex: 1; min-width: 0; box-sizing: border-box; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 7px 8px; font-size: 12px; outline: none; }
+.ec-trade-route select:focus { border-color: var(--gd); }
+.ec-trade-arrow { color: var(--t3); flex-shrink: 0; }
+.ec-trade-summary { display: flex; flex-direction: column; gap: 4px; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 10px 12px; margin-top: 2px; }
+.ec-trade-srow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 12px; color: var(--t3); }
+.ec-trade-srow b { color: var(--t1); font-weight: 600; }
+.ec-trade-srow.big { font-size: 14px; padding: 3px 0; border-top: 1px solid var(--w1); border-bottom: 1px solid var(--w1); }
+.ec-trade-srow.err { color: var(--err); justify-content: flex-start; }
+.ec-trade-form > .btn[disabled] { opacity: .5; cursor: not-allowed; }
 .ec-res-click { cursor: pointer; }
 .ec-res-click:hover { border-color: var(--w3); }
 
