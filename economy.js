@@ -366,6 +366,25 @@ function ecColonizeInfo(s, p, race) {
   return { cls: 'foreign', tag: 'чужая', label, btn: `<button class="btn btn-gh btn-sm" onclick="event.stopPropagation();ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},1)">Терраформ · ${ecNum(EC_TERRAFORM_COST)} ГС</button>` };
 }
 
+// Чипы ресурсов планеты (иконка + название + цвет по редкости)
+function ecPlanetResChips(p) {
+  const res = (p && Array.isArray(p.resources)) ? p.resources.filter(r => r && r.name) : [];
+  if (!res.length) return '<span class="ec-nres">◌ ресурсов нет</span>';
+  return res.map(r => {
+    const rar = r.r || 'common';
+    return `<span class="ec-rchip ec-rar-${rar}" title="${esc(r.name)} · ${rar}"><span class="ec-rchip-i">${esc(r.icon || '◈')}</span>${esc(r.name)}</span>`;
+  }).join('');
+}
+// Подсказка «что выгодно строить» по ресурсам/пригодности планеты
+function ecPlanetBuildHint(p) {
+  const res = (p && Array.isArray(p.resources)) ? p.resources.filter(r => r && r.name) : [];
+  const rich = res.some(r => ['rare', 'epic', 'legendary'].includes(r.r));
+  const tips = [];
+  if (res.length) tips.push(`⛏ Добывающий завод${rich ? ' — ценные ресурсы!' : ''}`);
+  if (ecColonizable(p)) tips.push('🏭 Фабрика · 🔬 Институт');
+  return tips.length ? `<div class="ec-pl-hint">💡 Выгодно: ${tips.join(' · ')}</div>` : '';
+}
+
 // Тело управления колонией (застройка) — показывается только в развёрнутой колонии
 function ecColonyManage(c) {
   const blds = EC.buildings.filter(b => b.colony_id === c.id);
@@ -403,15 +422,23 @@ function ecTabColonies() {
         const incSci = blds.reduce((a, b) => a + (ecBuildingIncome(b).science || 0), 0);
         const incTxt = [incGc ? `+${ecNum(incGc)} ГС` : '', incSci ? `+${ecNum(incSci)} ОН` : ''].filter(Boolean).join(' ');
         const head = `<div class="ec-pl ec-pl-own${open ? ' open' : ''}" onclick="ecToggleColony('${colony.id}')">
-          <div class="ec-pl-l"><span class="ec-pl-ic">🏙</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name)}</div><div class="ec-pl-sb">${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div></div></div>
-          <div class="ec-pl-r"><span class="ec-pl-cells">⬚ ${used}/${cap}</span>${incTxt ? `<span class="ec-pl-inc">${incTxt}/сут</span>` : ''}<span class="ec-pl-chev">${open ? '▾' : '▸'}</span></div>
+          <div class="ec-pl-top">
+            <div class="ec-pl-l"><span class="ec-pl-ic">🏙</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name)}</div><div class="ec-pl-sb">${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div></div></div>
+            <div class="ec-pl-r"><span class="ec-pl-cells">⬚ ${used}/${cap}</span>${incTxt ? `<span class="ec-pl-inc">${incTxt}/сут</span>` : ''}<span class="ec-pl-chev">${open ? '▾' : '▸'}</span></div>
+          </div>
+          <div class="ec-pl-res">${ecPlanetResChips(p)}</div>
         </div>`;
         return head + (open ? `<div class="ec-pl-detail">${ecColonyManage(colony)}</div>` : '');
       }
       const cz = ecColonizeInfo(s, p, race);
+      const cells = +p.slotsP || EC_DEFAULT_CELLS;
       return `<div class="ec-pl ec-pl-free">
-        <div class="ec-pl-l"><span class="ec-pl-ic">◌</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(p.name)}</div><div class="ec-pl-sb ec-cz-${cz.cls}">${esc(cz.tag)} · ${esc(cz.label)}</div></div></div>
-        <div class="ec-pl-r">${cz.btn}</div>
+        <div class="ec-pl-top">
+          <div class="ec-pl-l"><span class="ec-pl-ic">${cz.cls === 'no' ? '⊘' : '◌'}</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(p.name)}</div><div class="ec-pl-sb"><span class="ec-cz-${cz.cls}">${esc(cz.tag)}</span> · ${esc(cz.label)} · ⬚ ${cells} ячеек</div></div></div>
+          <div class="ec-pl-r">${cz.btn}</div>
+        </div>
+        <div class="ec-pl-res">${ecPlanetResChips(p)}</div>
+        ${cz.cls !== 'no' ? ecPlanetBuildHint(p) : ''}
       </div>`;
     }).join('') || `<div class="ec-empty" style="padding:10px 12px">В системе нет планет.</div>`;
     return `<div class="ec-sysblk">
