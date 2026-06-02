@@ -75,9 +75,15 @@ begin
     values (fid, coalesce(app.name, 'Фракция'), coalesce(app.color, 'rgba(120,140,170,0.3)'), 100)
     on conflict (id) do update set name = excluded.name, color = excluded.color;
 
-  -- занять систему
+  -- занять столичную систему на карте (спавн столицы на карте)
   if app.system_id is not null then
     update public.map_systems set faction = fid where id = app.system_id;
+    -- авто-синхрон: колонии, оказавшиеся в системах, которыми фракция НЕ владеет
+    -- (напр. после переезда через редактор карты), переносим в столичную систему.
+    update public.colonies set system_id = app.system_id
+      where faction_id = fid
+        and system_id is distinct from app.system_id
+        and system_id not in (select id from public.map_systems where faction = fid);
   end if;
 
   -- статус анкеты (сбрасываем флаг изменений)
