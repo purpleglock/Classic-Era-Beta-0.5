@@ -418,3 +418,59 @@
     padding: 8px 10px;
   }
 }
+
+/* ══════════════════════════════════════════════════════════
+   ЛОКАЦИИ — форумные RP-страницы (только для игроков)
+   ══════════════════════════════════════════════════════════ */
+/* Закрытый экран для не-игроков */
+.loc-gate { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; min-height:50vh; text-align:center; padding:40px 20px; }
+.loc-gate-ico { font-size:54px; opacity:.25; }
+.loc-gate-title { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:18px; letter-spacing:4px; color:var(--t2); }
+.loc-gate-sub { font-size:13px; color:var(--t4); max-width:360px; line-height:1.6; }
+/* Бейдж приватности на обложке */
+.loc-badge { display:inline-block; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:1.5px; color:var(--te,#3ec0d0); border:1px solid color-mix(in srgb, var(--te,#3ec0d0) 45%, transparent); background:color-mix(in srgb, var(--te,#3ec0d0) 12%, rgba(0,0,0,.4)); border-radius:5px; padding:3px 9px; margin-bottom:10px; backdrop-filter:blur(4px); }
+.loc-cov img { filter:saturate(1.05) contrast(1.04); }
+.loc-desc { margin-bottom:8px; }
+/* Досье локации — горизонтальная полоса статуса под заголовком */
+.loc-dossier { display:flex; flex-wrap:wrap; gap:1px; margin:0 0 18px; border:1px solid color-mix(in srgb, var(--te,#3ec0d0) 22%, var(--w2)); border-radius:8px; overflow:hidden; background:color-mix(in srgb, var(--te,#3ec0d0) 5%, var(--b1)); }
+.loc-dossier-cell { flex:1 1 140px; min-width:120px; display:flex; flex-direction:column; gap:3px; padding:9px 14px; background:rgba(0,0,0,.12); }
+.loc-dossier-cell + .loc-dossier-cell { box-shadow:inset 1px 0 0 color-mix(in srgb, var(--te,#3ec0d0) 14%, transparent); }
+.loc-dossier-k { font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:1px; text-transform:uppercase; color:var(--te,#3ec0d0); opacity:.85; }
+.loc-dossier-v { font-family:'Rajdhani',sans-serif; font-weight:600; font-size:14px; color:var(--t1); line-height:1.2; }
+.loc-dossier-cell.empty .loc-dossier-v { color:var(--t4); font-weight:400; }
+/* Лента локации — общий тон */
+.cmt-location .cmt-section-title { color:var(--te,#3ec0d0); }
+/* «Лог сцены»: вертикальная линия-таймлайн вдоль ленты */
+.cmt-location .cmt-list { position:relative; padding-left:18px; margin-bottom:8px; }
+.cmt-location .cmt-list::before { content:''; position:absolute; left:5px; top:6px; bottom:6px; width:1px; background:linear-gradient(180deg, transparent, color-mix(in srgb, var(--te,#3ec0d0) 35%, transparent) 12%, color-mix(in srgb, var(--te,#3ec0d0) 18%, transparent) 88%, transparent); }
+.cmt-location .cmt-item, .cmt-location .cmt-location-voice { position:relative; }
+.cmt-location .cmt-item::before { content:''; position:absolute; left:-15px; top:16px; width:7px; height:7px; border-radius:50%; background:var(--b1); border:1.5px solid color-mix(in srgb, var(--fac,var(--te,#3ec0d0)) 70%, transparent); }
+.cmt-location .cmt-empty { border:1px dashed color-mix(in srgb, var(--te,#3ec0d0) 25%, var(--w2)); border-radius:8px; background:color-mix(in srgb, var(--te,#3ec0d0) 4%, transparent); font-style:italic; }
+
+/* Композер «прибит» к низу экрана (чат-режим локации) */
+.cmt-composer-dock { position:sticky; bottom:0; z-index:30; margin:14px -12px -14px; padding:12px 12px 14px; background:linear-gradient(180deg, transparent, color-mix(in srgb, var(--b0,#0b0e13) 86%, transparent) 22%, var(--b0,#0b0e13) 60%); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
+.cmt-composer-dock::before { content:''; position:absolute; left:0; right:0; top:6px; height:1px; background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--te,#3ec0d0) 55%, transparent), transparent); }
+.cmt-composer-dock .cmt-form { margin:0; background:color-mix(in srgb, var(--te,#3ec0d0) 6%, var(--b2)); border:1px solid color-mix(in srgb, var(--te,#3ec0d0) 28%, var(--w2)); border-radius:12px; padding:10px 12px; box-shadow:0 8px 28px rgba(0,0,0,.45); }
+.cmt-composer-dock .cmt-textarea { background:rgba(0,0,0,.18); }
+@media (max-width:640px){ .cmt-composer-dock { margin-left:-8px; margin-right:-8px; } }
+
+/* Чип фракции игрока */
+.cmt-fac-chip { display:inline-flex; align-items:center; gap:3px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.5px; padding:1px 7px; border-radius:999px; color:var(--fac,#9fb4d8); border:1px solid color-mix(in srgb, var(--fac,#9fb4d8) 50%, transparent); background:color-mix(in srgb, var(--fac,#9fb4d8) 12%, transparent); white-space:nowrap; }
+/* Пост игрока — акцент цветом фракции */
+.cmt-item.cmt-player .cmt-bubble { border-left:2px solid color-mix(in srgb, var(--fac,#9fb4d8) 60%, transparent); background:color-mix(in srgb, var(--fac,#9fb4d8) 6%, transparent); }
+.cmt-item.cmt-player .cmt-av { box-shadow:0 0 0 2px color-mix(in srgb, var(--fac,#9fb4d8) 70%, transparent); border-radius:50%; }
+.cmt-item.cmt-player .cmt-author { color:var(--fac,#9fb4d8); font-weight:600; }
+
+/* Голос локации — карточка рассказчика */
+.cmt-location-voice { margin:14px 0; padding:14px 18px; text-align:center; border-radius:10px; border:1px solid color-mix(in srgb, var(--te,#3ec0d0) 35%, transparent); background:linear-gradient(180deg, color-mix(in srgb, var(--te,#3ec0d0) 9%, transparent), transparent); box-shadow:inset 0 0 30px color-mix(in srgb, var(--te,#3ec0d0) 8%, transparent); position:relative; }
+.cmt-lv-head { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; margin-bottom:7px; }
+.cmt-lv-ico { font-size:14px; }
+.cmt-lv-name { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--te,#3ec0d0); }
+.cmt-lv-tag { font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:1px; text-transform:uppercase; color:var(--t4); border:1px solid var(--w2); border-radius:4px; padding:1px 5px; }
+.cmt-lv-head .cmt-time { color:var(--t4); }
+.cmt-lv-body { font-family:'Spectral',Georgia,serif; font-style:italic; font-size:14px; line-height:1.7; color:var(--t2); max-width:620px; margin:0 auto; white-space:pre-wrap; }
+
+/* Тумблер «от имени локации» */
+.cmt-aslocation-toggle { display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--te,#3ec0d0); cursor:pointer; user-select:none; margin-right:auto; }
+.cmt-aslocation-toggle input { accent-color:var(--te,#3ec0d0); cursor:pointer; }
+.cmt-form.cmt-form-aslocation .cmt-textarea { border-color:color-mix(in srgb, var(--te,#3ec0d0) 55%, transparent); background:color-mix(in srgb, var(--te,#3ec0d0) 6%, transparent); font-style:italic; }

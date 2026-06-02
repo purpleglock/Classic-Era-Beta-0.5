@@ -15,6 +15,12 @@ let _cmtItems  = [];     // массив загруженных коммента
 let _cmtBusy   = false;  // блокировка повторной отправки
 let _cmtReplyTo = null;  // ID комментария, на который отвечаем
 let _cmtEditId = null;   // ID комментария, который редактируем
+// ── Режим локации (форумный отыгрыш) ──
+let _cmtPageType = null;    // тип текущей страницы ('location' и пр.)
+let _cmtLocationName = '';  // название локации (для «голоса локации»)
+let _cmtFactionMap = {};    // email автора -> { name, color } (одобренные фракции)
+let _cmtAsLocation = false; // тумблер «писать от имени локации» (для администрации)
+function _cmtIsLocation() { return _cmtPageType === 'location'; }
 
 // ── Разрешение на комментирование ──────────────────────────
 function canComment() {
@@ -44,7 +50,7 @@ async function loadComments(slug) {
       + `&is_deleted=eq.false`
       + `&order=created_at.asc`
       + `&limit=${CMT_PAGE_SIZE}`
-      + `&select=id,page_slug,user_id,user_email,body,created_at,parent_id`;
+      + `&select=id,page_slug,user_id,user_email,body,created_at,parent_id,as_location`;
     const r = await fetch(url, {
       headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token }
     });
@@ -120,6 +126,7 @@ async function submitComment() {
         user_email: user.email,
         body:       body,
         parent_id:  _cmtReplyTo || null,
+        as_location: !!(_cmtIsLocation() && _cmtAsLocation && typeof isLocationStaff === 'function' && isLocationStaff()),
       };
 
       const r = await fetch(`${SB_URL}/rest/v1/comments`, {
@@ -151,7 +158,9 @@ async function submitComment() {
       ta.value = '';
       updateCharCount();
       cancelReply();
-      toast(lang === 'ru' ? 'Комментарий отправлен' : 'Comment posted', 'ok');
+      // сброс тумблера «от имени локации» после отправки
+      if (_cmtAsLocation) { _cmtAsLocation = false; const tg = document.getElementById('cmt-aslocation'); if (tg) tg.checked = false; const fm = document.querySelector('.cmt-form'); if (fm) fm.classList.remove('cmt-form-aslocation'); }
+      toast(lang === 'ru' ? (_cmtIsLocation() ? 'Сообщение добавлено в ленту' : 'Комментарий отправлен') : 'Posted', 'ok');
     }
   } catch (e) {
     toast(e.message, 'err');
@@ -294,8 +303,47 @@ function updateCharCount() {
     : 'var(--t4)';
 }
 
+// ── Переключение режима «от имени локации» (для администрации) ──
+function toggleAsLocation(el) {
+  _cmtAsLocation = !!(el && el.checked);
+  const form = document.querySelector('.cmt-form');
+  if (form) form.classList.toggle('cmt-form-aslocation', _cmtAsLocation);
+  const ta = document.getElementById('cmt-input');
+  if (ta) ta.placeholder = _cmtAsLocation
+    ? (lang === 'ru' ? `Голос локации «${_cmtLocationName}» — опишите событие сцены…` : 'Narrate the scene…')
+    : (lang === 'ru' ? 'Опишите действие вашего персонажа…' : 'Describe your action…');
+}
+
+// ── Загрузка одобренных фракций для отображения авторов-игроков ──
+async function _cmtLoadFactions() {
+  _cmtFactionMap = {};
+  try {
+    const token = getToken();
+    const url = `${SB_URL}/rest/v1/faction_applications?status=eq.approved&select=owner_email,name,color`;
+    const r = await fetch(url, { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token } });
+    if (!r.ok) return;
+    const rows = await r.json();
+    (rows || []).forEach(f => { if (f.owner_email) _cmtFactionMap[f.owner_email] = { name: f.name || '', color: f.color || '' }; });
+  } catch (e) { /* фракции необязательны */ }
+}
+// Читаемый на тёмном фоне цвет фракции (используем frReadable, если доступен)
+function _cmtFacColor(c) { return (typeof frReadable === 'function') ? frReadable(c) : (c || '#9fb4d8'); }
+
 // ── Рендер одного комментария ───────────────────────────────
 function renderCommentItem(cmt, depth = 0) {
+  // Пост «от имени локации» — особая карточка рассказчика
+  if (cmt.as_location && _cmtIsLocation()) {
+    const canDel = canDeleteComment(cmt);
+    const body = esc(cmt.body).replace(/\n/g, '<br>');
+    return `
+<div class="cmt-location-voice" id="cmt-${esc(cmt.id)}" style="--depth:${depth}">
+  <div class="cmt-lv-head"><span class="cmt-lv-ico">📍</span><span class="cmt-lv-name">${esc(_cmtLocationName || 'Локация')}</span><span class="cmt-lv-tag">голос локации</span>
+    <span class="cmt-time">${timeAgo(cmt.created_at)}</span>
+    ${canDel ? `<button class="cmt-del-btn" onclick="deleteComment('${esc(cmt.id)}')" title="Удалить">✕</button>` : ''}
+  </div>
+  <div class="cmt-lv-body">${body}</div>
+</div>`;
+  }
   const prof        = getProfileOf(cmt.user_email);
   const displayName = prof.display_name || (cmt.user_email || '').split('@')[0] || '?';
   const avatarUrl   = prof.avatar_url   || '';
@@ -307,12 +355,20 @@ function renderCommentItem(cmt, depth = 0) {
 
   const bodyHtml = esc(cmt.body).replace(/\n/g, '<br>');
 
+  // В режиме локации: автор с одобренной фракцией = игрок → чип фракции + акцент её цветом
+  const fac = _cmtIsLocation() ? _cmtFactionMap[cmt.user_email] : null;
+  const facCol = fac ? _cmtFacColor(fac.color) : '';
+  const facChip = fac ? `<span class="cmt-fac-chip" style="--fac:${facCol}">⬡ ${esc(fac.name)}</span>` : '';
+  const playerCls = fac ? ' cmt-player' : '';
+  const facStyle = fac ? ` style="--fac:${facCol}"` : '';
+
   return `
-<div class="cmt-item${isOwn ? ' cmt-own' : ''}" id="cmt-${esc(cmt.id)}" style="--depth:${depth}">
-  <div class="cmt-av">${avHtml}</div>
-  <div class="cmt-bubble">
+<div class="cmt-item${isOwn ? ' cmt-own' : ''}${playerCls}" id="cmt-${esc(cmt.id)}" style="--depth:${depth}"${fac ? ` data-fac="1"` : ''}>
+  <div class="cmt-av"${facStyle}>${avHtml}</div>
+  <div class="cmt-bubble"${facStyle}>
     <div class="cmt-meta">
-      <span class="cmt-author">${esc(displayName)}</span>
+      <span class="cmt-author"${facStyle}>${esc(displayName)}</span>
+      ${facChip}
       <span class="cmt-time">${timeAgo(cmt.created_at)}</span>
       ${canReply ? `<button class="cmt-reply-btn" onclick="replyToComment('${esc(cmt.id)}')" title="${lang === 'ru' ? 'Ответить' : 'Reply'}">${lang === 'ru' ? 'ответить' : 'reply'}</button>` : ''}
       ${canEdit ? `<button class="cmt-edit-btn" onclick="editComment('${esc(cmt.id)}')" title="${lang === 'ru' ? 'Редактировать' : 'Edit'}">✎</button>` : ''}
@@ -364,7 +420,9 @@ function renderCommentsList() {
   if (!list) return;
 
   if (!_cmtItems.length) {
-    list.innerHTML = `<div class="cmt-empty">${lang === 'ru' ? 'Комментариев пока нет. Будьте первым!' : 'No comments yet. Be the first!'}</div>`;
+    list.innerHTML = `<div class="cmt-empty">${_cmtIsLocation()
+      ? (lang === 'ru' ? 'В этой локации ещё тихо. Опишите, как сюда прибывает ваш персонаж.' : 'The location is quiet. Be the first to arrive.')
+      : (lang === 'ru' ? 'Комментариев пока нет. Будьте первым!' : 'No comments yet. Be the first!')}</div>`;
     return;
   }
 
@@ -382,9 +440,17 @@ function renderCommentsSection(slug) {
 
   _cmtSlug  = slug;
   _cmtItems = [];
+  _cmtAsLocation = false;
 
   // Не показываем комменты на главной и секциях
   if (!slug || slug === 'home' || slug.startsWith('sec:')) return;
+
+  // Определяем тип страницы — для «режима локации»
+  const _pageMeta = (typeof pages !== 'undefined') ? pages.find(p => p.slug === slug) : null;
+  _cmtPageType = _pageMeta ? (_pageMeta.page_type || 'article') : null;
+  _cmtLocationName = (_cmtIsLocation() && _pageMeta) ? (pT(_pageMeta) || _pageMeta.title || 'Локация') : '';
+  const isLoc = _cmtIsLocation();
+  const canVoice = isLoc && typeof isLocationStaff === 'function' && isLocationStaff();
 
   const canWrite = canComment();
   const notLoggedIn = !user;
@@ -394,6 +460,14 @@ function renderCommentsSection(slug) {
   if (canWrite) {
     const prof = userProfile;
     const avHtml = getAvatarHtml(user.email, prof.avatar_url, prof.display_name || user.email.split('@')[0], 32);
+    const ph = isLoc
+      ? (lang === 'ru' ? 'Опишите действие вашего персонажа…' : 'Describe your action…')
+      : (lang === 'ru' ? 'Оставить комментарий…' : 'Leave a comment…');
+    const voiceToggle = canVoice ? `
+      <label class="cmt-aslocation-toggle" title="Сообщение появится как голос локации (рассказчик)">
+        <input type="checkbox" id="cmt-aslocation" onchange="toggleAsLocation(this)">
+        <span>✦ ${lang === 'ru' ? 'От имени локации' : 'As location'}</span>
+      </label>` : '';
     formHtml = `
 <div class="cmt-form">
   <div class="cmt-form-av">${avHtml}</div>
@@ -401,17 +475,18 @@ function renderCommentsSection(slug) {
     <textarea
       id="cmt-input"
       class="cmt-textarea"
-      placeholder="${lang === 'ru' ? 'Оставить комментарий…' : 'Leave a comment…'}"
+      placeholder="${esc(ph)}"
       maxlength="${CMT_MAX_LEN}"
       rows="3"
       oninput="updateCharCount()"
       onkeydown="if(event.ctrlKey&&event.key==='Enter')submitComment()"
     ></textarea>
     <div class="cmt-form-footer">
+      ${voiceToggle}
       <span class="cmt-hint">${lang === 'ru' ? 'Ctrl+Enter — отправить' : 'Ctrl+Enter to send'}</span>
       <span id="cmt-char-count" class="cmt-char">0 / ${CMT_MAX_LEN}</span>
       <button id="cmt-send-btn" class="btn btn-gd btn-sm" onclick="submitComment()">
-        ${lang === 'ru' ? 'Отправить' : 'Send'}
+        ${isLoc ? (lang === 'ru' ? 'Отправить в ленту' : 'Post') : (lang === 'ru' ? 'Отправить' : 'Send')}
       </button>
     </div>
   </div>
@@ -434,7 +509,7 @@ function renderCommentsSection(slug) {
 
   const section = document.createElement('div');
   section.id = 'cmt-section';
-  section.className = 'cmt-section';
+  section.className = 'cmt-section' + (isLoc ? ' cmt-location' : '');
   
   // Получаем метаданные страницы
   const currentPage = pages.find(p => p.slug === slug);
@@ -442,25 +517,29 @@ function renderCommentsSection(slug) {
   const tagsHtml = currentPage?.tags ? `<span>🏷 ${currentPage.tags.split(',').map(t => `<span class="art-tag">${esc(t.trim())}</span>`).join(' ')}</span>` : '';
   const metaHtml = currentPage ? `<div class="art-meta"><span>📅 ${fmtD(currentPage.updated_at)}</span><span>✍ ${esc(userLabel(currentPage.created_by||''))}</span>${sec2?`<span>📁 ${esc(sN(sec2))}</span>`:''}${tagsHtml}</div>` : '';
   
-  section.innerHTML = `
-${metaHtml}
+  const headerHtml = `
 <div class="cmt-section-hdr">
-  <span class="cmt-section-title">◈ ${lang === 'ru' ? 'КОММЕНТАРИИ' : 'COMMENTS'}</span>
+  <span class="cmt-section-title">${isLoc ? '📍 ' + (lang === 'ru' ? 'ЛЕНТА ЛОКАЦИИ' : 'LOCATION FEED') : '◈ ' + (lang === 'ru' ? 'КОММЕНТАРИИ' : 'COMMENTS')}</span>
   <span class="cmt-count" id="cmt-count">—</span>
-</div>
-${formHtml}
-<div id="cmt-list" class="cmt-list">
-  <div class="cmt-loading">${lang === 'ru' ? 'Загрузка комментариев…' : 'Loading comments…'}</div>
 </div>`;
+  const listHtml = `<div id="cmt-list" class="cmt-list">
+  <div class="cmt-loading">${lang === 'ru' ? (isLoc ? 'Загрузка ленты…' : 'Загрузка комментариев…') : 'Loading…'}</div>
+</div>`;
+  // В режиме локации: лента сверху, композер «прибит» к низу экрана (как в чате).
+  section.innerHTML = isLoc
+    ? `${metaHtml}${headerHtml}${listHtml}<div class="cmt-composer-dock">${formHtml}</div>`
+    : `${metaHtml}${headerHtml}${formHtml}${listHtml}`;
 
   pg.appendChild(section);
 
-  // Загрузка асинхронно
-  loadComments(slug).then(items => {
+  // Загрузка асинхронно (в режиме локации — сперва карта фракций для авторов-игроков)
+  const _factionsReady = isLoc ? _cmtLoadFactions() : Promise.resolve();
+  Promise.all([loadComments(slug), _factionsReady]).then(([items]) => {
+    if (_cmtSlug !== slug) return; // ушли на другую страницу
     _cmtItems = items;
     const countEl = document.getElementById('cmt-count');
     if (countEl) countEl.textContent = items.length
-      ? `${items.length} ${lang === 'ru' ? 'комм.' : 'comments'}`
+      ? `${items.length} ${lang === 'ru' ? (isLoc ? 'сообщ.' : 'комм.') : (isLoc ? 'posts' : 'comments')}`
       : '';
     renderCommentsList();
   });

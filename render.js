@@ -107,6 +107,7 @@ async function renderPage(pg) {
   }
   if (pg.page_type === 'faction')   { renderFactionPage(pg);   return; }
   if (pg.page_type === 'unit')       { await renderUnitPage(pg); return; }
+  if (pg.page_type === 'location')   { renderLocationPage(pg);  return; }
   const kids = pages.filter(p => isVisiblePage(p) && p.parent_slug === pg.slug).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
   const sec  = sections.find(s=>s.slug===pg.section);
   const isDraft = pg.status === 'draft';
@@ -130,6 +131,55 @@ async function renderPage(pg) {
     renderCommentsSection(pg.slug);
   }
 }
+// ── Локация: форумная RP-страница, доступная только игрокам ──
+function renderLocationPage(pg) {
+  // Закрытый экран для не-игроков (зрители/гости)
+  if (typeof canSeeLocations === 'function' && !canSeeLocations()) {
+    setPg(`<div class="loc-gate">
+      <div class="loc-gate-ico">⛬</div>
+      <div class="loc-gate-title">ЗАКРЫТАЯ ЗОНА</div>
+      <div class="loc-gate-sub">Локации доступны только участникам игры. Получите роль игрока, зарегистрировав государство.</div>
+      ${typeof user !== 'undefined' && user ? `<button class="btn btn-gd" onclick="go('factions')">⬡ К фракциям</button>` : `<button class="btn btn-gd" onclick="showAuth('login')">Войти</button>`}
+    </div>`);
+    return;
+  }
+  const isDraft = pg.status === 'draft';
+  const covH = pg.cover_height || 340;
+  const covPos = pg.cover_pos || 'center center';
+  const badge = `<div class="loc-badge">📍 ЛОКАЦИЯ · только для игроков</div>`;
+  const titleHtml = `${esc(pT(pg))}${isDraft ? `<span class="art-draft-tag">${T('draft')}</span>` : ''}`;
+  const cover = pg.image_url
+    ? `<div class="art-cov loc-cov" data-cover-type="${pg.cover_type||'standard'}" style="--cov-h:${covH}px;--cov-pos:${covPos}"><img src="${esc(pg.image_url)}" alt="${esc(pT(pg))}" loading="lazy"><div class="art-cov-scan"></div><div class="art-cov-fade"></div><div class="art-cov-hud hud-tl"></div><div class="art-cov-hud hud-tr"></div><div class="art-cov-title-slot">${badge}<h1 class="art-h1">${titleHtml}</h1></div></div><div class="art-cov-spacer"></div>`
+    : `<div class="art-page-header art-page-header--nocov">${badge}<h1 class="art-h1">${titleHtml}</h1></div>`;
+  // Разбираем блоки: инфобокс -> «досье локации» (горизонтальная полоса),
+  // остальное -> описание. Не используем плавающую вики-карточку.
+  let blocks = [];
+  try { blocks = JSON.parse(pC(pg) || '[]'); } catch (e) {}
+  const infobox = blocks.find(b => b && b.type === 'infobox');
+  const otherBlocks = blocks.filter(b => b && b.type !== 'infobox');
+  const LOC_ICONS = { 'сектор':'⬡', 'система':'☀', 'контроль':'⚑', 'опасность':'⚠', 'статус':'◉', 'регион':'🜨', 'координаты':'✦' };
+  let dossier = '';
+  if (infobox) {
+    const cells = [];
+    (infobox.sections || []).forEach(s => (s.rows || []).forEach(r => {
+      if (!r || !r.key) return;
+      const ic = LOC_ICONS[(r.key || '').toLowerCase().trim()] || '◈';
+      const val = (r.val || '').trim();
+      cells.push(`<div class="loc-dossier-cell${val ? '' : ' empty'}">
+        <span class="loc-dossier-k">${ic} ${esc(r.key)}</span>
+        <span class="loc-dossier-v">${val ? esc(val) : '—'}</span>
+      </div>`);
+    }));
+    if (cells.length) dossier = `<div class="loc-dossier">${cells.join('')}</div>`;
+  }
+  const descHtml = otherBlocks.length
+    ? `<div class="prose loc-desc">${otherBlocks.map(renderBlock).join('')}</div>`
+    : '';
+  setPg(`${cover}${dossier}${descHtml}`);
+  // Лента отыгрыша — через движок комментариев в «режиме локации»
+  renderCommentsSection(pg.slug);
+}
+
 // Fallback — на случай если renderAbilityPage ещё не объявлена
 function _renderAbilityPageInline(pg) {
   const isDraft = pg.status === 'draft';

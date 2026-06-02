@@ -117,6 +117,17 @@ let pickerInsertIdx = -1;
 let _pickerCat = 'all', _pickerQ = '';
 const _pgCache = new Map();  
 const VALID_ROLES = ['superadmin','editor','moderator','player','viewer'];
+// ── Доступ к локациям (форумные RP-страницы для игроков) ──
+// «Игрок+»: вошёл, не забанен, роль не зритель. Видит и пишет в локациях.
+function canSeeLocations() {
+  return !!(typeof user !== 'undefined' && user && !user.is_banned &&
+    ['superadmin','editor','moderator','player'].includes(user.role));
+}
+// «Голос локации»: администрация — может писать от имени локации и модерировать.
+function isLocationStaff() {
+  return !!(typeof user !== 'undefined' && user && !user.is_banned &&
+    ['superadmin','editor','moderator'].includes(user.role));
+}
 const MOS = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
 
 let userProfile = { display_name: '', avatar_url: '' };
@@ -136,7 +147,7 @@ const pC = p => lang==='en' ? (p.content_ru?.trim()||p.content||'') : (p.content
 const sN = s => lang==='en' ? (s.name_en?.trim()||s.name_ru||'') : (s.name_ru?.trim()||s.name_en||'');
 const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const escId = s => String(s??'').replace(/[^a-zA-Z0-9_-]/g,'');
-const isVisiblePage = p => !p.slug?.startsWith('_');
+const isVisiblePage = p => !p.slug?.startsWith('_') && !(p.page_type === 'location' && !canSeeLocations());
 const fmtD = d => { if(!d) return '—'; const dt=new Date(d); return `${dt.getDate()} ${MOS[dt.getMonth()]} ${dt.getFullYear()}`; };
 const uid  = () => Math.random().toString(36).slice(2,8);
 

@@ -107,6 +107,7 @@ function renderEditUI(pg, titleVal, isHome) {
           <option value="preview"${pg.page_type==='preview'?' selected':''}>◈ Превью (общее)</option>
           <option value="preview-weapon"${pg.page_type==='preview-weapon'?' selected':''}>⚔ Превью оружия</option>
           <option value="preview-armor"${pg.page_type==='preview-armor'?' selected':''}>🛡 Превью брони</option>
+          <option value="location"${pg.page_type==='location'?' selected':''}>📍 Локация</option>
         </select>
       </div>
     </div>
@@ -1603,6 +1604,7 @@ async function doCreateNew(){
     if(pgType==='ability')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Способность',title:t,sections:[{name:'Параметры',rows:[{key:'Тип',val:'passive'},{key:'Дальность',val:''},{key:'Стоимость',val:''},{key:'Эффект',val:''},{key:'Иммунитеты',val:''},{key:'Бонус КЗ',val:'0'},{key:'Бонус СИЛ',val:'0'}]}]}]);
     if(pgType==='faction')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Фракция',title:t,sections:[{name:'Основное',rows:[{key:'Тип',val:''},{key:'Столица',val:''},{key:'Лидер',val:''},{key:'Основана',val:''},{key:'Идеология',val:''}]}]},{type:'text',id:uid(),content:''}]);
     if(pgType==='preview')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Превью',title:t,sections:[{name:'Базовые',rows:[{key:'Скорость',val:''},{key:'Мощность',val:''},{key:'Точность',val:''}]},{name:'Дополнительно',rows:[{key:'Класс',val:''},{key:'Роль',val:''},{key:'Особенность',val:''}]}]},{type:'text',id:uid(),content:''}]);
+    if(pgType==='location')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Локация',title:t,sections:[{name:'Обстановка',rows:[{key:'Сектор',val:''},{key:'Система',val:''},{key:'Контроль',val:''},{key:'Опасность',val:''}]}]},{type:'text',id:uid(),content:'Опишите атмосферу места: что видят и слышат прибывшие сюда персонажи.'}]);
     await dbPost('pages',{slug:sl,title:t,section:sec,parent_slug:par,status:'draft',sort_order:0,content:initContent,page_type:pgType,created_at:now,updated_at:now,created_by:user.email});
     if(pgType==='character'){
       try{await fetch(`${SB_URL}/rest/v1/characters`,{method:'POST',headers:{'apikey':SB_ANON,'Authorization':'Bearer '+getToken(),'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({slug:sl,name:t,class:'soldier',play_start:new Date().toISOString().slice(0,10),owner_email:user.email,stats:{str:10,dex:10,con:10,int:10,wis:10,cha:10},abilities:[],gear:[],extra:{}})});}catch(e2){}
