@@ -16,6 +16,10 @@
 .ec-doc-chip.bad { color: var(--err, #e05050); border-color: color-mix(in srgb, var(--err, #e05050) 42%, transparent); background: color-mix(in srgb, var(--err, #e05050) 9%, transparent); }
 /* компактная версия для обзора анкеты */
 .fr-doctrine .ec-doctrine { margin-bottom: 0; }
+/* эффекты выбранного варианта прямо в анкете (под описанием) */
+.fr-opt-flavor { display: block; }
+.ec-doc-chips-inline { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.ec-doc-chips-inline .ec-doc-chip { font-size: 10px; padding: 2px 7px; }
 .ec-head { margin-bottom: 14px; }
 .ec-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em; color: var(--gd); text-transform: uppercase; }
 .ec-head h1 { font-family: var(--font-display); font-weight: 700; font-size: var(--text-2xl); color: var(--t1); margin: 2px 0 0; padding-bottom: 8px; display: inline-block; max-width: 100%; overflow-wrap: anywhere; line-height: 1.15; }

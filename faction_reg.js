@@ -109,13 +109,13 @@ const FR_GOV_REGIME = {
 function frAllowedRegimes(gov) { return FR_GOV_REGIME[gov] || FR_REGIME; }
 function frOnGovChange(gov) {
   FR.data.gov = gov;
-  frSetDesc('f-gov-d', FR_GOV_DESC, gov);
+  frSetDesc('f-gov-d', FR_GOV_DESC, gov, 'gov');
   const allowed = frAllowedRegimes(gov);
   const sel = document.getElementById('f-regime'); if (!sel) return;
   const val = allowed.includes(sel.value) ? sel.value : allowed[0];
   sel.innerHTML = allowed.map(o => `<option${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('');
   FR.data.regime = val;
-  frSetDesc('f-regime-d', FR_REGIME_DESC, val);
+  frSetDesc('f-regime-d', FR_REGIME_DESC, val, 'regime');
 }
 
 const FR = { data: null, step: 0, freeSystems: null, allSystems: null, busy: false };
@@ -369,11 +369,11 @@ function frStepCulture(d) {
   return `<h3 class="fr-h3">III. Культурные сведения</h3>
     <div class="fgr2">
       <div class="fg"><label class="fl">Биологический вид (раса)</label>
-        ${frSel('c-race', FR_RACE, d.race, "frSetDesc('c-race-d',FR_RACE_DESC,this.value)")}
-        <div class="fr-opt-desc" id="c-race-d">${esc(FR_RACE_DESC[d.race] || '')}</div></div>
+        ${frSel('c-race', FR_RACE, d.race, "frSetDesc('c-race-d',FR_RACE_DESC,this.value,'race')")}
+        <div class="fr-opt-desc" id="c-race-d">${frOptInit(FR_RACE_DESC, d.race, 'race')}</div></div>
       <div class="fg"><label class="fl">Идеология / Этика</label>
-        ${frSel('c-ideo', FR_IDEO, d.ideology, "frSetDesc('c-ideo-d',FR_IDEO_DESC,this.value)")}
-        <div class="fr-opt-desc" id="c-ideo-d">${esc(FR_IDEO_DESC[d.ideology] || '')}</div></div>
+        ${frSel('c-ideo', FR_IDEO, d.ideology, "frSetDesc('c-ideo-d',FR_IDEO_DESC,this.value,'ideology')")}
+        <div class="fr-opt-desc" id="c-ideo-d">${frOptInit(FR_IDEO_DESC, d.ideology, 'ideology')}</div></div>
     </div>
     <div class="fg"><label class="fl">Культурные особенности</label>
       <textarea class="fi" id="c-features" rows="4" placeholder="Традиции, менталитет, быт...">${esc(d.culture)}</textarea></div>`;

@@ -81,10 +81,10 @@ const EC_MODS = {
     'Олигархия':            { gc: 0.25, sci: -0.15 },
     'Диктатура':            { claim_cd: -0.20, agents: 0.15, gc: -0.10 },
     'Теократия':            { agents: 0.15, gc: 0.10, sci: -0.20 },
-    'Технократия':          { sci: 0.30, gc: -0.15 },
-    'Корпоратократия':      { gc: 0.20, mine: 0.15, agents: -0.10 },
+    'Технократия':          { sci: 0.30, gc: -0.15, build: 0.10 },
+    'Корпоратократия':      { gc: 0.20, mine: 0.15, agents: -0.10, build: -0.10 },
     'Коллективный разум':   { sci: 0.15, mine: 0.15, claim_cost: 0.20 },
-    'Машинный разум (ИИ)':  { sci: 0.20, agents: 0.15, gc: -0.15 },
+    'Машинный разум (ИИ)':  { sci: 0.20, agents: 0.15, gc: -0.15, build: -0.10 },
   },
   regime: {
     'Демократический':      { gc: 0.15, sci: 0.05, agents: -0.10 },
@@ -95,7 +95,7 @@ const EC_MODS = {
     'Авторитарный':         { agents: 0.20, mine: 0.10, gc: -0.10 },
     'Тоталитарный':         { mine: 0.25, agents: 0.15, gc: -0.15 },
     'Деспотичный':          { claim_cd: -0.20, agents: 0.10, sci: -0.15 },
-    'Анархический':         { colonize: -0.25, sci: 0.10, gc: -0.20 },
+    'Анархический':         { colonize: -0.25, sci: 0.10, gc: -0.20, build: 0.15 },
   },
   ideology: {
     'Технократия (Культ науки)': { sci: 0.30, gc: -0.15 },
@@ -108,7 +108,7 @@ const EC_MODS = {
     'Спиритуализм':              { agents: 0.20, sci: -0.15 },
     'Трансгуманизм':             { sci: 0.20, agents: 0.10, gc: -0.10 },
     'Экоцентризм':               { mine: 0.30, gc: -0.20 },
-    'Индустриализм':             { gc: 0.25, mine: 0.10, sci: -0.15 },
+    'Индустриализм':             { gc: 0.25, mine: 0.10, sci: -0.15, build: -0.15 },
   },
   race: {
     'Гуманоиды':                  { gc: 0.05, sci: 0.05 },
@@ -124,10 +124,10 @@ const EC_MODS = {
   },
   civ: {
     'frontier': { colonize: -0.25, claim_cd: -0.25, gc: -0.15 },
-    'colony':   { gc: 0.20, mine: 0.10, claim_cost: 0.15 },
+    'colony':   { gc: 0.20, mine: 0.10, claim_cost: 0.15, build: -0.10 },
   },
 };
-const EC_MOD_FIELDS = ['gc', 'sci', 'agents', 'mine', 'colonize', 'claim_cost', 'claim_cd'];
+const EC_MOD_FIELDS = ['gc', 'sci', 'agents', 'mine', 'build', 'colonize', 'claim_cost', 'claim_cd'];
 // Считает итоговые множители доктрины для анкеты app (по умолчанию — текущая фракция).
 function ecFactionMods(app) {
   app = app || (typeof EC !== 'undefined' && EC.app) || {};
@@ -139,7 +139,7 @@ function ecFactionMods(app) {
   const clamp = (v, lo) => Math.max(lo, 1 + v);
   return {
     gc: clamp(f.gc, 0.3), sci: clamp(f.sci, 0.3), agents: clamp(f.agents, 0.3),
-    mine: clamp(f.mine, 0.3), colonize: clamp(f.colonize, 0.3),
+    mine: clamp(f.mine, 0.3), build: clamp(f.build, 0.3), colonize: clamp(f.colonize, 0.3),
     claim_cost: clamp(f.claim_cost, 0.3), claim_cd: clamp(f.claim_cd, 0.25),
     _raw: f,
   };
@@ -382,6 +382,8 @@ function ecResEntries() { const res = (EC.eco && EC.eco.resources) || {}; return
 function ecMineRate(rar) { return Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 25) * ecFactionMods().mine)); }
 // Стоимость экспансии (колонизация/терраформ/обустройство) с учётом доктрины (mods.colonize).
 function ecColonizeCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().colonize)); }
+// Стоимость построек и слотов с учётом доктрины (mods.build).
+function ecBuildCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().build)); }
 
 // Ресурсы планеты для mining-здания (из данных карты или снимка колонии)
 function ecMiningPlanetRes(b) {
@@ -481,13 +483,13 @@ function ecSetTab(t) { EC.tab = t; ecPaintCabinet(); }
 function ecChoiceChips(cat, value) {
   const m = (EC_MODS[cat] || {})[value];
   if (!m) return '';
-  const LBL = { gc: 'ГС-доход', sci: 'Наука', agents: 'Агенты', mine: 'Добыча', colonize: 'Колонизация', claim_cost: 'Захват: цена' };
-  const order = ['gc', 'sci', 'agents', 'mine', 'colonize', 'claim_cost', 'claim_cd'];
+  const LBL = { gc: 'ГС-доход', sci: 'Наука', agents: 'Агенты', mine: 'Добыча', build: 'Постройки/слоты', colonize: 'Колонизация планет', claim_cost: 'Колонизация систем: цена' };
+  const order = ['gc', 'sci', 'agents', 'mine', 'build', 'colonize', 'claim_cost', 'claim_cd'];
   const chips = order.filter(k => m[k]).map(k => {
     const p = Math.round(m[k] * 100);
     let good, txt;
-    if (k === 'colonize' || k === 'claim_cost') { good = p < 0; txt = `${LBL[k]} ${p > 0 ? '+' : ''}${p}%`; }
-    else if (k === 'claim_cd') { good = p < 0; txt = `Кулдаун захвата ${p > 0 ? '+' : ''}${p}%`; }
+    if (k === 'colonize' || k === 'claim_cost' || k === 'build') { good = p < 0; txt = `${LBL[k]} ${p > 0 ? '+' : ''}${p}%`; }
+    else if (k === 'claim_cd') { good = p < 0; txt = `Кулдаун колонизации систем ${p > 0 ? '+' : ''}${p}%`; }
     else { good = p > 0; txt = `${LBL[k]} ${p > 0 ? '+' : ''}${p}%`; }
     return `<span class="ec-doc-chip ${good ? 'good' : 'bad'}">${txt}</span>`;
   });
@@ -505,10 +507,11 @@ function ecDoctrineChips(app) {
   };
   const out = [
     chip('ГС-доход', m.gc), chip('Наука', m.sci), chip('Агенты', m.agents), chip('Добыча', m.mine),
-    chip('Колонизация', m.colonize, false), chip('Захват: цена', m.claim_cost, false),
+    chip('Постройки/слоты', m.build, false),
+    chip('Колонизация планет', m.colonize, false), chip('Колонизация систем: цена', m.claim_cost, false),
   ];
   const cdP = pct(m.claim_cd);
-  if (cdP) out.push(`<span class="ec-doc-chip ${cdP < 0 ? 'good' : 'bad'}">${cdP < 0 ? `Захват чаще ×${(1 / m.claim_cd).toFixed(1)}` : `Захват реже +${cdP}%`}</span>`);
+  if (cdP) out.push(`<span class="ec-doc-chip ${cdP < 0 ? 'good' : 'bad'}">${cdP < 0 ? `Колонизация систем чаще ×${(1 / m.claim_cd).toFixed(1)}` : `Колонизация систем реже +${cdP}%`}</span>`);
   return out.filter(Boolean).join('');
 }
 function ecDoctrineHtml(app) {
@@ -619,7 +622,7 @@ function ecColonyManage(c) {
   const blds = EC.buildings.filter(b => b.colony_id === c.id);
   const used = blds.length, cap = c.cells || EC_DEFAULT_CELLS, full = used >= cap;
   const bHtml = blds.map(ecBuildingRow).join('') || `<div class="ec-empty" style="padding:8px 0">Пусто. Постройте структуру ↓</div>`;
-  const opts = EC_ORDER.map(t => `<option value="${t}">${esc(EC_BUILD[t].name)} — ${ecNum(EC_BUILD[t].cost)} ГС</option>`).join('');
+  const opts = EC_ORDER.map(t => `<option value="${t}">${esc(EC_BUILD[t].name)} — ${ecNum(ecBuildCost(EC_BUILD[t].cost))} ГС</option>`).join('');
   const pendHab = ecPendingHabitat(c.id);
   const habBtn = pendHab
     ? `<span class="ec-proj-tag" title="${ecProjEtaTxt(pendHab)}">⏳ обустройство среды (${ecProjEtaTxt(pendHab)})</span>`
@@ -798,9 +801,12 @@ function ecClaimableIds() {
   const byId = new Map((EC.allSystems || []).map(s => [s.id, s]));
   return [...adj].filter(id => { const s = byId.get(id); return s && !s.faction; });
 }
+// Цена и кулдаун колонизации системы с учётом доктрины (зеркало economy_claim_system).
+function ecClaimCost() { return Math.max(1, Math.round(EC_CLAIM_COST * ecFactionMods().claim_cost)); }
+function ecClaimCdDays() { return Math.max(1, Math.round(EC_CLAIM_CD_DAYS * ecFactionMods().claim_cd)); }
 function ecClaimCooldownMs() {
   if (!EC.eco.last_system_claim) return 0;
-  return Math.max(0, new Date(EC.eco.last_system_claim).getTime() + EC_CLAIM_CD_DAYS * 86400000 - Date.now());
+  return Math.max(0, new Date(EC.eco.last_system_claim).getTime() + ecClaimCdDays() * 86400000 - Date.now());
 }
 function ecMinimap() {
   const all = EC.allSystems || [];
@@ -831,7 +837,7 @@ function ecTabTerritory() {
     : `<div class="ec-cap">Доступно. Раз в ${EC_CLAIM_CD_DAYS} дн., стоимость ${ecNum(EC_CLAIM_COST)} ГС.</div>`;
   const list = claim.length
     ? claim.map(id => { const s = byId.get(id); return `<div class="ec-colonize-row"><div class="ec-cz-main"><span class="ec-cz-name">★ ${esc(s.name)}</span><span class="ec-cz-sub">смежная · ничья</span></div>
-        <button class="btn ${cdMs > 0 ? 'btn-gh' : 'btn-gd'} btn-sm" ${cdMs > 0 ? 'disabled' : ''} onclick="ecClaimSystem('${esc(id)}')">Колонизировать систему · ${ecNum(EC_CLAIM_COST)} ГС</button></div>`; }).join('')
+        <button class="btn ${cdMs > 0 ? 'btn-gh' : 'btn-gd'} btn-sm" ${cdMs > 0 ? 'disabled' : ''} onclick="ecClaimSystem('${esc(id)}')">Колонизировать систему · ${ecNum(ecClaimCost())} ГС</button></div>`; }).join('')
     : `<div class="ec-empty">Нет смежных свободных систем. Расширяйтесь вдоль гиперпутей — соседние ничьи системы появятся здесь.</div>`;
   return `<div class="ec-section-title">Карта территории <span class="ec-hint">— ваши системы и доступные для колонизации</span></div>
     ${ecMinimap()}
@@ -1280,7 +1286,7 @@ function ecBuildingRow(b) {
     ? `<span class="ec-maxed">${EC_MAX_SLOTS}/${EC_MAX_SLOTS}</span>`
     : pendSlot
       ? `<span class="ec-proj-tag" title="${ecProjEtaTxt(pendSlot)}">⏳ слот строится</span>`
-      : `<button class="btn btn-gh btn-xs" onclick="ecOpenSlot('${b.id}')">+ слот · ${ecNum(d.ladder[b.slots_open])} ГС</button>`;
+      : `<button class="btn btn-gh btn-xs" onclick="ecOpenSlot('${b.id}')">+ слот · ${ecNum(ecBuildCost(d.ladder[b.slots_open]))} ГС</button>`;
   const slotCount = `<span class="ec-slot-count">${b.slots_open}/${EC_MAX_SLOTS}</span>`;
   let mineHtml = '';
   if (b.btype === 'mining') {
@@ -1478,7 +1484,7 @@ async function ecBuild(colonyId) {
   if (used >= (colony.cells || EC_DEFAULT_CELLS)) { toast('Нет свободных ячеек на планете', 'err'); return; }
   EC.busy = true;
   try {
-    if (!await ecSpend(d.cost)) return;
+    if (!await ecSpend(ecBuildCost(d.cost))) return;
     await dbPost('colony_buildings', { colony_id: colonyId, faction_id: EC.fid, owner_id: user.id, btype, slots_open: d.free, tnp_mode: false });
     toast(d.name + ' построен', 'ok');
     await ecReloadPaint();
@@ -1493,7 +1499,7 @@ async function ecOpenSlot(buildingId) {
   const d = EC_BUILD[b.btype]; if (!d) return;
   if (b.slots_open >= EC_MAX_SLOTS) { toast('Все слоты открыты', 'inf'); return; }
   if (ecPendingSlot(buildingId)) { toast('Слот уже строится', 'inf'); return; }
-  const cost = d.ladder[b.slots_open];
+  const cost = ecBuildCost(d.ladder[b.slots_open]);
   EC.busy = true;
   try {
     if (!await ecSpend(cost)) return;
