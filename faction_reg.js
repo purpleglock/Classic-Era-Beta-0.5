@@ -84,7 +84,13 @@ const FR_BLD_DESC = {
   yard: 'Производство наземной техники и войск.',
   mil: 'Постройка и ремонт космических кораблей.',
 };
-function frSetDesc(elId, map, key) { const el = document.getElementById(elId); if (el) el.textContent = map[key] || ''; }
+// Описание варианта = атмосферный текст + конкретные игровые эффекты (чипы доктрины).
+function frOptInit(map, key, cat) {
+  const flavor = `<span class="fr-opt-flavor">${esc(map[key] || '')}</span>`;
+  const eff = (cat && typeof ecChoiceChips === 'function') ? ecChoiceChips(cat, key) : '';
+  return flavor + eff;
+}
+function frSetDesc(elId, map, key, cat) { const el = document.getElementById(elId); if (el) el.innerHTML = frOptInit(map, key, cat); }
 
 // ── Совместимость: какие режимы допустимы при форме правления ──
 // (исключает абсурд вроде Республика + Тоталитарный)
@@ -252,19 +258,19 @@ function frStepPolitics(d) {
     <div class="fgr2">
       <div class="fg"><label class="fl">Форма правления</label>
         ${frSel('f-gov', FR_GOV, d.gov, "frOnGovChange(this.value)")}
-        <div class="fr-opt-desc" id="f-gov-d">${esc(FR_GOV_DESC[d.gov] || '')}</div></div>
+        <div class="fr-opt-desc" id="f-gov-d">${frOptInit(FR_GOV_DESC, d.gov, 'gov')}</div></div>
       ${(() => { const allowed = frAllowedRegimes(d.gov); const rv = allowed.includes(d.regime) ? d.regime : allowed[0]; d.regime = rv; return `<div class="fg"><label class="fl">Политический режим <span class="fr-hint-i" title="Список зависит от формы правления">ⓘ</span></label>
-        ${frSel('f-regime', allowed, rv, "frSetDesc('f-regime-d',FR_REGIME_DESC,this.value)")}
-        <div class="fr-opt-desc" id="f-regime-d">${esc(FR_REGIME_DESC[rv] || '')}</div></div>`; })()}
+        ${frSel('f-regime', allowed, rv, "frSetDesc('f-regime-d',FR_REGIME_DESC,this.value,'regime')")}
+        <div class="fr-opt-desc" id="f-regime-d">${frOptInit(FR_REGIME_DESC, rv, 'regime')}</div></div>`; })()}
     </div>
     <div class="fgr2">
       <div class="fg"><label class="fl">Глава фракции</label><input class="fi" id="f-leader" value="${esc(d.leader)}" placeholder="Имя и титул"></div>
       <div class="fg"><label class="fl">Тип цивилизации</label>
-        <select class="fi" id="f-type" onchange="frSetDesc('f-type-d',FR_CIV_DESC,this.value)">
+        <select class="fi" id="f-type" onchange="frSetDesc('f-type-d',FR_CIV_DESC,this.value,'civ')">
           <option value="frontier"${d.civ_type === 'frontier' ? ' selected' : ''}>Зарождающийся фронтир</option>
           <option value="colony"${d.civ_type === 'colony' ? ' selected' : ''}>Самостоятельная колония</option>
         </select>
-        <div class="fr-opt-desc" id="f-type-d">${esc(FR_CIV_DESC[d.civ_type] || '')}</div></div>
+        <div class="fr-opt-desc" id="f-type-d">${frOptInit(FR_CIV_DESC, d.civ_type, 'civ')}</div></div>
     </div>`;
 }
 function frStepColor(d) {
@@ -399,7 +405,8 @@ function frStepReview(d) {
       ${row('Раса', d.race)}
       ${row('Идеология', d.ideology)}
     </div>
-    <p class="fr-note">После отправки анкета попадёт на модерацию. До одобрения видна только вам.</p>`;
+    ${typeof ecDoctrineHtml === 'function' ? `<div class="fr-doctrine" style="margin-top:14px">${ecDoctrineHtml(d)}</div>` : ''}
+    <p class="fr-note">Выбор правления, режима, идеологии, расы и типа реально влияет на экономику — см. «Доктрину» выше. После отправки анкета попадёт на модерацию.</p>`;
 }
 
 // ── Состояние / навигация ───────────────────────────────────

@@ -4,6 +4,18 @@
    ───────────────────────────────────────────────────────────────────── */
 
 .ec-wrap { max-width: 1120px; margin: 0 auto; padding: 22px 22px 60px; }
+
+/* ── Доктрина государства (эффекты выбора в анкете) ── */
+.ec-doctrine { background: linear-gradient(135deg, color-mix(in srgb, var(--gd) 8%, var(--b2)), var(--b2)); border: 1px solid color-mix(in srgb, var(--gd) 28%, var(--w2)); border-radius: var(--radius-md, 10px); padding: 13px 15px; margin-bottom: 16px; }
+.ec-doctrine-hd { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--t1); margin-bottom: 3px; }
+.ec-doctrine-hd .ec-hint { font-weight: 400; }
+.ec-doctrine-sub { font-family: var(--font-mono); font-size: 10px; letter-spacing: .03em; color: var(--t3); margin-bottom: 9px; }
+.ec-doctrine-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ec-doc-chip { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.ec-doc-chip.good { color: var(--ok, #4caf6a); border-color: color-mix(in srgb, var(--ok, #4caf6a) 45%, transparent); background: color-mix(in srgb, var(--ok, #4caf6a) 10%, transparent); }
+.ec-doc-chip.bad { color: var(--err, #e05050); border-color: color-mix(in srgb, var(--err, #e05050) 42%, transparent); background: color-mix(in srgb, var(--err, #e05050) 9%, transparent); }
+/* компактная версия для обзора анкеты */
+.fr-doctrine .ec-doctrine { margin-bottom: 0; }
 .ec-head { margin-bottom: 14px; }
 .ec-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em; color: var(--gd); text-transform: uppercase; }
 .ec-head h1 { font-family: var(--font-display); font-weight: 700; font-size: var(--text-2xl); color: var(--t1); margin: 2px 0 0; padding-bottom: 8px; display: inline-block; max-width: 100%; overflow-wrap: anywhere; line-height: 1.15; }

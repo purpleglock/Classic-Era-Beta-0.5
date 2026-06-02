@@ -67,6 +67,84 @@ function ecTerraTier(p, race) {
   return dist <= 1 ? 1 : dist <= 3 ? 2 : 3;
 }
 
+// ════════════════════════════════════════════════════════════
+// ДОКТРИНА ГОСУДАРСТВА — модификаторы от выбора в анкете.
+// Доли (0.20 = +20%). Поля: gc/sci/agents/mine — доход/добыча (>1 лучше);
+// colonize/claim_cost — стоимости (<1 дешевле); claim_cd — кулдаун захвата (<1 чаще).
+// ⚠ ЧИСЛА ДОЛЖНЫ СОВПАДАТЬ с public._faction_mods() в _economy_setup.sql.
+// ════════════════════════════════════════════════════════════
+const EC_MODS = {
+  gov: {
+    'Республика':           { sci: 0.15, gc: 0.10, claim_cd: 0.15 },
+    'Монархия':             { gc: 0.20, sci: -0.15 },
+    'Империя':              { claim_cost: -0.25, claim_cd: -0.25, agents: 0.10, gc: -0.10 },
+    'Олигархия':            { gc: 0.25, sci: -0.15 },
+    'Диктатура':            { claim_cd: -0.20, agents: 0.15, gc: -0.10 },
+    'Теократия':            { agents: 0.15, gc: 0.10, sci: -0.20 },
+    'Технократия':          { sci: 0.30, gc: -0.15 },
+    'Корпоратократия':      { gc: 0.20, mine: 0.15, agents: -0.10 },
+    'Коллективный разум':   { sci: 0.15, mine: 0.15, claim_cost: 0.20 },
+    'Машинный разум (ИИ)':  { sci: 0.20, agents: 0.15, gc: -0.15 },
+  },
+  regime: {
+    'Демократический':      { gc: 0.15, sci: 0.05, agents: -0.10 },
+    'Эгалитарный':          { gc: 0.10, sci: 0.10, claim_cost: 0.10 },
+    'Меритократический':    { sci: 0.25, gc: -0.10 },
+    'Плутократический':     { gc: 0.25, sci: -0.10 },
+    'Олигархический':       { gc: 0.15, mine: -0.10 },
+    'Авторитарный':         { agents: 0.20, mine: 0.10, gc: -0.10 },
+    'Тоталитарный':         { mine: 0.25, agents: 0.15, gc: -0.15 },
+    'Деспотичный':          { claim_cd: -0.20, agents: 0.10, sci: -0.15 },
+    'Анархический':         { colonize: -0.25, sci: 0.10, gc: -0.20 },
+  },
+  ideology: {
+    'Технократия (Культ науки)': { sci: 0.30, gc: -0.15 },
+    'Милитаризм (Культ силы)':   { agents: 0.20, claim_cost: -0.15, gc: -0.10 },
+    'Пацифизм':                  { gc: 0.25, agents: -0.20 },
+    'Экспансионизм':             { colonize: -0.30, claim_cost: -0.30, claim_cd: -0.40, gc: -0.10 },
+    'Изоляционизм':              { gc: 0.15, sci: 0.10, claim_cost: 0.25, claim_cd: 0.25 },
+    'Ксенофилия':                { gc: 0.20, agents: -0.10 },
+    'Ксенофобия':                { agents: 0.15, mine: 0.10, gc: -0.20 },
+    'Спиритуализм':              { agents: 0.20, sci: -0.15 },
+    'Трансгуманизм':             { sci: 0.20, agents: 0.10, gc: -0.10 },
+    'Экоцентризм':               { mine: 0.30, gc: -0.20 },
+    'Индустриализм':             { gc: 0.25, mine: 0.10, sci: -0.15 },
+  },
+  race: {
+    'Гуманоиды':                  { gc: 0.05, sci: 0.05 },
+    'Млекопитающие':              { gc: 0.20, sci: -0.05 },
+    'Рептилоиды':                 { agents: 0.20, gc: -0.10 },
+    'Авианы (Птицеподобные)':     { claim_cd: -0.25, agents: 0.10, gc: -0.05 },
+    'Инсектоиды':                 { mine: 0.20, gc: 0.10, sci: -0.15 },
+    'Акватики (Водные)':          { gc: 0.15, colonize: 0.15 },
+    'Плантоиды (Растениевидные)': { mine: 0.15, gc: 0.10, agents: -0.10 },
+    'Литоиды (Каменные)':         { mine: 0.25, gc: -0.15 },
+    'Синтетики / Киборги':        { sci: 0.25, gc: -0.15 },
+    'Энергетические сущности':    { sci: 0.20, agents: 0.10, gc: -0.15 },
+  },
+  civ: {
+    'frontier': { colonize: -0.25, claim_cd: -0.25, gc: -0.15 },
+    'colony':   { gc: 0.20, mine: 0.10, claim_cost: 0.15 },
+  },
+};
+const EC_MOD_FIELDS = ['gc', 'sci', 'agents', 'mine', 'colonize', 'claim_cost', 'claim_cd'];
+// Считает итоговые множители доктрины для анкеты app (по умолчанию — текущая фракция).
+function ecFactionMods(app) {
+  app = app || (typeof EC !== 'undefined' && EC.app) || {};
+  const f = {}; EC_MOD_FIELDS.forEach(k => f[k] = 0);
+  const add = m => { if (m) for (const k in m) f[k] = (f[k] || 0) + m[k]; };
+  add(EC_MODS.gov[app.gov]); add(EC_MODS.regime[app.regime]);
+  add(EC_MODS.ideology[app.ideology]); add(EC_MODS.race[app.race]);
+  add(EC_MODS.civ[app.civ_type]);
+  const clamp = (v, lo) => Math.max(lo, 1 + v);
+  return {
+    gc: clamp(f.gc, 0.3), sci: clamp(f.sci, 0.3), agents: clamp(f.agents, 0.3),
+    mine: clamp(f.mine, 0.3), colonize: clamp(f.colonize, 0.3),
+    claim_cost: clamp(f.claim_cost, 0.3), claim_cd: clamp(f.claim_cd, 0.25),
+    _raw: f,
+  };
+}
+
 // ── Расы → родные группы планет (дефолт, правится) ──────────
 const EC_HAB = {
   'Гуманоиды': ['terrestrial'],
@@ -291,12 +369,19 @@ function ecBuildingIncome(b) {
   const d = EC_BUILD[b.btype]; if (!d) return { gc: 0, science: 0 };
   return { gc: (d.inc.gc || 0) * b.slots_open, science: (d.inc.science || 0) * b.slots_open };
 }
+// Итоговый доход империи с учётом доктрины государства (зеркало economy_accrue).
 function ecIncomePreview() {
-  let gc = 0, science = 0;
-  EC.buildings.forEach(b => { const i = ecBuildingIncome(b); gc += i.gc; science += i.science; });
-  return { gc, science };
+  let gc = 0, science = 0, agents = 0;
+  EC.buildings.forEach(b => { const i = ecBuildingIncome(b); gc += i.gc; science += i.science; if (b.btype === 'intel') agents += b.slots_open; });
+  const m = ecFactionMods();
+  return { gc: Math.round(gc * m.gc), science: Math.round(science * m.sci), agents: Math.round(agents * m.agents),
+           base: { gc, science, agents }, mods: m };
 }
 function ecResEntries() { const res = (EC.eco && EC.eco.resources) || {}; return Object.keys(res).map(k => [k, +res[k] || 0]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]); }
+// Добыча за слот/сутки с учётом доктрины (mods.mine) — зеркало economy_accrue.
+function ecMineRate(rar) { return Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 25) * ecFactionMods().mine)); }
+// Стоимость экспансии (колонизация/терраформ/обустройство) с учётом доктрины (mods.colonize).
+function ecColonizeCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().colonize)); }
 
 // Ресурсы планеты для mining-здания (из данных карты или снимка колонии)
 function ecMiningPlanetRes(b) {
@@ -316,7 +401,7 @@ function ecColonyMinePreview(blds, planet) {
   mBlds.forEach(b => {
     (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(name => {
       const ri = res.find(r => r.name === name); if (!ri) return;
-      const rate = EC_RES_RATE[ri.r || 'common'] || 25;
+      const rate = ecMineRate(ri.r || 'common');
       totals.set(name, (totals.get(name) || 0) + rate);
     });
   });
@@ -392,6 +477,52 @@ function ecPaintCabinet() {
 }
 function ecSetTab(t) { EC.tab = t; ecPaintCabinet(); }
 
+// Чипы эффектов ОДНОГО выбора в анкете (cat: gov|regime|ideology|race|civ; value: значение).
+function ecChoiceChips(cat, value) {
+  const m = (EC_MODS[cat] || {})[value];
+  if (!m) return '';
+  const LBL = { gc: 'ГС-доход', sci: 'Наука', agents: 'Агенты', mine: 'Добыча', colonize: 'Колонизация', claim_cost: 'Захват: цена' };
+  const order = ['gc', 'sci', 'agents', 'mine', 'colonize', 'claim_cost', 'claim_cd'];
+  const chips = order.filter(k => m[k]).map(k => {
+    const p = Math.round(m[k] * 100);
+    let good, txt;
+    if (k === 'colonize' || k === 'claim_cost') { good = p < 0; txt = `${LBL[k]} ${p > 0 ? '+' : ''}${p}%`; }
+    else if (k === 'claim_cd') { good = p < 0; txt = `Кулдаун захвата ${p > 0 ? '+' : ''}${p}%`; }
+    else { good = p > 0; txt = `${LBL[k]} ${p > 0 ? '+' : ''}${p}%`; }
+    return `<span class="ec-doc-chip ${good ? 'good' : 'bad'}">${txt}</span>`;
+  });
+  return chips.length ? `<div class="ec-doc-chips-inline">${chips.join('')}</div>` : '';
+}
+
+// Чипы активных модификаторов доктрины (для кабинета и обзора анкеты)
+function ecDoctrineChips(app) {
+  const m = ecFactionMods(app);
+  const pct = v => Math.round((v - 1) * 100);
+  const chip = (label, v, goodIsHigh) => {
+    const p = pct(v); if (!p) return '';
+    const good = (goodIsHigh !== false) ? p > 0 : p < 0;
+    return `<span class="ec-doc-chip ${good ? 'good' : 'bad'}">${label} ${p > 0 ? '+' : ''}${p}%</span>`;
+  };
+  const out = [
+    chip('ГС-доход', m.gc), chip('Наука', m.sci), chip('Агенты', m.agents), chip('Добыча', m.mine),
+    chip('Колонизация', m.colonize, false), chip('Захват: цена', m.claim_cost, false),
+  ];
+  const cdP = pct(m.claim_cd);
+  if (cdP) out.push(`<span class="ec-doc-chip ${cdP < 0 ? 'good' : 'bad'}">${cdP < 0 ? `Захват чаще ×${(1 / m.claim_cd).toFixed(1)}` : `Захват реже +${cdP}%`}</span>`);
+  return out.filter(Boolean).join('');
+}
+function ecDoctrineHtml(app) {
+  app = app || EC.app || {};
+  const chips = ecDoctrineChips(app);
+  if (!chips) return '';
+  const sub = [app.gov, app.regime, app.ideology, app.race, app.civ_type === 'frontier' ? 'Фронтир' : (app.civ_type === 'colony' ? 'Колония' : '')].filter(Boolean).map(esc).join(' · ');
+  return `<div class="ec-doctrine">
+    <div class="ec-doctrine-hd">⚜ Доктрина государства <span class="ec-hint">реальные эффекты вашего выбора при регистрации</span></div>
+    ${sub ? `<div class="ec-doctrine-sub">${sub}</div>` : ''}
+    <div class="ec-doctrine-chips">${chips}</div>
+  </div>`;
+}
+
 function ecTabOverview() {
   const sumCat = c => EC.roster.filter(r => r.category === c).reduce((a, r) => a + (r.qty || 0), 0);
   const ships = sumCat('ship'), divs = sumCat('division'), ground = sumCat('ground'), avia = sumCat('aviation');
@@ -437,7 +568,7 @@ function ecTabOverview() {
   const resHtml = resTop.length
     ? `<div class="ec-ov-sect"><div class="ec-ov-sect-t">📦 Ресурсы на складе</div><div class="ec-ov-res">${resTop.map(([n, v]) => `<span class="ec-ov-res-chip"><span class="ec-ov-res-ic">${esc(ecResIcon(n))}</span><span class="ec-ov-res-n">${esc(n)}</span><b>${ecNum(v)}</b></span>`).join('')}</div></div>` : '';
 
-  return `${empire}${army}${sciDip}${activeHtml}${incLine}${resHtml}
+  return `${ecDoctrineHtml()}${empire}${army}${sciDip}${activeHtml}${incLine}${resHtml}
     <div class="ec-race-note">Раса: <b>${esc(EC.app.race || '—')}</b> · родные миры: ${(EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—'}. Чужие типы планет — через терраформ.</div>
     <div class="ec-ov-links">
       <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
@@ -453,12 +584,12 @@ function ecToggleSys(id) { EC.openSys = (EC.openSys === id) ? null : id; ecPaint
 function ecColonizeInfo(s, p, race) {
   const g = ecPlanetGroup(p), label = EC_GRP_LABEL[g] || g, cells = +p.slotsP || EC_DEFAULT_CELLS;
   if (!ecColonizable(p)) return { cls: 'no', tag: 'непригодна', label, btn: `<button class="btn btn-gh btn-sm" disabled title="Газовые гиганты, аномалии и пояса терраформировать нельзя">— нельзя</button>` };
-  if (ecNative(p, race)) return { cls: 'native', tag: 'родная', label, btn: `<button class="btn btn-gd btn-sm" onclick="event.stopPropagation();ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},0)">Колонизировать · ${EC_COLONIZE_COST} ГС</button>` };
+  if (ecNative(p, race)) return { cls: 'native', tag: 'родная', label, btn: `<button class="btn btn-gd btn-sm" onclick="event.stopPropagation();ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},0)">Колонизировать · ${ecNum(ecColonizeCost(EC_COLONIZE_COST))} ГС</button>` };
   // Чужая планета — терраформ с уровнем сложности (срок + ОН)
   const pend = ecPendingTerraform(s.id, p.name);
   if (pend) return { cls: 'foreign', tag: 'чужая', label, btn: `<span class="ec-proj-tag" title="${ecProjEtaTxt(pend)}">⏳ терраформ (${ecProjEtaTxt(pend)})</span>` };
   const tier = ecTerraTier(p, race), spec = EC_TERRA[tier];
-  const costTxt = `${ecNum(spec.gc)} ГС${spec.science ? ` + ${ecNum(spec.science)} ОН` : ''}`;
+  const costTxt = `${ecNum(ecColonizeCost(spec.gc))} ГС${spec.science ? ` + ${ecNum(spec.science)} ОН` : ''}`;
   const tierTag = `<span class="ec-terra-tier ec-terra-t${tier}">${spec.label} · ${spec.turns} ход.</span>`;
   return { cls: 'foreign', tag: 'чужая', label,
     btn: `${tierTag}<button class="btn btn-gh btn-sm" title="Терраформирование: ${spec.label.toLowerCase()}, ${spec.turns} ход(ов), ${costTxt}" onclick="event.stopPropagation();ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},1)">Терраформ · ${costTxt}</button>` };
@@ -493,7 +624,7 @@ function ecColonyManage(c) {
   const habBtn = pendHab
     ? `<span class="ec-proj-tag" title="${ecProjEtaTxt(pendHab)}">⏳ обустройство среды (${ecProjEtaTxt(pendHab)})</span>`
     : !c.terraformed
-      ? `<button class="btn btn-gh btn-sm" onclick="ecHabitat('${c.id}')" title="Расширить жизненное пространство: +${EC_HABITAT_CELLS} ячеек, завершится в конце хода">🌱 Обустроить среду (+${EC_HABITAT_CELLS} ⬚, ${ecNum(EC_HABITAT_COST)} ГС)</button>`
+      ? `<button class="btn btn-gh btn-sm" onclick="ecHabitat('${c.id}')" title="Расширить жизненное пространство: +${EC_HABITAT_CELLS} ячеек, завершится в конце хода">🌱 Обустроить среду (+${EC_HABITAT_CELLS} ⬚, ${ecNum(ecColonizeCost(EC_HABITAT_COST))} ГС)</button>`
       : '';
   return `<div class="ec-bld-grid">${bHtml}</div>
     <div class="ec-colony-actions">
@@ -1158,7 +1289,7 @@ function ecBuildingRow(b) {
     if (allRes.length) {
       const rows = allRes.map(r => {
         const active = targets.includes(r.name);
-        const rate = EC_RES_RATE[r.r || 'common'] || 25;
+        const rate = ecMineRate(r.r || 'common');
         const canAdd = !active && targets.length < b.slots_open;
         const cls = active ? 'active' : canAdd ? '' : 'locked';
         const onclick = (active || canAdd) ? `ecToggleMiningTarget(${ecArg(b.id)},${ecArg(r.name)})` : '';
@@ -1244,7 +1375,7 @@ async function ecColonize(sysId, planetName, planetType, cells, foreign) {
   if (foreign) return ecTerraform(sysId, planetName, planetType, cells); // непригодная → отложенный терраформ
   if (EC.busy) return; EC.busy = true;
   try {
-    if (!await ecSpend(EC_COLONIZE_COST)) return;
+    if (!await ecSpend(ecColonizeCost(EC_COLONIZE_COST))) return;
     let resources = [];
     const sys = EC.systems.find(s => s.id === sysId);
     const p = sys && (sys.planets || []).find(x => x.name === planetName);
@@ -1263,17 +1394,18 @@ async function ecTerraform(sysId, planetName, planetType, cells) {
   const sys = EC.systems.find(s => s.id === sysId);
   const p = sys && (sys.planets || []).find(x => x.name === planetName);
   const tier = ecTerraTier(p, EC.app.race), spec = EC_TERRA[tier];
-  if (!confirm(`Терраформирование «${planetName}» (${spec.label.toLowerCase()}):\n• срок: ${spec.turns} ход(ов)\n• затраты: ${ecNum(spec.gc)} ГС${spec.science ? ` + ${ecNum(spec.science)} ОН` : ''}\nНачать?`)) return;
+  const terraGc = ecColonizeCost(spec.gc);
+  if (!confirm(`Терраформирование «${planetName}» (${spec.label.toLowerCase()}):\n• срок: ${spec.turns} ход(ов)\n• затраты: ${ecNum(terraGc)} ГС${spec.science ? ` + ${ecNum(spec.science)} ОН` : ''}\nНачать?`)) return;
   EC.busy = true;
   try {
-    if (!await ecSpendBoth(spec.gc, spec.science)) return;
+    if (!await ecSpendBoth(terraGc, spec.science)) return;
     let resources = [];
     if (p && Array.isArray(p.resources)) resources = p.resources.map(r => ({ name: r.name, icon: r.icon, r: r.r }));
     await dbPost('colony_projects', {
       faction_id: EC.fid, owner_id: user.id, kind: 'terraform',
       system_id: sysId, planet_name: planetName, planet_type: planetType || '',
       cells: cells || EC_DEFAULT_CELLS,
-      payload: { resources, spent_gc: spec.gc, spent_science: spec.science },
+      payload: { resources, spent_gc: terraGc, spent_science: spec.science },
       label: `Терраформ: ${planetName}`, ready_at: _ecReadyTurns(spec.turns),
     });
     toast(`Терраформирование начато (${spec.turns} ход.)`, 'ok');
@@ -1391,11 +1523,12 @@ async function ecHabitat(colonyId) {
   if (ecPendingHabitat(colonyId)) { toast('Обустройство уже идёт', 'inf'); return; }
   EC.busy = true;
   try {
-    if (!await ecSpend(EC_HABITAT_COST)) return;
+    const habGc = ecColonizeCost(EC_HABITAT_COST);
+    if (!await ecSpend(habGc)) return;
     await dbPost('colony_projects', {
       faction_id: EC.fid, owner_id: user.id, kind: 'habitat',
       colony_id: colonyId, cells: EC_HABITAT_CELLS,
-      payload: { spent_gc: EC_HABITAT_COST, spent_science: 0 },
+      payload: { spent_gc: habGc, spent_science: 0 },
       label: `Обустройство среды: ${c.planet_name || ''}`,
       ready_at: _ecReadyTurns(EC_HABITAT_TURNS),
     });

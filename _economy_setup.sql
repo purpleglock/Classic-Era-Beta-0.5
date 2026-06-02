@@ -390,10 +390,15 @@ declare
   adj boolean;
   cost numeric := 3000;
   cd interval := '7 days';
+  mods jsonb;
 begin
   select * into app from public.faction_applications
     where owner_id = auth.uid() and status = 'approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
+  -- доктрина: модификаторы стоимости и кулдауна захвата
+  mods := public._faction_mods(app.faction_id);
+  cost := round(3000 * (mods->>'claim_cost')::numeric);
+  cd := (round(7 * (mods->>'claim_cd')::numeric) || ' days')::interval;
   select * into eco from public.faction_economy where faction_id = app.faction_id;
   if not found then raise exception 'no economy'; end if;
   select * into sys from public.map_systems where id = p_system_id;
@@ -926,6 +931,95 @@ revoke all on function public.economy_research(text,numeric) from public;
 grant execute on function public.economy_research(text,numeric) to authenticated;
 
 -- ════════════════════════════════════════════════════════════
+-- ДОКТРИНА ГОСУДАРСТВА — модификаторы от выбора в анкете.
+-- ⚠ ЧИСЛА ДОЛЖНЫ СОВПАДАТЬ с EC_MODS в economy.js.
+-- Поля: gc/sci/agents/mine (>1 лучше), colonize/claim_cost (<1 дешевле),
+-- claim_cd (<1 чаще). Полы: доход/добыча/стоимости ≥ 0.3; claim_cd ≥ 0.25.
+-- ════════════════════════════════════════════════════════════
+create or replace function public._faction_mods(p_fid text)
+returns jsonb language plpgsql stable security definer set search_path=public as $$
+declare a public.faction_applications;
+  gc numeric:=0; sci numeric:=0; ag numeric:=0; mine numeric:=0; col numeric:=0; cc numeric:=0; cd numeric:=0;
+begin
+  select * into a from public.faction_applications where faction_id=p_fid and status='approved' order by updated_at desc limit 1;
+  if not found then
+    return jsonb_build_object('gc',1,'sci',1,'agents',1,'mine',1,'colonize',1,'claim_cost',1,'claim_cd',1);
+  end if;
+
+  case a.gov
+    when 'Республика'          then sci:=sci+0.15; gc:=gc+0.10; cd:=cd+0.15;
+    when 'Монархия'            then gc:=gc+0.20; sci:=sci-0.15;
+    when 'Империя'             then cc:=cc-0.25; cd:=cd-0.25; ag:=ag+0.10; gc:=gc-0.10;
+    when 'Олигархия'           then gc:=gc+0.25; sci:=sci-0.15;
+    when 'Диктатура'           then cd:=cd-0.20; ag:=ag+0.15; gc:=gc-0.10;
+    when 'Теократия'           then ag:=ag+0.15; gc:=gc+0.10; sci:=sci-0.20;
+    when 'Технократия'         then sci:=sci+0.30; gc:=gc-0.15;
+    when 'Корпоратократия'     then gc:=gc+0.20; mine:=mine+0.15; ag:=ag-0.10;
+    when 'Коллективный разум'  then sci:=sci+0.15; mine:=mine+0.15; cc:=cc+0.20;
+    when 'Машинный разум (ИИ)' then sci:=sci+0.20; ag:=ag+0.15; gc:=gc-0.15;
+    else null;
+  end case;
+
+  case a.regime
+    when 'Демократический'   then gc:=gc+0.15; sci:=sci+0.05; ag:=ag-0.10;
+    when 'Эгалитарный'       then gc:=gc+0.10; sci:=sci+0.10; cc:=cc+0.10;
+    when 'Меритократический'  then sci:=sci+0.25; gc:=gc-0.10;
+    when 'Плутократический'   then gc:=gc+0.25; sci:=sci-0.10;
+    when 'Олигархический'     then gc:=gc+0.15; mine:=mine-0.10;
+    when 'Авторитарный'       then ag:=ag+0.20; mine:=mine+0.10; gc:=gc-0.10;
+    when 'Тоталитарный'       then mine:=mine+0.25; ag:=ag+0.15; gc:=gc-0.15;
+    when 'Деспотичный'        then cd:=cd-0.20; ag:=ag+0.10; sci:=sci-0.15;
+    when 'Анархический'       then col:=col-0.25; sci:=sci+0.10; gc:=gc-0.20;
+    else null;
+  end case;
+
+  case a.ideology
+    when 'Технократия (Культ науки)' then sci:=sci+0.30; gc:=gc-0.15;
+    when 'Милитаризм (Культ силы)'   then ag:=ag+0.20; cc:=cc-0.15; gc:=gc-0.10;
+    when 'Пацифизм'                  then gc:=gc+0.25; ag:=ag-0.20;
+    when 'Экспансионизм'             then col:=col-0.30; cc:=cc-0.30; cd:=cd-0.40; gc:=gc-0.10;
+    when 'Изоляционизм'              then gc:=gc+0.15; sci:=sci+0.10; cc:=cc+0.25; cd:=cd+0.25;
+    when 'Ксенофилия'                then gc:=gc+0.20; ag:=ag-0.10;
+    when 'Ксенофобия'                then ag:=ag+0.15; mine:=mine+0.10; gc:=gc-0.20;
+    when 'Спиритуализм'              then ag:=ag+0.20; sci:=sci-0.15;
+    when 'Трансгуманизм'             then sci:=sci+0.20; ag:=ag+0.10; gc:=gc-0.10;
+    when 'Экоцентризм'               then mine:=mine+0.30; gc:=gc-0.20;
+    when 'Индустриализм'             then gc:=gc+0.25; mine:=mine+0.10; sci:=sci-0.15;
+    else null;
+  end case;
+
+  case a.race
+    when 'Гуманоиды'                  then gc:=gc+0.05; sci:=sci+0.05;
+    when 'Млекопитающие'              then gc:=gc+0.20; sci:=sci-0.05;
+    when 'Рептилоиды'                 then ag:=ag+0.20; gc:=gc-0.10;
+    when 'Авианы (Птицеподобные)'     then cd:=cd-0.25; ag:=ag+0.10; gc:=gc-0.05;
+    when 'Инсектоиды'                 then mine:=mine+0.20; gc:=gc+0.10; sci:=sci-0.15;
+    when 'Акватики (Водные)'          then gc:=gc+0.15; col:=col+0.15;
+    when 'Плантоиды (Растениевидные)' then mine:=mine+0.15; gc:=gc+0.10; ag:=ag-0.10;
+    when 'Литоиды (Каменные)'         then mine:=mine+0.25; gc:=gc-0.15;
+    when 'Синтетики / Киборги'        then sci:=sci+0.25; gc:=gc-0.15;
+    when 'Энергетические сущности'    then sci:=sci+0.20; ag:=ag+0.10; gc:=gc-0.15;
+    else null;
+  end case;
+
+  case a.civ_type
+    when 'frontier' then col:=col-0.25; cd:=cd-0.25; gc:=gc-0.15;
+    when 'colony'   then gc:=gc+0.20; mine:=mine+0.10; cc:=cc+0.15;
+    else null;
+  end case;
+
+  return jsonb_build_object(
+    'gc',         greatest(0.3,  1+gc),
+    'sci',        greatest(0.3,  1+sci),
+    'agents',     greatest(0.3,  1+ag),
+    'mine',       greatest(0.3,  1+mine),
+    'colonize',   greatest(0.3,  1+col),
+    'claim_cost', greatest(0.3,  1+cc),
+    'claim_cd',   greatest(0.25, 1+cd));
+end$$;
+revoke all on function public._faction_mods(text) from public;
+
+-- ════════════════════════════════════════════════════════════
 -- v7: АВТОНАЧИСЛЕНИЕ — доход капает САМ (планировщик), а не «по клику»
 -- ════════════════════════════════════════════════════════════
 
@@ -940,9 +1034,13 @@ declare
   r record; col record; bld record; relem jsonb; thr jsonb;
   res_add jsonb := '{}'::jsonb; res_sub jsonb := '{}'::jsonb; merged jsonb; k text;
   rname text; rr text; rate numeric; escorted boolean; attacked boolean; chance numeric; avail numeric; shipped numeric;
+  mods jsonb; m_mine numeric;
 begin
   select * into eco from public.faction_economy where faction_id = p_fid for update;
   if not found then return jsonb_build_object('faction_id',p_fid,'days',0); end if;
+
+  mods := public._faction_mods(p_fid);          -- доктрина государства
+  m_mine := (mods->>'mine')::numeric;
 
   update public.unit_production set status='done' where faction_id=p_fid and status='queued' and ready_at<=now();
 
@@ -966,6 +1064,11 @@ begin
     end if;
   end loop;
 
+  -- доктрина: множители дохода/науки/агентов
+  inc_gc     := round(inc_gc     * (mods->>'gc')::numeric);
+  inc_sci    := round(inc_sci    * (mods->>'sci')::numeric);
+  inc_agents := round(inc_agents * (mods->>'agents')::numeric);
+
   if d >= 1 then
     -- добыча: каждое mining-здание добывает только назначенные месторождения, 1 слот = 1 месторождение
     for bld in
@@ -981,6 +1084,7 @@ begin
         if relem is null then continue; end if;
         rr := coalesce(relem->>'r','common');
         rate := case rr when 'uncommon' then 12 when 'rare' then 5 when 'epic' then 2 when 'legendary' then 1 else 25 end;
+        rate := greatest(1, round(rate * m_mine));   -- доктрина: множитель добычи
         res_add := jsonb_set(res_add, array[rname], to_jsonb(coalesce((res_add->>rname)::numeric,0) + rate*d), true);
       end loop;
     end loop;
@@ -1019,7 +1123,7 @@ begin
   end if;
 
   return jsonb_build_object('faction_id',eco.faction_id,'gc',eco.gc,'science',eco.science,'agents',eco.agents,
-    'resources',eco.resources,'last_tick',eco.last_tick,'days',d,
+    'resources',eco.resources,'last_tick',eco.last_tick,'days',d, 'mods', mods,
     'income', jsonb_build_object('gc',inc_gc,'science',inc_sci,'agents',inc_agents,'trade',trade_gc,'pirate',pirate));
 end$$;
 
