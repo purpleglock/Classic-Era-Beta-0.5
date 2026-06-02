@@ -830,23 +830,39 @@ function ecTradeCalc() {
   else if (vol <= 0) err = 'Укажите объём';
   const stockBtn = document.querySelector('#ec-cv-reslist .ec-trade-res.on');
   const stockHave = stockBtn ? (+stockBtn.dataset.stock || 0) : 0;
+  const shipVol = Math.min(vol, stockHave);              // реально уйдёт за ход (не больше склада)
   const overStock = vol > stockHave;
+  const shipsFree = (typeof ecMyShipsAvailable === 'function') ? ecMyShipsAvailable() : 0;
   const threatNames = [...new Set(threats.map(t => t.type === 'ancient' ? 'древние' : 'пираты'))].join(' / ');
-  const routeLine = err && (err.includes('систем') || err.includes('партнёр'))
-    ? `<div class="ec-trade-srow err">⚠ ${err}</div>`
+  const resIc = ecResIcon(resN), resName = esc(resN);
+  // ожидаемый доход с учётом риска грабежа — главный показатель «стоит ли оно того»
+  const effMy = Math.round(myInc * shipVol / Math.max(1, vol) * (1 - riskPct / 100));
+
+  // вердикт по риску + что делать
+  let riskColor = riskPct >= 50 ? 'var(--err)' : riskPct > 0 ? 'var(--color-warning)' : 'var(--ok)';
+  let riskAdvice = '';
+  if (threats.length && riskPct >= 50) {
+    riskAdvice = shipsFree > convoy
+      ? `<div class="ec-trade-note warn">⚠ Высокий риск грабежа. Добавьте конвой (есть свободных кораблей: ${shipsFree}).</div>`
+      : `<div class="ec-trade-note warn">⚠ Высокий риск, а свободных кораблей охраны нет. Постройте корабли на Корабельной Верфи или выберите более близкого/безопасного партнёра.</div>`;
+  }
+  const routeLine = (!dFac || !dSys || !oSys)
+    ? `<div class="ec-trade-srow err">⚠ ${esc(err || 'Маршрут не задан')}</div>`
     : hops == null
-      ? `<div class="ec-trade-srow"><span>Маршрут</span><b style="color:var(--t3)">прямой (гиперпуть не найден — без данных об угрозах)</b></div>`
-      : `<div class="ec-trade-srow"><span>Маршрут</span><b>${hops} прыжк. · ${threats.length ? `<span style="color:var(--color-warning)">угрозы: ${esc(threatNames)}</span>` : '<span style="color:var(--ok)">безопасно</span>'}</b></div>`;
+      ? `<div class="ec-trade-srow"><span>Путь</span><b style="color:var(--t3)">напрямую · угрозы неизвестны</b></div>`
+      : `<div class="ec-trade-srow"><span>Путь</span><b>${hops} прыжк.${threats.length ? ` · <span style="color:var(--color-warning)">${threats.length} опасн. сист. (${esc(threatNames)})</span>` : ' · <span style="color:var(--ok)">безопасно</span>'}</b></div>`;
+
   sumEl.innerHTML = `
+    <div class="ec-trade-deal">Каждый ход: <b>${resIc} ${ecNum(shipVol)} ${resName}</b> → партнёру · вы <b style="color:var(--gd)">+${ecNum(Math.round(myInc * shipVol / Math.max(1, vol)))} ГС</b>, партнёр <b style="color:var(--te)">+${ecNum(Math.round(partnerInc * shipVol / Math.max(1, vol)))} ГС</b></div>
     ${routeLine}
-    <div class="ec-trade-srow"><span>Цена ресурса</span><b>${price} ГС/ед · ${esc(ecResRarity(resN))}</b></div>
-    <div class="ec-trade-srow big"><span>Ваш доход</span><b style="color:var(--gd)">+${ecNum(myInc)} ГС/ход</b></div>
-    <div class="ec-trade-srow"><span>Доход партнёра</span><b style="color:var(--te)">+${ecNum(partnerInc)} ГС/ход</b></div>
-    <div class="ec-trade-srow"><span>Риск потери за ход</span><b style="color:${riskPct >= 50 ? 'var(--err)' : riskPct > 0 ? 'var(--color-warning)' : 'var(--ok)'}">${riskPct}%${convoy ? ` · 🛡${convoy}` : threats.length ? ' · без охраны' : ''}</b></div>
-    ${overStock ? `<div class="ec-trade-srow err">⚠ На складе только ${ecNum(stockHave)} ед — за ход отправится не больше, чем есть</div>` : ''}`;
+    <div class="ec-trade-srow"><span>Риск грабежа / ход</span><b style="color:${riskColor}">${riskPct}%${convoy ? ` · 🛡 конвой ${convoy}` : threats.length ? ' · без охраны' : ''}</b></div>
+    <div class="ec-trade-srow big"><span>Ожидаемо с учётом риска</span><b style="color:${effMy > 0 ? 'var(--gd)' : 'var(--err)'}">+${ecNum(effMy)} ГС/ход</b></div>
+    <div class="ec-trade-srow"><span>Длительность</span><b style="color:var(--t3)">бессрочно — пока путь не закрыт</b></div>
+    ${overStock ? `<div class="ec-trade-note">ℹ Объём ${ecNum(vol)} больше запаса (${ecNum(stockHave)} ед) — за ход уйдёт только наличное.</div>` : ''}
+    ${riskAdvice}`;
   if (send) {
     send.disabled = !!err;
-    send.textContent = err ? err : `Отправить караван · +${ecNum(myInc)} ГС/ход`;
+    send.textContent = err ? err : `Предложить караван (+${ecNum(effMy)} ГС/ход)`;
   }
   return { resN, vol, convoy, oSys, dFac, dSys, threats, path, err, riskPct };
 }
@@ -856,9 +872,14 @@ function ecRouteRow(r) {
   const value = (r.volume || 0) * (r.price || 0);
   const income = isOrigin ? value : Math.round(value * EC_DEST_CUT);
   const threats = r.threats || [];
-  const risk = threats.length ? `риск: ${[...new Set(threats.map(t => t.type === 'ancient' ? 'древние' : 'пираты'))].join('/')}` : 'безопасно';
-  const dir = isOrigin ? '→ ' + esc(other) : '← ' + esc(other);
-  return `<div class="ec-q-row"><span class="ec-r-name">${ecResIcon(r.resource)} ${esc(r.resource || '')} ×${ecNum(r.volume)} ${dir} · +${ecNum(income)} ГС/ход · <i style="color:${threats.length ? 'var(--color-warning)' : 'var(--ok)'}">${esc(risk)}</i>${r.convoy ? ` · 🛡${r.convoy}` : ''}</span><button class="ec-bld-del" title="Закрыть" onclick="ecTradeClose('${r.id}')">✕</button></div>`;
+  const riskPct = ecTradeRiskPct(threats, r.convoy);
+  const riskTxt = threats.length ? `риск ${riskPct}%${r.convoy ? ` · 🛡${r.convoy}` : ' · без охраны'}` : 'безопасно';
+  const verb = isOrigin ? `отправляю → ${esc(other)}` : `получаю ← ${esc(other)}`;
+  return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+      <span class="ec-route-badge ok">✓ активен</span>
+      ${ecResIcon(r.resource)} <b>${esc(r.resource || '')} ×${ecNum(r.volume)}</b>/ход · ${verb} · <b style="color:var(--gd)">+${ecNum(income)} ГС/ход</b>
+      <i style="color:${threats.length ? 'var(--color-warning)' : 'var(--ok)'}"> · ${esc(riskTxt)}</i>
+    </span><button class="ec-bld-del" title="Закрыть путь" onclick="ecTradeClose('${r.id}')">✕</button></div>`;
 }
 
 // ── Вкладка «Дипломатия» ────────────────────────────────────
@@ -900,32 +921,44 @@ function ecTabDiplomacy() {
       : !mySys.length ? '<div class="ec-empty">Нет ваших систем на карте — расширяйтесь (вкладка «Территория»).</div>'
         : !stock.length ? '<div class="ec-empty">Нет ресурсов на складе — стройте Добывающий завод и назначайте месторождения.</div>'
           : `<div class="ec-trade-form">
-        <div class="ec-trade-label">1 · Что отправляем</div>
+        <div class="ec-trade-how">
+          <b>Как это работает:</b> караван — постоянное торговое соглашение. После того как партнёр <b>примет</b> предложение, <b>каждый ход</b> вы автоматически отправляете выбранный объём ресурса и <b>оба получаете ГС</b>. Путь действует бессрочно, пока вы или партнёр его не закроете.
+          <div class="ec-trade-flow"><span>① Вы предлагаете</span><span>→</span><span>② Партнёр принимает</span><span>→</span><span>③ Доход каждый ход</span></div>
+        </div>
+        <div class="ec-trade-label">1 · Что отправляете <span class="ec-hint">ресурс уходит партнёру каждый ход</span></div>
         <div class="ec-trade-reslist" id="ec-cv-reslist">${resChips}</div>
         <input type="hidden" id="ec-cv-res" value="${esc(stock[0][0])}">
         <div class="ec-trade-volrow">
-          <label>Объём за ход</label>
+          <label title="Сколько единиц ресурса уходит со склада каждый ход">Объём / ход</label>
           <input type="range" id="ec-cv-vol-slider" min="1" max="${Math.max(1, stock[0][1])}" value="${Math.min(50, stock[0][1])}" oninput="ecSyncVol(this.value)">
           <input type="number" id="ec-cv-vol" min="1" value="${Math.min(50, stock[0][1])}" class="ec-trade-volnum" oninput="ecSyncVol(this.value)">
         </div>
-        <div class="ec-trade-label">2 · Маршрут</div>
+        <div class="ec-trade-label">2 · Кому и откуда <span class="ec-hint">чужие системы на пути = угрозы по дороге</span></div>
         <div class="ec-trade-route">
-          <select id="ec-cv-osys" onchange="ecTradeCalc()" title="Из вашей системы">${mySys.map(s => `<option value="${esc(s.id)}">🜨 ${esc(s.name)}</option>`).join('')}</select>
+          <select id="ec-cv-osys" onchange="ecTradeCalc()" title="Из вашей системы отправления">${mySys.map(s => `<option value="${esc(s.id)}">🜨 ${esc(s.name)}</option>`).join('')}</select>
           <span class="ec-trade-arrow">→</span>
-          <select id="ec-cv-dfac" onchange="ecFillDestSys();ecTradeCalc()" title="Партнёр">${others.map(f => `<option value="${esc(f.faction_id)}">${esc(f.name)}</option>`).join('')}</select>
+          <select id="ec-cv-dfac" onchange="ecFillDestSys();ecTradeCalc()" title="Партнёр-получатель">${others.map(f => `<option value="${esc(f.faction_id)}">${esc(f.name)}</option>`).join('')}</select>
           <select id="ec-cv-dsys" onchange="ecTradeCalc()" title="В систему партнёра">${destSys0.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('') || '<option value="">— нет систем —</option>'}</select>
         </div>
-        <div class="ec-trade-label">3 · Охрана <span class="ec-hint">конвой снижает риск пиратов/древних</span></div>
-        <div class="ec-trade-volrow">
-          <label>Конвой (≤${ships})</label>
+        <div class="ec-trade-label">3 · Охрана <span class="ec-hint">корабли-конвой снижают риск грабежа в пути</span></div>
+        ${ships > 0
+          ? `<div class="ec-trade-volrow">
+          <label title="Боевые корабли сопровождения из вашего флота">Конвой (≤${ships})</label>
           <input type="range" id="ec-cv-convoy-slider" min="0" max="${ships}" value="0" oninput="ecSyncConvoy(this.value)">
           <input type="number" id="ec-cv-convoy" min="0" max="${ships}" value="0" class="ec-trade-volnum" oninput="ecSyncConvoy(this.value)">
-        </div>
+        </div>`
+          : `<div class="ec-trade-note">⚓ Свободных кораблей нет — путь пойдёт без охраны. Постройте корабли на Корабельной Верфи (вкладка «Армия и флот»), чтобы снизить риск.<input type="hidden" id="ec-cv-convoy" value="0"></div>`}
         <div class="ec-trade-summary" id="ec-cv-summary"></div>
-        <button class="btn btn-gd" id="ec-cv-send" onclick="ecTradePropose()">Отправить караван</button>
+        <button class="btn btn-gd" id="ec-cv-send" onclick="ecTradePropose()">Предложить караван</button>
       </div>`;
-  const inHtml = incoming.map(r => { const value = (r.volume || 0) * (r.price || 0); return `<div class="ec-q-row"><span class="ec-r-name">От ${esc(r.a_name || ecFacName(r.a_fid))}: ${ecResIcon(r.resource)} ${esc(r.resource)} ×${ecNum(r.volume)} · вам +${ecNum(Math.round(value * EC_DEST_CUT))} ГС/ход</span><button class="btn btn-gd btn-xs" onclick="ecTradeRespond('${r.id}',true)">Принять</button><button class="ec-bld-del" onclick="ecTradeRespond('${r.id}',false)">✕</button></div>`; }).join('');
-  const outHtml = pendingOut.map(r => `<div class="ec-q-row"><span class="ec-r-name">→ ${esc(r.b_name || ecFacName(r.b_fid))}: ${ecResIcon(r.resource)} ${esc(r.resource)} ×${ecNum(r.volume)} <i style="color:var(--t4)">(ожидает ответа)</i></span><button class="ec-bld-del" onclick="ecTradeClose('${r.id}')">✕</button></div>`).join('');
+  const inHtml = incoming.map(r => { const value = (r.volume || 0) * (r.price || 0); return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+      <span class="ec-route-badge new">предложение</span>
+      <b>${esc(r.a_name || ecFacName(r.a_fid))}</b> предлагает слать вам ${ecResIcon(r.resource)} <b>${esc(r.resource)} ×${ecNum(r.volume)}</b>/ход · вы получите <b style="color:var(--gd)">+${ecNum(Math.round(value * EC_DEST_CUT))} ГС/ход</b> (бессрочно)
+    </span><button class="btn btn-gd btn-xs" title="Согласиться — путь станет активным" onclick="ecTradeRespond('${r.id}',true)">Принять</button><button class="ec-bld-del" title="Отклонить" onclick="ecTradeRespond('${r.id}',false)">✕</button></div>`; }).join('');
+  const outHtml = pendingOut.map(r => `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+      <span class="ec-route-badge wait">⏳ ждёт ответа</span>
+      ${ecResIcon(r.resource)} <b>${esc(r.resource)} ×${ecNum(r.volume)}</b>/ход → <b>${esc(r.b_name || ecFacName(r.b_fid))}</b> · начнёт приносить доход после принятия
+    </span><button class="ec-bld-del" title="Отозвать предложение" onclick="ecTradeClose('${r.id}')">✕</button></div>`).join('');
   const caravanBlock = `<div class="ec-dip-card ec-dip-trade"><div class="ec-dip-t">Торговые караваны <span class="ec-hint">пути: ${used}/${tradeCap}</span></div>
       ${caravanForm}
       ${incoming.length ? `<div class="ec-r-sec">Входящие предложения</div>${inHtml}` : ''}

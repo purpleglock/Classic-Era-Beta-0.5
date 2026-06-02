@@ -6,7 +6,8 @@
       "Read(//c/Users/Андрей/Desktop/**)",
       "PowerShell(node --check 'C:\\\\Users\\\\���३\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\editor.js')",
       "PowerShell(if \\($?\\) { \"editor.js OK\" })",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Bash(python -c ' *)"
     ]
   }
 }

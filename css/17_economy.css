@@ -278,6 +278,24 @@
 .ec-trade-srow.big { font-size: 14px; padding: 3px 0; border-top: 1px solid var(--w1); border-bottom: 1px solid var(--w1); }
 .ec-trade-srow.err { color: var(--err); justify-content: flex-start; }
 .ec-trade-form > .btn[disabled] { opacity: .5; cursor: not-allowed; }
+/* объяснитель «как работают караваны» */
+.ec-trade-how { background: color-mix(in srgb, var(--te, #3ec0d0) 7%, var(--b1)); border: 1px solid color-mix(in srgb, var(--te, #3ec0d0) 25%, transparent); border-radius: var(--radius-md); padding: 10px 12px; font-size: 12px; color: var(--t2); line-height: 1.5; }
+.ec-trade-how b { color: var(--t1); }
+.ec-trade-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.ec-trade-flow span { font-family: var(--font-mono); font-size: 10px; color: var(--t3); }
+.ec-trade-flow span:nth-child(odd) { background: var(--b3); border: 1px solid var(--w2); border-radius: 6px; padding: 3px 8px; color: var(--t2); }
+/* заметка/подсказка в сводке */
+.ec-trade-note { font-size: 11px; color: var(--t3); line-height: 1.45; padding: 6px 8px; background: var(--b2); border-radius: var(--radius-sm); }
+.ec-trade-note.warn { color: var(--color-warning, #e0a030); background: color-mix(in srgb, var(--color-warning, #e0a030) 10%, transparent); }
+/* строка сделки в сводке */
+.ec-trade-deal { font-size: 13px; color: var(--t2); line-height: 1.5; padding-bottom: 4px; border-bottom: 1px solid var(--w1); }
+.ec-trade-deal b { color: var(--t1); }
+/* бейджи состояния путей */
+.ec-route-row .ec-r-name { line-height: 1.5; }
+.ec-route-badge { display: inline-block; font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; margin-right: 6px; vertical-align: middle; border: 1px solid; }
+.ec-route-badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.ec-route-badge.new { color: var(--gd); border-color: color-mix(in srgb, var(--gd) 45%, transparent); }
+.ec-route-badge.wait { color: var(--color-warning, #e0a030); border-color: color-mix(in srgb, var(--color-warning, #e0a030) 45%, transparent); }
 .ec-res-click { cursor: pointer; }
 .ec-res-click:hover { border-color: var(--w3); }
 

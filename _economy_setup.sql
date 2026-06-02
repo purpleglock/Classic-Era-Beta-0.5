@@ -189,6 +189,38 @@ end$$;
 revoke all on function public._apply_colony_projects(text) from public;
 
 -- ── RPC: инициализация экономики из одобренной анкеты ────────
+-- Базовый набор «нежирных» (common) ресурсов столичной планеты по её типу.
+-- Полная версия и одноразовый бэкфилл существующих столиц — в _capital_resources.sql.
+create or replace function public._basic_capital_res(p_type text)
+returns jsonb language sql immutable as $$
+  select case
+    when p_type = 'Землеподобные' then jsonb_build_array(
+      jsonb_build_object('name','Железо','icon',E'\u2699\uFE0F','r','common'),
+      jsonb_build_object('name','Силикаты','icon',E'\U0001FAA8','r','common'),
+      jsonb_build_object('name','Углерод','icon',E'\u2B1B','r','common'))
+    when p_type = 'Океанические' then jsonb_build_array(
+      jsonb_build_object('name','Силикаты','icon',E'\U0001FAA8','r','common'),
+      jsonb_build_object('name','Лёд','icon',E'\U0001F9CA','r','common'))
+    when p_type = 'Пустынные' then jsonb_build_array(
+      jsonb_build_object('name','Железо','icon',E'\u2699\uFE0F','r','common'),
+      jsonb_build_object('name','Силикаты','icon',E'\U0001FAA8','r','common'),
+      jsonb_build_object('name','Сера','icon',E'\U0001F311','r','common'))
+    when p_type = 'Криомиры' then jsonb_build_array(
+      jsonb_build_object('name','Лёд','icon',E'\U0001F9CA','r','common'),
+      jsonb_build_object('name','Железо','icon',E'\u2699\uFE0F','r','common'),
+      jsonb_build_object('name','Силикаты','icon',E'\U0001FAA8','r','common'))
+    when p_type in ('Вулканические','Лавовые миры') then jsonb_build_array(
+      jsonb_build_object('name','Железо','icon',E'\u2699\uFE0F','r','common'),
+      jsonb_build_object('name','Сера','icon',E'\U0001F311','r','common'))
+    when p_type = 'Экзотические' then jsonb_build_array(
+      jsonb_build_object('name','Углерод','icon',E'\u2B1B','r','common'),
+      jsonb_build_object('name','Силикаты','icon',E'\U0001FAA8','r','common'))
+    else jsonb_build_array(
+      jsonb_build_object('name','Железо','icon',E'\u2699\uFE0F','r','common'),
+      jsonb_build_object('name','Силикаты','icon',E'\U0001FAA8','r','common'))
+  end
+$$;
+
 create or replace function public.economy_init()
 returns public.faction_economy
 language plpgsql
@@ -239,11 +271,16 @@ begin
       where system_id is not distinct from app.system_id and planet_name = cap_name limit 1;
   end if;
 
-  -- снимок ресурсов столичной планеты (если есть в данных системы)
-  update public.colonies set resources = coalesce((
-    select pl->'resources' from public.map_systems ms, jsonb_array_elements(ms.planets) pl
-    where ms.id = app.system_id and pl->>'name' = cap_name limit 1
-  ), '[]'::jsonb) where id = cap_colony;
+  -- снимок ресурсов столичной планеты с карты; если их нет (или планеты нет
+  -- в данных системы) — выдаём базовые «нежирные» ресурсы, чтобы было что добывать.
+  update public.colonies set resources = coalesce(
+    (select pl->'resources' from public.map_systems ms, jsonb_array_elements(ms.planets) pl
+     where ms.id = app.system_id and pl->>'name' = cap_name
+       and jsonb_array_length(coalesce(pl->'resources','[]'::jsonb)) > 0 limit 1),
+    public._basic_capital_res(coalesce(
+      (select pl->>'type' from public.map_systems ms, jsonb_array_elements(ms.planets) pl
+       where ms.id = app.system_id and pl->>'name' = cap_name limit 1), 'Столичный мир'))
+  ) where id = cap_colony;
 
   -- бесплатная постройка по типу цивилизации + выбранные в анкете
   fb := case when app.civ_type = 'frontier' then 'com' else 'encom' end;
