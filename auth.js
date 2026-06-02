@@ -118,7 +118,21 @@ async function init() {
     if (event === 'INITIAL_SESSION') return;
     if (_authBusy) return;
     if (event === 'SIGNED_IN' && session) {
-      await loadUserRole(session.user); loadProfile(); updAuthUI(); _pgCache.clear();
+      // Supabase повторно шлёт SIGNED_IN при возврате фокуса на вкладку и при
+      // обновлении токена — НЕ только при реальном входе. Отличаем настоящий
+      // вход (был разлогинен / сменился аккаунт) от повторного срабатывания
+      // того же пользователя по id.
+      const prevUid = user && user.id;
+      await loadUserRole(session.user); loadProfile(); updAuthUI();
+      const sameUser = prevUid && user && prevUid === user.id;
+      if (sameUser) {
+        // Тот же пользователь: тихо обновляем данные в фоне, но НЕ перерисовываем
+        // текущую страницу — иначе теряется незавершённый ввод (анкета и т.п.).
+        try { await Promise.all([loadPgs(), loadProfiles()]); buildNav(); } catch(e) {}
+        return;
+      }
+      // Настоящий вход или смена аккаунта — полный рендер с актуальной ролью/данными.
+      _pgCache.clear();
       await Promise.all([loadPgs(), loadProfiles(), loadHomePage()]);
       buildNav();
       if (curSlug && curSlug !== 'home') go(curSlug, false); else await renderHome();

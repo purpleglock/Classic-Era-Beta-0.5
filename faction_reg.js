@@ -177,6 +177,20 @@ async function renderFactionWizard() {
   FR.data = mine ? { ...frBlank(), ...mine, buildings: mine.buildings || [] } : frBlank();
   FR.step = 0;
   FR.freeSystems = null; FR.allSystems = null;
+  // Восстановление несохранённого черновика из localStorage (после перезагрузки).
+  // Только для новой анкеты (не редактирование одобренной) и если локальная копия
+  // не старше серверного черновика.
+  if (!FR.editApproved) {
+    const local = frLoadLocal();
+    const serverTs = mine && mine.updated_at ? Date.parse(mine.updated_at) || 0 : 0;
+    if (local && (local.ts || 0) >= serverTs) {
+      FR.data = { ...FR.data, ...local.data };
+      if (!Array.isArray(FR.data.buildings)) FR.data.buildings = [];
+      FR.step = Math.min(Math.max(0, local.step | 0), FR_STEPS.length - 1);
+      toast('Восстановлен несохранённый черновик', 'inf');
+    }
+  }
+  frBindAutosave();
   frRenderStep();
 }
 
@@ -312,6 +326,7 @@ function frOnRegRace(v) { FR.data.race = v; frRenderPlanetPick(); }
 function frPickPlanet(name, type) {
   FR.data.planet_name = name; FR.data.planet_type = type || '';
   const pk = document.getElementById('f-planet-picked'); if (pk) pk.innerHTML = `Столица: <b>${esc(name)}</b>`;
+  frSaveLocal();
   frRenderPlanetPick();
 }
 function frStepBuildings(d) {
@@ -397,14 +412,42 @@ function frSyncStep() {
   else if (FR.step === 5) { d.link = g('h-link').value.trim(); }
   // step3 (постройки) и герб синхронизируются в своих обработчиках
 }
-function frGoStep(i) { frSyncStep(); FR.step = i; frRenderStep(); }
+function frGoStep(i) { frSyncStep(); FR.step = i; frSaveLocal(); frRenderStep(); }
 function frNext() {
   frSyncStep();
   if (FR.step === 0 && !FR.data.name) { toast('Укажите название фракции', 'err'); return; }
   if (FR.step === 2 && !FR.data.system_id) { toast('Выберите свободную систему', 'err'); return; }
-  FR.step = Math.min(FR.step + 1, FR_STEPS.length - 1); frRenderStep();
+  FR.step = Math.min(FR.step + 1, FR_STEPS.length - 1); frSaveLocal(); frRenderStep();
 }
-function frPrev() { frSyncStep(); FR.step = Math.max(FR.step - 1, 0); frRenderStep(); }
+function frPrev() { frSyncStep(); FR.step = Math.max(FR.step - 1, 0); frSaveLocal(); frRenderStep(); }
+
+// ── Автосохранение черновика в localStorage (без потери при перезагрузке) ──
+function frDraftKey() { return 'fr_draft_' + (user ? user.id : 'anon'); }
+function frSaveLocal() {
+  // Черновики новой анкеты кэшируем локально; редактирование одобренной фракции — нет
+  // (там источник истины на сервере, перезагрузка подтянет актуальную копию).
+  if (!user || FR.editApproved || !FR.data) return;
+  try { frSyncStep(); } catch (e) { /* инпуты текущего шага могут отсутствовать */ }
+  try {
+    localStorage.setItem(frDraftKey(), JSON.stringify({ data: FR.data, step: FR.step, ts: Date.now() }));
+  } catch (e) { /* приватный режим / переполнение */ }
+}
+let _frSaveTimer = null;
+function frSaveLocalDebounced() { clearTimeout(_frSaveTimer); _frSaveTimer = setTimeout(frSaveLocal, 300); }
+function frLoadLocal() {
+  if (!user) return null;
+  try { const raw = localStorage.getItem(frDraftKey()); if (!raw) return null; const o = JSON.parse(raw); return (o && o.data) ? o : null; }
+  catch (e) { return null; }
+}
+function frClearLocal() { try { localStorage.removeItem(frDraftKey()); } catch (e) {} }
+// Однократная привязка слушателей автосохранения (ввод + закрытие/перезагрузка вкладки)
+function frBindAutosave() {
+  if (FR._autoSaveBound) return; FR._autoSaveBound = true;
+  const inWizard = e => e.target && e.target.closest && e.target.closest('.fr-wizard');
+  document.addEventListener('input', e => { if (inWizard(e)) frSaveLocalDebounced(); });
+  document.addEventListener('change', e => { if (inWizard(e)) frSaveLocalDebounced(); });
+  window.addEventListener('beforeunload', () => { try { clearTimeout(_frSaveTimer); frSaveLocal(); } catch (e) {} });
+}
 
 function frColorPreview(hex) {
   FR.data.color = frHexToRgba(hex, 0.34);
@@ -431,6 +474,7 @@ async function frUploadHerald(input) {
   await handleImgUpload(file, url => {
     FR.data.herald_url = url;
     const p = document.getElementById('f-herald-prev'); if (p) p.innerHTML = `<img src="${esc(url)}">`;
+    frSaveLocal();
   });
 }
 
@@ -489,6 +533,7 @@ function frPickSystem(id, name) {
   const pk = document.getElementById('f-planet-picked'); if (pk) pk.innerHTML = 'Планета не выбрана';
   const p = document.getElementById('f-sys-picked'); if (p) p.innerHTML = `Выбрано: <b>${esc(name)}</b>`;
   frFilterSystems(document.getElementById('f-sys-search')?.value || '');
+  frSaveLocal();
   frRenderMinimap();
   frRenderPlanetPick();
 }
@@ -514,7 +559,7 @@ async function frUpsert(status, extra) {
 }
 async function frSaveDraft() {
   if (FR.busy) return; FR.busy = true;
-  try { await frUpsert('draft'); toast('Черновик сохранён', 'ok'); }
+  try { await frUpsert('draft'); frClearLocal(); toast('Черновик сохранён', 'ok'); }
   catch (e) { toast('Ошибка: ' + e.message, 'err'); }
   finally { FR.busy = false; }
 }
@@ -527,6 +572,7 @@ async function frSubmit() {
   try {
     if (FR.editApproved) { await frUpsert('approved', { pending_review: true }); toast('Изменения отправлены на проверку администрации', 'ok'); }
     else { await frUpsert('pending'); toast('Анкета отправлена на модерацию!', 'ok'); }
+    frClearLocal();
     go('factions');
   }
   catch (e) { toast('Ошибка: ' + e.message, 'err'); }
