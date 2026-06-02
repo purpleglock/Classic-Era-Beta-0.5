@@ -7,8 +7,57 @@
 //             auth.js (user), faction_reg.js (frReadable)
 // ════════════════════════════════════════════════════════════
 
-const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], projects: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], tab: 'colonies', busy: false, openColony: null, openSys: null };
+const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], projects: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], dossiers: [], alerts: [], tab: 'colonies', busy: false, openColony: null, openSys: null, spyTarget: null, spyOp: 'recon_basic', spyAgents: 1 };
 const EC_CLAIM_COST = 3000, EC_CLAIM_CD_DAYS = 7;
+// ── ТАЙНЫЕ ОПЕРАЦИИ — каталог (зеркало spy_launch/ spy_resolve в SQL) ──
+// diff — сложность; base — базовая длительность (ходов); need — нужная разведка
+// ('','basic','deep'); recon — это разведка (даёт досье).
+const EC_SPY_OPS = {
+  recon_basic:  { label: 'Разведка (базовая)',  diff: 0,  base: 1, need: '',      recon: 'basic', icon: '🔍', desc: 'Экономика цели: ГС, наука, агенты, колонии.' },
+  recon_deep:   { label: 'Глубокая разведка',   diff: 15, base: 2, need: '',      recon: 'deep',  icon: '🛰', desc: 'Постройки, флот, армия, изученные технологии. Открывает сложные операции.' },
+  steal_gc:     { label: 'Кража казны',          diff: 25, base: 2, need: 'basic', icon: '💰', desc: 'Похитить часть ГС цели (растёт с числом агентов).' },
+  sabotage:     { label: 'Саботаж постройки',    diff: 30, base: 2, need: 'deep',  icon: '💥', desc: 'Вывести из строя выбранное здание цели.' },
+  destabilize:  { label: 'Дестабилизация',       diff: 35, base: 3, need: 'basic', icon: '🔥', desc: 'Снизить ГС-доход цели на несколько ходов.' },
+  steal_tech:   { label: 'Кража технологий',     diff: 45, base: 4, need: 'deep',  icon: '🧪', desc: 'Украсть изученную цель технологию (добавится в ваше дерево).' },
+};
+const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'sabotage', 'destabilize', 'steal_tech'];
+// Сила спецслужб от доктрины (связь с agents_flat): +5% за пункт.
+function ecSpyPower(app) { return (ecFactionMods(app).agents_flat || 0) * 5; }
+// Свежие разведданные по цели: вернуть {level:'basic'|'deep'|null, ageDays, bonus}.
+function ecSpyDossier(targetFid) {
+  const recs = (EC.dossiers || []).filter(m => m.target_fid === targetFid && m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep'));
+  if (!recs.length) return { level: null, ageDays: Infinity, bonus: 0, result: null, deep: false };
+  const deep = recs.find(m => m.op === 'recon_deep');
+  const latest = recs[0]; // dossiers отсортированы desc по created_at
+  const ageDays = Math.max(0, Math.floor((Date.now() - new Date(latest.ready_at || latest.created_at).getTime()) / 86400000));
+  const base = deep ? 20 : 10;
+  const bonus = Math.max(0, base - ageDays); // затухает со временем
+  return { level: deep ? 'deep' : 'basic', ageDays, bonus, result: (deep || latest).result || {}, deep: !!deep };
+}
+// Свободные агенты = пул − контрразведка − занятые в активных операциях.
+function ecSpyCommitted() { return (EC.missions || []).filter(m => m.actor_fid === EC.fid && m.status === 'active').reduce((a, m) => a + (m.agents || 0), 0); }
+function ecSpyFree() { return Math.max(0, (EC.eco.agents || 0) - (EC.eco.counter_agents || 0) - ecSpyCommitted()); }
+// Контрразведка цели (видна только если есть глубокая разведка; иначе считаем 0 для превью).
+function ecSpyTargetCI(targetFid) { const f = (EC.factions || []).find(x => x.faction_id === targetFid); return (f && +f.counter_agents) || 0; }
+// Сила контрразведки цели от её доктрины (нужна анкета цели — приблизительно 0, точный расчёт на сервере).
+// Живой расчёт операции: успех/раскрытие/длительность (зеркало SQL).
+function ecSpyCalc(op, agents, targetFid) {
+  const d = EC_SPY_OPS[op]; if (!d) return null;
+  const A = Math.max(1, agents | 0);
+  const dos = ecSpyDossier(targetFid);
+  const CI = ecSpyTargetCI(targetFid);
+  const intel = d.recon ? 0 : dos.bonus;
+  const spyPow = ecSpyPower();
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
+  const success = clamp(45 + A * 8 + intel + spyPow - d.diff - CI * 9, 5, 95);
+  const detect = clamp(8 + d.diff * 0.5 + CI * 12 + A * 2 - spyPow, 2, 90);
+  const turns = Math.max(1, Math.ceil(d.base * (1 + d.diff / 100) / Math.sqrt(A)));
+  // требование разведки
+  let err = '';
+  if (d.need === 'basic' && !dos.level) err = 'Нужна разведка цели (базовая)';
+  else if (d.need === 'deep' && dos.level !== 'deep') err = 'Нужна глубокая разведка цели';
+  return { success, detect, turns, intel, dossier: dos, ci: CI, err, agents: A };
+}
 // Ресурсы планет: цена продажи и добыча/слот по редкости
 const EC_RES_PRICE = { common: 2, uncommon: 5, rare: 12, epic: 30, legendary: 80 };
 const EC_RES_RATE = { common: 25, uncommon: 12, rare: 5, epic: 2, legendary: 1 };
@@ -69,77 +118,108 @@ function ecTerraTier(p, race) {
 
 // ════════════════════════════════════════════════════════════
 // ДОКТРИНА ГОСУДАРСТВА — модификаторы от выбора в анкете.
-// Доли (0.20 = +20%). Поля: gc/sci/agents/mine — доход/добыча (>1 лучше);
-// colonize/claim_cost — стоимости (<1 дешевле); claim_cd — кулдаун захвата (<1 чаще).
+// ПРОЦЕНТНЫЕ поля (доли, 0.20 = +20%): gc, mine, build — доход/добыча/стройка;
+//   colonize, claim_cost — стоимости (<1 дешевле); claim_cd — кулдаун колонизации
+//   систем (<1 чаще); research — стоимость исследований (<1 дешевле = больше техов).
+// ПЛОСКИЕ поля (целые, +N в сутки): sci_flat — ОН/сут, agents_flat — агентов/сут.
+//   Наука и агенты — дискретные малые величины, проценты для них бессмысленны.
 // ⚠ ЧИСЛА ДОЛЖНЫ СОВПАДАТЬ с public._faction_mods() в _economy_setup.sql.
 // ════════════════════════════════════════════════════════════
 const EC_MODS = {
   gov: {
-    'Республика':           { sci: 0.15, gc: 0.10, claim_cd: 0.15 },
-    'Монархия':             { gc: 0.20, sci: -0.15 },
-    'Империя':              { claim_cost: -0.25, claim_cd: -0.25, agents: 0.10, gc: -0.10 },
-    'Олигархия':            { gc: 0.25, sci: -0.15 },
-    'Диктатура':            { claim_cd: -0.20, agents: 0.15, gc: -0.10 },
-    'Теократия':            { agents: 0.15, gc: 0.10, sci: -0.20 },
-    'Технократия':          { sci: 0.30, gc: -0.15, build: 0.10 },
-    'Корпоратократия':      { gc: 0.20, mine: 0.15, agents: -0.10, build: -0.10 },
-    'Коллективный разум':   { sci: 0.15, mine: 0.15, claim_cost: 0.20 },
-    'Машинный разум (ИИ)':  { sci: 0.20, agents: 0.15, gc: -0.15, build: -0.10 },
+    'Республика':           { gc: 0.10, claim_cd: 0.15, sci_flat: 1 },
+    'Монархия':             { gc: 0.20, sci_flat: -1 },
+    'Империя':              { claim_cost: -0.25, claim_cd: -0.25, gc: -0.10, agents_flat: 1 },
+    'Олигархия':            { gc: 0.25, sci_flat: -1 },
+    'Диктатура':            { claim_cd: -0.20, gc: -0.10, agents_flat: 1 },
+    'Теократия':            { gc: 0.10, research: 0.15, sci_flat: -2, agents_flat: 1 },
+    'Технократия':          { gc: -0.15, build: 0.10, research: -0.25, sci_flat: 3 },
+    'Корпоратократия':      { gc: 0.20, mine: 0.15, build: -0.10, agents_flat: -1 },
+    'Коллективный разум':   { mine: 0.15, claim_cost: 0.20, research: -0.10, sci_flat: 1 },
+    'Машинный разум (ИИ)':  { gc: -0.15, build: -0.10, research: -0.15, sci_flat: 1, agents_flat: 1 },
   },
   regime: {
-    'Демократический':      { gc: 0.15, sci: 0.05, agents: -0.10 },
-    'Эгалитарный':          { gc: 0.10, sci: 0.10, claim_cost: 0.10 },
-    'Меритократический':    { sci: 0.25, gc: -0.10 },
-    'Плутократический':     { gc: 0.25, sci: -0.10 },
+    'Демократический':      { gc: 0.15, agents_flat: -1 },
+    'Эгалитарный':          { gc: 0.10, claim_cost: 0.10, sci_flat: 1 },
+    'Меритократический':    { gc: -0.10, research: -0.15, sci_flat: 2 },
+    'Плутократический':     { gc: 0.25, sci_flat: -1 },
     'Олигархический':       { gc: 0.15, mine: -0.10 },
-    'Авторитарный':         { agents: 0.20, mine: 0.10, gc: -0.10 },
-    'Тоталитарный':         { mine: 0.25, agents: 0.15, gc: -0.15 },
-    'Деспотичный':          { claim_cd: -0.20, agents: 0.10, sci: -0.15 },
-    'Анархический':         { colonize: -0.25, sci: 0.10, gc: -0.20, build: 0.15 },
+    'Авторитарный':         { mine: 0.10, gc: -0.10, agents_flat: 1 },
+    'Тоталитарный':         { mine: 0.25, gc: -0.15, agents_flat: 1 },
+    'Деспотичный':          { claim_cd: -0.20, sci_flat: -1, agents_flat: 1 },
+    'Анархический':         { colonize: -0.25, gc: -0.20, build: 0.15, sci_flat: 1 },
   },
   ideology: {
-    'Технократия (Культ науки)': { sci: 0.30, gc: -0.15 },
-    'Милитаризм (Культ силы)':   { agents: 0.20, claim_cost: -0.15, gc: -0.10 },
-    'Пацифизм':                  { gc: 0.25, agents: -0.20 },
+    'Технократия (Культ науки)': { gc: -0.15, research: -0.25, sci_flat: 3 },
+    'Милитаризм (Культ силы)':   { claim_cost: -0.15, gc: -0.10, research: 0.10, agents_flat: 1 },
+    'Пацифизм':                  { gc: 0.25, agents_flat: -1 },
     'Экспансионизм':             { colonize: -0.30, claim_cost: -0.30, claim_cd: -0.40, gc: -0.10 },
-    'Изоляционизм':              { gc: 0.15, sci: 0.10, claim_cost: 0.25, claim_cd: 0.25 },
-    'Ксенофилия':                { gc: 0.20, agents: -0.10 },
-    'Ксенофобия':                { agents: 0.15, mine: 0.10, gc: -0.20 },
-    'Спиритуализм':              { agents: 0.20, sci: -0.15 },
-    'Трансгуманизм':             { sci: 0.20, agents: 0.10, gc: -0.10 },
+    'Изоляционизм':              { gc: 0.15, claim_cost: 0.25, claim_cd: 0.25, sci_flat: 1 },
+    'Ксенофилия':                { gc: 0.20, agents_flat: -1 },
+    'Ксенофобия':                { mine: 0.10, gc: -0.20, agents_flat: 1 },
+    'Спиритуализм':              { research: 0.15, sci_flat: -1, agents_flat: 1 },
+    'Трансгуманизм':             { gc: -0.10, research: -0.15, sci_flat: 2 },
     'Экоцентризм':               { mine: 0.30, gc: -0.20 },
-    'Индустриализм':             { gc: 0.25, mine: 0.10, sci: -0.15, build: -0.15 },
+    'Индустриализм':             { gc: 0.25, mine: 0.10, build: -0.15, research: 0.10, sci_flat: -1 },
   },
   race: {
-    'Гуманоиды':                  { gc: 0.05, sci: 0.05 },
-    'Млекопитающие':              { gc: 0.20, sci: -0.05 },
-    'Рептилоиды':                 { agents: 0.20, gc: -0.10 },
-    'Авианы (Птицеподобные)':     { claim_cd: -0.25, agents: 0.10, gc: -0.05 },
-    'Инсектоиды':                 { mine: 0.20, gc: 0.10, sci: -0.15 },
+    'Гуманоиды':                  { gc: 0.05, sci_flat: 1 },
+    'Млекопитающие':              { gc: 0.20 },
+    'Рептилоиды':                 { gc: -0.10, agents_flat: 1 },
+    'Авианы (Птицеподобные)':     { claim_cd: -0.25, gc: -0.05, agents_flat: 1 },
+    'Инсектоиды':                 { mine: 0.20, gc: 0.10, research: 0.10, sci_flat: -1 },
     'Акватики (Водные)':          { gc: 0.15, colonize: 0.15 },
-    'Плантоиды (Растениевидные)': { mine: 0.15, gc: 0.10, agents: -0.10 },
+    'Плантоиды (Растениевидные)': { mine: 0.15, gc: 0.10, agents_flat: -1 },
     'Литоиды (Каменные)':         { mine: 0.25, gc: -0.15 },
-    'Синтетики / Киборги':        { sci: 0.25, gc: -0.15 },
-    'Энергетические сущности':    { sci: 0.20, agents: 0.10, gc: -0.15 },
+    'Синтетики / Киборги':        { gc: -0.15, research: -0.15, sci_flat: 2 },
+    'Энергетические сущности':    { gc: -0.15, research: -0.10, sci_flat: 1, agents_flat: 1 },
   },
   civ: {
     'frontier': { colonize: -0.25, claim_cd: -0.25, gc: -0.15 },
     'colony':   { gc: 0.20, mine: 0.10, claim_cost: 0.15, build: -0.10 },
   },
 };
-const EC_MOD_FIELDS = ['gc', 'sci', 'agents', 'mine', 'build', 'colonize', 'claim_cost', 'claim_cd'];
-// Считает итоговые множители доктрины для анкеты app (по умолчанию — текущая фракция).
+// Процентные поля (множители 1+sum) и плоские поля (целые суммы).
+const EC_MOD_PCT = ['gc', 'mine', 'build', 'colonize', 'claim_cost', 'claim_cd', 'research'];
+const EC_MOD_FLAT = ['sci_flat', 'agents_flat'];
+// ── Конкретные ПЛЮШКИ доктрины (зеркало _doctrine_grant_* в SQL) ──
+// Бонусные стартовые постройки: форма правления + идеология дают по зданию.
+const EC_DOCTRINE_BUILD = {
+  gov: {
+    'Республика': 'trade', 'Монархия': 'factory', 'Империя': 'military_factory', 'Олигархия': 'factory',
+    'Диктатура': 'training', 'Теократия': 'training', 'Технократия': 'science', 'Корпоратократия': 'trade',
+    'Коллективный разум': 'science', 'Машинный разум (ИИ)': 'science',
+  },
+  ideology: {
+    'Технократия (Культ науки)': 'science', 'Милитаризм (Культ силы)': 'military_factory', 'Пацифизм': 'factory',
+    'Экспансионизм': 'mining', 'Изоляционизм': 'intel', 'Ксенофилия': 'trade', 'Ксенофобия': 'training',
+    'Спиритуализм': 'training', 'Трансгуманизм': 'science', 'Экоцентризм': 'mining', 'Индустриализм': 'factory',
+  },
+};
+// Бесплатная стартовая технология (по идеологии).
+const EC_DOCTRINE_TECH = {
+  'Технократия (Культ науки)': 'Продвинутые реакторы (корабли)',
+  'Милитаризм (Культ силы)':   'Продвинутая броня (наземка)',
+  'Трансгуманизм':             'Продвинутые щиты (наземка)',
+  'Индустриализм':             'Продвинутые двигатели (корабли)',
+  'Изоляционизм':              'Продвинутые щиты (наземка)',
+  'Ксенофобия':                'Продвинутая броня (наземка)',
+};
+function ecBuildName(bt) { return (typeof EC_BUILD !== 'undefined' && EC_BUILD[bt]) ? EC_BUILD[bt].name : bt; }
+// Считает итоговые модификаторы доктрины для анкеты app (по умолчанию — текущая фракция).
 function ecFactionMods(app) {
   app = app || (typeof EC !== 'undefined' && EC.app) || {};
-  const f = {}; EC_MOD_FIELDS.forEach(k => f[k] = 0);
+  const f = {}; [...EC_MOD_PCT, ...EC_MOD_FLAT].forEach(k => f[k] = 0);
   const add = m => { if (m) for (const k in m) f[k] = (f[k] || 0) + m[k]; };
   add(EC_MODS.gov[app.gov]); add(EC_MODS.regime[app.regime]);
   add(EC_MODS.ideology[app.ideology]); add(EC_MODS.race[app.race]);
   add(EC_MODS.civ[app.civ_type]);
   const clamp = (v, lo) => Math.max(lo, 1 + v);
   return {
-    gc: clamp(f.gc, 0.3), sci: clamp(f.sci, 0.3), agents: clamp(f.agents, 0.3),
-    mine: clamp(f.mine, 0.3), build: clamp(f.build, 0.3), colonize: clamp(f.colonize, 0.3),
+    gc: clamp(f.gc, 0.3), mine: clamp(f.mine, 0.3), build: clamp(f.build, 0.3),
+    research: clamp(f.research, 0.3),
+    sci_flat: Math.round(f.sci_flat), agents_flat: Math.round(f.agents_flat),
+    colonize: clamp(f.colonize, 0.3),
     claim_cost: clamp(f.claim_cost, 0.3), claim_cd: clamp(f.claim_cd, 0.25),
     _raw: f,
   };
@@ -328,7 +408,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -340,8 +420,10 @@ async function ecLoad() {
     dbGet('faction_applications', `status=eq.approved&select=faction_id,name&order=name.asc`).catch(() => []),
     dbGet('trade_routes', `order=created_at.desc`).catch(() => []),
     dbGet('loans', `order=created_at.desc`).catch(() => []),
-    dbGet('spy_missions', `order=created_at.desc&limit=25`).catch(() => []),
+    // ТОЛЬКО свои операции (приватность); цель видит лишь раскрытые против себя (отдельно)
+    dbGet('spy_missions', `actor_fid=eq.${fid}&order=created_at.desc&limit=40`).catch(() => []),
     dbGet('colony_projects', `faction_id=eq.${fid}&order=ready_at.asc`).catch(() => []),
+    dbGet('spy_missions', `target_fid=eq.${fid}&detected=eq.true&order=created_at.desc&limit=25`).catch(() => []),
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -355,7 +437,9 @@ async function ecLoad() {
   EC.factions = (facs || []).filter(f => f.faction_id);
   EC.routes = routes || [];
   EC.loans = loans || [];
-  EC.missions = missions || [];
+  EC.missions = missions || [];                 // мои операции (active + done)
+  EC.alerts = alerts || [];                      // раскрытые операции против меня
+  EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
   // карта редкости/иконки ресурсов из колоний (+ доступных планет)
   EC.resInfo = {};
@@ -370,12 +454,17 @@ function ecBuildingIncome(b) {
   return { gc: (d.inc.gc || 0) * b.slots_open, science: (d.inc.science || 0) * b.slots_open };
 }
 // Итоговый доход империи с учётом доктрины государства (зеркало economy_accrue).
+// Наука/агенты — ПЛОСКИЙ бонус доктрины (+N/сут), а не процент (они дискретны).
 function ecIncomePreview() {
   let gc = 0, science = 0, agents = 0;
   EC.buildings.forEach(b => { const i = ecBuildingIncome(b); gc += i.gc; science += i.science; if (b.btype === 'intel') agents += b.slots_open; });
   const m = ecFactionMods();
-  return { gc: Math.round(gc * m.gc), science: Math.round(science * m.sci), agents: Math.round(agents * m.agents),
-           base: { gc, science, agents }, mods: m };
+  return {
+    gc: Math.round(gc * m.gc),
+    science: Math.max(0, science + m.sci_flat),
+    agents: Math.max(0, agents + m.agents_flat),
+    base: { gc, science, agents }, mods: m,
+  };
 }
 function ecResEntries() { const res = (EC.eco && EC.eco.resources) || {}; return Object.keys(res).map(k => [k, +res[k] || 0]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]); }
 // Добыча за слот/сутки с учётом доктрины (mods.mine) — зеркало economy_accrue.
@@ -384,6 +473,8 @@ function ecMineRate(rar) { return Math.max(1, Math.round((EC_RES_RATE[rar || 'co
 function ecColonizeCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().colonize)); }
 // Стоимость построек и слотов с учётом доктрины (mods.build).
 function ecBuildCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().build)); }
+// Стоимость исследования с учётом доктрины (mods.research) — дешевле = больше техов доступно.
+function ecResearchCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().research)); }
 
 // Ресурсы планеты для mining-здания (из данных карты или снимка колонии)
 function ecMiningPlanetRes(b) {
@@ -476,6 +567,7 @@ function ecPaintCabinet() {
     <div class="ec-tabbody">${body}</div>
   </div>`);
   if (EC.tab === 'diplomacy') { try { ecTradeCalc(); } catch (e) {} } // живой расчёт формы каравана
+  if (EC.tab === 'intel') { try { ecSpyCalcLive(); } catch (e) {} }   // живой расчёт операции
 }
 function ecSetTab(t) { EC.tab = t; ecPaintCabinet(); }
 
@@ -483,16 +575,22 @@ function ecSetTab(t) { EC.tab = t; ecPaintCabinet(); }
 function ecChoiceChips(cat, value) {
   const m = (EC_MODS[cat] || {})[value];
   if (!m) return '';
-  const LBL = { gc: 'ГС-доход', sci: 'Наука', agents: 'Агенты', mine: 'Добыча', build: 'Постройки/слоты', colonize: 'Колонизация планет', claim_cost: 'Колонизация систем: цена' };
-  const order = ['gc', 'sci', 'agents', 'mine', 'build', 'colonize', 'claim_cost', 'claim_cd'];
-  const chips = order.filter(k => m[k]).map(k => {
-    const p = Math.round(m[k] * 100);
-    let good, txt;
-    if (k === 'colonize' || k === 'claim_cost' || k === 'build') { good = p < 0; txt = `${LBL[k]} ${p > 0 ? '+' : ''}${p}%`; }
-    else if (k === 'claim_cd') { good = p < 0; txt = `Кулдаун колонизации систем ${p > 0 ? '+' : ''}${p}%`; }
-    else { good = p > 0; txt = `${LBL[k]} ${p > 0 ? '+' : ''}${p}%`; }
-    return `<span class="ec-doc-chip ${good ? 'good' : 'bad'}">${txt}</span>`;
-  });
+  const PCT = { gc: 'ГС-доход', mine: 'Добыча' };
+  const COST = { build: 'Постройки/слоты', colonize: 'Колонизация планет', claim_cost: 'Колонизация систем: цена', research: 'Исследования' };
+  const chips = [];
+  const chip = (good, txt) => chips.push(`<span class="ec-doc-chip ${good ? 'good' : 'bad'}">${txt}</span>`);
+  // плоские: наука / агенты (+N в сутки)
+  if (m.sci_flat) chip(m.sci_flat > 0, `Наука ${m.sci_flat > 0 ? '+' : ''}${m.sci_flat} ОН/сут`);
+  if (m.agents_flat) chip(m.agents_flat > 0, `Агенты ${m.agents_flat > 0 ? '+' : ''}${m.agents_flat}/сут`);
+  // процентные доход/добыча (выше = лучше)
+  ['gc', 'mine'].forEach(k => { if (m[k]) { const p = Math.round(m[k] * 100); chip(p > 0, `${PCT[k]} ${p > 0 ? '+' : ''}${p}%`); } });
+  // процентные стоимости (ниже = лучше)
+  ['build', 'colonize', 'claim_cost', 'research'].forEach(k => { if (m[k]) { const p = Math.round(m[k] * 100); chip(p < 0, `${COST[k]} ${p > 0 ? '+' : ''}${p}%`); } });
+  if (m.claim_cd) { const p = Math.round(m.claim_cd * 100); chip(p < 0, `Кулдаун колонизации систем ${p > 0 ? '+' : ''}${p}%`); }
+  // конкретные плюшки: бонусная постройка и/или технология
+  const bgBld = (EC_DOCTRINE_BUILD[cat] || {})[value];
+  if (bgBld) chips.push(`<span class="ec-doc-chip grant">🏗 +${esc(ecBuildName(bgBld))}</span>`);
+  if (cat === 'ideology' && EC_DOCTRINE_TECH[value]) chips.push(`<span class="ec-doc-chip grant">🔬 ${esc(EC_DOCTRINE_TECH[value])}</span>`);
   return chips.length ? `<div class="ec-doc-chips-inline">${chips.join('')}</div>` : '';
 }
 
@@ -505,24 +603,38 @@ function ecDoctrineChips(app) {
     const good = (goodIsHigh !== false) ? p > 0 : p < 0;
     return `<span class="ec-doc-chip ${good ? 'good' : 'bad'}">${label} ${p > 0 ? '+' : ''}${p}%</span>`;
   };
+  const flat = (label, v, unit) => v ? `<span class="ec-doc-chip ${v > 0 ? 'good' : 'bad'}">${label} ${v > 0 ? '+' : ''}${v}${unit}</span>` : '';
   const out = [
-    chip('ГС-доход', m.gc), chip('Наука', m.sci), chip('Агенты', m.agents), chip('Добыча', m.mine),
-    chip('Постройки/слоты', m.build, false),
+    chip('ГС-доход', m.gc), chip('Добыча', m.mine),
+    flat('Наука', m.sci_flat, ' ОН/сут'), flat('Агенты', m.agents_flat, '/сут'),
+    chip('Постройки/слоты', m.build, false), chip('Исследования', m.research, false),
     chip('Колонизация планет', m.colonize, false), chip('Колонизация систем: цена', m.claim_cost, false),
   ];
   const cdP = pct(m.claim_cd);
   if (cdP) out.push(`<span class="ec-doc-chip ${cdP < 0 ? 'good' : 'bad'}">${cdP < 0 ? `Колонизация систем чаще ×${(1 / m.claim_cd).toFixed(1)}` : `Колонизация систем реже +${cdP}%`}</span>`);
   return out.filter(Boolean).join('');
 }
+// Сводка конкретных стартовых плюшек доктрины (постройки + технологии).
+function ecDoctrineGrants(app) {
+  app = app || EC.app || {};
+  const blds = [(EC_DOCTRINE_BUILD.gov || {})[app.gov], (EC_DOCTRINE_BUILD.ideology || {})[app.ideology]].filter(Boolean);
+  const tech = EC_DOCTRINE_TECH[app.ideology];
+  const items = [];
+  blds.forEach(bt => items.push(`<span class="ec-doc-chip grant">🏗 ${esc(ecBuildName(bt))}</span>`));
+  if (tech) items.push(`<span class="ec-doc-chip grant">🔬 ${esc(tech)}</span>`);
+  return items;
+}
 function ecDoctrineHtml(app) {
   app = app || EC.app || {};
   const chips = ecDoctrineChips(app);
   if (!chips) return '';
   const sub = [app.gov, app.regime, app.ideology, app.race, app.civ_type === 'frontier' ? 'Фронтир' : (app.civ_type === 'colony' ? 'Колония' : '')].filter(Boolean).map(esc).join(' · ');
+  const grants = ecDoctrineGrants(app);
   return `<div class="ec-doctrine">
     <div class="ec-doctrine-hd">⚜ Доктрина государства <span class="ec-hint">реальные эффекты вашего выбора при регистрации</span></div>
     ${sub ? `<div class="ec-doctrine-sub">${sub}</div>` : ''}
     <div class="ec-doctrine-chips">${chips}</div>
+    ${grants.length ? `<div class="ec-doctrine-grants"><span class="ec-doctrine-grants-t">Стартовые плюшки:</span><div class="ec-doctrine-chips">${grants.join('')}</div></div>` : ''}
   </div>`;
 }
 
@@ -841,15 +953,16 @@ function ecTabTerritory() {
     : `<div class="ec-empty">Нет смежных свободных систем. Расширяйтесь вдоль гиперпутей — соседние ничьи системы появятся здесь.</div>`;
   return `<div class="ec-section-title">Карта территории <span class="ec-hint">— ваши системы и доступные для колонизации</span></div>
     ${ecMinimap()}
-    <div class="ec-section-title">Колонизация системы <span class="ec-hint">— смежная по гиперпути и ничья</span></div>
+    <div class="ec-section-title">Колонизация системы <span class="ec-hint">— смежная по гиперпути и ничья · раз в ${ecClaimCdDays()} дн. (доктрина)</span></div>
     ${cdLine}
     <div class="ec-colonize">${list}</div>`;
 }
 async function ecClaimSystem(systemId) {
   if (EC.busy) return;
   if (ecClaimCooldownMs() > 0) { toast('Колонизация системы на перезарядке', 'err'); return; }
-  if ((EC.eco.gc || 0) < EC_CLAIM_COST) { toast(`Недостаточно ГС: нужно ${ecNum(EC_CLAIM_COST)}`, 'err'); return; }
-  if (!confirm('Колонизировать систему за ' + ecNum(EC_CLAIM_COST) + ' ГС? (раз в ' + EC_CLAIM_CD_DAYS + ' дн.)')) return;
+  const claimCost = ecClaimCost();
+  if ((EC.eco.gc || 0) < claimCost) { toast(`Недостаточно ГС: нужно ${ecNum(claimCost)}`, 'err'); return; }
+  if (!confirm('Колонизировать систему за ' + ecNum(claimCost) + ' ГС? (раз в ' + ecClaimCdDays() + ' дн.)')) return;
   EC.busy = true;
   try {
     await ecRpc('economy_claim_system', { p_system_id: systemId });
@@ -952,8 +1065,9 @@ function ecTradeCalc() {
   const dFac = ecId('ec-cv-dfac')?.value || '';
   const dSys = ecId('ec-cv-dsys')?.value || '';
   const price = ecResPrice(ecResRarity(resN));
-  const myInc = vol * price;
-  const partnerInc = Math.round(myInc * EC_DEST_CUT);
+  const rawVal = vol * price;
+  const myInc = Math.round(rawVal * ecFactionMods().gc);   // доктрина: торговля — часть ГС-экономики
+  const partnerInc = Math.round(rawVal * EC_DEST_CUT);
   // маршрут и угрозы (для расчёта риска; отсутствие пути НЕ блокирует сделку)
   const path = ecPath(oSys, dSys);
   const threats = path ? ecRouteThreats(path) : [];
@@ -1037,7 +1151,7 @@ function ecTabDiplomacy() {
     ? stock.map(([n, v]) => `<div class="ec-q-row"><span class="ec-r-name">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4)">(${esc(ecResRarity(n))}, ${ecResPrice(ecResRarity(n))} ГС)</i></span><span class="ec-r-qty">${ecNum(v)}</span></div>`).join('')
     : '<div class="ec-empty" style="padding:8px">Склад пуст. Стройте Добывающий завод на колониях с ресурсами.</div>';
   const sellForm = stock.length
-    ? `<div class="ec-prod-form"><select id="ec-sell-res">${stock.map(([n]) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select><input type="number" id="ec-sell-units" min="1" placeholder="кол-во" class="ec-prod-qty"><button class="btn btn-gh btn-sm" onclick="ecSellResource()">Продать на рынке</button></div><div class="cn-fac-hint" style="margin-top:5px">Местный рынок — 80% цены. Караваны выгоднее.</div>`
+    ? `<div class="ec-prod-form"><select id="ec-sell-res">${stock.map(([n]) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select><input type="number" id="ec-sell-units" min="1" placeholder="кол-во" class="ec-prod-qty"><button class="btn btn-gh btn-sm" onclick="ecSellResource()">Продать на рынке</button></div><div class="cn-fac-hint" style="margin-top:5px">Местный рынок — 80% цены${ecFactionMods().gc !== 1 ? ` · ×${ecFactionMods().gc.toFixed(2)} от доктрины` : ''}. Караваны выгоднее.</div>`
     : '';
   const resBlock = `<div class="ec-dip-card"><div class="ec-dip-t">Ресурсы планет</div>${stockHtml}${sellForm}</div>`;
 
@@ -1116,27 +1230,101 @@ function ecTabDiplomacy() {
     <div class="ec-dip-grid">${resBlock}${transferBlock}${caravanBlock}${loanBlock}</div>`;
 }
 
-// ── Вкладка «Разведка» ──────────────────────────────────────
+// ── Вкладка «Разведка» (тайные операции 2.0) ────────────────
 function ecTabIntel() {
   const intelSlots = ecSlotsSum('intel');
   const others = ecOtherFactions();
-  const opForm = !others.length ? '<div class="ec-empty">Нет других фракций.</div>'
-    : (EC.eco.agents || 0) < 1 ? '<div class="ec-empty">Нет агентов. Стройте Центр Спецслужб (1 агент/слот за ход).</div>'
-      : `<div class="ec-prod-form">${ecFacSelect('ec-spy-fac')}<select id="ec-spy-type"><option value="recon">Разведка</option><option value="sabotage">Диверсия</option></select><button class="btn btn-gd btn-sm" onclick="ecSpy()">Операция (−1 агент)</button></div>`;
-  const log = (EC.missions || []).length ? EC.missions.map(m => {
-    const r = m.result || {}; let txt;
-    if (m.mtype === 'recon') txt = m.success ? `🔍 ${esc(m.target_name || ecFacName(m.target_fid))}: ${ecNum(r.gc)} ГС · ${ecNum(r.science)} ОН · агентов ${ecNum(r.agents)} · колоний ${r.colonies} · построек ${r.buildings} · юнитов ${ecNum(r.units)}` : 'разведка не удалась';
-    else txt = !m.success ? `💥 диверсия против ${esc(m.target_name || '')}: провал` : (r.action === 'steal' ? `💥 украдено ${ecNum(r.gc)} ГС у ${esc(m.target_name || '')}` : r.action === 'destroy' ? `💥 уничтожено здание (${esc(r.building || '')}) у ${esc(m.target_name || '')}` : `💥 цель уцелела`);
-    return `<div class="ec-q-row"><span class="ec-r-name">${txt}</span></div>`;
-  }).join('') : '<div class="ec-empty" style="padding:8px">Операций ещё не было.</div>';
-  return `<div class="ec-treasury" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
-      <div class="ec-res"><span class="ec-res-k">Агенты</span><span class="ec-res-v" style="color:var(--te)">${ecNum(EC.eco.agents)}</span></div>
-      <div class="ec-res"><span class="ec-res-k">Производство</span><span class="ec-res-v" style="font-size:15px">+${intelSlots} / ход</span></div>
+  const free = ecSpyFree(), committed = ecSpyCommitted(), ci = EC.eco.counter_agents || 0;
+  const active = (EC.missions || []).filter(m => m.actor_fid === EC.fid && m.status === 'active');
+  const doneOps = (EC.missions || []).filter(m => m.status === 'done');
+
+  // Панель агентов
+  const agentBar = `<div class="ec-treasury" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+      <div class="ec-res"><span class="ec-res-k">Свободно</span><span class="ec-res-v" style="color:var(--te)">${ecNum(free)}</span></div>
+      <div class="ec-res"><span class="ec-res-k">На операциях</span><span class="ec-res-v" style="color:var(--color-warning,#e0a030)">${ecNum(committed)}</span></div>
+      <div class="ec-res"><span class="ec-res-k">Контрразведка</span><span class="ec-res-v" style="color:var(--pu)">${ecNum(ci)}</span></div>
+      <div class="ec-res"><span class="ec-res-k">Производство</span><span class="ec-res-v" style="font-size:15px">+${intelSlots}/ход</span></div>
+    </div>`;
+
+  // Контрразведка — кнопки ±
+  const ciBlock = `<div class="ec-dip-card"><div class="ec-dip-t">🛡 Контрразведка <span class="ec-hint">защищает от вражеских операций, ловит агентов</span></div>
+      <div class="ec-ci-row">
+        <button class="btn btn-gh btn-sm" ${ci <= 0 ? 'disabled' : ''} onclick="ecCounterIntel(${ci - 1})">−</button>
+        <span class="ec-ci-val">${ecNum(ci)} агент(ов) в защите</span>
+        <button class="btn btn-gh btn-sm" ${free <= 0 ? 'disabled' : ''} onclick="ecCounterIntel(${ci + 1})">＋</button>
+      </div>
+      <div class="cn-fac-hint" style="margin-top:6px">Каждый агент в контрразведке снижает шанс успеха вражеских операций и повышает риск их раскрытия.</div></div>`;
+
+  // Планировщик
+  let planner;
+  if (!others.length) planner = '<div class="ec-empty">Нет других фракций для операций.</div>';
+  else if ((EC.eco.agents || 0) < 1) planner = '<div class="ec-empty">Нет агентов. Стройте Центр Спецслужб (даёт +1 агент/слот за ход).</div>';
+  else {
+    if (!EC.spyTarget || !others.find(f => f.faction_id === EC.spyTarget)) EC.spyTarget = others[0].faction_id;
+    const tgtOpts = others.map(f => `<option value="${esc(f.faction_id)}"${f.faction_id === EC.spyTarget ? ' selected' : ''}>${esc(f.name)}</option>`).join('');
+    const opCards = EC_SPY_ORDER.map(opk => {
+      const d = EC_SPY_OPS[opk]; const c = ecSpyCalc(opk, 1, EC.spyTarget);
+      const locked = !!c.err;
+      return `<button type="button" class="ec-spy-op${opk === EC.spyOp ? ' on' : ''}${locked ? ' locked' : ''}" ${locked ? `title="${esc(c.err)}"` : ''} onclick="ecPickSpyOp('${opk}')">
+        <span class="ec-spy-op-ic">${d.icon}</span><span class="ec-spy-op-n">${esc(d.label)}</span>${locked ? '<span class="ec-spy-op-lock">🔒</span>' : ''}</button>`;
+    }).join('');
+    planner = `<div class="ec-trade-form">
+      <div class="ec-trade-label">1 · Цель</div>
+      <select id="ec-spy-target" onchange="ecPickSpyTarget(this.value)">${tgtOpts}</select>
+      <div class="ec-trade-label">2 · Операция</div>
+      <div class="ec-spy-ops">${opCards}</div>
+      <div class="ec-trade-volrow">
+        <label>Агентов (своб. ${free})</label>
+        <input type="range" id="ec-spy-agents" min="1" max="${Math.max(1, free)}" value="${Math.min(EC.spyAgents || 1, Math.max(1, free))}" oninput="ecSyncSpyAgents(this.value)">
+        <input type="number" id="ec-spy-agents-n" min="1" max="${Math.max(1, free)}" value="${Math.min(EC.spyAgents || 1, Math.max(1, free))}" class="ec-trade-volnum" oninput="ecSyncSpyAgents(this.value)">
+      </div>
+      <div class="ec-trade-summary" id="ec-spy-summary"></div>
+      <button class="btn btn-gd" id="ec-spy-launch" onclick="ecSpyLaunch()">Запустить операцию</button>
+    </div>`;
+  }
+
+  const activeHtml = active.length ? active.map(ecSpyActiveRow).join('') : '<div class="ec-empty" style="padding:8px">Активных операций нет.</div>';
+  const logHtml = doneOps.length ? doneOps.slice(0, 20).map(ecSpyLogRow).join('') : '<div class="ec-empty" style="padding:8px">Операций ещё не было.</div>';
+  const alertsHtml = (EC.alerts || []).length
+    ? EC.alerts.slice(0, 15).map(a => `<div class="ec-q-row ec-route-row"><span class="ec-r-name"><span class="ec-route-badge new">тревога</span>${(EC_SPY_OPS[a.op] || {}).icon || '⚠'} <b>${esc(a.actor_fid && a.result && a.result.actor_name || 'Неизвестная фракция')}</b> — ${esc((EC_SPY_OPS[a.op] || {}).label || a.op)} · ${a.outcome === 'success' ? '<span style="color:var(--err)">удалась</span>' : '<span style="color:var(--ok)">сорвана</span>'}${a.result && a.result.caught ? ' · агент пойман' : ''}</span></div>`).join('')
+    : '<div class="ec-empty" style="padding:8px">Тревог нет — вас пока не атаковали (или не раскрыли).</div>';
+
+  return `${agentBar}
+    <div class="ec-dip-grid">
+      <div class="ec-dip-card ec-dip-trade"><div class="ec-dip-t">🎯 Планирование операции <span class="ec-hint">расчёт по разведданным и агентам</span></div>${planner}</div>
+      ${ciBlock}
     </div>
-    <div class="ec-section-title">Операция <span class="ec-hint">— разведка раскрывает цель; диверсия 50% (кража ~10% ГС / снос здания)</span></div>
-    ${opForm}
-    <div class="ec-section-title">Журнал операций</div>
-    <div class="ec-queue">${log}</div>`;
+    <div class="ec-section-title">Активные операции <span class="ec-hint">— завершаются через N ходов</span></div>
+    <div class="ec-queue">${activeHtml}</div>
+    <div class="ec-section-title">🛡 Тревоги контрразведки <span class="ec-hint">— раскрытые операции против вас</span></div>
+    <div class="ec-queue">${alertsHtml}</div>
+    <div class="ec-section-title">Журнал — ваши операции</div>
+    <div class="ec-queue">${logHtml}</div>`;
+}
+// Строка активной операции (с таймером)
+function ecSpyActiveRow(m) {
+  const d = EC_SPY_OPS[m.op] || { icon: '•', label: m.op };
+  const ms = m.ready_at ? new Date(m.ready_at).getTime() - Date.now() : 0;
+  const turns = ms <= 0 ? 'готово в конце хода' : `≈${Math.max(1, Math.ceil(ms / 86400000))} ход.`;
+  return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+      <span class="ec-route-badge wait">${d.icon} идёт</span>
+      <b>${esc(d.label)}</b> → ${esc(m.target_name || ecFacName(m.target_fid))} · 🕵 ${ecNum(m.agents)} · успех ${ecNum(m.success_pct)}% · раскрытие ${ecNum(m.detect_pct)}%
+      <i style="color:var(--t3)"> · ${turns}</i>
+    </span><button class="ec-bld-del" title="Отозвать (вернуть агентов)" onclick="ecSpyCancel('${m.id}')">✕</button></div>`;
+}
+// Строка журнала (завершённая операция)
+function ecSpyLogRow(m) {
+  const d = EC_SPY_OPS[m.op] || { icon: '•', label: m.op };
+  const r = m.result || {};
+  const ok = m.outcome === 'success';
+  let detail = '';
+  if (m.op === 'recon_basic' || m.op === 'recon_deep') detail = ok ? `ГС ${ecNum(r.gc)} · ОН ${ecNum(r.science)} · агентов ${ecNum(r.agents)} · колоний ${r.colonies ?? '—'} · построек ${r.buildings ?? '—'}` : 'разведка сорвана';
+  else if (m.op === 'steal_gc') detail = ok ? `украдено ${ecNum(r.gc)} ГС` : 'провал';
+  else if (m.op === 'sabotage') detail = ok ? `выведено из строя: ${esc(r.building || 'здание')}` : 'провал';
+  else if (m.op === 'steal_tech') detail = ok ? `украдена технология: ${esc(r.tech_name || r.tech || '—')}` : 'провал';
+  else if (m.op === 'destabilize') detail = ok ? `доход цели снижен на ${Math.round((r.debuff_pct || 0) * 100)}% (${r.turns || 0} ход.)` : 'провал';
+  const badge = ok ? '<span class="ec-route-badge ok">✓</span>' : '<span class="ec-route-badge" style="color:var(--err);border-color:var(--err)">✕</span>';
+  return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">${badge}${d.icon} <b>${esc(d.label)}</b> → ${esc(m.target_name || ecFacName(m.target_fid))} · ${detail}${m.detected ? ' · <span style="color:var(--color-warning,#e0a030)">раскрыто</span>' : ''}</span></div>`;
 }
 
 // ── Каталог исследований (из данных конструкторов) ──────────
@@ -1175,7 +1363,7 @@ function ecTabResearch() {
   const active = EC.eco.research_active;
   const readyMs = EC.eco.research_ready ? new Date(EC.eco.research_ready).getTime() - Date.now() : 0;
   const sci = EC.eco.science || 0;
-  const sciInc = EC.buildings.filter(b => b.btype === 'science').reduce((a, b) => a + (b.slots_open || 0), 0);
+  const sciInc = ecIncomePreview().science;   // база + плоский бонус доктрины
   let activeHtml = '';
   if (active) { const node = cat.find(n => n.id === active); const t = readyMs <= 0 ? 'готово на след. ходу' : `через ${Math.max(0, Math.floor(readyMs / 3600000))} ч`; activeHtml = `<div class="ec-cap">⏳ Изучается: <b>${esc(node ? node.name : active)}</b> — ${t}</div>`; }
   const nodeCard = n => {
@@ -1184,7 +1372,7 @@ function ecTabResearch() {
     if (isDone) badge = '<span class="ec-rs-badge ok">✓ изучено</span>';
     else if (isActive) badge = '<span class="ec-rs-badge cur">⏳ изучается</span>';
     else if (!prereqOk) { const need = (n.prereq || []).map(p => { const pn = cat.find(x => x.id === p); return pn ? pn.name : p; }).join(', '); badge = `<span class="ec-rs-badge lock">🔒 нужно: ${esc(need)}</span>`; }
-    else { badge = '<span class="ec-rs-badge av">🔓 доступно</span>'; const can = !active && sci >= n.cost; btn = `<button class="btn ${can ? 'btn-gd' : 'btn-gh'} btn-xs" ${can ? '' : 'disabled'} onclick="ecResearch('${n.id}')">Исследовать · ${ecNum(n.cost)} ОН</button>`; }
+    else { badge = '<span class="ec-rs-badge av">🔓 доступно</span>'; const rc = ecResearchCost(n.cost); const can = !active && sci >= rc; btn = `<button class="btn ${can ? 'btn-gd' : 'btn-gh'} btn-xs" ${can ? '' : 'disabled'} onclick="ecResearch('${n.id}')">Исследовать · ${ecNum(rc)} ОН</button>`; }
     return `<div class="ec-rs-node${isDone ? ' done' : ''}"><div class="ec-rs-name">${esc(n.name)}</div><div class="ec-rs-foot">${badge}${btn}</div></div>`;
   };
   const byCat = {};
@@ -1204,8 +1392,9 @@ function ecResearch(nodeId) {
   if (EC.eco.research_active) { toast('Уже идёт исследование', 'err'); return; }
   if (done.has(nodeId)) { toast('Уже изучено', 'inf'); return; }
   if (!(n.prereq || []).every(p => done.has(p))) { toast('Сначала изучите предшественников', 'err'); return; }
-  if ((EC.eco.science || 0) < n.cost) { toast(`Недостаточно ОН: нужно ${ecNum(n.cost)}`, 'err'); return; }
-  ecRpcAct('economy_research', { p_node: nodeId, p_cost: n.cost }, 'Исследование начато (1 ход)');
+  const rc = ecResearchCost(n.cost);
+  if ((EC.eco.science || 0) < rc) { toast(`Недостаточно ОН: нужно ${ecNum(rc)}`, 'err'); return; }
+  ecRpcAct('economy_research', { p_node: nodeId, p_cost: rc }, 'Исследование начато (1 ход)');
 }
 
 // ── Действия дипломатии/разведки ────────────────────────────
@@ -1241,16 +1430,54 @@ function ecLoanIssue() {
 }
 function ecLoanRepay(id) { ecRpcAct('loan_repay', { p_id: id }, 'Заём погашен'); }
 function ecLoanDispute(id) { ecRpcAct('loan_dispute', { p_id: id }, 'Спор подан в МГА'); }
-async function ecSpy() {
-  const fac = ecId('ec-spy-fac')?.value, type = ecId('ec-spy-type')?.value;
-  if (!fac) { toast('Выберите цель', 'err'); return; }
-  if (EC.busy) return; EC.busy = true;
-  try {
-    const r = await ecRpc('spy_mission', { p_target_fid: fac, p_type: type });
-    toast(r && r.success ? (type === 'recon' ? 'Разведка успешна' : 'Диверсия удалась') : 'Операция провалена', r && r.success ? 'ok' : 'inf');
-    await ecReloadPaint();
-  } catch (e) { toast(ecErr(e.message), 'err'); await ecReloadPaint(); }
-  finally { EC.busy = false; }
+// ── Тайные операции: интерактив планировщика ────────────────
+function ecPickSpyTarget(fid) { EC.spyTarget = fid; ecSpyCalcLive(); }
+function ecPickSpyOp(op) {
+  const c = ecSpyCalc(op, 1, EC.spyTarget);
+  if (c && c.err) { toast(c.err, 'err'); return; }
+  EC.spyOp = op;
+  document.querySelectorAll('.ec-spy-op').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes(`'${op}'`)));
+  ecSpyCalcLive();
+}
+function ecSyncSpyAgents(v) {
+  v = Math.max(1, parseInt(v) || 1);
+  const sl = ecId('ec-spy-agents'), num = ecId('ec-spy-agents-n');
+  const max = sl ? (+sl.max || v) : v; v = Math.min(v, max);
+  EC.spyAgents = v;
+  if (sl) sl.value = v; if (num) num.value = v;
+  ecSpyCalcLive();
+}
+// Живая сводка операции + состояние кнопки
+function ecSpyCalcLive() {
+  const sumEl = ecId('ec-spy-summary'); if (!sumEl) return null;
+  const op = EC.spyOp, A = Math.max(1, parseInt(ecId('ec-spy-agents')?.value) || EC.spyAgents || 1);
+  const c = ecSpyCalc(op, A, EC.spyTarget); if (!c) return null;
+  const d = EC_SPY_OPS[op];
+  const dosTxt = c.dossier.level ? `${c.dossier.level === 'deep' ? 'глубокая' : 'базовая'} (${c.dossier.ageDays} дн., +${c.intel})` : 'нет данных';
+  const sColor = c.success >= 60 ? 'var(--ok)' : c.success >= 35 ? 'var(--color-warning,#e0a030)' : 'var(--err)';
+  const dColor = c.detect >= 50 ? 'var(--err)' : c.detect > 20 ? 'var(--color-warning,#e0a030)' : 'var(--ok)';
+  sumEl.innerHTML = `
+    <div class="ec-trade-deal">${d.icon} <b>${esc(d.label)}</b> → ${esc(ecFacName(EC.spyTarget))} · 🕵 ${A} агент(ов)</div>
+    <div class="ec-trade-srow"><span>Описание</span><b style="color:var(--t2);font-weight:400">${esc(d.desc)}</b></div>
+    <div class="ec-trade-srow big"><span>Шанс успеха</span><b style="color:${sColor}">${c.success}%</b></div>
+    <div class="ec-trade-srow"><span>Риск раскрытия</span><b style="color:${dColor}">${c.detect}%</b></div>
+    <div class="ec-trade-srow"><span>Длительность</span><b>${c.turns} ход.</b></div>
+    <div class="ec-trade-srow"><span>Разведданные цели</span><b>${dosTxt}</b></div>
+    ${c.err ? `<div class="ec-trade-note warn">⚠ ${esc(c.err)}</div>` : `<div class="ec-trade-note">При раскрытии: агент будет пойман (−1), цель узнает о вас. Расчёт ориентировочный — контрразведка цели уточнится при исполнении.</div>`}`;
+  const btn = ecId('ec-spy-launch');
+  if (btn) { btn.disabled = !!c.err; btn.textContent = c.err ? c.err : `Запустить · успех ${c.success}% · ${c.turns} ход.`; }
+  return c;
+}
+function ecSpyLaunch() {
+  const c = ecSpyCalcLive(); if (!c) return;
+  if (c.err) { toast(c.err, 'err'); return; }
+  if (ecSpyFree() < c.agents) { toast('Недостаточно свободных агентов', 'err'); return; }
+  ecRpcAct('spy_launch', { p_target_fid: EC.spyTarget, p_op: EC.spyOp, p_agents: c.agents }, `Операция «${EC_SPY_OPS[EC.spyOp].label}» запущена (${c.turns} ход.)`);
+}
+function ecSpyCancel(id) { ecRpcAct('spy_cancel', { p_id: id }, 'Операция отозвана, агенты возвращены'); }
+function ecCounterIntel(n) {
+  n = Math.max(0, n | 0);
+  ecRpcAct('counterintel_set', { p_n: n }, 'Контрразведка обновлена');
 }
 
 // ── МГА: арбитраж спорных займов (вкладка в админ-панели) ───

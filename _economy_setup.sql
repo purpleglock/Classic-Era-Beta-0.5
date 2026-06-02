@@ -53,6 +53,22 @@ alter table public.colony_buildings add column if not exists mining_targets json
 alter table public.faction_economy add column if not exists research jsonb default '[]'::jsonb;
 alter table public.faction_economy add column if not exists research_active text;
 alter table public.faction_economy add column if not exists research_ready  timestamptz;
+-- v8: тайные операции 2.0 — контрразведка и дебафф дестабилизации
+alter table public.faction_economy add column if not exists counter_agents int default 0;
+alter table public.faction_economy add column if not exists debuff_until    timestamptz;
+alter table public.faction_economy add column if not exists debuff_pct      numeric default 0;
+-- spy_missions: расширение под планируемые операции с длительностью/факторами
+alter table public.spy_missions add column if not exists target_owner uuid;
+alter table public.spy_missions add column if not exists op           text;
+alter table public.spy_missions add column if not exists params       jsonb default '{}'::jsonb;
+alter table public.spy_missions add column if not exists agents       int default 1;
+alter table public.spy_missions add column if not exists success_pct  int default 0;
+alter table public.spy_missions add column if not exists detect_pct   int default 0;
+alter table public.spy_missions add column if not exists status       text default 'done';
+alter table public.spy_missions add column if not exists outcome      text;
+alter table public.spy_missions add column if not exists detected     boolean default false;
+alter table public.spy_missions add column if not exists started_at   timestamptz;
+alter table public.spy_missions add column if not exists ready_at     timestamptz;
 
 -- ── RLS ─────────────────────────────────────────────────────
 alter table public.faction_economy  enable row level security;
@@ -221,6 +237,40 @@ returns jsonb language sql immutable as $$
   end
 $$;
 
+-- Бонусные стартовые постройки доктрины: форма правления + идеология дают
+-- по одному тематическому зданию («допдомики»).
+create or replace function public._doctrine_grant_buildings(p_gov text, p_ideology text)
+returns text[] language sql immutable as $$
+  select array_remove(array[
+    case p_gov
+      when 'Республика' then 'trade'           when 'Монархия' then 'factory'
+      when 'Империя' then 'military_factory'    when 'Олигархия' then 'factory'
+      when 'Диктатура' then 'training'          when 'Теократия' then 'training'
+      when 'Технократия' then 'science'         when 'Корпоратократия' then 'trade'
+      when 'Коллективный разум' then 'science'  when 'Машинный разум (ИИ)' then 'science'
+      else null end,
+    case p_ideology
+      when 'Технократия (Культ науки)' then 'science'  when 'Милитаризм (Культ силы)' then 'military_factory'
+      when 'Пацифизм' then 'factory'                   when 'Экспансионизм' then 'mining'
+      when 'Изоляционизм' then 'intel'                 when 'Ксенофилия' then 'trade'
+      when 'Ксенофобия' then 'training'                when 'Спиритуализм' then 'training'
+      when 'Трансгуманизм' then 'science'              when 'Экоцентризм' then 'mining'
+      when 'Индустриализм' then 'factory'              else null end
+  ], null)
+$$;
+-- Бесплатная стартовая технология доктрины (стабильные id компонент-узлов).
+create or replace function public._doctrine_grant_techs(p_ideology text)
+returns jsonb language sql immutable as $$
+  select case p_ideology
+    when 'Технократия (Культ науки)' then '["comp.ship.reactor"]'::jsonb
+    when 'Милитаризм (Культ силы)'   then '["comp.ground.armor"]'::jsonb
+    when 'Трансгуманизм'             then '["comp.ground.shield"]'::jsonb
+    when 'Индустриализм'             then '["comp.ship.engine"]'::jsonb
+    when 'Изоляционизм'              then '["comp.ground.shield"]'::jsonb
+    when 'Ксенофобия'                then '["comp.ground.armor"]'::jsonb
+    else '[]'::jsonb end
+$$;
+
 create or replace function public.economy_init()
 returns public.faction_economy
 language plpgsql
@@ -256,14 +306,15 @@ begin
   select * into eco from public.faction_economy where faction_id = app.faction_id;
   if found then return eco; end if;   -- уже инициализировано
 
-  insert into public.faction_economy (faction_id, owner_id, owner_email, gc, science, tnp, last_tick)
+  insert into public.faction_economy (faction_id, owner_id, owner_email, gc, science, tnp, last_tick, research)
     values (app.faction_id, app.owner_id, app.owner_email,
-            case when app.bonus_money then 500 else 0 end, 0, 0, now())
+            case when app.bonus_money then 500 else 0 end, 0, 0, now(),
+            public._doctrine_grant_techs(app.ideology))   -- бесплатные техи доктрины
     returning * into eco;
 
   cap_name := coalesce(nullif(app.planet_name, ''), app.system_name, 'Столица');
   insert into public.colonies (faction_id, owner_id, system_id, planet_name, planet_type, cells)
-    values (app.faction_id, app.owner_id, app.system_id, cap_name, 'Столичный мир', 6)
+    values (app.faction_id, app.owner_id, app.system_id, cap_name, 'Столичный мир', 9)
     on conflict (system_id, planet_name) do nothing
     returning id into cap_colony;
   if cap_colony is null then
@@ -303,6 +354,13 @@ begin
       when 'mil'   then 'shipyard'
       else null end;
     if bt is null then continue; end if;
+    free_slots := case when bt in ('factory','mining') then 2 else 1 end;
+    insert into public.colony_buildings (colony_id, faction_id, owner_id, btype, slots_open)
+      values (cap_colony, app.faction_id, app.owner_id, bt, free_slots);
+  end loop;
+
+  -- бонусные постройки доктрины (форма правления + идеология)
+  foreach bt in array public._doctrine_grant_buildings(app.gov, app.ideology) loop
     free_slots := case when bt in ('factory','mining') then 2 else 1 end;
     insert into public.colony_buildings (colony_id, faction_id, owner_id, btype, slots_open)
       values (cap_colony, app.faction_id, app.owner_id, bt, free_slots);
@@ -474,9 +532,14 @@ create policy "tr_sel" on public.trade_routes for select to authenticated
 drop policy if exists "loans_sel" on public.loans;
 create policy "loans_sel" on public.loans for select to authenticated
   using (lender_owner = auth.uid() or borrower_owner = auth.uid() or public.current_user_role() in ('superadmin','editor','moderator'));
+create index if not exists spy_target_idx on public.spy_missions(target_owner);
+create index if not exists spy_ready_idx  on public.spy_missions(ready_at);
 drop policy if exists "spy_sel" on public.spy_missions;
+-- Приватность: свои операции видит автор; цель — ТОЛЬКО раскрытые против себя; стафф — всё.
 create policy "spy_sel" on public.spy_missions for select to authenticated
-  using (actor_owner = auth.uid() or public.current_user_role() in ('superadmin','editor','moderator'));
+  using (actor_owner = auth.uid()
+      or (target_owner = auth.uid() and detected = true)
+      or public.current_user_role() in ('superadmin','editor','moderator'));
 
 -- ── helper: имя/владелец фракции ──
 create or replace function public._fac_name(p_fid text) returns text language sql security definer set search_path=public as $$
@@ -636,44 +699,166 @@ begin
 end$$;
 
 -- ── Шпионаж ──
-create or replace function public.spy_mission(p_target_fid text, p_type text)
+-- ════════════════════════════════════════════════════════════
+-- ТАЙНЫЕ ОПЕРАЦИИ 2.0 — планирование, формула, длительность, контрразведка
+-- ⚠ ФОРМУЛЫ ДОЛЖНЫ СОВПАДАТЬ с ecSpyCalc/EC_SPY_OPS в economy.js.
+-- ════════════════════════════════════════════════════════════
+-- Сложность/база длительности операции.
+create or replace function public._spy_op_meta(p_op text)
+returns jsonb language sql immutable as $$
+  select case p_op
+    when 'recon_basic' then '{"diff":0,"base":1,"need":"","recon":"basic"}'::jsonb
+    when 'recon_deep'  then '{"diff":15,"base":2,"need":"","recon":"deep"}'::jsonb
+    when 'steal_gc'    then '{"diff":25,"base":2,"need":"basic"}'::jsonb
+    when 'sabotage'    then '{"diff":30,"base":2,"need":"deep"}'::jsonb
+    when 'destabilize' then '{"diff":35,"base":3,"need":"basic"}'::jsonb
+    when 'steal_tech'  then '{"diff":45,"base":4,"need":"deep"}'::jsonb
+    else null end
+$$;
+-- Сила спецслужб фракции от доктрины (agents_flat*5).
+create or replace function public._spy_power(p_fid text)
+returns numeric language sql stable as $$
+  select coalesce((public._faction_mods(p_fid)->>'agents_flat')::numeric,0) * 5
+$$;
+-- Свежая разведка актора по цели: 'deep' | 'basic' | null + возраст(дней).
+create or replace function public._spy_intel(p_actor text, p_target text)
+returns jsonb language sql stable as $$
+  select coalesce((
+    select jsonb_build_object(
+      'level', case when bool_or(op='recon_deep') then 'deep' else 'basic' end,
+      'age', floor(extract(epoch from (now()-max(coalesce(ready_at,created_at))))/86400.0))
+    from public.spy_missions
+    where actor_fid=p_actor and target_fid=p_target and outcome='success' and op in ('recon_basic','recon_deep')
+  ), '{"level":null,"age":9999}'::jsonb)
+$$;
+
+-- Запуск операции: списывает агентов, считает факторы, ставит в очередь на N ходов.
+create or replace function public.spy_launch(p_target_fid text, p_op text, p_agents int)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; me public.faction_economy; tgt public.faction_economy;
-  suc boolean; res jsonb; steal numeric; bid uuid; bt text;
+  meta jsonb; intel jsonb; diff numeric; need text; rec text;
+  a int; busy int; freeag int; ci int; ibonus numeric; spow numeric; succ int; det int; turns int;
+  tgt_owner uuid;
 begin
-  if p_type not in ('recon','sabotage') then raise exception 'bad type'; end if;
+  meta := public._spy_op_meta(p_op);
+  if meta is null then raise exception 'bad op'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
   if p_target_fid = app.faction_id then raise exception 'self'; end if;
-  select * into me from public.faction_economy where faction_id=app.faction_id;
-  if coalesce(me.agents,0) < 1 then raise exception 'no agents'; end if;
+  select * into me from public.faction_economy where faction_id=app.faction_id for update;
   select * into tgt from public.faction_economy where faction_id=p_target_fid;
   if not found then raise exception 'target has no economy'; end if;
-  update public.faction_economy set agents=agents-1 where faction_id=app.faction_id;
-  if p_type='recon' then
-    suc := true;
-    res := jsonb_build_object('gc',tgt.gc,'tnp',tgt.tnp,'science',tgt.science,'agents',tgt.agents,
-      'colonies',(select count(*) from public.colonies where faction_id=p_target_fid),
-      'buildings',(select count(*) from public.colony_buildings where faction_id=p_target_fid),
-      'units',(select coalesce(sum(qty),0) from public.unit_production where faction_id=p_target_fid and status='done'));
-  else
-    suc := random() < 0.5;
-    if suc then
-      if random() < 0.5 then
-        steal := round(coalesce(tgt.gc,0)*0.1);
-        update public.faction_economy set gc=gc-steal where faction_id=p_target_fid;
-        update public.faction_economy set gc=gc+steal where faction_id=app.faction_id;
-        res := jsonb_build_object('action','steal','gc',steal);
-      else
-        select id, btype into bid, bt from public.colony_buildings where faction_id=p_target_fid order by random() limit 1;
-        if bid is not null then delete from public.colony_buildings where id=bid; res := jsonb_build_object('action','destroy','building',bt);
-        else res := jsonb_build_object('action','none'); end if;
+  select owner_id into tgt_owner from public.faction_economy where faction_id=p_target_fid;
+
+  a := greatest(1, coalesce(p_agents,1));
+  select coalesce(sum(agents),0) into busy from public.spy_missions where actor_fid=app.faction_id and status='active';
+  freeag := coalesce(me.agents,0) - coalesce(me.counter_agents,0) - busy;
+  if a > freeag then raise exception 'not enough free agents'; end if;
+
+  -- требование разведки
+  intel := public._spy_intel(app.faction_id, p_target_fid);
+  need := meta->>'need';
+  rec := intel->>'level';
+  if need = 'basic' and rec is null then raise exception 'intel required: basic recon'; end if;
+  if need = 'deep'  and rec is distinct from 'deep' then raise exception 'intel required: deep recon'; end if;
+
+  -- факторы
+  diff := (meta->>'diff')::numeric;
+  ci := coalesce(tgt.counter_agents,0);
+  ibonus := case when meta ? 'recon' then 0
+                 else greatest(0, (case when rec='deep' then 20 else 10 end) - coalesce((intel->>'age')::numeric,9999)) end;
+  spow := public._spy_power(app.faction_id);
+  succ := greatest(5,  least(95, round(45 + a*8 + ibonus + spow - diff - ci*9)));
+  det  := greatest(2,  least(90, round(8 + diff*0.5 + ci*12 + a*2 + public._spy_power(p_target_fid) - spow)));
+  turns := greatest(1, ceil((meta->>'base')::numeric * (1 + diff/100.0) / sqrt(a)));
+
+  update public.faction_economy set agents = agents - a where faction_id=app.faction_id;  -- агенты заняты
+  insert into public.spy_missions(actor_fid,actor_owner,target_fid,target_owner,target_name,op,mtype,agents,
+      success_pct,detect_pct,status,started_at,ready_at,params)
+    values(app.faction_id, auth.uid(), p_target_fid, tgt_owner, public._fac_name(p_target_fid), p_op, p_op, a,
+      succ, det, 'active', now(), coalesce(me.last_tick, now()) + (turns || ' days')::interval, '{}'::jsonb);
+  return jsonb_build_object('ok',true,'success_pct',succ,'detect_pct',det,'turns',turns);
+end$$;
+
+-- Назначить агентов в контрразведку (≤ свободных).
+create or replace function public.counterintel_set(p_n int)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare app public.faction_applications; me public.faction_economy; busy int; n int;
+begin
+  select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
+  if not found then raise exception 'no approved faction'; end if;
+  select * into me from public.faction_economy where faction_id=app.faction_id for update;
+  select coalesce(sum(agents),0) into busy from public.spy_missions where actor_fid=app.faction_id and status='active';
+  n := greatest(0, least(coalesce(p_n,0), coalesce(me.agents,0) - busy));
+  update public.faction_economy set counter_agents = n where faction_id=app.faction_id;
+  return jsonb_build_object('ok',true,'counter_agents',n);
+end$$;
+
+-- Отозвать активную операцию (вернуть агентов).
+create or replace function public.spy_cancel(p_id uuid)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare m public.spy_missions;
+begin
+  select * into m from public.spy_missions where id=p_id and actor_owner=auth.uid() and status='active';
+  if not found then raise exception 'not found'; end if;
+  update public.faction_economy set agents = agents + m.agents where faction_id=m.actor_fid;
+  delete from public.spy_missions where id=p_id;
+  return jsonb_build_object('ok',true);
+end$$;
+
+-- Разрешение готовых операций фракции (вызывается в economy_accrue).
+create or replace function public._spy_resolve(p_fid text)
+returns void language plpgsql security definer set search_path=public as $$
+declare m public.spy_missions; ok boolean; caught boolean; res jsonb; steal numeric; bid uuid; bt text;
+  techs jsonb; node text; tgt public.faction_economy;
+begin
+  for m in select * from public.spy_missions where actor_fid=p_fid and status='active' and ready_at<=now() loop
+    ok := (random()*100) < m.success_pct;
+    caught := (random()*100) < m.detect_pct;
+    res := '{}'::jsonb;
+    select * into tgt from public.faction_economy where faction_id=m.target_fid;
+
+    if ok then
+      if m.op in ('recon_basic','recon_deep') then
+        res := jsonb_build_object('gc',tgt.gc,'science',tgt.science,'agents',tgt.agents,
+          'colonies',(select count(*) from public.colonies where faction_id=m.target_fid),
+          'buildings',(select count(*) from public.colony_buildings where faction_id=m.target_fid));
+        if m.op='recon_deep' then res := res || jsonb_build_object(
+          'units',(select coalesce(sum(qty),0) from public.unit_production where faction_id=m.target_fid and status='done'),
+          'research',(select coalesce(jsonb_array_length(research),0) from public.faction_economy where faction_id=m.target_fid)); end if;
+      elsif m.op='steal_gc' then
+        steal := round(coalesce(tgt.gc,0) * least(0.30, 0.06*m.agents));
+        update public.faction_economy set gc=greatest(0,gc-steal) where faction_id=m.target_fid;
+        update public.faction_economy set gc=gc+steal where faction_id=m.actor_fid;
+        res := jsonb_build_object('gc',steal);
+      elsif m.op='sabotage' then
+        select id,btype into bid,bt from public.colony_buildings where faction_id=m.target_fid order by random() limit 1;
+        if bid is not null then delete from public.colony_buildings where id=bid; res := jsonb_build_object('building',bt);
+        else res := jsonb_build_object('building',null); end if;
+      elsif m.op='steal_tech' then
+        select research into techs from public.faction_economy where faction_id=m.target_fid;
+        node := (select value::text from jsonb_array_elements_text(coalesce(techs,'[]'::jsonb)) value
+                 where value::text not in (select jsonb_array_elements_text(coalesce(research,'[]'::jsonb)) from public.faction_economy where faction_id=m.actor_fid)
+                 order by random() limit 1);
+        if node is not null then
+          update public.faction_economy set research = coalesce(research,'[]'::jsonb) || to_jsonb(node) where faction_id=m.actor_fid;
+          res := jsonb_build_object('tech',node,'tech_name',node);
+        else ok := false; res := jsonb_build_object('note','no tech to steal'); end if;
+      elsif m.op='destabilize' then
+        update public.faction_economy set debuff_pct=0.25, debuff_until=now()+interval '3 days' where faction_id=m.target_fid;
+        res := jsonb_build_object('debuff_pct',0.25,'turns',3);
       end if;
-    else res := jsonb_build_object('action','failed'); end if;
-  end if;
-  insert into public.spy_missions(actor_fid,actor_owner,target_fid,target_name,mtype,success,result)
-    values(app.faction_id, auth.uid(), p_target_fid, public._fac_name(p_target_fid), p_type, suc, res);
-  return jsonb_build_object('ok',true,'success',suc,'result',res);
+    end if;
+
+    -- агенты возвращаются; при раскрытии — один пойман (средне)
+    update public.faction_economy set agents = agents + m.agents - (case when caught then 1 else 0 end)
+      where faction_id=m.actor_fid;
+    if caught then res := res || jsonb_build_object('caught',true,'actor_name',public._fac_name(m.actor_fid)); end if;
+
+    update public.spy_missions
+      set status='done', outcome=(case when ok then 'success' else 'fail' end), detected=caught, result=res
+      where id=m.id;
+  end loop;
 end$$;
 
 do $$
@@ -681,7 +866,8 @@ declare fn text;
 begin
   foreach fn in array array[
     'economy_transfer(text,text,numeric)','trade_propose(text,int)','trade_respond(uuid,boolean)','trade_close(uuid)',
-    'loan_issue(text,numeric,text)','loan_repay(uuid)','loan_dispute(uuid)','loan_verdict(uuid,text)','spy_mission(text,text)','_fac_name(text)'
+    'loan_issue(text,numeric,text)','loan_repay(uuid)','loan_dispute(uuid)','loan_verdict(uuid,text)','_fac_name(text)',
+    'spy_launch(text,text,int)','counterintel_set(int)','spy_cancel(uuid)'
   ] loop
     execute format('revoke all on function public.%s from public', fn);
     execute format('grant execute on function public.%s to authenticated', fn);
@@ -766,7 +952,8 @@ begin
   select * into eco from public.faction_economy where faction_id=app.faction_id;
   have := coalesce((eco.resources->>p_name)::numeric, 0);
   if have < p_units then raise exception 'not enough resource'; end if;
-  gain := floor(p_units * public._res_price(p_rarity) * 0.8);
+  -- доктрина: продажа ресурсов — часть ГС-экономики
+  gain := floor(p_units * public._res_price(p_rarity) * 0.8 * (public._faction_mods(app.faction_id)->>'gc')::numeric);
   update public.faction_economy
     set resources = jsonb_set(coalesce(resources,'{}'::jsonb), array[p_name], to_jsonb(have - p_units), true),
         gc = gc + gain
@@ -939,83 +1126,86 @@ grant execute on function public.economy_research(text,numeric) to authenticated
 create or replace function public._faction_mods(p_fid text)
 returns jsonb language plpgsql stable security definer set search_path=public as $$
 declare a public.faction_applications;
-  gc numeric:=0; sci numeric:=0; ag numeric:=0; mine numeric:=0; col numeric:=0; cc numeric:=0; cd numeric:=0;
+  gc numeric:=0; mine numeric:=0; bld numeric:=0; col numeric:=0; cc numeric:=0; cd numeric:=0; rsch numeric:=0;
+  scf int:=0; agf int:=0;   -- плоские: наука ОН/сут, агенты /сут
 begin
   select * into a from public.faction_applications where faction_id=p_fid and status='approved' order by updated_at desc limit 1;
   if not found then
-    return jsonb_build_object('gc',1,'sci',1,'agents',1,'mine',1,'colonize',1,'claim_cost',1,'claim_cd',1);
+    return jsonb_build_object('gc',1,'mine',1,'build',1,'research',1,'colonize',1,'claim_cost',1,'claim_cd',1,'sci_flat',0,'agents_flat',0);
   end if;
 
   case a.gov
-    when 'Республика'          then sci:=sci+0.15; gc:=gc+0.10; cd:=cd+0.15;
-    when 'Монархия'            then gc:=gc+0.20; sci:=sci-0.15;
-    when 'Империя'             then cc:=cc-0.25; cd:=cd-0.25; ag:=ag+0.10; gc:=gc-0.10;
-    when 'Олигархия'           then gc:=gc+0.25; sci:=sci-0.15;
-    when 'Диктатура'           then cd:=cd-0.20; ag:=ag+0.15; gc:=gc-0.10;
-    when 'Теократия'           then ag:=ag+0.15; gc:=gc+0.10; sci:=sci-0.20;
-    when 'Технократия'         then sci:=sci+0.30; gc:=gc-0.15;
-    when 'Корпоратократия'     then gc:=gc+0.20; mine:=mine+0.15; ag:=ag-0.10;
-    when 'Коллективный разум'  then sci:=sci+0.15; mine:=mine+0.15; cc:=cc+0.20;
-    when 'Машинный разум (ИИ)' then sci:=sci+0.20; ag:=ag+0.15; gc:=gc-0.15;
+    when 'Республика'          then gc:=gc+0.10; cd:=cd+0.15; scf:=scf+1;
+    when 'Монархия'            then gc:=gc+0.20; scf:=scf-1;
+    when 'Империя'             then cc:=cc-0.25; cd:=cd-0.25; gc:=gc-0.10; agf:=agf+1;
+    when 'Олигархия'           then gc:=gc+0.25; scf:=scf-1;
+    when 'Диктатура'           then cd:=cd-0.20; gc:=gc-0.10; agf:=agf+1;
+    when 'Теократия'           then gc:=gc+0.10; rsch:=rsch+0.15; scf:=scf-2; agf:=agf+1;
+    when 'Технократия'         then gc:=gc-0.15; bld:=bld+0.10; rsch:=rsch-0.25; scf:=scf+3;
+    when 'Корпоратократия'     then gc:=gc+0.20; mine:=mine+0.15; bld:=bld-0.10; agf:=agf-1;
+    when 'Коллективный разум'  then mine:=mine+0.15; cc:=cc+0.20; rsch:=rsch-0.10; scf:=scf+1;
+    when 'Машинный разум (ИИ)' then gc:=gc-0.15; bld:=bld-0.10; rsch:=rsch-0.15; scf:=scf+1; agf:=agf+1;
     else null;
   end case;
 
   case a.regime
-    when 'Демократический'   then gc:=gc+0.15; sci:=sci+0.05; ag:=ag-0.10;
-    when 'Эгалитарный'       then gc:=gc+0.10; sci:=sci+0.10; cc:=cc+0.10;
-    when 'Меритократический'  then sci:=sci+0.25; gc:=gc-0.10;
-    when 'Плутократический'   then gc:=gc+0.25; sci:=sci-0.10;
+    when 'Демократический'   then gc:=gc+0.15; agf:=agf-1;
+    when 'Эгалитарный'       then gc:=gc+0.10; cc:=cc+0.10; scf:=scf+1;
+    when 'Меритократический'  then gc:=gc-0.10; rsch:=rsch-0.15; scf:=scf+2;
+    when 'Плутократический'   then gc:=gc+0.25; scf:=scf-1;
     when 'Олигархический'     then gc:=gc+0.15; mine:=mine-0.10;
-    when 'Авторитарный'       then ag:=ag+0.20; mine:=mine+0.10; gc:=gc-0.10;
-    when 'Тоталитарный'       then mine:=mine+0.25; ag:=ag+0.15; gc:=gc-0.15;
-    when 'Деспотичный'        then cd:=cd-0.20; ag:=ag+0.10; sci:=sci-0.15;
-    when 'Анархический'       then col:=col-0.25; sci:=sci+0.10; gc:=gc-0.20;
+    when 'Авторитарный'       then mine:=mine+0.10; gc:=gc-0.10; agf:=agf+1;
+    when 'Тоталитарный'       then mine:=mine+0.25; gc:=gc-0.15; agf:=agf+1;
+    when 'Деспотичный'        then cd:=cd-0.20; scf:=scf-1; agf:=agf+1;
+    when 'Анархический'       then col:=col-0.25; gc:=gc-0.20; bld:=bld+0.15; scf:=scf+1;
     else null;
   end case;
 
   case a.ideology
-    when 'Технократия (Культ науки)' then sci:=sci+0.30; gc:=gc-0.15;
-    when 'Милитаризм (Культ силы)'   then ag:=ag+0.20; cc:=cc-0.15; gc:=gc-0.10;
-    when 'Пацифизм'                  then gc:=gc+0.25; ag:=ag-0.20;
+    when 'Технократия (Культ науки)' then gc:=gc-0.15; rsch:=rsch-0.25; scf:=scf+3;
+    when 'Милитаризм (Культ силы)'   then cc:=cc-0.15; gc:=gc-0.10; rsch:=rsch+0.10; agf:=agf+1;
+    when 'Пацифизм'                  then gc:=gc+0.25; agf:=agf-1;
     when 'Экспансионизм'             then col:=col-0.30; cc:=cc-0.30; cd:=cd-0.40; gc:=gc-0.10;
-    when 'Изоляционизм'              then gc:=gc+0.15; sci:=sci+0.10; cc:=cc+0.25; cd:=cd+0.25;
-    when 'Ксенофилия'                then gc:=gc+0.20; ag:=ag-0.10;
-    when 'Ксенофобия'                then ag:=ag+0.15; mine:=mine+0.10; gc:=gc-0.20;
-    when 'Спиритуализм'              then ag:=ag+0.20; sci:=sci-0.15;
-    when 'Трансгуманизм'             then sci:=sci+0.20; ag:=ag+0.10; gc:=gc-0.10;
+    when 'Изоляционизм'              then gc:=gc+0.15; cc:=cc+0.25; cd:=cd+0.25; scf:=scf+1;
+    when 'Ксенофилия'                then gc:=gc+0.20; agf:=agf-1;
+    when 'Ксенофобия'                then mine:=mine+0.10; gc:=gc-0.20; agf:=agf+1;
+    when 'Спиритуализм'              then rsch:=rsch+0.15; scf:=scf-1; agf:=agf+1;
+    when 'Трансгуманизм'             then gc:=gc-0.10; rsch:=rsch-0.15; scf:=scf+2;
     when 'Экоцентризм'               then mine:=mine+0.30; gc:=gc-0.20;
-    when 'Индустриализм'             then gc:=gc+0.25; mine:=mine+0.10; sci:=sci-0.15;
+    when 'Индустриализм'             then gc:=gc+0.25; mine:=mine+0.10; bld:=bld-0.15; rsch:=rsch+0.10; scf:=scf-1;
     else null;
   end case;
 
   case a.race
-    when 'Гуманоиды'                  then gc:=gc+0.05; sci:=sci+0.05;
-    when 'Млекопитающие'              then gc:=gc+0.20; sci:=sci-0.05;
-    when 'Рептилоиды'                 then ag:=ag+0.20; gc:=gc-0.10;
-    when 'Авианы (Птицеподобные)'     then cd:=cd-0.25; ag:=ag+0.10; gc:=gc-0.05;
-    when 'Инсектоиды'                 then mine:=mine+0.20; gc:=gc+0.10; sci:=sci-0.15;
+    when 'Гуманоиды'                  then gc:=gc+0.05; scf:=scf+1;
+    when 'Млекопитающие'              then gc:=gc+0.20;
+    when 'Рептилоиды'                 then gc:=gc-0.10; agf:=agf+1;
+    when 'Авианы (Птицеподобные)'     then cd:=cd-0.25; gc:=gc-0.05; agf:=agf+1;
+    when 'Инсектоиды'                 then mine:=mine+0.20; gc:=gc+0.10; rsch:=rsch+0.10; scf:=scf-1;
     when 'Акватики (Водные)'          then gc:=gc+0.15; col:=col+0.15;
-    when 'Плантоиды (Растениевидные)' then mine:=mine+0.15; gc:=gc+0.10; ag:=ag-0.10;
+    when 'Плантоиды (Растениевидные)' then mine:=mine+0.15; gc:=gc+0.10; agf:=agf-1;
     when 'Литоиды (Каменные)'         then mine:=mine+0.25; gc:=gc-0.15;
-    when 'Синтетики / Киборги'        then sci:=sci+0.25; gc:=gc-0.15;
-    when 'Энергетические сущности'    then sci:=sci+0.20; ag:=ag+0.10; gc:=gc-0.15;
+    when 'Синтетики / Киборги'        then gc:=gc-0.15; rsch:=rsch-0.15; scf:=scf+2;
+    when 'Энергетические сущности'    then gc:=gc-0.15; rsch:=rsch-0.10; scf:=scf+1; agf:=agf+1;
     else null;
   end case;
 
   case a.civ_type
     when 'frontier' then col:=col-0.25; cd:=cd-0.25; gc:=gc-0.15;
-    when 'colony'   then gc:=gc+0.20; mine:=mine+0.10; cc:=cc+0.15;
+    when 'colony'   then gc:=gc+0.20; mine:=mine+0.10; cc:=cc+0.15; bld:=bld-0.10;
     else null;
   end case;
 
   return jsonb_build_object(
-    'gc',         greatest(0.3,  1+gc),
-    'sci',        greatest(0.3,  1+sci),
-    'agents',     greatest(0.3,  1+ag),
-    'mine',       greatest(0.3,  1+mine),
-    'colonize',   greatest(0.3,  1+col),
-    'claim_cost', greatest(0.3,  1+cc),
-    'claim_cd',   greatest(0.25, 1+cd));
+    'gc',          greatest(0.3,  1+gc),
+    'mine',        greatest(0.3,  1+mine),
+    'build',       greatest(0.3,  1+bld),
+    'research',    greatest(0.3,  1+rsch),
+    'colonize',    greatest(0.3,  1+col),
+    'claim_cost',  greatest(0.3,  1+cc),
+    'claim_cd',    greatest(0.25, 1+cd),
+    'sci_flat',    scf,
+    'agents_flat', agf);
 end$$;
 revoke all on function public._faction_mods(text) from public;
 
@@ -1034,18 +1224,25 @@ declare
   r record; col record; bld record; relem jsonb; thr jsonb;
   res_add jsonb := '{}'::jsonb; res_sub jsonb := '{}'::jsonb; merged jsonb; k text;
   rname text; rr text; rate numeric; escorted boolean; attacked boolean; chance numeric; avail numeric; shipped numeric;
-  mods jsonb; m_mine numeric;
+  mods jsonb; m_mine numeric; m_gc numeric;
 begin
   select * into eco from public.faction_economy where faction_id = p_fid for update;
   if not found then return jsonb_build_object('faction_id',p_fid,'days',0); end if;
 
   mods := public._faction_mods(p_fid);          -- доктрина государства
   m_mine := (mods->>'mine')::numeric;
+  m_gc   := (mods->>'gc')::numeric;
+  -- дебафф дестабилизации (вражеская операция) — режет ГС-доход, пока активен
+  if eco.debuff_until is not null and eco.debuff_until > now() then
+    m_gc := m_gc * (1 - coalesce(eco.debuff_pct,0));
+  end if;
 
   update public.unit_production set status='done' where faction_id=p_fid and status='queued' and ready_at<=now();
 
   -- завершённые проекты колоний (слоты/терраформ/обустройство среды)
   perform public._apply_colony_projects(p_fid);
+  -- готовые тайные операции (разрешение успеха/раскрытия, эффекты, возврат агентов)
+  perform public._spy_resolve(p_fid);
 
   if eco.research_active is not null and eco.research_ready is not null and eco.research_ready <= now() then
     update public.faction_economy
@@ -1064,10 +1261,8 @@ begin
     end if;
   end loop;
 
-  -- доктрина: множители дохода/науки/агентов
-  inc_gc     := round(inc_gc     * (mods->>'gc')::numeric);
-  inc_sci    := round(inc_sci    * (mods->>'sci')::numeric);
-  inc_agents := round(inc_agents * (mods->>'agents')::numeric);
+  -- Доктрина применяется к НАКОПЛЕНИЮ за весь период (base*mult*d), а не поштучно
+  -- за день — иначе бонусы к малым показателям (наука/агенты) съедало округление.
 
   if d >= 1 then
     -- добыча: каждое mining-здание добывает только назначенные месторождения, 1 слот = 1 месторождение
@@ -1104,6 +1299,7 @@ begin
       trade_gc := trade_gc + shipped * coalesce(r.price,0);
       update public.faction_economy set gc = gc + round(shipped*coalesce(r.price,0)*0.33) where faction_id = r.b_fid;
     end loop;
+    trade_gc := round(trade_gc * m_gc);   -- доктрина: торговля — часть ГС-экономики
 
     merged := coalesce(eco.resources,'{}'::jsonb);
     for k in select jsonb_object_keys(res_add) loop
@@ -1113,10 +1309,12 @@ begin
       merged := jsonb_set(merged, array[k], to_jsonb(greatest(0, coalesce((merged->>k)::numeric,0) - (res_sub->>k)::numeric)), true);
     end loop;
 
+    -- наука/агенты — ПЛОСКИЙ бонус доктрины (+N в сутки), не процент (дискретны);
+    -- за день не уходит в минус (greatest 0).
     update public.faction_economy
-      set gc = gc + inc_gc*d + trade_gc,
-          science = science + inc_sci*d,
-          agents = agents + inc_agents*d,
+      set gc = gc + round(inc_gc * m_gc * d) + trade_gc,
+          science = science + greatest(0, inc_sci    + (mods->>'sci_flat')::numeric)    * d,
+          agents  = agents  + greatest(0, inc_agents + (mods->>'agents_flat')::numeric) * d,
           resources = merged,
           last_tick = last_tick + (d || ' days')::interval
       where faction_id=p_fid returning * into eco;
@@ -1124,7 +1322,11 @@ begin
 
   return jsonb_build_object('faction_id',eco.faction_id,'gc',eco.gc,'science',eco.science,'agents',eco.agents,
     'resources',eco.resources,'last_tick',eco.last_tick,'days',d, 'mods', mods,
-    'income', jsonb_build_object('gc',inc_gc,'science',inc_sci,'agents',inc_agents,'trade',trade_gc,'pirate',pirate));
+    'income', jsonb_build_object(
+      'gc',     round(inc_gc * m_gc),
+      'science',greatest(0, inc_sci    + (mods->>'sci_flat')::numeric),
+      'agents', greatest(0, inc_agents + (mods->>'agents_flat')::numeric),
+      'trade',  trade_gc, 'pirate', pirate));
 end$$;
 
 -- ── Назначение месторождений для mining-здания ───────────────

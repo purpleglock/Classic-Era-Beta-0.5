@@ -139,7 +139,7 @@ async function init() {
     } else if (event === 'TOKEN_REFRESHED' && session) {
       await loadUserRole(session.user); updAuthUI();
     } else if (event === 'SIGNED_OUT') {
-      user = null; userProfile = { display_name:'', avatar_url:'' }; _pgCache.clear();
+      user = null; userProfile = { display_name:'', avatar_url:'' }; _pgCache.clear(); _myFactionApproved = false;
       if (editMode) exitEdit(false);
       closeAp(); updAuthUI();
       await Promise.all([loadPgs(), loadProfiles(), loadHomePage()]);
@@ -289,6 +289,14 @@ async function loadUserRole(authUser) {
     // «Управление» (и др. стафф-пункты) не появлялись на ПК, если ответ
     // о роли приходил уже после первичного рендера навигации (медленный канал).
     try { if (typeof buildNav === 'function') buildNav(); if (typeof updAuthUI === 'function') updAuthUI(); } catch(e) {}
+
+    // Игрок = есть одобренная анкета государства (роль 'player' могла не проставиться
+    // при одобрении). Даёт доступ к локациям даже без корректной роли в user_roles.
+    try {
+      const fr = await getJSON(`${SB_URL}/rest/v1/faction_applications?owner_id=eq.${authUser.id}&status=eq.approved&select=id&limit=1`);
+      _myFactionApproved = Array.isArray(fr) && fr.length > 0;
+      if (_myFactionApproved) { try { buildNav(); } catch(e) {} }
+    } catch(e) {}
 
     // Метаданные профиля — вторично, с таймаутом 4 с (не должны вешать роль/меню)
     try {

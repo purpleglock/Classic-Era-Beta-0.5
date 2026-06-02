@@ -118,10 +118,13 @@ let _pickerCat = 'all', _pickerQ = '';
 const _pgCache = new Map();  
 const VALID_ROLES = ['superadmin','editor','moderator','player','viewer'];
 // ── Доступ к локациям (форумные RP-страницы для игроков) ──
-// «Игрок+»: вошёл, не забанен, роль не зритель. Видит и пишет в локациях.
+// «Игрок+»: вошёл, не забанен, и ЛИБО роль игрок/стафф, ЛИБО есть одобренное
+// государство (роль 'player' могла не проставиться при одобрении — подстраховка).
+let _myFactionApproved = false;
 function canSeeLocations() {
-  return !!(typeof user !== 'undefined' && user && !user.is_banned &&
-    ['superadmin','editor','moderator','player'].includes(user.role));
+  if (typeof user === 'undefined' || !user || user.is_banned) return false;
+  if (['superadmin','editor','moderator','player'].includes(user.role)) return true;
+  return _myFactionApproved;
 }
 // «Голос локации»: администрация — может писать от имени локации и модерировать.
 function isLocationStaff() {
