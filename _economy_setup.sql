@@ -49,6 +49,7 @@ create index if not exists cb_faction_idx         on public.colony_buildings(fac
 alter table public.faction_economy add column if not exists resources jsonb default '{}'::jsonb;
 alter table public.colonies        add column if not exists resources jsonb default '[]'::jsonb;
 -- v6: исследования (открытые узлы + текущий проект, 1 активный)
+alter table public.colony_buildings add column if not exists mining_targets jsonb default '[]'::jsonb;
 alter table public.faction_economy add column if not exists research jsonb default '[]'::jsonb;
 alter table public.faction_economy add column if not exists research_active text;
 alter table public.faction_economy add column if not exists research_ready  timestamptz;
@@ -143,6 +144,16 @@ begin
     order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction application'; end if;
   if app.faction_id is null then raise exception 'application has no faction_id'; end if;
+
+  -- синхронизируем ресурсы колоний из данных карты (только у пустых — быстро)
+  update public.colonies c
+  set resources = coalesce((
+    select pl->'resources'
+    from public.map_systems ms, jsonb_array_elements(ms.planets) pl
+    where ms.id = c.system_id and pl->>'name' = c.planet_name limit 1
+  ), '[]'::jsonb)
+  where c.faction_id = app.faction_id
+    and (c.resources is null or c.resources = '[]'::jsonb);
 
   select * into eco from public.faction_economy where faction_id = app.faction_id;
   if found then return eco; end if;   -- уже инициализировано
@@ -823,7 +834,7 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare
   eco public.faction_economy; d int;
   inc_gc numeric:=0; inc_sci numeric:=0; inc_agents int:=0; trade_gc numeric:=0; pirate boolean:=false;
-  r record; col record; relem jsonb; thr jsonb;
+  r record; col record; bld record; relem jsonb; thr jsonb;
   res_add jsonb := '{}'::jsonb; res_sub jsonb := '{}'::jsonb; merged jsonb; k text;
   rname text; rr text; rate numeric; escorted boolean; attacked boolean; chance numeric; avail numeric; shipped numeric;
 begin
@@ -850,19 +861,22 @@ begin
   end loop;
 
   if d >= 1 then
-    for col in
-      select c.resources as cres,
-             (select coalesce(sum(cb.slots_open),0) from public.colony_buildings cb where cb.colony_id=c.id and cb.btype='mining') as mslots
-      from public.colonies c where c.faction_id=p_fid
+    -- добыча: каждое mining-здание добывает только назначенные месторождения, 1 слот = 1 месторождение
+    for bld in
+      select cb.mining_targets, c.resources as cres
+      from public.colony_buildings cb
+      join public.colonies c on c.id = cb.colony_id
+      where cb.faction_id = p_fid and cb.btype = 'mining'
+        and jsonb_array_length(coalesce(cb.mining_targets,'[]'::jsonb)) > 0
+        and c.resources is not null and jsonb_array_length(c.resources) > 0
     loop
-      if col.mslots > 0 and col.cres is not null then
-        for relem in select value from jsonb_array_elements(col.cres) loop
-          rname := relem->>'name'; if rname is null then continue; end if;
-          rr := coalesce(relem->>'r','common');
-          rate := case rr when 'uncommon' then 12 when 'rare' then 5 when 'epic' then 2 when 'legendary' then 1 else 25 end;
-          res_add := jsonb_set(res_add, array[rname], to_jsonb(coalesce((res_add->>rname)::numeric,0) + col.mslots*rate*d), true);
-        end loop;
-      end if;
+      for rname in select value from jsonb_array_elements_text(bld.mining_targets) loop
+        select value into relem from jsonb_array_elements(bld.cres) where value->>'name' = rname limit 1;
+        if relem is null then continue; end if;
+        rr := coalesce(relem->>'r','common');
+        rate := case rr when 'uncommon' then 12 when 'rare' then 5 when 'epic' then 2 when 'legendary' then 1 else 25 end;
+        res_add := jsonb_set(res_add, array[rname], to_jsonb(coalesce((res_add->>rname)::numeric,0) + rate*d), true);
+      end loop;
     end loop;
 
     for r in select volume, resource, price, convoy, threats, b_fid from public.trade_routes where status='active' and a_fid=p_fid loop
@@ -902,6 +916,23 @@ begin
     'resources',eco.resources,'last_tick',eco.last_tick,'days',d,
     'income', jsonb_build_object('gc',inc_gc,'science',inc_sci,'agents',inc_agents,'trade',trade_gc,'pirate',pirate));
 end$$;
+
+-- ── Назначение месторождений для mining-здания ───────────────
+create or replace function public.mining_assign(p_building_id uuid, p_targets jsonb)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare b public.colony_buildings;
+begin
+  select * into b from public.colony_buildings where id = p_building_id and owner_id = auth.uid();
+  if not found then raise exception 'building not found'; end if;
+  if b.btype != 'mining' then raise exception 'not a mining building'; end if;
+  if jsonb_array_length(coalesce(p_targets,'[]'::jsonb)) > b.slots_open then
+    raise exception 'too many targets: max % slots', b.slots_open;
+  end if;
+  update public.colony_buildings set mining_targets = coalesce(p_targets,'[]'::jsonb) where id = p_building_id;
+  return jsonb_build_object('ok', true);
+end$$;
+revoke all on function public.mining_assign(uuid, jsonb) from public;
+grant execute on function public.mining_assign(uuid, jsonb) to authenticated;
 
 -- economy_tick(): начисление СВОЕЙ фракции (вызывается при заходе — мгновенная
 -- актуализация; идемпотентно, не двоит благодаря FOR UPDATE в economy_accrue).
@@ -953,3 +984,17 @@ begin
     raise notice 'pg_cron недоступен — ежедневный тик обеспечит GitHub Action keep-alive.yml';
   end if;
 end$$;
+
+-- ════════════════════════════════════════════════════════════
+-- ПАТЧ: backfill ресурсов колоний из данных карты
+-- Исправляет колонии, созданные до добавления ресурсов (resources = []).
+-- Безопасно запускать повторно — трогает только пустые колонии.
+-- ════════════════════════════════════════════════════════════
+update public.colonies c
+set resources = pl->'resources'
+from public.map_systems ms, jsonb_array_elements(ms.planets) pl
+where ms.id = c.system_id
+  and pl->>'name' = c.planet_name
+  and (c.resources is null or c.resources = '[]'::jsonb or jsonb_array_length(c.resources) = 0)
+  and jsonb_typeof(pl->'resources') = 'array'
+  and jsonb_array_length(pl->'resources') > 0;

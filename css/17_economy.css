@@ -84,6 +84,29 @@
 .ec-rar-legendary { border-color: color-mix(in srgb, #ffaa00 55%, transparent); color: #ffc24d; }
 .ec-nres { font-size: 10px; color: var(--t4); font-style: italic; }
 .ec-pl-hint { font-size: 11px; color: var(--t3); padding-left: 26px; }
+/* добыча: строка в заголовке колонии */
+.ec-pl-mine { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding-left: 26px; padding-top: 4px; }
+.ec-pl-mine .ec-rchip b { opacity: .95; }
+.ec-mine-hint { font-size: 10px; color: var(--t3); }
+.ec-mine-empty { font-size: 10px; color: var(--t4); font-style: italic; }
+/* добыча: заголовок секции внутри карточки здания */
+.ec-bld-mine-hd { display: flex; align-items: center; justify-content: space-between; font-size: 10px; color: var(--t3); margin-bottom: 3px; }
+.ec-mine-slots-used { font-family: var(--font-mono); color: var(--t2); background: var(--b3); border: 1px solid var(--w2); border-radius: 4px; padding: 0 6px; font-size: 10px; }
+.ec-bld-mine-empty { font-size: 10px; color: var(--t4); font-style: italic; }
+/* список месторождений */
+.ec-mine-list { display: flex; flex-direction: column; gap: 1px; }
+.ec-mine-row { display: flex; align-items: center; gap: 7px; padding: 4px 6px; border-radius: 6px; cursor: pointer; transition: background .1s; user-select: none; }
+.ec-mine-row:hover:not(.locked) { background: var(--b3); }
+.ec-mine-row.active { background: color-mix(in srgb, var(--gd) 10%, var(--b1)); }
+.ec-mine-row.active:hover { background: color-mix(in srgb, var(--err) 10%, var(--b1)); }
+.ec-mine-row.locked { opacity: .38; cursor: default; }
+.ec-mine-chk { font-size: 11px; width: 12px; text-align: center; color: var(--t4); flex-shrink: 0; }
+.ec-mine-row.active .ec-mine-chk { color: var(--gd); }
+.ec-mine-ic { font-size: 13px; flex-shrink: 0; }
+.ec-mine-nm { flex: 1; font-size: 12px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-mine-row.active .ec-mine-nm { color: var(--t1); font-weight: 500; }
+.ec-mine-rt { font-family: var(--font-mono); font-size: 10px; color: var(--gd); font-weight: 700; flex-shrink: 0; white-space: nowrap; }
+.ec-mine-rt-dim { color: var(--t4); font-weight: 400; }
 .ec-pl-own { cursor: pointer; transition: background .12s; }
 .ec-pl-own:hover { background: var(--b3); }
 .ec-pl-own.open { background: color-mix(in srgb, var(--gd) 8%, var(--b2)); }

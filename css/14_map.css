@@ -42,6 +42,9 @@
 .gm-giant .gm-label{font-size:30px;color:#ffe6b0}
 .gm-linksel img{filter:drop-shadow(0 0 18px var(--gd)) brightness(1.3)}
 #gm-wrap.gm-editing .gm-star{cursor:move}
+/* Маркер столицы фракции */
+.gm-cap{position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:15px;line-height:1;pointer-events:none;z-index:6;text-shadow:0 0 4px #000,0 0 9px currentColor;filter:drop-shadow(0 0 2px #000)}
+.gm-capital img{filter:drop-shadow(0 0 10px currentColor)}
 
 /* Координаты */
 #gm-coord{
@@ -104,6 +107,7 @@
 .gm-fac-info{flex:1;min-width:0}
 .gm-fac-name{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;letter-spacing:.5px;line-height:1.1;text-shadow:0 1px 4px rgba(0,0,0,.6)}
 .gm-fac-leader{font-size:11px;color:var(--t2);margin-top:1px}
+.gm-fac-capital{font-size:11px;color:var(--fcol,#ffd24d);margin-top:2px;opacity:.9}
 .gm-fac-swatch{width:16px;height:16px;border-radius:4px;border:1px solid;flex-shrink:0}
 .gm-panel-desc{font-size:13px;color:var(--t2);line-height:1.6;margin:0 0 14px}
 .gm-panel-sub{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gdl);border-bottom:1px solid var(--w2);padding-bottom:6px;margin-bottom:10px}

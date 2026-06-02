@@ -485,11 +485,13 @@ function adTabTerritory(e) {
     return entry ? entry.app.name : fid;
   };
 
+  const capId = e.app && e.app.system_id;
   const sysRow = (s, isOwn) => `<div class="ad-sys-row">
-    <span class="ad-sys-name">${esc(s.name || s.id)}</span>
+    <span class="ad-sys-name">${capId === s.id ? '★ ' : ''}${esc(s.name || s.id)}</span>
     <span class="ad-sys-owner ${s.faction ? (isOwn ? 'mine' : 'other') : 'neutral'}">${esc(facName(s.faction))}</span>
     <span class="ad-sys-acts">
       ${!isOwn ? `<button class="btn btn-gd btn-xs" onclick="adGrantSystem(${adArg(s.id)})">→ Взять</button>` : ''}
+      ${capId === s.id ? '<span class="ad-dim" style="font-size:10px;white-space:nowrap">★ столица</span>' : `<button class="btn btn-gh btn-xs" onclick="adSetCapital(${adArg(s.id)})" title="Сделать столицей: пометит на карте ★ и перенесёт сюда все колонии">★ Столица</button>`}
       ${s.faction ? `<button class="btn btn-rd btn-xs" onclick="adReleaseSystem(${adArg(s.id)})">✕ Освободить</button>` : ''}
     </span>
   </div>`;
@@ -517,6 +519,27 @@ function adTabTerritory(e) {
       oninput="AD.sysSearch=this.value;adPaint()" style="width:100%;margin-bottom:8px">
     <div class="ad-sys-list">${searchHtml}</div>
   </div>`;
+}
+
+// Сделать систему СТОЛИЦЕЙ фракции: анкета (для маркера ★ и спавна) + карта + перенос колоний
+async function adSetCapital(sysId) {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e) return;
+  const sys = (AD.systems || []).find(s => s.id === sysId);
+  if (!confirm(`Сделать «${sys ? sys.name : sysId}» столицей фракции?\nСистема пометится столицей ★ на карте, закрепится за фракцией, и все ${e.colonies.length} колоний переедут сюда.`)) return;
+  AD.busy = true;
+  try {
+    await dbPatch('faction_applications', `faction_id=eq.${encodeURIComponent(AD.sel)}&status=eq.approved`, { system_id: sysId });
+    await dbPatch('map_systems', `id=eq.${encodeURIComponent(sysId)}`, { faction: AD.sel });
+    if (e.colonies.length) await dbPatch('colonies', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { system_id: sysId });
+    // локально
+    if (e.app) e.app.system_id = sysId;
+    e.colonies.forEach(c => { c.system_id = sysId; });
+    AD.colonies.forEach(c => { if (c.faction_id === AD.sel) c.system_id = sysId; });
+    if (sys) { sys.faction = AD.sel; if (!e.systems.find(x => x.id === sysId)) e.systems.push(sys); }
+    toast('Столица перенесена', 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
 }
 
 async function adGrantSystem(sysId) {

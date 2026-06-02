@@ -39,8 +39,9 @@ async function loadGalaxyData() {
     // мета фракций (флаг/герб, лидер) из анкет — необязательно
     GM.facMeta = {};
     try {
-      const apps = await dbGet('faction_applications', 'status=eq.approved&select=faction_id,herald_url,leader,gov,name');
-      (apps || []).forEach(a => { if (a.faction_id) GM.facMeta[a.faction_id] = a; });
+      const apps = await dbGet('faction_applications', 'status=eq.approved&select=faction_id,herald_url,leader,gov,name,system_id,planet_name');
+      GM.capitals = {};  // system_id -> faction_id (столица фракции)
+      (apps || []).forEach(a => { if (a.faction_id) { GM.facMeta[a.faction_id] = a; if (a.system_id) GM.capitals[a.system_id] = a.faction_id; } });
     } catch (e) { /* таблицы анкет может не быть */ }
   } catch (e) {
     console.warn('[map] load error', e);
@@ -461,12 +462,17 @@ function gmReadable(c) {
 function gmDrawStars() {
   const layer = document.getElementById('gm-stars');
   if (!layer) return;
+  const caps = GM.capitals || {};
   layer.innerHTML = GM.systems.map(s => {
     const giant = s.is_giant ? ' gm-giant' : '';
     const sel = (GM.linkFrom === s.id) ? ' gm-linksel' : '';
-    return `<div class="gm-star${giant}${sel}" data-id="${esc(s.id)}" style="left:${s.x}px;top:${s.y}px"
+    const capFid = caps[s.id];
+    const capCol = capFid ? gmReadable((gmFaction(capFid) || {}).color || '#ffd24d') : '';
+    const capHtml = capFid ? `<span class="gm-cap" title="Столица: ${esc((GM.facMeta[capFid] || {}).name || '')}" style="color:${capCol}">★</span>` : '';
+    return `<div class="gm-star${giant}${sel}${capFid ? ' gm-capital' : ''}" data-id="${esc(s.id)}" style="left:${s.x}px;top:${s.y}px"
         onmousedown="gmStarDown(event,'${esc(s.id)}')" onclick="gmStarClick(event,'${esc(s.id)}')">
         <img src="${GM_BASE}stars/star_${esc(s.star_type || 'yellow')}.png" draggable="false" alt="">
+        ${capHtml}
         <span class="gm-label">${esc(s.name)}</span>
       </div>`;
   }).join('');
@@ -510,6 +516,7 @@ function gmOpenPanel(sys) {
       <div class="gm-fac-info">
         <div class="gm-fac-name" style="color:${col}">${esc(fac.name)}</div>
         ${meta && meta.leader ? `<div class="gm-fac-leader">${esc(meta.leader)}</div>` : ''}
+        ${meta && meta.planet_name && GM.capitals && GM.capitals[sys.id] === fac.id ? `<div class="gm-fac-capital">★ ${esc(meta.planet_name)}</div>` : ''}
       </div>
     </div>`;
   })() : `<div class="gm-fac-badge gm-neutral">Нейтральная система</div>`;

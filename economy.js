@@ -264,6 +264,62 @@ function ecIncomePreview() {
 }
 function ecResEntries() { const res = (EC.eco && EC.eco.resources) || {}; return Object.keys(res).map(k => [k, +res[k] || 0]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]); }
 
+// Ресурсы планеты для mining-здания (из данных карты или снимка колонии)
+function ecMiningPlanetRes(b) {
+  const colony = EC.colonies.find(c => c.id === b.colony_id);
+  if (!colony) return [];
+  const sys = EC.systems.find(s => s.id === colony.system_id);
+  const planet = (sys && (sys.planets || []).find(p => p.name === colony.planet_name)) || colony;
+  return (planet && Array.isArray(planet.resources)) ? planet.resources.filter(r => r && r.name) : [];
+}
+// Суммарная добыча назначенных месторождений по всем mining-зданиям колонии (для заголовка)
+function ecColonyMinePreview(blds, planet) {
+  const mBlds = blds.filter(b => b.btype === 'mining');
+  if (!mBlds.length) return '';
+  const res = (planet && Array.isArray(planet.resources)) ? planet.resources.filter(r => r && r.name) : [];
+  if (!res.length) return '';
+  const totals = new Map();
+  mBlds.forEach(b => {
+    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(name => {
+      const ri = res.find(r => r.name === name); if (!ri) return;
+      const rate = EC_RES_RATE[ri.r || 'common'] || 25;
+      totals.set(name, (totals.get(name) || 0) + rate);
+    });
+  });
+  if (!totals.size) {
+    const totalSlots = mBlds.reduce((s, b) => s + b.slots_open, 0);
+    return `<div class="ec-pl-mine ec-mine-empty">⛏ ${totalSlots} слот. — раскройте здание, чтобы выбрать месторождения</div>`;
+  }
+  const chips = [...totals.entries()].map(([name, total]) => {
+    const ri = res.find(r => r.name === name) || {};
+    return `<span class="ec-rchip ec-rar-${ri.r || 'common'}" title="${esc(name)}: +${total}/сут"><span class="ec-rchip-i">${esc(ri.icon || '◈')}</span>${esc(name)} <b>+${total}</b></span>`;
+  }).join('');
+  return `<div class="ec-pl-mine">⛏ ${chips}<span class="ec-mine-hint">/сут</span></div>`;
+}
+// Назначить месторождения для mining-здания
+async function ecMiningAssign(bid, targets) {
+  if (EC.busy) return; EC.busy = true;
+  try {
+    await ecRpc('mining_assign', { p_building_id: bid, p_targets: targets });
+    const b = EC.buildings.find(x => x.id === bid);
+    if (b) b.mining_targets = targets;
+    ecPaintCabinet();
+  } catch(e) { toast(ecErr(e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+function ecToggleMiningTarget(bid, resName) {
+  const b = EC.buildings.find(x => x.id === bid);
+  if (!b) return;
+  const targets = [...(Array.isArray(b.mining_targets) ? b.mining_targets : [])];
+  const idx = targets.indexOf(resName);
+  if (idx >= 0) { targets.splice(idx, 1); }
+  else {
+    if (targets.length >= b.slots_open) { toast(`Максимум ${b.slots_open} месторождений (слотов открыто: ${b.slots_open})`, 'err'); return; }
+    targets.push(resName);
+  }
+  ecMiningAssign(bid, targets);
+}
+
 // ── Рендер кабинета ─────────────────────────────────────────
 function ecTreasuryHtml() {
   const inc = ecIncomePreview();
@@ -410,12 +466,14 @@ function ecColonyRowHtml(colony, sys) {
   const incTxt = [incGc ? `+${ecNum(incGc)} ГС` : '', incSci ? `+${ecNum(incSci)} ОН` : ''].filter(Boolean).join(' ');
   // ресурсы: из планеты на карте (если есть) или из снимка самой колонии
   const planet = (sys && (sys.planets || []).find(x => x.name === colony.planet_name)) || colony;
+  const minePreview = ecColonyMinePreview(blds, planet);
   const head = `<div class="ec-pl ec-pl-own${open ? ' open' : ''}" onclick="ecToggleColony('${colony.id}')">
     <div class="ec-pl-top">
       <div class="ec-pl-l"><span class="ec-pl-ic">🏙</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name || 'Колония')}</div><div class="ec-pl-sb">${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div></div></div>
       <div class="ec-pl-r"><span class="ec-pl-cells">⬚ ${used}/${cap}</span>${incTxt ? `<span class="ec-pl-inc">${incTxt}/сут</span>` : ''}<span class="ec-pl-chev">${open ? '▾' : '▸'}</span></div>
     </div>
     <div class="ec-pl-res">${ecPlanetResChips(planet)}</div>
+    ${minePreview}
   </div>`;
   return head + (open ? `<div class="ec-pl-detail">${ecColonyManage(colony)}</div>` : '');
 }
@@ -925,6 +983,30 @@ function ecBuildingRow(b) {
     ? `<span class="ec-maxed">${EC_MAX_SLOTS}/${EC_MAX_SLOTS}</span>`
     : `<button class="btn btn-gh btn-xs" onclick="ecOpenSlot('${b.id}')">+ слот · ${ecNum(d.ladder[b.slots_open])} ГС</button>`;
   const slotCount = `<span class="ec-slot-count">${b.slots_open}/${EC_MAX_SLOTS}</span>`;
+  let mineHtml = '';
+  if (b.btype === 'mining') {
+    const allRes = ecMiningPlanetRes(b);
+    const targets = Array.isArray(b.mining_targets) ? b.mining_targets : [];
+    if (allRes.length) {
+      const rows = allRes.map(r => {
+        const active = targets.includes(r.name);
+        const rate = EC_RES_RATE[r.r || 'common'] || 25;
+        const canAdd = !active && targets.length < b.slots_open;
+        const cls = active ? 'active' : canAdd ? '' : 'locked';
+        const onclick = (active || canAdd) ? `ecToggleMiningTarget(${ecArg(b.id)},${ecArg(r.name)})` : '';
+        const tip = active ? `Добывается · нажмите чтобы остановить` : canAdd ? `Нажмите чтобы начать добычу` : `Нет свободных слотов`;
+        return `<div class="ec-mine-row ${cls}" onclick="${onclick}" title="${tip}">
+          <span class="ec-mine-chk">${active ? '✓' : '○'}</span>
+          <span class="ec-mine-ic ec-rar-${r.r || 'common'}">${esc(r.icon || '◈')}</span>
+          <span class="ec-mine-nm">${esc(r.name)}</span>
+          <span class="ec-mine-rt">${active ? `+${rate}/сут` : `<span class="ec-mine-rt-dim">+${rate}/сут</span>`}</span>
+        </div>`;
+      }).join('');
+      mineHtml = `<div class="ec-bld-mine-hd">⛏ Месторождения <span class="ec-mine-slots-used">${targets.length}/${b.slots_open} слот.</span></div><div class="ec-mine-list">${rows}</div>`;
+    } else {
+      mineHtml = `<div class="ec-bld-mine-empty">◌ планета без ресурсов — только ГС</div>`;
+    }
+  }
   return `<div class="ec-bld">
     <div class="ec-bld-top">
       <span class="ec-bld-name">${esc(d.name)}</span>
@@ -932,6 +1014,7 @@ function ecBuildingRow(b) {
     </div>
     <div class="ec-slots" title="${b.slots_open} / ${EC_MAX_SLOTS} слотов открыто">${dots}</div>
     <div class="ec-bld-inc">${esc(incTxt)}</div>
+    ${mineHtml}
     <div class="ec-bld-act">${slotCount}${openBtn}</div>
   </div>`;
 }
