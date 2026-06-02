@@ -400,56 +400,71 @@ function ecColonyManage(c) {
     </div>`;
 }
 
+// Строка КОЛОНИИ (всегда показывается, даже если планета не совпала с картой)
+function ecColonyRowHtml(colony, sys) {
+  const open = EC.openColony === colony.id;
+  const blds = EC.buildings.filter(b => b.colony_id === colony.id);
+  const used = blds.length, cap = colony.cells || EC_DEFAULT_CELLS;
+  const incGc = blds.reduce((a, b) => a + (ecBuildingIncome(b).gc || 0), 0);
+  const incSci = blds.reduce((a, b) => a + (ecBuildingIncome(b).science || 0), 0);
+  const incTxt = [incGc ? `+${ecNum(incGc)} ГС` : '', incSci ? `+${ecNum(incSci)} ОН` : ''].filter(Boolean).join(' ');
+  // ресурсы: из планеты на карте (если есть) или из снимка самой колонии
+  const planet = (sys && (sys.planets || []).find(x => x.name === colony.planet_name)) || colony;
+  const head = `<div class="ec-pl ec-pl-own${open ? ' open' : ''}" onclick="ecToggleColony('${colony.id}')">
+    <div class="ec-pl-top">
+      <div class="ec-pl-l"><span class="ec-pl-ic">🏙</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name || 'Колония')}</div><div class="ec-pl-sb">${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div></div></div>
+      <div class="ec-pl-r"><span class="ec-pl-cells">⬚ ${used}/${cap}</span>${incTxt ? `<span class="ec-pl-inc">${incTxt}/сут</span>` : ''}<span class="ec-pl-chev">${open ? '▾' : '▸'}</span></div>
+    </div>
+    <div class="ec-pl-res">${ecPlanetResChips(planet)}</div>
+  </div>`;
+  return head + (open ? `<div class="ec-pl-detail">${ecColonyManage(colony)}</div>` : '');
+}
+// Строка незаселённой планеты (опция колонизации)
+function ecFreeRowHtml(s, p, race) {
+  const cz = ecColonizeInfo(s, p, race);
+  const cells = +p.slotsP || EC_DEFAULT_CELLS;
+  return `<div class="ec-pl ec-pl-free">
+    <div class="ec-pl-top">
+      <div class="ec-pl-l"><span class="ec-pl-ic">${cz.cls === 'no' ? '⊘' : '◌'}</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(p.name)}</div><div class="ec-pl-sb"><span class="ec-cz-${cz.cls}">${esc(cz.tag)}</span> · ${esc(cz.label)} · ⬚ ${cells} ячеек</div></div></div>
+      <div class="ec-pl-r">${cz.btn}</div>
+    </div>
+    <div class="ec-pl-res">${ecPlanetResChips(p)}</div>
+    ${cz.cls !== 'no' ? ecPlanetBuildHint(p) : ''}
+  </div>`;
+}
+
 function ecTabColonies() {
   const race = EC.app.race;
-  if (!EC.systems.length) {
+  // Системы: владеемые + те, где есть колонии (чтобы колонии НЕ ТЕРЯЛИСЬ,
+  // даже если имя колонии не совпало с планетой на карте или система не в списке).
+  const sysMap = new Map();
+  EC.systems.forEach(s => sysMap.set(s.id, { id: s.id, name: s.name, planets: (s.planets || []).filter(p => p && p.name) }));
+  EC.colonies.forEach(c => { if (c.system_id && !sysMap.has(c.system_id)) {
+    const live = EC.allSystems && EC.allSystems.find(x => x.id === c.system_id);
+    sysMap.set(c.system_id, { id: c.system_id, name: (live && live.name) || 'Система', planets: [] });
+  }});
+  if (!sysMap.size) {
     return `<div class="ec-section-title">Системы и колонии</div>
-      <div class="ec-empty">У вас пока нет систем. Захватывайте системы во вкладке «🌐 Территория».</div>`;
+      <div class="ec-empty">У вас пока нет систем и колоний. Захватывайте системы во вкладке «🌐 Территория».</div>`;
   }
   const totalCol = EC.colonies.length;
-  const totalPlanets = EC.systems.reduce((a, s) => a + (s.planets || []).filter(p => p && p.name).length, 0);
-  const blocks = EC.systems.map(s => {
-    const planets = (s.planets || []).filter(p => p && p.name);
+  const blocks = [...sysMap.values()].map(s => {
     const cols = EC.colonies.filter(c => c.system_id === s.id);
-    const sysOpen = EC.openSys === null || EC.openSys === s.id;  // по умолчанию раскрыто; можно свернуть
-    const planetRows = planets.map(p => {
-      const colony = cols.find(c => c.planet_name === p.name);
-      if (colony) {
-        const open = EC.openColony === colony.id;
-        const blds = EC.buildings.filter(b => b.colony_id === colony.id);
-        const used = blds.length, cap = colony.cells || EC_DEFAULT_CELLS;
-        const incGc = blds.reduce((a, b) => a + (ecBuildingIncome(b).gc || 0), 0);
-        const incSci = blds.reduce((a, b) => a + (ecBuildingIncome(b).science || 0), 0);
-        const incTxt = [incGc ? `+${ecNum(incGc)} ГС` : '', incSci ? `+${ecNum(incSci)} ОН` : ''].filter(Boolean).join(' ');
-        const head = `<div class="ec-pl ec-pl-own${open ? ' open' : ''}" onclick="ecToggleColony('${colony.id}')">
-          <div class="ec-pl-top">
-            <div class="ec-pl-l"><span class="ec-pl-ic">🏙</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name)}</div><div class="ec-pl-sb">${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div></div></div>
-            <div class="ec-pl-r"><span class="ec-pl-cells">⬚ ${used}/${cap}</span>${incTxt ? `<span class="ec-pl-inc">${incTxt}/сут</span>` : ''}<span class="ec-pl-chev">${open ? '▾' : '▸'}</span></div>
-          </div>
-          <div class="ec-pl-res">${ecPlanetResChips(p)}</div>
-        </div>`;
-        return head + (open ? `<div class="ec-pl-detail">${ecColonyManage(colony)}</div>` : '');
-      }
-      const cz = ecColonizeInfo(s, p, race);
-      const cells = +p.slotsP || EC_DEFAULT_CELLS;
-      return `<div class="ec-pl ec-pl-free">
-        <div class="ec-pl-top">
-          <div class="ec-pl-l"><span class="ec-pl-ic">${cz.cls === 'no' ? '⊘' : '◌'}</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(p.name)}</div><div class="ec-pl-sb"><span class="ec-cz-${cz.cls}">${esc(cz.tag)}</span> · ${esc(cz.label)} · ⬚ ${cells} ячеек</div></div></div>
-          <div class="ec-pl-r">${cz.btn}</div>
-        </div>
-        <div class="ec-pl-res">${ecPlanetResChips(p)}</div>
-        ${cz.cls !== 'no' ? ecPlanetBuildHint(p) : ''}
-      </div>`;
-    }).join('') || `<div class="ec-empty" style="padding:10px 12px">В системе нет планет.</div>`;
+    const colNames = new Set(cols.map(c => c.planet_name));
+    const sysOpen = EC.openSys === null || EC.openSys === s.id;
+    // 1) ВСЕ колонии системы (всегда), 2) незаселённые планеты
+    const colHtml = cols.map(c => ecColonyRowHtml(c, s)).join('');
+    const freeHtml = s.planets.filter(p => !colNames.has(p.name)).map(p => ecFreeRowHtml(s, p, race)).join('');
+    const body = (colHtml + freeHtml) || `<div class="ec-empty" style="padding:10px 12px">Нет планет.</div>`;
     return `<div class="ec-sysblk">
       <div class="ec-sysblk-hd" onclick="ecToggleSys('${esc(s.id)}')">
         <span class="ec-sysblk-nm">🜨 ${esc(s.name)}</span>
-        <span class="ec-sysblk-meta">${cols.length} колон. · ${planets.length} планет <span class="ec-pl-chev">${sysOpen ? '▾' : '▸'}</span></span>
+        <span class="ec-sysblk-meta">${cols.length} колон. · ${s.planets.length} планет <span class="ec-pl-chev">${sysOpen ? '▾' : '▸'}</span></span>
       </div>
-      ${sysOpen ? `<div class="ec-sysblk-body">${planetRows}</div>` : ''}
+      ${sysOpen ? `<div class="ec-sysblk-body">${body}</div>` : ''}
     </div>`;
   }).join('');
-  return `<div class="ec-section-title">Системы и колонии <span class="ec-hint">— ${totalCol} колон. из ${totalPlanets} планет · нажмите на колонию, чтобы развернуть застройку</span></div>
+  return `<div class="ec-section-title">Системы и колонии <span class="ec-hint">— ${totalCol} колоний · нажмите на колонию, чтобы развернуть застройку</span></div>
     <div class="ec-syslist">${blocks}</div>`;
 }
 
