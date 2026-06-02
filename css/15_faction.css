@@ -132,6 +132,23 @@
 .fr-view-herald img{width:100%;height:100%;object-fit:cover}
 .fr-lore{font-size:13px;color:var(--t2);line-height:1.6;margin:12px 0;padding:10px 12px;background:var(--b1);border-radius:8px}
 
+/* ── Большое поле истории в анкете + счётчик ── */
+.fr-history-input{min-height:200px;resize:vertical;line-height:1.6}
+.fr-input-hint{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);letter-spacing:.5px;margin-top:5px;text-align:right}
+
+/* ── Лор-блок: заголовок + сворачиваемое/прокручиваемое тело ── */
+.fr-lore-block{margin:12px 0;padding:12px 14px;background:var(--b1);border:1px solid var(--w1);border-radius:8px}
+.fr-lore-title{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gdl);margin-bottom:8px}
+.fr-lore-body{font-size:13px;color:var(--t2);line-height:1.7;overflow-wrap:break-word}
+.fr-lore-block.collapsible .fr-lore-body{position:relative;max-height:120px;overflow:hidden}
+.fr-lore-block.collapsible .fr-lore-body::after{content:'';position:absolute;left:0;right:0;bottom:0;height:52px;background:linear-gradient(transparent,var(--b1));pointer-events:none;transition:opacity .2s}
+.fr-lore-block.collapsible.open .fr-lore-body{max-height:320px;overflow-y:auto;padding-right:6px}
+.fr-lore-block.collapsible.open .fr-lore-body::after{opacity:0}
+.fr-lore-toggle{margin-top:8px;background:none;border:none;color:var(--te);font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;cursor:pointer;padding:2px 0;transition:color .15s}
+.fr-lore-toggle:hover{color:var(--tel)}
+.fr-lore-body::-webkit-scrollbar{width:6px}
+.fr-lore-body::-webkit-scrollbar-thumb{background:var(--w3);border-radius:3px}
+
 /* модерация в #ap */
 .fr-app{background:var(--b3);border:1px solid var(--w2);border-radius:10px;padding:10px 12px;margin-bottom:8px}
 .fr-app-hd{display:flex;align-items:center;gap:8px}

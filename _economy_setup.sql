@@ -183,7 +183,11 @@ begin
             where faction_id = p_fid and ready_at <= now()
             order by ready_at asc
   loop
-    if pr.kind = 'slot' then
+    if pr.kind = 'build' then
+      insert into public.colony_buildings (colony_id, faction_id, owner_id, btype, slots_open, tnp_mode)
+        values (pr.colony_id, p_fid, pr.owner_id, pr.btype,
+                coalesce((pr.payload->>'free_slots')::int, 1), false);
+    elsif pr.kind = 'slot' then
       update public.colony_buildings set slots_open = least(6, slots_open + 1)
         where id = pr.building_id and faction_id = p_fid;
     elsif pr.kind = 'habitat' then

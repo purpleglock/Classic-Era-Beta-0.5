@@ -1,0 +1,450 @@
+// ── GUIDEBOOK — Гайдбук «Классическая Эра» ─────────────────────────────────
+
+const GB_SECTIONS = [
+  { id: 'gb-intro',     icon: '◈', label: 'С чего начать' },
+  { id: 'gb-reg',       icon: '◷', label: 'Регистрация' },
+  { id: 'gb-wizard',    icon: '⬡', label: 'Создание фракции' },
+  { id: 'gb-doctrine',  icon: '⚑', label: 'Доктрина: все бонусы' },
+  { id: 'gb-economy',   icon: '◇', label: 'Экономика и доход' },
+  { id: 'gb-colonies',  icon: '◉', label: 'Колонии и планеты' },
+  { id: 'gb-buildings', icon: '⌂', label: 'Здания' },
+  { id: 'gb-research',  icon: '✦', label: 'Технологии' },
+  { id: 'gb-army',      icon: '⚔', label: 'Армия и флот' },
+  { id: 'gb-intel',     icon: '◐', label: 'Разведка' },
+  { id: 'gb-trade',     icon: '⇄', label: 'Торговля' },
+  { id: 'gb-map',       icon: '⬢', label: 'Карта галактики' },
+  { id: 'gb-loop',      icon: '↻', label: 'Игровой день' },
+  { id: 'gb-tips',      icon: '★', label: 'Советы новичку' },
+];
+
+// ── Доктрина: точные модификаторы (зеркало EC_MODS из economy.js) ──
+const GB_MOD = {
+  // pct: положительное хорошо? grow=true → рост зелёный; grow=false → снижение зелёный
+  gc:          { label: 'Доход',          grow: true,  pct: true },
+  mine:        { label: 'Добыча',         grow: true,  pct: true },
+  build:       { label: 'Цена построек',  grow: false, pct: true },
+  colonize:    { label: 'Цена колоний',   grow: false, pct: true },
+  claim_cost:  { label: 'Цена систем',    grow: false, pct: true },
+  claim_cd:    { label: 'Перезарядка',    grow: false, pct: true },
+  research:    { label: 'Цена науки',     grow: false, pct: true },
+  sci_flat:    { label: 'Наука',          grow: true,  pct: false, suf: '/сут' },
+  agents_flat: { label: 'Агенты',         grow: true,  pct: false, suf: '/сут' },
+};
+const GB_GRANT = {
+  trade: 'Торговый хаб', factory: 'Гражданская фабрика', military_factory: 'Военный завод',
+  training: 'Центр подготовки', science: 'Научный институт', mining: 'Добывающий завод',
+  intel: 'Центр спецслужб',
+};
+
+const GB_DOC_GOV = [
+  ['Республика',          { gc: 0.10, claim_cd: 0.15, sci_flat: 1 }, 'trade'],
+  ['Монархия',            { gc: 0.20, sci_flat: -1 }, 'factory'],
+  ['Империя',             { claim_cost: -0.25, claim_cd: -0.25, gc: -0.10, agents_flat: 1 }, 'military_factory'],
+  ['Олигархия',           { gc: 0.25, sci_flat: -1 }, 'factory'],
+  ['Диктатура',           { claim_cd: -0.20, gc: -0.10, agents_flat: 1 }, 'training'],
+  ['Теократия',           { gc: 0.10, research: 0.15, sci_flat: -2, agents_flat: 1 }, 'training'],
+  ['Технократия',         { gc: -0.15, build: 0.10, research: -0.25, sci_flat: 3 }, 'science'],
+  ['Корпоратократия',     { gc: 0.20, mine: 0.15, build: -0.10, agents_flat: -1 }, 'trade'],
+  ['Коллективный разум',  { mine: 0.15, claim_cost: 0.20, research: -0.10, sci_flat: 1 }, 'science'],
+  ['Машинный разум (ИИ)', { gc: -0.15, build: -0.10, research: -0.15, sci_flat: 1, agents_flat: 1 }, 'science'],
+];
+const GB_DOC_REGIME = [
+  ['Демократический',  { gc: 0.15, agents_flat: -1 }],
+  ['Эгалитарный',      { gc: 0.10, claim_cost: 0.10, sci_flat: 1 }],
+  ['Меритократический',{ gc: -0.10, research: -0.15, sci_flat: 2 }],
+  ['Плутократический', { gc: 0.25, sci_flat: -1 }],
+  ['Олигархический',   { gc: 0.15, mine: -0.10 }],
+  ['Авторитарный',     { mine: 0.10, gc: -0.10, agents_flat: 1 }],
+  ['Тоталитарный',     { mine: 0.25, gc: -0.15, agents_flat: 1 }],
+  ['Деспотичный',      { claim_cd: -0.20, sci_flat: -1, agents_flat: 1 }],
+  ['Анархический',     { colonize: -0.25, gc: -0.20, build: 0.15, sci_flat: 1 }],
+];
+const GB_DOC_IDEO = [
+  ['Технократия (Культ науки)', { gc: -0.15, research: -0.25, sci_flat: 3 }, 'science', 'Реакторы (корабли)'],
+  ['Милитаризм (Культ силы)',   { claim_cost: -0.15, gc: -0.10, research: 0.10, agents_flat: 1 }, 'military_factory', 'Броня (наземка)'],
+  ['Пацифизм',                  { gc: 0.25, agents_flat: -1 }, 'factory'],
+  ['Экспансионизм',             { colonize: -0.30, claim_cost: -0.30, claim_cd: -0.40, gc: -0.10 }, 'mining'],
+  ['Изоляционизм',              { gc: 0.15, claim_cost: 0.25, claim_cd: 0.25, sci_flat: 1 }, 'intel', 'Щиты (наземка)'],
+  ['Ксенофилия',                { gc: 0.20, agents_flat: -1 }, 'trade'],
+  ['Ксенофобия',                { mine: 0.10, gc: -0.20, agents_flat: 1 }, 'training', 'Броня (наземка)'],
+  ['Спиритуализм',              { research: 0.15, sci_flat: -1, agents_flat: 1 }, 'training'],
+  ['Трансгуманизм',             { gc: -0.10, research: -0.15, sci_flat: 2 }, 'science', 'Щиты (наземка)'],
+  ['Экоцентризм',               { mine: 0.30, gc: -0.20 }, 'mining'],
+  ['Индустриализм',             { gc: 0.25, mine: 0.10, build: -0.15, research: 0.10, sci_flat: -1 }, 'factory', 'Двигатели (корабли)'],
+];
+const GB_DOC_RACE = [
+  ['Гуманоиды',                  { gc: 0.05, sci_flat: 1 }, 'Землеподобные'],
+  ['Млекопитающие',              { gc: 0.20 }, 'Землеподобные, Океанические'],
+  ['Рептилоиды',                 { gc: -0.10, agents_flat: 1 }, 'Пустынные, Вулканические, Землеподобные'],
+  ['Авианы (Птицеподобные)',     { claim_cd: -0.25, gc: -0.05, agents_flat: 1 }, 'Землеподобные, Пустынные'],
+  ['Инсектоиды',                 { mine: 0.20, gc: 0.10, research: 0.10, sci_flat: -1 }, 'Землеподобные, Пустынные, Вулканические'],
+  ['Акватики (Водные)',          { gc: 0.15, colonize: 0.15 }, 'Океанические'],
+  ['Плантоиды (Растениевидные)', { mine: 0.15, gc: 0.10, agents_flat: -1 }, 'Землеподобные, Океанические'],
+  ['Литоиды (Каменные)',         { mine: 0.25, gc: -0.15 }, 'Малые тела, Лавовые, Пустынные'],
+  ['Синтетики / Киборги',        { gc: -0.15, research: -0.15, sci_flat: 2 }, 'Почти любые миры'],
+  ['Энергетические сущности',    { gc: -0.15, research: -0.10, sci_flat: 1, agents_flat: 1 }, 'Экзотические, Криомиры, Лавовые'],
+];
+const GB_DOC_CIV = [
+  ['Frontier — молодая колония',  { colonize: -0.25, claim_cd: -0.25, gc: -0.15 }, 'Дешевле расширяться, но беднее старт. Бесплатно: Центр спецслужб'],
+  ['Colony — устоявшаяся держава', { gc: 0.20, mine: 0.10, claim_cost: 0.15, build: -0.10 }, 'Сильная экономика, дороже захват систем. Бесплатно: Гражданская фабрика'],
+];
+
+// Один чип модификатора
+function gbChip(field, val) {
+  const m = GB_MOD[field]; if (!m || !val) return '';
+  const good = m.grow ? val > 0 : val < 0;
+  const sign = val > 0 ? '+' : '−';
+  const abs = Math.abs(val);
+  const num = m.pct ? `${Math.round(abs * 100)}%` : `${abs}${m.suf || ''}`;
+  return `<span class="gb-chip ${good ? 'gb-chip-good' : 'gb-chip-bad'}">${m.label} ${sign}${num}</span>`;
+}
+// Все чипы доктрины + (опц.) грант-здание + грант-тех
+function gbChips(mods, grant, tech) {
+  const order = ['gc', 'mine', 'build', 'colonize', 'claim_cost', 'claim_cd', 'research', 'sci_flat', 'agents_flat'];
+  let h = order.map(k => gbChip(k, mods[k])).join('');
+  if (grant && GB_GRANT[grant]) h += `<span class="gb-chip gb-chip-grant">⌂ ${GB_GRANT[grant]}</span>`;
+  if (tech) h += `<span class="gb-chip gb-chip-tech">✦ ${tech}</span>`;
+  return h;
+}
+function gbDocRows(arr, withHab) {
+  return arr.map(row => {
+    const [name, mods, c, d] = row;
+    const grant = withHab ? null : c;       // у рас третий элемент — это родные миры
+    const habitat = withHab ? c : null;
+    const tech = withHab ? null : d;
+    return `<div class="gb-doc-row">
+      <div class="gb-doc-name">${name}${habitat ? `<span class="gb-doc-hab">Родные миры: ${habitat}</span>` : ''}</div>
+      <div class="gb-doc-chips">${gbChips(mods, grant, tech)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderGuidebook() {
+  const toc = GB_SECTIONS.map(s =>
+    `<a class="gb-toc-link" href="javascript:void(0)" onclick="gbScrollTo('${s.id}')">
+       <span class="gb-toc-icon">${s.icon}</span><span>${s.label}</span>
+     </a>`
+  ).join('');
+
+  const html = `
+<div class="gb-wrap">
+  <aside class="gb-toc">
+    <div class="gb-toc-title">НА ЭТОЙ СТРАНИЦЕ</div>
+    <nav class="gb-toc-list">${toc}</nav>
+  </aside>
+
+  <main class="gb-main">
+
+    <header class="gb-hero">
+      <div class="gb-hero-eyebrow">РУКОВОДСТВО ИГРОКА · BETA 0.5</div>
+      <h1 class="gb-hero-title">Как играть в Классическую Эру</h1>
+      <p class="gb-hero-sub">Пошаговая стратегия о галактических державах. Здесь — всё, что нужно знать новичку: от создания фракции до первых колоний, армий и шпионажа.</p>
+    </header>
+
+    <!-- С ЧЕГО НАЧАТЬ -->
+    <section id="gb-intro" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">◈</span>С чего начать</h2>
+      <p>Вы управляете межзвёздной державой. Цель — развивать экономику, расширять территорию, строить армии и флоты, вести разведку и дипломатию. Игра идёт в реальном времени: раз в сутки наступает новый <strong>игровой день</strong>, когда начисляется доход и завершаются все начатые работы.</p>
+
+      <div class="gb-steps">
+        <div class="gb-step"><div class="gb-step-n">1</div><div><strong>Зарегистрируйтесь</strong> — создайте аккаунт по почте и паролю.</div></div>
+        <div class="gb-step"><div class="gb-step-n">2</div><div><strong>Создайте фракцию</strong> в разделе «Фракции» — пройдите мастер из нескольких шагов.</div></div>
+        <div class="gb-step"><div class="gb-step-n">3</div><div><strong>Дождитесь одобрения</strong> заявки администратором.</div></div>
+        <div class="gb-step"><div class="gb-step-n">4</div><div><strong>Откройте «Кабинет игрока»</strong> — стройте здания, колонизируйте планеты, развивайтесь.</div></div>
+      </div>
+
+      <div class="gb-cards">
+        <div class="gb-card"><div class="gb-card-big">ГС</div><div class="gb-card-t">Галактические стандарты</div><div class="gb-card-d">Главная валюта. Тратится на стройку, колонии, армию и операции.</div></div>
+        <div class="gb-card"><div class="gb-card-big">ОН</div><div class="gb-card-t">Очки науки</div><div class="gb-card-d">Копятся со временем, тратятся на исследование технологий.</div></div>
+        <div class="gb-card"><div class="gb-card-big">⌖</div><div class="gb-card-t">Агенты</div><div class="gb-card-d">Кадры разведки. Нужны для шпионских операций против соседей.</div></div>
+      </div>
+    </section>
+
+    <!-- РЕГИСТРАЦИЯ -->
+    <section id="gb-reg" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">◷</span>Регистрация и заявка</h2>
+      <p>Нажмите <strong>«Войти»</strong> в боковом меню и создайте аккаунт. После входа в навигации появится раздел <strong>«Фракции»</strong> — оттуда подаётся заявка на создание державы.</p>
+
+      <div class="gb-note gb-note-warn">
+        <span class="gb-note-i">!</span>
+        <div>Один аккаунт — одна фракция. Новую заявку можно подать, только если предыдущую отклонили.</div>
+      </div>
+
+      <h3 class="gb-h3">Что происходит с заявкой</h3>
+      <div class="gb-status-list">
+        <div class="gb-status"><span class="gb-dot gb-dot-warn"></span><strong>На рассмотрении</strong> — заявка ждёт проверки администратором.</div>
+        <div class="gb-status"><span class="gb-dot gb-dot-ok"></span><strong>Одобрена</strong> — в меню появляются «Кабинет игрока» и «Конструкторы». Игра началась!</div>
+        <div class="gb-status"><span class="gb-dot gb-dot-err"></span><strong>Отклонена</strong> — свяжитесь с администратором и подайте заявку заново.</div>
+      </div>
+    </section>
+
+    <!-- СОЗДАНИЕ ФРАКЦИИ -->
+    <section id="gb-wizard" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">⬡</span>Создание фракции</h2>
+      <p>Мастер проведёт вас по шагам. Каждое решение влияет на бонусы державы — их полную сводку смотрите в разделе <a class="gb-link" onclick="gbScrollTo('gb-doctrine')">«Доктрина»</a>.</p>
+
+      <div class="gb-wsteps">
+        <div class="gb-wstep"><b>Название и тип цивилизации.</b> Frontier (молодая колония) или Colony (устоявшаяся держава) — у них разные стартовые бонусы.</div>
+        <div class="gb-wstep"><b>Форма правления и политический режим.</b> Две независимые оси доктрины — их бонусы складываются.</div>
+        <div class="gb-wstep"><b>Идеология.</b> Задаёт стратегический вектор и часто даёт стартовую технологию.</div>
+        <div class="gb-wstep"><b>Раса.</b> Влияет на доход и определяет, какие планеты для вас «родные» (заселяются сразу, без терраформирования).</div>
+        <div class="gb-wstep"><b>Столичная система и планета.</b> Выберите свободную звезду на мини-карте — она станет столицей (отметка ★ на карте галактики).</div>
+        <div class="gb-wstep"><b>Стартовые постройки.</b> 20 очков на выбор начальных зданий (см. таблицу ниже).</div>
+        <div class="gb-wstep"><b>Описание и герб.</b> Лор фракции: лидер, культура, история, геральдика. Необязательно, но желательно.</div>
+      </div>
+
+      <h3 class="gb-h3">Стартовые постройки — 20 очков</h3>
+      <div class="gb-tbl">
+        <div class="gb-tr gb-th"><span>Здание</span><span>Очки</span><span>Что даёт</span></div>
+        <div class="gb-tr"><span>Гражданская фабрика</span><span>5</span><span>Доход в ГС (бесплатно для Colony)</span></div>
+        <div class="gb-tr"><span>Добывающий завод</span><span>5</span><span>Добыча планетарных ресурсов</span></div>
+        <div class="gb-tr"><span>Торговый хаб</span><span>5</span><span>Доход в ГС через торговые пути</span></div>
+        <div class="gb-tr"><span>Центр подготовки</span><span>5</span><span>Производство пехоты</span></div>
+        <div class="gb-tr"><span>Центр спецслужб</span><span>5</span><span>Прирост агентов (бесплатно для Frontier)</span></div>
+        <div class="gb-tr"><span>Научный институт</span><span>10</span><span>Прирост очков науки</span></div>
+        <div class="gb-tr"><span>Военный завод</span><span>10</span><span>Производство наземной техники</span></div>
+        <div class="gb-tr"><span>Корабельная верфь</span><span>10</span><span>Производство кораблей и авиации</span></div>
+        <div class="gb-tr"><span>+500 ГС</span><span>10</span><span>Стартовый капитал в казну</span></div>
+      </div>
+
+      <div class="gb-note gb-note-tip">
+        <span class="gb-note-i">★</span>
+        <div><b>Совет новичку.</b> Возьмите Гражданскую фабрику + Торговый хаб + Центр подготовки + 500 ГС. Это ровно 20 очков и даёт стабильный доход с самого начала.</div>
+      </div>
+    </section>
+
+    <!-- ДОКТРИНА -->
+    <section id="gb-doctrine" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">⚑</span>Доктрина: все бонусы</h2>
+      <p>«Доктрина» — это сумма бонусов от вашего типа цивилизации, формы правления, режима, идеологии и расы. <strong>Бонусы складываются.</strong> Например, +20% к доходу от правления и +20% от расы дадут вместе +40%.</p>
+
+      <div class="gb-legend">
+        <span class="gb-chip gb-chip-good">зелёный — выгодно вам</span>
+        <span class="gb-chip gb-chip-bad">красный — штраф / дороже</span>
+        <span class="gb-chip gb-chip-grant">⌂ бесплатное здание</span>
+        <span class="gb-chip gb-chip-tech">✦ стартовая технология</span>
+      </div>
+
+      <h3 class="gb-h3">Тип цивилизации</h3>
+      <div class="gb-doc-list">${gbDocRows(GB_DOC_CIV.map(([n, m]) => [n, m]), false)}</div>
+      <div class="gb-doc-note">${GB_DOC_CIV.map(c => `<div><b>${c[0].split('—')[0].trim()}:</b> ${c[2]}</div>`).join('')}</div>
+
+      <h3 class="gb-h3">Форма правления</h3>
+      <div class="gb-doc-list">${gbDocRows(GB_DOC_GOV, false)}</div>
+
+      <h3 class="gb-h3">Политический режим</h3>
+      <div class="gb-doc-list">${gbDocRows(GB_DOC_REGIME, false)}</div>
+
+      <h3 class="gb-h3">Идеология</h3>
+      <div class="gb-doc-list">${gbDocRows(GB_DOC_IDEO, false)}</div>
+
+      <h3 class="gb-h3">Раса</h3>
+      <div class="gb-doc-list">${gbDocRows(GB_DOC_RACE, true)}</div>
+
+      <div class="gb-note gb-note-info">
+        <span class="gb-note-i">i</span>
+        <div>Любой бонус-множитель не может опустить показатель ниже 30% от базы — даже если набрать много штрафов, доход не обнулится.</div>
+      </div>
+    </section>
+
+    <!-- ЭКОНОМИКА -->
+    <section id="gb-economy" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">◇</span>Экономика и доход</h2>
+      <p>Весь доход начисляется <strong>автоматически</strong> раз в игровой день — планировщик обсчитывает все фракции сам, заходить для этого не нужно. Если вы не были в игре несколько дней, при следующем входе доход придёт сразу за все пропущенные дни — ничего не теряется. Открытие <strong>«Кабинета игрока»</strong> просто подтягивает накопленное мгновенно, не дожидаясь ночного расчёта.</p>
+
+      <h3 class="gb-h3">Откуда берётся доход</h3>
+      <ul class="gb-ul">
+        <li><b>ГС в сутки</b> — сумма дохода всех ваших зданий, умноженная на бонус доктрины к доходу.</li>
+        <li><b>Очки науки в сутки</b> — от Научных институтов плюс бонусы доктрины к науке.</li>
+        <li><b>Агенты в сутки</b> — от Центров спецслужб плюс бонусы доктрины к агентам.</li>
+      </ul>
+
+      <h3 class="gb-h3">Планетарные ресурсы</h3>
+      <p>На части планет есть месторождения — их добывают Добывающие заводы. Чем реже ресурс, тем дороже он стоит, но тем медленнее добывается:</p>
+      <div class="gb-tbl">
+        <div class="gb-tr gb-th"><span>Редкость</span><span>Цена за единицу</span><span>Добыча в сутки (за слот)</span></div>
+        <div class="gb-tr"><span><span class="gb-rar gb-rar-1">Обычный</span></span><span>2 ГС</span><span>25</span></div>
+        <div class="gb-tr"><span><span class="gb-rar gb-rar-2">Необычный</span></span><span>5 ГС</span><span>12</span></div>
+        <div class="gb-tr"><span><span class="gb-rar gb-rar-3">Редкий</span></span><span>12 ГС</span><span>5</span></div>
+        <div class="gb-tr"><span><span class="gb-rar gb-rar-4">Эпический</span></span><span>30 ГС</span><span>2</span></div>
+        <div class="gb-tr"><span><span class="gb-rar gb-rar-5">Легендарный</span></span><span>80 ГС</span><span>1</span></div>
+      </div>
+    </section>
+
+    <!-- КОЛОНИИ -->
+    <section id="gb-colonies" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">◉</span>Колонии и планеты</h2>
+      <p>В <strong>«Кабинете игрока» → «Колонии»</strong> выберите систему своей территории, затем планету, и нажмите «Колонизировать».</p>
+
+      <ul class="gb-ul">
+        <li><b>Родные планеты</b> вашей расы заселяются сразу за <b>400 ГС</b> (с учётом бонусов доктрины).</li>
+        <li><b>Чужие планеты</b> требуют сначала терраформирования.</li>
+        <li>После колонизации действует <b>перезарядка 7 дней</b> — пока она идёт, новую планету заселить нельзя. Доктрина может её сократить.</li>
+      </ul>
+
+      <h3 class="gb-h3">Терраформирование</h3>
+      <p>Делает непригодную планету пригодной. Сложность зависит от того, насколько мир далёк от родных условий вашей расы:</p>
+      <div class="gb-tbl">
+        <div class="gb-tr gb-th"><span>Уровень</span><span>Время</span><span>Стоимость</span></div>
+        <div class="gb-tr"><span>Простое</span><span>1 день</span><span>1 000 ГС</span></div>
+        <div class="gb-tr"><span>Сложное</span><span>2 дня</span><span>1 800 ГС + 60 ОН</span></div>
+        <div class="gb-tr"><span>Экстремальное</span><span>4 дня</span><span>3 200 ГС + 200 ОН</span></div>
+      </div>
+
+      <div class="gb-note gb-note-info">
+        <span class="gb-note-i">i</span>
+        <div>Газовые гиганты, аномалии и пояса астероидов колонизировать нельзя ни при каких условиях.</div>
+      </div>
+
+      <h3 class="gb-h3">Ячейки и расширение</h3>
+      <p>Каждая планета имеет <b>ячейки</b> — места под здания (по умолчанию 6, одно здание = одна ячейка). Чтобы получить больше места, используйте <b>«Обустройство среды»</b>: 1 000 ГС, +3 ячейки, 1 день работы.</p>
+    </section>
+
+    <!-- ЗДАНИЯ -->
+    <section id="gb-buildings" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">⌂</span>Здания</h2>
+      <p>Здания — фундамент державы. Каждое занимает одну ячейку на планете и имеет до <b>6 слотов</b> мощности. Постройка здания и открытие каждого нового слота занимают <b>1 день</b>; недостроенное можно отменить с возвратом денег.</p>
+
+      <div class="gb-bld-grid">
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⚙</span><b>Гражданская фабрика</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">Стабильный доход в ГС за каждый слот.</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⛏</span><b>Добывающий завод</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">Добывает ресурсы с планеты (назначаются вручную).</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⇄</span><b>Торговый хаб</b></div><div class="gb-bld-cost">1 000 ГС · 1 слот</div><div class="gb-bld-d">Доход в ГС, но только при активных торговых путях.</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">✦</span><b>Научный институт</b></div><div class="gb-bld-cost">1 000 ГС · 1 слот</div><div class="gb-bld-d">Прирост очков науки за каждый слот.</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⚔</span><b>Центр подготовки</b></div><div class="gb-bld-cost">500 ГС · 1 слот</div><div class="gb-bld-d">Позволяет производить пехоту.</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">◐</span><b>Центр спецслужб</b></div><div class="gb-bld-cost">3 000 ГС · 1 слот</div><div class="gb-bld-d">Прирост агентов разведки.</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⛭</span><b>Военный завод</b></div><div class="gb-bld-cost">1 000 ГС · 1 слот</div><div class="gb-bld-d">Производство наземной техники.</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">🚀</span><b>Корабельная верфь</b></div><div class="gb-bld-cost">2 000 ГС · 1 слот</div><div class="gb-bld-d">Производство кораблей и авиации.</div></div>
+      </div>
+
+      <div class="gb-note gb-note-tip">
+        <span class="gb-note-i">★</span>
+        <div>Каждый следующий слот в здании дороже предыдущего. Расширяйте сначала самые доходные здания.</div>
+      </div>
+    </section>
+
+    <!-- ТЕХНОЛОГИИ -->
+    <section id="gb-research" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">✦</span>Технологии</h2>
+      <p>В <strong>«Кабинете игрока» → «Технологии»</strong> открывается дерево исследований. Выберите узел — если хватает очков науки, исследование запустится. Одновременно изучается <b>одна</b> технология.</p>
+      <ul class="gb-ul">
+        <li>Часть технологий доступна только после изучения предыдущих.</li>
+        <li>Некоторые идеологии дают стартовую технологию бесплатно (см. раздел «Доктрина»).</li>
+        <li>Технологии открывают новые модули в конструкторах кораблей и дивизий.</li>
+      </ul>
+    </section>
+
+    <!-- АРМИЯ -->
+    <section id="gb-army" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">⚔</span>Армия и флот</h2>
+      <p>Объём военного производства зависит от количества открытых слотов в военных зданиях:</p>
+      <ul class="gb-ul">
+        <li><b>Центр подготовки</b> — производит пехоту.</li>
+        <li><b>Военный завод</b> — производит наземную технику (тяжёлая занимает больше мощности, чем лёгкая).</li>
+        <li><b>Корабельная верфь</b> — строит крупные корабли или эскадрильи малых аппаратов.</li>
+      </ul>
+
+      <h3 class="gb-h3">Конструкторы</h3>
+      <p>В разделе <strong>«Конструкторы»</strong> вы проектируете собственные дивизии (из блоков пехоты, техники, авиации) и корабли (корпус + двигатели, броня, щиты, оружие). Готовый проект отправляется в производство на вкладке «Армия» — заказы выполняются к следующему игровому дню.</p>
+    </section>
+
+    <!-- РАЗВЕДКА -->
+    <section id="gb-intel" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">◐</span>Разведка</h2>
+      <p>Агенты копятся от Центров спецслужб. На вкладке <strong>«Разведка»</strong> выберите цель, тип операции и сколько агентов задействовать. Чем больше агентов — тем выше шанс успеха и тем быстрее операция.</p>
+
+      <div class="gb-tbl">
+        <div class="gb-tr gb-th"><span>Операция</span><span>Срок</span><span>Результат</span></div>
+        <div class="gb-tr"><span>Базовая разведка</span><span>1 день</span><span>Узнать казну, науку, агентов, колонии цели</span></div>
+        <div class="gb-tr"><span>Глубокая разведка</span><span>2 дня</span><span>Узнать постройки, флот, армию, технологии</span></div>
+        <div class="gb-tr"><span>Кража казны</span><span>2 дня</span><span>Похитить часть ГС цели</span></div>
+        <div class="gb-tr"><span>Саботаж</span><span>2 дня</span><span>Вывести из строя одно здание</span></div>
+        <div class="gb-tr"><span>Дестабилизация</span><span>3 дня</span><span>Снизить доход цели на несколько дней</span></div>
+        <div class="gb-tr"><span>Кража технологий</span><span>4 дня</span><span>Украсть технологию у цели</span></div>
+      </div>
+
+      <div class="gb-note gb-note-warn">
+        <span class="gb-note-i">!</span>
+        <div>Раскрытая операция уведомляет цель, а при провале можно потерять агентов. Держите 1–2 агента в резерве на контрразведку — иначе будете уязвимы для чужого шпионажа.</div>
+      </div>
+    </section>
+
+    <!-- ТОРГОВЛЯ -->
+    <section id="gb-trade" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">⇄</span>Торговля</h2>
+      <p>Торговый путь — соглашение между двумя фракциями. Пока у вас нет торговых партнёров, Торговые хабы не приносят дохода. Предложите путь другой державе на вкладке «Торговля» — после согласия обе стороны начинают получать ГС.</p>
+
+      <h3 class="gb-h3">Опасности маршрута</h3>
+      <p>На торговые конвои нападают пираты и древние угрозы. При нападении доход за этот день теряется. <b>Эскорт (конвой)</b> заметно снижает риск — назначается там же, на вкладке торговли.</p>
+    </section>
+
+    <!-- КАРТА -->
+    <section id="gb-map" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">⬢</span>Карта галактики</h2>
+      <ul class="gb-ul">
+        <li><b>Системы</b> — серые нейтральные и окрашенные в цвет фракции-владельца.</li>
+        <li><b>Гиперпути</b> — линии между системами, по ним идут флоты и торговые суда.</li>
+        <li><b>Границы</b> — автоматически очерчивают территорию каждой державы.</li>
+        <li><b>★ Столица</b> — главная система фракции.</li>
+      </ul>
+      <p>Сменить столицу можно в <strong>«Кабинете» → «Территория»</strong> кнопкой «★ Столица». При переносе все колонии переезжают в новую систему.</p>
+    </section>
+
+    <!-- ИГРОВОЙ ДЕНЬ -->
+    <section id="gb-loop" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">↻</span>Игровой день</h2>
+      <p>Раз в сутки наступает новый игровой день — он обрабатывается автоматически для всех фракций, без вашего участия. В этот момент происходит сразу всё накопленное:</p>
+      <div class="gb-steps">
+        <div class="gb-step"><div class="gb-step-n">↑</div><div>Начисляется доход — ГС, очки науки, агенты.</div></div>
+        <div class="gb-step"><div class="gb-step-n">⌂</div><div>Завершаются постройки, открытые слоты и обустройство среды.</div></div>
+        <div class="gb-step"><div class="gb-step-n">⚔</div><div>Готовые юниты выходят из производства в ваш ростер.</div></div>
+        <div class="gb-step"><div class="gb-step-n">◐</div><div>Завершаются шпионские операции и приходят их результаты.</div></div>
+      </div>
+      <div class="gb-note gb-note-tip">
+        <span class="gb-note-i">★</span>
+        <div>Заходить каждый день не обязательно: доход и завершение работ идут сами. Заход в Кабинет лишь подтягивает накопленное сразу, не дожидаясь ночного расчёта.</div>
+      </div>
+    </section>
+
+    <!-- СОВЕТЫ -->
+    <section id="gb-tips" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">★</span>Советы новичку</h2>
+      <div class="gb-tips">
+        <div class="gb-tip"><div class="gb-tip-n">01</div><div><b>Смотрите на бонусы, а не на названия.</b> Красивое имя доктрины ничего не значит — открывайте раздел «Доктрина» и считайте, что реально даёт выбор.</div></div>
+        <div class="gb-tip"><div class="gb-tip-n">02</div><div><b>Первые дни — это стройка.</b> Не копите деньги «на потом»: каждое здание и слот начинают приносить доход уже на следующий день.</div></div>
+        <div class="gb-tip"><div class="gb-tip-n">03</div><div><b>Торговля — простейший доход.</b> Найдите союзника и заключите торговый путь — хабы заработают сразу для обоих.</div></div>
+        <div class="gb-tip"><div class="gb-tip-n">04</div><div><b>Заселяйте планеты без простоя.</b> Как только перезарядка колонизации прошла — берите следующий мир. Больше планет = больше ячеек.</div></div>
+        <div class="gb-tip"><div class="gb-tip-n">05</div><div><b>Не оголяйте разведку.</b> Держите пару агентов в резерве — иначе соседи безнаказанно вас обчистят.</div></div>
+        <div class="gb-tip"><div class="gb-tip-n">06</div><div><b>Доход капает сам.</b> Начисления идут автоматически каждый день, даже если вы не в игре — за пропущенные дни всё придёт сразу. Заходить стоит не ради дохода, а чтобы пускать накопленные ресурсы в дело.</div></div>
+      </div>
+    </section>
+
+    <footer class="gb-footer">
+      <div class="gb-footer-line"></div>
+      <p>Классическая Эра · Beta 0.5 · Руководство игрока</p>
+    </footer>
+
+  </main>
+</div>`;
+
+  if (typeof setPg === 'function') setPg(html);
+  if (typeof setAct === 'function') setAct('guide');
+
+  requestAnimationFrame(() => {
+    const links = document.querySelectorAll('.gb-toc-link');
+    if (!links.length) return;
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        links.forEach(l => l.classList.remove('active'));
+        const link = document.querySelector(`.gb-toc-link[onclick*="${e.target.id}"]`);
+        if (link) link.classList.add('active');
+      });
+    }, { rootMargin: '-15% 0px -75% 0px' });
+    document.querySelectorAll('.gb-section').forEach(s => obs.observe(s));
+  });
+}
+
+function gbScrollTo(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}

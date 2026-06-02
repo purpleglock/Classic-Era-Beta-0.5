@@ -1461,27 +1461,38 @@ function renderMd(txt) {
 
 function buildNav(filt='') {
   const q=(filt||'').toLowerCase().trim();
+  const L=(ru,en)=>lang==='ru'?ru:en;
   let h=`<div class="n-home${curSlug==='home'?' on':''}" id="ntl-h" onclick="go('home')"><span class="n-home-icon">⌂</span>${T('home')}</div>`;
-  h+=`<div class="n-home${curSlug==='map'?' on':''}" id="ntl-map" onclick="go('map')"><span class="n-home-icon">🜨</span>${lang==='ru'?'Карта галактики':'Galaxy map'}</div>`;
-  h+=`<div class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" onclick="go('factions')"><span class="n-home-icon">⬡</span>${lang==='ru'?'Фракции':'Factions'}</div>`;
-  // Конструкторы — только для игроков с одобренной анкетой и стаффа
+  // Гайдбук — сразу под главной (важно для новичков)
+  h+=`<div class="n-home${curSlug==='guide'?' on':''}" id="ntl-guide" onclick="go('guide')"><span class="n-home-icon">📖</span>${L('Гайдбук','Guidebook')}</div>`;
+  // Кабинет игрока — высоко: игрокам с одобренной анкетой и стаффу
+  if (typeof ecNavEnsure==='function') ecNavEnsure();
+  if (typeof ecCanAccess==='function' && ecCanAccess()) {
+    h+=`<div class="n-home${curSlug==='economy'?' on':''}" id="ntl-eco" onclick="go('economy')"><span class="n-home-icon">🛰</span>${L('Кабинет игрока','Cabinet')}</div>`;
+  }
+  h+=`<div class="n-home${curSlug==='map'?' on':''}" id="ntl-map" onclick="go('map')"><span class="n-home-icon">🜨</span>${L('Карта галактики','Galaxy map')}</div>`;
+  h+=`<div class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" onclick="go('factions')"><span class="n-home-icon">⬡</span>${L('Фракции','Factions')}</div>`;
+  // Конструкторы — игрокам с одобренной анкетой и стаффу
   if (typeof cnNavEnsure==='function') cnNavEnsure();
   if (typeof cnCanAccess==='function' && cnCanAccess()) {
     const cnOn = (curSlug==='constructors'||(curSlug||'').startsWith('build-'))?' on':'';
-    h+=`<div class="n-home${cnOn}" id="ntl-con" onclick="go('constructors')"><span class="n-home-icon">⚒</span>${lang==='ru'?'Конструкторы':'Constructors'}</div>`;
+    h+=`<div class="n-home${cnOn}" id="ntl-con" onclick="go('constructors')"><span class="n-home-icon">⚒</span>${L('Конструкторы','Constructors')}</div>`;
   }
-  // Экономика — игрокам с одобренной анкетой и стаффу
-  if (typeof ecNavEnsure==='function') ecNavEnsure();
-  if (typeof ecCanAccess==='function' && ecCanAccess()) {
-    h+=`<div class="n-home${curSlug==='economy'?' on':''}" id="ntl-eco" onclick="go('economy')"><span class="n-home-icon">🛰</span>${lang==='ru'?'Кабинет игрока':'Cabinet'}</div>`;
-  }
+  // ── Группа «Войска»: каталоги юнитов (раскрывающаяся) ──
+  const cnCats=[['cat-ships','🚀',L('Флот','Fleet')],['cat-ground','🛡',L('Наземная техника','Ground')],['cat-aviation','✈',L('Авиация','Aviation')],['cat-divisions','⛬',L('Дивизии','Divisions')]];
+  const troopsActive=(curSlug||'').startsWith('cat-');
+  h+=`<div class="n-group${troopsActive?' op':''}" id="nav-troops">
+    <div class="n-group-hdr${troopsActive?' on':''}" id="ntl-troops" onclick="document.getElementById('nav-troops').classList.toggle('op')">
+      <span class="n-home-icon">⚔</span><span class="n-group-t">${L('Войска','Forces')}</span><span class="n-group-arr">▸</span>
+    </div>
+    <div class="n-group-body">
+      ${cnCats.map(([sl,ic,nm])=>`<div class="n-sub${curSlug===sl?' on':''}" id="ntl-${sl}" onclick="go('${sl}')"><span class="n-home-icon">${ic}</span>${nm}</div>`).join('')}
+    </div>
+  </div>`;
   // Администрирование — только суперадмины и эдиторы
   if (typeof adCanAccess==='function' && adCanAccess()) {
-    h+=`<div class="n-home${curSlug==='admin'?' on':''}" id="ntl-adm" onclick="go('admin')"><span class="n-home-icon">🛠</span>${lang==='ru'?'Управление':'Admin'}</div>`;
+    h+=`<div class="n-home${curSlug==='admin'?' on':''}" id="ntl-adm" onclick="go('admin')"><span class="n-home-icon">🛠</span>${L('Управление','Admin')}</div>`;
   }
-  // Каталоги юнитов фракций — видны всем
-  const cnCats=[['cat-ships','🚀',lang==='ru'?'Флот':'Fleet'],['cat-ground','🛡',lang==='ru'?'Наземная техника':'Ground'],['cat-aviation','✈',lang==='ru'?'Авиация':'Aviation'],['cat-divisions','⛬',lang==='ru'?'Дивизии':'Divisions']];
-  cnCats.forEach(([sl,ic,nm])=>{ h+=`<div class="n-home${curSlug===sl?' on':''}" onclick="go('${sl}')"><span class="n-home-icon">${ic}</span>${nm}</div>`; });
   h+=`<div class="nav-divider"></div>`;
 
   if (q) {
@@ -1565,11 +1576,26 @@ const tgNgP = slug => { document.getElementById('ngp-'+slug)?.classList.toggle('
 
 function setAct(slug) {
   // Clear ALL active states
-  document.querySelectorAll('.np,.n-home,.ng-hdr,.nl-hdr').forEach(el=>el.classList.remove('on'));
+  document.querySelectorAll('.np,.n-home,.ng-hdr,.nl-hdr,.n-group-hdr,.n-sub').forEach(el=>el.classList.remove('on'));
   // Set active page
   document.getElementById('np-'+slug)?.classList.add('on');
-  // Home
-  if(slug==='home') document.getElementById('ntl-h')?.classList.add('on');
+  // Верхнеуровневые спец-разделы (Главная, Карта, Фракции, Конструкторы,
+  // Кабинет, Управление, Гайдбук, каталоги) — подсветка по slug→id кнопки.
+  const TOP_NAV = {
+    'home': 'ntl-h', 'map': 'ntl-map',
+    'factions': 'ntl-fac', 'faction-new': 'ntl-fac',
+    'economy': 'ntl-eco', 'admin': 'ntl-adm', 'guide': 'ntl-guide',
+    'constructors': 'ntl-con', 'build-ship': 'ntl-con', 'build-ground': 'ntl-con',
+    'build-aviation': 'ntl-con', 'build-division': 'ntl-con',
+    'cat-ships': 'ntl-cat-ships', 'cat-ground': 'ntl-cat-ground',
+    'cat-aviation': 'ntl-cat-aviation', 'cat-divisions': 'ntl-cat-divisions',
+  };
+  if (TOP_NAV[slug]) document.getElementById(TOP_NAV[slug])?.classList.add('on');
+  // Каталог войск — подсветить заголовок группы и раскрыть её
+  if (slug.startsWith('cat-')) {
+    document.getElementById('ntl-troops')?.classList.add('on');
+    document.getElementById('nav-troops')?.classList.add('op');
+  }
   // Active page parent
   const pg=pages.find(p=>p.slug===slug);
   if(pg?.parent_slug){
@@ -2086,6 +2112,16 @@ function initWikiChart(id, d) {
 // ════════════════════════════════════════════════════════════
 // HERO — единая обложка главной (одно изображение + заголовок)
 // ════════════════════════════════════════════════════════════
+// CTA-кнопка на обложке: регистрация фракции / вход / переход в кабинет.
+function buildHeroCta(user) {
+  const isPlayer = typeof ecCanAccess === 'function' && ecCanAccess();
+  if (isPlayer) {
+    return `<button class="hp-hero-cta" onclick="go('economy')"><span class="hp-cta-ic">🛰</span>${lang === 'en' ? 'Open cabinet' : 'Открыть кабинет'}</button>`;
+  }
+  const action = user ? "go('faction-new')" : (typeof showAuth === 'function' ? "showAuth('login')" : "go('faction-new')");
+  return `<button class="hp-hero-cta" onclick="${action}"><span class="hp-cta-ic">⬡</span>${lang === 'en' ? 'Register a faction' : 'Зарегистрировать фракцию'}</button>`;
+}
+
 function buildHero(coverUrl, user) {
   const _homePg = _pgCache.get('home');
   // title = RU надпись, title_ru = EN надпись (исторически так в схеме)
@@ -2113,6 +2149,7 @@ function buildHero(coverUrl, user) {
       <div class="hp-hero-eyebrow">◈&nbsp;&nbsp;${esc(eyebrow)}&nbsp;&nbsp;◈</div>
       <h1 class="hp-hero-title">${esc(title)}</h1>
       <div class="hp-hero-rule"></div>
+      ${buildHeroCta(user)}
     </div>
     ${uploadBtn}
   </div>`;

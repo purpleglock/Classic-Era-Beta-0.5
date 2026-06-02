@@ -567,7 +567,17 @@ async function adReleaseSystem(sysId) {
     const sys = AD.systems.find(s => s.id === sysId);
     if (sys) {
       const prevFid = sys.faction; sys.faction = null;
-      if (prevFid) { const pe = AD.byFid.get(prevFid); if (pe) pe.systems = pe.systems.filter(s => s.id !== sysId); }
+      if (prevFid) {
+        const pe = AD.byFid.get(prevFid);
+        if (pe) {
+          pe.systems = pe.systems.filter(s => s.id !== sysId);
+          // если эта система была столицей — снимаем метку столицы
+          if (pe.app && pe.app.system_id === sysId) {
+            await dbPatch('faction_applications', `faction_id=eq.${encodeURIComponent(prevFid)}&status=eq.approved`, { system_id: null });
+            pe.app.system_id = null;
+          }
+        }
+      }
     }
     toast('Система освобождена', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }

@@ -732,14 +732,23 @@ function ecPlanetBuildHint(p) {
 // Тело управления колонией (застройка) — показывается только в развёрнутой колонии
 function ecColonyManage(c) {
   const blds = EC.buildings.filter(b => b.colony_id === c.id);
-  const used = blds.length, cap = c.cells || EC_DEFAULT_CELLS, full = used >= cap;
-  const bHtml = blds.map(ecBuildingRow).join('') || `<div class="ec-empty" style="padding:8px 0">Пусто. Постройте структуру ↓</div>`;
+  const pendBuilds = (EC.projects || []).filter(p => p.kind === 'build' && p.colony_id === c.id);
+  const used = blds.length + pendBuilds.length, cap = c.cells || EC_DEFAULT_CELLS, full = used >= cap;
+  const pendBldHtml = pendBuilds.map(p => {
+    const d = EC_BUILD[p.btype] || {};
+    return `<div class="ec-bld-row ec-bld-pending">
+      <span class="ec-bld-name">🏗 ${esc(d.name || p.btype)}</span>
+      <span class="ec-proj-tag">⏳ ${ecProjEtaTxt(p)}</span>
+      <button class="ec-bld-del" title="Отменить постройку (возврат затрат)" onclick="ecCancelProject('${p.id}')">✕</button>
+    </div>`;
+  }).join('');
+  const bHtml = blds.map(ecBuildingRow).join('') + pendBldHtml || `<div class="ec-empty" style="padding:8px 0">Пусто. Постройте структуру ↓</div>`;
   const opts = EC_ORDER.map(t => `<option value="${t}">${esc(EC_BUILD[t].name)} — ${ecNum(ecBuildCost(EC_BUILD[t].cost))} ГС</option>`).join('');
   const pendHab = ecPendingHabitat(c.id);
   const habBtn = pendHab
     ? `<span class="ec-proj-tag" title="${ecProjEtaTxt(pendHab)}">⏳ обустройство среды (${ecProjEtaTxt(pendHab)})</span>`
     : !c.terraformed
-      ? `<button class="btn btn-gh btn-sm" onclick="ecHabitat('${c.id}')" title="Расширить жизненное пространство: +${EC_HABITAT_CELLS} ячеек, завершится в конце хода">🌱 Обустроить среду (+${EC_HABITAT_CELLS} ⬚, ${ecNum(ecColonizeCost(EC_HABITAT_COST))} ГС)</button>`
+      ? `<button class="btn btn-gh btn-sm" onclick="ecHabitat('${c.id}')" title="Расширить жизненное пространство: +${EC_HABITAT_CELLS} ячеек, завершится через 1 день">🌱 Обустроить среду (+${EC_HABITAT_CELLS} ⬚, ${ecNum(ecColonizeCost(EC_HABITAT_COST))} ГС)</button>`
       : '';
   return `<div class="ec-bld-grid">${bHtml}</div>
     <div class="ec-colony-actions">
@@ -824,13 +833,13 @@ function ecTabColonies() {
 function ecProjectsBlock() {
   const ps = (EC.projects || []).slice().sort((a, b) => new Date(a.ready_at || 0) - new Date(b.ready_at || 0));
   if (!ps.length) return '';
-  const icon = { slot: '🏗', terraform: '🌍', habitat: '🌱' };
+  const icon = { slot: '🏗', terraform: '🌍', habitat: '🌱', build: '🏗' };
   const rows = ps.map(p => `<div class="ec-q-row">
       <span class="ec-r-name">${icon[p.kind] || '⏳'} ${esc(p.label || p.kind)}</span>
       <span class="ec-q-t">${ecProjEtaTxt(p)}</span>
       <button class="ec-bld-del" title="Отменить (возврат затрат)" onclick="ecCancelProject('${p.id}')">✕</button>
     </div>`).join('');
-  return `<div class="ec-section-title">Проекты в работе <span class="ec-hint">— применяются в конце хода</span></div>
+  return `<div class="ec-section-title">Проекты в работе <span class="ec-hint">— применяются через 1 день</span></div>
     <div class="ec-queue" style="margin-bottom:14px">${rows}</div>`;
 }
 
@@ -1572,10 +1581,11 @@ async function ecSpendBoth(gc, science) {
 }
 
 // ── Проекты колоний (отложенные на 1+ ход) ──────────────────
-// Момент готовности = конец текущего хода + (turns-1) суток.
-const _ecReadyTurns = (turns) => new Date((EC.eco.last_tick ? new Date(EC.eco.last_tick).getTime() : Date.now()) + Math.max(1, turns || 1) * 86400000).toISOString();
+// Момент готовности = сейчас + turns суток (1 реальный день от момента постройки).
+const _ecReadyTurns = (turns) => new Date(Date.now() + Math.max(1, turns || 1) * 86400000).toISOString();
 function ecPendingSlot(buildingId) { return (EC.projects || []).find(p => p.kind === 'slot' && p.building_id === buildingId); }
 function ecPendingHabitat(colonyId) { return (EC.projects || []).find(p => p.kind === 'habitat' && p.colony_id === colonyId); }
+function ecPendingBuild(colonyId, btype) { return (EC.projects || []).find(p => p.kind === 'build' && p.colony_id === colonyId && p.btype === btype); }
 function ecPendingTerraform(sysId, planetName) { return (EC.projects || []).find(p => p.kind === 'terraform' && p.system_id === sysId && p.planet_name === planetName); }
 // Сколько ходов осталось до завершения проекта
 function ecProjTurnsLeft(p) {
@@ -1584,8 +1594,12 @@ function ecProjTurnsLeft(p) {
   return Math.max(1, Math.ceil(ms / 86400000));
 }
 function ecProjEtaTxt(p) {
-  const n = ecProjTurnsLeft(p);
-  return n <= 1 ? 'готово в конце хода' : `через ${n} хода/ходов`;
+  if (!p || !p.ready_at) return 'неизвестно';
+  const ms = new Date(p.ready_at).getTime() - Date.now();
+  if (ms <= 0) return 'готово — ждёт тика';
+  const h = Math.floor(ms / 3600000);
+  if (h < 24) return `через ~${h} ч`;
+  return `через ~${Math.ceil(ms / 86400000)} д`;
 }
 // Отмена проекта с возвратом ГС/ОН (refund берётся из payload)
 async function ecCancelProject(id) {
@@ -1708,12 +1722,21 @@ async function ecBuild(colonyId) {
   const btype = sel.value; const d = EC_BUILD[btype]; if (!d) return;
   const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return;
   const used = EC.buildings.filter(b => b.colony_id === colonyId).length;
-  if (used >= (colony.cells || EC_DEFAULT_CELLS)) { toast('Нет свободных ячеек на планете', 'err'); return; }
+  // считаем строящиеся здания как занятые ячейки
+  const pending = (EC.projects || []).filter(p => p.kind === 'build' && p.colony_id === colonyId).length;
+  if (used + pending >= (colony.cells || EC_DEFAULT_CELLS)) { toast('Нет свободных ячеек на планете', 'err'); return; }
   EC.busy = true;
   try {
-    if (!await ecSpend(ecBuildCost(d.cost))) return;
-    await dbPost('colony_buildings', { colony_id: colonyId, faction_id: EC.fid, owner_id: user.id, btype, slots_open: d.free, tnp_mode: false });
-    toast(d.name + ' построен', 'ok');
+    const cost = ecBuildCost(d.cost);
+    if (!await ecSpend(cost)) return;
+    await dbPost('colony_projects', {
+      faction_id: EC.fid, owner_id: user.id, kind: 'build',
+      colony_id: colonyId, btype,
+      payload: { spent_gc: cost, btype, free_slots: d.free },
+      label: `Постройка: ${d.name}${colony.planet_name ? ' · ' + colony.planet_name : ''}`,
+      ready_at: _ecReadyTurns(1),
+    });
+    toast(d.name + ' — строительство начато (1 день)', 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
@@ -1738,7 +1761,7 @@ async function ecOpenSlot(buildingId) {
       label: `Слот: ${d.name}${colony ? ' · ' + (colony.planet_name || '') : ''}`,
       ready_at: _ecReadyTurns(EC_SLOT_TURNS),
     });
-    toast('Слот заложен — откроется в конце хода', 'ok');
+    toast('Слот заложен — откроется через 1 день', 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
@@ -1765,7 +1788,7 @@ async function ecHabitat(colonyId) {
       label: `Обустройство среды: ${c.planet_name || ''}`,
       ready_at: _ecReadyTurns(EC_HABITAT_TURNS),
     });
-    toast('Обустройство среды начато — завершится в конце хода', 'ok');
+    toast('Обустройство среды начато — завершится через 1 день', 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }

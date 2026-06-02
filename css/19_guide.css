@@ -1,0 +1,429 @@
+/* ══════════════════════════════════════════════════════════════
+   GUIDEBOOK  ·  css/19_guide.css
+   ══════════════════════════════════════════════════════════════ */
+
+.gb-wrap {
+  display: flex;
+  gap: 0;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 0 100px;
+  align-items: flex-start;
+}
+
+/* ── Оглавление: правая колонка «на этой странице» ── */
+.gb-toc {
+  order: 2;
+  position: sticky;
+  top: 76px;
+  width: 208px;
+  flex-shrink: 0;
+  padding: 30px 2px 28px 18px;
+  margin-left: 12px;
+  border-left: 1px solid var(--color-border);
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.gb-toc-title {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--color-text-faint);
+  padding: 0 0 12px 14px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+.gb-toc-list { display: flex; flex-direction: column; gap: 1px; }
+.gb-toc-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  line-height: 1.3;
+  transition: color var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
+}
+.gb-toc-link:hover { color: var(--color-text); background: var(--color-surface); }
+.gb-toc-link.active {
+  color: var(--color-accent);
+  border-left-color: var(--color-accent);
+  background: var(--color-accent-bg);
+}
+.gb-toc-icon { font-size: 13px; opacity: .6; width: 16px; text-align: center; flex-shrink: 0; }
+.gb-toc-link.active .gb-toc-icon { opacity: 1; }
+
+/* ── Контент ── */
+.gb-main { order: 1; flex: 1; min-width: 0; padding: 0 32px 0 4px; }
+
+/* ── Hero ── */
+.gb-hero { padding: 44px 0 32px; margin-bottom: 40px; border-bottom: 1px solid var(--color-border); }
+.gb-hero-eyebrow {
+  font-family: var(--font-display);
+  font-size: 11px; letter-spacing: 0.16em;
+  color: var(--color-accent); margin-bottom: 14px;
+}
+.gb-hero-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 4.5vw, 2.9rem);
+  font-weight: 700; letter-spacing: 0.01em;
+  color: var(--color-text); margin: 0 0 16px; line-height: 1.12;
+}
+.gb-hero-sub {
+  font-size: 15px; color: var(--color-text-muted);
+  margin: 0; max-width: 580px; line-height: 1.65;
+}
+
+/* ── Секции ── */
+.gb-section { margin-bottom: 60px; scroll-margin-top: 84px; }
+.gb-h2 {
+  font-family: var(--font-display);
+  font-size: 1.5rem; font-weight: 700; letter-spacing: 0.01em;
+  color: var(--color-text);
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 0 18px; padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-border-medium);
+}
+.gb-h2-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex-shrink: 0;
+  font-size: 16px; color: var(--color-accent);
+  background: var(--color-accent-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+.gb-h3 {
+  font-family: var(--font-display);
+  font-size: 0.92rem; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--color-text-muted);
+  margin: 30px 0 12px;
+}
+.gb-section p { font-size: 14px; line-height: 1.75; color: var(--color-text-muted); margin: 0 0 12px; }
+.gb-section strong, .gb-section b { color: var(--color-text); font-weight: 600; }
+.gb-link {
+  color: var(--color-link); cursor: pointer;
+  border-bottom: 1px solid var(--color-link-bg);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.gb-link:hover { color: var(--color-link-hover); border-color: var(--color-link); }
+
+/* ── Списки ── */
+.gb-ul { padding-left: 4px; margin: 6px 0 14px; list-style: none; }
+.gb-ul li {
+  position: relative; padding-left: 20px; margin-bottom: 8px;
+  font-size: 14px; color: var(--color-text-muted); line-height: 1.7;
+}
+.gb-ul li::before {
+  content: '▹'; position: absolute; left: 0; top: 0;
+  color: var(--color-accent); font-size: 13px;
+}
+
+/* ── Нумерованные шаги ── */
+.gb-steps { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+.gb-step {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: 12px 16px;
+  font-size: 14px; color: var(--color-text-muted); line-height: 1.5;
+}
+.gb-step-n {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex-shrink: 0;
+  font-family: var(--font-display); font-size: 15px; font-weight: 700;
+  color: var(--color-canvas); background: var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Шаги мастера (с засечкой слева) ── */
+.gb-wsteps { counter-reset: ws; display: flex; flex-direction: column; gap: 0; margin: 16px 0; }
+.gb-wstep {
+  counter-increment: ws;
+  position: relative; padding: 12px 0 12px 44px;
+  font-size: 14px; color: var(--color-text-muted); line-height: 1.6;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.gb-wstep:last-child { border-bottom: none; }
+.gb-wstep::before {
+  content: counter(ws); position: absolute; left: 0; top: 12px;
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px;
+  font-family: var(--font-display); font-size: 13px; font-weight: 700;
+  color: var(--color-accent); background: var(--color-accent-bg);
+  border: 1px solid var(--color-border-medium); border-radius: var(--radius-pill);
+}
+.gb-wstep b { color: var(--color-text); }
+
+/* ── Карточки понятий ── */
+.gb-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin: 18px 0; }
+.gb-card {
+  background: var(--gradient-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); padding: 18px 20px;
+}
+.gb-card-big {
+  font-family: var(--font-display); font-size: 28px; font-weight: 700;
+  color: var(--color-accent); line-height: 1; margin-bottom: 10px;
+}
+.gb-card-t { font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 6px; }
+.gb-card-d { font-size: 13px; color: var(--color-text-faint); line-height: 1.55; }
+
+/* ── Таблицы (grid) ── */
+.gb-tbl {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); overflow: hidden; margin: 12px 0 18px;
+}
+.gb-tr {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.3fr) minmax(64px, auto) minmax(0, 2fr);
+  gap: 14px; align-items: center;
+  padding: 10px 16px;
+  font-size: 13px; color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.gb-tr:last-child { border-bottom: none; }
+.gb-tr > span:nth-child(2) { color: var(--color-text); font-variant-numeric: tabular-nums; }
+.gb-tr:not(.gb-th):hover { background: var(--color-surface); }
+.gb-tr.gb-th {
+  background: var(--color-surface-raised);
+  font-family: var(--font-display); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--color-text-faint);
+  border-bottom: 1px solid var(--color-border-medium);
+}
+.gb-th > span:nth-child(2) { color: var(--color-text-faint); }
+
+/* ── Доктрина: строки с чипами ── */
+.gb-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 22px; }
+.gb-doc-list {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); overflow: hidden; margin: 8px 0 8px;
+}
+.gb-doc-row {
+  display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: start;
+  padding: 13px 16px; border-bottom: 1px solid var(--color-border-subtle);
+}
+.gb-doc-row:last-child { border-bottom: none; }
+.gb-doc-row:hover { background: var(--color-surface); }
+.gb-doc-name {
+  font-size: 13.5px; font-weight: 600; color: var(--color-text);
+  display: flex; flex-direction: column; gap: 4px; padding-top: 2px;
+}
+.gb-doc-hab { font-size: 11px; font-weight: 400; color: var(--color-text-faint); line-height: 1.4; }
+.gb-doc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.gb-doc-note {
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 13px; color: var(--color-text-muted);
+  padding: 4px 2px 0; line-height: 1.5;
+}
+.gb-doc-note b { color: var(--color-text); }
+
+/* ── Чипы модификаторов ── */
+.gb-chip {
+  display: inline-flex; align-items: center;
+  font-size: 11.5px; font-weight: 500; line-height: 1;
+  padding: 5px 9px; border-radius: var(--radius-pill);
+  border: 1px solid transparent; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.gb-chip-good {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+  border-color: hsl(150 70% 45% / 0.25);
+}
+.gb-chip-bad {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border-color: hsl(350 80% 60% / 0.25);
+}
+.gb-chip-grant {
+  color: var(--color-accent);
+  background: var(--color-accent-bg);
+  border-color: hsl(var(--hue-gold) var(--sat-gold) 55% / 0.3);
+}
+.gb-chip-tech {
+  color: var(--color-lore);
+  background: var(--color-lore-bg);
+  border-color: hsl(var(--hue-purple) var(--sat-purple) 65% / 0.3);
+}
+
+/* ── Заметки / callout ── */
+.gb-note {
+  display: flex; gap: 13px; align-items: flex-start;
+  padding: 14px 16px; margin: 16px 0;
+  border-radius: var(--radius-md); border-left: 3px solid;
+  font-size: 13.5px; line-height: 1.6; color: var(--color-text-muted);
+}
+.gb-note-i {
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; flex-shrink: 0;
+  font-family: var(--font-display); font-weight: 700; font-size: 13px;
+  border-radius: var(--radius-pill);
+}
+.gb-note b { color: var(--color-text); }
+.gb-note-info { background: var(--color-info-bg); border-color: var(--color-info); }
+.gb-note-info .gb-note-i { color: var(--color-info); background: hsl(var(--hue-cyan) var(--sat-cyan) 55% / 0.15); }
+.gb-note-warn { background: var(--color-warning-bg); border-color: var(--color-warning); }
+.gb-note-warn .gb-note-i { color: var(--color-warning); background: hsl(35 90% 55% / 0.15); }
+.gb-note-tip { background: var(--color-accent-bg); border-color: var(--color-accent); }
+.gb-note-tip .gb-note-i { color: var(--color-accent); background: hsl(var(--hue-gold) var(--sat-gold) 55% / 0.15); }
+
+/* ── Статусы заявки ── */
+.gb-status-list { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.gb-status {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 14px; color: var(--color-text-muted);
+  padding: 11px 16px;
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.gb-status b { color: var(--color-text); }
+.gb-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.gb-dot-warn { background: var(--color-warning); box-shadow: 0 0 8px hsl(35 90% 55% / 0.5); }
+.gb-dot-ok   { background: var(--color-success); box-shadow: 0 0 8px hsl(150 70% 45% / 0.5); }
+.gb-dot-err  { background: var(--color-error);   box-shadow: 0 0 8px hsl(350 80% 60% / 0.5); }
+
+/* ── Редкость ── */
+.gb-rar { font-weight: 600; }
+.gb-rar-1 { color: var(--color-text-muted); }
+.gb-rar-2 { color: hsl(120 50% 58%); }
+.gb-rar-3 { color: hsl(210 80% 66%); }
+.gb-rar-4 { color: hsl(280 70% 68%); }
+.gb-rar-5 { color: hsl(40 92% 62%); }
+
+/* ── Сетка зданий ── */
+.gb-bld-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin: 14px 0 18px; }
+.gb-bld {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: 14px 16px;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.gb-bld:hover { border-color: var(--color-border-medium); background: var(--color-surface-raised); }
+.gb-bld-h { display: flex; align-items: center; gap: 9px; font-size: 14px; color: var(--color-text); margin-bottom: 6px; }
+.gb-bld-ic { font-size: 15px; opacity: .85; }
+.gb-bld-cost {
+  font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--color-accent); margin-bottom: 8px;
+}
+.gb-bld-d { font-size: 12.5px; color: var(--color-text-faint); line-height: 1.5; }
+
+/* ── Советы ── */
+.gb-tips { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; margin-top: 14px; }
+.gb-tip {
+  display: flex; gap: 14px;
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: 16px 18px;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.gb-tip:hover { border-color: var(--color-border-medium); background: var(--color-surface-raised); }
+.gb-tip-n {
+  font-family: var(--font-display); font-size: 26px; font-weight: 700;
+  color: var(--color-border-strong); line-height: 1; flex-shrink: 0; width: 34px; padding-top: 2px;
+}
+.gb-tip div:last-child { font-size: 13px; color: var(--color-text-muted); line-height: 1.6; }
+.gb-tip b { color: var(--color-text); }
+
+/* ── Футер ── */
+.gb-footer { padding: 36px 0 0; text-align: center; }
+.gb-footer-line { height: 1px; background: var(--gradient-divider); margin-bottom: 22px; }
+.gb-footer p { font-family: var(--font-display); font-size: 12px; letter-spacing: 0.06em; color: var(--color-text-faint); margin: 4px 0; }
+
+/* ══════════════════════════════════════════════════════════════
+   ФИКС: активное состояние верхних кнопок навигации.
+   В 07_premium.css и 13_redesign.css правило .n-home.on задано
+   с !important и конфликтует — базовый цвет перебивал активный.
+   Здесь (последний по каскаду + id-специфичность) задаём единый
+   видимый стиль активной кнопки для ВСЕХ верхних разделов.
+   ══════════════════════════════════════════════════════════════ */
+#nav .n-home.on,
+#sb .n-home.on {
+  color: var(--gdl) !important;
+  background: linear-gradient(90deg, var(--gdb), transparent) !important;
+  box-shadow: inset 2px 0 0 var(--gd) !important;
+  border-color: transparent !important;
+}
+#nav .n-home.on .n-home-icon,
+#sb .n-home.on .n-home-icon { color: var(--gd) !important; }
+
+/* ══════════════════════════════════════════════════════════════
+   НАВИГАЦИЯ: раскрывающаяся группа «Войска» (каталоги юнитов).
+   ══════════════════════════════════════════════════════════════ */
+.n-group { margin: 0; }
+.n-group-hdr {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px; margin: 2px 12px; cursor: pointer;
+  font-family: 'Rajdhani', sans-serif; font-size: 8px; font-weight: 700;
+  letter-spacing: 2.5px; text-transform: uppercase;
+  color: hsl(220 14% 40%);
+  border-left: 2px solid transparent;
+  transition: color .15s, background .15s;
+}
+.n-group-hdr:hover { color: hsl(220 16% 68%); background: rgba(255,255,255,.025); }
+.n-group-hdr.on { color: var(--gdl); background: var(--gdb); border-left-color: var(--gd); }
+.n-group-hdr .n-home-icon { font-size: 9px; opacity: .7; flex-shrink: 0; }
+.n-group-hdr.on .n-home-icon { color: var(--gd); opacity: 1; }
+.n-group-t { flex: 1; }
+.n-group-arr { font-size: 8px; opacity: .55; transition: transform .2s var(--ease-out); }
+.n-group.op .n-group-arr { transform: rotate(90deg); }
+.n-group-body { display: none; }
+.n-group.op .n-group-body { display: block; animation: gbNavOpen .2s var(--ease-out); }
+@keyframes gbNavOpen { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.n-sub {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 16px 7px 26px; margin: 1px 12px; cursor: pointer;
+  font-family: 'Rajdhani', sans-serif; font-size: 8px; font-weight: 600;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: hsl(220 12% 38%);
+  border-left: 2px solid transparent;
+  transition: color .15s, background .15s;
+}
+.n-sub:hover { color: hsl(220 16% 64%); background: rgba(255,255,255,.02); }
+.n-sub.on { color: var(--gdl); background: var(--gdb); border-left-color: var(--gd); }
+.n-sub .n-home-icon { font-size: 9px; opacity: .7; flex-shrink: 0; }
+.n-sub.on .n-home-icon { color: var(--gd); opacity: 1; }
+
+/* ══════════════════════════════════════════════════════════════
+   ГЛАВНАЯ: CTA-кнопка на обложке («Зарегистрировать фракцию»).
+   ══════════════════════════════════════════════════════════════ */
+.hp-hero-cta {
+  pointer-events: auto;
+  display: inline-flex; align-items: center; gap: 10px;
+  margin-top: 24px;
+  padding: 13px 30px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--color-canvas);
+  background: linear-gradient(135deg, var(--gd), var(--gdl));
+  border: 1px solid var(--gdl);
+  cursor: pointer;
+  clip-path: polygon(11px 0, 100% 0, 100% calc(100% - 11px), calc(100% - 11px) 100%, 0 100%, 0 11px);
+  box-shadow: 0 0 26px var(--gds), 0 6px 20px rgba(0,0,0,.45);
+  transition: transform .2s var(--ease-out), box-shadow .2s var(--ease-out), background .2s var(--ease-out);
+}
+.hp-hero-cta:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, var(--gdl), var(--gd));
+  box-shadow: 0 0 40px var(--gdd), 0 10px 30px rgba(0,0,0,.55);
+}
+.hp-hero-cta:active { transform: translateY(0); }
+.hp-cta-ic { font-size: 15px; line-height: 1; }
+@media (max-width: 768px) {
+  .hp-hero-cta { margin-top: 16px; padding: 10px 22px; font-size: 12px; letter-spacing: 2px; }
+}
+
+/* ── Адаптив ── */
+@media (max-width: 1160px) {
+  .gb-toc { display: none; }
+  .gb-main { padding: 0 8px; }
+}
+@media (max-width: 640px) {
+  .gb-hero { padding: 28px 0 22px; margin-bottom: 28px; }
+  .gb-section { margin-bottom: 44px; }
+  .gb-h2 { font-size: 1.25rem; }
+  .gb-doc-row { grid-template-columns: 1fr; gap: 10px; }
+  .gb-tr { grid-template-columns: 1.2fr auto 1.6fr; gap: 8px; padding: 9px 12px; font-size: 12px; }
+  .gb-cards, .gb-bld-grid, .gb-tips { grid-template-columns: 1fr; }
+}

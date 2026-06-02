@@ -379,7 +379,13 @@ function frStepCulture(d) {
       <textarea class="fi" id="c-features" rows="4" placeholder="Традиции, менталитет, быт...">${esc(d.culture)}</textarea></div>`;
 }
 function frStepHistory(d) {
+  const len = (d.history || '').length;
   return `<h3 class="fr-h3">IV. Исторические сведения</h3>
+    <div class="fg"><label class="fl">История фракции</label>
+      <textarea class="fi fr-history-input" id="h-history" rows="12"
+        placeholder="Происхождение народа, ключевые события, войны и союзы, нынешнее положение... Пишите столько, сколько нужно — длинный текст будет аккуратно свёрнут в карточке фракции."
+        oninput="const c=document.getElementById('h-history-count');if(c)c.textContent=this.value.length+' символов'">${esc(d.history)}</textarea>
+      <div class="fr-input-hint" id="h-history-count">${len} символов</div></div>
     <div class="fg"><label class="fl">Ссылка на фракцию (группа/статья)</label>
       <input class="fi" id="h-link" value="${esc(d.link)}" placeholder="https://..."></div>
     <div class="fg"><label class="fl">Геральдика (герб фракции)</label>
@@ -405,6 +411,8 @@ function frStepReview(d) {
       ${row('Раса', d.race)}
       ${row('Идеология', d.ideology)}
     </div>
+    ${frLoreBlock('Культура', d.culture)}
+    ${frLoreBlock('История', d.history)}
     ${typeof ecDoctrineHtml === 'function' ? `<div class="fr-doctrine" style="margin-top:14px">${ecDoctrineHtml(d)}</div>` : ''}
     <p class="fr-note">Выбор правления, режима, идеологии, расы и типа реально влияет на экономику — см. «Доктрину» выше. После отправки анкета попадёт на модерацию.</p>`;
 }
@@ -416,7 +424,7 @@ function frSyncStep() {
   else if (FR.step === 1) { d.color = frHexToRgba(g('f-color').value, 0.34); }
   else if (FR.step === 2) { if (g('f-planet')) d.planet_name = g('f-planet').value.trim(); }
   else if (FR.step === 4) { d.race = g('c-race').value; d.ideology = g('c-ideo').value; d.culture = g('c-features').value.trim(); }
-  else if (FR.step === 5) { d.link = g('h-link').value.trim(); }
+  else if (FR.step === 5) { d.link = g('h-link').value.trim(); if (g('h-history')) d.history = g('h-history').value; }
   // step3 (постройки) и герб синхронизируются в своих обработчиках
 }
 function frGoStep(i) { frSyncStep(); FR.step = i; frSaveLocal(); frRenderStep(); }
@@ -627,6 +635,24 @@ async function renderFactionsPage() {
   </div>`);
 }
 
+// Лор-блок с заголовком: длинный текст сворачивается (фейд + кнопка),
+// в развёрнутом виде прокручивается внутри себя. Короткий — показывается целиком.
+function frLoreBlock(title, text) {
+  if (!text || !text.trim()) return '';
+  const html = esc(text).replace(/\r?\n/g, '<br>');
+  const long = text.length > 280;
+  return `<div class="fr-lore-block${long ? ' collapsible' : ''}">
+    <div class="fr-lore-title">${esc(title)}</div>
+    <div class="fr-lore-body">${html}</div>
+    ${long ? `<button class="fr-lore-toggle" onclick="frToggleLore(this)">Читать полностью ▾</button>` : ''}
+  </div>`;
+}
+function frToggleLore(btn) {
+  const blk = btn.closest('.fr-lore-block'); if (!blk) return;
+  const open = blk.classList.toggle('open');
+  btn.textContent = open ? 'Свернуть ▴' : 'Читать полностью ▾';
+}
+
 async function frViewFaction(id) {
   let f = null;
   try { const rows = await dbGet('faction_applications', 'id=eq.' + id + '&limit=1'); f = rows && rows[0]; } catch (e) {}
@@ -650,7 +676,8 @@ async function frViewFaction(id) {
       ${row('Постройки', [free + ' (беспл.)', ...blds].filter(Boolean).join(', '))}
       ${row('Финансы', f.bonus_money ? '+500 стандартов' : 'Стартовый капитал')}
     </div>
-    ${f.culture ? `<div class="fr-lore"><b>Культура.</b> ${esc(f.culture)}</div>` : ''}
+    ${frLoreBlock('Культура', f.culture)}
+    ${frLoreBlock('История', f.history)}
     ${f.link ? `<div class="fr-rev-row"><span>Ссылка</span><a href="${esc(f.link)}" target="_blank" rel="noopener" style="color:var(--te)">открыть ↗</a></div>` : ''}
     ${isOwner ? `<div class="fr-actions"><button class="btn btn-gd btn-sm" onclick="frCloseView();go('faction-new')">✎ Редактировать</button></div>` : ''}
   </div>`;
