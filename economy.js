@@ -162,7 +162,16 @@ async function ecBootOnce() {
   if (_ecBoot) return _ecBoot;
   _ecBoot = (async () => {
     await ecRpc('economy_init');
-    return await ecRpc('economy_tick');
+    const tick = await ecRpc('economy_tick');
+    // Тост — РОВНО ОДИН раз на реальный тик (а не на каждый вызов рендера,
+    // иначе при повторных рендерах из init было двойное оповещение).
+    if (tick && tick.days >= 1) {
+      const parts = [];
+      if (tick.income && tick.income.gc) parts.push(`+${ecNum(tick.income.gc * tick.days)} ГС`);
+      if (tick.income && tick.income.science) parts.push(`+${ecNum(tick.income.science * tick.days)} ОН`);
+      if (parts.length) toast(`Доход за ${tick.days} сут.: ${parts.join(' · ')}`, 'ok');
+    }
+    return tick;
   })();
   _ecBoot.finally(() => setTimeout(() => { _ecBoot = null; }, 2000));
   return _ecBoot;
@@ -181,13 +190,7 @@ async function ecRenderDashboard() {
     return;
   }
   try {
-    const tick = await ecBootOnce();   // создаём экономику + начисляем накопленный доход
-    if (tick && tick.days >= 1) {
-      const parts = [];
-      if (tick.income && tick.income.gc) parts.push(`+${ecNum(tick.income.gc * tick.days)} ГС`);
-      if (tick.income && tick.income.science) parts.push(`+${ecNum(tick.income.science * tick.days)} ОН`);
-      if (parts.length) toast(`Доход за ${tick.days} сут.: ${parts.join(' · ')}`, 'ok');
-    }
+    await ecBootOnce();   // создаём экономику + начисляем накопленный доход (тост внутри, 1 раз)
     await ecLoad();
     ecPaintCabinet();
   } catch (e) {
