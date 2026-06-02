@@ -7,7 +7,7 @@
 //             auth.js (user), faction_reg.js (frReadable)
 // ════════════════════════════════════════════════════════════
 
-const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], tab: 'colonies', busy: false };
+const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], tab: 'colonies', busy: false, openColony: null, openSys: null };
 const EC_CLAIM_COST = 3000, EC_CLAIM_CD_DAYS = 7;
 // Ресурсы планет: цена продажи и добыча/слот по редкости
 const EC_RES_PRICE = { common: 2, uncommon: 5, rare: 12, epic: 30, legendary: 80 };
@@ -355,35 +355,75 @@ function ecTabOverview() {
     </div>`;
 }
 
+function ecToggleColony(id) { EC.openColony = (EC.openColony === id) ? null : id; ecPaintCabinet(); }
+function ecToggleSys(id) { EC.openSys = (EC.openSys === id) ? null : id; ecPaintCabinet(); }
+
+// Кнопка/бейдж колонизации для незаселённой планеты
+function ecColonizeInfo(s, p, race) {
+  const g = ecPlanetGroup(p), label = EC_GRP_LABEL[g] || g, cells = +p.slotsP || EC_DEFAULT_CELLS;
+  if (!ecColonizable(p)) return { cls: 'no', tag: 'непригодна', label, btn: `<button class="btn btn-gh btn-sm" disabled>—</button>` };
+  if (ecNative(p, race)) return { cls: 'native', tag: 'родная', label, btn: `<button class="btn btn-gd btn-sm" onclick="event.stopPropagation();ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},0)">Колонизировать · ${EC_COLONIZE_COST} ГС</button>` };
+  return { cls: 'foreign', tag: 'чужая', label, btn: `<button class="btn btn-gh btn-sm" onclick="event.stopPropagation();ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},1)">Терраформ · ${ecNum(EC_TERRAFORM_COST)} ГС</button>` };
+}
+
+// Тело управления колонией (застройка) — показывается только в развёрнутой колонии
+function ecColonyManage(c) {
+  const blds = EC.buildings.filter(b => b.colony_id === c.id);
+  const used = blds.length, cap = c.cells || EC_DEFAULT_CELLS, full = used >= cap;
+  const bHtml = blds.map(ecBuildingRow).join('') || `<div class="ec-empty" style="padding:8px 0">Пусто. Постройте структуру ↓</div>`;
+  const opts = EC_ORDER.map(t => `<option value="${t}">${esc(EC_BUILD[t].name)} — ${ecNum(EC_BUILD[t].cost)} ГС</option>`).join('');
+  return `<div class="ec-bld-grid">${bHtml}</div>
+    <div class="ec-colony-actions">
+      <select class="ec-build-sel" id="ec-bsel-${c.id}">${opts}</select>
+      <button class="btn btn-gh btn-sm" ${full ? 'disabled title="Нет свободных ячеек"' : ''} onclick="ecBuild('${c.id}')">＋ Построить</button>
+      ${!c.terraformed ? `<button class="btn btn-gh btn-sm" onclick="ecTerraform('${c.id}')">Терраформ (+${EC_TERRAFORM_CELLS} ⬚, ${ecNum(EC_TERRAFORM_COST)} ГС)</button>` : ''}
+      <button class="btn btn-gh btn-sm ec-danger" onclick="ecAbandon('${c.id}')" title="Бросить колонию">✕ Бросить</button>
+    </div>`;
+}
+
 function ecTabColonies() {
-  const coloniesHtml = EC.colonies.length ? EC.colonies.map(ecColonyCard).join('') : `<div class="ec-empty">Колоний пока нет.</div>`;
   const race = EC.app.race;
-  const rows = [];
-  EC.systems.forEach(s => (s.planets || []).forEach(p => {
-    if (!p || !p.name) return;
-    if (EC.colonies.some(c => c.system_id === s.id && c.planet_name === p.name)) return;
-    const g = ecPlanetGroup(p), label = EC_GRP_LABEL[g] || g, cells = +p.slotsP || EC_DEFAULT_CELLS;
-    let badge, btn;
-    if (!ecColonizable(p)) {
-      badge = `<span class="ec-pl-bad ec-pl-no">непригодна · ${esc(label)}</span>`;
-      btn = `<button class="btn btn-gh btn-sm" disabled>—</button>`;
-    } else if (ecNative(p, race)) {
-      badge = `<span class="ec-pl-bad ec-pl-native">родная · ${esc(label)}</span>`;
-      btn = `<button class="btn btn-gd btn-sm" onclick="ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},0)">Колонизировать · ${EC_COLONIZE_COST} ГС</button>`;
-    } else {
-      badge = `<span class="ec-pl-bad ec-pl-foreign">чужая · ${esc(label)}</span>`;
-      btn = `<button class="btn btn-gh btn-sm" onclick="ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},1)">Терраформ+колон. · ${ecNum(EC_TERRAFORM_COST)} ГС</button>`;
-    }
-    rows.push(`<div class="ec-colonize-row">
-      <div class="ec-cz-main"><span class="ec-cz-name">${esc(p.name)}</span><span class="ec-cz-sub">${esc(s.name)} · ⬚ ${cells}</span></div>
-      <div class="ec-cz-right">${badge}${btn}</div>
-    </div>`);
-  }));
-  const colonizeHtml = rows.length ? rows.join('') : `<div class="ec-empty">В ваших системах нет планет. Контролируйте больше систем на карте галактики.</div>`;
-  return `<div class="ec-section-title">Колонии <span class="ec-hint">— застройка (1 здание = 1 ячейка)</span></div>
-    <div class="ec-colonies">${coloniesHtml}</div>
-    <div class="ec-section-title">Колонизация <span class="ec-hint">— все планеты в ваших системах</span></div>
-    <div class="ec-colonize">${colonizeHtml}</div>`;
+  if (!EC.systems.length) {
+    return `<div class="ec-section-title">Системы и колонии</div>
+      <div class="ec-empty">У вас пока нет систем. Захватывайте системы во вкладке «🌐 Территория».</div>`;
+  }
+  const totalCol = EC.colonies.length;
+  const totalPlanets = EC.systems.reduce((a, s) => a + (s.planets || []).filter(p => p && p.name).length, 0);
+  const blocks = EC.systems.map(s => {
+    const planets = (s.planets || []).filter(p => p && p.name);
+    const cols = EC.colonies.filter(c => c.system_id === s.id);
+    const sysOpen = EC.openSys === null || EC.openSys === s.id;  // по умолчанию раскрыто; можно свернуть
+    const planetRows = planets.map(p => {
+      const colony = cols.find(c => c.planet_name === p.name);
+      if (colony) {
+        const open = EC.openColony === colony.id;
+        const blds = EC.buildings.filter(b => b.colony_id === colony.id);
+        const used = blds.length, cap = colony.cells || EC_DEFAULT_CELLS;
+        const incGc = blds.reduce((a, b) => a + (ecBuildingIncome(b).gc || 0), 0);
+        const incSci = blds.reduce((a, b) => a + (ecBuildingIncome(b).science || 0), 0);
+        const incTxt = [incGc ? `+${ecNum(incGc)} ГС` : '', incSci ? `+${ecNum(incSci)} ОН` : ''].filter(Boolean).join(' ');
+        const head = `<div class="ec-pl ec-pl-own${open ? ' open' : ''}" onclick="ecToggleColony('${colony.id}')">
+          <div class="ec-pl-l"><span class="ec-pl-ic">🏙</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name)}</div><div class="ec-pl-sb">${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div></div></div>
+          <div class="ec-pl-r"><span class="ec-pl-cells">⬚ ${used}/${cap}</span>${incTxt ? `<span class="ec-pl-inc">${incTxt}/сут</span>` : ''}<span class="ec-pl-chev">${open ? '▾' : '▸'}</span></div>
+        </div>`;
+        return head + (open ? `<div class="ec-pl-detail">${ecColonyManage(colony)}</div>` : '');
+      }
+      const cz = ecColonizeInfo(s, p, race);
+      return `<div class="ec-pl ec-pl-free">
+        <div class="ec-pl-l"><span class="ec-pl-ic">◌</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(p.name)}</div><div class="ec-pl-sb ec-cz-${cz.cls}">${esc(cz.tag)} · ${esc(cz.label)}</div></div></div>
+        <div class="ec-pl-r">${cz.btn}</div>
+      </div>`;
+    }).join('') || `<div class="ec-empty" style="padding:10px 12px">В системе нет планет.</div>`;
+    return `<div class="ec-sysblk">
+      <div class="ec-sysblk-hd" onclick="ecToggleSys('${esc(s.id)}')">
+        <span class="ec-sysblk-nm">🜨 ${esc(s.name)}</span>
+        <span class="ec-sysblk-meta">${cols.length} колон. · ${planets.length} планет <span class="ec-pl-chev">${sysOpen ? '▾' : '▸'}</span></span>
+      </div>
+      ${sysOpen ? `<div class="ec-sysblk-body">${planetRows}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="ec-section-title">Системы и колонии <span class="ec-hint">— ${totalCol} колон. из ${totalPlanets} планет · нажмите на колонию, чтобы развернуть застройку</span></div>
+    <div class="ec-syslist">${blocks}</div>`;
 }
 
 function ecDivBuildCard(div) {

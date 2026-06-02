@@ -64,6 +64,35 @@
 .ec-cz-name { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--t1); }
 .ec-cz-sub { display: block; font-size: 11px; color: var(--t3); margin-top: 1px; }
 
+/* ── Колонии v2: группировка по системам + раскрытие застройки ── */
+.ec-syslist { display: flex; flex-direction: column; gap: 12px; }
+.ec-sysblk { background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-lg); overflow: hidden; }
+.ec-sysblk-hd { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; cursor: pointer; background: var(--b3); border-bottom: 1px solid var(--w2); user-select: none; }
+.ec-sysblk-hd:hover { background: var(--b4); }
+.ec-sysblk-nm { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--t1); }
+.ec-sysblk-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; color: var(--t3); display: inline-flex; align-items: center; gap: 8px; }
+.ec-sysblk-body { display: flex; flex-direction: column; }
+.ec-pl { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--w1); }
+.ec-pl:last-child { border-bottom: 0; }
+.ec-pl-own { cursor: pointer; transition: background .12s; }
+.ec-pl-own:hover { background: var(--b3); }
+.ec-pl-own.open { background: color-mix(in srgb, var(--gd) 8%, var(--b2)); }
+.ec-pl-l { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ec-pl-ic { font-size: 16px; flex-shrink: 0; opacity: .9; }
+.ec-pl-free .ec-pl-ic { opacity: .4; }
+.ec-pl-txt { min-width: 0; }
+.ec-pl-nm { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-pl-sb { font-size: 11px; color: var(--t3); margin-top: 1px; }
+.ec-pl-r { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ec-pl-cells { font-family: var(--font-mono); font-size: 11px; color: var(--t2); background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); padding: 2px 7px; white-space: nowrap; }
+.ec-pl-inc { font-family: var(--font-mono); font-size: 10px; color: var(--gd); white-space: nowrap; }
+.ec-pl-chev { font-size: 10px; color: var(--t3); width: 12px; text-align: center; }
+.ec-pl-detail { padding: 12px 14px 14px; background: var(--b1); border-bottom: 1px solid var(--w1); }
+.ec-pl-detail .ec-bld-grid { margin-bottom: 10px; }
+.ec-cz-native { color: var(--ok); }
+.ec-cz-foreign { color: var(--color-warning, #e0a030); }
+.ec-cz-no { color: var(--t4); }
+
 /* Кнопка-мини */
 .btn-xs { padding: 3px 8px !important; font-size: 10px !important; }
 
