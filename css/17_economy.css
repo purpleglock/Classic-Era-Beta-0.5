@@ -107,6 +107,13 @@
 .ec-mine-row.active .ec-mine-nm { color: var(--t1); font-weight: 500; }
 .ec-mine-rt { font-family: var(--font-mono); font-size: 10px; color: var(--gd); font-weight: 700; flex-shrink: 0; white-space: nowrap; }
 .ec-mine-rt-dim { color: var(--t4); font-weight: 400; }
+/* отложенные проекты колоний: тег «в работе» */
+.ec-proj-tag { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 10px; color: var(--color-warning, #e0a030); background: color-mix(in srgb, var(--color-warning, #e0a030) 12%, transparent); border: 1px solid color-mix(in srgb, var(--color-warning, #e0a030) 40%, transparent); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+/* уровень сложности терраформирования */
+.ec-terra-tier { display: inline-block; font-family: var(--font-mono); font-size: 9px; letter-spacing: .03em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; margin-right: 6px; border: 1px solid; vertical-align: middle; }
+.ec-terra-t1 { color: #6fd08a; border-color: color-mix(in srgb, #44bb66 50%, transparent); }
+.ec-terra-t2 { color: #e0a030; border-color: color-mix(in srgb, #e0a030 50%, transparent); }
+.ec-terra-t3 { color: #ff7a6b; border-color: color-mix(in srgb, #ff5a4d 55%, transparent); }
 .ec-pl-own { cursor: pointer; transition: background .12s; }
 .ec-pl-own:hover { background: var(--b3); }
 .ec-pl-own.open { background: color-mix(in srgb, var(--gd) 8%, var(--b2)); }

@@ -122,6 +122,72 @@ create policy "up_upd" on public.unit_production for update to authenticated
 create policy "up_del" on public.unit_production for delete to authenticated
   using (owner_id = auth.uid() or public.current_user_role() in ('superadmin','editor'));
 
+-- ── Проекты колоний (отложенные на 1+ ход) ──────────────────
+-- Слоты зданий, терраформирование непригодных планет и обустройство
+-- среды обитания не применяются мгновенно: проект завершается в конце хода
+-- (terraform — через несколько ходов в зависимости от сложности).
+create table if not exists public.colony_projects (
+  id          uuid primary key default gen_random_uuid(),
+  faction_id  text,
+  owner_id    uuid,
+  kind        text not null,            -- slot | terraform | habitat
+  colony_id   uuid,                     -- slot / habitat
+  building_id uuid,                     -- slot
+  system_id   text,                     -- terraform (новая планета)
+  planet_name text,
+  planet_type text,
+  cells       int default 0,            -- terraform: размер новой колонии / habitat: +ячеек
+  payload     jsonb default '{}'::jsonb,-- terraform: снимок ресурсов планеты
+  label       text,                     -- человекочитаемое имя проекта
+  ready_at    timestamptz,              -- момент завершения (конец хода/ходов)
+  created_at  timestamptz default now()
+);
+create index if not exists cp_faction_idx on public.colony_projects(faction_id);
+create index if not exists cp_owner_idx    on public.colony_projects(owner_id);
+create index if not exists cp_ready_idx     on public.colony_projects(ready_at);
+
+alter table public.colony_projects enable row level security;
+drop policy if exists "cp_sel" on public.colony_projects;
+drop policy if exists "cp_ins" on public.colony_projects;
+drop policy if exists "cp_del" on public.colony_projects;
+create policy "cp_sel" on public.colony_projects for select to authenticated
+  using (owner_id = auth.uid() or public.current_user_role() in ('superadmin','editor','moderator'));
+create policy "cp_ins" on public.colony_projects for insert to authenticated
+  with check (owner_id = auth.uid() or public.current_user_role() in ('superadmin','editor'));
+create policy "cp_del" on public.colony_projects for delete to authenticated
+  using (owner_id = auth.uid() or public.current_user_role() in ('superadmin','editor'));
+
+-- Применение завершённых проектов колоний (вызывается в начале начисления).
+-- Идемпотентно: проект применяется и сразу удаляется только когда ready_at<=now().
+create or replace function public._apply_colony_projects(p_fid text)
+returns void language plpgsql security definer set search_path=public as $$
+declare pr record;
+begin
+  for pr in select * from public.colony_projects
+            where faction_id = p_fid and ready_at <= now()
+            order by ready_at asc
+  loop
+    if pr.kind = 'slot' then
+      update public.colony_buildings set slots_open = least(6, slots_open + 1)
+        where id = pr.building_id and faction_id = p_fid;
+    elsif pr.kind = 'habitat' then
+      update public.colonies set cells = cells + coalesce(pr.cells, 3), terraformed = true
+        where id = pr.colony_id and faction_id = p_fid;
+    elsif pr.kind = 'terraform' then
+      if not exists (select 1 from public.colonies c
+                     where c.faction_id = p_fid
+                       and c.system_id is not distinct from pr.system_id
+                       and c.planet_name = pr.planet_name) then
+        insert into public.colonies (faction_id, owner_id, system_id, planet_name, planet_type, cells, terraformed, resources)
+          values (p_fid, pr.owner_id, pr.system_id, pr.planet_name, pr.planet_type,
+                  coalesce(nullif(pr.cells, 0), 6), true, coalesce(pr.payload->'resources', '[]'::jsonb));
+      end if;
+    end if;
+    delete from public.colony_projects where id = pr.id;
+  end loop;
+end$$;
+revoke all on function public._apply_colony_projects(text) from public;
+
 -- ── RPC: инициализация экономики из одобренной анкеты ────────
 create or replace function public.economy_init()
 returns public.faction_economy
@@ -842,6 +908,9 @@ begin
   if not found then return jsonb_build_object('faction_id',p_fid,'days',0); end if;
 
   update public.unit_production set status='done' where faction_id=p_fid and status='queued' and ready_at<=now();
+
+  -- завершённые проекты колоний (слоты/терраформ/обустройство среды)
+  perform public._apply_colony_projects(p_fid);
 
   if eco.research_active is not null and eco.research_ready is not null and eco.research_ready <= now() then
     update public.faction_economy
