@@ -84,13 +84,14 @@ const EC_BUILD = {
   factory:          { name: 'Гражданская фабрика', cost: 500,  ladder: [0, 0, 500, 1500, 1500, 3000], free: 2, inc: { gc: 100 }, cat: 'civ', desc: '+100 ГС за слот' },
   mining:           { name: 'Добывающий завод',    cost: 500,  ladder: [0, 0, 500, 1500, 1500, 3000], free: 2, inc: { gc: 100 }, cat: 'civ', desc: '+100 ГС за слот' },
   trade:            { name: 'Торговый хаб',         cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 100 }, cat: 'civ', desc: '+100 ГС за слот (торговый путь)' },
+  market:           { name: 'Товарная биржа',       cost: 1500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Продаёт добытые ресурсы за ГС (≈50% цены), без торговых путей' },
   science:          { name: 'Научный Институт',     cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { science: 1 }, cat: 'mil', desc: '+1 ОН за слот' },
   training:         { name: 'Центр Подготовки',     cost: 500,  ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1000 пехоты' },
   intel:            { name: 'Центр Спецслужб',      cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 агент' },
   military_factory: { name: 'Военный Завод',        cost: 1000, ladder: [0, 500, 500, 1500, 1500, 300], free: 1, inc: {}, cat: 'mil', desc: '1 слот = техника' },
   shipyard:         { name: 'Корабельная Верфь',    cost: 2000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 корабль / 12 МЛА' },
 };
-const EC_ORDER = ['factory', 'mining', 'trade', 'science', 'training', 'intel', 'military_factory', 'shipyard'];
+const EC_ORDER = ['factory', 'mining', 'trade', 'market', 'science', 'training', 'intel', 'military_factory', 'shipyard'];
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
 // Обустройство среды обитания на своей колонии (+ячейки, 1 ход)
 const EC_HABITAT_COST = 1000, EC_HABITAT_CELLS = 3, EC_HABITAT_TURNS = 1;
@@ -147,6 +148,7 @@ const EC_MODS = {
     'Авторитарный':         { mine: 0.10, gc: -0.10, agents_flat: 1 },
     'Тоталитарный':         { mine: 0.25, gc: -0.15, agents_flat: 1 },
     'Деспотичный':          { claim_cd: -0.20, sci_flat: -1, agents_flat: 1 },
+    'Деспотизм':            { gc: 0.15, mine: 0.10, research: 0.15, sci_flat: -1, agents_flat: 1 },
     'Анархический':         { colonize: -0.25, gc: -0.20, build: 0.15, sci_flat: 1 },
   },
   ideology: {

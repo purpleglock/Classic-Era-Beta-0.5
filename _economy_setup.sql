@@ -1188,6 +1188,7 @@ begin
     when 'Авторитарный'       then mine:=mine+0.10; gc:=gc-0.10; agf:=agf+1;
     when 'Тоталитарный'       then mine:=mine+0.25; gc:=gc-0.15; agf:=agf+1;
     when 'Деспотичный'        then cd:=cd-0.20; scf:=scf-1; agf:=agf+1;
+    when 'Деспотизм'          then gc:=gc+0.15; mine:=mine+0.10; rsch:=rsch+0.15; scf:=scf-1; agf:=agf+1;
     when 'Анархический'       then col:=col-0.25; gc:=gc-0.20; bld:=bld+0.15; scf:=scf+1;
     else null;
   end case;
@@ -1256,6 +1257,7 @@ declare
   res_add jsonb := '{}'::jsonb; res_sub jsonb := '{}'::jsonb; merged jsonb; k text;
   rname text; rr text; rate numeric; escorted boolean; attacked boolean; chance numeric; avail numeric; shipped numeric;
   mods jsonb; m_mine numeric; m_gc numeric;
+  market_cap numeric; market_gc numeric := 0; sell numeric;
 begin
   select * into eco from public.faction_economy where faction_id = p_fid for update;
   if not found then return jsonb_build_object('faction_id',p_fid,'days',0); end if;
@@ -1332,6 +1334,37 @@ begin
     end loop;
     trade_gc := round(trade_gc * m_gc);   -- доктрина: торговля — часть ГС-экономики
 
+    -- ── товарная биржа: пассивная продажа накопленных ресурсов за ГС (≈50% цены),
+    --    без торговых путей. 1 слот = до 25 ед./сут., дорогие ресурсы продаются первыми.
+    market_cap := (select coalesce(sum(slots_open),0) from public.colony_buildings
+                   where faction_id = p_fid and btype = 'market') * 25 * d;
+    if market_cap > 0 then
+      for r in
+        select res_name, res_rar, avail from (
+          select distinct on (nm) nm as res_name, rr as res_rar,
+            greatest(0, coalesce((eco.resources->>nm)::numeric,0)
+                        + coalesce((res_add->>nm)::numeric,0)
+                        - coalesce((res_sub->>nm)::numeric,0)) as avail
+          from (
+            select (e.value->>'name') as nm, coalesce(e.value->>'r','common') as rr
+            from public.colonies c, jsonb_array_elements(c.resources) e
+            where c.faction_id = p_fid
+          ) q
+          order by nm, public._res_price(rr) desc
+        ) u
+        where avail > 0
+        order by public._res_price(res_rar) desc
+      loop
+        exit when market_cap <= 0;
+        sell := least(r.avail, market_cap);
+        res_sub := jsonb_set(res_sub, array[r.res_name],
+                     to_jsonb(coalesce((res_sub->>r.res_name)::numeric,0) + sell), true);
+        market_gc := market_gc + sell * public._res_price(r.res_rar) * 0.5;
+        market_cap := market_cap - sell;
+      end loop;
+      market_gc := round(market_gc * m_gc);   -- доктрина: рыночный сбыт — часть ГС-экономики
+    end if;
+
     merged := coalesce(eco.resources,'{}'::jsonb);
     for k in select jsonb_object_keys(res_add) loop
       merged := jsonb_set(merged, array[k], to_jsonb(coalesce((merged->>k)::numeric,0) + (res_add->>k)::numeric), true);
@@ -1343,7 +1376,7 @@ begin
     -- наука/агенты — ПЛОСКИЙ бонус доктрины (+N в сутки), не процент (дискретны);
     -- за день не уходит в минус (greatest 0).
     update public.faction_economy
-      set gc = gc + round(inc_gc * m_gc * d) + trade_gc,
+      set gc = gc + round(inc_gc * m_gc * d) + trade_gc + market_gc,
           science = science + greatest(0, inc_sci    + (mods->>'sci_flat')::numeric)    * d,
           agents  = agents  + greatest(0, inc_agents + (mods->>'agents_flat')::numeric) * d,
           resources = merged,
@@ -1357,7 +1390,7 @@ begin
       'gc',     round(inc_gc * m_gc),
       'science',greatest(0, inc_sci    + (mods->>'sci_flat')::numeric),
       'agents', greatest(0, inc_agents + (mods->>'agents_flat')::numeric),
-      'trade',  trade_gc, 'pirate', pirate));
+      'trade',  trade_gc, 'market', market_gc, 'pirate', pirate));
 end$$;
 
 -- ── Назначение месторождений для mining-здания ───────────────
