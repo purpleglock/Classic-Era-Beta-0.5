@@ -47,6 +47,34 @@ end$$;
 revoke all on function public.set_my_profile(text, text) from public;
 grant execute on function public.set_my_profile(text, text) to authenticated;
 
+-- Переименовать колонию/планету в ЕДИНОМ источнике истины: обновляет и
+-- public.colonies.planet_name, и соответствующую запись в map_systems.planets.
+-- Права: владелец колонии или стафф. Так имя меняется сразу везде (карта,
+-- фракции, кабинет), а не только в анкете.
+create or replace function public.rename_colony(p_colony_id uuid, p_new_name text)
+returns void language plpgsql security definer set search_path = public as $$
+declare col public.colonies; nm text;
+begin
+  nm := nullif(btrim(p_new_name), '');
+  if nm is null then raise exception 'empty name'; end if;
+  select * into col from public.colonies where id = p_colony_id;
+  if not found then raise exception 'colony not found'; end if;
+  if not (col.owner_id = auth.uid() or public.current_user_role() in ('superadmin','editor','moderator')) then
+    raise exception 'forbidden';
+  end if;
+  -- переименовать планету на карте (по старому имени в системе колонии)
+  update public.map_systems ms
+    set planets = (
+      select jsonb_agg(case when e->>'name' = col.planet_name then jsonb_set(e, '{name}', to_jsonb(nm)) else e end)
+      from jsonb_array_elements(ms.planets) e)
+    where ms.id = col.system_id
+      and exists (select 1 from jsonb_array_elements(ms.planets) e2 where e2->>'name' = col.planet_name);
+  -- переименовать колонию
+  update public.colonies set planet_name = nm where id = p_colony_id;
+end$$;
+revoke all on function public.rename_colony(uuid, text) from public;
+grant execute on function public.rename_colony(uuid, text) to authenticated;
+
 -- Удалить профиль игрока по email (имя/аватар; аккаунт и роль не трогаются).
 create or replace function public.admin_delete_profile(p_email text)
 returns void language plpgsql security definer set search_path = public as $$

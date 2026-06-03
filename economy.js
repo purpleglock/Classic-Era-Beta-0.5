@@ -757,8 +757,22 @@ function ecColonyManage(c) {
       <select class="ec-build-sel" id="ec-bsel-${c.id}">${opts}</select>
       <button class="btn btn-gh btn-sm" ${full ? 'disabled title="Нет свободных ячеек"' : ''} onclick="ecBuild('${c.id}')">＋ Построить</button>
       ${habBtn}
+      ${(typeof user !== 'undefined' && user && ['superadmin','editor','moderator'].includes(user.role)) ? `<button class="btn btn-gh btn-sm" onclick="ecRenameColony('${c.id}',${ecArg(c.planet_name || '')})" title="Переименовать планету (стафф, без модерации)">✎ Имя</button>` : ''}
       <button class="btn btn-gh btn-sm ec-danger" onclick="ecAbandon('${c.id}')" title="Бросить колонию">✕ Бросить</button>
     </div>`;
+}
+
+// Переименование планеты/колонии — через единый источник истины (colonies + map_systems).
+async function ecRenameColony(colId, cur) {
+  const nm = prompt('Новое название планеты:', cur || '');
+  if (nm === null) return;
+  const v = nm.trim();
+  if (!v || v === cur) return;
+  try {
+    await ecRpc('rename_colony', { p_colony_id: colId, p_new_name: v });
+    toast('Планета переименована', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
 }
 
 // Строка КОЛОНИИ (всегда показывается, даже если планета не совпала с картой)

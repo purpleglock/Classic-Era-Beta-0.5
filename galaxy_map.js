@@ -536,6 +536,16 @@ function gmOpenPanel(sys) {
     </div>`;
   })() : `<div class="gm-fac-badge gm-neutral">Нейтральная система</div>`;
   panel.className = '';
+  // Реальные колонии в системе (из colonies) — структуры фракций и столичные планеты,
+  // которых может не быть в статичных map_systems.planets.
+  const sysCols = (GM.colonies || []).filter(c => c.system_id === sys.id);
+  const colsBlock = sysCols.length ? `
+    <div class="gm-panel-sub">Колонии · ${sysCols.length}</div>
+    <div class="gm-collist">${sysCols.map(c => {
+      const f2 = gmFaction(c.faction_id); const fcol = f2 ? gmReadable(f2.color) : 'rgba(255,255,255,.4)';
+      const isCap = c.is_capital || c.planet_type === 'Столичный мир';
+      return `<div class="gm-col-row"><span class="gm-col-dot" style="background:${fcol}"></span><span class="gm-col-nm">${isCap ? '★ ' : ''}${esc(c.planet_name || 'Колония')}</span>${c.planet_type ? `<span class="gm-col-ty">${esc(c.planet_type)}</span>` : ''}</div>`;
+    }).join('')}</div>` : '';
   panel.innerHTML = `
     <button class="gm-close" onclick="gmClosePanel()">✕</button>
     <h2 class="gm-panel-title">${esc(sys.name)}</h2>
@@ -543,6 +553,7 @@ function gmOpenPanel(sys) {
     ${(typeof ecCanAccess === 'function' && ecCanAccess() && typeof EC !== 'undefined' && EC.app && EC.app.faction_id === sys.faction)
       ? `<button class="btn btn-gh btn-sm" style="margin:6px 0 2px" onclick="gmClosePanel();go('economy')">🛰 Открыть кабинет</button>` : ''}
     <p class="gm-panel-desc">${esc(sys.description || '')}</p>
+    ${colsBlock}
     <div class="gm-panel-sub">Состав системы <span class="gm-sub-hint">★ от звезды наружу →</span></div>
     <div class="gm-orblist">${planets}</div>`;
 }

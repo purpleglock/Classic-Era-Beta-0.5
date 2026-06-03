@@ -182,6 +182,19 @@ async function renderFactionWizard() {
   }
   FR.editApproved = !!(mine && mine.status === 'approved'); // редактирование своей фракции
   FR.data = mine ? { ...frBlank(), ...mine, buildings: mine.buildings || [] } : frBlank();
+  // при редактировании — реальная столичная колония (источник истины для имени/системы)
+  FR.myCapital = null;
+  if (FR.editApproved && mine.faction_id) {
+    try {
+      const cols = await dbGet('colonies', `faction_id=eq.${encodeURIComponent(mine.faction_id)}&select=*`) || [];
+      const cap = cols.find(c => c.is_capital) || cols.find(c => c.planet_type === 'Столичный мир') || cols[0];
+      if (cap) {
+        let sysName = mine.system_name;
+        try { const ss = await dbGet('map_systems', `id=eq.${encodeURIComponent(cap.system_id)}&select=name`); if (ss && ss[0]) sysName = ss[0].name; } catch (e) {}
+        FR.myCapital = { id: cap.id, system_name: sysName, planet_name: cap.planet_name };
+      }
+    } catch (e) {}
+  }
   FR.step = 0;
   FR.freeSystems = null; FR.allSystems = null;
   // Восстановление несохранённого черновика из localStorage (после перезагрузки).
@@ -285,11 +298,13 @@ function frStepColor(d) {
 }
 function frStepSystem(d) {
   if (FR.editApproved) {
+    const cap = FR.myCapital || { system_name: d.system_name, planet_name: d.planet_name };
     return `<h3 class="fr-h3">Столичная система</h3>
       <div class="fr-locked">🔒 Стартовая система закреплена за фракцией и не может быть изменена.</div>
-      <div class="fr-sys-picked">Столица: <b>${esc(d.system_name || '—')}</b></div>
+      <div class="fr-sys-picked">Столица: <b>${esc(cap.system_name || '—')}${cap.planet_name ? ' / ' + esc(cap.planet_name) : ''}</b></div>
       <div class="fg" style="margin-top:12px"><label class="fl">Название столичной планеты</label>
-        <input class="fi" id="f-planet" value="${esc(d.planet_name)}" placeholder="Планета"></div>`;
+        <input class="fi" id="f-planet" value="${esc(cap.planet_name || d.planet_name || '')}" placeholder="Название планеты"></div>
+      <div class="fr-note" style="margin-top:8px">Изменение имени уйдёт на <b>проверку администрации</b> вместе с анкетой (кнопка «Сохранить» внизу). После одобрения название обновится на карте, странице фракций и в кабинете.</div>`;
   }
   return `<h3 class="fr-h3">Столичная система</h3>
     <p class="fr-note">Выберите <b>свободную</b> звезду: <span style="color:var(--gd)">голубые</span> свободны, серые заняты. Ваша столичная планета будет создана прямо в этой системе на карте.</p>
@@ -323,6 +338,19 @@ function frRenderPlanetPick() {
 }
 function frOnRegRace(v) { FR.data.race = v; frRenderPlanetPick(); }
 function frPickCapEnv(env) { FR.data.capital_env = env; frSaveLocal(); frRenderPlanetPick(); }
+// Переименование столицы прямо в анкете — через единый источник (colonies + map_systems).
+async function frRenameCapital() {
+  if (!FR.myCapital || !FR.myCapital.id) { toast('Столица ещё не создана', 'err'); return; }
+  const v = (document.getElementById('f-cap-rename')?.value || '').trim();
+  if (!v) { toast('Введите название', 'err'); return; }
+  if (v === FR.myCapital.planet_name) { toast('Имя не изменилось', 'inf'); return; }
+  try {
+    await apiFetch('rpc/rename_colony', { method: 'POST', body: JSON.stringify({ p_colony_id: FR.myCapital.id, p_new_name: v }) });
+    FR.myCapital.planet_name = v; FR.data.planet_name = v;
+    toast('Столица переименована', 'ok');
+    frRenderStep();
+  } catch (e) { toast('Не удалось переименовать: ' + e.message, 'err'); }
+}
 function frStepBuildings(d) {
   const free = frFreeBuilding(d.civ_type);
   if (FR.editApproved) {
@@ -587,11 +615,18 @@ async function frSubmit() {
 async function frLoadCapitals() {
   try {
     const [caps, sys] = await Promise.all([
-      dbGet('colonies', 'is_capital=eq.true&select=faction_id,system_id,planet_name').catch(() => []),
+      dbGet('colonies', 'select=*').catch(() => []),
       dbGet('map_systems', 'select=id,name').catch(() => []),
     ]);
     const sysNames = {}; (sys || []).forEach(s => { sysNames[s.id] = s.name; });
-    const byFid = {}; (caps || []).forEach(c => { byFid[c.faction_id] = c; });
+    const byFid = {};
+    // столица = is_capital (после миграции) ИЛИ planet_type='Столичный мир' (текущий признак)
+    (caps || []).forEach(c => {
+      if (!c.faction_id) return;
+      if ((c.is_capital || c.planet_type === 'Столичный мир') && !byFid[c.faction_id]) byFid[c.faction_id] = c;
+    });
+    // fallback: нет помеченной столицы — берём любую реальную колонию (лишь бы не данные анкеты)
+    (caps || []).forEach(c => { if (c.faction_id && !byFid[c.faction_id]) byFid[c.faction_id] = c; });
     return { byFid, sysNames };
   } catch (e) { return { byFid: {}, sysNames: {} }; }
 }

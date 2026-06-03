@@ -60,7 +60,7 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare app public.faction_applications; fid text;
+declare app public.faction_applications; fid text; cap public.colonies;
 begin
   if public.current_user_role() not in ('superadmin','editor') then
     raise exception 'forbidden: only superadmin/editor can approve';
@@ -84,6 +84,21 @@ begin
       where faction_id = fid
         and system_id is distinct from app.system_id
         and system_id not in (select id from public.map_systems where faction = fid);
+  end if;
+
+  -- применить новое имя столичной планеты из анкеты (переименование через модерацию):
+  -- меняем и реальную столичную колонию, и запись планеты на карте — единый источник.
+  if app.planet_name is not null and app.planet_name <> '' then
+    select * into cap from public.colonies where faction_id = fid
+      order by is_capital desc, (planet_type = 'Столичный мир') desc, created_at asc limit 1;
+    if found and cap.planet_name is distinct from app.planet_name then
+      update public.map_systems ms set planets = (
+        select jsonb_agg(case when e->>'name' = cap.planet_name then jsonb_set(e, '{name}', to_jsonb(app.planet_name)) else e end)
+        from jsonb_array_elements(ms.planets) e)
+        where ms.id = cap.system_id
+          and exists (select 1 from jsonb_array_elements(ms.planets) e2 where e2->>'name' = cap.planet_name);
+      update public.colonies set planet_name = app.planet_name where id = cap.id;
+    end if;
   end if;
 
   -- статус анкеты (сбрасываем флаг изменений)

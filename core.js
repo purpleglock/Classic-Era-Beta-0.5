@@ -23,7 +23,9 @@ const sb = supabase.createClient(SB_URL, SB_ANON, {
     persistSession: true,
     storageKey: 'wk12_session',
     storage: window.localStorage,
-    lock: false,
+    // no-op lock: отключает Web Locks (из-за reconnect-проблем), но остаётся
+    // валидной функцией — иначе auth-методы падают с "this.lock is not a function".
+    lock: (_name, _acquireTimeout, fn) => fn(),
     autoRefreshToken: true,
     detectSessionInUrl: false,
   }

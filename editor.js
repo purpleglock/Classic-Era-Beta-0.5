@@ -1708,6 +1708,20 @@ async function renderApTab(){
         <button class="btn btn-gd btn-fw" onclick="saveProfileFromApForm()">
           <span style="margin-right:6px">💾</span> Сохранить профиль
         </button>
+      </div>
+      <div class="prof-divider"></div>
+      <div class="prof-form">
+        <div class="fg">
+          <label class="fl">Текущий пароль</label>
+          <input class="fi" id="prof-curpass" type="password" placeholder="Для подтверждения личности" autocomplete="current-password">
+        </div>
+        <div class="fg">
+          <label class="fl">Новый пароль</label>
+          <input class="fi" id="prof-newpass" type="password" placeholder="Минимум 8 символов" autocomplete="new-password">
+        </div>
+        <button class="btn btn-gh btn-fw" onclick="changeMyPassword()">
+          <span style="margin-right:6px">🔑</span> Сменить пароль
+        </button>
       </div>`;
   } else if(apTab==='mypages'){
     const myPgs = pages.filter(p=>isVisiblePage(p)&&(p.created_by===user.email||p.created_by===user.id));
@@ -1924,6 +1938,32 @@ async function saveProfileFromApForm() {
   const _si = allProfiles.findIndex(p => p.email === user.email); const _pd = { email: user.email, display_name: displayName, avatar_url: avatarUrl };
   if (_si >= 0) allProfiles[_si] = _pd; else allProfiles.push(_pd);
   updAuthUI(); await renderHome(); renderAp(); toast('Профиль сохранён!', 'ok');
+}
+
+// Смена пароля текущего пользователя (Supabase Auth) с подтверждением текущего
+// пароля (re-authentication) — чтобы по открытой чужой сессии нельзя было
+// перехватить аккаунт, не зная старый пароль.
+async function changeMyPassword() {
+  if (!user) return;
+  const cur = document.getElementById('prof-curpass')?.value || '';
+  const np  = document.getElementById('prof-newpass')?.value || '';
+  if (!cur) { toast('Введите текущий пароль', 'err'); return; }
+  if (np.length < 8) { toast('Новый пароль минимум 8 символов', 'err'); return; }
+  if (np === cur) { toast('Новый пароль совпадает с текущим', 'err'); return; }
+  try {
+    // подтверждаем личность текущим паролем — прямой запрос токена,
+    // не меняя текущую сессию и не дёргая auth-события
+    const vr = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST', headers: { 'apikey': SB_ANON, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email, password: cur }),
+    });
+    if (!vr.ok) { toast('Неверный текущий пароль', 'err'); return; }
+    const { error } = await sb.auth.updateUser({ password: np });
+    if (error) throw error;
+    const c = document.getElementById('prof-curpass'); if (c) c.value = '';
+    const f = document.getElementById('prof-newpass'); if (f) f.value = '';
+    toast('Пароль изменён', 'ok');
+  } catch (e) { toast('Ошибка смены пароля: ' + (e.message || e), 'err'); }
 }
 
 // ВЫРЕЗАН КРИВОЙ ЗАПРОС user_roles по EMAIL (решение ошибки 400 Bad Request)
