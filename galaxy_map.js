@@ -42,14 +42,21 @@ async function loadGalaxyData() {
       // Метаданные (герб/лидер/имя/доктрина) — из анкеты (не меняются при переезде).
       // Столица (система + имя планеты) — из РЕАЛЬНОЙ столичной колонии (is_capital),
       // иначе переименование/перенос показывались бы как при регистрации.
-      const [apps, caps] = await Promise.all([
+      const [apps, cols] = await Promise.all([
         dbGet('faction_applications', 'status=eq.approved&select=faction_id,herald_url,leader,gov,name,system_id,planet_name'),
-        dbGet('colonies', 'is_capital=eq.true&select=faction_id,system_id,planet_name').catch(() => []),
+        dbGet('colonies', 'select=*').catch(() => []),
       ]);
+      GM.colonies = cols || [];   // реальные колонии (для панели системы)
       GM.capitals = {};   // system_id -> faction_id (актуальная столица)
       GM.capPlanet = {};  // system_id -> имя столичной планеты (актуальное)
       (apps || []).forEach(a => { if (a.faction_id) GM.facMeta[a.faction_id] = a; });
-      (caps || []).forEach(c => { if (c.faction_id && c.system_id) { GM.capitals[c.system_id] = c.faction_id; GM.capPlanet[c.system_id] = c.planet_name; } });
+      // столица = колония с is_capital (после миграции) ИЛИ planet_type='Столичный мир' (текущий признак)
+      (cols || []).forEach(c => {
+        if (!c.faction_id || !c.system_id) return;
+        if ((c.is_capital || c.planet_type === 'Столичный мир') && !GM.capitals[c.system_id]) {
+          GM.capitals[c.system_id] = c.faction_id; GM.capPlanet[c.system_id] = c.planet_name;
+        }
+      });
     } catch (e) { /* таблиц может не быть */ }
   } catch (e) {
     console.warn('[map] load error', e);
