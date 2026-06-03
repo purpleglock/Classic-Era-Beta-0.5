@@ -235,12 +235,6 @@ async function uploadProfileAv(input) {
 }
 async function saveProfileFromForm() {
   if (!user) return;
-  const _COOLDOWN = 7 * 24 * 60 * 60 * 1000;
-  const _lastChanged = parseInt(localStorage.getItem('wk_profile_changed_' + user.id) || '0');
-  if (Date.now() - _lastChanged < _COOLDOWN) {
-    const _daysLeft = Math.ceil((_COOLDOWN - (Date.now() - _lastChanged)) / 86400000);
-    toast(`Изменить профиль можно через ${_daysLeft} дн.`, 'err'); return;
-  }
   const displayName = document.getElementById('prof-name')?.value?.trim() || '';
   const avatarUrl   = document.getElementById('prof-avatar')?.value?.trim() || '';
   userProfile = { display_name: displayName, avatar_url: avatarUrl };
@@ -252,7 +246,6 @@ async function saveProfileFromForm() {
   const _si = allProfiles.findIndex(p => p.email === user.email);
   const _pd = { email: user.email, display_name: displayName, avatar_url: avatarUrl };
   if (_si >= 0) allProfiles[_si] = _pd; else allProfiles.push(_pd);
-  localStorage.setItem('wk_profile_changed_' + user.id, String(Date.now()));
   cm('mo-profile'); updAuthUI(); await renderHome(); toast('Профиль сохранён!', 'ok');
 }
 

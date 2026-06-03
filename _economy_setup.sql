@@ -275,6 +275,60 @@ returns jsonb language sql immutable as $$
     else '[]'::jsonb end
 $$;
 
+-- Флаг разового доначисления стартовых зданий (для уже созданных фракций).
+alter table public.faction_economy add column if not exists starter_fixed boolean default false;
+
+-- Доначисляет недостающие СТАРТОВЫЕ здания одной фракции до ожидаемого набора:
+--   бесплатное по типу цивилизации + купленные в анкете + гранты доктрины.
+-- Идемпотентно — создаёт только дефицит по каждому типу здания.
+create or replace function public._ensure_starter_buildings(p_fid text)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  app public.faction_applications;
+  cap uuid;
+  expected text[] := array[]::text[];
+  b text; t text; want int; have int; i int;
+begin
+  select * into app from public.faction_applications
+    where faction_id = p_fid and status = 'approved'
+    order by updated_at desc limit 1;
+  if not found then return; end if;
+
+  select id into cap from public.colonies
+    where faction_id = p_fid
+    order by (planet_type = 'Столичный мир') desc, created_at asc limit 1;
+  if cap is null then return; end if;
+
+  -- 1) бесплатное по типу цивилизации
+  expected := expected || (case when app.civ_type = 'frontier' then 'intel' else 'factory' end);
+  -- 2) купленные в анкете (id → btype, как в economy_init)
+  for b in select jsonb_array_elements_text(coalesce(app.buildings, '[]'::jsonb)) loop
+    t := case b
+      when 'encom' then 'factory'  when 'ind'  then 'mining'
+      when 'unit'  then 'trade'    when 'sci'  then 'science'
+      when 'emb'   then 'training' when 'com'  then 'intel'
+      when 'yard'  then 'military_factory' when 'mil' then 'shipyard'
+      else null end;
+    if t is not null then expected := expected || t; end if;
+  end loop;
+  -- 3) гранты доктрины (форма правления + идеология)
+  expected := expected || public._doctrine_grant_buildings(app.gov, app.ideology);
+
+  -- дозаполняем дефицит по каждому типу здания
+  for t in select distinct unnest(expected) loop
+    want := (select count(*) from unnest(expected) e(v) where e.v = t);
+    have := (select count(*) from public.colony_buildings cb
+             where cb.faction_id = p_fid and cb.btype = t);
+    if have < want then
+      for i in 1..(want - have) loop
+        insert into public.colony_buildings (colony_id, faction_id, owner_id, btype, slots_open)
+        values (cap, p_fid, app.owner_id, t, case when t in ('factory','mining') then 2 else 1 end);
+      end loop;
+    end if;
+  end loop;
+end$$;
+revoke all on function public._ensure_starter_buildings(text) from public;
+
 create or replace function public.economy_init()
 returns public.faction_economy
 language plpgsql
@@ -286,10 +340,6 @@ declare
   eco public.faction_economy;
   cap_colony uuid;
   cap_name text;
-  fb text;
-  bid text;
-  bt text;
-  free_slots int;
 begin
   select * into app from public.faction_applications
     where owner_id = auth.uid() and status = 'approved'
@@ -308,12 +358,19 @@ begin
     and (c.resources is null or c.resources = '[]'::jsonb);
 
   select * into eco from public.faction_economy where faction_id = app.faction_id;
-  if found then return eco; end if;   -- уже инициализировано
+  if found then
+    -- разово догоняем недовыданные стартовые здания (старые фракции до фикса)
+    if not coalesce(eco.starter_fixed, false) then
+      perform public._ensure_starter_buildings(app.faction_id);
+      update public.faction_economy set starter_fixed = true where faction_id = app.faction_id;
+    end if;
+    return eco;
+  end if;
 
-  insert into public.faction_economy (faction_id, owner_id, owner_email, gc, science, tnp, last_tick, research)
+  insert into public.faction_economy (faction_id, owner_id, owner_email, gc, science, tnp, last_tick, research, starter_fixed)
     values (app.faction_id, app.owner_id, app.owner_email,
             case when app.bonus_money then 500 else 0 end, 0, 0, now(),
-            public._doctrine_grant_techs(app.ideology))   -- бесплатные техи доктрины
+            public._doctrine_grant_techs(app.ideology), true)   -- бесплатные техи доктрины
     returning * into eco;
 
   cap_name := coalesce(nullif(app.planet_name, ''), app.system_name, 'Столица');
@@ -337,38 +394,8 @@ begin
        where ms.id = app.system_id and pl->>'name' = cap_name limit 1), 'Столичный мир'))
   ) where id = cap_colony;
 
-  -- бесплатная постройка по типу цивилизации + выбранные в анкете
-  fb := case when app.civ_type = 'frontier' then 'com' else 'encom' end;
-
-  for bid in
-    select distinct x from (
-      select fb as x
-      union all
-      select jsonb_array_elements_text(coalesce(app.buildings, '[]'::jsonb)) as x
-    ) q
-  loop
-    bt := case bid
-      when 'encom' then 'factory'
-      when 'ind'   then 'mining'
-      when 'unit'  then 'trade'
-      when 'sci'   then 'science'
-      when 'emb'   then 'training'
-      when 'com'   then 'intel'
-      when 'yard'  then 'military_factory'
-      when 'mil'   then 'shipyard'
-      else null end;
-    if bt is null then continue; end if;
-    free_slots := case when bt in ('factory','mining') then 2 else 1 end;
-    insert into public.colony_buildings (colony_id, faction_id, owner_id, btype, slots_open)
-      values (cap_colony, app.faction_id, app.owner_id, bt, free_slots);
-  end loop;
-
-  -- бонусные постройки доктрины (форма правления + идеология)
-  foreach bt in array public._doctrine_grant_buildings(app.gov, app.ideology) loop
-    free_slots := case when bt in ('factory','mining') then 2 else 1 end;
-    insert into public.colony_buildings (colony_id, faction_id, owner_id, btype, slots_open)
-      values (cap_colony, app.faction_id, app.owner_id, bt, free_slots);
-  end loop;
+  -- стартовые здания: бесплатное по типу + купленные в анкете + гранты доктрины
+  perform public._ensure_starter_buildings(app.faction_id);
 
   return eco;
 end$$;

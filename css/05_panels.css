@@ -1370,6 +1370,17 @@ select.sb-fi        { cursor: pointer; appearance: auto; }
   max-width: 500px;
 }
 
+/* пометка «имя по умолчанию» рядом с отображаемым именем */
+.prof-name-default { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:400; color:var(--t4); letter-spacing:.5px; }
+
+/* игровая сводка во вкладке профиля */
+.prof-game { background:var(--b1); border:1px solid var(--w2); border-radius:8px; padding:14px; margin-bottom:16px; }
+.prof-game-hd { font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--te); margin-bottom:10px; }
+.prof-game-row { display:flex; justify-content:space-between; gap:12px; font-size:12px; padding:6px 0; border-bottom:1px solid var(--w1); }
+.prof-game-row:last-of-type { border-bottom:none; }
+.prof-game-row span { color:var(--t3); }
+.prof-game-row b { color:#eaf3fb; text-align:right; }
+
 /* OLD STYLES - keeping for compatibility */
 .prof-stats-row {
   display: grid;

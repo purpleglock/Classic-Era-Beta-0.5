@@ -1,0 +1,91 @@
+-- ════════════════════════════════════════════════════════════════════
+-- РАЗОВАЯ МИГРАЦИЯ: доначисление недостающих СТАРТОВЫХ зданий.
+--
+-- Зачем: public.economy_init() создаёт стартовые здания РОВНО ОДИН РАЗ
+-- (при первом заходе в «Кабинет»: `if found then return eco`). Фракции,
+-- инициализированные до текущей версии логики выдачи (в т.ч. грант-здания
+-- доктрины), недополучили часть построек и повторным входом не чинятся.
+--
+-- Что делает: для каждой approved-фракции считает ОЖИДАЕМЫЙ набор
+--   = бесплатное по типу цивилизации (frontier→intel, colony→factory)
+--   + купленные в анкете (app.buildings)
+--   + грант-здания доктрины (_doctrine_grant_buildings)
+-- и сравнивает с фактическими colony_buildings (по всей фракции).
+-- Если по какому-то типу зданий МЕНЬШЕ ожидаемого — дозаполняет разницу
+-- на столичную колонию.
+--
+-- Безопасность:
+--  • Идемпотентно — повторный запуск ничего не добавит.
+--  • Консервативно — считает по всей фракции, поэтому НЕ дублирует тем, кто
+--    уже имеет нужное (в т.ч. построил сам). Снесённое игроком осознанно
+--    может вернуться — это компромисс в пользу пострадавших.
+-- ════════════════════════════════════════════════════════════════════
+
+create or replace function public._backfill_starter_buildings(p_apply boolean default false)
+returns table(faction text, kind text, missing int)
+language plpgsql security definer set search_path = public as $$
+declare
+  app record;
+  cap uuid;
+  expected text[];
+  b text; t text;
+  want int; have int; i int;
+begin
+  for app in
+    select * from public.faction_applications
+    where status = 'approved' and faction_id is not null
+  loop
+    -- столичная колония (приоритет — помеченная «Столичный мир»)
+    select id into cap from public.colonies
+      where faction_id = app.faction_id
+      order by (planet_type = 'Столичный мир') desc, created_at asc
+      limit 1;
+    if cap is null then continue; end if;
+
+    -- ── собираем ОЖИДАЕМЫЙ набор btype (мультимножество) ──
+    expected := array[]::text[];
+
+    -- 1) бесплатное по типу цивилизации
+    expected := expected || (case when app.civ_type = 'frontier' then 'intel' else 'factory' end);
+
+    -- 2) купленные в анкете (маппинг id → btype, как в economy_init)
+    for b in select jsonb_array_elements_text(coalesce(app.buildings, '[]'::jsonb)) loop
+      t := case b
+        when 'encom' then 'factory'  when 'ind'  then 'mining'
+        when 'unit'  then 'trade'    when 'sci'  then 'science'
+        when 'emb'   then 'training' when 'com'  then 'intel'
+        when 'yard'  then 'military_factory' when 'mil' then 'shipyard'
+        else null end;
+      if t is not null then expected := expected || t; end if;
+    end loop;
+
+    -- 3) грант-здания доктрины
+    expected := expected || public._doctrine_grant_buildings(app.gov, app.ideology);
+
+    -- ── по каждому типу: сколько ожидается vs сколько есть ──
+    for t in select distinct unnest(expected) loop
+      want := (select count(*) from unnest(expected) e(v) where e.v = t);
+      have := (select count(*) from public.colony_buildings cb
+               where cb.faction_id = app.faction_id and cb.btype = t);
+      if have < want then
+        faction := app.name; kind := t; missing := want - have; return next;
+        if p_apply then
+          for i in 1..(want - have) loop
+            insert into public.colony_buildings (colony_id, faction_id, owner_id, btype, slots_open)
+            values (cap, app.faction_id, app.owner_id, t,
+                    case when t in ('factory','mining') then 2 else 1 end);
+          end loop;
+        end if;
+      end if;
+    end loop;
+  end loop;
+end$$;
+
+revoke all on function public._backfill_starter_buildings(boolean) from public;
+
+-- ── КАК ЗАПУСКАТЬ ──
+-- 1) Сухой прогон — показать, кому и чего не хватает (НИЧЕГО не меняет):
+--      select * from public._backfill_starter_buildings(false);
+-- 2) Применить — доначислить недостающие здания всем:
+--      select * from public._backfill_starter_buildings(true);
+-- Повторный запуск (true) безопасен — добавит только новый дефицит.

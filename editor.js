@@ -1632,19 +1632,56 @@ function setApTab(t){apTab=t;renderAp();}
 async function renderApTab(){
   const b=document.getElementById('ap-body'); b.innerHTML='<div class="sload" style="min-height:60px"><div class="quote-loader">' + getRandomQuote() + '</div></div>';
   if(apTab==='profile'){
-    const dn=getDisplayName(); const avBig=getAvatarHtml(user.email,userProfile.avatar_url,userProfile.display_name||user.email.split('@')[0],72);
-    const myPgs = pages.filter(p=>isVisiblePage(p)&&(p.created_by===user.email||p.created_by===user.id)); const myPgCount = myPgs.length; const myPubCount = myPgs.filter(p=>p.status==='published').length; const myDftCount = myPgs.filter(p=>p.status==='draft').length;
-    const rl={superadmin:'SUPERADMIN',editor:'EDITOR',moderator:'MODERATOR',player:'ИГРОК',viewer:'VIEWER'}; const rc={superadmin:'var(--gdl)',editor:'var(--tel)',moderator:'var(--pul)',player:'var(--ok)',viewer:'var(--t3)'};
-    const _COOLDOWN = 7 * 24 * 60 * 60 * 1000;
-    const _lastChanged = parseInt(localStorage.getItem('wk_profile_changed_' + user.id) || '0');
-    const _cooldownActive = Date.now() - _lastChanged < _COOLDOWN;
-    const _daysLeft = _cooldownActive ? Math.ceil((_COOLDOWN - (Date.now() - _lastChanged)) / 86400000) : 0;
-    const cooldownNote = _cooldownActive ? `<div class="prof-cooldown">⏳ Смена профиля доступна через ${_daysLeft} дн.</div>` : '';
+    const hasName = !!(userProfile.display_name && userProfile.display_name.trim());
+    const dn=getDisplayName(); const avBig=getAvatarHtml(user.email,userProfile.avatar_url,dn,72);
+    const rl={superadmin:'SUPERADMIN',editor:'РЕДАКТОР',moderator:'МОДЕРАТОР',player:'ИГРОК',viewer:'ЗРИТЕЛЬ'}; const rc={superadmin:'var(--gdl)',editor:'var(--tel)',moderator:'var(--pul)',player:'var(--ok)',viewer:'var(--t3)'};
+    const isStaff = ['superadmin','editor','moderator'].includes(user.role);
+
+    // Вики-метрики показываем только редакторам/админам — у игроков они всегда 0.
+    let statsHtml = '';
+    if (isStaff) {
+      const myPgs = pages.filter(p=>isVisiblePage(p)&&(p.created_by===user.email||p.created_by===user.id));
+      const myPubCount = myPgs.filter(p=>p.status==='published').length, myDftCount = myPgs.filter(p=>p.status==='draft').length;
+      statsHtml = `<div class="prof-stats-grid">
+        <div class="prof-stat-card"><div class="prof-stat-icon">📄</div><div class="prof-stat-val">${myPgs.length}</div><div class="prof-stat-lbl">Всего страниц</div></div>
+        <div class="prof-stat-card"><div class="prof-stat-icon">✓</div><div class="prof-stat-val">${myPubCount}</div><div class="prof-stat-lbl">Опубликовано</div></div>
+        <div class="prof-stat-card"><div class="prof-stat-icon">✎</div><div class="prof-stat-val">${myDftCount}</div><div class="prof-stat-lbl">Черновиков</div></div>
+      </div>`;
+    }
+
+    // Игровая сводка: анкета фракции игрока (статус, столица, правление).
+    let gameHtml = '';
+    const myApp = (typeof frLoadMine==='function') ? await frLoadMine() : null;
+    if (myApp) {
+      const stMap = { draft:['ЧЕРНОВИК','var(--t3)'], pending:['НА МОДЕРАЦИИ','var(--color-warning)'], approved:['ОДОБРЕНА','var(--ok)'], rejected:['ОТКЛОНЕНА','var(--err)'] };
+      const st = stMap[myApp.status] || ['—','var(--t3)'];
+      const capital = (myApp.system_name||'—') + (myApp.planet_name ? ' / '+myApp.planet_name : '');
+      const gRow = (k,v)=>`<div class="prof-game-row"><span>${k}</span><b>${esc(v||'—')}</b></div>`;
+      gameHtml = `<div class="prof-game">
+        <div class="prof-game-hd">◈ Моё государство</div>
+        ${gRow('Фракция', myApp.name)}
+        <div class="prof-game-row"><span>Статус анкеты</span><b style="color:${st[1]}">${st[0]}</b></div>
+        ${gRow('Правление', (myApp.gov||'') + (myApp.regime?' · '+myApp.regime:''))}
+        ${gRow('Столица', capital)}
+        ${gRow('Раса', myApp.race)}
+        ${myApp.status==='approved'
+          ? `<button class="btn btn-gh btn-fw" style="margin-top:10px" onclick="closeAp();go('economy')">🛰 Открыть кабинет</button>`
+          : `<button class="btn btn-gh btn-fw" style="margin-top:10px" onclick="closeAp();go('faction-new')">⬡ ${myApp.status==='rejected'?'Подать заново':'Продолжить анкету'}</button>`}
+      </div>`;
+    } else if (!isStaff) {
+      gameHtml = `<div class="prof-game">
+        <div class="prof-game-hd">◈ Моё государство</div>
+        <div style="font-size:12px;color:var(--t3);margin-bottom:10px">Фракция ещё не создана.</div>
+        <button class="btn btn-gd btn-fw" onclick="closeAp();go('faction-new')">⬡ Зарегистрировать фракцию</button>
+      </div>`;
+    }
+
+    const nameLine = hasName ? esc(dn) : `${esc(dn)} <span class="prof-name-default">· имя по умолчанию</span>`;
     b.innerHTML=`
       <div class="prof-header">
         <div class="prof-av-large">${avBig}</div>
         <div class="prof-identity">
-          <div class="prof-display-name">${esc(dn)}</div>
+          <div class="prof-display-name">${nameLine}</div>
           <div class="prof-email">${esc(user.email)}</div>
           <div class="prof-role-badge" style="color:${rc[user.role]||'var(--t3)'};border-color:${rc[user.role]||'var(--t3)'}">
             <span class="prof-role-icon">◈</span>
@@ -1652,43 +1689,26 @@ async function renderApTab(){
           </div>
         </div>
       </div>
-      <div class="prof-stats-grid">
-        <div class="prof-stat-card">
-          <div class="prof-stat-icon">📄</div>
-          <div class="prof-stat-val">${myPgCount}</div>
-          <div class="prof-stat-lbl">Всего страниц</div>
-        </div>
-        <div class="prof-stat-card">
-          <div class="prof-stat-icon">✓</div>
-          <div class="prof-stat-val">${myPubCount}</div>
-          <div class="prof-stat-lbl">Опубликовано</div>
-        </div>
-        <div class="prof-stat-card">
-          <div class="prof-stat-icon">✎</div>
-          <div class="prof-stat-val">${myDftCount}</div>
-          <div class="prof-stat-lbl">Черновиков</div>
-        </div>
-      </div>
+      ${gameHtml}
+      ${statsHtml}
       <div class="prof-divider"></div>
-      ${cooldownNote}
       <div class="prof-form">
         <div class="fg">
           <label class="fl">Отображаемое имя</label>
-          <input class="fi" id="prof-name" value="${esc(userProfile.display_name||'')}" placeholder="${esc(user.email.split('@')[0])}" ${_cooldownActive?'disabled':''}>
+          <input class="fi" id="prof-name" value="${esc(userProfile.display_name||'')}" placeholder="${esc(user.email.split('@')[0])}">
         </div>
         <div class="fg">
           <label class="fl">URL аватара</label>
-          <input class="fi" id="prof-avatar" type="url" value="${esc(userProfile.avatar_url||'')}" placeholder="https://..." ${_cooldownActive?'disabled':''}>
+          <input class="fi" id="prof-avatar" type="url" value="${esc(userProfile.avatar_url||'')}" placeholder="https://...">
         </div>
         <input type="file" id="prof-av-file" accept="image/*" style="display:none" onchange="uploadProfileAv(this)">
-        <button class="btn btn-gh btn-fw" style="margin-bottom:12px" onclick="document.getElementById('prof-av-file').click()" ${_cooldownActive?'disabled':''}>
+        <button class="btn btn-gh btn-fw" style="margin-bottom:12px" onclick="document.getElementById('prof-av-file').click()">
           <span style="margin-right:6px">📁</span> Загрузить изображение
         </button>
-        <button class="btn btn-gd btn-fw" onclick="saveProfileFromApForm()" ${_cooldownActive?'disabled':''}>
+        <button class="btn btn-gd btn-fw" onclick="saveProfileFromApForm()">
           <span style="margin-right:6px">💾</span> Сохранить профиль
         </button>
-      </div>
-    `;
+      </div>`;
   } else if(apTab==='mypages'){
     const myPgs = pages.filter(p=>isVisiblePage(p)&&(p.created_by===user.email||p.created_by===user.id));
     if(!myPgs.length){b.innerHTML=`<div style="text-align:center;padding:24px 0"><div style="font-size:36px;opacity:.15;margin-bottom:10px">◈</div><div style="font-family:Rajdhani,sans-serif;font-size:10px;letter-spacing:2px;color:var(--t3)">Нет страниц</div></div>`;return;}
@@ -1802,7 +1822,7 @@ async function renderApTab(){
                 </div>
               </div>
               
-              <button class="ib-btn" onclick="openEditUsr('${u.user_id}','${u.role}','false')" style="flex-shrink:0" title="Редактировать">✎</button>
+              <button class="ib-btn" onclick="openEditUsr('${u.user_id}','${esc(u.role)}','${esc(email)}')" style="flex-shrink:0" title="Редактировать">✎</button>
             </div>
             
             ${userPages.length > 0 ? `
@@ -1882,12 +1902,6 @@ async function renderApTab(){
 
 async function saveProfileFromApForm() {
   if (!user) return;
-  const _COOLDOWN = 7 * 24 * 60 * 60 * 1000;
-  const _lastChanged = parseInt(localStorage.getItem('wk_profile_changed_' + user.id) || '0');
-  if (Date.now() - _lastChanged < _COOLDOWN) {
-    const _daysLeft = Math.ceil((_COOLDOWN - (Date.now() - _lastChanged)) / 86400000);
-    toast(`Изменить профиль можно через ${_daysLeft} дн.`, 'err'); return;
-  }
   const displayName = document.getElementById('prof-name')?.value?.trim() || '';
   const avatarUrl   = document.getElementById('prof-avatar')?.value?.trim() || '';
   
@@ -1917,7 +1931,6 @@ async function saveProfileFromApForm() {
   
   const _si = allProfiles.findIndex(p => p.email === user.email); const _pd = { email: user.email, display_name: displayName, avatar_url: avatarUrl };
   if (_si >= 0) allProfiles[_si] = _pd; else allProfiles.push(_pd);
-  localStorage.setItem('wk_profile_changed_' + user.id, String(Date.now()));
   updAuthUI(); await renderHome(); renderAp(); toast('Профиль сохранён!', 'ok');
 }
 
@@ -2012,13 +2025,49 @@ async function doSaveSec(){
   try{ if(id) await dbPatch('sections',`id=eq.${id}`,body); else await dbPost('sections',body); toast('Раздел сохранён!','ok');cm('mo-sec');await loadSecs();buildNav();renderApTab(); if(curSlug==='home') renderHome(); }catch(e){toast('Ошибка: '+e.message,'err');}
 }
 
-function openEditUsr(userId,role,is_banned){
-  document.getElementById('mo-usr-t').textContent='ПОЛЬЗОВАТЕЛЬ'; document.getElementById('eu-id').value=userId; document.getElementById('eu-nm').value=userId; document.getElementById('eu-role').value=role; document.getElementById('eu-ban').value=String(is_banned)==='true'?'true':'false'; om('mo-usr');
+function openEditUsr(userId,role,email){
+  email = email || '';
+  const prof = email ? (getProfileOf(email) || {}) : {};
+  document.getElementById('mo-usr-t').textContent='ПОЛЬЗОВАТЕЛЬ';
+  document.getElementById('eu-id').value=userId;
+  document.getElementById('eu-email').value=email;
+  document.getElementById('eu-email-disp').value=email||'(email не найден)';
+  document.getElementById('eu-name').value=prof.display_name||'';
+  document.getElementById('eu-role').value=role;
+  document.getElementById('eu-ban').value='false';
+  om('mo-usr');
 }
 async function doSaveUsr(){
   if(!user||user.role!=='superadmin'){toast('Только superadmin','err');return;}
-  const id=document.getElementById('eu-id').value; const ban=document.getElementById('eu-ban').value==='true';
-  try{await dbPatch('user_roles',`user_id=eq.${id}`,{is_banned:ban});toast('Сохранено!','ok');cm('mo-usr');renderApTab();}catch(e){toast('Ошибка: '+e.message,'err');}
+  const id=document.getElementById('eu-id').value;
+  const email=document.getElementById('eu-email').value;
+  const name=document.getElementById('eu-name').value.trim();
+  const ban=document.getElementById('eu-ban').value==='true';
+  try{
+    if(id && !id.startsWith('unknown_')) await dbPatch('user_roles',`user_id=eq.${id}`,{is_banned:ban});
+    if(email){
+      const cur=getProfileOf(email)||{};
+      await apiFetch('profiles',{method:'POST',body:JSON.stringify({email:email,display_name:name,avatar_url:cur.avatar_url||''}),headers2:{'Prefer':'resolution=merge-duplicates'}});
+      const si=allProfiles.findIndex(p=>p.email===email);
+      if(si>=0) allProfiles[si]={...allProfiles[si],display_name:name}; else allProfiles.push({email:email,display_name:name,avatar_url:''});
+    }
+    toast('Сохранено!','ok');cm('mo-usr');renderApTab();
+    if(curSlug==='home' && typeof renderHome==='function') renderHome();
+  }catch(e){toast('Ошибка: '+e.message,'err');}
+}
+// Удаление профиля игрока (сброс имени/аватара). Роль и аккаунт не затрагиваются.
+async function deleteUserProfile(){
+  if(!user||user.role!=='superadmin'){toast('Только superadmin','err');return;}
+  const email=document.getElementById('eu-email').value;
+  if(!email){toast('Email неизвестен — профиль удалить нельзя','err');return;}
+  if(!confirm(`Удалить профиль «${email}»?\nИмя и аватар будут сброшены (останется только email). Игровой аккаунт и роль не затрагиваются.`)) return;
+  try{
+    await dbDel('profiles',`email=eq.${encodeURIComponent(email)}`);
+    const si=allProfiles.findIndex(p=>p.email===email);
+    if(si>=0) allProfiles.splice(si,1);
+    toast('Профиль удалён','ok');cm('mo-usr');renderApTab();
+    if(curSlug==='home' && typeof renderHome==='function') renderHome();
+  }catch(e){toast('Ошибка: '+e.message,'err');}
 }
 
 function askDelChar(slug, name) {
