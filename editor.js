@@ -2046,8 +2046,7 @@ async function doSaveUsr(){
   try{
     if(id && !id.startsWith('unknown_')) await dbPatch('user_roles',`user_id=eq.${id}`,{is_banned:ban});
     if(email){
-      const cur=getProfileOf(email)||{};
-      await apiFetch('profiles',{method:'POST',body:JSON.stringify({email:email,display_name:name,avatar_url:cur.avatar_url||''}),headers2:{'Prefer':'resolution=merge-duplicates'}});
+      await apiFetch('rpc/admin_set_profile_name',{method:'POST',body:JSON.stringify({p_email:email,p_name:name})});
       const si=allProfiles.findIndex(p=>p.email===email);
       if(si>=0) allProfiles[si]={...allProfiles[si],display_name:name}; else allProfiles.push({email:email,display_name:name,avatar_url:''});
     }
@@ -2062,7 +2061,7 @@ async function deleteUserProfile(){
   if(!email){toast('Email неизвестен — профиль удалить нельзя','err');return;}
   if(!confirm(`Удалить профиль «${email}»?\nИмя и аватар будут сброшены (останется только email). Игровой аккаунт и роль не затрагиваются.`)) return;
   try{
-    await dbDel('profiles',`email=eq.${encodeURIComponent(email)}`);
+    await apiFetch('rpc/admin_delete_profile',{method:'POST',body:JSON.stringify({p_email:email})});
     const si=allProfiles.findIndex(p=>p.email===email);
     if(si>=0) allProfiles.splice(si,1);
     toast('Профиль удалён','ok');cm('mo-usr');renderApTab();
