@@ -30,6 +30,23 @@ end$$;
 revoke all on function public.admin_set_profile_name(text, text) from public;
 grant execute on function public.admin_set_profile_name(text, text) to authenticated;
 
+-- Сохранить СВОЙ профиль (имя + аватар). Любой залогиненный пишет только свою
+-- строку — email берётся из JWT, не от клиента. Надёжный upsert по email
+-- (прежний POST merge-duplicates падал на profiles_email_key и молча терялся).
+create or replace function public.set_my_profile(p_name text, p_avatar text)
+returns void language plpgsql security definer set search_path = public as $$
+declare em text;
+begin
+  em := auth.jwt() ->> 'email';
+  if em is null or em = '' then raise exception 'not authenticated'; end if;
+  update public.profiles set display_name = p_name, avatar_url = p_avatar where email = em;
+  if not found then
+    insert into public.profiles (email, display_name, avatar_url) values (em, p_name, p_avatar);
+  end if;
+end$$;
+revoke all on function public.set_my_profile(text, text) from public;
+grant execute on function public.set_my_profile(text, text) to authenticated;
+
 -- Удалить профиль игрока по email (имя/аватар; аккаунт и роль не трогаются).
 create or replace function public.admin_delete_profile(p_email text)
 returns void language plpgsql security definer set search_path = public as $$

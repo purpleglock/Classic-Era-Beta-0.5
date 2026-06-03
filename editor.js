@@ -1905,21 +1905,13 @@ async function saveProfileFromApForm() {
   const displayName = document.getElementById('prof-name')?.value?.trim() || '';
   const avatarUrl   = document.getElementById('prof-avatar')?.value?.trim() || '';
   
-  userProfile = { display_name: displayName, avatar_url: avatarUrl }; 
+  // Надёжная запись в БД через upsert по email; ошибку показываем, а не глотаем.
+  try {
+    await apiFetch('rpc/set_my_profile', { method: 'POST', body: JSON.stringify({ p_name: displayName, p_avatar: avatarUrl }) });
+  } catch(e) { toast('Не удалось сохранить профиль: ' + e.message, 'err'); return; }
+  userProfile = { display_name: displayName, avatar_url: avatarUrl };
   localStorage.setItem('wk_profile_' + user.id, JSON.stringify(userProfile));
-  
-  try { 
-    await apiFetch('profiles', { 
-      method: 'POST', 
-      body: JSON.stringify({ 
-        email: user.email, 
-        display_name: displayName, 
-        avatar_url: avatarUrl
-      }), 
-      headers2: { 'Prefer': 'resolution=merge-duplicates' } 
-    }); 
-  } catch(e) {}
-  
+
   try { 
     await sb.auth.updateUser({ 
       data: { 

@@ -111,7 +111,13 @@ async function init() {
 
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'hidden' || editMode) return;
-    try { await Promise.all([loadSecs(), loadPgs()]); buildNav(); } catch(e) {}
+    try {
+      await Promise.all([loadSecs(), loadPgs(), loadProfiles()]); buildNav();
+      // профили могли смениться (имя/аватар) — освежаем главную, чтобы участники
+      // и история правок показывали актуальные ники
+      if ((curSlug === 'home' || !curSlug) && typeof renderHome === 'function') renderHome();
+      if (typeof updAuthUI === 'function') updAuthUI();
+    } catch(e) {}
   });
 
   sb.auth.onAuthStateChange(async (event, session) => {
@@ -172,6 +178,17 @@ async function loadProfiles() {
     const map = new Map();
     rows.forEach(r => { if (r && r.email) map.set(r.email, r); });
     allProfiles = [...map.values()];
+    // БД — источник истины: синхронизируем профиль текущего пользователя из базы,
+    // перетирая возможно устаревший localStorage-кэш (иначе ник расходится между
+    // устройствами/сессиями — на каждом висит свой старый кэш).
+    if (user) {
+      const mine = map.get(user.email);
+      if (mine) {
+        userProfile.display_name = mine.display_name || '';
+        userProfile.avatar_url = mine.avatar_url || '';
+        try { localStorage.setItem('wk_profile_' + user.id, JSON.stringify(userProfile)); } catch(e) {}
+      }
+    }
   } catch(e) { allProfiles = []; }
 }
 function getProfileOf(email) {
@@ -237,11 +254,13 @@ async function saveProfileFromForm() {
   if (!user) return;
   const displayName = document.getElementById('prof-name')?.value?.trim() || '';
   const avatarUrl   = document.getElementById('prof-avatar')?.value?.trim() || '';
+  // Пишем в БД через надёжный upsert по email; ошибку НЕ глотаем — иначе имя
+  // «мигнёт» и откатится при следующей синхронизации с базой.
+  try {
+    await apiFetch('rpc/set_my_profile', { method: 'POST', body: JSON.stringify({ p_name: displayName, p_avatar: avatarUrl }) });
+  } catch(e) { toast('Не удалось сохранить профиль: ' + e.message, 'err'); return; }
   userProfile = { display_name: displayName, avatar_url: avatarUrl };
   localStorage.setItem('wk_profile_' + user.id, JSON.stringify(userProfile));
-  try {
-    await apiFetch('profiles', { method: 'POST', body: JSON.stringify({ email: user.email, display_name: displayName, avatar_url: avatarUrl }), headers2: { 'Prefer': 'resolution=merge-duplicates' } });
-  } catch(e) {}
   try { await sb.auth.updateUser({ data: { display_name: displayName, avatar_url: avatarUrl } }); } catch(e) {}
   const _si = allProfiles.findIndex(p => p.email === user.email);
   const _pd = { email: user.email, display_name: displayName, avatar_url: avatarUrl };
