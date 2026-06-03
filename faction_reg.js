@@ -192,6 +192,9 @@ async function renderFactionWizard() {
         let sysName = mine.system_name;
         try { const ss = await dbGet('map_systems', `id=eq.${encodeURIComponent(cap.system_id)}&select=name`); if (ss && ss[0]) sysName = ss[0].name; } catch (e) {}
         FR.myCapital = { id: cap.id, system_name: sysName, planet_name: cap.planet_name };
+        // в анкету кладём РЕАЛЬНОЕ имя столицы (а не устаревшее анкетное),
+        // чтобы при отправке без правки не «откатывалось» старое значение
+        FR.data.planet_name = cap.planet_name;
       }
     } catch (e) {}
   }
@@ -303,7 +306,7 @@ function frStepSystem(d) {
       <div class="fr-locked">🔒 Стартовая система закреплена за фракцией и не может быть изменена.</div>
       <div class="fr-sys-picked">Столица: <b>${esc(cap.system_name || '—')}${cap.planet_name ? ' / ' + esc(cap.planet_name) : ''}</b></div>
       <div class="fg" style="margin-top:12px"><label class="fl">Название столичной планеты</label>
-        <input class="fi" id="f-planet" value="${esc(cap.planet_name || d.planet_name || '')}" placeholder="Название планеты"></div>
+        <input class="fi" id="f-planet" value="${esc(cap.planet_name || d.planet_name || '')}" placeholder="Название планеты" oninput="FR.data.planet_name=this.value.trim()"></div>
       <div class="fr-note" style="margin-top:8px">Изменение имени уйдёт на <b>проверку администрации</b> вместе с анкетой (кнопка «Сохранить» внизу). После одобрения название обновится на карте, странице фракций и в кабинете.</div>`;
   }
   return `<h3 class="fr-h3">Столичная система</h3>
@@ -596,6 +599,8 @@ async function frSubmit() {
   if (FR.busy) return;
   frSyncStep();
   if (!FR.data.name) { toast('Укажите название', 'err'); FR.step = 0; frRenderStep(); return; }
+  if (typeof badName === 'function' && badName(FR.data.name)) { toast('Название фракции содержит недопустимые слова (мат или запрещённое)', 'err'); FR.step = 0; frRenderStep(); return; }
+  if (typeof badName === 'function' && badName(FR.data.planet_name)) { toast('Название столичной планеты содержит недопустимые слова (мат или запрещённое)', 'err'); FR.step = 2; frRenderStep(); return; }
   if (!FR.data.system_id) { toast('Выберите систему', 'err'); FR.step = 2; frRenderStep(); return; }
   FR.busy = true;
   try {
@@ -612,10 +617,13 @@ async function frSubmit() {
 // СТРАНИЦА «ФРАКЦИИ» (#factions)
 // ════════════════════════════════════════════════════════════
 // Столица фракции из РЕАЛЬНОЙ столичной колонии (is_capital), а не из анкеты.
+let _frCapCache = null, _frCapCacheTs = 0;
 async function frLoadCapitals() {
+  // кэш 30 с: страница фракций + каждая модалка иначе грузили бы все колонии заново
+  if (_frCapCache && Date.now() - _frCapCacheTs < 30000) return _frCapCache;
   try {
     const [caps, sys] = await Promise.all([
-      dbGet('colonies', 'select=*').catch(() => []),
+      dbGet('colonies', 'select=faction_id,system_id,planet_name,planet_type,is_capital').catch(() => dbGet('colonies', 'select=faction_id,system_id,planet_name,planet_type').catch(() => [])),
       dbGet('map_systems', 'select=id,name').catch(() => []),
     ]);
     const sysNames = {}; (sys || []).forEach(s => { sysNames[s.id] = s.name; });
@@ -627,7 +635,8 @@ async function frLoadCapitals() {
     });
     // fallback: нет помеченной столицы — берём любую реальную колонию (лишь бы не данные анкеты)
     (caps || []).forEach(c => { if (c.faction_id && !byFid[c.faction_id]) byFid[c.faction_id] = c; });
-    return { byFid, sysNames };
+    _frCapCache = { byFid, sysNames }; _frCapCacheTs = Date.now();
+    return _frCapCache;
   } catch (e) { return { byFid: {}, sysNames: {} }; }
 }
 // Актуальные система и планета столицы фракции f (fallback на анкету).

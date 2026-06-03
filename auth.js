@@ -109,12 +109,15 @@ async function init() {
 
   setInterval(() => { sb.auth.refreshSession().catch(() => {}); }, 4 * 60 * 1000);
 
+  let _lastVisSync = 0;
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'hidden' || editMode) return;
+    // throttle: не дёргать БД чаще раза в 2 минуты при переключении вкладок —
+    // иначе частые фокусы создают шквал запросов (loadSecs+loadPgs+loadProfiles).
+    if (Date.now() - _lastVisSync < 120000) return;
+    _lastVisSync = Date.now();
     try {
       await Promise.all([loadSecs(), loadPgs(), loadProfiles()]); buildNav();
-      // профили могли смениться (имя/аватар) — освежаем главную, чтобы участники
-      // и история правок показывали актуальные ники
       if ((curSlug === 'home' || !curSlug) && typeof renderHome === 'function') renderHome();
       if (typeof updAuthUI === 'function') updAuthUI();
     } catch(e) {}
@@ -254,6 +257,7 @@ async function saveProfileFromForm() {
   if (!user) return;
   const displayName = document.getElementById('prof-name')?.value?.trim() || '';
   const avatarUrl   = document.getElementById('prof-avatar')?.value?.trim() || '';
+  if (typeof badName === 'function' && badName(displayName)) { toast('Имя содержит недопустимые слова (мат или запрещённое) — выберите другое', 'err'); return; }
   // Пишем в БД через надёжный upsert по email; ошибку НЕ глотаем — иначе имя
   // «мигнёт» и откатится при следующей синхронизации с базой.
   try {

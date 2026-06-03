@@ -38,6 +38,23 @@
 .ec-head { margin-bottom: 14px; }
 .ec-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em; color: var(--gd); text-transform: uppercase; }
 .ec-head h1 { font-family: var(--font-display); font-weight: 700; font-size: var(--text-2xl); color: var(--t1); margin: 2px 0 0; padding-bottom: 8px; display: inline-block; max-width: 100%; overflow-wrap: anywhere; line-height: 1.15; }
+.ec-head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ec-guide-btn { flex-shrink: 0; }
+
+/* Вводный блок-объяснялка вверху вкладки */
+.ec-intro { background: var(--b2); border: 1px solid var(--w2); border-left: 3px solid var(--gd); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 16px; }
+.ec-intro-hd { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--t1); margin-bottom: 4px; }
+.ec-intro-ic { font-size: 15px; }
+.ec-intro-tx { font-size: 13px; color: var(--t2); line-height: 1.55; }
+.ec-intro-hints { margin: 8px 0 0; padding-left: 4px; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.ec-intro-hints li { position: relative; padding-left: 16px; font-size: 12.5px; color: var(--t3); line-height: 1.5; }
+.ec-intro-hints li::before { content: '▹'; position: absolute; left: 0; color: var(--gd); }
+.ec-intro-hints b { color: var(--t2); }
+
+/* Подсказка «как пользоваться» в карточке здания */
+.ec-bld-howto { font-size: 11px; color: var(--t3); line-height: 1.45; margin-top: 4px; }
+/* Разбивка источников дохода в обзоре */
+.ec-ov-srcs { font-size: 11px; color: var(--t4); margin-top: 4px; }
 
 /* Гейт */
 .ec-gate { max-width: 520px; margin: 56px auto; text-align: center; padding: 32px 24px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-lg); }

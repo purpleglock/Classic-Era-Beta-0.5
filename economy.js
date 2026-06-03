@@ -92,6 +92,18 @@ const EC_BUILD = {
   shipyard:         { name: 'Корабельная Верфь',    cost: 2000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 корабль / 12 МЛА' },
 };
 const EC_ORDER = ['factory', 'mining', 'trade', 'market', 'science', 'training', 'intel', 'military_factory', 'shipyard'];
+// Короткая подсказка «как пользоваться» для каждого типа здания (показывается в карточке).
+const EC_BLD_HOWTO = {
+  factory:          'Пассивный доход ГС. Открывайте слоты — каждый добавляет доход.',
+  mining:           'Откройте слот и назначьте месторождение ниже — без этого добычи нет.',
+  trade:            'Доход только при активном торговом пути (вкладка «Дипломатия»).',
+  market:           'Сама продаёт накопленные ресурсы за ГС (≈50% цены), без торговых путей.',
+  science:          'Даёт очки науки (ОН) для исследований.',
+  training:         'Даёт мощность для производства пехоты (заказ — во вкладке «Армия»).',
+  intel:            'Даёт агентов для разведки (вкладка «Разведка»).',
+  military_factory: 'Даёт мощность для производства наземной техники (вкладка «Армия»).',
+  shipyard:         'Даёт мощность для постройки кораблей и авиации (вкладка «Армия»).',
+};
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
 // Обустройство среды обитания на своей колонии (+ячейки, 1 ход)
 const EC_HABITAT_COST = 1000, EC_HABITAT_CELLS = 3, EC_HABITAT_TURNS = 1;
@@ -555,6 +567,16 @@ function ecTreasuryHtml() {
   </div>`;
 }
 
+// Вводный блок-объяснялка вверху вкладки: что это, как работает, что делать.
+// text — короткая суть (HTML допустим), hints — список ключевых правил/цифр.
+function ecIntro(icon, title, text, hints) {
+  const list = (hints && hints.length)
+    ? `<ul class="ec-intro-hints">${hints.map(h => `<li>${h}</li>`).join('')}</ul>` : '';
+  return `<div class="ec-intro">
+    <div class="ec-intro-hd"><span class="ec-intro-ic">${icon}</span><b>${esc(title)}</b></div>
+    <div class="ec-intro-tx">${text}</div>${list}</div>`;
+}
+
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
   const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['military', '⚔', 'Армия и флот'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['diplomacy', '🤝', 'Дипломатия'], ['intel', '🕵', 'Разведка']];
@@ -563,7 +585,13 @@ function ecPaintCabinet() {
     : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'intel' ? ecTabIntel() : ecTabColonies();
   setPg(`<div class="ec-wrap">
-    <div class="ec-head"><div class="ec-eyebrow">◈ КАБИНЕТ ИГРОКА</div><h1 style="border-bottom:2px solid ${col}">${esc(EC.app.name || 'Моя фракция')}</h1></div>
+    <div class="ec-head">
+      <div class="ec-eyebrow">◈ КАБИНЕТ ИГРОКА</div>
+      <div class="ec-head-row">
+        <h1 style="border-bottom:2px solid ${col}">${esc(EC.app.name || 'Моя фракция')}</h1>
+        <button class="btn btn-gh btn-sm ec-guide-btn" onclick="go('guide')" title="Полные правила и механики игры">❓ Как играть</button>
+      </div>
+    </div>
     ${ecTreasuryHtml()}
     <div class="ec-tabs">${tabsHtml}</div>
     <div class="ec-tabbody">${body}</div>
@@ -680,12 +708,15 @@ function ecTabOverview() {
   ]);
   const activeHtml = activeProj
     ? `<div class="ec-ov-active">🔬 Исследуется: <b>${esc(activeName)}</b><span class="ec-ov-active-x">завершится в конце хода</span></div>` : '';
+  const _slotParts = [['factory', 'фабрики'], ['mining', 'добыча'], ['trade', 'торговля'], ['market', 'рынок'], ['science', 'наука'], ['intel', 'спецслужбы']]
+    .map(([t, l]) => { const n = ecSlotsSum(t); return n ? `${n} ${l}` : ''; }).filter(Boolean).join(' · ');
   const incLine = (inc.gc || inc.science)
-    ? `<div class="ec-ov-inc">📈 Доход: ${inc.gc ? `<b style="color:var(--gd)">+${ecNum(inc.gc)} ГС</b>` : ''}${inc.gc && inc.science ? ' · ' : ''}${inc.science ? `<b style="color:var(--pu)">+${ecNum(inc.science)} ОН</b>` : ''} в сутки</div>` : '';
+    ? `<div class="ec-ov-inc">📈 Доход: ${inc.gc ? `<b style="color:var(--gd)">+${ecNum(inc.gc)} ГС</b>` : ''}${inc.gc && inc.science ? ' · ' : ''}${inc.science ? `<b style="color:var(--pu)">+${ecNum(inc.science)} ОН</b>` : ''} в сутки${_slotParts ? `<div class="ec-ov-srcs">Работают слоты: ${_slotParts}</div>` : ''}</div>`
+    : `<div class="ec-ov-inc" style="color:var(--t4)">📈 Доход 0 — постройте здания и откройте слоты во вкладке «Колонии».</div>`;
   const resHtml = resTop.length
     ? `<div class="ec-ov-sect"><div class="ec-ov-sect-t">📦 Ресурсы на складе</div><div class="ec-ov-res">${resTop.map(([n, v]) => `<span class="ec-ov-res-chip"><span class="ec-ov-res-ic">${esc(ecResIcon(n))}</span><span class="ec-ov-res-n">${esc(n)}</span><b>${ecNum(v)}</b></span>`).join('')}</div></div>` : '';
 
-  return `${ecDoctrineHtml()}${empire}${army}${sciDip}${activeHtml}${incLine}${resHtml}
+  return `${ecIntro('◈', 'Обзор державы', 'Сводка вашего государства: казна, держава, армия, наука и дипломатия. Все цифры кликабельны — ведут на нужную вкладку.', ['Доход начисляется раз в сутки и сразу при заходе в кабинет.', 'Развивайтесь по вкладкам: стройте здания (Колонии), исследуйте (Наука), расширяйтесь (Территория).'])}${ecDoctrineHtml()}${empire}${army}${sciDip}${activeHtml}${incLine}${resHtml}
     <div class="ec-race-note">Раса: <b>${esc(EC.app.race || '—')}</b> · родные миры: ${(EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—'}. Чужие типы планет — через терраформ.</div>
     <div class="ec-ov-links">
       <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
@@ -768,6 +799,7 @@ async function ecRenameColony(colId, cur) {
   if (nm === null) return;
   const v = nm.trim();
   if (!v || v === cur) return;
+  if (typeof badName === 'function' && badName(v)) { toast('Название содержит недопустимые слова (мат или запрещённое)', 'err'); return; }
   try {
     await ecRpc('rename_colony', { p_colony_id: colId, p_new_name: v });
     toast('Планета переименована', 'ok');
@@ -821,7 +853,7 @@ function ecTabColonies() {
     sysMap.set(c.system_id, { id: c.system_id, name: (live && live.name) || 'Система', planets: [] });
   }});
   if (!sysMap.size) {
-    return `<div class="ec-section-title">Системы и колонии</div>
+    return `${ecIntro('🏗', 'Колонии и застройка', 'Здесь вы строите здания на своих планетах — это основа дохода, науки и армии.', ['Сначала получите систему во вкладке «🌐 Территория».', 'Затем колонизируйте пригодную планету и стройте на ней здания.'])}<div class="ec-section-title">Системы и колонии</div>
       <div class="ec-empty">У вас пока нет систем и колоний. Захватывайте системы во вкладке «🌐 Территория».</div>`;
   }
   const totalCol = EC.colonies.length;
@@ -841,7 +873,7 @@ function ecTabColonies() {
       ${sysOpen ? `<div class="ec-sysblk-body">${body}</div>` : ''}
     </div>`;
   }).join('');
-  return `${ecProjectsBlock()}<div class="ec-section-title">Системы и колонии <span class="ec-hint">— ${totalCol} колоний · нажмите на колонию, чтобы развернуть застройку</span></div>
+  return `${ecIntro('🏗', 'Колонии и застройка', 'Стройте здания на планетах — это основа дохода, науки и армии.', ['Каждое здание занимает <b>ячейку</b> планеты и имеет до <b>6 слотов</b> мощности.', 'Постройка здания и открытие нового слота длятся <b>1 день</b> (можно отменить с возвратом ГС).', 'Нажмите на колонию, чтобы развернуть застройку. ⛏ Добывающему заводу нужно назначить месторождения.'])}${ecProjectsBlock()}<div class="ec-section-title">Системы и колонии <span class="ec-hint">— ${totalCol} колоний · нажмите на колонию, чтобы развернуть застройку</span></div>
     <div class="ec-syslist">${blocks}</div>`;
 }
 
@@ -917,7 +949,7 @@ function ecTabMilitary() {
   });
   if (!rosterHtml) rosterHtml = `<div class="ec-empty" style="padding:8px">Ростер пуст — сформируйте дивизии и постройте корабли.</div>`;
 
-  return `<div class="ec-section-title">Дивизии <span class="ec-hint">— комплектование: нужны здания под состав (пехота → Подготовка, техника → Воензавод)</span></div>
+  return `${ecIntro('⚔', 'Армия и флот', 'Здесь вы производите войска. Сами шаблоны проектируются в <b>Конструкторах</b>, а заказ на производство — здесь.', ['Объём производства зависит от слотов военных зданий: пехота → <b>Центр подготовки</b>, техника → <b>Военный завод</b>, корабли → <b>Корабельная верфь</b>.', 'Нет проектов? Откройте «⚒ Конструкторы» и спроектируйте дивизию или корабль.', 'Заказы выполняются к следующему игровому дню и попадают в ростер.'])}<div class="ec-section-title">Дивизии <span class="ec-hint">— комплектование: нужны здания под состав (пехота → Подготовка, техника → Воензавод)</span></div>
     ${divHtml}
     <div class="ec-section-title">Флот <span class="ec-hint">— корабли строятся на Верфи поштучно</span></div>
     ${shipForm}
@@ -976,7 +1008,7 @@ function ecTabTerritory() {
     ? claim.map(id => { const s = byId.get(id); return `<div class="ec-colonize-row"><div class="ec-cz-main"><span class="ec-cz-name">★ ${esc(s.name)}</span><span class="ec-cz-sub">смежная · ничья</span></div>
         <button class="btn ${cdMs > 0 ? 'btn-gh' : 'btn-gd'} btn-sm" ${cdMs > 0 ? 'disabled' : ''} onclick="ecClaimSystem('${esc(id)}')">Колонизировать систему · ${ecNum(ecClaimCost())} ГС</button></div>`; }).join('')
     : `<div class="ec-empty">Нет смежных свободных систем. Расширяйтесь вдоль гиперпутей — соседние ничьи системы появятся здесь.</div>`;
-  return `<div class="ec-section-title">Карта территории <span class="ec-hint">— ваши системы и доступные для колонизации</span></div>
+  return `${ecIntro('🌐', 'Территория и расширение', 'Захватывайте звёздные системы, чтобы получать новые планеты под колонии.', ['Колонизировать можно только систему, <b>смежную по гиперпути</b> с вашей и <b>ничью</b> (серую).', `Стоит ${ecNum(EC_CLAIM_COST)} ГС, доступно раз в <b>${ecClaimCdDays()} дн.</b> (срок зависит от доктрины).`, 'Получив систему — заселяйте её планеты во вкладке «🏗 Колонии».'])}<div class="ec-section-title">Карта территории <span class="ec-hint">— ваши системы и доступные для колонизации</span></div>
     ${ecMinimap()}
     <div class="ec-section-title">Колонизация системы <span class="ec-hint">— смежная по гиперпути и ничья · раз в ${ecClaimCdDays()} дн. (доктрина)</span></div>
     ${cdLine}
@@ -1251,7 +1283,7 @@ function ecTabDiplomacy() {
       ${asBorrower.length ? `<div class="ec-r-sec">Я заёмщик</div>${borrowerHtml}` : ''}
     </div>`;
 
-  return `<div class="ec-section-title">Ресурсы и торговля</div>
+  return `${ecIntro('🤝', 'Дипломатия и торговля', 'Превращайте добытые ресурсы в ГС и стройте отношения с другими фракциями.', ['<b>Местный рынок</b> — продать ресурсы сразу за 80% цены. <b>Караваны</b> (торговые пути) выгоднее, но требуют согласия партнёра и рискуют пиратами.', 'Торговый хаб приносит доход <b>только при активном торговом пути</b>.', 'Можно передавать ГС и выдавать займы другим фракциям; споры по займам решает МГА.'])}<div class="ec-section-title">Ресурсы и торговля</div>
     <div class="ec-dip-grid">${resBlock}${transferBlock}${caravanBlock}${loanBlock}</div>`;
 }
 
@@ -1314,7 +1346,7 @@ function ecTabIntel() {
     ? EC.alerts.slice(0, 15).map(a => `<div class="ec-q-row ec-route-row"><span class="ec-r-name"><span class="ec-route-badge new">тревога</span>${(EC_SPY_OPS[a.op] || {}).icon || '⚠'} <b>${esc(a.actor_fid && a.result && a.result.actor_name || 'Неизвестная фракция')}</b> — ${esc((EC_SPY_OPS[a.op] || {}).label || a.op)} · ${a.outcome === 'success' ? '<span style="color:var(--err)">удалась</span>' : '<span style="color:var(--ok)">сорвана</span>'}${a.result && a.result.caught ? ' · агент пойман' : ''}</span></div>`).join('')
     : '<div class="ec-empty" style="padding:8px">Тревог нет — вас пока не атаковали (или не раскрыли).</div>';
 
-  return `${agentBar}
+  return `${ecIntro('🕵', 'Разведка и тайные операции', 'Шпионьте за другими фракциями: разведка, кража казны и технологий, саботаж, дестабилизация.', ['<b>Агенты</b> копятся от слотов Центра спецслужб. Чем больше агентов в операции — выше шанс успеха и короче срок.', 'Сложные операции требуют сначала провести <b>разведку</b> цели.', 'Оставляйте часть агентов на <b>контрразведку</b> — иначе вас безнаказанно атакуют.'])}${agentBar}
     <div class="ec-dip-grid">
       <div class="ec-dip-card ec-dip-trade"><div class="ec-dip-t">🎯 Планирование операции <span class="ec-hint">расчёт по разведданным и агентам</span></div>${planner}</div>
       ${ciBlock}
@@ -1403,7 +1435,7 @@ function ecTabResearch() {
   const byCat = {};
   cat.forEach(n => { (byCat[n.catLabel] = byCat[n.catLabel] || []).push(n); });
   const body = Object.keys(byCat).map(cl => `<div class="ec-rs-cat"><div class="ec-rs-cat-t">${esc(cl)}</div><div class="ec-rs-grid">${byCat[cl].map(nodeCard).join('')}</div></div>`).join('');
-  return `<div class="ec-treasury" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+  return `${ecIntro('🔬', 'Исследования', 'Тратьте очки науки (ОН) на технологии — они открывают модули в конструкторах и дают бонусы.', ['ОН копятся от <b>Научных институтов</b> + бонусов доктрины. Стройте их во вкладке «Колонии».', 'Одновременно изучается <b>одна</b> технология, 1 ход на исследование.', 'Часть узлов открывается только после изучения предшественников.'])}<div class="ec-treasury" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
       <div class="ec-res"><span class="ec-res-k">Очки науки</span><span class="ec-res-v" style="color:var(--pu)">${ecNum(sci)} ОН</span></div>
       <div class="ec-res"><span class="ec-res-k">Доход</span><span class="ec-res-v" style="font-size:15px">+${sciInc} ОН/ход</span></div>
     </div>
@@ -1571,6 +1603,7 @@ function ecBuildingRow(b) {
     </div>
     <div class="ec-slots" title="${b.slots_open} / ${EC_MAX_SLOTS} слотов открыто">${dots}</div>
     <div class="ec-bld-inc">${esc(incTxt)}</div>
+    ${EC_BLD_HOWTO[b.btype] ? `<div class="ec-bld-howto">${esc(EC_BLD_HOWTO[b.btype])}</div>` : ''}
     ${mineHtml}
     <div class="ec-bld-act">${slotCount}${openBtn}</div>
   </div>`;

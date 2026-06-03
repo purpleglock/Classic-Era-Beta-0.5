@@ -1918,7 +1918,7 @@ async function saveProfileFromApForm() {
   if (!user) return;
   const displayName = document.getElementById('prof-name')?.value?.trim() || '';
   const avatarUrl   = document.getElementById('prof-avatar')?.value?.trim() || '';
-  
+  if (typeof badName === 'function' && badName(displayName)) { toast('Имя содержит недопустимые слова (мат или запрещённое) — выберите другое', 'err'); return; }
   // Надёжная запись в БД через upsert по email; ошибку показываем, а не глотаем.
   try {
     await apiFetch('rpc/set_my_profile', { method: 'POST', body: JSON.stringify({ p_name: displayName, p_avatar: avatarUrl }) });
@@ -2075,6 +2075,7 @@ async function doSaveUsr(){
   const email=document.getElementById('eu-email').value;
   const name=document.getElementById('eu-name').value.trim();
   const ban=document.getElementById('eu-ban').value==='true';
+  if (name && typeof badName === 'function' && badName(name)) { toast('Имя содержит недопустимые слова (мат или запрещённое)', 'err'); return; }
   try{
     if(id && !id.startsWith('unknown_')) await dbPatch('user_roles',`user_id=eq.${id}`,{is_banned:ban});
     if(email){

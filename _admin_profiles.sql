@@ -12,6 +12,14 @@
 -- только если профиля ещё нет). Выполнить целиком в Supabase SQL Editor.
 -- ============================================================
 
+-- Серверный фильтр имён (страховка от обхода клиента): ненормативная лексика +
+-- явно противоправное. Нормализация: lower + удаление не-букв (ловит «х у й»).
+create or replace function public._name_violates(p text) returns boolean
+language sql immutable as $$
+  select regexp_replace(lower(coalesce(p, '')), '[^a-zа-яё]', '', 'g') ~
+    '(хуй|хую|хуи|пизд|ебло|ебля|выеб|наеб|уеб|ебат|ебал|ебуч|ебут|бляд|блят|сука|суки|мудак|мудил|залуп|гондон|гандон|пидор|пидар|педик|жоп|говн|дроч|долбоёб|долбоеб|еблан|шлюх|нахуй|похуй|нихуя|гитлер|рейх|нацист|нацизм|фашист|фашизм|свастик|игил|террор|педофил|зоофил|hui|huy|huj|xyu|blyad|blya|pidor|pidar|pedik|suka|syka|ebat|ebal|eblan|mudak|nahui|pohui|gandon|gondon|gitler|nazi|fashist|svastik)'
+$$;
+
 -- Сменить отображаемое имя профиля по email.
 create or replace function public.admin_set_profile_name(p_email text, p_name text)
 returns void language plpgsql security definer set search_path = public as $$
@@ -22,6 +30,7 @@ begin
   if p_email is null or p_email = '' then
     raise exception 'email required';
   end if;
+  if public._name_violates(p_name) then raise exception 'name violates content policy'; end if;
   update public.profiles set display_name = p_name where email = p_email;
   if not found then
     insert into public.profiles (email, display_name) values (p_email, p_name);
@@ -39,6 +48,7 @@ declare em text;
 begin
   em := auth.jwt() ->> 'email';
   if em is null or em = '' then raise exception 'not authenticated'; end if;
+  if public._name_violates(p_name) then raise exception 'name violates content policy'; end if;
   update public.profiles set display_name = p_name, avatar_url = p_avatar where email = em;
   if not found then
     insert into public.profiles (email, display_name, avatar_url) values (em, p_name, p_avatar);
@@ -57,6 +67,7 @@ declare col public.colonies; nm text;
 begin
   nm := nullif(btrim(p_new_name), '');
   if nm is null then raise exception 'empty name'; end if;
+  if public._name_violates(nm) then raise exception 'name violates content policy'; end if;
   select * into col from public.colonies where id = p_colony_id;
   if not found then raise exception 'colony not found'; end if;
   if not (col.owner_id = auth.uid() or public.current_user_role() in ('superadmin','editor','moderator')) then
