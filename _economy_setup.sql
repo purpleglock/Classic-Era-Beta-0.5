@@ -277,6 +277,102 @@ $$;
 
 -- Флаг разового доначисления стартовых зданий (для уже созданных фракций).
 alter table public.faction_economy add column if not exists starter_fixed boolean default false;
+-- Единый источник истины для столицы: флаг колонии + выбранная родная среда планеты.
+alter table public.colonies add column if not exists is_capital boolean default false;
+alter table public.faction_applications add column if not exists capital_env text;
+
+-- Родные среды расы (зеркало EC_HAB из economy.js).
+create or replace function public._race_native_envs(p_race text) returns text[] language sql immutable as $$
+  select case p_race
+    when 'Гуманоиды'                  then array['terrestrial']
+    when 'Млекопитающие'              then array['terrestrial','oceanic']
+    when 'Рептилоиды'                 then array['desert','volcanic','terrestrial']
+    when 'Авианы (Птицеподобные)'     then array['terrestrial','desert']
+    when 'Инсектоиды'                 then array['terrestrial','desert','volcanic']
+    when 'Акватики (Водные)'          then array['oceanic']
+    when 'Плантоиды (Растениевидные)' then array['terrestrial','oceanic']
+    when 'Литоиды (Каменные)'         then array['micro','lava','desert']
+    when 'Синтетики / Киборги'        then array['terrestrial','desert','cryo','micro','lava','volcanic','exotic']
+    when 'Энергетические сущности'    then array['exotic','cryo','lava']
+    else array['terrestrial'] end
+$$;
+
+-- Среда → название типа планеты (обратимо классифицируется ecPlanetGroup через EC_GRP_NAME).
+create or replace function public._env_label(p_env text) returns text language sql immutable as $$
+  select case p_env
+    when 'terrestrial' then 'Землеподобные'
+    when 'oceanic'     then 'Океанические'
+    when 'desert'      then 'Пустынные'
+    when 'volcanic'    then 'Вулканические'
+    when 'lava'        then 'Лавовые миры'
+    when 'cryo'        then 'Криомиры'
+    when 'micro'       then 'Малые тела'
+    when 'exotic'      then 'Экзотические'
+    else 'Землеподобные' end
+$$;
+
+-- Гарантирует столичную планету фракции: генерирует её в map_systems.planets
+-- (по имени из анкеты и родной среде расы), создаёт/находит столичную колонию
+-- с is_capital=true. Идемпотентно. Источник истины о столице.
+create or replace function public._ensure_capital(p_fid text)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  app public.faction_applications;
+  env text; ptype text; cap_name text; cap_id uuid; sys_id text; pres jsonb;
+begin
+  select * into app from public.faction_applications
+    where faction_id = p_fid and status = 'approved'
+    order by updated_at desc limit 1;
+  if not found then return null; end if;
+
+  -- Существующая столичная колония — источник истины (её актуальные система и имя).
+  select id, system_id, planet_name into cap_id, sys_id, cap_name from public.colonies
+    where faction_id = p_fid
+    order by is_capital desc, (planet_type = 'Столичный мир') desc, created_at asc limit 1;
+  -- Новая фракция: система и имя берутся из анкеты.
+  if cap_id is null then
+    sys_id := app.system_id;
+    cap_name := coalesce(nullif(app.planet_name, ''), app.system_name, 'Столица');
+  end if;
+  if sys_id is null then return cap_id; end if;
+
+  env   := coalesce(nullif(app.capital_env, ''), (public._race_native_envs(app.race))[1], 'terrestrial');
+  ptype := public._env_label(env);
+
+  -- генерируем планету на карте, если её ещё нет в столичной системе
+  if not exists (
+    select 1 from public.map_systems ms, jsonb_array_elements(ms.planets) e
+    where ms.id = sys_id and e->>'name' = cap_name
+  ) then
+    update public.map_systems
+      set planets = coalesce(planets, '[]'::jsonb) || jsonb_build_object(
+            'name', cap_name, 'type', ptype, 'slotsP', 9,
+            'resources', public._basic_capital_res(ptype))
+      where id = sys_id;
+  end if;
+
+  -- ресурсы столичной планеты с карты
+  select e->'resources' into pres from public.map_systems ms, jsonb_array_elements(ms.planets) e
+    where ms.id = sys_id and e->>'name' = cap_name limit 1;
+
+  -- столичная колония (создаём только для новой фракции)
+  if cap_id is null then
+    insert into public.colonies (faction_id, owner_id, system_id, planet_name, planet_type, cells, is_capital, resources)
+      values (p_fid, app.owner_id, sys_id, cap_name, ptype, 9, true, coalesce(pres, '[]'::jsonb))
+      on conflict (system_id, planet_name) do nothing
+      returning id into cap_id;
+    if cap_id is null then
+      select id into cap_id from public.colonies
+        where system_id is not distinct from sys_id and planet_name = cap_name limit 1;
+    end if;
+  end if;
+
+  -- ровно одна столица на фракцию + система закреплена на карте
+  update public.colonies set is_capital = (id = cap_id) where faction_id = p_fid;
+  update public.map_systems set faction = p_fid where id = sys_id;
+  return cap_id;
+end$$;
+revoke all on function public._ensure_capital(text) from public;
 
 -- Доначисляет недостающие СТАРТОВЫЕ здания одной фракции до ожидаемого набора:
 --   бесплатное по типу цивилизации + купленные в анкете + гранты доктрины.
@@ -296,7 +392,7 @@ begin
 
   select id into cap from public.colonies
     where faction_id = p_fid
-    order by (planet_type = 'Столичный мир') desc, created_at asc limit 1;
+    order by is_capital desc, (planet_type = 'Столичный мир') desc, created_at asc limit 1;
   if cap is null then return; end if;
 
   -- 1) бесплатное по типу цивилизации
@@ -338,8 +434,6 @@ as $$
 declare
   app public.faction_applications;
   eco public.faction_economy;
-  cap_colony uuid;
-  cap_name text;
 begin
   select * into app from public.faction_applications
     where owner_id = auth.uid() and status = 'approved'
@@ -359,8 +453,9 @@ begin
 
   select * into eco from public.faction_economy where faction_id = app.faction_id;
   if found then
-    -- разово догоняем недовыданные стартовые здания (старые фракции до фикса)
+    -- разово догоняем недовыданное у старых фракций (до фикса): столица на карте + здания
     if not coalesce(eco.starter_fixed, false) then
+      perform public._ensure_capital(app.faction_id);
       perform public._ensure_starter_buildings(app.faction_id);
       update public.faction_economy set starter_fixed = true where faction_id = app.faction_id;
     end if;
@@ -373,26 +468,8 @@ begin
             public._doctrine_grant_techs(app.ideology), true)   -- бесплатные техи доктрины
     returning * into eco;
 
-  cap_name := coalesce(nullif(app.planet_name, ''), app.system_name, 'Столица');
-  insert into public.colonies (faction_id, owner_id, system_id, planet_name, planet_type, cells)
-    values (app.faction_id, app.owner_id, app.system_id, cap_name, 'Столичный мир', 9)
-    on conflict (system_id, planet_name) do nothing
-    returning id into cap_colony;
-  if cap_colony is null then
-    select id into cap_colony from public.colonies
-      where system_id is not distinct from app.system_id and planet_name = cap_name limit 1;
-  end if;
-
-  -- снимок ресурсов столичной планеты с карты; если их нет (или планеты нет
-  -- в данных системы) — выдаём базовые «нежирные» ресурсы, чтобы было что добывать.
-  update public.colonies set resources = coalesce(
-    (select pl->'resources' from public.map_systems ms, jsonb_array_elements(ms.planets) pl
-     where ms.id = app.system_id and pl->>'name' = cap_name
-       and jsonb_array_length(coalesce(pl->'resources','[]'::jsonb)) > 0 limit 1),
-    public._basic_capital_res(coalesce(
-      (select pl->>'type' from public.map_systems ms, jsonb_array_elements(ms.planets) pl
-       where ms.id = app.system_id and pl->>'name' = cap_name limit 1), 'Столичный мир'))
-  ) where id = cap_colony;
+  -- столичная планета (генерируется прямо на карту) + столичная колония is_capital
+  perform public._ensure_capital(app.faction_id);
 
   -- стартовые здания: бесплатное по типу + купленные в анкете + гранты доктрины
   perform public._ensure_starter_buildings(app.faction_id);

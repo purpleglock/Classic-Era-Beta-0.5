@@ -125,7 +125,7 @@ function frBlank() {
   return {
     id: null, status: 'draft', name: '', color: 'rgba(80,150,255,0.34)',
     gov: FR_GOV[0], regime: FR_REGIME[0], leader: '', civ_type: 'frontier',
-    system_id: null, system_name: '', planet_name: '', planet_type: '',
+    system_id: null, system_name: '', planet_name: '', planet_type: '', capital_env: '',
     buildings: [], bonus_money: false,
     race: FR_RACE[0], ideology: FR_IDEO[0], culture: '', history: '', link: '', herald_url: '',
   };
@@ -292,50 +292,37 @@ function frStepSystem(d) {
         <input class="fi" id="f-planet" value="${esc(d.planet_name)}" placeholder="Планета"></div>`;
   }
   return `<h3 class="fr-h3">Столичная система</h3>
-    <p class="fr-note">Выберите <b>свободную</b> звезду. На мини-карте видно её положение: <span style="color:var(--gd)">голубые</span> свободны, серые заняты.</p>
+    <p class="fr-note">Выберите <b>свободную</b> звезду: <span style="color:var(--gd)">голубые</span> свободны, серые заняты. Ваша столичная планета будет создана прямо в этой системе на карте.</p>
     <div class="fr-minimap" id="f-minimap"><div class="sload" style="min-height:60px"><div class="pulse-loader"></div></div></div>
     <div class="fg"><input class="fi" id="f-sys-search" placeholder="Поиск системы..." oninput="frFilterSystems(this.value)"></div>
     <div class="fr-sys-picked" id="f-sys-picked">${d.system_id ? `Выбрано: <b>${esc(d.system_name)}</b>` : 'Система не выбрана'}</div>
     <div class="fr-sys-list" id="f-sys-list"></div>
     <div class="fgr2" style="margin-top:14px">
-      <div class="fg"><label class="fl">Раса (для пригодности планет)</label>
+      <div class="fg"><label class="fl">Раса (определяет родные миры)</label>
         ${frSel('f-reg-race', FR_RACE, d.race, "frOnRegRace(this.value)")}</div>
-      <div class="fg"><label class="fl">Столичная планета</label>
-        <div class="fr-sys-picked" id="f-planet-picked">${d.planet_name ? `Столица: <b>${esc(d.planet_name)}</b>` : 'Планета не выбрана'}</div></div>
+      <div class="fg"><label class="fl">Название столичной планеты</label>
+        <input class="fi" id="f-planet" value="${esc(d.planet_name)}" placeholder="Имя вашей столицы" oninput="FR.data.planet_name=this.value"></div>
     </div>
-    <div class="fr-planet-pick" id="f-planet-pick"><div class="fr-empty">Сначала выберите систему выше.</div></div>`;
+    <div class="fr-planet-pick" id="f-planet-pick"></div>`;
 }
-// Список планет выбранной системы с учётом расы (использует классификаторы из economy.js)
+// Выбор типа столичной планеты — родной мир расы. Имя вводится игроком (поле f-planet),
+// тип определяется расой (EC_HAB). Если родных миров несколько — игрок выбирает.
 function frRenderPlanetPick() {
   const box = document.getElementById('f-planet-pick'); if (!box) return;
-  const sys = (FR.allSystems || []).find(s => s.id === FR.data.system_id);
-  if (!sys) { box.innerHTML = `<div class="fr-empty">Сначала выберите систему выше.</div>`; return; }
-  const planets = (sys.planets || []).filter(p => p && p.name);
-  if (!planets.length) { box.innerHTML = `<div class="fr-empty">В системе нет данных о планетах. Впишите столицу вручную ниже.</div>
-    <input class="fi" id="f-planet" value="${esc(FR.data.planet_name || '')}" placeholder="Название столицы" oninput="FR.data.planet_name=this.value">`; return; }
   const race = FR.data.race;
-  const grp = typeof ecPlanetGroup === 'function' ? ecPlanetGroup : (() => 'unknown');
-  const canCol = typeof ecColonizable === 'function' ? ecColonizable : (() => true);
-  const isNat = typeof ecNative === 'function' ? ecNative : (() => true);
+  const envs = (typeof EC_HAB !== 'undefined' && EC_HAB[race]) ? EC_HAB[race] : ['terrestrial'];
   const lbl = (typeof EC_GRP_LABEL !== 'undefined') ? EC_GRP_LABEL : {};
-  box.innerHTML = planets.map(p => {
-    const g = grp(p), gl = lbl[g] || g, cells = (+p.slotsP) || 6, sel = FR.data.planet_name === p.name;
-    let cls = 'fr-pl', tag = '';
-    if (!canCol(p)) { cls += ' fr-pl-no'; tag = `<span class="fr-pl-tag no">непригодна</span>`; }
-    else if (isNat(p, race)) { cls += ' fr-pl-native'; tag = `<span class="fr-pl-tag native">родная</span>`; }
-    else { cls += ' fr-pl-foreign'; tag = `<span class="fr-pl-tag foreign">чужая</span>`; }
-    if (sel) cls += ' on';
-    const click = canCol(p) ? ` onclick="frPickPlanet(${JSON.stringify(p.name).replace(/"/g, '&quot;')},${JSON.stringify(p.type || '').replace(/"/g, '&quot;')})"` : '';
-    return `<div class="${cls}"${click}><span class="fr-pl-name">${esc(p.name)}</span><span class="fr-pl-sub">${esc(gl)} · ⬚ ${cells}</span>${tag}${sel ? '<i>✓</i>' : ''}</div>`;
-  }).join('');
+  // авто-выбор, если среда одна или текущая не входит в родные миры расы
+  if (!FR.data.capital_env || !envs.includes(FR.data.capital_env)) FR.data.capital_env = envs[0];
+  if (envs.length <= 1) {
+    box.innerHTML = `<div class="fr-cap-note">Тип столицы: <b>${esc(lbl[envs[0]] || envs[0])}</b> — единственный родной мир вашей расы.</div>`;
+    return;
+  }
+  const chips = envs.map(e => `<div class="fr-cap-chip${FR.data.capital_env === e ? ' on' : ''}" onclick="frPickCapEnv('${e}')">${esc(lbl[e] || e)}</div>`).join('');
+  box.innerHTML = `<div class="fr-cap-label">Родной мир столицы (по расе):</div><div class="fr-cap-chips">${chips}</div>`;
 }
 function frOnRegRace(v) { FR.data.race = v; frRenderPlanetPick(); }
-function frPickPlanet(name, type) {
-  FR.data.planet_name = name; FR.data.planet_type = type || '';
-  const pk = document.getElementById('f-planet-picked'); if (pk) pk.innerHTML = `Столица: <b>${esc(name)}</b>`;
-  frSaveLocal();
-  frRenderPlanetPick();
-}
+function frPickCapEnv(env) { FR.data.capital_env = env; frSaveLocal(); frRenderPlanetPick(); }
 function frStepBuildings(d) {
   const free = frFreeBuilding(d.civ_type);
   if (FR.editApproved) {
@@ -544,9 +531,7 @@ function frFilterSystems(q) {
 }
 function frPickSystem(id, name) {
   FR.data.system_id = id; FR.data.system_name = name;
-  // сменили систему — сбросить выбранную планету
-  FR.data.planet_name = ''; FR.data.planet_type = '';
-  const pk = document.getElementById('f-planet-picked'); if (pk) pk.innerHTML = 'Планета не выбрана';
+  // имя столицы вводит игрок и оно не зависит от системы — не сбрасываем
   const p = document.getElementById('f-sys-picked'); if (p) p.innerHTML = `Выбрано: <b>${esc(name)}</b>`;
   frFilterSystems(document.getElementById('f-sys-search')?.value || '');
   frSaveLocal();
@@ -561,7 +546,7 @@ async function frUpsert(status, extra) {
   const body = {
     owner_id: user.id, owner_email: user.email, status,
     name: d.name, color: d.color, gov: d.gov, regime: d.regime, leader: d.leader, civ_type: d.civ_type,
-    system_id: d.system_id, system_name: d.system_name, planet_name: d.planet_name,
+    system_id: d.system_id, system_name: d.system_name, planet_name: d.planet_name, capital_env: d.capital_env || null,
     buildings: d.buildings, bonus_money: d.bonus_money,
     race: d.race, ideology: d.ideology, culture: d.culture, history: d.history, link: d.link, herald_url: d.herald_url,
     updated_at: new Date().toISOString(),
@@ -598,10 +583,36 @@ async function frSubmit() {
 // ════════════════════════════════════════════════════════════
 // СТРАНИЦА «ФРАКЦИИ» (#factions)
 // ════════════════════════════════════════════════════════════
+// Столица фракции из РЕАЛЬНОЙ столичной колонии (is_capital), а не из анкеты.
+async function frLoadCapitals() {
+  try {
+    const [caps, sys] = await Promise.all([
+      dbGet('colonies', 'is_capital=eq.true&select=faction_id,system_id,planet_name').catch(() => []),
+      dbGet('map_systems', 'select=id,name').catch(() => []),
+    ]);
+    const sysNames = {}; (sys || []).forEach(s => { sysNames[s.id] = s.name; });
+    const byFid = {}; (caps || []).forEach(c => { byFid[c.faction_id] = c; });
+    return { byFid, sysNames };
+  } catch (e) { return { byFid: {}, sysNames: {} }; }
+}
+// Актуальные система и планета столицы фракции f (fallback на анкету).
+function frCapital(f, cap) {
+  const c = cap && cap.byFid[f.faction_id];
+  const sysName = c ? (cap.sysNames[c.system_id] || f.system_name || '—') : (f.system_name || '—');
+  const planet = c ? (c.planet_name || f.planet_name || '') : (f.planet_name || '');
+  return { sysName, planet };
+}
+
 async function renderFactionsPage() {
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
-  let approved = [], mine = null;
-  try { approved = await dbGet('faction_applications', 'status=eq.approved&order=name.asc') || []; } catch (e) {}
+  let approved = [], mine = null, cap = { byFid: {}, sysNames: {} };
+  try {
+    const [ap, capData] = await Promise.all([
+      dbGet('faction_applications', 'status=eq.approved&order=name.asc'),
+      frLoadCapitals(),
+    ]);
+    approved = ap || []; cap = capData;
+  } catch (e) {}
   if (user) mine = await frLoadMine();
 
   const canCreate = !mine || mine.status === 'rejected' || mine.status === 'draft';
@@ -624,7 +635,7 @@ async function renderFactionsPage() {
       <div class="fr-card-main">
         <div class="fr-card-name">${esc(f.name)}</div>
         <div class="fr-card-sub">${esc(f.gov || '')}${f.leader ? ' · ' + esc(f.leader) : ''}</div>
-        <div class="fr-card-meta">★ ${esc(f.system_name || '—')} · ${esc(f.race || '')}</div>
+        <div class="fr-card-meta">★ ${esc(frCapital(f, cap).sysName)} · ${esc(f.race || '')}</div>
       </div></div>`).join('') || `<div class="fr-empty">Пока нет одобренных фракций.</div>`;
 
   setPg(`<div class="fr-wrap">
@@ -655,9 +666,16 @@ function frToggleLore(btn) {
 }
 
 async function frViewFaction(id) {
-  let f = null;
-  try { const rows = await dbGet('faction_applications', 'id=eq.' + id + '&limit=1'); f = rows && rows[0]; } catch (e) {}
+  let f = null, cap = { byFid: {}, sysNames: {} };
+  try {
+    const [rows, capData] = await Promise.all([
+      dbGet('faction_applications', 'id=eq.' + id + '&limit=1'),
+      frLoadCapitals(),
+    ]);
+    f = rows && rows[0]; cap = capData;
+  } catch (e) {}
   if (!f) { toast('Не найдено', 'err'); return; }
+  const capLoc = frCapital(f, cap);
   const blds = (f.buildings || []).map(b => FR_BUILDINGS.find(x => x.id === b)?.name).filter(Boolean);
   const free = FR_BUILDINGS.find(b => b.id === frFreeBuilding(f.civ_type))?.name;
   const row = (k, v) => `<div class="fr-rev-row"><span>${k}</span><b>${esc(v || '—')}</b></div>`;
@@ -672,7 +690,7 @@ async function frViewFaction(id) {
     </div>
     <div class="fr-rev">
       ${row('Глава', f.leader)} ${row('Тип', f.civ_type === 'frontier' ? 'Фронтир' : 'Колония')}
-      ${row('Столица', (f.system_name || '—') + (f.planet_name ? ' / ' + f.planet_name : ''))}
+      ${row('Столица', capLoc.sysName + (capLoc.planet ? ' / ' + capLoc.planet : ''))}
       ${row('Раса', f.race)} ${row('Идеология', f.ideology)}
       ${row('Постройки', [free + ' (беспл.)', ...blds].filter(Boolean).join(', '))}
       ${row('Финансы', f.bonus_money ? '+500 стандартов' : 'Стартовый капитал')}

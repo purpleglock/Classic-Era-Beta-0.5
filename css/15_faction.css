@@ -149,6 +149,15 @@
 .fr-lore-body::-webkit-scrollbar{width:6px}
 .fr-lore-body::-webkit-scrollbar-thumb{background:var(--w3);border-radius:3px}
 
+/* выбор родного мира столицы при регистрации */
+.fr-cap-label{font-size:12px;color:var(--t3);margin:10px 0 6px}
+.fr-cap-note{font-size:13px;color:var(--t2);background:var(--b1);border:1px solid var(--w1);border-radius:8px;padding:10px 12px;margin-top:10px}
+.fr-cap-note b{color:var(--gdl)}
+.fr-cap-chips{display:flex;flex-wrap:wrap;gap:8px}
+.fr-cap-chip{padding:7px 14px;font-size:13px;color:var(--t2);background:var(--b2);border:1px solid var(--w2);cursor:pointer;transition:color .15s,background .15s,border-color .15s}
+.fr-cap-chip:hover{border-color:var(--w3);color:var(--t1)}
+.fr-cap-chip.on{background:var(--gdb);border-color:var(--gd);color:var(--gdl)}
+
 /* модерация в #ap */
 .fr-app{background:var(--b3);border:1px solid var(--w2);border-radius:10px;padding:10px 12px;margin-bottom:8px}
 .fr-app-hd{display:flex;align-items:center;gap:8px}

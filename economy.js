@@ -774,7 +774,7 @@ function ecColonyRowHtml(colony, sys) {
   const minePreview = ecColonyMinePreview(blds, planet);
   const head = `<div class="ec-pl ec-pl-own${open ? ' open' : ''}" onclick="ecToggleColony('${colony.id}')">
     <div class="ec-pl-top">
-      <div class="ec-pl-l"><span class="ec-pl-ic">🏙</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name || 'Колония')}</div><div class="ec-pl-sb">${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div></div></div>
+      <div class="ec-pl-l"><span class="ec-pl-ic">${colony.is_capital ? '★' : '🏙'}</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name || 'Колония')}</div><div class="ec-pl-sb">${colony.is_capital ? 'Столица · ' : ''}${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div></div></div>
       <div class="ec-pl-r"><span class="ec-pl-cells">⬚ ${used}/${cap}</span>${incTxt ? `<span class="ec-pl-inc">${incTxt}/сут</span>` : ''}<span class="ec-pl-chev">${open ? '▾' : '▸'}</span></div>
     </div>
     <div class="ec-pl-res">${ecPlanetResChips(planet)}</div>

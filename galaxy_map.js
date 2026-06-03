@@ -39,10 +39,18 @@ async function loadGalaxyData() {
     // мета фракций (флаг/герб, лидер) из анкет — необязательно
     GM.facMeta = {};
     try {
-      const apps = await dbGet('faction_applications', 'status=eq.approved&select=faction_id,herald_url,leader,gov,name,system_id,planet_name');
-      GM.capitals = {};  // system_id -> faction_id (столица фракции)
-      (apps || []).forEach(a => { if (a.faction_id) { GM.facMeta[a.faction_id] = a; if (a.system_id) GM.capitals[a.system_id] = a.faction_id; } });
-    } catch (e) { /* таблицы анкет может не быть */ }
+      // Метаданные (герб/лидер/имя/доктрина) — из анкеты (не меняются при переезде).
+      // Столица (система + имя планеты) — из РЕАЛЬНОЙ столичной колонии (is_capital),
+      // иначе переименование/перенос показывались бы как при регистрации.
+      const [apps, caps] = await Promise.all([
+        dbGet('faction_applications', 'status=eq.approved&select=faction_id,herald_url,leader,gov,name,system_id,planet_name'),
+        dbGet('colonies', 'is_capital=eq.true&select=faction_id,system_id,planet_name').catch(() => []),
+      ]);
+      GM.capitals = {};   // system_id -> faction_id (актуальная столица)
+      GM.capPlanet = {};  // system_id -> имя столичной планеты (актуальное)
+      (apps || []).forEach(a => { if (a.faction_id) GM.facMeta[a.faction_id] = a; });
+      (caps || []).forEach(c => { if (c.faction_id && c.system_id) { GM.capitals[c.system_id] = c.faction_id; GM.capPlanet[c.system_id] = c.planet_name; } });
+    } catch (e) { /* таблиц может не быть */ }
   } catch (e) {
     console.warn('[map] load error', e);
     toast('Ошибка загрузки карты: ' + e.message, 'err');
@@ -516,7 +524,7 @@ function gmOpenPanel(sys) {
       <div class="gm-fac-info">
         <div class="gm-fac-name" style="color:${col}">${esc(fac.name)}</div>
         ${meta && meta.leader ? `<div class="gm-fac-leader">${esc(meta.leader)}</div>` : ''}
-        ${meta && meta.planet_name && GM.capitals && GM.capitals[sys.id] === fac.id ? `<div class="gm-fac-capital">★ ${esc(meta.planet_name)}</div>` : ''}
+        ${GM.capitals && GM.capitals[sys.id] === fac.id ? `<div class="gm-fac-capital">★ ${esc((GM.capPlanet && GM.capPlanet[sys.id]) || (meta && meta.planet_name) || '')}</div>` : ''}
       </div>
     </div>`;
   })() : `<div class="gm-fac-badge gm-neutral">Нейтральная система</div>`;

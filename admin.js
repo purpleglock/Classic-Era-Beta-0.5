@@ -529,12 +529,18 @@ async function adSetCapital(sysId) {
   if (!confirm(`Сделать «${sys ? sys.name : sysId}» столицей фракции?\nСистема пометится столицей ★ на карте, закрепится за фракцией, и все ${e.colonies.length} колоний переедут сюда.`)) return;
   AD.busy = true;
   try {
-    await dbPatch('faction_applications', `faction_id=eq.${encodeURIComponent(AD.sel)}&status=eq.approved`, { system_id: sysId });
+    const fenc = encodeURIComponent(AD.sel);
+    // столичная колония-источник истины (бывшая столица, иначе первая)
+    const capCol = e.colonies.find(c => c.is_capital) || e.colonies[0];
+    await dbPatch('faction_applications', `faction_id=eq.${fenc}&status=eq.approved`, { system_id: sysId });
     await dbPatch('map_systems', `id=eq.${encodeURIComponent(sysId)}`, { faction: AD.sel });
-    if (e.colonies.length) await dbPatch('colonies', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { system_id: sysId });
+    if (e.colonies.length) await dbPatch('colonies', `faction_id=eq.${fenc}`, { system_id: sysId });
+    // единый источник истины: ровно одна столица (is_capital) в новой системе
+    await dbPatch('colonies', `faction_id=eq.${fenc}`, { is_capital: false });
+    if (capCol) await dbPatch('colonies', `id=eq.${encodeURIComponent(capCol.id)}`, { is_capital: true });
     // локально
     if (e.app) e.app.system_id = sysId;
-    e.colonies.forEach(c => { c.system_id = sysId; });
+    e.colonies.forEach(c => { c.system_id = sysId; c.is_capital = !!(capCol && c.id === capCol.id); });
     AD.colonies.forEach(c => { if (c.faction_id === AD.sel) c.system_id = sysId; });
     if (sys) { sys.faction = AD.sel; if (!e.systems.find(x => x.id === sysId)) e.systems.push(sys); }
     toast('Столица перенесена', 'ok'); adPaint();

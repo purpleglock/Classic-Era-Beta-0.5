@@ -89,3 +89,25 @@ revoke all on function public._backfill_starter_buildings(boolean) from public;
 -- 2) Применить — доначислить недостающие здания всем:
 --      select * from public._backfill_starter_buildings(true);
 -- Повторный запуск (true) безопасен — добавит только новый дефицит.
+
+
+-- ════════════════════════════════════════════════════════════════════
+-- БЭКФИЛЛ СТОЛИЦ: пометить is_capital у существующих столичных колоний
+-- и сгенерировать столичную планету на карте (если её там ещё нет).
+-- Использует _ensure_capital (идемпотентно, без дублей колоний — берёт
+-- актуальную столичную колонию фракции как источник истины).
+-- Требует, чтобы _economy_setup.sql с _ensure_capital был уже применён.
+-- Запуск:  select public._backfill_capitals();
+-- ════════════════════════════════════════════════════════════════════
+create or replace function public._backfill_capitals()
+returns int language plpgsql security definer set search_path = public as $$
+declare f record; n int := 0;
+begin
+  for f in select distinct faction_id from public.faction_applications
+           where status = 'approved' and faction_id is not null loop
+    perform public._ensure_capital(f.faction_id);
+    n := n + 1;
+  end loop;
+  return n;
+end$$;
+revoke all on function public._backfill_capitals() from public;
