@@ -8,7 +8,15 @@
       "PowerShell(if \\($?\\) { \"editor.js OK\" })",
       "mcp__Claude_Preview__preview_start",
       "Bash(python -c ' *)",
-      "Bash(node --check editor.js)"
+      "Bash(node --check editor.js)",
+      "Bash(curl -s 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/colonies?select=id,planet_name,planet_type,system_id,is_capital,resources&planet_name=like.*анталассич*' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/colonies?select=planet_name,is_capital,resources&limit=3' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s -G https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/colonies --data-urlencode select=planet_name,planet_type,system_id,is_capital,resources --data-urlencode planet_type=eq.Океанические -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/colonies?select=planet_name,planet_type,system_id,is_capital,resources -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__' -o cols.json)",
+      "Bash(node -e \"const c=require\\('./cols.json'\\); const p=c.filter\\(x=>/нтала/.test\\(x.planet_name\\)\\); console.log\\('panth colonies:', p.length\\); p.forEach\\(x=>console.log\\(JSON.stringify\\({n:x.planet_name,sys:x.system_id,cap:x.is_capital,res:\\(x.resources||[]\\).map\\(r=>r.name\\)}\\)\\)\\);\")",
+      "Bash(curl -s 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/map_systems?id=eq.sys_mprwiw2e&select=id,name,planets' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__' -o sys.json)",
+      "Bash(node -e \"const s=require\\('./sys.json'\\)[0]; console.log\\('system:',s.name\\); \\(s.planets||[]\\).filter\\(p=>/нтала/.test\\(p.name||''\\)\\).forEach\\(p=>console.log\\(JSON.stringify\\({name:p.name,dist:p.dist,res:\\(p.resources||[]\\).map\\(r=>r.name+\\(r.amt?' '+r.amt:''\\)\\)}\\)\\)\\);\")",
+      "Bash(node --check economy.js)"
     ]
   }
 }

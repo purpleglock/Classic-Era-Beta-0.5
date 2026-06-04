@@ -494,6 +494,10 @@ function ecResearchCost(base) { return Math.max(1, Math.round((base || 0) * ecFa
 function ecMiningPlanetRes(b) {
   const colony = EC.colonies.find(c => c.id === b.colony_id);
   if (!colony) return [];
+  // ИСТИНА — снимок самой колонии (его же использует сервер при начислении добычи).
+  // По имени матчить нельзя: в системе бывают ДВЕ планеты с одинаковым именем,
+  // и .find хватает не ту (часто пустого двойника) → ресурсы «пропадают».
+  if (Array.isArray(colony.resources) && colony.resources.length) return colony.resources.filter(r => r && r.name);
   const sys = EC.systems.find(s => s.id === colony.system_id);
   const planet = (sys && (sys.planets || []).find(p => p.name === colony.planet_name)) || colony;
   return (planet && Array.isArray(planet.resources)) ? planet.resources.filter(r => r && r.name) : [];
@@ -815,8 +819,11 @@ function ecColonyRowHtml(colony, sys) {
   const incGc = blds.reduce((a, b) => a + (ecBuildingIncome(b).gc || 0), 0);
   const incSci = blds.reduce((a, b) => a + (ecBuildingIncome(b).science || 0), 0);
   const incTxt = [incGc ? `+${ecNum(incGc)} ГС` : '', incSci ? `+${ecNum(incSci)} ОН` : ''].filter(Boolean).join(' ');
-  // ресурсы: из планеты на карте (если есть) или из снимка самой колонии
-  const planet = (sys && (sys.planets || []).find(x => x.name === colony.planet_name)) || colony;
+  // ресурсы: ИСТИНА — снимок самой колонии (его использует сервер для добычи).
+  // Матчинг по имени ненадёжен: в системе бывает ДВЕ одноимённые планеты,
+  // .find берёт первую (часто пустую) и затирает корректный снимок колонии.
+  const mapPlanet = sys && (sys.planets || []).find(x => x.name === colony.planet_name);
+  const planet = (Array.isArray(colony.resources) && colony.resources.length) ? colony : (mapPlanet || colony);
   const minePreview = ecColonyMinePreview(blds, planet);
   const head = `<div class="ec-pl ec-pl-own${open ? ' open' : ''}" onclick="ecToggleColony('${colony.id}')">
     <div class="ec-pl-top">
