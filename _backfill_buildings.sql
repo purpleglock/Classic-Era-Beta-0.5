@@ -111,3 +111,76 @@ begin
   return n;
 end$$;
 revoke all on function public._backfill_capitals() from public;
+
+
+-- ════════════════════════════════════════════════════════════════════
+-- РАЗОВАЯ МИГРАЦИЯ: доначисление недостающих СТАРТОВЫХ ТЕХНОЛОГИЙ доктрины.
+--
+-- Зачем: бесплатные техи доктрины (_doctrine_grant_techs по идеологии)
+-- выдаются в faction_economy.research ТОЛЬКО при первичной вставке в
+-- economy_init(). Старые фракции, инициализированные до появления этой
+-- логики, недополучили их, а login-догон (starter_fixed) чинит лишь
+-- столицу и здания — НЕ техи. Аналог _backfill_starter_buildings, но для
+-- технологий.
+--
+-- Что делает: для каждой approved-фракции берёт ожидаемые техи доктрины
+-- и сверяет с faction_economy.research; недостающие ноды добавляет.
+--
+-- Безопасность:
+--  • Идемпотентно — уже выданное/изученное (research ? node) не дублируется.
+--  • Не трогает экономику, которая ещё не инициализирована (выдастся сама
+--    при первом заходе в «Кабинет»).
+-- ════════════════════════════════════════════════════════════════════
+create or replace function public._backfill_doctrine_techs(p_apply boolean default false)
+returns table(faction text, ideology text, tech_node text, tech_label text)
+language plpgsql security definer set search_path = public as $$
+declare
+  app record;
+  eco public.faction_economy;
+  granted jsonb;
+  tnode text;
+  cur jsonb;
+  chg boolean;
+begin
+  for app in
+    select * from public.faction_applications
+    where status = 'approved' and faction_id is not null
+  loop
+    granted := public._doctrine_grant_techs(app.ideology);
+    if granted is null or jsonb_array_length(granted) = 0 then continue; end if;
+
+    select * into eco from public.faction_economy where faction_id = app.faction_id;
+    if not found then continue; end if;   -- экономика не инициализирована — выдастся при первом заходе
+
+    cur := coalesce(eco.research, '[]'::jsonb);
+    chg := false;
+
+    -- по каждому гранту: если ноды нет в research — это недостача
+    for tnode in select jsonb_array_elements_text(granted) loop
+      if not (cur ? tnode) then
+        faction := app.name; ideology := app.ideology; tech_node := tnode;
+        tech_label := case tnode
+          when 'comp.ship.reactor'  then 'Продвинутые реакторы (корабли)'
+          when 'comp.ground.armor'  then 'Продвинутая броня (наземка)'
+          when 'comp.ground.shield' then 'Продвинутые щиты (наземка)'
+          when 'comp.ship.engine'   then 'Продвинутые двигатели (корабли)'
+          else tnode end;
+        return next;
+        if p_apply then cur := cur || to_jsonb(tnode); chg := true; end if;
+      end if;
+    end loop;
+
+    if p_apply and chg then
+      update public.faction_economy set research = cur where faction_id = app.faction_id;
+    end if;
+  end loop;
+end$$;
+
+revoke all on function public._backfill_doctrine_techs(boolean) from public;
+
+-- ── КАК ЗАПУСКАТЬ ──
+-- 1) Сухой прогон — показать, кому каких техов не хватает (НИЧЕГО не меняет):
+--      select * from public._backfill_doctrine_techs(false);
+-- 2) Применить — доначислить недостающие техи доктрины всем:
+--      select * from public._backfill_doctrine_techs(true);
+-- Повторный запуск (true) безопасен — добавит только новый дефицит.

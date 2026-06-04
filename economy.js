@@ -99,10 +99,15 @@ const EC_BLD_HOWTO = {
   trade:            'Доход только при активном торговом пути (вкладка «Дипломатия»).',
   market:           'Сама продаёт накопленные ресурсы за ГС (≈50% цены), без торговых путей.',
   science:          'Даёт очки науки (ОН) для исследований.',
-  training:         'Даёт мощность для производства пехоты (заказ — во вкладке «Армия»).',
+  training:         'Даёт мощность для производства пехоты (заказ — во вкладке «Строительство вооружённых сил»).',
   intel:            'Даёт агентов для разведки (вкладка «Разведка»).',
-  military_factory: 'Даёт мощность для производства наземной техники (вкладка «Армия»).',
-  shipyard:         'Даёт мощность для постройки кораблей и авиации (вкладка «Армия»).',
+  military_factory: 'Даёт мощность для производства наземной техники (вкладка «Строительство вооружённых сил»).',
+  shipyard:         'Даёт мощность для постройки кораблей и авиации (вкладка «Строительство вооружённых сил»).',
+};
+// Иконки зданий (для каталога-выбора при постройке)
+const EC_BLD_ICON = {
+  factory: '🏭', mining: '⛏', trade: '💱', market: '📈',
+  science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀',
 };
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
 // Обустройство среды обитания на своей колонии (+ячейки, 1 ход)
@@ -583,9 +588,10 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['military', '⚔', 'Армия и флот'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['diplomacy', '🤝', 'Дипломатия'], ['intel', '🕵', 'Разведка']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['diplomacy', '🤝', 'Дипломатия'], ['intel', '🕵', 'Разведка']];
   const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
-  const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'military' ? ecTabMilitary()
+  const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
+    : EC.tab === 'milbuild' ? ecTabMilBuild()
     : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'intel' ? ecTabIntel() : ecTabColonies();
   setPg(`<div class="ec-wrap">
@@ -697,12 +703,12 @@ function ecTabOverview() {
     card(`${ecNum(usedCells)}/${ecNum(totalCells)}`, 'Ячейки застройки', null, 'colonies'),
     card(ecNum(EC.buildings.length), 'Построек', null, 'colonies'),
   ]);
-  const army = sect('⚔ Армия и флот', [
-    card(ecNum(ships), 'Корабли', 'var(--te)', 'military'),
-    card(ecNum(divs), 'Дивизии', 'var(--gd)', 'military'),
-    card(ecNum(ground), 'Наземка', null, 'military'),
-    card(ecNum(avia), 'Авиация', null, 'military'),
-    queued ? card(ecNum(queued), 'В очереди', 'var(--color-warning, #e0a030)', 'military') : '',
+  const army = sect('⚔ Вооружённые силы государства', [
+    card(ecNum(ships), 'Корабли', 'var(--te)', 'forces'),
+    card(ecNum(divs), 'Дивизии', 'var(--gd)', 'forces'),
+    card(ecNum(ground), 'Наземка', null, 'forces'),
+    card(ecNum(avia), 'Авиация', null, 'forces'),
+    queued ? card(ecNum(queued), 'В очереди', 'var(--color-warning, #e0a030)', 'milbuild') : '',
   ]);
   const sciDip = sect('🔬 Наука · Дипломатия · Разведка', [
     card(`${ecNum(researchDone)}/${ecNum(researchAll.length)}`, 'Технологий', 'var(--pu)', 'research'),
@@ -780,7 +786,6 @@ function ecColonyManage(c) {
     </div>`;
   }).join('');
   const bHtml = blds.map(ecBuildingRow).join('') + pendBldHtml || `<div class="ec-empty" style="padding:8px 0">Пусто. Постройте структуру ↓</div>`;
-  const opts = EC_ORDER.map(t => `<option value="${t}">${esc(EC_BUILD[t].name)} — ${ecNum(ecBuildCost(EC_BUILD[t].cost))} ГС</option>`).join('');
   const pendHab = ecPendingHabitat(c.id);
   const habBtn = pendHab
     ? `<span class="ec-proj-tag" title="${ecProjEtaTxt(pendHab)}">⏳ обустройство среды (${ecProjEtaTxt(pendHab)})</span>`
@@ -789,8 +794,7 @@ function ecColonyManage(c) {
       : '';
   return `<div class="ec-bld-grid">${bHtml}</div>
     <div class="ec-colony-actions">
-      <select class="ec-build-sel" id="ec-bsel-${c.id}">${opts}</select>
-      <button class="btn btn-gh btn-sm" ${full ? 'disabled title="Нет свободных ячеек"' : ''} onclick="ecBuild('${c.id}')">＋ Построить</button>
+      <button class="btn btn-gd btn-sm ec-build-btn" ${full ? 'disabled title="Нет свободных ячеек"' : ''} onclick="ecBuildPicker('${c.id}')">🏗 Построить${full ? '' : ` <span class="ec-build-free">${cap - used} ⬚</span>`}</button>
       ${habBtn}
       ${(typeof user !== 'undefined' && user && ['superadmin','editor','moderator'].includes(user.role)) ? `<button class="btn btn-gh btn-sm" onclick="ecRenameColony('${c.id}',${ecArg(c.planet_name || '')})" title="Переименовать планету (стафф, без модерации)">✎ Имя</button>` : ''}
       <button class="btn btn-gh btn-sm ec-danger" onclick="ecAbandon('${c.id}')" title="Бросить колонию">✕ Бросить</button>
@@ -923,7 +927,44 @@ function ecDivBuildCard(div) {
   </div>`;
 }
 
-function ecTabMilitary() {
+// ── Вкладка 1: «Вооружённые силы государства» — текущий состав (ростер) ──
+function ecTabForces() {
+  const stock = {};
+  EC.roster.forEach(r => { const k = (r.category || '') + '|' + (r.unit_name || ''); if (!stock[k]) stock[k] = { name: r.unit_name, category: r.category, qty: 0 }; stock[k].qty += r.qty || 0; });
+  const all = Object.values(stock);
+  let rosterHtml = '';
+  [['division', '⚔', 'Дивизии', 'army', 'Дивизия'], ['ship', '🚀', 'Флот', 'fleet', 'Корабль']].forEach(([c, ic, lbl, mod, unit]) => {
+    const arr = all.filter(s => s.category === c).sort((a, b) => (b.qty || 0) - (a.qty || 0));
+    if (!arr.length) return;
+    const tot = arr.reduce((a, s) => a + (s.qty || 0), 0);
+    const cards = arr.map(s => `<div class="ec-force-card ec-force-card--${mod}">
+        <span class="ec-force-tok">${ic}</span>
+        <div class="ec-force-info"><div class="ec-force-name">${esc(s.name)}</div><div class="ec-force-sub">${unit}</div></div>
+        <span class="ec-force-qty">×${ecNum(s.qty)}</span>
+      </div>`).join('');
+    rosterHtml += `<div class="ec-force-group">
+      <div class="ec-force-hd ec-force-hd--${mod}"><span class="ec-force-hd-ic">${ic}</span><span class="ec-force-hd-l">${lbl}</span><span class="ec-force-hd-ct">${ecNum(tot)} ед.</span></div>
+      <div class="ec-force-grid">${cards}</div>
+    </div>`;
+  });
+  if (!rosterHtml) rosterHtml = `<div class="ec-force-empty"><span class="ec-force-empty-ic">🎖</span><div>Вооружённых сил пока нет.<br><span class="ec-force-empty-sub">Сформируйте их во вкладке «🏭 Строительство вооружённых сил».</span></div></div>`;
+
+  const totDiv = EC.roster.filter(r => r.category === 'division').reduce((a, r) => a + (r.qty || 0), 0);
+  const totShip = EC.roster.filter(r => r.category === 'ship').reduce((a, r) => a + (r.qty || 0), 0);
+  const inQueue = EC.queue.reduce((a, q) => a + (q.qty || 0), 0);
+
+  return `${ecIntro('⚔', 'Вооружённые силы государства', 'Текущий состав ваших вооружённых сил — сформированные дивизии и построенный флот.', ['Войска производятся во вкладке «🏭 Строительство вооружённых сил».', 'Готовые заказы пополняют этот состав в конце игрового хода.'])}<div class="ec-section-title">Сводка</div>
+    <div class="ec-ov-grid ec-force-stats">
+      <div class="ec-ov-card"><div class="ec-ov-v" style="color:var(--gd)">${ecNum(totDiv)}</div><div class="ec-ov-k">⚔ Дивизий</div></div>
+      <div class="ec-ov-card"><div class="ec-ov-v" style="color:var(--te)">${ecNum(totShip)}</div><div class="ec-ov-k">🚀 Кораблей</div></div>
+      ${inQueue ? `<div class="ec-ov-card ec-ov-clk" onclick="ecSetTab('milbuild')"><div class="ec-ov-v" style="color:var(--color-warning, #e0a030)">${ecNum(inQueue)}</div><div class="ec-ov-k">🏭 В очереди</div></div>` : ''}
+    </div>
+    <div class="ec-section-title">Боевой состав</div>
+    ${rosterHtml}`;
+}
+
+// ── Вкладка 2: «Строительство вооружённых сил» — производство и очередь ──
+function ecTabMilBuild() {
   const caps = ecCaps(), use = ecPendingUse();
   const divisions = EC.designs.filter(d => d.category === 'division');
   const ships = EC.designs.filter(d => d.category === 'ship');
@@ -946,24 +987,12 @@ function ecTabMilitary() {
     ? EC.queue.map(q => { const ms = q.ready_at ? new Date(q.ready_at).getTime() - Date.now() : 0; const t = ms <= 0 ? 'готово на след. ходу' : `через ${Math.max(0, Math.floor(ms / 3600000))} ч`; return `<div class="ec-q-row"><span class="ec-r-name">${esc(q.unit_name)} ×${ecNum(q.qty)}</span><span class="ec-q-t">${t}</span><button class="ec-bld-del" title="Отменить" onclick="ecCancelProd('${q.id}')">✕</button></div>`; }).join('')
     : `<div class="ec-empty" style="padding:8px">Очередь пуста.</div>`;
 
-  const stock = {};
-  EC.roster.forEach(r => { const k = (r.category || '') + '|' + (r.unit_name || ''); if (!stock[k]) stock[k] = { name: r.unit_name, category: r.category, qty: 0 }; stock[k].qty += r.qty || 0; });
-  const all = Object.values(stock);
-  let rosterHtml = '';
-  [['division', '⚔ Дивизии'], ['ship', '🚀 Флот']].forEach(([c, lbl]) => {
-    const arr = all.filter(s => s.category === c); if (!arr.length) return;
-    rosterHtml += `<div class="ec-r-sec">${lbl}</div>` + arr.map(s => `<div class="ec-r-row"><span class="ec-r-name">${esc(s.name)}</span><span class="ec-r-qty">×${ecNum(s.qty)}</span></div>`).join('');
-  });
-  if (!rosterHtml) rosterHtml = `<div class="ec-empty" style="padding:8px">Ростер пуст — сформируйте дивизии и постройте корабли.</div>`;
-
-  return `${ecIntro('⚔', 'Армия и флот', 'Здесь вы производите войска. Сами шаблоны проектируются в <b>Конструкторах</b>, а заказ на производство — здесь.', ['Объём производства зависит от слотов военных зданий: пехота → <b>Центр подготовки</b>, техника → <b>Военный завод</b>, корабли → <b>Корабельная верфь</b>.', 'Нет проектов? Откройте «⚒ Конструкторы» и спроектируйте дивизию или корабль.', 'Заказы выполняются к следующему игровому дню и попадают в ростер.'])}<div class="ec-section-title">Дивизии <span class="ec-hint">— комплектование: нужны здания под состав (пехота → Подготовка, техника → Воензавод)</span></div>
+  return `${ecIntro('🏭', 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, а заказ на производство — здесь.', ['Объём производства зависит от слотов военных зданий: пехота → <b>Центр подготовки</b>, техника → <b>Военный завод</b>, корабли → <b>Корабельная верфь</b>.', 'Нет проектов? Откройте «⚒ Конструкторы» и спроектируйте дивизию или корабль.', 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».'])}<div class="ec-section-title">Дивизии <span class="ec-hint">— комплектование: нужны здания под состав (пехота → Подготовка, техника → Воензавод)</span></div>
     ${divHtml}
     <div class="ec-section-title">Флот <span class="ec-hint">— корабли строятся на Верфи поштучно</span></div>
     ${shipForm}
     <div class="ec-section-title">В очереди <span class="ec-hint">— доставка в конце хода (сутки)</span></div>
-    <div class="ec-queue">${queueHtml}</div>
-    <div class="ec-section-title">Ростер — армия и флот</div>
-    <div class="ec-roster">${rosterHtml}</div>`;
+    <div class="ec-queue">${queueHtml}</div>`;
 }
 
 // ── Территория: смежность, миникарта, захват ───────────────
@@ -1262,7 +1291,7 @@ function ecTabDiplomacy() {
           <input type="range" id="ec-cv-convoy-slider" min="0" max="${ships}" value="0" oninput="ecSyncConvoy(this.value)">
           <input type="number" id="ec-cv-convoy" min="0" max="${ships}" value="0" class="ec-trade-volnum" oninput="ecSyncConvoy(this.value)">
         </div>`
-          : `<div class="ec-trade-note">⚓ Свободных кораблей нет — путь пойдёт без охраны. Постройте корабли на Корабельной Верфи (вкладка «Армия и флот»), чтобы снизить риск.<input type="hidden" id="ec-cv-convoy" value="0"></div>`}
+          : `<div class="ec-trade-note">⚓ Свободных кораблей нет — путь пойдёт без охраны. Постройте корабли на Корабельной Верфи (вкладка «Строительство вооружённых сил»), чтобы снизить риск.<input type="hidden" id="ec-cv-convoy" value="0"></div>`}
         <div class="ec-trade-summary" id="ec-cv-summary"></div>
         <button class="btn btn-gd" id="ec-cv-send" onclick="ecTradePropose()">Предложить караван</button>
       </div>`;
@@ -1772,19 +1801,89 @@ async function ecCancelProd(id) {
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
 }
 
-async function ecBuild(colonyId) {
+// ── Постройка зданий: каталог-выбор → подтверждение → стройка ──
+function _ecBuildFree(colonyId) {
+  const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return 0;
+  const used = EC.buildings.filter(b => b.colony_id === colonyId).length
+    + (EC.projects || []).filter(p => p.kind === 'build' && p.colony_id === colonyId).length;
+  return (colony.cells || EC_DEFAULT_CELLS) - used;
+}
+function _ecBuildHost() {
+  let h = document.getElementById('ec-bp-host');
+  if (!h) { h = document.createElement('div'); h.id = 'ec-bp-host'; document.body.appendChild(h); }
+  return h;
+}
+function ecBuildClose() { const h = document.getElementById('ec-bp-host'); if (h) h.innerHTML = ''; }
+
+// Шаг 1 — каталог построек (что можно построить)
+function ecBuildPicker(colonyId) {
   if (EC.busy) return;
-  const sel = ecId('ec-bsel-' + colonyId); if (!sel) return;
-  const btype = sel.value; const d = EC_BUILD[btype]; if (!d) return;
+  const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return;
+  const free = _ecBuildFree(colonyId);
+  if (free <= 0) { toast('Нет свободных ячеек на планете', 'err'); return; }
+  const gc = EC.eco.gc || 0;
+  const cards = EC_ORDER.map(t => {
+    const d = EC_BUILD[t]; const cost = ecBuildCost(d.cost); const afford = gc >= cost;
+    return `<button class="ec-bp-card ec-bp-${d.cat}${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecBuildConfirm('${colonyId}','${t}')">
+      <span class="ec-bp-ic">${EC_BLD_ICON[t] || '⌂'}</span>
+      <span class="ec-bp-info">
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-${d.cat}">${d.cat === 'civ' ? 'Гражд.' : 'Воен.'}</span></span>
+        <span class="ec-bp-desc">${esc(d.desc)}</span>
+        <span class="ec-bp-howto">${esc(EC_BLD_HOWTO[t] || '')}</span>
+      </span>
+      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small></span>
+    </button>`;
+  }).join('');
+  _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
+    <div class="ec-bp-modal" role="dialog" aria-modal="true">
+      <div class="ec-bp-hd">
+        <div class="ec-bp-hd-t"><span class="ec-bp-hd-ic">🏗</span><span>Что построить</span></div>
+        <button class="ec-bp-x" title="Закрыть" onclick="ecBuildClose()">✕</button>
+      </div>
+      <div class="ec-bp-meta"><span>🪐 ${esc(colony.planet_name || 'Колония')}</span><span>⬚ свободно ячеек: <b>${free}</b></span><span>💰 казна: <b>${ecNum(gc)}</b> ГС</span></div>
+      <div class="ec-bp-grid">${cards}</div>
+      <div class="ec-bp-foot">Постройка занимает 1 ячейку и завершается через 1 игровой день. Затраты возвращаются при отмене.</div>
+    </div>
+  </div>`;
+}
+
+// Шаг 2 — подтверждение выбранной постройки
+function ecBuildConfirm(colonyId, btype) {
+  const d = EC_BUILD[btype]; if (!d) return;
+  const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return;
+  const cost = ecBuildCost(d.cost); const after = (EC.eco.gc || 0) - cost;
+  _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
+    <div class="ec-bp-modal ec-bp-cf" role="dialog" aria-modal="true">
+      <div class="ec-bp-cf-ic ec-bp-${d.cat}">${EC_BLD_ICON[btype] || '⌂'}</div>
+      <div class="ec-bp-cf-title">Построить «${esc(d.name)}»?</div>
+      <div class="ec-bp-cf-desc">${esc(d.desc)}</div>
+      <div class="ec-bp-cf-howto">${esc(EC_BLD_HOWTO[btype] || '')}</div>
+      <div class="ec-bp-cf-rows">
+        <div class="ec-bp-cf-row"><span>🪐 Планета</span><b>${esc(colony.planet_name || 'Колония')}</b></div>
+        <div class="ec-bp-cf-row"><span>💰 Стоимость</span><b>${ecNum(cost)} ГС</b></div>
+        <div class="ec-bp-cf-row"><span>⏳ Срок</span><b>1 игровой день</b></div>
+        <div class="ec-bp-cf-row"><span>🏦 Казна после</span><b class="${after < 0 ? 'ec-warn' : ''}">${ecNum(after)} ГС</b></div>
+      </div>
+      <div class="ec-bp-cf-act">
+        <button class="btn btn-gh btn-sm" onclick="ecBuildPicker('${colonyId}')">← Назад к списку</button>
+        <button class="btn btn-gd btn-sm" onclick="ecBuildDo('${colonyId}','${btype}')">✓ Построить за ${ecNum(cost)} ГС</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Шаг 3 — собственно постройка (отложенный проект, 1 ход)
+async function ecBuildDo(colonyId, btype) {
+  if (EC.busy) return;
+  const d = EC_BUILD[btype]; if (!d) return;
   const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return;
   const used = EC.buildings.filter(b => b.colony_id === colonyId).length;
-  // считаем строящиеся здания как занятые ячейки
   const pending = (EC.projects || []).filter(p => p.kind === 'build' && p.colony_id === colonyId).length;
-  if (used + pending >= (colony.cells || EC_DEFAULT_CELLS)) { toast('Нет свободных ячеек на планете', 'err'); return; }
+  if (used + pending >= (colony.cells || EC_DEFAULT_CELLS)) { toast('Нет свободных ячеек на планете', 'err'); ecBuildClose(); return; }
   EC.busy = true;
   try {
     const cost = ecBuildCost(d.cost);
-    if (!await ecSpend(cost)) return;
+    if (!await ecSpend(cost)) { ecBuildClose(); return; }
     await dbPost('colony_projects', {
       faction_id: EC.fid, owner_id: user.id, kind: 'build',
       colony_id: colonyId, btype,
@@ -1792,9 +1891,10 @@ async function ecBuild(colonyId) {
       label: `Постройка: ${d.name}${colony.planet_name ? ' · ' + colony.planet_name : ''}`,
       ready_at: _ecReadyTurns(1),
     });
+    ecBuildClose();
     toast(d.name + ' — строительство начато (1 день)', 'ok');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); ecBuildClose(); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }
 

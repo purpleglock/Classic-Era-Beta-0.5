@@ -1464,7 +1464,18 @@ function buildNav(filt='') {
   const L=(ru,en)=>lang==='ru'?ru:en;
   let h=`<div class="n-home${curSlug==='home'?' on':''}" id="ntl-h" onclick="go('home')"><span class="n-home-icon">⌂</span>${T('home')}</div>`;
   // Гайдбук — сразу под главной (важно для новичков)
-  h+=`<div class="n-home${curSlug==='guide'?' on':''}" id="ntl-guide" onclick="go('guide')"><span class="n-home-icon">📖</span>${L('Гайдбук','Guidebook')}</div>`;
+  h+=`<div class="n-home${curSlug==='guide'?' on':''}" id="ntl-guide" onclick="go('guide')"><span class="n-home-icon">📖</span>${L('Игровой гайдбук','Game guidebook')}</div>`;
+  // ── Группа «Правила проекта» (раскрывающаяся): отдельные страницы правил ──
+  const ruleItems=[['rules-general','◈',L('Общие правила','General rules')],['rules-charter','⚖',L('Устав проекта','Charter')],['rules-rp','⚔',L('Регламент RP и боёв','RP & combat')],['rules-conduct','⚠',L('Дисциплина и общение','Conduct')],['rules-naming','✎',L('Регистрация и нейминг','Registration')]];
+  const rulesActive=(curSlug||'').startsWith('rules-');
+  h+=`<div class="n-group${rulesActive?' op':''}" id="nav-rules">
+    <div class="n-group-hdr${rulesActive?' on':''}" id="ntl-rules" onclick="document.getElementById('nav-rules').classList.toggle('op')">
+      <span class="n-home-icon">⚖</span><span class="n-group-t">${L('Правила проекта','Project rules')}</span><span class="n-group-arr">▸</span>
+    </div>
+    <div class="n-group-body">
+      ${ruleItems.map(([sl,ic,nm])=>`<div class="n-sub${curSlug===sl?' on':''}" id="ntl-${sl}" onclick="go('${sl}')"><span class="n-home-icon">${ic}</span>${nm}</div>`).join('')}
+    </div>
+  </div>`;
   // Кабинет игрока — высоко: игрокам с одобренной анкетой и стаффу
   if (typeof ecNavEnsure==='function') ecNavEnsure();
   if (typeof ecCanAccess==='function' && ecCanAccess()) {
@@ -1595,6 +1606,12 @@ function setAct(slug) {
   if (slug.startsWith('cat-')) {
     document.getElementById('ntl-troops')?.classList.add('on');
     document.getElementById('nav-troops')?.classList.add('op');
+  }
+  // Правила проекта — подсветить активную подстраницу, заголовок группы и раскрыть её
+  if (slug.startsWith('rules-')) {
+    document.getElementById('ntl-'+slug)?.classList.add('on');
+    document.getElementById('ntl-rules')?.classList.add('on');
+    document.getElementById('nav-rules')?.classList.add('op');
   }
   // Active page parent
   const pg=pages.find(p=>p.slug===slug);

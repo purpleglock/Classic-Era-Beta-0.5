@@ -16,7 +16,11 @@
       "Bash(node -e \"const c=require\\('./cols.json'\\); const p=c.filter\\(x=>/нтала/.test\\(x.planet_name\\)\\); console.log\\('panth colonies:', p.length\\); p.forEach\\(x=>console.log\\(JSON.stringify\\({n:x.planet_name,sys:x.system_id,cap:x.is_capital,res:\\(x.resources||[]\\).map\\(r=>r.name\\)}\\)\\)\\);\")",
       "Bash(curl -s 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/map_systems?id=eq.sys_mprwiw2e&select=id,name,planets' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__' -o sys.json)",
       "Bash(node -e \"const s=require\\('./sys.json'\\)[0]; console.log\\('system:',s.name\\); \\(s.planets||[]\\).filter\\(p=>/нтала/.test\\(p.name||''\\)\\).forEach\\(p=>console.log\\(JSON.stringify\\({name:p.name,dist:p.dist,res:\\(p.resources||[]\\).map\\(r=>r.name+\\(r.amt?' '+r.amt:''\\)\\)}\\)\\)\\);\")",
-      "Bash(node --check economy.js)"
+      "Bash(node --check economy.js)",
+      "Bash(node --check guide.js)",
+      "Bash(node --check data.js)",
+      "Bash(node --check render.js)",
+      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/faction_economy?select=faction_id,research&limit=3' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')"
     ]
   }
 }

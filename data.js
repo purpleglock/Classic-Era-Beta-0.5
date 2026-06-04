@@ -158,6 +158,11 @@ async function go(slug, push=true) {
     else { setPg('<div class="sempty">guide.js не загружен</div>'); }
     return;
   }
+  if (slug.startsWith('rules-')) {
+    if (typeof renderRules === 'function') { renderRules(slug); }
+    else { setPg('<div class="sempty">guide.js не загружен</div>'); }
+    return;
+  }
   if (slug==='economy') {
     if (typeof ecRenderDashboard === 'function') { await ecRenderDashboard(); }
     else { setPg('<div class="sempty">economy.js не загружен</div>'); }
