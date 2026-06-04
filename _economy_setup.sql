@@ -146,7 +146,8 @@ create table if not exists public.colony_projects (
   id          uuid primary key default gen_random_uuid(),
   faction_id  text,
   owner_id    uuid,
-  kind        text not null,            -- slot | terraform | habitat
+  kind        text not null,            -- build | slot | terraform | habitat
+  btype       text,                     -- build: тип здания
   colony_id   uuid,                     -- slot / habitat
   building_id uuid,                     -- slot
   system_id   text,                     -- terraform (новая планета)

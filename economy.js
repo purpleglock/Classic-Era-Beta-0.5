@@ -429,7 +429,7 @@ async function ecLoad() {
     dbGet('map_systems', `faction=eq.${fid}&select=id,name,planets`).catch(() => []),
     dbGet('faction_units', `or=(faction_id.eq.${fid},faction_id.is.null)&order=name.asc`).catch(() => []),
     dbGet('unit_production', `faction_id=eq.${fid}&order=created_at.desc`).catch(() => []),
-    dbGet('map_systems', `select=id,name,faction,x,y`).catch(() => []),
+    dbGet('map_systems', `select=id,name,faction,x,y,planets`).catch(() => []),
     dbGet('map_hyperlanes', `select=a_id,b_id`).catch(() => []),
     dbGet('faction_applications', `status=eq.approved&select=faction_id,name&order=name.asc`).catch(() => []),
     dbGet('trade_routes', `order=created_at.desc`).catch(() => []),
@@ -850,7 +850,7 @@ function ecTabColonies() {
   EC.systems.forEach(s => sysMap.set(s.id, { id: s.id, name: s.name, planets: (s.planets || []).filter(p => p && p.name) }));
   EC.colonies.forEach(c => { if (c.system_id && !sysMap.has(c.system_id)) {
     const live = EC.allSystems && EC.allSystems.find(x => x.id === c.system_id);
-    sysMap.set(c.system_id, { id: c.system_id, name: (live && live.name) || 'Система', planets: [] });
+    sysMap.set(c.system_id, { id: c.system_id, name: (live && live.name) || 'Система', planets: (live && live.planets) || [] });
   }});
   if (!sysMap.size) {
     return `${ecIntro('🏗', 'Колонии и застройка', 'Здесь вы строите здания на своих планетах — это основа дохода, науки и армии.', ['Сначала получите систему во вкладке «🌐 Территория».', 'Затем колонизируйте пригодную планету и стройте на ней здания.'])}<div class="ec-section-title">Системы и колонии</div>
