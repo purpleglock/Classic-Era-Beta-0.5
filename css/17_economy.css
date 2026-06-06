@@ -449,6 +449,28 @@
 .ec-loan-note:focus { border-color: var(--gd); }
 .ec-q-row .btn-xs { flex-shrink: 0; }
 
+/* ── Таблица отношений (дипломатия) ── */
+.ec-rel-card { grid-column: 1 / -1; }
+.ec-rel-list { display: flex; flex-direction: column; gap: 6px; }
+.ec-rel-row {
+  display: grid; grid-template-columns: minmax(120px, 1.2fr) 1.4fr 1.4fr; gap: 12px; align-items: center;
+  background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); padding: 8px 12px;
+}
+.ec-rel-name { font-size: 13px; font-weight: 600; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-rel-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ec-rel-cap { font-family: var(--font-mono); font-size: 9px; color: var(--t4); flex-shrink: 0; width: 34px; }
+.ec-rel-bar {
+  position: relative; flex: 1; min-width: 50px; height: 6px;
+  background: var(--b0); border: 1px solid var(--w2); border-radius: 99px; overflow: hidden;
+}
+.ec-rel-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--w3); transform: translateX(-0.5px); }
+.ec-rel-fill { position: absolute; top: 0; bottom: 0; border-radius: 99px; }
+.ec-rel-val { font-family: var(--font-mono); font-size: 10.5px; white-space: nowrap; flex-shrink: 0; min-width: 0; }
+@media (max-width: 640px) {
+  .ec-rel-row { grid-template-columns: 1fr; gap: 5px; }
+  .ec-rel-cap { width: 40px; }
+}
+
 /* ── Караван-форма + кликабельная карточка ресурсов ── */
 .ec-caravan-form { display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center; margin-bottom: 4px; }
 .ec-caravan-form label { font-size: 11px; color: var(--t3); white-space: nowrap; }

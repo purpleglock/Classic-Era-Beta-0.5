@@ -30,7 +30,7 @@ async function fnGetMyFaction(force) {
   if (FN.myFac !== undefined && !force) return FN.myFac;
   try {
     const rows = await dbGet('faction_applications',
-      `owner_id=eq.${user.id}&status=eq.approved&order=updated_at.desc&limit=1&select=faction_id,name,color,herald_url`);
+      `owner_id=eq.${user.id}&status=eq.approved&order=updated_at.desc&limit=1&select=faction_id,name,color,herald_url,race,ideology,gov,regime`);
     FN.myFac = (rows && rows[0]) ? rows[0] : null;
   } catch (e) { FN.myFac = null; }
   return FN.myFac;
@@ -118,6 +118,134 @@ function fnBodyToParas(body) {
     }).join('');
 }
 
+// ── Реакции государства на новость (дипломатия) ──────────────
+// Флавор-фразы по идеологии (приоритет) → расе → дефолт. stance: approve/neutral/disapprove.
+const FN_REACT_DEFAULT = {
+  approve:    'Мы одобряем эту позицию.',
+  neutral:    'Мы принимаем это к сведению.',
+  disapprove: 'Мы не одобряем этого.',
+};
+const FN_REACT_IDEO = {
+  'Технократия (Культ науки)': { approve: 'Рационально и обоснованно. Прогресс приветствуется.', neutral: 'Требуется больше данных, прежде чем делать выводы.', disapprove: 'Иррационально и недальновидно. Мы против.' },
+  'Милитаризм (Культ силы)':   { approve: 'Достойно. Сила и воля заслуживают уважения.',          neutral: 'Слова. Посмотрим на дела и оружие.',            disapprove: 'Слабость и пустословие. Мы не впечатлены.' },
+  'Пацифизм':                  { approve: 'Мудрый и мирный путь. Мы рукоплещем.',                  neutral: 'Лишь бы это не привело к насилию.',             disapprove: 'Это сеет рознь и ведёт к конфликту. Осуждаем.' },
+  'Экспансионизм':             { approve: 'Смелость в духе расширения границ. Одобряем.',           neutral: 'Любопытно, но границ это не двигает.',          disapprove: 'Робость и застой. Нам не по пути.' },
+  'Изоляционизм':              { approve: 'Не нарушает нашего покоя — и то хорошо.',                neutral: 'Нас это мало касается.',                        disapprove: 'Чужие дрязги тянут к нам беду. Против.' },
+  'Ксенофилия':                { approve: 'Прекрасный жест единства народов! Поддерживаем.',        neutral: 'Будем рады диалогу по этому поводу.',           disapprove: 'Это сеет вражду между народами. Осуждаем.' },
+  'Ксенофобия':                { approve: 'Неожиданно, но приемлемо для чужаков.',                  neutral: 'От чужаков иного и не ждали.',                  disapprove: 'Типичная чужацкая дерзость. Мы возмущены.' },
+  'Спиритуализм':              { approve: 'Душа этого деяния чиста. Благословляем.',                neutral: 'Звёзды ещё не открыли нам своего знака.',       disapprove: 'Это оскорбляет наши святыни. Мы осуждаем.' },
+  'Трансгуманизм':             { approve: 'Шаг к лучшей версии разума. Одобряем.',                  neutral: 'Эволюция рассудит, кто был прав.',              disapprove: 'Отсталый и косный подход. Мы против.' },
+  'Экоцентризм':               { approve: 'В гармонии с природой. Мы поддерживаем.',                neutral: 'Природа стерпит — пока.',                       disapprove: 'Это вредит живому. Мы решительно против.' },
+  'Индустриализм':             { approve: 'Деловой и продуктивный подход. Одобряем.',               neutral: 'Без выгоды — без интереса.',                    disapprove: 'Пустая трата ресурсов. Не одобряем.' },
+};
+const FN_REACT_RACE = {
+  'Рептилоиды':              { approve: 'Сильный ход. Уважаем.',            neutral: 'Мы наблюдаем, не торопясь.',     disapprove: 'Добыча так не поступает. Презираем.' },
+  'Инсектоиды':              { approve: 'Полезно для Роя. Принимаем.',      neutral: 'Рой не видит в этом смысла.',    disapprove: 'Чуждо Рою. Отвергаем.' },
+  'Синтетики / Киборги':     { approve: 'Логически оптимально. Одобрено.',  neutral: 'Недостаточно данных для оценки.', disapprove: 'Логическая ошибка. Отклонено.' },
+  'Энергетические сущности': { approve: 'Резонирует с нами. Приветствуем.', neutral: 'Колебания нейтральны.',          disapprove: 'Диссонанс. Мы отторгаем это.' },
+};
+function fnReactPhrase(myFac, stance) {
+  const byId = FN_REACT_IDEO[myFac && myFac.ideology];
+  if (byId && byId[stance]) return byId[stance];
+  const byRace = FN_REACT_RACE[myFac && myFac.race];
+  if (byRace && byRace[stance]) return byRace[stance];
+  return FN_REACT_DEFAULT[stance];
+}
+// Список опций: 3 авто (по идеологии/расе) + кастомные автора (news.reactions).
+function fnReactionOptions(myFac, news) {
+  const opts = [
+    { key: 'a', stance: 'approve',    text: fnReactPhrase(myFac, 'approve') },
+    { key: 'n', stance: 'neutral',    text: fnReactPhrase(myFac, 'neutral') },
+    { key: 'd', stance: 'disapprove', text: fnReactPhrase(myFac, 'disapprove') },
+  ];
+  let custom = [];
+  try { custom = Array.isArray(news.reactions) ? news.reactions : JSON.parse(news.reactions || '[]'); } catch (e) {}
+  (custom || []).forEach((c, i) => {
+    if (c && ['approve', 'neutral', 'disapprove'].includes(c.stance) && c.text) {
+      opts.push({ key: 'c' + i, stance: c.stance, text: String(c.text), custom: true });
+    }
+  });
+  return opts;
+}
+// Метка и цвет балла отношений (−100..+100).
+function fnRelLabel(score) {
+  if (score >= 60)  return { t: 'Союзные',         c: 'var(--ok)' };
+  if (score >= 20)  return { t: 'Дружелюбны',      c: 'var(--ok)' };
+  if (score <= -60) return { t: 'Враждебны',       c: 'var(--err)' };
+  if (score <= -20) return { t: 'Напряжённость',   c: 'var(--err)' };
+  return { t: 'Нейтральны', c: 'var(--t3)' };
+}
+const FN_STANCE_ICON = { approve: '👍', neutral: '➖', disapprove: '👎' };
+
+// Состояние блока реакции для открытой статьи: { stance, score } или null/undefined.
+// FN.reactState — карта news_id → {stance, score}.
+FN.reactState = FN.reactState || {};
+
+// HTML блока реакций для статьи n (исходя из myFac и текущего состояния).
+function fnReactionBlockHtml(n, myFac) {
+  // не залогинен или нет одобренной фракции
+  if (!myFac || !myFac.faction_id) {
+    return `<div class="fn-react fn-react-locked">
+      <div class="fn-react-hd">РЕАКЦИЯ ГОСУДАРСТВА</div>
+      <div class="fn-react-note">Чтобы выразить позицию своего государства и влиять на дипломатию — нужна одобренная фракция.${user ? '' : ' Войдите и зарегистрируйте её.'}</div>
+    </div>`;
+  }
+  // нельзя реагировать на новость своей же фракции
+  if (myFac.faction_id === n.faction_id) return '';
+
+  const st = FN.reactState[n.id];
+  const opts = fnReactionOptions(myFac, n);
+  const btns = opts.map(o => {
+    const on = st && st.stance === o.stance;
+    return `<button class="fn-react-opt fn-stance-${o.stance}${on ? ' on' : ''}"
+      onclick="fnReact('${esc(n.id)}','${o.stance}')">
+      <span class="fn-react-ic">${FN_STANCE_ICON[o.stance]}</span>
+      <span class="fn-react-txt">${esc(o.text)}</span></button>`;
+  }).join('');
+
+  let rel = '';
+  if (st) {
+    const lbl = fnRelLabel(st.score || 0);
+    rel = `<div class="fn-react-rel">Ваше отношение к <b>${esc((n.faction_name || 'фракции').toUpperCase())}</b>:
+      <span style="color:${lbl.c}">${lbl.t} (${st.score > 0 ? '+' : ''}${st.score})</span></div>`;
+  }
+  return `<div class="fn-react">
+    <div class="fn-react-hd">РЕАКЦИЯ ГОСУДАРСТВА <span class="fn-react-sub">// влияет на отношения</span></div>
+    <div class="fn-react-opts">${btns}</div>
+    ${rel}
+  </div>`;
+}
+
+// Подгрузка текущей реакции и балла → перерисовка блока.
+async function fnLoadReactState(n, myFac) {
+  if (!myFac || !myFac.faction_id || myFac.faction_id === n.faction_id) return;
+  try {
+    const [rx, rel] = await Promise.all([
+      dbGet('news_reactions', `news_id=eq.${encodeURIComponent(n.id)}&reactor_fid=eq.${encodeURIComponent(myFac.faction_id)}&select=stance&limit=1`).catch(() => []),
+      dbGet('faction_relations', `from_fid=eq.${encodeURIComponent(myFac.faction_id)}&to_fid=eq.${encodeURIComponent(n.faction_id)}&select=score&limit=1`).catch(() => []),
+    ]);
+    if (rx && rx[0]) FN.reactState[n.id] = { stance: rx[0].stance, score: (rel && rel[0]) ? rel[0].score : 0 };
+  } catch (e) {}
+  const slot = document.getElementById('fn-react-slot');
+  if (slot) slot.innerHTML = fnReactionBlockHtml(n, myFac);
+}
+
+// Обработчик клика по опции реакции.
+async function fnReact(newsId, stance) {
+  const n = FN.byId.get(newsId);
+  const myFac = await fnGetMyFaction();
+  if (!myFac || !myFac.faction_id) { toast('Нужна одобренная фракция', 'err'); return; }
+  try {
+    const res = await apiFetch('rpc/news_react', { method: 'POST', body: JSON.stringify({ p_news_id: newsId, p_stance: stance }) });
+    const score = (typeof res === 'number') ? res : (Array.isArray(res) ? res[0] : (res && res.news_react));
+    FN.reactState[newsId] = { stance, score: (typeof score === 'number') ? score : 0 };
+    const slot = document.getElementById('fn-react-slot');
+    if (slot && n) slot.innerHTML = fnReactionBlockHtml(n, myFac);
+    const lbl = fnRelLabel(FN.reactState[newsId].score);
+    toast(`Позиция учтена · ${lbl.t}`, 'ok');
+  } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
+}
+
 function fnOpenArticle(id) {
   const n = FN.byId.get(id);
   if (!n) { toast('Новость не найдена', 'err'); return; }
@@ -143,6 +271,7 @@ function fnOpenArticle(id) {
       </div>
       <h1 class="fn-art-title">${esc(n.title || 'Без заголовка')}</h1>
       <div class="fn-art-body">${fnBodyToParas(n.body)}</div>
+      <div id="fn-react-slot"></div>
     </div>
     <div class="fn-art-foot">
       <span>▌ КОНЕЦ ПЕРЕДАЧИ</span>
@@ -151,6 +280,12 @@ function fnOpenArticle(id) {
   </div>`;
   modal.classList.add('show');
   document.body.style.overflow = 'hidden';
+  // Блок реакции государства — асинхронно (нужна одобренная фракция читателя)
+  fnGetMyFaction().then(myFac => {
+    const slot = document.getElementById('fn-react-slot');
+    if (slot) slot.innerHTML = fnReactionBlockHtml(n, myFac);
+    fnLoadReactState(n, myFac);
+  }).catch(() => {});
 }
 function fnCloseArticle() {
   document.getElementById('fn-article')?.classList.remove('show');
@@ -272,6 +407,12 @@ function fnOpenComposer(id) {
       <div class="fg fn-c-body-fg">
         <div class="fn-c-body-hd"><label class="fl">Текст новости *</label><label class="btn btn-gh btn-xs fn-c-ins-btn">📷 Вставить фото<input type="file" accept="image/*" style="display:none" onchange="fnInsertImg(this)"></label></div>
         <textarea class="fi fn-c-body" id="fn-c-body" placeholder="Пишите свободно. Пустая строка = новый абзац.">${esc(data?.body || '')}</textarea></div>
+      <div class="fg">
+        <div class="fn-c-body-hd"><label class="fl">Варианты реакций <span style="color:var(--t4);font-weight:400">— необязательно</span></label>
+          <button type="button" class="btn btn-gh btn-xs" onclick="fnReactAddRow()">＋ Свой вариант</button></div>
+        <div class="fn-comp-note" style="margin:0 0 6px">Читатели и так получат авто-реакции по своей идеологии. Здесь можно добавить свои ивентные фразы — каждая со своим тоном.</div>
+        <div id="fn-c-reacts">${(() => { let cs = []; try { cs = Array.isArray(data?.reactions) ? data.reactions : JSON.parse(data?.reactions || '[]'); } catch (e) {} return (cs || []).map(c => fnReactRowHtml(c.text, c.stance)).join(''); })()}</div>
+      </div>
       <div class="fn-comp-ftr">
         <button class="btn btn-gh" onclick="fnCloseComposer()">Отмена</button>
         <button class="btn btn-gd" onclick="fnSubmit()">📨 Отправить на проверку</button>
@@ -285,6 +426,30 @@ function fnOpenComposer(id) {
   } else { fill(n); }
 }
 function fnCloseComposer() { document.getElementById('fn-composer')?.classList.remove('show'); }
+
+// Строка кастомной опции реакции (текст + тон)
+function fnReactRowHtml(text, stance) {
+  const opt = (v, l) => `<option value="${v}"${stance === v ? ' selected' : ''}>${l}</option>`;
+  return `<div class="fn-c-react-row">
+    <select class="fi fn-c-react-stance">${opt('approve', '👍 Одобрение')}${opt('neutral', '➖ Нейтрально')}${opt('disapprove', '👎 Осуждение')}</select>
+    <input class="fi fn-c-react-text" maxlength="120" placeholder="Текст реакции…" value="${esc(text || '')}">
+    <button type="button" class="fn-bld-del" title="Удалить" onclick="this.parentNode.remove()">✕</button>
+  </div>`;
+}
+function fnReactAddRow() {
+  const box = document.getElementById('fn-c-reacts');
+  if (box) box.insertAdjacentHTML('beforeend', fnReactRowHtml('', 'neutral'));
+}
+function fnReactCollect() {
+  const rows = document.querySelectorAll('#fn-c-reacts .fn-c-react-row');
+  const out = [];
+  rows.forEach(r => {
+    const text = (r.querySelector('.fn-c-react-text')?.value || '').trim();
+    const stance = r.querySelector('.fn-c-react-stance')?.value || 'neutral';
+    if (text) out.push({ text, stance });
+  });
+  return out.slice(0, 6);
+}
 
 function fnInsertImg(input) {
   const file = input?.files?.[0];
@@ -327,6 +492,7 @@ async function fnSubmit() {
   const title     = (document.getElementById('fn-c-title')?.value || '').trim();
   const body      = (document.getElementById('fn-c-body')?.value || '').trim();
   const image_url = (document.getElementById('fn-c-img')?.value || '').trim() || null;
+  const reactions = fnReactCollect();
   if (!title || !body) { toast('Заголовок и текст обязательны', 'err'); return; }
   if (typeof badName === 'function' && badName(title)) { toast('Заголовок содержит недопустимые слова', 'err'); return; }
   // Писать новости могут только владельцы одобренной фракции (игроки).
@@ -336,7 +502,7 @@ async function fnSubmit() {
   try {
     if (id) {
       await dbPatch('faction_news', `id=eq.${encodeURIComponent(id)}`,
-        { title, excerpt: null, body, image_url, status: 'pending', reject_reason: null, updated_at: new Date().toISOString() });
+        { title, excerpt: null, body, image_url, reactions, status: 'pending', reject_reason: null, updated_at: new Date().toISOString() });
       toast('Изменения отправлены на проверку', 'ok');
     } else {
       await dbPost('faction_news', {
@@ -344,7 +510,7 @@ async function fnSubmit() {
         faction_name: fac.name || null,
         faction_color: fac.color || null,
         owner_id: user.id, owner_email: user.email,
-        title, excerpt: null, body, image_url,
+        title, excerpt: null, body, image_url, reactions,
         status: 'pending',
       });
       toast('Новость отправлена на проверку', 'ok');

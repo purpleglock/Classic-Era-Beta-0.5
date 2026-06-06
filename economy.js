@@ -446,7 +446,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -462,6 +462,8 @@ async function ecLoad() {
     dbGet('spy_missions', `actor_fid=eq.${fid}&order=created_at.desc&limit=40`).catch(() => []),
     dbGet('colony_projects', `faction_id=eq.${fid}&order=ready_at.asc`).catch(() => []),
     dbGet('spy_missions', `target_fid=eq.${fid}&detected=eq.true&order=created_at.desc&limit=25`).catch(() => []),
+    // Отношения: только свои пары (RLS отдаёт где я from или to)
+    dbGet('faction_relations', `or=(from_fid.eq.${fid},to_fid.eq.${fid})`).catch(() => []),
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -477,6 +479,7 @@ async function ecLoad() {
   EC.loans = loans || [];
   EC.missions = missions || [];                 // мои операции (active + done)
   EC.alerts = alerts || [];                      // раскрытые операции против меня
+  EC.relations = relations || [];                // дипотношения (мои пары)
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
   // карта редкости/иконки ресурсов из колоний (+ доступных планет)
@@ -1263,6 +1266,46 @@ function ecRouteRow(r) {
 }
 
 // ── Вкладка «Дипломатия» ────────────────────────────────────
+// ── Дипломатия: таблица отношений (респект) ─────────────────
+function ecRelLabel(score) {
+  const s = score || 0;
+  if (s >= 60)  return { t: 'Союзные',       c: 'var(--ok)' };
+  if (s >= 20)  return { t: 'Дружелюбны',    c: 'var(--ok)' };
+  if (s <= -60) return { t: 'Враждебны',     c: 'var(--err)' };
+  if (s <= -20) return { t: 'Напряжённость', c: 'var(--err)' };
+  return { t: 'Нейтральны', c: 'var(--t3)' };
+}
+// Двусторонний бар: от центра вправо (+, зелёный) или влево (−, красный).
+function ecRelBar(score) {
+  const s = Math.max(-100, Math.min(100, Math.round(score || 0)));
+  const w = Math.abs(s) / 2;                       // 0..50 (% от половины трека)
+  const side = s >= 0 ? 'left:50%' : 'right:50%';
+  const col = s > 0 ? 'var(--ok)' : s < 0 ? 'var(--err)' : 'var(--t4)';
+  return `<span class="ec-rel-bar"><span class="ec-rel-mid"></span><span class="ec-rel-fill" style="${side};width:${w}%;background:${col}"></span></span>`;
+}
+function ecRelationsBlock() {
+  const others = ecOtherFactions();
+  if (!others.length) return '<div class="ec-dip-card"><div class="ec-dip-t">Таблица отношений</div><div class="ec-empty">Нет других фракций.</div></div>';
+  const relMap = new Map();
+  (EC.relations || []).forEach(r => relMap.set(r.from_fid + '>' + r.to_fid, r.score));
+  const cell = (score, cap) => {
+    const lbl = ecRelLabel(score || 0);
+    const val = (score == null) ? '—' : `${score > 0 ? '+' : ''}${score} · ${lbl.t}`;
+    return `<span class="ec-rel-cell"><span class="ec-rel-cap">${cap}</span>${ecRelBar(score)}<span class="ec-rel-val" style="color:${lbl.c}">${val}</span></span>`;
+  };
+  const rows = others.map(f => {
+    const mine = relMap.get(EC.fid + '>' + f.faction_id);
+    const theirs = relMap.get(f.faction_id + '>' + EC.fid);
+    return `<div class="ec-rel-row">
+      <span class="ec-rel-name">${esc(f.name || ecFacName(f.faction_id))}</span>
+      ${cell(mine, 'вы →')}
+      ${cell(theirs, '→ вам')}
+    </div>`;
+  }).join('');
+  return `<div class="ec-dip-card ec-rel-card"><div class="ec-dip-t">Таблица отношений <span class="ec-hint">— баллы −100..+100, копятся от реакций на ваши и чужие новости</span></div>
+    <div class="ec-rel-list">${rows}</div></div>`;
+}
+
 function ecTabDiplomacy() {
   const others = ecOtherFactions(), noOthers = !others.length;
   const tradeCap = ecSlotsSum('trade');
@@ -1355,7 +1398,9 @@ function ecTabDiplomacy() {
       ${asBorrower.length ? `<div class="ec-r-sec">Я заёмщик</div>${borrowerHtml}` : ''}
     </div>`;
 
-  return `${ecIntro('🤝', 'Дипломатия и торговля', 'Превращайте добытые ресурсы в ГС и стройте отношения с другими фракциями.', ['<b>Местный рынок</b> — продать ресурсы сразу за 80% цены. <b>Караваны</b> (торговые пути) выгоднее, но требуют согласия партнёра и рискуют пиратами.', 'Торговый хаб приносит доход <b>только при активном торговом пути</b>.', 'Можно передавать ГС и выдавать займы другим фракциям; споры по займам решает МГА.'])}<div class="ec-section-title">Ресурсы и торговля</div>
+  return `${ecIntro('🤝', 'Дипломатия и торговля', 'Превращайте добытые ресурсы в ГС и стройте отношения с другими фракциями.', ['<b>Местный рынок</b> — продать ресурсы сразу за 80% цены. <b>Караваны</b> (торговые пути) выгоднее, но требуют согласия партнёра и рискуют пиратами.', 'Торговый хаб приносит доход <b>только при активном торговом пути</b>.', 'Можно передавать ГС и выдавать займы другим фракциям; споры по займам решает МГА.'])}<div class="ec-section-title">Отношения <span class="ec-hint">— дипломатический респект</span></div>
+    ${ecRelationsBlock()}
+    <div class="ec-section-title">Ресурсы и торговля</div>
     <div class="ec-dip-grid">${resBlock}${transferBlock}${caravanBlock}${loanBlock}</div>`;
 }
 

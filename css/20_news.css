@@ -48,8 +48,8 @@
 .fn-card-lead { grid-row: 1 / span 2; }
 
 /* Обложка карточки */
-.fn-card-cov { width: 100%; overflow: hidden; background: var(--b0); aspect-ratio: 16/8; position: relative; z-index: 1; }
-.fn-card-lead .fn-card-cov { aspect-ratio: 16/7; }
+.fn-card-cov { width: 100%; overflow: hidden; background: var(--b0); height: 88px; position: relative; z-index: 1; }
+.fn-card-lead .fn-card-cov { height: 110px; }
 .fn-card-cov img { width: 100%; height: 100%; object-fit: cover; display: block;
   filter: brightness(.75) saturate(.8);
   transition: transform .35s ease, filter .35s ease; }
@@ -178,6 +178,49 @@
   transition: filter .3s;
 }
 .fn-art-img:hover img { filter: brightness(1) saturate(1); }
+
+/* ── Реакция государства (дипломатия) ── */
+.fn-react {
+  margin-top: 26px; padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 28%, var(--w2, #2a3340));
+  border-left: 2px solid var(--fn-accent, #5fb0e6);
+  background: color-mix(in srgb, var(--fn-accent, #5fb0e6) 6%, var(--b2, #141a22));
+}
+.fn-react-hd {
+  font-family: var(--fn-mono, monospace); font-size: 10px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--fn-accent, #5fb0e6); margin-bottom: 12px;
+}
+.fn-react-sub { color: var(--t4, #6a7a88); letter-spacing: .1em; }
+.fn-react-opts { display: flex; flex-direction: column; gap: 8px; }
+.fn-react-opt {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 10px 12px; cursor: pointer;
+  background: var(--b3, #0f141b); border: 1px solid var(--w2, #2a3340); color: var(--t2, #c0ccd6);
+  font-family: var(--fn-read, sans-serif); font-size: 13.5px; line-height: 1.4;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.fn-react-opt:hover { background: var(--b4, #161d27); color: var(--t1, #e8edf2); }
+.fn-react-ic { font-size: 15px; flex-shrink: 0; }
+.fn-react-opt.on { color: var(--t1, #e8edf2); }
+.fn-stance-approve.on    { border-color: var(--ok, #3ec96b);  background: color-mix(in srgb, var(--ok, #3ec96b) 14%, transparent); }
+.fn-stance-neutral.on    { border-color: var(--t3, #8aa0b0);  background: color-mix(in srgb, var(--t3, #8aa0b0) 14%, transparent); }
+.fn-stance-disapprove.on { border-color: var(--err, #ff6b6b); background: color-mix(in srgb, var(--err, #ff6b6b) 14%, transparent); }
+.fn-react-rel {
+  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--w2, #2a3340);
+  font-size: 12.5px; color: var(--t3, #8aa0b0);
+}
+.fn-react-rel b { color: var(--t2, #c0ccd6); }
+.fn-react-locked .fn-react-note { font-size: 12.5px; color: var(--t3, #8aa0b0); line-height: 1.5; }
+
+/* ── Кастом-опции реакций в композиторе ── */
+.fn-c-react-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.fn-c-react-stance { flex-shrink: 0; width: 150px; }
+.fn-c-react-text { flex: 1; min-width: 0; }
+.fn-c-react-row .fn-bld-del {
+  flex-shrink: 0; background: none; border: none; color: var(--t4, #6a7a88);
+  cursor: pointer; font-size: 13px; padding: 4px 6px;
+}
+.fn-c-react-row .fn-bld-del:hover { color: var(--err, #ff6b6b); }
 
 /* Нижняя системная панель */
 .fn-art-foot {
