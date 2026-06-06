@@ -540,6 +540,69 @@
 .ec-rs-badge.av { color: var(--gd); border-color: color-mix(in srgb, var(--gd) 50%, transparent); }
 .ec-rs-badge.lock { color: var(--t4); border-color: var(--w2); }
 
+/* ── Дерево исследований (по родам войск) ── */
+.ec-rcat-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 4px; }
+.ec-rcat {
+  display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
+  background: var(--b2); border: 1px solid var(--w2); color: var(--t2);
+  font-family: var(--font-display); font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.ec-rcat:hover { color: var(--t1); border-color: var(--w3); }
+.ec-rcat.on { background: color-mix(in srgb, var(--pu) 16%, transparent); border-color: var(--pu); color: var(--pu); }
+.ec-rcat-cnt { font-family: var(--font-mono); font-size: 10px; opacity: .7; }
+
+.ec-tree-scroll { overflow-x: auto; overflow-y: hidden; padding: 8px 2px 14px; }
+.ec-tree { position: relative; }
+.ec-tree-svg { position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: visible; }
+.ec-tedge { fill: none; stroke: var(--w3); stroke-width: 2; opacity: .55; }
+.ec-tedge.lit { stroke: var(--pu); opacity: .85; }
+
+.ec-tnode {
+  position: absolute; z-index: 1; box-sizing: border-box;
+  background: var(--b2); border: 1px solid var(--w2); border-left: 3px solid var(--w3);
+  border-radius: var(--radius-sm); padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 5px;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.ec-tnode-h { display: flex; align-items: center; justify-content: space-between; }
+.ec-tnode-tag { font-family: var(--font-mono); font-size: 8px; letter-spacing: .14em; color: var(--t4); }
+.ec-tnode-name { font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--t1); line-height: 1.2; }
+.ec-tnode-foot { margin-top: auto; display: flex; align-items: center; }
+.ec-tnode-badge { font-size: 10px; font-family: var(--font-mono); padding: 2px 6px; border-radius: var(--radius-pill); border: 1px solid; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.ec-tnode-badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.ec-tnode-badge.cur { color: var(--te); border-color: color-mix(in srgb, var(--te) 50%, transparent); }
+.ec-tnode-badge.lock { color: var(--t4); border-color: var(--w2); }
+
+/* состояния */
+.ec-tnode-done { opacity: .82; border-left-color: var(--ok); }
+.ec-tnode-done .ec-tnode-name { color: var(--t2); }
+.ec-tnode-active { border-color: var(--te); border-left-color: var(--te); box-shadow: 0 0 0 1px color-mix(in srgb, var(--te) 30%, transparent); }
+.ec-tnode-avail { border-left-color: var(--gd); }
+.ec-tnode-avail:hover { border-color: var(--gd); background: color-mix(in srgb, var(--gd) 8%, var(--b2)); }
+.ec-tnode-locked { opacity: .6; }
+/* цвет ветки на левой кромке */
+.ec-tnode.ec-br-class   { border-left-color: var(--pu); }
+.ec-tnode.ec-br-weapon  { border-left-color: var(--err); }
+.ec-tnode.ec-br-armor   { border-left-color: var(--gd); }
+.ec-tnode.ec-br-shield  { border-left-color: var(--te); }
+.ec-tnode.ec-br-engine  { border-left-color: var(--ok); }
+.ec-tnode.ec-br-reactor { border-left-color: var(--color-warning, #e0a030); }
+.ec-tnode.ec-br-type    { border-left-color: var(--cy, #5fb0e6); }
+.ec-tnode.ec-br-hangar  { border-left-color: var(--cy, #5fb0e6); }
+.ec-tnode.ec-br-module  { border-left-color: var(--t3); }
+.ec-tnode.ec-br-econ    { border-left-color: var(--gd); }
+.ec-tnode.ec-br-prod    { border-left-color: var(--color-warning, #e0a030); }
+.ec-tnode.ec-br-expand  { border-left-color: var(--pu); }
+
+/* чипы бонусов в узле политики */
+.ec-tnode-bonus { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.ec-bchip { font-family: var(--font-mono); font-size: 9.5px; padding: 1px 6px; border-radius: var(--radius-pill); border: 1px solid; white-space: nowrap; }
+.ec-bchip.good { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.ec-bchip.bad { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+.ec-bchip.special { color: var(--pu); border-color: color-mix(in srgb, var(--pu) 55%, transparent); background: color-mix(in srgb, var(--pu) 12%, transparent); }
+.ec-tnode-done.ec-tnode, .ec-tnode-locked.ec-tnode { } /* состояние перекрывает только при необходимости */
+
 @media (max-width: 720px) {
   .ec-wrap { padding: 16px 12px 48px; }
   .ec-head h1 { font-size: 20px; }

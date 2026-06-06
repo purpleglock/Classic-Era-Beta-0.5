@@ -252,6 +252,11 @@ function ecFactionMods(app) {
   add(EC_MODS.ideology[app.ideology]); add(EC_MODS.race[app.race]);
   add(EC_MODS.civ[app.civ_type]);
   add((EC_CAPITAL[app.capital_env] || {}).mods);   // лёгкий бонус планеты-столицы
+  // Бонусы изученных политических технологий (зеркало SQL _faction_mods).
+  // Применяются к текущей фракции (research лежит в EC.eco, не в анкете).
+  if (typeof EC !== 'undefined' && EC.eco && Array.isArray(EC.eco.research) && (!app || app === EC.app)) {
+    EC.eco.research.forEach(id => add(EC_RESEARCH_BONUS[id]));
+  }
   const clamp = (v, lo) => Math.max(lo, 1 + v);
   return {
     gc: clamp(f.gc, 0.3), mine: clamp(f.mine, 0.3), build: clamp(f.build, 0.3),
@@ -1051,6 +1056,14 @@ function ecClaimCooldownMs() {
   if (!EC.eco.last_system_claim) return 0;
   return Math.max(0, new Date(EC.eco.last_system_claim).getTime() + ecClaimCdDays() * 86400000 - Date.now());
 }
+// «Дом в небесах» (pol.house_heavens) → 2 системы за цикл вместо 1.
+function ecClaimMax() { return (EC.eco.research || []).includes('pol.house_heavens') ? 2 : 1; }
+// Сколько систем можно захватить прямо сейчас: при сбросе окна — полный запас,
+// внутри окна — остаток (max − уже использовано в этом цикле).
+function ecClaimsLeft() {
+  if (ecClaimCooldownMs() <= 0) return ecClaimMax();
+  return Math.max(0, ecClaimMax() - (EC.eco.claim_used || 0));
+}
 function ecMinimap() {
   const all = EC.allSystems || [];
   if (!all.length) return `<div class="ec-empty">Карта недоступна.</div>`;
@@ -1076,12 +1089,14 @@ function ecTabTerritory() {
   const cdMs = ecClaimCooldownMs(), claim = ecClaimableIds();
   const byId = new Map((EC.allSystems || []).map(s => [s.id, s]));
   const claimStart = EC.eco.last_system_claim ? new Date(EC.eco.last_system_claim).getTime() : 0;
-  const cdLine = cdMs > 0
-    ? `<div class="ec-cap ec-warn ec-cap-prog">Колонизация системы: ${ecProgress(claimStart, claimStart + ecClaimCdDays() * 86400000, 'доступно')}</div>`
-    : `<div class="ec-cap">Доступно. Раз в ${EC_CLAIM_CD_DAYS} дн., стоимость ${ecNum(EC_CLAIM_COST)} ГС.</div>`;
+  const left = ecClaimsLeft(), max = ecClaimMax(), canClaim = left > 0;
+  const leftTag = max > 1 ? ` <b style="color:var(--gd)">· захватов в цикле: ${left}/${max}</b>` : '';
+  const cdLine = canClaim
+    ? `<div class="ec-cap">Доступно${leftTag}. Раз в ${ecClaimCdDays()} дн., стоимость ${ecNum(ecClaimCost())} ГС.</div>`
+    : `<div class="ec-cap ec-warn ec-cap-prog">Колонизация системы: ${ecProgress(claimStart, claimStart + ecClaimCdDays() * 86400000, 'доступно')}</div>`;
   const list = claim.length
     ? claim.map(id => { const s = byId.get(id); return `<div class="ec-colonize-row"><div class="ec-cz-main"><span class="ec-cz-name">★ ${esc(s.name)}</span><span class="ec-cz-sub">смежная · ничья</span></div>
-        <button class="btn ${cdMs > 0 ? 'btn-gh' : 'btn-gd'} btn-sm" ${cdMs > 0 ? 'disabled' : ''} onclick="ecClaimSystem('${esc(id)}')">Колонизировать систему · ${ecNum(ecClaimCost())} ГС</button></div>`; }).join('')
+        <button class="btn ${canClaim ? 'btn-gd' : 'btn-gh'} btn-sm" ${canClaim ? '' : 'disabled'} onclick="ecClaimSystem('${esc(id)}')">Колонизировать систему · ${ecNum(ecClaimCost())} ГС</button></div>`; }).join('')
     : `<div class="ec-empty">Нет смежных свободных систем. Расширяйтесь вдоль гиперпутей — соседние ничьи системы появятся здесь.</div>`;
   return `${ecIntro('🌐', 'Территория и расширение', 'Захватывайте звёздные системы, чтобы получать новые планеты под колонии.', ['Колонизировать можно только систему, <b>смежную по гиперпути</b> с вашей и <b>ничью</b> (серую).', `Стоит ${ecNum(EC_CLAIM_COST)} ГС, доступно раз в <b>${ecClaimCdDays()} дн.</b> (срок зависит от доктрины).`, 'Получив систему — заселяйте её планеты во вкладке «🏗 Колонии».'])}<div class="ec-section-title">Карта территории <span class="ec-hint">— ваши системы и доступные для колонизации</span></div>
     ${ecMinimap()}
@@ -1091,7 +1106,7 @@ function ecTabTerritory() {
 }
 async function ecClaimSystem(systemId) {
   if (EC.busy) return;
-  if (ecClaimCooldownMs() > 0) { toast('Колонизация системы на перезарядке', 'err'); return; }
+  if (ecClaimsLeft() <= 0) { toast('Колонизация системы на перезарядке', 'err'); return; }
   const claimCost = ecClaimCost();
   if ((EC.eco.gc || 0) < claimCost) { toast(`Недостаточно ГС: нужно ${ecNum(claimCost)}`, 'err'); return; }
   if (!confirm('Колонизировать систему за ' + ecNum(claimCost) + ' ГС? (раз в ' + ecClaimCdDays() + ' дн.)')) return;
@@ -1499,63 +1514,236 @@ function ecSpyLogRow(m) {
 }
 
 // ── Каталог исследований (из данных конструкторов) ──────────
+// Ветки дерева исследований (метка + иконка). Военные — из данных конструктора,
+// политика — ручное дерево с пассивными бонусами (ниже EC_POLITICS).
+const EC_RES_CATS = [
+  ['ship', 'Флот', '🚀'],
+  ['ground', 'Наземные войска', '⚙'],
+  ['aviation', 'Авиация', '✈'],
+  ['politics', 'Политика', '🏛'],
+];
+// ── ПОЛИТИКА: пассивные бонусы на экономику/производство/экспансию ──
+// Названия — отсылки к реальным историческим решениям. bonus — модификаторы
+// доктрины (зеркало в SQL _faction_mods!). special:'claim2' — спец-механика.
+const EC_POLITICS = [
+  // Экономика
+  { id: 'pol.new_deal',     branch: 'econ',   name: 'Новый курс',                cost: 30, prereq: [],                  bonus: { gc: 0.10 },
+    desc: 'Программа общественных работ (Ф. Рузвельт, 1933): госзаказ и стройки оживляют экономику. +10% дохода.' },
+  { id: 'pol.mercantile',   branch: 'econ',   name: 'Меркантилизм',              cost: 50, prereq: ['pol.new_deal'],    bonus: { gc: 0.10, build: -0.05 },
+    desc: 'Протекционизм и накопление капитала (XVII в.): положительный торговый баланс. +10% дохода, −5% к цене построек.' },
+  // Производство
+  { id: 'pol.five_year',    branch: 'prod',   name: 'Пятилетний план',           cost: 35, prereq: [],                  bonus: { build: -0.15 },
+    desc: 'Форсированная индустриализация (план 1928): ударные стройки и нормы выработки. −15% к цене построек.' },
+  { id: 'pol.goelro',       branch: 'prod',   name: 'Электрификация (ГОЭЛРО)',    cost: 55, prereq: ['pol.five_year'],   bonus: { mine: 0.15 },
+    desc: 'Единый план электрификации (ГОЭЛРО, 1920): энергия для заводов и шахт. +15% добычи.' },
+  // Экспансия → капстоун «Дом в небесах»
+  { id: 'pol.land_reform',  branch: 'expand', name: 'Земельная реформа',         cost: 30, prereq: [],                  bonus: { colonize: -0.15 },
+    desc: 'Наделение колонистов землёй (Гомстед-акт, 1862): дешевле осваивать новые миры. −15% к цене колоний.' },
+  { id: 'pol.total_mob',    branch: 'expand', name: 'Всеобщая мобилизация',      cost: 55, prereq: ['pol.land_reform'], bonus: { claim_cost: -0.20 },
+    desc: 'Мобилизационная экономика военного времени: ресурсы брошены на экспансию. −20% к цене захвата систем.' },
+  { id: 'pol.house_heavens', branch: 'expand', name: 'Дом в небесах',            cost: 90, prereq: ['pol.total_mob'],   special: 'claim2',
+    desc: 'Великий колониальный проект: имперская служба освоения небес позволяет присоединять ДВЕ системы за один цикл вместо одной.' },
+];
+// id → bonus (для ecFactionMods). Спец-механики (special) применяются отдельно.
+const EC_RESEARCH_BONUS = {};
+EC_POLITICS.forEach(n => { if (n.bonus) EC_RESEARCH_BONUS[n.id] = n.bonus; });
+// Привязка оружия/компонентов к классу-тиру (тематичные prereq → ветвление дерева).
+// Значение = ключ класса (k из CN_*.data). Базовый класс/отсутствие → узел-корень ветки.
+const EC_TECH_TREE = {
+  ship: {
+    weapon: { 'Тяжёлые': 'cruiser', 'Сверхтяжёлые': 'battleship', 'Ракетное': 'destroyer', 'Зенитное': 'frigate' },
+    comp:   { engine: 'frigate', reactor: 'destroyer', armor: 'destroyer', shield: 'cruiser' },
+  },
+  ground: {
+    weapon: { 'Артиллерия и ПВО': 'artillery' },
+    comp:   { engine: 'medium', armor: 'heavy', shield: 'heavy' },
+  },
+  aviation: {
+    weapon: { 'Ракетное и бомбовое': 'medium', 'Спецоборудование': 'heavy' },
+    comp:   { engine: 'medium', reactor: 'medium', armor: 'heavy', shield: 'heavy' },
+  },
+};
+// Дерево исследований: узлы того же id-формата (cls./wpn./comp.) — id-контракт с
+// конструкторами сохранён. Добавлены branch/prereq/desc для древовидной раскладки.
 function ecBuildResearch() {
   if (EC._research) return EC._research;
   const out = [];
   const base = (typeof CN_BASE !== 'undefined') ? CN_BASE : { classes: {}, weapons: {} };
-  const CATS = [['ship', 'Корабли', (typeof CN_SHIP !== 'undefined' ? CN_SHIP : null), true], ['ground', 'Наземная техника', (typeof CN_GROUND !== 'undefined' ? CN_GROUND : null), false], ['aviation', 'Авиация', (typeof CN_AIR !== 'undefined' ? CN_AIR : null), true]];
-  CATS.forEach(([cat, catLabel, db, hasReactor]) => {
-    if (!db) return;
+  const DB = { ship: (typeof CN_SHIP !== 'undefined' ? CN_SHIP : null), ground: (typeof CN_GROUND !== 'undefined' ? CN_GROUND : null), aviation: (typeof CN_AIR !== 'undefined' ? CN_AIR : null) };
+  EC_RES_CATS.forEach(([cat, catLabel]) => {
+    const db = DB[cat]; if (!db) return;
+    const hasReactor = !!db.reactors;
+    const tree = EC_TECH_TREE[cat] || { weapon: {}, comp: {} };
     const baseCls = base.classes[cat] || [];
-    let prev = null, i = 0;
+    // class prereq → массив id (база/отсутствие = корень ветки)
+    const clsId = k => (k && !baseCls.includes(k) && db.data[k]) ? ['cls.' + cat + '.' + k] : [];
+
+    // ── Класс-хребет (линейная цепочка по тирам) ──
+    let prev = null, ci = 0;
     Object.keys(db.data).forEach(k => {
       if (baseCls.includes(k)) return;
       const id = 'cls.' + cat + '.' + k;
-      out.push({ id, cat, catLabel, group: 'Классы', name: 'Класс: ' + db.data[k].name, cost: 5 * Math.pow(2, i), prereq: prev ? [prev] : [] });
-      prev = id; i++;
+      out.push({ id, cat, catLabel, branch: 'class', name: db.data[k].name,
+        desc: 'Открывает класс корпуса/шасси в конструкторе', cost: 5 * Math.pow(2, ci), prereq: prev ? [prev] : [] });
+      prev = id; ci++;
     });
+
+    // ── Оружие (ветви, привязаны к классу-тиру) ──
     const baseW = base.weapons[cat] || [];
     let wi = 0;
     Object.keys(db.weapons || {}).forEach(g => {
       if (baseW.includes(g)) return;
-      out.push({ id: 'wpn.' + cat + '.' + g, cat, catLabel, group: 'Оружие', name: 'Оружие: ' + g, cost: 10 + wi * 6, prereq: [] });
+      out.push({ id: 'wpn.' + cat + '.' + g, cat, catLabel, branch: 'weapon', name: g,
+        desc: 'Открывает группу вооружения', cost: 12 + wi * 8, prereq: clsId(tree.weapon && tree.weapon[g]) });
       wi++;
     });
-    const comps = [['armor', 'броня', 10], ['shield', 'щиты', 12], ['engine', 'двигатели', 8]];
-    if (hasReactor) comps.unshift(['reactor', 'реакторы', 12]);
-    comps.forEach(([t, lbl, cost]) => out.push({ id: 'comp.' + cat + '.' + t, cat, catLabel, group: 'Компоненты', name: 'Продвинутые ' + lbl, cost, prereq: [] }));
+
+    // ── Компоненты (ветви) ──
+    const comps = [['armor', 'броня', 14], ['shield', 'щиты', 16], ['engine', 'двигатели', 10]];
+    if (hasReactor) comps.unshift(['reactor', 'реакторы', 16]);
+    comps.forEach(([t, lbl, cost]) => {
+      out.push({ id: 'comp.' + cat + '.' + t, cat, catLabel, branch: t, name: 'Продвинутые ' + lbl,
+        desc: 'Открывает улучшенные ' + lbl, cost, prereq: clsId(tree.comp && tree.comp[t]) });
+    });
+
+    // ── Продвинутые типы корпусов (2-й/3-й вариант класса) ──
+    Object.keys(db.data).forEach(k => {
+      const types = db.data[k].types;
+      if (!types || types.length < 2) return;
+      // база-класс → корень ветки; иначе требует свой класс
+      const pre = baseCls.includes(k) ? [] : ['cls.' + cat + '.' + k];
+      out.push({ id: 'type.' + cat + '.' + k, cat, catLabel, branch: 'type', name: 'Спец-корпуса: ' + db.data[k].name,
+        desc: 'Открывает продвинутые специализации этого класса', cost: 10, prereq: pre });
+    });
+
+    // ── Модули и системы (отдельная ветка-цепочка) ──
+    let prevMod = null, mi = 0;
+    Object.keys(db.modules || {}).forEach(g => {
+      const id = 'mod.' + cat + '.' + g;
+      out.push({ id, cat, catLabel, branch: 'module', name: g,
+        desc: 'Открывает группу модулей/систем в конструкторе', cost: 8 + mi * 5, prereq: prevMod ? [prevMod] : [] });
+      prevMod = id; mi++;
+    });
+
+    // ── Ангары и авиакрылья (только флот) ──
+    if (cat === 'ship') {
+      out.push({ id: 'hangar.ship', cat, catLabel, branch: 'hangar', name: 'Ангарные палубы',
+        desc: 'Открывает ангары и авиакрылья на кораблях', cost: 22, prereq: clsId('destroyer') });
+      out.push({ id: 'hangar.ship.heavy', cat, catLabel, branch: 'hangar', name: 'Тяжёлые ангары',
+        desc: 'Открывает крупные боевые ангары (стандартный/большой)', cost: 40, prereq: ['hangar.ship'] });
+    }
   });
+  // ── Политика: ручное дерево бонусов ──
+  EC_POLITICS.forEach(n => out.push({
+    id: n.id, cat: 'politics', catLabel: 'Политика', branch: n.branch,
+    name: n.name, desc: n.desc, cost: n.cost, prereq: n.prereq || [],
+    bonus: n.bonus || null, special: n.special || null,
+  }));
   EC._research = out;
   return out;
 }
+function ecSetResearchCat(c) { EC.researchCat = c; ecPaintCabinet(); }
+// Глубина узла = длиннейшая цепочка prereq (роль тира). Мемоизация.
+function ecTechDepth(n, byId, cache) {
+  if (cache[n.id] != null) return cache[n.id];
+  cache[n.id] = 0;
+  let d = 0;
+  (n.prereq || []).forEach(p => { const pn = byId.get(p); if (pn) d = Math.max(d, ecTechDepth(pn, byId, cache) + 1); });
+  cache[n.id] = d; return d;
+}
 function ecTabResearch() {
-  const cat = ecBuildResearch();
+  const all = ecBuildResearch();
   const done = new Set(EC.eco.research || []);
   const active = EC.eco.research_active;
-  const readyMs = EC.eco.research_ready ? new Date(EC.eco.research_ready).getTime() - Date.now() : 0;
   const sci = EC.eco.science || 0;
-  const sciInc = ecIncomePreview().science;   // база + плоский бонус доктрины
+  const sciInc = ecIncomePreview().science;
+  const sel = EC.researchCat || 'ship';
+
   let activeHtml = '';
-  if (active) { const node = cat.find(n => n.id === active); activeHtml = `<div class="ec-cap ec-cap-prog">⏳ Изучается: <b>${esc(node ? node.name : active)}</b> ${ecProgressISO(null, EC.eco.research_ready, 1, 'готово на след. ходу')}</div>`; }
+  if (active) { const node = all.find(n => n.id === active); activeHtml = `<div class="ec-cap ec-cap-prog">⏳ Изучается: <b>${esc(node ? node.name : active)}</b> ${ecProgressISO(null, EC.eco.research_ready, 1, 'готово на след. ходу')}</div>`; }
+
+  // под-вкладки родов войск
+  const subTabs = EC_RES_CATS.map(([c, l, ic]) => {
+    const cnt = all.filter(n => n.cat === c);
+    const dn = cnt.filter(n => done.has(n.id)).length;
+    return `<button class="ec-rcat${sel === c ? ' on' : ''}" onclick="ecSetResearchCat('${c}')">${ic} ${esc(l)} <span class="ec-rcat-cnt">${dn}/${cnt.length}</span></button>`;
+  }).join('');
+
+  // ── Раскладка дерева выбранного рода ──
+  const nodes = all.filter(n => n.cat === sel);
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const cache = {};
+  nodes.forEach(n => { n._d = ecTechDepth(n, byId, cache); });
+  const BRANCH_ORD = { class: 0, type: 1, weapon: 2, reactor: 3, engine: 4, armor: 5, shield: 6, hangar: 7, module: 8, econ: 0, prod: 1, expand: 2 };
+  // группировка по колонкам (depth), сортировка внутри по ветке
+  const cols = {};
+  nodes.forEach(n => { (cols[n._d] = cols[n._d] || []).push(n); });
+  const maxDepth = Math.max(0, ...nodes.map(n => n._d));
+  let maxRows = 1;
+  const pos = {};
+  const isPol = sel === 'politics';
+  const W = isPol ? 200 : 176, H = isPol ? 116 : 74, GX = 52, GY = 16;
+  for (let d = 0; d <= maxDepth; d++) {
+    const list = (cols[d] || []).slice().sort((a, b) => (BRANCH_ORD[a.branch] ?? 9) - (BRANCH_ORD[b.branch] ?? 9));
+    list.forEach((n, row) => { pos[n.id] = { x: d * (W + GX), y: row * (H + GY), col: d, row }; });
+    maxRows = Math.max(maxRows, list.length);
+  }
+  const cw = (maxDepth + 1) * (W + GX) - GX;
+  const ch = maxRows * (H + GY) - GY;
+
+  // SVG-связи prereq → node
+  const edges = [];
+  nodes.forEach(n => (n.prereq || []).forEach(pid => {
+    const a = pos[pid], b = pos[n.id]; if (!a || !b) return;
+    const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2;
+    const mx = (x1 + x2) / 2;
+    const bright = done.has(pid);
+    edges.push(`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" class="ec-tedge${bright ? ' lit' : ''}"/>`);
+  }));
+  const svg = `<svg class="ec-tree-svg" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${edges.join('')}</svg>`;
+
+  // карточки узлов
   const nodeCard = n => {
     const isDone = done.has(n.id), isActive = active === n.id, prereqOk = (n.prereq || []).every(p => done.has(p));
-    let badge, btn = '';
-    if (isDone) badge = '<span class="ec-rs-badge ok">✓ изучено</span>';
-    else if (isActive) badge = '<span class="ec-rs-badge cur">⏳ изучается</span>';
-    else if (!prereqOk) { const need = (n.prereq || []).map(p => { const pn = cat.find(x => x.id === p); return pn ? pn.name : p; }).join(', '); badge = `<span class="ec-rs-badge lock">🔒 нужно: ${esc(need)}</span>`; }
-    else { badge = '<span class="ec-rs-badge av">🔓 доступно</span>'; const rc = ecResearchCost(n.cost); const can = !active && sci >= rc; btn = `<button class="btn ${can ? 'btn-gd' : 'btn-gh'} btn-xs" ${can ? '' : 'disabled'} onclick="ecResearch('${n.id}')">Исследовать · ${ecNum(rc)} ОН</button>`; }
-    return `<div class="ec-rs-node${isDone ? ' done' : ''}"><div class="ec-rs-name">${esc(n.name)}</div><div class="ec-rs-foot">${badge}${btn}</div></div>`;
+    let state = 'locked', foot = '';
+    if (isDone) { state = 'done'; foot = '<span class="ec-tnode-badge ok">✓ изучено</span>'; }
+    else if (isActive) { state = 'active'; foot = '<span class="ec-tnode-badge cur">⏳ изучается</span>'; }
+    else if (!prereqOk) { state = 'locked'; const need = (n.prereq || []).map(p => (byId.get(p) || {}).name || p).join(', '); foot = `<span class="ec-tnode-badge lock" title="${esc(need)}">🔒 ${esc(need)}</span>`; }
+    else { state = 'avail'; const rc = ecResearchCost(n.cost); const can = !active && sci >= rc; foot = `<button class="btn ${can ? 'btn-gd' : 'btn-gh'} btn-xs" ${can ? '' : 'disabled'} onclick="ecResearch('${n.id}')">${ecNum(rc)} ОН</button>`; }
+    const p = pos[n.id];
+    const bonus = (n.bonus || n.special) ? ecBonusChips(n.bonus, n.special) : '';
+    return `<div class="ec-tnode ec-tnode-${state} ec-br-${n.branch}" style="left:${p.x}px;top:${p.y}px;width:${W}px;min-height:${H}px"${n.desc ? ` title="${esc(n.desc)}"` : ''}>
+      <div class="ec-tnode-h"><span class="ec-tnode-tag">${esc(ecBranchTag(n.branch))}</span></div>
+      <div class="ec-tnode-name">${esc(n.name)}</div>
+      ${bonus}
+      <div class="ec-tnode-foot">${foot}</div>
+    </div>`;
   };
-  const byCat = {};
-  cat.forEach(n => { (byCat[n.catLabel] = byCat[n.catLabel] || []).push(n); });
-  const body = Object.keys(byCat).map(cl => `<div class="ec-rs-cat"><div class="ec-rs-cat-t">${esc(cl)}</div><div class="ec-rs-grid">${byCat[cl].map(nodeCard).join('')}</div></div>`).join('');
-  return `${ecIntro('🔬', 'Исследования', 'Тратьте очки науки (ОН) на технологии — они открывают модули в конструкторах и дают бонусы.', ['ОН копятся от <b>Научных институтов</b> + бонусов доктрины. Стройте их во вкладке «Колонии».', 'Одновременно изучается <b>одна</b> технология, 1 ход на исследование.', 'Часть узлов открывается только после изучения предшественников.'])}<div class="ec-treasury" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+  const cards = nodes.map(nodeCard).join('');
+  const tree = `<div class="ec-tree-scroll"><div class="ec-tree" style="width:${cw}px;height:${ch}px">${svg}${cards}</div></div>`;
+
+  return `${ecIntro('🔬', 'Исследования', 'Тратьте очки науки (ОН) на технологии — они открывают классы, оружие и компоненты в конструкторах.', ['ОН копятся от <b>Научных институтов</b> + бонусов доктрины. Стройте их во вкладке «Колонии».', 'Одновременно изучается <b>одна</b> технология, 1 ход на исследование.', 'Тяжёлое оружие и продвинутые компоненты требуют сначала изучить класс-носитель.'])}<div class="ec-treasury" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
       <div class="ec-res"><span class="ec-res-k">Очки науки</span><span class="ec-res-v" style="color:var(--pu)">${ecNum(sci)} ОН</span></div>
       <div class="ec-res"><span class="ec-res-k">Доход</span><span class="ec-res-v" style="font-size:15px">+${sciInc} ОН/ход</span></div>
     </div>
     ${activeHtml}
-    <div class="ec-section-title">Дерево исследований <span class="ec-hint">— 1 проект за раз, 1 ход на исследование; открывает контент в конструкторах</span></div>
-    ${body}`;
+    <div class="ec-rcat-tabs">${subTabs}</div>
+    <div class="ec-section-title">Дерево исследований <span class="ec-hint">— 1 проект за раз; ведите ветку слева направо</span></div>
+    ${tree}`;
+}
+function ecBranchTag(branch) {
+  return { class: 'КЛАСС', type: 'КОРПУС', weapon: 'ОРУЖИЕ', armor: 'БРОНЯ', shield: 'ЩИТЫ', engine: 'ДВИГАТЕЛЬ', reactor: 'РЕАКТОР', hangar: 'АНГАР', module: 'СИСТЕМА', econ: 'ЭКОНОМИКА', prod: 'ПРОИЗВОДСТВО', expand: 'ЭКСПАНСИЯ' }[branch] || branch;
+}
+// Чипы бонуса политического узла (для карточки дерева).
+function ecBonusChips(b, special) {
+  const out = [];
+  const pct = (k, lbl, goodHigh) => { if (!b || b[k] == null) return; const p = Math.round(b[k] * 100); const good = goodHigh ? p > 0 : p < 0; out.push(`<span class="ec-bchip ${good ? 'good' : 'bad'}">${lbl} ${p > 0 ? '+' : ''}${p}%</span>`); };
+  pct('gc', 'Доход', true); pct('mine', 'Добыча', true);
+  pct('build', 'Постройки', false); pct('colonize', 'Колонии', false); pct('claim_cost', 'Захват', false); pct('claim_cd', 'Кулдаун', false); pct('research', 'Наука', false);
+  if (b && b.sci_flat) out.push(`<span class="ec-bchip good">Наука +${b.sci_flat}/ход</span>`);
+  if (b && b.agents_flat) out.push(`<span class="ec-bchip good">Агенты +${b.agents_flat}/ход</span>`);
+  if (special === 'claim2') out.push('<span class="ec-bchip special">★ +1 система за цикл</span>');
+  return out.length ? `<div class="ec-tnode-bonus">${out.join('')}</div>` : '';
 }
 function ecResearch(nodeId) {
   const n = ecBuildResearch().find(x => x.id === nodeId); if (!n) { toast('Узел не найден', 'err'); return; }

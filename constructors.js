@@ -427,7 +427,7 @@ function cnVehHandleClass() {
 }
 function cnVehClassDeps() {
   const def = CN.def, k = cnId('cn-class').value, cat = CN.cat;
-  if (def.hasType) cnId('cn-type').innerHTML = def.db.data[k].types.map((t, i) => `<option value="${i}">${esc(t.name)}</option>`).join('');
+  if (def.hasType) { const typeOpen = cnUnlocked('type.' + cat + '.' + k); cnId('cn-type').innerHTML = def.db.data[k].types.map((t, i) => { const locked = i >= 1 && !typeOpen; return `<option value="${i}"${locked ? ' disabled' : ''}>${locked ? '🔒 ' : ''}${esc(t.name)}</option>`; }).join(''); }
   if (def.hasReactor) cnId('cn-reactor').innerHTML = cnCompOptions(cat, 'reactor', def.db.reactors[k], r => `${r.name} (${r.energy} E)`);
   cnId('cn-armor').innerHTML = cnCompOptions(cat, 'armor', def.db.armors[k], a => `${a.name} (+${cnNum(a.armor)} AR)`);
   cnId('cn-shield').innerHTML = cnCompOptions(cat, 'shield', def.db.shields[k], s => s.name);
@@ -445,8 +445,9 @@ function cnVehAddItem(type, preset) {
   sel.onchange = cnVehCalc;
   for (const group in source) {
     if (type === 'weapon' && def.excl(k, group)) continue;
-    // не исследованные группы оружия скрываем (при правке/перезагрузке — preset — показываем все)
+    // не исследованные группы оружия/модулей скрываем (preset/правка — показываем все)
     if (type === 'weapon' && !preset && !cnWpnUnlocked(CN.cat, group)) continue;
+    if (type === 'module' && !preset && !cnUnlocked('mod.' + CN.cat + '.' + group)) continue;
     const g = document.createElement('optgroup');
     g.label = group;
     source[group].forEach((item, i) => {
@@ -460,7 +461,7 @@ function cnVehAddItem(type, preset) {
     });
     sel.appendChild(g);
   }
-  if (sel.options.length === 0) { if (type === 'weapon') toast('Нет доступного оружия этого класса', 'inf'); return; }
+  if (sel.options.length === 0) { toast(type === 'weapon' ? 'Нет доступного оружия этого класса' : 'Модули ещё не исследованы (вкладка «Исследования»)', 'inf'); return; }
   row.appendChild(sel);
   if (preset) { try { sel.value = JSON.stringify({ g: preset.g, idx: preset.idx }); } catch (e) {} }
   if (type === 'weapon') {
@@ -480,7 +481,11 @@ function cnVehAddItem(type, preset) {
 // ── Ангары (только корабли) ──
 function cnVehAddHangar(preset) {
   const def = CN.def, k = cnId('cn-class').value;
+  // гейт по исследованиям (preset/правка — пропускаем)
+  if (!preset && !cnUnlocked('hangar.ship')) { toast('Ангары требуют исследования «Ангарные палубы»', 'inf'); return; }
+  const heavyOpen = cnUnlocked('hangar.ship.heavy');
   const filtered = def.db.hangarTypes.filter(h => {
+    if (!preset && !heavyOpen && [1, 2].includes(h.id)) return false;   // крупные ангары — за «Тяжёлые ангары»
     if (['corvette', 'frigate', 'destroyer'].includes(k)) return ![1, 2].includes(h.id);
     if (k === 'cruiser') return h.id !== 2;
     return true;

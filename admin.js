@@ -88,9 +88,9 @@ async function adRenderConsole() {
   // Иначе постоянная замена DOM не даёт кликать.
   if (AD.byFid.size && AD._loadedAt && (Date.now() - AD._loadedAt < 8000)) { adPaint(); return; }
   // ГАРАНТИРОВАННЫЙ первый кадр (без adPaint) — экран не может остаться пустым.
-  setPg(`<div class="ad-console"><div class="ad-header"><div>
-      <div class="ad-title">🛠 Консоль управления</div>
-      <div class="ad-summary"><span>Загрузка данных…</span></div></div>
+  setPg(`<div class="fm-console"><div class="fm-header"><div>
+      <div class="fm-title">🛠 Консоль управления</div>
+      <div class="fm-summary"><span>Загрузка данных…</span></div></div>
       <button class="btn btn-gh btn-sm" onclick="go('admin',false)">↻ Обновить</button></div>
     <div class="sload" style="min-height:140px"><div class="pulse-loader"></div></div></div>`);
   AD.loading = true; AD.loadError = null;
@@ -120,7 +120,7 @@ async function adRenderConsole() {
 
 function adPaint() {
   // Собираем тело в try/catch: если adStatsTable/adFacPanel упадёт, раньше
-  // падал ВЕСЬ template setPg(...) ДО вставки -> пустой .ad-console. Теперь
+  // падал ВЕСЬ template setPg(...) ДО вставки -> пустой .fm-console. Теперь
   // ошибка попадает в видимый блок, а не превращается в пустоту.
   let header = '', body = '';
   try {
@@ -128,10 +128,10 @@ function adPaint() {
     const totalSys   = (AD.systems || []).filter(s => s.faction).length;
     const totalUnits = (AD.prod || []).filter(p => p.status === 'done').reduce((a, p) => a + (p.qty || 0), 0);
     const fCount     = AD.byFid.size;
-    header = `<div class="ad-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    header = `<div class="fm-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
       <div>
-        <div class="ad-title" style="font-family:var(--font-display,sans-serif);font-size:22px;font-weight:700;color:var(--gdl,#5fb0e6);letter-spacing:1px">🛠 Консоль управления</div>
-        <div class="ad-summary" style="display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12px;color:var(--t3,#8aa0b0);margin-top:6px">
+        <div class="fm-title" style="font-family:var(--font-display,sans-serif);font-size:22px;font-weight:700;color:var(--gdl,#5fb0e6);letter-spacing:1px">🛠 Консоль управления</div>
+        <div class="fm-summary" style="display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12px;color:var(--t3,#8aa0b0);margin-top:6px">
           <span>Фракций: <b style="color:var(--t1,#e8edf2)">${fCount}</b></span>
           <span>Колоний: <b style="color:var(--t1,#e8edf2)">${totalCols}</b></span>
           <span>Систем занято: <b style="color:var(--t1,#e8edf2)">${totalSys}</b></span>
@@ -146,7 +146,7 @@ function adPaint() {
     ).join('');
     const selector = `<div style="margin:18px 0;display:flex;flex-wrap:wrap;align-items:center;gap:10px">
       <label style="font-family:var(--font-display,sans-serif);font-size:13px;font-weight:600;color:var(--t2,#c0ccd6)">Фракция:</label>
-      <select id="ad-fac-select" onchange="adSelectFaction(this.value)" style="flex:1;min-width:220px;max-width:420px;padding:10px 12px;font-size:14px;background:var(--b2,#141a22);color:var(--t1,#e8edf2);border:1px solid var(--gd,#3a7fbf);border-radius:8px;cursor:pointer">
+      <select id="fm-fac-select" onchange="adSelectFaction(this.value)" style="flex:1;min-width:220px;max-width:420px;padding:10px 12px;font-size:14px;background:var(--b2,#141a22);color:var(--t1,#e8edf2);border:1px solid var(--gd,#3a7fbf);border-radius:8px;cursor:pointer">
         <option value="">— выберите фракцию для управления —</option>
         ${opts}
       </select>
@@ -155,16 +155,16 @@ function adPaint() {
     // содержимое (adSelectFaction), без перерисовки всей страницы — это
     // надёжнее (полный re-render #pg на Vercel почему-то не показывал панель).
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
-    body = selector + `<div id="ad-panel-slot">${adPanelSlotHtml()}</div>` + stats;
+    body = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + stats;
   } catch (e) {
     console.error('[ADMIN] adPaint build error', e);
     body = `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px;margin-top:12px">Ошибка отрисовки: ${esc(e.message || String(e))}<br><button class="btn btn-gh btn-sm" onclick="go('admin',false)" style="margin-top:8px">↺ Повторить</button></div>`;
   }
-  // ВАЖНО: display:block, НЕ flex. Раньше .ad-console был flex-column, и внутри
-  // .ad-table-wrap (overflow-x:auto) схлопывался в 0 высоты в Chromium/Yandex
+  // ВАЖНО: display:block, НЕ flex. Раньше .fm-console был flex-column, и внутри
+  // .fm-table-wrap (overflow-x:auto) схлопывался в 0 высоты в Chromium/Yandex
   // (flex min-height:0 + overflow) -> таблица была в DOM, но не видна (consoleH=86).
   // Блочный поток всегда отдаёт таблице её высоту.
-  setPg(`<div class="ad-console" style="max-width:1200px;margin:0 auto;padding:24px 16px 60px;color:var(--t1,#e8edf2);display:block">${header}<div style="margin-top:18px">${body}</div></div>`);
+  setPg(`<div class="fm-console" style="max-width:1200px;margin:0 auto;padding:24px 16px 60px;color:var(--t1,#e8edf2);display:block">${header}<div style="margin-top:18px">${body}</div></div>`);
   // ФОРС видимости #pg: многократные перерисовки могли оставить анимацию .pgi
   // на opacity:0. Гасим анимацию и форсим видимость.
   var _pg = document.getElementById('pg');
@@ -174,10 +174,10 @@ function adPaint() {
 function adStatsTable() {
   if (!AD.byFid.size) {
     if (AD.loading) return `<div class="sload" style="min-height:120px"><div class="pulse-loader"></div></div>`;
-    if (AD.loadError) return `<div class="ad-empty" style="display:flex;flex-direction:column;gap:10px;align-items:center;padding:24px">
+    if (AD.loadError) return `<div class="fm-empty" style="display:flex;flex-direction:column;gap:10px;align-items:center;padding:24px">
       <span>Не удалось загрузить: ${esc(AD.loadError)}</span>
       <button class="btn btn-gh btn-sm" onclick="go('admin',false)">↺ Повторить</button></div>`;
-    return `<div class="ad-empty">Нет одобренных фракций</div>`;
+    return `<div class="fm-empty">Нет одобренных фракций</div>`;
   }
   // БЕЗ <table>: только div'ы с инлайн-стилями. Раньше <table> в этом
   // окружении схлопывался в 0 высоты на Vercel/Yandex (localhost — нет).
@@ -217,7 +217,7 @@ function adPanelSlotHtml() {
 }
 // Обновить ТОЛЬКО слот панели (без перерисовки всей консоли)
 function adRenderSlot() {
-  const slot = document.getElementById('ad-panel-slot');
+  const slot = document.getElementById('fm-panel-slot');
   if (slot) { slot.innerHTML = adPanelSlotHtml(); return true; }
   return false;
 }
@@ -227,7 +227,7 @@ function adSelectFaction(fid) {
   AD.sysSearch = '';
   console.log('[ADMIN] select faction:', AD.sel, 'inIndex=', AD.sel ? AD.byFid.has(AD.sel) : '-');
   if (!adRenderSlot()) adPaint();   // если слота нет — полный рендер
-  const s = document.getElementById('ad-fac-select'); if (s && s.value !== (AD.sel || '')) s.value = AD.sel || '';
+  const s = document.getElementById('fm-fac-select'); if (s && s.value !== (AD.sel || '')) s.value = AD.sel || '';
 }
 function adSetSubtab(t) { AD.subtab = t; if (!adRenderSlot()) adPaint(); }
 
@@ -235,52 +235,52 @@ function adFacPanel() {
   const e = adEntry(AD.sel);
   if (!e) return '';
   const SUBTABS = [['treasury','💰 Казна'],['resources','📦 Ресурсы'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['danger','⚠ Зона риска']];
-  const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="ad-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
+  const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="fm-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
   const bodyMap = { treasury: adTabTreasury, resources: adTabResources, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, danger: adTabDanger };
   const renderFn = bodyMap[AD.subtab] || adTabTreasury;
   let tabBody = '';
   try { tabBody = renderFn(e); }
   catch (ex) { tabBody = `<div style="color:#ff7a7a;padding:12px">Ошибка вкладки: ${esc(ex.message || String(ex))}</div>`; }
   // Инлайн-стили — панель видна и не схлопывается независимо от CSS.
-  return `<div class="ad-panel" id="ad-panel" style="display:block;border:1px solid var(--gd,#3a7fbf);border-radius:10px;background:var(--b2,#141a22);margin-bottom:18px;overflow:hidden">
-    <div class="ad-panel-hd" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;background:color-mix(in srgb,var(--gd,#3a7fbf) 8%,transparent);border-bottom:1px solid var(--w2,#2a3340)">
+  return `<div class="fm-panel" id="fm-panel" style="display:block;border:1px solid var(--gd,#3a7fbf);border-radius:10px;background:var(--b2,#141a22);margin-bottom:18px;overflow:hidden">
+    <div class="fm-panel-hd" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;background:color-mix(in srgb,var(--gd,#3a7fbf) 8%,transparent);border-bottom:1px solid var(--w2,#2a3340)">
       <div>
-        <div class="ad-panel-title" style="font-family:var(--font-display,sans-serif);font-size:18px;font-weight:700;color:var(--gdl,#5fb0e6)">${esc(e.app.name)}</div>
-        <div class="ad-panel-sub" style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88);margin-top:4px">${esc(e.app.faction_id)} · ${esc(e.app.race || '—')} · <a class="ad-link" style="color:var(--te,#3ec0d0)" href="mailto:${esc(e.app.owner_email || '')}">${esc(e.app.owner_email || '—')}</a></div>
+        <div class="fm-panel-title" style="font-family:var(--font-display,sans-serif);font-size:18px;font-weight:700;color:var(--gdl,#5fb0e6)">${esc(e.app.name)}</div>
+        <div class="fm-panel-sub" style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88);margin-top:4px">${esc(e.app.faction_id)} · ${esc(e.app.race || '—')} · <a class="fm-link" style="color:var(--te,#3ec0d0)" href="mailto:${esc(e.app.owner_email || '')}">${esc(e.app.owner_email || '—')}</a></div>
       </div>
       <button class="btn btn-gh btn-xs" onclick="adSelectFaction('${esc(AD.sel)}')">✕ Закрыть</button>
     </div>
-    <div class="ad-stabs" style="display:flex;flex-wrap:wrap;gap:4px;padding:10px 14px;background:var(--b3,#0f141b);border-bottom:1px solid var(--w2,#2a3340)">${tabBtns}</div>
-    <div class="ad-tab-body" style="padding:18px 20px">${tabBody}</div>
+    <div class="fm-stabs" style="display:flex;flex-wrap:wrap;gap:4px;padding:10px 14px;background:var(--b3,#0f141b);border-bottom:1px solid var(--w2,#2a3340)">${tabBtns}</div>
+    <div class="fm-tab-body" style="padding:18px 20px">${tabBody}</div>
   </div>`;
 }
 
 // ── Вкладка: Казна ──────────────────────────────────────────────
 function adTabTreasury(e) {
-  if (!e.eco) return `<div class="ad-no-eco">Экономика не инициализирована. Перейдите в <b>⚠ Зону риска</b> → Создать экономику.</div>`;
+  if (!e.eco) return `<div class="fm-no-eco">Экономика не инициализирована. Перейдите в <b>⚠ Зону риска</b> → Создать экономику.</div>`;
   const eco = e.eco;
   const field = (id, label, fld, deltas, negDeltas) => `
-    <div class="ad-form-row">
-      <label class="ad-lbl">${label}</label>
-      <div class="ad-field-row">
-        <input class="fi ad-num-input" id="ad-${fld}" type="number" value="${eco[fld] || 0}" min="0">
+    <div class="fm-form-row">
+      <label class="fm-lbl">${label}</label>
+      <div class="fm-field-row">
+        <input class="fi fm-num-input" id="fm-${fld}" type="number" value="${eco[fld] || 0}" min="0">
         ${deltas.map(d => `<button class="btn btn-gh btn-xs" onclick="adDelta('${fld}',${d})">+${d >= 1000 ? (d/1000)+'к' : d}</button>`).join('')}
         ${negDeltas.map(d => `<button class="btn btn-rd btn-xs" onclick="adDelta('${fld}',${-d})">−${d >= 1000 ? (d/1000)+'к' : d}</button>`).join('')}
       </div>
     </div>`;
-  return `<div class="ad-form">
-    ${field('ad-gc',      'ГС (Галактический Стандарт)', 'gc',      [100,1000,10000], [100,1000])}
-    ${field('ad-science', 'ОН (Очки Науки)',             'science', [10,50,100],      [10])}
-    ${field('ad-agents',  'Агенты',                      'agents',  [1,5],            [1])}
+  return `<div class="fm-form">
+    ${field('fm-gc',      'ГС (Галактический Стандарт)', 'gc',      [100,1000,10000], [100,1000])}
+    ${field('fm-science', 'ОН (Очки Науки)',             'science', [10,50,100],      [10])}
+    ${field('fm-agents',  'Агенты',                      'agents',  [1,5],            [1])}
     <button class="btn btn-gd" onclick="adSetTreasury()" style="margin-top:8px">💾 Установить значения</button>
   </div>`;
 }
 
 async function adSetTreasury() {
   if (!AD.sel || AD.busy) return;
-  const gc      = Math.max(0, parseInt(document.getElementById('ad-gc')?.value) || 0);
-  const science = Math.max(0, parseInt(document.getElementById('ad-science')?.value) || 0);
-  const agents  = Math.max(0, parseInt(document.getElementById('ad-agents')?.value) || 0);
+  const gc      = Math.max(0, parseInt(document.getElementById('fm-gc')?.value) || 0);
+  const science = Math.max(0, parseInt(document.getElementById('fm-science')?.value) || 0);
+  const agents  = Math.max(0, parseInt(document.getElementById('fm-agents')?.value) || 0);
   AD.busy = true;
   try {
     await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { gc, science, agents });
@@ -305,34 +305,34 @@ async function adDelta(field, delta) {
 
 // ── Вкладка: Ресурсы ────────────────────────────────────────────
 function adTabResources(e) {
-  if (!e.eco) return `<div class="ad-no-eco">Экономика не инициализирована.</div>`;
+  if (!e.eco) return `<div class="fm-no-eco">Экономика не инициализирована.</div>`;
   const res = e.eco.resources || {};
   const resKeys = Object.keys(res).filter(k => (res[k] || 0) > 0);
 
   const curRows = resKeys.length
     ? resKeys.map(k => {
         const info = AD.resInfo[k] || {};
-        return `<div class="ad-res-row">
-          <span class="ad-res-icon">${esc(info.icon || '◈')}</span>
-          <span class="ad-res-name">${esc(k)}</span>
-          <span class="ad-rarity ad-rarity-${info.r || 'common'}">${info.r || 'common'}</span>
-          <input class="fi ad-res-val" id="ad-rv-${esc(k)}" type="number" value="${res[k]}" min="0">
+        return `<div class="fm-res-row">
+          <span class="fm-res-icon">${esc(info.icon || '◈')}</span>
+          <span class="fm-res-name">${esc(k)}</span>
+          <span class="fm-rarity fm-rarity-${info.r || 'common'}">${info.r || 'common'}</span>
+          <input class="fi fm-res-val" id="fm-rv-${esc(k)}" type="number" value="${res[k]}" min="0">
           <button class="btn btn-gh btn-xs" onclick="adUpdateResource(${adArg(k)})">Сохранить</button>
           <button class="btn btn-rd btn-xs" onclick="adZeroResource(${adArg(k)})">✕</button>
         </div>`;
       }).join('')
-    : `<div class="ad-empty">Нет ресурсов</div>`;
+    : `<div class="fm-empty">Нет ресурсов</div>`;
 
   const resOpts = Object.keys(AD.resInfo)
     .map(k => `<option value="${esc(k)}">${esc(k)} (${AD.resInfo[k].r || 'common'})</option>`).join('');
 
-  return `<div class="ad-resources">
-    <div class="ad-section-title">Текущие ресурсы на складе</div>
-    <div class="ad-res-list">${curRows}</div>
-    <div class="ad-section-title" style="margin-top:16px">Добавить / пополнить</div>
-    <div class="ad-field-row" style="flex-wrap:wrap">
-      ${resOpts ? `<select class="fi" id="ad-add-res-name" style="flex:1;min-width:160px">${resOpts}</select>` : `<input class="fi" id="ad-add-res-name" placeholder="Название ресурса" style="flex:1">`}
-      <input class="fi" id="ad-add-res-amt" type="number" value="100" min="1" style="width:80px" placeholder="Кол-во">
+  return `<div class="fm-resources">
+    <div class="fm-section-title">Текущие ресурсы на складе</div>
+    <div class="fm-res-list">${curRows}</div>
+    <div class="fm-section-title" style="margin-top:16px">Добавить / пополнить</div>
+    <div class="fm-field-row" style="flex-wrap:wrap">
+      ${resOpts ? `<select class="fi" id="fm-add-res-name" style="flex:1;min-width:160px">${resOpts}</select>` : `<input class="fi" id="fm-add-res-name" placeholder="Название ресурса" style="flex:1">`}
+      <input class="fi" id="fm-add-res-amt" type="number" value="100" min="1" style="width:80px" placeholder="Кол-во">
       <button class="btn btn-gd btn-sm" onclick="adAddResource()">+ Добавить</button>
     </div>
   </div>`;
@@ -341,7 +341,7 @@ function adTabResources(e) {
 async function adUpdateResource(name) {
   if (!AD.sel || AD.busy) return;
   const e = adEntry(AD.sel); if (!e || !e.eco) return;
-  const val = Math.max(0, parseInt(document.getElementById('ad-rv-' + name)?.value) || 0);
+  const val = Math.max(0, parseInt(document.getElementById('fm-rv-' + name)?.value) || 0);
   AD.busy = true;
   try {
     const res = { ...(e.eco.resources || {}), [name]: val };
@@ -368,9 +368,9 @@ async function adZeroResource(name) {
 async function adAddResource() {
   if (!AD.sel || AD.busy) return;
   const e = adEntry(AD.sel); if (!e || !e.eco) { toast('Нет экономики', 'err'); return; }
-  const nameEl = document.getElementById('ad-add-res-name');
+  const nameEl = document.getElementById('fm-add-res-name');
   const name = nameEl?.value?.trim();
-  const amt  = Math.max(1, parseInt(document.getElementById('ad-add-res-amt')?.value) || 0);
+  const amt  = Math.max(1, parseInt(document.getElementById('fm-add-res-amt')?.value) || 0);
   if (!name) { toast('Выберите / введите ресурс', 'err'); return; }
   AD.busy = true;
   try {
@@ -384,25 +384,25 @@ async function adAddResource() {
 
 // ── Вкладка: Технологии ─────────────────────────────────────────
 function adTabResearch(e) {
-  if (!e.eco) return `<div class="ad-no-eco">Экономика не инициализирована.</div>`;
+  if (!e.eco) return `<div class="fm-no-eco">Экономика не инициализирована.</div>`;
   const done   = new Set(Array.isArray(e.eco.research) ? e.eco.research : []);
   const active = e.eco.research_active;
   const cat    = (typeof ecBuildResearch === 'function') ? ecBuildResearch() : [];
 
   const activeHtml = active
-    ? `<div class="ad-cap">⏳ Активное: <b>${esc(active)}</b> <button class="btn btn-rd btn-xs" onclick="adClearActive()">Прервать</button></div>` : '';
+    ? `<div class="fm-cap">⏳ Активное: <b>${esc(active)}</b> <button class="btn btn-rd btn-xs" onclick="adClearActive()">Прервать</button></div>` : '';
 
   const byCat = {};
   cat.forEach(n => { (byCat[n.catLabel] = byCat[n.catLabel] || []).push(n); });
   const nodes = Object.keys(byCat).map(cl => `
-    <div class="ad-rs-cat">
-      <div class="ad-rs-cat-t">${esc(cl)}</div>
-      <div class="ad-rs-grid">
+    <div class="fm-rs-cat">
+      <div class="fm-rs-cat-t">${esc(cl)}</div>
+      <div class="fm-rs-grid">
         ${byCat[cl].map(n => {
           const isDone = done.has(n.id);
-          return `<div class="ad-rs-node${isDone ? ' done' : ''}">
-            <div class="ad-rs-gp">${esc(n.group)}</div>
-            <div class="ad-rs-name">${esc(n.name)}</div>
+          return `<div class="fm-rs-node${isDone ? ' done' : ''}">
+            <div class="fm-rs-gp">${esc(n.group)}</div>
+            <div class="fm-rs-name">${esc(n.name)}</div>
             <button class="btn ${isDone ? 'btn-rd' : 'btn-gd'} btn-xs" onclick="adToggleResearch(${adArg(n.id)})">
               ${isDone ? '✕ Отозвать' : '✓ Выдать'}
             </button>
@@ -411,14 +411,14 @@ function adTabResearch(e) {
       </div>
     </div>`).join('');
 
-  return `<div class="ad-research">
-    <div class="ad-actions-bar">
+  return `<div class="fm-research">
+    <div class="fm-actions-bar">
       <button class="btn btn-gd btn-sm" onclick="adGrantAllResearch()">✓ Выдать все</button>
       <button class="btn btn-rd btn-sm" onclick="adClearResearch()">✕ Сбросить все</button>
-      <span class="ad-rs-count">${done.size} / ${cat.length} изучено</span>
+      <span class="fm-rs-count">${done.size} / ${cat.length} изучено</span>
     </div>
     ${activeHtml}
-    ${nodes || '<div class="ad-empty">Каталог пуст (constructors.js не загружен)</div>'}
+    ${nodes || '<div class="fm-empty">Каталог пуст (constructors.js не загружен)</div>'}
   </div>`;
 }
 
@@ -486,38 +486,38 @@ function adTabTerritory(e) {
   };
 
   const capId = e.app && e.app.system_id;
-  const sysRow = (s, isOwn) => `<div class="ad-sys-row">
-    <span class="ad-sys-name">${capId === s.id ? '★ ' : ''}${esc(s.name || s.id)}</span>
-    <span class="ad-sys-owner ${s.faction ? (isOwn ? 'mine' : 'other') : 'neutral'}">${esc(facName(s.faction))}</span>
-    <span class="ad-sys-acts">
+  const sysRow = (s, isOwn) => `<div class="fm-sys-row">
+    <span class="fm-sys-name">${capId === s.id ? '★ ' : ''}${esc(s.name || s.id)}</span>
+    <span class="fm-sys-owner ${s.faction ? (isOwn ? 'mine' : 'other') : 'neutral'}">${esc(facName(s.faction))}</span>
+    <span class="fm-sys-acts">
       ${!isOwn ? `<button class="btn btn-gd btn-xs" onclick="adGrantSystem(${adArg(s.id)})">→ Взять</button>` : ''}
-      ${capId === s.id ? '<span class="ad-dim" style="font-size:10px;white-space:nowrap">★ столица</span>' : `<button class="btn btn-gh btn-xs" onclick="adSetCapital(${adArg(s.id)})" title="Сделать столицей: пометит на карте ★ и перенесёт сюда все колонии">★ Столица</button>`}
+      ${capId === s.id ? '<span class="fm-dim" style="font-size:10px;white-space:nowrap">★ столица</span>' : `<button class="btn btn-gh btn-xs" onclick="adSetCapital(${adArg(s.id)})" title="Сделать столицей: пометит на карте ★ и перенесёт сюда все колонии">★ Столица</button>`}
       ${s.faction ? `<button class="btn btn-rd btn-xs" onclick="adReleaseSystem(${adArg(s.id)})">✕ Освободить</button>` : ''}
     </span>
   </div>`;
 
   const mySystems = e.systems;
-  const myRows = mySystems.map(s => sysRow(s, true)).join('') || `<div class="ad-empty">Нет систем</div>`;
+  const myRows = mySystems.map(s => sysRow(s, true)).join('') || `<div class="fm-empty">Нет систем</div>`;
 
   let searchHtml;
   if (q.length >= 2) {
     const results = AD.systems.filter(s => s.faction !== myFid && (s.name || '').toLowerCase().includes(q)).slice(0, 60);
-    searchHtml = results.length ? results.map(s => sysRow(s, false)).join('') : `<div class="ad-empty">Ничего не найдено</div>`;
+    searchHtml = results.length ? results.map(s => sysRow(s, false)).join('') : `<div class="fm-empty">Ничего не найдено</div>`;
   } else {
-    searchHtml = `<div class="ad-hint">Введите ≥ 2 символа для поиска по всем системам</div>`;
+    searchHtml = `<div class="fm-hint">Введите ≥ 2 символа для поиска по всем системам</div>`;
   }
 
-  return `<div class="ad-territory">
-    <div class="ad-sys-stats">
+  return `<div class="fm-territory">
+    <div class="fm-sys-stats">
       <span>У фракции: <b>${mySystems.length}</b> систем</span>
       <span>Всего систем: <b>${AD.systems.length}</b></span>
     </div>
-    <div class="ad-section-title">Системы фракции</div>
-    <div class="ad-sys-list">${myRows}</div>
-    <div class="ad-section-title" style="margin-top:16px">Найти и добавить систему</div>
-    <input class="fi" id="ad-sys-q" placeholder="Поиск по названию..." value="${esc(AD.sysSearch || '')}"
+    <div class="fm-section-title">Системы фракции</div>
+    <div class="fm-sys-list">${myRows}</div>
+    <div class="fm-section-title" style="margin-top:16px">Найти и добавить систему</div>
+    <input class="fi" id="fm-sys-q" placeholder="Поиск по названию..." value="${esc(AD.sysSearch || '')}"
       oninput="AD.sysSearch=this.value;adPaint()" style="width:100%;margin-bottom:8px">
-    <div class="ad-sys-list">${searchHtml}</div>
+    <div class="fm-sys-list">${searchHtml}</div>
   </div>`;
 }
 
@@ -603,35 +603,35 @@ function adTabColonies(e) {
 
     const bldRows = blds.map(b => {
       const d = EC_BUILD_LOCAL[b.btype];
-      return `<div class="ad-bld-row">
-        <span class="ad-bld-name">${d ? esc(d.name) : esc(b.btype)}</span>
-        <span class="ad-bld-slots">
+      return `<div class="fm-bld-row">
+        <span class="fm-bld-name">${d ? esc(d.name) : esc(b.btype)}</span>
+        <span class="fm-bld-slots">
           <button class="btn btn-gh btn-xs" onclick="adSetSlots(${adArg(b.id)},${Math.max(1,b.slots_open-1)})" ${b.slots_open<=1?'disabled':''}>−</button>
-          <span class="ad-slot-val">${b.slots_open}/6</span>
+          <span class="fm-slot-val">${b.slots_open}/6</span>
           <button class="btn btn-gh btn-xs" onclick="adSetSlots(${adArg(b.id)},${Math.min(6,b.slots_open+1)})" ${b.slots_open>=6?'disabled':''}>+</button>
         </span>
         <button class="btn btn-rd btn-xs" onclick="adRemoveBuilding(${adArg(b.id)})">✕</button>
       </div>`;
-    }).join('') || `<div class="ad-empty" style="padding:4px 0;font-size:11px">Пусто</div>`;
+    }).join('') || `<div class="fm-empty" style="padding:4px 0;font-size:11px">Пусто</div>`;
 
     const bldOpts = EC_ORDER_LOCAL.map(t => { const d = EC_BUILD_LOCAL[t]; return `<option value="${t}">${d ? esc(d.name) : t}</option>`; }).join('');
-    return `<div class="ad-col-card">
-      <div class="ad-col-hd">
+    return `<div class="fm-col-card">
+      <div class="fm-col-hd">
         <div>
-          <span class="ad-col-name">${esc(c.planet_name)}</span>
-          <span class="ad-col-sys">${esc(sys ? sys.name : (c.system_id || '?'))}</span>
-          <span class="ad-col-type">${esc(c.planet_type || '')}</span>
+          <span class="fm-col-name">${esc(c.planet_name)}</span>
+          <span class="fm-col-sys">${esc(sys ? sys.name : (c.system_id || '?'))}</span>
+          <span class="fm-col-type">${esc(c.planet_type || '')}</span>
         </div>
-        <span class="ad-col-cells${full ? ' full' : ''}">${used}/${cap} ⬚</span>
+        <span class="fm-col-cells${full ? ' full' : ''}">${used}/${cap} ⬚</span>
       </div>
-      <div class="ad-bld-list">${bldRows}</div>
-      <div class="ad-col-foot">
-        <select id="ad-bsel-${c.id}" class="fi" style="flex:1">${bldOpts}</select>
+      <div class="fm-bld-list">${bldRows}</div>
+      <div class="fm-col-foot">
+        <select id="fm-bsel-${c.id}" class="fi" style="flex:1">${bldOpts}</select>
         <button class="btn btn-gh btn-sm" ${full ? 'disabled' : ''} onclick="adAddBuilding(${adArg(c.id)})">+ Постройка</button>
         <button class="btn btn-rd btn-sm" onclick="adRemoveColony(${adArg(c.id)})">✕ Колонию</button>
       </div>
     </div>`;
-  }).join('') || `<div class="ad-empty">Нет колоний</div>`;
+  }).join('') || `<div class="fm-empty">Нет колоний</div>`;
 
   const sysOpts = e.systems.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
   // системы, где реально лежат колонии (для информации о рассинхроне)
@@ -639,22 +639,22 @@ function adTabColonies(e) {
   const ownIds = new Set(e.systems.map(s => s.id));
   const orphanSys = colSysIds.filter(id => !ownIds.has(id));
   const orphanNote = orphanSys.length
-    ? `<div class="ad-empty" style="color:var(--color-warning,#e0a030);padding:8px 0">⚠ Часть колоний в системах, которыми фракция не владеет (рассинхрон спавна/переезда). Перенесите их в свою систему ниже.</div>` : '';
-  return `<div class="ad-colonies">
-    <div class="ad-cols-grid">${colCards}</div>
-    <div class="ad-section-title" style="margin-top:16px">⇄ Перенести ВСЕ колонии фракции в систему</div>
+    ? `<div class="fm-empty" style="color:var(--color-warning,#e0a030);padding:8px 0">⚠ Часть колоний в системах, которыми фракция не владеет (рассинхрон спавна/переезда). Перенесите их в свою систему ниже.</div>` : '';
+  return `<div class="fm-colonies">
+    <div class="fm-cols-grid">${colCards}</div>
+    <div class="fm-section-title" style="margin-top:16px">⇄ Перенести ВСЕ колонии фракции в систему</div>
     ${orphanNote}
-    <div class="ad-col-form">
-      <select class="fi" id="ad-move-sys" style="min-width:150px">${sysOpts || '<option value="">Нет систем у фракции</option>'}</select>
+    <div class="fm-col-form">
+      <select class="fi" id="fm-move-sys" style="min-width:150px">${sysOpts || '<option value="">Нет систем у фракции</option>'}</select>
       <button class="btn btn-gh btn-sm" onclick="adMoveColonies()">⇄ Перенести все (${e.colonies.length})</button>
-      <span class="ad-dim" style="font-size:11px">постройки и доход сохранятся, имена колоний останутся</span>
+      <span class="fm-dim" style="font-size:11px">постройки и доход сохранятся, имена колоний останутся</span>
     </div>
-    <div class="ad-section-title" style="margin-top:16px">+ Добавить колонию</div>
-    <div class="ad-col-form">
-      <select class="fi" id="ad-col-sys" style="min-width:130px">${sysOpts || '<option value="">Нет систем</option>'}</select>
-      <input class="fi" id="ad-col-pname" placeholder="Планета" style="flex:1">
-      <input class="fi" id="ad-col-ptype" placeholder="Тип" value="Столичный мир" style="flex:1">
-      <input class="fi" id="ad-col-cells" type="number" value="6" min="1" max="12" style="width:60px">
+    <div class="fm-section-title" style="margin-top:16px">+ Добавить колонию</div>
+    <div class="fm-col-form">
+      <select class="fi" id="fm-col-sys" style="min-width:130px">${sysOpts || '<option value="">Нет систем</option>'}</select>
+      <input class="fi" id="fm-col-pname" placeholder="Планета" style="flex:1">
+      <input class="fi" id="fm-col-ptype" placeholder="Тип" value="Столичный мир" style="flex:1">
+      <input class="fi" id="fm-col-cells" type="number" value="6" min="1" max="12" style="width:60px">
       <button class="btn btn-gd btn-sm" onclick="adAddColony()">+ Добавить</button>
     </div>
   </div>`;
@@ -663,7 +663,7 @@ function adTabColonies(e) {
 async function adMoveColonies() {
   if (!AD.sel || AD.busy) return;
   const e = adEntry(AD.sel); if (!e) return;
-  const sysId = document.getElementById('ad-move-sys')?.value;
+  const sysId = document.getElementById('fm-move-sys')?.value;
   if (!sysId) { toast('Выберите систему', 'err'); return; }
   if (!e.colonies.length) { toast('У фракции нет колоний', 'inf'); return; }
   const sys = e.systems.find(s => s.id === sysId) || (AD.systems || []).find(s => s.id === sysId);
@@ -681,10 +681,10 @@ async function adMoveColonies() {
 async function adAddColony() {
   if (!AD.sel || AD.busy) return;
   const e = adEntry(AD.sel); if (!e) return;
-  const sysId  = document.getElementById('ad-col-sys')?.value;
-  const pName  = (document.getElementById('ad-col-pname')?.value || '').trim();
-  const pType  = (document.getElementById('ad-col-ptype')?.value || '').trim();
-  const cells  = Math.max(1, parseInt(document.getElementById('ad-col-cells')?.value) || 6);
+  const sysId  = document.getElementById('fm-col-sys')?.value;
+  const pName  = (document.getElementById('fm-col-pname')?.value || '').trim();
+  const pType  = (document.getElementById('fm-col-ptype')?.value || '').trim();
+  const cells  = Math.max(1, parseInt(document.getElementById('fm-col-cells')?.value) || 6);
   if (!sysId || !pName) { toast('Укажите систему и название планеты', 'err'); return; }
   const ownerId    = (e.eco?.owner_id) || e.app?.owner_id;
   const ownerEmail = (e.eco?.owner_email) || e.app?.owner_email;
@@ -720,7 +720,7 @@ async function adRemoveColony(colId) {
 async function adAddBuilding(colId) {
   if (!AD.sel || AD.busy) return;
   const e = adEntry(AD.sel); if (!e) return;
-  const btype = document.getElementById('ad-bsel-' + colId)?.value; if (!btype) return;
+  const btype = document.getElementById('fm-bsel-' + colId)?.value; if (!btype) return;
   const d = (typeof EC_BUILD !== 'undefined') ? EC_BUILD[btype] : null;
   const ownerId = (e.eco?.owner_id) || e.app?.owner_id;
   AD.busy = true;
@@ -760,13 +760,13 @@ async function adSetSlots(bldId, n) {
 function adTabArmy(e) {
   const roster = e.roster;
   const rosterRows = roster.length
-    ? roster.map(p => `<div class="ad-unit-row">
-        <span class="ad-unit-cat">${esc(p.category || '')}</span>
-        <span class="ad-unit-name">${esc(p.unit_name || '—')}</span>
-        <span class="ad-unit-qty">×${p.qty || 1}</span>
+    ? roster.map(p => `<div class="fm-unit-row">
+        <span class="fm-unit-cat">${esc(p.category || '')}</span>
+        <span class="fm-unit-name">${esc(p.unit_name || '—')}</span>
+        <span class="fm-unit-qty">×${p.qty || 1}</span>
         <button class="btn btn-rd btn-xs" onclick="adRemoveUnit(${adArg(p.id)})">✕</button>
       </div>`).join('')
-    : `<div class="ad-empty">Нет юнитов в ростере</div>`;
+    : `<div class="fm-empty">Нет юнитов в ростере</div>`;
 
   // Faction designs + stock (null faction_id)
   const allDesigns = AD.designs.filter(d => d.faction_id === AD.sel || !d.faction_id);
@@ -776,15 +776,15 @@ function adTabArmy(e) {
     `<optgroup label="${esc(c)}">${bycat[c].map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('')}</optgroup>`
   ).join('');
 
-  return `<div class="ad-army">
-    <div class="ad-section-title">Ростер — готовые юниты</div>
-    <div class="ad-unit-list">${rosterRows}</div>
-    <div class="ad-section-title" style="margin-top:16px">Выдать юниты</div>
-    <div class="ad-field-row" style="flex-wrap:wrap">
-      <select class="fi" id="ad-unit-sel" style="flex:2;min-width:160px">
+  return `<div class="fm-army">
+    <div class="fm-section-title">Ростер — готовые юниты</div>
+    <div class="fm-unit-list">${rosterRows}</div>
+    <div class="fm-section-title" style="margin-top:16px">Выдать юниты</div>
+    <div class="fm-field-row" style="flex-wrap:wrap">
+      <select class="fi" id="fm-unit-sel" style="flex:2;min-width:160px">
         ${designOptGroups || '<option value="">Нет дизайнов</option>'}
       </select>
-      <input class="fi" id="ad-unit-qty" type="number" value="1" min="1" max="999" style="width:72px" placeholder="Кол-во">
+      <input class="fi" id="fm-unit-qty" type="number" value="1" min="1" max="999" style="width:72px" placeholder="Кол-во">
       <button class="btn btn-gd btn-sm" onclick="adGrantUnit()">✓ Выдать</button>
     </div>
   </div>`;
@@ -793,11 +793,11 @@ function adTabArmy(e) {
 async function adGrantUnit() {
   if (!AD.sel || AD.busy) return;
   const e = adEntry(AD.sel); if (!e) return;
-  const unitId = document.getElementById('ad-unit-sel')?.value;
+  const unitId = document.getElementById('fm-unit-sel')?.value;
   if (!unitId) { toast('Выберите юнит', 'err'); return; }
   const design = AD.designs.find(d => d.id === unitId);
   if (!design) { toast('Дизайн не найден', 'err'); return; }
-  const qty = Math.max(1, parseInt(document.getElementById('ad-unit-qty')?.value) || 1);
+  const qty = Math.max(1, parseInt(document.getElementById('fm-unit-qty')?.value) || 1);
   const ownerId = (e.eco?.owner_id) || e.app?.owner_id;
   AD.busy = true;
   try {
@@ -829,9 +829,9 @@ async function adRemoveUnit(id) {
 // ── Вкладка: Опасная зона ───────────────────────────────────────
 function adTabDanger(e) {
   const hasEco = !!e.eco;
-  const row = (label, btn) => `<div class="ad-danger-act"><div class="ad-danger-label">${label}</div>${btn}</div>`;
-  return `<div class="ad-danger">
-    <div class="ad-danger-banner">⚠ Действия в этом разделе необратимы — применять осознанно</div>
+  const row = (label, btn) => `<div class="fm-danger-act"><div class="fm-danger-label">${label}</div>${btn}</div>`;
+  return `<div class="fm-danger">
+    <div class="fm-danger-banner">⚠ Действия в этом разделе необратимы — применять осознанно</div>
     ${!hasEco ? row('Экономика фракции не инициализирована', `<button class="btn btn-gd" onclick="adInitEco()">✚ Создать экономику</button>`) : ''}
     ${row('Обнулить казну (ГС / ОН / Агенты → 0)', `<button class="btn btn-rd" onclick="adZeroTreasury()" ${!hasEco ? 'disabled' : ''}>Обнулить казну</button>`)}
     ${row('Обнулить все ресурсы склада', `<button class="btn btn-rd" onclick="adZeroResources()" ${!hasEco ? 'disabled' : ''}>Обнулить ресурсы</button>`)}

@@ -548,6 +548,7 @@ grant execute on function public.economy_tick() to authenticated;
 
 -- ── v3: колонки для производства и захвата систем ───────────
 alter table public.faction_economy  add column if not exists last_system_claim timestamptz;
+alter table public.faction_economy  add column if not exists claim_used int default 0;  -- захватов в текущем цикле
 alter table public.unit_production   add column if not exists weight int default 1;
 
 -- ── RPC: колонизация (захват) системы — раз в неделю, смежной и ничьей ──
@@ -565,6 +566,8 @@ declare
   cost numeric := 3000;
   cd interval := '7 days';
   mods jsonb;
+  max_claims int := 1;     -- «Дом в небесах» → 2 системы за цикл
+  in_window boolean;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   select * into app from public.faction_applications
@@ -590,12 +593,24 @@ begin
   ) into adj;
   if not adj then raise exception 'system not adjacent to your territory'; end if;
 
-  if eco.last_system_claim is not null and eco.last_system_claim > now() - cd then
-    raise exception 'claim cooldown active';
-  end if;
   if eco.gc < cost then raise exception 'not enough GC'; end if;
 
-  update public.faction_economy set gc = gc - cost, last_system_claim = now() where faction_id = app.faction_id;
+  -- сколько захватов разрешено в одном цикле (исследование «Дом в небесах»)
+  if eco.research is not null and eco.research ? 'pol.house_heavens' then max_claims := 2; end if;
+  in_window := eco.last_system_claim is not null and eco.last_system_claim > now() - cd;
+
+  if in_window then
+    -- окно активно: разрешаем, пока не исчерпан лимит цикла (кулдаун НЕ сбрасываем)
+    if coalesce(eco.claim_used, 0) >= max_claims then raise exception 'claim cooldown active'; end if;
+    update public.faction_economy
+      set gc = gc - cost, claim_used = coalesce(claim_used, 0) + 1
+      where faction_id = app.faction_id;
+  else
+    -- новое окно: первый захват сбрасывает таймер и счётчик
+    update public.faction_economy
+      set gc = gc - cost, last_system_claim = now(), claim_used = 1
+      where faction_id = app.faction_id;
+  end if;
   update public.map_systems set faction = app.faction_id where id = p_system_id;
 
   return jsonb_build_object('ok', true, 'system_id', p_system_id, 'cost', cost);
@@ -1258,6 +1273,7 @@ returns jsonb language plpgsql stable security definer set search_path=public as
 declare a public.faction_applications;
   gc numeric:=0; mine numeric:=0; bld numeric:=0; col numeric:=0; cc numeric:=0; cd numeric:=0; rsch numeric:=0;
   scf int:=0; agf int:=0;   -- плоские: наука ОН/сут, агенты /сут
+  rsrch jsonb;              -- изученные технологии (faction_economy.research)
 begin
   select * into a from public.faction_applications where faction_id=p_fid and status='approved' order by updated_at desc limit 1;
   if not found then
@@ -1339,6 +1355,17 @@ begin
     when 'exotic'      then scf:=scf+1;
     else null;
   end case;
+
+  -- Бонусы изученных политических технологий (зеркало EC_POLITICS в economy.js).
+  select research into rsrch from public.faction_economy where faction_id=p_fid;
+  if rsrch is not null then
+    if rsrch ? 'pol.new_deal'    then gc:=gc+0.10; end if;
+    if rsrch ? 'pol.mercantile'  then gc:=gc+0.10; bld:=bld-0.05; end if;
+    if rsrch ? 'pol.five_year'   then bld:=bld-0.15; end if;
+    if rsrch ? 'pol.goelro'      then mine:=mine+0.15; end if;
+    if rsrch ? 'pol.land_reform' then col:=col-0.15; end if;
+    if rsrch ? 'pol.total_mob'   then cc:=cc-0.20; end if;
+  end if;
 
   return jsonb_build_object(
     'gc',          greatest(0.3,  1+gc),
