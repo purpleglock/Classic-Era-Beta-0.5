@@ -508,6 +508,24 @@
   .ec-ov-v { font-size: 20px; }
   .ec-colonies { grid-template-columns: 1fr; }
   .ec-colonize-row { flex-direction: column; align-items: stretch; }
+
+  /* Планеты/колонии: на узком экране строка раскладывается вертикально —
+     текст получает всю ширину (имя не обрезается, подзаголовок не рвётся
+     по слову), кнопка действия уходит вниз на всю ширину. */
+  .ec-pl { padding: 12px; gap: 8px; }
+  .ec-pl-top { flex-direction: column; align-items: stretch; gap: 9px; }
+  .ec-pl-l { align-items: flex-start; }
+  .ec-pl-nm { white-space: normal; }
+  .ec-pl-sb { line-height: 1.45; }
+  /* Незаселённые планеты: кнопка/бейдж терраформа — колонкой на всю ширину */
+  .ec-pl-free .ec-pl-r { flex-direction: column; align-items: stretch; gap: 6px; flex-shrink: 1; }
+  .ec-pl-free .ec-pl-r .btn { width: 100%; justify-content: center; }
+  .ec-pl-free .ec-pl-r .ec-terra-tier,
+  .ec-pl-free .ec-pl-r .ec-proj-tag { text-align: center; }
+  /* Свои колонии: мелкие чипы (ячейки/доход/шеврон) остаются строкой */
+  .ec-pl-own .ec-pl-r { flex-wrap: wrap; gap: 8px; flex-shrink: 1; }
+  /* Ресурсы и подсказки выравниваем по левому краю (без отступа под иконку) */
+  .ec-pl-res, .ec-pl-hint, .ec-pl-mine { padding-left: 0; }
 }
 @media (max-width: 400px) {
   .ec-ov-grid { gap: 6px; }

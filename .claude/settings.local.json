@@ -32,7 +32,9 @@
       "Bash(node --check faction_news.js)",
       "Bash(ls .claude)",
       "Bash(cat .claude/launch.json)",
-      "Bash(node -e \"const fs=require\\('fs'\\);let s=fs.readFileSync\\('index.html','utf8'\\);s=s.split\\('v=20260604c'\\).join\\('v=20260606a'\\);fs.writeFileSync\\('index.html',s\\);console.log\\('replaced; now', \\(s.match\\(/v=20260606a/g\\)||[]\\).length, 'occurrences'\\);\")"
+      "Bash(node -e \"const fs=require\\('fs'\\);let s=fs.readFileSync\\('index.html','utf8'\\);s=s.split\\('v=20260604c'\\).join\\('v=20260606a'\\);fs.writeFileSync\\('index.html',s\\);console.log\\('replaced; now', \\(s.match\\(/v=20260606a/g\\)||[]\\).length, 'occurrences'\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);let s=fs.readFileSync\\('index.html','utf8'\\);s=s.split\\('v=20260606a'\\).join\\('v=20260606b'\\);s=s.replace\\(\\\\\"var BUILD = '20260606a';\\\\\",\\\\\"var BUILD = '20260606b';\\\\\"\\);fs.writeFileSync\\('index.html',s\\);console.log\\('assets:', \\(s.match\\(/v=20260606b/g\\)||[]\\).length, '| BUILD set:', s.includes\\(\\\\\"BUILD = '20260606b'\\\\\"\\)\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);let s=fs.readFileSync\\('index.html','utf8'\\);s=s.split\\('v=20260606b'\\).join\\('v=20260606c'\\);s=s.replace\\(\\\\\"var BUILD = '20260606b';\\\\\",\\\\\"var BUILD = '20260606c';\\\\\"\\);fs.writeFileSync\\('index.html',s\\);console.log\\('assets:',\\(s.match\\(/v=20260606c/g\\)||[]\\).length,'| BUILD:',s.includes\\(\\\\\"BUILD = '20260606c'\\\\\"\\)\\);\")"
     ]
   }
 }
