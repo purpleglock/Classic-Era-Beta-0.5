@@ -48,6 +48,18 @@ function fnDateLine(n) {
   return fmtD(n.published_at || n.created_at);
 }
 
+// Звёздная дата для погружения: в сеттинге 3000-й год. Реальный 2026 → 3000,
+// дальше год катится вперёд. Формат: «ЗВ.ДАТА 3000.157 · 12:12».
+function fnStardate(dateStr) {
+  const d = new Date(dateStr || Date.now());
+  if (isNaN(d)) return 'ЗВ.ДАТА 3000.001';
+  const galYear = 3000 + (d.getFullYear() - 2026);
+  const day = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `ЗВ.ДАТА ${galYear}.${String(day).padStart(3, '0')} · ${hh}:${mm}`;
+}
+
 // ── Главная: загрузка и блок новостей ───────────────────────
 async function fnLoadApproved() {
   try {
@@ -59,28 +71,31 @@ async function fnLoadApproved() {
   return FN.approved;
 }
 
-// HTML-блок для главной (вёрстка газеты: лид-история + сетка превью).
+// HTML-блок для главной — «входящие передачи фракций» в sci-fi стиле.
 function fnHomeBlockHtml() {
   const list = FN.approved || [];
   if (!list.length) return '';
   const card = (n, lead) => {
-    const accent = n.faction_color || 'rgba(120,140,170,.5)';
-    const cover = n.image_url
+    const accent = n.faction_color || 'var(--gd)';
+    const cardCover = n.image_url
       ? `<div class="fn-card-cov"><img src="${esc(n.image_url)}" loading="lazy" alt=""></div>` : '';
     return `<article class="fn-card${lead ? ' fn-card-lead' : ''}" onclick="fnOpenArticle('${esc(n.id)}')" style="--fn-accent:${esc(accent)}">
-      ${cover}
+      ${cardCover}
       <div class="fn-card-body">
-        <div class="fn-card-kicker"><span class="fn-dot"></span>${esc(n.faction_name || 'Фракция')}</div>
+        <div class="fn-card-kicker">
+          <span class="fn-card-live">ПЕРЕДАЧА</span>
+          <span class="fn-card-fac"><span class="fn-dot"></span>${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>
+        </div>
         <h3 class="fn-card-title">${esc(n.title || 'Без заголовка')}</h3>
         <p class="fn-card-excerpt">${esc(fnExcerpt(n))}</p>
-        <div class="fn-card-foot"><span>${esc(fnDateLine(n))}</span><span class="fn-readmore">Читать →</span></div>
+        <div class="fn-card-foot"><span class="fn-card-date">${esc(fnStardate(n.published_at || n.created_at))}</span><span class="fn-readmore">ДЕКОДИРОВАТЬ ▸</span></div>
       </div>
     </article>`;
   };
   const [lead, ...rest] = list;
   const grid = rest.slice(0, 6).map(n => card(n, false)).join('');
   return `<section class="home-block fn-home">
-    <div class="hb-head"><span class="hb-tag">◈ Вестник фракций</span></div>
+    <div class="hb-head"><span class="hb-tag">ВЕСТНИК ФРАКЦИЙ</span><span class="fn-home-sub">// ВХОДЯЩИЕ ПЕРЕДАЧИ · ${list.length}</span></div>
     <div class="fn-grid">
       ${card(lead, true)}
       ${grid ? `<div class="fn-grid-rest">${grid}</div>` : ''}
@@ -88,38 +103,51 @@ function fnHomeBlockHtml() {
   </section>`;
 }
 
-// ── Полноэкранная статья (газетный стиль) ───────────────────
+// ── Полноэкранная статья (sci-fi «терминал-депеша») ─────────
 function fnBodyToParas(body) {
+  let isFirst = true;
   return String(body || '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
-    .map((p, i) => `<p${i === 0 ? ' class="fn-lead-p"' : ''}>${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
+    .map(p => {
+      // [img:URL] или голый URL картинки — рендерим как изображение
+      const imgMatch = p.match(/^\[img:(https?:\/\/.+)\]$/i)
+        || (p.match(/^https?:\/\/\S+$/i) && p.match(/\.(jpe?g|png|gif|webp|avif|svg)(\?[^\s]*)?$/i) ? [null, p] : null);
+      if (imgMatch) return `<div class="fn-art-img"><img src="${esc(imgMatch[1])}" loading="lazy" alt=""></div>`;
+      const cls = isFirst ? ' class="fn-lead-p"' : '';
+      if (isFirst) isFirst = false;
+      return `<p${cls}>${esc(p).replace(/\n/g, '<br>')}</p>`;
+    }).join('');
 }
 
 function fnOpenArticle(id) {
   const n = FN.byId.get(id);
   if (!n) { toast('Новость не найдена', 'err'); return; }
-  const accent = n.faction_color || 'rgba(120,140,170,.6)';
+  const accent = n.faction_color || 'var(--gd)';
   const modal = document.getElementById('fn-article') || (() => {
     const m = document.createElement('div'); m.id = 'fn-article'; m.className = 'fn-art-ov';
     m.onclick = e => { if (e.target === m) fnCloseArticle(); };
     document.body.appendChild(m); return m;
   })();
-  const cover = n.image_url
-    ? `<div class="fn-art-cov"><img src="${esc(n.image_url)}" alt=""></div>` : '';
+  const coverHtml = n.image_url
+    ? `<div class="fn-art-cov"><img src="${esc(n.image_url)}" alt="" loading="lazy"></div>` : '';
   modal.innerHTML = `<div class="fn-art" style="--fn-accent:${esc(accent)}">
-    <button class="gm-close fn-art-close" onclick="fnCloseArticle()">✕</button>
-    <div class="fn-art-masthead">
-      <div class="fn-art-paper">ВЕСТНИК ФРАКЦИЙ</div>
-      <div class="fn-art-rule"></div>
-      <div class="fn-art-dateline">
-        <span>${esc(n.faction_name || 'Фракция')}</span>
-        <span>${esc(fnDateLine(n))}</span>
-      </div>
+    <div class="fn-art-bar">
+      <span class="fn-art-bar-l">◈ FACTION DISPATCH NETWORK</span>
+      <span class="fn-art-bar-r">ВХОДЯЩАЯ ПЕРЕДАЧА</span>
     </div>
-    <h1 class="fn-art-title">${esc(n.title || 'Без заголовка')}</h1>
-    ${n.excerpt ? `<div class="fn-art-lead">${esc(n.excerpt)}</div>` : ''}
-    ${cover}
-    <div class="fn-art-cols">${fnBodyToParas(n.body)}</div>
-    <div class="fn-art-end">◈ ◈ ◈</div>
+    <button class="fn-art-close" onclick="fnCloseArticle()">✕</button>
+    ${coverHtml}
+    <div class="fn-art-inner">
+      <div class="fn-art-meta">
+        <span class="fn-art-fac"><span class="fn-dot"></span>${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>
+        <span class="fn-art-date">${esc(fnStardate(n.published_at || n.created_at))}</span>
+      </div>
+      <h1 class="fn-art-title">${esc(n.title || 'Без заголовка')}</h1>
+      <div class="fn-art-body">${fnBodyToParas(n.body)}</div>
+    </div>
+    <div class="fn-art-foot">
+      <span>▌ КОНЕЦ ПЕРЕДАЧИ</span>
+      <span class="fn-art-foot-id">REF·${esc(String(n.id).slice(0, 8).toUpperCase())}</span>
+    </div>
   </div>`;
   modal.classList.add('show');
   document.body.style.overflow = 'hidden';
@@ -233,8 +261,17 @@ function fnOpenComposer(id) {
       <input type="hidden" id="fn-c-id" value="${id ? esc(id) : ''}">
       <div class="fg"><label class="fl">Заголовок *</label>
         <input class="fi fn-c-title" id="fn-c-title" maxlength="160" value="${esc(data?.title || '')}" placeholder="Главное событие недели"></div>
-      <div class="fg fn-c-body-fg"><label class="fl">Текст новости *</label>
-        <textarea class="fi fn-c-body" id="fn-c-body" placeholder="Пишите свободно. Пустая строка разделяет абзацы.">${esc(data?.body || '')}</textarea></div>
+      <div class="fg">
+        <label class="fl">Обложка</label>
+        <div class="fn-c-cov-wrap">
+          ${data?.image_url ? `<div class="fn-c-cov-prv" id="fn-c-cov-prv"><img src="${esc(data.image_url)}" alt=""><button type="button" class="fn-c-cov-rm" onclick="fnCoverRemove()">✕</button></div>` : `<div class="fn-c-cov-prv fn-c-cov-empty" id="fn-c-cov-prv"></div>`}
+          <label class="btn btn-gh fn-c-cov-btn">📷 Загрузить обложку<input type="file" accept="image/*" style="display:none" onchange="fnCoverUpload(this)"></label>
+        </div>
+        <input type="hidden" id="fn-c-img" value="${esc(data?.image_url || '')}">
+      </div>
+      <div class="fg fn-c-body-fg">
+        <div class="fn-c-body-hd"><label class="fl">Текст новости *</label><label class="btn btn-gh btn-xs fn-c-ins-btn">📷 Вставить фото<input type="file" accept="image/*" style="display:none" onchange="fnInsertImg(this)"></label></div>
+        <textarea class="fi fn-c-body" id="fn-c-body" placeholder="Пишите свободно. Пустая строка = новый абзац.">${esc(data?.body || '')}</textarea></div>
       <div class="fn-comp-ftr">
         <button class="btn btn-gh" onclick="fnCloseComposer()">Отмена</button>
         <button class="btn btn-gd" onclick="fnSubmit()">📨 Отправить на проверку</button>
@@ -249,11 +286,47 @@ function fnOpenComposer(id) {
 }
 function fnCloseComposer() { document.getElementById('fn-composer')?.classList.remove('show'); }
 
+function fnInsertImg(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  handleImgUpload(file, url => {
+    const ta = document.getElementById('fn-c-body');
+    if (!ta) return;
+    const marker = `\n\n[img:${url}]\n\n`;
+    const start = ta.selectionStart;
+    ta.value = ta.value.slice(0, start) + marker + ta.value.slice(ta.selectionEnd);
+    ta.selectionStart = ta.selectionEnd = start + marker.length;
+    ta.focus();
+  });
+  input.value = '';
+}
+
+function fnCoverUpload(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  handleImgUpload(file, url => {
+    document.getElementById('fn-c-img').value = url;
+    const prv = document.getElementById('fn-c-cov-prv');
+    if (prv) {
+      prv.classList.remove('fn-c-cov-empty');
+      prv.innerHTML = `<img src="${url}" alt=""><button type="button" class="fn-c-cov-rm" onclick="fnCoverRemove()">✕</button>`;
+    }
+  });
+  input.value = '';
+}
+
+function fnCoverRemove() {
+  document.getElementById('fn-c-img').value = '';
+  const prv = document.getElementById('fn-c-cov-prv');
+  if (prv) { prv.classList.add('fn-c-cov-empty'); prv.innerHTML = ''; }
+}
+
 async function fnSubmit() {
   if (FN.busy) return;
-  const id      = document.getElementById('fn-c-id')?.value || '';
-  const title   = (document.getElementById('fn-c-title')?.value || '').trim();
-  const body    = (document.getElementById('fn-c-body')?.value || '').trim();
+  const id        = document.getElementById('fn-c-id')?.value || '';
+  const title     = (document.getElementById('fn-c-title')?.value || '').trim();
+  const body      = (document.getElementById('fn-c-body')?.value || '').trim();
+  const image_url = (document.getElementById('fn-c-img')?.value || '').trim() || null;
   if (!title || !body) { toast('Заголовок и текст обязательны', 'err'); return; }
   if (typeof badName === 'function' && badName(title)) { toast('Заголовок содержит недопустимые слова', 'err'); return; }
   // Писать новости могут только владельцы одобренной фракции (игроки).
@@ -262,10 +335,8 @@ async function fnSubmit() {
   FN.busy = true;
   try {
     if (id) {
-      // правка своей новости — снова на модерацию. excerpt всегда сбрасываем:
-      // превью формируется автоматически из текста (игроки его не задают).
       await dbPatch('faction_news', `id=eq.${encodeURIComponent(id)}`,
-        { title, excerpt: null, body, status: 'pending', reject_reason: null, updated_at: new Date().toISOString() });
+        { title, excerpt: null, body, image_url, status: 'pending', reject_reason: null, updated_at: new Date().toISOString() });
       toast('Изменения отправлены на проверку', 'ok');
     } else {
       await dbPost('faction_news', {
@@ -273,7 +344,7 @@ async function fnSubmit() {
         faction_name: fac.name || null,
         faction_color: fac.color || null,
         owner_id: user.id, owner_email: user.email,
-        title, excerpt: null, body,   // превью генерируется из body
+        title, excerpt: null, body, image_url,
         status: 'pending',
       });
       toast('Новость отправлена на проверку', 'ok');
