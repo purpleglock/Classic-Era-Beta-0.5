@@ -2044,23 +2044,30 @@ async function doSaveSec(){
 function openEditUsr(userId,role,email,banned){
   email = email || '';
   const prof = email ? (getProfileOf(email) || {}) : {};
-  document.getElementById('mo-usr-t').textContent='ПОЛЬЗОВАТЕЛЬ';
-  document.getElementById('eu-id').value=userId;
-  document.getElementById('eu-email').value=email;
-  document.getElementById('eu-email-disp').value=email||'(email не найден)';
-  document.getElementById('eu-name').value=prof.display_name||'';
-  document.getElementById('eu-role').value=role;
+  // null-safe: разметка модалки могла быть упрощена (часть полей удалена),
+  // поэтому пишем только в реально существующие элементы — иначе функция
+  // падала на отсутствующем поле и модалка вообще не открывалась.
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+  const t = document.getElementById('mo-usr-t'); if (t) t.textContent = 'ПОЛЬЗОВАТЕЛЬ';
+  set('eu-id', userId);
+  set('eu-email', email);
+  set('eu-nm', email || '(email не найден)');
+  set('eu-email-disp', email || '(email не найден)');
+  set('eu-name', prof.display_name || '');
+  set('eu-role', role);
   // показываем РЕАЛЬНЫЙ текущий статус бана (раньше всегда сбрасывался в 'false',
   // из-за чего сохранение разбанивало и бан «не работал»)
-  document.getElementById('eu-ban').value = banned ? 'true' : 'false';
+  set('eu-ban', banned ? 'true' : 'false');
   om('mo-usr');
 }
 async function doSaveUsr(){
   if(!user||user.role!=='superadmin'){toast('Только superadmin','err');return;}
-  const id=document.getElementById('eu-id').value;
-  const email=document.getElementById('eu-email').value;
-  const name=document.getElementById('eu-name').value.trim();
-  const ban=document.getElementById('eu-ban').value==='true';
+  // null-safe чтение — поля имени/email в упрощённой модалке могут отсутствовать
+  const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const id=val('eu-id');
+  const email=val('eu-email');
+  const name=val('eu-name').trim();
+  const ban=val('eu-ban')==='true';
   if (name && typeof badName === 'function' && badName(name)) { toast('Имя содержит недопустимые слова (мат или запрещённое)', 'err'); return; }
   try{
     // Бан через SECURITY DEFINER RPC — обходит RLS (прямой PATCH чужой строки

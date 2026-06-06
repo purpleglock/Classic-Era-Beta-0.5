@@ -233,8 +233,6 @@ function fnOpenComposer(id) {
       <input type="hidden" id="fn-c-id" value="${id ? esc(id) : ''}">
       <div class="fg"><label class="fl">Заголовок *</label>
         <input class="fi fn-c-title" id="fn-c-title" maxlength="160" value="${esc(data?.title || '')}" placeholder="Главное событие недели"></div>
-      <div class="fg"><label class="fl">Лид / краткое превью <span style="color:var(--t4)">(необязательно)</span></label>
-        <input class="fi" id="fn-c-excerpt" maxlength="300" value="${esc(data?.excerpt || '')}" placeholder="Если пусто — возьмём начало текста"></div>
       <div class="fg fn-c-body-fg"><label class="fl">Текст новости *</label>
         <textarea class="fi fn-c-body" id="fn-c-body" placeholder="Пишите свободно. Пустая строка разделяет абзацы.">${esc(data?.body || '')}</textarea></div>
       <div class="fn-comp-ftr">
@@ -255,26 +253,27 @@ async function fnSubmit() {
   if (FN.busy) return;
   const id      = document.getElementById('fn-c-id')?.value || '';
   const title   = (document.getElementById('fn-c-title')?.value || '').trim();
-  const excerpt = (document.getElementById('fn-c-excerpt')?.value || '').trim();
   const body    = (document.getElementById('fn-c-body')?.value || '').trim();
   if (!title || !body) { toast('Заголовок и текст обязательны', 'err'); return; }
-  if (typeof badName === 'function' && (badName(title) || badName(excerpt))) { toast('Текст содержит недопустимые слова', 'err'); return; }
+  if (typeof badName === 'function' && badName(title)) { toast('Заголовок содержит недопустимые слова', 'err'); return; }
+  // Писать новости могут только владельцы одобренной фракции (игроки).
   const fac = await fnGetMyFaction();
-  if (!fac && !fnIsStaff()) { toast('Нужна одобренная фракция', 'err'); return; }
+  if (!fac || !fac.faction_id) { toast('Новости пишут только владельцы одобренной фракции', 'err'); return; }
   FN.busy = true;
   try {
     if (id) {
-      // правка своей новости — снова на модерацию
+      // правка своей новости — снова на модерацию. excerpt всегда сбрасываем:
+      // превью формируется автоматически из текста (игроки его не задают).
       await dbPatch('faction_news', `id=eq.${encodeURIComponent(id)}`,
-        { title, excerpt, body, status: 'pending', reject_reason: null, updated_at: new Date().toISOString() });
+        { title, excerpt: null, body, status: 'pending', reject_reason: null, updated_at: new Date().toISOString() });
       toast('Изменения отправлены на проверку', 'ok');
     } else {
       await dbPost('faction_news', {
-        faction_id: fac?.faction_id || null,
-        faction_name: fac?.name || null,
-        faction_color: fac?.color || null,
+        faction_id: fac.faction_id,
+        faction_name: fac.name || null,
+        faction_color: fac.color || null,
         owner_id: user.id, owner_email: user.email,
-        title, excerpt: excerpt || null, body,
+        title, excerpt: null, body,   // превью генерируется из body
         status: 'pending',
       });
       toast('Новость отправлена на проверку', 'ok');
