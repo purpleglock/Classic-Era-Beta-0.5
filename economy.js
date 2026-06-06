@@ -581,17 +581,17 @@ function ecTreasuryHtml() {
   if (inc.gc) incParts.push(`<span style="color:var(--gd)">+${ecNum(inc.gc)} ГС</span>`);
   if (inc.science) incParts.push(`<span style="color:var(--pu)">+${ecNum(inc.science)} ОН</span>`);
   const incLine = incParts.length ? incParts.join(' · ') : '<span style="color:var(--t4)">нет дохода — откройте слоты</span>';
-  let nextLine = '';
+  let nextHtml = '';
   if (EC.eco.last_tick) {
-    const ms = new Date(EC.eco.last_tick).getTime() + 86400000 - Date.now();
-    nextLine = ms <= 0 ? 'доход готов к начислению' : `следующий доход через ${Math.floor(ms / 3600000)} ч ${Math.floor((ms % 3600000) / 60000)} мин`;
+    const start = new Date(EC.eco.last_tick).getTime();
+    nextHtml = ecProgress(start, start + 86400000, 'доход готов к начислению');
   }
   const resN = ecResEntries().length;
   return `<div class="ec-treasury">
     <div class="ec-res"><span class="ec-res-k">Галактический стандарт</span><span class="ec-res-v" style="color:var(--gd)">${ecNum(EC.eco.gc)} ГС</span></div>
     <div class="ec-res"><span class="ec-res-k">Очки науки</span><span class="ec-res-v" style="color:var(--pu)">${ecNum(EC.eco.science)} ОН</span></div>
     <div class="ec-res ec-res-click" onclick="ecSetTab('diplomacy')" title="Управление ресурсами"><span class="ec-res-k">Ресурсы планет</span><span class="ec-res-v" style="color:var(--ok)">${resN} ${resN === 1 ? 'вид' : 'вид(ов)'}</span></div>
-    <div class="ec-res ec-res-inc"><span class="ec-res-k">Доход / сутки</span><span class="ec-res-v">${incLine}</span><span class="ec-next">${esc(nextLine)}</span></div>
+    <div class="ec-res ec-res-inc"><span class="ec-res-k">Доход / сутки</span><span class="ec-res-v">${incLine}</span><span class="ec-next">${nextHtml}</span></div>
   </div>`;
 }
 
@@ -930,7 +930,7 @@ function ecProjectsBlock() {
   const icon = { slot: '🏗', terraform: '🌍', habitat: '🌱', build: '🏗' };
   const rows = ps.map(p => `<div class="ec-q-row">
       <span class="ec-r-name">${icon[p.kind] || '⏳'} ${esc(p.label || p.kind)}</span>
-      <span class="ec-q-t">${ecProjEtaTxt(p)}</span>
+      ${ecProgressISO(p.created_at, p.ready_at, 1, 'готово — ждёт тика')}
       <button class="ec-bld-del" title="Отменить (возврат затрат)" onclick="ecCancelProject('${p.id}')">✕</button>
     </div>`).join('');
   return `<div class="ec-section-title">Проекты в работе <span class="ec-hint">— применяются через 1 день</span></div>
@@ -1019,7 +1019,7 @@ function ecTabMilBuild() {
     <div class="ec-cap">Верфь: <b class="${use.ships > caps.ships ? 'ec-warn' : ''}">${use.ships}/${caps.ships} кораблей за ход</b></div>`;
 
   const queueHtml = EC.queue.length
-    ? EC.queue.map(q => { const ms = q.ready_at ? new Date(q.ready_at).getTime() - Date.now() : 0; const t = ms <= 0 ? 'готово на след. ходу' : `через ${Math.max(0, Math.floor(ms / 3600000))} ч`; return `<div class="ec-q-row"><span class="ec-r-name">${esc(q.unit_name)} ×${ecNum(q.qty)}</span><span class="ec-q-t">${t}</span><button class="ec-bld-del" title="Отменить" onclick="ecCancelProd('${q.id}')">✕</button></div>`; }).join('')
+    ? EC.queue.map(q => `<div class="ec-q-row"><span class="ec-r-name">${esc(q.unit_name)} ×${ecNum(q.qty)}</span>${ecProgressISO(q.created_at, q.ready_at, 1, 'готово на след. ходу')}<button class="ec-bld-del" title="Отменить" onclick="ecCancelProd('${q.id}')">✕</button></div>`).join('')
     : `<div class="ec-empty" style="padding:8px">Очередь пуста.</div>`;
 
   return `${ecIntro('🏭', 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, а заказ на производство — здесь.', ['Объём производства зависит от слотов военных зданий: пехота → <b>Центр подготовки</b>, техника → <b>Военный завод</b>, корабли → <b>Корабельная верфь</b>.', 'Нет проектов? Откройте «⚒ Конструкторы» и спроектируйте дивизию или корабль.', 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».'])}<div class="ec-section-title">Дивизии <span class="ec-hint">— комплектование: нужны здания под состав (пехота → Подготовка, техника → Воензавод)</span></div>
@@ -1072,8 +1072,9 @@ function ecMinimap() {
 function ecTabTerritory() {
   const cdMs = ecClaimCooldownMs(), claim = ecClaimableIds();
   const byId = new Map((EC.allSystems || []).map(s => [s.id, s]));
+  const claimStart = EC.eco.last_system_claim ? new Date(EC.eco.last_system_claim).getTime() : 0;
   const cdLine = cdMs > 0
-    ? `<div class="ec-cap ec-warn">Колонизация системы доступна через ${Math.ceil(cdMs / 86400000)} дн.</div>`
+    ? `<div class="ec-cap ec-warn ec-cap-prog">Колонизация системы: ${ecProgress(claimStart, claimStart + ecClaimCdDays() * 86400000, 'доступно')}</div>`
     : `<div class="ec-cap">Доступно. Раз в ${EC_CLAIM_CD_DAYS} дн., стоимость ${ecNum(EC_CLAIM_COST)} ГС.</div>`;
   const list = claim.length
     ? claim.map(id => { const s = byId.get(id); return `<div class="ec-colonize-row"><div class="ec-cz-main"><span class="ec-cz-name">★ ${esc(s.name)}</span><span class="ec-cz-sub">смежная · ничья</span></div>
@@ -1432,13 +1433,10 @@ function ecTabIntel() {
 // Строка активной операции (с таймером)
 function ecSpyActiveRow(m) {
   const d = EC_SPY_OPS[m.op] || { icon: '•', label: m.op };
-  const ms = m.ready_at ? new Date(m.ready_at).getTime() - Date.now() : 0;
-  const turns = ms <= 0 ? 'готово в конце хода' : `≈${Math.max(1, Math.ceil(ms / 86400000))} ход.`;
   return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
       <span class="ec-route-badge wait">${d.icon} идёт</span>
       <b>${esc(d.label)}</b> → ${esc(m.target_name || ecFacName(m.target_fid))} · 🕵 ${ecNum(m.agents)} · успех ${ecNum(m.success_pct)}% · раскрытие ${ecNum(m.detect_pct)}%
-      <i style="color:var(--t3)"> · ${turns}</i>
-    </span><button class="ec-bld-del" title="Отозвать (вернуть агентов)" onclick="ecSpyCancel('${m.id}')">✕</button></div>`;
+    </span>${ecProgressISO(m.created_at, m.ready_at, 1, 'готово в конце хода')}<button class="ec-bld-del" title="Отозвать (вернуть агентов)" onclick="ecSpyCancel('${m.id}')">✕</button></div>`;
 }
 // Строка журнала (завершённая операция)
 function ecSpyLogRow(m) {
@@ -1493,7 +1491,7 @@ function ecTabResearch() {
   const sci = EC.eco.science || 0;
   const sciInc = ecIncomePreview().science;   // база + плоский бонус доктрины
   let activeHtml = '';
-  if (active) { const node = cat.find(n => n.id === active); const t = readyMs <= 0 ? 'готово на след. ходу' : `через ${Math.max(0, Math.floor(readyMs / 3600000))} ч`; activeHtml = `<div class="ec-cap">⏳ Изучается: <b>${esc(node ? node.name : active)}</b> — ${t}</div>`; }
+  if (active) { const node = cat.find(n => n.id === active); activeHtml = `<div class="ec-cap ec-cap-prog">⏳ Изучается: <b>${esc(node ? node.name : active)}</b> ${ecProgressISO(null, EC.eco.research_ready, 1, 'готово на след. ходу')}</div>`; }
   const nodeCard = n => {
     const isDone = done.has(n.id), isActive = active === n.id, prereqOk = (n.prereq || []).every(p => done.has(p));
     let badge, btn = '';
@@ -1720,6 +1718,34 @@ function ecProjEtaTxt(p) {
   const h = Math.floor(ms / 3600000);
   if (h < 24) return `через ~${h} ч`;
   return `через ~${Math.ceil(ms / 86400000)} д`;
+}
+
+// ── Прогресс-бар таймера: шкала заполнения + остаток времени ──
+// Компактный остаток времени (мин / ч / д).
+function ecFmtLeft(ms) {
+  if (ms <= 0) return 'готово';
+  if (ms < 3600000)  return `${Math.max(1, Math.round(ms / 60000))} мин`;
+  if (ms < 86400000) { const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000); return m ? `${h} ч ${m} мин` : `${h} ч`; }
+  const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000); return h ? `${d} д ${h} ч` : `${d} д`;
+}
+// Прогресс-бар [startMs..endMs] + подпись остатка. readyText — подпись по завершении.
+function ecProgress(startMs, endMs, readyText) {
+  const now = Date.now();
+  const total = Math.max(1, endMs - startMs);
+  const left = endMs - now;
+  const ready = left <= 0;
+  const pct = ready ? 100 : Math.min(100, Math.max(0, Math.round((now - startMs) / total * 100)));
+  const txt = ready ? (readyText || 'готово') : ecFmtLeft(left);
+  return `<span class="ec-prog${ready ? ' is-ready' : ''}">`
+    + `<span class="ec-prog-track"><span class="ec-prog-fill" style="width:${pct}%"></span></span>`
+    + `<span class="ec-prog-txt">${esc(txt)}</span></span>`;
+}
+// Враппер для ISO-строк. start может отсутствовать → берём end − fallbackDays.
+function ecProgressISO(startISO, endISO, fallbackDays, readyText) {
+  if (!endISO) return `<span class="ec-prog-txt">${esc(readyText || '—')}</span>`;
+  const end = new Date(endISO).getTime();
+  const start = startISO ? new Date(startISO).getTime() : end - Math.max(1, fallbackDays || 1) * 86400000;
+  return ecProgress(start, end, readyText);
 }
 // Отмена проекта с возвратом ГС/ОН (refund берётся из payload)
 async function ecCancelProject(id) {

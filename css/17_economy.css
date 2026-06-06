@@ -245,6 +245,30 @@
 .ec-q-row, .ec-r-row { display: flex; align-items: center; gap: 10px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-sm); padding: 8px 12px; }
 .ec-q-row .ec-r-name, .ec-r-name { flex: 1; min-width: 0; color: var(--t1); font-size: 13px; }
 .ec-q-t { font-size: 11px; color: var(--te); font-family: var(--font-mono); }
+
+/* ── Прогресс-бар таймера: шкала + остаток времени ── */
+.ec-prog { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ec-prog-track {
+  position: relative; width: 84px; height: 6px; flex-shrink: 0;
+  background: var(--b0); border: 1px solid var(--w2); border-radius: 99px; overflow: hidden;
+}
+.ec-prog-fill {
+  position: absolute; inset: 0 auto 0 0; height: 100%;
+  background: linear-gradient(90deg, var(--gd), var(--te));
+  border-radius: 99px; transition: width .4s ease;
+}
+.ec-prog.is-ready .ec-prog-fill { background: var(--ok); }
+.ec-prog-txt {
+  font-size: 11px; color: var(--te); font-family: var(--font-mono);
+  white-space: nowrap; min-width: 0;
+}
+.ec-prog.is-ready .ec-prog-txt { color: var(--ok); }
+/* Внутри подписей (.ec-cap) — бар выравниваем по базовой линии текста */
+.ec-cap-prog { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ec-cap-prog .ec-prog-track { width: 120px; }
+/* В строке дохода бар занимает всю ширину ячейки */
+.ec-next .ec-prog { display: flex; }
+.ec-next .ec-prog-track { flex: 1; width: auto; min-width: 60px; }
 .ec-r-cat { font-size: 15px; flex-shrink: 0; }
 .ec-r-qty { font-family: var(--font-display); font-weight: 700; color: var(--gd); }
 
