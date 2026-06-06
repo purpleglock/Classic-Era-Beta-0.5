@@ -436,6 +436,7 @@ declare
   app public.faction_applications;
   eco public.faction_economy;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   select * into app from public.faction_applications
     where owner_id = auth.uid() and status = 'approved'
     order by updated_at desc limit 1;
@@ -559,6 +560,7 @@ declare
   cd interval := '7 days';
   mods jsonb;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   select * into app from public.faction_applications
     where owner_id = auth.uid() and status = 'approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
@@ -660,6 +662,7 @@ create or replace function public.economy_transfer(p_to_fid text, p_res text, p_
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; me public.faction_economy; cur numeric;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   if p_amount is null or p_amount <= 0 then raise exception 'bad amount'; end if;
   if p_res not in ('gc','tnp','science') then raise exception 'bad resource'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
@@ -689,6 +692,7 @@ create or replace function public.trade_propose(p_to_fid text, p_volume int)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; cap int; used int; bowner uuid;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   if p_volume is null or p_volume <= 0 then raise exception 'bad volume'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
@@ -707,6 +711,7 @@ create or replace function public.trade_respond(p_id uuid, p_accept boolean)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; r public.trade_routes; cap int; used int;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
   select * into r from public.trade_routes where id=p_id;
@@ -725,6 +730,7 @@ create or replace function public.trade_close(p_id uuid)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; r public.trade_routes;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
   select * into r from public.trade_routes where id=p_id;
@@ -739,6 +745,7 @@ create or replace function public.loan_issue(p_to_fid text, p_amount numeric, p_
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; me public.faction_economy; bowner uuid;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   if p_amount is null or p_amount <= 0 then raise exception 'bad amount'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
@@ -758,6 +765,7 @@ create or replace function public.loan_repay(p_id uuid)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; l public.loans; me public.faction_economy;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
   select * into l from public.loans where id=p_id;
@@ -776,6 +784,7 @@ create or replace function public.loan_dispute(p_id uuid)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; l public.loans;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
   select * into l from public.loans where id=p_id;
@@ -849,6 +858,7 @@ declare app public.faction_applications; me public.faction_economy; tgt public.f
   a int; busy int; freeag int; ci int; ibonus numeric; spow numeric; succ int; det int; turns int;
   tgt_owner uuid;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   meta := public._spy_op_meta(p_op);
   if meta is null then raise exception 'bad op'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
@@ -894,6 +904,7 @@ create or replace function public.counterintel_set(p_n int)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; me public.faction_economy; busy int; n int;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
   select * into me from public.faction_economy where faction_id=app.faction_id for update;
@@ -908,6 +919,7 @@ create or replace function public.spy_cancel(p_id uuid)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare m public.spy_missions;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   select * into m from public.spy_missions where id=p_id and actor_owner=auth.uid() and status='active';
   if not found then raise exception 'not found'; end if;
   update public.faction_economy set agents = agents + m.agents where faction_id=m.actor_fid;
@@ -1055,6 +1067,7 @@ create or replace function public.economy_sell_resource(p_name text, p_units num
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; eco public.faction_economy; have numeric; gain numeric;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   if p_units is null or p_units <= 0 then raise exception 'bad units'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
@@ -1076,6 +1089,7 @@ create or replace function public.trade_propose(p_to_fid text, p_origin_sys text
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; cap int; used int; bowner uuid; roster_ships int; committed int;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   if p_volume is null or p_volume <= 0 then raise exception 'bad volume'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
   if not found then raise exception 'no approved faction'; end if;
@@ -1209,6 +1223,7 @@ create or replace function public.economy_research(p_node text, p_cost numeric)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; eco public.faction_economy;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   if p_node is null or p_node = '' then raise exception 'bad node'; end if;
   if p_cost is null or p_cost < 0 then raise exception 'bad cost'; end if;
   select * into app from public.faction_applications where owner_id=auth.uid() and status='approved' order by updated_at desc limit 1;
@@ -1476,6 +1491,7 @@ create or replace function public.mining_assign(p_building_id uuid, p_targets js
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare b public.colony_buildings;
 begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   select * into b from public.colony_buildings where id = p_building_id and owner_id = auth.uid();
   if not found then raise exception 'building not found'; end if;
   if b.btype != 'mining' then raise exception 'not a mining building'; end if;

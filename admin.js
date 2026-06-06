@@ -839,6 +839,10 @@ function adTabDanger(e) {
     ${row('Удалить все колонии и постройки фракции', `<button class="btn btn-rd" onclick="adDeleteColonies()">Удалить колонии</button>`)}
     ${row('Удалить весь ростер юнитов', `<button class="btn btn-rd" onclick="adDeleteRoster()">Удалить ростер</button>`)}
     ${row('Удалить строку экономики (казна, исследования, ресурсы)', `<button class="btn btn-rd" onclick="adDeleteEco()" ${!hasEco ? 'disabled' : ''}>Удалить экономику</button>`)}
+    <div style="margin-top:16px;border-top:1px solid rgba(255,74,74,.25);padding-top:14px">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#ff7a7a;margin-bottom:10px">💀 ЯДЕРНЫЙ ВАРИАНТ</div>
+      ${row('Полное удаление фракции: анкета, карта, экономика, колонии, ростер, дизайны. Роль владельца сбрасывается на viewer — сможет зарегистрироваться заново.', `<button class="btn btn-rd" onclick="adDeleteFaction()" style="white-space:nowrap;font-weight:700;background:rgba(180,0,0,.7);border-color:#c00">💀 Удалить фракцию</button>`)}
+    </div>
   </div>`;
 }
 
@@ -932,6 +936,54 @@ async function adDeleteEco() {
     const e = adEntry(AD.sel); if (e) e.eco = null;
     AD.ecos = AD.ecos.filter(ec => ec.faction_id !== AD.sel);
     toast('Экономика удалена', 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+// ── Полное удаление фракции ─────────────────────────────────────
+async function adDeleteFaction() {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel);
+  if (!e) return;
+  const name = e.app?.name || AD.sel;
+  if (!confirm(
+    `ПОЛНОЕ УДАЛЕНИЕ ФРАКЦИИ «${name}»\n\n` +
+    `Будет безвозвратно удалено:\n` +
+    `• Анкета (регистрация)\n` +
+    `• Запись на карте\n` +
+    `• Экономика, казна, ресурсы, технологии\n` +
+    `• Все колонии и постройки\n` +
+    `• Ростер и очередь юнитов\n` +
+    `• Дизайны юнитов\n\n` +
+    `Роль владельца сбросится — сможет зарегистрироваться заново.\n\nПродолжить?`
+  )) return;
+  if (!confirm(`Последнее предупреждение.\nУдалить «${name}» без возможности восстановления?`)) return;
+  AD.busy = true;
+  try {
+    const token = await getTokenFresh();
+    const ctrl  = new AbortController();
+    const tid   = setTimeout(() => ctrl.abort(), 28000);
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/admin_delete_faction`, {
+      method: 'POST',
+      headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_faction_id: AD.sel }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(tid);
+    if (!r.ok) { const t = await r.text(); throw new Error(t || 'HTTP ' + r.status); }
+    const fid = AD.sel;
+    AD.byFid.delete(fid);
+    AD.apps      = AD.apps.filter(a => a.faction_id !== fid);
+    AD.ecos      = AD.ecos.filter(ec => ec.faction_id !== fid);
+    AD.colonies  = AD.colonies.filter(c => c.faction_id !== fid);
+    AD.buildings = AD.buildings.filter(b => b.faction_id !== fid);
+    AD.prod      = AD.prod.filter(p => p.faction_id !== fid);
+    AD.designs   = AD.designs.filter(d => d.faction_id !== fid);
+    AD.systems.forEach(s => { if (s.faction === fid) s.faction = null; });
+    AD.sel = null;
+    AD.subtab = 'treasury';
+    toast(`Фракция «${name}» полностью удалена`, 'ok');
+    adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }

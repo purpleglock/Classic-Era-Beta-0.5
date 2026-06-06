@@ -430,7 +430,34 @@ async function doLogout() {
   }
 }
 
+// ── Блокировка забаненного аккаунта ─────────────────────────────
+// Полноэкранный оверлей: перекрывает весь сайт, оставляет только «Выйти».
+// Это UX-уровень (клиент). Реальную защиту данных даёт RLS на стороне БД.
+function enforceBan() {
+  const banned = !!(user && user.is_banned);
+  let gate = document.getElementById('ban-gate');
+  if (!banned) { if (gate) gate.remove(); document.body.style.overflow = ''; return; }
+  if (!gate) {
+    gate = document.createElement('div');
+    gate.id = 'ban-gate';
+    gate.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(8,10,14,.97);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px';
+    gate.innerHTML = `
+      <div style="max-width:440px;text-align:center;border:1px solid #a33;border-radius:14px;padding:34px 28px;background:linear-gradient(135deg,#1a1012,#120c10);box-shadow:0 20px 60px rgba(0,0,0,.6)">
+        <div style="font-size:52px;line-height:1;margin-bottom:14px">⛔</div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:800;letter-spacing:1px;color:#ff7a7a;margin-bottom:10px">АККАУНТ ЗАБЛОКИРОВАН</div>
+        <div style="font-size:13px;line-height:1.6;color:#c0ccd6;margin-bottom:8px">Доступ к вики ограничен администрацией.</div>
+        <div id="ban-gate-email" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a7a88;margin-bottom:22px"></div>
+        <button class="btn btn-gh" onclick="doLogout()" style="border-color:#a33;color:#ff9a9a">Выйти из аккаунта</button>
+      </div>`;
+    document.body.appendChild(gate);
+  }
+  const em = document.getElementById('ban-gate-email');
+  if (em) em.textContent = user.email || '';
+  document.body.style.overflow = 'hidden';
+}
+
 function updAuthUI() {
+  enforceBan();
   const btn = document.getElementById('auth-btn'); const dot = document.getElementById('adot'); const av = document.getElementById('auth-av'); const eb = document.getElementById('edit-btn');
   if (!btn) return;
   if (user) {

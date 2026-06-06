@@ -1746,99 +1746,78 @@ async function renderApTab(){
     return;
   } else if(apTab==='users'){
     try {
-      const ul=await dbGet('user_roles','select=user_id,role&order=role.desc,user_id.asc')||[];
-      
-      // Собираем мапу email -> количество страниц
-      const contribMap = {};
-      pages.forEach(p => { 
-        if(p.created_by) contribMap[p.created_by] = (contribMap[p.created_by]||0) + 1; 
-      });
-      
-      // Добавляем всех из allProfiles с 0 страниц
-      allProfiles.forEach(prof => { 
-        if(prof.email && !contribMap[prof.email]) contribMap[prof.email] = 0; 
-      });
-      
-      // Создаем мапу user_id -> email
-      const userDataMap = new Map();
-      
-      // Текущий пользователь - точно знаем
-      if (user && user.id && user.email) {
-        userDataMap.set(user.id, user.email);
-      }
-      
-      // Сортируем email по количеству страниц
-      const sortedEmails = Object.keys(contribMap).sort((a, b) => contribMap[b] - contribMap[a]);
-      
-      // Назначаем email каждому user_id
-      ul.forEach(u => {
-        if (!userDataMap.has(u.user_id)) {
-          const email = sortedEmails.find(e => !Array.from(userDataMap.values()).includes(e));
-          if (email) {
-            userDataMap.set(u.user_id, email);
-          }
-        }
-      });
-      
-      // Добавляем пользователей, которые есть в contribMap, но нет в user_roles
-      const usedEmails = new Set(userDataMap.values());
-      const missingUsers = sortedEmails.filter(email => !usedEmails.has(email)).map(email => ({
-        user_id: 'unknown_' + email,
-        role: 'viewer',
-        email: email
-      }));
-      
-      const allUsers = [...ul, ...missingUsers];
-      
-      const rcl={superadmin:'r-sa',editor:'r-ed',moderator:'r-mo',viewer:'r-vi'};
-      const roleLabels={superadmin:'SUPERADMIN',editor:'EDITOR',moderator:'MODERATOR',viewer:'VIEWER'};
-      
+      // Источник истины — серверный RPC: связь user_id↔email берётся из
+      // auth.users (а не угадывается), плюс роль, бан, профиль, текущая и
+      // удалённые анкеты — всё одним джойном.
+      const allUsers = await apiFetch('rpc/admin_list_users', { method:'POST', body:'{}' }) || [];
+
+      const roleLabels = { superadmin:'SUPERADMIN', editor:'EDITOR', moderator:'MODERATOR', player:'PLAYER', viewer:'VIEWER' };
+      const roleColors = { superadmin:'gd', editor:'te', moderator:'pul', player:'ok', viewer:'w3' };
+      const roleTextColors = { superadmin:'gdl', editor:'tel', moderator:'pul', player:'ok', viewer:'t3' };
+
       const userCards = allUsers.map(u => {
-        const email = u.email || userDataMap.get(u.user_id) || '';
-        const prof = email ? getProfileOf(email) : {};
-        const name = email.includes('@') ? email.split('@')[0] : 'Unknown User';
-        const displayName = prof.display_name || name;
-        const avatarUrl = prof.avatar_url || '';
+        const email = u.email || '';
+        // для текущего пользователя берём свежий локальный профиль (минуя кэш БД)
+        const localProf = (user && email === user.email) ? getProfileOf(email) : null;
+        const name = email.includes('@') ? email.split('@')[0] : 'Без email';
+        const displayName = (localProf?.display_name) || u.display_name || name;
+        const avatarUrl = (localProf?.avatar_url) || u.avatar_url || '';
         const hue = email ? [...email].reduce((a,c)=>a+c.charCodeAt(0),0) % 360 : 180;
-        
-        // Считаем статистику
+
         const userPages = email ? pages.filter(p => isVisiblePage(p) && p.created_by === email) : [];
         const pubCount = userPages.filter(p => p.status === 'published').length;
         const draftCount = userPages.filter(p => p.status === 'draft').length;
-        
-        const avHtml = avatarUrl 
-          ? `<img src="${esc(avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` 
+
+        const avHtml = avatarUrl
+          ? `<img src="${esc(avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
           : `<div style="width:100%;height:100%;border-radius:50%;background:hsl(${hue},60%,45%);display:flex;align-items:center;justify-content:center;font-family:Rajdhani,sans-serif;font-size:20px;font-weight:900;color:#fff">${esc(displayName.slice(0,2).toUpperCase())}</div>`;
-        
-        const roleColor = u.role==='superadmin'?'gd':u.role==='editor'?'te':u.role==='moderator'?'pul':'w3';
-        const roleTextColor = u.role==='superadmin'?'gdl':u.role==='editor'?'tel':u.role==='moderator'?'pul':'t3';
-        
+
+        const roleColor = roleColors[u.role] || 'w3';
+        const roleTextColor = roleTextColors[u.role] || 't3';
+
         const isCurrentUser = user && u.user_id === user.id;
-        
+        const banned = !!u.is_banned;
+
+        // Бейджи: фракция (одобренная) и удалённые анкеты
+        const facBadge = (u.faction_status === 'approved' && u.faction_name)
+          ? `<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:var(--b1);border:1px solid var(--gd);font-family:Rajdhani,sans-serif;font-size:7px;letter-spacing:1px;color:var(--gdl)">🏛 ${esc(u.faction_name)}</span>`
+          : '';
+        const delFactions = Array.isArray(u.deleted_factions) ? u.deleted_factions.filter(Boolean) : [];
+        const delBadge = delFactions.length
+          ? `<div style="margin-top:10px;padding:8px 10px;background:rgba(255,90,90,.07);border:1px solid rgba(255,90,90,.25);border-radius:4px">
+               <div style="font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:1px;color:#ff7a7a;margin-bottom:4px">🗑 УДАЛЁННЫЕ АНКЕТЫ (${delFactions.length})</div>
+               <div style="font-family:Rajdhani,sans-serif;font-size:11px;color:var(--t2);line-height:1.5">${delFactions.map(n=>esc(n)).join(', ')}</div>
+             </div>`
+          : '';
+
         return `
-          <div class="user-card" style="background:linear-gradient(135deg, var(--b3) 0%, var(--b2) 100%);border:1px solid var(--w2);padding:16px;position:relative;overflow:hidden${isCurrentUser ? ';box-shadow:0 0 0 2px var(--te)' : ''}">
+          <div class="user-card" style="background:linear-gradient(135deg, var(--b3) 0%, var(--b2) 100%);border:1px solid ${banned ? '#a33' : 'var(--w2)'};padding:16px;position:relative;overflow:hidden${isCurrentUser ? ';box-shadow:0 0 0 2px var(--te)' : ''}${banned ? ';opacity:.85' : ''}">
             <div style="position:absolute;top:0;right:0;bottom:0;width:3px;background:var(--${roleColor});opacity:0.6"></div>
             ${isCurrentUser ? `<div style="position:absolute;top:8px;left:8px;font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--te);background:var(--teb);padding:2px 6px;letter-spacing:1px;border-radius:2px">ВЫ</div>` : ''}
-            
-            <div style="display:flex;gap:14px;align-items:start;margin-top:${isCurrentUser ? '20px' : '0'}">
+            ${banned ? `<div style="position:absolute;top:8px;${isCurrentUser ? 'left:44px' : 'left:8px'};font-family:'JetBrains Mono',monospace;font-size:7px;color:#fff;background:#a33;padding:2px 6px;letter-spacing:1px;border-radius:2px">⛔ БАН</div>` : ''}
+
+            <div style="display:flex;gap:14px;align-items:start;margin-top:${(isCurrentUser || banned) ? '20px' : '0'}">
               <div style="width:56px;height:56px;flex-shrink:0;position:relative">
                 ${avHtml}
               </div>
-              
+
               <div style="flex:1;min-width:0">
                 <div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(displayName)}</div>
                 ${email ? `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(email)}">${esc(email)}</div>` : `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t5);margin-bottom:2px">Email не найден</div>`}
-                <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t5);margin-bottom:8px" title="${esc(u.user_id)}">ID: ${esc(u.user_id.slice(0, 8))}...</div>
-                
-                <div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--b1);border:1px solid var(--${roleColor});font-family:Rajdhani,sans-serif;font-size:7px;letter-spacing:1.5px;color:var(--${roleTextColor})">
-                  <span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>
-                  ${roleLabels[u.role] || u.role.toUpperCase()}
+                <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t5);margin-bottom:8px" title="${esc(u.user_id)}">ID: ${esc(String(u.user_id).slice(0, 8))}...</div>
+
+                <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+                  <div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--b1);border:1px solid var(--${roleColor});font-family:Rajdhani,sans-serif;font-size:7px;letter-spacing:1.5px;color:var(--${roleTextColor})">
+                    <span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>
+                    ${roleLabels[u.role] || String(u.role||'').toUpperCase()}
+                  </div>
+                  ${facBadge}
                 </div>
               </div>
-              
-              <button class="ib-btn" onclick="openEditUsr('${u.user_id}','${esc(u.role)}','${esc(email)}')" style="flex-shrink:0" title="Редактировать">✎</button>
+
+              <button class="ib-btn" onclick="openEditUsr('${esc(u.user_id)}','${esc(u.role||'')}','${esc(email)}',${banned})" style="flex-shrink:0" title="Редактировать">✎</button>
             </div>
-            
+
             ${userPages.length > 0 ? `
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--w2)">
               <div style="text-align:center">
@@ -1854,29 +1833,28 @@ async function renderApTab(){
                 <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--t4);letter-spacing:1px;margin-top:2px">ЧЕРНОВИК</div>
               </div>
             </div>
-            ` : `
-            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--w2);text-align:center">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t5)">Нет страниц</div>
-            </div>
-            `}
+            ` : ''}
+            ${delBadge}
           </div>
         `;
       }).join('');
-      
+
       b.innerHTML=`
         <div style="font-family:'Rajdhani',sans-serif;font-size:9px;letter-spacing:2px;color:var(--te);margin-bottom:12px;padding:10px 12px;background:var(--b3);border:1px solid var(--w2)">
           ◈ УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (${allUsers.length})
           <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t4);margin-top:6px;letter-spacing:0.5px">
-            Для смены роли: <strong style="color:var(--te)">Supabase Dashboard → user_roles</strong>
+            Роль меняется через <strong style="color:var(--te)">Supabase Dashboard → user_roles</strong>. Бан и имя — здесь.
           </div>
         </div>
         <div style="display:grid;gap:12px">
-          ${userCards}
+          ${userCards || '<p style="color:var(--t3);font-size:12px">Нет пользователей</p>'}
         </div>
       `;
     } catch(e){
       console.error('Users tab error:', e);
-      b.innerHTML=`<p style="color:var(--err);font-size:12px;padding:12px;background:var(--b3);border:1px solid var(--err)">${esc(e.message)}</p>`;
+      const hint = /admin_list_users|404|PGRST202|does not exist/i.test(e.message||'')
+        ? '<br><span style="color:var(--t3)">Похоже, не выполнен <strong>_admin_users.sql</strong> в Supabase → SQL Editor.</span>' : '';
+      b.innerHTML=`<p style="color:var(--err);font-size:12px;padding:12px;background:var(--b3);border:1px solid var(--err)">${esc(e.message)}${hint}</p>`;
     }
   } else if(apTab==='icons'){
     await renderIconsTab(b);
@@ -2057,7 +2035,7 @@ async function doSaveSec(){
   try{ if(id) await dbPatch('sections',`id=eq.${id}`,body); else await dbPost('sections',body); toast('Раздел сохранён!','ok');cm('mo-sec');await loadSecs();buildNav();renderApTab(); if(curSlug==='home') renderHome(); }catch(e){toast('Ошибка: '+e.message,'err');}
 }
 
-function openEditUsr(userId,role,email){
+function openEditUsr(userId,role,email,banned){
   email = email || '';
   const prof = email ? (getProfileOf(email) || {}) : {};
   document.getElementById('mo-usr-t').textContent='ПОЛЬЗОВАТЕЛЬ';
@@ -2066,7 +2044,9 @@ function openEditUsr(userId,role,email){
   document.getElementById('eu-email-disp').value=email||'(email не найден)';
   document.getElementById('eu-name').value=prof.display_name||'';
   document.getElementById('eu-role').value=role;
-  document.getElementById('eu-ban').value='false';
+  // показываем РЕАЛЬНЫЙ текущий статус бана (раньше всегда сбрасывался в 'false',
+  // из-за чего сохранение разбанивало и бан «не работал»)
+  document.getElementById('eu-ban').value = banned ? 'true' : 'false';
   om('mo-usr');
 }
 async function doSaveUsr(){
@@ -2077,7 +2057,11 @@ async function doSaveUsr(){
   const ban=document.getElementById('eu-ban').value==='true';
   if (name && typeof badName === 'function' && badName(name)) { toast('Имя содержит недопустимые слова (мат или запрещённое)', 'err'); return; }
   try{
-    if(id && !id.startsWith('unknown_')) await dbPatch('user_roles',`user_id=eq.${id}`,{is_banned:ban});
+    // Бан через SECURITY DEFINER RPC — обходит RLS (прямой PATCH чужой строки
+    // user_roles блокировался политикой, поэтому бан молча не применялся)
+    if(id && !id.startsWith('unknown_')) {
+      await apiFetch('rpc/admin_set_user_ban',{method:'POST',body:JSON.stringify({p_user_id:id,p_banned:ban})});
+    }
     if(email){
       await apiFetch('rpc/admin_set_profile_name',{method:'POST',body:JSON.stringify({p_email:email,p_name:name})});
       const si=allProfiles.findIndex(p=>p.email===email);

@@ -20,7 +20,15 @@
       "Bash(node --check guide.js)",
       "Bash(node --check data.js)",
       "Bash(node --check render.js)",
-      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/faction_economy?select=faction_id,research&limit=3' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')"
+      "Bash(curl -s -w '\\\\nHTTP=%{http_code}\\\\n' 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/faction_economy?select=faction_id,research&limit=3' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(Get-ChildItem -Path . -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(node --check admin.js)",
+      "Bash(node --check auth.js)",
+      "Bash(node -e ' *)",
+      "Bash(node _ban_patch.cjs)",
+      "Bash(grep -nB1 \"current_user_banned\\(\\) then raise exception 'forbidden: account banned'\" _economy_setup.sql)",
+      "Bash(grep -o '\\\\$\\\\$' _economy_setup.sql)"
     ]
   }
 }
