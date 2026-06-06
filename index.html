@@ -26,14 +26,9 @@
 <!-- CSP removed: was causing Web Locks + reconnect issues -->
 <title>НОВАЯ ЭРА</title>
 <script>
-// КРИТИЧНО: Применяем фон и favicon ДО загрузки CSS
+// Favicon из кэша до загрузки DOM
 (function() {
-  const cachedBg = localStorage.getItem('wk_background_url_cache');
   const cachedFavicon = localStorage.getItem('wk_favicon_url_cache');
-  if (cachedBg) {
-    document.documentElement.style.setProperty('--bg-image', "url('" + cachedBg + "')");
-  }
-  // Favicon применится после загрузки DOM
   if (cachedFavicon) {
     document.addEventListener('DOMContentLoaded', function() {
       const favicon = document.getElementById('favicon');

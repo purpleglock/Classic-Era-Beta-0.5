@@ -48,13 +48,12 @@ button,input,select,textarea{font-family:inherit;}
   inset:0;
   pointer-events:none;
   z-index:-1;
-  background-image: var(--bg-image, url('https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920'));
+  background-image: url('../assets/bg.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  filter: blur(10px) brightness(0.25) saturate(0.6);
-  transform: scale(1.1);
-  opacity: 1;
+  filter: blur(8px) brightness(0.22) saturate(0.55);
+  transform: scale(1.08);
 }
 #sb-overlay{
   display:none;position:fixed;inset:0;

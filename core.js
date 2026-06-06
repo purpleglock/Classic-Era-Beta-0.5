@@ -562,10 +562,7 @@ async function loadSiteSettings() {
         const favicon = document.getElementById('favicon');
         if (favicon) favicon.href = s.value;
       }
-      if (s.key === 'wk_background_url' && s.value) {
-        localStorage.setItem('wk_background_url_cache', s.value);
-        document.body.style.setProperty('--bg-image', `url('${s.value}')`);
-      }
+      // фон теперь локальный — wk_background_url игнорируем
     });
   } catch(e) {
     console.warn('Failed to load site settings:', e);
@@ -574,3 +571,4 @@ async function loadSiteSettings() {
 
 // Загружаем настройки при старте
 loadSiteSettings();
+

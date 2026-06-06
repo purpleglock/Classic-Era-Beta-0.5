@@ -39,21 +39,44 @@ end$$;
 grant execute on function public.assert_not_banned() to authenticated;
 
 -- ── Переопределение current_user_role() ─────────────────────
--- Забанен → 'banned'. Иначе — сохранённая роль (или 'viewer', если строки нет).
--- Для НЕзабаненных поведение не меняется: все политики сверяют роль через
--- «role in (...)», где 'viewer'/NULL одинаково не попадают в стафф-списки.
+-- Забанен → 'banned'. Иначе — НОРМАЛИЗОВАННАЯ сохранённая роль.
+--
+-- ВАЖНО: роль нормализуется (нижний регистр + алиасы) ТОЧНО КАК НА КЛИЕНТЕ
+-- (auth.js: roleAlias + toLowerCase). Без этого роль, записанная как 'Editor',
+-- 'EDITOR', 'admin', 'mod' и т.п., возвращалась «как есть», а RLS-политики
+-- сверяют точное in ('superadmin','editor'). В итоге клиент показывал панель
+-- (он толерантен к регистру), а сервер блокировал ВСЕ чтения/записи эдитора —
+-- «панель открывается, но ничего не работает». Нормализация чинит это разом
+-- для всех политик (они уже включают 'editor').
+-- Берёт самую ПРИВИЛЕГИРОВАННУЮ роль среди всех строк пользователя (защита от
+-- дублей user_roles + LIMIT 1 без ORDER BY) и нормализует регистр/алиасы как клиент.
 create or replace function public.current_user_role()
 returns text
 language sql stable security definer set search_path = public as $$
+  with rows as (
+    select lower(btrim(role)) as raw, coalesce(is_banned, false) as banned
+    from public.user_roles where user_id = auth.uid()
+  ), canon as (
+    select
+      case raw
+        when 'admin' then 'superadmin' when 'super' then 'superadmin' when 'superadmin' then 'superadmin'
+        when 'editor' then 'editor'
+        when 'mod' then 'moderator' when 'moderator' then 'moderator'
+        when 'player' then 'player'
+        else 'viewer'
+      end as role,
+      banned
+    from rows
+  )
   select case
-    when exists (
-      select 1 from public.user_roles
-      where user_id = auth.uid() and is_banned = true
-    ) then 'banned'
+    when exists (select 1 from canon where banned) then 'banned'
     else coalesce(
-      (select role from public.user_roles where user_id = auth.uid() limit 1),
-      'viewer'
-    )
+      (select role from canon
+        order by case role
+          when 'superadmin' then 0 when 'editor' then 1 when 'moderator' then 2
+          when 'player' then 3 else 4 end
+        limit 1),
+      'viewer')
   end
 $$;
 grant execute on function public.current_user_role() to anon, authenticated;

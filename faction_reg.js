@@ -332,12 +332,24 @@ function frRenderPlanetPick() {
   const lbl = (typeof EC_GRP_LABEL !== 'undefined') ? EC_GRP_LABEL : {};
   // авто-выбор, если среда одна или текущая не входит в родные миры расы
   if (!FR.data.capital_env || !envs.includes(FR.data.capital_env)) FR.data.capital_env = envs[0];
+  const env = FR.data.capital_env;
+  const cap = (typeof ecCapital === 'function') ? ecCapital(env) : null;
+  // карточка с характеристиками выбранной столицы
+  const card = cap ? `<div class="fr-cap-card">
+      <div class="fr-cap-card-hd"><span class="fr-cap-card-title">🪐 ${esc(cap.title)}</span><span class="fr-cap-card-type">${esc(lbl[env] || env)}</span></div>
+      <div class="fr-cap-card-flavor">${esc(cap.flavor)}</div>
+      <div class="fr-cap-card-stats">
+        <span class="fr-cap-stat">⬚ Ячейки застройки: <b>${cap.cells}</b></span>
+        <span class="fr-cap-stat">◆ Ресурсы: <b>${cap.res.map(esc).join(', ')}</b></span>
+      </div>
+      <div class="fr-cap-card-bonus">${(typeof ecChoiceChips === 'function') ? ecChoiceChips('capital', env) : ''}</div>
+    </div>` : '';
   if (envs.length <= 1) {
-    box.innerHTML = `<div class="fr-cap-note">Тип столицы: <b>${esc(lbl[envs[0]] || envs[0])}</b> — единственный родной мир вашей расы.</div>`;
+    box.innerHTML = `<div class="fr-cap-label">Родной мир столицы (по расе): <b>${esc(lbl[env] || env)}</b> — единственный для вашей расы.</div>${card}`;
     return;
   }
-  const chips = envs.map(e => `<div class="fr-cap-chip${FR.data.capital_env === e ? ' on' : ''}" onclick="frPickCapEnv('${e}')">${esc(lbl[e] || e)}</div>`).join('');
-  box.innerHTML = `<div class="fr-cap-label">Родной мир столицы (по расе):</div><div class="fr-cap-chips">${chips}</div>`;
+  const chips = envs.map(e => `<div class="fr-cap-chip${env === e ? ' on' : ''}" onclick="frPickCapEnv('${e}')">${esc(lbl[e] || e)}</div>`).join('');
+  box.innerHTML = `<div class="fr-cap-label">Родной мир столицы (по расе):</div><div class="fr-cap-chips">${chips}</div>${card}`;
 }
 function frOnRegRace(v) { FR.data.race = v; frRenderPlanetPick(); }
 function frPickCapEnv(env) { FR.data.capital_env = env; frSaveLocal(); frRenderPlanetPick(); }
@@ -424,7 +436,7 @@ function frStepReview(d) {
       ${row('Тип', d.civ_type === 'frontier' ? 'Зарождающийся фронтир' : 'Самостоятельная колония')}
       <div class="fr-rev-row"><span>Цвет</span><b><span class="fr-swatch" style="background:${d.color}"></span></b></div>
       ${row('Система', d.system_name)}
-      ${row('Планета', d.planet_name)}
+      ${row('Столица', (d.planet_name || '—') + (typeof ecCapital === 'function' && d.capital_env ? ' · ' + ecCapital(d.capital_env).title : ''))}
       ${row('Постройки', [free + ' (беспл.)', ...blds].filter(Boolean).join(', '))}
       ${row('Финансы', d.bonus_money ? '+500 стандартов' : 'Стартовый капитал')}
       ${row('Раса', d.race)}

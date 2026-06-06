@@ -8,6 +8,7 @@ const GB_SECTIONS = [
   { id: 'gb-doctrine',  icon: '⚑', label: 'Доктрина: все бонусы' },
   { id: 'gb-economy',   icon: '◇', label: 'Экономика и доход' },
   { id: 'gb-colonies',  icon: '◉', label: 'Колонии и планеты' },
+  { id: 'gb-capitals',  icon: '🪐', label: 'Планеты-столицы' },
   { id: 'gb-resources', icon: '◆', label: 'Ресурсы и добыча' },
   { id: 'gb-buildings', icon: '⌂', label: 'Здания' },
   { id: 'gb-research',  icon: '✦', label: 'Технологии' },
@@ -91,6 +92,34 @@ const GB_DOC_CIV = [
   ['Frontier — молодая колония',  { colonize: -0.25, claim_cd: -0.25, gc: -0.15 }, 'Дешевле расширяться, но беднее старт. Бесплатно: Центр спецслужб'],
   ['Colony — устоявшаяся держава', { gc: 0.20, mine: 0.10, claim_cost: 0.15, build: -0.10 }, 'Сильная экономика, дороже захват систем. Бесплатно: Гражданская фабрика'],
 ];
+// Порядок отображения планет-столиц в гайдбуке (данные — из EC_CAPITAL в economy.js).
+const GB_CAP_ORDER = ['terrestrial', 'oceanic', 'desert', 'volcanic', 'lava', 'cryo', 'micro', 'exotic'];
+// Какие расы получают этот родной мир (из EC_HAB в economy.js).
+function gbCapRaces(env) {
+  if (typeof EC_HAB === 'undefined') return '';
+  return Object.keys(EC_HAB).filter(r => (EC_HAB[r] || []).includes(env)).join(', ');
+}
+function gbCapRows() {
+  if (typeof EC_CAPITAL === 'undefined') return '';
+  const lbl = (typeof EC_GRP_LABEL !== 'undefined') ? EC_GRP_LABEL : {};
+  return GB_CAP_ORDER.filter(env => EC_CAPITAL[env]).map(env => {
+    const c = EC_CAPITAL[env];
+    const races = gbCapRaces(env);
+    return `<div class="gb-cap-row">
+      <div class="gb-cap-hd">
+        <span class="gb-cap-title">🪐 ${c.title}</span>
+        <span class="gb-cap-type">${lbl[env] || env}</span>
+      </div>
+      <div class="gb-cap-flavor">${c.flavor}</div>
+      <div class="gb-cap-stats">
+        <span class="gb-cap-stat">⬚ Ячейки: <b>${c.cells}</b></span>
+        <span class="gb-cap-stat">◆ Стартовые ресурсы: <b>${c.res.join(', ')}</b></span>
+      </div>
+      <div class="gb-cap-chips">${gbChips(c.mods, null, null)}</div>
+      ${races ? `<div class="gb-cap-races">Родной мир для: ${races}</div>` : ''}
+    </div>`;
+  }).join('');
+}
 
 // Один чип модификатора
 function gbChip(field, val) {
@@ -348,6 +377,26 @@ function renderGuidebook() {
 
       <h3 class="gb-h3">Ячейки и расширение</h3>
       <p>Каждая планета имеет <b>ячейки</b> — места под здания (по умолчанию 6, одно здание = одна ячейка). Чтобы получить больше места, используйте <b>«Обустройство среды»</b>: 1 000 ГС, +3 ячейки, 1 день работы.</p>
+    </section>
+
+    <!-- ПЛАНЕТЫ-СТОЛИЦЫ -->
+    <section id="gb-capitals" class="gb-section">
+      <h2 class="gb-h2"><span class="gb-h2-icon">🪐</span>Планеты-столицы</h2>
+      <p><strong>Столица</strong> — это родной мир, с которого начинает каждая фракция. Её тип определяется <strong>расой</strong>: при создании фракции вы выбираете родной мир из доступных вашей расе (см. <a class="gb-link" onclick="gbScrollTo('gb-wizard')">«Создание фракции»</a>). Столица крупнее обычной колонии, сразу даёт стартовые ресурсы и <b>лёгкий пассивный бонус</b> — «характер» вашего родного мира.</p>
+
+      <div class="gb-note gb-note-info">
+        <span class="gb-note-i">i</span>
+        <div>Бонус столицы намеренно <b>мягкий</b> — он складывается с доктриной, но не заменяет её. Это вкус родного мира, а не основной источник силы. Столицу нельзя потерять при захвате системы — её можно лишь перенести в «Кабинете».</div>
+      </div>
+
+      <div class="gb-legend">
+        <span class="gb-chip gb-chip-good">зелёный — выгодно вам</span>
+        <span class="gb-chip gb-chip-bad">красный — штраф</span>
+      </div>
+
+      <div class="gb-cap-list">${gbCapRows()}</div>
+
+      <p class="gb-cap-foot">Стартовые ресурсы столицы — обычные (common): их добывают <a class="gb-link" onclick="gbScrollTo('gb-buildings')">Добывающие заводы</a>. Более редкие месторождения ищите при <a class="gb-link" onclick="gbScrollTo('gb-colonies')">колонизации</a> других планет.</p>
     </section>
 
     <!-- РЕСУРСЫ -->

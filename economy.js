@@ -198,6 +198,24 @@ const EC_MODS = {
     'colony':   { gc: 0.20, mine: 0.10, claim_cost: 0.15, build: -0.10 },
   },
 };
+
+// ── ПЛАНЕТЫ-СТОЛИЦЫ: характеристики и лёгкий бонус родного мира ──
+// Ключ = среда (env, EC_HAB). Бонусы намеренно мягкие — это «характер» родного
+// мира, а не основной источник силы фракции. cells = ячейки застройки столицы,
+// res = базовый профиль ресурсов (common), mods = лёгкий пассивный бонус,
+// title/flavor — для регистрации и гайдбука. Зеркало: _faction_mods (capital_env)
+// и _basic_capital_res в SQL.
+const EC_CAPITAL = {
+  terrestrial: { title: 'Колыбель жизни',     cells: 9, res: ['Железо', 'Силикаты', 'Углерод'], mods: { gc: 0.05 },        flavor: 'Сбалансированный, обжитой мир. Стабильная биосфера даёт лёгкий бонус к доходу.' },
+  oceanic:     { title: 'Мир океанов',        cells: 9, res: ['Силикаты', 'Лёд'],               mods: { colonize: -0.10 }, flavor: 'Сплошной океан и развитая логистика по воде удешевляют расселение новых колоний.' },
+  desert:      { title: 'Выжженные пустоши',  cells: 8, res: ['Железо', 'Силикаты', 'Сера'],    mods: { mine: 0.10 },      flavor: 'Минералы лежат прямо на поверхности — выше скорость добычи ресурсов.' },
+  volcanic:    { title: 'Геотермальный мир',  cells: 8, res: ['Железо', 'Сера'],                mods: { mine: 0.10 },      flavor: 'Вулканическая активность питает шахты дешёвой энергией — выше добыча.' },
+  lava:        { title: 'Расплавленные недра',cells: 7, res: ['Железо', 'Сера'],                mods: { mine: 0.12 },      flavor: 'Море магмы богато тяжёлыми металлами. Суровый мир, но максимум добычи.' },
+  cryo:        { title: 'Ледяной мир',        cells: 8, res: ['Лёд', 'Железо', 'Силикаты'],     mods: { research: -0.08 }, flavor: 'Криолаборатории и сверхпроводники в вечном холоде удешевляют исследования.' },
+  micro:       { title: 'Малое тело',         cells: 7, res: ['Железо', 'Силикаты'],            mods: { claim_cd: -0.12 }, flavor: 'Низкая гравитация удешевляет запуск кораблей — экспансия идёт быстрее.' },
+  exotic:      { title: 'Аномальный мир',     cells: 8, res: ['Углерод', 'Силикаты'],           mods: { sci_flat: 1 },     flavor: 'Странная физика родного мира даёт учёным стабильный приток научных данных.' },
+};
+function ecCapital(env) { return EC_CAPITAL[env] || EC_CAPITAL.terrestrial; }
 // Процентные поля (множители 1+sum) и плоские поля (целые суммы).
 const EC_MOD_PCT = ['gc', 'mine', 'build', 'colonize', 'claim_cost', 'claim_cd', 'research'];
 const EC_MOD_FLAT = ['sci_flat', 'agents_flat'];
@@ -233,6 +251,7 @@ function ecFactionMods(app) {
   add(EC_MODS.gov[app.gov]); add(EC_MODS.regime[app.regime]);
   add(EC_MODS.ideology[app.ideology]); add(EC_MODS.race[app.race]);
   add(EC_MODS.civ[app.civ_type]);
+  add((EC_CAPITAL[app.capital_env] || {}).mods);   // лёгкий бонус планеты-столицы
   const clamp = (v, lo) => Math.max(lo, 1 + v);
   return {
     gc: clamp(f.gc, 0.3), mine: clamp(f.mine, 0.3), build: clamp(f.build, 0.3),
@@ -629,7 +648,7 @@ function ecTabNews() {
 
 // Чипы эффектов ОДНОГО выбора в анкете (cat: gov|regime|ideology|race|civ; value: значение).
 function ecChoiceChips(cat, value) {
-  const m = (EC_MODS[cat] || {})[value];
+  const m = (cat === 'capital') ? (EC_CAPITAL[value] || {}).mods : (EC_MODS[cat] || {})[value];
   if (!m) return '';
   const PCT = { gc: 'ГС-доход', mine: 'Добыча' };
   const COST = { build: 'Постройки/слоты', colonize: 'Колонизация планет', claim_cost: 'Колонизация систем: цена', research: 'Исследования' };

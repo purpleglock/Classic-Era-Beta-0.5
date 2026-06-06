@@ -158,6 +158,17 @@
 .fr-cap-chip:hover{border-color:var(--w3);color:var(--t1)}
 .fr-cap-chip.on{background:var(--gdb);border-color:var(--gd);color:var(--gdl)}
 
+/* карточка характеристик планеты-столицы */
+.fr-cap-card{margin-top:12px;background:var(--b1);border:1px solid var(--w2);border-left:2px solid var(--gd);border-radius:8px;padding:13px 15px}
+.fr-cap-card-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:7px}
+.fr-cap-card-title{font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--gdl);letter-spacing:.3px}
+.fr-cap-card-type{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--t4)}
+.fr-cap-card-flavor{font-size:12.5px;line-height:1.55;color:var(--t2);margin-bottom:10px}
+.fr-cap-card-stats{display:flex;flex-wrap:wrap;gap:8px 18px;margin-bottom:10px}
+.fr-cap-stat{font-size:12px;color:var(--t3)}
+.fr-cap-stat b{color:var(--t1);font-weight:600}
+.fr-cap-card-bonus .ec-doc-chips-inline{margin:0}
+
 /* модерация в #ap */
 .fr-app{background:var(--b3);border:1px solid var(--w2);border-radius:10px;padding:10px 12px;margin-bottom:8px}
 .fr-app-hd{display:flex;align-items:center;gap:8px}

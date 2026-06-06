@@ -319,7 +319,7 @@ create or replace function public._ensure_capital(p_fid text)
 returns uuid language plpgsql security definer set search_path = public as $$
 declare
   app public.faction_applications;
-  env text; ptype text; cap_name text; cap_id uuid; sys_id text; pres jsonb;
+  env text; ptype text; cap_name text; cap_id uuid; sys_id text; pres jsonb; cap_cells int;
 begin
   select * into app from public.faction_applications
     where faction_id = p_fid and status = 'approved'
@@ -339,6 +339,12 @@ begin
 
   env   := coalesce(nullif(app.capital_env, ''), (public._race_native_envs(app.race))[1], 'terrestrial');
   ptype := public._env_label(env);
+  -- размер столицы зависит от типа родного мира (зеркало EC_CAPITAL.cells)
+  cap_cells := case env
+    when 'terrestrial' then 9 when 'oceanic' then 9
+    when 'desert' then 8 when 'volcanic' then 8 when 'cryo' then 8 when 'exotic' then 8
+    when 'lava' then 7 when 'micro' then 7
+    else 9 end;
 
   -- генерируем планету на карте, если её ещё нет в столичной системе
   if not exists (
@@ -347,7 +353,7 @@ begin
   ) then
     update public.map_systems
       set planets = coalesce(planets, '[]'::jsonb) || jsonb_build_object(
-            'name', cap_name, 'type', ptype, 'slotsP', 9,
+            'name', cap_name, 'type', ptype, 'slotsP', cap_cells,
             'resources', public._basic_capital_res(ptype))
       where id = sys_id;
   end if;
@@ -359,7 +365,7 @@ begin
   -- столичная колония (создаём только для новой фракции)
   if cap_id is null then
     insert into public.colonies (faction_id, owner_id, system_id, planet_name, planet_type, cells, is_capital, resources)
-      values (p_fid, app.owner_id, sys_id, cap_name, ptype, 9, true, coalesce(pres, '[]'::jsonb))
+      values (p_fid, app.owner_id, sys_id, cap_name, ptype, cap_cells, true, coalesce(pres, '[]'::jsonb))
       on conflict (system_id, planet_name) do nothing
       returning id into cap_id;
     if cap_id is null then
@@ -1318,6 +1324,19 @@ begin
   case a.civ_type
     when 'frontier' then col:=col-0.25; cd:=cd-0.25; gc:=gc-0.15;
     when 'colony'   then gc:=gc+0.20; mine:=mine+0.10; cc:=cc+0.15; bld:=bld-0.10;
+    else null;
+  end case;
+
+  -- Лёгкий бонус планеты-столицы (зеркало EC_CAPITAL в economy.js).
+  case a.capital_env
+    when 'terrestrial' then gc:=gc+0.05;
+    when 'oceanic'     then col:=col-0.10;
+    when 'desert'      then mine:=mine+0.10;
+    when 'volcanic'    then mine:=mine+0.10;
+    when 'lava'        then mine:=mine+0.12;
+    when 'cryo'        then rsch:=rsch-0.08;
+    when 'micro'       then cd:=cd-0.12;
+    when 'exotic'      then scf:=scf+1;
     else null;
   end case;
 
