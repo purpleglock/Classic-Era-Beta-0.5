@@ -28,7 +28,11 @@
       "Bash(node -e ' *)",
       "Bash(node _ban_patch.cjs)",
       "Bash(grep -nB1 \"current_user_banned\\(\\) then raise exception 'forbidden: account banned'\" _economy_setup.sql)",
-      "Bash(grep -o '\\\\$\\\\$' _economy_setup.sql)"
+      "Bash(grep -o '\\\\$\\\\$' _economy_setup.sql)",
+      "Bash(node --check faction_news.js)",
+      "Bash(ls .claude)",
+      "Bash(cat .claude/launch.json)",
+      "Bash(node -e \"const fs=require\\('fs'\\);let s=fs.readFileSync\\('index.html','utf8'\\);s=s.split\\('v=20260604c'\\).join\\('v=20260606a'\\);fs.writeFileSync\\('index.html',s\\);console.log\\('replaced; now', \\(s.match\\(/v=20260606a/g\\)||[]\\).length, 'occurrences'\\);\")"
     ]
   }
 }

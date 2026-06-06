@@ -68,7 +68,13 @@ async function renderHome() {
 
   const sectionsHtml = strips ? `<section class="home-block"><div class="hb-head"><span class="hb-tag">${T('sections')}</span></div><div class="sec-grid">${strips}</div></section>` : `<p class="hp-empty-note">${user?'Создайте разделы и статьи.':'Войдите для редактирования.'}</p>`;
 
-  setPg(`${heroHtml}${customHtml}${sectionsHtml}${clRows ? `<section class="home-block"><div class="hb-head"><span class="hb-tag">${T('recentChanges')}</span></div><div class="cl-list">${clRows}</div></section>` : ''}${contribsHtml}`);
+  // ── Вестник фракций: одобренные новости ──
+  let newsHtml = '';
+  if (typeof fnLoadApproved === 'function') {
+    try { await fnLoadApproved(); newsHtml = fnHomeBlockHtml(); } catch (e) { newsHtml = ''; }
+  }
+
+  setPg(`${heroHtml}${customHtml}${newsHtml}${sectionsHtml}${clRows ? `<section class="home-block"><div class="hb-head"><span class="hb-tag">${T('recentChanges')}</span></div><div class="cl-list">${clRows}</div></section>` : ''}${contribsHtml}`);
 
   // Клик по обложке открывает изображение в полном размере
   requestAnimationFrame(() => {

@@ -588,12 +588,13 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['diplomacy', '🤝', 'Дипломатия'], ['intel', '🕵', 'Разведка']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['diplomacy', '🤝', 'Дипломатия'], ['intel', '🕵', 'Разведка'], ['news', '📰', 'Новости']];
   const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
     : EC.tab === 'milbuild' ? ecTabMilBuild()
     : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
-    : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'intel' ? ecTabIntel() : ecTabColonies();
+    : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'intel' ? ecTabIntel()
+    : EC.tab === 'news' ? ecTabNews() : ecTabColonies();
   setPg(`<div class="ec-wrap">
     <div class="ec-head">
       <div class="ec-eyebrow">◈ КАБИНЕТ ИГРОКА</div>
@@ -608,8 +609,23 @@ function ecPaintCabinet() {
   </div>`);
   if (EC.tab === 'diplomacy') { try { ecTradeCalc(); } catch (e) {} } // живой расчёт формы каравана
   if (EC.tab === 'intel') { try { ecSpyCalcLive(); } catch (e) {} }   // живой расчёт операции
+  // Новости: контейнер уже в DOM — дозаполняем асинхронно (как в faction_news.js)
+  if (EC.tab === 'news') {
+    const mount = document.getElementById('ec-news-mount');
+    if (mount && typeof fnRenderNewsTab === 'function') { fnRenderNewsTab(mount); }
+  }
 }
 function ecSetTab(t) { EC.tab = t; ecPaintCabinet(); }
+
+// Вкладка «Новости»: статический каркас, тело подгружает faction_news.js.
+function ecTabNews() {
+  return ecIntro('📰', 'Новости фракции',
+    'Пишите новости от лица своего государства. После проверки администрацией они выходят на главной в «Вестнике фракций».',
+    ['Кнопка <b>«Написать новость»</b> — ниже.',
+     'Новость уходит на <b>модерацию</b>, затем публикуется или отклоняется.',
+     'Опубликованные новости видны всем на главной странице.'])
+    + `<div id="ec-news-mount"><div class="ec-empty">Загрузка…</div></div>`;
+}
 
 // Чипы эффектов ОДНОГО выбора в анкете (cat: gov|regime|ideology|race|civ; value: значение).
 function ecChoiceChips(cat, value) {

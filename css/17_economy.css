@@ -186,22 +186,25 @@
 
 /* ── Вкладки кабинета ── */
 /* ── Вкладки (прокручиваются по горизонтали на телефоне) ── */
+/* Таб-бар: переносится по строкам (chip-стиль) — при любом числе вкладок
+   и любой ширине всё видно, ничего не обрезается. */
 .ec-tabs {
-  display: flex; gap: 4px; border-bottom: 1px solid var(--w2); margin: 18px 0 16px; padding-bottom: 1px;
-  overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap;
-  scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity;
+  display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0 16px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--w2);
 }
-.ec-tabs::-webkit-scrollbar { display: none; }
 .ec-tab {
-  flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start;
+  flex: 0 0 auto; white-space: nowrap;
   display: inline-flex; align-items: center; gap: 6px;
-  background: none; border: 0; border-bottom: 2px solid transparent;
-  color: var(--t3); font-family: var(--font-display); font-weight: 600; font-size: 14px;
-  padding: 8px 14px; cursor: pointer; margin-bottom: -1px; transition: color .15s, border-color .15s;
+  background: var(--b2); border: 1px solid var(--w2); border-radius: 999px;
+  color: var(--t3); font-family: var(--font-display); font-weight: 600; font-size: 13.5px;
+  padding: 7px 14px; cursor: pointer; transition: color .15s, border-color .15s, background .15s;
 }
 .ec-tab-ic { font-size: 13px; opacity: .8; }
-.ec-tab:hover { color: var(--t1); }
-.ec-tab.on { color: var(--gd); border-bottom-color: var(--gd); }
+.ec-tab:hover { color: var(--t1); border-color: var(--w3, #3a4654); }
+.ec-tab.on {
+  color: var(--gdl, #5fb0e6); border-color: var(--gd);
+  background: color-mix(in srgb, var(--gd) 16%, transparent);
+}
 .ec-tab.on .ec-tab-ic { opacity: 1; }
 
 /* ── Обзор ── */
@@ -498,8 +501,8 @@
   .ec-res { padding: 10px 12px; }
   .ec-res-v { font-size: 16px; }
   .ec-res-inc { grid-column: 1 / -1; }
-  .ec-tabs { margin: 14px 0; gap: 2px; }
-  .ec-tab { padding: 7px 11px; font-size: 13px; }
+  .ec-tabs { margin: 14px 0; gap: 5px; padding-bottom: 10px; }
+  .ec-tab { padding: 6px 11px; font-size: 12.5px; }
   .ec-ov-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .ec-ov-card { padding: 12px 8px; }
   .ec-ov-v { font-size: 20px; }
@@ -509,5 +512,5 @@
 @media (max-width: 400px) {
   .ec-ov-grid { gap: 6px; }
   .ec-ov-v { font-size: 18px; }
-  /* таб-бар прокручивается по горизонтали — подписи остаются видны */
+  /* таб-бар переносится по строкам — все подписи видны */
 }
