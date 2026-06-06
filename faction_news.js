@@ -63,44 +63,109 @@ function fnStardate(dateStr) {
 // ── Главная: загрузка и блок новостей ───────────────────────
 async function fnLoadApproved() {
   try {
-    const rows = await dbGet('faction_news',
-      'status=eq.approved&order=published_at.desc.nullslast,created_at.desc&limit=12') || [];
-    FN.approved = rows;
-    FN.byId = new Map(rows.map(n => [n.id, n]));
-  } catch (e) { FN.approved = []; }
+    // Новости игроков (owner_id есть) — в «Вестник». Системные события (owner_id null:
+    // слухи + сводки) — в отдельную «Ленту сектора».
+    const [news, events, heralds] = await Promise.all([
+      dbGet('faction_news', 'status=eq.approved&owner_id=not.is.null&order=published_at.desc.nullslast,created_at.desc&limit=12').catch(() => []),
+      dbGet('faction_news', 'status=eq.approved&owner_id=is.null&order=created_at.desc&limit=10').catch(() => []),
+      dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,herald_url').catch(() => []),
+    ]);
+    FN.approved = news || [];
+    FN.events = events || [];
+    FN.factionList = (heralds || []);
+    FN.heralds = new Map(FN.factionList.filter(h => h.herald_url).map(h => [h.faction_id, h.herald_url]));
+    FN.byId = new Map([...FN.approved, ...FN.events].map(n => [n.id, n]));
+  } catch (e) { FN.approved = []; FN.events = []; }
   return FN.approved;
 }
 
-// HTML-блок для главной — «входящие передачи фракций» в sci-fi стиле.
+// Тип записи: 'news' (игрок), 'bulletin' (сводка сектора), 'rumor' (слух).
+function fnKind(n) { if (n.owner_id) return 'news'; return n.kind === 'bulletin' ? 'bulletin' : 'rumor'; }
+
+// Фракция, которой касается событие — по имени в заголовке (для фон-герба).
+function fnEventFaction(n) {
+  if (!FN.factionList || !FN.factionList.length) return null;
+  const hay = ((n.title || '') + ' ' + (n.faction_name || ''));
+  let best = null;
+  FN.factionList.forEach(f => {
+    if (f.name && f.herald_url && hay.indexOf(f.name) !== -1 && (!best || f.name.length > best.name.length)) best = f;
+  });
+  return best;
+}
+
+// HTML-блок для главной: «Вестник фракций» (новости игроков) + «Лента сектора» (события).
 function fnHomeBlockHtml() {
   const list = FN.approved || [];
-  if (!list.length) return '';
   const card = (n, lead) => {
-    const accent = n.faction_color || 'var(--gd)';
+    const kind = fnKind(n);               // news | rumor | bulletin
+    const rumor = kind === 'rumor', bulletin = kind === 'bulletin';
+    // Цвет фракции игрока НЕ используем (бывает кислотным) — единый тон темы.
+    // Слухи/сводки красим в свой контролируемый цвет (серый/циан).
+    const accent = (kind === 'news') ? 'var(--gd)' : (n.faction_color || 'var(--gd)');
     const cardCover = n.image_url
       ? `<div class="fn-card-cov"><img src="${esc(n.image_url)}" loading="lazy" alt=""></div>` : '';
-    return `<article class="fn-card${lead ? ' fn-card-lead' : ''}" onclick="fnOpenArticle('${esc(n.id)}')" style="--fn-accent:${esc(accent)}">
+    const herald = (kind === 'news' && FN.heralds) ? FN.heralds.get(n.faction_id) : '';
+    const flag = herald ? `<img class="fn-card-flag" src="${esc(herald)}" alt="" onerror="this.style.display='none'">` : '<span class="fn-dot"></span>';
+    const kicker = bulletin
+      ? `<span class="fn-card-live fn-card-bulletin">◈ СВОДКА</span><span class="fn-card-fac">${esc((n.faction_name || 'СЕКТОР').toUpperCase())}</span>`
+      : rumor
+      ? `<span class="fn-card-live fn-card-rumor">📡 СЛУХ</span><span class="fn-card-fac">${esc((n.faction_name || 'АНОНИМНО').toUpperCase())}</span>`
+      : `<span class="fn-card-live">ПЕРЕДАЧА</span><span class="fn-card-fac">${flag}${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>`;
+    const readmore = bulletin ? 'СВОДКА ▸' : rumor ? 'ПОДРОБНОСТИ ▸' : 'ДЕКОДИРОВАТЬ ▸';
+    return `<article class="fn-card${lead ? ' fn-card-lead' : ''}${rumor ? ' fn-card-is-rumor' : ''}${bulletin ? ' fn-card-is-bulletin' : ''}" onclick="fnOpenArticle('${esc(n.id)}')" style="--fn-accent:${esc(accent)}">
       ${cardCover}
       <div class="fn-card-body">
-        <div class="fn-card-kicker">
-          <span class="fn-card-live">ПЕРЕДАЧА</span>
-          <span class="fn-card-fac"><span class="fn-dot"></span>${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>
-        </div>
+        <div class="fn-card-kicker">${kicker}</div>
         <h3 class="fn-card-title">${esc(n.title || 'Без заголовка')}</h3>
         <p class="fn-card-excerpt">${esc(fnExcerpt(n))}</p>
-        <div class="fn-card-foot"><span class="fn-card-date">${esc(fnStardate(n.published_at || n.created_at))}</span><span class="fn-readmore">ДЕКОДИРОВАТЬ ▸</span></div>
+        <div class="fn-card-foot"><span class="fn-card-date">${esc(fnStardate(n.published_at || n.created_at))}</span><span class="fn-readmore">${readmore}</span></div>
       </div>
     </article>`;
   };
-  const [lead, ...rest] = list;
-  const grid = rest.slice(0, 6).map(n => card(n, false)).join('');
-  return `<section class="home-block fn-home">
-    <div class="hb-head"><span class="hb-tag">ВЕСТНИК ФРАКЦИЙ</span><span class="fn-home-sub">// ВХОДЯЩИЕ ПЕРЕДАЧИ · ${list.length}</span></div>
-    <div class="fn-grid">
-      ${card(lead, true)}
-      ${grid ? `<div class="fn-grid-rest">${grid}</div>` : ''}
-    </div>
+  let newsSection = '';
+  if (list.length) {
+    const [lead, ...rest] = list;
+    const grid = rest.slice(0, 6).map(n => card(n, false)).join('');
+    newsSection = `<section class="home-block fn-home">
+      <div class="hb-head"><span class="hb-tag">ВЕСТНИК ФРАКЦИЙ</span><span class="fn-home-sub">// ВХОДЯЩИЕ ПЕРЕДАЧИ · ${list.length}</span></div>
+      <div class="fn-grid">
+        ${card(lead, true)}
+        ${grid ? `<div class="fn-grid-rest">${grid}</div>` : ''}
+      </div>
+    </section>`;
+  }
+  return newsSection + fnEventsFeedHtml();
+}
+
+// ── Лента сектора: компактная лента системных событий (слухи + сводки) ──
+function fnFeedRow(n) {
+  const kind = fnKind(n);
+  const ic = kind === 'bulletin' ? '◈' : '📡';
+  return `<div class="fn-feed-row fn-fr-${kind}" onclick="fnOpenArticle('${esc(n.id)}')">
+    <span class="fn-fr-ic">${ic}</span>
+    <span class="fn-fr-title">${esc(n.title || '')}</span>
+    <span class="fn-fr-time">${esc(fnStardate(n.published_at || n.created_at))}</span>
+  </div>`;
+}
+function fnEventsFeedHtml() {
+  const ev = FN.events || [];
+  if (!ev.length) return '';
+  return `<section class="home-block fn-feed">
+    <div class="hb-head"><span class="hb-tag">ЛЕНТА СЕКТОРА</span><span class="fn-home-sub">// СИСТЕМНЫЕ СОБЫТИЯ · ${ev.length}</span></div>
+    <div class="fn-feed-list" id="fn-feed-list">${ev.slice(0, 10).map(fnFeedRow).join('')}</div>
   </section>`;
+}
+async function fnLoadMoreEvents() {
+  const off = (FN.events || []).length;
+  let more = [];
+  try { more = await dbGet('faction_news', `status=eq.approved&owner_id=is.null&order=created_at.desc&offset=${off}&limit=30`) || []; } catch (e) {}
+  if (more.length) {
+    FN.events = (FN.events || []).concat(more);
+    more.forEach(n => FN.byId.set(n.id, n));
+    const list = document.getElementById('fn-feed-list');
+    if (list) list.insertAdjacentHTML('beforeend', more.map(fnFeedRow).join(''));
+  }
+  if (more.length < 30) { const b = document.getElementById('fn-feed-more'); if (b) b.style.display = 'none'; }
 }
 
 // ── Полноэкранная статья (sci-fi «терминал-депеша») ─────────
@@ -183,6 +248,8 @@ FN.reactState = FN.reactState || {};
 
 // HTML блока реакций для статьи n (исходя из myFac и текущего состояния).
 function fnReactionBlockHtml(n, myFac) {
+  // слухи (нет фракции-автора) — без реакций
+  if (!n.faction_id || !n.owner_id) return '';
   // не залогинен или нет одобренной фракции
   if (!myFac || !myFac.faction_id) {
     return `<div class="fn-react fn-react-locked">
@@ -249,24 +316,32 @@ async function fnReact(newsId, stance) {
 function fnOpenArticle(id) {
   const n = FN.byId.get(id);
   if (!n) { toast('Новость не найдена', 'err'); return; }
-  const accent = n.faction_color || 'var(--gd)';
+  // Цвет фракции игрока не используем (бывает кислотным); слухи/сводки — свой цвет.
+  const accent = n.owner_id ? 'var(--gd)' : (n.faction_color || 'var(--gd)');
   const modal = document.getElementById('fn-article') || (() => {
     const m = document.createElement('div'); m.id = 'fn-article'; m.className = 'fn-art-ov';
     m.onclick = e => { if (e.target === m) fnCloseArticle(); };
     document.body.appendChild(m); return m;
   })();
+  const kind = fnKind(n);               // news | rumor | bulletin
   const coverHtml = n.image_url
     ? `<div class="fn-art-cov"><img src="${esc(n.image_url)}" alt="" loading="lazy"></div>` : '';
+  // События (слухи/сводки) без обложки — на фон герб фракции, которой касается ситуация
+  const evFac = (!n.owner_id && !n.image_url) ? fnEventFaction(n) : null;
+  const bgFlag = evFac ? `<div class="fn-art-bgflag" style="background-image:url('${esc(evFac.herald_url)}')"></div>` : '';
+  const barL = kind === 'bulletin' ? '◈ СВОДКА СЕКТОРА' : kind === 'rumor' ? '📡 ПЕРЕХВАЧЕННЫЙ СЛУХ' : '◈ FACTION DISPATCH NETWORK';
+  const barR = kind === 'bulletin' ? 'ОФИЦИАЛЬНО' : kind === 'rumor' ? 'НЕПОДТВЕРЖДЕНО' : 'ВХОДЯЩАЯ ПЕРЕДАЧА';
   modal.innerHTML = `<div class="fn-art" style="--fn-accent:${esc(accent)}">
+    ${bgFlag}
     <div class="fn-art-bar">
-      <span class="fn-art-bar-l">◈ FACTION DISPATCH NETWORK</span>
-      <span class="fn-art-bar-r">ВХОДЯЩАЯ ПЕРЕДАЧА</span>
+      <span class="fn-art-bar-l">${barL}</span>
+      <span class="fn-art-bar-r">${barR}</span>
     </div>
     <button class="fn-art-close" onclick="fnCloseArticle()">✕</button>
     ${coverHtml}
     <div class="fn-art-inner">
       <div class="fn-art-meta">
-        <span class="fn-art-fac"><span class="fn-dot"></span>${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>
+        <span class="fn-art-fac">${(n.owner_id && FN.heralds && FN.heralds.get(n.faction_id)) ? `<img class="fn-art-flag" src="${esc(FN.heralds.get(n.faction_id))}" alt="" onerror="this.style.display='none'">` : '<span class="fn-dot"></span>'}${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>
         <span class="fn-art-date">${esc(fnStardate(n.published_at || n.created_at))}</span>
       </div>
       <h1 class="fn-art-title">${esc(n.title || 'Без заголовка')}</h1>

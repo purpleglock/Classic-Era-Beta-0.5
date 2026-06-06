@@ -179,38 +179,118 @@
 }
 .fn-art-img:hover img { filter: brightness(1) saturate(1); }
 
-/* ── Реакция государства (дипломатия) ── */
+/* ── Слухи о тайных операциях (авто, в стиле телеги) ── */
+.fn-card-rumor { color: var(--t3, #8aa0b0) !important; border-color: var(--w3, #3a4656) !important; background: transparent !important; }
+.fn-card-rumor::before { display: none !important; }
+.fn-card-is-rumor { opacity: .92; border-left-color: var(--t4, #6a7a88); }
+.fn-card-is-rumor .fn-card-title { font-style: italic; }
+
+/* ── Официальные сводки сектора (захват систем, новые фракции) ── */
+.fn-card-bulletin { color: var(--cy, #5fb0e6) !important;
+  border-color: color-mix(in srgb, var(--cy, #5fb0e6) 45%, transparent) !important;
+  background: color-mix(in srgb, var(--cy, #5fb0e6) 12%, transparent) !important; }
+.fn-card-is-bulletin { border-left-color: var(--cy, #5fb0e6); }
+
+/* ── Лента сектора: компактные строки системных событий ── */
+.fn-feed { margin-top: 18px; }
+.fn-feed-list { display: flex; flex-direction: column; border: 1px solid var(--w2, #2a3340); border-radius: 6px; overflow: hidden; }
+.fn-feed-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px;
+  border-bottom: 1px solid var(--w1, #1e2630); cursor: pointer; transition: background .15s; }
+.fn-feed-row:last-child { border-bottom: none; }
+.fn-feed-row:hover { background: var(--b3, #0f141b); }
+.fn-fr-ic { flex-shrink: 0; width: 18px; text-align: center; font-size: 13px; }
+.fn-fr-rumor .fn-fr-ic { color: var(--t3, #8aa0b0); }
+.fn-fr-bulletin .fn-fr-ic { color: var(--cy, #5fb0e6); }
+.fn-fr-title { flex: 1; min-width: 0; font-size: 13px; color: var(--t1, #e8edf2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fn-fr-rumor .fn-fr-title { color: var(--t2, #c0ccd6); font-style: italic; }
+.fn-fr-time { flex-shrink: 0; font-family: var(--fn-mono, 'JetBrains Mono', monospace); font-size: 9px; color: var(--t4, #6a7a88); letter-spacing: .06em; }
+.fn-feed-more { width: 100%; margin-top: 8px; padding: 9px; background: transparent;
+  border: 1px solid var(--w2, #2a3340); color: var(--t3, #8aa0b0); cursor: pointer; font-size: 12px;
+  font-family: var(--fn-mono, monospace); letter-spacing: .1em; transition: border-color .15s, color .15s; }
+.fn-feed-more:hover { border-color: var(--w3, #3a4656); color: var(--t1, #e8edf2); }
+
+/* ── Флаги/гербы фракций в новостях ── */
+/* Фон-герб фракции, которой касается событие (за текстом статьи) */
+.fn-art-bgflag {
+  position: absolute; inset: -8%; z-index: 0; pointer-events: none;
+  background-size: cover; background-repeat: no-repeat; background-position: center 32%;
+  opacity: .18; filter: blur(1.5px) saturate(.85) contrast(1);
+  -webkit-mask-image: radial-gradient(ellipse 72% 80% at 50% 36%, #000 0%, rgba(0,0,0,.65) 50%, transparent 80%);
+  mask-image: radial-gradient(ellipse 72% 80% at 50% 36%, #000 0%, rgba(0,0,0,.65) 50%, transparent 80%);
+}
+
+.fn-card-flag { width: 16px; height: 16px; object-fit: cover; flex-shrink: 0;
+  border: 1px solid var(--w3, #3a4656); border-radius: 2px; vertical-align: middle; margin-right: 1px; }
+.fn-art-flag { width: 22px; height: 22px; object-fit: cover; flex-shrink: 0;
+  border: 1px solid var(--w3, #3a4656); border-radius: 2px; box-shadow: 0 0 8px rgba(0,0,0,.4); }
+
+/* ── Реакция государства (дипломатия) — игровой стиль ── */
 .fn-react {
-  margin-top: 26px; padding: 16px 18px;
-  border: 1px solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 28%, var(--w2, #2a3340));
-  border-left: 2px solid var(--fn-accent, #5fb0e6);
-  background: color-mix(in srgb, var(--fn-accent, #5fb0e6) 6%, var(--b2, #141a22));
+  position: relative; margin-top: 28px; padding: 16px 18px 14px; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 32%, var(--w2, #2a3340));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--fn-accent, #5fb0e6) 9%, var(--b2, #141a22)), var(--b2, #141a22));
+}
+/* уголок-засечка + скан-линии */
+.fn-react::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.014) 3px 4px);
+}
+.fn-react::after {
+  content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+  background: linear-gradient(180deg, var(--fn-accent, #5fb0e6), transparent);
 }
 .fn-react-hd {
-  font-family: var(--fn-mono, monospace); font-size: 10px; letter-spacing: .16em;
-  text-transform: uppercase; color: var(--fn-accent, #5fb0e6); margin-bottom: 12px;
+  position: relative; z-index: 1; display: flex; align-items: center; gap: 7px;
+  font-family: var(--fn-mono, monospace); font-size: 10px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--fn-accent, #5fb0e6); margin-bottom: 13px;
 }
-.fn-react-sub { color: var(--t4, #6a7a88); letter-spacing: .1em; }
-.fn-react-opts { display: flex; flex-direction: column; gap: 8px; }
+.fn-react-hd::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--fn-accent, #5fb0e6);
+  box-shadow: 0 0 7px var(--fn-accent, #5fb0e6); animation: fn-blink 1.8s infinite;
+}
+.fn-react-sub { color: var(--t4, #6a7a88); letter-spacing: .12em; font-size: 9px; }
+.fn-react-opts { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 9px; }
 .fn-react-opt {
-  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-  padding: 10px 12px; cursor: pointer;
-  background: var(--b3, #0f141b); border: 1px solid var(--w2, #2a3340); color: var(--t2, #c0ccd6);
+  position: relative; display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 11px 14px 11px 13px; cursor: pointer; overflow: hidden;
+  background: var(--b3, #0f141b); border: 1px solid var(--w2, #2a3340);
+  border-left: 3px solid var(--w3, #3a4656); color: var(--t2, #c0ccd6);
   font-family: var(--fn-read, sans-serif); font-size: 13.5px; line-height: 1.4;
-  transition: border-color .15s, background .15s, color .15s;
+  transition: border-color .15s, background .15s, color .15s, transform .12s;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px));
 }
-.fn-react-opt:hover { background: var(--b4, #161d27); color: var(--t1, #e8edf2); }
-.fn-react-ic { font-size: 15px; flex-shrink: 0; }
-.fn-react-opt.on { color: var(--t1, #e8edf2); }
-.fn-stance-approve.on    { border-color: var(--ok, #3ec96b);  background: color-mix(in srgb, var(--ok, #3ec96b) 14%, transparent); }
-.fn-stance-neutral.on    { border-color: var(--t3, #8aa0b0);  background: color-mix(in srgb, var(--t3, #8aa0b0) 14%, transparent); }
-.fn-stance-disapprove.on { border-color: var(--err, #ff6b6b); background: color-mix(in srgb, var(--err, #ff6b6b) 14%, transparent); }
+.fn-react-opt::after {
+  content: '▸'; margin-left: auto; color: var(--t4, #6a7a88); font-size: 12px;
+  opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s;
+}
+.fn-react-opt:hover { background: var(--b4, #161d27); color: var(--t1, #e8edf2); transform: translateX(2px); }
+.fn-react-opt:hover::after { opacity: 1; transform: translateX(0); }
+.fn-react-ic { font-size: 16px; flex-shrink: 0; }
+.fn-react-txt { flex: 1; }
+.fn-stance-approve    { border-left-color: color-mix(in srgb, var(--ok, #3ec96b) 55%, transparent); }
+.fn-stance-neutral    { border-left-color: color-mix(in srgb, var(--t3, #8aa0b0) 55%, transparent); }
+.fn-stance-disapprove { border-left-color: color-mix(in srgb, var(--err, #ff6b6b) 55%, transparent); }
+.fn-react-opt.on { color: var(--t1, #e8edf2); font-weight: 500; }
+.fn-react-opt.on::after { content: '✓'; opacity: 1; transform: none; font-weight: 700; }
+.fn-stance-approve.on    { border-color: var(--ok, #3ec96b);  border-left-width: 3px; background: color-mix(in srgb, var(--ok, #3ec96b) 16%, transparent); box-shadow: inset 0 0 22px -8px var(--ok, #3ec96b); }
+.fn-stance-approve.on::after    { color: var(--ok, #3ec96b); }
+.fn-stance-neutral.on    { border-color: var(--t3, #8aa0b0);  background: color-mix(in srgb, var(--t3, #8aa0b0) 16%, transparent); }
+.fn-stance-neutral.on::after    { color: var(--t2, #c0ccd6); }
+.fn-stance-disapprove.on { border-color: var(--err, #ff6b6b); background: color-mix(in srgb, var(--err, #ff6b6b) 16%, transparent); box-shadow: inset 0 0 22px -8px var(--err, #ff6b6b); }
+.fn-stance-disapprove.on::after { color: var(--err, #ff6b6b); }
+
+/* статус отношения — как «дип. индикатор» */
 .fn-react-rel {
-  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--w2, #2a3340);
-  font-size: 12.5px; color: var(--t3, #8aa0b0);
+  position: relative; z-index: 1; margin-top: 13px; padding: 9px 12px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--b1, #0d1117); border: 1px solid var(--w2, #2a3340);
+  font-family: var(--fn-mono, monospace); font-size: 11px; letter-spacing: .04em; color: var(--t4, #6a7a88);
 }
-.fn-react-rel b { color: var(--t2, #c0ccd6); }
-.fn-react-locked .fn-react-note { font-size: 12.5px; color: var(--t3, #8aa0b0); line-height: 1.5; }
+.fn-react-rel b { color: var(--t2, #c0ccd6); font-weight: 600; letter-spacing: .08em; }
+.fn-react-locked { position: relative; }
+.fn-react-locked .fn-react-note { position: relative; z-index: 1; font-size: 12.5px; color: var(--t3, #8aa0b0); line-height: 1.5; }
 
 /* ── Кастом-опции реакций в композиторе ── */
 .fn-c-react-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
