@@ -636,6 +636,18 @@ function ecPaintCabinet() {
   </div>`);
   if (EC.tab === 'diplomacy') { try { ecTradeCalc(); } catch (e) {} } // живой расчёт формы каравана
   if (EC.tab === 'intel') { try { ecSpyCalcLive(); } catch (e) {} }   // живой расчёт операции
+  if (EC.tab === 'research') {
+    const sc = document.querySelector('.ec-tree-scroll');
+    if (sc && !sc._wheelBound) {
+      sc._wheelBound = true;
+      sc.addEventListener('wheel', e => { if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) { sc.scrollLeft += e.deltaY * 0.8; e.preventDefault(); } }, { passive: false });
+      let drag = null;
+      sc.addEventListener('mousedown', e => { if (e.button !== 0 || e.target.closest('button')) return; drag = { x: e.clientX, sl: sc.scrollLeft }; });
+      sc.addEventListener('mousemove', e => { if (!drag) return; const dx = e.clientX - drag.x; sc.scrollLeft = drag.sl - dx; });
+      sc.addEventListener('mouseup', () => { drag = null; });
+      sc.addEventListener('mouseleave', () => { drag = null; });
+    }
+  }
   // Новости: контейнер уже в DOM — дозаполняем асинхронно (как в faction_news.js)
   if (EC.tab === 'news') {
     const mount = document.getElementById('ec-news-mount');
@@ -1523,26 +1535,26 @@ const EC_RES_CATS = [
   ['politics', 'Политика', '🏛'],
 ];
 // ── ПОЛИТИКА: пассивные бонусы на экономику/производство/экспансию ──
-// Названия — отсылки к реальным историческим решениям. bonus — модификаторы
-// доктрины (зеркало в SQL _faction_mods!). special:'claim2' — спец-механика.
+// Политические доктрины фракции. bonus — модификаторы (зеркало в SQL _faction_mods!).
+// special:'claim2' — спец-механика захвата двух систем за цикл.
 const EC_POLITICS = [
   // Экономика
-  { id: 'pol.new_deal',     branch: 'econ',   name: 'Новый курс',                cost: 30, prereq: [],                  bonus: { gc: 0.10 },
-    desc: 'Программа общественных работ (Ф. Рузвельт, 1933): госзаказ и стройки оживляют экономику. +10% дохода.' },
-  { id: 'pol.mercantile',   branch: 'econ',   name: 'Меркантилизм',              cost: 50, prereq: ['pol.new_deal'],    bonus: { gc: 0.10, build: -0.05 },
-    desc: 'Протекционизм и накопление капитала (XVII в.): положительный торговый баланс. +10% дохода, −5% к цене построек.' },
+  { id: 'pol.new_deal',     branch: 'econ',   name: 'Торговые концессии',        cost: 30, prereq: [],                  bonus: { gc: 0.10 },
+    desc: 'Открытие рынков и налоговые льготы для межзвёздных корпораций — приток капитала в казну. +10% дохода.' },
+  { id: 'pol.mercantile',   branch: 'econ',   name: 'Торговая монополия',        cost: 50, prereq: ['pol.new_deal'],    bonus: { gc: 0.10, build: -0.05 },
+    desc: 'Государственный контроль над межсистемными торговыми маршрутами. +10% дохода, −5% к цене построек.' },
   // Производство
-  { id: 'pol.five_year',    branch: 'prod',   name: 'Пятилетний план',           cost: 35, prereq: [],                  bonus: { build: -0.15 },
-    desc: 'Форсированная индустриализация (план 1928): ударные стройки и нормы выработки. −15% к цене построек.' },
-  { id: 'pol.goelro',       branch: 'prod',   name: 'Электрификация (ГОЭЛРО)',    cost: 55, prereq: ['pol.five_year'],   bonus: { mine: 0.15 },
-    desc: 'Единый план электрификации (ГОЭЛРО, 1920): энергия для заводов и шахт. +15% добычи.' },
+  { id: 'pol.five_year',    branch: 'prod',   name: 'Директивная экономика',     cost: 35, prereq: [],                  bonus: { build: -0.15 },
+    desc: 'Централизованное планирование производства: верфи и заводы работают по единому государственному плану. −15% к цене построек.' },
+  { id: 'pol.goelro',       branch: 'prod',   name: 'Энергетическая сеть',       cost: 55, prereq: ['pol.five_year'],   bonus: { mine: 0.15 },
+    desc: 'Единая энергосеть фракции: реакторные узлы повышают КПД добывающих комплексов. +15% добычи.' },
   // Экспансия → капстоун «Дом в небесах»
-  { id: 'pol.land_reform',  branch: 'expand', name: 'Земельная реформа',         cost: 30, prereq: [],                  bonus: { colonize: -0.15 },
-    desc: 'Наделение колонистов землёй (Гомстед-акт, 1862): дешевле осваивать новые миры. −15% к цене колоний.' },
-  { id: 'pol.total_mob',    branch: 'expand', name: 'Всеобщая мобилизация',      cost: 55, prereq: ['pol.land_reform'], bonus: { claim_cost: -0.20 },
-    desc: 'Мобилизационная экономика военного времени: ресурсы брошены на экспансию. −20% к цене захвата систем.' },
+  { id: 'pol.land_reform',  branch: 'expand', name: 'Колонизационный кодекс',    cost: 30, prereq: [],                  bonus: { colonize: -0.15 },
+    desc: 'Стандартизация прав поселенцев и льготная логистика для первых волн освоения. −15% к цене колоний.' },
+  { id: 'pol.total_mob',    branch: 'expand', name: 'Экспансионный мандат',      cost: 55, prereq: ['pol.land_reform'], bonus: { claim_cost: -0.20 },
+    desc: 'Доктрина приоритетной экспансии: флот и дипломатия брошены на расширение границ. −20% к цене захвата систем.' },
   { id: 'pol.house_heavens', branch: 'expand', name: 'Дом в небесах',            cost: 90, prereq: ['pol.total_mob'],   special: 'claim2',
-    desc: 'Великий колониальный проект: имперская служба освоения небес позволяет присоединять ДВЕ системы за один цикл вместо одной.' },
+    desc: 'Имперский колониальный проект: специальная служба освоения позволяет присоединять две системы за один цикл.' },
 ];
 // id → bonus (для ecFactionMods). Спец-механики (special) применяются отдельно.
 const EC_RESEARCH_BONUS = {};
@@ -1584,7 +1596,7 @@ function ecBuildResearch() {
       if (baseCls.includes(k)) return;
       const id = 'cls.' + cat + '.' + k;
       out.push({ id, cat, catLabel, branch: 'class', name: db.data[k].name,
-        desc: 'Открывает класс корпуса/шасси в конструкторе', cost: 5 * Math.pow(2, ci), prereq: prev ? [prev] : [] });
+        desc: 'Открывает класс в конструкторе и ветку технологий', cost: 5 * Math.pow(2, ci), prereq: prev ? [prev] : [] });
       prev = id; ci++;
     });
 
@@ -1594,16 +1606,18 @@ function ecBuildResearch() {
     Object.keys(db.weapons || {}).forEach(g => {
       if (baseW.includes(g)) return;
       out.push({ id: 'wpn.' + cat + '.' + g, cat, catLabel, branch: 'weapon', name: g,
-        desc: 'Открывает группу вооружения', cost: 12 + wi * 8, prereq: clsId(tree.weapon && tree.weapon[g]) });
+        desc: 'Разблокирует орудия «' + g + '» в конструкторе', cost: 12 + wi * 8, prereq: clsId(tree.weapon && tree.weapon[g]) });
       wi++;
     });
 
     // ── Компоненты (ветви) ──
-    const comps = [['armor', 'броня', 14], ['shield', 'щиты', 16], ['engine', 'двигатели', 10]];
-    if (hasReactor) comps.unshift(['reactor', 'реакторы', 16]);
-    comps.forEach(([t, lbl, cost]) => {
-      out.push({ id: 'comp.' + cat + '.' + t, cat, catLabel, branch: t, name: 'Продвинутые ' + lbl,
-        desc: 'Открывает улучшенные ' + lbl, cost, prereq: clsId(tree.comp && tree.comp[t]) });
+    const COMP_DESC = { armor: 'Модули усиленной брони — повышают выживаемость в бою', shield: 'Щиты нового поколения: выше регенерация и ёмкость', engine: 'Продвинутые двигатели: скорость, тяга и манёвренность', reactor: 'Реакторы высокой мощности — энергия для тяжёлых систем' };
+    const comps = [['armor', 14], ['shield', 16], ['engine', 10]];
+    if (hasReactor) comps.unshift(['reactor', 16]);
+    const COMP_NAMES = { armor: 'Продвинутая броня', shield: 'Продвинутые щиты', engine: 'Продвинутые двигатели', reactor: 'Продвинутые реакторы' };
+    comps.forEach(([t, cost]) => {
+      out.push({ id: 'comp.' + cat + '.' + t, cat, catLabel, branch: t, name: COMP_NAMES[t],
+        desc: COMP_DESC[t], cost, prereq: clsId(tree.comp && tree.comp[t]) });
     });
 
     // ── Продвинутые типы корпусов (2-й/3-й вариант класса) ──
@@ -1613,7 +1627,7 @@ function ecBuildResearch() {
       // база-класс → корень ветки; иначе требует свой класс
       const pre = baseCls.includes(k) ? [] : ['cls.' + cat + '.' + k];
       out.push({ id: 'type.' + cat + '.' + k, cat, catLabel, branch: 'type', name: 'Спец-корпуса: ' + db.data[k].name,
-        desc: 'Открывает продвинутые специализации этого класса', cost: 10, prereq: pre });
+        desc: 'Спецкорпуса: уникальные роли и нестандартные компоновки', cost: 10, prereq: pre });
     });
 
     // ── Модули и системы (отдельная ветка-цепочка) ──
@@ -1621,16 +1635,16 @@ function ecBuildResearch() {
     Object.keys(db.modules || {}).forEach(g => {
       const id = 'mod.' + cat + '.' + g;
       out.push({ id, cat, catLabel, branch: 'module', name: g,
-        desc: 'Открывает группу модулей/систем в конструкторе', cost: 8 + mi * 5, prereq: prevMod ? [prevMod] : [] });
+        desc: 'Системы «' + g + '» — доступны в конструкторе', cost: 8 + mi * 5, prereq: prevMod ? [prevMod] : [] });
       prevMod = id; mi++;
     });
 
     // ── Ангары и авиакрылья (только флот) ──
     if (cat === 'ship') {
       out.push({ id: 'hangar.ship', cat, catLabel, branch: 'hangar', name: 'Ангарные палубы',
-        desc: 'Открывает ангары и авиакрылья на кораблях', cost: 22, prereq: clsId('destroyer') });
+        desc: 'Ангары для базирования авиакрыльев и малых судов на борту кораблей', cost: 22, prereq: clsId('destroyer') });
       out.push({ id: 'hangar.ship.heavy', cat, catLabel, branch: 'hangar', name: 'Тяжёлые ангары',
-        desc: 'Открывает крупные боевые ангары (стандартный/большой)', cost: 40, prereq: ['hangar.ship'] });
+        desc: 'Крупные боевые ангары — вмещают тяжёлые и штурмовые авиакрылья', cost: 40, prereq: ['hangar.ship'] });
     }
   });
   // ── Политика: ручное дерево бонусов ──
@@ -1674,25 +1688,50 @@ function ecTabResearch() {
   const byId = new Map(nodes.map(n => [n.id, n]));
   const cache = {};
   nodes.forEach(n => { n._d = ecTechDepth(n, byId, cache); });
-  const BRANCH_ORD = { class: 0, type: 1, weapon: 2, reactor: 3, engine: 4, armor: 5, shield: 6, hangar: 7, module: 8, econ: 0, prod: 1, expand: 2 };
-  // группировка по колонкам (depth), сортировка внутри по ветке
-  const cols = {};
-  nodes.forEach(n => { (cols[n._d] = cols[n._d] || []).push(n); });
   const maxDepth = Math.max(0, ...nodes.map(n => n._d));
-  let maxRows = 1;
-  const pos = {};
-  const isPol = sel === 'politics';
-  const W = isPol ? 200 : 176, H = isPol ? 116 : 74, GX = 52, GY = 16;
-  for (let d = 0; d <= maxDepth; d++) {
-    const list = (cols[d] || []).slice().sort((a, b) => (BRANCH_ORD[a.branch] ?? 9) - (BRANCH_ORD[b.branch] ?? 9));
-    list.forEach((n, row) => { pos[n.id] = { x: d * (W + GX), y: row * (H + GY), col: d, row }; });
-    maxRows = Math.max(maxRows, list.length);
-  }
-  const cw = (maxDepth + 1) * (W + GX) - GX;
-  const ch = maxRows * (H + GY) - GY;
 
-  // SVG-связи prereq → node
+  const isPol = sel === 'politics';
+  const W = 200, H = isPol ? 150 : 128, GX = 60, GY = 12, LANE_GAP = 30;
+
+  // ── Полосная раскладка: каждая ветка — отдельная горизонтальная полоса ──
+  const LANE_ORDER = isPol
+    ? ['econ', 'prod', 'expand']
+    : ['class', 'type', 'weapon', 'reactor', 'engine', 'armor', 'shield', 'hangar', 'module'];
+  const pos = {};
+  let laneY = 0;
+  const laneHeaders = []; // { y, label, branch }
+  LANE_ORDER.forEach(branch => {
+    const lnodes = nodes.filter(n => n.branch === branch);
+    if (!lnodes.length) return;
+    // сгруппировать по глубине
+    const byDepth = {};
+    lnodes.forEach(n => { (byDepth[n._d] = byDepth[n._d] || []).push(n); });
+    const maxInLane = Math.max(...Object.values(byDepth).map(a => a.length));
+    laneHeaders.push({ y: laneY, label: ecBranchTag(branch), branch });
+    Object.entries(byDepth).forEach(([d, ns]) => {
+      ns.forEach((n, i) => { pos[n.id] = { x: parseInt(d) * (W + GX), y: laneY + i * (H + GY) }; });
+    });
+    laneY += maxInLane * H + (maxInLane - 1) * GY + LANE_GAP;
+  });
+  // любые узлы вне LANE_ORDER — добавить в конец
+  const extra = nodes.filter(n => !LANE_ORDER.includes(n.branch) && !pos[n.id]);
+  extra.forEach((n, i) => { pos[n.id] = { x: n._d * (W + GX), y: laneY + i * (H + GY) }; });
+  if (extra.length) laneY += extra.length * (H + GY);
+
+  const cw = (maxDepth + 1) * (W + GX) - GX + 2;
+  const ch = Math.max(H, laneY - LANE_GAP);
+
+  // SVG-связи prereq → node + фоновые полосы
   const edges = [];
+  // фоновые полосы для каждой ветки
+  const laneBands = laneHeaders.map(lh => {
+    const lnodes2 = nodes.filter(n => n.branch === lh.branch);
+    const byD2 = {};
+    lnodes2.forEach(n => { (byD2[n._d] = byD2[n._d] || []).push(n); });
+    const maxR = Math.max(...Object.values(byD2).map(a => a.length));
+    const bh = maxR * H + (maxR - 1) * GY;
+    return `<rect x="0" y="${lh.y - 6}" width="${cw}" height="${bh + 12}" class="ec-lane-band ec-lane-${lh.branch}" rx="6"/>`;
+  }).join('');
   nodes.forEach(n => (n.prereq || []).forEach(pid => {
     const a = pos[pid], b = pos[n.id]; if (!a || !b) return;
     const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2;
@@ -1700,7 +1739,7 @@ function ecTabResearch() {
     const bright = done.has(pid);
     edges.push(`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" class="ec-tedge${bright ? ' lit' : ''}"/>`);
   }));
-  const svg = `<svg class="ec-tree-svg" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${edges.join('')}</svg>`;
+  const svg = `<svg class="ec-tree-svg" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${laneBands}${edges.join('')}</svg>`;
 
   // карточки узлов
   const nodeCard = n => {
@@ -1712,10 +1751,11 @@ function ecTabResearch() {
     else { state = 'avail'; const rc = ecResearchCost(n.cost); const can = !active && sci >= rc; foot = `<button class="btn ${can ? 'btn-gd' : 'btn-gh'} btn-xs" ${can ? '' : 'disabled'} onclick="ecResearch('${n.id}')">${ecNum(rc)} ОН</button>`; }
     const p = pos[n.id];
     const bonus = (n.bonus || n.special) ? ecBonusChips(n.bonus, n.special) : '';
-    return `<div class="ec-tnode ec-tnode-${state} ec-br-${n.branch}" style="left:${p.x}px;top:${p.y}px;width:${W}px;min-height:${H}px"${n.desc ? ` title="${esc(n.desc)}"` : ''}>
+    const descHtml = n.desc ? `<div class="ec-tnode-desc">${esc(n.desc)}</div>` : '';
+    return `<div class="ec-tnode ec-tnode-${state} ec-br-${n.branch}" style="left:${p.x}px;top:${p.y}px;width:${W}px;height:${H}px">
       <div class="ec-tnode-h"><span class="ec-tnode-tag">${esc(ecBranchTag(n.branch))}</span></div>
       <div class="ec-tnode-name">${esc(n.name)}</div>
-      ${bonus}
+      ${descHtml}${bonus}
       <div class="ec-tnode-foot">${foot}</div>
     </div>`;
   };
