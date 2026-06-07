@@ -441,9 +441,11 @@ function gmDrawSvg() {
   const fillHtml = cells.map(({ sys, poly }) => {
     if (!poly) return '';
     const fac = gmFaction(sys.faction);
-    const fill = fac ? fac.color : 'rgba(120,140,170,0.05)';
+    const isRift = !!(fac && fac.id === 'rift');
     const pts = gmPerturbPoly(poly);
     const d = 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + 'Z';
+    if (isRift) return `<path class="vor-cell vor-rift" d="${d}" stroke="none"></path>`;  // заливка/анимация — в CSS
+    const fill = fac ? fac.color : 'rgba(120,140,170,0.05)';
     const cls = 'vor-cell' + (fac ? ' vor-claimed' : ' vor-neutral');
     return `<path class="${cls}" d="${d}" fill="${fill}" stroke="none"></path>`;
   }).join('');
@@ -487,7 +489,11 @@ function gmDrawSvg() {
       });
     } else if (distinct.length === 1) {
       const fac = gmFaction(distinct[0]);
-      facBorderHtml.push(`<path class="vor-cell vor-edge vor-claimed" d="${dRaw()}" fill="none" stroke="${gmSolidColor(fac.color)}"></path>`);
+      if (fac.id === 'rift') {
+        facBorderHtml.push(`<path class="vor-cell vor-edge vor-rift-edge" d="${dRaw()}" fill="none"></path>`);
+      } else {
+        facBorderHtml.push(`<path class="vor-cell vor-edge vor-claimed" d="${dRaw()}" fill="none" stroke="${gmSolidColor(fac.color)}"></path>`);
+      }
     } else {
       neutralBorderHtml.push(`<path class="vor-cell vor-edge vor-neutral" d="${dRaw()}" fill="none" stroke="rgba(150,170,200,0.18)"></path>`);
     }
@@ -558,8 +564,17 @@ function gmDrawStars() {
   if (!layer) return;
   const caps = GM.capitals || {};
   layer.innerHTML = GM.systems.map(s => {
-    const giant = s.is_giant ? ' gm-giant' : '';
     const sel = (GM.linkFrom === s.id) ? ' gm-linksel' : '';
+    // Системы разлома — не звёзды, а пульсирующие аномалии (другой стиль)
+    if (s.faction === 'rift') {
+      const core = s.id === 'rift_core' ? ' gm-rift-core' : '';
+      return `<div class="gm-star gm-rift-node${core}${sel}" data-id="${esc(s.id)}" style="left:${s.x}px;top:${s.y}px"
+          onmousedown="gmStarDown(event,'${esc(s.id)}')" onclick="gmStarClick(event,'${esc(s.id)}')">
+          <span class="gm-rift-eye"></span><span class="gm-rift-ring"></span>
+          <span class="gm-label gm-rift-label">${esc(s.name)}</span>
+        </div>`;
+    }
+    const giant = s.is_giant ? ' gm-giant' : '';
     const capFid = caps[s.id];
     const capCol = capFid ? gmReadable((gmFaction(capFid) || {}).color || '#ffd24d') : '';
     const capHtml = capFid ? `<span class="gm-cap" title="Столица: ${esc((GM.facMeta[capFid] || {}).name || '')}" style="color:${capCol}">★</span>` : '';
@@ -596,6 +611,24 @@ function gmStarClick(e, id) {
 function gmOpenPanel(sys) {
   const panel = document.getElementById('gm-panel');
   if (!panel) return;
+  // ── Разлом: особая «глитч»-панель другой вселенной ──
+  if (sys.faction === 'rift') {
+    panel.className = 'gm-rift-panel';
+    panel.innerHTML = `
+      <button class="gm-close" onclick="gmClosePanel()">✕</button>
+      <div class="gm-rift-tag">⚠ АНОМАЛИЯ · ВНЕ КАТАЛОГА</div>
+      <h2 class="gm-panel-title gm-rift-title" data-txt="${esc(sys.name)}">${esc(sys.name)}</h2>
+      <div class="gm-rift-badge">Сигнатура: иная вселенная</div>
+      <p class="gm-panel-desc">${esc(sys.description || '')}</p>
+      <div class="gm-rift-readout">
+        <div class="gm-rift-row"><span>Стабильность</span><b class="gm-rift-bad">критическая</b></div>
+        <div class="gm-rift-row"><span>Происхождение</span><b>неизвестно</b></div>
+        <div class="gm-rift-row"><span>Активность за барьером</span><b class="gm-rift-bad">обнаружена</b></div>
+      </div>
+      <div class="gm-rift-foot">// канал перехвата нестабилен — данные частичны //</div>`;
+    panel.classList.remove('gm-hidden');
+    return;
+  }
   const fac = gmFaction(sys.faction);
   const planets = (sys.planets || []).map((p, i) => gmPlanetView(p, i)).join('')
     || `<p class="gm-empty">Система ещё не исследована. Данные о планетах отсутствуют.</p>`;
