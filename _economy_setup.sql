@@ -53,6 +53,9 @@ alter table public.colony_buildings add column if not exists mining_targets json
 alter table public.faction_economy add column if not exists research jsonb default '[]'::jsonb;
 alter table public.faction_economy add column if not exists research_active text;
 alter table public.faction_economy add column if not exists research_ready  timestamptz;
+-- роботы (раса «Синтетики/Киборги» или правление «Машинный разум»): 2-й слот исследований
+alter table public.faction_economy add column if not exists research_active2 text;
+alter table public.faction_economy add column if not exists research_ready2  timestamptz;
 -- v8: тайные операции 2.0 — контрразведка и дебафф дестабилизации
 alter table public.faction_economy add column if not exists counter_agents int default 0;
 alter table public.faction_economy add column if not exists debuff_until    timestamptz;
@@ -293,7 +296,7 @@ create or replace function public._race_native_envs(p_race text) returns text[] 
     when 'Акватики (Водные)'          then array['oceanic']
     when 'Плантоиды (Растениевидные)' then array['terrestrial','oceanic']
     when 'Литоиды (Каменные)'         then array['micro','lava','desert']
-    when 'Синтетики / Киборги'        then array['terrestrial','desert','cryo','micro','lava','volcanic','exotic']
+    when 'Синтетики / Киборги'        then array['terrestrial','oceanic','desert','volcanic','lava','cryo','micro','exotic']  -- роботы: все колонизируемые типы
     when 'Энергетические сущности'    then array['exotic','cryo','lava']
     else array['terrestrial'] end
 $$;
@@ -595,8 +598,9 @@ begin
 
   if eco.gc < cost then raise exception 'not enough GC'; end if;
 
-  -- сколько захватов разрешено в одном цикле (исследование «Дом в небесах»)
-  if eco.research is not null and eco.research ? 'pol.house_heavens' then max_claims := 2; end if;
+  -- сколько захватов разрешено в одном цикле: «Дом в небесах» ИЛИ роботы → 2
+  if (eco.research is not null and eco.research ? 'pol.house_heavens')
+     or public._faction_is_robot(app.faction_id) then max_claims := 2; end if;
   in_window := eco.last_system_claim is not null and eco.last_system_claim > now() - cd;
 
   if in_window then
@@ -1295,11 +1299,13 @@ revoke all on function public.economy_tick() from public;
 grant execute on function public.economy_tick() to authenticated;
 
 -- ════════════════════════════════════════════════════════════
--- v6: ИССЛЕДОВАНИЯ — старт проекта (ОН + 1 ход, 1 активный)
+-- v6: ИССЛЕДОВАНИЯ — старт проекта (ОН + 1 ход).
+-- 1 активный слот; роботы — 2 параллельных (research_active/research_active2).
 -- ════════════════════════════════════════════════════════════
 create or replace function public.economy_research(p_node text, p_cost numeric)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; eco public.faction_economy;
+  max_slots int := 1; active_cnt int;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   if p_node is null or p_node = '' then raise exception 'bad node'; end if;
@@ -1308,12 +1314,24 @@ begin
   if not found then raise exception 'no approved faction'; end if;
   select * into eco from public.faction_economy where faction_id=app.faction_id;
   if not found then raise exception 'no economy'; end if;
-  if eco.research_active is not null then raise exception 'research in progress'; end if;
+
+  if public._faction_is_robot(app.faction_id) then max_slots := 2; end if;
+  active_cnt := (eco.research_active is not null)::int + (eco.research_active2 is not null)::int;
+  if active_cnt >= max_slots then raise exception 'research in progress'; end if;
+  if eco.research_active = p_node or eco.research_active2 = p_node then raise exception 'already in progress'; end if;
   if coalesce(eco.research,'[]'::jsonb) ? p_node then raise exception 'already researched'; end if;
   if coalesce(eco.science,0) < p_cost then raise exception 'not enough science'; end if;
-  update public.faction_economy
-    set science = science - p_cost, research_active = p_node, research_ready = now() + interval '1 day'
-    where faction_id = app.faction_id;
+
+  -- кладём в первый свободный слот
+  if eco.research_active is null then
+    update public.faction_economy
+      set science = science - p_cost, research_active = p_node, research_ready = now() + interval '1 day'
+      where faction_id = app.faction_id;
+  else
+    update public.faction_economy
+      set science = science - p_cost, research_active2 = p_node, research_ready2 = now() + interval '1 day'
+      where faction_id = app.faction_id;
+  end if;
   return jsonb_build_object('ok', true, 'ready_at', now() + interval '1 day');
 end$$;
 revoke all on function public.economy_research(text,numeric) from public;
@@ -1325,6 +1343,19 @@ grant execute on function public.economy_research(text,numeric) to authenticated
 -- Поля: gc/sci/agents/mine (>1 лучше), colonize/claim_cost (<1 дешевле),
 -- claim_cd (<1 чаще). Полы: доход/добыча/стоимости ≥ 0.3; claim_cd ≥ 0.25.
 -- ════════════════════════════════════════════════════════════
+-- «Роботы»: раса «Синтетики / Киборги» ИЛИ правление «Машинный разум (ИИ)».
+-- Бонусы: пехота на Военном Заводе (×3, в JS), 2 слота исследований, 2 захвата/цикл.
+create or replace function public._faction_is_robot(p_fid text)
+returns boolean language sql stable security definer set search_path=public as $$
+  select exists (
+    select 1 from public.faction_applications
+    where faction_id = p_fid and status = 'approved'
+      and (race = 'Синтетики / Киборги' or gov = 'Машинный разум (ИИ)')
+  );
+$$;
+revoke all on function public._faction_is_robot(text) from public;
+grant execute on function public._faction_is_robot(text) to authenticated;
+
 create or replace function public._faction_mods(p_fid text)
 returns jsonb language plpgsql stable security definer set search_path=public as $$
 declare a public.faction_applications;
@@ -1389,7 +1420,7 @@ begin
     when 'Акватики (Водные)'          then gc:=gc+0.15; col:=col+0.15;
     when 'Плантоиды (Растениевидные)' then mine:=mine+0.15; gc:=gc+0.10; agf:=agf-1;
     when 'Литоиды (Каменные)'         then mine:=mine+0.25; gc:=gc-0.15;
-    when 'Синтетики / Киборги'        then gc:=gc-0.15; rsch:=rsch-0.15; scf:=scf+2;
+    when 'Синтетики / Киборги'        then gc:=gc-0.35; rsch:=rsch-0.15; scf:=scf+2;  -- все планеты родные → сильный дебаф денег
     when 'Энергетические сущности'    then gc:=gc-0.15; rsch:=rsch-0.10; scf:=scf+1; agf:=agf+1;
     else null;
   end case;
@@ -1473,6 +1504,7 @@ begin
   -- готовые тайные операции (разрешение успеха/раскрытия, эффекты, возврат агентов)
   perform public._spy_resolve(p_fid);
 
+  -- завершение исследований: слот 1
   if eco.research_active is not null and eco.research_ready is not null and eco.research_ready <= now() then
     update public.faction_economy
       set research = coalesce(research,'[]'::jsonb) || to_jsonb(eco.research_active::text),
@@ -1480,11 +1512,21 @@ begin
       where faction_id = p_fid;
     select * into eco from public.faction_economy where faction_id = p_fid;
   end if;
+  -- завершение исследований: слот 2 (роботы)
+  if eco.research_active2 is not null and eco.research_ready2 is not null and eco.research_ready2 <= now() then
+    update public.faction_economy
+      set research = coalesce(research,'[]'::jsonb) || to_jsonb(eco.research_active2::text),
+          research_active2 = null, research_ready2 = null
+      where faction_id = p_fid;
+    select * into eco from public.faction_economy where faction_id = p_fid;
+  end if;
 
   d := floor(extract(epoch from (now()-eco.last_tick))/86400.0);
 
   for r in select btype, slots_open from public.colony_buildings where faction_id=p_fid loop
-    if r.btype in ('factory','mining','trade') then inc_gc := inc_gc + r.slots_open*100;
+    if r.btype='factory' then inc_gc := inc_gc + r.slots_open*200;
+    elsif r.btype='mining' then inc_gc := inc_gc + r.slots_open*50;  -- + ресурсы (ниже)
+    elsif r.btype='trade' then inc_gc := inc_gc + r.slots_open*100;
     elsif r.btype='science' then inc_sci := inc_sci + r.slots_open*1;
     elsif r.btype='intel' then inc_agents := inc_agents + r.slots_open*1;
     end if;

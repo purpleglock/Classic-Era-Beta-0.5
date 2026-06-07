@@ -143,18 +143,25 @@
 .ec-bld-mine-empty { font-size: 10px; color: var(--t4); font-style: italic; }
 /* список месторождений */
 .ec-mine-list { display: flex; flex-direction: column; gap: 1px; }
-.ec-mine-row { display: flex; align-items: center; gap: 7px; padding: 4px 6px; border-radius: 6px; cursor: pointer; transition: background .1s; user-select: none; }
-.ec-mine-row:hover:not(.locked) { background: var(--b3); }
+.ec-mine-row { display: flex; align-items: center; gap: 7px; padding: 4px 6px; border-radius: 6px; transition: background .1s; user-select: none; }
 .ec-mine-row.active { background: color-mix(in srgb, var(--gd) 10%, var(--b1)); }
-.ec-mine-row.active:hover { background: color-mix(in srgb, var(--err) 10%, var(--b1)); }
-.ec-mine-row.locked { opacity: .38; cursor: default; }
-.ec-mine-chk { font-size: 11px; width: 12px; text-align: center; color: var(--t4); flex-shrink: 0; }
-.ec-mine-row.active .ec-mine-chk { color: var(--gd); }
 .ec-mine-ic { font-size: 13px; flex-shrink: 0; }
 .ec-mine-nm { flex: 1; font-size: 12px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ec-mine-row.active .ec-mine-nm { color: var(--t1); font-weight: 500; }
-.ec-mine-rt { font-family: var(--font-mono); font-size: 10px; color: var(--gd); font-weight: 700; flex-shrink: 0; white-space: nowrap; }
+.ec-mine-rt { font-family: var(--font-mono); font-size: 10px; color: var(--gd); font-weight: 700; flex-shrink: 0; white-space: nowrap; min-width: 52px; text-align: right; }
 .ec-mine-rt-dim { color: var(--t4); font-weight: 400; }
+/* степпер ячеек добычи */
+.ec-mine-step { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.ec-mine-btn {
+  width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1; font-weight: 700; cursor: pointer;
+  background: var(--b3); color: var(--t2); border: 1px solid var(--w2); border-radius: 5px;
+  transition: background .1s, color .1s, border-color .1s;
+}
+.ec-mine-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--gd) 18%, var(--b3)); color: var(--gd); border-color: color-mix(in srgb, var(--gd) 50%, transparent); }
+.ec-mine-btn:disabled { opacity: .3; cursor: default; }
+.ec-mine-cnt { font-family: var(--font-mono); font-size: 12px; font-weight: 700; min-width: 16px; text-align: center; color: var(--t4); }
+.ec-mine-cnt.on { color: var(--gd); }
 /* отложенные проекты колоний: тег «в работе» */
 .ec-proj-tag { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 10px; color: var(--color-warning, #e0a030); background: color-mix(in srgb, var(--color-warning, #e0a030) 12%, transparent); border: 1px solid color-mix(in srgb, var(--color-warning, #e0a030) 40%, transparent); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
 /* уровень сложности терраформирования */
@@ -241,6 +248,7 @@
 .ec-prod-qty { width: 70px !important; flex: 0 0 auto; text-align: center; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 8px; }
 .ec-cap { font-size: 11px; color: var(--t3); font-family: var(--font-mono); margin-bottom: 6px; }
 .ec-cap b { color: var(--t2); font-weight: 600; }
+.ec-rbadge { display: inline-block; font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; color: var(--te); background: color-mix(in srgb, var(--te) 14%, transparent); border: 1px solid color-mix(in srgb, var(--te) 45%, transparent); border-radius: var(--radius-pill); padding: 1px 7px; margin-left: 4px; vertical-align: middle; }
 .ec-queue, .ec-roster { display: flex; flex-direction: column; gap: 6px; }
 .ec-q-row, .ec-r-row { display: flex; align-items: center; gap: 10px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-sm); padding: 8px 12px; }
 .ec-q-row .ec-r-name, .ec-r-name { flex: 1; min-width: 0; color: var(--t1); font-size: 13px; }

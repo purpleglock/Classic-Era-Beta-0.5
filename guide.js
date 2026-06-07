@@ -443,8 +443,8 @@ function renderGuidebook() {
       <p>Здания — фундамент державы. Каждое занимает одну ячейку на планете и имеет до <b>6 слотов</b> мощности. Постройка здания и открытие каждого нового слота занимают <b>1 день</b>; недостроенное можно отменить с возвратом денег.</p>
 
       <div class="gb-bld-grid">
-        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⚙</span><b>Гражданская фабрика</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">Стабильный доход в ГС за каждый слот.</div></div>
-        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⛏</span><b>Добывающий завод</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">Добывает ресурсы с планеты (назначаются вручную).</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⚙</span><b>Гражданская фабрика</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">Основной источник ГС: +200 ГС/сут за каждую открытую ячейку.</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⛏</span><b>Добывающий завод</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">+50 ГС/сут за ячейку и добыча ресурсов планеты. Несколько ячеек можно назначить на один ресурс — добыча суммируется.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⇄</span><b>Торговый хаб</b></div><div class="gb-bld-cost">1 000 ГС · 1 слот</div><div class="gb-bld-d">Доход в ГС, но только при активных торговых путях.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">◆</span><b>Товарная биржа</b></div><div class="gb-bld-cost">1 500 ГС · 1 слот</div><div class="gb-bld-d">Сама продаёт накопленные ресурсы за ГС (~50% цены), без торговых путей.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">✦</span><b>Научный институт</b></div><div class="gb-bld-cost">1 000 ГС · 1 слот</div><div class="gb-bld-d">Прирост очков науки за каждый слот.</div></div>

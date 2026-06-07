@@ -647,7 +647,7 @@
 /* ─── §article ─────────────────────────────────────────────── */
 
 /* ── CARDS ── */
-.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:16px}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:16px;margin-bottom:16px}
 .card{
   position:relative;
   min-height:240px;
@@ -793,6 +793,27 @@
   font-size:48px;
   color:rgba(28,100,148,.3);
   text-shadow:0 0 20px rgba(28,100,148,.2);
+}
+
+/* ── Карточки государств: адаптив под планшет/телефон ── */
+@media (max-width:768px){
+  .cgrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:12px}
+  .card{min-height:200px}
+  .card img,.card-ov,.card-noimg{height:140px}
+  .card-noimg{font-size:38px}
+  .card-nm{padding:12px 12px;min-height:68px}
+  .card-title{font-size:14px;letter-spacing:1px;-webkit-line-clamp:2}
+  /* на телефоне отключаем сдвиг по hover — он ломает тач-скролл */
+  .card:hover{transform:none}
+}
+@media (max-width:480px){
+  .cgrid{grid-template-columns:1fr 1fr;gap:10px}
+  .card{min-height:170px}
+  .card img,.card-ov,.card-noimg{height:110px}
+  .card-noimg{font-size:30px}
+  .card-nm{padding:10px 8px;min-height:54px;letter-spacing:1px}
+  .card-title{font-size:11.5px;letter-spacing:.5px;line-height:1.25}
+  .card-nm::before,.card-nm::after{display:none}
 }
 
 
@@ -2280,6 +2301,9 @@
     0 4px 16px rgba(0,0,0,.9);
   text-transform:uppercase;
   max-width:100%;
+  overflow-wrap:break-word;
+  word-break:break-word;
+  hyphens:auto;
 }
 
 

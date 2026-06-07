@@ -59,7 +59,7 @@ const FR_RACE_DESC = {
   'Акватики (Водные)': 'Дети океанов. + бонус на водных мирах, штраф на суше.',
   'Плантоиды (Растениевидные)': 'Самодостаточны. + производство еды, медлительны.',
   'Литоиды (Каменные)': 'Едят минералы, живучи в космосе, очень медленный рост.',
-  'Синтетики / Киборги': 'Машинная плоть. не нужна еда, + наука, дорогой ремонт.',
+  'Синтетики / Киборги': 'Роботы: пригодны ВСЕ планеты (без терраформа), пехота на Военном Заводе ×3, 2 исследования и 2 захвата за цикл. Расплата — сильный штраф к доходу (−35%).',
   'Энергетические сущности': 'Чистая энергия. экзотичная мощь, уязвимы к ЭМ-оружию.',
 };
 const FR_IDEO_DESC = {
@@ -741,7 +741,7 @@ async function frViewFaction(id) {
     <button class="gm-close" onclick="frCloseView()">✕</button>
     <div class="fr-view-hd">
       <div class="fr-view-herald" style="border-color:${frReadable(f.color)}">${f.herald_url ? `<img src="${esc(f.herald_url)}">` : `<span style="color:${frReadable(f.color)}">◈</span>`}</div>
-      <div><div class="fr-card-name" style="font-size:22px">${esc(f.name)}</div>
+      <div style="min-width:0"><div class="fr-card-name">${esc(f.name)}</div>
       <div class="fr-card-sub">${esc(f.gov || '')} · ${esc(f.regime || '')}</div></div>
     </div>
     <div class="fr-rev">

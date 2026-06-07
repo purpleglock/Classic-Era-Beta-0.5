@@ -710,17 +710,31 @@
 .creg-stat-bar-fill { height: 100%; background: linear-gradient(to right, rgba(28,100,148,.4), rgba(210,170,80,.8)); }
 .creg-stat-mod { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,100,148,.6); margin-top: 4px; }
 
-.creg-faction-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.creg-faction-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%,150px), 1fr)); gap: 10px; margin-bottom: 14px; }
 .creg-faction-card {
-  border: 1px solid rgba(255,255,255,.07); background: var(--b3);
-  cursor: pointer; transition: all .15s; position: relative; overflow: hidden;
+  border: 1px solid rgba(255,255,255,.08); background: var(--b3);
+  border-radius: 8px;
+  cursor: pointer; transition: border-color .15s, background .15s, transform .15s, box-shadow .15s;
+  position: relative; overflow: hidden; display: flex; flex-direction: column;
 }
-.creg-faction-card:hover { border-color: rgba(28,100,148,.4); }
-.creg-faction-card.sel { border-color: rgba(28,100,148,.8); background: rgba(28,100,148,.1); }
-.creg-ff-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; filter: brightness(.6) saturate(.7); }
-.creg-ff-noimg { height: 60px; display: flex; align-items: center; justify-content: center; font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 900; color: rgba(28,100,148,.5); background: rgba(28,100,148,.06); }
-.creg-ff-name { font-family: 'Rajdhani', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,.8); padding: 8px 10px 10px; text-transform: uppercase; }
-.creg-ff-check { position: absolute; top: 6px; right: 6px; color: #4ec96a; font-size: 12px; }
+.creg-faction-card:hover { border-color: rgba(28,100,148,.5); transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+.creg-faction-card.sel { border-color: rgba(28,100,148,.9); background: rgba(28,100,148,.12); box-shadow: 0 0 0 1px rgba(28,100,148,.5); }
+.creg-ff-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; filter: brightness(.62) saturate(.75); }
+.creg-faction-card.sel .creg-ff-img { filter: brightness(.85) saturate(1); }
+.creg-ff-noimg { aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; font-family: 'Rajdhani', sans-serif; font-size: 26px; font-weight: 900; letter-spacing: 1px; color: rgba(28,100,148,.55); background: linear-gradient(135deg, rgba(28,100,148,.1), rgba(28,100,148,.03)); }
+.creg-ff-name {
+  font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .5px;
+  color: rgba(255,255,255,.85); padding: 9px 10px; text-transform: uppercase; line-height: 1.25;
+  text-align: center; overflow-wrap: break-word; word-break: break-word; hyphens: auto;
+  border-top: 1px solid rgba(255,255,255,.05);
+}
+.creg-faction-card.sel .creg-ff-name { color: #fff; }
+.creg-ff-check {
+  position: absolute; top: 6px; right: 6px; width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: #4ec96a; color: #04240f; font-size: 12px; font-weight: 900;
+  border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,.4);
+}
 
 .creg-ab-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .creg-ab-card {

@@ -1370,6 +1370,19 @@ select.sb-fi        { cursor: pointer; appearance: auto; }
   max-width: 500px;
 }
 
+/* На телефоне: кнопка «Сохранить профиль» прилипает к низу экрана,
+   чтобы её не приходилось выискивать скроллом, и не пряталась под
+   системной панелью (safe-area). */
+@media (max-width: 768px) {
+  .ap-body { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+  .prof-save-btn {
+    position: sticky;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    z-index: 5;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .55);
+  }
+}
+
 /* пометка «имя по умолчанию» рядом с отображаемым именем */
 .prof-name-default { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:400; color:var(--t4); letter-spacing:.5px; }
 

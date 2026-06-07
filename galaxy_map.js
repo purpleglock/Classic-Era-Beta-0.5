@@ -353,34 +353,48 @@ function gmEdgeHash(x, y) {
   const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
   return s - Math.floor(s);
 }
-function gmPerturbPoly(poly, amp = 2.2, steps = 4) {
-  if (!poly || poly.length < 2) return poly;
+// Внутренние возмущённые точки одного ребра a→b (детерминированно, без концов).
+// Общий шум по отсортированным концам → два соседних ребра/ячейки совпадут (без щелей).
+// Подразбиение АДАПТИВНОЕ: ~1 точка на 12px (длинные рёбра → много мелких сегментов),
+// амплитуда — две октавы шума для «природного» сложного края.
+function gmEdgeSubs(a, b, amp = 8) {
   const onBox = (p) => p[0] <= 0.5 || p[1] <= 0.5 || p[0] >= GM_W - 0.5 || p[1] >= GM_H - 0.5;
+  if (onBox(a) && onBox(b)) return [];   // рёбра bbox карты не трогаем
+  const swap = (a[0] > b[0]) || (a[0] === b[0] && a[1] > b[1]);
+  const p = swap ? b : a, q = swap ? a : b;
+  const cdx = q[0] - p[0], cdy = q[1] - p[1];
+  const clen = Math.hypot(cdx, cdy);
+  if (clen < 6) return [];
+  const nx = -cdy / clen, ny = cdx / clen;
+  // вариативность: у каждого ребра своя «изрезанность» (0.5–1.6×) — границы не однообразны
+  const vary = 0.5 + gmEdgeHash(p[0] * 0.13 + q[0] * 0.91, p[1] * 0.57 + q[1] * 0.19) * 1.1;
+  const localAmp = Math.min(amp * vary, clen * 0.32);
+  const n = Math.max(7, Math.min(24, Math.round(clen / 10)));   // ещё больше мелких рёбер
+  const subs = [];
+  for (let s = 1; s < n; s++) {
+    const tc = s / n;
+    // три октавы шума: крупная волна + средняя + мелкая деталь → изрезанный «природный» край
+    const lo  = gmEdgeHash(p[0] + q[0] * 0.37 + tc * 53.1,  p[1] + q[1] * 0.29 + tc * 91.7)  - 0.5;
+    const mid = gmEdgeHash(p[0] * 0.71 + tc * 137.3,        q[1] * 0.83 + tc * 311.5)        - 0.5;
+    const hi  = gmEdgeHash(p[0] * 1.93 + tc * 547.7,        q[1] * 1.27 + tc * 733.1)        - 0.5;
+    const off = (lo * 1.1 + mid * 0.6 + hi * 0.3) * localAmp;   // |off| ≤ localAmp
+    subs.push([p[0] + cdx * tc + nx * off, p[1] + cdy * tc + ny * off]);
+  }
+  if (swap) subs.reverse();   // вернуть в порядке a→b
+  return subs;
+}
+function gmPerturbPoly(poly, amp = 8) {
+  if (!poly || poly.length < 2) return poly;
   const out = [];
   for (let i = 0; i < poly.length - 1; i++) {
-    const a = poly[i], b = poly[i + 1];
-    out.push(a);
-    // Не трогаем рёбра bbox карты — иначе появятся щели у краёв
-    if (onBox(a) && onBox(b)) continue;
-    const swap = (a[0] > b[0]) || (a[0] === b[0] && a[1] > b[1]);
-    const p = swap ? b : a, q = swap ? a : b;
-    const cdx = q[0] - p[0], cdy = q[1] - p[1];
-    const clen = Math.hypot(cdx, cdy);
-    if (clen < 8) continue;
-    const nx = -cdy / clen, ny = cdx / clen;
-    const localAmp = Math.min(amp, clen * 0.18);
-    const subs = [];
-    for (let s = 1; s < steps; s++) {
-      const tc = s / steps;
-      const h1 = gmEdgeHash(p[0] + q[0] * 0.37 + tc * 53.1, p[1] + q[1] * 0.29 + tc * 91.7);
-      const h2 = gmEdgeHash(p[0] * 0.71 + tc * 17.3, q[1] * 0.83 + tc * 31.5);
-      const off = ((h1 + h2) * 0.5 - 0.5) * 2 * localAmp;
-      subs.push([p[0] + cdx * tc + nx * off, p[1] + cdy * tc + ny * off]);
-    }
-    if (swap) subs.reverse();
-    for (const s of subs) out.push(s);
+    out.push(poly[i]);
+    for (const s of gmEdgeSubs(poly[i], poly[i + 1], amp)) out.push(s);
   }
   return out;
+}
+// Возмущённое ребро как самостоятельный путь (с концами) — совпадает с заливкой.
+function gmPerturbEdge(a, b, amp = 8) {
+  return [a, ...gmEdgeSubs(a, b, amp), b];
 }
 // Catmull-Rom → cubic-Bezier, замкнутый путь, мягкое скругление углов
 function gmSmoothPath(pts) {
@@ -418,26 +432,85 @@ function gmDrawSvg() {
   const svg = document.getElementById('gm-svg');
   if (!svg) return;
   const cells = gmVoronoiCells();
-  const cellHtml = cells.map(({ sys, poly }) => {
+
+  // ── Заливки ячеек (без обводки) — соседние ячейки одной фракции сливаются ──
+  const fillHtml = cells.map(({ sys, poly }) => {
     if (!poly) return '';
     const fac = gmFaction(sys.faction);
     const fill = fac ? fac.color : 'rgba(120,140,170,0.05)';
-    const stroke = fac ? gmSolidColor(fac.color) : 'rgba(150,170,200,0.18)';
     const pts = gmPerturbPoly(poly);
     const d = 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + 'Z';
     const cls = 'vor-cell' + (fac ? ' vor-claimed' : ' vor-neutral');
-    return `<path class="${cls}" d="${d}" fill="${fill}" stroke="${stroke}"></path>`;
+    return `<path class="${cls}" d="${d}" fill="${fill}" stroke="none"></path>`;
   }).join('');
+
+  // ── Границы: схлопываем внутренние рёбра. Ребро между двумя ячейками ОДНОЙ
+  //    фракции не рисуем — остаётся только внешний контур территории. ──
+  const edgeMap = new Map();
+  const ekey = (a, b) => {
+    const ax = Math.round(a[0] * 10), ay = Math.round(a[1] * 10);
+    const bx = Math.round(b[0] * 10), by = Math.round(b[1] * 10);
+    return (ax < bx || (ax === bx && ay <= by)) ? `${ax},${ay}|${bx},${by}` : `${bx},${by}|${ax},${ay}`;
+  };
+  cells.forEach(({ sys, poly }) => {
+    if (!poly) return;
+    const fid = sys.faction || null;
+    for (let i = 0; i < poly.length - 1; i++) {
+      const k = ekey(poly[i], poly[i + 1]);
+      let e = edgeMap.get(k);
+      if (!e) { e = { a: poly[i], b: poly[i + 1], sides: [] }; edgeMap.set(k, e); }
+      e.sides.push({ fid, sx: sys.x, sy: sys.y });   // запоминаем «чья» сторона и где её система
+    }
+  });
+  const facBorderHtml = [], neutralBorderHtml = [];
+  const FRONT_OFF = 4;   // смещение линии фронта к своей территории (user units)
+  edgeMap.forEach(e => {
+    const facSides = e.sides.filter(s => s.fid && gmFaction(s.fid));
+    const distinct = [...new Set(facSides.map(s => s.fid))];
+    if (facSides.length === 2 && distinct.length === 1) return; // внутреннее ребро одной фракции
+    const pts = gmPerturbEdge(e.a, e.b);
+    const dRaw = () => 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L');
+    if (distinct.length >= 2) {
+      // ── ЛИНИЯ ФРОНТА: две границы, каждая смещена к своей стороне ──
+      const dx = e.b[0] - e.a[0], dy = e.b[1] - e.a[1], L = Math.hypot(dx, dy) || 1;
+      const nx = -dy / L, ny = dx / L, mx = (e.a[0] + e.b[0]) / 2, my = (e.a[1] + e.b[1]) / 2;
+      facSides.forEach(s => {
+        const fac = gmFaction(s.fid);
+        const sign = ((s.sx - mx) * nx + (s.sy - my) * ny) >= 0 ? 1 : -1;
+        const ox = nx * FRONT_OFF * sign, oy = ny * FRONT_OFF * sign;
+        const d = 'M' + pts.map(p => (p[0] + ox).toFixed(1) + ',' + (p[1] + oy).toFixed(1)).join('L');
+        facBorderHtml.push(`<path class="vor-cell vor-edge vor-claimed vor-front" d="${d}" fill="none" stroke="${gmSolidColor(fac.color)}"></path>`);
+      });
+    } else if (distinct.length === 1) {
+      const fac = gmFaction(distinct[0]);
+      facBorderHtml.push(`<path class="vor-cell vor-edge vor-claimed" d="${dRaw()}" fill="none" stroke="${gmSolidColor(fac.color)}"></path>`);
+    } else {
+      neutralBorderHtml.push(`<path class="vor-cell vor-edge vor-neutral" d="${dRaw()}" fill="none" stroke="rgba(150,170,200,0.18)"></path>`);
+    }
+  });
 
   const laneHtml = GM.lanes.map(l => {
     const a = GM.systems.find(s => s.id === l.a_id), b = GM.systems.find(s => s.id === l.b_id);
     if (!a || !b) return '';
     const del = GM.edit && GM.mode === 'link' ? ` onclick="gmDeleteLane('${l.id}')"` : '';
     const cls = 'hyperlane' + (GM.edit && GM.mode === 'link' ? ' gm-deletable' : '');
-    return `<line class="${cls}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"${del}></line>`;
+    // Слегка изогнутая кривая вместо прямой: контрольная точка = середина + перпендикуляр.
+    // Изгиб детерминированный (хэш по концам) — стабилен между перерисовками, не зависит от порядка.
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const nx = -dy / len, ny = dx / len;
+    const h = gmEdgeHash(Math.min(a.x, b.x) + Math.max(a.x, b.x) * 0.31, Math.min(a.y, b.y) + Math.max(a.y, b.y) * 0.47);
+    const bend = (h - 0.5) * 2 * Math.min(len * 0.11, 55);
+    const cx = (mx + nx * bend).toFixed(1), cy = (my + ny * bend).toFixed(1);
+    return `<path class="${cls}" d="M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}" fill="none"${del}></path>`;
   }).join('');
 
-  svg.innerHTML = `<g class="vor-layer">${cellHtml}</g><g class="lane-layer">${laneHtml}</g>`;
+  const fb = facBorderHtml.join('');
+  svg.innerHTML = `<defs><filter id="gm-glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3.2"/></filter></defs>`
+    + `<g class="vor-layer">${fillHtml}</g>`
+    + `<g class="vor-border-layer gm-glow-layer" filter="url(#gm-glow)">${fb}</g>`
+    + `<g class="vor-border-layer">${neutralBorderHtml.join('')}${fb}</g>`
+    + `<g class="lane-layer">${laneHtml}</g>`;
   svg.classList.toggle('gm-noborders', !GM.showBorders);
   gmUpdateStrokes();
 }
@@ -449,6 +522,9 @@ function gmUpdateStrokes() {
   const s = GM.scale || 1;
   svg.style.setProperty('--lane-w', (3 / s).toFixed(2));
   svg.style.setProperty('--cell-w', (1.4 / s).toFixed(2));
+  // радиус свечения границ — постоянный на экране (компенсируем зум)
+  const blur = svg.querySelector('#gm-glow feGaussianBlur');
+  if (blur) blur.setAttribute('stdDeviation', (2.2 / s).toFixed(2));
 }
 
 // превращает rgba(r,g,b,a) в более плотный контур

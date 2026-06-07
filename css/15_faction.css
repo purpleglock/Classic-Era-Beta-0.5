@@ -97,8 +97,8 @@
 /* обзор */
 .fr-rev{display:flex;flex-direction:column;gap:1px;border:1px solid var(--w1);border-radius:8px;overflow:hidden;margin-bottom:12px}
 .fr-rev-row{display:flex;justify-content:space-between;gap:12px;padding:8px 12px;background:var(--b1);font-size:13px}
-.fr-rev-row span{color:var(--t3)}
-.fr-rev-row b{color:#eaf3fb;text-align:right}
+.fr-rev-row span{color:var(--t3);flex-shrink:0}
+.fr-rev-row b{color:#eaf3fb;text-align:right;min-width:0;overflow-wrap:break-word;word-break:break-word}
 .fr-swatch{display:inline-block;width:22px;height:14px;border-radius:3px;border:1px solid var(--w3);vertical-align:middle}
 
 /* статус / моя анкета */
@@ -111,23 +111,24 @@
 .fr-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 
 /* сетка фракций */
-.fr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.fr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:12px}
 .fr-card{display:flex;gap:0;background:var(--b2);border:1px solid var(--w2);border-radius:12px;overflow:hidden;cursor:pointer;transition:transform .2s,border-color .2s,box-shadow .2s}
 .fr-card:hover{transform:translateY(-3px);border-color:var(--gd);box-shadow:0 10px 30px rgba(0,0,0,.5)}
 .fr-card-bar{width:5px;flex-shrink:0}
-.fr-card-herald{width:56px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--b1)}
+.fr-card-herald{width:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--b1)}
 .fr-card-herald img{width:100%;height:100%;object-fit:cover}
-.fr-card-main{flex:1;min-width:0;padding:10px 12px}
-.fr-card-name{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;color:#eaf3fb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fr-card-sub{font-size:11px;color:var(--t2);margin-top:1px}
-.fr-card-meta{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px}
+.fr-card-main{flex:1;min-width:0;padding:11px 13px;display:flex;flex-direction:column;justify-content:center}
+.fr-card-name{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:16px;line-height:1.2;color:#eaf3fb;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:break-word;word-break:break-word}
+.fr-card-sub{font-size:11.5px;color:var(--t2);margin-top:3px;overflow-wrap:break-word;word-break:break-word}
+.fr-card-meta{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t3);margin-top:5px;overflow-wrap:break-word;word-break:break-word}
 .fr-empty{color:var(--t3);font-size:13px;padding:20px;text-align:center;grid-column:1/-1}
 
 /* модалка просмотра фракции */
 .fr-modal-ov{display:none;position:fixed;inset:0;z-index:60;background:rgba(0,2,8,.8);backdrop-filter:blur(4px);align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
 .fr-modal-ov.show{display:flex}
 .fr-modal{position:relative;width:520px;max-width:100%;background:hsl(216 24% 8% / .98);border:1px solid var(--w3);border-radius:14px;padding:22px}
-.fr-view-hd{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.fr-view-hd{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding-right:30px}
+.fr-view-hd .fr-card-name{font-size:20px}
 .fr-view-herald{width:64px;height:64px;border:2px solid;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;background:var(--b1)}
 .fr-view-herald img{width:100%;height:100%;object-fit:cover}
 .fr-lore{font-size:13px;color:var(--t2);line-height:1.6;margin:12px 0;padding:10px 12px;background:var(--b1);border-radius:8px}
@@ -178,3 +179,17 @@
 .fr-app-acts{display:flex;gap:6px;flex-wrap:wrap}
 
 @media (max-width:600px){ .fgr2,.fr-bld-grid{grid-template-columns:1fr} }
+
+/* ── Фракции: адаптив под телефон ── */
+@media (max-width:600px){
+  .fr-head h1{font-size:21px;letter-spacing:1px}
+  .fr-grid{gap:10px}
+  .fr-card-name{font-size:15px}
+  /* модалка: на весь экран, без боковых полей-обрезков */
+  .fr-modal-ov{padding:16px 10px;align-items:flex-start}
+  .fr-modal{padding:18px 15px;border-radius:12px}
+  .fr-view-hd{gap:11px;padding-right:34px;margin-bottom:14px}
+  .fr-view-hd .fr-card-name{font-size:18px}
+  .fr-view-herald{width:52px;height:52px;font-size:22px}
+  .fr-rev-row{padding:9px 11px;font-size:12.5px}
+}

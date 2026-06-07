@@ -17,9 +17,15 @@
 .vor-cell{transition:fill .25s;pointer-events:none;stroke-width:var(--cell-w,2);stroke-linejoin:round}
 .vor-neutral{opacity:.35}
 .vor-claimed{stroke-width:calc(var(--cell-w,2) * 1.6)}
-#gm-svg.gm-noborders .vor-layer{display:none}
+.vor-edge{fill:none;stroke-linecap:round}
+/* свечение контура территории (нижний слой под чёткой линией) */
+.gm-glow-layer{pointer-events:none;opacity:.4}
+.gm-glow-layer .vor-edge{stroke-width:calc(var(--cell-w,2) * 2.6)}
+/* линия фронта чуть ярче обычной границы — спорный рубеж заметнее */
+.vor-front{opacity:.95}
+#gm-svg.gm-noborders .vor-layer,#gm-svg.gm-noborders .vor-border-layer{display:none}
 /* Гиперпути */
-.hyperlane{stroke:hsl(206 92% 64%);stroke-width:var(--lane-w,3);stroke-linecap:round}
+.hyperlane{fill:none;stroke:hsl(206 92% 64%);stroke-width:var(--lane-w,3);stroke-linecap:round;stroke-linejoin:round}
 .hyperlane.gm-deletable{pointer-events:stroke;cursor:pointer}
 .hyperlane.gm-deletable:hover{stroke:var(--err)}
 

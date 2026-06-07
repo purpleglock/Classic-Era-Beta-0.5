@@ -1708,7 +1708,7 @@ async function renderApTab(){
         <button class="btn btn-gh btn-fw" style="margin-bottom:12px" onclick="document.getElementById('prof-av-file').click()">
           <span style="margin-right:6px">📁</span> Загрузить изображение
         </button>
-        <button class="btn btn-gd btn-fw" onclick="saveProfileFromApForm()">
+        <button class="btn btn-gd btn-fw prof-save-btn" onclick="saveProfileFromApForm()">
           <span style="margin-right:6px">💾</span> Сохранить профиль
         </button>
       </div>
