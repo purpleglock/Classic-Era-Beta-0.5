@@ -17,9 +17,9 @@
 .fn-home-sub { font-family: var(--fn-mono); font-size: 9.5px; letter-spacing: .14em; color: var(--t4, #6a7a88); }
 
 .fn-grid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 14px; }
-@media (max-width: 860px) { .fn-grid { grid-template-columns: 1fr; } }
-.fn-grid-rest { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-content: start; }
-@media (max-width: 540px) { .fn-grid-rest { grid-template-columns: 1fr; } }
+@media (max-width: 980px) { .fn-grid { grid-template-columns: 1fr; } }
+/* мелкие карточки сами решают, сколько колонок влезет (не ужимаются в кашу) */
+.fn-grid-rest { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; align-content: start; }
 
 .fn-card {
   position: relative; display: flex; flex-direction: column; cursor: pointer; overflow: hidden;
@@ -71,15 +71,26 @@
   box-shadow: 0 0 6px var(--fn-accent, #5fb0e6); flex-shrink: 0; }
 
 .fn-card-title { font-family: var(--fn-disp); font-weight: 700; line-height: 1.12; letter-spacing: .01em;
-  color: var(--t1, #e8edf2); font-size: 18px; margin: 0; }
+  color: var(--t1, #e8edf2); font-size: 18px; margin: 0;
+  overflow-wrap: break-word; word-break: break-word; hyphens: auto; }
 .fn-card-lead .fn-card-title { font-size: 26px; }
 .fn-card-excerpt { font-family: var(--fn-read); font-size: 13px; line-height: 1.55; color: var(--t2, #c0ccd6);
   margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .fn-card-lead .fn-card-excerpt { -webkit-line-clamp: 5; }
 .fn-card-foot { margin-top: auto; display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 4px 10px;
   font-family: var(--fn-mono); font-size: 9px; letter-spacing: .08em; color: var(--t4, #6a7a88);
   padding-top: 9px; border-top: 1px solid var(--w1, #1e2630); }
-.fn-readmore { color: var(--fn-accent, #5fb0e6); font-weight: 600; letter-spacing: .1em; }
+.fn-card-foot > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fn-readmore { color: var(--fn-accent, #5fb0e6); font-weight: 600; letter-spacing: .1em; white-space: nowrap; flex-shrink: 0; }
+/* мелкие экраны: компактнее заголовки и обложки */
+@media (max-width: 600px) {
+  .fn-card-title { font-size: 16px; }
+  .fn-card-lead .fn-card-title { font-size: 20px; }
+  .fn-card-cov { height: 120px; }
+  .fn-card-lead .fn-card-cov { height: 140px; }
+  .fn-card-body { padding: 12px 14px 13px; gap: 8px; }
+}
 
 /* ── Полноэкранная депеша (sci-fi холо-терминал) ───────────── */
 .fn-art-ov {

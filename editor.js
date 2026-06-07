@@ -1626,7 +1626,7 @@ function renderAp(){
   const tabs=[['profile','Профиль'],['mypages','Мои стр.']];
   // «Новости»: видна владельцам одобренной фракции и стаффу (для модерации)
   if(_myFactionApproved || canEdit) tabs.push(['news','Новости']);
-  if(canEdit) tabs.push(['pages','Страницы']); if(canSec) tabs.push(['sections','Разделы'],['devlog','Девлог'],['apps','Анкеты'],['mga','МГА']); if(isSA) tabs.push(['users','Польз.'],['settings','Настройки']);
+  if(canEdit) tabs.push(['pages','Страницы']); if(canSec) tabs.push(['sections','Разделы'],['devlog','Девлог'],['apps','Анкеты'],['mga','МГА']); if(canEdit) tabs.push(['tickets','Тикеты']); if(isSA) tabs.push(['users','Польз.'],['settings','Настройки']);
   if(!tabs.find(t=>t[0]===apTab)) apTab=tabs[0]?.[0]||'profile';
   document.getElementById('ap-tabs').innerHTML=tabs.map(([id,l])=>`<button class="apt${apTab===id?' on':''}" onclick="setApTab('${id}')">${l}</button>`).join('');
   renderApTab();
@@ -1749,6 +1749,9 @@ async function renderApTab(){
     return;
   } else if(apTab==='news'){
     if(typeof fnRenderNewsTab==='function'){ await fnRenderNewsTab(b); } else { b.innerHTML='<p style="color:var(--err)">faction_news.js не загружен</p>'; }
+    return;
+  } else if(apTab==='tickets'){
+    if(typeof tkRenderAdmin==='function'){ await tkRenderAdmin(b); } else { b.innerHTML='<p style="color:var(--err)">tickets.js не загружен</p>'; }
     return;
   } else if(apTab==='users'){
     try {

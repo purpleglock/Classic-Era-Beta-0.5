@@ -12,7 +12,7 @@
 
 -- ── Постинг анонимного слуха по типу операции ──
 -- Сносим старую одно-аргументную версию, чтобы не было неоднозначности вызова.
-drop function if exists public._post_covert_rumor(text);
+drop function if exists public._post_covert_rumor(text, text);
 create or replace function public._post_covert_rumor(p_op text, p_target_fid text default null)
 returns void language plpgsql security definer set search_path=public as $$
 declare titles text[]; bodies text[]; t text; b text; v_target text; v_place text;
@@ -62,7 +62,7 @@ begin
         where owner_id is null and faction_name = '⚠ СЕКТОРНЫЕ СЛУХИ'
         order by created_at desc limit 15);
 end$$;
-revoke all on function public._post_covert_rumor(text) from public;
+revoke all on function public._post_covert_rumor(text, text) from public;
 
 -- ── Резолвер операций с вызовом слуха (полная версия) ──
 create or replace function public._spy_resolve(p_fid text)

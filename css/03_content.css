@@ -213,6 +213,11 @@
 .hp-hero-titlewrap{
   position:relative;z-index:5;text-align:center;padding:0 24px;pointer-events:none;
 }
+/* тёмная «подложка» за текстом — читаемость на любом ярком фоне */
+.hp-hero-titlewrap::before{
+  content:'';position:absolute;z-index:-1;inset:-26px -20px;pointer-events:none;
+  background:radial-gradient(60% 78% at 50% 50%, rgba(4,6,12,.62), rgba(4,6,12,.28) 55%, transparent 78%);
+}
 .hp-hero-eyebrow{
   font-family:'JetBrains Mono',monospace;font-size:11px;
   letter-spacing:8px;color:var(--gdl);opacity:.8;
@@ -223,9 +228,16 @@
   font-size:clamp(30px,5vw,60px);line-height:1.0;
   letter-spacing:clamp(2px,0.7vw,9px);
   text-transform:uppercase;margin:0;
-  color:#bfe1f5;
+  color:#dcefff;
   max-width:100%;overflow-wrap:break-word;
-  text-shadow:0 2px 0 rgba(0,0,0,.5), 0 0 40px rgba(46,155,224,.35);
+  text-shadow:0 2px 5px rgba(0,0,0,.9), 0 0 4px rgba(0,0,0,.95), 0 0 42px rgba(46,155,224,.4);
+}
+/* персональное приветствие — мягче, не капсом */
+.hp-hero-greet{
+  text-transform:none;
+  font-size:clamp(26px,4.4vw,52px);
+  letter-spacing:clamp(.5px,.3vw,2.5px);
+  color:#eaf6ff;
 }
 .hp-hero-rule{
   width:min(360px,60%);height:1px;margin:18px auto 0;

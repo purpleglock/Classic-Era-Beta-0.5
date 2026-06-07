@@ -32,7 +32,7 @@ const FR_GOV_DESC = {
   'Технократия': 'Власть учёных. + исследования и эффективность, холодная социалка.',
   'Корпоратократия': 'Власть корпораций. + торговля и производство, слабая лояльность.',
   'Коллективный разум': 'Единое сознание. идеальная координация, нет индивидуальности.',
-  'Машинный разум (ИИ)': 'Правит ИИ. + логика и эффективность, страх и недоверие органиков.',
+  'Машинный разум (ИИ)': 'Правит ИИ — фракция считается роботами: все планеты родные, пехота на Военном Заводе ×3, 2 исследования и 2 захвата за цикл. Расплата — штраф к доходу.',
 };
 const FR_REGIME_DESC = {
   'Демократический': 'Свободы и выборы. + счастье граждан, медленнее переход на военные рельсы.',
@@ -182,6 +182,8 @@ async function renderFactionWizard() {
   }
   FR.editApproved = !!(mine && mine.status === 'approved'); // редактирование своей фракции
   FR.data = mine ? { ...frBlank(), ...mine, buildings: mine.buildings || [] } : frBlank();
+  // раса фиксируется при перерегистрации — менять нельзя (определяет родные миры и доктрину)
+  FR.lockedRace = FR.editApproved ? mine.race : null;
   // при редактировании — реальная столичная колония (источник истины для имени/системы)
   FR.myCapital = null;
   if (FR.editApproved && mine.faction_id) {
@@ -400,7 +402,9 @@ function frStepCulture(d) {
   return `<h3 class="fr-h3">III. Культурные сведения</h3>
     <div class="fgr2">
       <div class="fg"><label class="fl">Биологический вид (раса)</label>
-        ${frSel('c-race', FR_RACE, d.race, "frSetDesc('c-race-d',FR_RACE_DESC,this.value,'race')")}
+        ${FR.editApproved
+          ? `<div class="fr-locked" style="margin:0">🔒 Раса закреплена за фракцией: <b>${esc(d.race)}</b> — изменить нельзя.</div><input type="hidden" id="c-race" value="${esc(d.race)}">`
+          : frSel('c-race', FR_RACE, d.race, "frSetDesc('c-race-d',FR_RACE_DESC,this.value,'race')")}
         <div class="fr-opt-desc" id="c-race-d">${frOptInit(FR_RACE_DESC, d.race, 'race')}</div></div>
       <div class="fg"><label class="fl">Идеология / Этика</label>
         ${frSel('c-ideo', FR_IDEO, d.ideology, "frSetDesc('c-ideo-d',FR_IDEO_DESC,this.value,'ideology')")}
@@ -610,6 +614,8 @@ async function frSaveDraft() {
 async function frSubmit() {
   if (FR.busy) return;
   frSyncStep();
+  // при перерегистрации раса неизменна — принудительно возвращаем исходную
+  if (FR.editApproved && FR.lockedRace) FR.data.race = FR.lockedRace;
   if (!FR.data.name) { toast('Укажите название', 'err'); FR.step = 0; frRenderStep(); return; }
   if (typeof badName === 'function' && badName(FR.data.name)) { toast('Название фракции содержит недопустимые слова (мат или запрещённое)', 'err'); FR.step = 0; frRenderStep(); return; }
   if (typeof badName === 'function' && badName(FR.data.planet_name)) { toast('Название столичной планеты содержит недопустимые слова (мат или запрещённое)', 'err'); FR.step = 2; frRenderStep(); return; }

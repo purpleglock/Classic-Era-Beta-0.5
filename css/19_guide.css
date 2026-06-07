@@ -221,6 +221,47 @@
 }
 .gb-doc-note b { color: var(--color-text); }
 
+/* ── Список «ключ → значение» (gb-kv) ── */
+.gb-kv-grid {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); overflow: hidden;
+  margin: 12px 0 18px;
+}
+.gb-kv-row {
+  display: grid; grid-template-columns: 200px 1fr; gap: 18px; align-items: start;
+  padding: 12px 16px; border-bottom: 1px solid var(--color-border-subtle);
+}
+.gb-kv-row:last-child { border-bottom: none; }
+.gb-kv-row:hover { background: var(--color-surface); }
+.gb-kv-key {
+  font-family: var(--font-display); font-size: 13px; font-weight: 600;
+  color: var(--color-accent); letter-spacing: 0.01em; padding-top: 1px;
+}
+.gb-kv-val { font-size: 13.5px; color: var(--color-text-muted); line-height: 1.6; }
+.gb-kv-val b { color: var(--color-text); }
+.gb-kv-bad { color: var(--color-danger, #e0654f) !important; }
+
+/* ── Панель особой расы (роботы) ── */
+.gb-robot {
+  margin: 18px 0;
+  padding: 16px 18px 6px;
+  border: 1px solid var(--color-border-medium);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-bg);
+}
+.gb-robot-hd {
+  display: flex; align-items: center; gap: 9px;
+  font-family: var(--font-display); font-size: 15px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-accent);
+  margin-bottom: 8px;
+}
+.gb-robot-ic { font-size: 17px; }
+.gb-robot-sub { font-size: 13.5px !important; margin: 0 0 6px !important; }
+.gb-robot .gb-kv-grid { border: none; background: transparent; margin: 4px 0 6px; }
+.gb-robot .gb-kv-row { border-bottom-color: var(--color-border); padding-left: 0; padding-right: 0; }
+.gb-robot .gb-kv-row:hover { background: transparent; }
+
 /* ── Чипы модификаторов ── */
 .gb-chip {
   display: inline-flex; align-items: center;
@@ -463,6 +504,8 @@
   .gb-section { margin-bottom: 44px; }
   .gb-h2 { font-size: 1.25rem; }
   .gb-doc-row { grid-template-columns: 1fr; gap: 10px; }
+  .gb-kv-row { grid-template-columns: 1fr; gap: 4px; }
+  .gb-kv-key { color: var(--color-accent); }
   .gb-tr { grid-template-columns: 1.2fr auto 1.6fr; gap: 8px; padding: 9px 12px; font-size: 12px; }
   .gb-cards, .gb-bld-grid, .gb-tips { grid-template-columns: 1fr; }
 }

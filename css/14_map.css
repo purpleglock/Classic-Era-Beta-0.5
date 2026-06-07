@@ -8,9 +8,29 @@
   cursor:grab;user-select:none;
 }
 #gm-viewport.gm-grabbing{cursor:grabbing}
-#gm-canvas{position:absolute;top:0;left:0;width:3300px;height:2062px;transform-origin:0 0}
-#gm-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;
-  filter:brightness(.4) saturate(.8) contrast(1.05)}
+#gm-canvas{position:absolute;top:0;left:0;width:3300px;height:2062px;transform-origin:0 0;
+  will-change:transform;backface-visibility:hidden}
+/* Космический фон СГЕНЕРИРОВАН КОДОМ (без картинки): тёмная база + туманности +
+   звёздная россыпь — всё CSS-градиентами. Композитится на GPU, не лагает. */
+#gm-bg{
+  position:absolute;inset:0;width:100%;height:100%;pointer-events:none;
+  background-color:#05060b;
+  background-image:
+    radial-gradient(58% 48% at 22% 28%, rgba(150,34,42,.30), transparent 70%),
+    radial-gradient(54% 46% at 78% 66%, rgba(54,34,104,.26), transparent 72%),
+    radial-gradient(46% 40% at 62% 16%, rgba(110,28,36,.20), transparent 70%),
+    radial-gradient(52% 52% at 12% 82%, rgba(30,52,96,.18), transparent 72%),
+    radial-gradient(40% 36% at 88% 22%, rgba(70,30,80,.16), transparent 72%),
+    radial-gradient(1px 1px at 30px 40px,   rgba(255,255,255,.75), transparent),
+    radial-gradient(1px 1px at 130px 90px,  rgba(210,225,255,.55), transparent),
+    radial-gradient(1.6px 1.6px at 210px 170px, rgba(255,246,230,.65), transparent),
+    radial-gradient(1px 1px at 310px 250px, rgba(255,255,255,.5), transparent),
+    radial-gradient(1.3px 1.3px at 80px 300px, rgba(200,220,255,.6), transparent);
+  background-repeat:no-repeat,no-repeat,no-repeat,no-repeat,no-repeat,
+    repeat,repeat,repeat,repeat,repeat;
+  background-size:auto,auto,auto,auto,auto,
+    260px 260px, 190px 190px, 330px 330px, 150px 150px, 410px 410px;
+}
 #gm-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
 
 /* Вороной (толщина обводки = var, выставляется из JS обратно зуму → постоянна на экране) */
@@ -18,9 +38,9 @@
 .vor-neutral{opacity:.35}
 .vor-claimed{stroke-width:calc(var(--cell-w,2) * 1.6)}
 .vor-edge{fill:none;stroke-linecap:round}
-/* свечение контура территории (нижний слой под чёткой линией) */
-.gm-glow-layer{pointer-events:none;opacity:.4}
-.gm-glow-layer .vor-edge{stroke-width:calc(var(--cell-w,2) * 2.6)}
+/* свечение контура территории — широкий полупрозрачный контур (без SVG-фильтра) */
+.gm-glow-layer{pointer-events:none;opacity:.28}
+.gm-glow-layer .vor-edge{stroke-width:calc(var(--cell-w,2) * 3.6)}
 /* линия фронта чуть ярче обычной границы — спорный рубеж заметнее */
 .vor-front{opacity:.95}
 #gm-svg.gm-noborders .vor-layer,#gm-svg.gm-noborders .vor-border-layer{display:none}

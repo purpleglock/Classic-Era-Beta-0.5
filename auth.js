@@ -417,7 +417,8 @@ async function doLogout() {
   try {
     if (editMode) exitEdit(false);
     closeAp();
-    localStorage.removeItem('wk12_session'); 
+    localStorage.removeItem('wk12_session');
+    try { localStorage.removeItem('wk_greet_name'); } catch(e){}   // сброс приветствия по имени
     sb.auth.signOut().catch(()=>{}); // Отправляем запрос, но не ждем его, чтобы UI не вис
     user = null; userProfile = { display_name:'', avatar_url:'' }; _pgCache.clear();
     updAuthUI();
@@ -458,6 +459,7 @@ function enforceBan() {
 
 function updAuthUI() {
   enforceBan();
+  try { if (typeof tkUpdateVisibility === 'function') tkUpdateVisibility(); } catch (e) {}
   const btn = document.getElementById('auth-btn'); const dot = document.getElementById('adot'); const av = document.getElementById('auth-av'); const eb = document.getElementById('edit-btn');
   if (!btn) return;
   if (user) {

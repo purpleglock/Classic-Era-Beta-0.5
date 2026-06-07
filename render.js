@@ -2145,6 +2145,88 @@ function buildHeroCta(user) {
   return `<button class="hp-hero-cta" onclick="${action}"><span class="hp-cta-ic">⬡</span>${lang === 'en' ? 'Register a faction' : 'Зарегистрировать фракцию'}</button>`;
 }
 
+// Выбранная фраза приветствия кэшируется на сессию, чтобы НЕ менялась при
+// перерисовках (оптимистичный рендер → после загрузки user). Сбрасывается при reload.
+let _heroGreet = null; // { name, text }
+// Есть ли в localStorage активная сессия Supabase (синхронно, до загрузки user).
+function _heroLikelyLoggedIn() {
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && /-auth-token$/.test(k) && localStorage.getItem(k)) return true; } } catch (e) {}
+  return false;
+}
+// Персональное приветствие для игроков/админов (по имени), иначе null (покажем бренд).
+// Чтобы не мигало «бренд → приветствие» при загрузке: если сессия есть, а user ещё
+// не загрузился — показываем приветствие сразу по кэшированному имени.
+function heroGreeting(user) {
+  let name = null;
+  if (user && ['superadmin', 'editor', 'moderator', 'player'].includes(user.role)) {
+    name = ((typeof userProfile !== 'undefined' && userProfile.display_name) || '').trim()
+      || (user.email ? user.email.split('@')[0] : '') || 'командир';
+    try { localStorage.setItem('wk_greet_name', name); } catch (e) {}
+  } else if (user) {
+    return null;                       // залогинен, но viewer → бренд
+  } else if (_heroLikelyLoggedIn()) {  // сессия грузится → оптимистично приветствуем по кэшу
+    name = (localStorage.getItem('wk_greet_name') || '').trim();
+    if (!name) return null;
+  } else {
+    return null;                       // аноним → бренд
+  }
+  name = name.trim();
+  // та же фраза на всю сессию для этого имени — никаких «прыжков» при перерисовке
+  if (_heroGreet && _heroGreet.name === name) return _heroGreet.text;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  const greets = en ? [
+    `Welcome back, ${name}`, `Good to see you, ${name}`, `${name} on deck`,
+    `Back in the saddle, ${name}`, `Signal locked, ${name}`, `Systems nominal, ${name}`,
+    `The galaxy awaits, ${name}`, `Course set, ${name}`, `Ready when you are, ${name}`,
+    `${name}, the bridge is yours`, `All stations report ready, ${name}`,
+  ] : [
+    `С возвращением, ${name}`,
+    `Как же я рад видеть тебя, ${name}`,
+    `${name} в свете прожекторов`,
+    `Снова в строю, ${name}?`,
+    `ПРИЕМ, ${name}`,
+    `Все системы готовы, ${name}`,
+    `Галактика ждёт твоих побед, ${name}`,
+    `Курс проложен, ${name}`,
+    `Мостик в вашем распоряжении, ${name}`,
+    `Флот ждёт приказов, ${name}`,
+    `Сектор как-то неспокоен, ${name}`,
+    `Скучал, ${name}?`,
+    `Всё для тебя, ${name}`,
+    `Мы обречены идти дальше, ${name}`,
+    `Готовность номер один, ${name}`,
+    `${name}, соберись. `,
+    `Привет от Рейхсклингера, ${name}`,
+    `Снова в гиперпространство, ${name}?`,
+    `Отдохни, ${name}`,
+    `Добро пожаловать в рубку, ${name}`,
+    `Какие же красивые песни поют на Травивале, ${name}`,
+    `Двигатели прогреты, ${name}`,
+    `Пора выступать, ${name}`,
+    `${name}, империя не ждёт`,
+    `Сводки, как всегда, на столе, ${name}`,
+    `Сигнал принят, ${name}`,
+    `Топлива точно хватит до следующей станции, ${name}`,
+    `Не забывай про радары, ${name}`,
+    `Навигация онлайн, ${name}`,
+    `${name}, к звёздам, К ТРИУМФУ!`,
+  ];
+  const h = new Date().getHours();
+  if (en) {
+    if (h < 5) greets.push(`Still up, ${name}?`, `Deep space never sleeps, ${name}`);
+    else if (h < 12) greets.push(`Good morning, ${name}`);
+    else if (h < 18) greets.push(`Good afternoon, ${name}`);
+    else greets.push(`Good evening, ${name}`);
+  } else {
+    if (h < 5) greets.push(`Не спится, ${name}?`, `Лучше поспи, ${name}`, `Как красив сегодня уважаемый спутник Земли, правда, ${name}?`);
+    else if (h < 12) greets.push(`С первыми лучами ты тут, словно солнышко, ${name}`, `С добрым утром, ${name}`, `Подъём, ${name}`);
+    else if (h < 18) greets.push(`Добрый день, ${name}`, `Хорошего дня, ${name}`);
+    else greets.push(`Добрый вечер, ${name}`, `Вечереет, ${name}`);
+  }
+  const text = greets[Math.floor(Math.random() * greets.length)];
+  _heroGreet = { name, text };
+  return text;
+}
 function buildHero(coverUrl, user) {
   const _homePg = _pgCache.get('home');
   // title = RU надпись, title_ru = EN надпись (исторически так в схеме)
@@ -2169,8 +2251,9 @@ function buildHero(coverUrl, user) {
     <span class="hpc-corner hpc-tl"></span><span class="hpc-corner hpc-tr"></span>
     <span class="hpc-corner hpc-bl"></span><span class="hpc-corner hpc-br"></span>
     <div class="hp-hero-titlewrap">
-      <div class="hp-hero-eyebrow">◈&nbsp;&nbsp;${esc(eyebrow)}&nbsp;&nbsp;◈</div>
-      <h1 class="hp-hero-title">${esc(title)}</h1>
+      ${(() => { const g = heroGreeting(user); return g
+        ? `<h1 class="hp-hero-title hp-hero-greet">${esc(g)}</h1>`
+        : `<h1 class="hp-hero-title">${esc(title)}</h1>`; })()}
       <div class="hp-hero-rule"></div>
       ${buildHeroCta(user)}
     </div>

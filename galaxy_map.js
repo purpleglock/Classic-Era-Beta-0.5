@@ -80,8 +80,8 @@ async function renderGalaxyMap() {
   host.innerHTML = `
     <div id="gm-wrap">
       <div id="gm-viewport">
+        <div id="gm-bg"></div>
         <div id="gm-canvas">
-          <img id="gm-bg" src="${GM_BASE}background_galaxy.png" draggable="false" alt="">
           <svg id="gm-svg" viewBox="0 0 ${GM_W} ${GM_H}" preserveAspectRatio="none"></svg>
           <div id="gm-stars"></div>
         </div>
@@ -144,11 +144,15 @@ function gmClamp() {
   if (mw < w) GM.tx = (w - mw) / 2;
   if (mh < h) GM.ty = (h - mh) / 2;
 }
+let _gmStrokeT = null;
 function gmApply() {
   gmClamp();
   const c = document.getElementById('gm-canvas');
   if (c) c.style.transform = `translate(${GM.tx}px, ${GM.ty}px) scale(${GM.scale})`;
-  gmUpdateStrokes();
+  // Толщину обводок обновляем НЕ каждый кадр зума (это меняет CSS-переменные и
+  // заставляет перерисовывать весь SVG → лаги), а с задержкой, после остановки.
+  clearTimeout(_gmStrokeT);
+  _gmStrokeT = setTimeout(gmUpdateStrokes, 110);
 }
 
 // ── Привязка событий вьюпорта ───────────────────────────────
@@ -369,15 +373,15 @@ function gmEdgeSubs(a, b, amp = 8) {
   // вариативность: у каждого ребра своя «изрезанность» (0.5–1.6×) — границы не однообразны
   const vary = 0.5 + gmEdgeHash(p[0] * 0.13 + q[0] * 0.91, p[1] * 0.57 + q[1] * 0.19) * 1.1;
   const localAmp = Math.min(amp * vary, clen * 0.32);
-  const n = Math.max(7, Math.min(24, Math.round(clen / 10)));   // ещё больше мелких рёбер
+  // меньше точек на ребро = легче пути (производительность пана/зума)
+  const n = Math.max(4, Math.min(13, Math.round(clen / 16)));
   const subs = [];
   for (let s = 1; s < n; s++) {
     const tc = s / n;
-    // три октавы шума: крупная волна + средняя + мелкая деталь → изрезанный «природный» край
+    // две октавы шума: крупная волна + деталь → изрезанный «природный» край
     const lo  = gmEdgeHash(p[0] + q[0] * 0.37 + tc * 53.1,  p[1] + q[1] * 0.29 + tc * 91.7)  - 0.5;
     const mid = gmEdgeHash(p[0] * 0.71 + tc * 137.3,        q[1] * 0.83 + tc * 311.5)        - 0.5;
-    const hi  = gmEdgeHash(p[0] * 1.93 + tc * 547.7,        q[1] * 1.27 + tc * 733.1)        - 0.5;
-    const off = (lo * 1.1 + mid * 0.6 + hi * 0.3) * localAmp;   // |off| ≤ localAmp
+    const off = (lo * 1.25 + mid * 0.55) * localAmp;
     subs.push([p[0] + cdx * tc + nx * off, p[1] + cdy * tc + ny * off]);
   }
   if (swap) subs.reverse();   // вернуть в порядке a→b
@@ -506,9 +510,11 @@ function gmDrawSvg() {
   }).join('');
 
   const fb = facBorderHtml.join('');
-  svg.innerHTML = `<defs><filter id="gm-glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3.2"/></filter></defs>`
-    + `<g class="vor-layer">${fillHtml}</g>`
-    + `<g class="vor-border-layer gm-glow-layer" filter="url(#gm-glow)">${fb}</g>`
+  // Свечение — широкий полупрозрачный контур БЕЗ SVG-фильтра (feGaussianBlur тормозил
+  // при пане/зуме). Дёшево композитится.
+  svg.innerHTML =
+    `<g class="vor-layer">${fillHtml}</g>`
+    + `<g class="vor-border-layer gm-glow-layer">${fb}</g>`
     + `<g class="vor-border-layer">${neutralBorderHtml.join('')}${fb}</g>`
     + `<g class="lane-layer">${laneHtml}</g>`;
   svg.classList.toggle('gm-noborders', !GM.showBorders);
@@ -522,9 +528,6 @@ function gmUpdateStrokes() {
   const s = GM.scale || 1;
   svg.style.setProperty('--lane-w', (3 / s).toFixed(2));
   svg.style.setProperty('--cell-w', (1.4 / s).toFixed(2));
-  // радиус свечения границ — постоянный на экране (компенсируем зум)
-  const blur = svg.querySelector('#gm-glow feGaussianBlur');
-  if (blur) blur.setAttribute('stdDeviation', (2.2 / s).toFixed(2));
 }
 
 // превращает rgba(r,g,b,a) в более плотный контур

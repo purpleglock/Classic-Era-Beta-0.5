@@ -10,7 +10,7 @@
 -- ============================================================
 
 -- 1) Функция-постер слуха (жертва + место, исполнитель в тайне)
-drop function if exists public._post_covert_rumor(text);
+drop function if exists public._post_covert_rumor(text, text);
 create or replace function public._post_covert_rumor(p_op text, p_target_fid text default null)
 returns void language plpgsql security definer set search_path=public as $$
 declare titles text[]; bodies text[]; t text; b text; v_target text; v_place text;

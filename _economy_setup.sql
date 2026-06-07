@@ -569,8 +569,8 @@ declare
   cost numeric := 3000;
   cd interval := '7 days';
   mods jsonb;
-  max_claims int := 1;     -- «Дом в небесах» → 2 системы за цикл
-  in_window boolean;
+  max_claims int := 1;     -- размер пула захватов: «Дом в небесах»/роботы → 2
+  pool_used int;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   select * into app from public.faction_applications
@@ -598,21 +598,29 @@ begin
 
   if eco.gc < cost then raise exception 'not enough GC'; end if;
 
-  -- сколько захватов разрешено в одном цикле: «Дом в небесах» ИЛИ роботы → 2
+  -- размер пула захватов до перезарядки: «Дом в небесах» ИЛИ роботы → 2, иначе 1
   if (eco.research is not null and eco.research ? 'pol.house_heavens')
      or public._faction_is_robot(app.faction_id) then max_claims := 2; end if;
-  in_window := eco.last_system_claim is not null and eco.last_system_claim > now() - cd;
 
-  if in_window then
-    -- окно активно: разрешаем, пока не исчерпан лимит цикла (кулдаун НЕ сбрасываем)
-    if coalesce(eco.claim_used, 0) >= max_claims then raise exception 'claim cooldown active'; end if;
+  -- Модель «пул»: кулдаун идёт ТОЛЬКО если пул был исчерпан (last_system_claim проставлен
+  -- при последнем захвате пула). Пока в пуле есть захваты — last_system_claim = null.
+  if eco.last_system_claim is not null and eco.last_system_claim > now() - cd then
+    raise exception 'claim cooldown active';
+  end if;
+  -- last_system_claim проставлен и кулдаун уже прошёл → пул пополнен (счёт с нуля);
+  -- иначе пул ещё открыт — берём текущий счётчик.
+  if eco.last_system_claim is not null then pool_used := 0; else pool_used := coalesce(eco.claim_used, 0); end if;
+  pool_used := pool_used + 1;
+
+  if pool_used >= max_claims then
+    -- пул исчерпан → стартует кулдаун от ЭТОГО (последнего) захвата
     update public.faction_economy
-      set gc = gc - cost, claim_used = coalesce(claim_used, 0) + 1
+      set gc = gc - cost, claim_used = pool_used, last_system_claim = now()
       where faction_id = app.faction_id;
   else
-    -- новое окно: первый захват сбрасывает таймер и счётчик
+    -- в пуле ещё остались захваты → кулдаун не запускаем
     update public.faction_economy
-      set gc = gc - cost, last_system_claim = now(), claim_used = 1
+      set gc = gc - cost, claim_used = pool_used, last_system_claim = null
       where faction_id = app.faction_id;
   end if;
   update public.map_systems set faction = app.faction_id where id = p_system_id;
@@ -955,7 +963,7 @@ end$$;
 -- Разрешение готовых операций фракции (вызывается в economy_accrue).
 -- Анонимный «слух» о тайной ОПЕРАЦИИ-ДЕЙСТВИИ в Вестник (без конкретики, со слов
 -- очевидцев, по шаблонам). Разведку (recon_*) не публикуем. Держим не более 15 слухов.
-drop function if exists public._post_covert_rumor(text);
+drop function if exists public._post_covert_rumor(text, text);
 create or replace function public._post_covert_rumor(p_op text, p_target_fid text default null)
 returns void language plpgsql security definer set search_path=public as $$
 declare titles text[]; bodies text[]; t text; b text; v_target text; v_place text;
@@ -1005,7 +1013,7 @@ begin
         where owner_id is null and faction_name = '⚠ СЕКТОРНЫЕ СЛУХИ'
         order by created_at desc limit 15);
 end$$;
-revoke all on function public._post_covert_rumor(text) from public;
+revoke all on function public._post_covert_rumor(text, text) from public;
 
 create or replace function public._spy_resolve(p_fid text)
 returns void language plpgsql security definer set search_path=public as $$
