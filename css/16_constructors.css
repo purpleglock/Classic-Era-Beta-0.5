@@ -119,6 +119,7 @@
 .cn-modal-bar { height: 4px; width: 60px; border-radius: var(--radius-pill); background: var(--w2); margin-bottom: 12px; }
 .cn-modal-name { font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--t1); }
 .cn-spec { white-space: pre-wrap; font-family: var(--font-mono); font-size: 11.5px; color: var(--te); background: var(--b1); border: 1px solid var(--w1); border-radius: var(--radius-sm); padding: 12px; margin: 4px 0 0; line-height: 1.55; }
+.cn-spec-locked { font-family: var(--font-display); font-size: 13px; color: var(--t3); text-align: center; border-style: dashed; line-height: 1.7; }
 .cn-modal-acts { display: flex; gap: 8px; margin-top: 14px; }
 
 /* ── Адаптив ── */

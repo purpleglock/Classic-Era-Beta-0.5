@@ -201,6 +201,25 @@
 .ec-cz-native { color: var(--ok); }
 .ec-cz-foreign { color: var(--color-warning, #e0a030); }
 .ec-cz-no { color: var(--t4); }
+.ec-cz-station { color: var(--pu); font-weight: 600; }   /* Небожители — станция на непригодном мире */
+
+/* Кликабельная карточка узла дерева → модалка с полным описанием */
+.ec-tnode-clk { cursor: pointer; }
+.ec-rinfo-ov { position: fixed; inset: 0; z-index: var(--z-modal, 50); display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,6,.72); }
+.ec-rinfo-ov.show { display: flex; }
+.ec-rinfo { position: relative; width: min(440px, 100%); max-height: 88vh; overflow-y: auto; background: var(--b2); border: 1px solid var(--w2); border-left: 3px solid var(--pu); border-radius: var(--radius-lg, 16px); padding: 20px 22px; box-shadow: var(--shadow-xl, 0 24px 48px rgba(0,0,0,.5)); }
+.ec-rinfo-x { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border: 1px solid var(--w2); background: var(--b3); color: var(--t3); border-radius: var(--radius-sm); cursor: pointer; }
+.ec-rinfo-x:hover { color: var(--t1); border-color: var(--w3); }
+.ec-rinfo-tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--pu); margin-bottom: 4px; }
+.ec-rinfo-name { font-family: var(--font-display); font-weight: 700; font-size: 19px; color: var(--t1); line-height: 1.2; padding-right: 34px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ec-rinfo-desc { font-size: 13.5px; color: var(--t2); line-height: 1.6; margin: 10px 0; }
+.ec-rinfo-station { font-size: 12.5px; color: var(--t2); line-height: 1.55; background: color-mix(in srgb, var(--pu) 10%, var(--b1)); border: 1px solid color-mix(in srgb, var(--pu) 30%, transparent); border-radius: var(--radius-md); padding: 9px 12px; margin: 8px 0; }
+.ec-rinfo-station b { color: var(--t1); }
+.ec-rinfo .ec-tnode-bonus { margin: 8px 0; }
+.ec-rinfo-meta { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--t3); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--w1); }
+.ec-rinfo-note { display: block; font-size: 12px; color: var(--color-warning, #e0a030); margin-top: 10px; }
+.ec-rinfo-act { margin-top: 14px; }
+.ec-rinfo-act .btn { width: 100%; justify-content: center; }
 
 /* Кнопка-мини */
 .btn-xs { padding: 3px 8px !important; font-size: 10px !important; }
@@ -688,10 +707,12 @@
 .ec-tnode.ec-br-econ    { border-left-color: var(--gd); }
 .ec-tnode.ec-br-prod    { border-left-color: var(--color-warning, #e0a030); }
 .ec-tnode.ec-br-expand  { border-left-color: var(--pu); }
+.ec-tnode.ec-br-celestial { border-left-color: var(--pu); }
+.ec-tnode.ec-br-celestial .ec-tnode-tag { color: var(--pu); background: color-mix(in srgb, var(--pu) 15%, transparent); }
 
 /* чипы бонусов в узле политики */
-.ec-tnode-bonus { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
-.ec-bchip { font-family: var(--font-mono); font-size: 9.5px; padding: 1px 6px; border-radius: var(--radius-pill); border: 1px solid; white-space: nowrap; }
+.ec-tnode-bonus { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; max-width: 100%; }
+.ec-bchip { font-family: var(--font-mono); font-size: 9.5px; padding: 1px 6px; border-radius: var(--radius-pill); border: 1px solid; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .ec-bchip.good { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
 .ec-bchip.bad { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
 .ec-bchip.special { color: var(--pu); border-color: color-mix(in srgb, var(--pu) 55%, transparent); background: color-mix(in srgb, var(--pu) 12%, transparent); }
@@ -734,4 +755,138 @@
   .ec-ov-grid { gap: 6px; }
   .ec-ov-v { font-size: 18px; }
   /* таб-бар переносится по строкам — все подписи видны */
+}
+
+/* ════════════════════════════════════════════════════════════
+   ОБЗОР ДЕРЖАВЫ — дашборд в духе Stellaris (ec-ovx-*)
+   Казна-герой · бюджетный реестр · ресурсы · держава · армия · наука.
+   Цвета: ◈ ГС — акцент (--gd), 🔬 ОН — фиолетовый (--pu),
+          🕵 агенты/контрразведка — циан (--te), предупреждения — amber.
+   ════════════════════════════════════════════════════════════ */
+:root { --ec-amb: var(--color-warning, #e0a030); }
+
+/* ── 1. Казна (hero) ── */
+.ec-ovx-hero {
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--fc, var(--gd)) 14%, transparent) 0%, transparent 55%),
+    linear-gradient(180deg, var(--b3) 0%, var(--b2) 100%);
+  border: 1px solid var(--w2); border-left: 3px solid var(--fc, var(--gd));
+  border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 16px;
+}
+.ec-ovx-hero::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background: repeating-linear-gradient(90deg, transparent 0 6px, color-mix(in srgb, var(--fc, var(--gd)) 5%, transparent) 6px 7px);
+  mask: linear-gradient(90deg, #000, transparent 60%);
+}
+.ec-ovx-hero-id { position: relative; z-index: 1; margin-bottom: 14px; }
+.ec-ovx-hero-name { font-family: var(--font-display); font-weight: 800; font-size: 24px; letter-spacing: .01em; color: var(--t1); line-height: 1.1; }
+.ec-ovx-hero-sub { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--t3); margin-top: 3px; }
+.ec-ovx-vaults { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.ec-ovx-vault {
+  position: relative; display: flex; flex-direction: column; gap: 2px;
+  background: color-mix(in srgb, var(--b1) 70%, transparent); border: 1px solid var(--w2);
+  border-radius: var(--radius-md); padding: 11px 13px 12px; overflow: hidden;
+}
+.ec-ovx-vault::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--vc, var(--gd)); }
+.ec-ovx-v-gc  { --vc: var(--gd); }
+.ec-ovx-v-sci { --vc: var(--pu); }
+.ec-ovx-v-agt { --vc: var(--te); }
+.ec-ovx-vault-ic { position: absolute; right: 9px; top: 8px; font-size: 17px; opacity: .35; }
+.ec-ovx-vault-k { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--t3); }
+.ec-ovx-vault-v { font-family: var(--font-display); font-weight: 800; font-size: 23px; color: var(--t1); line-height: 1.15; }
+.ec-ovx-vault-inc { font-family: var(--font-mono); font-size: 10.5px; color: color-mix(in srgb, var(--vc, var(--gd)) 75%, var(--t2)); }
+.ec-ovx-hero-tick { position: relative; z-index: 1; margin-top: 12px; font-family: var(--font-mono); font-size: 10.5px; color: var(--t3); display: flex; align-items: center; gap: 8px; }
+.ec-ovx-hero-tick > .ec-prog { flex: 1; }
+.ec-ovx-tick-wait { color: var(--t4); }
+
+/* ── Панель-секция ── */
+.ec-ovx-panel { background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 14px; }
+.ec-ovx-panel-t { display: flex; align-items: baseline; gap: 9px; font-family: var(--font-display); font-weight: 700; font-size: 14.5px; letter-spacing: .02em; color: var(--t1); margin-bottom: 11px; padding-bottom: 9px; border-bottom: 1px solid var(--w1); }
+.ec-ovx-panel-sub { font-family: var(--font-mono); font-weight: 400; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--t3); }
+.ec-ovx-panel-sub.ec-ov-clk:hover { color: var(--gd); }
+.ec-ovx-empty { font-size: 13px; color: var(--t3); padding: 6px 0; }
+.ec-ovx-hint { font-size: 11.5px; color: var(--t3); margin-top: 9px; line-height: 1.5; }
+.ec-ovx-hint b { color: var(--t2); }
+.ec-ovx-muted { color: var(--t4); }
+
+/* Цвета значений */
+.ec-ovx-c-gc  { color: var(--gd) !important; }
+.ec-ovx-c-sci { color: var(--pu) !important; }
+.ec-ovx-c-agt { color: var(--te) !important; }
+
+/* ── 2. Бюджетный реестр ── */
+.ec-ovx-ledger { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ec-ovx-led-row { cursor: pointer; transition: background var(--transition-fast); }
+.ec-ovx-led-row:hover { background: var(--b3); }
+.ec-ovx-ledger td { padding: 8px 6px; border-bottom: 1px solid var(--w1); vertical-align: middle; }
+.ec-ovx-led-src { color: var(--t1); font-weight: 500; }
+.ec-ovx-led-ic { display: inline-block; width: 22px; }
+.ec-ovx-led-slots { font-family: var(--font-mono); font-size: 11px; color: var(--t3); white-space: nowrap; }
+.ec-ovx-led-base { font-family: var(--font-mono); font-size: 12px; color: var(--t3); text-align: right; }
+.ec-ovx-led-note { color: var(--t4); font-style: italic; font-size: 11.5px; }
+.ec-ovx-led-val { font-family: var(--font-mono); font-weight: 700; font-size: 13.5px; text-align: right; white-space: nowrap; }
+.ec-ovx-led-u { font-size: 10px; font-weight: 400; opacity: .7; }
+.ec-ovx-led-total td { padding-top: 10px; border-bottom: none; font-family: var(--font-display); font-weight: 700; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--t2); }
+.ec-ovx-led-totals { text-align: right; display: flex; gap: 12px; justify-content: flex-end; font-family: var(--font-mono); font-size: 14px; }
+.ec-ovx-docs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ec-ovx-doc { font-family: var(--font-mono); font-size: 10.5px; padding: 3px 9px; border-radius: var(--radius-pill); border: 1px solid var(--w2); color: var(--t2); }
+.ec-ovx-doc.pos { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: color-mix(in srgb, var(--ok) 9%, transparent); }
+.ec-ovx-doc.neg { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); background: color-mix(in srgb, var(--err) 9%, transparent); }
+
+/* ── 3. Ресурсы ── */
+.ec-ovx-res-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 7px; }
+.ec-ovx-res-row { display: flex; align-items: center; gap: 9px; background: var(--b1); border: 1px solid var(--w1); border-left: 3px solid var(--w3); border-radius: var(--radius-sm); padding: 7px 11px; }
+.ec-ovx-res-ic { font-size: 15px; flex-shrink: 0; }
+.ec-ovx-res-n { flex: 1; font-size: 12.5px; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-ovx-res-rate { font-family: var(--font-mono); font-size: 11.5px; color: var(--ok); white-space: nowrap; }
+.ec-ovx-res-rate i { color: var(--t4); }
+.ec-ovx-res-have { font-family: var(--font-mono); font-size: 12.5px; font-weight: 700; color: var(--t1); white-space: nowrap; }
+.ec-ovx-res-have-u { font-weight: 400; font-size: 9.5px; color: var(--t4); }
+/* Редкость — цвет левой кромки */
+.ec-ovx-res-row.ec-rar-common   { border-left-color: var(--t4); }
+.ec-ovx-res-row.ec-rar-uncommon { border-left-color: var(--ok); }
+.ec-ovx-res-row.ec-rar-rare     { border-left-color: var(--te); }
+.ec-ovx-res-row.ec-rar-epic     { border-left-color: var(--pu); }
+.ec-ovx-res-row.ec-rar-legendary{ border-left-color: var(--gd); }
+
+/* ── 4–6. Стат-сетка, чипы, мощности ── */
+.ec-ovx-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 9px; }
+.ec-ovx-stat { background: var(--b1); border: 1px solid var(--w1); border-radius: var(--radius-md); padding: 12px 13px; text-align: center; }
+.ec-ovx-stat.ec-ov-clk { cursor: pointer; transition: border-color var(--transition-fast), background var(--transition-fast); }
+.ec-ovx-stat.ec-ov-clk:hover { border-color: var(--gd); background: var(--b3); }
+.ec-ovx-stat-v { font-family: var(--font-display); font-weight: 800; font-size: 24px; color: var(--t1); line-height: 1.05; }
+.ec-ovx-stat-k { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--t3); margin-top: 4px; }
+.ec-ovx-stat-wide { grid-column: 1 / -1; text-align: left; }
+.ec-ovx-stat-barline { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-family: var(--font-mono); font-size: 13px; color: var(--t2); }
+.ec-ovx-stat-barline b { color: var(--t1); font-size: 16px; }
+
+.ec-ovx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+.ec-ovx-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-pill); padding: 4px 11px; font-size: 11.5px; color: var(--t2); }
+.ec-ovx-chip b { color: var(--t1); }
+.ec-ovx-chip-ic { font-size: 12px; }
+
+.ec-ovx-caps { display: flex; flex-direction: column; gap: 9px; margin-top: 12px; }
+.ec-ovx-cap { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; }
+.ec-ovx-cap-k { font-size: 12.5px; color: var(--t2); }
+.ec-ovx-cap-v { font-family: var(--font-mono); font-size: 11.5px; color: var(--t3); white-space: nowrap; }
+.ec-ovx-cap .ec-ovx-bar { grid-column: 1 / -1; }
+
+/* Полоска заполнения */
+.ec-ovx-bar { display: block; height: 6px; flex: 1; min-width: 60px; background: var(--b0); border: 1px solid var(--w1); border-radius: var(--radius-pill); overflow: hidden; }
+.ec-ovx-bar-fill { display: block; height: 100%; background: var(--gd); border-radius: inherit; transition: width var(--transition-normal); }
+.ec-ovx-bar-fill.fill-gc  { background: linear-gradient(90deg, var(--gd), var(--gdl)); }
+.ec-ovx-bar-fill.fill-sci { background: linear-gradient(90deg, var(--pu), var(--pul)); }
+.ec-ovx-bar-fill.fill-amb { background: linear-gradient(90deg, var(--ec-amb), color-mix(in srgb, var(--ec-amb) 70%, #fff)); }
+
+.ec-ovx-active { background: color-mix(in srgb, var(--pu) 10%, var(--b1)); border: 1px solid color-mix(in srgb, var(--pu) 32%, transparent); border-radius: var(--radius-md); padding: 10px 13px; margin-bottom: 11px; font-size: 13px; color: var(--t1); }
+.ec-ovx-active b { color: var(--pu); }
+
+@media (max-width: 720px) {
+  .ec-ovx-vaults { grid-template-columns: 1fr; }
+  .ec-ovx-hero-name { font-size: 20px; }
+  .ec-ovx-vault-v { font-size: 20px; }
+  .ec-ovx-res-list { grid-template-columns: 1fr; }
+  .ec-ovx-led-totals { flex-direction: column; gap: 2px; font-size: 12.5px; }
+  .ec-ovx-stat-v { font-size: 20px; }
 }

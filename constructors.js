@@ -935,10 +935,25 @@ async function cnPublish() {
     owner_id: user.id, owner_email: user.email,
     summary, data, card_text: card, updated_at: new Date().toISOString(),
   };
+  const isNew = !(CN.editUnit && CN.editUnit.id);
+  const onCost = (isNew && CN.cat !== 'division' && fac.faction_id) ? (summary.on || 0) : 0;
+
+  if (onCost > 0) {
+    const ecoRows = await dbGet('faction_economy', `faction_id=eq.${encodeURIComponent(fac.faction_id)}&select=science`);
+    const curScience = (ecoRows && ecoRows[0] && ecoRows[0].science) || 0;
+    if (curScience < onCost) { toast(`Недостаточно ОН для разработки: нужно ${onCost}, есть ${curScience}`, 'err'); return; }
+  }
+
   CN.busy = true;
   try {
+    if (onCost > 0) {
+      const ecoRows = await dbGet('faction_economy', `faction_id=eq.${encodeURIComponent(fac.faction_id)}&select=science`);
+      const curScience = (ecoRows && ecoRows[0] && ecoRows[0].science) || 0;
+      if (curScience < onCost) { toast(`Недостаточно ОН для разработки: нужно ${onCost}, есть ${curScience}`, 'err'); return; }
+      await dbPatch('faction_economy', 'faction_id=eq.' + encodeURIComponent(fac.faction_id), { science: curScience - onCost });
+    }
     if (CN.editUnit && CN.editUnit.id) { await dbPatch('faction_units', 'id=eq.' + CN.editUnit.id, body); toast('Изменения сохранены ✓', 'ok'); }
-    else { const rows = await dbPost('faction_units', body); const row = Array.isArray(rows) ? rows[0] : rows; if (row && row.id) CN.editUnit = row; toast('Опубликовано ✓', 'ok'); }
+    else { const rows = await dbPost('faction_units', body); const row = Array.isArray(rows) ? rows[0] : rows; if (row && row.id) CN.editUnit = row; toast(`Опубликовано ✓${onCost ? ` · −${onCost} ОН` : ''}`, 'ok'); }
     go(cnCatRoute(CN.cat));
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
   finally { CN.busy = false; }
@@ -969,6 +984,18 @@ const CN_CAT_META = {
 CN.catFilter = '*';
 
 function cnCanManage(u) { return !!(user && (cnIsStaff() || u.owner_id === user.id)); }
+// Кто вообще видит юнит: администрация, владелец, своя фракция, либо общедоступный.
+// Чужие фракционные юниты не показываются вовсе — иначе по карточкам в каталоге
+// видно, у каких государств есть флот/техника, а это разведданные (чит).
+function cnCanSeeUnit(u) {
+  if (cnIsStaff()) return true;                          // администрация видит всё
+  if (user && u.owner_id === user.id) return true;       // автор
+  if (!u.faction_id) return true;                        // общедоступный — открыт всем
+  const mine = cnMyFactionMeta();                        // член той же фракции
+  return !!(mine && mine.faction_id && mine.faction_id === u.faction_id);
+}
+// Видимость чертежа/состава совпадает с видимостью самого юнита.
+function cnCanSeeBlueprint(u) { return cnCanSeeUnit(u); }
 function cnReadable(c) { return (typeof frReadable === 'function') ? frReadable(c) : (c || '#cfe3ff'); }
 function cnIsPublic(u) { return !u.faction_id; }
 function cnFacName(u) { return (u.faction_name && u.faction_name.trim()) ? u.faction_name : 'Общедоступная'; }
@@ -980,6 +1007,9 @@ async function cnRenderCatalog(cat) {
   let units = [];
   try { units = await dbGet('faction_units', `category=eq.${cat}&order=updated_at.desc`) || []; }
   catch (e) { setPg(`<div class="cn-wrap"><div class="cn-head"><h1>${meta.ico} ${esc(meta.title)}</h1></div><div class="sempty">Ошибка загрузки: ${esc(e.message)}</div></div>`); return; }
+  // Чужие фракционные юниты убираем целиком — каталог показывает только свои +
+  // общедоступные (администрация видит всё). Иначе по карточкам видно чужой флот.
+  units = units.filter(cnCanSeeUnit);
   CN.catUnits = units; CN.catCat = cat;
   if (CN.catFilter !== '*' && !units.some(u => (u.faction_id || '') === CN.catFilter)) CN.catFilter = '*';
   cnPaintCatalog();
@@ -1038,13 +1068,18 @@ function cnViewUnit(id) {
   let ov = document.getElementById('cn-modal-ov');
   if (!ov) { ov = document.createElement('div'); ov.id = 'cn-modal-ov'; ov.className = 'cn-modal-ov'; ov.onclick = e => { if (e.target === ov) cnCloseView(); }; document.body.appendChild(ov); }
   const stats = cnCardStats(u.category, u.summary);
+  const seeBp = cnCanSeeBlueprint(u);
+  const isDiv = u.category === 'division';
+  const spec = seeBp
+    ? `<pre class="cn-spec">${esc(u.card_text || '')}</pre>`
+    : `<div class="cn-spec cn-spec-locked">🔒 ${isDiv ? 'Состав дивизии засекречен' : 'Чертёж засекречен'}.<br><span style="opacity:.7">Доступно только владельцу фракции и администрации.</span></div>`;
   ov.innerHTML = `<div class="cn-modal">
     <button class="cn-modal-x" onclick="cnCloseView()">✕</button>
     <div class="cn-modal-bar" style="background:${esc(col)}"></div>
     <div class="cn-modal-name">${esc(u.name || 'Без названия')}</div>
     <div class="cn-card-fac" style="color:${esc(col)}">${esc(cnFacName(u))} · ${esc(CN_CAT_META[u.category]?.title || '')}</div>
     <div class="cn-card-stats" style="margin:10px 0">${stats}</div>
-    <pre class="cn-spec">${esc(u.card_text || '')}</pre>
+    ${spec}
     ${cnCanManage(u) ? `<div class="cn-modal-acts">
       <button class="btn btn-gh btn-sm" onclick="cnCloseView();cnEdit('${u.id}')">✎ Редактировать</button>
       <button class="btn btn-rd btn-sm" onclick="cnDelete('${u.id}')">✕ Удалить</button>

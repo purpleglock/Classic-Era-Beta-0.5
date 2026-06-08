@@ -572,3 +572,43 @@ async function loadSiteSettings() {
 // Загружаем настройки при старте
 loadSiteSettings();
 
+
+// ════════════════════════════════════════════════════════════
+
+// АНТИ-МЕРЦАНИЕ ПРИ БРАУЗЕРНОМ ПИНЧ-ЗУМЕ
+
+// При двупальцевом масштабировании страницы visualViewport.scale
+
+// меняется, и браузер каждый кадр перерисовывает фиксированный blur-фон
+
+// и сканлайны → стробоскоп. На время жеста вешаем .zooming на <html>
+
+// (CSS в 21_perf.css гасит тяжёлые слои), снимаем через паузу после
+
+// остановки жеста. Своя пинч-зум карты этим не затрагивается.
+
+(function () {
+
+  const vv = window.visualViewport;
+
+  if (!vv) return;
+
+  const root = document.documentElement;
+
+  let lastScale = vv.scale, t = null, active = false;
+
+  const stop = () => { active = false; root.classList.remove("zooming"); };
+
+  vv.addEventListener("resize", () => {
+
+    if (Math.abs(vv.scale - lastScale) <= 0.001) return; // не зум (ресайз/клавиатура)
+
+    lastScale = vv.scale;
+
+    if (!active && vv.scale !== 1) { active = true; root.classList.add("zooming"); }
+
+    if (active) { clearTimeout(t); t = setTimeout(stop, 220); }
+
+  });
+
+})();

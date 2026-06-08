@@ -30,3 +30,23 @@
 #top { background: hsl(222 24% 8% / .98) !important; }
 .st-ico, .st-count { background: hsl(216 20% 7% / .88) !important; }
 .cmt-composer-dock { background: var(--b0, #0b0e13) !important; }
+
+/* ════════════════════════════════════════════════════════════
+   АНТИ-СТРОБОСКОП ПРИ БРАУЗЕРНОМ ПИНЧ-ЗУМЕ.
+
+   При двупальцевом масштабировании страницы браузер каждый кадр
+   перерисовывает фиксированные слои: размытый фон #app::before
+   (filter: blur) и тонкие сканлайны body::after (repeating-linear-
+   gradient 2–3px). Размытие пересчитывается, а сканлайны дают муар —
+   вместе это и есть мерцание/«ристур эпилепсии».
+
+   На время жеста <html> получает класс .zooming (ставится из core.js
+   по visualViewport). Гасим blur у фона, убираем сканлайны и паузим
+   бесконечные анимации — после остановки жеста класс снимается и всё
+   возвращается. backdrop-filter уже снят глобально выше.
+   ════════════════════════════════════════════════════════════ */
+html.zooming #app::before { filter: brightness(.22) saturate(.55) !important; }
+html.zooming body::after { opacity: 0 !important; }
+html.zooming *, html.zooming *::before, html.zooming *::after {
+  animation-play-state: paused !important;
+}

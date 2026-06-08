@@ -40,7 +40,13 @@
       "Bash(grep -n \"create or replace function public.economy_accrue\\\\|create or replace function public.economy_claim_system\\\\|^end\\\\$\\\\$;\" _economy_setup.sql)",
       "Bash(node --check galaxy_map.js)",
       "Bash(node --check faction_reg.js)",
-      "Bash(node --check tickets.js)"
+      "Bash(node --check tickets.js)",
+      "Bash(node --check constructors.js)",
+      "Bash(printf '\\\\n%s\\\\n' '// ════════════════════════════════════════════════════════════' '// АНТИ-МЕРЦАНИЕ ПРИ БРАУЗЕРНОМ ПИНЧ-ЗУМЕ' '// При двупальцевом масштабировании страницы visualViewport.scale' '// меняется, и браузер каждый кадр перерисовывает фиксированный blur-фон' '// и сканлайны → стробоскоп. На время жеста вешаем .zooming на <html>' '// \\(CSS в 21_perf.css гасит тяжёлые слои\\), снимаем через паузу после' '// остановки жеста. Своя пинч-зум карты этим не затрагивается.' '\\(function \\(\\) {' '  const vv = window.visualViewport;' '  if \\(!vv\\) return;' '  const root = document.documentElement;' '  let lastScale = vv.scale, t = null, active = false;' '  const stop = \\(\\) => { active = false; root.classList.remove\\(\"zooming\"\\); };' '  vv.addEventListener\\(\"resize\", \\(\\) => {' '    if \\(Math.abs\\(vv.scale - lastScale\\) <= 0.001\\) return; // не зум \\(ресайз/клавиатура\\)' '    lastScale = vv.scale;' '    if \\(!active && vv.scale !== 1\\) { active = true; root.classList.add\\(\"zooming\"\\); }' '    if \\(active\\) { clearTimeout\\(t\\); t = setTimeout\\(stop, 220\\); }' '  }\\);' '}\\)\\(\\);')",
+      "Bash(node --check core.js)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const c=fs.readFileSync\\('css/17_economy.css','utf8'\\);const o=\\(c.match\\(/{/g\\)||[]\\).length,cl=\\(c.match\\(/}/g\\)||[]\\).length;console.log\\('CSS braces:',o,'{ vs',cl,'}', o===cl?'OK':'MISMATCH'\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const c=fs.readFileSync\\('css/20_news.css','utf8'\\);const o=\\(c.match\\(/{/g\\)||[]\\).length,cl=\\(c.match\\(/}/g\\)||[]\\).length;console.log\\('CSS braces:',o,'vs',cl, o===cl?'OK':'MISMATCH'\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const c=fs.readFileSync\\('css/17_economy.css','utf8'\\);const o=\\(c.match\\(/{/g\\)||[]\\).length,cl=\\(c.match\\(/}/g\\)||[]\\).length;console.log\\('CSS braces:',o,'vs',cl,o===cl?'OK':'MISMATCH'\\)\")"
     ]
   }
 }

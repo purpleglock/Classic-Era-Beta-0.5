@@ -88,7 +88,7 @@ const EC_BUILD = {
   science:          { name: 'Научный Институт',     cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { science: 1 }, cat: 'mil', desc: '+1 ОН за слот' },
   training:         { name: 'Центр Подготовки',     cost: 500,  ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1000 пехоты' },
   intel:            { name: 'Центр Спецслужб',      cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 агент' },
-  military_factory: { name: 'Военный Завод',        cost: 1000, ladder: [0, 500, 500, 1500, 1500, 300], free: 1, inc: {}, cat: 'mil', desc: '1 слот = техника' },
+  military_factory: { name: 'Военный Завод',        cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 100 ед. техники' },
   shipyard:         { name: 'Корабельная Верфь',    cost: 2000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 корабль / 12 МЛА' },
 };
 const EC_ORDER = ['factory', 'mining', 'trade', 'market', 'science', 'training', 'intel', 'military_factory', 'shipyard'];
@@ -112,6 +112,8 @@ const EC_BLD_ICON = {
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
 // Обустройство среды обитания на своей колонии (+ячейки, 1 ход)
 const EC_HABITAT_COST = 1000, EC_HABITAT_CELLS = 3, EC_HABITAT_TURNS = 1;
+// Небожители: орбитальные/наземные станции в непригодных мирах — малые колонии (3–5 ячеек).
+const EC_STATION_COST = 300;
 // Строительство слота здания (1 ход; ГС берётся из лестницы здания)
 const EC_SLOT_TURNS = 1;
 // Терраформирование непригодной планеты — уровни сложности (срок + доп. ОН)
@@ -301,6 +303,18 @@ function ecPlanetGroup(p) {
 }
 function ecColonizable(p) { return !EC_NOCOL.has(ecPlanetGroup(p)); }
 function ecNative(p, race) { return (EC_HAB[race] || []).includes(ecPlanetGroup(p)); }
+// Небожители: конфиг станции, если ИЗУЧЕНА технология, открывающая группу планет g.
+function ecStationFor(group) {
+  const done = (EC.eco && EC.eco.research) || [];
+  for (const n of EC_POLITICS) {
+    if (n.special === 'station' && n.station && n.station.groups.includes(group) && done.includes(n.id)) return n.station;
+  }
+  return null;
+}
+// Технология-станция, которая ОТКРЫЛА БЫ группу g (для подсказки «нужна технология»).
+function ecStationTechFor(group) {
+  return EC_POLITICS.find(n => n.special === 'station' && n.station && n.station.groups.includes(group)) || null;
+}
 
 // ── Производство ────────────────────────────────────────────
 const EC_BLD_LABEL = { training: 'Центр Подготовки', military_factory: 'Военный Завод', shipyard: 'Корабельная Верфь' };
@@ -329,10 +343,39 @@ function ecCaps() {
     hasMil: mf > 0, hasShipyard: sy > 0, robot,
   };
 }
+// Сколько пехоты / техники / кораблей «съедает» дивизия за ход.
+// Пехота → мощность Центра Подготовки (caps.training), наземная техника и авиация →
+// Военный Завод (caps.military), корабли в составе → Верфь (caps.ships).
+// Физическое количество = model.count × count блока (пехота 1000, техника 100, авиация 10).
+function ecDivManpower(div) {
+  const blocks = (div.data && div.data.blocks) || [];
+  let inf = 0, tech = 0, ships = 0;
+  blocks.forEach(b => {
+    const id = b.modelId || '';
+    const c = b.count || 1;
+    if (id.indexOf('tech:') === 0) {
+      const u = EC.designs.find(d => d.id === id.slice(5));
+      if (u && u.category === 'ship') ships += c; else tech += c;
+    } else {
+      const m = (typeof CN_DIV_DATA !== 'undefined') ? CN_DIV_DATA.find(x => x.id === id) : null;
+      if (!m) return;
+      const units = (m.count || 1) * c;
+      if (m.type === 'inf') inf += units; else tech += units;
+    }
+  });
+  return { inf, tech, ships };
+}
 function ecPendingUse() {
-  let ships = 0;
-  EC.queue.forEach(q => { if (q.category === 'ship') ships += q.qty; });
-  return { ships };
+  let ships = 0, inf = 0, tech = 0;
+  EC.queue.forEach(q => {
+    const qty = q.qty || 1;
+    if (q.category === 'ship') { ships += qty; return; }
+    if (q.category === 'division') {
+      const d = EC.designs.find(x => x.id === q.unit_id && x.category === 'division');
+      if (d) { const mp = ecDivManpower(d); inf += mp.inf * qty; tech += mp.tech * qty; ships += mp.ships * qty; }
+    }
+  });
+  return { ships, inf, tech };
 }
 function ecHasBuilding(bt) { return EC.buildings.some(b => b.btype === bt); }
 // Имя компонента состава дивизии (сток или зарегистрированная техника)
@@ -753,6 +796,12 @@ function ecDoctrineSpecials(app) {
   } else if (research.includes('pol.house_heavens')) {
     out.push('⬢ 2 захвата подряд, затем перезарядка — «Дом в небесах»');
   }
+  // Небожители: разблокированные станции на непригодных мирах.
+  EC_POLITICS.forEach(n => {
+    if (n.special === 'station' && n.station && research.includes(n.id)) {
+      out.push(`${n.station.icon || '★'} ${n.name} — станция на ${n.station.cells} ячеек`);
+    }
+  });
   return out;
 }
 // Сводка конкретных стартовых плюшек доктрины (постройки + технологии).
@@ -782,6 +831,25 @@ function ecDoctrineHtml(app) {
   </div>`;
 }
 
+// Суммарная суточная добыча по ресурсам (по всем mining-зданиям державы).
+function ecMineTotals() {
+  const totals = new Map();
+  EC.buildings.filter(b => b.btype === 'mining').forEach(b => {
+    const res = ecMiningPlanetRes(b);
+    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(name => {
+      const ri = res.find(r => r.name === name); if (!ri) return;
+      const cur = totals.get(name) || { rate: 0, r: ri.r || 'common', icon: ri.icon || '◈' };
+      cur.rate += ecMineRate(ri.r || 'common'); totals.set(name, cur);
+    });
+  });
+  return totals;
+}
+// Полоска заполнения used/cap (для мощностей и ячеек).
+function ecOvBar(used, cap, cls) {
+  const pct = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+  return `<span class="ec-ovx-bar"><span class="ec-ovx-bar-fill${cls ? ' ' + cls : ''}" style="width:${pct}%"></span></span>`;
+}
+
 function ecTabOverview() {
   const sumCat = c => EC.roster.filter(r => r.category === c).reduce((a, r) => a + (r.qty || 0), 0);
   const ships = sumCat('ship'), divs = sumCat('division'), ground = sumCat('ground'), avia = sumCat('aviation');
@@ -790,50 +858,171 @@ function ecTabOverview() {
   const usedCells = EC.buildings.length;
   const researchAll = (typeof ecBuildResearch === 'function') ? ecBuildResearch() : [];
   const researchDone = Array.isArray(EC.eco.research) ? EC.eco.research.length : 0;
+  const researchTotal = researchAll.length;
   const activeProj = EC.eco.research_active;
   const activeName = activeProj ? ((researchAll.find(n => n.id === activeProj) || {}).name || activeProj) : '';
   const myRoutes = (EC.routes || []).filter(r => (r.a_fid === EC.fid || r.b_fid === EC.fid) && r.status === 'active').length;
   const myLoans = (EC.loans || []).filter(l => (l.lender_fid === EC.fid || l.borrower_fid === EC.fid) && l.status === 'active').length;
-  const agents = EC.eco.agents || 0;
-  const resTop = ecResEntries().slice(0, 8);
+  const agentsTot = EC.eco.agents || 0;
+  const agentsFree = (typeof ecSpyFree === 'function') ? ecSpyFree() : agentsTot;
+  const agentsCI = EC.eco.counter_agents || 0;
+  const agentsOps = (typeof ecSpyCommitted === 'function') ? ecSpyCommitted() : 0;
   const inc = ecIncomePreview();
+  const m = inc.mods || {};
+  const col = ecReadable(EC.app.color);
 
-  const card = (v, k, color, click) => `<div class="ec-ov-card${click ? ' ec-ov-clk' : ''}"${click ? ` onclick="ecSetTab('${click}')"` : ''}><div class="ec-ov-v"${color ? ` style="color:${color}"` : ''}>${v}</div><div class="ec-ov-k">${esc(k)}</div></div>`;
-  const sect = (title, cards) => `<div class="ec-ov-sect"><div class="ec-ov-sect-t">${esc(title)}</div><div class="ec-ov-grid">${cards.filter(Boolean).join('')}</div></div>`;
+  // ── 1. КАЗНА (hero) ──
+  const gcPct = Math.round(((m.gc || 1) - 1) * 100);
+  const tickHtml = EC.eco.last_tick
+    ? ecProgress(new Date(EC.eco.last_tick).getTime(), new Date(EC.eco.last_tick).getTime() + 86400000, 'доход начислится')
+    : '<span class="ec-ovx-tick-wait">первый ход ещё не пройден</span>';
+  const vault = (cls, k, v, inci, ic) => `<div class="ec-ovx-vault ${cls}">
+      <span class="ec-ovx-vault-ic">${ic}</span>
+      <span class="ec-ovx-vault-k">${esc(k)}</span>
+      <span class="ec-ovx-vault-v">${v}</span>
+      <span class="ec-ovx-vault-inc">${inci}</span>
+    </div>`;
+  const hero = `<div class="ec-ovx-hero" style="--fc:${col}">
+    <div class="ec-ovx-hero-id">
+      <div class="ec-ovx-hero-name">${esc(EC.app.name || 'Моя фракция')}</div>
+      <div class="ec-ovx-hero-sub">${esc(EC.app.gov || '—')} · ${esc(EC.app.ideology || '—')} · ${esc(EC.app.race || '—')}</div>
+    </div>
+    <div class="ec-ovx-vaults">
+      ${vault('ec-ovx-v-gc', 'Галакт. стандарт', ecNum(EC.eco.gc || 0), inc.gc ? `+${ecNum(inc.gc)} / сут` : 'нет дохода', '◈')}
+      ${vault('ec-ovx-v-sci', 'Очки науки', ecNum(EC.eco.science || 0), inc.science ? `+${ecNum(inc.science)} / сут` : 'нет дохода', '🔬')}
+      ${vault('ec-ovx-v-agt', 'Агенты', `${ecNum(agentsFree)} / ${ecNum(agentsTot)}`, agentsTot ? 'свободно / всего' : 'нет агентов', '🕵')}
+    </div>
+    <div class="ec-ovx-hero-tick">⏱ ${tickHtml}</div>
+  </div>`;
 
-  const empire = sect('🏛 Держава', [
-    card(ecNum(EC.systems.length), 'Систем', null, 'territory'),
-    card(ecNum(EC.colonies.length), 'Колоний', null, 'colonies'),
-    card(`${ecNum(usedCells)}/${ecNum(totalCells)}`, 'Ячейки застройки', null, 'colonies'),
-    card(ecNum(EC.buildings.length), 'Построек', null, 'colonies'),
-  ]);
-  const army = sect('⚔ Вооружённые силы государства', [
-    card(ecNum(ships), 'Корабли', 'var(--te)', 'forces'),
-    card(ecNum(divs), 'Дивизии', 'var(--gd)', 'forces'),
-    card(ecNum(ground), 'Наземка', null, 'forces'),
-    card(ecNum(avia), 'Авиация', null, 'forces'),
-    queued ? card(ecNum(queued), 'В очереди', 'var(--color-warning, #e0a030)', 'milbuild') : '',
-  ]);
-  const sciDip = sect('🔬 Наука · Дипломатия · Разведка', [
-    card(`${ecNum(researchDone)}/${ecNum(researchAll.length)}`, 'Технологий', 'var(--pu)', 'research'),
-    card(ecNum(agents), 'Агенты', null, 'intel'),
-    card(ecNum(myRoutes), 'Торг. пути', null, 'trade'),
-    card(ecNum(myLoans), 'Активные займы', null, 'diplomacy'),
-  ]);
+  // ── 2. БЮДЖЕТ — реестр доходов по источникам ──
+  const ledgerSrc = [
+    ['factory', '🏭', 'Гражданские фабрики', (EC_BUILD.factory.inc.gc || 0), 'gc', 'colonies'],
+    ['mining', '⛏', 'Добывающие заводы', (EC_BUILD.mining.inc.gc || 0), 'gc', 'colonies'],
+    ['trade', '💱', 'Торговые хабы', (EC_BUILD.trade.inc.gc || 0), 'gc', 'trade'],
+    ['science', '🔬', 'Научные институты', (EC_BUILD.science.inc.science || 0), 'sci', 'research'],
+    ['intel', '🕵', 'Центры спецслужб', 1, 'agt', 'intel'],
+  ];
+  const ledgerRows = ledgerSrc.map(([t, ic, name, per, kind, tab]) => {
+    const slots = ecSlotsSum(t); if (!slots) return '';
+    const base = per * slots;
+    let finalV, unit, vcls;
+    if (kind === 'gc') { finalV = Math.round(base * (m.gc || 1)); unit = 'ГС'; vcls = 'ec-ovx-c-gc'; }
+    else if (kind === 'sci') { finalV = base; unit = 'ОН'; vcls = 'ec-ovx-c-sci'; }
+    else { finalV = base; unit = 'аг.'; vcls = 'ec-ovx-c-agt'; }
+    return `<tr class="ec-ovx-led-row" onclick="ecSetTab('${tab}')">
+      <td class="ec-ovx-led-src"><span class="ec-ovx-led-ic">${ic}</span>${esc(name)}</td>
+      <td class="ec-ovx-led-slots">${ecNum(slots)} сл.</td>
+      <td class="ec-ovx-led-base">${ecNum(base)}</td>
+      <td class="ec-ovx-led-val ${vcls}">+${ecNum(finalV)} <span class="ec-ovx-led-u">${unit}</span></td>
+    </tr>`;
+  }).filter(Boolean).join('');
+  const marketSlots = ecSlotsSum('market');
+  const marketRow = marketSlots ? `<tr class="ec-ovx-led-row" onclick="ecSetTab('trade')">
+      <td class="ec-ovx-led-src"><span class="ec-ovx-led-ic">📈</span>Товарные биржи</td>
+      <td class="ec-ovx-led-slots">${ecNum(marketSlots)} сл.</td>
+      <td class="ec-ovx-led-base" colspan="2"><i class="ec-ovx-led-note">продают ресурсы со склада (~50% цены)</i></td>
+    </tr>` : '';
+  const docNotes = [];
+  if (gcPct) docNotes.push(`<span class="ec-ovx-doc ${gcPct > 0 ? 'pos' : 'neg'}">Доктрина: ${gcPct > 0 ? '+' : ''}${gcPct}% к ГС</span>`);
+  if (m.sci_flat) docNotes.push(`<span class="ec-ovx-doc ${m.sci_flat > 0 ? 'pos' : 'neg'}">${m.sci_flat > 0 ? '+' : ''}${m.sci_flat} ОН/сут</span>`);
+  if (m.agents_flat) docNotes.push(`<span class="ec-ovx-doc ${m.agents_flat > 0 ? 'pos' : 'neg'}">${m.agents_flat > 0 ? '+' : ''}${m.agents_flat} агент/сут</span>`);
+  const budget = `<div class="ec-ovx-panel">
+    <div class="ec-ovx-panel-t">📊 Бюджет державы <span class="ec-ovx-panel-sub">доход за сутки</span></div>
+    ${(ledgerRows || marketRow)
+      ? `<table class="ec-ovx-ledger"><tbody>${ledgerRows}${marketRow}</tbody>
+          <tfoot><tr class="ec-ovx-led-total">
+            <td>ИТОГО / сут</td><td></td><td></td>
+            <td class="ec-ovx-led-totals">${inc.gc ? `<b class="ec-ovx-c-gc">+${ecNum(inc.gc)} ГС</b>` : ''}${inc.science ? `<b class="ec-ovx-c-sci">+${ecNum(inc.science)} ОН</b>` : ''}${inc.agents ? `<b class="ec-ovx-c-agt">+${ecNum(inc.agents)} аг.</b>` : ''}${!inc.gc && !inc.science && !inc.agents ? '<b class="ec-ovx-muted">—</b>' : ''}</td>
+          </tr></tfoot></table>
+          ${docNotes.length ? `<div class="ec-ovx-docs">${docNotes.join('')}</div>` : ''}
+          <div class="ec-ovx-hint">Содержание армии и зданий не списывается — расходы только разовые (постройка, производство, экспансия).</div>`
+      : `<div class="ec-ovx-empty">Дохода пока нет. Постройте здания и откройте слоты во вкладке «Колонии».</div>`}
+  </div>`;
+
+  // ── 3. РЕСУРСЫ — добыча/сутки + склад ──
+  const mineT = ecMineTotals();
+  const stock = new Map(ecResEntries());
+  const resNames = new Set([...mineT.keys(), ...stock.keys()]);
+  const resRows = [...resNames].map(n => {
+    const mt = mineT.get(n), rate = mt ? mt.rate : 0, have = stock.get(n) || 0;
+    const rar = (mt && mt.r) || ecResRarity(n) || 'common';
+    return { n, rate, have, rar, icon: (mt && mt.icon) || ecResIcon(n) };
+  }).sort((a, b) => (b.rate - a.rate) || (b.have - a.have));
+  const resPanel = resRows.length ? `<div class="ec-ovx-panel">
+    <div class="ec-ovx-panel-t">⛏ Ресурсы <span class="ec-ovx-panel-sub">добыча / склад</span></div>
+    <div class="ec-ovx-res-list">${resRows.map(r => `<div class="ec-ovx-res-row ec-rar-${r.rar}">
+        <span class="ec-ovx-res-ic">${esc(r.icon)}</span>
+        <span class="ec-ovx-res-n">${esc(r.n)}</span>
+        <span class="ec-ovx-res-rate">${r.rate ? `+${ecNum(r.rate)}/сут` : '<i>не добывается</i>'}</span>
+        <span class="ec-ovx-res-have">${ecNum(r.have)} <span class="ec-ovx-res-have-u">на складе</span></span>
+      </div>`).join('')}</div>
+  </div>` : '';
+
+  // ── 4. ДЕРЖАВА ──
+  const bldByType = {};
+  EC.buildings.forEach(b => { bldByType[b.btype] = (bldByType[b.btype] || 0) + 1; });
+  const bldChips = EC_ORDER.map(t => bldByType[t] ? `<span class="ec-ovx-chip"><span class="ec-ovx-chip-ic">${EC_BLD_ICON[t] || '▣'}</span>${esc(ecBuildName(t))} <b>${ecNum(bldByType[t])}</b></span>` : '').filter(Boolean).join('');
+  const empire = `<div class="ec-ovx-panel">
+    <div class="ec-ovx-panel-t">🏛 Держава</div>
+    <div class="ec-ovx-stat-grid">
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('territory')"><div class="ec-ovx-stat-v">${ecNum(EC.systems.length)}</div><div class="ec-ovx-stat-k">Систем</div></div>
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('colonies')"><div class="ec-ovx-stat-v">${ecNum(EC.colonies.length)}</div><div class="ec-ovx-stat-k">Колоний</div></div>
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('colonies')"><div class="ec-ovx-stat-v">${ecNum(EC.buildings.length)}</div><div class="ec-ovx-stat-k">Построек</div></div>
+      <div class="ec-ovx-stat ec-ovx-stat-wide ec-ov-clk" onclick="ecSetTab('colonies')">
+        <div class="ec-ovx-stat-k">Ячейки застройки</div>
+        <div class="ec-ovx-stat-barline"><b>${ecNum(usedCells)}</b> / ${ecNum(totalCells)} ${ecOvBar(usedCells, totalCells, 'fill-gc')}</div>
+      </div>
+    </div>
+    ${bldChips ? `<div class="ec-ovx-chips">${bldChips}</div>` : ''}
+  </div>`;
+
+  // ── 5. АРМИЯ + мощности производства ──
+  const caps = ecCaps(), use = (typeof ecPendingUse === 'function') ? ecPendingUse() : { ships: 0, inf: 0, tech: 0 };
+  const capRow = (label, used, cap, cls) => cap ? `<div class="ec-ovx-cap">
+      <span class="ec-ovx-cap-k">${esc(label)}</span>
+      <span class="ec-ovx-cap-v">${ecNum(used)} / ${ecNum(cap)} за ход</span>
+      ${ecOvBar(used, cap, cls)}
+    </div>` : '';
+  const army = `<div class="ec-ovx-panel">
+    <div class="ec-ovx-panel-t">⚔ Вооружённые силы ${queued ? `<span class="ec-ovx-panel-sub ec-ov-clk" onclick="ecSetTab('milbuild')">в очереди: ${ecNum(queued)}</span>` : ''}</div>
+    <div class="ec-ovx-stat-grid">
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v ec-ovx-c-sci">${ecNum(ships)}</div><div class="ec-ovx-stat-k">🚀 Корабли</div></div>
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v ec-ovx-c-gc">${ecNum(divs)}</div><div class="ec-ovx-stat-k">⚔ Дивизии</div></div>
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v">${ecNum(ground)}</div><div class="ec-ovx-stat-k">🛡 Наземка</div></div>
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v">${ecNum(avia)}</div><div class="ec-ovx-stat-k">✈ Авиация</div></div>
+    </div>
+    ${(caps.training || caps.military || caps.ships) ? `<div class="ec-ovx-caps">
+      ${capRow('🪖 Подготовка пехоты', use.inf || 0, caps.training, 'fill-gc')}
+      ${capRow('🛠 Военный завод', use.tech || 0, caps.military, 'fill-amb')}
+      ${capRow('🚀 Корабельная верфь', use.ships || 0, caps.ships, 'fill-sci')}
+    </div>` : '<div class="ec-ovx-hint">Военных мощностей нет — постройте Центр Подготовки, Военный Завод или Верфь.</div>'}
+  </div>`;
+
+  // ── 6. НАУКА · ДИПЛОМАТИЯ · РАЗВЕДКА ──
   const activeHtml = activeProj
-    ? `<div class="ec-ov-active">🔬 Исследуется: <b>${esc(activeName)}</b><span class="ec-ov-active-x">завершится в конце хода</span></div>` : '';
-  const _slotParts = [['factory', 'фабрики'], ['mining', 'добыча'], ['trade', 'торговля'], ['market', 'рынок'], ['science', 'наука'], ['intel', 'спецслужбы']]
-    .map(([t, l]) => { const n = ecSlotsSum(t); return n ? `${n} ${l}` : ''; }).filter(Boolean).join(' · ');
-  const incLine = (inc.gc || inc.science)
-    ? `<div class="ec-ov-inc">📈 Доход: ${inc.gc ? `<b style="color:var(--gd)">+${ecNum(inc.gc)} ГС</b>` : ''}${inc.gc && inc.science ? ' · ' : ''}${inc.science ? `<b style="color:var(--pu)">+${ecNum(inc.science)} ОН</b>` : ''} в сутки${_slotParts ? `<div class="ec-ov-srcs">Работают слоты: ${_slotParts}</div>` : ''}</div>`
-    : `<div class="ec-ov-inc" style="color:var(--t4)">📈 Доход 0 — постройте здания и откройте слоты во вкладке «Колонии».</div>`;
-  const resHtml = resTop.length
-    ? `<div class="ec-ov-sect"><div class="ec-ov-sect-t">📦 Ресурсы на складе</div><div class="ec-ov-res">${resTop.map(([n, v]) => `<span class="ec-ov-res-chip"><span class="ec-ov-res-ic">${esc(ecResIcon(n))}</span><span class="ec-ov-res-n">${esc(n)}</span><b>${ecNum(v)}</b></span>`).join('')}</div></div>` : '';
+    ? `<div class="ec-ovx-active">🔬 Исследуется: <b>${esc(activeName)}</b>${EC.eco.last_tick ? ecProgress(new Date(EC.eco.last_tick).getTime(), new Date(EC.eco.last_tick).getTime() + 86400000, 'готово в конце хода') : ''}</div>` : '';
+  const sci = `<div class="ec-ovx-panel">
+    <div class="ec-ovx-panel-t">🔬 Наука · Дипломатия · Разведка</div>
+    ${activeHtml}
+    <div class="ec-ovx-stat ec-ovx-stat-wide ec-ov-clk" onclick="ecSetTab('research')">
+      <div class="ec-ovx-stat-k">Изучено технологий</div>
+      <div class="ec-ovx-stat-barline"><b class="ec-ovx-c-sci">${ecNum(researchDone)}</b> / ${ecNum(researchTotal)} ${ecOvBar(researchDone, researchTotal, 'fill-sci')}</div>
+    </div>
+    <div class="ec-ovx-stat-grid" style="margin-top:10px">
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('intel')"><div class="ec-ovx-stat-v">${ecNum(agentsTot)}</div><div class="ec-ovx-stat-k">Агенты всего</div></div>
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('intel')"><div class="ec-ovx-stat-v ec-ovx-c-agt">${ecNum(agentsCI)}</div><div class="ec-ovx-stat-k">Контрразведка</div></div>
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('trade')"><div class="ec-ovx-stat-v">${ecNum(myRoutes)}</div><div class="ec-ovx-stat-k">Торг. пути</div></div>
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('diplomacy')"><div class="ec-ovx-stat-v">${ecNum(myLoans)}</div><div class="ec-ovx-stat-k">Займы</div></div>
+    </div>
+    ${agentsOps ? `<div class="ec-ovx-hint">Задействовано в операциях: <b>${ecNum(agentsOps)}</b> · свободно: <b>${ecNum(agentsFree)}</b></div>` : ''}
+  </div>`;
 
-  return `${ecIntro('◈', 'Обзор державы', 'Сводка вашего государства: казна, держава, армия, наука и дипломатия. Все цифры кликабельны — ведут на нужную вкладку.', ['Доход начисляется раз в сутки и сразу при заходе в кабинет.', 'Развивайтесь по вкладкам: стройте здания (Колонии), исследуйте (Наука), расширяйтесь (Территория).'])}${ecDoctrineHtml()}${empire}${army}${sciDip}${activeHtml}${incLine}${resHtml}
-    <div class="ec-race-note">Раса: <b>${esc(EC.app.race || '—')}</b> · ${ecIsRobot()
-      ? 'родные миры: <b>все типы планет</b> — колонизация без терраформа (бонус роботов).'
-      : 'родные миры: ' + ((EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—') + '. Чужие типы планет — через терраформ.'}</div>
+  const raceNote = `<div class="ec-race-note">Раса: <b>${esc(EC.app.race || '—')}</b> · ${ecIsRobot()
+    ? 'родные миры: <b>все типы планет</b> — колонизация без терраформа (бонус роботов).'
+    : 'родные миры: ' + ((EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—') + '. Чужие типы планет — через терраформ.'}</div>`;
+
+  return `${hero}${ecDoctrineHtml()}${budget}${resPanel}${empire}${army}${sci}${raceNote}
     <div class="ec-ov-links">
       <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
       <button class="btn btn-gh btn-sm" onclick="go('cat-ships')">🚀 Каталоги</button>
@@ -860,7 +1049,20 @@ function ecExpandAllSys() { EC.closedSys = new Set(); ecPaintCabinet(); }
 // Кнопка/бейдж колонизации для незаселённой планеты
 function ecColonizeInfo(s, p, race) {
   const g = ecPlanetGroup(p), label = EC_GRP_LABEL[g] || g, cells = +p.slotsP || EC_DEFAULT_CELLS;
-  if (!ecColonizable(p)) return { cls: 'no', tag: 'непригодна', label, btn: `<button class="btn btn-gh btn-sm" disabled title="Газовые гиганты, аномалии и пояса терраформировать нельзя">— нельзя</button>` };
+  if (!ecColonizable(p)) {
+    // Небожители: непригодный мир можно освоить станцией, если изучена технология.
+    const st = ecStationFor(g);
+    if (st) {
+      const sc = ecColonizeCost(EC_STATION_COST);
+      return { cls: 'station', tag: 'станция', label,
+        btn: `<button class="btn btn-gd btn-sm" title="Построить ${esc(st.label.toLowerCase())} — малая станция на ${st.cells} ячеек застройки. Стоимость ${ecNum(sc)} ГС." onclick="event.stopPropagation();ecBuildStation('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${ecArg(g)})">${st.icon} Станция · ${st.cells} ячеек · ${ecNum(sc)} ГС</button>` };
+    }
+    const tech = ecStationTechFor(g);
+    const lockTitle = tech
+      ? `Непригодно для жизни. Изучите технологию «${tech.name}» (ветка Небожители), чтобы построить станцию (${tech.station.cells} ячеек).`
+      : 'Газовые гиганты, аномалии и пояса заселить нельзя.';
+    return { cls: 'no', tag: 'непригодна', label, btn: `<button class="btn btn-gh btn-sm" disabled title="${esc(lockTitle)}">${tech ? '🔒 нужна технология' : '— нельзя'}</button>` };
+  }
   if (ecNative(p, race)) return { cls: 'native', tag: 'родная', label, btn: `<button class="btn btn-gd btn-sm" onclick="event.stopPropagation();ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},0)">Колонизировать · ${ecNum(ecColonizeCost(EC_COLONIZE_COST))} ГС</button>` };
   // Чужая планета — терраформ с уровнем сложности (срок + ОН)
   const pend = ecPendingTerraform(s.id, p.name);
@@ -1746,6 +1948,17 @@ const EC_POLITICS = [
     desc: 'Доктрина приоритетной экспансии: флот и дипломатия брошены на расширение границ. −20% к цене захвата систем.' },
   { id: 'pol.house_heavens', branch: 'expand', name: 'Дом в небесах',            cost: 90, prereq: ['pol.total_mob'],   special: 'claim2',
     desc: 'Имперский колониальный проект: служба освоения позволяет захватить ДВЕ системы за один цикл, прежде чем уйти на кулдаун.' },
+  // Небожители — освоение НЕПРИГОДНЫХ миров через малые станции (3–5 ячеек застройки).
+  // station.groups — какие группы планет открывает; station.cells — размер станции.
+  { id: 'pol.cel_asteroid', branch: 'celestial', name: 'Астероидные станции',     cost: 20,  prereq: [],
+    special: 'station', station: { groups: ['belt'], cells: 3, label: 'Астероидная станция', icon: '🪨' },
+    desc: 'Небожители учатся крепить обитаемые модули прямо к астероидам и телам пояса. Открывает постройку малой станции (3 ячейки застройки) на поясах и астероидах, где обычная колония невозможна.' },
+  { id: 'pol.cel_giants',   branch: 'celestial', name: 'Орбитальные станции',     cost: 40, prereq: ['pol.cel_asteroid'],
+    special: 'station', station: { groups: ['gasgiant', 'icegiant', 'hotgiant'], cells: 4, label: 'Орбитальная станция', icon: '🛰' },
+    desc: 'Подвесные орбитальные платформы над газовыми, ледяными и горячими гигантами — забор газов и тяжёлая промышленность на орбите. Открывает станцию на 4 ячейки над гигантами всех типов.' },
+  { id: 'pol.cel_anomaly',  branch: 'celestial', name: 'Аномальные станции',      cost: 60, prereq: ['pol.cel_giants'],
+    special: 'station', station: { groups: ['anomaly'], cells: 5, label: 'Аномальная станция', icon: '🌀' },
+    desc: 'Технология стабилизации конструкций внутри пространственных аномалий. Открывает крупнейшую станцию Небожителей — 5 ячеек застройки прямо в аномалии.' },
 ];
 // id → bonus (для ecFactionMods). Спец-механики (special) применяются отдельно.
 const EC_RESEARCH_BONUS = {};
@@ -1842,7 +2055,7 @@ function ecBuildResearch() {
   EC_POLITICS.forEach(n => out.push({
     id: n.id, cat: 'politics', catLabel: 'Политика', branch: n.branch,
     name: n.name, desc: n.desc, cost: n.cost, prereq: n.prereq || [],
-    bonus: n.bonus || null, special: n.special || null,
+    bonus: n.bonus || null, special: n.special || null, station: n.station || null,
   }));
   EC._research = out;
   return out;
@@ -1895,7 +2108,7 @@ function ecTabResearch() {
 
   // ── Полосная раскладка: каждая ветка — отдельная горизонтальная полоса ──
   const LANE_ORDER = isPol
-    ? ['econ', 'prod', 'expand']
+    ? ['econ', 'prod', 'expand', 'celestial']
     : ['class', 'type', 'weapon', 'reactor', 'engine', 'armor', 'shield', 'hangar', 'module'];
   const pos = {};
   let laneY = 0;
@@ -1948,8 +2161,8 @@ function ecTabResearch() {
     if (isDone) { state = 'done'; foot = '<span class="ec-tnode-badge ok">✓ изучено</span>'; }
     else if (isActive) { state = 'active'; foot = '<span class="ec-tnode-badge cur">⏳ изучается</span>'; }
     else if (!prereqOk) { state = 'locked'; const need = (n.prereq || []).map(p => (byId.get(p) || {}).name || p).join(', '); foot = `<span class="ec-tnode-badge lock" title="${esc(need)}">🔒 ${esc(need)}</span>`; }
-    else { state = 'avail'; const rc = ecResearchCost(n.cost); const can = !slotsFull && sci >= rc; foot = `<button class="btn ${can ? 'btn-gd' : 'btn-gh'} btn-xs" ${can ? '' : 'disabled'} onclick="ecResearch('${n.id}')">${ecNum(rc)} ОН</button>`; }
-    const bonus = (n.bonus || n.special) ? ecBonusChips(n.bonus, n.special) : '';
+    else { state = 'avail'; const rc = ecResearchCost(n.cost); const can = !slotsFull && sci >= rc; foot = `<button class="btn ${can ? 'btn-gd' : 'btn-gh'} btn-xs" ${can ? '' : 'disabled'} onclick="event.stopPropagation();ecResearch('${n.id}')">${ecNum(rc)} ОН</button>`; }
+    const bonus = (n.bonus || n.special) ? ecBonusChips(n.bonus, n.special, n.station) : '';
     const descHtml = n.desc ? `<div class="ec-tnode-desc">${esc(n.desc)}</div>` : '';
     const inner = `<div class="ec-tnode-h"><span class="ec-tnode-tag">${esc(ecBranchTag(n.branch))}</span></div>
       <div class="ec-tnode-name">${esc(n.name)}</div>
@@ -1960,7 +2173,7 @@ function ecTabResearch() {
   // холст (десктоп): абсолютные карточки
   const nodeCard = n => {
     const { state, inner } = nodeState(n); const p = pos[n.id];
-    return `<div class="ec-tnode ec-tnode-${state} ec-br-${n.branch}" style="left:${p.x}px;top:${p.y}px;width:${W}px;height:${H}px">${inner}</div>`;
+    return `<div class="ec-tnode ec-tnode-${state} ec-br-${n.branch} ec-tnode-clk" style="left:${p.x}px;top:${p.y}px;width:${W}px;height:${H}px" onclick="ecResNodeInfo('${n.id}')" title="Подробнее">${inner}</div>`;
   };
   const cards = nodes.map(nodeCard).join('');
   const tree = `<div class="ec-tree-scroll"><div class="ec-tree" style="width:${cw}px;height:${ch}px">${svg}${cards}</div></div>`;
@@ -1970,7 +2183,7 @@ function ecTabResearch() {
   const treeMobile = `<div class="ec-tree-mobile">${mobileLanes.map(branch => {
     const ln = nodes.filter(n => n.branch === branch).sort((a, b) => (a._d || 0) - (b._d || 0));
     if (!ln.length) return '';
-    const cardsM = ln.map(n => { const { state, inner } = nodeState(n); return `<div class="ec-tnode ec-tnode-m ec-tnode-${state} ec-br-${n.branch}">${inner}</div>`; }).join('');
+    const cardsM = ln.map(n => { const { state, inner } = nodeState(n); return `<div class="ec-tnode ec-tnode-m ec-tnode-${state} ec-br-${n.branch} ec-tnode-clk" onclick="ecResNodeInfo('${n.id}')">${inner}</div>`; }).join('');
     return `<div class="ec-tm-lane"><div class="ec-tm-lane-h">${esc(ecBranchTag(branch))}</div><div class="ec-tm-cards">${cardsM}</div></div>`;
   }).join('')}</div>`;
 
@@ -1988,10 +2201,10 @@ function ecTabResearch() {
     ${tree}${treeMobile}`;
 }
 function ecBranchTag(branch) {
-  return { class: 'КЛАСС', type: 'КОРПУС', weapon: 'ОРУЖИЕ', armor: 'БРОНЯ', shield: 'ЩИТЫ', engine: 'ДВИГАТЕЛЬ', reactor: 'РЕАКТОР', hangar: 'АНГАР', module: 'СИСТЕМА', econ: 'ЭКОНОМИКА', prod: 'ПРОИЗВОДСТВО', expand: 'ЭКСПАНСИЯ' }[branch] || branch;
+  return { class: 'КЛАСС', type: 'КОРПУС', weapon: 'ОРУЖИЕ', armor: 'БРОНЯ', shield: 'ЩИТЫ', engine: 'ДВИГАТЕЛЬ', reactor: 'РЕАКТОР', hangar: 'АНГАР', module: 'СИСТЕМА', econ: 'ЭКОНОМИКА', prod: 'ПРОИЗВОДСТВО', expand: 'ЭКСПАНСИЯ', celestial: 'НЕБОЖИТЕЛИ' }[branch] || branch;
 }
 // Чипы бонуса политического узла (для карточки дерева).
-function ecBonusChips(b, special) {
+function ecBonusChips(b, special, station) {
   const out = [];
   const pct = (k, lbl, goodHigh) => { if (!b || b[k] == null) return; const p = Math.round(b[k] * 100); const good = goodHigh ? p > 0 : p < 0; out.push(`<span class="ec-bchip ${good ? 'good' : 'bad'}">${lbl} ${p > 0 ? '+' : ''}${p}%</span>`); };
   pct('gc', 'Доход', true); pct('mine', 'Добыча', true);
@@ -1999,6 +2212,7 @@ function ecBonusChips(b, special) {
   if (b && b.sci_flat) out.push(`<span class="ec-bchip good">Наука +${b.sci_flat}/ход</span>`);
   if (b && b.agents_flat) out.push(`<span class="ec-bchip good">Агенты +${b.agents_flat}/ход</span>`);
   if (special === 'claim2') out.push('<span class="ec-bchip special">★ +1 захват до перезарядки</span>');
+  if (special === 'station' && station) out.push(`<span class="ec-bchip special">${station.icon || '★'} ${station.cells} ячеек</span>`);
   return out.length ? `<div class="ec-tnode-bonus">${out.join('')}</div>` : '';
 }
 function ecResearch(nodeId) {
@@ -2014,6 +2228,59 @@ function ecResearch(nodeId) {
   if ((EC.eco.science || 0) < rc) { toast(`Недостаточно ОН: нужно ${ecNum(rc)}`, 'err'); return; }
   ecRpcAct('economy_research', { p_node: nodeId, p_cost: rc }, 'Исследование начато (1 ход)');
 }
+
+// Карточка-описание узла дерева (по клику) — полный текст не влезает в плитку.
+function ecResNodeInfo(id) {
+  const all = ecBuildResearch();
+  const n = all.find(x => x.id === id); if (!n) return;
+  const byId = new Map(all.map(x => [x.id, x]));
+  const done = new Set(EC.eco.research || []);
+  const activeIds = [EC.eco.research_active, EC.eco.research_active2].filter(Boolean);
+  const isDone = done.has(n.id), isActive = activeIds.includes(n.id);
+  const prereqOk = (n.prereq || []).every(p => done.has(p));
+  const maxSlots = ecIsRobot() ? 2 : 1;
+  const slotsFull = activeIds.length >= maxSlots;
+  const rc = ecResearchCost(n.cost), sci = EC.eco.science || 0;
+  const can = !isDone && !isActive && prereqOk && !slotsFull && sci >= rc;
+
+  const status = isDone ? '<span class="ec-tnode-badge ok">✓ изучено</span>'
+    : isActive ? '<span class="ec-tnode-badge cur">⏳ изучается</span>'
+    : !prereqOk ? '<span class="ec-tnode-badge lock">🔒 заблокировано</span>' : '';
+  const prereqTxt = (n.prereq || []).length
+    ? (n.prereq).map(p => `${done.has(p) ? '✓' : '🔒'} ${esc((byId.get(p) || {}).name || p)}`).join(' · ')
+    : '<span style="color:var(--t4)">нет требований</span>';
+  let stationHtml = '';
+  if (n.special === 'station' && n.station) {
+    const groups = n.station.groups.map(g => EC_GRP_LABEL[g] || g).join(', ');
+    stationHtml = `<div class="ec-rinfo-station">${n.station.icon} <b>Станция</b> — открывает постройку на мирах: <b>${esc(groups)}</b> · размер <b>${n.station.cells} ячеек</b> · постройка <b>${ecNum(ecColonizeCost(EC_STATION_COST))} ГС</b></div>`;
+  }
+  const bonus = (n.bonus || n.special) ? ecBonusChips(n.bonus, n.special, n.station) : '';
+  let actHint = '';
+  if (isDone) actHint = '';
+  else if (isActive) actHint = '<span class="ec-rinfo-note">Уже изучается — завершится в конце хода.</span>';
+  else if (!prereqOk) actHint = '<span class="ec-rinfo-note">Сначала изучите предшественников.</span>';
+  else if (slotsFull) actHint = '<span class="ec-rinfo-note">Все слоты исследований заняты.</span>';
+  else if (sci < rc) actHint = `<span class="ec-rinfo-note">Не хватает ОН: нужно ${ecNum(rc)}, есть ${ecNum(sci)}.</span>`;
+  const actBtn = (!isDone && !isActive && prereqOk)
+    ? `<button class="btn ${can ? 'btn-gd' : 'btn-gh'}" ${can ? '' : 'disabled'} onclick="ecResNodeInfoClose();ecResearch('${esc(n.id)}')">🔬 Исследовать · ${ecNum(rc)} ОН</button>`
+    : '';
+
+  let ov = document.getElementById('ec-rinfo-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'ec-rinfo-ov'; ov.className = 'ec-rinfo-ov'; ov.onclick = e => { if (e.target === ov) ecResNodeInfoClose(); }; document.body.appendChild(ov); }
+  ov.innerHTML = `<div class="ec-rinfo ec-br-${esc(n.branch)}">
+    <button class="ec-rinfo-x" onclick="ecResNodeInfoClose()">✕</button>
+    <div class="ec-rinfo-tag">${esc(ecBranchTag(n.branch))}${n.catLabel ? ' · ' + esc(n.catLabel) : ''}</div>
+    <div class="ec-rinfo-name">${esc(n.name)} ${status}</div>
+    ${n.desc ? `<div class="ec-rinfo-desc">${esc(n.desc)}</div>` : ''}
+    ${stationHtml}
+    ${bonus}
+    <div class="ec-rinfo-meta"><span>Стоимость: <b style="color:var(--pu)">${ecNum(rc)} ОН</b></span><span>Требует: ${prereqTxt}</span></div>
+    ${actHint}
+    ${actBtn ? `<div class="ec-rinfo-act">${actBtn}</div>` : ''}
+  </div>`;
+  ov.classList.add('show');
+}
+function ecResNodeInfoClose() { document.getElementById('ec-rinfo-ov')?.classList.remove('show'); }
 
 // ── Действия дипломатии/разведки ────────────────────────────
 function ecSellResource() {
@@ -2172,7 +2439,7 @@ function ecBuildingRow(b) {
   const openBtn = maxed
     ? `<span class="ec-maxed">${EC_MAX_SLOTS}/${EC_MAX_SLOTS}</span>`
     : pendSlot
-      ? `<span class="ec-proj-tag" title="${ecProjEtaTxt(pendSlot)}">⏳ слот строится</span>`
+      ? `<span class="ec-proj-tag" title="${ecProjEtaTxt(pendSlot)}">⏳ слот строится</span><button class="ec-bld-del" title="Отменить слот (возврат ГС)" onclick="ecCancelProject('${pendSlot.id}')">✕</button>`
       : `<button class="btn btn-gh btn-xs" onclick="ecOpenSlot('${b.id}')">+ слот · ${ecNum(ecBuildCost(d.ladder[b.slots_open]))} ГС</button>`;
   const slotCount = `<span class="ec-slot-count">${b.slots_open}/${EC_MAX_SLOTS}</span>`;
   let mineHtml = '';
@@ -2293,13 +2560,35 @@ function ecProgressISO(startISO, endISO, fallbackDays, readyText) {
   const start = startISO ? new Date(startISO).getTime() : end - Math.max(1, fallbackDays || 1) * 86400000;
   return ecProgress(start, end, readyText);
 }
-// Отмена проекта с возвратом ГС/ОН (refund берётся из payload)
+// Сколько вернуть при отмене проекта. Сначала — точные затраты из payload (как при
+// создании). Фолбэк для старых проектов без payload: восстанавливаем цену из правил,
+// чтобы возврат не пропадал (раньше такие проекты возвращали 0 — частая жалоба).
+function ecProjectRefund(p) {
+  let gc = (p.payload && +p.payload.spent_gc) || 0;
+  let sci = (p.payload && +p.payload.spent_science) || 0;
+  if (gc || sci) return { gc, science: sci };
+  try {
+    if (p.kind === 'slot') {
+      const b = EC.buildings.find(x => x.id === p.building_id);
+      const d = b && EC_BUILD[b.btype];
+      if (d && d.ladder) gc = ecBuildCost(d.ladder[Math.max(0, b.slots_open)] || 0);
+    } else if (p.kind === 'build') {
+      const d = EC_BUILD[p.btype];
+      if (d) gc = ecBuildCost(d.cost || 0);
+    } else if (p.kind === 'habitat') {
+      gc = ecColonizeCost(EC_HABITAT_COST);
+    }
+  } catch (e) {}
+  return { gc, science: sci };
+}
+// Отмена проекта с возвратом ГС/ОН
 async function ecCancelProject(id) {
   const p = (EC.projects || []).find(x => x.id === id); if (!p) return;
-  if (!confirm(`Отменить проект «${p.label || p.kind}»? Затраты будут возвращены.`)) return;
+  const { gc: rg, science: rs } = ecProjectRefund(p);
+  const refundTxt = (rg || rs) ? `Вернётся: ${rg ? ecNum(rg) + ' ГС' : ''}${rg && rs ? ' + ' : ''}${rs ? ecNum(rs) + ' ОН' : ''}.` : 'Затрат к возврату нет.';
+  if (!confirm(`Отменить проект «${p.label || p.kind}»? ${refundTxt}`)) return;
   try {
     await dbDel('colony_projects', 'id=eq.' + id);
-    const rg = (p.payload && +p.payload.spent_gc) || 0, rs = (p.payload && +p.payload.spent_science) || 0;
     if (rg || rs) {
       await dbPatch('faction_economy', 'faction_id=eq.' + encodeURIComponent(EC.fid), { gc: (EC.eco.gc || 0) + rg, science: (EC.eco.science || 0) + rs });
       EC.eco.gc = (EC.eco.gc || 0) + rg; EC.eco.science = (EC.eco.science || 0) + rs;
@@ -2321,6 +2610,28 @@ async function ecColonize(sysId, planetName, planetType, cells, foreign) {
     if (p && Array.isArray(p.resources)) resources = p.resources.map(r => ({ name: r.name, icon: r.icon, r: r.r }));
     await dbPost('colonies', { faction_id: EC.fid, owner_id: user.id, system_id: sysId, planet_name: planetName, planet_type: planetType || '', cells: cells || EC_DEFAULT_CELLS, terraformed: false, resources });
     toast('Планета колонизирована', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+
+// Небожители: построить станцию на непригодном мире — малая колония (3–5 ячеек), сразу.
+// Требует изученной технологии-станции для группы этого мира. Ресурсы пояса/гиганта
+// копируются в колонию — на станции можно добывать (астероидная добыча и т.п.).
+async function ecBuildStation(sysId, planetName, planetType, group) {
+  if (EC.busy) return;
+  const st = ecStationFor(group);
+  if (!st) { toast('Нужна технология Небожителей для этого типа мира', 'err'); return; }
+  EC.busy = true;
+  try {
+    const cost = ecColonizeCost(EC_STATION_COST);
+    if (!await ecSpend(cost)) return;
+    let resources = [];
+    const sys = EC.systems.find(s => s.id === sysId);
+    const p = sys && (sys.planets || []).find(x => x.name === planetName);
+    if (p && Array.isArray(p.resources)) resources = p.resources.map(r => ({ name: r.name, icon: r.icon, r: r.r }));
+    await dbPost('colonies', { faction_id: EC.fid, owner_id: user.id, system_id: sysId, planet_name: planetName, planet_type: planetType || '', cells: st.cells, terraformed: true, resources });
+    toast(`${st.icon} ${st.label} построена · ${st.cells} ячеек`, 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
@@ -2363,6 +2674,12 @@ async function ecProduceDivision(divId) {
   const qty = Math.max(1, parseInt(ecId('ec-div-qty-' + divId)?.value) || 1);
   const missing = ecDivReqBuildings(div).filter(bt => !ecHasBuilding(bt));
   if (missing.length) { toast('Нужны здания: ' + missing.map(m => EC_BLD_LABEL[m]).join(', '), 'err'); return; }
+  // Лимит мощности за ход: пехота → Центр Подготовки, техника → Военный Завод, корабли → Верфь.
+  const caps = ecCaps(), use = ecPendingUse(), mp = ecDivManpower(div);
+  const needInf = mp.inf * qty, needTech = mp.tech * qty, needShips = mp.ships * qty;
+  if (use.inf + needInf > caps.training) { toast(`Лимит Центра Подготовки: ${ecNum(needInf)} пехоты нужно, свободно ${ecNum(Math.max(0, caps.training - use.inf))}/${ecNum(caps.training)} за ход — постройте слоты или ждите хода`, 'err'); return; }
+  if (use.tech + needTech > caps.military) { toast(`Лимит Военного Завода: ${ecNum(needTech)} техники нужно, свободно ${ecNum(Math.max(0, caps.military - use.tech))}/${ecNum(caps.military)} за ход — постройте слоты или ждите хода`, 'err'); return; }
+  if (use.ships + needShips > caps.ships) { toast(`Лимит Верфи: ${ecNum(needShips)} кораблей в составе, свободно ${ecNum(Math.max(0, caps.ships - use.ships))}/${ecNum(caps.ships)} за ход`, 'err'); return; }
   const cost = ((div.summary && div.summary.cost) || 0) * qty;
   EC.busy = true;
   try {
@@ -2557,10 +2874,31 @@ async function ecHabitat(colonyId) {
   finally { EC.busy = false; }
 }
 
+// Полная вложенная стоимость здания: база постройки + все ПЛАТНЫЕ открытые слоты
+// (бесплатные стартовые слоты d.free идут с базой). Цены — по текущим правилам/доктрине.
+function ecBuildingInvested(b) {
+  const d = EC_BUILD[b.btype]; if (!d) return 0;
+  let gc = ecBuildCost(d.cost || 0);
+  const free = d.free || 0;
+  for (let i = free; i < (b.slots_open || 0); i++) gc += ecBuildCost((d.ladder && d.ladder[i]) || 0);
+  return gc;
+}
 async function ecDemolish(buildingId) {
-  if (!confirm('Снести постройку? ГС не возвращаются.')) return;
-  try { await dbDel('colony_buildings', 'id=eq.' + buildingId); toast('Снесено', 'inf'); await ecReloadPaint(); }
-  catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  const b = EC.buildings.find(x => x.id === buildingId); if (!b) return;
+  const pend = ecPendingSlot(buildingId);              // незавершённый слот этого здания тоже вернём
+  let refund = ecBuildingInvested(b);
+  if (pend) refund += ecProjectRefund(pend).gc;
+  if (!confirm(`Снести постройку?${refund ? ` Вернётся ${ecNum(refund)} ГС (полная стоимость${pend ? ' + незавершённый слот' : ''}).` : ''}`)) return;
+  try {
+    if (pend) await dbDel('colony_projects', 'id=eq.' + pend.id);
+    await dbDel('colony_buildings', 'id=eq.' + buildingId);
+    if (refund) {
+      await dbPatch('faction_economy', 'faction_id=eq.' + encodeURIComponent(EC.fid), { gc: (EC.eco.gc || 0) + refund });
+      EC.eco.gc = (EC.eco.gc || 0) + refund;
+    }
+    toast(refund ? `Снесено · возврат ${ecNum(refund)} ГС` : 'Снесено', 'inf');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
 }
 
 async function ecAbandon(colonyId) {

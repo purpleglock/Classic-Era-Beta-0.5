@@ -10,6 +10,8 @@ const FN = {
   byId: new Map(),       // id → новость (для открытия статьи)
   myFac: undefined,      // approved-анкета текущего игрока (null — нет)
   busy: false,
+  draftKey: null,        // ключ автосохранения текущего черновика композитора
+  draftT: null,          // таймер дебаунса автосохранения
 };
 
 function fnIsStaff() { return !!(user && ['superadmin', 'editor', 'moderator'].includes(user.role)); }
@@ -460,47 +462,101 @@ function fnOpenComposer(id) {
   const modal = document.getElementById('fn-composer') || (() => {
     const m = document.createElement('div'); m.id = 'fn-composer'; m.className = 'fn-comp-ov';
     m.onclick = e => { if (e.target === m) fnCloseComposer(); };
+    // Автосохранение: любой ввод/выбор внутри композитора → отложенное сохранение черновика.
+    m.addEventListener('input', fnDraftSaveSoon);
+    m.addEventListener('change', fnDraftSaveSoon);
+    // Страховка при сворачивании/закрытии вкладки или потере страницы — мгновенный сброс.
+    window.addEventListener('pagehide', fnDraftSave);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') fnDraftSave(); });
     document.body.appendChild(m); return m;
   })();
+  const key = fnDraftKey(id);
   // если редактируем — подтянем данные
   let n = id ? FN.byId.get(id) : null;
   const fill = (data) => {
+    // Черновик из localStorage важнее серверных данных: это последние несохранённые
+    // правки игрока (например, после обрыва связи). Если он есть — подставляем его.
+    const draft = fnDraftLoad(key);
+    const restored = !!(draft && (draft.title || draft.body || draft.image_url || (draft.reactions || []).length));
+    const eff = restored ? draft : (data || null);
     modal.innerHTML = `<div class="fn-comp">
       <button class="gm-close" onclick="fnCloseComposer()">✕</button>
       <div class="fn-comp-hd">${id ? '✎ Редактировать новость' : '📰 Новая новость фракции'}</div>
       <input type="hidden" id="fn-c-id" value="${id ? esc(id) : ''}">
+      ${restored ? `<div class="fn-c-restored">📝 Восстановлен черновик от ${esc(fnClock(draft.ts))} — несохранённые правки подставлены.
+        <button type="button" class="btn btn-gh btn-xs" onclick="fnDraftDiscard()">Очистить черновик</button></div>` : ''}
       <div class="fg"><label class="fl">Заголовок *</label>
-        <input class="fi fn-c-title" id="fn-c-title" maxlength="160" value="${esc(data?.title || '')}" placeholder="Главное событие недели"></div>
+        <input class="fi fn-c-title" id="fn-c-title" maxlength="160" value="${esc(eff?.title || '')}" placeholder="Главное событие недели"></div>
       <div class="fg">
         <label class="fl">Обложка</label>
         <div class="fn-c-cov-wrap">
-          ${data?.image_url ? `<div class="fn-c-cov-prv" id="fn-c-cov-prv"><img src="${esc(data.image_url)}" alt=""><button type="button" class="fn-c-cov-rm" onclick="fnCoverRemove()">✕</button></div>` : `<div class="fn-c-cov-prv fn-c-cov-empty" id="fn-c-cov-prv"></div>`}
+          ${eff?.image_url ? `<div class="fn-c-cov-prv" id="fn-c-cov-prv"><img src="${esc(eff.image_url)}" alt=""><button type="button" class="fn-c-cov-rm" onclick="fnCoverRemove()">✕</button></div>` : `<div class="fn-c-cov-prv fn-c-cov-empty" id="fn-c-cov-prv"></div>`}
           <label class="btn btn-gh fn-c-cov-btn">📷 Загрузить обложку<input type="file" accept="image/*" style="display:none" onchange="fnCoverUpload(this)"></label>
         </div>
-        <input type="hidden" id="fn-c-img" value="${esc(data?.image_url || '')}">
+        <input type="hidden" id="fn-c-img" value="${esc(eff?.image_url || '')}">
       </div>
       <div class="fg fn-c-body-fg">
         <div class="fn-c-body-hd"><label class="fl">Текст новости *</label><label class="btn btn-gh btn-xs fn-c-ins-btn">📷 Вставить фото<input type="file" accept="image/*" style="display:none" onchange="fnInsertImg(this)"></label></div>
-        <textarea class="fi fn-c-body" id="fn-c-body" placeholder="Пишите свободно. Пустая строка = новый абзац.">${esc(data?.body || '')}</textarea></div>
+        <textarea class="fi fn-c-body" id="fn-c-body" placeholder="Пишите свободно. Пустая строка = новый абзац.">${esc(eff?.body || '')}</textarea></div>
       <div class="fg">
         <div class="fn-c-body-hd"><label class="fl">Варианты реакций <span style="color:var(--t4);font-weight:400">— необязательно</span></label>
           <button type="button" class="btn btn-gh btn-xs" onclick="fnReactAddRow()">＋ Свой вариант</button></div>
         <div class="fn-comp-note" style="margin:0 0 6px">Читатели и так получат авто-реакции по своей идеологии. Здесь можно добавить свои ивентные фразы — каждая со своим тоном.</div>
-        <div id="fn-c-reacts">${(() => { let cs = []; try { cs = Array.isArray(data?.reactions) ? data.reactions : JSON.parse(data?.reactions || '[]'); } catch (e) {} return (cs || []).map(c => fnReactRowHtml(c.text, c.stance)).join(''); })()}</div>
+        <div id="fn-c-reacts">${(() => { let cs = []; try { cs = Array.isArray(eff?.reactions) ? eff.reactions : JSON.parse(eff?.reactions || '[]'); } catch (e) {} return (cs || []).map(c => fnReactRowHtml(c.text, c.stance)).join(''); })()}</div>
       </div>
       <div class="fn-comp-ftr">
         <button class="btn btn-gh" onclick="fnCloseComposer()">Отмена</button>
         <button class="btn btn-gd" onclick="fnSubmit()">📨 Отправить на проверку</button>
       </div>
-      <div class="fn-comp-note">После отправки новость проверит администрация. Опубликованную правит только администрация.</div>
+      <div class="fn-comp-note fn-c-draft" id="fn-c-draft-st"></div>
+      <div class="fn-comp-note">После отправки новость проверит администрация. Опубликованную правит только администрация. Черновик сохраняется автоматически на этом устройстве.</div>
     </div>`;
     modal.classList.add('show');
+    FN.draftKey = key;
+    fnDraftStatus(restored ? ('восстановлен черновик · ' + fnClock(draft.ts)) : '');
   };
   if (id && !n) {
     dbGet('faction_news', `id=eq.${encodeURIComponent(id)}&limit=1`).then(rows => { fill(rows && rows[0]); }).catch(() => fill(null));
   } else { fill(n); }
 }
-function fnCloseComposer() { document.getElementById('fn-composer')?.classList.remove('show'); }
+function fnCloseComposer() {
+  clearTimeout(FN.draftT);
+  fnDraftSave();   // финальное сохранение — закрытие/обрыв не теряет последние буквы
+  document.getElementById('fn-composer')?.classList.remove('show');
+}
+
+// ── Автосохранение черновика новости (localStorage) ─────────
+// Ключ — на пользователя и на режим (новая / правка конкретной id), чтобы черновики
+// не перемешивались. Сохраняем при вводе (дебаунс) и при закрытии; чистим после отправки.
+function fnDraftKey(id) { return 'fn_draft_' + (id ? ('edit_' + id) : 'new') + '_' + ((typeof user !== 'undefined' && user && user.id) || 'anon'); }
+function fnDraftLoad(key) { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { return null; } }
+function fnClock(ts) { const d = new Date(ts || Date.now()); const p = n => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()); }
+function fnDraftStatus(text) { const el = document.getElementById('fn-c-draft-st'); if (el) el.textContent = text ? ('💾 ' + text) : ''; }
+function fnDraftSave() {
+  if (!FN.draftKey) return;
+  const g = id => document.getElementById(id);
+  if (!g('fn-c-body')) return;   // композитор не на экране
+  const payload = {
+    title: g('fn-c-title')?.value || '',
+    body: g('fn-c-body')?.value || '',
+    image_url: g('fn-c-img')?.value || '',
+    reactions: fnReactCollect(),
+    ts: Date.now(),
+  };
+  // Пустой черновик не держим в хранилище.
+  if (!payload.title && !payload.body && !payload.image_url && !payload.reactions.length) {
+    try { localStorage.removeItem(FN.draftKey); } catch (e) {}
+    fnDraftStatus('');
+    return;
+  }
+  try { localStorage.setItem(FN.draftKey, JSON.stringify(payload)); fnDraftStatus('черновик сохранён · ' + fnClock(payload.ts)); } catch (e) {}
+}
+function fnDraftSaveSoon() { clearTimeout(FN.draftT); FN.draftT = setTimeout(fnDraftSave, 600); }
+function fnDraftDiscard() {
+  if (FN.draftKey) { try { localStorage.removeItem(FN.draftKey); } catch (e) {} }
+  const id = document.getElementById('fn-c-id')?.value || '';
+  fnOpenComposer(id || undefined);   // переоткрыть с серверными данными (черновик уже стёрт)
+}
 
 // Строка кастомной опции реакции (текст + тон)
 function fnReactRowHtml(text, stance) {
@@ -537,6 +593,7 @@ function fnInsertImg(input) {
     ta.value = ta.value.slice(0, start) + marker + ta.value.slice(ta.selectionEnd);
     ta.selectionStart = ta.selectionEnd = start + marker.length;
     ta.focus();
+    fnDraftSaveSoon();
   });
   input.value = '';
 }
@@ -551,6 +608,7 @@ function fnCoverUpload(input) {
       prv.classList.remove('fn-c-cov-empty');
       prv.innerHTML = `<img src="${url}" alt=""><button type="button" class="fn-c-cov-rm" onclick="fnCoverRemove()">✕</button>`;
     }
+    fnDraftSaveSoon();
   });
   input.value = '';
 }
@@ -559,6 +617,7 @@ function fnCoverRemove() {
   document.getElementById('fn-c-img').value = '';
   const prv = document.getElementById('fn-c-cov-prv');
   if (prv) { prv.classList.add('fn-c-cov-empty'); prv.innerHTML = ''; }
+  fnDraftSaveSoon();
 }
 
 async function fnSubmit() {
@@ -590,6 +649,10 @@ async function fnSubmit() {
       });
       toast('Новость отправлена на проверку', 'ok');
     }
+    // Отправлено успешно — черновик больше не нужен. Сбрасываем ключ ДО закрытия,
+    // иначе финальное автосохранение в fnCloseComposer пересоздаст черновик.
+    try { if (FN.draftKey) localStorage.removeItem(FN.draftKey); } catch (e) {}
+    FN.draftKey = null;
     fnCloseComposer();
     fnRefresh();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }

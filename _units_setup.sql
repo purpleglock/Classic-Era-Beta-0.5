@@ -32,9 +32,21 @@ drop policy if exists "fu_insert" on public.faction_units;
 drop policy if exists "fu_update" on public.faction_units;
 drop policy if exists "fu_delete" on public.faction_units;
 
--- читать: каталоги публичны — видно всем (включая гостей)
+-- читать: только СВОИ + общедоступные юниты (и всё — администрации).
+-- Чужие фракционные юниты не отдаём вовсе, иначе по каталогу видно чужой флот/технику
+-- (разведданные/чит). Зеркало клиентского cnCanSeeUnit() в constructors.js.
 create policy "fu_select" on public.faction_units for select to public
-  using (true);
+  using (
+    faction_id is null                                              -- общедоступные
+    or owner_id = auth.uid()                                        -- автор
+    or public.current_user_role() in ('superadmin','editor','moderator')  -- администрация
+    or exists (                                                     -- член той же фракции
+      select 1 from public.faction_applications fa
+      where fa.owner_id = auth.uid()
+        and fa.status = 'approved'
+        and fa.faction_id = faction_units.faction_id
+    )
+  );
 
 -- создавать: только от своего имени И только стафф ИЛИ владелец одобренной анкеты
 create policy "fu_insert" on public.faction_units for insert to authenticated
