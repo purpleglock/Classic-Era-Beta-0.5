@@ -82,7 +82,7 @@ const ecReadable = c => (typeof frReadable === 'function') ? frReadable(c) : (c 
 // Каталог зданий — зеркало _economy_setup.sql (для цен и превью дохода; источник истины дохода — RPC)
 const EC_BUILD = {
   factory:          { name: 'Гражданская фабрика', cost: 500,  ladder: [0, 0, 500, 1500, 1500, 3000], free: 2, inc: { gc: 200 }, cat: 'civ', desc: '+200 ГС за слот' },
-  mining:           { name: 'Добывающий завод',    cost: 500,  ladder: [0, 0, 500, 1500, 1500, 3000], free: 2, inc: { gc: 50 }, cat: 'civ', desc: '+50 ГС за слот + ресурсы' },
+  mining:           { name: 'Добывающий завод',    cost: 500,  ladder: [0, 0, 500, 1500, 1500, 3000], free: 2, inc: {}, cat: 'civ', desc: 'Добыча ресурсов: слоты → месторождения планеты' },
   trade:            { name: 'Торговый хаб',         cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 100 }, cat: 'civ', desc: '+100 ГС за слот (торговый путь)' },
   market:           { name: 'Товарная биржа',       cost: 1500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Продаёт добытые ресурсы за ГС (≈50% цены), без торговых путей' },
   science:          { name: 'Научный Институт',     cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { science: 1 }, cat: 'mil', desc: '+1 ОН за слот' },
@@ -568,15 +568,24 @@ function ecBuildingIncome(b) {
 }
 // Итоговый доход империи с учётом доктрины государства (зеркало economy_accrue).
 // Наука/агенты — ПЛОСКИЙ бонус доктрины (+N/сут), а не процент (они дискретны).
+// Активная дестабилизация (вражеская операция) режет ГС-доход на debuff_pct,
+// пока не истёк debuff_until. Зеркало economy_accrue на сервере. Доля 0..1.
+function ecDebuffPct() {
+  const e = EC.eco;
+  if (e && e.debuff_until && new Date(e.debuff_until) > new Date()) return Math.max(0, Math.min(1, +e.debuff_pct || 0));
+  return 0;
+}
 function ecIncomePreview() {
   let gc = 0, science = 0, agents = 0;
   EC.buildings.forEach(b => { const i = ecBuildingIncome(b); gc += i.gc; science += i.science; if (b.btype === 'intel') agents += b.slots_open; });
   const m = ecFactionMods();
+  const dz = ecDebuffPct();
+  const gcMul = m.gc * (1 - dz);   // доктрина × срез дестабилизации
   return {
-    gc: Math.round(gc * m.gc),
+    gc: Math.round(gc * gcMul),
     science: Math.max(0, science + m.sci_flat),
     agents: Math.max(0, agents + m.agents_flat),
-    base: { gc, science, agents }, mods: m,
+    base: { gc, science, agents }, mods: m, debuff: dz, gcMul,
   };
 }
 function ecResEntries() { const res = (EC.eco && EC.eco.resources) || {}; return Object.keys(res).map(k => [k, +res[k] || 0]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]); }
@@ -871,73 +880,70 @@ function ecTabOverview() {
   const m = inc.mods || {};
   const col = ecReadable(EC.app.color);
 
-  // ── 1. КАЗНА (hero) ──
+  // Имя/ГС/наука/доход/тик уже показаны в постоянной шапке кабинета (ec-treasury) —
+  // в обзоре НЕ повторяем (убран дублирующий hero-блок). Доход детально — в «Казне» ниже.
   const gcPct = Math.round(((m.gc || 1) - 1) * 100);
-  const tickHtml = EC.eco.last_tick
-    ? ecProgress(new Date(EC.eco.last_tick).getTime(), new Date(EC.eco.last_tick).getTime() + 86400000, 'доход начислится')
-    : '<span class="ec-ovx-tick-wait">первый ход ещё не пройден</span>';
-  const vault = (cls, k, v, inci, ic) => `<div class="ec-ovx-vault ${cls}">
-      <span class="ec-ovx-vault-ic">${ic}</span>
-      <span class="ec-ovx-vault-k">${esc(k)}</span>
-      <span class="ec-ovx-vault-v">${v}</span>
-      <span class="ec-ovx-vault-inc">${inci}</span>
-    </div>`;
-  const hero = `<div class="ec-ovx-hero" style="--fc:${col}">
-    <div class="ec-ovx-hero-id">
-      <div class="ec-ovx-hero-name">${esc(EC.app.name || 'Моя фракция')}</div>
-      <div class="ec-ovx-hero-sub">${esc(EC.app.gov || '—')} · ${esc(EC.app.ideology || '—')} · ${esc(EC.app.race || '—')}</div>
-    </div>
-    <div class="ec-ovx-vaults">
-      ${vault('ec-ovx-v-gc', 'Галакт. стандарт', ecNum(EC.eco.gc || 0), inc.gc ? `+${ecNum(inc.gc)} / сут` : 'нет дохода', '◈')}
-      ${vault('ec-ovx-v-sci', 'Очки науки', ecNum(EC.eco.science || 0), inc.science ? `+${ecNum(inc.science)} / сут` : 'нет дохода', '🔬')}
-      ${vault('ec-ovx-v-agt', 'Агенты', `${ecNum(agentsFree)} / ${ecNum(agentsTot)}`, agentsTot ? 'свободно / всего' : 'нет агентов', '🕵')}
-    </div>
-    <div class="ec-ovx-hero-tick">⏱ ${tickHtml}</div>
-  </div>`;
 
-  // ── 2. БЮДЖЕТ — реестр доходов по источникам ──
-  const ledgerSrc = [
-    ['factory', '🏭', 'Гражданские фабрики', (EC_BUILD.factory.inc.gc || 0), 'gc', 'colonies'],
-    ['mining', '⛏', 'Добывающие заводы', (EC_BUILD.mining.inc.gc || 0), 'gc', 'colonies'],
-    ['trade', '💱', 'Торговые хабы', (EC_BUILD.trade.inc.gc || 0), 'gc', 'trade'],
-    ['science', '🔬', 'Научные институты', (EC_BUILD.science.inc.science || 0), 'sci', 'research'],
-    ['intel', '🕵', 'Центры спецслужб', 1, 'agt', 'intel'],
-  ];
-  const ledgerRows = ledgerSrc.map(([t, ic, name, per, kind, tab]) => {
-    const slots = ecSlotsSum(t); if (!slots) return '';
-    const base = per * slots;
-    let finalV, unit, vcls;
-    if (kind === 'gc') { finalV = Math.round(base * (m.gc || 1)); unit = 'ГС'; vcls = 'ec-ovx-c-gc'; }
-    else if (kind === 'sci') { finalV = base; unit = 'ОН'; vcls = 'ec-ovx-c-sci'; }
-    else { finalV = base; unit = 'аг.'; vcls = 'ec-ovx-c-agt'; }
-    return `<tr class="ec-ovx-led-row" onclick="ecSetTab('${tab}')">
-      <td class="ec-ovx-led-src"><span class="ec-ovx-led-ic">${ic}</span>${esc(name)}</td>
-      <td class="ec-ovx-led-slots">${ecNum(slots)} сл.</td>
-      <td class="ec-ovx-led-base">${ecNum(base)}</td>
-      <td class="ec-ovx-led-val ${vcls}">+${ecNum(finalV)} <span class="ec-ovx-led-u">${unit}</span></td>
-    </tr>`;
-  }).filter(Boolean).join('');
-  const marketSlots = ecSlotsSum('market');
-  const marketRow = marketSlots ? `<tr class="ec-ovx-led-row" onclick="ecSetTab('trade')">
-      <td class="ec-ovx-led-src"><span class="ec-ovx-led-ic">📈</span>Товарные биржи</td>
-      <td class="ec-ovx-led-slots">${ecNum(marketSlots)} сл.</td>
-      <td class="ec-ovx-led-base" colspan="2"><i class="ec-ovx-led-note">продают ресурсы со склада (~50% цены)</i></td>
-    </tr>` : '';
-  const docNotes = [];
-  if (gcPct) docNotes.push(`<span class="ec-ovx-doc ${gcPct > 0 ? 'pos' : 'neg'}">Доктрина: ${gcPct > 0 ? '+' : ''}${gcPct}% к ГС</span>`);
-  if (m.sci_flat) docNotes.push(`<span class="ec-ovx-doc ${m.sci_flat > 0 ? 'pos' : 'neg'}">${m.sci_flat > 0 ? '+' : ''}${m.sci_flat} ОН/сут</span>`);
-  if (m.agents_flat) docNotes.push(`<span class="ec-ovx-doc ${m.agents_flat > 0 ? 'pos' : 'neg'}">${m.agents_flat > 0 ? '+' : ''}${m.agents_flat} агент/сут</span>`);
-  const budget = `<div class="ec-ovx-panel">
-    <div class="ec-ovx-panel-t">📊 Бюджет державы <span class="ec-ovx-panel-sub">доход за сутки</span></div>
-    ${(ledgerRows || marketRow)
-      ? `<table class="ec-ovx-ledger"><tbody>${ledgerRows}${marketRow}</tbody>
-          <tfoot><tr class="ec-ovx-led-total">
-            <td>ИТОГО / сут</td><td></td><td></td>
-            <td class="ec-ovx-led-totals">${inc.gc ? `<b class="ec-ovx-c-gc">+${ecNum(inc.gc)} ГС</b>` : ''}${inc.science ? `<b class="ec-ovx-c-sci">+${ecNum(inc.science)} ОН</b>` : ''}${inc.agents ? `<b class="ec-ovx-c-agt">+${ecNum(inc.agents)} аг.</b>` : ''}${!inc.gc && !inc.science && !inc.agents ? '<b class="ec-ovx-muted">—</b>' : ''}</td>
-          </tr></tfoot></table>
-          ${docNotes.length ? `<div class="ec-ovx-docs">${docNotes.join('')}</div>` : ''}
-          <div class="ec-ovx-hint">Содержание армии и зданий не списывается — расходы только разовые (постройка, производство, экспансия).</div>`
-      : `<div class="ec-ovx-empty">Дохода пока нет. Постройте здания и откройте слоты во вкладке «Колонии».</div>`}
+  // ── 2. КАЗНА — игровой реестр доходов/расходов ГС за сутки ──
+  const gcMul = inc.gcMul != null ? inc.gcMul : (m.gc || 1);
+  // Торговля и караваны: продажа (исходящие), доля партнёра (входящие), вывоз ресурсов
+  const _act = (EC.routes || []).filter(r => r.status === 'active');
+  const _out = _act.filter(r => r.a_fid === EC.fid);   // исходящие — я продаю
+  const _in  = _act.filter(r => r.b_fid === EC.fid);   // входящие — получаю долю партнёра
+  const _outGc = Math.round(_out.reduce((a, r) => a + (r.volume || 0) * (r.price || 0), 0) * (m.gc || 1));
+  const _inGc  = _in.reduce((a, r) => a + Math.round((r.volume || 0) * (r.price || 0) * EC_DEST_CUT), 0);
+  const _resOut = {};
+  _out.forEach(r => { if (r.resource) _resOut[r.resource] = (_resOut[r.resource] || 0) + (r.volume || 0); });
+  const _resOutTotal = Object.values(_resOut).reduce((a, b) => a + b, 0);
+  const _resOutTxt = Object.entries(_resOut).map(([n, v]) => `${ecResIcon(n)} ${ecNum(v)}`).join(' · ');
+  const facSlots = ecSlotsSum('factory'), trSlots = ecSlotsSum('trade'), marketSlots = ecSlotsSum('market');
+  // Источники ГС-дохода (с долей-вкладом для столбика)
+  const moneyInc = [];
+  if (facSlots) moneyInc.push({ ic: '🏭', name: 'Гражданские фабрики', sub: `${ecNum(facSlots)} слот. × 200`, gc: Math.round(facSlots * 200 * gcMul), tab: 'colonies' });
+  if (trSlots)  moneyInc.push({ ic: '💱', name: 'Торговые хабы', sub: `${ecNum(trSlots)} слот. × 100`, gc: Math.round(trSlots * 100 * gcMul), tab: 'trade' });
+  if (_out.length) moneyInc.push({ ic: '🚚', name: 'Караваны · продажа', sub: `${_out.length} пут. → партнёрам`, gc: _outGc, tab: 'trade' });
+  if (_in.length)  moneyInc.push({ ic: '📦', name: 'Доля с поставок', sub: `${_in.length} пут. ← вам шлют`, gc: _inGc, tab: 'trade' });
+  const netGc = moneyInc.reduce((a, x) => a + x.gc, 0);
+  const maxGc = moneyInc.reduce((a, x) => Math.max(a, x.gc), 0) || 1;
+  const moneyRows = moneyInc.map(x => {
+    const w = Math.max(5, Math.round(x.gc / maxGc * 100));
+    return `<button type="button" class="ec-bdg-row" onclick="ecSetTab('${x.tab}')">
+      <span class="ec-bdg-ic">${x.ic}</span>
+      <span class="ec-bdg-info"><span class="ec-bdg-name">${esc(x.name)}</span><span class="ec-bdg-sub">${esc(x.sub)}</span></span>
+      <span class="ec-bdg-bar"><i style="width:${w}%"></i></span>
+      <span class="ec-bdg-val pos">+${ecNum(x.gc)}</span>
+    </button>`;
+  }).join('');
+  const marketRow = marketSlots ? `<button type="button" class="ec-bdg-row ec-bdg-var" onclick="ecSetTab('trade')">
+      <span class="ec-bdg-ic">📈</span>
+      <span class="ec-bdg-info"><span class="ec-bdg-name">Товарная биржа</span><span class="ec-bdg-sub">${ecNum(marketSlots)} слот. · продаёт ресурсы (~50% цены)</span></span>
+      <span class="ec-bdg-bar ec-bdg-bar-var"></span>
+      <span class="ec-bdg-val pos">+ перем.</span>
+    </button>` : '';
+  const expRow = _resOutTotal ? `<button type="button" class="ec-bdg-row ec-bdg-exp" onclick="ecSetTab('trade')">
+      <span class="ec-bdg-ic">📤</span>
+      <span class="ec-bdg-info"><span class="ec-bdg-name">Караваны · вывоз ресурсов</span><span class="ec-bdg-sub">${_resOutTxt}</span></span>
+      <span class="ec-bdg-bar"></span>
+      <span class="ec-bdg-val neg">−${ecNum(_resOutTotal)} ед.</span>
+    </button>` : '';
+  // Прочие потоки (не деньги) — компактной строкой, без дублирования панелей
+  const flows = [];
+  if (inc.science) flows.push(`<span class="ec-bdg-flow" onclick="ecSetTab('research')"><span class="ec-bdg-flow-ic">🔬</span><b class="ec-ovx-c-sci">+${ecNum(inc.science)}</b> ОН/сут</span>`);
+  if (inc.agents)  flows.push(`<span class="ec-bdg-flow" onclick="ecSetTab('intel')"><span class="ec-bdg-flow-ic">🕵</span><b class="ec-ovx-c-agt">+${ecNum(inc.agents)}</b> агент/сут</span>`);
+  if (gcPct) flows.push(`<span class="ec-bdg-flow"><span class="ec-bdg-flow-ic">${gcPct > 0 ? '⚖' : '⚠'}</span>доктрина ${gcPct > 0 ? '+' : ''}${gcPct}% ГС</span>`);
+  const hasBudget = moneyInc.length || marketSlots || _resOutTotal || flows.length;
+  const budget = `<div class="ec-ovx-panel ec-bdg-panel">
+    <div class="ec-ovx-panel-t">💰 Казна <span class="ec-ovx-panel-sub">доходы и расходы за сутки</span></div>
+    ${hasBudget ? `
+      <div class="ec-bdg-net${netGc > 0 ? ' up' : ''}">
+        <span class="ec-bdg-net-k">Чистый доход / сут</span>
+        <span class="ec-bdg-net-v">${netGc >= 0 ? '+' : ''}${ecNum(netGc)} <small>ГС</small></span>
+        ${inc.debuff ? `<span class="ec-bdg-net-warn">🔥 дестабилизация −${Math.round(inc.debuff * 100)}%</span>` : ''}
+      </div>
+      ${(moneyRows || marketRow || expRow) ? `<div class="ec-bdg-rows">${moneyRows}${marketRow}${expRow}</div>` : ''}
+      ${flows.length ? `<div class="ec-bdg-flows">${flows.join('')}</div>` : ''}
+      <div class="ec-ovx-hint">Содержания армии и зданий нет — траты разовые (постройка, производство, экспансия).${_out.length || _in.length ? ' Доход с караванов зависит от поставок и может срезаться пиратами; ресурсы по караванам ежедневно уходят со склада.' : ''}</div>`
+      : `<div class="ec-ovx-empty">Казна пуста. Постройте Гражданские фабрики во вкладке «Колонии» — это база дохода.</div>`}
   </div>`;
 
   // ── 3. РЕСУРСЫ — добыча/сутки + склад ──
@@ -963,7 +969,7 @@ function ecTabOverview() {
   const bldByType = {};
   EC.buildings.forEach(b => { bldByType[b.btype] = (bldByType[b.btype] || 0) + 1; });
   const bldChips = EC_ORDER.map(t => bldByType[t] ? `<span class="ec-ovx-chip"><span class="ec-ovx-chip-ic">${EC_BLD_ICON[t] || '▣'}</span>${esc(ecBuildName(t))} <b>${ecNum(bldByType[t])}</b></span>` : '').filter(Boolean).join('');
-  const empire = `<div class="ec-ovx-panel">
+  const empire = `<div class="ec-ovx-panel ec-ovx-half">
     <div class="ec-ovx-panel-t">🏛 Держава</div>
     <div class="ec-ovx-stat-grid">
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('territory')"><div class="ec-ovx-stat-v">${ecNum(EC.systems.length)}</div><div class="ec-ovx-stat-k">Систем</div></div>
@@ -984,7 +990,7 @@ function ecTabOverview() {
       <span class="ec-ovx-cap-v">${ecNum(used)} / ${ecNum(cap)} за ход</span>
       ${ecOvBar(used, cap, cls)}
     </div>` : '';
-  const army = `<div class="ec-ovx-panel">
+  const army = `<div class="ec-ovx-panel ec-ovx-half">
     <div class="ec-ovx-panel-t">⚔ Вооружённые силы ${queued ? `<span class="ec-ovx-panel-sub ec-ov-clk" onclick="ecSetTab('milbuild')">в очереди: ${ecNum(queued)}</span>` : ''}</div>
     <div class="ec-ovx-stat-grid">
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v ec-ovx-c-sci">${ecNum(ships)}</div><div class="ec-ovx-stat-k">🚀 Корабли</div></div>
@@ -1022,7 +1028,7 @@ function ecTabOverview() {
     ? 'родные миры: <b>все типы планет</b> — колонизация без терраформа (бонус роботов).'
     : 'родные миры: ' + ((EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—') + '. Чужие типы планет — через терраформ.'}</div>`;
 
-  return `${hero}${ecDoctrineHtml()}${budget}${resPanel}${empire}${army}${sci}${raceNote}
+  return `<div class="ec-ovx-grid">${budget}${resPanel}${empire}${army}${sci}${ecDoctrineHtml()}</div>${raceNote}
     <div class="ec-ov-links">
       <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
       <button class="btn btn-gh btn-sm" onclick="go('cat-ships')">🚀 Каталоги</button>
@@ -2475,7 +2481,7 @@ function ecBuildingRow(b) {
       }).join('');
       mineHtml = `<div class="ec-bld-mine-hd">⛏ Месторождения <span class="ec-mine-slots-used">${used}/${b.slots_open} слотов занято</span></div><div class="ec-mine-list">${rows}</div>`;
     } else {
-      mineHtml = `<div class="ec-bld-mine-empty">◌ планета без ресурсов — только ГС</div>`;
+      mineHtml = `<div class="ec-bld-mine-empty">◌ планета без ресурсов — заводу нечего добывать</div>`;
     }
   }
   return `<div class="ec-bld">

@@ -12,14 +12,24 @@
 @keyframes fn-blink { 0%, 100% { opacity: 1 } 50% { opacity: .25 } }
 
 /* ── Блок на главной: «входящие передачи» ─────────────────── */
+/* контейнер для container query ленты (реакция на ширину блока, не окна) */
+.fn-home { container: fn-home / inline-size; }
 .fn-home .hb-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .fn-home .hb-tag { letter-spacing: .16em; }
 .fn-home-sub { font-family: var(--fn-mono); font-size: 9.5px; letter-spacing: .14em; color: var(--t4, #6a7a88); }
 
-.fn-grid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 14px; }
-@media (max-width: 980px) { .fn-grid { grid-template-columns: 1fr; } }
-/* мелкие карточки сами решают, сколько колонок влезет (не ужимаются в кашу) */
-.fn-grid-rest { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; align-content: start; }
+/* ── Вертикальная лента передач со скроллом ───────────────── */
+.fn-feed-news {
+  display: flex; flex-direction: column; gap: 10px;
+  max-height: 620px; overflow-y: auto; overscroll-behavior: contain;
+  padding: 2px 8px 2px 2px;
+}
+/* тонкий скроллбар в стиле терминала */
+.fn-feed-news { scrollbar-width: thin; scrollbar-color: var(--w3, #3a4656) transparent; }
+.fn-feed-news::-webkit-scrollbar { width: 8px; }
+.fn-feed-news::-webkit-scrollbar-thumb { background: var(--w3, #3a4656); border-radius: 4px; }
+.fn-feed-news::-webkit-scrollbar-thumb:hover { background: var(--fn-accent, #5fb0e6); }
+.fn-feed-news::-webkit-scrollbar-track { background: transparent; }
 
 .fn-card {
   position: relative; display: flex; flex-direction: column; cursor: pointer; overflow: hidden;
@@ -45,7 +55,17 @@
   transform: translateY(-3px);
   box-shadow: 0 12px 30px rgba(0,0,0,.5), -2px 0 16px color-mix(in srgb, var(--fn-accent, #5fb0e6) 32%, transparent);
 }
-.fn-card-lead { grid-row: 1 / span 2; }
+/* В ленте карточка — горизонтальная строка: миниатюра слева, текст справа.
+   Картинка резиновая (доля от ширины блока), тексту всегда хватает места. */
+.fn-feed-news .fn-card { flex-direction: row; min-height: 96px; }
+.fn-feed-news .fn-card-cov { width: 34%; max-width: 220px; min-width: 0; height: auto; min-height: 96px; flex-shrink: 0; }
+.fn-feed-news .fn-card-body { flex: 1; min-width: 0; }
+/* Узкий БЛОК (а не окно!) → карточка в столбик: картинка сверху, текст снизу.
+   container query смотрит на ширину .fn-home, поэтому работает и в боковой колонке. */
+@container fn-home (max-width: 460px) {
+  .fn-feed-news .fn-card { flex-direction: column; }
+  .fn-feed-news .fn-card-cov { width: 100%; max-width: none; min-height: 120px; }
+}
 
 /* Обложка карточки */
 .fn-card-cov { width: 100%; overflow: hidden; background: var(--b0); height: 88px; position: relative; z-index: 1; }

@@ -126,14 +126,10 @@ function fnHomeBlockHtml() {
   };
   let newsSection = '';
   if (list.length) {
-    const [lead, ...rest] = list;
-    const grid = rest.slice(0, 6).map(n => card(n, false)).join('');
+    const items = list.slice(0, 20).map(n => card(n, false)).join('');
     newsSection = `<section class="home-block fn-home">
       <div class="hb-head"><span class="hb-tag">ВЕСТНИК ФРАКЦИЙ</span><span class="fn-home-sub">// ВХОДЯЩИЕ ПЕРЕДАЧИ · ${list.length}</span></div>
-      <div class="fn-grid">
-        ${card(lead, true)}
-        ${grid ? `<div class="fn-grid-rest">${grid}</div>` : ''}
-      </div>
+      <div class="fn-feed-news">${items}</div>
     </section>`;
   }
   return newsSection + fnEventsFeedHtml();

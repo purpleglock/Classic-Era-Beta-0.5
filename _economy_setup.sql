@@ -1565,7 +1565,7 @@ begin
 
   for r in select btype, slots_open from public.colony_buildings where faction_id=p_fid loop
     if r.btype='factory' then inc_gc := inc_gc + r.slots_open*200;
-    elsif r.btype='mining' then inc_gc := inc_gc + r.slots_open*50;  -- + ресурсы (ниже)
+    -- mining: ГС НЕ даёт — только ресурсы (добыча по mining_targets ниже)
     elsif r.btype='trade' then inc_gc := inc_gc + r.slots_open*100;
     elsif r.btype='science' then inc_sci := inc_sci + r.slots_open*1;
     elsif r.btype='intel' then inc_agents := inc_agents + r.slots_open*1;

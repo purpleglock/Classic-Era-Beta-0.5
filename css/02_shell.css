@@ -243,6 +243,9 @@ button,input,select,textarea{font-family:inherit;}
 /* ─── §navigation ─────────────────────────────────────────────── */
 
 /* ── L0: HOME ── */
+/* Навигация — настоящие <a href> (для «открыть в новой вкладке» / Ctrl+клик).
+   Цвет задаётся классами ниже (author-стиль перекрывает UA), убираем лишь подчёркивание. */
+a.n-home, a.n-sub, a.np, a.ng-t { text-decoration:none; }
 .n-home{
   display:flex;align-items:center;gap:10px;
   padding:8px 16px;margin:4px 10px;

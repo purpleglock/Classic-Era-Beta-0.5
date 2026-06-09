@@ -1468,9 +1468,9 @@ function renderMd(txt) {
 function buildNav(filt='') {
   const q=(filt||'').toLowerCase().trim();
   const L=(ru,en)=>lang==='ru'?ru:en;
-  let h=`<div class="n-home${curSlug==='home'?' on':''}" id="ntl-h" onclick="go('home')"><span class="n-home-icon">⌂</span>${T('home')}</div>`;
+  let h=`<a class="n-home${curSlug==='home'?' on':''}" id="ntl-h" href="#home" onclick="return navGo(event,'home')"><span class="n-home-icon">⌂</span>${T('home')}</a>`;
   // Гайдбук — сразу под главной (важно для новичков)
-  h+=`<div class="n-home${curSlug==='guide'?' on':''}" id="ntl-guide" onclick="go('guide')"><span class="n-home-icon">📖</span>${L('Игровой гайдбук','Game guidebook')}</div>`;
+  h+=`<a class="n-home${curSlug==='guide'?' on':''}" id="ntl-guide" href="#guide" onclick="return navGo(event,'guide')"><span class="n-home-icon">📖</span>${L('Игровой гайдбук','Game guidebook')}</a>`;
   // ── Группа «Правила проекта» (раскрывающаяся): отдельные страницы правил ──
   const ruleItems=[['rules-general','◈',L('Общие правила','General rules')],['rules-charter','⚖',L('Устав проекта','Charter')],['rules-rp','⚔',L('Регламент RP и боёв','RP & combat')],['rules-conduct','⚠',L('Дисциплина и общение','Conduct')],['rules-naming','✎',L('Регистрация и нейминг','Registration')]];
   const rulesActive=(curSlug||'').startsWith('rules-');
@@ -1479,21 +1479,21 @@ function buildNav(filt='') {
       <span class="n-home-icon">⚖</span><span class="n-group-t">${L('Правила проекта','Project rules')}</span><span class="n-group-arr">▸</span>
     </div>
     <div class="n-group-body">
-      ${ruleItems.map(([sl,ic,nm])=>`<div class="n-sub${curSlug===sl?' on':''}" id="ntl-${sl}" onclick="go('${sl}')"><span class="n-home-icon">${ic}</span>${nm}</div>`).join('')}
+      ${ruleItems.map(([sl,ic,nm])=>`<a class="n-sub${curSlug===sl?' on':''}" id="ntl-${sl}" href="#${sl}" onclick="return navGo(event,'${sl}')"><span class="n-home-icon">${ic}</span>${nm}</a>`).join('')}
     </div>
   </div>`;
   // Кабинет игрока — высоко: игрокам с одобренной анкетой и стаффу
   if (typeof ecNavEnsure==='function') ecNavEnsure();
   if (typeof ecCanAccess==='function' && ecCanAccess()) {
-    h+=`<div class="n-home${curSlug==='economy'?' on':''}" id="ntl-eco" onclick="go('economy')"><span class="n-home-icon">🛰</span>${L('Кабинет игрока','Cabinet')}</div>`;
+    h+=`<a class="n-home${curSlug==='economy'?' on':''}" id="ntl-eco" href="#economy" onclick="return navGo(event,'economy')"><span class="n-home-icon">🛰</span>${L('Кабинет игрока','Cabinet')}</a>`;
   }
-  h+=`<div class="n-home${curSlug==='map'?' on':''}" id="ntl-map" onclick="go('map')"><span class="n-home-icon">🜨</span>${L('Карта галактики','Galaxy map')}</div>`;
-  h+=`<div class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" onclick="go('factions')"><span class="n-home-icon">⬡</span>${L('Фракции','Factions')}</div>`;
+  h+=`<a class="n-home${curSlug==='map'?' on':''}" id="ntl-map" href="#map" onclick="return navGo(event,'map')"><span class="n-home-icon">🜨</span>${L('Карта галактики','Galaxy map')}</a>`;
+  h+=`<a class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" href="#factions" onclick="return navGo(event,'factions')"><span class="n-home-icon">⬡</span>${L('Фракции','Factions')}</a>`;
   // Конструкторы — игрокам с одобренной анкетой и стаффу
   if (typeof cnNavEnsure==='function') cnNavEnsure();
   if (typeof cnCanAccess==='function' && cnCanAccess()) {
     const cnOn = (curSlug==='constructors'||(curSlug||'').startsWith('build-'))?' on':'';
-    h+=`<div class="n-home${cnOn}" id="ntl-con" onclick="go('constructors')"><span class="n-home-icon">⚒</span>${L('Конструкторы','Constructors')}</div>`;
+    h+=`<a class="n-home${cnOn}" id="ntl-con" href="#constructors" onclick="return navGo(event,'constructors')"><span class="n-home-icon">⚒</span>${L('Конструкторы','Constructors')}</a>`;
   }
   // ── Группа «Войска»: каталоги юнитов (раскрывающаяся) ──
   const cnCats=[['cat-ships','🚀',L('Флот','Fleet')],['cat-ground','🛡',L('Наземная техника','Ground')],['cat-aviation','✈',L('Авиация','Aviation')],['cat-divisions','⛬',L('Дивизии','Divisions')]];
@@ -1503,12 +1503,12 @@ function buildNav(filt='') {
       <span class="n-home-icon">⚔</span><span class="n-group-t">${L('Войска','Forces')}</span><span class="n-group-arr">▸</span>
     </div>
     <div class="n-group-body">
-      ${cnCats.map(([sl,ic,nm])=>`<div class="n-sub${curSlug===sl?' on':''}" id="ntl-${sl}" onclick="go('${sl}')"><span class="n-home-icon">${ic}</span>${nm}</div>`).join('')}
+      ${cnCats.map(([sl,ic,nm])=>`<a class="n-sub${curSlug===sl?' on':''}" id="ntl-${sl}" href="#${sl}" onclick="return navGo(event,'${sl}')"><span class="n-home-icon">${ic}</span>${nm}</a>`).join('')}
     </div>
   </div>`;
   // Администрирование — только суперадмины и эдиторы
   if (typeof adCanAccess==='function' && adCanAccess()) {
-    h+=`<div class="n-home${curSlug==='admin'?' on':''}" id="ntl-adm" onclick="go('admin')"><span class="n-home-icon">🛠</span>${L('Управление','Admin')}</div>`;
+    h+=`<a class="n-home${curSlug==='admin'?' on':''}" id="ntl-adm" href="#admin" onclick="return navGo(event,'admin')"><span class="n-home-icon">🛠</span>${L('Управление','Admin')}</a>`;
   }
   h+=`<div class="nav-divider"></div>`;
 
@@ -1520,7 +1520,7 @@ function buildNav(filt='') {
       matched.forEach(p=>{
         const sec=p.section?sections.find(s=>s.slug===p.section):null;
         const trail=sec?`<span style="font-size:9px;color:var(--t4);font-family:JetBrains Mono,monospace;display:block;margin-top:1px;letter-spacing:.5px">${sN(sec)}</span>`:'';
-        h+=`<div class="np${curSlug===p.slug?' on':''}" onclick="go('${esc(p.slug)}')">${esc(pT(p))}${trail}</div>`;
+        h+=`<a class="np${curSlug===p.slug?' on':''}" href="#${esc(p.slug)}" onclick="return navGo(event,'${esc(p.slug)}')">${esc(pT(p))}${trail}</a>`;
       });
     }
     document.getElementById('nav').innerHTML=h; setAct(curSlug||'home'); return;
@@ -1576,8 +1576,8 @@ function npEl(p,all) {
   const kids=all.filter(c=>isVisiblePage(c)&&c.parent_slug===p.slug).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
   const dd=(user&&p.status==='draft')?'<span class="np-d">DFT</span>':'';
   const isOpen=kids.some(k=>k.slug===curSlug||all.filter(c=>isVisiblePage(c)&&c.parent_slug===k.slug).some(c=>c.slug===curSlug));
-  if(!kids.length) return `<div class="np${curSlug===p.slug?' on':''}" id="np-${p.slug}" onclick="go('${esc(p.slug)}')">${esc(pT(p))}${dd}</div>`;
-  return `<div class="ng${isOpen||curSlug===p.slug?' op':''}" id="ngp-${p.slug}"><div class="ng-hdr${curSlug===p.slug?' on':''}" id="ngph-${p.slug}" onclick="tgNgP('${p.slug}')"><span class="ng-arr">▶</span><span class="ng-t" onclick="go('${esc(p.slug)}');event.stopPropagation()">${esc(pT(p))}${dd}</span></div><div class="ng-body">${kids.map(k=>npEl(k,all)).join('')}</div></div>`;
+  if(!kids.length) return `<a class="np${curSlug===p.slug?' on':''}" id="np-${p.slug}" href="#${esc(p.slug)}" onclick="return navGo(event,'${esc(p.slug)}')">${esc(pT(p))}${dd}</a>`;
+  return `<div class="ng${isOpen||curSlug===p.slug?' op':''}" id="ngp-${p.slug}"><div class="ng-hdr${curSlug===p.slug?' on':''}" id="ngph-${p.slug}" onclick="tgNgP('${p.slug}')"><span class="ng-arr">▶</span><a class="ng-t" href="#${esc(p.slug)}" onclick="event.stopPropagation();return navGo(event,'${esc(p.slug)}')">${esc(pT(p))}${dd}</a></div><div class="ng-body">${kids.map(k=>npEl(k,all)).join('')}</div></div>`;
 }
 
 const tgNs = (id, secSlug) => {

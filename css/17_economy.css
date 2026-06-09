@@ -890,3 +890,139 @@
   .ec-ovx-led-totals { flex-direction: column; gap: 2px; font-size: 12.5px; }
   .ec-ovx-stat-v { font-size: 20px; }
 }
+
+/* Плашка активной дестабилизации в шапке кабинета (ГС-доход снижен) */
+.ec-ovx-debuff { color: var(--err, #ff6b6b); font-weight: 600; white-space: nowrap; }
+
+/* Бюджет: расход (ресурсы по караванам) и итог с учётом торговли */
+.ec-ovx-c-neg { color: var(--err, #ff6b6b) !important; }
+.ec-ovx-led-trade td { color: var(--t3, #8aa0b0); font-weight: 600; border-top: 1px dashed var(--w2, #2a3340); }
+
+/* ══════════════════════════════════════════════════════════════
+   КАЗНА — игровой реестр доходов/расходов (НЕ таблица).
+   ══════════════════════════════════════════════════════════════ */
+.ec-bdg-panel { position: relative; }
+
+/* Крупный «казначейский» итог сверху */
+.ec-bdg-net {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px;
+  margin-bottom: 13px; padding: 12px 14px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--gd, #c9a24b) 16%, var(--b3, #0f141b)), var(--b2, #141a22));
+  border: 1px solid color-mix(in srgb, var(--gd, #c9a24b) 38%, var(--w2, #2a3340));
+  border-left: 3px solid var(--gd, #c9a24b);
+  border-radius: var(--radius-md, 10px);
+}
+.ec-bdg-net-k { font-family: var(--font-mono, monospace); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--t3, #8aa0b0); }
+.ec-bdg-net-v { margin-left: auto; font-family: var(--font-display, sans-serif); font-weight: 800; font-size: 26px; line-height: 1; color: var(--gd, #c9a24b); text-shadow: 0 0 18px color-mix(in srgb, var(--gd, #c9a24b) 45%, transparent); }
+.ec-bdg-net.up .ec-bdg-net-v { color: var(--gdl, #e6c060); }
+.ec-bdg-net-v small { font-size: 12px; font-weight: 600; opacity: .7; letter-spacing: .04em; }
+.ec-bdg-net-warn { flex-basis: 100%; font-family: var(--font-mono, monospace); font-size: 10.5px; font-weight: 600; color: var(--err, #ff6b6b); letter-spacing: .04em; }
+
+/* Строки источников */
+.ec-bdg-rows { display: flex; flex-direction: column; gap: 4px; }
+.ec-bdg-row {
+  display: grid; grid-template-columns: 26px minmax(0,1fr) clamp(48px,18%,110px) auto;
+  align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 8px 10px; cursor: pointer;
+  background: var(--b3, #0f141b); border: 1px solid var(--w1, #1e2630);
+  border-left: 2px solid var(--w2, #2a3340); border-radius: 7px;
+  font: inherit; color: var(--t2, #c0ccd6);
+  transition: background .14s, border-color .14s, transform .12s;
+}
+.ec-bdg-row:hover { background: var(--b4, #161d27); border-left-color: var(--gd, #c9a24b); transform: translateX(2px); }
+.ec-bdg-ic { font-size: 16px; text-align: center; }
+.ec-bdg-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ec-bdg-name { font-family: var(--font-display, sans-serif); font-weight: 700; font-size: 13px; color: var(--t1, #e8edf2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-bdg-sub { font-family: var(--font-mono, monospace); font-size: 9.5px; letter-spacing: .03em; color: var(--t4, #6a7a88); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Столбик-вклад источника */
+.ec-bdg-bar { height: 6px; border-radius: 3px; background: var(--b1, #0d1117); overflow: hidden; box-shadow: inset 0 0 0 1px var(--w1, #1e2630); }
+.ec-bdg-bar i { display: block; height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gd, #c9a24b) 55%, transparent), var(--gd, #c9a24b)); }
+.ec-bdg-bar-var { background: repeating-linear-gradient(90deg, var(--w2,#2a3340) 0 4px, transparent 4px 8px); box-shadow: none; }
+.ec-bdg-val { font-family: var(--font-mono, monospace); font-weight: 700; font-size: 14px; white-space: nowrap; text-align: right; }
+.ec-bdg-val.pos { color: var(--gd, #c9a24b); }
+.ec-bdg-val.neg { color: var(--err, #ff6b6b); }
+.ec-bdg-exp { border-left-color: color-mix(in srgb, var(--err, #ff6b6b) 50%, transparent); }
+.ec-bdg-exp:hover { border-left-color: var(--err, #ff6b6b); }
+.ec-bdg-var .ec-bdg-val.pos { color: var(--t3, #8aa0b0); }
+
+/* Прочие потоки (наука/агенты/доктрина) — чипы, не дублируют свои панели */
+.ec-bdg-flows { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+.ec-bdg-flow {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 5px 10px; border-radius: 20px;
+  background: var(--b3, #0f141b); border: 1px solid var(--w2, #2a3340);
+  font-family: var(--font-mono, monospace); font-size: 11px; color: var(--t3, #8aa0b0);
+  transition: border-color .14s, color .14s;
+}
+.ec-bdg-flow:hover { border-color: var(--w3, #3a4656); color: var(--t1, #e8edf2); }
+.ec-bdg-flow-ic { font-size: 12px; }
+
+@media (max-width: 560px) {
+  .ec-bdg-row { grid-template-columns: 24px minmax(0,1fr) auto; }
+  .ec-bdg-bar { display: none; }
+  .ec-bdg-net-v { font-size: 22px; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ОБЗОР КАБИНЕТА — единый игровой дашборд (редизайн).
+   Панели в адаптивную сетку, согласованные карточки и плитки.
+   Блок переопределяет более ранние правила .ec-ovx-*.
+   ══════════════════════════════════════════════════════════════ */
+.ec-ovx-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.ec-ovx-grid > * { grid-column: 1 / -1; margin-bottom: 0 !important; }
+.ec-ovx-grid > .ec-ovx-half { grid-column: span 1; }
+@media (max-width: 820px) { .ec-ovx-grid { grid-template-columns: 1fr; } .ec-ovx-grid > .ec-ovx-half { grid-column: 1 / -1; } }
+
+/* Карточка-панель: лёгкий объём, верхний акцент, аккуратная шапка */
+.ec-ovx-panel {
+  position: relative; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--b2) 92%, #2a3550), var(--b1));
+  border: 1px solid var(--w2); border-radius: 14px;
+  padding: 15px 17px 16px;
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 4%, transparent) inset, 0 8px 24px -18px #000;
+}
+.ec-ovx-panel-t {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: .03em;
+  text-transform: uppercase; color: var(--t1);
+  margin-bottom: 13px; padding-bottom: 10px; border-bottom: 1px solid var(--w1);
+}
+.ec-ovx-panel-t::before {
+  content: ''; width: 3px; height: 15px; border-radius: 2px; flex-shrink: 0;
+  background: linear-gradient(180deg, var(--gd, #c9a24b), color-mix(in srgb, var(--gd, #c9a24b) 30%, transparent));
+}
+.ec-ovx-panel-sub { margin-left: auto; }
+
+/* Плитки-показатели — единый стиль, крупные цифры, акцент при наведении */
+.ec-ovx-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px; }
+.ec-ovx-stat {
+  position: relative; overflow: hidden; text-align: center;
+  background: linear-gradient(165deg, var(--b3, #0f141b), var(--b1, #0d1117));
+  border: 1px solid var(--w2); border-radius: 11px; padding: 13px 12px;
+  transition: transform .14s, border-color .14s, box-shadow .14s;
+}
+.ec-ovx-stat.ec-ov-clk { cursor: pointer; }
+.ec-ovx-stat.ec-ov-clk:hover {
+  transform: translateY(-2px); border-color: color-mix(in srgb, var(--gd, #c9a24b) 60%, var(--w2));
+  box-shadow: 0 8px 20px -12px var(--gd, #c9a24b);
+}
+.ec-ovx-stat-v {
+  font-family: var(--font-display); font-weight: 800; font-size: 26px; line-height: 1; color: var(--t1);
+  text-shadow: 0 0 16px color-mix(in srgb, currentColor 22%, transparent);
+}
+.ec-ovx-stat-k { font-family: var(--font-mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--t3); margin-top: 6px; }
+.ec-ovx-stat-wide { grid-column: 1 / -1; text-align: left; background: var(--b1); }
+.ec-ovx-stat-barline { display: flex; align-items: center; gap: 10px; margin-top: 7px; font-family: var(--font-mono); font-size: 13px; color: var(--t2); }
+.ec-ovx-stat-barline b { color: var(--t1); font-size: 17px; }
+
+/* Чипы зданий — ровные пилюли */
+.ec-ovx-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--b1); border: 1px solid var(--w2); border-radius: 20px;
+  padding: 5px 11px; font-size: 11.5px; color: var(--t3);
+}
+.ec-ovx-chip b { color: var(--t1); font-family: var(--font-mono); }
+
+/* Полоски мощностей — чуть выразительнее */
+.ec-ovx-bar { height: 7px; background: var(--b0, #07090d); box-shadow: inset 0 0 0 1px var(--w1); }

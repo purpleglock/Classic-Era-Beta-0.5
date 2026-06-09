@@ -90,7 +90,21 @@ async function loadHomePage() {
 }
 
 let _navAbort = null, _navSeq = 0, _pushingHash = false;
-function route() { if (_pushingHash) return; if (editMode) exitEdit(false); go(location.hash.slice(1)||'home', false); }
+// Программный переход (go с push=true) сам меняет hash → ловим этот hashchange
+// и гасим его ЗДЕСЬ (а не микротаской — она успевала сброситься до события, и
+// страница рендерилась дважды; на формах редактирования второй рендер затирал
+// уже «съеденный» CN.edit пустой формой).
+function route() { if (_pushingHash) { _pushingHash = false; return; } if (editMode) exitEdit(false); go(location.hash.slice(1)||'home', false); }
+
+// Клик по навигационной ссылке (<a href="#slug">). При обычном клике — SPA-переход
+// без перезагрузки. При Ctrl/⌘/Shift/средней кнопке — НЕ перехватываем: пусть
+// браузер сам откроет ссылку в новой вкладке (и работает правый клик «Открыть в…»).
+function navGo(e, slug) {
+  if (e && (e.ctrlKey || e.metaKey || e.shiftKey || (typeof e.button === 'number' && e.button !== 0))) return true;
+  if (e && e.preventDefault) e.preventDefault();
+  go(slug);
+  return false;
+}
 
 async function go(slug, push=true) {
   if (editMode) exitEdit(false);
@@ -99,7 +113,9 @@ async function go(slug, push=true) {
   if (_navAbort) { _navAbort.abort(); _navAbort=null; }
   const seq = ++_navSeq;
 
-  if (push) { _pushingHash = true; location.hash = '#' + slug; Promise.resolve().then(() => { _pushingHash = false; }); }
+  // Взводим флаг ТОЛЬКО если hash реально изменится (иначе hashchange не выстрелит
+  // и флаг «залипнет», проглотив следующий настоящий переход). Снимает флаг route().
+  if (push) { const _h = '#' + slug; if (location.hash !== _h) { _pushingHash = true; location.hash = _h; } }
 
   if (slug.startsWith('sec:')) {
     curSlug = slug; const sec = sections.find(s=>s.slug===slug.slice(4));
