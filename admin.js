@@ -692,9 +692,11 @@ async function adAddColony() {
   const sys = AD.systems.find(s => s.id === sysId);
   const planet = sys && (sys.planets || []).find(p => p.name === pName);
   const resources = planet && Array.isArray(planet.resources) ? planet.resources.map(r => ({ name: r.name, icon: r.icon, r: r.r })) : [];
+  // pid с карты (если планета существует) — связь колонии с конкретной планетой, а не с именем
+  const pPid = planet && Number.isInteger(planet.pid) ? planet.pid : null;
   AD.busy = true;
   try {
-    const rows = await dbPost('colonies', { faction_id: AD.sel, owner_id: ownerId, system_id: sysId, planet_name: pName, planet_type: pType, cells, terraformed: false, resources });
+    const rows = await dbPost('colonies', { faction_id: AD.sel, owner_id: ownerId, system_id: sysId, planet_name: pName, planet_pid: pPid, planet_type: pType, cells, terraformed: false, resources });
     if (rows?.[0]) { e.colonies.push(rows[0]); AD.colonies.push(rows[0]); }
     toast('Колония добавлена', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }

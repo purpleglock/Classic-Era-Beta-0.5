@@ -22,12 +22,16 @@ create table if not exists public.colonies (
   owner_id    uuid,
   system_id   text,
   planet_name text,
+  planet_pid  int,                        -- стабильный id планеты в map_systems.planets[] (а НЕ имя: имена не уникальны)
   planet_type text,
   cells       int default 6,              -- ячеек под застройку
   terraformed boolean default false,
-  created_at  timestamptz default now(),
-  unique (system_id, planet_name)
+  created_at  timestamptz default now()
 );
+-- Уникальность колонии — по pid планеты, а не по имени (в системе бывают одноимённые планеты).
+-- Частичный индекс: старые колонии без pid (planet_pid is null) не блокируются.
+create unique index if not exists colonies_system_pid_uidx
+  on public.colonies (system_id, planet_pid) where planet_pid is not null;
 
 create table if not exists public.colony_buildings (
   id          uuid primary key default gen_random_uuid(),
@@ -155,6 +159,7 @@ create table if not exists public.colony_projects (
   building_id uuid,                     -- slot
   system_id   text,                     -- terraform (новая планета)
   planet_name text,
+  planet_pid  int,                       -- terraform: стабильный pid планеты на карте
   planet_type text,
   cells       int default 0,            -- terraform: размер новой колонии / habitat: +ячеек
   payload     jsonb default '{}'::jsonb,-- terraform: снимок ресурсов планеты
@@ -198,12 +203,15 @@ begin
       update public.colonies set cells = cells + coalesce(pr.cells, 3), terraformed = true
         where id = pr.colony_id and faction_id = p_fid;
     elsif pr.kind = 'terraform' then
+      -- дубль определяем по pid (точно), для старых проектов без pid — по имени
       if not exists (select 1 from public.colonies c
                      where c.faction_id = p_fid
                        and c.system_id is not distinct from pr.system_id
-                       and c.planet_name = pr.planet_name) then
-        insert into public.colonies (faction_id, owner_id, system_id, planet_name, planet_type, cells, terraformed, resources)
-          values (p_fid, pr.owner_id, pr.system_id, pr.planet_name, pr.planet_type,
+                       and (case when pr.planet_pid is not null
+                                 then c.planet_pid = pr.planet_pid
+                                 else c.planet_name = pr.planet_name end)) then
+        insert into public.colonies (faction_id, owner_id, system_id, planet_name, planet_pid, planet_type, cells, terraformed, resources)
+          values (p_fid, pr.owner_id, pr.system_id, pr.planet_name, pr.planet_pid, pr.planet_type,
                   coalesce(nullif(pr.cells, 0), 6), true, coalesce(pr.payload->'resources', '[]'::jsonb));
       end if;
     end if;
@@ -323,14 +331,15 @@ returns uuid language plpgsql security definer set search_path = public as $$
 declare
   app public.faction_applications;
   env text; ptype text; cap_name text; cap_id uuid; sys_id text; pres jsonb; cap_cells int;
+  cap_pid int; cap_planet_pid int;
 begin
   select * into app from public.faction_applications
     where faction_id = p_fid and status = 'approved'
     order by updated_at desc limit 1;
   if not found then return null; end if;
 
-  -- Существующая столичная колония — источник истины (её актуальные система и имя).
-  select id, system_id, planet_name into cap_id, sys_id, cap_name from public.colonies
+  -- Существующая столичная колония — источник истины (её актуальные система, имя и pid).
+  select id, system_id, planet_name, planet_pid into cap_id, sys_id, cap_name, cap_pid from public.colonies
     where faction_id = p_fid
     order by is_capital desc, (planet_type = 'Столичный мир') desc, created_at asc limit 1;
   -- Новая фракция: система и имя берутся из анкеты.
@@ -349,32 +358,52 @@ begin
     when 'lava' then 7 when 'micro' then 7
     else 9 end;
 
-  -- генерируем планету на карте, если её ещё нет в столичной системе
-  if not exists (
-    select 1 from public.map_systems ms, jsonb_array_elements(ms.planets) e
-    where ms.id = sys_id and e->>'name' = cap_name
-  ) then
+  -- pid столичной планеты на карте: сперва по известному pid колонии, затем по имени
+  -- (к элементам jsonb обращаемся через явный алиас колонки e(val) — см. _migration_planet_pid.sql)
+  if cap_pid is not null then
+    select (e.val->>'pid')::int into cap_planet_pid
+      from public.map_systems ms
+      cross join lateral jsonb_array_elements(coalesce(ms.planets, '[]'::jsonb)) as e(val)
+      where ms.id = sys_id and (e.val->>'pid')::int = cap_pid limit 1;
+  end if;
+  if cap_planet_pid is null then
+    select (e.val->>'pid')::int into cap_planet_pid
+      from public.map_systems ms
+      cross join lateral jsonb_array_elements(coalesce(ms.planets, '[]'::jsonb)) as e(val)
+      where ms.id = sys_id and e.val->>'name' = cap_name limit 1;
+  end if;
+  -- планеты ещё нет на карте — генерируем её с новым стабильным pid (max+1 в системе)
+  if cap_planet_pid is null then
+    select coalesce(max((e.val->>'pid')::int), 0) + 1 into cap_planet_pid
+      from public.map_systems ms
+      cross join lateral jsonb_array_elements(coalesce(ms.planets, '[]'::jsonb)) as e(val)
+      where ms.id = sys_id;
     update public.map_systems
       set planets = coalesce(planets, '[]'::jsonb) || jsonb_build_object(
-            'name', cap_name, 'type', ptype, 'slotsP', cap_cells,
+            'name', cap_name, 'type', ptype, 'slotsP', cap_cells, 'pid', cap_planet_pid,
             'resources', public._basic_capital_res(ptype))
       where id = sys_id;
   end if;
 
-  -- ресурсы столичной планеты с карты
-  select e->'resources' into pres from public.map_systems ms, jsonb_array_elements(ms.planets) e
-    where ms.id = sys_id and e->>'name' = cap_name limit 1;
+  -- ресурсы столичной планеты с карты (по pid)
+  select e.val->'resources' into pres
+    from public.map_systems ms
+    cross join lateral jsonb_array_elements(coalesce(ms.planets, '[]'::jsonb)) as e(val)
+    where ms.id = sys_id and (e.val->>'pid')::int = cap_planet_pid limit 1;
 
-  -- столичная колония (создаём только для новой фракции)
+  -- столичная колония (создаём только для новой фракции; дубль ловим по pid, без ON CONFLICT)
   if cap_id is null then
-    insert into public.colonies (faction_id, owner_id, system_id, planet_name, planet_type, cells, is_capital, resources)
-      values (p_fid, app.owner_id, sys_id, cap_name, ptype, cap_cells, true, coalesce(pres, '[]'::jsonb))
-      on conflict (system_id, planet_name) do nothing
-      returning id into cap_id;
+    select id into cap_id from public.colonies
+      where system_id is not distinct from sys_id and planet_pid = cap_planet_pid limit 1;
     if cap_id is null then
-      select id into cap_id from public.colonies
-        where system_id is not distinct from sys_id and planet_name = cap_name limit 1;
+      insert into public.colonies (faction_id, owner_id, system_id, planet_name, planet_pid, planet_type, cells, is_capital, resources)
+        values (p_fid, app.owner_id, sys_id, cap_name, cap_planet_pid, ptype, cap_cells, true, coalesce(pres, '[]'::jsonb))
+        returning id into cap_id;
     end if;
+  end if;
+  -- проставим pid существующей столичной колонии, если он ещё не выставлен
+  if cap_id is not null and cap_pid is null then
+    update public.colonies set planet_pid = cap_planet_pid where id = cap_id and planet_pid is null;
   end if;
 
   -- ровно одна столица на фракцию + система закреплена на карте
@@ -457,7 +486,10 @@ begin
   set resources = coalesce((
     select pl->'resources'
     from public.map_systems ms, jsonb_array_elements(ms.planets) pl
-    where ms.id = c.system_id and pl->>'name' = c.planet_name limit 1
+    where ms.id = c.system_id
+      and (case when c.planet_pid is not null
+                then (pl->>'pid')::int = c.planet_pid
+                else pl->>'name' = c.planet_name end) limit 1
   ), '[]'::jsonb)
   where c.faction_id = app.faction_id
     and (c.resources is null or c.resources = '[]'::jsonb);
@@ -1717,7 +1749,9 @@ update public.colonies c
 set resources = pl->'resources'
 from public.map_systems ms, jsonb_array_elements(ms.planets) pl
 where ms.id = c.system_id
-  and pl->>'name' = c.planet_name
+  and (case when c.planet_pid is not null
+            then (pl->>'pid')::int = c.planet_pid
+            else pl->>'name' = c.planet_name end)
   and (c.resources is null or c.resources = '[]'::jsonb or jsonb_array_length(c.resources) = 0)
   and jsonb_typeof(pl->'resources') = 'array'
   and jsonb_array_length(pl->'resources') > 0;

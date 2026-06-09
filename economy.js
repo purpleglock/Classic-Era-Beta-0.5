@@ -598,7 +598,7 @@ function ecMiningPlanetRes(b) {
   // и .find хватает не ту (часто пустого двойника) → ресурсы «пропадают».
   if (Array.isArray(colony.resources) && colony.resources.length) return colony.resources.filter(r => r && r.name);
   const sys = EC.systems.find(s => s.id === colony.system_id);
-  const planet = (sys && (sys.planets || []).find(p => p.name === colony.planet_name)) || colony;
+  const planet = ecFindPlanet(sys, colony.planet_name, colony.planet_pid) || colony;
   return (planet && Array.isArray(planet.resources)) ? planet.resources.filter(r => r && r.name) : [];
 }
 // Суммарная добыча назначенных месторождений по всем mining-зданиям колонии (для заголовка)
@@ -1055,7 +1055,7 @@ function ecColonizeInfo(s, p, race) {
     if (st) {
       const sc = ecColonizeCost(EC_STATION_COST);
       return { cls: 'station', tag: 'станция', label,
-        btn: `<button class="btn btn-gd btn-sm" title="Построить ${esc(st.label.toLowerCase())} — малая станция на ${st.cells} ячеек застройки. Стоимость ${ecNum(sc)} ГС." onclick="event.stopPropagation();ecBuildStation('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${ecArg(g)})">${st.icon} Станция · ${st.cells} ячеек · ${ecNum(sc)} ГС</button>` };
+        btn: `<button class="btn btn-gd btn-sm" title="Построить ${esc(st.label.toLowerCase())} — малая станция на ${st.cells} ячеек застройки. Стоимость ${ecNum(sc)} ГС." onclick="event.stopPropagation();ecBuildStation('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${ecArg(g)},${ecPidArg(p)})">${st.icon} Станция · ${st.cells} ячеек · ${ecNum(sc)} ГС</button>` };
     }
     const tech = ecStationTechFor(g);
     const lockTitle = tech
@@ -1063,15 +1063,15 @@ function ecColonizeInfo(s, p, race) {
       : 'Газовые гиганты, аномалии и пояса заселить нельзя.';
     return { cls: 'no', tag: 'непригодна', label, btn: `<button class="btn btn-gh btn-sm" disabled title="${esc(lockTitle)}">${tech ? '🔒 нужна технология' : '— нельзя'}</button>` };
   }
-  if (ecNative(p, race)) return { cls: 'native', tag: 'родная', label, btn: `<button class="btn btn-gd btn-sm" onclick="event.stopPropagation();ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},0)">Колонизировать · ${ecNum(ecColonizeCost(EC_COLONIZE_COST))} ГС</button>` };
+  if (ecNative(p, race)) return { cls: 'native', tag: 'родная', label, btn: `<button class="btn btn-gd btn-sm" onclick="event.stopPropagation();ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},0,${ecPidArg(p)})">Колонизировать · ${ecNum(ecColonizeCost(EC_COLONIZE_COST))} ГС</button>` };
   // Чужая планета — терраформ с уровнем сложности (срок + ОН)
-  const pend = ecPendingTerraform(s.id, p.name);
+  const pend = ecPendingTerraform(s.id, p.name, p.pid);
   if (pend) return { cls: 'foreign', tag: 'чужая', label, btn: `<span class="ec-proj-tag" title="${ecProjEtaTxt(pend)}">⏳ терраформ (${ecProjEtaTxt(pend)})</span>` };
   const tier = ecTerraTier(p, race), spec = EC_TERRA[tier];
   const costTxt = `${ecNum(ecColonizeCost(spec.gc))} ГС${spec.science ? ` + ${ecNum(spec.science)} ОН` : ''}`;
   // одна понятная кнопка: заселить нельзя — но можно терраформировать (сложность + цена + срок)
   return { cls: 'foreign', tag: 'чужая', label,
-    btn: `<button class="btn btn-sm ec-terra-btn ec-terra-t${tier}" title="Заселить сразу нельзя. Терраформировать (${spec.label.toLowerCase()}) → затем станет колонией. Стоимость ${costTxt}, срок ${spec.turns} ход(ов)." onclick="event.stopPropagation();ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},1)">🌱 Терраформ · ${spec.label} · ${costTxt} · ${spec.turns} ход.</button>` };
+    btn: `<button class="btn btn-sm ec-terra-btn ec-terra-t${tier}" title="Заселить сразу нельзя. Терраформировать (${spec.label.toLowerCase()}) → затем станет колонией. Стоимость ${costTxt}, срок ${spec.turns} ход(ов)." onclick="event.stopPropagation();ecColonize('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${cells},1,${ecPidArg(p)})">🌱 Терраформ · ${spec.label} · ${costTxt} · ${spec.turns} ход.</button>` };
 }
 
 // Чипы ресурсов планеты (иконка + название + цвет по редкости)
@@ -1147,7 +1147,7 @@ function ecColonyRowHtml(colony, sys) {
   // ресурсы: ИСТИНА — снимок самой колонии (его использует сервер для добычи).
   // Матчинг по имени ненадёжен: в системе бывает ДВЕ одноимённые планеты,
   // .find берёт первую (часто пустую) и затирает корректный снимок колонии.
-  const mapPlanet = sys && (sys.planets || []).find(x => x.name === colony.planet_name);
+  const mapPlanet = ecFindPlanet(sys, colony.planet_name, colony.planet_pid);
   const planet = (Array.isArray(colony.resources) && colony.resources.length) ? colony : (mapPlanet || colony);
   const minePreview = ecColonyMinePreview(blds, planet);
   const head = `<div class="ec-pl ec-pl-own${open ? ' open' : ''}" onclick="ecToggleColony('${colony.id}')">
@@ -1191,11 +1191,18 @@ function ecTabColonies() {
   const totalCol = EC.colonies.length;
   const blocks = [...sysMap.values()].map(s => {
     const cols = EC.colonies.filter(c => c.system_id === s.id);
-    const colNames = new Set(cols.map(c => c.planet_name));
+    // Занятость планеты определяем по pid (две одноимённые планеты — разные объекты).
+    // Имя — фолбэк только для старых колоний без planet_pid.
+    const colPids = new Set(cols.map(c => c.planet_pid).filter(v => v != null));
+    const colNamesNoPid = new Set(cols.filter(c => c.planet_pid == null).map(c => c.planet_name));
     const sysOpen = !(EC.closedSys && EC.closedSys.has(s.id));
     // 1) ВСЕ колонии системы (всегда), 2) незаселённые планеты
     const colHtml = cols.map(c => ecColonyRowHtml(c, s)).join('');
-    const freeHtml = s.planets.filter(p => !colNames.has(p.name)).map(p => ecFreeRowHtml(s, p, race)).join('');
+    const freeHtml = s.planets.filter(p => {
+      if (p.pid != null && colPids.has(p.pid)) return false;
+      if (colNamesNoPid.has(p.name)) return false;
+      return true;
+    }).map(p => ecFreeRowHtml(s, p, race)).join('');
     const body = (colHtml + freeHtml) || `<div class="ec-empty" style="padding:10px 12px">Нет планет.</div>`;
     return `<div class="ec-sysblk">
       <div class="ec-sysblk-hd" onclick="ecToggleSys('${esc(s.id)}')">
@@ -2493,6 +2500,8 @@ function ecBuildingRow(b) {
 
 // экранирование строки для inline-onclick (одинарные кавычки)
 function ecArg(s) { return "'" + String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; }
+// pid планеты как числовой литерал для inline-onclick (или null для немигрированных данных карты)
+function ecPidArg(p) { return (p && Number.isInteger(p.pid)) ? String(p.pid) : 'null'; }
 
 // ── Денежные операции (клиентские, под RLS) ─────────────────
 async function ecSpend(amount) {
@@ -2517,7 +2526,14 @@ const _ecReadyTurns = (turns) => new Date(Date.now() + Math.max(1, turns || 1) *
 function ecPendingSlot(buildingId) { return (EC.projects || []).find(p => p.kind === 'slot' && p.building_id === buildingId); }
 function ecPendingHabitat(colonyId) { return (EC.projects || []).find(p => p.kind === 'habitat' && p.colony_id === colonyId); }
 function ecPendingBuild(colonyId, btype) { return (EC.projects || []).find(p => p.kind === 'build' && p.colony_id === colonyId && p.btype === btype); }
-function ecPendingTerraform(sysId, planetName) { return (EC.projects || []).find(p => p.kind === 'terraform' && p.system_id === sysId && p.planet_name === planetName); }
+function ecPendingTerraform(sysId, planetName, pid) {
+  return (EC.projects || []).find(p => {
+    if (p.kind !== 'terraform' || p.system_id !== sysId) return false;
+    // pid точнее имени (две одноимённые планеты); имя — фолбэк для старых проектов без pid
+    if (pid != null && p.planet_pid != null) return p.planet_pid === pid;
+    return p.planet_name === planetName;
+  });
+}
 // Сколько ходов осталось до завершения проекта
 function ecProjTurnsLeft(p) {
   if (!p || !p.ready_at) return 0;
@@ -2599,16 +2615,23 @@ async function ecCancelProject(id) {
 }
 
 // Колонизация РОДНОЙ планеты — мгновенно (просто заселение пригодного мира).
-async function ecColonize(sysId, planetName, planetType, cells, foreign) {
-  if (foreign) return ecTerraform(sysId, planetName, planetType, cells); // непригодная → отложенный терраформ
+// Поиск планеты в системе по стабильному pid (фолбэк — по имени для немигрированных данных).
+function ecFindPlanet(sys, planetName, pid) {
+  const planets = (sys && sys.planets) || [];
+  if (pid != null) { const byPid = planets.find(x => x.pid === pid); if (byPid) return byPid; }
+  return planets.find(x => x.name === planetName);
+}
+
+async function ecColonize(sysId, planetName, planetType, cells, foreign, pid) {
+  if (foreign) return ecTerraform(sysId, planetName, planetType, cells, pid); // непригодная → отложенный терраформ
   if (EC.busy) return; EC.busy = true;
   try {
     if (!await ecSpend(ecColonizeCost(EC_COLONIZE_COST))) return;
     let resources = [];
     const sys = EC.systems.find(s => s.id === sysId);
-    const p = sys && (sys.planets || []).find(x => x.name === planetName);
+    const p = ecFindPlanet(sys, planetName, pid);
     if (p && Array.isArray(p.resources)) resources = p.resources.map(r => ({ name: r.name, icon: r.icon, r: r.r }));
-    await dbPost('colonies', { faction_id: EC.fid, owner_id: user.id, system_id: sysId, planet_name: planetName, planet_type: planetType || '', cells: cells || EC_DEFAULT_CELLS, terraformed: false, resources });
+    await dbPost('colonies', { faction_id: EC.fid, owner_id: user.id, system_id: sysId, planet_name: planetName, planet_pid: (pid != null ? pid : null), planet_type: planetType || '', cells: cells || EC_DEFAULT_CELLS, terraformed: false, resources });
     toast('Планета колонизирована', 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
@@ -2618,7 +2641,7 @@ async function ecColonize(sysId, planetName, planetType, cells, foreign) {
 // Небожители: построить станцию на непригодном мире — малая колония (3–5 ячеек), сразу.
 // Требует изученной технологии-станции для группы этого мира. Ресурсы пояса/гиганта
 // копируются в колонию — на станции можно добывать (астероидная добыча и т.п.).
-async function ecBuildStation(sysId, planetName, planetType, group) {
+async function ecBuildStation(sysId, planetName, planetType, group, pid) {
   if (EC.busy) return;
   const st = ecStationFor(group);
   if (!st) { toast('Нужна технология Небожителей для этого типа мира', 'err'); return; }
@@ -2628,9 +2651,9 @@ async function ecBuildStation(sysId, planetName, planetType, group) {
     if (!await ecSpend(cost)) return;
     let resources = [];
     const sys = EC.systems.find(s => s.id === sysId);
-    const p = sys && (sys.planets || []).find(x => x.name === planetName);
+    const p = ecFindPlanet(sys, planetName, pid);
     if (p && Array.isArray(p.resources)) resources = p.resources.map(r => ({ name: r.name, icon: r.icon, r: r.r }));
-    await dbPost('colonies', { faction_id: EC.fid, owner_id: user.id, system_id: sysId, planet_name: planetName, planet_type: planetType || '', cells: st.cells, terraformed: true, resources });
+    await dbPost('colonies', { faction_id: EC.fid, owner_id: user.id, system_id: sysId, planet_name: planetName, planet_pid: (pid != null ? pid : null), planet_type: planetType || '', cells: st.cells, terraformed: true, resources });
     toast(`${st.icon} ${st.label} построена · ${st.cells} ячеек`, 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
@@ -2638,11 +2661,11 @@ async function ecBuildStation(sysId, planetName, planetType, group) {
 }
 
 // Терраформирование НЕПРИГОДНОЙ планеты — отложенный проект (1..4 хода + ОН по сложности).
-async function ecTerraform(sysId, planetName, planetType, cells) {
+async function ecTerraform(sysId, planetName, planetType, cells, pid) {
   if (EC.busy) return;
-  if (ecPendingTerraform(sysId, planetName)) { toast('Терраформирование уже идёт', 'inf'); return; }
+  if (ecPendingTerraform(sysId, planetName, pid)) { toast('Терраформирование уже идёт', 'inf'); return; }
   const sys = EC.systems.find(s => s.id === sysId);
-  const p = sys && (sys.planets || []).find(x => x.name === planetName);
+  const p = ecFindPlanet(sys, planetName, pid);
   const tier = ecTerraTier(p, EC.app.race), spec = EC_TERRA[tier];
   const terraGc = ecColonizeCost(spec.gc);
   if (!confirm(`Терраформирование «${planetName}» (${spec.label.toLowerCase()}):\n• срок: ${spec.turns} ход(ов)\n• затраты: ${ecNum(terraGc)} ГС${spec.science ? ` + ${ecNum(spec.science)} ОН` : ''}\nНачать?`)) return;
@@ -2653,7 +2676,7 @@ async function ecTerraform(sysId, planetName, planetType, cells) {
     if (p && Array.isArray(p.resources)) resources = p.resources.map(r => ({ name: r.name, icon: r.icon, r: r.r }));
     await dbPost('colony_projects', {
       faction_id: EC.fid, owner_id: user.id, kind: 'terraform',
-      system_id: sysId, planet_name: planetName, planet_type: planetType || '',
+      system_id: sysId, planet_name: planetName, planet_pid: (pid != null ? pid : null), planet_type: planetType || '',
       cells: cells || EC_DEFAULT_CELLS,
       payload: { resources, spent_gc: terraGc, spent_science: spec.science },
       label: `Терраформ: ${planetName}`, ready_at: _ecReadyTurns(spec.turns),

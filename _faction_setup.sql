@@ -92,11 +92,20 @@ begin
     select * into cap from public.colonies where faction_id = fid
       order by is_capital desc, (planet_type = 'Столичный мир') desc, created_at asc limit 1;
     if found and cap.planet_name is distinct from app.planet_name then
+      -- переименовываем КОНКРЕТНУЮ планету по pid (если есть), иначе по имени —
+      -- иначе одноимённый двойник в системе переименовался бы заодно.
       update public.map_systems ms set planets = (
-        select jsonb_agg(case when e->>'name' = cap.planet_name then jsonb_set(e, '{name}', to_jsonb(app.planet_name)) else e end)
+        select jsonb_agg(
+          case when (case when cap.planet_pid is not null
+                          then (e->>'pid')::int = cap.planet_pid
+                          else e->>'name' = cap.planet_name end)
+               then jsonb_set(e, '{name}', to_jsonb(app.planet_name)) else e end)
         from jsonb_array_elements(ms.planets) e)
         where ms.id = cap.system_id
-          and exists (select 1 from jsonb_array_elements(ms.planets) e2 where e2->>'name' = cap.planet_name);
+          and exists (select 1 from jsonb_array_elements(ms.planets) e2
+                      where (case when cap.planet_pid is not null
+                                  then (e2->>'pid')::int = cap.planet_pid
+                                  else e2->>'name' = cap.planet_name end));
       update public.colonies set planet_name = app.planet_name where id = cap.id;
     end if;
   end if;

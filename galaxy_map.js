@@ -836,9 +836,20 @@ function gmAddPlanetManual() { GM.formPlanets.push({ name: '', type: '', owner: 
 function gmRemovePlanet(i) { GM.formPlanets.splice(i, 1); gmRenderFormPlanets(); }
 function gmCloseForm() { document.getElementById('gm-form')?.classList.add('gm-hidden'); gmCloseGen(); }
 
+// Стабильный идентификатор планеты внутри системы. НЕ индекс массива:
+// планеты в редакторе можно переставлять/удалять/вставлять, а колонии
+// (colonies.planet_pid) ссылаются именно на pid — он должен пережить правки.
+// Сохраняем существующие pid, новым выдаём max+1 (без переиспользования).
+function gmAssignPids(planets) {
+  let max = 0;
+  planets.forEach(p => { if (Number.isInteger(p.pid) && p.pid > max) max = p.pid; });
+  planets.forEach(p => { if (!Number.isInteger(p.pid)) p.pid = ++max; });
+  return planets;
+}
+
 async function gmSaveForm() {
   const id = document.getElementById('gmf-id').value;
-  const planets = GM.formPlanets.filter(p => (p.name || '').trim());
+  const planets = gmAssignPids(GM.formPlanets.filter(p => (p.name || '').trim()));
   const body = {
     name: document.getElementById('gmf-name').value.trim() || 'Без имени',
     star_type: document.getElementById('gmf-type').value,
