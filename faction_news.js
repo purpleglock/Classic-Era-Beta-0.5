@@ -106,7 +106,7 @@ function fnHomeBlockHtml() {
     const accent = (kind === 'news') ? 'var(--gd)' : (n.faction_color || 'var(--gd)');
     const cardCover = n.image_url
       ? `<div class="fn-card-cov"><img src="${esc(n.image_url)}" loading="lazy" alt=""></div>` : '';
-    const herald = (kind === 'news' && FN.heralds) ? FN.heralds.get(n.faction_id) : '';
+    const herald = (kind === 'news') ? ((FN.heralds && FN.heralds.get(n.faction_id)) || n.author_herald || '') : '';
     const flag = herald ? `<img class="fn-card-flag" src="${esc(herald)}" alt="" onerror="this.style.display='none'">` : '<span class="fn-dot"></span>';
     const kicker = bulletin
       ? `<span class="fn-card-live fn-card-bulletin">◈ СВОДКА</span><span class="fn-card-fac">${esc((n.faction_name || 'СЕКТОР').toUpperCase())}</span>`
@@ -114,7 +114,8 @@ function fnHomeBlockHtml() {
       ? `<span class="fn-card-live fn-card-rumor">📡 СЛУХ</span><span class="fn-card-fac">${esc((n.faction_name || 'АНОНИМНО').toUpperCase())}</span>`
       : `<span class="fn-card-live">ПЕРЕДАЧА</span><span class="fn-card-fac">${flag}${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>`;
     const readmore = bulletin ? 'СВОДКА ▸' : rumor ? 'ПОДРОБНОСТИ ▸' : 'ДЕКОДИРОВАТЬ ▸';
-    return `<article class="fn-card${lead ? ' fn-card-lead' : ''}${rumor ? ' fn-card-is-rumor' : ''}${bulletin ? ' fn-card-is-bulletin' : ''}" onclick="fnOpenArticle('${esc(n.id)}')" style="--fn-accent:${esc(accent)}">
+    return `<article class="fn-card${lead ? ' fn-card-lead' : ''}${rumor ? ' fn-card-is-rumor' : ''}${bulletin ? ' fn-card-is-bulletin' : ''}" data-fn-id="${esc(n.id)}" onclick="fnOpenArticle('${esc(n.id)}')" style="--fn-accent:${esc(accent)}">
+      ${fnIsStaff() ? `<button class="fn-card-del" title="Удалить (админ)" onclick="fnAdminDelete('${esc(n.id)}',event)">✕</button>` : ''}
       ${cardCover}
       <div class="fn-card-body">
         <div class="fn-card-kicker">${kicker}</div>
@@ -139,10 +140,11 @@ function fnHomeBlockHtml() {
 function fnFeedRow(n) {
   const kind = fnKind(n);
   const ic = kind === 'bulletin' ? '◈' : '📡';
-  return `<div class="fn-feed-row fn-fr-${kind}" onclick="fnOpenArticle('${esc(n.id)}')">
+  return `<div class="fn-feed-row fn-fr-${kind}" data-fn-id="${esc(n.id)}" onclick="fnOpenArticle('${esc(n.id)}')">
     <span class="fn-fr-ic">${ic}</span>
     <span class="fn-fr-title">${esc(n.title || '')}</span>
     <span class="fn-fr-time">${esc(fnStardate(n.published_at || n.created_at))}</span>
+    ${fnIsStaff() ? `<button class="fn-fr-del" title="Удалить (админ)" onclick="fnAdminDelete('${esc(n.id)}',event)">✕</button>` : ''}
   </div>`;
 }
 function fnEventsFeedHtml() {
@@ -246,8 +248,9 @@ FN.reactState = FN.reactState || {};
 
 // HTML блока реакций для статьи n (исходя из myFac и текущего состояния).
 function fnReactionBlockHtml(n, myFac) {
-  // слухи (нет фракции-автора) — без реакций
-  if (!n.faction_id || !n.owner_id) return '';
+  // НПС/сводка (нет фракции-автора): дипломатии нет, но если автор задал свои
+  // варианты ответа — показываем их как выбор читателя (ивент/квест).
+  if (!n.faction_id || !n.owner_id) return fnNpcChoiceBlockHtml(n);
   // не залогинен или нет одобренной фракции
   if (!myFac || !myFac.faction_id) {
     return `<div class="fn-react fn-react-locked">
@@ -287,6 +290,7 @@ function fnReactionBlockHtml(n, myFac) {
 
 // Подгрузка текущей реакции и балла → перерисовка блока.
 async function fnLoadReactState(n, myFac) {
+  if (!n.faction_id || !n.owner_id) return;   // НПС/сводка — дипломатии нет, состояние не грузим
   if (!myFac || !myFac.faction_id || myFac.faction_id === n.faction_id) return;
   try {
     const [rx, rel] = await Promise.all([
@@ -315,9 +319,44 @@ async function fnReact(newsId, stance, optKey) {
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
 }
 
+// ── НПС-новости: выбор ответа читателя (без дипломатии) ──────
+// У НПС нет фракции-автора, поэтому балл отношений не меняется. Это просто
+// интерактивный выбор (ивент/квест), сохраняется локально на устройстве.
+function fnNpcCustomOptions(n) {
+  let custom = [];
+  try { custom = Array.isArray(n.reactions) ? n.reactions : JSON.parse(n.reactions || '[]'); } catch (e) {}
+  return (custom || []).filter(c => c && c.text);
+}
+function fnNpcChoiceKey(id) { return 'fn_npc_choice_' + id + '_' + ((typeof user !== 'undefined' && user && user.id) || 'anon'); }
+function fnNpcChoiceGet(id) { try { const v = localStorage.getItem(fnNpcChoiceKey(id)); return v == null ? null : (+v); } catch (e) { return null; } }
+function fnNpcChoiceBlockHtml(n) {
+  const opts = fnNpcCustomOptions(n);
+  if (!opts.length) return '';                 // обычная сводка/слух без вариантов — ничего
+  const chosen = fnNpcChoiceGet(n.id);
+  const btns = opts.map((c, i) => {
+    const stance = ['approve', 'neutral', 'disapprove'].includes(c.stance) ? c.stance : 'neutral';
+    const on = chosen === i;
+    return `<button class="fn-react-opt fn-stance-${stance}${on ? ' on' : ''}" onclick="fnNpcChoose('${esc(n.id)}',${i})">
+      <span class="fn-react-ic">${FN_STANCE_ICON[stance]}</span>
+      <span class="fn-react-txt">${esc(c.text)}</span></button>`;
+  }).join('');
+  return `<div class="fn-react fn-react-npc">
+    <div class="fn-react-hd">ВАШ ОТВЕТ <span class="fn-react-sub">// ${chosen != null ? 'выбор сохранён' : 'выберите вариант'}</span></div>
+    <div class="fn-react-opts">${btns}</div>
+  </div>`;
+}
+function fnNpcChoose(id, i) {
+  try { localStorage.setItem(fnNpcChoiceKey(id), String(i)); } catch (e) {}
+  const n = FN.byId.get(id);
+  const slot = document.getElementById('fn-react-slot');
+  if (slot && n) slot.innerHTML = fnNpcChoiceBlockHtml(n);
+  toast('Ваш выбор учтён', 'ok');
+}
+
 function fnOpenArticle(id) {
   const n = FN.byId.get(id);
   if (!n) { toast('Новость не найдена', 'err'); return; }
+  FN._openId = id;
   // Цвет фракции игрока не используем (бывает кислотным); слухи/сводки — свой цвет.
   const accent = n.owner_id ? 'var(--gd)' : (n.faction_color || 'var(--gd)');
   const modal = document.getElementById('fn-article') || (() => {
@@ -328,12 +367,17 @@ function fnOpenArticle(id) {
   const kind = fnKind(n);               // news | rumor | bulletin
   const coverHtml = n.image_url
     ? `<div class="fn-art-cov"><img src="${esc(n.image_url)}" alt="" loading="lazy"></div>` : '';
-  // События (слухи/сводки) без обложки — на фон герб фракции, которой касается ситуация
-  const evFac = (!n.owner_id && !n.image_url) ? fnEventFaction(n) : null;
-  const bgFlag = evFac ? `<div class="fn-art-bgflag" style="background-image:url('${esc(evFac.herald_url)}')"></div>` : '';
+  // Флаг автора: герб фракции, либо загруженный админом флаг НПС.
+  const artFlag = (FN.heralds && FN.heralds.get(n.faction_id)) || n.author_herald || '';
+  // События без обложки — на фон герб: флаг НПС, либо фракция по имени в заголовке.
+  const evFac = (!n.owner_id && !n.image_url && !n.author_herald) ? fnEventFaction(n) : null;
+  const bgUrl = (!n.image_url) ? (n.author_herald || (evFac && evFac.herald_url) || '') : '';
+  const bgFlag = bgUrl ? `<div class="fn-art-bgflag" style="background-image:url('${esc(bgUrl)}')"></div>` : '';
   const barL = kind === 'bulletin' ? '◈ СВОДКА СЕКТОРА' : kind === 'rumor' ? '📡 ПЕРЕХВАЧЕННЫЙ СЛУХ' : '◈ FACTION DISPATCH NETWORK';
   const barR = kind === 'bulletin' ? 'ОФИЦИАЛЬНО' : kind === 'rumor' ? 'НЕПОДТВЕРЖДЕНО' : 'ВХОДЯЩАЯ ПЕРЕДАЧА';
-  modal.innerHTML = `<div class="fn-art" style="--fn-accent:${esc(accent)}">
+  const glitch = n.fx === 'glitch';
+  modal.innerHTML = `<div class="fn-art${glitch ? ' fn-art-glitch' : ''}" style="--fn-accent:${esc(accent)}">
+    ${glitch ? '<span class="fn-glitch-bar fn-glitch-l" aria-hidden="true"></span><span class="fn-glitch-bar fn-glitch-r" aria-hidden="true"></span>' : ''}
     ${bgFlag}
     <div class="fn-art-bar">
       <span class="fn-art-bar-l">${barL}</span>
@@ -343,7 +387,7 @@ function fnOpenArticle(id) {
     ${coverHtml}
     <div class="fn-art-inner">
       <div class="fn-art-meta">
-        <span class="fn-art-fac">${(n.owner_id && FN.heralds && FN.heralds.get(n.faction_id)) ? `<img class="fn-art-flag" src="${esc(FN.heralds.get(n.faction_id))}" alt="" onerror="this.style.display='none'">` : '<span class="fn-dot"></span>'}${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>
+        <span class="fn-art-fac">${artFlag ? `<img class="fn-art-flag" src="${esc(artFlag)}" alt="" onerror="this.style.display='none'">` : '<span class="fn-dot"></span>'}${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>
         <span class="fn-art-date">${esc(fnStardate(n.published_at || n.created_at))}</span>
       </div>
       <h1 class="fn-art-title">${esc(n.title || 'Без заголовка')}</h1>
@@ -352,6 +396,7 @@ function fnOpenArticle(id) {
     </div>
     <div class="fn-art-foot">
       <span>▌ КОНЕЦ ПЕРЕДАЧИ</span>
+      ${fnIsStaff() ? `<button class="fn-art-del" title="Удалить новость (админ)" onclick="fnAdminDelete('${esc(n.id)}',event)">🗑 Удалить</button>` : ''}
       <span class="fn-art-foot-id">REF·${esc(String(n.id).slice(0, 8).toUpperCase())}</span>
     </div>
   </div>`;
@@ -365,6 +410,7 @@ function fnOpenArticle(id) {
   }).catch(() => {});
 }
 function fnCloseArticle() {
+  FN._openId = null;
   document.getElementById('fn-article')?.classList.remove('show');
   document.body.style.overflow = '';
 }
@@ -499,11 +545,27 @@ function fnOpenComposer(id) {
       ${fnIsStaff() ? `<div class="fg">
         <label class="fl">📡 Автор публикации <span style="color:var(--t4);font-weight:400">— админ</span></label>
         <select class="fi" id="fn-c-author" onchange="fnAuthorModeChange()"><option value="">Загрузка фракций…</option></select>
-        <div id="fn-c-npc-fields" style="display:none;gap:8px;flex-wrap:wrap;margin-top:8px">
-          <input class="fi" id="fn-c-npc-name" maxlength="80" placeholder="Имя автора (НПС / свободное)" style="flex:1;min-width:160px">
-          <input class="fi" id="fn-c-npc-color" type="color" value="#3a7fbf" title="Цвет акцента" style="width:52px;padding:2px;flex:0 0 auto">
+        <div id="fn-c-npc-fields" style="display:none;flex-direction:column;gap:8px;margin-top:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input class="fi" id="fn-c-npc-name" maxlength="80" placeholder="Имя автора (НПС / свободное)" style="flex:1;min-width:160px">
+            <input class="fi" id="fn-c-npc-color" type="color" value="#3a7fbf" title="Цвет акцента" style="width:52px;padding:2px;flex:0 0 auto">
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <label class="fl" style="margin:0;white-space:nowrap">Куда:</label>
+            <select class="fi" id="fn-c-npc-place" style="flex:0 1 auto;min-width:190px">
+              <option value="sector">◈ Лента сектора (событие)</option>
+              <option value="news">📰 Вестник новостей</option>
+            </select>
+            <span id="fn-c-npc-flag-prv" class="fn-c-npc-flag-prv"></span>
+            <label class="btn btn-gh btn-xs" style="white-space:nowrap">🚩 Флаг НПС<input type="file" accept="image/*" style="display:none" onchange="fnNpcFlagUpload(this)"></label>
+            <input type="hidden" id="fn-c-npc-herald" value="">
+          </div>
         </div>
-        <div class="fn-comp-note" style="margin:6px 0 0">Админская публикация выходит сразу, без модерации. «НПС» — свободный автор (событие/квест без фракции, как сводка сектора); фракция игрока — от её лица (с реакциями).</div>
+        <div class="fn-comp-note" style="margin:6px 0 0">Админская публикация выходит сразу, без модерации. «НПС» — свободный автор (событие/квест без фракции); у НПС-статьи показываются <b>только ваши варианты ответа</b> (если добавите их ниже). Фракция игрока — от её лица (с обычными реакциями).</div>
+        <label class="fn-c-fx" style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="fn-c-glitch"${n && n.fx === 'glitch' ? ' checked' : ''}>
+          <span>✨ Глитч-эффект по бокам статьи <span style="color:var(--t4)">— стильно, без вспышек/эпилепсии</span></span>
+        </label>
       </div>` : ''}
       <div class="fg"><label class="fl">Заголовок *</label>
         <input class="fi fn-c-title" id="fn-c-title" maxlength="160" value="${esc(eff?.title || '')}" placeholder="Главное событие недели"></div>
@@ -659,20 +721,43 @@ async function fnPopulateAuthorSelect(existing) {
   ).join('') + `</optgroup>`;
   html += `<option value="npc">НПС / свободный автор (событие, квест)</option>`;
   sel.innerHTML = html;
-  // предвыбор для редактирования
+  // предвыбор для редактирования (НПС определяем по отсутствию фракции, не owner_id —
+  // НПС-новость в «Вестнике» имеет owner_id админа, но faction_id всё равно пустой).
   if (existing && existing.id) {
-    if (!existing.owner_id) sel.value = 'npc';
+    if (!existing.faction_id) sel.value = 'npc';
     else if (mine && existing.faction_id === mine.faction_id) sel.value = 'self';
-    else if (existing.faction_id) sel.value = 'fac:' + existing.faction_id;
+    else sel.value = 'fac:' + existing.faction_id;
   } else if (!(mine && mine.faction_id)) {
     sel.value = facs.length ? 'fac:' + facs[0].faction_id : 'npc';
   }
   fnAuthorModeChange();
-  if (existing && existing.id && !existing.owner_id) {
+  if (existing && existing.id && !existing.faction_id) {
     const nm = document.getElementById('fn-c-npc-name'); if (nm) nm.value = existing.faction_name || '';
     const cl = document.getElementById('fn-c-npc-color');
     if (cl && /^#[0-9a-f]{6}$/i.test(existing.faction_color || '')) cl.value = existing.faction_color;
+    const pl = document.getElementById('fn-c-npc-place'); if (pl) pl.value = existing.owner_id ? 'news' : 'sector';
+    if (existing.author_herald) { const h = document.getElementById('fn-c-npc-herald'); if (h) h.value = existing.author_herald; fnNpcFlagPreview(existing.author_herald); }
   }
+}
+// Загрузка/удаление флага НПС (герб автора для карточки/статьи).
+function fnNpcFlagPreview(url) {
+  const prv = document.getElementById('fn-c-npc-flag-prv');
+  if (!prv) return;
+  prv.innerHTML = url ? `<img src="${esc(url)}" alt="" class="fn-c-npc-flag-img"><button type="button" class="fn-c-cov-rm" onclick="fnNpcFlagRemove()">✕</button>` : '';
+}
+function fnNpcFlagUpload(input) {
+  const file = input?.files?.[0]; if (!file) return;
+  handleImgUpload(file, url => {
+    const h = document.getElementById('fn-c-npc-herald'); if (h) h.value = url;
+    fnNpcFlagPreview(url);
+    fnDraftSaveSoon();
+  });
+  input.value = '';
+}
+function fnNpcFlagRemove() {
+  const h = document.getElementById('fn-c-npc-herald'); if (h) h.value = '';
+  fnNpcFlagPreview('');
+  fnDraftSaveSoon();
 }
 function fnAuthorModeChange() {
   const sel = document.getElementById('fn-c-author');
@@ -687,18 +772,22 @@ async function fnResolveAuthor() {
     const name = (document.getElementById('fn-c-npc-name')?.value || '').trim();
     if (!name) { toast('Укажите имя НПС-автора', 'err'); return null; }
     const color = document.getElementById('fn-c-npc-color')?.value || null;
-    return { faction_id: null, faction_name: name, faction_color: color, owner_id: null, owner_email: null, kind: 'bulletin' };
+    const herald = document.getElementById('fn-c-npc-herald')?.value || null;
+    // Куда: «Вестник» (owner_id = админ → попадает в основную ленту) или «Лента сектора» (owner_id null).
+    const toNews = (document.getElementById('fn-c-npc-place')?.value || 'sector') === 'news';
+    return { faction_id: null, faction_name: name, faction_color: color, author_herald: herald,
+      owner_id: toNews ? user.id : null, owner_email: toNews ? user.email : null, kind: toNews ? 'news' : 'bulletin' };
   }
   if (mode === 'self') {
     const fac = await fnGetMyFaction();
     if (!fac || !fac.faction_id) { toast('У вас нет одобренной фракции', 'err'); return null; }
-    return { faction_id: fac.faction_id, faction_name: fac.name || null, faction_color: fac.color || null, owner_id: user.id, owner_email: user.email, kind: 'news' };
+    return { faction_id: fac.faction_id, faction_name: fac.name || null, faction_color: fac.color || null, author_herald: null, owner_id: user.id, owner_email: user.email, kind: 'news' };
   }
   if (mode && mode.indexOf('fac:') === 0) {
     const opt = sel.options[sel.selectedIndex];
     const fid = mode.slice(4);
     if (!fid) { toast('Выберите фракцию', 'err'); return null; }
-    return { faction_id: fid, faction_name: opt?.dataset.name || null, faction_color: opt?.dataset.color || null, owner_id: opt?.dataset.owner || null, owner_email: opt?.dataset.email || null, kind: 'news' };
+    return { faction_id: fid, faction_name: opt?.dataset.name || null, faction_color: opt?.dataset.color || null, author_herald: null, owner_id: opt?.dataset.owner || null, owner_email: opt?.dataset.email || null, kind: 'news' };
   }
   toast('Выберите автора публикации', 'err'); return null;
 }
@@ -725,6 +814,7 @@ async function fnSubmit() {
     author = { faction_id: fac.faction_id, faction_name: fac.name || null, faction_color: fac.color || null, owner_id: user.id, owner_email: user.email, kind: 'news' };
   }
   const now = new Date().toISOString();
+  const fx = staff && document.getElementById('fn-c-glitch')?.checked ? 'glitch' : null;
   FN.busy = true;
   try {
     if (id) {
@@ -733,7 +823,8 @@ async function fnSubmit() {
         const prev = FN.byId.get(id);
         Object.assign(patch, {
           faction_id: author.faction_id, faction_name: author.faction_name, faction_color: author.faction_color,
-          owner_id: author.owner_id, owner_email: author.owner_email, kind: author.kind,
+          author_herald: author.author_herald || null,
+          owner_id: author.owner_id, owner_email: author.owner_email, kind: author.kind, fx,
           status: 'approved', published_at: (prev && prev.published_at) || now, reviewed_by: user.email,
         });
       } else {
@@ -746,8 +837,9 @@ async function fnSubmit() {
         faction_id: author.faction_id,
         faction_name: author.faction_name,
         faction_color: author.faction_color,
+        author_herald: author.author_herald || null,
         owner_id: author.owner_id, owner_email: author.owner_email,
-        kind: author.kind,
+        kind: author.kind, fx,
         title, excerpt: null, body, image_url, reactions,
         status: staff ? 'approved' : 'pending',
         published_at: staff ? now : null,
@@ -801,6 +893,27 @@ async function fnDelete(id) {
     await dbDel('faction_news', `id=eq.${encodeURIComponent(id)}`);
     toast('Удалено', 'ok');
     fnRefresh();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+  finally { FN.busy = false; }
+}
+
+// Удаление прямо из лент/статьи (стафф). Гасим всплытие, чтобы не открыть статью.
+async function fnAdminDelete(id, ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (!fnIsStaff()) { toast('Только для администрации', 'err'); return; }
+  if (FN.busy) return;
+  if (!confirm('Удалить новость безвозвратно?')) return;
+  FN.busy = true;
+  try {
+    await dbDel('faction_news', `id=eq.${encodeURIComponent(id)}`);
+    // вычистить из кэшей и DOM (карточка «Вестника», строка «Ленты сектора»)
+    FN.approved = (FN.approved || []).filter(n => n.id !== id);
+    FN.events   = (FN.events || []).filter(n => n.id !== id);
+    if (FN.byId) FN.byId.delete(id);
+    document.querySelectorAll(`[data-fn-id="${id}"]`).forEach(el => el.remove());
+    if (FN._openId === id) fnCloseArticle();
+    fnRefresh();   // обновит кабинет/профиль, если открыты
+    toast('Удалено', 'ok');
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
   finally { FN.busy = false; }
 }

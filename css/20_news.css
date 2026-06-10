@@ -433,3 +433,100 @@ textarea.fn-c-body {
   .fn-comp { max-height: calc(100vh - 24px); padding: 18px 16px 16px; }
   .fn-comp-ov { padding: 12px 8px; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   НПС-статья: глитч-эффект по бокам (тонкий, без вспышек/эпилепсии).
+   Только узкие боковые полосы с RGB-сдвигом и медленным дрейфом —
+   центр читается спокойно. Анимация выключается при reduce-motion.
+   ════════════════════════════════════════════════════════════ */
+.fn-glitch-bar {
+  position: absolute; top: 0; bottom: 0; width: 24px; z-index: 1;
+  pointer-events: none; opacity: .5; overflow: hidden; mix-blend-mode: screen;
+  background: repeating-linear-gradient(0deg,
+    transparent 0 6px,
+    color-mix(in srgb, var(--fn-accent, #5fb0e6) 32%, transparent) 6px 7px,
+    transparent 7px 14px);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, transparent 100%);
+          mask-image: linear-gradient(90deg, #000 0%, transparent 100%);
+}
+.fn-glitch-l { left: 0; }
+.fn-glitch-r { right: 0; transform: scaleX(-1); }
+/* два цветовых слоя (хром-сдвиг), нарезаются разными clip-path в разном темпе */
+.fn-glitch-bar::before, .fn-glitch-bar::after {
+  content: ''; position: absolute; inset: 0; mix-blend-mode: screen;
+}
+.fn-glitch-bar::before {
+  background: linear-gradient(90deg, rgba(255,46,110,.55), transparent 80%);
+  animation: fn-glitch-slice 5.2s steps(1, end) infinite;
+}
+.fn-glitch-bar::after {
+  background: linear-gradient(90deg, rgba(25,240,255,.5), transparent 80%);
+  animation: fn-glitch-slice 4.1s steps(1, end) infinite reverse;
+}
+@keyframes fn-glitch-slice {
+  0%   { clip-path: inset(2% 0 80% 0); }
+  20%  { clip-path: inset(70% 0 8% 0); }
+  40%  { clip-path: inset(34% 0 50% 0); }
+  60%  { clip-path: inset(58% 0 24% 0); }
+  80%  { clip-path: inset(14% 0 68% 0); }
+  100% { clip-path: inset(2% 0 80% 0); }
+}
+/* лёгкий хром-сдвиг заголовка глитч-статьи — медленный, без мерцания */
+.fn-art-glitch .fn-art-title {
+  animation: fn-glitch-title 6s ease-in-out infinite;
+}
+@keyframes fn-glitch-title {
+  0%, 92%, 100% { text-shadow: none; }
+  94% { text-shadow: -2px 0 rgba(255,46,110,.55), 2px 0 rgba(25,240,255,.5); }
+  96% { text-shadow:  2px 0 rgba(255,46,110,.55), -2px 0 rgba(25,240,255,.5); }
+  98% { text-shadow: -1px 0 rgba(255,46,110,.5), 1px 0 rgba(25,240,255,.45); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fn-glitch-bar::before, .fn-glitch-bar::after,
+  .fn-art-glitch .fn-art-title { animation: none; }
+  .fn-art-glitch .fn-art-title { text-shadow: -1px 0 rgba(255,46,110,.4), 1px 0 rgba(25,240,255,.35); }
+}
+@media (max-width: 600px) { .fn-glitch-bar { width: 14px; opacity: .42; } }
+
+/* НПС-выбор ответа (ивент/квест) — тот же вид, что у реакций, но без дипломатии */
+.fn-react-npc .fn-react-hd { color: var(--fn-accent, #5fb0e6); }
+
+/* ── Кнопки удаления для админа (карточка / лента / статья) ──
+   .fn-card уже position:relative, поэтому кнопку якорим к ней. */
+.fn-card-del {
+  position: absolute; top: 6px; right: 6px; z-index: 4;
+  width: 24px; height: 24px; line-height: 1; padding: 0; border-radius: 4px; cursor: pointer;
+  background: rgba(10,12,18,.72); color: #ff8a8a;
+  border: 1px solid rgba(255,90,90,.5); font-size: 13px;
+  opacity: 0; transition: opacity .12s, background .12s, color .12s;
+}
+.fn-card:hover .fn-card-del, .fn-card-del:focus-visible { opacity: 1; }
+.fn-card-del:hover { background: #ff5a5a; color: #fff; }
+
+.fn-feed-row { position: relative; }
+.fn-fr-del {
+  flex: 0 0 auto; margin-left: 8px; width: 22px; height: 22px; line-height: 1; padding: 0;
+  border-radius: 4px; cursor: pointer; font-size: 12px;
+  background: transparent; color: #ff8a8a; border: 1px solid rgba(255,90,90,.4);
+  opacity: 0; transition: opacity .12s, background .12s, color .12s;
+}
+.fn-feed-row:hover .fn-fr-del, .fn-fr-del:focus-visible { opacity: 1; }
+.fn-fr-del:hover { background: #ff5a5a; color: #fff; }
+
+/* в подвале статьи — между «КОНЕЦ ПЕРЕДАЧИ» и REF, не перекрывает шапку */
+.fn-art-del {
+  margin: 0; cursor: pointer; white-space: nowrap;
+  padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600; letter-spacing: .03em;
+  background: rgba(255,90,90,.14); color: #ff9a9a; border: 1px solid rgba(255,90,90,.5);
+}
+.fn-art-del:hover { background: #ff5a5a; color: #fff; }
+@media (max-width: 600px) {
+  .fn-card-del, .fn-fr-del { opacity: 1; }   /* на тач — всегда видно */
+}
+
+/* Превью флага НПС в композиторе */
+.fn-c-npc-flag-prv { display: inline-flex; align-items: center; position: relative; }
+.fn-c-npc-flag-prv:empty { display: none; }
+.fn-c-npc-flag-img { width: 26px; height: 26px; object-fit: cover; border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 45%, transparent); }
+.fn-c-npc-flag-prv .fn-c-cov-rm { margin-left: 4px; }

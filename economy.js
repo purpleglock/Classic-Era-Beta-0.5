@@ -527,10 +527,10 @@ async function ecLoad() {
     dbGet('faction_applications', `status=eq.approved&select=faction_id,name&order=name.asc`).catch(() => []),
     dbGet('trade_routes', `order=created_at.desc`).catch(() => []),
     dbGet('loans', `order=created_at.desc`).catch(() => []),
-    // ТОЛЬКО свои операции (приватность); цель видит лишь раскрытые против себя (отдельно)
+    // ТОЛЬКО свои операции (приватность); цель видит входящие через RPC (исполнитель скрыт, если не раскрыт)
     dbGet('spy_missions', `actor_fid=eq.${fid}&order=created_at.desc&limit=40`).catch(() => []),
     dbGet('colony_projects', `faction_id=eq.${fid}&order=ready_at.asc`).catch(() => []),
-    dbGet('spy_missions', `target_fid=eq.${fid}&detected=eq.true&order=created_at.desc&limit=25`).catch(() => []),
+    ecRpc('spy_incoming').catch(() => []),
     // Отношения: только свои пары (RLS отдаёт где я from или to)
     dbGet('faction_relations', `or=(from_fid.eq.${fid},to_fid.eq.${fid})`).catch(() => []),
     // Предложения обмена (RLS отдаёт где я from или to)
@@ -549,7 +549,7 @@ async function ecLoad() {
   EC.routes = routes || [];
   EC.loans = loans || [];
   EC.missions = missions || [];                 // мои операции (active + done)
-  EC.alerts = alerts || [];                      // раскрытые операции против меня
+  EC.alerts = alerts || [];                      // входящие операции против меня (исполнитель скрыт, если не раскрыт)
   EC.relations = relations || [];                // дипотношения (мои пары)
   EC.barters = barters || [];                    // активные предложения обмена (мои пары)
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
@@ -1917,8 +1917,8 @@ function ecTabIntel() {
   const activeHtml = active.length ? active.map(ecSpyActiveRow).join('') : '<div class="ec-empty" style="padding:8px">Активных операций нет.</div>';
   const logHtml = doneOps.length ? doneOps.slice(0, 20).map(ecSpyLogRow).join('') : '<div class="ec-empty" style="padding:8px">Операций ещё не было.</div>';
   const alertsHtml = (EC.alerts || []).length
-    ? EC.alerts.slice(0, 15).map(a => `<div class="ec-q-row ec-route-row"><span class="ec-r-name"><span class="ec-route-badge new">тревога</span>${(EC_SPY_OPS[a.op] || {}).icon || '⚠'} <b>${esc(a.actor_fid && a.result && a.result.actor_name || 'Неизвестная фракция')}</b> — ${esc((EC_SPY_OPS[a.op] || {}).label || a.op)} · ${a.outcome === 'success' ? '<span style="color:var(--err)">удалась</span>' : '<span style="color:var(--ok)">сорвана</span>'}${a.result && a.result.caught ? ' · агент пойман' : ''}</span></div>`).join('')
-    : '<div class="ec-empty" style="padding:8px">Тревог нет — вас пока не атаковали (или не раскрыли).</div>';
+    ? EC.alerts.slice(0, 15).map(ecSpyAlertRow).join('')
+    : '<div class="ec-empty" style="padding:8px">Тревог нет — против вас ничего не предпринимали (или попытки не оставили следов).</div>';
 
   return `${ecIntro('🕵', 'Разведка и тайные операции', 'Шпионьте за другими фракциями: разведка, кража казны и технологий, саботаж, дестабилизация.', ['<b>Агенты</b> копятся от слотов Центра спецслужб. Чем больше агентов в операции — выше шанс успеха и короче срок.', 'Сложные операции требуют сначала провести <b>разведку</b> цели.', 'Оставляйте часть агентов на <b>контрразведку</b> — иначе вас безнаказанно атакуют.'])}${agentBar}
     <div class="ec-dip-grid">
@@ -1927,7 +1927,7 @@ function ecTabIntel() {
     </div>
     <div class="ec-section-title">Активные операции <span class="ec-hint">— завершаются через N ходов</span></div>
     <div class="ec-queue">${activeHtml}</div>
-    <div class="ec-section-title">🛡 Тревоги контрразведки <span class="ec-hint">— раскрытые операции против вас</span></div>
+    <div class="ec-section-title">🛡 Тревоги контрразведки <span class="ec-hint">— операции против вас (исполнитель виден только если раскрыт)</span></div>
     <div class="ec-queue">${alertsHtml}</div>
     <div class="ec-section-title">Журнал — ваши операции</div>
     <div class="ec-queue">${logHtml}</div>`;
@@ -1939,6 +1939,29 @@ function ecSpyActiveRow(m) {
       <span class="ec-route-badge wait">${d.icon} идёт</span>
       <b>${esc(d.label)}</b> → ${esc(m.target_name || ecFacName(m.target_fid))} · 🕵 ${ecNum(m.agents)} · успех ${ecNum(m.success_pct)}% · раскрытие ${ecNum(m.detect_pct)}%
     </span>${ecProgressISO(m.created_at, m.ready_at, 1, 'готово в конце хода')}<button class="ec-bld-del" title="Отозвать (вернуть агентов)" onclick="ecSpyCancel('${m.id}')">✕</button></div>`;
+}
+// Строка «тревоги» — входящая операция против нас. Исполнитель показывается,
+// только если операция раскрыта (detected); иначе виден лишь факт ущерба.
+function ecSpyAlertRow(a) {
+  const d = EC_SPY_OPS[a.op] || { icon: '⚠', label: a.op };
+  const r = a.result || {};
+  const ok = a.outcome === 'success';
+  let detail = '';
+  if (a.op === 'steal_gc') detail = ok ? `похищено <b style="color:var(--err)">${ecNum(r.gc)} ГС</b> из казны` : 'попытка кражи казны';
+  else if (a.op === 'sabotage') detail = ok ? `выведено из строя: ${esc(r.building || 'здание')}` : 'попытка саботажа';
+  else if (a.op === 'steal_tech') detail = ok ? `похищена технология: ${esc(r.tech_name || r.tech || '—')}` : 'попытка кражи технологий';
+  else if (a.op === 'destabilize') detail = ok ? `дестабилизация: доход −${Math.round((r.debuff_pct || 0) * 100)}% (${r.turns || 0} ход.)` : 'попытка дестабилизации';
+  else if (a.op === 'recon_basic' || a.op === 'recon_deep') detail = 'разведка вашей фракции';
+  else detail = ok ? 'операция удалась' : 'операция сорвана';
+  // исполнитель: раскрыт → имя; не раскрыт → аноним
+  const actor = a.detected
+    ? `<b style="color:var(--color-warning,#e0a030)">${esc(a.actor_name || 'раскрытая фракция')}</b>`
+    : `<b style="color:var(--t3)">неизвестно</b> <span class="ec-hint">(не раскрыт)</span>`;
+  const badge = a.detected
+    ? '<span class="ec-route-badge new">⚠ раскрыто</span>'
+    : '<span class="ec-route-badge wait">⚠ аноним</span>';
+  const caught = (a.detected && r.caught) ? ' · <span style="color:var(--ok)">агент пойман</span>' : '';
+  return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">${badge}${d.icon} <b>${esc(d.label)}</b> · ${detail} · от: ${actor}${caught}</span></div>`;
 }
 // Строка журнала (завершённая операция)
 function ecSpyLogRow(m) {
