@@ -125,7 +125,7 @@ function fnHomeBlockHtml() {
       : rumor
       ? `<span class="fn-card-live fn-card-rumor">📡 СЛУХ</span><span class="fn-card-fac">${esc((n.faction_name || 'АНОНИМНО').toUpperCase())}</span>`
       : `<span class="fn-card-live">ПЕРЕДАЧА</span><span class="fn-card-fac">${flag}${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>`;
-    const readmore = bulletin ? 'СВОДКА ▸' : rumor ? 'ПОДРОБНОСТИ ▸' : 'ДЕКОДИРОВАТЬ ▸';
+    const readmore = bulletin ? 'СВОДКА ▸' : rumor ? '|||||||| ' : '||||||||';
     return `<article class="fn-card${lead ? ' fn-card-lead' : ''}${rumor ? ' fn-card-is-rumor' : ''}${bulletin ? ' fn-card-is-bulletin' : ''}" data-fn-id="${esc(n.id)}" onclick="fnOpenArticle('${esc(n.id)}')" style="--fn-accent:${esc(accent)}">
       ${fnIsStaff() ? `<button class="fn-card-del" title="Удалить (админ)" onclick="fnAdminDelete('${esc(n.id)}',event)">✕</button>` : ''}
       ${cardCover}
