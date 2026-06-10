@@ -287,8 +287,27 @@
     }
     return out;
   }
+  // ── Персональная ЦЕНА ресурса (ГС/ед) по id ────────────────────────────────
+  // Раньше цена была общей по редкости; теперь у каждого ресурса своя ценность.
+  // Зеркало в SQL — функция _res_value(name) (см. _migration_res_value.sql) и
+  // в economy.js (через GalaxyGen.resPrice). Меняешь тут — синхронь SQL.
+  const RB_PRICE = { common: 2, uncommon: 10, rare: 50, epic: 200, legendary: 1200 };
+  const RES_PRICE = {
+    SILICATE: 1, SULFUR: 2, IRON: 3, CARBON: 3, ICEWATER: 3, METHANE: 4,
+    COPPER: 8, AMMONIA: 10, SULFIDES: 12, TITANIUM: 14,
+    WATER: 45, URANIUM: 50, ORGANICS: 55, RAREEARTH: 60, DEUTERIUM: 65, PLATINUM: 70, HELIUM3: 80,
+    THERMFUEL: 200, DIAMONDS: 220, EXOCRYST: 260,
+    QUANTUMCRYST: 1200, DEGENERATE: 1500, NEUTRONMAT: 1600,
+  };
+  // Цена по имени ресурса; для неизвестных — фолбэк по редкости.
+  function resPrice(name) {
+    const R = RESOURCES.find(x => x.name === name);
+    if (R && RES_PRICE[R.id] != null) return RES_PRICE[R.id];
+    return R ? (RB_PRICE[R.r] || 2) : 2;
+  }
+
   // Слим-каталог для ручного выбора в редакторе (без внутренних весов/групп).
-  const RES_CATALOG = RESOURCES.map(R => ({ id: R.id, name: R.name, icon: R.icon, r: R.r, rname: rname(R.r) }));
+  const RES_CATALOG = RESOURCES.map(R => ({ id: R.id, name: R.name, icon: R.icon, r: R.r, rname: rname(R.r), price: (RES_PRICE[R.id] != null ? RES_PRICE[R.id] : RB_PRICE[R.r]) }));
   // Уровни количества (для ручного выбора) — те же, что выдаёт amtDesc.
   const AMT_LEVELS = ['следы', 'мало', 'умеренно', 'много', 'очень много', 'колоссально'];
 
@@ -318,9 +337,10 @@
   }
   window.resIconSrc = resIconSrc;
   window.resIconHtml = resIconHtml;
+  window.resPrice = resPrice;
 
   window.GalaxyGen = {
-    generate, getSlots, rollResources,
+    generate, getSlots, rollResources, resPrice,
     RESOURCES: RES_CATALOG, AMT_LEVELS, resIconHtml, resIconSrc,
     STAR_CLASSES: ['random', 'O', 'B', 'A', 'F', 'G', 'K', 'M', 'D', 'N'],
   };

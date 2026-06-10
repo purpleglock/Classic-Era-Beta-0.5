@@ -61,7 +61,7 @@ function ecSpyCalc(op, agents, targetFid) {
 // Ресурсы планет: цена продажи и добыча/слот по редкости
 const EC_RES_PRICE = { common: 2, uncommon: 10, rare: 50, epic: 200, legendary: 1200 };
 const EC_RES_RATE = { common: 25, uncommon: 12, rare: 6, epic: 3, legendary: 1 };
-const EC_DEST_CUT = 0.33;   // доля получателя каравана — зеркало economy_accrue (round(shipped*price*0.33))
+const EC_DEST_CUT = 0.5;   // доля получателя каравана — зеркало живой economy_accrue (round(shipped*price*0.5))
 // Шанс нападения на КАЖДУЮ угрозу на пути (зеркало economy_accrue): с конвоем меньше.
 const EC_THREAT_CHANCE = { ancient: { escort: 0.65, bare: 0.80 }, pirates: { escort: 0.40, bare: 0.80 } };
 // Итоговый риск потери каравана за ход (%) с учётом конвоя: 1 - произведение «прошёл мимо каждой угрозы».
@@ -72,6 +72,11 @@ function ecTradeRiskPct(threats, convoy) {
   return Math.round((1 - safe) * 100);
 }
 function ecResPrice(r) { return EC_RES_PRICE[r] || EC_RES_PRICE.common; }
+// Персональная цена по ИМЕНИ ресурса (зеркало SQL _res_value). Фолбэк — по редкости.
+function ecResPriceN(name) {
+  if (typeof resPrice === 'function') return resPrice(name);
+  return ecResPrice(ecResRarity(name));
+}
 function ecResRarity(name) { return (EC.resInfo && EC.resInfo[name] && EC.resInfo[name].r) || 'common'; }
 // Иконка ресурса как HTML: картинка из каталога (resIconHtml), иначе — сохранённая эмодзи.
 function ecResIcon(name) {
@@ -520,7 +525,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -540,6 +545,8 @@ async function ecLoad() {
     dbGet('faction_relations', `or=(from_fid.eq.${fid},to_fid.eq.${fid})`).catch(() => []),
     // Предложения обмена (RLS отдаёт где я from или to)
     dbGet('barter_offers', `status=eq.pending&order=created_at.desc`).catch(() => []),
+    // Предложения продажи технологий/чертежей (RLS отдаёт где я продавец или покупатель)
+    dbGet('tech_offers', `status=eq.pending&order=created_at.desc`).catch(() => []),
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -557,6 +564,7 @@ async function ecLoad() {
   EC.alerts = alerts || [];                      // входящие операции против меня (исполнитель скрыт, если не раскрыт)
   EC.relations = relations || [];                // дипотношения (мои пары)
   EC.barters = barters || [];                    // активные предложения обмена (мои пары)
+  EC.techOffers = techOffers || [];              // предложения продажи технологий/чертежей (мои пары)
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
   // карта редкости/иконки ресурсов из колоний (+ доступных планет)
@@ -1150,12 +1158,16 @@ function ecColonyManage(c) {
     <div class="ec-colony-actions">
       <button class="btn btn-gd btn-sm ec-build-btn" ${full ? 'disabled title="Нет свободных ячеек"' : ''} onclick="ecBuildPicker('${c.id}')">🏗 Построить${full ? '' : ` <span class="ec-build-free">${cap - used} ⬚</span>`}</button>
       ${habBtn}
-      ${(typeof user !== 'undefined' && user && ['superadmin','editor','moderator'].includes(user.role)) ? `<button class="btn btn-gh btn-sm" onclick="ecRenameColony('${c.id}',${ecArg(c.planet_name || '')})" title="Переименовать планету (стафф, без модерации)">✎ Имя</button>` : ''}
+      ${(typeof user !== 'undefined' && user && ['superadmin','editor','moderator'].includes(user.role))
+        ? `<button class="btn btn-gh btn-sm" onclick="ecRenameColony('${c.id}',${ecArg(c.planet_name || '')})" title="Переименовать планету (стафф, бесплатно)">✎ Имя</button>`
+        : `<button class="btn btn-gh btn-sm" onclick="ecRenameColonyPaid('${c.id}',${ecArg(c.planet_name || '')})" title="Переименовать планету за ${EC_RENAME_COST} ГС">✎ Имя · ${EC_RENAME_COST} ГС</button>`}
       <button class="btn btn-gh btn-sm ec-danger" onclick="ecAbandon('${c.id}')" title="Бросить колонию">✕ Бросить</button>
     </div>`;
 }
 
 // Переименование планеты/колонии — через единый источник истины (colonies + map_systems).
+// Стафф — бесплатно (rename_colony). Игрок-владелец — платно (colony_rename_paid, 500 ГС).
+const EC_RENAME_COST = 500;
 async function ecRenameColony(colId, cur) {
   const nm = prompt('Новое название планеты:', cur || '');
   if (nm === null) return;
@@ -1165,6 +1177,22 @@ async function ecRenameColony(colId, cur) {
   try {
     await ecRpc('rename_colony', { p_colony_id: colId, p_new_name: v });
     toast('Планета переименована', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+}
+// Платное переименование для игрока-владельца: списывает EC_RENAME_COST ГС на сервере.
+async function ecRenameColonyPaid(colId, cur) {
+  const bal = (EC.eco && EC.eco.gc) || 0;
+  if (bal < EC_RENAME_COST) { toast(`Нужно ${ecNum(EC_RENAME_COST)} ГС, в казне ${ecNum(bal)}`, 'err'); return; }
+  const nm = prompt(`Новое название планеты (стоимость ${ecNum(EC_RENAME_COST)} ГС):`, cur || '');
+  if (nm === null) return;
+  const v = nm.trim();
+  if (!v || v === cur) return;
+  if (typeof badName === 'function' && badName(v)) { toast('Название содержит недопустимые слова (мат или запрещённое)', 'err'); return; }
+  if (!confirm(`Переименовать в «${v}» за ${ecNum(EC_RENAME_COST)} ГС?`)) return;
+  try {
+    await ecRpc('colony_rename_paid', { p_colony_id: colId, p_new_name: v });
+    toast(`Планета переименована · −${ecNum(EC_RENAME_COST)} ГС`, 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
 }
@@ -1474,6 +1502,12 @@ function ecErr(m) {
   if (m.includes('not enough science')) return 'Недостаточно ОН';
   if (m.includes('self')) return 'Нельзя с самим собой';
   if (m.includes('forbidden')) return 'Недостаточно прав';
+  if (m.includes('name violates')) return 'Название нарушает правила (мат или запрещённое)';
+  if (m.includes('empty name')) return 'Пустое название';
+  if (m.includes('missing prerequisites')) return 'Не изучены технологии, нужные для чертежа';
+  if (m.includes('seller lacks tech')) return 'У вас нет этой технологии';
+  if (m.includes('recipient not found')) return 'Получатель не найден';
+  if (m.includes('bad price')) return 'Неверная цена';
   return 'Ошибка: ' + m;
 }
 async function ecRpcAct(fn, body, okMsg) {
@@ -1547,7 +1581,7 @@ function ecTradeCalc() {
   const oSys = ecId('ec-cv-osys')?.value || '';
   const dFac = ecId('ec-cv-dfac')?.value || '';
   const dSys = ecId('ec-cv-dsys')?.value || '';
-  const price = ecResPrice(ecResRarity(resN));
+  const price = ecResPriceN(resN);
   const rawVal = vol * price;
   const myInc = Math.round(rawVal * ecFactionMods().gc);   // доктрина: торговля — часть ГС-экономики
   const partnerInc = Math.round(rawVal * EC_DEST_CUT);
@@ -1672,7 +1706,7 @@ function ecTabTrade() {
   const ships = ecMyShipsAvailable();
 
   const stockHtml = stock.length
-    ? stock.map(([n, v]) => `<div class="ec-q-row"><span class="ec-r-name">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4)">(${esc(ecResRarity(n))}, ${ecResPrice(ecResRarity(n))} ГС)</i></span><span class="ec-r-qty">${ecNum(v)}</span></div>`).join('')
+    ? stock.map(([n, v]) => `<div class="ec-q-row"><span class="ec-r-name">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4)">(${esc(ecResRarity(n))}, ${ecResPriceN(n)} ГС)</i></span><span class="ec-r-qty">${ecNum(v)}</span></div>`).join('')
     : '<div class="ec-empty" style="padding:8px">Склад пуст. Стройте Добывающий завод на колониях с ресурсами.</div>';
   const sellForm = stock.length
     ? `<div class="ec-prod-form"><select id="ec-sell-res">${stock.map(([n]) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select><input type="number" id="ec-sell-units" min="1" placeholder="кол-во" class="ec-prod-qty"><button class="btn btn-gh btn-sm" onclick="ecSellResource()">Продать на рынке</button></div><div class="cn-fac-hint" style="margin-top:5px">Местный рынок — 80% цены${ecFactionMods().gc !== 1 ? ` · ×${ecFactionMods().gc.toFixed(2)} от доктрины` : ''}. Караваны выгоднее.</div>`
@@ -1688,7 +1722,7 @@ function ecTabTrade() {
     const rar = ecResRarity(n);
     return `<button type="button" class="ec-trade-res ec-rar-${rar}${i === 0 ? ' on' : ''}" data-res="${esc(n)}" data-stock="${v}" onclick="ecPickTradeRes(this)">
       <span class="ec-trade-res-ic">${ecResIcon(n)}</span><span class="ec-trade-res-n">${esc(n)}</span>
-      <span class="ec-trade-res-meta">${ecNum(v)} ед · ${ecResPrice(rar)} ГС/ед</span></button>`;
+      <span class="ec-trade-res-meta">${ecNum(v)} ед · ${ecResPriceN(n)} ГС/ед</span></button>`;
   }).join('');
   const caravanForm = (tradeCap < 1) ? '<div class="ec-empty">Нужен Торговый хаб (вкладка «Колонии») — он открывает торговые пути.</div>'
     : noOthers ? '<div class="ec-empty">Нет других фракций для торговли.</div>'
@@ -1744,7 +1778,110 @@ function ecTabTrade() {
     <div class="ec-section-title">Рынок ресурсов</div>
     ${resBlock}
     <div class="ec-section-title">Торговые караваны</div>
-    ${caravanBlock}`;
+    ${caravanBlock}
+    <div class="ec-section-title">Технологии и чертежи</div>
+    ${ecTechMarketBlock()}`;
+}
+
+// ── Биржа технологий и чертежей (адресные предложения) ──────────
+function ecResearchLabel(key) {
+  const all = (typeof ecBuildResearch === 'function') ? ecBuildResearch() : [];
+  const n = all.find(x => x.id === key);
+  return (n && n.name) || key;
+}
+// Свои чертежи: юниты своей фракции, кроме дивизий (дивизия — композиция другой техники).
+function ecMyBlueprints() {
+  return (EC.designs || []).filter(u => u && u.faction_id === EC.fid && u.category !== 'division');
+}
+function ecTechKindToggle() {
+  const k = document.getElementById('ec-tm-kind') && document.getElementById('ec-tm-kind').value;
+  const t = document.getElementById('ec-tm-tech-wrap'), b = document.getElementById('ec-tm-bp-wrap');
+  if (t) t.style.display = (k === 'tech') ? '' : 'none';
+  if (b) b.style.display = (k === 'blueprint') ? '' : 'none';
+}
+function ecTechMarketBlock() {
+  const others = ecOtherFactions();
+  const myTechs = (EC.eco && Array.isArray(EC.eco.research)) ? EC.eco.research : [];
+  const mine = new Set(myTechs);
+  const bps = ecMyBlueprints();
+  const incoming = (EC.techOffers || []).filter(o => o.buyer_fid === EC.fid && o.status === 'pending');
+  const outgoing = (EC.techOffers || []).filter(o => o.seller_fid === EC.fid && o.status === 'pending');
+
+  const techOpts = myTechs.map(k => `<option value="${esc(k)}">${esc(ecResearchLabel(k))}</option>`).join('');
+  const bpOpts = bps.map(u => `<option value="${esc(u.id)}">${esc(u.name || 'Чертёж')} · ${esc(u.category || '')}</option>`).join('');
+
+  const form = !others.length
+    ? '<div class="ec-empty">Нет других фракций для сделки.</div>'
+    : `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px">
+        ${ecFacSelect('ec-tm-buyer')}
+        <select id="ec-tm-kind" onchange="ecTechKindToggle()">
+          <option value="tech">Технология</option>
+          <option value="blueprint">Чертёж (юнит)</option>
+        </select>
+        <span id="ec-tm-tech-wrap">${techOpts ? `<select id="ec-tm-tech">${techOpts}</select>` : '<span class="ec-hint">нет изученных технологий</span>'}</span>
+        <span id="ec-tm-bp-wrap" style="display:none">${bpOpts ? `<select id="ec-tm-bp">${bpOpts}</select>` : '<span class="ec-hint">нет своих чертежей</span>'}</span>
+        <input type="number" id="ec-tm-price" min="0" placeholder="цена ГС" class="ec-prod-qty">
+        <button class="btn btn-gd btn-sm" onclick="ecTechOfferPropose()">Предложить</button>
+      </div>
+      <div class="ec-hint" style="margin-top:4px">Технологию покупатель получает в своё дерево исследований. Чертёж — копией, но купить выйдет, только если у него уже изучены все нужные для чертежа технологии.</div>`;
+
+  const inHtml = incoming.map(o => {
+    if (o.kind === 'tech') {
+      return `<div class="ec-q-row"><span class="ec-r-name"><span class="ec-route-badge new">тех</span> <b>${esc(o.seller_name || ecFacName(o.seller_fid))}</b> продаёт технологию «${esc(o.tech_label || o.tech_key)}» за <b style="color:var(--gd)">${ecNum(o.price)} ГС</b></span><button class="btn btn-gd btn-xs" onclick="ecTechOfferAccept('${o.id}')">Купить</button><button class="ec-bld-del" title="Отклонить" onclick="ecTechOfferReject('${o.id}')">✕</button></div>`;
+    }
+    const req = Array.isArray(o.req_tech) ? o.req_tech : [];
+    const missing = req.filter(k => !mine.has(k));
+    const missTxt = missing.length ? `<div class="ec-hint" style="color:var(--err)">Не хватает технологий: ${missing.map(k => esc(ecResearchLabel(k))).join(', ')}</div>` : '';
+    return `<div class="ec-q-row" style="flex-wrap:wrap"><span class="ec-r-name"><span class="ec-route-badge new">чертёж</span> <b>${esc(o.seller_name || ecFacName(o.seller_fid))}</b> продаёт чертёж «${esc(o.unit_name || 'юнит')}» (${esc(o.unit_category || '')}) за <b style="color:var(--gd)">${ecNum(o.price)} ГС</b>${missTxt}</span>${missing.length ? `<button class="btn btn-gh btn-xs" disabled title="Сначала изучите недостающие технологии">🔒 Нельзя</button>` : `<button class="btn btn-gd btn-xs" onclick="ecTechOfferAccept('${o.id}')">Купить</button>`}<button class="ec-bld-del" title="Отклонить" onclick="ecTechOfferReject('${o.id}')">✕</button></div>`;
+  }).join('');
+
+  const outHtml = outgoing.map(o => `<div class="ec-q-row"><span class="ec-r-name"><span class="ec-route-badge wait">⏳ ждёт ответа</span> ${o.kind === 'tech' ? 'технология «' + esc(o.tech_label || o.tech_key) + '»' : 'чертёж «' + esc(o.unit_name || 'юнит') + '»'} → <b>${esc(ecFacName(o.buyer_fid))}</b> · ${ecNum(o.price)} ГС</span><button class="ec-bld-del" title="Отозвать предложение" onclick="ecTechOfferCancel('${o.id}')">✕</button></div>`).join('');
+
+  return `<div class="ec-dip-card">
+      <div class="ec-dip-t">Биржа технологий и чертежей</div>
+      ${form}
+      ${incoming.length ? `<div class="ec-r-sec">Входящие предложения</div>${inHtml}` : ''}
+      ${outgoing.length ? `<div class="ec-r-sec">Отправленные</div>${outHtml}` : ''}
+    </div>`;
+}
+async function ecTechOfferPropose() {
+  const buyer = document.getElementById('ec-tm-buyer') && document.getElementById('ec-tm-buyer').value;
+  const kind = (document.getElementById('ec-tm-kind') && document.getElementById('ec-tm-kind').value) || 'tech';
+  const price = Math.max(0, Math.round(+(document.getElementById('ec-tm-price') && document.getElementById('ec-tm-price').value) || 0));
+  if (!buyer) { toast('Выберите фракцию-покупателя', 'err'); return; }
+  const body = { p_buyer_fid: buyer, p_kind: kind, p_price: price,
+    p_tech_key: null, p_tech_label: null, p_unit_name: null, p_unit_category: null, p_unit_snapshot: null, p_req_tech: [] };
+  if (kind === 'tech') {
+    const key = document.getElementById('ec-tm-tech') && document.getElementById('ec-tm-tech').value;
+    if (!key) { toast('Нет технологии для продажи', 'err'); return; }
+    body.p_tech_key = key; body.p_tech_label = ecResearchLabel(key);
+  } else {
+    const uid = document.getElementById('ec-tm-bp') && document.getElementById('ec-tm-bp').value;
+    const u = ecMyBlueprints().find(x => x.id === uid);
+    if (!u) { toast('Нет чертежа для продажи', 'err'); return; }
+    body.p_unit_name = u.name || 'Чертёж';
+    body.p_unit_category = u.category;
+    body.p_unit_snapshot = { name: u.name, summary: u.summary, data: u.data, card_text: u.card_text };
+    body.p_req_tech = (typeof cnUnitReqTech === 'function') ? cnUnitReqTech(u) : [];
+  }
+  try {
+    await ecRpc('tech_offer_propose', body);
+    toast('Предложение отправлено', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + ecErr(e.message), 'err'); }
+}
+async function ecTechOfferAccept(id) {
+  if (!confirm('Купить? С казны спишется цена предложения.')) return;
+  try { await ecRpc('tech_offer_accept', { p_offer_id: id }); toast('Сделка совершена ✓', 'ok'); await ecReloadPaint(); }
+  catch (e) { toast('Ошибка: ' + ecErr(e.message), 'err'); }
+}
+async function ecTechOfferReject(id) {
+  try { await ecRpc('tech_offer_reject', { p_offer_id: id }); await ecReloadPaint(); }
+  catch (e) { toast('Ошибка: ' + ecErr(e.message), 'err'); }
+}
+async function ecTechOfferCancel(id) {
+  try { await ecRpc('tech_offer_cancel', { p_offer_id: id }); await ecReloadPaint(); }
+  catch (e) { toast('Ошибка: ' + ecErr(e.message), 'err'); }
 }
 
 // ── Вкладка «Дипломатия»: отношения · кредиты ──

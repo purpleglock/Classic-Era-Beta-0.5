@@ -319,6 +319,24 @@ async function cnLoadResearch() {
   if (cnIsStaff()) CN.staffAll = true;
 }
 function cnUnlocked(key) { return CN.staffAll || (CN.unlocked && CN.unlocked.has(key)); }
+// Тех-ключи, которые требует чертёж юнита (для продажи: покупатель должен иметь их
+// все в research, иначе купить нельзя). Базовые/бесплатные классы и оружие не считаем.
+// Дивизии — это композиция другой техники, у них своих тех-ключей нет → [].
+function cnUnitReqTech(unit) {
+  if (!unit || unit.category === 'division' || !unit.data || typeof CN_BASE === 'undefined') return [];
+  const cat = unit.category, d = unit.data, keys = new Set();
+  const baseCls = (CN_BASE.classes[cat] || []), baseWpn = (CN_BASE.weapons[cat] || []);
+  if (d.class && !baseCls.includes(d.class)) keys.add('cls.' + cat + '.' + d.class);
+  if (d.class && d.type != null && +d.type >= 1) keys.add('type.' + cat + '.' + d.class);
+  (d.weapons || []).forEach(w => { if (w && w.g && !baseWpn.includes(w.g)) keys.add('wpn.' + cat + '.' + w.g); });
+  (d.modules || []).forEach(m => { if (m && m.g) keys.add('mod.' + cat + '.' + m.g); });
+  if (Array.isArray(d.hangars) && d.hangars.length) {
+    keys.add('hangar.ship');
+    if (d.hangars.some(h => [1, 2].includes(+h.id))) keys.add('hangar.ship.heavy');
+  }
+  return [...keys];
+}
+if (typeof window !== 'undefined') window.cnUnitReqTech = cnUnitReqTech;
 function cnClassUnlocked(cat, k) { return (CN_BASE.classes[cat] || []).includes(k) || cnUnlocked('cls.' + cat + '.' + k); }
 function cnWpnUnlocked(cat, g) { return (CN_BASE.weapons[cat] || []).includes(g) || cnUnlocked('wpn.' + cat + '.' + g); }
 function cnCompUnlocked(cat, t) { return cnUnlocked('comp.' + cat + '.' + t); }

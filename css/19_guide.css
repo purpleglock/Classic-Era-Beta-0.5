@@ -2,6 +2,12 @@
    GUIDEBOOK  ·  css/19_guide.css
    ══════════════════════════════════════════════════════════════ */
 
+/* Таблица ресурсов (иконка + название) */
+.gb-res-cell { display: inline-flex; align-items: center; gap: 7px; }
+.gb-res-table img.res-ic { width: 1.3em; height: 1.3em; vertical-align: -0.25em; }
+.gb-res-table td:nth-child(3), .gb-res-table td:nth-child(4),
+.gb-res-table td:nth-child(5) { text-align: right; white-space: nowrap; }
+
 .gb-wrap {
   display: flex;
   gap: 0;

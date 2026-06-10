@@ -151,6 +151,30 @@ function gbDocRows(arr, withHab) {
   }).join('');
 }
 
+// Полная таблица ресурсов: иконка, редкость, персональная цена, добыча/слот и
+// ГС/слот/сутки (цена × добыча). Данные — из каталога GalaxyGen (один источник).
+const GB_RES_RATE = { common: 25, uncommon: 12, rare: 6, epic: 3, legendary: 1 };
+const GB_RAR_N = { common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5 };
+function gbResTable() {
+  const cat = (window.GalaxyGen && GalaxyGen.RESOURCES) || [];
+  if (!cat.length) return '<p class="gb-muted">Каталог ресурсов недоступен.</p>';
+  const ic = (R) => (GalaxyGen.resIconHtml ? GalaxyGen.resIconHtml(R.name, 'gb-res-ic') : (R.icon || ''));
+  const rows = cat.slice().sort((a, b) => (a.price - b.price) || a.name.localeCompare(b.name)).map(R => {
+    const rate = GB_RES_RATE[R.r] || 25;
+    return `<tr>
+      <td><span class="gb-res-cell">${ic(R)} ${R.name}</span></td>
+      <td><span class="gb-rar gb-rar-${GB_RAR_N[R.r] || 1}">${R.rname}</span></td>
+      <td>${R.price} ГС</td>
+      <td>${rate}</td>
+      <td><b>${R.price * rate}</b></td>
+    </tr>`;
+  }).join('');
+  return `<div class="gb-table-wrap"><table class="gb-table gb-res-table">
+    <thead><tr><th>Ресурс</th><th>Редкость</th><th>Цена/ед</th><th>Добыча/сут</th><th>ГС за слот/сут</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
 function renderGuidebook() {
   const toc = GB_SECTIONS.map(s =>
     `<a class="gb-toc-link" href="javascript:void(0)" onclick="gbScrollTo('${s.id}')">
@@ -338,15 +362,8 @@ function renderGuidebook() {
       </ul>
 
       <h3 class="gb-h3">Планетарные ресурсы</h3>
-      <p>На части планет есть месторождения — их добывают Добывающие заводы. Чем реже ресурс, тем дороже он стоит, но тем медленнее добывается. Редкие месторождения дают в разы больше ГС за слот, чем обычные — за них стоит бороться и возить их караванами:</p>
-      <div class="gb-tbl">
-        <div class="gb-tr gb-th"><span>Редкость</span><span>Цена за единицу</span><span>Добыча в сутки (за слот)</span><span>ГС за слот/сутки</span></div>
-        <div class="gb-tr"><span><span class="gb-rar gb-rar-1">Обычный</span></span><span>2 ГС</span><span>25</span><span>50</span></div>
-        <div class="gb-tr"><span><span class="gb-rar gb-rar-2">Необычный</span></span><span>10 ГС</span><span>12</span><span>120</span></div>
-        <div class="gb-tr"><span><span class="gb-rar gb-rar-3">Редкий</span></span><span>50 ГС</span><span>6</span><span>300</span></div>
-        <div class="gb-tr"><span><span class="gb-rar gb-rar-4">Эпический</span></span><span>200 ГС</span><span>3</span><span>600</span></div>
-        <div class="gb-tr"><span><span class="gb-rar gb-rar-5">Легендарный</span></span><span>1200 ГС</span><span>1</span><span>1200</span></div>
-      </div>
+      <p>На части планет есть месторождения — их добывают Добывающие заводы. У каждого ресурса своя цена; добыча за слот зависит от редкости. Полная таблица по всем ресурсам — ниже, в разделе про экономику. Кратко: за дорогие месторождения стоит бороться и гнать их караванами.</p>
+      ${gbResTable()}
     </section>
 
     <!-- КОЛОНИИ -->
@@ -428,25 +445,16 @@ function renderGuidebook() {
         <li>Скорость добычи зависит от редкости ресурса; бонус доктрины «добыча» умножает выработку.</li>
       </ul>
 
-      <h3 class="gb-h3">Редкость, цена и скорость добычи</h3>
-      <div class="gb-table-wrap"><table class="gb-table">
-        <thead><tr><th>Редкость</th><th>Цена за единицу</th><th>Добыча в сутки (за слот)</th><th>ГС за слот/сутки</th></tr></thead>
-        <tbody>
-          <tr><td><span class="gb-rar gb-rar-1">Обычный</span></td><td>2 ГС</td><td>25</td><td>50</td></tr>
-          <tr><td><span class="gb-rar gb-rar-2">Необычный</span></td><td>10 ГС</td><td>12</td><td>120</td></tr>
-          <tr><td><span class="gb-rar gb-rar-3">Редкий</span></td><td>50 ГС</td><td>6</td><td>300</td></tr>
-          <tr><td><span class="gb-rar gb-rar-4">Эпический</span></td><td>200 ГС</td><td>3</td><td>600</td></tr>
-          <tr><td><span class="gb-rar gb-rar-5">Легендарный</span></td><td>1200 ГС</td><td>1</td><td>1200</td></tr>
-        </tbody>
-      </table></div>
-      <p>Чем реже ресурс, тем дороже единица — и тем больше ГС приносит слот добычи. Легендарное месторождение даёт ~24× обычного: за такие планеты борются, а излишки выгодно гнать караванами союзникам.</p>
+      <h3 class="gb-h3">Цена и скорость добычи по ресурсам</h3>
+      ${gbResTable()}
+      <p>У каждого ресурса <b>своя цена</b> за единицу; добыча за слот зависит от редкости (чем реже — тем медленнее). Итоговый столбец «ГС за слот/сут» = цена × добыча — именно он показывает, за какие месторождения стоит бороться. Дорогие ресурсы выгоднее возить караванами по полной цене, а дешёвый «вал» — сбрасывать на бирже.</p>
 
       <h3 class="gb-h3">Как превратить ресурсы в ГС</h3>
       <p>Накопленные ресурсы сами по себе доход не приносят — их нужно продать. Есть три способа:</p>
       <div class="gb-kv-grid">
         <div class="gb-kv-row"><span class="gb-kv-key">Местный рынок</span><span class="gb-kv-val">Вкладка «Дипломатия» → продать вручную за <b>80%</b> базовой цены. Мгновенно, без партнёров.</span></div>
         <div class="gb-kv-row"><span class="gb-kv-key">Товарная биржа</span><span class="gb-kv-val">Здание: <b>само</b> продаёт накопленное каждый день. Цена зависит от редкости: ширпотреб — <b>50%</b>, легендарка — до <b>75%</b>. Удобно, но дешевле каравана.</span></div>
-        <div class="gb-kv-row"><span class="gb-kv-key">Торговый караван</span><span class="gb-kv-val">Торговый путь с другой фракцией — отправитель получает <b>полную</b> цену, партнёр-получатель — ещё <b>33%</b> сверху. Нужен партнёр и есть риск пиратов (см. «Торговля»).</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">Торговый караван</span><span class="gb-kv-val">Торговый путь с другой фракцией — отправитель получает <b>полную</b> цену, партнёр-получатель — ещё <b>50%</b> сверху. Нужен партнёр и есть риск пиратов (см. «Торговля»).</span></div>
       </div>
       <div class="gb-callout gb-callout-tip">
         <span class="gb-callout-icon">★</span>

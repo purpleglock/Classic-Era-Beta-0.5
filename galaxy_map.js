@@ -702,7 +702,21 @@ function gmOpenPanel(sys) {
     return;
   }
   const fac = gmFaction(sys.faction);
-  const planets = (sys.planets || []).map((p, i) => gmPlanetView(p, i)).join('')
+  const sysCols = (GM.colonies || []).filter(c => c.system_id === sys.id);
+  // Убираем из «Состава системы» ТОЛЬКО фантом столицы: легаси-запись (без kind →
+  // рисуется как «Контроль: ничейная»), дублирующую столичную планету. Сама столица
+  // корректно показана в блоке «Колонии». Реальные планеты (с kind/зоной/ресурсами),
+  // в т.ч. те, на которых стоят обычные колонии, — НЕ трогаем.
+  const capCol = sysCols.find(c => c.is_capital || c.planet_type === 'Столичный мир');
+  const capName = ((capCol && capCol.planet_name) || (GM.capPlanet && GM.capPlanet[sys.id]) || '').trim().toLowerCase();
+  const planets = (sys.planets || [])
+    .filter(p => {
+      if (!p) return false;
+      const nm = (p.name ? String(p.name) : '').trim().toLowerCase();
+      const isGhostCapital = nm && nm === capName && !p.kind;  // легаси-дубль столицы
+      return !isGhostCapital;
+    })
+    .map((p, i) => gmPlanetView(p, i)).join('')
     || `<p class="gm-empty">Система ещё не исследована. Данные о планетах отсутствуют.</p>`;
   const meta = fac && GM.facMeta ? GM.facMeta[fac.id] : null;
   const facBlock = fac ? (() => {
@@ -720,9 +734,6 @@ function gmOpenPanel(sys) {
     </div>`;
   })() : `<div class="gm-fac-badge gm-neutral">Нейтральная система</div>`;
   panel.className = '';
-  // Реальные колонии в системе (из colonies) — структуры фракций и столичные планеты,
-  // которых может не быть в статичных map_systems.planets.
-  const sysCols = (GM.colonies || []).filter(c => c.system_id === sys.id);
   const colsBlock = sysCols.length ? `
     <div class="gm-panel-sub">Колонии · ${sysCols.length}</div>
     <div class="gm-collist">${sysCols.map(c => {
