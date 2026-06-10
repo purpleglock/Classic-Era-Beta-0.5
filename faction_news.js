@@ -260,10 +260,14 @@ function fnReactionBlockHtml(n, myFac) {
 
   const st = FN.reactState[n.id];
   const opts = fnReactionOptions(myFac, n);
+  // Подсвечиваем ровно одну выбранную опцию. Несколько опций могут иметь одинаковый stance
+  // (авто-фраза и кастомная — обе approve), поэтому матчим по key, а не по stance.
+  // После перезагрузки (в БД хранится только stance) — берём первую опцию этого тона.
+  const selKey = st ? (st.optKey != null ? st.optKey : (opts.find(o => o.stance === st.stance) || {}).key) : null;
   const btns = opts.map(o => {
-    const on = st && st.stance === o.stance;
+    const on = selKey != null && selKey === o.key;
     return `<button class="fn-react-opt fn-stance-${o.stance}${on ? ' on' : ''}"
-      onclick="fnReact('${esc(n.id)}','${o.stance}')">
+      onclick="fnReact('${esc(n.id)}','${o.stance}','${esc(o.key)}')">
       <span class="fn-react-ic">${FN_STANCE_ICON[o.stance]}</span>
       <span class="fn-react-txt">${esc(o.text)}</span></button>`;
   }).join('');
@@ -296,14 +300,14 @@ async function fnLoadReactState(n, myFac) {
 }
 
 // Обработчик клика по опции реакции.
-async function fnReact(newsId, stance) {
+async function fnReact(newsId, stance, optKey) {
   const n = FN.byId.get(newsId);
   const myFac = await fnGetMyFaction();
   if (!myFac || !myFac.faction_id) { toast('Нужна одобренная фракция', 'err'); return; }
   try {
     const res = await apiFetch('rpc/news_react', { method: 'POST', body: JSON.stringify({ p_news_id: newsId, p_stance: stance }) });
     const score = (typeof res === 'number') ? res : (Array.isArray(res) ? res[0] : (res && res.news_react));
-    FN.reactState[newsId] = { stance, score: (typeof score === 'number') ? score : 0 };
+    FN.reactState[newsId] = { stance, optKey: optKey != null ? optKey : null, score: (typeof score === 'number') ? score : 0 };
     const slot = document.getElementById('fn-react-slot');
     if (slot && n) slot.innerHTML = fnReactionBlockHtml(n, myFac);
     const lbl = fnRelLabel(FN.reactState[newsId].score);
@@ -372,6 +376,17 @@ async function fnRenderNewsTab(b) {
   const fac = await fnGetMyFaction();
 
   let html = '';
+
+  // Секция админ-публикации (стафф): ивенты/квесты от лица НПС или любой фракции игрока.
+  if (staff) {
+    html += `<div class="fn-tab-sec">
+      <div class="fn-tab-hd">
+        <span>📡 Админ-публикация <span style="color:var(--t4);font-weight:400;font-size:12px">— от лица НПС или фракции игрока</span></span>
+        <button class="btn btn-gd btn-sm" onclick="fnOpenComposer()">✚ Опубликовать ивент / квест</button>
+      </div>
+      <div class="fn-tab-note">Автор (НПС / своя / любая фракция) выбирается прямо в композиторе. Админская публикация выходит сразу, без модерации.</div>
+    </div>`;
+  }
 
   // Секция автора (владельца одобренной фракции)
   if (fac && fac.faction_id) {
@@ -481,6 +496,15 @@ function fnOpenComposer(id) {
       <input type="hidden" id="fn-c-id" value="${id ? esc(id) : ''}">
       ${restored ? `<div class="fn-c-restored">📝 Восстановлен черновик от ${esc(fnClock(draft.ts))} — несохранённые правки подставлены.
         <button type="button" class="btn btn-gh btn-xs" onclick="fnDraftDiscard()">Очистить черновик</button></div>` : ''}
+      ${fnIsStaff() ? `<div class="fg">
+        <label class="fl">📡 Автор публикации <span style="color:var(--t4);font-weight:400">— админ</span></label>
+        <select class="fi" id="fn-c-author" onchange="fnAuthorModeChange()"><option value="">Загрузка фракций…</option></select>
+        <div id="fn-c-npc-fields" style="display:none;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <input class="fi" id="fn-c-npc-name" maxlength="80" placeholder="Имя автора (НПС / свободное)" style="flex:1;min-width:160px">
+          <input class="fi" id="fn-c-npc-color" type="color" value="#3a7fbf" title="Цвет акцента" style="width:52px;padding:2px;flex:0 0 auto">
+        </div>
+        <div class="fn-comp-note" style="margin:6px 0 0">Админская публикация выходит сразу, без модерации. «НПС» — свободный автор (событие/квест без фракции, как сводка сектора); фракция игрока — от её лица (с реакциями).</div>
+      </div>` : ''}
       <div class="fg"><label class="fl">Заголовок *</label>
         <input class="fi fn-c-title" id="fn-c-title" maxlength="160" value="${esc(eff?.title || '')}" placeholder="Главное событие недели"></div>
       <div class="fg">
@@ -502,7 +526,7 @@ function fnOpenComposer(id) {
       </div>
       <div class="fn-comp-ftr">
         <button class="btn btn-gh" onclick="fnCloseComposer()">Отмена</button>
-        <button class="btn btn-gd" onclick="fnSubmit()">📨 Отправить на проверку</button>
+        <button class="btn btn-gd" onclick="fnSubmit()">${fnIsStaff() ? '📡 Опубликовать' : '📨 Отправить на проверку'}</button>
       </div>
       <div class="fn-comp-note fn-c-draft" id="fn-c-draft-st"></div>
       <div class="fn-comp-note">После отправки новость проверит администрация. Опубликованную правит только администрация. Черновик сохраняется автоматически на этом устройстве.</div>
@@ -510,6 +534,7 @@ function fnOpenComposer(id) {
     modal.classList.add('show');
     FN.draftKey = key;
     fnDraftStatus(restored ? ('восстановлен черновик · ' + fnClock(draft.ts)) : '');
+    if (fnIsStaff()) fnPopulateAuthorSelect(n);   // автор берётся из серверной строки, не из черновика
   };
   if (id && !n) {
     dbGet('faction_news', `id=eq.${encodeURIComponent(id)}&limit=1`).then(rows => { fill(rows && rows[0]); }).catch(() => fill(null));
@@ -616,6 +641,68 @@ function fnCoverRemove() {
   fnDraftSaveSoon();
 }
 
+// ── Админ-публикация: выбор автора (НПС / своя / любая фракция) ──
+async function fnLoadAuthorFacs() {
+  if (FN.authorFacs) return FN.authorFacs;
+  try { FN.authorFacs = await dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,color,owner_id,owner_email&order=name.asc') || []; }
+  catch (e) { FN.authorFacs = []; }
+  return FN.authorFacs;
+}
+// Наполнить <select id="fn-c-author"> вариантами; предвыбрать по редактируемой новости.
+async function fnPopulateAuthorSelect(existing) {
+  const sel = document.getElementById('fn-c-author'); if (!sel) return;
+  const [facs, mine] = await Promise.all([fnLoadAuthorFacs(), fnGetMyFaction()]);
+  let html = '';
+  if (mine && mine.faction_id) html += `<option value="self">Моя фракция: ${esc(mine.name || '—')}</option>`;
+  html += `<optgroup label="Фракции игроков">` + facs.map(f =>
+    `<option value="fac:${esc(f.faction_id)}" data-name="${esc(f.name || '')}" data-color="${esc(f.color || '')}" data-owner="${esc(f.owner_id || '')}" data-email="${esc(f.owner_email || '')}">${esc(f.name || '—')}</option>`
+  ).join('') + `</optgroup>`;
+  html += `<option value="npc">НПС / свободный автор (событие, квест)</option>`;
+  sel.innerHTML = html;
+  // предвыбор для редактирования
+  if (existing && existing.id) {
+    if (!existing.owner_id) sel.value = 'npc';
+    else if (mine && existing.faction_id === mine.faction_id) sel.value = 'self';
+    else if (existing.faction_id) sel.value = 'fac:' + existing.faction_id;
+  } else if (!(mine && mine.faction_id)) {
+    sel.value = facs.length ? 'fac:' + facs[0].faction_id : 'npc';
+  }
+  fnAuthorModeChange();
+  if (existing && existing.id && !existing.owner_id) {
+    const nm = document.getElementById('fn-c-npc-name'); if (nm) nm.value = existing.faction_name || '';
+    const cl = document.getElementById('fn-c-npc-color');
+    if (cl && /^#[0-9a-f]{6}$/i.test(existing.faction_color || '')) cl.value = existing.faction_color;
+  }
+}
+function fnAuthorModeChange() {
+  const sel = document.getElementById('fn-c-author');
+  const npc = document.getElementById('fn-c-npc-fields');
+  if (sel && npc) npc.style.display = sel.value === 'npc' ? 'flex' : 'none';
+}
+// Разобрать выбранного автора → поля строки faction_news. Возвращает null при ошибке (с тостом).
+async function fnResolveAuthor() {
+  const sel = document.getElementById('fn-c-author');
+  const mode = sel ? sel.value : '';
+  if (mode === 'npc') {
+    const name = (document.getElementById('fn-c-npc-name')?.value || '').trim();
+    if (!name) { toast('Укажите имя НПС-автора', 'err'); return null; }
+    const color = document.getElementById('fn-c-npc-color')?.value || null;
+    return { faction_id: null, faction_name: name, faction_color: color, owner_id: null, owner_email: null, kind: 'bulletin' };
+  }
+  if (mode === 'self') {
+    const fac = await fnGetMyFaction();
+    if (!fac || !fac.faction_id) { toast('У вас нет одобренной фракции', 'err'); return null; }
+    return { faction_id: fac.faction_id, faction_name: fac.name || null, faction_color: fac.color || null, owner_id: user.id, owner_email: user.email, kind: 'news' };
+  }
+  if (mode && mode.indexOf('fac:') === 0) {
+    const opt = sel.options[sel.selectedIndex];
+    const fid = mode.slice(4);
+    if (!fid) { toast('Выберите фракцию', 'err'); return null; }
+    return { faction_id: fid, faction_name: opt?.dataset.name || null, faction_color: opt?.dataset.color || null, owner_id: opt?.dataset.owner || null, owner_email: opt?.dataset.email || null, kind: 'news' };
+  }
+  toast('Выберите автора публикации', 'err'); return null;
+}
+
 async function fnSubmit() {
   if (FN.busy) return;
   const id        = document.getElementById('fn-c-id')?.value || '';
@@ -625,25 +712,48 @@ async function fnSubmit() {
   const reactions = fnReactCollect();
   if (!title || !body) { toast('Заголовок и текст обязательны', 'err'); return; }
   if (typeof badName === 'function' && badName(title)) { toast('Заголовок содержит недопустимые слова', 'err'); return; }
-  // Писать новости могут только владельцы одобренной фракции (игроки).
-  const fac = await fnGetMyFaction();
-  if (!fac || !fac.faction_id) { toast('Новости пишут только владельцы одобренной фракции', 'err'); return; }
+  const staff = fnIsStaff();
+  // Стафф публикует от лица НПС/любой фракции сразу (без модерации);
+  // игрок — только от своей одобренной фракции, через очередь модерации.
+  let author;
+  if (staff) {
+    author = await fnResolveAuthor();
+    if (!author) return;   // тост уже показан
+  } else {
+    const fac = await fnGetMyFaction();
+    if (!fac || !fac.faction_id) { toast('Новости пишут только владельцы одобренной фракции', 'err'); return; }
+    author = { faction_id: fac.faction_id, faction_name: fac.name || null, faction_color: fac.color || null, owner_id: user.id, owner_email: user.email, kind: 'news' };
+  }
+  const now = new Date().toISOString();
   FN.busy = true;
   try {
     if (id) {
-      await dbPatch('faction_news', `id=eq.${encodeURIComponent(id)}`,
-        { title, excerpt: null, body, image_url, reactions, status: 'pending', reject_reason: null, updated_at: new Date().toISOString() });
-      toast('Изменения отправлены на проверку', 'ok');
+      const patch = { title, excerpt: null, body, image_url, reactions, reject_reason: null, updated_at: now };
+      if (staff) {
+        const prev = FN.byId.get(id);
+        Object.assign(patch, {
+          faction_id: author.faction_id, faction_name: author.faction_name, faction_color: author.faction_color,
+          owner_id: author.owner_id, owner_email: author.owner_email, kind: author.kind,
+          status: 'approved', published_at: (prev && prev.published_at) || now, reviewed_by: user.email,
+        });
+      } else {
+        patch.status = 'pending';   // правка игрока снова уходит на проверку
+      }
+      await dbPatch('faction_news', `id=eq.${encodeURIComponent(id)}`, patch);
+      toast(staff ? 'Новость обновлена и опубликована' : 'Изменения отправлены на проверку', 'ok');
     } else {
       await dbPost('faction_news', {
-        faction_id: fac.faction_id,
-        faction_name: fac.name || null,
-        faction_color: fac.color || null,
-        owner_id: user.id, owner_email: user.email,
+        faction_id: author.faction_id,
+        faction_name: author.faction_name,
+        faction_color: author.faction_color,
+        owner_id: author.owner_id, owner_email: author.owner_email,
+        kind: author.kind,
         title, excerpt: null, body, image_url, reactions,
-        status: 'pending',
+        status: staff ? 'approved' : 'pending',
+        published_at: staff ? now : null,
+        reviewed_by: staff ? user.email : null,
       });
-      toast('Новость отправлена на проверку', 'ok');
+      toast(staff ? 'Опубликовано на главной' : 'Новость отправлена на проверку', 'ok');
     }
     // Отправлено успешно — черновик больше не нужен. Сбрасываем ключ ДО закрытия,
     // иначе финальное автосохранение в fnCloseComposer пересоздаст черновик.

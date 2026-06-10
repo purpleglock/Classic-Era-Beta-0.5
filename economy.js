@@ -588,6 +588,27 @@ function ecIncomePreview() {
     base: { gc, science, agents }, mods: m, debuff: dz, gcMul,
   };
 }
+// Доход с активных караванов за сутки — единый источник для шапки и обзора («Казна»).
+// Исходящие (я продаю) учитывают доктрину (× m.gc); входящие — доля партнёра (EC_DEST_CUT).
+function ecCaravanIncome() {
+  const m = ecFactionMods();
+  const act = (EC.routes || []).filter(r => r.status === 'active');
+  const out = act.filter(r => r.a_fid === EC.fid);   // исходящие — я продаю
+  const inn = act.filter(r => r.b_fid === EC.fid);   // входящие — доля партнёра
+  const outGc = Math.round(out.reduce((a, r) => a + (r.volume || 0) * (r.price || 0), 0) * (m.gc || 1));
+  const inGc  = inn.reduce((a, r) => a + Math.round((r.volume || 0) * (r.price || 0) * EC_DEST_CUT), 0);
+  return { out: outGc, inc: inGc, net: outGc + inGc, outRoutes: out, inRoutes: inn };
+}
+// Итоговый ГС-доход за сутки в разбивке (постройки + караваны) — чтобы шапка «Доход / сутки»
+// совпадала с «Чистым доходом» в обзоре. Постройки учитывают доктрину и срез дестабилизации.
+function ecGcIncome() {
+  const inc = ecIncomePreview();
+  const gcMul = inc.gcMul != null ? inc.gcMul : 1;
+  const factory = Math.round(ecSlotsSum('factory') * 200 * gcMul);
+  const trade   = Math.round(ecSlotsSum('trade') * 100 * gcMul);
+  const cv = ecCaravanIncome();
+  return { factory, trade, caravan: cv, net: factory + trade + cv.net };
+}
 function ecResEntries() { const res = (EC.eco && EC.eco.resources) || {}; return Object.keys(res).map(k => [k, +res[k] || 0]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]); }
 // Добыча за слот/сутки с учётом доктрины (mods.mine) — зеркало economy_accrue.
 function ecMineRate(rar) { return Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 25) * ecFactionMods().mine)); }
@@ -666,8 +687,9 @@ function ecMineCell(bid, resName, delta) {
 // ── Рендер кабинета ─────────────────────────────────────────
 function ecTreasuryHtml() {
   const inc = ecIncomePreview();
+  const gcNet = ecGcIncome().net;   // постройки + караваны — как «Чистый доход» в обзоре
   const incParts = [];
-  if (inc.gc) incParts.push(`<span style="color:var(--gd)">+${ecNum(inc.gc)} ГС</span>`);
+  if (gcNet) incParts.push(`<span style="color:var(--gd)">+${ecNum(gcNet)} ГС</span>`);
   if (inc.science) incParts.push(`<span style="color:var(--pu)">+${ecNum(inc.science)} ОН</span>`);
   const incLine = incParts.length ? incParts.join(' · ') : '<span style="color:var(--t4)">нет дохода — откройте слоты</span>';
   let nextHtml = '';
@@ -887,11 +909,11 @@ function ecTabOverview() {
   // ── 2. КАЗНА — игровой реестр доходов/расходов ГС за сутки ──
   const gcMul = inc.gcMul != null ? inc.gcMul : (m.gc || 1);
   // Торговля и караваны: продажа (исходящие), доля партнёра (входящие), вывоз ресурсов
-  const _act = (EC.routes || []).filter(r => r.status === 'active');
-  const _out = _act.filter(r => r.a_fid === EC.fid);   // исходящие — я продаю
-  const _in  = _act.filter(r => r.b_fid === EC.fid);   // входящие — получаю долю партнёра
-  const _outGc = Math.round(_out.reduce((a, r) => a + (r.volume || 0) * (r.price || 0), 0) * (m.gc || 1));
-  const _inGc  = _in.reduce((a, r) => a + Math.round((r.volume || 0) * (r.price || 0) * EC_DEST_CUT), 0);
+  const _cv = ecCaravanIncome();
+  const _out = _cv.outRoutes;   // исходящие — я продаю
+  const _in  = _cv.inRoutes;    // входящие — получаю долю партнёра
+  const _outGc = _cv.out;
+  const _inGc  = _cv.inc;
   const _resOut = {};
   _out.forEach(r => { if (r.resource) _resOut[r.resource] = (_resOut[r.resource] || 0) + (r.volume || 0); });
   const _resOutTotal = Object.values(_resOut).reduce((a, b) => a + b, 0);
@@ -1577,7 +1599,9 @@ function ecRouteRow(r) {
   const isOrigin = r.a_fid === EC.fid;
   const other = isOrigin ? (r.b_name || ecFacName(r.b_fid)) : (r.a_name || ecFacName(r.a_fid));
   const value = (r.volume || 0) * (r.price || 0);
-  const income = isOrigin ? value : Math.round(value * EC_DEST_CUT);
+  // исходящий караван (продажа) учитывает бонус доктрины к ГС — как в «Казне» обзора;
+  // входящий — фиксированная доля партнёра без доктрины.
+  const income = isOrigin ? Math.round(value * ecFactionMods().gc) : Math.round(value * EC_DEST_CUT);
   const threats = r.threats || [];
   const riskPct = ecTradeRiskPct(threats, r.convoy);
   const riskTxt = threats.length ? `риск ${riskPct}%${r.convoy ? ` · 🛡${r.convoy}` : ' · без охраны'}` : 'безопасно';

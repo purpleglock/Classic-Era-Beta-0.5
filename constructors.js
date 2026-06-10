@@ -884,20 +884,28 @@ function cnDivCardText() {
 // ════════════════════════════════════════════════════════════
 async function cnFactionPublishBlock() {
   const mine = cnMyFactionMeta();
-  if (mine) return `<div class="cn-fac-line">От имени фракции: <b style="color:${esc(frReadable(mine.faction_color))}">${esc(mine.faction_name || '—')}</b></div>`;
+  // Стафф ВСЕГДА получает выбор фракции (даже если сам владеет одной) — чтобы
+  // выдавать общедоступные/фракционные юниты-награды любому игроку.
   if (cnIsStaff()) {
     const facs = await cnLoadApprovedFactions();
+    const myFid = mine && mine.faction_id;
     const opts = `<option value="">★ Общедоступная (для всех фракций)</option>` +
-      facs.map(f => `<option value="${esc(f.faction_id || '')}" data-name="${esc(f.name || '')}" data-color="${esc(f.color || '')}">${esc(f.name || '—')}</option>`).join('');
+      facs.map(f => `<option value="${esc(f.faction_id || '')}" data-name="${esc(f.name || '')}" data-color="${esc(f.color || '')}">${esc(f.name || '—')}${myFid && f.faction_id === myFid ? ' (моя)' : ''}</option>`).join('');
     return `<div class="cn-fac-line"><label>Публиковать от фракции</label><select id="cn-faction" class="fi">${opts}</select>
-      <div class="cn-fac-hint">«Общедоступная» — техника без фракции, доступна всем игрокам в конструкторе дивизий.</div></div>`;
+      <div class="cn-fac-hint">«Общедоступная» — техника без фракции, доступна всем игрокам в конструкторе дивизий. Выберите фракцию, чтобы выдать юнит-награду только ей. ОН с казны не списываются.</div></div>`;
   }
+  if (mine) return `<div class="cn-fac-line">От имени фракции: <b style="color:${esc(frReadable(mine.faction_color))}">${esc(mine.faction_name || '—')}</b></div>`;
   return '';
 }
 function cnResolveFactionForSave() {
+  // У стаффа приоритет — выбор в селекторе (общедоступная / любая фракция).
+  const sel = cnId('cn-faction');
+  if (cnIsStaff() && sel) {
+    const opt = sel.options[sel.selectedIndex];
+    return { faction_id: sel.value || null, faction_name: opt?.dataset.name || '', faction_color: opt?.dataset.color || '' };
+  }
   const mine = cnMyFactionMeta();
   if (mine) return mine;
-  const sel = cnId('cn-faction');
   if (sel && sel.value) {
     const opt = sel.options[sel.selectedIndex];
     return { faction_id: sel.value || null, faction_name: opt?.dataset.name || '', faction_color: opt?.dataset.color || '' };
@@ -936,7 +944,8 @@ async function cnPublish() {
     summary, data, card_text: card, updated_at: new Date().toISOString(),
   };
   const isNew = !(CN.editUnit && CN.editUnit.id);
-  const onCost = (isNew && CN.cat !== 'division' && fac.faction_id) ? (summary.on || 0) : 0;
+  // Стафф выдаёт юниты-награды — ОН с казны фракции не списываем.
+  const onCost = (isNew && CN.cat !== 'division' && fac.faction_id && !cnIsStaff()) ? (summary.on || 0) : 0;
 
   if (onCost > 0) {
     const ecoRows = await dbGet('faction_economy', `faction_id=eq.${encodeURIComponent(fac.faction_id)}&select=science`);
