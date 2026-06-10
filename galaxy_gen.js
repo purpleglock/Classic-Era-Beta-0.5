@@ -250,21 +250,51 @@
     const orbits = genOrbits(star, rmult);
     const bodies = orbits.map(orb => {
       if (orb.type === 'belt') {
-        return { kind: 'belt', name: orb.bt.name, type: orb.compD + ' · ' + orb.densD, icon: orb.bt.icon,
+        return { kind: 'belt', g: 'belt', name: orb.bt.name, type: orb.compD + ' · ' + orb.densD, icon: orb.bt.icon,
           zone: ZN[orb.sec], dist: +orb.dist.toFixed(2), slotsP: 0, slotsK: Math.max(1, Math.round(orb.density / 2)),
           rings: 0, moons: 0, resources: orb.resources };
       }
       if (orb.type === 'anomaly') {
-        return { kind: 'anomaly', name: orb.planet.name, type: 'Аномалия', icon: orb.planet.i,
+        return { kind: 'anomaly', g: 'anomaly', name: orb.planet.name, type: 'Аномалия', icon: orb.planet.i,
           zone: ZN[orb.sec], dist: +orb.dist.toFixed(2), slotsP: 0, slotsK: 0, rings: 0, moons: 0, resources: [] };
       }
       const sl = getSlots(orb.planet);
-      return { kind: 'planet', name: orb.planet.name, type: GRP[orb.planet.g].name, icon: orb.planet.i,
+      // g — ключ климатической группы планеты: нужен редактору для типозависимого
+      // реролла ресурсов (rollResources). Экономика поле игнорирует.
+      return { kind: 'planet', g: orb.planet.g, name: orb.planet.name, type: GRP[orb.planet.g].name, icon: orb.planet.i,
         zone: ZN[orb.sec], dist: +orb.dist.toFixed(2), slotsP: sl.p, slotsK: sl.k,
         rings: (orb.rings || []).length, moons: (orb.moons || []).length, resources: orb.resources };
     });
     return { star: { cls: star.cls, name: star.sd.name, icon: star.sd.e }, bodies };
   }
 
-  window.GalaxyGen = { generate, getSlots, STAR_CLASSES: ['random', 'O', 'B', 'A', 'F', 'G', 'K', 'M', 'D', 'N'] };
+  // Ролл ресурсов для ОДНОЙ планеты (для редактора: кнопка «🎲 ресурсы»).
+  // group — ключ климатической группы (terrestrial/cryo/…); если не задан или
+  // belt/anomaly — катим по всему каталогу. Возвращает массив записей в том же
+  // формате, что и генератор: {name, icon, r, rname, amt}. Экономике важны name+r.
+  function rollResources(group, starCls, richness) {
+    seedRng(Math.floor(Math.random() * 0xffffffff));
+    const rmult = 0.05 + (((+richness || 5) - 1) / 9) * 2.15;
+    const sc = (starCls && starCls !== 'random') ? starCls : '';
+    const useGroup = group && group !== 'belt' && group !== 'anomaly';
+    const out = [];
+    for (const R of RESOURCES) {
+      if (useGroup && !R.g.includes(group)) continue;
+      let c = (RB[R.r] || 10) * rmult;
+      if (R.stars.length && sc && R.stars.includes(sc)) c = Math.min(97, c + 24);
+      if (!ch(c)) continue;
+      out.push({ name: R.name, icon: R.icon, r: R.r, rname: rname(R.r), amt: amtDesc(rollDice(R.d, rmult)) });
+    }
+    return out;
+  }
+  // Слим-каталог для ручного выбора в редакторе (без внутренних весов/групп).
+  const RES_CATALOG = RESOURCES.map(R => ({ name: R.name, icon: R.icon, r: R.r, rname: rname(R.r) }));
+  // Уровни количества (для ручного выбора) — те же, что выдаёт amtDesc.
+  const AMT_LEVELS = ['следы', 'мало', 'умеренно', 'много', 'очень много', 'колоссально'];
+
+  window.GalaxyGen = {
+    generate, getSlots, rollResources,
+    RESOURCES: RES_CATALOG, AMT_LEVELS,
+    STAR_CLASSES: ['random', 'O', 'B', 'A', 'F', 'G', 'K', 'M', 'D', 'N'],
+  };
 })();

@@ -72,6 +72,46 @@
 .gm-cap{position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:15px;line-height:1;pointer-events:none;z-index:6;text-shadow:0 0 4px #000,0 0 9px currentColor;filter:drop-shadow(0 0 2px #000)}
 .gm-capital img{filter:drop-shadow(0 0 10px currentColor)}
 
+/* Режим «ресурсы систем»: компактная сводка одной строкой над звездой */
+.gm-res-overlay{
+  position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:4px;
+  display:none;align-items:center;gap:2px;white-space:nowrap;
+  padding:2px 5px;border-radius:7px;z-index:7;pointer-events:none;
+  background:hsl(216 30% 5% / .85);border:1px solid var(--w2);
+}
+#gm-wrap.gm-show-res .gm-res-overlay{display:flex}
+/* в режиме ресурсов подписи звёзд приглушаем, чтобы не мешали сводкам */
+#gm-wrap.gm-show-res .gm-label{opacity:.22}
+.gm-res-pin{font-size:14px;line-height:1;filter:drop-shadow(0 1px 1px #000) saturate(.9)}
+.gm-res-pin.r-common{color:#7f93ad}
+.gm-res-pin.r-uncommon{color:#5fc257}
+.gm-res-pin.r-rare{color:#39bfe8}
+.gm-res-pin.r-epic{color:#b66cf2}
+.gm-res-pin.r-legendary{color:#ffa033}
+.gm-res-more{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;color:var(--t3);filter:none;margin-left:1px}
+
+/* Полоска фильтров редкости (под кнопкой «Ресурсы») */
+#gm-res-filter{display:flex;flex-direction:column;gap:4px;margin:2px 0}
+.gm-rf{
+  width:38px;height:24px;display:flex;align-items:center;justify-content:center;
+  font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;cursor:pointer;
+  background:hsl(216 20% 7% / .85);color:var(--t4);border:1px solid var(--w2);
+  border-left:3px solid currentColor;border-radius:8px;backdrop-filter:blur(6px);
+  transition:all .18s;opacity:.55;
+}
+.gm-rf:hover{opacity:.85}
+.gm-rf.gm-on{opacity:1;color:#fff;box-shadow:0 0 8px hsl(206 72% 50% / .25)}
+.gm-rf.r-common{border-left-color:#7f93ad}
+.gm-rf.r-uncommon{border-left-color:#5fc257}
+.gm-rf.r-rare{border-left-color:#39bfe8}
+.gm-rf.r-epic{border-left-color:#b66cf2}
+.gm-rf.r-legendary{border-left-color:#ffa033}
+.gm-rf.gm-on.r-common{color:#9fb1c8}
+.gm-rf.gm-on.r-uncommon{color:#7fdd6f}
+.gm-rf.gm-on.r-rare{color:#5fd0f5}
+.gm-rf.gm-on.r-epic{color:#cf92ff}
+.gm-rf.gm-on.r-legendary{color:#ffbf5f}
+
 /* Координаты */
 #gm-coord{
   position:absolute;left:12px;bottom:12px;z-index:20;
@@ -180,10 +220,14 @@ textarea.gm-fi{resize:vertical}
 .gm-orb-dot.gm-dot-belt{background:none;border:2px dashed var(--zc);box-shadow:none}
 .gm-orb-dot.gm-dot-anom{background:var(--err);border-color:var(--err);box-shadow:0 0 10px var(--err)}
 .gm-orb-main{flex:1;min-width:0}
-.gm-orb-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.gm-orb-name{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:#eaf3fb}
-.gm-orb-dist{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te);background:hsl(206 30% 14% / .6);border:1px solid var(--w2);border-radius:4px;padding:1px 5px}
-.gm-orb-sub{font-size:11px;color:var(--t3);margin-top:2px}
+/* верхняя строка: имя слева (с обрезкой), дистанция тихо в правом рейле */
+.gm-orb-top{display:flex;align-items:baseline;gap:8px}
+.gm-orb-name{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14.5px;color:#eaf3fb;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gm-orb-dist{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);letter-spacing:.3px;flex-shrink:0;margin-left:auto}
+/* мета-строка: тип·зона слева, слоты тихо справа */
+.gm-orb-meta{display:flex;align-items:baseline;gap:8px;margin-top:2px}
+.gm-orb-sub{font-size:11px;color:var(--t3);flex:1;min-width:0;line-height:1.4}
+.gm-orb-zone{font-weight:600}
 .gm-orb-legacy .gm-planet-img{width:34px;height:34px;border-radius:8px;overflow:hidden;background:#0a0e16;flex-shrink:0}
 .gm-orb-legacy .gm-planet-img img{width:100%;height:100%;object-fit:cover}
 
@@ -191,25 +235,57 @@ textarea.gm-fi{resize:vertical}
 .gm-planet-rich{align-items:flex-start}
 .gm-pl-ico{width:38px;height:38px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;background:hsl(216 18% 11% / .6);border:1px solid var(--w1);border-radius:9px}
 .gm-pl-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.gm-slots{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.5px;color:var(--gdl);border:1px solid var(--w2);border-radius:5px;padding:1px 6px;white-space:nowrap}
-.gm-slots b{color:#eaf3fb}
-.gm-slots-k{color:var(--te)}
-.gm-res{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px}
-.gm-res-tag{font-size:9px;padding:1px 5px;border:1px solid;border-radius:4px;display:inline-flex;gap:3px;align-items:center;background:rgba(0,0,0,.2)}
-.gm-res-tag i{font-style:normal;opacity:.6;font-size:8px}
-.gm-res-tag.r-common{border-color:#3a5270;color:#9fb2cc}
-.gm-res-tag.r-uncommon{border-color:#2a8a25;color:#5fc257}
-.gm-res-tag.r-rare{border-color:#0099cc;color:#33bce8}
-.gm-res-tag.r-epic{border-color:#8820dd;color:#b15cf0}
-.gm-res-tag.r-legendary{border-color:#cc5500;color:#ff8a33}
+/* слоты застройки — тихий индикатор в правом рейле, без пилюли */
+.gm-slots{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.3px;color:var(--t4);white-space:nowrap;flex-shrink:0}
+.gm-slots b{color:var(--t2);font-weight:700}
+.gm-slots i{font-style:normal;color:var(--w3);margin:0 4px}
+.gm-slots-none{color:var(--w3);font-style:italic}
+.gm-slots-k{color:var(--t4)}
+/* ресурсы — единый нейтральный чип; редкость = цвет текста + левая полоса */
+.gm-res{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+.gm-res-tag{font-size:10.5px;line-height:1;padding:3px 7px 3px 6px;border:1px solid var(--w1);border-left:2px solid currentColor;border-radius:4px;
+  display:inline-flex;gap:4px;align-items:center;background:hsl(216 22% 13% / .55)}
+.gm-res-tag .gm-res-ic{font-size:11px;opacity:.9;filter:saturate(.85)}
+.gm-res-tag .gm-res-nm{color:var(--t1)}
+.gm-res-tag i{font-style:normal;color:var(--t4);font-size:9px;letter-spacing:.2px}
+.gm-res-tag.r-common{color:#7f93ad}
+.gm-res-tag.r-uncommon{color:#5fc257}
+.gm-res-tag.r-rare{color:#39bfe8}
+.gm-res-tag.r-epic{color:#b66cf2}
+.gm-res-tag.r-legendary{color:#ffa033}
+/* название ресурса наследует обычный светлый цвет; редкостью «горит» только полоса
+   слева + количество, чтобы обычные не выглядели серыми, а легендарные выделялись */
+.gm-res-tag.r-rare .gm-res-nm,.gm-res-tag.r-epic .gm-res-nm,.gm-res-tag.r-legendary .gm-res-nm{color:currentColor;font-weight:600}
 
 /* ── Состав в форме редактирования ── */
 .gm-planets-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .gm-gen-btn{border-color:var(--gd)!important;color:var(--gdl)!important}
-.gm-fp-rich{display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:4px;background:hsl(216 18% 11% / .6);border:1px solid var(--w1);border-radius:8px}
+/* карточка планеты в форме: шапка + секция ресурсов */
+.gm-fp-card{padding:7px 8px;margin-bottom:6px;background:hsl(216 18% 11% / .6);border:1px solid var(--w1);border-radius:8px}
+.gm-fp-card .gm-planet-row{margin-bottom:0}
+.gm-fp-head{display:flex;align-items:center;gap:8px}
 .gm-fp-ico{font-size:16px;flex-shrink:0}
 .gm-fp-name{font-weight:600;color:#eaf3fb;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gm-fp-meta{flex:1;font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* секция ресурсов планеты в форме */
+.gm-fp-note{font-size:10.5px;line-height:1.45;color:var(--t3);background:hsl(206 30% 12% / .5);border:1px solid var(--w1);border-radius:7px;padding:7px 9px;margin:8px 0 6px}
+.gm-fp-note b{color:var(--gdl)}
+.gm-fp-res{margin-top:6px;padding-top:6px;border-top:1px dashed var(--w1)}
+.gm-fp-res-chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+.gm-fp-res-empty{font-size:10px;color:var(--t4);font-style:italic}
+.gm-fp-res-chip{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;line-height:1;padding:3px 4px 3px 6px;
+  border:1px solid var(--w1);border-left:2px solid currentColor;border-radius:4px;background:hsl(216 22% 13% / .55)}
+.gm-fp-res-chip i{font-style:normal;color:var(--t4);font-size:9px}
+.gm-fp-res-chip button{background:none;border:none;color:var(--t4);cursor:pointer;font-size:11px;line-height:1;padding:0 2px}
+.gm-fp-res-chip button:hover{color:var(--err)}
+.gm-fp-res-chip.r-common{color:#7f93ad}
+.gm-fp-res-chip.r-uncommon{color:#5fc257}
+.gm-fp-res-chip.r-rare{color:#39bfe8}
+.gm-fp-res-chip.r-epic{color:#b66cf2}
+.gm-fp-res-chip.r-legendary{color:#ffa033}
+.gm-fp-res-tools{display:flex;gap:6px}
+.gm-fp-res-picker{display:flex;gap:6px;align-items:center;margin-top:7px;flex-wrap:wrap}
+.gm-fp-res-picker select{flex:1;min-width:90px}
 
 /* ── Модалка генератора ── */
 #gm-gen{
@@ -231,6 +307,9 @@ textarea.gm-fi{resize:vertical}
   #gm-panel,#gm-form{width:calc(100% - 24px)}
   .gm-planet-row{grid-template-columns:1fr 1fr;}
   #gm-gen{width:calc(100% - 24px)}
+  /* кнопка поддержки (#tk-fab) висит в правом нижнем углу — поднимаем
+     контролы карты над ней, чтобы не перекрывались */
+  #gm-controls{bottom:66px}
 }
 
 /* ════════ РАЗЛОМ МАТЕРИИ (другая вселенная) ════════ */

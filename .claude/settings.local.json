@@ -50,7 +50,8 @@
       "Bash(node --check \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\economy.js\")",
       "Bash(node --check \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\faction_news.js\")",
       "Bash(node --check \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\constructors.js\")",
-      "Bash(node --check \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\render.js\")"
+      "Bash(node --check \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\render.js\")",
+      "Bash(node --check galaxy_gen.js)"
     ]
   }
 }

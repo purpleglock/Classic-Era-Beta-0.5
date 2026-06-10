@@ -1181,7 +1181,7 @@ alter table public.trade_routes add column if not exists threats    jsonb defaul
 
 -- цена ресурса по редкости
 create or replace function public._res_price(p_rarity text) returns numeric language sql immutable as $$
-  select case p_rarity when 'uncommon' then 5 when 'rare' then 12 when 'epic' then 30 when 'legendary' then 80 else 2 end::numeric
+  select case p_rarity when 'uncommon' then 10 when 'rare' then 50 when 'epic' then 200 when 'legendary' then 1200 else 2 end::numeric
 $$;
 
 -- ── Локальная продажа ресурса (страховочный сбыт, 80% цены) ──
@@ -1311,7 +1311,7 @@ begin
       if shipped <= 0 then continue; end if;
       res_sub := jsonb_set(res_sub, array[r.resource], to_jsonb(coalesce((res_sub->>r.resource)::numeric,0)+shipped), true);
       trade_gc := trade_gc + shipped * coalesce(r.price,0);
-      update public.faction_economy set gc = gc + round(shipped*coalesce(r.price,0)*0.33) where faction_id = r.b_fid;
+      update public.faction_economy set gc = gc + round(shipped*coalesce(r.price,0)*0.5) where faction_id = r.b_fid;
     end loop;
 
     merged := coalesce(eco.resources,'{}'::jsonb);
@@ -1589,7 +1589,7 @@ begin
         select value into relem from jsonb_array_elements(bld.cres) where value->>'name' = rname limit 1;
         if relem is null then continue; end if;
         rr := coalesce(relem->>'r','common');
-        rate := case rr when 'uncommon' then 12 when 'rare' then 5 when 'epic' then 2 when 'legendary' then 1 else 25 end;
+        rate := case rr when 'uncommon' then 12 when 'rare' then 6 when 'epic' then 3 when 'legendary' then 1 else 25 end;
         rate := greatest(1, round(rate * m_mine));   -- доктрина: множитель добычи
         res_add := jsonb_set(res_add, array[rname], to_jsonb(coalesce((res_add->>rname)::numeric,0) + rate*d), true);
       end loop;
@@ -1608,12 +1608,12 @@ begin
       if shipped <= 0 then continue; end if;
       res_sub := jsonb_set(res_sub, array[r.resource], to_jsonb(coalesce((res_sub->>r.resource)::numeric,0)+shipped), true);
       trade_gc := trade_gc + shipped * coalesce(r.price,0);
-      update public.faction_economy set gc = gc + round(shipped*coalesce(r.price,0)*0.33) where faction_id = r.b_fid;
+      update public.faction_economy set gc = gc + round(shipped*coalesce(r.price,0)*0.5) where faction_id = r.b_fid;
     end loop;
     trade_gc := round(trade_gc * m_gc);   -- доктрина: торговля — часть ГС-экономики
 
-    -- ── товарная биржа: пассивная продажа накопленных ресурсов за ГС (≈50% цены),
-    --    без торговых путей. 1 слот = до 25 ед./сут., дорогие ресурсы продаются первыми.
+    -- ── товарная биржа: пассивная продажа накопленных ресурсов за ГС (50–75% цены
+    --    по редкости), без торговых путей. 1 слот = до 25 ед./сут., дорогие первыми.
     market_cap := (select coalesce(sum(slots_open),0) from public.colony_buildings
                    where faction_id = p_fid and btype = 'market') * 25 * d;
     if market_cap > 0 then
@@ -1637,7 +1637,10 @@ begin
         sell := least(r.avail, market_cap);
         res_sub := jsonb_set(res_sub, array[r.res_name],
                      to_jsonb(coalesce((res_sub->>r.res_name)::numeric,0) + sell), true);
-        market_gc := market_gc + sell * public._res_price(r.res_rar) * 0.5;
+        -- штраф биржи шкалируется по редкости: ходовой ширпотреб теряет половину,
+        -- стратегические ресурсы держат цену лучше (стимул не сбрасывать их вслепую).
+        market_gc := market_gc + sell * public._res_price(r.res_rar) *
+          (case r.res_rar when 'legendary' then 0.75 when 'epic' then 0.70 when 'rare' then 0.65 when 'uncommon' then 0.55 else 0.5 end);
         market_cap := market_cap - sell;
       end loop;
       market_gc := round(market_gc * m_gc);   -- доктрина: рыночный сбыт — часть ГС-экономики

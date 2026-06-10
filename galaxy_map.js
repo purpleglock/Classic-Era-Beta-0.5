@@ -18,6 +18,8 @@ const GM = {
   panning: false, panStart: null,
   loaded: false,
   showBorders: true, fullscreen: false,
+  showRes: false,                // режим «ресурсы систем»
+  resRarities: ['rare', 'epic', 'legendary'], // какие редкости показывать на карте
   touch: null,                   // {mode:'pan'|'pinch', ...}
 };
 
@@ -89,6 +91,8 @@ async function renderGalaxyMap() {
       <div id="gm-coord">X: 0 | Y: 0</div>
       <div id="gm-controls">
         <button class="gm-ctl${GM.showBorders ? ' gm-active' : ''}" title="Границы" id="gm-ctl-borders" onclick="gmToggleBorders()">⬡</button>
+        <button class="gm-ctl${GM.showRes ? ' gm-active' : ''}" title="Ресурсы систем" id="gm-ctl-res" onclick="gmToggleRes()">💎</button>
+        ${gmResFilterHtml()}
         <button class="gm-ctl" title="Приблизить" onclick="gmZoomBtn(1)">＋</button>
         <button class="gm-ctl" title="Отдалить" onclick="gmZoomBtn(-1)">－</button>
         <button class="gm-ctl" title="Вся карта" onclick="gmFit()">⤢</button>
@@ -100,6 +104,7 @@ async function renderGalaxyMap() {
     </div>`;
 
   gmBindViewport();
+  document.getElementById('gm-wrap')?.classList.toggle('gm-show-res', GM.showRes);
   gmFit();
   gmDraw();
 }
@@ -291,6 +296,51 @@ function gmToggleBorders() {
   GM.showBorders = !GM.showBorders;
   document.getElementById('gm-svg')?.classList.toggle('gm-noborders', !GM.showBorders);
   document.getElementById('gm-ctl-borders')?.classList.toggle('gm-active', GM.showBorders);
+}
+// ── Режим «ресурсы систем» ──────────────────────────────────
+// Над каждой звездой — сводка ресурсов системы (уникальные по названию ресурсы
+// всех её планет). Что именно показывать — задают фильтры по редкости, чтобы
+// карта не превращалась в кашу из иконок.
+const GM_RARITY_ORDER = { legendary: 5, epic: 4, rare: 3, uncommon: 2, common: 1 };
+const GM_RARITIES = [   // порядок кнопок: от ценных к обычным
+  { r: 'legendary', short: 'Л', name: 'Легендарные' },
+  { r: 'epic', short: 'Э', name: 'Эпические' },
+  { r: 'rare', short: 'Ц', name: 'Ценные' },
+  { r: 'uncommon', short: 'Р', name: 'Редкие' },
+  { r: 'common', short: 'О', name: 'Обычные' },
+];
+function gmSysRes(sys) {
+  const map = new Map(); // name → {name, icon, r}  (храним самую высокую редкость)
+  (sys.planets || []).forEach(p => {
+    const list = p && Array.isArray(p.resources) ? p.resources : [];
+    list.forEach(r => {
+      if (!r || !r.name) return;
+      const cur = map.get(r.name);
+      if (!cur || (GM_RARITY_ORDER[r.r] || 0) > (GM_RARITY_ORDER[cur.r] || 0))
+        map.set(r.name, { name: r.name, icon: r.icon, r: r.r });
+    });
+  });
+  return [...map.values()].sort((a, b) => (GM_RARITY_ORDER[b.r] || 0) - (GM_RARITY_ORDER[a.r] || 0));
+}
+// Полоска фильтров редкости (видна только в режиме ресурсов)
+function gmResFilterHtml() {
+  const btns = GM_RARITIES.map(R => {
+    const on = GM.resRarities.includes(R.r);
+    return `<button class="gm-rf r-${R.r}${on ? ' gm-on' : ''}" data-r="${R.r}" title="${R.name}" onclick="gmSetResRarity('${R.r}')">${R.short}</button>`;
+  }).join('');
+  return `<div id="gm-res-filter" class="${GM.showRes ? '' : 'gm-hidden'}">${btns}</div>`;
+}
+function gmToggleRes() {
+  GM.showRes = !GM.showRes;
+  document.getElementById('gm-wrap')?.classList.toggle('gm-show-res', GM.showRes);
+  document.getElementById('gm-ctl-res')?.classList.toggle('gm-active', GM.showRes);
+  document.getElementById('gm-res-filter')?.classList.toggle('gm-hidden', !GM.showRes);
+}
+function gmSetResRarity(r) {
+  const i = GM.resRarities.indexOf(r);
+  if (i >= 0) GM.resRarities.splice(i, 1); else GM.resRarities.push(r);
+  document.querySelector(`#gm-res-filter .gm-rf[data-r="${r}"]`)?.classList.toggle('gm-on', GM.resRarities.includes(r));
+  gmDrawStars();   // пересобираем сводки над звёздами под новый фильтр
 }
 function gmZoomBtn(dir) {
   const vp = document.getElementById('gm-viewport');
@@ -582,10 +632,25 @@ function gmDrawStars() {
         onmousedown="gmStarDown(event,'${esc(s.id)}')" onclick="gmStarClick(event,'${esc(s.id)}')">
         <img src="${GM_BASE}stars/star_${esc(s.star_type || 'yellow')}.png" draggable="false" alt="">
         ${capHtml}
+        ${gmResOverlay(s)}
         <span class="gm-label">${esc(s.name)}</span>
       </div>`;
   }).join('');
 }
+
+// Сводка ресурсов над звездой (видна только в режиме «ресурсы»). Рисуется всегда,
+// показывается через CSS-класс #gm-wrap.gm-show-res — чтобы переключение было мгновенным.
+function gmResOverlay(s) {
+  // показываем только включённые в фильтре редкости — иначе на карте каша
+  const list = gmSysRes(s).filter(r => GM.resRarities.includes(r.r || 'common'));
+  if (!list.length) return '';
+  const MAX = 6;
+  const pins = list.slice(0, MAX).map(r =>
+    `<span class="gm-res-pin r-${r.r || 'common'}" title="${esc(r.name)} · ${esc(gmRarName(r.r))}">${r.icon || '◆'}</span>`).join('');
+  const more = list.length > MAX ? `<span class="gm-res-pin gm-res-more">+${list.length - MAX}</span>` : '';
+  return `<div class="gm-res-overlay">${pins}${more}</div>`;
+}
+function gmRarName(r) { return (GM_RARITIES.find(x => x.r === r) || {}).name || 'обычные'; }
 
 // ── Взаимодействие со звёздами ──────────────────────────────
 function gmStarDown(e, id) {
@@ -731,12 +796,20 @@ async function gmAddStar(x, y) {
 // ── Рендер тела состава (просмотр) ──────────────────────────
 function gmResChips(res) {
   if (!res || !res.length) return '';
+  // Редкость кодируется ОДНИМ способом: цвет текста + тонкая левая полоса того же
+  // цвета. Рамка-«коробка» у всех одна нейтральная — без радуги цветных рамок.
   return `<div class="gm-res">` + res.map(r =>
-    `<span class="gm-res-tag r-${r.r || 'common'}">${r.icon || ''} ${esc(r.name)}<i>${esc(r.amt || '')}</i></span>`).join('') + `</div>`;
+    `<span class="gm-res-tag r-${r.r || 'common'}">${r.icon ? `<span class="gm-res-ic">${r.icon}</span>` : ''}<span class="gm-res-nm">${esc(r.name)}</span>${r.amt ? `<i>${esc(r.amt)}</i>` : ''}</span>`).join('') + `</div>`;
 }
 function gmSlotsBadge(p) {
   if (p.slotsP === undefined && p.slotsK === undefined) return '';
-  return `<span class="gm-slots"><b>${p.slotsP || 0}</b>&nbsp;П&nbsp;+&nbsp;<b>${p.slotsK || 0}</b>&nbsp;К</span>`;
+  // Тихий индикатор в правом рейле: показываем только ненулевые слоты (без «0 П»),
+  // расшифровка — в подсказке. П — планетные, К — космические слоты застройки.
+  const parts = [];
+  if (p.slotsP) parts.push(`<b>${p.slotsP}</b> П`);
+  if (p.slotsK) parts.push(`<b>${p.slotsK}</b> К`);
+  if (!parts.length) return '<span class="gm-slots gm-slots-none" title="Нет слотов застройки">без слотов</span>';
+  return `<span class="gm-slots" title="Слоты застройки: П — планетные, К — космические">${parts.join('<i>·</i>')}</span>`;
 }
 function gmZoneColor(z) {
   return { 'Пекло': '#ff4422', 'Внутр.': '#ff8800', 'Обитаемая': '#7fdd55', 'Холод': '#33bce8', 'Пустота': '#8e8eff' }[z] || '#8aa0bd';
@@ -755,8 +828,8 @@ function gmPlanetView(p, i) {
       <div class="gm-orb-idx">${idx}</div>
       <div class="gm-orb-dot${kindCls}" style="--zc:${zc}"></div>
       <div class="gm-orb-main">
-        <div class="gm-orb-top"><span class="gm-orb-name">${esc(p.name)}</span>${dist}${gmSlotsBadge(p)}</div>
-        <div class="gm-orb-sub">${esc(p.type || '')}${p.zone ? ` · <span style="color:${zc}">${esc(p.zone)} зона</span>` : ''}${satStr}</div>
+        <div class="gm-orb-top"><span class="gm-orb-name">${esc(p.name)}</span>${dist}</div>
+        <div class="gm-orb-meta"><span class="gm-orb-sub">${esc(p.type || '')}${p.zone ? ` · <span class="gm-orb-zone" style="color:${zc}">${esc(p.zone)}</span>` : ''}${satStr}</span>${gmSlotsBadge(p)}</div>
         ${gmResChips(p.resources)}
       </div>
     </div>`;
@@ -768,6 +841,7 @@ function gmPlanetView(p, i) {
     <div class="gm-orb-main">
       <div class="gm-orb-top"><span class="gm-orb-name">${esc(p.name || '—')}</span></div>
       <div class="gm-orb-sub">${esc(p.type || 'Неизвестно')} · Контроль: ${esc(p.owner || 'ничейная')}</div>
+      ${gmResChips(p.resources)}
     </div>
   </div>`;
 }
@@ -801,6 +875,7 @@ function gmOpenForm(sys) {
         <button class="gm-mini-btn" onclick="gmAddPlanetManual()">＋ вручную</button>
       </span>
     </div>
+    <div class="gm-fp-note">ℹ Ресурсы влияют на отображение и на <b>будущие</b> колонизации (снимок берётся по pid при заселении). Уже колонизированные планеты сохраняют свой набор — задним числом он не меняется.</div>
     <div id="gmf-planets"></div>
     <div class="gm-form-actions">
       <button class="gm-tb-btn gm-danger" onclick="gmDeleteStar('${esc(sys.id)}')">Удалить систему</button>
@@ -814,25 +889,80 @@ function gmRenderFormPlanets() {
   if (!box) return;
   if (!GM.formPlanets.length) { box.innerHTML = `<div class="gm-empty" style="padding:6px 0">Состав пуст. Сгенерируй 🎲 или добавь вручную.</div>`; return; }
   box.innerHTML = GM.formPlanets.map((p, i) => {
+    let head;
     if (p && p.kind) {
       const kc = p.kind === 'belt' ? ' gm-dot-belt' : p.kind === 'anomaly' ? ' gm-dot-anom' : '';
-      return `<div class="gm-fp-rich">
+      head = `<div class="gm-fp-head">
         <span class="gm-orb-dot${kc}" style="--zc:${gmZoneColor(p.zone)}"></span>
         <span class="gm-fp-name">${esc(p.name)}</span>
         <span class="gm-fp-meta">${p.dist != null ? p.dist + ' а.е. · ' : ''}${esc(p.type || '')} · ${p.slotsP || 0}П+${p.slotsK || 0}К</span>
         <button class="gm-mini-btn gm-danger" onclick="gmRemovePlanet(${i})">✕</button>
       </div>`;
+    } else {
+      head = `<div class="gm-planet-row">
+        <input class="gm-fi gm-fi-sm" placeholder="Имя" value="${esc(p.name || '')}" oninput="GM.formPlanets[${i}].name=this.value">
+        <input class="gm-fi gm-fi-sm" placeholder="Тип" value="${esc(p.type || '')}" oninput="GM.formPlanets[${i}].type=this.value">
+        <input class="gm-fi gm-fi-sm" placeholder="Контроль" value="${esc(p.owner || '')}" oninput="GM.formPlanets[${i}].owner=this.value">
+        <input class="gm-fi gm-fi-sm" placeholder="img" value="${esc(p.img || '')}" oninput="GM.formPlanets[${i}].img=this.value">
+        <button class="gm-mini-btn gm-danger" onclick="gmRemovePlanet(${i})">✕</button>
+      </div>`;
     }
-    return `<div class="gm-planet-row">
-      <input class="gm-fi gm-fi-sm" placeholder="Имя" value="${esc(p.name || '')}" oninput="GM.formPlanets[${i}].name=this.value">
-      <input class="gm-fi gm-fi-sm" placeholder="Тип" value="${esc(p.type || '')}" oninput="GM.formPlanets[${i}].type=this.value">
-      <input class="gm-fi gm-fi-sm" placeholder="Контроль" value="${esc(p.owner || '')}" oninput="GM.formPlanets[${i}].owner=this.value">
-      <input class="gm-fi gm-fi-sm" placeholder="img" value="${esc(p.img || '')}" oninput="GM.formPlanets[${i}].img=this.value">
-      <button class="gm-mini-btn gm-danger" onclick="gmRemovePlanet(${i})">✕</button>
-    </div>`;
+    return `<div class="gm-fp-card">${head}${gmResEditSection(p, i)}</div>`;
   }).join('');
 }
-function gmAddPlanetManual() { GM.formPlanets.push({ name: '', type: '', owner: '', img: '' }); gmRenderFormPlanets(); }
+// Секция правки ресурсов одной планеты: чипы (с удалением) + ролл + ручное добавление.
+// Формат записи — как у генератора: {name, icon, r, rname, amt}. Для экономики
+// обязательны name+r (по r считается добыча); icon/amt — только отображение.
+function gmResEditSection(p, i) {
+  const res = Array.isArray(p.resources) ? p.resources : [];
+  const chips = res.length
+    ? res.map((r, j) => `<span class="gm-fp-res-chip r-${r.r || 'common'}">${r.icon ? r.icon + ' ' : ''}${esc(r.name)}${r.amt ? ` <i>${esc(r.amt)}</i>` : ''}<button title="Убрать" onclick="gmPlanetRemoveRes(${i},${j})">✕</button></span>`).join('')
+    : `<span class="gm-fp-res-empty">ресурсов нет</span>`;
+  return `<div class="gm-fp-res">
+      <div class="gm-fp-res-chips">${chips}</div>
+      <div class="gm-fp-res-tools">
+        <button class="gm-mini-btn" onclick="gmPlanetRollRes(${i})" title="Случайный набор по типу планеты">🎲 ресурсы</button>
+        <button class="gm-mini-btn" onclick="gmPlanetAddResToggle(${i})">＋ ресурс</button>
+      </div>
+      <div class="gm-fp-res-picker gm-hidden" id="gm-respick-${i}">${gmResPickerHtml(i)}</div>
+    </div>`;
+}
+function gmResPickerHtml(i) {
+  const cat = (window.GalaxyGen && GalaxyGen.RESOURCES) || [];
+  if (!cat.length) return '<span class="gm-fp-res-empty">каталог не загружен</span>';
+  const opts = cat.map((R, ci) => `<option value="${ci}">${R.icon ? R.icon + ' ' : ''}${esc(R.name)} · ${esc(R.rname || R.r)}</option>`).join('');
+  const amts = ((window.GalaxyGen && GalaxyGen.AMT_LEVELS) || ['умеренно']).map(a => `<option value="${esc(a)}"${a === 'умеренно' ? ' selected' : ''}>${esc(a)}</option>`).join('');
+  return `<select class="gm-fi gm-fi-sm" id="gm-respick-res-${i}">${opts}</select>
+    <select class="gm-fi gm-fi-sm" id="gm-respick-amt-${i}">${amts}</select>
+    <button class="gm-mini-btn gm-active" onclick="gmPlanetAddRes(${i})">Добавить</button>`;
+}
+function gmPlanetRollRes(i) {
+  if (!window.GalaxyGen || !GalaxyGen.rollResources) { toast('Генератор не загружен', 'err'); return; }
+  const p = GM.formPlanets[i]; if (!p) return;
+  const starCls = document.getElementById('gmg-cls')?.value || null;  // если открыт генератор — учтём класс
+  p.resources = GalaxyGen.rollResources(p.g, starCls, 5);
+  gmRenderFormPlanets();
+  toast(p.resources.length ? `Выпало ресурсов: ${p.resources.length}` : 'Пусто — крути ещё или добавь вручную', 'ok');
+}
+function gmPlanetAddResToggle(i) { document.getElementById('gm-respick-' + i)?.classList.toggle('gm-hidden'); }
+function gmPlanetAddRes(i) {
+  const cat = (window.GalaxyGen && GalaxyGen.RESOURCES) || [];
+  const ci = +document.getElementById('gm-respick-res-' + i)?.value;
+  const amt = document.getElementById('gm-respick-amt-' + i)?.value || 'умеренно';
+  const R = cat[ci]; if (!R) return;
+  const p = GM.formPlanets[i]; if (!p) return;
+  if (!Array.isArray(p.resources)) p.resources = [];
+  // один и тот же ресурс на планете не дублируем — обновляем количество
+  const ex = p.resources.find(x => x.name === R.name);
+  if (ex) ex.amt = amt;
+  else p.resources.push({ name: R.name, icon: R.icon, r: R.r, rname: R.rname || R.r, amt });
+  gmRenderFormPlanets();
+}
+function gmPlanetRemoveRes(i, j) {
+  const p = GM.formPlanets[i];
+  if (p && Array.isArray(p.resources)) { p.resources.splice(j, 1); gmRenderFormPlanets(); }
+}
+function gmAddPlanetManual() { GM.formPlanets.push({ name: '', type: '', owner: '', img: '', resources: [] }); gmRenderFormPlanets(); }
 function gmRemovePlanet(i) { GM.formPlanets.splice(i, 1); gmRenderFormPlanets(); }
 function gmCloseForm() { document.getElementById('gm-form')?.classList.add('gm-hidden'); gmCloseGen(); }
 

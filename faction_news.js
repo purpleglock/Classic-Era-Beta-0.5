@@ -38,11 +38,39 @@ async function fnGetMyFaction(force) {
   return FN.myFac;
 }
 
+// Снять редакторскую разметку (BBCode-теги/FX/markdown), чтобы в текстовом превью
+// карточки не светились коды вроде [fx:schizo], [img:URL], **жирный**, ## и т.п.
+function fnStripMarkup(s) {
+  let t = String(s || '');
+  t = t.replace(/\r/g, '');
+  // схизо-блок целиком — это скрытый рунический текст, в превью ему не место
+  t = t.replace(/\[fx:schizo\][\s\S]*?\[\/fx\]/gi, ' ');
+  // картинки: [img:URL] и голые URL изображений
+  t = t.replace(/\[img:[^\]]*\]/gi, ' ');
+  t = t.replace(/https?:\/\/\S+\.(?:jpe?g|png|gif|webp|avif|svg)(?:\?\S*)?/gi, ' ');
+  t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');
+  // парные форматные/FX-теги: [center]…[/center], [c:gold]…[/c], [bg:…]…[/bg], [fx:…]…[/fx], [left]/[right]
+  t = t.replace(/\[\/?(?:center|left|right|c|bg|fx)(?::[^\]]*)?\]/gi, ' ');
+  // markdown-ссылки [text](url) → text
+  t = t.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+  // заголовки, цитаты, маркеры списков в начале строки
+  t = t.replace(/^[ \t]*#{1,6}[ \t]+/gm, '');
+  t = t.replace(/^[ \t]*>[ \t]?/gm, '');
+  t = t.replace(/^[ \t]*[-*+][ \t]+/gm, '');
+  // горизонтальные разделители (---, ***, ___)
+  t = t.replace(/^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$/gm, ' ');
+  // выделения: **жирный** / __…__, *курсив* / _…_, `код`
+  t = t.replace(/(\*\*|__)([\s\S]*?)\1/g, '$2');
+  t = t.replace(/(\*|_)([\s\S]*?)\1/g, '$2');
+  t = t.replace(/`([^`]*)`/g, '$1');
+  return t.replace(/\s+/g, ' ').trim();
+}
+
 // Краткое превью из текста, если лид не задан.
 function fnExcerpt(n) {
   const e = (n.excerpt || '').trim();
   if (e) return e;
-  const body = (n.body || '').replace(/\s+/g, ' ').trim();
+  const body = fnStripMarkup(n.body || '');
   return body.length > 220 ? body.slice(0, 220).replace(/\s+\S*$/, '') + '…' : body;
 }
 

@@ -338,14 +338,14 @@ function renderGuidebook() {
       </ul>
 
       <h3 class="gb-h3">Планетарные ресурсы</h3>
-      <p>На части планет есть месторождения — их добывают Добывающие заводы. Чем реже ресурс, тем дороже он стоит, но тем медленнее добывается:</p>
+      <p>На части планет есть месторождения — их добывают Добывающие заводы. Чем реже ресурс, тем дороже он стоит, но тем медленнее добывается. Редкие месторождения дают в разы больше ГС за слот, чем обычные — за них стоит бороться и возить их караванами:</p>
       <div class="gb-tbl">
-        <div class="gb-tr gb-th"><span>Редкость</span><span>Цена за единицу</span><span>Добыча в сутки (за слот)</span></div>
-        <div class="gb-tr"><span><span class="gb-rar gb-rar-1">Обычный</span></span><span>2 ГС</span><span>25</span></div>
-        <div class="gb-tr"><span><span class="gb-rar gb-rar-2">Необычный</span></span><span>5 ГС</span><span>12</span></div>
-        <div class="gb-tr"><span><span class="gb-rar gb-rar-3">Редкий</span></span><span>12 ГС</span><span>5</span></div>
-        <div class="gb-tr"><span><span class="gb-rar gb-rar-4">Эпический</span></span><span>30 ГС</span><span>2</span></div>
-        <div class="gb-tr"><span><span class="gb-rar gb-rar-5">Легендарный</span></span><span>80 ГС</span><span>1</span></div>
+        <div class="gb-tr gb-th"><span>Редкость</span><span>Цена за единицу</span><span>Добыча в сутки (за слот)</span><span>ГС за слот/сутки</span></div>
+        <div class="gb-tr"><span><span class="gb-rar gb-rar-1">Обычный</span></span><span>2 ГС</span><span>25</span><span>50</span></div>
+        <div class="gb-tr"><span><span class="gb-rar gb-rar-2">Необычный</span></span><span>10 ГС</span><span>12</span><span>120</span></div>
+        <div class="gb-tr"><span><span class="gb-rar gb-rar-3">Редкий</span></span><span>50 ГС</span><span>6</span><span>300</span></div>
+        <div class="gb-tr"><span><span class="gb-rar gb-rar-4">Эпический</span></span><span>200 ГС</span><span>3</span><span>600</span></div>
+        <div class="gb-tr"><span><span class="gb-rar gb-rar-5">Легендарный</span></span><span>1200 ГС</span><span>1</span><span>1200</span></div>
       </div>
     </section>
 
@@ -424,29 +424,29 @@ function renderGuidebook() {
       <ul class="gb-ul">
         <li>Постройте <b>Добывающий завод</b> на колонии, у планеты которой есть ресурсы.</li>
         <li>Откройте слоты и <b>назначьте месторождения</b> степпером «− N +». Можно посадить <b>несколько слотов на один ресурс</b> — его добыча суммируется (2 слота = ×2 скорость).</li>
-        <li>Помимо ресурсов завод даёт небольшой доход <b>+50 ГС/сут за слот</b>. Без назначенных месторождений идёт только этот ГС-доход.</li>
+        <li>Завод добычи <b>не даёт ГС напрямую</b> — только ресурсы. Без назначенных месторождений он простаивает; ценность даёт именно состав планеты.</li>
         <li>Скорость добычи зависит от редкости ресурса; бонус доктрины «добыча» умножает выработку.</li>
       </ul>
 
       <h3 class="gb-h3">Редкость, цена и скорость добычи</h3>
       <div class="gb-table-wrap"><table class="gb-table">
-        <thead><tr><th>Редкость</th><th>Цена за единицу</th><th>Добыча в сутки (за слот)</th></tr></thead>
+        <thead><tr><th>Редкость</th><th>Цена за единицу</th><th>Добыча в сутки (за слот)</th><th>ГС за слот/сутки</th></tr></thead>
         <tbody>
-          <tr><td><span class="gb-rar gb-rar-1">Обычный</span></td><td>2 ГС</td><td>25</td></tr>
-          <tr><td><span class="gb-rar gb-rar-2">Необычный</span></td><td>5 ГС</td><td>12</td></tr>
-          <tr><td><span class="gb-rar gb-rar-3">Редкий</span></td><td>12 ГС</td><td>5</td></tr>
-          <tr><td><span class="gb-rar gb-rar-4">Эпический</span></td><td>30 ГС</td><td>2</td></tr>
-          <tr><td><span class="gb-rar gb-rar-5">Легендарный</span></td><td>80 ГС</td><td>1</td></tr>
+          <tr><td><span class="gb-rar gb-rar-1">Обычный</span></td><td>2 ГС</td><td>25</td><td>50</td></tr>
+          <tr><td><span class="gb-rar gb-rar-2">Необычный</span></td><td>10 ГС</td><td>12</td><td>120</td></tr>
+          <tr><td><span class="gb-rar gb-rar-3">Редкий</span></td><td>50 ГС</td><td>6</td><td>300</td></tr>
+          <tr><td><span class="gb-rar gb-rar-4">Эпический</span></td><td>200 ГС</td><td>3</td><td>600</td></tr>
+          <tr><td><span class="gb-rar gb-rar-5">Легендарный</span></td><td>1200 ГС</td><td>1</td><td>1200</td></tr>
         </tbody>
       </table></div>
-      <p>Редкие ресурсы дороже, но добываются медленнее — баланс между объёмом и ценностью.</p>
+      <p>Чем реже ресурс, тем дороже единица — и тем больше ГС приносит слот добычи. Легендарное месторождение даёт ~24× обычного: за такие планеты борются, а излишки выгодно гнать караванами союзникам.</p>
 
       <h3 class="gb-h3">Как превратить ресурсы в ГС</h3>
       <p>Накопленные ресурсы сами по себе доход не приносят — их нужно продать. Есть три способа:</p>
       <div class="gb-kv-grid">
         <div class="gb-kv-row"><span class="gb-kv-key">Местный рынок</span><span class="gb-kv-val">Вкладка «Дипломатия» → продать вручную за <b>80%</b> базовой цены. Мгновенно, без партнёров.</span></div>
-        <div class="gb-kv-row"><span class="gb-kv-key">Товарная биржа</span><span class="gb-kv-val">Здание: <b>само</b> продаёт накопленное за ~<b>50%</b> цены каждый день. Удобно, но дешевле.</span></div>
-        <div class="gb-kv-row"><span class="gb-kv-key">Торговый караван</span><span class="gb-kv-val">Торговый путь с другой фракцией — <b>полная</b> цена, но нужен партнёр и есть риск пиратов (см. «Торговля»).</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">Товарная биржа</span><span class="gb-kv-val">Здание: <b>само</b> продаёт накопленное каждый день. Цена зависит от редкости: ширпотреб — <b>50%</b>, легендарка — до <b>75%</b>. Удобно, но дешевле каравана.</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">Торговый караван</span><span class="gb-kv-val">Торговый путь с другой фракцией — отправитель получает <b>полную</b> цену, партнёр-получатель — ещё <b>50%</b> сверху. Нужен партнёр и есть риск пиратов (см. «Торговля»).</span></div>
       </div>
       <div class="gb-callout gb-callout-tip">
         <span class="gb-callout-icon">★</span>
@@ -461,9 +461,9 @@ function renderGuidebook() {
 
       <div class="gb-bld-grid">
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⚙</span><b>Гражданская фабрика</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">Основной источник ГС: +200 ГС/сут за каждый открытый слот.</div></div>
-        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⛏</span><b>Добывающий завод</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">+50 ГС/сут за слот и добыча ресурсов планеты. Несколько слотов можно назначить на один ресурс — добыча суммируется.</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⛏</span><b>Добывающий завод</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">Добыча ресурсов планеты (сам ГС не даёт). Несколько слотов можно назначить на один ресурс — добыча суммируется. Ценность зависит от редкости месторождения.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⇄</span><b>Торговый хаб</b></div><div class="gb-bld-cost">1 000 ГС · 1 слот</div><div class="gb-bld-d">Доход в ГС, но только при активных торговых путях.</div></div>
-        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">◆</span><b>Товарная биржа</b></div><div class="gb-bld-cost">1 500 ГС · 1 слот</div><div class="gb-bld-d">Сама продаёт накопленные ресурсы за ГС (~50% цены), без торговых путей.</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">◆</span><b>Товарная биржа</b></div><div class="gb-bld-cost">1 500 ГС · 1 слот</div><div class="gb-bld-d">Сама продаёт накопленные ресурсы за ГС (50–75% цены по редкости), без торговых путей.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">✦</span><b>Научный институт</b></div><div class="gb-bld-cost">1 000 ГС · 1 слот</div><div class="gb-bld-d">Прирост очков науки за каждый слот.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⚔</span><b>Центр подготовки</b></div><div class="gb-bld-cost">500 ГС · 1 слот</div><div class="gb-bld-d">Позволяет производить пехоту.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">◐</span><b>Центр спецслужб</b></div><div class="gb-bld-cost">3 000 ГС · 1 слот</div><div class="gb-bld-d">Прирост агентов разведки.</div></div>

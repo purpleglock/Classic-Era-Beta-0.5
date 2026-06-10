@@ -59,9 +59,9 @@ function ecSpyCalc(op, agents, targetFid) {
   return { success, detect, turns, intel, dossier: dos, ci: CI, err, agents: A };
 }
 // Ресурсы планет: цена продажи и добыча/слот по редкости
-const EC_RES_PRICE = { common: 2, uncommon: 5, rare: 12, epic: 30, legendary: 80 };
-const EC_RES_RATE = { common: 25, uncommon: 12, rare: 5, epic: 2, legendary: 1 };
-const EC_DEST_CUT = 0.33;
+const EC_RES_PRICE = { common: 2, uncommon: 10, rare: 50, epic: 200, legendary: 1200 };
+const EC_RES_RATE = { common: 25, uncommon: 12, rare: 6, epic: 3, legendary: 1 };
+const EC_DEST_CUT = 0.5;
 // Шанс нападения на КАЖДУЮ угрозу на пути (зеркало economy_accrue): с конвоем меньше.
 const EC_THREAT_CHANCE = { ancient: { escort: 0.65, bare: 0.80 }, pirates: { escort: 0.40, bare: 0.80 } };
 // Итоговый риск потери каравана за ход (%) с учётом конвоя: 1 - произведение «прошёл мимо каждой угрозы».
@@ -84,7 +84,7 @@ const EC_BUILD = {
   factory:          { name: 'Гражданская фабрика', cost: 500,  ladder: [0, 0, 500, 1500, 1500, 3000], free: 2, inc: { gc: 200 }, cat: 'civ', desc: '+200 ГС за слот' },
   mining:           { name: 'Добывающий завод',    cost: 500,  ladder: [0, 0, 500, 1500, 1500, 3000], free: 2, inc: {}, cat: 'civ', desc: 'Добыча ресурсов: слоты → месторождения планеты' },
   trade:            { name: 'Торговый хаб',         cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 100 }, cat: 'civ', desc: '+100 ГС за слот (торговый путь)' },
-  market:           { name: 'Товарная биржа',       cost: 1500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Продаёт добытые ресурсы за ГС (≈50% цены), без торговых путей' },
+  market:           { name: 'Товарная биржа',       cost: 1500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Продаёт добытые ресурсы за ГС (50–75% цены по редкости), без торговых путей' },
   science:          { name: 'Научный Институт',     cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { science: 1 }, cat: 'mil', desc: '+1 ОН за слот' },
   training:         { name: 'Центр Подготовки',     cost: 500,  ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1000 пехоты' },
   intel:            { name: 'Центр Спецслужб',      cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 агент' },
@@ -97,7 +97,7 @@ const EC_BLD_HOWTO = {
   factory:          'Пассивный доход ГС. Открывайте слоты — каждый добавляет +200 ГС/сут.',
   mining:           'Назначьте слоты на месторождения ниже. Несколько слотов на один ресурс = больше добычи.',
   trade:            'Доход только при активном торговом пути (вкладка «Торговля»).',
-  market:           'Сама продаёт накопленные ресурсы за ГС (≈50% цены), без торговых путей.',
+  market:           'Сама продаёт накопленные ресурсы за ГС (50–75% цены по редкости), без торговых путей.',
   science:          'Даёт очки науки (ОН) для исследований.',
   training:         'Даёт мощность для производства пехоты (заказ — во вкладке «Строительство вооружённых сил»).',
   intel:            'Даёт агентов для разведки (вкладка «Разведка»).',
@@ -938,7 +938,7 @@ function ecTabOverview() {
   }).join('');
   const marketRow = marketSlots ? `<button type="button" class="ec-bdg-row ec-bdg-var" onclick="ecSetTab('trade')">
       <span class="ec-bdg-ic">📈</span>
-      <span class="ec-bdg-info"><span class="ec-bdg-name">Товарная биржа</span><span class="ec-bdg-sub">${ecNum(marketSlots)} слот. · продаёт ресурсы (~50% цены)</span></span>
+      <span class="ec-bdg-info"><span class="ec-bdg-name">Товарная биржа</span><span class="ec-bdg-sub">${ecNum(marketSlots)} слот. · продаёт ресурсы (50–75% по редкости)</span></span>
       <span class="ec-bdg-bar ec-bdg-bar-var"></span>
       <span class="ec-bdg-val pos">+ перем.</span>
     </button>` : '';

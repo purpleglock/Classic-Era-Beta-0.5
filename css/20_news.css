@@ -57,7 +57,9 @@
 }
 /* В ленте карточка — горизонтальная строка: миниатюра слева, текст справа.
    Картинка резиновая (доля от ширины блока), тексту всегда хватает места. */
-.fn-feed-news .fn-card { flex-direction: row; min-height: 96px; align-items: stretch; }
+/* flex-shrink:0 — иначе flex-колонка с max-height ужимает карточки до min-height
+   и overflow:hidden срезает текст (на мобиле карточки высокие → виден только кавер). */
+.fn-feed-news .fn-card { flex-direction: row; min-height: 96px; align-items: stretch; flex-shrink: 0; }
 .fn-feed-news .fn-card-cov { 
   width: 34%; max-width: 220px; min-width: 0; 
   height: auto !important; min-height: 96px; flex-shrink: 0; 
