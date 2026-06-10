@@ -646,11 +646,18 @@ function gmResOverlay(s) {
   if (!list.length) return '';
   const MAX = 6;
   const pins = list.slice(0, MAX).map(r =>
-    `<span class="gm-res-pin r-${r.r || 'common'}" title="${esc(r.name)} · ${esc(gmRarName(r.r))}">${r.icon || '◆'}</span>`).join('');
+    `<span class="gm-res-pin r-${r.r || 'common'}" title="${esc(r.name)} · ${esc(gmRarName(r.r))}">${gmResIc(r)}</span>`).join('');
   const more = list.length > MAX ? `<span class="gm-res-pin gm-res-more">+${list.length - MAX}</span>` : '';
   return `<div class="gm-res-overlay">${pins}${more}</div>`;
 }
 function gmRarName(r) { return (GM_RARITIES.find(x => x.r === r) || {}).name || 'обычные'; }
+// Иконка ресурса: картинка из каталога (resIconHtml), а для нестандартных
+// ресурсов (нет в каталоге) — сохранённая в данных эмодзи.
+function gmResIc(r) {
+  if (typeof resIconHtml === 'function' && typeof resIconSrc === 'function' && resIconSrc(r.name))
+    return resIconHtml(r.name);
+  return `<span class="res-ic res-ic-emoji">${r.icon || '◆'}</span>`;
+}
 
 // ── Взаимодействие со звёздами ──────────────────────────────
 function gmStarDown(e, id) {
@@ -799,7 +806,7 @@ function gmResChips(res) {
   // Редкость кодируется ОДНИМ способом: цвет текста + тонкая левая полоса того же
   // цвета. Рамка-«коробка» у всех одна нейтральная — без радуги цветных рамок.
   return `<div class="gm-res">` + res.map(r =>
-    `<span class="gm-res-tag r-${r.r || 'common'}">${r.icon ? `<span class="gm-res-ic">${r.icon}</span>` : ''}<span class="gm-res-nm">${esc(r.name)}</span>${r.amt ? `<i>${esc(r.amt)}</i>` : ''}</span>`).join('') + `</div>`;
+    `<span class="gm-res-tag r-${r.r || 'common'}"><span class="gm-res-ic">${gmResIc(r)}</span><span class="gm-res-nm">${esc(r.name)}</span>${r.amt ? `<i>${esc(r.amt)}</i>` : ''}</span>`).join('') + `</div>`;
 }
 function gmSlotsBadge(p) {
   if (p.slotsP === undefined && p.slotsK === undefined) return '';
@@ -916,7 +923,7 @@ function gmRenderFormPlanets() {
 function gmResEditSection(p, i) {
   const res = Array.isArray(p.resources) ? p.resources : [];
   const chips = res.length
-    ? res.map((r, j) => `<span class="gm-fp-res-chip r-${r.r || 'common'}">${r.icon ? r.icon + ' ' : ''}${esc(r.name)}${r.amt ? ` <i>${esc(r.amt)}</i>` : ''}<button title="Убрать" onclick="gmPlanetRemoveRes(${i},${j})">✕</button></span>`).join('')
+    ? res.map((r, j) => `<span class="gm-fp-res-chip r-${r.r || 'common'}">${gmResIc(r)} ${esc(r.name)}${r.amt ? ` <i>${esc(r.amt)}</i>` : ''}<button title="Убрать" onclick="gmPlanetRemoveRes(${i},${j})">✕</button></span>`).join('')
     : `<span class="gm-fp-res-empty">ресурсов нет</span>`;
   return `<div class="gm-fp-res">
       <div class="gm-fp-res-chips">${chips}</div>

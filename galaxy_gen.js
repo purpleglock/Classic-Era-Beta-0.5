@@ -288,13 +288,40 @@
     return out;
   }
   // Слим-каталог для ручного выбора в редакторе (без внутренних весов/групп).
-  const RES_CATALOG = RESOURCES.map(R => ({ name: R.name, icon: R.icon, r: R.r, rname: rname(R.r) }));
+  const RES_CATALOG = RESOURCES.map(R => ({ id: R.id, name: R.name, icon: R.icon, r: R.r, rname: rname(R.r) }));
   // Уровни количества (для ручного выбора) — те же, что выдаёт amtDesc.
   const AMT_LEVELS = ['следы', 'мало', 'умеренно', 'много', 'очень много', 'колоссально'];
 
+  // ── Иконки ресурсов (картинки вместо эмодзи) ──────────────────────────────
+  // Файлы лежат в RES_ICON_DIR, имя = id ресурса в нижнем регистре + RES_ICON_EXT
+  // (например IRON → assets/icons/res/iron.png). Чтобы перейти на svg/webp —
+  // поменяй только RES_ICON_EXT. Эмодзи остаётся как фолбэк (alt), если файла нет.
+  const RES_ICON_DIR = 'assets/icons/res/';
+  const RES_ICON_EXT = '.png';
+  const RES_ID_BY_NAME = {}, RES_EMOJI_BY_NAME = {};
+  RESOURCES.forEach(R => { RES_ID_BY_NAME[R.name] = R.id; RES_EMOJI_BY_NAME[R.name] = R.icon; });
+
+  // src иконки по имени ресурса (или null, если ресурса нет в каталоге)
+  function resIconSrc(name) {
+    const id = RES_ID_BY_NAME[name];
+    return id ? RES_ICON_DIR + id.toLowerCase() + RES_ICON_EXT : null;
+  }
+  // Готовый HTML иконки. cls — доп. класс под размер в конкретном месте.
+  // Если файла нет — браузер покажет alt (эмодзи), без JS и битых картинок.
+  function resIconHtml(name, cls) {
+    const c = 'res-ic' + (cls ? ' ' + cls : '');
+    const src = resIconSrc(name);
+    const emoji = RES_EMOJI_BY_NAME[name] || '◈';
+    if (!src) return `<span class="${c} res-ic-emoji">${emoji}</span>`;
+    const safe = String(name).replace(/"/g, '&quot;');
+    return `<img class="${c}" src="${src}" alt="${emoji}" title="${safe}" loading="lazy" decoding="async">`;
+  }
+  window.resIconSrc = resIconSrc;
+  window.resIconHtml = resIconHtml;
+
   window.GalaxyGen = {
     generate, getSlots, rollResources,
-    RESOURCES: RES_CATALOG, AMT_LEVELS,
+    RESOURCES: RES_CATALOG, AMT_LEVELS, resIconHtml, resIconSrc,
     STAR_CLASSES: ['random', 'O', 'B', 'A', 'F', 'G', 'K', 'M', 'D', 'N'],
   };
 })();

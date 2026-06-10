@@ -73,7 +73,12 @@ function ecTradeRiskPct(threats, convoy) {
 }
 function ecResPrice(r) { return EC_RES_PRICE[r] || EC_RES_PRICE.common; }
 function ecResRarity(name) { return (EC.resInfo && EC.resInfo[name] && EC.resInfo[name].r) || 'common'; }
-function ecResIcon(name) { return (EC.resInfo && EC.resInfo[name] && EC.resInfo[name].icon) || '◈'; }
+// Иконка ресурса как HTML: картинка из каталога (resIconHtml), иначе — сохранённая эмодзи.
+function ecResIcon(name) {
+  if (typeof resIconSrc === 'function' && resIconSrc(name)) return resIconHtml(name);
+  const em = (EC.resInfo && EC.resInfo[name] && EC.resInfo[name].icon) || '◈';
+  return `<span class="res-ic res-ic-emoji">${em}</span>`;
+}
 
 const ecId = id => document.getElementById(id);
 const ecNum = n => Number(n || 0).toLocaleString('ru-RU');
@@ -651,7 +656,7 @@ function ecColonyMinePreview(blds, planet) {
   }
   const chips = [...totals.entries()].map(([name, total]) => {
     const ri = res.find(r => r.name === name) || {};
-    return `<span class="ec-rchip ec-rchip-mine ec-rar-${ri.r || 'common'}" title="${esc(name)}: +${total}/сут"><span class="ec-rchip-i">${esc(ri.icon || '◈')}</span>${esc(name)} <b>+${total}</b></span>`;
+    return `<span class="ec-rchip ec-rchip-mine ec-rar-${ri.r || 'common'}" title="${esc(name)}: +${total}/сут"><span class="ec-rchip-i">${ecResIcon(name)}</span>${esc(name)} <b>+${total}</b></span>`;
   }).join('');
   return `<div class="ec-pl-mine"><span class="ec-pl-lbl">⛏ Добывается:</span>${chips}<span class="ec-mine-hint">/сут</span></div>`;
 }
@@ -980,7 +985,7 @@ function ecTabOverview() {
   const resPanel = resRows.length ? `<div class="ec-ovx-panel">
     <div class="ec-ovx-panel-t">⛏ Ресурсы <span class="ec-ovx-panel-sub">добыча / склад</span></div>
     <div class="ec-ovx-res-list">${resRows.map(r => `<div class="ec-ovx-res-row ec-rar-${r.rar}">
-        <span class="ec-ovx-res-ic">${esc(r.icon)}</span>
+        <span class="ec-ovx-res-ic">${ecResIcon(r.n)}</span>
         <span class="ec-ovx-res-n">${esc(r.n)}</span>
         <span class="ec-ovx-res-rate">${r.rate ? `+${ecNum(r.rate)}/сут` : '<i>не добывается</i>'}</span>
         <span class="ec-ovx-res-have">${ecNum(r.have)} <span class="ec-ovx-res-have-u">на складе</span></span>
@@ -1108,7 +1113,7 @@ function ecPlanetResChips(p) {
   if (!res.length) return '<span class="ec-nres">◌ ресурсов нет</span>';
   return res.map(r => {
     const rar = r.r || 'common';
-    return `<span class="ec-rchip ec-rar-${rar}" title="${esc(r.name)} · ${rar}"><span class="ec-rchip-i">${esc(r.icon || '◈')}</span>${esc(r.name)}</span>`;
+    return `<span class="ec-rchip ec-rar-${rar}" title="${esc(r.name)} · ${rar}"><span class="ec-rchip-i">${ecResIcon(r.name)}</span>${esc(r.name)}</span>`;
   }).join('');
 }
 // Подсказка «что выгодно строить» по ресурсам/пригодности планеты

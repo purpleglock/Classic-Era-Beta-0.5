@@ -2,7 +2,7 @@
 @import './01_tokens.css';
 @import './02_shell.css';
 @import './03_content.css';
-@import './04_ui.css';
+@import './04_ui.css?v=20260610a';
 @import './05_panels.css';
 @import './06_system.css';
 @import './07_comments.css';
