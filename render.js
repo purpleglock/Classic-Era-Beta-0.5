@@ -1403,6 +1403,9 @@ function il(t) {
     return s;
   };
 
+  // FX schizo (админский «шизотекст») — раньше всего: внутри плоский текст → руны.
+  t=t.replace(/\[fx:schizo\]([\s\S]*?)\[\/fx\]/g,(_,s)=>mark(schizoWrap(s)));
+
   // images first - with onclick handler
   t=t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,(_,alt,url)=>mark(`<img src="${esc(safeUrl(url))}" alt="${esc(alt)}" loading="lazy" style="cursor:zoom-in" onclick="event.preventDefault();event.stopPropagation();openLightbox('${esc(safeUrl(url))}','${esc(alt)}');return false;">`));
   
@@ -1427,6 +1430,9 @@ function il(t) {
   // background highlight — inner, can wrap color/MD
   const bgMap={cyber:'bg-cyber',gold:'bg-gold',danger:'bg-danger',lore:'bg-lore',redacted:'bg-redacted'};
   t=t.replace(/\[bg:(\w+)\]([\s\S]*?)\[\/bg\]/g,(_,k,s)=>mark(`<span class="${bgMap[k]||'bg-cyber'}">${resolve(s)}</span>`));
+
+  // alignment — блочное выравнивание абзаца (центр / право / лево)
+  t=t.replace(/\[(center|right|left)\]([\s\S]*?)\[\/\1\]/g,(_,a,s)=>mark(`<span class="al-${a}">${resolve(s)}</span>`));
 
   // FX — outermost, wraps everything above
   t=t.replace(/\[fx:scanner\]([\s\S]*?)\[\/fx\]/g,(_,s)=>mark(`<span class="fx-scanner">${resolve(s)}</span>`));
@@ -1457,6 +1463,52 @@ function jitterWrap(text) {
     return `<span class="jl" style="--jx1:${o[0][0]}px;--jy1:${o[0][1]}px;--jx2:${o[1][0]}px;--jy2:${o[1][1]}px;--jd:${d}s;animation-delay:${delay}s">${ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch}</span>`;
   }).join('');
   return `<span class="fx-jitter">${letters}</span>`;
+}
+
+// ── FX: SCHIZO («шизотекст») ──────────────────────────────────
+// Текст показывается анимированными хаотичными рунами; при наведении курсора
+// небольшая зона вокруг него «фонариком» высвечивает оригинальные буквы.
+// Каждый символ — пара слоёв: настоящая буква (скрыта) + руна (поверх).
+const SCHIZO_RUNES = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟᛃᛘᛯᛦᚷᚦ⌖⍜⎔⏃⌬';
+function schizoRune() { return SCHIZO_RUNES.charAt((Math.random() * SCHIZO_RUNES.length) | 0); }
+function schizoWrap(text) {
+  const cleanText = String(text).replace(/\r/g, '').trim();
+  const cells = [...cleanText].map(ch => {
+    if (ch === '\n') return '<br>';                                   // перенос строки внутри блока
+    if (ch === ' ' || ch === '\t') return '<span class="sz-sp"> </span>';
+    const e = ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '&' ? '&amp;' : esc(ch);
+    return `<span class="sz-c"><span class="sz-real">${e}</span><span class="sz-rune" aria-hidden="true">${schizoRune()}</span></span>`;
+  }).join('');
+  if (typeof window !== 'undefined') setTimeout(schizoEnsure, 0);
+  return `<span class="fx-schizo" onmousemove="schizoMove(event,this)" onmouseleave="schizoLeave(this)" ontouchstart="schizoMove(event,this)" ontouchmove="schizoMove(event,this)" ontouchend="schizoLeave(this)" title="наведи — высветится оригинал">${cells}</span>`;
+}
+let _schizoTimer = null;
+function schizoEnsure() { if (_schizoTimer == null) _schizoTimer = setInterval(schizoTick, 110); }
+function schizoTick() {
+  const runes = document.querySelectorAll('.fx-schizo .sz-rune');
+  if (!runes.length) { clearInterval(_schizoTimer); _schizoTimer = null; return; }   // нет шизотекста на экране — гасим таймер
+  for (let i = 0; i < runes.length; i++) { if (Math.random() < 0.45) runes[i].textContent = schizoRune(); }
+}
+let _schizoRaf = 0;
+function schizoMove(ev, root) {
+  const pt = (ev.touches && ev.touches[0]) ? ev.touches[0] : ev;
+  const x = pt.clientX, y = pt.clientY;
+  if (_schizoRaf) return;                                  // троттлинг через rAF
+  _schizoRaf = requestAnimationFrame(() => {
+    _schizoRaf = 0;
+    const cells = root.__cells || (root.__cells = [].slice.call(root.querySelectorAll('.sz-c')));
+    const R2 = 42 * 42;                                     // радиус «фонарика»
+    for (let i = 0; i < cells.length; i++) {
+      const r = cells[i].getBoundingClientRect();
+      const dx = (r.left + r.width / 2) - x, dy = (r.top + r.height / 2) - y;
+      const lit = (dx * dx + dy * dy) < R2;
+      if (lit !== cells[i].__lit) { cells[i].__lit = lit; cells[i].classList.toggle('lit', lit); }
+    }
+  });
+}
+function schizoLeave(root) {
+  const cells = root.__cells || [];
+  for (let i = 0; i < cells.length; i++) { if (cells[i].__lit) { cells[i].__lit = false; cells[i].classList.remove('lit'); } }
 }
 function renderMd(txt) {
   if (!txt && txt !== 0) return ''; txt = String(txt); const lines=txt.split('\n'); let out='',ul=false; const eu=()=>{if(ul){out+='</ul>';ul=false;}};

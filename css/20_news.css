@@ -57,14 +57,24 @@
 }
 /* В ленте карточка — горизонтальная строка: миниатюра слева, текст справа.
    Картинка резиновая (доля от ширины блока), тексту всегда хватает места. */
-.fn-feed-news .fn-card { flex-direction: row; min-height: 96px; }
-.fn-feed-news .fn-card-cov { width: 34%; max-width: 220px; min-width: 0; height: auto; min-height: 96px; flex-shrink: 0; }
+.fn-feed-news .fn-card { flex-direction: row; min-height: 96px; align-items: stretch; }
+.fn-feed-news .fn-card-cov { 
+  width: 34%; max-width: 220px; min-width: 0; 
+  height: auto !important; min-height: 96px; flex-shrink: 0; 
+  /* Плавный переход (маска) справа от картинки к тексту */
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 30px), transparent 100%);
+          mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 30px), transparent 100%);
+}
 .fn-feed-news .fn-card-body { flex: 1; min-width: 0; }
 /* Узкий БЛОК (а не окно!) → карточка в столбик: картинка сверху, текст снизу.
    container query смотрит на ширину .fn-home, поэтому работает и в боковой колонке. */
 @container fn-home (max-width: 460px) {
   .fn-feed-news .fn-card { flex-direction: column; }
-  .fn-feed-news .fn-card-cov { width: 100%; max-width: none; min-height: 120px; }
+  .fn-feed-news .fn-card-cov { 
+    width: 100%; max-width: none; min-height: 120px; 
+    /* В вертикальном виде убираем боковую маску */
+    -webkit-mask-image: none; mask-image: none;
+  }
 }
 
 /* Обложка карточки */
@@ -187,6 +197,24 @@
 /* Тело статьи */
 .fn-art-body { font-family: var(--fn-read); font-size: 15.5px; line-height: 1.88; color: var(--t2, #c0ccd6); }
 .fn-art-body p { margin: 0 0 18px; }
+/* богатая разметка (renderMd): заголовки, цитаты, списки, разделители */
+.fn-art-body h1, .fn-art-body h2, .fn-art-body h3 {
+  color: var(--t1, #e8edf2); font-family: var(--font-display, sans-serif);
+  line-height: 1.25; margin: 22px 0 10px; font-weight: 700; }
+.fn-art-body h1 { font-size: 22px; }
+.fn-art-body h2 { font-size: 19px; }
+.fn-art-body h3 { font-size: 16.5px; color: var(--fn-accent, #5fb0e6); }
+.fn-art-body ul { margin: 0 0 18px; padding-left: 22px; }
+.fn-art-body li { margin: 0 0 6px; }
+.fn-art-body blockquote {
+  margin: 0 0 18px; padding: 8px 16px; border-left: 3px solid var(--fn-accent, #5fb0e6);
+  background: color-mix(in srgb, var(--fn-accent, #5fb0e6) 7%, transparent);
+  color: var(--t1, #e8edf2); font-style: italic; }
+.fn-art-body hr { border: 0; border-top: 1px solid var(--w2, #2a3340); margin: 22px 0; }
+.fn-art-body code {
+  font-family: var(--fn-mono, monospace); font-size: .92em;
+  background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 3px; }
+.fn-art-body img { max-width: 100%; border-radius: 4px; margin: 6px 0; }
 .fn-art-body .fn-lead-p {
   font-size: 17.5px; line-height: 1.72; color: var(--t1, #e8edf2);
   padding: 4px 0 4px 18px; border-left: 3px solid var(--fn-accent, #5fb0e6);
@@ -382,6 +410,7 @@
 .fn-comp {
   position: relative; width: 100%; max-width: 960px; margin: auto;
   display: flex; flex-direction: column; max-height: calc(100vh - 52px);
+  overflow-y: auto; overscroll-behavior: contain;   /* контент остаётся внутри модалки и скроллится */
   background: var(--b2, #141a22); border: 1px solid var(--gd, #3a7fbf); border-radius: 12px;
   padding: 22px clamp(18px, 4vw, 34px) 20px; box-shadow: 0 24px 60px rgba(0,0,0,.55);
 }
@@ -414,7 +443,8 @@ textarea.fn-c-body {
   font-family: var(--fn-read); font-size: 15.5px; line-height: 1.7; padding: 14px 16px;
 }
 @media (max-width: 600px) { textarea.fn-c-body { min-height: 40vh; } }
-.fn-comp-ftr { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; flex-shrink: 0; }
+.fn-comp-ftr { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; flex-shrink: 0;
+  position: sticky; bottom: -1px; background: var(--b2, #141a22); padding: 8px 0 2px; z-index: 3; }
 .fn-comp-ftr .btn { font-size: 14px; padding: 10px 20px; }
 .fn-comp-note { font-size: 11px; color: var(--t4, #6a7a88); margin-top: 10px; line-height: 1.5; flex-shrink: 0; }
 
@@ -438,39 +468,81 @@ textarea.fn-c-body {
    НПС-статья: глитч-эффект по бокам (тонкий, без вспышек/эпилепсии).
    Только узкие боковые полосы с RGB-сдвигом и медленным дрейфом —
    центр читается спокойно. Анимация выключается при reduce-motion.
+/* ════════════════════════════════════════════════════════════
+   НПС-статья: глитч-эффект по бокам (Кинематографичный Sci-Fi)
+   Энергетические бегающие "спайки" (всплески данных) по краям
    ════════════════════════════════════════════════════════════ */
 .fn-glitch-bar {
   position: absolute; top: 0; bottom: 0; width: 24px; z-index: 1;
-  pointer-events: none; opacity: .5; overflow: hidden; mix-blend-mode: screen;
-  background: repeating-linear-gradient(0deg,
-    transparent 0 6px,
-    color-mix(in srgb, var(--fn-accent, #5fb0e6) 32%, transparent) 6px 7px,
-    transparent 7px 14px);
-  -webkit-mask-image: linear-gradient(90deg, #000 0%, transparent 100%);
-          mask-image: linear-gradient(90deg, #000 0%, transparent 100%);
+  pointer-events: none; mix-blend-mode: screen;
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(25,240,255,0.08) 2px 3px, transparent 3px 6px);
+  border-left: 1px solid rgba(25,240,255, 0.4);
 }
 .fn-glitch-l { left: 0; }
 .fn-glitch-r { right: 0; transform: scaleX(-1); }
-/* два цветовых слоя (хром-сдвиг), нарезаются разными clip-path в разном темпе */
+
+/* Спайки данных */
 .fn-glitch-bar::before, .fn-glitch-bar::after {
-  content: ''; position: absolute; inset: 0; mix-blend-mode: screen;
+  content: ''; position: absolute; left: -1px; width: 3px; mix-blend-mode: screen; border-radius: 2px;
 }
 .fn-glitch-bar::before {
-  background: linear-gradient(90deg, rgba(255,46,110,.55), transparent 80%);
-  animation: fn-glitch-slice 5.2s steps(1, end) infinite;
+  background: #ff2e6e; box-shadow: 0 0 14px #ff2e6e;
+  animation: fn-spike-1 3.5s ease-in-out infinite alternate;
 }
 .fn-glitch-bar::after {
-  background: linear-gradient(90deg, rgba(25,240,255,.5), transparent 80%);
-  animation: fn-glitch-slice 4.1s steps(1, end) infinite reverse;
+  background: #19f0ff; box-shadow: 0 0 14px #19f0ff;
+  animation: fn-spike-2 2.8s ease-in-out infinite alternate-reverse;
 }
-@keyframes fn-glitch-slice {
-  0%   { clip-path: inset(2% 0 80% 0); }
-  20%  { clip-path: inset(70% 0 8% 0); }
-  40%  { clip-path: inset(34% 0 50% 0); }
-  60%  { clip-path: inset(58% 0 24% 0); }
-  80%  { clip-path: inset(14% 0 68% 0); }
-  100% { clip-path: inset(2% 0 80% 0); }
+@keyframes fn-spike-1 {
+  0%   { top: 10%; bottom: 85%; opacity: 0; transform: translateX(0); }
+  15%  { top: 20%; bottom: 60%; opacity: 1; transform: translateX(-2px); }
+  30%  { top: 40%; bottom: 45%; opacity: 0.3; transform: translateX(1px); }
+  45%  { top: 30%; bottom: 20%; opacity: 1; transform: translateX(0); }
+  60%  { top: 60%; bottom: 35%; opacity: 0; transform: translateX(-1px); }
+  80%  { top: 75%; bottom: 10%; opacity: 0.8; transform: translateX(2px); }
+  100% { top: 85%; bottom: 5%; opacity: 0; transform: translateX(0); }
 }
+@keyframes fn-spike-2 {
+  0%   { top: 5%; bottom: 90%; opacity: 0; transform: translateX(0); }
+  20%  { top: 15%; bottom: 70%; opacity: 1; transform: translateX(2px); }
+  40%  { top: 50%; bottom: 30%; opacity: 0.4; transform: translateX(-1px); }
+  60%  { top: 25%; bottom: 65%; opacity: 1; transform: translateX(1px); }
+  80%  { top: 70%; bottom: 15%; opacity: 0; transform: translateX(-2px); }
+  100% { top: 40%; bottom: 40%; opacity: 0.9; transform: translateX(0); }
+}
+/* Убираем рамку и делаем окно голографически размытым по краям через маску */
+.fn-art-ov .fn-art.fn-art-glitch {
+  border: none;
+  border-radius: 0;
+  background: linear-gradient(180deg, rgba(16, 22, 30, 0.75), rgba(8, 12, 18, 0.95));
+  
+  /* Эффект растворения краев: строго в пикселях, чтобы НЕ съедать текст интерфейса! */
+  -webkit-mask-image: 
+    linear-gradient(to bottom, transparent 0px, rgba(0,0,0,0.8) 4px, #000 12px, #000 calc(100% - 12px), rgba(0,0,0,0.8) calc(100% - 4px), transparent 100%),
+    linear-gradient(to right, transparent 0px, #000 8px, #000 calc(100% - 8px), transparent 100%);
+  -webkit-mask-composite: source-in;
+          mask-composite: intersect;
+          
+  animation: fn-holo-breath 6s ease-in-out infinite alternate;
+}
+@keyframes fn-holo-breath {
+  0% { box-shadow: inset 0 0 50px rgba(25, 240, 255, 0.02), 0 0 100px rgba(0, 0, 0, 0.9); }
+  100% { box-shadow: inset 0 0 100px rgba(170, 70, 255, 0.08), 0 0 140px rgba(0, 0, 0, 1); }
+}
+
+.fn-art-glitch::before {
+  opacity: 0.35; /* Приглушаем фоновые сканлайны */
+}
+/* Системные панели без жестких линий, чтобы они "висели" в воздухе */
+.fn-art-glitch .fn-art-bar, 
+.fn-art-glitch .fn-art-foot {
+  border: none !important;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--fn-accent, #5fb0e6) 12%, transparent), transparent) !important;
+}
+.fn-art-glitch .fn-art-cov {
+  border-bottom: none !important;
+}
+
 /* лёгкий хром-сдвиг заголовка глитч-статьи — медленный, без мерцания */
 .fn-art-glitch .fn-art-title {
   animation: fn-glitch-title 6s ease-in-out infinite;
@@ -523,6 +595,50 @@ textarea.fn-c-body {
 @media (max-width: 600px) {
   .fn-card-del, .fn-fr-del { opacity: 1; }   /* на тач — всегда видно */
 }
+
+/* ── «Разлом» — флаг-символ таинственного НПС (RGB-глитч ◈, без эпилепсии) ── */
+.fn-rift-flag {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 1.25em; height: 1.25em; flex: 0 0 auto; vertical-align: middle;
+  color: #b96bff; font-weight: 900; text-shadow: 0 0 8px currentColor;
+  animation: fn-rift-pulse 2.6s ease-in-out infinite;
+}
+.fn-rift-flag::before, .fn-rift-flag::after {
+  content: '◈'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  mix-blend-mode: screen; opacity: .85;
+}
+.fn-rift-flag::before { color: #ff2e6e; animation: fn-rift-shift 2.1s steps(2) infinite; }
+.fn-rift-flag::after  { color: #19f0ff; animation: fn-rift-shift 1.6s steps(2) infinite reverse; }
+.fn-rift-flag.fn-art-flag { width: 1.4em; height: 1.4em; font-size: 1.05em; }
+@keyframes fn-rift-pulse { 0%, 100% { transform: scale(1); opacity: .92; } 50% { transform: scale(1.13); opacity: 1; } }
+@keyframes fn-rift-shift { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(1.6px, -1.1px); } }
+/* крупный «разлом» на фоне статьи */
+.fn-art-bgrift {
+  display: flex; align-items: center; justify-content: center;
+  font-size: clamp(180px, 32vw, 360px); line-height: 1;
+  color: rgba(170,70,255,.5); opacity: .5; filter: blur(2px);
+  text-shadow: 0 0 70px rgba(170,70,255,.5), 0 0 30px rgba(25,240,255,.3);
+  animation: fn-rift-pulse 5s ease-in-out infinite; pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fn-rift-flag, .fn-rift-flag::before, .fn-rift-flag::after, .fn-art-bgrift { animation: none; }
+}
+
+/* Живой предпросмотр тела статьи в композиторе */
+.fn-c-prev-fg { flex: 0 0 auto; min-height: 0; }
+.fn-c-prev-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fn-c-prev-bar .fn-comp-note { font-size: 11px; color: var(--t4, #6a7a88); }
+.fn-c-preview {
+  margin-top: 8px; padding: 14px 16px;
+  border: 1px solid var(--w2, #2a3340); border-radius: 6px;
+  background: var(--b1, #0d1117);
+  max-height: 36vh; overflow: auto; overscroll-behavior: contain;
+  max-width: 100%; box-sizing: border-box; overflow-wrap: anywhere;
+  --fn-accent: var(--gd, #3a7fbf);
+}
+.fn-c-preview:empty { display: none; }
+/* когда предпросмотр открыт — поле ввода ужимается, чтобы всё влезло без вылета */
+.fn-comp.prev-on textarea.fn-c-body { min-height: 22vh; }
 
 /* Превью флага НПС в композиторе */
 .fn-c-npc-flag-prv { display: inline-flex; align-items: center; position: relative; }

@@ -84,6 +84,18 @@ async function fnLoadApproved() {
 // Тип записи: 'news' (игрок), 'bulletin' (сводка сектора), 'rumor' (слух).
 function fnKind(n) { if (n.owner_id) return 'news'; return n.kind === 'bulletin' ? 'bulletin' : 'rumor'; }
 
+// Особые НПС с фиксированным «крутым» символом-флагом (эффект задаётся CSS, не картинкой).
+// author_herald = 'fx:rift' → таинственный «Разлом».
+const FN_SPECIAL_NPC = {
+  rift: { name: 'Разлом', color: 'rgba(170,70,255,0.6)', herald: 'fx:rift' },
+};
+// HTML флага автора: спец-эффект (fx:*), загруженная картинка или ничего.
+function fnAuthorFlagHtml(herald, cls) {
+  if (!herald) return '';
+  if (herald === 'fx:rift') return `<span class="fn-rift-flag ${cls || ''}" aria-label="Разлом" title="Разлом — таинственный НПС">◈</span>`;
+  return `<img class="${cls || ''}" src="${esc(herald)}" alt="" onerror="this.style.display='none'">`;
+}
+
 // Фракция, которой касается событие — по имени в заголовке (для фон-герба).
 function fnEventFaction(n) {
   if (!FN.factionList || !FN.factionList.length) return null;
@@ -103,11 +115,11 @@ function fnHomeBlockHtml() {
     const rumor = kind === 'rumor', bulletin = kind === 'bulletin';
     // Цвет фракции игрока НЕ используем (бывает кислотным) — единый тон темы.
     // Слухи/сводки красим в свой контролируемый цвет (серый/циан).
-    const accent = (kind === 'news') ? 'var(--gd)' : (n.faction_color || 'var(--gd)');
+    const accent = (kind === 'news' && n.faction_id) ? 'var(--gd)' : (n.faction_color || 'var(--gd)');
     const cardCover = n.image_url
       ? `<div class="fn-card-cov"><img src="${esc(n.image_url)}" loading="lazy" alt=""></div>` : '';
-    const herald = (kind === 'news') ? ((FN.heralds && FN.heralds.get(n.faction_id)) || n.author_herald || '') : '';
-    const flag = herald ? `<img class="fn-card-flag" src="${esc(herald)}" alt="" onerror="this.style.display='none'">` : '<span class="fn-dot"></span>';
+    const herald = (kind === 'news') ? ((FN.heralds && FN.heralds.get(n.faction_id)) || n.author_herald || '') : (n.author_herald || '');
+    const flag = herald ? fnAuthorFlagHtml(herald, 'fn-card-flag') : '<span class="fn-dot"></span>';
     const kicker = bulletin
       ? `<span class="fn-card-live fn-card-bulletin">◈ СВОДКА</span><span class="fn-card-fac">${esc((n.faction_name || 'СЕКТОР').toUpperCase())}</span>`
       : rumor
@@ -181,6 +193,38 @@ function fnBodyToParas(body) {
       if (isFirst) isFirst = false;
       return `<p${cls}>${esc(p).replace(/\n/g, '<br>')}</p>`;
     }).join('');
+}
+// Богатый рендер тела статьи: тот же markdown/FX-движок, что и в вики-статьях
+// (renderMd/il из render.js) + совместимость со старым синтаксисом новостей
+// [img:URL] и голым URL картинки. Падение назад на fnBodyToParas, если renderMd нет.
+function fnRenderBody(body) {
+  let t = String(body || '').replace(/\r/g, '');
+  // [img:URL] → markdown-картинка
+  t = t.replace(/\[img:(https?:\/\/[^\]\s]+)\]/g, (_, u) => `\n\n![](${u})\n\n`);
+  // голый URL картинки на отдельной строке → markdown-картинка
+  t = t.replace(/^(https?:\/\/\S+\.(?:jpe?g|png|gif|webp|avif|svg)(?:\?\S*)?)\s*$/gim, '![]($1)');
+  if (typeof renderMd !== 'function') return fnBodyToParas(body);
+  // «Шизотекст» может занимать НЕСКОЛЬКО абзацев, а renderMd рубит текст по строкам
+  // и не видит парный тег. Поэтому вынимаем такие блоки целиком ДО renderMd,
+  // подменяем плейсхолдером, а после — возвращаем готовый HTML рун.
+  const blocks = [];
+  t = t.replace(/\[fx:schizo\]([\s\S]*?)\[\/fx\]/gi, (_, inner) => {
+    const i = blocks.push(typeof schizoWrap === 'function' ? schizoWrap(inner) : esc(inner)) - 1;
+    return `\n\nSZ${i}\n\n`;
+  });
+  let html = renderMd(t);
+  // Возвращаем блоки рун: только точная форма <p>SZi</p> (наш маркер всегда отдельный абзац),
+  // поэтому случайный «SZ0» в тексте не пострадает.
+  blocks.forEach((b, bi) => {
+    const tok = 'SZ' + bi;
+    const div = '<div class="fn-art-schizo">' + b + '</div>';
+    // renderMd мог обернуть маркер по-разному (или вовсе не обернуть) — заменяем все формы
+    html = html.split('<p>' + tok + '</p>').join(div)
+               .split('<p>' + tok + ' </p>').join(div)
+               .split('<p> ' + tok + '</p>').join(div)
+               .split(tok).join(div);
+  });
+  return html;
 }
 
 // ── Реакции государства на новость (дипломатия) ──────────────
@@ -357,8 +401,8 @@ function fnOpenArticle(id) {
   const n = FN.byId.get(id);
   if (!n) { toast('Новость не найдена', 'err'); return; }
   FN._openId = id;
-  // Цвет фракции игрока не используем (бывает кислотным); слухи/сводки — свой цвет.
-  const accent = n.owner_id ? 'var(--gd)' : (n.faction_color || 'var(--gd)');
+  // Цвет фракции игрока не используем (бывает кислотным); НПС/слухи/сводки — свой цвет.
+  const accent = (n.owner_id && n.faction_id) ? 'var(--gd)' : (n.faction_color || 'var(--gd)');
   const modal = document.getElementById('fn-article') || (() => {
     const m = document.createElement('div'); m.id = 'fn-article'; m.className = 'fn-art-ov';
     m.onclick = e => { if (e.target === m) fnCloseArticle(); };
@@ -367,14 +411,17 @@ function fnOpenArticle(id) {
   const kind = fnKind(n);               // news | rumor | bulletin
   const coverHtml = n.image_url
     ? `<div class="fn-art-cov"><img src="${esc(n.image_url)}" alt="" loading="lazy"></div>` : '';
-  // Флаг автора: герб фракции, либо загруженный админом флаг НПС.
+  // Флаг автора: герб фракции, либо герб/спец-эффект НПС.
   const artFlag = (FN.heralds && FN.heralds.get(n.faction_id)) || n.author_herald || '';
-  // События без обложки — на фон герб: флаг НПС, либо фракция по имени в заголовке.
+  const isFxHerald = typeof artFlag === 'string' && artFlag.indexOf('fx:') === 0;   // спец-символ, не картинка
+  // События без обложки — на фон герб: картинка-флаг НПС, либо фракция по имени в заголовке.
   const evFac = (!n.owner_id && !n.image_url && !n.author_herald) ? fnEventFaction(n) : null;
-  const bgUrl = (!n.image_url) ? (n.author_herald || (evFac && evFac.herald_url) || '') : '';
-  const bgFlag = bgUrl ? `<div class="fn-art-bgflag" style="background-image:url('${esc(bgUrl)}')"></div>` : '';
-  const barL = kind === 'bulletin' ? '◈ СВОДКА СЕКТОРА' : kind === 'rumor' ? '📡 ПЕРЕХВАЧЕННЫЙ СЛУХ' : '◈ FACTION DISPATCH NETWORK';
-  const barR = kind === 'bulletin' ? 'ОФИЦИАЛЬНО' : kind === 'rumor' ? 'НЕПОДТВЕРЖДЕНО' : 'ВХОДЯЩАЯ ПЕРЕДАЧА';
+  const bgImgUrl = (n.author_herald && !isFxHerald) ? n.author_herald : (evFac && evFac.herald_url) || '';
+  const bgUrl = (!n.image_url) ? bgImgUrl : '';
+  const bgFlag = bgUrl ? `<div class="fn-art-bgflag" style="background-image:url('${esc(bgUrl)}')"></div>`
+    : (isFxHerald && !n.image_url ? `<div class="fn-art-bgflag fn-art-bgrift" aria-hidden="true">◈</div>` : '');
+  const barL = kind === 'bulletin' ? '◈ СВОДКА СЕКТОРА' : kind === 'rumor' ? '📡 ПЕРЕХВАЧЕННЫЙ СЛУХ' : 'Галактическая информсеть "Патриоты"';
+  const barR = kind === 'bulletin' ? '◈◈' : kind === 'rumor' ? '◈◈' : '◈◈';
   const glitch = n.fx === 'glitch';
   modal.innerHTML = `<div class="fn-art${glitch ? ' fn-art-glitch' : ''}" style="--fn-accent:${esc(accent)}">
     ${glitch ? '<span class="fn-glitch-bar fn-glitch-l" aria-hidden="true"></span><span class="fn-glitch-bar fn-glitch-r" aria-hidden="true"></span>' : ''}
@@ -387,17 +434,17 @@ function fnOpenArticle(id) {
     ${coverHtml}
     <div class="fn-art-inner">
       <div class="fn-art-meta">
-        <span class="fn-art-fac">${artFlag ? `<img class="fn-art-flag" src="${esc(artFlag)}" alt="" onerror="this.style.display='none'">` : '<span class="fn-dot"></span>'}${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>
+        <span class="fn-art-fac">${artFlag ? fnAuthorFlagHtml(artFlag, 'fn-art-flag') : '<span class="fn-dot"></span>'}${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>
         <span class="fn-art-date">${esc(fnStardate(n.published_at || n.created_at))}</span>
       </div>
       <h1 class="fn-art-title">${esc(n.title || 'Без заголовка')}</h1>
-      <div class="fn-art-body">${fnBodyToParas(n.body)}</div>
+      <div class="fn-art-body">${fnRenderBody(n.body)}</div>
       <div id="fn-react-slot"></div>
     </div>
     <div class="fn-art-foot">
-      <span>▌ КОНЕЦ ПЕРЕДАЧИ</span>
+      <span>◈◈◈</span>
       ${fnIsStaff() ? `<button class="fn-art-del" title="Удалить новость (админ)" onclick="fnAdminDelete('${esc(n.id)}',event)">🗑 Удалить</button>` : ''}
-      <span class="fn-art-foot-id">REF·${esc(String(n.id).slice(0, 8).toUpperCase())}</span>
+      <span class="fn-art-foot-id">◈◈◈</span>
     </div>
   </div>`;
   modal.classList.add('show');
@@ -521,6 +568,7 @@ function fnOpenComposer(id) {
     m.onclick = e => { if (e.target === m) fnCloseComposer(); };
     // Автосохранение: любой ввод/выбор внутри композитора → отложенное сохранение черновика.
     m.addEventListener('input', fnDraftSaveSoon);
+    m.addEventListener('input', fnPreviewSoon);
     m.addEventListener('change', fnDraftSaveSoon);
     // Страховка при сворачивании/закрытии вкладки или потере страницы — мгновенный сброс.
     window.addEventListener('pagehide', fnDraftSave);
@@ -579,7 +627,37 @@ function fnOpenComposer(id) {
       </div>
       <div class="fg fn-c-body-fg">
         <div class="fn-c-body-hd"><label class="fl">Текст новости *</label><label class="btn btn-gh btn-xs fn-c-ins-btn">📷 Вставить фото<input type="file" accept="image/*" style="display:none" onchange="fnInsertImg(this)"></label></div>
-        <textarea class="fi fn-c-body" id="fn-c-body" placeholder="Пишите свободно. Пустая строка = новый абзац.">${esc(eff?.body || '')}</textarea></div>
+        <div class="md-toolbar fn-md-toolbar">
+          <button type="button" class="mdt" title="Жирный" onclick="fnMd('**','**','текст')"><b>B</b></button>
+          <button type="button" class="mdt" title="Курсив" onclick="fnMd('*','*','текст')"><i>I</i></button>
+          <button type="button" class="mdt" title="Моноширинный" onclick="fnMd('\`','\`','код')">&lt;/&gt;</button>
+          <button type="button" class="mdt" title="Заголовок" onclick="fnMd('## ','','Заголовок')">H2</button>
+          <button type="button" class="mdt" title="Подзаголовок" onclick="fnMd('### ','','Заголовок')">H3</button>
+          <button type="button" class="mdt" title="Цитата" onclick="fnMd('> ','','цитата')">❝</button>
+          <button type="button" class="mdt" title="Список" onclick="fnMd('- ','','пункт')">≣</button>
+          <span class="mdt-sep"></span>
+          <button type="button" class="mdt" title="По левому краю" onclick="fnMd('[left]','[/left]','текст')">⇤</button>
+          <button type="button" class="mdt" title="По центру" onclick="fnMd('[center]','[/center]','текст')">≡</button>
+          <button type="button" class="mdt" title="По правому краю" onclick="fnMd('[right]','[/right]','текст')">⇥</button>
+          <span class="mdt-sep"></span>
+          <button type="button" class="mdt" title="Цвет: золото" onclick="fnMd('[c:gold]','[/c]','текст')" style="color:#e8b04a">A</button>
+          <button type="button" class="mdt" title="Цвет: циан" onclick="fnMd('[c:cyan]','[/c]','текст')" style="color:#3ec0d0">A</button>
+          <button type="button" class="mdt" title="Цвет: красный" onclick="fnMd('[c:red]','[/c]','текст')" style="color:#ff6b6b">A</button>
+          <button type="button" class="mdt" title="Подсветка" onclick="fnMd('[bg:cyber]','[/bg]','текст')">▮</button>
+          ${fnIsStaff() ? `<span class="mdt-sep"></span>
+          <button type="button" class="mdt" title="Сканер" onclick="fnMd('[fx:scanner]','[/fx]','текст')">▤</button>
+          <button type="button" class="mdt" title="Дрожь" onclick="fnMd('[fx:jitter]','[/fx]','текст')">≈</button>
+          <button type="button" class="mdt mdt-schizo" title="Шизотекст: руны, при наведении высвечивается оригинал (только админ)" onclick="fnMd('[fx:schizo]','[/fx]','скрытый текст')">🜂</button>` : ''}
+        </div>
+        <textarea class="fi fn-c-body" id="fn-c-body" placeholder="Пишите свободно. Пустая строка = новый абзац. Выделите текст и нажмите кнопку форматирования.">${esc(eff?.body || '')}</textarea>
+      </div>
+      <div class="fg fn-c-prev-fg">
+        <div class="fn-c-prev-bar">
+          <button type="button" class="btn btn-gh btn-xs" id="fn-c-prev-btn" onclick="fnTogglePreview()">👁 Предпросмотр</button>
+          <span class="fn-comp-note" style="margin:0">Разметка: **жирный** · *курсив* · ## Заголовок · &gt; цитата · [center]центр[/center] · [c:gold]цвет[/c]${fnIsStaff() ? ' · [fx:schizo]…[/fx]' : ''}</span>
+        </div>
+        <div id="fn-c-preview" class="fn-art-body fn-c-preview" style="display:none"></div>
+      </div>
       <div class="fg">
         <div class="fn-c-body-hd"><label class="fl">Варианты реакций <span style="color:var(--t4);font-weight:400">— необязательно</span></label>
           <button type="button" class="btn btn-gh btn-xs" onclick="fnReactAddRow()">＋ Свой вариант</button></div>
@@ -665,6 +743,44 @@ function fnReactCollect() {
   return out.slice(0, 6);
 }
 
+// Вставка markdown/FX-разметки вокруг выделения в поле текста новости.
+function fnMd(before, after, ph) {
+  const ta = document.getElementById('fn-c-body');
+  if (!ta) return;
+  ta.focus();
+  const sel = ta.value.substring(ta.selectionStart, ta.selectionEnd);
+  // execCommand сохраняет историю отмены (Ctrl+Z) в textarea
+  if (document.execCommand) document.execCommand('insertText', false, before + (sel || ph) + after);
+  else {
+    const s = ta.selectionStart, e = ta.selectionEnd, ins = before + (sel || ph) + after;
+    ta.value = ta.value.slice(0, s) + ins + ta.value.slice(e);
+    ta.selectionStart = ta.selectionEnd = s + ins.length;
+  }
+  fnDraftSaveSoon();
+  fnPreviewSoon();
+}
+
+// ── Живой предпросмотр тела статьи в композиторе ─────────────
+function fnTogglePreview() {
+  const pv = document.getElementById('fn-c-preview');
+  const btn = document.getElementById('fn-c-prev-btn');
+  if (!pv) return;
+  const show = pv.style.display === 'none';
+  pv.style.display = show ? 'block' : 'none';
+  document.querySelector('#fn-composer .fn-comp')?.classList.toggle('prev-on', show);
+  if (btn) { btn.classList.toggle('on', show); btn.textContent = show ? '🙈 Скрыть предпросмотр' : '👁 Предпросмотр'; }
+  if (show) fnUpdatePreview();
+}
+function fnUpdatePreview() {
+  const pv = document.getElementById('fn-c-preview');
+  if (!pv || pv.style.display === 'none') return;   // не считаем, пока скрыт
+  const body = document.getElementById('fn-c-body')?.value || '';
+  pv.innerHTML = body.trim()
+    ? fnRenderBody(body)
+    : '<span style="color:var(--t4)">— текст пуст: предпросмотр появится по мере набора —</span>';
+}
+function fnPreviewSoon() { clearTimeout(FN.prevT); FN.prevT = setTimeout(fnUpdatePreview, 250); }
+
 function fnInsertImg(input) {
   const file = input?.files?.[0];
   if (!file) return;
@@ -677,6 +793,7 @@ function fnInsertImg(input) {
     ta.selectionStart = ta.selectionEnd = start + marker.length;
     ta.focus();
     fnDraftSaveSoon();
+    fnPreviewSoon();
   });
   input.value = '';
 }
@@ -719,12 +836,17 @@ async function fnPopulateAuthorSelect(existing) {
   html += `<optgroup label="Фракции игроков">` + facs.map(f =>
     `<option value="fac:${esc(f.faction_id)}" data-name="${esc(f.name || '')}" data-color="${esc(f.color || '')}" data-owner="${esc(f.owner_id || '')}" data-email="${esc(f.owner_email || '')}">${esc(f.name || '—')}</option>`
   ).join('') + `</optgroup>`;
+  html += `<optgroup label="Особые НПС">` +
+    Object.keys(FN_SPECIAL_NPC).map(k => `<option value="special:${k}">◈ ${esc(FN_SPECIAL_NPC[k].name)} — таинственный НПС</option>`).join('') +
+    `</optgroup>`;
   html += `<option value="npc">НПС / свободный автор (событие, квест)</option>`;
   sel.innerHTML = html;
   // предвыбор для редактирования (НПС определяем по отсутствию фракции, не owner_id —
   // НПС-новость в «Вестнике» имеет owner_id админа, но faction_id всё равно пустой).
   if (existing && existing.id) {
-    if (!existing.faction_id) sel.value = 'npc';
+    const sp = existing.author_herald && Object.keys(FN_SPECIAL_NPC).find(k => FN_SPECIAL_NPC[k].herald === existing.author_herald);
+    if (sp) sel.value = 'special:' + sp;
+    else if (!existing.faction_id) sel.value = 'npc';
     else if (mine && existing.faction_id === mine.faction_id) sel.value = 'self';
     else sel.value = 'fac:' + existing.faction_id;
   } else if (!(mine && mine.faction_id)) {
@@ -768,6 +890,13 @@ function fnAuthorModeChange() {
 async function fnResolveAuthor() {
   const sel = document.getElementById('fn-c-author');
   const mode = sel ? sel.value : '';
+  if (mode && mode.indexOf('special:') === 0) {
+    const sp = FN_SPECIAL_NPC[mode.slice(8)];
+    if (!sp) { toast('Неизвестный НПС', 'err'); return null; }
+    // особый НПС публикуется в основную ленту с фиксированным крутым флагом-символом
+    return { faction_id: null, faction_name: sp.name, faction_color: sp.color, author_herald: sp.herald,
+      owner_id: user.id, owner_email: user.email, kind: 'news' };
+  }
   if (mode === 'npc') {
     const name = (document.getElementById('fn-c-npc-name')?.value || '').trim();
     if (!name) { toast('Укажите имя НПС-автора', 'err'); return null; }

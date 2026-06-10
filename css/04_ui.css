@@ -558,6 +558,26 @@ textarea.fi { resize: vertical; min-height: 80px; line-height: 1.6; }
 .fx-jitter .jl { display: inline-block; animation: jitter-shake var(--jd, .18s) steps(2) infinite alternate; }
 @keyframes jitter-shake { 0% { transform: translate(var(--jx1, 0px), var(--jy1, 0px)); } 100% { transform: translate(var(--jx2, 0px), var(--jy2, 0px)); } }
 
+/* ── Выравнивание абзаца ── */
+.al-center { display: block; text-align: center; }
+.al-right  { display: block; text-align: right; }
+.al-left   { display: block; text-align: left; }
+
+/* ── FX: SCHIZO («шизотекст»: руны + фонарик) ── */
+.fx-schizo { cursor: crosshair; }
+.fx-schizo .sz-c { position: relative; display: inline-block; }
+.fx-schizo .sz-sp { display: inline-block; width: .3em; }
+.fx-schizo .sz-real { visibility: hidden; transition: text-shadow .12s; }   /* занимает место → раскладка стабильна */
+.fx-schizo .sz-rune {
+  position: absolute; left: 50%; top: 0; transform: translateX(-50%); white-space: pre;
+  color: var(--fn-accent, #7fd0ff); text-shadow: 0 0 6px currentColor;
+  opacity: .82; animation: sz-flick 1.7s steps(2) infinite;
+}
+.fx-schizo .sz-c.lit .sz-rune { opacity: 0; }
+.fx-schizo .sz-c.lit .sz-real { visibility: visible; color: var(--gdl, #5fb0e6); text-shadow: 0 0 9px var(--fn-accent, #7fd0ff); }
+@keyframes sz-flick { 0% { opacity: .58; } 100% { opacity: .9; } }
+@media (prefers-reduced-motion: reduce) { .fx-schizo .sz-rune { animation: none; } }
+
 /* Preview toggle & Cov pos */
 .cov-pos-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; max-width: 120px; margin-top: 8px; }
 .cpb {
