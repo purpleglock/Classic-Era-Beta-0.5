@@ -2698,22 +2698,11 @@ function ecArg(s) { return "'" + String(s == null ? '' : s).replace(/\\/g, '\\\\
 // pid планеты как числовой литерал для inline-onclick (или null для немигрированных данных карты)
 function ecPidArg(p) { return (p && Number.isInteger(p.pid)) ? String(p.pid) : 'null'; }
 
-// ── Денежные операции (клиентские, под RLS) ─────────────────
-async function ecSpend(amount) {
-  if ((EC.eco.gc || 0) < amount) { toast(`Недостаточно ГС: нужно ${ecNum(amount)}, есть ${ecNum(EC.eco.gc || 0)}`, 'err'); return false; }
-  await dbPatch('faction_economy', 'faction_id=eq.' + encodeURIComponent(EC.fid), { gc: (EC.eco.gc || 0) - amount });
-  EC.eco.gc = (EC.eco.gc || 0) - amount;
-  return true;
-}
-// Списание ГС и ОН одной операцией (для терраформа: ОН-затраты на сложные миры)
-async function ecSpendBoth(gc, science) {
-  gc = gc || 0; science = science || 0;
-  if ((EC.eco.gc || 0) < gc) { toast(`Недостаточно ГС: нужно ${ecNum(gc)}, есть ${ecNum(EC.eco.gc || 0)}`, 'err'); return false; }
-  if ((EC.eco.science || 0) < science) { toast(`Недостаточно ОН: нужно ${ecNum(science)}, есть ${ecNum(EC.eco.science || 0)}`, 'err'); return false; }
-  await dbPatch('faction_economy', 'faction_id=eq.' + encodeURIComponent(EC.fid), { gc: (EC.eco.gc || 0) - gc, science: (EC.eco.science || 0) - science });
-  EC.eco.gc = (EC.eco.gc || 0) - gc; EC.eco.science = (EC.eco.science || 0) - science;
-  return true;
-}
+// ── Денежные операции теперь СЕРВЕРНЫЕ ──────────────────────
+// Списание/возврат ГС и ОН делают SECURITY DEFINER RPC (economy_build,
+// economy_colonize, economy_terraform, economy_produce, ... в _security_money.sql),
+// которые сами считают цену. Прямой записи баланса с клиента больше нет —
+// ecSpend/ecSpendBoth удалены как небезопасные (игрок мог писать любое число).
 
 // ── Проекты колоний (отложенные на 1+ ход) ──────────────────
 // Момент готовности = сейчас + turns суток (1 реальный день от момента постройки).
@@ -2799,14 +2788,10 @@ async function ecCancelProject(id) {
   const refundTxt = (rg || rs) ? `Вернётся: ${rg ? ecNum(rg) + ' ГС' : ''}${rg && rs ? ' + ' : ''}${rs ? ecNum(rs) + ' ОН' : ''}.` : 'Затрат к возврату нет.';
   if (!confirm(`Отменить проект «${p.label || p.kind}»? ${refundTxt}`)) return;
   try {
-    await dbDel('colony_projects', 'id=eq.' + id);
-    if (rg || rs) {
-      await dbPatch('faction_economy', 'faction_id=eq.' + encodeURIComponent(EC.fid), { gc: (EC.eco.gc || 0) + rg, science: (EC.eco.science || 0) + rs });
-      EC.eco.gc = (EC.eco.gc || 0) + rg; EC.eco.science = (EC.eco.science || 0) + rs;
-    }
+    await ecRpc('economy_cancel_project', { p_project_id: id });
     toast('Проект отменён, затраты возвращены', 'inf');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
 }
 
 // Колонизация РОДНОЙ планеты — мгновенно (просто заселение пригодного мира).
@@ -2821,15 +2806,11 @@ async function ecColonize(sysId, planetName, planetType, cells, foreign, pid) {
   if (foreign) return ecTerraform(sysId, planetName, planetType, cells, pid); // непригодная → отложенный терраформ
   if (EC.busy) return; EC.busy = true;
   try {
-    if (!await ecSpend(ecColonizeCost(EC_COLONIZE_COST))) return;
-    let resources = [];
-    const sys = EC.systems.find(s => s.id === sysId);
-    const p = ecFindPlanet(sys, planetName, pid);
-    if (p && Array.isArray(p.resources)) resources = p.resources.map(r => ({ name: r.name, icon: r.icon, r: r.r }));
-    await dbPost('colonies', { faction_id: EC.fid, owner_id: user.id, system_id: sysId, planet_name: planetName, planet_pid: (pid != null ? pid : null), planet_type: planetType || '', cells: cells || EC_DEFAULT_CELLS, terraformed: false, resources });
+    if (pid == null) { toast('У планеты нет pid — обновите карту', 'err'); return; }
+    await ecRpc('economy_colonize', { p_system_id: sysId, p_planet_pid: pid });
     toast('Планета колонизирована', 'ok');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }
 
@@ -2842,16 +2823,11 @@ async function ecBuildStation(sysId, planetName, planetType, group, pid) {
   if (!st) { toast('Нужна технология Небожителей для этого типа мира', 'err'); return; }
   EC.busy = true;
   try {
-    const cost = ecColonizeCost(EC_STATION_COST);
-    if (!await ecSpend(cost)) return;
-    let resources = [];
-    const sys = EC.systems.find(s => s.id === sysId);
-    const p = ecFindPlanet(sys, planetName, pid);
-    if (p && Array.isArray(p.resources)) resources = p.resources.map(r => ({ name: r.name, icon: r.icon, r: r.r }));
-    await dbPost('colonies', { faction_id: EC.fid, owner_id: user.id, system_id: sysId, planet_name: planetName, planet_pid: (pid != null ? pid : null), planet_type: planetType || '', cells: st.cells, terraformed: true, resources });
+    if (pid == null) { toast('У планеты нет pid — обновите карту', 'err'); return; }
+    await ecRpc('economy_build_station', { p_system_id: sysId, p_planet_pid: pid });
     toast(`${st.icon} ${st.label} построена · ${st.cells} ячеек`, 'ok');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }
 
@@ -2866,19 +2842,11 @@ async function ecTerraform(sysId, planetName, planetType, cells, pid) {
   if (!confirm(`Терраформирование «${planetName}» (${spec.label.toLowerCase()}):\n• срок: ${spec.turns} ход(ов)\n• затраты: ${ecNum(terraGc)} ГС${spec.science ? ` + ${ecNum(spec.science)} ОН` : ''}\nНачать?`)) return;
   EC.busy = true;
   try {
-    if (!await ecSpendBoth(terraGc, spec.science)) return;
-    let resources = [];
-    if (p && Array.isArray(p.resources)) resources = p.resources.map(r => ({ name: r.name, icon: r.icon, r: r.r }));
-    await dbPost('colony_projects', {
-      faction_id: EC.fid, owner_id: user.id, kind: 'terraform',
-      system_id: sysId, planet_name: planetName, planet_pid: (pid != null ? pid : null), planet_type: planetType || '',
-      cells: cells || EC_DEFAULT_CELLS,
-      payload: { resources, spent_gc: terraGc, spent_science: spec.science },
-      label: `Терраформ: ${planetName}`, ready_at: _ecReadyTurns(spec.turns),
-    });
+    if (pid == null) { toast('У планеты нет pid — обновите карту', 'err'); return; }
+    await ecRpc('economy_terraform', { p_system_id: sysId, p_planet_pid: pid });
     toast(`Терраформирование начато (${spec.turns} ход.)`, 'ok');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }
 
@@ -2901,11 +2869,10 @@ async function ecProduceDivision(divId) {
   const cost = ((div.summary && div.summary.cost) || 0) * qty;
   EC.busy = true;
   try {
-    if (!await ecSpend(cost)) return;
-    await dbPost('unit_production', { faction_id: EC.fid, owner_id: user.id, unit_id: div.id, unit_name: div.name, category: 'division', line: 'army', weight: 0, qty, status: 'queued', ready_at: _ecReady() });
+    await ecRpc('economy_produce', { p_unit_id: div.id, p_qty: qty });
     toast(`Формируется дивизия: ${div.name} ×${qty}`, 'ok');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }
 
@@ -2921,26 +2888,19 @@ async function ecProduceShip() {
   const cost = ((u.summary && u.summary.cost) || 0) * qty;
   EC.busy = true;
   try {
-    if (!await ecSpend(cost)) return;
-    await dbPost('unit_production', { faction_id: EC.fid, owner_id: user.id, unit_id: u.id, unit_name: u.name, category: 'ship', line: 'shipyard', weight: 1, qty, status: 'queued', ready_at: _ecReady() });
+    await ecRpc('economy_produce', { p_unit_id: u.id, p_qty: qty });
     toast(`Заложен корабль: ${u.name} ×${qty}`, 'ok');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }
 
 async function ecCancelProd(id) {
-  const q = EC.queue.find(x => x.id === id);
   try {
-    await dbDel('unit_production', 'id=eq.' + id);
-    if (q) {
-      const u = EC.designs.find(d => d.id === q.unit_id);
-      const refund = ((u && u.summary && u.summary.cost) || 0) * (q.qty || 0);
-      if (refund) { await dbPatch('faction_economy', 'faction_id=eq.' + encodeURIComponent(EC.fid), { gc: (EC.eco.gc || 0) + refund }); EC.eco.gc = (EC.eco.gc || 0) + refund; }
-    }
+    await ecRpc('economy_cancel_production', { p_id: id });
     toast('Производство отменено', 'inf');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
 }
 
 // ── Постройка зданий: каталог-выбор → подтверждение → стройка ──
@@ -3024,19 +2984,11 @@ async function ecBuildDo(colonyId, btype) {
   if (used + pending >= (colony.cells || EC_DEFAULT_CELLS)) { toast('Нет свободных ячеек на планете', 'err'); ecBuildClose(); return; }
   EC.busy = true;
   try {
-    const cost = ecBuildCost(d.cost);
-    if (!await ecSpend(cost)) { ecBuildClose(); return; }
-    await dbPost('colony_projects', {
-      faction_id: EC.fid, owner_id: user.id, kind: 'build',
-      colony_id: colonyId, btype,
-      payload: { spent_gc: cost, btype, free_slots: d.free },
-      label: `Постройка: ${d.name}${colony.planet_name ? ' · ' + colony.planet_name : ''}`,
-      ready_at: _ecReadyTurns(1),
-    });
+    await ecRpc('economy_build', { p_colony_id: colonyId, p_btype: btype });
     ecBuildClose();
     toast(d.name + ' — строительство начато (1 день)', 'ok');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); ecBuildClose(); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); ecBuildClose(); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }
 
@@ -3047,27 +2999,18 @@ async function ecOpenSlot(buildingId) {
   const d = EC_BUILD[b.btype]; if (!d) return;
   if (b.slots_open >= EC_MAX_SLOTS) { toast('Все слоты открыты', 'inf'); return; }
   if (ecPendingSlot(buildingId)) { toast('Слот уже строится', 'inf'); return; }
-  const cost = ecBuildCost(d.ladder[b.slots_open]);
   EC.busy = true;
   try {
-    if (!await ecSpend(cost)) return;
-    const colony = EC.colonies.find(c => c.id === b.colony_id);
-    await dbPost('colony_projects', {
-      faction_id: EC.fid, owner_id: user.id, kind: 'slot',
-      colony_id: b.colony_id, building_id: buildingId,
-      payload: { spent_gc: cost, spent_science: 0 },
-      label: `Слот: ${d.name}${colony ? ' · ' + (colony.planet_name || '') : ''}`,
-      ready_at: _ecReadyTurns(EC_SLOT_TURNS),
-    });
+    await ecRpc('economy_open_slot', { p_building_id: buildingId });
     toast('Слот заложен — откроется через 1 день', 'ok');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }
 
 async function ecToggleTnp(buildingId, checked) {
-  try { await dbPatch('colony_buildings', 'id=eq.' + buildingId, { tnp_mode: !!checked }); await ecReloadPaint(); }
-  catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  try { await ecRpc('economy_set_tnp', { p_building_id: buildingId, p_on: !!checked }); await ecReloadPaint(); }
+  catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
 }
 
 // Обустройство среды обитания на своей колонии (+ячейки) — отложенный проект (1 ход).
@@ -3077,18 +3020,10 @@ async function ecHabitat(colonyId) {
   if (ecPendingHabitat(colonyId)) { toast('Обустройство уже идёт', 'inf'); return; }
   EC.busy = true;
   try {
-    const habGc = ecColonizeCost(EC_HABITAT_COST);
-    if (!await ecSpend(habGc)) return;
-    await dbPost('colony_projects', {
-      faction_id: EC.fid, owner_id: user.id, kind: 'habitat',
-      colony_id: colonyId, cells: EC_HABITAT_CELLS,
-      payload: { spent_gc: habGc, spent_science: 0 },
-      label: `Обустройство среды: ${c.planet_name || ''}`,
-      ready_at: _ecReadyTurns(EC_HABITAT_TURNS),
-    });
+    await ecRpc('economy_habitat', { p_colony_id: colonyId });
     toast('Обустройство среды начато — завершится через 1 день', 'ok');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }
 
@@ -3108,20 +3043,15 @@ async function ecDemolish(buildingId) {
   if (pend) refund += ecProjectRefund(pend).gc;
   if (!confirm(`Снести постройку?${refund ? ` Вернётся ${ecNum(refund)} ГС (полная стоимость${pend ? ' + незавершённый слот' : ''}).` : ''}`)) return;
   try {
-    if (pend) await dbDel('colony_projects', 'id=eq.' + pend.id);
-    await dbDel('colony_buildings', 'id=eq.' + buildingId);
-    if (refund) {
-      await dbPatch('faction_economy', 'faction_id=eq.' + encodeURIComponent(EC.fid), { gc: (EC.eco.gc || 0) + refund });
-      EC.eco.gc = (EC.eco.gc || 0) + refund;
-    }
+    await ecRpc('economy_demolish', { p_building_id: buildingId });
     toast(refund ? `Снесено · возврат ${ecNum(refund)} ГС` : 'Снесено', 'inf');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
 }
 
 async function ecAbandon(colonyId) {
   const c = EC.colonies.find(x => x.id === colonyId); if (!c) return;
   if (!confirm('Бросить колонию «' + (c.planet_name || '') + '»? Все её постройки будут потеряны.')) return;
-  try { await dbDel('colonies', 'id=eq.' + colonyId); toast('Колония оставлена', 'inf'); await ecReloadPaint(); }
-  catch (e) { toast('Ошибка: ' + e.message, 'err'); await ecReloadPaint(); }
+  try { await ecRpc('economy_abandon', { p_colony_id: colonyId }); toast('Колония оставлена', 'inf'); await ecReloadPaint(); }
+  catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
 }

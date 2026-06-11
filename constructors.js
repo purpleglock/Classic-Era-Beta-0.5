@@ -977,7 +977,7 @@ async function cnPublish() {
       const ecoRows = await dbGet('faction_economy', `faction_id=eq.${encodeURIComponent(fac.faction_id)}&select=science`);
       const curScience = (ecoRows && ecoRows[0] && ecoRows[0].science) || 0;
       if (curScience < onCost) { toast(`Недостаточно ОН для разработки: нужно ${onCost}, есть ${curScience}`, 'err'); return; }
-      await dbPatch('faction_economy', 'faction_id=eq.' + encodeURIComponent(fac.faction_id), { science: curScience - onCost });
+      await ecRpc('economy_dev_charge', { p_on: onCost });
     }
     if (CN.editUnit && CN.editUnit.id) { await dbPatch('faction_units', 'id=eq.' + CN.editUnit.id, body); toast('Изменения сохранены ✓', 'ok'); }
     else { const rows = await dbPost('faction_units', body); const row = Array.isArray(rows) ? rows[0] : rows; if (row && row.id) CN.editUnit = row; toast(`Опубликовано ✓${onCost ? ` · −${onCost} ОН` : ''}`, 'ok'); }
