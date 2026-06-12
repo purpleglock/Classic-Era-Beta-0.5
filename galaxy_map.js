@@ -70,9 +70,23 @@ async function loadGalaxyData() {
 async function renderGalaxyMap() {
   const host = document.getElementById('pg');
   host.className = 'pgi';
-  host.innerHTML = `<div class="sload"><div class="pulse-loader"></div></div>`;
-  await loadGalaxyData();
-  if (document.getElementById('pg') !== host) return; // ушли со страницы
+  if (GM.loaded) {
+    // повторный заход: данные уже в памяти — рисуем мгновенно, обновляем в фоне
+    loadGalaxyData().then(() => {
+      if (document.getElementById('pg') !== host) return;
+      if (GMM.active) { gmmBuildWorld(); gmmRaster(); }
+      else if (document.getElementById('gm-svg')) gmDraw();
+    });
+  } else {
+    host.innerHTML = `<div class="sload"><div class="pulse-loader"></div></div>`;
+    await loadGalaxyData();
+    if (document.getElementById('pg') !== host) return; // ушли со страницы
+  }
+
+  // Телефоны/планшеты (основной указатель — палец): отдельный canvas-рендерер,
+  // DOM/SVG-вариант на тач-устройствах неюзабелен (см. блок GMM в конце файла).
+  if (gmIsMobile()) { GM.edit = false; gmmRender(host); return; }
+  GMM.active = false;
 
   // сброс временного состояния (DOM пересоздаётся при каждом входе)
   GM.edit = false; GM.mode = 'select'; GM.linkFrom = null;
@@ -129,6 +143,7 @@ function gmMinScale() {
   return Math.min(vp.clientWidth / GM_W, vp.clientHeight / GM_H);
 }
 function gmFit() {
+  if (GMM.active) { gmmFit(true); return; }
   const vp = document.getElementById('gm-viewport');
   if (!vp) return;
   const w = vp.clientWidth, h = vp.clientHeight;
@@ -294,8 +309,9 @@ function gmTouchEnd() { GM.touch = null; }
 // ── Контролы (границы / зум / фуллскрин) ────────────────────
 function gmToggleBorders() {
   GM.showBorders = !GM.showBorders;
-  document.getElementById('gm-svg')?.classList.toggle('gm-noborders', !GM.showBorders);
   document.getElementById('gm-ctl-borders')?.classList.toggle('gm-active', GM.showBorders);
+  if (GMM.active) { gmmRaster(); return; }
+  document.getElementById('gm-svg')?.classList.toggle('gm-noborders', !GM.showBorders);
 }
 // ── Режим «ресурсы систем» ──────────────────────────────────
 // Над каждой звездой — сводка ресурсов системы (уникальные по названию ресурсы
@@ -335,14 +351,17 @@ function gmToggleRes() {
   document.getElementById('gm-wrap')?.classList.toggle('gm-show-res', GM.showRes);
   document.getElementById('gm-ctl-res')?.classList.toggle('gm-active', GM.showRes);
   document.getElementById('gm-res-filter')?.classList.toggle('gm-hidden', !GM.showRes);
+  if (GMM.active) gmmRaster();
 }
 function gmSetResRarity(r) {
   const i = GM.resRarities.indexOf(r);
   if (i >= 0) GM.resRarities.splice(i, 1); else GM.resRarities.push(r);
   document.querySelector(`#gm-res-filter .gm-rf[data-r="${r}"]`)?.classList.toggle('gm-on', GM.resRarities.includes(r));
+  if (GMM.active) { gmmRaster(); return; }
   gmDrawStars();   // пересобираем сводки над звёздами под новый фильтр
 }
 function gmZoomBtn(dir) {
+  if (GMM.active) { gmmZoomAt(GMM.vw / 2, GMM.vh / 2, GMM.s * (dir > 0 ? 1.45 : 1 / 1.45), true); return; }
   const vp = document.getElementById('gm-viewport');
   if (!vp) return;
   const w = vp.clientWidth, h = vp.clientHeight;
@@ -379,7 +398,7 @@ function gmFallbackFs(on) {
     if (GM._fsHome) { GM._fsHome.appendChild(wrap); GM._fsHome = null; }
   }
   document.getElementById('gm-ctl-fs')?.classList.toggle('gm-active', on);
-  requestAnimationFrame(() => { gmClamp(); gmApply(); });
+  requestAnimationFrame(() => { if (GMM.active) gmmResize(); else { gmClamp(); gmApply(); } });
 }
 function gmOnFsChange() {
   const wrap = document.getElementById('gm-wrap');
@@ -387,7 +406,7 @@ function gmOnFsChange() {
   const fs = !!(document.fullscreenElement || document.webkitFullscreenElement);
   wrap.classList.toggle('gm-fullscreen', fs);
   document.getElementById('gm-ctl-fs')?.classList.toggle('gm-active', fs);
-  requestAnimationFrame(() => { gmClamp(); gmApply(); });
+  requestAnimationFrame(() => { if (GMM.active) gmmResize(); else { gmClamp(); gmApply(); } });
 }
 if (!window._gmFsBound) {
   window._gmFsBound = true;
@@ -482,23 +501,18 @@ function gmVoronoiCells() {
   } catch (e) { console.warn('[map] voronoi', e); return []; }
 }
 
-function gmDrawSvg() {
-  const svg = document.getElementById('gm-svg');
-  if (!svg) return;
+// ── Общая геометрия карты (для SVG-рендера десктопа и canvas-рендера телефона):
+//    заливки ячеек, классифицированные границы и изогнутые гиперпути ──
+function gmBuildGeo() {
   const cells = gmVoronoiCells();
 
   // ── Заливки ячеек (без обводки) — соседние ячейки одной фракции сливаются ──
-  const fillHtml = cells.map(({ sys, poly }) => {
-    if (!poly) return '';
+  const fills = [];
+  cells.forEach(({ sys, poly }) => {
+    if (!poly) return;
     const fac = gmFaction(sys.faction);
-    const isRift = !!(fac && fac.id === 'rift');
-    const pts = gmPerturbPoly(poly);
-    const d = 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + 'Z';
-    if (isRift) return `<path class="vor-cell vor-rift" d="${d}" stroke="none"></path>`;  // заливка/анимация — в CSS
-    const fill = fac ? fac.color : 'rgba(120,140,170,0.05)';
-    const cls = 'vor-cell' + (fac ? ' vor-claimed' : ' vor-neutral');
-    return `<path class="${cls}" d="${d}" fill="${fill}" stroke="none"></path>`;
-  }).join('');
+    fills.push({ sys, fac, isRift: !!(fac && fac.id === 'rift'), pts: gmPerturbPoly(poly) });
+  });
 
   // ── Границы: схлопываем внутренние рёбра. Ребро между двумя ячейками ОДНОЙ
   //    фракции не рисуем — остаётся только внешний контур территории. ──
@@ -518,14 +532,13 @@ function gmDrawSvg() {
       e.sides.push({ fid, sx: sys.x, sy: sys.y });   // запоминаем «чья» сторона и где её система
     }
   });
-  const facBorderHtml = [], neutralBorderHtml = [];
+  const edges = [];   // {kind:'front'|'fac'|'rift'|'neutral', color?, pts}
   const FRONT_OFF = 4;   // смещение линии фронта к своей территории (user units)
   edgeMap.forEach(e => {
     const facSides = e.sides.filter(s => s.fid && gmFaction(s.fid));
     const distinct = [...new Set(facSides.map(s => s.fid))];
     if (facSides.length === 2 && distinct.length === 1) return; // внутреннее ребро одной фракции
     const pts = gmPerturbEdge(e.a, e.b);
-    const dRaw = () => 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L');
     if (distinct.length >= 2) {
       // ── ЛИНИЯ ФРОНТА: две границы, каждая смещена к своей стороне ──
       const dx = e.b[0] - e.a[0], dy = e.b[1] - e.a[1], L = Math.hypot(dx, dy) || 1;
@@ -534,35 +547,61 @@ function gmDrawSvg() {
         const fac = gmFaction(s.fid);
         const sign = ((s.sx - mx) * nx + (s.sy - my) * ny) >= 0 ? 1 : -1;
         const ox = nx * FRONT_OFF * sign, oy = ny * FRONT_OFF * sign;
-        const d = 'M' + pts.map(p => (p[0] + ox).toFixed(1) + ',' + (p[1] + oy).toFixed(1)).join('L');
-        facBorderHtml.push(`<path class="vor-cell vor-edge vor-claimed vor-front" d="${d}" fill="none" stroke="${gmSolidColor(fac.color)}"></path>`);
+        edges.push({ kind: 'front', color: gmSolidColor(fac.color), pts: pts.map(p => [p[0] + ox, p[1] + oy]) });
       });
     } else if (distinct.length === 1) {
       const fac = gmFaction(distinct[0]);
-      if (fac.id === 'rift') {
-        facBorderHtml.push(`<path class="vor-cell vor-edge vor-rift-edge" d="${dRaw()}" fill="none"></path>`);
-      } else {
-        facBorderHtml.push(`<path class="vor-cell vor-edge vor-claimed" d="${dRaw()}" fill="none" stroke="${gmSolidColor(fac.color)}"></path>`);
-      }
+      if (fac.id === 'rift') edges.push({ kind: 'rift', pts });
+      else edges.push({ kind: 'fac', color: gmSolidColor(fac.color), pts });
     } else {
-      neutralBorderHtml.push(`<path class="vor-cell vor-edge vor-neutral" d="${dRaw()}" fill="none" stroke="rgba(150,170,200,0.18)"></path>`);
+      edges.push({ kind: 'neutral', color: 'rgba(150,170,200,0.18)', pts });
     }
   });
 
-  const laneHtml = GM.lanes.map(l => {
+  // ── Гиперпути: слегка изогнутая кривая вместо прямой. Изгиб детерминированный
+  //    (хэш по концам) — стабилен между перерисовками, не зависит от порядка. ──
+  const lanes = [];
+  GM.lanes.forEach(l => {
     const a = GM.systems.find(s => s.id === l.a_id), b = GM.systems.find(s => s.id === l.b_id);
-    if (!a || !b) return '';
-    const del = GM.edit && GM.mode === 'link' ? ` onclick="gmDeleteLane('${l.id}')"` : '';
-    const cls = 'hyperlane' + (GM.edit && GM.mode === 'link' ? ' gm-deletable' : '');
-    // Слегка изогнутая кривая вместо прямой: контрольная точка = середина + перпендикуляр.
-    // Изгиб детерминированный (хэш по концам) — стабилен между перерисовками, не зависит от порядка.
+    if (!a || !b) return;
     const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
     const nx = -dy / len, ny = dx / len;
     const h = gmEdgeHash(Math.min(a.x, b.x) + Math.max(a.x, b.x) * 0.31, Math.min(a.y, b.y) + Math.max(a.y, b.y) * 0.47);
     const bend = (h - 0.5) * 2 * Math.min(len * 0.11, 55);
-    const cx = (mx + nx * bend).toFixed(1), cy = (my + ny * bend).toFixed(1);
-    return `<path class="${cls}" d="M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}" fill="none"${del}></path>`;
+    lanes.push({ id: l.id, ax: a.x, ay: a.y, cx: +(mx + nx * bend).toFixed(1), cy: +(my + ny * bend).toFixed(1), bx: b.x, by: b.y });
+  });
+
+  return { fills, edges, lanes };
+}
+
+function gmDrawSvg() {
+  const svg = document.getElementById('gm-svg');
+  if (!svg) return;
+  const geo = gmBuildGeo();
+  const dOf = (pts, close) => 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + (close ? 'Z' : '');
+
+  const fillHtml = geo.fills.map(f => {
+    const d = dOf(f.pts, true);
+    if (f.isRift) return `<path class="vor-cell vor-rift" d="${d}" stroke="none"></path>`;  // заливка/анимация — в CSS
+    const fill = f.fac ? f.fac.color : 'rgba(120,140,170,0.05)';
+    const cls = 'vor-cell' + (f.fac ? ' vor-claimed' : ' vor-neutral');
+    return `<path class="${cls}" d="${d}" fill="${fill}" stroke="none"></path>`;
+  }).join('');
+
+  const facBorderHtml = [], neutralBorderHtml = [];
+  geo.edges.forEach(e => {
+    const d = dOf(e.pts);
+    if (e.kind === 'front') facBorderHtml.push(`<path class="vor-cell vor-edge vor-claimed vor-front" d="${d}" fill="none" stroke="${e.color}"></path>`);
+    else if (e.kind === 'rift') facBorderHtml.push(`<path class="vor-cell vor-edge vor-rift-edge" d="${d}" fill="none"></path>`);
+    else if (e.kind === 'fac') facBorderHtml.push(`<path class="vor-cell vor-edge vor-claimed" d="${d}" fill="none" stroke="${e.color}"></path>`);
+    else neutralBorderHtml.push(`<path class="vor-cell vor-edge vor-neutral" d="${d}" fill="none" stroke="${e.color}"></path>`);
+  });
+
+  const laneHtml = geo.lanes.map(L => {
+    const del = GM.edit && GM.mode === 'link' ? ` onclick="gmDeleteLane('${L.id}')"` : '';
+    const cls = 'hyperlane' + (GM.edit && GM.mode === 'link' ? ' gm-deletable' : '');
+    return `<path class="${cls}" d="M${L.ax},${L.ay} Q${L.cx},${L.cy} ${L.bx},${L.by}" fill="none"${del}></path>`;
   }).join('');
 
   const fb = facBorderHtml.join('');
@@ -752,7 +791,10 @@ function gmOpenPanel(sys) {
     <div class="gm-panel-sub">Состав системы <span class="gm-sub-hint">★ от звезды наружу →</span></div>
     <div class="gm-orblist">${planets}</div>`;
 }
-function gmClosePanel() { document.getElementById('gm-panel')?.classList.add('gm-hidden'); }
+function gmClosePanel() {
+  document.getElementById('gm-panel')?.classList.add('gm-hidden');
+  if (GMM.active && GMM.selId) { GMM.selId = null; GMM.dirty = true; gmmKick(); }
+}
 
 // ── Режим редактирования ────────────────────────────────────
 function gmToggleEdit() {
@@ -1081,12 +1123,564 @@ function gmApplyGen() {
   gmCloseGen();
   toast('Состав применён — не забудь «Сохранить»', 'ok');
 }
-async function gmDeleteStar(id) {
-  if (!confirm('Удалить систему и связанные гиперпути?')) return;
-  try {
-    await dbDel('map_systems', 'id=eq.' + encodeURIComponent(id));
-    GM.systems = GM.systems.filter(s => s.id !== id);
-    GM.lanes = GM.lanes.filter(l => l.a_id !== id && l.b_id !== id);
-    gmCloseForm(); gmDraw(); toast('Удалено', 'ok');
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+
+// ════════════════════════════════════════════════════════════
+// GMM — МОБИЛЬНЫЙ РЕНДЕРЕР КАРТЫ (canvas).
+//
+// Почему отдельный: DOM/SVG-вариант на телефонах неюзабелен — слой
+// 3300×2062 (SVG-вороной + DOM-звёзды) пере-растеризуется браузером при
+// каждом пинче, а бесконечные CSS-анимации разлома заставляют перерисо-
+// вывать весь слой даже в покое → лаги, дёрганье, «рендер с нуля».
+//
+// Здесь мир (фон, вороной, границы, линии, звёзды, подписи) рисуется в
+// офскрин-битмап (видимая область + запас по пол-экрана), а каждый кадр
+// на экран — это ОДИН drawImage с трансформом. Пан/пинч/инерция всегда
+// идут по готовому битмапу (60 fps); после остановки жеста битмап
+// перерисовывается в полном разрешении (короткая фоновая операция).
+//
+// Жесты: 1 палец — пан (с инерцией), 2 — пинч-зум, тап — панель системы,
+// дабл-тап по пустому — зум. Редактирование карты — только на десктопе.
+// Отладка на ПК: ?gmm=1 в адресе принудительно включает этот рендерер.
+// ════════════════════════════════════════════════════════════
+const GMM = {
+  active: false, cv: null, ctx: null, dpr: 1, vw: 0, vh: 0,
+  s: 0.1, tx: 0, ty: 0,            // камера: screen = world * s + t (CSS px)
+  paths: null,                     // кэш Path2D мира (группировка по цвету)
+  bmp: null,                       // офскрин-битмап {cv, wx, wy, scale, pw, ph, camS}
+  ptrs: new Map(), gesture: null, rect: null,
+  vel: null, anim: null,           // инерция / анимация камеры
+  raf: 0, dirty: false, rasterT: 0, lastRaster: 0,
+  lastTap: 0, ltx: 0, lty: 0,
+  selId: null, imgs: {},
+};
+const GMM_RAR_C = { common: '#7f93ad', uncommon: '#5fc257', rare: '#39bfe8', epic: '#b66cf2', legendary: '#ffa033' };
+// туманности фона: [x, y, r] в долях карты, цвет, альфа (палитра как у #gm-bg)
+const GMM_NEBULAE = [
+  [.22, .28, .30, '150,34,42', .30],
+  [.78, .66, .28, '54,34,104', .26],
+  [.62, .16, .24, '110,28,36', .20],
+  [.12, .82, .27, '30,52,96', .18],
+  [.88, .22, .21, '70,30,80', .16],
+];
+
+function gmIsMobile() {
+  if (/[?&]gmm=1\b/.test(location.search)) return true;   // принудительно (отладка)
+  if (/[?&]gmm=0\b/.test(location.search)) return false;  // принудительно десктоп
+  return window.matchMedia && matchMedia('(pointer: coarse)').matches;
+}
+
+// ── Вход в мобильный режим ──────────────────────────────────
+function gmmRender(host) {
+  GMM.active = true;
+  host.innerHTML = `
+    <div id="gm-wrap" class="gm-mobile">
+      <div id="gm-viewport"><canvas id="gmm-cv"></canvas></div>
+      <div id="gm-controls">
+        <button class="gm-ctl${GM.showBorders ? ' gm-active' : ''}" title="Границы" id="gm-ctl-borders" onclick="gmToggleBorders()">⬡</button>
+        <button class="gm-ctl${GM.showRes ? ' gm-active' : ''}" title="Ресурсы систем" id="gm-ctl-res" onclick="gmToggleRes()">💎</button>
+        ${gmResFilterHtml()}
+        <button class="gm-ctl" title="Приблизить" onclick="gmZoomBtn(1)">＋</button>
+        <button class="gm-ctl" title="Отдалить" onclick="gmZoomBtn(-1)">－</button>
+        <button class="gm-ctl" title="Вся карта" onclick="gmFit()">⤢</button>
+        <button class="gm-ctl" title="На весь экран" id="gm-ctl-fs" onclick="gmToggleFullscreen()">⛶</button>
+      </div>
+      <div id="gm-panel" class="gm-hidden"></div>
+    </div>`;
+  GMM.cv = document.getElementById('gmm-cv');
+  GMM.ctx = GMM.cv.getContext('2d');
+  GMM.bmp = null; GMM.ptrs.clear(); GMM.gesture = null;
+  GMM.vel = null; GMM.anim = null; GMM.selId = null; GMM.lastTap = 0;
+  gmmLoadImgs();
+  gmmBuildWorld();
+  gmmBindCanvas();
+  if (!window._gmmRszBound) { window._gmmRszBound = true; window.addEventListener('resize', gmmOnWinResize); }
+  // первичный размер + «вся карта»
+  const vp = document.getElementById('gm-viewport');
+  GMM.vw = vp.clientWidth; GMM.vh = vp.clientHeight;
+  GMM.dpr = Math.min(2, window.devicePixelRatio || 1);
+  GMM.cv.width = Math.max(1, Math.round(GMM.vw * GMM.dpr));
+  GMM.cv.height = Math.max(1, Math.round(GMM.vh * GMM.dpr));
+  gmmFit(false);
+  gmmRaster();
+  // дорисовка, когда подгрузятся веб-шрифты (подписи в битмапе)
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
+    if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRaster();
+  });
+}
+
+function gmmLoadImgs() {
+  GM_STAR_TYPES.forEach(t => {
+    if (GMM.imgs[t]) return;
+    const im = new Image();
+    im.onload = () => { if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRasterSoon(); };
+    im.src = GM_BASE + 'stars/star_' + t + '.png';
+    GMM.imgs[t] = im;
+  });
+}
+
+// ── Камера ──────────────────────────────────────────────────
+function gmmMinS() { return Math.min(GMM.vw / GM_W, GMM.vh / GM_H) || 0.05; }
+function gmmClampCam(c) {
+  c.s = Math.min(Math.max(c.s, gmmMinS()), 4);
+  const mw = GM_W * c.s, mh = GM_H * c.s;
+  c.tx = Math.min(0, Math.max(c.tx, GMM.vw - mw));
+  c.ty = Math.min(0, Math.max(c.ty, GMM.vh - mh));
+  if (mw < GMM.vw) c.tx = (GMM.vw - mw) / 2;
+  if (mh < GMM.vh) c.ty = (GMM.vh - mh) / 2;
+  return c;
+}
+function gmmClamp() { const c = gmmClampCam({ s: GMM.s, tx: GMM.tx, ty: GMM.ty }); GMM.s = c.s; GMM.tx = c.tx; GMM.ty = c.ty; }
+function gmmFit(animate) {
+  const ms = gmmMinS();
+  const to = { s: ms, tx: (GMM.vw - GM_W * ms) / 2, ty: (GMM.vh - GM_H * ms) / 2 };
+  if (animate) gmmAnimTo(to, 320);
+  else { GMM.s = to.s; GMM.tx = to.tx; GMM.ty = to.ty; GMM.dirty = true; gmmKick(); }
+}
+function gmmZoomAt(cx, cy, ns, animate) {
+  ns = Math.min(Math.max(ns, gmmMinS()), 4);
+  const wx = (cx - GMM.tx) / GMM.s, wy = (cy - GMM.ty) / GMM.s;
+  const to = gmmClampCam({ s: ns, tx: cx - wx * ns, ty: cy - wy * ns });
+  if (animate) gmmAnimTo(to, 280);
+  else { GMM.s = to.s; GMM.tx = to.tx; GMM.ty = to.ty; GMM.dirty = true; gmmKick(); }
+}
+function gmmAnimTo(to, dur) {
+  GMM.vel = null;
+  GMM.anim = { t0: performance.now(), dur: dur || 280, from: { s: GMM.s, tx: GMM.tx, ty: GMM.ty }, to };
+  gmmKick();
+}
+
+function gmmResize() {
+  const vp = document.getElementById('gm-viewport');
+  if (!vp || !GMM.cv || !GMM.cv.isConnected) return;
+  const w = vp.clientWidth, h = vp.clientHeight;
+  if (!w || !h) return;
+  GMM.vw = w; GMM.vh = h;
+  GMM.dpr = Math.min(2, window.devicePixelRatio || 1);
+  GMM.cv.width = Math.round(w * GMM.dpr);
+  GMM.cv.height = Math.round(h * GMM.dpr);
+  gmmClamp();
+  gmmRaster();
+}
+function gmmOnWinResize() {
+  if (!GMM.active || !document.getElementById('gmm-cv')) return;
+  clearTimeout(GMM._rszT);
+  GMM._rszT = setTimeout(gmmResize, 120);
+}
+
+// ── Жесты (Pointer Events; touch-action:none на канвасе) ───
+function gmmBindCanvas() {
+  const cv = GMM.cv;
+  cv.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    GMM.rect = cv.getBoundingClientRect();
+    GMM.ptrs.set(e.pointerId, { x: e.clientX - GMM.rect.left, y: e.clientY - GMM.rect.top });
+    GMM.vel = null; GMM.anim = null;
+    if (GMM.ptrs.size === 1) {
+      const p = GMM.ptrs.get(e.pointerId), now = performance.now();
+      GMM.gesture = { mode: 'pan', id: e.pointerId, sx: p.x, sy: p.y, tx0: GMM.tx, ty0: GMM.ty,
+        moved: false, t0: now, lx: p.x, ly: p.y, lt: now, vx: 0, vy: 0 };
+    } else if (GMM.ptrs.size === 2) gmmStartPinch();
+    else GMM.gesture = null;
+  });
+  cv.addEventListener('pointermove', (e) => {
+    const pt = GMM.ptrs.get(e.pointerId);
+    if (!pt) return;
+    const r = GMM.rect || cv.getBoundingClientRect();
+    pt.x = e.clientX - r.left; pt.y = e.clientY - r.top;
+    const g = GMM.gesture;
+    if (!g) return;
+    if (g.mode === 'pan' && e.pointerId === g.id) {
+      const dx = pt.x - g.sx, dy = pt.y - g.sy;
+      if (!g.moved && Math.hypot(dx, dy) > 7) g.moved = true;
+      if (!g.moved) return;
+      GMM.tx = g.tx0 + dx; GMM.ty = g.ty0 + dy;
+      gmmClamp();
+      const now = performance.now(), dt = Math.max(1, now - g.lt);
+      g.vx = 0.75 * ((pt.x - g.lx) / dt) + 0.25 * g.vx;   // сглаженная скорость для инерции
+      g.vy = 0.75 * ((pt.y - g.ly) / dt) + 0.25 * g.vy;
+      g.lx = pt.x; g.ly = pt.y; g.lt = now;
+      GMM.dirty = true; gmmKick();
+    } else if (g.mode === 'pinch' && GMM.ptrs.size >= 2) {
+      const ps = [...GMM.ptrs.values()];
+      const d = Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) || 1;
+      const cx = (ps[0].x + ps[1].x) / 2, cy = (ps[0].y + ps[1].y) / 2;
+      GMM.s = Math.min(Math.max(g.s0 * (d / g.d0), gmmMinS()), 4);
+      GMM.tx = cx - g.wx * GMM.s; GMM.ty = cy - g.wy * GMM.s;
+      gmmClamp();
+      GMM.dirty = true; gmmKick();
+    }
+  });
+  const up = (e) => {
+    if (!GMM.ptrs.delete(e.pointerId)) return;
+    const g = GMM.gesture;
+    if (GMM.ptrs.size === 1) {
+      // из пинча в пан оставшимся пальцем — без скачка
+      const [id] = GMM.ptrs.keys();
+      const p = GMM.ptrs.get(id), now = performance.now();
+      GMM.gesture = { mode: 'pan', id, sx: p.x, sy: p.y, tx0: GMM.tx, ty0: GMM.ty,
+        moved: true, t0: now, lx: p.x, ly: p.y, lt: now, vx: 0, vy: 0 };
+      return;
+    }
+    if (GMM.ptrs.size) return;
+    GMM.gesture = null;
+    if (!g || g.mode !== 'pan') return;
+    const now = performance.now();
+    if (!g.moved && e.type === 'pointerup' && now - g.t0 < 500) {
+      const r = GMM.rect || cv.getBoundingClientRect();
+      gmmTapAt(e.clientX - r.left, e.clientY - r.top);
+    } else if (g.moved && now - g.lt < 60 && Math.hypot(g.vx, g.vy) > 0.08) {
+      GMM.vel = { vx: g.vx, vy: g.vy, t: 0 };   // инерция доводки
+      gmmKick();
+    }
+  };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  // колесо — вдруг планшет с мышью / отладка на ПК
+  cv.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = cv.getBoundingClientRect();
+    gmmZoomAt(e.clientX - r.left, e.clientY - r.top, GMM.s * (e.deltaY > 0 ? 1 / 1.15 : 1.15), false);
+  }, { passive: false });
+}
+function gmmStartPinch() {
+  const ps = [...GMM.ptrs.values()];
+  const d0 = Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) || 1;
+  const cx = (ps[0].x + ps[1].x) / 2, cy = (ps[0].y + ps[1].y) / 2;
+  GMM.gesture = { mode: 'pinch', d0, s0: GMM.s, wx: (cx - GMM.tx) / GMM.s, wy: (cy - GMM.ty) / GMM.s };
+}
+
+function gmmTapAt(lx, ly) {
+  // ближайшая система в радиусе пальца
+  let best = null, bd = 1e9;
+  GM.systems.forEach(s => {
+    const sx = s.x * GMM.s + GMM.tx, sy = s.y * GMM.s + GMM.ty;
+    const d = Math.hypot(sx - lx, sy - ly);
+    const rad = Math.max(24, gmmIconPx(s, GMM.s) * 0.7);
+    if (d < rad && d < bd) { bd = d; best = s; }
+  });
+  if (best) {
+    GMM.selId = best.id; GMM.dirty = true; gmmKick();
+    gmOpenPanel(best);
+    gmmEnsureVisible(best);
+    GMM.lastTap = 0;
+    return;
+  }
+  const now = performance.now();
+  if (now - GMM.lastTap < 320 && Math.hypot(lx - GMM.ltx, ly - GMM.lty) < 40) {
+    // дабл-тап по пустому: зум к точке; если уже почти максимум — вся карта
+    gmmZoomAt(lx, ly, GMM.s > 3.4 ? gmmMinS() : GMM.s * 2.2, true);
+    GMM.lastTap = 0;
+  } else {
+    GMM.lastTap = now; GMM.ltx = lx; GMM.lty = ly;
+    gmClosePanel();
+  }
+}
+// после открытия нижней панели доводим камеру, чтобы звезда не пряталась под ней
+function gmmEnsureVisible(sys) {
+  const sx = sys.x * GMM.s + GMM.tx, sy = sys.y * GMM.s + GMM.ty;
+  let tx = GMM.tx, ty = GMM.ty;
+  const yMin = 56, yMax = GMM.vh * 0.32, xMin = 30, xMax = GMM.vw - 30;
+  if (sy > yMax) ty += yMax - sy; else if (sy < yMin) ty += yMin - sy;
+  if (sx < xMin) tx += xMin - sx; else if (sx > xMax) tx += xMax - sx;
+  if (tx !== GMM.tx || ty !== GMM.ty) gmmAnimTo(gmmClampCam({ s: GMM.s, tx, ty }), 260);
+}
+
+// ── Кадровый цикл: блит битмапа + инерция/анимация ──────────
+function gmmKick() { if (!GMM.raf && GMM.active) GMM.raf = requestAnimationFrame(gmmFrame); }
+function gmmFrame(ts) {
+  GMM.raf = 0;
+  if (!GMM.cv || !GMM.cv.isConnected) { GMM.active = false; return; }   // ушли со страницы
+  let again = false;
+  if (GMM.anim) {
+    const a = GMM.anim, k = Math.min(1, (ts - a.t0) / a.dur);
+    const e = 1 - Math.pow(1 - k, 3);
+    GMM.s = a.from.s + (a.to.s - a.from.s) * e;
+    GMM.tx = a.from.tx + (a.to.tx - a.from.tx) * e;
+    GMM.ty = a.from.ty + (a.to.ty - a.from.ty) * e;
+    if (k >= 1) GMM.anim = null; else again = true;
+    GMM.dirty = true;
+  } else if (GMM.vel) {
+    const dt = GMM.vel.t ? Math.min(40, ts - GMM.vel.t) : 16;
+    GMM.vel.t = ts;
+    GMM.tx += GMM.vel.vx * dt; GMM.ty += GMM.vel.vy * dt;
+    const f = Math.exp(-dt / 320);   // трение
+    GMM.vel.vx *= f; GMM.vel.vy *= f;
+    gmmClamp();
+    if (Math.hypot(GMM.vel.vx, GMM.vel.vy) < 0.01) GMM.vel = null; else again = true;
+    GMM.dirty = true;
+  }
+  if (GMM.dirty) { GMM.dirty = false; gmmBlit(); }
+  if (gmmNeedRaster()) {
+    const now = performance.now();
+    if (now - GMM.lastRaster > 380) gmmRaster();        // во время длинного жеста — освежаем
+    else gmmRasterSoon();                               // после остановки — дорисовка начисто
+  }
+  if (again) gmmKick();
+}
+function gmmBlit() {
+  const ctx = GMM.ctx, dpr = GMM.dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#04060c';
+  ctx.fillRect(0, 0, GMM.vw, GMM.vh);
+  const b = GMM.bmp;
+  if (b) {
+    const f = GMM.s / b.scale;   // битмап-px → CSS-px
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(b.cv, 0, 0, b.pw, b.ph,
+      b.wx * GMM.s + GMM.tx, b.wy * GMM.s + GMM.ty, b.pw * f, b.ph * f);
+  }
+  if (GMM.selId) {   // кольцо выбранной системы — поверх, живёт без перерисовки мира
+    const sys = GM.systems.find(x => x.id === GMM.selId);
+    if (sys) {
+      const sx = sys.x * GMM.s + GMM.tx, sy = sys.y * GMM.s + GMM.ty;
+      ctx.beginPath(); ctx.arc(sx, sy, gmmIconPx(sys, GMM.s) * 0.62 + 6, 0, 6.2832);
+      ctx.strokeStyle = 'rgba(150,205,255,.85)'; ctx.lineWidth = 1.6;
+      ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+}
+
+// ── Офскрин-битмап мира ─────────────────────────────────────
+function gmmNeedRaster() {
+  const b = GMM.bmp;
+  if (!b) return !!GMM.paths;
+  const ratio = GMM.s / b.camS;
+  if (ratio > 1.45 || ratio < 0.62) return true;        // зум ушёл — битмап мыльный/тяжёлый
+  const vx0 = -GMM.tx / GMM.s, vy0 = -GMM.ty / GMM.s;
+  const vx1 = (GMM.vw - GMM.tx) / GMM.s, vy1 = (GMM.vh - GMM.ty) / GMM.s;
+  const bx1 = b.wx + b.pw / b.scale, by1 = b.wy + b.ph / b.scale;
+  if (vx0 < b.wx - 2 && b.wx > 1) return true;          // выехали за покрытие (и там есть мир)
+  if (vy0 < b.wy - 2 && b.wy > 1) return true;
+  if (vx1 > bx1 + 2 && bx1 < GM_W - 1) return true;
+  if (vy1 > by1 + 2 && by1 < GM_H - 1) return true;
+  return false;
+}
+function gmmRasterSoon() {
+  if (GMM.rasterT) return;
+  GMM.rasterT = setTimeout(gmmRaster, 110);
+}
+function gmmRaster() {
+  if (GMM.rasterT) { clearTimeout(GMM.rasterT); GMM.rasterT = 0; }
+  if (!GMM.active || !GMM.cv || !GMM.cv.isConnected) return;
+  if (!GMM.paths) gmmBuildWorld();
+  const s = GMM.s, dpr = GMM.dpr;
+  // мировое окно: видимая область + запас по пол-экрана с каждой стороны
+  const padX = GMM.vw * 0.5, padY = GMM.vh * 0.5;
+  const wx0 = Math.max(0, (-GMM.tx - padX) / s), wy0 = Math.max(0, (-GMM.ty - padY) / s);
+  const wx1 = Math.min(GM_W, (GMM.vw - GMM.tx + padX) / s), wy1 = Math.min(GM_H, (GMM.vh - GMM.ty + padY) / s);
+  if (wx1 <= wx0 || wy1 <= wy0) return;
+  let bs = s * dpr;
+  // бюджет растра: не больше 4096 по стороне и ~8.5 Мпикс суммарно
+  const rawW = (wx1 - wx0) * bs, rawH = (wy1 - wy0) * bs;
+  bs *= Math.min(1, 4096 / rawW, 4096 / rawH, Math.sqrt(8.5e6 / (rawW * rawH)));
+  const pw = Math.max(1, Math.ceil((wx1 - wx0) * bs)), ph = Math.max(1, Math.ceil((wy1 - wy0) * bs));
+  let b = GMM.bmp;
+  if (!b) b = GMM.bmp = { cv: document.createElement('canvas') };
+  if (b.cv.width !== pw || b.cv.height !== ph) { b.cv.width = pw; b.cv.height = ph; }
+  const c2 = b.cv.getContext('2d');
+  c2.setTransform(1, 0, 0, 1, 0, 0);
+  c2.clearRect(0, 0, pw, ph);
+  c2.setTransform(bs, 0, 0, bs, -wx0 * bs, -wy0 * bs);
+  gmmPaint(c2, s, wx0, wy0, wx1, wy1);
+  Object.assign(b, { wx: wx0, wy: wy0, scale: bs, pw, ph, camS: s });
+  GMM.lastRaster = performance.now();
+  GMM.dirty = true; gmmKick();
+}
+
+// ── Кэш Path2D мира (пересобирается при смене данных) ───────
+function gmmBuildWorld() {
+  const geo = gmBuildGeo();
+  const dOf = (pts, close) => 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + (close ? 'Z' : '');
+  // заливки, сгруппированные по цвету (фракция = один Path2D из всех её ячеек)
+  const fillD = new Map();
+  geo.fills.forEach(f => {
+    const color = f.isRift ? 'rgba(14,2,24,.8)' : (f.fac ? f.fac.color : 'rgba(120,140,170,0.04)');
+    fillD.set(color, (fillD.get(color) || '') + dOf(f.pts, true));
+  });
+  // границы: цветные (фракции/фронты) по цвету, нейтральные и разлом — отдельно
+  const edgeD = new Map(); let neutralD = '', riftD = '';
+  geo.edges.forEach(e => {
+    const d = dOf(e.pts);
+    if (e.kind === 'neutral') neutralD += d;
+    else if (e.kind === 'rift') riftD += d;
+    else edgeD.set(e.color, (edgeD.get(e.color) || '') + d);
+  });
+  let lanesD = '';
+  geo.lanes.forEach(L => { lanesD += `M${L.ax},${L.ay} Q${L.cx},${L.cy} ${L.bx},${L.by}`; });
+  GMM.paths = {
+    fills: [...fillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
+    edges: [...edgeD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
+    neutral: neutralD ? new Path2D(neutralD) : null,
+    rift: riftD ? new Path2D(riftD) : null,
+    lanes: lanesD ? new Path2D(lanesD) : null,
+  };
+}
+
+// ── Отрисовка мира в произвольный контекст (transform уже мировой) ──
+// camS — экранный масштаб: толщины линий/шрифты задаются в px и делятся на него
+function gmmPaint(ctx, camS, wx0, wy0, wx1, wy1) {
+  // фон: база + туманности + детерминированная звёздная россыпь
+  ctx.fillStyle = '#05060b';
+  ctx.fillRect(wx0, wy0, wx1 - wx0, wy1 - wy0);
+  GMM_NEBULAE.forEach(([px, py, pr, c, a]) => {
+    const cx = px * GM_W, cy = py * GM_H, R = pr * GM_W;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+    g.addColorStop(0, `rgba(${c},${a})`); g.addColorStop(1, `rgba(${c},0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  });
+  gmmPaintStarfield(ctx, camS, wx0, wy0, wx1, wy1);
+  ctx.strokeStyle = 'rgba(120,160,220,.14)'; ctx.lineWidth = 1.5 / camS;
+  ctx.strokeRect(0, 0, GM_W, GM_H);
+
+  const P = GMM.paths;
+  if (!P) return;
+  P.fills.forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
+  if (GM.showBorders) {
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    // свечение — широкий полупрозрачный контур (как на десктопе, без фильтров)
+    ctx.globalAlpha = .28; ctx.lineWidth = 5 / camS;
+    P.edges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
+    if (P.rift) { ctx.strokeStyle = '#b14ef0'; ctx.stroke(P.rift); }
+    ctx.globalAlpha = 1;
+    if (P.neutral) { ctx.lineWidth = 1.2 / camS; ctx.strokeStyle = 'rgba(150,170,200,.18)'; ctx.stroke(P.neutral); }
+    ctx.lineWidth = 2.2 / camS;
+    P.edges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
+    if (P.rift) {   // граница разлома — статичный глитч-пунктир (анимация дорого на телефоне)
+      ctx.setLineDash([7, 5]); ctx.strokeStyle = '#c060ff'; ctx.lineWidth = 2.2 / camS;
+      ctx.stroke(P.rift); ctx.setLineDash([]);
+    }
+  }
+  if (P.lanes) {
+    ctx.globalAlpha = .85; ctx.lineCap = 'round';
+    ctx.strokeStyle = 'hsl(206 92% 64%)'; ctx.lineWidth = 1.8 / camS;
+    ctx.stroke(P.lanes); ctx.globalAlpha = 1;
+  }
+  gmmPaintStars(ctx, camS);
+}
+
+function gmmPaintStarfield(ctx, camS, wx0, wy0, wx1, wy1) {
+  const CELL = 120;
+  const i0 = Math.floor(wx0 / CELL), i1 = Math.ceil(wx1 / CELL);
+  const j0 = Math.floor(wy0 / CELL), j1 = Math.ceil(wy1 / CELL);
+  for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) for (let k = 0; k < 2; k++) {
+    const h1 = gmEdgeHash(i * 12.7 + k * 31.7, j * 7.9 + k * 17.3);
+    const h2 = gmEdgeHash(i * 3.1 + k * 5.9, j * 9.7 + k * 2.3);
+    const h3 = gmEdgeHash(i * 8.3 + k * 1.7, j * 4.9 + k * 23.1);
+    const x = (i + h1) * CELL, y = (j + h2) * CELL;
+    if (x < 0 || y < 0 || x > GM_W || y > GM_H) continue;
+    const r = (0.5 + h3 * 0.9) / camS;
+    ctx.globalAlpha = 0.25 + h3 * 0.5;
+    ctx.fillStyle = h1 > 0.85 ? '#cfe0ff' : '#ffffff';
+    ctx.fillRect(x - r / 2, y - r / 2, r, r);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// иконка звезды: на телефоне размер полу-экранный — пропорционален зуму,
+// но с минимумом (видна на фит-зуме) и максимумом (не мыло на 4×)
+function gmmIconPx(s, camS) {
+  const base = s.faction === 'rift' ? (s.id === 'rift_core' ? 74 : 46) : (s.is_giant ? 104 : 52);
+  const floor = s.is_giant ? 30 : (s.faction === 'rift' ? 20 : 18);
+  return Math.max(floor, Math.min(base, base * camS));
+}
+
+function gmmPaintStars(ctx, camS) {
+  const caps = GM.capitals || {};
+  const showAll = camS >= 0.30;   // дальше — подписи только у важного (гиганты/столицы/разлом)
+  const labelPx = 12;
+  GM.systems.forEach(s => {
+    const iw = gmmIconPx(s, camS) / camS;   // мировые юниты
+    if (s.faction === 'rift') {
+      gmmPaintRift(ctx, s, iw, camS);
+    } else {
+      const glowR = iw * (s.is_giant ? 1.1 : 0.9);
+      const gc = s.is_giant ? '255,210,120' : '120,180,255';
+      const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, glowR);
+      g.addColorStop(0, `rgba(${gc},.34)`); g.addColorStop(1, `rgba(${gc},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(s.x, s.y, glowR, 0, 6.2832); ctx.fill();
+      const im = GMM.imgs[s.star_type] || GMM.imgs.yellow;
+      if (im && im.complete && im.naturalWidth) ctx.drawImage(im, s.x - iw / 2, s.y - iw / 2, iw, iw);
+      else { ctx.fillStyle = '#ffd76a'; ctx.beginPath(); ctx.arc(s.x, s.y, iw * 0.3, 0, 6.2832); ctx.fill(); }
+      const capFid = caps[s.id];
+      if (capFid) {
+        ctx.font = `${(13 / camS).toFixed(2)}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillStyle = gmReadable((gmFaction(capFid) || {}).color || '#ffd24d');
+        ctx.fillText('★', s.x, s.y - iw / 2 - 1 / camS);
+      }
+    }
+    const important = s.is_giant || caps[s.id] || s.faction === 'rift';
+    if (showAll || important) {
+      const fpx = (s.is_giant ? labelPx + 2 : labelPx) / camS;
+      ctx.font = `600 ${fpx.toFixed(2)}px Rajdhani, 'Exo 2', sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      const ly = s.y + iw / 2 + 3 / camS;
+      ctx.lineWidth = 3 / camS; ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.lineJoin = 'round';
+      ctx.strokeText(s.name, s.x, ly);
+      ctx.fillStyle = s.faction === 'rift' ? '#e0c2ff' : (s.is_giant ? '#ffe6b0' : '#dfeaff');
+      ctx.fillText(s.name, s.x, ly);
+    }
+    if (GM.showRes) gmmPaintResPins(ctx, s, iw, camS);
+  });
+}
+
+function gmmPaintRift(ctx, s, iw, camS) {
+  const r = iw / 2;
+  const g2 = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r * 1.5);
+  g2.addColorStop(0, 'rgba(155,48,255,.4)'); g2.addColorStop(1, 'rgba(155,48,255,0)');
+  ctx.fillStyle = g2;
+  ctx.beginPath(); ctx.arc(s.x, s.y, r * 1.5, 0, 6.2832); ctx.fill();
+  const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r * 0.62);
+  g.addColorStop(0, '#20003a'); g.addColorStop(0.7, '#7a18c8'); g.addColorStop(1, 'rgba(122,24,200,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(s.x, s.y, r * 0.62, 0, 6.2832); ctx.fill();
+  ctx.setLineDash([6 / camS, 5 / camS]);
+  ctx.strokeStyle = 'rgba(205,130,255,.7)'; ctx.lineWidth = 1.6 / camS;
+  ctx.beginPath(); ctx.arc(s.x, s.y, r * 0.92, 0, 6.2832); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function gmmPaintResPins(ctx, s, iw, camS) {
+  const list = gmSysRes(s).filter(r => GM.resRarities.includes(r.r || 'common'));
+  if (!list.length) return;
+  if (camS < 0.2) {   // далеко: вместо плашки — точка цвета самой ценной редкости
+    ctx.fillStyle = GMM_RAR_C[list[0].r] || GMM_RAR_C.common;
+    const r = 3.2 / camS;
+    ctx.beginPath(); ctx.arc(s.x, s.y - iw / 2 - r * 1.6, r, 0, 6.2832); ctx.fill();
+    return;
+  }
+  const MAX = 6, shown = list.slice(0, MAX);
+  const more = list.length > MAX ? '+' + (list.length - MAX) : '';
+  const ph = 13 / camS, wEach = 15 / camS, padX = 5 / camS;
+  const wMore = more ? (more.length * 7 + 4) / camS : 0;
+  const W = shown.length * wEach + wMore + padX * 2;
+  const H = ph + 8 / camS;
+  const x0 = s.x - W / 2, y0 = s.y - iw / 2 - H - 6 / camS;
+  ctx.fillStyle = 'rgba(7,10,18,.82)';
+  ctx.strokeStyle = 'rgba(160,190,230,.25)'; ctx.lineWidth = 1 / camS;
+  gmmRoundRect(ctx, x0, y0, W, H, 5 / camS);
+  ctx.fill(); ctx.stroke();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const cy = y0 + H / 2 + 0.5 / camS;
+  ctx.font = `${ph.toFixed(2)}px sans-serif`;
+  let cx = x0 + padX + wEach / 2;
+  shown.forEach(r => { ctx.fillStyle = GMM_RAR_C[r.r] || GMM_RAR_C.common; ctx.fillText(r.icon || '◆', cx, cy); cx += wEach; });
+  if (more) {
+    ctx.fillStyle = '#9fb1c8';
+    ctx.font = `700 ${(9.5 / camS).toFixed(2)}px Rajdhani, sans-serif`;
+    ctx.fillText(more, x0 + W - padX - wMore / 2 + 2 / camS, cy);
+  }
+}
+function gmmRoundRect(ctx, x, y, w, h, r) {
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return; }
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }

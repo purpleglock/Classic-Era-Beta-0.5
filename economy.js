@@ -477,6 +477,11 @@ async function ecBootOnce() {
       if (tick.income && tick.income.gc) parts.push(`+${ecNum(tick.income.gc * tick.days)} ГС`);
       if (tick.income && tick.income.science) parts.push(`+${ecNum(tick.income.science * tick.days)} ОН`);
       if (parts.length) toast(`Доход за ${tick.days} сут.: ${parts.join(' · ')}`, 'ok');
+      // Пираты срезали караваны за этот период — иначе доход «меньше превью» без объяснений.
+      if (tick.income && tick.income.pirate) {
+        const lost = tick.income.pirate_loss ? ` (~${ecNum(tick.income.pirate_loss)} ГС)` : '';
+        toast(`🏴‍☠ Караваны атакованы пиратами — потеряно${lost} торгового дохода`, 'err');
+      }
     }
     return tick;
   })();
