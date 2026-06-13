@@ -1578,12 +1578,13 @@ function gmmPaintStarfield(ctx, camS, wx0, wy0, wx1, wy1) {
   ctx.globalAlpha = 1;
 }
 
-// иконка звезды: на телефоне размер полу-экранный — пропорционален зуму,
-// но с минимумом (видна на фит-зуме) и максимумом (не мыло на 4×)
+// иконка звезды: размер растёт СУБлинейно от зума (pow 0.55) — на фит-зуме
+// звёзды мелкие и не сливаются в кашу, при приближении доходят до полного
+// размера; сверху ограничены base (не мыло на 4×)
 function gmmIconPx(s, camS) {
   const base = s.faction === 'rift' ? (s.id === 'rift_core' ? 74 : 46) : (s.is_giant ? 104 : 52);
-  const floor = s.is_giant ? 30 : (s.faction === 'rift' ? 20 : 18);
-  return Math.max(floor, Math.min(base, base * camS));
+  const k = Math.pow(Math.min(1, camS), s.is_giant ? 0.78 : 0.7);
+  return Math.max(8, base * k);
 }
 
 function gmmPaintStars(ctx, camS) {

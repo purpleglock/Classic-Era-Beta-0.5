@@ -312,6 +312,33 @@ textarea.gm-fi{resize:vertical}
   #gm-controls{bottom:66px}
 }
 
+/* ════════ МОБИЛЬНЫЙ РЕНДЕРЕР (canvas, #gm-wrap.gm-mobile) ════════ */
+/* 100dvh вместо 100vh: на телефонах адресная строка «съедает» vh */
+@supports (height:100dvh){
+  #gm-wrap{height:calc(100dvh - var(--th) - 52px)}
+  #gm-wrap.gm-fullscreen{height:100dvh}
+}
+/* канвас точно по вьюпорту; backing-размер (×dpr) задаёт JS */
+#gmm-cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#gm-wrap.gm-mobile #gm-viewport{cursor:default}
+#gm-wrap.gm-mobile.gm-fullscreen #gm-viewport,
+#gm-wrap.gm-mobile:fullscreen #gm-viewport{height:100%}
+/* контролы — пальцевые размеры */
+#gm-wrap.gm-mobile .gm-ctl{width:42px;height:42px;font-size:19px}
+#gm-wrap.gm-mobile .gm-rf{width:42px;height:26px}
+/* панель системы — нижний лист на всю ширину */
+#gm-wrap.gm-mobile #gm-panel{
+  top:auto;left:0;right:0;bottom:0;width:100%;max-width:none;max-height:58%;
+  border-left:none;border-right:none;border-bottom:none;
+  padding:22px 16px calc(18px + env(safe-area-inset-bottom,0px));
+  box-shadow:0 -14px 44px rgba(0,0,0,.65);overscroll-behavior:contain;
+}
+#gm-wrap.gm-mobile #gm-panel::before{
+  content:'';position:absolute;top:7px;left:50%;transform:translateX(-50%);
+  width:42px;height:4px;border-radius:2px;background:rgba(255,255,255,.22);
+}
+#gm-wrap.gm-mobile #gm-panel .gm-close{top:12px;right:14px;font-size:22px;padding:4px}
+
 /* ════════ РАЗЛОМ МАТЕРИИ (другая вселенная) ════════ */
 /* Территория разлома — тёмная пустота с медленным «дыханием» */
 .vor-rift{fill:rgba(14,2,24,.66);animation:gm-rift-breathe 6s ease-in-out infinite}
