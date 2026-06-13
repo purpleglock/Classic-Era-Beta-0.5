@@ -2880,8 +2880,9 @@ async function removeBackgroundUrl() {
 }
 
 function applyBackgroundImage(url) {
-  if (url) {
-    document.body.style.setProperty('--bg-image', `url('${url}')`);
+  const safe = (typeof cssUrl === 'function') ? cssUrl(url) : url;
+  if (safe) {
+    document.body.style.setProperty('--bg-image', `url('${safe}')`);
   } else {
     document.body.style.removeProperty('--bg-image');
   }

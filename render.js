@@ -1402,6 +1402,11 @@ function il(t) {
     do { prev = s; s = s.replace(/\x00(\d+)\x00/g, (_,i) => ph[+i] || ''); } while (s !== prev);
     return s;
   };
+  // XSS-защита: экранируем СЫРОЙ текст (вне плейсхолдеров) внутри тегов
+  // [c:]/[bg:]/[center]/[fx:…]. Без этого их содержимое попадало в DOM как сырой
+  // HTML (напр. <img onerror>) → stored XSS у всех читателей, включая модератора.
+  // Легальный markdown к этому моменту уже в плейсхолдерах и не пострадает.
+  const escFx = s => String(s).replace(/(\x00\d+\x00)|([^\x00]+)/g, (_, p, raw) => p || esc(raw));
 
   // FX schizo (админский «шизотекст») — раньше всего: внутри плоский текст → руны.
   t=t.replace(/\[fx:schizo\]([\s\S]*?)\[\/fx\]/g,(_,s)=>mark(schizoWrap(s)));
@@ -1425,19 +1430,19 @@ function il(t) {
 
   // color — inner, can wrap MD marks
   const colMap={gold:'tc-gold',cyan:'tc-cyan',red:'tc-red',purple:'tc-purple',green:'tc-green',dim:'tc-dim'};
-  t=t.replace(/\[c:(\w+)\]([\s\S]*?)\[\/c\]/g,(_,k,s)=>mark(`<span class="${colMap[k]||'tc-cyan'}">${resolve(s)}</span>`));
+  t=t.replace(/\[c:(\w+)\]([\s\S]*?)\[\/c\]/g,(_,k,s)=>mark(`<span class="${colMap[k]||'tc-cyan'}">${resolve(escFx(s))}</span>`));
 
   // background highlight — inner, can wrap color/MD
   const bgMap={cyber:'bg-cyber',gold:'bg-gold',danger:'bg-danger',lore:'bg-lore',redacted:'bg-redacted'};
-  t=t.replace(/\[bg:(\w+)\]([\s\S]*?)\[\/bg\]/g,(_,k,s)=>mark(`<span class="${bgMap[k]||'bg-cyber'}">${resolve(s)}</span>`));
+  t=t.replace(/\[bg:(\w+)\]([\s\S]*?)\[\/bg\]/g,(_,k,s)=>mark(`<span class="${bgMap[k]||'bg-cyber'}">${resolve(escFx(s))}</span>`));
 
   // alignment — блочное выравнивание абзаца (центр / право / лево)
-  t=t.replace(/\[(center|right|left)\]([\s\S]*?)\[\/\1\]/g,(_,a,s)=>mark(`<span class="al-${a}">${resolve(s)}</span>`));
+  t=t.replace(/\[(center|right|left)\]([\s\S]*?)\[\/\1\]/g,(_,a,s)=>mark(`<span class="al-${a}">${resolve(escFx(s))}</span>`));
 
   // FX — outermost, wraps everything above
-  t=t.replace(/\[fx:scanner\]([\s\S]*?)\[\/fx\]/g,(_,s)=>mark(`<span class="fx-scanner">${resolve(s)}</span>`));
-  t=t.replace(/\[fx:glitch\]([\s\S]*?)\[\/fx\]/g,(_,s)=>{const inner=resolve(s);return mark(`<span class="fx-glitch" data-text="${esc(s)}">${inner}</span>`);});
-  t=t.replace(/\[fx:jitter\]([\s\S]*?)\[\/fx\]/g,(_,s)=>mark(jitterWrap(resolve(s))));
+  t=t.replace(/\[fx:scanner\]([\s\S]*?)\[\/fx\]/g,(_,s)=>mark(`<span class="fx-scanner">${resolve(escFx(s))}</span>`));
+  t=t.replace(/\[fx:glitch\]([\s\S]*?)\[\/fx\]/g,(_,s)=>{const inner=resolve(escFx(s));return mark(`<span class="fx-glitch" data-text="${esc(s)}">${inner}</span>`);});
+  t=t.replace(/\[fx:jitter\]([\s\S]*?)\[\/fx\]/g,(_,s)=>mark(jitterWrap(resolve(escFx(s)))));
 
   // escape remaining raw text (only what's left outside placeholders)
   t = t.replace(/(\x00\d+\x00)|([^\x00]+)/g, (_, ph_match, raw) => ph_match || esc(raw));

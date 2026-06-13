@@ -152,7 +152,7 @@ function fnHomeBlockHtml() {
       ? `<span class="fn-card-live fn-card-bulletin">◈ СВОДКА</span><span class="fn-card-fac">${esc((n.faction_name || 'СЕКТОР').toUpperCase())}</span>`
       : rumor
       ? `<span class="fn-card-live fn-card-rumor">📡 СЛУХ</span><span class="fn-card-fac">${esc((n.faction_name || 'АНОНИМНО').toUpperCase())}</span>`
-      : `<span class="fn-card-live">ПЕРЕДАЧА</span><span class="fn-card-fac">${flag}${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>`;
+      : `<span class="fn-card-fac fn-card-fac-main">${flag}${esc((n.faction_name || 'ФРАКЦИЯ').toUpperCase())}</span>`;
     const readmore = bulletin ? 'СВОДКА ▸' : rumor ? '|||||||| ' : '||||||||';
     return `<article class="fn-card${lead ? ' fn-card-lead' : ''}${rumor ? ' fn-card-is-rumor' : ''}${bulletin ? ' fn-card-is-bulletin' : ''}" data-fn-id="${esc(n.id)}" onclick="fnOpenArticle('${esc(n.id)}')" style="--fn-accent:${esc(accent)}">
       ${fnIsStaff() ? `<button class="fn-card-del" title="Удалить (админ)" onclick="fnAdminDelete('${esc(n.id)}',event)">✕</button>` : ''}
@@ -446,7 +446,7 @@ function fnOpenArticle(id) {
   const evFac = (!n.owner_id && !n.image_url && !n.author_herald) ? fnEventFaction(n) : null;
   const bgImgUrl = (n.author_herald && !isFxHerald) ? n.author_herald : (evFac && evFac.herald_url) || '';
   const bgUrl = (!n.image_url) ? bgImgUrl : '';
-  const bgFlag = bgUrl ? `<div class="fn-art-bgflag" style="background-image:url('${esc(bgUrl)}')"></div>`
+  const bgFlag = bgUrl ? `<div class="fn-art-bgflag" style="background-image:url('${cssUrl(bgUrl)}')"></div>`
     : (isFxHerald && !n.image_url ? `<div class="fn-art-bgflag fn-art-bgrift" aria-hidden="true">◈</div>` : '');
   const barL = kind === 'bulletin' ? '◈ СВОДКА СЕКТОРА' : kind === 'rumor' ? '📡 ПЕРЕХВАЧЕННЫЙ СЛУХ' : 'Галактическая информсеть "Патриоты"';
   const barR = kind === 'bulletin' ? '◈◈' : kind === 'rumor' ? '◈◈' : '◈◈';

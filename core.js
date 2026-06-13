@@ -202,6 +202,14 @@ function safeUrl(u) {
   if (/^(javascript|data|vbscript|blob):/.test(lo)) return '#';
   return u;
 }
+// URL для CSS-контекста (background-image:url(...)). esc() здесь НЕ спасает: браузер
+// HTML-декодирует &#39;/&quot; обратно в кавычки → выход из url('...') и CSS-инъекция.
+// Пропускаем только чистый http(s)/относительный URL без символов разрыва.
+function cssUrl(u) {
+  u = String(safeUrl(u || ''));
+  if (u === '#' || /["'()\\\s<>;]/.test(u)) return '';
+  return u;
+}
 
 let _langBusy = false;
 function setLang(l) {

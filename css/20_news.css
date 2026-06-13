@@ -59,21 +59,25 @@
    Картинка резиновая (доля от ширины блока), тексту всегда хватает места. */
 /* flex-shrink:0 — иначе flex-колонка с max-height ужимает карточки до min-height
    и overflow:hidden срезает текст (на мобиле карточки высокие → виден только кавер). */
-.fn-feed-news .fn-card { flex-direction: row; min-height: 96px; align-items: stretch; flex-shrink: 0; }
-.fn-feed-news .fn-card-cov { 
-  width: 34%; max-width: 220px; min-width: 0; 
-  height: auto !important; min-height: 96px; flex-shrink: 0; 
-  /* Плавный переход (маска) справа от картинки к тексту */
-  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 30px), transparent 100%);
-          mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 30px), transparent 100%);
+/* Карточка растёт под ПОЛНЫЙ заголовок и текст — ничего не режем.
+   Равный размер обложек держим фикс-высотой самой картинки (по центру). */
+.fn-feed-news .fn-card { flex-direction: row; height: 204px; min-height: 0; align-items: stretch; flex-shrink: 0; }
+.fn-feed-news .fn-card-excerpt { -webkit-line-clamp: 2; }
+.fn-feed-news .fn-card-cov {
+  width: 38%; max-width: 240px; min-width: 0;
+  height: 100% !important; min-height: 0; align-self: stretch; flex-shrink: 0;
+  background: transparent;
+  /* Картинка заполняет всё: заподлицо сверху/снизу/слева, правый край в текст. */
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 64%, transparent 100%);
+          mask-image: linear-gradient(to right, #000 0%, #000 64%, transparent 100%);
 }
 .fn-feed-news .fn-card-body { flex: 1; min-width: 0; }
 /* Узкий БЛОК (а не окно!) → карточка в столбик: картинка сверху, текст снизу.
    container query смотрит на ширину .fn-home, поэтому работает и в боковой колонке. */
 @container fn-home (max-width: 460px) {
-  .fn-feed-news .fn-card { flex-direction: column; }
-  .fn-feed-news .fn-card-cov { 
-    width: 100%; max-width: none; min-height: 120px; 
+  .fn-feed-news .fn-card { flex-direction: column; height: auto; min-height: 130px; }
+  .fn-feed-news .fn-card-cov {
+    width: 100%; max-width: none; height: 120px !important; min-height: 0; align-self: stretch;
     /* В вертикальном виде убираем боковую маску */
     -webkit-mask-image: none; mask-image: none;
   }
@@ -101,6 +105,13 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .fn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--fn-accent, #5fb0e6);
   box-shadow: 0 0 6px var(--fn-accent, #5fb0e6); flex-shrink: 0; }
+/* Кикер-фракция вместо бейджа «ПЕРЕДАЧА»: флаг + имя фракции акцентом. */
+.fn-card-fac-main { color: var(--fn-accent, #5fb0e6); font-weight: 600; font-size: 9.5px; letter-spacing: .14em; }
+.fn-card-fac-main .fn-card-flag { width: 18px; height: 18px; border-radius: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--fn-accent, #5fb0e6) 40%, transparent); }
+.fn-card-fac-main::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--fn-accent, #5fb0e6); box-shadow: 0 0 6px var(--fn-accent, #5fb0e6);
+  flex-shrink: 0; animation: fn-blink 1.8s infinite; }
 
 .fn-card-title { font-family: var(--fn-disp); font-weight: 700; line-height: 1.12; letter-spacing: .01em;
   color: var(--t1, #e8edf2); font-size: 18px; margin: 0;
