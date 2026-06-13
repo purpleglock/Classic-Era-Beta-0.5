@@ -9,6 +9,27 @@ const GM_W = 3300, GM_H = 2062;
 const GM_BASE = 'assets/map/';
 const GM_STAR_TYPES = ['yellow', 'red', 'blue', 'white', 'green'];
 
+// Иконки контролов — инлайн-SVG (currentColor), чтобы не зависеть от эмодзи-шрифта:
+// глифы ⬡💎⤢⛶ на телефонах рендерились разноцветными эмодзи и плохо читались.
+const GM_ICO = {
+  borders: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2.6l8.1 4.7v9.4L12 21.4 3.9 16.7V7.3z"/></svg>',
+  res: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M5.4 8l3.1-4.5h7L18.6 8 12 20.5z" stroke-width="1.8"/><path d="M3.6 8h16.8M9 3.5 12 8 9 20.5M15 3.5 12 8l3 12.5" stroke-width="1.2"/></svg>',
+  zin: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5.5v13M5.5 12h13"/></svg>',
+  zout: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5.5 12h13"/></svg>',
+  fit: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>',
+  fs: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></svg>',
+};
+function gmCtlBtns() {
+  return `
+        <button class="gm-ctl${GM.showBorders ? ' gm-active' : ''}" title="Границы" id="gm-ctl-borders" onclick="gmToggleBorders()">${GM_ICO.borders}</button>
+        <button class="gm-ctl${GM.showRes ? ' gm-active' : ''}" title="Ресурсы систем" id="gm-ctl-res" onclick="gmToggleRes()">${GM_ICO.res}</button>
+        ${gmResFilterHtml()}
+        <button class="gm-ctl" title="Приблизить" onclick="gmZoomBtn(1)">${GM_ICO.zin}</button>
+        <button class="gm-ctl" title="Отдалить" onclick="gmZoomBtn(-1)">${GM_ICO.zout}</button>
+        <button class="gm-ctl" title="Вся карта" onclick="gmFit()">${GM_ICO.fit}</button>
+        <button class="gm-ctl" title="На весь экран" id="gm-ctl-fs" onclick="gmToggleFullscreen()">${GM_ICO.fs}</button>`;
+}
+
 const GM = {
   systems: [], lanes: [], factions: [],
   scale: 1, tx: 0, ty: 0,
@@ -103,21 +124,14 @@ async function renderGalaxyMap() {
         </div>
       </div>
       <div id="gm-coord">X: 0 | Y: 0</div>
-      <div id="gm-controls">
-        <button class="gm-ctl${GM.showBorders ? ' gm-active' : ''}" title="Границы" id="gm-ctl-borders" onclick="gmToggleBorders()">⬡</button>
-        <button class="gm-ctl${GM.showRes ? ' gm-active' : ''}" title="Ресурсы систем" id="gm-ctl-res" onclick="gmToggleRes()">💎</button>
-        ${gmResFilterHtml()}
-        <button class="gm-ctl" title="Приблизить" onclick="gmZoomBtn(1)">＋</button>
-        <button class="gm-ctl" title="Отдалить" onclick="gmZoomBtn(-1)">－</button>
-        <button class="gm-ctl" title="Вся карта" onclick="gmFit()">⤢</button>
-        <button class="gm-ctl" title="На весь экран" id="gm-ctl-fs" onclick="gmToggleFullscreen()">⛶</button>
-      </div>
+      <div id="gm-controls">${gmCtlBtns()}</div>
       ${canEdit ? gmToolbarHtml() : ''}
       <div id="gm-panel" class="gm-hidden"></div>
       <div id="gm-form" class="gm-hidden"></div>
     </div>`;
 
   gmBindViewport();
+  gmBindResTip();
   document.getElementById('gm-wrap')?.classList.toggle('gm-show-res', GM.showRes);
   gmFit();
   gmDraw();
@@ -685,7 +699,7 @@ function gmResOverlay(s) {
   if (!list.length) return '';
   const MAX = 6;
   const pins = list.slice(0, MAX).map(r =>
-    `<span class="gm-res-pin r-${r.r || 'common'}" title="${esc(r.name)} · ${esc(gmRarName(r.r))}">${gmResIc(r)}</span>`).join('');
+    `<span class="gm-res-pin r-${r.r || 'common'}" data-name="${esc(r.name)}" data-r="${esc(gmRarName(r.r))}">${gmResIc(r)}</span>`).join('');
   const more = list.length > MAX ? `<span class="gm-res-pin gm-res-more">+${list.length - MAX}</span>` : '';
   return `<div class="gm-res-overlay">${pins}${more}</div>`;
 }
@@ -696,6 +710,33 @@ function gmResIc(r) {
   if (typeof resIconHtml === 'function' && typeof resIconSrc === 'function' && resIconSrc(r.name))
     return resIconHtml(r.name);
   return `<span class="res-ic res-ic-emoji">${r.icon || '◆'}</span>`;
+}
+
+// Тултип с названием ресурса при наведении на иконку (десктоп). Привязка одна
+// на документ — переживает пересборку слоя звёзд; позиция в экранных координатах
+// (через getBoundingClientRect), поэтому читается на любом зуме карты.
+function gmBindResTip() {
+  if (window._gmResTipBound) return;
+  window._gmResTipBound = true;
+  const tip = document.createElement('div');
+  tip.id = 'gm-res-tip';
+  document.body.appendChild(tip);
+  const hide = () => tip.classList.remove('gm-on');
+  document.addEventListener('mouseover', e => {
+    const pin = e.target.closest && e.target.closest('.gm-res-pin[data-name]');
+    if (!pin) return;
+    tip.innerHTML = esc(pin.dataset.name) + (pin.dataset.r ? `<span class="gm-tip-r">${esc(pin.dataset.r)}</span>` : '');
+    const b = pin.getBoundingClientRect();
+    tip.style.left = (b.left + b.width / 2) + 'px';
+    tip.style.top = (b.top - 7) + 'px';
+    tip.classList.add('gm-on');
+  });
+  document.addEventListener('mouseout', e => {
+    if (e.target.closest && e.target.closest('.gm-res-pin')) hide();
+  });
+  // при панораме/зуме карты прячем, чтобы не «висел» на старом месте
+  document.addEventListener('pointerdown', hide, true);
+  document.addEventListener('wheel', hide, true);
 }
 
 // ── Взаимодействие со звёздами ──────────────────────────────
@@ -1151,7 +1192,7 @@ const GMM = {
   vel: null, anim: null,           // инерция / анимация камеры
   raf: 0, dirty: false, rasterT: 0, lastRaster: 0,
   lastTap: 0, ltx: 0, lty: 0,
-  selId: null, imgs: {},
+  selId: null, imgs: {}, resImgs: {},   // resImgs: кэш PNG-иконок ресурсов по имени
 };
 const GMM_RAR_C = { common: '#7f93ad', uncommon: '#5fc257', rare: '#39bfe8', epic: '#b66cf2', legendary: '#ffa033' };
 // туманности фона: [x, y, r] в долях карты, цвет, альфа (палитра как у #gm-bg)
@@ -1175,15 +1216,7 @@ function gmmRender(host) {
   host.innerHTML = `
     <div id="gm-wrap" class="gm-mobile">
       <div id="gm-viewport"><canvas id="gmm-cv"></canvas></div>
-      <div id="gm-controls">
-        <button class="gm-ctl${GM.showBorders ? ' gm-active' : ''}" title="Границы" id="gm-ctl-borders" onclick="gmToggleBorders()">⬡</button>
-        <button class="gm-ctl${GM.showRes ? ' gm-active' : ''}" title="Ресурсы систем" id="gm-ctl-res" onclick="gmToggleRes()">💎</button>
-        ${gmResFilterHtml()}
-        <button class="gm-ctl" title="Приблизить" onclick="gmZoomBtn(1)">＋</button>
-        <button class="gm-ctl" title="Отдалить" onclick="gmZoomBtn(-1)">－</button>
-        <button class="gm-ctl" title="Вся карта" onclick="gmFit()">⤢</button>
-        <button class="gm-ctl" title="На весь экран" id="gm-ctl-fs" onclick="gmToggleFullscreen()">⛶</button>
-      </div>
+      <div id="gm-controls">${gmCtlBtns()}</div>
       <div id="gm-panel" class="gm-hidden"></div>
     </div>`;
   GMM.cv = document.getElementById('gmm-cv');
@@ -1200,7 +1233,7 @@ function gmmRender(host) {
   GMM.dpr = Math.min(2, window.devicePixelRatio || 1);
   GMM.cv.width = Math.max(1, Math.round(GMM.vw * GMM.dpr));
   GMM.cv.height = Math.max(1, Math.round(GMM.vh * GMM.dpr));
-  gmmFit(false);
+  gmmCover();
   gmmRaster();
   // дорисовка, когда подгрузятся веб-шрифты (подписи в битмапе)
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
@@ -1235,6 +1268,15 @@ function gmmFit(animate) {
   const to = { s: ms, tx: (GMM.vw - GM_W * ms) / 2, ty: (GMM.vh - GM_H * ms) / 2 };
   if (animate) gmmAnimTo(to, 320);
   else { GMM.s = to.s; GMM.tx = to.tx; GMM.ty = to.ty; GMM.dirty = true; gmmKick(); }
+}
+// стартовый вид: карта ЗАПОЛНЯЕТ экран (cover), а не висит узкой полосой в пустоте.
+// на портретном телефоне «вся карта» (contain) даёт огромные чёрные поля сверху/снизу —
+// поэтому при входе центрируем по cover-масштабу; кнопка ⤢ остаётся «вся карта».
+function gmmCover() {
+  const cs = Math.min(4, Math.max(gmmMinS(), GMM.vw / GM_W, GMM.vh / GM_H) * 1.02);
+  GMM.s = cs;
+  GMM.tx = (GMM.vw - GM_W * cs) / 2; GMM.ty = (GMM.vh - GM_H * cs) / 2;
+  gmmClamp(); GMM.dirty = true; gmmKick();
 }
 function gmmZoomAt(cx, cy, ns, animate) {
   ns = Math.min(Math.max(ns, gmmMinS()), 4);
@@ -1591,6 +1633,8 @@ function gmmPaintStars(ctx, camS) {
   const caps = GM.capitals || {};
   const showAll = camS >= 0.30;   // дальше — подписи только у важного (гиганты/столицы/разлом)
   const labelPx = 12;
+  const cands = [];   // кандидаты подписей — рисуем отдельным проходом с защитой от наложений
+  // ── проход 1: иконки звёзд (всегда) ──
   GM.systems.forEach(s => {
     const iw = gmmIconPx(s, camS) / camS;   // мировые юниты
     if (s.faction === 'rift') {
@@ -1603,8 +1647,14 @@ function gmmPaintStars(ctx, camS) {
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(s.x, s.y, glowR, 0, 6.2832); ctx.fill();
       const im = GMM.imgs[s.star_type] || GMM.imgs.yellow;
-      if (im && im.complete && im.naturalWidth) ctx.drawImage(im, s.x - iw / 2, s.y - iw / 2, iw, iw);
-      else { ctx.fillStyle = '#ffd76a'; ctx.beginPath(); ctx.arc(s.x, s.y, iw * 0.3, 0, 6.2832); ctx.fill(); }
+      if (im && im.complete && im.naturalWidth) {
+        // сохраняем пропорции PNG (как object-fit:contain на десктопе) — иначе
+        // неквадратные иконки (напр. star_blue 632×395) выглядят сплющенными
+        const ar = im.naturalWidth / im.naturalHeight;
+        let dw = iw, dh = iw;
+        if (ar >= 1) dh = iw / ar; else dw = iw * ar;
+        ctx.drawImage(im, s.x - dw / 2, s.y - dh / 2, dw, dh);
+      } else { ctx.fillStyle = '#ffd76a'; ctx.beginPath(); ctx.arc(s.x, s.y, iw * 0.3, 0, 6.2832); ctx.fill(); }
       const capFid = caps[s.id];
       if (capFid) {
         ctx.font = `${(13 / camS).toFixed(2)}px sans-serif`;
@@ -1613,18 +1663,28 @@ function gmmPaintStars(ctx, camS) {
         ctx.fillText('★', s.x, s.y - iw / 2 - 1 / camS);
       }
     }
-    const important = s.is_giant || caps[s.id] || s.faction === 'rift';
-    if (showAll || important) {
-      const fpx = (s.is_giant ? labelPx + 2 : labelPx) / camS;
-      ctx.font = `600 ${fpx.toFixed(2)}px Rajdhani, 'Exo 2', sans-serif`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      const ly = s.y + iw / 2 + 3 / camS;
-      ctx.lineWidth = 3 / camS; ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.lineJoin = 'round';
-      ctx.strokeText(s.name, s.x, ly);
-      ctx.fillStyle = s.faction === 'rift' ? '#e0c2ff' : (s.is_giant ? '#ffe6b0' : '#dfeaff');
-      ctx.fillText(s.name, s.x, ly);
-    }
+    const important = s.is_giant || !!caps[s.id] || s.faction === 'rift';
+    if (showAll || important) cands.push({ s, iw, important });
     if (GM.showRes) gmmPaintResPins(ctx, s, iw, camS);
+  });
+  // ── проход 2: подписи с защитой от наложений ──
+  // важные первыми — они занимают место, остальные уступают и пропускаются
+  cands.sort((a, b) => (b.important - a.important) || (b.s.is_giant - a.s.is_giant));
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
+  const boxes = [], pad = 2 / camS;
+  cands.forEach(({ s, iw, important }) => {
+    const fpx = (s.is_giant ? labelPx + 2 : labelPx) / camS;
+    ctx.font = `600 ${fpx.toFixed(2)}px Rajdhani, 'Exo 2', sans-serif`;
+    const w = ctx.measureText(s.name).width;
+    const x0 = s.x - w / 2, y0 = s.y + iw / 2 + 3 / camS, x1 = x0 + w, y1 = y0 + fpx;
+    for (const r of boxes) {
+      if (x0 < r.x1 + pad && x1 > r.x0 - pad && y0 < r.y1 + pad && y1 > r.y0 - pad) return;   // налезает → прячем
+    }
+    boxes.push({ x0, y0, x1, y1 });
+    ctx.lineWidth = 3 / camS; ctx.strokeStyle = 'rgba(0,0,0,.85)';
+    ctx.strokeText(s.name, s.x, y0);
+    ctx.fillStyle = s.faction === 'rift' ? '#e0c2ff' : (s.is_giant ? '#ffe6b0' : '#dfeaff');
+    ctx.fillText(s.name, s.x, y0);
   });
 }
 
@@ -1644,35 +1704,61 @@ function gmmPaintRift(ctx, s, iw, camS) {
   ctx.setLineDash([]);
 }
 
+// PNG-иконка ресурса по имени (ленивая загрузка, перерисовка по onload).
+// null → нет картинки (нестандартный ресурс) → рисуем эмодзи-фолбэк.
+function gmmResImg(name) {
+  if (typeof resIconSrc !== 'function') return null;
+  const src = resIconSrc(name);
+  if (!src) return null;
+  let im = GMM.resImgs[name];
+  if (im) return (im.complete && im.naturalWidth) ? im : null;
+  im = new Image();
+  im.onload = () => { if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRasterSoon(); };
+  im.src = src;
+  GMM.resImgs[name] = im;
+  return null;
+}
 function gmmPaintResPins(ctx, s, iw, camS) {
   const list = gmSysRes(s).filter(r => GM.resRarities.includes(r.r || 'common'));
   if (!list.length) return;
   if (camS < 0.2) {   // далеко: вместо плашки — точка цвета самой ценной редкости
     ctx.fillStyle = GMM_RAR_C[list[0].r] || GMM_RAR_C.common;
-    const r = 3.2 / camS;
+    const r = 3.6 / camS;
     ctx.beginPath(); ctx.arc(s.x, s.y - iw / 2 - r * 1.6, r, 0, 6.2832); ctx.fill();
     return;
   }
   const MAX = 6, shown = list.slice(0, MAX);
   const more = list.length > MAX ? '+' + (list.length - MAX) : '';
-  const ph = 13 / camS, wEach = 15 / camS, padX = 5 / camS;
-  const wMore = more ? (more.length * 7 + 4) / camS : 0;
-  const W = shown.length * wEach + wMore + padX * 2;
-  const H = ph + 8 / camS;
-  const x0 = s.x - W / 2, y0 = s.y - iw / 2 - H - 6 / camS;
-  ctx.fillStyle = 'rgba(7,10,18,.82)';
-  ctx.strokeStyle = 'rgba(160,190,230,.25)'; ctx.lineWidth = 1 / camS;
-  gmmRoundRect(ctx, x0, y0, W, H, 5 / camS);
-  ctx.fill(); ctx.stroke();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const cy = y0 + H / 2 + 0.5 / camS;
-  ctx.font = `${ph.toFixed(2)}px sans-serif`;
-  let cx = x0 + padX + wEach / 2;
-  shown.forEach(r => { ctx.fillStyle = GMM_RAR_C[r.r] || GMM_RAR_C.common; ctx.fillText(r.icon || '◆', cx, cy); cx += wEach; });
+  // крупные читаемые ячейки-иконки (≈22px на экране) в ряд на тёмной плашке
+  const tile = 22 / camS, gap = 3 / camS, padX = 6 / camS, padY = 5 / camS;
+  const wMore = more ? (more.length * 9 + 6) / camS : 0;
+  const W = shown.length * tile + (shown.length - 1) * gap + wMore + padX * 2;
+  const H = tile + padY * 2;
+  const x0 = s.x - W / 2, y0 = s.y - iw / 2 - H - 8 / camS;
+  ctx.fillStyle = 'rgba(7,10,18,.88)';
+  ctx.strokeStyle = 'rgba(160,190,230,.3)'; ctx.lineWidth = 1.2 / camS;
+  gmmRoundRect(ctx, x0, y0, W, H, 6 / camS); ctx.fill(); ctx.stroke();
+  let cx = x0 + padX; const iy = y0 + padY;
+  shown.forEach(r => {
+    const col = GMM_RAR_C[r.r] || GMM_RAR_C.common;
+    // подложка ячейки с рамкой в цвет редкости — даёт контраст и кодирует ценность
+    ctx.fillStyle = 'rgba(255,255,255,.06)';
+    gmmRoundRect(ctx, cx, iy, tile, tile, 4 / camS); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 1.4 / camS;
+    gmmRoundRect(ctx, cx, iy, tile, tile, 4 / camS); ctx.stroke();
+    const im = gmmResImg(r.name), ic = tile * 0.78, off = (tile - ic) / 2;
+    if (im) ctx.drawImage(im, cx + off, iy + off, ic, ic);
+    else {
+      ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `${(ic * 0.95).toFixed(2)}px sans-serif`;
+      ctx.fillText(r.icon || '◆', cx + tile / 2, iy + tile / 2 + 0.5 / camS);
+    }
+    cx += tile + gap;
+  });
   if (more) {
-    ctx.fillStyle = '#9fb1c8';
-    ctx.font = `700 ${(9.5 / camS).toFixed(2)}px Rajdhani, sans-serif`;
-    ctx.fillText(more, x0 + W - padX - wMore / 2 + 2 / camS, cy);
+    ctx.fillStyle = '#9fb1c8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `700 ${(12 / camS).toFixed(2)}px Rajdhani, sans-serif`;
+    ctx.fillText(more, x0 + W - padX - wMore / 2, y0 + H / 2);
   }
 }
 function gmmRoundRect(ctx, x, y, w, h, r) {

@@ -74,21 +74,39 @@
 
 /* Режим «ресурсы систем»: компактная сводка одной строкой над звездой */
 .gm-res-overlay{
-  position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:4px;
-  display:none;align-items:center;gap:2px;white-space:nowrap;
-  padding:2px 5px;border-radius:7px;z-index:7;pointer-events:none;
-  background:hsl(216 30% 5% / .85);border:1px solid var(--w2);
+  position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:6px;
+  display:none;align-items:center;gap:4px;white-space:nowrap;
+  padding:5px 7px;border-radius:9px;z-index:7;pointer-events:none;
+  background:hsl(216 30% 5% / .88);border:1px solid var(--w2);
 }
 #gm-wrap.gm-show-res .gm-res-overlay{display:flex}
 /* в режиме ресурсов подписи звёзд приглушаем, чтобы не мешали сводкам */
 #gm-wrap.gm-show-res .gm-label{opacity:.22}
-.gm-res-pin{font-size:14px;line-height:1;filter:drop-shadow(0 1px 1px #000) saturate(.9)}
+/* ячейка-иконка: крупная картинка в рамке цвета редкости (читается даже на «вся карта») */
+.gm-res-pin{
+  width:30px;height:30px;display:flex;align-items:center;justify-content:center;
+  border:1.5px solid currentColor;border-radius:5px;background:rgba(255,255,255,.06);
+  pointer-events:auto;cursor:help;transition:background .12s,transform .12s;
+}
+.gm-res-pin[data-name]:hover{background:rgba(255,255,255,.16);transform:translateY(-1px)}
+/* Тултип названия ресурса (в экранных координатах, поверх всего) */
+#gm-res-tip{
+  position:fixed;z-index:120;pointer-events:none;opacity:0;
+  transform:translate(-50%,-100%);
+  padding:5px 10px;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;
+  color:#eaf2ff;background:hsl(216 32% 8% / .96);border:1px solid hsl(210 25% 45% / .55);
+  border-radius:8px;white-space:nowrap;box-shadow:0 5px 16px rgba(0,0,0,.55);
+  transition:opacity .12s;
+}
+#gm-res-tip.gm-on{opacity:1}
+#gm-res-tip .gm-tip-r{font-size:11.5px;font-weight:500;opacity:.7;margin-left:6px}
+.gm-res-pin img.res-ic,.gm-res-pin .res-ic{width:23px;height:23px;font-size:21px;line-height:1;filter:drop-shadow(0 1px 1px #000)}
 .gm-res-pin.r-common{color:#7f93ad}
 .gm-res-pin.r-uncommon{color:#5fc257}
 .gm-res-pin.r-rare{color:#39bfe8}
 .gm-res-pin.r-epic{color:#b66cf2}
 .gm-res-pin.r-legendary{color:#ffa033}
-.gm-res-more{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;color:var(--t3);filter:none;margin-left:1px}
+.gm-res-more{width:auto;border:none;background:none;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--t3)}
 
 /* Полоска фильтров редкости (под кнопкой «Ресурсы») */
 #gm-res-filter{display:flex;flex-direction:column;gap:4px;margin:2px 0}
@@ -124,10 +142,12 @@
 .gm-ctl{
   width:38px;height:38px;display:flex;align-items:center;justify-content:center;
   font-size:18px;line-height:1;cursor:pointer;
-  background:hsl(216 20% 7% / .85);color:var(--t2);border:1px solid var(--w2);border-radius:9px;
+  background:hsl(216 22% 9% / .92);color:#d4e2f7;border:1px solid hsl(210 25% 40% / .5);border-radius:9px;
   backdrop-filter:blur(6px);transition:all .2s;
 }
 .gm-ctl:hover{border-color:var(--gd);color:var(--gdl)}
+.gm-ico{width:21px;height:21px;display:block;pointer-events:none}
+#gm-wrap.gm-mobile .gm-ico{width:23px;height:23px}
 .gm-ctl.gm-active{color:var(--gdl);border-color:var(--gd);box-shadow:0 0 10px hsl(206 72% 50% / .3)}
 
 /* Фуллскрин — нативный (:fullscreen) и CSS-фолбэк (.gm-fullscreen) */
