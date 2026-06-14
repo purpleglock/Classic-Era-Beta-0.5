@@ -576,11 +576,12 @@ function cnVehCalc() {
     cost += m.cost; on += cls.modON;
     if (def.hasEnergy) energyCons += (m.energy || 0);
   });
-  let hangarOver = false;
+  let hangarOver = false, cargo = 0;
   if (def.hasHangars) {
     document.querySelectorAll('#cn-hangars .cn-hangar').forEach(hp => {
       const h = db.hangarTypes.find(x => x.id == hp.querySelector('.cn-h-type').value);
       cost += h.cost; on += cls.modON; energyCons += h.energy;
+      if (h && h.canHaveUnits === false) cargo += (h.capacity || 0);   // грузовые ангары = грузоподъёмность каравана
       let used = 0; hp.querySelectorAll('.cn-u-type').forEach(u => used += db.airUnits[u.value].points);
       const st = hp.querySelector('.cn-h-status');
       st.textContent = `Занято: ${used} / ${h.capacity} очков`;
@@ -595,7 +596,7 @@ function cnVehCalc() {
   const shield = shieldObj.shield || 0;
   const speed = engObj.speed;
   const eMax = reactObj ? reactObj.energy : 0;
-  CN.last = { hp, armor, shield, dmg, speed, cost, on: +on.toFixed(1), eCons: energyCons, eMax, energy: def.hasEnergy, hangarOver };
+  CN.last = { hp, armor, shield, dmg, speed, cost, on: +on.toFixed(1), eCons: energyCons, eMax, energy: def.hasEnergy, hangarOver, cargo };
   cnVehRenderStats();
   // Жёсткий лимит: нельзя набрать сверх показателя — откатываем последнее действие
   if (CN._applying) return;
@@ -620,6 +621,7 @@ function cnVehRenderStats() {
     <div class="cn-stat"><span>Щиты</span><b>${s.shield > 0 ? cnNum(s.shield) + ' ед.' : 'нет'}</b></div>
     <div class="cn-stat"><span>Огневая мощь</span><b>${cnNum(s.dmg)} урон</b></div>
     <div class="cn-stat"><span>Скорость</span><b>${s.speed} у.е.</b></div>
+    ${s.cargo > 0 ? `<div class="cn-stat"><span>Грузоподъёмность</span><b style="color:var(--te)">${cnNum(s.cargo)} ед.</b></div>` : ''}
     <div class="cn-stat"><span>Стоимость</span><b style="color:var(--gd)">${cnNum(s.cost)} ГС</b></div>
     <div class="cn-stat"><span>Разработка</span><b style="color:var(--te)">${s.on} ОН</b></div>`;
   if (s.energy) rows += `<div class="cn-stat"><span>Энергосеть</span><b class="${energyOk ? '' : 'cn-warn'}">${cnNum(s.eCons)} / ${cnNum(s.eMax)} E</b></div>`;
