@@ -1622,27 +1622,51 @@ function ecCvSync() {
   ecTradeCalc();
 }
 // Аллокатор груза каравана: распределяем грузоподъёмность по ресурсам ДОБЫЧИ
+// Авто-распределение грузоподъёмности по выбранным месторождениям: самые ценные
+// грузим первыми, каждый ресурс — его поток добычи, пока не кончится трюм.
+function ecCvAllocate() {
+  const cap = ecCvFleetTotals().cap;
+  const sel = Object.keys(EC.cvCargo || {}).filter(r => EC.cvCargo[r]);
+  sel.sort((a, b) => ecResPriceN(b) - ecResPriceN(a));
+  let rem = cap; const out = [];
+  sel.forEach(res => {
+    const vol = Math.min(ecExtractRate(res), rem);
+    if (vol > 0) { out.push({ res, vol }); rem -= vol; }
+  });
+  return out;
+}
+// Выбор месторождений для каравана: тыкаешь ресурс из своей добычи — он грузится
+// потоком (никаких ручных чисел, объём = добыча, капается грузоподъёмностью флота).
 function ecCvCargoHtml() {
   EC.cvCargo = EC.cvCargo || {};
   const ex = ecExtractEntries();
-  if (!ex.length) return '<div class="ec-empty" style="padding:6px">Нет добычи — назначьте месторождения.</div>';
+  if (!ex.length) return '<div class="ec-empty" style="padding:6px">Нет добычи — назначьте месторождения на добывающих заводах в колониях.</div>';
+  const alloc = {}; ecCvAllocate().forEach(c => alloc[c.res] = c.vol);
   return ex.map(([n, rate]) => {
-    const v = EC.cvCargo[n] || 0;
-    return `<div class="ec-q-row" style="gap:6px">
-      <span class="ec-r-name">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4)">⛏ ${ecNum(rate)}/ход · ${ecResPriceN(n)} ГС/ед</i></span>
-      <input type="number" min="0" value="${v}" class="ec-trade-volnum" style="width:72px" oninput="ecCvCargoSet('${esc(n)}', this.value)">
-    </div>`;
+    const on = !!EC.cvCargo[n];
+    const ship = alloc[n] || 0;
+    const bd = on ? 'var(--gd)' : 'var(--bd,#2a3550)';
+    const tail = on
+      ? (ship > 0 ? `<b style="color:var(--gd)">грузим ${ecNum(ship)}${ship < rate ? ' · лимит трюма' : ''}</b>` : `<b style="color:var(--err)">трюм полон</b>`)
+      : '';
+    return `<button type="button" onclick="ecCvCargoToggle('${esc(n)}')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 10px;margin:4px 0;border-radius:8px;cursor:pointer;border:1px solid ${bd};background:${on ? 'rgba(120,200,140,.10)' : 'transparent'};color:inherit;font:inherit">
+      <span style="width:18px;height:18px;flex:none;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;border:1px solid ${on ? 'var(--gd)' : 'var(--t4)'};color:${on ? 'var(--gd)' : 'var(--t4)'};font-weight:700">${on ? '✓' : '+'}</span>
+      <span style="flex:1">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4);font-style:normal"> · ⛏ ${ecNum(rate)}/ход · ${ecResPriceN(n)} ГС/ед</i></span>
+      ${tail}
+    </button>`;
   }).join('');
 }
-function ecCvCargoSet(res, val) {
+function ecCvCargoToggle(res) {
   EC.cvCargo = EC.cvCargo || {};
-  EC.cvCargo[res] = Math.max(0, parseInt(val) || 0);
-  ecTradeCalc();   // не перерисовываем блок (чтобы не терять фокус ввода), только пересчёт
+  if (EC.cvCargo[res]) delete EC.cvCargo[res]; else EC.cvCargo[res] = true;
+  const el = ecId('ec-cv-cargo'); if (el) el.innerHTML = ecCvCargoHtml();
+  ecTradeCalc();
 }
-// Твоя добыча ресурса /ход (для throughput каравана — зеркало economy_accrue)
+// Твой ЭКСПОРТНЫЙ поток ресурса /ход (для throughput каравана — зеркало economy_accrue).
+// Только заводы в режиме «экспорт» — склад караванам недоступен.
 function ecExtractRate(resName) {
   let total = 0;
-  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
+  (EC.buildings || []).filter(b => b.btype === 'mining' && b.mine_mode === 'export').forEach(b => {
     const res = ecMiningPlanetRes(b);
     (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
       if (t === resName) { const ri = res.find(x => x.name === resName); if (ri) total += ecMineRate(ri.r, ri.amt); }
@@ -1655,6 +1679,23 @@ function ecDipCoef(toFid) {
   const rel = (EC.relations || []).find(x => x.from_fid === EC.fid && x.to_fid === toFid);
   const s = rel ? (+rel.score || 0) : 0;
   return Math.max(0.8, Math.min(1.2, 1 + s / 500));
+}
+// Средняя скорость торгового флота (взвеш. по грузоподъёмности) — зеркало _fleet_speed
+function ecFleetSpeed() {
+  let wsum = 0, w = 0;
+  (EC.roster || []).filter(r => r.category === 'ship').forEach(r => {
+    const d = (EC.designs || []).find(x => x.id === r.unit_id);
+    const cargo = (d && d.summary && +d.summary.cargo) || 0;
+    const speed = (d && d.summary && +d.summary.speed) || 0;
+    if (cargo > 0) { wsum += speed * cargo * (r.qty || 0); w += cargo * (r.qty || 0); }
+  });
+  return w > 0 ? Math.round(wsum / w) : 20;
+}
+// Оценка времени в пути каравана (зеркало trade_respond): дистанция/скорость
+function ecTravelTurns(oSys, dSys) {
+  if (!oSys || !dSys) return null;
+  const adj = (EC.lanes || []).some(l => (l.a_id === oSys && l.b_id === dSys) || (l.a_id === dSys && l.b_id === oSys));
+  return Math.max(1, Math.ceil((adj ? 1 : 3) * 25 / Math.max(1, ecFleetSpeed())));
 }
 // Что фракция ДОБЫВАЕТ и с какой скоростью /ход — список для каравана (поток, не склад)
 function ecExtractEntries() {
@@ -1693,17 +1734,18 @@ function ecTradeCalc() {
   const cargoCap = ecCvFleetTotals().cap;              // грузоподъёмность собранного флота
   const dipCoef = ecDipCoef(dFac);                     // дипломатия → ±20% к выгоде
   const gcMod = ecFactionMods().gc;
-  // грузы: распределение грузоподъёмности по ресурсам добычи
-  const cargo = Object.entries(EC.cvCargo || {}).filter(([, v]) => (+v) > 0).map(([res, v]) => ({ res, vol: +v }));
+  // грузы: авто-распределение грузоподъёмности по выбранным месторождениям (поток добычи)
+  const cargo = ecCvAllocate();
   let alloc = 0, myInc = 0, partnerInc = 0; const dealParts = [];
   cargo.forEach(({ res, vol }) => {
     alloc += vol;
-    const ship = Math.min(vol, ecExtractRate(res));    // throughput = min(объём, добыча)
+    const ship = vol;                                  // vol уже = min(добыча, остаток трюма)
     const price = ecResPriceN(res);
     myInc += Math.round(ship * price * gcMod * dipCoef);
     partnerInc += Math.round(ship * price * EC_DEST_CUT * dipCoef);
     if (ship > 0) dealParts.push(`${ecResIcon(res)} ${ecNum(ship)} ${esc(res)}`);
   });
+  const anySel = Object.keys(EC.cvCargo || {}).some(r => EC.cvCargo[r]);
   // маршрут и угрозы (для расчёта риска; отсутствие пути НЕ блокирует сделку)
   const path = ecPath(oSys, dSys);
   const threats = path ? ecRouteThreats(path) : [];
@@ -1715,8 +1757,8 @@ function ecTradeCalc() {
   else if (!dSys) err = 'У партнёра нет систем на карте — выберите другого';
   else if (!oSys) err = 'У вас нет систем на карте';
   else if (cargoCap <= 0) err = 'Соберите флот каравана — нет грузоподъёмности';
-  else if (!cargo.length) err = 'Распределите груз — задайте объём ресурсу';
-  else if (alloc > cargoCap) err = `Перегруз: ${ecNum(alloc)} > грузоподъёмность ${ecNum(cargoCap)}`;
+  else if (!anySel) err = 'Выберите месторождения для загрузки — нажмите на ресурс';
+  else if (!cargo.length) err = 'Грузоподъёмности не хватает — соберите больше торговых кораблей';
   const shipsFree = (typeof ecMyShipsAvailable === 'function') ? ecMyShipsAvailable() : 0;
   const threatNames = [...new Set(threats.map(t => t.type === 'ancient' ? 'древние' : 'пираты'))].join(' / ');
   // ожидаемый доход с учётом риска грабежа — главный показатель «стоит ли оно того»
@@ -1740,6 +1782,7 @@ function ecTradeCalc() {
     <div class="ec-trade-deal">Каждый ход: <b>${dealParts.length ? dealParts.join(' · ') : '—'}</b> → партнёру · вы <b style="color:var(--gd)">+${ecNum(myInc)} ГС</b>, партнёр <b style="color:var(--te)">+${ecNum(partnerInc)} ГС</b></div>
     <div class="ec-trade-srow"><span>Загрузка</span><b style="color:${alloc > cargoCap ? 'var(--err)' : 'var(--t2)'}">${ecNum(alloc)} / грузоподъёмность ${ecNum(cargoCap)}</b></div>
     ${routeLine}
+    ${(oSys && dSys) ? `<div class="ec-trade-srow"><span>Время в пути</span><b>🚀 ${ecTravelTurns(oSys, dSys)} ход. · скорость флота ${ecFleetSpeed()}</b></div>` : ''}
     <div class="ec-trade-srow"><span>Риск грабежа / ход</span><b style="color:${riskColor}">${riskPct}%${convoy ? ` · 🛡 конвой ${convoy}` : threats.length ? ' · без охраны' : ''}</b></div>
     <div class="ec-trade-srow big"><span>Ожидаемо с учётом риска</span><b style="color:${effMy > 0 ? 'var(--gd)' : 'var(--err)'}">+${ecNum(effMy)} ГС/ход</b></div>
     <div class="ec-trade-srow"><span>Длительность</span><b style="color:var(--t3)">бессрочно — пока путь не закрыт</b></div>
@@ -1767,9 +1810,15 @@ function ecRouteRow(r) {
   const riskPct = ecTradeRiskPct(threats, r.convoy);
   const riskTxt = threats.length ? `риск ${riskPct}%${r.convoy ? ` · 🛡${r.convoy}` : ' · без охраны'}` : 'безопасно';
   const verb = isOrigin ? `отправляю → ${esc(other)}` : `получаю ← ${esc(other)}`;
+  const transitMs = r.transit_until ? new Date(r.transit_until).getTime() - Date.now() : 0;
+  const inTransit = transitMs > 0;
+  const badge = inTransit
+    ? `<span class="ec-route-badge wait">🚀 в пути · прибудет ${ecFmtLeft(transitMs)}</span>`
+    : `<span class="ec-route-badge ok">✓ активен</span>`;
+  const incomeTxt = inTransit ? `<i style="color:var(--t3)"> · доход после прибытия</i>` : ` · <b style="color:var(--gd)">+${ecNum(income)} ГС/ход</b>`;
   return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
-      <span class="ec-route-badge ok">✓ активен</span>
-      <b>${ecRouteCargoText(r)}</b>/ход · ${verb} · <b style="color:var(--gd)">+${ecNum(income)} ГС/ход</b>
+      ${badge}
+      <b>${ecRouteCargoText(r)}</b>/ход · ${verb}${incomeTxt}
       <i style="color:${threats.length ? 'var(--color-warning)' : 'var(--ok)'}"> · ${esc(riskTxt)}</i>
     </span><button class="ec-bld-del" title="Закрыть путь" onclick="ecTradeClose('${r.id}')">✕</button></div>`;
 }
@@ -1861,7 +1910,7 @@ function ecTabTrade() {
         <div class="ec-trade-label">1 · Соберите флот каравана <span class="ec-hint">грузовые → грузоподъёмность, боевые → эскорт</span></div>
         <div id="ec-cv-fleet">${ecCvFleetHtml()}</div>
         <input type="hidden" id="ec-cv-convoy" value="0">
-        <div class="ec-trade-label">2 · Что грузим <span class="ec-hint">распределите грузоподъёмность по ресурсам добычи</span></div>
+        <div class="ec-trade-label">2 · Что грузим <span class="ec-hint">тыкните месторождения — флот грузит их поток, ценные первыми</span></div>
         <div id="ec-cv-cargo">${ecCvCargoHtml()}</div>
         <div class="ec-trade-label">3 · Кому и откуда <span class="ec-hint">чужие системы на пути = угрозы по дороге</span></div>
         <div class="ec-trade-route">
