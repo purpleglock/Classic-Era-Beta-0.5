@@ -593,7 +593,7 @@ async function fnPreview(id) {
 function fnOpenComposer(id) {
   const modal = document.getElementById('fn-composer') || (() => {
     const m = document.createElement('div'); m.id = 'fn-composer'; m.className = 'fn-comp-ov';
-    m.onclick = e => { if (e.target === m) fnCloseComposer(); };
+    m.onclick = e => { if (e.target === m) fnTryCloseComposer(); };
     // Автосохранение: любой ввод/выбор внутри композитора → отложенное сохранение черновика.
     m.addEventListener('input', fnDraftSaveSoon);
     m.addEventListener('input', fnPreviewSoon);
@@ -707,6 +707,16 @@ function fnOpenComposer(id) {
   if (id && !n) {
     dbGet('faction_news', `id=eq.${encodeURIComponent(id)}&limit=1`).then(rows => { fill(rows && rows[0]); }).catch(() => fill(null));
   } else { fill(n); }
+}
+// Закрытие по клику вне окна — с подтверждением, если есть набранный текст
+// (случайный клик по фону не должен «сворачивать» статью молча).
+function fnTryCloseComposer() {
+  const g = id => document.getElementById(id);
+  const hasContent = (g('fn-c-title')?.value || '').trim()
+    || (g('fn-c-body')?.value || '').trim()
+    || (g('fn-c-img')?.value || '').trim();
+  if (hasContent && !confirm('Закрыть редактор? Черновик сохранится, можно вернуться позже.')) return;
+  fnCloseComposer();
 }
 function fnCloseComposer() {
   clearTimeout(FN.draftT);

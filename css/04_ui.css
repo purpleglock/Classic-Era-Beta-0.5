@@ -535,7 +535,7 @@ textarea.fi { resize: vertical; min-height: 80px; line-height: 1.6; }
 }
 
 /* ── INLINE TEXT COLORS — [c:gold], [c:cyan], [c:red], [c:purple], [c:green], [c:dim] ── */
-.tc-gold   { color: var(--primitive-gold-400,   #4e9ed8); }
+.tc-gold   { color: #e8b04a; }  /* настоящее золото: --primitive-gold-* перекрашен в акцент-блю */
 .tc-cyan   { color: var(--primitive-cyan-400,   #6bb8d4); }
 .tc-red    { color: var(--primitive-red-400,    #e05060); }
 .tc-purple { color: var(--primitive-purple-400, #a070e0); }

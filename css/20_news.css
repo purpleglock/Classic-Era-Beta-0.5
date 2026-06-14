@@ -21,7 +21,7 @@
 /* ── Вертикальная лента передач со скроллом ───────────────── */
 .fn-feed-news {
   display: flex; flex-direction: column; gap: 10px;
-  max-height: 620px; overflow-y: auto; overscroll-behavior: contain;
+  max-height: 620px; overflow-y: auto; overscroll-behavior-y: auto;
   padding: 2px 8px 2px 2px;
 }
 /* тонкий скроллбар в стиле терминала */
