@@ -57,7 +57,8 @@
       "Bash(rm -f _shot.jpg)",
       "Bash(curl -s -m 2 -X POST -d \"x\" http://127.0.0.1:8742/dummy)",
       "Bash(break)",
-      "Bash(rm -f _shot.jpg _zoom.jpg _fit.jpg _res.jpg _dummy.jpg _p1.txt _shot_b64.txt)"
+      "Bash(rm -f _shot.jpg _zoom.jpg _fit.jpg _res.jpg _dummy.jpg _p1.txt _shot_b64.txt)",
+      "Bash(node --check \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\guide.js\")"
     ]
   }
 }

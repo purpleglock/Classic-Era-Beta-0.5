@@ -822,6 +822,13 @@ function ecPaintCabinet() {
     <div class="ec-tabs">${tabsHtml}</div>
     <div class="ec-tabbody">${body}</div>
   </div>`);
+  // На телефоне лента вкладок скроллится — подвинем активную вкладку в центр обзора
+  try {
+    const tabsEl = document.querySelector('.ec-tabs'), onTab = tabsEl && tabsEl.querySelector('.ec-tab.on');
+    if (tabsEl && onTab && tabsEl.scrollWidth > tabsEl.clientWidth) {
+      tabsEl.scrollLeft = onTab.offsetLeft - tabsEl.clientWidth / 2 + onTab.clientWidth / 2;
+    }
+  } catch (e) {}
   if (EC.tab === 'trade') { try { ecCvSync(); } catch (e) {} } // флот каравана → объём/эскорт + живой расчёт
   if (EC.tab === 'intel') { try { ecSpyCalcLive(); } catch (e) {} }   // живой расчёт операции
   if (EC.tab === 'research') {
@@ -1097,8 +1104,7 @@ function ecTabOverview() {
     <div class="ec-ovx-res-list">${resRows.map(r => `<div class="ec-ovx-res-row ec-rar-${r.rar}">
         <span class="ec-ovx-res-ic">${ecResIcon(r.n)}</span>
         <span class="ec-ovx-res-n">${esc(r.n)}</span>
-        <span class="ec-ovx-res-rate">${r.rate ? `+${ecNum(r.rate)}/сут` : '<i>не добывается</i>'}</span>
-        <span class="ec-ovx-res-have">${ecNum(r.have)} <span class="ec-ovx-res-have-u">на складе</span></span>
+        <span class="ec-ovx-res-meta"><span class="ec-ovx-res-rate">${r.rate ? `+${ecNum(r.rate)}/сут` : '<i>не добывается</i>'}</span><span class="ec-ovx-res-have">${ecNum(r.have)} <span class="ec-ovx-res-have-u">на складе</span></span></span>
       </div>`).join('')}</div>
   </div>` : '';
 

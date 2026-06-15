@@ -130,6 +130,64 @@
   .ec-cover-title { font-size: 19px; }
 }
 
+/* ══ МОБИЛЬНОЕ ОФОРМЛЕНИЕ КАБИНЕТА — по типу контента каждого блока ══ */
+@media (max-width: 560px) {
+  html, body { overflow-x: hidden; }
+  .ec-wrap { overflow-x: clip; max-width: 100%; }
+
+  /* ПАНЕЛИ обзора — каждая на всю ширину, друг под другом */
+  .ec-ovx-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 12px; }
+  .ec-ovx-grid > * { min-width: 0; }
+  .ec-ovx-panel { padding: 13px 12px; }
+  .ec-ovx-panel-t { flex-wrap: wrap; row-gap: 3px; align-items: baseline; font-size: 14px; }
+  .ec-ovx-panel-sub { flex-basis: 100%; }   /* подзаголовок — на свою строку */
+
+  /* ПЛИТКИ-СТАТЫ (системы/колонии/корабли…) — компактно по 2-3 в ряд, НЕ во всю ширину */
+  .ec-ovx-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 7px; }
+  .ec-ovx-stat { min-width: 0; padding: 10px 6px; }
+  .ec-ovx-stat-v { font-size: 19px; }
+  .ec-ovx-stat-k { font-size: 10px; }
+  .ec-ovx-stat-wide { grid-column: 1 / -1; }   /* широкие (ячейки/техно-бар) — на всю ширину */
+
+  /* СТАТЫ НА ОБЛОЖКЕ — 2 в ряд, доход на всю ширину */
+  .ec-stats, .ec-cover .ec-stats { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
+  .ec-stat { min-width: 0; }
+  .ec-stat-inc, .ec-cover .ec-stat-inc, .ec-res-inc { grid-column: 1 / -1 !important; }
+
+  /* КАЗНА — строки дохода: имя целиком, значение справа крупно */
+  .ec-bdg-row { grid-template-columns: 24px minmax(0,1fr) auto !important; align-items: center; padding: 10px 11px; gap: 10px; min-width: 0; }
+  .ec-bdg-info { min-width: 0; }
+  .ec-bdg-name { white-space: normal; line-height: 1.2; font-size: 13px; }
+  .ec-bdg-sub { white-space: normal; font-size: 10.5px; color: var(--t3); }
+  .ec-bdg-val { font-size: 16px; }
+
+  /* РЕСУРСЫ — жёсткая grid-сетка: иконка | имя (сверху) / мета (снизу). Без налезания. */
+  .ec-ovx-res-list { grid-template-columns: minmax(0,1fr) !important; }
+  .ec-ovx-res-row {
+    display: grid !important; grid-template-columns: auto 1fr;
+    grid-template-areas: "ic name" "ic meta"; column-gap: 10px; row-gap: 2px;
+    align-items: center; min-width: 0; padding: 9px 11px;
+  }
+  .ec-ovx-res-ic { grid-area: ic; align-self: center; font-size: 17px; }
+  .ec-ovx-res-n { grid-area: name; min-width: 0; white-space: normal !important; overflow: visible !important; text-overflow: clip !important; font-size: 13.5px; font-weight: 600; line-height: 1.2; }
+  .ec-ovx-res-meta { grid-area: meta; display: flex !important; flex: initial !important; align-items: baseline; gap: 12px; min-width: 0; }
+
+  /* ДОКТРИНА/чипы — длинный текст переносится, чип не шире контейнера */
+  .ec-bchip, .ec-ovx-chip, .ec-bdg-flow, .ec-doc-chip, .ec-doctrine-chips > * { white-space: normal !important; max-width: 100%; height: auto; }
+  .ec-doctrine-chips { flex-wrap: wrap; }
+
+  /* ФОРМЫ/строки с полями — переносить и сжимать */
+  .ec-prod-form, .ec-trade-route, .ec-field-row, .ec-ci-row, .ec-bt-add, .ec-build-row, .ec-head-row, .ec-cover-row, .ec-bt-cols { flex-wrap: wrap; }
+  .ec-bt-cols { grid-template-columns: minmax(0,1fr) !important; }
+  .ec-prod-form select, .ec-prod-form input, .ec-build-sel, .ec-trade-route select, .ec-bt-add select, .ec-bt-add input, .ec-prod-qty {
+    min-width: 0 !important; flex: 1 1 110px; width: auto;
+  }
+  .ec-tabbody img, .ec-tabbody table, .ec-tabbody pre { max-width: 100%; }
+}
+@media (max-width: 380px) {
+  .ec-ovx-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
 /* Вводный блок-объяснялка вверху вкладки */
 .ec-intro { background: var(--b2); border: 1px solid var(--w2); border-left: 3px solid var(--gd); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 16px; }
 .ec-intro-hd { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--t1); margin-bottom: 4px; }
@@ -812,8 +870,19 @@
   .ec-res { padding: 10px 12px; }
   .ec-res-v { font-size: 16px; }
   .ec-res-inc { grid-column: 1 / -1; }
-  .ec-tabs { margin: 14px 0; gap: 5px; padding-bottom: 10px; }
-  .ec-tab { padding: 6px 11px; font-size: 12.5px; }
+  /* Навигация на телефоне — липкая горизонтальная лента со свайпом (не перенос) */
+  .ec-tabs {
+    flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    gap: 7px; margin: 10px 0 14px; padding: 9px 0;
+    position: sticky; top: 0; z-index: 30;
+    background: color-mix(in srgb, var(--b1, #0c1118) 92%, transparent);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--w2);
+    scroll-snap-type: x proximity; scrollbar-width: none;
+  }
+  .ec-tabs::-webkit-scrollbar { display: none; }
+  .ec-tab { flex: 0 0 auto; scroll-snap-align: center; padding: 10px 15px; font-size: 13.5px; min-height: 40px; }
+  .ec-tab .ec-tab-ic { font-size: 15px; }
   .ec-ov-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .ec-ov-card { padding: 12px 8px; }
   .ec-ov-v { font-size: 20px; }
@@ -930,6 +999,7 @@
 .ec-ovx-res-rate i { color: var(--t4); }
 .ec-ovx-res-have { font-family: var(--font-mono); font-size: 12.5px; font-weight: 700; color: var(--t1); white-space: nowrap; }
 .ec-ovx-res-have-u { font-weight: 400; font-size: 9.5px; color: var(--t4); }
+.ec-ovx-res-meta { display: inline-flex; align-items: baseline; gap: 9px; flex: 0 0 auto; }
 /* Редкость — цвет левой кромки */
 .ec-ovx-res-row.ec-rar-common   { border-left-color: var(--t4); }
 .ec-ovx-res-row.ec-rar-uncommon { border-left-color: var(--ok); }
@@ -1059,7 +1129,7 @@
 .ec-ovx-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
 .ec-ovx-grid > * { grid-column: 1 / -1; margin-bottom: 0 !important; }
 .ec-ovx-grid > .ec-ovx-half { grid-column: span 1; }
-@media (max-width: 820px) { .ec-ovx-grid { grid-template-columns: 1fr; } .ec-ovx-grid > .ec-ovx-half { grid-column: 1 / -1; } }
+@media (max-width: 820px) { .ec-ovx-grid { grid-template-columns: minmax(0, 1fr); } .ec-ovx-grid > .ec-ovx-half { grid-column: 1 / -1; } }
 
 /* Карточка-панель: лёгкий объём, верхний акцент, аккуратная шапка */
 .ec-ovx-panel {
