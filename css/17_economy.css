@@ -93,24 +93,19 @@
 .ec-rchip-n { font-size: 11px; color: var(--t3); }
 .ec-rchip-empty { font-size: 12px; color: var(--t4); padding: 4px 2px; }
 
-/* Доход по времени (таблица истории) */
-.ec-ih-list { display: flex; flex-direction: column; gap: 2px; }
-.ec-ih-row { display: grid; grid-template-columns: 92px 1fr 110px 78px 120px; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; font-size: 12px; }
-.ec-ih-row:nth-child(odd) { background: rgba(255,255,255,.025); }
+/* Статистика за ходы — карточки с разбивкой (адаптивно) */
+.ec-ih-list { display: flex; flex-direction: column; gap: 6px; }
+.ec-ih-row { background: var(--b1); border: 1px solid var(--w2); border-radius: 8px; padding: 8px 10px; }
+.ec-ih-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .ec-ih-when { font-family: var(--font-mono); color: var(--t3); font-size: 11px; }
-.ec-ih-bar { height: 7px; border-radius: 4px; background: var(--b1); overflow: hidden; }
-.ec-ih-bar i { display: block; height: 100%; }
-.ec-ih-bar i.pos { background: var(--gd, #5fc38a); }
-.ec-ih-bar i.neg { background: var(--err, #e06a6a); }
-.ec-ih-gc { font-family: var(--font-display); font-weight: 700; text-align: right; }
-.ec-ih-gc.pos { color: var(--gd, #5fc38a); }
-.ec-ih-gc.neg { color: var(--err, #e06a6a); }
-.ec-ih-sci { color: var(--pu, #a78bdc); text-align: right; font-size: 11px; }
-.ec-ih-bal { color: var(--t3); text-align: right; font-size: 11px; }
-@media (max-width: 640px) {
-  .ec-ih-row { grid-template-columns: 76px 1fr 84px; }
-  .ec-ih-sci, .ec-ih-bal { display: none; }
-}
+.ec-ih-net { font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+.ec-ih-net.pos { color: var(--gd, #5fc38a); }
+.ec-ih-net.neg { color: var(--err, #e06a6a); }
+.ec-ih-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ec-ih-chip { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--b2); border: 1px solid var(--w2); color: var(--t2); white-space: nowrap; }
+.ec-ih-chip.neg { color: var(--err, #e06a6a); }
+.ec-ih-chip.sci { color: var(--pu, #a78bdc); }
+.ec-ih-chip.res { color: var(--ok, #5fc38a); }
 @media (max-width: 640px) {
   .ec-cover { min-height: 0; border-radius: 12px; margin-bottom: 14px; }
   .ec-cover-inner { padding: 14px 14px 14px; }

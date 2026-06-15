@@ -965,26 +965,34 @@ function ecOvBar(used, cap, cls) {
   return `<span class="ec-ovx-bar"><span class="ec-ovx-bar-fill${cls ? ' ' + cls : ''}" style="width:${pct}%"></span></span>`;
 }
 
-// Таблица «доход по времени» — снимки начислений (income_history, пишет триггер)
+// Статистика за ходы — разбивка «сколько чего пришло» по статьям (income_history)
 function ecIncomeHistoryPanel() {
   const h = EC.incomeHistory || [];
-  if (!h.length) return `<div class="ec-ovx-panel" style="grid-column:1/-1"><div class="ec-ovx-panel-t">📈 Доход по времени</div><div class="ec-ovx-empty">Истории пока нет — появится после первого начисления (тика).</div></div>`;
-  const maxAbs = Math.max(1, ...h.map(r => Math.abs(+r.gc_delta || 0)));
+  if (!h.length) return `<div class="ec-ovx-panel" style="grid-column:1/-1"><div class="ec-ovx-panel-t">📈 Статистика за ходы</div><div class="ec-ovx-empty">Истории пока нет — появится после первого начисления (тика). Сделайте ход и она начнёт наполняться.</div></div>`;
   const rows = h.map(r => {
-    const d = +r.gc_delta || 0, s = +r.sci_delta || 0;
+    const net = +r.gc_net || 0;
     const dt = r.tick_at ? new Date(r.tick_at) : null;
     const when = dt ? `${dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} ${dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : '—';
-    const w = Math.round(Math.abs(d) / maxAbs * 100);
+    const chip = (cond, cls, txt, title) => cond ? `<span class="ec-ih-chip${cls ? ' ' + cls : ''}" title="${esc(title)}">${txt}</span>` : '';
+    const parts = [
+      chip(+r.gc_build, '', `🏭 +${ecNum(+r.gc_build)}`, 'Фабрики и торговые хабы'),
+      chip(+r.gc_trade, '', `🚚 +${ecNum(+r.gc_trade)}`, 'Караваны'),
+      chip(+r.gc_market, '', `📈 +${ecNum(+r.gc_market)}`, 'Товарная биржа'),
+      chip(+r.gc_export, '', `📤 +${ecNum(+r.gc_export)}`, 'Экспорт добычи'),
+      chip(+r.gc_policy, 'neg', `📜 −${ecNum(+r.gc_policy)}`, 'Апкип торговой политики'),
+      chip(+r.mined, 'res', `⛏ ${ecNum(+r.mined)}`, 'Добыто ресурсов на склад'),
+      chip(+r.sci, 'sci', `🔬 +${ecNum(+r.sci)}`, 'Наука'),
+    ].filter(Boolean).join('');
     return `<div class="ec-ih-row">
-        <span class="ec-ih-when">${esc(when)}</span>
-        <span class="ec-ih-bar"><i class="${d >= 0 ? 'pos' : 'neg'}" style="width:${w}%"></i></span>
-        <span class="ec-ih-gc ${d >= 0 ? 'pos' : 'neg'}">${d >= 0 ? '+' : ''}${ecNum(d)} ГС</span>
-        <span class="ec-ih-sci">${s ? `+${ecNum(s)} ОН` : ''}</span>
-        <span class="ec-ih-bal">казна ${ecNum(+r.gc_after || 0)}</span>
+        <div class="ec-ih-head">
+          <span class="ec-ih-when">${esc(when)}${(+r.days > 1) ? ` · ${r.days} дн.` : ''}</span>
+          <span class="ec-ih-net ${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : ''}${ecNum(net)} ГС</span>
+        </div>
+        <div class="ec-ih-chips">${parts || '<span class="ec-ih-chip">нет потоков</span>'}</div>
       </div>`;
   }).join('');
   return `<div class="ec-ovx-panel" style="grid-column:1/-1">
-    <div class="ec-ovx-panel-t">📈 Доход по времени <span class="ec-ovx-panel-sub">последние ${h.length} начислений · чистый прирост казны за тик</span></div>
+    <div class="ec-ovx-panel-t">📈 Статистика за ходы <span class="ec-ovx-panel-sub">что приходило в казну за каждый тик · последние ${h.length}</span></div>
     <div class="ec-ih-list">${rows}</div>
   </div>`;
 }
