@@ -562,7 +562,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -590,6 +590,7 @@ async function ecLoad() {
     ecRpc('trade_capacity').catch(() => null),   // грузоподъёмность торгового флота
     ecRpc('spy_recruits_list').catch(() => null),   // агентура: ростер + еженедельный рынок рекрутов
     ecRpc('diplo_status').catch(() => null),         // союзы: федерация/конфедерация + вассалитеты
+    dbGet('income_history', `owner_id=eq.${user.id}&order=tick_at.desc&limit=14`).catch(() => []),  // доход по времени
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -613,6 +614,7 @@ async function ecLoad() {
   EC.tradeCargo = tradeCargo || { total: 0, used: 0, free: 0 };   // грузоподъёмность торгового флота
   EC.spyAgency = spyAgency || { cap: 0, hired: 0, roster: [], recruits: [], refresh_at: null };  // агентура: ростер + рынок
   EC.diplo = diploStatus || { union: null, members: [], invites: [], vassals: [] };  // союзы и вассалитеты
+  EC.incomeHistory = incomeHistory || [];   // снимки дохода по тикам (доход по времени)
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
   // карта редкости/иконки ресурсов из колоний (+ доступных планет)
@@ -963,6 +965,29 @@ function ecOvBar(used, cap, cls) {
   return `<span class="ec-ovx-bar"><span class="ec-ovx-bar-fill${cls ? ' ' + cls : ''}" style="width:${pct}%"></span></span>`;
 }
 
+// Таблица «доход по времени» — снимки начислений (income_history, пишет триггер)
+function ecIncomeHistoryPanel() {
+  const h = EC.incomeHistory || [];
+  if (!h.length) return `<div class="ec-ovx-panel" style="grid-column:1/-1"><div class="ec-ovx-panel-t">📈 Доход по времени</div><div class="ec-ovx-empty">Истории пока нет — появится после первого начисления (тика).</div></div>`;
+  const maxAbs = Math.max(1, ...h.map(r => Math.abs(+r.gc_delta || 0)));
+  const rows = h.map(r => {
+    const d = +r.gc_delta || 0, s = +r.sci_delta || 0;
+    const dt = r.tick_at ? new Date(r.tick_at) : null;
+    const when = dt ? `${dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} ${dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : '—';
+    const w = Math.round(Math.abs(d) / maxAbs * 100);
+    return `<div class="ec-ih-row">
+        <span class="ec-ih-when">${esc(when)}</span>
+        <span class="ec-ih-bar"><i class="${d >= 0 ? 'pos' : 'neg'}" style="width:${w}%"></i></span>
+        <span class="ec-ih-gc ${d >= 0 ? 'pos' : 'neg'}">${d >= 0 ? '+' : ''}${ecNum(d)} ГС</span>
+        <span class="ec-ih-sci">${s ? `+${ecNum(s)} ОН` : ''}</span>
+        <span class="ec-ih-bal">казна ${ecNum(+r.gc_after || 0)}</span>
+      </div>`;
+  }).join('');
+  return `<div class="ec-ovx-panel" style="grid-column:1/-1">
+    <div class="ec-ovx-panel-t">📈 Доход по времени <span class="ec-ovx-panel-sub">последние ${h.length} начислений · чистый прирост казны за тик</span></div>
+    <div class="ec-ih-list">${rows}</div>
+  </div>`;
+}
 function ecTabOverview() {
   const sumCat = c => EC.roster.filter(r => r.category === c).reduce((a, r) => a + (r.qty || 0), 0);
   const ships = sumCat('ship'), divs = sumCat('division'), ground = sumCat('ground'), avia = sumCat('aviation');
@@ -976,7 +1001,7 @@ function ecTabOverview() {
   const activeName = activeProj ? ((researchAll.find(n => n.id === activeProj) || {}).name || activeProj) : '';
   const myRoutes = (EC.routes || []).filter(r => (r.a_fid === EC.fid || r.b_fid === EC.fid) && r.status === 'active').length;
   const myLoans = (EC.loans || []).filter(l => (l.lender_fid === EC.fid || l.borrower_fid === EC.fid) && l.status === 'active').length;
-  const agentsTot = EC.eco.agents || 0;
+  const agentsTot = (typeof ecSpyRoster === 'function') ? ecSpyRoster().length : (EC.eco.agents || 0);
   const agentsFree = (typeof ecSpyFree === 'function') ? ecSpyFree() : agentsTot;
   const agentsCI = EC.eco.counter_agents || 0;
   const agentsOps = (typeof ecSpyCommitted === 'function') ? ecSpyCommitted() : 0;
@@ -1044,9 +1069,9 @@ function ecTabOverview() {
         <span class="ec-bdg-net-v">${netGc >= 0 ? '+' : ''}${ecNum(netGc)} <small>ГС</small></span>
         ${inc.debuff ? `<span class="ec-bdg-net-warn">🔥 дестабилизация −${Math.round(inc.debuff * 100)}%</span>` : ''}
       </div>
-      ${(moneyRows || marketRow || expRow) ? `<div class="ec-bdg-rows">${moneyRows}${marketRow}${expRow}</div>` : ''}
+      ${(moneyRows || marketRow) ? `<div class="ec-bdg-rows">${moneyRows}${marketRow}</div>` : ''}
       ${flows.length ? `<div class="ec-bdg-flows">${flows.join('')}</div>` : ''}
-      <div class="ec-ovx-hint">Содержания армии и зданий нет — траты разовые (постройка, производство, экспансия).${_out.length || _in.length ? ' Доход с караванов зависит от поставок и может срезаться пиратами; ресурсы по караванам ежедневно уходят со склада.' : ''}</div>`
+      <div class="ec-ovx-hint">Только денежные потоки (ГС). Ресурсы и их добыча — в панели «Ресурсы» ниже. Содержания армии/зданий нет — траты разовые.${_out.length || _in.length ? ' Доход с караванов зависит от поставок и срезается пиратами.' : ''}</div>`
       : `<div class="ec-ovx-empty">Казна пуста. Постройте Гражданские фабрики во вкладке «Колонии» — это база дохода.</div>`}
   </div>`;
 
@@ -1126,13 +1151,23 @@ function ecTabOverview() {
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('diplomacy')"><div class="ec-ovx-stat-v">${ecNum(myLoans)}</div><div class="ec-ovx-stat-k">Займы</div></div>
     </div>
     ${agentsOps ? `<div class="ec-ovx-hint">Задействовано в операциях: <b>${ecNum(agentsOps)}</b> · свободно: <b>${ecNum(agentsFree)}</b></div>` : ''}
+    ${(() => {
+      const u = EC.diplo && EC.diplo.union, vs = (EC.diplo && EC.diplo.vassals) || [];
+      const mine = vs.filter(v => v.overlord === EC.fid && v.status === 'active').length;
+      const lord = vs.find(v => v.vassal === EC.fid && v.status === 'active');
+      const parts = [];
+      if (u) parts.push(`${u.kind === 'federation' ? '🛡 Федерация' : '🤝 Конфедерация'}: <b>${esc(u.name)}</b>`);
+      if (mine) parts.push(`вассалов: <b>${mine}</b>`);
+      if (lord) parts.push(`сюзерен: <b>${esc(lord.overlord_name)}</b>`);
+      return parts.length ? `<div class="ec-ovx-hint ec-ov-clk" onclick="ecSetTab('diplomacy')">${parts.join(' · ')}</div>` : '';
+    })()}
   </div>`;
 
   const raceNote = `<div class="ec-race-note">Раса: <b>${esc(EC.app.race || '—')}</b> · ${ecIsRobot()
     ? 'родные миры: <b>все типы планет</b> — колонизация без терраформа (бонус роботов).'
     : 'родные миры: ' + ((EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—') + '. Чужие типы планет — через терраформ.'}</div>`;
 
-  return `<div class="ec-ovx-grid">${budget}${resPanel}${empire}${army}${sci}${ecDoctrineHtml()}</div>${raceNote}
+  return `<div class="ec-ovx-grid">${budget}${ecIncomeHistoryPanel()}${resPanel}${empire}${army}${sci}${ecDoctrineHtml()}</div>${raceNote}
     <div class="ec-ov-links">
       <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
       <button class="btn btn-gh btn-sm" onclick="go('cat-ships')">🚀 Каталоги</button>

@@ -92,6 +92,25 @@
 .ec-rchip b { font-family: var(--font-display); font-size: 15px; color: var(--t1); }
 .ec-rchip-n { font-size: 11px; color: var(--t3); }
 .ec-rchip-empty { font-size: 12px; color: var(--t4); padding: 4px 2px; }
+
+/* Доход по времени (таблица истории) */
+.ec-ih-list { display: flex; flex-direction: column; gap: 2px; }
+.ec-ih-row { display: grid; grid-template-columns: 92px 1fr 110px 78px 120px; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; font-size: 12px; }
+.ec-ih-row:nth-child(odd) { background: rgba(255,255,255,.025); }
+.ec-ih-when { font-family: var(--font-mono); color: var(--t3); font-size: 11px; }
+.ec-ih-bar { height: 7px; border-radius: 4px; background: var(--b1); overflow: hidden; }
+.ec-ih-bar i { display: block; height: 100%; }
+.ec-ih-bar i.pos { background: var(--gd, #5fc38a); }
+.ec-ih-bar i.neg { background: var(--err, #e06a6a); }
+.ec-ih-gc { font-family: var(--font-display); font-weight: 700; text-align: right; }
+.ec-ih-gc.pos { color: var(--gd, #5fc38a); }
+.ec-ih-gc.neg { color: var(--err, #e06a6a); }
+.ec-ih-sci { color: var(--pu, #a78bdc); text-align: right; font-size: 11px; }
+.ec-ih-bal { color: var(--t3); text-align: right; font-size: 11px; }
+@media (max-width: 640px) {
+  .ec-ih-row { grid-template-columns: 76px 1fr 84px; }
+  .ec-ih-sci, .ec-ih-bal { display: none; }
+}
 @media (max-width: 640px) {
   .ec-cover { min-height: 0; border-radius: 12px; margin-bottom: 14px; }
   .ec-cover-inner { padding: 14px 14px 14px; }
