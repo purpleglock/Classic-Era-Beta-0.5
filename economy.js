@@ -1640,7 +1640,7 @@ function ecCvAllocate() {
 function ecCvCargoHtml() {
   EC.cvCargo = EC.cvCargo || {};
   const ex = ecExtractEntries();
-  if (!ex.length) return '<div class="ec-empty" style="padding:6px">Нет добычи — назначьте месторождения на добывающих заводах в колониях.</div>';
+  if (!ex.length) return '<div class="ec-empty" style="padding:6px">Нет ресурсов в экспорте. Переключите добывающий завод в режим 💱 Экспорт (вкладка «Колонии») — только экспорт доступен караванам, склад копит на себя.</div>';
   const alloc = {}; ecCvAllocate().forEach(c => alloc[c.res] = c.vol);
   return ex.map(([n, rate]) => {
     const on = !!EC.cvCargo[n];
@@ -1697,10 +1697,11 @@ function ecTravelTurns(oSys, dSys) {
   const adj = (EC.lanes || []).some(l => (l.a_id === oSys && l.b_id === dSys) || (l.a_id === dSys && l.b_id === oSys));
   return Math.max(1, Math.ceil((adj ? 1 : 3) * 25 / Math.max(1, ecFleetSpeed())));
 }
-// Что фракция ДОБЫВАЕТ и с какой скоростью /ход — список для каравана (поток, не склад)
+// Что фракция отдаёт в ЭКСПОРТ и с какой скоростью /ход — список для каравана.
+// Только заводы в режиме «экспорт»; «склад» — копит на склад, караванам недоступно.
 function ecExtractEntries() {
   const m = {};
-  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
+  (EC.buildings || []).filter(b => b.btype === 'mining' && b.mine_mode === 'export').forEach(b => {
     const res = ecMiningPlanetRes(b);
     (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
       const ri = res.find(x => x.name === t); if (!ri) return;
@@ -1901,10 +1902,10 @@ function ecTabTrade() {
   const caravanForm = (tradeCap < 1) ? '<div class="ec-empty">Нужен Торговый хаб (вкладка «Колонии») — он открывает торговые пути.</div>'
     : noOthers ? '<div class="ec-empty">Нет других фракций для торговли.</div>'
       : !mySys.length ? '<div class="ec-empty">Нет ваших систем на карте — расширяйтесь (вкладка «Территория»).</div>'
-        : !extractEntries.length ? '<div class="ec-empty">Вы ничего не добываете — постройте Добывающий завод и назначьте месторождения (вкладка «Колонии»). Караван возит вашу добычу.</div>'
+        : !extractEntries.length ? '<div class="ec-empty">Нет ресурсов в экспорте. Поставьте добывающий завод в режим 💱 Экспорт (вкладка «Колонии») — караван возит только экспортную добычу, склад остаётся себе.</div>'
           : `<div class="ec-trade-form">
         <div class="ec-trade-how">
-          <b>Как это работает:</b> караван — постоянное торговое соглашение. После того как партнёр <b>примет</b>, <b>каждый ход</b> ваш караван возит вашу <b>добычу</b> ресурса (сколько влезет в трюмы флота) и <b>оба получаете ГС</b>. Никаких единиц со склада — возится поток добычи. Путь бессрочный, пока не закроете.
+          <b>Как это работает:</b> караван — постоянное торговое соглашение. После того как партнёр <b>примет</b>, <b>каждый ход</b> ваш караван возит вашу <b>экспортную добычу</b> (режим 💱 Экспорт на заводе, сколько влезет в трюмы) и <b>оба получаете ГС</b>. Завод в режиме 📦 Склад караванам недоступен — это разные каналы, двойного дохода нет. Путь бессрочный, пока не закроете.
           <div class="ec-trade-flow"><span>① Вы предлагаете</span><span>→</span><span>② Партнёр принимает</span><span>→</span><span>③ Доход каждый ход</span></div>
         </div>
         <div class="ec-trade-label">1 · Соберите флот каравана <span class="ec-hint">грузовые → грузоподъёмность, боевые → эскорт</span></div>
