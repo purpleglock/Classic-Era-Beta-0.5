@@ -562,7 +562,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -589,6 +589,7 @@ async function ecLoad() {
     ecRpc('raid_status').catch(() => null),
     ecRpc('trade_capacity').catch(() => null),   // грузоподъёмность торгового флота
     ecRpc('spy_recruits_list').catch(() => null),   // агентура: ростер + еженедельный рынок рекрутов
+    ecRpc('diplo_status').catch(() => null),         // союзы: федерация/конфедерация + вассалитеты
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -611,6 +612,7 @@ async function ecLoad() {
   EC.raidStatus = raidStatus || { ships: 0, convoy: 0, raids: 0, policy: 0, free: 0 };  // статус флота
   EC.tradeCargo = tradeCargo || { total: 0, used: 0, free: 0 };   // грузоподъёмность торгового флота
   EC.spyAgency = spyAgency || { cap: 0, hired: 0, roster: [], recruits: [], refresh_at: null };  // агентура: ростер + рынок
+  EC.diplo = diploStatus || { union: null, members: [], invites: [], vassals: [] };  // союзы и вассалитеты
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
   // карта редкости/иконки ресурсов из колоний (+ доступных планет)
@@ -2113,11 +2115,80 @@ function ecTabDiplomacy() {
       ${asBorrower.length ? `<div class="ec-r-sec">Я заёмщик</div>${borrowerHtml}` : ''}
     </div>`;
 
-  return `${ecIntro('🤝', 'Дипломатия', 'Стройте отношения с другими фракциями и управляйте кредитами. Торговля и обмен — на вкладке «Торговля».', ['<b>Дипломатический респект</b> отражает отношения между державами.', 'Можно выдавать займы другим фракциям; споры по долгам решает МГА.'])}<div class="ec-section-title">Отношения <span class="ec-hint">— дипломатический респект</span></div>
+  return `${ecIntro('🤝', 'Дипломатия', 'Союзы, отношения и кредиты. Федерация/конфедерация дают защиту и общий флот; вассал платит сюзерену дань. Торговля и обмен — на вкладке «Торговля».', ['<b>Федерация/конфедерация</b> — союз нескольких держав: защита караванов и от разведки, общий флот.', '<b>Вассалитет</b> — вассал платит сюзерену дань с дохода (как у Paradox).', 'Можно выдавать займы; споры по долгам решает МГА.'])}<div class="ec-section-title">Союзы <span class="ec-hint">— федерация · конфедерация · вассалитет</span></div>
+    ${ecAllianceBlock()}
+    <div class="ec-section-title">Отношения <span class="ec-hint">— дипломатический респект</span></div>
     ${ecRelationsBlock()}
     <div class="ec-section-title">Кредиты</div>
     <div class="ec-dip-grid">${loanBlock}</div>`;
 }
+
+// Блок союзов: федерация/конфедерация (группа) + вассалитет (парный пакт). Слайс 1.
+function ecAllianceBlock() {
+  const d = EC.diplo || { union: null, members: [], invites: [], vassals: [] };
+  const chip = (txt, crown) => `<span style="display:inline-block;background:var(--b1);border:1px solid var(--w2);border-radius:8px;padding:3px 9px;margin:2px;font-size:12px">${esc(txt)}${crown ? ' 👑' : ''}</span>`;
+  let unionHtml;
+  if (d.union) {
+    const isLeader = d.union.leader_fid === EC.fid;
+    const kindName = d.union.kind === 'federation' ? 'Федерация' : 'Конфедерация';
+    const membersHtml = (d.members || []).map(m => chip(m.name, m.fid === d.union.leader_fid)).join('');
+    unionHtml = `<div class="ec-dip-t">${d.union.kind === 'federation' ? '🛡' : '🤝'} ${esc(kindName)}: «${esc(d.union.name)}»</div>
+      <div style="margin:6px 0">${membersHtml}</div>
+      ${isLeader ? `<div class="ec-prod-form" style="margin-top:6px">${ecFacSelect('ec-union-inv')}<button class="btn btn-gd btn-sm" onclick="ecUnionInvite()">Пригласить</button></div>` : ''}
+      <button class="btn btn-gh btn-sm" style="margin-top:6px" onclick="ecUnionLeave()">Выйти из союза</button>`;
+  } else {
+    unionHtml = `<div class="ec-dip-t">🤝 Союз</div>
+      <div class="ec-empty" style="padding:6px">Вы не в союзе. Создайте федерацию или конфедерацию и приглашайте державы.</div>
+      <div class="ec-prod-form" style="margin-top:6px;flex-wrap:wrap">
+        <input id="ec-union-name" placeholder="название союза" class="ec-loan-note" style="flex:1;min-width:140px">
+        <select id="ec-union-kind" class="ec-prod-qty" style="width:auto"><option value="confederation">Конфедерация</option><option value="federation">Федерация</option></select>
+        <button class="btn btn-gd btn-sm" onclick="ecUnionCreate()">Создать</button>
+      </div>`;
+  }
+  const invHtml = (d.invites || []).map(i => `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+      <span class="ec-route-badge new">приглашение</span> <b>${esc(i.name)}</b> (${i.kind === 'federation' ? 'федерация' : 'конфедерация'}) от ${esc(i.leader)}
+    </span><button class="btn btn-gd btn-xs" onclick="ecUnionInviteRespond('${i.id}',true)">Вступить</button><button class="ec-bld-del" onclick="ecUnionInviteRespond('${i.id}',false)">✕</button></div>`).join('');
+
+  const vassals = d.vassals || [];
+  const myVassals = vassals.filter(v => v.overlord === EC.fid);
+  const asVassal = vassals.filter(v => v.vassal === EC.fid);
+  const vassalRows = myVassals.map(v => `<div class="ec-q-row"><span class="ec-r-name">${v.status === 'pending' ? '⏳ ' : '👑 '}Вассал <b>${esc(v.vassal_name)}</b> · дань ${Math.round(v.tribute_pct * 100)}%${v.status === 'pending' ? ' (ждёт ответа)' : ''}</span><button class="ec-bld-del" title="Разорвать" onclick="ecVassalBreak('${v.id}')">✕</button></div>`).join('');
+  const overlordRows = asVassal.map(v => v.status === 'pending'
+    ? `<div class="ec-q-row ec-route-row"><span class="ec-r-name"><span class="ec-route-badge new">вассалитет</span> <b>${esc(v.overlord_name)}</b> предлагает стать сюзереном · дань ${Math.round(v.tribute_pct * 100)}%</span><button class="btn btn-gd btn-xs" onclick="ecVassalRespond('${v.id}',true)">Принять</button><button class="ec-bld-del" onclick="ecVassalRespond('${v.id}',false)">✕</button></div>`
+    : `<div class="ec-q-row"><span class="ec-r-name">Сюзерен <b>${esc(v.overlord_name)}</b> · дань ${Math.round(v.tribute_pct * 100)}%</span><button class="ec-bld-del" title="Разорвать" onclick="ecVassalBreak('${v.id}')">✕</button></div>`).join('');
+  const amVassal = asVassal.some(v => v.status === 'active');
+  const vassalBlock = `<div class="ec-dip-card"><div class="ec-dip-t">👑 Вассалитет <span class="ec-hint">вассал платит сюзерену дань с дохода</span></div>
+      ${amVassal ? '<div class="ec-empty" style="padding:6px">Вы уже чей-то вассал — нельзя брать своих вассалов.</div>' : `<div class="ec-prod-form" style="flex-wrap:wrap">${ecFacSelect('ec-vassal-fac')}<input type="number" id="ec-vassal-pct" min="5" max="30" value="10" class="ec-prod-qty" style="width:70px" title="дань, %"><button class="btn btn-gd btn-sm" onclick="ecVassalPropose()">Сделать вассалом</button></div>`}
+      ${vassalRows ? `<div class="ec-r-sec">Мои вассалы</div>${vassalRows}` : ''}
+      ${overlordRows ? `<div class="ec-r-sec">Мой статус</div>${overlordRows}` : ''}
+    </div>`;
+
+  return `<div class="ec-dip-grid">
+      <div class="ec-dip-card">${unionHtml}${invHtml ? `<div class="ec-r-sec">📥 Приглашения вам</div>${invHtml}` : ''}</div>
+      ${vassalBlock}
+    </div>`;
+}
+function ecUnionCreate() {
+  const name = ecId('ec-union-name')?.value?.trim();
+  const kind = ecId('ec-union-kind')?.value || 'confederation';
+  if (!name) { toast('Введите название союза', 'err'); return; }
+  ecRpcAct('union_create', { p_kind: kind, p_name: name }, 'Союз создан');
+}
+function ecUnionInvite() {
+  const fid = ecId('ec-union-inv')?.value;
+  if (!fid || !EC.diplo.union) { toast('Выберите фракцию', 'err'); return; }
+  ecRpcAct('union_invite', { p_union_id: EC.diplo.union.id, p_target_fid: fid }, 'Приглашение отправлено');
+}
+function ecUnionInviteRespond(id, acc) { ecRpcAct('union_invite_respond', { p_invite_id: id, p_accept: !!acc }, acc ? 'Вы вступили в союз' : 'Приглашение отклонено'); }
+function ecUnionLeave() { if (confirm('Выйти из союза?')) ecRpcAct('union_leave', {}, 'Вы вышли из союза'); }
+function ecVassalPropose() {
+  const fid = ecId('ec-vassal-fac')?.value;
+  const pct = Math.max(5, Math.min(30, parseInt(ecId('ec-vassal-pct')?.value) || 10)) / 100;
+  if (!fid) { toast('Выберите фракцию', 'err'); return; }
+  ecRpcAct('vassal_propose', { p_target_fid: fid, p_tribute_pct: pct }, 'Предложение вассалитета отправлено');
+}
+function ecVassalRespond(id, acc) { ecRpcAct('vassal_respond', { p_id: id, p_accept: !!acc }, acc ? 'Вассалитет принят' : 'Отклонено'); }
+function ecVassalBreak(id) { if (confirm('Разорвать вассалитет?')) ecRpcAct('vassal_break', { p_id: id }, 'Вассалитет разорван'); }
 
 // ── Блок «Обмен» (бартер): отдать/запросить ГС·ОН·ресурсы·корабли ──
 function ecBarterBlock(others, noOthers, stock) {

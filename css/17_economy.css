@@ -92,7 +92,29 @@
 .ec-rchip b { font-family: var(--font-display); font-size: 15px; color: var(--t1); }
 .ec-rchip-n { font-size: 11px; color: var(--t3); }
 .ec-rchip-empty { font-size: 12px; color: var(--t4); padding: 4px 2px; }
-@media (max-width: 640px) { .ec-cover { min-height: 150px; } .ec-stats { grid-template-columns: 1fr 1fr; } .ec-stat-inc { grid-column: 1 / -1; } }
+@media (max-width: 640px) {
+  .ec-cover { min-height: 0; border-radius: 12px; margin-bottom: 14px; }
+  .ec-cover-inner { padding: 14px 14px 14px; }
+  .ec-cover-hud { width: 18px; height: 18px; top: 8px; }
+  .ec-cover-hud.hud-tl { left: 8px; } .ec-cover-hud.hud-tr { right: 8px; }
+  .ec-cover-row { gap: 8px; }
+  .ec-cover-title { font-size: 22px; padding-bottom: 4px; border-bottom-width: 2px; }
+  .ec-cover-btns { width: 100%; }
+  .ec-cover .ec-stats { grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 8px; }
+  .ec-cover .ec-stat-inc { grid-column: 1 / -1; }
+  .ec-stat { padding: 9px 11px; gap: 9px; }
+  .ec-stat-ic { font-size: 20px; }
+  .ec-stat-v { font-size: 16px; }
+  .ec-stat-inc .ec-stat-v { font-size: 13px; }
+  .ec-resbar { padding: 10px 11px; }
+  .ec-rchip { padding: 5px 8px; gap: 5px; }
+  .ec-rchip b { font-size: 13px; }
+  .ec-rchip-n { display: none; }
+}
+@media (max-width: 380px) {
+  .ec-cover .ec-stats { grid-template-columns: 1fr; }
+  .ec-cover-title { font-size: 19px; }
+}
 
 /* Вводный блок-объяснялка вверху вкладки */
 .ec-intro { background: var(--b2); border: 1px solid var(--w2); border-left: 3px solid var(--gd); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 16px; }

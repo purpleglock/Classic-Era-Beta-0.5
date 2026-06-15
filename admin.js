@@ -234,9 +234,9 @@ function adSetSubtab(t) { AD.subtab = t; if (!adRenderSlot()) adPaint(); }
 function adFacPanel() {
   const e = adEntry(AD.sel);
   if (!e) return '';
-  const SUBTABS = [['treasury','💰 Казна'],['resources','📦 Ресурсы'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['danger','⚠ Зона риска']];
+  const SUBTABS = [['treasury','💰 Казна'],['resources','📦 Ресурсы'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['danger','⚠ Зона риска']];
   const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="fm-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
-  const bodyMap = { treasury: adTabTreasury, resources: adTabResources, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, danger: adTabDanger };
+  const bodyMap = { treasury: adTabTreasury, resources: adTabResources, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, danger: adTabDanger };
   const renderFn = bodyMap[AD.subtab] || adTabTreasury;
   let tabBody = '';
   try { tabBody = renderFn(e); }
@@ -271,7 +271,7 @@ function adTabTreasury(e) {
   return `<div class="fm-form">
     ${field('fm-gc',      'ГС (Галактический Стандарт)', 'gc',      [100,1000,10000], [100,1000])}
     ${field('fm-science', 'ОН (Очки Науки)',             'science', [10,50,100],      [10])}
-    ${field('fm-agents',  'Агенты',                      'agents',  [1,5],            [1])}
+    <div class="fm-dim" style="font-size:11px;margin:4px 0">Агенты теперь именованные — выдавайте их во вкладке «🕵 Агенты».</div>
     <button class="btn btn-gd" onclick="adSetTreasury()" style="margin-top:8px">💾 Установить значения</button>
   </div>`;
 }
@@ -280,11 +280,10 @@ async function adSetTreasury() {
   if (!AD.sel || AD.busy) return;
   const gc      = Math.max(0, parseInt(document.getElementById('fm-gc')?.value) || 0);
   const science = Math.max(0, parseInt(document.getElementById('fm-science')?.value) || 0);
-  const agents  = Math.max(0, parseInt(document.getElementById('fm-agents')?.value) || 0);
   AD.busy = true;
   try {
-    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { gc, science, agents });
-    const e = adEntry(AD.sel); if (e && e.eco) { e.eco.gc = gc; e.eco.science = science; e.eco.agents = agents; }
+    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { gc, science });
+    const e = adEntry(AD.sel); if (e && e.eco) { e.eco.gc = gc; e.eco.science = science; }
     toast('Казна обновлена', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -824,6 +823,95 @@ async function adRemoveUnit(id) {
     const e = adEntry(AD.sel); if (e) e.roster = e.roster.filter(p => p.id !== id);
     AD.prod = AD.prod.filter(p => p.id !== id);
     toast('Юнит удалён', 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+// ── Вкладка: Агенты (выдача и кастомизация) ─────────────────────
+const AD_PERKS = [
+  ['infiltrator', '🕵 Инфильтратор'], ['saboteur', '💣 Диверсант'],
+  ['ghost', '👻 Призрак'], ['analyst', '📊 Аналитик'], ['handler', '🛡 Куратор'],
+];
+const AD_FNAMES = ['Алекс','Марк','Юри','Дана','Лена','Ник','Ивар','Соня','Рэй','Тао','Мира','Кай','Лев','Зара','Орин','Вера'];
+const AD_LNAMES = ['Восс','Кейн','Орлов','Драй','Морозов','Сато','Винтер','Холт','Рейес','Ким','Блэк','Норд','Грей','Фокс','Волков'];
+function adPerkSelect(id, cur) {
+  return `<select class="fi" id="${id}">${AD_PERKS.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+}
+function adTabAgents(e) {
+  if (e.agents == null) { adLoadAgents(AD.sel); return `<div class="fm-empty">Загрузка агентов…</div>`; }
+  const rows = e.agents.length
+    ? e.agents.map(a => {
+        const training = a.ready_at && new Date(a.ready_at).getTime() > Date.now();
+        return `<div class="fm-field-row" style="flex-wrap:wrap;gap:6px;align-items:center;border-bottom:1px solid var(--w2,#2a3340);padding:6px 0">
+          <input class="fi" id="ag-fn-${a.id}" value="${esc(a.first_name || '')}" style="width:110px" placeholder="Имя">
+          <input class="fi" id="ag-ln-${a.id}" value="${esc(a.last_name || '')}" style="width:110px" placeholder="Фамилия">
+          ${adPerkSelect('ag-pk-' + a.id, a.perk)}
+          ${training ? '<span class="fm-dim" style="font-size:10px">обучается</span>' : '<span class="fm-dim" style="font-size:10px;color:var(--ok,#5fc38a)">готов</span>'}
+          <button class="btn btn-gd btn-xs" onclick="adSetAgent(${adArg(a.id)})" title="Сохранить">💾</button>
+          <button class="btn btn-rd btn-xs" onclick="adRemoveAgent(${adArg(a.id)})" title="Удалить">✕</button>
+        </div>`;
+      }).join('')
+    : `<div class="fm-empty">Нет агентов</div>`;
+  return `<div class="fm-agents">
+    <div class="fm-section-title">Агенты фракции (${e.agents.length})</div>
+    <div>${rows}</div>
+    <div class="fm-section-title" style="margin-top:16px">Выдать агента <span class="fm-dim" style="font-weight:400">— готов сразу, виден в кабинете фракции</span></div>
+    <div class="fm-field-row" style="flex-wrap:wrap;gap:6px">
+      <input class="fi" id="ag-new-fn" style="width:120px" placeholder="Имя">
+      <input class="fi" id="ag-new-ln" style="width:120px" placeholder="Фамилия">
+      ${adPerkSelect('ag-new-pk', 'infiltrator')}
+      <button class="btn btn-gh btn-sm" onclick="adAgentRandom()">🎲 Случайно</button>
+      <button class="btn btn-gd btn-sm" onclick="adGrantAgent()">✓ Выдать</button>
+    </div>
+  </div>`;
+}
+async function adLoadAgents(fid) {
+  try {
+    const rows = await dbGet('spy_agents', `faction_id=eq.${fid}&order=hired_at.asc`);
+    const e = adEntry(fid); if (e) e.agents = rows || [];
+  } catch (ex) { const e = adEntry(fid); if (e) e.agents = []; toast('Ошибка загрузки агентов: ' + ex.message, 'err'); }
+  adPaint();
+}
+function adAgentRandom() {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('ag-new-fn', AD_FNAMES[Math.floor(Math.random() * AD_FNAMES.length)]);
+  set('ag-new-ln', AD_LNAMES[Math.floor(Math.random() * AD_LNAMES.length)]);
+  set('ag-new-pk', AD_PERKS[Math.floor(Math.random() * AD_PERKS.length)][0]);
+}
+async function adGrantAgent() {
+  if (!AD.sel || AD.busy) return;
+  const first = document.getElementById('ag-new-fn')?.value || '';
+  const last = document.getElementById('ag-new-ln')?.value || '';
+  const perk = document.getElementById('ag-new-pk')?.value || 'infiltrator';
+  AD.busy = true;
+  try {
+    await apiFetch('rpc/admin_grant_agent', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel, p_first: first, p_last: last, p_perk: perk }) });
+    const e = adEntry(AD.sel); if (e) e.agents = null;
+    toast('Агент выдан', 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+async function adSetAgent(id) {
+  if (AD.busy) return;
+  const first = document.getElementById('ag-fn-' + id)?.value || '';
+  const last = document.getElementById('ag-ln-' + id)?.value || '';
+  const perk = document.getElementById('ag-pk-' + id)?.value || null;
+  AD.busy = true;
+  try {
+    await apiFetch('rpc/admin_set_agent', { method: 'POST', body: JSON.stringify({ p_id: id, p_first: first, p_last: last, p_perk: perk }) });
+    const e = adEntry(AD.sel); if (e) e.agents = null;
+    toast('Сохранено', 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+async function adRemoveAgent(id) {
+  if (AD.busy) return;
+  if (!confirm('Удалить агента?')) return;
+  AD.busy = true;
+  try {
+    await apiFetch('rpc/admin_remove_agent', { method: 'POST', body: JSON.stringify({ p_id: id }) });
+    const e = adEntry(AD.sel); if (e) e.agents = null;
+    toast('Агент удалён', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }
