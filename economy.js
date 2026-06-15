@@ -21,6 +21,17 @@ const EC_SPY_OPS = {
   steal_tech:   { label: 'Кража технологий',     diff: 45, base: 4, need: 'deep',  icon: '🧪', desc: 'Украсть изученную цель технологию (добавится в ваше дерево).' },
 };
 const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'sabotage', 'destabilize', 'steal_tech'];
+// Перки агентов (зеркало _spy_agents.sql). Этап 1 — хранятся; этап 2 — гейтят/баффят операции.
+const EC_SPY_PERKS = {
+  infiltrator: { label: 'Инфильтратор', icon: '🕵', desc: 'Повышает успех краж (казна, технологии).' },
+  saboteur:    { label: 'Диверсант',    icon: '💣', desc: 'Повышает успех саботажа и дестабилизации.' },
+  ghost:       { label: 'Призрак',      icon: '👻', desc: 'Снижает риск раскрытия операций.' },
+  analyst:     { label: 'Аналитик',     icon: '📊', desc: 'Качественнее разведка, свежее досье.' },
+  handler:     { label: 'Куратор',      icon: '🛡', desc: 'Усиливает контрразведку.' },
+};
+function ecPerk(p) { return EC_SPY_PERKS[p] || { label: p || '—', icon: '•', desc: '' }; }
+function ecSpyHire(id) { ecRpcAct('spy_hire', { p_recruit_id: id }, 'Агент нанят'); }
+function ecSpyFire(id) { if (confirm('Уволить агента?')) ecRpcAct('spy_agent_fire', { p_id: id }, 'Агент уволен'); }
 // Сила спецслужб от доктрины (связь с agents_flat): +5% за пункт.
 function ecSpyPower(app) { return (ecFactionMods(app).agents_flat || 0) * 5; }
 // Свежие разведданные по цели: вернуть {level:'basic'|'deep'|null, ageDays, bonus}.
@@ -34,29 +45,48 @@ function ecSpyDossier(targetFid) {
   const bonus = Math.max(0, base - ageDays); // затухает со временем
   return { level: deep ? 'deep' : 'basic', ageDays, bonus, result: (deep || latest).result || {}, deep: !!deep };
 }
-// Свободные агенты = пул − контрразведка − занятые в активных операциях.
-function ecSpyCommitted() { return (EC.missions || []).filter(m => m.actor_fid === EC.fid && m.status === 'active').reduce((a, m) => a + (m.agents || 0), 0); }
-function ecSpyFree() { return Math.max(0, (EC.eco.agents || 0) - (EC.eco.counter_agents || 0) - ecSpyCommitted()); }
+// Агентура — из ростера (этап 2): операции на именованных агентах, не на пуле.
+function ecSpyRoster() { return (EC.spyAgency && EC.spyAgency.roster) || []; }
+function ecSpyReadyAgents() { return ecSpyRoster().filter(a => a.status === 'ready'); }     // обучены и не заняты
+function ecSpyCommitted() { return ecSpyRoster().filter(a => a.status === 'busy').length; }  // на операциях
+function ecSpyTraining() { return ecSpyRoster().filter(a => a.status === 'training').length; }
+function ecSpyFree() { return Math.max(0, ecSpyReadyAgents().length - (EC.eco.counter_agents || 0)); }
+// Колонии цели из последней УСПЕШНОЙ разведки (для выбора цели саботажа) — этап 3.
+function ecSpyColonyOptions(targetFid) {
+  const dos = ecSpyDossier(targetFid);
+  return (dos && dos.result && Array.isArray(dos.result.colony_list)) ? dos.result.colony_list : [];
+}
 // Контрразведка цели (видна только если есть глубокая разведка; иначе считаем 0 для превью).
 function ecSpyTargetCI(targetFid) { const f = (EC.factions || []).find(x => x.faction_id === targetFid); return (f && +f.counter_agents) || 0; }
 // Сила контрразведки цели от её доктрины (нужна анкета цели — приблизительно 0, точный расчёт на сервере).
-// Живой расчёт операции: успех/раскрытие/длительность (зеркало SQL).
-function ecSpyCalc(op, agents, targetFid) {
+// Живой расчёт операции: успех/раскрытие/длительность (зеркало spy_launch).
+// agentIds — массив id выбранных агентов (перки баффают). Для превью (lock-check) можно [].
+function ecSpyCalc(op, agentIds, targetFid) {
   const d = EC_SPY_OPS[op]; if (!d) return null;
-  const A = Math.max(1, agents | 0);
+  const ids = Array.isArray(agentIds) ? agentIds : [];
+  const picked = ecSpyRoster().filter(a => ids.includes(a.id));
+  const A = Math.max(1, picked.length);
   const dos = ecSpyDossier(targetFid);
   const CI = ecSpyTargetCI(targetFid);
   const intel = d.recon ? 0 : dos.bonus;
   const spyPow = ecSpyPower();
+  // перк-бонусы выбранных агентов (зеркало spy_launch)
+  let succB = 0, detB = 0;
+  picked.forEach(a => {
+    if (a.perk === 'infiltrator' && (op === 'steal_gc' || op === 'steal_tech')) succB += 12;
+    else if (a.perk === 'saboteur' && (op === 'sabotage' || op === 'destabilize')) succB += 12;
+    else if (a.perk === 'analyst' && (op === 'recon_basic' || op === 'recon_deep')) succB += 10;
+    if (a.perk === 'ghost') detB += 10;
+  });
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
-  const success = clamp(45 + A * 8 + intel + spyPow - d.diff - CI * 9, 5, 95);
-  const detect = clamp(8 + d.diff * 0.5 + CI * 12 + A * 2 - spyPow, 2, 90);
-  const turns = Math.max(1, Math.ceil(d.base * (1 + d.diff / 100) / Math.sqrt(A)));
+  const success = clamp(45 + A * 8 + intel + spyPow - d.diff - CI * 9 + succB, 5, 95);
+  const detect = clamp(8 + d.diff * 0.5 + CI * 12 + A * 2 - spyPow - detB, 2, 90);
+  const turns = Math.max(1, Math.min(2, Math.ceil(d.base / Math.sqrt(A))));   // 1–2 цикла
   // требование разведки
   let err = '';
   if (d.need === 'basic' && !dos.level) err = 'Нужна разведка цели (базовая)';
   else if (d.need === 'deep' && dos.level !== 'deep') err = 'Нужна глубокая разведка цели';
-  return { success, detect, turns, intel, dossier: dos, ci: CI, err, agents: A };
+  return { success, detect, turns, intel, dossier: dos, ci: CI, err, agents: A, succB, detB, ids };
 }
 // Ресурсы планет: цена продажи и добыча/слот по редкости
 const EC_RES_PRICE = { common: 2, uncommon: 10, rare: 50, epic: 200, legendary: 1200 };
@@ -532,7 +562,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -558,6 +588,7 @@ async function ecLoad() {
     dbGet('raid_missions', `actor_fid=eq.${fid}&order=created_at.desc&limit=40`).catch(() => []),
     ecRpc('raid_status').catch(() => null),
     ecRpc('trade_capacity').catch(() => null),   // грузоподъёмность торгового флота
+    ecRpc('spy_recruits_list').catch(() => null),   // агентура: ростер + еженедельный рынок рекрутов
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -577,8 +608,9 @@ async function ecLoad() {
   EC.barters = barters || [];                    // активные предложения обмена (мои пары)
   EC.techOffers = techOffers || [];              // предложения продажи технологий/чертежей (мои пары)
   EC.raids = myRaids || [];                       // мои рейды (active + done)
-  EC.raidStatus = raidStatus || { ships: 0, convoy: 0, raids: 0, patrol: 0, free: 0 };  // статус флота
+  EC.raidStatus = raidStatus || { ships: 0, convoy: 0, raids: 0, policy: 0, free: 0 };  // статус флота
   EC.tradeCargo = tradeCargo || { total: 0, used: 0, free: 0 };   // грузоподъёмность торгового флота
+  EC.spyAgency = spyAgency || { cap: 0, hired: 0, roster: [], recruits: [], refresh_at: null };  // агентура: ростер + рынок
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
   // карта редкости/иконки ресурсов из колоний (+ доступных планет)
@@ -1695,7 +1727,7 @@ function ecFleetSpeed() {
 function ecTravelTurns(oSys, dSys) {
   if (!oSys || !dSys) return null;
   const adj = (EC.lanes || []).some(l => (l.a_id === oSys && l.b_id === dSys) || (l.a_id === dSys && l.b_id === oSys));
-  return Math.max(1, Math.ceil((adj ? 1 : 3) * 25 / Math.max(1, ecFleetSpeed())));
+  return Math.max(1, Math.min(2, Math.ceil((adj ? 1 : 2) * 20 / Math.max(1, ecFleetSpeed()))));   // 1–2 цикла
 }
 // Что фракция отдаёт в ЭКСПОРТ и с какой скоростью /ход — список для каравана.
 // Только заводы в режиме «экспорт»; «склад» — копит на склад, караванам недоступно.
@@ -2180,7 +2212,7 @@ function ecTabIntel() {
       <div class="ec-res"><span class="ec-res-k">Свободно</span><span class="ec-res-v" style="color:var(--te)">${ecNum(free)}</span></div>
       <div class="ec-res"><span class="ec-res-k">На операциях</span><span class="ec-res-v" style="color:var(--color-warning,#e0a030)">${ecNum(committed)}</span></div>
       <div class="ec-res"><span class="ec-res-k">Контрразведка</span><span class="ec-res-v" style="color:var(--pu)">${ecNum(ci)}</span></div>
-      <div class="ec-res"><span class="ec-res-k">Производство</span><span class="ec-res-v" style="font-size:15px">+${intelSlots}/ход</span></div>
+      <div class="ec-res"><span class="ec-res-k">Потолок / обучаются</span><span class="ec-res-v" style="font-size:15px">${ecNum((EC.spyAgency || {}).cap || 0)} / ${ecNum(ecSpyTraining())}</span></div>
     </div>`;
 
   // Контрразведка — кнопки ±
@@ -2190,17 +2222,17 @@ function ecTabIntel() {
         <span class="ec-ci-val">${ecNum(ci)} агент(ов) в защите</span>
         <button class="btn btn-gh btn-sm" ${free <= 0 ? 'disabled' : ''} onclick="ecCounterIntel(${ci + 1})">＋</button>
       </div>
-      <div class="cn-fac-hint" style="margin-top:6px">Каждый агент в контрразведке снижает шанс успеха вражеских операций и повышает риск их раскрытия.</div></div>`;
+      <div class="cn-fac-hint" style="margin-top:6px">Каждый агент в контрразведке снижает шанс успеха вражеских операций и повышает риск их раскрытия. Перк 🛡 Куратор усиливает контрразведку пассивно и ускоряет расследования.</div></div>`;
 
   // Планировщик
   let planner;
   if (!others.length) planner = '<div class="ec-empty">Нет других фракций для операций.</div>';
-  else if ((EC.eco.agents || 0) < 1) planner = '<div class="ec-empty">Нет агентов. Стройте Центр Спецслужб (даёт +1 агент/слот за ход).</div>';
+  else if (!ecSpyRoster().length) planner = '<div class="ec-empty">Нет агентов. Наймите оперативников на рынке рекрутов выше (Центр Спецслужб задаёт потолок).</div>';
   else {
     if (!EC.spyTarget || !others.find(f => f.faction_id === EC.spyTarget)) EC.spyTarget = others[0].faction_id;
     const tgtOpts = others.map(f => `<option value="${esc(f.faction_id)}"${f.faction_id === EC.spyTarget ? ' selected' : ''}>${esc(f.name)}</option>`).join('');
     const opCards = EC_SPY_ORDER.map(opk => {
-      const d = EC_SPY_OPS[opk]; const c = ecSpyCalc(opk, 1, EC.spyTarget);
+      const d = EC_SPY_OPS[opk]; const c = ecSpyCalc(opk, [], EC.spyTarget);
       const locked = !!c.err;
       return `<button type="button" class="ec-spy-op${opk === EC.spyOp ? ' on' : ''}${locked ? ' locked' : ''}" ${locked ? `title="${esc(c.err)}" style="opacity:.55"` : ''} onclick="ecPickSpyOp('${opk}')">
         <span class="ec-spy-op-ic">${d.icon}</span><span class="ec-spy-op-n">${esc(d.label)}</span>${locked ? `<span class="ec-spy-op-lock" title="${esc(c.err)}">🔒</span>` : ''}</button>`;
@@ -2210,11 +2242,9 @@ function ecTabIntel() {
       <select id="ec-spy-target" onchange="ecPickSpyTarget(this.value)">${tgtOpts}</select>
       <div class="ec-trade-label">2 · Операция</div>
       <div class="ec-spy-ops">${opCards}</div>
-      <div class="ec-trade-volrow">
-        <label>Агентов (своб. ${free})</label>
-        <input type="range" id="ec-spy-agents" min="1" max="${Math.max(1, free)}" value="${Math.min(EC.spyAgents || 1, Math.max(1, free))}" oninput="ecSyncSpyAgents(this.value)">
-        <input type="number" id="ec-spy-agents-n" min="1" max="${Math.max(1, free)}" value="${Math.min(EC.spyAgents || 1, Math.max(1, free))}" class="ec-trade-volnum" oninput="ecSyncSpyAgents(this.value)">
-      </div>
+      <div id="ec-spy-colony"></div>
+      <div class="ec-trade-label">3 · Агенты <span class="ec-hint">перки баффают операцию · свободно ${free}</span></div>
+      <div id="ec-spy-agents-pick" style="display:flex;flex-wrap:wrap;gap:6px">${ecSpyAgentPickHtml()}</div>
       <div class="ec-trade-summary" id="ec-spy-summary"></div>
       <button class="btn btn-gd" id="ec-spy-launch" onclick="ecSpyLaunch()">Запустить операцию</button>
     </div>`;
@@ -2226,7 +2256,33 @@ function ecTabIntel() {
     ? EC.alerts.slice(0, 15).map(ecSpyAlertRow).join('')
     : '<div class="ec-empty" style="padding:8px">Тревог нет — против вас ничего не предпринимали (или попытки не оставили следов).</div>';
 
-  return `${ecIntro('🕵', 'Разведка и тайные операции', 'Шпионьте за другими фракциями: разведка, кража казны и технологий, саботаж, дестабилизация.', ['<b>Агенты</b> копятся от слотов Центра спецслужб. Чем больше агентов в операции — выше шанс успеха и короче срок.', 'Сложные операции требуют сначала провести <b>разведку</b> цели.', 'Оставляйте часть агентов на <b>контрразведку</b> — иначе вас безнаказанно атакуют.'])}${agentBar}
+  // Агентура: ростер нанятых + еженедельный рынок рекрутов
+  const ag = EC.spyAgency || { cap: 0, hired: 0, roster: [], recruits: [], refresh_at: null };
+  const refreshDays = ag.refresh_at ? Math.max(0, Math.ceil((new Date(ag.refresh_at).getTime() - Date.now()) / 86400000)) : null;
+  const atCap = (ag.hired || 0) >= (ag.cap || 0);
+  const stBadge = { training: { t: 'обучается', c: 'var(--color-warning,#e0a030)' }, busy: { t: 'на операции', c: 'var(--te)' }, ready: { t: 'готов', c: 'var(--ok)' } };
+  const rosterHtml = (ag.roster || []).length
+    ? ag.roster.map(a => {
+        const pk = ecPerk(a.perk); const sb = stBadge[a.status] || stBadge.ready;
+        const trainLeft = a.status === 'training' && a.ready_at ? ` ~${Math.max(1, Math.ceil((new Date(a.ready_at).getTime() - Date.now()) / 86400000))} ход.` : '';
+        return `<div class="ec-q-row">
+        <span class="ec-r-name">🕵 <b>${esc(a.first_name)} ${esc(a.last_name)}</b> <i style="color:var(--t4);font-style:normal" title="${esc(pk.desc)}"> · ${pk.icon} ${esc(pk.label)}</i> <i style="color:${sb.c};font-style:normal"> · ${sb.t}${trainLeft}</i></span>
+        <button class="ec-bld-del" title="${a.status === 'busy' ? 'Агент на операции' : 'Уволить'}" ${a.status === 'busy' ? 'disabled' : ''} onclick="ecSpyFire('${esc(a.id)}')">✕</button></div>`; }).join('')
+    : '<div class="ec-empty" style="padding:6px">Нет нанятых агентов — наймите из списка рекрутов справа.</div>';
+  const recruitsHtml = (ag.recruits || []).length
+    ? ag.recruits.map(r => { const pk = ecPerk(r.perk); return `<div class="ec-q-row" style="flex-wrap:wrap;gap:6px">
+        <span class="ec-r-name">${pk.icon} <b>${esc(r.first_name)} ${esc(r.last_name)}</b> <i style="color:var(--t4);font-style:normal" title="${esc(pk.desc)}"> · ${esc(pk.label)}</i></span>
+        <button class="btn btn-gd btn-xs" ${atCap ? 'disabled title="Достигнут потолок агентов — стройте Центр Спецслужб"' : ''} onclick="ecSpyHire('${esc(r.id)}')">Нанять · ${ecNum(r.cost)} ГС</button></div>`; }).join('')
+    : '<div class="ec-empty" style="padding:6px">Список рекрутов пуст.</div>';
+  const agencyBlock = `<div class="ec-dip-grid">
+      <div class="ec-dip-card"><div class="ec-dip-t">🕵 Агентура <span class="ec-hint">нанятые оперативники (${ag.hired || 0}/${ag.cap || 0})</span></div>
+        <div class="ec-queue">${rosterHtml}</div></div>
+      <div class="ec-dip-card"><div class="ec-dip-t">📋 Рынок рекрутов <span class="ec-hint">обновится через ${refreshDays != null ? refreshDays + ' дн.' : '—'}</span></div>
+        <div class="ec-queue">${recruitsHtml}</div></div>
+    </div>`;
+
+  return `${ecIntro('🕵', 'Разведка и тайные операции', 'Шпионьте за другими фракциями: разведка, кража казны и технологий, саботаж, дестабилизация.', ['<b>Агентов</b> нанимаете на еженедельном рынке рекрутов — у каждого имя и перк. Центр спецслужб задаёт потолок числа агентов.', 'Сложные операции требуют сначала провести <b>разведку</b> цели.', 'Оставляйте часть агентов на <b>контрразведку</b> — иначе вас безнаказанно атакуют.'])}${agentBar}
+    ${agencyBlock}
     <div class="ec-dip-grid">
       <div class="ec-dip-card ec-dip-trade"><div class="ec-dip-t">🎯 Планирование операции <span class="ec-hint">расчёт по разведданным и агентам</span></div>${planner}</div>
       ${ciBlock}
@@ -2242,8 +2298,16 @@ function ecTabIntel() {
 // ════════════════════════════════════════════════════════════
 // КАПЕРСТВО (РЕЙДЫ) — флот грабит чужие караваны
 // ════════════════════════════════════════════════════════════
+// Тиры торговой политики — зеркало _trade_policy_cost/_def (бэкенд авторитетен)
+const EC_TRADE_POLICY = [
+  { name: 'Нет', cost: 0, def: 0 },
+  { name: 'Патрульный контракт', cost: 120, def: 8 },
+  { name: 'Конвой Торговой Лиги', cost: 350, def: 18 },
+];
+function ecRaidPolicySet(t) { ecRpcAct('raid_policy_set', { p_tier: Math.max(0, Math.min(2, t)) }, 'Торговая политика обновлена'); }
 function ecTabRaids() {
-  const st = EC.raidStatus || { ships: 0, free: 0, raids: 0, patrol: 0 };
+  const st = EC.raidStatus || { ships: 0, free: 0, raids: 0, policy: 0 };
+  const pol = st.policy || 0; const polInfo = EC_TRADE_POLICY[pol] || EC_TRADE_POLICY[0];
   const others = ecOtherFactions();
   const active = (EC.raids || []).filter(m => m.status === 'active');
   const done = (EC.raids || []).filter(m => m.status === 'done');
@@ -2252,16 +2316,17 @@ function ecTabRaids() {
       <div class="ec-res"><span class="ec-res-k">Корабли</span><span class="ec-res-v">${ecNum(st.ships || 0)}</span></div>
       <div class="ec-res"><span class="ec-res-k">Свободно</span><span class="ec-res-v" style="color:var(--te)">${ecNum(st.free || 0)}</span></div>
       <div class="ec-res"><span class="ec-res-k">В рейдах</span><span class="ec-res-v" style="color:var(--color-warning,#e0a030)">${ecNum(st.raids || 0)}</span></div>
-      <div class="ec-res"><span class="ec-res-k">Патруль</span><span class="ec-res-v" style="color:var(--pu)">${ecNum(st.patrol || 0)}</span></div>
+      <div class="ec-res"><span class="ec-res-k">Защита</span><span class="ec-res-v" style="color:var(--pu)">${esc(polInfo.name)}</span></div>
     </div>`;
 
-  const patrolBlock = `<div class="ec-dip-card"><div class="ec-dip-t">🛡 Патруль <span class="ec-hint">корабли на защите своих караванов</span></div>
-      <div class="ec-ci-row">
-        <button class="btn btn-gh btn-sm" ${(st.patrol || 0) <= 0 ? 'disabled' : ''} onclick="ecRaidPatrol(${(st.patrol || 0) - 1})">−</button>
-        <span class="ec-ci-val">${ecNum(st.patrol || 0)} кораблей в патруле</span>
-        <button class="btn btn-gh btn-sm" ${(st.free || 0) <= 0 ? 'disabled' : ''} onclick="ecRaidPatrol(${(st.patrol || 0) + 1})">＋</button>
+  const policyBlock = `<div class="ec-dip-card"><div class="ec-dip-t">📜 Торговая политика <span class="ec-hint">платная защита всех караванов</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+        ${EC_TRADE_POLICY.map((p, i) => `<button class="btn ${i === pol ? 'btn-gd' : 'btn-gh'} btn-sm" style="display:flex;justify-content:space-between;gap:8px" onclick="ecRaidPolicySet(${i})">
+            <span>${i === pol ? '✓ ' : ''}${esc(p.name)}</span>
+            <span style="opacity:.8">${p.cost ? `${ecNum(p.cost)} ГС/ход · +${p.def} защ.` : 'бесплатно'}</span>
+          </button>`).join('')}
       </div>
-      <div class="cn-fac-hint" style="margin-top:6px">Патрульные корабли усиливают эскорт ВСЕХ ваших караванов — выше шанс отбить чужой рейд.</div></div>`;
+      <div class="cn-fac-hint" style="margin-top:6px">Контракт с NPC-флотом защищает ВСЕ ваши караваны от рейдов; апкип списывается каждый ход. Конвой (свои корабли на конкретный путь) добавляется сверху.</div></div>`;
 
   let planner;
   if ((st.ships || 0) < 1) planner = '<div class="ec-empty">Нет военных кораблей. Постройте Корабельную Верфь и заложите корабли (вкладка «Военпром»).</div>';
@@ -2269,25 +2334,28 @@ function ecTabRaids() {
   else {
     if (!EC.raidTarget || !others.find(f => f.faction_id === EC.raidTarget)) { EC.raidTarget = others[0].faction_id; EC.raidScout = null; }
     const tgtOpts = others.map(f => `<option value="${esc(f.faction_id)}"${f.faction_id === EC.raidTarget ? ' selected' : ''}>${esc(f.name)}</option>`).join('');
+    const hasRecon = !!(ecSpyDossier(EC.raidTarget).level);   // караваны видны только после разведки цели
     const scout = (EC.raidScout && EC.raidScout.fid === EC.raidTarget) ? EC.raidScout.routes : null;
     let caravans;
-    if (scout == null) caravans = `<div class="ec-empty" style="padding:8px">Нажмите «🔭 Разведать», чтобы увидеть караваны цели.</div>`;
+    if (!hasRecon) caravans = `<div class="ec-empty" style="padding:8px">🔒 Нет разведданных об этой фракции. Чужие караваны видны <b>только после разведки</b> — проведите операцию «Разведка» во вкладке «Разведка». <button class="btn btn-gh btn-xs" style="margin-left:6px" onclick="ecSetTab('intel')">→ В Разведку</button></div>`;
+    else if (scout == null) caravans = `<div class="ec-empty" style="padding:8px">Нажмите «🔭 Обновить караваны», чтобы увидеть текущие караваны цели.</div>`;
     else if (!scout.length) caravans = `<div class="ec-empty" style="padding:8px">У цели нет активных караванов — грабить нечего.</div>`;
     else caravans = scout.map(rt => {
-      const info = EC.resInfo[rt.resource] || {};
       const maxShips = Math.max(1, st.free || 0);
       return `<div class="ec-q-row" style="flex-wrap:wrap;gap:6px">
-        <span class="ec-r-name">${info.icon || '📦'} <b>${esc(rt.resource || 'груз')}</b> ×${ecNum(rt.volume || 0)} · 🛡 эскорт ${ecNum(rt.convoy || 0)}</span>
+        <span class="ec-r-name">${ecRouteCargoText(rt)} · 🛡 эскорт ${ecNum(rt.convoy || 0)}</span>
         <span style="display:flex;gap:6px;align-items:center">
           <input type="number" id="raid-ships-${esc(rt.id)}" min="1" max="${maxShips}" value="${Math.min(1, maxShips)}" class="ec-trade-volnum" style="width:64px" title="Кораблей в рейд">
           <button class="btn btn-gd btn-xs" ${(st.free || 0) < 1 ? 'disabled' : ''} onclick="ecRaidLaunch('${esc(rt.id)}')">🏴‍☠ Рейд</button>
         </span></div>`;
     }).join('');
     planner = `<div class="ec-trade-form">
-      <div class="ec-trade-label">1 · Цель</div>
+      <div class="ec-trade-label">1 · Цель <span class="ec-hint">караваны видны только по разведанным фракциям</span></div>
       <div style="display:flex;gap:6px">
         <select id="ec-raid-target" onchange="ecRaidPickTarget(this.value)" style="flex:1">${tgtOpts}</select>
-        <button class="btn btn-gh btn-sm" onclick="ecRaidScout()">🔭 Разведать</button>
+        ${hasRecon
+          ? `<button class="btn btn-gh btn-sm" onclick="ecRaidScout()">🔭 Обновить караваны</button>`
+          : `<button class="btn btn-gh btn-sm" onclick="ecSetTab('intel')">🕵 Разведать в «Разведке»</button>`}
       </div>
       <div class="ec-trade-label">2 · Караваны цели <span class="ec-hint">грабить можно только то, что везут</span></div>
       <div class="ec-queue">${caravans}</div>
@@ -2297,10 +2365,10 @@ function ecTabRaids() {
   const activeHtml = active.length ? active.map(ecRaidActiveRow).join('') : '<div class="ec-empty" style="padding:8px">Активных рейдов нет.</div>';
   const logHtml = done.length ? done.slice(0, 20).map(ecRaidLogRow).join('') : '<div class="ec-empty" style="padding:8px">Рейдов ещё не было.</div>';
 
-  return `${ecIntro('🏴‍☠', 'Каперство · рейды', 'Шлите военные корабли грабить чужие караваны. Добыча — ресурсы и ГС. Но эскорт даёт отпор: в бою корабли теряют обе стороны.', ['Сила рейда — от <b>числа кораблей</b>. Эскорт цели (конвой + патруль) сопротивляется: победит сильнейший, потери считаются у всех.', 'Грабить можно только <b>активный караван</b> цели — нет торговли, нечего и грабить.', 'Держите <b>патруль</b> на защите своих путей. За раскрытый разбой отношения падают.'])}${shipBar}
+  return `${ecIntro('🏴‍☠', 'Каперство · рейды', 'Шлите военные корабли грабить чужие караваны. Добыча — ресурсы и ГС. Но эскорт даёт отпор: в бою корабли теряют обе стороны.', ['Сила рейда — от <b>числа кораблей</b>. Защита цели (конвой + торговая политика) сопротивляется: победит сильнейший, потери считаются у всех.', 'Грабить можно только <b>активный караван</b> цели — нет торговли, нечего и грабить.', 'Включите <b>торговую политику</b> — платный контракт защищает все ваши караваны. За раскрытый разбой отношения падают.'])}${shipBar}
     <div class="ec-dip-grid">
       <div class="ec-dip-card ec-dip-trade"><div class="ec-dip-t">🎯 Планирование рейда</div>${planner}</div>
-      ${patrolBlock}
+      ${policyBlock}
     </div>
     <div class="ec-section-title">Активные рейды <span class="ec-hint">— флот в пути, завершатся через N ходов</span></div>
     <div class="ec-queue">${activeHtml}</div>
@@ -2326,6 +2394,7 @@ function ecRaidLogRow(m) {
 function ecRaidPickTarget(fid) { EC.raidTarget = fid; EC.raidScout = null; ecPaintCabinet(); }
 async function ecRaidScout() {
   const fid = EC.raidTarget; if (!fid) return;
+  if (!ecSpyDossier(fid).level) { toast('Сначала разведайте эту фракцию во вкладке «Разведка»', 'err'); ecSetTab('intel'); return; }
   try {
     const routes = await ecRpc('raid_scout', { p_target_fid: fid });
     EC.raidScout = { fid, routes: routes || [] };
@@ -2367,8 +2436,22 @@ function ecSpyAlertRow(a) {
     ? '<span class="ec-route-badge new">⚠ раскрыто</span>'
     : '<span class="ec-route-badge wait">⚠ аноним</span>';
   const caught = (a.detected && r.caught) ? ' · <span style="color:var(--ok)">агент пойман</span>' : '';
-  return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">${badge}${d.icon} <b>${esc(d.label)}</b> · ${detail} · от: ${actor}${caught}</span></div>`;
+  // мини-игра расследования: незаметную враждебную операцию можно вскрыть по уликам
+  const hostile = ['steal_gc', 'sabotage', 'destabilize', 'steal_tech'].includes(a.op);
+  let investHtml = '';
+  if (!a.detected && hostile && ok) {
+    const ev = Math.max(0, Math.min(100, a.evidence || 0));
+    investHtml = `<div style="margin-top:6px;display:flex;flex-direction:column;gap:4px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;height:7px;border-radius:4px;background:var(--bd,#2a3550);overflow:hidden"><div style="height:100%;width:${ev}%;background:var(--gd)"></div></div>
+        <span class="ec-hint">улики ${ev}%</span>
+        <button class="btn btn-gh btn-xs" onclick="ecSpyInvestigate('${esc(a.id)}')">🔎 Расследовать · 150 ГС</button>
+      </div>
+      ${a.hint ? `<div class="ec-hint" style="color:var(--te)">🧩 ${esc(a.hint)}</div>` : ''}</div>`;
+  }
+  return `<div class="ec-q-row ec-route-row" style="flex-direction:column;align-items:stretch"><span class="ec-r-name">${badge}${d.icon} <b>${esc(d.label)}</b> · ${detail} · от: ${actor}${caught}</span>${investHtml}</div>`;
 }
+function ecSpyInvestigate(id) { ecRpcAct('spy_investigate', { p_mission_id: id }, 'Расследование продвинулось'); }
 // Строка журнала (завершённая операция)
 function ecSpyLogRow(m) {
   const d = EC_SPY_OPS[m.op] || { icon: '•', label: m.op };
@@ -2377,7 +2460,7 @@ function ecSpyLogRow(m) {
   let detail = '';
   if (m.op === 'recon_basic' || m.op === 'recon_deep') detail = ok ? `ГС ${ecNum(r.gc)} · ОН ${ecNum(r.science)} · агентов ${ecNum(r.agents)} · колоний ${r.colonies ?? '—'} · построек ${r.buildings ?? '—'}` : 'разведка сорвана';
   else if (m.op === 'steal_gc') detail = ok ? `украдено ${ecNum(r.gc)} ГС` : 'провал';
-  else if (m.op === 'sabotage') detail = ok ? `выведено из строя: ${esc(r.building || 'здание')}` : 'провал';
+  else if (m.op === 'sabotage') detail = ok ? `выведено из строя: ${esc(r.building || 'здание')}${r.colony ? ` (${esc(r.colony)})` : ''}` : 'провал';
   else if (m.op === 'steal_tech') detail = ok ? `украдена технология: ${esc(r.tech_name || r.tech || '—')}` : 'провал';
   else if (m.op === 'destabilize') detail = ok ? `доход цели снижен на ${Math.round((r.debuff_pct || 0) * 100)}% (${r.turns || 0} ход.)` : 'провал';
   const badge = ok ? '<span class="ec-route-badge ok">✓</span>' : '<span class="ec-route-badge" style="color:var(--err);border-color:var(--err)">✕</span>';
@@ -2826,7 +2909,7 @@ function ecLoanDispute(id) { ecRpcAct('loan_dispute', { p_id: id }, 'Спор п
 // ── Тайные операции: интерактив планировщика ────────────────
 function ecPickSpyTarget(fid) { EC.spyTarget = fid; ecSpyCalcLive(); }
 function ecPickSpyOp(op) {
-  const c = ecSpyCalc(op, 1, EC.spyTarget);
+  const c = ecSpyCalc(op, [], EC.spyTarget);
   if (c && c.err) {
     const recon = EC_SPY_OPS[c.err.includes('глубок') ? 'recon_deep' : 'recon_basic'].label;
     toast(`🔒 ${c.err}. Сначала запустите операцию «${recon}» по этой цели.`, 'err');
@@ -2836,40 +2919,77 @@ function ecPickSpyOp(op) {
   document.querySelectorAll('.ec-spy-op').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes(`'${op}'`)));
   ecSpyCalcLive();
 }
-function ecSyncSpyAgents(v) {
-  v = Math.max(1, parseInt(v) || 1);
-  const sl = ecId('ec-spy-agents'), num = ecId('ec-spy-agents-n');
-  const max = sl ? (+sl.max || v) : v; v = Math.min(v, max);
-  EC.spyAgents = v;
-  if (sl) sl.value = v; if (num) num.value = v;
+// Чипы выбора агентов под операцию (только свободные обученные)
+function ecSpyAgentPickHtml() {
+  const ready = ecSpyReadyAgents();
+  EC.spyPick = (EC.spyPick || []).filter(id => ready.some(a => a.id === id));   // выкинуть ставших недоступными
+  if (!ready.length) return '<div class="ec-empty" style="padding:6px">Нет свободных обученных агентов — наймите новых, дождитесь обучения или снимите часть с контрразведки.</div>';
+  return ready.map(a => {
+    const pk = ecPerk(a.perk); const on = EC.spyPick.includes(a.id);
+    return `<button type="button" onclick="ecSpyTogglePick('${esc(a.id)}')" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;cursor:pointer;border:1px solid ${on ? 'var(--gd)' : 'var(--bd,#2a3550)'};background:${on ? 'rgba(120,200,140,.10)' : 'transparent'};color:inherit;font:inherit">
+      <span style="font-weight:700;color:${on ? 'var(--gd)' : 'var(--t4)'}">${on ? '✓' : '+'}</span>${pk.icon} <b>${esc(a.first_name)} ${esc(a.last_name)}</b> <i style="color:var(--t4);font-style:normal" title="${esc(pk.desc)}">${esc(pk.label)}</i></button>`;
+  }).join('');
+}
+function ecSpyTogglePick(id) {
+  EC.spyPick = EC.spyPick || [];
+  const i = EC.spyPick.indexOf(id);
+  if (i >= 0) EC.spyPick.splice(i, 1);
+  else {
+    const cap = Math.max(0, ecSpyReadyAgents().length - (EC.eco.counter_agents || 0));   // ready − контрразведка
+    if (EC.spyPick.length >= cap) { toast('Все свободные агенты выбраны (часть зарезервирована в контрразведке)', 'inf'); return; }
+    EC.spyPick.push(id);
+  }
+  const el = ecId('ec-spy-agents-pick'); if (el) el.innerHTML = ecSpyAgentPickHtml();
   ecSpyCalcLive();
 }
 // Живая сводка операции + состояние кнопки
 function ecSpyCalcLive() {
   const sumEl = ecId('ec-spy-summary'); if (!sumEl) return null;
-  const op = EC.spyOp, A = Math.max(1, parseInt(ecId('ec-spy-agents')?.value) || EC.spyAgents || 1);
-  const c = ecSpyCalc(op, A, EC.spyTarget); if (!c) return null;
+  const op = EC.spyOp, picks = EC.spyPick || [];
+  const c = ecSpyCalc(op, picks, EC.spyTarget); if (!c) return null;
   const d = EC_SPY_OPS[op];
+  const noAgents = picks.length < 1;
+  // колония-цель для саботажа (из глубокой разведки)
+  const colEl = ecId('ec-spy-colony');
+  let colErr = '';
+  if (colEl) {
+    if (op === 'sabotage') {
+      const cols = ecSpyColonyOptions(EC.spyTarget);
+      if (!cols.length) { colEl.innerHTML = '<div class="ec-trade-note warn" style="margin:6px 0">⚠ Нужна свежая глубокая разведка цели, чтобы выбрать колонию для саботажа.</div>'; colErr = 'Нет данных о колониях — проведите глубокую разведку'; }
+      else {
+        if (!EC.spyColony || !cols.find(x => x.id === EC.spyColony)) EC.spyColony = cols[0].id;
+        colEl.innerHTML = `<div class="ec-trade-label">Колония-цель</div>
+          <select id="ec-spy-colony-sel" onchange="EC.spyColony=this.value;ecSpyCalcLive()">${cols.map(x => `<option value="${esc(x.id)}"${x.id === EC.spyColony ? ' selected' : ''}>${esc(x.name)}${Array.isArray(x.buildings) ? ` · ${x.buildings.length} построек` : ''}</option>`).join('')}</select>`;
+      }
+    } else { colEl.innerHTML = ''; }
+  }
+  // госуровневая операция требует сети (≥2 агента)
+  let netErr = (op === 'steal_tech' && picks.length === 1) ? 'Госуровень: нужна сеть — минимум 2 агента' : '';
   const dosTxt = c.dossier.level ? `${c.dossier.level === 'deep' ? 'глубокая' : 'базовая'} (${c.dossier.ageDays} дн., +${c.intel})` : 'нет данных';
   const sColor = c.success >= 60 ? 'var(--ok)' : c.success >= 35 ? 'var(--color-warning,#e0a030)' : 'var(--err)';
   const dColor = c.detect >= 50 ? 'var(--err)' : c.detect > 20 ? 'var(--color-warning,#e0a030)' : 'var(--ok)';
+  const perkTxt = (c.succB || c.detB) ? ` · перки: ${c.succB ? `+${c.succB}% успех` : ''}${c.succB && c.detB ? ', ' : ''}${c.detB ? `−${c.detB}% раскрытие` : ''}` : '';
+  const gateErr = c.err || (noAgents ? 'Выберите агентов для операции' : '') || colErr || netErr;
   sumEl.innerHTML = `
-    <div class="ec-trade-deal">${d.icon} <b>${esc(d.label)}</b> → ${esc(ecFacName(EC.spyTarget))} · 🕵 ${A} агент(ов)</div>
+    <div class="ec-trade-deal">${d.icon} <b>${esc(d.label)}</b> → ${esc(ecFacName(EC.spyTarget))} · 🕵 ${noAgents ? '—' : picks.length} агент(ов)${esc(perkTxt)}</div>
     <div class="ec-trade-srow"><span>Описание</span><b style="color:var(--t2);font-weight:400">${esc(d.desc)}</b></div>
-    <div class="ec-trade-srow big"><span>Шанс успеха</span><b style="color:${sColor}">${c.success}%</b></div>
-    <div class="ec-trade-srow"><span>Риск раскрытия</span><b style="color:${dColor}">${c.detect}%</b></div>
-    <div class="ec-trade-srow"><span>Длительность</span><b>${c.turns} ход.</b></div>
+    <div class="ec-trade-srow big"><span>Шанс успеха</span><b style="color:${sColor}">${noAgents ? '—' : c.success + '%'}</b></div>
+    <div class="ec-trade-srow"><span>Риск раскрытия</span><b style="color:${dColor}">${noAgents ? '—' : c.detect + '%'}</b></div>
+    <div class="ec-trade-srow"><span>Длительность</span><b>${noAgents ? '—' : c.turns + ' ход.'}</b></div>
     <div class="ec-trade-srow"><span>Разведданные цели</span><b>${dosTxt}</b></div>
-    ${c.err ? `<div class="ec-trade-note warn">⚠ ${esc(c.err)}</div>` : `<div class="ec-trade-note">При раскрытии: агент будет пойман (−1), цель узнает о вас. Расчёт ориентировочный — контрразведка цели уточнится при исполнении.</div>`}`;
+    ${gateErr ? `<div class="ec-trade-note warn">⚠ ${esc(gateErr)}</div>` : `<div class="ec-trade-note">При раскрытии: назначенный агент будет схвачен (выбывает), цель узнает о вас. Расчёт ориентировочный — контрразведка цели уточнится при исполнении.</div>`}`;
   const btn = ecId('ec-spy-launch');
-  if (btn) { btn.disabled = !!c.err; btn.textContent = c.err ? c.err : `Запустить · успех ${c.success}% · ${c.turns} ход.`; }
+  if (btn) { btn.disabled = !!gateErr; btn.textContent = gateErr ? gateErr : `Запустить · успех ${c.success}% · ${c.turns} ход.`; }
+  c.gateErr = gateErr;
   return c;
 }
 function ecSpyLaunch() {
+  const picks = EC.spyPick || [];
+  if (!picks.length) { toast('Выберите хотя бы одного агента', 'err'); return; }
   const c = ecSpyCalcLive(); if (!c) return;
-  if (c.err) { toast(c.err, 'err'); return; }
-  if (ecSpyFree() < c.agents) { toast('Недостаточно свободных агентов', 'err'); return; }
-  ecRpcAct('spy_launch', { p_target_fid: EC.spyTarget, p_op: EC.spyOp, p_agents: c.agents }, `Операция «${EC_SPY_OPS[EC.spyOp].label}» запущена (${c.turns} ход.)`);
+  if (c.gateErr) { toast(c.gateErr, 'err'); return; }
+  const colonyId = (EC.spyOp === 'sabotage') ? (EC.spyColony || null) : null;
+  ecRpcAct('spy_launch', { p_target_fid: EC.spyTarget, p_op: EC.spyOp, p_agent_ids: picks, p_colony_id: colonyId }, `Операция «${EC_SPY_OPS[EC.spyOp].label}» запущена (${c.turns} ход.)`);
 }
 function ecSpyCancel(id) { ecRpcAct('spy_cancel', { p_id: id }, 'Операция отозвана, агенты возвращены'); }
 function ecCounterIntel(n) {

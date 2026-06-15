@@ -4,15 +4,21 @@
 
 -- Разведать активные караваны цели (RLS прячет чужие маршруты → нужен definer).
 -- Возвращает то, что «видно в космосе»: ресурс, объём, эскорт, концы маршрута.
+-- ГЕЙТ РАЗВЕДКОЙ: чужие караваны видно ТОЛЬКО если проведена разведка цели
+-- (вкладка «Разведка»). Иначе — никакой информации (даже о наличии караванов).
 create or replace function public.raid_scout(p_target_fid text)
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare fid text; arr jsonb;
+declare fid text; arr jsonb; intel jsonb;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   fid := public._ec_my_fid();
   if p_target_fid = fid then raise exception 'cannot scout yourself'; end if;
+  intel := public._spy_intel(fid, p_target_fid);
+  if intel->>'level' is null then
+    raise exception 'intel required: recon target first';
+  end if;
   select coalesce(jsonb_agg(jsonb_build_object(
-           'id', id, 'resource', resource, 'volume', volume,
+           'id', id, 'resource', resource, 'volume', volume, 'cargo', coalesce(cargo,'[]'::jsonb),
            'convoy', coalesce(convoy,0), 'origin', origin_sys, 'dest', dest_sys
          ) order by created_at desc), '[]'::jsonb)
     into arr
