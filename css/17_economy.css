@@ -58,6 +58,19 @@
 .ec-cover-title { font-family: var(--font-display); font-weight: 700; font-size: clamp(22px, 4vw, 38px); color: #fff; margin: 0; padding-bottom: 6px; line-height: 1.1; text-shadow: 0 2px 12px rgba(0,0,0,.75); border-bottom: 3px solid var(--fac); display: inline-block; overflow-wrap: anywhere; }
 .ec-cover-btns { display: flex; gap: 8px; flex-shrink: 0; }
 
+/* Статы и ресурсы НА обложке — стеклянные карточки поверх флага */
+.ec-cover { align-items: stretch; }
+.ec-cover-inner { display: flex; flex-direction: column; justify-content: flex-end; }
+.ec-cover .ec-stats { margin: 16px 0 10px; }
+.ec-cover .ec-resbar { margin-bottom: 0; }
+.ec-cover .ec-stat,
+.ec-cover .ec-resbar { background: rgba(10, 14, 24, .52); border-color: rgba(255, 255, 255, .14); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
+.ec-cover .ec-rchip { background: rgba(0, 0, 0, .34); border-color: rgba(255, 255, 255, .12); }
+.ec-cover .ec-rchip:hover { border-color: rgba(255, 255, 255, .28); }
+.ec-cover .ec-stat-v { color: #fff; }
+.ec-cover .ec-stat-k, .ec-cover .ec-resbar-hd, .ec-cover .ec-rchip-n { color: rgba(255, 255, 255, .72); }
+.ec-cover .ec-rchip b { color: #fff; }
+
 /* ── Панель статов ── */
 .ec-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .ec-stat { display: flex; align-items: center; gap: 12px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 12px 16px; }

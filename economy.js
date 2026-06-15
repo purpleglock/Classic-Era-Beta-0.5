@@ -812,9 +812,9 @@ function ecPaintCabinet() {
             <button class="btn btn-gh btn-sm" onclick="go('guide')" title="Полные правила и механики игры">❓ Как играть</button>
           </div>
         </div>
+        ${ecTreasuryHtml()}
       </div>
     </div>
-    ${ecTreasuryHtml()}
     <div class="ec-tabs">${tabsHtml}</div>
     <div class="ec-tabbody">${body}</div>
   </div>`);
