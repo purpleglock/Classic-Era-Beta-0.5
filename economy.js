@@ -759,13 +759,20 @@ function ecTreasuryHtml() {
     const start = new Date(EC.eco.last_tick).getTime();
     nextHtml = ecProgress(start, start + 86400000, 'доход готов к начислению');
   }
-  const resN = ecResEntries().length;
-  return `<div class="ec-treasury">
-    <div class="ec-res"><span class="ec-res-k">Галактический стандарт</span><span class="ec-res-v" style="color:var(--gd)">${ecNum(EC.eco.gc)} ГС</span></div>
-    <div class="ec-res"><span class="ec-res-k">Очки науки</span><span class="ec-res-v" style="color:var(--pu)">${ecNum(EC.eco.science)} ОН</span></div>
-    <div class="ec-res ec-res-click" onclick="ecSetTab('trade')" title="Рынок и обмен ресурсами"><span class="ec-res-k">Ресурсы планет</span><span class="ec-res-v" style="color:var(--ok)">${resN} ${resN === 1 ? 'вид' : 'вид(ов)'}</span></div>
-    <div class="ec-res ec-res-inc"><span class="ec-res-k">Доход / сутки</span><span class="ec-res-v">${incLine}</span><span class="ec-next">${nextHtml}</span></div>
-  </div>`;
+  const entries = ecResEntries();
+  const resIco = (n) => (typeof resIconHtml === 'function') ? resIconHtml(n) : '<span class="res-ic res-ic-emoji">◈</span>';
+  const resHtml = entries.length
+    ? entries.map(([n, v]) => `<div class="ec-rchip ec-res-click" title="${esc(n)}" onclick="ecSetTab('trade')"><span class="ec-rchip-ic">${resIco(n)}</span><b>${ecNum(v)}</b><span class="ec-rchip-n">${esc(n)}</span></div>`).join('')
+    : '<div class="ec-rchip-empty">Склад пуст — переведите добывающие заводы в режим 📦 Склад, чтобы копить ресурсы.</div>';
+  return `<div class="ec-stats">
+      <div class="ec-stat"><span class="ec-stat-ic" style="color:var(--gd)">⛃</span><div class="ec-stat-tx"><span class="ec-stat-k">Галактический стандарт</span><span class="ec-stat-v" style="color:var(--gd)">${ecNum(EC.eco.gc)} ГС</span></div></div>
+      <div class="ec-stat"><span class="ec-stat-ic" style="color:var(--pu)">🔬</span><div class="ec-stat-tx"><span class="ec-stat-k">Очки науки</span><span class="ec-stat-v" style="color:var(--pu)">${ecNum(EC.eco.science)} ОН</span></div></div>
+      <div class="ec-stat ec-stat-inc"><span class="ec-stat-ic">📈</span><div class="ec-stat-tx"><span class="ec-stat-k">Доход / сутки</span><span class="ec-stat-v" style="font-size:14px">${incLine}</span>${nextHtml ? `<span class="ec-next">${nextHtml}</span>` : ''}</div></div>
+    </div>
+    <div class="ec-resbar">
+      <div class="ec-resbar-hd"><span>Ресурсы планет</span><span class="ec-resbar-n">${entries.length} ${entries.length === 1 ? 'вид' : 'вид(ов)'}</span></div>
+      <div class="ec-resbar-list">${resHtml}</div>
+    </div>`;
 }
 
 // Вводный блок-объяснялка вверху вкладки: что это, как работает, что делать.
@@ -789,12 +796,22 @@ function ecPaintCabinet() {
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'intel' ? ecTabIntel()
     : EC.tab === 'raids' ? ecTabRaids()
     : EC.tab === 'news' ? ecTabNews() : ecTabColonies();
+  const img = (EC.app && (EC.app.herald_url || EC.app.image_url)) || '';
+  const coverBg = img
+    ? `<img class="ec-cover-img" src="${esc(img)}" alt=""><div class="ec-cover-fade"></div>`
+    : `<div class="ec-cover-bg" style="background:linear-gradient(135deg, ${col}33, var(--b1) 70%)"></div>`;
   setPg(`<div class="ec-wrap">
-    <div class="ec-head">
-      <div class="ec-eyebrow">◈ КАБИНЕТ ИГРОКА</div>
-      <div class="ec-head-row">
-        <h1 style="border-bottom:2px solid ${col}">${esc(EC.app.name || 'Моя фракция')}</h1>
-        <button class="btn btn-gh btn-sm ec-guide-btn" onclick="go('guide')" title="Полные правила и механики игры">❓ Как играть</button>
+    <div class="ec-cover" style="--fac:${col}">
+      ${coverBg}
+      <div class="ec-cover-scan"></div>
+      <div class="ec-cover-hud hud-tl"></div><div class="ec-cover-hud hud-tr"></div>
+      <div class="ec-cover-inner">
+        <div class="ec-cover-row">
+          <h1 class="ec-cover-title">${esc(EC.app.name || 'Моя фракция')}</h1>
+          <div class="ec-cover-btns">
+            <button class="btn btn-gh btn-sm" onclick="go('guide')" title="Полные правила и механики игры">❓ Как играть</button>
+          </div>
+        </div>
       </div>
     </div>
     ${ecTreasuryHtml()}
@@ -2215,14 +2232,22 @@ function ecTabIntel() {
       <div class="ec-res"><span class="ec-res-k">Потолок / обучаются</span><span class="ec-res-v" style="font-size:15px">${ecNum((EC.spyAgency || {}).cap || 0)} / ${ecNum(ecSpyTraining())}</span></div>
     </div>`;
 
-  // Контрразведка — кнопки ±
-  const ciBlock = `<div class="ec-dip-card"><div class="ec-dip-t">🛡 Контрразведка <span class="ec-hint">защищает от вражеских операций, ловит агентов</span></div>
-      <div class="ec-ci-row">
-        <button class="btn btn-gh btn-sm" ${ci <= 0 ? 'disabled' : ''} onclick="ecCounterIntel(${ci - 1})">−</button>
-        <span class="ec-ci-val">${ecNum(ci)} агент(ов) в защите</span>
-        <button class="btn btn-gh btn-sm" ${free <= 0 ? 'disabled' : ''} onclick="ecCounterIntel(${ci + 1})">＋</button>
-      </div>
-      <div class="cn-fac-hint" style="margin-top:6px">Каждый агент в контрразведке снижает шанс успеха вражеских операций и повышает риск их раскрытия. Перк 🛡 Куратор усиливает контрразведку пассивно и ускоряет расследования.</div></div>`;
+  // Контрразведка — распределение агентов по объектам (Центр + колонии)
+  const cmap = (EC.eco && EC.eco.counter_map) || {};
+  const ciScopes = [['hq', '🏛 Центр', 'казна, технологии, дестабилизация']]
+    .concat((EC.colonies || []).map(c => [c.id, '🏗 ' + (c.planet_name || 'Колония'), 'защита от саботажа по ней']));
+  const ciRows = ciScopes.map(([key, label, sub]) => {
+    const n = +(cmap[key] || 0);
+    return `<div class="ec-ci-row" style="gap:8px">
+        <span style="flex:1;text-align:left;min-width:0"><b>${esc(label)}</b> <i style="color:var(--t4);font-style:normal">${esc(sub)}</i></span>
+        <button class="btn btn-gh btn-sm" ${n <= 0 ? 'disabled' : ''} onclick="ecCounterIntel('${esc(key)}', ${n - 1})">−</button>
+        <span class="ec-ci-val" style="min-width:24px;text-align:center">${n}</span>
+        <button class="btn btn-gh btn-sm" ${free <= 0 ? 'disabled' : ''} onclick="ecCounterIntel('${esc(key)}', ${n + 1})">＋</button>
+      </div>`;
+  }).join('');
+  const ciBlock = `<div class="ec-dip-card"><div class="ec-dip-t">🛡 Контрразведка <span class="ec-hint">всего в защите: ${ecNum(ci)} · свободно ${ecNum(free)}</span></div>
+      ${ciRows}
+      <div class="cn-fac-hint" style="margin-top:6px">Сажайте агентов на объекты: <b>Центр</b> ловит шпионов по казне/технологиям/дестабилизации, <b>колония</b> — саботаж именно по ней. Перк 🛡 Куратор усиливает КР везде и ускоряет расследования.</div></div>`;
 
   // Планировщик
   let planner;
@@ -2992,9 +3017,8 @@ function ecSpyLaunch() {
   ecRpcAct('spy_launch', { p_target_fid: EC.spyTarget, p_op: EC.spyOp, p_agent_ids: picks, p_colony_id: colonyId }, `Операция «${EC_SPY_OPS[EC.spyOp].label}» запущена (${c.turns} ход.)`);
 }
 function ecSpyCancel(id) { ecRpcAct('spy_cancel', { p_id: id }, 'Операция отозвана, агенты возвращены'); }
-function ecCounterIntel(n) {
-  n = Math.max(0, n | 0);
-  ecRpcAct('counterintel_set', { p_n: n }, 'Контрразведка обновлена');
+function ecCounterIntel(scope, n) {
+  ecRpcAct('counterintel_set', { p_scope: scope, p_n: Math.max(0, n | 0) }, 'Контрразведка обновлена');
 }
 
 // ── МГА: арбитраж спорных займов (вкладка в админ-панели) ───
