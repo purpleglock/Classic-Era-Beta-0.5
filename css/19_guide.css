@@ -84,23 +84,36 @@
 }
 
 /* ── Секции ── */
-.gb-section { margin-bottom: 60px; scroll-margin-top: 84px; }
+/* Разделы визуально отделены: жирный разделитель сверху + акцентный заголовок */
+.gb-section { margin: 0 0 8px; padding: 42px 0 6px; border-top: 2px solid var(--color-border-medium); scroll-margin-top: 84px; }
+.gb-section:first-of-type { border-top: none; padding-top: 0; }
 .gb-h2 {
   font-family: var(--font-display);
-  font-size: 1.5rem; font-weight: 700; letter-spacing: 0.01em;
-  color: var(--color-text);
-  display: flex; align-items: center; gap: 12px;
+  font-size: 1.55rem; font-weight: 700; letter-spacing: 0.01em;
+  color: var(--color-accent, #c9a24b);
+  display: flex; align-items: center; gap: 13px;
   margin: 0 0 18px; padding-bottom: 14px;
   border-bottom: 1px solid var(--color-border-medium);
 }
 .gb-h2-icon {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; flex-shrink: 0;
-  font-size: 16px; color: var(--color-accent);
+  width: 38px; height: 38px; flex-shrink: 0;
+  font-size: 19px; color: var(--color-accent);
   background: var(--color-accent-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--color-accent, #c9a24b) 40%, transparent);
+  border-radius: var(--radius-md);
 }
+
+/* ── Раскрывающиеся таблицы ── */
+.gb-collapse { margin: 12px 0 20px; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.gb-collapse > .gb-table-wrap, .gb-collapse > .gb-tbl { margin: 0 !important; border: none; border-top: 1px solid var(--color-border); border-radius: 0; }
+.gb-collapse-sum { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 9px; padding: 11px 15px; font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--color-text-muted); background: var(--color-surface-raised); user-select: none; }
+.gb-collapse-sum::-webkit-details-marker { display: none; }
+.gb-collapse-sum:hover { color: var(--color-text); }
+.gb-collapse-ic { color: var(--color-accent); transition: transform .18s ease; font-size: 11px; }
+.gb-collapse[open] .gb-collapse-ic { transform: rotate(90deg); }
+.gb-collapse-hint { margin-left: auto; font-family: var(--font-mono); font-size: 10px; font-weight: 400; color: var(--color-text-faint); text-transform: uppercase; letter-spacing: .05em; }
+.gb-collapse[open] .gb-collapse-sum { border-bottom: 1px solid var(--color-border); }
 .gb-h3 {
   font-family: var(--font-display);
   font-size: 0.92rem; font-weight: 600; letter-spacing: 0.06em;
@@ -514,4 +527,10 @@
   .gb-kv-key { color: var(--color-accent); }
   .gb-tr { grid-template-columns: 1.2fr auto 1.6fr; gap: 8px; padding: 9px 12px; font-size: 12px; }
   .gb-cards, .gb-bld-grid, .gb-tips { grid-template-columns: 1fr; }
+  /* таблицы — компактнее, чтобы влезали в телефон (а не уезжали в горизонтальный скролл) */
+  .gb-table { font-size: 11.5px; }
+  .gb-table th, .gb-table td { padding: 7px 8px; line-height: 1.35; }
+  .gb-table thead th { font-size: 9.5px; letter-spacing: .03em; }
+  .gb-res-table td:nth-child(3), .gb-res-table td:nth-child(4), .gb-res-table td:nth-child(5) { white-space: normal; }
+  .gb-table-wrap { -webkit-overflow-scrolling: touch; }
 }
