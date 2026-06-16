@@ -21,12 +21,24 @@ const AD = {
   subtab:    'treasury',
   sysSearch: '',
   busy:      false,
+  embed:     null,     // встраивание панели в композитор новостей (faction_news.js)
 };
 
 // ── Доступ ──────────────────────────────────────────────────────
 function adCanAccess() { return !!(user && ['superadmin', 'editor'].includes(user.role)); }
 function adEntry(fid)  { return AD.byFid.get(fid); }
 function adNum(n)      { return Number(n || 0).toLocaleString('ru-RU'); }
+
+// Журнал выдач для блока «вердикт» в композиторе новостей.
+function adLogGrant(entry) {
+  if (!AD.embed || !AD.embed.active) return;
+  const grants = (typeof fnGrantsCollect === 'function') ? fnGrantsCollect() : (AD.embed.grants || []);
+  grants.push(Object.assign({ ts: Date.now() }, entry));
+  if (typeof fnGrantsSet === 'function') fnGrantsSet(grants);
+  else AD.embed.grants = grants;
+  if (typeof fnVerdictPreviewRefresh === 'function') fnVerdictPreviewRefresh();
+}
+function adTreasuryLabel(field) { return field === 'science' ? 'ОН' : 'ГС'; }
 
 // ── Загрузка данных (прогрессивно: сначала лёгкое ядро, потом детали) ──
 function adBuildIndex() {
@@ -119,6 +131,11 @@ async function adRenderConsole() {
 }
 
 function adPaint() {
+  // Встроенная панель в композиторе новостей — обновляем только слот, не всю страницу.
+  if (AD.embed && AD.embed.active) {
+    adRenderSlot();
+    return;
+  }
   // Собираем тело в try/catch: если adStatsTable/adFacPanel упадёт, раньше
   // падал ВЕСЬ template setPg(...) ДО вставки -> пустой .fm-console. Теперь
   // ошибка попадает в видимый блок, а не превращается в пустоту.
@@ -217,8 +234,13 @@ function adPanelSlotHtml() {
 }
 // Обновить ТОЛЬКО слот панели (без перерисовки всей консоли)
 function adRenderSlot() {
-  const slot = document.getElementById('fm-panel-slot');
-  if (slot) { slot.innerHTML = adPanelSlotHtml(); return true; }
+  const slotId = (AD.embed && AD.embed.active) ? (AD.embed.slotId || 'fn-c-admin-slot') : 'fm-panel-slot';
+  const slot = document.getElementById(slotId);
+  if (slot) {
+    slot.innerHTML = adPanelSlotHtml();
+    if (AD.embed && AD.embed.active && typeof fnVerdictPreviewRefresh === 'function') fnVerdictPreviewRefresh();
+    return true;
+  }
   return false;
 }
 function adSelectFaction(fid) {
@@ -282,8 +304,12 @@ async function adSetTreasury() {
   const science = Math.max(0, parseInt(document.getElementById('fm-science')?.value) || 0);
   AD.busy = true;
   try {
+    const e = adEntry(AD.sel);
+    const oldGc = e?.eco?.gc, oldSci = e?.eco?.science;
     await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { gc, science });
-    const e = adEntry(AD.sel); if (e && e.eco) { e.eco.gc = gc; e.eco.science = science; }
+    if (e && e.eco) { e.eco.gc = gc; e.eco.science = science; }
+    if (oldGc != null && gc !== oldGc) adLogGrant({ type: 'treasury', field: 'gc', label: 'ГС', from: oldGc, to: gc, delta: gc - oldGc });
+    if (oldSci != null && science !== oldSci) adLogGrant({ type: 'treasury', field: 'science', label: 'ОН', from: oldSci, to: science, delta: science - oldSci });
     toast('Казна обновлена', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -297,6 +323,7 @@ async function adDelta(field, delta) {
   try {
     await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { [field]: val });
     e.eco[field] = val;
+    adLogGrant({ type: 'treasury', field, label: adTreasuryLabel(field), delta, to: val });
     toast(`${field}: ${adNum(val)}`, 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -341,11 +368,13 @@ async function adUpdateResource(name) {
   if (!AD.sel || AD.busy) return;
   const e = adEntry(AD.sel); if (!e || !e.eco) return;
   const val = Math.max(0, parseInt(document.getElementById('fm-rv-' + name)?.value) || 0);
+  const old = Number(e.eco.resources?.[name] || 0);
   AD.busy = true;
   try {
     const res = { ...(e.eco.resources || {}), [name]: val };
     await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { resources: res });
     e.eco.resources = res;
+    if (val !== old) adLogGrant({ type: 'resource', name, delta: val - old, to: val });
     toast(`${name}: ${adNum(val)}`, 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -373,9 +402,11 @@ async function adAddResource() {
   if (!name) { toast('Выберите / введите ресурс', 'err'); return; }
   AD.busy = true;
   try {
-    const res = { ...(e.eco.resources || {}), [name]: (Number(e.eco.resources?.[name] || 0) + amt) };
+    const to = Number(e.eco.resources?.[name] || 0) + amt;
+    const res = { ...(e.eco.resources || {}), [name]: to };
     await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { resources: res });
     e.eco.resources = res;
+    adLogGrant({ type: 'resource', name, delta: amt, to });
     toast(`+${adNum(amt)} ${name}`, 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -428,9 +459,13 @@ async function adToggleResearch(nodeId) {
   try {
     const cur = Array.isArray(e.eco.research) ? [...e.eco.research] : [];
     const idx = cur.indexOf(nodeId);
+    const nodes = typeof ecBuildResearch === 'function' ? ecBuildResearch() : [];
+    const node = nodes.find(n => n.id === nodeId);
     if (idx >= 0) cur.splice(idx, 1); else cur.push(nodeId);
     await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { research: cur });
-    e.eco.research = cur; adPaint();
+    e.eco.research = cur;
+    adLogGrant({ type: 'research', id: nodeId, name: node?.name || nodeId, revoke: idx >= 0 });
+    adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }
@@ -443,7 +478,9 @@ async function adGrantAllResearch() {
   AD.busy = true;
   try {
     await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { research: allNodes });
-    e.eco.research = allNodes; toast('Все технологии выданы', 'ok'); adPaint();
+    e.eco.research = allNodes;
+    adLogGrant({ type: 'research_all', count: allNodes.length });
+    toast('Все технологии выданы', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }
@@ -559,6 +596,7 @@ async function adGrantSystem(sysId) {
       if (prevFid) { const pe = AD.byFid.get(prevFid); if (pe) pe.systems = pe.systems.filter(s => s.id !== sysId); }
       const me = adEntry(AD.sel); if (me && !me.systems.find(s => s.id === sysId)) me.systems.push(sys);
     }
+    adLogGrant({ type: 'system', id: sysId, name: sys?.name || sysId });
     toast('Система передана фракции', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -697,6 +735,7 @@ async function adAddColony() {
   try {
     const rows = await dbPost('colonies', { faction_id: AD.sel, owner_id: ownerId, system_id: sysId, planet_name: pName, planet_pid: pPid, planet_type: pType, cells, terraformed: false, resources });
     if (rows?.[0]) { e.colonies.push(rows[0]); AD.colonies.push(rows[0]); }
+    adLogGrant({ type: 'colony', name: pName, system: sys?.name || sysId, cells });
     toast('Колония добавлена', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -728,6 +767,7 @@ async function adAddBuilding(colId) {
   try {
     const rows = await dbPost('colony_buildings', { colony_id: colId, faction_id: AD.sel, owner_id: ownerId, btype, slots_open: d?.free || 1, tnp_mode: false });
     if (rows?.[0]) { e.buildings.push(rows[0]); AD.buildings.push(rows[0]); }
+    adLogGrant({ type: 'building', name: d?.name || btype, btype });
     toast('Постройка добавлена', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -810,6 +850,7 @@ async function adGrantUnit() {
       weight: 1, qty, status: 'done', ready_at: now
     });
     if (rows?.[0]) { e.roster.push(rows[0]); AD.prod.push(rows[0]); }
+    adLogGrant({ type: 'unit', name: design.name, qty, category: design.category });
     toast(`Выдано: ${design.name} ×${qty}`, 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -887,6 +928,7 @@ async function adGrantAgent() {
   try {
     await apiFetch('rpc/admin_grant_agent', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel, p_first: first, p_last: last, p_perk: perk }) });
     const e = adEntry(AD.sel); if (e) e.agents = null;
+    adLogGrant({ type: 'agent', first, last, perk });
     toast('Агент выдан', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }

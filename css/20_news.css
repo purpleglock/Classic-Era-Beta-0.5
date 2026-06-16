@@ -483,46 +483,49 @@ textarea.fn-c-body {
    центр читается спокойно. Анимация выключается при reduce-motion.
 /* ════════════════════════════════════════════════════════════
    НПС-статья: глитч-эффект по бокам (Кинематографичный Sci-Fi)
-   Энергетические бегающие "спайки" (всплески данных) по краям
+   Улучшенная версия: плавная работа, GPU-ускорение, без мерцания
    ════════════════════════════════════════════════════════════ */
 .fn-glitch-bar {
   position: absolute; top: 0; bottom: 0; width: 24px; z-index: 1;
   pointer-events: none; mix-blend-mode: screen;
-  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(25,240,255,0.08) 2px 3px, transparent 3px 6px);
-  border-left: 1px solid rgba(25,240,255, 0.4);
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(25,240,255,0.05) 2px 3px, transparent 3px 6px);
+  border-left: 1px solid rgba(25,240,255, 0.2);
 }
 .fn-glitch-l { left: 0; }
 .fn-glitch-r { right: 0; transform: scaleX(-1); }
 
-/* Спайки данных */
+/* Спайки данных (переделаны на "бегущий луч" для идеальной плавности) */
 .fn-glitch-bar::before, .fn-glitch-bar::after {
-  content: ''; position: absolute; left: -1px; width: 3px; mix-blend-mode: screen; border-radius: 2px;
+  content: ''; position: absolute; left: -1px; width: 3px; top: 0; bottom: 0;
+  mix-blend-mode: screen; border-radius: 2px;
 }
+
 .fn-glitch-bar::before {
-  background: #ff2e6e; box-shadow: 0 0 14px #ff2e6e;
-  animation: fn-spike-1 3.5s ease-in-out infinite alternate;
+  /* Формируем луч из градиента */
+  background: linear-gradient(180deg, transparent, #ff2e6e 50%, transparent);
+  background-size: 100% 25%; /* Высота луча — 25% от экрана */
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 8px #ff2e6e);
+  /* Анимируем только движение фона, это работает как по маслу */
+  animation: fn-spike-flow 3.5s ease-in-out infinite alternate;
 }
+
 .fn-glitch-bar::after {
-  background: #19f0ff; box-shadow: 0 0 14px #19f0ff;
-  animation: fn-spike-2 2.8s ease-in-out infinite alternate-reverse;
+  background: linear-gradient(180deg, transparent, #19f0ff 50%, transparent);
+  background-size: 100% 15%;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 8px #19f0ff);
+  animation: fn-spike-flow 2.8s ease-in-out infinite alternate-reverse;
 }
-@keyframes fn-spike-1 {
-  0%   { top: 10%; bottom: 85%; opacity: 0; transform: translateX(0); }
-  15%  { top: 20%; bottom: 60%; opacity: 1; transform: translateX(-2px); }
-  30%  { top: 40%; bottom: 45%; opacity: 0.3; transform: translateX(1px); }
-  45%  { top: 30%; bottom: 20%; opacity: 1; transform: translateX(0); }
-  60%  { top: 60%; bottom: 35%; opacity: 0; transform: translateX(-1px); }
-  80%  { top: 75%; bottom: 10%; opacity: 0.8; transform: translateX(2px); }
-  100% { top: 85%; bottom: 5%; opacity: 0; transform: translateX(0); }
+
+/* Плавный проезд лучей сверху вниз */
+@keyframes fn-spike-flow {
+  0% { background-position: 0 -30%; opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { background-position: 0 130%; opacity: 0; }
 }
-@keyframes fn-spike-2 {
-  0%   { top: 5%; bottom: 90%; opacity: 0; transform: translateX(0); }
-  20%  { top: 15%; bottom: 70%; opacity: 1; transform: translateX(2px); }
-  40%  { top: 50%; bottom: 30%; opacity: 0.4; transform: translateX(-1px); }
-  60%  { top: 25%; bottom: 65%; opacity: 1; transform: translateX(1px); }
-  80%  { top: 70%; bottom: 15%; opacity: 0; transform: translateX(-2px); }
-  100% { top: 40%; bottom: 40%; opacity: 0.9; transform: translateX(0); }
-}
+
 /* Убираем рамку и делаем окно голографически размытым по краям через маску */
 .fn-art-ov .fn-art.fn-art-glitch {
   border: none;
@@ -538,14 +541,16 @@ textarea.fn-c-body {
           
   animation: fn-holo-breath 6s ease-in-out infinite alternate;
 }
+
 @keyframes fn-holo-breath {
   0% { box-shadow: inset 0 0 50px rgba(25, 240, 255, 0.02), 0 0 100px rgba(0, 0, 0, 0.9); }
   100% { box-shadow: inset 0 0 100px rgba(170, 70, 255, 0.08), 0 0 140px rgba(0, 0, 0, 1); }
 }
 
 .fn-art-glitch::before {
-  opacity: 0.35; /* Приглушаем фоновые сканлайны */
+  opacity: 0.2; /* Приглушаем фоновые сканлаыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыыйны, чтобы не рябило */
 }
+
 /* Системные панели без жестких линий, чтобы они "висели" в воздухе */
 .fn-art-glitch .fn-art-bar, 
 .fn-art-glitch .fn-art-foot {
@@ -556,16 +561,17 @@ textarea.fn-c-body {
   border-bottom: none !important;
 }
 
-/* лёгкий хром-сдвиг заголовка глитч-статьи — медленный, без мерцания */
+/* ПЛАВНЫЙ хром-сдвиг заголовка глитч-статьи — замена дерганому эффекту */
 .fn-art-glitch .fn-art-title {
-  animation: fn-glitch-title 6s ease-in-out infinite;
+  animation: fn-glitch-title-smooth 4s ease-in-out infinite alternate;
 }
-@keyframes fn-glitch-title {
-  0%, 92%, 100% { text-shadow: none; }
-  94% { text-shadow: -2px 0 rgba(255,46,110,.55), 2px 0 rgba(25,240,255,.5); }
-  96% { text-shadow:  2px 0 rgba(255,46,110,.55), -2px 0 rgba(25,240,255,.5); }
-  98% { text-shadow: -1px 0 rgba(255,46,110,.5), 1px 0 rgba(25,240,255,.45); }
+
+@keyframes fn-glitch-title-smooth {
+  0% { text-shadow: -1px 0 2px rgba(255,46,110,0.2), 1px 0 2px rgba(25,240,255,0.2); filter: brightness(1); }
+  100% { text-shadow: -4px 0 8px rgba(255,46,110,0.6), 4px 0 8px rgba(25,240,255,0.6); filter: brightness(1.2); }
 }
+
+/* Безопасный режим для пользователей с отключенными анимациями */
 @media (prefers-reduced-motion: reduce) {
   .fn-glitch-bar::before, .fn-glitch-bar::after,
   .fn-art-glitch .fn-art-title { animation: none; }
@@ -575,6 +581,44 @@ textarea.fn-c-body {
 
 /* НПС-выбор ответа (ивент/квест) — тот же вид, что у реакций, но без дипломатии */
 .fn-react-npc .fn-react-hd { color: var(--fn-accent, #5fb0e6); }
+
+/* ════════════════════════════════════════════════════════════
+   Опция: Обложка на весь фон статьи
+   ════════════════════════════════════════════════════════════ */
+.fn-art-bg-cover .fn-art-cov {
+  position: absolute;
+  inset: 0;
+  max-height: none;
+  height: 100%;
+  z-index: 0; /* Убираем картинку на самый задний план */
+  border: none !important;
+}
+
+/* Делаем картинку полупрозрачной и затеняем низ, чтобы текст хорошо читался */
+.fn-art-bg-cover .fn-art-cov img {
+  max-height: none;
+  opacity: 0.18; /* Если нужно светлее/темнее — меняй это значение (от 0.1 до 0.5) */
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 40%, rgba(0,0,0,0) 100%);
+  mask-image: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 40%, rgba(0,0,0,0) 100%);
+}
+
+.fn-art-bg-cover .fn-art-cov::after {
+  display: none; /* Убираем старый градиент обложки */
+}
+
+/* Поднимаем весь текст, шапку и системные панели НАД фоном */
+.fn-art-bg-cover .fn-art-inner,
+.fn-art-bg-cover .fn-art-bar,
+.fn-art-bg-cover .fn-art-foot {
+  position: relative;
+  z-index: 2;
+}
+
+/* Скрываем фон-герб, чтобы не было каши из двух фоновых картинок */
+.fn-art-bg-cover .fn-art-bgflag {
+  display: none;
+}
+
 
 /* ── Кнопки удаления для админа (карточка / лента / статья) ──
    .fn-card уже position:relative, поэтому кнопку якорим к ней. */
@@ -659,3 +703,63 @@ textarea.fn-c-body {
 .fn-c-npc-flag-img { width: 26px; height: 26px; object-fit: cover; border-radius: 3px;
   border: 1px solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 45%, transparent); }
 .fn-c-npc-flag-prv .fn-c-cov-rm { margin-left: 4px; }
+
+/* ── Вердикт администрации ── */
+.fn-art-verdict {
+  position: relative; margin: 28px 0 8px; padding: 18px 20px 16px;
+  border: 1px solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 55%, transparent);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--fn-accent, #5fb0e6) 7%, transparent), transparent 42%),
+    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.12) 2px, rgba(0,0,0,.12) 3px);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.03), 0 0 24px color-mix(in srgb, var(--fn-accent, #5fb0e6) 8%, transparent);
+}
+.fn-art-verdict::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, var(--fn-accent, #5fb0e6), color-mix(in srgb, var(--fn-accent, #5fb0e6) 20%, transparent));
+  border-radius: 6px 0 0 6px;
+}
+.fn-verdict-hd {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 14px; padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 25%, transparent);
+}
+.fn-verdict-badge {
+  font-family: var(--fn-disp); font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--fn-accent, #5fb0e6);
+}
+.fn-verdict-meta { font-family: monospace; font-size: 10px; color: var(--t4, #6a7a88); letter-spacing: .06em; }
+.fn-verdict-grants { margin-bottom: 14px; }
+.fn-verdict-grants-hd {
+  font-family: monospace; font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--t3, #8aa0b0); margin-bottom: 8px;
+}
+.fn-verdict-grant-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.fn-verdict-grant {
+  display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px;
+  border: 1px solid var(--w2, #2a3340); border-radius: 5px;
+  background: color-mix(in srgb, var(--b3, #0f141b) 88%, transparent);
+  font-size: 13px; line-height: 1.45; color: var(--t1, #e8edf2);
+}
+.fn-verdict-grant-ic { flex-shrink: 0; font-size: 15px; line-height: 1.2; opacity: .95; }
+.fn-verdict-grant-t { flex: 1; min-width: 0; }
+.fn-grant-treasury { border-color: color-mix(in srgb, #e8b04a 35%, var(--w2)); }
+.fn-grant-resource { border-color: color-mix(in srgb, #3ec0d0 35%, var(--w2)); }
+.fn-grant-research, .fn-grant-research_all { border-color: color-mix(in srgb, #8b7cf6 35%, var(--w2)); }
+.fn-grant-unit { border-color: color-mix(in srgb, #ff6b6b 30%, var(--w2)); }
+.fn-grant-agent { border-color: color-mix(in srgb, var(--fn-accent, #5fb0e6) 35%, var(--w2)); }
+.fn-verdict-body { font-family: var(--fn-read); font-size: 14.5px; line-height: 1.82; color: var(--t2, #c0ccd6); }
+.fn-verdict-body p:last-child { margin-bottom: 0; }
+.fn-verdict-empty { font-size: 12px; color: var(--t4, #6a7a88); font-style: italic; padding: 8px 0; }
+
+/* Композитор: вердикт + встроенная админ-панель */
+textarea.fn-c-verdict { min-height: 110px; resize: vertical; font-size: 14px; line-height: 1.55; }
+.fn-c-verdict-preview { margin-top: 12px; }
+.fn-c-admin-slot { margin-top: 4px; }
+.fn-c-admin-slot .fm-panel { margin-bottom: 0; }
+.fn-c-admin-slot .fm-stabs { position: sticky; top: 0; z-index: 2; }
+.fn-c-admin-empty {
+  padding: 16px; border: 1px dashed var(--w2, #2a3340); border-radius: 8px;
+  color: var(--t3, #8aa0b0); font-size: 12.5px; line-height: 1.5; text-align: center;
+}
+.fn-c-admin-fg .fm-tab-body { max-height: min(52vh, 520px); overflow: auto; }

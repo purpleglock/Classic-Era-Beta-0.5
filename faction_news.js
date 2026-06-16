@@ -255,7 +255,149 @@ function fnRenderBody(body) {
   return html;
 }
 
-// ── Реакции государства на новость (дипломатия) ──────────────
+// ── Вердикт администрации (комментарий + журнал выдач) ────────
+function fnGrantsParse(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch (e) { return []; }
+}
+function fnGrantsCollect() {
+  try {
+    const raw = document.getElementById('fn-c-grants')?.value;
+    return raw ? fnGrantsParse(raw) : (AD?.embed?.grants || []);
+  } catch (e) { return []; }
+}
+function fnGrantsSet(arr) {
+  const el = document.getElementById('fn-c-grants');
+  if (el) el.value = JSON.stringify(arr || []);
+  if (AD && AD.embed) AD.embed.grants = arr || [];
+}
+function fnGrantIcon(type) {
+  return ({ treasury: '💰', resource: '📦', research: '🔬', research_all: '🔬', unit: '⚔', agent: '🕵', system: '🌐', colony: '🏗', building: '🏭' }[type]) || '◈';
+}
+function fnGrantText(g) {
+  const n = typeof adNum === 'function' ? adNum : v => Number(v || 0).toLocaleString('ru-RU');
+  switch (g.type) {
+    case 'treasury': {
+      const sign = (g.delta || 0) >= 0 ? '+' : '';
+      const bit = g.delta != null ? `${sign}${n(g.delta)} ${g.label || adTreasuryLabel?.(g.field) || g.field || ''}`.trim() : `${g.label}: ${n(g.to)}`;
+      return g.to != null && g.delta != null ? `${bit} → итого ${n(g.to)}` : bit;
+    }
+    case 'resource': return `+${n(g.delta != null ? g.delta : (g.amt || g.to))} ${g.name || 'ресурс'}`;
+    case 'research': return g.revoke ? `Отозвана технология «${g.name}»` : `Изучена технология «${g.name}»`;
+    case 'research_all': return `Выдан полный пакет технологий (${g.count || 'все'})`;
+    case 'unit': return `${g.name || 'Юнит'} ×${g.qty || 1}${g.category ? ' · ' + g.category : ''}`;
+    case 'agent': {
+      const perk = (typeof AD_PERKS !== 'undefined' ? AD_PERKS : []).find(p => p[0] === g.perk);
+      return `${(g.first || '').trim()} ${(g.last || '').trim()}`.trim() + (perk ? ' · ' + perk[1] : '');
+    }
+    case 'system': return `Система «${g.name || g.id}» закреплена за фракцией`;
+    case 'colony': return `Колония «${g.name}»${g.system ? ' · ' + g.system : ''}`;
+    case 'building': return `Постройка «${g.name || g.btype}»`;
+    default: return g.text || g.label || 'Выдача';
+  }
+}
+function fnRenderGrantsBlock(grants) {
+  if (!grants?.length) return '';
+  const items = grants.map(g =>
+    `<li class="fn-verdict-grant fn-grant-${esc(g.type || 'misc')}"><span class="fn-verdict-grant-ic" aria-hidden="true">${fnGrantIcon(g.type)}</span><span class="fn-verdict-grant-t">${esc(fnGrantText(g))}</span></li>`
+  ).join('');
+  return `<div class="fn-verdict-grants"><div class="fn-verdict-grants-hd">◈ Выдано по итогам рассмотрения</div><ul class="fn-verdict-grant-list">${items}</ul></div>`;
+}
+function fnRenderVerdictBlock(n) {
+  const text = (n.staff_verdict || '').trim();
+  const grants = fnGrantsParse(n.staff_grants);
+  if (!text && !grants.length) return '';
+  const grantsHtml = fnRenderGrantsBlock(grants);
+  const bodyHtml = text ? `<div class="fn-verdict-body">${fnRenderBody(text)}</div>` : '';
+  const when = n.verdict_at || n.updated_at;
+  return `<div class="fn-art-verdict">
+    <div class="fn-verdict-hd">
+      <span class="fn-verdict-badge">⚖ Вердикт администрации</span>
+      ${when ? `<span class="fn-verdict-meta">${esc(fnStardate(when))}</span>` : ''}
+    </div>
+    ${grantsHtml}
+    ${bodyHtml}
+  </div>`;
+}
+function fnVerdictPreviewHtml() {
+  const text = (document.getElementById('fn-c-verdict')?.value || '').trim();
+  const grants = fnGrantsCollect();
+  if (!text && !grants.length) return '<div class="fn-verdict-empty">Пока пусто — напишите комментарий или выдайте награды через панель ниже.</div>';
+  return fnRenderVerdictBlock({ staff_verdict: text, staff_grants: grants, verdict_by: user?.email, verdict_at: new Date().toISOString() });
+}
+function fnVerdictPreviewRefresh() {
+  const pv = document.getElementById('fn-c-verdict-preview');
+  if (pv && pv.style.display !== 'none') pv.innerHTML = fnVerdictPreviewHtml();
+}
+function fnToggleVerdictPreview() {
+  const pv = document.getElementById('fn-c-verdict-preview');
+  const btn = document.getElementById('fn-c-verdict-prev-btn');
+  if (!pv) return;
+  const show = pv.style.display === 'none';
+  pv.style.display = show ? 'block' : 'none';
+  if (show) pv.innerHTML = fnVerdictPreviewHtml();
+  if (btn) { btn.classList.toggle('on', show); btn.textContent = show ? '🙈 Скрыть предпросмотр' : '👁 Предпросмотр'; }
+}
+async function fnAdminEmbedSync() {
+  if (typeof adCanAccess !== 'function' || !adCanAccess()) return;
+  const slot = document.getElementById('fn-c-admin-slot');
+  if (!slot) return;
+  let fid = null;
+  const sel = document.getElementById('fn-c-author');
+  const mode = sel?.value || '';
+  if (mode.indexOf('fac:') === 0) fid = mode.slice(4);
+  else if (mode === 'self') {
+    const fac = await fnGetMyFaction();
+    fid = fac?.faction_id || null;
+  }
+  const prevGrants = fnGrantsCollect();
+  if (!fid) {
+    AD.embed = { active: false, grants: prevGrants };
+    slot.innerHTML = `<div class="fn-c-admin-empty">Панель управления доступна, когда автор — фракция игрока. Выберите фракцию из списка «Автор публикации».</div>`;
+    fnVerdictPreviewRefresh();
+    return;
+  }
+  AD.embed = { active: true, slotId: 'fn-c-admin-slot', grants: prevGrants, fid };
+  AD.sel = fid;
+  if (!AD.subtab) AD.subtab = 'treasury';
+  slot.innerHTML = `<div class="sload" style="min-height:80px"><div class="pulse-loader"></div></div>`;
+  try {
+    if (!AD.byFid.size || !AD.byFid.has(fid)) {
+      if (typeof adLoadCore === 'function') await adLoadCore();
+      if (typeof adLoadDetails === 'function') await adLoadDetails();
+      if (typeof adBuildIndex === 'function') adBuildIndex();
+    }
+    if (typeof adRenderSlot === 'function') adRenderSlot();
+  } catch (e) {
+    slot.innerHTML = `<div class="fn-c-admin-empty">Ошибка загрузки панели: ${esc(e.message || String(e))}</div>`;
+  }
+  fnVerdictPreviewRefresh();
+}
+function fnStaffVerdictFieldsHtml(eff, data) {
+  if (!fnIsStaff()) return '';
+  const src = eff || data || {};
+  const verdict = src.staff_verdict || '';
+  const grants = fnGrantsParse(src.staff_grants);
+  const grantsJson = esc(JSON.stringify(grants));
+  const adminPanel = (typeof adCanAccess === 'function' && adCanAccess())
+    ? `<div class="fg fn-c-admin-fg">
+        <label class="fl">🛠 Панель управления фракцией</label>
+        <div class="fn-comp-note" style="margin:0 0 8px">Выдачи применяются сразу и автоматически оформятся в блоке вердикта.</div>
+        <div id="fn-c-admin-slot" class="fn-c-admin-slot"></div>
+      </div>` : '';
+  return `<div class="fg fn-c-verdict-fg">
+      <div class="fn-c-body-hd">
+        <label class="fl">⚖ Вердикт администрации</label>
+        <button type="button" class="btn btn-gh btn-xs" id="fn-c-verdict-prev-btn" onclick="fnToggleVerdictPreview()">👁 Предпросмотр</button>
+      </div>
+      <div class="fn-comp-note" style="margin:0 0 8px">Комментарий виден в статье под текстом новости. Модераторы и эдиторы могут пояснить решение; выдачи из панели ниже попадут в вердикт автоматически.</div>
+      <textarea class="fi fn-c-verdict" id="fn-c-verdict" placeholder="Решение администрации, условия ивента, пояснения к выдаче…">${esc(verdict)}</textarea>
+      <input type="hidden" id="fn-c-grants" value="${grantsJson}">
+      <div id="fn-c-verdict-preview" class="fn-art-verdict fn-c-verdict-preview" style="display:none"></div>
+    </div>${adminPanel}`;
+}
+
 // Флавор-фразы по идеологии (приоритет) → расе → дефолт. stance: approve/neutral/disapprove.
 const FN_REACT_DEFAULT = {
   approve:    'Мы одобряем эту позицию.',
@@ -450,8 +592,10 @@ function fnOpenArticle(id) {
     : (isFxHerald && !n.image_url ? `<div class="fn-art-bgflag fn-art-bgrift" aria-hidden="true">◈</div>` : '');
   const barL = kind === 'bulletin' ? '◈ СВОДКА СЕКТОРА' : kind === 'rumor' ? '📡 ПЕРЕХВАЧЕННЫЙ СЛУХ' : 'Галактическая информсеть "Патриоты"';
   const barR = kind === 'bulletin' ? '◈◈' : kind === 'rumor' ? '◈◈' : '◈◈';
-  const glitch = n.fx === 'glitch';
-  modal.innerHTML = `<div class="fn-art${glitch ? ' fn-art-glitch' : ''}" style="--fn-accent:${esc(accent)}">
+  const fxStr = n.fx || '';
+  const glitch = fxStr.includes('glitch');
+  const isBgCover = fxStr.includes('bg');
+  modal.innerHTML = `<div class="fn-art${glitch ? ' fn-art-glitch' : ''}${isBgCover ? ' fn-art-bg-cover' : ''}" style="--fn-accent:${esc(accent)}">
     ${glitch ? '<span class="fn-glitch-bar fn-glitch-l" aria-hidden="true"></span><span class="fn-glitch-bar fn-glitch-r" aria-hidden="true"></span>' : ''}
     ${bgFlag}
     <div class="fn-art-bar">
@@ -467,11 +611,15 @@ function fnOpenArticle(id) {
       </div>
       <h1 class="fn-art-title">${esc(n.title || 'Без заголовка')}</h1>
       <div class="fn-art-body">${fnRenderBody(n.body)}</div>
+      ${fnRenderVerdictBlock(n)}
       <div id="fn-react-slot"></div>
     </div>
     <div class="fn-art-foot">
       <span>◈◈◈</span>
-      ${fnIsStaff() ? `<button class="fn-art-del" title="Удалить новость (админ)" onclick="fnAdminDelete('${esc(n.id)}',event)">🗑 Удалить</button>` : ''}
+      ${fnIsStaff() ? `
+        <button class="btn btn-gh btn-sm" style="margin-right: 15px; border-color: var(--gd); color: var(--gd);" onclick="fnCloseArticle(); fnOpenComposer('${esc(n.id)}')">⚖ Редактировать вердикт</button>
+        <button class="fn-art-del" title="Удалить новость (админ)" onclick="fnAdminDelete('${esc(n.id)}',event)">🗑 Удалить</button>
+      ` : ''}
       <span class="fn-art-foot-id">◈◈◈</span>
     </div>
   </div>`;
@@ -558,11 +706,12 @@ async function fnRenderNewsTab(b) {
     const modRows = pend.length ? pend.map(n => `<div class="fn-mod-row" id="fn-mod-${esc(n.id)}">
       <div class="fn-mod-main">
         <div class="fn-mod-title">${esc(n.title || 'Без заголовка')}</div>
-        <div class="fn-mod-meta">${esc(n.faction_name || '—')} · ${esc(n.owner_email || '')} · ${esc(fnDateLine(n))}</div>
+        <div class="fn-mod-meta">${esc(n.faction_name || '—')} · ${esc(fnDateLine(n))}</div>
         <div class="fn-mod-excerpt">${esc(fnExcerpt(n))}</div>
       </div>
       <div class="fn-mod-acts">
         <button class="btn btn-gh btn-sm" onclick="fnPreview('${esc(n.id)}')">Читать</button>
+        <button class="btn btn-gh btn-sm" onclick="fnOpenComposer('${esc(n.id)}')">⚖ Вердикт</button>
         <button class="btn btn-gd btn-sm" onclick="fnApprove('${esc(n.id)}')">✓ Одобрить</button>
         <button class="btn btn-rd btn-sm" onclick="fnReject('${esc(n.id)}')">✕ Отклонить</button>
       </div>
@@ -597,6 +746,7 @@ function fnOpenComposer(id) {
     // Автосохранение: любой ввод/выбор внутри композитора → отложенное сохранение черновика.
     m.addEventListener('input', fnDraftSaveSoon);
     m.addEventListener('input', fnPreviewSoon);
+    m.addEventListener('input', fnVerdictPreviewRefresh);
     m.addEventListener('change', fnDraftSaveSoon);
     // Страховка при сворачивании/закрытии вкладки или потере страницы — мгновенный сброс.
     window.addEventListener('pagehide', fnDraftSave);
@@ -639,8 +789,12 @@ function fnOpenComposer(id) {
         </div>
         <div class="fn-comp-note" style="margin:6px 0 0">Админская публикация выходит сразу, без модерации. «НПС» — свободный автор (событие/квест без фракции); у НПС-статьи показываются <b>только ваши варианты ответа</b> (если добавите их ниже). Фракция игрока — от её лица (с обычными реакциями).</div>
         <label class="fn-c-fx" style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;cursor:pointer">
-          <input type="checkbox" id="fn-c-glitch"${n && n.fx === 'glitch' ? ' checked' : ''}>
+          <input type="checkbox" id="fn-c-glitch"${n && n.fx && n.fx.includes('glitch') ? ' checked' : ''}>
           <span>✨ Глитч-эффект по бокам статьи <span style="color:var(--t4)">— стильно, без вспышек/эпилепсии</span></span>
+        </label>
+        <label class="fn-c-fx" style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="fn-c-bg-cover"${n && n.fx && n.fx.includes('bg') ? ' checked' : ''}>
+          <span>🖼 Картинка на весь фон <span style="color:var(--t4)">— обложка уйдет на задний план статьи</span></span>
         </label>
       </div>` : ''}
       <div class="fg"><label class="fl">Заголовок *</label>
@@ -692,6 +846,7 @@ function fnOpenComposer(id) {
         <div class="fn-comp-note" style="margin:0 0 6px">Читатели и так получат авто-реакции по своей идеологии. Здесь можно добавить свои ивентные фразы — каждая со своим тоном.</div>
         <div id="fn-c-reacts">${(() => { let cs = []; try { cs = Array.isArray(eff?.reactions) ? eff.reactions : JSON.parse(eff?.reactions || '[]'); } catch (e) {} return (cs || []).map(c => fnReactRowHtml(c.text, c.stance)).join(''); })()}</div>
       </div>
+      ${fnStaffVerdictFieldsHtml(eff, data)}
       <div class="fn-comp-ftr">
         <button class="btn btn-gh" onclick="fnCloseComposer()">Отмена</button>
         <button class="btn btn-gd" onclick="fnSubmit()">${fnIsStaff() ? '📡 Опубликовать' : '📨 Отправить на проверку'}</button>
@@ -702,7 +857,9 @@ function fnOpenComposer(id) {
     modal.classList.add('show');
     FN.draftKey = key;
     fnDraftStatus(restored ? ('восстановлен черновик · ' + fnClock(draft.ts)) : '');
-    if (fnIsStaff()) fnPopulateAuthorSelect(n);   // автор берётся из серверной строки, не из черновика
+    if (fnIsStaff()) {
+      fnPopulateAuthorSelect(n).then(() => fnAdminEmbedSync());   // автор + панель управления
+    }
   };
   if (id && !n) {
     dbGet('faction_news', `id=eq.${encodeURIComponent(id)}&limit=1`).then(rows => { fill(rows && rows[0]); }).catch(() => fill(null));
@@ -721,6 +878,7 @@ function fnTryCloseComposer() {
 function fnCloseComposer() {
   clearTimeout(FN.draftT);
   fnDraftSave();   // финальное сохранение — закрытие/обрыв не теряет последние буквы
+  if (typeof AD !== 'undefined') AD.embed = null;
   document.getElementById('fn-composer')?.classList.remove('show');
 }
 
@@ -740,10 +898,13 @@ function fnDraftSave() {
     body: g('fn-c-body')?.value || '',
     image_url: g('fn-c-img')?.value || '',
     reactions: fnReactCollect(),
+    staff_verdict: g('fn-c-verdict')?.value || '',
+    staff_grants: fnGrantsCollect(),
     ts: Date.now(),
   };
   // Пустой черновик не держим в хранилище.
-  if (!payload.title && !payload.body && !payload.image_url && !payload.reactions.length) {
+  if (!payload.title && !payload.body && !payload.image_url && !payload.reactions.length
+      && !payload.staff_verdict && !payload.staff_grants.length) {
     try { localStorage.removeItem(FN.draftKey); } catch (e) {}
     fnDraftStatus('');
     return;
@@ -923,6 +1084,7 @@ function fnAuthorModeChange() {
   const sel = document.getElementById('fn-c-author');
   const npc = document.getElementById('fn-c-npc-fields');
   if (sel && npc) npc.style.display = sel.value === 'npc' ? 'flex' : 'none';
+  fnAdminEmbedSync();
 }
 // Разобрать выбранного автора → поля строки faction_news. Возвращает null при ошибке (с тостом).
 async function fnResolveAuthor() {
@@ -981,7 +1143,13 @@ async function fnSubmit() {
     author = { faction_id: fac.faction_id, faction_name: fac.name || null, faction_color: fac.color || null, owner_id: user.id, owner_email: user.email, kind: 'news' };
   }
   const now = new Date().toISOString();
-  const fx = staff && document.getElementById('fn-c-glitch')?.checked ? 'glitch' : null;
+let fxArr = [];
+  if (staff && document.getElementById('fn-c-glitch')?.checked) fxArr.push('glitch');
+  if (staff && document.getElementById('fn-c-bg-cover')?.checked) fxArr.push('bg');
+  const fx = fxArr.length ? fxArr.join(',') : null;
+  const staff_verdict = staff ? ((document.getElementById('fn-c-verdict')?.value || '').trim() || null) : undefined;
+  const staff_grants = staff ? fnGrantsCollect() : undefined;
+  const hasVerdict = staff && (staff_verdict || (staff_grants && staff_grants.length));
   FN.busy = true;
   try {
     if (id) {
@@ -993,6 +1161,9 @@ async function fnSubmit() {
           author_herald: author.author_herald || null,
           owner_id: author.owner_id, owner_email: author.owner_email, kind: author.kind, fx,
           status: 'approved', published_at: (prev && prev.published_at) || now, reviewed_by: user.email,
+          staff_verdict, staff_grants: staff_grants?.length ? staff_grants : null,
+          verdict_by: hasVerdict ? user.email : (prev && prev.verdict_by) || null,
+          verdict_at: hasVerdict ? now : (prev && prev.verdict_at) || null,
         });
       } else {
         patch.status = 'pending';   // правка игрока снова уходит на проверку
@@ -1011,6 +1182,10 @@ async function fnSubmit() {
         status: staff ? 'approved' : 'pending',
         published_at: staff ? now : null,
         reviewed_by: staff ? user.email : null,
+        staff_verdict: staff ? staff_verdict : null,
+        staff_grants: staff && staff_grants?.length ? staff_grants : null,
+        verdict_by: hasVerdict ? user.email : null,
+        verdict_at: hasVerdict ? now : null,
       });
       toast(staff ? 'Опубликовано на главной' : 'Новость отправлена на проверку', 'ok');
     }

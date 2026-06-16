@@ -1768,9 +1768,9 @@ function ecCvCargoHtml() {
     const ship = alloc[n] || 0;
     const bd = on ? 'var(--gd)' : 'var(--bd,#2a3550)';
     const tail = on
-      ? (ship > 0 ? `<b style="color:var(--gd)">грузим ${ecNum(ship)}${ship < rate ? ' · лимит трюма' : ''}</b>` : `<b style="color:var(--err)">трюм полон</b>`)
-      : '';
-    return `<button type="button" onclick="ecCvCargoToggle('${esc(n)}')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 10px;margin:4px 0;border-radius:8px;cursor:pointer;border:1px solid ${bd};background:${on ? 'rgba(120,200,140,.10)' : 'transparent'};color:inherit;font:inherit">
+      ? (ship > 0 ? `<b style="color:var(--gd)">грузим ${ecNum(ship)}${ship < rate ? ' · лимит трюма' : ''}</b>` : `<b style="color:var(--err)">${rate <= 0 ? 'поток занят' : 'трюм полон'}</b>`)
+      : (rate <= 0 ? `<i style="color:var(--t4);font-style:normal">занято караванами</i>` : '');
+    return `<button type="button" ${!on && rate <= 0 ? 'disabled' : ''} onclick="ecCvCargoToggle('${esc(n)}')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 10px;margin:4px 0;border-radius:8px;cursor:${!on && rate <= 0 ? 'not-allowed' : 'pointer'};border:1px solid ${bd};background:${on ? 'rgba(120,200,140,.10)' : 'transparent'};color:inherit;font:inherit;opacity:${!on && rate <= 0 ? '.55' : '1'}">
       <span style="width:18px;height:18px;flex:none;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;border:1px solid ${on ? 'var(--gd)' : 'var(--t4)'};color:${on ? 'var(--gd)' : 'var(--t4)'};font-weight:700">${on ? '✓' : '+'}</span>
       <span style="flex:1">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4);font-style:normal"> · ⛏ ${ecNum(rate)}/ход · ${ecResPriceN(n)} ГС/ед</i></span>
       ${tail}
@@ -1779,13 +1779,14 @@ function ecCvCargoHtml() {
 }
 function ecCvCargoToggle(res) {
   EC.cvCargo = EC.cvCargo || {};
-  if (EC.cvCargo[res]) delete EC.cvCargo[res]; else EC.cvCargo[res] = true;
+  if (EC.cvCargo[res]) delete EC.cvCargo[res];
+  else if (ecExtractRate(res) <= 0) return;
+  else EC.cvCargo[res] = true;
   const el = ecId('ec-cv-cargo'); if (el) el.innerHTML = ecCvCargoHtml();
   ecTradeCalc();
 }
-// Твой ЭКСПОРТНЫЙ поток ресурса /ход (для throughput каравана — зеркало economy_accrue).
-// Только заводы в режиме «экспорт» — склад караванам недоступен.
-function ecExtractRate(resName) {
+// Валовый ЭКСПОРТНЫЙ поток ресурса /ход (сумма export-заводов — зеркало mine_flow до караванов).
+function ecExtractRateGross(resName) {
   let total = 0;
   (EC.buildings || []).filter(b => b.btype === 'mining' && b.mine_mode === 'export').forEach(b => {
     const res = ecMiningPlanetRes(b);
@@ -1794,6 +1795,30 @@ function ecExtractRate(resName) {
     });
   });
   return total;
+}
+// Поток, уже занятый исходящими караванами (зеркало economy_accrue: pending + active не в пути).
+function ecCommittedExtractFlow() {
+  const out = {};
+  const now = Date.now();
+  (EC.routes || []).forEach(r => {
+    if (r.a_fid !== EC.fid) return;
+    if (r.status === 'pending') { /* ожидает — резервируем, как конвой у кораблей */ }
+    else if (r.status === 'active') {
+      if (r.transit_until && new Date(r.transit_until).getTime() > now) return; // в пути — бэкенд поток не списывает
+    } else return;
+    const cargo = Array.isArray(r.cargo) && r.cargo.length ? r.cargo
+      : (r.resource ? [{ res: r.resource, vol: r.volume || 0 }] : []);
+    cargo.forEach(ci => {
+      const res = ci.res; if (!res) return;
+      out[res] = (out[res] || 0) + (+ci.vol || 0);
+    });
+  });
+  return out;
+}
+// СВОБОДНЫЙ экспортный поток /ход (валовая − занятое активными/ожидающими караванами).
+function ecExtractRate(resName) {
+  const committed = ecCommittedExtractFlow();
+  return Math.max(0, ecExtractRateGross(resName) - (committed[resName] || 0));
 }
 // Дипломатический коэффициент к выгоде каравана (зеркало economy_accrue)
 function ecDipCoef(toFid) {
@@ -1818,18 +1843,20 @@ function ecTravelTurns(oSys, dSys) {
   const adj = (EC.lanes || []).some(l => (l.a_id === oSys && l.b_id === dSys) || (l.a_id === dSys && l.b_id === oSys));
   return Math.max(1, Math.min(2, Math.ceil((adj ? 1 : 2) * 20 / Math.max(1, ecFleetSpeed()))));   // 1–2 цикла
 }
-// Что фракция отдаёт в ЭКСПОРТ и с какой скоростью /ход — список для каравана.
-// Только заводы в режиме «экспорт»; «склад» — копит на склад, караванам недоступно.
+// Что фракция отдаёт в ЭКСПОРТ — список для каравана (свободный поток /ход, не валовая добыча).
 function ecExtractEntries() {
-  const m = {};
+  const gross = {};
   (EC.buildings || []).filter(b => b.btype === 'mining' && b.mine_mode === 'export').forEach(b => {
     const res = ecMiningPlanetRes(b);
     (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
       const ri = res.find(x => x.name === t); if (!ri) return;
-      m[t] = (m[t] || 0) + ecMineRate(ri.r, ri.amt);
+      gross[t] = (gross[t] || 0) + ecMineRate(ri.r, ri.amt);
     });
   });
-  return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  const committed = ecCommittedExtractFlow();
+  return Object.entries(gross)
+    .map(([n, g]) => [n, Math.max(0, g - (committed[n] || 0))])
+    .sort((a, b) => b[1] - a[1]);
 }
 function ecSyncVol(v) {
   v = Math.max(1, parseInt(v) || 1);
