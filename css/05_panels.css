@@ -649,6 +649,335 @@ select.sb-fi        { cursor: pointer; appearance: auto; }
 .sb-wrap.bm-edit-mode .ed-block-form { padding: 0; border-top: 2px solid var(--te); }
 .sb-wrap.bm-edit-mode .bme-wrap { padding: 16px 20px; }
 
+/* ════════════════════════════════════════════════════════════
+   КОНСТРУКТОР ФРАКЦИЙ: Апгрейд №1 (Идеальный Голо-терминал)
+   ════════════════════════════════════════════════════════════ */
+
+/* 1. Оболочка терминала */
+.fr-wizard {
+  background: linear-gradient(180deg, var(--b2, #141a22), var(--b1, #0d1117));
+  border: 1px solid var(--w2, #2a3340);
+  border-top: 2px solid var(--gd, #3a7fbf); /* Акцентная линия сверху */
+  box-shadow: 0 24px 80px rgba(0,0,0, 0.7), 
+              inset 0 1px 20px color-mix(in srgb, var(--gd, #3a7fbf) 10%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 20px;
+}
+
+/* Чертежная сетка на фоне */
+.fr-body {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: center top;
+  padding: 30px 40px;
+}
+
+/* 2. Шапка (Герой) */
+.fr-hero {
+  padding: 36px 40px 16px;
+  text-align: center;
+  background: radial-gradient(ellipse at top, color-mix(in srgb, var(--gd, #3a7fbf) 15%, transparent), transparent 70%);
+}
+.fr-title {
+  font-family: var(--font-display, sans-serif);
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--t1, #e8edf2);
+  margin: 8px 0;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.fr-eyebrow {
+  color: var(--gd, #3a7fbf);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.25em;
+}
+.fr-sub { color: var(--t3, #8aa0b0); font-size: 13px; }
+
+/* 3. Панель шагов (Граф узлов) */
+.fr-steps {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  padding: 30px 40px 45px; /* Больше места снизу для текста */
+  background: rgba(0,0,0, 0.25);
+  border-bottom: 1px solid var(--w1, #1e2630);
+}
+
+/* Линия связи (шина), проходящая сквозь все кружки */
+.fr-steps::before {
+  content: '';
+  position: absolute;
+  top: 45px; /* Центрируем точно по кружкам */
+  left: 60px; right: 60px;
+  height: 2px;
+  background: var(--w2, #2a3340);
+  z-index: 0;
+}
+
+/* 4. Сами узлы (контейнеры) */
+.fr-steps .fr-dot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  width: 60px; /* Чтобы текст ровно центрировался под кружком */
+}
+
+/* Кружок с цифрой */
+.fr-steps .fr-dot span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--b1, #0d1117);
+  border: 2px solid var(--w2, #2a3340);
+  border-radius: 50%; /* Делаем идеальный круг */
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--t3, #8aa0b0);
+  box-shadow: 0 0 0 6px rgba(10, 14, 26, 1); /* Стирает линию под кружком */
+  transition: all 0.3s ease;
+}
+
+/* Подпись под кружком */
+.fr-steps .fr-dot label {
+  position: absolute;
+  top: 42px; /* Опускаем ровно под кружок */
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--t4, #6a7a88);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+/* 5. СОСТОЯНИЯ УЗЛОВ */
+
+/* Наведение мыши */
+.fr-steps .fr-dot:hover span { border-color: var(--t2, #c0ccd6); color: var(--t2, #c0ccd6); }
+.fr-steps .fr-dot:hover label { color: var(--t2, #c0ccd6); }
+
+/* Пройденный шаг (.done) */
+.fr-steps .fr-dot.done span {
+  background: color-mix(in srgb, var(--gd, #3a7fbf) 15%, var(--b1, #0d1117));
+  border-color: var(--gd, #3a7fbf);
+  color: var(--gd, #3a7fbf);
+}
+.fr-steps .fr-dot.done label { color: var(--t2, #c0ccd6); }
+
+/* Текущий активный шаг (.on) - ГЛАВНЫЙ АКЦЕНТ */
+.fr-steps .fr-dot.on span {
+  background: var(--gd, #3a7fbf);
+  border-color: var(--gd, #3a7fbf);
+  color: #000; /* Контрастный цвет цифры внутри неонового кружка */
+  box-shadow: 0 0 0 6px rgba(10, 14, 26, 1), 
+              0 0 16px var(--gd, #3a7fbf);
+  transform: scale(1.15); /* Чуть увеличиваем активный кружок */
+}
+.fr-steps .fr-dot.on label {
+  color: var(--gd, #3a7fbf);
+  font-weight: 700;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--gd, #3a7fbf) 50%, transparent);
+}
+
+/* ════════════════════════════════════════════════════════════
+   КОНСТРУКТОР ФРАКЦИЙ: Апгрейд №1.1 (Идеальный Голо-терминал)
+   ════════════════════════════════════════════════════════════ */
+
+
+
+
+/* Базовые переменные терминала вынесены наверх для удобства */
+.fr-wizard {
+  --b1: #0d1117;
+  --b2: #141a22;
+  --w1: #1e2630;
+  --w2: #2a3340;
+  --gd: #3a7fbf;
+  --t1: #e8edf2;
+  --t2: #c0ccd6;
+  --t3: #8aa0b0;
+  --t4: #6a7a88;
+  --font-display: system-ui, -apple-system, sans-serif; /* Подставь свой шрифт */
+  --font-mono: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+
+  background: linear-gradient(180deg, var(--b2), var(--b1));
+  border: 1px solid var(--w2);
+  border-top: 2px solid var(--gd);
+  box-shadow: 0 24px 80px rgba(0,0,0, 0.7), 
+              inset 0 1px 20px color-mix(in srgb, var(--gd) 10%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 20px;
+  position: relative;
+}
+
+/* 1. Чертежная сетка */
+.fr-body {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: center top;
+  padding: 30px 40px;
+}
+
+/* 2. Шапка (Герой) */
+.fr-hero {
+  padding: 36px 40px 16px;
+  text-align: center;
+  background: radial-gradient(ellipse at top, color-mix(in srgb, var(--gd) 15%, transparent), transparent 70%);
+}
+
+.fr-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--t1);
+  margin: 8px 0;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.fr-eyebrow {
+  color: var(--gd);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.25em;
+}
+
+.fr-sub { 
+  color: var(--t3); 
+  font-size: 13px; 
+}
+
+/* 3. Панель шагов */
+.fr-steps {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start; /* Важно для правильного позиционирования линии */
+  padding: 30px 40px 45px;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--w1);
+}
+
+/* Линия связи (шина) */
+.fr-steps::before {
+  content: '';
+  position: absolute;
+  top: calc(30px + 16px); /* padding-top + половина высоты кружка (32/2) */
+  left: calc(40px + 16px); /* padding-left + половина ширины кружка */
+  right: calc(40px + 16px);
+  height: 2px;
+  background: var(--w2);
+  z-index: 0;
+}
+
+/* 4. Узлы (контейнеры) */
+.fr-steps .fr-dot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px; /* Заменяет position: absolute у label, делает верстку пуленепробиваемой */
+  cursor: pointer;
+  width: 80px; /* Чуть шире, чтобы текст не слипался */
+  text-align: center;
+}
+
+/* Кружок с цифрой */
+.fr-steps .fr-dot span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0; /* Чтобы кружок не сжимался */
+  background: var(--b1);
+  border: 2px solid var(--w2);
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--t3);
+  box-shadow: 0 0 0 6px var(--b1); /* Обтравка фона вокруг кружка поверх линии */
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), 
+              border-color 0.3s ease, 
+              color 0.3s ease, 
+              background-color 0.3s ease;
+}
+
+/* Подпись под кружком */
+.fr-steps .fr-dot label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--t4);
+  cursor: pointer;
+  transition: color 0.3s ease;
+  line-height: 1.2;
+}
+
+
+
+/* 5. СОСТОЯНИЯ УЗЛОВ */
+
+/* Наведение мыши */
+.fr-steps .fr-dot:hover span { 
+  border-color: var(--t2); 
+  color: var(--t2); 
+}
+.fr-steps .fr-dot:hover label { 
+  color: var(--t2); 
+}
+
+/* Пройденный шаг (.done) */
+.fr-steps .fr-dot.done span {
+  background: color-mix(in srgb, var(--gd) 15%, var(--b1));
+  border-color: var(--gd);
+  color: var(--gd);
+}
+.fr-steps .fr-dot.done label { 
+  color: var(--t2); 
+}
+
+/* Текущий активный шаг (.on) */
+.fr-steps .fr-dot.on span {
+  background: var(--gd);
+  border-color: var(--gd);
+  color: #000;
+  box-shadow: 0 0 0 6px var(--b1), 
+              0 0 16px var(--gd);
+  transform: scale(1.15);
+  animation: holo-pulse 2s infinite alternate ease-in-out; /* Эффект пульсации */
+}
+
+.fr-steps .fr-dot.on label {
+  color: var(--gd);
+  font-weight: 700;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--gd) 50%, transparent);
+}
+
+/* 6. АНИМАЦИИ */
+@keyframes holo-pulse {
+  0% { box-shadow: 0 0 0 6px var(--b1), 0 0 10px var(--gd); }
+  100% { box-shadow: 0 0 0 6px var(--b1), 0 0 22px var(--gd); }
+}
+
 /* ─────────────────────────────────────────────────────────────────
    27. BATTLE MAP BLOCK
 ───────────────────────────────────────────────────────────────── */

@@ -20,3 +20,83 @@
 @import './20_news.css';
 @import './21_perf.css';
 @import './22_tickets.css';
+
+
+/* ════════════════════════════════════════════════════════════
+   КОНСТРУКТОР ФРАКЦИЙ: Апгрейд №1 (Голо-терминал и Шаги)
+   ════════════════════════════════════════════════════════════ */
+
+/* 1. Превращаем само окно в инженерный терминал */
+#faction-reg-screen .mo {
+  background: linear-gradient(180deg, var(--b2, #141a22), var(--b1, #0d1117));
+  border: 1px solid color-mix(in srgb, var(--gd, #3a7fbf) 40%, transparent);
+  box-shadow: 0 30px 90px rgba(0,0,0, 0.8),
+              inset 0 0 60px color-mix(in srgb, var(--gd, #3a7fbf) 10%, transparent);
+}
+
+/* 2. Чертежная сетка на фоне самого контента (ненавязчивая) */
+#freg-content {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: center top;
+}
+
+/* 3. Панель шагов превращаем в информационную шину (Node Graph) */
+#freg-steps {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 40px !important; /* Даем больше воздуха по краям */
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gd, #3a7fbf) 10%, transparent) 50%, transparent) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--gd, #3a7fbf) 30%, transparent) !important;
+  position: relative;
+}
+
+/* Горизонтальная линия связи (провод/шина), проходящая прямо под шагами */
+#freg-steps::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 40px; right: 40px;
+  height: 2px;
+  background: var(--w2, #2a3340);
+  z-index: 0;
+  transform: translateY(-50%);
+}
+
+/* 4. Оформляем сами "узлы" шагов (каждую отдельную цифру/название) */
+#freg-steps > * {
+  position: relative;
+  z-index: 1;
+  background: var(--b1, #0d1117);
+  padding: 6px 14px;
+  border: 1px solid var(--w2, #2a3340);
+  border-radius: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--t3, #8aa0b0);
+  text-transform: uppercase;
+  box-shadow: 0 0 0 6px var(--b2, #141a22); /* Эта тень "стирает" линию под блоком */
+  transition: all 0.3s ease;
+}
+
+/* Активный шаг (светится неоном) */
+#freg-steps > .active,
+#freg-steps > .on,
+#freg-steps > [data-active="true"] {
+  background: color-mix(in srgb, var(--gd, #3a7fbf) 15%, transparent);
+  border-color: var(--gd, #3a7fbf);
+  color: var(--gd, #3a7fbf);
+  box-shadow: 0 0 0 6px var(--b2, #141a22),
+              0 0 15px color-mix(in srgb, var(--gd, #3a7fbf) 40%, transparent);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--gd, #3a7fbf) 60%, transparent);
+}
+
+/* Пройденный шаг */
+#freg-steps > .done,
+#freg-steps > .completed {
+  border-color: var(--t2, #c0ccd6);
+  color: var(--t1, #e8edf2);
+}

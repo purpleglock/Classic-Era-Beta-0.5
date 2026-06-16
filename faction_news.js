@@ -280,8 +280,7 @@ function fnGrantText(g) {
   switch (g.type) {
     case 'treasury': {
       const sign = (g.delta || 0) >= 0 ? '+' : '';
-      const bit = g.delta != null ? `${sign}${n(g.delta)} ${g.label || adTreasuryLabel?.(g.field) || g.field || ''}`.trim() : `${g.label}: ${n(g.to)}`;
-      return g.to != null && g.delta != null ? `${bit} → итого ${n(g.to)}` : bit;
+      return g.delta != null ? `${sign}${n(g.delta)} ${g.label || adTreasuryLabel?.(g.field) || g.field || ''}`.trim() : `${g.label}: ${n(g.to)}`;
     }
     case 'resource': return `+${n(g.delta != null ? g.delta : (g.amt || g.to))} ${g.name || 'ресурс'}`;
     case 'research': return g.revoke ? `Отозвана технология «${g.name}»` : `Изучена технология «${g.name}»`;
