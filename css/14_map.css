@@ -448,6 +448,10 @@ textarea.gm-fi{resize:vertical}
 /* канвас точно по вьюпорту; backing-размер (×dpr) задаёт JS */
 #gmm-cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 #gm-wrap.gm-mobile #gm-viewport{cursor:default}
+/* ПК в canvas-режиме: «схватить и тянуть» как на интерактивных картах */
+#gm-wrap.gm-canvas-desk #gm-viewport{cursor:grab}
+#gm-wrap.gm-canvas-desk #gm-viewport:active{cursor:grabbing}
+.gm-tb-btn.gm-tb-exit{color:var(--gdl);border-color:var(--gd)}
 #gm-wrap.gm-mobile.gm-fullscreen #gm-viewport,
 #gm-wrap.gm-mobile:fullscreen #gm-viewport{height:100%}
 /* контролы — пальцевые размеры */

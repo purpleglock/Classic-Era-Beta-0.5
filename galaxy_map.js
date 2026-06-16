@@ -18,6 +18,7 @@ const GM_ICO = {
   zout: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5.5 12h13"/></svg>',
   fit: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>',
   fs: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></svg>',
+  edit: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10.5-10.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
 };
 function gmCtlBtns() {
   return `
@@ -34,6 +35,7 @@ const GM = {
   systems: [], lanes: [], factions: [], sectors: [],
   scale: 1, tx: 0, ty: 0,
   edit: false, mode: 'select',   // select | link | unlink | add | sector
+  editSession: false,            // ПК: редактор зашёл в правку карты → старый SVG-рендер
   linkFrom: null,
   sectorDraft: null,             // {id?, name, color, lore, system_ids:[]} — редактируемый сектор
   drag: null,                    // {sys, moved}
@@ -47,6 +49,20 @@ const GM = {
 
 function gmCanEdit() { return !!(user && ['superadmin', 'editor'].includes(user.role)); }
 function gmFaction(id) { return GM.factions.find(f => f.id === id) || null; }
+
+// ПК: вход/выход из редактора карты. Просмотр идёт быстрым canvas-рендером,
+// а правка (двигать звёзды/пути/сектора) — в старом SVG-рендере, который
+// рисуется только при GM.editSession (см. renderGalaxyMap).
+function gmEnterEdit() {
+  if (!gmCanEdit()) return;
+  GM.editSession = true;
+  GMM.active = false;
+  renderGalaxyMap();
+}
+function gmExitEdit() {
+  GM.editSession = false; GM.edit = false;
+  renderGalaxyMap();
+}
 
 // ── Загрузка данных ─────────────────────────────────────────
 async function loadGalaxyData() {
@@ -107,9 +123,11 @@ async function renderGalaxyMap() {
     if (document.getElementById('pg') !== host) return; // ушли со страницы
   }
 
-  // Телефоны/планшеты (основной указатель — палец): отдельный canvas-рендерер,
-  // DOM/SVG-вариант на тач-устройствах неюзабелен (см. блок GMM в конце файла).
-  if (gmIsMobile()) { GM.edit = false; gmmRender(host); return; }
+  // Быстрый canvas-рендерер (GMM) — и на телефоне, и на ПК: SVG/DOM-вариант
+  // при зуме пере-растеризует весь вектор → мигание и адские лаги (см. блок GMM).
+  // Старый SVG-рендер остаётся ТОЛЬКО как редактор карты: редактор входит в него
+  // кнопкой «Редактировать», что выставляет GM.editSession (см. gmEnterEdit).
+  if (gmIsMobile() || !GM.editSession) { GM.edit = false; gmmRender(host); return; }
   GMM.active = false;
 
   // сброс временного состояния (DOM пересоздаётся при каждом входе)
@@ -142,6 +160,7 @@ async function renderGalaxyMap() {
 
 function gmToolbarHtml() {
   return `<div id="gm-toolbar">
+    <button class="gm-tb-btn gm-tb-exit" onclick="gmExitEdit()">← К карте</button>
     <button class="gm-tb-btn" id="gm-edit-toggle" onclick="gmToggleEdit()">✎ Редактировать карту</button>
     <div id="gm-edit-tools" class="gm-hidden">
       <button class="gm-tb-btn" data-mode="select" onclick="gmSetMode('select')">✥ Двигать</button>
@@ -614,25 +633,15 @@ function gmBuildGeo() {
   //   территория сектора → лёгкая цветная подложка.
   const fills = [];     // {fac?, isRift, isFog, pts}
   const secFills = [];  // {color, pts}
+  const fog = [];   // полигоны пустоты — единая пелена «тумана войны» (расступается у звёзд)
   cells.forEach(({ sys, poly }) => {
     if (!poly) return;
-    if (sys.phantom) {
-      // Туман гаснет к краям холста ДО ПРОЗРАЧНОСТИ: фон (#gm-bg) растянут на весь
-      // вьюпорт, поэтому у кромки холста туман = 0 → шов с областью снаружи исчезает.
-      let cx = 0, cy = 0; for (const p of poly) { cx += p[0]; cy += p[1]; }
-      cx /= poly.length; cy /= poly.length;
-      const dEdge = Math.min(cx, GM_W - cx, cy, GM_H - cy);
-      const fade = Math.max(0, Math.min(1, dEdge / 650));        // 0 у кромки → 1 в глубине
-      const a = +(0.5 * fade).toFixed(3);                        // прозрачно у края, до .5 внутри
-      if (a < 0.03) return;                                      // у самой кромки туман не нужен
-      fills.push({ isFog: true, fogA: a, pts: gmPerturbPoly(poly) });
-      return;
-    }
+    if (sys.phantom) { fog.push(gmPerturbPoly(poly)); return; }
     const fac = gmFaction(sys.faction);
     const pts = gmPerturbPoly(poly);
     fills.push({ sys, fac, isRift: !!(fac && fac.id === 'rift'), pts });
     const sid = secOfSys[sys.id];
-    if (sid) { const sec = sectorsR.find(x => x.id === sid); if (sec) secFills.push({ color: sec.color || 'rgba(120,200,255,0.5)', pts }); }
+    if (sid) { const sec = sectorsR.find(x => x.id === sid); if (sec) secFills.push({ secId: sid, color: sec.color || 'rgba(120,200,255,0.5)', pts }); }
   });
 
   // ── Границы: схлопываем внутренние рёбра. Ребро между двумя ячейками ОДНОЙ
@@ -723,7 +732,7 @@ function gmBuildGeo() {
     lanes.push({ id: l.id, ax: a.x, ay: a.y, cx: +(mx + nx * bend).toFixed(1), cy: +(my + ny * bend).toFixed(1), bx: b.x, by: b.y });
   });
 
-  return { fills, secFills, edges, lanes, secEdges, secLabels };
+  return { fills, secFills, edges, lanes, secEdges, secLabels, fog };
 }
 
 function gmDrawSvg() {
@@ -1522,10 +1531,14 @@ function gmIsMobile() {
 // ── Вход в мобильный режим ──────────────────────────────────
 function gmmRender(host) {
   GMM.active = true;
+  // Класс gm-mobile (пальцевые контролы, нижний лист-панель) — только на тач-устройствах;
+  // на ПК canvas-режим использует десктопную панель/контролы (класс gm-canvas-desk).
+  const touch = gmIsMobile();
+  const deskEdit = !touch && gmCanEdit();   // на ПК редактор может уйти в правку карты
   host.innerHTML = `
-    <div id="gm-wrap" class="gm-mobile">
+    <div id="gm-wrap" class="${touch ? 'gm-mobile' : 'gm-canvas-desk'}">
       <div id="gm-viewport"><canvas id="gmm-cv"></canvas></div>
-      <div id="gm-controls">${gmCtlBtns()}</div>
+      <div id="gm-controls">${gmCtlBtns()}${deskEdit ? `<button class="gm-ctl gm-ctl-edit" title="Редактировать карту" onclick="gmEnterEdit()">${GM_ICO.edit}</button>` : ''}</div>
       <div id="gm-panel" class="gm-hidden"></div>
     </div>`;
   GMM.cv = document.getElementById('gmm-cv');
@@ -1702,7 +1715,19 @@ function gmmStartPinch() {
 }
 
 function gmmTapAt(lx, ly) {
-  // ближайшая система в радиусе пальца
+  const now = performance.now();
+  const dbl = (now - GMM.lastTap < 320 && Math.hypot(lx - GMM.ltx, ly - GMM.lty) < 40);
+  // ОБЗОР: главное — регионы. Клик по сектору в приоритете над звёздами.
+  if (gmmOverview()) {
+    if (!dbl) {
+      const secId = gmmSectorAt(lx, ly);
+      if (secId) { gmOpenSector(secId); GMM.lastTap = now; GMM.ltx = lx; GMM.lty = ly; return; }
+    }
+    if (dbl) { gmmZoomAt(lx, ly, GMM.s * 2.2, true); GMM.lastTap = 0; }
+    else { GMM.lastTap = now; GMM.ltx = lx; GMM.lty = ly; gmClosePanel(); }
+    return;
+  }
+  // ближняя дистанция — ближайшая система в радиусе пальца
   let best = null, bd = 1e9;
   GM.systems.forEach(s => {
     const sx = s.x * GMM.s + GMM.tx, sy = s.y * GMM.s + GMM.ty;
@@ -1717,8 +1742,7 @@ function gmmTapAt(lx, ly) {
     GMM.lastTap = 0;
     return;
   }
-  const now = performance.now();
-  if (now - GMM.lastTap < 320 && Math.hypot(lx - GMM.ltx, ly - GMM.lty) < 40) {
+  if (dbl) {
     // дабл-тап по пустому: зум к точке; если уже почти максимум — вся карта
     gmmZoomAt(lx, ly, GMM.s > 3.4 ? gmmMinS() : GMM.s * 2.2, true);
     GMM.lastTap = 0;
@@ -1726,6 +1750,18 @@ function gmmTapAt(lx, ly) {
     GMM.lastTap = now; GMM.ltx = lx; GMM.lty = ly;
     gmClosePanel();
   }
+}
+// какой сектор под точкой экрана (lx,ly) — проверка попадания в union ячеек сектора
+function gmmSectorAt(lx, ly) {
+  const P = GMM.paths;
+  if (!P || !P.secHit || !P.secHit.length || !GMM.ctx) return null;
+  const wx = (lx - GMM.tx) / GMM.s, wy = (ly - GMM.ty) / GMM.s;   // экран → мир
+  const ctx = GMM.ctx;
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);   // координаты Path2D — мировые
+  let hit = null;
+  for (const h of P.secHit) { if (ctx.isPointInPath(h.p2d, wx, wy)) { hit = h.secId; break; } }
+  ctx.restore();
+  return hit;
 }
 // после открытия нижней панели доводим камеру, чтобы звезда не пряталась под ней
 function gmmEnsureVisible(sys) {
@@ -1798,6 +1834,7 @@ function gmmNeedRaster() {
   if (!b) return !!GMM.paths;
   const ratio = GMM.s / b.camS;
   if (ratio > 1.45 || ratio < 0.62) return true;        // зум ушёл — битмап мыльный/тяжёлый
+  if (Math.abs(gmmZoomT(GMM.s) - gmmZoomT(b.camS)) > 0.06) return true;   // идём сквозь переход обзор↔системы — освежаем кадры
   const vx0 = -GMM.tx / GMM.s, vy0 = -GMM.ty / GMM.s;
   const vx1 = (GMM.vw - GMM.tx) / GMM.s, vy1 = (GMM.vh - GMM.ty) / GMM.s;
   const bx1 = b.wx + b.pw / b.scale, by1 = b.wy + b.ph / b.scale;
@@ -1844,18 +1881,19 @@ function gmmBuildWorld() {
   const geo = gmBuildGeo();
   const dOf = (pts, close) => 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + (close ? 'Z' : '');
   // заливки, сгруппированные по цвету (фракция = один Path2D из всех её ячеек)
-  const fillD = new Map(); const fogD = new Map();
+  const fillD = new Map();
   geo.fills.forEach(f => {
-    if (f.isFog) {   // туман: группируем по уровню прозрачности (бакеты по .05)
-      const k = (Math.round((f.fogA != null ? f.fogA : 0.55) / 0.05) * 0.05).toFixed(2);
-      fogD.set(k, (fogD.get(k) || '') + dOf(f.pts, true)); return;
-    }
     const color = f.isRift ? 'rgba(14,2,24,.8)' : (f.fac ? f.fac.color : 'rgba(120,140,170,0.04)');
     fillD.set(color, (fillD.get(color) || '') + dOf(f.pts, true));
   });
+  // туман — единый путь по всем ячейкам пустоты (без швов: один Path2D)
+  const fogD = (geo.fog || []).map(pts => dOf(pts, true)).join('');
   // подложки территорий секторов по цвету
   const secFillD = new Map();
   (geo.secFills || []).forEach(f => secFillD.set(f.color, (secFillD.get(f.color) || '') + dOf(f.pts, true)));
+  // области секторов по id — для попадания тапом (union ячеек сектора)
+  const secHitD = new Map();
+  (geo.secFills || []).forEach(f => { if (f.secId) secHitD.set(f.secId, (secHitD.get(f.secId) || '') + dOf(f.pts, true)); });
   // границы: цветные (фракции/фронты) по цвету, нейтральные и разлом — отдельно
   const edgeD = new Map(); let neutralD = '', riftD = '';
   geo.edges.forEach(e => {
@@ -1871,7 +1909,7 @@ function gmmBuildWorld() {
   (geo.secEdges || []).forEach(e => secD.set(e.color, (secD.get(e.color) || '') + dOf(e.pts)));
   GMM.paths = {
     fills: [...fillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
-    fog: [...fogD].map(([a, d]) => ({ a: +a, p2d: new Path2D(d) })),
+    fogPath: fogD ? new Path2D(fogD) : null,
     secFills: [...secFillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     edges: [...edgeD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     neutral: neutralD ? new Path2D(neutralD) : null,
@@ -1879,6 +1917,7 @@ function gmmBuildWorld() {
     lanes: lanesD ? new Path2D(lanesD) : null,
     secEdges: [...secD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     secLabels: geo.secLabels || [],
+    secHit: [...secHitD].map(([secId, d]) => ({ secId, p2d: new Path2D(d) })),
   };
 }
 
@@ -1902,10 +1941,10 @@ function gmmPaint(ctx, camS, wx0, wy0, wx1, wy1) {
   const P = GMM.paths;
   if (!P) return;
   P.fills.forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
-  if (P.fog) P.fog.forEach(g => { ctx.fillStyle = `rgba(4,6,12,${g.a})`; ctx.fill(g.p2d); });  // туман (градиент к краям)
-  // подложки секторов — только на обзоре (сильное отдаление)
-  if (P.secFills && P.secFills.length && camS <= gmmMinS() * 1.7) {
-    ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = .42;
+  // подложки секторов — на обзоре, плавно гаснут при приближении
+  const secA = 1 - gmmZoomT(camS);
+  if (P.secFills && P.secFills.length && secA > 0.01) {
+    ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = .42 * secA;
     P.secFills.forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
     ctx.restore();
   }
@@ -1929,28 +1968,58 @@ function gmmPaint(ctx, camS, wx0, wy0, wx1, wy1) {
     ctx.strokeStyle = 'hsl(206 92% 64%)'; ctx.lineWidth = 1.8 / camS;
     ctx.stroke(P.lanes); ctx.globalAlpha = 1;
   }
-  // границы секторов — чистая сплошная линия цвета сектора (на обзоре ярче + свечение)
+  // границы секторов — на обзоре ярче + свечение, при приближении плавно тускнеют
   if (P.secEdges && P.secEdges.length) {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    if (camS <= gmmMinS() * 1.7) {   // обзор: мягкое свечение под линией
-      ctx.globalAlpha = .18; ctx.lineWidth = 8 / camS;
+    if (secA > 0.01) {   // мягкое свечение под линией (только пока виден обзор)
+      ctx.globalAlpha = .18 * secA; ctx.lineWidth = 8 / camS;
       P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
     }
-    ctx.globalAlpha = camS <= gmmMinS() * 1.7 ? .85 : .6; ctx.lineWidth = 2 / camS;
+    ctx.globalAlpha = .6 + 0.25 * secA; ctx.lineWidth = 2 / camS;
     P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
     ctx.globalAlpha = 1;
   }
-  // метки секторов — только на сильном отдалении (≈ почти максимально отдалённая карта)
-  if (P.secLabels && P.secLabels.length && camS <= gmmMinS() * 1.7) {
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `600 ${(24 / camS).toFixed(1)}px Rajdhani, 'Exo 2', sans-serif`;
+  // метки регионов — нормальный размер, плавно гаснут при приближении
+  if (P.secLabels && P.secLabels.length && secA > 0.01) {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.font = `700 ${(14 / camS).toFixed(1)}px Rajdhani, 'Exo 2', sans-serif`;
     P.secLabels.forEach(l => {
-      ctx.globalAlpha = .5; ctx.fillStyle = l.color;
-      ctx.fillText((l.name || '').toUpperCase(), l.x, l.y);
+      const t = (l.name || '').toUpperCase();
+      ctx.globalAlpha = secA; ctx.lineWidth = 3.5 / camS; ctx.strokeStyle = 'rgba(0,0,0,.6)';
+      ctx.strokeText(t, l.x, l.y);
+      ctx.globalAlpha = .9 * secA; ctx.fillStyle = l.color;
+      ctx.fillText(t, l.x, l.y);
+      ctx.globalAlpha = 1;
     });
-    ctx.globalAlpha = 1;
   }
+  gmmPaintFog(ctx);
   gmmPaintStars(ctx, camS);
+}
+
+// Туман войны: тёмная пелена над пустотой, которая МЯГКО расступается вокруг звёзд.
+// Рисуем на отдельном слое (та же мировая система координат), затем компонуем —
+// иначе «прорехи» (destination-out) стёрли бы и территории под ними.
+function gmmPaintFog(ctx) {
+  const P = GMM.paths;
+  if (!P || !P.fogPath) return;
+  const pw = ctx.canvas.width, ph = ctx.canvas.height, m = ctx.getTransform();
+  let fc = GMM.fogCv || (GMM.fogCv = document.createElement('canvas'));
+  if (fc.width !== pw || fc.height !== ph) { fc.width = pw; fc.height = ph; }
+  const f = fc.getContext('2d');
+  f.setTransform(1, 0, 0, 1, 0, 0); f.clearRect(0, 0, pw, ph);
+  f.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);   // тот же мировой transform, что у мира
+  f.fillStyle = 'rgba(4,6,14,0.88)'; f.fill(P.fogPath);   // пелена над пустотой
+  f.globalCompositeOperation = 'destination-out';         // прорехи у источников света
+  const R = 360;
+  for (const s of GM.systems) {
+    if (s.phantom) continue;
+    const rr = s.is_giant ? R * 1.55 : (s.faction === 'rift' ? R * 1.2 : R);
+    const g = f.createRadialGradient(s.x, s.y, 0, s.x, s.y, rr);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.5, 'rgba(0,0,0,.9)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    f.fillStyle = g; f.beginPath(); f.arc(s.x, s.y, rr, 0, 6.2832); f.fill();
+  }
+  f.globalCompositeOperation = 'source-over';
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(fc, 0, 0); ctx.restore();
 }
 
 function gmmPaintStarfield(ctx, camS, wx0, wy0, wx1, wy1) {
@@ -1975,26 +2044,65 @@ function gmmPaintStarfield(ctx, camS, wx0, wy0, wx1, wy1) {
 // звёзды мелкие и не сливаются в кашу, при приближении доходят до полного
 // размера; сверху ограничены base (не мыло на 4×)
 function gmmIconPx(s, camS) {
-  const base = s.faction === 'rift' ? (s.id === 'rift_core' ? 74 : 46) : (s.is_giant ? 104 : 52);
+  const base = s.faction === 'rift' ? (s.id === 'rift_core' ? 70 : 44) : (s.is_giant ? 96 : 46);
   const k = Math.pow(Math.min(1, camS), s.is_giant ? 0.78 : 0.7);
-  return Math.max(8, base * k);
+  return Math.max(7, base * k);
+}
+
+// «Высота» камеры → плавный переход обзор↔карта систем.
+// t=0 (отдалённо): только регионы + звёзды точками; t=1 (ближе): иконки звёзд.
+// В переходной полосе [lo,hi] секторы/точки гаснут, иконки/подписи проявляются.
+function gmmZoomT(camS) {
+  const m = gmmMinS(), lo = m * 1.85, hi = m * 2.35;   // узкая полоса — чёткая смена, без долгой каши
+  const s = (camS == null ? GMM.s : camS);
+  const u = Math.max(0, Math.min(1, (s - lo) / (hi - lo)));
+  return u * u * (3 - 2 * u);   // smoothstep — мягкие концы перехода
+}
+function gmmOverview(camS) { return gmmZoomT(camS) < 0.5; }
+
+const GMM_STAR_DOTC = { yellow: '#ffd76a', red: '#ff7a5c', blue: '#8fb8ff', white: '#eaf2ff', green: '#86e6a6' };
+// обзорная «текстовая звезда»: аккуратная светящаяся точка цвета звезды
+function gmmPaintStarDot(ctx, s, camS) {
+  if (s.faction === 'rift') {
+    const rr = (s.id === 'rift_core' ? 5.5 : 3.8) / camS;
+    const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, rr * 2.6);
+    g.addColorStop(0, 'rgba(170,80,255,.5)'); g.addColorStop(1, 'rgba(170,80,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, rr * 2.6, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = '#c98cff'; ctx.beginPath(); ctx.arc(s.x, s.y, rr, 0, 6.2832); ctx.fill();
+    return;
+  }
+  const col = s.is_giant ? '#ffd76a' : (GMM_STAR_DOTC[s.star_type] || '#dfeaff');
+  const r = (s.is_giant ? 4.6 : 2.8) / camS;
+  const rgb = s.is_giant ? '255,210,120' : '150,190,255';
+  const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r * 3);
+  g.addColorStop(0, `rgba(${rgb},.4)`); g.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, r * 3, 0, 6.2832); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, 6.2832); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.beginPath(); ctx.arc(s.x, s.y, r * 0.42, 0, 6.2832); ctx.fill();
 }
 
 function gmmPaintStars(ctx, camS) {
   const caps = GM.capitals || {};
-  const showAll = camS >= 0.30;   // дальше — подписи только у важного (гиганты/столицы/разлом)
+  const t = gmmZoomT(camS);
+  const dotsA = 1 - t, iconA = t;   // обзорные точки гаснут, иконки проявляются
+  const showAll = camS >= 0.30;
   const labelPx = 12;
   const cands = [];   // кандидаты подписей — рисуем отдельным проходом с защитой от наложений
-  // ── проход 1: иконки звёзд (всегда) ──
+  // ── проход 1: тела звёзд ──
   GM.systems.forEach(s => {
+    const important = s.is_giant || !!caps[s.id] || s.faction === 'rift';
+    // обзорная «текстовая» точка — главное на обзоре, гаснет при приближении
+    if (dotsA > 0.01) { ctx.globalAlpha = dotsA; gmmPaintStarDot(ctx, s, camS); ctx.globalAlpha = 1; }
+    if (iconA <= 0.01) return;   // ещё чистый обзор — иконку не рисуем
     const iw = gmmIconPx(s, camS) / camS;   // мировые юниты
+    ctx.globalAlpha = iconA;
     if (s.faction === 'rift') {
       gmmPaintRift(ctx, s, iw, camS);
     } else {
-      const glowR = iw * (s.is_giant ? 1.1 : 0.9);
+      const glowR = iw * (s.is_giant ? 0.95 : 0.72);
       const gc = s.is_giant ? '255,210,120' : '120,180,255';
       const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, glowR);
-      g.addColorStop(0, `rgba(${gc},.34)`); g.addColorStop(1, `rgba(${gc},0)`);
+      g.addColorStop(0, `rgba(${gc},.24)`); g.addColorStop(1, `rgba(${gc},0)`);
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(s.x, s.y, glowR, 0, 6.2832); ctx.fill();
       const im = GMM.imgs[s.star_type] || GMM.imgs.yellow;
@@ -2014,12 +2122,12 @@ function gmmPaintStars(ctx, camS) {
         ctx.fillText('★', s.x, s.y - iw / 2 - 1 / camS);
       }
     }
-    const important = s.is_giant || !!caps[s.id] || s.faction === 'rift';
+    ctx.globalAlpha = 1;
     if (showAll || important) cands.push({ s, iw, important });
     if (GM.showRes) gmmPaintResPins(ctx, s, iw, camS);
   });
-  // ── проход 2: подписи с защитой от наложений ──
-  // важные первыми — они занимают место, остальные уступают и пропускаются
+  // ── проход 2: подписи с защитой от наложений (проявляются вместе с иконками) ──
+  if (iconA <= 0.01) return;
   cands.sort((a, b) => (b.important - a.important) || (b.s.is_giant - a.s.is_giant));
   ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
   const boxes = [], pad = 2 / camS;
@@ -2032,11 +2140,13 @@ function gmmPaintStars(ctx, camS) {
       if (x0 < r.x1 + pad && x1 > r.x0 - pad && y0 < r.y1 + pad && y1 > r.y0 - pad) return;   // налезает → прячем
     }
     boxes.push({ x0, y0, x1, y1 });
+    ctx.globalAlpha = iconA;
     ctx.lineWidth = 3 / camS; ctx.strokeStyle = 'rgba(0,0,0,.85)';
     ctx.strokeText(s.name, s.x, y0);
     ctx.fillStyle = s.faction === 'rift' ? '#e0c2ff' : (s.is_giant ? '#ffe6b0' : '#dfeaff');
     ctx.fillText(s.name, s.x, y0);
   });
+  ctx.globalAlpha = 1;
 }
 
 function gmmPaintRift(ctx, s, iw, camS) {
