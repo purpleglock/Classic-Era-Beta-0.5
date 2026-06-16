@@ -2143,15 +2143,36 @@ async function bmCharImgUpload(input,blockIdx,charIdx){
   });
 }
 
+// ── Клиентское сжатие картинок ПЕРЕД загрузкой в Storage ──────────────────
+// На free-плане Supabase Image Transformations недоступны, поэтому ресайзим
+// и пережимаем в браузере: оригиналы 3-4 МБ → обычно 150-400 КБ.
+// Это главный рычаг экономии egress (картинки качаются десятками раз).
+// GIF не трогаем (потеряли бы анимацию).
+async function compressImageFile(file, maxDim = 1920, quality = 0.82) {
+  if (!file || file.type === 'image/gif' || !file.type.startsWith('image/')) return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
+    const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    bmp.close && bmp.close();
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/webp', quality));
+    if (!blob || blob.size >= file.size) return file;   // не помогло — оставляем оригинал
+    return new File([blob], (file.name || 'image').replace(/\.\w+$/, '') + '.webp', { type: 'image/webp' });
+  } catch (e) { return file; }   // любой сбой — грузим как есть
+}
+
 async function handleImgUpload(file, onUrl) {
   if (!file) return;
   if (!user) { toast('Необходима авторизация','err'); return; }
   const ALLOWED=['image/jpeg','image/png','image/gif','image/webp']; if (!ALLOWED.includes(file.type)) { toast('Только JPEG / PNG / GIF / WebP','err'); return; }
   if (file.size>4*1024*1024) { toast('Файл слишком большой (макс. 4 МБ)','err'); return; }
   toast('Загрузка...','inf');
+  file = await compressImageFile(file);
   try {
     const token = await getTokenFresh(); const ext=({'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp'})[file.type]||'jpg'; const name=`${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
-    const r=await fetch(`${SB_URL}/storage/v1/object/wiki-images/${name}`,{ method:'POST', headers:{'apikey':SB_ANON,'Authorization':'Bearer '+token,'Content-Type':file.type,'x-upsert':'true'}, body:file });
+    const r=await fetch(`${SB_URL}/storage/v1/object/wiki-images/${name}`,{ method:'POST', headers:{'apikey':SB_ANON,'Authorization':'Bearer '+token,'Content-Type':file.type,'cache-control':'max-age=31536000, immutable','x-upsert':'true'}, body:file });
     if(r.ok){onUrl(`${SB_URL}/storage/v1/object/public/wiki-images/${name}`);toast('Загружено ✓','ok');return;}
     let errMsg='HTTP '+r.status; try{const e=await r.json();errMsg=e?.error||e?.message||errMsg;}catch{} toast(`Storage: ${errMsg}. Используй URL напрямую или настрой Storage policies.`,'err');
   } catch(e) { toast(`Ошибка: ${e.message}`,'err'); }
@@ -2946,18 +2967,20 @@ function updateDevlogBgPreview(url) {
 
 async function uploadDevlogBg(input) {
   if (!input.files?.[0]) return;
-  const file = input.files[0];
+  let file = input.files[0];
   if (file.size > 10 * 1024 * 1024) { toast('Файл слишком большой (макс. 10 МБ)', 'err'); return; }
   
   toast('Загрузка...', 'ok');
   
   try {
+    file = await compressImageFile(file);
     const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
     const res = await fetch(`${SB_URL}/storage/v1/object/wiki-images/${fileName}`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Authorization': 'Bearer ' + getToken(),
-        'Content-Type': file.type
+        'Content-Type': file.type,
+        'cache-control': 'max-age=31536000, immutable'
       },
       body: file
     });
@@ -3232,7 +3255,7 @@ async function uploadFaviconImage(input) {
     const fileName = `favicon_${Date.now()}.${file.name.split('.').pop()}`;
     const { data, error } = await sb.storage
       .from('images')
-      .upload(fileName, file, { upsert: true });
+      .upload(fileName, file, { upsert: true, cacheControl: '31536000' });
     
     if (error) throw error;
     

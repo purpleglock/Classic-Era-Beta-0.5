@@ -3318,7 +3318,7 @@ async function renderFactionPage(pg) {
       const stMap = {active:'АКТИВЕН',dead:'ПОГИБ',retired:'НА ПОКОЕ'};
       const stCls = {active:'st-active',dead:'st-dead',retired:'st-retired'}[c.status]||'st-retired';
       return `<div class="fac-member" onclick="go('${esc(c.slug)}')">
-        ${pg2?.image_url ? `<img src="${esc(pg2.image_url)}" class="fac-member-av">` : `<div class="fac-member-av fac-member-av--ph">${esc((c.name||'?').slice(0,2).toUpperCase())}</div>`}
+        ${pg2?.image_url ? `<img src="${esc(pg2.image_url)}" class="fac-member-av" loading="lazy">` : `<div class="fac-member-av fac-member-av--ph">${esc((c.name||'?').slice(0,2).toUpperCase())}</div>`}
         <div class="fac-member-info">
           <div class="fac-member-name">${esc(c.name||c.slug)}</div>
           <div class="fac-member-cls">${esc(clsLabel)}</div>

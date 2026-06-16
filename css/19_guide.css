@@ -106,7 +106,7 @@
 
 /* ── Раскрывающиеся таблицы ── */
 .gb-collapse { margin: 12px 0 20px; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
-.gb-collapse > .gb-table-wrap, .gb-collapse > .gb-tbl { margin: 0 !important; border: none; border-top: 1px solid var(--color-border); border-radius: 0; }
+.gb-collapse > .gb-table-wrap, .gb-collapse > .gb-tbl, .gb-collapse > .gb-doc-list { margin: 0 !important; border: none; border-top: 1px solid var(--color-border); border-radius: 0; }
 .gb-collapse-sum { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 9px; padding: 11px 15px; font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--color-text-muted); background: var(--color-surface-raised); user-select: none; }
 .gb-collapse-sum::-webkit-details-marker { display: none; }
 .gb-collapse-sum:hover { color: var(--color-text); }
@@ -353,6 +353,7 @@
   border-radius: var(--radius-pill);
 }
 .gb-note b { color: var(--color-text); }
+.gb-muted { color: var(--color-text-faint); font-size: 13px; }
 .gb-note-info { background: var(--color-info-bg); border-color: var(--color-info); }
 .gb-note-info .gb-note-i { color: var(--color-info); background: hsl(var(--hue-cyan) var(--sat-cyan) 55% / 0.15); }
 .gb-note-warn { background: var(--color-warning-bg); border-color: var(--color-warning); }

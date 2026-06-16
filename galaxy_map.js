@@ -776,11 +776,13 @@ function gmDrawSvg() {
 
   const fb = facBorderHtml.join('');
 
-  // ── Сектора: статичный пунктир + мягкое свечение + хит-зона (клик → лор/редакт) ──
-  const secGlow = geo.secEdges.map(e =>
-    `<path class="gm-sec-glow" d="${dOf(e.pts)}" fill="none" stroke="${e.color}"></path>`).join('');
+  // ── Сектора: мягкое тёмное «разрежение»-пустота (перо из 3 слоёв) + хит-зона ──
+  const secVoid = geo.secEdges.map(e =>
+    `<path class="gm-sec-void" d="${dOf(e.pts)}" fill="none"></path>`).join('');
+  const secVoidCore = geo.secEdges.map(e =>
+    `<path class="gm-sec-void-core" d="${dOf(e.pts)}" fill="none"></path>`).join('');
   const secLine = geo.secEdges.map(e =>
-    `<path class="gm-sec-line" d="${dOf(e.pts)}" fill="none" stroke="${e.color}"></path>`).join('');
+    `<path class="gm-sec-line" d="${dOf(e.pts)}" fill="none"></path>`).join('');
   const secHit = geo.secEdges.map(e =>
     `<path class="gm-sec-hit" d="${dOf(e.pts)}" fill="none" onclick="gmSectorBorderClick('${e.secId}')"></path>`).join('');
   const secLabelHtml = geo.secLabels.map(l =>
@@ -794,7 +796,7 @@ function gmDrawSvg() {
     + `<g class="vor-border-layer gm-glow-layer">${fb}</g>`
     + `<g class="vor-border-layer">${neutralBorderHtml.join('')}${fb}</g>`
     + `<g class="lane-layer">${laneHtml}</g>`
-    + `<g class="sec-layer">${secGlow}${secLine}${secLabelHtml}${secHit}</g>`;
+    + `<g class="sec-layer">${secVoid}${secVoidCore}${secLine}${secLabelHtml}${secHit}</g>`;
   svg.classList.toggle('gm-noborders', !GM.showBorders);
   gmUpdateStrokes();
 }
@@ -807,8 +809,9 @@ function gmUpdateStrokes() {
   svg.style.setProperty('--lane-w', (3 / s).toFixed(2));
   svg.style.setProperty('--cell-w', (1.4 / s).toFixed(2));
   // Сектора: ширины/пунктир/хит-зона постоянны на экране (в юнитах = px/scale)
-  svg.style.setProperty('--sec-w', (2.2 / s).toFixed(2));
-  svg.style.setProperty('--sec-glow-w', (9 / s).toFixed(2));
+  svg.style.setProperty('--sec-w', (5 / s).toFixed(2));
+  svg.style.setProperty('--sec-void-w', (20 / s).toFixed(2));
+  svg.style.setProperty('--sec-void-core', (11 / s).toFixed(2));
   svg.style.setProperty('--sec-hit-w', (16 / s).toFixed(2));
   svg.style.setProperty('--sec-font', (24 / s).toFixed(1) + 'px');
   // LOD подписей: вдали (мелкий зум) прячем имена рядовых систем — остаются
@@ -1968,15 +1971,13 @@ function gmmPaint(ctx, camS, wx0, wy0, wx1, wy1) {
     ctx.strokeStyle = 'hsl(206 92% 64%)'; ctx.lineWidth = 1.8 / camS;
     ctx.stroke(P.lanes); ctx.globalAlpha = 1;
   }
-  // границы секторов — на обзоре ярче + свечение, при приближении плавно тускнеют
-  if (P.secEdges && P.secEdges.length) {
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    if (secA > 0.01) {   // мягкое свечение под линией (только пока виден обзор)
-      ctx.globalAlpha = .18 * secA; ctx.lineWidth = 8 / camS;
-      P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
-    }
-    ctx.globalAlpha = .6 + 0.25 * secA; ctx.lineWidth = 2 / camS;
-    P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
+  // границы секторов = «пустота»: мягкое тёмное разрежение (перо из 3 слоёв) в тон туману,
+  // видно лишь на обзоре — при приближении плавно тает
+  if (P.secEdges && P.secEdges.length && secA > 0.01) {
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#070a12';
+    ctx.globalAlpha = .12 * secA; ctx.lineWidth = 20 / camS; P.secEdges.forEach(e => ctx.stroke(e.p2d));
+    ctx.globalAlpha = .18 * secA; ctx.lineWidth = 11 / camS; P.secEdges.forEach(e => ctx.stroke(e.p2d));
+    ctx.globalAlpha = .24 * secA; ctx.lineWidth = 5 / camS;  P.secEdges.forEach(e => ctx.stroke(e.p2d));
     ctx.globalAlpha = 1;
   }
   // метки регионов — нормальный размер, плавно гаснут при приближении

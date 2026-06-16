@@ -161,6 +161,29 @@ function gbDocRows(arr, withHab) {
   }).join('');
 }
 
+// Оборачивает список строк доктрины в собственную раскрывашку с заголовком-категорией.
+// label — название категории (Идеология, Форма правления…), count — число вариантов.
+function gbDocCollapse(label, rowsHtml, count, open) {
+  return `<details class="gb-collapse gb-doc-collapse"${open ? ' open' : ''}>
+    <summary class="gb-collapse-sum"><span class="gb-collapse-ic">▸</span><span>${label}</span><span class="gb-collapse-hint">${count} вар.</span></summary>
+    <div class="gb-doc-list">${rowsHtml}</div>
+  </details>`;
+}
+
+// Таблица богатства месторождения (зеркало EC_RICHNESS из economy.js): множитель к добыче.
+const GB_RICHNESS = [
+  ['Следы',        0.6], ['Мало',       1.0], ['Умеренно',   1.5],
+  ['Много',        2.0], ['Очень много', 2.5], ['Колоссально', 3.0],
+];
+function gbRichTable() {
+  const rows = GB_RICHNESS.map(([n, m]) =>
+    `<tr><td>${n}</td><td><b>×${m.toFixed(1)}</b></td></tr>`).join('');
+  return `<div class="gb-table-wrap"><table class="gb-table">
+    <thead><tr><th>Богатство залежи (с карты)</th><th>Множитель добычи</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
 // Полная таблица ресурсов: иконка, редкость, персональная цена, добыча/слот и
 // ГС/слот/сутки (цена × добыча). Данные — из каталога GalaxyGen (один источник).
 const GB_RES_RATE = { common: 25, uncommon: 12, rare: 6, epic: 3, legendary: 1 };
@@ -308,21 +331,15 @@ function renderGuidebook() {
         <span class="gb-chip gb-chip-tech">✦ СТАРТОВАЯ ТЕХНОЛОГИЯ</span>
       </div>
 
-      <h3 class="gb-h3">Тип цивилизации</h3>
-      <div class="gb-doc-list">${gbDocRows(GB_DOC_CIV.map(([n, m]) => [n, m]), false)}</div>
+      <p style="margin:6px 0 14px;color:var(--color-text-muted);font-size:13px">Нажмите на категорию, чтобы развернуть её таблицу.</p>
+
+      ${gbDocCollapse('Тип цивилизации', gbDocRows(GB_DOC_CIV.map(([n, m]) => [n, m]), false), GB_DOC_CIV.length, true)}
       <div class="gb-doc-note">${GB_DOC_CIV.map(c => `<div><b>${c[0].split('—')[0].trim()}:</b> ${c[2]}</div>`).join('')}</div>
 
-      <h3 class="gb-h3">Форма правления</h3>
-      <div class="gb-doc-list">${gbDocRows(GB_DOC_GOV, false)}</div>
-
-      <h3 class="gb-h3">Политический режим</h3>
-      <div class="gb-doc-list">${gbDocRows(GB_DOC_REGIME, false)}</div>
-
-      <h3 class="gb-h3">Идеология</h3>
-      <div class="gb-doc-list">${gbDocRows(GB_DOC_IDEO, false)}</div>
-
-      <h3 class="gb-h3">Раса</h3>
-      <div class="gb-doc-list">${gbDocRows(GB_DOC_RACE, true)}</div>
+      ${gbDocCollapse('Форма правления', gbDocRows(GB_DOC_GOV, false), GB_DOC_GOV.length)}
+      ${gbDocCollapse('Политический режим', gbDocRows(GB_DOC_REGIME, false), GB_DOC_REGIME.length)}
+      ${gbDocCollapse('Идеология', gbDocRows(GB_DOC_IDEO, false), GB_DOC_IDEO.length)}
+      ${gbDocCollapse('Раса', gbDocRows(GB_DOC_RACE, true), GB_DOC_RACE.length)}
 
       <div class="gb-note gb-note-info">
         <span class="gb-note-i">i</span>
@@ -445,14 +462,38 @@ function renderGuidebook() {
         <div>Склад имеет <b>лимит ёмкости</b> (базово 1000 + по 500 за слот <b>Склада</b>). Сверх лимита ресурс на склад не кладётся — лишнее лучше пускать в экспорт.</div>
       </div>
 
+      <div class="gb-note gb-note-info">
+        <span class="gb-note-i">∑</span>
+        <div><b>Формула добычи за слот/сутки:</b> базовая скорость по редкости <b>× множитель богатства залежи × бонус доктрины к добыче</b>. Минимум — 1/сут. Тот же расчёт сервер применяет при ночном начислении.</div>
+      </div>
+
+      <h3 class="gb-h3">Богатство месторождения</h3>
+      <p>У каждой залежи на карте есть <b>богатство</b> — от «следов» до «колоссально». Оно множит базовую скорость добычи: бедная жила почти ничего не даёт, а колоссальная — втрое больше базы.</p>
+      ${gbRichTable()}
+
       <h3 class="gb-h3">Цена и скорость добычи по ресурсам</h3>
       ${gbResTable()}
-      <p>У каждого ресурса <b>своя цена</b> за единицу; добыча за слот зависит от редкости (чем реже — тем медленнее). Итоговый столбец «ГС за слот/сут» = цена × добыча — именно он показывает, за какие месторождения стоит бороться. Дорогие ресурсы выгоднее возить караванами по полной цене, а дешёвый «вал» — сбрасывать на бирже.</p>
+      <p>У каждого ресурса <b>своя цена</b> за единицу; добыча за слот зависит от редкости (чем реже — тем медленнее). Итоговый столбец «ГС за слот/сут» = цена × добыча <b>при богатстве ×1.0</b> — именно он показывает, за какие месторождения стоит бороться. Дорогие ресурсы выгоднее возить караванами по полной цене, а дешёвый «вал» — сбрасывать на бирже.</p>
+
+      <h3 class="gb-h3">Сырьё для производства армии</h3>
+      <p>Ресурсы нужны не только ради ГС: <b>постройка кораблей, техники и дивизий тратит сырьё со склада</b>. У каждого проекта в Конструкторе есть <b>ресурсная ведомость</b> — список того, что уйдёт на один корпус.</p>
+      <div class="gb-kv-grid">
+        <div class="gb-kv-row"><span class="gb-kv-key">Броня</span><span class="gb-kv-val">Железо, Титан</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">Щиты</span><span class="gb-kv-val">Редкоземельные руды, Дейтерий</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">Двигатели</span><span class="gb-kv-val">Метан, Дейтерий</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">Реакторы</span><span class="gb-kv-val">Изотопы, Гелий-3</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">Вооружение</span><span class="gb-kv-val">Железо · Гелий-3 (лучевое) · Изотопы (ракеты)</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">Системы / ангары</span><span class="gb-kv-val">Редкоземельные руды, Стелларит, Титан</span></div>
+      </div>
+      <div class="gb-note gb-note-warn">
+        <span class="gb-note-i">!</span>
+        <div>Чего <b>не хватает на складе</b> в момент производства — докупается на рынке по <b>×1.5</b> цены. Налаженная добыча нужных руд заметно удешевляет флот.</div>
+      </div>
 
       <h3 class="gb-h3">Как превратить ресурсы в ГС</h3>
       <p>Коротко: <b>💱 Экспорт</b> → караваны (полная цена + дипломатия, остаток авто-продажа 60%); <b>📈 Товарная биржа</b> → продаёт складское (50–75%); <b>бартер</b> → отдать/продать вручную. Подробно — в разделе <a class="gb-link" onclick="gbScrollTo('gb-trade')">«Торговля»</a>.</p>
-      <div class="gb-callout gb-callout-tip">
-        <span class="gb-callout-icon">★</span>
+      <div class="gb-note gb-note-tip">
+        <span class="gb-note-i">★</span>
         <div>Дорогие ресурсы (эпические/легендарные) выгоднее возить караванами по полной цене, а дешёвый «вал» — сбрасывать на бирже автоматически.</div>
       </div>
     </section>
@@ -517,7 +558,19 @@ function renderGuidebook() {
       <p>Прежде чем строить корабли и дивизии, их нужно спроектировать. «Конструкторы» — ваше конструкторское бюро: здесь создаются шаблоны, которые потом производятся в Кабинете.</p>
 
       <h3 class="gb-h3">Корабельный конструктор</h3>
-      <p>Корабль собирается из <b>корпуса</b> и модулей: <b>двигатели</b> (скорость), <b>броня</b> и <b>щиты</b> (защита), <b>вооружение</b>, <b>ангары</b> и системы поддержки. Набор модулей зависит от изученных <a class="gb-link" onclick="gbScrollTo('gb-research')">технологий</a>. У готового проекта считаются стоимость и характеристики.</p>
+      <p>Корабль собирается из <b>корпуса</b> и модулей: <b>двигатели</b> (скорость), <b>броня</b> и <b>щиты</b> (защита), <b>вооружение</b>, <b>ангары</b>, <b>реактор</b> и системы поддержки. Чем крупнее класс корпуса (корвет → фрегат → эсминец → крейсер → линкор → дредноут), тем мощнее модули в него влезают и тем дороже он в ГС и очках науки. Набор модулей зависит от изученных <a class="gb-link" onclick="gbScrollTo('gb-research')">технологий</a>. У готового проекта считаются стоимость и характеристики.</p>
+
+      <h3 class="gb-h3">Два правила, которые нельзя нарушить</h3>
+      <div class="gb-kv-grid">
+        <div class="gb-kv-row"><span class="gb-kv-key">⚡ Энергобаланс</span><span class="gb-kv-val"><b>Реактор</b> даёт энергию (E), а каждый модуль её тратит. Если суммарное потребление <b>больше выработки</b> — энергосеть перегружена, и проект <b>нельзя сохранить/построить</b>. Ставьте реактор мощнее или снимайте лишние системы.</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">🛩 Вместимость ангара</span><span class="gb-kv-val">Авиагруппа (истребители, бомбардировщики) должна <b>помещаться</b> в ангары корабля. Перегруженный ангар тоже блокирует постройку.</span></div>
+      </div>
+
+      <div class="gb-note gb-note-info">
+        <span class="gb-note-i">◆</span>
+        <div><b>Сырьё на постройку.</b> Кроме ГС, корпус расходует <b>ресурсы со склада</b> по ресурсной ведомости проекта (броня → Железо/Титан, щиты → Редкоземельные руды/Дейтерий, реактор → Изотопы/Гелий-3 и т.д.). Чего нет на складе — докупается по <b>×1.5</b>. Подробнее — в разделе <a class="gb-link" onclick="gbScrollTo('gb-resources')">«Ресурсы»</a>.</div>
+      </div>
+
       <div class="gb-note gb-note-info">
         <span class="gb-note-i">i</span>
         <div><b>Торговый корабль</b> — это корпус с <b>грузовыми ангарами</b> (Транспортный / Грузовой ангар, без места под войска). Их суммарная вместимость = <b>грузоподъёмность</b> для караванов. <b>Двигатели</b> задают скорость → быстрый флот быстрее доводит караван до партнёра (см. <a class="gb-link" onclick="gbScrollTo('gb-trade')">«Торговля»</a>).</div>

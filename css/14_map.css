@@ -66,14 +66,19 @@
 /* цветная подложка территории сектора — ТОЛЬКО на обзоре (.gm-sec-far) */
 .gm-sec-fill{opacity:.42;mix-blend-mode:screen;display:none}
 #gm-wrap.gm-sec-far .gm-sec-fill{display:block}
-/* мягкое свечение под линией — тоже только на обзоре */
-.gm-sec-glow{stroke-width:var(--sec-glow-w,8);opacity:0;stroke-linecap:round;stroke-linejoin:round;transition:opacity .2s}
-#gm-wrap.gm-sec-far .gm-sec-glow{opacity:.18}
-/* основная линия — чистая сплошная граница (без пунктира и анимации) */
-.gm-sec-line{
-  stroke-width:var(--sec-w,2);stroke-linecap:round;stroke-linejoin:round;opacity:.6;
+/* ── Граница сектора = ПУСТОТА, а не «государственная» линия ──
+   мягкое тёмное «разрежение» в тон туману войны: перо из трёх слоёв
+   (широкий → узкий, без жёсткого края и без цвета) — секторы просто
+   плавно тают друг от друга. Видно лишь на обзоре (.gm-sec-far). */
+.gm-sec-void,.gm-sec-void-core,.gm-sec-line{
+  stroke:#070a12;stroke-linecap:round;stroke-linejoin:round;opacity:0;transition:opacity .25s;
 }
-#gm-wrap.gm-sec-far .gm-sec-line{opacity:.85}
+.gm-sec-void{stroke-width:var(--sec-void-w,20)}
+.gm-sec-void-core{stroke-width:var(--sec-void-core,11)}
+.gm-sec-line{stroke-width:var(--sec-w,5)}
+#gm-wrap.gm-sec-far .gm-sec-void{opacity:.12}
+#gm-wrap.gm-sec-far .gm-sec-void-core{opacity:.18}
+#gm-wrap.gm-sec-far .gm-sec-line{opacity:.24}
 /* широкая прозрачная хит-зона — кликабельна ТОЛЬКО на обзоре (.gm-sec-far) */
 .gm-sec-hit{stroke:transparent;stroke-width:var(--sec-hit-w,16);pointer-events:none}
 #gm-wrap.gm-sec-far .gm-sec-hit{pointer-events:stroke;cursor:pointer}

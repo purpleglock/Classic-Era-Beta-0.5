@@ -62,7 +62,8 @@
       "Bash(node --check \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\data.js\")",
       "Bash(node --check \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\galaxy_map.js\")",
       "Bash(node tools/gen_unit_catalog.js)",
-      "Bash(grep -nE \"create or replace function|raise exception|language plpgsql|security definer|\\\\\\\\$\\\\\\\\$;\" _unit_publish.sql)"
+      "Bash(grep -nE \"create or replace function|raise exception|language plpgsql|security definer|\\\\\\\\$\\\\\\\\$;\" _unit_publish.sql)",
+      "Bash(node --check tools/optimize_images.js)"
     ]
   }
 }
