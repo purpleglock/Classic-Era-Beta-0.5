@@ -56,29 +56,43 @@
 .hyperlane-hit{fill:none;stroke:transparent;stroke-width:calc(var(--lane-w,3) * 6);pointer-events:stroke;cursor:pointer}
 .hyperlane-hit:hover + .hyperlane{stroke:var(--err)}
 
-/* ════════ СЕКТОРА — особая граница (свечение + марширующий пунктир) ════════ */
+/* ════════ ТУМАН ВОЙНЫ — пустота (фантом-ячейки); прозрачность из атрибута fill,
+   сгущается к краям холста до цвета фона → кромка полотна растворяется ════════ */
+.vor-fog{pointer-events:none}
+
+/* ════════ СЕКТОРА — подложка территории + чистая граница ════════ */
 .sec-layer{pointer-events:none}
-/* мягкое свечение под линией */
-.gm-sec-glow{stroke-width:var(--sec-glow-w,9);opacity:.16;stroke-linecap:round;filter:none}
-/* основная линия — анимированный пунктир («административная граница») */
+.sec-fill-layer{pointer-events:none}
+/* цветная подложка территории сектора — ТОЛЬКО на обзоре (.gm-sec-far) */
+.gm-sec-fill{opacity:.42;mix-blend-mode:screen;display:none}
+#gm-wrap.gm-sec-far .gm-sec-fill{display:block}
+/* мягкое свечение под линией — тоже только на обзоре */
+.gm-sec-glow{stroke-width:var(--sec-glow-w,8);opacity:0;stroke-linecap:round;stroke-linejoin:round;transition:opacity .2s}
+#gm-wrap.gm-sec-far .gm-sec-glow{opacity:.18}
+/* основная линия — чистая сплошная граница (без пунктира и анимации) */
 .gm-sec-line{
-  stroke-width:var(--sec-w,2.2);stroke-linecap:round;stroke-linejoin:round;
-  stroke-dasharray:var(--sec-dash,11 7);opacity:.92;
-  animation:gm-sec-march 1.4s linear infinite;
+  stroke-width:var(--sec-w,2);stroke-linecap:round;stroke-linejoin:round;opacity:.6;
 }
-@keyframes gm-sec-march{to{stroke-dashoffset:-18}}
-/* широкая прозрачная хит-зона для клика по границе */
-.gm-sec-hit{stroke:transparent;stroke-width:var(--sec-hit-w,16);pointer-events:stroke;cursor:pointer}
-/* парящая метка-название сектора */
+#gm-wrap.gm-sec-far .gm-sec-line{opacity:.85}
+/* широкая прозрачная хит-зона — кликабельна ТОЛЬКО на обзоре (.gm-sec-far) */
+.gm-sec-hit{stroke:transparent;stroke-width:var(--sec-hit-w,16);pointer-events:none}
+#gm-wrap.gm-sec-far .gm-sec-hit{pointer-events:stroke;cursor:pointer}
+/* метка-название сектора — видна ТОЛЬКО на обзоре (.gm-sec-far) */
 .gm-sec-label{
-  font-family:'Rajdhani','Exo 2',sans-serif;font-weight:700;
-  font-size:var(--sec-font,54px);letter-spacing:.18em;text-anchor:middle;dominant-baseline:middle;
-  opacity:.32;pointer-events:auto;cursor:pointer;
-  paint-order:stroke;stroke:rgba(0,0,0,.65);stroke-width:.5px;
+  font-family:'Rajdhani','Exo 2',sans-serif;font-weight:600;
+  font-size:var(--sec-font,24px);letter-spacing:.12em;text-anchor:middle;dominant-baseline:middle;
+  text-transform:uppercase;opacity:.55;pointer-events:none;cursor:pointer;display:none;
+  paint-order:stroke;stroke:rgba(0,0,0,.7);stroke-width:.6px;
   transition:opacity .15s;
 }
-.gm-sec-label:hover{opacity:.7}
-#gm-svg.gm-noborders .sec-layer{display:none}
+#gm-wrap.gm-sec-far .gm-sec-label{display:block;pointer-events:auto}
+#gm-wrap.gm-sec-far .gm-sec-label:hover{opacity:.9}
+#gm-svg.gm-noborders .sec-layer,#gm-svg.gm-noborders .sec-fill-layer{display:none}
+
+/* ════════ ОБЗОР СЕКТОРОВ — на сильном отдалении гасим системы, сектора выразительнее ════════ */
+#gm-wrap.gm-sec-overview #gm-stars{opacity:.42;transition:opacity .2s}
+#gm-wrap.gm-sec-overview .gm-label{display:none!important}
+#gm-wrap.gm-sec-overview .lane-layer{opacity:.5}
 
 /* Звёзды */
 #gm-stars{position:absolute;inset:0;pointer-events:none}
@@ -86,8 +100,17 @@
 /* scale(var(--gm-icon-k)) — сублинейный LOD-масштаб (контр-множитель к зуму canvas):
    вдали иконки/подписи крупнее, вблизи не раздуваются. Центр пришпилен к (x,y). */
 .gm-star{position:absolute;width:52px;height:52px;transform:translate(-50%,-50%) scale(var(--gm-icon-k,1));cursor:pointer;z-index:5;pointer-events:auto}
+/* LOD: на ближнем зуме звезда — нормальная иконка, на отдалении (обзор) — текстовая ★ */
+.gm-star::before{
+  content:'★';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:38px;color:#eef4fb;text-shadow:0 0 12px rgba(120,180,255,.7);
+  opacity:0;transition:opacity .3s;pointer-events:none;
+}
+#gm-wrap.gm-sec-overview .gm-star::before{opacity:1}
 .gm-star img{width:100%;height:100%;object-fit:contain;display:block;
-  filter:drop-shadow(0 0 8px rgba(120,180,255,.4));transition:transform .15s, filter .15s}
+  filter:drop-shadow(0 0 8px rgba(120,180,255,.4));transition:opacity .3s, transform .15s, filter .15s;
+  opacity:1}
+#gm-wrap.gm-sec-overview .gm-star img{opacity:0}
 .gm-star:hover img{transform:scale(1.18);filter:drop-shadow(0 0 16px rgba(140,200,255,.8))}
 .gm-giant{width:104px;height:104px}
 .gm-giant img{filter:drop-shadow(0 0 24px rgba(255,210,120,.6))}

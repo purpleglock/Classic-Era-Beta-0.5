@@ -553,6 +553,15 @@ function gmPhantomSeeds() {
   return seeds;
 }
 
+// «Вес» системы = радиус кольца дополнительных seed-точек вокруг неё.
+// Крупная звезда → её ячейки сливаются в одну БОЛЬШУЮ область, соседи поджимаются.
+// (приближение взвешенного Вороного через мульти-seed; тайлинг сохраняется)
+function gmSysWeight(s) {
+  if (s.phantom) return 0;
+  if (s.faction === 'rift') return s.id === 'rift_core' ? 120 : 0;
+  return s.is_giant ? 165 : 0;
+}
+
 function gmVoronoiCells() {
   if (!window.d3 || !d3.Delaunay || GM.systems.length < 1) return [];
   try {
@@ -560,7 +569,8 @@ function gmVoronoiCells() {
     const sysById = Object.fromEntries(GM.systems.map(s => [s.id, s]));
     const phantoms = gmPhantomSeeds();
     const all = [...GM.systems, ...phantoms];
-    const pts = all.map(s => {
+    // базовая позиция (со сдвигом к соседям по гиперпутям)
+    const basePos = s => {
       if (s.phantom) return [s.x, s.y];
       const nbrs = GM.lanes
         .filter(l => l.a_id === s.id || l.b_id === s.id)
@@ -570,10 +580,22 @@ function gmVoronoiCells() {
       const cx = nbrs.reduce((a, n) => a + n.x, 0) / nbrs.length;
       const cy = nbrs.reduce((a, n) => a + n.y, 0) / nbrs.length;
       return [s.x + (cx - s.x) * LANE_BIAS, s.y + (cy - s.y) * LANE_BIAS];
+    };
+    // разворачиваем каждую систему в один или несколько seed'ов (вес → кольцо)
+    const pts = [], owners = [];   // owners[i] = система-владелец seed'а i
+    const RING = 6;                // точек в кольце крупной звезды
+    all.forEach(s => {
+      const [bx, by] = basePos(s);
+      const w = gmSysWeight(s);
+      pts.push([bx, by]); owners.push(s);            // центр
+      if (w > 0) for (let k = 0; k < RING; k++) {
+        const a = (k / RING) * Math.PI * 2;
+        pts.push([bx + Math.cos(a) * w, by + Math.sin(a) * w]); owners.push(s);
+      }
     });
     const del = d3.Delaunay.from(pts);
     const vor = del.voronoi([0, 0, GM_W, GM_H]);
-    return all.map((s, i) => ({ sys: s, poly: vor.cellPolygon(i) }));
+    return owners.map((s, i) => ({ sys: s, poly: vor.cellPolygon(i) }));
   } catch (e) { console.warn('[map] voronoi', e); return []; }
 }
 
@@ -582,12 +604,35 @@ function gmVoronoiCells() {
 function gmBuildGeo() {
   const cells = gmVoronoiCells();
 
-  // ── Заливки ячеек (без обводки) — соседние ячейки одной фракции сливаются ──
-  const fills = [];
+  // карта система → id сектора (одно членство; defensive — берём первый)
+  const sectorsR = gmSectorsForRender();
+  const secOfSys = {};
+  sectorsR.forEach(sec => (sec.system_ids || []).forEach(id => { if (!secOfSys[id]) secOfSys[id] = sec.id; }));
+
+  // ── Заливки ячеек ──
+  //   реальные системы → цвет фракции; ПУСТОТА (фантом-ячейки) → тёмный «туман войны»;
+  //   территория сектора → лёгкая цветная подложка.
+  const fills = [];     // {fac?, isRift, isFog, pts}
+  const secFills = [];  // {color, pts}
   cells.forEach(({ sys, poly }) => {
-    if (!poly || sys.phantom) return;
+    if (!poly) return;
+    if (sys.phantom) {
+      // Туман гаснет к краям холста ДО ПРОЗРАЧНОСТИ: фон (#gm-bg) растянут на весь
+      // вьюпорт, поэтому у кромки холста туман = 0 → шов с областью снаружи исчезает.
+      let cx = 0, cy = 0; for (const p of poly) { cx += p[0]; cy += p[1]; }
+      cx /= poly.length; cy /= poly.length;
+      const dEdge = Math.min(cx, GM_W - cx, cy, GM_H - cy);
+      const fade = Math.max(0, Math.min(1, dEdge / 650));        // 0 у кромки → 1 в глубине
+      const a = +(0.5 * fade).toFixed(3);                        // прозрачно у края, до .5 внутри
+      if (a < 0.03) return;                                      // у самой кромки туман не нужен
+      fills.push({ isFog: true, fogA: a, pts: gmPerturbPoly(poly) });
+      return;
+    }
     const fac = gmFaction(sys.faction);
-    fills.push({ sys, fac, isRift: !!(fac && fac.id === 'rift'), pts: gmPerturbPoly(poly) });
+    const pts = gmPerturbPoly(poly);
+    fills.push({ sys, fac, isRift: !!(fac && fac.id === 'rift'), pts });
+    const sid = secOfSys[sys.id];
+    if (sid) { const sec = sectorsR.find(x => x.id === sid); if (sec) secFills.push({ color: sec.color || 'rgba(120,200,255,0.5)', pts }); }
   });
 
   // ── Границы: схлопываем внутренние рёбра. Ребро между двумя ячейками ОДНОЙ
@@ -598,24 +643,22 @@ function gmBuildGeo() {
     const bx = Math.round(b[0] * 10), by = Math.round(b[1] * 10);
     return (ax < bx || (ax === bx && ay <= by)) ? `${ax},${ay}|${bx},${by}` : `${bx},${by}|${ax},${ay}`;
   };
-  // карта система → id сектора (одно членство; defensive — берём первый)
-  const sectorsR = gmSectorsForRender();
-  const secOfSys = {};
-  sectorsR.forEach(sec => (sec.system_ids || []).forEach(id => { if (!secOfSys[id]) secOfSys[id] = sec.id; }));
   cells.forEach(({ sys, poly }) => {
-    if (!poly || sys.phantom) return;
+    if (!poly) return;
     const fid = sys.faction || null;
     const secId = secOfSys[sys.id] || null;
     for (let i = 0; i < poly.length - 1; i++) {
       const k = ekey(poly[i], poly[i + 1]);
       let e = edgeMap.get(k);
       if (!e) { e = { a: poly[i], b: poly[i + 1], sides: [] }; edgeMap.set(k, e); }
-      e.sides.push({ fid, secId, sx: sys.x, sy: sys.y });   // запоминаем «чья» сторона и где её система
+      e.sides.push({ fid, secId, oid: sys.id, ph: !!sys.phantom, sx: sys.x, sy: sys.y });
     }
   });
   const edges = [];   // {kind:'front'|'fac'|'rift'|'neutral', color?, pts}
   const FRONT_OFF = 4;   // смещение линии фронта к своей территории (user units)
   edgeMap.forEach(e => {
+    if (e.sides.length === 2 && e.sides[0].oid === e.sides[1].oid) return; // sub-ячейки одной звезды
+    if (e.sides.every(s => s.ph)) return;                                 // ребро в глубине пустоты — скрыто туманом
     const facSides = e.sides.filter(s => s.fid && gmFaction(s.fid));
     const distinct = [...new Set(facSides.map(s => s.fid))];
     if (facSides.length === 2 && distinct.length === 1) return; // внутреннее ребро одной фракции
@@ -634,7 +677,9 @@ function gmBuildGeo() {
       const fac = gmFaction(distinct[0]);
       if (fac.id === 'rift') edges.push({ kind: 'rift', pts });
       else edges.push({ kind: 'fac', color: gmSolidColor(fac.color), pts });
-    } else {
+    } else if (!e.sides.some(s => s.ph)) {
+      // нейтральная граница рисуется только МЕЖДУ реальными ничейными системами;
+      // у кромки пустоты (рядом фантом) — не рисуем, туман сам очерчивает берег
       edges.push({ kind: 'neutral', color: 'rgba(150,170,200,0.18)', pts });
     }
   });
@@ -678,7 +723,7 @@ function gmBuildGeo() {
     lanes.push({ id: l.id, ax: a.x, ay: a.y, cx: +(mx + nx * bend).toFixed(1), cy: +(my + ny * bend).toFixed(1), bx: b.x, by: b.y });
   });
 
-  return { fills, edges, lanes, secEdges, secLabels };
+  return { fills, secFills, edges, lanes, secEdges, secLabels };
 }
 
 function gmDrawSvg() {
@@ -689,11 +734,16 @@ function gmDrawSvg() {
 
   const fillHtml = geo.fills.map(f => {
     const d = dOf(f.pts, true);
+    if (f.isFog) return `<path class="vor-fog" d="${d}" fill="rgba(4,6,12,${f.fogA != null ? f.fogA : 0.55})" stroke="none"></path>`;  // туман войны (пустота)
     if (f.isRift) return `<path class="vor-cell vor-rift" d="${d}" stroke="none"></path>`;  // заливка/анимация — в CSS
     const fill = f.fac ? f.fac.color : 'rgba(120,140,170,0.05)';
     const cls = 'vor-cell' + (f.fac ? ' vor-claimed' : ' vor-neutral');
     return `<path class="${cls}" d="${d}" fill="${fill}" stroke="none"></path>`;
   }).join('');
+
+  // подложка территории сектора (поверх заливок фракций, под границами)
+  const secFillHtml = (geo.secFills || []).map(f =>
+    `<path class="gm-sec-fill" d="${dOf(f.pts, true)}" fill="${f.color}" stroke="none"></path>`).join('');
 
   const facBorderHtml = [], neutralBorderHtml = [];
   geo.edges.forEach(e => {
@@ -717,7 +767,7 @@ function gmDrawSvg() {
 
   const fb = facBorderHtml.join('');
 
-  // ── Сектора: свечение + анимированный пунктир + широкая хит-зона (клик → лор/редакт) ──
+  // ── Сектора: статичный пунктир + мягкое свечение + хит-зона (клик → лор/редакт) ──
   const secGlow = geo.secEdges.map(e =>
     `<path class="gm-sec-glow" d="${dOf(e.pts)}" fill="none" stroke="${e.color}"></path>`).join('');
   const secLine = geo.secEdges.map(e =>
@@ -731,6 +781,7 @@ function gmDrawSvg() {
   // при пане/зуме). Дёшево композитится.
   svg.innerHTML =
     `<g class="vor-layer">${fillHtml}</g>`
+    + `<g class="sec-fill-layer">${secFillHtml}</g>`
     + `<g class="vor-border-layer gm-glow-layer">${fb}</g>`
     + `<g class="vor-border-layer">${neutralBorderHtml.join('')}${fb}</g>`
     + `<g class="lane-layer">${laneHtml}</g>`
@@ -750,11 +801,20 @@ function gmUpdateStrokes() {
   svg.style.setProperty('--sec-w', (2.2 / s).toFixed(2));
   svg.style.setProperty('--sec-glow-w', (9 / s).toFixed(2));
   svg.style.setProperty('--sec-hit-w', (16 / s).toFixed(2));
-  svg.style.setProperty('--sec-dash', `${(11 / s).toFixed(2)} ${(7 / s).toFixed(2)}`);
-  svg.style.setProperty('--sec-font', (54 / s).toFixed(1) + 'px');
+  svg.style.setProperty('--sec-font', (24 / s).toFixed(1) + 'px');
   // LOD подписей: вдали (мелкий зум) прячем имена рядовых систем — остаются
   // только гиганты, столицы и разломы. Вблизи показываем все.
-  document.getElementById('gm-wrap')?.classList.toggle('gm-lod-far', s < 0.55);
+  const wrap = document.getElementById('gm-wrap');
+  wrap?.classList.toggle('gm-lod-far', s < 0.55);
+  // Сектора: название + клик по границе показываем ТОЛЬКО на сильном отдалении
+  // (≈ максимально/почти максимально отдалённая карта). Вблизи — только линия границы.
+  // В режиме редактора секторов всегда показываем (иначе не поправить).
+  const far = s <= gmMinScale() * 1.7;
+  const secFar = far || (GM.edit && GM.mode === 'sector');
+  wrap?.classList.toggle('gm-sec-far', secFar);
+  // Обзор секторов: на сильном отдалении (вне редактора) гасим системы и их имена,
+  // чтобы сектора читались выразительнее. В редакторе секторов — НЕ гасим (надо кликать).
+  wrap?.classList.toggle('gm-sec-overview', far && !GM.edit);
 }
 
 // превращает rgba(r,g,b,a) в более плотный контур
@@ -1784,11 +1844,18 @@ function gmmBuildWorld() {
   const geo = gmBuildGeo();
   const dOf = (pts, close) => 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + (close ? 'Z' : '');
   // заливки, сгруппированные по цвету (фракция = один Path2D из всех её ячеек)
-  const fillD = new Map();
+  const fillD = new Map(); const fogD = new Map();
   geo.fills.forEach(f => {
+    if (f.isFog) {   // туман: группируем по уровню прозрачности (бакеты по .05)
+      const k = (Math.round((f.fogA != null ? f.fogA : 0.55) / 0.05) * 0.05).toFixed(2);
+      fogD.set(k, (fogD.get(k) || '') + dOf(f.pts, true)); return;
+    }
     const color = f.isRift ? 'rgba(14,2,24,.8)' : (f.fac ? f.fac.color : 'rgba(120,140,170,0.04)');
     fillD.set(color, (fillD.get(color) || '') + dOf(f.pts, true));
   });
+  // подложки территорий секторов по цвету
+  const secFillD = new Map();
+  (geo.secFills || []).forEach(f => secFillD.set(f.color, (secFillD.get(f.color) || '') + dOf(f.pts, true)));
   // границы: цветные (фракции/фронты) по цвету, нейтральные и разлом — отдельно
   const edgeD = new Map(); let neutralD = '', riftD = '';
   geo.edges.forEach(e => {
@@ -1804,6 +1871,8 @@ function gmmBuildWorld() {
   (geo.secEdges || []).forEach(e => secD.set(e.color, (secD.get(e.color) || '') + dOf(e.pts)));
   GMM.paths = {
     fills: [...fillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
+    fog: [...fogD].map(([a, d]) => ({ a: +a, p2d: new Path2D(d) })),
+    secFills: [...secFillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     edges: [...edgeD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     neutral: neutralD ? new Path2D(neutralD) : null,
     rift: riftD ? new Path2D(riftD) : null,
@@ -1833,6 +1902,13 @@ function gmmPaint(ctx, camS, wx0, wy0, wx1, wy1) {
   const P = GMM.paths;
   if (!P) return;
   P.fills.forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
+  if (P.fog) P.fog.forEach(g => { ctx.fillStyle = `rgba(4,6,12,${g.a})`; ctx.fill(g.p2d); });  // туман (градиент к краям)
+  // подложки секторов — только на обзоре (сильное отдаление)
+  if (P.secFills && P.secFills.length && camS <= gmmMinS() * 1.7) {
+    ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = .42;
+    P.secFills.forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
+    ctx.restore();
+  }
   if (GM.showBorders) {
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     // свечение — широкий полупрозрачный контур (как на десктопе, без фильтров)
@@ -1853,18 +1929,23 @@ function gmmPaint(ctx, camS, wx0, wy0, wx1, wy1) {
     ctx.strokeStyle = 'hsl(206 92% 64%)'; ctx.lineWidth = 1.8 / camS;
     ctx.stroke(P.lanes); ctx.globalAlpha = 1;
   }
-  // границы секторов — пунктир цвета сектора (статичный, без анимации — дёшево)
+  // границы секторов — чистая сплошная линия цвета сектора (на обзоре ярче + свечение)
   if (P.secEdges && P.secEdges.length) {
-    ctx.setLineDash([11 / camS, 7 / camS]); ctx.lineCap = 'round'; ctx.lineWidth = 2.2 / camS;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (camS <= gmmMinS() * 1.7) {   // обзор: мягкое свечение под линией
+      ctx.globalAlpha = .18; ctx.lineWidth = 8 / camS;
+      P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
+    }
+    ctx.globalAlpha = camS <= gmmMinS() * 1.7 ? .85 : .6; ctx.lineWidth = 2 / camS;
     P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
-    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
   }
-  // метки секторов
-  if (P.secLabels && P.secLabels.length) {
+  // метки секторов — только на сильном отдалении (≈ почти максимально отдалённая карта)
+  if (P.secLabels && P.secLabels.length && camS <= gmmMinS() * 1.7) {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `700 ${(54 / camS).toFixed(1)}px Rajdhani, 'Exo 2', sans-serif`;
+    ctx.font = `600 ${(24 / camS).toFixed(1)}px Rajdhani, 'Exo 2', sans-serif`;
     P.secLabels.forEach(l => {
-      ctx.globalAlpha = .32; ctx.fillStyle = l.color;
+      ctx.globalAlpha = .5; ctx.fillStyle = l.color;
       ctx.fillText((l.name || '').toUpperCase(), l.x, l.y);
     });
     ctx.globalAlpha = 1;
