@@ -7,8 +7,14 @@
   border:1px solid var(--w2);border-radius:14px;background:#05070d;
   cursor:grab;user-select:none;
 }
+#gm-viewport::after{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:8;border-radius:14px;
+  /* мягкое атмосферное затемнение только у самых краёв — без плотного кольца */
+  background:radial-gradient(ellipse 78% 82% at center,
+    transparent 62%, rgba(4,6,12,.22) 84%, rgba(4,6,12,.5) 100%);
+}
 #gm-viewport.gm-grabbing{cursor:grabbing}
-#gm-canvas{position:absolute;top:0;left:0;width:3300px;height:2062px;transform-origin:0 0;
+#gm-canvas{position:absolute;top:0;left:0;width:6600px;height:4124px;transform-origin:0 0;
   will-change:transform;backface-visibility:hidden}
 /* Космический фон СГЕНЕРИРОВАН КОДОМ (без картинки): тёмная база + туманности +
    звёздная россыпь — всё CSS-градиентами. Композитится на GPU, не лагает. */
@@ -46,13 +52,40 @@
 #gm-svg.gm-noborders .vor-layer,#gm-svg.gm-noborders .vor-border-layer{display:none}
 /* Гиперпути */
 .hyperlane{fill:none;stroke:hsl(206 92% 64%);stroke-width:var(--lane-w,3);stroke-linecap:round;stroke-linejoin:round}
-.hyperlane.gm-deletable{pointer-events:stroke;cursor:pointer}
-.hyperlane.gm-deletable:hover{stroke:var(--err)}
+.hyperlane.gm-deletable{pointer-events:none}
+.hyperlane-hit{fill:none;stroke:transparent;stroke-width:calc(var(--lane-w,3) * 6);pointer-events:stroke;cursor:pointer}
+.hyperlane-hit:hover + .hyperlane{stroke:var(--err)}
+
+/* ════════ СЕКТОРА — особая граница (свечение + марширующий пунктир) ════════ */
+.sec-layer{pointer-events:none}
+/* мягкое свечение под линией */
+.gm-sec-glow{stroke-width:var(--sec-glow-w,9);opacity:.16;stroke-linecap:round;filter:none}
+/* основная линия — анимированный пунктир («административная граница») */
+.gm-sec-line{
+  stroke-width:var(--sec-w,2.2);stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:var(--sec-dash,11 7);opacity:.92;
+  animation:gm-sec-march 1.4s linear infinite;
+}
+@keyframes gm-sec-march{to{stroke-dashoffset:-18}}
+/* широкая прозрачная хит-зона для клика по границе */
+.gm-sec-hit{stroke:transparent;stroke-width:var(--sec-hit-w,16);pointer-events:stroke;cursor:pointer}
+/* парящая метка-название сектора */
+.gm-sec-label{
+  font-family:'Rajdhani','Exo 2',sans-serif;font-weight:700;
+  font-size:var(--sec-font,54px);letter-spacing:.18em;text-anchor:middle;dominant-baseline:middle;
+  opacity:.32;pointer-events:auto;cursor:pointer;
+  paint-order:stroke;stroke:rgba(0,0,0,.65);stroke-width:.5px;
+  transition:opacity .15s;
+}
+.gm-sec-label:hover{opacity:.7}
+#gm-svg.gm-noborders .sec-layer{display:none}
 
 /* Звёзды */
-#gm-stars{position:absolute;inset:0}
+#gm-stars{position:absolute;inset:0;pointer-events:none}
 /* контейнер = РОВНО размер иконки и центрируется на (x,y) → линии приходят в центр */
-.gm-star{position:absolute;width:52px;height:52px;transform:translate(-50%,-50%);cursor:pointer;z-index:5}
+/* scale(var(--gm-icon-k)) — сублинейный LOD-масштаб (контр-множитель к зуму canvas):
+   вдали иконки/подписи крупнее, вблизи не раздуваются. Центр пришпилен к (x,y). */
+.gm-star{position:absolute;width:52px;height:52px;transform:translate(-50%,-50%) scale(var(--gm-icon-k,1));cursor:pointer;z-index:5;pointer-events:auto}
 .gm-star img{width:100%;height:100%;object-fit:contain;display:block;
   filter:drop-shadow(0 0 8px rgba(120,180,255,.4));transition:transform .15s, filter .15s}
 .gm-star:hover img{transform:scale(1.18);filter:drop-shadow(0 0 16px rgba(140,200,255,.8))}
@@ -66,7 +99,21 @@
   text-shadow:0 2px 6px #000, 0 0 10px rgba(0,0,0,.9);pointer-events:none;
 }
 .gm-giant .gm-label{font-size:30px;color:#ffe6b0}
+/* LOD: вдали прячем подписи рядовых систем; остаются гиганты/столицы/разломы */
+#gm-wrap.gm-lod-far .gm-label{display:none}
+#gm-wrap.gm-lod-far .gm-giant .gm-label,
+#gm-wrap.gm-lod-far .gm-capital .gm-label,
+#gm-wrap.gm-lod-far .gm-rift-node .gm-label{display:block}
 .gm-linksel img{filter:drop-shadow(0 0 18px var(--gd)) brightness(1.3)}
+/* звезда, включённая в редактируемый сектор */
+.gm-sec-selected::before{
+  content:'';position:absolute;inset:-6px;border-radius:50%;z-index:-1;
+  border:2px dashed hsl(200 90% 70% / .9);
+  box-shadow:0 0 14px hsl(200 90% 60% / .6), inset 0 0 10px hsl(200 90% 60% / .35);
+  animation:gm-sec-spin 6s linear infinite;
+}
+@keyframes gm-sec-spin{to{transform:rotate(360deg)}}
+.gm-sec-selected img{filter:drop-shadow(0 0 14px hsl(200 90% 65% / .9)) brightness(1.15)}
 #gm-wrap.gm-editing .gm-star{cursor:move}
 /* Маркер столицы фракции */
 .gm-cap{position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:15px;line-height:1;pointer-events:none;z-index:6;text-shadow:0 0 4px #000,0 0 9px currentColor;filter:drop-shadow(0 0 2px #000)}
@@ -180,6 +227,43 @@
   box-shadow:0 18px 50px rgba(0,0,0,.6);
 }
 #gm-form{right:auto;left:12px}
+
+/* ════════ РЕДАКТОР СЕКТОРА (панель справа, живёт пока режим «Сектора») ════════ */
+#gm-sector{
+  position:absolute;top:12px;right:12px;width:300px;max-width:calc(100% - 24px);max-height:calc(100% - 24px);
+  overflow-y:auto;z-index:28;
+  background:hsl(216 22% 7% / .95);backdrop-filter:blur(10px);
+  border:1px solid hsl(200 60% 45% / .45);border-radius:14px;padding:14px 14px 16px;
+  box-shadow:0 18px 50px rgba(0,0,0,.6);
+}
+.gm-sec-fhead{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:17px;letter-spacing:.5px;color:hsl(200 80% 75%);margin-bottom:6px}
+.gm-sec-row{display:flex;gap:12px;align-items:flex-end}
+.gm-sec-color{width:46px;height:34px;padding:0;border:1px solid var(--w2);border-radius:7px;background:var(--b1);cursor:pointer}
+.gm-sec-count{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:20px;color:hsl(200 80% 75%);line-height:1.6}
+.gm-sec-lore{resize:vertical}
+.gm-sec-chips{display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 4px}
+.gm-sec-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--t1);
+  background:hsl(200 40% 16% / .6);border:1px solid hsl(200 50% 40% / .5);border-radius:20px;padding:3px 9px;cursor:pointer;transition:all .15s}
+.gm-sec-chip:hover{background:var(--err);border-color:var(--err);color:#fff}
+.gm-sec-empty{font-size:11px;color:var(--t3);font-style:italic}
+.gm-sec-actions{display:flex;gap:6px;margin-top:12px}
+.gm-sec-actions .gm-tb-btn{flex:1;text-align:center}
+.gm-sec-actions .gm-tb-btn.gm-danger{flex:0 0 auto}
+.gm-tb-btn.gm-danger{color:var(--err);border-color:hsl(352 70% 50% / .5)}
+.gm-tb-btn.gm-danger:hover{background:var(--err);color:#fff}
+.gm-sec-lhead{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--t3);margin:14px 0 6px;border-top:1px solid var(--w2);padding-top:10px}
+.gm-sec-list{display:flex;flex-direction:column;gap:4px}
+.gm-sec-listbtn{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  font-family:'Rajdhani',sans-serif;font-weight:600;font-size:13px;color:var(--t2);
+  background:hsl(216 18% 11% / .6);border:1px solid var(--w1);border-radius:8px;padding:6px 9px;cursor:pointer;transition:all .15s}
+.gm-sec-listbtn:hover{border-color:hsl(200 60% 50% / .6);color:#dfeaff}
+.gm-sec-listbtn.gm-active{border-color:hsl(200 80% 60%);color:#eaf3fb;background:hsl(200 40% 16% / .5)}
+.gm-sec-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+/* лор-окно сектора (поверх #gm-panel) */
+#gm-panel.gm-sector-panel{border-color:hsl(200 60% 45% / .5)}
+.gm-sec-tag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;margin-bottom:6px}
+.gm-sec-pmeta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);margin-bottom:12px}
 .gm-hidden{display:none!important}
 .gm-close{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--t3);font-size:18px;cursor:pointer;line-height:1}
 .gm-close:hover{color:var(--gdl)}

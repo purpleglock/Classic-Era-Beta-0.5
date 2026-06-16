@@ -5,7 +5,7 @@
 //             auth.js (user), d3-delaunay (CDN)
 // ════════════════════════════════════════════════════════════
 
-const GM_W = 3300, GM_H = 2062;
+const GM_W = 6600, GM_H = 4124;
 const GM_BASE = 'assets/map/';
 const GM_STAR_TYPES = ['yellow', 'red', 'blue', 'white', 'green'];
 
@@ -31,10 +31,11 @@ function gmCtlBtns() {
 }
 
 const GM = {
-  systems: [], lanes: [], factions: [],
+  systems: [], lanes: [], factions: [], sectors: [],
   scale: 1, tx: 0, ty: 0,
-  edit: false, mode: 'select',   // select | link | add
+  edit: false, mode: 'select',   // select | link | unlink | add | sector
   linkFrom: null,
+  sectorDraft: null,             // {id?, name, color, lore, system_ids:[]} — редактируемый сектор
   drag: null,                    // {sys, moved}
   panning: false, panStart: null,
   loaded: false,
@@ -50,14 +51,16 @@ function gmFaction(id) { return GM.factions.find(f => f.id === id) || null; }
 // ── Загрузка данных ─────────────────────────────────────────
 async function loadGalaxyData() {
   try {
-    const [sys, lanes, facs] = await Promise.all([
+    const [sys, lanes, facs, secs] = await Promise.all([
       dbGet('map_systems', 'select=*'),
       dbGet('map_hyperlanes', 'select=*'),
       dbGet('map_factions', 'select=*&order=sort.asc'),
+      dbGet('map_sectors', 'select=*').catch(() => []),   // таблица может быть не создана
     ]);
     GM.systems = (sys || []).map(s => ({ ...s, x: +s.x, y: +s.y, planets: s.planets || [] }));
     GM.lanes = lanes || [];
     GM.factions = facs || [];
+    GM.sectors = (secs || []).map(s => ({ ...s, system_ids: s.system_ids || [] }));
     GM.loaded = true;
     // мета фракций (флаг/герб, лидер) из анкет — необязательно
     GM.facMeta = {};
@@ -143,7 +146,9 @@ function gmToolbarHtml() {
     <div id="gm-edit-tools" class="gm-hidden">
       <button class="gm-tb-btn" data-mode="select" onclick="gmSetMode('select')">✥ Двигать</button>
       <button class="gm-tb-btn" data-mode="add" onclick="gmSetMode('add')">＋ Звезда</button>
-      <button class="gm-tb-btn" data-mode="link" onclick="gmSetMode('link')">⟿ Гиперпуть</button>
+      <button class="gm-tb-btn" data-mode="link" onclick="gmSetMode('link')">⟿ Проложить</button>
+      <button class="gm-tb-btn" data-mode="unlink" onclick="gmSetMode('unlink')">✕ Убрать путь</button>
+      <button class="gm-tb-btn" data-mode="sector" onclick="gmSetMode('sector')">▣ Сектора</button>
       <span class="gm-tb-hint" id="gm-tb-hint"></span>
     </div>
   </div>`;
@@ -161,9 +166,20 @@ function gmFit() {
   const vp = document.getElementById('gm-viewport');
   if (!vp) return;
   const w = vp.clientWidth, h = vp.clientHeight;
-  GM.scale = gmMinScale();
-  GM.tx = (w - GM_W * GM.scale) / 2;
-  GM.ty = (h - GM_H * GM.scale) / 2;
+  if (GM.systems.length > 0) {
+    // Центрируем на кластере звёзд, а не на всём холсте
+    const xs = GM.systems.map(s => s.x), ys = GM.systems.map(s => s.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const pad = 250;
+    GM.scale = Math.min(w / (maxX - minX + pad * 2), h / (maxY - minY + pad * 2));
+    GM.tx = w / 2 - (minX + maxX) / 2 * GM.scale;
+    GM.ty = h / 2 - (minY + maxY) / 2 * GM.scale;
+  } else {
+    GM.scale = gmMinScale();
+    GM.tx = (w - GM_W * GM.scale) / 2;
+    GM.ty = (h - GM_H * GM.scale) / 2;
+  }
   gmApply();
 }
 function gmClamp() {
@@ -182,7 +198,14 @@ let _gmStrokeT = null;
 function gmApply() {
   gmClamp();
   const c = document.getElementById('gm-canvas');
-  if (c) c.style.transform = `translate(${GM.tx}px, ${GM.ty}px) scale(${GM.scale})`;
+  if (c) {
+    c.style.transform = `translate(${GM.tx}px, ${GM.ty}px) scale(${GM.scale})`;
+    // LOD-масштаб иконок/подписей: контр-множитель к линейному зуму canvas,
+    // чтобы итоговый экранный размер рос сублинейно (как на мобайле: base·scale^0.7).
+    // iconK = scale^0.7 / scale = scale^-0.3 — вдали иконки крупнее, вблизи не раздуваются.
+    const k = Math.max(0.5, Math.min(2.2, Math.pow(GM.scale, -0.3)));
+    c.style.setProperty('--gm-icon-k', k.toFixed(3));
+  }
   // Толщину обводок обновляем НЕ каждый кадр зума (это меняет CSS-переменные и
   // заставляет перерисовывать весь SVG → лаги), а с задержкой, после остановки.
   clearTimeout(_gmStrokeT);
@@ -223,8 +246,10 @@ function gmBindViewport() {
 
   // старт панорамирования / добавление звезды по пустому месту
   vp.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.gm-star') || e.target.closest('#gm-panel') ||
-        e.target.closest('#gm-form') || e.target.closest('#gm-toolbar')) return;
+    if (e.target.closest('.gm-star') || e.target.closest('.hyperlane-hit') ||
+        e.target.closest('.gm-sec-hit') || e.target.closest('.gm-sec-label') ||
+        e.target.closest('#gm-panel') || e.target.closest('#gm-form') ||
+        e.target.closest('#gm-sector') || e.target.closest('#gm-toolbar')) return;
     if (GM.edit && GM.mode === 'add') {
       const r = vp.getBoundingClientRect();
       const x = Math.round((e.clientX - r.left - GM.tx) / GM.scale);
@@ -505,13 +530,50 @@ function gmSmoothPath(pts) {
   return d;
 }
 
+// Детерминированные «пустые» seed-точки по всему холсту.
+// Они участвуют в вычислении Вороного и создают органические границы в пустоте,
+// но не рендерятся как звёзды и не имеют заливки.
+function gmPhantomSeeds() {
+  const SPACING = 310, JITTER = 0.48, MIN_D = 190;
+  const seeds = [];
+  const cols = Math.ceil(GM_W / SPACING) + 1;
+  const rows = Math.ceil(GM_H / SPACING) + 1;
+  for (let gx = 0; gx < cols; gx++) {
+    for (let gy = 0; gy < rows; gy++) {
+      const bx = gx * SPACING + SPACING / 2;
+      const by = gy * SPACING + SPACING / 2;
+      const jx = (gmEdgeHash(bx * 0.37 + by * 1.1, bx * 0.9 + gy) - 0.5) * SPACING * JITTER;
+      const jy = (gmEdgeHash(bx * 1.3 + by * 0.61, by * 0.8 + gx) - 0.5) * SPACING * JITTER;
+      const px = Math.max(5, Math.min(GM_W - 5, bx + jx));
+      const py = Math.max(5, Math.min(GM_H - 5, by + jy));
+      if (GM.systems.some(s => Math.hypot(s.x - px, s.y - py) < MIN_D)) continue;
+      seeds.push({ id: `_ph_${gx}_${gy}`, x: px, y: py, faction: null, phantom: true });
+    }
+  }
+  return seeds;
+}
+
 function gmVoronoiCells() {
   if (!window.d3 || !d3.Delaunay || GM.systems.length < 1) return [];
   try {
-    const pts = GM.systems.map(s => [s.x, s.y]);
+    const LANE_BIAS = 0.07;
+    const sysById = Object.fromEntries(GM.systems.map(s => [s.id, s]));
+    const phantoms = gmPhantomSeeds();
+    const all = [...GM.systems, ...phantoms];
+    const pts = all.map(s => {
+      if (s.phantom) return [s.x, s.y];
+      const nbrs = GM.lanes
+        .filter(l => l.a_id === s.id || l.b_id === s.id)
+        .map(l => sysById[l.a_id === s.id ? l.b_id : l.a_id])
+        .filter(Boolean);
+      if (!nbrs.length) return [s.x, s.y];
+      const cx = nbrs.reduce((a, n) => a + n.x, 0) / nbrs.length;
+      const cy = nbrs.reduce((a, n) => a + n.y, 0) / nbrs.length;
+      return [s.x + (cx - s.x) * LANE_BIAS, s.y + (cy - s.y) * LANE_BIAS];
+    });
     const del = d3.Delaunay.from(pts);
     const vor = del.voronoi([0, 0, GM_W, GM_H]);
-    return GM.systems.map((s, i) => ({ sys: s, poly: vor.cellPolygon(i) }));
+    return all.map((s, i) => ({ sys: s, poly: vor.cellPolygon(i) }));
   } catch (e) { console.warn('[map] voronoi', e); return []; }
 }
 
@@ -523,7 +585,7 @@ function gmBuildGeo() {
   // ── Заливки ячеек (без обводки) — соседние ячейки одной фракции сливаются ──
   const fills = [];
   cells.forEach(({ sys, poly }) => {
-    if (!poly) return;
+    if (!poly || sys.phantom) return;
     const fac = gmFaction(sys.faction);
     fills.push({ sys, fac, isRift: !!(fac && fac.id === 'rift'), pts: gmPerturbPoly(poly) });
   });
@@ -536,14 +598,19 @@ function gmBuildGeo() {
     const bx = Math.round(b[0] * 10), by = Math.round(b[1] * 10);
     return (ax < bx || (ax === bx && ay <= by)) ? `${ax},${ay}|${bx},${by}` : `${bx},${by}|${ax},${ay}`;
   };
+  // карта система → id сектора (одно членство; defensive — берём первый)
+  const sectorsR = gmSectorsForRender();
+  const secOfSys = {};
+  sectorsR.forEach(sec => (sec.system_ids || []).forEach(id => { if (!secOfSys[id]) secOfSys[id] = sec.id; }));
   cells.forEach(({ sys, poly }) => {
-    if (!poly) return;
+    if (!poly || sys.phantom) return;
     const fid = sys.faction || null;
+    const secId = secOfSys[sys.id] || null;
     for (let i = 0; i < poly.length - 1; i++) {
       const k = ekey(poly[i], poly[i + 1]);
       let e = edgeMap.get(k);
       if (!e) { e = { a: poly[i], b: poly[i + 1], sides: [] }; edgeMap.set(k, e); }
-      e.sides.push({ fid, sx: sys.x, sy: sys.y });   // запоминаем «чья» сторона и где её система
+      e.sides.push({ fid, secId, sx: sys.x, sy: sys.y });   // запоминаем «чья» сторона и где её система
     }
   });
   const edges = [];   // {kind:'front'|'fac'|'rift'|'neutral', color?, pts}
@@ -572,6 +639,31 @@ function gmBuildGeo() {
     }
   });
 
+  // ── Границы СЕКТОРОВ: ребро между членом сектора и не-членом (или иным сектором).
+  //    Рисуется поверх фракционных границ особым стилем (анимированный пунктир). ──
+  const secEdges = [];   // {secId, color, pts}
+  edgeMap.forEach(e => {
+    const s0 = e.sides[0] ? e.sides[0].secId : null;
+    const s1 = e.sides[1] ? e.sides[1].secId : null;
+    if (s0 === s1) return;                       // обе стороны в одном секторе (или обе вне) → внутреннее
+    const pts = gmPerturbEdge(e.a, e.b, 5);      // лёгкое возмущение — мягче, чем у границ территорий
+    [s0, s1].forEach((sid, idx) => {
+      if (!sid || sid === (idx === 0 ? s1 : s0)) return;
+      const sec = sectorsR.find(x => x.id === sid);
+      if (sec) secEdges.push({ secId: sid, color: gmReadable(sec.color || '#7cc8ff'), pts });
+    });
+  });
+
+  // ── Метки секторов: центр масс систем сектора (мировые координаты) ──
+  const secLabels = [];
+  sectorsR.forEach(sec => {
+    const mem = (sec.system_ids || []).map(id => GM.systems.find(s => s.id === id)).filter(Boolean);
+    if (!mem.length) return;
+    const cx = mem.reduce((a, s) => a + s.x, 0) / mem.length;
+    const cy = mem.reduce((a, s) => a + s.y, 0) / mem.length;
+    secLabels.push({ id: sec.id, name: sec.name, color: gmReadable(sec.color || '#7cc8ff'), x: cx, y: cy });
+  });
+
   // ── Гиперпути: слегка изогнутая кривая вместо прямой. Изгиб детерминированный
   //    (хэш по концам) — стабилен между перерисовками, не зависит от порядка. ──
   const lanes = [];
@@ -586,7 +678,7 @@ function gmBuildGeo() {
     lanes.push({ id: l.id, ax: a.x, ay: a.y, cx: +(mx + nx * bend).toFixed(1), cy: +(my + ny * bend).toFixed(1), bx: b.x, by: b.y });
   });
 
-  return { fills, edges, lanes };
+  return { fills, edges, lanes, secEdges, secLabels };
 }
 
 function gmDrawSvg() {
@@ -613,19 +705,36 @@ function gmDrawSvg() {
   });
 
   const laneHtml = geo.lanes.map(L => {
-    const del = GM.edit && GM.mode === 'link' ? ` onclick="gmDeleteLane('${L.id}')"` : '';
-    const cls = 'hyperlane' + (GM.edit && GM.mode === 'link' ? ' gm-deletable' : '');
-    return `<path class="${cls}" d="M${L.ax},${L.ay} Q${L.cx},${L.cy} ${L.bx},${L.by}" fill="none"${del}></path>`;
+    const d = `M${L.ax},${L.ay} Q${L.cx},${L.cy} ${L.bx},${L.by}`;
+    const cls = 'hyperlane' + (GM.edit && GM.mode === 'unlink' ? ' gm-deletable' : '');
+    const visible = `<path class="${cls}" d="${d}" fill="none"></path>`;
+    if (GM.edit && GM.mode === 'unlink') {
+      const hit = `<path class="hyperlane-hit" d="${d}" fill="none" onclick="gmDeleteLane('${L.id}')"></path>`;
+      return hit + visible;
+    }
+    return visible;
   }).join('');
 
   const fb = facBorderHtml.join('');
+
+  // ── Сектора: свечение + анимированный пунктир + широкая хит-зона (клик → лор/редакт) ──
+  const secGlow = geo.secEdges.map(e =>
+    `<path class="gm-sec-glow" d="${dOf(e.pts)}" fill="none" stroke="${e.color}"></path>`).join('');
+  const secLine = geo.secEdges.map(e =>
+    `<path class="gm-sec-line" d="${dOf(e.pts)}" fill="none" stroke="${e.color}"></path>`).join('');
+  const secHit = geo.secEdges.map(e =>
+    `<path class="gm-sec-hit" d="${dOf(e.pts)}" fill="none" onclick="gmSectorBorderClick('${e.secId}')"></path>`).join('');
+  const secLabelHtml = geo.secLabels.map(l =>
+    `<text class="gm-sec-label" x="${l.x.toFixed(0)}" y="${l.y.toFixed(0)}" fill="${l.color}" onclick="gmSectorBorderClick('${l.id}')">${esc((l.name || '').toUpperCase())}</text>`).join('');
+
   // Свечение — широкий полупрозрачный контур БЕЗ SVG-фильтра (feGaussianBlur тормозил
   // при пане/зуме). Дёшево композитится.
   svg.innerHTML =
     `<g class="vor-layer">${fillHtml}</g>`
     + `<g class="vor-border-layer gm-glow-layer">${fb}</g>`
     + `<g class="vor-border-layer">${neutralBorderHtml.join('')}${fb}</g>`
-    + `<g class="lane-layer">${laneHtml}</g>`;
+    + `<g class="lane-layer">${laneHtml}</g>`
+    + `<g class="sec-layer">${secGlow}${secLine}${secLabelHtml}${secHit}</g>`;
   svg.classList.toggle('gm-noborders', !GM.showBorders);
   gmUpdateStrokes();
 }
@@ -637,6 +746,15 @@ function gmUpdateStrokes() {
   const s = GM.scale || 1;
   svg.style.setProperty('--lane-w', (3 / s).toFixed(2));
   svg.style.setProperty('--cell-w', (1.4 / s).toFixed(2));
+  // Сектора: ширины/пунктир/хит-зона постоянны на экране (в юнитах = px/scale)
+  svg.style.setProperty('--sec-w', (2.2 / s).toFixed(2));
+  svg.style.setProperty('--sec-glow-w', (9 / s).toFixed(2));
+  svg.style.setProperty('--sec-hit-w', (16 / s).toFixed(2));
+  svg.style.setProperty('--sec-dash', `${(11 / s).toFixed(2)} ${(7 / s).toFixed(2)}`);
+  svg.style.setProperty('--sec-font', (54 / s).toFixed(1) + 'px');
+  // LOD подписей: вдали (мелкий зум) прячем имена рядовых систем — остаются
+  // только гиганты, столицы и разломы. Вблизи показываем все.
+  document.getElementById('gm-wrap')?.classList.toggle('gm-lod-far', s < 0.55);
 }
 
 // превращает rgba(r,g,b,a) в более плотный контур
@@ -666,12 +784,14 @@ function gmDrawStars() {
   const layer = document.getElementById('gm-stars');
   if (!layer) return;
   const caps = GM.capitals || {};
+  const secSelIds = (GM.edit && GM.mode === 'sector' && GM.sectorDraft) ? GM.sectorDraft.system_ids : [];
   layer.innerHTML = GM.systems.map(s => {
     const sel = (GM.linkFrom === s.id) ? ' gm-linksel' : '';
+    const secSel = secSelIds.includes(s.id) ? ' gm-sec-selected' : '';
     // Системы разлома — не звёзды, а пульсирующие аномалии (другой стиль)
     if (s.faction === 'rift') {
       const core = s.id === 'rift_core' ? ' gm-rift-core' : '';
-      return `<div class="gm-star gm-rift-node${core}${sel}" data-id="${esc(s.id)}" style="left:${s.x}px;top:${s.y}px"
+      return `<div class="gm-star gm-rift-node${core}${sel}${secSel}" data-id="${esc(s.id)}" style="left:${s.x}px;top:${s.y}px"
           onmousedown="gmStarDown(event,'${esc(s.id)}')" onclick="gmStarClick(event,'${esc(s.id)}')">
           <span class="gm-rift-eye"></span><span class="gm-rift-ring"></span>
           <span class="gm-label gm-rift-label">${esc(s.name)}</span>
@@ -681,7 +801,7 @@ function gmDrawStars() {
     const capFid = caps[s.id];
     const capCol = capFid ? gmReadable((gmFaction(capFid) || {}).color || '#ffd24d') : '';
     const capHtml = capFid ? `<span class="gm-cap" title="Столица: ${esc((GM.facMeta[capFid] || {}).name || '')}" style="color:${capCol}">★</span>` : '';
-    return `<div class="gm-star${giant}${sel}${capFid ? ' gm-capital' : ''}" data-id="${esc(s.id)}" style="left:${s.x}px;top:${s.y}px"
+    return `<div class="gm-star${giant}${sel}${secSel}${capFid ? ' gm-capital' : ''}" data-id="${esc(s.id)}" style="left:${s.x}px;top:${s.y}px"
         onmousedown="gmStarDown(event,'${esc(s.id)}')" onclick="gmStarClick(event,'${esc(s.id)}')">
         <img src="${GM_BASE}stars/star_${esc(s.star_type || 'yellow')}.png" draggable="false" alt="">
         ${capHtml}
@@ -752,6 +872,7 @@ function gmStarClick(e, id) {
   const sys = GM.systems.find(s => s.id === id);
   if (!sys) return;
   if (GM.edit && GM.mode === 'link') { gmLinkClick(sys); return; }
+  if (GM.edit && GM.mode === 'sector') { gmSectorToggleSys(sys.id); return; }
   if (GM.edit && GM.mode === 'select') {
     if (GM.drag && GM.drag.moved) return; // это было перетаскивание
     gmOpenForm(sys); return;
@@ -854,8 +975,13 @@ function gmSetMode(m) {
     b.classList.toggle('gm-active', b.dataset.mode === m));
   const hint = document.getElementById('gm-tb-hint');
   if (hint) hint.textContent = m === 'add' ? 'Клик по пустому месту — новая звезда'
-    : m === 'link' ? 'Клик две звезды — связать; клик по линии — удалить'
+    : m === 'link' ? 'Клик на первую звезду, затем на вторую — проложить путь'
+    : m === 'unlink' ? 'Клик по линии гиперпути — удалить'
+    : m === 'sector' ? 'Клик по звёздам — собрать сектор; клик по границе — править существующий'
     : 'Тащи звезду мышью; клик — редактировать';
+  // Форма сектора видна только в режиме «Сектора»
+  if (m === 'sector') { if (!GM.sectorDraft) gmSectorNew(false); gmRenderSectorForm(); }
+  else { GM.sectorDraft = null; document.getElementById('gm-sector')?.remove(); }
   gmDraw();
 }
 
@@ -877,9 +1003,132 @@ async function gmCreateLane(a, b) {
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); GM.linkFrom = null; gmDrawStars(); }
 }
 async function gmDeleteLane(id) {
-  if (!(GM.edit && GM.mode === 'link')) return;
+  if (!(GM.edit && GM.mode === 'unlink')) return;
   try { await dbDel('map_hyperlanes', 'id=eq.' + encodeURIComponent(id)); GM.lanes = GM.lanes.filter(l => l.id !== id); gmDrawSvg(); }
   catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+// ════════════════════════════════════════════════════════════
+// СЕКТОРА — именованные группы систем с лором и особой границей
+// ════════════════════════════════════════════════════════════
+// Список секторов для рендера: сохранённые + текущий черновик (живой предпросмотр).
+function gmSectorsForRender() {
+  const base = (GM.sectors || []).slice();
+  if (GM.edit && GM.mode === 'sector' && GM.sectorDraft) {
+    const d = GM.sectorDraft;
+    const draft = { id: d.id || '__draft__', name: d.name, color: d.color, lore: d.lore, system_ids: d.system_ids };
+    const i = base.findIndex(s => s.id === draft.id);
+    if (i >= 0) base[i] = draft; else base.push(draft);
+  }
+  return base;
+}
+// rgba/hex → #rrggbb (для <input type=color>) и обратно
+function gmToHex(c) { const [r, g, b] = gmRgb(c); return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join(''); }
+function gmHexToRgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`; }
+
+function gmSectorNew(redraw = true) {
+  GM.sectorDraft = { id: null, name: 'Новый сектор', color: 'rgba(120, 200, 255, 0.5)', lore: '', system_ids: [] };
+  if (redraw) { gmRenderSectorForm(); gmDraw(); }
+}
+function gmSectorEdit(id) {
+  if (id === '__draft__') return;
+  const s = GM.sectors.find(x => x.id === id);
+  if (!s) return;
+  GM.sectorDraft = { id: s.id, name: s.name, color: s.color, lore: s.lore || '', system_ids: (s.system_ids || []).slice() };
+  gmRenderSectorForm(); gmDraw();
+}
+function gmSectorToggleSys(id) {
+  if (!GM.sectorDraft) gmSectorNew(false);
+  const arr = GM.sectorDraft.system_ids;
+  const i = arr.indexOf(id);
+  if (i >= 0) arr.splice(i, 1); else arr.push(id);
+  gmRenderSectorForm(); gmDraw();
+}
+async function gmSectorSave() {
+  const d = GM.sectorDraft;
+  if (!d) return;
+  if (!d.system_ids.length) { toast('Добавь хотя бы одну систему', 'inf'); return; }
+  const payload = { name: d.name || 'Сектор', color: d.color, lore: d.lore || '', system_ids: d.system_ids };
+  try {
+    if (d.id) {
+      await dbPatch('map_sectors', 'id=eq.' + encodeURIComponent(d.id), payload);
+      const s = GM.sectors.find(x => x.id === d.id); if (s) Object.assign(s, payload);
+    } else {
+      const rows = await dbPost('map_sectors', payload);
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      if (row && row.id) { GM.sectors.push({ ...row, system_ids: row.system_ids || [] }); d.id = row.id; }
+      else await loadGalaxyData();
+    }
+    toast('Сектор сохранён', 'ok');
+    gmRenderSectorForm(); gmDraw();
+  } catch (e) { toast('Ошибка: ' + e.message + ' (создал таблицу _map_sectors.sql?)', 'err'); }
+}
+async function gmSectorDelete() {
+  const d = GM.sectorDraft;
+  if (!d || !d.id) { gmSectorNew(); return; }
+  if (!confirm('Удалить сектор «' + (d.name || '') + '»?')) return;
+  try {
+    await dbDel('map_sectors', 'id=eq.' + encodeURIComponent(d.id));
+    GM.sectors = GM.sectors.filter(s => s.id !== d.id);
+    toast('Сектор удалён', 'ok'); gmSectorNew();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+// Клик по границе/метке сектора: в режиме редактирования секторов — править, иначе — лор
+function gmSectorBorderClick(id) {
+  if (GM.edit && GM.mode === 'sector') { gmSectorEdit(id); return; }
+  gmOpenSector(id);
+}
+function gmOpenSector(id) {
+  const sec = GM.sectors.find(s => s.id === id);
+  if (!sec) return;
+  const panel = document.getElementById('gm-panel');
+  if (!panel) return;
+  const col = gmReadable(sec.color || '#7cc8ff');
+  const n = (sec.system_ids || []).length;
+  panel.className = 'gm-sector-panel';
+  panel.innerHTML = `
+    <button class="gm-close" onclick="gmClosePanel()">✕</button>
+    <div class="gm-sec-tag" style="color:${col}">◈ СЕКТОР</div>
+    <h2 class="gm-panel-title" style="color:${col}">${esc(sec.name)}</h2>
+    <div class="gm-sec-pmeta">Систем: ${n}</div>
+    <p class="gm-panel-desc">${esc(sec.lore || 'Лор этого сектора пока не записан.')}</p>`;
+  panel.classList.remove('gm-hidden');
+}
+
+// Панель-редактор сектора (живёт в #gm-wrap, только в режиме «Сектора»)
+function gmRenderSectorForm() {
+  const wrap = document.getElementById('gm-wrap');
+  if (!wrap) return;
+  let el = document.getElementById('gm-sector');
+  if (!el) { el = document.createElement('div'); el.id = 'gm-sector'; wrap.appendChild(el); }
+  const d = GM.sectorDraft || { name: '', color: 'rgba(120,200,255,0.5)', lore: '', system_ids: [] };
+  const chips = d.system_ids.length
+    ? d.system_ids.map(id => {
+        const s = GM.systems.find(x => x.id === id);
+        return `<span class="gm-sec-chip" onclick="gmSectorToggleSys('${id}')">${esc(s ? s.name : id)} ✕</span>`;
+      }).join('')
+    : '<span class="gm-sec-empty">Кликай по звёздам на карте</span>';
+  const list = (GM.sectors || []).map(s =>
+    `<button class="gm-sec-listbtn${GM.sectorDraft && GM.sectorDraft.id === s.id ? ' gm-active' : ''}" onclick="gmSectorEdit('${s.id}')">
+       <span class="gm-sec-dot" style="background:${gmReadable(s.color || '#7cc8ff')}"></span>${esc(s.name)}</button>`).join('');
+  el.innerHTML = `
+    <div class="gm-sec-fhead">${d.id ? '✎ Сектор' : '＋ Новый сектор'}</div>
+    <label class="gm-fl">Название</label>
+    <input class="gm-fi" id="gm-sec-name" value="${esc(d.name || '')}" oninput="GM.sectorDraft.name=this.value;gmDrawSvg()">
+    <div class="gm-sec-row">
+      <div><label class="gm-fl">Цвет</label>
+        <input type="color" class="gm-sec-color" value="${gmToHex(d.color)}" oninput="GM.sectorDraft.color=gmHexToRgba(this.value,0.5);gmDrawSvg();gmRenderSectorForm()"></div>
+      <div style="flex:1"><label class="gm-fl">Систем</label><div class="gm-sec-count">${d.system_ids.length}</div></div>
+    </div>
+    <label class="gm-fl">Лор (окно при клике на границу)</label>
+    <textarea class="gm-fi gm-sec-lore" rows="4" oninput="GM.sectorDraft.lore=this.value" placeholder="Краткое описание сектора…">${esc(d.lore || '')}</textarea>
+    <div class="gm-sec-chips">${chips}</div>
+    <div class="gm-sec-actions">
+      <button class="gm-tb-btn gm-active" onclick="gmSectorSave()">✓ Сохранить</button>
+      <button class="gm-tb-btn" onclick="gmSectorNew()">＋ Новый</button>
+      ${d.id ? `<button class="gm-tb-btn gm-danger" onclick="gmSectorDelete()">🗑</button>` : ''}
+    </div>
+    ${list ? `<div class="gm-sec-lhead">Существующие</div><div class="gm-sec-list">${list}</div>` : ''}`;
 }
 
 async function gmAddStar(x, y) {
@@ -1550,12 +1799,17 @@ function gmmBuildWorld() {
   });
   let lanesD = '';
   geo.lanes.forEach(L => { lanesD += `M${L.ax},${L.ay} Q${L.cx},${L.cy} ${L.bx},${L.by}`; });
+  // границы секторов, сгруппированные по цвету (для пунктира)
+  const secD = new Map();
+  (geo.secEdges || []).forEach(e => secD.set(e.color, (secD.get(e.color) || '') + dOf(e.pts)));
   GMM.paths = {
     fills: [...fillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     edges: [...edgeD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     neutral: neutralD ? new Path2D(neutralD) : null,
     rift: riftD ? new Path2D(riftD) : null,
     lanes: lanesD ? new Path2D(lanesD) : null,
+    secEdges: [...secD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
+    secLabels: geo.secLabels || [],
   };
 }
 
@@ -1598,6 +1852,22 @@ function gmmPaint(ctx, camS, wx0, wy0, wx1, wy1) {
     ctx.globalAlpha = .85; ctx.lineCap = 'round';
     ctx.strokeStyle = 'hsl(206 92% 64%)'; ctx.lineWidth = 1.8 / camS;
     ctx.stroke(P.lanes); ctx.globalAlpha = 1;
+  }
+  // границы секторов — пунктир цвета сектора (статичный, без анимации — дёшево)
+  if (P.secEdges && P.secEdges.length) {
+    ctx.setLineDash([11 / camS, 7 / camS]); ctx.lineCap = 'round'; ctx.lineWidth = 2.2 / camS;
+    P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
+    ctx.setLineDash([]);
+  }
+  // метки секторов
+  if (P.secLabels && P.secLabels.length) {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `700 ${(54 / camS).toFixed(1)}px Rajdhani, 'Exo 2', sans-serif`;
+    P.secLabels.forEach(l => {
+      ctx.globalAlpha = .32; ctx.fillStyle = l.color;
+      ctx.fillText((l.name || '').toUpperCase(), l.x, l.y);
+    });
+    ctx.globalAlpha = 1;
   }
   gmmPaintStars(ctx, camS);
 }
