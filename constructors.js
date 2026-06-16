@@ -463,9 +463,13 @@ function cnVehAddItem(type, preset) {
   sel.onchange = cnVehCalc;
   for (const group in source) {
     if (type === 'weapon' && def.excl(k, group)) continue;
-    // не исследованные группы оружия/модулей скрываем (preset/правка — показываем все)
-    if (type === 'weapon' && !preset && !cnWpnUnlocked(CN.cat, group)) continue;
-    if (type === 'module' && !preset && !cnUnlocked('mod.' + CN.cat + '.' + group)) continue;
+    // не исследованные группы скрываем ВСЕГДА. Исключение — СОХРАНЁННАЯ группа этой
+    // строки при правке (чтобы старый дизайн грузился), но не «все модули» подряд.
+    const isPresetGroup = preset && preset.g === group;
+    if (!isPresetGroup) {
+      if (type === 'weapon' && !cnWpnUnlocked(CN.cat, group)) continue;
+      if (type === 'module' && !cnUnlocked('mod.' + CN.cat + '.' + group)) continue;
+    }
     const g = document.createElement('optgroup');
     g.label = group;
     source[group].forEach((item, i) => {
@@ -503,7 +507,8 @@ function cnVehAddHangar(preset) {
   if (!preset && !cnUnlocked('hangar.ship')) { toast('Ангары требуют исследования «Ангарные палубы»', 'inf'); return; }
   const heavyOpen = cnUnlocked('hangar.ship.heavy');
   const filtered = def.db.hangarTypes.filter(h => {
-    if (!preset && !heavyOpen && [1, 2].includes(h.id)) return false;   // крупные ангары — за «Тяжёлые ангары»
+    // крупные ангары — за «Тяжёлые ангары»; при правке оставляем только СОХРАНЁННЫЙ тип
+    if (!heavyOpen && [1, 2].includes(h.id) && !(preset && preset.id === h.id)) return false;
     if (['corvette', 'frigate', 'destroyer'].includes(k)) return ![1, 2].includes(h.id);
     if (k === 'cruiser') return h.id !== 2;
     return true;

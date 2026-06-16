@@ -117,6 +117,18 @@ async function go(slug, push=true) {
   // и флаг «залипнет», проглотив следующий настоящий переход). Снимает флаг route().
   if (push) { const _h = '#' + slug; if (location.hash !== _h) { _pushingHash = true; location.hash = _h; } }
 
+  // Скрипты страниц (galaxy_map/economy/…) грузятся внизу <body>; если роут случился
+  // раньше их выполнения — не показываем пугающее «X не загружен», а ждём полной
+  // загрузки и повторяем переход. Иначе игрок видит заглушку и она «залипает».
+  if (document.readyState !== 'complete') {
+    setPg('<div class="sempty">Загрузка…</div>');
+    if (!window._goDeferred) {
+      window._goDeferred = true;
+      window.addEventListener('load', () => { window._goDeferred = false; go(location.hash.slice(1) || 'home', false); }, { once: true });
+    }
+    return;
+  }
+
   if (slug.startsWith('sec:')) {
     curSlug = slug; const sec = sections.find(s=>s.slug===slug.slice(4));
     setAct(slug); updTopBcSec(sec); updAuthUI(); renderSectionPage(sec); return;

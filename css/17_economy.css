@@ -691,6 +691,23 @@
 /* ── Переработанная форма каравана ── */
 .ec-dip-trade { grid-column: 1 / -1; }
 .ec-trade-form { display: flex; flex-direction: column; gap: 8px; }
+/* Мастер каравана — индикатор шагов + навигация */
+.ec-cv-steps { display: flex; align-items: center; gap: 4px; margin: 6px 0 12px; flex-wrap: wrap; }
+.ec-cv-stepbtn { display: inline-flex; align-items: center; gap: 7px; background: var(--b2); border: 1px solid var(--w2); border-radius: 999px; color: var(--t3); font-family: var(--font-display); font-weight: 600; font-size: 12.5px; padding: 6px 13px 6px 7px; cursor: pointer; }
+.ec-cv-stepbtn:hover { color: var(--t1); }
+.ec-cv-stepn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--b1); border: 1px solid var(--w2); font-size: 11px; }
+.ec-cv-stepbtn.on { color: var(--gdl, #5fb0e6); border-color: var(--gd); background: color-mix(in srgb, var(--gd) 14%, transparent); }
+.ec-cv-stepbtn.on .ec-cv-stepn { background: var(--gd); color: #0c1118; border-color: var(--gd); }
+.ec-cv-stepbtn.done { color: var(--ok); }
+.ec-cv-stepbtn.done .ec-cv-stepn { background: color-mix(in srgb, var(--ok) 20%, transparent); border-color: var(--ok); color: var(--ok); }
+.ec-cv-steparr { color: var(--t4); font-size: 14px; }
+.ec-cv-nav { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
+.ec-cv-nav .btn { min-width: 140px; }
+@media (max-width: 560px) {
+  .ec-cv-stepbtn { padding: 6px 11px 6px 6px; font-size: 12px; }
+  .ec-cv-steparr { display: none; }
+  .ec-cv-nav .btn { min-width: 0; flex: 1; }
+}
 .ec-trade-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--gdl, var(--gd)); margin-top: 4px; }
 .ec-trade-label .ec-hint { text-transform: none; letter-spacing: 0; color: var(--t4); }
 .ec-trade-reslist { display: flex; flex-wrap: wrap; gap: 6px; }

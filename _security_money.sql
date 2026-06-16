@@ -481,7 +481,7 @@ begin
   qty := greatest(1, coalesce(p_qty, 1));
   select * into u from public.faction_units where id = p_unit_id;
   if not found then raise exception 'unit design not found'; end if;
-  if u.faction_id is distinct from fid then raise exception 'not your design'; end if;
+  if u.faction_id is not null and u.faction_id is distinct from fid then raise exception 'not your design'; end if;
 
   if u.category = 'division' then cat:='division'; ln:='army';     w:=0;
   elsif u.category = 'ship'   then cat:='ship';     ln:='shipyard'; w:=1;

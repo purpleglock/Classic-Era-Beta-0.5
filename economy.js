@@ -1363,6 +1363,9 @@ function ecTabColonies() {
     const live = EC.allSystems && EC.allSystems.find(x => x.id === c.system_id);
     sysMap.set(c.system_id, { id: c.system_id, name: (live && live.name) || 'Система', planets: (live && live.planets) || [] });
   }});
+  // По умолчанию системы СВЁРНУТЫ (раскрываются кликом по шапке). Инициализируем
+  // один раз за сессию — дальше твои раскрытия/сворачивания сохраняются.
+  if (!EC.sysCollapseInit) { EC.closedSys = new Set([...sysMap.keys()]); EC.sysCollapseInit = true; }
   if (!sysMap.size) {
     return `${ecIntro('🏗', 'Колонии и застройка', 'Здесь вы строите здания на своих планетах — это основа дохода, науки и армии.', ['Сначала получите систему во вкладке «🌐 Территория».', 'Затем колонизируйте пригодную планету и стройте на ней здания.'])}<div class="ec-section-title">Системы и колонии</div>
       <div class="ec-empty">У вас пока нет систем и колоний. Захватывайте системы во вкладке «🌐 Территория».</div>`;
@@ -1639,7 +1642,8 @@ async function ecRpcAct(fn, body, okMsg) {
 function ecMyShipsAvailable() {
   const total = (EC.roster || []).filter(r => r.category === 'ship').reduce((a, r) => a + (r.qty || 0), 0);
   const committed = (EC.routes || []).filter(r => r.a_fid === EC.fid && ['pending', 'active'].includes(r.status)).reduce((a, r) => a + (r.convoy || 0), 0);
-  return Math.max(0, total - committed);
+  const raids = (EC.raids || []).filter(m => m.status === 'active').reduce((a, m) => a + (m.ships || 0), 0);
+  return Math.max(0, total - committed - raids);
 }
 function ecPath(from, to) {
   if (!from || !to) return null;
@@ -1692,19 +1696,33 @@ function ecCvFleetHtml() {
   const { freighters, warships } = ecCvFleetGroups();
   const { cap, escort } = ecCvFleetTotals();
   const f = EC.cvFleet;
-  const row = (d, tag) => `<div class="ec-q-row" style="gap:6px">
+  // СВОБОДНЫЙ пул (минус то, что уже занято активными/ожидающими путями):
+  // грузоподъёмность — из trade_capacity (used = занятое поставками); боевые — минус конвои.
+  const freeCap = Math.max(0, (EC.tradeCargo && EC.tradeCargo.free) || 0);
+  const totalWar = warships.reduce((a, d) => a + (d.qty || 0), 0);
+  const committedConvoy = (EC.routes || []).filter(r => r.a_fid === EC.fid && ['pending', 'active'].includes(r.status)).reduce((a, r) => a + (r.convoy || 0), 0);
+  // боевые заняты и конвоями караванов, И активными рейдами (общий пул кораблей)
+  const committedRaids = (EC.raids || []).filter(m => m.status === 'active').reduce((a, m) => a + (m.ships || 0), 0);
+  const freeWar = Math.max(0, totalWar - committedConvoy - committedRaids);
+  const row = (d, tag, isFr) => {
+    const n = f[d.id] || 0;
+    // нельзя добавить: уже взял весь ростер ИЛИ свободный пул исчерпан
+    const poolFull = isFr ? (cap + d.cargo > freeCap) : (escort + 1 > freeWar);
+    const canAdd = n < d.qty && !poolFull;
+    return `<div class="ec-q-row" style="gap:6px">
       <span class="ec-r-name">${esc(d.name)} <i style="color:var(--t4)">${tag} · в наличии ${ecNum(d.qty)}</i></span>
       <span class="ec-mine-step">
-        <button class="ec-mine-btn" ${(f[d.id] || 0) <= 0 ? 'disabled' : ''} onclick="ecCvFleetAdd('${esc(d.id)}',-1)">−</button>
-        <span class="ec-mine-cnt ${(f[d.id] || 0) ? 'on' : ''}">${f[d.id] || 0}</span>
-        <button class="ec-mine-btn" ${(f[d.id] || 0) >= d.qty ? 'disabled' : ''} onclick="ecCvFleetAdd('${esc(d.id)}',1)">+</button>
+        <button class="ec-mine-btn" ${n <= 0 ? 'disabled' : ''} onclick="ecCvFleetAdd('${esc(d.id)}',-1)">−</button>
+        <span class="ec-mine-cnt ${n ? 'on' : ''}">${n}</span>
+        <button class="ec-mine-btn" ${canAdd ? '' : 'disabled'} title="${poolFull && n < d.qty ? (isFr ? 'Свободная грузоподъёмность исчерпана (занята активными путями)' : 'Свободные боевые корабли заняты конвоями') : ''}" onclick="ecCvFleetAdd('${esc(d.id)}',1)">+</button>
       </span></div>`;
-  const frHtml = freighters.length ? freighters.map(d => row(d, `📦 груз ${d.cargo}`)).join('')
+  };
+  const frHtml = freighters.length ? freighters.map(d => row(d, `📦 груз ${d.cargo}`, true)).join('')
     : '<div class="ec-empty" style="padding:6px">Нет грузовых кораблей — постройте корабль с грузовыми ангарами (Конструктор → Корабль) и заложите его в Военпроме.</div>';
-  const wsHtml = warships.length ? warships.map(d => row(d, '⚔ эскорт')).join('')
+  const wsHtml = warships.length ? warships.map(d => row(d, '⚔ эскорт', false)).join('')
     : '<div class="ec-empty" style="padding:6px">Нет боевых кораблей для эскорта.</div>';
-  return `<div class="ec-r-sec">📦 Грузовые — дают грузоподъёмность</div>${frHtml}
-    <div class="ec-r-sec">⚔ Эскорт — защита в пути</div>${wsHtml}
+  return `<div class="ec-r-sec">📦 Грузовые — дают грузоподъёмность <span class="ec-hint">свободно ${ecNum(freeCap)}</span></div>${frHtml}
+    <div class="ec-r-sec">⚔ Эскорт — защита в пути <span class="ec-hint">свободно ${ecNum(freeWar)}</span></div>${wsHtml}
     <div class="ec-trade-note${cap < 1 ? ' warn' : ''}"><b>Флот каравана:</b> 📦 грузоподъёмность <b>${ecNum(cap)}</b> · ⚔ эскорт <b>${ecNum(escort)}</b> кораблей${cap < 1 ? ' — добавьте грузовой корабль, иначе объём = 0.' : ''}</div>`;
 }
 function ecCvFleetAdd(unitId, delta) {
@@ -1714,6 +1732,9 @@ function ecCvFleetAdd(unitId, delta) {
   const cont = ecId('ec-cv-fleet'); if (cont) cont.innerHTML = ecCvFleetHtml();
   ecCvSync();
 }
+// Шаг мастера каравана (1 Флот · 2 Ресурсы · 3 Маршрут). Состояние выбора —
+// в EC.cvFleet/cvCargo/cvOrigin/cvDFac/cvDSys, поэтому переход не сбрасывает выбранное.
+function ecCvStep(n) { EC.cvStep = Math.min(3, Math.max(1, n | 0)); ecPaintCabinet(); }
 // Пересчитать скрытые объём/конвой из собранного флота и запаса выбранного ресурса
 function ecCvSync() {
   const { escort } = ecCvFleetTotals();
@@ -1828,10 +1849,12 @@ function ecSyncConvoy(v) {
 function ecTradeCalc() {
   const sumEl = ecId('ec-cv-summary'); if (!sumEl) return null; // форма не на экране
   const send = ecId('ec-cv-send');
-  const convoy = Math.max(0, parseInt(ecId('ec-cv-convoy')?.value) || 0);
-  const oSys = ecId('ec-cv-osys')?.value || '';
-  const dFac = ecId('ec-cv-dfac')?.value || '';
-  const dSys = ecId('ec-cv-dsys')?.value || '';
+  // эскорт/маршрут берём из СОСТОЯНИЯ (EC.cvFleet + EC.cv*), а не из DOM —
+  // чтобы значения не терялись при переходе между шагами мастера.
+  const convoy = ecCvFleetTotals().escort;
+  const oSys = ecId('ec-cv-osys')?.value || EC.cvOrigin || '';
+  const dFac = ecId('ec-cv-dfac')?.value || EC.cvDFac || '';
+  const dSys = ecId('ec-cv-dsys')?.value || EC.cvDSys || '';
   const cargoCap = ecCvFleetTotals().cap;              // грузоподъёмность собранного флота
   const dipCoef = ecDipCoef(dFac);                     // дипломатия → ±20% к выгоде
   const gcMod = ecFactionMods().gc;
@@ -2003,26 +2026,42 @@ function ecTabTrade() {
     : noOthers ? '<div class="ec-empty">Нет других фракций для торговли.</div>'
       : !mySys.length ? '<div class="ec-empty">Нет ваших систем на карте — расширяйтесь (вкладка «Территория»).</div>'
         : !extractEntries.length ? '<div class="ec-empty">Нет ресурсов в экспорте. Поставьте добывающий завод в режим 💱 Экспорт (вкладка «Колонии») — караван возит только экспортную добычу, склад остаётся себе.</div>'
-          : `<div class="ec-trade-form">
-        <div class="ec-trade-how">
-          <b>Как это работает:</b> караван — постоянное торговое соглашение. После того как партнёр <b>примет</b>, <b>каждый ход</b> ваш караван возит вашу <b>экспортную добычу</b> (режим 💱 Экспорт на заводе, сколько влезет в трюмы) и <b>оба получаете ГС</b>. Завод в режиме 📦 Склад караванам недоступен — это разные каналы, двойного дохода нет. Путь бессрочный, пока не закроете.
-          <div class="ec-trade-flow"><span>① Вы предлагаете</span><span>→</span><span>② Партнёр принимает</span><span>→</span><span>③ Доход каждый ход</span></div>
-        </div>
-        <div class="ec-trade-label">1 · Соберите флот каравана <span class="ec-hint">грузовые → грузоподъёмность, боевые → эскорт</span></div>
-        <div id="ec-cv-fleet">${ecCvFleetHtml()}</div>
-        <input type="hidden" id="ec-cv-convoy" value="0">
-        <div class="ec-trade-label">2 · Что грузим <span class="ec-hint">тыкните месторождения — флот грузит их поток, ценные первыми</span></div>
-        <div id="ec-cv-cargo">${ecCvCargoHtml()}</div>
-        <div class="ec-trade-label">3 · Кому и откуда <span class="ec-hint">чужие системы на пути = угрозы по дороге</span></div>
-        <div class="ec-trade-route">
-          <select id="ec-cv-osys" onchange="ecTradeCalc()" title="Из вашей системы отправления">${mySys.map(s => `<option value="${esc(s.id)}">🜨 ${esc(s.name)}</option>`).join('')}</select>
-          <span class="ec-trade-arrow">→</span>
-          <select id="ec-cv-dfac" onchange="ecFillDestSys();ecTradeCalc()" title="Партнёр-получатель">${others.map(f => `<option value="${esc(f.faction_id)}">${esc(f.name)}</option>`).join('')}</select>
-          <select id="ec-cv-dsys" onchange="ecTradeCalc()" title="В систему партнёра">${destSys0.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('') || '<option value="">— нет систем —</option>'}</select>
-        </div>
-        <div class="ec-trade-summary" id="ec-cv-summary"></div>
-        <button class="btn btn-gd" id="ec-cv-send" onclick="ecTradePropose()">Предложить караван</button>
-      </div>`;
+          : (() => {
+        // ── ПОШАГОВЫЙ МАСТЕР: 1) Флот+эскорт → 2) Ресурсы → 3) Кому/куда ──
+        const step = EC.cvStep = Math.min(3, Math.max(1, EC.cvStep || 1));
+        if (!EC.cvOrigin || !mySys.find(s => s.id === EC.cvOrigin)) EC.cvOrigin = mySys[0] && mySys[0].id;
+        if (!EC.cvDFac || !others.find(f => f.faction_id === EC.cvDFac)) EC.cvDFac = others[0] && others[0].faction_id;
+        const destList = (EC.allSystems || []).filter(s => s.faction === EC.cvDFac);
+        if (!EC.cvDSys || !destList.find(s => s.id === EC.cvDSys)) EC.cvDSys = destList[0] ? destList[0].id : '';
+        const labels = ['Флот', 'Ресурсы', 'Маршрут'];
+        const stepNav = `<div class="ec-cv-steps">${[1, 2, 3].map(n => `<button class="ec-cv-stepbtn${step === n ? ' on' : ''}${step > n ? ' done' : ''}" onclick="ecCvStep(${n})"><span class="ec-cv-stepn">${step > n ? '✓' : n}</span>${labels[n - 1]}</button>${n < 3 ? '<span class="ec-cv-steparr">›</span>' : ''}`).join('')}</div>`;
+        let body;
+        if (step === 1) {
+          body = `<div class="ec-trade-label">Соберите флот каравана <span class="ec-hint">грузовые → грузоподъёмность · эскорт опционален</span></div>
+            <div id="ec-cv-fleet">${ecCvFleetHtml()}</div>
+            <div class="ec-cv-nav"><span></span><button class="btn btn-gd" onclick="ecCvStep(2)">Далее: ресурсы →</button></div>`;
+        } else if (step === 2) {
+          body = `<div class="ec-trade-label">Что грузим <span class="ec-hint">тыкните месторождения — флот грузит их поток, ценные первыми</span></div>
+            <div id="ec-cv-cargo">${ecCvCargoHtml()}</div>
+            <div class="ec-cv-nav"><button class="btn btn-gh" onclick="ecCvStep(1)">← Флот</button><button class="btn btn-gd" onclick="ecCvStep(3)">Далее: маршрут →</button></div>`;
+        } else {
+          body = `<div class="ec-trade-label">Кому и куда <span class="ec-hint">чужие системы на пути = угрозы по дороге</span></div>
+            <div class="ec-trade-route">
+              <select id="ec-cv-osys" onchange="EC.cvOrigin=this.value;ecTradeCalc()" title="Из вашей системы отправления">${mySys.map(s => `<option value="${esc(s.id)}"${s.id === EC.cvOrigin ? ' selected' : ''}>🜨 ${esc(s.name)}</option>`).join('')}</select>
+              <span class="ec-trade-arrow">→</span>
+              <select id="ec-cv-dfac" onchange="EC.cvDFac=this.value;EC.cvDSys='';ecFillDestSys();EC.cvDSys=ecId('ec-cv-dsys')?.value||'';ecTradeCalc()" title="Партнёр-получатель">${others.map(f => `<option value="${esc(f.faction_id)}"${f.faction_id === EC.cvDFac ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>
+              <select id="ec-cv-dsys" onchange="EC.cvDSys=this.value;ecTradeCalc()" title="В систему партнёра">${destList.map(s => `<option value="${esc(s.id)}"${s.id === EC.cvDSys ? ' selected' : ''}>${esc(s.name)}</option>`).join('') || '<option value="">— нет систем —</option>'}</select>
+            </div>
+            <div class="ec-trade-summary" id="ec-cv-summary"></div>
+            <div class="ec-cv-nav"><button class="btn btn-gh" onclick="ecCvStep(2)">← Ресурсы</button><button class="btn btn-gd" id="ec-cv-send" onclick="ecTradePropose()">Предложить караван</button></div>`;
+        }
+        return `<div class="ec-trade-form">
+          <div class="ec-trade-how">
+            <b>Как это работает:</b> караван — постоянное торговое соглашение. После того как партнёр <b>примет</b>, <b>каждый ход</b> ваш караван возит вашу <b>экспортную добычу</b> (режим 💱 Экспорт на заводе) и <b>оба получаете ГС</b>. Путь бессрочный, пока не закроете.
+          </div>
+          ${stepNav}${body}
+        </div>`;
+      })();
   const inHtml = incoming.map(r => { const value = (r.volume || 0) * (r.price || 0); return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
       <span class="ec-route-badge new">предложение</span>
       <b>${esc(r.a_name || ecFacName(r.a_fid))}</b> предлагает слать вам <b>${ecRouteCargoText(r)}</b>/ход · вы получите <b style="color:var(--gd)">+${ecNum(Math.round(value * EC_DEST_CUT))} ГС/ход</b> (бессрочно)
@@ -2181,8 +2220,17 @@ function ecAllianceBlock() {
     const isLeader = d.union.leader_fid === EC.fid;
     const kindName = d.union.kind === 'federation' ? 'Федерация' : 'Конфедерация';
     const membersHtml = (d.members || []).map(m => chip(m.name, m.fid === d.union.leader_fid)).join('');
+    const bonuses = d.union.kind === 'federation'
+      ? ['🛡 Защита караванов — крепкая', '🔍 Защита от разведки — крепкая', '🚀 Общий пул кораблей']
+      : ['🛡 Защита караванов — умеренная', '🔍 Защита от разведки — умеренная'];
+    const bonusHtml = `<div class="ec-union-bonus" style="margin:8px 0;padding:8px 10px;background:var(--b1);border:1px solid var(--w2);border-radius:8px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-bottom:5px">Бонусы союза (${ecNum((d.members || []).length)} чл.)</div>
+        ${bonuses.map(b => `<div style="font-size:12.5px;color:var(--t2);padding:1px 0">${b}</div>`).join('')}
+        <div style="font-size:10.5px;color:var(--t4);margin-top:5px">⚙ механические эффекты вводятся постепенно</div>
+      </div>`;
     unionHtml = `<div class="ec-dip-t">${d.union.kind === 'federation' ? '🛡' : '🤝'} ${esc(kindName)}: «${esc(d.union.name)}»</div>
       <div style="margin:6px 0">${membersHtml}</div>
+      ${bonusHtml}
       ${isLeader ? `<div class="ec-prod-form" style="margin-top:6px">${ecFacSelect('ec-union-inv')}<button class="btn btn-gd btn-sm" onclick="ecUnionInvite()">Пригласить</button></div>` : ''}
       <button class="btn btn-gh btn-sm" style="margin-top:6px" onclick="ecUnionLeave()">Выйти из союза</button>`;
   } else {
