@@ -426,6 +426,22 @@
 .ec-prod-qty { width: 70px !important; flex: 0 0 auto; text-align: center; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 8px; }
 .ec-cap { font-size: 11px; color: var(--t3); font-family: var(--font-mono); margin-bottom: 6px; }
 .ec-cap b { color: var(--t2); font-weight: 600; }
+
+/* Ресурсная ведомость постройки корабля */
+.ec-ship-bill { margin: 0 0 8px; font-size: 12px; line-height: 1.7; }
+.ec-bill-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 5px; }
+.ec-bill-item { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border: 1px solid var(--w2); border-radius: var(--radius-pill); color: var(--t1); white-space: nowrap; }
+.ec-bill-item.ec-bill-ok { border-color: color-mix(in srgb, var(--gd) 40%, transparent); }
+.ec-bill-item.ec-bill-short { border-color: color-mix(in srgb, var(--color-warning) 55%, transparent); color: var(--t1); }
+.ec-bill-item.ec-bill-short b { color: var(--color-warning); }
+.ec-bill-hn { color: var(--t3); font-family: var(--font-mono); font-size: 10px; }
+.ec-bill-ic { width: 14px; height: 14px; vertical-align: middle; }
+.ec-bill-note { display: block; font-size: 11px; margin-bottom: 2px; }
+.ec-bill-note.ec-bill-ok { color: var(--gd); }
+.ec-bill-note.ec-bill-short { color: var(--color-warning); }
+.ec-bill-none { color: var(--t3); }
+.ec-bill-total { font-size: 12px; color: var(--t2); }
+.ec-bill-total b { color: var(--gd); }
 .ec-rbadge { display: inline-block; font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; color: var(--te); background: color-mix(in srgb, var(--te) 14%, transparent); border: 1px solid color-mix(in srgb, var(--te) 45%, transparent); border-radius: var(--radius-pill); padding: 1px 7px; margin-left: 4px; vertical-align: middle; }
 .ec-queue, .ec-roster { display: flex; flex-direction: column; gap: 6px; }
 .ec-q-row, .ec-r-row { display: flex; align-items: center; gap: 10px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-sm); padding: 8px 12px; }

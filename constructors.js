@@ -553,6 +553,114 @@ function cnVehAddUnit(btn, presetIdx) {
   cnVehCalc();
 }
 
+// ════════════════════════════════════════════════════════════
+// РЕСУРСНАЯ ВЕДОМОСТЬ КОРАБЛЯ (bill) — сырьё на 1 корпус
+// ────────────────────────────────────────────────────────────
+// Складывается из базы корпуса (по классу) + вклада компонентов
+// (броня/щит/двигатель/реактор/оружие/модули/ангары). Пишется в
+// summary.bill = {"Железо": N, ...}. На производстве economy_produce
+// списывает это со склада, дефицит докупает по рынку ×1.5 (см.
+// _unit_resources.sql). Логика — ОДНА, здесь; SQL только потребляет
+// bill, как уже делает с summary.cost. Числа крутятся свободно.
+// ════════════════════════════════════════════════════════════
+// База корпуса по категории и классу. Корабли — за 1 корпус; наземка/авиация —
+// за 1 регистрируемый «взвод/эскадрилью» (в дивизии одна запись ≈ один штатный
+// батальон-аналог по размеру), потому масштаб сопоставим со штатными моделями.
+// ЕДИНАЯ ЛЕСТНИЦА СТОИМОСТИ (важно: масштаб согласован между категориями!).
+// Корабль — за 1 корпус; наземка/авиация в конструкторе — за 1 регистрируемую
+// единицу-«взвод», в дивизии она занимает размер ≈ одного штатного пакета. Любой
+// корабль (даже корвет) дороже сырьём, чем любой наземный пакет — это космофлот.
+//   пехотный пакет < наземный пакет < авиапакет < корвет < … < дредноут
+const CN_HULL_BILL = {
+  ship: {
+    corvette:    { 'Железо': 30,   'Медь': 8 },
+    frigate:     { 'Железо': 70,   'Медь': 24,  'Титан': 8 },
+    destroyer:   { 'Железо': 120,  'Медь': 40,  'Титан': 20 },
+    cruiser:     { 'Железо': 220,  'Медь': 70,  'Титан': 45,  'Платина': 15 },
+    battleship:  { 'Железо': 500,  'Титан': 150, 'Платина': 70, 'Изотопы': 30 },
+    dreadnought: { 'Железо': 1000, 'Титан': 320, 'Платина': 160, 'Гравиядро': 6, 'Рагенод': 3 },
+  },
+  ground: {
+    light:     { 'Железо': 6,  'Медь': 2 },
+    medium:    { 'Железо': 12, 'Титан': 4,  'Медь': 3 },
+    artillery: { 'Железо': 10, 'Титан': 3,  'Изотопы': 3 },
+    heavy:     { 'Железо': 20, 'Титан': 8,  'Платина': 2 },
+    walker:    { 'Железо': 18, 'Титан': 9,  'Редкоземельные руды': 3 },
+  },
+  aviation: {
+    light:  { 'Титан': 3,  'Редкоземельные руды': 1 },
+    medium: { 'Титан': 6,  'Редкоземельные руды': 2, 'Дейтерий': 2 },
+    heavy:  { 'Титан': 10, 'Редкоземельные руды': 4, 'Дейтерий': 3 },
+    cargo:  { 'Титан': 5,  'Медь': 3 },
+  },
+};
+// Делители вклада компонентов по категории (стат → сколько сырья). Ground без
+// космо-двигателя/реактора: ходовая = немного Железа.
+const CN_BILL_DIV = {
+  ship:     { armorFe: 2500, armorTi: 15000, shRare: 8000, shDeu: 20000, engFuel: 150, engDeu: 400, reIso: 2500, reHe: 6000 },
+  aviation: { armorFe: 200,  armorTi: 1500,  shRare: 400,  shDeu: 800,   engFuel: 40,  engDeu: 120, reIso: 200,  reHe: 400 },
+  ground:   { armorFe: 1200, armorTi: 6000,  shRare: 1500, shDeu: 4000 },
+};
+function cnBillAdd(bill, name, qty) { qty = Math.ceil(qty); if (qty > 0) bill[name] = (bill[name] || 0) + qty; }
+// Тип орудия по названию → какое сырьё на него идёт
+function cnWpnResKind(name) {
+  const n = (name || '').toLowerCase();
+  if (/пусков|ракет|шахт|перехватчик|торпед|бомб/.test(n)) return 'missile';
+  if (/лазер|импульс|электромагн|ланцет|плазм|бластер/.test(n)) return 'energy';
+  return 'ballistic';   // баллист/рельс/масс/пво/пулемёт/гаубиц
+}
+// Главный расчёт ведомости: категория + класс-ключ + разрешённые объекты
+// компонентов. weapons/modules/hangars — массивы {w,q}/{m}/{h}.
+function cnUnitBill(cat, k, parts) {
+  const bill = {};
+  const t = CN_BILL_DIV[cat]; if (!t) return bill;
+  const base = (CN_HULL_BILL[cat] || {})[k] || {};
+  for (const nm in base) cnBillAdd(bill, nm, base[nm]);
+  const p = parts || {};
+  if (p.armorObj) { cnBillAdd(bill, 'Железо', (p.armorObj.armor || 0) / t.armorFe); cnBillAdd(bill, 'Титан', (p.armorObj.armor || 0) / t.armorTi); }
+  if (p.shieldObj && p.shieldObj.shield) { cnBillAdd(bill, 'Редкоземельные руды', p.shieldObj.shield / t.shRare); cnBillAdd(bill, 'Дейтерий', p.shieldObj.shield / t.shDeu); }
+  if (p.engObj) {
+    if (t.engFuel) { cnBillAdd(bill, 'Метан', (p.engObj.energy || 0) / t.engFuel); cnBillAdd(bill, 'Дейтерий', (p.engObj.energy || 0) / t.engDeu); }
+    else cnBillAdd(bill, 'Железо', 1);   // наземная ходовая часть
+  }
+  if (p.reactObj && t.reIso) { cnBillAdd(bill, 'Изотопы', (p.reactObj.energy || 0) / t.reIso); cnBillAdd(bill, 'Гелий-3', (p.reactObj.energy || 0) / t.reHe); }
+  (p.weapons || []).forEach(({ w, q }) => {
+    if (!w || !q) return;
+    const kind = cnWpnResKind(w.name);
+    if (kind === 'missile') cnBillAdd(bill, 'Изотопы', (w.dmg / 150) * q);
+    else if (kind === 'energy') { cnBillAdd(bill, 'Редкоземельные руды', (w.dmg / 180) * q); cnBillAdd(bill, 'Гелий-3', (w.dmg / 400) * q); }
+    else cnBillAdd(bill, 'Железо', (w.dmg / 120) * q);
+  });
+  (p.modules || []).forEach(({ m }) => {
+    if (!m) return;
+    if ((m.cost || 0) >= 100) cnBillAdd(bill, 'Стелларит', 1);
+    else if ((m.cost || 0) >= 30) cnBillAdd(bill, 'Редкоземельные руды', 1);
+  });
+  (p.hangars || []).forEach(({ h }) => { if (h) cnBillAdd(bill, 'Титан', (h.capacity || 0) / 12); });
+  return bill;
+}
+// Сложить ведомость src×mult в dst (для агрегации дивизии)
+function cnBillMerge(dst, src, mult) {
+  mult = mult || 1;
+  for (const nm in (src || {})) cnBillAdd(dst, nm, (src[nm] || 0) * mult);
+  return dst;
+}
+// Иконка ресурса (через GalaxyGen, если доступен)
+function cnBillResIcon(name) {
+  try { if (window.GalaxyGen && GalaxyGen.resIconHtml) return GalaxyGen.resIconHtml(name, 'cn-bill-ic') + ' '; } catch (e) {}
+  return '';
+}
+function cnBillHtml(bill) {
+  const keys = Object.keys(bill || {});
+  if (!keys.length) return '<span class="cn-bill-none">— без сырья —</span>';
+  return keys.map(nm => `<span class="cn-bill-item">${cnBillResIcon(nm)}${esc(nm)} ×${cnNum(bill[nm])}</span>`).join('');
+}
+function cnBillText(bill) {
+  const keys = Object.keys(bill || {});
+  if (!keys.length) return ' - не требуется';
+  return keys.map(nm => ` - ${nm}: ${cnNum(bill[nm])}`).join('\n');
+}
+
 // ── Расчёт ТТХ ──
 function cnVehCalc() {
   const def = CN.def, db = def.db;
@@ -567,6 +675,7 @@ function cnVehCalc() {
   let cost = (typeObj ? typeObj.cost : cls.cost) + (reactObj ? reactObj.cost : 0) + armorObj.cost + shieldObj.cost + engObj.cost;
   let energyCons = def.hasEnergy ? ((shieldObj.energy || 0) + (engObj.energy || 0)) : 0;
   let dmg = 0, on = cls.baseON;
+  const billWeapons = [], billModules = [], billHangars = [];   // для ресурсной ведомости
 
   document.querySelectorAll('#cn-weapons .cn-row').forEach(row => {
     const s = JSON.parse(row.querySelector('select').value);
@@ -574,18 +683,21 @@ function cnVehCalc() {
     const w = db.weapons[s.g][s.idx];
     cost += w.cost * q; on += q * cls.modON; dmg += w.dmg * q;
     if (def.hasEnergy) energyCons += (w.energy || 0) * q;
+    billWeapons.push({ w, q });
   });
   document.querySelectorAll('#cn-modules .cn-row').forEach(row => {
     const s = JSON.parse(row.querySelector('select').value);
     const m = db.modules[s.g][s.idx];
     cost += m.cost; on += cls.modON;
     if (def.hasEnergy) energyCons += (m.energy || 0);
+    billModules.push({ m });
   });
   let hangarOver = false, cargo = 0;
   if (def.hasHangars) {
     document.querySelectorAll('#cn-hangars .cn-hangar').forEach(hp => {
       const h = db.hangarTypes.find(x => x.id == hp.querySelector('.cn-h-type').value);
       cost += h.cost; on += cls.modON; energyCons += h.energy;
+      billHangars.push({ h });
       if (h && h.canHaveUnits === false) cargo += (h.capacity || 0);   // грузовые ангары = грузоподъёмность каравана
       let used = 0; hp.querySelectorAll('.cn-u-type').forEach(u => used += db.airUnits[u.value].points);
       const st = hp.querySelector('.cn-h-status');
@@ -601,7 +713,10 @@ function cnVehCalc() {
   const shield = shieldObj.shield || 0;
   const speed = engObj.speed;
   const eMax = reactObj ? reactObj.energy : 0;
-  CN.last = { hp, armor, shield, dmg, speed, cost, on: +on.toFixed(1), eCons: energyCons, eMax, energy: def.hasEnergy, hangarOver, cargo };
+  // Ресурсная ведомость: корабли строятся по ней напрямую, наземка/авиация —
+  // в составе дивизий (их bill агрегируется в дивизионный summary.bill).
+  const bill = cnUnitBill(CN.cat, k, { typeObj, reactObj, armorObj, shieldObj, engObj, weapons: billWeapons, modules: billModules, hangars: billHangars });
+  CN.last = { hp, armor, shield, dmg, speed, cost, on: +on.toFixed(1), eCons: energyCons, eMax, energy: def.hasEnergy, hangarOver, cargo, bill };
   cnVehRenderStats();
   // Жёсткий лимит: нельзя набрать сверх показателя — откатываем последнее действие
   if (CN._applying) return;
@@ -630,6 +745,7 @@ function cnVehRenderStats() {
     <div class="cn-stat"><span>Стоимость</span><b style="color:var(--gd)">${cnNum(s.cost)} ГС</b></div>
     <div class="cn-stat"><span>Разработка</span><b style="color:var(--te)">${s.on} ОН</b></div>`;
   if (s.energy) rows += `<div class="cn-stat"><span>Энергосеть</span><b class="${energyOk ? '' : 'cn-warn'}">${cnNum(s.eCons)} / ${cnNum(s.eMax)} E</b></div>`;
+  if (s.bill && Object.keys(s.bill).length) rows += `<div class="cn-stat cn-stat-bill"><span>Сырьё / корпус</span><div class="cn-bill">${cnBillHtml(s.bill)}</div></div>`;
   cnId('cn-stats').innerHTML = rows;
 }
 
@@ -692,6 +808,7 @@ function cnVehCardText() {
   const ms = document.querySelectorAll('#cn-modules .cn-row');
   if (!ms.length) c += ` - базовая комплектация\n`;
   ms.forEach(r => { const sp = JSON.parse(r.querySelector('select').value); c += ` - ${db.modules[sp.g][sp.idx].name}\n`; });
+  if (s.bill && Object.keys(s.bill).length) c += `------------------------------------------\nСЫРЬЁ НА КОРПУС:\n${cnBillText(s.bill)}\n`;
   c += `------------------------------------------\nИТОГ: ${cnNum(s.cost)} ГС · ${s.on} ОН`;
   if (s.energy) c += ` · энергосеть ${cnNum(s.eCons)}/${cnNum(s.eMax)} E`;
   return c;
@@ -701,27 +818,29 @@ function cnCopyVehCard() { cnCopy(cnVehCardText()); }
 // ════════════════════════════════════════════════════════════
 // БИЛДЕР ДИВИЗИЙ (division)
 // ════════════════════════════════════════════════════════════
+// bill — сырьё на 1 «пакет» модели (count единиц): пехота=1000 бойцов,
+// техника=100 машин, авиация=10 бортов. Складывается в дивизионный summary.bill.
 const CN_DIV_DATA = [
-  { id: 'inf_militia', name: 'Ополчение', type: 'inf', cost: 10, count: 1000, size: 1000, armorhp: 1, atack: 1, dalnost: 1 },
-  { id: 'inf_regular', name: 'Регулярная пехота', type: 'inf', cost: 35, count: 1000, size: 1000, armorhp: 2, atack: 3, dalnost: 2 },
-  { id: 'inf_heavy', name: 'Тяжелая/Штурмовая пехота', type: 'inf', cost: 80, count: 1000, size: 1000, armorhp: 5, atack: 6, dalnost: 2 },
-  { id: 'inf_spec', name: 'Спецназ / Десант', type: 'inf', cost: 150, count: 1000, size: 1000, armorhp: 4, atack: 10, dalnost: 3 },
-  { id: 'inf_robot', name: 'Роботизированная пехота', type: 'inf', cost: 50, count: 1000, size: 1000, armorhp: 4, atack: 10, dalnost: 3 },
-  { id: 'tank_light', name: 'Легкий танк', type: 'tank', cost: 300, count: 100, size: 200, armorhp: 30, atack: 25, dalnost: 4 },
-  { id: 'tank_mbt', name: 'Основной Боевой Танк', type: 'tank', cost: 500, count: 100, size: 300, armorhp: 80, atack: 70, dalnost: 5 },
-  { id: 'tank_heavy', name: 'Тяжелый танк прорыва', type: 'tank', cost: 1000, count: 100, size: 400, armorhp: 150, atack: 110, dalnost: 5 },
-  { id: 'tank_walker', name: 'Штурмовой Шагоход', type: 'tank', cost: 1500, count: 100, size: 400, armorhp: 120, atack: 140, dalnost: 6 },
-  { id: 'btr_wheel', name: 'Колесный бронетранспортер', type: 'btr', cost: 250, count: 100, size: 150, armorhp: 15, atack: 10, dalnost: 2 },
-  { id: 'bmp_track', name: 'Гусеничная БМП', type: 'btr', cost: 450, count: 100, size: 200, armorhp: 35, atack: 25, dalnost: 3 },
-  { id: 'btr_hover', name: 'Грави-транспорт', type: 'btr', cost: 800, count: 100, size: 150, armorhp: 25, atack: 15, dalnost: 3 },
-  { id: 'art_mortar', name: 'Мобильная минометная батарея', type: 'artillery', cost: 200, count: 100, size: 100, armorhp: 5, atack: 40, dalnost: 15 },
-  { id: 'art_sau', name: 'Самоходная артустановка', type: 'artillery', cost: 900, count: 100, size: 250, armorhp: 20, atack: 90, dalnost: 40 },
-  { id: 'art_rszo', name: 'РСЗО', type: 'artillery', cost: 1200, count: 100, size: 300, armorhp: 15, atack: 150, dalnost: 60 },
-  { id: 'art_laser', name: 'Тяжелое плазменное/лазерное орудие', type: 'artillery', cost: 3500, count: 100, size: 350, armorhp: 30, atack: 250, dalnost: 80 },
-  { id: 'air_drone', name: 'Ударный беспилотник', type: 'aviation', cost: 500, count: 10, size: 10, armorhp: 2, atack: 40, dalnost: 50 },
-  { id: 'air_heli', name: 'Штурмовой ганшип', type: 'aviation', cost: 1500, count: 10, size: 20, armorhp: 15, atack: 100, dalnost: 30 },
-  { id: 'air_fighter', name: 'Атмосферный истребитель', type: 'aviation', cost: 2000, count: 10, size: 20, armorhp: 10, atack: 150, dalnost: 150 },
-  { id: 'air_bomber', name: 'Тяжелый тактический бомбардировщик', type: 'aviation', cost: 2500, count: 10, size: 40, armorhp: 25, atack: 400, dalnost: 200 }
+  { id: 'inf_militia', name: 'Ополчение', type: 'inf', cost: 10, count: 1000, size: 1000, armorhp: 1, atack: 1, dalnost: 1, bill: { 'Железо': 1 } },
+  { id: 'inf_regular', name: 'Регулярная пехота', type: 'inf', cost: 35, count: 1000, size: 1000, armorhp: 2, atack: 3, dalnost: 2, bill: { 'Железо': 2 } },
+  { id: 'inf_heavy', name: 'Тяжелая/Штурмовая пехота', type: 'inf', cost: 80, count: 1000, size: 1000, armorhp: 5, atack: 6, dalnost: 2, bill: { 'Железо': 5, 'Титан': 1 } },
+  { id: 'inf_spec', name: 'Спецназ / Десант', type: 'inf', cost: 150, count: 1000, size: 1000, armorhp: 4, atack: 10, dalnost: 3, bill: { 'Железо': 4, 'Титан': 2, 'Редкоземельные руды': 1 } },
+  { id: 'inf_robot', name: 'Роботизированная пехота', type: 'inf', cost: 50, count: 1000, size: 1000, armorhp: 4, atack: 10, dalnost: 3, bill: { 'Железо': 6, 'Медь': 3, 'Редкоземельные руды': 1 } },
+  { id: 'tank_light', name: 'Легкий танк', type: 'tank', cost: 300, count: 100, size: 200, armorhp: 30, atack: 25, dalnost: 4, bill: { 'Железо': 6, 'Медь': 2 } },
+  { id: 'tank_mbt', name: 'Основной Боевой Танк', type: 'tank', cost: 500, count: 100, size: 300, armorhp: 80, atack: 70, dalnost: 5, bill: { 'Железо': 12, 'Титан': 4, 'Медь': 3 } },
+  { id: 'tank_heavy', name: 'Тяжелый танк прорыва', type: 'tank', cost: 1000, count: 100, size: 400, armorhp: 150, atack: 110, dalnost: 5, bill: { 'Железо': 20, 'Титан': 8, 'Платина': 2 } },
+  { id: 'tank_walker', name: 'Штурмовой Шагоход', type: 'tank', cost: 1500, count: 100, size: 400, armorhp: 120, atack: 140, dalnost: 6, bill: { 'Железо': 18, 'Титан': 9, 'Редкоземельные руды': 3 } },
+  { id: 'btr_wheel', name: 'Колесный бронетранспортер', type: 'btr', cost: 250, count: 100, size: 150, armorhp: 15, atack: 10, dalnost: 2, bill: { 'Железо': 4, 'Медь': 1 } },
+  { id: 'bmp_track', name: 'Гусеничная БМП', type: 'btr', cost: 450, count: 100, size: 200, armorhp: 35, atack: 25, dalnost: 3, bill: { 'Железо': 7, 'Титан': 2, 'Медь': 2 } },
+  { id: 'btr_hover', name: 'Грави-транспорт', type: 'btr', cost: 800, count: 100, size: 150, armorhp: 25, atack: 15, dalnost: 3, bill: { 'Железо': 5, 'Медь': 3, 'Редкоземельные руды': 1 } },
+  { id: 'art_mortar', name: 'Мобильная минометная батарея', type: 'artillery', cost: 200, count: 100, size: 100, armorhp: 5, atack: 40, dalnost: 15, bill: { 'Железо': 4, 'Изотопы': 1 } },
+  { id: 'art_sau', name: 'Самоходная артустановка', type: 'artillery', cost: 900, count: 100, size: 250, armorhp: 20, atack: 90, dalnost: 40, bill: { 'Железо': 10, 'Титан': 3, 'Изотопы': 2 } },
+  { id: 'art_rszo', name: 'РСЗО', type: 'artillery', cost: 1200, count: 100, size: 300, armorhp: 15, atack: 150, dalnost: 60, bill: { 'Железо': 9, 'Титан': 2, 'Изотопы': 3 } },
+  { id: 'art_laser', name: 'Тяжелое плазменное/лазерное орудие', type: 'artillery', cost: 3500, count: 100, size: 350, armorhp: 30, atack: 250, dalnost: 80, bill: { 'Железо': 12, 'Редкоземельные руды': 5, 'Гелий-3': 2 } },
+  { id: 'air_drone', name: 'Ударный беспилотник', type: 'aviation', cost: 500, count: 10, size: 10, armorhp: 2, atack: 40, dalnost: 50, bill: { 'Титан': 2, 'Редкоземельные руды': 1 } },
+  { id: 'air_heli', name: 'Штурмовой ганшип', type: 'aviation', cost: 1500, count: 10, size: 20, armorhp: 15, atack: 100, dalnost: 30, bill: { 'Титан': 5, 'Медь': 2, 'Дейтерий': 1 } },
+  { id: 'air_fighter', name: 'Атмосферный истребитель', type: 'aviation', cost: 2000, count: 10, size: 20, armorhp: 10, atack: 150, dalnost: 150, bill: { 'Титан': 6, 'Редкоземельные руды': 2, 'Дейтерий': 2 } },
+  { id: 'air_bomber', name: 'Тяжелый тактический бомбардировщик', type: 'aviation', cost: 2500, count: 10, size: 40, armorhp: 25, atack: 400, dalnost: 200, bill: { 'Титан': 10, 'Редкоземельные руды': 3, 'Изотопы': 2, 'Дейтерий': 2 } }
 ];
 const CN_DIV_TYPES = [['inf', 'Пехота'], ['tank', 'Танки'], ['btr', 'БТР / БМП'], ['artillery', 'Артиллерия'], ['aviation', 'Авиация']];
 const CN_DIV_CAP = 10000;
@@ -795,6 +914,7 @@ function cnDivModelById(id) {
       armorhp: (sm.armor || 0) + (sm.hp || 0),
       atack: sm.dmg || 0,
       dalnost: sm.dalnost || 0,
+      bill: sm.bill || {},
     };
   }
   return CN_DIV_DATA.find(m => m.id === id) || null;
@@ -845,7 +965,7 @@ function cnDivTypeChange(sel) {
 }
 function cnDivTotals() {
   let cost = 0, size = 0, count = 0, sa = 0, st = 0, sd = 0, ma = 0, mt = 0, md = 0;
-  const list = [];
+  const list = [], bill = {};
   document.querySelectorAll('#cn-div-area .cn-divblock').forEach(b => {
     const id = b.querySelector('.cn-d-model').value;
     const c = parseInt(b.querySelector('.cn-d-count').value) || 0;
@@ -855,11 +975,12 @@ function cnDivTotals() {
       cost += m.cost * c; size += m.size * c;
       sa += (m.armorhp || 0) * c; st += (m.atack || 0) * c; sd += (m.dalnost || 0) * c; count += c;
       if (m.armorhp > ma) ma = m.armorhp; if (m.atack > mt) mt = m.atack; if (m.dalnost > md) md = m.dalnost;
+      cnBillMerge(bill, m.bill, c);
     }
   });
   const percent = +(size / CN_DIV_CAP * 100).toFixed(1);
   const midA = count ? +(sa / count).toFixed(1) : 0, midT = count ? +(st / count).toFixed(1) : 0, midD = count ? +(sd / count).toFixed(1) : 0;
-  CN.lastDiv = { cost, size, percent, count, midArmor: midA, maxArmor: ma, midAtk: midT, maxAtk: mt, midRange: midD, maxRange: md };
+  CN.lastDiv = { cost, size, percent, count, midArmor: midA, maxArmor: ma, midAtk: midT, maxAtk: mt, midRange: midD, maxRange: md, bill };
   const over = size > CN_DIV_CAP;
   cnId('cn-stats').innerHTML = `
     <div class="cn-stat"><span>Стоимость</span><b style="color:var(--gd)">${cnNum(cost)} ГС</b></div>
@@ -867,7 +988,8 @@ function cnDivTotals() {
     <div class="cn-stat"><span>Занято</span><b class="${over ? 'cn-warn' : ''}">${percent} %</b></div>
     <div class="cn-stat"><span>Бронир. ср / макс</span><b>${midA} / ${cnNum(ma)}</b></div>
     <div class="cn-stat"><span>Атака ср / макс</span><b>${midT} / ${cnNum(mt)}</b></div>
-    <div class="cn-stat"><span>Дальность ср / макс</span><b>${midD} / ${cnNum(md)}</b></div>`;
+    <div class="cn-stat"><span>Дальность ср / макс</span><b>${midD} / ${cnNum(md)}</b></div>
+    ${Object.keys(bill).length ? `<div class="cn-stat cn-stat-bill"><span>Сырьё / дивизию</span><div class="cn-bill">${cnBillHtml(bill)}</div></div>` : ''}`;
   cnId('cn-div-summary').innerHTML = list.length ? list.join('<br>') : 'Пусто';
   // Жёсткий лимит размера: нельзя набрать сверх 10 000 — откатываем
   if (CN._applyingDiv) return;
@@ -901,7 +1023,8 @@ function cnDivCardText() {
     `4. Размер: ${cnNum(s.size)} / ${cnNum(CN_DIV_CAP)} (${s.percent}%)\n` +
     `5. Бронирование (ср/макс): ${s.midArmor} / ${cnNum(s.maxArmor)}\n` +
     `6. Атака (ср/макс): ${s.midAtk} / ${cnNum(s.maxAtk)}\n` +
-    `7. Дальность (ср/макс): ${s.midRange} / ${cnNum(s.maxRange)}`;
+    `7. Дальность (ср/макс): ${s.midRange} / ${cnNum(s.maxRange)}\n` +
+    `------------------------\nСЫРЬЁ НА ДИВИЗИЮ:\n${cnBillText(s.bill)}`;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -962,16 +1085,10 @@ async function cnPublish() {
     summary = { ...CN.last, className: cls.name, typeName: typeObj ? typeObj.name : '' };
     card = cnVehCardText();
   }
-  const body = {
-    category: CN.cat, name,
-    faction_id: fac.faction_id, faction_name: fac.faction_name, faction_color: fac.faction_color,
-    owner_id: user.id, owner_email: user.email,
-    summary, data, card_text: card, updated_at: new Date().toISOString(),
-  };
   const isNew = !(CN.editUnit && CN.editUnit.id);
-  // Стафф выдаёт юниты-награды — ОН с казны фракции не списываем.
+  // Цену/ОН/ведомость/ТТХ считает СЕРВЕР (economy_publish_unit) из data — клиентский
+  // summary идёт только для предпросмотра. summary в тело запроса НЕ кладём.
   const onCost = (isNew && CN.cat !== 'division' && fac.faction_id && !cnIsStaff()) ? (summary.on || 0) : 0;
-
   if (onCost > 0) {
     const ecoRows = await dbGet('faction_economy', `faction_id=eq.${encodeURIComponent(fac.faction_id)}&select=science`);
     const curScience = (ecoRows && ecoRows[0] && ecoRows[0].science) || 0;
@@ -980,16 +1097,18 @@ async function cnPublish() {
 
   CN.busy = true;
   try {
-    if (onCost > 0) {
-      const ecoRows = await dbGet('faction_economy', `faction_id=eq.${encodeURIComponent(fac.faction_id)}&select=science`);
-      const curScience = (ecoRows && ecoRows[0] && ecoRows[0].science) || 0;
-      if (curScience < onCost) { toast(`Недостаточно ОН для разработки: нужно ${onCost}, есть ${curScience}`, 'err'); return; }
-      await ecRpc('economy_dev_charge', { p_on: onCost });
-    }
-    if (CN.editUnit && CN.editUnit.id) { await dbPatch('faction_units', 'id=eq.' + CN.editUnit.id, body); toast('Изменения сохранены ✓', 'ok'); }
-    else { const rows = await dbPost('faction_units', body); const row = Array.isArray(rows) ? rows[0] : rows; if (row && row.id) CN.editUnit = row; toast(`Опубликовано ✓${onCost ? ` · −${onCost} ОН` : ''}`, 'ok'); }
+    const res = await ecRpc('economy_publish_unit', {
+      p_category: CN.cat, p_name: name, p_data: data, p_card_text: card,
+      p_faction_id: fac.faction_id || null, p_faction_name: fac.faction_name || null,
+      p_faction_color: fac.faction_color || null,
+      p_unit_id: (CN.editUnit && CN.editUnit.id) || null,
+    });
+    const row = (res && res.id) ? res : (Array.isArray(res) ? res[0] : res);
+    if (row && row.id) CN.editUnit = row;
+    const charged = row && row._on_charged;
+    toast(isNew ? `Опубликовано ✓${charged ? ` · −${cnNum(charged)} ОН` : ''}` : 'Изменения сохранены ✓', 'ok');
     go(cnCatRoute(CN.cat));
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+  } catch (e) { toast('Ошибка: ' + (e && e.message ? e.message : e), 'err'); }
   finally { CN.busy = false; }
 }
 

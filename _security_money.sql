@@ -20,7 +20,7 @@ returns numeric language sql immutable as $$
     when 'trade'            then 1000   when 'market'   then 1500
     when 'science'          then 1000   when 'training' then 500
     when 'intel'            then 3000   when 'military_factory' then 1000
-    when 'shipyard'         then 2000
+    when 'shipyard'         then 2000   when 'warehouse' then 800
     else null end
 $$;
 -- Сколько слотов даётся бесплатно при постройке (EC_BUILD[t].free).

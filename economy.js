@@ -1433,8 +1433,9 @@ function ecDivBuildCard(div) {
     <div class="ec-div-hd"><span class="ec-div-name">⚔ ${esc(div.name)}</span><span class="ec-div-cost">${ecNum(cost)} ГС</span></div>
     <div class="ec-div-comp">${comp}</div>
     <div class="ec-div-need">${needChips}</div>
+    <div id="ec-div-bill-${esc(div.id)}" class="ec-ship-bill">${ecDivBillHtml(div.id, 1)}</div>
     <div class="ec-div-act">
-      <input type="number" id="ec-div-qty-${esc(div.id)}" value="1" min="1" class="ec-prod-qty">
+      <input type="number" id="ec-div-qty-${esc(div.id)}" value="1" min="1" class="ec-prod-qty" oninput="ecDivBillUpd('${esc(div.id)}')">
       ${can
       ? `<button class="btn btn-gd btn-sm" onclick="ecProduceDivision('${esc(div.id)}')">Сформировать</button>`
       : `<button class="btn btn-gh btn-sm" disabled>Нет: ${missing.map(m => esc(EC_BLD_LABEL[m])).join(', ')}</button>`}
@@ -1492,10 +1493,11 @@ function ecTabMilBuild() {
   if (!caps.hasShipyard) shipForm = `<div class="ec-empty">Нужна Корабельная Верфь — постройте её во вкладке «Колонии».</div>`;
   else if (!ships.length) shipForm = `<div class="ec-empty">Нет проектов кораблей. Спроектируйте в Корабельном конструкторе. <button class="btn btn-gh btn-sm" style="margin-left:8px" onclick="go('build-ship')">🚀 Конструктор</button></div>`;
   else shipForm = `<div class="ec-prod-form">
-      <select id="ec-ship-sel">${ships.map(d => `<option value="${esc(d.id)}">${esc(d.name)} — ${ecNum((d.summary && d.summary.cost) || 0)} ГС</option>`).join('')}</select>
-      <input type="number" id="ec-ship-qty" value="1" min="1" class="ec-prod-qty">
+      <select id="ec-ship-sel" onchange="ecShipBillUpd()">${ships.map(d => `<option value="${esc(d.id)}">${esc(d.name)} — ${ecNum((d.summary && d.summary.cost) || 0)} ГС</option>`).join('')}</select>
+      <input type="number" id="ec-ship-qty" value="1" min="1" class="ec-prod-qty" oninput="ecShipBillUpd()">
       <button class="btn btn-gd btn-sm" onclick="ecProduceShip()">＋ Заложить</button>
     </div>
+    <div id="ec-ship-bill" class="ec-ship-bill">${ecShipBillHtml(ships[0].id, 1)}</div>
     <div class="ec-cap">Верфь: <b class="${use.ships > caps.ships ? 'ec-warn' : ''}">${use.ships}/${caps.ships} кораблей за ход</b></div>`;
 
   const queueHtml = EC.queue.length
@@ -3480,11 +3482,56 @@ async function ecProduceDivision(divId) {
   const cost = ((div.summary && div.summary.cost) || 0) * qty;
   EC.busy = true;
   try {
-    await ecRpc('economy_produce', { p_unit_id: div.id, p_qty: qty });
-    toast(`Формируется дивизия: ${div.name} ×${qty}`, 'ok');
+    const r = await ecRpc('economy_produce', { p_unit_id: div.id, p_qty: qty });
+    const sc = r && +r.surcharge || 0;
+    toast(`Формируется дивизия: ${div.name} ×${qty}` + (sc > 0 ? ` · докуплено сырья на ${ecNum(sc)} ГС` : ''), 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
+}
+
+// ── Ресурсная ведомость корабля в панели производства ───────
+// Сравнивает summary.bill дизайна со складом (EC.eco.resources), считает
+// дефицит и наценку ×1.5 — зеркало economy_produce (_unit_resources.sql).
+function ecShipBillIcon(name) {
+  try { if (window.GalaxyGen && GalaxyGen.resIconHtml) return GalaxyGen.resIconHtml(name, 'ec-bill-ic') + ' '; } catch (e) {}
+  return '';
+}
+// Ядро: ведомость по дизайну (корабль/дивизия) и количеству. Зеркало
+// economy_produce (_unit_resources.sql): дефицит докупается ×1.5.
+function ecUnitBillHtml(u, qty) {
+  if (!u) return '';
+  qty = Math.max(1, qty || 1);
+  const bill = (u.summary && u.summary.bill) || {};
+  const keys = Object.keys(bill);
+  const base = ((u.summary && u.summary.cost) || 0) * qty;
+  if (!keys.length) return `<span class="ec-bill-none">Сырьё не требуется.</span> <span class="ec-bill-total">Итого: <b>${ecNum(base)} ГС</b></span>`;
+  const res = (EC.eco && EC.eco.resources) || {};
+  let surchargeRaw = 0, anyShort = false;
+  const items = keys.map(nm => {
+    const need = (+bill[nm] || 0) * qty, have = +res[nm] || 0, short = Math.max(0, need - have);
+    if (short > 0) { surchargeRaw += short * ecResPriceN(nm) * 1.5; anyShort = true; }
+    return `<span class="ec-bill-item ${short > 0 ? 'ec-bill-short' : 'ec-bill-ok'}">${ecShipBillIcon(nm)}${esc(nm)} <span class="ec-bill-hn">${ecNum(have)}/${ecNum(need)}</span>${short > 0 ? ` <b>докупка ${ecNum(short)}</b>` : ''}</span>`;
+  }).join('');
+  const surcharge = Math.ceil(surchargeRaw);
+  const note = anyShort
+    ? `<span class="ec-bill-note ec-bill-short">Дефицит сырья докупается по рынку ×1.5: <b>+${ecNum(surcharge)} ГС</b></span>`
+    : `<span class="ec-bill-note ec-bill-ok">Сырья на складе хватает — берётся бесплатно.</span>`;
+  return `<div class="ec-bill-row">${items}</div>${note} <span class="ec-bill-total">Итого: <b>${ecNum(base + surcharge)} ГС</b>${surcharge ? ` <span class="ec-hint">(${ecNum(base)} + ${ecNum(surcharge)})</span>` : ''}</span>`;
+}
+function ecShipBillHtml(unitId, qty) {
+  return ecUnitBillHtml(EC.designs.find(d => d.id === unitId && d.category === 'ship'), qty);
+}
+function ecShipBillUpd() {
+  const box = ecId('ec-ship-bill'), sel = ecId('ec-ship-sel'); if (!box || !sel) return;
+  box.innerHTML = ecShipBillHtml(sel.value, Math.max(1, parseInt(ecId('ec-ship-qty')?.value) || 1));
+}
+function ecDivBillHtml(divId, qty) {
+  return ecUnitBillHtml(EC.designs.find(d => d.id === divId && d.category === 'division'), qty);
+}
+function ecDivBillUpd(divId) {
+  const box = ecId('ec-div-bill-' + divId); if (!box) return;
+  box.innerHTML = ecDivBillHtml(divId, Math.max(1, parseInt(ecId('ec-div-qty-' + divId)?.value) || 1));
 }
 
 // Постройка корабля — поштучно на Верфи
@@ -3499,8 +3546,9 @@ async function ecProduceShip() {
   const cost = ((u.summary && u.summary.cost) || 0) * qty;
   EC.busy = true;
   try {
-    await ecRpc('economy_produce', { p_unit_id: u.id, p_qty: qty });
-    toast(`Заложен корабль: ${u.name} ×${qty}`, 'ok');
+    const r = await ecRpc('economy_produce', { p_unit_id: u.id, p_qty: qty });
+    const sc = r && +r.surcharge || 0;
+    toast(`Заложен корабль: ${u.name} ×${qty}` + (sc > 0 ? ` · докуплено сырья на ${ecNum(sc)} ГС` : ''), 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
