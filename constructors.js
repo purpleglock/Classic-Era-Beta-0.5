@@ -463,21 +463,18 @@ function cnInfoModal(title, body) {
 }
 function cnCloseInfo() { document.getElementById('cn-info-ov')?.classList.remove('show'); }
 
-// Инлайн-карточка ТЕКУЩЕГО выбора слота + «Изменить» (открывает модалку выбора)
+// Компактный чип ТЕКУЩЕГО выбора слота в шапке полотна (клик → модалка выбора)
+const CN_SLOT_SHORT = { class: 'Корпус', type: 'Специализация', reactor: 'Реактор', engine: 'Двигатель', armor: 'Броня', shield: 'Щит' };
 function cnSlotSelected(slot) {
   const def = CN.def; if (!def || !def.cardUI) return;
   const wrap = cnId('cn-' + slot + '-cards'), sel = cnId('cn-' + slot);
   if (!wrap || !sel) return;
   const info = slot === 'class' ? cnCompInfo('class', sel.value) : cnCompInfo(slot, null, +sel.value);
   if (!info.obj) { wrap.innerHTML = ''; return; }
-  wrap.innerHTML = `<div class="cn-comp on cn-comp-pick" onclick="cnOpenSlotPicker('${slot}')">
-    ${cnImgTag(info.imgPath, 'cn-comp-img')}
-    <div class="cn-comp-b">
-      <div class="cn-comp-nm">${esc(info.obj.name)}</div>
-      <div class="cn-comp-st">${cnSlotStatChips(slot, info.obj, def)}</div>
-    </div>
-    <span class="cn-comp-change">Изменить ▸</span>
-  </div>`;
+  wrap.innerHTML = `<button class="cn-slot-chip" onclick="cnOpenSlotPicker('${slot}')">
+    <span class="cn-slot-lbl">${CN_SLOT_SHORT[slot] || slot}</span>
+    <span class="cn-slot-val">${esc(info.obj.name)}</span>
+  </button>`;
 }
 // Модалка выбора компонента слота (полные карточки; гейт по исследованиям)
 function cnOpenSlotPicker(slot) {
@@ -620,6 +617,54 @@ function cnHullRooms(H, count) {
   return rooms.map(p => { let cx = 0, cy = 0; p.forEach(q => { cx += q[0]; cy += q[1]; }); return { poly: p, cx: cx / p.length, cy: cy / p.length }; });
 }
 
+// Силуэт ПОДКЛАССА: ширина корпуса по «массе» спецификации (лёгкий — узкий, тяжёлый — широкий)
+function cnScalePathX(d, sx, cx) { return cnPathPoly(d).map((p, i) => (i ? 'L' : 'M') + (cx + (p[0] - cx) * sx).toFixed(1) + ',' + p[1].toFixed(1)).join(' ') + 'Z'; }
+function cnTypeGeo(H, cls, tIdx) {
+  if (!cls.types || cls.types.length < 2) return H;
+  const ms = cls.types.map(t => (t.hp || 0) + (t.armor || 0) * 2);
+  const lo = Math.min(...ms), hi = Math.max(...ms), r = hi > lo ? ((ms[tIdx] || ms[0]) - lo) / (hi - lo) : 0.5;
+  const wf = 0.84 + r * 0.32;
+  const Hs = Object.assign({}, H);
+  Hs.path = cnScalePathX(H.path, wf, 160);
+  Hs.maxHW = H.maxHW * wf;
+  Hs.shield = [H.shield[0], H.shield[1], H.shield[2] * wf, H.shield[3]];
+  return Hs;
+}
+// ДВИГАТЕЛЬ: число дюз из названия, цвет/размер по типу (ион — бирюза/тонкие, плазма — золото/шире)
+function cnEngineSvg(H, engObj) {
+  const e = H.engine, name = engObj ? engObj.name : '';
+  const mm = name.match(/(\d+)/); let nz = mm ? Math.min(6, +mm[1]) : 1; if (nz < 1) nz = 1;
+  const plasma = /плазм/i.test(name), col = plasma ? 'var(--gd)' : 'var(--te)';
+  const len = Math.min(60, 20 + (engObj ? engObj.speed : 20)) * (plasma ? 1.18 : 1);
+  const span = Math.min(H.maxHW * 0.72, 8 + nz * 5), w = plasma ? 7 : 5, op = plasma ? 0.62 : 0.5;
+  let s = '';
+  for (let i = 0; i < nz; i++) { const fx = nz === 1 ? 160 : 160 - span + 2 * span * i / (nz - 1); s += `<polygon points="${(fx - w).toFixed(1)},${e[1]} ${(fx + w).toFixed(1)},${e[1]} ${fx.toFixed(1)},${(e[1] + len).toFixed(1)}" fill="${col}" opacity="${op}"/>`; }
+  return s;
+}
+// Масштаб пути относительно точки (для конформной оболочки щита)
+function cnScaleAbout(d, s, cx, cy) { return cnPathPoly(d).map((p, i) => (i ? 'L' : 'M') + (cx + (p[0] - cx) * s).toFixed(1) + ',' + (cy + (p[1] - cy) * s).toFixed(1)).join(' ') + 'Z'; }
+function cnPolyDots(poly, spacing) {
+  const pts = [];
+  for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length], dx = b[0] - a[0], dy = b[1] - a[1], steps = Math.max(1, Math.round(Math.hypot(dx, dy) / spacing)); for (let s = 0; s < steps; s++) { const t = s / steps; pts.push([a[0] + dx * t, a[1] + dy * t]); } }
+  return pts;
+}
+// ЩИТ: КОНФОРМНАЯ оболочка по силуэту корпуса (а не огромный эллипс). 3 стиля по типу.
+function cnShieldSvg(H, sIdx, rt) {
+  const midY = (H.nose + H.engine[1]) / 2, sf = 1.1 + 0.12 * rt;
+  const col = sIdx === 0 ? 'var(--te)' : sIdx === 1 ? 'var(--gd)' : 'var(--t2)', op = 0.55 + 0.3 * rt;
+  const env = s => cnScaleAbout(H.path, s, 160, midY);
+  if (sIdx === 0) {                       // Дефлекторный — облегающий купол с бликом
+    return `<path d="${env(sf)}" fill="color-mix(in srgb, ${col} 8%, transparent)" stroke="${col}" stroke-width="${(1.6 + rt * 1.3).toFixed(1)}" stroke-linejoin="round" opacity="${op.toFixed(2)}"/>`
+      + `<path d="${env(sf - 0.05)}" fill="none" stroke="${col}" stroke-width="0.8" stroke-linejoin="round" opacity="${(op * 0.5).toFixed(2)}"/>`;
+  }
+  if (sIdx === 1) {                       // Энергетический — две оболочки (контур + пунктир)
+    return `<path d="${env(sf)}" fill="none" stroke="${col}" stroke-width="1.9" stroke-linejoin="round" opacity="${op.toFixed(2)}"/>`
+      + `<path d="${env(sf - 0.08)}" fill="none" stroke="${col}" stroke-width="1" stroke-dasharray="9 6" stroke-linejoin="round" opacity="${(op * 0.6).toFixed(2)}"/>`;
+  }
+  const dots = cnPolyDots(cnPathPoly(env(sf)), 13 - rt * 3), c = (1.1 + rt * 1.1).toFixed(1);   // Корпускулярный — частицы по контуру
+  return dots.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${c}" fill="${col}" opacity="${op.toFixed(2)}"/>`).join('');
+}
+
 // Живая схема корабля вид сверху — рисуется из CN.shipLayout, без картинок.
 function cnDrawShip() {
   if (CN.cat !== 'ship' || !CN.def || !CN.def.cardUI) return;
@@ -627,27 +672,24 @@ function cnDrawShip() {
   if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] };
   if (!CN.schemShow) CN.schemShow = { weapons: true, bays: true };
   const db = CN.def.db, k = cnId('cn-class').value, cls = db.data[k];
-  const H = CN_SHIP_GEO[k] || CN_SHIP_GEO.corvette;
+  const H0 = CN_SHIP_GEO[k] || CN_SHIP_GEO.corvette;
+  const tIdx = +(cnId('cn-type') || {}).value || 0;
+  const H = cnTypeGeo(H0, cls, tIdx);     // силуэт зависит от подкласса (ширина по «массе»)
   const armorObj = db.armors[k][+cnId('cn-armor').value || 0];
   const shieldObj = db.shields[k][+cnId('cn-shield').value || 0];
   const engObj = db.engines[k][+cnId('cn-engine').value || 0];
   const e = H.engine, P = [], L = CN.shipLayout;
   const mounts = cnMountPositions(H, L.mounts.length);
 
-  // ЩИТ — вид зависит от выбранного щита (тип + сила)
+  // ЩИТ — три разных стиля поля по типу + размер/насыщенность по силе
   if (shieldObj && shieldObj.shield > 0) {
-    const s = H.shield, sIdx = +cnId('cn-shield').value || 0;
+    const sIdx = +cnId('cn-shield').value || 0;
     const maxSh = Math.max(...db.shields[k].map(x => x.shield)) || 1, rt = Math.min(1, shieldObj.shield / maxSh);
-    const scol = sIdx === 0 ? 'var(--te)' : sIdx === 1 ? 'var(--gd)' : 'var(--t2)';
-    const dash = sIdx === 2 ? '2 6' : sIdx === 1 ? '11 6' : '5 7';
-    const rx = +(s[2] * (0.88 + 0.18 * rt)).toFixed(0), ry = +(s[3] * (0.88 + 0.18 * rt)).toFixed(0);
-    P.push(`<ellipse cx="${s[0]}" cy="${s[1]}" rx="${rx}" ry="${ry}" fill="none" stroke="${scol}" stroke-width="${(1.4 + rt * 2).toFixed(1)}" stroke-dasharray="${dash}" opacity="${(0.4 + 0.45 * rt).toFixed(2)}"/>`);
-    if (rt > 0.6) P.push(`<ellipse cx="${s[0]}" cy="${s[1]}" rx="${Math.round(rx * 0.93)}" ry="${Math.round(ry * 0.93)}" fill="none" stroke="${scol}" stroke-width="1" stroke-dasharray="2 7" opacity="0.4"/>`);
+    P.push(cnShieldSvg(H, sIdx, rt));
   }
 
-  // ДВИГАТЕЛЬ — факел (длина ~ скорость)
-  const fl = Math.min(64, 24 + (engObj ? engObj.speed : 20));
-  P.push(`<polygon points="${e[0] - 18},${e[1]} ${e[0] + 18},${e[1]} ${e[0]},${e[1] + fl}" fill="var(--te)" opacity="0.5"/>`);
+  // ДВИГАТЕЛЬ — число дюз и тип (ион/плазма) из выбранного двигателя
+  P.push(cnEngineSvg(H, engObj));
 
   // КОРПУС + бронепояс (толщина пояса/обводки зависит от брони)
   const maxAr = Math.max(...db.armors[k].map(a => a.armor)) || 1, aRt = (armorObj ? armorObj.armor : 0) / maxAr;
@@ -688,7 +730,7 @@ function cnDrawShip() {
     else P.push(`<g style="cursor:pointer" onclick="cnNodeClick('mount',${i})"><title>Пустой узел — нажми, чтобы поставить орудие</title><circle cx="${m[0]}" cy="${m[1]}" r="4.5" fill="var(--b2)" stroke="var(--t4)" stroke-width="1" stroke-dasharray="2 2"/></g>`);
   });
 
-  host.innerHTML = `<svg viewBox="0 0 320 440" class="cn-schem-svg" role="img" aria-label="Схема корабля вид сверху">${P.join('')}</svg>`;
+  host.innerHTML = `<svg viewBox="0 0 440 320" class="cn-schem-svg" role="img" aria-label="Схема корабля вид сверху (горизонтально)"><g transform="translate(440,0) rotate(90)">${P.join('')}</g></svg>`;
   const cap = cnId('cn-schem-cap');
   if (cap) {
     const tIdx = +(cnId('cn-type') || {}).value || 0, tName = cls.types && cls.types[tIdx] ? cls.types[tIdx].name : '';
@@ -698,8 +740,9 @@ function cnDrawShip() {
 
 // ── Ручное размещение: добавить узел/отсек, назначить/убрать содержимое, скрыть слой ──
 function cnLayoutAdd(kind) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; if (kind === 'mount') CN.shipLayout.mounts.push({ w: null }); else CN.shipLayout.bays.push({ m: null }); cnVehCalc(); }
-// Клик по свободному внутреннему пространству → занять новый отсек и сразу выбрать модуль
+// Клик по свободному внутреннему пространству → занять именно эту комнату отсеком и выбрать модуль
 function cnRoomAdd() { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; CN.shipLayout.bays.push({ m: null }); cnVehCalc(); cnOpenAssignPicker('bay', CN.shipLayout.bays.length - 1); }
+function cnRoomAddAt(i) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; while (CN.shipLayout.bays.length <= i) CN.shipLayout.bays.push({ m: null }); cnVehCalc(); cnOpenAssignPicker('bay', i); }
 function cnSchemToggle(which) { if (!CN.schemShow) CN.schemShow = { weapons: true, bays: true }; CN.schemShow[which] = !CN.schemShow[which]; const b = cnId(which === 'weapons' ? 'cn-tg-w' : 'cn-tg-b'); if (b) b.classList.toggle('on', CN.schemShow[which]); cnDrawShip(); }
 function cnNodeClick(kind, i) { cnOpenAssignPicker(kind, i); }
 function cnOpenAssignPicker(kind, slot) {
@@ -840,18 +883,33 @@ async function cnVehRender(cat) {
       </div>` : '';
 
   const cui = def.cardUI;
-  const configHtml = cui ? `
-      <div class="cn-config">
-        <div class="cn-panel cn-schem-panel">
+  const publishBtns = `${facBlock}
+          <button class="btn btn-gd btn-fw" style="margin-top:12px" onclick="cnPublish()">${edit ? '💾 Сохранить изменения' : '✓ Опубликовать'}</button>
+          <button class="btn btn-gh btn-fw" style="margin-top:8px" onclick="cnCopyVehCard()">📋 Копировать спецификацию</button>`;
+  // Игровой outfit-экран: системы — компактные чипы в шапке полотна, ниже крупный корабль, под ним ТТХ
+  const slotSel = (id, h) => `<select id="cn-${id}" class="cn-sel-hidden" onchange="${h}"></select><div class="cn-cards cn-slot" id="cn-${id}-cards"></div>`;
+  const stageHtml = `
+      <div class="cn-present cn-present-full">
+        <div class="cn-panel cn-stage">
+          <input id="cn-name" class="cn-stage-name" placeholder="Название корабля…" value="${esc(edit ? edit.name : '')}">
+          <div class="cn-slots">
+            ${slotSel('class', 'cnVehHandleClass()')}
+            ${def.hasType ? slotSel('type', 'cnVehCalc()') : ''}
+            ${def.hasReactor ? slotSel('reactor', 'cnVehCalc()') : ''}
+            ${slotSel('engine', 'cnVehCalc()')}
+            ${slotSel('armor', 'cnVehCalc()')}
+            ${slotSel('shield', 'cnVehCalc()')}
+          </div>
           <div class="cn-schem-cap" id="cn-schem-cap"></div>
           <div id="cn-schematic" class="cn-schematic"></div>
           <div class="cn-schem-tools">
             <button class="btn btn-gh btn-sm" onclick="cnLayoutAdd('mount')">＋ Узел орудия</button>
             <button class="btn btn-gh btn-sm" onclick="cnLayoutAdd('bay')">＋ Отсек</button>
+            ${def.hasHangars ? `<button class="btn btn-gh btn-sm" onclick="cnVehAddHangar()">＋ Ангар</button>` : ''}
             <button class="btn btn-gh btn-sm on" id="cn-tg-w" onclick="cnSchemToggle('weapons')">Орудия</button>
             <button class="btn btn-gh btn-sm on" id="cn-tg-b" onclick="cnSchemToggle('bays')">Отсеки</button>
           </div>
-          <div class="cn-schem-hint">Жми по узлам/отсекам на схеме, чтобы поставить или убрать. Добавляй новые кнопками выше.</div>
+          <div class="cn-schem-hint">Системы сверху — клик открывает выбор. По узлам и отсекам прямо на корабле — поставить, сменить или убрать.</div>
           <div class="cn-schem-legend">
             <span class="cn-lg"><i style="background:var(--te)"></i>энергия</span>
             <span class="cn-lg"><i style="background:var(--t2)"></i>баллистика</span>
@@ -862,24 +920,11 @@ async function cnVehRender(cat) {
             <span class="cn-lg"><i class="cn-lg-empty"></i>свободный узел</span>
           </div>
         </div>
-        <div class="cn-panel">
-          <h3>Базовая конфигурация</h3>
-          <div class="cn-field"><label>${esc(def.nameLabel)}</label><input id="cn-name" placeholder="Введите название..." value="${esc(edit ? edit.name : '')}"></div>
-          <div class="cn-field"><label>${esc(def.classLabel)}</label><select id="cn-class" class="cn-sel-hidden" onchange="cnVehHandleClass()"></select><div class="cn-cards" id="cn-class-cards"></div></div>
-          ${def.hasType ? `<div class="cn-field"><label>Специализация</label><select id="cn-type" class="cn-sel-hidden" onchange="cnVehCalc()"></select><div class="cn-cards" id="cn-type-cards"></div></div>` : ''}
-        </div>
-        <div class="cn-panel">
-          <h3>Энергоузел и ходовая</h3>
-          ${def.hasReactor ? `<div class="cn-field"><label>Реактор</label><select id="cn-reactor" class="cn-sel-hidden" onchange="cnVehCalc()"></select><div class="cn-cards" id="cn-reactor-cards"></div></div>` : ''}
-          <div class="cn-field"><label>${esc(def.engineLabel)}</label><select id="cn-engine" class="cn-sel-hidden" onchange="cnVehCalc()"></select><div class="cn-cards" id="cn-engine-cards"></div></div>
-        </div>
-        <div class="cn-panel">
-          <h3>Защита</h3>
-          <div class="cn-field"><label>Бронирование</label><select id="cn-armor" class="cn-sel-hidden" onchange="cnVehCalc()"></select><div class="cn-cards" id="cn-armor-cards"></div></div>
-          <div class="cn-field"><label>Щитовой модуль</label><select id="cn-shield" class="cn-sel-hidden" onchange="cnVehCalc()"></select><div class="cn-cards" id="cn-shield-cards"></div></div>
-        </div>
-        ${hangarPanel}
-      </div>` : `
+        ${def.hasHangars ? `<div class="cn-panel cn-hangars-panel"><h3>Ангарная палуба</h3><div id="cn-hangars"></div></div>` : ''}
+        <div class="cn-panel"><h3>Текущие ТТХ</h3><div id="cn-stats" class="cn-stats-grid"></div></div>
+        <div class="cn-panel">${publishBtns}</div>
+      </div>`;
+  const configHtml = `
       <div class="cn-config">
         <div class="cn-panel">
           <h3>Базовая конфигурация</h3>
@@ -910,6 +955,16 @@ async function cnVehRender(cat) {
           <button class="btn btn-gh btn-fw" style="margin-top:10px" onclick="cnVehAddItem('module')">+ Добавить модуль</button>
         </div>
       </div>`;
+  const body = cui ? stageHtml : `<div class="cn-grid">
+      ${configHtml}
+      <div class="cn-side">
+        <div class="cn-panel cn-sticky">
+          <h3>Текущие ТТХ</h3>
+          <div id="cn-stats"></div>
+          ${publishBtns}
+        </div>
+      </div>
+    </div>`;
 
   setPg(`<div class="cn-wrap cn-builder">
     <div class="cn-head">
@@ -917,18 +972,7 @@ async function cnVehRender(cat) {
       <h1>${esc(def.title)}</h1>
       <div class="cn-back"><a onclick="go('constructors')">← к конструкторам</a></div>
     </div>
-    <div class="cn-grid">
-      ${configHtml}
-      <div class="cn-side">
-        <div class="cn-panel cn-sticky">
-          <h3>Текущие ТТХ</h3>
-          <div id="cn-stats"></div>
-          ${facBlock}
-          <button class="btn btn-gd btn-fw" style="margin-top:12px" onclick="cnPublish()">${edit ? '💾 Сохранить изменения' : '✓ Опубликовать'}</button>
-          <button class="btn btn-gh btn-fw" style="margin-top:8px" onclick="cnCopyVehCard()">📋 Копировать спецификацию</button>
-        </div>
-      </div>
-    </div>
+    ${body}
   </div>`);
 
   if (edit && cnId('cn-faction')) cnId('cn-faction').value = edit.faction_id || '';
