@@ -107,19 +107,50 @@
 .cn-chip-btn:hover { color: var(--t1); border-color: var(--w3); }
 .cn-chip-btn.on { border-color: var(--c, var(--gd)); color: var(--t1); box-shadow: inset 0 0 0 1px var(--c, var(--gd)); }
 
-.cn-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 14px; }
-.cn-card { position: relative; display: flex; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-md); overflow: hidden; cursor: pointer; transition: border-color var(--transition-fast); }
-.cn-card:hover { border-color: var(--w3); }
-.cn-card-bar { width: 5px; flex: 0 0 auto; background: var(--w2); }
-.cn-card-body { padding: 12px 14px; flex: 1; min-width: 0; }
-.cn-card-name { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--t1); }
-.cn-card-fac { font-size: 11px; font-weight: 600; margin-top: 2px; }
-.cn-card-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.cn-mini { font-size: 10px; color: var(--t3); background: var(--b1); border: 1px solid var(--w1); border-radius: var(--radius-sm); padding: 2px 6px; white-space: nowrap; }
-.cn-mini b { color: var(--t2); font-weight: 600; }
-.cn-card-acts { display: flex; flex-direction: column; gap: 4px; padding: 8px; }
-.cn-card-acts button { width: 26px; height: 26px; border: 1px solid var(--w2); background: var(--b3); color: var(--t3); border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1; }
-.cn-card-acts button:hover { color: var(--t1); border-color: var(--w3); }
+.cn-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; margin-top: 16px; }
+
+/* Карточка юнита — крупная, с цветовым акцентом фракции (--cc) */
+.cn-card {
+  --cc: var(--gd);
+  position: relative; display: flex; flex-direction: column; gap: 13px;
+  background: linear-gradient(165deg, var(--b2), color-mix(in srgb, var(--cc) 5%, var(--b2)));
+  border: 1px solid var(--w2); border-radius: var(--radius-lg);
+  padding: 16px 16px 14px; cursor: pointer; overflow: hidden;
+  transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.cn-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--cc); opacity: .9; }
+.cn-card:hover { border-color: var(--cc); transform: translateY(-3px); box-shadow: 0 10px 28px -14px color-mix(in srgb, var(--cc) 60%, transparent); }
+
+.cn-card-top { display: flex; align-items: flex-start; gap: 12px; }
+.cn-card-ico {
+  flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
+  font-size: 22px; line-height: 1; border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--cc) 14%, var(--b1)); border: 1px solid color-mix(in srgb, var(--cc) 35%, var(--w2));
+}
+.cn-card-id { flex: 1; min-width: 0; }
+.cn-card-name { font-family: var(--font-display); font-weight: 700; font-size: 17px; color: var(--t1); line-height: 1.25; letter-spacing: var(--ls-tight); }
+.cn-card-fac { font-size: 11.5px; font-weight: 600; margin-top: 3px; color: var(--cc); text-transform: uppercase; letter-spacing: .04em; }
+
+.cn-card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--w1); border: 1px solid var(--w1); border-radius: var(--radius-md); overflow: hidden; }
+.cn-st { display: flex; flex-direction: column; gap: 2px; padding: 9px 10px; background: var(--b1); }
+.cn-st b { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--t1); line-height: 1.1; }
+.cn-st span { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--t3); }
+.cn-st-a b { color: var(--cc); }
+
+.cn-card-bill { display: flex; flex-direction: column; gap: 6px; }
+.cn-card-bill-lbl { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--t3); }
+
+.cn-card-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--w1); }
+.cn-card-cost { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--gd); }
+.cn-card-more { font-size: 11px; color: var(--t3); transition: color var(--transition-fast); }
+.cn-card:hover .cn-card-more { color: var(--cc); }
+
+.cn-card-acts { display: flex; gap: 5px; flex: 0 0 auto; }
+.cn-card-acts button { width: 28px; height: 28px; border: 1px solid var(--w2); background: var(--b3); color: var(--t3); border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; line-height: 1; transition: color var(--transition-fast), border-color var(--transition-fast); }
+.cn-card-acts button:hover { color: var(--t1); border-color: var(--cc); }
+
+.cn-modal-grid { margin: 12px 0; }
+.cn-modal-grid + .cn-card-bill { margin-bottom: 14px; }
 
 /* ── Модалка просмотра ── */
 .cn-modal-ov { position: fixed; inset: 0; background: rgba(0, 0, 0, .62); display: none; align-items: center; justify-content: center; z-index: var(--z-modal); padding: 20px; }
@@ -133,9 +164,138 @@
 .cn-spec-locked { font-family: var(--font-display); font-size: 13px; color: var(--t3); text-align: center; border-style: dashed; line-height: 1.7; }
 .cn-modal-acts { display: flex; gap: 8px; margin-top: 14px; }
 
+/* ═══════════════════════════════════════════════════════════════
+   ВИЗУАЛЬНЫЙ ВЫБОР КОМПОНЕНТОВ (карточки + картинки + описания)
+   ─────────────────────────────────────────────────────────────── */
+.cn-sel-hidden { display: none !important; }
+
+.cn-cards { display: block; margin-top: 2px; }
+
+.cn-comp {
+  position: relative; display: flex; flex-direction: column; gap: 8px; padding: 10px;
+  background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-md);
+  cursor: pointer; transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.cn-comp:hover { border-color: var(--gd); transform: translateY(-2px); }
+.cn-comp.on { border-color: var(--gd); box-shadow: inset 0 0 0 1px var(--gd), 0 8px 22px -16px var(--gd); }
+.cn-comp.on::after { content: '✓'; position: absolute; top: 6px; right: 9px; font-size: 12px; font-weight: 700; color: var(--gd); }
+.cn-comp.locked { opacity: .5; cursor: not-allowed; filter: grayscale(.5); }
+.cn-comp.locked:hover { border-color: var(--w2); transform: none; }
+
+.cn-comp-img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: var(--radius-sm); background: var(--b3); display: block; }
+.cn-comp-b { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cn-comp-nm { font-family: var(--font-display); font-weight: 600; font-size: 12.5px; color: var(--t1); line-height: 1.25; }
+.cn-comp-st { display: flex; flex-wrap: wrap; gap: 4px; }
+.cn-comp-ds { font-size: 10.5px; color: var(--t3); line-height: 1.45; }
+
+.cn-chip { display: inline-flex; align-items: baseline; gap: 3px; font-family: var(--font-mono); font-size: 9.5px; color: var(--t1); background: var(--w1); border: 1px solid var(--w1); border-radius: var(--radius-pill); padding: 1px 6px; white-space: nowrap; }
+.cn-chip i { font-style: normal; color: var(--t3); font-size: 8.5px; text-transform: uppercase; letter-spacing: .04em; }
+
+/* Обёртка картинки + заглушка, если файла ещё нет */
+.cn-imgbox { position: relative; display: block; background: var(--b3); overflow: hidden; }
+.cn-imgbox img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cn-imgbox-empty { border: 1px dashed var(--w2); background: repeating-linear-gradient(45deg, var(--b3), var(--b3) 7px, var(--b2) 7px, var(--b2) 14px); }
+.cn-imgbox-empty::after { content: '⬡ нет картинки'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; font-family: var(--font-mono); font-size: 9px; color: var(--t4); text-align: center; padding: 4px; line-height: 1.2; }
+.cn-h-img.cn-imgbox-empty::after, .cn-u-img.cn-imgbox-empty::after { content: '⬡'; font-size: 13px; }
+
+/* Схема корабля вид сверху (живая, рисуется кодом) */
+.cn-schem-panel { padding: 0; overflow: hidden; }
+.cn-schem-cap { padding: 13px 16px 2px; font-family: var(--font-mono); font-size: 12px; color: var(--t3); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.cn-schem-k { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--t1); letter-spacing: var(--ls-tight); }
+.cn-schem-t { color: var(--t2); }
+.cn-schem-m { color: var(--te); }
+.cn-schematic { position: relative; display: flex; justify-content: center; padding: 4px 8px; }
+.cn-schem-svg { width: 100%; max-width: 290px; height: auto; display: block; }
+.cn-schem-over { position: absolute; left: 14px; bottom: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--err); }
+.cn-schem-tools { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 4px; }
+.cn-schem-tools .btn { flex: 0 0 auto; }
+.cn-schem-tools .btn.on { border-color: var(--gd); color: var(--gd); }
+.cn-schem-hint { padding: 4px 16px 0; font-size: 10.5px; color: var(--t4); line-height: 1.45; }
+.cn-assign-head { display: flex; gap: 8px; margin-top: 12px; }
+.cn-schem-legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 16px 14px; border-top: 1px solid var(--w1); }
+.cn-lg { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--t3); }
+.cn-lg i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: 0 0 auto; }
+.cn-lg-empty { border: 1.5px dashed var(--t4); background: transparent !important; border-radius: 50%; }
+.cn-lg-mod { border: 1.5px solid var(--gd); background: var(--b3) !important; border-radius: 2px; width: 14px !important; }
+.cn-lg-hangar { border: 1.5px solid var(--te); background: var(--b3) !important; border-radius: 2px; width: 14px !important; }
+.cn-lg-air { background: var(--te) !important; clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%); border-radius: 0 !important; }
+.cn-bay { cursor: help; }
+
+/* Hero выбранного корпуса */
+.cn-hero-panel { padding: 0; overflow: hidden; }
+.cn-hull-hero { position: relative; display: block; min-height: 120px; background: var(--b1); }
+.cn-hero-img { width: 100%; height: 190px; object-fit: cover; display: block; }
+.cn-hull-hero .cn-hero-b { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 16px; background: linear-gradient(to top, rgba(0, 0, 0, .78), rgba(0, 0, 0, 0)); }
+.cn-hero-k { font-family: var(--font-display); font-weight: 700; font-size: 19px; color: #fff; letter-spacing: var(--ls-tight); }
+.cn-hero-t { font-size: 12px; color: rgba(255, 255, 255, .82); margin-top: 2px; }
+
+/* Строка оружия/модуля как мини-карточка */
+.cn-comp-row { align-items: stretch; }
+.cn-comp-inrow { flex: 1; min-width: 0; flex-direction: row; align-items: center; gap: 11px; cursor: default; }
+.cn-comp-inrow:hover { transform: none; }
+.cn-comp-inrow .cn-comp-img { width: 78px; height: 50px; aspect-ratio: auto; flex: 0 0 auto; }
+.cn-comp-row .cn-qty, .cn-comp-row .cn-del { align-self: center; }
+
+/* Картинки ангара / авиагруппы */
+.cn-h-img { width: 40px; height: 40px; object-fit: cover; border-radius: var(--radius-sm); flex: 0 0 auto; background: var(--b3); }
+.cn-u-img { width: 30px; height: 30px; object-fit: cover; border-radius: var(--radius-sm); flex: 0 0 auto; background: var(--b3); }
+
+/* Модалка выбора компонента */
+.cn-pick-modal { width: min(860px, 96vw); }
+.cn-pick-body { margin-top: 14px; display: flex; flex-direction: column; gap: 18px; }
+.cn-pick-h { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--te); margin-bottom: 8px; }
+
+/* Картинка корпуса в карточке каталога */
+.cn-card-ico-img { padding: 0; overflow: hidden; }
+.cn-card-ico-img .cn-imgbox { width: 100%; height: 100%; }
+
+/* Инлайн-«хардпоинт» текущего выбора слота (image + статы + «Изменить») */
+.cn-comp-pick {
+  flex-direction: row; align-items: center; gap: 14px; padding: 12px 14px;
+  border-left: 3px solid var(--gd);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gd) 9%, var(--b1)), var(--b1) 55%);
+}
+.cn-comp-pick:hover { transform: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gd) 40%, transparent), 0 8px 22px -16px var(--gd); }
+.cn-comp-pick.on::after { content: none; }
+.cn-comp-pick .cn-comp-img { width: 104px; height: 64px; aspect-ratio: auto; flex: 0 0 auto; border: 1px solid var(--w2); }
+.cn-comp-pick .cn-comp-b { flex: 1 1 auto; min-width: 0; gap: 7px; }
+.cn-comp-pick .cn-comp-nm { font-size: 15px; }
+.cn-comp-change {
+  flex: 0 0 auto; align-self: center; white-space: nowrap;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--gd); padding: 8px 13px; border: 1px solid var(--w2); border-radius: var(--radius-sm); background: var(--b2);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.cn-comp-pick:hover .cn-comp-change { border-color: var(--gd); background: color-mix(in srgb, var(--gd) 12%, var(--b2)); }
+
+/* ── Модалка выбора компонента: сетка полных карточек ── */
+.cn-info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 12px; margin-top: 14px; }
+.cn-info-card { display: flex; flex-direction: column; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-md); overflow: hidden; cursor: pointer; transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast); }
+.cn-info-card:hover { border-color: var(--gd); transform: translateY(-2px); box-shadow: 0 10px 24px -16px var(--gd); }
+.cn-info-card.on { border-color: var(--gd); box-shadow: inset 0 0 0 1px var(--gd); }
+.cn-info-card.locked { opacity: .55; cursor: not-allowed; filter: grayscale(.5); }
+.cn-info-card.locked:hover { transform: none; border-color: var(--w2); box-shadow: none; }
+.cn-info-img { width: 100%; aspect-ratio: 16 / 9; flex: 0 0 auto; }
+.cn-info-body { display: flex; flex-direction: column; gap: 9px; padding: 12px; }
+.cn-info-nm { font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--t1); line-height: 1.25; }
+.cn-info-cur { font-family: var(--font-mono); font-size: 9px; color: var(--gd); text-transform: uppercase; letter-spacing: .05em; }
+.cn-info-stats { display: flex; flex-direction: column; }
+.cn-info-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--w1); }
+.cn-info-row:last-child { border-bottom: 0; }
+.cn-info-row span { color: var(--t3); }
+.cn-info-row b { color: var(--t1); font-family: var(--font-display); font-weight: 600; }
+.cn-info-res { display: flex; flex-direction: column; gap: 5px; }
+.cn-info-sub { font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); }
+.cn-info-desc { font-size: 11.5px; color: var(--t2); line-height: 1.5; white-space: pre-wrap; }
+.cn-info-pick { margin-top: 2px; text-align: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em; color: var(--gd); border: 1px solid var(--w2); border-radius: var(--radius-sm); padding: 7px; background: var(--b2); }
+.cn-info-card:hover .cn-info-pick { border-color: var(--gd); }
+.cn-info-pick.cn-info-lk { color: var(--t4); }
+
 /* ── Адаптив ── */
 @media (max-width: 900px) {
   .cn-grid { grid-template-columns: 1fr; }
   .cn-sticky { position: static; }
   .cn-row3 { grid-template-columns: 1fr; }
+  .cn-cards { grid-template-columns: 1fr; }
+  .cn-info-grid { grid-template-columns: 1fr; }
 }
