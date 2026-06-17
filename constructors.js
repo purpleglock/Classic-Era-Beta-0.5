@@ -636,7 +636,7 @@ function cnEngineSvg(H, engObj) {
   const mm = name.match(/(\d+)/); let nz = mm ? Math.min(6, +mm[1]) : 1; if (nz < 1) nz = 1;
   const plasma = /плазм/i.test(name), col = plasma ? 'var(--gd)' : 'var(--te)';
   const len = Math.min(60, 20 + (engObj ? engObj.speed : 20)) * (plasma ? 1.18 : 1);
-  const span = Math.min(H.maxHW * 0.72, 8 + nz * 5), w = plasma ? 7 : 5, op = plasma ? 0.62 : 0.5;
+  const span = Math.min(cnHullHalf(H, e[1] - 6) * 0.72, 6 + nz * 4), w = plasma ? 6 : 4.5, op = plasma ? 0.62 : 0.5;
   let s = '';
   for (let i = 0; i < nz; i++) { const fx = nz === 1 ? 160 : 160 - span + 2 * span * i / (nz - 1); s += `<polygon points="${(fx - w).toFixed(1)},${e[1]} ${(fx + w).toFixed(1)},${e[1]} ${fx.toFixed(1)},${(e[1] + len).toFixed(1)}" fill="${col}" opacity="${op}"/>`; }
   return s;
@@ -730,7 +730,7 @@ function cnDrawShip() {
     else P.push(`<g style="cursor:pointer" onclick="cnNodeClick('mount',${i})"><title>Пустой узел — нажми, чтобы поставить орудие</title><circle cx="${m[0]}" cy="${m[1]}" r="4.5" fill="var(--b2)" stroke="var(--t4)" stroke-width="1" stroke-dasharray="2 2"/></g>`);
   });
 
-  host.innerHTML = `<svg viewBox="0 0 440 320" class="cn-schem-svg" role="img" aria-label="Схема корабля вид сверху (горизонтально)"><g transform="translate(440,0) rotate(90)">${P.join('')}</g></svg>`;
+  host.innerHTML = `<svg viewBox="0 0 500 320" class="cn-schem-svg" role="img" aria-label="Схема корабля вид сверху (горизонтально)"><g transform="translate(470,0) rotate(90)">${P.join('')}</g></svg>`;
   const cap = cnId('cn-schem-cap');
   if (cap) {
     const tIdx = +(cnId('cn-type') || {}).value || 0, tName = cls.types && cls.types[tIdx] ? cls.types[tIdx].name : '';
@@ -901,13 +901,17 @@ async function cnVehRender(cat) {
             ${slotSel('shield', 'cnVehCalc()')}
           </div>
           <div class="cn-schem-cap" id="cn-schem-cap"></div>
-          <div id="cn-schematic" class="cn-schematic"></div>
+          <div class="cn-schem-wrap">
+            <div id="cn-schematic" class="cn-schematic"></div>
+            <div class="cn-schem-toggles">
+              <button class="btn btn-gh btn-sm on" id="cn-tg-w" onclick="cnSchemToggle('weapons')" title="Показать/скрыть орудия">Орудия</button>
+              <button class="btn btn-gh btn-sm on" id="cn-tg-b" onclick="cnSchemToggle('bays')" title="Показать/скрыть отсеки">Отсеки</button>
+            </div>
+          </div>
           <div class="cn-schem-tools">
             <button class="btn btn-gh btn-sm" onclick="cnLayoutAdd('mount')">＋ Узел орудия</button>
             <button class="btn btn-gh btn-sm" onclick="cnLayoutAdd('bay')">＋ Отсек</button>
             ${def.hasHangars ? `<button class="btn btn-gh btn-sm" onclick="cnVehAddHangar()">＋ Ангар</button>` : ''}
-            <button class="btn btn-gh btn-sm on" id="cn-tg-w" onclick="cnSchemToggle('weapons')">Орудия</button>
-            <button class="btn btn-gh btn-sm on" id="cn-tg-b" onclick="cnSchemToggle('bays')">Отсеки</button>
           </div>
           <div class="cn-schem-hint">Системы сверху — клик открывает выбор. По узлам и отсекам прямо на корабле — поставить, сменить или убрать.</div>
           <div class="cn-schem-legend">

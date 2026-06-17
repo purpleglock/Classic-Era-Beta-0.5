@@ -229,7 +229,10 @@
 .cn-schem-over { position: absolute; left: 14px; bottom: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--err); }
 .cn-schem-tools { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 4px; }
 .cn-schem-tools .btn { flex: 0 0 auto; }
-.cn-schem-tools .btn.on { border-color: var(--gd); color: var(--gd); }
+.cn-schem-wrap { position: relative; }
+.cn-schem-toggles { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
+.cn-schem-toggles .btn { background: var(--b2); }
+.cn-schem-tools .btn.on, .cn-schem-toggles .btn.on { border-color: var(--gd); color: var(--gd); }
 .cn-schem-hint { padding: 4px 16px 0; font-size: 10.5px; color: var(--t4); line-height: 1.45; }
 .cn-assign-head { display: flex; gap: 8px; margin-top: 12px; }
 .cn-schem-legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 16px 14px; border-top: 1px solid var(--w1); }
@@ -318,4 +321,30 @@
   .cn-row3 { grid-template-columns: 1fr; }
   .cn-cards { grid-template-columns: 1fr; }
   .cn-info-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Мобильная адаптация конструктора ── */
+@media (max-width: 640px) {
+  .cn-wrap { padding: 14px 12px 48px; }
+  .cn-head h1 { font-size: var(--text-xl); }
+  .cn-panel { padding: 13px 13px 14px; }
+  .cn-stage { padding: 12px; }
+  .cn-stage-name { font-size: 15px; padding: 9px 10px; }
+  .cn-slots { gap: 6px; }
+  .cn-slot-chip { padding: 5px 9px; }
+  .cn-slot-lbl { font-size: 8.5px; }
+  .cn-slot-val { font-size: 11px; }
+  .cn-schem-cap { font-size: 11px; padding: 11px 12px 2px; }
+  .cn-schem-toggles { top: 6px; right: 6px; gap: 5px; }
+  .cn-schem-toggles .btn { padding: 4px 8px; font-size: 10px; }
+  .cn-schem-tools { padding: 0 12px 4px; }
+  .cn-schem-legend { gap: 9px 12px; padding: 10px 12px 14px; }
+  .cn-stats-grid { grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .cn-hub-grid { grid-template-columns: 1fr; }
+  .cn-cat-grid { grid-template-columns: 1fr; }
+  .cn-info-card .cn-info-img { aspect-ratio: 16 / 7; }
+  .cn-modal { padding: 16px; }
+}
+@media (max-width: 380px) {
+  .cn-stats-grid { grid-template-columns: 1fr; }
 }
