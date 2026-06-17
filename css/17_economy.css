@@ -468,6 +468,15 @@
 /* Внутри подписей (.ec-cap) — бар выравниваем по базовой линии текста */
 .ec-cap-prog { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ec-cap-prog .ec-prog-track { width: 120px; }
+.ec-cap-free { opacity: .6; }
+/* Очередь технологий */
+.ec-rqueue { margin: 8px 0; border: 1px solid var(--w2); border-radius: var(--radius-md, 8px); background: color-mix(in srgb, var(--color-warning, #e0a030) 4%, var(--b1)); padding: 8px 10px; }
+.ec-rqueue-h { font-size: 12px; color: var(--t2); margin-bottom: 6px; }
+.ec-rqueue-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px dashed var(--w1); }
+.ec-rqueue-item:first-of-type { border-top: none; }
+.ec-rqueue-item b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-rqueue-n { font-family: var(--font-mono); font-size: 11px; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: color-mix(in srgb, var(--color-warning, #e0a030) 18%, transparent); color: var(--color-warning, #e0a030); flex: none; }
+.ec-rqueue-cost { font-family: var(--font-mono); font-size: 11px; color: var(--pu); flex: none; }
 /* В строке дохода бар занимает всю ширину ячейки */
 .ec-next .ec-prog { display: flex; }
 .ec-next .ec-prog-track { flex: 1; width: auto; min-width: 60px; }
@@ -830,6 +839,7 @@
 .ec-lane-econ    { fill: color-mix(in srgb, var(--gd) 5%, var(--b1)); }
 .ec-lane-prod    { fill: color-mix(in srgb, var(--color-warning, #e0a030) 5%, var(--b1)); }
 .ec-lane-expand  { fill: color-mix(in srgb, var(--pu) 5%, var(--b1)); }
+.ec-lane-mind    { fill: color-mix(in srgb, var(--te) 5%, var(--b1)); }
 .ec-tedge { fill: none; stroke: var(--w3); stroke-width: 1.5; opacity: .45; }
 .ec-tedge.lit { stroke: var(--pu); stroke-width: 2; opacity: .9; }
 
@@ -853,6 +863,7 @@
 .ec-tnode-badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); background: color-mix(in srgb, var(--ok) 8%, transparent); }
 .ec-tnode-badge.cur { color: var(--te); border-color: color-mix(in srgb, var(--te) 50%, transparent); }
 .ec-tnode-badge.lock { color: var(--t4); border-color: var(--w2); font-size: 9.5px; }
+.ec-tnode-badge.q { color: var(--color-warning, #e0a030); border-color: color-mix(in srgb, var(--color-warning, #e0a030) 50%, transparent); background: color-mix(in srgb, var(--color-warning, #e0a030) 10%, transparent); }
 
 /* состояния */
 .ec-tnode-done { opacity: .78; border-left-color: var(--ok); }
@@ -861,6 +872,8 @@
 .ec-tnode-active { border-color: var(--te); border-left-color: var(--te); box-shadow: 0 0 0 1px color-mix(in srgb, var(--te) 30%, transparent), 0 0 10px color-mix(in srgb, var(--te) 15%, transparent); }
 .ec-tnode-avail { border-left-color: var(--gd); }
 .ec-tnode-avail:hover { border-color: var(--gd); background: color-mix(in srgb, var(--gd) 7%, var(--b2)); box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+.ec-tnode-queued { border-left-color: var(--color-warning, #e0a030); box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-warning, #e0a030) 25%, transparent); }
+.ec-tnode-queued .ec-tnode-foot { display: flex; align-items: center; gap: 6px; }
 .ec-tnode-locked { opacity: .5; }
 .ec-tnode-locked .ec-tnode-desc { display: none; }
 
@@ -887,6 +900,8 @@
 .ec-tnode.ec-br-expand  { border-left-color: var(--pu); }
 .ec-tnode.ec-br-celestial { border-left-color: var(--pu); }
 .ec-tnode.ec-br-celestial .ec-tnode-tag { color: var(--pu); background: color-mix(in srgb, var(--pu) 15%, transparent); }
+.ec-tnode.ec-br-mind    { border-left-color: var(--te); }
+.ec-tnode.ec-br-mind    .ec-tnode-tag { color: var(--te); background: color-mix(in srgb, var(--te) 15%, transparent); }
 
 /* чипы бонусов в узле политики */
 .ec-tnode-bonus { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; max-width: 100%; }

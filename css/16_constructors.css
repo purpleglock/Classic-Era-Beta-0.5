@@ -244,6 +244,25 @@
 .cn-lg-air { background: var(--te) !important; clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%); border-radius: 0 !important; }
 .cn-bay { cursor: help; }
 
+/* Мобильный список слотов — крупные тач-цели вместо мелких SVG-узлов.
+   На десктопе скрыт (узлы на схеме кликаются мышью); на touch — показан. */
+.cn-schem-list { display: none; flex-direction: column; gap: 8px; padding: 4px 14px; }
+@media (pointer: coarse), (max-width: 640px) { .cn-schem-list { display: flex; } }
+.cn-slotrow {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px;
+  text-align: left; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-md);
+  padding: 10px 12px; cursor: pointer; color: var(--t1); -webkit-tap-highlight-color: transparent;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.cn-slotrow:active { border-color: var(--gd); background: color-mix(in srgb, var(--gd) 8%, var(--b1)); }
+.cn-slotrow.filled { border-left: 3px solid var(--gd); }
+.cn-slotrow-ico { flex: 0 0 auto; width: 22px; text-align: center; font-size: 17px; color: var(--te); }
+.cn-slotrow-b { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.cn-slotrow-lbl { font-family: var(--font-mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--t3); }
+.cn-slotrow-val { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; color: var(--t1); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cn-slotrow:not(.filled) .cn-slotrow-val { color: var(--t3); font-weight: 500; }
+.cn-slotrow-arr { flex: 0 0 auto; font-size: 20px; color: var(--t4); line-height: 1; }
+
 /* Hero выбранного корпуса */
 .cn-hero-panel { padding: 0; overflow: hidden; }
 .cn-hull-hero { position: relative; display: block; min-height: 120px; background: var(--b1); }

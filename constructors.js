@@ -731,6 +731,23 @@ function cnDrawShip() {
   });
 
   host.innerHTML = `<svg viewBox="0 0 500 320" class="cn-schem-svg" role="img" aria-label="Схема корабля вид сверху (горизонтально)"><g transform="translate(470,0) rotate(90)">${P.join('')}</g></svg>`;
+
+  // Мобильный список слотов: SVG-узлы (r≈4.5px) на телефоне почти неподжимаемы —
+  // дублируем их крупными тач-строками (CSS показывает список только на coarse-указателе).
+  const listHost = cnId('cn-schem-list');
+  if (listHost) {
+    const rows = [];
+    if (CN.schemShow.weapons) L.mounts.forEach((slot, i) => {
+      const w = slot && slot.w, item = w ? db.weapons[w.g][w.idx] : null;
+      rows.push(cnSlotRow('mount', i, '◎', 'Узел орудия ' + (i + 1), item ? esc(item.name) : 'Пусто — поставить орудие', !!item));
+    });
+    if (CN.schemShow.bays) L.bays.forEach((slot, i) => {
+      const m = slot && slot.m, item = m ? db.modules[m.g][m.idx] : null;
+      rows.push(cnSlotRow('bay', i, '▦', 'Отсек ' + (i + 1), item ? esc(item.name) : 'Пусто — поставить модуль', !!item));
+    });
+    listHost.innerHTML = rows.length ? rows.join('') : `<div class="cn-bill-none" style="padding:8px 2px">Нет узлов и отсеков — добавьте кнопками «＋ Узел орудия» / «＋ Отсек» выше.</div>`;
+  }
+
   const cap = cnId('cn-schem-cap');
   if (cap) {
     const tIdx = +(cnId('cn-type') || {}).value || 0, tName = cls.types && cls.types[tIdx] ? cls.types[tIdx].name : '';
@@ -745,6 +762,10 @@ function cnRoomAdd() { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [
 function cnRoomAddAt(i) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; while (CN.shipLayout.bays.length <= i) CN.shipLayout.bays.push({ m: null }); cnVehCalc(); cnOpenAssignPicker('bay', i); }
 function cnSchemToggle(which) { if (!CN.schemShow) CN.schemShow = { weapons: true, bays: true }; CN.schemShow[which] = !CN.schemShow[which]; const b = cnId(which === 'weapons' ? 'cn-tg-w' : 'cn-tg-b'); if (b) b.classList.toggle('on', CN.schemShow[which]); cnDrawShip(); }
 function cnNodeClick(kind, i) { cnOpenAssignPicker(kind, i); }
+// Крупная тач-строка слота для мобильного списка (открывает тот же пикер, что и узел на схеме)
+function cnSlotRow(kind, i, ico, lbl, val, filled) {
+  return `<button type="button" class="cn-slotrow${filled ? ' filled' : ''}" onclick="cnNodeClick('${kind}',${i})"><span class="cn-slotrow-ico">${ico}</span><span class="cn-slotrow-b"><span class="cn-slotrow-lbl">${lbl}</span><span class="cn-slotrow-val">${val}</span></span><span class="cn-slotrow-arr">›</span></button>`;
+}
 function cnOpenAssignPicker(kind, slot) {
   const isW = kind === 'mount', def = CN.def, k = cnId('cn-class').value, source = isW ? def.db.weapons : def.db.modules;
   const arr = isW ? CN.shipLayout.mounts : CN.shipLayout.bays, cur = arr[slot] && (isW ? arr[slot].w : arr[slot].m);
@@ -913,6 +934,7 @@ async function cnVehRender(cat) {
             <button class="btn btn-gh btn-sm" onclick="cnLayoutAdd('bay')">＋ Отсек</button>
             ${def.hasHangars ? `<button class="btn btn-gh btn-sm" onclick="cnVehAddHangar()">＋ Ангар</button>` : ''}
           </div>
+          <div id="cn-schem-list" class="cn-schem-list"></div>
           <div class="cn-schem-hint">Системы сверху — клик открывает выбор. По узлам и отсекам прямо на корабле — поставить, сменить или убрать.</div>
           <div class="cn-schem-legend">
             <span class="cn-lg"><i style="background:var(--te)"></i>энергия</span>

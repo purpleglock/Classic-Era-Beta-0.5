@@ -7,6 +7,34 @@
 // Экранирование строки для onclick="fn('значение')" — обёртка в одинарные кавычки
 const adArg = s => "'" + String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
 
+// Полный каталог ресурсов (источник — galaxy_gen.js). Используется как фолбэк
+// когда AD.resInfo ещё не заполнен из планет и как база выпадающего списка.
+const AD_RES_CATALOG = [
+  { name: 'Железо',                  icon: '⚙️',  r: 'common' },
+  { name: 'Силикаты',                icon: '🪨',  r: 'common' },
+  { name: 'Лёд',                     icon: '🧊',  r: 'common' },
+  { name: 'Углерод',                 icon: '⬛',  r: 'common' },
+  { name: 'Метан',                   icon: '💚',  r: 'common' },
+  { name: 'Сера',                    icon: '🌑',  r: 'common' },
+  { name: 'Медь',                    icon: '🟤',  r: 'uncommon' },
+  { name: 'Титан',                   icon: '🔘',  r: 'uncommon' },
+  { name: 'Ионит',                   icon: '🟡',  r: 'uncommon' },
+  { name: 'Аммиачный лёд',           icon: '🟣',  r: 'uncommon' },
+  { name: 'Редкоземельные руды',      icon: '💡',  r: 'rare' },
+  { name: 'Платина',                 icon: '⬜',  r: 'rare' },
+  { name: 'Изотопы',                 icon: '☢️',  r: 'rare' },
+  { name: 'Жидкая вода',             icon: '🌊',  r: 'rare' },
+  { name: 'Реликтовое дерево',       icon: '🧬',  r: 'rare' },
+  { name: 'Дейтерий',                icon: '⚛️',  r: 'rare' },
+  { name: 'Гелий-3',                 icon: '🫧',  r: 'rare' },
+  { name: 'Старвис',                 icon: '🔥',  r: 'epic' },
+  { name: 'Хтонит',                  icon: '💎',  r: 'epic' },
+  { name: 'Стелларит',               icon: '🔷',  r: 'epic' },
+  { name: 'Гравиядро',               icon: '🔮',  r: 'legendary' },
+  { name: 'Рагенод',                 icon: '💀',  r: 'legendary' },
+  { name: 'Программируемая материя', icon: '🟢',  r: 'legendary' },
+];
+
 const AD = {
   apps:      [],        // faction_applications (approved)
   ecos:      [],        // faction_economy (all)
@@ -55,10 +83,11 @@ function adBuildIndex() {
       systems:  (AD.systems || []).filter(s => s.faction === app.faction_id),
     });
   });
-  // Карта редкости ресурсов (если planets подгружены — иначе пусто, ввод вручную)
+  // Карта редкости ресурсов: сначала каталог, потом данные с планет (перезаписывают если есть)
   AD.resInfo = {};
+  AD_RES_CATALOG.forEach(rc => { AD.resInfo[rc.name] = { r: rc.r, icon: rc.icon }; });
   (AD.systems || []).forEach(s => (s.planets || []).forEach(p => (p.resources || []).forEach(r => {
-    if (r && r.name && !AD.resInfo[r.name]) AD.resInfo[r.name] = { r: r.r || 'common', icon: r.icon || '◈' };
+    if (r && r.name) AD.resInfo[r.name] = { r: r.r || AD.resInfo[r.name]?.r || 'common', icon: r.icon || AD.resInfo[r.name]?.icon || '◈' };
   })));
 }
 
@@ -330,6 +359,9 @@ async function adDelta(field, delta) {
 }
 
 // ── Вкладка: Ресурсы ────────────────────────────────────────────
+const AD_RARITY_LABEL = { common: 'обычный', uncommon: 'редкий', rare: 'ценный', epic: 'эпический', legendary: 'легенд.' };
+const AD_RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+
 function adTabResources(e) {
   if (!e.eco) return `<div class="fm-no-eco">Экономика не инициализирована.</div>`;
   const res = e.eco.resources || {};
@@ -338,28 +370,46 @@ function adTabResources(e) {
   const curRows = resKeys.length
     ? resKeys.map(k => {
         const info = AD.resInfo[k] || {};
-        return `<div class="fm-res-row">
-          <span class="fm-res-icon">${esc(info.icon || '◈')}</span>
-          <span class="fm-res-name">${esc(k)}</span>
-          <span class="fm-rarity fm-rarity-${info.r || 'common'}">${info.r || 'common'}</span>
-          <input class="fi fm-res-val" id="fm-rv-${esc(k)}" type="number" value="${res[k]}" min="0">
-          <button class="btn btn-gh btn-xs" onclick="adUpdateResource(${adArg(k)})">Сохранить</button>
-          <button class="btn btn-rd btn-xs" onclick="adZeroResource(${adArg(k)})">✕</button>
+        return `<div class="fm-res-row" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--w1,#1e2630)">
+          <span style="font-size:16px;width:22px;text-align:center">${esc(info.icon || '◈')}</span>
+          <span style="flex:1;min-width:100px;font-size:13px;color:var(--t1,#e8edf2)">${esc(k)}</span>
+          <span class="fm-rarity fm-rarity-${info.r || 'common'}" style="font-size:10px;min-width:60px">${AD_RARITY_LABEL[info.r] || info.r || 'common'}</span>
+          <input class="fi fm-res-val" id="fm-rv-${esc(k)}" type="number" value="${res[k]}" min="0" style="width:80px;text-align:right">
+          <button class="btn btn-gh btn-xs" onclick="adDeltaRes(${adArg(k)},50)">+50</button>
+          <button class="btn btn-gh btn-xs" onclick="adDeltaRes(${adArg(k)},100)">+100</button>
+          <button class="btn btn-gh btn-xs" onclick="adDeltaRes(${adArg(k)},500)">+500</button>
+          <button class="btn btn-gh btn-xs" onclick="adDeltaRes(${adArg(k)},1000)">+1к</button>
+          <button class="btn btn-rd btn-xs" onclick="adDeltaRes(${adArg(k)},-100)">−100</button>
+          <button class="btn btn-gh btn-xs" onclick="adUpdateResource(${adArg(k)})" title="Установить точное значение из поля">✓</button>
+          <button class="btn btn-rd btn-xs" onclick="adZeroResource(${adArg(k)})" title="Убрать ресурс">✕</button>
         </div>`;
       }).join('')
-    : `<div class="fm-empty">Нет ресурсов</div>`;
+    : `<div class="fm-empty">Нет ресурсов на складе</div>`;
 
-  const resOpts = Object.keys(AD.resInfo)
-    .map(k => `<option value="${esc(k)}">${esc(k)} (${AD.resInfo[k].r || 'common'})</option>`).join('');
+  // Группировка каталога по редкости для выпадающего списка
+  const byRarity = {};
+  AD_RES_CATALOG.forEach(rc => { (byRarity[rc.r] = byRarity[rc.r] || []).push(rc); });
+  const resOptGroups = AD_RARITY_ORDER.filter(r => byRarity[r]).map(r =>
+    `<optgroup label="${AD_RARITY_LABEL[r] || r}">${byRarity[r].map(rc => `<option value="${esc(rc.name)}">${esc(rc.icon)} ${esc(rc.name)}</option>`).join('')}</optgroup>`
+  ).join('');
+
+  // Пресет-кнопки быстрой выдачи (выбранный ресурс + фиксированные суммы)
+  const quickBtns = [50, 100, 500, 1000, 5000].map(v =>
+    `<button class="btn btn-gd btn-xs" onclick="adAddResourceAmt(${v})">+${v >= 1000 ? v/1000+'к' : v}</button>`
+  ).join('');
 
   return `<div class="fm-resources">
     <div class="fm-section-title">Текущие ресурсы на складе</div>
     <div class="fm-res-list">${curRows}</div>
     <div class="fm-section-title" style="margin-top:16px">Добавить / пополнить</div>
-    <div class="fm-field-row" style="flex-wrap:wrap">
-      ${resOpts ? `<select class="fi" id="fm-add-res-name" style="flex:1;min-width:160px">${resOpts}</select>` : `<input class="fi" id="fm-add-res-name" placeholder="Название ресурса" style="flex:1">`}
+    <div class="fm-field-row" style="flex-wrap:wrap;gap:6px;align-items:center">
+      <select class="fi" id="fm-add-res-name" style="flex:2;min-width:180px">${resOptGroups}</select>
       <input class="fi" id="fm-add-res-amt" type="number" value="100" min="1" style="width:80px" placeholder="Кол-во">
       <button class="btn btn-gd btn-sm" onclick="adAddResource()">+ Добавить</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;align-items:center">
+      <span style="font-size:11px;color:var(--t3,#8aa0b0);margin-right:2px">Быстро:</span>
+      ${quickBtns}
     </div>
   </div>`;
 }
@@ -412,15 +462,58 @@ async function adAddResource() {
   finally { AD.busy = false; }
 }
 
+// Быстрые кнопки: выбранный ресурс + фиксированное количество
+async function adAddResourceAmt(amt) {
+  const nameEl = document.getElementById('fm-add-res-name');
+  const name = nameEl?.value?.trim();
+  if (!name) { toast('Выберите ресурс из списка', 'err'); return; }
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e || !e.eco) { toast('Нет экономики', 'err'); return; }
+  AD.busy = true;
+  try {
+    const to = Number(e.eco.resources?.[name] || 0) + amt;
+    const res = { ...(e.eco.resources || {}), [name]: to };
+    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { resources: res });
+    e.eco.resources = res;
+    adLogGrant({ type: 'resource', name, delta: amt, to });
+    toast(`+${adNum(amt)} ${name}`, 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+// Изменить количество ресурса на delta (inline-кнопки в строке склада)
+async function adDeltaRes(name, delta) {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e || !e.eco) return;
+  const cur = Number(e.eco.resources?.[name] || 0);
+  const val = Math.max(0, cur + delta);
+  AD.busy = true;
+  try {
+    const res = { ...(e.eco.resources || {}), [name]: val };
+    if (val === 0) delete res[name];
+    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { resources: res });
+    e.eco.resources = res;
+    adLogGrant({ type: 'resource', name, delta, to: val });
+    toast(`${name}: ${adNum(val)}`, 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
 // ── Вкладка: Технологии ─────────────────────────────────────────
 function adTabResearch(e) {
   if (!e.eco) return `<div class="fm-no-eco">Экономика не инициализирована.</div>`;
   const done   = new Set(Array.isArray(e.eco.research) ? e.eco.research : []);
-  const active = e.eco.research_active;
+  const slots  = Array.isArray(e.eco.research_slots) ? e.eco.research_slots : [];
+  const queue  = Array.isArray(e.eco.research_queue) ? e.eco.research_queue : [];
   const cat    = (typeof ecBuildResearch === 'function') ? ecBuildResearch() : [];
+  const nameOf = id => (cat.find(n => n.id === id) || {}).name || id;
 
-  const activeHtml = active
-    ? `<div class="fm-cap">⏳ Активное: <b>${esc(active)}</b> <button class="btn btn-rd btn-xs" onclick="adClearActive()">Прервать</button></div>` : '';
+  const activeHtml = (slots.length || queue.length)
+    ? `<div class="fm-cap">
+        ${slots.map((s, i) => `⏳ Слот ${i + 1}: <b>${esc(nameOf(s.n))}</b>`).join(' · ') || '—'}
+        ${queue.length ? ` · 🕓 в очереди: ${queue.map(id => esc(nameOf(id))).join(', ')}` : ''}
+        <button class="btn btn-rd btn-xs" onclick="adClearActive()">Прервать всё</button>
+      </div>` : '';
 
   const byCat = {};
   cat.forEach(n => { (byCat[n.catLabel] = byCat[n.catLabel] || []).push(n); });
@@ -491,8 +584,8 @@ async function adClearResearch() {
   if (!confirm('Сбросить все технологии?')) return;
   AD.busy = true;
   try {
-    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { research: [], research_active: null, research_ready: null });
-    e.eco.research = []; e.eco.research_active = null; e.eco.research_ready = null;
+    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { research: [], research_active: null, research_ready: null, research_active2: null, research_ready2: null, research_slots: [], research_queue: [] });
+    e.eco.research = []; e.eco.research_active = null; e.eco.research_ready = null; e.eco.research_slots = []; e.eco.research_queue = [];
     toast('Технологии сброшены', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -503,9 +596,9 @@ async function adClearActive() {
   const e = adEntry(AD.sel); if (!e || !e.eco) return;
   AD.busy = true;
   try {
-    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { research_active: null, research_ready: null });
-    e.eco.research_active = null; e.eco.research_ready = null;
-    toast('Активное исследование прервано', 'ok'); adPaint();
+    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { research_active: null, research_ready: null, research_active2: null, research_ready2: null, research_slots: [], research_queue: [] });
+    e.eco.research_active = null; e.eco.research_ready = null; e.eco.research_slots = []; e.eco.research_queue = [];
+    toast('Активные исследования и очередь прерваны', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }

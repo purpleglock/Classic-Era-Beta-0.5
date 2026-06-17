@@ -66,7 +66,8 @@
       "Bash(node --check tools/optimize_images.js)",
       "Bash(curl -s -o /dev/null -w \"status=%{http_code} time=%{time_total}s\\\\n\" --max-time 10 \"http://localhost:3000/assets/constructors/ship_class_corvette.webp\")",
       "mcp__visualize__read_me",
-      "mcp__visualize__show_widget"
+      "mcp__visualize__show_widget",
+      "Bash(ls index.html)"
     ]
   }
 }
