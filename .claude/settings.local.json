@@ -75,7 +75,8 @@
       "Bash(git commit -m 'Добавить отображение названий ресурсов в тултипе на canvas-карте *)",
       "Bash(git commit --amend -m 'Добавить отображение названий ресурсов в тултипе на canvas-карте *)",
       "mcp__Claude_in_Chrome__navigate",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(grep -nA30 \"create or replace function public._post_covert_rumor\" _covert_rumors.sql)"
     ]
   }
 }

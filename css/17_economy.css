@@ -1373,3 +1373,37 @@
   .ec-ach-desc { font-size: 10px; }
   .ec-ach-cond { font-size: 9px; }
 }
+
+/* ══ ВЕРА — сакральный интерфейс ════════════════════════════
+   Цвет веры прокидывается через --fc (inline style на .ec-shrine). */
+.ec-shrine { position: relative; overflow: hidden; margin-bottom: 14px;
+  background:
+    radial-gradient(140% 90% at 50% -20%, color-mix(in srgb, var(--fc, #c9a227) 20%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in srgb, var(--fc, #c9a227) 9%, var(--b2)), var(--b2));
+  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 38%, var(--w2));
+  border-radius: var(--radius-lg, 14px); padding: 18px 18px 16px; }
+.ec-shrine::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--fc, #c9a227), transparent); opacity: .85; }
+.ec-shrine-hd { display: flex; align-items: center; gap: 13px; }
+.ec-shrine-sigil { width: 48px; height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 26px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--fc, #c9a227) 32%, var(--b1)), var(--b1));
+  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 55%, var(--w2));
+  box-shadow: 0 0 22px color-mix(in srgb, var(--fc, #c9a227) 30%, transparent), inset 0 0 12px color-mix(in srgb, var(--fc, #c9a227) 18%, transparent); }
+.ec-shrine-name { font-family: var(--font-display); font-weight: 800; font-size: 21px; letter-spacing: .01em; line-height: 1.12; color: var(--fc, #c9a227); }
+.ec-shrine-role { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--t3); margin-top: 3px; }
+.ec-shrine-dogma { font-size: 13.5px; color: var(--t2); font-style: italic; line-height: 1.55; margin: 13px 0 4px;
+  padding: 3px 0 3px 13px; border-left: 2px solid color-mix(in srgb, var(--fc, #c9a227) 55%, var(--w2)); }
+.ec-shrine-note { font-size: 11.5px; color: var(--t3); line-height: 1.55; margin: 6px 0 0; }
+.ec-bless-hd { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--t3); margin: 14px 0 8px; }
+.ec-bless-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.ec-bless { display: flex; align-items: center; gap: 11px; background: var(--b1);
+  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 22%, var(--w2)); border-radius: 11px; padding: 10px 12px; }
+.ec-bless-ic { font-size: 20px; width: 30px; text-align: center; flex-shrink: 0;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--fc, #c9a227) 45%, transparent)); }
+.ec-bless-tx { display: flex; flex-direction: column; min-width: 0; }
+.ec-bless-v { font-family: var(--font-display); font-weight: 800; font-size: 17px; color: var(--t1); line-height: 1.05; }
+.ec-bless-l { font-size: 10.5px; color: var(--t3); line-height: 1.25; margin-top: 1px; }
+.ec-faith-pew { display: inline-flex; align-items: center; gap: 6px; margin: 3px 4px 0 0; padding: 4px 11px; font-size: 12px; color: var(--t2);
+  background: var(--b1); border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 30%, var(--w2)); border-radius: 999px; }
+.ec-faith-pew b { color: var(--fc, #c9a227); font-weight: 700; }

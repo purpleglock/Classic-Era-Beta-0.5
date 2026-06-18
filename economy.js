@@ -19,8 +19,9 @@ const EC_SPY_OPS = {
   sabotage:     { label: 'Саботаж постройки',    diff: 30, base: 2, need: 'deep',  icon: '💥', desc: 'Вывести из строя выбранное здание цели.' },
   destabilize:  { label: 'Дестабилизация',       diff: 35, base: 3, need: 'basic', icon: '🔥', desc: 'Снизить ГС-доход цели на несколько ходов.' },
   steal_tech:   { label: 'Кража технологий',     diff: 45, base: 4, need: 'deep',  icon: '🧪', desc: 'Украсть изученную цель технологию (добавится в ваше дерево).' },
+  faith_impose: { label: 'Тайная секта',         diff: 28, base: 3, need: 'basic', icon: '🛐', desc: 'Внедрить тайную секту вашей веры в чужую державу. Работает как храм (доход и сила — вам), пока контрразведка цели её не вскроет. Нужна исповедуемая вера.' },
 };
-const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'sabotage', 'destabilize', 'steal_tech'];
+const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'sabotage', 'destabilize', 'steal_tech', 'faith_impose'];
 // Перки агентов (зеркало _spy_agents.sql). Этап 1 — хранятся; этап 2 — гейтят/баффят операции.
 const EC_SPY_PERKS = {
   infiltrator: { label: 'Инфильтратор', icon: '🕵', desc: 'Повышает успех краж (казна, технологии).' },
@@ -84,7 +85,8 @@ function ecSpyCalc(op, agentIds, targetFid) {
   const turns = Math.max(1, Math.min(2, Math.ceil(d.base / Math.sqrt(A))));   // 1–2 цикла
   // требование разведки
   let err = '';
-  if (d.need === 'basic' && !dos.level) err = 'Нужна разведка цели (базовая)';
+  if (op === 'faith_impose' && !(EC.faith && EC.faith.faith)) err = 'Нужна исповедуемая вера (вкладка «Вера»)';
+  else if (d.need === 'basic' && !dos.level) err = 'Нужна разведка цели (базовая)';
   else if (d.need === 'deep' && dos.level !== 'deep') err = 'Нужна глубокая разведка цели';
   return { success, detect, turns, intel, dossier: dos, ci: CI, err, agents: A, succB, detB, ids };
 }
@@ -131,8 +133,9 @@ const EC_BUILD = {
   intel:            { name: 'Центр Спецслужб',      cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 агент' },
   military_factory: { name: 'Военный Завод',        cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 100 ед. техники' },
   shipyard:         { name: 'Корабельная Верфь',    cost: 2000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 корабль / 12 МЛА' },
+  temple:           { name: 'Храм Веры',            cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 150 }, cat: 'faith', desc: '+150 ГС за слот и удешевляет постройку войск. Нужна исповедуемая вера (вкладка «Вера»)' },
 };
-const EC_ORDER = ['factory', 'mining', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard'];
+const EC_ORDER = ['factory', 'mining', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'temple'];
 // Короткая подсказка «как пользоваться» для каждого типа здания (показывается в карточке).
 const EC_BLD_HOWTO = {
   factory:          'Пассивный доход ГС. Открывайте слоты — каждый добавляет +200 ГС/сут.',
@@ -145,11 +148,12 @@ const EC_BLD_HOWTO = {
   intel:            'Даёт агентов для разведки (вкладка «Разведка»).',
   military_factory: 'Даёт мощность для производства наземной техники (вкладка «Строительство вооружённых сил»).',
   shipyard:         'Даёт мощность для постройки кораблей и авиации (вкладка «Строительство вооружённых сил»).',
+  temple:           'Пассивный доход ГС + «сила веры»: чем больше слотов храмов, тем дешевле постройка войск. Спиритуалистам и теократиям бонус сильнее. Требует исповедуемой веры.',
 };
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
   factory: '🏭', mining: '⛏', trade: '💱', market: '📈',
-  science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', warehouse: '📦',
+  science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', warehouse: '📦', temple: '🛐',
 };
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
 // Обустройство среды обитания на своей колонии (+ячейки, 1 ход)
@@ -562,7 +566,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -591,6 +595,8 @@ async function ecLoad() {
     ecRpc('spy_recruits_list').catch(() => null),   // агентура: ростер + еженедельный рынок рекрутов
     ecRpc('diplo_status').catch(() => null),         // союзы: федерация/конфедерация + вассалитеты
     dbGet('income_history', `owner_id=eq.${user.id}&order=tick_at.desc&limit=14`).catch(() => []),  // доход по времени
+    ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции (вера, роль, сила, скидка)
+    ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий (для вступления)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -614,6 +620,8 @@ async function ecLoad() {
   EC.tradeCargo = tradeCargo || { total: 0, used: 0, free: 0 };   // грузоподъёмность торгового флота
   EC.spyAgency = spyAgency || { cap: 0, hired: 0, roster: [], recruits: [], refresh_at: null };  // агентура: ростер + рынок
   EC.diplo = diploStatus || { union: null, members: [], invites: [], vassals: [] };  // союзы и вассалитеты
+  EC.faith = faithStatus || { faith: null, can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };  // вера: статус
+  EC.faithList = faithList || [];           // вера: реестр религий
   EC.incomeHistory = incomeHistory || [];   // снимки дохода по тикам (доход по времени)
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
@@ -804,13 +812,13 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['trade', '⇄', 'Торговля'], ['diplomacy', '🤝', 'Дипломатия'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['news', '📰', 'Новости']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['trade', '⇄', 'Торговля'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['news', '📰', 'Новости']];
   const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
     : EC.tab === 'milbuild' ? ecTabMilBuild()
     : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
     : EC.tab === 'trade' ? ecTabTrade()
-    : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'intel' ? ecTabIntel()
+    : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'faith' ? ecTabFaith() : EC.tab === 'intel' ? ecTabIntel()
     : EC.tab === 'raids' ? ecTabRaids()
     : EC.tab === 'news' ? ecTabNews() : ecTabColonies();
   const img = (EC.app && (EC.app.herald_url || EC.app.image_url)) || '';
@@ -2480,6 +2488,142 @@ function ecUnionInvite() {
 }
 function ecUnionInviteRespond(id, acc) { ecRpcAct('union_invite_respond', { p_invite_id: id, p_accept: !!acc }, acc ? 'Вы вступили в союз' : 'Приглашение отклонено'); }
 function ecUnionLeave() { if (confirm('Выйти из союза?')) ecRpcAct('union_leave', {}, 'Вы вышли из союза'); }
+
+// ── ВЕРА (религия) · слайс 1 ────────────────────────────────
+// Спиритуалист/теократ основывает веру → исповедующие строят храмы (вкладка
+// «Колонии», тип «Храм Веры») → +ГС и удешевление постройки войск.
+function ecTabFaith() {
+  const fs = EC.faith || { faith: null, can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };
+  const intro = ecIntro('🛐', 'Вера', 'Спиритуалисты и теократии основывают религии. Исповедующие строят Храмы Веры — каждый слот даёт пассивный доход и удешевляет постройку войск. Чем больше паствы (слотов храмов), тем сильнее эффект.', [
+    '<b>Основать веру</b> могут идеология «Спиритуализм», форма правления «Теократия» и администрация.',
+    '<b>Храм Веры</b> строится во вкладке «Колонии» — нужна исповедуемая вера.',
+    'Распространение веры на чужие земли, десятина основателю и федерация веры — в разработке.',
+  ]);
+
+  // Карточка моей веры или блок основания/вступления
+  const blessTile = (ic, v, l) => `<div class="ec-bless"><span class="ec-bless-ic">${ic}</span><span class="ec-bless-tx"><span class="ec-bless-v">${v}</span><span class="ec-bless-l">${l}</span></span></div>`;
+  let mine;
+  if (fs.faith) {
+    const f = fs.faith;
+    const fc = esc(f.color || '#c9a227');
+    const disc = Math.round((fs.unit_discount || 0) * 100);
+    const tithePct = Math.round((fs.tithe_pct || 0.20) * 100);
+    const income = ecNum(fs.temple_income || 150);
+    const strength = ecNum(fs.strength || 0);
+    const isFounder = fs.role === 'founder';
+    const roleTxt = isFounder ? '👑 Пророк-основатель' : fs.role === 'recognized' ? '🕊 Признавший веру' : '🙏 Адепт веры';
+    const adepts = (fs.adepts || []);
+    const adeptIc = r => r === 'founder' ? '👑 ' : r === 'recognized' ? '🕊 ' : '🙏 ';
+    const adeptsHtml = adepts.map(a => `<span class="ec-faith-pew">${adeptIc(a.role)}${esc(ecFacName(a.fid))} · паства <b>${ecNum(a.flock)}</b></span>`).join('');
+    // Распространение веры — только основатель
+    const offersOut = (fs.offers_out || []);
+    const offersOutHtml = offersOut.map(o => `<div class="ec-q-row"><span class="ec-r-name">⏳ Миссия отправлена: <b>${esc(ecFacName(o.to_fid))}</b></span></div>`).join('');
+    const others = (typeof ecOtherFactions === 'function' ? ecOtherFactions() : []);
+    const spreadBlock = isFounder ? `<div class="ec-bless-hd" style="margin-top:16px">Распространение веры — десятина +${tithePct}%</div>
+        <div class="ec-shrine-note">Отправьте миссионеров к чужой державе: признав вашу веру, она станет возводить ваши храмы, а с их дохода вам потечёт десятина (+${tithePct}%).</div>
+        ${others.length ? `<div class="ec-prod-form" style="margin-top:8px">${ecFacSelect('ec-faith-reco')}<button class="btn btn-gd btn-sm" onclick="ecFaithOffer()">Предложить признание</button></div>` : '<div class="ec-empty">Нет других держав.</div>'}
+        ${offersOutHtml ? `<div style="margin-top:8px">${offersOutHtml}</div>` : ''}` : '';
+    mine = `<div class="ec-shrine" style="--fc:${fc}">
+        <div class="ec-shrine-hd">
+          <div class="ec-shrine-sigil">🛐</div>
+          <div><div class="ec-shrine-name">«${esc(f.name)}»</div>
+            <div class="ec-shrine-role">${roleTxt} · ${ecNum(adepts.length)} народ(ов) в лоне веры</div></div>
+        </div>
+        ${f.dogma ? `<div class="ec-shrine-dogma">«${esc(f.dogma)}»</div>` : ''}
+        <div class="ec-bless-hd">Благословения веры — паства ${strength} слот(ов) храмов</div>
+        <div class="ec-bless-grid">
+          ${blessTile('💰', '+' + income, 'ГС с каждого храма')}
+          ${blessTile('⚔', '−' + disc + '%', disc > 0 ? 'дешевле войска (флот — вдвое)' : 'войска (стройте храмы)')}
+          ${blessTile('🛐', strength, 'сила паствы')}
+          ${isFounder ? blessTile('🤝', '+' + tithePct + '%', 'десятина с адептов') : ''}
+        </div>
+        ${fs.role === 'recognized' ? `<div class="ec-shrine-note" style="margin-top:10px">🕊 Вы под покровительством чужой веры: с дохода ваших храмов её основатель взимает десятину ${tithePct}%.</div>` : ''}
+        ${adeptsHtml ? `<div class="ec-bless-hd" style="margin-top:16px">Паства веры</div><div>${adeptsHtml}</div>` : ''}
+        ${spreadBlock}
+        <div style="margin-top:16px"><button class="btn btn-gh btn-sm" onclick="ecFaithLeave()">Отречься от веры</button></div>
+      </div>`;
+  } else if (fs.can_found) {
+    mine = `<div class="ec-shrine" style="--fc:#c9a227">
+        <div class="ec-shrine-hd"><div class="ec-shrine-sigil">✶</div>
+          <div><div class="ec-shrine-name" style="color:var(--gd)">Провозгласить веру</div>
+            <div class="ec-shrine-role">ваш народ ещё не обрёл высшего смысла</div></div></div>
+        <div class="ec-shrine-note">Учредите новый культ и поведите за собой народы — либо примите одну из уже сияющих в галактике религий ниже.</div>
+        <div class="ec-prod-form" style="margin-top:12px;flex-wrap:wrap">
+          <input id="ec-faith-name" placeholder="имя веры" class="ec-loan-note" style="flex:1;min-width:160px" maxlength="60">
+          <input id="ec-faith-color" type="color" value="#c9a227" class="ec-prod-qty" style="width:46px;padding:2px" title="священный цвет">
+          <button class="btn btn-gd btn-sm" onclick="ecFaithFound()">Провозгласить</button>
+        </div>
+        <input id="ec-faith-dogma" placeholder="священный девиз / догмат (необязательно)" class="ec-loan-note" style="margin-top:8px;width:100%" maxlength="160">
+      </div>`;
+  } else {
+    mine = `<div class="ec-shrine" style="--fc:#6a6f7a">
+        <div class="ec-shrine-hd"><div class="ec-shrine-sigil">🔒</div>
+          <div><div class="ec-shrine-name" style="color:var(--t3)">Путь веры закрыт</div>
+            <div class="ec-shrine-role">нужна духовная природа державы</div></div></div>
+        <div class="ec-shrine-note">Учреждать и принимать веру по своей воле могут лишь державы с идеологией «Спиритуализм» или формой правления «Теократия». Прочие народы могут обратиться в чужую веру только по зову её основателя — следите за предложениями признания.</div>
+      </div>`;
+  }
+
+  // Реестр религий мира
+  const list = EC.faithList || [];
+  const myFaithId = fs.faith && fs.faith.id;
+  const canJoin = !fs.faith && fs.can_found;
+  const rows = list.map(f => {
+    const isMine = f.id === myFaithId;
+    const joinBtn = (canJoin && f.open) ? `<button class="btn btn-gd btn-xs" onclick="ecFaithJoin('${f.id}')">Принять</button>` : (f.open ? '' : '<span class="ec-q-t">закрыта</span>');
+    return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(f.color || '#c9a227')};margin-right:6px"></span>
+        <b style="color:${esc(f.color || '#c9a227')}">${esc(f.name)}</b>${isMine ? ' <span class="ec-hint">— ваша</span>' : ''} · ${ecNum(f.adepts)} адепт(ов) · паства ${ecNum(f.flock)}
+        <span class="ec-hint">основатель ${esc(ecFacName(f.founder_fid))}</span>
+      </span>${isMine ? '' : joinBtn}</div>`;
+  }).join('');
+  const registry = `<div class="ec-section-title">Религии мира <span class="ec-hint">— реестр всех вер</span></div>
+    ${list.length ? `<div class="ec-dip-card">${rows}</div>` : '<div class="ec-empty">Ни одной веры ещё не основано.</div>'}`;
+
+  // Входящие предложения признания — видны любой фракции без веры (в т.ч. не-спиритуалистам)
+  const offersIn = (fs.offers_in || []);
+  const offersInHtml = offersIn.length ? `<div class="ec-section-title">Предложения признания <span class="ec-hint">— вам предлагают принять веру</span></div>
+    <div class="ec-dip-card">${offersIn.map(o => `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+        <span class="ec-route-badge new">признание</span> <b style="color:${esc(o.faith_color || '#c9a227')}">«${esc(o.faith_name)}»</b> от ${esc(ecFacName(o.from_fid))} — сможете строить храмы этой веры
+      </span><button class="btn btn-gd btn-xs" onclick="ecFaithOfferRespond('${o.id}',true)">Принять</button><button class="ec-bld-del" onclick="ecFaithOfferRespond('${o.id}',false)">✕</button></div>`).join('')}</div>` : '';
+
+  // Мои тайные секты (covert temples в чужих державах) + риск вскрытия
+  const sects = (fs.sects || []);
+  const sectsHtml = sects.length ? `<div class="ec-section-title">🕳 Тайные секты <span class="ec-hint">— работают как храмы, пока не вскроют</span></div>
+    <div class="ec-dip-card">${sects.map(s => {
+      const exp = Math.round(s.exposure || 0);
+      const col = exp >= 67 ? 'var(--err)' : exp >= 34 ? 'var(--color-warning,#e0a030)' : 'var(--ok)';
+      return `<div class="ec-q-row"><span class="ec-r-name">🕳 секта в <b>${esc(ecFacName(s.host_fid))}</b> · +150 ГС/сут</span>
+        <span class="ec-hint" title="риск вскрытия контрразведкой хозяина">вскрытие <b style="color:${col}">${exp}%</b></span></div>`;
+    }).join('')}</div>` : '';
+  // Вскрытые секты на МОЕЙ территории
+  const exposedHere = (fs.exposed_here || []);
+  const exposedHtml = exposedHere.length ? `<div class="ec-section-title">🛐 Вскрыто контрразведкой <span class="ec-hint">— чужие секты у вас</span></div>
+    <div class="ec-dip-card">${exposedHere.map(e => `<div class="ec-q-row"><span class="ec-r-name">⚠ ликвидирована секта веры <b>«${esc(e.faith_name || '—')}»</b> — насаждала <b>${esc(ecFacName(e.owner_fid))}</b></span></div>`).join('')}</div>` : '';
+
+  return `${intro}
+    ${offersInHtml}
+    <div class="ec-section-title">🛐 Ваша вера</div>
+    ${mine}
+    ${sectsHtml}
+    ${exposedHtml}
+    ${registry}`;
+}
+function ecFaithOffer() {
+  const fid = ecId('ec-faith-reco')?.value;
+  if (!fid) { toast('Выберите державу', 'err'); return; }
+  ecRpcAct('faith_offer_recognition', { p_to_fid: fid }, 'Признание предложено');
+}
+function ecFaithOfferRespond(id, acc) { ecRpcAct('faith_offer_respond', { p_offer_id: id, p_accept: !!acc }, acc ? 'Вы признали веру' : 'Предложение отклонено'); }
+function ecFaithFound() {
+  const name = ecId('ec-faith-name')?.value?.trim();
+  const dogma = ecId('ec-faith-dogma')?.value?.trim() || null;
+  const color = ecId('ec-faith-color')?.value || null;
+  if (!name) { toast('Введите название веры', 'err'); return; }
+  ecRpcAct('faith_found', { p_name: name, p_dogma: dogma, p_color: color }, 'Вера основана');
+}
+function ecFaithJoin(id) { ecRpcAct('faith_join', { p_faith_id: id }, 'Вы приняли веру'); }
+function ecFaithLeave() { if (confirm('Оставить веру? Бонусы храмов исчезнут.')) ecRpcAct('faith_leave', {}, 'Вы оставили веру'); }
 function ecVassalPropose() {
   const fid = ecId('ec-vassal-fac')?.value;
   const pct = Math.max(5, Math.min(30, parseInt(ecId('ec-vassal-pct')?.value) || 10)) / 100;
@@ -2822,6 +2966,7 @@ function ecSpyAlertRow(a) {
   else if (a.op === 'steal_tech') detail = ok ? `похищена технология: ${esc(r.tech_name || r.tech || '—')}` : 'попытка кражи технологий';
   else if (a.op === 'destabilize') detail = ok ? `дестабилизация: доход −${Math.round((r.debuff_pct || 0) * 100)}% (${r.turns || 0} ход.)` : 'попытка дестабилизации';
   else if (a.op === 'recon_basic' || a.op === 'recon_deep') detail = 'разведка вашей фракции';
+  else if (a.op === 'faith_impose') detail = ok ? `в вашей державе внедрена тайная секта: <b style="color:var(--color-warning,#e0a030)">${esc(r.sect || '—')}</b>` : 'попытка внедрить тайную секту';
   else detail = ok ? 'операция удалась' : 'операция сорвана';
   // исполнитель: раскрыт → имя; не раскрыт → аноним
   const actor = a.detected
@@ -2868,6 +3013,7 @@ function ecSpyLogRow(m) {
   else if (m.op === 'sabotage') detail = ok ? `выведено из строя: ${esc(r.building || 'здание')}${r.colony ? ` (${esc(r.colony)})` : ''}` : 'провал';
   else if (m.op === 'steal_tech') detail = ok ? `украдена технология: ${esc(r.tech_name || r.tech || '—')}` : 'провал';
   else if (m.op === 'destabilize') detail = ok ? `доход цели снижен на ${Math.round((r.debuff_pct || 0) * 100)}% (${r.turns || 0} ход.)` : 'провал';
+  else if (m.op === 'faith_impose') detail = ok ? `внедрена тайная секта: ${esc(r.sect || '—')} (тайный доход, пока не вскроют)` : 'провал';
   const badge = ok ? '<span class="ec-route-badge ok">✓</span>' : '<span class="ec-route-badge" style="color:var(--err);border-color:var(--err)">✕</span>';
   return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">${badge}${d.icon} <b>${esc(d.label)}</b> → ${esc(m.target_name || ecFacName(m.target_fid))} · ${detail}${m.detected ? ' · <span style="color:var(--color-warning,#e0a030)">раскрыто</span>' : ''}</span></div>`;
 }
@@ -3840,12 +3986,14 @@ function ecBuildPicker(colonyId) {
   const free = _ecBuildFree(colonyId);
   if (free <= 0) { toast('Нет свободных ячеек на планете', 'err'); return; }
   const gc = EC.eco.gc || 0;
-  const cards = EC_ORDER.map(t => {
+  const hasFaith = !!(EC.faith && EC.faith.faith);   // храм доступен только исповедующим веру
+  const cards = EC_ORDER.filter(t => t !== 'temple' || hasFaith).map(t => {
     const d = EC_BUILD[t]; const cost = ecBuildCost(d.cost); const afford = gc >= cost;
+    const catLabel = d.cat === 'civ' ? 'Гражд.' : d.cat === 'faith' ? 'Вера' : 'Воен.';
     return `<button class="ec-bp-card ec-bp-${d.cat}${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecBuildConfirm('${colonyId}','${t}')">
       <span class="ec-bp-ic">${EC_BLD_ICON[t] || '⌂'}</span>
       <span class="ec-bp-info">
-        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-${d.cat}">${d.cat === 'civ' ? 'Гражд.' : 'Воен.'}</span></span>
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-${d.cat}">${catLabel}</span></span>
         <span class="ec-bp-desc">${esc(d.desc)}</span>
         <span class="ec-bp-howto">${esc(EC_BLD_HOWTO[t] || '')}</span>
       </span>
