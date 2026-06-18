@@ -1709,6 +1709,41 @@ function gmmBindCanvas() {
     const r = cv.getBoundingClientRect();
     gmmZoomAt(e.clientX - r.left, e.clientY - r.top, GMM.s * (e.deltaY > 0 ? 1 / 1.15 : 1.15), false);
   }, { passive: false });
+  // тултип названия ресурса при наведении курсора
+  cv.addEventListener('mousemove', (e) => {
+    if (!GM.showRes || !GMM.resHitMap || !GMM.resHitMap.length) { gmmHideResTip(); return; }
+    const r = cv.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    // преобразуем координаты мыши в мировые координаты
+    const b = GMM.bmp;
+    if (!b) { gmmHideResTip(); return; }
+    // bitamp рисуется в: (b.wx * GMM.s + GMM.tx, b.wy * GMM.s + GMM.ty) с размером (b.pw * f, b.ph * f)
+    // где f = GMM.s / b.scale. Обратное преобразование:
+    const wx = (mx - b.wx * GMM.s - GMM.tx) / GMM.s + b.wx;
+    const wy = (my - b.wy * GMM.s - GMM.ty) / GMM.s + b.wy;
+    // ищем иконку ресурса под мышью
+    const hit = GMM.resHitMap.find(rn =>
+      wx >= rn.x && wx <= rn.x + rn.w && wy >= rn.y && wy <= rn.y + rn.h);
+    if (hit) gmmShowResTip(hit, e.clientX, e.clientY);
+    else gmmHideResTip();
+  });
+  cv.addEventListener('mouseleave', () => gmmHideResTip());
+}
+function gmmShowResTip(hit, clientX, clientY) {
+  let tip = document.getElementById('gmm-res-tip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'gmm-res-tip';
+    document.body.appendChild(tip);
+  }
+  tip.innerHTML = esc(hit.name) + (hit.r ? `<span class="gm-tip-r">${esc(hit.r)}</span>` : '');
+  tip.style.left = (clientX) + 'px';
+  tip.style.top = (clientY - 7) + 'px';
+  tip.classList.add('gm-on');
+}
+function gmmHideResTip() {
+  const tip = document.getElementById('gmm-res-tip');
+  if (tip) tip.classList.remove('gm-on');
 }
 function gmmStartPinch() {
   const ps = [...GMM.ptrs.values()];
@@ -1855,6 +1890,7 @@ function gmmRaster() {
   if (GMM.rasterT) { clearTimeout(GMM.rasterT); GMM.rasterT = 0; }
   if (!GMM.active || !GMM.cv || !GMM.cv.isConnected) return;
   if (!GMM.paths) gmmBuildWorld();
+  GMM.resHitMap = [];  // очищаем карту попаданий иконок ресурсов перед новой отрисовкой
   const s = GMM.s, dpr = GMM.dpr;
   // мировое окно: видимая область + запас по пол-экрана с каждой стороны
   const padX = GMM.vw * 0.5, padY = GMM.vh * 0.5;
@@ -2201,7 +2237,8 @@ function gmmPaintResPins(ctx, s, iw, camS) {
   ctx.strokeStyle = 'rgba(160,190,230,.3)'; ctx.lineWidth = 1.2 / camS;
   gmmRoundRect(ctx, x0, y0, W, H, 6 / camS); ctx.fill(); ctx.stroke();
   let cx = x0 + padX; const iy = y0 + padY;
-  shown.forEach(r => {
+  const resNames = [];  // собираем имена для тултипа
+  shown.forEach((r, i) => {
     const col = GMM_RAR_C[r.r] || GMM_RAR_C.common;
     // подложка ячейки с рамкой в цвет редкости — даёт контраст и кодирует ценность
     ctx.fillStyle = 'rgba(255,255,255,.06)';
@@ -2215,6 +2252,7 @@ function gmmPaintResPins(ctx, s, iw, camS) {
       ctx.font = `${(ic * 0.95).toFixed(2)}px sans-serif`;
       ctx.fillText(r.icon || '◆', cx + tile / 2, iy + tile / 2 + 0.5 / camS);
     }
+    resNames.push({ x: cx, y: iy, w: tile, h: tile, name: r.name, r: gmRarName(r.r) });
     cx += tile + gap;
   });
   if (more) {
@@ -2222,6 +2260,9 @@ function gmmPaintResPins(ctx, s, iw, camS) {
     ctx.font = `700 ${(12 / camS).toFixed(2)}px Rajdhani, sans-serif`;
     ctx.fillText(more, x0 + W - padX - wMore / 2, y0 + H / 2);
   }
+  // сохраняем позиции иконок для тултипа при наведении
+  if (!GMM.resHitMap) GMM.resHitMap = [];
+  GMM.resHitMap.push(...resNames.map(rn => ({ sys: s, ...rn })));
 }
 function gmmRoundRect(ctx, x, y, w, h, r) {
   if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return; }

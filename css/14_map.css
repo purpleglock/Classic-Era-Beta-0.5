@@ -175,6 +175,17 @@
 }
 #gm-res-tip.gm-on{opacity:1}
 #gm-res-tip .gm-tip-r{font-size:11.5px;font-weight:500;opacity:.7;margin-left:6px}
+/* тултип для canvas-версии карты (то же, что #gm-res-tip) */
+#gmm-res-tip{
+  position:fixed;z-index:120;pointer-events:none;opacity:0;
+  transform:translate(-50%,-100%);
+  padding:5px 10px;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;
+  color:#eaf2ff;background:hsl(216 32% 8% / .96);border:1px solid hsl(210 25% 45% / .55);
+  border-radius:8px;white-space:nowrap;box-shadow:0 5px 16px rgba(0,0,0,.55);
+  transition:opacity .12s;
+}
+#gmm-res-tip.gm-on{opacity:1}
+#gmm-res-tip .gm-tip-r{font-size:11.5px;font-weight:500;opacity:.7;margin-left:6px}
 .gm-res-pin img.res-ic,.gm-res-pin .res-ic{width:23px;height:23px;font-size:21px;line-height:1;filter:drop-shadow(0 1px 1px #000)}
 .gm-res-pin.r-common{color:#7f93ad}
 .gm-res-pin.r-uncommon{color:#5fc257}
