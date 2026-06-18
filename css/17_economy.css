@@ -1090,6 +1090,8 @@
 .ec-ovx-bar-fill.fill-gc  { background: linear-gradient(90deg, var(--gd), var(--gdl)); }
 .ec-ovx-bar-fill.fill-sci { background: linear-gradient(90deg, var(--pu), var(--pul)); }
 .ec-ovx-bar-fill.fill-amb { background: linear-gradient(90deg, var(--ec-amb), color-mix(in srgb, var(--ec-amb) 70%, #fff)); }
+.ec-ovx-bar-fill.fill-rd  { background: linear-gradient(90deg, var(--rd, #c0392b), color-mix(in srgb, var(--rd, #c0392b) 70%, #fff)); }
+.ec-ovx-res-empty { font-size: 12px; color: var(--t3); padding: 8px 2px 2px; }
 
 .ec-ovx-active { background: color-mix(in srgb, var(--pu) 10%, var(--b1)); border: 1px solid color-mix(in srgb, var(--pu) 32%, transparent); border-radius: var(--radius-md); padding: 10px 13px; margin-bottom: 11px; font-size: 13px; color: var(--t1); }
 .ec-ovx-active b { color: var(--pu); }
@@ -1244,6 +1246,56 @@
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px;
 }
 
+/* ── Пути достижений: чипы-фильтры + секции ── */
+.ec-ach-filters {
+  display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 20px;
+}
+.ec-ach-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--font-display); font-size: 11px; font-weight: 600; letter-spacing: .03em;
+  color: var(--t2); cursor: pointer;
+  background: linear-gradient(180deg, var(--b2), var(--b1));
+  border: 1px solid var(--w2); border-radius: 11px; padding: 7px 11px;
+  transition: border-color .2s, color .2s, background .2s, box-shadow .2s;
+}
+.ec-ach-chip:hover {
+  border-color: color-mix(in srgb, var(--gd, #c9a24b) 45%, var(--w2)); color: var(--t1);
+}
+.ec-ach-chip.on {
+  color: color-mix(in srgb, var(--t1) 85%, var(--gd, #c9a24b) 15%);
+  border-color: color-mix(in srgb, var(--gd, #c9a24b) 60%, var(--w2));
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--b2) 70%, var(--gd, #c9a24b) 30%),
+    color-mix(in srgb, var(--b1) 82%, var(--gd, #c9a24b) 18%));
+  box-shadow: 0 0 18px -6px color-mix(in srgb, var(--gd, #c9a24b) 45%, transparent);
+}
+.ec-ach-chip-ic { font-size: 14px; line-height: 1; }
+.ec-ach-chip-n {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: .03em;
+  color: var(--gd, #c9a24b);
+  background: color-mix(in srgb, var(--gd, #c9a24b) 10%, transparent);
+  border-radius: 6px; padding: 2px 6px;
+}
+.ec-ach-chip.on .ec-ach-chip-n {
+  background: color-mix(in srgb, var(--gd, #c9a24b) 18%, transparent);
+}
+.ec-ach-cat { margin-bottom: 26px; }
+.ec-ach-cat:last-child { margin-bottom: 0; }
+.ec-ach-cat-h {
+  display: flex; align-items: center; gap: 9px; margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--gd, #c9a24b) 22%, var(--w1) 40%);
+}
+.ec-ach-cat-ic { font-size: 17px; line-height: 1; }
+.ec-ach-cat-l {
+  font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: .06em;
+  color: var(--t1); text-transform: uppercase;
+}
+.ec-ach-cat-n {
+  margin-left: auto; font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  color: var(--gd, #c9a24b); letter-spacing: .05em;
+}
+
 .ec-ach-card {
   display: flex; flex-direction: column; overflow: hidden; position: relative;
   background: linear-gradient(180deg, var(--b2), var(--b1));
@@ -1268,6 +1320,28 @@
   border-color: color-mix(in srgb, var(--gd, #c9a24b) 60%, var(--w2));
   box-shadow: 0 0 28px -8px color-mix(in srgb, var(--gd, #c9a24b) 40%, transparent),
               inset 0 1px 0 color-mix(in srgb, #fff 5%, transparent);
+}
+
+/* Закрытая ачивка — приглушена и обесцвечена (а не только замочек). */
+.ec-ach-card:not(.on) {
+  opacity: .62;
+  filter: grayscale(.7);
+  transition: opacity .22s, filter .22s, border-color .22s;
+}
+.ec-ach-card:not(.on) .ec-ach-art img,
+.ec-ach-card:not(.on) .ec-ach-art-ph {
+  filter: grayscale(1) brightness(.45) contrast(.9);
+  transition: filter .22s;
+}
+.ec-ach-card:not(.on) .ec-ach-name { color: var(--t3); }
+/* При наведении слегка раскрываем — видно, что именно открыть. */
+.ec-ach-card:not(.on):hover {
+  opacity: .92; filter: grayscale(.25);
+  border-color: color-mix(in srgb, var(--gd, #c9a24b) 30%, var(--w2));
+}
+.ec-ach-card:not(.on):hover .ec-ach-art img,
+.ec-ach-card:not(.on):hover .ec-ach-art-ph {
+  filter: grayscale(.45) brightness(.7);
 }
 
 .ec-ach-art {
@@ -1372,6 +1446,9 @@
   .ec-ach-name { font-size: 11px; }
   .ec-ach-desc { font-size: 10px; }
   .ec-ach-cond { font-size: 9px; }
+  .ec-ach-chip { font-size: 10px; padding: 6px 9px; gap: 5px; }
+  .ec-ach-chip-ic { font-size: 13px; }
+  .ec-ach-cat-l { font-size: 12px; }
 }
 
 /* ══ ВЕРА — сакральный интерфейс ════════════════════════════

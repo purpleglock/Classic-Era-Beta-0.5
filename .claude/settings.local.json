@@ -76,7 +76,10 @@
       "Bash(git commit --amend -m 'Добавить отображение названий ресурсов в тултипе на canvas-карте *)",
       "mcp__Claude_in_Chrome__navigate",
       "Bash(git commit -m ' *)",
-      "Bash(grep -nA30 \"create or replace function public._post_covert_rumor\" _covert_rumors.sql)"
+      "Bash(grep -nA30 \"create or replace function public._post_covert_rumor\" _covert_rumors.sql)",
+      "Bash(node -e \"const m=require\\('fs'\\).readFileSync\\('economy.js','utf8'\\);const o=m.match\\(/EC_ACH_ORDER = \\\\[\\([\\\\s\\\\S]*?\\)\\\\];/\\)[1];const ids=o.match\\(/'[a-z_]+'/g\\).length;console.log\\(ids\\);\")",
+      "Bash(grep -cE \"^\\\\- \\\\`[a-z_]+\\\\.webp\\\\`\" assets/ach/_IMAGES.md)",
+      "Bash(node _check_ach.js)"
     ]
   }
 }

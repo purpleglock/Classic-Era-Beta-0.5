@@ -43,9 +43,18 @@ where jsonb_array_length(e.research_slots) = 0
 -- Зеркало ecResearchSlots() в economy.js.
 create or replace function public._research_slots(p_fid text)
 returns int language plpgsql stable security definer set search_path=public as $$
-declare n int := 1; rs jsonb;
+declare n int := 1; rs jsonb; a public.faction_applications;
 begin
   if public._faction_is_robot(p_fid) then n := n + 1; end if;
+  -- Технократы: бонусные слоты по доктрине (зеркало EC_DOCTRINE_SLOTS в economy.js).
+  -- ВАЖНО: держать синхронно с _technocracy.sql — иначе порядок применения SQL
+  -- ломает счёт слотов (клиент видит слот, сервер — нет, очередь не разбирается).
+  select * into a from public.faction_applications
+    where faction_id = p_fid and status = 'approved' order by updated_at desc limit 1;
+  if found then
+    if a.gov = 'Технократия'                    then n := n + 1; end if;
+    if a.ideology = 'Технократия (Культ науки)' then n := n + 1; end if;
+  end if;
   select research into rs from public.faction_economy where faction_id = p_fid;
   rs := coalesce(rs, '[]'::jsonb);
   if rs ? 'pol.light_knowledge' then n := n + 1; end if;
@@ -63,7 +72,8 @@ declare
   eco public.faction_economy;
   slot jsonb; kept jsonb := '[]'::jsonb; done_ids text[] := '{}';
   smax int; nid text; tn public.tech_nodes; cost numeric; mres numeric;
-  in_slot boolean; has_missing boolean; guard int := 0;
+  in_slot boolean; has_missing boolean;
+  new_queue jsonb := '[]'::jsonb;
 begin
   select * into eco from public.faction_economy where faction_id = p_fid for update;
   if not found then return; end if;
@@ -79,28 +89,28 @@ begin
   if array_length(done_ids,1) is not null then
     eco.research := coalesce(eco.research,'[]'::jsonb) || to_jsonb(done_ids);
     eco.research_slots := kept;
-    update public.faction_economy
-      set research = eco.research, research_slots = eco.research_slots
-      where faction_id = p_fid;
   end if;
 
-  -- 2) добрать из очереди в свободные слоты
+  -- 2) добрать из очереди в свободные слоты.
+  -- ВАЖНО: идём по ВСЕЙ очереди по порядку и ПРОПУСКАЕМ то, что пока не может
+  -- стартовать (ждёт предшественника или не хватает ОН) — оставляя в очереди.
+  -- Раньше делали exit на первом «не-готовом» элементе → затор по голове:
+  -- застрявшая голова блокировала независимые техи и оставляла слот пустым.
   smax := public._research_slots(p_fid);
   mres := (public._faction_mods(p_fid)->>'research')::numeric;
-  loop
-    guard := guard + 1; exit when guard > 50;
-    exit when jsonb_array_length(coalesce(eco.research_slots,'[]'::jsonb)) >= smax;
-    exit when jsonb_array_length(coalesce(eco.research_queue,'[]'::jsonb)) = 0;
-    nid := eco.research_queue->>0;
+  for nid in select value from jsonb_array_elements_text(coalesce(eco.research_queue,'[]'::jsonb)) loop
+    -- слоты кончились → остаток очереди сохраняем как есть
+    if jsonb_array_length(eco.research_slots) >= smax then
+      new_queue := new_queue || to_jsonb(nid);
+      continue;
+    end if;
 
-    -- уже изучено / уже в слоте / неизвестный узел → выбросить голову, дальше
+    -- уже изучено / уже в слоте / неизвестный узел → выбросить из очереди
     select * into tn from public.tech_nodes where node_id = nid;
-    select exists(select 1 from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) sl
+    select exists(select 1 from jsonb_array_elements(eco.research_slots) sl
                   where sl.value->>'n' = nid) into in_slot;
     if tn.node_id is null or (coalesce(eco.research,'[]'::jsonb) ? nid) or in_slot then
-      eco.research_queue := eco.research_queue - 0;
-      update public.faction_economy set research_queue = eco.research_queue where faction_id = p_fid;
-      continue;
+      continue;   -- молча убираем из очереди (в new_queue не добавляем)
     end if;
 
     -- предшественники изучены?
@@ -108,23 +118,28 @@ begin
       select 1 from jsonb_array_elements_text(coalesce(tn.prereq,'[]'::jsonb)) pr
       where not (coalesce(eco.research,'[]'::jsonb) ? pr.value)
     ) into has_missing;
-    if has_missing then exit; end if;   -- ждём, пока изучатся предшественники
 
     -- хватает ОН?
     cost := greatest(1, round(tn.base_cost * mres));
-    if coalesce(eco.science,0) < cost then exit; end if;   -- ждём накопления ОН
 
-    -- СТАРТ: снять с головы, добавить слот, списать ОН
-    eco.research_queue := eco.research_queue - 0;
-    eco.research_slots := coalesce(eco.research_slots,'[]'::jsonb)
+    if has_missing or coalesce(eco.science,0) < cost then
+      new_queue := new_queue || to_jsonb(nid);   -- пока не готов → оставить в очереди
+      continue;
+    end if;
+
+    -- СТАРТ: добавить слот, списать ОН (из очереди элемент уходит)
+    eco.research_slots := eco.research_slots
       || jsonb_build_object('n', nid, 'r', now() + interval '1 day');
     eco.science := coalesce(eco.science,0) - cost;
-    update public.faction_economy
-      set research_queue = eco.research_queue,
-          research_slots = eco.research_slots,
-          science = eco.science
-      where faction_id = p_fid;
   end loop;
+
+  eco.research_queue := new_queue;
+  update public.faction_economy
+    set research      = eco.research,
+        research_slots = eco.research_slots,
+        research_queue = eco.research_queue,
+        science       = eco.science
+    where faction_id = p_fid;
 end$$;
 revoke all on function public._research_step(text) from public;
 grant execute on function public._research_step(text) to authenticated;

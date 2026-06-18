@@ -408,7 +408,7 @@ function cnCompStatsRows(info) {
   switch (info.kind) {
     case 'class':   push('База ОН', o.baseON); push('ОН за модуль', '+' + o.modON); if (o.types) push('Специализаций', o.types.length); break;
     case 'type':    push('Прочность', cnNum(o.hp) + ' HP'); push('Броня корпуса', '+' + cnNum(o.armor) + ' AR'); push('Цена', cnNum(o.cost) + ' ГС'); break;
-    case 'reactor': push('Выработка энергии', cnNum(o.energy) + ' E'); push('Цена', cnNum(o.cost) + ' ГС'); break;
+    case 'reactor': push('Уровень', 'Ур. ' + ((info.idx || 0) + 1)); push('Выработка энергии', cnNum(o.energy) + ' E'); push('Цена', cnNum(o.cost) + ' ГС'); break;
     case 'armor':   push('Броня', '+' + cnNum(o.armor) + ' AR'); push('Цена', cnNum(o.cost) + ' ГС'); break;
     case 'shield':  push('Щит', o.shield ? cnNum(o.shield) + ' ед.' : 'нет'); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); push('Цена', cnNum(o.cost) + ' ГС'); break;
     case 'engine':  push('Скорость', o.speed + ' у.е.'); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); push('Цена', cnNum(o.cost) + ' ГС'); break;
@@ -447,7 +447,7 @@ function cnCompFullHtml(info, action) {
   return `<div class="cn-info-card${on ? ' on' : ''}${locked ? ' locked' : ''}"${(action && !locked) ? ` onclick="${action}"` : ''}>
     ${cnImgTag(info.imgPath, 'cn-info-img')}
     <div class="cn-info-body">
-      <div class="cn-info-nm">${locked ? '🔒 ' : ''}${esc(info.obj.name)}${on ? ' <span class="cn-info-cur">установлено</span>' : ''}</div>
+      <div class="cn-info-nm">${locked ? '🔒 ' : ''}${info.kind === 'reactor' ? `<span class="cn-info-lvl">Ур. ${(info.idx || 0) + 1}</span> ` : ''}${esc(info.obj.name)}${on ? ' <span class="cn-info-cur">установлено</span>' : ''}</div>
       <div class="cn-info-stats">${cnCompStatsRows(info)}</div>
       ${billHtml}
       <div class="cn-info-desc">${esc(info.desc || '…')}</div>
@@ -473,7 +473,7 @@ function cnSlotSelected(slot) {
   if (!info.obj) { wrap.innerHTML = ''; return; }
   wrap.innerHTML = `<button class="cn-slot-chip" onclick="cnOpenSlotPicker('${slot}')">
     <span class="cn-slot-lbl">${CN_SLOT_SHORT[slot] || slot}</span>
-    <span class="cn-slot-val">${esc(info.obj.name)}</span>
+    <span class="cn-slot-val">${slot === 'reactor' ? 'Ур.' + ((+sel.value || 0) + 1) + ' · ' : ''}${esc(info.obj.name)}</span>
   </button>`;
 }
 // Модалка выбора компонента слота (полные карточки; гейт по исследованиям)
@@ -1079,7 +1079,7 @@ function cnVehHandleClass() {
 function cnVehClassDeps() {
   const def = CN.def, k = cnId('cn-class').value, cat = CN.cat;
   if (def.hasType) { const typeOpen = cnUnlocked('type.' + cat + '.' + k); cnId('cn-type').innerHTML = def.db.data[k].types.map((t, i) => { const locked = i >= 1 && !typeOpen; return `<option value="${i}"${locked ? ' disabled' : ''}>${locked ? '🔒 ' : ''}${esc(t.name)}</option>`; }).join(''); }
-  if (def.hasReactor) cnId('cn-reactor').innerHTML = cnCompOptions(cat, 'reactor', def.db.reactors[k], r => `${r.name} (${r.energy} E)`);
+  if (def.hasReactor) cnId('cn-reactor').innerHTML = cnCompOptions(cat, 'reactor', def.db.reactors[k], (r, i) => `Ур.${i + 1} · ${r.name} (${r.energy} E)`);
   cnId('cn-armor').innerHTML = cnCompOptions(cat, 'armor', def.db.armors[k], a => `${a.name} (+${cnNum(a.armor)} AR)`);
   cnId('cn-shield').innerHTML = cnCompOptions(cat, 'shield', def.db.shields[k], s => s.name);
   cnId('cn-engine').innerHTML = cnCompOptions(cat, 'engine', def.db.engines[k], e => `${e.name} (${e.speed} у.е.)`);
@@ -1474,17 +1474,35 @@ function cnVehCardText() {
   c += `СКОРОСТЬ: ${s.speed} у.е. (${engObj.name})\n`;
   if (reactObj) c += `РЕАКТОР: ${reactObj.name} (${reactObj.energy} E)\n`;
   c += `------------------------------------------\nВООРУЖЕНИЕ:\n`;
-  const ws = document.querySelectorAll('#cn-weapons .cn-row');
-  if (!ws.length) c += ` - нет\n`;
-  ws.forEach(r => { const sp = JSON.parse(r.querySelector('select').value); const q = r.querySelector('input').value; const w = db.weapons[sp.g][sp.idx]; c += ` - ${w.name} x${q} (${cnNum(w.dmg * q)} урон)\n`; });
+  const shipCard = CN.cat === 'ship' && def.cardUI;
+  if (shipCard) {
+    // Визуальный конструктор: состав в CN.shipLayout, агрегируем одинаковые по борту.
+    const L = CN.shipLayout || { mounts: [], bays: [] };
+    const wAgg = new Map();
+    (L.mounts || []).forEach(mt => { if (!mt.w) return; const key = mt.w.g + '|' + mt.w.idx; wAgg.set(key, (wAgg.get(key) || 0) + 1); });
+    if (!wAgg.size) c += ` - нет\n`;
+    wAgg.forEach((q, key) => { const [g, idx] = key.split('|'); const w = db.weapons[g][+idx]; c += ` - ${w.name} x${q} (${cnNum(w.dmg * q)} урон)\n`; });
+  } else {
+    const ws = document.querySelectorAll('#cn-weapons .cn-row');
+    if (!ws.length) c += ` - нет\n`;
+    ws.forEach(r => { const sp = JSON.parse(r.querySelector('select').value); const q = r.querySelector('input').value; const w = db.weapons[sp.g][sp.idx]; c += ` - ${w.name} x${q} (${cnNum(w.dmg * q)} урон)\n`; });
+  }
   if (def.hasHangars) {
     const hs = document.querySelectorAll('#cn-hangars .cn-hangar');
     if (hs.length) { c += `\nАНГАРЫ:\n`; hs.forEach(hp => { const h = db.hangarTypes.find(x => x.id == hp.querySelector('.cn-h-type').value); c += ` + ${h.name.toUpperCase()} (вмест. ${h.capacity})\n`; hp.querySelectorAll('.cn-u-type').forEach(u => c += `   > ${db.airUnits[u.value].name}\n`); }); }
   }
   c += `\nМОДУЛИ:\n`;
-  const ms = document.querySelectorAll('#cn-modules .cn-row');
-  if (!ms.length) c += ` - базовая комплектация\n`;
-  ms.forEach(r => { const sp = JSON.parse(r.querySelector('select').value); c += ` - ${db.modules[sp.g][sp.idx].name}\n`; });
+  if (shipCard) {
+    const L = CN.shipLayout || { mounts: [], bays: [] };
+    const mAgg = new Map();
+    (L.bays || []).forEach(by => { if (!by.m) return; const key = by.m.g + '|' + by.m.idx; mAgg.set(key, (mAgg.get(key) || 0) + 1); });
+    if (!mAgg.size) c += ` - базовая комплектация\n`;
+    mAgg.forEach((q, key) => { const [g, idx] = key.split('|'); const m = db.modules[g][+idx]; c += ` - ${m.name}${q > 1 ? ' x' + q : ''}\n`; });
+  } else {
+    const ms = document.querySelectorAll('#cn-modules .cn-row');
+    if (!ms.length) c += ` - базовая комплектация\n`;
+    ms.forEach(r => { const sp = JSON.parse(r.querySelector('select').value); c += ` - ${db.modules[sp.g][sp.idx].name}\n`; });
+  }
   if (s.bill && Object.keys(s.bill).length) c += `------------------------------------------\nСЫРЬЁ НА КОРПУС:\n${cnBillText(s.bill)}\n`;
   c += `------------------------------------------\nИТОГ: ${cnNum(s.cost)} ГС · ${s.on} ОН`;
   if (s.energy) c += ` · энергосеть ${cnNum(s.eCons)}/${cnNum(s.eMax)} E`;

@@ -321,6 +321,7 @@
 .cn-info-body { display: flex; flex-direction: column; gap: 9px; padding: 12px; }
 .cn-info-nm { font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--t1); line-height: 1.25; }
 .cn-info-cur { font-family: var(--font-mono); font-size: 9px; color: var(--gd); text-transform: uppercase; letter-spacing: .05em; }
+.cn-info-lvl { display: inline-block; vertical-align: middle; font-family: var(--font-mono); font-size: 9px; font-weight: 700; color: var(--pu, #8a7cff); background: color-mix(in srgb, var(--pu, #8a7cff) 16%, transparent); border: 1px solid color-mix(in srgb, var(--pu, #8a7cff) 36%, transparent); border-radius: var(--radius-pill, 999px); padding: 1px 6px; letter-spacing: .04em; }
 .cn-info-stats { display: flex; flex-direction: column; }
 .cn-info-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--w1); }
 .cn-info-row:last-child { border-bottom: 0; }

@@ -704,7 +704,7 @@ function frCapital(f, cap) {
 
 async function renderFactionsPage() {
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
-  let approved = [], mine = null, cap = { byFid: {}, sysNames: {} };
+  let approved = [], mine = null, cap = { byFid: {}, sysNames: {} }, unions = [];
   try {
     const [ap, capData] = await Promise.all([
       dbGet('faction_applications', 'status=eq.approved&order=name.asc'),
@@ -712,6 +712,7 @@ async function renderFactionsPage() {
     ]);
     approved = ap || []; cap = capData;
   } catch (e) {}
+  try { unions = (user ? await frRpc('union_list') : null) || []; } catch (e) { unions = []; }
   if (user) mine = await frLoadMine();
 
   const canCreate = !mine || mine.status === 'rejected' || mine.status === 'draft';
@@ -737,13 +738,54 @@ async function renderFactionsPage() {
         <div class="fr-card-meta">★ ${esc(frCapital(f, cap).sysName)} · ${esc(f.race || '')}</div>
       </div></div>`).join('') || `<div class="fr-empty">Пока нет одобренных фракций.</div>`;
 
+  const unionCards = (unions || []).map(u => {
+    const col = frReadable(u.color || '#5a7fb0');
+    const kind = u.kind === 'federation' ? 'Федерация' : 'Конфедерация';
+    return `<div class="fr-card" onclick="frViewUnion('${u.id}')">
+      <div class="fr-card-bar" style="background:${col}"></div>
+      <div class="fr-card-herald">${u.herald_url ? `<img src="${esc(u.herald_url)}">` : `<span style="color:${col}">${u.kind === 'federation' ? '🛡' : '🤝'}</span>`}</div>
+      <div class="fr-card-main">
+        <div class="fr-card-name">${esc(u.name)}</div>
+        <div class="fr-card-sub">${kind}${u.leader_name ? ' · ' + esc(u.leader_name) : ''}</div>
+        <div class="fr-card-meta">👥 ${(+u.members || 0)} участник(ов)</div>
+      </div></div>`;
+  }).join('');
+  const unionsBlock = (unions && unions.length)
+    ? `<div class="fr-section-title" style="margin-top:26px"><h2 style="font-size:18px;margin:0">Союзы <span style="font-size:12px;color:var(--t3);font-weight:400">— федерации и конфедерации</span></h2></div>
+       <div class="fr-grid">${unionCards}</div>`
+    : '';
+
   setPg(`<div class="fr-wrap">
     <div class="fr-head"><h1>Фракции</h1>
       ${user && canCreate && !mine ? `<button class="btn btn-gd" onclick="go('faction-new')">+ Создать государство</button>` : ''}
     </div>
     ${mineHtml}
     <div class="fr-grid">${cards}</div>
+    ${unionsBlock}
   </div>`);
+}
+
+// Просмотр союза — модалка с флагом, описанием и участниками (видно всем).
+async function frViewUnion(id) {
+  let u = null;
+  try { u = await frRpc('union_detail', { p_union_id: id }); } catch (e) {}
+  if (!u) { toast('Не найдено', 'err'); return; }
+  const col = frReadable(u.color || '#5a7fb0');
+  const kind = u.kind === 'federation' ? 'Федерация' : 'Конфедерация';
+  const members = (u.members || []).map(m =>
+    `<span class="fr-app-badge" style="background:var(--b1);border-color:${col};color:var(--t2);margin:3px">${m.is_leader ? '👑 ' : ''}${esc(m.name)}</span>`).join('');
+  const modal = document.getElementById('fr-modal') || (() => { const m = document.createElement('div'); m.id = 'fr-modal'; m.className = 'fr-modal-ov'; m.onclick = e => { if (e.target === m) frCloseView(); }; document.body.appendChild(m); return m; })();
+  modal.innerHTML = `<div class="fr-modal">
+    <button class="gm-close" onclick="frCloseView()">✕</button>
+    <div class="fr-view-hd">
+      <div class="fr-view-herald" style="border-color:${col}">${u.herald_url ? `<img src="${esc(u.herald_url)}">` : `<span style="color:${col}">${u.kind === 'federation' ? '🛡' : '🤝'}</span>`}</div>
+      <div style="min-width:0"><div class="fr-card-name">${esc(u.name)}</div>
+      <div class="fr-card-sub">${kind} · 👑 ${esc(u.leader_name || '—')}</div></div>
+    </div>
+    ${u.description ? frLoreBlock('Описание', u.description) : ''}
+    <div class="fr-rev-row" style="display:block"><span>Участники (${(u.members || []).length})</span><div style="margin-top:6px">${members || '—'}</div></div>
+  </div>`;
+  modal.classList.add('show');
 }
 
 // Лор-блок с заголовком: длинный текст сворачивается (фейд + кнопка),
@@ -808,10 +850,11 @@ function frCloseView() { document.getElementById('fr-modal')?.classList.remove('
 // ════════════════════════════════════════════════════════════
 async function frRenderAppsTab(b) {
   b.innerHTML = `<div class="sload" style="min-height:60px"><div class="quote-loader">Загрузка...</div></div>`;
-  let apps = [], faiths = [];
+  let apps = [], faiths = [], unions = [];
   try { apps = await dbGet('faction_applications', 'or=(status.eq.pending,pending_review.eq.true)&order=updated_at.asc') || []; } catch (e) { b.innerHTML = `<p style="color:var(--err)">Ошибка: ${esc(e.message)}</p>`; return; }
   try { faiths = await frRpc('faith_pending_list') || []; } catch (e) { faiths = []; }
-  if (!apps.length && !faiths.length) { b.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--t3)">Нет анкет на модерации</div>`; return; }
+  try { unions = await frRpc('union_pending_list') || []; } catch (e) { unions = []; }
+  if (!apps.length && !faiths.length && !unions.length) { b.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--t3)">Нет анкет на модерации</div>`; return; }
   const appsHtml = apps.map(a => {
       const isEdit = a.status === 'approved' && a.pending_review;
       const badge = isEdit ? `<span class="fr-app-badge edit">ИЗМЕНЕНИЯ</span>` : `<span class="fr-app-badge new">НОВАЯ</span>`;
@@ -848,9 +891,41 @@ async function frRenderAppsTab(b) {
         <button class="btn btn-rd btn-sm" onclick="frFaithReview('${f.id}',false)">✕ Отклонить</button>
       </div></div>`;
     }).join('');
-  b.innerHTML = `<div style="margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--te)">${apps.length + faiths.length} на модерации</div>`
+  const unionsHtml = unions.map(u => {
+      const isEdit = !!u.is_edit;
+      const p = u.proposed || {};
+      const show = isEdit ? { name: p.name, description: p.description, color: p.color, herald_url: p.herald_url } : u;
+      const kind = u.kind_union === 'federation' ? 'Федерация' : 'Конфедерация';
+      const badge = isEdit ? `<span class="fr-app-badge edit">ПРАВКА</span>` : `<span class="fr-app-badge new">НОВЫЙ СОЮЗ</span>`;
+      const img = show.herald_url ? `<img src="${esc(show.herald_url)}" alt="" style="width:46px;height:46px;border-radius:8px;object-fit:cover;flex-shrink:0">` : '';
+      const diff = isEdit ? `<div class="fr-app-meta">Было: «${esc(u.name || '—')}»${u.description ? ` · ${esc(u.description)}` : ''}</div>` : '';
+      return `<div class="fr-app" id="fr-union-${u.id}">
+      <div class="fr-app-hd">${badge}<span class="fr-swatch" style="background:${esc(show.color || '#5a7fb0')}"></span>
+        ${img}
+        <b>${u.kind_union === 'federation' ? '🛡' : '🤝'} «${esc(show.name || u.name || 'Без названия')}»</b>
+        <span class="fr-app-by">${esc(u.leader_name || u.leader_fid || '')}</span></div>
+      <div class="fr-app-meta">${kind} · ${frNum(u.members)} участник(ов)</div>
+      ${show.description ? `<div class="fr-app-meta" style="font-style:italic">«${esc(show.description)}»</div>` : ''}
+      ${diff}
+      <div class="fr-app-acts">
+        <button class="btn btn-gd btn-sm" onclick="frUnionReview('${u.id}',true)">✓ ${isEdit ? 'Принять изменения' : 'Одобрить'}</button>
+        <button class="btn btn-rd btn-sm" onclick="frUnionReview('${u.id}',false)">✕ Отклонить</button>
+      </div></div>`;
+    }).join('');
+  b.innerHTML = `<div style="margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--te)">${apps.length + faiths.length + unions.length} на модерации</div>`
     + appsHtml
-    + (faiths.length ? `<div class="fr-app-group">🛐 Религии</div>${faithsHtml}` : '');
+    + (faiths.length ? `<div class="fr-app-group">🛐 Религии</div>${faithsHtml}` : '')
+    + (unions.length ? `<div class="fr-app-group">🤝 Союзы</div>${unionsHtml}` : '');
+}
+async function frUnionReview(id, approve) {
+  let reason = null;
+  if (!approve) { reason = prompt('Причина отклонения (увидит лидер союза):', ''); if (reason === null) return; }
+  else if (!confirm('Одобрить союз? Его профиль станет виден в реестре фракций.')) return;
+  try {
+    await frRpc('union_review', { p_union_id: id, p_approve: !!approve, p_reason: reason });
+    toast(approve ? 'Одобрено ✓' : 'Отклонено', approve ? 'ok' : 'inf');
+    document.getElementById('fr-union-' + id)?.remove();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
 // Лёгкий вызов RPC из модерации (faction_reg.js): свежий токен + JSON.
 async function frRpc(fn, body) {

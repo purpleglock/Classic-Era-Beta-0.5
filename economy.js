@@ -376,6 +376,10 @@ const EC_VEH_WEIGHT = { tank_light: 1, tank_mbt: 2, tank_heavy: 4, tank_walker: 
 const EC_GROUND_WEIGHT = { light: 1, medium: 2, artillery: 2, heavy: 4, walker: 4 };
 function ecUnitWeight(u) { return EC_GROUND_WEIGHT[(u && u.data && u.data.class) || ''] || 2; }
 function ecSlotsSum(t) { return EC.buildings.filter(b => b.btype === t).reduce((a, b) => a + (b.slots_open || 0), 0); }
+// Лимит ёмкости общего склада ресурсов. Зеркало _resources_phase1.sql:
+// база 1000 + 500 за каждый открытый слот здания «Склад».
+const EC_STORE_BASE = 1000, EC_STORE_PER_SLOT = 500;
+function ecStoreCap() { return EC_STORE_BASE + ecSlotsSum('warehouse') * EC_STORE_PER_SLOT; }
 // ── Раса/правление «роботов»: раса «Синтетики / Киборги» ИЛИ правление
 //    «Машинный разум (ИИ)». Роботы: пехота на Военном Заводе (×3), 2 слота
 //    исследований, 2 захвата систем за цикл. Зеркало: public._faction_is_robot().
@@ -1063,7 +1067,7 @@ const EC_ACH = {
   amor_fati: { name: 'Возлюби судьбу', ic: '🜂', reward: 0,
     quote: 'Amor fati, не желай, чтобы было иначе.',
     desc: 'Один из множества ударов судьбы.',
-    cond: 'Стань целью вражеской операции и уцелей' },
+    cond: 'Стань целью вражеской операции' },
   dichotomia: { name: 'Дихотомия контроля', ic: '🜁', reward: 1500,
     quote: 'Различай подвластное тебе и неподвластное.',
     desc: 'Властвуй над тем, что в твоей власти.',
@@ -1078,7 +1082,7 @@ const EC_ACH = {
     quote: 'Мудрость есть знание дел божественных и человеческих.',
     desc: 'Истинная мудрость объемлет всё.',
     cond: 'Изучи 10 технологий' },
-  fortitudo: { name: 'Мужество разумного', ic: '🜏', reward: 4000,
+  fortitudo: { name: 'Ни мужества, ни чести', ic: '🜏', reward: 4000,
     quote: 'Мужество есть знание того, чего следует и не следует страшиться.',
     desc: 'Доблесть проверяется в деле, а не в покое.',
     cond: 'Проведи успешный рейд' },
@@ -1094,38 +1098,446 @@ const EC_ACH = {
     quote: 'Великое не родится вдруг.',
     desc: 'Держава растёт трудом без устали.',
     cond: 'Возведи 30 построек' },
+
+  // ── Большой набор: масштаб державы ──
+  abundantia: { name: 'Изобилие...', ic: '🜝', reward: 8000,
+    quote: 'Magnae fortunae magna servitus.',
+    desc: 'Большое богатство есть большая ответственность.',
+    cond: 'Скопи 50 000 ГС в казне' },
+  imperium_sine_fine: { name: 'Границы Империи нигде не заканчиваются', ic: '🝆', reward: 8000,
+    quote: 'Imperium sine fine dedi.',
+    desc: 'Жизненного пространства много не бывает.',
+    cond: 'Удержи 10 колоний' },
+  res_publica: { name: 'Общее дело', ic: '🝅', reward: 15000,
+    quote: 'Res publica res populi.',
+    desc: 'Государство есть дело народа.',
+    cond: 'Возведи 100 построек' },
+  terra_nova: { name: 'Новое небо и новая земля', ic: '🝧', reward: 3000,
+    quote: 'Naturam mutare labor.',
+    desc: 'Так долго копировать всё за природой, чтобы изменить и её?',
+    cond: 'Терраформируй планету' },
+  magnae_divitiae: { name: 'Закрома', ic: '🝐', reward: 4000,
+    quote: 'Divitiae apud sapientem virum in servitute sunt.',
+    desc: 'У мудрого богатство в услужении, а не он у богатства.',
+    cond: 'Накопи 100 единиц одного ресурса' },
+
+  // ── Наука ──
+  omniscientia: { name: 'Объять сущее', ic: '🜿', reward: 10000,
+    quote: 'Omnia mea mecum porto.',
+    desc: 'Всё своё ношу с собою - в разуме.',
+    cond: 'Изучи 25 технологий' },
+
+  // ── Торговля ──
+  mercator: { name: 'Купеческие пути', ic: '🝁', reward: 4000,
+    quote: 'Navigare necesse est.',
+    desc: 'Торговля движет мирами, подобно притяжение.',
+    cond: 'Держи 5 торговых путей' },
+  via_argentaria: { name: 'Серебряный путь', ic: '🝍', reward: 3000,
+    quote: 'Pecunia nervus rerum.',
+    desc: 'Деньги — движитель всех дел, даже дел изыскательских.',
+    cond: 'Продай технологию на рынке' },
+
+  // ── Война ──
+  legio: { name: 'Легион', ic: '🜨', reward: 3500,
+    quote: 'Si vis pacem, para bellum.',
+    desc: 'Хочешь мира - готовь войско.',
+    cond: 'Спроектируй 5 боевых единиц' },
+  imperator_belli: { name: 'Вождь войны', ic: '🜟', reward: 8000,
+    quote: 'Veni, vidi, vici.',
+    desc: 'Пришёл, увидел, победил - и так пять раз.',
+    cond: 'Проведи 5 успешных рейдов' },
+
+  // ── Шпионаж ──
+  magister_arcanorum: { name: 'Мастер тайн', ic: '🜗', reward: 8000,
+    quote: 'Qui tacet consentire videtur.',
+    desc: 'Кто молчит - тот знает больше.',
+    cond: 'Проведи 5 успешных разведопераций' },
+  missionarius: { name: 'Тайный поклонник', ic: '🜘', reward: 3000,
+    quote: 'Sub rosa.',
+    desc: 'Под розой молчания зреет вера.',
+    cond: 'Внедри тайную секту в чужую державу' },
+
+  // ── Вера ──
+  credens: { name: 'Верующий', ic: '🝫', reward: 1500,
+    quote: 'Credo ut intelligam.',
+    desc: 'Верю, чтобы понимать.',
+    cond: 'Прими веру' },
+  fides_fundata: { name: 'Школа разума', ic: '🝬', reward: 3000,
+    quote: 'In principio erat verbum.',
+    desc: 'В начале было слово.',
+    cond: 'Основай собственную веру' },
+  pontifex_maximus: { name: 'Звездный понтифик', ic: '🝭', reward: 5000,
+    quote: 'Vox populi, vox Dei.',
+    desc: 'Голос народа - голос неба.',
+    cond: 'Добейся признания веры тремя державами' },
+
+  // ── Дипломатия ──
+  foederati: { name: 'Союзник', ic: '🝳', reward: 2000,
+    quote: 'Concordia parvae res crescunt.',
+    desc: 'В согласии растёт и малое.',
+    cond: 'Вступи в союз' },
+  dux_foederis: { name: 'Глава союза', ic: '🝴', reward: 4000,
+    quote: 'Primus inter pares.',
+    desc: 'Первый среди равных.',
+    cond: 'Возглавь союз' },
+  dominus_terrarum: { name: 'Сюзерен', ic: '🝵', reward: 5000,
+    quote: 'Divide et impera.',
+    desc: 'Разделяй и властвуй.',
+    cond: 'Возьми державу в вассалитет' },
+  creditor_magnus: { name: 'Великий кредитор', ic: '🝎', reward: 4000,
+    quote: 'Qui dat, accipit.',
+    desc: 'Кто даёт - тот и получает.',
+    cond: 'Выдай заём на 20 000 ГС' },
+
+  // ── Слово ──
+  vox_imperii: { name: 'Глас миллиардов', ic: '🝪', reward: 2000,
+    quote: 'Verba volant, scripta manent.',
+    desc: 'Слова уходят, но написанное остаётся.',
+    cond: 'Опубликуй новость державы' },
+
+  // ── Инфраструктура ──
+  classis: { name: 'Верфь', ic: '🝓', reward: 2500,
+    quote: 'Qui mare teneat, eum necesse rerum potiri.',
+    desc: 'Кто владеет навигационной орбитой, тот владеет всем.',
+    cond: 'Заложи верфь' },
+  cohors_arcana: { name: 'Тиха секторальная ночь', ic: '🝏', reward: 2500,
+    quote: 'Praemonitus, praemunitus.',
+    desc: 'Кто предупреждён - тот вооружён.',
+    cond: 'Открой разведцентр' },
+  plena_officina: { name: 'Полная мощность', ic: '🝒', reward: 3000,
+    quote: 'Festina lente.',
+    desc: 'Спеши медленно, но раскрой всё до конца.',
+    cond: 'Построй все 6 слотов одной постройки' },
+  copia_rerum: { name: 'Многообразие благ', ic: '🝑', reward: 3000,
+    quote: 'Varietas delectat.',
+    desc: 'Это радует и укрепляет, разве нет?',
+    cond: 'Имей в запасе 5 разных ресурсов' },
+  arsenal: { name: 'Всё больше проектов', ic: '🝕', reward: 6000,
+    quote: 'In arsenali virtus.',
+    desc: 'Лушче союзников, чем армия и флот, увы, в политике не бывает.',
+    cond: 'Спроектируй 15 боевых единиц' },
+  arma_omnia: { name: 'Час Х', ic: '🝖', reward: 4000,
+    quote: 'Bellum omnium contra omnes.',
+    desc: 'Кто готов ко всему, тот не застигнут врасплох.',
+    cond: 'Создай юнит каждого рода войск' },
+
+  // ── Оборона ──
+  contra_speculator: { name: 'Тимур гордился бы вами', ic: '🝙', reward: 3500,
+    quote: 'Caveat emptor.',
+    desc: 'Чужой соглядатай схвачен у твоих ворот.',
+    cond: 'Раскрой вражеского шпиона' },
+  // ── Тонкая торговля ──
+  permutatio: { name: 'Мена', ic: '🝛', reward: 2500,
+    quote: 'Do ut des.',
+    desc: 'Даю, чтобы и ты дал.',
+    cond: 'Заключи бартерную сделку' },
+  emptor: { name: 'Покупатель знания', ic: '🝜', reward: 2500,
+    quote: 'Bona fide.',
+    desc: 'Добросовестно приобрети чужой труд.',
+    cond: 'Купи технологию на рынке' },
+
+  // ── Тонкая дипломатия ──
+  fidelis: { name: 'Верный вассал', ic: '🝝', reward: 2000,
+    quote: 'Fideli certa merces.',
+    desc: 'Верному - верная награда.',
+    cond: 'Стань вассалом сильной державы' },
+  amicitia: { name: 'Крепкая дружба', ic: '🝞', reward: 3000,
+    quote: 'Amicus certus in re incerta cernitur.',
+    desc: 'Верный друг познаётся в беде.',
+    cond: 'Достигни прочной дружбы с державой' },
+  debitum_solutum: { name: 'Долг платежом', ic: '🝟', reward: 2500,
+    quote: 'Qui solvit, liberatur.',
+    desc: 'Кто платит, тот свободен.',
+    cond: 'Погаси взятый заём' },
+
+  // ── Познание ──
+  duae_viae: { name: 'Дуализм мысли', ic: '🝠', reward: 3000,
+    quote: 'Per aspera ad astra.',
+    desc: 'Иди через тернии двумя путями сразу.',
+    cond: 'Веди 2 исследования одновременно' },
+  ordo_cognoscendi: { name: 'Порядок познания', ic: '🝡', reward: 2000,
+    quote: 'Ordo ab chao.',
+    desc: 'Порядок из хаоса, хаос из порядка.',
+    cond: 'Выстрой очередь из 3 технологий' },
+
+  // ════════ ГРАНД-ТИРЫ — вершины каждой ветви ════════
+  croesus: { name: 'Богатство Креза', ic: '🜢', reward: 15000,
+    quote: 'Aurea mediocritas - но казна полна до краёв.',
+    desc: 'Богатейший среди богатых.',
+    cond: 'Скопи 250 000 ГС в казне' },
+  urbs_aeterna: { name: 'Вечный город', ic: '🜣', reward: 20000,
+    quote: 'Roma aeterna.',
+    desc: 'Держава, что переживёт века.',
+    cond: 'Возведи 150 построек' },
+  pax_galactica: { name: 'Галактический мир', ic: '🜤', reward: 15000,
+    quote: 'Pax per imperium.',
+    desc: 'Мир, что держится силой державы.',
+    cond: 'Удержи 20 колоний' },
+  terraformator: { name: 'Преобразитель миров', ic: '🝨', reward: 6000,
+    quote: 'Ex nihilo nihil — но из пустыни рождается жизнь.',
+    desc: 'Три мёртвых мира зацвели твоим трудом.',
+    cond: 'Терраформируй 3 планеты' },
+  thesaurus: { name: 'Сокровищница', ic: '🝩', reward: 8000,
+    quote: 'Ubi thesaurus tuus, ibi cor tuum.',
+    desc: 'Где сокровище твоё - там и сердце твоё.',
+    cond: 'Накопи 500 единиц одного ресурса' },
+  sapientia_summa: { name: 'Высшая мудрость', ic: '🜦', reward: 20000,
+    quote: 'Sapientia summa.',
+    desc: 'Познавший почти всё сущее.',
+    cond: 'Изучи 50 технологий' },
+  magister_magnus: { name: 'Великий магистр тайн', ic: '🜫', reward: 12000,
+    quote: 'Scientia occulta — vis maxima.',
+    desc: 'Ни одного провала.',
+    cond: 'Проведи 10 успешных разведопераций' },
+  archipirata: { name: 'Архипират', ic: '🜬', reward: 12000,
+    quote: 'Mare nostrum — всё наше.',
+    desc: 'Гроза торговых путей галактики.',
+    cond: 'Проведи 10 успешных рейдов' },
+  machina_belli: { name: 'Военная машина', ic: '🜭', reward: 10000,
+    quote: 'Cedant arma — но не твои.',
+    desc: 'Несокрушимая военная мощь.',
+    cond: 'Спроектируй 30 боевых единиц' },
+  via_magna: { name: 'Великий путь', ic: '🝂', reward: 6000,
+    quote: 'Omnes viae ad opes ducunt.',
+    desc: 'Все пути ведут к процветанию.',
+    cond: 'Держи 10 торговых путей' },
+  imperator_imperatorum: { name: 'Царь царей', ic: '🝷', reward: 10000,
+    quote: 'Rex regum.',
+    desc: 'Три державы склонились под твою руку.',
+    cond: 'Держи 3 вассала одновременно' },
+
+  // ════════ ВОЕНКА — техи классов и реальное производство ════════
+  crucigera: { name: 'Крейсерская верфь', ic: '🜪', reward: 3000,
+    quote: 'Maiora premunt.',
+    desc: 'Капитальные корабли вновь среди звезд.',
+    cond: 'Открой класс «Крейсер» в дереве технологий' },
+  dreadnought: { name: 'Эпоха дредноутов', ic: '🜨', reward: 6000,
+    quote: 'Ultima ratio regum.',
+    desc: 'Титаны снова продут по земле.',
+    cond: 'Открой класс «Дредноут» в дереве технологий' },
+  centuria_navium: { name: 'Сотни вымелов', ic: '🜬', reward: 5000,
+    quote: 'Multitudo navium.',
+    desc: 'Они затмят собой звёзды.',
+    cond: 'Построй 100 корветов' },
+  leviathan: { name: 'Эхо великой войны', ic: '🜭', reward: 6000,
+    quote: 'Behemoth maris.',
+    desc: 'Стальная исполин сошл со стапелей.',
+    cond: 'Построй дредноут' },
+  classis_magna: { name: 'Пан-колониальный флот', ic: '🝃', reward: 8000,
+    quote: 'Classis invicta.',
+    desc: 'Несокрушимая армада под твоим флагом.',
+    cond: 'Построй 50 кораблей' },
+  legio_ferrata: { name: 'Железный легион', ic: '🜸', reward: 4000,
+    quote: 'Ferro et igni.',
+    desc: 'Бронированный кулак наземных войск.',
+    cond: 'Построй 50 единиц наземной техники' },
+  ala_magna: { name: 'Воздушная армада', ic: '🜹', reward: 4000,
+    quote: 'Per ardua ad astra.',
+    desc: 'Небо принадлежит твоим крыльям.',
+    cond: 'Построй 50 единиц авиации' },
+
+  // ── Новые ветви охвата ──
+  rete_arcanum: { name: 'Наши узы всё крепче', ic: '🜩', reward: 5000,
+    quote: 'Sub rosa, ubique.',
+    desc: 'Незримая сеть опутала врагов.',
+    cond: 'Внедри 3 тайные секты' },
+  magna_foederatio: { name: 'Великая федерация', ic: '🝶', reward: 8000,
+    quote: 'E pluribus unum.',
+    desc: 'Из многих - единое, и ты во главе.',
+    cond: 'Возглавь союз из 5+ держав' },
+  inimicus: { name: 'Заклятый враг', ic: '🜮', reward: 2000,
+    quote: 'Inimicum quamvis humilem docti est metuere.',
+    desc: 'Мудрый опасается даже малого врага.',
+    cond: 'Доведи отношения с державой до вражды' },
+  usura: { name: 'Дом займов', ic: '🝏', reward: 5000,
+    quote: 'Qui dat mutuum, amicum vendit.',
+    desc: 'Дающий в долг - приобретает власть.',
+    cond: 'Выдай 5 займов' },
+  industria_plena: { name: 'Индустриализация за индустриализацией', ic: '🜯', reward: 6000,
+    quote: 'Labor omnia vincit.',
+    desc: 'Труд всё побеждает во всех отраслях.',
+    cond: 'Построй все 8 типов сооружений' },
+  dispersio: { name: 'Жители пустоты', ic: '🜰', reward: 5000,
+    quote: 'Crescit eundo.',
+    desc: 'Растёт, распространяясь меж звёзд.',
+    cond: 'Засели колонии в 5 системах' },
+
+  // ════════ КОЛОНИИ-СТАНЦИИ НЕБОЖИТЕЛЕЙ — требуют исследований ════════
+  statio_orbitalis: { name: 'Дом над бездной', ic: '🛰', reward: 3500,
+    quote: 'Ad astra per aspera.',
+    desc: 'Подвесные платформы парят над вечной бурей гиганта.',
+    cond: 'Построй колонию-станцию на газовом гиганте (нужна технология «Орбитальные станции»)' },
+  statio_anomala: { name: 'Жизнь в невозможном', ic: '🌀', reward: 5000,
+    quote: 'Ignotum per ignotius.',
+    desc: 'Там, где рвётся сама ткань пространства, теплится твоя колония.',
+    cond: 'Засели колонию-станцию в космической аномалии (нужна технология «Аномальные станции»)' },
+
+  // ════════ ПАСХАЛКА ════════
+  kfzlib: { name: 'Ох...', ic: '🥚', reward: 2000,
+    quote: 'Nomen est omen.',
+    desc: 'Наверное, не стоит...',
+    cond: 'Переименуй колонию в «Kfzlib»' },
+  templum_mundi: { name: 'Отчаяние', ic: '⛩', reward: 5000,
+    quote: 'Sacrum in centro mundi.',
+    desc: 'Где сходятся начала всего сущего, воздвигни алтарь веры, и верни надежду, что покинула этот мир.',
+    cond: 'Возведи Храм Веры в колонии системы «Храм мироздания»' },
+
+  // ════════ КАПСТОУН ════════
+  summa_perfectio: { name: 'Гиперпуть стоика завершён', ic: '🟆', reward: 0,
+    quote: 'Perfectus — feci quod potui.',
+    desc: 'Все добродетели обретены. Дальше только пример другим.',
+    cond: 'Получи все остальные достижения' },
 };
 const EC_ACH_ORDER = ['sibi_imperare', 'constantia', 'cosmopolites', 'amor_fati', 'dichotomia', 'temperantia',
-  'sophia', 'prudentia', 'fortitudo', 'iustitia', 'magnum_opus'];
+  'sophia', 'prudentia', 'fortitudo', 'iustitia', 'magnum_opus',
+  // ── Большой набор ──
+  'imperium_sine_fine', 'res_publica', 'abundantia', 'terra_nova', 'magnae_divitiae',
+  'omniscientia',
+  'mercator', 'via_argentaria',
+  'legio', 'imperator_belli',
+  'magister_arcanorum', 'missionarius',
+  'credens', 'fides_fundata', 'pontifex_maximus',
+  'foederati', 'dux_foederis', 'dominus_terrarum', 'creditor_magnus',
+  'vox_imperii',
+  // ── Третий набор ──
+  'classis', 'cohors_arcana', 'plena_officina', 'copia_rerum', 'arsenal', 'arma_omnia',
+  'contra_speculator',
+  'permutatio', 'emptor',
+  'fidelis', 'amicitia', 'debitum_solutum',
+  'duae_viae', 'ordo_cognoscendi',
+  // ── Военка: техи классов + производство ──
+  'crucigera', 'dreadnought', 'centuria_navium', 'leviathan', 'classis_magna', 'legio_ferrata', 'ala_magna',
+  // ── Новые ветви охвата ──
+  'rete_arcanum', 'magna_foederatio', 'inimicus', 'usura',
+  'industria_plena', 'dispersio',
+  // ── Гранд-тиры ──
+  'croesus', 'urbs_aeterna', 'pax_galactica', 'terraformator', 'thesaurus',
+  'sapientia_summa',
+  'magister_magnus', 'archipirata', 'machina_belli', 'via_magna', 'imperator_imperatorum',
+  // ── Колонии-станции Небожителей ──
+  'statio_orbitalis', 'statio_anomala',
+  // ── Пасхалка / особое + капстоун ──
+  'kfzlib', 'templum_mundi',
+  'summa_perfectio'];
 
-// Панель ачивок для вкладки «Обзор». Заработанные — в цвете, с артом и датой;
-// остальные — затемнены, с подсказкой как открыть.
-function ecAchPanel() {
-  const earned = new Map((EC.ach || []).map(a => [a.id, a]));
-  const got = earned.size, total = EC_ACH_ORDER.length;
-  const cards = EC_ACH_ORDER.map(id => {
-    const a = EC_ACH[id]; if (!a) return '';
-    const e = earned.get(id), unlocked = !!e;
-    const when = e && e.earned_at ? new Date(e.earned_at).toLocaleDateString('ru-RU') : '';
-    const rew = a.reward > 0 ? `<span class="ec-ach-rew">+${ecNum(a.reward)} ГС</span>` : '<span class="ec-ach-rew ec-ach-rew-respect">Молодец!</span>';
-    return `<div class="ec-ach-card${unlocked ? ' on' : ''}">
-      <div class="ec-ach-art">
-        <img src="assets/ach/${id}.webp" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-        <span class="ec-ach-art-ph" style="display:none">${a.ic}</span>
-        ${unlocked ? '' : '<span class="ec-ach-lock">🔒</span>'}
-      </div>
-      <div class="ec-ach-body">
-        <div class="ec-ach-name">${esc(a.name)}</div>
-        <div class="ec-ach-desc">${esc(a.desc)}</div>
-        <div class="ec-ach-cond">→ ${esc(a.cond)}</div>
-        <div class="ec-ach-foot">${rew}${when ? `<span class="ec-ach-when">${esc(when)}</span>` : ''}</div>
-      </div>
-    </div>`;
-  }).join('');
-  return `<div class="ec-ovx-panel ec-ach-panel" style="grid-column:1/-1">
-    <div class="ec-ovx-panel-t">🏆 Достижения <span class="ec-ovx-panel-sub">путь стоика · получено ${ecNum(got)} / ${ecNum(total)}</span></div>
-    <div class="ec-ach-grid">${cards}</div>
+// Пути достижений — для фильтра и группировки в панели. Каждая ачивка отнесена
+// ровно к одному пути; порядок путей задаёт порядок секций и чипов.
+const EC_ACH_CATS = [
+  { key: 'power',   label: 'Держава',      ic: '👑' },
+  { key: 'science', label: 'Познание',     ic: '🔬' },
+  { key: 'war',     label: 'Война',        ic: '⚔️' },
+  { key: 'spy',     label: 'Тайная война', ic: '🕵️' },
+  { key: 'faith',   label: 'Вера',         ic: '🛐' },
+  { key: 'diplo',   label: 'Политика',     ic: '🤝' },
+  { key: 'trade',   label: 'Торговля',     ic: '⚖️' },
+  { key: 'special', label: 'Особое',       ic: '🌟' },
+];
+const EC_ACH_CAT = {
+  // Держава — масштаб, ресурсы, инфраструктура
+  constantia: 'power', cosmopolites: 'power', temperantia: 'power', magnum_opus: 'power',
+  abundantia: 'power', imperium_sine_fine: 'power', res_publica: 'power', terra_nova: 'power',
+  magnae_divitiae: 'power', classis: 'power', plena_officina: 'power', copia_rerum: 'power',
+  industria_plena: 'power', dispersio: 'power', croesus: 'power', urbs_aeterna: 'power',
+  pax_galactica: 'power', terraformator: 'power', thesaurus: 'power',
+  statio_orbitalis: 'power', statio_anomala: 'power',
+  // Познание — наука и исследования
+  sibi_imperare: 'science', sophia: 'science', omniscientia: 'science', sapientia_summa: 'science',
+  duae_viae: 'science', ordo_cognoscendi: 'science',
+  // Война — армия, флот, рейды
+  fortitudo: 'war', legio: 'war', imperator_belli: 'war', arsenal: 'war', arma_omnia: 'war',
+  crucigera: 'war', dreadnought: 'war', centuria_navium: 'war', leviathan: 'war',
+  classis_magna: 'war', legio_ferrata: 'war', ala_magna: 'war', machina_belli: 'war', archipirata: 'war',
+  // Тайная война — шпионаж, секты, контрразведка
+  prudentia: 'spy', amor_fati: 'spy', magister_arcanorum: 'spy', missionarius: 'spy',
+  contra_speculator: 'spy', magister_magnus: 'spy', rete_arcanum: 'spy', cohors_arcana: 'spy',
+  // Вера — религия
+  credens: 'faith', fides_fundata: 'faith', pontifex_maximus: 'faith',
+  // Политика — дипломатия, союзы, вассалы, займы, слово
+  iustitia: 'diplo', foederati: 'diplo', dux_foederis: 'diplo', dominus_terrarum: 'diplo',
+  creditor_magnus: 'diplo', fidelis: 'diplo', amicitia: 'diplo', debitum_solutum: 'diplo',
+  inimicus: 'diplo', usura: 'diplo', magna_foederatio: 'diplo', imperator_imperatorum: 'diplo',
+  vox_imperii: 'diplo',
+  // Торговля — пути, бартер, рынок технологий
+  dichotomia: 'trade', mercator: 'trade', via_argentaria: 'trade', permutatio: 'trade',
+  emptor: 'trade', via_magna: 'trade',
+  // Особое — пасхалка + храм мироздания + мета-капстоун
+  kfzlib: 'special', templum_mundi: 'special', summa_perfectio: 'special',
+};
+function ecAchCat(id) { return EC_ACH_CAT[id] || 'special'; }
+
+// Карточка одной ачивки (общая для всех режимов панели).
+function ecAchCard(id, e) {
+  const a = EC_ACH[id]; if (!a) return '';
+  const unlocked = !!e;
+  const when = e && e.earned_at ? new Date(e.earned_at).toLocaleDateString('ru-RU') : '';
+  const rew = a.reward > 0 ? `<span class="ec-ach-rew">+${ecNum(a.reward)} ГС</span>` : '<span class="ec-ach-rew ec-ach-rew-respect">Молодец!</span>';
+  return `<div class="ec-ach-card${unlocked ? ' on' : ''}">
+    <div class="ec-ach-art">
+      <img src="assets/ach/${id}.webp" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <span class="ec-ach-art-ph" style="display:none">${a.ic}</span>
+      ${unlocked ? '' : '<span class="ec-ach-lock">🔒</span>'}
+    </div>
+    <div class="ec-ach-body">
+      <div class="ec-ach-name">${esc(a.name)}</div>
+      <div class="ec-ach-desc">${esc(a.desc)}</div>
+      <div class="ec-ach-cond">→ ${esc(a.cond)}</div>
+      <div class="ec-ach-foot">${rew}${when ? `<span class="ec-ach-when">${esc(when)}</span>` : ''}</div>
+    </div>
   </div>`;
+}
+
+// Смена активного фильтра-пути: локальный ре-рендер панели без полного перекраса кабинета.
+function ecAchFilter(key) {
+  EC.achFilter = key;
+  const el = document.getElementById('ec-ach-panel');
+  if (el) el.innerHTML = ecAchPanelInner();
+}
+
+// Внутренности панели (шапка + чипы-фильтры + секции путей). Полученные ачивки
+// идут ПЕРВЫМИ внутри каждого пути (по дате — свежие сверху), затем закрытые.
+function ecAchPanelInner() {
+  const earned = new Map((EC.ach || []).map(a => [a.id, a]));
+  const filt = EC.achFilter || 'all';
+  const allIds = EC_ACH_ORDER.filter(id => EC_ACH[id]);
+  const got = allIds.filter(id => earned.has(id)).length, total = allIds.length;
+  const orderIdx = {}; EC_ACH_ORDER.forEach((id, i) => orderIdx[id] = i);
+  const sortIds = ids => ids.slice().sort((x, y) => {
+    const ex = earned.has(x), ey = earned.has(y);
+    if (ex !== ey) return ex ? -1 : 1;                                   // полученные — вперёд
+    if (ex && ey) {                                                      // оба получены — свежие выше
+      const d = new Date(earned.get(y).earned_at || 0) - new Date(earned.get(x).earned_at || 0);
+      if (d) return d;
+    }
+    return orderIdx[x] - orderIdx[y];                                    // иначе — порядок каталога
+  });
+  const cats = EC_ACH_CATS
+    .map(c => ({ ...c, ids: allIds.filter(id => ecAchCat(id) === c.key) }))
+    .filter(c => c.ids.length);
+  const chip = (key, ic, label, g, t, on) =>
+    `<button type="button" class="ec-ach-chip${on ? ' on' : ''}" onclick="ecAchFilter('${key}')">
+       <span class="ec-ach-chip-ic">${ic}</span><span class="ec-ach-chip-l">${esc(label)}</span>
+       <span class="ec-ach-chip-n">${ecNum(g)}/${ecNum(t)}</span></button>`;
+  const chips = chip('all', '🏆', 'Все', got, total, filt === 'all')
+    + cats.map(c => chip(c.key, c.ic, c.label, c.ids.filter(id => earned.has(id)).length, c.ids.length, filt === c.key)).join('');
+  const shown = filt === 'all' ? cats : cats.filter(c => c.key === filt);
+  const sections = shown.map(c => {
+    const g = c.ids.filter(id => earned.has(id)).length;
+    const cards = sortIds(c.ids).map(id => ecAchCard(id, earned.get(id))).join('');
+    return `<div class="ec-ach-cat">
+      <div class="ec-ach-cat-h"><span class="ec-ach-cat-ic">${c.ic}</span>
+        <span class="ec-ach-cat-l">${esc(c.label)}</span>
+        <span class="ec-ach-cat-n">${ecNum(g)} / ${ecNum(c.ids.length)}</span></div>
+      <div class="ec-ach-grid">${cards}</div></div>`;
+  }).join('');
+  return `<div class="ec-ovx-panel-t">🏆 Достижения <span class="ec-ovx-panel-sub">путь стоика · получено ${ecNum(got)} / ${ecNum(total)}</span></div>
+    <div class="ec-ach-filters">${chips}</div>
+    ${sections}`;
+}
+
+// Панель ачивок для вкладки «Обзор». Стабильный id → ecAchFilter перерисовывает
+// только её содержимое при переключении пути.
+function ecAchPanel() {
+  return `<div class="ec-ovx-panel ec-ach-panel" id="ec-ach-panel" style="grid-column:1/-1">${ecAchPanelInner()}</div>`;
 }
 
 function ecTabOverview() {
@@ -1225,14 +1637,22 @@ function ecTabOverview() {
     const rar = (mt && mt.r) || ecResRarity(n) || 'common';
     return { n, rate, have, rar, icon: (mt && mt.icon) || ecResIcon(n) };
   }).sort((a, b) => (b.rate - a.rate) || (b.have - a.have));
-  const resPanel = resRows.length ? `<div class="ec-ovx-panel">
+  const storeCap = ecStoreCap();
+  const storeUsed = resRows.reduce((s, r) => s + (r.have || 0), 0);
+  const whSlots = ecSlotsSum('warehouse');
+  const capBar = `<div class="ec-ovx-stat-wide ec-ov-clk" onclick="ecSetTab('colonies')" data-tip="Ёмкость общего склада: база ${ecNum(EC_STORE_BASE)} + по ${ecNum(EC_STORE_PER_SLOT)} за слот «Склада».\n${whSlots ? whSlots + ' слот(ов) склада → +' + ecNum(whSlots * EC_STORE_PER_SLOT) : 'Складов нет — стройте «Склад», чтобы поднять лимит'}.\nСверх лимита добыча на склад не кладётся — лишнее в экспорт.">
+        <div class="ec-ovx-stat-k">📦 Вместимость склада</div>
+        <div class="ec-ovx-stat-barline"><b>${ecNum(storeUsed)}</b> / ${ecNum(storeCap)} ${ecOvBar(storeUsed, storeCap, storeUsed >= storeCap ? 'fill-rd' : 'fill-gc')}</div>
+      </div>`;
+  const resPanel = `<div class="ec-ovx-panel">
     <div class="ec-ovx-panel-t">⛏ Ресурсы <span class="ec-ovx-panel-sub">добыча / склад</span></div>
-    <div class="ec-ovx-res-list">${resRows.map(r => `<div class="ec-ovx-res-row ec-rar-${r.rar}">
+    ${capBar}
+    ${resRows.length ? `<div class="ec-ovx-res-list">${resRows.map(r => `<div class="ec-ovx-res-row ec-rar-${r.rar}">
         <span class="ec-ovx-res-ic">${ecResIcon(r.n)}</span>
         <span class="ec-ovx-res-n">${esc(r.n)}</span>
         <span class="ec-ovx-res-meta"><span class="ec-ovx-res-rate">${r.rate ? `+${ecNum(r.rate)}/сут` : '<i>не добывается</i>'}</span><span class="ec-ovx-res-have">${ecNum(r.have)} <span class="ec-ovx-res-have-u">на складе</span></span></span>
-      </div>`).join('')}</div>
-  </div>` : '';
+      </div>`).join('')}</div>` : '<div class="ec-ovx-res-empty">Склад пуст — переведите добывающие заводы в режим 📦 «Склад».</div>'}
+  </div>`;
 
   // ── 4. ДЕРЖАВА ──
   const bldByType = {};
@@ -2441,10 +2861,11 @@ function ecAllianceBlock() {
   const chip = (txt, crown) => `<span style="display:inline-block;background:var(--b1);border:1px solid var(--w2);border-radius:8px;padding:3px 9px;margin:2px;font-size:12px">${esc(txt)}${crown ? ' 👑' : ''}</span>`;
   let unionHtml;
   if (d.union) {
-    const isLeader = d.union.leader_fid === EC.fid;
-    const kindName = d.union.kind === 'federation' ? 'Федерация' : 'Конфедерация';
-    const membersHtml = (d.members || []).map(m => chip(m.name, m.fid === d.union.leader_fid)).join('');
-    const bonuses = d.union.kind === 'federation'
+    const u = d.union;
+    const isLeader = u.leader_fid === EC.fid;
+    const kindName = u.kind === 'federation' ? 'Федерация' : 'Конфедерация';
+    const membersHtml = (d.members || []).map(m => chip(m.name, m.fid === u.leader_fid)).join('');
+    const bonuses = u.kind === 'federation'
       ? ['🛡 Защита караванов — крепкая', '🔍 Защита от разведки — крепкая', '🚀 Общий пул кораблей']
       : ['🛡 Защита караванов — умеренная', '🔍 Защита от разведки — умеренная'];
     const bonusHtml = `<div class="ec-union-bonus" style="margin:8px 0;padding:8px 10px;background:var(--b1);border:1px solid var(--w2);border-radius:8px">
@@ -2452,11 +2873,37 @@ function ecAllianceBlock() {
         ${bonuses.map(b => `<div style="font-size:12.5px;color:var(--t2);padding:1px 0">${b}</div>`).join('')}
         <div style="font-size:10.5px;color:var(--t4);margin-top:5px">⚙ механические эффекты вводятся постепенно</div>
       </div>`;
-    unionHtml = `<div class="ec-dip-t">${d.union.kind === 'federation' ? '🛡' : '🤝'} ${esc(kindName)}: «${esc(d.union.name)}»</div>
+    // Статус модерации профиля союза (зеркало веры)
+    let modNote = '';
+    if (u.status === 'pending' && !u.pending_review) modNote = `<div style="margin:4px 0;font-size:11.5px;color:var(--color-warning)">⏳ Союз на модерации администрации — в общем реестре фракций появится после одобрения.</div>`;
+    else if (u.status === 'rejected') modNote = `<div style="margin:4px 0;font-size:11.5px;color:var(--err)">✕ Профиль отклонён${u.reject_reason ? ': ' + esc(u.reject_reason) : ''}.${isLeader ? ' Отредактируйте и отправьте снова.' : ''}</div>`;
+    else if (u.pending_review) modNote = `<div style="margin:4px 0;font-size:11.5px;color:var(--color-warning)">⏳ Правка профиля на проверке — мир пока видит прежний вид.</div>`;
+    const flag = u.herald_url ? `<img src="${esc(u.herald_url)}" alt="" style="width:38px;height:38px;border-radius:7px;object-fit:cover;border:1px solid var(--w2);flex-shrink:0">` : '';
+    const editForm = (isLeader && EC.unionEditing) ? `<div class="ec-union-edit" style="margin-top:8px;padding:10px;background:var(--b1);border:1px solid var(--w2);border-radius:8px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-bottom:6px">✎ Профиль союза (на модерацию)</div>
+        <input id="ec-ue-name" class="ec-loan-note" style="width:100%;margin-bottom:6px" value="${esc(u.name || '')}" placeholder="название союза">
+        <textarea id="ec-ue-desc" class="ec-loan-note" rows="3" style="width:100%;margin-bottom:6px" placeholder="описание / лор союза">${esc(u.description || '')}</textarea>
+        <div class="ec-prod-form" style="flex-wrap:wrap;align-items:center;gap:8px">
+          <label style="font-size:12px;color:var(--t2)">Цвет <input type="color" id="ec-ue-color" value="${esc(u.color || '#5a7fb0')}" style="vertical-align:middle"></label>
+          <input type="hidden" id="ec-ue-img" value="${esc(u.herald_url || '')}">
+          <label class="btn btn-gh btn-sm" style="cursor:pointer">📁 Флаг<input type="file" accept="image/*" style="display:none" onchange="ecUnionImg(this,'ec-ue-img','ec-ue-img-prev')"></label>
+          <span id="ec-ue-img-prev">${u.herald_url ? `<img src="${esc(u.herald_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle">` : '<span style="font-size:11px;color:var(--t4)">нет флага</span>'}</span>
+          ${u.herald_url ? `<button class="ec-bld-del" title="Убрать флаг" onclick="ecUnionImgClear('ec-ue-img','ec-ue-img-prev')">✕</button>` : ''}
+        </div>
+        <div style="margin-top:8px"><button class="btn btn-gd btn-sm" onclick="ecUnionEdit()">Отправить на модерацию</button>
+          <button class="btn btn-gh btn-sm" onclick="ecUnionEditToggle(false)">Отмена</button></div>
+      </div>` : '';
+    unionHtml = `<div class="ec-dip-t" style="display:flex;align-items:center;gap:8px">${flag}<span>${u.kind === 'federation' ? '🛡' : '🤝'} ${esc(kindName)}: «${esc(u.name)}»</span></div>
+      ${modNote}
+      ${u.description ? `<div style="margin:6px 0;font-size:12.5px;color:var(--t2);white-space:pre-wrap">${esc(u.description)}</div>` : ''}
       <div style="margin:6px 0">${membersHtml}</div>
       ${bonusHtml}
-      ${isLeader ? `<div class="ec-prod-form" style="margin-top:6px">${ecFacSelect('ec-union-inv')}<button class="btn btn-gd btn-sm" onclick="ecUnionInvite()">Пригласить</button></div>` : ''}
-      <button class="btn btn-gh btn-sm" style="margin-top:6px" onclick="ecUnionLeave()">Выйти из союза</button>`;
+      ${isLeader && !EC.unionEditing ? `<div class="ec-prod-form" style="margin-top:6px">${ecFacSelect('ec-union-inv')}<button class="btn btn-gd btn-sm" onclick="ecUnionInvite()">Пригласить</button></div>` : ''}
+      ${editForm}
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+        ${isLeader && !EC.unionEditing ? `<button class="btn btn-gh btn-sm" onclick="ecUnionEditToggle(true)">✎ Редактировать профиль</button>` : ''}
+        <button class="btn btn-gh btn-sm" onclick="ecUnionLeave()">Выйти из союза</button>
+      </div>`;
   } else {
     unionHtml = `<div class="ec-dip-t">🤝 Союз</div>
       <div class="ec-empty" style="padding:6px">Вы не в союзе. Создайте федерацию или конфедерацию и приглашайте державы.</div>
@@ -2502,6 +2949,30 @@ function ecUnionInvite() {
 }
 function ecUnionInviteRespond(id, acc) { ecRpcAct('union_invite_respond', { p_invite_id: id, p_accept: !!acc }, acc ? 'Вы вступили в союз' : 'Приглашение отклонено'); }
 function ecUnionLeave() { if (confirm('Выйти из союза?')) ecRpcAct('union_leave', {}, 'Вы вышли из союза'); }
+// ── Профиль союза: редактирование лидером (через модерацию) ──
+function ecUnionEditToggle(on) { EC.unionEditing = !!on; ecPaintCabinet(); }
+function ecUnionEdit() {
+  const name = ecId('ec-ue-name')?.value?.trim();
+  const desc = ecId('ec-ue-desc')?.value?.trim() || null;
+  const color = ecId('ec-ue-color')?.value || null;
+  const herald = ecId('ec-ue-img')?.value?.trim() || null;
+  if (!name) { toast('Введите название союза', 'err'); return; }
+  EC.unionEditing = false;
+  ecRpcAct('union_edit', { p_name: name, p_description: desc, p_color: color, p_herald_url: herald }, 'Профиль союза отправлен на модерацию');
+}
+// Флаг союза: загрузка в Storage через общий хелпер (как у веры)
+function ecUnionImg(input, hiddenId, prevId) {
+  const file = input.files && input.files[0]; if (!file) return;
+  if (typeof handleImgUpload !== 'function') { toast('Загрузка недоступна', 'err'); return; }
+  handleImgUpload(file, url => {
+    const h = ecId(hiddenId); if (h) h.value = url;
+    const p = ecId(prevId); if (p) p.innerHTML = `<img src="${esc(url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle">`;
+  });
+}
+function ecUnionImgClear(hiddenId, prevId) {
+  const h = ecId(hiddenId); if (h) h.value = '';
+  const p = ecId(prevId); if (p) p.innerHTML = '<span style="font-size:11px;color:var(--t4)">нет флага</span>';
+}
 
 // ── ВЕРА (религия) · слайс 1 ────────────────────────────────
 // Спиритуалист/теократ основывает веру → исповедующие строят храмы (вкладка
