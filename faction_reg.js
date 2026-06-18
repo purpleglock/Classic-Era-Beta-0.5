@@ -107,7 +107,24 @@ const FR_GOV_REGIME = {
   'Коллективный разум': ['Эгалитарный', 'Тоталитарный', 'Авторитарный'],
   'Машинный разум (ИИ)': ['Тоталитарный', 'Авторитарный', 'Меритократический'],
 };
+
+// Несовместимость идеологий (взаимоисключающие выборы)
+const FR_IDEO_CONFLICTS = {
+  'Технократия (Культ науки)': ['Спиритуализм'],
+  'Спиритуализм': ['Технократия (Культ науки)'],
+  'Экспансионизм': ['Изоляционизм', 'Экоцентризм'],
+  'Изоляционизм': ['Экспансионизм', 'Ксенофилия'],
+  'Ксенофилия': ['Ксенофобия', 'Изоляционизм'],
+  'Ксенофобия': ['Ксенофилия'],
+  'Пацифизм': ['Милитаризм (Культ силы)'],
+  'Милитаризм (Культ силы)': ['Пацифизм'],
+  'Экоцентризм': ['Индустриализм', 'Экспансионизм'],
+  'Индустриализм': ['Экоцентризм'],
+};
+
 function frAllowedRegimes(gov) { return FR_GOV_REGIME[gov] || FR_REGIME; }
+function frAllowedIdeologies() { return FR_IDEO; }  // все идеологии — фильтр идёт не по списку, а по текущему конфликту
+function frCheckIdeoConflict(chosen) { return FR_IDEO_CONFLICTS[chosen] || []; }
 function frOnGovChange(gov) {
   FR.data.gov = gov;
   frSetDesc('f-gov-d', FR_GOV_DESC, gov, 'gov');
@@ -117,6 +134,24 @@ function frOnGovChange(gov) {
   sel.innerHTML = allowed.map(o => `<option${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('');
   FR.data.regime = val;
   frSetDesc('f-regime-d', FR_REGIME_DESC, val, 'regime');
+}
+function frOnIdeoChange(ideo) {
+  FR.data.ideology = ideo;
+  frSetDesc('c-ideo-d', FR_IDEO_DESC, ideo, 'ideology');
+  const conflicts = frCheckIdeoConflict(ideo);
+
+  // Обновляем select элемент, отмечая конфликтующие идеологии как disabled
+  const sel = document.getElementById('c-ideo');
+  if (sel) {
+    sel.innerHTML = FR_IDEO.map(o =>
+      `<option${o === ideo ? ' selected' : ''}${conflicts.includes(o) ? ' disabled title="Несовместима с текущей идеологией"' : ''}>${esc(o)}</option>`
+    ).join('');
+  }
+
+  if (conflicts.length > 0) {
+    const msg = `⚠️ Идеология «${ideo}» несовместима с: ${conflicts.join(', ')}. Эти опции недоступны.`;
+    toast(msg, 'warn');
+  }
 }
 
 const FR = { data: null, step: 0, freeSystems: null, allSystems: null, busy: false };
@@ -265,9 +300,9 @@ function frRenderStep() {
 }
 
 // ── Шаги ─────────────────────────────────────────────────────
-function frSel(id, opts, val, onch) {
+function frSel(id, opts, val, onch, disabledOpts = []) {
   return `<select class="fi" id="${id}"${onch ? ` onchange="${onch}"` : ''}>` +
-    opts.map(o => `<option${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('') + `</select>`;
+    opts.map(o => `<option${o === val ? ' selected' : ''}${disabledOpts.includes(o) ? ' disabled' : ''}>${esc(o)}</option>`).join('') + `</select>`;
 }
 function frStepPolitics(d) {
   return `<h3 class="fr-h3">I. Политические сведения</h3>
@@ -407,7 +442,7 @@ function frStepCulture(d) {
           : frSel('c-race', FR_RACE, d.race, "frSetDesc('c-race-d',FR_RACE_DESC,this.value,'race')")}
         <div class="fr-opt-desc" id="c-race-d">${frOptInit(FR_RACE_DESC, d.race, 'race')}</div></div>
       <div class="fg"><label class="fl">Идеология / Этика</label>
-        ${frSel('c-ideo', FR_IDEO, d.ideology, "frSetDesc('c-ideo-d',FR_IDEO_DESC,this.value,'ideology')")}
+        ${frSel('c-ideo', FR_IDEO, d.ideology, "frOnIdeoChange(this.value)", frCheckIdeoConflict(d.ideology))}
         <div class="fr-opt-desc" id="c-ideo-d">${frOptInit(FR_IDEO_DESC, d.ideology, 'ideology')}</div></div>
     </div>
     <div class="fg"><label class="fl">Культурные особенности</label>
@@ -552,6 +587,7 @@ function frRenderMinimap() {
   const box = document.getElementById('f-minimap'); if (!box) return;
   const all = FR.allSystems || [];
   if (!all.length) { box.innerHTML = `<div class="fr-empty">Карта недоступна</div>`; return; }
+  mapZoomClean('f-minimap-zoom');
   const W = (typeof GM_W !== 'undefined') ? GM_W : 3300, H = (typeof GM_H !== 'undefined') ? GM_H : 2062;
   const freeIds = new Set((FR.freeSystems || []).map(s => s.id));
   const sel = FR.data.system_id;
@@ -564,7 +600,8 @@ function frRenderMinimap() {
   }).join('');
   const selSys = all.find(s => s.id === sel);
   const lbl = selSys ? `<text x="${selSys.x}" y="${selSys.y - 52}" class="fr-mm-lbl" text-anchor="middle">${esc(selSys.name)}</text>` : '';
-  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${dots}${lbl}</svg>`;
+  box.innerHTML = `<div class="mm-zoom-wrapper"><div class="mm-zoom-btns"><button class="mm-zoom-btn" onclick="mapZoomIn('f-minimap-zoom')">+</button><button class="mm-zoom-btn" onclick="mapZoomOut('f-minimap-zoom')">−</button></div><div class="mm-zoom-viewport" id="f-minimap-zoom"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${dots}${lbl}</svg></div></div>`;
+  requestAnimationFrame(() => mapZoomInit('f-minimap-zoom'));
 }
 
 function frFilterSystems(q) {
