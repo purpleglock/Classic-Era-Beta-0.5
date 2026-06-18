@@ -58,6 +58,14 @@
 
 /* мини-карта выбора системы */
 .fr-minimap{position:relative;width:100%;background:#06080e;border:1px solid var(--w2);border-radius:10px;overflow:hidden;margin-bottom:12px}
+.mm-zoom-wrapper{position:relative;display:flex;align-items:flex-start}
+.mm-zoom-btns{display:flex;flex-direction:column;gap:6px;padding:12px;z-index:10}
+.mm-zoom-btn{width:36px;height:36px;border:1px solid var(--w2);background:rgba(15,25,50,.8);color:var(--t1);font-size:18px;font-weight:700;border-radius:6px;cursor:pointer;transition:background .15s, color .15s;flex-shrink:0}
+.mm-zoom-btn:hover{background:var(--b3);color:var(--gd)}
+.mm-zoom-btn:active{background:var(--b4);transform:scale(.95)}
+.mm-zoom-viewport{flex:1;overflow:hidden;max-height:300px;display:flex;align-items:center;justify-content:center;user-select:none}
+.mm-zoom-viewport svg{display:block;width:100%;height:auto;transform-origin:center;transition:transform .1s ease-out;cursor:grab}
+.mm-zoom-viewport svg:active{cursor:grabbing}
 .fr-minimap svg{display:block;width:100%;height:auto;max-height:300px}
 .fr-mm-dot{transition:r .15s, fill .15s}
 .fr-mm-dot.taken{fill:#3a4660;stroke:#222c3e;stroke-width:2}

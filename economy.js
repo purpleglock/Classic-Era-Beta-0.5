@@ -7,7 +7,7 @@
 //             auth.js (user), faction_reg.js (frReadable)
 // ════════════════════════════════════════════════════════════
 
-const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], projects: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], dossiers: [], alerts: [], tab: 'colonies', busy: false, openColony: null, openSys: null, spyTarget: null, spyOp: 'recon_basic', spyAgents: 1 };
+const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], projects: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], dossiers: [], alerts: [], tab: 'overview', busy: false, openColony: null, openSys: null, spyTarget: null, spyOp: 'recon_basic', spyAgents: 1 };
 const EC_CLAIM_COST = 3000, EC_CLAIM_CD_DAYS = 7;
 // ── ТАЙНЫЕ ОПЕРАЦИИ — каталог (зеркало spy_launch/ spy_resolve в SQL) ──
 // diff — сложность; base — базовая длительность (ходов); need — нужная разведка
@@ -621,6 +621,19 @@ async function ecLoad() {
   EC.resInfo = {};
   EC.colonies.forEach(c => (c.resources || []).forEach(r => { if (r && r.name && !EC.resInfo[r.name]) EC.resInfo[r.name] = { r: r.r || 'common', icon: r.icon || '◈' }; }));
   EC.systems.forEach(s => (s.planets || []).forEach(p => (p.resources || []).forEach(r => { if (r && r.name && !EC.resInfo[r.name]) EC.resInfo[r.name] = { r: r.r || 'common', icon: r.icon || '◈' }; })));
+
+  // Ачивки: сервер пересчитывает условия, выдаёт новые и начисляет ГС.
+  // Считаем ПОСЛЕ загрузки (gc мог измениться при выдаче — патчим из ответа).
+  try {
+    const ach = await ecRpc('ach_check');
+    EC.ach = (ach && ach.earned) || [];
+    if (ach && ach.gc != null) EC.eco.gc = ach.gc;
+    if (ach && ach.newly > 0 && Array.isArray(ach.new_ids) && ach.new_ids.length) {
+      const names = ach.new_ids.map(id => (EC_ACH[id] || {}).name || id).join(', ');
+      const tot = ach.new_ids.reduce((a, id) => a + ((EC_ACH[id] || {}).reward || 0), 0);
+      if (typeof toast === 'function') toast(`🏆 Достижение: ${names}${tot ? ` · +${ecNum(tot)} ГС` : ''}`, 'ok');
+    }
+  } catch (e) { EC.ach = EC.ach || []; }
 }
 async function ecReloadPaint() { await ecLoad(); ecPaintCabinet(); }
 
@@ -1006,6 +1019,93 @@ function ecIncomeHistoryPanel() {
     <div class="ec-ih-list">${rows}</div>
   </div>`;
 }
+// ── ДОСТИЖЕНИЯ (ачивки) — в стиле стоицизма ─────────────────
+// Каталог = зеркало RPC ach_check (_achievements.sql). Условия и награды
+// считает сервер; здесь — только подписи, арт и порядок показа.
+// Арт игрок заливает в assets/ach/<id>.webp (см. assets/ach/_IMAGES.md);
+// если файла нет — показываем эмодзи-заглушку, вёрстка не ломается.
+// Видны ачивки ТОЛЬКО во вкладке «Обзор» (ecAchPanel ниже).
+const EC_ACH = {
+  sibi_imperare: { name: 'Власть над собой', ic: '🜍', reward: 1000,
+    quote: 'Imperare sibi maximum imperium est.',
+    desc: 'Наиыысшая власть есть власть над собой.',
+    cond: 'Заверши первое исследование' },
+  constantia: { name: 'Постоянство', ic: '🜔', reward: 2000,
+    quote: 'Gutta cavat lapidem non vi, sed saepe cadendo.',
+    desc: 'Не силой, но постоянством капля точит камень.',
+    cond: 'Возведи 10 построек' },
+  cosmopolites: { name: 'Гражданин космоса', ic: '🜨', reward: 2500,
+    quote: 'Дорогой мне град Зевса, весь мир.',
+    desc: 'Для мудреца отечество весь космос.',
+    cond: 'Удержи 5 колоний' },
+  amor_fati: { name: 'Возлюби судьбу', ic: '🜂', reward: 0,
+    quote: 'Amor fati, не желай, чтобы было иначе.',
+    desc: 'Один из множества ударов судьбы.',
+    cond: 'Стань целью вражеской операции и уцелей' },
+  dichotomia: { name: 'Дихотомия контроля', ic: '🜁', reward: 1500,
+    quote: 'Различай подвластное тебе и неподвластное.',
+    desc: 'Властвуй над тем, что в твоей власти.',
+    cond: 'Открой первый торговый путь' },
+  temperantia: { name: 'Изобилие в умеренности', ic: '🜛', reward: 0,
+    quote: 'Богат не тот, у кого много, а кто малым доволен.',
+    desc: 'Владей, не привязываясь.',
+    cond: 'Скопи 10 000 ГС в казне' },
+
+  // ── Тяжёлые ачивки (четыре добродетели + усердие) ──
+  sophia: { name: 'Знание сущего', ic: '🜚', reward: 4000,
+    quote: 'Мудрость есть знание дел божественных и человеческих.',
+    desc: 'Истинная мудрость объемлет всё.',
+    cond: 'Изучи 10 технологий' },
+  fortitudo: { name: 'Мужество разумного', ic: '🜏', reward: 4000,
+    quote: 'Мужество есть знание того, чего следует и не следует страшиться.',
+    desc: 'Доблесть проверяется в деле, а не в покое.',
+    cond: 'Проведи успешный рейд' },
+  prudentia: { name: 'Предусмотрительность', ic: '🜖', reward: 3500,
+    quote: 'Разумный знает прежде, чем действует.',
+    desc: 'Кто предвидит, тот владеет.',
+    cond: 'Успешно проведи разведывательную операцию' },
+  iustitia: { name: 'Воздать каждому своё', ic: '🜂', reward: 3500,
+    quote: 'Справедливость воздаёт каждому по достоинству.',
+    desc: 'Сильный поддерживает, а не только берёт.',
+    cond: 'Выдай заём другой фракции' },
+  magnum_opus: { name: 'Великое из малого', ic: '🜕', reward: 7000,
+    quote: 'Великое не родится вдруг.',
+    desc: 'Держава растёт трудом без устали.',
+    cond: 'Возведи 30 построек' },
+};
+const EC_ACH_ORDER = ['sibi_imperare', 'constantia', 'cosmopolites', 'amor_fati', 'dichotomia', 'temperantia',
+  'sophia', 'prudentia', 'fortitudo', 'iustitia', 'magnum_opus'];
+
+// Панель ачивок для вкладки «Обзор». Заработанные — в цвете, с артом и датой;
+// остальные — затемнены, с подсказкой как открыть.
+function ecAchPanel() {
+  const earned = new Map((EC.ach || []).map(a => [a.id, a]));
+  const got = earned.size, total = EC_ACH_ORDER.length;
+  const cards = EC_ACH_ORDER.map(id => {
+    const a = EC_ACH[id]; if (!a) return '';
+    const e = earned.get(id), unlocked = !!e;
+    const when = e && e.earned_at ? new Date(e.earned_at).toLocaleDateString('ru-RU') : '';
+    const rew = a.reward > 0 ? `<span class="ec-ach-rew">+${ecNum(a.reward)} ГС</span>` : '<span class="ec-ach-rew ec-ach-rew-respect">Молодец!</span>';
+    return `<div class="ec-ach-card${unlocked ? ' on' : ''}">
+      <div class="ec-ach-art">
+        <img src="assets/ach/${id}.webp" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <span class="ec-ach-art-ph" style="display:none">${a.ic}</span>
+        ${unlocked ? '' : '<span class="ec-ach-lock">🔒</span>'}
+      </div>
+      <div class="ec-ach-body">
+        <div class="ec-ach-name">${esc(a.name)}</div>
+        <div class="ec-ach-desc">${esc(a.desc)}</div>
+        <div class="ec-ach-cond">→ ${esc(a.cond)}</div>
+        <div class="ec-ach-foot">${rew}${when ? `<span class="ec-ach-when">${esc(when)}</span>` : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="ec-ovx-panel ec-ach-panel" style="grid-column:1/-1">
+    <div class="ec-ovx-panel-t">🏆 Достижения <span class="ec-ovx-panel-sub">путь стоика · получено ${ecNum(got)} / ${ecNum(total)}</span></div>
+    <div class="ec-ach-grid">${cards}</div>
+  </div>`;
+}
+
 function ecTabOverview() {
   const sumCat = c => EC.roster.filter(r => r.category === c).reduce((a, r) => a + (r.qty || 0), 0);
   const ships = sumCat('ship'), divs = sumCat('division'), ground = sumCat('ground'), avia = sumCat('aviation');
@@ -1187,7 +1287,7 @@ function ecTabOverview() {
     ? 'родные миры: <b>все типы планет</b> — колонизация без терраформа (бонус роботов).'
     : 'родные миры: ' + ((EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—') + '. Чужие типы планет — через терраформ.'}</div>`;
 
-  return `<div class="ec-ovx-grid">${budget}${ecIncomeHistoryPanel()}${resPanel}${empire}${army}${sci}${ecDoctrineHtml()}</div>${raceNote}
+  return `<div class="ec-ovx-grid">${budget}${ecIncomeHistoryPanel()}${resPanel}${empire}${army}${sci}${ecDoctrineHtml()}${ecAchPanel()}</div>${raceNote}
     <div class="ec-ov-links">
       <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
       <button class="btn btn-gh btn-sm" onclick="go('cat-ships')">🚀 Каталоги</button>
@@ -1556,6 +1656,7 @@ function ecClaimsLeft() {
 function ecMinimap() {
   const all = EC.allSystems || [];
   if (!all.length) return `<div class="ec-empty">Карта недоступна.</div>`;
+  mapZoomClean('ec-minimap-zoom');
   const W = (typeof GM_W !== 'undefined') ? GM_W : 3300, H = (typeof GM_H !== 'undefined') ? GM_H : 2062;
   const mine = ecMySysIds(), claim = new Set(ecClaimableIds()), myCol = ecReadable(EC.app.color);
   const byId = new Map(all.map(s => [s.id, s]));
@@ -1571,8 +1672,10 @@ function ecMinimap() {
     else if (s.faction) { fill = 'rgba(255,90,90,.35)'; }
     return `<g${click}><circle cx="${s.x}" cy="${s.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"><title>${esc(s.name)}${mine.has(s.id) ? ' (ваша)' : claim.has(s.id) ? ' — можно колонизировать' : s.faction ? ' (занята)' : ' (ничья)'}</title></circle></g>`;
   }).join('');
-  return `<div class="ec-minimap"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${lanesSvg}${dots}</svg></div>
+  const html = `<div class="ec-minimap"><div class="mm-zoom-wrapper"><div class="mm-zoom-btns"><button class="mm-zoom-btn" onclick="mapZoomIn('ec-minimap-zoom')">+</button><button class="mm-zoom-btn" onclick="mapZoomOut('ec-minimap-zoom')">−</button></div><div class="mm-zoom-viewport" id="ec-minimap-zoom"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${lanesSvg}${dots}</svg></div></div></div>
     <div class="ec-mm-legend"><span><i style="background:${myCol}"></i> ваши</span><span><i style="background:rgba(0,0,0,.4);box-shadow:inset 0 0 0 2px var(--gd)"></i> доступно</span><span><i style="background:rgba(255,90,90,.35)"></i> заняты</span><span><i style="background:rgba(140,160,190,.5)"></i> ничьи</span></div>`;
+  requestAnimationFrame(() => mapZoomInit('ec-minimap-zoom'));
+  return html;
 }
 function ecTabTerritory() {
   const cdMs = ecClaimCooldownMs(), claim = ecClaimableIds();
@@ -1699,44 +1802,106 @@ function ecCvFleetTotals() {
   Object.keys(f).forEach(id => { const c = ecCvShipCargo(id); if (c > 0) cap += (f[id] || 0) * c; else escort += (f[id] || 0); });
   return { cap, escort };
 }
+// Свободная вместимость флота = вся минус занятая активными/ожидающими исходящими путями.
+// Это потолок объёма нового каравана (сервер проверяет то же самое).
+function ecCvFreeCap() {
+  const t = EC.tradeCargo || {};
+  return Math.max(0, (t.total || 0) - (t.used || 0));
+}
+// ── Поштучное закрепление грузовых: какой корабль уже занят моими путями ──
+// Сумма по моим pending/active исходящим путям их ships = {unit_id: qty}.
+function ecCvCommittedShips() {
+  const m = {};
+  (EC.routes || []).filter(r => r.a_fid === EC.fid && ['pending', 'active'].includes(r.status)).forEach(r => {
+    const s = r.ships || {};
+    Object.keys(s).forEach(id => { m[id] = (m[id] || 0) + (+s[id] || 0); });
+  });
+  return m;
+}
+function ecCvShipOwned(unitId) {
+  return (EC.roster || []).filter(r => r.category === 'ship' && r.unit_id === unitId).reduce((a, r) => a + (r.qty || 0), 0);
+}
+// Свободно к назначению = всего во владении − уже закреплено другими путями.
+function ecCvShipAvail(unitId) {
+  return Math.max(0, ecCvShipOwned(unitId) - (ecCvCommittedShips()[unitId] || 0));
+}
 function ecCvFleetHtml() {
   EC.cvFleet = EC.cvFleet || {};
   const { freighters, warships } = ecCvFleetGroups();
   const { cap, escort } = ecCvFleetTotals();
   const f = EC.cvFleet;
-  // СВОБОДНЫЙ пул (минус то, что уже занято активными/ожидающими путями):
-  // грузоподъёмность — из trade_capacity (used = занятое поставками); боевые — минус конвои.
-  const freeCap = Math.max(0, (EC.tradeCargo && EC.tradeCargo.free) || 0);
+  // Данные о лимитах и занятости
+  const totalCap = (EC.tradeCargo && EC.tradeCargo.total) || 0;  // вся вместимость флота
+  const usedCap = (EC.tradeCargo && EC.tradeCargo.used) || 0;    // объём активных путей
+  const freeCap = Math.max(0, totalCap - usedCap);
   const totalWar = warships.reduce((a, d) => a + (d.qty || 0), 0);
   const committedConvoy = (EC.routes || []).filter(r => r.a_fid === EC.fid && ['pending', 'active'].includes(r.status)).reduce((a, r) => a + (r.convoy || 0), 0);
-  // боевые заняты и конвоями караванов, И активными рейдами (общий пул кораблей)
   const committedRaids = (EC.raids || []).filter(m => m.status === 'active').reduce((a, m) => a + (m.ships || 0), 0);
   const freeWar = Math.max(0, totalWar - committedConvoy - committedRaids);
+
+  const isOverloaded = usedCap > totalCap;
+  const cargoSel = cap;                         // суммарный груз выбранных кораблей
+  const effVol = Math.min(cargoSel, freeCap);   // реальный объём каравана (режется свободной вместимостью)
+
   const row = (d, tag, isFr) => {
     const n = f[d.id] || 0;
-    // нельзя добавить: уже взял весь ростер ИЛИ свободный пул исчерпан
-    const poolFull = isFr ? (cap + d.cargo > freeCap) : (escort + 1 > freeWar);
-    const canAdd = n < d.qty && !poolFull;
+    // Грузовые: закрепляются поштучно — доступно = владение − занятое другими путями.
+    // Эскорт: ограничен числом свободных боевых (по-старому).
+    const avail = isFr ? ecCvShipAvail(d.id) : d.qty;
+    const canAdd = isFr ? (n < avail) : (n < d.qty && escort + 1 <= freeWar);
+    const busy = isFr && avail < d.qty;   // часть закреплена другими путями
+    const availTxt = busy ? `свободно ${ecNum(avail)} из ${ecNum(d.qty)}` : `в наличии ${ecNum(d.qty)}`;
+    const title = isFr
+      ? (n >= avail && avail < d.qty ? 'Остальные корабли этого типа закреплены за другими путями — закройте путь, чтобы освободить' : '')
+      : (!canAdd && n < d.qty ? 'Свободные боевые корабли заняты конвоями/рейдами' : '');
     return `<div class="ec-q-row" style="gap:6px">
-      <span class="ec-r-name">${esc(d.name)} <i style="color:var(--t4)">${tag} · в наличии ${ecNum(d.qty)}</i></span>
+      <span class="ec-r-name">${esc(d.name)} <i style="color:var(--t4)">${tag} · ${availTxt}</i></span>
       <span class="ec-mine-step">
         <button class="ec-mine-btn" ${n <= 0 ? 'disabled' : ''} onclick="ecCvFleetAdd('${esc(d.id)}',-1)">−</button>
         <span class="ec-mine-cnt ${n ? 'on' : ''}">${n}</span>
-        <button class="ec-mine-btn" ${canAdd ? '' : 'disabled'} title="${poolFull && n < d.qty ? (isFr ? 'Свободная грузоподъёмность исчерпана (занята активными путями)' : 'Свободные боевые корабли заняты конвоями') : ''}" onclick="ecCvFleetAdd('${esc(d.id)}',1)">+</button>
+        <button class="ec-mine-btn" ${canAdd ? '' : 'disabled'} title="${title}" onclick="ecCvFleetAdd('${esc(d.id)}',1)">+</button>
       </span></div>`;
   };
   const frHtml = freighters.length ? freighters.map(d => row(d, `📦 груз ${d.cargo}`, true)).join('')
     : '<div class="ec-empty" style="padding:6px">Нет грузовых кораблей — постройте корабль с грузовыми ангарами (Конструктор → Корабль) и заложите его в Военпроме.</div>';
   const wsHtml = warships.length ? warships.map(d => row(d, '⚔ эскорт', false)).join('')
     : '<div class="ec-empty" style="padding:6px">Нет боевых кораблей для эскорта.</div>';
-  return `<div class="ec-r-sec">📦 Грузовые — дают грузоподъёмность <span class="ec-hint">свободно ${ecNum(freeCap)}</span></div>${frHtml}
+
+  // Информационная панель о состоянии флота
+  let statusLine = `<b>Флот каравана:</b> 📦 везёт <b>${ecNum(effVol)}/ход</b> · ⚔ эскорт <b>${ecNum(escort)}</b> кораблей`;
+  if (cargoSel < 1) statusLine += ' — <b style="color:var(--err)">добавьте грузовой корабль, иначе объём = 0</b>';
+  else if (cargoSel > freeCap) statusLine += ` <i style="color:var(--t3)">(выбранный флот тянет ${ecNum(cargoSel)}, но свободно лишь ${ecNum(freeCap)} — остальное заняли активные пути)</i>`;
+
+  // Грузовой флот в трюме (поштучное закрепление за путями)
+  const ownedShipCargo = freighters.reduce((a, d) => a + d.cargo * d.qty, 0);
+  const committedMap = ecCvCommittedShips();
+  let reservedShipCargo = 0;
+  Object.keys(committedMap).forEach(id => { reservedShipCargo += ecCvShipCargo(id) * committedMap[id]; });
+  const freeShipCargo = Math.max(0, ownedShipCargo - reservedShipCargo);
+
+  let capacityInfo = `<div style="font-size:12px;color:var(--t3);line-height:1.6;margin:8px 0">
+    <div>Грузовой флот всего: <b>${ecNum(ownedShipCargo)}</b> трюма</div>
+    <div>Закреплено за активными путями: <b style="color:var(--ok)">${ecNum(reservedShipCargo)}</b></div>
+    <div>Свободно к назначению: <b style="color:${freeShipCargo > 0 ? 'var(--ok)' : 'var(--err)'}">${ecNum(freeShipCargo)}</b></div>
+  </div>`;
+
+  if (isOverloaded) {
+    capacityInfo = `<div style="padding:8px;margin:8px 0;background:rgba(255,100,100,.15);border-left:3px solid var(--err);border-radius:4px">
+      <div style="font-weight:bold;color:var(--err)">⚠ Флот перегружен</div>
+      <div style="font-size:12px;color:var(--t2);margin-top:4px">Активные пути требуют <b>${ecNum(usedCap)}/ход</b>, а флот может везти только <b>${ecNum(totalCap)}/ход</b>. Закройте один из путей, чтобы освободить вместимость.</div>
+    </div>`;
+  }
+
+  return `${capacityInfo}
+    <div class="ec-r-sec">📦 Грузовые — дают грузоподъёмность</div>${frHtml}
     <div class="ec-r-sec">⚔ Эскорт — защита в пути <span class="ec-hint">свободно ${ecNum(freeWar)}</span></div>${wsHtml}
-    <div class="ec-trade-note${cap < 1 ? ' warn' : ''}"><b>Флот каравана:</b> 📦 грузоподъёмность <b>${ecNum(cap)}</b> · ⚔ эскорт <b>${ecNum(escort)}</b> кораблей${cap < 1 ? ' — добавьте грузовой корабль, иначе объём = 0.' : ''}</div>`;
+    <div class="ec-trade-note${cargoSel < 1 ? ' warn' : ''}${isOverloaded ? ' warn' : ''}">${statusLine}</div>`;
 }
 function ecCvFleetAdd(unitId, delta) {
   EC.cvFleet = EC.cvFleet || {};
-  const have = (EC.roster || []).filter(r => r.category === 'ship' && r.unit_id === unitId).reduce((a, r) => a + (r.qty || 0), 0);
-  EC.cvFleet[unitId] = Math.max(0, Math.min(have, (EC.cvFleet[unitId] || 0) + delta));
+  // грузовые лимитируются свободными (не закреплёнными) кораблями; эскорт — владением
+  const limit = ecCvShipCargo(unitId) > 0 ? ecCvShipAvail(unitId) : ecCvShipOwned(unitId);
+  EC.cvFleet[unitId] = Math.max(0, Math.min(limit, (EC.cvFleet[unitId] || 0) + delta));
   const cont = ecId('ec-cv-fleet'); if (cont) cont.innerHTML = ecCvFleetHtml();
   ecCvSync();
 }
@@ -1754,7 +1919,8 @@ function ecCvSync() {
 // Авто-распределение грузоподъёмности по выбранным месторождениям: самые ценные
 // грузим первыми, каждый ресурс — его поток добычи, пока не кончится трюм.
 function ecCvAllocate() {
-  const cap = ecCvFleetTotals().cap;
+  // объём ограничен И собранным флотом, И свободной вместимостью (что меньше)
+  const cap = Math.min(ecCvFleetTotals().cap, ecCvFreeCap());
   const sel = Object.keys(EC.cvCargo || {}).filter(r => EC.cvCargo[r]);
   sel.sort((a, b) => ecResPriceN(b) - ecResPriceN(a));
   let rem = cap; const out = [];
@@ -1890,7 +2056,7 @@ function ecTradeCalc() {
   const oSys = ecId('ec-cv-osys')?.value || EC.cvOrigin || '';
   const dFac = ecId('ec-cv-dfac')?.value || EC.cvDFac || '';
   const dSys = ecId('ec-cv-dsys')?.value || EC.cvDSys || '';
-  const cargoCap = ecCvFleetTotals().cap;              // грузоподъёмность собранного флота
+  const cargoCap = Math.min(ecCvFleetTotals().cap, ecCvFreeCap());  // объём каравана: флот, но не больше свободной вместимости
   const dipCoef = ecDipCoef(dFac);                     // дипломатия → ±20% к выгоде
   const gcMod = ecFactionMods().gc;
   // грузы: авто-распределение грузоподъёмности по выбранным месторождениям (поток добычи)
@@ -1915,7 +2081,8 @@ function ecTradeCalc() {
   if (!dFac) err = 'Нет партнёра для торговли';
   else if (!dSys) err = 'У партнёра нет систем на карте — выберите другого';
   else if (!oSys) err = 'У вас нет систем на карте';
-  else if (cargoCap <= 0) err = 'Соберите флот каравана — нет грузоподъёмности';
+  else if (ecCvFleetTotals().cap <= 0) err = 'Соберите флот каравана — добавьте грузовой корабль';
+  else if (ecCvFreeCap() <= 0) err = 'Нет свободной вместимости — закройте активный путь';
   else if (!anySel) err = 'Выберите месторождения для загрузки — нажмите на ресурс';
   else if (!cargo.length) err = 'Грузоподъёмности не хватает — соберите больше торговых кораблей';
   const shipsFree = (typeof ecMyShipsAvailable === 'function') ? ecMyShipsAvailable() : 0;
@@ -2679,7 +2846,17 @@ function ecSpyAlertRow(a) {
   }
   return `<div class="ec-q-row ec-route-row" style="flex-direction:column;align-items:stretch"><span class="ec-r-name">${badge}${d.icon} <b>${esc(d.label)}</b> · ${detail} · от: ${actor}${caught}</span>${investHtml}</div>`;
 }
-function ecSpyInvestigate(id) { ecRpcAct('spy_investigate', { p_mission_id: id }, 'Расследование продвинулось'); }
+async function ecSpyInvestigate(id) {
+  if (EC.busy) return; EC.busy = true;
+  try {
+    const r = await ecRpc('spy_investigate', { p_mission_id: id });
+    if (r && r.revealed) toast('🕵 Шпион вычислен: ' + (r.actor_name || 'фракция раскрыта'), 'ok');
+    else if (r && (r.gain || 0) > 0) toast('Расследование продвинулось (+' + r.gain + '% улик)', 'ok');
+    else toast('След остыл — улик не добавилось. Усильте контрразведку.', 'err');
+    await ecReloadPaint();
+  } catch (e) { toast(ecErr(e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
 // Строка журнала (завершённая операция)
 function ecSpyLogRow(m) {
   const d = EC_SPY_OPS[m.op] || { icon: '•', label: m.op };
@@ -3186,8 +3363,11 @@ function ecTradePropose() {
   if (c.err) { toast(c.err, 'err'); return; }
   // Отсутствие гиперпути НЕ блокирует: караван идёт напрямую, просто без данных об угрозах.
   const riskTxt = c.threats.length ? `риск ${c.riskPct}%` : 'путь безопасен';
+  // состав грузовых кораблей пути (только грузовые из собранного флота) — закрепляется за путём
+  const ships = {};
+  Object.keys(EC.cvFleet || {}).forEach(id => { if ((EC.cvFleet[id] || 0) > 0 && ecCvShipCargo(id) > 0) ships[id] = EC.cvFleet[id]; });
   ecRpcAct('trade_propose_multi',
-    { p_to_fid: c.dFac, p_origin_sys: c.oSys, p_dest_sys: c.dSys, p_cargo: c.cargo, p_convoy: c.convoy, p_threats: c.threats },
+    { p_to_fid: c.dFac, p_origin_sys: c.oSys, p_dest_sys: c.dSys, p_cargo: c.cargo, p_convoy: c.convoy, p_threats: c.threats, p_ships: ships },
     `Караван предложен партнёру (${riskTxt})`);
 }
 function ecTradeRespond(id, acc) { ecRpcAct('trade_respond', { p_id: id, p_accept: !!acc }, acc ? 'Путь принят' : 'Отклонено'); }

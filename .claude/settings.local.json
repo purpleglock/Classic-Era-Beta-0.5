@@ -69,7 +69,13 @@
       "mcp__visualize__show_widget",
       "Bash(ls index.html)",
       "Bash(curl -s '__TRACKED_VAR__/tech_nodes?select=node_id,base_cost,prereq&node_id=like.pol.*' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
-      "Bash(curl -s '__TRACKED_VAR__/faction_economy?select=faction_id,research,research_slots,research_queue&limit=3' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')"
+      "Bash(curl -s '__TRACKED_VAR__/faction_economy?select=faction_id,research,research_slots,research_queue&limit=3' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(node -c galaxy_map.js)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'Добавить отображение названий ресурсов в тултипе на canvas-карте *)",
+      "Bash(git commit --amend -m 'Добавить отображение названий ресурсов в тултипе на canvas-карте *)",
+      "mcp__Claude_in_Chrome__navigate",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

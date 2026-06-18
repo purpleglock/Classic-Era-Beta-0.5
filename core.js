@@ -620,3 +620,89 @@ loadSiteSettings();
   });
 
 })();
+
+// ════════════════════════════════════════════════════════════
+// MAP ZOOM & PAN MANAGER
+// ════════════════════════════════════════════════════════════
+const mapZoomState = {};
+function mapZoomInit(viewportId) {
+  const viewport = document.getElementById(viewportId);
+  if (!viewport) return;
+  mapZoomClean(viewportId);
+  mapZoomState[viewportId] = { scale: 1, panX: 0, panY: 0, dragging: false, startX: 0, startY: 0, listeners: {} };
+  const s = mapZoomState[viewportId];
+  s.listeners.wheel = (e) => mapZoomWheel(e, viewportId);
+  s.listeners.mousedown = (e) => mapPanStart(e, viewportId);
+  s.listeners.mousemove = (e) => mapPanMove(e, viewportId);
+  s.listeners.mouseup = (e) => mapPanEnd(e, viewportId);
+  s.listeners.mouseleave = (e) => mapPanEnd(e, viewportId);
+  viewport.addEventListener('wheel', s.listeners.wheel, { passive: false });
+  viewport.addEventListener('mousedown', s.listeners.mousedown);
+  viewport.addEventListener('mousemove', s.listeners.mousemove);
+  viewport.addEventListener('mouseup', s.listeners.mouseup);
+  viewport.addEventListener('mouseleave', s.listeners.mouseleave);
+}
+function mapZoomClean(viewportId) {
+  const state = mapZoomState[viewportId];
+  if (!state || !state.listeners) return;
+  const viewport = document.getElementById(viewportId);
+  if (!viewport) return;
+  const l = state.listeners;
+  viewport.removeEventListener('wheel', l.wheel);
+  viewport.removeEventListener('mousedown', l.mousedown);
+  viewport.removeEventListener('mousemove', l.mousemove);
+  viewport.removeEventListener('mouseup', l.mouseup);
+  viewport.removeEventListener('mouseleave', l.mouseleave);
+  delete mapZoomState[viewportId];
+}
+function mapZoomWheel(e, viewportId) {
+  e.preventDefault();
+  const state = mapZoomState[viewportId];
+  if (!state) return;
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  state.scale = Math.max(0.5, Math.min(4, state.scale * delta));
+  mapZoomUpdate(viewportId);
+}
+function mapPanStart(e, viewportId) {
+  if (e.button !== 0) return;
+  const state = mapZoomState[viewportId];
+  if (!state) return;
+  state.dragging = true;
+  state.startX = e.clientX;
+  state.startY = e.clientY;
+}
+function mapPanMove(e, viewportId) {
+  const state = mapZoomState[viewportId];
+  if (!state || !state.dragging || state.scale <= 1) return;
+  const dx = e.clientX - state.startX;
+  const dy = e.clientY - state.startY;
+  state.panX += dx;
+  state.panY += dy;
+  state.startX = e.clientX;
+  state.startY = e.clientY;
+  mapZoomUpdate(viewportId);
+}
+function mapPanEnd(e, viewportId) {
+  const state = mapZoomState[viewportId];
+  if (!state) return;
+  state.dragging = false;
+}
+function mapZoomIn(viewportId) {
+  const state = mapZoomState[viewportId];
+  if (!state) return;
+  state.scale = Math.min(4, state.scale * 1.2);
+  mapZoomUpdate(viewportId);
+}
+function mapZoomOut(viewportId) {
+  const state = mapZoomState[viewportId];
+  if (!state) return;
+  state.scale = Math.max(0.5, state.scale / 1.2);
+  mapZoomUpdate(viewportId);
+}
+function mapZoomUpdate(viewportId) {
+  const viewport = document.getElementById(viewportId);
+  if (!viewport) return;
+  const state = mapZoomState[viewportId];
+  const svg = viewport.querySelector('svg');
+  if (svg) svg.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.scale})`;
+}
