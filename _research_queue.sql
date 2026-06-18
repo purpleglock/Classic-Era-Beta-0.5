@@ -95,8 +95,8 @@ begin
 
     -- уже изучено / уже в слоте / неизвестный узел → выбросить голову, дальше
     select * into tn from public.tech_nodes where node_id = nid;
-    select exists(select 1 from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) ee
-                  where ee->>'n' = nid) into in_slot;
+    select exists(select 1 from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) sl
+                  where sl.value->>'n' = nid) into in_slot;
     if tn.node_id is null or (coalesce(eco.research,'[]'::jsonb) ? nid) or in_slot then
       eco.research_queue := eco.research_queue - 0;
       update public.faction_economy set research_queue = eco.research_queue where faction_id = p_fid;
@@ -105,8 +105,8 @@ begin
 
     -- предшественники изучены?
     select exists(
-      select 1 from jsonb_array_elements_text(coalesce(tn.prereq,'[]'::jsonb)) v
-      where not (coalesce(eco.research,'[]'::jsonb) ? v)
+      select 1 from jsonb_array_elements_text(coalesce(tn.prereq,'[]'::jsonb)) pr
+      where not (coalesce(eco.research,'[]'::jsonb) ? pr.value)
     ) into has_missing;
     if has_missing then exit; end if;   -- ждём, пока изучатся предшественники
 
@@ -148,14 +148,14 @@ begin
 
   smax := public._research_slots(app.faction_id);
   if jsonb_array_length(coalesce(eco.research_slots,'[]'::jsonb)) >= smax then raise exception 'research in progress'; end if;
-  select exists(select 1 from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) ee
-                where ee->>'n' = p_node) into in_slot;
+  select exists(select 1 from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) sl
+                where sl.value->>'n' = p_node) into in_slot;
   if in_slot then raise exception 'already in progress'; end if;
   if coalesce(eco.research,'[]'::jsonb) ? p_node then raise exception 'already researched'; end if;
 
-  select string_agg(value, ', ') into missing
-    from jsonb_array_elements_text(coalesce(tn.prereq,'[]'::jsonb)) as value
-    where not (coalesce(eco.research,'[]'::jsonb) ? value);
+  select string_agg(pr.value, ', ') into missing
+    from jsonb_array_elements_text(coalesce(tn.prereq,'[]'::jsonb)) pr
+    where not (coalesce(eco.research,'[]'::jsonb) ? pr.value);
   if missing is not null then raise exception 'missing prerequisites: %', missing; end if;
 
   cost := greatest(1, round(tn.base_cost * (public._faction_mods(app.faction_id)->>'research')::numeric));
@@ -188,19 +188,21 @@ begin
   if not found then raise exception 'unknown tech node'; end if;
   if coalesce(eco.research,'[]'::jsonb) ? p_node then raise exception 'already researched'; end if;
 
-  select exists(select 1 from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) ee
-                where ee->>'n' = p_node) into in_slot;
+  select exists(select 1 from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) sl
+                where sl.value->>'n' = p_node) into in_slot;
   if in_slot then raise exception 'already in progress'; end if;
-  select exists(select 1 from jsonb_array_elements_text(coalesce(eco.research_queue,'[]'::jsonb)) v
-                where v = p_node) into in_queue;
+  -- очередь — массив строк-id, поэтому членство проверяем оператором ? (без SRF)
+  in_queue := coalesce(eco.research_queue,'[]'::jsonb) ? p_node;
   if in_queue then raise exception 'already queued'; end if;
 
-  -- предшественники должны быть изучены, в слоте ИЛИ уже в очереди (раньше)
-  select string_agg(value, ', ') into missing
-    from jsonb_array_elements_text(coalesce(tn.prereq,'[]'::jsonb)) as value
-    where not (coalesce(eco.research,'[]'::jsonb) ? value)
-      and not exists(select 1 from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) ee where ee->>'n' = value)
-      and not exists(select 1 from jsonb_array_elements_text(coalesce(eco.research_queue,'[]'::jsonb)) qv where qv = value);
+  -- предшественники должны быть изучены, в слоте ИЛИ уже в очереди (раньше).
+  -- ВСЕ ссылки на колонку SRF квалифицируем (pr.value): иначе незакв. value
+  -- разрешается в jsonb-колонку вложенного jsonb_array_elements → text = jsonb.
+  select string_agg(pr.value, ', ') into missing
+    from jsonb_array_elements_text(coalesce(tn.prereq,'[]'::jsonb)) pr
+    where not (coalesce(eco.research,'[]'::jsonb) ? pr.value)
+      and not (coalesce(eco.research_queue,'[]'::jsonb) ? pr.value)
+      and not exists(select 1 from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) sl where sl.value->>'n' = pr.value);
   if missing is not null then raise exception 'queue prerequisites first: %', missing; end if;
 
   if jsonb_array_length(coalesce(eco.research_queue,'[]'::jsonb)) >= 12 then raise exception 'queue full'; end if;

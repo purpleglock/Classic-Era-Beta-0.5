@@ -67,7 +67,9 @@
       "Bash(curl -s -o /dev/null -w \"status=%{http_code} time=%{time_total}s\\\\n\" --max-time 10 \"http://localhost:3000/assets/constructors/ship_class_corvette.webp\")",
       "mcp__visualize__read_me",
       "mcp__visualize__show_widget",
-      "Bash(ls index.html)"
+      "Bash(ls index.html)",
+      "Bash(curl -s '__TRACKED_VAR__/tech_nodes?select=node_id,base_cost,prereq&node_id=like.pol.*' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s '__TRACKED_VAR__/faction_economy?select=faction_id,research,research_slots,research_queue&limit=3' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')"
     ]
   }
 }
