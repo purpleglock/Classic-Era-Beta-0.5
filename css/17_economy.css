@@ -1407,3 +1407,28 @@
 .ec-faith-pew { display: inline-flex; align-items: center; gap: 6px; margin: 3px 4px 0 0; padding: 4px 11px; font-size: 12px; color: var(--t2);
   background: var(--b1); border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 30%, var(--w2)); border-radius: 999px; }
 .ec-faith-pew b { color: var(--fc, #c9a227); font-weight: 700; }
+/* Модерация веры: статус-баннеры, картинка, форма правки, модалка просмотра */
+.ec-faith-status { font-size: 11.5px; line-height: 1.5; border-radius: 9px; padding: 8px 11px; margin: 0 0 12px; border: 1px solid; }
+.ec-faith-status.pend { color: var(--color-warning, #e0a030); border-color: color-mix(in srgb, var(--color-warning, #e0a030) 45%, var(--w2));
+  background: color-mix(in srgb, var(--color-warning, #e0a030) 9%, transparent); }
+.ec-faith-status.rej { color: var(--err, #ff6b6b); border-color: color-mix(in srgb, var(--err, #ff6b6b) 45%, var(--w2));
+  background: color-mix(in srgb, var(--err, #ff6b6b) 9%, transparent); }
+.ec-faith-cover { margin: 0 0 12px; border-radius: 11px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 38%, var(--w2)); }
+.ec-faith-cover img { display: block; width: 100%; max-height: 200px; object-fit: cover; }
+.ec-faith-cover.lg img { max-height: 260px; }
+.ec-faith-imgrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.ec-faith-imgprev { width: 64px; height: 64px; flex-shrink: 0; border-radius: 10px; overflow: hidden;
+  border: 1px dashed color-mix(in srgb, var(--fc, #c9a227) 40%, var(--w2)); background: var(--b1);
+  display: flex; align-items: center; justify-content: center; }
+.ec-faith-imgprev img { width: 100%; height: 100%; object-fit: cover; }
+.ec-faith-imgprev span { font-size: 9px; color: var(--t4); text-align: center; padding: 4px; font-family: var(--font-mono); }
+.ec-faith-edit { margin: 14px 0 4px; padding: 12px; border-radius: 11px; background: var(--b1);
+  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 28%, var(--w2)); }
+.ec-faith-thumb { display: inline-block; width: 18px; height: 18px; border-radius: 5px; margin-right: 7px; vertical-align: middle;
+  background-size: cover; background-position: center; border: 1px solid var(--w2); }
+.ec-faith-modal-back { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,.62); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center; padding: 18px; overflow: auto; }
+.ec-faith-modal { position: relative; max-width: 540px; width: 100%; max-height: 90vh; overflow: auto; margin: 0; }
+.ec-faith-modal-x { position: absolute; top: 10px; right: 10px; z-index: 2; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--b1); border: 1px solid var(--w2); color: var(--t2); font-size: 14px; cursor: pointer; line-height: 1; }
+.ec-faith-modal-x:hover { color: var(--t1); border-color: var(--fc, #c9a227); }

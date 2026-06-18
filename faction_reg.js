@@ -808,11 +808,11 @@ function frCloseView() { document.getElementById('fr-modal')?.classList.remove('
 // ════════════════════════════════════════════════════════════
 async function frRenderAppsTab(b) {
   b.innerHTML = `<div class="sload" style="min-height:60px"><div class="quote-loader">Загрузка...</div></div>`;
-  let apps = [];
+  let apps = [], faiths = [];
   try { apps = await dbGet('faction_applications', 'or=(status.eq.pending,pending_review.eq.true)&order=updated_at.asc') || []; } catch (e) { b.innerHTML = `<p style="color:var(--err)">Ошибка: ${esc(e.message)}</p>`; return; }
-  if (!apps.length) { b.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--t3)">Нет анкет на модерации</div>`; return; }
-  b.innerHTML = `<div style="margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--te)">${apps.length} на модерации</div>` +
-    apps.map(a => {
+  try { faiths = await frRpc('faith_pending_list') || []; } catch (e) { faiths = []; }
+  if (!apps.length && !faiths.length) { b.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--t3)">Нет анкет на модерации</div>`; return; }
+  const appsHtml = apps.map(a => {
       const isEdit = a.status === 'approved' && a.pending_review;
       const badge = isEdit ? `<span class="fr-app-badge edit">ИЗМЕНЕНИЯ</span>` : `<span class="fr-app-badge new">НОВАЯ</span>`;
       return `<div class="fr-app" id="fr-app-${a.id}">
@@ -826,6 +826,53 @@ async function frRenderAppsTab(b) {
         ${isEdit ? '' : `<button class="btn btn-rd btn-sm" onclick="frReject('${a.id}')">✕ Отклонить</button>`}
       </div></div>`;
     }).join('');
+  const faithsHtml = faiths.map(f => {
+      const isEdit = !!f.is_edit;
+      const p = f.proposed || {};
+      // при правке показываем «было → стало»; у новой — заявленный контент
+      const cur = { name: f.name, dogma: f.dogma, color: f.color, image_url: f.image_url };
+      const show = isEdit ? { name: p.name, dogma: p.dogma, color: p.color, image_url: p.image_url } : cur;
+      const badge = isEdit ? `<span class="fr-app-badge edit">ПРАВКА</span>` : `<span class="fr-app-badge new">НОВАЯ ВЕРА</span>`;
+      const img = show.image_url ? `<img src="${esc(show.image_url)}" alt="" style="width:46px;height:46px;border-radius:8px;object-fit:cover;flex-shrink:0">` : '';
+      const diff = isEdit ? `<div class="fr-app-meta">Было: «${esc(f.name || '—')}»${f.dogma ? ` · ${esc(f.dogma)}` : ''}</div>` : '';
+      return `<div class="fr-app" id="fr-faith-${f.id}">
+      <div class="fr-app-hd">${badge}<span class="fr-swatch" style="background:${esc(show.color || '#c9a227')}"></span>
+        ${img}
+        <b>🛐 «${esc(show.name || f.name || 'Без названия')}»</b>
+        <span class="fr-app-by">${esc(f.founder_name || f.founder_fid || '')}</span></div>
+      ${show.dogma ? `<div class="fr-app-meta" style="font-style:italic">«${esc(show.dogma)}»</div>` : ''}
+      ${diff}
+      <div class="fr-app-meta">${frNum(f.adepts)} адепт(ов)</div>
+      <div class="fr-app-acts">
+        <button class="btn btn-gd btn-sm" onclick="frFaithReview('${f.id}',true)">✓ ${isEdit ? 'Принять изменения' : 'Одобрить'}</button>
+        <button class="btn btn-rd btn-sm" onclick="frFaithReview('${f.id}',false)">✕ Отклонить</button>
+      </div></div>`;
+    }).join('');
+  b.innerHTML = `<div style="margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--te)">${apps.length + faiths.length} на модерации</div>`
+    + appsHtml
+    + (faiths.length ? `<div class="fr-app-group">🛐 Религии</div>${faithsHtml}` : '');
+}
+// Лёгкий вызов RPC из модерации (faction_reg.js): свежий токен + JSON.
+async function frRpc(fn, body) {
+  const token = await getTokenFresh();
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST', headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  if (!r.ok) { const t = await r.text(); throw new Error(t || ('HTTP ' + r.status)); }
+  if (r.status === 204) return null;
+  return r.json();
+}
+function frNum(n) { return (typeof n === 'number' ? n : (+n || 0)).toLocaleString('ru-RU'); }
+async function frFaithReview(id, approve) {
+  let reason = null;
+  if (!approve) { reason = prompt('Причина отклонения (увидит основатель):', ''); if (reason === null) return; }
+  else if (!confirm('Одобрить религию? Её облик станет виден миру.')) return;
+  try {
+    await frRpc('faith_review', { p_faith_id: id, p_approve: !!approve, p_reason: reason });
+    toast(approve ? 'Одобрено ✓' : 'Отклонено', approve ? 'ok' : 'inf');
+    document.getElementById('fr-faith-' + id)?.remove();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
 async function frApprove(id) {
   if (!confirm('Одобрить анкету? Система окрасится, автор станет игроком.')) return;

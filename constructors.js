@@ -651,18 +651,19 @@ function cnPolyDots(poly, spacing) {
 // ЩИТ: КОНФОРМНАЯ оболочка по силуэту корпуса (а не огромный эллипс). 3 стиля по типу.
 function cnShieldSvg(H, sIdx, rt) {
   const midY = (H.nose + H.engine[1]) / 2, sf = 1.1 + 0.12 * rt;
-  const col = sIdx === 0 ? 'var(--te)' : sIdx === 1 ? 'var(--gd)' : 'var(--t2)', op = 0.55 + 0.3 * rt;
+  const col = sIdx === 0 ? 'var(--te)' : sIdx === 1 ? 'var(--gd)' : 'var(--t2)', op = 0.3 + 0.2 * rt;
   const env = s => cnScaleAbout(H.path, s, 160, midY);
-  if (sIdx === 0) {                       // Дефлекторный — облегающий купол с бликом
-    return `<path d="${env(sf)}" fill="color-mix(in srgb, ${col} 8%, transparent)" stroke="${col}" stroke-width="${(1.6 + rt * 1.3).toFixed(1)}" stroke-linejoin="round" opacity="${op.toFixed(2)}"/>`
-      + `<path d="${env(sf - 0.05)}" fill="none" stroke="${col}" stroke-width="0.8" stroke-linejoin="round" opacity="${(op * 0.5).toFixed(2)}"/>`;
+  
+  if (sIdx === 0) {                       // Дефлекторный — тонкий купол с легким внутренним бликом
+    return `<path d="${env(sf)}" fill="color-mix(in srgb, ${col} 4%, transparent)" stroke="${col}" stroke-width="${(1.2 + rt * 0.8).toFixed(1)}" stroke-linejoin="round" opacity="${op.toFixed(2)}"/>`
+      + `<path d="${env(sf - 0.03)}" fill="none" stroke="${col}" stroke-width="0.6" stroke-linejoin="round" opacity="${(op * 0.4).toFixed(2)}"/>`;
   }
-  if (sIdx === 1) {                       // Энергетический — две оболочки (контур + пунктир)
-    return `<path d="${env(sf)}" fill="none" stroke="${col}" stroke-width="1.9" stroke-linejoin="round" opacity="${op.toFixed(2)}"/>`
-      + `<path d="${env(sf - 0.08)}" fill="none" stroke="${col}" stroke-width="1" stroke-dasharray="9 6" stroke-linejoin="round" opacity="${(op * 0.6).toFixed(2)}"/>`;
+  if (sIdx === 1) {                       // Энергетический — пунктирный двойной контур
+    return `<path d="${env(sf)}" fill="none" stroke="${col}" stroke-width="1.4" stroke-linejoin="round" opacity="${op.toFixed(2)}"/>`
+      + `<path d="${env(sf - 0.05)}" fill="none" stroke="${col}" stroke-width="0.8" stroke-dasharray="6 4" stroke-linejoin="round" opacity="${(op * 0.7).toFixed(2)}"/>`;
   }
-  const dots = cnPolyDots(cnPathPoly(env(sf)), 13 - rt * 3), c = (1.1 + rt * 1.1).toFixed(1);   // Корпускулярный — частицы по контуру
-  return dots.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${c}" fill="${col}" opacity="${op.toFixed(2)}"/>`).join('');
+  const dots = cnPolyDots(cnPathPoly(env(sf)), 14 - rt * 4), c = (1.0 + rt * 0.6).toFixed(1);   // Корпускулярный — редкие точки по орбите
+  return dots.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${c}" fill="${col}" opacity="${(op * 1.5).toFixed(2)}"/>`).join('');
 }
 
 // Живая схема корабля вид сверху — рисуется из CN.shipLayout, без картинок.
@@ -675,11 +676,11 @@ function cnDrawShip() {
   const H0 = CN_SHIP_GEO[k] || CN_SHIP_GEO.corvette;
   const tIdx = +(cnId('cn-type') || {}).value || 0;
   const H = cnTypeGeo(H0, cls, tIdx);     // силуэт зависит от подкласса (ширина по «массе»)
+  CN.shipGeo = H;                          // храним актуальную геометрию для drag-обработчика узлов
   const armorObj = db.armors[k][+cnId('cn-armor').value || 0];
   const shieldObj = db.shields[k][+cnId('cn-shield').value || 0];
   const engObj = db.engines[k][+cnId('cn-engine').value || 0];
   const e = H.engine, P = [], L = CN.shipLayout;
-  const mounts = cnMountPositions(H, L.mounts.length);
 
   // ЩИТ — три разных стиля поля по типу + размер/насыщенность по силе
   if (shieldObj && shieldObj.shield > 0) {
@@ -724,13 +725,25 @@ function cnDrawShip() {
 
   // УЗЛЫ ОРУДИЙ (борта), кликабельны
   let wpnCount = 0;
-  if (CN.schemShow.weapons) mounts.forEach((m, i) => {
-    const slot = L.mounts[i], w = slot && slot.w;
-    if (w) { wpnCount++; const item = db.weapons[w.g][w.idx], vis = cnWpnVisual(w.g, item.name); P.push(`<g style="cursor:pointer" onclick="cnNodeClick('mount',${i})"><title>${esc(item.name)}</title>${cnTurretSvg(m, vis)}</g>`); }
-    else P.push(`<g style="cursor:pointer" onclick="cnNodeClick('mount',${i})"><title>Пустой узел — нажми, чтобы поставить орудие</title><circle cx="${m[0]}" cy="${m[1]}" r="4.5" fill="var(--b2)" stroke="var(--t4)" stroke-width="1" stroke-dasharray="2 2"/></g>`);
+  const maxMounts = Math.max(16, L.mounts.length);
+  const wpnMounts = cnMountPositions(H, maxMounts);
+  if (CN.schemShow.weapons) wpnMounts.forEach((m, i) => {
+    const slot = L.mounts[i], active = i < L.mounts.length, w = active && slot && slot.w;
+    // активный узел можно таскать → используем его сохранённую позицию (slot.pos), иначе авто-место
+    const p = (active && slot && slot.pos) ? [slot.pos.x, slot.pos.y] : m;
+    if (w) {
+      wpnCount++; const item = db.weapons[w.g][w.idx], vis = cnWpnVisual(w.g, item.name);
+      P.push(`<g style="cursor:grab" onpointerdown="cnMountPointerDown(event,${i})"><title>${esc(item.name)} · тащи, чтобы переместить · клик — настроить</title>${cnTurretSvg(p, vis)}</g>`);
+    }
+    else if (active) {
+      P.push(`<g style="cursor:grab" onpointerdown="cnMountPointerDown(event,${i})"><title>Пустой узел — тащи, чтобы переместить · клик — поставить орудие или удалить</title><circle cx="${p[0]}" cy="${p[1]}" r="4.5" fill="var(--b2)" stroke="var(--t3)" stroke-width="1.2" stroke-dasharray="2 2" opacity="0.9"/></g>`);
+    }
+    else {
+      P.push(`<g style="cursor:pointer" onclick="cnMountAddAt(${i})"><title>Свободное место — нажми, чтобы добавить узел орудия</title><circle cx="${m[0]}" cy="${m[1]}" r="4.5" fill="var(--b2)" stroke="var(--w2)" stroke-width="0.6" opacity="0.4"/></g>`);
+    }
   });
 
-  host.innerHTML = `<svg viewBox="0 0 500 320" class="cn-schem-svg" role="img" aria-label="Схема корабля вид сверху (горизонтально)"><g transform="translate(470,0) rotate(90)">${P.join('')}</g></svg>`;
+  host.innerHTML = `<svg viewBox="50 40 420 240" class="cn-schem-svg" role="img" aria-label="Схема корабля вид сверху (горизонтально)"><g id="cn-schem-g" transform="translate(470,0) rotate(90)">${P.join('')}</g></svg>`;
 
   // Мобильный список слотов: SVG-узлы (r≈4.5px) на телефоне почти неподжимаемы —
   // дублируем их крупными тач-строками (CSS показывает список только на coarse-указателе).
@@ -757,11 +770,45 @@ function cnDrawShip() {
 
 // ── Ручное размещение: добавить узел/отсек, назначить/убрать содержимое, скрыть слой ──
 function cnLayoutAdd(kind) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; if (kind === 'mount') CN.shipLayout.mounts.push({ w: null }); else CN.shipLayout.bays.push({ m: null }); cnVehCalc(); }
-// Клик по свободному внутреннему пространству → занять именно эту комнату отсеком и выбрать модуль
 function cnRoomAdd() { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; CN.shipLayout.bays.push({ m: null }); cnVehCalc(); cnOpenAssignPicker('bay', CN.shipLayout.bays.length - 1); }
 function cnRoomAddAt(i) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; while (CN.shipLayout.bays.length <= i) CN.shipLayout.bays.push({ m: null }); cnVehCalc(); cnOpenAssignPicker('bay', i); }
+function cnMountAddAt(i) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; while (CN.shipLayout.mounts.length <= i) CN.shipLayout.mounts.push({ w: null }); cnVehCalc(); cnOpenAssignPicker('mount', i); }
 function cnSchemToggle(which) { if (!CN.schemShow) CN.schemShow = { weapons: true, bays: true }; CN.schemShow[which] = !CN.schemShow[which]; const b = cnId(which === 'weapons' ? 'cn-tg-w' : 'cn-tg-b'); if (b) b.classList.toggle('on', CN.schemShow[which]); cnDrawShip(); }
 function cnNodeClick(kind, i) { cnOpenAssignPicker(kind, i); }
+// Перетаскивание узла орудия по схеме. Клик без движения → открыть пикер (поставить/удалить).
+function cnMountToLocal(evt) {                       // экранные координаты → координаты корпуса (учёт viewBox + rotate(90))
+  const g = document.getElementById('cn-schem-g'); if (!g) return null;
+  const svg = g.ownerSVGElement || g.closest('svg'); if (!svg) return null;
+  const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
+  const m = g.getScreenCTM(); if (!m) return null;
+  const loc = pt.matrixTransform(m.inverse());
+  return { x: loc.x, y: loc.y };
+}
+function cnMountPointerDown(evt, i) {
+  if (evt.button != null && evt.button !== 0) return;   // только основная кнопка
+  evt.preventDefault();
+  const L = CN.shipLayout, slot = L && L.mounts[i]; if (!slot) return;
+  const start = cnMountToLocal(evt); let moved = false;
+  const move = e => {
+    const p = cnMountToLocal(e); if (!p) return;
+    if (!moved && start && Math.hypot(p.x - start.x, p.y - start.y) < 3) return;   // порог, чтобы клик не считался тягой
+    moved = true;
+    const H = CN.shipGeo;
+    if (H) {                                            // держим узел в пределах корпуса (+небольшой вынос за борт)
+      const y = Math.max(H.nose, Math.min(H.engine[1], p.y));
+      const hw = cnHullHalf(H, y) + 8;
+      slot.pos = { x: Math.round(Math.max(160 - hw, Math.min(160 + hw, p.x))), y: Math.round(y) };
+    } else slot.pos = { x: Math.round(p.x), y: Math.round(p.y) };
+    cnDrawShip();
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    if (!moved) cnNodeClick('mount', i);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
 // Крупная тач-строка слота для мобильного списка (открывает тот же пикер, что и узел на схеме)
 function cnSlotRow(kind, i, ico, lbl, val, filled) {
   return `<button type="button" class="cn-slotrow${filled ? ' filled' : ''}" onclick="cnNodeClick('${kind}',${i})"><span class="cn-slotrow-ico">${ico}</span><span class="cn-slotrow-b"><span class="cn-slotrow-lbl">${lbl}</span><span class="cn-slotrow-val">${val}</span></span><span class="cn-slotrow-arr">›</span></button>`;
@@ -786,7 +833,12 @@ function cnOpenAssignPicker(kind, slot) {
 }
 function cnAssignSlot(kind, slot, g, i) { const a = kind === 'mount' ? CN.shipLayout.mounts : CN.shipLayout.bays; if (!a[slot]) return; if (kind === 'mount') a[slot].w = { g, idx: i }; else a[slot].m = { g, idx: i }; cnClosePick(); cnVehCalc(); }
 function cnClearSlot(kind, slot) { const a = kind === 'mount' ? CN.shipLayout.mounts : CN.shipLayout.bays; if (a[slot]) { if (kind === 'mount') a[slot].w = null; else a[slot].m = null; } cnClosePick(); cnVehCalc(); }
-function cnDeleteSlot(kind, slot) { const a = kind === 'mount' ? CN.shipLayout.mounts : CN.shipLayout.bays; a.splice(slot, 1); cnClosePick(); cnVehCalc(); }
+function cnDeleteSlot(kind, slot) { 
+  const a = kind === 'mount' ? CN.shipLayout.mounts : CN.shipLayout.bays; 
+  if (kind === 'mount') a[slot] = { w: null }; else a[slot] = { m: null };
+  while (a.length > 0) { const last = a[a.length - 1]; if (kind === 'mount' && (!last || !last.w)) a.pop(); else if (kind === 'bay' && (!last || !last.m)) a.pop(); else break; }
+  cnClosePick(); cnVehCalc(); 
+}
 // Внутренность карточки оружия/модуля (картинка + статы + описание)
 function cnPartCardInner(type, g, idx) {
   const db = CN.def.db, E = CN.def.hasEnergy;
@@ -1371,7 +1423,7 @@ function cnVehCollectData() {
     const L = CN.shipLayout || { mounts: [], bays: [] };
     d.weapons = L.mounts.filter(m => m.w).map(m => ({ g: m.w.g, idx: m.w.idx, q: 1 }));
     d.modules = L.bays.filter(b => b.m).map(b => ({ g: b.m.g, idx: b.m.idx }));
-    d.layout = { mounts: L.mounts.map(m => m.w ? { g: m.w.g, idx: m.w.idx } : null), bays: L.bays.map(b => b.m ? { g: b.m.g, idx: b.m.idx } : null) };
+    d.layout = { mounts: L.mounts.map(m => ({ w: m.w ? { g: m.w.g, idx: m.w.idx } : null, pos: m.pos ? { x: m.pos.x, y: m.pos.y } : null })), bays: L.bays.map(b => b.m ? { g: b.m.g, idx: b.m.idx } : null) };
   } else {
     d.weapons = [...document.querySelectorAll('#cn-weapons .cn-row')].map(r => { const s = JSON.parse(r.querySelector('select').value); return { g: s.g, idx: s.idx, q: +(r.querySelector('input')?.value || 1) }; });
     d.modules = [...document.querySelectorAll('#cn-modules .cn-row')].map(r => { const s = JSON.parse(r.querySelector('select').value); return { g: s.g, idx: s.idx }; });
@@ -1392,7 +1444,10 @@ function cnVehApplyData(d) {
   if (d.shield != null) cnId('cn-shield').value = d.shield;
   if (d.engine != null) cnId('cn-engine').value = d.engine;
   if (shipCard) {
-    if (d.layout) CN.shipLayout = { mounts: (d.layout.mounts || []).map(x => ({ w: x ? { g: x.g, idx: x.idx } : null })), bays: (d.layout.bays || []).map(x => ({ m: x ? { g: x.g, idx: x.idx } : null })) };
+    if (d.layout) CN.shipLayout = { mounts: (d.layout.mounts || []).map(x => {
+        if (x && ('w' in x || 'pos' in x)) return { w: x.w ? { g: x.w.g, idx: x.w.idx } : null, pos: x.pos ? { x: x.pos.x, y: x.pos.y } : null };  // новый формат {w,pos}
+        return { w: x ? { g: x.g, idx: x.idx } : null };                                                                                        // старый формат {g,idx}|null
+      }), bays: (d.layout.bays || []).map(x => ({ m: x ? { g: x.g, idx: x.idx } : null })) };
     else CN.shipLayout = { mounts: (d.weapons || []).flatMap(w => Array.from({ length: w.q || 1 }, () => ({ w: { g: w.g, idx: w.idx } }))), bays: (d.modules || []).map(m => ({ m: { g: m.g, idx: m.idx } })) };
   } else {
     (d.weapons || []).forEach(w => cnVehAddItem('weapon', w));

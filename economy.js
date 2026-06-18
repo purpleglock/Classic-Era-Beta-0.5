@@ -290,6 +290,14 @@ const EC_DOCTRINE_TECH = {
   'Изоляционизм':              'Продвинутые щиты (наземка)',
   'Ксенофобия':                'Продвинутая броня (наземка)',
 };
+// Бонусные слоты параллельных исследований по выбору доктрины («доп. исследования»).
+// Технократия как форма правления и «Культ науки» как идеология дают по +1 слоту
+// (стекаются → полноценная научная держава). Зеркало: ecTechnoSlots() /
+// public._research_slots в _technocracy.sql.
+const EC_DOCTRINE_SLOTS = {
+  gov:      { 'Технократия': 1 },
+  ideology: { 'Технократия (Культ науки)': 1 },
+};
 function ecBuildName(bt) { return (typeof EC_BUILD !== 'undefined' && EC_BUILD[bt]) ? EC_BUILD[bt].name : bt; }
 // Считает итоговые модификаторы доктрины для анкеты app (по умолчанию — текущая фракция).
 function ecFactionMods(app) {
@@ -853,6 +861,7 @@ function ecPaintCabinet() {
   if (EC.tab === 'trade') { try { ecCvSync(); } catch (e) {} } // флот каравана → объём/эскорт + живой расчёт
   if (EC.tab === 'intel') { try { ecSpyCalcLive(); } catch (e) {} }   // живой расчёт операции
   if (EC.tab === 'research') {
+    ecResearchDrain();  // немедленно заполнить свободные слоты из очереди
     const sc = document.querySelector('.ec-tree-scroll');
     if (sc && !sc._wheelBound) {
       sc._wheelBound = true;
@@ -902,6 +911,9 @@ function ecChoiceChips(cat, value) {
   const bgBld = (EC_DOCTRINE_BUILD[cat] || {})[value];
   if (bgBld) chips.push(`<span class="ec-doc-chip grant">🏗 +${esc(ecBuildName(bgBld))}</span>`);
   if (cat === 'ideology' && EC_DOCTRINE_TECH[value]) chips.push(`<span class="ec-doc-chip grant">🔬 ${esc(EC_DOCTRINE_TECH[value])}</span>`);
+  // особая способность: бонусный слот параллельных исследований (технократы)
+  const slotBonus = (EC_DOCTRINE_SLOTS[cat] || {})[value];
+  if (slotBonus) chips.push(`<span class="ec-doc-chip special">🔬 +${slotBonus} слот исследований</span>`);
   return chips.length ? `<div class="ec-doc-chips-inline">${chips.join('')}</div>` : '';
 }
 
@@ -941,6 +953,8 @@ function ecDoctrineSpecials(app) {
   }
   if (research.includes('pol.mind_supremacy')) out.push('🔬 +2 слота исследований — «Превосходство разума»');
   else if (research.includes('pol.light_knowledge')) out.push('🔬 +1 слот исследований — «Свет знаний»');
+  const techno = ecTechnoSlots(app);
+  if (techno) out.push(`🔬 +${techno} слот${techno > 1 ? 'а' : ''} исследований — технократия (доп. исследования)`);
   if (typeof ecResearchSlots === 'function') out.push(`🔬 Всего слотов исследований: ${ecResearchSlots()}`);
   // Небожители: разблокированные станции на непригодных мирах.
   EC_POLITICS.forEach(n => {
@@ -2506,6 +2520,14 @@ function ecTabFaith() {
   if (fs.faith) {
     const f = fs.faith;
     const fc = esc(f.color || '#c9a227');
+    // ── Статус модерации контента ──
+    const st = f.status || 'approved';
+    const stBanner =
+      st === 'pending' ? `<div class="ec-faith-status pend">⏳ Религия на модерации — название, догма и образ станут видны миру после одобрения администрации. Бонусы храмов уже действуют.</div>`
+      : st === 'rejected' ? `<div class="ec-faith-status rej">✕ Религия отклонена администрацией.${f.reject_reason ? ` Причина: «${esc(f.reject_reason)}». ` : ' '}Отредактируйте её и подайте заново.</div>`
+      : (f.pending_review ? `<div class="ec-faith-status pend">⏳ Изменения отправлены на проверку — мир пока видит прежний облик веры.${f.pending && f.pending.name ? ` Предложено: «${esc(f.pending.name)}».` : ''}</div>`
+      : (f.reject_reason ? `<div class="ec-faith-status rej">✕ Прошлые изменения отклонены.${f.reject_reason ? ` Причина: «${esc(f.reject_reason)}».` : ''}</div>` : ''));
+    const imgHtml = f.image_url ? `<div class="ec-faith-cover"><img src="${esc(f.image_url)}" alt=""></div>` : '';
     const disc = Math.round((fs.unit_discount || 0) * 100);
     const tithePct = Math.round((fs.tithe_pct || 0.20) * 100);
     const income = ecNum(fs.temple_income || 150);
@@ -2523,13 +2545,34 @@ function ecTabFaith() {
         <div class="ec-shrine-note">Отправьте миссионеров к чужой державе: признав вашу веру, она станет возводить ваши храмы, а с их дохода вам потечёт десятина (+${tithePct}%).</div>
         ${others.length ? `<div class="ec-prod-form" style="margin-top:8px">${ecFacSelect('ec-faith-reco')}<button class="btn btn-gd btn-sm" onclick="ecFaithOffer()">Предложить признание</button></div>` : '<div class="ec-empty">Нет других держав.</div>'}
         ${offersOutHtml ? `<div style="margin-top:8px">${offersOutHtml}</div>` : ''}` : '';
+    const editForm = (isFounder && EC.faithEditing) ? `<div class="ec-faith-edit">
+          <div class="ec-bless-hd" style="margin-top:0">Редактирование веры — изменения уйдут на модерацию</div>
+          <div class="ec-prod-form" style="flex-wrap:wrap">
+            <input id="ec-fe-name" placeholder="имя веры" class="ec-loan-note" style="flex:1;min-width:160px" maxlength="60" value="${esc(f.name || '')}">
+            <input id="ec-fe-color" type="color" value="${esc(f.color || '#c9a227')}" class="ec-prod-qty" style="width:46px;padding:2px" title="священный цвет">
+          </div>
+          <input id="ec-fe-dogma" placeholder="священный девиз / догмат (необязательно)" class="ec-loan-note" style="margin-top:8px;width:100%" maxlength="160" value="${esc(f.dogma || '')}">
+          <input type="hidden" id="ec-fe-img" value="${esc(f.image_url || '')}">
+          <div class="ec-faith-imgrow">
+            <div class="ec-faith-imgprev" id="ec-fe-imgprev">${f.image_url ? `<img src="${esc(f.image_url)}" alt="">` : '<span>нет образа</span>'}</div>
+            <label class="btn btn-gh btn-sm">📷 Образ веры<input type="file" accept="image/*" style="display:none" onchange="ecFaithImg(this,'ec-fe-img','ec-fe-imgprev')"></label>
+            ${f.image_url ? `<button class="btn btn-gh btn-sm" onclick="ecFaithImgClear('ec-fe-img','ec-fe-imgprev')">Убрать</button>` : ''}
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px">
+            <button class="btn btn-gd btn-sm" onclick="ecFaithEdit()">Отправить на модерацию</button>
+            <button class="btn btn-gh btn-sm" onclick="ecFaithEditToggle(false)">Отмена</button>
+          </div>
+        </div>` : '';
     mine = `<div class="ec-shrine" style="--fc:${fc}">
+        ${stBanner}
+        ${imgHtml}
         <div class="ec-shrine-hd">
           <div class="ec-shrine-sigil">🛐</div>
           <div><div class="ec-shrine-name">«${esc(f.name)}»</div>
             <div class="ec-shrine-role">${roleTxt} · ${ecNum(adepts.length)} народ(ов) в лоне веры</div></div>
         </div>
         ${f.dogma ? `<div class="ec-shrine-dogma">«${esc(f.dogma)}»</div>` : ''}
+        ${editForm}
         <div class="ec-bless-hd">Благословения веры — паства ${strength} слот(ов) храмов</div>
         <div class="ec-bless-grid">
           ${blessTile('💰', '+' + income, 'ГС с каждого храма')}
@@ -2540,7 +2583,10 @@ function ecTabFaith() {
         ${fs.role === 'recognized' ? `<div class="ec-shrine-note" style="margin-top:10px">🕊 Вы под покровительством чужой веры: с дохода ваших храмов её основатель взимает десятину ${tithePct}%.</div>` : ''}
         ${adeptsHtml ? `<div class="ec-bless-hd" style="margin-top:16px">Паства веры</div><div>${adeptsHtml}</div>` : ''}
         ${spreadBlock}
-        <div style="margin-top:16px"><button class="btn btn-gh btn-sm" onclick="ecFaithLeave()">Отречься от веры</button></div>
+        <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+          ${(isFounder && !EC.faithEditing) ? `<button class="btn btn-gd btn-sm" onclick="ecFaithEditToggle(true)">✎ Редактировать веру</button>` : ''}
+          <button class="btn btn-gh btn-sm" onclick="ecFaithLeave()">Отречься от веры</button>
+        </div>
       </div>`;
   } else if (fs.can_found) {
     mine = `<div class="ec-shrine" style="--fc:#c9a227">
@@ -2548,12 +2594,18 @@ function ecTabFaith() {
           <div><div class="ec-shrine-name" style="color:var(--gd)">Провозгласить веру</div>
             <div class="ec-shrine-role">ваш народ ещё не обрёл высшего смысла</div></div></div>
         <div class="ec-shrine-note">Учредите новый культ и поведите за собой народы — либо примите одну из уже сияющих в галактике религий ниже.</div>
+        <div class="ec-shrine-note" style="color:var(--t4)">Новая религия проходит модерацию администрации, как анкета фракции: её облик станет виден миру после одобрения. Бонусы храмов действуют сразу.</div>
         <div class="ec-prod-form" style="margin-top:12px;flex-wrap:wrap">
           <input id="ec-faith-name" placeholder="имя веры" class="ec-loan-note" style="flex:1;min-width:160px" maxlength="60">
           <input id="ec-faith-color" type="color" value="#c9a227" class="ec-prod-qty" style="width:46px;padding:2px" title="священный цвет">
           <button class="btn btn-gd btn-sm" onclick="ecFaithFound()">Провозгласить</button>
         </div>
         <input id="ec-faith-dogma" placeholder="священный девиз / догмат (необязательно)" class="ec-loan-note" style="margin-top:8px;width:100%" maxlength="160">
+        <input type="hidden" id="ec-faith-img" value="">
+        <div class="ec-faith-imgrow">
+          <div class="ec-faith-imgprev" id="ec-faith-imgprev"><span>нет образа</span></div>
+          <label class="btn btn-gh btn-sm">📷 Образ веры<input type="file" accept="image/*" style="display:none" onchange="ecFaithImg(this,'ec-faith-img','ec-faith-imgprev')"></label>
+        </div>
       </div>`;
   } else {
     mine = `<div class="ec-shrine" style="--fc:#6a6f7a">
@@ -2571,11 +2623,14 @@ function ecTabFaith() {
   const rows = list.map(f => {
     const isMine = f.id === myFaithId;
     const joinBtn = (canJoin && f.open) ? `<button class="btn btn-gd btn-xs" onclick="ecFaithJoin('${f.id}')">Принять</button>` : (f.open ? '' : '<span class="ec-q-t">закрыта</span>');
+    const thumb = f.image_url
+      ? `<span class="ec-faith-thumb" style="background-image:url('${esc(f.image_url)}')"></span>`
+      : `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(f.color || '#c9a227')};margin-right:6px"></span>`;
     return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
-        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(f.color || '#c9a227')};margin-right:6px"></span>
+        ${thumb}
         <b style="color:${esc(f.color || '#c9a227')}">${esc(f.name)}</b>${isMine ? ' <span class="ec-hint">— ваша</span>' : ''} · ${ecNum(f.adepts)} адепт(ов) · паства ${ecNum(f.flock)}
         <span class="ec-hint">основатель ${esc(ecFacName(f.founder_fid))}</span>
-      </span>${isMine ? '' : joinBtn}</div>`;
+      </span><span style="display:inline-flex;gap:6px"><button class="btn btn-gh btn-xs" onclick="ecFaithDetail('${f.id}')">Подробнее</button>${isMine ? '' : joinBtn}</span></div>`;
   }).join('');
   const registry = `<div class="ec-section-title">Религии мира <span class="ec-hint">— реестр всех вер</span></div>
     ${list.length ? `<div class="ec-dip-card">${rows}</div>` : '<div class="ec-empty">Ни одной веры ещё не основано.</div>'}`;
@@ -2619,11 +2674,65 @@ function ecFaithFound() {
   const name = ecId('ec-faith-name')?.value?.trim();
   const dogma = ecId('ec-faith-dogma')?.value?.trim() || null;
   const color = ecId('ec-faith-color')?.value || null;
+  const image = ecId('ec-faith-img')?.value?.trim() || null;
   if (!name) { toast('Введите название веры', 'err'); return; }
-  ecRpcAct('faith_found', { p_name: name, p_dogma: dogma, p_color: color }, 'Вера основана');
+  ecRpcAct('faith_found', { p_name: name, p_dogma: dogma, p_color: color, p_image_url: image }, 'Вера основана — отправлена на модерацию');
 }
 function ecFaithJoin(id) { ecRpcAct('faith_join', { p_faith_id: id }, 'Вы приняли веру'); }
 function ecFaithLeave() { if (confirm('Оставить веру? Бонусы храмов исчезнут.')) ecRpcAct('faith_leave', {}, 'Вы оставили веру'); }
+// ── Картинка веры: загрузка в Storage через общий хелпер ─────
+function ecFaithImg(input, hiddenId, prevId) {
+  const file = input.files && input.files[0]; if (!file) return;
+  if (typeof handleImgUpload !== 'function') { toast('Загрузка недоступна', 'err'); return; }
+  handleImgUpload(file, url => {
+    const h = ecId(hiddenId); if (h) h.value = url;
+    const p = ecId(prevId); if (p) p.innerHTML = `<img src="${esc(url)}" alt="">`;
+  });
+}
+function ecFaithImgClear(hiddenId, prevId) {
+  const h = ecId(hiddenId); if (h) h.value = '';
+  const p = ecId(prevId); if (p) p.innerHTML = '<span>нет образа</span>';
+}
+// ── Редактирование веры основателем (через модерацию) ───────
+function ecFaithEditToggle(on) { EC.faithEditing = !!on; ecPaintCabinet(); }
+function ecFaithEdit() {
+  const name = ecId('ec-fe-name')?.value?.trim();
+  const dogma = ecId('ec-fe-dogma')?.value?.trim() || null;
+  const color = ecId('ec-fe-color')?.value || null;
+  const image = ecId('ec-fe-img')?.value?.trim() || null;
+  if (!name) { toast('Введите название веры', 'err'); return; }
+  EC.faithEditing = false;
+  ecRpcAct('faith_edit', { p_name: name, p_dogma: dogma, p_color: color, p_image_url: image }, 'Изменения отправлены на модерацию');
+}
+// ── Просмотр религии с описанием — модалка (видно всем) ─────
+async function ecFaithDetail(id) {
+  let d;
+  try { d = await ecRpc('faith_detail', { p_faith_id: id }); }
+  catch (e) { toast(ecErr(e.message), 'err'); return; }
+  if (!d) return;
+  const fc = esc(d.color || '#c9a227');
+  const adeptIc = r => r === 'founder' ? '👑 ' : r === 'recognized' ? '🕊 ' : '🙏 ';
+  const adepts = (d.adepts || []).map(a => `<span class="ec-faith-pew">${adeptIc(a.role)}${esc(ecFacName(a.fid))} · паства <b>${ecNum(a.flock)}</b></span>`).join('');
+  const cover = d.image_url ? `<div class="ec-faith-cover lg"><img src="${esc(d.image_url)}" alt=""></div>` : '';
+  const html = `<div class="ec-faith-modal-back" onclick="ecFaithDetailClose(event)">
+    <div class="ec-faith-modal ec-shrine" style="--fc:${fc}" onclick="event.stopPropagation()">
+      <button class="ec-faith-modal-x" onclick="ecFaithDetailClose()">✕</button>
+      ${cover}
+      <div class="ec-shrine-hd"><div class="ec-shrine-sigil">🛐</div>
+        <div><div class="ec-shrine-name">«${esc(d.name)}»</div>
+          <div class="ec-shrine-role">основатель ${esc(ecFacName(d.founder_fid))} · ${ecNum((d.adepts || []).length)} народ(ов) · паства ${ecNum(d.flock || 0)}</div></div></div>
+      ${d.dogma ? `<div class="ec-shrine-dogma">«${esc(d.dogma)}»</div>` : '<div class="ec-shrine-note">Догмат веры не записан.</div>'}
+      ${adepts ? `<div class="ec-bless-hd" style="margin-top:16px">Паства веры</div><div>${adepts}</div>` : ''}
+    </div></div>`;
+  const wrap = document.createElement('div');
+  wrap.id = 'ec-faith-modal-host';
+  wrap.innerHTML = html;
+  document.body.appendChild(wrap);
+}
+function ecFaithDetailClose(ev) {
+  if (ev && ev.target && !ev.target.classList.contains('ec-faith-modal-back') && ev.target.tagName !== 'BUTTON') return;
+  document.getElementById('ec-faith-modal-host')?.remove();
+}
 function ecVassalPropose() {
   const fid = ecId('ec-vassal-fac')?.value;
   const pct = Math.max(5, Math.min(30, parseInt(ecId('ec-vassal-pct')?.value) || 10)) / 100;
@@ -3181,9 +3290,17 @@ function ecTechDepth(n, byId, cache) {
 function ecResearchSlots() {
   const r = (EC.eco && EC.eco.research) || [];
   let n = ecIsRobot() ? 2 : 1;
+  n += ecTechnoSlots();
   if (r.includes('pol.light_knowledge')) n += 1;
   if (r.includes('pol.mind_supremacy')) n += 2;
   return n;
+}
+// Технократы ведут больше исследований параллельно: форма правления «Технократия»
+// и/или идеология «Культ науки» дают по +1 слоту. Стекается с роботами и
+// политиками ветки «Разум». Зеркало: public._research_slots в _technocracy.sql.
+function ecTechnoSlots(app) {
+  app = app || (typeof EC !== 'undefined' && EC.app) || {};
+  return ((EC_DOCTRINE_SLOTS.gov || {})[app.gov] || 0) + ((EC_DOCTRINE_SLOTS.ideology || {})[app.ideology] || 0);
 }
 // Активные исследования: массив {n: node, r: ready_iso}.
 function ecActiveResearch() { return Array.isArray(EC.eco.research_slots) ? EC.eco.research_slots : []; }
@@ -3368,7 +3485,7 @@ function ecResearch(nodeId) {
   ecRpcAct('economy_research', { p_node: nodeId, p_cost: rc }, 'Исследование начато (1 ход)');
 }
 // Добавить технологию в очередь — автозапуск в свободный слот на тике.
-function ecQueueResearch(nodeId) {
+async function ecQueueResearch(nodeId) {
   const n = ecBuildResearch().find(x => x.id === nodeId); if (!n) { toast('Узел не найден', 'err'); return; }
   const done = new Set(EC.eco.research || []);
   if (done.has(nodeId)) { toast('Уже изучено', 'inf'); return; }
@@ -3378,10 +3495,36 @@ function ecQueueResearch(nodeId) {
   if (!(n.prereq || []).every(p => done.has(p) || active.has(p) || queued.has(p))) {
     toast('Сначала поставьте в очередь предшественников', 'err'); return;
   }
-  ecRpcAct('economy_research_queue', { p_node: nodeId }, 'Добавлено в очередь технологий');
+  if (EC.busy) return; EC.busy = true;
+  try {
+    await ecRpc('economy_research_queue', { p_node: nodeId });
+    toast('Добавлено в очередь технологий', 'ok');
+    await ecReloadPaint();
+    _ecDrainTimer = 0;
+    await ecResearchDrain();
+  } catch (e) { toast(ecErr(e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
 }
 function ecDequeueResearch(idx) {
   ecRpcAct('economy_research_dequeue', { p_idx: idx | 0 }, 'Убрано из очереди');
+}
+// Немедленно заполнить свободные слоты из очереди (без ожидания тика).
+// Дёргается при открытии вкладки и после любых изменений очереди.
+// Дебаунс: не чаще раза в 5 с, чтобы не создавать гонку при быстром рекликинге.
+let _ecDrainTimer = 0;
+async function ecResearchDrain() {
+  if (EC.busy) return;
+  const now = Date.now();
+  if (now - _ecDrainTimer < 5000) return;
+  _ecDrainTimer = now;
+  const slots = ecActiveResearch().length;
+  const maxSlots = ecResearchSlots();
+  const queue = ecResearchQueueArr();
+  if (slots >= maxSlots || !queue.length) return;   // нечего добирать
+  try {
+    await ecRpc('research_drain_queue', {});
+    await ecReloadPaint();
+  } catch (e) { /* тихо: дрейн — фоновый помощник, не блокирующее действие */ }
 }
 
 // Карточка-описание узла дерева (по клику) — полный текст не влезает в плитку.

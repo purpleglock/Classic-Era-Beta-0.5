@@ -185,6 +185,7 @@
 .fr-app-by{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4)}
 .fr-app-meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin:5px 0 8px}
 .fr-app-acts{display:flex;gap:6px;flex-wrap:wrap}
+.fr-app-group{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gd,#c9a227);margin:16px 0 8px;padding-top:10px;border-top:1px solid var(--w2)}
 
 @media (max-width:600px){ .fgr2,.fr-bld-grid{grid-template-columns:1fr} }
 
