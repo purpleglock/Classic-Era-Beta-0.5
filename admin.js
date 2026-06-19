@@ -94,7 +94,7 @@ function adBuildIndex() {
 // Ядро — лёгкие запросы, нужные для таблицы фракций (грузится за ~1 c)
 async function adLoadCore() {
   const [apps, ecos] = await Promise.all([
-    dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,owner_id,owner_email,race,civ_type,system_id,system_name&order=name.asc').catch(() => []),
+    dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,owner_id,owner_email,race,civ_type,gov,regime,ideology,capital_env,system_id,system_name&order=name.asc').catch(() => []),
     dbGet('faction_economy',  'select=*').catch(() => []),
   ]);
   AD.apps = apps || [];
@@ -285,9 +285,9 @@ function adSetSubtab(t) { AD.subtab = t; if (!adRenderSlot()) adPaint(); }
 function adFacPanel() {
   const e = adEntry(AD.sel);
   if (!e) return '';
-  const SUBTABS = [['treasury','💰 Казна'],['resources','📦 Ресурсы'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
+  const SUBTABS = [['treasury','💰 Казна'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
   const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="fm-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
-  const bodyMap = { treasury: adTabTreasury, resources: adTabResources, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, testing: adTabTesting, danger: adTabDanger };
+  const bodyMap = { treasury: adTabTreasury, resources: adTabResources, mining: adTabMining, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, testing: adTabTesting, danger: adTabDanger };
   const renderFn = bodyMap[AD.subtab] || adTabTreasury;
   let tabBody = '';
   try { tabBody = renderFn(e); }
@@ -497,6 +497,143 @@ async function adDeltaRes(name, delta) {
     toast(`${name}: ${adNum(val)}`, 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
+}
+
+// ── Вкладка: Добыча ─────────────────────────────────────────────
+// Подробный разбор «кто, сколько и как добывает»: множитель доктрины,
+// каждый добывающий завод → его слоты/месторождения → добыча/сутки, режим
+// потока (склад/экспорт) и сводка по фракции. Расчёт — зеркало economy_accrue
+// (см. ecMineRate/ecFactionMods в economy.js).
+
+// Итоговый множитель добычи фракции (доктрина + бонусы изученных политтехнологий).
+// ecFactionMods(app) не подмешивает research для чужой анкеты — добавляем вручную.
+function adMineMult(e) {
+  const base = (typeof ecFactionMods === 'function') ? ecFactionMods(e.app || {}) : { mine: 1, _raw: {} };
+  const rawMine = (base._raw && typeof base._raw.mine === 'number') ? base._raw.mine : (base.mine - 1);
+  let resBonus = 0;
+  const research = Array.isArray(e.eco && e.eco.research) ? e.eco.research : [];
+  if (typeof EC_RESEARCH_BONUS !== 'undefined') {
+    research.forEach(id => { const b = EC_RESEARCH_BONUS[id]; if (b && b.mine) resBonus += b.mine; });
+  }
+  return { mult: Math.max(0.3, 1 + rawMine + resBonus), resBonus };
+}
+
+// Добыча одного слота/сутки: редкость × богатство месторождения × множитель.
+function adMineRate(rar, amt, mult) {
+  const baseRate = (typeof EC_RES_RATE !== 'undefined' && EC_RES_RATE[rar || 'common']) || 25;
+  const rich = (typeof ecRichMult === 'function') ? ecRichMult(amt) : 1.5;
+  return Math.max(1, Math.round(baseRate * rich * mult));
+}
+
+function adTabMining(e) {
+  if (!e.eco) return `<div class="fm-no-eco">Экономика не инициализирована.</div>`;
+  const mm = adMineMult(e);
+  const mult = mm.mult;
+  const cols = e.colonies || [];
+  const totals = new Map();   // name → { rate, slots, r, icon, store, export }
+  let totalSlots = 0, usedSlots = 0, mineBlds = 0, idleMineBlds = 0;
+
+  const rarLbl = r => AD_RARITY_LABEL[r] || r || 'common';
+  const iconOf = (ri, name) => esc((ri && ri.icon) || (AD.resInfo[name] && AD.resInfo[name].icon) || '◈');
+  const rarOf  = (ri, name) => (ri && ri.r) || (AD.resInfo[name] && AD.resInfo[name].r) || 'common';
+
+  // ── Колонии с добывающими заводами ──
+  const colBlocks = cols.map(c => {
+    const blds = e.buildings.filter(b => b.colony_id === c.id && b.btype === 'mining');
+    if (!blds.length) return '';
+    const sys = AD.systems.find(s => s.id === c.system_id);
+    const planetRes = Array.isArray(c.resources) ? c.resources.filter(r => r && r.name) : [];
+
+    const bldCards = blds.map(b => {
+      mineBlds++;
+      const targets = Array.isArray(b.mining_targets) ? b.mining_targets : [];
+      const slotsOpen = b.slots_open || 0;
+      totalSlots += slotsOpen; usedSlots += targets.length;
+      if (!targets.length) idleMineBlds++;
+      const isExport = b.mine_mode === 'export';
+      const modeBadge = isExport
+        ? `<span style="font-size:10px;padding:2px 7px;border-radius:6px;background:color-mix(in srgb,var(--gd,#3a7fbf) 18%,transparent);color:var(--gdl,#5fb0e6)">💱 Экспорт</span>`
+        : `<span style="font-size:10px;padding:2px 7px;border-radius:6px;background:var(--w1,#1e2630);color:var(--t3,#8aa0b0)">📦 На склад</span>`;
+
+      // слоты, назначенные на месторождения (с группировкой по ресурсу)
+      const tcount = new Map();
+      targets.forEach(n => tcount.set(n, (tcount.get(n) || 0) + 1));
+      const assignedRows = [...tcount.entries()].map(([name, cnt]) => {
+        const ri = planetRes.find(r => r.name === name);
+        const rar = rarOf(ri, name);
+        const per = adMineRate(rar, ri && ri.amt, mult);
+        const sub = per * cnt;
+        const cur = totals.get(name) || { rate: 0, slots: 0, r: rar, icon: (ri && ri.icon) || (AD.resInfo[name] && AD.resInfo[name].icon), store: false, export: false };
+        cur.rate += sub; cur.slots += cnt; if (isExport) cur.export = true; else cur.store = true;
+        totals.set(name, cur);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--w1,#1e2630)">
+          <span style="font-size:15px;width:20px;text-align:center">${iconOf(ri, name)}</span>
+          <span style="flex:1;min-width:90px;font-size:13px;color:var(--t1,#e8edf2)">${esc(name)}</span>
+          <span class="fm-rarity fm-rarity-${rar}" style="font-size:10px;min-width:54px">${rarLbl(rar)}</span>
+          <span style="font-size:11px;color:var(--t3,#8aa0b0);min-width:74px;text-align:right" title="Богатство месторождения">${esc((ri && ri.amt) || '—')}</span>
+          <span style="font-family:monospace;font-size:11px;color:var(--t4,#6a7a88);min-width:64px;text-align:right" title="Добыча за 1 слот/сут">${cnt}×${adNum(per)}</span>
+          <span style="font-family:monospace;font-size:13px;color:var(--gdl,#5fb0e6);min-width:64px;text-align:right" title="Всего с этого завода/сут">+${adNum(sub)}</span>
+        </div>`;
+      }).join('');
+
+      const idleNote = !targets.length
+        ? `<div class="fm-empty" style="padding:6px 0;font-size:11px;color:var(--color-warning,#e0a030)">⚠ Слоты не назначены — завод простаивает (${slotsOpen} своб.)</div>` : '';
+
+      return `<div style="border:1px solid var(--w2,#2a3340);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--b3,#0f141b)">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+          <span style="font-size:13px;font-weight:600;color:var(--t1,#e8edf2)">⛏ Добывающий завод</span>
+          ${modeBadge}
+          <span style="font-family:monospace;font-size:11px;color:var(--t3,#8aa0b0);margin-left:auto">${targets.length}/${slotsOpen} слот.</span>
+        </div>
+        ${assignedRows || ''}${idleNote}
+      </div>`;
+    }).join('');
+
+    return `<div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:14px;font-weight:700;color:var(--gdl,#5fb0e6)">${c.is_capital ? '★ ' : ''}${esc(c.planet_name || '?')}</span>
+        <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(sys ? sys.name : (c.system_id || '?'))}${c.planet_type ? ' · ' + esc(c.planet_type) : ''}</span>
+      </div>
+      ${bldCards}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  // ── Сводка по фракции ──
+  const sumEntries = [...totals.entries()].sort((a, b) => b[1].rate - a[1].rate);
+  const grandTotal = sumEntries.reduce((s, [, v]) => s + v.rate, 0);
+  const sumRows = sumEntries.length
+    ? sumEntries.map(([name, v]) => {
+        const flow = v.export && v.store ? '📦+💱' : v.export ? '💱 экспорт' : '📦 склад';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--w1,#1e2630)">
+          <span style="font-size:16px;width:22px;text-align:center">${iconOf(null, name)}</span>
+          <span style="flex:1;min-width:90px;font-size:13px;color:var(--t1,#e8edf2)">${esc(name)}</span>
+          <span class="fm-rarity fm-rarity-${v.r}" style="font-size:10px;min-width:54px">${rarLbl(v.r)}</span>
+          <span style="font-size:11px;color:var(--t3,#8aa0b0);min-width:58px;text-align:right">${v.slots} слот.</span>
+          <span style="font-size:10px;color:var(--t4,#6a7a88);min-width:74px;text-align:right">${flow}</span>
+          <span style="font-family:monospace;font-size:14px;color:var(--gdl,#5fb0e6);min-width:70px;text-align:right">+${adNum(v.rate)}</span>
+        </div>`;
+      }).join('')
+    : `<div class="fm-empty">Фракция ничего не добывает — нет добывающих заводов с назначенными слотами.</div>`;
+
+  const pct = Math.round((mult - 1) * 100);
+  const multStr = (pct === 0 ? '×1.0 (база)' : `×${mult.toFixed(2)} (${pct > 0 ? '+' : ''}${pct}%)`);
+  const resBonusStr = mm.resBonus ? ` · из них +${Math.round(mm.resBonus * 100)}% от изученных технологий` : '';
+
+  return `<div class="fm-mining">
+    <div style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 14px;border:1px solid var(--w2,#2a3340);border-radius:8px;background:var(--b3,#0f141b);margin-bottom:14px;font-size:12px;color:var(--t3,#8aa0b0)">
+      <span>Множитель добычи: <b style="color:var(--gdl,#5fb0e6)">${multStr}</b>${resBonusStr}</span>
+      <span>Заводов: <b style="color:var(--t1,#e8edf2)">${mineBlds}</b>${idleMineBlds ? ` <span style="color:var(--color-warning,#e0a030)">(${idleMineBlds} простаивает)</span>` : ''}</span>
+      <span>Слотов добычи: <b style="color:var(--t1,#e8edf2)">${usedSlots}/${totalSlots}</b></span>
+      <span>Всего/сутки: <b style="color:var(--gdl,#5fb0e6)">+${adNum(grandTotal)}</b> ед.</span>
+    </div>
+
+    <div class="fm-section-title">Итоговая добыча по ресурсам / сутки</div>
+    <div style="border:1px solid var(--w2,#2a3340);border-radius:8px;padding:4px 12px;background:var(--b2,#141a22);margin-bottom:16px">${sumRows}</div>
+
+    <div class="fm-section-title">Разбор по колониям и заводам</div>
+    ${colBlocks || `<div class="fm-empty">Нет добывающих заводов ни в одной колонии.</div>`}
+    <div class="fm-dim" style="font-size:11px;margin-top:10px">Расчёт зеркалит живое начисление (economy_accrue): редкость × богатство месторождения × множитель доктрины/технологий. Режим «💱 Экспорт» — поток продаётся за ГС и не копится на складе; «📦 На склад» — копится до лимита ёмкости.</div>
+  </div>`;
 }
 
 // ── Вкладка: Технологии ─────────────────────────────────────────
