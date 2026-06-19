@@ -7,7 +7,7 @@
 //             auth.js (user), faction_reg.js (frReadable)
 // ════════════════════════════════════════════════════════════
 
-const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], projects: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], dossiers: [], alerts: [], tab: 'overview', busy: false, openColony: null, openSys: null, spyTarget: null, spyOp: 'recon_basic', spyAgents: 1 };
+const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], projects: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], dossiers: [], alerts: [], passive: {}, tab: 'overview', busy: false, openColony: null, openSys: null, spyTarget: null, spyOp: 'recon_basic', spyAgents: 1 };
 const EC_CLAIM_COST = 3000, EC_CLAIM_CD_DAYS = 7;
 // ── ТАЙНЫЕ ОПЕРАЦИИ — каталог (зеркало spy_launch/ spy_resolve в SQL) ──
 // diff — сложность; base — базовая длительность (ходов); need — нужная разведка
@@ -48,6 +48,51 @@ function ecSpyDossier(targetFid) {
   const base = deep ? 20 : 10;
   const bonus = Math.max(0, base - ageDays); // затухает со временем
   return { level: deep ? 'deep' : 'basic', ageDays, bonus, result: (deep || latest).result || {}, deep: !!deep };
+}
+// ── Пассивная разведка: размытый срез по союзникам/торг.партнёрам/друзьям ──
+// Источник интел даётся СЕРВЕРОМ (passive_intel_all), клиент только рисует.
+function ecPassiveIntel(fid) { return (EC.passive || {})[fid] || null; }
+const EC_PI_SOURCE = {
+  ally:      { ic: '🤝', label: 'союзник',           hint: 'Союз / вассалитет — самый подробный пассивный срез (≈ значения).' },
+  trade:     { ic: '🚢', label: 'торговый путь',      hint: 'Торговые караваны приносят слухи о партнёре.' },
+  relations: { ic: '💬', label: 'хорошие отношения',  hint: 'Дипломатические каналы при тёплых отношениях (балл ≥ 40).' },
+};
+// Цвет вердикта сравнения сил: их превосходство = тревога, их отставание = в нашу пользу.
+function ecPiCmpColor(v) {
+  if (/значительно опережает/.test(v)) return 'var(--color-warning,#e0a030)';
+  if (/опережает/.test(v))             return 'var(--te,#e08a8a)';
+  if (/значительно отстаёт/.test(v))   return 'var(--ok,#7bd88f)';
+  if (/отстаёт/.test(v))               return 'var(--ok,#7bd88f)';
+  return 'var(--t3,#9fb0c8)';
+}
+// Карточка пассивной разведки по фракции fid (или '' если данных нет).
+function ecPassiveIntelCard(fid) {
+  const p = ecPassiveIntel(fid); if (!p) return '';
+  const src = EC_PI_SOURCE[p.source] || EC_PI_SOURCE.relations;
+  const e = p.enterprises || { civ_pct: 0, mil_pct: 0, faith_pct: 0, total: '—' };
+  const f = p.forces || {};
+  const fl = p.fleet || {};
+  const cmpRow = (k, v) => `<div class="ec-res" style="align-items:baseline"><span class="ec-res-k">${k}</span><span class="ec-res-v" style="font-size:13px;color:${ecPiCmpColor(v || '')}">${esc(v || '—')}</span></div>`;
+  const barSeg = (pct, color, title) => +pct > 0 ? `<div title="${title}: ${pct}%" style="width:${pct}%;background:${color}"></div>` : '';
+  return `<div class="ec-dip-card" style="border-color:rgba(120,160,220,.25)">
+    <div class="ec-dip-t">🛰 Пассивная разведка <span class="ec-hint" title="${esc(src.hint)}">${src.ic} ${esc(src.label)}</span></div>
+    <div class="cn-fac-hint" style="margin:0 0 8px">Приблизительные данные без агентов. Для точных цифр и операций нужна активная разведка ниже.</div>
+    <div class="ec-treasury" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:8px">
+      <div class="ec-res"><span class="ec-res-k">🚀 Флот (кораблей)</span><span class="ec-res-v" style="font-size:14px">${esc(fl.ships || '—')}</span></div>
+      <div class="ec-res"><span class="ec-res-k">🪖 Наземка / авиация</span><span class="ec-res-v" style="font-size:14px">${esc(fl.ground || '—')}</span></div>
+      <div class="ec-res"><span class="ec-res-k">💰 Доход</span><span class="ec-res-v" style="font-size:14px">${esc(p.income || '—')}</span></div>
+      <div class="ec-res"><span class="ec-res-k">🏭 Предприятий</span><span class="ec-res-v" style="font-size:14px">${esc(e.total || '—')}</span></div>
+    </div>
+    <div class="ec-res-k" style="margin-bottom:4px">Распределение предприятий</div>
+    <div style="display:flex;height:12px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,.06);margin-bottom:4px">
+      ${barSeg(e.civ_pct, 'var(--bl,#5a9bd4)', 'Гражданские')}${barSeg(e.mil_pct, 'var(--te,#e08a8a)', 'Военные')}${barSeg(e.faith_pct, 'var(--pu,#b07bd8)', 'Культовые')}
+    </div>
+    <div class="ec-hint" style="margin-bottom:8px">🔵 гражданские ${e.civ_pct || 0}% · 🔴 военные ${e.mil_pct || 0}% · 🟣 культовые ${e.faith_pct || 0}%</div>
+    <div class="ec-res-k" style="margin-bottom:4px">Соотношение сил (их уровень против вашего)</div>
+    <div class="ec-treasury" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      ${cmpRow('🔬 Наука', f.science)}${cmpRow('⚙ Военпром', f.mil_industry)}${cmpRow('⚔ Армия', f.army)}
+    </div>
+  </div>`;
 }
 // Агентура — из ростера (этап 2): операции на именованных агентах, не на пуле.
 function ecSpyRoster() { return (EC.spyAgency && EC.spyAgency.roster) || []; }
@@ -585,7 +630,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -616,6 +661,7 @@ async function ecLoad() {
     dbGet('income_history', `owner_id=eq.${user.id}&order=tick_at.desc&limit=14`).catch(() => []),  // доход по времени
     ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции (вера, роль, сила, скидка)
     ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий (для вступления)
+    ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез по союзникам/торг.партнёрам/друзьям
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -642,6 +688,9 @@ async function ecLoad() {
   EC.faith = faithStatus || { faith: null, can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };  // вера: статус
   EC.faithList = faithList || [];           // вера: реестр религий
   EC.incomeHistory = incomeHistory || [];   // снимки дохода по тикам (доход по времени)
+  // Пассивная разведка: размытый срез по фракциям, с кем есть торговый путь / хорошие отношения / союз. Индекс по fid.
+  EC.passive = {};
+  (Array.isArray(passiveIntel) ? passiveIntel : []).forEach(p => { if (p && p.target_fid) EC.passive[p.target_fid] = p; });
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
   // карта редкости/иконки ресурсов из колоний (+ доступных планет)
@@ -3431,8 +3480,15 @@ function ecTabIntel() {
       <div id="ec-spy-agents-pick" style="display:flex;flex-wrap:wrap;gap:6px">${ecSpyAgentPickHtml()}</div>
       <div class="ec-trade-summary" id="ec-spy-summary"></div>
       <button class="btn btn-gd" id="ec-spy-launch" onclick="ecSpyLaunch()">Запустить операцию</button>
-    </div>`;
+    </div>${ecPassiveIntelCard(EC.spyTarget)}`;
   }
+
+  // Пассивная разведка по всем доступным целям (союз / торговля / отношения) — даётся даром, без агентов.
+  const passList = Object.values(EC.passive || {});
+  const passBlock = passList.length
+    ? `<div class="ec-section-title">🛰 Пассивная разведка <span class="ec-hint">— приблизительный срез по союзникам, торговым партнёрам и дружественным фракциям (без агентов)</span></div>
+       <div class="ec-dip-grid">${passList.map(p => ecPassiveIntelCard(p.target_fid)).join('')}</div>`
+    : '';
 
   const activeHtml = active.length ? active.map(ecSpyActiveRow).join('') : '<div class="ec-empty" style="padding:8px">Активных операций нет.</div>';
   const logHtml = doneOps.length ? doneOps.slice(0, 20).map(ecSpyLogRow).join('') : '<div class="ec-empty" style="padding:8px">Операций ещё не было.</div>';
@@ -3471,6 +3527,7 @@ function ecTabIntel() {
       <div class="ec-dip-card ec-dip-trade"><div class="ec-dip-t">🎯 Планирование операции <span class="ec-hint">расчёт по разведданным и агентам</span></div>${planner}</div>
       ${ciBlock}
     </div>
+    ${passBlock}
     <div class="ec-section-title">Активные операции <span class="ec-hint">— завершаются через N ходов</span></div>
     <div class="ec-queue">${activeHtml}</div>
     <div class="ec-section-title">🛡 Тревоги контрразведки <span class="ec-hint">— операции против вас (исполнитель виден только если раскрыт)</span></div>

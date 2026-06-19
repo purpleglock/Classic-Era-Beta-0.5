@@ -159,6 +159,11 @@ async function go(slug, push=true) {
     else { setPg('<div class="sempty">faction_reg.js не загружен</div>'); }
     return;
   }
+  if (slug==='locations') {
+    if (typeof renderLocationsHub === 'function') { await renderLocationsHub(); }
+    else { setPg('<div class="sempty">locations.js не загружен</div>'); }
+    return;
+  }
   if (slug==='armor-config') {
     if (typeof renderArmorConfigPage === 'function') { renderArmorConfigPage(); }
     else { setPg('<div class="sempty">renderArmorConfigPage не найден</div>'); }

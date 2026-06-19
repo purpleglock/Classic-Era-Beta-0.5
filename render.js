@@ -157,31 +157,59 @@ function renderLocationPage(pg) {
   const cover = pg.image_url
     ? `<div class="art-cov loc-cov" data-cover-type="${pg.cover_type||'standard'}" style="--cov-h:${covH}px;--cov-pos:${covPos}"><img src="${esc(pg.image_url)}" alt="${esc(pT(pg))}" loading="lazy"><div class="art-cov-scan"></div><div class="art-cov-fade"></div><div class="art-cov-hud hud-tl"></div><div class="art-cov-hud hud-tr"></div><div class="art-cov-title-slot">${badge}<h1 class="art-h1">${titleHtml}</h1></div></div><div class="art-cov-spacer"></div>`
     : `<div class="art-page-header art-page-header--nocov">${badge}<h1 class="art-h1">${titleHtml}</h1></div>`;
-  // Разбираем блоки: инфобокс -> «досье локации» (горизонтальная полоса),
-  // остальное -> описание. Не используем плавающую вики-карточку.
+  // Разбираем блоки: инфобокс -> модульное «досье планеты» (HUD-панель с
+  // секциями), остальное -> описание. Не используем плавающую вики-карточку.
   let blocks = [];
   try { blocks = JSON.parse(pC(pg) || '[]'); } catch (e) {}
   const infobox = blocks.find(b => b && b.type === 'infobox');
   const otherBlocks = blocks.filter(b => b && b.type !== 'infobox');
-  const LOC_ICONS = { 'сектор':'⬡', 'система':'☀', 'контроль':'⚑', 'опасность':'⚠', 'статус':'◉', 'регион':'🜨', 'координаты':'✦' };
+  const LOC_ICONS = {
+    'сектор':'⬡', 'система':'☀', 'звезда':'★', 'владелец':'⚑', 'контроль':'⚑',
+    'опасность':'⚠', 'статус':'◉', 'регион':'🜨', 'координаты':'✦', 'тип мира':'🜨',
+    'освоение':'⛬', 'население':'☉', 'климат':'❂', 'столица':'⛨', 'правитель':'♛',
+    'язык':'✎', 'религия':'☥', 'фракция':'⬡', 'столичный град':'⛫', 'достопримечательности':'❖',
+  };
   let dossier = '';
   if (infobox) {
-    const cells = [];
-    (infobox.sections || []).forEach(s => (s.rows || []).forEach(r => {
-      if (!r || !r.key) return;
-      const ic = LOC_ICONS[(r.key || '').toLowerCase().trim()] || '◈';
-      const val = (r.val || '').trim();
-      cells.push(`<div class="loc-dossier-cell${val ? '' : ' empty'}">
-        <span class="loc-dossier-k">${ic} ${esc(r.key)}</span>
-        <span class="loc-dossier-v">${val ? esc(val) : '—'}</span>
-      </div>`);
-    }));
-    if (cells.length) dossier = `<div class="loc-dossier">${cells.join('')}</div>`;
+    const isCap = pg.slug && pg.slug.indexOf('loc-cap-') === 0;
+    const groups = [];
+    (infobox.sections || []).forEach(s => {
+      const cells = (s.rows || []).filter(r => r && r.key).map(r => {
+        const ic = LOC_ICONS[(r.key || '').toLowerCase().trim()] || '◈';
+        const val = (r.val || '').trim();
+        return `<div class="loc-dcell${val ? '' : ' empty'}">
+          <span class="loc-dcell-ic">${ic}</span>
+          <span class="loc-dcell-txt"><span class="loc-dcell-k">${esc(r.key)}</span><span class="loc-dcell-v">${val ? esc(val) : '—'}</span></span>
+        </div>`;
+      });
+      if (!cells.length) return;
+      const gname = (s.name || '').trim();
+      const gt = gname && gname.toLowerCase() !== 'основное'
+        ? `<div class="loc-dgroup-t"><span></span>${esc(gname)}<span></span></div>` : '';
+      groups.push(`<div class="loc-dgroup">${gt}<div class="loc-dcells">${cells.join('')}</div></div>`);
+    });
+    if (groups.length) {
+      dossier = `<div class="loc-dossier-panel">
+        <div class="loc-dhud loc-dhud-tl"></div><div class="loc-dhud loc-dhud-tr"></div>
+        <div class="loc-dhud loc-dhud-bl"></div><div class="loc-dhud loc-dhud-br"></div>
+        <div class="loc-dossier-head">
+          <span class="loc-dossier-head-ic">🪐</span>
+          <span class="loc-dossier-head-t">${isCap ? 'ДОСЬЕ СТОЛИЧНОГО МИРА' : 'ДОСЬЕ ЛОКАЦИИ'}</span>
+          <span class="loc-dossier-head-line"></span>
+          <span class="loc-dossier-head-sub">${esc(pT(pg))}</span>
+        </div>
+        ${groups.join('')}
+      </div>`;
+    }
   }
   const descHtml = otherBlocks.length
     ? `<div class="prose loc-desc">${otherBlocks.map(renderBlock).join('')}</div>`
     : '';
-  setPg(`${cover}${dossier}${descHtml}`);
+  // Панель инструментов столичной локации (кнопка «Редактировать досье»)
+  const capTools = (pg.slug && pg.slug.indexOf('loc-cap-') === 0) ? `<div id="loc-cap-tools"></div>` : '';
+  setPg(`${cover}${capTools}${dossier}${descHtml}`);
+  // Кнопку редактирования досье добавляем асинхронно (проверка владельца/стаффа)
+  if (capTools && typeof locMaybeAddCapEditBtn === 'function') locMaybeAddCapEditBtn(pg);
   // Лента отыгрыша — через движок комментариев в «режиме локации»
   renderCommentsSection(pg.slug);
 }
@@ -1560,6 +1588,10 @@ function buildNav(filt='') {
   }
   h+=`<a class="n-home${curSlug==='map'?' on':''}" id="ntl-map" href="#map" onclick="return navGo(event,'map')"><span class="n-home-icon">🜨</span>${L('Карта галактики','Galaxy map')}</a>`;
   h+=`<a class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" href="#factions" onclick="return navGo(event,'factions')"><span class="n-home-icon">⬡</span>${L('Фракции','Factions')}</a>`;
+  // Игровые локации — игрокам с одобренной анкетой и стаффу
+  if (typeof canSeeLocations==='function' && canSeeLocations()) {
+    h+=`<a class="n-home${curSlug==='locations'?' on':''}" id="ntl-loc" href="#locations" onclick="return navGo(event,'locations')"><span class="n-home-icon">⛬</span>${L('Игровые локации','Game locations')}</a>`;
+  }
   // Конструкторы — игрокам с одобренной анкетой и стаффу
   if (typeof cnNavEnsure==='function') cnNavEnsure();
   if (typeof cnCanAccess==='function' && cnCanAccess()) {
@@ -1597,18 +1629,21 @@ function buildNav(filt='') {
     document.getElementById('nav').innerHTML=h; setAct(curSlug||'home'); return;
   }
 
+  // Локации (page_type='location') не показываем в дереве вики — у них свой
+  // хаб «Игровые локации». Иначе авто-страницы столиц засоряют боковое меню.
+  const isNav = p => isVisiblePage(p) && p.page_type !== 'location';
   const topSecs=sections.filter(s=>!s.parent_id).sort((a,b)=>a.sort_order-b.sort_order);
   topSecs.forEach(sec=>{
     const subSecs=sections.filter(s=>s.parent_id===sec.id).sort((a,b)=>a.sort_order-b.sort_order);
-    const directPgs=pages.filter(p=>isVisiblePage(p)&&p.section===sec.slug&&!p.parent_slug).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
-    const totalCnt=pages.filter(p=>isVisiblePage(p)&&(p.section===sec.slug||subSecs.some(ss=>ss.slug===p.section))).length;
-    const hasContent=directPgs.length||subSecs.some(ss=>pages.some(p=>isVisiblePage(p)&&p.section===ss.slug));
+    const directPgs=pages.filter(p=>isNav(p)&&p.section===sec.slug&&!p.parent_slug).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const totalCnt=pages.filter(p=>isNav(p)&&(p.section===sec.slug||subSecs.some(ss=>ss.slug===p.section))).length;
+    const hasContent=directPgs.length||subSecs.some(ss=>pages.some(p=>isNav(p)&&p.section===ss.slug));
     if (!hasContent&&!user) return;
 
     // Section is open if current slug is this section, or a page/subsection inside it
     const isSecPage = curSlug==='sec:'+sec.slug;
     const hasActivePg = directPgs.some(p=>p.slug===curSlug) ||
-      subSecs.some(sub=>pages.filter(p=>isVisiblePage(p)&&p.section===sub.slug).some(p=>p.slug===curSlug));
+      subSecs.some(sub=>pages.filter(p=>isNav(p)&&p.section===sub.slug).some(p=>p.slug===curSlug));
     const isOpen = isSecPage || hasActivePg;
 
     const _secIconUrl = sec.icon && /^(https?:|data:)/i.test(sec.icon);
@@ -1621,16 +1656,16 @@ function buildNav(filt='') {
     h+=`<div class="nl-body" id="nlb-${sec.id}">`;
     directPgs.forEach(p=>{h+=npEl(p,pages);});
     subSecs.forEach(sub=>{
-      const spgs=pages.filter(p=>isVisiblePage(p)&&p.section===sub.slug&&!p.parent_slug).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+      const spgs=pages.filter(p=>isNav(p)&&p.section===sub.slug&&!p.parent_slug).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
       if(!spgs.length&&!user) return;
-      const subHasActive=spgs.some(p=>p.slug===curSlug||pages.filter(c=>isVisiblePage(c)&&c.parent_slug===p.slug).some(c=>c.slug===curSlug));
+      const subHasActive=spgs.some(p=>p.slug===curSlug||pages.filter(c=>isNav(c)&&c.parent_slug===p.slug).some(c=>c.slug===curSlug));
       const subCnt=spgs.length?`<span class="ng-cnt">${spgs.length}</span>`:'';
       h+=`<div class="ng${subHasActive?' op':''}" id="ng-${sub.id}"><div class="ng-hdr" id="ngh-${sub.id}" onclick="tgNg('${sub.id}')"><span class="ng-arr">▶</span><span class="ng-t">${esc(sN(sub))}</span>${subCnt}</div><div class="ng-body">${spgs.map(p=>npEl(p,pages)).join('')}</div></div>`;
     });
     h+=`</div></div>`;
   });
 
-  const orphans=pages.filter(p=>isVisiblePage(p)&&!p.section&&!p.parent_slug&&p.slug!=='home');
+  const orphans=pages.filter(p=>isNav(p)&&!p.section&&!p.parent_slug&&p.slug!=='home');
   if(orphans.length){
     h+=`<div class="nav-divider" style="margin-top:8px"></div>`;
     h+=`<div class="nl-static">${T('other')}</div>`;
@@ -1671,7 +1706,7 @@ function setAct(slug) {
   // Кабинет, Управление, Гайдбук, каталоги) — подсветка по slug→id кнопки.
   const TOP_NAV = {
     'home': 'ntl-h', 'map': 'ntl-map',
-    'factions': 'ntl-fac', 'faction-new': 'ntl-fac',
+    'factions': 'ntl-fac', 'faction-new': 'ntl-fac', 'locations': 'ntl-loc',
     'economy': 'ntl-eco', 'admin': 'ntl-adm', 'guide': 'ntl-guide',
     'constructors': 'ntl-con', 'build-ship': 'ntl-con', 'build-ground': 'ntl-con',
     'build-aviation': 'ntl-con', 'build-division': 'ntl-con',

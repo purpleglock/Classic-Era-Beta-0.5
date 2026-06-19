@@ -277,6 +277,35 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fn-fr-rumor .fn-fr-title { color: var(--t2, #c0ccd6); font-style: italic; }
 .fn-fr-time { flex-shrink: 0; font-family: var(--fn-mono, 'JetBrains Mono', monospace); font-size: 9px; color: var(--t4, #6a7a88); letter-spacing: .06em; }
+/* Флаг (герб) фракции сбоку строки события */
+.fn-fr-flag { flex-shrink: 0; width: 22px; height: 14px; object-fit: cover; border-radius: 2px;
+  border: 1px solid var(--w2, #2a3340); box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
+/* Сводка достижений в ленте сектора: сворачиваемая группа (аккордеон) */
+.fn-feed-group { display: contents; }
+.fn-feed-summary { background: rgba(224,176,74,.07); border-left: 2px solid var(--gd, #e0b04a); }
+.fn-feed-summary:hover { background: rgba(224,176,74,.14); }
+.fn-fr-chev { flex-shrink: 0; width: 14px; text-align: center; font-size: 11px;
+  color: var(--gd, #e0b04a); transition: transform .18s; }
+.fn-feed-group.open .fn-feed-summary .fn-fr-chev { transform: rotate(90deg); }
+.fn-feed-summary .fn-fr-ic { color: var(--gd, #e0b04a); }
+.fn-feed-summary .fn-fr-title { font-weight: 600; }
+.fn-feed-hint { flex-shrink: 0; font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--gd, #e0b04a); opacity: .7; padding: 1px 7px; border: 1px solid rgba(224,176,74,.35);
+  border-radius: 10px; }
+.fn-feed-group.open .fn-feed-hint { opacity: 0; }
+.fn-feed-sub { display: none; flex-direction: column; }
+.fn-feed-group.open .fn-feed-sub { display: flex; }
+.fn-feed-subrow { position: relative; padding-left: 30px; background: var(--b2, #0b0f15); overflow: hidden; }
+.fn-feed-subrow .fn-fr-title { font-style: normal; color: var(--t2, #c0ccd6); }
+.fn-feed-subrow .fn-fr-title b { color: var(--t1, #e8edf2); font-weight: 600; }
+/* Арт ачивки — приглушённым фоном справа, текст поверх читаем */
+.fn-feed-subrow.has-art::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: var(--fn-ach-img) right center / auto 180% no-repeat;
+  opacity: .16; mask-image: linear-gradient(90deg, transparent 35%, #000 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 35%, #000 100%); }
+.fn-feed-subrow.has-art > * { position: relative; z-index: 1; }
+.fn-feed-subrow.has-art:hover::before { opacity: .26; }
 .fn-feed-more { width: 100%; margin-top: 8px; padding: 9px; background: transparent;
   border: 1px solid var(--w2, #2a3340); color: var(--t3, #8aa0b0); cursor: pointer; font-size: 12px;
   font-family: var(--fn-mono, monospace); letter-spacing: .1em; transition: border-color .15s, color .15s; }

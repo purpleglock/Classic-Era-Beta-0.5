@@ -5,7 +5,7 @@
 @import './04_ui.css?v=20260610a';
 @import './05_panels.css';
 @import './06_system.css';
-@import './07_comments.css';
+@import './07_comments.css?v=20260620d';
 @import './08_character.css';
 @import './07_premium.css';
 @import './10_patch.css';
@@ -17,7 +17,7 @@
 @import './17_economy.css?v=20260619b';
 @import './18_admin.css?v=20260607a';
 @import './19_guide.css?v=20260615b';
-@import './20_news.css?v=20260619r';
+@import './20_news.css?v=20260619t';
 @import './21_perf.css';
 @import './22_tickets.css';
 
