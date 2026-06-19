@@ -285,9 +285,9 @@ function adSetSubtab(t) { AD.subtab = t; if (!adRenderSlot()) adPaint(); }
 function adFacPanel() {
   const e = adEntry(AD.sel);
   if (!e) return '';
-  const SUBTABS = [['treasury','💰 Казна'],['resources','📦 Ресурсы'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['danger','⚠ Зона риска']];
+  const SUBTABS = [['treasury','💰 Казна'],['resources','📦 Ресурсы'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
   const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="fm-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
-  const bodyMap = { treasury: adTabTreasury, resources: adTabResources, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, danger: adTabDanger };
+  const bodyMap = { treasury: adTabTreasury, resources: adTabResources, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, testing: adTabTesting, danger: adTabDanger };
   const renderFn = bodyMap[AD.subtab] || adTabTreasury;
   let tabBody = '';
   try { tabBody = renderFn(e); }
@@ -1047,6 +1047,70 @@ async function adRemoveAgent(id) {
     await apiFetch('rpc/admin_remove_agent', { method: 'POST', body: JSON.stringify({ p_id: id }) });
     const e = adEntry(AD.sel); if (e) e.agents = null;
     toast('Агент удалён', 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+// ── Вкладка: Тестовые инструменты ───────────────────────────────
+// Ускоряют игровые таймеры и резолвят отложенные действия немедленно
+// (через admin_test_* RPC, _admin_testing.sql). Только стафф.
+function adTabTesting(e) {
+  const eco = e.eco;
+  const lastTick = eco?.last_tick ? new Date(eco.last_tick) : null;
+  const fmtT = d => d ? d.toLocaleString('ru-RU') : '—';
+  const row = (label, hint, btn) => `<div class="fm-danger-act" style="align-items:flex-start">
+    <div class="fm-danger-label"><div>${label}</div>${hint ? `<div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">${hint}</div>` : ''}</div>${btn}</div>`;
+  return `<div class="fm-danger">
+    <div class="fm-danger-banner" style="background:rgba(95,176,230,.12);border-color:rgba(95,176,230,.4);color:var(--gdl,#5fb0e6)">🧪 Тестовые инструменты — ускоряют игровые таймеры и резолвят отложенные действия немедленно, не дожидаясь суточного тика.</div>
+    ${row('🏴‍☠️ Завершить рейды немедленно', 'Все активные рейды этой фракции (как атакующего и как цели) резолвятся сейчас: бой, добыча, потери, раскрытие.', `<button class="btn btn-gd" onclick="adTestSpeedRaids()">Завершить рейды</button>`)}
+    ${row('🕵 Завершить шпионаж немедленно', 'Агенты мгновенно дообучаются, активные операции резолвятся сейчас.', `<button class="btn btn-gd" onclick="adTestSpeedSpy()">Завершить шпионаж</button>`)}
+    ${row('⏩ Форсировать тик дохода', `Начислить доход за сутки немедленно (last_tick откатится на 25 ч). Последний доход: ${fmtT(lastTick)}.`, `<button class="btn btn-gd" onclick="adTestForceTick()" ${eco ? '' : 'disabled'}>Начислить доход</button>`)}
+    ${row('🛐 Удалить религию фракции', 'Удаляет веру, основанную этой фракцией. Адепты, признания и тайные секты уходят каскадом. Необратимо.', `<button class="btn btn-rd" onclick="adTestDeleteFaith()">Удалить религию</button>`)}
+  </div>`;
+}
+
+async function adTestSpeedRaids() {
+  if (!AD.sel || AD.busy) return;
+  AD.busy = true;
+  try {
+    const r = await apiFetch('rpc/admin_test_speed_raids', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel }) });
+    toast(`Рейды резолвлены (атака: ${r?.as_attacker || 0}, защита: ${r?.as_target || 0})`, 'ok');
+    await adReloadPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+async function adTestSpeedSpy() {
+  if (!AD.sel || AD.busy) return;
+  AD.busy = true;
+  try {
+    const r = await apiFetch('rpc/admin_test_speed_spy', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel }) });
+    toast(`Шпионаж резолвлен (операций: ${r?.ops || 0})`, 'ok');
+    await adReloadPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+async function adTestForceTick() {
+  if (!AD.sel || AD.busy) return;
+  if (!confirm('Форсировать тик дохода? Доход за сутки будет начислен немедленно.')) return;
+  AD.busy = true;
+  try {
+    await apiFetch('rpc/admin_test_force_tick', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel }) });
+    toast('Доход начислен', 'ok');
+    await adReloadPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+async function adTestDeleteFaith() {
+  if (!AD.sel || AD.busy) return;
+  if (!confirm('Удалить религию, основанную этой фракцией? Адепты, признания и тайные секты будут удалены каскадом. Необратимо.')) return;
+  AD.busy = true;
+  try {
+    const r = await apiFetch('rpc/admin_test_delete_faith', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel }) });
+    toast(`Религия «${r?.name || ''}» удалена`, 'ok');
+    await adReloadPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }

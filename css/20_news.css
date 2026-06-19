@@ -763,3 +763,91 @@ textarea.fn-c-verdict { min-height: 110px; resize: vertical; font-size: 14px; li
   color: var(--t3, #8aa0b0); font-size: 12.5px; line-height: 1.5; text-align: center;
 }
 .fn-c-admin-fg .fm-tab-body { max-height: min(52vh, 520px); overflow: auto; }
+
+/* ════════════════════════════════════════════════════════════
+   УПОМИНАНИЯ И ОПОВЕЩЕНИЯ (переработка ленты новостей)
+   ════════════════════════════════════════════════════════════ */
+
+/* Чип-упоминание страны в тексте статьи ([fac:FID]Имя[/fac]) */
+.md-fac {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 0 7px; border-radius: 999px; cursor: pointer;
+  font-weight: 600; font-size: .92em; white-space: nowrap;
+  color: var(--gd, #e8b04a);
+  background: color-mix(in srgb, var(--gd, #e8b04a) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gd, #e8b04a) 40%, transparent);
+  transition: background .15s, border-color .15s;
+}
+.md-fac:hover { background: color-mix(in srgb, var(--gd, #e8b04a) 24%, transparent); border-color: var(--gd, #e8b04a); }
+.md-fac-flag {
+  width: 1.05em; height: 1.05em; border-radius: 3px; object-fit: cover;
+  vertical-align: -0.15em; flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--gd, #e8b04a) 45%, transparent);
+}
+
+/* Лента «Оповещения» в кабинете */
+.fn-notif-list { display: flex; flex-direction: column; gap: 6px; }
+.fn-notif-row {
+  display: flex; align-items: center; gap: 11px; padding: 9px 12px; cursor: pointer;
+  border: 1px solid var(--w2, #2a3340); border-radius: 7px;
+  background: color-mix(in srgb, var(--b3, #0f141b) 80%, transparent);
+  transition: border-color .15s, background .15s, transform .08s;
+}
+.fn-notif-row:hover { border-color: var(--gd, #e8b04a); background: color-mix(in srgb, var(--gd, #e8b04a) 7%, var(--b3, #0f141b)); }
+.fn-notif-row:active { transform: scale(.995); }
+.fn-notif-ic { flex-shrink: 0; font-size: 16px; width: 22px; text-align: center; opacity: .9; }
+.fn-notif-main { flex: 1; min-width: 0; }
+.fn-notif-title {
+  font-size: 13.5px; font-weight: 600; color: var(--t1, #e8edf2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fn-notif-meta { font-size: 11px; color: var(--t3, #8aa0b0); margin-top: 2px; letter-spacing: .02em; }
+.fn-notif-kind { color: var(--gd, #e8b04a); font-weight: 700; letter-spacing: .06em; }
+.fn-notif-arr { flex-shrink: 0; color: var(--t4, #6a7a88); font-size: 13px; }
+
+/* Сводка достижений: одна строка-итог + раскрывающийся список наград */
+.fn-notif-group { display: flex; flex-direction: column; gap: 6px; }
+.fn-notif-summary .fn-notif-chev { transition: transform .18s; }
+.fn-notif-group.open .fn-notif-summary .fn-notif-chev { transform: rotate(180deg); }
+.fn-notif-sub {
+  display: none; flex-direction: column; gap: 5px; padding: 1px 0 2px;
+  margin-left: 18px; padding-left: 14px; border-left: 1px solid var(--w2, #2a3340);
+}
+.fn-notif-group.open .fn-notif-sub { display: flex; }
+.fn-notif-subrow {
+  display: flex; align-items: center; gap: 9px; padding: 7px 11px; cursor: pointer;
+  border: 1px solid var(--w2, #2a3340); border-radius: 6px;
+  background: color-mix(in srgb, var(--b3, #0f141b) 60%, transparent);
+  transition: border-color .15s, background .15s;
+}
+.fn-notif-subrow:hover { border-color: var(--gd, #e8b04a); background: color-mix(in srgb, var(--gd, #e8b04a) 7%, var(--b3, #0f141b)); }
+.fn-notif-subic { flex-shrink: 0; font-size: 13px; opacity: .85; }
+.fn-notif-subtitle {
+  flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--t2, #c2cdd6);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Выбор страны для вставки в композиторе */
+.fn-fac-pick-ov {
+  position: fixed; inset: 0; z-index: 9300; display: none;
+  align-items: center; justify-content: center; padding: 18px;
+  background: color-mix(in srgb, #000 62%, transparent); backdrop-filter: blur(3px);
+}
+.fn-fac-pick-ov.show { display: flex; }
+.fn-fac-pick {
+  width: min(440px, 96vw); max-height: 80vh; display: flex; flex-direction: column;
+  background: var(--b2, #11161e); border: 1px solid var(--w2, #2a3340);
+  border-radius: 12px; padding: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.55);
+}
+.fn-fac-pick-hd { display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 15px; color: var(--t1, #e8edf2); margin-bottom: 10px; }
+.fn-fac-pick-q { width: 100%; margin-bottom: 10px; }
+.fn-fac-pick-list { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.fn-fac-pick-row {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  padding: 9px 11px; cursor: pointer; font-size: 13.5px; color: var(--t1, #e8edf2);
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  transition: background .12s, border-color .12s;
+}
+.fn-fac-pick-row:hover { background: color-mix(in srgb, var(--gd, #e8b04a) 10%, transparent); border-color: color-mix(in srgb, var(--gd, #e8b04a) 40%, transparent); }
+.fn-fac-pick-dot { flex-shrink: 0; width: 12px; height: 12px; border-radius: 50%; border: 1px solid color-mix(in srgb, #fff 25%, transparent); }
+.fn-fac-pick-flag { flex-shrink: 0; width: 22px; height: 22px; border-radius: 4px; object-fit: cover; border: 1px solid var(--w2, #2a3340); }

@@ -652,6 +652,10 @@ async function ecLoad() {
       const names = ach.new_ids.map(id => (EC_ACH[id] || {}).name || id).join(', ');
       const tot = ach.new_ids.reduce((a, id) => a + ((EC_ACH[id] || {}).reward || 0), 0);
       if (typeof toast === 'function') toast(`🏆 Достижение: ${names}${tot ? ` · +${ecNum(tot)} ГС` : ''}`, 'ok');
+      // Публикуем каждое новое достижение в ленту «Хроники сектора» (best-effort).
+      ach.new_ids.forEach(id => {
+        ecRpc('news_announce_ach', { p_ach_id: id, p_name: (EC_ACH[id] || {}).name || id }).catch(() => {});
+      });
     }
   } catch (e) { EC.ach = EC.ach || []; }
 }
@@ -3506,7 +3510,8 @@ function ecRaidLogRow(m) {
   if (o.loot_gc) loot.push(`${ecNum(o.loot_gc)} ГС`);
   const lootTxt = loot.length ? `угнано ${loot.join(' + ')}` : 'добычи нет';
   const win = (o.loot_frac || 0) > 0;
-  return `<div class="ec-q-row"><span class="ec-r-name">${win ? '✅' : '❌'} Рейд на <b>${esc(m.target_name || ecFacName(m.target_fid))}</b> — ${lootTxt}. Потери: ваши ${ecNum(o.att_losses || 0)}, эскорт ${ecNum(o.def_losses || 0)}.${o.detected ? ' · <b style="color:var(--err)">раскрыты</b>' : ''}</span></div>`;
+  const disrupt = o.disrupt_days ? ` · трасса сорвана на ${ecNum(o.disrupt_days)} х.` : '';
+  return `<div class="ec-q-row"><span class="ec-r-name">${win ? '✅' : '❌'} Рейд на <b>${esc(m.target_name || ecFacName(m.target_fid))}</b> — ${lootTxt}. Потери: ваши ${ecNum(o.att_losses || 0)}, эскорт ${ecNum(o.def_losses || 0)}.${disrupt}${o.detected ? ' · <b style="color:var(--err)">раскрыты</b>' : ''}</span></div>`;
 }
 
 // ── Действия рейдов ─────────────────────────────────────────

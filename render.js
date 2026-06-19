@@ -1423,6 +1423,20 @@ function il(t) {
   // regular links
   t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_,text,url)=>mark(`<a href="${esc(safeUrl(url))}" target="_blank">${esc(text)}</a>`));
 
+  // faction mention chip — [fac:FID|FLAG_URL]Имя[/fac] (флаг необязателен).
+  // «Пинг» страны: при публикации новости FID попадает в mentions, а упомянутая
+  // фракция видит запись в своей ленте «Оповещения». Если задан флаг — показываем
+  // его картинкой; иначе (или при ошибке загрузки) — символ ⬡.
+  t=t.replace(/\[fac:([^\]|]+)(?:\|([^\]]*))?\]([\s\S]*?)\[\/fac\]/g,(_,fid,flag,s)=>{
+    // флаг: из тега, иначе резолвим по FID из реестра (старые упоминания без URL)
+    let url = (flag && flag.trim()) || '';
+    if (!url && typeof fnFlagFor === 'function') { try { url = fnFlagFor(fid) || ''; } catch (e) {} }
+    const ic = url
+      ? `<img class="md-fac-flag" src="${esc(safeUrl(url))}" alt="" onerror="this.outerHTML='⬡'">`
+      : '⬡';
+    return mark(`<span class="md-fac" onclick="if(typeof fnGotoFaction==='function')fnGotoFaction('${esc(fid)}',event)" title="Перейти к фракции «${esc(s)}»">${ic}<span>${esc(s)}</span></span>`);
+  });
+
   // standard MD (innermost — process first so they can be nested inside others)
   t=t.replace(/\*\*([^*]+)\*\*/g,(_,s)=>mark(`<strong>${esc(s)}</strong>`));
   t=t.replace(/\*([^*]+)\*/g,(_,s)=>mark(`<em>${esc(s)}</em>`));

@@ -51,6 +51,8 @@ function fnStripMarkup(s) {
   t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');
   // парные форматные/FX-теги: [center]…[/center], [c:gold]…[/c], [bg:…]…[/bg], [fx:…]…[/fx], [left]/[right]
   t = t.replace(/\[\/?(?:center|left|right|c|bg|fx)(?::[^\]]*)?\]/gi, ' ');
+  // упоминание фракции [fac:FID]Имя[/fac] → Имя
+  t = t.replace(/\[fac:[^\]|]+(?:\|[^\]]*)?\]([\s\S]*?)\[\/fac\]/gi, '$1');
   // markdown-ссылки [text](url) → text
   t = t.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
   // заголовки, цитаты, маркеры списков в начале строки
@@ -64,6 +66,32 @@ function fnStripMarkup(s) {
   t = t.replace(/(\*|_)([\s\S]*?)\1/g, '$2');
   t = t.replace(/`([^`]*)`/g, '$1');
   return t.replace(/\s+/g, ' ').trim();
+}
+
+// Извлечь faction_id всех упоминаний [fac:FID]…[/fac] из текста (заголовок+тело).
+// Это «пинги» — упомянутые фракции увидят новость в своей ленте «Оповещения».
+function fnParseMentions() {
+  const txt = (document.getElementById('fn-c-title')?.value || '') + '\n'
+            + (document.getElementById('fn-c-body')?.value || '');
+  const out = [];
+  const re = /\[fac:([^\]|]+)(?:\|[^\]]*)?\]/gi;
+  let m;
+  while ((m = re.exec(txt))) { const id = (m[1] || '').trim(); if (id && !out.includes(id)) out.push(id); }
+  return out;
+}
+
+// Флаг (герб) фракции по её id — из общего реестра, загруженного fnLoadApproved.
+// Используется чипом-упоминанием в il() как фолбэк, если URL не зашит в тег
+// (например, старые упоминания без флага).
+function fnFlagFor(fid) {
+  try { return (FN.heralds && FN.heralds.get(fid)) || ''; } catch (e) { return ''; }
+}
+
+// Переход к фракции из чипа-упоминания (закрываем статью, открываем реестр фракций).
+function fnGotoFaction(fid, ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  if (typeof fnCloseArticle === 'function') fnCloseArticle();
+  if (typeof go === 'function') go('factions');
 }
 
 // Краткое превью из текста, если лид не задан.
@@ -656,6 +684,15 @@ async function fnRenderNewsTab(b) {
     </div>`;
   }
 
+  // Секция ОПОВЕЩЕНИЙ: всё, где упомянута фракция (пинги + системные сводки/хроники
+  // + чужие новости по имени). Тело подгружается асинхронно (fnLoadMentions).
+  if (fac && fac.faction_id) {
+    html += `<div class="fn-tab-sec">
+      <div class="fn-tab-hd"><span>🔔 Оповещения <span style="color:var(--t4);font-weight:400;font-size:12px">— упоминания вашей фракции</span></span></div>
+      <div class="fn-notif-list" id="fn-notif-list"><div class="sload" style="min-height:50px"><div class="pulse-loader"></div></div></div>
+    </div>`;
+  }
+
   // Секция автора (владельца одобренной фракции)
   if (fac && fac.faction_id) {
     let mine = [];
@@ -723,6 +760,96 @@ async function fnRenderNewsTab(b) {
   }
 
   b.innerHTML = html || `<div style="color:var(--t3);font-size:13px;padding:8px 0">Нет доступа к новостям.</div>`;
+  if (fac && fac.faction_id) fnLoadMentions();
+}
+
+// ── Лента «Оповещения»: всё, где упомянута фракция (RPC news_mentions) ──
+async function fnLoadMentions() {
+  const box = document.getElementById('fn-notif-list');
+  if (!box) return;
+  let rows = [];
+  try {
+    rows = await apiFetch('rpc/news_mentions', { method: 'POST', body: JSON.stringify({ p_limit: 40 }) }) || [];
+  } catch (e) {
+    box.innerHTML = `<div style="color:var(--t3);font-size:12px;padding:8px 0">Не удалось загрузить оповещения.</div>`;
+    return;
+  }
+  if (!rows.length) {
+    box.innerHTML = `<div style="color:var(--t3);font-size:12px;padding:8px 0">Пока тихо — вашу фракцию ещё нигде не упоминали.</div>`;
+    return;
+  }
+  rows.forEach(n => FN.byId.set(n.id, n));   // чтобы fnOpenArticle нашёл запись
+  const kindMeta = { news: ['📰', 'НОВОСТЬ'], bulletin: ['◈', 'СВОДКА'], rumor: ['📡', 'СЛУХ'] };
+  // Одиночная строка-оповещение (используется и сама по себе, и внутри сводки).
+  const rowHtml = (n) => {
+    const k = fnKind(n);
+    const [ic, lbl] = kindMeta[k] || kindMeta.news;
+    const who = n.faction_name || (k === 'news' ? 'Фракция' : 'Сектор');
+    return `<div class="fn-notif-row" data-fn-id="${esc(n.id)}" onclick="fnOpenArticle('${esc(n.id)}')">
+      <span class="fn-notif-ic">${ic}</span>
+      <div class="fn-notif-main">
+        <div class="fn-notif-title">${esc(n.title || 'Без заголовка')}</div>
+        <div class="fn-notif-meta"><span class="fn-notif-kind">${lbl}</span> · ${esc(who)} · ${esc(fnStardate(n.published_at || n.created_at))}</div>
+      </div>
+      <span class="fn-notif-arr">▸</span>
+    </div>`;
+  };
+  // Сводная строка для пачки достижений, полученных разом, со списком внутри.
+  const groupHtml = (grp) => {
+    const who = grp[0].faction_name || 'Фракция';
+    const cnt = grp.length;
+    const word = fnPlural(cnt, 'достижение', 'достижения', 'достижений');
+    // в подстроке — конкретная награда (из тела «…достижение «Имя»…») или заголовок
+    const sub = grp.map(n => {
+      const m = /достижени[ея]\s+«([^»]+)»/i.exec(n.body || '');
+      const nm = m ? m[1] : (n.title || '');
+      return `<div class="fn-notif-subrow" data-fn-id="${esc(n.id)}" onclick="event.stopPropagation();fnOpenArticle('${esc(n.id)}')">
+        <span class="fn-notif-subic">🏆</span>
+        <span class="fn-notif-subtitle">${esc(nm)}</span>
+        <span class="fn-notif-arr">▸</span>
+      </div>`;
+    }).join('');
+    return `<div class="fn-notif-group">
+      <div class="fn-notif-row fn-notif-summary" onclick="fnToggleAchGroup(this)">
+        <span class="fn-notif-ic">🏆</span>
+        <div class="fn-notif-main">
+          <div class="fn-notif-title">${esc(cnt + ' ' + word)}: ${esc(who)}</div>
+          <div class="fn-notif-meta"><span class="fn-notif-kind">СВОДКА</span> · ${esc(who)} · ${esc(fnStardate(grp[0].published_at || grp[0].created_at))}</div>
+        </div>
+        <span class="fn-notif-arr fn-notif-chev">▾</span>
+      </div>
+      <div class="fn-notif-sub">${sub}</div>
+    </div>`;
+  };
+  // Свернуть подряд идущие достижения одной фракции в одну сводку.
+  const isAch = (n) => /^🏆\s*Достижение:/.test(n.title || '');
+  const out = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (isAch(rows[i])) {
+      const grp = [rows[i]];
+      while (i + 1 < rows.length && isAch(rows[i + 1]) && rows[i + 1].faction_name === rows[i].faction_name) {
+        grp.push(rows[++i]);
+      }
+      out.push(grp.length > 1 ? groupHtml(grp) : rowHtml(grp[0]));
+    } else {
+      out.push(rowHtml(rows[i]));
+    }
+  }
+  box.innerHTML = out.join('');
+}
+
+// Развернуть/свернуть сводку достижений.
+function fnToggleAchGroup(el) {
+  const g = el.closest('.fn-notif-group');
+  if (g) g.classList.toggle('open');
+}
+
+// Русское склонение по числу: 1 яблоко / 2 яблока / 5 яблок.
+function fnPlural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
 }
 
 // Просмотр черновика/ожидающей новости автором или стаффом (без публикации).
@@ -807,7 +934,11 @@ function fnOpenComposer(id) {
         <input type="hidden" id="fn-c-img" value="${esc(eff?.image_url || '')}">
       </div>
       <div class="fg fn-c-body-fg">
-        <div class="fn-c-body-hd"><label class="fl">Текст новости *</label><label class="btn btn-gh btn-xs fn-c-ins-btn">📷 Вставить фото<input type="file" accept="image/*" style="display:none" onchange="fnInsertImg(this)"></label></div>
+        <div class="fn-c-body-hd"><label class="fl">Текст новости *</label>
+          <span style="display:flex;gap:6px">
+            <button type="button" class="btn btn-gh btn-xs" onclick="fnOpenFacPicker()" title="Вставить упоминание страны — она получит оповещение">⬡ Вставить страну</button>
+            <label class="btn btn-gh btn-xs fn-c-ins-btn">📷 Вставить фото<input type="file" accept="image/*" style="display:none" onchange="fnInsertImg(this)"></label>
+          </span></div>
         <div class="md-toolbar fn-md-toolbar">
           <button type="button" class="mdt" title="Жирный" onclick="fnMd('**','**','текст')"><b>B</b></button>
           <button type="button" class="mdt" title="Курсив" onclick="fnMd('*','*','текст')"><i>I</i></button>
@@ -979,6 +1110,58 @@ function fnUpdatePreview() {
 }
 function fnPreviewSoon() { clearTimeout(FN.prevT); FN.prevT = setTimeout(fnUpdatePreview, 250); }
 
+// ── Вставка упоминания страны («пинг») ──────────────────────
+// Открывает выбор фракции; вставляет тег [fac:FID]Имя[/fac] в текст.
+// При публикации FID попадёт в mentions → страна получит оповещение.
+async function fnOpenFacPicker() {
+  let modal = document.getElementById('fn-fac-picker');
+  if (!modal) {
+    modal = document.createElement('div'); modal.id = 'fn-fac-picker'; modal.className = 'fn-fac-pick-ov';
+    modal.onclick = e => { if (e.target === modal) fnCloseFacPicker(); };
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `<div class="fn-fac-pick">
+    <div class="fn-fac-pick-hd"><span>⬡ Вставить страну</span><button type="button" class="gm-close" onclick="fnCloseFacPicker()">✕</button></div>
+    <input class="fi fn-fac-pick-q" id="fn-fac-pick-q" placeholder="Поиск фракции…" oninput="fnFacPickFilter(this.value)" autocomplete="off">
+    <div class="fn-fac-pick-list" id="fn-fac-pick-list"><div class="sload" style="min-height:60px"><div class="pulse-loader"></div></div></div>
+    <div class="fn-comp-note" style="margin:8px 0 0">Упомянутая страна получит оповещение в своей ленте новостей.</div>
+  </div>`;
+  modal.classList.add('show');
+  const facs = await fnLoadAuthorFacs();
+  const list = document.getElementById('fn-fac-pick-list');
+  if (!list) return;
+  if (!facs.length) { list.innerHTML = `<div style="color:var(--t3);padding:10px">Нет одобренных фракций.</div>`; return; }
+  list.innerHTML = facs.map(f => {
+    const badge = f.herald_url
+      ? `<img class="fn-fac-pick-flag" src="${esc(f.herald_url)}" alt="" onerror="this.outerHTML='<span class=\\'fn-fac-pick-dot\\' style=\\'background:${esc(f.color || 'var(--gd)')}\\'></span>'">`
+      : `<span class="fn-fac-pick-dot" style="background:${esc(f.color || 'var(--gd)')}"></span>`;
+    return `<button type="button" class="fn-fac-pick-row" data-name="${esc((f.name || '').toLowerCase())}" data-fid="${esc(f.faction_id)}" data-disp="${esc(f.name || '—')}" data-flag="${esc(f.herald_url || '')}" onclick="fnInsertFacEl(this)">
+      ${badge}<span>${esc(f.name || '—')}</span></button>`;
+  }).join('');
+  const q = document.getElementById('fn-fac-pick-q'); if (q) setTimeout(() => q.focus(), 30);
+}
+function fnFacPickFilter(v) {
+  const q = (v || '').toLowerCase().trim();
+  document.querySelectorAll('#fn-fac-pick-list .fn-fac-pick-row').forEach(r => {
+    r.style.display = (!q || (r.getAttribute('data-name') || '').includes(q)) ? '' : 'none';
+  });
+}
+function fnCloseFacPicker() { document.getElementById('fn-fac-picker')?.classList.remove('show'); }
+function fnInsertFacEl(el) { fnInsertFac(el.getAttribute('data-fid'), el.getAttribute('data-disp'), el.getAttribute('data-flag')); }
+function fnInsertFac(fid, name, flag) {
+  fnCloseFacPicker();
+  const ta = document.getElementById('fn-c-body');
+  if (!ta || !fid) return;
+  ta.focus();
+  // [fac:FID|FLAG_URL]Имя[/fac] — флаг подставляется в тег, чтобы чип показал картинку.
+  const token = `[fac:${fid}${flag ? '|' + flag : ''}]${name || '—'}[/fac]`;
+  const s = ta.selectionStart, e = ta.selectionEnd;
+  if (document.execCommand) document.execCommand('insertText', false, token);
+  else { ta.value = ta.value.slice(0, s) + token + ta.value.slice(e); ta.selectionStart = ta.selectionEnd = s + token.length; }
+  fnDraftSaveSoon();
+  fnPreviewSoon();
+}
+
 function fnInsertImg(input) {
   const file = input?.files?.[0];
   if (!file) return;
@@ -1021,7 +1204,7 @@ function fnCoverRemove() {
 // ── Админ-публикация: выбор автора (НПС / своя / любая фракция) ──
 async function fnLoadAuthorFacs() {
   if (FN.authorFacs) return FN.authorFacs;
-  try { FN.authorFacs = await dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,color,owner_id,owner_email&order=name.asc') || []; }
+  try { FN.authorFacs = await dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,color,herald_url,owner_id,owner_email&order=name.asc') || []; }
   catch (e) { FN.authorFacs = []; }
   return FN.authorFacs;
 }
@@ -1152,7 +1335,7 @@ let fxArr = [];
   FN.busy = true;
   try {
     if (id) {
-      const patch = { title, excerpt: null, body, image_url, reactions, reject_reason: null, updated_at: now };
+      const patch = { title, excerpt: null, body, image_url, reactions, mentions: fnParseMentions(), reject_reason: null, updated_at: now };
       if (staff) {
         const prev = FN.byId.get(id);
         Object.assign(patch, {
@@ -1177,7 +1360,7 @@ let fxArr = [];
         author_herald: author.author_herald || null,
         owner_id: author.owner_id, owner_email: author.owner_email,
         kind: author.kind, fx,
-        title, excerpt: null, body, image_url, reactions,
+        title, excerpt: null, body, image_url, reactions, mentions: fnParseMentions(),
         status: staff ? 'approved' : 'pending',
         published_at: staff ? now : null,
         reviewed_by: staff ? user.email : null,
