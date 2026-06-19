@@ -43,6 +43,7 @@ const AD = {
   prod:      [],        // unit_production (all)
   systems:   [],        // map_systems (all)
   designs:   [],        // faction_units (all)
+  routes:    [],        // trade_routes (all)
   byFid:     new Map(), // fid → { app, eco, colonies[], buildings[], roster[], queue[], designs[], systems[] }
   resInfo:   {},        // resName → { r, icon }
   sel:       null,      // selected faction_id
@@ -81,6 +82,7 @@ function adBuildIndex() {
       queue:    (AD.prod || []).filter(p => p.faction_id === app.faction_id && p.status === 'queued'),
       designs:  (AD.designs || []).filter(d => d.faction_id === app.faction_id),
       systems:  (AD.systems || []).filter(s => s.faction === app.faction_id),
+      routes:   (AD.routes || []).filter(r => r.a_fid === app.faction_id || r.b_fid === app.faction_id),
     });
   });
   // Карта редкости ресурсов: сначала каталог, потом данные с планет (перезаписывают если есть)
@@ -103,18 +105,22 @@ async function adLoadCore() {
 
 // Детали — счётчики и содержимое вкладок (без тяжёлого planets jsonb)
 async function adLoadDetails() {
-  const [cols, blds, prod, systems, designs] = await Promise.all([
+  const [cols, blds, prod, systems, designs, routes, faiths] = await Promise.all([
     dbGet('colonies',         'select=*').catch(() => []),
     dbGet('colony_buildings', 'select=*').catch(() => []),
     dbGet('unit_production',  'select=*').catch(() => []),
     dbGet('map_systems',      'select=id,name,faction').catch(() => []),               // без planets/x,y — экономим ~25 КБ
     dbGet('faction_units',    'select=id,category,name,faction_id&order=name.asc').catch(() => []), // без тяжёлых data/summary
+    dbGet('trade_routes',     'select=id,a_fid,a_name,b_fid,b_name,volume,price,resource,cargo,ships,convoy,threats,origin_sys,dest_sys,transit_until,status,created_at&order=created_at.desc').catch(() => []), // торговые пути (разбор дохода + детальная вкладка караванов)
+    dbGet('faith_membership', 'select=faction_id').catch(() => []),                    // кто исповедует веру (доход храмов считается только тогда)
   ]);
   AD.colonies  = cols    || [];
   AD.buildings = blds    || [];
   AD.prod      = prod    || [];
   AD.systems   = systems || [];
   AD.designs   = designs || [];
+  AD.routes    = routes  || [];
+  AD.faithFids = new Set((faiths || []).map(f => f.faction_id));
 }
 
 async function adLoad() { await adLoadCore(); await adLoadDetails(); adBuildIndex(); }
@@ -285,9 +291,9 @@ function adSetSubtab(t) { AD.subtab = t; if (!adRenderSlot()) adPaint(); }
 function adFacPanel() {
   const e = adEntry(AD.sel);
   if (!e) return '';
-  const SUBTABS = [['treasury','💰 Казна'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
+  const SUBTABS = [['treasury','💰 Казна'],['economy','📊 Экономика'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['caravans','🚚 Караваны'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
   const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="fm-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
-  const bodyMap = { treasury: adTabTreasury, resources: adTabResources, mining: adTabMining, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, testing: adTabTesting, danger: adTabDanger };
+  const bodyMap = { treasury: adTabTreasury, economy: adTabEconomy, resources: adTabResources, mining: adTabMining, caravans: adTabCaravans, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, testing: adTabTesting, danger: adTabDanger };
   const renderFn = bodyMap[AD.subtab] || adTabTreasury;
   let tabBody = '';
   try { tabBody = renderFn(e); }
@@ -499,6 +505,138 @@ async function adDeltaRes(name, delta) {
   finally { AD.busy = false; }
 }
 
+// ── Вкладка: Экономика ──────────────────────────────────────────
+// Полный разбор «откуда и сколько идёт дохода»: ГС с фабрик/хабов/храмов и
+// караванов, наука с институтов, агенты со спецслужб, плюс прочие мощности
+// (подготовка/верфи/склады/биржа). Расчёт — зеркало economy_accrue (_faith_setup.sql).
+
+function adSlotsOf(e, type) { return e.buildings.filter(b => b.btype === type).reduce((a, b) => a + (b.slots_open || 0), 0); }
+function adCountOf(e, type) { return e.buildings.filter(b => b.btype === type).length; }
+function adDebuffPct(eco) {
+  if (eco && eco.debuff_until && new Date(eco.debuff_until) > new Date()) return Math.max(0, Math.min(1, +eco.debuff_pct || 0));
+  return 0;
+}
+
+function adTabEconomy(e) {
+  if (!e.eco) return `<div class="fm-no-eco">Экономика не инициализирована.</div>`;
+  const m = (typeof ecFactionMods === 'function') ? ecFactionMods(e.app || {}) : { gc: 1, sci_flat: 0, agents_flat: 0 };
+  const debuff = adDebuffPct(e.eco);
+  const gcMul  = (m.gc || 1) * (1 - debuff);
+  const hasFaith = AD.faithFids ? AD.faithFids.has(AD.sel) : false;
+
+  // ── ГС с построек (точно как сервер: inc_gc × m_gc) ──
+  const facSlots = adSlotsOf(e, 'factory'), tradeSlots = adSlotsOf(e, 'trade'), templeSlots = adSlotsOf(e, 'temple');
+  const facBase    = facSlots * 200;
+  const tradeBase  = tradeSlots * 100;
+  const templeBase = hasFaith ? templeSlots * 150 : 0;
+  const bldGcBase  = facBase + tradeBase + templeBase;
+  const bldGcFinal = Math.round(bldGcBase * gcMul);
+
+  // ── Караваны (валовый поток; фактически зависит от экспортной добычи и пиратов) ──
+  const act = (e.routes || []).filter(r => r.status === 'active');
+  const out = act.filter(r => r.a_fid === AD.sel);   // исходящие — фракция продаёт
+  const inn = act.filter(r => r.b_fid === AD.sel);   // входящие — доля 50%
+  const outGross = out.reduce((a, r) => a + (r.volume || 0) * (r.price || 0), 0);
+  const outGc = Math.round(outGross * (m.gc || 1));
+  const inGc  = inn.reduce((a, r) => a + Math.round((r.volume || 0) * (r.price || 0) * 0.5), 0);
+  const pendingOut = (e.routes || []).filter(r => r.a_fid === AD.sel && r.status === 'pending').length;
+
+  // ── Наука и агенты (плоский бонус доктрины) ──
+  const sciSlots = adSlotsOf(e, 'science');
+  const sciBase = sciSlots * 1;
+  const sciFlat = Math.round(m.sci_flat || 0);
+  const sciFinal = Math.max(0, sciBase + sciFlat);
+  const intelSlots = adSlotsOf(e, 'intel');
+  const agFlat = Math.round(m.agents_flat || 0);
+  const agFinal = Math.max(0, intelSlots + agFlat);
+
+  // ── Прочие мощности ──
+  const warehouseSlots = adSlotsOf(e, 'warehouse');
+  const storageCap = 1000 + warehouseSlots * 500;
+  const marketSlots = adSlotsOf(e, 'market');
+  const trainSlots = adSlotsOf(e, 'training');
+  const milfacSlots = adSlotsOf(e, 'military_factory');
+  const shipSlots = adSlotsOf(e, 'shipyard');
+
+  const gcNetSteady = bldGcFinal + outGc + inGc;
+
+  // helper: строка источника
+  const row = (icon, label, detail, value, vcolor) => `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--w1,#1e2630)">
+    <span style="font-size:15px;width:22px;text-align:center">${icon}</span>
+    <span style="flex:1;min-width:120px;font-size:13px;color:var(--t1,#e8edf2)">${label}<span style="display:block;font-size:10px;color:var(--t4,#6a7a88);font-family:monospace">${detail}</span></span>
+    <span style="font-family:monospace;font-size:14px;color:${vcolor};min-width:84px;text-align:right">${value}</span>
+  </div>`;
+
+  const gcMulNote = `доктрина ×${(m.gc || 1).toFixed(2)}${debuff ? ` · дестабилизация −${Math.round(debuff * 100)}%` : ''} → итог ×${gcMul.toFixed(2)}`;
+
+  // ── ГС-блок ──
+  const gcRows = [
+    facSlots    ? row('🏭', 'Гражданские фабрики', `${facSlots} слот. × 200 = ${adNum(facBase)} → ×${gcMul.toFixed(2)}`, `+${adNum(Math.round(facBase * gcMul))}`, 'var(--gd,#3a7fbf)') : '',
+    tradeSlots  ? row('💱', 'Торговые хабы', `${tradeSlots} слот. × 100 = ${adNum(tradeBase)} → ×${gcMul.toFixed(2)}`, `+${adNum(Math.round(tradeBase * gcMul))}`, 'var(--gd,#3a7fbf)') : '',
+    templeSlots ? row('🛐', 'Храмы веры', hasFaith ? `${templeSlots} слот. × 150 = ${adNum(templeSlots*150)} → ×${gcMul.toFixed(2)}` : `${templeSlots} слот. — нет исповедуемой веры, доход 0`, hasFaith ? `+${adNum(Math.round(templeSlots*150*gcMul))}` : '0', hasFaith ? 'var(--gd,#3a7fbf)' : 'var(--t4,#6a7a88)') : '',
+    out.length  ? row('🚚', `Караваны исходящие (${out.length})`, `вал ${adNum(outGross)} × доктрина ${(m.gc||1).toFixed(2)} — зависит от экспортной добычи и пиратов`, `+${adNum(outGc)}`, 'var(--gd,#3a7fbf)') : '',
+    inn.length  ? row('📥', `Караваны входящие (${inn.length})`, `доля получателя 50% от поставок партнёра`, `+${adNum(inGc)}`, 'var(--gd,#3a7fbf)') : '',
+  ].filter(Boolean).join('') || `<div class="fm-empty">Нет источников ГС — нет фабрик/хабов/караванов.</div>`;
+
+  // активные пути списком
+  const routeList = act.length ? `<div style="margin-top:8px;font-size:11px;color:var(--t3,#8aa0b0)">
+    ${act.map(r => {
+      const isOut = r.a_fid === AD.sel;
+      const partner = isOut ? (r.b_name || r.b_fid) : (r.a_name || r.a_fid);
+      return `<div style="padding:3px 0">${isOut ? '↗' : '↘'} <b style="color:var(--t2,#c0ccd6)">${esc(partner)}</b> · ${esc(r.resource || 'разное')} · объём ${adNum(r.volume||0)} × цена ${adNum(r.price||0)}${isOut ? '' : ' (вход, 50%)'}</div>`;
+    }).join('')}
+  </div>` : '';
+
+  // ── Наука-блок ──
+  const sciRows = [
+    sciSlots ? row('🔬', 'Научные институты', `${sciSlots} слот. × 1 ОН`, `+${adNum(sciBase)}`, 'var(--pu,#b07bd8)') : '',
+    sciFlat  ? row('📜', 'Бонус доктрины (наука)', `плоский ${sciFlat > 0 ? '+' : ''}${sciFlat} ОН/сут`, `${sciFlat > 0 ? '+' : ''}${adNum(sciFlat)}`, sciFlat > 0 ? 'var(--pu,#b07bd8)' : 'var(--t4,#6a7a88)') : '',
+  ].filter(Boolean).join('') || `<div class="fm-empty">Нет источников науки — нет научных институтов.</div>`;
+
+  // ── Агенты-блок ──
+  const agRows = [
+    intelSlots ? row('🕵', 'Центры спецслужб', `${intelSlots} слот. × 1 агент`, `+${adNum(intelSlots)}`, 'var(--te,#3ec0d0)') : '',
+    agFlat     ? row('📜', 'Бонус доктрины (агенты)', `плоский ${agFlat > 0 ? '+' : ''}${agFlat}/сут`, `${agFlat > 0 ? '+' : ''}${adNum(agFlat)}`, agFlat > 0 ? 'var(--te,#3ec0d0)' : 'var(--t4,#6a7a88)') : '',
+  ].filter(Boolean).join('') || `<div class="fm-empty">Нет источников агентов — нет центров спецслужб.</div>`;
+
+  // ── Переменные источники ──
+  const varRows = [
+    marketSlots ? row('📈', 'Товарная биржа', `${marketSlots} слот. → продаёт до ${adNum(marketSlots*25)} ед. ресурсов/сут за ГС (50–75% цены)`, 'перем.', 'var(--t3,#8aa0b0)') : '',
+  ].filter(Boolean).join('');
+
+  // ── Прочие мощности (не доход, а что даёт) ──
+  const capChip = (icon, label, val) => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--w1,#1e2630)">
+    <span style="font-size:14px;width:20px;text-align:center">${icon}</span>
+    <span style="flex:1;font-size:12px;color:var(--t2,#c0ccd6)">${label}</span>
+    <span style="font-family:monospace;font-size:12px;color:var(--t1,#e8edf2)">${val}</span>
+  </div>`;
+  const capRows = [
+    capChip('🪖', 'Центры подготовки (пехота)', `${trainSlots} слот. → ${adNum(trainSlots*1000)} ед./заказ`),
+    capChip('🛠', 'Военные заводы (техника)',   `${milfacSlots} слот. → ${adNum(milfacSlots*100)} ед./заказ`),
+    capChip('🚀', 'Корабельные верфи',          `${shipSlots} слот. → ${shipSlots} кор. / ${shipSlots*12} МЛА`),
+    capChip('📦', 'Склады (ёмкость хранилища)', `${warehouseSlots} слот. → лимит ${adNum(storageCap)}`),
+  ].join('');
+
+  const sect = (title, inner) => `<div class="fm-section-title">${title}</div><div style="border:1px solid var(--w2,#2a3340);border-radius:8px;padding:4px 12px;background:var(--b2,#141a22);margin-bottom:16px">${inner}</div>`;
+
+  return `<div class="fm-economy">
+    <div style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 14px;border:1px solid var(--w2,#2a3340);border-radius:8px;background:var(--b3,#0f141b);margin-bottom:14px;font-size:12px;color:var(--t3,#8aa0b0)">
+      <span>💰 Постоянный ГС/сут: <b style="color:var(--gd,#3a7fbf)">+${adNum(gcNetSteady)}</b></span>
+      <span>🔬 Наука/сут: <b style="color:var(--pu,#b07bd8)">+${adNum(sciFinal)}</b></span>
+      <span>🕵 Агенты/сут: <b style="color:var(--te,#3ec0d0)">+${adNum(agFinal)}</b></span>
+      <span style="flex-basis:100%;font-size:10px;color:var(--t4,#6a7a88)">Множитель ГС: ${gcMulNote}</span>
+    </div>
+
+    ${sect('💰 Доход ГС / сутки', gcRows + routeList + (pendingOut ? `<div style="font-size:11px;color:var(--color-warning,#e0a030);padding:6px 0">⏳ Ещё ${pendingOut} путь(ей) на согласовании (пока без дохода)</div>` : ''))}
+    ${varRows ? sect('💱 Переменный доход ГС (зависит от склада/потока)', varRows) : ''}
+    ${sect(`🔬 Наука / сутки — итог +${adNum(sciFinal)} ОН`, sciRows)}
+    ${sect(`🕵 Агенты / сутки — итог +${adNum(agFinal)}`, agRows)}
+    ${sect('🏗 Прочие мощности (производство)', capRows)}
+
+    <div class="fm-dim" style="font-size:11px;margin-top:4px">Расчёт зеркалит живой тик economy_accrue: ГС построек × множитель доктрины × (1−дестабилизация); наука и агенты — плоский бонус доктрины. Караваны показаны валом — фактический доход режут пираты и зависит от экспортной добычи. Подробная добыча ресурсов — во вкладке «⛏ Добыча».</div>
+  </div>`;
+}
+
 // ── Вкладка: Добыча ─────────────────────────────────────────────
 // Подробный разбор «кто, сколько и как добывает»: множитель доктрины,
 // каждый добывающий завод → его слоты/месторождения → добыча/сутки, режим
@@ -633,6 +771,133 @@ function adTabMining(e) {
     <div class="fm-section-title">Разбор по колониям и заводам</div>
     ${colBlocks || `<div class="fm-empty">Нет добывающих заводов ни в одной колонии.</div>`}
     <div class="fm-dim" style="font-size:11px;margin-top:10px">Расчёт зеркалит живое начисление (economy_accrue): редкость × богатство месторождения × множитель доктрины/технологий. Режим «💱 Экспорт» — поток продаётся за ГС и не копится на складе; «📦 На склад» — копится до лимита ёмкости.</div>
+  </div>`;
+}
+
+// ── Вкладка: Караваны ───────────────────────────────────────────
+// Детальный разбор торговых путей фракции: состав груза, направление,
+// партнёр, объём/цена/доход, конвой и угрозы, назначенные корабли, сроки.
+// Поля — зеркало trade_routes (_economy_setup.sql + _trade_multi/_trade_speed/_trade_ship_assign).
+
+function adSysName(id) {
+  if (!id) return '—';
+  const s = (AD.systems || []).find(x => x.id === id);
+  return s ? s.name : id;
+}
+function adShipName(unitId) {
+  const d = (AD.designs || []).find(x => x.id === unitId);
+  return d ? d.name : unitId;
+}
+function adFmtTs(ts) {
+  if (!ts) return '—';
+  const dt = new Date(ts);
+  if (isNaN(dt)) return '—';
+  return `${dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+}
+// Состав груза маршрута: мультигруз cargo[{res,vol}] или легаси resource/volume.
+function adRouteCargoRows(r) {
+  const cargo = Array.isArray(r.cargo) && r.cargo.length
+    ? r.cargo.map(ci => ({ res: ci.res, vol: +ci.vol || 0 }))
+    : (r.resource ? [{ res: r.resource, vol: +r.volume || 0 }] : []);
+  if (!cargo.length) return `<div class="fm-empty" style="padding:4px 0;font-size:11px">Состав груза не указан</div>`;
+  return cargo.map(ci => {
+    const info = AD.resInfo[ci.res] || {};
+    const price = (typeof ecResPriceN === 'function') ? ecResPriceN(ci.res) : (r.price || 0);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--w1,#1e2630)">
+      <span style="font-size:15px;width:20px;text-align:center">${esc(info.icon || '◈')}</span>
+      <span style="flex:1;min-width:90px;font-size:13px;color:var(--t1,#e8edf2)">${esc(ci.res || '?')}</span>
+      <span class="fm-rarity fm-rarity-${info.r || 'common'}" style="font-size:10px;min-width:54px">${AD_RARITY_LABEL[info.r] || info.r || 'common'}</span>
+      <span style="font-family:monospace;font-size:12px;color:var(--t2,#c0ccd6);min-width:90px;text-align:right" title="Объём/ход">×${adNum(ci.vol)}/ход</span>
+      <span style="font-family:monospace;font-size:11px;color:var(--t4,#6a7a88);min-width:70px;text-align:right" title="Цена за ед.">${adNum(price)}/ед.</span>
+    </div>`;
+  }).join('');
+}
+
+function adCaravanCard(r, e, m) {
+  const isOut = r.a_fid === AD.sel;
+  const partnerFid = isOut ? r.b_fid : r.a_fid;
+  const partnerName = isOut ? (r.b_name || (AD.byFid.get(partnerFid)?.app.name) || partnerFid) : (r.a_name || (AD.byFid.get(partnerFid)?.app.name) || partnerFid);
+  const value = (r.volume || 0) * (r.price || 0);
+  const income = isOut ? Math.round(value * (m.gc || 1)) : Math.round(value * 0.5);
+
+  // статус / транзит
+  const transitMs = r.transit_until ? new Date(r.transit_until).getTime() - Date.now() : 0;
+  const inTransit = r.status === 'active' && transitMs > 0;
+  let badge;
+  if (r.status === 'pending')      badge = `<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:color-mix(in srgb,var(--color-warning,#e0a030) 22%,transparent);color:var(--color-warning,#e0a030)">⏳ на согласовании</span>`;
+  else if (r.status === 'declined')badge = `<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:var(--w1,#1e2630);color:#ff7a7a">✕ отклонён</span>`;
+  else if (r.status === 'closed')  badge = `<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:var(--w1,#1e2630);color:var(--t4,#6a7a88)">⛔ закрыт</span>`;
+  else if (inTransit)              badge = `<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:color-mix(in srgb,var(--gd,#3a7fbf) 20%,transparent);color:var(--gdl,#5fb0e6)">🚀 в пути</span>`;
+  else                             badge = `<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:color-mix(in srgb,var(--ok,#52c41a) 20%,transparent);color:var(--ok,#52c41a)">✓ активен</span>`;
+
+  const dirLabel = isOut
+    ? `<span style="color:var(--gdl,#5fb0e6)">↗ Исходящий</span> · продаём → <b>${esc(partnerName)}</b>`
+    : `<span style="color:var(--te,#3ec0d0)">↘ Входящий</span> · получаем ← <b>${esc(partnerName)}</b>`;
+
+  // конвой / угрозы
+  const threats = Array.isArray(r.threats) ? r.threats : [];
+  const riskPct = (typeof ecTradeRiskPct === 'function') ? ecTradeRiskPct(threats, r.convoy) : 0;
+  const threatTxt = threats.length
+    ? threats.map(t => t.type === 'ancient' ? '👁 древние' : '🏴‍☠ пираты').join(', ')
+    : 'чисто';
+  const riskColor = riskPct >= 60 ? '#ff7a7a' : riskPct >= 30 ? 'var(--color-warning,#e0a030)' : 'var(--ok,#52c41a)';
+
+  // корабли
+  const ships = (r.ships && typeof r.ships === 'object') ? r.ships : {};
+  const shipEntries = Object.keys(ships).filter(k => (+ships[k] || 0) > 0);
+  const shipTxt = shipEntries.length
+    ? shipEntries.map(id => `${esc(adShipName(id))} ×${adNum(ships[id])}`).join(', ')
+    : '<span style="color:var(--t4,#6a7a88)">не назначены</span>';
+
+  const srow = (k, v) => `<div style="display:flex;gap:8px;font-size:11px;padding:2px 0"><span style="color:var(--t3,#8aa0b0);min-width:118px">${k}</span><span style="color:var(--t1,#e8edf2);flex:1">${v}</span></div>`;
+
+  return `<div style="border:1px solid var(--w2,#2a3340);border-radius:9px;padding:12px 14px;margin-bottom:10px;background:var(--b3,#0f141b)">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <span style="font-size:13px;font-weight:600;color:var(--t1,#e8edf2)">${dirLabel}</span>
+      ${badge}
+      <span style="margin-left:auto;font-family:monospace;font-size:14px;color:${isOut ? 'var(--gd,#3a7fbf)' : 'var(--te,#3ec0d0)'}" title="${isOut ? 'Доход продавца (×доктрина)' : 'Доля получателя 50%'}">+${adNum(income)} ГС/ход</span>
+    </div>
+    <div style="margin-bottom:8px">${adRouteCargoRows(r)}</div>
+    ${srow('🌐 Маршрут', `${esc(adSysName(r.origin_sys))} <span style="color:var(--t4,#6a7a88)">→</span> ${esc(adSysName(r.dest_sys))}`)}
+    ${srow('📦 Оборот/ход', `${adNum(r.volume || 0)} ед. × ${adNum(r.price || 0)} ГС = <b>${adNum(value)}</b> ГС вал.`)}
+    ${srow('🛡 Конвой / риск', `${r.convoy ? `${adNum(r.convoy)} кор. охраны` : 'без охраны'} · угрозы: ${threatTxt} · <span style="color:${riskColor}">риск грабежа ${riskPct}%/ход</span>`)}
+    ${srow('🚀 Грузовые', shipTxt)}
+    ${srow('🕓 Создан', adFmtTs(r.created_at) + (inTransit ? ` · прибудет ${adFmtTs(r.transit_until)}` : ''))}
+  </div>`;
+}
+
+function adTabCaravans(e) {
+  const m = (typeof ecFactionMods === 'function') ? ecFactionMods(e.app || {}) : { gc: 1 };
+  const routes = e.routes || [];
+  if (!routes.length) return `<div class="fm-caravans"><div class="fm-empty">У фракции нет ни одного торгового пути.</div></div>`;
+
+  const rank = { active: 0, pending: 1, closed: 2, declined: 3 };
+  const sorted = [...routes].sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || (new Date(b.created_at) - new Date(a.created_at)));
+
+  const active  = sorted.filter(r => r.status === 'active');
+  const pending = sorted.filter(r => r.status === 'pending');
+  const archived = sorted.filter(r => r.status === 'closed' || r.status === 'declined');
+
+  const out = active.filter(r => r.a_fid === AD.sel);
+  const inn = active.filter(r => r.b_fid === AD.sel);
+  const outGc = out.reduce((a, r) => a + Math.round((r.volume || 0) * (r.price || 0) * (m.gc || 1)), 0);
+  const inGc  = inn.reduce((a, r) => a + Math.round((r.volume || 0) * (r.price || 0) * 0.5), 0);
+
+  const block = (title, list) => list.length
+    ? `<div class="fm-section-title">${title} (${list.length})</div>${list.map(r => adCaravanCard(r, e, m)).join('')}`
+    : '';
+
+  return `<div class="fm-caravans">
+    <div style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 14px;border:1px solid var(--w2,#2a3340);border-radius:8px;background:var(--b3,#0f141b);margin-bottom:14px;font-size:12px;color:var(--t3,#8aa0b0)">
+      <span>Активных путей: <b style="color:var(--t1,#e8edf2)">${active.length}</b></span>
+      <span>↗ исходящих: <b style="color:var(--gdl,#5fb0e6)">${out.length}</b> · ↘ входящих: <b style="color:var(--te,#3ec0d0)">${inn.length}</b></span>
+      <span>На согласовании: <b style="color:var(--color-warning,#e0a030)">${pending.length}</b></span>
+      <span style="flex-basis:100%">Вал. доход активных: <b style="color:var(--gd,#3a7fbf)">+${adNum(outGc + inGc)} ГС/ход</b> <span style="font-size:10px;color:var(--t4,#6a7a88)">(до пиратов и экспортной добычи)</span></span>
+    </div>
+    ${block('✓ Активные', active)}
+    ${block('⏳ На согласовании', pending)}
+    ${archived.length ? `<div class="fm-section-title">📁 Архив (закрытые/отклонённые) (${archived.length})</div>${archived.slice(0, 12).map(r => adCaravanCard(r, e, m)).join('')}` : ''}
+    <div class="fm-dim" style="font-size:11px;margin-top:6px">Доход исходящих = объём × цена × множитель доктрины; входящих — фиксированная доля получателя 50%. Фактический поток зависит от экспортной добычи на стороне продавца и срезается пиратами по риску.</div>
   </div>`;
 }
 
