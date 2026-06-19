@@ -140,6 +140,11 @@ async function fnLoadApproved() {
 // Тип записи: 'news' (игрок), 'bulletin' (сводка сектора), 'rumor' (слух).
 function fnKind(n) { if (n.owner_id) return 'news'; return n.kind === 'bulletin' ? 'bulletin' : 'rumor'; }
 
+// Есть ли у новости флаг визуального/поведенческого эффекта (поле fx = список через запятую).
+// Флаги: glitch, bg (см. композитор), noauto (отключить авто-реакции),
+// private (личное сообщение фракции — не в ленту, только в её кабинет + всплывашка).
+function fnHasFx(n, flag) { return !!(n && typeof n.fx === 'string' && n.fx.split(',').includes(flag)); }
+
 // Особые НПС с фиксированным «крутым» символом-флагом (эффект задаётся CSS, не картинкой).
 // author_herald = 'fx:rift' → таинственный «Разлом».
 const FN_SPECIAL_NPC = {
@@ -459,7 +464,8 @@ function fnReactPhrase(myFac, stance) {
 }
 // Список опций: 3 авто (по идеологии/расе) + кастомные автора (news.reactions).
 function fnReactionOptions(myFac, news) {
-  const opts = [
+  // noauto — автор отключил дефолтные варианты, оставив только свои.
+  const opts = fnHasFx(news, 'noauto') ? [] : [
     { key: 'a', stance: 'approve',    text: fnReactPhrase(myFac, 'approve') },
     { key: 'n', stance: 'neutral',    text: fnReactPhrase(myFac, 'neutral') },
     { key: 'd', stance: 'disapprove', text: fnReactPhrase(myFac, 'disapprove') },
@@ -504,6 +510,7 @@ function fnReactionBlockHtml(n, myFac) {
 
   const st = FN.reactState[n.id];
   const opts = fnReactionOptions(myFac, n);
+  if (!opts.length) return '';   // автор отключил авто-реакции и не задал своих — реагировать нечем
   // Подсвечиваем ровно одну выбранную опцию. Несколько опций могут иметь одинаковый stance
   // (авто-фраза и кастомная — обе approve), поэтому матчим по key, а не по stance.
   // После перезагрузки (в БД хранится только stance) — берём первую опцию этого тона.
@@ -665,6 +672,61 @@ function fnCloseArticle() {
   document.body.style.overflow = '';
 }
 
+// ── Личные сообщения фракции (private) ──────────────────────
+// Админ может отправить новость «лично» одной фракции (флаг fx=private, status='private'):
+// в общую ленту/на главную она не попадает (фильтр status=eq.approved), но видна в кабинете
+// этой фракции (список «Новости фракции», грузится по faction_id без фильтра статуса)
+// и один раз всплывает при входе владельца в кабинет. «Прочитано» храним локально.
+function fnPrivSeenKey() { return 'fn_priv_seen_' + ((typeof user !== 'undefined' && user && user.id) || 'anon'); }
+function fnPrivSeenGet() { try { return new Set(JSON.parse(localStorage.getItem(fnPrivSeenKey()) || '[]')); } catch (e) { return new Set(); } }
+function fnPrivSeenAdd(id) {
+  const s = fnPrivSeenGet(); s.add(id);
+  // не даём списку разрастаться бесконечно — держим последние 200 id
+  try { localStorage.setItem(fnPrivSeenKey(), JSON.stringify([...s].slice(-200))); } catch (e) {}
+}
+// Вызывается при входе в кабинет (economy.js → ecRenderDashboard). Показывает 1 ещё не
+// виденное личное сообщение для фракции facId; остальные дождутся следующего входа.
+async function fnCheckPrivatePopup(facId) {
+  if (!facId || typeof user === 'undefined' || !user) return;
+  let rows = [];
+  try {
+    rows = await dbGet('faction_news',
+      `faction_id=eq.${encodeURIComponent(facId)}&status=eq.private&order=created_at.desc&limit=20`) || [];
+  } catch (e) { return; }
+  if (!rows.length) return;
+  rows.forEach(r => FN.byId.set(r.id, r));   // чтобы fnOpenArticle нашёл запись
+  const seen = fnPrivSeenGet();
+  const next = rows.find(n => !seen.has(n.id));
+  if (next) fnShowPrivatePopup(next);
+}
+function fnShowPrivatePopup(n) {
+  fnPrivSeenAdd(n.id);   // «всплывает 1 раз» — помечаем сразу при показе
+  const accent = n.faction_color || 'var(--gd)';
+  const modal = document.getElementById('fn-priv-pop') || (() => {
+    const m = document.createElement('div'); m.id = 'fn-priv-pop'; m.className = 'fn-priv-ov';
+    m.onclick = e => { if (e.target === m) fnClosePrivatePopup(); };
+    document.body.appendChild(m); return m;
+  })();
+  const cover = n.image_url ? `<div class="fn-priv-cov"><img src="${esc(n.image_url)}" alt="" loading="lazy"></div>` : '';
+  modal.innerHTML = `<div class="fn-priv-box" style="--fn-accent:${esc(accent)}">
+    <div class="fn-priv-bar"><span class="fn-priv-bar-l">📨 ВХОДЯЩАЯ ДЕПЕША · ШИФР «ЛИЧНО»</span><span class="fn-priv-bar-r">◈◈</span></div>
+    <button class="fn-art-close" onclick="fnClosePrivatePopup()">✕</button>
+    ${cover}
+    <div class="fn-priv-inner">
+      <div class="fn-priv-kicker">Только для государства «${esc((n.faction_name || '').toUpperCase())}»</div>
+      <h2 class="fn-priv-title">${esc(n.title || 'Без заголовка')}</h2>
+      <p class="fn-priv-excerpt">${esc(fnExcerpt(n))}</p>
+      <div class="fn-priv-date">${esc(fnStardate(n.published_at || n.created_at))}</div>
+    </div>
+    <div class="fn-priv-ftr">
+      <button class="btn btn-gh" onclick="fnClosePrivatePopup()">Позже</button>
+      <button class="btn btn-gd" onclick="fnClosePrivatePopup(); fnOpenArticle('${esc(n.id)}')">📖 Читать</button>
+    </div>
+  </div>`;
+  requestAnimationFrame(() => modal.classList.add('show'));
+}
+function fnClosePrivatePopup() { document.getElementById('fn-priv-pop')?.classList.remove('show'); }
+
 // ── Кабинет: вкладка «Новости» ──────────────────────────────
 async function fnRenderNewsTab(b) {
   b.innerHTML = `<div class="sload" style="min-height:60px"><div class="quote-loader">Загрузка...</div></div>`;
@@ -703,10 +765,12 @@ async function fnRenderNewsTab(b) {
       pending:  ['НА МОДЕРАЦИИ', 'var(--color-warning,#e0a030)'],
       approved: ['ОПУБЛИКОВАНА', 'var(--ok,#3ec96b)'],
       rejected: ['ОТКЛОНЕНА', 'var(--err,#ff6b6b)'],
+      private:  ['🔒 ЛИЧНОЕ', 'var(--gd,#e8b04a)'],
     };
     const rows = mine.length ? mine.map(n => {
       const st = stMap[n.status] || ['—', 'var(--t3)'];
-      const canEdit = n.status !== 'approved';
+      // Опубликованную правит только админ; личное сообщение от админа получатель тоже не редактирует.
+      const canEdit = n.status !== 'approved' && n.status !== 'private';
       return `<div class="fn-mine-row">
         <div class="fn-mine-main">
           <div class="fn-mine-title">${esc(n.title || 'Без заголовка')}</div>
@@ -922,6 +986,10 @@ function fnOpenComposer(id) {
           <input type="checkbox" id="fn-c-bg-cover"${n && n.fx && n.fx.includes('bg') ? ' checked' : ''}>
           <span>🖼 Картинка на весь фон <span style="color:var(--t4)">— обложка уйдет на задний план статьи</span></span>
         </label>
+        <label class="fn-c-fx" style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="fn-c-private"${n && fnHasFx(n, 'private') ? ' checked' : ''}>
+          <span>🔒 Личное сообщение фракции <span style="color:var(--t4)">— не в ленту/на главную; только в кабинет выбранной фракции (автор) + всплывёт у неё 1 раз</span></span>
+        </label>
       </div>` : ''}
       <div class="fg"><label class="fl">Заголовок *</label>
         <input class="fi fn-c-title" id="fn-c-title" maxlength="160" value="${esc(eff?.title || '')}" placeholder="Главное событие недели"></div>
@@ -975,6 +1043,10 @@ function fnOpenComposer(id) {
           <button type="button" class="btn btn-gh btn-xs" onclick="fnReactAddRow()">＋ Свой вариант</button></div>
         <div class="fn-comp-note" style="margin:0 0 6px">Читатели и так получат авто-реакции по своей идеологии. Здесь можно добавить свои ивентные фразы — каждая со своим тоном.</div>
         <div id="fn-c-reacts">${(() => { let cs = []; try { cs = Array.isArray(eff?.reactions) ? eff.reactions : JSON.parse(eff?.reactions || '[]'); } catch (e) {} return (cs || []).map(c => fnReactRowHtml(c.text, c.stance)).join(''); })()}</div>
+        <label class="fn-c-fx" style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="fn-c-noauto"${n && fnHasFx(n, 'noauto') ? ' checked' : ''}>
+          <span>🚫 Отключить авто-реакции <span style="color:var(--t4)">— оставить только свои варианты (выше)</span></span>
+        </label>
       </div>
       ${fnStaffVerdictFieldsHtml(eff, data)}
       <div class="fn-comp-ftr">
@@ -1328,6 +1400,14 @@ async function fnSubmit() {
 let fxArr = [];
   if (staff && document.getElementById('fn-c-glitch')?.checked) fxArr.push('glitch');
   if (staff && document.getElementById('fn-c-bg-cover')?.checked) fxArr.push('bg');
+  // noauto — отключить дефолтные реакции (доступно всем); private — личное сообщение фракции (только стафф).
+  if (document.getElementById('fn-c-noauto')?.checked) fxArr.push('noauto');
+  const isPrivate = staff && !!document.getElementById('fn-c-private')?.checked;
+  if (isPrivate) {
+    if (!author.faction_id) { toast('Личное сообщение можно отправить только фракции игрока — выберите её в «Авторе публикации»', 'err'); return; }
+    if (!author.owner_id)   { toast('У выбранной фракции нет владельца-получателя', 'err'); return; }
+    fxArr.push('private');
+  }
   const fx = fxArr.length ? fxArr.join(',') : null;
   const staff_verdict = staff ? ((document.getElementById('fn-c-verdict')?.value || '').trim() || null) : undefined;
   const staff_grants = staff ? fnGrantsCollect() : undefined;
@@ -1335,14 +1415,14 @@ let fxArr = [];
   FN.busy = true;
   try {
     if (id) {
-      const patch = { title, excerpt: null, body, image_url, reactions, mentions: fnParseMentions(), reject_reason: null, updated_at: now };
+      const patch = { title, excerpt: null, body, image_url, reactions, mentions: fnParseMentions(), reject_reason: null, fx, updated_at: now };
       if (staff) {
         const prev = FN.byId.get(id);
         Object.assign(patch, {
           faction_id: author.faction_id, faction_name: author.faction_name, faction_color: author.faction_color,
           author_herald: author.author_herald || null,
-          owner_id: author.owner_id, owner_email: author.owner_email, kind: author.kind, fx,
-          status: 'approved', published_at: (prev && prev.published_at) || now, reviewed_by: user.email,
+          owner_id: author.owner_id, owner_email: author.owner_email, kind: author.kind,
+          status: isPrivate ? 'private' : 'approved', published_at: (prev && prev.published_at) || now, reviewed_by: user.email,
           staff_verdict, staff_grants: staff_grants?.length ? staff_grants : null,
           verdict_by: hasVerdict ? user.email : (prev && prev.verdict_by) || null,
           verdict_at: hasVerdict ? now : (prev && prev.verdict_at) || null,
@@ -1351,7 +1431,7 @@ let fxArr = [];
         patch.status = 'pending';   // правка игрока снова уходит на проверку
       }
       await dbPatch('faction_news', `id=eq.${encodeURIComponent(id)}`, patch);
-      toast(staff ? 'Новость обновлена и опубликована' : 'Изменения отправлены на проверку', 'ok');
+      toast(isPrivate ? 'Личное сообщение обновлено и доставлено фракции' : (staff ? 'Новость обновлена и опубликована' : 'Изменения отправлены на проверку'), 'ok');
     } else {
       await dbPost('faction_news', {
         faction_id: author.faction_id,
@@ -1361,15 +1441,15 @@ let fxArr = [];
         owner_id: author.owner_id, owner_email: author.owner_email,
         kind: author.kind, fx,
         title, excerpt: null, body, image_url, reactions, mentions: fnParseMentions(),
-        status: staff ? 'approved' : 'pending',
-        published_at: staff ? now : null,
+        status: isPrivate ? 'private' : (staff ? 'approved' : 'pending'),
+        published_at: (staff || isPrivate) ? now : null,
         reviewed_by: staff ? user.email : null,
         staff_verdict: staff ? staff_verdict : null,
         staff_grants: staff && staff_grants?.length ? staff_grants : null,
         verdict_by: hasVerdict ? user.email : null,
         verdict_at: hasVerdict ? now : null,
       });
-      toast(staff ? 'Опубликовано на главной' : 'Новость отправлена на проверку', 'ok');
+      toast(isPrivate ? 'Личное сообщение доставлено фракции' : (staff ? 'Опубликовано на главной' : 'Новость отправлена на проверку'), 'ok');
     }
     // Отправлено успешно — черновик больше не нужен. Сбрасываем ключ ДО закрытия,
     // иначе финальное автосохранение в fnCloseComposer пересоздаст черновик.

@@ -1493,6 +1493,15 @@
 .ec-faith-cover { margin: 0 0 12px; border-radius: 11px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 38%, var(--w2)); }
 .ec-faith-cover img { display: block; width: 100%; max-height: 200px; object-fit: cover; }
 .ec-faith-cover.lg img { max-height: 260px; }
+.ec-faith-hero { position: relative; border-radius: 10px; overflow: hidden; margin: 0 0 14px; }
+.ec-faith-hero.has-img { min-height: 180px; display: flex; align-items: flex-end;
+  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 30%, var(--w2)); }
+.ec-faith-hero.has-img::before { content: ''; position: absolute; inset: 0;
+  background-image: var(--faith-img); background-size: cover; background-position: center; filter: brightness(.65); }
+.ec-faith-hero.has-img::after { content: ''; position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(8,6,18,.93) 0%, rgba(8,6,18,.38) 50%, transparent 100%); }
+.ec-faith-hero .ec-shrine-hd { position: relative; z-index: 1; padding: 16px 14px 14px; }
+.ec-faith-hero:not(.has-img) .ec-shrine-hd { padding: 0 0 14px; }
 .ec-faith-imgrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 .ec-faith-imgprev { width: 64px; height: 64px; flex-shrink: 0; border-radius: 10px; overflow: hidden;
   border: 1px dashed color-mix(in srgb, var(--fc, #c9a227) 40%, var(--w2)); background: var(--b1);

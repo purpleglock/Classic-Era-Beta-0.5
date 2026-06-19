@@ -553,6 +553,8 @@ async function ecRenderDashboard() {
     await ecBootOnce();   // создаём экономику + начисляем накопленный доход (тост внутри, 1 раз)
     await ecLoad();
     ecPaintCabinet();
+    // Личные сообщения админа этой фракции — всплывают 1 раз при входе в кабинет.
+    if (typeof fnCheckPrivatePopup === 'function') fnCheckPrivatePopup(EC.app.faction_id);
   } catch (e) {
     // Никакого вечного спиннера — показываем причину и кнопку повтора
     setPg(`<div class="ec-wrap"><div class="sempty" style="gap:12px;flex-direction:column">
@@ -1058,7 +1060,7 @@ function ecIncomeHistoryPanel() {
 const EC_ACH = {
   sibi_imperare: { name: 'Власть над собой', ic: '🜍', reward: 1000,
     quote: 'Imperare sibi maximum imperium est.',
-    desc: 'Наиыысшая власть есть власть над собой.',
+    desc: 'Наивысшая власть есть власть над собой.',
     cond: 'Заверши первое исследование' },
   constantia: { name: 'Постоянство', ic: '🜔', reward: 2000,
     quote: 'Gutta cavat lapidem non vi, sed saepe cadendo.',
@@ -1138,7 +1140,7 @@ const EC_ACH = {
     cond: 'Держи 5 торговых путей' },
   via_argentaria: { name: 'Серебряный путь', ic: '🝍', reward: 3000,
     quote: 'Pecunia nervus rerum.',
-    desc: 'Деньги — движитель всех дел, даже дел изыскательских.',
+    desc: 'Деньги есть движитель всех дел, даже дел изыскательских.',
     cond: 'Продай технологию на рынке' },
 
   // ── Война ──
@@ -1231,9 +1233,9 @@ const EC_ACH = {
     desc: 'Чужой соглядатай схвачен у твоих ворот.',
     cond: 'Раскрой вражеского шпиона' },
   // ── Тонкая торговля ──
-  permutatio: { name: 'Мена', ic: '🝛', reward: 2500,
+  permutatio: { name: 'Мена?', ic: '🝛', reward: 2500,
     quote: 'Do ut des.',
-    desc: 'Даю, чтобы и ты дал.',
+    desc: 'Ты мне древосталь, а я тебе котлы.',
     cond: 'Заключи бартерную сделку' },
   emptor: { name: 'Покупатель знания', ic: '🝜', reward: 2500,
     quote: 'Bona fide.',
@@ -1244,7 +1246,7 @@ const EC_ACH = {
   fidelis: { name: 'Верный вассал', ic: '🝝', reward: 2000,
     quote: 'Fideli certa merces.',
     desc: 'Верному - верная награда.',
-    cond: 'Стань вассалом сильной державы' },
+    cond: 'Стань вассалом другой державы' },
   amicitia: { name: 'Крепкая дружба', ic: '🝞', reward: 3000,
     quote: 'Amicus certus in re incerta cernitur.',
     desc: 'Верный друг познаётся в беде.',
@@ -1283,15 +1285,15 @@ const EC_ACH = {
     cond: 'Терраформируй 3 планеты' },
   thesaurus: { name: 'Сокровищница', ic: '🝩', reward: 8000,
     quote: 'Ubi thesaurus tuus, ibi cor tuum.',
-    desc: 'Где сокровище твоё - там и сердце твоё.',
+    desc: 'Где сокровище твоё, там и сердце твоё.',
     cond: 'Накопи 500 единиц одного ресурса' },
   sapientia_summa: { name: 'Высшая мудрость', ic: '🜦', reward: 20000,
     quote: 'Sapientia summa.',
     desc: 'Познавший почти всё сущее.',
     cond: 'Изучи 50 технологий' },
-  magister_magnus: { name: 'Великий магистр тайн', ic: '🜫', reward: 12000,
+  magister_magnus: { name: 'Тихо ходит лихо', ic: '🜫', reward: 12000,
     quote: 'Scientia occulta — vis maxima.',
-    desc: 'Ни одного провала.',
+    desc: 'Будет забавно, когда оповещение об этом всплывёт в галактической ленте...',
     cond: 'Проведи 10 успешных разведопераций' },
   archipirata: { name: 'Архипират', ic: '🜬', reward: 12000,
     quote: 'Mare nostrum — всё наше.',
@@ -1303,7 +1305,7 @@ const EC_ACH = {
     cond: 'Спроектируй 30 боевых единиц' },
   via_magna: { name: 'Великий путь', ic: '🝂', reward: 6000,
     quote: 'Omnes viae ad opes ducunt.',
-    desc: 'Все пути ведут к процветанию.',
+    desc: 'Путеводная звезда галактической торговли.',
     cond: 'Держи 10 торговых путей' },
   imperator_imperatorum: { name: 'Царь царей', ic: '🝷', reward: 10000,
     quote: 'Rex regum.',
@@ -1315,9 +1317,9 @@ const EC_ACH = {
     quote: 'Maiora premunt.',
     desc: 'Капитальные корабли вновь среди звезд.',
     cond: 'Открой класс «Крейсер» в дереве технологий' },
-  dreadnought: { name: 'Эпоха дредноутов', ic: '🜨', reward: 6000,
+  dreadnought: { name: 'Медленно, но верно', ic: '🜨', reward: 6000,
     quote: 'Ultima ratio regum.',
-    desc: 'Титаны снова продут по земле.',
+    desc: 'Титаны снова пройдут по земле.',
     cond: 'Открой класс «Дредноут» в дереве технологий' },
   centuria_navium: { name: 'Сотни вымелов', ic: '🜬', reward: 5000,
     quote: 'Multitudo navium.',
@@ -1325,11 +1327,11 @@ const EC_ACH = {
     cond: 'Построй 100 корветов' },
   leviathan: { name: 'Эхо великой войны', ic: '🜭', reward: 6000,
     quote: 'Behemoth maris.',
-    desc: 'Стальная исполин сошл со стапелей.',
+    desc: 'Стальной исполин сошел со стапелей.',
     cond: 'Построй дредноут' },
   classis_magna: { name: 'Пан-колониальный флот', ic: '🝃', reward: 8000,
     quote: 'Classis invicta.',
-    desc: 'Несокрушимая армада под твоим флагом.',
+    desc: 'Зачатки великого Галактического флота.',
     cond: 'Построй 50 кораблей' },
   legio_ferrata: { name: 'Железный легион', ic: '🜸', reward: 4000,
     quote: 'Ferro et igni.',
@@ -1343,7 +1345,7 @@ const EC_ACH = {
   // ── Новые ветви охвата ──
   rete_arcanum: { name: 'Наши узы всё крепче', ic: '🜩', reward: 5000,
     quote: 'Sub rosa, ubique.',
-    desc: 'Незримая сеть опутала врагов.',
+    desc: 'Незримая сеть опутала их.',
     cond: 'Внедри 3 тайные секты' },
   magna_foederatio: { name: 'Великая федерация', ic: '🝶', reward: 8000,
     quote: 'E pluribus unum.',
@@ -1377,9 +1379,9 @@ const EC_ACH = {
     cond: 'Засели колонию-станцию в космической аномалии (нужна технология «Аномальные станции»)' },
 
   // ════════ ПАСХАЛКА ════════
-  kfzlib: { name: 'Ох...', ic: '🥚', reward: 2000,
+  kfzlib: { name: 'Девять миллиардов имён Бога', ic: '🥚', reward: 2000,
     quote: 'Nomen est omen.',
-    desc: 'Наверное, не стоит...',
+    desc: 'Им всем предпочти одно.',
     cond: 'Переименуй колонию в «Kfzlib»' },
   templum_mundi: { name: 'Отчаяние', ic: '⛩', reward: 5000,
     quote: 'Sacrum in centro mundi.',
@@ -3002,7 +3004,8 @@ function ecTabFaith() {
       : st === 'rejected' ? `<div class="ec-faith-status rej">✕ Религия отклонена администрацией.${f.reject_reason ? ` Причина: «${esc(f.reject_reason)}». ` : ' '}Отредактируйте её и подайте заново.</div>`
       : (f.pending_review ? `<div class="ec-faith-status pend">⏳ Изменения отправлены на проверку — мир пока видит прежний облик веры.${f.pending && f.pending.name ? ` Предложено: «${esc(f.pending.name)}».` : ''}</div>`
       : (f.reject_reason ? `<div class="ec-faith-status rej">✕ Прошлые изменения отклонены.${f.reject_reason ? ` Причина: «${esc(f.reject_reason)}».` : ''}</div>` : ''));
-    const imgHtml = f.image_url ? `<div class="ec-faith-cover"><img src="${esc(f.image_url)}" alt=""></div>` : '';
+    const heroStyle = f.image_url ? ` style="--faith-img:url('${esc(f.image_url)}')"` : '';
+    const heroClass = `ec-faith-hero${f.image_url ? ' has-img' : ''}`;
     const disc = Math.round((fs.unit_discount || 0) * 100);
     const tithePct = Math.round((fs.tithe_pct || 0.20) * 100);
     const income = ecNum(fs.temple_income || 150);
@@ -3040,11 +3043,12 @@ function ecTabFaith() {
         </div>` : '';
     mine = `<div class="ec-shrine" style="--fc:${fc}">
         ${stBanner}
-        ${imgHtml}
-        <div class="ec-shrine-hd">
-          <div class="ec-shrine-sigil">🛐</div>
-          <div><div class="ec-shrine-name">«${esc(f.name)}»</div>
-            <div class="ec-shrine-role">${roleTxt} · ${ecNum(adepts.length)} народ(ов) в лоне веры</div></div>
+        <div class="${heroClass}"${heroStyle}>
+          <div class="ec-shrine-hd">
+            <div class="ec-shrine-sigil">🛐</div>
+            <div><div class="ec-shrine-name">«${esc(f.name)}»</div>
+              <div class="ec-shrine-role">${roleTxt} · ${ecNum(adepts.length)} народ(ов) в лоне веры</div></div>
+          </div>
         </div>
         ${f.dogma ? `<div class="ec-shrine-dogma">«${esc(f.dogma)}»</div>` : ''}
         ${editForm}
@@ -3188,14 +3192,16 @@ async function ecFaithDetail(id) {
   const fc = esc(d.color || '#c9a227');
   const adeptIc = r => r === 'founder' ? '👑 ' : r === 'recognized' ? '🕊 ' : '🙏 ';
   const adepts = (d.adepts || []).map(a => `<span class="ec-faith-pew">${adeptIc(a.role)}${esc(ecFacName(a.fid))} · паства <b>${ecNum(a.flock)}</b></span>`).join('');
-  const cover = d.image_url ? `<div class="ec-faith-cover lg"><img src="${esc(d.image_url)}" alt=""></div>` : '';
+  const heroStyleM = d.image_url ? ` style="--faith-img:url('${esc(d.image_url)}')"` : '';
+  const heroClassM = `ec-faith-hero${d.image_url ? ' has-img' : ''}`;
   const html = `<div class="ec-faith-modal-back" onclick="ecFaithDetailClose(event)">
     <div class="ec-faith-modal ec-shrine" style="--fc:${fc}" onclick="event.stopPropagation()">
       <button class="ec-faith-modal-x" onclick="ecFaithDetailClose()">✕</button>
-      ${cover}
-      <div class="ec-shrine-hd"><div class="ec-shrine-sigil">🛐</div>
-        <div><div class="ec-shrine-name">«${esc(d.name)}»</div>
-          <div class="ec-shrine-role">основатель ${esc(ecFacName(d.founder_fid))} · ${ecNum((d.adepts || []).length)} народ(ов) · паства ${ecNum(d.flock || 0)}</div></div></div>
+      <div class="${heroClassM}"${heroStyleM}>
+        <div class="ec-shrine-hd"><div class="ec-shrine-sigil">🛐</div>
+          <div><div class="ec-shrine-name">«${esc(d.name)}»</div>
+            <div class="ec-shrine-role">основатель ${esc(ecFacName(d.founder_fid))} · ${ecNum((d.adepts || []).length)} народ(ов) · паства ${ecNum(d.flock || 0)}</div></div></div>
+      </div>
       ${d.dogma ? `<div class="ec-shrine-dogma">«${esc(d.dogma)}»</div>` : '<div class="ec-shrine-note">Догмат веры не записан.</div>'}
       ${adepts ? `<div class="ec-bless-hd" style="margin-top:16px">Паства веры</div><div>${adepts}</div>` : ''}
     </div></div>`;
@@ -3455,23 +3461,35 @@ function ecTabRaids() {
   if ((st.ships || 0) < 1) planner = '<div class="ec-empty">Нет военных кораблей. Постройте Корабельную Верфь и заложите корабли (вкладка «Военпром»).</div>';
   else if (!others.length) planner = '<div class="ec-empty">Нет других фракций для рейда.</div>';
   else {
-    if (!EC.raidTarget || !others.find(f => f.faction_id === EC.raidTarget)) { EC.raidTarget = others[0].faction_id; EC.raidScout = null; }
+    if (!EC.raidTarget || !others.find(f => f.faction_id === EC.raidTarget)) { EC.raidTarget = others[0].faction_id; EC.raidScout = null; EC.raidRoute = null; EC.raidComp = {}; }
     const tgtOpts = others.map(f => `<option value="${esc(f.faction_id)}"${f.faction_id === EC.raidTarget ? ' selected' : ''}>${esc(f.name)}</option>`).join('');
     const hasRecon = !!(ecSpyDossier(EC.raidTarget).level);   // караваны видны только после разведки цели
     const scout = (EC.raidScout && EC.raidScout.fid === EC.raidTarget) ? EC.raidScout.routes : null;
+    // выбранный караван должен существовать в текущей разведке
+    if (EC.raidRoute && !(scout || []).find(r => r.id === EC.raidRoute)) EC.raidRoute = null;
     let caravans;
     if (!hasRecon) caravans = `<div class="ec-empty" style="padding:8px">🔒 Нет разведданных об этой фракции. Чужие караваны видны <b>только после разведки</b> — проведите операцию «Разведка» во вкладке «Разведка». <button class="btn btn-gh btn-xs" style="margin-left:6px" onclick="ecSetTab('intel')">→ В Разведку</button></div>`;
     else if (scout == null) caravans = `<div class="ec-empty" style="padding:8px">Нажмите «🔭 Обновить караваны», чтобы увидеть текущие караваны цели.</div>`;
     else if (!scout.length) caravans = `<div class="ec-empty" style="padding:8px">У цели нет активных караванов — грабить нечего.</div>`;
     else caravans = scout.map(rt => {
-      const maxShips = Math.max(1, st.free || 0);
-      return `<div class="ec-q-row" style="flex-wrap:wrap;gap:6px">
+      const sel = EC.raidRoute === rt.id;
+      return `<div class="ec-q-row${sel ? ' on' : ''}" style="flex-wrap:wrap;gap:6px">
         <span class="ec-r-name">${ecRouteCargoText(rt)} · 🛡 эскорт ${ecNum(rt.convoy || 0)}</span>
-        <span style="display:flex;gap:6px;align-items:center">
-          <input type="number" id="raid-ships-${esc(rt.id)}" min="1" max="${maxShips}" value="${Math.min(1, maxShips)}" class="ec-trade-volnum" style="width:64px" title="Кораблей в рейд">
-          <button class="btn btn-gd btn-xs" ${(st.free || 0) < 1 ? 'disabled' : ''} onclick="ecRaidLaunch('${esc(rt.id)}')">🏴‍☠ Рейд</button>
-        </span></div>`;
+        <button class="btn ${sel ? 'btn-gd' : 'btn-gh'} btn-xs" onclick="ecRaidPickRoute('${esc(rt.id)}')">${sel ? '✓ Цель выбрана' : '🎯 Выбрать целью'}</button>
+      </div>`;
     }).join('');
+
+    // 3 · Состав рейда — конкретные корабли (появляется при выбранном караване)
+    let compBlock;
+    if (EC.raidRoute && (scout || []).find(r => r.id === EC.raidRoute)) {
+      const { ships } = ecRaidCompTotals();
+      compBlock = `<div class="ec-trade-label">3 · Состав рейда <span class="ec-hint">выберите КОНКРЕТНЫЕ корабли — мощь зависит от состава</span></div>
+        <div class="ec-queue" id="ec-raid-comp">${ecRaidCompHtml()}</div>
+        <button class="btn btn-gd btn-sm" style="margin-top:8px" ${ships < 1 ? 'disabled' : ''} onclick="ecRaidLaunch()">🏴‍☠ Отправить рейд</button>`;
+    } else {
+      compBlock = `<div class="ec-trade-label">3 · Состав рейда</div><div class="ec-empty" style="padding:8px">Сначала выберите целевой караван выше.</div>`;
+    }
+
     planner = `<div class="ec-trade-form">
       <div class="ec-trade-label">1 · Цель <span class="ec-hint">караваны видны только по разведанным фракциям</span></div>
       <div style="display:flex;gap:6px">
@@ -3482,13 +3500,14 @@ function ecTabRaids() {
       </div>
       <div class="ec-trade-label">2 · Караваны цели <span class="ec-hint">грабить можно только то, что везут</span></div>
       <div class="ec-queue">${caravans}</div>
+      ${compBlock}
     </div>`;
   }
 
   const activeHtml = active.length ? active.map(ecRaidActiveRow).join('') : '<div class="ec-empty" style="padding:8px">Активных рейдов нет.</div>';
   const logHtml = done.length ? done.slice(0, 20).map(ecRaidLogRow).join('') : '<div class="ec-empty" style="padding:8px">Рейдов ещё не было.</div>';
 
-  return `${ecIntro('🏴‍☠', 'Каперство · рейды', 'Шлите военные корабли грабить чужие караваны. Добыча — ресурсы и ГС. Но эскорт даёт отпор: в бою корабли теряют обе стороны.', ['Сила рейда — от <b>числа кораблей</b>. Защита цели (конвой + торговая политика) сопротивляется: победит сильнейший, потери считаются у всех.', 'Грабить можно только <b>активный караван</b> цели — нет торговли, нечего и грабить.', 'Включите <b>торговую политику</b> — платный контракт защищает все ваши караваны. За раскрытый разбой отношения падают.'])}${shipBar}
+  return `${ecIntro('🏴‍☠', 'Каперство · рейды', 'Шлите военные корабли грабить чужие караваны. Добыча — ресурсы и ГС. Но эскорт даёт отпор: в бою корабли теряют обе стороны.', ['Соберите <b>состав рейда</b> из конкретных кораблей — мощь зависит от их класса (дредноут сильнее корвета). Защита цели (конвой + торговая политика) сопротивляется: победит сильнейший.', 'В бою гибнут только корабли <b>отправленного состава</b> — флот, оставшийся дома, в безопасности.', 'Грабить можно только <b>активный караван</b> цели. Включите <b>торговую политику</b> — платный контракт защищает все ваши караваны. За раскрытый разбой отношения падают.'])}${shipBar}
     <div class="ec-dip-grid">
       <div class="ec-dip-card ec-dip-trade"><div class="ec-dip-t">🎯 Планирование рейда</div>${planner}</div>
       ${policyBlock}
@@ -3500,7 +3519,7 @@ function ecTabRaids() {
 }
 
 function ecRaidActiveRow(m) {
-  return `<div class="ec-q-row"><span class="ec-r-name">🏴‍☠ Рейд на <b>${esc(m.target_name || ecFacName(m.target_fid))}</b> · ${ecNum(m.ships)} кораблей</span>${ecProgressISO(m.started_at, m.ready_at, 1, 'подходит к цели')}<button class="ec-bld-del" title="Отозвать рейд" onclick="ecRaidCancel('${esc(m.id)}')">✕</button></div>`;
+  return `<div class="ec-q-row"><span class="ec-r-name">🏴‍☠ Рейд на <b>${esc(m.target_name || ecFacName(m.target_fid))}</b> · ${ecRaidCompText(m)}</span>${ecProgressISO(m.started_at, m.ready_at, 1, 'подходит к цели')}<button class="ec-bld-del" title="Отозвать рейд" onclick="ecRaidCancel('${esc(m.id)}')">✕</button></div>`;
 }
 function ecRaidLogRow(m) {
   const o = m.outcome || {};
@@ -3514,8 +3533,89 @@ function ecRaidLogRow(m) {
   return `<div class="ec-q-row"><span class="ec-r-name">${win ? '✅' : '❌'} Рейд на <b>${esc(m.target_name || ecFacName(m.target_fid))}</b> — ${lootTxt}. Потери: ваши ${ecNum(o.att_losses || 0)}, эскорт ${ecNum(o.def_losses || 0)}.${disrupt}${o.detected ? ' · <b style="color:var(--err)">раскрыты</b>' : ''}</span></div>`;
 }
 
+// ── Сборщик СОСТАВА рейда: выбираешь конкретные корабли (дизайны), не «число» ──
+// Зеркало серверного raid_launch(p_comp): мощь = Σ qty × cost-мощь дизайна.
+function ecRaidShipCost(unitId) { const d = (EC.designs || []).find(x => x.id === unitId); return (d && d.summary && +d.summary.cost) || 100; }
+function ecRaidShipPower(unitId) { return Math.max(1, ecRaidShipCost(unitId) / 10); }
+function ecRaidDesignName(unitId) {
+  const r = (EC.roster || []).find(x => x.unit_id === unitId);
+  if (r && r.unit_name) return r.unit_name;
+  const d = (EC.designs || []).find(x => x.id === unitId);
+  return (d && d.name) || 'Корабль';
+}
+// Все готовые дизайны кораблей (агрегат по ростеру)
+function ecRaidShipDesigns() {
+  const by = {};
+  (EC.roster || []).filter(r => r.category === 'ship').forEach(r => {
+    if (!by[r.unit_id]) by[r.unit_id] = { id: r.unit_id, name: r.unit_name || 'Корабль', qty: 0, cargo: ecCvShipCargo(r.unit_id) };
+    by[r.unit_id].qty += r.qty || 0;
+  });
+  return Object.values(by);
+}
+// Корабли дизайна, занятые активными рейдами (по их составу comp)
+function ecRaidCommittedShips() {
+  const m = {};
+  (EC.raids || []).filter(x => x.status === 'active').forEach(x => {
+    (x.comp || []).forEach(c => { m[c.unit_id] = (m[c.unit_id] || 0) + (+c.qty || 0); });
+  });
+  return m;
+}
+// Свободно дизайна = владение − закреплено караванами (поштучно) − занято рейдами
+function ecRaidShipAvail(unitId) {
+  return Math.max(0, ecCvShipOwned(unitId) - (ecCvCommittedShips()[unitId] || 0) - (ecRaidCommittedShips()[unitId] || 0));
+}
+function ecRaidCompTotals() {
+  const c = EC.raidComp || {}; let ships = 0, power = 0;
+  Object.keys(c).forEach(id => { const n = c[id] || 0; ships += n; power += n * ecRaidShipPower(id); });
+  return { ships, power: Math.round(power) };
+}
+function ecRaidCompAdd(unitId, delta) {
+  EC.raidComp = EC.raidComp || {};
+  const perDesign = ecRaidShipAvail(unitId);
+  const { ships } = ecRaidCompTotals();
+  const globalFree = ecMyShipsAvailable();
+  let next = (EC.raidComp[unitId] || 0) + delta;
+  next = Math.max(0, Math.min(perDesign, next));
+  // глобальный потолок свободного флота (с учётом уже выбранного в этом рейде)
+  if (delta > 0 && ships + delta > globalFree) next = EC.raidComp[unitId] || 0;
+  EC.raidComp[unitId] = next;
+  const cont = ecId('ec-raid-comp'); if (cont) cont.innerHTML = ecRaidCompHtml();
+}
+function ecRaidCompHtml() {
+  EC.raidComp = EC.raidComp || {};
+  const designs = ecRaidShipDesigns();
+  if (!designs.length) return '<div class="ec-empty" style="padding:6px">Нет готовых кораблей. Заложите корабли во вкладке «Военпром».</div>';
+  const { ships, power } = ecRaidCompTotals();
+  const globalFree = ecMyShipsAvailable();
+  const row = d => {
+    const n = EC.raidComp[d.id] || 0;
+    const avail = ecRaidShipAvail(d.id);
+    const canAdd = n < avail && ships < globalFree;
+    const tag = d.cargo > 0 ? '📦 грузовой' : '⚔ боевой';
+    const title = n >= avail ? 'Нет свободных кораблей этого типа' : (ships >= globalFree ? 'Достигнут предел свободного флота' : '');
+    return `<div class="ec-q-row" style="gap:6px">
+      <span class="ec-r-name">${esc(d.name)} <i style="color:var(--t4)">${tag} · 💥 ${ecNum(Math.round(ecRaidShipPower(d.id)))} · свободно ${ecNum(avail)}</i></span>
+      <span class="ec-mine-step">
+        <button class="ec-mine-btn" ${n <= 0 ? 'disabled' : ''} onclick="ecRaidCompAdd('${esc(d.id)}',-1)">−</button>
+        <span class="ec-mine-cnt ${n ? 'on' : ''}">${n}</span>
+        <button class="ec-mine-btn" ${canAdd ? '' : 'disabled'} title="${title}" onclick="ecRaidCompAdd('${esc(d.id)}',1)">+</button>
+      </span></div>`;
+  };
+  const note = ships < 1
+    ? '<b style="color:var(--err)">Добавьте хотя бы один корабль в рейд</b>'
+    : `<b>Состав рейда:</b> 🚀 <b>${ecNum(ships)}</b> кор. · 💥 мощь <b>${ecNum(power)}</b>`;
+  return `${designs.map(row).join('')}
+    <div class="ec-trade-note${ships < 1 ? ' warn' : ''}">${note} <span class="ec-hint">свободно во флоте: ${ecNum(globalFree)}</span></div>`;
+}
+// Состав рейда текстом (для активных рейдов и журнала)
+function ecRaidCompText(m) {
+  if (Array.isArray(m.comp) && m.comp.length) return m.comp.map(c => `${ecNum(c.qty)}× ${esc(ecRaidDesignName(c.unit_id))}`).join(', ');
+  return `${ecNum(m.ships)} кораблей`;
+}
+
 // ── Действия рейдов ─────────────────────────────────────────
-function ecRaidPickTarget(fid) { EC.raidTarget = fid; EC.raidScout = null; ecPaintCabinet(); }
+function ecRaidPickTarget(fid) { EC.raidTarget = fid; EC.raidScout = null; EC.raidRoute = null; EC.raidComp = {}; ecPaintCabinet(); }
+function ecRaidPickRoute(id) { EC.raidRoute = (EC.raidRoute === id ? null : id); ecPaintCabinet(); }
 async function ecRaidScout() {
   const fid = EC.raidTarget; if (!fid) return;
   if (!ecSpyDossier(fid).level) { toast('Сначала разведайте эту фракцию во вкладке «Разведка»', 'err'); ecSetTab('intel'); return; }
@@ -3525,9 +3625,15 @@ async function ecRaidScout() {
     ecPaintCabinet();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
 }
-function ecRaidLaunch(routeId) {
-  const n = Math.max(1, parseInt(ecId('raid-ships-' + routeId)?.value) || 1);
-  ecRpcAct('raid_launch', { p_target_fid: EC.raidTarget, p_route_id: routeId, p_ships: n }, 'Рейд отправлен — флот в пути');
+function ecRaidLaunch() {
+  if (!EC.raidTarget) { toast('Выберите цель', 'err'); return; }
+  if (!EC.raidRoute) { toast('Выберите целевой караван', 'err'); return; }
+  const c = EC.raidComp || {};
+  const comp = Object.keys(c).filter(id => (c[id] || 0) > 0).map(id => ({ unit_id: id, qty: c[id] }));
+  if (!comp.length) { toast('Соберите состав рейда — выберите конкретные корабли', 'err'); return; }
+  const routeId = EC.raidRoute, target = EC.raidTarget;
+  EC.raidComp = {}; EC.raidRoute = null;   // сбрасываем выбор после отправки
+  ecRpcAct('raid_launch', { p_target_fid: target, p_route_id: routeId, p_comp: comp }, 'Рейд отправлен — флот в пути');
 }
 function ecRaidCancel(id) { ecRpcAct('raid_cancel', { p_id: id }, 'Рейд отозван'); }
 function ecRaidPatrol(n) { ecRpcAct('raid_patrol_set', { p_n: Math.max(0, n) }, 'Патруль обновлён'); }
