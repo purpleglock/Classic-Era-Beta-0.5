@@ -115,6 +115,17 @@ declare
   v_giant     boolean;   -- есть колония-станция на газовом/ледяном/горячем гиганте (нужна pol.cel_giants)
   v_anomaly_col boolean; -- есть колония-станция в космической аномалии (нужна pol.cel_anomaly)
   v_temple_sanctuary boolean; -- возведён Храм Веры в системе «Храм мироздания»
+  -- ── седьмой набор (УРОН ТАЙНЫХ ОПЕРАЦИЙ: накопительные итоги по spy_missions) ──
+  v_steal_gc   numeric;  -- суммарно украдено чужой казны (op=steal_gc)
+  v_steal_res  numeric;  -- суммарно украдено чужого сырья (op=steal_res)
+  v_destroyed  int;      -- уничтожено чужих построек (saboteur+mass_demolish)
+  v_killed     int;      -- ликвидировано вражеских агентов (op=kill_agent)
+  v_techstolen int;      -- украдено чужих технологий (op=steal_tech)
+  -- ── восьмой набор (контрразведка-мини-игра + именные корабли + дивизии) ──
+  v_caught     int;      -- раскрыто чужих шпионов (spy_missions detected=true; вкл. мини-игру spy_investigate)
+  v_div_built  int;      -- сформировано дивизий (производство category='division')
+  v_named_bs   boolean;  -- создан линкор (battleship) с именем «Брандтаухер»
+  v_named_cr   boolean;  -- создан крейсер (cruiser) с именем «Беликоза»
   rec         record;
   newly       int := 0;
   new_ids     jsonb := '[]'::jsonb;
@@ -151,6 +162,8 @@ begin
   v_attacked:=false; v_route:=false; v_raid:=false; v_spy:=false; v_loan:=false;
   v_kfzlib:=false;
   v_giant:=false; v_anomaly_col:=false; v_temple_sanctuary:=false;
+  v_steal_gc:=0; v_steal_res:=0; v_destroyed:=0; v_killed:=0; v_techstolen:=0;
+  v_caught:=0; v_div_built:=0; v_named_bs:=false; v_named_cr:=false;
 
   -- ── Казна (gc/science/tnp/research — базовые). research_slots/queue из
   --    _research_queue.sql: если миграции нет, ловим undefined_column ──
@@ -232,7 +245,24 @@ begin
   select count(*) into v_spies from public.spy_missions where actor_fid=fid and outcome='success';
   v_spy   := v_spies > 0;
   v_ci    := exists(select 1 from public.spy_missions where target_fid=fid and detected=true);
+  -- Раскрытые чужие шпионы: detected=true ставится и при пассивном засвете, и
+  -- мини-игрой расследования spy_investigate (улики→100% → detected=true).
+  select count(*) into v_caught from public.spy_missions where target_fid=fid and detected=true;
   v_attacked := exists(select 1 from public.spy_missions where target_fid=fid);
+  -- ── Накопительный урон тайных операций (_spy_new_ops.sql; result jsonb).
+  --    Если новых операций нет/не применены — итоги остаются 0, ачивки не выполнены. ──
+  select coalesce(sum((result->>'gc')::numeric),0) into v_steal_gc
+    from public.spy_missions where actor_fid=fid and op='steal_gc' and outcome='success';
+  select coalesce(sum((result->>'amount')::numeric),0) into v_steal_res
+    from public.spy_missions where actor_fid=fid and op='steal_res' and outcome='success';
+  -- saboteur уничтожает 1 здание (result.building не null), mass_demolish — result.count
+  select coalesce(sum(case
+      when op='sabotage'      and (result->>'building') is not null then 1
+      when op='mass_demolish' then coalesce((result->>'count')::int,0)
+      else 0 end),0) into v_destroyed
+    from public.spy_missions where actor_fid=fid and op in ('sabotage','mass_demolish') and outcome='success';
+  select count(*) into v_killed     from public.spy_missions where actor_fid=fid and op='kill_agent' and outcome='success';
+  select count(*) into v_techstolen from public.spy_missions where actor_fid=fid and op='steal_tech' and outcome='success';
   v_loan     := exists(select 1 from public.loans where lender_fid=fid);
   v_loan_big := exists(select 1 from public.loans where lender_fid=fid and coalesce(amount,0)>=20000);
   v_debt_paid:= exists(select 1 from public.loans where borrower_fid=fid and status='repaid');
@@ -240,6 +270,12 @@ begin
 
   -- ── Производство юнитов (unit_production базовая) ──
   select coalesce(sum(qty),0) into v_ships_built  from public.unit_production where faction_id=fid and status='done' and category='ship';
+  -- ВАЖНО: производятся ТОЛЬКО ship и division (см. _unit_resources.sql/produce:
+  -- ground/aviation существуют лишь как компоненты дивизий, отдельно не строятся →
+  -- наземные/авиа достижения считаем по СФОРМИРОВАННЫМ ДИВИЗИЯМ, а не по «единицам».
+  select coalesce(sum(qty),0) into v_div_built    from public.unit_production where faction_id=fid and status='done' and category='division';
+  -- v_ground_built/v_avia_built больше не используются в каталоге (категории не производятся),
+  -- но оставлены вычисленными на случай возврата прямого производства техники.
   select coalesce(sum(qty),0) into v_ground_built from public.unit_production where faction_id=fid and status='done' and category='ground';
   select coalesce(sum(qty),0) into v_avia_built   from public.unit_production where faction_id=fid and status='done' and category='aviation';
 
@@ -263,6 +299,14 @@ begin
      where up.faction_id=fid and up.status='done' and fu.data->>'class'='corvette';
     v_dread_built := exists(select 1 from public.unit_production up join public.faction_units fu on fu.id=up.unit_id
        where up.faction_id=fid and up.status='done' and fu.data->>'class'='dreadnought');
+    -- Именные корабли: имя дизайна хранится в ВЕРХНЕМ регистре (constructors.js),
+    -- класс корпуса — в data->>'class'. Допускаем серийный суффикс «-2/-3…» (like '…%').
+    v_named_bs := exists(select 1 from public.faction_units
+       where faction_id=fid and category='ship' and data->>'class'='battleship'
+         and lower(coalesce(name,'')) like 'брандтаухер%');
+    v_named_cr := exists(select 1 from public.faction_units
+       where faction_id=fid and category='ship' and data->>'class'='cruiser'
+         and (lower(coalesce(name,'')) like 'беликоза%' or lower(coalesce(name,'')) like 'беликорза%'));
   end if;
 
   -- ── Рынок технологий — _migration_tech_market.sql (опц.) ──
@@ -374,6 +418,7 @@ begin
       ('arma_omnia',         4000, v_unit_cats >= 4),
       -- ── Оборона ──
       ('contra_speculator',  3500, v_ci),
+      ('inquisitor',         6000, v_caught >= 5),
       -- ── Тонкая торговля ──
       ('permutatio',         2500, v_barter),
       ('emptor',             2500, v_tech_buy),
@@ -392,6 +437,8 @@ begin
       ('thesaurus',          8000, v_resmax >= 500),
       ('sapientia_summa',   20000, v_research >= 50),
       ('magister_magnus',   12000, v_spies >= 10),
+      ('fur_maximus',        9000, v_steal_gc  >= 100000),
+      ('vastator',           8000, v_destroyed >= 50),
       ('archipirata',       12000, v_raids >= 10),
       ('machina_belli',     10000, v_units >= 30),
       ('via_magna',          6000, v_routes >= 10),
@@ -402,8 +449,18 @@ begin
       ('centuria_navium',    5000, v_corv >= 100),
       ('leviathan',          6000, v_dread_built),
       ('classis_magna',      8000, v_ships_built >= 50),
-      ('legio_ferrata',      4000, v_ground_built >= 50),
-      ('ala_magna',          4000, v_avia_built >= 50),
+      -- наземка/авиация строятся ТОЛЬКО в составе дивизий → считаем сформированные дивизии
+      ('legio_ferrata',      4000, v_div_built >= 10),
+      ('ala_magna',          6000, v_div_built >= 30),
+      -- именные корабли (создание дизайна нужного класса с нужным именем)
+      ('brandtaucher',       6000, v_named_bs),
+      ('belicosa',           4000, v_named_cr),
+      -- ════════ УРОН ТАЙНЫХ ОПЕРАЦИЙ (накопительные итоги) ════════
+      ('praeda_aurea',       4000, v_steal_gc  >= 25000),
+      ('direptor',           3500, v_steal_res >= 100),
+      ('eversor',            4000, v_destroyed >= 10),
+      ('sicarius',           3500, v_killed    >= 3),
+      ('fur_arcanorum',      4000, v_techstolen >= 3),
       -- ── Новые ветви охвата ──
       ('rete_arcanum',       5000, v_sects >= 3),
       ('magna_foederatio',   8000, v_lead_big),
@@ -418,7 +475,7 @@ begin
       ('kfzlib',             2000, v_kfzlib),
       ('templum_mundi',      5000, v_temple_sanctuary),
       -- ════════ КАПСТОУН: получить все остальные ════════
-      ('summa_perfectio',       0, v_ach_count >= 73)
+      ('summa_perfectio',       0, v_ach_count >= 83)
     ) as t(ach_id, reward, met)
   loop
     if rec.met then

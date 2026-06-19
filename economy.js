@@ -13,15 +13,18 @@ const EC_CLAIM_COST = 3000, EC_CLAIM_CD_DAYS = 7;
 // diff — сложность; base — базовая длительность (ходов); need — нужная разведка
 // ('','basic','deep'); recon — это разведка (даёт досье).
 const EC_SPY_OPS = {
-  recon_basic:  { label: 'Разведка (базовая)',  diff: 0,  base: 1, need: '',      recon: 'basic', icon: '🔍', desc: 'Экономика цели: ГС, наука, агенты, колонии.' },
-  recon_deep:   { label: 'Глубокая разведка',   diff: 15, base: 2, need: '',      recon: 'deep',  icon: '🛰', desc: 'Постройки, флот, армия, изученные технологии. Открывает сложные операции.' },
-  steal_gc:     { label: 'Кража казны',          diff: 25, base: 2, need: 'basic', icon: '💰', desc: 'Похитить часть ГС цели (растёт с числом агентов).' },
-  sabotage:     { label: 'Саботаж постройки',    diff: 30, base: 2, need: 'deep',  icon: '💥', desc: 'Вывести из строя выбранное здание цели.' },
-  destabilize:  { label: 'Дестабилизация',       diff: 35, base: 3, need: 'basic', icon: '🔥', desc: 'Снизить ГС-доход цели на несколько ходов.' },
-  steal_tech:   { label: 'Кража технологий',     diff: 45, base: 4, need: 'deep',  icon: '🧪', desc: 'Украсть изученную цель технологию (добавится в ваше дерево).' },
-  faith_impose: { label: 'Тайная секта',         diff: 28, base: 3, need: 'basic', icon: '🛐', desc: 'Внедрить тайную секту вашей веры в чужую державу. Работает как храм (доход и сила — вам), пока контрразведка цели её не вскроет. Нужна исповедуемая вера.' },
+  recon_basic:   { label: 'Разведка (базовая)',  diff: 0,  base: 1, need: '',      recon: 'basic', icon: '🔍', desc: 'Экономика цели: ГС, наука, агенты, колонии.' },
+  recon_deep:    { label: 'Глубокая разведка',   diff: 15, base: 2, need: '',      recon: 'deep',  icon: '🛰', desc: 'Постройки, флот, армия, изученные технологии. Открывает сложные операции.' },
+  steal_gc:      { label: 'Кража казны',         diff: 25, base: 2, need: 'basic', icon: '💰', desc: 'Похитить часть ГС цели (до 30%, растёт с числом агентов).' },
+  steal_res:     { label: 'Кража ресурсов',      diff: 28, base: 2, need: 'basic', icon: '📦', desc: 'Похитить сырьё со складов цели (до 25%, растёт с числом агентов). Инфильтратор усиливает.' },
+  sabotage:      { label: 'Саботаж постройки',   diff: 30, base: 2, need: 'deep',  icon: '💥', desc: 'Вывести из строя одно здание цели.' },
+  destabilize:   { label: 'Дестабилизация',      diff: 35, base: 3, need: 'basic', icon: '🔥', desc: 'Снизить ГС-доход цели на несколько ходов.' },
+  kill_agent:    { label: 'Ликвидация агента',   diff: 38, base: 2, need: 'basic', icon: '🗡', desc: 'Устранить одного готового агента цели. Призрак повышает шанс успеха.' },
+  steal_tech:    { label: 'Кража технологий',    diff: 45, base: 4, need: 'deep',  icon: '🧪', desc: 'Украсть технологию (мин. 2 агента). Добавится в ваше дерево.' },
+  mass_demolish: { label: 'Массовый снос',       diff: 45, base: 3, need: 'deep',  minAgents: 2, icon: '🏚', desc: 'Уничтожить сразу N зданий цели (N = число агентов, max 5). Мин. 2 агента. Саботёр усиливает.' },
+  faith_impose:  { label: 'Тайная секта',        diff: 28, base: 3, need: 'basic', icon: '🛐', desc: 'Внедрить тайную секту вашей веры в чужую державу. Работает как храм (доход и сила — вам), пока контрразведка цели её не вскроет. Нужна исповедуемая вера.' },
 };
-const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'sabotage', 'destabilize', 'steal_tech', 'faith_impose'];
+const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'steal_res', 'sabotage', 'destabilize', 'kill_agent', 'steal_tech', 'mass_demolish', 'faith_impose'];
 // Перки агентов (зеркало _spy_agents.sql). Этап 1 — хранятся; этап 2 — гейтят/баффят операции.
 const EC_SPY_PERKS = {
   infiltrator: { label: 'Инфильтратор', icon: '🕵', desc: 'Повышает успех краж (казна, технологии).' },
@@ -74,9 +77,10 @@ function ecSpyCalc(op, agentIds, targetFid) {
   // перк-бонусы выбранных агентов (зеркало spy_launch)
   let succB = 0, detB = 0;
   picked.forEach(a => {
-    if (a.perk === 'infiltrator' && (op === 'steal_gc' || op === 'steal_tech')) succB += 12;
-    else if (a.perk === 'saboteur' && (op === 'sabotage' || op === 'destabilize')) succB += 12;
+    if (a.perk === 'infiltrator' && (op === 'steal_gc' || op === 'steal_tech' || op === 'steal_res')) succB += 12;
+    else if (a.perk === 'saboteur' && (op === 'sabotage' || op === 'destabilize' || op === 'mass_demolish')) succB += 12;
     else if (a.perk === 'analyst' && (op === 'recon_basic' || op === 'recon_deep')) succB += 10;
+    else if (a.perk === 'ghost' && op === 'kill_agent') succB += 8;
     if (a.perk === 'ghost') detB += 10;
   });
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
@@ -86,6 +90,7 @@ function ecSpyCalc(op, agentIds, targetFid) {
   // требование разведки
   let err = '';
   if (op === 'faith_impose' && !(EC.faith && EC.faith.faith)) err = 'Нужна исповедуемая вера (вкладка «Вера»)';
+  else if ((op === 'steal_tech' || op === 'mass_demolish') && A < 2) err = 'Нужно минимум 2 агента';
   else if (d.need === 'basic' && !dos.level) err = 'Нужна разведка цели (базовая)';
   else if (d.need === 'deep' && dos.level !== 'deep') err = 'Нужна глубокая разведка цели';
   return { success, detect, turns, intel, dossier: dos, ci: CI, err, agents: A, succB, detB, ids };
@@ -1144,7 +1149,7 @@ const EC_ACH = {
     cond: 'Продай технологию на рынке' },
 
   // ── Война ──
-  legio: { name: 'Легион', ic: '🜨', reward: 3500,
+  legio: { name: 'Мечи к солнцу', ic: '🜨', reward: 3500,
     quote: 'Si vis pacem, para bellum.',
     desc: 'Хочешь мира - готовь войско.',
     cond: 'Спроектируй 5 боевых единиц' },
@@ -1162,6 +1167,36 @@ const EC_ACH = {
     quote: 'Sub rosa.',
     desc: 'Под розой молчания зреет вера.',
     cond: 'Внедри тайную секту в чужую державу' },
+
+  // ── Урон тайных операций (накопительные итоги) ──
+  praeda_aurea: { name: 'Добыча', ic: '💰', reward: 4000,
+    quote: 'Lucri bonus est odor ex re qualibet.',
+    desc: 'Запах прибыли хорош, откуда бы она ни шла.',
+    cond: 'Укради из чужих казён 25 000 ГС суммарно' },
+  fur_maximus: { name: 'Почти как в Ренессансе', ic: '🎭', reward: 9000,
+    quote: 'Occasio facit furem.',
+    desc: 'Случай делает вором, а ты не упускаешь ни одного?',
+    cond: 'Укради из чужих казён 100 000 ГС суммарно' },
+  direptor: { name: 'Расхититель', ic: '📦', reward: 3500,
+    quote: 'Spolia opima.',
+    desc: 'Чужие закрома пустеют твоими трудами.',
+    cond: 'Укради чужого сырья 100 единиц суммарно' },
+  eversor: { name: 'Плановая деконструкция', ic: '💥', reward: 4000,
+    quote: 'Delenda est.',
+    desc: 'То, что построено врагом, должно быть разрушено.',
+    cond: 'Уничтожь тайными операциями 10 чужих построек' },
+  vastator: { name: 'Выженная земля', ic: '🔥', reward: 8000,
+    quote: 'Solitudinem faciunt, pacem appellant.',
+    desc: 'Оставляй руины и называй это миром, что они заслужили.',
+    cond: 'Уничтожь тайными операциями 50 чужих построек' },
+  sicarius: { name: 'Встреча с лезвием Немизиды', ic: '🗡', reward: 3500,
+    quote: 'Sublata causa, tollitur effectus.',
+    desc: 'Устрани причину, тогда исчезнет и следствие.',
+    cond: 'Раскрой 3 вражеских агента' },
+  fur_arcanorum: { name: 'Похититель тайн', ic: '📜', reward: 4000,
+    quote: 'Scientia rapta — vis parta.',
+    desc: 'Похищенное знание есть обретённая сила.',
+    cond: 'Укради 3 чужие технологии' },
 
   // ── Вера ──
   credens: { name: 'Верующий', ic: '🝫', reward: 1500,
@@ -1196,7 +1231,7 @@ const EC_ACH = {
     cond: 'Выдай заём на 20 000 ГС' },
 
   // ── Слово ──
-  vox_imperii: { name: 'Глас миллиардов', ic: '🝪', reward: 2000,
+  vox_imperii: { name: 'Глас и воля миллиардов', ic: '🝪', reward: 2000,
     quote: 'Verba volant, scripta manent.',
     desc: 'Слова уходят, но написанное остаётся.',
     cond: 'Опубликуй новость державы' },
@@ -1232,6 +1267,10 @@ const EC_ACH = {
     quote: 'Caveat emptor.',
     desc: 'Чужой соглядатай схвачен у твоих ворот.',
     cond: 'Раскрой вражеского шпиона' },
+  inquisitor: { name: 'Дознаватель', ic: '🔍', reward: 6000,
+    quote: 'Quis custodiet ipsos custodes?',
+    desc: 'Кто устережёт самих сторожей? Ты — и ловишь их одного за другим.',
+    cond: 'Раскрой 5 чужих шпионов (в т.ч. через расследование)' },
   // ── Тонкая торговля ──
   permutatio: { name: 'Мена?', ic: '🝛', reward: 2500,
     quote: 'Do ut des.',
@@ -1335,12 +1374,20 @@ const EC_ACH = {
     cond: 'Построй 50 кораблей' },
   legio_ferrata: { name: 'Железный легион', ic: '🜸', reward: 4000,
     quote: 'Ferro et igni.',
-    desc: 'Бронированный кулак наземных войск.',
-    cond: 'Построй 50 единиц наземной техники' },
-  ala_magna: { name: 'Воздушная армада', ic: '🜹', reward: 4000,
+    desc: 'Бронированный кулак наземных войск собран в боевые соединения.',
+    cond: 'Сформируй 10 дивизий' },
+  ala_magna: { name: 'Великая армия', ic: '🜹', reward: 6000,
     quote: 'Per ardua ad astra.',
-    desc: 'Небо принадлежит твоим крыльям.',
-    cond: 'Построй 50 единиц авиации' },
+    desc: 'Несокрушимые соединения пехоты, брони и авиации под единым знаменем.',
+    cond: 'Сформируй 30 дивизий' },
+  brandtaucher: { name: 'Брандтаухер', ic: '⚓', reward: 6000,
+    quote: 'Leuchtturm - маяк, что ведёт флот в бой.',
+    desc: ' «Лейх-турм» сошёл со стапелей и продолжит сражаться.',
+    cond: 'Создай линкор с именем «Брандтаухер-(ваш номер)», например «Брандтаухер-(100)»' },
+  belicosa: { name: 'Беликоза', ic: '🚢', reward: 4000,
+    quote: 'Bellicosus - рождённый для войны.',
+    desc: 'Крейсер «Беликоза» снова занял своё место в строю.',
+    cond: 'Создай крейсер с именем «Беликоза-(ваш номер)», например «Беликоза-(100)»' },
 
   // ── Новые ветви охвата ──
   rete_arcanum: { name: 'Наши узы всё крепче', ic: '🜩', reward: 5000,
@@ -1381,7 +1428,7 @@ const EC_ACH = {
   // ════════ ПАСХАЛКА ════════
   kfzlib: { name: 'Девять миллиардов имён Бога', ic: '🥚', reward: 2000,
     quote: 'Nomen est omen.',
-    desc: 'Им всем предпочти одно.',
+    desc: 'Им всем предпочти одно людское.',
     cond: 'Переименуй колонию в «Kfzlib»' },
   templum_mundi: { name: 'Отчаяние', ic: '⛩', reward: 5000,
     quote: 'Sacrum in centro mundi.',
@@ -1411,15 +1458,19 @@ const EC_ACH_ORDER = ['sibi_imperare', 'constantia', 'cosmopolites', 'amor_fati'
   'permutatio', 'emptor',
   'fidelis', 'amicitia', 'debitum_solutum',
   'duae_viae', 'ordo_cognoscendi',
-  // ── Военка: техи классов + производство ──
+  // ── Военка: техи классов + производство + именные корабли ──
   'crucigera', 'dreadnought', 'centuria_navium', 'leviathan', 'classis_magna', 'legio_ferrata', 'ala_magna',
+  'brandtaucher', 'belicosa',
+  // ── Урон тайных операций ──
+  'praeda_aurea', 'direptor', 'eversor', 'sicarius', 'fur_arcanorum',
   // ── Новые ветви охвата ──
+  'inquisitor',
   'rete_arcanum', 'magna_foederatio', 'inimicus', 'usura',
   'industria_plena', 'dispersio',
   // ── Гранд-тиры ──
   'croesus', 'urbs_aeterna', 'pax_galactica', 'terraformator', 'thesaurus',
   'sapientia_summa',
-  'magister_magnus', 'archipirata', 'machina_belli', 'via_magna', 'imperator_imperatorum',
+  'magister_magnus', 'fur_maximus', 'vastator', 'archipirata', 'machina_belli', 'via_magna', 'imperator_imperatorum',
   // ── Колонии-станции Небожителей ──
   'statio_orbitalis', 'statio_anomala',
   // ── Пасхалка / особое + капстоун ──
@@ -1453,9 +1504,13 @@ const EC_ACH_CAT = {
   fortitudo: 'war', legio: 'war', imperator_belli: 'war', arsenal: 'war', arma_omnia: 'war',
   crucigera: 'war', dreadnought: 'war', centuria_navium: 'war', leviathan: 'war',
   classis_magna: 'war', legio_ferrata: 'war', ala_magna: 'war', machina_belli: 'war', archipirata: 'war',
+  brandtaucher: 'war', belicosa: 'war',
   // Тайная война — шпионаж, секты, контрразведка
   prudentia: 'spy', amor_fati: 'spy', magister_arcanorum: 'spy', missionarius: 'spy',
   contra_speculator: 'spy', magister_magnus: 'spy', rete_arcanum: 'spy', cohors_arcana: 'spy',
+  inquisitor: 'spy',
+  praeda_aurea: 'spy', fur_maximus: 'spy', direptor: 'spy', eversor: 'spy', vastator: 'spy',
+  sicarius: 'spy', fur_arcanorum: 'spy',
   // Вера — религия
   credens: 'faith', fides_fundata: 'faith', pontifex_maximus: 'faith',
   // Политика — дипломатия, союзы, вассалы, займы, слово
@@ -3653,9 +3708,12 @@ function ecSpyAlertRow(a) {
   const ok = a.outcome === 'success';
   let detail = '';
   if (a.op === 'steal_gc') detail = ok ? `похищено <b style="color:var(--err)">${ecNum(r.gc)} ГС</b> из казны` : 'попытка кражи казны';
+  else if (a.op === 'steal_res') detail = ok ? `похищено <b style="color:var(--err)">${ecNum(r.amount)}</b> ед. <b>${esc(r.resource || '?')}</b> со складов` : 'попытка кражи ресурсов';
   else if (a.op === 'sabotage') detail = ok ? `выведено из строя: ${esc(r.building || 'здание')}` : 'попытка саботажа';
+  else if (a.op === 'mass_demolish') detail = ok ? `массовый снос: уничтожено <b style="color:var(--err)">${r.count || 0}</b> зданий` : 'попытка массового сноса';
   else if (a.op === 'steal_tech') detail = ok ? `похищена технология: ${esc(r.tech_name || r.tech || '—')}` : 'попытка кражи технологий';
   else if (a.op === 'destabilize') detail = ok ? `дестабилизация: доход −${Math.round((r.debuff_pct || 0) * 100)}% (${r.turns || 0} ход.)` : 'попытка дестабилизации';
+  else if (a.op === 'kill_agent') detail = ok ? `ликвидирован агент: <b style="color:var(--err)">${esc(r.agent_name || '—')}</b>` : 'попытка ликвидации агента';
   else if (a.op === 'recon_basic' || a.op === 'recon_deep') detail = 'разведка вашей фракции';
   else if (a.op === 'faith_impose') detail = ok ? `в вашей державе внедрена тайная секта: <b style="color:var(--color-warning,#e0a030)">${esc(r.sect || '—')}</b>` : 'попытка внедрить тайную секту';
   else detail = ok ? 'операция удалась' : 'операция сорвана';
@@ -3668,7 +3726,7 @@ function ecSpyAlertRow(a) {
     : '<span class="ec-route-badge wait">⚠ аноним</span>';
   const caught = (a.detected && r.caught) ? ' · <span style="color:var(--ok)">агент пойман</span>' : '';
   // мини-игра расследования: незаметную враждебную операцию можно вскрыть по уликам
-  const hostile = ['steal_gc', 'sabotage', 'destabilize', 'steal_tech'].includes(a.op);
+  const hostile = ['steal_gc', 'steal_res', 'sabotage', 'mass_demolish', 'destabilize', 'steal_tech', 'kill_agent'].includes(a.op);
   let investHtml = '';
   if (!a.detected && hostile && ok) {
     const ev = Math.max(0, Math.min(100, a.evidence || 0));
@@ -3701,10 +3759,13 @@ function ecSpyLogRow(m) {
   let detail = '';
   if (m.op === 'recon_basic' || m.op === 'recon_deep') detail = ok ? `ГС ${ecNum(r.gc)} · ОН ${ecNum(r.science)} · агентов ${ecNum(r.agents)} · колоний ${r.colonies ?? '—'} · построек ${r.buildings ?? '—'}` : 'разведка сорвана';
   else if (m.op === 'steal_gc') detail = ok ? `украдено ${ecNum(r.gc)} ГС` : 'провал';
+  else if (m.op === 'steal_res') detail = ok ? `похищено ${ecNum(r.amount)} ед. ${esc(r.resource || '?')}` : 'провал';
   else if (m.op === 'sabotage') detail = ok ? `выведено из строя: ${esc(r.building || 'здание')}${r.colony ? ` (${esc(r.colony)})` : ''}` : 'провал';
+  else if (m.op === 'mass_demolish') detail = ok ? `снесено ${r.count || 0} зданий: ${(r.buildings || []).map(b => esc(b)).join(', ') || '—'}` : 'провал';
   else if (m.op === 'steal_tech') detail = ok ? `украдена технология: ${esc(r.tech_name || r.tech || '—')}` : 'провал';
   else if (m.op === 'destabilize') detail = ok ? `доход цели снижен на ${Math.round((r.debuff_pct || 0) * 100)}% (${r.turns || 0} ход.)` : 'провал';
-  else if (m.op === 'faith_impose') detail = ok ? `внедрена тайная секта: ${esc(r.sect || '—')} (тайный доход, пока не вскроют)` : 'провал';
+  else if (m.op === 'kill_agent') detail = ok ? `агент ликвидирован: ${esc(r.agent_name || '—')}` : 'провал';
+  else if (m.op === 'faith_impose') detail = ok ? `внедрена тайная секта: ${esc(r.faith || r.sect || '—')} (тайный доход, пока не вскроют)` : 'провал';
   const badge = ok ? '<span class="ec-route-badge ok">✓</span>' : '<span class="ec-route-badge" style="color:var(--err);border-color:var(--err)">✕</span>';
   return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">${badge}${d.icon} <b>${esc(d.label)}</b> → ${esc(m.target_name || ecFacName(m.target_fid))} · ${detail}${m.detected ? ' · <span style="color:var(--color-warning,#e0a030)">раскрыто</span>' : ''}</span></div>`;
 }

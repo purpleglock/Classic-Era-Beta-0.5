@@ -86,7 +86,8 @@
       "Bash(grep -cn '\\\\$fn\\\\$' _raid_balance.sql)",
       "Bash(sed -i \"s|20_news.css?v=20260619p|20_news.css?v=20260619r|\" css/index.css)",
       "Bash(sed -i 's|css/index.css?v=20260619p|css/index.css?v=20260619r|g' index.html)",
-      "Bash(node -c economy.js)"
+      "Bash(node -c economy.js)",
+      "Bash(node _chk.js)"
     ]
   }
 }
