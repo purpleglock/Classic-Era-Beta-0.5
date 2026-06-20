@@ -680,6 +680,32 @@ async function ecBootOnce() {
   return _ecBoot;
 }
 
+// ── Вход в кабинет чужой фракции (администрация) ─────────────
+// Стафф открывает экономику/кабинет глазами владельца — для проверки и помощи.
+// Игрок не снимается, владелец не меняется: это режим просмотра. Серверные
+// RPC (тик дохода, постройки) резолвят фракцию по auth.uid(), поэтому при
+// impersonation суточный тик НЕ запускаем — только читаем данные фракции.
+async function ecEnterAsFaction(fid) {
+  if (!ecIsStaff()) { toast('Только администрация', 'err'); return; }
+  if (!fid) return;
+  try {
+    const rows = await dbGet('faction_applications', `faction_id=eq.${encodeURIComponent(fid)}&status=eq.approved&order=updated_at.desc&limit=1`);
+    const app = rows && rows[0];
+    if (!app) { toast('Одобренная анкета фракции не найдена', 'err'); return; }
+    EC.app = app;
+    EC.myAppUid = user.id;                 // фиксируем кэш — ecLoadApp не перезатрёт чужой анкетой
+    EC.actAs = { fid, name: app.name };    // флаг режима администрации
+    go('economy', false);
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+// Выйти из чужого кабинета — сбросить кэш анкеты и вернуться в консоль.
+function ecExitImpersonation() {
+  EC.actAs = null;
+  EC.app = null; EC.myAppUid = null;       // следующий ecLoadApp подтянет свою (или пусто)
+  go('admin', false);
+}
+
 // ── Точка входа (#economy) ──────────────────────────────────
 async function ecRenderDashboard() {
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
@@ -693,7 +719,7 @@ async function ecRenderDashboard() {
     return;
   }
   try {
-    await ecBootOnce();   // создаём экономику + начисляем накопленный доход (тост внутри, 1 раз)
+    if (!EC.actAs) await ecBootOnce();   // создаём экономику + начисляем доход (тост внутри). В режиме администрации тик не запускаем — он резолвит фракцию по auth.uid()
     await ecLoad();
     ecPaintCabinet();
     // Личные сообщения админа этой фракции — всплывают 1 раз при входе в кабинет.
@@ -996,7 +1022,14 @@ function ecPaintCabinet() {
   const coverBg = img
     ? `<img class="ec-cover-img" src="${esc(img)}" alt=""><div class="ec-cover-fade"></div>`
     : `<div class="ec-cover-bg" style="background:linear-gradient(135deg, ${col}33, var(--b1) 70%)"></div>`;
+  const adminBanner = EC.actAs
+    ? `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;margin-bottom:12px;border:1px solid var(--gd,#3a7fbf);border-radius:8px;background:color-mix(in srgb,var(--gd,#3a7fbf) 14%,transparent);color:var(--gdl,#5fb0e6);font-size:13px">
+        <span>🔑 Режим администрации — вы в кабинете фракции <b>${esc(EC.actAs.name || EC.app.name || '')}</b>. Игрок не снят; изменения через серверные действия могут не примениться к этой фракции.</span>
+        <button class="btn btn-gh btn-sm" style="margin-left:auto" onclick="ecExitImpersonation()">✕ Выйти из кабинета</button>
+      </div>`
+    : '';
   setPg(`<div class="ec-wrap">
+    ${adminBanner}
     <div class="ec-cover" style="--fac:${col}">
       ${coverBg}
       <div class="ec-cover-scan"></div>

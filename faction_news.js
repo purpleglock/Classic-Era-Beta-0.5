@@ -212,6 +212,10 @@ function fnHomeBlockHtml() {
 // ── Лента сектора: компактная лента системных событий (слухи + сводки) ──
 // Это событие — анонс достижения? (title «🏆 Достижение: …»)
 function fnIsAch(n) { return /^🏆\s*Достижение:/.test(n && n.title || ''); }
+// Это событие — колонизация планеты? (title «Колонизация: …»)
+// Колоний бывает много, поэтому в ленте их сворачиваем в одну сводку,
+// чтобы они не вытесняли остальные события из видимой части.
+function fnIsColony(n) { return /^Колонизация:/.test(n && n.title || ''); }
 // Флаг (герб) фракции для события — по имени в заголовке. '' если не нашли.
 function fnFeedFlagHtml(n) {
   const f = fnEventFaction(n);
@@ -270,13 +274,42 @@ function fnToggleFeedAchGroup(el) {
   const g = el.closest('.fn-feed-group');
   if (g) g.classList.toggle('open');
 }
-// Собираем ленту: все достижения — в одну сводку сверху, остальные новости — строками.
-// Так спам ачивок не вытесняет слухи/сводки/события мира из видимой части.
+// Сводная строка ленты: ВСЕ колонизации в одной сворачиваемой группе.
+// Колоний бывают десятки — без сворачивания они монополизируют ленту.
+function fnFeedColonyGroup(grp) {
+  const cnt = grp.length;
+  const word = fnPlural(cnt, 'колонизация', 'колонизации', 'колонизаций');
+  const sub = grp.map(n => {
+    // title: «Колонизация: <планета> — <фракция>» → показываем хвост
+    const tail = String(n.title || '').replace(/^Колонизация:\s*/, '').trim() || '—';
+    return `<div class="fn-feed-row fn-fr-bulletin fn-feed-subrow" data-fn-id="${esc(n.id)}" onclick="event.stopPropagation();fnOpenArticle('${esc(n.id)}')">
+      <span class="fn-fr-ic">🪐</span>
+      ${fnFeedFlagHtml(n)}
+      <span class="fn-fr-title">${esc(tail)}</span>
+      <span class="fn-fr-time">${esc(fnStardate(n.published_at || n.created_at))}</span>
+    </div>`;
+  }).join('');
+  return `<div class="fn-feed-group">
+    <div class="fn-feed-row fn-fr-bulletin fn-feed-summary" onclick="fnToggleFeedAchGroup(this)" role="button" tabindex="0">
+      <span class="fn-fr-chev">▸</span>
+      <span class="fn-fr-ic">🪐</span>
+      <span class="fn-fr-title">${esc(cnt + ' ' + word + ' сектора')}</span>
+      <span class="fn-feed-hint">развернуть</span>
+      <span class="fn-fr-time">${esc(fnStardate(grp[0].published_at || grp[0].created_at))}</span>
+    </div>
+    <div class="fn-feed-sub">${sub}</div>
+  </div>`;
+}
+// Собираем ленту: достижения и колонизации — каждое в свою сворачиваемую сводку
+// сверху, остальные события (экспансия / новые государства / вера / союзы / слухи) —
+// строками. Так массовые однотипные события не вытесняют разнообразную хронику.
 function fnFeedRows(rows) {
   const achs = rows.filter(fnIsAch);
-  const others = rows.filter(n => !fnIsAch(n));
+  const colonies = rows.filter(n => !fnIsAch(n) && fnIsColony(n));
+  const others = rows.filter(n => !fnIsAch(n) && !fnIsColony(n));
   const out = [];
   if (achs.length) out.push(achs.length > 1 ? fnFeedAchGroup(achs) : fnFeedRow(achs[0]));
+  if (colonies.length) out.push(colonies.length > 1 ? fnFeedColonyGroup(colonies) : fnFeedRow(colonies[0]));
   others.slice(0, 10).forEach(n => out.push(fnFeedRow(n)));
   return out.join('');
 }

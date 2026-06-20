@@ -291,9 +291,9 @@ function adSetSubtab(t) { AD.subtab = t; if (!adRenderSlot()) adPaint(); }
 function adFacPanel() {
   const e = adEntry(AD.sel);
   if (!e) return '';
-  const SUBTABS = [['treasury','💰 Казна'],['economy','📊 Экономика'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['caravans','🚚 Караваны'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
+  const SUBTABS = [['treasury','💰 Казна'],['economy','📊 Экономика'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['caravans','🚚 Караваны'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['owner','👑 Владелец'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
   const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="fm-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
-  const bodyMap = { treasury: adTabTreasury, economy: adTabEconomy, resources: adTabResources, mining: adTabMining, caravans: adTabCaravans, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, testing: adTabTesting, danger: adTabDanger };
+  const bodyMap = { treasury: adTabTreasury, economy: adTabEconomy, resources: adTabResources, mining: adTabMining, caravans: adTabCaravans, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, owner: adTabOwner, testing: adTabTesting, danger: adTabDanger };
   const renderFn = bodyMap[AD.subtab] || adTabTreasury;
   let tabBody = '';
   try { tabBody = renderFn(e); }
@@ -1450,6 +1450,109 @@ async function adRemoveAgent(id) {
     const e = adEntry(AD.sel); if (e) e.agents = null;
     toast('Агент удалён', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+// ── Вкладка: Владелец (вход в кабинет / снятие / передача) ──────
+// Три независимые функции (_admin_transfer.sql + impersonation в economy.js):
+//   • Войти в кабинет игрока — стафф видит фракцию глазами владельца (без снятия).
+//   • Снять игрока — государство остаётся, но становится бесхозным.
+//   • Передать другому игроку — постоянная смена владельца во всех таблицах.
+function adTabOwner(e) {
+  const hasOwner = !!(e.app.owner_id);
+  const ownerLine = hasOwner
+    ? `<b style="color:var(--t1,#e8edf2)">${esc(e.app.owner_email || '—')}</b> <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(e.app.owner_id)}</span>`
+    : `<b style="color:var(--color-warning,#e0a030)">— бесхозное (нет владельца)</b>`;
+
+  // выпадающий список игроков для передачи (лениво из admin_list_users)
+  let assignPicker;
+  if (AD.users == null) {
+    adLoadUsers();
+    assignPicker = `<div class="fm-empty">Загрузка списка игроков…</div>`;
+  } else {
+    // кандидаты: все аккаунты, кроме текущего владельца этой фракции;
+    // помечаем тех, кто уже владеет одобренной фракцией (им передать нельзя)
+    const opts = AD.users
+      .filter(u => u.user_id !== e.app.owner_id)
+      .map(u => {
+        const busy = u.faction_status === 'approved' && u.faction_name;
+        const tag = busy ? ` — занят: ${u.faction_name}` : (u.role && u.role !== 'viewer' ? ` (${u.role})` : '');
+        return `<option value="${esc(u.user_id)}"${busy ? ' disabled' : ''}>${esc(u.email || u.user_id)}${esc(tag)}</option>`;
+      }).join('');
+    assignPicker = `<div class="fm-field-row" style="flex-wrap:wrap;gap:6px;align-items:center">
+      <select class="fi" id="ad-assign-user" style="flex:2;min-width:240px">
+        <option value="">— выберите игрока —</option>${opts}
+      </select>
+      <button class="btn btn-gd btn-sm" onclick="adAssignFaction()">↪ Передать государство</button>
+    </div>`;
+  }
+
+  const row = (label, hint, btn) => `<div class="fm-danger-act" style="align-items:flex-start">
+    <div class="fm-danger-label"><div>${label}</div>${hint ? `<div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">${hint}</div>` : ''}</div>${btn}</div>`;
+
+  return `<div class="fm-danger">
+    <div class="fm-danger-banner" style="background:rgba(95,176,230,.12);border-color:rgba(95,176,230,.4);color:var(--gdl,#5fb0e6)">👑 Управление владельцем государства. Сама страна (карта, экономика, колонии, армия) НЕ удаляется ни одной из этих операций.</div>
+    <div style="padding:8px 0;font-size:12px;color:var(--t3,#8aa0b0)">Текущий владелец: ${ownerLine}</div>
+    ${row('🔑 Войти в кабинет игрока', 'Открыть экономику и кабинет этой фракции глазами её владельца — для проверки и помощи. Игрок остаётся на месте, ничего не меняется.', `<button class="btn btn-gd" onclick="adEnterCabinet()">Войти в кабинет</button>`)}
+    ${row('🚪 Снять игрока с государства', 'Государство остаётся целым, но становится бесхозным (без владельца). Бывший владелец освобождается и сможет подать новую анкету. Данные страны не трогаются.', `<button class="btn btn-rd" onclick="adVacateFaction()" ${hasOwner ? '' : 'disabled'}>Снять игрока</button>`)}
+    <div style="margin-top:14px;border-top:1px solid var(--w2,#2a3340);padding-top:12px">
+      <div class="fm-danger-label" style="margin-bottom:4px">↪ Передать государство другому игроку <span class="fm-dim" style="font-weight:400">— постоянная смена владельца</span></div>
+      <div class="fm-dim" style="font-size:11px;margin-bottom:8px;line-height:1.4">Новый игрок получает полный контроль над страной (колонии, армия, экономика, дизайны) и роль «игрок». Прежний владелец (если есть) освобождается. Игрокам, уже владеющим одобренной фракцией, передать нельзя.</div>
+      ${assignPicker}
+    </div>
+  </div>`;
+}
+
+async function adLoadUsers() {
+  try {
+    const rows = await apiFetch('rpc/admin_list_users', { method: 'POST', body: '{}' });
+    AD.users = Array.isArray(rows) ? rows : [];
+  } catch (ex) { AD.users = []; toast('Ошибка загрузки игроков: ' + ex.message, 'err'); }
+  if (AD.subtab === 'owner') adPaint();
+}
+
+// Вход в кабинет выбранной фракции (impersonation, без снятия игрока) — логика в economy.js
+function adEnterCabinet() {
+  if (!AD.sel) return;
+  if (typeof ecEnterAsFaction === 'function') ecEnterAsFaction(AD.sel);
+  else toast('Модуль экономики не загружен', 'err');
+}
+
+async function adVacateFaction() {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e) return;
+  const who = e.app.owner_email || e.app.owner_id || 'владелец';
+  if (!confirm(`Снять игрока (${who}) с государства «${e.app.name}»?\n\nСтрана останется целой, но станет бесхозной. Бывший владелец сможет подать новую анкету. Данные не удаляются.`)) return;
+  AD.busy = true;
+  try {
+    await apiFetch('rpc/admin_vacate_faction', { method: 'POST', body: JSON.stringify({ p_faction_id: AD.sel }) });
+    e.app.owner_id = null; e.app.owner_email = null;
+    if (e.eco) { e.eco.owner_id = null; e.eco.owner_email = null; }
+    AD.users = null;   // список ролей мог измениться
+    toast('Игрок снят, государство бесхозное', 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+async function adAssignFaction() {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e) return;
+  const uid = document.getElementById('ad-assign-user')?.value || '';
+  if (!uid) { toast('Выберите игрока', 'err'); return; }
+  const u = (AD.users || []).find(x => x.user_id === uid);
+  const who = u ? (u.email || uid) : uid;
+  if (!confirm(`Передать государство «${e.app.name}» игроку ${who}?\n\nОн получит полный контроль и роль «игрок». Прежний владелец (если есть) будет снят.`)) return;
+  AD.busy = true;
+  try {
+    const r = await apiFetch('rpc/admin_assign_faction', { method: 'POST', body: JSON.stringify({ p_faction_id: AD.sel, p_user_id: uid }) });
+    e.app.owner_id = uid; e.app.owner_email = (r && r.new_owner_email) || (u && u.email) || null;
+    if (e.eco) { e.eco.owner_id = uid; e.eco.owner_email = e.app.owner_email; }
+    AD.users = null;   // роли изменились
+    toast(`Государство передано: ${who}`, 'ok'); adPaint();
+  } catch (ex) {
+    const msg = /already owns an approved faction/.test(ex.message) ? 'У игрока уже есть одобренная фракция' : ex.message;
+    toast('Ошибка: ' + msg, 'err');
+  }
   finally { AD.busy = false; }
 }
 
