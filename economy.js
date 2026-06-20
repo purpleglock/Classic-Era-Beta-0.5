@@ -2575,12 +2575,26 @@ function ecTabColonies() {
   const race = EC.app.race;
   // Системы: владеемые + те, где есть колонии (чтобы колонии НЕ ТЕРЯЛИСЬ,
   // даже если имя колонии не совпало с планетой на карте или система не в списке).
+  // Источник истины по составу системы — ПОЛНЫЙ список карты (EC.allSystems),
+  // тот же, что рисует галактическая карта. Раньше состав брался из EC.systems
+  // (отдельная выборка по faction=eq.fid), и планеты, добавленные через редактор
+  // карты, могли не появиться во вкладке при любом расхождении тегов faction —
+  // на карте видно, а в «Системы и колонии» нет. Теперь планеты всегда берутся
+  // из allSystems → состав вкладки совпадает с картой.
+  const allById = new Map((EC.allSystems || []).map(s => [s.id, s]));
   const sysMap = new Map();
-  EC.systems.forEach(s => sysMap.set(s.id, { id: s.id, name: s.name, planets: (s.planets || []).filter(p => p && p.name) }));
-  EC.colonies.forEach(c => { if (c.system_id && !sysMap.has(c.system_id)) {
-    const live = EC.allSystems && EC.allSystems.find(x => x.id === c.system_id);
-    sysMap.set(c.system_id, { id: c.system_id, name: (live && live.name) || 'Система', planets: (live && live.planets) || [] });
-  }});
+  const addSys = (id, fallbackName) => {
+    if (!id || sysMap.has(id)) return;
+    const live = allById.get(id);
+    const own = (EC.systems || []).find(s => s.id === id);
+    const name = (live && live.name) || (own && own.name) || fallbackName || 'Система';
+    const planets = ((live && live.planets) || (own && own.planets) || []).filter(p => p && p.name);
+    sysMap.set(id, { id, name, planets });
+  };
+  // 1) системы, которыми владеет фракция игрока
+  (EC.systems || []).forEach(s => addSys(s.id, s.name));
+  // 2) системы, где у игрока есть колонии (даже если тег faction отличается)
+  (EC.colonies || []).forEach(c => addSys(c.system_id));
   // По умолчанию системы СВЁРНУТЫ (раскрываются кликом по шапке). Инициализируем
   // один раз за сессию — дальше твои раскрытия/сворачивания сохраняются.
   if (!EC.sysCollapseInit) { EC.closedSys = new Set([...sysMap.keys()]); EC.sysCollapseInit = true; }
