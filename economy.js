@@ -8,7 +8,7 @@
 // ════════════════════════════════════════════════════════════
 
 const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], projects: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], dossiers: [], alerts: [], passive: {}, tab: 'overview', busy: false, openColony: null, openSys: null, spyTarget: null, spyOp: 'recon_basic', spyAgents: 1 };
-const EC_CLAIM_COST = 3000, EC_CLAIM_CD_DAYS = 7;
+const EC_CLAIM_COST = 3000, EC_CLAIM_CD_DAYS = 4;
 // ── ТАЙНЫЕ ОПЕРАЦИИ — каталог (зеркало spy_launch/ spy_resolve в SQL) ──
 // diff — сложность; base — базовая длительность (ходов); need — нужная разведка
 // ('','basic','deep'); recon — это разведка (даёт досье).

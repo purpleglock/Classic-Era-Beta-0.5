@@ -132,7 +132,7 @@ declare
   sys public.map_systems;
   adj boolean;
   cost numeric := 3000;
-  cd interval := '7 days';
+  cd interval := '4 days';
   mods jsonb;
   max_claims int := 1;     -- размер пула захватов: «Дом в небесах»/роботы/экспансионисты → 2
   pool_used int;
@@ -143,7 +143,7 @@ begin
   if not found then raise exception 'no approved faction'; end if;
   mods := public._faction_mods(app.faction_id);
   cost := round(3000 * (mods->>'claim_cost')::numeric);
-  cd := (round(7 * (mods->>'claim_cd')::numeric) || ' days')::interval;
+  cd := (round(4 * (mods->>'claim_cd')::numeric) || ' days')::interval;
 
   select * into eco from public.faction_economy where faction_id = app.faction_id for update;
   if not found then raise exception 'no economy'; end if;
