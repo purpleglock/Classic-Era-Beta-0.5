@@ -60,18 +60,165 @@
 .ec-doc-tag.neg { color: var(--err, #e05050); border-color: color-mix(in srgb, var(--err, #e05050) 40%, transparent); background: color-mix(in srgb, var(--err, #e05050) 8%, transparent); }
 .ec-doc-tag.grant { color: var(--te, #3ec0d0); border-color: color-mix(in srgb, var(--te, #3ec0d0) 48%, transparent); background: color-mix(in srgb, var(--te, #3ec0d0) 11%, transparent); }
 .ec-doc-tag.special { color: var(--pu, #a98bff); border-color: color-mix(in srgb, var(--pu, #a98bff) 52%, transparent); background: color-mix(in srgb, var(--pu, #a98bff) 13%, transparent); font-weight: 700; }
-/* ── Тайные операции ── */
-.ec-spy-ops { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
-.ec-spy-op { display: flex; align-items: center; gap: 7px; background: var(--b1); border: 1px solid var(--w2); border-radius: 8px; padding: 8px 10px; cursor: pointer; color: var(--t2); font-size: 12px; text-align: left; transition: border-color .12s, background .12s; }
-.ec-spy-op:hover:not(.locked) { background: var(--b3); }
-.ec-spy-op.on { border-color: var(--te, #3ec0d0); background: color-mix(in srgb, var(--te, #3ec0d0) 12%, var(--b1)); color: var(--t1); }
+/* ══ Тайные операции — редизайн UI 2.0 ══ */
+
+/* Флаг/герб фракции */
+.ec-flag { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--w3); border-radius: 6px; overflow: hidden; background: var(--b0); position: relative; vertical-align: middle; }
+.ec-flag img { width: 100%; height: 100%; object-fit: cover; }
+.ec-flag b { display: none; font-family: var(--font-display); font-weight: 800; font-size: 10px; letter-spacing: .02em; }
+.ec-flag.ec-flag-fb b { display: block; }
+
+/* Командный HUD разведуправления */
+.ec-spy-hud { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; background: linear-gradient(135deg, color-mix(in srgb, var(--pu, #a98bff) 9%, var(--b2)), var(--b2)); border: 1px solid var(--w2); border-left: 3px solid var(--pu, #a98bff); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 18px; }
+.ec-spy-hud-ttl { display: flex; align-items: center; gap: 10px; }
+.ec-spy-hud-ttl > span { font-size: 26px; line-height: 1; }
+.ec-spy-hud-ttl b { display: block; font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--t1); }
+.ec-spy-hud-ttl i { display: block; font-style: normal; font-size: 11px; color: var(--t3); }
+.ec-spy-hud-stats { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-left: auto; }
+.ec-spy-stat { display: flex; flex-direction: column; align-items: center; min-width: 58px; }
+.ec-spy-stat-v { font-family: var(--font-display); font-weight: 700; font-size: 21px; color: var(--t1); line-height: 1.1; }
+.ec-spy-stat-v i { font-style: normal; font-size: 13px; color: var(--t4); }
+.ec-spy-stat-k { font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; color: var(--t3); margin-top: 2px; white-space: nowrap; }
+
+/* Шевроны уровня */
+.ec-pips { display: inline-flex; gap: 2px; vertical-align: middle; }
+.ec-pips .ec-pip { width: 5px; height: 9px; border-radius: 1.5px; background: var(--w2); transform: skewX(-12deg); }
+.ec-pips .ec-pip.on { background: var(--gd, #7bd88f); }
+.ec-pips.sm .ec-pip { width: 4px; height: 7px; }
+
+/* ── Карточки агентов (досье) ── */
+.ec-agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 9px; }
+.ec-agent-card, .ec-recruit-card { display: flex; flex-direction: column; gap: 8px; background: var(--b1); border: 1px solid var(--w1); border-left: 3px solid var(--ag-col, var(--w3)); border-radius: var(--radius-md); padding: 11px 12px; }
+.ec-recruit-card { background: var(--b2); }
+.ec-agent-top { display: flex; align-items: center; gap: 10px; }
+.ec-agent-pic { display: inline-flex; align-items: center; justify-content: center; position: relative; border: 2px solid; border-radius: 10px; flex-shrink: 0; }
+.ec-agent-pic-ic { font-size: 20px; line-height: 1; }
+.ec-agent-pic-lv { position: absolute; right: -5px; bottom: -5px; min-width: 16px; height: 16px; padding: 0 3px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-weight: 800; font-size: 10px; color: #06101e; border-radius: 8px; border: 1.5px solid var(--b1); }
+.ec-agent-id { flex: 1; min-width: 0; }
+.ec-agent-name { display: flex; align-items: center; gap: 6px; font-family: var(--font-display); font-weight: 700; font-size: 13.5px; color: var(--t1); line-height: 1.2; }
+.ec-agent-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px; }
+.ec-agent-attr { font-size: 10.5px; color: var(--t3); }
+.ec-agent-arts { font-size: 12px; }
+.ec-agent-status { flex-shrink: 0; font-family: var(--font-mono); font-size: 9px; letter-spacing: .03em; text-transform: uppercase; padding: 2px 7px; border: 1px solid; border-radius: var(--radius-pill); white-space: nowrap; }
+.ec-agent-perks { display: flex; flex-wrap: wrap; gap: 5px; }
+.ec-agent-perk { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border: 1px solid; border-radius: var(--radius-pill); background: color-mix(in srgb, currentColor 8%, transparent); }
+.ec-agent-art { font-size: 13px; cursor: help; }
+.ec-agent-xp { display: flex; align-items: center; gap: 8px; }
+.ec-agent-xp-bar { flex: 1; height: 5px; border-radius: 3px; background: var(--w1); overflow: hidden; }
+.ec-agent-xp-bar > div { height: 100%; border-radius: 3px; }
+.ec-agent-xp-t { font-family: var(--font-mono); font-size: 9px; color: var(--t3); white-space: nowrap; }
+.ec-agent-acts { display: flex; gap: 6px; align-items: center; }
+.ec-agent-acts .btn { flex: 1; }
+.ec-agent-fire { flex: 0 0 auto !important; min-width: 30px; }
+.ec-recruit-hire { margin-top: 2px; }
+
+/* ── Выбор цели (карточки-флаги) ── */
+.ec-tgt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 7px; }
+.ec-tgt-card { display: flex; align-items: center; gap: 9px; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 8px 10px; cursor: pointer; color: inherit; text-align: left; font: inherit; transition: border-color .12s, background .12s; }
+.ec-tgt-card:hover { background: var(--b3); }
+.ec-tgt-card.on { border-color: var(--gd, #7bd88f); background: color-mix(in srgb, var(--gd, #7bd88f) 10%, var(--b1)); }
+.ec-tgt-info { flex: 1; min-width: 0; }
+.ec-tgt-name { font-weight: 700; font-size: 12.5px; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-tgt-meta { font-size: 10px; color: var(--t3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-tgt-dos { font-family: var(--font-mono); font-size: 9.5px; }
+.ec-tgt-chk { color: var(--gd, #7bd88f); font-weight: 800; flex-shrink: 0; }
+
+/* ── Операции (карточки по группам) ── */
+.ec-op-group { margin-bottom: 12px; }
+.ec-op-group-hd { font-family: var(--font-display); font-weight: 600; font-size: 12px; color: var(--t2); margin: 4px 0 6px; }
+.ec-op-group-hd i { font-weight: 400; font-style: normal; font-size: 10.5px; color: var(--t4); margin-left: 4px; }
+.ec-spy-ops { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 7px; }
+.ec-spy-op { display: flex; flex-direction: column; gap: 6px; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 9px 11px; cursor: pointer; color: var(--t2); text-align: left; font: inherit; transition: border-color .12s, background .12s; }
+.ec-spy-op:hover:not(.locked) { background: var(--b3); border-color: var(--w3); }
+.ec-spy-op.on { border-color: var(--te, #3ec0d0); background: color-mix(in srgb, var(--te, #3ec0d0) 12%, var(--b1)); color: var(--t1); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--te, #3ec0d0) 30%, transparent); }
 .ec-spy-op.locked { opacity: .5; cursor: not-allowed; }
-.ec-spy-op-ic { font-size: 15px; flex-shrink: 0; }
-.ec-spy-op-n { flex: 1; }
-.ec-spy-op-lock { font-size: 11px; }
+.ec-op-hd { display: flex; align-items: center; gap: 7px; }
+.ec-op-ic { font-size: 16px; flex-shrink: 0; }
+.ec-op-n { flex: 1; font-weight: 700; font-size: 12.5px; color: var(--t1); }
+.ec-op-lock, .ec-op-chk { font-size: 12px; flex-shrink: 0; }
+.ec-op-chk { color: var(--te, #3ec0d0); font-weight: 800; }
+.ec-op-desc { font-size: 10.5px; color: var(--t3); line-height: 1.4; }
+.ec-op-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.ec-op-diff { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .03em; text-transform: uppercase; color: var(--t4); }
+.ec-op-tag { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .02em; text-transform: uppercase; padding: 1.5px 6px; border: 1px solid var(--w2); border-radius: var(--radius-pill); color: var(--t3); }
+.ec-op-tag.locked { color: var(--color-warning, #e0a030); border-color: color-mix(in srgb, var(--color-warning, #e0a030) 40%, transparent); }
+
+/* ── Выбор оперативной группы ── */
+.ec-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
+.ec-pick-card { display: flex; align-items: center; gap: 8px; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 7px 9px; cursor: pointer; color: inherit; text-align: left; font: inherit; transition: border-color .12s, background .12s; }
+.ec-pick-card:hover { background: var(--b3); }
+.ec-pick-card.on { border-color: var(--ag-col, var(--gd)); background: color-mix(in srgb, var(--ag-col, var(--gd)) 11%, var(--b1)); }
+.ec-pick-check { width: 18px; height: 18px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; border: 1px solid var(--w3); font-weight: 800; font-size: 12px; color: var(--t4); }
+.ec-pick-card.on .ec-pick-check { background: var(--ag-col, var(--gd)); border-color: var(--ag-col, var(--gd)); color: #06101e; }
+.ec-pick-ic { font-size: 16px; flex-shrink: 0; }
+.ec-pick-body { flex: 1; min-width: 0; }
+.ec-pick-name { display: flex; align-items: center; gap: 5px; font-weight: 700; font-size: 12px; color: var(--t1); }
+.ec-pick-perk { display: block; font-size: 10px; margin-top: 1px; }
+.ec-pick-p2 { margin-left: 3px; }
+.ec-pick-arts { color: var(--t3); }
+
+/* ── Сводка операции (с гейджами) ── */
+.ec-sum-head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--w1); }
+.ec-sum-op { font-size: 13.5px; color: var(--t1); }
+.ec-sum-arrow { color: var(--t4); }
+.ec-sum-tgt { font-size: 13px; color: var(--t1); }
+.ec-sum-team { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.ec-sum-agent { font-size: 11.5px; }
+.ec-sum-agent b { font-size: 10px; }
+.ec-sum-desc { font-size: 11.5px; color: var(--t3); line-height: 1.45; }
+.ec-sum-metric { display: flex; align-items: center; gap: 9px; }
+.ec-sum-k { flex: 0 0 96px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .03em; text-transform: uppercase; color: var(--t3); }
+.ec-sum-gauge { flex: 1; height: 8px; border-radius: 4px; background: var(--w1); overflow: hidden; }
+.ec-sum-gauge-fill { height: 100%; border-radius: 4px; transition: width .2s; }
+.ec-sum-metric > b { flex: 0 0 42px; text-align: right; font-family: var(--font-display); font-weight: 700; font-size: 14px; }
+.ec-sum-rows { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.ec-sum-rows span { font-size: 11px; color: var(--t3); }
+.ec-sum-rows i { font-style: normal; color: var(--t4); }
+.ec-sum-rows b { color: var(--t1); font-weight: 600; }
+
+/* ── Ленты операций ── */
+.ec-spy-feed { display: flex; flex-direction: column; gap: 7px; }
+.ec-spy-row { display: flex; align-items: flex-start; gap: 11px; background: var(--b2); border: 1px solid var(--w2); border-left: 3px solid var(--w3); border-radius: var(--radius-md); padding: 9px 12px; }
+.ec-spy-row.ok { border-left-color: var(--ok, #7bd88f); }
+.ec-spy-row.fail { border-left-color: var(--err, #e05050); }
+.ec-spy-row.wait { border-left-color: var(--color-warning, #e0a030); }
+.ec-spy-row.alert { border-left-color: var(--err, #e05050); background: color-mix(in srgb, var(--err, #e05050) 5%, var(--b2)); }
+.ec-spy-row-badge { flex-shrink: 0; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; font-size: 14px; background: var(--b0); border: 1px solid var(--w2); }
+.ec-spy-row-badge.ok { color: var(--ok, #7bd88f); border-color: color-mix(in srgb, var(--ok, #7bd88f) 45%, transparent); }
+.ec-spy-row-badge.fail { color: var(--err, #e05050); border-color: color-mix(in srgb, var(--err, #e05050) 45%, transparent); }
+.ec-spy-row-badge.wait { color: var(--color-warning, #e0a030); border-color: color-mix(in srgb, var(--color-warning, #e0a030) 45%, transparent); }
+.ec-spy-row-badge.alert { color: var(--err, #e05050); border-color: color-mix(in srgb, var(--err, #e05050) 45%, transparent); }
+.ec-spy-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ec-spy-row-top { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; color: var(--t2); }
+.ec-spy-row-top b { color: var(--t1); }
+.ec-spy-row-arr { color: var(--t4); }
+.ec-spy-row-tgt { font-weight: 600; color: var(--t1); }
+.ec-spy-row-detail { font-size: 12px; color: var(--t2); line-height: 1.4; }
+.ec-spy-mean { color: var(--t3); font-style: italic; }
+.ec-spy-row-foot { font-family: var(--font-mono); font-size: 10px; color: var(--t4); }
+.ec-spy-row-side { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.ec-spy-tag { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .02em; text-transform: uppercase; padding: 1.5px 6px; border-radius: var(--radius-pill); border: 1px solid var(--w2); color: var(--t3); }
+.ec-spy-tag.bad { color: var(--err, #e05050); border-color: color-mix(in srgb, var(--err, #e05050) 40%, transparent); }
+.ec-spy-tag.art { color: var(--pu, #a98bff); border-color: color-mix(in srgb, var(--pu, #a98bff) 40%, transparent); }
+.ec-spy-anon { color: var(--t3); }
+.ec-spy-anon i { color: var(--t4); }
+.ec-spy-invest { display: flex; flex-direction: column; gap: 5px; margin-top: 5px; }
+.ec-spy-invest-bar { display: flex; align-items: center; gap: 8px; }
+.ec-spy-invest-track { flex: 1; height: 7px; border-radius: 4px; background: var(--w1); overflow: hidden; }
+.ec-spy-invest-track > div { height: 100%; background: var(--gd, #7bd88f); }
+.ec-spy-count { font-family: var(--font-mono); font-size: 10px; padding: 1px 7px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--te, #3ec0d0) 16%, transparent); color: var(--te, #3ec0d0); }
+.ec-spy-count.warn { background: color-mix(in srgb, var(--color-warning, #e0a030) 16%, transparent); color: var(--color-warning, #e0a030); }
+
 .ec-ci-row { display: flex; align-items: center; gap: 10px; }
 .ec-ci-val { font-family: var(--font-mono); font-size: 12px; color: var(--pu); }
 .ec-ci-row .btn { min-width: 34px; }
+
+@media (max-width: 720px) {
+  .ec-spy-hud-stats { margin-left: 0; width: 100%; justify-content: space-between; gap: 10px; }
+  .ec-spy-stat { min-width: 50px; }
+  .ec-agent-grid, .ec-tgt-grid, .ec-spy-ops, .ec-pick-grid { grid-template-columns: 1fr; }
+  .ec-sum-k { flex-basis: 80px; }
+}
 /* компактная версия для обзора анкеты */
 .fr-doctrine .ec-doctrine { margin-bottom: 0; }
 /* эффекты выбранного варианта прямо в анкете (под описанием) */

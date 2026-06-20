@@ -34,7 +34,6 @@ const GB_MOD = {
   claim_cd:    { label: 'Перезарядка',    grow: false, pct: true },
   research:    { label: 'Цена науки',     grow: false, pct: true },
   sci_flat:    { label: 'Наука',          grow: true,  pct: false, suf: '/сут' },
-  agents_flat: { label: 'Агенты',         grow: true,  pct: false, suf: '/сут' },
 };
 const GB_GRANT = {
   trade: 'Торговый хаб', factory: 'Гражданская фабрика', military_factory: 'Военный завод',
@@ -94,7 +93,7 @@ function gbChip(field, val) {
 }
 // Все чипы доктрины + (опц.) грант-здание + грант-тех + бонус-слот
 function gbChips(mods, grant, tech, slot) {
-  const order = ['gc', 'mine', 'build', 'colonize', 'claim_cost', 'claim_cd', 'research', 'sci_flat', 'agents_flat'];
+  const order = ['gc', 'mine', 'build', 'colonize', 'claim_cost', 'claim_cd', 'research', 'sci_flat'];
   let h = order.map(k => gbChip(k, mods[k])).join('');
   if (grant && GB_GRANT[grant]) h += `<span class="gb-chip gb-chip-grant">⌂ ${GB_GRANT[grant]}</span>`;
   if (tech) h += `<span class="gb-chip gb-chip-tech">✦ ${tech}</span>`;
