@@ -673,6 +673,12 @@
 .ec-rqueue-item b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ec-rqueue-n { font-family: var(--font-mono); font-size: 11px; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: color-mix(in srgb, var(--color-warning, #e0a030) 18%, transparent); color: var(--color-warning, #e0a030); flex: none; }
 .ec-rqueue-cost { font-family: var(--font-mono); font-size: 11px; color: var(--pu); flex: none; }
+/* Причина простоя техи в очереди (зеркало серверного _research_step) */
+.ec-rqueue-why { font-size: 10.5px; flex: 0 1 auto; min-width: 0; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .9; }
+.ec-rqueue-why.go   { color: var(--ok, #7bd88f); }
+.ec-rqueue-why.sci  { color: var(--color-warning, #e0a030); }
+.ec-rqueue-why.lock { color: var(--te, #e08a8a); }
+.ec-rqueue-why.wait { color: var(--t3, #9fb0c8); }
 /* В строке дохода бар занимает всю ширину ячейки */
 .ec-next .ec-prog { display: flex; }
 .ec-next .ec-prog-track { flex: 1; width: auto; min-width: 60px; }

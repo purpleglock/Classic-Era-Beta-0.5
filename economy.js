@@ -4888,10 +4888,31 @@ function ecTabResearch() {
   }).join('') + Array.from({ length: Math.max(0, maxSlots - activeSlots.length) }, (_, i) =>
     `<div class="ec-cap ec-cap-prog ec-cap-free">○ Слот ${activeSlots.length + i + 1}: <span style="color:var(--t4)">свободен</span></div>`).join('');
 
-  // Очередь технологий — автозапуск в освободившиеся слоты на тике.
+  // ── Причина простоя для каждой техи в очереди ──
+  // Симуляция зеркалит серверный _research_step: порядок проверок строго
+  // слот → предшественник → ОН; стартующие техи «занимают» слот и тратят ОН,
+  // поэтому подсказка для нижних элементов учитывает расход верхних.
+  const queueReason = (() => {
+    let freeSlots = Math.max(0, maxSlots - activeSlots.length);
+    let budget = sci;
+    const map = {};
+    for (const id of queue) {
+      const node = all.find(n => n.id === id) || {};
+      const cost = ecResearchCost(node.cost || 0);
+      if (freeSlots <= 0) { map[id] = { ic: '⏸', cls: 'wait', txt: 'ждёт свободный слот' }; continue; }
+      const miss = (node.prereq || []).filter(p => !done.has(p));
+      if (miss.length) { map[id] = { ic: '🔒', cls: 'lock', txt: 'ждёт: ' + miss.map(nameOf).join(', ') }; continue; }
+      if (budget < cost) { map[id] = { ic: '⚠', cls: 'sci', txt: `не хватает ОН: нужно ${ecNum(cost)} (есть ${ecNum(budget)})` }; continue; }
+      map[id] = { ic: '▶', cls: 'go', txt: 'стартует в этот слот' };
+      freeSlots -= 1; budget -= cost;
+    }
+    return map;
+  })();
+
+  // Очередь технологий — автозапуск в освободившиеся слоты (сразу при действии и на тике).
   const queueHtml = queue.length
-    ? `<div class="ec-rqueue"><div class="ec-rqueue-h">🕓 Очередь технологий <span class="ec-hint">(${queue.length}) — запускаются автоматически</span></div>
-        ${queue.map((id, i) => `<div class="ec-rqueue-item"><span class="ec-rqueue-n">${i + 1}</span><b>${esc(nameOf(id))}</b><span class="ec-rqueue-cost">${ecNum(ecResearchCost((all.find(n => n.id === id) || {}).cost || 0))} ОН</span><button class="btn btn-gh btn-xs" onclick="ecDequeueResearch(${i})" title="Убрать">✕</button></div>`).join('')}
+    ? `<div class="ec-rqueue"><div class="ec-rqueue-h">🕓 Очередь технологий <span class="ec-hint">(${queue.length}) — запускаются автоматически, как только освободится слот и хватит ОН</span></div>
+        ${queue.map((id, i) => { const rsn = queueReason[id] || { ic: '', cls: 'wait', txt: '' }; return `<div class="ec-rqueue-item"><span class="ec-rqueue-n">${i + 1}</span><b>${esc(nameOf(id))}</b><span class="ec-rqueue-cost">${ecNum(ecResearchCost((all.find(n => n.id === id) || {}).cost || 0))} ОН</span><span class="ec-rqueue-why ${rsn.cls}" title="${esc(rsn.txt)}">${rsn.ic} ${esc(rsn.txt)}</span><button class="btn btn-gh btn-xs" onclick="ecDequeueResearch(${i})" title="Убрать">✕</button></div>`; }).join('')}
       </div>`
     : '';
 
@@ -5046,11 +5067,10 @@ async function ecResearch(nodeId) {
   if ((EC.eco.science || 0) < rc) { ecQueueResearch(nodeId); return; }      // не хватает ОН → в очередь
   if (EC.busy) return; EC.busy = true;
   try {
+    // Сервер сам добирает очередь в свободные слоты (perform _research_step в economy_research).
     await ecRpc('economy_research', { p_node: nodeId, p_cost: rc });
     toast('Исследование начато (1 ход)', 'ok');
     await ecReloadPaint();
-    _ecDrainTimer = 0;
-    await ecResearchDrain();
   } catch (e) { toast(ecErr(e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }
@@ -5067,11 +5087,10 @@ async function ecQueueResearch(nodeId) {
   }
   if (EC.busy) return; EC.busy = true;
   try {
+    // Сервер сам добирает очередь в свободные слоты (perform _research_step в economy_research_queue).
     await ecRpc('economy_research_queue', { p_node: nodeId });
     toast('Добавлено в очередь технологий', 'ok');
     await ecReloadPaint();
-    _ecDrainTimer = 0;
-    await ecResearchDrain();
   } catch (e) { toast(ecErr(e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }
