@@ -286,6 +286,7 @@ textarea.fi { resize: vertical; min-height: 80px; line-height: 1.6; }
   padding: 14px 24px; border-top: 1px solid var(--w2);
   display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0;
   background: var(--b2);
+  position: sticky; bottom: 0; z-index: 10;
 }
 .xb {
   background: transparent; border: 1px solid var(--w2); border-radius: 0;
