@@ -32,6 +32,62 @@ const sb = supabase.createClient(SB_URL, SB_ANON, {
 });
 
 // ────────────────────────────────────────────────────────────────────────────────────────────────────
+// CLOUDFLARE R2 (картинки) — бесплатный egress, спасает от банов Supabase Storage
+// ────────────────────────────────────────────────────────────────────────────────────────────────────
+// R2_PUBLIC — публичный URL бакета (R2 → бакет → Settings → Public access → r2.dev), БЕЗ слэша в конце
+//             пример: 'https://pub-xxxxxxxx.r2.dev'
+// R2_UPLOAD — URL воркера-загрузчика (Cloudflare Workers, *.workers.dev), БЕЗ слэша в конце
+//             пример: 'https://ce-upload.твой-логин.workers.dev'
+// Пока обе строки пустые → заливка идёт в Supabase Storage, как раньше (плавный переход).
+const R2_PUBLIC = '';
+const R2_UPLOAD = '';
+
+// Плейсхолдер «КЭ» — инлайн-SVG, сети не требует, не ломается. Подменяет любую битую картинку.
+const CE_IMG_PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'>" +
+  "<rect width='100%' height='100%' fill='#0b0e18'/>" +
+  "<rect x='1.5' y='1.5' width='397' height='297' fill='none' stroke='#1e2740' stroke-width='2'/>" +
+  "<text x='50%' y='47%' fill='#4cb4ec' font-family='Georgia,serif' font-size='120' font-weight='bold' " +
+  "text-anchor='middle' dominant-baseline='central' opacity='0.85'>КЭ</text>" +
+  "<text x='50%' y='80%' fill='#3a4a66' font-family='Arial,sans-serif' font-size='18' " +
+  "letter-spacing='3' text-anchor='middle'>НЕТ ИЗОБРАЖЕНИЯ</text></svg>"
+);
+
+// Глобальный перехватчик: любая <img>, которая не загрузилась, заменяется на плейсхолдер.
+// capture=true — события error у картинок не всплывают, ловим на фазе погружения.
+window.addEventListener('error', function (e) {
+  const t = e.target;
+  if (t && t.tagName === 'IMG' && t.dataset.cePh !== '1' && t.src !== CE_IMG_PLACEHOLDER) {
+    t.dataset.cePh = '1';
+    t.src = CE_IMG_PLACEHOLDER;
+  }
+}, true);
+
+// Общий аплоадер картинок: пишет в R2 (если настроен), иначе — в Supabase Storage.
+// Возвращает публичный URL загруженного файла. file уже должен быть сжат вызывающим кодом.
+async function ceUploadImage(file, token) {
+  const ext = ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' })[file.type] || 'jpg';
+  const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  if (R2_PUBLIC && R2_UPLOAD) {
+    const r = await fetch(`${R2_UPLOAD}/${name}`, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': file.type },
+      body: file
+    });
+    if (!r.ok) { let m = 'R2 HTTP ' + r.status; try { m += ': ' + (await r.text()); } catch {} throw new Error(m); }
+    return `${R2_PUBLIC}/${name}`;
+  }
+  // Фолбэк — Supabase Storage (bucket wiki-images)
+  const r = await fetch(`${SB_URL}/storage/v1/object/wiki-images/${name}`, {
+    method: 'POST',
+    headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token, 'Content-Type': file.type, 'cache-control': 'max-age=31536000, immutable', 'x-upsert': 'true' },
+    body: file
+  });
+  if (!r.ok) { let m = 'HTTP ' + r.status; try { const e = await r.json(); m = e?.error || e?.message || m; } catch {} throw new Error(m); }
+  return `${SB_URL}/storage/v1/object/public/wiki-images/${name}`;
+}
+
+// ────────────────────────────────────────────────────────────────────────────────────────────────────
 // REST HELPERS
 // ────────────────────────────────────────────────────────────────────────────────────────────────────
 function getToken() {

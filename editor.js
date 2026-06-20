@@ -2171,11 +2171,10 @@ async function handleImgUpload(file, onUrl) {
   toast('Загрузка...','inf');
   file = await compressImageFile(file);
   try {
-    const token = await getTokenFresh(); const ext=({'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp'})[file.type]||'jpg'; const name=`${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
-    const r=await fetch(`${SB_URL}/storage/v1/object/wiki-images/${name}`,{ method:'POST', headers:{'apikey':SB_ANON,'Authorization':'Bearer '+token,'Content-Type':file.type,'cache-control':'max-age=31536000, immutable','x-upsert':'true'}, body:file });
-    if(r.ok){onUrl(`${SB_URL}/storage/v1/object/public/wiki-images/${name}`);toast('Загружено ✓','ok');return;}
-    let errMsg='HTTP '+r.status; try{const e=await r.json();errMsg=e?.error||e?.message||errMsg;}catch{} toast(`Storage: ${errMsg}. Используй URL напрямую или настрой Storage policies.`,'err');
-  } catch(e) { toast(`Ошибка: ${e.message}`,'err'); }
+    const token = await getTokenFresh();
+    const url = await ceUploadImage(file, token);
+    onUrl(url); toast('Загружено ✓','ok'); return;
+  } catch(e) { toast(`Загрузка: ${e.message}. Используй URL напрямую.`,'err'); }
   if (file.size>512*1024){toast('Слишком большой для base64. Настрой Storage bucket.','err');return;}
   const reader=new FileReader(); reader.onload=()=>onUrl(reader.result); reader.onerror=()=>toast('Не удалось прочитать файл','err'); reader.readAsDataURL(file);
 }
@@ -2974,24 +2973,7 @@ async function uploadDevlogBg(input) {
   
   try {
     file = await compressImageFile(file);
-    const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    const res = await fetch(`${SB_URL}/storage/v1/object/wiki-images/${fileName}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + getToken(),
-        'Content-Type': file.type,
-        'cache-control': 'max-age=31536000, immutable'
-      },
-      body: file
-    });
-    
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error('Ошибка загрузки: ' + err);
-    }
-    
-    const data = await res.json();
-    const url = `${SB_URL}/storage/v1/object/public/wiki-images/${fileName}`;
+    const url = await ceUploadImage(file, await getTokenFresh());
     document.getElementById('devlog-bg').value = url;
     updateDevlogBgPreview(url);
     toast('Изображение загружено', 'ok');
@@ -3252,14 +3234,7 @@ async function uploadFaviconImage(input) {
   }
   
   try {
-    const fileName = `favicon_${Date.now()}.${file.name.split('.').pop()}`;
-    const { data, error } = await sb.storage
-      .from('images')
-      .upload(fileName, file, { upsert: true, cacheControl: '31536000' });
-    
-    if (error) throw error;
-    
-    const url = `${SB_URL}/storage/v1/object/public/images/${fileName}`;
+    const url = await ceUploadImage(file, await getTokenFresh());
     document.getElementById('favicon-url').value = url;
     
     toast('Иконка загружена', 'ok');

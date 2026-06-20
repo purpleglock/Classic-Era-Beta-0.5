@@ -5,20 +5,61 @@
 
 .ec-wrap { max-width: 1120px; margin: 0 auto; padding: 22px 22px 60px; }
 
-/* ── Доктрина государства (эффекты выбора в анкете) ── */
-.ec-doctrine { background: linear-gradient(135deg, color-mix(in srgb, var(--gd) 8%, var(--b2)), var(--b2)); border: 1px solid color-mix(in srgb, var(--gd) 28%, var(--w2)); border-radius: var(--radius-md, 10px); padding: 13px 15px; margin-bottom: 16px; }
-.ec-doctrine-hd { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--t1); margin-bottom: 3px; }
-.ec-doctrine-hd .ec-hint { font-weight: 400; }
-.ec-doctrine-sub { font-family: var(--font-mono); font-size: 10px; letter-spacing: .03em; color: var(--t3); margin-bottom: 9px; }
-.ec-doctrine-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.ec-doc-chip { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
-.ec-doc-chip.good { color: var(--ok, #4caf6a); border-color: color-mix(in srgb, var(--ok, #4caf6a) 45%, transparent); background: color-mix(in srgb, var(--ok, #4caf6a) 10%, transparent); }
-.ec-doc-chip.bad { color: var(--err, #e05050); border-color: color-mix(in srgb, var(--err, #e05050) 42%, transparent); background: color-mix(in srgb, var(--err, #e05050) 9%, transparent); }
-.ec-doc-chip.grant { color: var(--te, #3ec0d0); border-color: color-mix(in srgb, var(--te, #3ec0d0) 50%, transparent); background: color-mix(in srgb, var(--te, #3ec0d0) 12%, transparent); }
-.ec-doc-chip.special { color: var(--pu, #a98bff); border-color: color-mix(in srgb, var(--pu, #a98bff) 55%, transparent); background: color-mix(in srgb, var(--pu, #a98bff) 14%, transparent); font-weight: 700; }
-.ec-doctrine-sect-t { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--t4); margin: 11px 0 6px; }
-.ec-doctrine-grants { margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--w2); }
-.ec-doctrine-grants-t { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--te, #3ec0d0); margin-bottom: 6px; }
+/* ── КАРТОЧКА ДОКТРИНЫ (архетип-плейстайл) ──
+   --lane задаётся инлайном из JS (акцентный цвет линии архетипа). */
+.ec-doctrine { --lane: var(--gd, #d4af37); position: relative; overflow: hidden;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--lane) 13%, var(--b2)), var(--b2) 60%);
+  border: 1px solid color-mix(in srgb, var(--lane) 34%, var(--w2)); border-left: 3px solid var(--lane);
+  border-radius: var(--radius-md, 10px); padding: 14px 16px; margin-bottom: 16px; }
+/* герой */
+.ec-doc-hero { display: flex; align-items: flex-start; gap: 12px; }
+.ec-doc-hero-ic { flex-shrink: 0; width: 42px; height: 42px; display: grid; place-items: center; font-size: 21px;
+  border-radius: 11px; background: color-mix(in srgb, var(--lane) 18%, var(--b1)); border: 1px solid color-mix(in srgb, var(--lane) 40%, transparent); }
+.ec-doc-hero-tx { min-width: 0; flex: 1; }
+.ec-doc-hero-t { font-family: var(--font-display); font-weight: 700; font-size: 17px; line-height: 1.1; color: var(--t1); }
+.ec-doc-hero-tag { font-size: 12px; color: var(--t2); margin-top: 3px; line-height: 1.35; }
+.ec-doc-hero-sub { font-family: var(--font-mono); font-size: 10px; letter-spacing: .02em; color: var(--t4); margin-top: 5px; overflow-wrap: anywhere; }
+/* сигнатура — герой-плашка */
+.ec-doc-sig { display: flex; align-items: center; gap: 11px; margin-top: 13px; padding: 9px 12px; border-radius: 9px;
+  background: color-mix(in srgb, var(--lane) 14%, var(--b1)); border: 1px solid color-mix(in srgb, var(--lane) 45%, transparent); }
+.ec-doc-sig-star { font-size: 18px; color: var(--lane); flex-shrink: 0; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--lane) 60%, transparent)); }
+.ec-doc-sig-h { font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--t4); }
+.ec-doc-sig-v { font-weight: 600; font-size: 13px; color: var(--t1); line-height: 1.25; }
+/* секции */
+.ec-doc-block { margin-top: 13px; }
+.ec-doc-sect { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--t4); margin-bottom: 7px; }
+/* особые способности */
+.ec-doc-specials { display: flex; flex-direction: column; gap: 4px; }
+.ec-doc-special { font-size: 12px; color: var(--t2); padding: 5px 9px; border-radius: 7px; background: color-mix(in srgb, var(--pu, #a98bff) 9%, var(--b1)); border: 1px solid color-mix(in srgb, var(--pu, #a98bff) 26%, transparent); }
+/* профиль статов — сгруппированные полоски */
+.ec-stat-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 18px; }
+.ec-stat-grp-t { font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--lane); opacity: .85; margin-bottom: 4px; }
+.ec-stat { display: grid; grid-template-columns: 1fr 64px auto; align-items: center; gap: 7px; padding: 1.5px 0; }
+.ec-stat-l { font-size: 11.5px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-stat-track { height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--w2) 70%, transparent); overflow: hidden; }
+.ec-stat-track i { display: block; height: 100%; border-radius: 3px; }
+.ec-stat-v { font-family: var(--font-mono); font-size: 11px; font-weight: 700; text-align: right; white-space: nowrap; }
+.ec-stat.pos .ec-stat-track i { background: var(--ok, #4caf6a); }
+.ec-stat.pos .ec-stat-v { color: var(--ok, #4caf6a); }
+.ec-stat.neg .ec-stat-track i { background: var(--err, #e05050); }
+.ec-stat.neg .ec-stat-v { color: var(--err, #e05050); }
+/* полоса «Сила ↔ Цена» */
+.ec-trade { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; padding-top: 11px; border-top: 1px dashed var(--w2); }
+.ec-trade-h { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+.ec-trade-h-pos { color: var(--ok, #4caf6a); }
+.ec-trade-h-neg { color: var(--err, #e05050); }
+.ec-trade-none { color: var(--t4); font-size: 12px; }
+.ec-trade-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.ec-trade-tag.pos { color: var(--ok, #4caf6a); border-color: color-mix(in srgb, var(--ok, #4caf6a) 40%, transparent); background: color-mix(in srgb, var(--ok, #4caf6a) 9%, transparent); }
+.ec-trade-tag.neg { color: var(--err, #e05050); border-color: color-mix(in srgb, var(--err, #e05050) 38%, transparent); background: color-mix(in srgb, var(--err, #e05050) 8%, transparent); }
+.ec-trade-tag b { font-family: var(--font-mono); font-weight: 700; }
+/* теги (плюшки / компактные эффекты выбора) */
+.ec-doc-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.ec-doc-tag { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.ec-doc-tag.pos { color: var(--ok, #4caf6a); border-color: color-mix(in srgb, var(--ok, #4caf6a) 42%, transparent); background: color-mix(in srgb, var(--ok, #4caf6a) 9%, transparent); }
+.ec-doc-tag.neg { color: var(--err, #e05050); border-color: color-mix(in srgb, var(--err, #e05050) 40%, transparent); background: color-mix(in srgb, var(--err, #e05050) 8%, transparent); }
+.ec-doc-tag.grant { color: var(--te, #3ec0d0); border-color: color-mix(in srgb, var(--te, #3ec0d0) 48%, transparent); background: color-mix(in srgb, var(--te, #3ec0d0) 11%, transparent); }
+.ec-doc-tag.special { color: var(--pu, #a98bff); border-color: color-mix(in srgb, var(--pu, #a98bff) 52%, transparent); background: color-mix(in srgb, var(--pu, #a98bff) 13%, transparent); font-weight: 700; }
 /* ── Тайные операции ── */
 .ec-spy-ops { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
 .ec-spy-op { display: flex; align-items: center; gap: 7px; background: var(--b1); border: 1px solid var(--w2); border-radius: 8px; padding: 8px 10px; cursor: pointer; color: var(--t2); font-size: 12px; text-align: left; transition: border-color .12s, background .12s; }
@@ -35,8 +76,13 @@
 .fr-doctrine .ec-doctrine { margin-bottom: 0; }
 /* эффекты выбранного варианта прямо в анкете (под описанием) */
 .fr-opt-flavor { display: block; }
-.ec-doc-chips-inline { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
-.ec-doc-chips-inline .ec-doc-chip { font-size: 10px; padding: 2px 7px; }
+.ec-choice-eff { margin-top: 7px; }
+.ec-choice-arch { --lane: var(--gd, #d4af37); display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 6px;
+  padding: 5px 9px; border-radius: 8px; background: color-mix(in srgb, var(--lane) 12%, var(--b1)); border: 1px solid color-mix(in srgb, var(--lane) 38%, transparent); }
+.ec-choice-arch-i { font-size: 14px; }
+.ec-choice-arch b { font-family: var(--font-display); font-size: 13px; color: var(--t1); }
+.ec-choice-sig { flex-basis: 100%; font-size: 11px; color: var(--lane); font-weight: 600; }
+.ec-choice-eff .ec-doc-tag { font-size: 10px; padding: 2px 7px; }
 .ec-head { margin-bottom: 14px; }
 .ec-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em; color: var(--gd); text-transform: uppercase; }
 .ec-head h1 { font-family: var(--font-display); font-weight: 700; font-size: var(--text-2xl); color: var(--t1); margin: 2px 0 0; padding-bottom: 8px; display: inline-block; max-width: 100%; overflow-wrap: anywhere; line-height: 1.15; }
@@ -161,20 +207,17 @@
   .ec-bdg-sub { white-space: normal; font-size: 10.5px; color: var(--t3); }
   .ec-bdg-val { font-size: 16px; }
 
-  /* РЕСУРСЫ — жёсткая grid-сетка: иконка | имя (сверху) / мета (снизу). Без налезания. */
-  .ec-ovx-res-list { grid-template-columns: minmax(0,1fr) !important; }
-  .ec-ovx-res-row {
-    display: grid !important; grid-template-columns: auto 1fr;
-    grid-template-areas: "ic name" "ic meta"; column-gap: 10px; row-gap: 2px;
-    align-items: center; min-width: 0; padding: 9px 11px;
-  }
-  .ec-ovx-res-ic { grid-area: ic; align-self: center; font-size: 17px; }
-  .ec-ovx-res-n { grid-area: name; min-width: 0; white-space: normal !important; overflow: visible !important; text-overflow: clip !important; font-size: 13.5px; font-weight: 600; line-height: 1.2; }
-  .ec-ovx-res-meta { grid-area: meta; display: flex !important; flex: initial !important; align-items: baseline; gap: 12px; min-width: 0; }
+  /* РЕСУРСЫ — карточки в одну колонку, числа остаются в 3 столбца */
+  .ec-res-cards { grid-template-columns: minmax(0,1fr) !important; }
+  .ec-res-card { min-width: 0; }
+  .ec-res-card-name { white-space: normal !important; }
+  .ec-res-sum { gap: 6px 12px; }
 
   /* ДОКТРИНА/чипы — длинный текст переносится, чип не шире контейнера */
-  .ec-bchip, .ec-ovx-chip, .ec-bdg-flow, .ec-doc-chip, .ec-doctrine-chips > * { white-space: normal !important; max-width: 100%; height: auto; }
-  .ec-doctrine-chips { flex-wrap: wrap; }
+  .ec-bchip, .ec-ovx-chip, .ec-bdg-flow, .ec-doc-tag, .ec-trade-tag { white-space: normal !important; max-width: 100%; height: auto; }
+  /* карточка доктрины: профиль и «Сила↔Цена» в одну колонку на узком экране */
+  .ec-stat-groups, .ec-trade { grid-template-columns: 1fr !important; }
+  .ec-stat { grid-template-columns: 1fr 52px auto; }
 
   /* ФОРМЫ/строки с полями — переносить и сжимать */
   .ec-prod-form, .ec-trade-route, .ec-field-row, .ec-ci-row, .ec-bt-add, .ec-build-row, .ec-head-row, .ec-cover-row, .ec-bt-cols { flex-wrap: wrap; }
@@ -1061,6 +1104,126 @@
 .ec-ovx-res-row.ec-rar-rare     { border-left-color: var(--te); }
 .ec-ovx-res-row.ec-rar-epic     { border-left-color: var(--pu); }
 .ec-ovx-res-row.ec-rar-legendary{ border-left-color: var(--gd); }
+
+/* ── 3b. Ресурсы — подробные карточки (что/откуда/сколько/цена/почему) ── */
+.ec-res-sum { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 10px 0 12px; font-size: 11.5px; color: var(--t3); }
+.ec-res-sum-i { display: inline-flex; align-items: baseline; gap: 5px; }
+.ec-res-sum-i b { font-family: var(--font-mono); font-weight: 700; color: var(--t1); font-size: 13px; }
+.ec-res-sum-i b.ok  { color: var(--ok); }
+.ec-res-sum-i b.dim { color: var(--t4); }
+.ec-res-sum-warn { color: var(--ec-amb, #e0a030); }
+.ec-res-cap-pct { font-family: var(--font-mono); font-size: 10px; color: var(--t4); margin-left: 6px; }
+
+.ec-res-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 9px; }
+.ec-res-card { display: flex; flex-direction: column; gap: 8px; background: var(--b1); border: 1px solid var(--w1); border-left: 3px solid var(--w3); border-radius: var(--radius-md); padding: 11px 13px; }
+.ec-res-card-top { display: flex; align-items: center; gap: 8px; }
+.ec-res-card-ic { font-size: 18px; flex-shrink: 0; line-height: 1; }
+.ec-res-card-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--t1); line-height: 1.2; white-space: normal; word-break: break-word; }
+.ec-res-card-rar { font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; color: var(--t3); border: 1px solid var(--w2); border-radius: var(--radius-pill); padding: 2px 7px; flex-shrink: 0; }
+.ec-rar-tx-uncommon  { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.ec-rar-tx-rare      { color: var(--te); border-color: color-mix(in srgb, var(--te) 45%, transparent); }
+.ec-rar-tx-epic      { color: var(--pu); border-color: color-mix(in srgb, var(--pu) 45%, transparent); }
+.ec-rar-tx-legendary { color: var(--gd); border-color: color-mix(in srgb, var(--gd) 50%, transparent); }
+
+.ec-res-card-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.ec-res-card-num { display: flex; flex-direction: column; gap: 2px; background: var(--b0); border: 1px solid var(--w1); border-radius: var(--radius-sm); padding: 6px 8px; }
+.ec-res-card-num-v { font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--t1); line-height: 1.1; }
+.ec-res-card-num-v.ok  { color: var(--ok); }
+.ec-res-card-num-v.dim { color: var(--t4); }
+.ec-res-card-num-k { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .03em; text-transform: uppercase; color: var(--t4); }
+
+.ec-res-card-src { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; font-size: 11px; color: var(--t3); }
+.ec-res-card-src-k { font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; color: var(--t4); margin-right: 2px; }
+.ec-res-src-chip { display: inline-flex; align-items: baseline; gap: 4px; background: var(--b0); border: 1px solid var(--w1); border-radius: var(--radius-pill); padding: 2px 8px; font-size: 10.5px; color: var(--t2); }
+.ec-res-src-chip b { font-family: var(--font-mono); color: var(--ok); }
+.ec-res-card-why { font-size: 10.5px; color: var(--t4); font-style: italic; line-height: 1.35; }
+
+.ec-res-card.ec-rar-common    { border-left-color: var(--t4); }
+.ec-res-card.ec-rar-uncommon  { border-left-color: var(--ok); }
+.ec-res-card.ec-rar-rare      { border-left-color: var(--te); }
+.ec-res-card.ec-rar-epic      { border-left-color: var(--pu); }
+.ec-res-card.ec-rar-legendary { border-left-color: var(--gd); }
+
+/* ── Раскрываемые секции (fold) ── */
+.ec-fold-btn { display: flex; align-items: baseline; gap: 8px; width: 100%; margin-top: 11px; padding: 8px 11px; background: var(--b1); border: 1px solid var(--w1); border-radius: var(--radius-md); color: var(--t1); font-family: var(--font-display); font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; transition: border-color var(--transition-fast), background var(--transition-fast); }
+.ec-fold-btn:hover { border-color: var(--gd); background: var(--b3); }
+.ec-fold-btn.open { border-color: color-mix(in srgb, var(--gd) 40%, transparent); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.ec-fold-chev { font-size: 11px; color: var(--gd); flex-shrink: 0; }
+.ec-fold-lbl { flex: 1; }
+.ec-fold-sub { font-family: var(--font-mono); font-weight: 400; font-size: 9.5px; letter-spacing: .03em; text-transform: uppercase; color: var(--t4); }
+
+/* ── Статистика: график (SVG) ── */
+.ec-stat-panel .ec-stat-controls { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 9px 14px; margin-bottom: 12px; }
+.ec-stat-metrics, .ec-stat-ranges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ec-stat-ranges-k { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--t4); margin-right: 2px; }
+.ec-stat-mbtn, .ec-stat-rbtn { background: var(--b1); border: 1px solid var(--w1); border-radius: var(--radius-pill); color: var(--t3); font-size: 11px; padding: 5px 11px; cursor: pointer; transition: all var(--transition-fast); white-space: nowrap; }
+.ec-stat-mbtn:hover, .ec-stat-rbtn:hover { color: var(--t1); border-color: var(--w3); }
+.ec-stat-mbtn.on { background: color-mix(in srgb, var(--gd) 16%, var(--b1)); border-color: var(--gd); color: var(--t1); }
+.ec-stat-rbtn { min-width: 34px; text-align: center; }
+.ec-stat-rbtn.on { background: color-mix(in srgb, var(--pu) 18%, var(--b1)); border-color: var(--pu); color: var(--t1); }
+
+.ec-chart-wrap { width: 100%; }
+.ec-chart-svg { display: block; width: 100%; height: auto; background: var(--b0); border: 1px solid var(--w1); border-radius: var(--radius-md); }
+.ec-chart-empty { font-size: 12px; color: var(--t3); padding: 26px 4px; text-align: center; }
+.ec-chart-grid { stroke: var(--w1); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ec-chart-zero { stroke: var(--w3); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.ec-chart-ylab, .ec-chart-xlab { fill: var(--t4); font-family: var(--font-mono); font-size: 13px; }
+.ec-chart-line { stroke-width: 2.4; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+.ec-chart-dot { stroke: var(--b0); stroke-width: 1.5; }
+.ec-chart-seg { transition: opacity var(--transition-fast); }
+.ec-chart-seg:hover { opacity: 0.8; }
+.ec-chart-legend, .ec-donut-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 9px; }
+.ec-chart-leg, .ec-donut-leg { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--t3); }
+.ec-chart-leg i, .ec-donut-leg i { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.ec-donut-leg b { font-family: var(--font-mono); color: var(--t1); }
+
+.ec-stat-sum { display: flex; flex-wrap: wrap; gap: 7px 18px; margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--w1); font-size: 11.5px; color: var(--t3); }
+.ec-stat-sum-i b { font-family: var(--font-mono); font-size: 13px; color: var(--t1); }
+.ec-stat-sum-i b.pos { color: var(--ok); }
+.ec-stat-sum-i b.neg { color: var(--rd, #c0392b); }
+
+/* ── Donut состава ── */
+.ec-donut-wrap { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 8px 0 4px; }
+.ec-donut-svg { width: 116px; height: 116px; flex-shrink: 0; }
+.ec-donut-c { fill: var(--t1); font-family: var(--font-display); font-weight: 800; font-size: 19px; }
+.ec-donut-s { fill: var(--t4); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
+.ec-donut-legend { flex: 1; min-width: 140px; flex-direction: column; gap: 6px; }
+
+/* ── Казна: детальная справка (формулы) ── */
+.ec-bdg-detail, .ec-emp-detail, .ec-army-detail { background: var(--b1); border: 1px solid color-mix(in srgb, var(--gd) 25%, var(--w1)); border-top: none; border-radius: 0 0 var(--radius-md) var(--radius-md); padding: 12px 13px; margin-bottom: 2px; }
+.ec-bdg-dt-sect, .ec-emp-dt-sect, .ec-army-dt-sect { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--t4); margin: 12px 0 7px; }
+.ec-bdg-dt-sect:first-child, .ec-emp-dt-sect:first-child, .ec-army-dt-sect:first-child { margin-top: 0; }
+.ec-bdg-dt-list { display: flex; flex-direction: column; gap: 5px; }
+.ec-bdg-dt-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; background: var(--b0); border: 1px solid var(--w1); border-radius: var(--radius-sm); padding: 7px 10px; }
+.ec-bdg-dt-ic { font-size: 14px; }
+.ec-bdg-dt-name { display: block; font-size: 12.5px; color: var(--t1); font-weight: 600; }
+.ec-bdg-dt-fx { display: block; font-family: var(--font-mono); font-size: 10px; color: var(--t3); margin-top: 1px; }
+.ec-bdg-dt-val { font-family: var(--font-mono); font-weight: 700; font-size: 13px; }
+.ec-bdg-dt-val.pos { color: var(--ok); }
+.ec-bdg-dt-val.neg { color: var(--rd, #c0392b); }
+.ec-bdg-dt-warn { font-size: 11px; color: var(--ec-amb, #e0a030); margin-top: 9px; line-height: 1.4; }
+
+/* ── Держава: дерево систем/колоний ── */
+.ec-emp-sys { background: var(--b0); border: 1px solid var(--w1); border-radius: var(--radius-md); padding: 9px 11px; margin-bottom: 8px; }
+.ec-emp-sys-h { font-size: 12.5px; font-weight: 700; color: var(--t1); margin-bottom: 7px; }
+.ec-emp-sys-sub { font-family: var(--font-mono); font-weight: 400; font-size: 10px; color: var(--t4); margin-left: 5px; }
+.ec-emp-col { padding: 6px 0 6px 12px; border-left: 2px solid var(--w2); margin-bottom: 5px; }
+.ec-emp-col:last-child { margin-bottom: 0; }
+.ec-emp-col-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ec-emp-col-n { font-size: 12px; color: var(--t2); }
+.ec-emp-col-cells { font-family: var(--font-mono); font-size: 10.5px; color: var(--t4); white-space: nowrap; }
+.ec-emp-col-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.ec-emp-bchip { display: inline-flex; align-items: center; gap: 3px; background: var(--b2); border: 1px solid var(--w1); border-radius: var(--radius-sm); padding: 2px 7px; font-family: var(--font-mono); font-size: 10.5px; color: var(--t2); }
+.ec-emp-empty { font-size: 10.5px; color: var(--t4); font-style: italic; }
+
+/* ── Армия: состав по проектам ── */
+.ec-army-cat { margin-bottom: 9px; }
+.ec-army-cat-h { font-size: 12px; font-weight: 600; color: var(--t1); margin-bottom: 5px; }
+.ec-army-cat-tot { font-family: var(--font-mono); font-size: 11px; color: var(--gd); margin-left: 5px; }
+.ec-army-uchips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ec-army-uchip { display: inline-flex; align-items: baseline; gap: 5px; background: var(--b0); border: 1px solid var(--w1); border-radius: var(--radius-pill); padding: 3px 10px; font-size: 11px; color: var(--t2); }
+.ec-army-uchip b { font-family: var(--font-mono); color: var(--t1); }
+.ec-army-uchip-q { border-style: dashed; color: var(--t3); }
 
 /* ── 4–6. Стат-сетка, чипы, мощности ── */
 .ec-ovx-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 9px; }

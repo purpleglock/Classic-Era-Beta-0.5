@@ -59,9 +59,10 @@ begin
 
   if eco.gc < cost then raise exception 'not enough GC'; end if;
 
-  -- размер пула захватов: «Дом в небесах» ИЛИ роботы → 2, иначе 1
+  -- размер пула захватов: «Дом в небесах» ИЛИ роботы ИЛИ экспансионисты → 2, иначе 1
   if (eco.research is not null and eco.research ? 'pol.house_heavens')
-     or public._faction_is_robot(app.faction_id) then max_claims := 2; end if;
+     or public._faction_is_robot(app.faction_id)
+     or app.ideology = 'Экспансионизм' then max_claims := 2; end if;
 
   -- кулдаун идёт ТОЛЬКО если пул был исчерпан
   if eco.last_system_claim is not null and eco.last_system_claim > now() - cd then

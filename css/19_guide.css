@@ -232,6 +232,7 @@
   display: flex; flex-direction: column; gap: 4px; padding-top: 2px;
 }
 .gb-doc-hab { font-size: 11px; font-weight: 400; color: var(--color-text-faint); line-height: 1.4; }
+.gb-doc-sig { font-size: 11px; font-weight: 600; color: var(--pu, #a98bff); line-height: 1.4; }
 .gb-doc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .gb-doc-note {
   display: flex; flex-direction: column; gap: 6px;

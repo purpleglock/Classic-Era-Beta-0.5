@@ -630,9 +630,10 @@ begin
 
   if eco.gc < cost then raise exception 'not enough GC'; end if;
 
-  -- размер пула захватов до перезарядки: «Дом в небесах» ИЛИ роботы → 2, иначе 1
+  -- размер пула захватов до перезарядки: «Дом в небесах» ИЛИ роботы ИЛИ экспансионисты → 2, иначе 1
   if (eco.research is not null and eco.research ? 'pol.house_heavens')
-     or public._faction_is_robot(app.faction_id) then max_claims := 2; end if;
+     or public._faction_is_robot(app.faction_id)
+     or app.ideology = 'Экспансионизм' then max_claims := 2; end if;
 
   -- Модель «пул»: кулдаун идёт ТОЛЬКО если пул был исчерпан (last_system_claim проставлен
   -- при последнем захвате пула). Пока в пуле есть захваты — last_system_claim = null.
@@ -1408,17 +1409,18 @@ begin
     return jsonb_build_object('gc',1,'mine',1,'build',1,'research',1,'colonize',1,'claim_cost',1,'claim_cd',1,'sci_flat',0,'agents_flat',0);
   end if;
 
+  -- ⚠ Числа = зеркало EC_MODS в economy.js. Менять синхронно.
   case a.gov
-    when 'Республика'          then gc:=gc+0.10; cd:=cd+0.15; scf:=scf+1;
-    when 'Монархия'            then gc:=gc+0.20; scf:=scf-1;
-    when 'Империя'             then cc:=cc-0.25; cd:=cd-0.25; gc:=gc-0.10; agf:=agf+1;
-    when 'Олигархия'           then gc:=gc+0.25; scf:=scf-1;
-    when 'Диктатура'           then cd:=cd-0.20; gc:=gc-0.10; agf:=agf+1;
-    when 'Теократия'           then gc:=gc+0.10; rsch:=rsch+0.15; scf:=scf-2; agf:=agf+1;
-    when 'Технократия'         then gc:=gc-0.15; bld:=bld+0.10; rsch:=rsch-0.25; scf:=scf+3;
-    when 'Корпоратократия'     then gc:=gc+0.20; mine:=mine+0.15; bld:=bld-0.10; agf:=agf-1;
-    when 'Коллективный разум'  then mine:=mine+0.15; cc:=cc+0.20; rsch:=rsch-0.10; scf:=scf+1;
-    when 'Машинный разум (ИИ)' then gc:=gc-0.15; bld:=bld-0.10; rsch:=rsch-0.15; scf:=scf+1; agf:=agf+1;
+    when 'Республика'          then gc:=gc+0.05; scf:=scf+1; agf:=agf-1;
+    when 'Монархия'            then gc:=gc+0.15; rsch:=rsch+0.10; cd:=cd+0.10;
+    when 'Империя'             then cc:=cc-0.20; cd:=cd-0.15; gc:=gc-0.15; agf:=agf+1;
+    when 'Олигархия'           then gc:=gc+0.20; scf:=scf-1; agf:=agf-1;
+    when 'Диктатура'           then cd:=cd-0.20; agf:=agf+1; gc:=gc-0.10; scf:=scf-1;
+    when 'Теократия'           then gc:=gc+0.10; rsch:=rsch+0.10; agf:=agf+1; scf:=scf-1;
+    when 'Технократия'         then gc:=gc-0.20; rsch:=rsch-0.15; bld:=bld+0.05; scf:=scf+2;
+    when 'Корпоратократия'     then gc:=gc+0.10; mine:=mine+0.10; agf:=agf-1;
+    when 'Коллективный разум'  then mine:=mine+0.20; cc:=cc+0.15; gc:=gc-0.10; scf:=scf+1;
+    when 'Машинный разум (ИИ)' then gc:=gc-0.15; bld:=bld-0.10; rsch:=rsch-0.10; scf:=scf+1; agf:=agf+1;
     else null;
   end case;
 
@@ -1426,48 +1428,48 @@ begin
     when 'Демократический'   then gc:=gc+0.15; agf:=agf-1;
     when 'Эгалитарный'       then gc:=gc+0.10; cc:=cc+0.10; scf:=scf+1;
     when 'Меритократический'  then gc:=gc-0.10; rsch:=rsch-0.15; scf:=scf+2;
-    when 'Плутократический'   then gc:=gc+0.25; scf:=scf-1;
+    when 'Плутократический'   then gc:=gc+0.20; scf:=scf-1; agf:=agf-1;
     when 'Олигархический'     then gc:=gc+0.15; mine:=mine-0.10;
-    when 'Авторитарный'       then mine:=mine+0.10; gc:=gc-0.10; agf:=agf+1;
-    when 'Тоталитарный'       then mine:=mine+0.25; gc:=gc-0.15; agf:=agf+1;
-    when 'Деспотичный'        then cd:=cd-0.20; scf:=scf-1; agf:=agf+1;
-    when 'Деспотизм'          then gc:=gc+0.15; mine:=mine+0.10; rsch:=rsch+0.15; scf:=scf-1; agf:=agf+1;
-    when 'Анархический'       then col:=col-0.25; gc:=gc-0.20; bld:=bld+0.15; scf:=scf+1;
+    when 'Авторитарный'       then mine:=mine+0.10; agf:=agf+1; gc:=gc-0.10;
+    when 'Тоталитарный'       then mine:=mine+0.20; gc:=gc-0.15; agf:=agf+1;
+    when 'Деспотичный'        then cd:=cd-0.20; agf:=agf+1; scf:=scf-1;
+    when 'Деспотизм'          then mine:=mine+0.15; gc:=gc+0.10; rsch:=rsch+0.15; scf:=scf-1; agf:=agf+1;
+    when 'Анархический'       then col:=col-0.20; bld:=bld+0.15; gc:=gc-0.15; scf:=scf+1;
     else null;
   end case;
 
   case a.ideology
-    when 'Технократия (Культ науки)' then gc:=gc-0.15; rsch:=rsch-0.25; scf:=scf+3;
-    when 'Милитаризм (Культ силы)'   then cc:=cc-0.15; gc:=gc-0.10; rsch:=rsch+0.10; agf:=agf+1;
-    when 'Пацифизм'                  then gc:=gc+0.25; agf:=agf-1;
-    when 'Экспансионизм'             then col:=col-0.30; cc:=cc-0.30; cd:=cd-0.40; gc:=gc-0.10;
-    when 'Изоляционизм'              then gc:=gc+0.15; cc:=cc+0.25; cd:=cd+0.25; scf:=scf+1;
-    when 'Ксенофилия'                then gc:=gc+0.20; agf:=agf-1;
-    when 'Ксенофобия'                then mine:=mine+0.10; gc:=gc-0.20; agf:=agf+1;
-    when 'Спиритуализм'              then rsch:=rsch+0.15; scf:=scf-1; agf:=agf+1;
-    when 'Трансгуманизм'             then gc:=gc-0.10; rsch:=rsch-0.15; scf:=scf+2;
-    when 'Экоцентризм'               then mine:=mine+0.30; gc:=gc-0.20;
-    when 'Индустриализм'             then gc:=gc+0.25; mine:=mine+0.10; bld:=bld-0.15; rsch:=rsch+0.10; scf:=scf-1;
+    when 'Технократия (Культ науки)' then gc:=gc-0.15; rsch:=rsch-0.20; scf:=scf+2;
+    when 'Милитаризм (Культ силы)'   then cc:=cc-0.20; gc:=gc-0.10; rsch:=rsch+0.10; agf:=agf+1;
+    when 'Пацифизм'                  then gc:=gc+0.25; cd:=cd+0.15; agf:=agf-1;
+    when 'Экспансионизм'             then col:=col-0.25; cc:=cc-0.20; gc:=gc-0.10;
+    when 'Изоляционизм'              then gc:=gc+0.15; cc:=cc+0.20; cd:=cd+0.20; agf:=agf+1;
+    when 'Ксенофилия'                then gc:=gc+0.20; col:=col-0.10; agf:=agf-1;
+    when 'Ксенофобия'                then mine:=mine+0.15; gc:=gc-0.10; agf:=agf+1;
+    when 'Спиритуализм'              then gc:=gc+0.10; rsch:=rsch+0.10; scf:=scf-1; agf:=agf+1;
+    when 'Трансгуманизм'             then gc:=gc-0.10; rsch:=rsch-0.20; scf:=scf+2;
+    when 'Экоцентризм'               then mine:=mine+0.25; gc:=gc-0.15; bld:=bld+0.05;
+    when 'Индустриализм'             then bld:=bld-0.15; mine:=mine+0.10; gc:=gc+0.05; rsch:=rsch+0.10;
     else null;
   end case;
 
   case a.race
     when 'Гуманоиды'                  then gc:=gc+0.05; scf:=scf+1;
-    when 'Млекопитающие'              then gc:=gc+0.20;
+    when 'Млекопитающие'              then gc:=gc+0.15;
     when 'Рептилоиды'                 then gc:=gc-0.10; agf:=agf+1;
-    when 'Авианы (Птицеподобные)'     then cd:=cd-0.25; gc:=gc-0.05; agf:=agf+1;
-    when 'Инсектоиды'                 then mine:=mine+0.20; gc:=gc+0.10; rsch:=rsch+0.10; scf:=scf-1;
+    when 'Авианы (Птицеподобные)'     then cd:=cd-0.20; gc:=gc-0.05; agf:=agf+1;
+    when 'Инсектоиды'                 then mine:=mine+0.15; gc:=gc+0.05; rsch:=rsch+0.10; scf:=scf-1;
     when 'Акватики (Водные)'          then gc:=gc+0.15; col:=col+0.15;
-    when 'Плантоиды (Растениевидные)' then mine:=mine+0.15; gc:=gc+0.10; agf:=agf-1;
-    when 'Литоиды (Каменные)'         then mine:=mine+0.25; gc:=gc-0.15;
+    when 'Плантоиды (Растениевидные)' then mine:=mine+0.15; gc:=gc+0.05; agf:=agf-1;
+    when 'Литоиды (Каменные)'         then mine:=mine+0.20; gc:=gc-0.15;
     when 'Синтетики / Киборги'        then gc:=gc-0.35; rsch:=rsch-0.15; scf:=scf+2;  -- все планеты родные → сильный дебаф денег
     when 'Энергетические сущности'    then gc:=gc-0.15; rsch:=rsch-0.10; scf:=scf+1; agf:=agf+1;
     else null;
   end case;
 
   case a.civ_type
-    when 'frontier' then col:=col-0.25; cd:=cd-0.25; gc:=gc-0.15;
-    when 'colony'   then gc:=gc+0.20; mine:=mine+0.10; cc:=cc+0.15; bld:=bld-0.10;
+    when 'frontier' then col:=col-0.20; cd:=cd-0.20; gc:=gc-0.15;
+    when 'colony'   then gc:=gc+0.15; mine:=mine+0.10; cc:=cc+0.15; bld:=bld-0.10;
     else null;
   end case;
 

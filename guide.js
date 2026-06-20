@@ -42,66 +42,18 @@ const GB_GRANT = {
   intel: 'Центр спецслужб',
 };
 
-const GB_DOC_GOV = [
-  ['Республика',          { gc: 0.10, claim_cd: 0.15, sci_flat: 1 }, 'trade'],
-  ['Монархия',            { gc: 0.20, sci_flat: -1 }, 'factory'],
-  ['Империя',             { claim_cost: -0.25, claim_cd: -0.25, gc: -0.10, agents_flat: 1 }, 'military_factory'],
-  ['Олигархия',           { gc: 0.25, sci_flat: -1 }, 'factory'],
-  ['Диктатура',           { claim_cd: -0.20, gc: -0.10, agents_flat: 1 }, 'training'],
-  ['Теократия',           { gc: 0.10, research: 0.15, sci_flat: -2, agents_flat: 1 }, 'training'],
-  ['Технократия',         { gc: -0.15, build: 0.10, research: -0.25, sci_flat: 3 }, 'science'],
-  ['Корпоратократия',     { gc: 0.20, mine: 0.15, build: -0.10, agents_flat: -1 }, 'trade'],
-  ['Коллективный разум',  { mine: 0.15, claim_cost: 0.20, research: -0.10, sci_flat: 1 }, 'science'],
-  ['Машинный разум (ИИ)', { gc: -0.15, build: -0.10, research: -0.15, sci_flat: 1, agents_flat: 1 }, 'science'],
-];
-const GB_DOC_REGIME = [
-  ['Демократический',  { gc: 0.15, agents_flat: -1 }],
-  ['Эгалитарный',      { gc: 0.10, claim_cost: 0.10, sci_flat: 1 }],
-  ['Меритократический',{ gc: -0.10, research: -0.15, sci_flat: 2 }],
-  ['Плутократический', { gc: 0.25, sci_flat: -1 }],
-  ['Олигархический',   { gc: 0.15, mine: -0.10 }],
-  ['Авторитарный',     { mine: 0.10, gc: -0.10, agents_flat: 1 }],
-  ['Тоталитарный',     { mine: 0.25, gc: -0.15, agents_flat: 1 }],
-  ['Деспотичный',      { claim_cd: -0.20, sci_flat: -1, agents_flat: 1 }],
-  ['Анархический',     { colonize: -0.25, gc: -0.20, build: 0.15, sci_flat: 1 }],
-];
-const GB_DOC_IDEO = [
-  ['Технократия (Культ науки)', { gc: -0.15, research: -0.25, sci_flat: 3 }, 'science', 'Реакторы (корабли)'],
-  ['Милитаризм (Культ силы)',   { claim_cost: -0.15, gc: -0.10, research: 0.10, agents_flat: 1 }, 'military_factory', 'Броня (наземка)'],
-  ['Пацифизм',                  { gc: 0.25, agents_flat: -1 }, 'factory'],
-  ['Экспансионизм',             { colonize: -0.30, claim_cost: -0.30, claim_cd: -0.40, gc: -0.10 }, 'mining'],
-  ['Изоляционизм',              { gc: 0.15, claim_cost: 0.25, claim_cd: 0.25, sci_flat: 1 }, 'intel', 'Щиты (наземка)'],
-  ['Ксенофилия',                { gc: 0.20, agents_flat: -1 }, 'trade'],
-  ['Ксенофобия',                { mine: 0.10, gc: -0.20, agents_flat: 1 }, 'training', 'Броня (наземка)'],
-  ['Спиритуализм',              { research: 0.15, sci_flat: -1, agents_flat: 1 }, 'training'],
-  ['Трансгуманизм',             { gc: -0.10, research: -0.15, sci_flat: 2 }, 'science', 'Щиты (наземка)'],
-  ['Экоцентризм',               { mine: 0.30, gc: -0.20 }, 'mining'],
-  ['Индустриализм',             { gc: 0.25, mine: 0.10, build: -0.15, research: 0.10, sci_flat: -1 }, 'factory', 'Двигатели (корабли)'],
-];
-const GB_DOC_RACE = [
-  ['Гуманоиды',                  { gc: 0.05, sci_flat: 1 }, 'Землеподобные'],
-  ['Млекопитающие',              { gc: 0.20 }, 'Землеподобные, Океанические'],
-  ['Рептилоиды',                 { gc: -0.10, agents_flat: 1 }, 'Пустынные, Вулканические, Землеподобные'],
-  ['Авианы (Птицеподобные)',     { claim_cd: -0.25, gc: -0.05, agents_flat: 1 }, 'Землеподобные, Пустынные'],
-  ['Инсектоиды',                 { mine: 0.20, gc: 0.10, research: 0.10, sci_flat: -1 }, 'Землеподобные, Пустынные, Вулканические'],
-  ['Акватики (Водные)',          { gc: 0.15, colonize: 0.15 }, 'Океанические'],
-  ['Плантоиды (Растениевидные)', { mine: 0.15, gc: 0.10, agents_flat: -1 }, 'Землеподобные, Океанические'],
-  ['Литоиды (Каменные)',         { mine: 0.25, gc: -0.15 }, 'Малые тела, Лавовые, Пустынные'],
-  ['Синтетики / Киборги',        { gc: -0.35, research: -0.15, sci_flat: 2 }, 'ВСЕ планеты (без терраформа)'],
-  ['Энергетические сущности',    { gc: -0.15, research: -0.10, sci_flat: 1, agents_flat: 1 }, 'Экзотические, Криомиры, Лавовые'],
-];
+// ── Доктрина: числа берутся ЖИВЫМИ из EC_MODS (economy.js) — без дубля. ──
+// Тип цивилизации хранит лишь flavor-текст (его нет в EC_MODS); моды — из EC_MODS.civ.
 const GB_DOC_CIV = [
-  [
-    'Фронтир',
-    { colonize: -0.25, claim_cd: -0.25, gc: -0.15 },
-    'Недавно основанное поселение на краю освоенного космоса. Несмотря на ограниченные ресурсы и трудности становления, энтузиазм колонистов позволяет развивать инфраструктуру в ускоренном темпе. Стартовый бонус: бесплатный Центр спецслужб.'
-  ],
-  [
-    'Колония',
-    { gc: 0.20, mine: 0.10, claim_cost: 0.15, build: -0.10 },
-    'Стабильное государство с развитой бюрократией и отлаженными цепочками поставок. Мощная экономика позволяет эффективно добывать ресурсы и возводить постройки, однако излишняя зарегулированность заметно усложняет процесс освоения новых секторов. Стартовый бонус: бесплатная Гражданская фабрика.'
-  ],
+  ['frontier', 'Фронтир', 'Недавно основанное поселение на краю освоенного космоса. Несмотря на ограниченные ресурсы и трудности становления, энтузиазм колонистов позволяет развивать инфраструктуру в ускоренном темпе. Стартовый бонус: бесплатный Центр спецслужб.'],
+  ['colony',   'Колония', 'Стабильное государство с развитой бюрократией и отлаженными цепочками поставок. Мощная экономика позволяет эффективно добывать ресурсы и возводить постройки, однако излишняя зарегулированность заметно усложняет процесс освоения новых секторов. Стартовый бонус: бесплатная Гражданская фабрика.'],
 ];
+// Родные миры расы (метки групп планет) из EC_HAB + EC_GRP_LABEL.
+function gbRaceHab(race) {
+  if (typeof EC_HAB === 'undefined') return '';
+  const lbl = (typeof EC_GRP_LABEL !== 'undefined') ? EC_GRP_LABEL : {};
+  return (EC_HAB[race] || []).map(e => lbl[e] || e).join(', ');
+}
 // Порядок отображения планет-столиц в гайдбуке (данные — из EC_CAPITAL в economy.js).
 const GB_CAP_ORDER = ['terrestrial', 'oceanic', 'desert', 'volcanic', 'lava', 'cryo', 'micro', 'exotic'];
 // Какие расы получают этот родной мир (из EC_HAB в economy.js).
@@ -140,25 +92,43 @@ function gbChip(field, val) {
   const num = m.pct ? `${Math.round(abs * 100)}%` : `${abs}${m.suf || ''}`;
   return `<span class="gb-chip ${good ? 'gb-chip-good' : 'gb-chip-bad'}">${m.label} ${sign}${num}</span>`;
 }
-// Все чипы доктрины + (опц.) грант-здание + грант-тех
-function gbChips(mods, grant, tech) {
+// Все чипы доктрины + (опц.) грант-здание + грант-тех + бонус-слот
+function gbChips(mods, grant, tech, slot) {
   const order = ['gc', 'mine', 'build', 'colonize', 'claim_cost', 'claim_cd', 'research', 'sci_flat', 'agents_flat'];
   let h = order.map(k => gbChip(k, mods[k])).join('');
   if (grant && GB_GRANT[grant]) h += `<span class="gb-chip gb-chip-grant">⌂ ${GB_GRANT[grant]}</span>`;
   if (tech) h += `<span class="gb-chip gb-chip-tech">✦ ${tech}</span>`;
+  if (slot) h += `<span class="gb-chip gb-chip-tech">✦ +${slot} слот исследований</span>`;
   return h;
 }
-function gbDocRows(arr, withHab) {
-  return arr.map(row => {
-    const [name, mods, c, d] = row;
-    const grant = withHab ? null : c;       // у рас третий элемент — это родные миры
-    const habitat = withHab ? c : null;
-    const tech = withHab ? null : d;
+// Строит строки доктрины для категории cat (gov|regime|ideology|race) из ЖИВЫХ EC_MODS.
+// Зеркало регистрации: грант-здание (EC_DOCTRINE_BUILD), тех (EC_DOCTRINE_TECH),
+// бонус-слот (EC_DOCTRINE_SLOTS), родные миры (EC_HAB), сигнатура (EC_ARCHETYPE).
+function gbDocRows(cat) {
+  if (typeof EC_MODS === 'undefined' || !EC_MODS[cat]) return '';
+  const builds = (typeof EC_DOCTRINE_BUILD !== 'undefined' && EC_DOCTRINE_BUILD[cat]) || {};
+  const slots = (typeof EC_DOCTRINE_SLOTS !== 'undefined' && EC_DOCTRINE_SLOTS[cat]) || {};
+  return Object.keys(EC_MODS[cat]).map(name => {
+    const mods = EC_MODS[cat][name];
+    const tech = (cat === 'ideology' && typeof EC_DOCTRINE_TECH !== 'undefined') ? EC_DOCTRINE_TECH[name] : null;
+    const arch = (cat === 'ideology' && typeof EC_ARCHETYPE !== 'undefined') ? EC_ARCHETYPE[name] : null;
+    const habitat = (cat === 'race') ? gbRaceHab(name) : '';
+    const sig = arch && arch.signature ? `<span class="gb-doc-sig">★ ${arch.signature}</span>` : '';
     return `<div class="gb-doc-row">
-      <div class="gb-doc-name">${name}${habitat ? `<span class="gb-doc-hab">Родные миры: ${habitat}</span>` : ''}</div>
-      <div class="gb-doc-chips">${gbChips(mods, grant, tech)}</div>
+      <div class="gb-doc-name">${name}${habitat ? `<span class="gb-doc-hab">Родные миры: ${habitat}</span>` : ''}${sig}</div>
+      <div class="gb-doc-chips">${gbChips(mods, builds[name], tech, slots[name])}</div>
     </div>`;
   }).join('');
+}
+// Число вариантов в категории (для счётчика раскрывашки).
+function gbDocCount(cat) { return (typeof EC_MODS !== 'undefined' && EC_MODS[cat]) ? Object.keys(EC_MODS[cat]).length : 0; }
+// Строки для типа цивилизации (моды из EC_MODS.civ, имена/flavor — из GB_DOC_CIV).
+function gbCivRows() {
+  const civ = (typeof EC_MODS !== 'undefined' && EC_MODS.civ) || {};
+  return GB_DOC_CIV.map(([key, name]) => `<div class="gb-doc-row">
+      <div class="gb-doc-name">${name}</div>
+      <div class="gb-doc-chips">${gbChips(civ[key] || {}, null, null)}</div>
+    </div>`).join('');
 }
 
 // Оборачивает список строк доктрины в собственную раскрывашку с заголовком-категорией.
@@ -333,13 +303,13 @@ function renderGuidebook() {
 
       <p style="margin:6px 0 14px;color:var(--color-text-muted);font-size:13px">Нажмите на категорию, чтобы развернуть её таблицу.</p>
 
-      ${gbDocCollapse('Тип цивилизации', gbDocRows(GB_DOC_CIV.map(([n, m]) => [n, m]), false), GB_DOC_CIV.length, true)}
-      <div class="gb-doc-note">${GB_DOC_CIV.map(c => `<div><b>${c[0].split('—')[0].trim()}:</b> ${c[2]}</div>`).join('')}</div>
+      ${gbDocCollapse('Тип цивилизации', gbCivRows(), GB_DOC_CIV.length, true)}
+      <div class="gb-doc-note">${GB_DOC_CIV.map(c => `<div><b>${c[1]}:</b> ${c[2]}</div>`).join('')}</div>
 
-      ${gbDocCollapse('Форма правления', gbDocRows(GB_DOC_GOV, false), GB_DOC_GOV.length)}
-      ${gbDocCollapse('Политический режим', gbDocRows(GB_DOC_REGIME, false), GB_DOC_REGIME.length)}
-      ${gbDocCollapse('Идеология', gbDocRows(GB_DOC_IDEO, false), GB_DOC_IDEO.length)}
-      ${gbDocCollapse('Раса', gbDocRows(GB_DOC_RACE, true), GB_DOC_RACE.length)}
+      ${gbDocCollapse('Форма правления', gbDocRows('gov'), gbDocCount('gov'))}
+      ${gbDocCollapse('Политический режим', gbDocRows('regime'), gbDocCount('regime'))}
+      ${gbDocCollapse('Идеология', gbDocRows('ideology'), gbDocCount('ideology'))}
+      ${gbDocCollapse('Раса', gbDocRows('race'), gbDocCount('race'))}
 
       <div class="gb-note gb-note-info">
         <span class="gb-note-i">i</span>

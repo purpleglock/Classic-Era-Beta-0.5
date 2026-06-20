@@ -242,60 +242,96 @@ function ecTerraTier(p, race) {
 // ⚠ ЧИСЛА ДОЛЖНЫ СОВПАДАТЬ с public._faction_mods() в _economy_setup.sql.
 // ════════════════════════════════════════════════════════════
 const EC_MODS = {
+  // Форма правления → ТЕМП ЭКСПАНСИИ и контроль (захват/кулдаун/агенты/стройка).
+  // Деньги дают слабо — это не «денежная» ось.
   gov: {
-    'Республика':           { gc: 0.10, claim_cd: 0.15, sci_flat: 1 },
-    'Монархия':             { gc: 0.20, sci_flat: -1 },
-    'Империя':              { claim_cost: -0.25, claim_cd: -0.25, gc: -0.10, agents_flat: 1 },
-    'Олигархия':            { gc: 0.25, sci_flat: -1 },
-    'Диктатура':            { claim_cd: -0.20, gc: -0.10, agents_flat: 1 },
-    'Теократия':            { gc: 0.10, research: 0.15, sci_flat: -2, agents_flat: 1 },
-    'Технократия':          { gc: -0.15, build: 0.10, research: -0.25, sci_flat: 3 },
-    'Корпоратократия':      { gc: 0.20, mine: 0.15, build: -0.10, agents_flat: -1 },
-    'Коллективный разум':   { mine: 0.15, claim_cost: 0.20, research: -0.10, sci_flat: 1 },
-    'Машинный разум (ИИ)':  { gc: -0.15, build: -0.10, research: -0.15, sci_flat: 1, agents_flat: 1 },
+    'Республика':           { gc: 0.05, sci_flat: 1, agents_flat: -1 },
+    'Монархия':             { gc: 0.15, research: 0.10, claim_cd: 0.10 },
+    'Империя':              { claim_cost: -0.20, claim_cd: -0.15, gc: -0.15, agents_flat: 1 },
+    'Олигархия':            { gc: 0.20, sci_flat: -1, agents_flat: -1 },
+    'Диктатура':            { claim_cd: -0.20, agents_flat: 1, gc: -0.10, sci_flat: -1 },
+    'Теократия':            { gc: 0.10, research: 0.10, agents_flat: 1, sci_flat: -1 },   // ★ вера сильнее
+    'Технократия':          { gc: -0.20, research: -0.15, build: 0.05, sci_flat: 2 },     // ★ +1 слот исследований
+    'Корпоратократия':      { gc: 0.10, mine: 0.10, agents_flat: -1 },
+    'Коллективный разум':   { mine: 0.20, claim_cost: 0.15, gc: -0.10, sci_flat: 1 },
+    'Машинный разум (ИИ)':  { gc: -0.15, build: -0.10, research: -0.10, sci_flat: 1, agents_flat: 1 },  // ★ робот-набор
   },
+  // Режим → ЭКОНОМИЧЕСКИЙ ТЕМПЕРАМЕНТ: дил «доход ↔ добыча ↔ наука».
   regime: {
     'Демократический':      { gc: 0.15, agents_flat: -1 },
     'Эгалитарный':          { gc: 0.10, claim_cost: 0.10, sci_flat: 1 },
     'Меритократический':    { gc: -0.10, research: -0.15, sci_flat: 2 },
-    'Плутократический':     { gc: 0.25, sci_flat: -1 },
+    'Плутократический':     { gc: 0.20, sci_flat: -1, agents_flat: -1 },
     'Олигархический':       { gc: 0.15, mine: -0.10 },
-    'Авторитарный':         { mine: 0.10, gc: -0.10, agents_flat: 1 },
-    'Тоталитарный':         { mine: 0.25, gc: -0.15, agents_flat: 1 },
-    'Деспотичный':          { claim_cd: -0.20, sci_flat: -1, agents_flat: 1 },
-    'Деспотизм':            { gc: 0.15, mine: 0.10, research: 0.15, sci_flat: -1, agents_flat: 1 },
-    'Анархический':         { colonize: -0.25, gc: -0.20, build: 0.15, sci_flat: 1 },
+    'Авторитарный':         { mine: 0.10, agents_flat: 1, gc: -0.10 },
+    'Тоталитарный':         { mine: 0.20, gc: -0.15, agents_flat: 1 },
+    'Деспотичный':          { claim_cd: -0.20, agents_flat: 1, sci_flat: -1 },
+    'Деспотизм':            { mine: 0.15, gc: 0.10, research: 0.15, sci_flat: -1, agents_flat: 1 },
+    'Анархический':         { colonize: -0.20, build: 0.15, gc: -0.15, sci_flat: 1 },
   },
+  // Идеология → ГЛАВНАЯ ИДЕНТИЧНОСТЬ + сигнатура. Может бить 0.25–0.30 на свою линию,
+  // но платит на другой. См. EC_ARCHETYPE.
   ideology: {
-    'Технократия (Культ науки)': { gc: -0.15, research: -0.25, sci_flat: 3 },
-    'Милитаризм (Культ силы)':   { claim_cost: -0.15, gc: -0.10, research: 0.10, agents_flat: 1 },
-    'Пацифизм':                  { gc: 0.25, agents_flat: -1 },
-    'Экспансионизм':             { colonize: -0.30, claim_cost: -0.30, claim_cd: -0.40, gc: -0.10 },
-    'Изоляционизм':              { gc: 0.15, claim_cost: 0.25, claim_cd: 0.25, sci_flat: 1 },
-    'Ксенофилия':                { gc: 0.20, agents_flat: -1 },
-    'Ксенофобия':                { mine: 0.10, gc: -0.20, agents_flat: 1 },
-    'Спиритуализм':              { research: 0.15, sci_flat: -1, agents_flat: 1 },
-    'Трансгуманизм':             { gc: -0.10, research: -0.15, sci_flat: 2 },
-    'Экоцентризм':               { mine: 0.30, gc: -0.20 },
-    'Индустриализм':             { gc: 0.25, mine: 0.10, build: -0.15, research: 0.10, sci_flat: -1 },
+    'Технократия (Культ науки)': { gc: -0.15, research: -0.20, sci_flat: 2 },             // ★ +1 слот исследований
+    'Милитаризм (Культ силы)':   { claim_cost: -0.20, gc: -0.10, research: 0.10, agents_flat: 1 },
+    'Пацифизм':                  { gc: 0.25, claim_cd: 0.15, agents_flat: -1 },           // ★ золотой век, слабая армия
+    'Экспансионизм':             { colonize: -0.25, claim_cost: -0.20, gc: -0.10 },        // ★ пул из 2 захватов
+    'Изоляционизм':              { gc: 0.15, claim_cost: 0.20, claim_cd: 0.20, agents_flat: 1 },
+    'Ксенофилия':                { gc: 0.20, colonize: -0.10, agents_flat: -1 },
+    'Ксенофобия':                { mine: 0.15, gc: -0.10, agents_flat: 1 },
+    'Спиритуализм':              { gc: 0.10, research: 0.10, sci_flat: -1, agents_flat: 1 },  // ★ вера сильнее
+    'Трансгуманизм':             { gc: -0.10, research: -0.20, sci_flat: 2 },
+    'Экоцентризм':               { mine: 0.25, gc: -0.15, build: 0.05 },
+    'Индустриализм':             { build: -0.15, mine: 0.10, gc: 0.05, research: 0.10 },
   },
+  // Раса → мягкая биология (≤0.20) + родные миры (EC_HAB). Нетто ≈ 0.
   race: {
     'Гуманоиды':                  { gc: 0.05, sci_flat: 1 },
-    'Млекопитающие':              { gc: 0.20 },
+    'Млекопитающие':              { gc: 0.15 },
     'Рептилоиды':                 { gc: -0.10, agents_flat: 1 },
-    'Авианы (Птицеподобные)':     { claim_cd: -0.25, gc: -0.05, agents_flat: 1 },
-    'Инсектоиды':                 { mine: 0.20, gc: 0.10, research: 0.10, sci_flat: -1 },
+    'Авианы (Птицеподобные)':     { claim_cd: -0.20, gc: -0.05, agents_flat: 1 },
+    'Инсектоиды':                 { mine: 0.15, gc: 0.05, research: 0.10, sci_flat: -1 },
     'Акватики (Водные)':          { gc: 0.15, colonize: 0.15 },
-    'Плантоиды (Растениевидные)': { mine: 0.15, gc: 0.10, agents_flat: -1 },
-    'Литоиды (Каменные)':         { mine: 0.25, gc: -0.15 },
-    'Синтетики / Киборги':        { gc: -0.35, research: -0.15, sci_flat: 2 },  // все планеты родные → сильный дебаф денег
+    'Плантоиды (Растениевидные)': { mine: 0.15, gc: 0.05, agents_flat: -1 },
+    'Литоиды (Каменные)':         { mine: 0.20, gc: -0.15 },
+    'Синтетики / Киборги':        { gc: -0.35, research: -0.15, sci_flat: 2 },  // все планеты родные → намеренно сильный дебаф денег
     'Энергетические сущности':    { gc: -0.15, research: -0.10, sci_flat: 1, agents_flat: 1 },
   },
+  // Тип → СТАРТ: фронтир = дешёвая быстрая экспансия, но бедно; колония = богато/вглубь, медленно вширь.
   civ: {
-    'frontier': { colonize: -0.25, claim_cd: -0.25, gc: -0.15 },
-    'colony':   { gc: 0.20, mine: 0.10, claim_cost: 0.15, build: -0.10 },
+    'frontier': { colonize: -0.20, claim_cd: -0.20, gc: -0.15 },
+    'colony':   { gc: 0.15, mine: 0.10, claim_cost: 0.15, build: -0.10 },
   },
 };
+// ── АРХЕТИПЫ доктрины (идентичность по идеологии) ──────────────
+// Несут «лицо» плейстайла для карточки: заголовок, слоган, цветовая линия (lane)
+// и текст сигнатуры (★ — главная фишка). lane → акцентный цвет карточки.
+const EC_ARCHETYPE = {
+  'Технократия (Культ науки)': { title: 'Научная держава',  lane: 'science', tagline: 'Гонка технологий: дешёвые исследования и параллельные проекты.', signature: '+1 слот параллельных исследований' },
+  'Милитаризм (Культ силы)':   { title: 'Военная машина',   lane: 'war',     tagline: 'Экспансия силой: дешёвый захват систем и сильные спецслужбы.',      signature: 'Военная экономика — дешёвый захват + агенты' },
+  'Пацифизм':                  { title: 'Золотой век',      lane: 'econ',    tagline: 'Максимум дохода ценой слабой армии и разведки.',                    signature: 'Процветание — топовый доход, но без милитаризации' },
+  'Экспансионизм':             { title: 'Великое расселение',lane: 'expand', tagline: 'Дешёвая безостановочная колонизация во все стороны.',               signature: 'Пул из 2 захватов систем подряд' },
+  'Изоляционизм':              { title: 'Затворники',       lane: 'econ',    tagline: 'Богатое замкнутое ядро; расширяться дорого и медленно.',            signature: 'Крепкий тыл — доход и агенты, дорогая экспансия' },
+  'Ксенофилия':                { title: 'Открытый мир',     lane: 'econ',    tagline: 'Торговля и дружелюбие приносят доход и удешевляют колонии.',         signature: 'Открытые границы — доход + дешёвая колонизация' },
+  'Ксенофобия':                { title: 'Крепость-мир',     lane: 'mine',    tagline: 'Замкнутая мобилизация на добычу и контроль.',                       signature: 'Осадная экономика — добыча + спецслужбы' },
+  'Спиритуализм':              { title: 'Держава духа',     lane: 'faith',   tagline: 'Вера кормит казну и удешевляет войска.',                            signature: 'Усиленная Вера — храмы дают больше' },
+  'Трансгуманизм':             { title: 'Постлюди',         lane: 'science', tagline: 'Жертвуют экономикой ради чистой науки.',                            signature: 'Постчеловек — дешёвая наука и приток ОН' },
+  'Экоцентризм':               { title: 'Гармония',         lane: 'mine',    tagline: 'Бережная сверхдобыча ресурсов родных миров.',                       signature: 'Гармония с миром — максимум добычи' },
+  'Индустриализм':             { title: 'Промышленность',   lane: 'build',   tagline: 'Дешёвое строительство и развитая производственная база.',           signature: 'Индустриальная база — дешёвые постройки и слоты' },
+};
+// Акцентные цвета линий архетипа (CSS-переменные с фолбэком).
+const EC_LANE_COLOR = {
+  science: 'var(--te, #3ec0d0)', war: 'var(--err, #e05050)', econ: 'var(--gd, #d4af37)',
+  expand: 'var(--ok, #4caf6a)', faith: 'var(--pu, #a98bff)', mine: '#e0962f', build: '#e0962f',
+};
+const EC_LANE_ICON = { science: '🔬', war: '⚔', econ: '💰', expand: '🪐', faith: '🛐', mine: '⛏', build: '🏗' };
+// Архетип текущей анкеты (по идеологии; робот переопределяет).
+function ecArchetype(app) {
+  app = app || EC.app || {};
+  const isRobot = app.race === 'Синтетики / Киборги' || app.gov === 'Машинный разум (ИИ)';
+  if (isRobot) return { title: 'Машинный разум', lane: 'science', tagline: 'Синтетический рой: любой мир — дом, наука и сила вместо денег.', signature: 'Робот-набор — все миры родные, пехота ×3, +слот, 2 захвата' };
+  return EC_ARCHETYPE[app.ideology] || { title: 'Независимая держава', lane: 'econ', tagline: 'Сбалансированный путь без выраженной специализации.', signature: '' };
+}
 
 // ── ПЛАНЕТЫ-СТОЛИЦЫ: характеристики и лёгкий бонус родного мира ──
 // Ключ = среда (env, EC_HAB). Бонусы намеренно мягкие — это «характер» родного
@@ -437,6 +473,8 @@ function ecIsRobot() {
   const a = EC.app || {};
   return a.race === 'Синтетики / Киборги' || a.gov === 'Машинный разум (ИИ)';
 }
+// Сигнатура экспансионизма: пул из 2 захватов систем подряд (как у роботов / «Дома в небесах»).
+function ecIsExpansionist() { return (EC.app || {}).ideology === 'Экспансионизм'; }
 const EC_INF_PER_SLOT = 1000, EC_ROBOT_INF_PER_SLOT = 3000;
 function ecCaps() {
   const tr = ecSlotsSum('training'), mf = ecSlotsSum('military_factory'), sy = ecSlotsSum('shipyard');
@@ -658,7 +696,7 @@ async function ecLoad() {
     ecRpc('trade_capacity').catch(() => null),   // грузоподъёмность торгового флота
     ecRpc('spy_recruits_list').catch(() => null),   // агентура: ростер + еженедельный рынок рекрутов
     ecRpc('diplo_status').catch(() => null),         // союзы: федерация/конфедерация + вассалитеты
-    dbGet('income_history', `owner_id=eq.${user.id}&order=tick_at.desc&limit=14`).catch(() => []),  // доход по времени
+    dbGet('income_history', `owner_id=eq.${user.id}&order=tick_at.desc&limit=30`).catch(() => []),  // доход по времени (история для графиков статистики)
     ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции (вера, роль, сила, скидка)
     ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий (для вступления)
     ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез по союзникам/торг.партнёрам/друзьям
@@ -945,6 +983,26 @@ function ecPaintCabinet() {
 }
 function ecSetTab(t) { EC.tab = t; ecPaintCabinet(); }
 
+// ── Состояние «Обзора»-статистики: раскрытые секции, активный график, окно истории ──
+function ecOvState() {
+  if (!EC.ov) EC.ov = { exp: {}, chart: 'net', range: 14 };
+  if (!EC.ov.exp) EC.ov.exp = {};
+  return EC.ov;
+}
+function ecOvExpanded(key) { return !!ecOvState().exp[key]; }
+function ecOvToggle(key) { const s = ecOvState(); s.exp[key] = !s.exp[key]; ecPaintCabinet(); }
+function ecOvSetChart(metric) { ecOvState().chart = metric; ecPaintCabinet(); }
+function ecOvSetRange(n) { ecOvState().range = n; ecPaintCabinet(); }
+// Заголовок раскрываемой секции: стрелка + текст; клик — разворот/сворот детального блока.
+function ecOvFold(key, label, sub) {
+  const open = ecOvExpanded(key);
+  return `<button type="button" class="ec-fold-btn${open ? ' open' : ''}" onclick="ecOvToggle('${key}')">
+    <span class="ec-fold-chev">${open ? '▾' : '▸'}</span>
+    <span class="ec-fold-lbl">${label}</span>
+    ${sub ? `<span class="ec-fold-sub">${sub}</span>` : ''}
+  </button>`;
+}
+
 // Вкладка «Новости»: статический каркас, тело подгружает faction_news.js.
 function ecTabNews() {
   return ecIntro('📰', 'Новости фракции',
@@ -955,51 +1013,72 @@ function ecTabNews() {
     + `<div id="ec-news-mount"><div class="ec-empty">Загрузка…</div></div>`;
 }
 
-// Чипы эффектов ОДНОГО выбора в анкете (cat: gov|regime|ideology|race|civ; value: значение).
-function ecChoiceChips(cat, value) {
-  const m = (cat === 'capital') ? (EC_CAPITAL[value] || {}).mods : (EC_MODS[cat] || {})[value];
-  if (!m) return '';
-  const PCT = { gc: 'ГС-доход', mine: 'Добыча' };
-  const COST = { build: 'Постройки/слоты', colonize: 'Колонизация планет', claim_cost: 'Колонизация систем: цена', research: 'Исследования' };
-  const chips = [];
-  const chip = (good, txt) => chips.push(`<span class="ec-doc-chip ${good ? 'good' : 'bad'}">${txt}</span>`);
-  // плоские: наука / агенты (+N в сутки)
-  if (m.sci_flat) chip(m.sci_flat > 0, `Наука ${m.sci_flat > 0 ? '+' : ''}${m.sci_flat} ОН/сут`);
-  if (m.agents_flat) chip(m.agents_flat > 0, `Агенты ${m.agents_flat > 0 ? '+' : ''}${m.agents_flat}/сут`);
-  // процентные доход/добыча (выше = лучше)
-  ['gc', 'mine'].forEach(k => { if (m[k]) { const p = Math.round(m[k] * 100); chip(p > 0, `${PCT[k]} ${p > 0 ? '+' : ''}${p}%`); } });
-  // процентные стоимости (ниже = лучше)
-  ['build', 'colonize', 'claim_cost', 'research'].forEach(k => { if (m[k]) { const p = Math.round(m[k] * 100); chip(p < 0, `${COST[k]} ${p > 0 ? '+' : ''}${p}%`); } });
-  if (m.claim_cd) { const p = Math.round(m.claim_cd * 100); chip(p < 0, `Кулдаун колонизации систем ${p > 0 ? '+' : ''}${p}%`); }
-  // конкретные плюшки: бонусная постройка и/или технология
-  const bgBld = (EC_DOCTRINE_BUILD[cat] || {})[value];
-  if (bgBld) chips.push(`<span class="ec-doc-chip grant">🏗 +${esc(ecBuildName(bgBld))}</span>`);
-  if (cat === 'ideology' && EC_DOCTRINE_TECH[value]) chips.push(`<span class="ec-doc-chip grant">🔬 ${esc(EC_DOCTRINE_TECH[value])}</span>`);
-  // особая способность: бонусный слот параллельных исследований (технократы)
-  const slotBonus = (EC_DOCTRINE_SLOTS[cat] || {})[value];
-  if (slotBonus) chips.push(`<span class="ec-doc-chip special">🔬 +${slotBonus} слот исследований</span>`);
-  return chips.length ? `<div class="ec-doc-chips-inline">${chips.join('')}</div>` : '';
+// ── Метаданные полей доктрины для карточки: иконка, подпись, группа, направление ──
+// goodHigh: больше = лучше? (для стоимостей/кулдауна — нет). flat: плоское поле (целые).
+const EC_FIELD_META = {
+  gc:          { label: 'Доход',        icon: '📈', group: 'econ',   goodHigh: true,  flat: false },
+  mine:        { label: 'Добыча',       icon: '⛏', group: 'econ',   goodHigh: true,  flat: false },
+  build:       { label: 'Постройки',    icon: '🏗', group: 'dev',    goodHigh: false, flat: false },
+  research:    { label: 'Цена науки',   icon: '🧪', group: 'dev',    goodHigh: false, flat: false },
+  sci_flat:    { label: 'Наука',        icon: '🔬', group: 'dev',    goodHigh: true,  flat: true,  unit: ' ОН/сут' },
+  colonize:    { label: 'Колонии',      icon: '🪐', group: 'expand', goodHigh: false, flat: false },
+  claim_cost:  { label: 'Захват: цена', icon: '⚑', group: 'expand', goodHigh: false, flat: false },
+  claim_cd:    { label: 'Перезарядка',  icon: '⏳', group: 'expand', goodHigh: false, flat: false },
+  agents_flat: { label: 'Агенты',       icon: '🕵', group: 'sec',    goodHigh: true,  flat: true,  unit: '/сут' },
+};
+const EC_GROUP_ORDER = ['econ', 'dev', 'expand', 'sec'];
+const EC_GROUP_TITLE = { econ: 'Экономика', dev: 'Развитие', expand: 'Экспансия', sec: 'Безопасность' };
+// Нормализует моды в список строк {key,meta,delta,good,flat}. mode='agg' → множители
+// из ecFactionMods (1.10); mode='raw' → доли одного выбора (0.10). Плоские — целые в обоих.
+function ecModRows(src, mode) {
+  const rows = [];
+  for (const key in EC_FIELD_META) {
+    const meta = EC_FIELD_META[key];
+    let delta;
+    if (meta.flat) delta = Math.round(+src[key] || 0);
+    else { const raw = +src[key] || 0; delta = mode === 'agg' ? Math.round((raw - 1) * 100) : Math.round(raw * 100); }
+    if (!delta) continue;
+    rows.push({ key, meta, delta, good: meta.goodHigh ? delta > 0 : delta < 0, flat: meta.flat });
+  }
+  return rows;
+}
+// Одна стат-полоска (бар, длина ∝ модулю значения).
+function ecStatBar(r) {
+  const sign = r.delta > 0 ? '+' : '';
+  const unit = r.flat ? (r.meta.unit || '') : '%';
+  const len = Math.min(100, Math.round(r.flat ? Math.abs(r.delta) * 28 : Math.abs(r.delta) * 4));
+  return `<div class="ec-stat ${r.good ? 'pos' : 'neg'}"><span class="ec-stat-l">${r.meta.icon} ${r.meta.label}</span><span class="ec-stat-track"><i style="width:${len}%"></i></span><span class="ec-stat-v">${sign}${r.delta}${unit}</span></div>`;
+}
+// Профиль статов, сгруппированный по линиям (экономика/развитие/экспансия/безопасность).
+function ecStatGroups(rows) {
+  return EC_GROUP_ORDER.map(g => {
+    const gr = rows.filter(r => r.meta.group === g);
+    if (!gr.length) return '';
+    return `<div class="ec-stat-grp"><div class="ec-stat-grp-t">${EC_GROUP_TITLE[g]}</div>${gr.map(ecStatBar).join('')}</div>`;
+  }).join('');
 }
 
-// Чипы активных модификаторов доктрины (для кабинета и обзора анкеты)
-function ecDoctrineChips(app) {
-  const m = ecFactionMods(app);
-  const pct = v => Math.round((v - 1) * 100);
-  const chip = (label, v, goodIsHigh) => {
-    const p = pct(v); if (!p) return '';
-    const good = (goodIsHigh !== false) ? p > 0 : p < 0;
-    return `<span class="ec-doc-chip ${good ? 'good' : 'bad'}">${label} ${p > 0 ? '+' : ''}${p}%</span>`;
-  };
-  const flat = (label, v, unit) => v ? `<span class="ec-doc-chip ${v > 0 ? 'good' : 'bad'}">${label} ${v > 0 ? '+' : ''}${v}${unit}</span>` : '';
-  const out = [
-    chip('📈 ГС-доход', m.gc), chip('⛏ Добыча', m.mine),
-    flat('🔬 Наука', m.sci_flat, ' ОН/сут'), flat('🕵 Агенты', m.agents_flat, '/сут'),
-    chip('🏗 Постройки/слоты', m.build, false), chip('🧪 Исследования', m.research, false),
-    chip('🪐 Колонизация планет', m.colonize, false), chip('⚑ Захват систем: цена', m.claim_cost, false),
-  ];
-  const cdP = pct(m.claim_cd);
-  if (cdP) out.push(`<span class="ec-doc-chip ${cdP < 0 ? 'good' : 'bad'}">⏳ ${cdP < 0 ? `Захват систем чаще ×${(1 / m.claim_cd).toFixed(1)}` : `Захват систем реже +${cdP}%`}</span>`);
-  return out.filter(Boolean).join('');
+// Компактные эффекты ОДНОГО выбора в анкете (cat: gov|regime|ideology|race|civ|capital).
+function ecChoiceChips(cat, value) {
+  const m = (cat === 'capital') ? (EC_CAPITAL[value] || {}).mods : (EC_MODS[cat] || {})[value];
+  const rows = m ? ecModRows(m, 'raw') : [];
+  const tags = rows.map(r => {
+    const sign = r.delta > 0 ? '+' : '', unit = r.flat ? (r.meta.unit || '') : '%';
+    return `<span class="ec-doc-tag ${r.good ? 'pos' : 'neg'}">${r.meta.icon} ${r.meta.label} ${sign}${r.delta}${unit}</span>`;
+  });
+  const bgBld = (EC_DOCTRINE_BUILD[cat] || {})[value];
+  if (bgBld) tags.push(`<span class="ec-doc-tag grant">🏗 +${esc(ecBuildName(bgBld))}</span>`);
+  if (cat === 'ideology' && EC_DOCTRINE_TECH[value]) tags.push(`<span class="ec-doc-tag grant">🔬 ${esc(EC_DOCTRINE_TECH[value])}</span>`);
+  const slotBonus = (EC_DOCTRINE_SLOTS[cat] || {})[value];
+  if (slotBonus) tags.push(`<span class="ec-doc-tag special">🔬 +${slotBonus} слот</span>`);
+  // Для идеологии — шапка архетипа с сигнатурой.
+  let head = '';
+  if (cat === 'ideology' && EC_ARCHETYPE[value]) {
+    const a = EC_ARCHETYPE[value];
+    head = `<div class="ec-choice-arch" style="--lane:${EC_LANE_COLOR[a.lane] || EC_LANE_COLOR.econ}"><span class="ec-choice-arch-i">${EC_LANE_ICON[a.lane] || '⚜'}</span><b>${esc(a.title)}</b>${a.signature ? `<span class="ec-choice-sig">★ ${esc(a.signature)}</span>` : ''}</div>`;
+  }
+  if (!head && !tags.length) return '';
+  return `<div class="ec-choice-eff">${head}${tags.length ? `<div class="ec-doc-tags">${tags.join('')}</div>` : ''}</div>`;
 }
 // Особые способности (не-процентные механики): роботы, «Дом в небесах».
 function ecDoctrineSpecials(app) {
@@ -1034,44 +1113,274 @@ function ecDoctrineGrants(app) {
   const blds = [(EC_DOCTRINE_BUILD.gov || {})[app.gov], (EC_DOCTRINE_BUILD.ideology || {})[app.ideology]].filter(Boolean);
   const tech = EC_DOCTRINE_TECH[app.ideology];
   const items = [];
-  blds.forEach(bt => items.push(`<span class="ec-doc-chip grant">🏗 ${esc(ecBuildName(bt))}</span>`));
-  if (tech) items.push(`<span class="ec-doc-chip grant">🔬 ${esc(tech)}</span>`);
+  blds.forEach(bt => items.push(`<span class="ec-doc-tag grant">🏗 ${esc(ecBuildName(bt))}</span>`));
+  if (tech) items.push(`<span class="ec-doc-tag grant">🔬 ${esc(tech)}</span>`);
   return items;
 }
+// КАРТОЧКА ДОКТРИНЫ: герой-архетип + сигнатура + профиль статов + «Сила ↔ Цена» + плюшки.
 function ecDoctrineHtml(app) {
   app = app || EC.app || {};
-  const chips = ecDoctrineChips(app);
-  if (!chips) return '';
+  const rows = ecModRows(ecFactionMods(app), 'agg');
+  const arch = ecArchetype(app);
+  if (!rows.length && !app.ideology && !app.gov) return '';
+  const lane = EC_LANE_COLOR[arch.lane] || EC_LANE_COLOR.econ;
+  const icon = EC_LANE_ICON[arch.lane] || '⚜';
   const sub = [app.gov, app.regime, app.ideology, app.race, app.civ_type === 'frontier' ? 'Фронтир' : (app.civ_type === 'colony' ? 'Колония' : '')].filter(Boolean).map(esc).join(' · ');
-  const grants = ecDoctrineGrants(app);
   const specials = ecDoctrineSpecials(app);
-  return `<div class="ec-doctrine">
-    <div class="ec-doctrine-hd">⚜ Доктрина государства <span class="ec-hint">реальные эффекты вашего выбора при регистрации</span></div>
-    ${sub ? `<div class="ec-doctrine-sub">${sub}</div>` : ''}
-    ${specials.length ? `<div class="ec-doctrine-grants"><span class="ec-doctrine-grants-t" style="color:var(--pu)">★ Особые способности:</span><div class="ec-doctrine-chips">${specials.map(s => `<span class="ec-doc-chip special">${esc(s)}</span>`).join('')}</div></div>` : ''}
-    <div class="ec-doctrine-sect-t">Модификаторы</div>
-    <div class="ec-doctrine-chips">${chips}</div>
-    ${grants.length ? `<div class="ec-doctrine-grants"><span class="ec-doctrine-grants-t">Стартовые плюшки:</span><div class="ec-doctrine-chips">${grants.join('')}</div></div>` : ''}
+  const grants = ecDoctrineGrants(app);
+  const strengths = rows.filter(r => r.good), costs = rows.filter(r => !r.good);
+  const tradeTag = (r) => {
+    const sign = r.delta > 0 ? '+' : '', unit = r.flat ? (r.meta.unit || '') : '%';
+    return `<span class="ec-trade-tag ${r.good ? 'pos' : 'neg'}">${r.meta.icon} ${r.meta.label} <b>${sign}${r.delta}${unit}</b></span>`;
+  };
+  return `<div class="ec-doctrine" style="--lane:${lane}">
+    <div class="ec-doc-hero">
+      <div class="ec-doc-hero-ic">${icon}</div>
+      <div class="ec-doc-hero-tx">
+        <div class="ec-doc-hero-t">${esc(arch.title)}</div>
+        <div class="ec-doc-hero-tag">${esc(arch.tagline)}</div>
+        ${sub ? `<div class="ec-doc-hero-sub">${sub}</div>` : ''}
+      </div>
+    </div>
+    ${arch.signature ? `<div class="ec-doc-sig"><span class="ec-doc-sig-star">★</span><div class="ec-doc-sig-tx"><div class="ec-doc-sig-h">Сигнатура</div><div class="ec-doc-sig-v">${esc(arch.signature)}</div></div></div>` : ''}
+    ${specials.length ? `<div class="ec-doc-block"><div class="ec-doc-sect">Особые способности</div><div class="ec-doc-specials">${specials.map(s => `<div class="ec-doc-special">${esc(s)}</div>`).join('')}</div></div>` : ''}
+    ${rows.length ? `<div class="ec-doc-block"><div class="ec-doc-sect">Профиль доктрины</div><div class="ec-stat-groups">${ecStatGroups(rows)}</div></div>
+    <div class="ec-trade">
+      <div class="ec-trade-col"><div class="ec-trade-h ec-trade-h-pos">▲ Сила</div><div class="ec-doc-tags">${strengths.length ? strengths.map(tradeTag).join('') : '<span class="ec-trade-none">—</span>'}</div></div>
+      <div class="ec-trade-col"><div class="ec-trade-h ec-trade-h-neg">▼ Цена</div><div class="ec-doc-tags">${costs.length ? costs.map(tradeTag).join('') : '<span class="ec-trade-none">—</span>'}</div></div>
+    </div>` : ''}
+    ${grants.length ? `<div class="ec-doc-block"><div class="ec-doc-sect">Стартовые плюшки</div><div class="ec-doc-tags">${grants.join('')}</div></div>` : ''}
   </div>`;
 }
 
 // Суммарная суточная добыча по ресурсам (по всем mining-зданиям державы).
+// Для каждого ресурса собираем ещё и источники (srcs): откуда, сколько слотов,
+// какое богатство месторождения и какой вклад в добычу — для подробной справки.
 function ecMineTotals() {
   const totals = new Map();
   EC.buildings.filter(b => b.btype === 'mining').forEach(b => {
     const res = ecMiningPlanetRes(b);
+    const colony = EC.colonies.find(c => c.id === b.colony_id);
+    const colName = (colony && (colony.name || colony.planet_name)) || '—';
     (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(name => {
       const ri = res.find(r => r.name === name); if (!ri) return;
-      const cur = totals.get(name) || { rate: 0, r: ri.r || 'common', icon: ri.icon || '◈' };
-      cur.rate += ecMineRate(ri.r || 'common'); totals.set(name, cur);
+      // Богатство месторождения (amt) ВЛИЯЕТ на добычу — учитываем как в колонии-превью.
+      const rate = ecMineRate(ri.r || 'common', ri.amt);
+      const cur = totals.get(name) || { rate: 0, r: ri.r || 'common', icon: ri.icon || '◈', slots: 0, srcs: new Map() };
+      cur.rate += rate; cur.slots += 1;
+      const s = cur.srcs.get(colName) || { rate: 0, slots: 0, amt: ri.amt };
+      s.rate += rate; s.slots += 1; s.amt = ri.amt;
+      cur.srcs.set(colName, s);
+      totals.set(name, cur);
     });
   });
   return totals;
 }
+// Человекочитаемые названия редкости ресурсов (для подробной справки).
+const EC_RAR_LABEL = { common: 'обычный', uncommon: 'необычный', rare: 'редкий', epic: 'эпический', legendary: 'легендарный' };
+function ecRarLabel(r) { return EC_RAR_LABEL[r] || r || 'обычный'; }
 // Полоска заполнения used/cap (для мощностей и ячеек).
 function ecOvBar(used, cap, cls) {
   const pct = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
   return `<span class="ec-ovx-bar"><span class="ec-ovx-bar-fill${cls ? ' ' + cls : ''}" style="width:${pct}%"></span></span>`;
+}
+
+// ── ДВИЖОК ГРАФИКОВ (чистый SVG, без библиотек) ─────────────────────────────
+// «Красивое» округление верхней границы оси Y.
+function ecChartNiceMax(v) {
+  if (v <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p;
+  const s = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+  return s * p;
+}
+const ecChartFmt = v => { const a = Math.abs(v); return a >= 1e6 ? (v / 1e6).toFixed(1) + 'М' : a >= 1e3 ? Math.round(v / 1e3) + 'к' : ecNum(Math.round(v)); };
+// Линейный/столбчатый/стопочный график.
+// cfg: { labels:[str], series:[{name,color,vals:[num]}], type:'line'|'bar'|'stack', h, money, fmtTip }
+function ecSvgChart(cfg) {
+  const labels = cfg.labels || [], series = cfg.series || [], n = labels.length;
+  if (!n) return '<div class="ec-chart-empty">Нет данных за выбранный период.</div>';
+  const type = cfg.type || 'line';
+  const VW = 1000, VH = cfg.h || 240, pad = { l: 56, r: 16, t: 16, b: 34 };
+  const pw = VW - pad.l - pad.r, ph = VH - pad.t - pad.b;
+  let yMax = 0, yMin = 0;
+  if (type === 'stack') {
+    for (let i = 0; i < n; i++) { let pos = 0, neg = 0; series.forEach(s => { const v = +s.vals[i] || 0; if (v >= 0) pos += v; else neg += v; }); yMax = Math.max(yMax, pos); yMin = Math.min(yMin, neg); }
+  } else {
+    series.forEach(s => s.vals.forEach(x => { const v = +x || 0; yMax = Math.max(yMax, v); yMin = Math.min(yMin, v); }));
+  }
+  yMax = ecChartNiceMax(yMax || 1);
+  if (yMin < 0) yMin = -ecChartNiceMax(-yMin); else yMin = 0;
+  const span = (yMax - yMin) || 1;
+  const Y = v => pad.t + (1 - ((v - yMin) / span)) * ph;
+  const bandW = pw / n;
+  const cx = i => pad.l + bandW * (i + 0.5);
+  // Сетка + подписи Y
+  let grid = '';
+  for (let k = 0; k <= 4; k++) {
+    const val = yMin + span * (k / 4), y = Y(val);
+    grid += `<line class="ec-chart-grid" x1="${pad.l}" y1="${y.toFixed(1)}" x2="${VW - pad.r}" y2="${y.toFixed(1)}"/>`;
+    grid += `<text class="ec-chart-ylab" x="${pad.l - 8}" y="${(y + 3.5).toFixed(1)}" text-anchor="end">${ecChartFmt(val)}</text>`;
+  }
+  if (yMin < 0) { const y0 = Y(0); grid += `<line class="ec-chart-zero" x1="${pad.l}" y1="${y0.toFixed(1)}" x2="${VW - pad.r}" y2="${y0.toFixed(1)}"/>`; }
+  // Подписи X (прорежаем)
+  const step = Math.ceil(n / 9);
+  let xlab = '';
+  for (let i = 0; i < n; i++) if (i % step === 0 || i === n - 1) xlab += `<text class="ec-chart-xlab" x="${cx(i).toFixed(1)}" y="${VH - 12}" text-anchor="middle">${esc(labels[i])}</text>`;
+  // Тело графика
+  let body = '';
+  const tip = (i, extra) => `${esc(labels[i])}${extra}`;
+  if (type === 'stack') {
+    const bw = Math.min(38, bandW * 0.62);
+    for (let i = 0; i < n; i++) {
+      let accP = 0, accN = 0;
+      series.forEach(s => {
+        const v = +s.vals[i] || 0; if (!v) return;
+        const y0 = v >= 0 ? Y(accP + v) : Y(accN); const y1 = v >= 0 ? Y(accP) : Y(accN + v);
+        if (v >= 0) accP += v; else accN += v;
+        const hh = Math.max(0.5, y1 - y0);
+        body += `<rect class="ec-chart-seg" x="${(cx(i) - bw / 2).toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" fill="${s.color}" rx="1.5"><title>${tip(i, `\n${s.name}: ${ecNum(v)}`)}</title></rect>`;
+      });
+    }
+  } else if (type === 'bar') {
+    const s = series[0], bw = Math.min(40, bandW * 0.6);
+    for (let i = 0; i < n; i++) {
+      const v = +s.vals[i] || 0, y0 = Y(Math.max(0, v)), y1 = Y(Math.min(0, v)), hh = Math.max(0.5, y1 - y0);
+      body += `<rect class="ec-chart-seg" x="${(cx(i) - bw / 2).toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" fill="${v < 0 ? 'var(--rd,#c0392b)' : s.color}" rx="1.5"><title>${tip(i, `\n${s.name}: ${ecNum(v)}`)}</title></rect>`;
+    }
+  } else { // line
+    series.forEach(s => {
+      const pts = s.vals.map((v, i) => `${cx(i).toFixed(1)},${Y(+v || 0).toFixed(1)}`).join(' ');
+      const areaPts = `${cx(0).toFixed(1)},${Y(yMin < 0 ? 0 : yMin).toFixed(1)} ${pts} ${cx(n - 1).toFixed(1)},${Y(yMin < 0 ? 0 : yMin).toFixed(1)}`;
+      if (s.fill !== false) body += `<polygon class="ec-chart-area" points="${areaPts}" fill="${s.color}" opacity="0.10"/>`;
+      body += `<polyline class="ec-chart-line" points="${pts}" stroke="${s.color}" fill="none"/>`;
+      s.vals.forEach((v, i) => { body += `<circle class="ec-chart-dot" cx="${cx(i).toFixed(1)}" cy="${Y(+v || 0).toFixed(1)}" r="3" fill="${s.color}"><title>${tip(i, `\n${s.name}: ${ecNum(+v || 0)}`)}</title></circle>`; });
+    });
+  }
+  const legend = series.length > 1 ? `<div class="ec-chart-legend">${series.map(s => `<span class="ec-chart-leg"><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('')}</div>` : '';
+  return `<div class="ec-chart-wrap"><svg class="ec-chart-svg" viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="none" role="img">${grid}${body}${xlab}</svg>${legend}</div>`;
+}
+
+// Кольцевая диаграмма состава (donut). parts: [{name,color,value}] — только value>0.
+function ecSvgDonut(parts, opts) {
+  parts = (parts || []).filter(p => (+p.value || 0) > 0);
+  const total = parts.reduce((a, p) => a + (+p.value || 0), 0);
+  if (!total) return '';
+  const R = 52, r = 32, C = 60, circ = 2 * Math.PI * ((R + r) / 2), sw = R - r;
+  let off = 0, segs = '';
+  parts.forEach(p => {
+    const frac = (+p.value || 0) / total, len = frac * circ;
+    segs += `<circle cx="${C}" cy="${C}" r="${(R + r) / 2}" fill="none" stroke="${p.color}" stroke-width="${sw}"
+      stroke-dasharray="${len.toFixed(2)} ${(circ - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"
+      transform="rotate(-90 ${C} ${C})"><title>${esc(p.name)}: ${ecNum(Math.round(p.value))} (${Math.round(frac * 100)}%)</title></circle>`;
+    off += len;
+  });
+  const center = opts && opts.center ? `<text class="ec-donut-c" x="${C}" y="${C - 2}" text-anchor="middle">${esc(opts.center)}</text>${opts.sub ? `<text class="ec-donut-s" x="${C}" y="${C + 12}" text-anchor="middle">${esc(opts.sub)}</text>` : ''}` : '';
+  const legend = parts.map(p => `<span class="ec-donut-leg"><i style="background:${p.color}"></i>${esc(p.name)} <b>${Math.round((+p.value || 0) / total * 100)}%</b></span>`).join('');
+  return `<div class="ec-donut-wrap"><svg class="ec-donut-svg" viewBox="0 0 120 120">${segs}${center}</svg><div class="ec-donut-legend">${legend}</div></div>`;
+}
+
+// ── ПАНЕЛЬ СТАТИСТИКИ ФРАКЦИИ: график + фильтры метрик/периода + сводка + журнал ──
+const EC_STAT_METRICS = [
+  { id: 'net',     name: 'Чистый доход', ic: '💰', color: 'var(--gd)',         type: 'bar',   field: r => +r.gc_net || 0,   unit: 'ГС' },
+  { id: 'balance', name: 'Казна',        ic: '🏦', color: 'var(--gdl,var(--gd))', type: 'line',  field: r => +r.gc_after || 0, unit: 'ГС' },
+  { id: 'sources', name: 'Доходы по статьям', ic: '📊', color: '',              type: 'stack', unit: 'ГС' },
+  { id: 'mined',   name: 'Добыча',       ic: '⛏', color: 'var(--te)',          type: 'bar',   field: r => +r.mined || 0,    unit: 'ед.' },
+  { id: 'sci',     name: 'Наука',        ic: '🔬', color: 'var(--pu)',          type: 'line',  field: r => +r.sci || 0,      unit: 'ОН' },
+  { id: 'agents',  name: 'Агенты',       ic: '🕵', color: 'var(--ec-amb,#e0a030)', type: 'bar', field: r => +r.agents_n || 0, unit: 'шт' },
+];
+function ecStatLabel(r) {
+  const dt = r.tick_at ? new Date(r.tick_at) : null;
+  return dt ? dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '—';
+}
+function ecStatsPanel() {
+  const hAll = (EC.incomeHistory || []).slice();   // desc (новые сверху)
+  if (!hAll.length) return `<div class="ec-ovx-panel" style="grid-column:1/-1">
+    <div class="ec-ovx-panel-t">📈 Статистика фракции <span class="ec-ovx-panel-sub">доходы · расходы · добыча по ходам</span></div>
+    <div class="ec-ovx-empty">Истории пока нет — она появится после первого начисления (тика). Сделайте ход, и здесь будут графики доходов, расходов и добычи по времени.</div></div>`;
+  const st = ecOvState();
+  const range = st.range || 14;
+  // Берём последние N (по убыванию), затем разворачиваем в хронологический порядок для графика.
+  const slice = (range >= 999 ? hAll : hAll.slice(0, range)).slice().reverse();
+  const labels = slice.map(ecStatLabel);
+  const metric = EC_STAT_METRICS.find(m => m.id === st.chart) || EC_STAT_METRICS[0];
+
+  // Кнопки выбора метрики
+  const metricBtns = EC_STAT_METRICS.map(m =>
+    `<button type="button" class="ec-stat-mbtn${m.id === metric.id ? ' on' : ''}" onclick="ecOvSetChart('${m.id}')">${m.ic} ${m.name}</button>`).join('');
+  // Кнопки периода
+  const ranges = [[7, '7'], [14, '14'], [30, '30'], [999, 'всё']];
+  const rangeBtns = ranges.map(([v, l]) =>
+    `<button type="button" class="ec-stat-rbtn${range === v ? ' on' : ''}" onclick="ecOvSetRange(${v})">${l}</button>`).join('');
+
+  // Данные графика
+  let chart, sumLine;
+  if (metric.id === 'sources') {
+    const series = [
+      { name: '🏭 Фабрики/хабы', color: 'var(--gd)',         vals: slice.map(r => +r.gc_build || 0) },
+      { name: '🚚 Караваны',      color: 'var(--te)',          vals: slice.map(r => +r.gc_trade || 0) },
+      { name: '📈 Биржа',         color: 'var(--ok)',          vals: slice.map(r => +r.gc_market || 0) },
+      { name: '📤 Экспорт',       color: 'var(--ec-amb,#e0a030)', vals: slice.map(r => +r.gc_export || 0) },
+      { name: '📜 Апкип политики', color: 'var(--rd,#c0392b)',  vals: slice.map(r => -(+r.gc_policy || 0)) },
+    ].filter(s => s.vals.some(v => v));
+    chart = ecSvgChart({ labels, series, type: 'stack', h: 250 });
+    const tot = { b: 0, t: 0, mk: 0, e: 0, p: 0 };
+    slice.forEach(r => { tot.b += +r.gc_build || 0; tot.t += +r.gc_trade || 0; tot.mk += +r.gc_market || 0; tot.e += +r.gc_export || 0; tot.p += +r.gc_policy || 0; });
+    const grossAll = tot.b + tot.t + tot.mk + tot.e;
+    sumLine = `<div class="ec-stat-sum">
+      <span class="ec-stat-sum-i">всего получено: <b class="pos">+${ecNum(grossAll)}</b> ГС</span>
+      <span class="ec-stat-sum-i">расходы (апкип): <b class="neg">−${ecNum(tot.p)}</b> ГС</span>
+      <span class="ec-stat-sum-i">чисто: <b>${grossAll - tot.p >= 0 ? '+' : ''}${ecNum(grossAll - tot.p)}</b> ГС</span>
+    </div>`;
+  } else {
+    const vals = slice.map(metric.field);
+    chart = ecSvgChart({ labels, series: [{ name: metric.name, color: metric.color, vals }], type: metric.type, h: 250 });
+    const sum = vals.reduce((a, b) => a + b, 0), avg = vals.length ? sum / vals.length : 0;
+    const mx = Math.max(...vals, 0), mn = Math.min(...vals, 0);
+    sumLine = `<div class="ec-stat-sum">
+      <span class="ec-stat-sum-i">сумма: <b>${ecNum(Math.round(sum))}</b> ${metric.unit}</span>
+      <span class="ec-stat-sum-i">в среднем: <b>${ecNum(Math.round(avg))}</b> ${metric.unit}/ход</span>
+      <span class="ec-stat-sum-i">макс: <b class="pos">${ecNum(mx)}</b></span>
+      ${mn < 0 ? `<span class="ec-stat-sum-i">мин: <b class="neg">${ecNum(mn)}</b></span>` : ''}
+    </div>`;
+  }
+
+  // Журнал тиков (свёрнут по умолчанию) — детально что/откуда за каждый ход
+  const logKey = 'statlog';
+  const logRows = slice.slice().reverse().map(r => {   // снова новые сверху для журнала
+    const net = +r.gc_net || 0;
+    const dt = r.tick_at ? new Date(r.tick_at) : null;
+    const when = dt ? `${dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} ${dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : '—';
+    const chip = (cond, cls, txt, title) => cond ? `<span class="ec-ih-chip${cls ? ' ' + cls : ''}" title="${esc(title)}">${txt}</span>` : '';
+    const parts = [
+      chip(+r.gc_build, '', `🏭 +${ecNum(+r.gc_build)}`, 'Фабрики и торговые хабы'),
+      chip(+r.gc_trade, '', `🚚 +${ecNum(+r.gc_trade)}`, 'Караваны'),
+      chip(+r.gc_market, '', `📈 +${ecNum(+r.gc_market)}`, 'Товарная биржа'),
+      chip(+r.gc_export, '', `📤 +${ecNum(+r.gc_export)}`, 'Экспорт добычи'),
+      chip(+r.gc_policy, 'neg', `📜 −${ecNum(+r.gc_policy)}`, 'Апкип торговой политики'),
+      chip(+r.mined, 'res', `⛏ ${ecNum(+r.mined)}`, 'Добыто ресурсов на склад'),
+      chip(+r.sci, 'sci', `🔬 +${ecNum(+r.sci)}`, 'Наука'),
+      chip(+r.agents_n, 'agt', `🕵 +${ecNum(+r.agents_n)}`, 'Агенты'),
+    ].filter(Boolean).join('');
+    return `<div class="ec-ih-row">
+        <div class="ec-ih-head">
+          <span class="ec-ih-when">${esc(when)}${(+r.days > 1) ? ` · ${r.days} дн.` : ''}</span>
+          <span class="ec-ih-net ${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : ''}${ecNum(net)} ГС · казна ${ecNum(+r.gc_after || 0)}</span>
+        </div>
+        <div class="ec-ih-chips">${parts || '<span class="ec-ih-chip">нет потоков</span>'}</div>
+      </div>`;
+  }).join('');
+
+  return `<div class="ec-ovx-panel ec-stat-panel" style="grid-column:1/-1">
+    <div class="ec-ovx-panel-t">📈 Статистика фракции <span class="ec-ovx-panel-sub">${metric.ic} ${esc(metric.name)} · последние ${slice.length} ход(ов)</span></div>
+    <div class="ec-stat-controls">
+      <div class="ec-stat-metrics">${metricBtns}</div>
+      <div class="ec-stat-ranges"><span class="ec-stat-ranges-k">период:</span>${rangeBtns}</div>
+    </div>
+    ${chart}
+    ${sumLine}
+    ${ecOvFold(logKey, '🧾 Журнал по ходам', 'детально: доход, расход, добыча за каждый тик')}
+    ${ecOvExpanded(logKey) ? `<div class="ec-ih-list">${logRows}</div>` : ''}
+  </div>`;
 }
 
 // Статистика за ходы — разбивка «сколько чего пришло» по статьям (income_history)
@@ -1724,6 +2033,28 @@ function ecTabOverview() {
   if (inc.agents)  flows.push(`<span class="ec-bdg-flow" onclick="ecSetTab('intel')"><span class="ec-bdg-flow-ic">🕵</span><b class="ec-ovx-c-agt">+${ecNum(inc.agents)}</b> агент/сут</span>`);
   if (gcPct) flows.push(`<span class="ec-bdg-flow"><span class="ec-bdg-flow-ic">${gcPct > 0 ? '⚖' : '⚠'}</span>доктрина ${gcPct > 0 ? '+' : ''}${gcPct}% ГС</span>`);
   const hasBudget = moneyInc.length || marketSlots || _resOutTotal || flows.length;
+  // ── Раскрываемая детальная справка по казне: формула каждого источника + состав (donut) ──
+  const gcMulPct = Math.round((gcMul - 1) * 100);
+  const fxRow = (ic, name, formula, gc) => `<div class="ec-bdg-dt-row">
+      <span class="ec-bdg-dt-ic">${ic}</span>
+      <span class="ec-bdg-dt-info"><span class="ec-bdg-dt-name">${esc(name)}</span><span class="ec-bdg-dt-fx">${formula}</span></span>
+      <span class="ec-bdg-dt-val ${gc < 0 ? 'neg' : 'pos'}">${gc >= 0 ? '+' : ''}${ecNum(gc)}</span>
+    </div>`;
+  const detRows = [];
+  if (facSlots) detRows.push(fxRow('🏭', 'Гражданские фабрики', `${ecNum(facSlots)} слот × 200${gcMulPct ? ` × ${gcMul.toFixed(2)} (доктрина ${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''}`, Math.round(facSlots * 200 * gcMul)));
+  if (trSlots) detRows.push(fxRow('💱', 'Торговые хабы', `${ecNum(trSlots)} слот × 100${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''}`, Math.round(trSlots * 100 * gcMul)));
+  if (_out.length) detRows.push(fxRow('🚚', 'Караваны · продажа', `${_out.length} путь(ей): объём × цена − срез пиратов`, _outGc));
+  if (_in.length) detRows.push(fxRow('📦', 'Доля с поставок', `${_in.length} путь(ей): ${Math.round(EC_DEST_CUT * 100)}% от объёма партнёра`, _inGc));
+  if (marketSlots) detRows.push(fxRow('📈', 'Товарная биржа', `${ecNum(marketSlots)} слот · продаёт склад по 50–75% цены (переменно)`, 0));
+  const composition = moneyInc.length ? ecSvgDonut(moneyInc.map(x => ({ name: x.name, color: { 'Гражданские фабрики': 'var(--gd)', 'Торговые хабы': 'var(--te)', 'Караваны · продажа': 'var(--ok)', 'Доля с поставок': 'var(--ec-amb,#e0a030)' }[x.name] || 'var(--gd)', value: x.gc })), { center: ecChartFmt(netGc), sub: 'ГС/сут' }) : '';
+  const bdgDetail = `<div class="ec-bdg-detail">
+      ${composition ? `<div class="ec-bdg-dt-sect">Состав дохода</div>${composition}` : ''}
+      <div class="ec-bdg-dt-sect">Формулы по источникам</div>
+      <div class="ec-bdg-dt-list">${detRows.join('') || '<div class="ec-ovx-hint">Денежных источников нет.</div>'}</div>
+      ${_resOutTotal ? `<div class="ec-bdg-dt-warn">📤 Вывоз ресурсов караванами: −${ecNum(_resOutTotal)} ед/сут (${esc(_resOutTxt)}) — это расход сырья, не денег.</div>` : ''}
+      ${inc.debuff ? `<div class="ec-bdg-dt-warn">🔥 Дестабилизация режет денежный доход на ${Math.round(inc.debuff * 100)}% — уже учтено в суммах.</div>` : ''}
+      <div class="ec-ovx-hint">Доход начисляется в конце каждого хода (тика). Доктрина даёт ×${gcMul.toFixed(2)} к ГС-потокам${gcMulPct ? ` (${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''}. Содержания армии/зданий нет — постройка тратит ГС разово.</div>
+    </div>`;
   const budget = `<div class="ec-ovx-panel ec-bdg-panel">
     <div class="ec-ovx-panel-t">💰 Казна <span class="ec-ovx-panel-sub">доходы и расходы за сутки</span></div>
     ${hasBudget ? `
@@ -1734,40 +2065,100 @@ function ecTabOverview() {
       </div>
       ${(moneyRows || marketRow) ? `<div class="ec-bdg-rows">${moneyRows}${marketRow}</div>` : ''}
       ${flows.length ? `<div class="ec-bdg-flows">${flows.join('')}</div>` : ''}
-      <div class="ec-ovx-hint">Только денежные потоки (ГС). Ресурсы и их добыча — в панели «Ресурсы» ниже. Содержания армии/зданий нет — траты разовые.${_out.length || _in.length ? ' Доход с караванов зависит от поставок и срезается пиратами.' : ''}</div>`
+      ${ecOvFold('bdg', '🔍 Подробно: формулы и состав', 'откуда каждый ГС')}
+      ${ecOvExpanded('bdg') ? bdgDetail : ''}`
       : `<div class="ec-ovx-empty">Казна пуста. Постройте Гражданские фабрики во вкладке «Колонии» — это база дохода.</div>`}
   </div>`;
 
-  // ── 3. РЕСУРСЫ — добыча/сутки + склад ──
+  // ── 3. РЕСУРСЫ — добыча/сутки + склад (подробная справка: что/откуда/сколько/цена/почему) ──
   const mineT = ecMineTotals();
   const stock = new Map(ecResEntries());
   const resNames = new Set([...mineT.keys(), ...stock.keys()]);
   const resRows = [...resNames].map(n => {
     const mt = mineT.get(n), rate = mt ? mt.rate : 0, have = stock.get(n) || 0;
     const rar = (mt && mt.r) || ecResRarity(n) || 'common';
-    return { n, rate, have, rar, icon: (mt && mt.icon) || ecResIcon(n) };
+    return { n, rate, have, rar, slots: (mt && mt.slots) || 0, srcs: (mt && mt.srcs) || null };
   }).sort((a, b) => (b.rate - a.rate) || (b.have - a.have));
   const storeCap = ecStoreCap();
   const storeUsed = resRows.reduce((s, r) => s + (r.have || 0), 0);
+  const storePct = storeCap > 0 ? Math.round(storeUsed / storeCap * 100) : 0;
+  const mineDay = resRows.reduce((s, r) => s + (r.rate || 0), 0);
+  const freeCap = Math.max(0, storeCap - storeUsed);
+  const daysFull = mineDay > 0 ? Math.ceil(freeCap / mineDay) : 0;
+  const minedKinds = resRows.filter(r => r.rate > 0).length;
   const whSlots = ecSlotsSum('warehouse');
-  const capBar = `<div class="ec-ovx-stat-wide ec-ov-clk" onclick="ecSetTab('colonies')" data-tip="Ёмкость общего склада: база ${ecNum(EC_STORE_BASE)} + по ${ecNum(EC_STORE_PER_SLOT)} за слот «Склада».\n${whSlots ? whSlots + ' слот(ов) склада → +' + ecNum(whSlots * EC_STORE_PER_SLOT) : 'Складов нет — стройте «Склад», чтобы поднять лимит'}.\nСверх лимита добыча на склад не кладётся — лишнее в экспорт.">
-        <div class="ec-ovx-stat-k">📦 Вместимость склада</div>
-        <div class="ec-ovx-stat-barline"><b>${ecNum(storeUsed)}</b> / ${ecNum(storeCap)} ${ecOvBar(storeUsed, storeCap, storeUsed >= storeCap ? 'fill-rd' : 'fill-gc')}</div>
+  // Итоговая полоса склада + «когда заполнится»
+  const capBar = `<div class="ec-ovx-stat-wide ec-ov-clk" onclick="ecSetTab('colonies')" data-tip="Ёмкость общего склада: база ${ecNum(EC_STORE_BASE)} + по ${ecNum(EC_STORE_PER_SLOT)} за слот «Склада».\n${whSlots ? whSlots + ' слот(ов) склада → +' + ecNum(whSlots * EC_STORE_PER_SLOT) : 'Складов нет — стройте «Склад», чтобы поднять лимит'}.\nСверх лимита добыча на склад не кладётся — лишнее уходит в экспорт.">
+        <div class="ec-ovx-stat-k">📦 Вместимость склада <span class="ec-res-cap-pct">${storePct}%</span></div>
+        <div class="ec-ovx-stat-barline"><b>${ecNum(storeUsed)}</b> / ${ecNum(storeCap)} ${ecOvBar(storeUsed, storeCap, storeUsed >= storeCap ? 'fill-rd' : (storePct >= 85 ? 'fill-amb' : 'fill-gc'))}</div>
       </div>`;
+  // Сводка-итоги: суммарная добыча/сут, виды, прогноз заполнения
+  const resSummary = `<div class="ec-res-sum">
+    <span class="ec-res-sum-i"><b class="${mineDay ? 'ok' : 'dim'}">${mineDay ? '+' + ecNum(mineDay) : '0'}</b> ед/сут добыча</span>
+    <span class="ec-res-sum-i"><b>${ecNum(minedKinds)}</b> вид(ов) добывается</span>
+    ${mineDay && freeCap > 0 ? `<span class="ec-res-sum-i">склад полон через <b>${ecNum(daysFull)}</b> ход(ов)</span>` : (mineDay && freeCap <= 0 ? '<span class="ec-res-sum-i ec-res-sum-warn">⚠ склад полон — добыча сверх лимита уходит в экспорт</span>' : '')}
+  </div>`;
+  // Карточка ресурса: верх (иконка + полное имя + редкость), числа (добыча/склад/цена),
+  // источники (откуда добывается) либо причина «не добывается».
+  const resCard = (r) => {
+    const price = ecResPriceN(r.n);
+    const rarTxt = ecRarLabel(r.rar);
+    let foot;
+    if (r.srcs && r.srcs.size) {
+      const chips = [...r.srcs.entries()].map(([col, s]) =>
+        `<span class="ec-res-src-chip" title="${esc(col)}: ${s.slots} слот(ов)${s.amt ? ', месторождение «' + esc(s.amt) + '»' : ''} → +${ecNum(s.rate)}/сут">⛏ ${esc(col)} ×${s.slots} <b>+${ecNum(s.rate)}</b></span>`
+      ).join('');
+      foot = `<div class="ec-res-card-src"><span class="ec-res-card-src-k">откуда:</span>${chips}</div>`;
+    } else if (r.have > 0) {
+      foot = `<div class="ec-res-card-why">в запасе, добыча не ведётся — назначьте месторождение «${esc(r.n)}» добывающему заводу во вкладке «Колонии»</div>`;
+    } else {
+      foot = `<div class="ec-res-card-why">не добывается и склад пуст</div>`;
+    }
+    return `<div class="ec-res-card ec-rar-${r.rar}">
+      <div class="ec-res-card-top">
+        <span class="ec-res-card-ic">${ecResIcon(r.n)}</span>
+        <span class="ec-res-card-name">${esc(r.n)}</span>
+        <span class="ec-res-card-rar ec-rar-tx-${r.rar}">${rarTxt}</span>
+      </div>
+      <div class="ec-res-card-nums">
+        <div class="ec-res-card-num"><span class="ec-res-card-num-v ${r.rate ? 'ok' : 'dim'}">${r.rate ? '+' + ecNum(r.rate) : '—'}</span><span class="ec-res-card-num-k">добыча / сут</span></div>
+        <div class="ec-res-card-num"><span class="ec-res-card-num-v">${ecNum(r.have)}</span><span class="ec-res-card-num-k">на складе</span></div>
+        <div class="ec-res-card-num"><span class="ec-res-card-num-v">${ecNum(price)}</span><span class="ec-res-card-num-k">ГС / ед.</span></div>
+      </div>
+      ${foot}
+    </div>`;
+  };
   const resPanel = `<div class="ec-ovx-panel">
-    <div class="ec-ovx-panel-t">⛏ Ресурсы <span class="ec-ovx-panel-sub">добыча / склад</span></div>
+    <div class="ec-ovx-panel-t">⛏ Ресурсы <span class="ec-ovx-panel-sub">добыча · склад · цена · источники</span></div>
     ${capBar}
-    ${resRows.length ? `<div class="ec-ovx-res-list">${resRows.map(r => `<div class="ec-ovx-res-row ec-rar-${r.rar}">
-        <span class="ec-ovx-res-ic">${ecResIcon(r.n)}</span>
-        <span class="ec-ovx-res-n">${esc(r.n)}</span>
-        <span class="ec-ovx-res-meta"><span class="ec-ovx-res-rate">${r.rate ? `+${ecNum(r.rate)}/сут` : '<i>не добывается</i>'}</span><span class="ec-ovx-res-have">${ecNum(r.have)} <span class="ec-ovx-res-have-u">на складе</span></span></span>
-      </div>`).join('')}</div>` : '<div class="ec-ovx-res-empty">Склад пуст — переведите добывающие заводы в режим 📦 «Склад».</div>'}
+    ${resRows.length ? resSummary + `<div class="ec-res-cards">${resRows.map(resCard).join('')}</div>` : '<div class="ec-ovx-res-empty">Ресурсов нет. Постройте «Добывающий завод» в колонии и назначьте слотам месторождения планеты — добыча начисляется в конце каждого хода.</div>'}
+    <div class="ec-ovx-hint">Добыча = редкость месторождения × его богатство × доктрина, начисляется в конце каждого хода (тика). Сверх ёмкости склада ресурсы не копятся.</div>
   </div>`;
 
   // ── 4. ДЕРЖАВА ──
   const bldByType = {};
   EC.buildings.forEach(b => { bldByType[b.btype] = (bldByType[b.btype] || 0) + 1; });
   const bldChips = EC_ORDER.map(t => bldByType[t] ? `<span class="ec-ovx-chip"><span class="ec-ovx-chip-ic">${EC_BLD_ICON[t] || '▣'}</span>${esc(ecBuildName(t))} <b>${ecNum(bldByType[t])}</b></span>` : '').filter(Boolean).join('');
+  // Раскрываемое дерево: система → её колонии → постройки и занятые ячейки.
+  const empTreeRows = (EC.systems || []).map(s => {
+    const cols = EC.colonies.filter(c => c.system_id === s.id);
+    const colRows = cols.map(c => {
+      const cb = EC.buildings.filter(b => b.colony_id === c.id);
+      const cap = c.cells || EC_DEFAULT_CELLS;
+      const bt = {}; cb.forEach(b => { bt[b.btype] = (bt[b.btype] || 0) + 1; });
+      const chips = Object.keys(bt).map(t => `<span class="ec-emp-bchip" title="${esc(ecBuildName(t))}">${EC_BLD_ICON[t] || '▣'} ${ecNum(bt[t])}</span>`).join('') || '<span class="ec-emp-empty">пусто</span>';
+      return `<div class="ec-emp-col">
+        <div class="ec-emp-col-h"><span class="ec-emp-col-n">🪐 ${esc(c.name || c.planet_name || 'Колония')}</span><span class="ec-emp-col-cells">${ecNum(cb.length)}/${ecNum(cap)} яч.</span></div>
+        <div class="ec-emp-col-chips">${chips}</div>
+      </div>`;
+    }).join('') || '<div class="ec-emp-empty">колоний нет</div>';
+    return `<div class="ec-emp-sys"><div class="ec-emp-sys-h">🌐 ${esc(s.name || 'Система')} <span class="ec-emp-sys-sub">${ecNum(cols.length)} колон.</span></div>${colRows}</div>`;
+  }).join('');
+  const empDetail = `<div class="ec-emp-detail">
+      ${bldChips ? `<div class="ec-emp-dt-sect">Все постройки державы</div><div class="ec-ovx-chips">${bldChips}</div>` : ''}
+      <div class="ec-emp-dt-sect">По системам и колониям</div>
+      ${empTreeRows || '<div class="ec-ovx-hint">Систем нет — захватывайте их на карте.</div>'}
+    </div>`;
   const empire = `<div class="ec-ovx-panel ec-ovx-half">
     <div class="ec-ovx-panel-t">🏛 Держава</div>
     <div class="ec-ovx-stat-grid">
@@ -1779,7 +2170,9 @@ function ecTabOverview() {
         <div class="ec-ovx-stat-barline"><b>${ecNum(usedCells)}</b> / ${ecNum(totalCells)} ${ecOvBar(usedCells, totalCells, 'fill-gc')}</div>
       </div>
     </div>
-    ${bldChips ? `<div class="ec-ovx-chips">${bldChips}</div>` : ''}
+    <div class="ec-ovx-hint">Системы — захвачены на карте (вкладка «Территория»). Колонии — заселённые планеты в них. Ячейки застройки — лимит построек на планетах (зависит от их размера); постройки расходуют ячейки и дают доход/добычу/мощности.</div>
+    ${ecOvFold('emp', '🔍 Подробно: системы и колонии', 'что и где построено')}
+    ${ecOvExpanded('emp') ? empDetail : ''}
   </div>`;
 
   // ── 5. АРМИЯ + мощности производства ──
@@ -1789,6 +2182,24 @@ function ecTabOverview() {
       <span class="ec-ovx-cap-v">${ecNum(used)} / ${ecNum(cap)} за ход</span>
       ${ecOvBar(used, cap, cls)}
     </div>` : '';
+  // Раскрываемая разбивка армии по проектам внутри категорий + очередь.
+  const armyCats = [['ship', '🚀 Корабли'], ['division', '⚔ Дивизии'], ['ground', '🛡 Наземка'], ['aviation', '✈ Авиация']];
+  const armyDetailRows = armyCats.map(([cat, label]) => {
+    const items = EC.roster.filter(r => r.category === cat);
+    if (!items.length) return '';
+    const byName = {};
+    items.forEach(r => { const nm = r.unit_name || r.name || '—'; byName[nm] = (byName[nm] || 0) + (r.qty || 0); });
+    const chips = Object.entries(byName).sort((a, b) => b[1] - a[1]).map(([nm, q]) => `<span class="ec-army-uchip">${esc(nm)} <b>×${ecNum(q)}</b></span>`).join('');
+    const tot = Object.values(byName).reduce((a, b) => a + b, 0);
+    return `<div class="ec-army-cat"><div class="ec-army-cat-h">${label} <span class="ec-army-cat-tot">${ecNum(tot)}</span></div><div class="ec-army-uchips">${chips}</div></div>`;
+  }).filter(Boolean).join('');
+  const queueRows = (EC.queue || []).length ? `<div class="ec-army-dt-sect">🕓 В очереди производства</div><div class="ec-army-uchips">${EC.queue.map(q => `<span class="ec-army-uchip ec-army-uchip-q">${esc(q.unit_name || '—')} <b>×${ecNum(q.qty || 0)}</b></span>`).join('')}</div>` : '';
+  const armyDetail = `<div class="ec-army-detail">
+      ${armyDetailRows || '<div class="ec-ovx-hint">Войск пока нет — стройте их во вкладке «Военпром».</div>'}
+      ${queueRows}
+      ${(caps.training || caps.military || caps.ships) ? `<div class="ec-army-dt-sect">⚙ Мощности производства за ход</div>
+      <div class="ec-ovx-hint">Пехота: <b>${ecNum(caps.training)}</b> ед/ход (Центр Подготовки${caps.robot ? ' / робо-сборка на Военном Заводе ×3' : ''}) · Техника: <b>${ecNum(caps.military)}</b> ед/ход (Военный Завод) · Корабли: <b>${ecNum(caps.ships)}</b> шт/ход (Верфь). Каждый слот завода добавляет мощность; постройка тратит ГС и сырьё (дефицит ×1.5).</div>` : ''}
+    </div>`;
   const army = `<div class="ec-ovx-panel ec-ovx-half">
     <div class="ec-ovx-panel-t">⚔ Вооружённые силы ${queued ? `<span class="ec-ovx-panel-sub ec-ov-clk" onclick="ecSetTab('milbuild')">в очереди: ${ecNum(queued)}</span>` : ''}</div>
     <div class="ec-ovx-stat-grid">
@@ -1801,7 +2212,10 @@ function ecTabOverview() {
       ${capRow('🪖 Подготовка пехоты', use.inf || 0, caps.training, 'fill-gc')}
       ${capRow('🛠 Военный завод', use.tech || 0, caps.military, 'fill-amb')}
       ${capRow('🚀 Корабельная верфь', use.ships || 0, caps.ships, 'fill-sci')}
-    </div>` : '<div class="ec-ovx-hint">Военных мощностей нет — постройте Центр Подготовки, Военный Завод или Верфь.</div>'}
+    </div>
+    <div class="ec-ovx-hint">Производство — партиями за ход: лимит каждой мощности = слоты соответствующих заводов (Центр Подготовки / Военный Завод / Верфь). Постройка тратит ГС и сырьё со склада; дефицит сырья докупается ×1.5. Очередь и сборка — во вкладке «Военпром».</div>` : '<div class="ec-ovx-hint">Военных мощностей нет — постройте Центр Подготовки (пехота), Военный Завод (техника) или Верфь (корабли) во вкладке «Колонии», затем стройте войска в «Военпроме».</div>'}
+    ${ecOvFold('army', '🔍 Подробно: состав и производство', 'по проектам и очередь')}
+    ${ecOvExpanded('army') ? armyDetail : ''}
   </div>`;
 
   // ── 6. НАУКА · ДИПЛОМАТИЯ · РАЗВЕДКА ──
@@ -1809,8 +2223,9 @@ function ecTabOverview() {
   const qCnt = Array.isArray(EC.eco.research_queue) ? EC.eco.research_queue.length : 0;
   const activeHtml = activeProj
     ? `<div class="ec-ovx-active">🔬 Исследуется: <b>${esc(activeName)}</b>${allSlots.length > 1 ? ` <span class="ec-hint">+ ещё ${allSlots.length - 1}</span>` : ''}${qCnt ? ` <span class="ec-hint">· 🕓 ${qCnt} в очереди</span>` : ''}${activeSlot && activeSlot.r ? ecProgressISO(null, activeSlot.r, 1, 'готово в конце хода') : ''}</div>` : '';
+  const sciInc = inc.science || 0, agInc = inc.agents || 0;
   const sci = `<div class="ec-ovx-panel">
-    <div class="ec-ovx-panel-t">🔬 Наука · Дипломатия · Разведка</div>
+    <div class="ec-ovx-panel-t">🔬 Наука · Дипломатия · Разведка <span class="ec-ovx-panel-sub">${sciInc ? '+' + ecNum(sciInc) + ' ОН/сут' : 'нет науки'}${agInc ? ' · +' + ecNum(agInc) + ' агент/сут' : ''}</span></div>
     ${activeHtml}
     <div class="ec-ovx-stat ec-ovx-stat-wide ec-ov-clk" onclick="ecSetTab('research')">
       <div class="ec-ovx-stat-k">Изучено технологий</div>
@@ -1833,13 +2248,14 @@ function ecTabOverview() {
       if (lord) parts.push(`сюзерен: <b>${esc(lord.overlord_name)}</b>`);
       return parts.length ? `<div class="ec-ovx-hint ec-ov-clk" onclick="ecSetTab('diplomacy')">${parts.join(' · ')}</div>` : '';
     })()}
+    <div class="ec-ovx-hint">Наука (ОН/сут) — со слотов «Научного Института», копится и тратится на технологии (готовы в конце хода). Агенты (раз/сут) — с разведслужбы; ведут операции и контрразведку во вкладке «Разведка». Торг. пути и займы создаются в «Торговле»/«Дипломатии».</div>
   </div>`;
 
   const raceNote = `<div class="ec-race-note">Раса: <b>${esc(EC.app.race || '—')}</b> · ${ecIsRobot()
     ? 'родные миры: <b>все типы планет</b> — колонизация без терраформа (бонус роботов).'
     : 'родные миры: ' + ((EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—') + '. Чужие типы планет — через терраформ.'}</div>`;
 
-  return `<div class="ec-ovx-grid">${budget}${ecIncomeHistoryPanel()}${resPanel}${empire}${army}${sci}${ecDoctrineHtml()}${ecAchPanel()}</div>${raceNote}
+  return `<div class="ec-ovx-grid">${budget}${ecStatsPanel()}${resPanel}${empire}${army}${sci}${ecDoctrineHtml()}${ecAchPanel()}</div>${raceNote}
     <div class="ec-ov-links">
       <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
       <button class="btn btn-gh btn-sm" onclick="go('cat-ships')">🚀 Каталоги</button>
@@ -2197,7 +2613,7 @@ function ecClaimCooldownMs() {
   return Math.max(0, new Date(EC.eco.last_system_claim).getTime() + ecClaimCdDays() * 86400000 - Date.now());
 }
 // «Дом в небесах» (pol.house_heavens) ИЛИ роботы → пул из 2 захватов вместо 1.
-function ecClaimMax() { return (ecIsRobot() || (EC.eco.research || []).includes('pol.house_heavens')) ? 2 : 1; }
+function ecClaimMax() { return (ecIsRobot() || ecIsExpansionist() || (EC.eco.research || []).includes('pol.house_heavens')) ? 2 : 1; }
 // Сколько захватов осталось в пуле (зеркало модели «пул» в economy_claim_system):
 //   кулдаун идёт → 0; кулдаун прошёл → пул пополнен (max); пул открыт → max − использовано.
 function ecClaimsLeft() {
