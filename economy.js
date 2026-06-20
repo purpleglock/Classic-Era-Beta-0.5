@@ -6504,10 +6504,9 @@ function ecShowUnitSpecs(unitName, category) {
   if (!unitName) return;
   const found = pages.find(p => (p.title || p.name || '') === unitName);
   if (!found) { toast('Данные юнита не найдены', 'err'); return; }
-  if (typeof showUnitDrawer === 'function') {
-    showUnitDrawer(unitName, found.slug, category === 'ship' ? 'corvette' : 'peh');
-  } else if (typeof uShowDetail === 'function') {
-    uShowDetail(unitName, found.slug, category === 'ship' ? 'corvette' : 'peh', '');
+  const slotType = category === 'ship' ? 'corvette' : 'peh';
+  if (typeof window.showUnitDrawer === 'function') {
+    window.showUnitDrawer(unitName, found.slug, slotType);
   } else {
     go(found.slug);
   }
