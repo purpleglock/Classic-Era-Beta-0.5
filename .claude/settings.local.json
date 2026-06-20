@@ -96,7 +96,11 @@
       "Bash(rm -f /tmp/qtest.js)",
       "Bash(node -c \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\economy.js\")",
       "Bash(git commit -m 'Оптимизировать ecShowUnitSpecs для использования drawer *)",
-      "Bash(node -c \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\constructors.js\")"
+      "Bash(node -c \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\constructors.js\")",
+      "Bash(ls *.css)",
+      "Bash(grep -rln \"gm-orbit\\\\|gm-deepzoom\\\\|gm-planet\\\\|gm-sys\" *.css *.html)",
+      "Bash(ls *.html)",
+      "Bash(grep -rln \"gm-orbit\" . --include=*.css --include=*.html --include=*.js)"
     ]
   }
 }
