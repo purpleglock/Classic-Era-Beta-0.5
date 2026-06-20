@@ -651,7 +651,7 @@ begin
                    where faction_id = p_fid and btype = 'market') * 25 * d;
     if market_cap > 0 then
       for r in
-        select res_name, res_rar, avail from (
+        select u.res_name, u.res_rar, u.avail from (
           select distinct on (q.nm) q.nm as res_name, q.rr as res_rar,
             greatest(0, coalesce((eco.resources->>q.nm)::numeric,0)
                         + coalesce((res_add->>q.nm)::numeric,0)
@@ -663,8 +663,8 @@ begin
           ) q
           order by q.nm, public._res_value(q.nm, q.rr) desc
         ) u
-        where avail > 0
-        order by public._res_value(res_name, res_rar) desc
+        where u.avail > 0
+        order by public._res_value(u.res_name, u.res_rar) desc
       loop
         exit when market_cap <= 0;
         sell := least(r.avail, market_cap);
