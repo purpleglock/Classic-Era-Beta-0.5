@@ -40,7 +40,7 @@ async function renderHome() {
 
   const contribMap = {}; pages.filter(isVisiblePage).forEach(p=>{ if(p.created_by) contribMap[p.created_by]=(contribMap[p.created_by]||0)+1; });
   allProfiles.forEach(prof=>{ if(prof.email && !contribMap[prof.email]) contribMap[prof.email]=0; });
-  const sortedContribs = Object.entries(contribMap).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  const sortedContribs = Object.entries(contribMap).sort((a,b)=>b[1]-a[1]);
   const maxCnt = Math.max(100, sortedContribs.length ? sortedContribs[0][1] : 1);
   const contribsHtml = sortedContribs.length ? `<section class="home-block hp-contribs"><div class="hb-head"><span class="hb-tag">${T('contributors')}</span></div><div class="contrib-grid">${sortedContribs.map(([email, cnt], idx) => {
     const rank = idx + 1;

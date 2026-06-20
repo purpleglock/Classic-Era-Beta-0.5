@@ -119,6 +119,30 @@
 .gm-star:hover img{transform:scale(1.18);filter:drop-shadow(0 0 16px rgba(140,200,255,.8))}
 .gm-giant{width:104px;height:104px}
 .gm-giant img{filter:drop-shadow(0 0 24px rgba(255,210,120,.6))}
+
+/* ── Глубокий зум: звезда раскрывается в анимированную систему ──────────────
+   .gm-sys скрыт по умолчанию (display:none ⇒ анимации не тикают без зума).
+   На gm-deepzoom: гасим LOD-контр-масштаб у звезды (растёт вместе с зумом),
+   убираем подпись/ресурсы и показываем орбиты по составу s.planets. */
+.gm-sys{display:none}
+#gm-wrap.gm-deepzoom .gm-star{transform:translate(-50%,-50%);z-index:6}
+#gm-wrap.gm-deepzoom .gm-star .gm-label,
+#gm-wrap.gm-deepzoom .gm-res-overlay{display:none}
+#gm-wrap.gm-deepzoom .gm-sys{display:block;position:absolute;left:50%;top:50%;width:0;height:0;
+  z-index:-1;pointer-events:none}
+/* кольцо орбиты: круг диаметром 2r, центрирован на звезде, медленно вращается */
+.gm-orbit{position:absolute;left:calc(var(--r) * -1);top:calc(var(--r) * -1);
+  width:calc(var(--r) * 2);height:calc(var(--r) * 2);border-radius:50%;
+  border:1.5px solid rgba(150,185,235,.22);
+  animation:gm-rift-spin var(--dur,18s) linear infinite}
+/* планета сидит в верхней точке кольца и едет по орбите вместе с ним */
+.gm-planet{position:absolute;left:50%;top:0;transform:translate(-50%,-50%);
+  width:var(--sz,9px);height:var(--sz,9px);border-radius:50%;
+  background:radial-gradient(circle at 32% 30%, #fff6, var(--zc,#8aa0bd) 60%, #0006);
+  box-shadow:0 0 7px var(--zc,#8aa0bd), 0 0 2px #000}
+.gm-planet.gm-dot-belt{background:none;border:1.5px dotted var(--zc,#8aa0bd);box-shadow:none}
+.gm-planet.gm-dot-anom{background:radial-gradient(circle, #fff, var(--zc,#b86cff) 60%, transparent);
+  box-shadow:0 0 9px var(--zc,#b86cff)}
 /* подпись висит абсолютно под иконкой и НЕ влияет на центровку */
 .gm-label{
   position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:3px;

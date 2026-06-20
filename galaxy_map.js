@@ -9,6 +9,11 @@ const GM_W = 6600, GM_H = 4124;
 const GM_BASE = 'assets/map/';
 const GM_STAR_TYPES = ['yellow', 'red', 'blue', 'white', 'green'];
 
+// Потолок зума и порог «глубокого зума»: за GM_DEEP_SCALE звёзды раскрываются
+// в анимированные системы (звезда + орбиты планет по составу s.planets).
+const GM_MAX_SCALE = 10;
+const GM_DEEP_SCALE = 4;
+
 // Иконки контролов — инлайн-SVG (currentColor), чтобы не зависеть от эмодзи-шрифта:
 // глифы ⬡💎⤢⛶ на телефонах рендерились разноцветными эмодзи и плохо читались.
 const GM_ICO = {
@@ -206,7 +211,7 @@ function gmClamp() {
   if (!vp) return;
   const w = vp.clientWidth, h = vp.clientHeight;
   const minScale = gmMinScale();
-  GM.scale = Math.min(Math.max(GM.scale, minScale), 4.0);
+  GM.scale = Math.min(Math.max(GM.scale, minScale), GM_MAX_SCALE);
   const mw = GM_W * GM.scale, mh = GM_H * GM.scale;
   GM.tx = Math.min(0, Math.max(GM.tx, w - mw));
   GM.ty = Math.min(0, Math.max(GM.ty, h - mh));
@@ -225,6 +230,8 @@ function gmApply() {
     const k = Math.max(0.5, Math.min(2.2, Math.pow(GM.scale, -0.3)));
     c.style.setProperty('--gm-icon-k', k.toFixed(3));
   }
+  // Глубокий зум: звёзды раскрываются в анимированные системы (орбиты по составу)
+  document.getElementById('gm-wrap')?.classList.toggle('gm-deepzoom', GM.scale >= GM_DEEP_SCALE);
   // Толщину обводок обновляем НЕ каждый кадр зума (это меняет CSS-переменные и
   // заставляет перерисовывать весь SVG → лаги), а с задержкой, после остановки.
   clearTimeout(_gmStrokeT);
@@ -242,7 +249,7 @@ function gmBindViewport() {
     const mx = e.clientX - r.left, my = e.clientY - r.top;
     const px = (mx - GM.tx) / GM.scale, py = (my - GM.ty) / GM.scale;
     GM.scale += (e.deltaY > 0 ? -1 : 1) * 0.12 * GM.scale;
-    GM.scale = Math.min(Math.max(GM.scale, gmMinScale()), 4.0);
+    GM.scale = Math.min(Math.max(GM.scale, gmMinScale()), GM_MAX_SCALE);
     GM.tx = mx - px * GM.scale;
     GM.ty = my - py * GM.scale;
     gmApply();
@@ -356,7 +363,7 @@ function gmTouchMove(e) {
     gmApply();
   } else if (GM.touch.mode === 'pinch' && e.touches.length === 2) {
     const d = gmTouchDist(e.touches);
-    GM.scale = Math.min(Math.max(GM.touch.scale * (d / GM.touch.dist), gmMinScale()), 4.0);
+    GM.scale = Math.min(Math.max(GM.touch.scale * (d / GM.touch.dist), gmMinScale()), GM_MAX_SCALE);
     GM.tx = GM.touch.mx - GM.touch.px * GM.scale;
     GM.ty = GM.touch.my - GM.touch.py * GM.scale;
     gmApply();
@@ -424,7 +431,7 @@ function gmZoomBtn(dir) {
   if (!vp) return;
   const w = vp.clientWidth, h = vp.clientHeight;
   const px = (w / 2 - GM.tx) / GM.scale, py = (h / 2 - GM.ty) / GM.scale;
-  GM.scale = Math.min(Math.max(GM.scale * (dir > 0 ? 1.3 : 1 / 1.3), gmMinScale()), 4.0);
+  GM.scale = Math.min(Math.max(GM.scale * (dir > 0 ? 1.3 : 1 / 1.3), gmMinScale()), GM_MAX_SCALE);
   GM.tx = w / 2 - px * GM.scale;
   GM.ty = h / 2 - py * GM.scale;
   gmApply();
@@ -878,9 +885,31 @@ function gmDrawStars() {
         <img src="${GM_BASE}stars/star_${esc(s.star_type || 'yellow')}.png" draggable="false" alt="">
         ${capHtml}
         ${gmResOverlay(s)}
+        ${gmOrbits(s)}
         <span class="gm-label">${esc(s.name)}</span>
       </div>`;
   }).join('');
+}
+
+// Орбитальная раскладка системы для глубокого зума: звезда в центре + вращающиеся
+// кольца с точками-планетами по составу s.planets. Скрыта по умолчанию (display:none),
+// показывается через #gm-wrap.gm-deepzoom — поэтому без зума анимации не тикают.
+const GM_ORBIT_MAX = 7;            // не больше колец на систему (защита от каши/лагов)
+function gmOrbits(sys) {
+  const planets = (sys.planets || []).filter(p => p && p.kind);
+  if (!planets.length) return '';
+  const rings = planets.slice(0, GM_ORBIT_MAX).map((p, i) => {
+    const r = 38 + i * 16;                         // радиус кольца (юниты карты)
+    const dur = 16 + i * 5;                        // дальние — медленнее
+    const delay = -((i * 137) % 360) / 360 * dur;  // негативная задержка = стартовая фаза
+    const belt = p.kind === 'belt', anom = p.kind === 'anomaly';
+    const sz = belt ? 5 : anom ? 7 : 9;            // размер точки
+    const kc = belt ? ' gm-dot-belt' : anom ? ' gm-dot-anom' : '';
+    return `<div class="gm-orbit" style="--r:${r}px;--dur:${dur}s;animation-delay:${delay.toFixed(2)}s">
+        <span class="gm-planet${kc}" style="--zc:${gmZoneColor(p.zone)};--sz:${sz}px"></span>
+      </div>`;
+  }).join('');
+  return `<div class="gm-sys" aria-hidden="true">${rings}</div>`;
 }
 
 // Сводка ресурсов над звездой (видна только в режиме «ресурсы»). Рисуется всегда,
@@ -1579,7 +1608,7 @@ function gmmLoadImgs() {
 // ── Камера ──────────────────────────────────────────────────
 function gmmMinS() { return Math.min(GMM.vw / GM_W, GMM.vh / GM_H) || 0.05; }
 function gmmClampCam(c) {
-  c.s = Math.min(Math.max(c.s, gmmMinS()), 4);
+  c.s = Math.min(Math.max(c.s, gmmMinS()), GM_MAX_SCALE);
   const mw = GM_W * c.s, mh = GM_H * c.s;
   c.tx = Math.min(0, Math.max(c.tx, GMM.vw - mw));
   c.ty = Math.min(0, Math.max(c.ty, GMM.vh - mh));
@@ -1604,7 +1633,7 @@ function gmmCover() {
   gmmClamp(); GMM.dirty = true; gmmKick();
 }
 function gmmZoomAt(cx, cy, ns, animate) {
-  ns = Math.min(Math.max(ns, gmmMinS()), 4);
+  ns = Math.min(Math.max(ns, gmmMinS()), GM_MAX_SCALE);
   const wx = (cx - GMM.tx) / GMM.s, wy = (cy - GMM.ty) / GMM.s;
   const to = gmmClampCam({ s: ns, tx: cx - wx * ns, ty: cy - wy * ns });
   if (animate) gmmAnimTo(to, 280);
@@ -1672,7 +1701,7 @@ function gmmBindCanvas() {
       const ps = [...GMM.ptrs.values()];
       const d = Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) || 1;
       const cx = (ps[0].x + ps[1].x) / 2, cy = (ps[0].y + ps[1].y) / 2;
-      GMM.s = Math.min(Math.max(g.s0 * (d / g.d0), gmmMinS()), 4);
+      GMM.s = Math.min(Math.max(g.s0 * (d / g.d0), gmmMinS()), GM_MAX_SCALE);
       GMM.tx = cx - g.wx * GMM.s; GMM.ty = cy - g.wy * GMM.s;
       gmmClamp();
       GMM.dirty = true; gmmKick();
@@ -1835,6 +1864,9 @@ function gmmFrame(ts) {
     if (Math.hypot(GMM.vel.vx, GMM.vel.vy) < 0.01) GMM.vel = null; else again = true;
     GMM.dirty = true;
   }
+  // Глубокий зум: системы раскрываются в анимированные орбиты — гоним кадры
+  // непрерывно (живой оверлей поверх статичного битмапа, как кольцо выбора).
+  if (gmmDeepA() > 0.01) { GMM.dirty = true; again = true; }
   if (GMM.dirty) { GMM.dirty = false; gmmBlit(); }
   if (gmmNeedRaster()) {
     const now = performance.now();
@@ -1864,6 +1896,63 @@ function gmmBlit() {
       ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
     }
   }
+  gmmPaintOrbits(ctx);   // живой оверлей анимированных систем (на глубоком зуме)
+}
+
+// Сила оверлея орбит: 0 на обычном зуме → 1 на глубоком (плавный заход в [lo,hi]).
+function gmmDeepA() {
+  const lo = 2.4, hi = 3.6;
+  const u = Math.max(0, Math.min(1, (GMM.s - lo) / (hi - lo)));
+  return u * u * (3 - 2 * u);
+}
+// Рисует звезду-систему в разрезе: вращающиеся орбиты с планетами по составу
+// s.planets. Только для систем в кадре (отсев по вьюпорту) — стоимость ограничена.
+function gmmPaintOrbits(ctx) {
+  const a = gmmDeepA();
+  if (a <= 0.01) return;
+  const s = GMM.s, tx = GMM.tx, ty = GMM.ty;
+  const wx0 = -tx / s, wy0 = -ty / s, wx1 = (GMM.vw - tx) / s, wy1 = (GMM.vh - ty) / s;
+  const t = performance.now() / 1000;
+  const dotK = Math.min(2.2, Math.max(1, s / 3));   // планеты чуть растут с зумом, но не бесконечно
+  ctx.save();
+  ctx.lineCap = 'round';
+  GM.systems.forEach(sys => {
+    if (sys.faction === 'rift') return;
+    const planets = (sys.planets || []).filter(p => p && p.kind);
+    if (!planets.length) return;
+    if (sys.x < wx0 - 300 || sys.x > wx1 + 300 || sys.y < wy0 - 300 || sys.y > wy1 + 300) return;
+    const cx = sys.x * s + tx, cy = sys.y * s + ty;
+    const n = Math.min(planets.length, GM_ORBIT_MAX);
+    for (let i = 0; i < n; i++) {
+      const p = planets[i];
+      const r = (38 + i * 16) * s;                        // радиус орбиты на экране
+      const dur = 16 + i * 5;
+      const ang = ((i * 137) % 360) * Math.PI / 180 + (t / dur) * 6.2832;
+      // кольцо орбиты
+      ctx.globalAlpha = a * 0.45;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832);
+      ctx.strokeStyle = 'rgba(150,185,235,1)'; ctx.lineWidth = 1; ctx.stroke();
+      // планета на орбите
+      const px = cx + Math.cos(ang) * r, py = cy + Math.sin(ang) * r;
+      const belt = p.kind === 'belt', anom = p.kind === 'anomaly';
+      const zc = gmZoneColor(p.zone);
+      const sz = (belt ? 5 : anom ? 7 : 9) * dotK;
+      if (belt) {
+        ctx.globalAlpha = a;
+        ctx.beginPath(); ctx.arc(px, py, sz * 0.5, 0, 6.2832);
+        ctx.strokeStyle = zc; ctx.lineWidth = 1.4; ctx.setLineDash([2, 2]); ctx.stroke(); ctx.setLineDash([]);
+      } else {
+        ctx.globalAlpha = a * 0.5;                         // ореол
+        ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fillStyle = zc; ctx.fill();
+        ctx.globalAlpha = a;                              // тело планеты
+        const g = ctx.createRadialGradient(px - sz * 0.25, py - sz * 0.25, 0, px, py, sz * 0.75);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(0.55, zc); g.addColorStop(1, 'rgba(0,0,0,.5)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, sz * 0.7, 0, 6.2832); ctx.fill();
+      }
+    }
+  });
+  ctx.restore();
+  ctx.globalAlpha = 1;
 }
 
 // ── Офскрин-битмап мира ─────────────────────────────────────

@@ -1760,7 +1760,7 @@ const EC_ACH = {
     quote: 'Fideli certa merces.',
     desc: 'Верному - верная награда.',
     cond: 'Стань вассалом другой державы' },
-  amicitia: { name: 'Крепкая дружба', ic: '🝞', reward: 3000,
+  amicitia: { name: 'Дружба', ic: '🝞', reward: 3000,
     quote: 'Amicus certus in re incerta cernitur.',
     desc: 'Верный друг познаётся в беде.',
     cond: 'Достигни прочной дружбы с державой' },

@@ -93,7 +93,10 @@
       "Bash(sed -i 's#economy\\\\.js?v=20260619q#economy.js?v=20260620a#' index.html)",
       "Bash(sed -i 's#css/index\\\\.css?v=20260620f#css/index.css?v=20260620g#g' index.html)",
       "Bash(sed -i \"s#17_economy\\\\.css?v=20260620f#17_economy.css?v=20260620g#\" css/index.css)",
-      "Bash(rm -f /tmp/qtest.js)"
+      "Bash(rm -f /tmp/qtest.js)",
+      "Bash(node -c \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\economy.js\")",
+      "Bash(git commit -m 'Оптимизировать ecShowUnitSpecs для использования drawer *)",
+      "Bash(node -c \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\constructors.js\")"
     ]
   }
 }
