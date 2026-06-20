@@ -100,7 +100,11 @@
       "Bash(ls *.css)",
       "Bash(grep -rln \"gm-orbit\\\\|gm-deepzoom\\\\|gm-planet\\\\|gm-sys\" *.css *.html)",
       "Bash(ls *.html)",
-      "Bash(grep -rln \"gm-orbit\" . --include=*.css --include=*.html --include=*.js)"
+      "Bash(grep -rln \"gm-orbit\" . --include=*.css --include=*.html --include=*.js)",
+      "Bash(curl -sI \"http://localhost:3000/index.html\")",
+      "Bash(curl -sI \"http://localhost:3000/galaxy_map.js?v=20260621d\")",
+      "PowerShell($b=Get-Content \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\tmp_cap.b64\" -Raw; [IO.File]::WriteAllBytes\\(\"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\tmp_cap.jpg\",[Convert]::FromBase64String\\($b.Trim\\(\\)\\)\\); \\(Get-Item \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\tmp_cap.jpg\"\\).Length)",
+      "PowerShell(Add-Type -AssemblyName System.Drawing; $img=[System.Drawing.Image]::FromFile\\(\"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\tmp_cap.jpg\"\\); $bmp=New-Object System.Drawing.Bitmap $img; $bmp.Save\\(\"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\tmp_cap.png\",[System.Drawing.Imaging.ImageFormat]::Png\\); $img.Dispose\\(\\); $bmp.Dispose\\(\\); \\(Get-Item \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\tmp_cap.png\"\\).Length)"
     ]
   }
 }
