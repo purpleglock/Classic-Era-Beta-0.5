@@ -146,6 +146,7 @@ grant execute on function public._research_step(text) to authenticated;
 
 -- ── economy_research: старт исследования НЕМЕДЛЕННО в свободный слот ─────
 -- Сигнатура прежняя (text, numeric); p_cost от клиента игнорируется.
+-- ВАЖНО: в конце вызывает _research_step() чтобы немедленно заполнить оставшиеся слоты из очереди.
 create or replace function public.economy_research(p_node text, p_cost numeric)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; eco public.faction_economy; tn public.tech_nodes;
@@ -181,12 +182,18 @@ begin
         research_slots = coalesce(research_slots,'[]'::jsonb)
           || jsonb_build_object('n', p_node, 'r', now() + interval '1 day')
     where faction_id = app.faction_id;
+
+  -- Немедленно заполнить оставшиеся свободные слоты из очереди (без ожидания тика).
+  perform public._research_step(app.faction_id);
+
   return jsonb_build_object('ok', true, 'cost', cost, 'ready_at', now() + interval '1 day');
 end$$;
 revoke all on function public.economy_research(text,numeric) from public;
 grant execute on function public.economy_research(text,numeric) to authenticated;
 
 -- ── economy_research_queue: добавить технологию в очередь ────
+-- ВАЖНО: в конце вызывает _research_step() чтобы немедленно заполнить свободные слоты из очереди.
+-- Так новое исследование может сразу стартовать, если есть свободный слот.
 create or replace function public.economy_research_queue(p_node text)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; eco public.faction_economy; tn public.tech_nodes;
@@ -225,12 +232,17 @@ begin
   update public.faction_economy
     set research_queue = coalesce(research_queue,'[]'::jsonb) || to_jsonb(p_node)
     where faction_id = app.faction_id;
+
+  -- Немедленно заполнить свободные слоты из очереди (без ожидания тика).
+  perform public._research_step(app.faction_id);
+
   return jsonb_build_object('ok', true);
 end$$;
 revoke all on function public.economy_research_queue(text) from public;
 grant execute on function public.economy_research_queue(text) to authenticated;
 
 -- ── economy_research_dequeue: убрать технологию из очереди по индексу ──
+-- ВАЖНО: в конце вызывает _research_step() чтобы заполнить освободившийся слот (если появился).
 create or replace function public.economy_research_dequeue(p_idx int)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare app public.faction_applications; eco public.faction_economy;
@@ -246,6 +258,10 @@ begin
   update public.faction_economy
     set research_queue = research_queue - p_idx
     where faction_id = app.faction_id;
+
+  -- Попытка заполнить свободные слоты из оставшейся очереди (без ожидания тика).
+  perform public._research_step(app.faction_id);
+
   return jsonb_build_object('ok', true);
 end$$;
 revoke all on function public.economy_research_dequeue(int) from public;

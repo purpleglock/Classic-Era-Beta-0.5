@@ -45,7 +45,10 @@ function ecPerkSucc(perk, op, level) {
 }
 // Уровни агентов (зеркало _spy_level / _spy_xp_floor): пороги XP 0/100/300/600/1000.
 function ecSpyLevelFloor(level) { return [0, 0, 100, 300, 600, 1000][Math.max(1, Math.min(5, level || 1))]; }
-function ecSpyTrain(id) { ecRpcAct('spy_train', { p_agent_ids: [id] }, 'Агент отправлен на тайное обучение (2 ход.)'); }
+function ecSpyTrain(id) {
+  if (ecSpyFree() <= 0) { toast('Нет свободных агентов — все в контрразведке. Снимите кого-то с защиты (блок «🛡 Контрразведка»).', 'err'); return; }
+  ecRpcAct('spy_train', { p_agent_ids: [id] }, 'Агент отправлен на тайное обучение (2 ход.)');
+}
 // Плен (срез 7): действия жертвы над пленником и владельца по выкупу
 function ecCaptiveExecute(id, name) { if (confirm(`Казнить пленника «${name}»? Владелец затаит обиду (−отношения, casus belli).`)) ecRpcAct('spy_captive_execute', { p_id: id }, 'Пленник казнён'); }
 function ecCaptiveReturn(id, name) { if (confirm(`Вернуть «${name}» владельцу даром? Жест доброй воли (+отношения).`)) ecRpcAct('spy_captive_return', { p_id: id }, 'Агент возвращён владельцу'); }
@@ -4018,10 +4021,20 @@ function ecBarterDel(side, i) { if (EC.bt && EC.bt[side]) { EC.bt[side].splice(i
 // ── Разведка: визуальные конструкторы карточек (срез UI 2.0) ──
 // Статусы агента (зеркало stBadge): обучение / на операции / готов.
 const EC_SPY_ST = {
-  training: { t: 'обучается',   c: 'var(--color-warning,#e0a030)', ic: '🎓' },
-  busy:     { t: 'на операции', c: 'var(--te,#5fd0c0)',            ic: '🛰' },
-  ready:    { t: 'в строю',     c: 'var(--ok,#7bd88f)',            ic: '✓' },
+  training:     { t: 'обучается',       c: 'var(--color-warning,#e0a030)', ic: '🎓' },
+  busy:         { t: 'на операции',     c: 'var(--te,#5fd0c0)',            ic: '🛰' },
+  counterintel: { t: 'в контрразведке', c: 'var(--pu,#b07bd8)',           ic: '🛡' },
+  ready:        { t: 'в строю',         c: 'var(--ok,#7bd88f)',            ic: '✓' },
 };
+// Какие готовые агенты числятся в резерве контрразведки. Резерв задан ЧИСЛОМ
+// (counter_agents) — конкретные агенты на сервере не закреплены, поэтому для
+// наглядности помечаем последние N готовых агентов в порядке ростера.
+function ecSpyCounterIds() {
+  const n = EC.eco ? (EC.eco.counter_agents || 0) : 0;
+  if (n <= 0) return new Set();
+  const ready = ecSpyReadyAgents();
+  return new Set(ready.slice(Math.max(0, ready.length - n)).map(a => a.id));
+}
 // Бейдж уровня в виде шевронов (RP-погоны): заполнено = уровень, всего 5.
 function ecLevelPips(lv) {
   const n = Math.max(1, Math.min(5, lv || 1));
@@ -4040,7 +4053,10 @@ function ecAgentPortrait(a, size) {
 }
 // Полная «оперативная карта» агента в ростере (досье + действия).
 function ecAgentCard(a) {
-  const pk = ecPerk(a.perk); const st = EC_SPY_ST[a.status] || EC_SPY_ST.ready;
+  const pk = ecPerk(a.perk);
+  // готовый агент, попавший в резерв контрразведки → отдельный статус
+  const onCI = a.status === 'ready' && ecSpyCounterIds().has(a.id);
+  const st = EC_SPY_ST[onCI ? 'counterintel' : a.status] || EC_SPY_ST.ready;
   const lv = Math.max(1, a.level || 1);
   const col = ecPerkColor(a.perk);
   // полоса опыта
@@ -4058,8 +4074,10 @@ function ecAgentCard(a) {
   // артефакты
   const arts = (a.arts || []).map(k => { const m = ecArt(k); return `<span class="ec-agent-art" title="${esc(m.label)}: ${esc(m.desc)}">${m.icon}</span>`; }).join('');
   // действия
-  const trainBtn = a.status === 'ready'
-    ? `<button class="btn btn-gh btn-xs" title="Тайное обучение: 2 ход., 120 ГС — гарантированный опыт без риска" onclick="ecSpyTrain('${esc(a.id)}')">🎓 Обучить</button>` : '';
+  // обучать можно только реально свободного агента (не занятого контрразведкой)
+  const trainBtn = (a.status === 'ready' && !onCI)
+    ? `<button class="btn btn-gh btn-xs" title="Тайное обучение: 2 ход., 120 ГС — гарантированный опыт без риска" onclick="ecSpyTrain('${esc(a.id)}')">🎓 Обучить</button>`
+    : '';
   const fireBtn = `<button class="btn btn-gh btn-xs ec-agent-fire" title="${a.status === 'busy' ? 'Агент на операции' : 'Уволить'}" ${a.status === 'busy' ? 'disabled' : ''} onclick="ecSpyFire('${esc(a.id)}')">✕</button>`;
   return `<div class="ec-agent-card" style="--ag-col:${col}">
     <div class="ec-agent-top">
@@ -5015,7 +5033,7 @@ function ecBonusChips(b, special, station, slots) {
   if (special === 'station' && station) out.push(`<span class="ec-bchip special">${station.icon || '★'} ${station.cells} ячеек</span>`);
   return out.length ? `<div class="ec-tnode-bonus">${out.join('')}</div>` : '';
 }
-function ecResearch(nodeId) {
+async function ecResearch(nodeId) {
   const n = ecBuildResearch().find(x => x.id === nodeId); if (!n) { toast('Узел не найден', 'err'); return; }
   const done = new Set(EC.eco.research || []);
   const maxSlots = ecResearchSlots();
@@ -5026,7 +5044,15 @@ function ecResearch(nodeId) {
   if (!(n.prereq || []).every(p => done.has(p))) { toast('Сначала изучите предшественников', 'err'); return; }
   const rc = ecResearchCost(n.cost);
   if ((EC.eco.science || 0) < rc) { ecQueueResearch(nodeId); return; }      // не хватает ОН → в очередь
-  ecRpcAct('economy_research', { p_node: nodeId, p_cost: rc }, 'Исследование начато (1 ход)');
+  if (EC.busy) return; EC.busy = true;
+  try {
+    await ecRpc('economy_research', { p_node: nodeId, p_cost: rc });
+    toast('Исследование начато (1 ход)', 'ok');
+    await ecReloadPaint();
+    _ecDrainTimer = 0;
+    await ecResearchDrain();
+  } catch (e) { toast(ecErr(e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
 }
 // Добавить технологию в очередь — автозапуск в свободный слот на тике.
 async function ecQueueResearch(nodeId) {
