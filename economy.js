@@ -238,7 +238,7 @@ const EC_BUILD = {
   intel:            { name: 'Центр Спецслужб',      cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 агент' },
   military_factory: { name: 'Военный Завод',        cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 100 ед. техники' },
   shipyard:         { name: 'Корабельная Верфь',    cost: 2000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 корабль / 12 МЛА' },
-  temple:           { name: 'Храм Веры',            cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 150 }, cat: 'faith', desc: '+150 ГС за слот и удешевляет постройку войск. Нужна исповедуемая вера (вкладка «Вера»)' },
+  temple:           { name: 'Храм Веры',            cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 150 }, cat: 'faith', desc: '+150 ГС за слот и удешевляет постройку войск. При постройке выбираете, чьей религии храм (можно строить храмы разных вер)' },
 };
 const EC_ORDER = ['factory', 'mining', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'temple'];
 // Короткая подсказка «как пользоваться» для каждого типа здания (показывается в карточке).
@@ -253,7 +253,7 @@ const EC_BLD_HOWTO = {
   intel:            'Даёт агентов для разведки (вкладка «Разведка»).',
   military_factory: 'Даёт мощность для производства наземной техники (вкладка «Строительство вооружённых сил»).',
   shipyard:         'Даёт мощность для постройки кораблей и авиации (вкладка «Строительство вооружённых сил»).',
-  temple:           'Пассивный доход ГС + «сила веры»: чем больше слотов храмов, тем дешевле постройка войск. Спиритуалистам и теократиям бонус сильнее. Требует исповедуемой веры.',
+  temple:           'Пассивный доход ГС + «сила веры»: чем больше слотов храмов, тем дешевле постройка войск. Спиритуалистам и теократиям бонус сильнее. Требует исповедуемой веры; при постройке указывается её религия (можно держать храмы разных вер).',
 };
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
@@ -749,7 +749,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -781,6 +781,8 @@ async function ecLoad() {
     ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции (вера, роль, сила, скидка)
     ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий (для вступления)
     ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез по союзникам/торг.партнёрам/друзьям
+    dbGet('tech_layout', `select=node_id,x,y,icon,img`).catch(() => []),   // PoE-раскладка дерева исследований (позиции/иконки/картинки)
+    dbGet('tech_prereq', `select=node_id,prereq`).catch(() => []),         // staff-override связей дерева (prereq); дефолт генерит ecBuildResearch
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -804,9 +806,23 @@ async function ecLoad() {
   EC.tradeCargo = tradeCargo || { total: 0, used: 0, free: 0 };   // грузоподъёмность торгового флота
   EC.spyAgency = spyAgency || { cap: 0, hired: 0, roster: [], recruits: [], refresh_at: null };  // агентура: ростер + рынок
   EC.diplo = diploStatus || { union: null, members: [], invites: [], vassals: [] };  // союзы и вассалитеты
-  EC.faith = faithStatus || { faith: null, can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };  // вера: статус
+  EC.faith = faithStatus || { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };  // вера: статус
+  if (!Array.isArray(EC.faith.faiths)) EC.faith.faiths = EC.faith.faith ? [EC.faith.faith] : [];  // мультивера: все исповедуемые
   EC.faithList = faithList || [];           // вера: реестр религий
+  // мультивера: справочник «id веры → {name,color}» для подписи храмов (свои исповедуемые + публичный реестр)
+  EC.faithById = {};
+  (EC.faith.faiths || []).forEach(f => { if (f && f.id) EC.faithById[f.id] = { name: f.name, color: f.color }; });
+  (EC.faithList || []).forEach(f => { if (f && f.id && !EC.faithById[f.id]) EC.faithById[f.id] = { name: f.name, color: f.color }; });
   EC.incomeHistory = incomeHistory || [];   // снимки дохода по тикам (доход по времени)
+  // PoE-раскладка дерева исследований: node_id → { x, y, icon, img }. Косметика поверх
+  // авто-раскладки — узлы без записи раскидываются автоматически (см. ecResLayout).
+  EC.techLayout = {};
+  (Array.isArray(techLayout) ? techLayout : []).forEach(r => { if (r && r.node_id) EC.techLayout[r.node_id] = r; });
+  // Staff-override связей дерева: node_id → массив prereq. Накладывается на дефолт
+  // из ecBuildResearch (см. overlay там). Сбрасываем мемо, чтобы overlay применился.
+  EC.techPrereq = {};
+  (Array.isArray(techPrereq) ? techPrereq : []).forEach(r => { if (r && r.node_id) EC.techPrereq[r.node_id] = Array.isArray(r.prereq) ? r.prereq : []; });
+  EC._research = null;
   // Пассивная разведка: размытый срез по фракциям, с кем есть торговый путь / хорошие отношения / союз. Индекс по fid.
   EC.passive = {};
   (Array.isArray(passiveIntel) ? passiveIntel : []).forEach(p => { if (p && p.target_fid) EC.passive[p.target_fid] = p; });
@@ -1058,16 +1074,7 @@ function ecPaintCabinet() {
   if (EC.tab === 'intel') { try { ecSpyCalcLive(); } catch (e) {} }   // живой расчёт операции
   if (EC.tab === 'research') {
     ecResearchDrain();  // немедленно заполнить свободные слоты из очереди
-    const sc = document.querySelector('.ec-tree-scroll');
-    if (sc && !sc._wheelBound) {
-      sc._wheelBound = true;
-      sc.addEventListener('wheel', e => { if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) { sc.scrollLeft += e.deltaY * 0.8; e.preventDefault(); } }, { passive: false });
-      let drag = null;
-      sc.addEventListener('mousedown', e => { if (e.button !== 0 || e.target.closest('button')) return; drag = { x: e.clientX, sl: sc.scrollLeft }; });
-      sc.addEventListener('mousemove', e => { if (!drag) return; const dx = e.clientX - drag.x; sc.scrollLeft = drag.sl - dx; });
-      sc.addEventListener('mouseup', () => { drag = null; });
-      sc.addEventListener('mouseleave', () => { drag = null; });
-    }
+    ecTreeBind();       // пан/зум холста + drag-редактор раскладки (staff)
   }
   // Новости: контейнер уже в DOM — дозаполняем асинхронно (как в faction_news.js)
   if (EC.tab === 'news') {
@@ -2718,7 +2725,7 @@ function ecTabForces() {
     const arr = all.filter(s => s.category === c).sort((a, b) => (b.qty || 0) - (a.qty || 0));
     if (!arr.length) return;
     const tot = arr.reduce((a, s) => a + (s.qty || 0), 0);
-    const cards = arr.map(s => `<div class="ec-force-card ec-force-card--${mod}">
+    const cards = arr.map(s => `<div class="ec-force-card ec-force-card--${mod}" style="cursor:pointer" onclick="ecShowUnitSpecs('${esc(s.name)}', '${c}')">
         <span class="ec-force-tok">${ic}</span>
         <div class="ec-force-info"><div class="ec-force-name">${esc(s.name)}</div><div class="ec-force-sub">${unit}</div></div>
         <span class="ec-force-qty">×${ecNum(s.qty)}</span>
@@ -3731,9 +3738,9 @@ function ecUnionImgClear(hiddenId, prevId) {
 function ecTabFaith() {
   const fs = EC.faith || { faith: null, can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };
   const intro = ecIntro('🛐', 'Вера', 'Спиритуалисты и теократии основывают религии. Исповедующие строят Храмы Веры — каждый слот даёт пассивный доход и удешевляет постройку войск. Чем больше паствы (слотов храмов), тем сильнее эффект.', [
-    '<b>Основать веру</b> могут идеология «Спиритуализм», форма правления «Теократия» и администрация.',
-    '<b>Храм Веры</b> строится во вкладке «Колонии» — нужна исповедуемая вера.',
-    'Распространение веры на чужие земли, десятина основателю и федерация веры — в разработке.',
+    '<b>Основать веру</b> могут идеология «Спиритуализм», форма правления «Теократия» и администрация (свою — только одну).',
+    '<b>Несколько религий</b>: держава может исповедовать сразу несколько вер и строить храмы разных религий — при постройке храма указывается его религия.',
+    '<b>Храм Веры</b> строится во вкладке «Колонии». Доход храма идёт, пока вы исповедуете его религию.',
   ]);
 
   // Карточка моей веры или блок основания/вступления
@@ -3809,28 +3816,11 @@ function ecTabFaith() {
         ${spreadBlock}
         <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
           ${(isFounder && !EC.faithEditing) ? `<button class="btn btn-gd btn-sm" onclick="ecFaithEditToggle(true)">✎ Редактировать веру</button>` : ''}
-          <button class="btn btn-gh btn-sm" onclick="ecFaithLeave()">Отречься от веры</button>
+          <button class="btn btn-gh btn-sm" onclick="ecFaithLeave('${f.id}')">Отречься от веры</button>
         </div>
       </div>`;
   } else if (fs.can_found) {
-    mine = `<div class="ec-shrine" style="--fc:#c9a227">
-        <div class="ec-shrine-hd"><div class="ec-shrine-sigil">✶</div>
-          <div><div class="ec-shrine-name" style="color:var(--gd)">Провозгласить веру</div>
-            <div class="ec-shrine-role">ваш народ ещё не обрёл высшего смысла</div></div></div>
-        <div class="ec-shrine-note">Учредите новый культ и поведите за собой народы — либо примите одну из уже сияющих в галактике религий ниже.</div>
-        <div class="ec-shrine-note" style="color:var(--t4)">Новая религия проходит модерацию администрации, как анкета фракции: её облик станет виден миру после одобрения. Бонусы храмов действуют сразу.</div>
-        <div class="ec-prod-form" style="margin-top:12px;flex-wrap:wrap">
-          <input id="ec-faith-name" placeholder="имя веры" class="ec-loan-note" style="flex:1;min-width:160px" maxlength="60">
-          <input id="ec-faith-color" type="color" value="#c9a227" class="ec-prod-qty" style="width:46px;padding:2px" title="священный цвет">
-          <button class="btn btn-gd btn-sm" onclick="ecFaithFound()">Провозгласить</button>
-        </div>
-        <input id="ec-faith-dogma" placeholder="священный девиз / догмат (необязательно)" class="ec-loan-note" style="margin-top:8px;width:100%" maxlength="160">
-        <input type="hidden" id="ec-faith-img" value="">
-        <div class="ec-faith-imgrow">
-          <div class="ec-faith-imgprev" id="ec-faith-imgprev"><span>нет образа</span></div>
-          <label class="btn btn-gh btn-sm">📷 Образ веры<input type="file" accept="image/*" style="display:none" onchange="ecFaithImg(this,'ec-faith-img','ec-faith-imgprev')"></label>
-        </div>
-      </div>`;
+    mine = ecFaithFoundCard(false);
   } else {
     mine = `<div class="ec-shrine" style="--fc:#6a6f7a">
         <div class="ec-shrine-hd"><div class="ec-shrine-sigil">🔒</div>
@@ -3840,13 +3830,30 @@ function ecTabFaith() {
       </div>`;
   }
 
+  // Мультивера: все исповедуемые религии (с ролью, паствой и кнопкой отречься)
+  const myFaiths = (fs.faiths || []);
+  // спиритуалист/теократ, уже исповедующий чужую веру, всё ещё может основать СВОЮ (одну)
+  const hasFounded = myFaiths.some(f => f.role === 'founder');
+  if (fs.faith && fs.can_found && !hasFounded) mine += ecFaithFoundCard(true);
+  const followedIds = new Set(myFaiths.map(f => f.id));
+  const roleIc = r => r === 'founder' ? '👑' : r === 'recognized' ? '🕊' : '🙏';
+  const roleNm = r => r === 'founder' ? 'основатель' : r === 'recognized' ? 'признавший' : 'адепт';
+  const followedHtml = myFaiths.length > 1 ? `<div class="ec-section-title">Исповедуемые религии <span class="ec-hint">— ваша держава следует ${ecNum(myFaiths.length)} вер(ам); храмы можно строить любой</span></div>
+    <div class="ec-dip-card">${myFaiths.map(f => {
+      const fc = esc(f.color || '#c9a227');
+      const st = f.status && f.status !== 'approved' ? ` <span class="ec-q-t">(${f.status === 'pending' ? 'на модерации' : 'отклонена'})</span>` : '';
+      return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${fc};margin-right:6px"></span>
+          <b style="color:${fc}">«${esc(f.name)}»</b> · ${roleIc(f.role)} ${roleNm(f.role)} · паства ${ecNum(f.flock || 0)}${st}
+        </span><button class="ec-bld-del" title="Отречься от этой веры" onclick="ecFaithLeave('${f.id}')">✕</button></div>`;
+    }).join('')}</div>` : '';
+
   // Реестр религий мира
   const list = EC.faithList || [];
-  const myFaithId = fs.faith && fs.faith.id;
-  const canJoin = !fs.faith && fs.can_found;
+  const canJoin = fs.can_found;   // мультивера: спиритуалист/теократ может принять ещё одну веру
   const rows = list.map(f => {
-    const isMine = f.id === myFaithId;
-    const joinBtn = (canJoin && f.open) ? `<button class="btn btn-gd btn-xs" onclick="ecFaithJoin('${f.id}')">Принять</button>` : (f.open ? '' : '<span class="ec-q-t">закрыта</span>');
+    const isMine = followedIds.has(f.id);
+    const joinBtn = isMine ? '' : (canJoin && f.open) ? `<button class="btn btn-gd btn-xs" onclick="ecFaithJoin('${f.id}')">Принять</button>` : (f.open ? '' : '<span class="ec-q-t">закрыта</span>');
     const thumb = f.image_url
       ? `<span class="ec-faith-thumb" style="background-image:url('${esc(f.image_url)}')"></span>`
       : `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(f.color || '#c9a227')};margin-right:6px"></span>`;
@@ -3884,9 +3891,36 @@ function ecTabFaith() {
     ${offersInHtml}
     <div class="ec-section-title">🛐 Ваша вера</div>
     ${mine}
+    ${followedHtml}
     ${sectsHtml}
     ${exposedHtml}
     ${registry}`;
+}
+// Карточка основания веры. additional=true — когда держава уже исповедует другие веры.
+function ecFaithFoundCard(additional) {
+  const title = additional ? 'Основать собственную веру' : 'Провозгласить веру';
+  const role = additional ? 'у вас может быть лишь одна СВОЯ религия' : 'ваш народ ещё не обрёл высшего смысла';
+  const note = additional
+    ? 'Вы вольны исповедовать чужие веры, но провозгласить можете и собственную религию — основать дозволено только одну.'
+    : 'Учредите новый культ и поведите за собой народы — либо примите одну из уже сияющих в галактике религий ниже.';
+  return `<div class="ec-shrine" style="--fc:#c9a227${additional ? ';margin-top:14px' : ''}">
+        <div class="ec-shrine-hd"><div class="ec-shrine-sigil">✶</div>
+          <div><div class="ec-shrine-name" style="color:var(--gd)">${title}</div>
+            <div class="ec-shrine-role">${role}</div></div></div>
+        <div class="ec-shrine-note">${note}</div>
+        <div class="ec-shrine-note" style="color:var(--t4)">Новая религия проходит модерацию администрации, как анкета фракции: её облик станет виден миру после одобрения. Бонусы храмов действуют сразу.</div>
+        <div class="ec-prod-form" style="margin-top:12px;flex-wrap:wrap">
+          <input id="ec-faith-name" placeholder="имя веры" class="ec-loan-note" style="flex:1;min-width:160px" maxlength="60">
+          <input id="ec-faith-color" type="color" value="#c9a227" class="ec-prod-qty" style="width:46px;padding:2px" title="священный цвет">
+          <button class="btn btn-gd btn-sm" onclick="ecFaithFound()">Провозгласить</button>
+        </div>
+        <input id="ec-faith-dogma" placeholder="священный девиз / догмат (необязательно)" class="ec-loan-note" style="margin-top:8px;width:100%" maxlength="160">
+        <input type="hidden" id="ec-faith-img" value="">
+        <div class="ec-faith-imgrow">
+          <div class="ec-faith-imgprev" id="ec-faith-imgprev"><span>нет образа</span></div>
+          <label class="btn btn-gh btn-sm">📷 Образ веры<input type="file" accept="image/*" style="display:none" onchange="ecFaithImg(this,'ec-faith-img','ec-faith-imgprev')"></label>
+        </div>
+      </div>`;
 }
 function ecFaithOffer() {
   const fid = ecId('ec-faith-reco')?.value;
@@ -3903,7 +3937,12 @@ function ecFaithFound() {
   ecRpcAct('faith_found', { p_name: name, p_dogma: dogma, p_color: color, p_image_url: image }, 'Вера основана — отправлена на модерацию');
 }
 function ecFaithJoin(id) { ecRpcAct('faith_join', { p_faith_id: id }, 'Вы приняли веру'); }
-function ecFaithLeave() { if (confirm('Оставить веру? Бонусы храмов исчезнут.')) ecRpcAct('faith_leave', {}, 'Вы оставили веру'); }
+function ecFaithLeave(faithId) {
+  if (!faithId) return;
+  const fa = (EC.faithById && EC.faithById[faithId]) || null;
+  const name = fa && fa.name;
+  if (confirm('Отречься от веры' + (name ? ` «${name}»` : '') + '? Доход её храмов прекратится.')) ecRpcAct('faith_leave', { p_faith_id: faithId }, 'Вы отреклись от веры');
+}
 // ── Картинка веры: загрузка в Storage через общий хелпер ─────
 function ecFaithImg(input, hiddenId, prevId) {
   const file = input.files && input.files[0]; if (!file) return;
@@ -4882,6 +4921,12 @@ function ecBuildResearch() {
     name: n.name, desc: n.desc, cost: n.cost, prereq: n.prereq || [],
     bonus: n.bonus || null, special: n.special || null, station: n.station || null, slots: n.slots || null,
   }));
+  // ── Overlay staff-правок связей: prereq из tech_prereq поверх дефолта ──
+  // _prereq0 хранит дефолт (для «сброса к авто-связям»); prereq — действующее.
+  out.forEach(n => {
+    n._prereq0 = n.prereq || [];
+    if (EC.techPrereq && EC.techPrereq[n.id]) n.prereq = EC.techPrereq[n.id].slice();
+  });
   EC._research = out;
   return out;
 }
@@ -4963,70 +5008,132 @@ function ecTabResearch() {
       </div>`
     : '';
 
-  // под-вкладки родов войск
+  // под-вкладки родов войск — теперь это кнопки БЫСТРОГО ПЕРЕХОДА по единому
+  // холсту (а не фильтр): клик скроллит к секции рода и подсвечивает её.
   const subTabs = EC_RES_CATS.map(([c, l, ic]) => {
     const cnt = all.filter(n => n.cat === c);
     const dn = cnt.filter(n => done.has(n.id)).length;
-    return `<button class="ec-rcat${sel === c ? ' on' : ''}" onclick="ecSetResearchCat('${c}')">${ic} ${esc(l)} <span class="ec-rcat-cnt">${dn}/${cnt.length}</span></button>`;
+    return `<button class="ec-rcat${sel === c ? ' on' : ''}" data-cat="${c}" onclick="ecTreeJump('${c}')" title="Перейти к ветке «${esc(l)}»">${ic} ${esc(l)} <span class="ec-rcat-cnt">${dn}/${cnt.length}</span></button>`;
   }).join('');
 
-  // ── Раскладка дерева выбранного рода ──
-  const nodes = all.filter(n => n.cat === sel);
+  // ── ЕДИНОЕ ДРЕВО (как в Path of Exile): один холст, ветви расходятся из
+  // ЦЕНТРА (ядра) в РАЗНЫЕ стороны. Категория = сектор-«рукав», внутри неё ветки
+  // веером, глубина prereq = радиус (дальше от ядра — продвинутее технология).
+  // Холст не привязан к краю; навигация — свободный пан мышью + зум колесом.
+  const nodes = all;
   const byId = new Map(nodes.map(n => [n.id, n]));
   const cache = {};
   nodes.forEach(n => { n._d = ecTechDepth(n, byId, cache); });
-  const maxDepth = Math.max(0, ...nodes.map(n => n._d));
 
-  const isPol = sel === 'politics';
-  const W = 200, H = isPol ? 150 : 128, GX = 60, GY = 12, LANE_GAP = 30;
+  const W = EC_TREE_W, H = EC_TREE_H;
+  const PAD = 140;
+  // Порядок веток внутри каждой категории (угол ветки в рукаве + порядок в под-вкладке).
+  const CAT_LANES = {
+    ship:     ['class', 'type', 'weapon', 'reactor', 'engine', 'armor', 'shield', 'hangar', 'module'],
+    ground:   ['class', 'type', 'weapon', 'reactor', 'engine', 'armor', 'shield', 'hangar', 'module'],
+    aviation: ['class', 'type', 'weapon', 'reactor', 'engine', 'armor', 'shield', 'hangar', 'module'],
+    politics: ['econ', 'prod', 'expand', 'mind', 'celestial'],
+  };
 
-  // ── Полосная раскладка: каждая ветка — отдельная горизонтальная полоса ──
-  const LANE_ORDER = isPol
-    ? ['econ', 'prod', 'expand', 'mind', 'celestial']
-    : ['class', 'type', 'weapon', 'reactor', 'engine', 'armor', 'shield', 'hangar', 'module'];
-  const pos = {};
-  let laneY = 0;
-  const laneHeaders = []; // { y, label, branch }
-  LANE_ORDER.forEach(branch => {
-    const lnodes = nodes.filter(n => n.branch === branch);
-    if (!lnodes.length) return;
-    // сгруппировать по глубине
-    const byDepth = {};
-    lnodes.forEach(n => { (byDepth[n._d] = byDepth[n._d] || []).push(n); });
-    const maxInLane = Math.max(...Object.values(byDepth).map(a => a.length));
-    laneHeaders.push({ y: laneY, label: ecBranchTag(branch), branch });
-    Object.entries(byDepth).forEach(([d, ns]) => {
-      ns.forEach((n, i) => { pos[n.id] = { x: parseInt(d) * (W + GX), y: laneY + i * (H + GY) }; });
+  // ── СТАБИЛЬНАЯ РАСКЛАДКА ХОЛСТА ──────────────────────────────────────────
+  // Радиальная авто-раскладка зависит от ГЛУБИНЫ prereq (depth → радиус). Если
+  // считать её заново на каждую правку связи, depth меняется и ВСЕ незакреплённые
+  // узлы прыгают на новые места — «выкидывает все исследования». Поэтому тяжёлый
+  // радиальный расчёт + нормализацию делаем ОДИН раз и кэшируем по набору узлов
+  // каталога: правка связей набор не меняет → берём готовые авто-места из кэша,
+  // а связи лишь перерисовывают рёбра между неподвижными узлами.
+  const nodeKey = nodes.map(n => n.id).join('|');
+  let pos, armLabels, coreX, coreY, cw, ch;
+  if (EC._treeLayoutKey === nodeKey && EC._treeLayoutCache) {
+    const c = EC._treeLayoutCache;
+    pos = Object.assign({}, c.pos);              // авто-места (мировые координаты)
+    armLabels = c.armLabels; coreX = c.coreX; coreY = c.coreY; cw = c.cw; ch = c.ch;
+  } else {
+    // Параметры радиальной раскладки (под компактные узлы-самоцветы).
+    const R0 = 420;            // радиус первого кольца (depth 0) от ядра
+    const RING = 200;          // прирост радиуса на каждый тир глубины
+    const STAG = 110;          // сдвиг радиуса для чётных веток (чтобы соседние не налезали)
+    const ARC = 170;           // целевой шаг между соседними узлами вдоль дуги (px)
+    const CX = 5000, CY = 5000;   // центр на большом холсте (нормализуем ниже)
+
+    const activeCats = EC_RES_CATS.filter(([cat]) => nodes.some(n => n.cat === cat));
+    const nCats = activeCats.length || 1;
+    pos = {};
+    armLabels = [];      // { x, y, cat, label }
+    activeCats.forEach(([cat, catLabel], ci) => {
+      const cnodes = nodes.filter(n => n.cat === cat);
+      const aCat = (ci / nCats) * Math.PI * 2 - Math.PI / 2;        // центральный угол рукава
+      const catSpan = (Math.PI * 2 / nCats) * 0.8;                  // угловой размах рукава (оставляем зазор между рукавами)
+      const branches = (CAT_LANES[cat] || []).concat(
+        [...new Set(cnodes.map(n => n.branch))].filter(b => !(CAT_LANES[cat] || []).includes(b)))
+        .filter(b => cnodes.some(n => n.branch === b));
+      const nb = branches.length || 1;
+      branches.forEach((branch, bi) => {
+        const lnodes = cnodes.filter(n => n.branch === branch);
+        if (!lnodes.length) return;
+        const aBranch = aCat + (nb > 1 ? (bi / (nb - 1) - 0.5) * catSpan : 0);   // угол ветки в рукаве
+        const bStag = (bi % 2) * STAG;                              // чередуем радиус соседних веток
+        const byDepth = {};
+        lnodes.forEach(n => { (byDepth[n._d] = byDepth[n._d] || []).push(n); });
+        Object.entries(byDepth).forEach(([d, ns]) => {
+          const r = R0 + bStag + parseInt(d) * RING;
+          const spread = (ns.length - 1) * ARC / r;                 // угловой разброс узлов одного тира
+          ns.forEach((n, i) => {
+            const a = aBranch + (ns.length > 1 ? (i / (ns.length - 1) - 0.5) * spread : 0);
+            pos[n.id] = { x: CX + r * Math.cos(a) - W / 2, y: CY + r * Math.sin(a) - H / 2 };
+          });
+        });
+      });
+      // метка рукава категории — между ядром и первым кольцом, по центральному углу
+      armLabels.push({ x: CX + (R0 * 0.42) * Math.cos(aCat) - 60, y: CY + (R0 * 0.42) * Math.sin(aCat) - 16, cat, label: catLabel });
     });
-    laneY += maxInLane * H + (maxInLane - 1) * GY + LANE_GAP;
+
+    // Нормализация: сдвигаем всё, чтобы минимум был в PAD (без пустых краёв холста).
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    Object.values(pos).forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x + W); maxY = Math.max(maxY, p.y + H); });
+    armLabels.forEach(l => { minX = Math.min(minX, l.x); minY = Math.min(minY, l.y); maxX = Math.max(maxX, l.x + 140); maxY = Math.max(maxY, l.y + 34); });
+    if (!isFinite(minX)) { minX = 0; minY = 0; maxX = W; maxY = H; }
+    const dx = PAD - minX, dy = PAD - minY;
+    Object.keys(pos).forEach(k => { pos[k].x += dx; pos[k].y += dy; });
+    armLabels.forEach(l => { l.x += dx; l.y += dy; });
+    coreX = CX + dx; coreY = CY + dy;
+    cw = maxX + dx + PAD; ch = maxY + dy + PAD;
+
+    // кэш авто-раскладки (без ручных оверрайдов) — переиспользуется, пока набор узлов тот же
+    EC._treeLayoutCache = { pos: Object.assign({}, pos), armLabels, coreX, coreY, cw, ch };
+    EC._treeLayoutKey = nodeKey;
+  }
+
+  // ── Поверх авто-раскладки — сохранённые позиции (staff двигает руками) ──
+  // Применяем КАЖДЫЙ раз, в мировых координатах и БЕЗ ренормализации — поэтому
+  // правка связей и драг не сдвигают закреплённые узлы. Узлы без записи в
+  // tech_layout остаются на радиальном авто-месте из кэша.
+  nodes.forEach(n => {
+    const L = EC.techLayout && EC.techLayout[n.id];
+    if (L && L.x != null && L.y != null) {
+      pos[n.id] = { x: +L.x, y: +L.y };
+      cw = Math.max(cw, +L.x + W + PAD); ch = Math.max(ch, +L.y + H + PAD);   // не обрезать вручную утащенные узлы
+    }
   });
-  // любые узлы вне LANE_ORDER — добавить в конец
-  const extra = nodes.filter(n => !LANE_ORDER.includes(n.branch) && !pos[n.id]);
-  extra.forEach((n, i) => { pos[n.id] = { x: n._d * (W + GX), y: laneY + i * (H + GY) }; });
-  if (extra.length) laneY += extra.length * (H + GY);
 
-  const cw = (maxDepth + 1) * (W + GX) - GX + 2;
-  const ch = Math.max(H, laneY - LANE_GAP);
+  // bbox каждой категории (для прыжка по под-вкладке — вписываем всю секцию,
+  // чтобы попадать на узлы, а не в пустоту между разъехавшимися ветками).
+  const catBox = {};
+  EC_RES_CATS.forEach(([cat]) => {
+    const cn = nodes.filter(n => n.cat === cat && pos[n.id]);
+    if (!cn.length) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    cn.forEach(n => { const p = pos[n.id]; x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x + W); y1 = Math.max(y1, p.y + H); });
+    catBox[cat] = { x0, y0, x1, y1 };
+  });
 
-  // SVG-связи prereq → node + фоновые полосы
-  const edges = [];
-  // фоновые полосы для каждой ветки
-  const laneBands = laneHeaders.map(lh => {
-    const lnodes2 = nodes.filter(n => n.branch === lh.branch);
-    const byD2 = {};
-    lnodes2.forEach(n => { (byD2[n._d] = byD2[n._d] || []).push(n); });
-    const maxR = Math.max(...Object.values(byD2).map(a => a.length));
-    const bh = maxR * H + (maxR - 1) * GY;
-    return `<rect x="0" y="${lh.y - 6}" width="${cw}" height="${bh + 12}" class="ec-lane-band ec-lane-${lh.branch}" rx="6"/>`;
-  }).join('');
-  nodes.forEach(n => (n.prereq || []).forEach(pid => {
-    const a = pos[pid], b = pos[n.id]; if (!a || !b) return;
-    const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2;
-    const mx = (x1 + x2) / 2;
-    const bright = done.has(pid);
-    edges.push(`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" class="ec-tedge${bright ? ' lit' : ''}"/>`);
-  }));
-  const svg = `<svg class="ec-tree-svg" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${laneBands}${edges.join('')}</svg>`;
+  EC._treePos = pos;            // живые позиции для drag-редактора
+  EC._treeNodes = nodes;        // все узлы холста (для перерисовки связей)
+  EC._treeDone = done;
+  EC._treeCore = { x: coreX, y: coreY };
+  EC._treeCatBox = catBox;
+
+  const svg = ecTreeSvg(nodes, pos, done, activeSet, cw, ch, W, H, { x: coreX, y: coreY }, !!EC.treePathEdit);
 
   // состояние + внутреннее содержимое узла (общее для холста и мобильного списка)
   const nodeState = n => {
@@ -5054,21 +5161,78 @@ function ecTabResearch() {
       <div class="ec-tnode-foot">${foot}</div>`;
     return { state, inner };
   };
-  // холст (десктоп): абсолютные карточки
+  // ── Самоцвет узла (PoE): картинка/иконка в гранёной рамке + кольцо состояния ──
+  const gem = n => {
+    const L = (EC.techLayout && EC.techLayout[n.id]) || {};
+    const ic = L.icon || EC_BRANCH_ICON[n.branch] || EC_CAT_ICON[n.cat] || '✦';
+    return L.img
+      ? `<span class="ec-tgem"><img class="ec-tgem-img" src="${esc(L.img)}" alt="" loading="lazy"><span class="ec-tgem-ring"></span></span>`
+      : `<span class="ec-tgem ec-tgem-ph"><span class="ec-tgem-ic">${esc(ic)}</span><span class="ec-tgem-ring"></span></span>`;
+  };
+  const editing = !!EC.treeEdit;
+  const pathEditing = editing && !!EC.treePathEdit;   // режим правки связей (prereq)
+  // холст (десктоп): компактные узлы-самоцветы (иконка + имя). Подробности,
+  // бонусы и кнопки исследования — в модалке по клику (ecResNodeInfo).
   const nodeCard = n => {
-    const { state, inner } = nodeState(n); const p = pos[n.id];
-    return `<div class="ec-tnode ec-tnode-${state} ec-br-${n.branch} ec-tnode-clk" style="left:${p.x}px;top:${p.y}px;width:${W}px;height:${H}px" onclick="ecResNodeInfo('${n.id}')" title="Подробнее">${inner}</div>`;
+    const { state } = nodeState(n); const p = pos[n.id];
+    const click = pathEditing ? `ecPathPick('${esc(n.id)}')` : editing ? `ecTreeSelect('${esc(n.id)}',event)` : `ecResNodeInfo('${esc(n.id)}')`;
+    const sel = (editing && EC.treeSel === n.id) ? ' ec-tnode-sel' : '';
+    const pf = (pathEditing && EC.pathFrom === n.id) ? ' ec-tnode-pathfrom' : '';
+    const ttl = pathEditing ? (EC.pathFrom ? 'Клик — провести связь сюда (станет наследником)' : 'Клик — выбрать узел-источник связи')
+      : editing ? 'Перетащите · клик — настроить'
+      : `${n.name}${n.desc ? ' — ' + n.desc : ''}`;
+    const badge = state === 'done' ? '<span class="ec-gpip ok">✓</span>'
+      : state === 'active' ? '<span class="ec-gpip cur">⏳</span>'
+      : state === 'queued' ? '<span class="ec-gpip q">🕓</span>' : '';
+    return `<div class="ec-tnode ec-tnode-gem ec-tnode-${state} ec-br-${n.branch} ec-tnode-clk${sel}${pf}" data-nid="${esc(n.id)}" style="left:${p.x}px;top:${p.y}px;width:${W}px;height:${H}px" onclick="${click}" title="${esc(ttl)}">
+      <span class="ec-tnode-gemwrap">${gem(n)}${badge}</span><div class="ec-tnode-glabel">${esc(n.name)}</div></div>`;
   };
   const cards = nodes.map(nodeCard).join('');
-  const tree = `<div class="ec-tree-scroll"><div class="ec-tree" style="width:${cw}px;height:${ch}px">${svg}${cards}</div></div>`;
+  // Ядро дерева (центр) + метки рукавов-категорий.
+  const coreHtml = `<div class="ec-tcore" style="left:${coreX - 46}px;top:${coreY - 46}px">🔬<span>НАУКА</span></div>`;
+  const armHtml = armLabels.map(l =>
+    `<div class="ec-tarm" data-cat="${esc(l.cat)}" style="left:${l.x}px;top:${l.y}px">${esc(EC_CAT_ICON[l.cat] || '')} ${esc(l.label)}</div>`).join('');
+  const editBar = ecIsStaff() ? `<div class="ec-tree-tools">
+      <button class="ec-tree-tbtn${editing ? ' on' : ''}" onclick="ecTreeEditToggle()" title="Режим раскладки: тащите узлы мышью">${editing ? '✓ Раскладка вкл.' : '✎ Раскладка'}</button>
+      ${editing ? `<button class="ec-tree-tbtn${pathEditing ? ' on' : ''}" onclick="ecPathToggle()" title="Режим связей: клик по двум узлам — создать путь, клик по линии — удалить">🔗 Связи</button>` : ''}
+      ${editing ? '<button class="ec-tree-tbtn ec-tree-tdanger" onclick="ecTreeResetAll()" title="Сбросить ВСЮ ручную раскладку — узлы вернутся на авто-радиальные места">↺ Сброс всего</button>' : ''}
+      <span class="ec-tree-tsep"></span>
+      <button class="ec-tree-tbtn${EC.treeFs ? ' on' : ''}" onclick="ecTreeFullscreen()" title="${EC.treeFs ? 'Свернуть' : 'На весь экран'}">${EC.treeFs ? '✕' : '⛶'}</button>
+      <button class="ec-tree-tbtn" onclick="ecTreeFit()" title="Вместить всё дерево">⤢</button>
+      <button class="ec-tree-tbtn" onclick="ecTreeZoom(-1)" title="Отдалить">−</button>
+      <button class="ec-tree-tbtn ec-tree-tzoom" onclick="ecTreeZoom(0)" title="Сброс масштаба">${Math.round((EC.treeZoom || 1) * 100)}%</button>
+      <button class="ec-tree-tbtn" onclick="ecTreeZoom(1)" title="Приблизить">+</button>
+    </div>` : `<div class="ec-tree-tools">
+      <button class="ec-tree-tbtn${EC.treeFs ? ' on' : ''}" onclick="ecTreeFullscreen()" title="${EC.treeFs ? 'Свернуть' : 'На весь экран'}">${EC.treeFs ? '✕' : '⛶'}</button>
+      <button class="ec-tree-tbtn" onclick="ecTreeFit()" title="Вместить всё дерево">⤢</button>
+      <button class="ec-tree-tbtn" onclick="ecTreeZoom(-1)">−</button>
+      <button class="ec-tree-tbtn ec-tree-tzoom" onclick="ecTreeZoom(0)">${Math.round((EC.treeZoom || 1) * 100)}%</button>
+      <button class="ec-tree-tbtn" onclick="ecTreeZoom(1)">+</button>
+    </div>`;
+  const z = EC.treeZoom || 1, px = EC.treePanX || 0, py = EC.treePanY || 0;
+  const hint = pathEditing
+    ? `<div class="ec-tree-edhint">🔗 Режим связей: ${EC.pathFrom ? `источник <b>${esc((nodes.find(n => n.id === EC.pathFrom) || {}).name || EC.pathFrom)}</b> — кликните узел-наследник` : 'кликните узел-<b>источник</b>'} · клик по линии — удалить связь · правый клик/Esc — отмена</div>`
+    : editing
+      ? '<div class="ec-tree-edhint">Перетаскивайте узлы мышью — позиция сохраняется. Клик по узлу — emoji/картинка. «🔗 Связи» — править пути.</div>'
+      : '<div class="ec-tree-edhint ec-tree-navhint">Тащите мышью — двигать дерево · колесо — зум · клик по узлу — детали</div>';
+  const tree = `<div class="ec-tree-stage${editing ? ' ec-tree-editing' : ''}${pathEditing ? ' ec-tree-pathedit' : ''}${EC.treeFs ? ' ec-tree-fs' : ''}">${editBar}
+    <div class="ec-tree-viewport" id="ec-tree-vp">
+      <div class="ec-tree-world" id="ec-tree-world" style="width:${cw}px;height:${ch}px;transform:translate(${px}px,${py}px) scale(${z});transform-origin:0 0">${svg}${coreHtml}${armHtml}${cards}</div>
+    </div>${hint}</div>`;
 
-  // мобильный список: узлы сгруппированы по веткам, отсортированы по тиру (prereq → выше)
-  const mobileLanes = LANE_ORDER.concat([...new Set(extra.map(n => n.branch))].filter(b => !LANE_ORDER.includes(b)));
-  const treeMobile = `<div class="ec-tree-mobile">${mobileLanes.map(branch => {
-    const ln = nodes.filter(n => n.branch === branch).sort((a, b) => (a._d || 0) - (b._d || 0));
-    if (!ln.length) return '';
-    const cardsM = ln.map(n => { const { state, inner } = nodeState(n); return `<div class="ec-tnode ec-tnode-m ec-tnode-${state} ec-br-${n.branch} ec-tnode-clk" onclick="ecResNodeInfo('${n.id}')">${inner}</div>`; }).join('');
-    return `<div class="ec-tm-lane"><div class="ec-tm-lane-h">${esc(ecBranchTag(branch))}</div><div class="ec-tm-cards">${cardsM}</div></div>`;
+  // мобильный список: всё дерево — категории, внутри ветки, отсортированы по тиру
+  const treeMobile = `<div class="ec-tree-mobile">${EC_RES_CATS.map(([cat, catLabel]) => {
+    const cn = nodes.filter(n => n.cat === cat);
+    if (!cn.length) return '';
+    const order = (CAT_LANES[cat] || []).concat(
+      [...new Set(cn.map(n => n.branch))].filter(b => !(CAT_LANES[cat] || []).includes(b)));
+    const lanesHtml = order.map(branch => {
+      const ln = cn.filter(n => n.branch === branch).sort((a, b) => (a._d || 0) - (b._d || 0));
+      if (!ln.length) return '';
+      const cardsM = ln.map(n => { const { state, inner } = nodeState(n); return `<div class="ec-tnode ec-tnode-m ec-tnode-${state} ec-br-${n.branch} ec-tnode-clk" onclick="ecResNodeInfo('${esc(n.id)}')"><div class="ec-tnode-top">${gem(n)}<div class="ec-tnode-top-tx">${inner}</div></div></div>`; }).join('');
+      return `<div class="ec-tm-lane"><div class="ec-tm-lane-h">${esc(ecBranchTag(branch))}</div><div class="ec-tm-cards">${cardsM}</div></div>`;
+    }).join('');
+    return lanesHtml ? `<div class="ec-tm-cat"><div class="ec-tm-cat-h">${esc(EC_CAT_ICON[cat] || '')} ${esc(catLabel)}</div>${lanesHtml}</div>` : '';
   }).join('')}</div>`;
 
   const slotsBullet = maxSlots > 1
@@ -5082,8 +5246,356 @@ function ecTabResearch() {
     ${activeHtml}
     ${queueHtml}
     <div class="ec-rcat-tabs">${subTabs}</div>
-    <div class="ec-section-title">Дерево исследований <span class="ec-hint">— ${slotsHint}</span></div>
+    <div class="ec-section-title">Единое дерево исследований <span class="ec-hint">— ${slotsHint} · клик по роду войск выше — переход к ветке</span></div>
     ${tree}${treeMobile}`;
+}
+// Размер слота узла-самоцвета на холсте (десктоп). Компактный: иконка + имя.
+const EC_TREE_W = 150, EC_TREE_H = 104;
+// Дефолтные emoji-значки по ветке/роду — пока узлу не задана картинка/иконка.
+const EC_BRANCH_ICON = { class: '🚀', type: '🛰', weapon: '🎯', armor: '🛡', shield: '🔰', engine: '🚀', reactor: '⚛', hangar: '🛬', module: '📡', econ: '💰', prod: '🏭', expand: '🧭', celestial: '🌌', mind: '🧠' };
+const EC_CAT_ICON = { ship: '🚀', ground: '⚙', aviation: '✈', politics: '🏛' };
+
+// Связи дерева — прямые «созвездные» линии центр→центр (PoE), загораются по
+// изученной цепочке (.lit) и «текут» в активные узлы (.flow).
+function ecTreeSvg(nodes, pos, done, activeSet, cw, ch, W, H, core, pathEdit) {
+  let html = '';
+  // Спицы от ядра к корневым узлам (без prereq) — связывают всё в ОДНО древо.
+  if (core) nodes.forEach(n => {
+    if ((n.prereq || []).length) return;
+    const b = pos[n.id]; if (!b) return;
+    html += `<path d="M${core.x},${core.y} L${b.x + W / 2},${b.y + H / 2}" class="ec-tedge core${done.has(n.id) ? ' lit' : ''}"/>`;
+  });
+  nodes.forEach(n => (n.prereq || []).forEach(pid => {
+    const a = pos[pid], b = pos[n.id]; if (!a || !b) return;
+    const ax = a.x + W / 2, ay = a.y + H / 2, bx = b.x + W / 2, by = b.y + H / 2;
+    const cls = 'ec-tedge' + (done.has(pid) ? ' lit' : '') + (activeSet.has(n.id) ? ' flow' : '');
+    // в режиме связей — широкая невидимая «хит»-линия для удаления кликом
+    if (pathEdit) html += `<path d="M${ax},${ay} L${bx},${by}" class="ec-tedge-hit" onclick="ecPathDelete('${esc(n.id)}','${esc(pid)}')"><title>Удалить связь</title></path>`;
+    html += `<path d="M${ax},${ay} L${bx},${by}" class="${cls}"/>`;
+  }));
+  return `<svg class="ec-tree-svg" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${html}</svg>`;
+}
+
+// ════════════════════════════════════════════════════════════
+// ПАН/ЗУМ ХОЛСТА ДЕРЕВА + drag-редактор узлов (staff).
+// Модель: мир (#ec-tree-world) двигается через transform translate()+scale();
+// нет нативного скролла — свободный пан мышью/пальцем в любую сторону, зум
+// колесом к курсору. Перерисовки нет — только меняем transform (плавно).
+// ════════════════════════════════════════════════════════════
+function ecTreeEditToggle() { if (!ecIsStaff()) return; EC.treeEdit = !EC.treeEdit; EC.treeSel = null; EC.treePathEdit = false; EC.pathFrom = null; ecTreeInspectorClose(); ecPaintCabinet(); }
+// ── Редактор связей дерева (prereq): клик по двум узлам = путь, клик по линии = удалить ──
+function ecPathToggle() { if (!ecIsStaff() || !EC.treeEdit) return; EC.treePathEdit = !EC.treePathEdit; EC.pathFrom = null; ecPaintCabinet(); }
+function ecPathPick(id) {
+  if (!EC.treePathEdit) return;
+  if (!EC.pathFrom) { EC.pathFrom = id; ecPaintCabinet(); return; }            // выбран источник
+  if (EC.pathFrom === id) { EC.pathFrom = null; ecPaintCabinet(); return; }    // отмена выбора
+  const from = EC.pathFrom; EC.pathFrom = null;
+  ecPathAdd(from, id);                                                          // from → id (id наследует from)
+}
+// Зависит ли узел a (транзитивно) от b? — защита от циклов.
+function ecDependsOn(a, b, byId) {
+  const seen = new Set(), st = [a];
+  while (st.length) { const x = st.pop(); if (x === b) return true; if (seen.has(x)) continue; seen.add(x); ((byId.get(x) || {}).prereq || []).forEach(p => st.push(p)); }
+  return false;
+}
+async function ecPathAdd(fromId, toId) {
+  const all = ecBuildResearch(), byId = new Map(all.map(n => [n.id, n]));
+  const to = byId.get(toId), from = byId.get(fromId);
+  if (!to || !from) { toast('Узел не найден', 'err'); return; }
+  if ((to.prereq || []).includes(fromId)) { toast('Связь уже есть', 'inf'); return; }
+  if (ecDependsOn(fromId, toId, byId)) { toast('Нельзя: образуется цикл связей', 'err'); return; }
+  await ecPathSave(toId, [...(to.prereq || []), fromId]);
+}
+function ecPathDelete(toId, fromId) {
+  const all = ecBuildResearch(), to = all.find(n => n.id === toId);
+  if (!to) return;
+  ecPathSave(toId, (to.prereq || []).filter(p => p !== fromId));
+}
+async function ecPathSave(nodeId, prereqArr) {
+  if (EC.busy) return; EC.busy = true;
+  const tools = document.querySelector('.ec-tree-tools'); if (tools) tools.style.opacity = '.5';
+  try {
+    await ecRpc('tech_prereq_set', { p_node: nodeId, p_prereq: prereqArr });
+    EC.techPrereq[nodeId] = prereqArr.slice();
+    EC._research = null;                       // пересобрать дерево с новыми связями
+    toast('Связь обновлена ✓', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Связь не сохранена: ' + ecErr(e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+// Сброс связей узла к дефолту (из inspector).
+async function ecPathResetNode(nodeId) {
+  if (!ecIsStaff() || EC.busy) return;
+  const all = ecBuildResearch(), n = all.find(x => x.id === nodeId); if (!n) return;
+  EC.busy = true;
+  try {
+    await ecRpc('tech_prereq_reset', { p_node: nodeId, p_default: n._prereq0 || [] });
+    delete EC.techPrereq[nodeId];
+    EC._research = null;
+    toast('Связи узла сброшены к дефолту', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast(ecErr(e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+// Сбросить ВСЮ ручную раскладку: удаляем все сохранённые записи (узлы вернутся
+// на авто-радиальные места) и пере-вписываем камеру по центру нового дерева.
+// Используем tech_layout_reset (DELETE строки) — set(p_x:null) НЕ чистит позицию
+// (coalesce оставляет старое значение), поэтому нужен именно reset.
+async function ecTreeResetAll() {
+  if (!ecIsStaff() || EC.busy) return;
+  const ids = Object.keys(EC.techLayout || {});
+  if (!ids.length) { toast('Ручных позиций нет — дерево уже радиальное', 'inf'); return; }
+  if (!confirm(`Сбросить ВСЮ ручную раскладку (${ids.length} узл.)? Все позиции, иконки и картинки удалятся, дерево станет радиальным.`)) return;
+  EC.busy = true;
+  const tools = document.querySelector('.ec-tree-tools'); if (tools) tools.style.opacity = '.5';
+  try {
+    for (const id of ids) await ecRpc('tech_layout_reset', { p_node: id }).catch(() => {});
+    EC.techLayout = {};
+    EC.treePanX = null; EC.treePanY = null;     // авто-вписать заново по центру
+    toast('Раскладка сброшена — дерево радиальное', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast(ecErr(e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+const EC_TREE_ZMIN = 0.1, EC_TREE_ZMAX = 2;
+function ecTreeApply() {
+  const w = document.getElementById('ec-tree-world'); if (!w) return;
+  w.style.transform = `translate(${EC.treePanX || 0}px,${EC.treePanY || 0}px) scale(${EC.treeZoom || 1})`;
+  const lbl = document.querySelector('.ec-tree-tzoom'); if (lbl) lbl.textContent = Math.round((EC.treeZoom || 1) * 100) + '%';
+}
+// Зум кнопками — вокруг центра окна просмотра.
+function ecTreeZoom(dir) {
+  const vp = document.getElementById('ec-tree-vp');
+  const oldZ = EC.treeZoom || 1;
+  let z = dir === 0 ? 1 : Math.min(EC_TREE_ZMAX, Math.max(EC_TREE_ZMIN, +(oldZ + dir * 0.15).toFixed(2)));
+  if (vp) {
+    const r = vp.getBoundingClientRect(), cx = r.width / 2, cy = r.height / 2;
+    EC.treePanX = cx - (cx - (EC.treePanX || 0)) * (z / oldZ);
+    EC.treePanY = cy - (cy - (EC.treePanY || 0)) * (z / oldZ);
+  }
+  EC.treeZoom = z; ecTreeApply();
+}
+// Первый показ: центрируем ЯДРО при читаемом зуме (видно центр + рукава),
+// а не отдаляем всё дерево. Холст большой — детали смотрят паном/зумом.
+function ecTreeCenterCore() {
+  const vp = document.getElementById('ec-tree-vp');
+  if (!vp || !EC._treeCore) { return ecTreeFit(); }
+  const r = vp.getBoundingClientRect();
+  const z = Math.min(0.85, Math.max(0.5, +((Math.min(r.width, r.height)) / 1000).toFixed(2)));
+  EC.treeZoom = z;
+  EC.treePanX = r.width / 2 - EC._treeCore.x * z;
+  EC.treePanY = r.height / 2 - EC._treeCore.y * z;
+  ecTreeApply();
+}
+// Вместить всё дерево в окно и отцентрировать.
+function ecTreeFit() {
+  const vp = document.getElementById('ec-tree-vp'), world = document.getElementById('ec-tree-world');
+  if (!vp || !world) return;
+  const cw = (parseFloat(world.style.width) || world.offsetWidth) || 1;
+  const ch = (parseFloat(world.style.height) || world.offsetHeight) || 1;
+  const r = vp.getBoundingClientRect();
+  const z = Math.max(EC_TREE_ZMIN, Math.min(1, +Math.min((r.width - 60) / cw, (r.height - 60) / ch).toFixed(3)));
+  EC.treeZoom = z;
+  EC.treePanX = (r.width - cw * z) / 2;
+  EC.treePanY = (r.height - ch * z) / 2;
+  ecTreeApply();
+}
+// Прыжок к секции категории — ВПИСЫВАЕМ всю секцию в окно (zoom+центр по её
+// bbox), чтобы кадр всегда падал на узлы, а не в пустоту. Плавно + вспышка метки.
+function ecTreeJump(cat) {
+  EC.researchCat = cat;
+  document.querySelectorAll('.ec-rcat').forEach(b => b.classList.toggle('on', b.dataset.cat === cat));
+  const box = EC._treeCatBox && EC._treeCatBox[cat], vp = document.getElementById('ec-tree-vp'), world = document.getElementById('ec-tree-world');
+  if (box && vp && world) {
+    const r = vp.getBoundingClientRect();
+    const bw = (box.x1 - box.x0) || 1, bh = (box.y1 - box.y0) || 1;
+    const z = Math.max(EC_TREE_ZMIN, Math.min(1.1, +Math.min((r.width - 120) / bw, (r.height - 120) / bh).toFixed(3)));
+    const cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
+    EC.treeZoom = z;
+    EC.treePanX = r.width / 2 - cx * z;
+    EC.treePanY = r.height / 2 - cy * z;
+    world.classList.add('ec-tree-anim');
+    ecTreeApply();
+    setTimeout(() => world.classList.remove('ec-tree-anim'), 420);
+  }
+  const arm = document.querySelector(`.ec-tarm[data-cat="${cat}"]`);
+  if (arm) { document.querySelectorAll('.ec-tarm.flash').forEach(e => e.classList.remove('flash')); arm.classList.add('flash'); setTimeout(() => arm.classList.remove('flash'), 1300); }
+}
+// Полноэкранный режим холста дерева. Сохраняем в EC.treeFs (переживает
+// перерисовку). Настоящий фуллскрин: ecTreePortal выносит сцену в <body> мимо
+// трансформируемых предков (иначе position:fixed упирается в область контента).
+function ecTreeFullscreen() {
+  EC.treeFs = !EC.treeFs;
+  document.body.classList.toggle('ec-tree-fs-lock', EC.treeFs);
+  ecPaintCabinet();
+  requestAnimationFrame(() => requestAnimationFrame(ecTreeCenterCore));
+}
+// Портал сцены в body при фуллскрине (и уборка при выходе). Вызывается из
+// ecTreeBind после каждой перерисовки, чтобы новая сцена тоже попадала в body.
+function ecTreePortal() {
+  if (EC._treeFsEl && EC._treeFsEl.parentNode === document.body) EC._treeFsEl.remove();
+  EC._treeFsEl = null;
+  if (!EC.treeFs) return;
+  const stage = document.querySelector('.ec-tree-stage.ec-tree-fs');
+  if (!stage) return;
+  if (stage.parentNode !== document.body) document.body.appendChild(stage);
+  EC._treeFsEl = stage;
+}
+let _ecTreeDrag = null, _ecPan = null, _ecTreeSuppressClick = 0;
+function ecTreePt(e) { const t = e.touches && e.touches[0]; return { x: t ? t.clientX : e.clientX, y: t ? t.clientY : e.clientY }; }
+function ecTreeBind() {
+  ecTreePortal();   // фуллскрин: вынести сцену в body мимо трансформ-предков
+  const vp = document.getElementById('ec-tree-vp');
+  if (vp && !vp._ecBound) {
+    vp._ecBound = true;
+    vp.addEventListener('mousedown', ecTreeDown);
+    vp.addEventListener('touchstart', ecTreeDown, { passive: false });
+    vp.addEventListener('wheel', ecTreeWheel, { passive: false });
+  }
+  if (!document._ecTreeMoves) {
+    document._ecTreeMoves = true;
+    document.addEventListener('mousemove', ecTreeMove);
+    document.addEventListener('mouseup', ecTreeUp);
+    document.addEventListener('touchmove', ecTreeMove, { passive: false });
+    document.addEventListener('touchend', ecTreeUp);
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      if (EC.treePathEdit && EC.pathFrom) { EC.pathFrom = null; ecPaintCabinet(); }
+      else if (EC.treeFs) { ecTreeFullscreen(); }
+    });
+  }
+  if (EC.treePanX == null) requestAnimationFrame(ecTreeCenterCore);   // первый показ — ядро по центру
+}
+function ecTreeDown(e) {
+  if (e.type === 'mousedown' && e.button !== 0) {
+    if (EC.treePathEdit && EC.pathFrom) { EC.pathFrom = null; ecPaintCabinet(); }   // правый клик — отмена выбора источника
+    return;
+  }
+  if (e.target.closest && e.target.closest('button')) return;
+  const node = e.target.closest && e.target.closest('.ec-tnode[data-nid]');
+  if (EC.treeEdit && !EC.treePathEdit && node) {   // staff: перетаскиваем узел (вне режима связей)
+    const id = node.dataset.nid, p = (EC._treePos && EC._treePos[id]) || { x: 0, y: 0 }, pt = ecTreePt(e);
+    _ecTreeDrag = { id, card: node, sx: pt.x, sy: pt.y, ox: p.x, oy: p.y, z: EC.treeZoom || 1, moved: false };
+    node.classList.add('ec-tnode-dragging');
+    e.preventDefault(); e.stopPropagation(); return;
+  }
+  const pt = ecTreePt(e);                           // иначе — свободный пан холста
+  _ecPan = { sx: pt.x, sy: pt.y, px: EC.treePanX || 0, py: EC.treePanY || 0, moved: false };
+  if (e.cancelable) e.preventDefault();
+}
+function ecTreeMove(e) {
+  if (_ecTreeDrag) {
+    const d = _ecTreeDrag, pt = ecTreePt(e);
+    const nx = Math.round(d.ox + (pt.x - d.sx) / d.z), ny = Math.round(d.oy + (pt.y - d.sy) / d.z);
+    if (Math.abs(pt.x - d.sx) > 3 || Math.abs(pt.y - d.sy) > 3) d.moved = true;
+    d.card.style.left = nx + 'px'; d.card.style.top = ny + 'px';
+    if (EC._treePos) EC._treePos[d.id] = { x: nx, y: ny };
+    ecTreeRedrawEdges();
+    if (e.cancelable) e.preventDefault();
+    return;
+  }
+  if (_ecPan) {
+    const pt = ecTreePt(e);
+    EC.treePanX = _ecPan.px + (pt.x - _ecPan.sx);
+    EC.treePanY = _ecPan.py + (pt.y - _ecPan.sy);
+    if (Math.abs(pt.x - _ecPan.sx) > 3 || Math.abs(pt.y - _ecPan.sy) > 3) { _ecPan.moved = true; document.body.classList.add('ec-tree-grabbing'); }
+    ecTreeApply();
+    if (e.cancelable) e.preventDefault();
+  }
+}
+function ecTreeUp() {
+  if (_ecTreeDrag) {
+    const d = _ecTreeDrag; _ecTreeDrag = null;
+    d.card.classList.remove('ec-tnode-dragging');
+    if (d.moved) {
+      _ecTreeSuppressClick = Date.now();
+      const p = (EC._treePos && EC._treePos[d.id]) || { x: d.ox, y: d.oy };
+      EC.techLayout[d.id] = Object.assign({}, EC.techLayout[d.id], { x: p.x, y: p.y });
+      ecRpc('tech_layout_set', { p_node: d.id, p_x: p.x, p_y: p.y })
+        .catch(err => toast('Позиция не сохранена: ' + (err.message || ''), 'err'));
+    }
+  }
+  if (_ecPan) {
+    if (_ecPan.moved) _ecTreeSuppressClick = Date.now();   // после пана не открываем карточку узла
+    _ecPan = null; document.body.classList.remove('ec-tree-grabbing');
+  }
+}
+// Зум колесом — к точке под курсором (мир остаётся «прибит» к курсору).
+function ecTreeWheel(e) {
+  e.preventDefault();
+  const r = e.currentTarget.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top, oldZ = EC.treeZoom || 1;
+  const z = Math.min(EC_TREE_ZMAX, Math.max(EC_TREE_ZMIN, +(oldZ * (e.deltaY < 0 ? 1.12 : 1 / 1.12)).toFixed(3)));
+  EC.treePanX = sx - (sx - (EC.treePanX || 0)) * (z / oldZ);
+  EC.treePanY = sy - (sy - (EC.treePanY || 0)) * (z / oldZ);
+  EC.treeZoom = z; ecTreeApply();
+}
+function ecTreeRedrawEdges() {
+  const svg = document.querySelector('#ec-tree-world .ec-tree-svg');
+  if (!svg || !EC._treeNodes || !EC._treePos) return;
+  const pos = EC._treePos, done = EC._treeDone || new Set(), W = EC_TREE_W, H = EC_TREE_H, core = EC._treeCore;
+  let html = '';
+  if (core) EC._treeNodes.forEach(n => {
+    if ((n.prereq || []).length) return;
+    const b = pos[n.id]; if (!b) return;
+    html += `<path d="M${core.x},${core.y} L${b.x + W / 2},${b.y + H / 2}" class="ec-tedge core${done.has(n.id) ? ' lit' : ''}"/>`;
+  });
+  EC._treeNodes.forEach(n => (n.prereq || []).forEach(pid => {
+    const a = pos[pid], b = pos[n.id]; if (!a || !b) return;
+    const ax = a.x + W / 2, ay = a.y + H / 2, bx = b.x + W / 2, by = b.y + H / 2;
+    html += `<path d="M${ax},${ay} L${bx},${by}" class="ec-tedge${done.has(pid) ? ' lit' : ''}"/>`;
+  }));
+  svg.innerHTML = html;
+}
+// Клик по узлу в режиме раскладки → выбрать + открыть инспектор (иконка/картинка).
+function ecTreeSelect(id, ev) {
+  if (ev) ev.stopPropagation();
+  if (_ecTreeSuppressClick && Date.now() - _ecTreeSuppressClick < 350) return;   // это был конец drag
+  EC.treeSel = id;
+  document.querySelectorAll('.ec-tnode-sel').forEach(e => e.classList.remove('ec-tnode-sel'));
+  const c = document.querySelector(`.ec-tnode[data-nid="${id}"]`); if (c) c.classList.add('ec-tnode-sel');
+  ecTreeInspector(id);
+}
+function ecTreeInspector(id) {
+  const n = ecBuildResearch().find(x => x.id === id); if (!n) return;
+  const L = (EC.techLayout && EC.techLayout[id]) || {};
+  let ov = document.getElementById('ec-tins-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'ec-tins-ov'; ov.className = 'ec-tins-ov'; ov.onclick = e => { if (e.target === ov) ecTreeInspectorClose(); }; document.body.appendChild(ov); }
+  ov.innerHTML = `<div class="ec-tins ec-br-${esc(n.branch)}">
+    <button class="ec-rinfo-x" onclick="ecTreeInspectorClose()">✕</button>
+    <div class="ec-tins-h">${esc(n.name)}</div>
+    <div class="ec-tins-id">${esc(id)}</div>
+    <label class="ec-tins-l">Emoji-значок <span class="ec-hint">(если нет картинки)</span></label>
+    <input id="ec-tins-icon" class="ec-tins-i" maxlength="8" value="${esc(L.icon || '')}" placeholder="напр. 🚀 ⚛ 🛡">
+    <label class="ec-tins-l">URL картинки <span class="ec-hint">(Storage)</span></label>
+    <input id="ec-tins-img" class="ec-tins-i" value="${esc(L.img || '')}" placeholder="https://…">
+    <div class="ec-tins-act">
+      <button class="btn btn-gd btn-sm" onclick="ecTreeInspectorSave('${esc(id)}')">✓ Сохранить</button>
+      <button class="btn btn-gh btn-sm" onclick="ecTreeNodeReset('${esc(id)}')" title="Сбросить позицию и иконку к авто-раскладке">↺ Сброс</button>
+    </div>
+    <label class="ec-tins-l">Связи (требует изучить) ${EC.techPrereq && EC.techPrereq[id] ? '<span class="ec-hint" style="color:var(--te)">— изменены</span>' : ''}</label>
+    <div class="ec-tins-prereq">${(n.prereq || []).length ? (n.prereq).map(p => `<span class="ec-tins-pchip">${esc((ecBuildResearch().find(x => x.id === p) || {}).name || p)}</span>`).join('') : '<span class="ec-hint">нет требований (корень)</span>'}</div>
+    ${EC.techPrereq && EC.techPrereq[id] ? `<button class="btn btn-gh btn-xs" onclick="ecPathResetNode('${esc(id)}')" title="Вернуть связи узла к дефолтным">↺ Сбросить связи к дефолту</button>` : ''}
+    <div class="ec-tins-hint">Позицию двигаешь мышью на холсте. Здесь — значок/картинка. Сами пути правятся кнопкой «🔗 Связи» на холсте.</div>
+  </div>`;
+  ov.classList.add('show');
+}
+function ecTreeInspectorClose() { const ov = document.getElementById('ec-tins-ov'); if (ov) ov.classList.remove('show'); EC.treeSel = null; }
+async function ecTreeInspectorSave(id) {
+  const icon = (document.getElementById('ec-tins-icon') || {}).value || '';
+  const img = (document.getElementById('ec-tins-img') || {}).value || '';
+  try {
+    await ecRpc('tech_layout_set', { p_node: id, p_x: null, p_y: null, p_icon: icon, p_img: img });
+    EC.techLayout[id] = Object.assign({}, EC.techLayout[id], { icon: icon || null, img: img || null });
+    toast('Сохранено ✓', 'ok'); ecTreeInspectorClose(); ecPaintCabinet();
+  } catch (e) { toast('Ошибка сохранения: ' + (e.message || ''), 'err'); }
+}
+async function ecTreeNodeReset(id) {
+  try {
+    await ecRpc('tech_layout_reset', { p_node: id });
+    delete EC.techLayout[id];
+    toast('Сброшено к авто-раскладке', 'ok'); ecTreeInspectorClose(); ecPaintCabinet();
+  } catch (e) { toast('Ошибка: ' + (e.message || ''), 'err'); }
 }
 function ecBranchTag(branch) {
   return { class: 'КЛАСС', type: 'КОРПУС', weapon: 'ОРУЖИЕ', armor: 'БРОНЯ', shield: 'ЩИТЫ', engine: 'ДВИГАТЕЛЬ', reactor: 'РЕАКТОР', hangar: 'АНГАР', module: 'СИСТЕМА', econ: 'ЭКОНОМИКА', prod: 'ПРОИЗВОДСТВО', expand: 'ЭКСПАНСИЯ', celestial: 'НЕБОЖИТЕЛИ', mind: 'РАЗУМ' }[branch] || branch;
@@ -5165,6 +5677,7 @@ async function ecResearchDrain() {
 
 // Карточка-описание узла дерева (по клику) — полный текст не влезает в плитку.
 function ecResNodeInfo(id) {
+  if (_ecTreeSuppressClick && Date.now() - _ecTreeSuppressClick < 300) return;   // это был конец пана/драга, не клик
   const all = ecBuildResearch();
   const n = all.find(x => x.id === id); if (!n) return;
   const byId = new Map(all.map(x => [x.id, x]));
@@ -5212,10 +5725,16 @@ function ecResNodeInfo(id) {
 
   let ov = document.getElementById('ec-rinfo-ov');
   if (!ov) { ov = document.createElement('div'); ov.id = 'ec-rinfo-ov'; ov.className = 'ec-rinfo-ov'; ov.onclick = e => { if (e.target === ov) ecResNodeInfoClose(); }; document.body.appendChild(ov); }
+  const L = (EC.techLayout && EC.techLayout[n.id]) || {};
+  const gicon = L.icon || EC_BRANCH_ICON[n.branch] || EC_CAT_ICON[n.cat] || '✦';
+  const gemHtml = L.img
+    ? `<span class="ec-tgem ec-rinfo-gem"><img class="ec-tgem-img" src="${esc(L.img)}" alt=""><span class="ec-tgem-ring"></span></span>`
+    : `<span class="ec-tgem ec-tgem-ph ec-rinfo-gem"><span class="ec-tgem-ic">${esc(gicon)}</span><span class="ec-tgem-ring"></span></span>`;
   ov.innerHTML = `<div class="ec-rinfo ec-br-${esc(n.branch)}">
     <button class="ec-rinfo-x" onclick="ecResNodeInfoClose()">✕</button>
+    <div class="ec-rinfo-head">${gemHtml}<div>
     <div class="ec-rinfo-tag">${esc(ecBranchTag(n.branch))}${n.catLabel ? ' · ' + esc(n.catLabel) : ''}</div>
-    <div class="ec-rinfo-name">${esc(n.name)} ${status}</div>
+    <div class="ec-rinfo-name">${esc(n.name)} ${status}</div></div></div>
     ${n.desc ? `<div class="ec-rinfo-desc">${esc(n.desc)}</div>` : ''}
     ${stationHtml}
     ${bonus}
@@ -5492,9 +6011,17 @@ function ecBuildingRow(b) {
     const mkModeBtn = (m, label, title) => `<button class="btn btn-xs ${mode === m ? 'btn-gd' : 'btn-gh'}" title="${title}" onclick="ecSetMineMode('${b.id}','${m}')">${label}</button>`;
     mineHtml += `<div class="ec-bld-mine-hd" style="display:flex;align-items:center;gap:6px;margin-top:8px">Поток: ${mkModeBtn('store', '📦 На склад', 'Копить ресурсы на складе (до лимита ёмкости)')} ${mkModeBtn('export', '💱 Экспорт', 'Сразу продавать поток за ГС — не копится, месторождение работает дальше')}</div>`;
   }
+  // мультивера: у храма пишем, чьей он религии
+  let faithBadge = '';
+  if (b.btype === 'temple') {
+    const fa = b.faith_id ? (EC.faithById && EC.faithById[b.faith_id]) : null;
+    faithBadge = fa
+      ? `<span class="ec-bld-faith" style="color:${esc(fa.color || '#c9a227')}" title="Храм религии «${esc(fa.name)}»">🛐 «${esc(fa.name)}»</span>`
+      : `<span class="ec-bld-faith ec-bld-faith-none" title="Религия храма не указана">🛐 без религии</span>`;
+  }
   return `<div class="ec-bld">
     <div class="ec-bld-top">
-      <span class="ec-bld-name">${esc(d.name)}</span>
+      <span class="ec-bld-name">${esc(d.name)}${faithBadge}</span>
       <button class="ec-bld-del" title="Снести" onclick="ecDemolish('${b.id}')">✕</button>
     </div>
     <div class="ec-slots" title="${b.slots_open} / ${EC_MAX_SLOTS} слотов открыто">${dots}</div>
@@ -5794,11 +6321,14 @@ function ecBuildPicker(colonyId) {
   const free = _ecBuildFree(colonyId);
   if (free <= 0) { toast('Нет свободных ячеек на планете', 'err'); return; }
   const gc = EC.eco.gc || 0;
-  const hasFaith = !!(EC.faith && EC.faith.faith);   // храм доступен только исповедующим веру
+  const myFaiths = (EC.faith && EC.faith.faiths) || [];        // мультивера: исповедуемые религии
+  const hasFaith = myFaiths.length > 0;                        // храм доступен только исповедующим веру
   const cards = EC_ORDER.filter(t => t !== 'temple' || hasFaith).map(t => {
     const d = EC_BUILD[t]; const cost = ecBuildCost(d.cost); const afford = gc >= cost;
     const catLabel = d.cat === 'civ' ? 'Гражд.' : d.cat === 'faith' ? 'Вера' : 'Воен.';
-    return `<button class="ec-bp-card ec-bp-${d.cat}${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecBuildConfirm('${colonyId}','${t}')">
+    // мультивера: для храма сперва выбираем веру (если их несколько); иначе сразу подтверждение
+    const act = t === 'temple' ? `ecBuildTempleFaith('${colonyId}')` : `ecBuildConfirm('${colonyId}','${t}')`;
+    return `<button class="ec-bp-card ec-bp-${d.cat}${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="${act}">
       <span class="ec-bp-ic">${EC_BLD_ICON[t] || '⌂'}</span>
       <span class="ec-bp-info">
         <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-${d.cat}">${catLabel}</span></span>
@@ -5821,11 +6351,44 @@ function ecBuildPicker(colonyId) {
   </div>`;
 }
 
-// Шаг 2 — подтверждение выбранной постройки
-function ecBuildConfirm(colonyId, btype) {
+// Шаг 1.5 (только храм) — выбор веры, чьим будет храм. Если вера одна — пропускаем.
+function ecBuildTempleFaith(colonyId) {
+  const myFaiths = (EC.faith && EC.faith.faiths) || [];
+  if (myFaiths.length <= 1) { ecBuildConfirm(colonyId, 'temple', myFaiths[0] && myFaiths[0].id); return; }
+  const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return;
+  const cards = myFaiths.map(f => {
+    const fc = esc(f.color || '#c9a227');
+    const roleTxt = f.role === 'founder' ? '👑 ваша' : f.role === 'recognized' ? '🕊 признана' : '🙏 принята';
+    return `<button class="ec-bp-card ec-bp-faith" onclick="ecBuildConfirm('${colonyId}','temple','${f.id}')">
+      <span class="ec-bp-ic" style="color:${fc}">🛐</span>
+      <span class="ec-bp-info">
+        <span class="ec-bp-row1"><span class="ec-bp-name" style="color:${fc}">«${esc(f.name)}»</span><span class="ec-bp-cat ec-bp-cat-faith">${roleTxt}</span></span>
+        <span class="ec-bp-desc">Храм этой веры · паства ${ecNum(f.flock || 0)} слот(ов)</span>
+      </span>
+      <span class="ec-bp-cost">→</span>
+    </button>`;
+  }).join('');
+  _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
+    <div class="ec-bp-modal" role="dialog" aria-modal="true">
+      <div class="ec-bp-hd">
+        <div class="ec-bp-hd-t"><span class="ec-bp-hd-ic">🛐</span><span>Храм какой веры?</span></div>
+        <button class="ec-bp-x" title="Закрыть" onclick="ecBuildClose()">✕</button>
+      </div>
+      <div class="ec-bp-meta"><span>🪐 ${esc(colony.planet_name || 'Колония')}</span><span>Выберите религию — она будет указана у храма</span></div>
+      <div class="ec-bp-grid">${cards}</div>
+      <div class="ec-bp-foot"><button class="btn btn-gh btn-sm" onclick="ecBuildPicker('${colonyId}')">← Назад к списку</button></div>
+    </div>
+  </div>`;
+}
+
+// Шаг 2 — подтверждение выбранной постройки (faithId — только для храма)
+function ecBuildConfirm(colonyId, btype, faithId) {
   const d = EC_BUILD[btype]; if (!d) return;
   const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return;
   const cost = ecBuildCost(d.cost); const after = (EC.eco.gc || 0) - cost;
+  const fa = faithId ? (EC.faithById[faithId] || null) : null;
+  const faithRow = (btype === 'temple' && fa) ? `<div class="ec-bp-cf-row"><span>🛐 Религия</span><b style="color:${esc(fa.color || '#c9a227')}">«${esc(fa.name)}»</b></div>` : '';
+  const fArg = faithId ? `,'${faithId}'` : '';
   _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
     <div class="ec-bp-modal ec-bp-cf" role="dialog" aria-modal="true">
       <div class="ec-bp-cf-ic ec-bp-${d.cat}">${EC_BLD_ICON[btype] || '⌂'}</div>
@@ -5834,20 +6397,21 @@ function ecBuildConfirm(colonyId, btype) {
       <div class="ec-bp-cf-howto">${esc(EC_BLD_HOWTO[btype] || '')}</div>
       <div class="ec-bp-cf-rows">
         <div class="ec-bp-cf-row"><span>🪐 Планета</span><b>${esc(colony.planet_name || 'Колония')}</b></div>
+        ${faithRow}
         <div class="ec-bp-cf-row"><span>💰 Стоимость</span><b>${ecNum(cost)} ГС</b></div>
         <div class="ec-bp-cf-row"><span>⏳ Срок</span><b>1 игровой день</b></div>
         <div class="ec-bp-cf-row"><span>🏦 Казна после</span><b class="${after < 0 ? 'ec-warn' : ''}">${ecNum(after)} ГС</b></div>
       </div>
       <div class="ec-bp-cf-act">
-        <button class="btn btn-gh btn-sm" onclick="ecBuildPicker('${colonyId}')">← Назад к списку</button>
-        <button class="btn btn-gd btn-sm" onclick="ecBuildDo('${colonyId}','${btype}')">✓ Построить за ${ecNum(cost)} ГС</button>
+        <button class="btn btn-gh btn-sm" onclick="${btype === 'temple' ? `ecBuildTempleFaith('${colonyId}')` : `ecBuildPicker('${colonyId}')`}">← Назад</button>
+        <button class="btn btn-gd btn-sm" onclick="ecBuildDo('${colonyId}','${btype}'${fArg})">✓ Построить за ${ecNum(cost)} ГС</button>
       </div>
     </div>
   </div>`;
 }
 
 // Шаг 3 — собственно постройка (отложенный проект, 1 ход)
-async function ecBuildDo(colonyId, btype) {
+async function ecBuildDo(colonyId, btype, faithId) {
   if (EC.busy) return;
   const d = EC_BUILD[btype]; if (!d) return;
   const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return;
@@ -5856,7 +6420,7 @@ async function ecBuildDo(colonyId, btype) {
   if (used + pending >= (colony.cells || EC_DEFAULT_CELLS)) { toast('Нет свободных ячеек на планете', 'err'); ecBuildClose(); return; }
   EC.busy = true;
   try {
-    await ecRpc('economy_build', { p_colony_id: colonyId, p_btype: btype });
+    await ecRpc('economy_build', { p_colony_id: colonyId, p_btype: btype, p_faith_id: (btype === 'temple' ? (faithId || null) : null) });
     ecBuildClose();
     toast(d.name + ' — строительство начато (1 день)', 'ok');
     await ecReloadPaint();
@@ -5933,4 +6497,18 @@ async function ecAbandon(colonyId) {
   if (!confirm('Бросить колонию «' + (c.planet_name || '') + '»? Все её постройки будут потеряны.')) return;
   try { await ecRpc('economy_abandon', { p_colony_id: colonyId }); toast('Колония оставлена', 'inf'); await ecReloadPaint(); }
   catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+}
+
+// Показать ТТХ корабля или дивизии
+function ecShowUnitSpecs(unitName, category) {
+  if (!unitName) return;
+  const found = pages.find(p => (p.title || p.name || '') === unitName);
+  if (!found) { toast('Данные юнита не найдены', 'err'); return; }
+  if (typeof showUnitDrawer === 'function') {
+    showUnitDrawer(unitName, found.slug, category === 'ship' ? 'corvette' : 'peh');
+  } else if (typeof uShowDetail === 'function') {
+    uShowDetail(unitName, found.slug, category === 'ship' ? 'corvette' : 'peh', '');
+  } else {
+    go(found.slug);
+  }
 }
