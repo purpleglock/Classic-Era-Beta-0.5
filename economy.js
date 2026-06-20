@@ -6499,15 +6499,57 @@ async function ecAbandon(colonyId) {
   catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
 }
 
-// Показать ТТХ корабля или дивизии
+// Показать ТТХ корабля или дивизии из боевого состава.
+// Юниты в ростере — это проекты конструктора (EC.designs = faction_units),
+// поэтому переиспользуем готовую модалку конструктора cnViewUnit.
 function ecShowUnitSpecs(unitName, category) {
   if (!unitName) return;
-  const found = pages.find(p => (p.title || p.name || '') === unitName);
-  if (!found) { toast('Данные юнита не найдены', 'err'); return; }
-  const slotType = category === 'ship' ? 'corvette' : 'peh';
-  if (typeof window.showUnitDrawer === 'function') {
-    window.showUnitDrawer(unitName, found.slug, slotType);
-  } else {
-    go(found.slug);
+  // Ищем проект по имени + категории; если переименовали — по одному имени.
+  const designs = EC.designs || [];
+  const design = designs.find(d => d.name === unitName && d.category === category)
+              || designs.find(d => d.name === unitName);
+  if (design && typeof cnViewUnit === 'function' && typeof CN !== 'undefined') {
+    // Подсовываем проект в каталог конструктора, чтобы cnViewUnit нашёл его по id.
+    CN.catUnits = CN.catUnits || [];
+    if (!CN.catUnits.some(u => u.id === design.id)) CN.catUnits.push(design);
+    cnViewUnit(design.id);
+    return;
   }
+  // Фолбэк: проект удалён/недоступен — покажем минимальную карточку из снапшота.
+  ecShowUnitSpecsFallback(unitName, category, design);
+}
+
+// Запасная карточка ТТХ, если исходный проект конструктора недоступен.
+function ecShowUnitSpecsFallback(unitName, category, design) {
+  const sm = (design && design.summary) || {};
+  const card = (design && design.card_text) || '';
+  const rows = [];
+  if (sm.hp != null)     rows.push(['HP', ecNum(sm.hp)]);
+  if (sm.armor != null)  rows.push(['Броня', ecNum(sm.armor)]);
+  if (sm.shield)         rows.push(['Щит', ecNum(sm.shield)]);
+  if (sm.speed != null)  rows.push(['Скорость', ecNum(sm.speed)]);
+  if (sm.on != null)     rows.push(['ОН', sm.on]);
+  if (sm.cost != null)   rows.push(['Цена', ecNum(sm.cost) + ' ГС']);
+  const statsHtml = rows.length
+    ? `<div class="ec-treasury" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin:12px 0">
+        ${rows.map(([k, v]) => `<div class="ec-res"><span class="ec-res-k">${esc(k)}</span><span class="ec-res-v" style="font-size:15px">${esc(String(v))}</span></div>`).join('')}
+      </div>` : '';
+  const specHtml = card ? `<pre class="cn-spec">${esc(card)}</pre>` : '';
+  const body = (statsHtml || specHtml)
+    ? `${statsHtml}${specHtml}`
+    : `<div class="ec-empty" style="margin:12px 0">Подробные характеристики недоступны — проект больше не существует в конструкторе.</div>`;
+  let ov = document.getElementById('ec-unit-spec-ov');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'ec-unit-spec-ov'; ov.className = 'cn-modal-ov';
+    ov.onclick = e => { if (e.target === ov) ov.classList.remove('show'); };
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = `<div class="cn-modal">
+    <button class="cn-modal-x" onclick="document.getElementById('ec-unit-spec-ov').classList.remove('show')">✕</button>
+    <div class="cn-modal-bar"></div>
+    <div class="cn-modal-name">${esc(unitName)}</div>
+    <div class="cn-card-fac">${category === 'ship' ? '🚀 Корабль' : '⚔ Дивизия'}</div>
+    ${body}
+  </div>`;
+  ov.classList.add('show');
 }
