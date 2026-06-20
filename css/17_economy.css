@@ -148,10 +148,16 @@
 .ec-ih-net.pos { color: var(--gd, #5fc38a); }
 .ec-ih-net.neg { color: var(--err, #e06a6a); }
 .ec-ih-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.ec-ih-chip { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--b2); border: 1px solid var(--w2); color: var(--t2); white-space: nowrap; }
+.ec-ih-chip { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--b2); border: 1px solid var(--w2); color: var(--t2); white-space: nowrap; cursor: help; }
 .ec-ih-chip.neg { color: var(--err, #e06a6a); }
 .ec-ih-chip.sci { color: var(--pu, #a78bdc); }
 .ec-ih-chip.res { color: var(--ok, #5fc38a); }
+/* Легенда иконок журнала: что значит каждый смайлик */
+.ec-ih-detail { margin-top: 2px; }
+.ec-ih-legend { display: flex; flex-wrap: wrap; gap: 5px 14px; margin: 4px 0 10px; padding: 9px 11px; background: var(--b1); border: 1px dashed var(--w2); border-radius: var(--radius-md); }
+.ec-ih-leg { font-size: 11px; color: var(--t3); white-space: nowrap; }
+.ec-ih-leg b { font-size: 13px; margin-right: 2px; }
+.ec-ovx-stat-cap { font-size: 14px; color: var(--t4); font-weight: 600; }
 @media (max-width: 640px) {
   .ec-cover { min-height: 0; border-radius: 12px; margin-bottom: 14px; }
   .ec-cover-inner { padding: 14px 14px 14px; }
@@ -1404,7 +1410,95 @@
 /* Полоски мощностей — чуть выразительнее */
 .ec-ovx-bar { height: 7px; background: var(--b0, #07090d); box-shadow: inset 0 0 0 1px var(--w1); }
 
-/* ── ДОСТИЖЕНИЯ (ачивки, путь стоика) — только во вкладке «Обзор» ── */
+/* ── ДОСТИЖЕНИЯ (ачивки, путь стоика) — отдельная вкладка «Зал достижений» ── */
+.ec-ach-tab { max-width: 1180px; margin: 0 auto; }
+
+/* Геройская шапка зала достижений */
+.ec-ach-hero {
+  position: relative; overflow: visible;
+  display: flex; align-items: center; gap: 28px;
+  padding: 26px 28px; margin-bottom: 26px;
+  border: 1px solid color-mix(in srgb, var(--gd, #c9a24b) 38%, var(--w2));
+  border-radius: 20px;
+  background:
+    radial-gradient(120% 160% at 88% -20%, color-mix(in srgb, var(--gd, #c9a24b) 22%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in srgb, var(--b2) 78%, var(--gd, #c9a24b) 22%), var(--b1));
+  box-shadow: 0 0 44px -14px color-mix(in srgb, var(--gd, #c9a24b) 55%, transparent),
+              inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent);
+}
+.ec-ach-hero-bg {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  opacity: .18; pointer-events: none; border-radius: 20px;
+  z-index: 0; filter: brightness(.85) saturate(.6);
+}
+.ec-ach-hero-glow {
+  position: absolute; inset: -40% -10% auto auto; width: 320px; height: 320px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--gd, #c9a24b) 28%, transparent), transparent 70%);
+  pointer-events: none; filter: blur(8px); z-index: 0;
+}
+.ec-ach-hero-ring { position: relative; z-index: 1; flex-shrink: 0; }
+.ec-ach-hero-main { position: relative; z-index: 1; flex: 1; min-width: 0; }
+.ec-ach-hero-kick {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: .18em; text-transform: uppercase;
+  color: var(--gd, #c9a24b);
+}
+.ec-ach-hero-title {
+  margin: 6px 0 14px; font-family: var(--font-display); font-weight: 800;
+  font-size: 27px; letter-spacing: .02em; line-height: 1.1; color: var(--t1);
+  text-shadow: 0 2px 14px color-mix(in srgb, var(--gd, #c9a24b) 30%, transparent);
+}
+.ec-ach-hero-bar { max-width: 480px; margin-bottom: 16px; }
+.ec-ach-hero-bar .ec-ovx-bar { height: 9px; border-radius: 6px; }
+.ec-ach-hero-stats { display: flex; flex-wrap: wrap; gap: 28px; }
+.ec-ach-hs { display: flex; flex-direction: column; gap: 3px; }
+.ec-ach-hs-v {
+  font-family: var(--font-display); font-weight: 800; font-size: 24px; line-height: 1;
+  color: var(--t1);
+}
+.ec-ach-hs-of { font-size: 14px; font-weight: 600; color: var(--t3); }
+.ec-ach-hs-k {
+  font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--t3);
+}
+
+/* Кольцо-прогресс */
+.ec-ach-ring { display: block; }
+.ec-ach-ring-bg { fill: none; stroke: color-mix(in srgb, var(--w1) 70%, transparent); stroke-width: 8; }
+.ec-ach-ring-fg {
+  fill: none; stroke: var(--gd, #c9a24b); stroke-width: 8; stroke-linecap: round;
+  transition: stroke-dashoffset .6s cubic-bezier(.22,1,.36,1);
+}
+.ec-ach-ring-pct {
+  fill: var(--t1); font-family: var(--font-display); font-weight: 800; font-size: 22px;
+  text-anchor: middle; dominant-baseline: middle;
+}
+.ec-ach-ring-sub {
+  fill: var(--t3); font-family: var(--font-mono); font-size: 8px; letter-spacing: .14em;
+  text-anchor: middle; dominant-baseline: middle; text-transform: uppercase;
+}
+
+/* Карточка-зазывалка в «Обзоре» */
+.ec-ach-teaser {
+  display: flex; align-items: center; gap: 20px; cursor: pointer;
+  border-color: color-mix(in srgb, var(--gd, #c9a24b) 30%, var(--w2));
+  transition: border-color .2s, box-shadow .2s, transform .12s;
+}
+.ec-ach-teaser:hover {
+  border-color: color-mix(in srgb, var(--gd, #c9a24b) 55%, var(--w2));
+  box-shadow: 0 0 26px -10px color-mix(in srgb, var(--gd, #c9a24b) 50%, transparent);
+}
+.ec-ach-teaser-ring { flex-shrink: 0; }
+.ec-ach-teaser-ring .ec-ach-ring { width: 78px; height: 78px; }
+.ec-ach-teaser-main { flex: 1; min-width: 0; }
+.ec-ach-teaser-bar { margin: 9px 0; }
+.ec-ach-teaser-line { font-size: 12px; color: var(--t3); }
+.ec-ach-teaser-line b { color: var(--t1); font-family: var(--font-mono); }
+.ec-ach-teaser-go {
+  flex-shrink: 0; font-family: var(--font-display); font-weight: 700; font-size: 12px;
+  letter-spacing: .04em; color: var(--gd, #c9a24b);
+}
+
 .ec-ach-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px;
 }
@@ -1612,6 +1706,11 @@
   .ec-ach-chip { font-size: 10px; padding: 6px 9px; gap: 5px; }
   .ec-ach-chip-ic { font-size: 13px; }
   .ec-ach-cat-l { font-size: 12px; }
+  .ec-ach-hero { flex-direction: column; text-align: center; gap: 14px; padding: 20px 16px; }
+  .ec-ach-hero-title { font-size: 21px; }
+  .ec-ach-hero-bar { margin: 0 auto 14px; }
+  .ec-ach-hero-stats { justify-content: center; gap: 20px; }
+  .ec-ach-teaser { flex-direction: column; text-align: center; gap: 12px; }
 }
 
 /* ══ ВЕРА — сакральный интерфейс ════════════════════════════

@@ -922,7 +922,7 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['trade', '⇄', 'Торговля'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['news', '📰', 'Новости']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['trade', '⇄', 'Торговля'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
     : EC.tab === 'milbuild' ? ecTabMilBuild()
@@ -930,6 +930,7 @@ function ecPaintCabinet() {
     : EC.tab === 'trade' ? ecTabTrade()
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'faith' ? ecTabFaith() : EC.tab === 'intel' ? ecTabIntel()
     : EC.tab === 'raids' ? ecTabRaids()
+    : EC.tab === 'achievements' ? ecTabAchievements()
     : EC.tab === 'news' ? ecTabNews() : ecTabColonies();
   const img = (EC.app && (EC.app.herald_url || EC.app.image_url)) || '';
   const coverBg = img
@@ -991,8 +992,8 @@ function ecOvState() {
 }
 function ecOvExpanded(key) { return !!ecOvState().exp[key]; }
 function ecOvToggle(key) { const s = ecOvState(); s.exp[key] = !s.exp[key]; ecPaintCabinet(); }
-function ecOvSetChart(metric) { ecOvState().chart = metric; ecPaintCabinet(); }
-function ecOvSetRange(n) { ecOvState().range = n; ecPaintCabinet(); }
+function ecOvSetChart(metric) { ecOvState().chart = metric; ecStatRepaint(); }
+function ecOvSetRange(n) { ecOvState().range = n; ecStatRepaint(); }
 // Заголовок раскрываемой секции: стрелка + текст; клик — разворот/сворот детального блока.
 function ecOvFold(key, label, sub) {
   const open = ecOvExpanded(key);
@@ -1286,20 +1287,33 @@ const EC_STAT_METRICS = [
   { id: 'sources', name: 'Доходы по статьям', ic: '📊', color: '',              type: 'stack', unit: 'ГС' },
   { id: 'mined',   name: 'Добыча',       ic: '⛏', color: 'var(--te)',          type: 'bar',   field: r => +r.mined || 0,    unit: 'ед.' },
   { id: 'sci',     name: 'Наука',        ic: '🔬', color: 'var(--pu)',          type: 'line',  field: r => +r.sci || 0,      unit: 'ОН' },
-  { id: 'agents',  name: 'Агенты',       ic: '🕵', color: 'var(--ec-amb,#e0a030)', type: 'bar', field: r => +r.agents_n || 0, unit: 'шт' },
+];
+// Легенда иконок журнала: эмодзи → расшифровка (чипы в журнале сами по себе непонятны).
+const EC_STAT_LEGEND = [
+  ['🏭', 'фабрики и торговые хабы'], ['🚚', 'караваны'], ['📈', 'товарная биржа'],
+  ['📤', 'экспорт добычи'], ['📜', 'апкип торговой политики (расход)'], ['⛏', 'добыто на склад'], ['🔬', 'наука'],
 ];
 function ecStatLabel(r) {
   const dt = r.tick_at ? new Date(r.tick_at) : null;
   return dt ? dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '—';
 }
+// Outer-обёртка со стабильным id — содержимое перерисовываем на месте (без полного
+// перерендера кабинета и прыжка скролла) при смене метрики/периода/журнала.
 function ecStatsPanel() {
+  return `<div class="ec-ovx-panel ec-stat-panel" id="ec-stat-panel" style="grid-column:1/-1">${ecStatsInner()}</div>`;
+}
+function ecStatRepaint() {
+  const el = document.getElementById('ec-stat-panel');
+  if (el) el.innerHTML = ecStatsInner(); else if (typeof ecPaintCabinet === 'function') ecPaintCabinet();
+}
+function ecStatToggleLog() { const s = ecOvState(); s.exp.statlog = !s.exp.statlog; ecStatRepaint(); }
+function ecStatsInner() {
   const hAll = (EC.incomeHistory || []).slice();   // desc (новые сверху)
-  if (!hAll.length) return `<div class="ec-ovx-panel" style="grid-column:1/-1">
-    <div class="ec-ovx-panel-t">📈 Статистика фракции <span class="ec-ovx-panel-sub">доходы · расходы · добыча по ходам</span></div>
-    <div class="ec-ovx-empty">Истории пока нет — она появится после первого начисления (тика). Сделайте ход, и здесь будут графики доходов, расходов и добычи по времени.</div></div>`;
+  if (!hAll.length) return `<div class="ec-ovx-panel-t">📈 Статистика фракции <span class="ec-ovx-panel-sub">доходы · расходы · добыча по ходам</span></div>
+    <div class="ec-ovx-empty">Истории пока нет — она появится после первого начисления (тика). Сделайте ход, и здесь будут графики доходов, расходов и добычи по времени.</div>`;
   const st = ecOvState();
-  const range = st.range || 14;
-  // Берём последние N (по убыванию), затем разворачиваем в хронологический порядок для графика.
+  // Период не может быть больше, чем накоплено ходов — иначе кнопки «30/всё» выглядят бесполезными.
+  let range = st.range || 14;
   const slice = (range >= 999 ? hAll : hAll.slice(0, range)).slice().reverse();
   const labels = slice.map(ecStatLabel);
   const metric = EC_STAT_METRICS.find(m => m.id === st.chart) || EC_STAT_METRICS[0];
@@ -1307,9 +1321,9 @@ function ecStatsPanel() {
   // Кнопки выбора метрики
   const metricBtns = EC_STAT_METRICS.map(m =>
     `<button type="button" class="ec-stat-mbtn${m.id === metric.id ? ' on' : ''}" onclick="ecOvSetChart('${m.id}')">${m.ic} ${m.name}</button>`).join('');
-  // Кнопки периода
-  const ranges = [[7, '7'], [14, '14'], [30, '30'], [999, 'всё']];
-  const rangeBtns = ranges.map(([v, l]) =>
+  // Кнопки периода: прячем те, что превышают объём истории (кроме активной/«всё»).
+  const ranges = [[7, '7 ход.'], [14, '14 ход.'], [30, '30 ход.'], [999, 'всё']];
+  const rangeBtns = ranges.filter(([v]) => v >= 999 || v <= hAll.length + (range === v ? 999 : 0) || v === 7).map(([v, l]) =>
     `<button type="button" class="ec-stat-rbtn${range === v ? ' on' : ''}" onclick="ecOvSetRange(${v})">${l}</button>`).join('');
 
   // Данные графика
@@ -1345,21 +1359,21 @@ function ecStatsPanel() {
   }
 
   // Журнал тиков (свёрнут по умолчанию) — детально что/откуда за каждый ход
-  const logKey = 'statlog';
+  const open = ecOvExpanded('statlog');
+  const legend = `<div class="ec-ih-legend">${EC_STAT_LEGEND.map(([ic, t]) => `<span class="ec-ih-leg"><b>${ic}</b> ${esc(t)}</span>`).join('')}</div>`;
   const logRows = slice.slice().reverse().map(r => {   // снова новые сверху для журнала
     const net = +r.gc_net || 0;
     const dt = r.tick_at ? new Date(r.tick_at) : null;
     const when = dt ? `${dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} ${dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : '—';
-    const chip = (cond, cls, txt, title) => cond ? `<span class="ec-ih-chip${cls ? ' ' + cls : ''}" title="${esc(title)}">${txt}</span>` : '';
+    const chip = (cond, cls, txt, title) => cond ? `<span class="ec-ih-chip${cls ? ' ' + cls : ''}" data-tip="${esc(title)}">${txt}</span>` : '';
     const parts = [
-      chip(+r.gc_build, '', `🏭 +${ecNum(+r.gc_build)}`, 'Фабрики и торговые хабы'),
-      chip(+r.gc_trade, '', `🚚 +${ecNum(+r.gc_trade)}`, 'Караваны'),
-      chip(+r.gc_market, '', `📈 +${ecNum(+r.gc_market)}`, 'Товарная биржа'),
-      chip(+r.gc_export, '', `📤 +${ecNum(+r.gc_export)}`, 'Экспорт добычи'),
-      chip(+r.gc_policy, 'neg', `📜 −${ecNum(+r.gc_policy)}`, 'Апкип торговой политики'),
-      chip(+r.mined, 'res', `⛏ ${ecNum(+r.mined)}`, 'Добыто ресурсов на склад'),
-      chip(+r.sci, 'sci', `🔬 +${ecNum(+r.sci)}`, 'Наука'),
-      chip(+r.agents_n, 'agt', `🕵 +${ecNum(+r.agents_n)}`, 'Агенты'),
+      chip(+r.gc_build, '', `🏭 +${ecNum(+r.gc_build)}`, 'Гражданские фабрики и торговые хабы — основной доход ГС'),
+      chip(+r.gc_trade, '', `🚚 +${ecNum(+r.gc_trade)}`, 'Караваны — продажа и доля с поставок'),
+      chip(+r.gc_market, '', `📈 +${ecNum(+r.gc_market)}`, 'Товарная биржа — продажа ресурсов со склада за ГС'),
+      chip(+r.gc_export, '', `📤 +${ecNum(+r.gc_export)}`, 'Экспорт добычи караванами'),
+      chip(+r.gc_policy, 'neg', `📜 −${ecNum(+r.gc_policy)}`, 'Апкип торговой политики — расход ГС'),
+      chip(+r.mined, 'res', `⛏ ${ecNum(+r.mined)}`, 'Добыто ресурсов на склад за этот ход'),
+      chip(+r.sci, 'sci', `🔬 +${ecNum(+r.sci)}`, 'Очки науки получено'),
     ].filter(Boolean).join('');
     return `<div class="ec-ih-row">
         <div class="ec-ih-head">
@@ -1370,17 +1384,19 @@ function ecStatsPanel() {
       </div>`;
   }).join('');
 
-  return `<div class="ec-ovx-panel ec-stat-panel" style="grid-column:1/-1">
-    <div class="ec-ovx-panel-t">📈 Статистика фракции <span class="ec-ovx-panel-sub">${metric.ic} ${esc(metric.name)} · последние ${slice.length} ход(ов)</span></div>
+  return `<div class="ec-ovx-panel-t">📈 Статистика фракции <span class="ec-ovx-panel-sub">${metric.ic} ${esc(metric.name)} · последние ${slice.length} ход(ов)</span></div>
     <div class="ec-stat-controls">
       <div class="ec-stat-metrics">${metricBtns}</div>
       <div class="ec-stat-ranges"><span class="ec-stat-ranges-k">период:</span>${rangeBtns}</div>
     </div>
     ${chart}
     ${sumLine}
-    ${ecOvFold(logKey, '🧾 Журнал по ходам', 'детально: доход, расход, добыча за каждый тик')}
-    ${ecOvExpanded(logKey) ? `<div class="ec-ih-list">${logRows}</div>` : ''}
-  </div>`;
+    <button type="button" class="ec-fold-btn${open ? ' open' : ''}" onclick="ecStatToggleLog()">
+      <span class="ec-fold-chev">${open ? '▾' : '▸'}</span>
+      <span class="ec-fold-lbl">🧾 Журнал по ходам</span>
+      <span class="ec-fold-sub">что/откуда/когда за каждый тик</span>
+    </button>
+    ${open ? `<div class="ec-ih-detail">${legend}<div class="ec-ih-list">${logRows}</div></div>` : ''}`;
 }
 
 // Статистика за ходы — разбивка «сколько чего пришло» по статьям (income_history)
@@ -1419,7 +1435,8 @@ function ecIncomeHistoryPanel() {
 // считает сервер; здесь — только подписи, арт и порядок показа.
 // Арт игрок заливает в assets/ach/<id>.webp (см. assets/ach/_IMAGES.md);
 // если файла нет — показываем эмодзи-заглушку, вёрстка не ломается.
-// Видны ачивки ТОЛЬКО во вкладке «Обзор» (ecAchPanel ниже).
+// Ачивки живут в отдельной вкладке «Достижения» (ecTabAchievements ниже);
+// в «Обзоре» — только компактная карточка-зазывалка (ecAchOverviewTeaser).
 const EC_ACH = {
   sibi_imperare: { name: 'Власть над собой', ic: '🜍', reward: 1000,
     quote: 'Imperare sibi maximum imperium est.',
@@ -1912,8 +1929,8 @@ function ecAchFilter(key) {
   if (el) el.innerHTML = ecAchPanelInner();
 }
 
-// Внутренности панели (шапка + чипы-фильтры + секции путей). Полученные ачивки
-// идут ПЕРВЫМИ внутри каждого пути (по дате — свежие сверху), затем закрытые.
+// Внутренности панели (чипы-фильтры + секции путей) — перерисовываются при смене
+// фильтра. Полученные ачивки идут ПЕРВЫМИ внутри каждого пути (свежие сверху).
 function ecAchPanelInner() {
   const earned = new Map((EC.ach || []).map(a => [a.id, a]));
   const filt = EC.achFilter || 'all';
@@ -1948,15 +1965,79 @@ function ecAchPanelInner() {
         <span class="ec-ach-cat-n">${ecNum(g)} / ${ecNum(c.ids.length)}</span></div>
       <div class="ec-ach-grid">${cards}</div></div>`;
   }).join('');
-  return `<div class="ec-ovx-panel-t">🏆 Достижения <span class="ec-ovx-panel-sub">путь стоика · получено ${ecNum(got)} / ${ecNum(total)}</span></div>
-    <div class="ec-ach-filters">${chips}</div>
+  return `<div class="ec-ach-filters">${chips}</div>
     ${sections}`;
 }
 
-// Панель ачивок для вкладки «Обзор». Стабильный id → ecAchFilter перерисовывает
-// только её содержимое при переключении пути.
-function ecAchPanel() {
-  return `<div class="ec-ovx-panel ec-ach-panel" id="ec-ach-panel" style="grid-column:1/-1">${ecAchPanelInner()}</div>`;
+// Сводка по ачивкам для шапки «Зала достижений»: сколько получено, % и сумма наград.
+function ecAchStats() {
+  const earned = new Map((EC.ach || []).map(a => [a.id, a]));
+  const allIds = EC_ACH_ORDER.filter(id => EC_ACH[id]);
+  const got = allIds.filter(id => earned.has(id)).length, total = allIds.length;
+  const pct = total ? Math.round(got / total * 100) : 0;
+  const rewardGot = allIds.reduce((s, id) => s + (earned.has(id) ? (EC_ACH[id].reward || 0) : 0), 0);
+  return { got, total, pct, rewardGot };
+}
+
+// Кольцо-прогресс (SVG) для шапки зала достижений.
+function ecAchRing(pct) {
+  const r = 46, c = 2 * Math.PI * r, off = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+  return `<svg class="ec-ach-ring" viewBox="0 0 110 110" width="110" height="110" aria-hidden="true">
+    <circle class="ec-ach-ring-bg" cx="55" cy="55" r="${r}"></circle>
+    <circle class="ec-ach-ring-fg" cx="55" cy="55" r="${r}"
+      stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
+      transform="rotate(-90 55 55)"></circle>
+    <text class="ec-ach-ring-pct" x="55" y="52">${pct}%</text>
+    <text class="ec-ach-ring-sub" x="55" y="70">пройдено</text>
+  </svg>`;
+}
+
+// Полноценная вкладка «Достижения» — зал славы: героическая шапка + фильтры + секции.
+function ecTabAchievements() {
+  const s = ecAchStats();
+  const earned = new Map((EC.ach || []).map(a => [a.id, a]));
+  const allIds = EC_ACH_ORDER.filter(id => EC_ACH[id]);
+  let lastId = null;
+  if (earned.size > 0) {
+    const lastEarned = [...earned.entries()].sort((a, b) => new Date(b[1].earned_at || 0) - new Date(a[1].earned_at || 0))[0];
+    lastId = lastEarned[0];
+  } else if (allIds.length > 0) {
+    lastId = allIds[0];
+  }
+  const bgImg = lastId ? `<img class="ec-ach-hero-bg" src="assets/ach/${esc(lastId)}.webp" alt="" loading="lazy" onerror="this.style.display='none'">` : '';
+  const hero = `<div class="ec-ach-hero">
+    <div class="ec-ach-hero-glow"></div>
+    ${bgImg}
+    <div class="ec-ach-hero-ring">${ecAchRing(s.pct)}</div>
+    <div class="ec-ach-hero-main">
+      <div class="ec-ach-hero-kick">🏆 Зал достижений · путь стоика</div>
+      <h2 class="ec-ach-hero-title">${esc(EC.app && EC.app.name || 'Моя фракция')}</h2>
+      <div class="ec-ach-hero-bar">${ecOvBar(s.got, s.total, s.got >= s.total ? 'fill-gc' : 'fill-amb')}</div>
+      <div class="ec-ach-hero-stats">
+        <div class="ec-ach-hs"><span class="ec-ach-hs-v">${ecNum(s.got)}<span class="ec-ach-hs-of">/${ecNum(s.total)}</span></span><span class="ec-ach-hs-k">получено</span></div>
+        <div class="ec-ach-hs"><span class="ec-ach-hs-v ec-ovx-c-gc">+${ecNum(s.rewardGot)}</span><span class="ec-ach-hs-k">ГС наград</span></div>
+        <div class="ec-ach-hs"><span class="ec-ach-hs-v">${ecNum(s.total - s.got)}</span><span class="ec-ach-hs-k">осталось</span></div>
+      </div>
+    </div>
+  </div>`;
+  return `<div class="ec-ach-tab">
+    ${hero}
+    <div id="ec-ach-panel">${ecAchPanelInner()}</div>
+  </div>`;
+}
+
+// Компактная карточка-зазывалка в «Обзоре» — прогресс + переход во вкладку «Достижения».
+function ecAchOverviewTeaser() {
+  const s = ecAchStats();
+  return `<div class="ec-ovx-panel ec-ach-teaser ec-ov-clk" style="grid-column:1/-1" onclick="ecSetTab('achievements')">
+    <div class="ec-ach-teaser-ring">${ecAchRing(s.pct)}</div>
+    <div class="ec-ach-teaser-main">
+      <div class="ec-ovx-panel-t" style="margin:0">🏆 Достижения <span class="ec-ovx-panel-sub">путь стоика</span></div>
+      <div class="ec-ach-teaser-bar">${ecOvBar(s.got, s.total, s.got >= s.total ? 'fill-gc' : 'fill-amb')}</div>
+      <div class="ec-ach-teaser-line">получено <b>${ecNum(s.got)}</b> / ${ecNum(s.total)} · награды <b class="ec-ovx-c-gc">+${ecNum(s.rewardGot)}</b> ГС</div>
+    </div>
+    <div class="ec-ach-teaser-go">Открыть зал →</div>
+  </div>`;
 }
 
 function ecTabOverview() {
@@ -2030,7 +2111,8 @@ function ecTabOverview() {
   // Прочие потоки (не деньги) — компактной строкой, без дублирования панелей
   const flows = [];
   if (inc.science) flows.push(`<span class="ec-bdg-flow" onclick="ecSetTab('research')"><span class="ec-bdg-flow-ic">🔬</span><b class="ec-ovx-c-sci">+${ecNum(inc.science)}</b> ОН/сут</span>`);
-  if (inc.agents)  flows.push(`<span class="ec-bdg-flow" onclick="ecSetTab('intel')"><span class="ec-bdg-flow-ic">🕵</span><b class="ec-ovx-c-agt">+${ecNum(inc.agents)}</b> агент/сут</span>`);
+  // Агенты НЕ выдаются автоматически — они нанимаются на рынке рекрутов (Центр Спецслужб задаёт потолок).
+  // Поэтому никакого «+N агент/сут» в казне не показываем.
   if (gcPct) flows.push(`<span class="ec-bdg-flow"><span class="ec-bdg-flow-ic">${gcPct > 0 ? '⚖' : '⚠'}</span>доктрина ${gcPct > 0 ? '+' : ''}${gcPct}% ГС</span>`);
   const hasBudget = moneyInc.length || marketSlots || _resOutTotal || flows.length;
   // ── Раскрываемая детальная справка по казне: формула каждого источника + состав (donut) ──
@@ -2051,7 +2133,7 @@ function ecTabOverview() {
       ${composition ? `<div class="ec-bdg-dt-sect">Состав дохода</div>${composition}` : ''}
       <div class="ec-bdg-dt-sect">Формулы по источникам</div>
       <div class="ec-bdg-dt-list">${detRows.join('') || '<div class="ec-ovx-hint">Денежных источников нет.</div>'}</div>
-      ${_resOutTotal ? `<div class="ec-bdg-dt-warn">📤 Вывоз ресурсов караванами: −${ecNum(_resOutTotal)} ед/сут (${esc(_resOutTxt)}) — это расход сырья, не денег.</div>` : ''}
+      ${_resOutTotal ? `<div class="ec-bdg-dt-warn">📤 Вывоз ресурсов караванами: −${ecNum(_resOutTotal)} ед/сут (${_resOutTxt}) — это расход сырья, не денег.</div>` : ''}
       ${inc.debuff ? `<div class="ec-bdg-dt-warn">🔥 Дестабилизация режет денежный доход на ${Math.round(inc.debuff * 100)}% — уже учтено в суммах.</div>` : ''}
       <div class="ec-ovx-hint">Доход начисляется в конце каждого хода (тика). Доктрина даёт ×${gcMul.toFixed(2)} к ГС-потокам${gcMulPct ? ` (${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''}. Содержания армии/зданий нет — постройка тратит ГС разово.</div>
     </div>`;
@@ -2131,7 +2213,7 @@ function ecTabOverview() {
   const resPanel = `<div class="ec-ovx-panel">
     <div class="ec-ovx-panel-t">⛏ Ресурсы <span class="ec-ovx-panel-sub">добыча · склад · цена · источники</span></div>
     ${capBar}
-    ${resRows.length ? resSummary + `<div class="ec-res-cards">${resRows.map(resCard).join('')}</div>` : '<div class="ec-ovx-res-empty">Ресурсов нет. Постройте «Добывающий завод» в колонии и назначьте слотам месторождения планеты — добыча начисляется в конце каждого хода.</div>'}
+    ${resRows.length ? resSummary + ecOvFold('rescards', '📦 Все ресурсы', `${resRows.length} вид(ов) — добыча · склад · цена · источники`) + (ecOvExpanded('rescards') ? `<div class="ec-res-cards">${resRows.map(resCard).join('')}</div>` : '') : '<div class="ec-ovx-res-empty">Ресурсов нет. Постройте «Добывающий завод» в колонии и назначьте слотам месторождения планеты — добыча начисляется в конце каждого хода.</div>'}
     <div class="ec-ovx-hint">Добыча = редкость месторождения × его богатство × доктрина, начисляется в конце каждого хода (тика). Сверх ёмкости склада ресурсы не копятся.</div>
   </div>`;
 
@@ -2223,16 +2305,18 @@ function ecTabOverview() {
   const qCnt = Array.isArray(EC.eco.research_queue) ? EC.eco.research_queue.length : 0;
   const activeHtml = activeProj
     ? `<div class="ec-ovx-active">🔬 Исследуется: <b>${esc(activeName)}</b>${allSlots.length > 1 ? ` <span class="ec-hint">+ ещё ${allSlots.length - 1}</span>` : ''}${qCnt ? ` <span class="ec-hint">· 🕓 ${qCnt} в очереди</span>` : ''}${activeSlot && activeSlot.r ? ecProgressISO(null, activeSlot.r, 1, 'готово в конце хода') : ''}</div>` : '';
-  const sciInc = inc.science || 0, agInc = inc.agents || 0;
+  const sciInc = inc.science || 0;
+  const spyAg = EC.spyAgency || { cap: 0, hired: 0 };
+  const agCap = spyAg.cap || 0, agHired = spyAg.hired || agentsTot;
   const sci = `<div class="ec-ovx-panel">
-    <div class="ec-ovx-panel-t">🔬 Наука · Дипломатия · Разведка <span class="ec-ovx-panel-sub">${sciInc ? '+' + ecNum(sciInc) + ' ОН/сут' : 'нет науки'}${agInc ? ' · +' + ecNum(agInc) + ' агент/сут' : ''}</span></div>
+    <div class="ec-ovx-panel-t">🔬 Наука · Дипломатия · Разведка <span class="ec-ovx-panel-sub">${sciInc ? '+' + ecNum(sciInc) + ' ОН/сут' : 'нет науки'}</span></div>
     ${activeHtml}
     <div class="ec-ovx-stat ec-ovx-stat-wide ec-ov-clk" onclick="ecSetTab('research')">
       <div class="ec-ovx-stat-k">Изучено технологий</div>
       <div class="ec-ovx-stat-barline"><b class="ec-ovx-c-sci">${ecNum(researchDone)}</b> / ${ecNum(researchTotal)} ${ecOvBar(researchDone, researchTotal, 'fill-sci')}</div>
     </div>
     <div class="ec-ovx-stat-grid" style="margin-top:10px">
-      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('intel')"><div class="ec-ovx-stat-v">${ecNum(agentsTot)}</div><div class="ec-ovx-stat-k">Агенты всего</div></div>
+      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('intel')" data-tip="Нанятые оперативники / потолок (Центр Спецслужб). Агенты нанимаются на рынке рекрутов, не выдаются автоматически."><div class="ec-ovx-stat-v">${ecNum(agHired)}<span class="ec-ovx-stat-cap">/${ecNum(agCap)}</span></div><div class="ec-ovx-stat-k">Агенты (найм)</div></div>
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('intel')"><div class="ec-ovx-stat-v ec-ovx-c-agt">${ecNum(agentsCI)}</div><div class="ec-ovx-stat-k">Контрразведка</div></div>
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('trade')"><div class="ec-ovx-stat-v">${ecNum(myRoutes)}</div><div class="ec-ovx-stat-k">Торг. пути</div></div>
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('diplomacy')"><div class="ec-ovx-stat-v">${ecNum(myLoans)}</div><div class="ec-ovx-stat-k">Займы</div></div>
@@ -2248,14 +2332,15 @@ function ecTabOverview() {
       if (lord) parts.push(`сюзерен: <b>${esc(lord.overlord_name)}</b>`);
       return parts.length ? `<div class="ec-ovx-hint ec-ov-clk" onclick="ecSetTab('diplomacy')">${parts.join(' · ')}</div>` : '';
     })()}
-    <div class="ec-ovx-hint">Наука (ОН/сут) — со слотов «Научного Института», копится и тратится на технологии (готовы в конце хода). Агенты (раз/сут) — с разведслужбы; ведут операции и контрразведку во вкладке «Разведка». Торг. пути и займы создаются в «Торговле»/«Дипломатии».</div>
+    <div class="ec-ovx-hint">Наука (ОН/сут) — со слотов «Научного Института», копится и тратится на технологии (готовы в конце хода). Агенты <b>нанимаются на рынке рекрутов</b> во вкладке «Разведка» (Центр Спецслужб задаёт потолок) — автоматически не выдаются. Торг. пути и займы создаются в «Торговле»/«Дипломатии».</div>
   </div>`;
 
   const raceNote = `<div class="ec-race-note">Раса: <b>${esc(EC.app.race || '—')}</b> · ${ecIsRobot()
     ? 'родные миры: <b>все типы планет</b> — колонизация без терраформа (бонус роботов).'
     : 'родные миры: ' + ((EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—') + '. Чужие типы планет — через терраформ.'}</div>`;
 
-  return `<div class="ec-ovx-grid">${budget}${ecStatsPanel()}${resPanel}${empire}${army}${sci}${ecDoctrineHtml()}${ecAchPanel()}</div>${raceNote}
+  const achTeaser = ecAchOverviewTeaser();
+  return `<div class="ec-ovx-grid">${budget}${ecStatsPanel()}${resPanel}${empire}${army}${sci}${ecDoctrineHtml()}${achTeaser}</div>${raceNote}
     <div class="ec-ov-links">
       <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
       <button class="btn btn-gh btn-sm" onclick="go('cat-ships')">🚀 Каталоги</button>
