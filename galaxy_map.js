@@ -1918,9 +1918,19 @@ function gmmNN(sys) {
   sys._nn = isFinite(best) ? best : 700;
   return sys._nn;
 }
-const GMM_ORB_TILT = 0.52;   // сжатие орбит по вертикали → наклонная плоскость (объём)
-// Рисует звёзды-системы «в разрезе»: наклонные орбиты с планетами по составу
-// s.planets, у системы в фокусе (ближайшей к центру экрана) — подписи планет.
+// Экранный радиус тела по группе планеты (p.type — отображаемое имя группы из
+// генератора): гиганты крупные, карлики мелкие — чтобы разница размеров читалась.
+// Аномалии пульсируют отдельно.
+const GMM_PG_SZ = {
+  'Газовые гиганты': 12, 'Ледяные гиганты': 11, 'Горячие гиганты': 11,
+  'Океанические': 8, 'Экзотические': 8, 'Землеподобные': 7.5, 'Пустынные': 7,
+  'Вулканические': 6.5, 'Лавовые миры': 6, 'Криомиры': 5, 'Малые тела': 4.5,
+};
+function gmmPlanetSz(p) { return GMM_PG_SZ[p.type] || 7; }
+
+// Рисует звёзды-системы «в разрезе»: плоские орбиты с планетами по составу s.planets.
+// Радиусы — по реальной дистанции (p.dist, а.е.), размер тела — по группе планеты,
+// пояса — поле астероидов. У системы в фокусе (ближайшей к центру) — подписи планет.
 // Только для систем в кадре (отсев по вьюпорту) — стоимость ограничена.
 function gmmPaintOrbits(ctx) {
   const a = gmmDeepA();
@@ -1942,49 +1952,73 @@ function gmmPaintOrbits(ctx) {
   ctx.lineCap = 'round';
   GM.systems.forEach(sys => {
     if (!hasP(sys) || !inView(sys)) return;
-    const planets = (sys.planets || []).filter(p => p && p.kind);
+    const planets = (sys.planets || []).filter(p => p && p.kind)
+      .sort((p, q) => (+p.dist || 0) - (+q.dist || 0)).slice(0, GM_ORBIT_MAX);
     const cx = sys.x * s + tx, cy = sys.y * s + ty;
-    const n = Math.min(planets.length, GM_ORBIT_MAX);
+    const n = planets.length;
     const isFocus = sys === focus;
-    // радиусы орбит: от края звезды до полупролёта к соседу, но не больше потолка
     const starR = Math.max(10, gmmIconPx(sys, s) * 0.5);
-    const rMax = Math.min(gmmNN(sys) * 0.42 * s, 230);
-    const rIn = Math.min(starR + 16, rMax - 4);
-    const step = n > 1 ? (rMax - rIn) / (n - 1) : 0;
+    const rMax = Math.min(gmmNN(sys) * 0.42 * s, 230);   // клубок не налезает на соседа
+    const rIn = Math.min(starR + 18, rMax - 6);
+    // радиусы орбит — по реальной дистанции (а.е.), отсюда неравномерные интервалы
+    const ds = planets.map(p => +p.dist || 0);
+    const dmin = Math.min(...ds), dmax = Math.max(...ds);
+    const radii = planets.map((p, i) => {
+      if (n <= 1) return (rIn + rMax) / 2;
+      const u = dmax > dmin ? (ds[i] - dmin) / (dmax - dmin) : i / (n - 1);
+      return rIn + (rMax - rIn) * u;
+    });
     for (let i = 0; i < n; i++) {
-      const p = planets[i];
-      const r = n > 1 ? rIn + step * i : (rIn + rMax) / 2;
-      const dur = 20 + i * 7;
-      const ang = ((i * 137) % 360) * Math.PI / 180 + (t / dur) * 6.2832;
-      // орбита — наклонный эллипс
-      ctx.globalAlpha = a * (isFocus ? 0.34 : 0.22);
-      ctx.beginPath(); ctx.ellipse(cx, cy, r, r * GMM_ORB_TILT, 0, 0, 6.2832);
-      ctx.strokeStyle = 'rgba(165,198,246,1)'; ctx.lineWidth = 1; ctx.stroke();
-      const px = cx + Math.cos(ang) * r, py = cy + Math.sin(ang) * r * GMM_ORB_TILT;
-      const belt = p.kind === 'belt', anom = p.kind === 'anomaly';
-      const zc = gmZoneColor(p.zone);
-      const sz = belt ? 4 : anom ? 6 : 7;
-      if (belt) {
-        ctx.globalAlpha = a * 0.9; ctx.strokeStyle = zc; ctx.lineWidth = 1.3;
-        ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.stroke(); ctx.setLineDash([]);
-      } else {
-        ctx.globalAlpha = a * 0.5;                         // ореол
-        const gg = ctx.createRadialGradient(px, py, 0, px, py, sz * 2.6);
-        gg.addColorStop(0, zc); gg.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(px, py, sz * 2.6, 0, 6.2832); ctx.fill();
-        ctx.globalAlpha = a;                              // тело планеты с боковым светом
-        const g = ctx.createRadialGradient(px - sz * 0.35, py - sz * 0.35, 0, px, py, sz);
-        g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, zc); g.addColorStop(1, 'rgba(0,0,0,.6)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
+      const p = planets[i], r = radii[i], zc = gmZoneColor(p.zone);
+      // орбита — плоский круг
+      ctx.globalAlpha = a * (isFocus ? 0.3 : 0.18);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832);
+      ctx.strokeStyle = 'rgba(170,200,245,1)'; ctx.lineWidth = 1; ctx.stroke();
+
+      if (p.kind === 'belt') {
+        // поле астероидов — кольцо мелких камешков, медленно дрейфует по орбите
+        const drift = (t / 80) * 6.2832;
+        const N = Math.max(28, Math.min(120, Math.round(r * 0.9)));
+        const band = Math.max(2.5, r * 0.05);
+        ctx.fillStyle = zc;
+        for (let k = 0; k < N; k++) {
+          const h = Math.sin((k + 1) * 12.9898 + i * 7.13) * 43758.5453;
+          const j = h - Math.floor(h);                    // псевдослучайное 0..1 (стабильное)
+          const aa = (k / N) * 6.2832 + drift;
+          const rr = r + (j - 0.5) * 2 * band;
+          ctx.globalAlpha = a * (0.22 + 0.55 * j);
+          ctx.fillRect(cx + Math.cos(aa) * rr, cy + Math.sin(aa) * rr, 1.5, 1.5);
+        }
+        if (isFocus && p.name) {
+          ctx.globalAlpha = a; ctx.font = '600 12px Rajdhani, sans-serif';
+          ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.fillStyle = 'rgba(210,222,245,.8)';
+          ctx.fillText(p.name, cx + r + 6, cy); ctx.shadowBlur = 0;
+        }
+        continue;
       }
-      // подпись планеты — только у системы в фокусе
+
+      const isAnom = p.kind === 'anomaly';
+      const sz = isAnom ? 6 + Math.sin(t * 2.2 + i) * 1.4 : gmmPlanetSz(p);
+      const dur = 22 + i * 8;
+      const ang = ((i * 137) % 360) * Math.PI / 180 + (t / dur) * 6.2832;
+      const px = cx + Math.cos(ang) * r, py = cy + Math.sin(ang) * r;
+      // ореол
+      ctx.globalAlpha = a * (isAnom ? 0.6 : 0.4);
+      const gg = ctx.createRadialGradient(px, py, 0, px, py, sz * 2.6);
+      gg.addColorStop(0, zc); gg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(px, py, sz * 2.6, 0, 6.2832); ctx.fill();
+      // тело с боковым светом (объём шара без псевдо-3D на самой карте)
+      ctx.globalAlpha = a;
+      const g = ctx.createRadialGradient(px - sz * 0.38, py - sz * 0.38, 0, px, py, sz);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, zc); g.addColorStop(1, 'rgba(0,0,0,.62)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
+
       if (isFocus && p.name) {
-        ctx.globalAlpha = a;
-        ctx.font = '600 12px Rajdhani, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
-        ctx.fillStyle = 'rgba(223,234,255,.95)';
-        ctx.fillText(p.name, px + sz + 4, py);
-        ctx.shadowBlur = 0;
+        ctx.globalAlpha = a; ctx.font = '600 12px Rajdhani, sans-serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.fillStyle = 'rgba(223,234,255,.95)';
+        ctx.fillText(p.name, px + sz + 5, py); ctx.shadowBlur = 0;
       }
     }
   });

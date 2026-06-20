@@ -652,16 +652,16 @@ begin
     if market_cap > 0 then
       for r in
         select res_name, res_rar, avail from (
-          select distinct on (nm) nm as res_name, rr as res_rar,
-            greatest(0, coalesce((eco.resources->>nm)::numeric,0)
-                        + coalesce((res_add->>nm)::numeric,0)
-                        - coalesce((res_sub->>nm)::numeric,0)) as avail
+          select distinct on (q.nm) q.nm as res_name, q.rr as res_rar,
+            greatest(0, coalesce((eco.resources->>q.nm)::numeric,0)
+                        + coalesce((res_add->>q.nm)::numeric,0)
+                        - coalesce((res_sub->>q.nm)::numeric,0)) as avail
           from (
             select (e.value->>'name') as nm, coalesce(e.value->>'r','common') as rr
             from public.colonies c, jsonb_array_elements(c.resources) e
             where c.faction_id = p_fid
           ) q
-          order by nm, public._res_value(nm, rr) desc
+          order by q.nm, public._res_value(q.nm, q.rr) desc
         ) u
         where avail > 0
         order by public._res_value(res_name, res_rar) desc
