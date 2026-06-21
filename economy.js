@@ -4150,6 +4150,18 @@ function ecExCorpsBlock() {
       : (co.pending_review ? `<div class="ec-faith-status pend">⏳ Правка профиля на проверке — другие пока видят прежний вид.${co.pending && co.pending.name ? ` Предложено: «${esc(co.pending.name)}».` : ''}</div>`
       : (co.reject_reason ? `<div class="ec-faith-status rej">✕ Прошлая правка отклонена.${co.reject_reason ? ` Причина: «${esc(co.reject_reason)}».` : ''}</div>` : ''));
     const editing = !!(EC.corpEditing && EC.corpEditing[co.id]);
+    // Редактор состава предприятий (за 10 000 ГС): текущие постройки (отмечены) + свободные.
+    const recCards = editing ? (co.buildings || []).map(b =>
+        `<label class="ec-corp-bcard on"><input type="checkbox" value="${b.id}" checked onchange="this.closest('.ec-corp-bcard').classList.toggle('on',this.checked)">
+          <span class="ec-corp-bcard-ic">${ecBldIcon(b.btype)}</span>
+          <span class="ec-corp-bcard-meta"><span class="ec-corp-bcard-n">${esc(ecBldNm(b.btype))}</span>
+            <span class="ec-corp-bcard-sub">${b.colony ? esc(b.colony) + ' · ' : ''}${b.slots} сл</span></span></label>`)
+      .concat(free.map(b =>
+        `<label class="ec-corp-bcard"><input type="checkbox" value="${b.id}" onchange="this.closest('.ec-corp-bcard').classList.toggle('on',this.checked)">
+          <span class="ec-corp-bcard-ic">${ecBldIcon(b.btype)}</span>
+          <span class="ec-corp-bcard-meta"><span class="ec-corp-bcard-n">${esc(ecBldNm(b.btype))}</span>
+            <span class="ec-corp-bcard-sub">${b.colony ? esc(b.colony) + ' · ' : ''}${b.slots} сл</span></span>
+          <span class="ec-corp-bcard-gc">+${ecNum(b.daily_gc || 0)}<small>/ход</small></span></label>`)).join('') : '';
     const editForm = editing ? `<div class="ec-faith-edit">
         <div class="ec-bless-hd" style="margin-top:0">Редактирование — изменения уйдут на модерацию</div>
         <input id="ec-ce-name-${co.id}" placeholder="название организации" class="ec-corp-name-in" maxlength="40" value="${esc(co.name || '')}">
@@ -4164,6 +4176,9 @@ function ecExCorpsBlock() {
           <button class="btn btn-gd btn-sm" onclick="ecCorpEdit('${co.id}')">Отправить на модерацию</button>
           <button class="btn btn-gh btn-sm" onclick="ecCorpEditToggle('${co.id}',false)">Отмена</button>
         </div>
+        <div class="ec-corp-pick-lbl" style="margin-top:14px">Состав предприятий <span class="ec-hint">— отметьте постройки организации; изменение состава стоит <b>10 000 ГС</b> и применяется сразу (без модерации)</span></div>
+        <div class="ec-corp-pick" id="ec-co-rec-${co.id}">${recCards || '<i style="color:var(--t4)">нет доступных построек</i>'}</div>
+        <button class="btn btn-gh btn-sm" style="margin-top:8px" onclick="ecCorpRecompose('${co.id}')">Изменить состав — 10 000 ГС</button>
       </div>` : '';
     const emblem = co.image_url ? `<span class="ec-corp-emblem" style="background-image:url('${esc(co.image_url)}')"></span>` : '';
     const descHtml = (co.description && !editing) ? `<div class="ec-corp-desc">${esc(co.description)}</div>` : '';
@@ -4219,15 +4234,19 @@ function ecExCorpsBlock() {
   // ════════ ТОРГОВЫЙ ТЕРМИНАЛ ════════
   const board = c.board || [];
   const chgOf = (price, sp) => { const f = (sp && sp.length) ? +sp[0] : price; return f ? Math.round((price / f - 1) * 100) : 0; };
+  // Δ за ход: рост · падение · без изменения (нейтрально, не зелёная стрелка вверх)
+  const chgArrow = ch => ch > 0 ? '▲' : ch < 0 ? '▼' : '▬';
+  const chgCol   = ch => ch > 0 ? '#5fc98a' : ch < 0 ? '#e0688a' : 'var(--t4)';
+  const chgTxt   = ch => `${ch > 0 ? '+' : ''}${ch}%`;
 
   // ── Индекс корпораций: значение + Δ + линейный график ──
   const idx = c.index || { value: 1000, base: 1000, spark: [] };
   const iv = +idx.value || 1000, ib = +idx.base || 1000, isp = idx.spark || [];
-  const iChg = chgOf(iv, isp), iUp = iChg >= 0, iCol = iUp ? '#5fc98a' : '#e0688a';
+  const iChg = chgOf(iv, isp), iCol = chgCol(iChg);
   const indexHeader = `<div class="ec-xch-index">
     <div class="ec-xch-index-l">
       <div class="ec-xch-index-cap">📈 Индекс корпораций <span class="ec-hint">CORP·IDX · ${sesPill}</span></div>
-      <div class="ec-xch-index-val">${ecNum(Math.round(iv))} <span style="color:${iCol}">${iUp ? '▲' : '▼'} ${iChg >= 0 ? '+' : ''}${iChg}%</span></div>
+      <div class="ec-xch-index-val">${ecNum(Math.round(iv))} <span style="color:${iCol}">${chgArrow(iChg)} ${chgTxt(iChg)}</span></div>
       <div class="ec-xch-index-sub">база ${ecNum(Math.round(ib))} · ${ecNum(board.length)} компан. в листинге</div>
     </div>
     <div class="ec-xch-index-chart">${ecSparkline(isp, iCol, 360, 92) || '<span class="ec-hint">история индекса копится — зайдите завтра</span>'}</div>
@@ -4238,7 +4257,7 @@ function ecExCorpsBlock() {
 
   // ── Доска котировок: все одобренные организации ──
   const boardRows = board.map(b => {
-    const ch = chgOf(b.share_price, b.spark), up = ch >= 0, col = up ? '#5fc98a' : '#e0688a';
+    const ch = chgOf(b.share_price, b.spark), col = chgCol(ch);
     const sm = +b.sector_mult || 1, smc = sm > 1.05 ? 'var(--gd)' : sm < 0.95 ? 'var(--err)' : 'var(--t3)';
     const ask = b.ask;
     const bid = (ask && !b.mine)
@@ -4248,7 +4267,7 @@ function ecExCorpsBlock() {
     return `<div class="ec-xch-row${b.mine ? ' mine' : ''}">
       <span class="ec-xch-tk">${emblem}<span class="ec-xch-tkn"><b>${esc(b.name)}</b><i>${esc(b.founder)}${b.mine ? ' · ваша' : ''}</i></span></span>
       <span class="ec-xch-px">${ecNum(Math.round(b.share_price))}</span>
-      <span class="ec-xch-ch" style="color:${col}">${up ? '▲' : '▼'} ${ch >= 0 ? '+' : ''}${ch}%</span>
+      <span class="ec-xch-ch" style="color:${col}">${chgArrow(ch)} ${chgTxt(ch)}</span>
       <span class="ec-xch-dm" style="color:${smc}" title="секторный спрос">${sm.toFixed(2)}×</span>
       <span class="ec-xch-sp">${ecSparkline(b.spark, col, 84, 26) || '<span class="ec-hint" style="font-size:10px">—</span>'}</span>
       <span class="ec-xch-bid">${bid}</span>
@@ -6720,6 +6739,14 @@ function ecCorpEdit(id) {
   if (EC.corpEditing) delete EC.corpEditing[id];
   ecRpcAct('corp_edit', { p_corp: id, p_name: name, p_description: desc, p_image_url: image }, 'Изменения отправлены на модерацию');
 }
+// ── Смена состава предприятий организации за 10 000 ГС (применяется сразу) ──
+function ecCorpRecompose(id) {
+  const box = ecId('ec-co-rec-' + id);
+  if (!box) return;
+  const ids = Array.from(box.querySelectorAll('input[type=checkbox]:checked')).map(el => el.value);
+  if (!confirm(`Изменить состав предприятий организации за ${ecNum(10000)} ГС?\nВыбрано построек: ${ids.length}. Котировка пересчитается по новому доходу.`)) return;
+  ecRpcAct('corp_recompose', { p_corp: id, p_buildings: ids }, 'Состав изменён · списано 10 000 ГС');
+}
 // ── Эмблема организации: загрузка в Storage через общий хелпер ──
 function ecCorpImg(input, hiddenId, prevId) {
   const file = input.files && input.files[0]; if (!file) return;
@@ -7249,15 +7276,25 @@ function ecUnitBillHtml(u, qty) {
   const base = ((u.summary && u.summary.cost) || 0) * qty;
   if (!keys.length) return `<span class="ec-bill-none">Сырьё не требуется.</span> <span class="ec-bill-total">Итого: <b>${ecNum(base)} ГС</b></span>`;
   const res = (EC.eco && EC.eco.resources) || {};
-  let surchargeRaw = 0, anyShort = false;
+  let surchargeRaw = 0, anyShort = false, anyBlocked = false;
   const items = keys.map(nm => {
     const need = (+bill[nm] || 0) * qty, have = +res[nm] || 0, short = Math.max(0, need - have);
+    // дефицит докупается с рынка ×1.5, но рынок КОНЕЧЕН: stock из EC.market
+    const mkStock = (EC.market && EC.market[nm] && Number.isFinite(EC.market[nm].stock)) ? EC.market[nm].stock : null;
+    const blocked = short > 0 && mkStock !== null && mkStock < short;
     if (short > 0) { surchargeRaw += short * ecResPriceN(nm) * 1.5; anyShort = true; }
-    return `<span class="ec-bill-item ${short > 0 ? 'ec-bill-short' : 'ec-bill-ok'}">${ecShipBillIcon(nm)}${esc(nm)} <span class="ec-bill-hn">${ecNum(have)}/${ecNum(need)}</span>${short > 0 ? ` <b>докупка ${ecNum(short)}</b>` : ''}</span>`;
+    if (blocked) anyBlocked = true;
+    const cls = blocked ? 'ec-bill-block' : (short > 0 ? 'ec-bill-short' : 'ec-bill-ok');
+    const tail = short > 0
+      ? ` <b>докупка ${ecNum(short)}</b>${mkStock !== null ? ` <i class="ec-bill-mk">(на рынке ${ecNum(mkStock)})</i>` : ''}`
+      : '';
+    return `<span class="ec-bill-item ${cls}">${ecShipBillIcon(nm)}${esc(nm)} <span class="ec-bill-hn">${ecNum(have)}/${ecNum(need)}</span>${tail}</span>`;
   }).join('');
   const surcharge = Math.ceil(surchargeRaw);
-  const note = anyShort
-    ? `<span class="ec-bill-note ec-bill-short">Дефицит сырья докупается по рынку ×1.5: <b>+${ecNum(surcharge)} ГС</b></span>`
+  const note = anyBlocked
+    ? `<span class="ec-bill-note ec-bill-block">На рынке нет столько сырья — закладка не пройдёт. Ждите суточного обновления рынка (NPC) или закупки у других держав.</span>`
+    : anyShort
+    ? `<span class="ec-bill-note ec-bill-short">Дефицит докупается с рынка ×1.5 (списывается с запаса рынка): <b>+${ecNum(surcharge)} ГС</b></span>`
     : `<span class="ec-bill-note ec-bill-ok">Сырья на складе хватает — берётся бесплатно.</span>`;
   return `<div class="ec-bill-row">${items}</div>${note} <span class="ec-bill-total">Итого: <b>${ecNum(base + surcharge)} ГС</b>${surcharge ? ` <span class="ec-hint">(${ecNum(base)} + ${ecNum(surcharge)})</span>` : ''}</span>`;
 }

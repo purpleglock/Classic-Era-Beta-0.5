@@ -630,6 +630,10 @@
 .ec-bill-item.ec-bill-ok { border-color: color-mix(in srgb, var(--gd) 40%, transparent); }
 .ec-bill-item.ec-bill-short { border-color: color-mix(in srgb, var(--color-warning) 55%, transparent); color: var(--t1); }
 .ec-bill-item.ec-bill-short b { color: var(--color-warning); }
+.ec-bill-item.ec-bill-block { border-color: color-mix(in srgb, var(--rd, #e5484d) 60%, transparent); background: color-mix(in srgb, var(--rd, #e5484d) 9%, transparent); }
+.ec-bill-item.ec-bill-block b { color: var(--rd, #e5484d); }
+.ec-bill-mk { color: var(--t3); font-style: normal; font-size: 10px; }
+.ec-bill-note.ec-bill-block { color: var(--rd, #e5484d); font-weight: 600; }
 .ec-bill-hn { color: var(--t3); font-family: var(--font-mono); font-size: 10px; }
 .ec-bill-ic { width: 14px; height: 14px; vertical-align: middle; }
 .ec-bill-note { display: block; font-size: 11px; margin-bottom: 2px; }
