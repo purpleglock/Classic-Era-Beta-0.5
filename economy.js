@@ -209,8 +209,12 @@ function ecTradeRiskPct(threats, convoy) {
   return Math.round((1 - safe) * 100);
 }
 function ecResPrice(r) { return EC_RES_PRICE[r] || EC_RES_PRICE.common; }
-// Персональная цена по ИМЕНИ ресурса (зеркало SQL _res_value). Фолбэк — по редкости.
+// ЖИВАЯ цена по ИМЕНИ ресурса. Источник истины — рынок (SQL market_resources,
+// зеркало в EC.market). Фолбэк: базовый якорь resPrice → редкость. Округляем до
+// целого для подписей (не меньше 1 ГС); точную цену рынка см. EC.market[name].
 function ecResPriceN(name) {
+  const m = EC.market && EC.market[name];
+  if (m && m.price != null) return Math.max(1, Math.round(m.price));
   if (typeof resPrice === 'function') return resPrice(name);
   return ecResPrice(ecResRarity(name));
 }
@@ -749,7 +753,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -783,6 +787,10 @@ async function ecLoad() {
     ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез по союзникам/торг.партнёрам/друзьям
     dbGet('tech_layout', `select=node_id,x,y,icon,img`).catch(() => []),   // PoE-раскладка дерева исследований (позиции/иконки/картинки)
     dbGet('tech_prereq', `select=node_id,prereq`).catch(() => []),         // staff-override связей дерева (prereq); дефолт генерит ecBuildResearch
+    dbGet('market_resources', `select=name,base_price,price,stock,equilibrium`).catch(() => []),  // галактический рынок: живые цены/запасы (зеркало для UI и ecResPriceN)
+    ecRpc('exchange_status').catch(() => null),   // биржа: индекс/ETF + спарклайны цен ресурсов + моя позиция
+    ecRpc('bonds_status').catch(() => null),      // биржа: облигации — мои выпуски/держания + рынок чужих бумаг
+    ecRpc('corps_status').catch(e => ({ __err: (e && e.message) || 'нет ответа' })),   // биржа: корпорации (ошибку показываем в UI)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -837,6 +845,23 @@ async function ecLoad() {
   ((window.GalaxyGen && window.GalaxyGen.RESOURCES) || []).forEach(rc => { if (rc && rc.name) EC.resInfo[rc.name] = { r: rc.r || 'common', icon: rc.icon || '◈' }; });
   EC.colonies.forEach(c => (c.resources || []).forEach(r => { if (r && r.name) EC.resInfo[r.name] = { r: r.r || EC.resInfo[r.name]?.r || 'common', icon: r.icon || EC.resInfo[r.name]?.icon || '◈' }; }));
   EC.systems.forEach(s => (s.planets || []).forEach(p => (p.resources || []).forEach(r => { if (r && r.name) EC.resInfo[r.name] = { r: r.r || EC.resInfo[r.name]?.r || 'common', icon: r.icon || EC.resInfo[r.name]?.icon || '◈' }; })));
+
+  // Галактический рынок: name → { price (живая), base (якорь), stock (запас), eq (равновесие) }.
+  // Источник истины — SQL market_resources (тикается на сервере). Питает ecResPriceN и вкладку «Рынок».
+  EC.market = {};
+  (Array.isArray(market) ? market : []).forEach(m => { if (m && m.name) EC.market[m.name] = { price: +m.price, base: +m.base_price, stock: +m.stock, eq: +m.equilibrium }; });
+
+  // Биржа (срез 2): индекс рынка + моя ETF-позиция + спарклайны цен ресурсов.
+  // exchange_status() — SECURITY DEFINER RPC. Спарклайны цен подмешиваем в EC.market[name].spark.
+  EC.exchange = exchange || { index: { value: 1000, base: 1000, spark: [] }, holdings: { units: 0, basis: 0 }, resources: {} };
+  const exRes = (EC.exchange && EC.exchange.resources) || {};
+  Object.keys(exRes).forEach(n => { if (EC.market[n]) EC.market[n].spark = (exRes[n] || []).map(Number); });
+  // Облигации (срез 3): мои выпуски/держания + рынок чужих бумаг (bonds_status RPC).
+  EC.bonds = bonds || { issuer: [], holdings: [], market: [] };
+  // Корпорации (срез 4a): мои корпорации/доли в чужих/стакан/свободные постройки + сессия (corps_status RPC).
+  // null = RPC не ответил (SQL не применён или ошибка) — UI покажет диагностику с текстом ошибки.
+  EC.corpsErr = (corps && corps.__err) || null;
+  EC.corps = EC.corpsErr ? null : corps;
 
   // Ачивки: сервер пересчитывает условия, выдаёт новые и начисляет ГС.
   // Считаем ПОСЛЕ загрузки (gc мог измениться при выдаче — патчим из ответа).
@@ -1024,12 +1049,13 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['trade', '⇄', 'Торговля'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['trade', '⇄', 'Торговля'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
     : EC.tab === 'milbuild' ? ecTabMilBuild()
     : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
     : EC.tab === 'trade' ? ecTabTrade()
+    : EC.tab === 'exchange' ? ecTabExchange()
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'faith' ? ecTabFaith() : EC.tab === 'intel' ? ecTabIntel()
     : EC.tab === 'raids' ? ecTabRaids()
     : EC.tab === 'achievements' ? ecTabAchievements()
@@ -3390,6 +3416,60 @@ function ecRelationsBlock() {
     <div class="ec-rel-list">${rows}</div></div>`;
 }
 
+// ── Мини-спарклайн котировки: компактный inline-SVG из ряда значений ──
+// series — массив чисел (старое→новое). col — цвет линии. Возвращает '' если данных <2.
+function ecSparkline(series, col, w, h) {
+  const s = (series || []).map(Number).filter(v => isFinite(v));
+  if (s.length < 2) return '';
+  w = w || 64; h = h || 18;
+  const min = Math.min(...s), max = Math.max(...s), span = (max - min) || 1;
+  const stepX = w / (s.length - 1);
+  const pts = s.map((v, i) => `${(i * stepX).toFixed(1)},${(h - 1 - (v - min) / span * (h - 2)).toFixed(1)}`).join(' ');
+  const c = col || (s[s.length - 1] >= s[0] ? '#5fc98a' : '#e0688a');
+  return `<svg class="ec-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+    <polyline points="${pts}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+// ── Галактический рынок (под-вкладка «Рынок»): живые цены + конечный запас ──
+// Единые цены на всю галактику; продажа двигает цену вниз, покупка — вверх.
+// stock — ваши складские остатки (ecResEntries): [[name, qty], ...].
+function ecMarketBlock(stock) {
+  const mk = EC.market || {};
+  const myStock = {}; (stock || []).forEach(([n, v]) => { myStock[n] = v; });
+  // показываем все рыночные ресурсы; для каждого — живая цена, тренд к базе, запас рынка, ваш остаток
+  const names = Object.keys(mk).sort((a, b) => (mk[b].price || 0) - (mk[a].price || 0));
+  if (!names.length) {
+    return `<div class="ec-dip-card"><div class="ec-dip-t">🏪 Галактический рынок</div>
+      <div class="ec-empty" style="padding:8px">Рынок ещё не инициализирован. Примените <b>_market_setup.sql</b> в Supabase.</div></div>`;
+  }
+  const rows = names.map(n => {
+    const m = mk[n], rar = ecResRarity(n);
+    const base = m.base || m.price || 1;
+    const dpct = Math.round((m.price / base - 1) * 100);
+    const trend = m.price > base * 1.02 ? `<span style="color:#e0688a">▲</span>`
+      : m.price < base * 0.98 ? `<span style="color:#5fc98a">▼</span>`
+        : `<span style="color:var(--t4)">▬</span>`;
+    const mine = myStock[n] || 0;
+    const spark = ecSparkline(m.spark);
+    return `<div class="ec-q-row" style="gap:10px">
+      <span class="ec-r-name" style="flex:1 1 40%">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4)">(${esc(rar)})</i></span>
+      <span style="flex:0 0 auto;min-width:64px;text-align:center" title="динамика цены за последние ходы">${spark}</span>
+      <span style="flex:0 0 auto;text-align:right;min-width:120px">${trend} <b>${ecNum(Math.round(m.price))} ГС</b> <i style="color:var(--t4)">${dpct >= 0 ? '+' : ''}${dpct}%</i></span>
+      <span style="flex:0 0 auto;color:var(--t4);min-width:150px;text-align:right" title="запас рынка · ваш склад">📦 ${ecNum(Math.round(m.stock))} · у вас ${ecNum(mine)}</span>
+    </div>`;
+  }).join('');
+  const opts = names.map(n => `<option value="${esc(n)}">${esc(n)} — ${ecNum(Math.round(mk[n].price))} ГС</option>`).join('');
+  const gcMod = ecFactionMods().gc;
+  const form = `<div class="ec-prod-form">
+      <select id="ec-mk-res">${opts}</select>
+      <input type="number" id="ec-mk-units" min="1" placeholder="кол-во" class="ec-prod-qty">
+      <button class="btn btn-gd btn-sm" onclick="ecBuyResource()">Купить</button>
+      <button class="btn btn-gh btn-sm" onclick="ecSellResource()">Продать</button>
+    </div>
+    <div class="cn-fac-hint" style="margin-top:5px">Цена живая: продажа сбивает её, покупка — поднимает; запас рынка конечен. Продажа — 80% цены${gcMod !== 1 ? ` · ×${gcMod.toFixed(2)} от доктрины` : ''}. Караваны выгоднее.</div>`;
+  return `<div class="ec-dip-card"><div class="ec-dip-t">🏪 Галактический рынок <span class="ec-hint">— единые цены на всю галактику, спрос/предложение двигают их каждый ход</span></div>${rows}${form}</div>`;
+}
+
 // ── Вкладка «Торговля»: рынок · караваны · обмен (бартер с кораблями) ──
 function ecTabTrade() {
   const others = ecOtherFactions(), noOthers = !others.length;
@@ -3404,13 +3484,7 @@ function ecTabTrade() {
   const cargo = EC.tradeCargo || { total: 0, used: 0, free: 0 };   // грузоподъёмность торгового флота
   const volMax = Math.max(1, Math.min(stock.length ? stock[0][1] : 1, cargo.free || 0));
 
-  const stockHtml = stock.length
-    ? stock.map(([n, v]) => `<div class="ec-q-row"><span class="ec-r-name">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4)">(${esc(ecResRarity(n))}, ${ecResPriceN(n)} ГС)</i></span><span class="ec-r-qty">${ecNum(v)}</span></div>`).join('')
-    : '<div class="ec-empty" style="padding:8px">Склад пуст. Стройте Добывающий завод на колониях с ресурсами.</div>';
-  const sellForm = stock.length
-    ? `<div class="ec-prod-form"><select id="ec-sell-res">${stock.map(([n]) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select><input type="number" id="ec-sell-units" min="1" placeholder="кол-во" class="ec-prod-qty"><button class="btn btn-gh btn-sm" onclick="ecSellResource()">Продать на рынке</button></div><div class="cn-fac-hint" style="margin-top:5px">Местный рынок — 80% цены${ecFactionMods().gc !== 1 ? ` · ×${ecFactionMods().gc.toFixed(2)} от доктрины` : ''}. Караваны выгоднее.</div>`
-    : '';
-  const resBlock = `<div class="ec-dip-card"><div class="ec-dip-t">Ресурсы планет</div>${stockHtml}${sellForm}</div>`;
+  const resBlock = ecMarketBlock(stock);
 
   const barterBlock = ecBarterBlock(others, noOthers, stock);
 
@@ -3487,6 +3561,259 @@ function ecTabTrade() {
   return `${ecIntro('⇄', 'Торговля', 'Превращайте ресурсы в ГС и обменивайтесь активами с другими фракциями.', ['<b>Караваны</b> — постоянные пути (поток добычи к партнёру, доход каждый ход). <b>Рынок</b> — продать со склада за 80%. <b>Обмен</b> — подарки/сделки и биржа техов и чертежей.'])}${subNav}${subBody}`;
 }
 function ecSetTradeSub(s) { EC.tradeSub = s; ecPaintCabinet(); }
+
+// ── Вкладка «Биржа»: финансовые инструменты поверх рынка ресурсов ──
+// Срез 2: индекс рынка / ETF. Под-вкладки-заготовки под облигации/акции/фьючерсы
+// добавятся срезами 3–5 по тому же образцу (EC.exSub + ecSetExSub).
+function ecSetExSub(s) { EC.exSub = s; ecPaintCabinet(); }
+function ecTabExchange() {
+  const sub = EC.exSub || 'corps';
+  const subTabs = [['corps', '🏢', 'Организации'], ['index', '📊', 'Индекс рынка'], ['bonds', '🏛', 'Облигации']];   // далее: фьючерсы
+  const subNav = subTabs.length > 1
+    ? `<div class="ec-tabs" style="margin:4px 0 12px">${subTabs.map(([id, ic, l]) => `<button class="ec-tab${sub === id ? ' on' : ''}" onclick="ecSetExSub('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('')}</div>`
+    : '';
+  const body = sub === 'bonds' ? ecExBondsBlock() : sub === 'index' ? ecExIndexBlock() : ecExCorpsBlock();
+  const ses = (EC.corps && EC.corps.session) || { open: false, open_hour: 12, close_hour: 18 };
+  const sesTag = ses.open
+    ? `<b style="color:#5fc98a">● торги открыты</b> до ${ses.close_hour}:00 UTC`
+    : `<b style="color:#e0688a">● торги закрыты</b> · открытие в ${ses.open_hour}:00 UTC`;
+  return `${ecIntro('📊', 'Биржа', `Финансовые инструменты, привязанные к реальной экономике державы. ${sesTag}.`, ['<b>Организации</b> — объедините реальные постройки; вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%) — он распределяется дивидендами, поэтому учредить выгодно. Доли продаются другим фракциям.', '<b>Индекс</b> — корзина цен ресурсов (ETF). <b>Облигации</b> — займ под купон.', 'Сделки с долями идут только при <b>открытых торгах</b> (окно по UTC); на закрытии — фиксинг и дивиденды.'])}${subNav}${body}`;
+}
+
+// Карточка индекса рынка / ETF: значение, тренд, спарклайн, моя позиция, формы.
+function ecExIndexBlock() {
+  const ex = EC.exchange || {};
+  const idx = ex.index || { value: 1000, base: 1000, spark: [] };
+  const hold = ex.holdings || { units: 0, basis: 0 };
+  const val = +idx.value || 1000, base = +idx.base || 1000;
+  const dpct = Math.round((val / base - 1) * 100);
+  const up = val >= base;
+  const trend = val > base * 1.005 ? `<span style="color:#5fc98a">▲</span>`
+    : val < base * 0.995 ? `<span style="color:#e0688a">▼</span>`
+      : `<span style="color:var(--t4)">▬</span>`;
+  const spark = ecSparkline(idx.spark, up ? '#5fc98a' : '#e0688a', 220, 56);
+  const units = +hold.units || 0, basis = +hold.basis || 0;
+  const posVal = units * val;            // текущая стоимость позиции
+  const pl = posVal - basis;             // нереализованный P/L
+  const plPct = basis > 0 ? Math.round(pl / basis * 100) : 0;
+  const plCol = pl >= 0 ? 'var(--gd)' : 'var(--err)';
+  const gc = (EC.eco && EC.eco.gc) || 0;
+
+  const posCard = units > 0.0001
+    ? `<div class="ec-q-row" style="flex-wrap:wrap;gap:12px;margin-top:8px">
+        <span class="ec-r-name" style="flex:1 1 100%">Моя позиция</span>
+        <span>Паёв: <b>${units.toFixed(3)}</b></span>
+        <span>Вложено: <b>${ecNum(Math.round(basis))} ГС</b></span>
+        <span>Сейчас: <b>${ecNum(Math.round(posVal))} ГС</b></span>
+        <span>P/L: <b style="color:${plCol}">${pl >= 0 ? '+' : ''}${ecNum(Math.round(pl))} ГС (${plPct >= 0 ? '+' : ''}${plPct}%)</b></span>
+      </div>`
+    : `<div class="cn-fac-hint" style="margin-top:8px">Позиции нет. Купите паи на ГС — они подорожают, если рынок в целом вырастет.</div>`;
+
+  const form = `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px;margin-top:8px">
+      <input type="number" id="ec-ix-gc" min="1" placeholder="вложить ГС" class="ec-prod-qty">
+      <button class="btn btn-gd btn-sm" onclick="ecIndexBuy()">Купить паи</button>
+      <input type="number" id="ec-ix-units" min="0" step="0.001" placeholder="продать паёв" class="ec-prod-qty">
+      <button class="btn btn-gh btn-sm" onclick="ecIndexSell()">Продать</button>
+      ${units > 0.0001 ? `<button class="btn btn-gh btn-sm" onclick="ecIndexSellAll()" title="Продать всю позицию">Всё</button>` : ''}
+    </div>
+    <div class="cn-fac-hint" style="margin-top:5px">1 пай = текущее значение индекса (${ecNum(Math.round(val))} ГС). В казне: ${ecNum(Math.round(gc))} ГС.</div>`;
+
+  return `<div class="ec-dip-card">
+    <div class="ec-dip-t">📊 Индекс рынка <span class="ec-hint">— корзина живых цен всех ресурсов, база = 1000</span></div>
+    <div class="ec-q-row" style="align-items:center;gap:14px">
+      <span style="font-size:26px;font-weight:700">${trend} ${ecNum(Math.round(val))}</span>
+      <span style="color:${up ? '#5fc98a' : '#e0688a'}">${dpct >= 0 ? '+' : ''}${dpct}% к базе</span>
+      <span style="flex:1 1 auto;text-align:right">${spark}</span>
+    </div>
+    ${posCard}
+    ${form}
+  </div>`;
+}
+
+// ── Облигации (под-вкладка «Облигации»): рынок чужих бумаг + выпуск + позиции ──
+// Купон в б.п./сутки от номинала; в срок эмитент гасит номинал. Дефолт = риск.
+function ecExBondsBlock() {
+  const b = EC.bonds || { issuer: [], holdings: [], market: [] };
+  const daysLeft = iso => { const ms = new Date(iso) - Date.now(); return ms <= 0 ? 0 : Math.ceil(ms / 86400000); };
+  const pct = bps => (bps / 100).toFixed(bps % 100 ? 2 : 0);   // б.п. → %
+  const statusTag = s => s === 'open' ? '' : s === 'redeemed' ? '<span class="ec-route-badge">погашен</span>'
+    : s === 'default' ? '<span class="ec-route-badge" style="background:var(--err)">дефолт</span>'
+      : '<span class="ec-route-badge">снят</span>';
+
+  // Рынок: чужие открытые выпуски — купить
+  const market = (b.market || []).map(i => `<div class="ec-q-row" style="flex-wrap:wrap;gap:8px">
+      <span class="ec-r-name" style="flex:1 1 50%"><b>${esc(i.issuer_name || '—')}</b> · номинал ${ecNum(Math.round(i.face))} ГС · купон <b style="color:var(--gd)">${pct(i.coupon_bps)}%/ход</b> · до погашения ${daysLeft(i.matures_at)} дн · доступно ${ecNum(i.units_left)}</span>
+      <input type="number" id="ec-bd-buy-${i.id}" min="1" max="${i.units_left}" placeholder="шт" class="ec-prod-qty" style="max-width:90px">
+      <button class="btn btn-gd btn-sm" onclick="ecBondBuy('${i.id}')">Купить</button>
+    </div>`).join('') || '<div class="cn-fac-hint">Нет чужих выпусков в продаже.</div>';
+
+  // Мои держания
+  const holds = (b.holdings || []).map(h => `<div class="ec-q-row" style="flex-wrap:wrap;gap:10px">
+      <span class="ec-r-name" style="flex:1 1 50%">${statusTag(h.status)} <b>${esc(h.issuer_name || '—')}</b> · ${ecNum(h.units)} шт × ${ecNum(Math.round(h.face))} = <b>${ecNum(Math.round(h.value))} ГС</b></span>
+      <span style="color:var(--t4)">купон +${ecNum(Math.round(h.daily_coupon))} ГС/ход${h.status === 'open' ? ` · погашение через ${daysLeft(h.matures_at)} дн` : ''}</span>
+    </div>`).join('') || '<div class="cn-fac-hint">Вы не держите чужих облигаций.</div>';
+
+  // Мои выпуски
+  const mine = (b.issuer || []).map(i => `<div class="ec-q-row" style="flex-wrap:wrap;gap:10px">
+      <span class="ec-r-name" style="flex:1 1 50%">${statusTag(i.status)} номинал ${ecNum(Math.round(i.face))} · купон ${pct(i.coupon_bps)}%/ход · размещено ${ecNum(i.units_sold)}/${ecNum(i.units_total)}${i.status === 'open' ? ` · срок ${daysLeft(i.matures_at)} дн` : ''}</span>
+      <span style="color:${i.daily_coupon ? 'var(--err)' : 'var(--t4)'}">${i.daily_coupon ? `−${ecNum(Math.round(i.daily_coupon))} ГС/ход` : 'выплат нет'}</span>
+      ${i.status === 'open' && i.units_sold === 0 ? `<button class="ec-bld-del" title="Снять выпуск" onclick="ecBondCancel('${i.id}')">✕</button>` : ''}
+    </div>`).join('') || '<div class="cn-fac-hint">У вас нет выпусков.</div>';
+
+  const issueForm = `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px;margin-top:6px">
+      <input type="number" id="ec-bd-face" min="1" placeholder="номинал ГС" class="ec-prod-qty" style="max-width:120px">
+      <input type="number" id="ec-bd-units" min="1" placeholder="кол-во бумаг" class="ec-prod-qty" style="max-width:120px">
+      <input type="number" id="ec-bd-coupon" min="0.01" max="10" step="0.01" placeholder="купон %/ход" class="ec-prod-qty" style="max-width:120px">
+      <input type="number" id="ec-bd-term" min="1" max="120" placeholder="срок, дней" class="ec-prod-qty" style="max-width:120px">
+      <button class="btn btn-gd btn-sm" onclick="ecBondIssue()">Выпустить</button>
+    </div>
+    <div class="cn-fac-hint" style="margin-top:5px">Инвесторы покупают бумаги — их ГС идут вам сразу. Каждый ход платите купон держателям, в срок гасите номинал. Не хватит ГС на выплату → <b style="color:var(--err)">дефолт</b> (репутация и доверие падают).</div>`;
+
+  return `<div class="ec-dip-card">
+      <div class="ec-dip-t">🏛 Рынок облигаций <span class="ec-hint">— занимайте ГС под купон или вкладывайтесь в чужой долг</span></div>
+      ${market}
+    </div>
+    <div class="ec-dip-card">
+      <div class="ec-dip-t">Мои вложения в облигации</div>
+      ${holds}
+    </div>
+    <div class="ec-dip-card">
+      <div class="ec-dip-t">Мои выпуски <span class="ec-hint">— заём под мой долг</span></div>
+      ${mine}
+      ${issueForm}
+    </div>`;
+}
+
+// ── Корпорации (под-вкладка «Корпорации»): организации из реальных построек ──
+// Доход вложенных построек уходит акционерам дивидендами на закрытии торгов.
+// Доли продаются через стакан, покупка — только при открытых торгах.
+const ecBldIcon = bt => (typeof EC_BLD_ICON !== 'undefined' && EC_BLD_ICON[bt]) || '◈';
+const ecBldNm = bt => (typeof ecBuildName === 'function' ? ecBuildName(bt) : bt);
+function ecExCorpsBlock() {
+  const c = EC.corps;
+  // RPC не ответил → честная диагностика вместо «пусто»
+  if (!c) {
+    const err = EC.corpsErr || '';
+    const schemaCache = /schema cache|Could not find|PGRST20\d|does not exist/i.test(err);
+    return `<div class="ec-dip-card ec-corp-warn">
+      <div class="ec-dip-t">🏢 Биржа корпораций недоступна</div>
+      <div class="cn-fac-hint">Сервер не вернул данные организаций.${err ? ` Ответ сервера:<br><code style="color:var(--err);word-break:break-word">${esc(err)}</code>` : ''}</div>
+      <div class="cn-fac-hint" style="margin-top:8px">${schemaCache
+        ? 'Похоже, PostgREST ещё не увидел новые функции (кэш схемы). Выполните в SQL Editor: <code>notify pgrst, \'reload schema\';</code> и обновите страницу через минуту.'
+        : 'Если <b>_exchange_corps.sql</b> применялся с красной ошибкой — Supabase откатывает весь скрипт. Перезапустите файл и убедитесь, что внизу «Success».'}</div></div>`;
+  }
+  const ses = c.session || { open: false };
+  const free = c.free_buildings || [];
+
+  // ── Учреждение: карточки-постройки + живой итог ──
+  const sumGross = free.reduce((a, b) => a + (b.daily_gc || 0), 0);
+  const pickCards = free.map(b => `<label class="ec-corp-bcard" data-gc="${b.daily_gc || 0}" onclick="setTimeout(ecCorpPick,0)">
+      <input type="checkbox" class="ec-co-newb" value="${b.id}">
+      <span class="ec-corp-bcard-ic">${ecBldIcon(b.btype)}</span>
+      <span class="ec-corp-bcard-meta"><span class="ec-corp-bcard-n">${esc(ecBldNm(b.btype))}</span>
+        <span class="ec-corp-bcard-sub">${b.colony ? esc(b.colony) + ' · ' : ''}${b.slots} сл</span></span>
+      <span class="ec-corp-bcard-gc">${b.daily_gc ? '+' + ecNum(b.daily_gc) : '0'}<small>/ход</small></span>
+    </label>`).join('');
+
+  const canFound = c.can_found !== false;   // право учреждать — только «корпоративные» державы
+  const createCard = !canFound
+    ? `<div class="ec-dip-card ec-corp-warn" style="border-color:var(--w2)">
+        <div class="ec-dip-t">🔒 Учреждение организаций недоступно</div>
+        <div class="cn-fac-hint">Учреждать организации могут только державы с <b>корпоративным укладом</b>: форма правления <b>Корпоратократия</b> или <b>Олигархия</b>, либо политический режим <b>Плутократический</b>/<b>Олигархический</b>. Покупать доли чужих организаций и получать дивиденды вы можете при любом укладе.</div></div>`
+    : free.length
+    ? `<div class="ec-corp-create">
+        <div class="ec-corp-create-hd">
+          <span class="ec-corp-create-ic">🏢</span>
+          <div><div class="ec-corp-create-t">Учредить организацию</div>
+            <div class="ec-corp-create-s">Объедините реальные постройки державы. Вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%) — этот доход распределяется дивидендами на закрытии торгов. Держите все доли — весь бонус ваш; продаёте доли — делите с инвесторами, зато получаете капитал сразу.</div></div>
+        </div>
+        <input type="text" id="ec-co-name" maxlength="40" placeholder="Название организации (напр. «Орбитальный консорциум»)" class="ec-corp-name-in" oninput="ecCorpPick()">
+        <div class="ec-corp-pick-lbl">Активы организации <span class="ec-hint">— отметьте постройки (всего доступно ${free.length}, суммарно ${ecNum(sumGross)} ГС/ход)</span></div>
+        <div class="ec-corp-pick">${pickCards}</div>
+        <div class="ec-corp-foot">
+          <div class="ec-corp-foot-sum" id="ec-co-summary">Выбрано: 0 построек · выручка 0 ГС/ход</div>
+          <button class="btn btn-gd" onclick="ecCorpCreate()">Учредить организацию</button>
+        </div>
+      </div>`
+    : `<div class="ec-dip-card"><div class="ec-dip-t">🏢 Учредить организацию</div>
+        <div class="cn-fac-hint">Нет свободных построек${(c.mine || []).length ? ' — все уже в ваших организациях' : ''}. Организация обеспечивается реальными постройками (фабрики, торговые хабы, храмы) — постройте их во вкладке <b>«Колонии»</b>.</div>
+        <button class="btn btn-gh btn-sm" style="margin-top:8px" onclick="ecSetTab('colonies')">→ К колониям</button></div>`;
+
+  // ── Мои организации ──
+  const mine = (c.mine || []).map(co => {
+    const bchips = (co.buildings || []).map(b => `<span class="ec-corp-chip">${ecBldIcon(b.btype)} ${esc(ecBldNm(b.btype))}${b.colony ? ` · ${esc(b.colony)}` : ''} (${b.slots})</span>`).join('') || '<i style="color:var(--t4)">без построек — доход 0</i>';
+    const myListed = (c.listings || []).filter(l => l.mine && l.corp_id === co.id);
+    const ownPct = co.total_shares ? Math.round(co.my_shares / co.total_shares * 100) : 0;
+    const listedRows = myListed.map(l => `<div class="ec-corp-listed"><span>📤 В продаже: <b>${ecNum(l.shares)}</b> долей (${Math.round(l.shares / Math.max(1, co.total_shares) * 100)}%) по <b>${ecNum(Math.round(l.price))} ГС</b></span><button class="ec-bld-del" title="Снять с продажи" onclick="ecCorpCancelListing('${l.id}')">✕</button></div>`).join('');
+    const canDissolve = co.my_shares >= co.total_shares && co.holders <= 1;
+    const effPct = Math.round((co.efficiency || 0) * 100);
+    const myDiv = Math.round((co.daily_gross || 0) * co.my_shares / Math.max(1, co.total_shares)); // мой дивиденд/ход
+    const effBadge = effPct ? `<span class="ec-corp-ses on" title="Синергия: доход построек увеличен">⚡ +${effPct}%</span>` : '';
+    return `<div class="ec-corp-card">
+      <div class="ec-corp-card-hd"><span class="ec-corp-card-n">🏢 ${esc(co.name)} ${effBadge}</span>
+        ${canDissolve ? `<button class="ec-bld-del" title="Распустить организацию" onclick="ecCorpDissolve('${co.id}')">✕</button>` : ''}</div>
+      <div class="ec-corp-stats">
+        <span><i>Котировка</i><b>${ecNum(Math.round(co.share_price))} ГС</b>/доля</span>
+        <span><i>Доход с синергией</i><b>${ecNum(Math.round(co.daily_gross))} /ход</b></span>
+        <span><i>Моя доля</i><b>${ownPct}% (${ecNum(co.my_shares)}/${ecNum(co.total_shares)})</b></span>
+        <span><i>Мой дивиденд</i><b style="color:var(--gd)">+${ecNum(myDiv)} /ход</b></span>
+      </div>
+      <div class="ec-corp-chips">${bchips}</div>
+      ${listedRows}
+      <div class="ec-corp-sell">
+        <input type="number" id="ec-co-ls-sh-${co.id}" min="1" max="${co.my_shares}" placeholder="долей на продажу (есть ${ecNum(co.my_shares)})" class="ec-prod-qty">
+        <input type="number" id="ec-co-ls-pr-${co.id}" min="1" placeholder="цена за долю" class="ec-prod-qty">
+        <button class="btn btn-gh btn-sm" onclick="ecCorpListShares('${co.id}')">Выставить доли</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // ── Рынок долей (чужие листинги, покупка только в сессию) ──
+  const others = (c.listings || []).filter(l => !l.mine);
+  const market = others.map(l => {
+    const divid = (l.daily_gross || 0) / Math.max(1, l.total_shares);     // дивиденд на 1 долю/ход
+    const yieldPct = l.price > 0 ? Math.round(divid / l.price * 100) : 0; // доходность/ход
+    return `<div class="ec-corp-offer">
+      <span class="ec-corp-offer-main"><b>${esc(l.name)}</b> <i style="color:var(--t4)">от ${esc(l.seller)}</i><br>
+        <span class="ec-corp-offer-sub">${ecNum(l.shares)} долей × ${ecNum(Math.round(l.price))} ГС · дивиденд ≈ ${ecNum(Math.round(divid))} ГС/доля/ход${yieldPct ? ` · доходность ~${yieldPct}%/ход` : ''}</span></span>
+      <input type="number" id="ec-co-buy-${l.id}" min="1" max="${l.shares}" placeholder="долей" class="ec-prod-qty" style="max-width:90px">
+      <button class="btn btn-gd btn-sm"${ses.open ? '' : ' disabled title="Торги закрыты — покупка недоступна"'} onclick="ecCorpBuyShares('${l.id}')">Купить</button>
+    </div>`;
+  }).join('') || `<div class="cn-fac-hint">Нет долей в продаже${ses.open ? '' : ' · торги сейчас закрыты'}.</div>`;
+
+  // ── Мои доли в чужих организациях ──
+  const holds = (c.holdings || []).map(h => `<div class="ec-corp-offer">
+      <span class="ec-corp-offer-main"><b>${esc(h.name)}</b> <i style="color:var(--t4)">(${esc(h.founder)})</i><br>
+        <span class="ec-corp-offer-sub">${ecNum(h.shares)}/${ecNum(h.total_shares)} долей = ${ecNum(Math.round(h.value))} ГС · дивиденд ≈ ${ecNum(Math.round((h.daily_gross || 0) * h.shares / Math.max(1, h.total_shares)))} ГС/ход</span></span>
+    </div>`).join('') || '<div class="cn-fac-hint">Вы не держите чужих долей.</div>';
+
+  const sesPill = ses.open
+    ? `<span class="ec-corp-ses on">● торги открыты</span>`
+    : `<span class="ec-corp-ses off">● торги закрыты</span>`;
+
+  return `${createCard}
+    <div class="ec-section-title">Мои организации</div>
+    ${mine || '<div class="cn-fac-hint">У вас пока нет организаций — учредите выше.</div>'}
+    <div class="ec-dip-card" style="margin-top:10px"><div class="ec-dip-t">🛒 Рынок долей ${sesPill}</div>${market}</div>
+    <div class="ec-dip-card"><div class="ec-dip-t">📈 Мои доли в чужих организациях</div>${holds}</div>`;
+}
+// Живой пересчёт итога формы учреждения (выбранные постройки → выручка/ход).
+function ecCorpPick() {
+  const boxes = Array.from(document.querySelectorAll('.ec-co-newb'));
+  let n = 0, gross = 0;
+  boxes.forEach(b => {
+    const card = b.closest('.ec-corp-bcard');
+    if (b.checked) { n++; gross += +(card?.dataset.gc || 0); card?.classList.add('on'); }
+    else card?.classList.remove('on');
+  });
+  const out = ecId('ec-co-summary');
+  if (!out) return;
+  const eff = Math.min(0.30, n * 0.03);            // зеркало _corp_efficiency
+  const net = Math.round(gross * (1 + eff));
+  out.innerHTML = n
+    ? `Выбрано <b>${n}</b> ${n === 1 ? 'постройка' : 'построек'} · база ${ecNum(gross)} + синергия <b style="color:#5fc98a">+${Math.round(eff * 100)}%</b> = <b style="color:var(--gd)">${ecNum(net)} ГС/ход</b> к распределению · котировка ≈ ${ecNum(Math.round(net * 20 / 1000))} ГС/доля`
+    : `Выбрано: 0 построек · выручка 0 ГС/ход`;
+}
 
 // ── Биржа технологий и чертежей (адресные предложения) ──────────
 function ecResearchLabel(key) {
@@ -5834,10 +6161,75 @@ function ecResNodeInfoClose() { document.getElementById('ec-rinfo-ov')?.classLis
 
 // ── Действия дипломатии/разведки ────────────────────────────
 function ecSellResource() {
-  const name = ecId('ec-sell-res')?.value, units = Math.max(0, parseInt(ecId('ec-sell-units')?.value) || 0);
+  const name = (ecId('ec-mk-res') || ecId('ec-sell-res'))?.value;
+  const units = Math.max(0, parseInt((ecId('ec-mk-units') || ecId('ec-sell-units'))?.value) || 0);
   if (!name) { toast('Выберите ресурс', 'err'); return; }
   if (!units) { toast('Укажите количество', 'err'); return; }
-  ecRpcAct('economy_sell_resource', { p_name: name, p_units: units, p_rarity: ecResRarity(name) }, 'Продано на рынке');
+  ecRpcAct('market_sell_resource', { p_name: name, p_units: units }, 'Продано на рынке');
+}
+function ecBuyResource() {
+  const name = ecId('ec-mk-res')?.value, units = Math.max(0, parseInt(ecId('ec-mk-units')?.value) || 0);
+  if (!name) { toast('Выберите ресурс', 'err'); return; }
+  if (!units) { toast('Укажите количество', 'err'); return; }
+  ecRpcAct('market_buy_resource', { p_name: name, p_units: units }, 'Куплено на рынке');
+}
+// ── Биржа: индекс/ETF ────────────────────────────────────────
+function ecIndexBuy() {
+  const gc = Math.max(0, parseInt(ecId('ec-ix-gc')?.value) || 0);
+  if (!gc) { toast('Укажите сумму ГС', 'err'); return; }
+  ecRpcAct('index_buy', { p_gc: gc }, 'Паи индекса куплены');
+}
+function ecIndexSell() {
+  const units = Math.max(0, parseFloat(ecId('ec-ix-units')?.value) || 0);
+  if (!units) { toast('Укажите количество паёв', 'err'); return; }
+  ecRpcAct('index_sell', { p_units: units }, 'Паи индекса проданы');
+}
+function ecIndexSellAll() {
+  const units = ((EC.exchange && EC.exchange.holdings && +EC.exchange.holdings.units) || 0);
+  if (units <= 0) { toast('Нет позиции', 'err'); return; }
+  ecRpcAct('index_sell', { p_units: units }, 'Позиция закрыта');
+}
+// ── Биржа: облигации ─────────────────────────────────────────
+function ecBondIssue() {
+  const face = Math.max(0, parseInt(ecId('ec-bd-face')?.value) || 0);
+  const units = Math.max(0, parseInt(ecId('ec-bd-units')?.value) || 0);
+  const couponPct = Math.max(0, parseFloat(ecId('ec-bd-coupon')?.value) || 0);
+  const term = Math.max(0, parseInt(ecId('ec-bd-term')?.value) || 0);
+  if (!face) { toast('Укажите номинал', 'err'); return; }
+  if (!units) { toast('Укажите кол-во бумаг', 'err'); return; }
+  if (!couponPct) { toast('Укажите купон', 'err'); return; }
+  if (!term) { toast('Укажите срок', 'err'); return; }
+  ecRpcAct('bond_issue', { p_face: face, p_units: units, p_coupon_bps: Math.round(couponPct * 100), p_term_days: term }, 'Выпуск размещён');
+}
+function ecBondBuy(id) {
+  const units = Math.max(0, parseInt(ecId('ec-bd-buy-' + id)?.value) || 0);
+  if (!units) { toast('Укажите количество', 'err'); return; }
+  ecRpcAct('bond_buy', { p_issue_id: id, p_units: units }, 'Облигации куплены');
+}
+function ecBondCancel(id) { ecRpcAct('bond_cancel', { p_issue_id: id }, 'Выпуск снят'); }
+// ── Биржа: корпорации ────────────────────────────────────────
+function ecCorpCreate() {
+  const name = (ecId('ec-co-name')?.value || '').trim();
+  if (name.length < 2) { toast('Укажите название', 'err'); return; }
+  const ids = Array.from(document.querySelectorAll('.ec-co-newb:checked')).map(el => el.value);
+  ecRpcAct('corp_create', { p_name: name, p_buildings: ids }, 'Организация учреждена');
+}
+function ecCorpDissolve(id) { ecRpcAct('corp_dissolve', { p_corp: id }, 'Организация распущена'); }
+function ecCorpListShares(corp) {
+  const shares = Math.max(0, parseInt(ecId('ec-co-ls-sh-' + corp)?.value) || 0);
+  const price = Math.max(0, parseInt(ecId('ec-co-ls-pr-' + corp)?.value) || 0);
+  if (!shares) { toast('Укажите кол-во долей', 'err'); return; }
+  if (!price) { toast('Укажите цену', 'err'); return; }
+  // нельзя выставить больше, чем держишь (сервер тоже режет эскроу)
+  const co = ((EC.corps && EC.corps.mine) || []).find(x => x.id === corp);
+  if (co && shares > co.my_shares) { toast(`У вас только ${ecNum(co.my_shares)} долей`, 'err'); return; }
+  ecRpcAct('corp_list_shares', { p_corp: corp, p_shares: shares, p_price: price }, 'Доли выставлены');
+}
+function ecCorpCancelListing(id) { ecRpcAct('corp_cancel_listing', { p_listing: id }, 'Снято с продажи'); }
+function ecCorpBuyShares(listing) {
+  const shares = Math.max(0, parseInt(ecId('ec-co-buy-' + listing)?.value) || 0);
+  if (!shares) { toast('Укажите количество', 'err'); return; }
+  ecRpcAct('corp_buy_shares', { p_listing: listing, p_shares: shares }, 'Акции куплены');
 }
 function ecTransfer() {
   const fac = ecId('ec-tr-fac')?.value, res = ecId('ec-tr-res')?.value, amt = parseInt(ecId('ec-tr-amt')?.value) || 0;

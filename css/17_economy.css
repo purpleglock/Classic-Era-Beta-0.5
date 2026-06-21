@@ -2188,3 +2188,58 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-faith-modal-x { position: absolute; top: 10px; right: 10px; z-index: 2; width: 30px; height: 30px; border-radius: 50%;
   background: var(--b1); border: 1px solid var(--w2); color: var(--t2); font-size: 14px; cursor: pointer; line-height: 1; }
 .ec-faith-modal-x:hover { color: var(--t1); border-color: var(--fc, #c9a227); }
+
+/* ── Биржа: корпорации (срез 4a) ─────────────────────────────── */
+.ec-corp-warn { border-color: var(--err, #c0504d); }
+.ec-corp-ses { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; margin-left: 6px; vertical-align: middle; }
+.ec-corp-ses.on  { color: #5fc98a; background: rgba(95,201,138,.14); }
+.ec-corp-ses.off { color: #e0688a; background: rgba(224,104,138,.12); }
+
+/* Карточка учреждения */
+.ec-corp-create { background: linear-gradient(160deg, color-mix(in srgb, var(--gd, #3a7fbf) 12%, var(--b2)) 0%, var(--b2) 60%);
+  border: 1px solid color-mix(in srgb, var(--gd, #3a7fbf) 35%, var(--w2)); border-radius: 14px; padding: 16px; }
+.ec-corp-create-hd { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.ec-corp-create-ic { font-size: 30px; line-height: 1; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--gd,#3a7fbf) 50%, transparent)); }
+.ec-corp-create-t { font-size: 17px; font-weight: 700; letter-spacing: .3px; }
+.ec-corp-create-s { font-size: 12.5px; color: var(--t3, #9fb2c8); margin-top: 2px; max-width: 640px; }
+.ec-corp-name-in { width: 100%; box-sizing: border-box; padding: 11px 14px; font-size: 15px; border-radius: 10px;
+  background: var(--b1); border: 1px solid var(--w2); color: var(--t1); margin-bottom: 12px; }
+.ec-corp-name-in:focus { outline: none; border-color: var(--gd, #3a7fbf); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gd,#3a7fbf) 25%, transparent); }
+.ec-corp-pick-lbl { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+.ec-corp-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; max-height: 320px; overflow: auto; }
+.ec-corp-bcard { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border: 1px solid var(--w2); border-radius: 11px;
+  background: var(--b1); cursor: pointer; transition: border-color .15s, background .15s, box-shadow .15s; user-select: none; }
+.ec-corp-bcard:hover { border-color: color-mix(in srgb, var(--gd,#3a7fbf) 60%, var(--w2)); }
+.ec-corp-bcard.on { border-color: var(--gd, #3a7fbf); background: color-mix(in srgb, var(--gd,#3a7fbf) 13%, var(--b1));
+  box-shadow: inset 0 0 0 1px var(--gd, #3a7fbf); }
+.ec-corp-bcard input { display: none; }
+.ec-corp-bcard-ic { font-size: 20px; line-height: 1; }
+.ec-corp-bcard-meta { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.ec-corp-bcard-n { font-weight: 600; font-size: 13px; }
+.ec-corp-bcard-sub { font-size: 11px; color: var(--t4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-corp-bcard-gc { margin-left: auto; color: #5fc98a; font-weight: 700; font-size: 12.5px; white-space: nowrap; }
+.ec-corp-bcard-gc small { font-weight: 400; color: var(--t4); }
+.ec-corp-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 13px; flex-wrap: wrap; }
+.ec-corp-foot-sum { font-size: 13px; color: var(--t2); }
+
+/* Карточка корпорации */
+.ec-corp-card { background: var(--b2); border: 1px solid var(--w2); border-radius: 12px; padding: 13px; margin-bottom: 9px; }
+.ec-corp-card-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.ec-corp-card-n { font-size: 15px; font-weight: 700; }
+.ec-corp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.ec-corp-stats span { display: flex; flex-direction: column; gap: 1px; background: var(--b1); border: 1px solid var(--w2);
+  border-radius: 9px; padding: 7px 10px; }
+.ec-corp-stats i { font-style: normal; font-size: 10.5px; color: var(--t4); text-transform: uppercase; letter-spacing: .4px; }
+.ec-corp-stats b { font-size: 14px; }
+.ec-corp-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 9px; }
+.ec-corp-chip { font-size: 11.5px; padding: 3px 9px; border-radius: 20px; background: var(--b1); border: 1px solid var(--w2); color: var(--t2); }
+.ec-corp-listed { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px;
+  padding: 6px 10px; background: color-mix(in srgb, var(--gd,#3a7fbf) 8%, var(--b1)); border-radius: 8px; margin-bottom: 6px; }
+.ec-corp-sell { display: flex; flex-wrap: wrap; gap: 6px; }
+.ec-corp-sell .ec-prod-qty { max-width: 150px; }
+
+/* Рынок долей / мои доли */
+.ec-corp-offer { display: flex; align-items: center; gap: 9px; padding: 9px 0; border-bottom: 1px solid var(--w1, rgba(255,255,255,.05)); flex-wrap: wrap; }
+.ec-corp-offer:last-child { border-bottom: none; }
+.ec-corp-offer-main { flex: 1 1 50%; font-size: 13.5px; line-height: 1.4; }
+.ec-corp-offer-sub { font-size: 12px; color: var(--t4); }

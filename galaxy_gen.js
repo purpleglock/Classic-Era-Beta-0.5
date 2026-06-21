@@ -291,6 +291,9 @@
   // Раньше цена была общей по редкости; теперь у каждого ресурса своя ценность.
   // Зеркало в SQL — функция _res_value(name) (см. _migration_res_value.sql) и
   // в economy.js (через GalaxyGen.resPrice). Меняешь тут — синхронь SQL.
+  // ⚠ Это БАЗОВЫЙ ЯКОРЬ. С появлением галактического рынка (_market_setup.sql)
+  // ЖИВАЯ цена считается на сервере (market_resources) и зеркалится в EC.market;
+  // resPrice/RES_PRICE остаются фолбэком и target-ом для возврата к среднему.
   const RB_PRICE = { common: 2, uncommon: 10, rare: 50, epic: 200, legendary: 1200 };
   const RES_PRICE = {
     SILICATE: 1, SULFUR: 2, IRON: 3, CARBON: 3, ICEWATER: 3, METHANE: 4,
