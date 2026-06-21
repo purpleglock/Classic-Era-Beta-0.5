@@ -685,11 +685,11 @@ function ecSpatialBar(bal) {
   const popM = bal.pop_mult == null ? 1 : +bal.pop_mult;
   const popChip = popM < 0.995 ? `<span class="ec-sb-cov ec-sb-lo" title="Отток населения: бедность гонит жителей прочь. Доля заселённости — ${Math.round(popM * 100)}% от ёмкости.">👥 ${Math.round(popM * 100)}%</span>` : '';
   const revolt = bal.revolt_until && new Date(bal.revolt_until).getTime() > Date.now();
-  const revChip = revolt ? `<span class="ec-sb-cov ec-sb-lo" title="Последствия восстания: просперити ×0.8 до ${new Date(bal.revolt_until).toLocaleDateString('ru-RU')}.">🔥 бунт</span>` : '';
+  const revChip = revolt ? `<span class="ec-sb-cov ec-sb-lo" title="Последствия беспорядков: просперити ×0.95 до ${new Date(bal.revolt_until).toLocaleDateString('ru-RU')}.">🔥 беспорядки</span>` : '';
   const relChips = (bal.relief || []).map(r => `<span class="ec-sb-cov ec-sb-hi" title="${esc((EC_RELIEF[r.kind] || {}).name || r.kind)} активна">${(EC_RELIEF[r.kind] || {}).ic || '🤝'}</span>`).join('');
   return `<div class="ec-sb">
     <span class="ec-sb-pill ec-sb-${st}" title="Просперити системы — множитель дохода домиков.">просперити ×${pr.toFixed(2)} · ${stTxt}</span>
-    ${chip('⛏', 'Сырьё', cov.r)}${chip('🏭', 'Товары', cov.g)}${chip('🍞', 'Потребление', cov.c)}${chip('👷', 'Труд', cov.l)}${spill}${evChip}${popChip}${revChip}${relChips}
+    ${chip('👷', 'Труд', cov.l)}${chip('⛏', 'Сырьё', cov.r)}${chip('🏭', 'Товары', cov.g)}${spill}${evChip}${popChip}${revChip}${relChips}
   </div>`;
 }
 
@@ -728,7 +728,7 @@ function ecPovertyStats() {
 // Что именно «провисает» в системе — причины дефицита (для карточки).
 function ecPovDeficits(bal) {
   const cov = bal.coverage || {};
-  const items = [['c', '🍞 Потребление'], ['l', '👷 Труд'], ['g', '🏭 Товары'], ['r', '⛏ Сырьё']];
+  const items = [['l', '👷 Труд'], ['g', '🏭 Товары'], ['r', '⛏ Сырьё']];
   return items.filter(([k]) => (cov[k] == null ? 1 : +cov[k]) < 0.7)
     .map(([k, label]) => ({ k, label, cov: cov[k] == null ? 1 : +cov[k] }));
 }
@@ -750,11 +750,11 @@ function ecPovertyPanel() {
   const cls = s.stagn || s.revolt ? 'bad' : (s.unrest ? 'warn' : 'ok');
   const headVal = poor ? `${poor} / ${s.n}` : `0`;
   const desc = poor
-    ? `Бедность бьёт по доходу, гонит население прочь и грозит восстанием. Помогайте бедствующим системам во вкладке «Территория».`
+    ? `Плотная застройка/нехватка рабочих рук слегка давит доход и понемногу гонит население. Разрядите застройку или помогите системам во вкладке «Благополучие».`
     : `Все системы держатся в достатке — бедности нет.`;
   const top = ecPovPoorSystems().slice(0, 3).map(b => {
     const st = b.status === 'stagnation' ? 'стагнация' : (b.status === 'unrest' ? 'волнения' : 'отток');
-    return `<button type="button" class="ec-pov-mini" onclick="ecSetTab('territory')">
+    return `<button type="button" class="ec-pov-mini" onclick="ecSetTab('welfare')">
       <span class="ec-pov-mini-n">🌐 ${esc(b.name || 'Система')}</span>
       <span class="ec-pov-mini-st ec-sb-${b.status || 'ok'}">${st} · ×${(+b.prosperity || 1).toFixed(2)}</span>
     </button>`;
@@ -769,14 +769,12 @@ function ecPovertyPanel() {
     </div>
     <div class="ec-ovx-hint">${desc}</div>
     ${top ? `<div class="ec-pov-minis">${top}</div>` : ''}
-    ${poor ? `<button class="btn btn-gh btn-sm" onclick="ecSetTab('territory')" style="margin-top:8px">⚖ Меры против бедности →</button>` : ''}
+    ${poor ? `<button class="btn btn-gh btn-sm" onclick="ecSetTab('welfare')" style="margin-top:8px">⚖ Открыть благополучие →</button>` : ''}
   </div>`;
 }
 
 // Что наполняет шкалу и что её опустошает (мех-ка _building_vector: supply/demand).
 const EC_COV_INFO = {
-  c: { ic: '📦', label: 'Потребление',
-       up: 'фабрики потребления', down: 'население + производства' },
   l: { ic: '👷', label: 'Труд',
        up: 'население', down: 'рабочие места всех построек' },
   g: { ic: '🏭', label: 'Товары',
@@ -812,20 +810,20 @@ function ecPovertyCard(bal) {
 
   // ── Диагноз одной фразой (что прямо сейчас происходит) ──
   const diag = revolt
-    ? '🔥 Идёт восстание: казна разграблена, доход системы подбит на несколько дней. Сбейте напряжение мерой «Снабжение».'
-    : st === 'stagnation' ? '🔴 Стагнация: доход системы упал в пол, население бежит. На максимуме напряжения — восстание и грабёж казны.'
-    : st === 'unrest' ? '🟡 Волнения: доход снижен, население понемногу утекает. Если не выправить снабжение — дойдёт до стагнации.'
+    ? '🔥 Беспорядки: казна понесла небольшой разовый урон, доход системы подбит на пару дней. Сбейте напряжение мерой «Снабжение».'
+    : st === 'stagnation' ? '🔴 Стагнация: доход системы заметно просел, население потихоньку утекает. На максимуме напряжения возможны беспорядки.'
+    : st === 'unrest' ? '🟡 Волнения: доход слегка снижен, население понемногу утекает. Если не выправить снабжение — дойдёт до стагнации.'
     : popM < 0.995 ? '🟢 Восстановление: снабжение налаживается, население возвращается.'
     : '🟢 Под нагрузкой: снабжение на грани, но держится.';
 
   // ── Доход (просперити) — что значит множитель ──
-  const prCls = pr < 0.6 ? 'lo' : (pr < 0.9 ? 'mid' : 'hi');
-  const prWhy = st === 'stagnation' ? 'обрезан стагнацией (потолок ×0.40)'
-    : st === 'unrest' ? 'снижен волнениями'
-    : pr > 1 ? 'выше нормы' : 'почти в норме';
+  const prCls = pr < 0.93 ? 'lo' : (pr < 1.05 ? 'mid' : 'hi');
+  const prWhy = st === 'stagnation' ? 'слегка обрезан стагнацией (мягкий потолок ×0.90)'
+    : st === 'unrest' ? 'чуть снижен волнениями'
+    : pr > 1.05 ? 'выше нормы' : 'почти в норме';
 
   // ── Напряжение: 6 сегментов с порогами + тренд ──
-  const welfare = Math.min(cov.c == null ? 1 : +cov.c, cov.l == null ? 1 : +cov.l);
+  const welfare = cov.l == null ? 1 : +cov.l;
   const trend = importActive ? '⏸ заморожен импортом'
     : welfare < 0.4 ? '↑↑ быстро растёт'
     : welfare < 0.7 ? '↑ растёт'
@@ -833,23 +831,22 @@ function ecPovertyCard(bal) {
     : '→ держится';
   const segs = Array.from({ length: 6 }, (_, i) => {
     const on = i < strain;
-    const tier = i < 2 ? 'lo' : (i < 4 ? 'mid' : 'hi'); // 0-1 копится, 2-3 волнения, 4-5 стагнация→бунт
+    const tier = i < 3 ? 'lo' : (i < 5 ? 'mid' : 'hi'); // 0-2 копится, 3-4 волнения, 5-6 стагнация→бунт
     return `<i class="${on ? 'on ec-strain-' + tier : ''}"></i>`;
   }).join('');
 
   // ── Полосы обеспеченности (вместо запутанного «дефицит: X%»), худшее вверх ──
-  const covRows = ['c', 'l', 'g', 'r']
+  const covRows = ['l', 'g', 'r']
     .map(k => [k, cov[k] == null ? 1 : +cov[k]])
     .sort((a, b) => a[1] - b[1])
     .map(([k, c]) => ecCovBar(k, c)).join('');
 
   // ── Главная причина → конкретный совет ──
   const defs = ecPovDeficits(bal);
-  const lever = defs.find(d => d.k === 'c') ? '💡 Не хватает товаров потребления. Стройте фабрики потребления или заведите караван с доставкой в эту систему — ввоз засчитывается в снабжение.'
-    : defs.find(d => d.k === 'l') ? '💡 Не хватает рабочих рук: построек больше, чем населения тянет. Снизьте нагрузку домиков — население подрастёт с достатком.'
-    : defs.find(d => d.k === 'g') ? '💡 Не хватает товаров. Стройте фабрики товаров / гражданские.'
-    : defs.find(d => d.k === 'r') ? '💡 Не хватает сырья. Стройте добывающие заводы.'
-    : '💡 Снабжение в норме — просто удержите его несколько ходов, напряжение спадёт само.';
+  const lever = defs.find(d => d.k === 'l') ? '💡 Не хватает рабочих рук: построек больше, чем тянет население. Снизьте плотность застройки — это главный рычаг просперити.'
+    : defs.find(d => d.k === 'g') ? '💡 Не хватает товаров (справочно). Стройте гражданские фабрики.'
+    : defs.find(d => d.k === 'r') ? '💡 Не хватает сырья (справочно). Стройте добывающие заводы.'
+    : '💡 Всё в норме — просто удержите несколько ходов, напряжение спадёт само.';
 
   const btns = Object.keys(EC_RELIEF).map(kind => {
     const cfg = EC_RELIEF[kind];
@@ -888,7 +885,7 @@ function ecPovertyCard(bal) {
     <div class="ec-pov-strain">
       <div class="ec-pov-strain-h"><span>😣 Напряжение ${strain}/6</span><span class="ec-pov-strain-tr">${trend}</span></div>
       <div class="ec-strain-bar">${segs}</div>
-      <div class="ec-strain-marks"><span>0</span><span>2 · волнения</span><span>4 · стагнация</span><span>6 · бунт</span></div>
+      <div class="ec-strain-marks"><span>0</span><span>3 · волнения</span><span>5 · стагнация</span><span>6 · бунт</span></div>
     </div>
 
     <div class="ec-pov-covs"><div class="ec-pov-covs-k">Снабжение системы:</div>${covRows}</div>
@@ -901,22 +898,73 @@ function ecPovertyCard(bal) {
 }
 
 // Секция бедности во вкладке «Территория»: сводка + карточки бедных систем.
-function ecPovertySection() {
-  if (!Object.keys(EC.spatial || {}).length) return '';
+// Объясняющие карточки механики благополучия (что такое население/труд/просперити).
+function ecWelfareHowto() {
+  const items = [
+    ['👥', 'Население', 'Жители системы — сумма по всем её колониям. Дают <b>рабочие руки</b>. В бедности часть уезжает (заселённость падает), с достатком возвращаются. Растёт от новых колоний и терраформинга.'],
+    ['👷', 'Труд · рабочие места', 'Каждая постройка требует рабочих рук — по числу открытых слотов. Чем плотнее застройка системы, тем больше спрос на труд.'],
+    ['⚖', 'Просперити (×0.85…1.30)', 'Множитель дохода <b>всех</b> доходных построек системы (фабрики, торг-хабы, храмы). Считается из одного: <b>население ÷ рабочие места</b>. Рук с запасом → к ×1.30; впритык → ~×1.15; рук вдвое меньше нужного → к полу ×0.85.'],
+    ['📉', 'Что давит доход', 'Только <b>плотная застройка</b> — много построек на мало населения. Не лепите всё в одну систему: расширяйтесь и распределяйте производство по системам.'],
+    ['★', 'Столица', 'Стартовая столичная система <b>всегда богата и спокойна</b> — бедность, отток населения и беспорядки её не трогают.'],
+    ['💰', 'Меры за ГС', 'Бедной системе можно <b>временно</b> поднять просперити: дотация, снабжение, экстренный импорт. Стоимость растёт с населением — это скорая помощь, не лечение.'],
+  ];
+  return `<div class="ec-wf-how">${items.map(([ic, t, d]) =>
+    `<div class="ec-wf-how-c"><div class="ec-wf-how-h"><span>${ic}</span><b>${t}</b></div><div class="ec-wf-how-d">${d}</div></div>`).join('')}</div>`;
+}
+
+// Одна строка системы в общем списке: имя · просперити · покрытие труда · жители · рабочие места · статус.
+function ecWelfareSysRow(bal, isCap) {
+  const pr = +bal.prosperity || 1;
+  const cl = (bal.coverage && bal.coverage.l != null) ? +bal.coverage.l : 1;
+  const pop = Math.round(+bal.pop || 0);
+  const jobs = Math.round((bal.labor && +bal.labor.demand) || 0);
+  const popM = bal.pop_mult == null ? 1 : +bal.pop_mult;
+  const st = isCap ? 'ok' : (bal.status || 'ok');
+  const prCls = pr < 0.93 ? 'lo' : (pr < 1.05 ? 'mid' : 'hi');
+  const clPct = Math.round(cl * 100);
+  const clCls = cl < 0.5 ? 'lo' : (cl < 0.8 ? 'mid' : 'hi');
+  const stTxt = isCap ? '★ столица' : (st === 'stagnation' ? 'стагнация' : st === 'unrest' ? 'волнения' : 'в достатке');
+  return `<div class="ec-wf-row">
+    <div class="ec-wf-nm">🌐 ${esc(bal.name || 'Система')}${isCap ? ' <span class="ec-wf-cap">★</span>' : ''}</div>
+    <div class="ec-wf-pr ec-cov-${prCls}" title="Множитель дохода построек системы">×${pr.toFixed(2)}</div>
+    <div class="ec-wf-bar ec-cov-${clCls}" title="Покрытие труда: население ÷ рабочие места"><span class="ec-cov-bar"><i style="width:${Math.min(100, clPct)}%"></i></span><b>${clPct}%</b></div>
+    <div class="ec-wf-pop" title="Жители системы (доля заселённости)">👥 ${ecNum(pop)}${popM < 0.995 ? ` <span class="ec-cov-lo">${Math.round(popM * 100)}%</span>` : ''}</div>
+    <div class="ec-wf-jobs" title="Рабочих мест требуют постройки">👷 ${ecNum(jobs)}</div>
+    <div class="ec-wf-st ec-sb-${st}">${stTxt}</div>
+  </div>`;
+}
+
+// Вкладка «Благополучие»: объяснение механики + список всех систем + карточки проблемных с мерами.
+function ecTabWelfare() {
+  const intro = ecIntro('⚖', 'Благополучие систем',
+    'Просперити — это <b>множитель дохода</b> каждой системы. Главный и единственный рычаг — <b>плотность застройки</b>: сколько построек приходится на население. Хватает рабочих рук — система богатеет; перегрузили стройкой — доход мягко проседает.',
+    ['Доход доходных построек (фабрики · торг-хабы · храмы) умножается на просперити системы, где они стоят.',
+     'Просперити держится в полосе <b>×0.85…×1.30</b> — резких обвалов нет.',
+     'Бедность мягкая: лёгкий отток населения и редкие беспорядки только при затяжном перегрузе. <b>Столица не беднеет никогда.</b>']);
+  if (!Object.keys(EC.spatial || {}).length) {
+    return `${intro}${ecWelfareHowto()}<div class="ec-empty">Пока нет систем с колониями — благополучие появится, когда заселите планеты.</div>`;
+  }
+  const capSet = new Set((EC.colonies || []).filter(c => c.is_capital).map(c => c.system_id));
+  const all = Object.values(EC.spatial).slice().sort((a, b) => (+a.prosperity || 1) - (+b.prosperity || 1));
   const s = ecPovertyStats();
   const poor = ecPovPoorSystems();
-  const head = `<div class="ec-section-title">Бедность и благополучие <span class="ec-hint">— дефицит давит доход, гонит население и грозит восстанием</span></div>
-    <div class="ec-pov-how">Система в дефиците потребления/труда копит <b>напряжение</b>: волнения → стагнация (доход в пол) → <b>отток населения</b> и риск <b>восстания</b> (грабёж казны). Лечится снабжением (фабрики, добыча, <b>торговые караваны</b> с доставкой в систему) — а деньгами можно <b>экстренно поддержать</b> бедствующую систему.</div>`;
-  if (!poor.length) {
-    return `${head}<div class="ec-empty">✓ Бедных систем нет — все ${ecNum(s.n)} систем(ы) держатся в достатке.</div>`;
-  }
   const summary = `<div class="ec-pov-sum">
-    <span class="ec-pov-sum-i ec-sb-${s.stagn ? 'lo' : 'mid'}"><b>${ecNum(s.unrest + s.stagn)}</b> бедн. систем</span>
+    <span class="ec-pov-sum-i">⚖ <b>${ecNum(all.length)}</b> систем(ы)</span>
+    <span class="ec-pov-sum-i ec-sb-${s.stagn ? 'stagnation' : (s.unrest ? 'unrest' : 'ok')}"><b>${ecNum(s.unrest + s.stagn)}</b> требуют внимания</span>
     <span class="ec-pov-sum-i"><b>${s.poorPct}%</b> населения в нужде</span>
-    ${s.revolt ? `<span class="ec-pov-sum-i ec-sb-lo"><b>🔥 ${ecNum(s.revolt)}</b> восстаний</span>` : ''}
-    ${s.relief ? `<span class="ec-pov-sum-i ec-sb-hi"><b>🤝 ${ecNum(s.relief)}</b> под помощью</span>` : ''}
+    ${s.revolt ? `<span class="ec-pov-sum-i ec-sb-stagnation">🔥 <b>${ecNum(s.revolt)}</b> беспорядков</span>` : ''}
+    ${s.relief ? `<span class="ec-pov-sum-i ec-sb-ok">🤝 <b>${ecNum(s.relief)}</b> под помощью</span>` : ''}
   </div>`;
-  return `${head}${summary}<div class="ec-pov-cards">${poor.map(ecPovertyCard).join('')}</div>`;
+  const table = `<div class="ec-section-title">Все системы <span class="ec-hint">— доход · труд (рук хватает?) · жители · рабочие места</span></div>
+    <div class="ec-wf-table">
+      <div class="ec-wf-head"><span>Система</span><span>Доход</span><span>Труд</span><span>Жители</span><span>Места</span><span>Статус</span></div>
+      ${all.map(b => ecWelfareSysRow(b, capSet.has(b.system_id))).join('')}
+    </div>`;
+  const careHead = `<div class="ec-section-title">Требуют внимания <span class="ec-hint">— причина просадки и экстренные меры</span></div>`;
+  const cards = poor.length
+    ? `${careHead}<div class="ec-pov-cards">${poor.map(ecPovertyCard).join('')}</div>`
+    : `${careHead}<div class="ec-empty">✓ Все системы держатся в достатке — помощь не нужна.</div>`;
+  return `${intro}${ecWelfareHowto()}${summary}${table}${cards}`;
 }
 
 // Применить меру помощи системе (тратит ГС). Зеркало RPC poverty_relief.
@@ -1351,11 +1399,12 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['trade', '⇄', 'Торговля'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['trade', '⇄', 'Торговля'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
     : EC.tab === 'milbuild' ? ecTabMilBuild()
     : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
+    : EC.tab === 'welfare' ? ecTabWelfare()
     : EC.tab === 'trade' ? ecTabTrade()
     : EC.tab === 'exchange' ? ecTabExchange()
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'faith' ? ecTabFaith() : EC.tab === 'intel' ? ecTabIntel()
@@ -3194,8 +3243,7 @@ function ecTabTerritory() {
     ${ecMinimap()}
     <div class="ec-section-title">Колонизация системы <span class="ec-hint">— смежная по гиперпути и ничья · раз в ${ecClaimCdDays()} дн. (доктрина)</span></div>
     ${cdLine}
-    <div class="ec-colonize">${list}</div>
-    ${ecPovertySection()}`;
+    <div class="ec-colonize">${list}</div>`;
 }
 async function ecClaimSystem(systemId) {
   if (EC.busy) return;
@@ -6766,7 +6814,7 @@ async function ecMgaVerdict(id, action) {
 function ecBuildingRow(b) {
   const d = EC_BUILD[b.btype]; if (!d) return '';
   const inc = ecBuildingIncome(b);
-  const incTxt = inc.gc ? `+${ecNum(inc.gc)} ГС / сутки` : inc.science ? `+${ecNum(inc.science)} ОН / сутки` : inc.tnp ? `+${ecNum(inc.tnp)} ТНП / сутки` : d.desc;
+  const incTxt = inc.gc ? `+${ecNum(inc.gc)} ГС / сутки` : inc.science ? `+${ecNum(inc.science)} ОН / сутки` : d.desc;
   const dots = Array.from({ length: EC_MAX_SLOTS }, (_, i) => `<span class="ec-slot ${i < b.slots_open ? 'on' : ''}"></span>`).join('');
   const maxed = b.slots_open >= EC_MAX_SLOTS;
   const pendSlot = ecPendingSlot(b.id);
