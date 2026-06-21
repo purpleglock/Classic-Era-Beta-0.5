@@ -653,6 +653,284 @@ async function ecRpc(fn, body) {
   }
 }
 
+// ── Пространственная экономика (срез 1-4): полоска баланса системы ──
+// Покрытие <0.7 — дефицит (красный), 0.7..1 — впритык (жёлтый), ≥1 — профицит (зелёный).
+function ecSpatialCovCls(v) { return v < 0.7 ? 'lo' : (v < 1 ? 'mid' : 'hi'); }
+// Активное экономическое событие сектора системы (срез 4).
+const EC_SECTOR_EVENT = { war: '⚔ война', pirates: '☠ пираты', boom: '↑ бум', depression: '↓ кризис' };
+function ecSysSectorEvent(sid) {
+  const now = Date.now();
+  const sec = (EC.sectors || []).find(s => Array.isArray(s.system_ids) && s.system_ids.includes(sid)
+    && s.econ_event && (!s.econ_until || new Date(s.econ_until).getTime() > now));
+  return sec ? { event: sec.econ_event, mod: +sec.econ_mod || 1, name: sec.name } : null;
+}
+function ecSpatialBar(bal) {
+  if (!bal) return '';
+  const cov = bal.coverage || {};
+  const pr = +bal.prosperity || 1;
+  const st = bal.status || 'ok';
+  const stTxt = st === 'stagnation' ? 'стагнация' : (st === 'unrest' ? 'волнения' : 'баланс');
+  const chip = (ic, label, v) => {
+    const n = (v == null ? 1 : +v);
+    return `<span class="ec-sb-cov ec-sb-${ecSpatialCovCls(n)}" title="${label}: покрытие ${Math.round(n * 100)}%">${ic} ${Math.round(n * 100)}%</span>`;
+  };
+  const sum = o => o ? Math.round((+o.r || 0) + (+o.g || 0) + (+o.c || 0)) : 0;
+  // Спилловер от соседей (срез 4)
+  const spl = bal.spill && sum(bal.spill);
+  const spill = spl ? `<span class="ec-sb-cov ec-sb-hi" title="Спилловер: соседи той же фракции гасят дефицит">🌐 +${spl}</span>` : '';
+  // Событие сектора (срез 4)
+  const ev = ecSysSectorEvent(bal.system_id);
+  const evChip = ev ? `<span class="ec-sb-cov ${ev.mod >= 1 ? 'ec-sb-hi' : 'ec-sb-lo'}" title="Событие сектора «${esc(ev.name || '')}»: просперити ×${ev.mod}">${EC_SECTOR_EVENT[ev.event] || esc(ev.event)} ×${ev.mod}</span>` : '';
+  // Бедность (срез 6): отток населения + штраф после восстания
+  const popM = bal.pop_mult == null ? 1 : +bal.pop_mult;
+  const popChip = popM < 0.995 ? `<span class="ec-sb-cov ec-sb-lo" title="Отток населения: бедность гонит жителей прочь. Доля заселённости — ${Math.round(popM * 100)}% от ёмкости.">👥 ${Math.round(popM * 100)}%</span>` : '';
+  const revolt = bal.revolt_until && new Date(bal.revolt_until).getTime() > Date.now();
+  const revChip = revolt ? `<span class="ec-sb-cov ec-sb-lo" title="Последствия восстания: просперити ×0.8 до ${new Date(bal.revolt_until).toLocaleDateString('ru-RU')}.">🔥 бунт</span>` : '';
+  const relChips = (bal.relief || []).map(r => `<span class="ec-sb-cov ec-sb-hi" title="${esc((EC_RELIEF[r.kind] || {}).name || r.kind)} активна">${(EC_RELIEF[r.kind] || {}).ic || '🤝'}</span>`).join('');
+  return `<div class="ec-sb">
+    <span class="ec-sb-pill ec-sb-${st}" title="Просперити системы — множитель дохода домиков.">просперити ×${pr.toFixed(2)} · ${stTxt}</span>
+    ${chip('⛏', 'Сырьё', cov.r)}${chip('🏭', 'Товары', cov.g)}${chip('🍞', 'Потребление', cov.c)}${chip('👷', 'Труд', cov.l)}${spill}${evChip}${popChip}${revChip}${relChips}
+  </div>`;
+}
+
+// ── Бедность (срез 6): сводка державы, карточки бедных систем, меры помощи ──
+// Меры зеркалят RPC poverty_relief: множитель цены на эффективное население системы.
+const EC_RELIEF = {
+  subsidy: { ic: '💰', name: 'Дотация', short: 'деньги → просперити',
+    desc: '+0.25 просперити на 5 дней. Деньги напрямую поднимают доход системы — лечит симптом, не корень.', mul: 450, min: 15000 },
+  ration:  { ic: '📦', name: 'Снабжение', short: 'гасит напряжение',
+    desc: '−3 напряжения сразу + малый буст просперити на 3 дня. Быстро сбивает волнения и стагнацию.', mul: 300, min: 10000 },
+  import:  { ic: '🚀', name: 'Экстренный импорт', short: 'закрывает дефицит',
+    desc: '+0.15 просперити на 7 дней и тормозит рост напряжения. Затыкает провал снабжения, пока строите производство.', mul: 350, min: 12000 },
+};
+function ecPovActive(bal, kind) {
+  return (bal.relief || []).some(r => r.kind === kind && (!r.until || new Date(r.until).getTime() > Date.now()));
+}
+function ecReliefCost(bal, kind) {
+  const cfg = EC_RELIEF[kind]; if (!cfg) return 0;
+  return Math.max(cfg.min, Math.ceil((+bal.pop || 0) * cfg.mul));
+}
+// Сводка бедности по всем системам державы (для обзора и заголовка секции).
+function ecPovertyStats() {
+  const arr = Object.values(EC.spatial || {});
+  const now = Date.now();
+  let totPop = 0, poorPop = 0, unrest = 0, stagn = 0, revolt = 0, relief = 0;
+  arr.forEach(b => {
+    const pop = +b.pop || 0; totPop += pop;
+    if (b.status === 'stagnation') { stagn++; poorPop += pop; }
+    else if (b.status === 'unrest') { unrest++; poorPop += pop; }
+    if (b.revolt_until && new Date(b.revolt_until).getTime() > now) revolt++;
+    if ((b.relief || []).some(r => !r.until || new Date(r.until).getTime() > now)) relief++;
+  });
+  return { n: arr.length, unrest, stagn, revolt, relief, totPop, poorPop,
+    poorPct: totPop > 0 ? Math.round(poorPop / totPop * 100) : 0 };
+}
+// Что именно «провисает» в системе — причины дефицита (для карточки).
+function ecPovDeficits(bal) {
+  const cov = bal.coverage || {};
+  const items = [['c', '🍞 Потребление'], ['l', '👷 Труд'], ['g', '🏭 Товары'], ['r', '⛏ Сырьё']];
+  return items.filter(([k]) => (cov[k] == null ? 1 : +cov[k]) < 0.7)
+    .map(([k, label]) => ({ k, label, cov: cov[k] == null ? 1 : +cov[k] }));
+}
+// Бедные системы (волнения/стагнация/бунт), самые тяжёлые сверху.
+function ecPovPoorSystems() {
+  const now = Date.now();
+  return Object.values(EC.spatial || {})
+    .filter(b => b.status === 'unrest' || b.status === 'stagnation'
+      || (b.revolt_until && new Date(b.revolt_until).getTime() > now)
+      || (b.pop_mult != null && +b.pop_mult < 0.995))
+    .sort((a, b) => (+a.prosperity || 1) - (+b.prosperity || 1));
+}
+
+// Компактная панель в обзоре кабинета: индекс бедности державы.
+function ecPovertyPanel() {
+  const s = ecPovertyStats();
+  if (!s.n) return '';
+  const poor = s.unrest + s.stagn;
+  const cls = s.stagn || s.revolt ? 'bad' : (s.unrest ? 'warn' : 'ok');
+  const headVal = poor ? `${poor} / ${s.n}` : `0`;
+  const desc = poor
+    ? `Бедность бьёт по доходу, гонит население прочь и грозит восстанием. Помогайте бедствующим системам во вкладке «Территория».`
+    : `Все системы держатся в достатке — бедности нет.`;
+  const top = ecPovPoorSystems().slice(0, 3).map(b => {
+    const st = b.status === 'stagnation' ? 'стагнация' : (b.status === 'unrest' ? 'волнения' : 'отток');
+    return `<button type="button" class="ec-pov-mini" onclick="ecSetTab('territory')">
+      <span class="ec-pov-mini-n">🌐 ${esc(b.name || 'Система')}</span>
+      <span class="ec-pov-mini-st ec-sb-${b.status || 'ok'}">${st} · ×${(+b.prosperity || 1).toFixed(2)}</span>
+    </button>`;
+  }).join('');
+  return `<div class="ec-ovx-panel ec-ovx-half ec-pov-panel ec-pov-${cls}">
+    <div class="ec-ovx-panel-t">⚖ Бедность <span class="ec-ovx-panel-sub">благополучие систем</span></div>
+    <div class="ec-ovx-stat-grid">
+      <div class="ec-ovx-stat"><div class="ec-ovx-stat-v ec-pov-v-${cls}">${headVal}</div><div class="ec-ovx-stat-k">Бедных систем</div></div>
+      <div class="ec-ovx-stat"><div class="ec-ovx-stat-v">${s.poorPct}%</div><div class="ec-ovx-stat-k">Населения в нужде</div></div>
+      <div class="ec-ovx-stat"><div class="ec-ovx-stat-v ec-pov-v-${s.revolt ? 'bad' : 'ok'}">${s.revolt || 0}</div><div class="ec-ovx-stat-k">🔥 Восстаний</div></div>
+      <div class="ec-ovx-stat"><div class="ec-ovx-stat-v ec-pov-v-ok">${s.relief || 0}</div><div class="ec-ovx-stat-k">🤝 Под помощью</div></div>
+    </div>
+    <div class="ec-ovx-hint">${desc}</div>
+    ${top ? `<div class="ec-pov-minis">${top}</div>` : ''}
+    ${poor ? `<button class="btn btn-gh btn-sm" onclick="ecSetTab('territory')" style="margin-top:8px">⚖ Меры против бедности →</button>` : ''}
+  </div>`;
+}
+
+// Что наполняет шкалу и что её опустошает (мех-ка _building_vector: supply/demand).
+const EC_COV_INFO = {
+  c: { ic: '📦', label: 'Потребление',
+       up: 'фабрики потребления', down: 'население + производства' },
+  l: { ic: '👷', label: 'Труд',
+       up: 'население', down: 'рабочие места всех построек' },
+  g: { ic: '🏭', label: 'Товары',
+       up: 'фабрики товаров', down: 'производства, что их тратят' },
+  r: { ic: '⛏', label: 'Сырьё',
+       up: 'добывающие заводы', down: 'фабрики, что его перерабатывают' },
+};
+// Одна строка-полоса обеспеченности ресурса: бар + % + оценка + ОТКУДА/КУДА.
+function ecCovBar(k, cov) {
+  const info = EC_COV_INFO[k] || { ic: '•', label: k, up: '?', down: '?' };
+  const pct = Math.round(cov * 100);
+  const cls = cov < 0.4 ? 'lo' : (cov < 0.7 ? 'mid' : 'hi');
+  const word = cov < 0.4 ? 'критично' : (cov < 0.7 ? 'нехватка' : 'в норме');
+  return `<div class="ec-cov-row ec-cov-${cls}">
+    <span class="ec-cov-lbl">${info.ic} ${info.label}</span>
+    <span class="ec-cov-bar"><i style="width:${Math.min(100, pct)}%"></i></span>
+    <span class="ec-cov-pct">${pct}%</span>
+    <span class="ec-cov-word">${word}</span>
+    <span class="ec-cov-drv">↑ ${info.up} · ↓ ${info.down}</span>
+  </div>`;
+}
+
+// Карточка бедной системы: диагноз → шкалы → что делать → меры помощи.
+function ecPovertyCard(bal) {
+  const st = bal.status || 'ok';
+  const stTxt = st === 'stagnation' ? 'Стагнация' : (st === 'unrest' ? 'Волнения' : 'Под нагрузкой');
+  const pr = +bal.prosperity || 1;
+  const popM = bal.pop_mult == null ? 1 : +bal.pop_mult;
+  const strain = Math.max(0, Math.min(6, Math.round(+bal.strain || 0)));
+  const revolt = bal.revolt_until && new Date(bal.revolt_until).getTime() > Date.now();
+  const cov = bal.coverage || {};
+  const importActive = ecPovActive(bal, 'import');
+
+  // ── Диагноз одной фразой (что прямо сейчас происходит) ──
+  const diag = revolt
+    ? '🔥 Идёт восстание: казна разграблена, доход системы подбит на несколько дней. Сбейте напряжение мерой «Снабжение».'
+    : st === 'stagnation' ? '🔴 Стагнация: доход системы упал в пол, население бежит. На максимуме напряжения — восстание и грабёж казны.'
+    : st === 'unrest' ? '🟡 Волнения: доход снижен, население понемногу утекает. Если не выправить снабжение — дойдёт до стагнации.'
+    : popM < 0.995 ? '🟢 Восстановление: снабжение налаживается, население возвращается.'
+    : '🟢 Под нагрузкой: снабжение на грани, но держится.';
+
+  // ── Доход (просперити) — что значит множитель ──
+  const prCls = pr < 0.6 ? 'lo' : (pr < 0.9 ? 'mid' : 'hi');
+  const prWhy = st === 'stagnation' ? 'обрезан стагнацией (потолок ×0.40)'
+    : st === 'unrest' ? 'снижен волнениями'
+    : pr > 1 ? 'выше нормы' : 'почти в норме';
+
+  // ── Напряжение: 6 сегментов с порогами + тренд ──
+  const welfare = Math.min(cov.c == null ? 1 : +cov.c, cov.l == null ? 1 : +cov.l);
+  const trend = importActive ? '⏸ заморожен импортом'
+    : welfare < 0.4 ? '↑↑ быстро растёт'
+    : welfare < 0.7 ? '↑ растёт'
+    : welfare >= 0.9 ? '↓ спадает'
+    : '→ держится';
+  const segs = Array.from({ length: 6 }, (_, i) => {
+    const on = i < strain;
+    const tier = i < 2 ? 'lo' : (i < 4 ? 'mid' : 'hi'); // 0-1 копится, 2-3 волнения, 4-5 стагнация→бунт
+    return `<i class="${on ? 'on ec-strain-' + tier : ''}"></i>`;
+  }).join('');
+
+  // ── Полосы обеспеченности (вместо запутанного «дефицит: X%»), худшее вверх ──
+  const covRows = ['c', 'l', 'g', 'r']
+    .map(k => [k, cov[k] == null ? 1 : +cov[k]])
+    .sort((a, b) => a[1] - b[1])
+    .map(([k, c]) => ecCovBar(k, c)).join('');
+
+  // ── Главная причина → конкретный совет ──
+  const defs = ecPovDeficits(bal);
+  const lever = defs.find(d => d.k === 'c') ? '💡 Не хватает товаров потребления. Стройте фабрики потребления или заведите караван с доставкой в эту систему — ввоз засчитывается в снабжение.'
+    : defs.find(d => d.k === 'l') ? '💡 Не хватает рабочих рук: построек больше, чем населения тянет. Снизьте нагрузку домиков — население подрастёт с достатком.'
+    : defs.find(d => d.k === 'g') ? '💡 Не хватает товаров. Стройте фабрики товаров / гражданские.'
+    : defs.find(d => d.k === 'r') ? '💡 Не хватает сырья. Стройте добывающие заводы.'
+    : '💡 Снабжение в норме — просто удержите его несколько ходов, напряжение спадёт само.';
+
+  const btns = Object.keys(EC_RELIEF).map(kind => {
+    const cfg = EC_RELIEF[kind];
+    const cost = ecReliefCost(bal, kind);
+    const active = ecPovActive(bal, kind);
+    const afford = (EC.eco.gc || 0) >= cost;
+    const dis = active || !afford;
+    return `<button class="ec-relief-btn ec-relief-${kind}${active ? ' is-active' : ''}${!afford && !active ? ' is-off' : ''}" ${dis ? 'disabled' : ''}
+      title="${esc(cfg.desc)}" onclick="ecReliefApply('${esc(bal.system_id)}','${kind}')">
+      <span class="ec-relief-ic">${cfg.ic}</span>
+      <span class="ec-relief-main"><span class="ec-relief-n">${esc(cfg.name)}</span><span class="ec-relief-s">${esc(cfg.short)}</span></span>
+      <span class="ec-relief-cost">${active ? '✓ активно' : ecNum(cost) + ' ГС'}</span>
+    </button>`;
+  }).join('');
+
+  return `<div class="ec-pov-card ec-pov-card-${st}${revolt ? ' ec-pov-card-revolt' : ''}">
+    <div class="ec-pov-card-h">
+      <span class="ec-pov-card-n">🌐 ${esc(bal.name || 'Система')}</span>
+      <span class="ec-pov-card-badge ec-sb-${st}">${revolt ? '🔥 ' : ''}${stTxt}</span>
+    </div>
+    <div class="ec-pov-diag ec-sb-${st}">${diag}</div>
+
+    <div class="ec-pov-gauges">
+      <div class="ec-pov-gauge">
+        <div class="ec-pov-gauge-k">Доход системы</div>
+        <div class="ec-pov-gauge-v ec-cov-${prCls}">×${pr.toFixed(2)}</div>
+        <div class="ec-pov-gauge-s">${prWhy}</div>
+      </div>
+      <div class="ec-pov-gauge">
+        <div class="ec-pov-gauge-k">Население</div>
+        <div class="ec-pov-gauge-v ${popM < 0.7 ? 'ec-cov-lo' : (popM < 0.995 ? 'ec-cov-mid' : 'ec-cov-hi')}">${Math.round(popM * 100)}%</div>
+        <div class="ec-pov-gauge-s">${popM < 0.995 ? 'отток жителей' : 'заселено полностью'}</div>
+      </div>
+    </div>
+
+    <div class="ec-pov-strain">
+      <div class="ec-pov-strain-h"><span>😣 Напряжение ${strain}/6</span><span class="ec-pov-strain-tr">${trend}</span></div>
+      <div class="ec-strain-bar">${segs}</div>
+      <div class="ec-strain-marks"><span>0</span><span>2 · волнения</span><span>4 · стагнация</span><span>6 · бунт</span></div>
+    </div>
+
+    <div class="ec-pov-covs"><div class="ec-pov-covs-k">Снабжение системы:</div>${covRows}</div>
+
+    <div class="ec-pov-card-lever">${lever}</div>
+
+    <div class="ec-pov-acts-k">Экстренная помощь за ГС (временная):</div>
+    <div class="ec-pov-card-acts">${btns}</div>
+  </div>`;
+}
+
+// Секция бедности во вкладке «Территория»: сводка + карточки бедных систем.
+function ecPovertySection() {
+  if (!Object.keys(EC.spatial || {}).length) return '';
+  const s = ecPovertyStats();
+  const poor = ecPovPoorSystems();
+  const head = `<div class="ec-section-title">Бедность и благополучие <span class="ec-hint">— дефицит давит доход, гонит население и грозит восстанием</span></div>
+    <div class="ec-pov-how">Система в дефиците потребления/труда копит <b>напряжение</b>: волнения → стагнация (доход в пол) → <b>отток населения</b> и риск <b>восстания</b> (грабёж казны). Лечится снабжением (фабрики, добыча, <b>торговые караваны</b> с доставкой в систему) — а деньгами можно <b>экстренно поддержать</b> бедствующую систему.</div>`;
+  if (!poor.length) {
+    return `${head}<div class="ec-empty">✓ Бедных систем нет — все ${ecNum(s.n)} систем(ы) держатся в достатке.</div>`;
+  }
+  const summary = `<div class="ec-pov-sum">
+    <span class="ec-pov-sum-i ec-sb-${s.stagn ? 'lo' : 'mid'}"><b>${ecNum(s.unrest + s.stagn)}</b> бедн. систем</span>
+    <span class="ec-pov-sum-i"><b>${s.poorPct}%</b> населения в нужде</span>
+    ${s.revolt ? `<span class="ec-pov-sum-i ec-sb-lo"><b>🔥 ${ecNum(s.revolt)}</b> восстаний</span>` : ''}
+    ${s.relief ? `<span class="ec-pov-sum-i ec-sb-hi"><b>🤝 ${ecNum(s.relief)}</b> под помощью</span>` : ''}
+  </div>`;
+  return `${head}${summary}<div class="ec-pov-cards">${poor.map(ecPovertyCard).join('')}</div>`;
+}
+
+// Применить меру помощи системе (тратит ГС). Зеркало RPC poverty_relief.
+async function ecReliefApply(systemId, kind) {
+  if (EC.busy) return;
+  const bal = EC.spatial && EC.spatial[systemId];
+  if (!bal) return;
+  const cfg = EC_RELIEF[kind]; if (!cfg) return;
+  const cost = ecReliefCost(bal, kind);
+  if ((EC.eco.gc || 0) < cost) { toast(`Недостаточно ГС: нужно ${ecNum(cost)}`, 'err'); return; }
+  if (!confirm(`${cfg.ic} ${cfg.name} для системы «${bal.name || ''}» за ${ecNum(cost)} ГС?\n${cfg.desc}`)) return;
+  await ecRpcAct('poverty_relief', { p_system_id: systemId, p_kind: kind }, `${cfg.ic} ${cfg.name}: помощь оказана`);
+}
+
 // ── Инициализация экономики (без начисления!) ───────────────
 // Доход начисляется И сервером (pg_cron -> economy_tick_all раз в сутки для
 // всех), И при заходе в кабинет (economy_tick — «догоняет» накопленные сутки
@@ -753,7 +1031,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -791,11 +1069,17 @@ async function ecLoad() {
     ecRpc('exchange_status').catch(() => null),   // биржа: индекс/ETF + спарклайны цен ресурсов + моя позиция
     ecRpc('bonds_status').catch(() => null),      // биржа: облигации — мои выпуски/держания + рынок чужих бумаг
     ecRpc('corps_status').catch(e => ({ __err: (e && e.message) || 'нет ответа' })),   // биржа: корпорации (ошибку показываем в UI)
+    ecRpc('spatial_status').catch(() => []),   // пространственная экономика: NET-баланс систем (с учётом торговых караванов между игроками)
+    dbGet('map_sectors', `select=id,name,system_ids,econ_event,econ_mod,econ_until`).catch(() => []),   // сектора + эконом-события (срез 4)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
   EC.buildings = blds || [];
   EC.systems = (sys || []).map(s => ({ ...s, planets: s.planets || [] }));
+  // Пространственная экономика: NET-баланс системы (покрытия R/G/C/труд, просперити, статус), индекс по system_id.
+  EC.spatial = {};
+  (Array.isArray(spatial) ? spatial : []).forEach(b => { if (b && b.system_id) EC.spatial[b.system_id] = b; });
+  EC.sectors = Array.isArray(sectors) ? sectors : [];   // сектора карты + эконом-события (срез 4)
   EC.designs = (designs || []);
   EC.roster = (prod || []).filter(p => p.status === 'done');
   EC.queue = (prod || []).filter(p => p.status === 'queued');
@@ -883,9 +1167,21 @@ async function ecLoad() {
 async function ecReloadPaint() { await ecLoad(); ecPaintCabinet(); }
 
 // ── Превью дохода (зеркало RPC) ─────────────────────────────
+// Пространственная экономика (срез 2): просперити/цена товаров системы постройки
+// (зеркало _system_balance). Без данных (старая БД / нет среза) — нейтрально ×1.
+function ecBuildingSysBal(b) {
+  const c = EC.colonies.find(x => x.id === b.colony_id);
+  return (c && EC.spatial && EC.spatial[c.system_id]) || null;
+}
+function ecBuildingProsp(b) { const bal = ecBuildingSysBal(b); return bal ? (+bal.prosperity || 1) : 1; }
+function ecBuildingPriceG(b) { const bal = ecBuildingSysBal(b); return (bal && bal.prices) ? (+bal.prices.g || 1) : 1; }
 function ecBuildingIncome(b) {
   const d = EC_BUILD[b.btype]; if (!d) return { gc: 0, science: 0 };
-  return { gc: (d.inc.gc || 0) * b.slots_open, science: (d.inc.science || 0) * b.slots_open };
+  let gc = (d.inc.gc || 0) * b.slots_open;
+  // ГС-домики × просперити системы; фабрика ещё × ценовую премию товаров (срез 2)
+  if (b.btype === 'factory') gc *= ecBuildingProsp(b) * ecBuildingPriceG(b);
+  else if (b.btype === 'trade' || b.btype === 'temple') gc *= ecBuildingProsp(b);
+  return { gc, science: (d.inc.science || 0) * b.slots_open };
 }
 // Итоговый доход империи с учётом доктрины государства (зеркало economy_accrue).
 // Наука/агенты — ПЛОСКИЙ бонус доктрины (+N/сут), а не процент (они дискретны).
@@ -925,8 +1221,14 @@ function ecCaravanIncome() {
 function ecGcIncome() {
   const inc = ecIncomePreview();
   const gcMul = inc.gcMul != null ? inc.gcMul : 1;
-  const factory = Math.round(ecSlotsSum('factory') * 200 * gcMul);
-  const trade   = Math.round(ecSlotsSum('trade') * 100 * gcMul);
+  // По-построечно: ecBuildingIncome уже учитывает просперити/цену системы (срез 2).
+  let factory = 0, trade = 0;
+  (EC.buildings || []).forEach(b => {
+    if (b.btype === 'factory') factory += ecBuildingIncome(b).gc;
+    else if (b.btype === 'trade') trade += ecBuildingIncome(b).gc;
+  });
+  factory = Math.round(factory * gcMul);
+  trade   = Math.round(trade * gcMul);
   const cv = ecCaravanIncome();
   return { factory, trade, caravan: cv, net: factory + trade + cv.net };
 }
@@ -2347,7 +2649,9 @@ function ecTabOverview() {
   EC.buildings.forEach(b => { bldByType[b.btype] = (bldByType[b.btype] || 0) + 1; });
   const bldChips = EC_ORDER.map(t => bldByType[t] ? `<span class="ec-ovx-chip"><span class="ec-ovx-chip-ic">${EC_BLD_ICON[t] || '▣'}</span>${esc(ecBuildName(t))} <b>${ecNum(bldByType[t])}</b></span>` : '').filter(Boolean).join('');
   // Раскрываемое дерево: система → её колонии → постройки и занятые ячейки.
+  // Полоска баланса системы (пространственная экономика, срез 1).
   const empTreeRows = (EC.systems || []).map(s => {
+    const bal = EC.spatial && EC.spatial[s.id];
     const cols = EC.colonies.filter(c => c.system_id === s.id);
     const colRows = cols.map(c => {
       const cb = EC.buildings.filter(b => b.colony_id === c.id);
@@ -2359,7 +2663,7 @@ function ecTabOverview() {
         <div class="ec-emp-col-chips">${chips}</div>
       </div>`;
     }).join('') || '<div class="ec-emp-empty">колоний нет</div>';
-    return `<div class="ec-emp-sys"><div class="ec-emp-sys-h">🌐 ${esc(s.name || 'Система')} <span class="ec-emp-sys-sub">${ecNum(cols.length)} колон.</span></div>${colRows}</div>`;
+    return `<div class="ec-emp-sys"><div class="ec-emp-sys-h">🌐 ${esc(s.name || 'Система')} <span class="ec-emp-sys-sub">${ecNum(cols.length)} колон.</span></div>${ecSpatialBar(bal)}${colRows}</div>`;
   }).join('');
   const empDetail = `<div class="ec-emp-detail">
       ${bldChips ? `<div class="ec-emp-dt-sect">Все постройки державы</div><div class="ec-ovx-chips">${bldChips}</div>` : ''}
@@ -2465,7 +2769,7 @@ function ecTabOverview() {
     : 'родные миры: ' + ((EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—') + '. Чужие типы планет — через терраформ.'}</div>`;
 
   const achTeaser = ecAchOverviewTeaser();
-  return `<div class="ec-ovx-grid">${budget}${ecStatsPanel()}${resPanel}${empire}${army}${sci}${ecDoctrineHtml()}${achTeaser}</div>${raceNote}
+  return `<div class="ec-ovx-grid">${budget}${ecStatsPanel()}${resPanel}${empire}${ecPovertyPanel()}${army}${sci}${ecDoctrineHtml()}${achTeaser}</div>${raceNote}
     <div class="ec-ov-links">
       <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
       <button class="btn btn-gh btn-sm" onclick="go('cat-ships')">🚀 Каталоги</button>
@@ -2890,7 +3194,8 @@ function ecTabTerritory() {
     ${ecMinimap()}
     <div class="ec-section-title">Колонизация системы <span class="ec-hint">— смежная по гиперпути и ничья · раз в ${ecClaimCdDays()} дн. (доктрина)</span></div>
     ${cdLine}
-    <div class="ec-colonize">${list}</div>`;
+    <div class="ec-colonize">${list}</div>
+    ${ecPovertySection()}`;
 }
 async function ecClaimSystem(systemId) {
   if (EC.busy) return;
@@ -2952,6 +3257,8 @@ function ecFacSelect(id) { const opts = ecOtherFactions().map(f => `<option valu
 function ecErr(m) {
   m = m || '';
   if (m.includes('not enough')) return 'Недостаточно средств';
+  if (m.includes('not your system')) return 'Это не ваша система';
+  if (m.includes('bad kind')) return 'Неизвестная мера помощи';
   if (m.includes('no free trade hub')) return 'Нет свободных слотов Торгового хаба';
   if (m.includes('has no economy')) return 'У второй стороны нет экономики (не заходила в кабинет)';
   if (m.includes('no agents')) return 'Нет агентов';
@@ -6137,7 +6444,10 @@ function ecResNodeInfo(id) {
   }
 
   let ov = document.getElementById('ec-rinfo-ov');
-  if (!ov) { ov = document.createElement('div'); ov.id = 'ec-rinfo-ov'; ov.className = 'ec-rinfo-ov'; ov.onclick = e => { if (e.target === ov) ecResNodeInfoClose(); }; document.body.appendChild(ov); }
+  // Пересоздаём, если оверлея нет ИЛИ его выпилил из DOM блокировщик рекламы
+  // (uBlock/AdGuard scriptlet `:remove()`): иначе ссылка «висит» в воздухе и
+  // карточка узла «не открывается» только у людей с адблоком.
+  if (!ov || !document.body.contains(ov)) { ov = document.createElement('div'); ov.id = 'ec-rinfo-ov'; ov.className = 'ec-rinfo-ov'; ov.onclick = e => { if (e.target === ov) ecResNodeInfoClose(); }; document.body.appendChild(ov); }
   const L = (EC.techLayout && EC.techLayout[n.id]) || {};
   const gicon = L.icon || EC_BRANCH_ICON[n.branch] || EC_CAT_ICON[n.cat] || '✦';
   const gemHtml = L.img
@@ -6156,8 +6466,18 @@ function ecResNodeInfo(id) {
     ${actBtn ? `<div class="ec-rinfo-act">${actBtn}</div>` : ''}
   </div>`;
   ov.classList.add('show');
+  // Форсим показ инлайн-стилем с !important — перебивает внедрённый блокировщиком
+  // `display:none !important` (косметический фильтр на полноэкранный оверлей).
+  // Обычный класс `.show` такой фильтр перебить не может — у адблок-юзеров
+  // карточка «не открывалась».
+  ov.style.setProperty('display', 'flex', 'important');
 }
-function ecResNodeInfoClose() { document.getElementById('ec-rinfo-ov')?.classList.remove('show'); }
+function ecResNodeInfoClose() {
+  const ov = document.getElementById('ec-rinfo-ov');
+  if (!ov) return;
+  ov.classList.remove('show');
+  ov.style.setProperty('display', 'none', 'important');
+}
 
 // ── Действия дипломатии/разведки ────────────────────────────
 function ecSellResource() {

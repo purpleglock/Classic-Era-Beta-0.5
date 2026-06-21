@@ -171,6 +171,18 @@
 .gm-cap{position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:15px;line-height:1;pointer-events:none;z-index:6;text-shadow:0 0 4px #000,0 0 9px currentColor;filter:drop-shadow(0 0 2px #000)}
 .gm-capital img{filter:drop-shadow(0 0 10px currentColor)}
 
+/* Режим «бедность»: сами ячейки систем красятся по просперити (см. gmEconFill),
+   ореолов-колец больше нет — вся инфа читается внутри границ системы. */
+#gm-wrap.gm-show-econ .gm-label{opacity:.55}
+/* Легенда — вертикальный столбик под кнопкой (панель контролов узкая, горизонтальная
+   раскладка раньше «съезжала» из колонки влево) */
+#gm-econ-legend{display:flex;flex-direction:column;gap:4px;align-items:flex-end;margin:2px 0}
+#gm-econ-legend.gm-hidden{display:none}
+.gm-el{font-size:10px;line-height:1;padding:3px 7px;border-radius:6px;border:1px solid var(--w2);background:hsl(216 30% 5% / .7);white-space:nowrap}
+.gm-el-poor{color:#e74c3c}
+.gm-el-mid{color:#f1c40f}
+.gm-el-rich{color:#2ecc71}
+
 /* Режим «ресурсы систем»: компактная сводка одной строкой над звездой */
 .gm-res-overlay{
   position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:6px;
@@ -249,6 +261,11 @@
 
 /* Контролы (границы/зум/фуллскрин) */
 #gm-controls{position:absolute;right:12px;bottom:12px;z-index:25;display:flex;flex-direction:column;gap:6px}
+.gm-ctl-group{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.gm-ctl-group.gm-collapsed{display:none}
+.gm-ctl-toggle{align-self:flex-end}
+.gm-ctl-toggle .gm-ico{transition:transform .2s}
+.gm-ctl-toggle.gm-on .gm-ico{transform:rotate(180deg)}
 .gm-ctl{
   width:38px;height:38px;display:flex;align-items:center;justify-content:center;
   font-size:18px;line-height:1;cursor:pointer;

@@ -19,21 +19,37 @@ const GM_DEEP_SCALE = 4;
 const GM_ICO = {
   borders: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2.6l8.1 4.7v9.4L12 21.4 3.9 16.7V7.3z"/></svg>',
   res: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M5.4 8l3.1-4.5h7L18.6 8 12 20.5z" stroke-width="1.8"/><path d="M3.6 8h16.8M9 3.5 12 8 9 20.5M15 3.5 12 8l3 12.5" stroke-width="1.2"/></svg>',
+  econ: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v10M9.3 9.4c0-1.3 1.2-2.1 2.7-2.1s2.7.9 2.7 2c0 2.6-5.4 1.4-5.4 4 0 1.1 1.2 2 2.7 2s2.7-.9 2.7-2.1"/></svg>',
   zin: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5.5v13M5.5 12h13"/></svg>',
   zout: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5.5 12h13"/></svg>',
   fit: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>',
   fs: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></svg>',
   edit: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10.5-10.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+  collapse: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9.5l5 5 5-5"/></svg>',
 };
 function gmCtlBtns() {
   return `
+        <button class="gm-ctl gm-ctl-toggle${GM.ctlCollapsed ? ' gm-on' : ''}" id="gm-ctl-toggle" title="${GM.ctlCollapsed ? 'Показать панель' : 'Свернуть панель'}" onclick="gmToggleControls()">${GM_ICO.collapse}</button>
+        <div class="gm-ctl-group${GM.ctlCollapsed ? ' gm-collapsed' : ''}" id="gm-ctl-group">
         <button class="gm-ctl${GM.showBorders ? ' gm-active' : ''}" title="Границы" id="gm-ctl-borders" onclick="gmToggleBorders()">${GM_ICO.borders}</button>
         <button class="gm-ctl${GM.showRes ? ' gm-active' : ''}" title="Ресурсы систем" id="gm-ctl-res" onclick="gmToggleRes()">${GM_ICO.res}</button>
         ${gmResFilterHtml()}
+        <button class="gm-ctl${GM.showEcon ? ' gm-active' : ''}" title="Бедность систем" id="gm-ctl-econ" onclick="gmToggleEcon()">${GM_ICO.econ}</button>
+        ${gmEconLegendHtml()}
         <button class="gm-ctl" title="Приблизить" onclick="gmZoomBtn(1)">${GM_ICO.zin}</button>
         <button class="gm-ctl" title="Отдалить" onclick="gmZoomBtn(-1)">${GM_ICO.zout}</button>
         <button class="gm-ctl" title="Вся карта" onclick="gmFit()">${GM_ICO.fit}</button>
-        <button class="gm-ctl" title="На весь экран" id="gm-ctl-fs" onclick="gmToggleFullscreen()">${GM_ICO.fs}</button>`;
+        <button class="gm-ctl" title="На весь экран" id="gm-ctl-fs" onclick="gmToggleFullscreen()">${GM_ICO.fs}</button>
+        </div>`;
+}
+// Свернуть/развернуть панель контролов карты — остаётся только кнопка-стрелка.
+function gmToggleControls() {
+  const g = document.getElementById('gm-ctl-group');
+  if (!g) return;
+  GM.ctlCollapsed = !g.classList.contains('gm-collapsed');
+  g.classList.toggle('gm-collapsed', GM.ctlCollapsed);
+  const b = document.getElementById('gm-ctl-toggle');
+  if (b) { b.classList.toggle('gm-on', GM.ctlCollapsed); b.title = GM.ctlCollapsed ? 'Показать панель' : 'Свернуть панель'; }
 }
 
 const GM = {
@@ -46,8 +62,9 @@ const GM = {
   drag: null,                    // {sys, moved}
   panning: false, panStart: null,
   loaded: false,
-  showBorders: true, fullscreen: false,
+  showBorders: true, fullscreen: false, ctlCollapsed: false,
   showRes: false,                // режим «ресурсы систем»
+  showEcon: false,               // режим «бедность» (просперити систем)
   resRarities: ['rare', 'epic', 'legendary'], // какие редкости показывать на карте
   touch: null,                   // {mode:'pan'|'pinch', ...}
   myFid: null,                   // фракция игрока (для «развитости» СВОИХ колоний)
@@ -75,19 +92,23 @@ function gmExitEdit() {
 // ── Загрузка данных ─────────────────────────────────────────
 async function loadGalaxyData() {
   try {
-    const [sys, lanes, facs, secs, routes] = await Promise.all([
+    const [sys, lanes, facs, secs, routes, econ] = await Promise.all([
       dbGet('map_systems', 'select=*'),
       dbGet('map_hyperlanes', 'select=*'),
       dbGet('map_factions', 'select=*&order=sort.asc'),
       dbGet('map_sectors', 'select=*').catch(() => []),   // таблица может быть не создана
       // активные торговые маршруты — для трафика караванов по гиперпутям
       dbGet('trade_routes', 'status=eq.active&select=origin_sys,dest_sys,a_fid,convoy').catch(() => []),
+      // пространственная экономика: кэш просперити/статуса систем (режим «бедность»)
+      dbGet('system_econ', 'select=system_id,status,prosperity').catch(() => []),
     ]);
     GM.systems = (sys || []).map(s => ({ ...s, x: +s.x, y: +s.y, planets: s.planets || [] }));
     GM.lanes = lanes || [];
     GM.factions = facs || [];
     GM.routes = routes || [];
     GM.sectors = (secs || []).map(s => ({ ...s, system_ids: s.system_ids || [] }));
+    GM.econ = {};   // system_id → { status, prosperity } для режима «бедность»
+    (econ || []).forEach(e => { if (e && e.system_id) GM.econ[e.system_id] = { status: e.status, prosperity: +e.prosperity }; });
     GM.loaded = true;
     // мета фракций (флаг/герб, лидер) из анкет — необязательно
     GM.facMeta = {};
@@ -182,6 +203,7 @@ async function renderGalaxyMap() {
   gmBindViewport();
   gmBindResTip();
   document.getElementById('gm-wrap')?.classList.toggle('gm-show-res', GM.showRes);
+  document.getElementById('gm-wrap')?.classList.toggle('gm-show-econ', GM.showEcon);
   gmFit();
   gmDraw();
 }
@@ -444,6 +466,39 @@ function gmToggleRes() {
   document.getElementById('gm-ctl-res')?.classList.toggle('gm-active', GM.showRes);
   document.getElementById('gm-res-filter')?.classList.toggle('gm-hidden', !GM.showRes);
   if (GMM.active) gmmRaster();
+}
+
+// ── Режим «бедность»: раскраска систем по просперити (кэш system_econ) ──
+function gmEconLegendHtml() {
+  return `<div id="gm-econ-legend" class="${GM.showEcon ? '' : 'gm-hidden'}">
+    <span class="gm-el gm-el-poor">бедность</span>
+    <span class="gm-el gm-el-mid">впритык</span>
+    <span class="gm-el gm-el-rich">достаток</span>
+  </div>`;
+}
+function gmToggleEcon() {
+  GM.showEcon = !GM.showEcon;
+  document.getElementById('gm-wrap')?.classList.toggle('gm-show-econ', GM.showEcon);
+  document.getElementById('gm-ctl-econ')?.classList.toggle('gm-active', GM.showEcon);
+  document.getElementById('gm-econ-legend')?.classList.toggle('gm-hidden', !GM.showEcon);
+  if (GMM.active) gmmRaster();
+  else gmDrawSvg();   // SVG-рендер: режим «бедность» перекрашивает САМИ ячейки (не ореолы)
+}
+// Цвет по просперити: стагнация — бордовый, далее красный→оранж→жёлтый→зелёный.
+function gmEconColor(pr, status) {
+  if (status === 'stagnation') return '#c0392b';
+  if (pr <= 0.6) return '#e74c3c';
+  if (pr <= 0.85) return '#e67e22';
+  if (pr < 1.1) return '#f1c40f';
+  return '#2ecc71';
+}
+// Заливка ячейки системы в режиме «бедность»: полупрозрачный цвет просперити прямо
+// в границах системы (вместо ореола-кольца). Нет данных — нейтральная серая дымка.
+function gmEconFill(s) {
+  const e = GM.econ && GM.econ[s.id];
+  if (!e || e.prosperity == null || isNaN(e.prosperity)) return 'rgba(90,100,120,0.16)';
+  const [r, g, b] = gmRgb(gmEconColor(e.prosperity, e.status));
+  return `rgba(${r},${g},${b},0.5)`;
 }
 function gmSetResRarity(r) {
   const i = GM.resRarities.indexOf(r);
@@ -779,7 +834,8 @@ function gmDrawSvg() {
     const d = dOf(f.pts, true);
     if (f.isFog) return `<path class="vor-fog" d="${d}" fill="rgba(4,6,12,${f.fogA != null ? f.fogA : 0.55})" stroke="none"></path>`;  // туман войны (пустота)
     if (f.isRift) return `<path class="vor-cell vor-rift" d="${d}" stroke="none"></path>`;  // заливка/анимация — в CSS
-    const fill = f.fac ? f.fac.color : 'rgba(120,140,170,0.05)';
+    // Режим «бедность»: ячейку красим по просперити системы (а не цветом фракции).
+    const fill = GM.showEcon ? gmEconFill(f.sys) : (f.fac ? f.fac.color : 'rgba(120,140,170,0.05)');
     const cls = 'vor-cell' + (f.fac ? ' vor-claimed' : ' vor-neutral');
     return `<path class="${cls}" d="${d}" fill="${fill}" stroke="none"></path>`;
   }).join('');
@@ -2535,9 +2591,12 @@ function gmmBuildWorld() {
   const dOf = (pts, close) => 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + (close ? 'Z' : '');
   // заливки, сгруппированные по цвету (фракция = один Path2D из всех её ячеек)
   const fillD = new Map();
+  const econD = new Map();   // те же ячейки, но цвет = просперити системы (режим «бедность»)
   geo.fills.forEach(f => {
     const color = f.isRift ? 'rgba(14,2,24,.8)' : (f.fac ? f.fac.color : 'rgba(120,140,170,0.04)');
-    fillD.set(color, (fillD.get(color) || '') + dOf(f.pts, true));
+    const d = dOf(f.pts, true);
+    fillD.set(color, (fillD.get(color) || '') + d);
+    if (!f.isRift && f.sys) { const ec = gmEconFill(f.sys); econD.set(ec, (econD.get(ec) || '') + d); }
   });
   // туман — единый путь по всем ячейкам пустоты (без швов: один Path2D)
   const fogD = (geo.fog || []).map(pts => dOf(pts, true)).join('');
@@ -2569,6 +2628,7 @@ function gmmBuildWorld() {
   (geo.secEdges || []).forEach(e => secD.set(e.color, (secD.get(e.color) || '') + dOf(e.pts)));
   GMM.paths = {
     fills: [...fillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
+    econFills: [...econD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     fogPath: fogD ? new Path2D(fogD) : null,
     secFills: [...secFillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     edges: [...edgeD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
@@ -2670,10 +2730,17 @@ function gmmPaint(ctx, camS, wx0, wy0, wx1, wy1) {
 function gmmPaintVector(ctx, camS) {
   const P = GMM.paths;
   if (!P) return;
-  P.fills.forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
-  // подложки секторов — на обзоре, плавно гаснут при приближении
+  // Заливки территорий. Режим «бедность» красит ячейки по просперити. Без границ и
+  // без «бедности» заливки не рисуем вовсе (кнопка «Границы» убирает всю территорию,
+  // как в SVG-рендере), остаются только гиперпути и звёзды.
+  if (GM.showEcon) {
+    (P.econFills || []).forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
+  } else if (GM.showBorders) {
+    P.fills.forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
+  }
+  // подложки секторов — на обзоре, плавно гаснут при приближении (привязаны к «Границам»)
   const secA = 1 - gmmZoomT(camS);
-  if (P.secFills && P.secFills.length && secA > 0.01) {
+  if (GM.showBorders && P.secFills && P.secFills.length && secA > 0.01) {
     ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = .42 * secA;
     P.secFills.forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
     ctx.restore();
@@ -2700,7 +2767,7 @@ function gmmPaintVector(ctx, camS) {
   }
   // границы секторов = «пустота»: мягкое тёмное разрежение (перо из 3 слоёв) в тон туману,
   // видно лишь на обзоре — при приближении плавно тает
-  if (P.secEdges && P.secEdges.length && secA > 0.01) {
+  if (GM.showBorders && P.secEdges && P.secEdges.length && secA > 0.01) {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#070a12';
     ctx.globalAlpha = .12 * secA; ctx.lineWidth = 20 / camS; P.secEdges.forEach(e => ctx.stroke(e.p2d));
     ctx.globalAlpha = .18 * secA; ctx.lineWidth = 11 / camS; P.secEdges.forEach(e => ctx.stroke(e.p2d));
@@ -2708,7 +2775,7 @@ function gmmPaintVector(ctx, camS) {
     ctx.globalAlpha = 1;
   }
   // метки регионов — нормальный размер, плавно гаснут при приближении
-  if (P.secLabels && P.secLabels.length && secA > 0.01) {
+  if (GM.showBorders && P.secLabels && P.secLabels.length && secA > 0.01) {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
     ctx.font = `700 ${(14 / camS).toFixed(1)}px Rajdhani, 'Exo 2', sans-serif`;
     P.secLabels.forEach(l => {
