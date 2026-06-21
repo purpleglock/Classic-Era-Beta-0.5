@@ -284,7 +284,7 @@ begin
         'Планета «'||coalesce(s.target_planet,'???')||'» в системе «'||coalesce(tgt.name,'???')||
         '» перестала существовать. Кора вскипела, океаны испарились, орбита усеяна пеплом — теперь это мёртвый камень.'||
         case when victim_name is not null then ' Колония державы «'||victim_name||'» стёрта вместе с миром.' else '' end||
-        ' Пиздец что творится.');
+        ' Молчите. Здесь больше нечего сказать.');
     end if;
 
     update public.doom_salvos set status='done', resolved_at=now() where id = s.id;
@@ -329,7 +329,7 @@ begin
       perform public._doom_news(
         '🜨 ОРУДИЕ РАСПАЛОСЬ',
         'Длань Неотвратимости рассыпалась в прах: программируемая материя иссякла, и сдерживать деградацию стало нечем. '||
-        'То, что грозило целым мирам, теперь — груда мёртвого металла. Пиздец что творится.');
+        'То, что грозило целым мирам, теперь — груда мёртвого металла. Возможно, так даже лучше.');
     else
       -- last_maint двигаем ровно на отработанные сутки (остаток времени сохраняем)
       update public.doom_guns set integrity = d, last_maint = g.last_maint + (days||' days')::interval
@@ -383,6 +383,43 @@ begin
 end$$;
 revoke all on function public.admin_test_speed_doom(text) from public;
 grant execute on function public.admin_test_speed_doom(text) to authenticated;
+
+-- ── 9б) АДМИН: ВЫДАТЬ ОРУДИЕ фракции (без исследования и затрат) ──
+-- Ставит готовую «Длань Неотвратимости» сразу (не отложенным проектом) на
+-- колонию фракции со свободной ячейкой. Триггер заведёт doom_guns (integrity 100).
+-- Опционально открывает исследование pol.inevitability, чтобы UI был согласован.
+create or replace function public.admin_grant_doomgun(p_fid text, p_colony_id uuid default null)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare col record; used int; bid uuid; picked record;
+begin
+  if public.current_user_role() not in ('superadmin','editor') then raise exception 'forbidden: staff only'; end if;
+
+  if p_colony_id is not null then
+    select * into picked from public.colonies where id = p_colony_id and faction_id = p_fid;
+    if not found then raise exception 'colony not found for this faction'; end if;
+  else
+    -- первая колония со свободной ячейкой (по дате создания → обычно столица)
+    for col in select c.* from public.colonies c where c.faction_id = p_fid order by c.created_at asc loop
+      select count(*) into used from public.colony_buildings where colony_id = col.id;
+      if used < coalesce(col.cells,6) then picked := col; exit; end if;
+    end loop;
+    if picked is null then raise exception 'no colony with a free cell for faction %', p_fid; end if;
+  end if;
+
+  insert into public.colony_buildings (colony_id, faction_id, owner_id, btype, slots_open, tnp_mode)
+    values (picked.id, p_fid, picked.owner_id, 'doomgun', 1, false)
+    returning id into bid;   -- триггер _doom_on_building создаст doom_guns
+
+  -- чтобы кабинет видел технологию как открытую (постройка ещё и руками возможна)
+  update public.faction_economy
+    set research = case when coalesce(research,'[]'::jsonb) ? 'pol.inevitability'
+                        then research else coalesce(research,'[]'::jsonb) || '"pol.inevitability"'::jsonb end
+    where faction_id = p_fid;
+
+  return jsonb_build_object('ok', true, 'colony', picked.planet_name, 'building_id', bid);
+end$$;
+revoke all on function public.admin_grant_doomgun(text,uuid) from public;
+grant execute on function public.admin_grant_doomgun(text,uuid) to authenticated;
 
 -- ── 10) ХУК В ТИК: пересоздаём _apply_colony_projects ───────
 -- База — из _faith_multi.sql (АКТУАЛЬНАЯ версия: insert построек с faith_id для

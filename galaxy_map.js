@@ -92,7 +92,7 @@ function gmExitEdit() {
 // ── Загрузка данных ─────────────────────────────────────────
 async function loadGalaxyData() {
   try {
-    const [sys, lanes, facs, secs, routes, econ] = await Promise.all([
+    const [sys, lanes, facs, secs, routes, econ, salvos] = await Promise.all([
       dbGet('map_systems', 'select=*'),
       dbGet('map_hyperlanes', 'select=*'),
       dbGet('map_factions', 'select=*&order=sort.asc'),
@@ -101,11 +101,15 @@ async function loadGalaxyData() {
       dbGet('trade_routes', 'status=eq.active&select=origin_sys,dest_sys,a_fid,convoy').catch(() => []),
       // пространственная экономика: кэш просперити/статуса систем (режим «бедность»)
       dbGet('system_econ', 'select=system_id,status,prosperity').catch(() => []),
+      // межзвёздная артиллерия: залпы в полёте (видны всем — угроза публична).
+      // Таблицы может не быть (_interstellar_artillery.sql ещё не применён) → []
+      dbGet('doom_salvos', 'status=eq.in_flight&select=origin_system_id,target_system_id,target_pid,target_planet,launched_at,ready_at,faction_id').catch(() => []),
     ]);
     GM.systems = (sys || []).map(s => ({ ...s, x: +s.x, y: +s.y, planets: s.planets || [] }));
     GM.lanes = lanes || [];
     GM.factions = facs || [];
     GM.routes = routes || [];
+    GM.salvos = salvos || [];   // залпы артиллерии в полёте (для визуализации на карте)
     GM.sectors = (secs || []).map(s => ({ ...s, system_ids: s.system_ids || [] }));
     GM.econ = {};   // system_id → { status, prosperity } для режима «бедность»
     (econ || []).forEach(e => { if (e && e.system_id) GM.econ[e.system_id] = { status: e.status, prosperity: +e.prosperity }; });
@@ -1995,6 +1999,8 @@ function gmmFrame(ts) {
   // Аналогично — пока виден трафик караванов по гиперпутям.
   if (gmmDeepA() > 0.01) { GMM.dirty = true; again = true; }
   else if (gmmLaneA() > 0.01 && GMM.caravans && GMM.caravans.length) { GMM.dirty = true; again = true; }
+  // залпы артиллерии живут на любом зуме — гоним кадры, пока есть снаряды в полёте
+  if (GMM.salvos && GMM.salvos.length) { GMM.dirty = true; again = true; }
   if (GMM.dirty) { GMM.dirty = false; gmmBlit(); }
   if (gmmNeedRaster()) {
     const now = performance.now();
@@ -2081,6 +2087,7 @@ function gmmBlit() {
     }
   }
   gmmPaintLaneTraffic(ctx);  // караваны по гиперпутям (как только видны сами пути)
+  gmmPaintSalvos(ctx);   // залпы межзвёздной артиллерии в полёте (на любом зуме)
   gmmPaintOrbits(ctx);   // живой оверлей анимированных систем (на глубоком зуме)
 }
 
@@ -2640,6 +2647,7 @@ function gmmBuildWorld() {
     secHit: [...secHitD].map(([secId, d]) => ({ secId, p2d: new Path2D(d) })),
   };
   gmmBuildCaravans();
+  gmmBuildSalvos();
 }
 
 // Караваны торговых маршрутов: для каждого активного trade_route считаем путь по
@@ -2676,6 +2684,104 @@ function gmmBuildCaravans() {
     const col = fac ? gmRgb(fac.color) : [180, 210, 245];
     GMM.caravans.push({ segs, total, col, ships: Math.max(1, Math.min(3, (r.convoy || 0) + 1)) });
   });
+}
+
+// ── Межзвёздная артиллерия: залпы «Длани Неотвратимости» в полёте ──
+// Снаряд летит ПРЯМОЙ через космос из системы-источника в систему-цель (а не по
+// гиперпутям — это оружие судного дня, ему не нужны торговые пути). Позиция вдоль
+// траектории считается по РЕАЛЬНОМУ времени полёта (launched_at → ready_at), так
+// что на карте видно, как именно близко снаряд подошёл к обречённой планете.
+function gmmBuildSalvos() {
+  GMM.salvos = [];
+  if (!GM.salvos || !GM.salvos.length) return;
+  const byId = Object.fromEntries((GM.systems || []).map(s => [s.id, s]));
+  GM.salvos.forEach(s => {
+    const tgt = byId[s.target_system_id];
+    if (!tgt) return;                         // цель не на карте — нечего рисовать
+    const ori = byId[s.origin_system_id];     // источник может быть неизвестен/вне карты
+    const la = s.launched_at ? Date.parse(s.launched_at) : null;
+    const ra = s.ready_at ? Date.parse(s.ready_at) : null;
+    GMM.salvos.push({
+      ox: ori ? ori.x : tgt.x, oy: ori ? ori.y : tgt.y, hasOrigin: !!ori,
+      dx: tgt.x, dy: tgt.y, la, ra, planet: s.target_planet || '',
+    });
+  });
+}
+
+// Рисует залпы поверх карты на ЛЮБОМ зуме (событие галактического масштаба):
+// тревожный пунктирный луч траектории, летящий снаряд с огненным хвостом и
+// пульсирующий прицел-перекрестие на системе-цели (тем ярче, чем ближе подлёт).
+function gmmPaintSalvos(ctx) {
+  if (!GMM.salvos || !GMM.salvos.length) return;
+  const s = GMM.s, tx = GMM.tx, ty = GMM.ty, t = performance.now() / 1000, now = Date.now();
+  const wx0 = -tx / s - 60, wy0 = -ty / s - 60, wx1 = (GMM.vw - tx) / s + 60, wy1 = (GMM.vh - ty) / s + 60;
+  ctx.save();
+  ctx.lineCap = 'round';
+  GMM.salvos.forEach(sv => {
+    // прогресс полёта по реальному времени (если меток нет — считаем на полпути)
+    let u = 0.5;
+    if (sv.la != null && sv.ra != null && sv.ra > sv.la) u = (now - sv.la) / (sv.ra - sv.la);
+    u = Math.max(0, Math.min(1, u));
+    // экранные координаты цели / источника / снаряда (с учётом наклона плоскости)
+    const tX = sv.dx * s + tx, tY = gmmTY(sv.dy * s + ty);
+    const targetIn = !(sv.dx < wx0 || sv.dx > wx1 || sv.dy < wy0 || sv.dy > wy1);
+
+    if (sv.hasOrigin) {
+      const oX = sv.ox * s + tx, oY = gmmTY(sv.oy * s + ty);
+      const px = sv.ox + (sv.dx - sv.ox) * u, py = sv.oy + (sv.dy - sv.oy) * u;
+      const pX = px * s + tx, pY = gmmTY(py * s + ty);
+      // 1) пунктирный луч траектории: пройденный участок ярче, остаток — тусклый
+      ctx.setLineDash([7, 7]); ctx.lineDashOffset = -t * 16;
+      ctx.strokeStyle = 'rgba(255,70,40,0.16)'; ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.moveTo(pX, pY); ctx.lineTo(tX, tY); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,110,50,0.4)'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(oX, oY); ctx.lineTo(pX, pY); ctx.stroke();
+      ctx.setLineDash([]);
+      // 2) снаряд с огненным хвостом (виден, если в кадре)
+      if (px >= wx0 && px <= wx1 && py >= wy0 && py <= wy1) {
+        const t0u = Math.max(0, u - 0.07);
+        const hx = (sv.ox + (sv.dx - sv.ox) * t0u) * s + tx;
+        const hy = gmmTY((sv.oy + (sv.dy - sv.oy) * t0u) * s + ty);
+        const trail = ctx.createLinearGradient(hx, hy, pX, pY);
+        trail.addColorStop(0, 'rgba(255,80,30,0)');
+        trail.addColorStop(1, 'rgba(255,150,50,0.9)');
+        ctx.strokeStyle = trail; ctx.lineWidth = 3.2;
+        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(pX, pY); ctx.stroke();
+        const flick = 0.85 + 0.15 * Math.sin(t * 22);
+        const gr = ctx.createRadialGradient(pX, pY, 0, pX, pY, 11 * flick);
+        gr.addColorStop(0, 'rgba(255,240,200,1)');
+        gr.addColorStop(0.35, 'rgba(255,130,50,0.95)');
+        gr.addColorStop(1, 'rgba(255,60,20,0)');
+        ctx.fillStyle = gr;
+        ctx.beginPath(); ctx.arc(pX, pY, 11 * flick, 0, 6.2832); ctx.fill();
+      }
+    }
+
+    // 3) прицел-перекрестие на системе-цели — пульсирует, ярче по мере подлёта
+    if (targetIn) {
+      const pulse = 0.5 + 0.5 * Math.sin(t * 3.2);
+      const intens = 0.45 + 0.55 * u;
+      const R = 15 + 7 * pulse;
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = `rgba(255,55,40,${(0.35 + 0.45 * pulse) * intens})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(tX, tY, R, 0, 6.2832); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,90,60,${0.6 * intens})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(tX, tY, R * 0.6, 0, 6.2832); ctx.stroke();
+      // крест-метки прицела
+      const tick = R + 5, gap = R * 0.5;
+      ctx.strokeStyle = `rgba(255,70,50,${0.8 * intens})`; ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(tX - tick, tY); ctx.lineTo(tX - gap, tY);
+      ctx.moveTo(tX + gap, tY); ctx.lineTo(tX + tick, tY);
+      ctx.moveTo(tX, tY - tick); ctx.lineTo(tX, tY - gap);
+      ctx.moveTo(tX, tY + gap); ctx.lineTo(tX, tY + tick);
+      ctx.stroke();
+    }
+  });
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 // Точка и касательная на квадратичной кривой Безье при параметре u∈[0,1].
