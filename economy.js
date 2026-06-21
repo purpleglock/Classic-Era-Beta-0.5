@@ -243,7 +243,12 @@ const EC_BUILD = {
   military_factory: { name: 'Военный Завод',        cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 100 ед. техники' },
   shipyard:         { name: 'Корабельная Верфь',    cost: 2000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 корабль / 12 МЛА' },
   temple:           { name: 'Храм Веры',            cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 150 }, cat: 'faith', desc: '+150 ГС за слот и удешевляет постройку войск. При постройке выбираете, чьей религии храм (можно строить храмы разных вер)' },
+  // ОРУДИЕ СУДНОГО ДНЯ — строится отдельным путём (doom_build): ГС + Программируемая
+  // материя, требует исследование «Сама неотвратимость». Слоты не открываются.
+  doomgun:          { name: 'Длань Неотвратимости', cost: 8000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Межзвёздная артиллерия: залп из системы в систему превращает планету-цель в мёртвый камень. Жрёт Гравиядро на залп и Программируемую материю на содержание; с каждым выстрелом и днём деградирует, пока не распадётся.' },
 };
+// Стоимость орудия в Программируемой материи (зеркало _doom_const('build_matter')).
+const EC_DOOM_BUILD_MATTER = 40, EC_DOOM_SHOT_GRAV = 20;
 const EC_ORDER = ['factory', 'mining', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'temple'];
 // Короткая подсказка «как пользоваться» для каждого типа здания (показывается в карточке).
 const EC_BLD_HOWTO = {
@@ -258,11 +263,12 @@ const EC_BLD_HOWTO = {
   military_factory: 'Даёт мощность для производства наземной техники (вкладка «Строительство вооружённых сил»).',
   shipyard:         'Даёт мощность для постройки кораблей и авиации (вкладка «Строительство вооружённых сил»).',
   temple:           'Пассивный доход ГС + «сила веры»: чем больше слотов храмов, тем дешевле постройка войск. Спиритуалистам и теократиям бонус сильнее. Требует исповедуемой веры; при постройке указывается её религия (можно держать храмы разных вер).',
+  doomgun:          'Откройте пульт орудия, выберите систему-цель и планету — залп тратит 20 Гравиядра. Снаряд летит сутки. Держите запас Программируемой материи: без неё орудие деградирует быстрее и распадётся.',
 };
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
   factory: '🏭', mining: '⛏', trade: '💱', market: '📈',
-  science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', warehouse: '📦', temple: '🛐',
+  science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', warehouse: '📦', temple: '🛐', doomgun: '🜨',
 };
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
 // Обустройство среды обитания на своей колонии (+ячейки, 1 ход)
@@ -1079,7 +1085,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1122,11 +1128,16 @@ async function ecLoad() {
     ecRpc('margin_status').catch(() => null),    // биржа: маржа — лонги/шорты с плечом (срез 5)
     ecRpc('futures_status').catch(() => null),   // биржа: фьючерсы — срочные контракты (срез 6)
     ecRpc('options_status').catch(() => null),   // биржа: опционы — колл/пут (срез 7)
+    ecRpc('doom_status').catch(() => null),       // межзвёздная артиллерия: орудия + залпы в полёте
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
   EC.buildings = blds || [];
   EC.systems = (sys || []).map(s => ({ ...s, planets: s.planets || [] }));
+  // Межзвёздная артиллерия: орудия фракции (с integrity) + залпы в полёте + баланс.
+  EC.doom = (doom && typeof doom === 'object') ? doom : { guns: [], salvos: [], const: {} };
+  EC.doomByBuilding = {};
+  (EC.doom.guns || []).forEach(g => { if (g && g.building_id) EC.doomByBuilding[g.building_id] = g; });
   // Пространственная экономика: NET-баланс системы (покрытия R/G/C/труд, просперити, статус), индекс по system_id.
   EC.spatial = {};
   (Array.isArray(spatial) ? spatial : []).forEach(b => { if (b && b.system_id) EC.spatial[b.system_id] = b; });
@@ -1285,7 +1296,37 @@ function ecGcIncome() {
   factory = Math.round(factory * gcMul);
   trade   = Math.round(trade * gcMul);
   const cv = ecCaravanIncome();
-  return { factory, trade, caravan: cv, net: factory + trade + cv.net };
+  const ex = ecExchangeIncome();
+  return { factory, trade, caravan: cv, exchange: ex, net: factory + trade + cv.net + ex.net };
+}
+// Регулярные ГС-потоки с БИРЖИ за ход — чтобы «Чистый доход» учитывал ВСЁ, а не
+// только постройки/караваны. Берём строго то, что НЕ задвоится с доходом фабрик:
+//  • купоны облигаций (мой доход держателя) минус купоны, что плачу как эмитент;
+//  • дивиденды по ЧУЖИМ долям (выручку тех построек accrue платит чужому учредителю,
+//    мне она иначе не достаётся — чистый приход);
+//  • СИНЕРГИЯ моих корпораций (бонус ×efficiency на мою долю): валовую выручку
+//    построек фабрики УЖЕ принесли через accrue, поэтому из своих корпораций берём
+//    только надбавку, иначе доход построек посчитается дважды (см. _exchange_corps.sql corp_fix).
+function ecExchangeIncome() {
+  let bondIn = 0, bondOut = 0, corpDiv = 0, corpSyn = 0;
+  const bo = EC.bonds || {};
+  (bo.holdings || []).forEach(h => { bondIn  += +h.daily_coupon || 0; });   // я инвестор → купон мне
+  (bo.issuer   || []).forEach(i => { bondOut += +i.daily_coupon || 0; });   // я эмитент → купон держателям
+  const c = EC.corps || {};
+  (c.holdings || []).forEach(h => {                                          // чужие корпорации — чистый приход
+    const tot = Math.max(1, +h.total_shares || 1);
+    corpDiv += Math.round((+h.daily_gross || 0) * (+h.shares || 0) / tot);
+  });
+  (c.mine || []).forEach(co => {                                            // мои корпорации — только синергия
+    const tot = Math.max(1, +co.total_shares || 1);
+    corpSyn += Math.round((+co.daily_gross || 0) * (+co.efficiency || 0) * (+co.my_shares || 0) / tot);
+  });
+  const bonds = bondIn - bondOut;
+  return { bondIn, bondOut, bonds, corpDiv, corpSyn, net: bonds + corpDiv + corpSyn };
+}
+// Сумма наград за уже полученные достижения (РАЗОВО, не в /сут) — для отдельной строки в Казне.
+function ecAchTotal() {
+  return (EC.ach || []).reduce((a, id) => a + ((EC_ACH[id] || {}).reward || 0), 0);
 }
 function ecResEntries() { const res = (EC.eco && EC.eco.resources) || {}; return Object.keys(res).map(k => [k, +res[k] || 0]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]); }
 // Множитель богатства месторождения (amt с карты) — зеркало public._richness_mult.
@@ -2568,15 +2609,21 @@ function ecTabOverview() {
   if (trSlots)  moneyInc.push({ ic: '💱', name: 'Торговые хабы', sub: `${ecNum(trSlots)} слот. × 100`, gc: Math.round(trSlots * 100 * gcMul), tab: 'trade' });
   if (_out.length) moneyInc.push({ ic: '🚚', name: 'Караваны · продажа', sub: `${_out.length} пут. → партнёрам`, gc: _outGc, tab: 'trade' });
   if (_in.length)  moneyInc.push({ ic: '📦', name: 'Доля с поставок', sub: `${_in.length} пут. ← вам шлют`, gc: _inGc, tab: 'trade' });
+  // Биржа: регулярные потоки (облигации/дивиденды/синергия) — без задвоения с фабриками.
+  const _ex = ecExchangeIncome();
+  if (_ex.bonds)   moneyInc.push({ ic: '🏦', name: 'Облигации · купоны', sub: _ex.bondOut ? `${ecNum(_ex.bondIn)} держателю − ${ecNum(_ex.bondOut)} выплаты эмитента` : 'купон по моим вложениям', gc: _ex.bonds, tab: 'exchange' });
+  if (_ex.corpDiv) moneyInc.push({ ic: '🏢', name: 'Дивиденды · чужие доли', sub: 'мои доли в чужих корпорациях', gc: _ex.corpDiv, tab: 'exchange' });
+  if (_ex.corpSyn) moneyInc.push({ ic: '⚡', name: 'Синергия корпораций', sub: 'бонус моих корпораций сверх дохода построек', gc: _ex.corpSyn, tab: 'exchange' });
   const netGc = moneyInc.reduce((a, x) => a + x.gc, 0);
-  const maxGc = moneyInc.reduce((a, x) => Math.max(a, x.gc), 0) || 1;
+  const maxGc = moneyInc.reduce((a, x) => Math.max(a, Math.abs(x.gc)), 0) || 1;
   const moneyRows = moneyInc.map(x => {
-    const w = Math.max(5, Math.round(x.gc / maxGc * 100));
+    const w = Math.max(5, Math.round(Math.abs(x.gc) / maxGc * 100));
+    const neg = x.gc < 0;
     return `<button type="button" class="ec-bdg-row" onclick="ecSetTab('${x.tab}')">
       <span class="ec-bdg-ic">${x.ic}</span>
       <span class="ec-bdg-info"><span class="ec-bdg-name">${esc(x.name)}</span><span class="ec-bdg-sub">${esc(x.sub)}</span></span>
       <span class="ec-bdg-bar"><i style="width:${w}%"></i></span>
-      <span class="ec-bdg-val pos">+${ecNum(x.gc)}</span>
+      <span class="ec-bdg-val ${neg ? 'neg' : 'pos'}">${neg ? '−' : '+'}${ecNum(Math.abs(x.gc))}</span>
     </button>`;
   }).join('');
   const marketRow = marketSlots ? `<button type="button" class="ec-bdg-row ec-bdg-var" onclick="ecSetTab('trade')">
@@ -2597,6 +2644,9 @@ function ecTabOverview() {
   // Агенты НЕ выдаются автоматически — они нанимаются на рынке рекрутов (Центр Спецслужб задаёт потолок).
   // Поэтому никакого «+N агент/сут» в казне не показываем.
   if (gcPct) flows.push(`<span class="ec-bdg-flow"><span class="ec-bdg-flow-ic">${gcPct > 0 ? '⚖' : '⚠'}</span>доктрина ${gcPct > 0 ? '+' : ''}${gcPct}% ГС</span>`);
+  // Достижения — РАЗОВЫЕ награды (не в /сут): показываем накопленную сумму отдельной строкой.
+  const _achTot = ecAchTotal();
+  if (_achTot) flows.push(`<span class="ec-bdg-flow" onclick="ecSetTab('achievements')"><span class="ec-bdg-flow-ic">🏆</span>достижения <b class="pos">+${ecNum(_achTot)}</b> ГС <small>(разово, получено)</small></span>`);
   const hasBudget = moneyInc.length || marketSlots || _resOutTotal || flows.length;
   // ── Раскрываемая детальная справка по казне: формула каждого источника + состав (donut) ──
   const gcMulPct = Math.round((gcMul - 1) * 100);
@@ -2611,14 +2661,18 @@ function ecTabOverview() {
   if (_out.length) detRows.push(fxRow('🚚', 'Караваны · продажа', `${_out.length} путь(ей): объём × цена − срез пиратов`, _outGc));
   if (_in.length) detRows.push(fxRow('📦', 'Доля с поставок', `${_in.length} путь(ей): ${Math.round(EC_DEST_CUT * 100)}% от объёма партнёра`, _inGc));
   if (marketSlots) detRows.push(fxRow('📈', 'Товарная биржа', `${ecNum(marketSlots)} слот · продаёт склад по 50–75% цены (переменно)`, 0));
-  const composition = moneyInc.length ? ecSvgDonut(moneyInc.map(x => ({ name: x.name, color: { 'Гражданские фабрики': 'var(--gd)', 'Торговые хабы': 'var(--te)', 'Караваны · продажа': 'var(--ok)', 'Доля с поставок': 'var(--ec-amb,#e0a030)' }[x.name] || 'var(--gd)', value: x.gc })), { center: ecChartFmt(netGc), sub: 'ГС/сут' }) : '';
+  if (_ex.bonds)   detRows.push(fxRow('🏦', 'Облигации · купоны', `купоны по вложениям ${ecNum(_ex.bondIn)} − выплаты как эмитент ${ecNum(_ex.bondOut)}`, _ex.bonds));
+  if (_ex.corpDiv) detRows.push(fxRow('🏢', 'Дивиденды (чужие доли)', `выручка × моя доля по чужим корпорациям`, _ex.corpDiv));
+  if (_ex.corpSyn) detRows.push(fxRow('⚡', 'Синергия моих корпораций', `доход построек × синергия × моя доля (сверх дохода фабрик)`, _ex.corpSyn));
+  const composition = moneyInc.length ? ecSvgDonut(moneyInc.filter(x => x.gc > 0).map(x => ({ name: x.name, color: { 'Гражданские фабрики': 'var(--gd)', 'Торговые хабы': 'var(--te)', 'Караваны · продажа': 'var(--ok)', 'Доля с поставок': 'var(--ec-amb,#e0a030)', 'Облигации · купоны': 'var(--pu)', 'Дивиденды · чужие доли': 'var(--ok)', 'Синергия корпораций': 'var(--te)' }[x.name] || 'var(--gd)', value: x.gc })), { center: ecChartFmt(netGc), sub: 'ГС/сут' }) : '';
   const bdgDetail = `<div class="ec-bdg-detail">
       ${composition ? `<div class="ec-bdg-dt-sect">Состав дохода</div>${composition}` : ''}
       <div class="ec-bdg-dt-sect">Формулы по источникам</div>
       <div class="ec-bdg-dt-list">${detRows.join('') || '<div class="ec-ovx-hint">Денежных источников нет.</div>'}</div>
       ${_resOutTotal ? `<div class="ec-bdg-dt-warn">📤 Вывоз ресурсов караванами: −${ecNum(_resOutTotal)} ед/сут (${_resOutTxt}) — это расход сырья, не денег.</div>` : ''}
       ${inc.debuff ? `<div class="ec-bdg-dt-warn">🔥 Дестабилизация режет денежный доход на ${Math.round(inc.debuff * 100)}% — уже учтено в суммах.</div>` : ''}
-      <div class="ec-ovx-hint">Доход начисляется в конце каждого хода (тика). Доктрина даёт ×${gcMul.toFixed(2)} к ГС-потокам${gcMulPct ? ` (${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''}. Содержания армии/зданий нет — постройка тратит ГС разово.</div>
+      <div class="ec-ovx-hint">Доход начисляется в конце каждого хода (тика). Доктрина даёт ×${gcMul.toFixed(2)} к ГС-потокам${gcMulPct ? ` (${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''} (к доходу биржи не применяется). Содержания армии/зданий нет — постройка тратит ГС разово.</div>
+      <div class="ec-ovx-hint">📊 Биржа учтена: купоны облигаций, дивиденды по чужим долям и синергия своих корпораций. Доход построек внутри своих корпораций уже сидит в строке «Фабрики/Хабы» — поэтому из них берётся только синергия (без задвоения). Товарная биржа и спекуляции (маржа/фьючерсы/опционы) переменны и в «/сут» не входят. 🏆 Награды за достижения — разовые, показаны отдельной строкой, а не в доходе за сутки.</div>
     </div>`;
   const budget = `<div class="ec-ovx-panel ec-bdg-panel">
     <div class="ec-ovx-panel-t">💰 Казна <span class="ec-ovx-panel-sub">доходы и расходы за сутки</span></div>
@@ -5965,6 +6019,11 @@ const EC_POLITICS = [
   { id: 'pol.mind_supremacy',  branch: 'mind', name: 'Превосходство разума',   cost: 140, prereq: ['pol.light_knowledge'],
     special: 'rslot', slots: 2,
     desc: 'Доктрина приоритета фундаментальной науки: лучшие умы фракции работают сразу над несколькими прорывами. Открывает +2 слота исследований.' },
+  // Неотвратимость — запредельно дорогой капстоун. Открывает постройку «Длань
+  // Неотвратимости» (межзвёздную артиллерию). Зеркало tech_nodes.pol.inevitability.
+  { id: 'pol.inevitability', branch: 'doom', name: 'Сама неотвратимость',     cost: 5000, prereq: [],
+    special: 'artillery',
+    desc: 'Запретная доктрина конца. Государство учится фокусировать гравитацию в луч, способный пройти межзвёздную бездну и вскипятить кору целой планеты. Открывает постройку «Длань Неотвратимости» — орудие, стирающее миры. Цена изучения чудовищна, и не зря: то, что нельзя забыть, лучше было не узнавать.' },
 ];
 // id → bonus (для ecFactionMods). Спец-механики (special) применяются отдельно.
 const EC_RESEARCH_BONUS = {};
@@ -6744,7 +6803,7 @@ async function ecTreeNodeReset(id) {
   } catch (e) { toast('Ошибка: ' + (e.message || ''), 'err'); }
 }
 function ecBranchTag(branch) {
-  return { class: 'КЛАСС', type: 'КОРПУС', weapon: 'ОРУЖИЕ', armor: 'БРОНЯ', shield: 'ЩИТЫ', engine: 'ДВИГАТЕЛЬ', reactor: 'РЕАКТОР', hangar: 'АНГАР', module: 'СИСТЕМА', econ: 'ЭКОНОМИКА', prod: 'ПРОИЗВОДСТВО', expand: 'ЭКСПАНСИЯ', celestial: 'НЕБОЖИТЕЛИ', mind: 'РАЗУМ' }[branch] || branch;
+  return { class: 'КЛАСС', type: 'КОРПУС', weapon: 'ОРУЖИЕ', armor: 'БРОНЯ', shield: 'ЩИТЫ', engine: 'ДВИГАТЕЛЬ', reactor: 'РЕАКТОР', hangar: 'АНГАР', module: 'СИСТЕМА', econ: 'ЭКОНОМИКА', prod: 'ПРОИЗВОДСТВО', expand: 'ЭКСПАНСИЯ', celestial: 'НЕБОЖИТЕЛИ', mind: 'РАЗУМ', doom: 'НЕОТВРАТИМОСТЬ' }[branch] || branch;
 }
 // Чипы бонуса политического узла (для карточки дерева).
 function ecBonusChips(b, special, station, slots) {
@@ -6757,6 +6816,7 @@ function ecBonusChips(b, special, station, slots) {
   if (special === 'claim2') out.push('<span class="ec-bchip special">★ +1 захват до перезарядки</span>');
   if (special === 'rslot') out.push(`<span class="ec-bchip special">🔬 +${slots || 1} слот${(slots || 1) > 1 ? 'а' : ''} исследований</span>`);
   if (special === 'station' && station) out.push(`<span class="ec-bchip special">${station.icon || '★'} ${station.cells} ячеек</span>`);
+  if (special === 'artillery') out.push('<span class="ec-bchip special" style="background:rgba(220,40,40,.18);border-color:rgba(220,40,40,.5);color:#ff8a8a">🜨 Орудие судного дня</span>');
   return out.length ? `<div class="ec-tnode-bonus">${out.join('')}</div>` : '';
 }
 async function ecResearch(nodeId) {
@@ -6851,6 +6911,9 @@ function ecResNodeInfo(id) {
   if (n.special === 'station' && n.station) {
     const groups = n.station.groups.map(g => EC_GRP_LABEL[g] || g).join(', ');
     stationHtml = `<div class="ec-rinfo-station">${n.station.icon} <b>Станция</b> — открывает постройку на мирах: <b>${esc(groups)}</b> · размер <b>${n.station.cells} ячеек</b> · постройка <b>${ecNum(ecColonizeCost(EC_STATION_COST))} ГС</b></div>`;
+  }
+  if (n.special === 'artillery') {
+    stationHtml = `<div class="ec-rinfo-station" style="background:rgba(220,40,40,.1);border-color:rgba(220,40,40,.4)">🜨 <b>Орудие судного дня</b> — открывает постройку «Длань Неотвратимости»: межзвёздная артиллерия, стирающая планеты целых систем. Содержание — Программируемая материя, залп — 20 Гравиядра.</div>`;
   }
   const bonus = (n.bonus || n.special) ? ecBonusChips(n.bonus, n.special, n.station, n.slots) : '';
   let actHint = '';
@@ -7283,6 +7346,7 @@ async function ecMgaVerdict(id, action) {
 }
 
 function ecBuildingRow(b) {
+  if (b.btype === 'doomgun') return ecDoomgunRow(b);
   const d = EC_BUILD[b.btype]; if (!d) return '';
   const inc = ecBuildingIncome(b);
   const incTxt = inc.gc ? `+${ecNum(inc.gc)} ГС / сутки` : inc.science ? `+${ecNum(inc.science)} ОН / сутки` : d.desc;
@@ -7664,7 +7728,7 @@ function ecBuildPicker(colonyId) {
       </span>
       <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small></span>
     </button>`;
-  }).join('');
+  }).join('') + ecDoomBuildCard(colonyId, gc);
   _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
     <div class="ec-bp-modal" role="dialog" aria-modal="true">
       <div class="ec-bp-hd">
@@ -7676,6 +7740,176 @@ function ecBuildPicker(colonyId) {
       <div class="ec-bp-foot">Постройка занимает 1 ячейку и завершается через 1 игровой день. Затраты возвращаются при отмене.</div>
     </div>
   </div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+//  МЕЖЗВЁЗДНАЯ АРТИЛЛЕРИЯ — «Длань Неотвратимости» (клиент)
+// ════════════════════════════════════════════════════════════
+// Запас ресурса на складе по русскому имени (зеркало faction_economy.resources).
+function ecStockOf(name) { return +(((EC.eco && EC.eco.resources) || {})[name] || 0); }
+// Открыто ли исследование «Сама неотвратимость».
+function ecHasDoomTech() { return ((EC.eco && EC.eco.research) || []).includes('pol.inevitability'); }
+
+// Карточка постройки орудия в меню «Что построить» (только если изучено).
+function ecDoomBuildCard(colonyId, gc) {
+  if (!ecHasDoomTech()) return '';
+  const d = EC_BUILD.doomgun; const cost = ecBuildCost(d.cost);
+  const matter = ecStockOf('Программируемая материя');
+  const afford = gc >= cost && matter >= EC_DOOM_BUILD_MATTER;
+  const why = gc < cost ? 'Не хватает ГС' : matter < EC_DOOM_BUILD_MATTER ? `Нужно ${EC_DOOM_BUILD_MATTER} 🟢 Программируемой материи (есть ${ecNum(matter)})` : '';
+  return `<button class="ec-bp-card ec-bp-mil ec-bp-doom${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecDoomBuildConfirm('${colonyId}')" title="${esc(why)}" style="border-color:rgba(220,40,40,.5)">
+      <span class="ec-bp-ic">🜨</span>
+      <span class="ec-bp-info">
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mil" style="background:rgba(220,40,40,.25)">СУДНЫЙ ДЕНЬ</span></span>
+        <span class="ec-bp-desc">${esc(d.desc)}</span>
+        <span class="ec-bp-howto">${esc(EC_BLD_HOWTO.doomgun)}</span>
+      </span>
+      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small><br><small>+${EC_DOOM_BUILD_MATTER} 🟢</small></span>
+    </button>`;
+}
+
+// Подтверждение постройки орудия.
+function ecDoomBuildConfirm(colonyId) {
+  const d = EC_BUILD.doomgun; const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return;
+  const cost = ecBuildCost(d.cost); const matter = ecStockOf('Программируемая материя');
+  const afterGc = (EC.eco.gc || 0) - cost; const afterMatter = matter - EC_DOOM_BUILD_MATTER;
+  const ok = afterGc >= 0 && afterMatter >= 0;
+  _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
+    <div class="ec-bp-modal ec-bp-cf" role="dialog" aria-modal="true">
+      <div class="ec-bp-cf-ic ec-bp-mil" style="background:rgba(220,40,40,.2)">🜨</div>
+      <div class="ec-bp-cf-title">Возвести «${esc(d.name)}»?</div>
+      <div class="ec-bp-cf-desc">${esc(d.desc)}</div>
+      <div class="ec-bp-cf-howto">⚠ Орудие необратимо меняет правила: им можно стереть планету любой державы. Содержите его Программируемой материей, иначе оно деградирует и распадётся.</div>
+      <div class="ec-bp-cf-rows">
+        <div class="ec-bp-cf-row"><span>🪐 Планета</span><b>${esc(colony.planet_name || 'Колония')}</b></div>
+        <div class="ec-bp-cf-row"><span>💰 Стоимость</span><b>${ecNum(cost)} ГС</b></div>
+        <div class="ec-bp-cf-row"><span>🟢 Программируемая материя</span><b class="${afterMatter < 0 ? 'ec-warn' : ''}">${EC_DOOM_BUILD_MATTER} (есть ${ecNum(matter)})</b></div>
+        <div class="ec-bp-cf-row"><span>⏳ Срок</span><b>1 игровой день</b></div>
+        <div class="ec-bp-cf-row"><span>🏦 Казна после</span><b class="${afterGc < 0 ? 'ec-warn' : ''}">${ecNum(afterGc)} ГС</b></div>
+      </div>
+      <div class="ec-bp-cf-act">
+        <button class="btn btn-gh btn-sm" onclick="ecBuildPicker('${colonyId}')">← Назад</button>
+        <button class="btn btn-gd btn-sm" ${ok ? '' : 'disabled'} onclick="ecDoomBuildDo('${colonyId}')">🜨 Возвести</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Запуск постройки орудия (RPC doom_build).
+async function ecDoomBuildDo(colonyId) {
+  if (EC.busy) return; EC.busy = true;
+  try {
+    await ecRpc('doom_build', { p_colony_id: colonyId });
+    ecBuildClose();
+    toast('Длань Неотвратимости — возведение начато (1 день)', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+
+// Строка постройки-орудия в списке колонии: integrity + пульт залпа.
+function ecDoomgunRow(b) {
+  const d = EC_BUILD.doomgun;
+  const g = EC.doomByBuilding[b.id];
+  const integ = g ? Math.max(0, Math.round(+g.integrity)) : 100;
+  const inFlight = g && g.in_flight;
+  const salvo = inFlight ? (EC.doom.salvos || []).find(s => s.gun_id === g.id) : null;
+  const grav = ecStockOf('Гравиядро');
+  const matter = ecStockOf('Программируемая материя');
+  const integColor = integ > 60 ? '#5fd27f' : integ > 30 ? '#e6c45f' : '#ff6a6a';
+  const wrecked = integ <= 0;
+  const fireBtn = wrecked
+    ? `<span class="ec-maxed" style="color:#ff6a6a">💥 распалось</span>`
+    : inFlight
+      ? `<span class="ec-proj-tag" title="Снаряд в полёте">☄️ залп в пути${salvo ? ' · ' + ecProgressISO(null, salvo.ready_at, 1, 'на подлёте') : ''}</span>`
+      : `<button class="btn btn-rd btn-xs" onclick="ecDoomConsole('${b.id}')" title="Открыть пульт залпа">🜨 Пульт залпа</button>`;
+  return `<div class="ec-bld ec-bld-doom" style="border-color:rgba(220,40,40,.45)">
+    <div class="ec-bld-top">
+      <span class="ec-bld-name">🜨 ${esc(d.name)}</span>
+      <button class="ec-bld-del" title="Снести" onclick="ecDemolish('${b.id}')">✕</button>
+    </div>
+    <div class="ec-doom-integ" title="Целостность орудия">
+      <div class="ec-doom-integ-bar" style="background:rgba(255,255,255,.08);border-radius:4px;height:8px;overflow:hidden">
+        <div style="width:${integ}%;height:100%;background:${integColor};transition:width .3s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:3px">
+        <span style="color:${integColor}">Целостность: <b>${integ}%</b></span>
+        <span style="color:var(--t4)">выстрелов: ${g ? g.total_shots : 0}</span>
+      </div>
+    </div>
+    <div class="ec-bld-howto">🟢 Программируемая материя на складе: <b>${ecNum(matter)}</b> · 🔮 Гравиядро: <b>${ecNum(grav)}</b>. ${matter <= 0 ? '<span style="color:#ff6a6a">Нет материи — орудие быстро деградирует!</span>' : 'Материя сдерживает деградацию.'}</div>
+    <div class="ec-bld-act" style="justify-content:flex-end">${fireBtn}</div>
+  </div>`;
+}
+
+// Пульт залпа — выбор системы-цели и планеты, запуск.
+function ecDoomConsole(buildingId) {
+  const b = EC.buildings.find(x => x.id === buildingId); if (!b) return;
+  EC._doomBuilding = buildingId;
+  const grav = ecStockOf('Гравиядро');
+  const canFuel = grav >= EC_DOOM_SHOT_GRAV;
+  const st = EC._doomTarget || {};
+  // Все известные системы карты (allSys → EC.allSystems), с планетами.
+  const sysList = (EC.allSystems || EC.systems || []);
+  const sysOpts = sysList.slice().sort((a, b2) => (a.name || '').localeCompare(b2.name || '', 'ru'))
+    .map(s => `<option value="${esc(s.id)}" ${st.sysId === s.id ? 'selected' : ''}>${esc(s.name || s.id)}${s.faction ? '' : ''}</option>`).join('');
+  let planetHtml = '<div class="ec-bld-howto">Выберите систему-цель.</div>';
+  if (st.sysId) {
+    const sys = sysList.find(s => s.id === st.sysId);
+    const planets = (sys && sys.planets || []).filter(p => p && Number.isInteger(p.pid) && (p.kind === 'planet' || p.g));
+    if (!planets.length) planetHtml = '<div class="ec-bld-howto" style="color:#e6c45f">В этой системе нет планет-целей (или данные карты не мигрированы).</div>';
+    else planetHtml = `<div class="ec-doom-planets">${planets.map(p => {
+      const dead = p.dead || p.doomed;
+      const sel = st.pid === p.pid;
+      return `<button class="ec-bp-card${sel ? ' ec-bp-sel' : ''}" ${dead ? 'disabled' : ''} onclick="ecDoomPick('${esc(st.sysId)}',${p.pid})" style="${sel ? 'border-color:#ff6a6a' : ''}">
+        <span class="ec-bp-ic">${dead ? '🪨' : (p.icon || '🪐')}</span>
+        <span class="ec-bp-info"><span class="ec-bp-name">${esc(p.name || 'Планета')}</span><span class="ec-bp-desc">${dead ? 'уже мёртвая' : esc(p.type || '')}</span></span>
+      </button>`;
+    }).join('')}</div>`;
+  }
+  const target = (st.sysId && Number.isInteger(st.pid)) ? sysList.find(s => s.id === st.sysId) : null;
+  const tgtPlanet = target ? (target.planets || []).find(p => p.pid === st.pid) : null;
+  const canFire = canFuel && tgtPlanet && !(tgtPlanet.dead || tgtPlanet.doomed);
+  _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
+    <div class="ec-bp-modal" role="dialog" aria-modal="true" style="max-width:560px">
+      <div class="ec-bp-hd" style="background:rgba(220,40,40,.12)">
+        <div class="ec-bp-hd-t"><span class="ec-bp-hd-ic">🜨</span><span>Пульт залпа — Длань Неотвратимости</span></div>
+        <button class="ec-bp-x" title="Закрыть" onclick="ecBuildClose()">✕</button>
+      </div>
+      <div class="ec-bp-meta"><span>🔮 Гравиядро: <b class="${canFuel ? '' : 'ec-warn'}">${ecNum(grav)}</b> / нужно ${EC_DOOM_SHOT_GRAV}</span><span>☄️ снаряд летит 1 день</span></div>
+      <div style="padding:10px 14px">
+        <label style="font-size:12px;color:var(--t3)">Система-цель</label>
+        <select class="ec-input" style="width:100%;margin:4px 0 10px" onchange="ecDoomPickSys(this.value)">
+          <option value="">— выберите систему —</option>${sysOpts}
+        </select>
+        ${planetHtml}
+        ${tgtPlanet ? `<div class="ec-bld-howto" style="margin-top:10px;color:#ff8a8a">Цель: <b>${esc(tgtPlanet.name || '')}</b> — после поражения станет мёртвым камнем. Любая колония на ней будет стёрта.</div>` : ''}
+      </div>
+      <div class="ec-bp-cf-act" style="padding:0 14px 14px">
+        <button class="btn btn-gh btn-sm" onclick="ecBuildClose()">Отмена</button>
+        <button class="btn btn-rd btn-sm" ${canFire ? '' : 'disabled'} onclick="ecDoomFire('${buildingId}')">🜨 ЗАЛП (−${EC_DOOM_SHOT_GRAV} 🔮)</button>
+      </div>
+    </div>
+  </div>`;
+}
+function ecDoomPickSys(sysId) { EC._doomTarget = { sysId: sysId || null, pid: null }; const b = EC._doomBuilding; if (b) ecDoomConsole(b); }
+function ecDoomPick(sysId, pid) { EC._doomTarget = { sysId, pid }; const b = EC._doomBuilding; if (b) ecDoomConsole(b); }
+async function ecDoomFire(buildingId) {
+  if (EC.busy) return;
+  const st = EC._doomTarget || {};
+  if (!st.sysId || !Number.isInteger(st.pid)) { toast('Выберите цель', 'err'); return; }
+  const g = EC.doomByBuilding[buildingId];
+  if (!g) { toast('Орудие не найдено', 'err'); return; }
+  if (!confirm('Дать залп по выбранной планете? Это необратимо уничтожит её.')) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('doom_fire', { p_gun_id: g.id, p_target_system_id: st.sysId, p_target_pid: st.pid });
+    EC._doomTarget = null;
+    ecBuildClose();
+    toast(`Залп выпущен по «${r?.target || 'цели'}» — снаряд в пути`, 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
 }
 
 // Шаг 1.5 (только храм) — выбор веры, чьим будет храм. Если вера одна — пропускаем.
