@@ -1079,7 +1079,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1119,6 +1119,9 @@ async function ecLoad() {
     ecRpc('corps_status').catch(e => ({ __err: (e && e.message) || 'нет ответа' })),   // биржа: корпорации (ошибку показываем в UI)
     ecRpc('spatial_status').catch(() => []),   // пространственная экономика: NET-баланс систем (с учётом торговых караванов между игроками)
     dbGet('map_sectors', `select=id,name,system_ids,econ_event,econ_mod,econ_until`).catch(() => []),   // сектора + эконом-события (срез 4)
+    ecRpc('margin_status').catch(() => null),    // биржа: маржа — лонги/шорты с плечом (срез 5)
+    ecRpc('futures_status').catch(() => null),   // биржа: фьючерсы — срочные контракты (срез 6)
+    ecRpc('options_status').catch(() => null),   // биржа: опционы — колл/пут (срез 7)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1194,6 +1197,10 @@ async function ecLoad() {
   // null = RPC не ответил (SQL не применён или ошибка) — UI покажет диагностику с текстом ошибки.
   EC.corpsErr = (corps && corps.__err) || null;
   EC.corps = EC.corpsErr ? null : corps;
+  // Деривативы (срезы 5–7): маржа (лонги/шорты), фьючерсы, опционы. null = RPC не ответил (SQL не применён).
+  EC.margin  = margin  || null;
+  EC.futures = futures || null;
+  EC.options = options || null;
 
   // Ачивки: сервер пересчитывает условия, выдаёт новые и начисляет ГС.
   // Считаем ПОСЛЕ загрузки (gc мог измениться при выдаче — патчим из ответа).
@@ -3923,16 +3930,20 @@ function ecSetTradeSub(s) { EC.tradeSub = s; ecPaintCabinet(); }
 function ecSetExSub(s) { EC.exSub = s; ecPaintCabinet(); }
 function ecTabExchange() {
   const sub = EC.exSub || 'corps';
-  const subTabs = [['corps', '🏢', 'Организации'], ['index', '📊', 'Индекс рынка'], ['bonds', '🏛', 'Облигации']];   // далее: фьючерсы
+  const subTabs = [['corps', '🏢', 'Организации'], ['index', '📊', 'Индекс'],
+    ['margin', '📈', 'Маржа'], ['futures', '📅', 'Фьючерсы'], ['options', '🎲', 'Опционы'], ['bonds', '🏛', 'Облигации']];
   const subNav = subTabs.length > 1
     ? `<div class="ec-tabs" style="margin:4px 0 12px">${subTabs.map(([id, ic, l]) => `<button class="ec-tab${sub === id ? ' on' : ''}" onclick="ecSetExSub('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('')}</div>`
     : '';
-  const body = sub === 'bonds' ? ecExBondsBlock() : sub === 'index' ? ecExIndexBlock() : ecExCorpsBlock();
+  const body = sub === 'bonds' ? ecExBondsBlock() : sub === 'index' ? ecExIndexBlock()
+    : sub === 'margin' ? ecExMarginBlock()
+    : sub === 'futures' ? ecExFuturesBlock() : sub === 'options' ? ecExOptionsBlock()
+    : ecExCorpsBlock();
   const ses = (EC.corps && EC.corps.session) || { open: false, open_hour: 12, close_hour: 18 };
   const sesTag = ses.open
     ? `<b style="color:#5fc98a">● торги открыты</b> до ${ses.close_hour}:00 UTC`
     : `<b style="color:#e0688a">● торги закрыты</b> · открытие в ${ses.open_hour}:00 UTC`;
-  return `${ecIntro('📊', 'Биржа', `Финансовые инструменты, привязанные к реальной экономике галактики. ${sesTag}.`, ['<b>Организации</b> — объедините реальные постройки; вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%). Доли продаются другим фракциям.', '<b>Секторный спрос</b> — доход и котировки крутит сама галактика: дефицит сырья поднимает рудники, очередь кораблей — верфи, торговые пути — хабы (множитель 0.25×…3.0×).', '<b>Индекс</b> — корзина цен ресурсов (ETF). <b>Облигации</b> — займ под купон. Сделки с долями — только при <b>открытых торгах</b>; на закрытии фиксинг и дивиденды.'])}${subNav}${body}`;
+  return `${ecIntro('📊', 'Биржа', `Финансовые инструменты, привязанные к реальной экономике галактики. ${sesTag}.`, ['<b>Организации</b> — объедините реальные постройки; вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%). Доли продаются другим фракциям.', '<b>Секторный спрос</b> — доход и котировки крутит сама галактика: дефицит сырья поднимает рудники, очередь кораблей — верфи, торговые пути — хабы (множитель 0.25×…3.0×).', '<b>Индекс</b> — корзина цен ресурсов (ETF). <b>Облигации</b> — займ под купон. Сделки с долями — только при <b>открытых торгах</b>; на закрытии фиксинг и дивиденды.', '<b>Маржа</b> — лонг/шорт с плечом до ×10 (ликвидация при просадке залога). <b>Фьючерсы</b> — срочные контракты с расчётом по экспирации. <b>Опционы</b> — колл/пут за премию. Спот-торговля ресурсами — во вкладке «Торговля → Рынок».'])}${subNav}${body}`;
 }
 
 // Карточка индекса рынка / ETF: значение, тренд, спарклайн, моя позиция, формы.
@@ -3985,6 +3996,229 @@ function ecExIndexBlock() {
   </div>`;
 }
 
+// ── Общая карточка «инструмент недоступен» (RPC не ответил → SQL не применён) ──
+function ecDerivNA(title, file) {
+  return `<div class="ec-dip-card ec-corp-warn">
+    <div class="ec-dip-t">${title} — недоступно</div>
+    <div class="cn-fac-hint">Сервер не вернул данные. Примените <b>${file}</b> в Supabase → SQL Editor, затем выполните <code>notify pgrst, 'reload schema';</code> и обновите страницу.</div>
+  </div>`;
+}
+// Бейдж стороны позиции
+function ecSideBadge(side) {
+  return side === 'long'
+    ? `<span class="ec-route-badge" style="background:#2f6b46">▲ ЛОНГ</span>`
+    : `<span class="ec-route-badge" style="background:#7a2f44">▼ ШОРТ</span>`;
+}
+const ecPlCol = v => (+v >= 0 ? 'var(--gd)' : 'var(--err)');
+const ecSign  = v => (+v >= 0 ? '+' : '');
+const ecDays  = iso => { const ms = new Date(iso) - Date.now(); return ms <= 0 ? 0 : Math.ceil(ms / 86400000); };
+
+// ── Доска котировок: живая цена + %Δ к базе + мини-график по ресурсам.
+//    Спарклайны берутся из market_price_history (EC.market[name].spark, грузится
+//    в exchange_status). Сортировка — по величине движения (крупнейшие сверху),
+//    чтобы трейдер сразу видел, что взлетело/упало. Это «график» под деривативы.
+function ecDerivPriceBoard(resources, limit) {
+  const mk = EC.market || {};
+  const list = (resources || []).map(r => {
+    const px = +r.price || 0, base = +r.base || 0;
+    return { name: r.name, px, base, dpct: base > 0 ? (px / base - 1) * 100 : 0 };
+  }).sort((a, b) => Math.abs(b.dpct) - Math.abs(a.dpct)).slice(0, limit || 12);
+  if (!list.length) return '';
+  const rows = list.map(r => {
+    const up = r.px >= r.base, d = Math.round(r.dpct);
+    const trend = r.px > r.base * 1.01 ? `<span style="color:#5fc98a">▲</span>`
+      : r.px < r.base * 0.99 ? `<span style="color:#e0688a">▼</span>` : `<span style="color:var(--t4)">▬</span>`;
+    const spark = ecSparkline((mk[r.name] && mk[r.name].spark) || [], up ? '#5fc98a' : '#e0688a', 96, 26);
+    return `<div class="ec-q-row" style="gap:10px;align-items:center">
+        <span class="ec-r-name" style="flex:1 1 36%">${esc(r.name)}</span>
+        <span style="flex:0 0 auto;min-width:120px;text-align:right">${trend} <b>${ecNum(r.px)}</b> ГС <span style="color:${up ? '#5fc98a' : '#e0688a'}">${ecSign(d)}${d}%</span></span>
+        <span style="flex:0 0 auto">${spark}</span>
+      </div>`;
+  }).join('');
+  return `<div class="ec-dip-card">
+      <div class="ec-dip-t">📉 Котировки <span class="ec-hint">— живая цена и динамика (крупнейшие движения сверху); на этом вы и зарабатываете</span></div>
+      ${rows}
+    </div>`;
+}
+
+// ── Объяснение инструмента простыми словами (разворачивающийся блок) ──
+// Цель: игрок без биржевого опыта понимает суть и риск на конкретном примере.
+function ecDerivHelp(kind) {
+  const g = 'color:var(--gd)', e = 'color:var(--err)';
+  const wrap = (title, body) => `<div class="ec-dip-card" style="border-left:3px solid var(--gd)">
+      <details open><summary style="cursor:pointer;font-weight:600;font-size:15px">📖 ${title} <span class="ec-hint">— простыми словами</span></summary>
+        <div style="margin-top:10px;line-height:1.65">${body}</div>
+      </details>
+    </div>`;
+  if (kind === 'margin') return wrap('Что такое маржа: лонг и шорт', `
+    <p style="margin:0 0 8px"><b>Суть:</b> ты ставишь деньги на то, что цена ресурса <b style="${g}">вырастет</b> (ставка «лонг») или <b style="${e}">упадёт</b> (ставка «шорт»). Сам ресурс при этом не покупаешь — это чистая ставка на движение цены, выигрыш/проигрыш приходит деньгами (ГС).</p>
+    <p style="margin:0 0 8px"><b>Плечо</b> — множитель ставки. Вносишь <b>залог</b> 1000 ГС с плечом <b>×5</b> — играешь так, будто вложил 5000.</p>
+    <p style="margin:0 0 8px"><b>Пример (лонг на рост):</b> Платина стоит 70 ГС. Залог 1000, плечо ×5 (ставка как на 5000 ГС). Цена выросла на 10% → <b style="${g}">+500 ГС</b> (10% от 5000, а не от 1000). Упала на 10% → <b style="${e}">−500 ГС</b>. <b>Шорт</b> — всё наоборот: зарабатываешь на падении.</p>
+    <p style="margin:0"><b>⚠ Главный риск — ликвидация:</b> если цена пойдёт против тебя слишком далеко (до «цены ликвидации», она написана в карточке позиции), биржа закроет позицию сама и <b style="${e}">весь залог сгорит</b>. Чем больше плечо — тем ближе ликвидация: ×10 «вылетает» уже при движении против тебя на ~9–10%.</p>`);
+  if (kind === 'futures') return wrap('Что такое фьючерс', `
+    <p style="margin:0 0 8px"><b>Суть:</b> то же, что маржа (ставка на цену с плечом, лонг или шорт), но у контракта есть <b>дата экспирации</b> — день, когда он закроется и рассчитается сам.</p>
+    <p style="margin:0 0 8px"><b>Пример:</b> думаешь, Дейтерий (65 ГС) подорожает за 2 недели. Берёшь фьючерс-<b style="${g}">лонг</b> на 14 дней, залог 2000, плечо ×4 (ставка как на 8000). Через 14 дней контракт сам рассчитается по цене того дня: вырос на 8% → <b style="${g}">+640 ГС</b>. Можно закрыть и раньше кнопкой «Закрыть».</p>
+    <p style="margin:0 0 8px"><b>Что за «контанго»:</b> вход во фьючерс чуть дороже текущей цены — надбавка за срок. К дате расчёта она тает. Поэтому если цена просто стоит на месте, лонг теряет эту небольшую надбавку (а шорт — наоборот зарабатывает).</p>
+    <p style="margin:0"><b>⚠ Риск:</b> то же плечо и та же <b style="${e}">ликвидация</b>, что в марже, плюс жёсткая дата, когда позиция закроется в любом случае.</p>`);
+  if (kind === 'options') return wrap('Что такое опцион: колл и пут', `
+    <p style="margin:0 0 8px"><b>Суть:</b> ты покупаешь <b>право</b> (не обязанность). Платишь «<b>премию</b>» — как цену билета. Угадал направление — получаешь выплату; не угадал — теряешь <b>только премию</b>, и больше ничего.</p>
+    <p style="margin:0 0 8px"><b style="${g}">КОЛЛ</b> = ставка на рост, <b style="${e}">ПУТ</b> = ставка на падение. <b>Страйк</b> — цена-порог, от которой считается выигрыш.</p>
+    <p style="margin:0 0 8px"><b>Пример (колл на рост):</b> Гелий-3 стоит 80 ГС. Покупаешь КОЛЛ со страйком 80 на 100 контрактов, премия например 600 ГС. Цена выросла до 100 → выплата (100−80)×100 = 2000 ГС, минус 600 премии = <b style="${g}">+1400 ГС</b>. Цена осталась ≤80 → опцион сгорает, потерял <b style="${e}">только 600</b>.</p>
+    <p style="margin:0"><b>Чем лучше маржи:</b> убыток ограничен премией — тебя не ликвидируют. <b>Чем хуже:</b> если не угадал, премия сгорает целиком. В срок опцион исполняется сам; можно и продать досрочно.</p>`);
+  if (kind === 'bonds') return wrap('Что такое облигации', `
+    <p style="margin:0 0 8px"><b>Суть:</b> это долг. Два режима — ты можешь <b>давать в долг</b> или <b>занимать</b>.</p>
+    <p style="margin:0 0 8px"><b>Ты инвестор (даёшь в долг):</b> покупаешь облигации другой державы. Каждый ход получаешь проценты («<b>купон</b>»), а в конце срока тебе возвращают «<b>номинал</b>» (вложенное).</p>
+    <p style="margin:0 0 8px"><b>Пример:</b> держава выпустила облигации по 1000 ГС, купон 1%/ход, срок 14 дней. Купил 10 штук = дал 10 000 ГС. Каждый ход <b style="${g}">+100 ГС</b> купона, через 14 дней вернут 10 000. Итого ~<b style="${g}">+1400 ГС</b> за срок.</p>
+    <p style="margin:0 0 8px"><b>Ты эмитент (занимаешь):</b> сам выпускаешь облигации — получаешь ГС сразу, но каждый ход платишь купон держателям и гасишь номинал в срок.</p>
+    <p style="margin:0"><b>⚠ Риск (для инвестора):</b> если у эмитента кончатся ГС на выплату — <b style="${e}">дефолт</b>: купоны прекращаются и номинал не вернут. Высокий купон обычно значит и выше риск дефолта.</p>`);
+  return '';
+}
+
+// ── Маржа (под-вкладка «Маржа»): лонги/шорты с плечом, cash-settled ──
+function ecExMarginBlock() {
+  const d = EC.margin;
+  if (!d) return ecDerivNA('📈 Маржинальная торговля', '_exchange_margin.sql');
+  const maxLev = +d.max_lev || 10, mm = +d.mm || 0.05;
+  const opens = d.open || [], hist = d.history || [];
+  const totPnl = opens.reduce((a, p) => a + (+p.pnl || 0), 0);
+  const totColl = opens.reduce((a, p) => a + (+p.collateral || 0), 0);
+
+  const openRows = opens.map(p => {
+    const px = +p.price || 0, liq = +p.liq || 0, pnl = +p.pnl || 0;
+    const near = p.side === 'long' ? px <= liq * 1.05 : px >= liq * 0.95;
+    const pnlPct = p.collateral > 0 ? Math.round(pnl / p.collateral * 100) : 0;
+    return `<div class="ec-q-row" style="flex-wrap:wrap;gap:8px;align-items:center">
+        <span class="ec-r-name" style="flex:1 1 40%">${ecSideBadge(p.side)} <b>${esc(p.resource)}</b> ×${(+p.leverage).toFixed(0)} · ${ecNum(p.size)} ед.</span>
+        <span>вход ${ecNum(p.entry)} → <b>${ecNum(px)}</b></span>
+        <span title="цена ликвидации" style="color:${near ? 'var(--err)' : 'var(--t4)'}">⚠ ликв. ${ecNum(liq)}</span>
+        <span>P/L <b style="color:${ecPlCol(pnl)}">${ecSign(pnl)}${ecNum(pnl)} ГС (${ecSign(pnlPct)}${pnlPct}%)</b></span>
+        <button class="btn btn-gh btn-sm" onclick="ecMarginClose('${p.id}')">Закрыть</button>
+      </div>`;
+  }).join('') || '<div class="cn-fac-hint">Открытых позиций нет.</div>';
+
+  const histRows = hist.map(p => `<div class="ec-q-row" style="flex-wrap:wrap;gap:8px">
+      <span class="ec-r-name" style="flex:1 1 45%">${p.status === 'liquidated' ? '<span class="ec-route-badge" style="background:var(--err)">ликвидация</span>' : '<span class="ec-route-badge">закрыто</span>'} ${ecSideBadge(p.side)} <b>${esc(p.resource)}</b> ×${(+p.leverage).toFixed(0)}</span>
+      <span>вход ${ecNum(p.entry)} → ${ecNum(p.exit)}</span>
+      <span>итог <b style="color:${ecPlCol(p.realized)}">${ecSign(p.realized)}${ecNum(Math.round(p.realized))} ГС</b></span>
+    </div>`).join('') || '<div class="cn-fac-hint">История пуста.</div>';
+
+  const opts = (d.resources || []).map(r => `<option value="${esc(r.name)}">${esc(r.name)} · ${ecNum(+r.price)} ГС</option>`).join('');
+  const form = `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px;margin-top:6px">
+      <select id="ec-mg-res" class="ec-prod-qty" style="max-width:180px">${opts}</select>
+      <input type="number" id="ec-mg-coll" min="100" placeholder="залог ГС" class="ec-prod-qty" style="max-width:120px">
+      <input type="number" id="ec-mg-lev" min="1" max="${maxLev}" placeholder="плечо 1–${maxLev}" class="ec-prod-qty" style="max-width:120px">
+      <button class="btn btn-gd btn-sm" onclick="ecMarginOpen('long')">▲ Лонг</button>
+      <button class="btn btn-gh btn-sm" onclick="ecMarginOpen('short')">▼ Шорт</button>
+    </div>
+    <div class="cn-fac-hint" style="margin-top:5px">Номинал = залог × плечо. Прибыль/убыток умножаются на плечо. Если цена дойдёт до <b>ликвидации</b> (запас маржи ${Math.round(mm * 100)}%) — позиция закроется, залог сгорит.</div>`;
+
+  return `${ecDerivHelp('margin')}${ecDerivPriceBoard(d.resources)}
+    <div class="ec-dip-card">
+      <div class="ec-dip-t">📈 Маржинальные позиции <span class="ec-hint">— ставка на движение цены ресурса с плечом до ×${maxLev}</span></div>
+      ${opens.length ? `<div class="ec-q-row" style="gap:14px;flex-wrap:wrap"><span>Открыто: <b>${opens.length}</b></span><span>Залог в работе: <b>${ecNum(Math.round(totColl))} ГС</b></span><span>Нереализ. P/L: <b style="color:${ecPlCol(totPnl)}">${ecSign(totPnl)}${ecNum(Math.round(totPnl))} ГС</b></span></div>` : ''}
+      ${openRows}
+      ${form}
+    </div>
+    <div class="ec-dip-card">
+      <div class="ec-dip-t">История сделок</div>
+      ${histRows}
+    </div>`;
+}
+
+// ── Фьючерсы (под-вкладка «Фьючерсы»): срочные контракты с экспирацией ──
+function ecExFuturesBlock() {
+  const d = EC.futures;
+  if (!d) return ecDerivNA('📅 Фьючерсы', '_exchange_futures.sql');
+  const maxLev = +d.max_lev || 10;
+  const opens = d.open || [], hist = d.history || [];
+
+  const openRows = opens.map(p => {
+    const px = +p.price || 0, liq = +p.liq || 0, pnl = +p.pnl || 0;
+    const near = p.side === 'long' ? px <= liq * 1.05 : px >= liq * 0.95;
+    return `<div class="ec-q-row" style="flex-wrap:wrap;gap:8px;align-items:center">
+        <span class="ec-r-name" style="flex:1 1 38%">${ecSideBadge(p.side)} <b>${esc(p.resource)}</b> ×${(+p.leverage).toFixed(0)} · экспирация ${ecDays(p.expires_at)} дн</span>
+        <span>фьюч ${ecNum(p.entry)} → спот <b>${ecNum(px)}</b></span>
+        <span style="color:${near ? 'var(--err)' : 'var(--t4)'}">⚠ ликв. ${ecNum(liq)}</span>
+        <span>P/L <b style="color:${ecPlCol(pnl)}">${ecSign(pnl)}${ecNum(pnl)} ГС</b></span>
+        <button class="btn btn-gh btn-sm" onclick="ecFuturesClose('${p.id}')">Закрыть</button>
+      </div>`;
+  }).join('') || '<div class="cn-fac-hint">Открытых контрактов нет.</div>';
+
+  const histRows = hist.map(p => `<div class="ec-q-row" style="flex-wrap:wrap;gap:8px">
+      <span class="ec-r-name" style="flex:1 1 45%">${p.status === 'liquidated' ? '<span class="ec-route-badge" style="background:var(--err)">ликвидация</span>' : p.status === 'settled' ? '<span class="ec-route-badge">расчёт</span>' : '<span class="ec-route-badge">закрыто</span>'} ${ecSideBadge(p.side)} <b>${esc(p.resource)}</b> ×${(+p.leverage).toFixed(0)}</span>
+      <span>вход ${ecNum(p.entry)} → ${ecNum(p.exit)}</span>
+      <span>итог <b style="color:${ecPlCol(p.realized)}">${ecSign(p.realized)}${ecNum(Math.round(p.realized))} ГС</b></span>
+    </div>`).join('') || '<div class="cn-fac-hint">История пуста.</div>';
+
+  const opts = (d.resources || []).map(r => `<option value="${esc(r.name)}">${esc(r.name)} · ${ecNum(+r.price)} ГС</option>`).join('');
+  const form = `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px;margin-top:6px">
+      <select id="ec-ft-res" class="ec-prod-qty" style="max-width:170px">${opts}</select>
+      <input type="number" id="ec-ft-coll" min="100" placeholder="залог ГС" class="ec-prod-qty" style="max-width:110px">
+      <input type="number" id="ec-ft-lev" min="1" max="${maxLev}" placeholder="плечо" class="ec-prod-qty" style="max-width:90px">
+      <input type="number" id="ec-ft-term" min="1" max="90" placeholder="срок, дней" class="ec-prod-qty" style="max-width:120px">
+      <button class="btn btn-gd btn-sm" onclick="ecFuturesOpen('long')">▲ Лонг</button>
+      <button class="btn btn-gh btn-sm" onclick="ecFuturesOpen('short')">▼ Шорт</button>
+    </div>
+    <div class="cn-fac-hint" style="margin-top:5px">Вход по фьючерсной цене (спот + контанго за срок). На экспирации контракт рассчитывается по споту — базис сходится. До срока действует та же ликвидация по плечу.</div>`;
+
+  return `${ecDerivHelp('futures')}${ecDerivPriceBoard(d.resources)}
+    <div class="ec-dip-card">
+      <div class="ec-dip-t">📅 Фьючерсные контракты <span class="ec-hint">— срочная ставка на цену с датой расчёта</span></div>
+      ${openRows}
+      ${form}
+    </div>
+    <div class="ec-dip-card">
+      <div class="ec-dip-t">История контрактов</div>
+      ${histRows}
+    </div>`;
+}
+
+// ── Опционы (под-вкладка «Опционы»): колл/пут за премию ──
+function ecExOptionsBlock() {
+  const d = EC.options;
+  if (!d) return ecDerivNA('🎲 Опционы', '_exchange_options.sql');
+  const opens = d.open || [], hist = d.history || [];
+
+  const openRows = opens.map(p => {
+    const val = +p.value || 0, paid = +p.premium_paid || 0, pl = val - paid;
+    return `<div class="ec-q-row" style="flex-wrap:wrap;gap:8px;align-items:center">
+        <span class="ec-r-name" style="flex:1 1 40%"><span class="ec-route-badge" style="background:${p.kind === 'call' ? '#2f6b46' : '#7a2f44'}">${p.kind === 'call' ? 'КОЛЛ' : 'ПУТ'}</span> <b>${esc(p.resource)}</b> страйк ${ecNum(p.strike)} · ${ecNum(p.contracts)} к. · ${ecDays(p.expires_at)} дн</span>
+        <span>спот <b>${ecNum(p.spot)}</b> · внутр. ${ecNum(p.intrinsic)}</span>
+        <span>стоит ${ecNum(val)} / премия ${ecNum(paid)}</span>
+        <span>P/L <b style="color:${ecPlCol(pl)}">${ecSign(pl)}${ecNum(Math.round(pl))} ГС</b></span>
+        <button class="btn btn-gh btn-sm" onclick="ecOptionsClose('${p.id}')" title="Продать досрочно по теор. стоимости (×0.9)">Продать</button>
+      </div>`;
+  }).join('') || '<div class="cn-fac-hint">Открытых опционов нет.</div>';
+
+  const histRows = hist.map(p => `<div class="ec-q-row" style="flex-wrap:wrap;gap:8px">
+      <span class="ec-r-name" style="flex:1 1 45%">${p.status === 'exercised' ? '<span class="ec-route-badge" style="background:#2f6b46">исполнен</span>' : p.status === 'expired' ? '<span class="ec-route-badge" style="background:var(--err)">сгорел</span>' : '<span class="ec-route-badge">продан</span>'} ${p.kind === 'call' ? 'КОЛЛ' : 'ПУТ'} <b>${esc(p.resource)}</b> страйк ${ecNum(p.strike)}</span>
+      <span>премия ${ecNum(Math.round(p.premium_paid))} · выплата ${ecNum(Math.round(p.payout))}</span>
+      <span>итог <b style="color:${ecPlCol(p.realized)}">${ecSign(p.realized)}${ecNum(Math.round(p.realized))} ГС</b></span>
+    </div>`).join('') || '<div class="cn-fac-hint">История пуста.</div>';
+
+  const opts = (d.resources || []).map(r => `<option value="${esc(r.name)}" data-px="${+r.price}">${esc(r.name)} · ${ecNum(+r.price)} ГС</option>`).join('');
+  const form = `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px;margin-top:6px">
+      <select id="ec-op-res" class="ec-prod-qty" style="max-width:170px" onchange="ecOptionsPreview()">${opts}</select>
+      <select id="ec-op-kind" class="ec-prod-qty" style="max-width:100px" onchange="ecOptionsPreview()"><option value="call">КОЛЛ ▲</option><option value="put">ПУТ ▼</option></select>
+      <input type="number" id="ec-op-strike" min="0.01" step="0.01" placeholder="страйк" class="ec-prod-qty" style="max-width:100px" oninput="ecOptionsPreview()">
+      <input type="number" id="ec-op-ct" min="1" placeholder="контрактов" class="ec-prod-qty" style="max-width:110px" oninput="ecOptionsPreview()">
+      <input type="number" id="ec-op-term" min="1" max="90" placeholder="срок, дней" class="ec-prod-qty" style="max-width:110px" oninput="ecOptionsPreview()">
+      <button class="btn btn-gd btn-sm" onclick="ecOptionsBuy()">Купить</button>
+    </div>
+    <div class="cn-fac-hint" id="ec-op-prev" style="margin-top:5px">Колл выигрывает при росте выше страйка, пут — при падении ниже. Премия = максимальный убыток; в срок опцион исполняется по споту автоматически.</div>`;
+
+  return `${ecDerivHelp('options')}${ecDerivPriceBoard(d.resources)}
+    <div class="ec-dip-card">
+      <div class="ec-dip-t">🎲 Опционы <span class="ec-hint">— право на выплату по страйку за уплаченную премию</span></div>
+      ${openRows}
+      ${form}
+    </div>
+    <div class="ec-dip-card">
+      <div class="ec-dip-t">История опционов</div>
+      ${histRows}
+    </div>`;
+}
+
 // ── Облигации (под-вкладка «Облигации»): рынок чужих бумаг + выпуск + позиции ──
 // Купон в б.п./сутки от номинала; в срок эмитент гасит номинал. Дефолт = риск.
 function ecExBondsBlock() {
@@ -4024,7 +4258,7 @@ function ecExBondsBlock() {
     </div>
     <div class="cn-fac-hint" style="margin-top:5px">Инвесторы покупают бумаги — их ГС идут вам сразу. Каждый ход платите купон держателям, в срок гасите номинал. Не хватит ГС на выплату → <b style="color:var(--err)">дефолт</b> (репутация и доверие падают).</div>`;
 
-  return `<div class="ec-dip-card">
+  return `${ecDerivHelp('bonds')}<div class="ec-dip-card">
       <div class="ec-dip-t">🏛 Рынок облигаций <span class="ec-hint">— занимайте ГС под купон или вкладывайтесь в чужой долг</span></div>
       ${market}
     </div>
@@ -6719,6 +6953,58 @@ function ecBondBuy(id) {
   ecRpcAct('bond_buy', { p_issue_id: id, p_units: units }, 'Облигации куплены');
 }
 function ecBondCancel(id) { ecRpcAct('bond_cancel', { p_issue_id: id }, 'Выпуск снят'); }
+// ── Биржа: маржа (лонги/шорты с плечом) ──────────────────────
+function ecMarginOpen(side) {
+  const res = ecId('ec-mg-res')?.value || '';
+  const coll = Math.max(0, parseInt(ecId('ec-mg-coll')?.value) || 0);
+  const lev = Math.max(0, parseInt(ecId('ec-mg-lev')?.value) || 0);
+  if (!res) { toast('Выберите ресурс', 'err'); return; }
+  if (coll < 100) { toast('Залог минимум 100 ГС', 'err'); return; }
+  if (lev < 1) { toast('Укажите плечо', 'err'); return; }
+  ecRpcAct('margin_open', { p_resource: res, p_side: side, p_collateral: coll, p_leverage: lev }, side === 'long' ? 'Лонг открыт' : 'Шорт открыт');
+}
+function ecMarginClose(id) { ecRpcAct('margin_close', { p_id: id }, 'Позиция закрыта'); }
+// ── Биржа: фьючерсы ──────────────────────────────────────────
+function ecFuturesOpen(side) {
+  const res = ecId('ec-ft-res')?.value || '';
+  const coll = Math.max(0, parseInt(ecId('ec-ft-coll')?.value) || 0);
+  const lev = Math.max(0, parseInt(ecId('ec-ft-lev')?.value) || 0);
+  const term = Math.max(0, parseInt(ecId('ec-ft-term')?.value) || 0);
+  if (!res) { toast('Выберите ресурс', 'err'); return; }
+  if (coll < 100) { toast('Залог минимум 100 ГС', 'err'); return; }
+  if (lev < 1) { toast('Укажите плечо', 'err'); return; }
+  if (term < 1) { toast('Укажите срок', 'err'); return; }
+  ecRpcAct('futures_open', { p_resource: res, p_side: side, p_collateral: coll, p_leverage: lev, p_term_days: term }, side === 'long' ? 'Фьючерс-лонг открыт' : 'Фьючерс-шорт открыт');
+}
+function ecFuturesClose(id) { ecRpcAct('futures_close', { p_id: id }, 'Контракт закрыт'); }
+// ── Биржа: опционы (колл/пут) ────────────────────────────────
+function ecOptionsPreview() {
+  const box = ecId('ec-op-prev'); if (!box) return;
+  const opt = ecId('ec-op-res')?.selectedOptions?.[0];
+  const spot = opt ? (+opt.getAttribute('data-px') || 0) : 0;
+  const kind = ecId('ec-op-kind')?.value || 'call';
+  const strike = Math.max(0, parseFloat(ecId('ec-op-strike')?.value) || 0);
+  const ct = Math.max(0, parseInt(ecId('ec-op-ct')?.value) || 0);
+  const term = Math.max(0, parseInt(ecId('ec-op-term')?.value) || 0);
+  if (!spot || !strike || !ct || !term) { box.innerHTML = 'Колл выигрывает при росте выше страйка, пут — при падении ниже. Премия = максимальный убыток; в срок опцион исполняется по споту автоматически.'; return; }
+  const vol = (EC.options && +EC.options.vol) || 0.45;
+  const intrinsic = Math.max(0, kind === 'call' ? spot - strike : strike - spot);
+  const prem = Math.max(1, intrinsic + spot * vol * Math.sqrt(term / 365) * 0.5);
+  box.innerHTML = `Премия ≈ <b>${ecNum(Math.round(prem))} ГС</b>/контракт · итого ≈ <b>${ecNum(Math.round(prem * ct))} ГС</b> (спот ${ecNum(spot)}).`;
+}
+function ecOptionsBuy() {
+  const res = ecId('ec-op-res')?.value || '';
+  const kind = ecId('ec-op-kind')?.value || 'call';
+  const strike = Math.max(0, parseFloat(ecId('ec-op-strike')?.value) || 0);
+  const ct = Math.max(0, parseInt(ecId('ec-op-ct')?.value) || 0);
+  const term = Math.max(0, parseInt(ecId('ec-op-term')?.value) || 0);
+  if (!res) { toast('Выберите ресурс', 'err'); return; }
+  if (!strike) { toast('Укажите страйк', 'err'); return; }
+  if (!ct) { toast('Укажите контракты', 'err'); return; }
+  if (!term) { toast('Укажите срок', 'err'); return; }
+  ecRpcAct('options_buy', { p_resource: res, p_kind: kind, p_strike: strike, p_contracts: ct, p_term_days: term }, 'Опцион куплен');
+}
+function ecOptionsClose(id) { ecRpcAct('options_close', { p_id: id }, 'Опцион продан'); }
 // ── Биржа: корпорации ────────────────────────────────────────
 function ecCorpCreate() {
   const name = (ecId('ec-co-name')?.value || '').trim();
