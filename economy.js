@@ -263,7 +263,7 @@ const EC_BLD_HOWTO = {
   military_factory: 'Даёт мощность для производства наземной техники (вкладка «Строительство вооружённых сил»).',
   shipyard:         'Даёт мощность для постройки кораблей и авиации (вкладка «Строительство вооружённых сил»).',
   temple:           'Пассивный доход ГС + «сила веры»: чем больше слотов храмов, тем дешевле постройка войск. Спиритуалистам и теократиям бонус сильнее. Требует исповедуемой веры; при постройке указывается её религия (можно держать храмы разных вер).',
-  doomgun:          'Откройте пульт орудия, выберите систему-цель и планету — залп тратит 20 Гравиядра. Снаряд летит сутки. Держите запас Программируемой материи: без неё орудие деградирует быстрее и распадётся.',
+  doomgun:          'Откройте пульт орудия, выберите систему-цель и планету — залп тратит 20 Гравиядра. Снаряд летит тем дольше, чем дальше цель: от ~3 ч до соседней системы и до суток — от края до края галактики. Держите запас Программируемой материи: без неё орудие деградирует быстрее и распадётся.',
 };
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
@@ -7870,13 +7870,27 @@ function ecDoomConsole(buildingId) {
   const target = (st.sysId && Number.isInteger(st.pid)) ? sysList.find(s => s.id === st.sysId) : null;
   const tgtPlanet = target ? (target.planets || []).find(p => p.pid === st.pid) : null;
   const canFire = canFuel && tgtPlanet && !(tgtPlanet.dead || tgtPlanet.doomed);
+  // Оценка времени полёта = функция расстояния (зеркало _doom_fire): соседняя
+  // система ≈ 3 ч, край↔край карты ≈ 24 ч. Считаем по координатам систем.
+  const gun = EC.doomByBuilding ? EC.doomByBuilding[buildingId] : null;
+  const orig = gun ? sysList.find(s => s.id === gun.system_id) : null;
+  const tgtSys = st.sysId ? sysList.find(s => s.id === st.sysId) : null;
+  let flyTxt = 'от 3 ч (рядом) до 24 ч (край карты) — зависит от расстояния';
+  if (orig && tgtSys && Number.isFinite(+orig.x) && Number.isFinite(+tgtSys.x)) {
+    const dist = Math.hypot(+tgtSys.x - +orig.x, +tgtSys.y - +orig.y);
+    const xs = sysList.map(s => +s.x).filter(Number.isFinite);
+    const ys = sysList.map(s => +s.y).filter(Number.isFinite);
+    const diag = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) || 1;
+    const flyH = 3 + Math.min(1, Math.max(0, dist / diag)) * (24 - 3);
+    flyTxt = `≈ ${flyH.toFixed(1)} ч полёта (дистанция ${Math.round(dist)})`;
+  }
   _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
     <div class="ec-bp-modal" role="dialog" aria-modal="true" style="max-width:560px">
       <div class="ec-bp-hd" style="background:rgba(220,40,40,.12)">
         <div class="ec-bp-hd-t"><span class="ec-bp-hd-ic">🜨</span><span>Пульт залпа — Длань Неотвратимости</span></div>
         <button class="ec-bp-x" title="Закрыть" onclick="ecBuildClose()">✕</button>
       </div>
-      <div class="ec-bp-meta"><span>🔮 Гравиядро: <b class="${canFuel ? '' : 'ec-warn'}">${ecNum(grav)}</b> / нужно ${EC_DOOM_SHOT_GRAV}</span><span>☄️ снаряд летит 1 день</span></div>
+      <div class="ec-bp-meta"><span>🔮 Гравиядро: <b class="${canFuel ? '' : 'ec-warn'}">${ecNum(grav)}</b> / нужно ${EC_DOOM_SHOT_GRAV}</span><span>☄️ ${flyTxt}</span></div>
       <div style="padding:10px 14px">
         <label style="font-size:12px;color:var(--t3)">Система-цель</label>
         <select class="ec-input" style="width:100%;margin:4px 0 10px" onchange="ecDoomPickSys(this.value)">

@@ -2687,10 +2687,13 @@ function gmmBuildCaravans() {
 }
 
 // ── Межзвёздная артиллерия: залпы «Длани Неотвратимости» в полёте ──
-// Снаряд летит ПРЯМОЙ через космос из системы-источника в систему-цель (а не по
-// гиперпутям — это оружие судного дня, ему не нужны торговые пути). Позиция вдоль
-// траектории считается по РЕАЛЬНОМУ времени полёта (launched_at → ready_at), так
-// что на карте видно, как именно близко снаряд подошёл к обречённой планете.
+// Снаряд летит через космос из системы-источника в систему-цель ДУГОЙ (а не по
+// гиперпутям — это оружие судного дня, ему не нужны торговые пути). Изгиб дуги —
+// всегда в ОДНУ сторону от направления полёта, поэтому встречный залп (B→A)
+// выгибается в противоположную: размен идёт по двум разнесённым дугам, а не по
+// одной прямой «каше». Позиция вдоль траектории — по РЕАЛЬНОМУ времени полёта
+// (launched_at → ready_at), видно, как близко снаряд подошёл к обречённой планете.
+// Цвет луча/снаряда — фракции-стрелка (кто бьёт), прицел на цели — красный (смерть).
 function gmmBuildSalvos() {
   GMM.salvos = [];
   if (!GM.salvos || !GM.salvos.length) return;
@@ -2701,86 +2704,96 @@ function gmmBuildSalvos() {
     const ori = byId[s.origin_system_id];     // источник может быть неизвестен/вне карты
     const la = s.launched_at ? Date.parse(s.launched_at) : null;
     const ra = s.ready_at ? Date.parse(s.ready_at) : null;
-    GMM.salvos.push({
-      ox: ori ? ori.x : tgt.x, oy: ori ? ori.y : tgt.y, hasOrigin: !!ori,
-      dx: tgt.x, dy: tgt.y, la, ra, planet: s.target_planet || '',
-    });
+    const fac = gmFaction(s.faction_id);
+    const col = fac ? gmRgb(fac.color) : [255, 96, 48];   // цвет стрелка (нет → тревожный красно-оранж)
+    // имя стрелка для подписи «кто → во что» (анкета — самый надёжный источник имени)
+    const aName = (GM.facMeta && GM.facMeta[s.faction_id] && GM.facMeta[s.faction_id].name)
+      || (fac && fac.name) || 'Неизвестно';
+    let g = null;                                          // квадратичная Безье дуги {ax,ay,cx,cy,bx,by}
+    if (ori) {
+      const ax = ori.x, ay = ori.y, bx = tgt.x, by = tgt.y;
+      const dxv = bx - ax, dyv = by - ay, len = Math.hypot(dxv, dyv) || 1;
+      const nx = -dyv / len, ny = dxv / len;              // левая нормаль направления полёта (знак привязан к направлению → встречный залп выгнется зеркально)
+      const bow = Math.max(60, Math.min(560, len * 0.16));
+      g = { ax, ay, cx: (ax + bx) / 2 + nx * bow, cy: (ay + by) / 2 + ny * bow, bx, by };
+    }
+    GMM.salvos.push({ g, sys: tgt, dx: tgt.x, dy: tgt.y, la, ra, col,
+      attacker: aName, planet: s.target_planet || '' });
   });
 }
 
-// Рисует залпы поверх карты на ЛЮБОМ зуме (событие галактического масштаба):
-// тревожный пунктирный луч траектории, летящий снаряд с огненным хвостом и
-// пульсирующий прицел-перекрестие на системе-цели (тем ярче, чем ближе подлёт).
+// Рисует залпы поверх карты — минималистично, в языке самой карты (как трафик
+// караванов + кольцо выделения системы). Никаких плашек/перекрестий:
+//  • тонкая дуга-трасса в цвете фракции-стрелка (бледная впереди, светится позади);
+//  • маленькая бело-горячая искра-снаряд скользит по дуге (масштаб как у караванов);
+//  • цель помечена красным пунктирным кольцом вокруг звезды — тем же стилем, что и
+//    кольцо выбранной системы (gmmBlit), только красным и с лёгким пульсом.
+// Кто в кого бьёт — читается по тому, ИЗ ЧЬЕЙ звезды и каким цветом выходит дуга.
 function gmmPaintSalvos(ctx) {
   if (!GMM.salvos || !GMM.salvos.length) return;
-  const s = GMM.s, tx = GMM.tx, ty = GMM.ty, t = performance.now() / 1000, now = Date.now();
-  const wx0 = -tx / s - 60, wy0 = -ty / s - 60, wx1 = (GMM.vw - tx) / s + 60, wy1 = (GMM.vh - ty) / s + 60;
+  const s = GMM.s, t = performance.now() / 1000, now = Date.now();
+  const SX = wx => wx * s + GMM.tx;          // мир→экран X
+  const SY = wy => gmmTY(wy * s + GMM.ty);   // мир→экран Y (с наклоном плоскости)
   ctx.save();
-  ctx.lineCap = 'round';
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   GMM.salvos.forEach(sv => {
     // прогресс полёта по реальному времени (если меток нет — считаем на полпути)
     let u = 0.5;
     if (sv.la != null && sv.ra != null && sv.ra > sv.la) u = (now - sv.la) / (sv.ra - sv.la);
     u = Math.max(0, Math.min(1, u));
-    // экранные координаты цели / источника / снаряда (с учётом наклона плоскости)
-    const tX = sv.dx * s + tx, tY = gmmTY(sv.dy * s + ty);
-    const targetIn = !(sv.dx < wx0 || sv.dx > wx1 || sv.dy < wy0 || sv.dy > wy1);
+    const [r, gg, b] = sv.col;
+    const lr = Math.min(255, r + 110), lg = Math.min(255, gg + 110), lb = Math.min(255, b + 110);
+    const tX = SX(sv.dx), tY = SY(sv.dy);
 
-    if (sv.hasOrigin) {
-      const oX = sv.ox * s + tx, oY = gmmTY(sv.oy * s + ty);
-      const px = sv.ox + (sv.dx - sv.ox) * u, py = sv.oy + (sv.dy - sv.oy) * u;
-      const pX = px * s + tx, pY = gmmTY(py * s + ty);
-      // 1) пунктирный луч траектории: пройденный участок ярче, остаток — тусклый
-      ctx.setLineDash([7, 7]); ctx.lineDashOffset = -t * 16;
-      ctx.strokeStyle = 'rgba(255,70,40,0.16)'; ctx.lineWidth = 1.3;
-      ctx.beginPath(); ctx.moveTo(pX, pY); ctx.lineTo(tX, tY); ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,110,50,0.4)'; ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.moveTo(oX, oY); ctx.lineTo(pX, pY); ctx.stroke();
+    if (sv.g) {
+      const N = 28, pts = [];
+      for (let i = 0; i <= N; i++) { const p = gmmBezPt(sv.g, i / N); pts.push([SX(p.x), SY(p.y)]); }
+      const iCur = Math.max(0, Math.min(N, Math.ceil(u * N)));
+      const seg = (from, to) => {
+        if (to < from) return;
+        ctx.beginPath(); ctx.moveTo(pts[from][0], pts[from][1]);
+        for (let i = from + 1; i <= to; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.stroke();
+      };
+      // впереди снаряда — лёгкая бледная трасса (куда летит). Позади — светящийся
+      // след с мягким glow (виден и на красной территории за счёт высветления+bloom).
       ctx.setLineDash([]);
-      // 2) снаряд с огненным хвостом (виден, если в кадре)
-      if (px >= wx0 && px <= wx1 && py >= wy0 && py <= wy1) {
-        const t0u = Math.max(0, u - 0.07);
-        const hx = (sv.ox + (sv.dx - sv.ox) * t0u) * s + tx;
-        const hy = gmmTY((sv.oy + (sv.dy - sv.oy) * t0u) * s + ty);
-        const trail = ctx.createLinearGradient(hx, hy, pX, pY);
-        trail.addColorStop(0, 'rgba(255,80,30,0)');
-        trail.addColorStop(1, 'rgba(255,150,50,0.9)');
-        ctx.strokeStyle = trail; ctx.lineWidth = 3.2;
-        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(pX, pY); ctx.stroke();
-        const flick = 0.85 + 0.15 * Math.sin(t * 22);
-        const gr = ctx.createRadialGradient(pX, pY, 0, pX, pY, 11 * flick);
-        gr.addColorStop(0, 'rgba(255,240,200,1)');
-        gr.addColorStop(0.35, 'rgba(255,130,50,0.95)');
-        gr.addColorStop(1, 'rgba(255,60,20,0)');
-        ctx.fillStyle = gr;
-        ctx.beginPath(); ctx.arc(pX, pY, 11 * flick, 0, 6.2832); ctx.fill();
-      }
+      ctx.strokeStyle = `rgba(${lr},${lg},${lb},0.22)`; ctx.lineWidth = 1.1; seg(iCur, N);
+      ctx.shadowColor = `rgba(${lr},${lg},${lb},0.7)`; ctx.shadowBlur = 5;
+      ctx.strokeStyle = `rgba(${lr},${lg},${lb},0.55)`; ctx.lineWidth = 1.5; seg(0, iCur);
+      ctx.shadowBlur = 0;
+
+      // снаряд — маленькая бело-горячая искра с короткой кометной чёрточкой по ходу
+      const head = gmmBezPt(sv.g, u), hX = SX(head.x), hY = SY(head.y);
+      const back = gmmBezPt(sv.g, Math.max(0, u - 0.03));
+      const ang = Math.atan2(hY - SY(back.y), hX - SX(back.x));
+      const sz = 2.6 + Math.min(3.2, s * 0.9);   // как у каравана — мелкая искра
+      ctx.save();
+      ctx.translate(hX, hY); ctx.rotate(ang);
+      const tg = ctx.createLinearGradient(-sz * 5, 0, sz, 0);   // короткий хвост-чёрточка
+      tg.addColorStop(0, `rgba(${lr},${lg},${lb},0)`);
+      tg.addColorStop(1, 'rgba(255,250,238,0.95)');
+      ctx.strokeStyle = tg; ctx.lineWidth = sz * 0.7;
+      ctx.beginPath(); ctx.moveTo(-sz * 5, 0); ctx.lineTo(0, 0); ctx.stroke();
+      ctx.shadowColor = `rgba(${lr},${lg},${lb},0.95)`; ctx.shadowBlur = 7;
+      ctx.fillStyle = 'rgba(255,252,244,1)';
+      ctx.beginPath(); ctx.ellipse(0, 0, sz, sz * 0.62, 0, 0, 6.2832); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
     }
 
-    // 3) прицел-перекрестие на системе-цели — пульсирует, ярче по мере подлёта
-    if (targetIn) {
-      const pulse = 0.5 + 0.5 * Math.sin(t * 3.2);
-      const intens = 0.45 + 0.55 * u;
-      const R = 15 + 7 * pulse;
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = `rgba(255,55,40,${(0.35 + 0.45 * pulse) * intens})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(tX, tY, R, 0, 6.2832); ctx.stroke();
-      ctx.strokeStyle = `rgba(255,90,60,${0.6 * intens})`;
-      ctx.lineWidth = 1.4;
-      ctx.beginPath(); ctx.arc(tX, tY, R * 0.6, 0, 6.2832); ctx.stroke();
-      // крест-метки прицела
-      const tick = R + 5, gap = R * 0.5;
-      ctx.strokeStyle = `rgba(255,70,50,${0.8 * intens})`; ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(tX - tick, tY); ctx.lineTo(tX - gap, tY);
-      ctx.moveTo(tX + gap, tY); ctx.lineTo(tX + tick, tY);
-      ctx.moveTo(tX, tY - tick); ctx.lineTo(tX, tY - gap);
-      ctx.moveTo(tX, tY + gap); ctx.lineTo(tX, tY + tick);
-      ctx.stroke();
+    // ЦЕЛЬ — красное пунктирное кольцо вокруг звезды, в стиле кольца выбора (gmmBlit):
+    // эллипс с тем же сжатием по наклону плоскости (deepA), лёгкий пульс + бег пунктира.
+    if (tX > -60 && tX < GMM.vw + 60 && tY > -60 && tY < GMM.vh + 60) {
+      const pulse = 0.6 + 0.4 * Math.sin(t * 2.2);
+      const R = (sv.sys ? gmmIconPx(sv.sys, s) * 0.62 : 10) + 8;
+      const ry = R * (1 - 0.5 * gmmDeepA());
+      ctx.setLineDash([5, 4]); ctx.lineDashOffset = -t * 7;
+      ctx.strokeStyle = `rgba(255,80,60,${0.85 * pulse})`; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.ellipse(tX, tY, R, ry, 0, 0, 6.2832); ctx.stroke();
+      ctx.setLineDash([]);
     }
   });
-  ctx.globalAlpha = 1;
   ctx.restore();
 }
 

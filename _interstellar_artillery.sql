@@ -92,7 +92,9 @@ returns numeric language sql immutable as $$
     when 'decay_day'     then 5        -- естественная деградация в день
     when 'decay_kept'    then 1        -- деградация в день при оплаченном содержании
     when 'maint_matter'  then 4        -- Программируемой материи в день на содержание
-    when 'flight_days'   then 1        -- сколько суток летит снаряд
+    when 'flight_days'   then 1        -- (устар.) сколько суток летит снаряд — заменено дистанцией
+    when 'flight_h_min'  then 3        -- мин. полёт (соседняя система), часов
+    when 'flight_h_max'  then 24       -- макс. полёт (край↔край карты), часов = 1 сутки
     else 0 end
 $$;
 
@@ -188,6 +190,7 @@ create or replace function public.doom_fire(p_gun_id uuid, p_target_system_id te
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare fid text; g public.doom_guns; eco public.faction_economy; res jsonb;
   grav_need numeric; have_grav numeric; tgt public.map_systems; pl jsonb; rdy timestamptz; fname text; ptname text;
+  org public.map_systems; dist numeric; map_diag numeric; frac numeric; fly_h numeric;
 begin
   fid := public._ec_my_fid();
   perform public._doom_settle(fid);   -- сначала догнать деградацию (integrity актуальна)
@@ -224,7 +227,18 @@ begin
                               total_shots = total_shots + 1
     where id = g.id;
 
-  rdy := now() + (public._doom_const('flight_days')::int || ' days')::interval;
+  -- время полёта = функция РАССТОЯНИЯ от орудия до цели.
+  -- соседняя система ≈ flight_h_min, край↔край карты ≈ flight_h_max (1 сутки).
+  select * into org from public.map_systems where id = g.system_id;
+  dist := sqrt(power(coalesce(tgt.x,0)-coalesce(org.x,0),2)
+             + power(coalesce(tgt.y,0)-coalesce(org.y,0),2));
+  -- диагональ карты = от мин. до макс. координат всех систем (реальный «край↔край»)
+  select sqrt(power(max(x)-min(x),2) + power(max(y)-min(y),2))
+    into map_diag from public.map_systems;
+  frac := least(1.0, greatest(0.0, dist / nullif(map_diag,0)));
+  fly_h := public._doom_const('flight_h_min')
+         + frac * (public._doom_const('flight_h_max') - public._doom_const('flight_h_min'));
+  rdy := now() + (round(fly_h*60)::int || ' minutes')::interval;
   insert into public.doom_salvos
     (gun_id, faction_id, owner_id, origin_system_id, target_system_id, target_pid, target_planet, ready_at)
   values
@@ -234,9 +248,11 @@ begin
   perform public._doom_news(
     '🜨 ЗАЛП ВЫПУЩЕН — ОТСЧЁТ ПОШЁЛ',
     'Длань Неотвратимости ('||coalesce(fname,'???')||') дала залп по системе «'||coalesce(tgt.name,'???')||
-    '». Снаряд уже в пути к планете «'||ptname||'». Эвакуация бессмысленна — он придёт. И никто его не остановит.');
+    '». Снаряд уже в пути к планете «'||ptname||'» — расчётное время полёта ~'||
+    to_char(fly_h,'FM990.0')||' ч. Эвакуация бессмысленна — он придёт. И никто его не остановит.');
 
-  return jsonb_build_object('ok', true, 'grav', grav_need, 'ready_at', rdy, 'target', ptname);
+  return jsonb_build_object('ok', true, 'grav', grav_need, 'ready_at', rdy, 'target', ptname,
+                            'flight_h', round(fly_h,1), 'dist', round(dist));
 end$$;
 revoke all on function public.doom_fire(uuid,text,int) from public;
 grant execute on function public.doom_fire(uuid,text,int) to authenticated;
