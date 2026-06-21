@@ -5524,6 +5524,10 @@ function ecTreePortal() {
   EC._treeFsEl = stage;
 }
 let _ecTreeDrag = null, _ecPan = null, _ecTreeSuppressClick = 0;
+// Допуск «дрожания» руки при клике: пока курсор не сместился больше этого порога,
+// нажатие считается КЛИКОМ по узлу, а не паном/драгом. 3px слишком жёстко — обычный
+// клик мышью часто уводит курсор на 4–6px, и клик «съедался» (узлы «не жмутся»).
+const EC_TREE_CLICK_SLOP = 6;
 function ecTreePt(e) { const t = e.touches && e.touches[0]; return { x: t ? t.clientX : e.clientX, y: t ? t.clientY : e.clientY }; }
 function ecTreeBind() {
   ecTreePortal();   // фуллскрин: вынести сцену в body мимо трансформ-предков
@@ -5569,7 +5573,7 @@ function ecTreeMove(e) {
   if (_ecTreeDrag) {
     const d = _ecTreeDrag, pt = ecTreePt(e);
     const nx = Math.round(d.ox + (pt.x - d.sx) / d.z), ny = Math.round(d.oy + (pt.y - d.sy) / d.z);
-    if (Math.abs(pt.x - d.sx) > 3 || Math.abs(pt.y - d.sy) > 3) d.moved = true;
+    if (Math.abs(pt.x - d.sx) > EC_TREE_CLICK_SLOP || Math.abs(pt.y - d.sy) > EC_TREE_CLICK_SLOP) d.moved = true;
     d.card.style.left = nx + 'px'; d.card.style.top = ny + 'px';
     if (EC._treePos) EC._treePos[d.id] = { x: nx, y: ny };
     ecTreeRedrawEdges();
@@ -5580,7 +5584,7 @@ function ecTreeMove(e) {
     const pt = ecTreePt(e);
     EC.treePanX = _ecPan.px + (pt.x - _ecPan.sx);
     EC.treePanY = _ecPan.py + (pt.y - _ecPan.sy);
-    if (Math.abs(pt.x - _ecPan.sx) > 3 || Math.abs(pt.y - _ecPan.sy) > 3) { _ecPan.moved = true; document.body.classList.add('ec-tree-grabbing'); }
+    if (Math.abs(pt.x - _ecPan.sx) > EC_TREE_CLICK_SLOP || Math.abs(pt.y - _ecPan.sy) > EC_TREE_CLICK_SLOP) { _ecPan.moved = true; document.body.classList.add('ec-tree-grabbing'); }
     ecTreeApply();
     if (e.cancelable) e.preventDefault();
   }
