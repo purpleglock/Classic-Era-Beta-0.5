@@ -76,6 +76,9 @@ async function renderHome() {
 
   setPg(`${heroHtml}${customHtml}${newsHtml}${sectionsHtml}${clRows ? `<section class="home-block"><div class="hb-head"><span class="hb-tag">${T('recentChanges')}</span></div><div class="cl-list">${clRows}</div></section>` : ''}${contribsHtml}`);
 
+  // Биржевая бегущая лента в «Ленте сектора» — дозаполняем асинхронно (не блокирует главную)
+  if (typeof fnLoadCorpTicker === 'function') fnLoadCorpTicker();
+
   // Клик по обложке открывает изображение в полном размере
   requestAnimationFrame(() => {
     const heroImg = document.querySelector('#hp-hero-cover .hp-hero-img');

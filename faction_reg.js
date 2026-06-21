@@ -850,11 +850,12 @@ function frCloseView() { document.getElementById('fr-modal')?.classList.remove('
 // ════════════════════════════════════════════════════════════
 async function frRenderAppsTab(b) {
   b.innerHTML = `<div class="sload" style="min-height:60px"><div class="quote-loader">Загрузка...</div></div>`;
-  let apps = [], faiths = [], unions = [];
+  let apps = [], faiths = [], unions = [], corps = [];
   try { apps = await dbGet('faction_applications', 'or=(status.eq.pending,pending_review.eq.true)&order=updated_at.asc') || []; } catch (e) { b.innerHTML = `<p style="color:var(--err)">Ошибка: ${esc(e.message)}</p>`; return; }
   try { faiths = await frRpc('faith_pending_list') || []; } catch (e) { faiths = []; }
   try { unions = await frRpc('union_pending_list') || []; } catch (e) { unions = []; }
-  if (!apps.length && !faiths.length && !unions.length) { b.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--t3)">Нет анкет на модерации</div>`; return; }
+  try { corps = await frRpc('corp_pending_list') || []; } catch (e) { corps = []; }
+  if (!apps.length && !faiths.length && !unions.length && !corps.length) { b.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--t3)">Нет анкет на модерации</div>`; return; }
   const appsHtml = apps.map(a => {
       const isEdit = a.status === 'approved' && a.pending_review;
       const badge = isEdit ? `<span class="fr-app-badge edit">ИЗМЕНЕНИЯ</span>` : `<span class="fr-app-badge new">НОВАЯ</span>`;
@@ -912,10 +913,40 @@ async function frRenderAppsTab(b) {
         <button class="btn btn-rd btn-sm" onclick="frUnionReview('${u.id}',false)">✕ Отклонить</button>
       </div></div>`;
     }).join('');
-  b.innerHTML = `<div style="margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--te)">${apps.length + faiths.length + unions.length} на модерации</div>`
+  const corpsHtml = corps.map(c => {
+      const isEdit = !!c.is_edit;
+      const p = c.proposed || {};
+      const show = isEdit ? { name: p.name, description: p.description, image_url: p.image_url } : c;
+      const badge = isEdit ? `<span class="fr-app-badge edit">ПРАВКА</span>` : `<span class="fr-app-badge new">НОВАЯ ОРГ.</span>`;
+      const img = show.image_url ? `<img src="${esc(show.image_url)}" alt="" style="width:46px;height:46px;border-radius:8px;object-fit:cover;flex-shrink:0">` : '';
+      const diff = isEdit ? `<div class="fr-app-meta">Было: «${esc(c.name || '—')}»${c.description ? ` · ${esc(c.description)}` : ''}</div>` : '';
+      return `<div class="fr-app" id="fr-corp-${c.id}">
+      <div class="fr-app-hd">${badge}${img}
+        <b>🏢 «${esc(show.name || c.name || 'Без названия')}»</b>
+        <span class="fr-app-by">${esc(c.founder_name || c.founder_fid || '')}</span></div>
+      ${show.description ? `<div class="fr-app-meta" style="font-style:italic">«${esc(show.description)}»</div>` : ''}
+      ${diff}
+      <div class="fr-app-meta">${frNum(c.buildings)} построек · доход ≈ ${frNum(Math.round(c.daily_gross || 0))} ГС/ход</div>
+      <div class="fr-app-acts">
+        <button class="btn btn-gd btn-sm" onclick="frCorpReview('${c.id}',true)">✓ ${isEdit ? 'Принять изменения' : 'Одобрить'}</button>
+        <button class="btn btn-rd btn-sm" onclick="frCorpReview('${c.id}',false)">✕ Отклонить</button>
+      </div></div>`;
+    }).join('');
+  b.innerHTML = `<div style="margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--te)">${apps.length + faiths.length + unions.length + corps.length} на модерации</div>`
     + appsHtml
     + (faiths.length ? `<div class="fr-app-group">🛐 Религии</div>${faithsHtml}` : '')
-    + (unions.length ? `<div class="fr-app-group">🤝 Союзы</div>${unionsHtml}` : '');
+    + (unions.length ? `<div class="fr-app-group">🤝 Союзы</div>${unionsHtml}` : '')
+    + (corps.length ? `<div class="fr-app-group">🏢 Организации</div>${corpsHtml}` : '');
+}
+async function frCorpReview(id, approve) {
+  let reason = null;
+  if (!approve) { reason = prompt('Причина отклонения (увидит учредитель):', ''); if (reason === null) return; }
+  else if (!confirm('Одобрить организацию? Её профиль станет виден другим фракциям, доли можно будет выставлять на рынок.')) return;
+  try {
+    await frRpc('corp_review', { p_corp: id, p_approve: !!approve, p_reason: reason });
+    toast(approve ? 'Одобрено ✓' : 'Отклонено', approve ? 'ok' : 'inf');
+    document.getElementById('fr-corp-' + id)?.remove();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
 async function frUnionReview(id, approve) {
   let reason = null;

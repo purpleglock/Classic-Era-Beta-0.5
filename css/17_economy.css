@@ -2351,6 +2351,82 @@ body.ec-tree-fs-lock { overflow: hidden; }
   border-radius: 9px; padding: 7px 10px; }
 .ec-corp-stats i { font-style: normal; font-size: 10.5px; color: var(--t4); text-transform: uppercase; letter-spacing: .4px; }
 .ec-corp-stats b { font-size: 14px; }
+/* Секторный спрос: шкалы отраслей (множитель 0.25×…3.0×, нейтраль 1.0) */
+.ec-dem-row { display: grid; grid-template-columns: 130px 1fr 62px; align-items: center; gap: 10px; margin: 5px 0; }
+.ec-dem-nm { font-size: 12px; color: var(--t2); white-space: nowrap; }
+.ec-dem-bar { position: relative; height: 8px; border-radius: 6px; background: var(--b1); border: 1px solid var(--w2); overflow: hidden; }
+.ec-dem-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; transition: width .3s ease; }
+.ec-dem-mark { position: absolute; left: 33.33%; top: -1px; bottom: -1px; width: 1px; background: var(--t4); opacity: .55; }  /* отметка нейтрали 1.0× (=1/3 шкалы) */
+.ec-dem-val { font-size: 12px; font-weight: 600; text-align: right; white-space: nowrap; }
+/* Эмблема и описание организации (контент под модерацией) */
+.ec-corp-emblem { display: inline-block; width: 22px; height: 22px; border-radius: 6px; background-size: cover; background-position: center;
+  vertical-align: middle; margin-right: 7px; border: 1px solid var(--w2); }
+.ec-corp-desc { font-size: 12.5px; color: var(--t2); font-style: italic; margin: -2px 0 10px; line-height: 1.45; }
+
+/* ════════ ТОРГОВЫЙ ТЕРМИНАЛ БИРЖИ ════════ */
+/* Индекс корпораций — крупный хедер с графиком */
+.ec-xch-index { display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ok,#5fc98a) 6%, var(--b2)), var(--b2));
+  border: 1px solid var(--w2); border-radius: 14px; padding: 16px 18px; margin-bottom: 10px; }
+.ec-xch-index-l { flex: 1 1 240px; min-width: 220px; }
+.ec-xch-index-cap { font-size: 12px; color: var(--t3); letter-spacing: .4px; }
+.ec-xch-index-val { font-family: JetBrains Mono, monospace; font-size: 34px; font-weight: 700; line-height: 1.1; margin: 4px 0 2px; }
+.ec-xch-index-val span { font-size: 16px; font-weight: 600; }
+.ec-xch-index-sub { font-size: 11.5px; color: var(--t4); }
+.ec-xch-index-chart { flex: 1 1 320px; min-width: 220px; display: flex; justify-content: flex-end; }
+.ec-xch-index-chart svg { width: 100%; max-width: 380px; height: 92px; }
+
+/* Бегущая лента котировок */
+.ec-tick { overflow: hidden; white-space: nowrap; border: 1px solid var(--w2); border-radius: 9px;
+  background: var(--b1); padding: 7px 0; margin-bottom: 10px; -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); }
+.ec-tick-run { display: inline-flex; gap: 26px; animation: ec-tick-scroll 48s linear infinite; will-change: transform; }
+.ec-tick:hover .ec-tick-run { animation-play-state: paused; }
+.ec-tick-item { font-family: JetBrains Mono, monospace; font-size: 12.5px; color: var(--t2); }
+.ec-tick-item b { color: var(--t1); font-weight: 600; }
+@keyframes ec-tick-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* Бегущая лента биржи в «Ленте сектора» на главной */
+.fn-corp-ticker { margin-bottom: 12px; }
+.fn-corp-ticker .ec-tick { margin-bottom: 0; }
+.fn-corp-ticker-cap { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--t3); margin: 0 2px 6px; font-family: JetBrains Mono, monospace; }
+.fn-corp-ses { font-weight: 600; }
+.fn-corp-ses.on { color: #5fc98a; }
+.fn-corp-ses.off { color: #e0688a; }
+
+/* Доска котировок */
+.ec-xch-board { padding-bottom: 6px; }
+.ec-xch-row { display: grid; grid-template-columns: minmax(0,1fr) 84px 80px 60px 92px 74px; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: 8px; border-bottom: 1px solid color-mix(in srgb, var(--w2) 55%, transparent); }
+.ec-xch-row:last-child { border-bottom: 0; }
+.ec-xch-row:not(.ec-xch-head):hover { background: var(--b1); }
+.ec-xch-row.mine { background: color-mix(in srgb, var(--ok,#5fc98a) 8%, transparent); }
+.ec-xch-head { font-size: 10.5px; color: var(--t4); text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--w2); }
+.ec-xch-head span { font-weight: 600; }
+.ec-xch-tk { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ec-xch-tkn { display: flex; flex-direction: column; min-width: 0; }
+.ec-xch-tkn b { font-size: 13px; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-xch-tkn i { font-size: 10.5px; color: var(--t4); font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-xch-noemb { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px; background: var(--b1); border: 1px solid var(--w2); font-size: 12px; flex-shrink: 0; }
+.ec-xch-px { font-family: JetBrains Mono, monospace; font-size: 14px; font-weight: 600; text-align: right; }
+.ec-xch-ch { font-family: JetBrains Mono, monospace; font-size: 12.5px; text-align: right; }
+.ec-xch-dm { font-family: JetBrains Mono, monospace; font-size: 12px; text-align: right; }
+.ec-xch-sp { display: flex; justify-content: center; }
+.ec-xch-bid { text-align: right; }
+.ec-xch-head .ec-xch-px, .ec-xch-head .ec-xch-ch, .ec-xch-head .ec-xch-dm, .ec-xch-head .ec-xch-bid { font-family: inherit; }
+
+/* Сворачиваемое управление */
+.ec-xch-manage { margin-top: 14px; }
+.ec-xch-manage-btn { width: 100%; text-align: left; background: var(--b1); border: 1px solid var(--w2); border-radius: 9px;
+  padding: 9px 12px; color: var(--t2); font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 10px; }
+.ec-xch-manage-btn:hover { border-color: var(--te); color: var(--t1); }
+
+@media (max-width: 620px) {
+  .ec-xch-row { grid-template-columns: minmax(0,1fr) 64px 64px 60px; }
+  .ec-xch-sp, .ec-xch-head .ec-xch-sp { display: none; }
+  .ec-xch-bid, .ec-xch-head .ec-xch-bid { display: none; }
+}
 .ec-corp-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 9px; }
 .ec-corp-chip { font-size: 11.5px; padding: 3px 9px; border-radius: 20px; background: var(--b1); border: 1px solid var(--w2); color: var(--t2); }
 .ec-corp-listed { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px;

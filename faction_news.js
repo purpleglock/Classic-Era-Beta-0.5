@@ -318,8 +318,47 @@ function fnEventsFeedHtml() {
   if (!ev.length) return '';
   return `<section class="home-block fn-feed">
     <div class="hb-head"><span class="hb-tag">ЛЕНТА СЕКТОРА</span><span class="fn-home-sub">// СИСТЕМНЫЕ СОБЫТИЯ · ${ev.length}</span></div>
+    <div id="fn-corp-ticker"></div>
     <div class="fn-feed-list" id="fn-feed-list">${fnFeedRows(ev)}</div>
   </section>`;
+}
+
+// ── Биржевая бегущая лента в «Ленте сектора» ────────────────
+// Котировки одобренных организаций (тот же RPC corps_status, что и кабинет
+// «Биржа»). Заполняем асинхронно после рендера главной — RPC тяжёлый и
+// требует логина, поэтому он не должен тормозить загрузку страницы.
+function fnCorpTickerHtml(cs) {
+  const board = (cs && cs.board) || [];
+  if (!board.length) return '';
+  const ses = (cs && cs.session) || {};
+  const num = (typeof ecNum === 'function') ? ecNum : (v => Number(v || 0).toLocaleString('ru-RU'));
+  const chgOf = (price, sp) => { const f = (sp && sp.length) ? +sp[0] : price; return f ? Math.round((price / f - 1) * 100) : 0; };
+  const items = board.map(b => {
+    const ch = chgOf(b.share_price, b.spark), up = ch >= 0;
+    return `<span class="ec-tick-item"><b>${esc(b.name)}</b> ${num(Math.round(b.share_price))} <span style="color:${up ? '#5fc98a' : '#e0688a'}">${up ? '▲' : '▼'}${ch >= 0 ? '+' : ''}${ch}%</span></span>`;
+  }).join('');
+  const sesPill = ses.open
+    ? `<span class="fn-corp-ses on">● торги открыты</span>`
+    : `<span class="fn-corp-ses off">● торги закрыты</span>`;
+  return `<div class="fn-corp-ticker">
+    <span class="fn-corp-ticker-cap">📈 CORP·IDX ${sesPill}</span>
+    <div class="ec-tick"><div class="ec-tick-run">${items}${items}</div></div>
+  </div>`;
+}
+async function fnLoadCorpTicker() {
+  const mount = document.getElementById('fn-corp-ticker');
+  if (!mount) return;
+  if (typeof user === 'undefined' || !user || typeof ecRpc !== 'function') return;
+  // Кэш на сессию: не дёргаем тяжёлый RPC при каждом возврате на главную.
+  if (FN._corpTickerHtml != null && (Date.now() - (FN._corpTickerAt || 0) < 90000)) {
+    mount.innerHTML = FN._corpTickerHtml; return;
+  }
+  let cs = null;
+  try { cs = await ecRpc('corps_status'); } catch (e) { return; }
+  const html = fnCorpTickerHtml(cs);
+  FN._corpTickerHtml = html; FN._corpTickerAt = Date.now();
+  const m2 = document.getElementById('fn-corp-ticker');
+  if (m2) m2.innerHTML = html;
 }
 async function fnLoadMoreEvents() {
   const off = (FN.events || []).length;
