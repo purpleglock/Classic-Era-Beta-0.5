@@ -1419,6 +1419,7 @@ function renderBlock(b) {
     case 'rel_graph': return renderRelGraph(b);
     case 'vis_timeline': return renderVisTimeline(b);
     case 'chart': return renderChart(b);
+    case 'statblock': return renderStatblock(b);
     default: return '';
   }
 }
@@ -2238,6 +2239,77 @@ function initWikiChart(id, d) {
   }
 
   ctx.restore();
+}
+
+// ════════════════════════════════════════════════════════════
+// БЛОК: ЧАРНИК (statblock) — карточка существа в стиле бестиария
+// ════════════════════════════════════════════════════════════
+function renderStatblock(b) {
+  const cards = (b.cards && b.cards.length) ? b.cards : [];
+  if (!cards.length) return `<div class="blk blk-statblock blk-statblock--empty">🐉 ${lang==='ru'?'Пустой чарник':'Empty statblock'}</div>`;
+  const bid = escId(b.id || uid());
+  const multi = cards.length > 1;
+
+  const cardHtml = cards.map((c, ci) => {
+    const title    = (lang==='en'&&c.title_en?.trim())    ? c.title_en    : c.title    || '';
+    const subtitle = (lang==='en'&&c.subtitle_en?.trim()) ? c.subtitle_en : c.subtitle || '';
+    const hasImg = !!c.image_url;
+    const bg = hasImg ? `<div class="sbk-bg" style="background-image:url('${esc(safeUrl(c.image_url))}')"></div>` : '';
+
+    const stats = (c.stats||[]).map(st => {
+      const k = (lang==='en'&&st.key_en?.trim()) ? st.key_en : st.key || '';
+      const v = (lang==='en'&&st.val_en?.trim()) ? st.val_en : st.val || '';
+      if (!k && !v) return '';
+      return `<div class="sbk-stat"><span class="sbk-stat-k">${esc(k)}</span><span class="sbk-stat-v">${esc(v)}</span></div>`;
+    }).filter(Boolean).join('');
+
+    const sections = (c.sections||[]).map(sec => {
+      const sn = (lang==='en'&&sec.name_en?.trim()) ? sec.name_en : sec.name || '';
+      const entries = (sec.entries||[]).map(en => {
+        const nm = (lang==='en'&&en.name_en?.trim()) ? en.name_en : en.name || '';
+        const tx = (lang==='en'&&en.text_en?.trim()) ? en.text_en : en.text || '';
+        if (!nm && !tx) return '';
+        return `<div class="sbk-trait">${nm?`<span class="sbk-trait-name">${esc(nm)}.</span> `:''}<span class="sbk-trait-body">${il(tx)}</span></div>`;
+      }).filter(Boolean).join('');
+      if (!sn && !entries) return '';
+      return `${sn?`<div class="sbk-section-hd">${esc(sn)}</div><div class="sbk-rule"></div>`:''}<div class="sbk-section-body">${entries}</div>`;
+    }).filter(Boolean).join('');
+
+    return `<div class="sbk-card${ci===0?' on':''}${hasImg?' has-img':''}" data-idx="${ci}">
+      ${bg}
+      <div class="sbk-body">
+        <div class="sbk-name">${esc(title)}</div>
+        ${subtitle?`<div class="sbk-sub">${esc(subtitle)}</div>`:''}
+        ${stats?`<div class="sbk-stats">${stats}</div><div class="sbk-rule sbk-rule-lg"></div>`:''}
+        ${sections}
+      </div>
+    </div>`;
+  }).join('');
+
+  const nav = multi ? `<div class="sbk-nav">
+    <button class="sbk-nav-btn" onclick="sbFlip('${bid}',-1)" aria-label="prev">‹</button>
+    <div class="sbk-dots">${cards.map((_,k)=>`<span class="sbk-dot${k===0?' on':''}" onclick="sbFlip('${bid}',${k},true)"></span>`).join('')}</div>
+    <span class="sbk-counter"><span class="sbk-cur">1</span> / ${cards.length}</span>
+    <button class="sbk-nav-btn" onclick="sbFlip('${bid}',1)" aria-label="next">›</button>
+  </div>` : '';
+
+  return `<div class="blk blk-statblock" id="sbk-${bid}" data-count="${cards.length}">${nav}<div class="sbk-stage">${cardHtml}</div></div>`;
+}
+
+// Листание карт чарника
+function sbFlip(bid, arg, absolute) {
+  const wrap = document.getElementById('sbk-' + bid);
+  if (!wrap) return;
+  const cards = [...wrap.querySelectorAll('.sbk-card')];
+  if (cards.length < 2) return;
+  let cur = cards.findIndex(c => c.classList.contains('on'));
+  if (cur < 0) cur = 0;
+  let next = absolute ? arg : ((cur + arg) % cards.length + cards.length) % cards.length;
+  cards.forEach((c,k)=>c.classList.toggle('on', k===next));
+  const dots = wrap.querySelectorAll('.sbk-dot');
+  dots.forEach((d,k)=>d.classList.toggle('on', k===next));
+  const cnt = wrap.querySelector('.sbk-cur');
+  if (cnt) cnt.textContent = String(next+1);
 }
 
 

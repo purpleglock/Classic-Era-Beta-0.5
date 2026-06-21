@@ -281,7 +281,7 @@ function renderBlockEditor() {
 }
 
 function blockIcon(t) {
-  const icons={text:'¶',heading:'Aa',quote:'❞',alert:'⚠',callout:'💬',spoiler:'🔒',image:'🖼',imgtext:'🖼',gallery:'⊞',infobox:'📋',cols:'⫛',frame:'🗂',divider:'—',table:'▦',stats:'◉',timeline:'◈',vis_timeline:'⟿',rel_graph:'◎',chart:'📈',battle_map:'🗺'};
+  const icons={text:'¶',heading:'Aa',quote:'❞',alert:'⚠',callout:'💬',spoiler:'🔒',image:'🖼',imgtext:'🖼',gallery:'⊞',infobox:'📋',cols:'⫛',frame:'🗂',divider:'—',table:'▦',stats:'◉',timeline:'◈',vis_timeline:'⟿',rel_graph:'◎',chart:'📈',battle_map:'🗺',statblock:'🐉'};
   return icons[t]||'◈';
 }
 
@@ -321,6 +321,7 @@ function blockMiniPreview(b){
     case 'rel_graph': return `<div class="sbp-placeholder">◎ ${esc2(b.title||'Граф связей').slice(0,50)} <span style="opacity:.5;font-size:9px">${(b.nodes||[]).length} узл. · ${(b.edges||[]).length} св.</span></div>`;
     case 'vis_timeline': return `<div class="sbp-placeholder">⟿ ${esc2(b.title||'Хронология').slice(0,50)} <span style="opacity:.5;font-size:9px">${(b.items||[]).length} событий</span></div>`;
     case 'chart': return `<div class="sbp-placeholder">📈 ${esc2(b.title||'График').slice(0,50)} <span style="opacity:.5;font-size:9px">${b.chart_type||'bar'}</span></div>`;
+    case 'statblock': { const cards=b.cards||[]; const c0=cards[0]||{}; return `<div class="sbp-placeholder">🐉 ${esc2(c0.title||'Чарник').slice(0,50)} <span style="opacity:.5;font-size:9px">${cards.length>1?cards.length+' карт.':(c0.sections||[]).length+' секц.'}</span></div>`; }
     default: return `<div class="sbp-placeholder">${esc2(b.type)}</div>`;
   }
 }
@@ -354,7 +355,8 @@ function blockLabel(t){
     spoiler:isRu?'🔒 Спойлер':'🔒 Spoiler',
     stats:isRu?'◉ Статистика':'◉ Stats',
     timeline:isRu?'◈ Хронология':'◈ Timeline',
-    battle_map:isRu?'🗺 Тактическая карта':'🗺 Battle Map'
+    battle_map:isRu?'🗺 Тактическая карта':'🗺 Battle Map',
+    statblock:isRu?'🐉 Чарник':'🐉 Statblock'
   };
   return labels[t]||t;
 }
@@ -527,6 +529,7 @@ function blockEditorHtml(b,i){
     case 'rel_graph': return relGraphEditorHtml(b,i);
     case 'vis_timeline': return visTimelineEditorHtml(b,i);
     case 'chart': return chartEditorHtml(b,i);
+    case 'statblock': return statblockEditorHtml(b,i);
     default: return `<p style="color:var(--t3);font-size:12px">${lang==='ru'?`Редактор для «${b.type}» не реализован.`:`No editor for «${b.type}».`}</p>`;
   }
 }
@@ -1443,6 +1446,7 @@ const BLOCKS=[
   {type:'rel_graph',cat:'special',icon:'◎',ru:'Граф связей',en:'Relation Graph',dRu:'Схема персонажей, иерархий, семейных древ',dEn:'Character relations, hierarchy, family tree'},
   {type:'vis_timeline',cat:'special',icon:'⟿',ru:'Хронология (визуал)',en:'Visual Timeline',dRu:'Интерактивная шкала времени с событиями',dEn:'Interactive visual timeline of events'},
   {type:'chart',cat:'special',icon:'📈',ru:'График',en:'Chart',dRu:'Столбчатый, линейный или круговой',dEn:'Bar, line or pie chart'},
+  {type:'statblock',cat:'special',icon:'🐉',ru:'Чарник',en:'Statblock',dRu:'Карточка существа: КЗ, хиты, действия; листается',dEn:'Creature card: AC, HP, actions; pageable'},
 ];
 function openPicker(afterIdx,e){e.stopPropagation();pickerInsertIdx=afterIdx;_pickerQ='';document.getElementById('bp-search').value='';renderPickerCats();renderPickerBlocks();document.getElementById('bp-modal-ov').classList.add('show');setTimeout(()=>document.getElementById('bp-search').focus(),80);}
 function closePicker(){document.getElementById('bp-modal-ov')?.classList.remove('show');document.getElementById('bp-ov')?.classList.remove('show');}
@@ -1490,6 +1494,7 @@ function insertBlock(type){
     chart:{type:'chart',id:uid(),title:'',chart_type:'bar',labels:['А','Б','В','Г'],datasets:[
       {label:'Серия 1',data:[40,70,30,90]},
     ]},
+    statblock:{type:'statblock',id:uid(),cards:[ SB_NEW_CARD() ]},
   };
   
   const blk=defaults[type]||{type,id:uid()}; editBlocks.splice(pickerInsertIdx+1,0,blk); renderBlockEditor();
@@ -2307,6 +2312,92 @@ ${(b.datasets||[]).map((ds,k)=>`<div class="sb-timeline-item">
   <button class="sb-del-btn" style="margin-top:4px" onclick="editBlocks[${i}].datasets.splice(${k},1);refreshBlockPropsPanel()">✕</button>
 </div>`).join('')}
 <button class="sb-add-inline" onclick="editBlocks[${i}].datasets.push({label:'',data:[]});refreshBlockPropsPanel()">+ ${isRu?'Серия':'Series'}</button>`;
+}
+
+// ════════════════════════════════════════════════════════════
+// EDITOR HTML: ЧАРНИК (statblock) — карточка существа в стиле бестиария
+// ════════════════════════════════════════════════════════════
+function SB_NEW_CARD(){
+  return {
+    title:'Неистовый клык', title_en:'',
+    subtitle:'Большой зверь, без мировоззрения', subtitle_en:'',
+    image_url:'',
+    stats:[
+      {key:'Класс Защиты',key_en:'',val:'14 (природный доспех)',val_en:''},
+      {key:'Хиты',key_en:'',val:'114 (12к10 + 48)',val_en:''},
+      {key:'Скорость',key_en:'',val:'40 фт.',val_en:''},
+      {key:'Опасность',key_en:'',val:'3–4 (700-1100 опыта)',val_en:''},
+    ],
+    sections:[
+      {name:'',name_en:'',entries:[
+        {name:'Атака на броске',name_en:'',text:'Если существо переместится как минимум на 30 футов по прямой к цели, а затем в том же ходу попадёт по ней атакой, цель получает дополнительный урон.',text_en:''},
+      ]},
+      {name:'Действия',name_en:'',entries:[
+        {name:'Мультиатака',name_en:'',text:'Существо совершает две атаки.',text_en:''},
+        {name:'Клыки',name_en:'',text:'*Рукопашная атака оружием:* +5 к попаданию, досягаемость 5 фт., одна цель. *Попадание:* рубящий урон 10 (2к6 + 3).',text_en:''},
+      ]},
+    ],
+  };
+}
+const _sbEC={}; // активная карта в редакторе: { blockId: index }
+function sbEdCardIdx(b){ const v=_sbEC[b.id]; return (v==null||v>=(b.cards||[]).length)?0:v; }
+function sbSetCard(bid,ci){ _sbEC[bid]=ci; refreshBlockPropsPanel(); }
+function sbAddCard(i){ editBlocks[i].cards.push(SB_NEW_CARD()); _sbEC[editBlocks[i].id]=editBlocks[i].cards.length-1; refreshBlockPropsPanel(); }
+function sbDelCard(i){ const b=editBlocks[i]; if((b.cards||[]).length<=1)return; const ci=sbEdCardIdx(b); b.cards.splice(ci,1); _sbEC[b.id]=Math.max(0,ci-1); refreshBlockPropsPanel(); }
+
+function statblockEditorHtml(b,i){
+  const isRu=lang==='ru';
+  if(!b.cards||!b.cards.length) b.cards=[SB_NEW_CARD()];
+  const ci=sbEdCardIdx(b);
+  const c=b.cards[ci];
+  const tabs=b.cards.map((cd,k)=>`<button class="sb-sbk-tab${k===ci?' on':''}" onclick="sbSetCard('${b.id}',${k})">${esc((cd.title||'').slice(0,14)||(isRu?'Карта':'Card')+' '+(k+1))}</button>`).join('');
+  const stats=(c.stats||[]).map((st,k)=>`<div class="sb-sbk-row">
+    <input class="sb-fi" placeholder="${isRu?'Параметр RU':'Stat RU'}" value="${esc(st.key||'')}" oninput="editBlocks[${i}].cards[${ci}].stats[${k}].key=this.value">
+    <input class="sb-fi" placeholder="${isRu?'Значение RU':'Value RU'}" value="${esc(st.val||'')}" oninput="editBlocks[${i}].cards[${ci}].stats[${k}].val=this.value">
+    <button class="sb-del-btn" onclick="editBlocks[${i}].cards[${ci}].stats.splice(${k},1);refreshBlockPropsPanel()">✕</button>
+    <input class="sb-fi sb-fi-en" placeholder="Stat EN" value="${esc(st.key_en||'')}" oninput="editBlocks[${i}].cards[${ci}].stats[${k}].key_en=this.value">
+    <input class="sb-fi sb-fi-en" placeholder="Value EN" value="${esc(st.val_en||'')}" oninput="editBlocks[${i}].cards[${ci}].stats[${k}].val_en=this.value">
+    <span></span>
+  </div>`).join('');
+  const sections=(c.sections||[]).map((sec,si)=>`<div class="sb-sbk-section">
+    <div class="sb-sbk-section-hd">
+      <input class="sb-fi" placeholder="${isRu?'Название секции RU (пусто = без заголовка)':'Section name RU (empty = no header)'}" value="${esc(sec.name||'')}" oninput="editBlocks[${i}].cards[${ci}].sections[${si}].name=this.value">
+      <button class="sb-del-btn" title="${isRu?'Удалить секцию':'Delete section'}" onclick="editBlocks[${i}].cards[${ci}].sections.splice(${si},1);refreshBlockPropsPanel()">✕ ${isRu?'секция':'section'}</button>
+    </div>
+    <input class="sb-fi sb-fi-en" placeholder="Section name EN" value="${esc(sec.name_en||'')}" oninput="editBlocks[${i}].cards[${ci}].sections[${si}].name_en=this.value" style="margin-bottom:6px">
+    ${(sec.entries||[]).map((en,ei)=>`<div class="sb-sbk-entry">
+      <input class="sb-fi" placeholder="${isRu?'Название (жирным)':'Name (bold)'}" value="${esc(en.name||'')}" oninput="editBlocks[${i}].cards[${ci}].sections[${si}].entries[${ei}].name=this.value" style="margin-bottom:4px">
+      <input class="sb-fi sb-fi-en" placeholder="Name EN" value="${esc(en.name_en||'')}" oninput="editBlocks[${i}].cards[${ci}].sections[${si}].entries[${ei}].name_en=this.value" style="margin-bottom:4px">
+      <textarea class="sb-fi" rows="2" placeholder="${isRu?'Описание RU (Markdown)':'Text RU (Markdown)'}" oninput="editBlocks[${i}].cards[${ci}].sections[${si}].entries[${ei}].text=this.value">${esc(en.text||'')}</textarea>
+      <textarea class="sb-fi sb-fi-en" rows="2" placeholder="Text EN" oninput="editBlocks[${i}].cards[${ci}].sections[${si}].entries[${ei}].text_en=this.value">${esc(en.text_en||'')}</textarea>
+      <button class="sb-del-btn" style="margin-top:4px" onclick="editBlocks[${i}].cards[${ci}].sections[${si}].entries.splice(${ei},1);refreshBlockPropsPanel()">✕ ${isRu?'пункт':'entry'}</button>
+    </div>`).join('')}
+    <button class="sb-add-inline" onclick="editBlocks[${i}].cards[${ci}].sections[${si}].entries.push({name:'',name_en:'',text:'',text_en:''});refreshBlockPropsPanel()">+ ${isRu?'Пункт':'Entry'}</button>
+  </div>`).join('');
+  return `
+<div class="sb-sbk-tabs">${tabs}
+  <button class="sb-sbk-tab sb-sbk-tab-add" title="${isRu?'Добавить карту (лист)':'Add card (page)'}" onclick="sbAddCard(${i})">＋</button>
+  ${b.cards.length>1?`<button class="sb-sbk-tab sb-sbk-tab-del" title="${isRu?'Удалить текущую карту':'Delete current card'}" onclick="sbDelCard(${i})">🗑</button>`:''}
+</div>
+<div class="sb-field"><label class="sb-fi-label">${isRu?'Имя RU':'Name RU'}</label><input class="sb-fi" value="${esc(c.title||'')}" oninput="editBlocks[${i}].cards[${ci}].title=this.value;refreshBlockPropsPanel()"></div>
+<div class="sb-field"><label class="sb-fi-label sb-fi-label-en">Name EN</label><input class="sb-fi sb-fi-en" value="${esc(c.title_en||'')}" oninput="editBlocks[${i}].cards[${ci}].title_en=this.value"></div>
+<div class="sb-field"><label class="sb-fi-label">${isRu?'Подзаголовок RU (тип, размер)':'Subtitle RU'}</label><input class="sb-fi" value="${esc(c.subtitle||'')}" oninput="editBlocks[${i}].cards[${ci}].subtitle=this.value"></div>
+<div class="sb-field"><label class="sb-fi-label sb-fi-label-en">Subtitle EN</label><input class="sb-fi sb-fi-en" value="${esc(c.subtitle_en||'')}" oninput="editBlocks[${i}].cards[${ci}].subtitle_en=this.value"></div>
+<div class="sb-field"><label class="sb-fi-label">${isRu?'URL изображения':'Image URL'}</label>
+  <div style="display:flex;gap:6px">
+    <input class="sb-fi" id="sbk-img-${b.id}-${ci}" value="${esc(c.image_url||'')}" placeholder="https://..." oninput="editBlocks[${i}].cards[${ci}].image_url=this.value" style="flex:1">
+    <label class="sb-upload-btn">📁<input type="file" accept="image/*" style="display:none" onchange="handleImgUpload(this.files[0],url=>{document.getElementById('sbk-img-${b.id}-${ci}').value=url;editBlocks[${i}].cards[${ci}].image_url=url;refreshBlockPropsPanel()})"></label>
+  </div>
+</div>
+<div class="sb-field-label" style="margin-top:10px">${isRu?'Параметры (КЗ, Хиты, Скорость…)':'Stats (AC, HP, Speed…)'}</div>
+${stats}
+<button class="sb-add-inline" onclick="editBlocks[${i}].cards[${ci}].stats.push({key:'',key_en:'',val:'',val_en:''});refreshBlockPropsPanel()">+ ${isRu?'Параметр':'Stat'}</button>
+<div class="sb-field-label" style="margin-top:14px">${isRu?'Секции (Действия, Реакции…)':'Sections (Actions, Reactions…)'}</div>
+${sections}
+<button class="sb-add-inline" onclick="editBlocks[${i}].cards[${ci}].sections.push({name:'',name_en:'',entries:[{name:'',name_en:'',text:'',text_en:''}]});refreshBlockPropsPanel()">+ ${isRu?'Секция':'Section'}</button>
+<div class="sb-field" style="margin-top:8px;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;line-height:1.6">
+  ${isRu?'«Карта» = отдельный лист. Несколько карт → читатель листает их стрелками.':'Each "card" is a page. Multiple cards → reader flips with arrows.'}
+</div>`;
 }
 
 // ══════════════════════════════════════════════════════════════

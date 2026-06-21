@@ -427,6 +427,130 @@
 .gb-tip div:last-child { font-size: 13px; color: var(--color-text-muted); line-height: 1.6; }
 .gb-tip b { color: var(--color-text); }
 
+/* ══════════════════════════════════════════════════════════════
+   ИЛЛЮСТРАЦИИ МЕХАНИК
+   Схемы построены на HTML/CSS (текст переносится и не вылезает).
+   SVG используется только для чистой графики (дуга, карта, линия),
+   без текста внутри — поэтому ничего не наслаивается.
+   ══════════════════════════════════════════════════════════════ */
+.gb-fig {
+  margin: 18px 0 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-subtle, var(--color-surface));
+  overflow: hidden;
+}
+.gb-fig-canvas {
+  display: block; width: 100%; height: auto;
+  background:
+    radial-gradient(120% 120% at 50% 0%, color-mix(in srgb, var(--color-accent) 6%, transparent), transparent 60%),
+    var(--color-canvas);
+}
+.gb-fig-cap {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: 12.5px; line-height: 1.55; color: var(--color-text-faint);
+}
+.gb-fig-cap b { color: var(--color-text-muted); font-weight: 600; }
+.gb-fig-cap .gb-fig-tag {
+  font-family: var(--font-mono, monospace); font-size: 9.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--color-accent); flex-shrink: 0;
+  padding-top: 1px;
+}
+
+/* Тело HTML-схемы */
+.gb-fig-body { padding: 16px; }
+
+/* Лейн (ряд) с тегом-подписью слева */
+.gb-lane { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.gb-lane:last-child { margin-bottom: 0; }
+.gb-lane-tag {
+  flex: 0 0 110px; padding-top: 9px;
+  font-family: var(--font-display); font-size: 10px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-faint);
+}
+
+/* Поток узлов (со стрелками), переносится на узком экране */
+.gb-flow { flex: 1 1 280px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+
+/* Узел-карточка: текст внутри переносится — overflow невозможен */
+.gb-node {
+  flex: 1 1 130px; min-width: 116px; max-width: 240px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-medium);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 10px; padding: 9px 12px;
+}
+.gb-node--g { border-left-color: var(--ok); }
+.gb-node--b { border-left-color: var(--color-info); background: color-mix(in srgb, var(--color-info) 8%, var(--color-surface-raised)); }
+.gb-node--p { border-left-color: var(--color-lore); }
+.gb-node-t { display: flex; align-items: center; gap: 7px; font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--color-text); line-height: 1.25; }
+.gb-node-ic { font-size: 15px; flex-shrink: 0; }
+.gb-node-s { font-size: 11.5px; color: var(--color-text-faint); margin-top: 4px; line-height: 1.45; }
+
+/* Стрелка-коннектор */
+.gb-arrow { flex: 0 0 auto; color: var(--color-accent); font-size: 18px; line-height: 1; }
+.gb-arrow--g { color: var(--ok); }
+.gb-arrow--p { color: var(--color-lore); }
+.gb-arrow--err { color: var(--err); }
+@media (max-width: 560px) {
+  .gb-flow { flex-direction: column; align-items: stretch; }
+  .gb-node { flex: 0 0 auto; max-width: none; }
+  .gb-arrow { align-self: center; transform: rotate(90deg); }
+}
+
+/* Сноска под схемой */
+.gb-fig-foot { font-size: 12.5px; color: var(--color-text-muted); line-height: 1.55; margin: 4px 0 0; }
+.gb-fig-foot.err { color: var(--color-error); }
+.gb-fig-foot b { color: var(--color-text); }
+
+/* Шкала-гейдж (благосостояние) */
+.gb-gauge-bar { height: 16px; border-radius: 8px; background: linear-gradient(90deg, var(--err), var(--color-warning) 34%, var(--ok) 70%); }
+.gb-gauge-ticks, .gb-gauge-zones { display: flex; justify-content: space-between; margin-top: 6px; gap: 8px; }
+.gb-gauge-ticks span { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-muted); }
+.gb-gauge-zones { margin-top: 4px; }
+.gb-gauge-zones span { font-size: 11.5px; font-weight: 600; }
+.gb-gauge-zones .err { color: var(--color-error); }
+.gb-gauge-zones .ok { color: var(--color-success); }
+
+/* Энергобар (корабль) */
+.gb-pbar-lbl { font-size: 12px; color: var(--color-text-faint); margin-bottom: 8px; line-height: 1.4; }
+.gb-pbar {
+  display: flex; height: 26px; border-radius: 7px; overflow: hidden;
+  border: 1px solid var(--color-border-medium);
+  background: repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in srgb, var(--ok) 13%, transparent) 6px, color-mix(in srgb, var(--ok) 13%, transparent) 12px);
+}
+.gb-pbar-seg { height: 100%; }
+.gb-pbar-scale { display: flex; justify-content: space-between; margin-top: 6px; gap: 8px; font-family: var(--font-mono); font-size: 10.5px; color: var(--color-text-faint); }
+.gb-pbar-scale .ok { color: var(--color-success); }
+.gb-legend2 { display: flex; flex-wrap: wrap; gap: 7px 14px; margin: 9px 0 0; }
+.gb-legend2 span { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--color-text-muted); }
+.gb-dot2 { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+/* Две карточки-правила */
+.gb-rules2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0 0; }
+.gb-rule { border-radius: 9px; padding: 10px 12px; border: 1px solid; display: flex; flex-direction: column; gap: 3px; }
+.gb-rule b { font-size: 12.5px; }
+.gb-rule span { font-size: 11.5px; color: var(--color-text-faint); line-height: 1.4; }
+.gb-rule--ok { background: var(--color-success-bg); border-color: hsl(150 70% 45% / .3); }
+.gb-rule--ok b { color: var(--color-success); }
+.gb-rule--err { background: var(--color-error-bg); border-color: hsl(350 80% 60% / .3); }
+.gb-rule--err b { color: var(--color-error); }
+@media (max-width: 560px) { .gb-rules2 { grid-template-columns: 1fr; } }
+
+/* Мини-график биржи */
+.gb-chart-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; font-size: 13px; font-weight: 600; color: var(--color-text); }
+.gb-chart-hd .ok { color: var(--color-success); font-size: 12px; font-weight: 500; }
+.gb-chart-svg { display: block; width: 100%; height: 84px; }
+.gb-chart-base { font-family: var(--font-mono); font-size: 10.5px; color: var(--color-text-faint); margin-top: 3px; }
+.gb-chips2 { display: flex; flex-wrap: wrap; gap: 7px; margin: 13px 0 0; }
+.gb-chips2 span { font-size: 12px; color: var(--color-text-muted); background: var(--color-accent-bg); border: 1px solid var(--color-border-medium); border-radius: var(--radius-pill); padding: 5px 11px; }
+
+/* Легенда карты / артиллерии */
+.gb-maplegend { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.gb-maplegend span { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--color-text-muted); }
+
 /* ── Футер ── */
 .gb-footer { padding: 36px 0 0; text-align: center; }
 .gb-footer-line { height: 1px; background: var(--gradient-divider); margin-bottom: 22px; }

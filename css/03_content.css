@@ -2576,3 +2576,120 @@
   border-color: var(--gd);
   color: var(--gdl);
 }
+
+/* ════════════════════════════════════════════════════════════
+   БЛОК: ЧАРНИК (statblock) — карточка существа (бестиарий)
+   ════════════════════════════════════════════════════════════ */
+.blk-statblock{
+  position:relative;
+  width:100%;margin:24px 0;
+  background:linear-gradient(180deg,var(--b2),var(--b1));
+  border:1px solid var(--w3);
+  border-top:2px solid var(--am);
+  box-shadow:0 8px 30px rgba(0,0,0,.45), inset 0 0 80px rgba(0,0,0,.3);
+  overflow:hidden;
+  clip-path:polygon(0 0,calc(100% - var(--cut)) 0,100% var(--cut),100% 100%,0 100%);
+}
+.blk-statblock--empty{padding:24px;text-align:center;color:var(--t3);font-size:13px}
+
+.sbk-stage{position:relative}
+.sbk-card{display:none;position:relative;min-height:240px}
+.sbk-card.on{display:block;animation:sbkFade .25s ease}
+@keyframes sbkFade{from{opacity:0}to{opacity:1}}
+
+/* Фоновый арт — вплавлен в карточку маской прозрачности */
+.sbk-bg{
+  position:absolute;inset:0;left:30%;
+  background-size:cover;background-position:center 18%;
+  filter:saturate(.9) contrast(1.05);
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,rgba(0,0,0,.55) 38%,#000 78%);
+          mask-image:linear-gradient(90deg,transparent 0,rgba(0,0,0,.55) 38%,#000 78%);
+  pointer-events:none;
+}
+/* Затемняющий скрим поверх арта — читаемость текста */
+.sbk-card.has-img::before{
+  content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:
+    linear-gradient(90deg,var(--b1) 0,rgba(20,22,28,.65) 42%,transparent 80%),
+    linear-gradient(0deg,rgba(10,11,14,.5),transparent 55%);
+}
+
+.sbk-body{position:relative;z-index:2;padding:22px 26px 24px}
+.sbk-card.has-img .sbk-body{max-width:60%;min-width:300px}
+
+.sbk-name{
+  font-family:'Rajdhani',sans-serif;font-weight:700;
+  font-size:30px;line-height:1.02;letter-spacing:.5px;
+  color:var(--aml);margin-bottom:2px;
+  text-shadow:0 2px 8px rgba(0,0,0,.7);
+}
+.sbk-sub{font-size:12.5px;font-style:italic;color:var(--t3);margin-bottom:14px}
+
+.sbk-stats{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
+.sbk-stat{font-size:13px;line-height:1.5;color:var(--t1)}
+.sbk-stat-k{font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--am);letter-spacing:.3px;margin-right:8px}
+.sbk-stat-v{color:var(--t1)}
+
+/* Разделитель с заострёнными краями (бестиарий) */
+.sbk-rule{
+  height:4px;margin:10px 0;background:var(--am);opacity:.92;
+  box-shadow:0 0 8px rgba(204,72,72,.4);
+  clip-path:polygon(0 50%,7px 0,calc(100% - 7px) 0,100% 50%,calc(100% - 7px) 100%,7px 100%);
+}
+.sbk-rule-lg{height:5px;margin:14px 0}
+
+.sbk-section-hd{
+  font-family:'Rajdhani',sans-serif;font-weight:700;
+  font-size:19px;letter-spacing:.5px;color:var(--aml);
+  margin-top:16px;text-shadow:0 1px 4px rgba(0,0,0,.6);
+}
+.sbk-section-body{display:flex;flex-direction:column;gap:9px;margin-top:8px}
+.sbk-trait{font-size:13px;line-height:1.6;color:var(--t1)}
+.sbk-trait-name{font-weight:700;font-style:italic;color:var(--gdl)}
+.sbk-trait-body{color:var(--t1)}
+.sbk-trait-body em{color:var(--t2)}
+
+@media(max-width:680px){
+  .sbk-bg{left:0;opacity:.45;-webkit-mask-image:linear-gradient(0deg,#000,transparent 70%);mask-image:linear-gradient(0deg,#000,transparent 70%)}
+  .sbk-card.has-img .sbk-body{max-width:100%;min-width:0}
+  .sbk-name{font-size:24px}
+}
+
+/* Листание карт */
+.sbk-nav{
+  display:flex;align-items:center;gap:12px;position:relative;z-index:3;
+  padding:8px 14px;border-bottom:1px solid var(--w2);
+  background:linear-gradient(135deg,var(--b3),var(--b2));
+}
+.sbk-nav-btn{
+  width:28px;height:28px;flex-shrink:0;
+  border:1px solid var(--w3);background:var(--b1);color:var(--aml);
+  font-size:18px;line-height:1;cursor:pointer;border-radius:3px;
+  transition:all .15s;
+}
+.sbk-nav-btn:hover{background:var(--am);color:#fff;border-color:var(--am)}
+.sbk-dots{display:flex;gap:6px;flex:1;justify-content:center}
+.sbk-dot{width:8px;height:8px;border-radius:50%;background:var(--w3);cursor:pointer;transition:all .15s}
+.sbk-dot.on{background:var(--am);box-shadow:0 0 6px var(--am)}
+.sbk-counter{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);flex-shrink:0}
+.sbk-cur{color:var(--aml);font-weight:700}
+
+@media(max-width:560px){
+  .sbk-portrait{float:none;width:100%;max-width:100%;margin:0 0 12px}
+  .sbk-name{font-size:22px}
+}
+
+/* ── Поля редактора чарника ── */
+.sb-sbk-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+.sb-sbk-tab{
+  padding:4px 10px;border:1px solid var(--w2);background:var(--b2);
+  color:var(--t2);font-size:11px;cursor:pointer;border-radius:3px;
+}
+.sb-sbk-tab.on{border-color:var(--am);color:var(--aml);background:var(--b3)}
+.sb-sbk-tab-add{color:var(--gdl)}
+.sb-sbk-tab-del{color:var(--am)}
+.sb-sbk-row{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-bottom:6px}
+.sb-sbk-section{border:1px solid var(--w2);border-left:2px solid var(--am);padding:10px;margin-bottom:10px;border-radius:3px;background:var(--b2)}
+.sb-sbk-section-hd{display:flex;gap:6px;margin-bottom:6px}
+.sb-sbk-section-hd .sb-fi{flex:1}
+.sb-sbk-entry{border-top:1px dashed var(--w2);padding-top:8px;margin-top:8px}
