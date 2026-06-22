@@ -57,7 +57,7 @@ returns numeric language sql immutable as $$
     when 'repair_cost_frac'      then 0.50
     when 'repair_days'           then 1
     when 'mine_hex_max'          then 6       -- гексов в кольце вокруг планеты (полное поле)
-    when 'mine_hex_cost'         then 400     -- ГС за ОДИН гекс мин
+    when 'mine_hex_cost'         then 1000    -- ГС за ОДИН гекс мин (минимум 1к)
     when 'mine_hex_attrition'    then 0.05    -- доля флота-рейдера, выбиваемая за каждый закрытый гекс
     when 'mine_wear_hexes'       then 1       -- сколько гексов поле теряет при срабатывании
     when 'mine_refund_frac'      then 0.50    -- доля возврата ГС при разминировании

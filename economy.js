@@ -3108,7 +3108,7 @@ function ecColonyManage(c) {
 // _defense_minefield.sql). Каждый клик «+гекс» закрывает ещё один гекс кольца
 // вокруг планеты за EC_MINE_HEX_COST; полное поле — EC_MINE_HEX_MAX гексов.
 // Никакой кнопки «заминировать всё сразу»: поле растёт по одному гексу.
-const EC_MINE_HEX_COST = 400;
+const EC_MINE_HEX_COST = 1000;
 const EC_MINE_HEX_MAX = 6;
 function ecMyMinefield(c) {
   return (EC.minefields || []).find(m => m.mine && m.system_id === c.system_id &&
@@ -4311,7 +4311,7 @@ function ecTabTrade() {
   const subBody = sub === 'market' ? resBlock
     : sub === 'barter' ? `${barterBlock}<div class="ec-section-title">Технологии и чертежи</div>${ecTechMarketBlock()}`
       : caravanBlock;
-  return `${ecIntro('⇄', 'Торговля', 'Превращайте ресурсы в ГС и обменивайтесь активами с другими фракциями.', ['<b>Караваны</b> — постоянные пути (поток добычи к партнёру, доход каждый ход). <b>Рынок</b> — продать со склада за 80%. <b>Обмен</b> — подарки/сделки и биржа техов и чертежей.'])}${subNav}${subBody}`;
+  return `<div class="ec-trade-tab">${ecIntro('⇄', 'Торговля', 'Превращайте ресурсы в ГС и обменивайтесь активами с другими фракциями.', ['<b>Караваны</b> — постоянные пути (поток добычи к партнёру, доход каждый ход). <b>Рынок</b> — продать со склада за 80%. <b>Обмен</b> — подарки/сделки и биржа техов и чертежей.'])}${subNav}${subBody}</div>`;
 }
 function ecSetTradeSub(s) { EC.tradeSub = s; ecPaintCabinet(); }
 

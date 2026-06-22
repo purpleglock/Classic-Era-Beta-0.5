@@ -1163,6 +1163,74 @@
 .ec-res-click { cursor: pointer; }
 .ec-res-click:hover { border-color: var(--w3); }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   ТОРГОВЛЯ — мобильный/планшетный редизайн (с нуля).
+   Всё, что в .ec-trade-tab, на узком экране перестраивается так, чтобы
+   ПОКАЗАТЕЛИ НИКОГДА НЕ НАЕЗЖАЛИ НА НАЗВАНИЯ: имя получает свою строку,
+   числа — свою. Скоуп .ec-trade-tab держит правки внутри вкладки и не
+   ломает «Биржу» и другие списки на тех же базовых классах.
+   ───────────────────────────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  /* под-вкладки Караваны/Рынок/Обмен — равной ширины, по центру */
+  .ec-trade-tab .ec-tabs { gap: 4px; }
+  .ec-trade-tab .ec-tabs .ec-tab { flex: 1 1 0; justify-content: center; padding: 8px 6px; min-width: 0; }
+
+  /* карточки чуть теснее, заголовок переносится */
+  .ec-trade-tab .ec-dip-card { padding: 12px 11px; }
+  .ec-trade-tab .ec-dip-t { flex-wrap: wrap; row-gap: 2px; }
+
+  /* ── РЫНОК: имя на всю ширину сверху, под ним цена слева и запас справа ── */
+  .ec-trade-tab .ec-q-row.ec-mk-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "name name" "price stock";
+    gap: 3px 10px;
+    align-items: center;
+    padding: 10px 12px;
+  }
+  .ec-trade-tab .ec-mk-name  { grid-area: name;  min-width: 0; line-height: 1.3; font-size: 13px; white-space: normal; }
+  .ec-trade-tab .ec-mk-spark { display: none; }
+  .ec-trade-tab .ec-mk-price { grid-area: price; min-width: 0; text-align: left;  white-space: nowrap; }
+  .ec-trade-tab .ec-mk-stock { grid-area: stock; min-width: 0; text-align: right; white-space: nowrap; font-size: 11.5px; }
+
+  /* ── Общие строки-списки (флот, активные пути, предложения) ──
+        переносим содержимое; имя занимает всю строку, числа/кнопки уходят вниз */
+  .ec-trade-tab .ec-q-row:not(.ec-mk-row) { flex-wrap: wrap; gap: 6px 10px; }
+  .ec-trade-tab .ec-q-row:not(.ec-mk-row) .ec-r-name { flex: 1 1 100%; min-width: 0; line-height: 1.4; }
+  /* степпер количества (сбор флота) — прижат вправо под именем */
+  .ec-trade-tab .ec-q-row .ec-mine-step { margin-left: auto; }
+  /* кнопки в строках путей/обмена — выровнены вправо, не наезжают на текст */
+  .ec-trade-tab .ec-route-row { justify-content: flex-end; }
+  .ec-trade-tab .ec-route-row .btn,
+  .ec-trade-tab .ec-route-row .ec-bld-del { flex: 0 0 auto; }
+
+  /* ── Чип ресурса каравана: имя в строку, мета (поток/цена) — под ним ── */
+  .ec-trade-tab .ec-trade-res { width: 100%; flex-wrap: wrap; gap: 4px 8px; padding: 8px 11px; }
+  .ec-trade-tab .ec-trade-res-n    { flex: 1 1 auto; }
+  .ec-trade-tab .ec-trade-res-meta { flex: 1 1 100%; }
+
+  /* ── Маршрут (из → кому → куда): селекты вертикально, стрелка скрыта ── */
+  .ec-trade-tab .ec-trade-route { flex-direction: column; align-items: stretch; gap: 7px; }
+  .ec-trade-tab .ec-trade-arrow { display: none; }
+  .ec-trade-tab .ec-trade-route select { width: 100%; padding: 10px; font-size: 13px; }
+
+  /* ── Форма рынка купи/продай: селект на всю ширину, кол-во + кнопки в ряд ── */
+  .ec-trade-tab .ec-prod-form { gap: 6px; }
+  .ec-trade-tab .ec-prod-form select { flex: 1 1 100%; min-width: 0; }
+  .ec-trade-tab .ec-prod-form .ec-prod-qty { flex: 1 1 90px; width: auto !important; }
+  .ec-trade-tab .ec-prod-form .btn { flex: 1 1 0; }
+
+  /* ── Обмен: колонки «отдаёте | взамен» в одну, строка добавления переносится ── */
+  .ec-trade-tab .ec-bt-cols { grid-template-columns: 1fr; gap: 10px; }
+  .ec-trade-tab .ec-bt-add { flex-wrap: wrap; gap: 6px; }
+  .ec-trade-tab .ec-bt-add .ec-bt-kind { flex: 1 1 100%; }
+  .ec-trade-tab .ec-bt-add select,
+  .ec-trade-tab .ec-bt-add .ec-bt-name,
+  .ec-trade-tab .ec-bt-add .ec-bt-num { flex: 1 1 120px; }
+  .ec-trade-tab .ec-bt-add .ec-prod-qty { flex: 0 0 80px; }
+  .ec-trade-tab .ec-bt-add .ec-bt-addbtn { flex: 0 0 auto; }
+}
+
 /* ── Дерево исследований ── */
 .ec-rs-cat { margin-bottom: 16px; }
 .ec-rs-cat-t { font-family: var(--font-display); font-weight: 600; font-size: 13px; color: var(--pu); margin: 6px 0 8px; letter-spacing: var(--ls-wide); }
