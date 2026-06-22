@@ -90,7 +90,10 @@ function ecAgentAttr(a) {
   const parts = [a.race, a.gender, a.replication && a.replication !== 'Оригинал' ? a.replication : null].filter(Boolean);
   return parts.length ? parts.join(' · ') : '';
 }
-function ecSpyHire(id) { ecRpcAct('spy_hire', { p_recruit_id: id }, 'Агент нанят'); }
+async function ecSpyHire(id) {
+  await ecRpcAct('spy_hire', { p_recruit_id: id }, 'Агент нанят');
+  if (document.getElementById('ec-recruits-host')) ecRecruitsRender();   // окно открыто — обновить список рекрутов
+}
 function ecSpyFire(id) { if (confirm('Уволить агента?')) ecRpcAct('spy_agent_fire', { p_id: id }, 'Агент уволен'); }
 // Сила спецслужб от доктрины (связь с agents_flat): +5% за пункт.
 function ecSpyPower(app) { return (ecFactionMods(app).agents_flat || 0) * 5; }
@@ -295,7 +298,7 @@ const EC_SLOT_TURNS = 1;
 const EC_TERRA = {
   1: { label: 'Простое',        turns: 1, gc: 1000, science: 0   },
   2: { label: 'Сложное',        turns: 2, gc: 1800, science: 60  },
-  3: { label: 'Экстремальное',  turns: 4, gc: 3200, science: 200 },
+  3: { label: 'Экстремальное',  turns: 4, gc: 4800, science: 30  },
 };
 // «Климатическая» координата групп планет (для оценки взаимной несовместимости).
 // Чем дальше планета от родных миров расы по этой шкале — тем сложнее терраформ.
@@ -1107,7 +1110,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips, spyPortraits] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1154,6 +1157,7 @@ async function ecLoad() {
     ecRpc('minefields_visible').catch(() => []),  // оборона: минные поля (свои + разведанные чужие)
     ecRpc('outposts_visible').catch(() => []),    // оборона: развёрнутые аванпосты (свои + разведанные чужие)
     ecRpc('outpost_ships_mine').catch(() => []),  // оборона: мои корабли-носители аванпостов (idle/в полёте)
+    dbGet('spy_portraits', `select=id,race,gender,url`).catch(() => []),  // агентура: общий пул портретов (админ-загрузка), подбор на клиенте по расе/полу
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1164,6 +1168,7 @@ async function ecLoad() {
   EC.minefields = Array.isArray(defMines) ? defMines : [];      // оборона: видимые минные поля (гексы)
   EC.outposts = Array.isArray(defOutposts) ? defOutposts : [];  // оборона: развёрнутые аванпосты
   EC.opShips = Array.isArray(defOpShips) ? defOpShips : [];     // оборона: мои корабли-носители
+  EC.spyPortraits = Array.isArray(spyPortraits) ? spyPortraits : [];  // агентура: общий пул портретов (подбор на клиенте)
   EC.doomByBuilding = {};
   (EC.doom.guns || []).forEach(g => { if (g && g.building_id) EC.doomByBuilding[g.building_id] = g; });
   // Пространственная экономика: NET-баланс системы (покрытия R/G/C/труд, просперити, статус), индекс по system_id.
@@ -5585,6 +5590,23 @@ function ecAgentPortrait(a, size) {
     <span class="ec-agent-pic-ic">${pk.icon}</span>
     <b class="ec-agent-pic-lv" style="background:${col}">${Math.max(1, a.level || 1)}</b></span>`;
 }
+// Детерминированный хэш строки (FNV-1a) — чтобы портрет агента не «прыгал» между рендерами.
+function ecHash(str) { let h = 2166136261; for (let i = 0; i < (str || '').length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+// Подбор портрета агенту из общего пула (EC.spyPortraits): сперва раса+пол,
+// затем только раса, затем «универсальные» (без расы), затем любой. Выбор
+// СТАБИЛЕН (seed = id агента), поэтому портрет закреплён за конкретным агентом.
+function ecAgentPortraitUrl(a) {
+  const pool = (EC.spyPortraits || []).filter(p => p && p.url);
+  if (!pool.length) return null;
+  const race = a.race, gender = a.gender;
+  let cand = pool.filter(p => p.race === race && p.gender === gender);
+  if (!cand.length) cand = pool.filter(p => p.race === race && (!p.gender || p.gender === gender));
+  if (!cand.length) cand = pool.filter(p => p.race === race);
+  if (!cand.length) cand = pool.filter(p => !p.race);
+  if (!cand.length) cand = pool;
+  const idx = ecHash(String(a.id || (a.first_name + a.last_name) || '')) % cand.length;
+  return cand[idx].url;
+}
 // Полная «оперативная карта» агента в ростере (досье + действия).
 function ecAgentCard(a) {
   const pk = ecPerk(a.perk);
@@ -5610,44 +5632,91 @@ function ecAgentCard(a) {
   // действия
   // обучать можно только реально свободного агента (не занятого контрразведкой)
   const trainBtn = (a.status === 'ready' && !onCI)
-    ? `<button class="btn btn-gh btn-xs" title="Тайное обучение: 2 ход., 120 ГС — гарантированный опыт без риска" onclick="ecSpyTrain('${esc(a.id)}')">🎓 Обучить</button>`
+    ? `<button class="btn btn-gh btn-xs" title="Тайное обучение: 2 ход., 120 ГС → +150 XP гарантированно, без риска" onclick="ecSpyTrain('${esc(a.id)}')">🎓 Обучить</button>`
     : '';
   const fireBtn = `<button class="btn btn-gh btn-xs ec-agent-fire" title="${a.status === 'busy' ? 'Агент на операции' : 'Уволить'}" ${a.status === 'busy' ? 'disabled' : ''} onclick="ecSpyFire('${esc(a.id)}')">✕</button>`;
-  return `<div class="ec-agent-card" style="--ag-col:${col}">
-    <div class="ec-agent-top">
-      ${ecAgentPortrait(a)}
-      <div class="ec-agent-id">
-        <div class="ec-agent-name">${esc(a.first_name)} ${esc(a.last_name)} ${ecLevelPips(lv)}</div>
-        <div class="ec-agent-sub">${arts ? `<span class="ec-agent-arts">${arts}</span>` : ''}${attr ? `<span class="ec-agent-attr">${esc(attr)}</span>` : '<span class="ec-agent-attr">оперативник</span>'}</div>
+  // RPG-портрет на задний фон карточки (или иконка-плейсхолдер, если пул пуст)
+  const img = ecAgentPortraitUrl(a);
+  const heroStyle = img ? `background-image:url('${esc(img)}')` : '';
+  return `<div class="ec-agent-card rpg${img ? ' has-img' : ''}" style="--ag-col:${col}">
+    <div class="ec-agent-hero" style="${heroStyle}">
+      ${img ? '' : `<div class="ec-agent-hero-ph">${pk.icon}</div>`}
+      <div class="ec-agent-hero-top">
+        <span class="ec-agent-rank" title="Уровень ${lv}/5"><b>${lv}</b>${ecLevelPips(lv)}</span>
+        <span class="ec-agent-status" style="color:${st.c};border-color:color-mix(in srgb,${st.c} 55%,transparent)">${st.ic} ${st.t}${trainLeft ? ` · ${trainLeft}` : ''}</span>
       </div>
-      <span class="ec-agent-status" style="color:${st.c};border-color:color-mix(in srgb,${st.c} 45%,transparent)">${st.ic} ${st.t}${trainLeft ? ` · ${trainLeft}` : ''}</span>
+      ${arts ? `<span class="ec-agent-arts" title="Артефакты">${arts}</span>` : ''}
+      <div class="ec-agent-hero-grad"></div>
+      <div class="ec-agent-hero-id">
+        <div class="ec-agent-name">${esc(a.first_name)} ${esc(a.last_name)}</div>
+        <div class="ec-agent-sub"><span class="ec-agent-attr">${attr ? esc(attr) : 'оперативник'}</span></div>
+      </div>
     </div>
-    <div class="ec-agent-perks">
-      <span class="ec-agent-perk" title="${esc(pk.desc)}" style="border-color:${col};color:${col}">${pk.icon} ${esc(pk.label)}</span>${perk2}
+    <div class="ec-agent-body">
+      <div class="ec-agent-perks">
+        <span class="ec-agent-perk" title="${esc(pk.desc)}" style="border-color:${col};color:${col}">${pk.icon} ${esc(pk.label)}</span>${perk2}
+      </div>
+      <div class="ec-agent-xp" title="${esc(xpLabel)}">
+        <div class="ec-agent-xp-bar"><div style="width:${pct}%;background:${next != null ? 'var(--gd,#7bd88f)' : 'var(--pu,#b07bd8)'}"></div></div>
+        <span class="ec-agent-xp-t">${next != null ? `ур. ${lv} · ${pct}%` : `ур. 5 · макс.`}</span>
+      </div>
+      <div class="ec-agent-acts">${trainBtn}${fireBtn}</div>
     </div>
-    <div class="ec-agent-xp" title="${esc(xpLabel)}">
-      <div class="ec-agent-xp-bar"><div style="width:${pct}%;background:${next != null ? 'var(--gd,#7bd88f)' : 'var(--pu,#b07bd8)'}"></div></div>
-      <span class="ec-agent-xp-t">${next != null ? `ур. ${lv} · ${pct}%` : `ур. 5 · макс.`}</span>
-    </div>
-    <div class="ec-agent-acts">${trainBtn}${fireBtn}</div>
   </div>`;
 }
-// Карточка рекрута на рынке.
+// Карточка рекрута на рынке (RPG-стиль, портрет на фоне).
 function ecRecruitCard(r, atCap) {
   const pk = ecPerk(r.perk); const col = ecPerkColor(r.perk);
   const attr = ecAgentAttr(r);
-  return `<div class="ec-recruit-card" style="--ag-col:${col}">
-    <div class="ec-agent-top">
-      ${ecAgentPortrait({ perk: r.perk, level: 1, status: 'ready' }, 40)}
-      <div class="ec-agent-id">
+  const img = ecAgentPortraitUrl(r);
+  const heroStyle = img ? `background-image:url('${esc(img)}')` : '';
+  return `<div class="ec-agent-card ec-recruit-card rpg${img ? ' has-img' : ''}" style="--ag-col:${col}">
+    <div class="ec-agent-hero" style="${heroStyle}">
+      ${img ? '' : `<div class="ec-agent-hero-ph">${pk.icon}</div>`}
+      <div class="ec-agent-hero-top">
+        <span class="ec-agent-rank ec-rank-rec" title="Новобранец · уровень 1">★ нов.</span>
+      </div>
+      <div class="ec-agent-hero-grad"></div>
+      <div class="ec-agent-hero-id">
         <div class="ec-agent-name">${esc(r.first_name)} ${esc(r.last_name)}</div>
         <div class="ec-agent-sub"><span class="ec-agent-attr">${attr ? esc(attr) : 'новобранец'}</span></div>
       </div>
     </div>
-    <div class="ec-agent-perks"><span class="ec-agent-perk" title="${esc(pk.desc)}" style="border-color:${col};color:${col}">${pk.icon} ${esc(pk.label)}</span></div>
-    <button class="btn btn-gd btn-xs ec-recruit-hire" ${atCap ? 'disabled title="Достигнут потолок агентов — стройте Центр Спецслужб"' : ''} onclick="ecSpyHire('${esc(r.id)}')">Нанять · ${ecNum(r.cost)} ГС</button>
+    <div class="ec-agent-body">
+      <div class="ec-agent-perks"><span class="ec-agent-perk" title="${esc(pk.desc)}" style="border-color:${col};color:${col}">${pk.icon} ${esc(pk.label)}</span></div>
+      <button class="btn btn-gd btn-xs ec-recruit-hire" ${atCap ? 'disabled title="Достигнут потолок агентов — стройте Центр Спецслужб"' : ''} onclick="ecSpyHire('${esc(r.id)}')">Нанять · ${ecNum(r.cost)} ГС</button>
+    </div>
   </div>`;
 }
+// ── Рынок рекрутов: отдельное окно (не забивает кабинет) ──
+function ecRecruitsHtml() {
+  const ag = EC.spyAgency || { cap: 0, hired: 0, recruits: [], refresh_at: null };
+  const refreshDays = ag.refresh_at ? Math.max(0, Math.ceil((new Date(ag.refresh_at).getTime() - Date.now()) / 86400000)) : null;
+  const atCap = (ag.hired || 0) >= (ag.cap || 0);
+  const recruitsHtml = (ag.recruits || []).length
+    ? `<div class="ec-agent-grid">${ag.recruits.map(r => ecRecruitCard(r, atCap)).join('')}</div>`
+    : '<div class="ec-empty" style="padding:14px">Список рекрутов пуст — обновится автоматически.</div>';
+  return `<div class="ec-recruits-modal-back" onclick="ecRecruitsClose(event)">
+    <div class="ec-recruits-modal" onclick="event.stopPropagation()">
+      <div class="ec-recruits-hd">
+        <div><div class="ec-recruits-ttl">📋 Рынок рекрутов</div>
+          <div class="ec-recruits-sub">штат ${ag.hired || 0}/${ag.cap || 0}${refreshDays != null ? ` · обновится через ${refreshDays} дн.` : ''}${atCap ? ' · <b style="color:var(--color-warning,#e0a030)">потолок достигнут — стройте Центр Спецслужб</b>' : ''}</div></div>
+        <button class="ec-recruits-x" onclick="ecRecruitsClose()" title="Закрыть">✕</button>
+      </div>
+      <div class="ec-recruits-body">${recruitsHtml}</div>
+    </div></div>`;
+}
+function ecRecruitsOpen() {
+  let host = document.getElementById('ec-recruits-host');
+  if (!host) { host = document.createElement('div'); host.id = 'ec-recruits-host'; document.body.appendChild(host); }
+  host.innerHTML = ecRecruitsHtml();
+}
+function ecRecruitsRender() { const host = document.getElementById('ec-recruits-host'); if (host) host.innerHTML = ecRecruitsHtml(); }
+function ecRecruitsClose(ev) {
+  if (ev && ev.target && !ev.target.classList.contains('ec-recruits-modal-back') && ev.target.tagName !== 'BUTTON') return;
+  document.getElementById('ec-recruits-host')?.remove();
+}
+
 // Категории операций для группировки в планировщике.
 const EC_SPY_OP_CATS = [
   ['recon',   '🔭 Разведка',            'Сбор сведений — открывает сложные операции'],
@@ -5756,16 +5825,16 @@ function ecTabIntel() {
   const atCap = (ag.hired || 0) >= (ag.cap || 0);
   const rosterHtml = (ag.roster || []).length
     ? `<div class="ec-agent-grid">${ag.roster.map(ecAgentCard).join('')}</div>`
-    : '<div class="ec-empty" style="padding:10px">Нет нанятых агентов — наймите из списка рекрутов справа.</div>';
-  const recruitsHtml = (ag.recruits || []).length
-    ? `<div class="ec-agent-grid">${ag.recruits.map(r => ecRecruitCard(r, atCap)).join('')}</div>`
-    : '<div class="ec-empty" style="padding:10px">Список рекрутов пуст.</div>';
-  const agencyBlock = `<div class="ec-dip-grid">
-      <div class="ec-dip-card"><div class="ec-dip-t">🕵 Агентура <span class="ec-hint">штат оперативников (${ag.hired || 0}/${ag.cap || 0})</span></div>
-        ${rosterHtml}
-        <div class="cn-fac-hint" style="margin-top:8px">Шевроны = <b>уровень</b> (растёт за успешные операции: выше успех, ниже раскрытие, сильнее перк; на 5-м — <b>второй перк</b>). 🎓 <b>Обучить</b> — тайная подготовка (2 ход., 120 ГС): гарантированный опыт без риска.</div></div>
-      <div class="ec-dip-card"><div class="ec-dip-t">📋 Рынок рекрутов <span class="ec-hint">обновится через ${refreshDays != null ? refreshDays + ' дн.' : '—'}</span></div>
-        ${recruitsHtml}</div>
+    : '<div class="ec-empty" style="padding:10px">Нет нанятых агентов — откройте «📋 Рынок рекрутов» и наймите оперативников.</div>';
+  // Рынок рекрутов вынесен в отдельное окно (ecRecruitsOpen) — не забивает кабинет.
+  const recCount = (ag.recruits || []).length;
+  const agencyBlock = `<div class="ec-dip-card">
+      <div class="ec-dip-t" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <span>🕵 Агентура <span class="ec-hint">штат оперативников (${ag.hired || 0}/${ag.cap || 0})</span></span>
+        <button class="btn btn-gd btn-sm ec-recruit-open" onclick="ecRecruitsOpen()" title="${atCap ? 'Достигнут потолок — стройте Центр Спецслужб' : 'Нанять новых оперативников'}">📋 Рынок рекрутов${recCount ? ` · ${recCount}` : ''}${refreshDays != null ? ` <i style="opacity:.7;font-style:normal">· ${refreshDays} дн.</i>` : ''}</button>
+      </div>
+      ${rosterHtml}
+      <div class="cn-fac-hint" style="margin-top:8px">Шевроны = <b>уровень</b> (растёт за успешные операции: выше успех, ниже раскрытие, сильнее перк; на 5-м — <b>второй перк</b>). 🎓 <b>Обучить</b> — тайная подготовка (2 ход., 120 ГС): +150 XP гарантированно, без риска.</div>
     </div>`;
 
   // Плен (срез 7): пленники у меня + мои агенты в чужом плену

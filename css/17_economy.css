@@ -86,23 +86,54 @@
 .ec-pips .ec-pip.on { background: var(--gd, #7bd88f); }
 .ec-pips.sm .ec-pip { width: 4px; height: 7px; }
 
-/* ── Карточки агентов (досье) ── */
-.ec-agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 9px; }
-.ec-agent-card, .ec-recruit-card { display: flex; flex-direction: column; gap: 8px; background: var(--b1); border: 1px solid var(--w1); border-left: 3px solid var(--ag-col, var(--w3)); border-radius: var(--radius-md); padding: 11px 12px; }
-.ec-recruit-card { background: var(--b2); }
-.ec-agent-top { display: flex; align-items: center; gap: 10px; }
-.ec-agent-pic { display: inline-flex; align-items: center; justify-content: center; position: relative; border: 2px solid; border-radius: 10px; flex-shrink: 0; }
-.ec-agent-pic-ic { font-size: 20px; line-height: 1; }
-.ec-agent-pic-lv { position: absolute; right: -5px; bottom: -5px; min-width: 16px; height: 16px; padding: 0 3px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-weight: 800; font-size: 10px; color: #06101e; border-radius: 8px; border: 1.5px solid var(--b1); }
-.ec-agent-id { flex: 1; min-width: 0; }
-.ec-agent-name { display: flex; align-items: center; gap: 6px; font-family: var(--font-display); font-weight: 700; font-size: 13.5px; color: var(--t1); line-height: 1.2; }
-.ec-agent-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px; }
-.ec-agent-attr { font-size: 10.5px; color: var(--t3); }
-.ec-agent-arts { font-size: 12px; }
-.ec-agent-status { flex-shrink: 0; font-family: var(--font-mono); font-size: 9px; letter-spacing: .03em; text-transform: uppercase; padding: 2px 7px; border: 1px solid; border-radius: var(--radius-pill); white-space: nowrap; }
+/* ── Карточки агентов (RPG-досье с портретом) ── */
+.ec-agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(208px, 1fr)); gap: 11px; }
+
+/* RPG-карта: портрет на фон, инфо поверх, тело с перками/опытом/действиями */
+.ec-agent-card.rpg { display: flex; flex-direction: column; background: var(--b1);
+  border: 1px solid color-mix(in srgb, var(--ag-col, var(--w3)) 30%, var(--w1));
+  border-radius: var(--radius-md, 10px); overflow: hidden; position: relative;
+  box-shadow: 0 1px 3px rgba(0,0,0,.35); transition: transform .12s, box-shadow .12s, border-color .12s; }
+.ec-agent-card.rpg:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,.45);
+  border-color: color-mix(in srgb, var(--ag-col, var(--w3)) 60%, var(--w1)); }
+
+/* Геро-портрет */
+.ec-agent-hero { position: relative; height: 168px; background-size: cover; background-position: center top;
+  background-color: color-mix(in srgb, var(--ag-col, #2a3650) 22%, var(--b0, #0c1322)); overflow: hidden; }
+.ec-recruit-card .ec-agent-hero { height: 150px; }
+.ec-agent-hero-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 64px; opacity: .35; filter: grayscale(.2); }
+.ec-agent-hero-grad { position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(8,12,22,.55) 0%, rgba(8,12,22,0) 28%, rgba(8,12,22,0) 42%, rgba(8,12,22,.82) 100%); }
+.ec-agent-hero-top { position: absolute; top: 7px; left: 7px; right: 7px; display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 6px; z-index: 2; }
+/* Шеврон-погон ранга */
+.ec-agent-rank { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--ag-col, #7bd88f) 88%, #000), color-mix(in srgb, var(--ag-col, #7bd88f) 55%, #000));
+  border-radius: var(--radius-pill, 99px); box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+.ec-agent-rank > b { font-family: var(--font-display); font-weight: 800; font-size: 13px; color: #06101e; line-height: 1; }
+.ec-agent-rank.ec-rank-rec { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase; color: #06101e; font-weight: 700; }
+.ec-agent-rank .ec-pips .ec-pip { background: rgba(6,16,30,.4); }
+.ec-agent-rank .ec-pips .ec-pip.on { background: #06101e; }
+.ec-agent-status { flex-shrink: 0; font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .03em;
+  text-transform: uppercase; padding: 3px 7px; border: 1px solid; border-radius: var(--radius-pill);
+  white-space: nowrap; background: rgba(8,12,22,.72); backdrop-filter: blur(2px); }
+.ec-agent-arts { position: absolute; right: 8px; bottom: 46px; z-index: 2; font-size: 14px;
+  background: rgba(8,12,22,.6); border-radius: 6px; padding: 1px 5px; }
+.ec-agent-hero-id { position: absolute; left: 11px; right: 11px; bottom: 9px; z-index: 2; }
+.ec-agent-name { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: #fff;
+  line-height: 1.15; text-shadow: 0 1px 3px rgba(0,0,0,.85); }
+.ec-agent-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px; }
+.ec-agent-attr { font-size: 10.5px; color: rgba(220,232,245,.82); text-shadow: 0 1px 2px rgba(0,0,0,.8); }
+.ec-agent-art { font-size: 14px; cursor: help; }
+
+/* Тело карты */
+.ec-agent-body { display: flex; flex-direction: column; gap: 8px; padding: 9px 11px 11px;
+  border-top: 1px solid var(--w1); background: var(--b1); }
+.ec-recruit-card .ec-agent-body { background: var(--b2); }
 .ec-agent-perks { display: flex; flex-wrap: wrap; gap: 5px; }
-.ec-agent-perk { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border: 1px solid; border-radius: var(--radius-pill); background: color-mix(in srgb, currentColor 8%, transparent); }
-.ec-agent-art { font-size: 13px; cursor: help; }
+.ec-agent-perk { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px;
+  border: 1px solid; border-radius: var(--radius-pill); background: color-mix(in srgb, currentColor 8%, transparent); }
 .ec-agent-xp { display: flex; align-items: center; gap: 8px; }
 .ec-agent-xp-bar { flex: 1; height: 5px; border-radius: 3px; background: var(--w1); overflow: hidden; }
 .ec-agent-xp-bar > div { height: 100%; border-radius: 3px; }
@@ -110,7 +141,29 @@
 .ec-agent-acts { display: flex; gap: 6px; align-items: center; }
 .ec-agent-acts .btn { flex: 1; }
 .ec-agent-fire { flex: 0 0 auto !important; min-width: 30px; }
-.ec-recruit-hire { margin-top: 2px; }
+.ec-recruit-hire { width: 100%; }
+
+/* Старый аватар-тайл (fallback, если где-то ещё вызывается ecAgentPortrait) */
+.ec-agent-pic { display: inline-flex; align-items: center; justify-content: center; position: relative; border: 2px solid; border-radius: 10px; flex-shrink: 0; }
+.ec-agent-pic-ic { font-size: 20px; line-height: 1; }
+.ec-agent-pic-lv { position: absolute; right: -5px; bottom: -5px; min-width: 16px; height: 16px; padding: 0 3px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-weight: 800; font-size: 10px; color: #06101e; border-radius: 8px; border: 1.5px solid var(--b1); }
+
+/* ── Окно «Рынок рекрутов» ── */
+.ec-recruits-modal-back { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center;
+  justify-content: center; padding: 24px; background: rgba(5,8,15,.72); backdrop-filter: blur(3px);
+  animation: ecRecFade .15s ease; }
+@keyframes ecRecFade { from { opacity: 0; } to { opacity: 1; } }
+.ec-recruits-modal { width: min(880px, 100%); max-height: 88vh; display: flex; flex-direction: column;
+  background: var(--b1, #0e1422); border: 1px solid var(--w2); border-radius: var(--radius-lg, 14px);
+  box-shadow: 0 20px 60px rgba(0,0,0,.6); overflow: hidden; }
+.ec-recruits-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 15px 18px; border-bottom: 1px solid var(--w2); background: var(--b2); }
+.ec-recruits-ttl { font-family: var(--font-display); font-weight: 700; font-size: 17px; color: var(--t1); }
+.ec-recruits-sub { font-size: 11.5px; color: var(--t3); margin-top: 3px; }
+.ec-recruits-x { flex-shrink: 0; width: 30px; height: 30px; border: 1px solid var(--w2); border-radius: 8px;
+  background: var(--b1); color: var(--t2); font-size: 15px; cursor: pointer; line-height: 1; }
+.ec-recruits-x:hover { background: var(--b3); color: var(--t1); }
+.ec-recruits-body { padding: 16px 18px; overflow-y: auto; }
 
 /* ── Выбор цели (карточки-флаги) ── */
 .ec-tgt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 7px; }

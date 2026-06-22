@@ -435,10 +435,10 @@ begin
   end if;
 
   tier := public._ec_terra_tier(grp, v_race);
-  -- EC_TERRA: 1→{1д,1000ГС,0ОН} 2→{2д,1800ГС,60ОН} 3→{4д,3200ГС,200ОН}
+  -- EC_TERRA: 1→{1д,1000ГС,0ОН} 2→{2д,1800ГС,60ОН} 3→{4д,4800ГС,30ОН}
   if tier = 1 then gc_base:=1000; sci:=0;   turns:=1;
   elsif tier = 2 then gc_base:=1800; sci:=60;  turns:=2;
-  else               gc_base:=3200; sci:=200; turns:=4; end if;
+  else               gc_base:=4800; sci:=30;  turns:=4; end if;
 
   cost_gc := public._ec_colonize_cost(fid, gc_base);
   cells   := coalesce((pl->>'slotsP')::int, 6);

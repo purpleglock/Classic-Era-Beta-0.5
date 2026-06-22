@@ -44,6 +44,7 @@ const AD = {
   systems:   [],        // map_systems (all)
   designs:   [],        // faction_units (all)
   routes:    [],        // trade_routes (all)
+  portraits: [],        // spy_portraits (общий пул портретов оперативников)
   byFid:     new Map(), // fid → { app, eco, colonies[], buildings[], roster[], queue[], designs[], systems[] }
   resInfo:   {},        // resName → { r, icon }
   sel:       null,      // selected faction_id
@@ -105,7 +106,7 @@ async function adLoadCore() {
 
 // Детали — счётчики и содержимое вкладок (без тяжёлого planets jsonb)
 async function adLoadDetails() {
-  const [cols, blds, prod, systems, designs, routes, faiths] = await Promise.all([
+  const [cols, blds, prod, systems, designs, routes, faiths, portraits] = await Promise.all([
     dbGet('colonies',         'select=*').catch(() => []),
     dbGet('colony_buildings', 'select=*').catch(() => []),
     dbGet('unit_production',  'select=*').catch(() => []),
@@ -113,6 +114,7 @@ async function adLoadDetails() {
     dbGet('faction_units',    'select=id,category,name,faction_id&order=name.asc').catch(() => []), // без тяжёлых data/summary
     dbGet('trade_routes',     'select=id,a_fid,a_name,b_fid,b_name,volume,price,resource,cargo,ships,convoy,threats,origin_sys,dest_sys,transit_until,status,created_at&order=created_at.desc').catch(() => []), // торговые пути (разбор дохода + детальная вкладка караванов)
     dbGet('faith_membership', 'select=faction_id').catch(() => []),                    // кто исповедует веру (доход храмов считается только тогда)
+    dbGet('spy_portraits',    'select=id,race,gender,url,label&order=created_at.desc').catch(() => []),  // общий пул портретов оперативников
   ]);
   AD.colonies  = cols    || [];
   AD.buildings = blds    || [];
@@ -121,6 +123,7 @@ async function adLoadDetails() {
   AD.designs   = designs || [];
   AD.routes    = routes  || [];
   AD.faithFids = new Set((faiths || []).map(f => f.faction_id));
+  AD.portraits = portraits || [];
 }
 
 async function adLoad() { await adLoadCore(); await adLoadDetails(); adBuildIndex(); }
@@ -207,7 +210,7 @@ function adPaint() {
     // содержимое (adSelectFaction), без перерисовки всей страницы — это
     // надёжнее (полный re-render #pg на Vercel почему-то не показывал панель).
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
-    body = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + stats;
+    body = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + adPortraitsPanel() + stats;
   } catch (e) {
     console.error('[ADMIN] adPaint build error', e);
     body = `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px;margin-top:12px">Ошибка отрисовки: ${esc(e.message || String(e))}<br><button class="btn btn-gh btn-sm" onclick="go('admin',false)" style="margin-top:8px">↺ Повторить</button></div>`;
@@ -278,6 +281,69 @@ function adRenderSlot() {
   }
   return false;
 }
+// ── Глобальный пул портретов оперативников (общий для всех фракций) ──
+const AD_PORTRAIT_RACES   = ['Человек', 'Синтет', 'Зоранин', 'Криор', 'Веспид', 'Терранид', 'Нублар'];
+const AD_PORTRAIT_GENDERS = ['муж.', 'жен.', 'агендер'];
+function adPortraitsPanel() {
+  const list = AD.portraits || [];
+  const byRace = {};
+  list.forEach(p => { const k = p.race || '— универсальные (любая раса) —'; (byRace[k] = byRace[k] || []).push(p); });
+  const inp = 'padding:8px 10px;font-size:13px;background:var(--b2,#141a22);color:var(--t1,#e8edf2);border:1px solid var(--w2,#2a3340);border-radius:8px';
+  const raceOpts = ['<option value="">— любая раса (универсальный) —</option>']
+    .concat(AD_PORTRAIT_RACES.map(r => `<option value="${esc(r)}">${esc(r)}</option>`)).join('');
+  const genderOpts = ['<option value="">— любой пол —</option>']
+    .concat(AD_PORTRAIT_GENDERS.map(g => `<option value="${esc(g)}">${esc(g)}</option>`)).join('');
+  const groups = Object.keys(byRace).sort().map(race => {
+    const cards = byRace[race].map(p => `<div style="position:relative;width:92px">
+        <div style="width:92px;height:116px;border-radius:8px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover no-repeat;background-image:url('${esc(p.url)}')"></div>
+        <div style="font-size:9px;color:var(--t4,#6a7a88);margin-top:3px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.gender || 'любой пол')}</div>
+        <button class="btn btn-gh btn-xs" title="Удалить портрет" onclick="adPortraitDelete('${esc(p.id)}')" style="position:absolute;top:3px;right:3px;min-width:0;padding:2px 6px;background:rgba(8,12,22,.8)">✕</button>
+      </div>`).join('');
+    return `<div style="margin-top:14px">
+      <div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:7px">${esc(race)} <span style="color:var(--t4,#6a7a88)">· ${byRace[race].length}</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">${cards}</div>
+    </div>`;
+  }).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:14px 0">Пул пуст — загрузите первые портреты. Игра подбирает их оперативникам случайно по расе.</div>';
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🎭 Портреты оперативников <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· общий пул для всех фракций (${list.length})</span></div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 12px">Загружайте портреты, помечая расой и полом. Каждому оперативнику игра выбирает портрет <b>случайно</b> из подходящих по расе (и полу, если задан) — выбор закреплён за агентом. Без расы — «универсальные», подходят всем.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+      <select id="ad-portrait-race" style="${inp}">${raceOpts}</select>
+      <select id="ad-portrait-gender" style="${inp}">${genderOpts}</select>
+      <input id="ad-portrait-file" type="file" accept="image/*" multiple style="${inp};max-width:280px">
+      <button class="btn btn-gd btn-sm" onclick="adPortraitUpload()">⬆ Загрузить</button>
+      <span id="ad-portrait-status" style="font-size:12px;color:var(--t3,#8aa0b0)"></span>
+    </div>
+    <div id="ad-portrait-grid">${groups}</div>
+  </div>`;
+}
+async function adPortraitUpload() {
+  const fileEl = document.getElementById('ad-portrait-file');
+  const race   = (document.getElementById('ad-portrait-race')   || {}).value || null;
+  const gender = (document.getElementById('ad-portrait-gender') || {}).value || null;
+  const status = document.getElementById('ad-portrait-status');
+  const files  = fileEl && fileEl.files ? [...fileEl.files] : [];
+  if (!files.length) { if (status) status.textContent = 'Выберите файл(ы)'; return; }
+  let done = 0, fail = 0;
+  for (const f of files) {
+    if (status) status.textContent = `Загрузка ${done + fail + 1}/${files.length}…`;
+    try {
+      const cf  = (typeof compressImageFile === 'function') ? await compressImageFile(f, 768, 0.85) : f;
+      const url = await ceUploadImage(cf, await getTokenFresh());
+      await dbPost('spy_portraits', { race, gender, url, label: f.name || null });
+      done++;
+    } catch (e) { console.error('[admin] portrait upload', e); fail++; }
+  }
+  if (status) status.textContent = `Готово: +${done}${fail ? `, ошибок ${fail}` : ''}`;
+  try { AD.portraits = await dbGet('spy_portraits', 'select=id,race,gender,url,label&order=created_at.desc'); } catch (e) {}
+  adPaint();
+}
+async function adPortraitDelete(id) {
+  if (!confirm('Удалить портрет из пула? (Агентам, у кого он был, подберётся другой.)')) return;
+  try { await dbDel('spy_portraits', `id=eq.${id}`); AD.portraits = (AD.portraits || []).filter(p => p.id !== id); adPaint(); }
+  catch (e) { toast('Не удалось удалить: ' + (e.message || e), 'err'); }
+}
+
 function adSelectFaction(fid) {
   AD.sel = fid || null;        // выбор из списка (без переключения)
   AD.subtab = 'treasury';

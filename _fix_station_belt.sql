@@ -146,7 +146,7 @@ begin
   tier := public._ec_terra_tier(grp, v_race);
   if tier = 1 then gc_base:=1000; sci:=0;   turns:=1;
   elsif tier = 2 then gc_base:=1800; sci:=60;  turns:=2;
-  else               gc_base:=3200; sci:=200; turns:=4; end if;
+  else               gc_base:=4800; sci:=30;  turns:=4; end if;
   cost_gc := public._ec_colonize_cost(fid, gc_base);
   cells   := coalesce((pl->>'slotsP')::int, 6);
   update public.faction_economy set gc = gc - cost_gc, science = science - sci
