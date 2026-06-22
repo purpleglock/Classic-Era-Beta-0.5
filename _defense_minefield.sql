@@ -85,9 +85,12 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare fid text; cost numeric; hexmax int; cur int; v_id uuid; v_hexes int;
 begin
   fid := public._ec_my_fid();
-  -- мины можно ставить только у своей колонии на этой планете
+  -- мины можно ставить только у своей колонии на этой планете.
+  -- p_pid может быть NULL у «старых» колоний без planet_pid — тогда матчим по системе
+  -- (NULL=NULL в SQL не истинно, поэтому отдельная ветка через IS NULL).
   if not exists(select 1 from public.colonies
-                where faction_id=fid and system_id=p_system_id and planet_pid=p_pid) then
+                where faction_id=fid and system_id=p_system_id
+                  and (p_pid is null or planet_pid is not distinct from p_pid)) then
     raise exception 'lay mines only at your own colony (system %, planet %)', p_system_id, p_pid;
   end if;
   hexmax := public._defense_const('mine_hex_max')::int;
