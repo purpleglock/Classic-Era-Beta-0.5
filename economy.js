@@ -4403,23 +4403,26 @@ function ecSetTradeSub(s) { EC.tradeSub = s; ecPaintCabinet(); }
 // Срез 2: индекс рынка / ETF. Под-вкладки-заготовки под облигации/акции/фьючерсы
 // добавятся срезами 3–5 по тому же образцу (EC.exSub + ecSetExSub).
 function ecSetExSub(s) { EC.exSub = s; ecPaintCabinet(); }
+// Закрыты на реконструкцию (перебалансировка против манипуляций рынком):
+// индекс/маржа/фьючерсы/опционы/облигации. Доступны только организации и заказы.
+const EC_EX_CLOSED = { index: 1, margin: 1, futures: 1, options: 1, bonds: 1 };
 function ecTabExchange() {
-  const sub = EC.exSub || 'corps';
+  let sub = EC.exSub || 'corps';
+  if (EC_EX_CLOSED[sub]) sub = 'corps';   // не залипаем на закрытой вкладке
   const subTabs = [['corps', '🏢', 'Организации'], ['orders', '📋', 'Заказы'], ['index', '📊', 'Индекс'],
     ['margin', '📈', 'Маржа'], ['futures', '📅', 'Фьючерсы'], ['options', '🎲', 'Опционы'], ['bonds', '🏛', 'Облигации']];
-  const subNav = subTabs.length > 1
-    ? `<div class="ec-tabs" style="margin:4px 0 12px">${subTabs.map(([id, ic, l]) => `<button class="ec-tab${sub === id ? ' on' : ''}" onclick="ecSetExSub('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('')}</div>`
-    : '';
-  const body = sub === 'bonds' ? ecExBondsBlock() : sub === 'index' ? ecExIndexBlock()
-    : sub === 'margin' ? ecExMarginBlock()
-    : sub === 'futures' ? ecExFuturesBlock() : sub === 'options' ? ecExOptionsBlock()
-    : sub === 'orders' ? ecExOrdersBlock()
-    : ecExCorpsBlock();
+  const subNav = `<div class="ec-tabs" style="margin:4px 0 12px">${subTabs.map(([id, ic, l]) =>
+    EC_EX_CLOSED[id]
+      ? `<button class="ec-tab" disabled title="На реконструкции" style="opacity:.45;cursor:not-allowed"><span class="ec-tab-ic">🔒</span><span class="ec-tab-l">${l}</span></button>`
+      : `<button class="ec-tab${sub === id ? ' on' : ''}" onclick="ecSetExSub('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`
+  ).join('')}</div>`;
+  const closedBanner = `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;margin:0 0 12px;border:1px solid #c9a227;border-radius:8px;background:rgba(201,162,39,.12);color:#e8c75a;font-size:13px;line-height:1.5">🔒 <span><b>Индекс, маржа, фьючерсы, опционы и облигации временно закрыты</b> на реконструкцию — идёт перебалансировка, чтобы исключить манипуляции рынком. Открыты «Организации» и «Заказы».</span></div>`;
+  const body = sub === 'orders' ? ecExOrdersBlock() : ecExCorpsBlock();
   const ses = (EC.corps && EC.corps.session) || { open: false, open_hour: 12, close_hour: 18 };
   const sesTag = ses.open
     ? `<b style="color:#5fc98a">● торги открыты</b> до ${ses.close_hour}:00 UTC`
     : `<b style="color:#e0688a">● торги закрыты</b> · открытие в ${ses.open_hour}:00 UTC`;
-  return `${ecIntro('📊', 'Биржа', `Финансовые инструменты, привязанные к реальной экономике галактики. ${sesTag}.`, ['<b>Организации</b> — объедините реальные постройки; вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%). Доли продаются другим фракциям.', '<b>Секторный спрос</b> — доход и котировки крутит сама галактика: дефицит сырья поднимает рудники, очередь кораблей — верфи, торговые пути — хабы (множитель 0.25×…3.0×).', '<b>Индекс</b> — корзина цен ресурсов (ETF). <b>Облигации</b> — займ под купон. Сделки с долями — только при <b>открытых торгах</b>; на закрытии фиксинг и дивиденды.', '<b>Маржа</b> — лонг/шорт с плечом до ×10 (ликвидация при просадке залога). <b>Фьючерсы</b> — срочные контракты с расчётом по экспирации. <b>Опционы</b> — колл/пут за премию. Спот-торговля ресурсами — во вкладке «Торговля → Рынок».', '<b>Заказы</b> — разместите госзаказ на закупку ресурса (деньги блокируются в <b>эскроу</b>); заказ объявляется в ленте сектора, и любая фракция выполняет его из своих запасов — полностью или частями. Гарантированная оплата из эскроу.'])}${subNav}${body}`;
+  return `${ecIntro('📊', 'Биржа', `Финансовые инструменты, привязанные к реальной экономике галактики. ${sesTag}.`, ['<b>Организации</b> — объедините реальные постройки; вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%). Доли продаются другим фракциям.', '<b>Секторный спрос</b> — доход и котировки крутит сама галактика: дефицит сырья поднимает рудники, очередь кораблей — верфи, торговые пути — хабы (множитель 0.25×…3.0×).', '<b>Индекс</b> — корзина цен ресурсов (ETF). <b>Облигации</b> — займ под купон. Сделки с долями — только при <b>открытых торгах</b>; на закрытии фиксинг и дивиденды.', '<b>Маржа</b> — лонг/шорт с плечом до ×10 (ликвидация при просадке залога). <b>Фьючерсы</b> — срочные контракты с расчётом по экспирации. <b>Опционы</b> — колл/пут за премию. Спот-торговля ресурсами — во вкладке «Торговля → Рынок».', '<b>Заказы</b> — разместите госзаказ на закупку ресурса (деньги блокируются в <b>эскроу</b>); заказ объявляется в ленте сектора, и любая фракция выполняет его из своих запасов — полностью или частями. Гарантированная оплата из эскроу.'])}${subNav}${closedBanner}${body}`;
 }
 
 // Карточка индекса рынка / ETF: значение, тренд, спарклайн, моя позиция, формы.
