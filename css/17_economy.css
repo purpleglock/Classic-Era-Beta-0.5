@@ -1771,6 +1771,8 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-res-card-src-k { font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase; color: var(--t4); margin-right: 2px; }
 .ec-res-src-chip { display: inline-flex; align-items: baseline; gap: 4px; background: var(--b0); border: 1px solid var(--w1); border-radius: var(--radius-pill); padding: 2px 8px; font-size: 10.5px; color: var(--t2); }
 .ec-res-src-chip b { font-family: var(--font-mono); color: var(--ok); }
+.ec-res-src-chip.ec-res-src-op { border-color: color-mix(in srgb, var(--sci, #6aa9ff) 50%, var(--w1)); color: var(--sci, #6aa9ff); }
+.ec-res-src-chip.ec-res-src-op b { color: var(--sci, #6aa9ff); }
 .ec-res-card-why { font-size: 10.5px; color: var(--t4); font-style: italic; line-height: 1.35; }
 
 .ec-res-card.ec-rar-common    { border-left-color: var(--t4); }

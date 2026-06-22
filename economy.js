@@ -564,12 +564,16 @@ function ecCaps() {
   // Роботы «собирают» пехоту как технику — на Военном Заводе, втрое эффективнее.
   const infFromMf = robot ? mf * EC_ROBOT_INF_PER_SLOT : 0;
   const infFromTr = tr * EC_INF_PER_SLOT;
-  // Вместимость флота от Звёздных Баз (зеркало _fleet_capacity).
-  const fleetCap = ecSlotsSum('starbase') * EC_STARBASE_CAP_PER_SLOT;
+  // Вместимость флота: Звёздные Базы + ДОБЫВАЮЩИЕ аванпосты-стоянки (зеркало _fleet_capacity).
+  const baseCap = ecSlotsSum('starbase') * EC_STARBASE_CAP_PER_SLOT;
+  const opMining = (EC.outposts || []).filter(o => o.mine && o.mode === 'mining').length;
+  const outpostCap = opMining * EC_OUTPOST_CAP;
+  const fleetCap = baseCap + outpostCap;
   return {
     training: robot ? infFromMf : infFromTr,   // суммарная мощность пехоты
     military: mf * 100, ships: sy, mla: sy * 12,
     fleetCap,                                   // мест под корабли (суммарно)
+    fleetBaseCap: baseCap, fleetOutpostCap: outpostCap, fleetOutposts: opMining,
     hasTraining: robot ? mf > 0 : tr > 0,       // у роботов «носитель пехоты» = Военный Завод
     hasMil: mf > 0, hasShipyard: sy > 0, hasStarbase: ecSlotsSum('starbase') > 0, robot,
   };
@@ -773,6 +777,23 @@ function ecPovPoorSystems() {
     .sort((a, b) => (+a.prosperity || 1) - (+b.prosperity || 1));
 }
 
+// ГС/сут, теряемые из-за просперити<1 в бедных системах (фабрики+хабы режутся
+// множителем просперити в economy_accrue). «Цена бедности» для обзора/казны.
+function ecPovertyDrag() {
+  const gcMul = (typeof ecGcMul === 'function') ? ecGcMul() : 1;
+  let lost = 0;
+  (EC.buildings || []).forEach(b => {
+    if (b.btype !== 'factory' && b.btype !== 'trade') return;
+    const bal = ecBuildingSysBal(b);
+    const pr = bal ? (+bal.prosperity || 1) : 1;
+    if (pr >= 1) return;
+    const d = EC_BUILD[b.btype]; if (!d) return;
+    const base = (d.inc.gc || 0) * b.slots_open;
+    const priceG = b.btype === 'factory' ? ecBuildingPriceG(b) : 1;
+    lost += base * priceG * (1 - pr) * gcMul;
+  });
+  return Math.round(lost);
+}
 // Компактная панель в обзоре кабинета: индекс бедности державы.
 function ecPovertyPanel() {
   const s = ecPovertyStats();
@@ -783,6 +804,8 @@ function ecPovertyPanel() {
   const desc = poor
     ? `Плотная застройка/нехватка рабочих рук слегка давит доход и понемногу гонит население. Разрядите застройку или помогите системам во вкладке «Благополучие».`
     : `Все системы держатся в достатке — бедности нет.`;
+  const drag = ecPovertyDrag();
+  const reliefActive = Object.values(EC.spatial || {}).reduce((a, b) => a + ((b.relief || []).filter(r => !r.until || new Date(r.until).getTime() > Date.now()).length), 0);
   const top = ecPovPoorSystems().slice(0, 3).map(b => {
     const st = b.status === 'stagnation' ? 'стагнация' : (b.status === 'unrest' ? 'волнения' : 'отток');
     return `<button type="button" class="ec-pov-mini" onclick="ecSetTab('welfare')">
@@ -797,6 +820,12 @@ function ecPovertyPanel() {
       <div class="ec-ovx-stat"><div class="ec-ovx-stat-v">${s.poorPct}%</div><div class="ec-ovx-stat-k">Населения в нужде</div></div>
       <div class="ec-ovx-stat"><div class="ec-ovx-stat-v ec-pov-v-${s.revolt ? 'bad' : 'ok'}">${s.revolt || 0}</div><div class="ec-ovx-stat-k">🔥 Восстаний</div></div>
       <div class="ec-ovx-stat"><div class="ec-ovx-stat-v ec-pov-v-ok">${s.relief || 0}</div><div class="ec-ovx-stat-k">🤝 Под помощью</div></div>
+    </div>
+    <div class="ec-ovx-stat-grid" style="margin-top:8px">
+      <div class="ec-ovx-stat ec-ovx-stat-wide" data-tip="Сколько ГС/сут недополучает казна из-за просперити<1 в бедных системах (фабрики и торговые хабы режутся множителем просперити). Это и есть «цена бедности» — поднимите благополучие, чтобы вернуть доход.">
+        <div class="ec-ovx-stat-k">💸 Потери дохода от бедности</div>
+        <div class="ec-ovx-stat-barline"><b style="color:${drag ? 'var(--err,#e05050)' : 'var(--t4)'}">${drag ? '−' + ecNum(drag) : '0'}</b> ГС/сут${reliefActive ? ` · 🤝 активных мер помощи: <b>${reliefActive}</b>` : ''}</div>
+      </div>
     </div>
     <div class="ec-ovx-hint">${desc}</div>
     ${top ? `<div class="ec-pov-minis">${top}</div>` : ''}
@@ -1404,8 +1433,9 @@ function ecGcIncome() {
   const exportGc = ecExportIncome();
   const policy = ecPolicyCostDay();
   const ex = ecExchangeIncome();
-  const net = factory + trade + temple + tithe + sects + cv.net + market + exportGc - policy + ex.net;
-  return { factory, trade, temple, tithe, sects, caravan: cv, market, export: exportGc, policy, exchange: ex, net };
+  const op = ecOutpostMineTotals();   // добывающие аванпосты: +ГС/сут (ленивый settle, вне основного тика)
+  const net = factory + trade + temple + tithe + sects + cv.net + market + exportGc - policy + ex.net + op.gc;
+  return { factory, trade, temple, tithe, sects, caravan: cv, market, export: exportGc, policy, exchange: ex, outpost: op, net };
 }
 // Регулярные ГС-потоки с БИРЖИ за ход — чтобы «Чистый доход» учитывал ВСЁ, а не
 // только постройки/караваны. Берём строго то, что НЕ задвоится с доходом фабрик:
@@ -1813,6 +1843,37 @@ function ecMineTotals() {
     });
   });
   return totals;
+}
+// Добыча с ДОБЫВАЮЩИХ аванпостов за сутки — зеркало _outpost_mining_settle:
+// каждый mode='mining' аванпост тянет ресурсы со ВСЕХ планет своей системы по
+// фикс-ставкам (вне границ — ниже колониальных) + EC_OUTPOST_MINE_GC ГС/сут.
+// Возвращает { totals: Map(res→{rate,r,srcs:Map(sys→{rate,n})}), gc, n }.
+const EC_OUTPOST_MINE_GC = 75;
+const EC_OUTPOST_RES_RATE = { uncommon: 6, rare: 3, epic: 1, legendary: 1, common: 12 };
+function ecOutpostMineTotals() {
+  const totals = new Map();
+  let gc = 0, n = 0;
+  const byId = new Map((EC.allSystems || []).map(s => [s.id, s]));
+  (EC.outposts || []).filter(o => o.mine && o.mode === 'mining').forEach(o => {
+    n++; gc += EC_OUTPOST_MINE_GC;
+    const sys = byId.get(o.system_id);
+    const sysName = (sys && sys.name) || (typeof ecSysName === 'function' ? ecSysName(o.system_id) : o.system_id);
+    const planets = (sys && Array.isArray(sys.planets)) ? sys.planets : [];
+    planets.forEach(p => {
+      (Array.isArray(p.resources) ? p.resources : []).forEach(ri => {
+        if (!ri || !ri.name) return;
+        const rar = ri.r || 'common';
+        const rate = EC_OUTPOST_RES_RATE[rar] != null ? EC_OUTPOST_RES_RATE[rar] : EC_OUTPOST_RES_RATE.common;
+        const cur = totals.get(ri.name) || { rate: 0, r: rar, srcs: new Map() };
+        cur.rate += rate;
+        const s = cur.srcs.get(sysName) || { rate: 0, n: 0 };
+        s.rate += rate; s.n += 1;
+        cur.srcs.set(sysName, s);
+        totals.set(ri.name, cur);
+      });
+    });
+  });
+  return { totals, gc, n };
 }
 // Человекочитаемые названия редкости ресурсов (для подробной справки).
 const EC_RAR_LABEL = { common: 'обычный', uncommon: 'необычный', rare: 'редкий', epic: 'эпический', legendary: 'легендарный' };
@@ -2735,6 +2796,10 @@ function ecTabOverview() {
   if (_ex.bonds)   moneyInc.push({ ic: '🏦', name: 'Облигации · купоны', sub: _ex.bondOut ? `${ecNum(_ex.bondIn)} держателю − ${ecNum(_ex.bondOut)} выплаты эмитента` : 'купон по моим вложениям', gc: _ex.bonds, tab: 'exchange' });
   if (_ex.corpDiv) moneyInc.push({ ic: '🏢', name: 'Дивиденды · чужие доли', sub: 'мои доли в чужих корпорациях', gc: _ex.corpDiv, tab: 'exchange' });
   if (_ex.corpSyn) moneyInc.push({ ic: '⚡', name: 'Синергия корпораций', sub: 'бонус моих корпораций сверх дохода построек', gc: _ex.corpSyn, tab: 'exchange' });
+  // Добывающие аванпосты вне границ: ГС/сут (плюс ресурсы — в панели «Ресурсы»).
+  const _op = g.outpost || { gc: 0, n: 0, totals: new Map() };
+  if (_op.n) moneyInc.push({ ic: '🛰', name: 'Аванпосты · добыча', sub: `${_op.n} аванпост. вне границ × ${EC_OUTPOST_MINE_GC}`, gc: _op.gc, tab: 'outposts' });
+  const _povDrag = (typeof ecPovertyDrag === 'function') ? ecPovertyDrag() : 0;
   const netGc = g.net;
   const maxGc = moneyInc.reduce((a, x) => Math.max(a, Math.abs(x.gc)), 0) || 1;
   const moneyRows = moneyInc.map(x => {
@@ -2786,12 +2851,14 @@ function ecTabOverview() {
   if (_ex.bonds)   detRows.push(fxRow('🏦', 'Облигации · купоны', `купоны по вложениям ${ecNum(_ex.bondIn)} − выплаты как эмитент ${ecNum(_ex.bondOut)}`, _ex.bonds));
   if (_ex.corpDiv) detRows.push(fxRow('🏢', 'Дивиденды (чужие доли)', `выручка × моя доля по чужим корпорациям`, _ex.corpDiv));
   if (_ex.corpSyn) detRows.push(fxRow('⚡', 'Синергия моих корпораций', `доход построек × синергия × моя доля (сверх дохода фабрик)`, _ex.corpSyn));
-  const composition = moneyInc.length ? ecSvgDonut(moneyInc.filter(x => x.gc > 0).map(x => ({ name: x.name, color: { 'Гражданские фабрики': 'var(--gd)', 'Торговые хабы': 'var(--te)', 'Храмы веры': 'var(--ec-amb,#e0a030)', 'Десятина с адептов': 'var(--ec-amb,#e0a030)', 'Тайные секты': 'var(--pu)', 'Караваны · продажа': 'var(--ok)', 'Доля с поставок': 'var(--ec-amb,#e0a030)', 'Товарная биржа': 'var(--ok)', 'Экспорт добычи': 'var(--te)', 'Облигации · купоны': 'var(--pu)', 'Дивиденды · чужие доли': 'var(--ok)', 'Синергия корпораций': 'var(--te)' }[x.name] || 'var(--gd)', value: x.gc })), { center: ecChartFmt(netGc), sub: 'ГС/сут' }) : '';
+  if (_op.n) detRows.push(fxRow('🛰', 'Аванпосты · добыча', `${_op.n} аванпост(ов) × ${EC_OUTPOST_MINE_GC} ГС/сут + ресурсы с планет их систем (ленивый расчёт, вне основного тика)`, _op.gc));
+  const composition = moneyInc.length ? ecSvgDonut(moneyInc.filter(x => x.gc > 0).map(x => ({ name: x.name, color: { 'Гражданские фабрики': 'var(--gd)', 'Торговые хабы': 'var(--te)', 'Храмы веры': 'var(--ec-amb,#e0a030)', 'Десятина с адептов': 'var(--ec-amb,#e0a030)', 'Тайные секты': 'var(--pu)', 'Караваны · продажа': 'var(--ok)', 'Доля с поставок': 'var(--ec-amb,#e0a030)', 'Товарная биржа': 'var(--ok)', 'Экспорт добычи': 'var(--te)', 'Облигации · купоны': 'var(--pu)', 'Дивиденды · чужие доли': 'var(--ok)', 'Синергия корпораций': 'var(--te)', 'Аванпосты · добыча': 'var(--te)' }[x.name] || 'var(--gd)', value: x.gc })), { center: ecChartFmt(netGc), sub: 'ГС/сут' }) : '';
   const bdgDetail = `<div class="ec-bdg-detail">
       ${composition ? `<div class="ec-bdg-dt-sect">Состав дохода</div>${composition}` : ''}
       <div class="ec-bdg-dt-sect">Формулы по источникам</div>
       <div class="ec-bdg-dt-list">${detRows.join('') || '<div class="ec-ovx-hint">Денежных источников нет.</div>'}</div>
       ${_resOutTotal ? `<div class="ec-bdg-dt-warn">📤 Вывоз ресурсов караванами: −${ecNum(_resOutTotal)} ед/сут (${_resOutTxt}) — это расход сырья, не денег.</div>` : ''}
+      ${_povDrag ? `<div class="ec-bdg-dt-warn">💸 Бедность съедает ≈ −${ecNum(_povDrag)} ГС/сут: фабрики и хабы в небогатых системах режутся просперити (уже учтено в строках «Фабрики»/«Хабы»). Поднимайте благополучие во вкладке «Благополучие».</div>` : ''}
       ${inc.debuff ? `<div class="ec-bdg-dt-warn">🔥 Дестабилизация режет денежный доход на ${Math.round(inc.debuff * 100)}% — уже учтено в суммах.</div>` : ''}
       <div class="ec-ovx-hint">Доход начисляется в конце каждого хода (тика). Доктрина даёт ×${gcMul.toFixed(2)} к ГС-потокам${gcMulPct ? ` (${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''} (к доходу биржи не применяется). Содержания армии/зданий нет — постройка тратит ГС разово.</div>
       <div class="ec-ovx-hint">📊 Учтены все потоки тика: храмы (вера), десятина, секты, Товарная биржа (оценка по складу) и экспорт добычи — это даёт ту же сумму, что начислит сервер. Спекуляции (маржа/фьючерсы/опционы) переменны и в «/сут» не входят. Биржа корпораций: доход построек внутри своих корпораций уже сидит в строке «Фабрики/Хабы» — из них берётся только синергия (без задвоения). 🏆 Награды за достижения — разовые, показаны отдельной строкой.</div>
@@ -2812,13 +2879,17 @@ function ecTabOverview() {
   </div>`;
 
   // ── 3. РЕСУРСЫ — добыча/сутки + склад (подробная справка: что/откуда/сколько/цена/почему) ──
+  // Источники добычи: колониальные заводы (ecMineTotals) + добывающие аванпосты вне границ (_op.totals).
   const mineT = ecMineTotals();
+  const opT = _op.totals || new Map();
   const stock = new Map(ecResEntries());
-  const resNames = new Set([...mineT.keys(), ...stock.keys()]);
+  const resNames = new Set([...mineT.keys(), ...opT.keys(), ...stock.keys()]);
   const resRows = [...resNames].map(n => {
-    const mt = mineT.get(n), rate = mt ? mt.rate : 0, have = stock.get(n) || 0;
-    const rar = (mt && mt.r) || ecResRarity(n) || 'common';
-    return { n, rate, have, rar, slots: (mt && mt.slots) || 0, srcs: (mt && mt.srcs) || null };
+    const mt = mineT.get(n), ot = opT.get(n);
+    const colRate = mt ? mt.rate : 0, opRate = ot ? ot.rate : 0;
+    const rate = colRate + opRate, have = stock.get(n) || 0;
+    const rar = (mt && mt.r) || (ot && ot.r) || ecResRarity(n) || 'common';
+    return { n, rate, colRate, opRate, have, rar, slots: (mt && mt.slots) || 0, srcs: (mt && mt.srcs) || null, opSrcs: (ot && ot.srcs) || null };
   }).sort((a, b) => (b.rate - a.rate) || (b.have - a.have));
   const storeCap = ecStoreCap();
   const storeUsed = resRows.reduce((s, r) => s + (r.have || 0), 0);
@@ -2834,9 +2905,11 @@ function ecTabOverview() {
         <div class="ec-ovx-stat-barline"><b>${ecNum(storeUsed)}</b> / ${ecNum(storeCap)} ${ecOvBar(storeUsed, storeCap, storeUsed >= storeCap ? 'fill-rd' : (storePct >= 85 ? 'fill-amb' : 'fill-gc'))}</div>
       </div>`;
   // Сводка-итоги: суммарная добыча/сут, виды, прогноз заполнения
+  const opMineDay = resRows.reduce((s, r) => s + (r.opRate || 0), 0);
   const resSummary = `<div class="ec-res-sum">
     <span class="ec-res-sum-i"><b class="${mineDay ? 'ok' : 'dim'}">${mineDay ? '+' + ecNum(mineDay) : '0'}</b> ед/сут добыча</span>
     <span class="ec-res-sum-i"><b>${ecNum(minedKinds)}</b> вид(ов) добывается</span>
+    ${_op.n ? `<span class="ec-res-sum-i" data-tip="Добывающие аванпосты вне границ тянут ресурсы со всех планет своих систем + ${EC_OUTPOST_MINE_GC} ГС/сут каждый.">🛰 <b>${ecNum(_op.n)}</b> аванпост. добычи · +${ecNum(opMineDay)} ед/сут${_op.gc ? ' + ' + ecNum(_op.gc) + ' ГС' : ''}</span>` : ''}
     ${mineDay && freeCap > 0 ? `<span class="ec-res-sum-i">склад полон через <b>${ecNum(daysFull)}</b> ход(ов)</span>` : (mineDay && freeCap <= 0 ? '<span class="ec-res-sum-i ec-res-sum-warn">⚠ склад полон — добыча сверх лимита уходит в экспорт</span>' : '')}
   </div>`;
   // Карточка ресурса: верх (иконка + полное имя + редкость), числа (добыча/склад/цена),
@@ -2845,11 +2918,14 @@ function ecTabOverview() {
     const price = ecResPriceN(r.n);
     const rarTxt = ecRarLabel(r.rar);
     let foot;
-    if (r.srcs && r.srcs.size) {
-      const chips = [...r.srcs.entries()].map(([col, s]) =>
+    const colChips = (r.srcs && r.srcs.size) ? [...r.srcs.entries()].map(([col, s]) =>
         `<span class="ec-res-src-chip" title="${esc(col)}: ${s.slots} слот(ов)${s.amt ? ', месторождение «' + esc(s.amt) + '»' : ''} → +${ecNum(s.rate)}/сут">⛏ ${esc(col)} ×${s.slots} <b>+${ecNum(s.rate)}</b></span>`
-      ).join('');
-      foot = `<div class="ec-res-card-src"><span class="ec-res-card-src-k">откуда:</span>${chips}</div>`;
+      ).join('') : '';
+    const opChips = (r.opSrcs && r.opSrcs.size) ? [...r.opSrcs.entries()].map(([sys, s]) =>
+        `<span class="ec-res-src-chip ec-res-src-op" title="Аванпост(ы) в системе ${esc(sys)} (${s.n} шт.) → +${ecNum(s.rate)}/сут (добыча вне границ)">🛰 ${esc(sys)}${s.n > 1 ? ' ×' + s.n : ''} <b>+${ecNum(s.rate)}</b></span>`
+      ).join('') : '';
+    if (colChips || opChips) {
+      foot = `<div class="ec-res-card-src"><span class="ec-res-card-src-k">откуда:</span>${colChips}${opChips}</div>`;
     } else if (r.have > 0) {
       foot = `<div class="ec-res-card-why">в запасе, добыча не ведётся — назначьте месторождение «${esc(r.n)}» добывающему заводу во вкладке «Колонии»</div>`;
     } else {
@@ -2862,7 +2938,7 @@ function ecTabOverview() {
         <span class="ec-res-card-rar ec-rar-tx-${r.rar}">${rarTxt}</span>
       </div>
       <div class="ec-res-card-nums">
-        <div class="ec-res-card-num"><span class="ec-res-card-num-v ${r.rate ? 'ok' : 'dim'}">${r.rate ? '+' + ecNum(r.rate) : '—'}</span><span class="ec-res-card-num-k">добыча / сут</span></div>
+        <div class="ec-res-card-num"${r.opRate ? ` title="колонии: +${ecNum(r.colRate)} · аванпосты: +${ecNum(r.opRate)}"` : ''}><span class="ec-res-card-num-v ${r.rate ? 'ok' : 'dim'}">${r.rate ? '+' + ecNum(r.rate) : '—'}</span><span class="ec-res-card-num-k">добыча / сут${r.opRate ? ' <span class="ec-hint">🛰' + (r.colRate ? '+⛏' : '') + '</span>' : ''}</span></div>
         <div class="ec-res-card-num"><span class="ec-res-card-num-v">${ecNum(r.have)}</span><span class="ec-res-card-num-k">на складе</span></div>
         <div class="ec-res-card-num"><span class="ec-res-card-num-v">${ecNum(price)}</span><span class="ec-res-card-num-k">ГС / ед.</span></div>
       </div>
@@ -2873,7 +2949,7 @@ function ecTabOverview() {
     <div class="ec-ovx-panel-t">⛏ Ресурсы <span class="ec-ovx-panel-sub">добыча · склад · цена · источники</span></div>
     ${capBar}
     ${resRows.length ? resSummary + ecOvFold('rescards', '📦 Все ресурсы', `${resRows.length} вид(ов) — добыча · склад · цена · источники`) + (ecOvExpanded('rescards') ? `<div class="ec-res-cards">${resRows.map(resCard).join('')}</div>` : '') : '<div class="ec-ovx-res-empty">Ресурсов нет. Постройте «Добывающий завод» в колонии и назначьте слотам месторождения планеты — добыча начисляется в конце каждого хода.</div>'}
-    <div class="ec-ovx-hint">Добыча = редкость месторождения × его богатство × доктрина, начисляется в конце каждого хода (тика). Сверх ёмкости склада ресурсы не копятся.</div>
+    <div class="ec-ovx-hint">Добыча = редкость месторождения × его богатство × доктрина, начисляется в конце каждого хода (тика). Сверх ёмкости склада ресурсы не копятся.${_op.n ? ` 🛰 Аванпосты добычи тянут ресурсы со всех планет своих систем по фикс-ставкам (обычн. 12, необыч. 6, ред. 3, эпич./лег. 1 ед/сут за вид) + ${EC_OUTPOST_MINE_GC} ГС/сут каждый — расчёт ленивый, вне основного тика.` : ''}</div>
   </div>`;
 
   // ── 4. ДЕРЖАВА ──
@@ -2943,6 +3019,13 @@ function ecTabOverview() {
       ${(caps.training || caps.military || caps.ships) ? `<div class="ec-army-dt-sect">⚙ Мощности производства за ход</div>
       <div class="ec-ovx-hint">Пехота: <b>${ecNum(caps.training)}</b> ед/ход (Центр Подготовки${caps.robot ? ' / робо-сборка на Военном Заводе ×3' : ''}) · Техника: <b>${ecNum(caps.military)}</b> ед/ход (Военный Завод) · Корабли: <b>${ecNum(caps.ships)}</b> шт/ход (Верфь). Каждый слот завода добавляет мощность; постройка тратит ГС и сырьё (дефицит ×1.5).</div>` : ''}
     </div>`;
+  // Вместимость флота: места под корабли (Звёздные Базы + добывающие аванпосты-стоянки).
+  const fUsed = ecFleetUsed(), fCap = caps.fleetCap, fFull = fCap > 0 && fUsed >= fCap;
+  const fleetCapTip = `Места под корабли. Базы: ${ecNum(ecSlotsSum('starbase'))} слот × ${EC_STARBASE_CAP_PER_SLOT} = ${ecNum(caps.fleetBaseCap)}${caps.fleetOutposts ? `; аванпосты добычи: ${ecNum(caps.fleetOutposts)} × ${EC_OUTPOST_CAP} = ${ecNum(caps.fleetOutpostCap)}` : ''}. Считаются готовые + в очереди + повреждённые + в ремонте. Сверх лимита новые корабли строить нельзя — стройте Звёздную Базу или разверните добывающий аванпост.`;
+  const fleetCapBar = (fCap > 0 || fUsed > 0) ? `<div class="ec-ovx-stat ec-ovx-stat-wide ec-ov-clk" onclick="ecSetTab('forces')" data-tip="${esc(fleetCapTip)}">
+      <div class="ec-ovx-stat-k">🛰 Вместимость флота${fFull ? ' <span class="ec-res-cap-pct">лимит исчерпан</span>' : ''}</div>
+      <div class="ec-ovx-stat-barline"><b style="color:${fFull ? 'var(--err,#e05050)' : 'var(--pu)'}">${ecNum(fUsed)}</b> / ${ecNum(fCap)} мест ${ecOvBar(fUsed, fCap, fFull ? 'fill-rd' : 'fill-sci')}</div>
+    </div>` : '';
   const army = `<div class="ec-ovx-panel ec-ovx-half">
     <div class="ec-ovx-panel-t">⚔ Вооружённые силы ${queued ? `<span class="ec-ovx-panel-sub ec-ov-clk" onclick="ecSetTab('milbuild')">в очереди: ${ecNum(queued)}</span>` : ''}</div>
     <div class="ec-ovx-stat-grid">
@@ -2950,6 +3033,7 @@ function ecTabOverview() {
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v ec-ovx-c-gc">${ecNum(divs)}</div><div class="ec-ovx-stat-k">⚔ Дивизии</div></div>
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v">${ecNum(ground)}</div><div class="ec-ovx-stat-k">🛡 Наземка</div></div>
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v">${ecNum(avia)}</div><div class="ec-ovx-stat-k">✈ Авиация</div></div>
+      ${fleetCapBar}
     </div>
     ${(caps.training || caps.military || caps.ships) ? `<div class="ec-ovx-caps">
       ${capRow('🪖 Подготовка пехоты', use.inf || 0, caps.training, 'fill-gc')}
@@ -7818,6 +7902,14 @@ function ecOrderCalc() {
   const lack = escrow > gc ? ` <span style="color:var(--err)">— не хватает ${ecNum(escrow - Math.round(gc))} ГС</span>` : '';
   box.innerHTML = `Заблокируем в эскроу: <b style="color:${escrow > gc ? 'var(--err)' : 'var(--gd)'}">${ecNum(escrow)} ГС</b>${lack}${mkTip}. В казне: <b>${ecNum(Math.round(gc))} ГС</b>.`;
 }
+// Заказывать можно только РЕАЛЬНЫЙ складской ресурс. ГС/ОН — валюты, их на складе
+// не бывает (исполнитель отдаёт ресурс из `resources`, а науки там нет), поэтому
+// такой заказ невыполним и засоряет доску. Сверяем со справочником рынка.
+function ecIsTradeableRes(name) {
+  const n = (name || '').trim().toLowerCase();
+  if (!n) return false;
+  return Object.keys(EC.market || {}).some(k => k.toLowerCase() === n);
+}
 function ecOrderCreate() {
   const res = (ecId('ec-ord-res')?.value || '').trim();
   const qty = Math.max(0, parseInt(ecId('ec-ord-qty')?.value) || 0);
@@ -7825,6 +7917,7 @@ function ecOrderCreate() {
   const days = Math.max(1, Math.min(60, parseInt(ecId('ec-ord-days')?.value) || 7));
   const note = (ecId('ec-ord-note')?.value || '').trim() || null;
   if (!res) { toast('Укажите ресурс', 'err'); return; }
+  if (!ecIsTradeableRes(res)) { toast('«' + res + '» — не складской ресурс. Заказывать можно только добываемые ресурсы (ГС и ОН на складе не бывает).', 'err'); return; }
   if (!qty) { toast('Укажите объём', 'err'); return; }
   if (!price) { toast('Укажите цену', 'err'); return; }
   ecRpcAct('order_create', { p_resource: res, p_qty: qty, p_price: price, p_note: note, p_days: days },

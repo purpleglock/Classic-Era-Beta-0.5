@@ -54,8 +54,13 @@ create or replace function public.orders_sweep()
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare o record; n int := 0;
 begin
+  -- 1) Истёкшие заказы: вернуть остаток эскроу, закрыть.
+  -- 2) «Мусорные» заказы на нескладские ресурсы (напр. ОН/ГС, ошибочно созданные
+  --    до валидации order_create): они невыполнимы — возвращаем эскроу и гасим.
   for o in select * from public.exchange_orders
-           where status = 'open' and expires_at is not null and expires_at < now()
+           where status = 'open'
+             and ( (expires_at is not null and expires_at < now())
+                or not exists (select 1 from public.resource_rarity where name = exchange_orders.resource) )
            for update loop
     if o.escrow > 0 then
       update public.faction_economy set gc = gc + o.escrow where faction_id = o.buyer_fid;
@@ -78,6 +83,12 @@ begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   res := btrim(coalesce(p_resource, ''));
   if length(res) < 1 then raise exception 'bad resource'; end if;
+  -- Заказывать можно только РЕАЛЬНЫЙ складской ресурс (есть в справочнике редкости).
+  -- ГС/ОН — это валюты (faction_economy.gc/.science), их в `resources` не бывает,
+  -- значит заказ на них невыполним и лишь засоряет доску. Отсекаем сразу.
+  if not exists (select 1 from public.resource_rarity where name = res) then
+    raise exception 'bad resource: % is not a tradeable warehouse resource', res;
+  end if;
   if p_qty   is null or p_qty   <  1 then raise exception 'bad qty'; end if;
   if p_price is null or p_price <  1 then raise exception 'bad price'; end if;
   fid := public._ec_my_fid();
