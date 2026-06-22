@@ -677,6 +677,23 @@
 .ec-prod-form select { flex: 1; min-width: 160px; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 8px 10px; font-size: 13px; outline: none; }
 .ec-prod-form select:focus { border-color: var(--gd); }
 .ec-prod-qty { width: 70px !important; flex: 0 0 auto; text-align: center; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 8px; }
+/* Строка галактического рынка: имя · спарклайн · цена · запас */
+.ec-mk-row { gap: 10px; }
+.ec-mk-name { flex: 1 1 40%; }
+.ec-mk-spark { flex: 0 0 auto; min-width: 64px; text-align: center; }
+.ec-mk-price { flex: 0 0 auto; text-align: right; min-width: 120px; }
+.ec-mk-stock { flex: 0 0 auto; color: var(--t4); min-width: 150px; text-align: right; }
+@media (max-width: 560px) {
+  /* на телефоне строка перестраивается в 2 ряда: имя+цена сверху, спарклайн+запас снизу */
+  .ec-mk-row { flex-wrap: wrap; gap: 4px 10px; }
+  .ec-mk-name { flex: 1 1 auto; min-width: 0; order: 1; }
+  .ec-mk-price { flex: 0 0 auto; min-width: 0; order: 2; }
+  .ec-mk-spark { order: 3; }
+  .ec-mk-stock { flex: 1 1 auto; min-width: 0; text-align: right; order: 4; font-size: 12px; }
+  /* форма купли-продажи: селект на всю ширину, кол-во + 2 кнопки в ряд */
+  .ec-prod-form select { flex: 1 1 100%; }
+  .ec-prod-form .btn { flex: 1 1 0; }
+}
 .ec-cap { font-size: 11px; color: var(--t3); font-family: var(--font-mono); margin-bottom: 6px; }
 .ec-cap b { color: var(--t2); font-weight: 600; }
 

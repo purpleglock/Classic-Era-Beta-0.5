@@ -3695,6 +3695,9 @@ function ecPerkColor(perk) {
 function ecFacSelect(id) { const opts = ecOtherFactions().map(f => `<option value="${esc(f.faction_id)}">${esc(f.name)}</option>`).join(''); return `<select id="${id}">${opts || '<option value="">— нет фракций —</option>'}</select>`; }
 function ecErr(m) {
   m = m || '';
+  if (m.includes('not enough resource')) return 'Недостаточно ресурса на складе';
+  if (m.includes('not enough on market')) return 'На рынке нет столько ресурса';
+  if (m.includes('not enough GC') || m.includes('not enough gc')) return 'Недостаточно ГС';
   if (m.includes('not enough')) return 'Недостаточно средств';
   if (m.includes('not your system')) return 'Это не ваша система';
   if (m.includes('bad kind')) return 'Неизвестная мера помощи';
@@ -4197,11 +4200,11 @@ function ecMarketBlock(stock) {
         : `<span style="color:var(--t4)">▬</span>`;
     const mine = myStock[n] || 0;
     const spark = ecSparkline(m.spark);
-    return `<div class="ec-q-row" style="gap:10px">
-      <span class="ec-r-name" style="flex:1 1 40%">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4)">(${esc(rar)})</i></span>
-      <span style="flex:0 0 auto;min-width:64px;text-align:center" title="динамика цены за последние ходы">${spark}</span>
-      <span style="flex:0 0 auto;text-align:right;min-width:120px">${trend} <b>${ecNum(Math.round(m.price))} ГС</b> <i style="color:var(--t4)">${dpct >= 0 ? '+' : ''}${dpct}%</i></span>
-      <span style="flex:0 0 auto;color:var(--t4);min-width:150px;text-align:right" title="запас рынка · ваш склад">📦 ${ecNum(Math.round(m.stock))} · у вас ${ecNum(mine)}</span>
+    return `<div class="ec-q-row ec-mk-row">
+      <span class="ec-r-name ec-mk-name">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4)">(${esc(rar)})</i></span>
+      <span class="ec-mk-spark" title="динамика цены за последние ходы">${spark}</span>
+      <span class="ec-mk-price">${trend} <b>${ecNum(Math.round(m.price))} ГС</b> <i style="color:var(--t4)">${dpct >= 0 ? '+' : ''}${dpct}%</i></span>
+      <span class="ec-mk-stock" title="запас рынка · ваш склад">📦 ${ecNum(Math.round(m.stock))} · у вас ${ecNum(mine)}</span>
     </div>`;
   }).join('');
   const opts = names.map(n => `<option value="${esc(n)}">${esc(n)} — ${ecNum(Math.round(mk[n].price))} ГС</option>`).join('');
