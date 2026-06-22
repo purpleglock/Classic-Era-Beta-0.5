@@ -1035,6 +1035,7 @@ function gmSystemBodies(sys) {
     const nm = norm(p.name);
     // пояса/аномалии остаются как есть; всё прочее без класса считаем планетой
     const b = { name: p.name || '', kind: p.kind || 'planet', zone: p.zone, dist: p.dist, type: p.type,
+                dead: !!(p.dead || p.doomed),   // ☠ выжжена «Дланью Неотвратимости» — рисуем мёртвым камнем
                 pid: Number.isInteger(p.pid) ? p.pid : null };
     if (nm && nm === capName) b.isCapital = true;
     byName.set(nm || ('__p' + anon++), b);
@@ -1070,9 +1071,9 @@ function gmOrbits(sys) {
     const delay = -((i * 137) % 360) / 360 * dur;  // негативная задержка = стартовая фаза
     const belt = p.kind === 'belt', anom = p.kind === 'anomaly';
     const sz = belt ? 5 : anom ? 7 : 9;            // размер точки
-    const kc = belt ? ' gm-dot-belt' : anom ? ' gm-dot-anom' : '';
+    const kc = belt ? ' gm-dot-belt' : anom ? ' gm-dot-anom' : p.dead ? ' gm-dot-dead' : '';
     return `<div class="gm-orbit" style="--r:${r}px;--dur:${dur}s;animation-delay:${delay.toFixed(2)}s">
-        <span class="gm-planet${kc}" style="--zc:${gmZoneColor(p.zone)};--sz:${sz}px"></span>
+        <span class="gm-planet${kc}" style="--zc:${p.dead ? '#6b6b72' : gmZoneColor(p.zone)};--sz:${sz}px"></span>
       </div>`;
   }).join('');
   return `<div class="gm-sys" aria-hidden="true">${rings}</div>`;
@@ -1226,7 +1227,8 @@ function gmOpenPanel(sys) {
     const f = gmFaction(o.faction_id); const c = f ? gmReadable(f.color) : 'rgba(150,200,245,.9)';
     const nm = (f && f.name) || o.faction_name || (GM.facMeta && GM.facMeta[o.faction_id] && GM.facMeta[o.faction_id].name) || 'Неизвестно';
     const rm = o.mine ? `<button class="btn btn-gh btn-sm" style="padding:1px 7px;font-size:11px" onclick="gmOutpostDismantleMap('${o.id}','${sys.id}')" title="Разобрать (возврат ~50%)">разобрать</button>` : `<span class="gm-col-ty">${esc(nm)}</span>`;
-    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:${c}"></span><span class="gm-col-nm">🛰 Аванпост${o.mine ? ' · ваш' : ''}${o.name ? ': ' + esc(o.name) : ''}</span>${rm}</div>`);
+    const md = o.mode === 'mining' ? ' ⛏' : (o.mode === 'recon' ? ' 🛰' : '');
+    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:${c}"></span><span class="gm-col-nm">🛰 Аванпост${md}${o.mine ? ' · ваш' : ''}${o.name ? ': ' + esc(o.name) : ''}</span>${rm}</div>`);
   });
   // мои корабли-носители, стоящие (idle) в этой системе
   (GM.opShips || []).filter(sh => sh.status === 'idle' && sh.system_id === sys.id).forEach(sh => {
@@ -1319,8 +1321,12 @@ function gmOpenOutpostCmd(id) {
       <div class="gm-opcmd-title">🚀 Носитель аванпоста${sh.name ? ' «' + esc(sh.name) + '»' : ''}</div>
       <div class="gm-opcmd-sub">в системе ${esc(sysName)}</div>
       <button class="gm-opcmd-btn" onclick="gmOutpostCmdSend()">➤ Отправить — выберите систему</button>
-      <button class="gm-opcmd-btn${sh.can_deploy ? '' : ' gm-dis'}" ${sh.can_deploy ? '' : 'disabled'} onclick="gmOutpostCmdDeploy()">⚑ Развернуть в аванпост</button>
-      ${sh.can_deploy ? '' : '<div class="gm-opcmd-hint">Развернуть нельзя: нужна нейтральная система, не впритык к чужой границе</div>'}
+      ${sh.can_deploy
+        ? `<button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('recon')">🛰 Развернуть: разведка</button>
+           <button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('mining')">⛏ Развернуть: добыча</button>
+           <div class="gm-opcmd-hint">Разведка — срез по соседним державам. Добыча — ресурсы вне границ + стоянка флота.</div>`
+        : `<button class="gm-opcmd-btn gm-dis" disabled>⚑ Развернуть в аванпост</button>
+           <div class="gm-opcmd-hint">Развернуть нельзя: нужна нейтральная система, не впритык к чужой границе</div>`}
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmOutpostCmdScrap()">✕ Списать носитель</button>
     </div>`;
   el.classList.remove('gm-hidden');
@@ -1353,12 +1359,13 @@ async function gmOutpostSendTo(id, destSys) {
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); gmCloseOutpostCmd(); }
   finally { GM._defBusy = false; }
 }
-async function gmOutpostCmdDeploy() {
+async function gmOutpostCmdDeploy(mode) {
   if (!GMM.opCmd) return; const id = GMM.opCmd.id;
+  const md = mode === 'mining' ? 'mining' : 'recon';
   if (GM._defBusy) return; GM._defBusy = true;
   try {
-    await gmDefRpc('outpost_ship_deploy', { p_id: id });
-    toast('Аванпост развёрнут', 'ok');
+    await gmDefRpc('outpost_ship_deploy', { p_id: id, p_mode: md });
+    toast(md === 'mining' ? '⛏ Добывающий аванпост развёрнут' : '🛰 Разведаванпост развёрнут', 'ok');
     gmCloseOutpostCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
@@ -1586,13 +1593,23 @@ function gmZoneColor(z) {
 function gmPlanetView(p, i) {
   const idx = String((i || 0) + 1).padStart(2, '0');
   if (p && p.kind) { // богатый формат (из генератора)
-    const zc = gmZoneColor(p.zone);
-    const kindCls = p.kind === 'belt' ? ' gm-dot-belt' : p.kind === 'anomaly' ? ' gm-dot-anom' : '';
+    const dead = !!(p.dead || p.doomed);
+    const zc = dead ? '#6b6b72' : gmZoneColor(p.zone);
+    const kindCls = p.kind === 'belt' ? ' gm-dot-belt' : p.kind === 'anomaly' ? ' gm-dot-anom' : dead ? ' gm-dot-dead' : '';
     const sat = [];
     if (p.rings) sat.push(`кольца ×${p.rings}`);
     if (p.moons) sat.push(`спутники ×${p.moons}`);
     const satStr = sat.length ? ` · ${sat.join(' · ')}` : '';
     const dist = (p.dist != null) ? `<span class="gm-orb-dist">${p.dist} а.е.</span>` : '';
+    // мёртвый мир: ресурсов/слотов нет, тип — «Мёртвая планета», помечаем ☠
+    if (dead) return `<div class="gm-orb gm-orb-dead">
+      <div class="gm-orb-idx">${idx}</div>
+      <div class="gm-orb-dot gm-dot-dead" style="--zc:${zc}"></div>
+      <div class="gm-orb-main">
+        <div class="gm-orb-top"><span class="gm-orb-name">☠ ${esc(p.name)}</span>${dist}</div>
+        <div class="gm-orb-meta"><span class="gm-orb-sub" style="color:#9aa0aa">Мёртвая планета · выжжена дотла</span></div>
+      </div>
+    </div>`;
     return `<div class="gm-orb">
       <div class="gm-orb-idx">${idx}</div>
       <div class="gm-orb-dot${kindCls}" style="--zc:${zc}"></div>
@@ -2511,7 +2528,7 @@ function gmmPaintOrbits(ctx) {
     const labels = [];   // подписи планет/поясов — собираем здесь, рисуем после тел
     const colPos = [];   // экранные позиции колоний — для внутрисистемного трафика
     for (let i = 0; i < n; i++) {
-      const p = planets[i], r = radii[i], zc = gmZoneColor(p.zone);
+      const p = planets[i], r = radii[i], zc = p.dead ? '#6b6b72' : gmZoneColor(p.zone);  // мёртвый мир — холодный камень
       // орбита — наклонный эллипс, тонированный под зону, с лёгким двойным свечением
       ctx.beginPath(); ctx.ellipse(cx, cy, r, r * TILT, 0, 0, 6.2832);
       ctx.globalAlpha = a * (isFocus ? 0.12 : 0.07);
@@ -2549,19 +2566,21 @@ function gmmPaintOrbits(ctx) {
       const gg = ctx.createRadialGradient(px, py, 0, px, py, sz * 2.6);
       gg.addColorStop(0, zc); gg.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(px, py, sz * 2.6, 0, 6.2832); ctx.fill();
-      // тело с боковым светом (объём шара без псевдо-3D на самой карте)
+      // тело с боковым светом (объём шара без псевдо-3D на самой карте).
+      // Мёртвый мир: тусклый камень без яркого блика — выжжен дотла.
       ctx.globalAlpha = a;
       const g = ctx.createRadialGradient(px - sz * 0.38, py - sz * 0.38, 0, px, py, sz);
-      g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, zc); g.addColorStop(1, 'rgba(0,0,0,.62)');
+      if (p.dead) { g.addColorStop(0, '#9a9aa2'); g.addColorStop(0.5, zc); g.addColorStop(1, 'rgba(0,0,0,.75)'); }
+      else { g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, zc); g.addColorStop(1, 'rgba(0,0,0,.62)'); }
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
 
-      // ── «признаки жизни» колонизированного мира (базовый слой) ──
-      if (p.isColony && !isAnom) { gmmBodyLife(ctx, px, py, sz, p, a, t); colPos.push({ px, py }); }
+      // ── «признаки жизни» колонизированного мира (базовый слой) — на мёртвом мире нет ──
+      if (p.isColony && !isAnom && !p.dead) { gmmBodyLife(ctx, px, py, sz, p, a, t); colPos.push({ px, py }); }
 
       // ── минные ГЕКСЫ вокруг планеты (своя колония — кликабельны; чужое поле — показ) ──
-      if (p.isColony && !isAnom && p.pid != null) gmmPlanetMineHexes(ctx, px, py, sz, TILT, a, p, sys);
+      if (p.isColony && !isAnom && !p.dead && p.pid != null) gmmPlanetMineHexes(ctx, px, py, sz, TILT, a, p, sys);
 
-      if (isFocus && p.name) labels.push({ name: p.name, ang, r, sz });
+      if (isFocus && p.name) labels.push({ name: p.name, ang, r, sz, dead: p.dead });
     }
     // внутрисистемный трафик: еле заметные конвои между колониями системы
     if (colPos.length > 1) gmmSysTraffic(ctx, colPos, a, t);
@@ -2572,9 +2591,10 @@ function gmmPaintOrbits(ctx) {
       ctx.font = '600 12px Rajdhani, sans-serif'; ctx.shadowColor = '#000';
       const boxes = [];
       for (const L of labels) {
+        const nm = L.dead ? '☠ ' + L.name : L.name;   // мёртвый мир помечаем в подписи
         const dirx = Math.cos(L.ang), diry = Math.sin(L.ang), right = dirx >= 0;
         ctx.textAlign = right ? 'left' : 'right';
-        const w = ctx.measureText(L.name).width;
+        const w = ctx.measureText(nm).width;
         let off = L.sz + 6, lx = 0, ly = 0, box = null;
         for (let tries = 0; tries < 7; tries++) {
           const ax = cx + dirx * (L.r + off), ay = cy + diry * (L.r + off) * TILT;
@@ -2585,8 +2605,8 @@ function gmmPaintOrbits(ctx) {
         }
         boxes.push(box);
         ctx.shadowBlur = 4;
-        ctx.fillStyle = L.dim ? 'rgba(210,222,245,.85)' : 'rgba(223,234,255,.95)';
-        ctx.fillText(L.name, lx, ly);
+        ctx.fillStyle = L.dead ? 'rgba(170,170,178,.9)' : L.dim ? 'rgba(210,222,245,.85)' : 'rgba(223,234,255,.95)';
+        ctx.fillText(nm, lx, ly);
       }
       ctx.shadowBlur = 0;
     }

@@ -1110,7 +1110,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips, spyPortraits] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips, defOutIntel, spyPortraits] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1156,7 +1156,8 @@ async function ecLoad() {
     ecRpc('doom_status').catch(() => null),       // межзвёздная артиллерия: орудия + залпы в полёте
     ecRpc('minefields_visible').catch(() => []),  // оборона: минные поля (свои + разведанные чужие)
     ecRpc('outposts_visible').catch(() => []),    // оборона: развёрнутые аванпосты (свои + разведанные чужие)
-    ecRpc('outpost_ships_mine').catch(() => []),  // оборона: мои корабли-носители аванпостов (idle/в полёте)
+    ecRpc('outpost_ships_mine').catch(() => []),  // оборона: мои корабли-носители аванпостов (building/idle/в полёте)
+    ecRpc('outpost_intel').catch(() => []),       // оборона: разведданные от РАЗВЕД-аванпостов (срез по соседним державам)
     dbGet('spy_portraits', `select=id,race,gender,url`).catch(() => []),  // агентура: общий пул портретов (админ-загрузка), подбор на клиенте по расе/полу
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
@@ -1168,6 +1169,7 @@ async function ecLoad() {
   EC.minefields = Array.isArray(defMines) ? defMines : [];      // оборона: видимые минные поля (гексы)
   EC.outposts = Array.isArray(defOutposts) ? defOutposts : [];  // оборона: развёрнутые аванпосты
   EC.opShips = Array.isArray(defOpShips) ? defOpShips : [];     // оборона: мои корабли-носители
+  EC.outpostIntel = Array.isArray(defOutIntel) ? defOutIntel : [];  // оборона: разведданные разведаванпостов (срез по соседям)
   EC.spyPortraits = Array.isArray(spyPortraits) ? spyPortraits : [];  // агентура: общий пул портретов (подбор на клиенте)
   EC.doomByBuilding = {};
   (EC.doom.guns || []).forEach(g => { if (g && g.building_id) EC.doomByBuilding[g.building_id] = g; });
@@ -1550,10 +1552,11 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['trade', '⇄', 'Торговля'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['trade', '⇄', 'Торговля'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
     : EC.tab === 'milbuild' ? ecTabMilBuild()
+    : EC.tab === 'outposts' ? ecTabOutposts()
     : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
     : EC.tab === 'welfare' ? ecTabWelfare()
     : EC.tab === 'trade' ? ecTabTrade()
@@ -3392,7 +3395,6 @@ function ecTabMilBuild() {
     <div class="ec-section-title">Флот <span class="ec-hint">— корабли строятся на Верфи поштучно</span></div>
     ${shipForm}
     ${ecRepairPanelHtml(caps)}
-    ${ecOutpostPanelHtml()}
     <div class="ec-section-title">В очереди <span class="ec-hint">— доставка в конце хода (сутки)</span></div>
     <div class="ec-queue">${queueHtml}</div>`;
 }
@@ -3424,17 +3426,37 @@ function ecRepairPanelHtml(caps) {
     ${!caps.hasShipyard && dmg.length ? '<div class="ec-empty" style="padding:8px">Постройте Корабельную Верфь, чтобы чинить.</div>' : ''}`;
 }
 
-// Аванпосты (зеркало _defense_outpost.sql). Постройка/отправка/развёртывание
-// носителей и разбор аванпостов делаются ПРЯМО НА ГАЛАКТИЧЕСКОЙ КАРТЕ (клик по
-// носителю/системе). В кабинете — только сводка статуса (read-only).
-const EC_OUTPOST_CAP = 20, EC_OUTPOST_SHIP_COST = 1500;   // вместимость + цена носителя (зеркало _defense_const)
+// Аванпосты (зеркало _defense_outpost.sql) — отдельная вкладка кабинета.
+// Постройка носителя — здесь; отправка/развёртывание — на ГАЛАКТИЧЕСКОЙ КАРТЕ
+// (клик по носителю); смена режима развёрнутого аванпоста — здесь (ecOutpostSetMode).
+const EC_OUTPOST_CAP = 20, EC_OUTPOST_SHIP_COST = 2000, EC_OUTPOST_BUILD_H = 24;   // вместимость + цена носителя + время постройки (зеркало _defense_const)
 function ecSysName(id) { const s = (EC.allSystems || []).find(x => x.id === id); return (s && s.name) || id; }
+// Вкладка «Аванпосты»: вводный блок + панель управления.
+function ecTabOutposts() {
+  return `${ecIntro('🛰', 'Аванпосты', 'Форпосты в нейтральном космосе вне ваших границ. Сначала на <b>Верфи</b> строится корабль-носитель (сутки), затем на карте вы отправляете его в нейтральную систему и разворачиваете, выбирая режим.', [
+    '<b>🛰 Разведка</b> — раскрывает оборону системы и даёт размытый срез по соседним по гиперпутям державам (внизу — «Разведсводка»).',
+    '<b>⛏ Добыча</b> — работает как вынесенный добывающий завод: каждые сутки тянет ресурсы с планет своей системы + ГС, и служит стоянкой флота (+' + EC_OUTPOST_CAP + ' мест).',
+    'Режим можно <b>переключать</b> у уже развёрнутого аванпоста — кнопкой в списке ниже.',
+    'Нельзя входить в чужие границы; разворачивать — не впритык к чужой границе.'])}
+    ${ecOutpostPanelHtml()}`;
+}
+// Подпись режима развёрнутого аванпоста.
+function ecOutpostModeLabel(mode) {
+  return mode === 'mining'
+    ? `⛏ добыча <span class="ec-hint">+${EC_OUTPOST_CAP} мест флота</span>`
+    : `🛰 разведка <span class="ec-hint">— срез по соседним державам</span>`;
+}
 function ecOutpostPanelHtml() {
   const mine = (EC.outposts || []).filter(o => o.mine);
   const ships = EC.opShips || [];
   const transit = ships.filter(s => s.status === 'transit').length;
+  const building = ships.filter(s => s.status === 'building').length;
   const idle = ships.filter(s => s.status === 'idle').length;
   const shipRows = ships.map(sh => {
+    if (sh.status === 'building') {
+      return `<div class="ec-q-row"><span class="ec-r-name">🏗 Носитель${sh.name ? ' «' + esc(sh.name) + '»' : ''} <span class="ec-hint">строится в ${esc(ecSysName(sh.system_id))}</span></span>
+        ${ecProgressISO(sh.depart_at, sh.arrive_at, 1, 'готов')}</div>`;
+    }
     if (sh.status === 'transit') {
       return `<div class="ec-q-row"><span class="ec-r-name">🚀 Носитель${sh.name ? ' «' + esc(sh.name) + '»' : ''} <span class="ec-hint">→ ${esc(ecSysName(sh.dest_sys))}</span></span>
         ${ecProgressISO(sh.depart_at, sh.arrive_at, 1, 'прибывает')}</div>`;
@@ -3442,7 +3464,20 @@ function ecOutpostPanelHtml() {
     return `<div class="ec-q-row"><span class="ec-r-name">🚀 Носитель${sh.name ? ' «' + esc(sh.name) + '»' : ''} <span class="ec-hint">в системе ${esc(ecSysName(sh.system_id))}</span></span>
       <span class="ec-hint">${sh.can_deploy ? 'можно развернуть' : 'на стоянке'}</span></div>`;
   }).join('');
-  const opRows = mine.map(o => `<div class="ec-q-row"><span class="ec-r-name">🛰 ${esc(ecSysName(o.system_id))}${o.name ? ' · ' + esc(o.name) : ''}</span><span class="ec-hint">+${EC_OUTPOST_CAP} мест флота</span></div>`).join('');
+  const opRows = mine.map(o => {
+    const toMining = o.mode !== 'mining';
+    const swBtn = `<button class="btn btn-gh btn-sm" style="padding:1px 8px;font-size:11px" title="Переключить режим аванпоста" onclick="ecOutpostSetMode('${o.id}','${toMining ? 'mining' : 'recon'}')">${toMining ? '→ ⛏ добыча' : '→ 🛰 разведка'}</button>`;
+    return `<div class="ec-q-row"><span class="ec-r-name">🛰 ${esc(ecSysName(o.system_id))}${o.name ? ' · ' + esc(o.name) : ''} <span class="ec-hint">${ecOutpostModeLabel(o.mode)}</span></span>${swBtn}</div>`;
+  }).join('');
+  // Разведданные разведаванпостов: размытый срез по соседним по гиперпутям державам.
+  const intel = EC.outpostIntel || [];
+  const intelRows = intel.map(r => {
+    const fl = r.fleet || {}, fo = r.forces || {};
+    const det = r.income
+      ? `доход: ${esc(r.income)} · флот: ${esc(fl.ships || '?')} кор., ${esc(fl.ground || '?')} назем. · армия: ${esc(fo.army || '—')}`
+      : 'данные собираются…';
+    return `<div class="ec-q-row"><span class="ec-r-name">🛰 ${esc(r.target_name || r.target_fid)}</span><span class="ec-hint">${det}</span></div>`;
+  }).join('');
   // Носитель аванпоста — обычный корабль: строится на Корабельной Верфи. Доступные
   // системы постройки — те, где стоит своя Верфь (как и весь остальной флот).
   const verfColonyIds = new Set((EC.buildings || []).filter(b => b.btype === 'shipyard').map(b => b.colony_id));
@@ -3455,11 +3490,12 @@ function ecOutpostPanelHtml() {
         <input type="text" id="ec-op-name" class="ec-prod-qty" style="width:150px" maxlength="40" placeholder="имя (необязательно)">
         <button class="btn btn-gd btn-sm" ${afford ? '' : 'disabled'} title="${afford ? '' : 'Не хватает ГС'}" onclick="ecOutpostBuildShip()">＋ Заложить носитель · ${ecNum(EC_OUTPOST_SHIP_COST)} ГС</button>
       </div>
-      <div class="ec-cap">Готовый носитель появится на <b>галактической карте</b> в выбранной системе — оттуда отправляйте его по гиперпутям и разворачивайте в аванпост (нельзя входить в чужие границы; разворачивать — не впритык к чужой границе).</div>`;
-  return `<div class="ec-section-title">Аванпосты <span class="ec-hint">— носитель строится на Верфи, управление на карте</span></div>
+      <div class="ec-cap">Постройка носителя занимает <b>сутки</b>. Готовый носитель появится на <b>галактической карте</b> в выбранной системе — оттуда отправляйте его по гиперпутям и при развёртывании выбирайте режим: <b>🛰 разведка</b> (срез по соседним державам) или <b>⛏ добыча</b> (ресурсы вне границ + стоянка флота). Нельзя входить в чужие границы; разворачивать — не впритык к чужой границе.</div>`;
+  return `<div class="ec-section-title">Постройка носителя <span class="ec-hint">— строится сутки на Верфи; отправка и развёртывание — на карте</span></div>
     ${buildForm}
-    ${ships.length ? `<div class="ec-sub-title" style="margin-top:8px">Носители · ${idle} на стоянке, ${transit} в пути</div>${shipRows}` : ''}
-    ${mine.length ? `<div class="ec-sub-title" style="margin-top:8px">Развёрнутые аванпосты · ${mine.length}</div>${opRows}` : ''}`;
+    ${ships.length ? `<div class="ec-sub-title" style="margin-top:8px">Носители · ${building} строятся, ${idle} на стоянке, ${transit} в пути</div>${shipRows}` : ''}
+    ${mine.length ? `<div class="ec-sub-title" style="margin-top:8px">Развёрнутые аванпосты · ${mine.length}</div>${opRows}` : ''}
+    ${intelRows ? `<div class="ec-sub-title" style="margin-top:8px">🛰 Разведсводка аванпостов · ${intel.length}</div>${intelRows}` : ''}`;
 }
 
 // Заложить носитель аванпоста на Верфи (в системе своей колонии с Верфью).
@@ -3472,7 +3508,20 @@ async function ecOutpostBuildShip() {
   EC.busy = true;
   try {
     await ecRpc('outpost_ship_build', { p_system_id: sel.value, p_name: nm || null });
-    toast('Носитель аванпоста заложен на Верфи · −' + ecNum(EC_OUTPOST_SHIP_COST) + ' ГС', 'ok');
+    toast('Носитель аванпоста заложен · −' + ecNum(EC_OUTPOST_SHIP_COST) + ' ГС · строится сутки', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+
+// Переключить режим уже развёрнутого аванпоста (разведка ↔ добыча).
+async function ecOutpostSetMode(id, mode) {
+  if (EC.busy) return;
+  const md = mode === 'mining' ? 'mining' : 'recon';
+  EC.busy = true;
+  try {
+    await ecRpc('outpost_set_mode', { p_id: id, p_mode: md });
+    toast(md === 'mining' ? '⛏ Аванпост переведён в добычу' : '🛰 Аванпост переведён в разведку', 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
@@ -6221,15 +6270,19 @@ function ecSpyAlertRow(a) {
   const badgeIc = a.detected ? '⚠' : '❓';
   const caught = (a.detected && r.caught) ? ' · <span style="color:var(--ok)">агент пойман</span>' : '';
   const status = ok ? 'удалось' : 'сорвано';
-  // мини-игра расследования: незаметную враждебную операцию можно вскрыть по уликам
-  const hostile = ['steal_gc', 'steal_res', 'sabotage', 'mass_demolish', 'destabilize', 'steal_tech', 'kill_agent'].includes(a.op);
+  // мини-игра расследования: незаметную враждебную операцию можно вскрыть через
+  // следственное дело (дедукция + методы). has_case приходит с сервера.
   let investHtml = '';
-  if (!a.detected && hostile && ok) {
-    const ev = Math.max(0, Math.min(100, a.evidence || 0));
+  if (a.has_case) {
+    const conf = Math.max(0, Math.min(100, a.case_confidence || 0));
+    const started = conf > 0 || (a.case_verdict != null);
     investHtml = `<div class="ec-spy-invest">
-      <div class="ec-spy-invest-bar"><div class="ec-spy-invest-track"><div style="width:${ev}%"></div></div><span class="ec-hint">улики ${ev}%</span>
-        <button class="btn btn-gh btn-xs" onclick="ecSpyInvestigate('${esc(a.id)}')">🔎 Расследовать · 150 ГС</button></div>
-      ${a.hint ? `<div class="ec-hint" style="color:var(--te)">🧩 ${esc(a.hint)}</div>` : ''}</div>`;
+      <div class="ec-spy-invest-bar"><div class="ec-spy-invest-track"><div style="width:${conf}%"></div></div><span class="ec-hint">ясность ${conf}%</span>
+        <button class="btn btn-gh btn-xs" onclick="ecSpyCaseOpen('${esc(a.id)}')">🗂 ${started ? 'Продолжить дело' : 'Открыть дело'}</button></div></div>`;
+  } else if (!a.detected && a.case_verdict === 'wrong') {
+    investHtml = `<div class="ec-spy-invest"><div class="ec-hint" style="color:var(--err)">⚖ ложное обвинение — дело сгорело, шпион ушёл</div></div>`;
+  } else if (!a.detected && a.case_verdict === 'cold') {
+    investHtml = `<div class="ec-spy-invest"><div class="ec-hint" style="color:var(--t4)">❄ след остыл — дело закрыто нераскрытым</div></div>`;
   }
   return `<div class="ec-spy-row ${badge}">
     <span class="ec-spy-row-badge ${badge}">${badgeIc}</span>
@@ -6241,16 +6294,186 @@ function ecSpyAlertRow(a) {
     </div>
   </div>`;
 }
-async function ecSpyInvestigate(id) {
+// ════════════════════════════════════════════════════════════
+//  СЛЕДСТВЕННОЕ ДЕЛО — дедукция + методы (мини-игра контрразведки)
+// ════════════════════════════════════════════════════════════
+function _ecCaseHost() {
+  let h = document.getElementById('ec-case-host');
+  if (!h) { h = document.createElement('div'); h.id = 'ec-case-host'; document.body.appendChild(h); }
+  return h;
+}
+function ecSpyCaseClose() { const h = document.getElementById('ec-case-host'); if (h) h.innerHTML = ''; EC.caseData = null; }
+
+// Метаданные следственных измерений (порядок столбцов = порядок дедукции).
+const EC_CASE_DIMS = [
+  ['gov', '🏛', 'Режим'],
+  ['race', '👽', 'Раса'],
+  ['motive', '🎯', 'Мотив'],
+];
+// Описание методов: иконка, название, к какому измерению ведёт, базовая цена.
+const EC_CASE_METHODS = {
+  forensics: { ic: '🔬', name: 'Криминалистика', dim: 'gov', cost: 80, hint: 'Анализ улик на месте — вскрывает режим виновного.' },
+  surveil: { ic: '👁', name: 'Слежка', dim: 'race', cost: 60, hint: 'Занимает свободного агента — устанавливает расу исполнителя.' },
+  wiretap: { ic: '📡', name: 'Перехват связи', dim: 'motive', cost: 120, hint: 'Нужна сильная КР области — вскрывает мотив (отношения к вам).' },
+  interro: { ic: '🗣', name: 'Допрос пойманного', dim: null, cost: 0, hint: 'Доступен, только если агент пойман: сдаёт приметы хозяина (режим+раса чисто).' },
+};
+
+async function ecSpyCaseOpen(id) {
   if (EC.busy) return; EC.busy = true;
   try {
-    const r = await ecRpc('spy_investigate', { p_mission_id: id });
-    if (r && r.revealed) toast('🕵 Шпион вычислен: ' + (r.actor_name || 'фракция раскрыта'), 'ok');
-    else if (r && (r.gain || 0) > 0) toast('Расследование продвинулось (+' + r.gain + '% улик)', 'ok');
-    else toast('След остыл — улик не добавилось. Усильте контрразведку.', 'err');
-    await ecReloadPaint();
-  } catch (e) { toast(ecErr(e.message), 'err'); await ecReloadPaint(); }
+    const c = await ecRpc('spy_case_open', { p_mission_id: id });
+    EC.caseData = c; ecSpyCaseRender(c);
+  } catch (e) { toast(ecErr(e.message), 'err'); }
   finally { EC.busy = false; }
+}
+
+async function ecSpyCaseMethod(method) {
+  const c = EC.caseData; if (!c || EC.busy) return; EC.busy = true;
+  try {
+    const v = await ecRpc('spy_case_method', { p_mission_id: c.mission_id, p_method: method });
+    EC.caseData = v; ecSpyCaseRender(v);
+    const m = EC_CASE_METHODS[method];
+    const dim = method === 'interro' ? null : m.dim;
+    const noisy = dim && (v.clues || []).find(cl => cl.dim === dim && cl.noisy);
+    if (method === 'interro') toast('🗣 Пойманный агент сдал приметы хозяина', 'ok');
+    else if (noisy) toast('Улика смазана — перепроверьте метод (дороже) или усильте КР', 'err');
+    else toast('Новая улика по делу получена', 'ok');
+  } catch (e) { toast(ecErr(e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+
+function ecSpyCaseAccuse(fid) {
+  const c = EC.caseData; if (!c) return;
+  const nm = (c.suspects.find(s => s.fid === fid) || {}).name || ecFacName(fid);
+  // подтверждение: ложное обвинение сжигает дело и роняет отношения
+  _ecCaseHost().querySelector('.ec-case-confirm')?.remove();
+  const modal = _ecCaseHost().querySelector('.ec-bp-modal'); if (!modal) return;
+  const box = document.createElement('div');
+  box.className = 'ec-case-confirm';
+  box.innerHTML = `<div class="ec-case-confirm-in">
+      <div class="ec-case-confirm-t">⚖ Обвинить «${esc(nm)}»?</div>
+      <div class="ec-case-confirm-d">Верное обвинение раскроет шпиона. <b style="color:var(--err)">Ошибка сожжёт дело</b> — реальный шпион уйдёт, а отношения с невиновной державой упадут.</div>
+      <div class="ec-case-confirm-act">
+        <button class="btn btn-gh btn-sm" onclick="this.closest('.ec-case-confirm').remove()">Отмена</button>
+        <button class="btn btn-rd btn-sm" onclick="ecSpyCaseAccuseDo('${esc(fid)}')">⚖ Обвинить</button>
+      </div></div>`;
+  modal.appendChild(box);
+}
+
+async function ecSpyCaseAccuseDo(fid) {
+  const c = EC.caseData; if (!c || EC.busy) return; EC.busy = true;
+  try {
+    const r = await ecRpc('spy_case_accuse', { p_mission_id: c.mission_id, p_suspect_fid: fid });
+    if (r && r.correct) {
+      toast('🕵 Шпион вычислен: ' + (r.actor_name || 'фракция раскрыта'), 'ok');
+      ecSpyCaseClose(); await ecReloadPaint();
+    } else {
+      toast('⚖ Ошибка следствия: «' + (r.accused_name || '') + '» невиновна. Дело сгорело.', 'err');
+      ecSpyCaseClose(); await ecReloadPaint();
+    }
+  } catch (e) { toast(ecErr(e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+
+// Отметка подозреваемого по измерению: ✓ совпало / ✗ нет / ? смазано / · не вскрыто.
+function _ecCaseMark(v) {
+  if (v === 'yes') return '<span class="ec-case-m yes">✓</span>';
+  if (v === 'no') return '<span class="ec-case-m no">✗</span>';
+  if (v === '?') return '<span class="ec-case-m unk">?</span>';
+  return '<span class="ec-case-m none">·</span>';
+}
+
+function ecSpyCaseRender(c) {
+  const op = EC_SPY_OPS[c.op] || { icon: '🗂', label: c.op };
+  const trail = Math.max(0, Math.min(100, c.trail || 0));
+  const trailColor = trail > 60 ? '#5fd27f' : trail > 30 ? '#e6c45f' : '#ff6a6a';
+  const conf = Math.max(0, Math.min(100, c.confidence || 0));
+  const closed = !!c.verdict;
+  const revealedDims = (c.clues || []).reduce((m, cl) => (m[cl.dim] = cl, m), {});
+
+  // баннер исхода закрытого дела
+  let banner = '';
+  if (c.verdict === 'solved') banner = `<div class="ec-case-banner ok">✅ Дело раскрыто — шпион вычислен.</div>`;
+  else if (c.verdict === 'wrong') banner = `<div class="ec-case-banner bad">⚖ Ложное обвинение — дело сгорело, шпион ушёл.</div>`;
+  else if (c.verdict === 'cold') banner = `<div class="ec-case-banner cold">❄ След остыл — дело закрыто нераскрытым.</div>`;
+
+  // открытые улики (профиль виновного)
+  const cluesHtml = (c.clues && c.clues.length)
+    ? c.clues.map(cl => {
+      const d = EC_CASE_DIMS.find(x => x[0] === cl.dim) || ['', '•', cl.dim];
+      return `<span class="ec-case-clue${cl.noisy ? ' noisy' : ''}">${d[1]} ${esc(d[2])}: <b>${cl.noisy ? '<i>смазано</i>' : esc(cl.value)}</b></span>`;
+    }).join('')
+    : `<span class="ec-hint">улик ещё нет — примените следственный метод</span>`;
+
+  // методы
+  const methodsHtml = Object.keys(EC_CASE_METHODS).map(k => {
+    const m = EC_CASE_METHODS[k];
+    const uses = (c.methods || {})[k] || 0;
+    let cost = m.cost;
+    if (k !== 'interro' && m.dim && revealedDims[m.dim]) cost = Math.ceil(cost * 1.5); // перепроверка
+    let locked = false, why = '';
+    if (closed) { locked = true; }
+    else if (k === 'surveil' && (c.idle_agents || 0) < 1) { locked = true; why = 'нет свободного агента'; }
+    else if (k === 'wiretap' && (c.ci || 0) < 3) { locked = true; why = `нужна КР области ≥3 (есть ${c.ci || 0})`; }
+    else if (k === 'interro' && !c.caught) { locked = true; why = 'агент не пойман'; }
+    else if (k === 'interro' && uses >= 1) { locked = true; why = 'уже допрошен'; }
+    const recheck = (k !== 'interro' && m.dim && revealedDims[m.dim]);
+    const label = k === 'interro' ? 'допросить' : recheck ? 'перепроверить' : 'применить';
+    const costTxt = cost > 0 ? `${ecNum(cost)} ГС` : 'бесплатно';
+    return `<button class="ec-case-method${locked ? ' locked' : ''}${uses ? ' used' : ''}" ${locked ? 'disabled' : ''}
+        title="${esc(m.hint)}${why ? ' · ' + why : ''}" onclick="ecSpyCaseMethod('${k}')">
+      <span class="ec-case-method-ic">${m.ic}</span>
+      <span class="ec-case-method-body">
+        <span class="ec-case-method-name">${esc(m.name)}${uses ? ` <small>×${uses}</small>` : ''}</span>
+        <span class="ec-case-method-sub">${locked && why ? esc(why) : `${label} · ${costTxt}`}</span>
+      </span>
+    </button>`;
+  }).join('');
+
+  // таблица подозреваемых
+  const headCols = EC_CASE_DIMS.map(d => `<span class="ec-case-col" title="${esc(d[2])}">${d[1]}</span>`).join('');
+  const rows = (c.suspects || []).map(s => {
+    const marks = EC_CASE_DIMS.map(d => `<span class="ec-case-cell">${_ecCaseMark((s.marks || {})[d[0]])}</span>`).join('');
+    const accuseBtn = closed
+      ? (c.accused === s.fid ? `<span class="ec-case-accused">${c.verdict === 'solved' ? '✅ виновен' : '⚖ обвинён'}</span>` : '')
+      : `<button class="btn btn-rd btn-xs" onclick="ecSpyCaseAccuse('${esc(s.fid)}')">⚖ Обвинить</button>`;
+    return `<div class="ec-case-row${s.consistent ? ' consistent' : ' ruled-out'}">
+      <span class="ec-case-sus">${ecFacFlag(s.fid, 22)}<b>${esc(s.name)}</b></span>
+      <span class="ec-case-marks">${marks}</span>
+      <span class="ec-case-act">${accuseBtn}</span>
+    </div>`;
+  }).join('');
+
+  _ecCaseHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecSpyCaseClose()">
+    <div class="ec-bp-modal ec-case-modal" role="dialog" aria-modal="true">
+      <div class="ec-bp-hd">
+        <div class="ec-bp-hd-t"><span class="ec-bp-hd-ic">🗂</span><span>Следственное дело · ${esc(op.label)}</span></div>
+        <button class="ec-bp-x" title="Закрыть" onclick="ecSpyCaseClose()">✕</button>
+      </div>
+      ${banner}
+      <div class="ec-case-meters">
+        <div class="ec-case-meter">
+          <div class="ec-case-meter-lbl"><span>❄ Свежесть следа</span><b style="color:${trailColor}">${trail}%</b></div>
+          <div class="ec-case-meter-bar"><div style="width:${trail}%;background:${trailColor}"></div></div>
+          <div class="ec-hint">След остывает со временем — успейте довести дело до обвинения.</div>
+        </div>
+        <div class="ec-case-meter">
+          <div class="ec-case-meter-lbl"><span>🎯 Ясность картины</span><b>${conf}%</b></div>
+          <div class="ec-case-meter-bar"><div style="width:${conf}%;background:#6aa0e6"></div></div>
+          <div class="ec-hint">Чем меньше держав сходится с уликами — тем выше ясность.</div>
+        </div>
+      </div>
+      <div class="ec-case-clues">${cluesHtml}</div>
+      <div class="ec-case-sec-t">Следственные методы</div>
+      <div class="ec-case-methods">${methodsHtml}</div>
+      <div class="ec-case-sec-t">Подозреваемые <span class="ec-hint">(✓ сходится · ✗ нет · ? смазано · · не вскрыто)</span></div>
+      <div class="ec-case-board">
+        <div class="ec-case-head"><span class="ec-case-sus"> </span><span class="ec-case-marks">${headCols}</span><span class="ec-case-act"> </span></div>
+        ${rows}
+      </div>
+      <div class="ec-bp-foot">Сопоставьте улики с подозреваемыми и выдвиньте обвинение. Ошибка сожжёт дело.</div>
+    </div>
+  </div>`;
 }
 // Строка журнала (завершённая операция)
 function ecSpyLogRow(m) {

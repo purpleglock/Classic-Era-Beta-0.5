@@ -143,6 +143,8 @@
 .gm-planet.gm-dot-belt{background:none;border:1.5px dotted var(--zc,#8aa0bd);box-shadow:none}
 .gm-planet.gm-dot-anom{background:radial-gradient(circle, #fff, var(--zc,#b86cff) 60%, transparent);
   box-shadow:0 0 9px var(--zc,#b86cff)}
+/* мёртвый мир — холодный камень без свечения */
+.gm-planet.gm-dot-dead{background:radial-gradient(circle at 35% 35%, #9a9aa2, var(--zc,#6b6b72) 70%, #1a1a1d);box-shadow:none;opacity:.85}
 /* подпись висит абсолютно под иконкой и НЕ влияет на центровку */
 .gm-label{
   position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:3px;
@@ -416,6 +418,8 @@ textarea.gm-fi{resize:vertical}
 .gm-orb-dot{flex-shrink:0;width:16px;height:16px;margin-top:1px;border-radius:50%;
   background:radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--zc) 70%, #fff), var(--zc) 70%);
   border:1px solid var(--zc);box-shadow:0 0 8px color-mix(in srgb, var(--zc) 50%, transparent);z-index:1}
+.gm-orb-dot.gm-dot-dead{background:radial-gradient(circle at 35% 30%, #9a9aa2, var(--zc) 75%);border:1px solid #4a4a50;box-shadow:none;opacity:.85}
+.gm-orb.gm-orb-dead{opacity:.7}
 .gm-orb-dot.gm-dot-belt{background:none;border:2px dashed var(--zc);box-shadow:none}
 .gm-orb-dot.gm-dot-anom{background:var(--err);border-color:var(--err);box-shadow:0 0 10px var(--err)}
 .gm-orb-main{flex:1;min-width:0}
