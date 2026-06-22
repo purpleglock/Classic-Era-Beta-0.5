@@ -1110,7 +1110,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips, defOutIntel, spyPortraits] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips, defOutIntel, spyPortraits, orders] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1159,6 +1159,7 @@ async function ecLoad() {
     ecRpc('outpost_ships_mine').catch(() => []),  // оборона: мои корабли-носители аванпостов (building/idle/в полёте)
     ecRpc('outpost_intel').catch(() => []),       // оборона: разведданные от РАЗВЕД-аванпостов (срез по соседним державам)
     dbGet('spy_portraits', `select=id,race,gender,url`).catch(() => []),  // агентура: общий пул портретов (админ-загрузка), подбор на клиенте по расе/полу
+    ecRpc('orders_status').catch(() => null),     // биржа: заказы (госзаказы/RFQ) — мои заказы + доска чужих
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1249,6 +1250,8 @@ async function ecLoad() {
   EC.margin  = margin  || null;
   EC.futures = futures || null;
   EC.options = options || null;
+  // Заказы (срез 8): госзаказы/RFQ — мои заказы + доска чужих (orders_status RPC). null = SQL не применён.
+  EC.orders = orders || null;
 
   // Ачивки: сервер пересчитывает условия, выдаёт новые и начисляет ГС.
   // Считаем ПОСЛЕ загрузки (gc мог измениться при выдаче — патчим из ответа).
@@ -3353,6 +3356,24 @@ function ecTabForces() {
     ${rosterHtml}`;
 }
 
+// Метр вместимости/мощности: подпись + значение used/cap + бар + примечание.
+// opts: {unit, full, fullNote, freeNote, overOk} — overOk=false красит бар в тревогу при превышении.
+function ecCapMeter(icon, label, used, cap, opts) {
+  opts = opts || {};
+  const over = used > cap, full = opts.full !== undefined ? opts.full : (cap > 0 && used >= cap);
+  const pct = cap > 0 ? Math.min(100, Math.round(used / cap * 100)) : (used > 0 ? 100 : 0);
+  const danger = full || (over && opts.overOk === false);
+  const free = Math.max(0, cap - used);
+  const note = danger
+    ? (opts.fullNote || `Превышено: ${ecNum(used)} из ${ecNum(cap)}`)
+    : (opts.freeNote ? `${opts.freeNote} ${ecNum(free)}${opts.unit ? ' ' + opts.unit : ''}` : `${opts.unit || ''}`.trim());
+  return `<div class="ec-meter${danger ? ' ec-meter--full' : ''}">
+    <div class="ec-meter-hd"><span class="ec-meter-lb">${icon} ${label}</span><span class="ec-meter-val">${ecNum(used)}<i> / ${ecNum(cap)}</i></span></div>
+    <div class="ec-meter-bar"><div class="ec-meter-fill" style="width:${pct}%"></div></div>
+    ${note ? `<div class="ec-meter-note">${note}</div>` : ''}
+  </div>`;
+}
+
 // ── Вкладка 2: «Строительство вооружённых сил» — производство и очередь ──
 function ecTabMilBuild() {
   const caps = ecCaps(), use = ecPendingUse();
@@ -3374,8 +3395,10 @@ function ecTabMilBuild() {
       <button class="btn btn-gd btn-sm" onclick="ecProduceShip()">＋ Заложить</button>
     </div>
     <div id="ec-ship-bill" class="ec-ship-bill">${ecShipBillHtml(ships[0].id, 1)}</div>
-    <div class="ec-cap">Верфь: <b class="${use.ships > caps.ships ? 'ec-warn' : ''}">${use.ships}/${caps.ships} кораблей за ход</b></div>
-    <div class="ec-cap">🛰 Вместимость флота: <b class="${fFull ? 'ec-warn' : ''}">${ecNum(fUsed)}/${ecNum(fCap)}</b> ${fFull ? '— лимит исчерпан, постройте Звёздную Базу' : `(свободно ${ecNum(Math.max(0, fCap - fUsed))})`}</div>`;
+    <div class="ec-meter-row">
+      ${ecCapMeter('🏗', 'Верфь за ход', use.ships, caps.ships, { unit: 'кораблей', overOk: false })}
+      ${ecCapMeter('🛰', 'Вместимость флота', fUsed, fCap, { unit: 'мест', full: fFull, fullNote: 'Лимит исчерпан — постройте Звёздную Базу или откройте её слот', freeNote: 'свободно' })}
+    </div>`;
   }
 
   const queueHtml = EC.queue.length
@@ -4290,7 +4313,7 @@ function ecSetTradeSub(s) { EC.tradeSub = s; ecPaintCabinet(); }
 function ecSetExSub(s) { EC.exSub = s; ecPaintCabinet(); }
 function ecTabExchange() {
   const sub = EC.exSub || 'corps';
-  const subTabs = [['corps', '🏢', 'Организации'], ['index', '📊', 'Индекс'],
+  const subTabs = [['corps', '🏢', 'Организации'], ['orders', '📋', 'Заказы'], ['index', '📊', 'Индекс'],
     ['margin', '📈', 'Маржа'], ['futures', '📅', 'Фьючерсы'], ['options', '🎲', 'Опционы'], ['bonds', '🏛', 'Облигации']];
   const subNav = subTabs.length > 1
     ? `<div class="ec-tabs" style="margin:4px 0 12px">${subTabs.map(([id, ic, l]) => `<button class="ec-tab${sub === id ? ' on' : ''}" onclick="ecSetExSub('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('')}</div>`
@@ -4298,12 +4321,13 @@ function ecTabExchange() {
   const body = sub === 'bonds' ? ecExBondsBlock() : sub === 'index' ? ecExIndexBlock()
     : sub === 'margin' ? ecExMarginBlock()
     : sub === 'futures' ? ecExFuturesBlock() : sub === 'options' ? ecExOptionsBlock()
+    : sub === 'orders' ? ecExOrdersBlock()
     : ecExCorpsBlock();
   const ses = (EC.corps && EC.corps.session) || { open: false, open_hour: 12, close_hour: 18 };
   const sesTag = ses.open
     ? `<b style="color:#5fc98a">● торги открыты</b> до ${ses.close_hour}:00 UTC`
     : `<b style="color:#e0688a">● торги закрыты</b> · открытие в ${ses.open_hour}:00 UTC`;
-  return `${ecIntro('📊', 'Биржа', `Финансовые инструменты, привязанные к реальной экономике галактики. ${sesTag}.`, ['<b>Организации</b> — объедините реальные постройки; вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%). Доли продаются другим фракциям.', '<b>Секторный спрос</b> — доход и котировки крутит сама галактика: дефицит сырья поднимает рудники, очередь кораблей — верфи, торговые пути — хабы (множитель 0.25×…3.0×).', '<b>Индекс</b> — корзина цен ресурсов (ETF). <b>Облигации</b> — займ под купон. Сделки с долями — только при <b>открытых торгах</b>; на закрытии фиксинг и дивиденды.', '<b>Маржа</b> — лонг/шорт с плечом до ×10 (ликвидация при просадке залога). <b>Фьючерсы</b> — срочные контракты с расчётом по экспирации. <b>Опционы</b> — колл/пут за премию. Спот-торговля ресурсами — во вкладке «Торговля → Рынок».'])}${subNav}${body}`;
+  return `${ecIntro('📊', 'Биржа', `Финансовые инструменты, привязанные к реальной экономике галактики. ${sesTag}.`, ['<b>Организации</b> — объедините реальные постройки; вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%). Доли продаются другим фракциям.', '<b>Секторный спрос</b> — доход и котировки крутит сама галактика: дефицит сырья поднимает рудники, очередь кораблей — верфи, торговые пути — хабы (множитель 0.25×…3.0×).', '<b>Индекс</b> — корзина цен ресурсов (ETF). <b>Облигации</b> — займ под купон. Сделки с долями — только при <b>открытых торгах</b>; на закрытии фиксинг и дивиденды.', '<b>Маржа</b> — лонг/шорт с плечом до ×10 (ликвидация при просадке залога). <b>Фьючерсы</b> — срочные контракты с расчётом по экспирации. <b>Опционы</b> — колл/пут за премию. Спот-торговля ресурсами — во вкладке «Торговля → Рынок».', '<b>Заказы</b> — разместите госзаказ на закупку ресурса (деньги блокируются в <b>эскроу</b>); заказ объявляется в ленте сектора, и любая фракция выполняет его из своих запасов — полностью или частями. Гарантированная оплата из эскроу.'])}${subNav}${body}`;
 }
 
 // Карточка индекса рынка / ETF: значение, тренд, спарклайн, моя позиция, формы.
@@ -4665,6 +4689,81 @@ function ecDemandPanel(dem) {
     <div class="ec-dip-t">📊 Секторный спрос <span class="ec-hint">— реальная галактика крутит доход и котировки (0.25×…3.0×, отметка = норма)</span></div>
     ${body}</div>`;
 }
+// ── Биржа: заказы (госзаказы / RFQ — твёрдые заявки на закупку с эскроу) ──────
+// Заказчик блокирует ГС в эскроу; заказ виден на доске и в ленте сектора; любая
+// фракция выполняет из своих запасов (полностью/частями), оплата из эскроу.
+const EC_ORD_STATUS = { open: '● открыт', filled: '✅ выполнен', cancelled: '✕ отменён', expired: '⌛ истёк' };
+function ecExOrdersBlock() {
+  const o = EC.orders;
+  if (!o) return ecDerivNA('📋 Биржа заказов', '_exchange_orders.sql');
+  const gc = (EC.eco && EC.eco.gc) || 0;
+  const mine = o.mine || [], board = o.board || [];
+
+  // справочник имён ресурсов (рынок + мой склад) для подсказок ввода
+  const names = new Set(Object.keys(EC.market || {}));
+  ecResEntries().forEach(([n]) => names.add(n));
+  const datalist = `<datalist id="ec-ord-reslist">${Array.from(names).sort().map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>`;
+
+  // ── Форма размещения заказа ──
+  const createCard = `<div class="ec-dip-card">
+      <div class="ec-dip-t">📋 Разместить заказ <span class="ec-hint">— твёрдая заявка на закупку; сумма блокируется в эскроу</span></div>
+      <div class="ec-prod-form" style="flex-wrap:wrap;gap:6px">
+        <input list="ec-ord-reslist" id="ec-ord-res" placeholder="ресурс (напр. Дилитий)" class="ec-prod-qty" style="min-width:160px" oninput="ecOrderCalc()">${datalist}
+        <input type="number" id="ec-ord-qty" min="1" placeholder="объём, ед." class="ec-prod-qty" oninput="ecOrderCalc()">
+        <input type="number" id="ec-ord-price" min="1" placeholder="цена ГС/ед." class="ec-prod-qty" oninput="ecOrderCalc()">
+        <input type="number" id="ec-ord-days" min="1" max="60" value="7" title="срок жизни заказа, суток" class="ec-prod-qty" style="max-width:90px">
+        <button class="btn btn-gd btn-sm" onclick="ecOrderCreate()">Разместить</button>
+      </div>
+      <input type="text" id="ec-ord-note" maxlength="120" placeholder="комментарий к заказу (необязательно)" class="ec-corp-name-in" style="margin-top:6px">
+      <div class="cn-fac-hint" style="margin-top:5px" id="ec-ord-summary">Укажите ресурс, объём и цену. В казне: <b>${ecNum(Math.round(gc))} ГС</b>.</div>
+    </div>`;
+
+  // ── Мои заказы ──
+  const mineRows = mine.map(r => {
+    const open = r.status === 'open';
+    const prog = r.qty_total > 0 ? Math.round(r.qty_filled / r.qty_total * 100) : 0;
+    const stCol = open ? 'var(--ok)' : r.status === 'filled' ? 'var(--gd)' : 'var(--t4)';
+    const exp = open && r.expires_at ? ` · истекает через ${ecDays(r.expires_at)} сут` : '';
+    return `<div class="ec-corp-listed" style="flex-wrap:wrap;gap:6px">
+        <span style="flex:1 1 60%">📦 <b>${esc(r.resource)}</b> — ${ecNum(r.qty_filled)}/${ecNum(r.qty_total)} ед. (${prog}%) по <b>${ecNum(Math.round(r.price))} ГС</b>
+          <span style="color:${stCol}">· ${EC_ORD_STATUS[r.status] || r.status}</span>${exp}
+          ${r.note ? `<br><span class="ec-hint">«${esc(r.note)}»</span>` : ''}</span>
+        <span style="flex:0 0 auto">эскроу: <b>${ecNum(Math.round(r.escrow))} ГС</b></span>
+        ${open ? `<button class="ec-bld-del" title="Отменить заказ (вернуть эскроу)" onclick="ecOrderCancel('${r.id}')">✕</button>` : ''}
+      </div>`;
+  }).join('') || '<div class="cn-fac-hint">У вас нет заказов. Разместите заявку на закупку выше.</div>';
+  const mineCard = `<div class="ec-dip-card"><div class="ec-dip-t">🗂 Мои заказы</div>${mineRows}</div>`;
+
+  // ── Доска чужих заказов (можно выполнить) ──
+  const boardRows = board.map(r => {
+    const stock = +r.my_stock || 0;
+    const can = stock > 0 && r.remaining > 0;
+    const dflt = Math.max(1, Math.min(r.remaining, stock));
+    const exp = r.expires_at ? `истекает через ${ecDays(r.expires_at)} сут` : '';
+    const earn = ecNum(Math.round(dflt * r.price));
+    const fulfill = can
+      ? `<div class="ec-prod-form" style="gap:6px;margin-top:4px">
+          <input type="number" id="ec-ordf-${r.id}" min="1" max="${Math.min(r.remaining, stock)}" value="${dflt}" class="ec-prod-qty" style="max-width:120px">
+          <button class="btn btn-gd btn-sm" onclick="ecOrderFulfill('${r.id}')">Выполнить → +${earn} ГС</button>
+        </div>`
+      : `<div class="cn-fac-hint" style="margin-top:4px">${stock <= 0 ? `Нет «${esc(r.resource)}» на складе — выполнить нельзя.` : 'Заказ уже выбран.'}</div>`;
+    return `<div class="ec-corp-card" style="padding:10px 12px">
+        <div class="ec-q-row" style="flex-wrap:wrap;gap:8px;align-items:baseline">
+          <span style="flex:1 1 100%"><b>${esc(r.buyer || 'Держава')}</b> закупает <b>${esc(r.resource)}</b></span>
+          <span>нужно: <b>${ecNum(r.remaining)}</b> из ${ecNum(r.qty_total)} ед.</span>
+          <span>цена: <b>${ecNum(Math.round(r.price))} ГС</b>/ед</span>
+          <span style="color:var(--t4)">${exp}</span>
+        </div>
+        ${r.note ? `<div class="ec-hint" style="margin:2px 0">«${esc(r.note)}»</div>` : ''}
+        <div class="ec-hint">На моём складе: <b>${ecNum(stock)}</b> ед.</div>
+        ${fulfill}
+      </div>`;
+  }).join('') || '<div class="cn-fac-hint">Сейчас открытых заказов от других фракций нет.</div>';
+  const boardCard = `<div class="ec-dip-card"><div class="ec-dip-t">🛒 Доска заказов <span class="ec-hint">— открытые госзаказы других держав; выполните из своих запасов</span></div>${boardRows}</div>`;
+
+  return `${createCard}${mineCard}${boardCard}`;
+}
+
 function ecExCorpsBlock() {
   const c = EC.corps;
   // RPC не ответил → честная диагностика вместо «пусто»
@@ -7696,6 +7795,43 @@ function ecCorpBuyAsk(listing, price, maxShares) {
   if (!shares) { toast('Укажите количество', 'err'); return; }
   ecRpcAct('corp_buy_shares', { p_listing: listing, p_shares: shares }, 'Акции куплены');
 }
+// ── Биржа: заказы (госзаказы / RFQ) ──────────────────────────
+// Живой итог формы размещения: эскроу = объём×цена + подсказка рыночной цены.
+function ecOrderCalc() {
+  const res = (ecId('ec-ord-res')?.value || '').trim();
+  const qty = Math.max(0, parseInt(ecId('ec-ord-qty')?.value) || 0);
+  const price = Math.max(0, parseInt(ecId('ec-ord-price')?.value) || 0);
+  const gc = (EC.eco && EC.eco.gc) || 0;
+  const box = ecId('ec-ord-summary'); if (!box) return;
+  if (!res || !qty || !price) { box.innerHTML = `Укажите ресурс, объём и цену. В казне: <b>${ecNum(Math.round(gc))} ГС</b>.`; return; }
+  const escrow = qty * price;
+  const mk = res && EC.market && EC.market[res] ? Math.round(EC.market[res].price) : 0;
+  const mkTip = mk ? ` · рыночная цена «${esc(res)}» ≈ <b>${ecNum(mk)} ГС</b>/ед` : '';
+  const lack = escrow > gc ? ` <span style="color:var(--err)">— не хватает ${ecNum(escrow - Math.round(gc))} ГС</span>` : '';
+  box.innerHTML = `Заблокируем в эскроу: <b style="color:${escrow > gc ? 'var(--err)' : 'var(--gd)'}">${ecNum(escrow)} ГС</b>${lack}${mkTip}. В казне: <b>${ecNum(Math.round(gc))} ГС</b>.`;
+}
+function ecOrderCreate() {
+  const res = (ecId('ec-ord-res')?.value || '').trim();
+  const qty = Math.max(0, parseInt(ecId('ec-ord-qty')?.value) || 0);
+  const price = Math.max(0, parseInt(ecId('ec-ord-price')?.value) || 0);
+  const days = Math.max(1, Math.min(60, parseInt(ecId('ec-ord-days')?.value) || 7));
+  const note = (ecId('ec-ord-note')?.value || '').trim() || null;
+  if (!res) { toast('Укажите ресурс', 'err'); return; }
+  if (!qty) { toast('Укажите объём', 'err'); return; }
+  if (!price) { toast('Укажите цену', 'err'); return; }
+  ecRpcAct('order_create', { p_resource: res, p_qty: qty, p_price: price, p_note: note, p_days: days },
+    `Заказ размещён · в эскроу ${ecNum(qty * price)} ГС`);
+}
+function ecOrderFulfill(id) {
+  const qty = Math.max(0, parseInt(ecId('ec-ordf-' + id)?.value) || 0);
+  if (!qty) { toast('Укажите объём поставки', 'err'); return; }
+  ecRpcAct('order_fulfill', { p_order: id, p_qty: qty }, 'Заказ выполнен — оплата зачислена');
+}
+function ecOrderCancel(id) {
+  if (!confirm('Отменить заказ? Остаток эскроу вернётся в казну.')) return;
+  ecRpcAct('order_cancel', { p_order: id }, 'Заказ отменён · эскроу возвращён');
+}
+
 function ecTransfer() {
   const fac = ecId('ec-tr-fac')?.value, res = ecId('ec-tr-res')?.value, amt = parseInt(ecId('ec-tr-amt')?.value) || 0;
   if (!fac) { toast('Выберите фракцию', 'err'); return; }
@@ -8221,29 +8357,43 @@ function ecUnitBillHtml(u, qty) {
   const bill = (u.summary && u.summary.bill) || {};
   const keys = Object.keys(bill);
   const base = ((u.summary && u.summary.cost) || 0) * qty;
-  if (!keys.length) return `<span class="ec-bill-none">Сырьё не требуется.</span> <span class="ec-bill-total">Итого: <b>${ecNum(base)} ГС</b></span>`;
+  if (!keys.length) return `<div class="ec-bill-foot"><span class="ec-bill-note ec-bill-ok">✓ Сырьё не требуется.</span><span class="ec-bill-total">Итого <b>${ecNum(base)} ГС</b></span></div>`;
   const res = (EC.eco && EC.eco.resources) || {};
   let surchargeRaw = 0, anyShort = false, anyBlocked = false;
-  const items = keys.map(nm => {
+  // сортировка: сначала блокирующие, потом дефицитные, потом покрытые — глаз сразу видит проблему
+  const rows = keys.map(nm => {
     const need = (+bill[nm] || 0) * qty, have = +res[nm] || 0, short = Math.max(0, need - have);
-    // дефицит докупается с рынка ×1.5, но рынок КОНЕЧЕН: stock из EC.market
     const mkStock = (EC.market && EC.market[nm] && Number.isFinite(EC.market[nm].stock)) ? EC.market[nm].stock : null;
     const blocked = short > 0 && mkStock !== null && mkStock < short;
-    if (short > 0) { surchargeRaw += short * ecResPriceN(nm) * 1.5; anyShort = true; }
-    if (blocked) anyBlocked = true;
-    const cls = blocked ? 'ec-bill-block' : (short > 0 ? 'ec-bill-short' : 'ec-bill-ok');
-    const tail = short > 0
-      ? ` <b>докупка ${ecNum(short)}</b>${mkStock !== null ? ` <i class="ec-bill-mk">(на рынке ${ecNum(mkStock)})</i>` : ''}`
-      : '';
-    return `<span class="ec-bill-item ${cls}">${ecShipBillIcon(nm)}${esc(nm)} <span class="ec-bill-hn">${ecNum(have)}/${ecNum(need)}</span>${tail}</span>`;
+    return { nm, need, have, short, mkStock, blocked };
+  }).sort((a, b) => (b.blocked - a.blocked) || (b.short - a.short) || a.nm.localeCompare(b.nm));
+  const items = rows.map(r => {
+    if (r.short > 0) { surchargeRaw += r.short * ecResPriceN(r.nm) * 1.5; anyShort = true; }
+    if (r.blocked) anyBlocked = true;
+    const cls = r.blocked ? 'ec-bom--block' : (r.short > 0 ? 'ec-bom--short' : 'ec-bom--ok');
+    const pct = r.need > 0 ? Math.min(100, Math.round(r.have / r.need * 100)) : 100;
+    const tag = r.blocked
+      ? `<span class="ec-bom-tag" title="На рынке всего ${ecNum(r.mkStock)} ед. — меньше дефицита">рынок: ${ecNum(r.mkStock)}</span>`
+      : r.short > 0
+      ? `<span class="ec-bom-tag">докупка ${ecNum(r.short)}</span>`
+      : `<span class="ec-bom-tag">✓</span>`;
+    return `<div class="ec-bom ${cls}">
+      <span class="ec-bom-ic">${ecShipBillIcon(r.nm)}</span>
+      <div class="ec-bom-main">
+        <div class="ec-bom-top"><span class="ec-bom-nm">${esc(r.nm)}</span><span class="ec-bom-qty"><b>${ecNum(r.have)}</b><i> / ${ecNum(r.need)}</i></span></div>
+        <div class="ec-bom-bar"><div class="ec-bom-fill" style="width:${pct}%"></div></div>
+      </div>
+      ${tag}
+    </div>`;
   }).join('');
   const surcharge = Math.ceil(surchargeRaw);
   const note = anyBlocked
-    ? `<span class="ec-bill-note ec-bill-block">На рынке нет столько сырья — закладка не пройдёт. Ждите суточного обновления рынка (NPC) или закупки у других держав.</span>`
+    ? `<span class="ec-bill-note ec-bill-block">⛔ На рынке нет столько сырья — закладка не пройдёт. Ждите суточного обновления рынка (NPC) или закупки у других держав.</span>`
     : anyShort
-    ? `<span class="ec-bill-note ec-bill-short">Дефицит докупается с рынка ×1.5 (списывается с запаса рынка): <b>+${ecNum(surcharge)} ГС</b></span>`
-    : `<span class="ec-bill-note ec-bill-ok">Сырья на складе хватает — берётся бесплатно.</span>`;
-  return `<div class="ec-bill-row">${items}</div>${note} <span class="ec-bill-total">Итого: <b>${ecNum(base + surcharge)} ГС</b>${surcharge ? ` <span class="ec-hint">(${ecNum(base)} + ${ecNum(surcharge)})</span>` : ''}</span>`;
+    ? `<span class="ec-bill-note ec-bill-short">⚠ Дефицит докупается с рынка ×1.5: <b>+${ecNum(surcharge)} ГС</b></span>`
+    : `<span class="ec-bill-note ec-bill-ok">✓ Сырья на складе хватает — берётся бесплатно.</span>`;
+  return `<div class="ec-bom-grid">${items}</div>
+    <div class="ec-bill-foot">${note}<span class="ec-bill-total">Итого <b>${ecNum(base + surcharge)} ГС</b>${surcharge ? ` <span class="ec-hint">(${ecNum(base)} + ${ecNum(surcharge)})</span>` : ''}</span></div>`;
 }
 function ecShipBillHtml(unitId, qty) {
   return ecUnitBillHtml(EC.designs.find(d => d.id === unitId && d.category === 'ship'), qty);
