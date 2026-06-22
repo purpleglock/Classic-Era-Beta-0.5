@@ -3029,7 +3029,7 @@ function ecColonizeInfo(s, p, race) {
     const st = ecStationFor(g);
     if (st) {
       const sc = ecColonizeCost(EC_STATION_COST);
-      return { cls: 'station', tag: 'станция', label,
+      return { cls: 'station', tag: 'станция', label, cells: st.cells,
         btn: `<button class="btn btn-gd btn-sm" title="Построить ${esc(st.label.toLowerCase())} — малая станция на ${st.cells} ячеек застройки. Стоимость ${ecNum(sc)} ГС." onclick="event.stopPropagation();ecBuildStation('${esc(s.id)}',${ecArg(p.name)},${ecArg(p.type)},${ecArg(g)},${ecPidArg(p)})">${st.icon} Станция · ${st.cells} ячеек · ${ecNum(sc)} ГС</button>` };
     }
     const tech = ecStationTechFor(g);
@@ -3205,7 +3205,8 @@ function ecColonyRowHtml(colony, sys) {
 // Строка незаселённой планеты (опция колонизации)
 function ecFreeRowHtml(s, p, race) {
   const cz = ecColonizeInfo(s, p, race);
-  const cells = +p.slotsP || EC_DEFAULT_CELLS;
+  // станция (пояс/аномалия) застраивается на cells самой станции, а не на slotsP (=0 → фолбэк 6)
+  const cells = cz.cells || +p.slotsP || EC_DEFAULT_CELLS;
   return `<div class="ec-pl ec-pl-free">
     <div class="ec-pl-top">
       <div class="ec-pl-l"><span class="ec-pl-ic">${cz.cls === 'no' ? '⊘' : '◌'}</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(p.name)}</div><div class="ec-pl-sb"><span class="ec-cz-${cz.cls}">${esc(cz.tag)}</span> · ${esc(cz.label)} · ⬚ ${cells} ячеек</div></div></div>
