@@ -50,6 +50,8 @@ const AD = {
   sel:       null,      // selected faction_id
   subtab:    'treasury',
   sysSearch: '',
+  audit:     {},        // fid → { rows[], loading, err } (журнал действий, лениво)
+  auditCat:  'all',     // активный фильтр категории в журнале
   busy:      false,
   embed:     null,     // встраивание панели в композитор новостей (faction_news.js)
 };
@@ -357,9 +359,9 @@ function adSetSubtab(t) { AD.subtab = t; if (!adRenderSlot()) adPaint(); }
 function adFacPanel() {
   const e = adEntry(AD.sel);
   if (!e) return '';
-  const SUBTABS = [['treasury','💰 Казна'],['economy','📊 Экономика'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['caravans','🚚 Караваны'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['owner','👑 Владелец'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
+  const SUBTABS = [['treasury','💰 Казна'],['economy','📊 Экономика'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['caravans','🚚 Караваны'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['journal','📋 Журнал'],['owner','👑 Владелец'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
   const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="fm-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
-  const bodyMap = { treasury: adTabTreasury, economy: adTabEconomy, resources: adTabResources, mining: adTabMining, caravans: adTabCaravans, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, owner: adTabOwner, testing: adTabTesting, danger: adTabDanger };
+  const bodyMap = { treasury: adTabTreasury, economy: adTabEconomy, resources: adTabResources, mining: adTabMining, caravans: adTabCaravans, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, journal: adTabJournal, owner: adTabOwner, testing: adTabTesting, danger: adTabDanger };
   const renderFn = bodyMap[AD.subtab] || adTabTreasury;
   let tabBody = '';
   try { tabBody = renderFn(e); }
@@ -1524,6 +1526,103 @@ async function adRemoveAgent(id) {
 //   • Войти в кабинет игрока — стафф видит фракцию глазами владельца (без снятия).
 //   • Снять игрока — государство остаётся, но становится бесхозным.
 //   • Передать другому игроку — постоянная смена владельца во всех таблицах.
+// ── Вкладка: Журнал действий игрока ─────────────────────────────
+// Серверный аудит (таблица faction_audit, заполняется триггерами БД —
+// см. _admin_action_log.sql). Ловит всё, что пишется в игровые таблицы,
+// даже правки напрямую через консоль. Грузится лениво по выбранной фракции.
+const AD_AUDIT_CATS = [
+  ['all',     '🗂 Все'],
+  ['colony',  '🏗 Колонии'],
+  ['building','🧱 Постройки'],
+  ['unit',    '⚔ Юниты'],
+  ['caravan', '🚚 Караваны'],
+  ['trade',   '🔁 Бартер'],
+  ['exchange','📈 Биржа'],
+  ['finance', '🏦 Займы'],
+  ['spy',     '🕵 Шпионаж'],
+  ['diplo',   '🤝 Дипломатия'],
+  ['faith',   '🕊 Вера'],
+  ['defense', '🛡 Оборона'],
+  ['design',  '🛠 Проекты'],
+  ['research','🔬 Наука'],
+  ['economy', '💰 Экономика'],
+  ['news',    '📰 Новости'],
+];
+const AD_AUDIT_CAT_ICON = { colony:'🏗', building:'🧱', unit:'⚔', caravan:'🚚', trade:'🔁', exchange:'📈', finance:'🏦', spy:'🕵', diplo:'🤝', faith:'🕊', defense:'🛡', design:'🛠', research:'🔬', economy:'💰', news:'📰' };
+
+function adTabJournal(e) {
+  const fid = AD.sel;
+  const st  = AD.audit[fid];
+  if (!st) { adLoadAudit(fid); return `<div class="fm-empty">Загрузка журнала…</div>`; }
+  if (st.loading) return `<div class="fm-empty">Загрузка журнала…</div>`;
+  if (st.err) {
+    return `<div style="color:var(--color-warning,#e0a030);padding:10px 12px;border:1px solid var(--w2,#2a3340);border-radius:8px;line-height:1.5">
+      Журнал недоступен: ${esc(st.err)}<br>
+      <span style="font-size:12px;color:var(--t3,#8aa0b0)">Похоже, не применён срез <code>_admin_action_log.sql</code> в Supabase (таблица <code>faction_audit</code>). Примените его в SQL Editor — журнал заполнится из реальной истории и начнёт писать новые действия.</span>
+      <div style="margin-top:8px"><button class="btn btn-gd btn-sm" onclick="adReloadAudit()">↻ Повторить</button></div>
+    </div>`;
+  }
+
+  const rows = st.rows || [];
+  if (!rows.length) return `<div class="fm-empty">Журнал пуст — действий за этой фракцией пока не записано.<div style="margin-top:8px"><button class="btn btn-gh btn-sm" onclick="adReloadAudit()">↻ Обновить</button></div></div>`;
+
+  const counts = {};
+  rows.forEach(r => { counts[r.category] = (counts[r.category] || 0) + 1; });
+  const cat = AD.auditCat || 'all';
+  const filterBtns = AD_AUDIT_CATS
+    .filter(([id]) => id === 'all' || counts[id])
+    .map(([id, lbl]) => {
+      const n = id === 'all' ? rows.length : (counts[id] || 0);
+      return `<button class="fm-stab${cat === id ? ' on' : ''}" style="font-size:11px;padding:4px 9px" onclick="adAuditFilter('${id}')">${lbl} <span style="opacity:.6">${n}</span></button>`;
+    }).join('');
+
+  const shown = cat === 'all' ? rows : rows.filter(r => r.category === cat);
+
+  const itemHtml = r => {
+    const icon = AD_AUDIT_CAT_ICON[r.category] || '•';
+    const actorBadge = r.is_staff
+      ? `<span title="${esc(r.actor_email || 'админ')}" style="font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--color-warning,#e0a030);border:1px solid color-mix(in srgb,var(--color-warning,#e0a030) 50%,transparent);border-radius:4px;padding:1px 5px;white-space:nowrap">АДМИН</span>`
+      : (r.actor_email
+          ? `<span title="${esc(r.actor_email)}" style="font-size:9px;color:var(--te,#3ec0d0);white-space:nowrap">игрок</span>`
+          : `<span title="фон/крон" style="font-size:9px;color:var(--t4,#6a7a88);white-space:nowrap">⚙ авто</span>`);
+    const actColor = r.action === 'delete' ? 'var(--err,#ff7a7a)' : r.action === 'insert' ? 'var(--gdl,#5fb0e6)' : 'var(--t3,#8aa0b0)';
+    return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-bottom:1px solid var(--w2,#2a3340)">
+      <span style="font-size:15px;line-height:1.3;width:20px;text-align:center;flex:0 0 auto">${icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;color:var(--t1,#e8edf2);line-height:1.4">${esc(r.summary || r.action || '—')}</div>
+        <div style="font-size:10px;color:var(--t4,#6a7a88);font-family:monospace;margin-top:2px">${adFmtTs(r.ts)} · <span style="color:${actColor}">${esc(r.action || '')}</span></div>
+      </div>
+      <div style="flex:0 0 auto;align-self:center">${actorBadge}</div>
+    </div>`;
+  };
+
+  return `<div class="fm-journal">
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;align-items:center">
+      ${filterBtns}
+      <button class="btn btn-gh btn-xs" style="margin-left:auto" onclick="adReloadAudit()">↻ Обновить</button>
+    </div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin-bottom:8px">Показано ${shown.length} из ${rows.length} записей (последние ${rows.length}). Журнал ведётся на сервере и фиксирует все изменения игровых данных фракции — даже правки админа из этой консоли (метка <b style="color:var(--color-warning,#e0a030)">АДМИН</b>).</div>
+    <div style="border:1px solid var(--w2,#2a3340);border-radius:8px;background:var(--b3,#0f141b);overflow:hidden">
+      ${shown.map(itemHtml).join('') || '<div class="fm-empty" style="padding:14px">В этой категории записей нет.</div>'}
+    </div>
+  </div>`;
+}
+
+async function adLoadAudit(fid) {
+  if (!fid) return;
+  if (AD.audit[fid] && AD.audit[fid].loading) return;
+  AD.audit[fid] = { loading: true, rows: [], err: null };
+  try {
+    const rows = await dbGet('faction_audit', `faction_id=eq.${encodeURIComponent(fid)}&order=ts.desc&limit=400`);
+    AD.audit[fid] = { loading: false, rows: Array.isArray(rows) ? rows : [], err: null };
+  } catch (ex) {
+    AD.audit[fid] = { loading: false, rows: [], err: ex.message || String(ex) };
+  }
+  if (AD.subtab === 'journal' && AD.sel === fid) { if (!adRenderSlot()) adPaint(); }
+}
+function adReloadAudit() { if (AD.sel) { delete AD.audit[AD.sel]; adLoadAudit(AD.sel); if (!adRenderSlot()) adPaint(); } }
+function adAuditFilter(cat) { AD.auditCat = cat; if (!adRenderSlot()) adPaint(); }
+
 function adTabOwner(e) {
   const hasOwner = !!(e.app.owner_id);
   const ownerLine = hasOwner
