@@ -616,6 +616,10 @@
 .ec-pl-no { color: var(--t4); border-color: var(--w2); }
 
 /* ── Производство ── */
+/* Под-заголовок секции (мельче ec-section-title) + компактный select в строках */
+.ec-sub-title { font-size: 12px; font-weight: 600; color: var(--t2); margin: 4px 0 6px; letter-spacing: .02em; }
+.ec-mini-sel { background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 5px 8px; font-size: 12px; outline: none; max-width: 160px; }
+.ec-mini-sel:focus { border-color: var(--gd); }
 .ec-prod-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
 .ec-prod-form select { flex: 1; min-width: 160px; background: var(--b1); border: 1px solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 8px 10px; font-size: 13px; outline: none; }
 .ec-prod-form select:focus { border-color: var(--gd); }

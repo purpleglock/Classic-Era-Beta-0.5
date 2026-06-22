@@ -308,6 +308,21 @@
 }
 #gm-form{right:auto;left:12px}
 
+/* ════════ Командная плашка носителя аванпоста (клик по нему на карте) ════════ */
+#gm-opcmd{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:32;max-width:calc(100% - 24px)}
+#gm-opcmd.gm-hidden{display:none!important}
+.gm-opcmd-card{position:relative;min-width:240px;background:hsl(216 24% 8% / .96);backdrop-filter:blur(10px);
+  border:1px solid var(--w2);border-radius:12px;padding:14px 16px 12px;box-shadow:0 14px 40px rgba(0,0,0,.6);
+  display:flex;flex-direction:column;gap:7px}
+.gm-opcmd-title{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--gdl)}
+.gm-opcmd-sub{font-size:11px;color:var(--t3);margin-top:-3px}
+.gm-opcmd-hint{font-size:11px;color:var(--t3);line-height:1.35}
+.gm-opcmd-btn{background:hsl(216 22% 13% / .9);border:1px solid var(--w2);border-radius:8px;color:var(--t1);
+  padding:8px 12px;font-size:13px;cursor:pointer;text-align:left;transition:border-color .15s,background .15s}
+.gm-opcmd-btn:hover{border-color:var(--gdl);background:hsl(216 22% 16% / .95)}
+.gm-opcmd-btn.gm-dis{opacity:.45;cursor:not-allowed}
+.gm-opcmd-btn.gm-opcmd-danger:hover{border-color:var(--err);color:var(--err)}
+
 /* ════════ РЕДАКТОР СЕКТОРА (панель справа, живёт пока режим «Сектора») ════════ */
 #gm-sector{
   position:absolute;top:12px;right:12px;width:300px;max-width:calc(100% - 24px);max-height:calc(100% - 24px);

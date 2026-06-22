@@ -243,13 +243,23 @@ const EC_BUILD = {
   military_factory: { name: 'Военный Завод',        cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 100 ед. техники' },
   shipyard:         { name: 'Корабельная Верфь',    cost: 2000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 корабль / 12 МЛА' },
   temple:           { name: 'Храм Веры',            cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 150 }, cat: 'faith', desc: '+150 ГС за слот и удешевляет постройку войск. При постройке выбираете, чьей религии храм (можно строить храмы разных вер)' },
+  // ─ ОБОРОННЫЕ СТРУКТУРЫ (зеркало _defense_*.sql) ─
+  starbase:         { name: 'Звёздная База',         cost: 5000, ladder: [0, 5000, 5000, 8000, 8000, 12000], free: 1, inc: {}, cat: 'mil', desc: 'Вместимость флота: +50 кораблей за слот. Без неё нельзя строить корабли сверх лимита (содержания нет — только вместимость)' },
+  flak:             { name: 'Батарея ПВО',           cost: 1500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: 'Пассивная защита планеты от вражеской авиации: снижает урон атакующих авиагрупп (за слот)' },
+  abm:              { name: 'Комплекс ПРО',          cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: 'Перехват ударов по планете. Требует снаряды — их докупают за ГС, поставка 1 день. Нет снарядов — нет перехвата' },
   // ОРУДИЕ СУДНОГО ДНЯ — строится отдельным путём (doom_build): ГС + Программируемая
   // материя, требует исследование «Сама неотвратимость». Слоты не открываются.
   doomgun:          { name: 'Длань Неотвратимости', cost: 8000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Межзвёздная артиллерия: залп из системы в систему превращает планету-цель в мёртвый камень. Жрёт Гравиядро на залп и Программируемую материю на содержание; с каждым выстрелом и днём деградирует, пока не распадётся.' },
 };
 // Стоимость орудия в Программируемой материи (зеркало _doom_const('build_matter')).
 const EC_DOOM_BUILD_MATTER = 40, EC_DOOM_SHOT_GRAV = 20;
-const EC_ORDER = ['factory', 'mining', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'temple'];
+const EC_ORDER = ['factory', 'mining', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'starbase', 'flak', 'abm', 'temple'];
+// ПРО: цена снаряда + срок доставки (зеркало _defense_const).
+const EC_ABM_AMMO_COST = 800;
+// Вместимость флота: каждый слот Звёздной Базы даёт столько мест под корабли (зеркало _defense_const).
+const EC_STARBASE_CAP_PER_SLOT = 50;
+// Верфь-ремонт: цена ремонта = доля стоимости постройки корабля (зеркало _defense_const).
+const EC_REPAIR_COST_FRAC = 0.50;
 // Короткая подсказка «как пользоваться» для каждого типа здания (показывается в карточке).
 const EC_BLD_HOWTO = {
   factory:          'Пассивный доход ГС. Открывайте слоты — каждый добавляет +200 ГС/сут.',
@@ -262,6 +272,9 @@ const EC_BLD_HOWTO = {
   intel:            'Даёт агентов для разведки (вкладка «Разведка»).',
   military_factory: 'Даёт мощность для производства наземной техники (вкладка «Строительство вооружённых сил»).',
   shipyard:         'Даёт мощность для постройки кораблей и авиации (вкладка «Строительство вооружённых сил»).',
+  starbase:         'Открывает вместимость флота (+50 кораблей за слот). Нельзя строить корабли сверх суммарной вместимости баз — это не содержание, а «места под флот». Уже имеющийся флот сверх лимита остаётся, но новые корабли заблокированы, пока не построите базу/слот.',
+  flak:             'Пассивная защита планеты от авиации: снижает урон вражеских авиагрупп при ударе по этой планете. Боезапаса не требует.',
+  abm:              'Перехватывает удары по планете (орбитальные удары, залп орудия судного дня). Каждый перехват тратит снаряд. Снаряды докупаются за ГС и прибывают через 1 день. Нет снарядов — удар проходит.',
   temple:           'Пассивный доход ГС + «сила веры»: чем больше слотов храмов, тем дешевле постройка войск. Спиритуалистам и теократиям бонус сильнее. Требует исповедуемой веры; при постройке указывается её религия (можно держать храмы разных вер).',
   doomgun:          'Откройте пульт орудия, выберите систему-цель и планету — залп тратит 20 Гравиядра. Снаряд летит тем дольше, чем дальше цель: от ~3 ч до соседней системы и до суток — от края до края галактики. Держите запас Программируемой материи: без неё орудие деградирует быстрее и распадётся.',
 };
@@ -269,6 +282,7 @@ const EC_BLD_HOWTO = {
 const EC_BLD_ICON = {
   factory: '🏭', mining: '⛏', trade: '💱', market: '📈',
   science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', warehouse: '📦', temple: '🛐', doomgun: '🜨',
+  starbase: '🛰', flak: '🎯', abm: '🚀',
 };
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
 // Обустройство среды обитания на своей колонии (+ячейки, 1 ход)
@@ -547,12 +561,20 @@ function ecCaps() {
   // Роботы «собирают» пехоту как технику — на Военном Заводе, втрое эффективнее.
   const infFromMf = robot ? mf * EC_ROBOT_INF_PER_SLOT : 0;
   const infFromTr = tr * EC_INF_PER_SLOT;
+  // Вместимость флота от Звёздных Баз (зеркало _fleet_capacity).
+  const fleetCap = ecSlotsSum('starbase') * EC_STARBASE_CAP_PER_SLOT;
   return {
     training: robot ? infFromMf : infFromTr,   // суммарная мощность пехоты
     military: mf * 100, ships: sy, mla: sy * 12,
+    fleetCap,                                   // мест под корабли (суммарно)
     hasTraining: robot ? mf > 0 : tr > 0,       // у роботов «носитель пехоты» = Военный Завод
-    hasMil: mf > 0, hasShipyard: sy > 0, robot,
+    hasMil: mf > 0, hasShipyard: sy > 0, hasStarbase: ecSlotsSum('starbase') > 0, robot,
   };
+}
+// Сколько кораблей фракция уже держит (готовые + очередь + повреждённые + в ремонте). Зеркало _fleet_used.
+function ecFleetUsed() {
+  const ships = arr => (arr || []).filter(r => r.category === 'ship').reduce((a, r) => a + (r.qty || 0), 0);
+  return ships(EC.roster) + ships(EC.queue) + ships(EC.damaged) + ships(EC.repairing);
 }
 // Сколько пехоты / техники / кораблей «съедает» дивизия за ход.
 // Пехота → мощность Центра Подготовки (caps.training), наземная техника и авиация →
@@ -1085,7 +1107,7 @@ function ecGate() {
 async function ecLoad() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1129,6 +1151,9 @@ async function ecLoad() {
     ecRpc('futures_status').catch(() => null),   // биржа: фьючерсы — срочные контракты (срез 6)
     ecRpc('options_status').catch(() => null),   // биржа: опционы — колл/пут (срез 7)
     ecRpc('doom_status').catch(() => null),       // межзвёздная артиллерия: орудия + залпы в полёте
+    ecRpc('minefields_visible').catch(() => []),  // оборона: минные поля (свои + разведанные чужие)
+    ecRpc('outposts_visible').catch(() => []),    // оборона: развёрнутые аванпосты (свои + разведанные чужие)
+    ecRpc('outpost_ships_mine').catch(() => []),  // оборона: мои корабли-носители аванпостов (idle/в полёте)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1136,6 +1161,9 @@ async function ecLoad() {
   EC.systems = (sys || []).map(s => ({ ...s, planets: s.planets || [] }));
   // Межзвёздная артиллерия: орудия фракции (с integrity) + залпы в полёте + баланс.
   EC.doom = (doom && typeof doom === 'object') ? doom : { guns: [], salvos: [], const: {} };
+  EC.minefields = Array.isArray(defMines) ? defMines : [];      // оборона: видимые минные поля (гексы)
+  EC.outposts = Array.isArray(defOutposts) ? defOutposts : [];  // оборона: развёрнутые аванпосты
+  EC.opShips = Array.isArray(defOpShips) ? defOpShips : [];     // оборона: мои корабли-носители
   EC.doomByBuilding = {};
   (EC.doom.guns || []).forEach(g => { if (g && g.building_id) EC.doomByBuilding[g.building_id] = g; });
   // Пространственная экономика: NET-баланс системы (покрытия R/G/C/труд, просперити, статус), индекс по system_id.
@@ -1145,6 +1173,8 @@ async function ecLoad() {
   EC.designs = (designs || []);
   EC.roster = (prod || []).filter(p => p.status === 'done');
   EC.queue = (prod || []).filter(p => p.status === 'queued');
+  EC.damaged = (prod || []).filter(p => p.status === 'damaged' && p.category === 'ship');     // повреждённые в бою — чинит Верфь
+  EC.repairing = (prod || []).filter(p => p.status === 'repairing' && p.category === 'ship'); // уже в ремонте
   EC.allSystems = (allSys || []).map(s => ({ ...s, x: +s.x, y: +s.y }));
   EC.lanes = lanes || [];
   EC.factions = (facs || []).filter(f => f.faction_id);
@@ -3054,8 +3084,54 @@ function ecColonyManage(c) {
       ${(typeof user !== 'undefined' && user && ['superadmin','editor','moderator'].includes(user.role))
         ? `<button class="btn btn-gh btn-sm" onclick="ecRenameColony('${c.id}',${ecArg(c.planet_name || '')})" title="Переименовать планету (стафф, бесплатно)">✎ Имя</button>`
         : `<button class="btn btn-gh btn-sm" onclick="ecRenameColonyPaid('${c.id}',${ecArg(c.planet_name || '')})" title="Переименовать планету за ${EC_RENAME_COST} ГС">✎ Имя · ${EC_RENAME_COST} ГС</button>`}
+      ${ecMineButton(c)}
       <button class="btn btn-gh btn-sm ec-danger" onclick="ecAbandon('${c.id}')" title="Бросить колонию">✕ Бросить</button>
     </div>`;
+}
+
+// Минное поле у планеты колонии — застраивается ГЕКС ЗА ГЕКСОМ (зеркало
+// _defense_minefield.sql). Каждый клик «+гекс» закрывает ещё один гекс кольца
+// вокруг планеты за EC_MINE_HEX_COST; полное поле — EC_MINE_HEX_MAX гексов.
+// Никакой кнопки «заминировать всё сразу»: поле растёт по одному гексу.
+const EC_MINE_HEX_COST = 400;
+const EC_MINE_HEX_MAX = 6;
+function ecMyMinefield(c) {
+  return (EC.minefields || []).find(m => m.mine && m.system_id === c.system_id &&
+    (m.planet_pid == null || c.planet_pid == null || +m.planet_pid === +c.planet_pid));
+}
+function ecMineButton(c) {
+  const mf = ecMyMinefield(c);
+  const hexes = mf ? Math.min(+mf.hexes || 0, +mf.hex_max || EC_MINE_HEX_MAX) : 0;
+  const hexMax = mf ? (+mf.hex_max || EC_MINE_HEX_MAX) : EC_MINE_HEX_MAX;
+  const pidArg = c.planet_pid == null ? 'null' : c.planet_pid;
+  const layBtn = hexes >= hexMax
+    ? `<button class="btn btn-gh btn-sm" disabled title="Поле полностью застроено">⛯ Поле полное · ${hexes}/${hexMax}</button>`
+    : `<button class="btn btn-gh btn-sm" onclick="ecMineLay('${c.system_id}',${pidArg})" title="Закрыть ещё один гекс минами">⛯ +гекс мин (${hexes}/${hexMax}) · ${ecNum(EC_MINE_HEX_COST)} ГС</button>`;
+  const clearBtn = mf
+    ? `<button class="btn btn-gh btn-sm" onclick="ecMineClear('${mf.id}')" title="Снять поле (возврат ~50% за гекс)">⛯ Снять поле</button>` : '';
+  return layBtn + clearBtn;
+}
+async function ecMineLay(sysId, pid) {
+  if (EC.busy) return;
+  if ((EC.eco.gc || 0) < EC_MINE_HEX_COST) { toast(`Нужно ${ecNum(EC_MINE_HEX_COST)} ГС`, 'err'); return; }
+  EC.busy = true;
+  try {
+    const r = await ecRpc('minefield_lay', { p_system_id: sysId, p_pid: pid });
+    toast(`Гекс заминирован · ${r && r.hexes || ''}/${r && r.hex_max || EC_MINE_HEX_MAX} · −${ecNum(EC_MINE_HEX_COST)} ГС`, 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+async function ecMineClear(id) {
+  if (EC.busy) return;
+  if (!confirm('Снять минное поле целиком? Вернётся ~50% за каждый гекс.')) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('minefield_clear', { p_id: id });
+    toast(`Поле снято · +${ecNum(r && r.refund || 0)} ГС`, 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
 }
 
 // Переименование планеты/колонии — через единый источник истины (colonies + map_systems).
@@ -3282,13 +3358,17 @@ function ecTabMilBuild() {
   let shipForm;
   if (!caps.hasShipyard) shipForm = `<div class="ec-empty">Нужна Корабельная Верфь — постройте её во вкладке «Колонии».</div>`;
   else if (!ships.length) shipForm = `<div class="ec-empty">Нет проектов кораблей. Спроектируйте в Корабельном конструкторе. <button class="btn btn-gh btn-sm" style="margin-left:8px" onclick="go('build-ship')">🚀 Конструктор</button></div>`;
-  else shipForm = `<div class="ec-prod-form">
+  else {
+    const fUsed = ecFleetUsed(), fCap = caps.fleetCap, fFull = fUsed >= fCap;
+    shipForm = `<div class="ec-prod-form">
       <select id="ec-ship-sel" onchange="ecShipBillUpd()">${ships.map(d => `<option value="${esc(d.id)}">${esc(d.name)} — ${ecNum((d.summary && d.summary.cost) || 0)} ГС</option>`).join('')}</select>
       <input type="number" id="ec-ship-qty" value="1" min="1" class="ec-prod-qty" oninput="ecShipBillUpd()">
       <button class="btn btn-gd btn-sm" onclick="ecProduceShip()">＋ Заложить</button>
     </div>
     <div id="ec-ship-bill" class="ec-ship-bill">${ecShipBillHtml(ships[0].id, 1)}</div>
-    <div class="ec-cap">Верфь: <b class="${use.ships > caps.ships ? 'ec-warn' : ''}">${use.ships}/${caps.ships} кораблей за ход</b></div>`;
+    <div class="ec-cap">Верфь: <b class="${use.ships > caps.ships ? 'ec-warn' : ''}">${use.ships}/${caps.ships} кораблей за ход</b></div>
+    <div class="ec-cap">🛰 Вместимость флота: <b class="${fFull ? 'ec-warn' : ''}">${ecNum(fUsed)}/${ecNum(fCap)}</b> ${fFull ? '— лимит исчерпан, постройте Звёздную Базу' : `(свободно ${ecNum(Math.max(0, fCap - fUsed))})`}</div>`;
+  }
 
   const queueHtml = EC.queue.length
     ? EC.queue.map(q => `<div class="ec-q-row"><span class="ec-r-name">${esc(q.unit_name)} ×${ecNum(q.qty)}</span>${ecProgressISO(q.created_at, q.ready_at, 1, 'готово на след. ходу')}<button class="ec-bld-del" title="Отменить" onclick="ecCancelProd('${q.id}')">✕</button></div>`).join('')
@@ -3306,8 +3386,102 @@ function ecTabMilBuild() {
     ${divHtml}
     <div class="ec-section-title">Флот <span class="ec-hint">— корабли строятся на Верфи поштучно</span></div>
     ${shipForm}
+    ${ecRepairPanelHtml(caps)}
+    ${ecOutpostPanelHtml()}
     <div class="ec-section-title">В очереди <span class="ec-hint">— доставка в конце хода (сутки)</span></div>
     <div class="ec-queue">${queueHtml}</div>`;
+}
+
+// Цена ремонта корабля = доля стоимости постройки его проекта (зеркало _repair_cost).
+function ecRepairCost(unitId, qty) {
+  const d = (EC.designs || []).find(x => x.id === unitId && x.category === 'ship');
+  const cost = (d && d.summary && d.summary.cost) || 100;
+  return Math.max(1, Math.ceil(cost * EC_REPAIR_COST_FRAC * Math.max(1, qty || 1)));
+}
+
+// Панель «Повреждённые корабли»: чинятся на Корабельной Верфи за ГС и 1 ход.
+function ecRepairPanelHtml(caps) {
+  const dmg = EC.damaged || [], rep = EC.repairing || [];
+  if (!dmg.length && !rep.length) return '';
+  const slots = caps.ships, busy = rep.reduce((a, r) => a + (r.qty || 0), 0), free = Math.max(0, slots - busy);
+  const dmgRows = dmg.map(r => {
+    const each = ecRepairCost(r.unit_id, 1), all = ecRepairCost(r.unit_id, r.qty);
+    const can = caps.hasShipyard && free > 0 && (EC.eco.gc || 0) >= each;
+    return `<div class="ec-q-row">
+      <span class="ec-r-name">🛠 ${esc(r.unit_name)} ×${ecNum(r.qty)} <span class="ec-hint">— ${ecNum(each)} ГС/шт</span></span>
+      <button class="btn btn-gd btn-sm" ${can ? '' : 'disabled'} title="${can ? '' : (!caps.hasShipyard ? 'Нужна Верфь' : free <= 0 ? 'Мощность Верфи занята' : 'Не хватает ГС')}" onclick="ecShipyardRepair('${r.id}', ${r.qty})">Чинить всё (${ecNum(all)} ГС)</button>
+    </div>`;
+  }).join('');
+  const repRows = rep.map(r => `<div class="ec-q-row"><span class="ec-r-name">⚙ ${esc(r.unit_name)} ×${ecNum(r.qty)} <span class="ec-hint">в ремонте</span></span>${ecProgressISO(r.created_at, r.ready_at, 1, 'готово на след. ходу')}</div>`).join('');
+  return `<div class="ec-section-title">Повреждённые корабли <span class="ec-hint">— чинит Верфь: ${ecNum(busy)}/${ecNum(slots)} мощности занято</span></div>
+    ${dmg.length ? dmgRows : ''}
+    ${rep.length ? repRows : ''}
+    ${!caps.hasShipyard && dmg.length ? '<div class="ec-empty" style="padding:8px">Постройте Корабельную Верфь, чтобы чинить.</div>' : ''}`;
+}
+
+// Аванпосты (зеркало _defense_outpost.sql). Постройка/отправка/развёртывание
+// носителей и разбор аванпостов делаются ПРЯМО НА ГАЛАКТИЧЕСКОЙ КАРТЕ (клик по
+// носителю/системе). В кабинете — только сводка статуса (read-only).
+const EC_OUTPOST_CAP = 20, EC_OUTPOST_SHIP_COST = 1500;   // вместимость + цена носителя (зеркало _defense_const)
+function ecSysName(id) { const s = (EC.allSystems || []).find(x => x.id === id); return (s && s.name) || id; }
+function ecOutpostPanelHtml() {
+  const mine = (EC.outposts || []).filter(o => o.mine);
+  const ships = EC.opShips || [];
+  const transit = ships.filter(s => s.status === 'transit').length;
+  const idle = ships.filter(s => s.status === 'idle').length;
+  const shipRows = ships.map(sh => {
+    if (sh.status === 'transit') {
+      return `<div class="ec-q-row"><span class="ec-r-name">🚀 Носитель${sh.name ? ' «' + esc(sh.name) + '»' : ''} <span class="ec-hint">→ ${esc(ecSysName(sh.dest_sys))}</span></span>
+        ${ecProgressISO(sh.depart_at, sh.arrive_at, 1, 'прибывает')}</div>`;
+    }
+    return `<div class="ec-q-row"><span class="ec-r-name">🚀 Носитель${sh.name ? ' «' + esc(sh.name) + '»' : ''} <span class="ec-hint">в системе ${esc(ecSysName(sh.system_id))}</span></span>
+      <span class="ec-hint">${sh.can_deploy ? 'можно развернуть' : 'на стоянке'}</span></div>`;
+  }).join('');
+  const opRows = mine.map(o => `<div class="ec-q-row"><span class="ec-r-name">🛰 ${esc(ecSysName(o.system_id))}${o.name ? ' · ' + esc(o.name) : ''}</span><span class="ec-hint">+${EC_OUTPOST_CAP} мест флота</span></div>`).join('');
+  // Носитель аванпоста — обычный корабль: строится на Корабельной Верфи. Доступные
+  // системы постройки — те, где стоит своя Верфь (как и весь остальной флот).
+  const verfColonyIds = new Set((EC.buildings || []).filter(b => b.btype === 'shipyard').map(b => b.colony_id));
+  const verfSysIds = [...new Set((EC.colonies || []).filter(c => verfColonyIds.has(c.id)).map(c => c.system_id))];
+  const gc = EC.eco.gc || 0, afford = gc >= EC_OUTPOST_SHIP_COST;
+  const buildForm = !verfSysIds.length
+    ? `<div class="ec-empty" style="padding:8px;line-height:1.45">Носитель аванпоста строится на <b>Корабельной Верфи</b>, как и весь флот. Постройте Верфь во вкладке «Колонии».</div>`
+    : `<div class="ec-prod-form">
+        <select id="ec-op-sys">${verfSysIds.map(sid => `<option value="${esc(sid)}">${esc(ecSysName(sid))}</option>`).join('')}</select>
+        <input type="text" id="ec-op-name" class="ec-prod-qty" style="width:150px" maxlength="40" placeholder="имя (необязательно)">
+        <button class="btn btn-gd btn-sm" ${afford ? '' : 'disabled'} title="${afford ? '' : 'Не хватает ГС'}" onclick="ecOutpostBuildShip()">＋ Заложить носитель · ${ecNum(EC_OUTPOST_SHIP_COST)} ГС</button>
+      </div>
+      <div class="ec-cap">Готовый носитель появится на <b>галактической карте</b> в выбранной системе — оттуда отправляйте его по гиперпутям и разворачивайте в аванпост (нельзя входить в чужие границы; разворачивать — не впритык к чужой границе).</div>`;
+  return `<div class="ec-section-title">Аванпосты <span class="ec-hint">— носитель строится на Верфи, управление на карте</span></div>
+    ${buildForm}
+    ${ships.length ? `<div class="ec-sub-title" style="margin-top:8px">Носители · ${idle} на стоянке, ${transit} в пути</div>${shipRows}` : ''}
+    ${mine.length ? `<div class="ec-sub-title" style="margin-top:8px">Развёрнутые аванпосты · ${mine.length}</div>${opRows}` : ''}`;
+}
+
+// Заложить носитель аванпоста на Верфи (в системе своей колонии с Верфью).
+// Тот же RPC, что раньше дёргала карта, — теперь точка входа в кабинете.
+async function ecOutpostBuildShip() {
+  if (EC.busy) return;
+  const sel = ecId('ec-op-sys'); if (!sel || !sel.value) { toast('Выберите систему с Верфью', 'err'); return; }
+  if ((EC.eco.gc || 0) < EC_OUTPOST_SHIP_COST) { toast('Не хватает ГС: носитель стоит ' + ecNum(EC_OUTPOST_SHIP_COST), 'err'); return; }
+  const nm = (ecId('ec-op-name')?.value || '').trim();
+  EC.busy = true;
+  try {
+    await ecRpc('outpost_ship_build', { p_system_id: sel.value, p_name: nm || null });
+    toast('Носитель аванпоста заложен на Верфи · −' + ecNum(EC_OUTPOST_SHIP_COST) + ' ГС', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+
+async function ecShipyardRepair(id, qty) {
+  if (EC.busy) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('shipyard_repair', { p_id: id, p_qty: qty });
+    toast(`Ремонт запущен · ${ecNum(r && r.cost || 0)} ГС · готово на след. ходу`, 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
 }
 
 // ── Территория: смежность, миникарта, захват ───────────────
@@ -7513,8 +7687,42 @@ function ecBuildingRow(b) {
       return ht ? `<div class="ec-bld-howto">${esc(ht)}</div>` : '';
     })()}
     ${mineHtml}
+    ${b.btype === 'abm' ? ecAbmAmmoHtml(b) : ''}
     <div class="ec-bld-act">${slotCount}${openBtn}</div>
   </div>`;
+}
+
+// Боезапас ПРО на строке здания: счётчик + докупка (доставка 1 день). Зеркало _defense_planetary.sql.
+function ecAbmAmmoHtml(b) {
+  const ammo = +(b.ammo || 0), pend = +(b.ammo_pending || 0);
+  const pendTxt = pend > 0 ? ` <span class="ec-hint">+${ecNum(pend)} в пути${b.ammo_ready ? ' (' + ecEtaShort(b.ammo_ready) + ')' : ''}</span>` : '';
+  return `<div class="ec-bld-mine-hd" style="display:flex;align-items:center;gap:8px;margin-top:8px">
+      🚀 Снаряды ПРО: <b>${ecNum(ammo)}</b>${pendTxt}
+    </div>
+    <div class="ec-prod-form" style="margin-top:6px">
+      <input type="number" id="ec-abm-qty-${b.id}" value="5" min="1" class="ec-prod-qty">
+      <button class="btn btn-gh btn-sm" onclick="ecAbmBuyAmmo('${b.colony_id}', '${b.id}')">Докупить · ${ecNum(EC_ABM_AMMO_COST)} ГС/шт</button>
+    </div>`;
+}
+// Короткая оценка времени до готовности (если нет ecProgressISO под рукой).
+function ecEtaShort(iso) {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return 'скоро';
+  const h = Math.ceil(ms / 3600000);
+  return h >= 24 ? Math.ceil(h / 24) + ' дн.' : h + ' ч.';
+}
+async function ecAbmBuyAmmo(colonyId, bldId) {
+  if (EC.busy) return;
+  const qty = Math.max(1, parseInt(ecId('ec-abm-qty-' + bldId)?.value) || 1);
+  const cost = EC_ABM_AMMO_COST * qty;
+  if ((EC.eco.gc || 0) < cost) { toast(`Нужно ${ecNum(cost)} ГС`, 'err'); return; }
+  EC.busy = true;
+  try {
+    await ecRpc('abm_buy_ammo', { p_colony_id: colonyId, p_qty: qty });
+    toast(`Заказано снарядов: ${ecNum(qty)} · −${ecNum(cost)} ГС · прибудут через 1 день`, 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
 }
 
 // экранирование строки для inline-onclick (одинарные кавычки)
@@ -7769,6 +7977,8 @@ async function ecProduceShip() {
   const caps = ecCaps(), use = ecPendingUse();
   if (!caps.hasShipyard) { toast('Нужна Корабельная Верфь', 'err'); return; }
   if (use.ships + qty > caps.ships) { toast(`Лимит верфи на ход: ${use.ships}/${caps.ships} кораблей — откройте слоты или ждите хода`, 'err'); return; }
+  const fUsed = ecFleetUsed();
+  if (fUsed + qty > caps.fleetCap) { toast(`Превышена вместимость флота: ${ecNum(fUsed)}/${ecNum(caps.fleetCap)}. Постройте Звёздную Базу или откройте её слот.`, 'err'); return; }
   const cost = ((u.summary && u.summary.cost) || 0) * qty;
   EC.busy = true;
   try {

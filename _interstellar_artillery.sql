@@ -262,10 +262,27 @@ create or replace function public._doom_resolve(p_fid text)
 returns void language plpgsql security definer set search_path=public as $$
 declare s record; tgt public.map_systems; arr jsonb; el jsonb; newpl jsonb; i int;
   victim_fid text; victim_name text; col public.colonies;
+  v_intercepted boolean;        -- ПРО планеты-цели (_defense_planetary.sql)
 begin
   for s in select * from public.doom_salvos
            where faction_id = p_fid and status='in_flight' and ready_at <= now()
   loop
+    -- ⛨ ПЛАНЕТАРНАЯ ПРО: перехват тратит снаряд и спасает планету.
+    -- Вызов через to_regprocedure+EXECUTE, чтобы не зависеть от порядка применения
+    -- (если _defense_planetary.sql ещё не накатан — хук просто молчит).
+    v_intercepted := false;
+    if to_regprocedure('public._abm_intercept(text,int)') is not null then
+      execute 'select public._abm_intercept($1,$2)'
+        into v_intercepted using s.target_system_id, s.target_pid;
+    end if;
+    if v_intercepted then
+      update public.doom_salvos set status='intercepted', resolved_at=now() where id = s.id;
+      perform public._doom_news('⛨ ЗАЛП ПЕРЕХВАЧЕН',
+        'Залп «Длани Неотвратимости» по планете «'||coalesce(s.target_planet,'???')||
+        '» сбит планетарной ПРО. Планета уцелела — снаряд противоракеты израсходован.');
+      continue;
+    end if;
+
     select * into tgt from public.map_systems where id = s.target_system_id;
     if found then
       arr := coalesce(tgt.planets, '[]'::jsonb);
