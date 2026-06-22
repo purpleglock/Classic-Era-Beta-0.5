@@ -1556,6 +1556,9 @@ function ecIntro(icon, title, text, hints) {
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
   const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['trade', '⇄', 'Торговля'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
+  // Длань Неотвратимости — отдельная вкладка-пульт, появляется когда орудие доступно
+  // (исследование открыто или орудие уже стоит).
+  if (ecDoomUnlocked()) tabs.splice(13, 0, ['doom', '🜨', 'Длань Неотвратимости']);
   const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
     : EC.tab === 'milbuild' ? ecTabMilBuild()
@@ -1566,6 +1569,7 @@ function ecPaintCabinet() {
     : EC.tab === 'exchange' ? ecTabExchange()
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'faith' ? ecTabFaith() : EC.tab === 'intel' ? ecTabIntel()
     : EC.tab === 'raids' ? ecTabRaids()
+    : EC.tab === 'doom' ? ecTabDoom()
     : EC.tab === 'achievements' ? ecTabAchievements()
     : EC.tab === 'news' ? ecTabNews() : ecTabColonies();
   const img = (EC.app && (EC.app.herald_url || EC.app.image_url)) || '';
@@ -8575,7 +8579,7 @@ function ecDoomgunRow(b) {
     ? `<span class="ec-maxed" style="color:#ff6a6a">💥 распалось</span>`
     : inFlight
       ? `<span class="ec-proj-tag" title="Снаряд в полёте">☄️ залп в пути${salvo ? ' · ' + ecProgressISO(null, salvo.ready_at, 1, 'на подлёте') : ''}</span>`
-      : `<button class="btn btn-rd btn-xs" onclick="ecDoomConsole('${b.id}')" title="Открыть пульт залпа">🜨 Пульт залпа</button>`;
+      : `<button class="btn btn-rd btn-xs" onclick="ecDoomOpenTab('${g ? g.id : ''}')" title="Открыть пульт залпа с визуальным наведением">🜨 Пульт залпа</button>`;
   return `<div class="ec-bld ec-bld-doom" style="border-color:rgba(220,40,40,.45)">
     <div class="ec-bld-top">
       <span class="ec-bld-name">🜨 ${esc(d.name)}</span>
@@ -8609,7 +8613,7 @@ function ecDoomConsole(buildingId) {
   let planetHtml = '<div class="ec-bld-howto">Выберите систему-цель.</div>';
   if (st.sysId) {
     const sys = sysList.find(s => s.id === st.sysId);
-    const planets = (sys && sys.planets || []).filter(p => p && Number.isInteger(p.pid) && (p.kind === 'planet' || p.g));
+    const planets = ecDoomTargetablePlanets(sys);
     if (!planets.length) planetHtml = '<div class="ec-bld-howto" style="color:#e6c45f">В этой системе нет планет-целей (или данные карты не мигрированы).</div>';
     else planetHtml = `<div class="ec-doom-planets">${planets.map(p => {
       const dead = p.dead || p.doomed;
@@ -8677,6 +8681,253 @@ async function ecDoomFire(buildingId) {
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
   finally { EC.busy = false; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ВКЛАДКА «ДЛАНЬ НЕОТВРАТИМОСТИ» — пульт залпа с визуальным наведением
+   ════════════════════════════════════════════════════════════════ */
+// Вкладка доступна, если открыто исследование ИЛИ уже стоит орудие.
+function ecDoomUnlocked() {
+  return ecHasDoomTech() || !!((EC.doom && EC.doom.guns && EC.doom.guns.length));
+}
+// Планеты-цели системы: любая планета со стабильным pid, кроме поясов/аномалий.
+// ВАЖНО: столичные/колонизированные планеты, рождённые _ensure_capital, не имеют
+// полей kind/g — поэтому фильтруем по «не пояс и не аномалия», а не по наличию kind.
+function ecDoomTargetablePlanets(sys) {
+  return ((sys && sys.planets) || []).filter(p =>
+    p && Number.isInteger(p.pid) && p.kind !== 'belt' && p.kind !== 'anomaly');
+}
+// Открыть вкладку-пульт и навестись конкретным орудием (из строки постройки).
+function ecDoomOpenTab(gunId) {
+  EC._doomTab = { gunId: gunId || null, sysId: null, pid: null };
+  EC.tab = 'doom';
+  ecPaintCabinet();
+}
+// Активное орудие пульта: выбранное игроком, иначе первое боеготовое.
+function ecDoomActiveGun() {
+  const guns = (EC.doom && EC.doom.guns) || [];
+  if (!guns.length) return null;
+  const st = EC._doomTab || {};
+  let g = st.gunId ? guns.find(x => x.id === st.gunId) : null;
+  if (!g) g = guns.find(x => !x.in_flight && +x.integrity > 0) || guns[0];
+  return g;
+}
+// Оценка времени полёта снаряда (зеркало _doom_fire): соседняя система ≈ 3 ч,
+// край↔край карты ≈ 24 ч. Возвращает {txt, hours, dist} или null.
+function ecDoomFlight(gun, sysId) {
+  const sysList = EC.allSystems || EC.systems || [];
+  const orig = gun ? sysList.find(s => s.id === gun.system_id) : null;
+  const tgt = sysId ? sysList.find(s => s.id === sysId) : null;
+  if (!orig || !tgt || !Number.isFinite(+orig.x) || !Number.isFinite(+tgt.x)) return null;
+  const dist = Math.hypot(+tgt.x - +orig.x, +tgt.y - +orig.y);
+  const xs = sysList.map(s => +s.x).filter(Number.isFinite);
+  const ys = sysList.map(s => +s.y).filter(Number.isFinite);
+  const diag = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) || 1;
+  const hours = 3 + Math.min(1, Math.max(0, dist / diag)) * (24 - 3);
+  return { txt: `≈ ${hours.toFixed(1)} ч полёта (дистанция ${Math.round(dist)})`, hours, dist: Math.round(dist) };
+}
+// Разовая инъекция стилей карты наведения (вместе с бампом economy.js?v — всегда свежие).
+function ecDoomEnsureStyle() {
+  if (document.getElementById('ec-doom-style')) return;
+  const s = document.createElement('style'); s.id = 'ec-doom-style';
+  s.textContent = `
+    .ec-doom-map .mm-zoom-viewport{background:radial-gradient(circle at 50% 38%,rgba(90,20,20,.28),var(--b1) 70%)}
+    .dm-star circle{transition:filter .15s}
+    .dm-star.dm-can:hover circle{filter:brightness(1.5)}
+    .dm-star.dm-sel circle{stroke:#ff5a5a;stroke-width:7;animation:dmPulse 1.2s ease-in-out infinite}
+    .dm-star.dm-origin circle{stroke:#ffd166;stroke-width:7}
+    .dm-orig-mk{font-size:54px;fill:#ffd166;pointer-events:none}
+    #dm-aim{stroke:#ff5a5a;stroke-width:4;stroke-dasharray:18 12;opacity:.85;animation:dmDash 1s linear infinite;pointer-events:none}
+    @keyframes dmDash{to{stroke-dashoffset:-30}}
+    @keyframes dmPulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:.3}}
+    .ec-doom-gunsel{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+    .ec-doom-gunchip{cursor:pointer;border:1px solid var(--bd,#2a3550);border-radius:8px;padding:6px 10px;font-size:12px;background:var(--b2,#141b2e)}
+    .ec-doom-gunchip.on{border-color:#ff6a6a;box-shadow:inset 0 0 0 1px #ff6a6a}
+  `;
+  document.head.appendChild(s);
+}
+// Карта наведения: SVG-звёзды; клик по системе с целями выбирает её.
+function ecDoomMap(gun) {
+  const all = EC.allSystems || [];
+  if (!all.length) return '<div class="ec-empty">Карта галактики недоступна.</div>';
+  mapZoomClean('ec-doom-zoom');
+  const W = (typeof GM_W !== 'undefined') ? GM_W : 3300, H = (typeof GM_H !== 'undefined') ? GM_H : 2062;
+  const myCol = ecReadable(EC.app.color);
+  const byId = new Map(all.map(s => [s.id, s]));
+  const originId = gun ? gun.system_id : null;
+  const st = EC._doomTab || {};
+  const lanes = (EC.lanes || []).map(l => {
+    const a = byId.get(l.a_id), b = byId.get(l.b_id); if (!a || !b) return '';
+    return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="rgba(255,255,255,.06)" stroke-width="2"/>`;
+  }).join('');
+  // линия наведения орудие→цель (всегда в DOM, прячем когда цели нет)
+  const orig = originId ? byId.get(originId) : null;
+  const tgt = st.sysId ? byId.get(st.sysId) : null;
+  const aimShow = orig && tgt && orig !== tgt;
+  const aimLine = `<line id="dm-aim" x1="${aimShow ? orig.x : 0}" y1="${aimShow ? orig.y : 0}" x2="${aimShow ? tgt.x : 0}" y2="${aimShow ? tgt.y : 0}" style="${aimShow ? '' : 'display:none'}"/>`;
+  const dots = all.map(s => {
+    const alive = ecDoomTargetablePlanets(s).filter(p => !(p.dead || p.doomed));
+    const targetable = alive.length > 0;
+    const isOrigin = s.id === originId;
+    const isSel = st.sysId === s.id;
+    let r = 14, fill = 'rgba(120,140,170,.35)';
+    if (s.faction === EC.fid) fill = myCol;
+    else if (s.faction) fill = 'rgba(255,90,90,.30)';
+    if (!targetable && !isOrigin) { fill = 'rgba(90,100,120,.20)'; r = 11; }
+    const cls = 'dm-star' + (isOrigin ? ' dm-origin' : '') + (isSel ? ' dm-sel' : '') + (targetable ? ' dm-can' : '');
+    const click = targetable ? ` onclick="ecDoomTabPickSys(this,'${esc(s.id)}')" style="cursor:crosshair"` : '';
+    const owner = s.faction ? (s.faction === EC.fid ? ' (ваша)' : ' · ' + esc(ecFacName(s.faction))) : ' (ничья)';
+    const ttl = esc(s.name || s.id) + owner + (targetable ? ` · планет-целей: ${alive.length}` : ' · нет целей');
+    return `<g class="${cls}" data-sys="${esc(s.id)}"${click}><circle cx="${s.x}" cy="${s.y}" r="${r}" fill="${fill}"></circle>${isOrigin ? `<text class="dm-orig-mk" x="${s.x}" y="${(+s.y) - r - 14}" text-anchor="middle">🜨</text>` : ''}<title>${ttl}</title></g>`;
+  }).join('');
+  const html = `<div class="ec-minimap ec-doom-map"><div class="mm-zoom-wrapper"><div class="mm-zoom-btns"><button class="mm-zoom-btn" onclick="mapZoomIn('ec-doom-zoom')">+</button><button class="mm-zoom-btn" onclick="mapZoomOut('ec-doom-zoom')">−</button></div><div class="mm-zoom-viewport" id="ec-doom-zoom"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${lanes}${aimLine}${dots}</svg></div></div></div>
+    <div class="ec-mm-legend"><span><i style="background:#ffd166"></i> ваше орудие</span><span><i style="background:#ff5a5a"></i> цель</span><span><i style="background:${myCol}"></i> ваши</span><span><i style="background:rgba(255,90,90,.3)"></i> чужие</span><span><i style="background:rgba(120,140,170,.35)"></i> ничьи</span></div>`;
+  requestAnimationFrame(() => mapZoomInit('ec-doom-zoom'));
+  return html;
+}
+// Правая панель: выбор планеты-цели в наведённой системе + расчёт + ЗАЛП.
+function ecDoomPanelRender() {
+  const gun = ecDoomActiveGun();
+  const st = EC._doomTab || {};
+  const sysList = EC.allSystems || EC.systems || [];
+  const grav = ecStockOf('Гравиядро');
+  const canFuel = grav >= EC_DOOM_SHOT_GRAV;
+  if (gun && gun.in_flight) {
+    const salvo = ((EC.doom && EC.doom.salvos) || []).find(s => s.gun_id === gun.id);
+    return `<div class="ec-bld-howto" style="color:#ff8a8a">☄️ Это орудие уже дало залп — снаряд в пути${salvo ? '. Подлёт: ' + ecProgressISO(null, salvo.ready_at, 1, 'на подлёте') : ''}. Дождитесь поражения цели, затем перезарядите.</div>`;
+  }
+  if (!st.sysId) return `<div class="ec-bld-howto">🎯 Кликните звезду на карте слева, чтобы навести орудие на систему-цель.</div>`;
+  const sys = sysList.find(s => s.id === st.sysId);
+  const sysName = (sys && sys.name) || st.sysId;
+  const planets = ecDoomTargetablePlanets(sys);
+  let planetHtml;
+  if (!planets.length) planetHtml = '<div class="ec-bld-howto" style="color:#e6c45f">В этой системе нет планет-целей (или данные карты не мигрированы).</div>';
+  else planetHtml = `<div class="ec-doom-planets">${planets.map(p => {
+    const dead = p.dead || p.doomed;
+    const sel = st.pid === p.pid;
+    return `<button class="ec-bp-card${sel ? ' ec-bp-sel' : ''}" ${dead ? 'disabled' : ''} onclick="ecDoomTabPickPlanet(${p.pid})" style="${sel ? 'border-color:#ff6a6a' : ''}">
+      <span class="ec-bp-ic">${dead ? '🪨' : (p.icon || '🪐')}</span>
+      <span class="ec-bp-info"><span class="ec-bp-name">${esc(p.name || 'Планета')}</span><span class="ec-bp-desc">${dead ? 'уже мёртвая' : esc(p.type || '')}</span></span>
+    </button>`;
+  }).join('')}</div>`;
+  const tgtPlanet = Number.isInteger(st.pid) ? planets.find(p => p.pid === st.pid) : null;
+  const fly = ecDoomFlight(gun, st.sysId);
+  const canFire = !!gun && canFuel && tgtPlanet && !(tgtPlanet.dead || tgtPlanet.doomed);
+  return `<div class="ec-bp-meta" style="margin:0 0 8px"><span>🔮 Гравиядро: <b class="${canFuel ? '' : 'ec-warn'}">${ecNum(grav)}</b> / нужно ${EC_DOOM_SHOT_GRAV}</span><span>☄️ ${fly ? esc(fly.txt) : 'от 3 ч до 24 ч'}</span></div>
+    <div class="ec-section-title" style="margin-top:0">Цель в системе «${esc(sysName)}»</div>
+    ${planetHtml}
+    ${tgtPlanet ? `<div class="ec-bld-howto" style="margin-top:10px;color:#ff8a8a">Цель: <b>${esc(tgtPlanet.name || '')}</b> — после поражения станет мёртвым камнем. Любая колония на ней (в т.ч. <b>столица</b>) будет стёрта.</div>` : ''}
+    <div class="ec-bp-cf-act" style="padding:12px 0 0;justify-content:flex-end">
+      <button class="btn btn-rd btn-sm" ${canFire ? '' : 'disabled'} onclick="ecDoomTabFire()">🜨 ЗАЛП (−${EC_DOOM_SHOT_GRAV} 🔮)</button>
+    </div>`;
+}
+// Точечная перерисовка панели (карта/зум не трогаем).
+function ecDoomPanelSync() { const el = document.getElementById('ec-doom-panel'); if (el) el.innerHTML = ecDoomPanelRender(); }
+// Перерисовка всей вкладки (смена орудия → меняется точка-источник на карте).
+function ecDoomBodySync() { const host = document.querySelector('.ec-tabbody'); if (host) host.innerHTML = ecTabDoom(); else ecPaintCabinet(); }
+// Клик по звезде: навестись на систему (без перерисовки карты — сохраняем зум/пан).
+function ecDoomTabPickSys(el, sysId) {
+  const st = EC._doomTab = EC._doomTab || {};
+  st.sysId = sysId; st.pid = null;
+  document.querySelectorAll('#ec-doom-zoom .dm-star.dm-sel').forEach(g => g.classList.remove('dm-sel'));
+  const g = (el && el.classList && el.classList.contains('dm-star')) ? el : (el && el.closest && el.closest('.dm-star'));
+  if (g) g.classList.add('dm-sel');
+  const gun = ecDoomActiveGun();
+  const byId = new Map((EC.allSystems || []).map(s => [s.id, s]));
+  const orig = gun ? byId.get(gun.system_id) : null, tgt = byId.get(sysId);
+  const aim = document.getElementById('dm-aim');
+  if (aim) {
+    if (orig && tgt && orig !== tgt) { aim.setAttribute('x1', orig.x); aim.setAttribute('y1', orig.y); aim.setAttribute('x2', tgt.x); aim.setAttribute('y2', tgt.y); aim.style.display = ''; }
+    else aim.style.display = 'none';
+  }
+  ecDoomPanelSync();
+}
+function ecDoomTabPickPlanet(pid) { (EC._doomTab = EC._doomTab || {}).pid = pid; ecDoomPanelSync(); }
+function ecDoomTabSelGun(gunId) { (EC._doomTab = EC._doomTab || {}).gunId = gunId; EC._doomTab.sysId = null; EC._doomTab.pid = null; ecDoomBodySync(); }
+// ЗАЛП из пульта-вкладки.
+async function ecDoomTabFire() {
+  if (EC.busy) return;
+  const st = EC._doomTab || {};
+  const gun = ecDoomActiveGun();
+  if (!gun) { toast('Орудие не найдено', 'err'); return; }
+  if (!st.sysId || !Number.isInteger(st.pid)) { toast('Выберите систему и планету-цель', 'err'); return; }
+  if (!confirm('Дать залп по выбранной планете? Это необратимо уничтожит её вместе с любой колонией (включая столицу).')) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('doom_fire', { p_gun_id: gun.id, p_target_system_id: st.sysId, p_target_pid: st.pid });
+    EC._doomTab = { gunId: gun.id, sysId: null, pid: null };
+    toast(`Залп выпущен по «${r?.target || 'цели'}» — снаряд в пути`, 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+// Staff: мгновенно приземлить снаряды (для тестов).
+async function ecDoomTabSpeed() {
+  if (EC.busy || !ecIsStaff()) return;
+  EC.busy = true;
+  try { await ecRpc('admin_test_speed_doom', { p_fid: EC.fid }); toast('Снаряды приземлены', 'ok'); await ecReloadPaint(); }
+  catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+  finally { EC.busy = false; }
+}
+// Вкладка целиком.
+function ecTabDoom() {
+  ecDoomEnsureStyle();
+  const guns = (EC.doom && EC.doom.guns) || [];
+  const salvos = ((EC.doom && EC.doom.salvos) || []).filter(s => s.status === 'in_flight');
+  const intro = ecIntro('🜨', 'Длань Неотвратимости — пульт залпа',
+    'Орудие судного дня стирает планету в другой системе, превращая её в мёртвый камень. Любая колония на цели — включая столицу противника — будет уничтожена.',
+    ['Залп тратит <b>' + EC_DOOM_SHOT_GRAV + ' 🔮 Гравиядра</b>. Время полёта зависит от дистанции: <b>≈3 ч</b> к соседней системе, до <b>24 ч</b> на край карты.',
+      'Каждый выстрел изнашивает орудие; <b>🟢 Программируемая материя</b> на складе сдерживает деградацию между залпами.',
+      'Цель защищена планетарной ПРО? Снаряд может быть перехвачен.']);
+  // Нет орудия, но открыто исследование — приглашаем построить.
+  if (!guns.length) {
+    return intro + `<div class="ec-empty" style="text-align:center;padding:24px">
+      <div style="font-size:15px;margin-bottom:6px">Орудие ещё не возведено.</div>
+      <div style="color:var(--t3);margin-bottom:14px">Постройте «Длань Неотвратимости» на одной из колоний — это откроет пульт наведения.</div>
+      <button class="btn btn-rd btn-sm" onclick="ecSetTab('colonies')">🏗 Перейти к колониям и возвести орудие</button>
+    </div>`;
+  }
+  const gun = ecDoomActiveGun();
+  (EC._doomTab = EC._doomTab || {}).gunId = gun.id;
+  // Селектор орудий (если их несколько).
+  const gunSel = guns.length > 1
+    ? `<div class="ec-doom-gunsel">${guns.map(g => {
+        const nm = ecSysName(g.system_id);
+        const tag = g.in_flight ? ' · ☄️ в залпе' : (+g.integrity <= 0 ? ' · 💥' : '');
+        return `<div class="ec-doom-gunchip${g.id === gun.id ? ' on' : ''}" onclick="ecDoomTabSelGun('${g.id}')">🜨 ${esc(nm)} <small style="color:var(--t4)">${Math.round(+g.integrity)}%${tag}</small></div>`;
+      }).join('')}</div>`
+    : '';
+  // Карточка состояния активного орудия.
+  const integ = Math.max(0, Math.round(+gun.integrity));
+  const integColor = integ > 60 ? '#5fd27f' : integ > 30 ? '#e6c45f' : '#ff6a6a';
+  const matter = ecStockOf('Программируемая материя');
+  const statusCard = `<div class="ec-bld ec-bld-doom" style="border-color:rgba(220,40,40,.45);margin-bottom:12px">
+    <div class="ec-bld-top"><span class="ec-bld-name">🜨 Орудие · система «${esc(ecSysName(gun.system_id))}»</span>
+      <span style="color:var(--t4);font-size:12px">выстрелов: ${gun.total_shots || 0}</span></div>
+    <div class="ec-doom-integ" title="Целостность орудия">
+      <div class="ec-doom-integ-bar" style="background:rgba(255,255,255,.08);border-radius:4px;height:8px;overflow:hidden">
+        <div style="width:${integ}%;height:100%;background:${integColor};transition:width .3s"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:3px">
+        <span style="color:${integColor}">Целостность: <b>${integ}%</b></span>
+        <span style="color:var(--t4)">🟢 Материя: <b>${ecNum(matter)}</b> · 🔮 Гравиядро: <b>${ecNum(ecStockOf('Гравиядро'))}</b></span></div></div>
+    ${matter <= 0 ? '<div class="ec-bld-howto" style="color:#ff6a6a">Нет программируемой материи — орудие быстро деградирует!</div>' : ''}
+  </div>`;
+  // Снаряды в полёте.
+  const salvoHtml = salvos.length
+    ? `<div class="ec-section-title">Снаряды в полёте</div>${salvos.map(s => `<div class="ec-colonize-row">
+        <div class="ec-cz-main"><span class="ec-cz-name">☄️ ${esc(s.target_planet || 'цель')} <small style="color:var(--t4)">· ${esc(ecSysName(s.target_system_id))}</small></span>
+          <span class="ec-cz-sub">${ecProgressISO(null, s.ready_at, 1, 'на подлёте')}</span></div>
+        ${ecIsStaff() ? `<button class="btn btn-gh btn-sm" onclick="ecDoomTabSpeed()" title="Staff: мгновенно приземлить">⏩ Тест</button>` : ''}
+      </div>`).join('')}`
+    : '';
+  // Двухколоночный пульт: карта наведения + панель цели.
+  const consoleHtml = `<div class="ec-doom-console" style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+    <div style="flex:1 1 380px;min-width:300px" id="ec-doom-map-wrap">${ecDoomMap(gun)}</div>
+    <div style="flex:1 1 280px;min-width:260px" id="ec-doom-panel">${ecDoomPanelRender()}</div>
+  </div>`;
+  return intro + gunSel + statusCard + salvoHtml +
+    `<div class="ec-section-title">Визуальное наведение <span class="ec-hint">— кликните систему-цель на карте, затем выберите планету</span></div>` +
+    consoleHtml;
 }
 
 // Шаг 1.5 (только храм) — выбор веры, чьим будет храм. Если вера одна — пропускаем.

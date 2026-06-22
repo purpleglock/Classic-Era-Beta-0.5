@@ -111,7 +111,9 @@
       "Bash(python _sysdump_tmp.py)",
       "Bash(curl -s __TRACKED_VAR__/rest/v1/map_systems?select=id,name,x,y -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__' -o _sys_tmp.json)",
       "Bash(curl -s '__TRACKED_VAR__/rest/v1/doom_salvos?status=eq.in_flight&select=origin_system_id,target_system_id,launched_at,ready_at' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
-      "Bash(awk -F: '$1>2080 && $1<2400')"
+      "Bash(awk -F: '$1>2080 && $1<2400')",
+      "Bash(ls package.json)",
+      "Bash(head -20 package.json)"
     ]
   }
 }
