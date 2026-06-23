@@ -116,7 +116,8 @@
       "Bash(head -20 package.json)",
       "Bash(grep -nE \"\\\\.neg[ ,{]|\\\\.pos[ ,{]|\\\\.dim[ ,{]\" css/17_economy.css)",
       "Bash(grep -nE \"^\\\\.ok[ ,{]|^\\\\.dim[ ,{]|^\\\\.neg[ ,{]|^\\\\.pos[ ,{]| \\\\.ok[ ,{]| \\\\.dim[ ,{]\" css/17_economy.css)",
-      "Bash(npx --version)"
+      "Bash(npx --version)",
+      "Bash(node --check \"C:/Users/Андрей/Desktop/Classic-Era-Beta-0.5/auth.js\")"
     ]
   }
 }

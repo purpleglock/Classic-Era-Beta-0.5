@@ -230,6 +230,38 @@ function fnAchImg(n) {
   for (const id in EC_ACH) { if (EC_ACH[id] && EC_ACH[id].name === nm) return `assets/ach/${id}.webp`; }
   return '';
 }
+// По имени достижения из тела новости найти его id и запись каталога EC_ACH. null если нет.
+function fnAchLookup(n) {
+  const m = /достижени[ея]\s+«([^»]+)»/i.exec(n && n.body || '');
+  if (!m || typeof EC_ACH === 'undefined') return null;
+  const nm = m[1];
+  for (const id in EC_ACH) { if (EC_ACH[id] && EC_ACH[id].name === nm) return { id, ach: EC_ACH[id] }; }
+  return null;
+}
+// Карточка самого достижения для статьи новости: арт (или значок-фолбэк) + название +
+// условие получения + девиз + смысл + награда. '' если новость не про достижение или
+// ачивка не найдена в каталоге.
+function fnAchCardHtml(n) {
+  if (!fnIsAch(n)) return '';
+  const found = fnAchLookup(n);
+  if (!found) return '';
+  const { id, ach } = found;
+  const num = (v) => (typeof ecNum === 'function') ? ecNum(v) : v;
+  const reward = ach.reward ? `<div class="fn-ach-reward">◆ Награда: +${num(ach.reward)} ГС</div>` : '';
+  return `<div class="fn-ach-card">
+    <div class="fn-ach-art">
+      <img src="${esc(`assets/ach/${id}.webp`)}" alt="" loading="lazy" onerror="this.remove()">
+      <span class="fn-ach-glyph">${esc(ach.ic || '🏆')}</span>
+    </div>
+    <div class="fn-ach-info">
+      <div class="fn-ach-name">${esc(ach.name || '')}</div>
+      ${ach.cond  ? `<div class="fn-ach-cond">⬡ ${esc(ach.cond)}</div>` : ''}
+      ${ach.quote ? `<div class="fn-ach-quote">«${esc(ach.quote)}»</div>` : ''}
+      ${ach.desc  ? `<div class="fn-ach-desc">${esc(ach.desc)}</div>` : ''}
+      ${reward}
+    </div>
+  </div>`;
+}
 function fnFeedRow(n) {
   const kind = fnKind(n);
   const ic = kind === 'bulletin' ? '◈' : '📡';
@@ -777,6 +809,7 @@ function fnOpenArticle(id) {
       </div>
       <h1 class="fn-art-title">${esc(n.title || 'Без заголовка')}</h1>
       <div class="fn-art-body">${fnRenderBody(n.body)}</div>
+      ${fnAchCardHtml(n)}
       ${fnRenderVerdictBlock(n)}
       <div id="fn-react-slot"></div>
     </div>

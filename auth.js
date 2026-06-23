@@ -107,7 +107,12 @@ async function init() {
     route(); // первый кадр (кеша не было)
   }
 
-  setInterval(() => { sb.auth.refreshSession().catch(() => {}); }, 4 * 60 * 1000);
+  // Страховочное обновление сессии. Клиент Supabase и так авто-обновляет токен
+  // (autoRefreshToken:true, см. core.js), поэтому ручное держим РЕДКИМ: каждый
+  // refreshSession() ротирует refresh-токен = запись в auth.refresh_tokens (самая
+  // тяжёлая по индексам таблица). Было 4 мин (~15 записей/час/игрока) → 30 мин.
+  // Токен живёт ~60 мин, так что запас есть. Если сессии стабильны — можно убрать совсем.
+  setInterval(() => { sb.auth.refreshSession().catch(() => {}); }, 30 * 60 * 1000);
 
   let _lastVisSync = 0;
   document.addEventListener('visibilitychange', async () => {
