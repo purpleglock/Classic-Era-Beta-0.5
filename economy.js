@@ -256,6 +256,8 @@ const EC_BUILD = {
 };
 // Стоимость орудия в Программируемой материи (зеркало _doom_const('build_matter')).
 const EC_DOOM_BUILD_MATTER = 40, EC_DOOM_SHOT_GRAV = 20;
+// МЗА — мобильная «Длань» (зеркало _mza_const): цена постройки + расход залпа.
+const EC_MZA_BUILD_GC = 12000, EC_MZA_BUILD_MATTER = 60, EC_MZA_SHOT_GRAV = 12;
 const EC_ORDER = ['factory', 'mining', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'starbase', 'flak', 'abm', 'temple'];
 // ПРО: цена снаряда + срок доставки (зеркало _defense_const).
 const EC_ABM_AMMO_COST = 800;
@@ -1172,7 +1174,7 @@ async function ecLoad() {
 async function _ecLoadImpl() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips, defOutIntel, spyPortraits, orders] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1222,6 +1224,7 @@ async function _ecLoadImpl() {
     ecRpc('outpost_intel').catch(() => []),       // оборона: разведданные от РАЗВЕД-аванпостов (срез по соседним державам)
     ecCached('spyPortraits', () => dbGet('spy_portraits', `select=id,race,gender,url`)),  // пул портретов (админ-загрузка) — статичен, кэш на сессию
     ecRpc('orders_status').catch(() => null),     // биржа: заказы (госзаказы/RFQ) — мои заказы + доска чужих
+    ecRpc('mza_ships_mine').catch(() => []),      // МЗА: мои мобильные «Длани» (building/idle/в полёте) — управление на карте
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1233,6 +1236,7 @@ async function _ecLoadImpl() {
   EC.minefields = Array.isArray(defMines) ? defMines : [];      // оборона: видимые минные поля (гексы)
   EC.outposts = Array.isArray(defOutposts) ? defOutposts : [];  // оборона: развёрнутые аванпосты
   EC.opShips = Array.isArray(defOpShips) ? defOpShips : [];     // оборона: мои корабли-носители
+  EC.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];        // МЗА: мои мобильные «Длани»
   EC.outpostIntel = Array.isArray(defOutIntel) ? defOutIntel : [];  // оборона: разведданные разведаванпостов (срез по соседям)
   EC.spyPortraits = Array.isArray(spyPortraits) ? spyPortraits : [];  // агентура: общий пул портретов (подбор на клиенте)
   EC.doomByBuilding = {};
@@ -9045,7 +9049,7 @@ function ecTabDoom() {
       <div style="font-size:15px;margin-bottom:6px">Орудие ещё не возведено.</div>
       <div style="color:var(--t3);margin-bottom:14px">Постройте «Длань Неотвратимости» на одной из колоний — это откроет пульт наведения.</div>
       <button class="btn btn-rd btn-sm" onclick="ecSetTab('colonies')">🏗 Перейти к колониям и возвести орудие</button>
-    </div>`;
+    </div>` + ecMzaSection();
   }
   const gun = ecDoomActiveGun();
   (EC._doomTab = EC._doomTab || {}).gunId = gun.id;
@@ -9087,7 +9091,52 @@ function ecTabDoom() {
   </div>`;
   return intro + gunSel + statusCard + salvoHtml +
     `<div class="ec-section-title">Визуальное наведение <span class="ec-hint">— кликните систему-цель на карте, затем выберите планету</span></div>` +
-    consoleHtml;
+    consoleHtml + ecMzaSection();
+}
+
+// ── МЗА — мобильная «Длань»: постройка прямо в этой вкладке ──
+// Строится как корабль в системе своей колонии; дальше живёт на карте
+// (переброска/залп — кликом по носителю на галактической карте).
+function ecMzaSection() {
+  const ships = EC.mzaShips || [];
+  const gc = +EC.eco.gc || 0, matter = ecStockOf('Программируемая материя');
+  const afford = gc >= EC_MZA_BUILD_GC && matter >= EC_MZA_BUILD_MATTER;
+  // системы со своей колонией — где можно заложить носитель
+  const sysIds = [...new Set((EC.colonies || []).map(c => c.system_id).filter(Boolean))];
+  const buildForm = !sysIds.length
+    ? `<div class="ec-empty" style="padding:8px">Нет колоний — МЗА закладывается в системе вашей колонии.</div>`
+    : `<div class="ec-prod-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0">
+        <select id="ec-mza-sys" class="ec-input" style="min-width:180px">${sysIds.map(sid => `<option value="${esc(sid)}">${esc(ecSysName(sid))}</option>`).join('')}</select>
+        <input type="text" id="ec-mza-name" class="ec-input" style="width:160px" maxlength="40" placeholder="имя (необязательно)">
+        <button class="btn btn-rd btn-sm" ${afford ? '' : 'disabled'} title="${afford ? '' : 'Не хватает ГС или Программируемой материи'}" onclick="ecMzaBuild()">☣ Заложить МЗА · ${ecNum(EC_MZA_BUILD_GC)} ГС + ${EC_MZA_BUILD_MATTER} 🟢</button>
+      </div>
+      <div class="ec-bld-howto">Строится <b>сутки</b>, затем появляется на <b>галактической карте</b>. Переброска по всей карте и залпы по планетам — кликом по носителю на карте. Залп тратит <b>${EC_MZA_SHOT_GRAV} 🔮 Гравиядра</b> и изнашивает корпус (≈4 залпа).</div>`;
+  const shipRows = ships.length
+    ? ships.map(sh => {
+        const st = sh.status === 'building' ? '🏗 строится' : sh.status === 'transit' ? '➤ в пути'
+          : (sh.in_flight ? '☄️ залп в полёте' : (sh.can_fire ? '🜨 готова к залпу' : '⚓ на стоянке'));
+        const where = sh.system_id ? ' · ' + esc(ecSysName(sh.system_id)) : '';
+        return `<div class="ec-colonize-row"><div class="ec-cz-main">
+            <span class="ec-cz-name">☣ МЗА${sh.name ? ' «' + esc(sh.name) + '»' : ''}<small style="color:var(--t4)">${where}</small></span>
+            <span class="ec-cz-sub">${st} · корпус ${Math.round(+sh.integrity || 0)}%</span></div></div>`;
+      }).join('')
+    : '';
+  return `<div class="ec-section-title" style="margin-top:18px">☣ МЗА — мобильная «Длань Неотвратимости» <span class="ec-hint">— орудие судного дня на корабле: ездит по всей карте</span></div>
+    ${buildForm}
+    ${ships.length ? `<div class="ec-sub-title" style="margin-top:8px">Мои МЗА · ${ships.length} <span class="ec-hint">(управление — на карте)</span></div>${shipRows}` : ''}`;
+}
+async function ecMzaBuild() {
+  if (EC.busy) return;
+  const sel = ecId('ec-mza-sys'); if (!sel || !sel.value) { toast('Выберите систему с колонией', 'err'); return; }
+  if ((+EC.eco.gc || 0) < EC_MZA_BUILD_GC) { toast('Не хватает ГС: МЗА стоит ' + ecNum(EC_MZA_BUILD_GC), 'err'); return; }
+  const nm = (ecId('ec-mza-name')?.value || '').trim();
+  EC.busy = true;
+  try {
+    await ecRpc('mza_build', { p_system_id: sel.value, p_name: nm || null });
+    toast('☣ МЗА заложена · строится сутки · появится на карте', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
 }
 
 // Шаг 1.5 (только храм) — выбор веры, чьим будет храм. Если вера одна — пропускаем.
