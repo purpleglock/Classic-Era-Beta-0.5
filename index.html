@@ -40,9 +40,9 @@
 <link rel="icon" type="image/png" id="favicon" href="">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:ital,wght@0,200;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/index.css?v=20260623d"></head>
+<link rel="stylesheet" href="css/index.css?v=20260623un"></head>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Exo+2:ital,wght@0,200;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/index.css?v=20260623d">
+<link rel="stylesheet" href="css/index.css?v=20260623un">
 <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -310,7 +310,7 @@
     <div class="mo-body">
       <div class="fg">
         <label class="fl">Тип страницы</label>
-        <select class="fi" id="np-type" onchange="document.getElementById('np-type-hint').textContent=({article:'Обычная статья с блоками',character:'Карточка персонажа — имя, класс, статы, снаряжение',faction:'Страница фракции / государства',item:'Карточка снаряжения — редкость, слот, бонусы',ability:'Карточка способности — тип, эффект, дальность',unit:'Юнит / Корабль — конструктор с модулями',preview:'Превью характеристик с фильтром и кнопками'})[this.value]||''">
+        <select class="fi" id="np-type" onchange="document.getElementById('np-type-hint').textContent=({article:'Обычная статья с блоками',character:'Карточка персонажа — имя, класс, статы, снаряжение',faction:'Страница фракции / государства',item:'Карточка снаряжения — редкость, слот, бонусы',ability:'Карточка способности — тип, эффект, дальность',unit:'Юнит / Корабль — конструктор с модулями',preview:'Превью характеристик с фильтром и кнопками',location:'RP-страница мира — обстановка, система, контроль, описание'})[this.value]||''">
           <option value="article">📄 Статья</option>
           <option value="character">◉ Персонаж</option>
           <option value="faction">⬡ Фракция / Государство</option>
@@ -318,6 +318,7 @@
           <option value="ability">◈ Способность</option>
           <option value="unit">⊕ Юнит / Корабль</option>
           <option value="preview">◈ Превью</option>
+          <option value="location">📍 Локация</option>
         </select>
         <div id="np-type-hint" style="font-size:10px;color:var(--t4);margin-top:3px">Обычная статья с блоками</div>
       </div>

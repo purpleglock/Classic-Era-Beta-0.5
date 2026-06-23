@@ -434,6 +434,15 @@ function fnRenderBody(body) {
   // и не видит парный тег. Поэтому вынимаем такие блоки целиком ДО renderMd,
   // подменяем плейсхолдером, а после — возвращаем готовый HTML рун.
   const blocks = [];
+  // Сворачиваемые «главы» [spoiler:Заголовок]…[/spoiler] и блоки под паролем
+  // [lock:пароль|Заголовок]…[/lock]. Вынимаем ДО renderMd (они многострочные),
+  // содержимое рендерим рекурсивно, на место ставим плейсхолдер FNEMBi.
+  const embeds = [];
+  const stash = h => `\n\nFNEMB${embeds.push(h) - 1}\n\n`;
+  t = t.replace(/\[spoiler:([^\]\n]*)\]([\s\S]*?)\[\/spoiler\]/gi,
+    (_, title, inner) => stash(fnSpoilerHtml(title, fnRenderBody(inner))));
+  t = t.replace(/\[lock:([^\]\n]*?)\]([\s\S]*?)\[\/lock\]/gi,
+    (_, meta, inner) => stash(fnLockHtml(meta, fnRenderBody(inner))));
   t = t.replace(/\[fx:schizo\]([\s\S]*?)\[\/fx\]/gi, (_, inner) => {
     const i = blocks.push(typeof schizoWrap === 'function' ? schizoWrap(inner) : esc(inner)) - 1;
     return `\n\nSZ${i}\n\n`;
@@ -450,7 +459,59 @@ function fnRenderBody(body) {
                .split('<p> ' + tok + '</p>').join(div)
                .split(tok).join(div);
   });
+  // Возвращаем сворачиваемые блоки / блоки под паролем (без обёртки)
+  embeds.forEach((b, bi) => {
+    const tok = 'FNEMB' + bi;
+    html = html.split('<p>' + tok + '</p>').join(b)
+               .split('<p>' + tok + ' </p>').join(b)
+               .split('<p> ' + tok + '</p>').join(b)
+               .split(tok).join(b);
+  });
   return html;
+}
+
+// base64 от UTF-8 строки — чтобы пароль не лежал в DOM открытым текстом
+// (это не настоящая защита, а «спойлер»: содержимое всё равно в разметке).
+function fnB64(s) { try { return btoa(unescape(encodeURIComponent(String(s)))); } catch (e) { return ''; } }
+
+// HTML сворачиваемой «главы»: клик по шапке раскрывает/прячет содержимое.
+function fnSpoilerHtml(title, bodyHtml) {
+  const t = esc((String(title || '').trim()) || 'Раскрыть');
+  return `<div class="fn-spoiler"><button type="button" class="fn-spoiler-hd" onclick="fnSpoilerToggle(this)">`
+    + `<span class="fn-spoiler-ar">▶</span><span class="fn-spoiler-ttl">${t}</span></button>`
+    + `<div class="fn-spoiler-body">${bodyHtml}</div></div>`;
+}
+// HTML блока под паролем: meta = "пароль" или "пароль|Заголовок".
+function fnLockHtml(meta, bodyHtml) {
+  const parts = String(meta || '').split('|');
+  const pw = (parts[0] || '').trim();
+  const title = esc((parts.slice(1).join('|').trim()) || 'Под паролем');
+  return `<div class="fn-lock" data-pw="${esc(fnB64(pw))}"><div class="fn-lock-hd">🔒 ${title}</div>`
+    + `<div class="fn-lock-gate"><input type="password" class="fn-lock-inp" placeholder="Введите пароль…" `
+    + `onkeydown="if(event.key==='Enter'){event.preventDefault();fnLockTry(this);}">`
+    + `<button type="button" class="fn-lock-btn" onclick="fnLockTry(this)">Открыть</button>`
+    + `<span class="fn-lock-msg"></span></div><div class="fn-lock-body" hidden>${bodyHtml}</div></div>`;
+}
+// Раскрытие/сворачивание «главы».
+function fnSpoilerToggle(btn) {
+  const box = btn && btn.closest('.fn-spoiler');
+  if (box) box.classList.toggle('open');
+}
+// Проверка пароля и раскрытие защищённого блока.
+function fnLockTry(el) {
+  const box = el && el.closest('.fn-lock');
+  if (!box) return;
+  const inp = box.querySelector('.fn-lock-inp');
+  const msg = box.querySelector('.fn-lock-msg');
+  if (fnB64(inp && inp.value || '') === (box.getAttribute('data-pw') || '') && (box.getAttribute('data-pw') || '')) {
+    box.classList.add('open');
+    const body = box.querySelector('.fn-lock-body'); if (body) body.hidden = false;
+    const gate = box.querySelector('.fn-lock-gate'); if (gate) gate.style.display = 'none';
+  } else {
+    if (msg) msg.textContent = 'Неверный пароль';
+    box.classList.add('fn-lock-shake');
+    setTimeout(() => box.classList.remove('fn-lock-shake'), 420);
+  }
 }
 
 // ── Вердикт администрации (комментарий + журнал выдач) ────────
@@ -1190,6 +1251,10 @@ function fnOpenComposer(id) {
           <button type="button" class="mdt" title="Цвет: циан" onclick="fnMd('[c:cyan]','[/c]','текст')" style="color:#3ec0d0">A</button>
           <button type="button" class="mdt" title="Цвет: красный" onclick="fnMd('[c:red]','[/c]','текст')" style="color:#ff6b6b">A</button>
           <button type="button" class="mdt" title="Подсветка" onclick="fnMd('[bg:cyber]','[/bg]','текст')">▮</button>
+          <span class="mdt-sep"></span>
+          <button type="button" class="mdt" title="Картинка по ссылке" onclick="fnInsertImgUrl()">🖼</button>
+          <button type="button" class="mdt" title="Сворачиваемый блок (как глава)" onclick="fnMd('[spoiler:Глава]\\n','\\n[/spoiler]','скрытый текст')">▸</button>
+          <button type="button" class="mdt" title="Спойлер под паролем" onclick="fnMd('[lock:пароль|Секрет]\\n','\\n[/lock]','секретный текст')">🔒</button>
           ${fnIsStaff() ? `<span class="mdt-sep"></span>
           <button type="button" class="mdt" title="Сканер" onclick="fnMd('[fx:scanner]','[/fx]','текст')">▤</button>
           <button type="button" class="mdt" title="Дрожь" onclick="fnMd('[fx:jitter]','[/fx]','текст')">≈</button>
@@ -1400,6 +1465,12 @@ function fnInsertFac(fid, name, flag) {
   fnPreviewSoon();
 }
 
+function fnInsertImgUrl() {
+  const url = (prompt('Ссылка на картинку (https://…):', '') || '').trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) { toast('Нужна ссылка вида http(s)://…', 'err'); return; }
+  fnMd('\n\n[img:' + url + ']\n\n', '', '');
+}
 function fnInsertImg(input) {
   const file = input?.files?.[0];
   if (!file) return;
