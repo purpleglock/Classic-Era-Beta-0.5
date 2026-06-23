@@ -21,17 +21,27 @@ alter table public.colony_buildings add column if not exists ammo_ready   timest
 -- ── Константы (надмножество _defense_outpost.sql) ──
 create or replace function public._defense_const(p_key text)
 returns numeric language sql immutable as $$
+  -- ВНИМАНИЕ: это последний срез обороны — функция ДОЛЖНА быть суперсетом всех
+  -- предыдущих (_defense_outpost.sql и др.), иначе create-or-replace затрёт ключи
+  -- аванпостов/hex-мин и сломает их (напр. op_fly_h_* → NULL → arrive_at NULL,
+  -- носитель застревает в полёте навсегда).
   select case p_key
     when 'starbase_cap_per_slot' then 50
     when 'repair_fraction'       then 0.40
     when 'repair_cost_frac'      then 0.50
     when 'repair_days'           then 1
-    when 'mine_full_cost'        then 2000
-    when 'mine_attrition'        then 0.15
-    when 'mine_wear'             then 0.25
-    when 'outpost_cost'          then 1500
-    when 'outpost_cap'           then 20
-    when 'outpost_refund'        then 0.50
+    when 'mine_hex_max'          then 6
+    when 'mine_hex_cost'         then 400
+    when 'mine_hex_attrition'    then 0.05
+    when 'mine_wear_hexes'       then 1
+    when 'mine_refund_frac'      then 0.50
+    when 'outpost_ship_cost'     then 2000    -- ГС за постройку корабля-носителя
+    when 'outpost_build_h'       then 24      -- постройка носителя занимает сутки
+    when 'outpost_cap'           then 20      -- +вместимость флота за добыв. аванпост
+    when 'outpost_refund'        then 0.50    -- доля возврата при разборке/сломе
+    when 'outpost_mine_gc'       then 75      -- ГС/сут с добывающего аванпоста
+    when 'op_fly_h_min'          then 2       -- мин. полёт носителя (соседняя система), часов
+    when 'op_fly_h_max'          then 18      -- макс. полёт носителя (край↔край карты), часов
     when 'abm_ammo_cost'         then 800     -- ГС за снаряд ПРО
     when 'abm_ammo_days'         then 1       -- срок доставки снарядов (дней)
     when 'flak_per_slot'         then 0.15    -- ПВО: −доля урона авиации за слот
@@ -146,4 +156,17 @@ grant execute on function public.planet_defense_status() to authenticated;
 --  а если орудие не установлено вовсе, ПРО просто нечего перехватывать.
 --  Никаких действий здесь не требуется — функция _abm_intercept уже создана выше.
 -- ════════════════════════════════════════════════════════════════════════════
+
+-- ── ОДНОРАЗОВЫЙ БЭКФИЛЛ: расклинить носители, застрявшие в полёте с arrive_at=NULL ──
+--  Симптом: ранее этот срез затирал _defense_const устаревшей версией без ключей
+--  op_fly_h_*, поэтому outpost_ship_send писал arrive_at=NULL → полёт не считался и
+--  ленивое прибытие (arrive_at <= now()) никогда не срабатывало. Функции выше уже
+--  починены; здесь добиваем уже испорченные строки: проставляем им корректный
+--  arrive_at от depart_at (или от now(), если и его нет) по дистанции маршрута.
+update public.outpost_ships
+  set depart_at = coalesce(depart_at, now()),
+      arrive_at = coalesce(depart_at, now())
+                  + (coalesce(public._outpost_fly_hours(from_sys, dest_sys),
+                              public._defense_const('op_fly_h_min')) || ' hours')::interval
+  where status = 'transit' and arrive_at is null and dest_sys is not null;
 

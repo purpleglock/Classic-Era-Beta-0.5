@@ -65,6 +65,8 @@ create table if not exists public.doom_salvos (
 );
 create index if not exists doom_salvos_fid_idx    on public.doom_salvos(faction_id);
 create index if not exists doom_salvos_status_idx on public.doom_salvos(status);
+-- держава, чья колония была стёрта этим залпом (для ачивки «Мироубийца»); null — пустой мир
+alter table public.doom_salvos add column if not exists victim_fid text;
 
 alter table public.doom_guns   enable row level security;
 alter table public.doom_salvos enable row level security;
@@ -310,6 +312,8 @@ begin
         select name into victim_name from public.faction_applications
           where faction_id = victim_fid and status='approved' order by updated_at desc limit 1;
         delete from public.colonies where id = col.id;   -- colony_buildings уходят каскадом
+        -- фиксируем жертву на залпе (для ачивки «Мироубийца»); col.* живо после delete
+        update public.doom_salvos set victim_fid = col.faction_id where id = s.id;
       end if;
 
       perform public._doom_news(

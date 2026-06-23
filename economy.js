@@ -2507,6 +2507,30 @@ const EC_ACH = {
     quote: 'Sacrum in centro mundi.',
     desc: 'Где сходятся начала всего сущего, воздвигни алтарь веры, и верни надежду, что покинула этот мир.',
     cond: 'Возведи Храм Веры в колонии системы «Храм мироздания»' },
+  spes_perdita: { name: 'Надежда не вернётся', ic: '☄', reward: 10000,
+    quote: 'Sic transit gloria mundi.',
+    desc: 'Где сходились начала всего сущего — теперь лишь пепел да мёртвый камень. Ты не оставил даже надежды.',
+    cond: 'Сотри все уничтожимые планеты системы «Храм мироздания» Дланью Неотвратимости' },
+  solitudo: { name: 'Так одиноко', ic: '🛰', reward: 3000,
+    quote: 'Ubi solitudinem faciunt.',
+    desc: 'На самом краю изведанного, где обрывается последний гиперпуть, горит одинокий огонёк твоего форпоста.',
+    cond: 'Разверни аванпост в системе «Конец гиперпути»' },
+  iudex_et_iudicium: { name: 'Суд и судья', ic: '⚖', reward: 6000,
+    quote: 'Iudex damnatur ubi nocens absolvitur.',
+    desc: 'Ты вынес приговор целому миру — и сам же привёл его в исполнение. Кто судит звёзды?',
+    cond: 'Уничтожь планету межзвёздной артиллерией' },
+  mundicida: { name: 'Мироубийца', ic: '💀', reward: 8000,
+    quote: 'Hostem qui feriet, mihi erit Carthaginiensis.',
+    desc: 'Чужой дом, чужие надежды, чужая история — всё обратилось в пепел по твоему слову.',
+    cond: 'Уничтожь колонию другого игрока' },
+  quinque_stationes: { name: 'я не придумал название...', ic: '🛰', reward: 5000,
+    quote: 'Per aspera ad astra.',
+    desc: 'Твои форпосты раскинулись по всей галактике — тихие маяки в пустоте.',
+    cond: 'Развернуть 5 аванпостов по галактике' },
+  capitale: { name: 'Капитал', ic: '🏛', reward: 3000,
+    quote: 'Pecunia non olet.',
+    desc: 'Из камня и труда ты сложил организацию, чьи акции теперь ходят по бирже.',
+    cond: 'Учреди корпорацию на бирже' },
 
   // ════════ КАПСТОУН ════════
   summa_perfectio: { name: 'Гиперпуть стоика завершён', ic: '🟆', reward: 0,
@@ -2546,8 +2570,10 @@ const EC_ACH_ORDER = ['sibi_imperare', 'constantia', 'cosmopolites', 'amor_fati'
   'magister_magnus', 'fur_maximus', 'vastator', 'archipirata', 'machina_belli', 'via_magna', 'imperator_imperatorum',
   // ── Колонии-станции Небожителей ──
   'statio_orbitalis', 'statio_anomala',
+  // ── Война / экспансия / биржа (новые) ──
+  'iudex_et_iudicium', 'mundicida', 'quinque_stationes', 'capitale',
   // ── Пасхалка / особое + капстоун ──
-  'kfzlib', 'templum_mundi',
+  'kfzlib', 'templum_mundi', 'spes_perdita', 'solitudo',
   'summa_perfectio'];
 
 // Пути достижений — для фильтра и группировки в панели. Каждая ачивка отнесена
@@ -2569,7 +2595,7 @@ const EC_ACH_CAT = {
   magnae_divitiae: 'power', classis: 'power', plena_officina: 'power', copia_rerum: 'power',
   industria_plena: 'power', dispersio: 'power', croesus: 'power', urbs_aeterna: 'power',
   pax_galactica: 'power', terraformator: 'power', thesaurus: 'power',
-  statio_orbitalis: 'power', statio_anomala: 'power',
+  statio_orbitalis: 'power', statio_anomala: 'power', quinque_stationes: 'power',
   // Познание — наука и исследования
   sibi_imperare: 'science', sophia: 'science', omniscientia: 'science', sapientia_summa: 'science',
   duae_viae: 'science', ordo_cognoscendi: 'science',
@@ -2577,7 +2603,7 @@ const EC_ACH_CAT = {
   fortitudo: 'war', legio: 'war', imperator_belli: 'war', arsenal: 'war', arma_omnia: 'war',
   crucigera: 'war', dreadnought: 'war', centuria_navium: 'war', leviathan: 'war',
   classis_magna: 'war', legio_ferrata: 'war', ala_magna: 'war', machina_belli: 'war', archipirata: 'war',
-  brandtaucher: 'war', belicosa: 'war',
+  brandtaucher: 'war', belicosa: 'war', iudex_et_iudicium: 'war', mundicida: 'war',
   // Тайная война — шпионаж, секты, контрразведка
   prudentia: 'spy', amor_fati: 'spy', magister_arcanorum: 'spy', missionarius: 'spy',
   contra_speculator: 'spy', magister_magnus: 'spy', rete_arcanum: 'spy', cohors_arcana: 'spy',
@@ -2593,9 +2619,10 @@ const EC_ACH_CAT = {
   vox_imperii: 'diplo',
   // Торговля — пути, бартер, рынок технологий
   dichotomia: 'trade', mercator: 'trade', via_argentaria: 'trade', permutatio: 'trade',
-  emptor: 'trade', via_magna: 'trade',
+  emptor: 'trade', via_magna: 'trade', capitale: 'trade',
   // Особое — пасхалка + храм мироздания + мета-капстоун
-  kfzlib: 'special', templum_mundi: 'special', summa_perfectio: 'special',
+  kfzlib: 'special', templum_mundi: 'special', spes_perdita: 'special', solitudo: 'special',
+  summa_perfectio: 'special',
 };
 function ecAchCat(id) { return EC_ACH_CAT[id] || 'special'; }
 

@@ -46,6 +46,27 @@ update public.index_holdings
        updated_at = now()
  where units <> 0 or basis <> 0;
 
+-- ════════════════════════════════════════════════════════════════════════════
+--  СЕРВЕРНЫЙ ЗАМОК — ГЛАВНОЕ. UI-баннер прячет кнопки, но казино-RPC выданы роли
+--  authenticated, и нарушители зовут их НАПРЯМУЮ через REST/консоль (минуя UI).
+--  Поэтому отзываем право вызова у всех игрок-facing точек входа казино:
+--  открытие/покупка/продажа/закрытие. Оставляем *_settle (нужны тику) и *_status
+--  (нужны UI на чтение) — они денег не печатают. Revoke обратим: при возврате
+--  инструментов после корневого фикса просто выдашь grant снова.
+-- ════════════════════════════════════════════════════════════════════════════
+revoke execute on function public.index_buy(numeric)                       from authenticated, anon;
+revoke execute on function public.index_sell(numeric)                      from authenticated, anon;
+revoke execute on function public.margin_open(text,text,numeric,numeric)   from authenticated, anon;
+revoke execute on function public.margin_close(uuid)                       from authenticated, anon;
+revoke execute on function public.futures_open(text,text,numeric,numeric,int) from authenticated, anon;
+revoke execute on function public.futures_close(uuid)                      from authenticated, anon;
+revoke execute on function public.options_buy(text,text,numeric,numeric,int)  from authenticated, anon;
+revoke execute on function public.options_close(uuid)                      from authenticated, anon;
+revoke execute on function public.bond_buy(uuid,int)                       from authenticated, anon;
+
+-- PostgREST: сбросить кэш схемы, чтобы отзыв подхватился сразу
+notify pgrst, 'reload schema';
+
 -- ── Проверка ────────────────────────────────────────────────────────────────
 -- Должно быть 0 во всех строках:
 select 'margin_open'  as what, count(*) from public.margin_positions  where status = 'open'

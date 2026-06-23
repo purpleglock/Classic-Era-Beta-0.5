@@ -126,6 +126,15 @@ declare
   v_div_built  int;      -- сформировано дивизий (производство category='division')
   v_named_bs   boolean;  -- создан линкор (battleship) с именем «Брандтаухер»
   v_named_cr   boolean;  -- создан крейсер (cruiser) с именем «Беликоза»
+  -- ── девятый набор (лор-системы: судный день над «Храмом Мироздания» + аванпост у «Конца гиперпути») ──
+  v_doom_temple   boolean;  -- ВСЕ уничтожимые планеты системы «Храм мироздания» стёрты МОИМ судным орудием
+  v_outpost_edge  boolean;  -- развёрнут мой аванпост в системе «Конец гиперпути»
+  v_temple_pl     int;      -- всего уничтожимых планет в «Храме мироздания»
+  v_temple_doomed int;      -- из них стёрто моим орудием (doomed_by=fid)
+  v_doom_kill     boolean;  -- уничтожил хоть одну планету орудием судного дня
+  v_worldkiller   boolean;  -- стёр колонию ДРУГОГО игрока (doom_salvos.victim_fid)
+  v_outposts_n    int;      -- развёрнуто моих аванпостов (по галактике)
+  v_corp          boolean;  -- учредил корпорацию (организацию) на бирже
   rec         record;
   newly       int := 0;
   new_ids     jsonb := '[]'::jsonb;
@@ -164,6 +173,8 @@ begin
   v_giant:=false; v_anomaly_col:=false; v_temple_sanctuary:=false;
   v_steal_gc:=0; v_steal_res:=0; v_destroyed:=0; v_killed:=0; v_techstolen:=0;
   v_caught:=0; v_div_built:=0; v_named_bs:=false; v_named_cr:=false;
+  v_doom_temple:=false; v_outpost_edge:=false; v_temple_pl:=0; v_temple_doomed:=0;
+  v_doom_kill:=false; v_worldkiller:=false; v_outposts_n:=0; v_corp:=false;
 
   -- ── Казна (gc/science/tnp/research — базовые). research_slots/queue из
   --    _research_queue.sql: если миграции нет, ловим undefined_column ──
@@ -238,6 +249,58 @@ begin
            and lower(btrim(ms.name)) = 'храм мироздания');
     end if;
   exception when others then v_temple_sanctuary:=false; end;
+
+  -- ── Лор-достижение «Надежда не вернётся»: в системе «Храм мироздания»
+  --   ВСЕ уничтожимые планеты стёрты МОИМ орудием судного дня. _doom_resolve
+  --   (_interstellar_artillery.sql) помечает поражённую планету doomed_by=fid.
+  --   «Уничтожимые» = тела-планеты: kind='planet' ИЛИ без поля kind (столичные
+  --   планеты в _ensure_capital пишутся без kind); пояса/аномалии исключены. ──
+  begin
+    if to_regclass('public.map_systems') is not null then
+      select count(*) filter (where coalesce(b.val->>'kind','planet')='planet'),
+             count(*) filter (where coalesce(b.val->>'kind','planet')='planet'
+                                and (b.val->>'doomed_by') = fid)
+        into v_temple_pl, v_temple_doomed
+        from public.map_systems ms
+        cross join lateral jsonb_array_elements(coalesce(ms.planets,'[]'::jsonb)) as b(val)
+       where lower(btrim(ms.name)) = 'храм мироздания';
+      v_doom_temple := coalesce(v_temple_pl,0) > 0 and v_temple_pl = v_temple_doomed;
+    end if;
+  exception when others then v_doom_temple:=false; end;
+
+  -- ── Орудие судного дня: разрешившиеся залпы (_interstellar_artillery.sql).
+  --   status='done' = снаряд приземлился и стёр планету (intercepted — отдельно);
+  --   victim_fid (заполняет _doom_resolve) = держава, чью колонию снёс залп. ──
+  begin
+    if to_regclass('public.doom_salvos') is not null then
+      v_doom_kill := exists(
+        select 1 from public.doom_salvos where faction_id=fid and status='done');
+      v_worldkiller := exists(
+        select 1 from public.doom_salvos
+         where faction_id=fid and victim_fid is not null and victim_fid <> fid);
+    end if;
+  exception when others then v_doom_kill:=false; v_worldkiller:=false; end;
+
+  -- ── Аванпосты (public.outposts из _defense_outpost.sql): лор-система «Конец
+  --   гиперпути» + общее число развёрнутых по галактике. ──
+  begin
+    if to_regclass('public.outposts') is not null then
+      select count(*) into v_outposts_n from public.outposts where faction_id=fid;
+      if to_regclass('public.map_systems') is not null then
+        v_outpost_edge := exists(
+          select 1 from public.outposts o
+            join public.map_systems ms on ms.id = o.system_id
+           where o.faction_id = fid and lower(btrim(ms.name)) = 'конец гиперпути');
+      end if;
+    end if;
+  exception when others then v_outpost_edge:=false; v_outposts_n:=0; end;
+
+  -- ── Биржа: учреждена корпорация (организация) — _exchange_corps.sql ──
+  begin
+    if to_regclass('public.corporations') is not null then
+      v_corp := exists(select 1 from public.corporations where faction_id=fid);
+    end if;
+  exception when others then v_corp:=false; end;
 
   -- ── Торговля / шпионаж / займы (базовые таблицы _economy_setup) ──
   select count(*) into v_routes from public.trade_routes where (a_fid=fid or b_fid=fid) and status='active';
@@ -474,8 +537,14 @@ begin
       -- ════════ ПАСХАЛКА / ОСОБОЕ ════════
       ('kfzlib',             2000, v_kfzlib),
       ('templum_mundi',      5000, v_temple_sanctuary),
+      ('spes_perdita',      10000, v_doom_temple),
+      ('solitudo',           3000, v_outpost_edge),
+      ('iudex_et_iudicium',  6000, v_doom_kill),
+      ('mundicida',          8000, v_worldkiller),
+      ('quinque_stationes',  5000, v_outposts_n >= 5),
+      ('capitale',           3000, v_corp),
       -- ════════ КАПСТОУН: получить все остальные ════════
-      ('summa_perfectio',       0, v_ach_count >= 83)
+      ('summa_perfectio',       0, v_ach_count >= 89)
     ) as t(ach_id, reward, met)
   loop
     if rec.met then
