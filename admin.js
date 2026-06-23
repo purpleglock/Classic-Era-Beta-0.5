@@ -45,6 +45,7 @@ const AD = {
   designs:   [],        // faction_units (all)
   routes:    [],        // trade_routes (all)
   portraits: [],        // spy_portraits (общий пул портретов оперативников)
+  unions:    [],        // diplo_unions (все союзы — реестр для удаления)
   byFid:     new Map(), // fid → { app, eco, colonies[], buildings[], roster[], queue[], designs[], systems[] }
   resInfo:   {},        // resName → { r, icon }
   sel:       null,      // selected faction_id
@@ -126,6 +127,19 @@ async function adLoadDetails() {
   AD.routes    = routes  || [];
   AD.faithFids = new Set((faiths || []).map(f => f.faction_id));
   AD.portraits = portraits || [];
+  try { AD.unions = await adRpc('union_admin_list') || []; } catch (e) { AD.unions = []; }
+}
+
+// Лёгкий вызов SECURITY DEFINER RPC из админ-панели (свежий токен + JSON).
+async function adRpc(fn, body) {
+  const token = await getTokenFresh();
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST', headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  if (!r.ok) { const t = await r.text(); throw new Error(t || ('HTTP ' + r.status)); }
+  if (r.status === 204) return null;
+  return r.json();
 }
 
 async function adLoad() { await adLoadCore(); await adLoadDetails(); adBuildIndex(); }
@@ -212,7 +226,7 @@ function adPaint() {
     // содержимое (adSelectFaction), без перерисовки всей страницы — это
     // надёжнее (полный re-render #pg на Vercel почему-то не показывал панель).
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
-    body = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + adPortraitsPanel() + stats;
+    body = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + adUnionsPanel() + adPortraitsPanel() + stats;
   } catch (e) {
     console.error('[ADMIN] adPaint build error', e);
     body = `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px;margin-top:12px">Ошибка отрисовки: ${esc(e.message || String(e))}<br><button class="btn btn-gh btn-sm" onclick="go('admin',false)" style="margin-top:8px">↺ Повторить</button></div>`;
@@ -318,6 +332,51 @@ function adPortraitsPanel() {
     </div>
     <div id="ad-portrait-grid">${groups}</div>
   </div>`;
+}
+// ── Союзы: реестр всех федераций/конфедераций + удаление ──────
+function adUnionsPanel() {
+  const list = AD.unions || [];
+  const ST = { pending: ['НА МОДЕРАЦИИ', 'var(--color-warning,#d9a13a)'], approved: ['ОДОБРЕН', 'var(--ok,#5fbf7f)'], rejected: ['ОТКЛОНЁН', 'var(--err,#ff7a7a)'] };
+  const cards = list.map(u => {
+    const col  = u.color || '#5a7fb0';
+    const kind = u.kind === 'federation' ? '🛡 Федерация' : '🤝 Конфедерация';
+    const st   = ST[u.status] || ['—', 'var(--t4,#6a7a88)'];
+    const herald = u.herald_url
+      ? `<div style="width:40px;height:40px;border-radius:8px;flex-shrink:0;background:#0c1322 center/cover no-repeat;background-image:url('${esc(u.herald_url)}')"></div>`
+      : `<div style="width:40px;height:40px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#0c1322;color:${esc(col)};font-size:18px">${u.kind === 'federation' ? '🛡' : '🤝'}</div>`;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--w2,#2a3340);border-radius:9px;background:var(--b1,#0f141b)">
+      <span style="width:5px;align-self:stretch;border-radius:4px;background:${esc(col)}"></span>
+      ${herald}
+      <div style="min-width:0;flex:1">
+        <div style="font-weight:700;color:var(--t1,#e8edf2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.name || 'Без названия')}
+          <span style="font-size:9px;font-weight:700;letter-spacing:.08em;color:${st[1]};border:1px solid ${st[1]};border-radius:5px;padding:1px 5px;margin-left:6px">${st[0]}</span></div>
+        <div style="font-size:11px;color:var(--t3,#8aa0b0);margin-top:2px">${kind} · 👑 ${esc(u.leader_name || u.leader_fid || '—')} · 👥 ${(+u.members || 0)}</div>
+      </div>
+      <button class="btn btn-rd btn-sm" onclick="adUnionDelete('${esc(u.id)}', this)" style="white-space:nowrap">🗑 Удалить</button>
+    </div>`;
+  }).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:14px 0">Союзов нет.</div>';
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🤝 Союзы <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· все федерации и конфедерации (${list.length})</span></div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 12px">Удаление союза необратимо: распускает объединение, убирает всех участников и приглашения. Вассальные пакты не затрагиваются.</div>
+    <div style="display:flex;flex-direction:column;gap:8px">${cards}</div>
+  </div>`;
+}
+async function adUnionDelete(id, btn) {
+  if (AD.busy) return;
+  const u = (AD.unions || []).find(x => x.id === id);
+  const name = u ? (u.name || 'союз') : 'союз';
+  if (!confirm(`Удалить союз «${name}»?\n\nОбъединение будет распущено, все участники и приглашения удалены. Необратимо.`)) return;
+  AD.busy = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Удаление…'; }
+  try {
+    await adRpc('union_delete', { p_union_id: id });
+    AD.unions = (AD.unions || []).filter(x => x.id !== id);
+    toast(`Союз «${name}» удалён`, 'ok');
+    adPaint();
+  } catch (ex) {
+    toast('Ошибка: ' + (ex.message || ex), 'err');
+    if (btn) { btn.disabled = false; btn.textContent = '🗑 Удалить'; }
+  } finally { AD.busy = false; }
 }
 async function adPortraitUpload() {
   const fileEl = document.getElementById('ad-portrait-file');

@@ -118,7 +118,9 @@
       "Bash(grep -nE \"^\\\\.ok[ ,{]|^\\\\.dim[ ,{]|^\\\\.neg[ ,{]|^\\\\.pos[ ,{]| \\\\.ok[ ,{]| \\\\.dim[ ,{]\" css/17_economy.css)",
       "Bash(npx --version)",
       "Bash(node --check \"C:/Users/Андрей/Desktop/Classic-Era-Beta-0.5/auth.js\")",
-      "Bash(cd \"/c/Users/Андрей/Desktop/Classic-Era-Beta-0.5\" && node --check economy.js && node --check admin.js && node --check constructors.js && node --check data.js && echo \"JS OK\" && grep -nE \"economy\\\\.js\\\\?v=|admin\\\\.js\\\\?v=\" index.html)"
+      "Bash(cd \"/c/Users/Андрей/Desktop/Classic-Era-Beta-0.5\" && node --check economy.js && node --check admin.js && node --check constructors.js && node --check data.js && echo \"JS OK\" && grep -nE \"economy\\\\.js\\\\?v=|admin\\\\.js\\\\?v=\" index.html)",
+      "Bash(ls _exchange_corp*.sql _corp*.sql)",
+      "Bash(grep -l \"'board'\" *.sql)"
     ]
   }
 }
