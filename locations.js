@@ -36,14 +36,27 @@ async function locCanEditCap(slug) {
   return !!(fid && slug === 'loc-cap-' + fid);
 }
 
-// Добавить кнопку «Редактировать досье» в плейсхолдер на странице локации.
+// Добавить кнопку редактирования в плейсхолдер на странице локации.
+// Столичная локация → редактор досье; обычная локация → обычный редактор (стафф).
 async function locMaybeAddCapEditBtn(pg) {
-  const can = await locCanEditCap(pg.slug);
   const box = document.getElementById('loc-cap-tools');
-  if (!box || !can) return;
+  if (!box) return;
+  const isCap = pg.slug && pg.slug.indexOf('loc-cap-') === 0;
+  const isStaff = typeof user !== 'undefined' && user && !user.is_banned &&
+    ['superadmin','editor','moderator'].includes(user.role);
+  if (isCap) {
+    if (!(await locCanEditCap(pg.slug))) return;
+    box.innerHTML = `<div class="loc-cap-tools">
+      <button class="btn btn-gh btn-sm" onclick="locEditCapDossier('${esc(pg.slug)}')">✎ Редактировать досье</button>
+      <span class="loc-cap-tools-hint">досье «Основное» синхронизируется автоматически; здесь — обложка, доп. поля и описание</span>
+    </div>`;
+    return;
+  }
+  // Обычная локация — кнопка обычного редактора для персонала
+  if (!isStaff) return;
   box.innerHTML = `<div class="loc-cap-tools">
-    <button class="btn btn-gh btn-sm" onclick="locEditCapDossier('${esc(pg.slug)}')">✎ Редактировать досье</button>
-    <span class="loc-cap-tools-hint">досье «Основное» синхронизируется автоматически; здесь — обложка, доп. поля и описание</span>
+    <button class="btn btn-gh btn-sm" onclick="toggleEdit()">✎ Редактировать локацию</button>
+    <span class="loc-cap-tools-hint">обстановка, описание и обложка в обычном редакторе</span>
   </div>`;
 }
 

@@ -208,11 +208,11 @@ function renderLocationPage(pg) {
   const descHtml = otherBlocks.length
     ? `<div class="prose loc-desc">${otherBlocks.map(renderBlock).join('')}</div>`
     : '';
-  // Панель инструментов столичной локации (кнопка «Редактировать досье»)
-  const capTools = (pg.slug && pg.slug.indexOf('loc-cap-') === 0) ? `<div id="loc-cap-tools"></div>` : '';
+  // Панель инструментов локации (кнопка редактирования) — для всех локаций
+  const capTools = `<div id="loc-cap-tools"></div>`;
   setPg(`${cover}${capTools}${dossier}${descHtml}`);
-  // Кнопку редактирования досье добавляем асинхронно (проверка владельца/стаффа)
-  if (capTools && typeof locMaybeAddCapEditBtn === 'function') locMaybeAddCapEditBtn(pg);
+  // Кнопки добавляем асинхронно (проверка владельца/стаффа)
+  if (typeof locMaybeAddCapEditBtn === 'function') locMaybeAddCapEditBtn(pg);
   // Лента отыгрыша — через движок комментариев в «режиме локации»
   renderCommentsSection(pg.slug);
 }
