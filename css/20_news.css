@@ -235,35 +235,66 @@
 
 /* ── Карточка самого достижения в статье новости (анонс ачивки) ── */
 .fn-ach-card {
-  display: flex; gap: 16px; align-items: flex-start;
-  margin: 2px 0 22px; padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 38%, var(--w2, #2a3340));
-  border-left: 3px solid var(--fn-accent, #5fb0e6); border-radius: 5px;
-  background: linear-gradient(150deg, color-mix(in srgb, var(--fn-accent, #5fb0e6) 10%, transparent), transparent 70%); }
+  --ach-gold: var(--gd, #e8c069);
+  position: relative; display: flex; gap: 20px; align-items: center;
+  margin: 6px 0 24px; padding: 18px 20px; border-radius: 8px; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ach-gold) 30%, var(--w2, #2a3340));
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--ach-gold) 14%, transparent), transparent 55%),
+    linear-gradient(150deg, color-mix(in srgb, var(--ach-gold) 8%, var(--b3, #0f141b)), var(--b2, #141a22) 70%);
+  box-shadow: inset 0 0 60px color-mix(in srgb, var(--ach-gold) 6%, transparent); }
+/* золотая полоса-акцент слева */
+.fn-ach-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, var(--ach-gold), color-mix(in srgb, var(--ach-gold) 20%, transparent)); }
+
+/* ── «Медаль»: крупный арт с рамкой, свечением и значком-кубком ── */
 .fn-ach-art {
-  position: relative; flex: 0 0 auto; width: 76px; height: 76px; border-radius: 6px; overflow: hidden;
+  position: relative; flex: 0 0 auto; width: 104px; height: 104px; border-radius: 10px; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--fn-accent, #5fb0e6) 26%, transparent), transparent 72%);
-  border: 1px solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 30%, transparent); }
+  background: radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--ach-gold) 32%, transparent), transparent 70%), var(--b3, #0f141b);
+  border: 1px solid color-mix(in srgb, var(--ach-gold) 45%, transparent);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.4), 0 6px 22px rgba(0,0,0,.5),
+              0 0 26px color-mix(in srgb, var(--ach-gold) 22%, transparent); }
 .fn-ach-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.fn-ach-glyph { font-size: 38px; line-height: 1; filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); }
+.fn-ach-glyph { font-size: 50px; line-height: 1; filter: drop-shadow(0 2px 8px rgba(0,0,0,.6)); }
+/* значок-кубок в углу медали */
+.fn-ach-badge {
+  position: absolute; right: -2px; bottom: -2px; width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 15px;
+  background: radial-gradient(circle at 40% 35%, #fff3cf, var(--ach-gold) 55%, color-mix(in srgb, var(--ach-gold) 60%, #000) 100%);
+  box-shadow: 0 2px 8px rgba(0,0,0,.55), 0 0 12px color-mix(in srgb, var(--ach-gold) 50%, transparent);
+  border: 1.5px solid var(--b2, #141a22); }
+
 .fn-ach-info { min-width: 0; flex: 1; }
+.fn-ach-label {
+  font-family: var(--fn-mono, monospace); font-size: 10px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--ach-gold); margin-bottom: 7px; opacity: .92; }
 .fn-ach-name {
-  font-family: var(--font-display, sans-serif); font-weight: 700; font-size: 18px;
-  color: var(--t1, #e8edf2); line-height: 1.2; margin-bottom: 6px; }
+  font-family: var(--font-display, sans-serif); font-weight: 800; font-size: 22px;
+  color: var(--t1, #e8edf2); line-height: 1.15; margin-bottom: 9px;
+  text-shadow: 0 1px 10px color-mix(in srgb, var(--ach-gold) 18%, transparent); }
 .fn-ach-cond {
-  font-family: var(--fn-mono, monospace); font-size: 11px; letter-spacing: .04em;
-  color: var(--fn-accent, #5fb0e6); margin-bottom: 8px; }
-.fn-ach-quote { font-style: italic; font-size: 13.5px; color: var(--t2, #c0ccd6); line-height: 1.5; margin-bottom: 4px; }
-.fn-ach-desc { font-size: 12.5px; color: var(--t4, #6a7a88); line-height: 1.5; }
+  display: inline-block; font-family: var(--fn-mono, monospace); font-size: 11.5px; letter-spacing: .03em;
+  color: var(--t1, #e8edf2); margin-bottom: 11px; padding: 4px 10px; border-radius: 4px;
+  background: color-mix(in srgb, var(--fn-accent, #5fb0e6) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 32%, transparent); }
+.fn-ach-cond-ic { color: var(--fn-accent, #5fb0e6); }
+.fn-ach-quote {
+  font-style: italic; font-size: 14.5px; color: var(--t1, #e8edf2); line-height: 1.55; margin-bottom: 6px; }
+.fn-ach-desc { font-size: 13.5px; color: var(--t2, #c0ccd6); line-height: 1.6; }
 .fn-ach-reward {
-  margin-top: 9px; font-family: var(--fn-mono, monospace); font-size: 11px; letter-spacing: .06em;
-  color: var(--gd, #e8c069); }
+  display: inline-block; margin-top: 13px; padding: 5px 13px; border-radius: 20px;
+  font-family: var(--fn-mono, monospace); font-size: 12px; font-weight: 600; letter-spacing: .05em;
+  color: var(--ach-gold);
+  background: color-mix(in srgb, var(--ach-gold) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ach-gold) 42%, transparent); }
 @media (max-width: 480px) {
-  .fn-ach-card { gap: 12px; padding: 12px; }
-  .fn-ach-art { width: 60px; height: 60px; }
-  .fn-ach-glyph { font-size: 30px; }
-  .fn-ach-name { font-size: 16px; }
+  .fn-ach-card { gap: 14px; padding: 14px; flex-direction: column; text-align: center; align-items: center; }
+  .fn-ach-art { width: 88px; height: 88px; }
+  .fn-ach-glyph { font-size: 42px; }
+  .fn-ach-name { font-size: 19px; }
+  .fn-ach-cond { white-space: normal; }
 }
 
 /* Inline-изображения внутри текста */

@@ -267,6 +267,14 @@ returns text language sql immutable as $$
     else 'unknown' end
 $$;
 
+-- Планета стёрта «Дланью Неотвратимости» (межзвёздной артиллерией) — мёртвый
+-- камень: ни колонии, ни станции, ни терраформа. Зеркало флагов из _doom_resolve.
+create or replace function public._ec_planet_dead(p_pl jsonb)
+returns boolean language sql immutable as $$
+  select coalesce((p_pl->>'dead')::boolean, false)
+      or coalesce((p_pl->>'doomed')::boolean, false)
+$$;
+
 -- «Климатическая» координата группы (EC_ENV, economy.js:137). null — неизвестно.
 create or replace function public._ec_env(p_group text)
 returns int language sql immutable as $$
@@ -341,6 +349,7 @@ begin
 
   pl := public._ec_planet(p_system_id, p_planet_pid);
   if pl is null then raise exception 'planet not found'; end if;
+  if public._ec_planet_dead(pl) then raise exception 'planet is dead — cannot be colonized'; end if;
   grp := public._ec_planet_group(pl->>'type');
   if public._ec_nocol(grp) then raise exception 'planet needs a station, not colony'; end if;
 
@@ -380,6 +389,7 @@ begin
   if p_planet_pid is null then raise exception 'planet has no pid'; end if;
   pl := public._ec_planet(p_system_id, p_planet_pid);
   if pl is null then raise exception 'planet not found'; end if;
+  if public._ec_planet_dead(pl) then raise exception 'planet is dead — cannot host a station'; end if;
   grp := public._ec_planet_group(pl->>'type');
 
   st := public._ec_station_for(fid, grp);
@@ -419,6 +429,7 @@ begin
 
   pl := public._ec_planet(p_system_id, p_planet_pid);
   if pl is null then raise exception 'planet not found'; end if;
+  if public._ec_planet_dead(pl) then raise exception 'planet is dead — cannot be terraformed'; end if;
   grp := public._ec_planet_group(pl->>'type');
   if public._ec_nocol(grp) then raise exception 'planet needs a station, not terraform'; end if;
   if grp = any(public._race_native_envs(v_race)) then raise exception 'planet is native — colonize directly'; end if;

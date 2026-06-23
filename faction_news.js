@@ -247,18 +247,19 @@ function fnAchCardHtml(n) {
   if (!found) return '';
   const { id, ach } = found;
   const num = (v) => (typeof ecNum === 'function') ? ecNum(v) : v;
-  const reward = ach.reward ? `<div class="fn-ach-reward">◆ Награда: +${num(ach.reward)} ГС</div>` : '';
   return `<div class="fn-ach-card">
     <div class="fn-ach-art">
       <img src="${esc(`assets/ach/${id}.webp`)}" alt="" loading="lazy" onerror="this.remove()">
       <span class="fn-ach-glyph">${esc(ach.ic || '🏆')}</span>
+      <span class="fn-ach-badge" aria-hidden="true">🏆</span>
     </div>
     <div class="fn-ach-info">
+      <div class="fn-ach-label">◆ Достижение получено</div>
       <div class="fn-ach-name">${esc(ach.name || '')}</div>
-      ${ach.cond  ? `<div class="fn-ach-cond">⬡ ${esc(ach.cond)}</div>` : ''}
+      ${ach.cond  ? `<div class="fn-ach-cond"><span class="fn-ach-cond-ic">⬡</span> ${esc(ach.cond)}</div>` : ''}
       ${ach.quote ? `<div class="fn-ach-quote">«${esc(ach.quote)}»</div>` : ''}
       ${ach.desc  ? `<div class="fn-ach-desc">${esc(ach.desc)}</div>` : ''}
-      ${reward}
+      ${ach.reward ? `<span class="fn-ach-reward">◆ +${num(ach.reward)} ГС</span>` : ''}
     </div>
   </div>`;
 }

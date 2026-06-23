@@ -3173,6 +3173,9 @@ function ecExpandAllSys() { EC.closedSys = new Set(); ecPaintCabinet(); }
 // Кнопка/бейдж колонизации для незаселённой планеты
 function ecColonizeInfo(s, p, race) {
   const g = ecPlanetGroup(p), label = EC_GRP_LABEL[g] || g, cells = +p.slotsP || EC_DEFAULT_CELLS;
+  // Мёртвый мир (стёрт «Дланью Неотвратимости») — ни колонизировать, ни терраформировать нельзя.
+  if (p.dead || p.doomed) return { cls: 'no', tag: 'мёртвая', label: 'Мёртвая планета',
+    btn: `<button class="btn btn-gh btn-sm" disabled title="Планета уничтожена орудием судного дня. Мёртвый мир нельзя колонизировать или терраформировать.">☠ мёртвый мир</button>` };
   if (!ecColonizable(p)) {
     // Небожители: непригодный мир можно освоить станцией, если изучена технология.
     const st = ecStationFor(g);
