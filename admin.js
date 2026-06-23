@@ -1737,12 +1737,12 @@ function adTabTesting(e) {
     ${row('⏩ Форсировать тик дохода', `Начислить доход за сутки немедленно (last_tick откатится на 25 ч). Последний доход: ${fmtT(lastTick)}.`, `<button class="btn btn-gd" onclick="adTestForceTick()" ${eco ? '' : 'disabled'}>Начислить доход</button>`)}
     ${row('🜨 Приземлить залп артиллерии', 'Все снаряды «Длани Неотвратимости» этой фракции, что в полёте, мгновенно поражают цель: планета-цель превращается в мёртвый камень, колония на ней стирается.', `<button class="btn btn-gd" onclick="adTestSpeedDoom()">Приземлить залп</button>`)}
     ${row('🜨 Выдать орудие судного дня', 'Поставить готовую «Длань Неотвратимости» (целостность 100%) на первую колонию фракции со свободной ячейкой — без исследования и затрат. Заодно открывает технологию «Сама неотвратимость».', `<button class="btn btn-gd" onclick="adGrantDoomgun()">Выдать орудие</button>`)}
-    ${row('☣ Выдать МЗА в конкретной системе', 'Спавнит готовую мобильную «Длань Неотвратимости» (МЗА) сразу на карте — в выбранной системе. Без исследования и затрат; технология открывается заодно. Пусто = первая колония фракции.',
+    ${row('☣ Выдать Гиперпейсер в конкретной системе', 'Спавнит готовый Гиперпейсер (мобильное орудие судного дня) сразу на карте — в выбранной системе. Без исследования и затрат; технология открывается заодно. Пусто = первая колония фракции.',
       `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
         <select id="ad-mza-sys" class="ec-input" style="min-width:200px"><option value="">— первая колония фракции —</option>${(AD.systems || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru')).map(s => `<option value="${esc(s.id)}">${esc(s.name || s.id)}${s.faction ? '' : ' · нейтр.'}</option>`).join('')}</select>
-        <button class="btn btn-gd" onclick="adGrantMza()">Выдать МЗА</button>
+        <button class="btn btn-gd" onclick="adGrantMza()">Выдать Гиперпейсер</button>
       </div>`)}
-    ${row('☣ Приземлить залп МЗА', 'Все носители МЗА фракции мгновенно прибывают, а их снаряды в полёте поражают цель: планета-цель становится мёртвым камнем, колония на ней стирается.', `<button class="btn btn-gd" onclick="adTestSpeedMza()">Приземлить залп МЗА</button>`)}
+    ${row('☣ Приземлить залп Гиперпейсера', 'Все гиперпейсеры фракции мгновенно прибывают, а их снаряды в полёте поражают цель: планета-цель становится мёртвым камнем, колония на ней стирается.', `<button class="btn btn-gd" onclick="adTestSpeedMza()">Приземлить залп</button>`)}
     ${row('🛐 Удалить религию фракции', 'Удаляет веру, основанную этой фракцией. Адепты, признания и тайные секты уходят каскадом. Необратимо.', `<button class="btn btn-rd" onclick="adTestDeleteFaith()">Удалить религию</button>`)}
   </div>`;
 }
@@ -1774,11 +1774,11 @@ async function adGrantMza() {
   if (!AD.sel || AD.busy) return;
   const sid = document.getElementById('ad-mza-sys')?.value || null;
   const where = sid ? (((AD.systems || []).find(s => s.id === sid) || {}).name || sid) : 'первой колонии фракции';
-  if (!confirm(`Выдать МЗА этой фракции в системе «${where}»? Появится на карте немедленно.`)) return;
+  if (!confirm(`Выдать Гиперпейсер этой фракции в системе «${where}»? Появится на карте немедленно.`)) return;
   AD.busy = true;
   try {
     const r = await apiFetch('rpc/admin_grant_mza', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel, p_system_id: sid }) });
-    toast(`МЗА выдана · система «${r?.system_name || '—'}»`, 'ok');
+    toast(`Гиперпейсер выдан · система «${r?.system_name || '—'}»`, 'ok');
     await adReloadPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -1789,7 +1789,7 @@ async function adTestSpeedMza() {
   AD.busy = true;
   try {
     const r = await apiFetch('rpc/admin_test_speed_mza', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel }) });
-    toast(`Залпы МЗА приземлены: ${r?.landed || 0}`, 'ok');
+    toast(`Залпы Гиперпейсера приземлены: ${r?.landed || 0}`, 'ok');
     await adReloadPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }

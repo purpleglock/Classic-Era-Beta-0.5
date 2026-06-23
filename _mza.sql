@@ -1,5 +1,6 @@
 -- ============================================================
---  МЗА — МОБИЛЬНАЯ «ДЛАНЬ НЕОТВРАТИМОСТИ»
+--  ГИПЕРПЕЙСЕР — МОБИЛЬНОЕ ОРУДИЕ СУДНОГО ДНЯ
+--  (внутр. идентификаторы оставлены как mza_* — это техническое имя)
 --
 --  Корабль-носитель орудия судного дня. В отличие от стационарной
 --  «Длани Неотвратимости» (doomgun) — СТРОИТСЯ В КОНСТРУКТОРЕ КАК
@@ -155,9 +156,9 @@ begin
   select name into sysname from public.map_systems where id=p_system_id;
   select name into fname from public.faction_applications where faction_id=fid and status='approved' order by updated_at desc limit 1;
   perform public._doom_news(
-    '☣ ЗАЛОЖЕНА МОБИЛЬНАЯ «ДЛАНЬ НЕОТВРАТИМОСТИ»',
-    coalesce(fname,'Неизвестная держава')||' закладывает мобильное орудие судного дня (МЗА) в системе «'||
-    coalesce(sysname,'???')||'». Теперь приговор мирам обретёт ноги — он сможет прийти к любой звезде.');
+    '☣ ЗАЛОЖЕН ГИПЕРПЕЙСЕР',
+    coalesce(fname,'Неизвестная держава')||' закладывает Гиперпейсер — мобильное орудие судного дня — в системе «'||
+    coalesce(sysname,'???')||'». Теперь приговор мирам обретёт ноги: он сможет прийти к любой звезде.');
 
   return jsonb_build_object('ok', true, 'id', v_id, 'gc', gc_cost, 'matter', matter_need, 'ready_at', ready);
 end$$;
@@ -216,9 +217,16 @@ begin
   if not found then raise exception 'target system not found'; end if;
   select value into pl from jsonb_array_elements(coalesce(tgt.planets,'[]'::jsonb))
     where (value->>'pid')::int = p_target_pid limit 1;
-  if pl is null then raise exception 'target planet not found'; end if;
-  if coalesce((pl->>'dead')::boolean, false) then raise exception 'planet already dead'; end if;
-  ptname := coalesce(pl->>'name','планета');
+  if pl is null then
+    -- столица/домик может жить ТОЛЬКО в colonies (нет записи в map_systems.planets):
+    -- допускаем залп по такой планете, цель = колония с этим planet_pid.
+    select coalesce(planet_name,'планета') into ptname from public.colonies
+      where system_id = p_target_system_id and planet_pid = p_target_pid limit 1;
+    if ptname is null then raise exception 'target planet not found'; end if;
+  else
+    if coalesce((pl->>'dead')::boolean, false) then raise exception 'planet already dead'; end if;
+    ptname := coalesce(pl->>'name','планета');
+  end if;
 
   -- топливо: Гравиядра
   select * into eco from public.faction_economy where faction_id = fid for update;
@@ -247,8 +255,8 @@ begin
 
   select name into fname from public.faction_applications where faction_id=fid and status='approved' order by updated_at desc limit 1;
   perform public._doom_news(
-    '🜨 МОБИЛЬНЫЙ ЗАЛП ВЫПУЩЕН — ОТСЧЁТ ПОШЁЛ',
-    'Мобильная «Длань Неотвратимости» ('||coalesce(fname,'???')||') дала залп по системе «'||coalesce(tgt.name,'???')||
+    '🜨 ЗАЛП ГИПЕРПЕЙСЕРА ВЫПУЩЕН — ОТСЧЁТ ПОШЁЛ',
+    'Гиперпейсер ('||coalesce(fname,'???')||') дал залп по системе «'||coalesce(tgt.name,'???')||
     '». Снаряд уже в пути к планете «'||ptname||'» — расчётное время полёта ~'||
     to_char(fly_h,'FM990.0')||' ч. Орудие можно увезти куда угодно — спрятаться негде.');
 
@@ -325,7 +333,7 @@ begin
   end if;
 
   insert into public.mza_ships(faction_id, owner_id, name, status, system_id)
-    values(p_fid, v_owner, 'МЗА (выдана)', 'idle', sid)
+    values(p_fid, v_owner, 'Гиперпейсер (выдан)', 'idle', sid)
     returning id into v_id;
   update public.faction_economy
     set research = case when coalesce(research,'[]'::jsonb) ? 'pol.inevitability'
