@@ -1046,11 +1046,25 @@ async function ecReliefApply(systemId, kind) {
 // economy_tick делает FOR UPDATE и двигает last_tick на целые сутки.
 // Дедуп промиса — чтобы повторный рендер не дёргал тик параллельно.
 let _ecBoot = null;
+// Доход считается СЕРВЕРОМ по целым суткам (от last_tick). Поэтому дёргать тик на
+// каждом заходе в кабинет бессмысленно — доход тот же, а каждый вызов = записи в БД
+// (FOR UPDATE + цепочка market_tick→*_settle). Зовём не чаще раза в N минут на
+// фракцию (метка в localStorage). Это БЕЗ ПОТЕРЬ дохода — лишь реже трогаем диск.
+const EC_TICK_THROTTLE_MS = 3 * 60 * 1000;
+function _ecTickKey() { return 'ec_lasttick_' + ((EC.app && EC.app.faction_id) || 'x'); }
+function _ecTickThrottled() {
+  try {
+    const last = +localStorage.getItem(_ecTickKey()) || 0;
+    return last && (Date.now() - last < EC_TICK_THROTTLE_MS);
+  } catch (e) { return false; }   // нет localStorage — не троттлим
+}
 async function ecBootOnce() {
   if (_ecBoot) return _ecBoot;
+  if (_ecTickThrottled()) return null;   // недавно тикали — пропускаем лишние записи в БД
   _ecBoot = (async () => {
     await ecRpc('economy_init');
     const tick = await ecRpc('economy_tick');
+    try { localStorage.setItem(_ecTickKey(), String(Date.now())); } catch (e) {}
     // Тост — РОВНО ОДИН раз на реальный тик (а не на каждый вызов рендера,
     // иначе при повторных рендерах из init было двойное оповещение).
     if (tick && tick.days >= 1) {
@@ -1136,18 +1150,37 @@ function ecGate() {
   </div>`);
 }
 
+// Кэш «статики» на сессию: данные, которые НЕ меняются по ходу игры (топология
+// гиперпутей, раскладка/связи дерева технологий, пул портретов). Грузим один раз,
+// а не на каждой перезагрузке кабинета — меньше запросов и трафика к БД.
+// Сброс — обычным обновлением страницы (F5): кэш в памяти, переживает только сессию.
+const _ecStaticCache = {};
+function ecCached(key, fetcher) {
+  if (key in _ecStaticCache) return Promise.resolve(_ecStaticCache[key]);
+  return fetcher().then(v => { _ecStaticCache[key] = v; return v; }).catch(() => []);  // ошибку не кэшируем — повторим в следующий раз
+}
+
+// Дедуп параллельных загрузок: пока один ecLoad в полёте, повторные вызовы
+// (быстрые действия подряд, двойной рендер) ждут его, а не запускают ещё ~40 RPC.
+let _ecLoadInFlight = null;
 async function ecLoad() {
+  if (_ecLoadInFlight) return _ecLoadInFlight;
+  _ecLoadInFlight = _ecLoadImpl();
+  try { return await _ecLoadInFlight; }
+  finally { _ecLoadInFlight = null; }
+}
+async function _ecLoadImpl() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
   const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips, defOutIntel, spyPortraits, orders] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
-    dbGet('map_systems', `faction=eq.${fid}&select=id,name,planets`).catch(() => []),
+    Promise.resolve(null),   // EC.systems выводится из allSys ниже — НЕ дёргаем map_systems второй раз (экономия запросов к БД)
     dbGet('faction_units', `or=(faction_id.eq.${fid},faction_id.is.null)&order=name.asc`).catch(() => []),
     dbGet('unit_production', `faction_id=eq.${fid}&order=created_at.desc`).catch(() => []),
     dbGet('map_systems', `select=id,name,faction,x,y,planets`).catch(() => []),
-    dbGet('map_hyperlanes', `select=a_id,b_id`).catch(() => []),
+    ecCached('lanes', () => dbGet('map_hyperlanes', `select=a_id,b_id`)),   // топология гиперпутей не меняется по ходу игры — кэш на сессию
     dbGet('faction_applications', `status=eq.approved&select=faction_id,name,herald_url,color,gov,leader&order=name.asc`).catch(() => []),
     dbGet('trade_routes', `order=created_at.desc`).catch(() => []),
     dbGet('loans', `order=created_at.desc`).catch(() => []),
@@ -1171,8 +1204,8 @@ async function ecLoad() {
     ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции (вера, роль, сила, скидка)
     ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий (для вступления)
     ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез по союзникам/торг.партнёрам/друзьям
-    dbGet('tech_layout', `select=node_id,x,y,icon,img,nocore`).catch(() => []),   // PoE-раскладка дерева исследований (позиции/иконки/картинки/откреп. от ядра)
-    dbGet('tech_prereq', `select=node_id,prereq`).catch(() => []),         // staff-override связей дерева (prereq); дефолт генерит ecBuildResearch
+    ecCached('techLayout', () => dbGet('tech_layout', `select=node_id,x,y,icon,img,nocore`)),   // PoE-раскладка дерева — статична, кэш на сессию
+    ecCached('techPrereq', () => dbGet('tech_prereq', `select=node_id,prereq`)),   // связи дерева (prereq) — статичны, кэш на сессию
     dbGet('market_resources', `select=name,base_price,price,stock,equilibrium`).catch(() => []),  // галактический рынок: живые цены/запасы (зеркало для UI и ecResPriceN)
     ecRpc('exchange_status').catch(() => null),   // биржа: индекс/ETF + спарклайны цен ресурсов + моя позиция
     ecRpc('bonds_status').catch(() => null),      // биржа: облигации — мои выпуски/держания + рынок чужих бумаг
@@ -1187,13 +1220,14 @@ async function ecLoad() {
     ecRpc('outposts_visible').catch(() => []),    // оборона: развёрнутые аванпосты (свои + разведанные чужие)
     ecRpc('outpost_ships_mine').catch(() => []),  // оборона: мои корабли-носители аванпостов (building/idle/в полёте)
     ecRpc('outpost_intel').catch(() => []),       // оборона: разведданные от РАЗВЕД-аванпостов (срез по соседним державам)
-    dbGet('spy_portraits', `select=id,race,gender,url`).catch(() => []),  // агентура: общий пул портретов (админ-загрузка), подбор на клиенте по расе/полу
+    ecCached('spyPortraits', () => dbGet('spy_portraits', `select=id,race,gender,url`)),  // пул портретов (админ-загрузка) — статичен, кэш на сессию
     ecRpc('orders_status').catch(() => null),     // биржа: заказы (госзаказы/RFQ) — мои заказы + доска чужих
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
   EC.buildings = blds || [];
-  EC.systems = (sys || []).map(s => ({ ...s, planets: s.planets || [] }));
+  // Свои системы выводим из общего списка allSys (он уже содержит faction/planets) — без второго запроса к map_systems.
+  EC.systems = (allSys || []).filter(s => String(s.faction) === String(EC.fid)).map(s => ({ ...s, planets: s.planets || [] }));
   // Межзвёздная артиллерия: орудия фракции (с integrity) + залпы в полёте + баланс.
   EC.doom = (doom && typeof doom === 'object') ? doom : { guns: [], salvos: [], const: {} };
   EC.minefields = Array.isArray(defMines) ? defMines : [];      // оборона: видимые минные поля (гексы)

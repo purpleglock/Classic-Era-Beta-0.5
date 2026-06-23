@@ -126,6 +126,7 @@ async function loadGalaxyData() {
     GM.econ = {};   // system_id → { status, prosperity } для режима «бедность»
     (econ || []).forEach(e => { if (e && e.system_id) GM.econ[e.system_id] = { status: e.status, prosperity: +e.prosperity }; });
     GM.loaded = true;
+    GM.dataAt = Date.now();   // отметка свежести — фоновое обновление карты дросселируется по ней
     // мета фракций (флаг/герб, лидер) из анкет — необязательно
     GM.facMeta = {};
     try {
@@ -181,12 +182,17 @@ async function renderGalaxyMap() {
   const host = document.getElementById('pg');
   host.className = 'pgi';
   if (GM.loaded) {
-    // повторный заход: данные уже в памяти — рисуем мгновенно, обновляем в фоне
-    loadGalaxyData().then(() => {
-      if (document.getElementById('pg') !== host) return;
-      if (GMM.active) { gmmBuildWorld(); gmmRaster(); }
-      else if (document.getElementById('gm-svg')) gmDraw();
-    });
+    // повторный заход: данные уже в памяти — рисуем мгновенно. Фоновое обновление —
+    // не чаще раза в минуту: топология галактики не меняется поминутно, а каждый
+    // фон-рефреш тянул ВСЕ системы (select=*) → лишний трафик к БД при частой навигации.
+    const STALE_MS = 60 * 1000;
+    if (Date.now() - (GM.dataAt || 0) > STALE_MS) {
+      loadGalaxyData().then(() => {
+        if (document.getElementById('pg') !== host) return;
+        if (GMM.active) { gmmBuildWorld(); gmmRaster(); }
+        else if (document.getElementById('gm-svg')) gmDraw();
+      });
+    }
   } else {
     host.innerHTML = `<div class="sload"><div class="pulse-loader"></div></div>`;
     await loadGalaxyData();
