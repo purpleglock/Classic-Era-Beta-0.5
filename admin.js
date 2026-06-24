@@ -423,7 +423,7 @@ async function adPortraitUpload() {
     toast('Запусти локальный аплоад-сервер: node tools/upload-server.js', 'err');
     return;
   }
-  let done = 0, fail = 0;
+  let done = 0, fail = 0, lastErr = '';
   for (const f of files) {
     if (status) status.textContent = `Сохранение ${done + fail + 1}/${files.length}…`;
     try {
@@ -433,12 +433,19 @@ async function adPortraitUpload() {
         method: 'POST', headers: { 'Content-Type': cf.type || 'application/octet-stream' }, body: cf
       });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('HTTP ' + r.status));
-      await dbPost('spy_portraits', { race, gender, url: j.url, label: f.name || null });
+      if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+      try {
+        await dbPost('spy_portraits', { race, gender, url: j.url, label: f.name || null });
+      } catch (dbe) {
+        // Файл в папке уже лежит — но в БД не записался. Чаще всего: нет прав
+        // (не стафф) или истёк вход. Показываем настоящую причину.
+        throw new Error('БД: ' + (dbe.message || dbe));
+      }
       done++;
-    } catch (e) { console.error('[admin] portrait save', e); fail++; }
+    } catch (e) { console.error('[admin] portrait save', e); fail++; lastErr = e.message || String(e); }
   }
-  if (status) status.textContent = `Готово: +${done}${fail ? `, ошибок ${fail}` : ''} → ${AD_PORT_DIR}/`;
+  if (status) status.textContent = `Готово: +${done}${fail ? `, ошибок ${fail} — ${lastErr}` : ''} → ${AD_PORT_DIR}/`;
+  if (fail) toast('Не записалось в БД: ' + lastErr, 'err');
   try { AD.portraits = await dbGet('spy_portraits', 'select=id,race,gender,url,label&order=created_at.desc'); } catch (e) {}
   adPaint();
 }

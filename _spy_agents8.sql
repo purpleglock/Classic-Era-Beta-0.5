@@ -64,17 +64,77 @@ returns numeric language sql stable security definer set search_path=public as $
 $$;
 revoke all on function public._spy_agent_xp_mult(uuid) from public;
 
+-- ── 2a. Расовый генератор имён ───────────────────────────────
+-- У каждой расы свой пул имён, фамилий и логика пола. Возвращает {fn,ln,gn}.
+-- Неорганики (Литоиды/Синтетики/Энергетические) — «агендер» (портреты-юниты).
+create or replace function public._spy_gen_name(p_race text)
+returns jsonb language plpgsql volatile as $$
+declare fns text[]; gns text[]; lns text[]; ni int; agender boolean := false;
+begin
+  case p_race
+    when 'Млекопитающие' then
+      fns := array['Гарр','Брунн','Тала','Рурк','Майя','Корвин','Ленна','Фенрис','Ула','Брок'];
+      gns := array['муж.','муж.','жен.','муж.','жен.','муж.','жен.','муж.','жен.','муж.'];
+      lns := array['Клык','Грива','Бурый','Когтистый','Вольный','Длиннолап','Серый','Быстрый'];
+    when 'Рептилоиды' then
+      fns := array['Сстра','Краал','Зисс','Воракс','Нагаш','Сетх','Раазх','Тиссва','Корзз','Аздай'];
+      gns := array['жен.','муж.','жен.','муж.','муж.','муж.','муж.','жен.','муж.','жен.'];
+      lns := array['Чешуйчатый','Хладнокровный','Ядозуб','Болотный','Песчаный','Гнездовой'];
+    when 'Авианы (Птицеподобные)' then
+      fns := array['Кри','Сиэл','Вэйн','Аэрис','Тиу','Скай','Фьюри','Вела','Орн','Кайра'];
+      gns := array['жен.','жен.','муж.','жен.','муж.','муж.','муж.','жен.','муж.','жен.'];
+      lns := array['Быстрокрыл','Высокий','Ветрорез','Зоркий','Перистый','Громоклюв'];
+    when 'Инсектоиды' then
+      fns := array['Кзак','Зирр','Ткаас','Велка','Хисск','Ззет','Крилл','Вокс','Ниш','Тарр'];
+      gns := array['муж.','жен.','муж.','жен.','муж.','жен.','муж.','жен.','жен.','муж.'];
+      lns := array['Жвало','Рой','Хитин','Жало','Стрекот','Многоног'];
+    when 'Акватики (Водные)' then
+      fns := array['Мору','Налл','Тэласса','Оон','Глим','Корал','Нерис','Або','Тайд','Луми'];
+      gns := array['муж.','жен.','жен.','муж.','муж.','жен.','жен.','муж.','муж.','жен.'];
+      lns := array['Глубинный','Приливный','Жемчужный','Течение','Тихоплав','Солёный'];
+    when 'Плантоиды (Растениевидные)' then
+      fns := array['Вэрн','Сильва','Мирт','Флора','Корн','Тэрн','Лиа','Бромел','Аспен','Вьюн'];
+      gns := array['муж.','жен.','жен.','жен.','муж.','муж.','жен.','муж.','муж.','жен.'];
+      lns := array['Корень','Лоза','Цветущий','Шипастый','Споровый','Кронолист'];
+    when 'Литоиды (Каменные)' then
+      agender := true;
+      fns := array['Базальт','Гранит','Обсидиан','Кремень','Магма','Кварц','Слан','Базан','Гнейс','Пирит'];
+      lns := array['Тяжёлый','Глыба','Жильный','Породный','Изверженный','Монолит'];
+    when 'Синтетики / Киборги' then
+      agender := true;
+      fns := array['Юнит-7','Вектор','Аксиом','Нуль','Каскад','Кодек','Бит','Логос','Реле','Контур'];
+      lns := array['Серия-IX','Протокол','Модель-Z','Прайм','Ядро','Терминал'];
+    when 'Энергетические сущности' then
+      agender := true;
+      fns := array['Квант','Пульс','Спектр','Эфир','Резонанс','Фотон','Вольт','Плазма','Аура','Импульс'];
+      lns := array['Поле','Разряд','Спектральный','Волновой','Лучистый','Континуум'];
+    else  -- Гуманоиды и неизвестная раса → базовый «человеческий» пул
+      fns := array['Алекс','Марк','Юри','Дана','Лена','Ник','Ивар','Соня','Рэй','Тао',
+                   'Мира','Кай','Лев','Зара','Орин','Вера','Дрейк','Нея','Костас','Айла'];
+      gns := array['муж.','муж.','муж.','жен.','жен.','муж.','муж.','жен.','муж.','муж.',
+                   'жен.','муж.','муж.','жен.','муж.','жен.','муж.','жен.','муж.','жен.'];
+      lns := array['Восс','Кейн','Орлов','Драй','Морозов','Сато','Винтер','Холт','Рейес','Ким',
+                   'Блэк','Норд','Айронс','Стрелков','Грей','Фокс','Маяк','Тейн','Волков','Дельгадо'];
+  end case;
+  ni := 1 + floor(random()*array_length(fns,1))::int;
+  return jsonb_build_object(
+    'fn', fns[ni],
+    'ln', lns[1 + floor(random()*array_length(lns,1))::int],
+    'gn', case when agender then 'агендер' else gns[ni] end);
+end$$;
+revoke all on function public._spy_gen_name(text) from public;
+
 -- ── 2. spy_recruits_list: атрибуты в генерации + артефакты ──
 create or replace function public.spy_recruits_list()
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare fid text; uid uuid; v_last timestamptz; i int; fn text; ln text; pk text; rc text; gn text; rp text; frace text;
-  first_names text[] := array['Алекс','Марк','Юри','Дана','Лена','Ник','Ивар','Соня','Рэй','Тао',
-                              'Мира','Кай','Лев','Зара','Орин','Вера','Дрейк','Нея','Костас','Айла'];
-  last_names  text[] := array['Восс','Кейн','Орлов','Драй','Морозов','Сато','Винтер','Холт','Рейес','Ким',
-                              'Блэк','Норд','Айронс','Стрелков','Грей','Фокс','Маяк','Тейн','Волков','Дельгадо'];
+declare fid text; uid uuid; v_last timestamptz; i int; fn text; ln text; pk text; rc text; gn text; rp text; frace text; nm jsonb;
   perks       text[] := array['infiltrator','saboteur','ghost','analyst','handler'];
-  genders     text[] := array['муж.','жен.','агендер'];
   repls       text[] := array['Оригинал','Оригинал','Оригинал','Клон','Репликант'];
+  -- Рынок рекрутов разнороден: чаще своя раса, но попадаются и чужаки (нужны
+  -- для внедрения к иным расам — см. _spy_race_infiltration.sql).
+  all_races   text[] := array['Гуманоиды','Млекопитающие','Рептилоиды','Авианы (Птицеподобные)',
+                              'Инсектоиды','Акватики (Водные)','Плантоиды (Растениевидные)',
+                              'Литоиды (Каменные)','Синтетики / Киборги','Энергетические сущности'];
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   fid := public._ec_my_fid(); uid := auth.uid();
@@ -89,11 +149,16 @@ begin
   if v_last is null or v_last < now() - interval '7 days' then
     delete from public.spy_recruits where faction_id=fid;
     for i in 1..4 loop
-      fn := first_names[1 + floor(random()*array_length(first_names,1))::int];
-      ln := last_names[1 + floor(random()*array_length(last_names,1))::int];
+      -- Раса сначала: ~55% своя, иначе случайный чужак (нет своей → всегда случайный)
+      if frace is not null and random() < 0.55 then
+        rc := frace;
+      else
+        rc := all_races[1 + floor(random()*array_length(all_races,1))::int];
+      end if;
+      -- Имя/фамилия/пол — из расового пула (неорганики = агендер)
+      nm := public._spy_gen_name(rc);
+      fn := nm->>'fn'; ln := nm->>'ln'; gn := nm->>'gn';
       pk := perks[1 + floor(random()*array_length(perks,1))::int];
-      rc := frace;  -- раса фракции (NULL → портрет «универсальный/любой»)
-      gn := genders[1 + floor(random()*array_length(genders,1))::int];
       rp := repls[1 + floor(random()*array_length(repls,1))::int];
       insert into public.spy_recruits(faction_id, owner_id, first_name, last_name, perk, cost, race, gender, replication)
         values(fid, uid, fn, ln, pk, public._spy_perk_cost(pk) + floor(random()*200), rc, gn, rp);
@@ -490,9 +555,10 @@ grant execute on function public.spy_hire(uuid) to authenticated;
 -- ── Бэкфилл: раса = раса фракции ────────────────────────────
 -- У ранее нанятых агентов и текущих рекрутов раса была случайной из
 -- выдуманного списка. Проставляем расу фракции (твои шпионы — твой народ).
--- Пол НЕ трогаем (он остаётся случайным и закреплённым за агентом).
 -- Пленных не трогаем: их раса — раса их РОДНОЙ фракции (orig_fid), а не
 -- захватчика, под которым они сейчас числятся.
+-- Пол раньше был СЛУЧАЙНЫМ и не совпадал с именем (у «Сони»/«Неи» выходил
+-- мужской портрет). Привязываем пол к имени по справочнику.
 update public.spy_agents s
   set race = fa.race
   from public.faction_applications fa
@@ -507,6 +573,25 @@ update public.spy_recruits s
   where fa.faction_id = s.faction_id
     and fa.status = 'approved'
     and coalesce(s.race,'') is distinct from fa.race;
+
+-- Бэкфилл пола по имени (справочник имя→пол). Имена не из списка не трогаем.
+with nm(first_name, gender) as (values
+  ('Алекс','муж.'),('Марк','муж.'),('Юри','муж.'),('Дана','жен.'),('Лена','жен.'),
+  ('Ник','муж.'),('Ивар','муж.'),('Соня','жен.'),('Рэй','муж.'),('Тао','муж.'),
+  ('Мира','жен.'),('Кай','муж.'),('Лев','муж.'),('Зара','жен.'),('Орин','муж.'),
+  ('Вера','жен.'),('Дрейк','муж.'),('Нея','жен.'),('Костас','муж.'),('Айла','жен.'))
+update public.spy_agents s set gender = nm.gender
+  from nm where nm.first_name = s.first_name
+    and coalesce(s.gender,'') is distinct from nm.gender;
+
+with nm(first_name, gender) as (values
+  ('Алекс','муж.'),('Марк','муж.'),('Юри','муж.'),('Дана','жен.'),('Лена','жен.'),
+  ('Ник','муж.'),('Ивар','муж.'),('Соня','жен.'),('Рэй','муж.'),('Тао','муж.'),
+  ('Мира','жен.'),('Кай','муж.'),('Лев','муж.'),('Зара','жен.'),('Орин','муж.'),
+  ('Вера','жен.'),('Дрейк','муж.'),('Нея','жен.'),('Костас','муж.'),('Айла','жен.'))
+update public.spy_recruits s set gender = nm.gender
+  from nm where nm.first_name = s.first_name
+    and coalesce(s.gender,'') is distinct from nm.gender;
 
 -- ── Проверка ────────────────────────────────────────────────
 -- Новые рекруты имеют расу/пол/репликацию. Успешные боевые операции иногда

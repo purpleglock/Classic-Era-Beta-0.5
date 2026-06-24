@@ -167,6 +167,32 @@ function ecSpyColonyOptions(targetFid) {
 // Контрразведка цели (видна только если есть глубокая разведка; иначе считаем 0 для превью).
 function ecSpyTargetCI(targetFid) { const f = (EC.factions || []).find(x => x.faction_id === targetFid); return (f && +f.counter_agents) || 0; }
 // Сила контрразведки цели от её доктрины (нужна анкета цели — приблизительно 0, точный расчёт на сервере).
+// ── Раса агента ↔ раса цели: «вживание» в чужое общество (зеркало SQL _spy_race_*) ──
+// Класс «субстрата»: 1 органик-позвоночные, 2 органик-экзотика, 3 камень, 4 машины, 5 энергия.
+function ecRaceClass(r) {
+  switch (r) {
+    case 'Гуманоиды': case 'Млекопитающие': case 'Рептилоиды': case 'Авианы (Птицеподобные)': return 1;
+    case 'Инсектоиды': case 'Акватики (Водные)': case 'Плантоиды (Растениевидные)': return 2;
+    case 'Литоиды (Каменные)': return 3;
+    case 'Синтетики / Киборги': return 4;
+    case 'Энергетические сущности': return 5;
+    default: return 0;
+  }
+}
+// Штраф к успеху (положительный = тяжелее). Свой среди своих = бонус (−5).
+function ecRacePenalty(agentRace, targetRace) {
+  if (!agentRace || !targetRace) return 0;
+  if (agentRace === targetRace) return -5;
+  const ca = ecRaceClass(agentRace), ct = ecRaceClass(targetRace);
+  if (!ca || !ct) return 0;
+  if (ca === ct) return 8;                          // разные виды одного субстрата
+  if (ca <= 2 && ct <= 2) return 18;                // органик ↔ органик
+  if (ca <= 2 || ct <= 2) return 32;                // органик ↔ камень/машина/энергия — почти невозможно
+  return 28;                                         // камень/машина/энергия между собой
+}
+// Раса цели для превью (из реестра фракций; race добавлен в select).
+function ecFacRace(fid) { const f = (EC.factions || []).find(x => x.faction_id === fid); return (f && f.race) || null; }
+
 // Живой расчёт операции: успех/раскрытие/длительность (зеркало spy_launch).
 // agentIds — массив id выбранных агентов (перки баффают). Для превью (lock-check) можно [].
 function ecSpyCalc(op, agentIds, targetFid) {
@@ -186,8 +212,17 @@ function ecSpyCalc(op, agentIds, targetFid) {
     detB += ((a.perk === 'ghost' || a.perk2 === 'ghost') ? 10 + (lv - 1) * 2 : 0) + (lv - 1) * 2;
     (a.arts || []).forEach(k => { succB += ecArtSucc(k, op); detB += ecArtDet(k); });   // бонусы артефактов
   });
+  // «Вживание» по расе: средний штраф выбранных агентов против расы цели.
+  // Разведка (recon) — наблюдение со стороны, штраф вполовину.
+  const tRace = ecFacRace(targetFid);
+  let racePen = 0;
+  if (picked.length && tRace) {
+    racePen = picked.reduce((s, a) => s + ecRacePenalty(a.race, tRace), 0) / picked.length;
+    if (d.recon) racePen *= 0.5;
+  }
+  const raceMod = Math.round(racePen);
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
-  const success = clamp(45 + A * 8 + intel + spyPow - d.diff - CI * 9 + succB, 5, 95);
+  const success = clamp(45 + A * 8 + intel + spyPow - d.diff - CI * 9 + succB - raceMod, 5, 95);
   const detect = clamp(8 + d.diff * 0.5 + CI * 12 + A * 2 - spyPow - detB, 2, 90);
   const turns = Math.max(1, Math.min(2, Math.ceil(d.base / Math.sqrt(A))));   // 1–2 цикла
   // требование разведки
@@ -196,7 +231,7 @@ function ecSpyCalc(op, agentIds, targetFid) {
   else if ((op === 'steal_tech' || op === 'mass_demolish') && A < 2) err = 'Нужно минимум 2 агента';
   else if (d.need === 'basic' && !dos.level) err = 'Нужна разведка цели (базовая)';
   else if (d.need === 'deep' && dos.level !== 'deep') err = 'Нужна глубокая разведка цели';
-  return { success, detect, turns, intel, dossier: dos, ci: CI, err, agents: A, succB, detB, ids };
+  return { success, detect, turns, intel, dossier: dos, ci: CI, err, agents: A, succB, detB, ids, raceMod, tRace };
 }
 // Ресурсы планет: цена продажи и добыча/слот по редкости
 const EC_RES_PRICE = { common: 2, uncommon: 10, rare: 50, epic: 200, legendary: 1200 };
@@ -1183,7 +1218,7 @@ async function _ecLoadImpl() {
     dbGet('unit_production', `faction_id=eq.${fid}&order=created_at.desc`).catch(() => []),
     dbGet('map_systems', `select=id,name,faction,x,y,planets`).catch(() => []),
     ecCached('lanes', () => dbGet('map_hyperlanes', `select=a_id,b_id`)),   // топология гиперпутей не меняется по ходу игры — кэш на сессию
-    dbGet('faction_applications', `status=eq.approved&select=faction_id,name,herald_url,color,gov,leader&order=name.asc`).catch(() => []),
+    dbGet('faction_applications', `status=eq.approved&select=faction_id,name,herald_url,color,gov,leader,race&order=name.asc`).catch(() => []),
     dbGet('trade_routes', `order=created_at.desc`).catch(() => []),
     dbGet('loans', `order=created_at.desc`).catch(() => []),
     // ТОЛЬКО свои операции (приватность); цель видит входящие через RPC (исполнитель скрыт, если не раскрыт)
@@ -8174,6 +8209,7 @@ function ecSpyCalcLive() {
       <span><i>Длительность</i> <b>${noAgents ? '—' : c.turns + ' ход.'}</b></span>
       <span><i>Разведданные</i> <b>${dosTxt}</b></span>
       ${(c.succB || c.detB) ? `<span><i>Бонусы группы</i> <b style="color:var(--ok)">${c.succB ? `+${c.succB}% усп.` : ''}${c.succB && c.detB ? ' · ' : ''}${c.detB ? `−${c.detB}% раскр.` : ''}</b></span>` : ''}
+      ${(c.raceMod && c.tRace) ? `<span><i>Вживание в расу</i> <b style="color:${c.raceMod > 0 ? 'var(--err)' : 'var(--ok)'}" title="Агенты должны сойти за «${esc(c.tRace)}». Чужеродные расы — огромный штраф к успеху.">${c.raceMod > 0 ? `−${c.raceMod}% усп. (чужая раса)` : `+${-c.raceMod}% усп. (своя раса)`}</b></span>` : ''}
     </div>
     ${gateErr ? `<div class="ec-trade-note warn">⚠ ${esc(gateErr)}</div>` : `<div class="ec-trade-note">При раскрытии назначенный агент будет схвачен (выбывает), а цель узнает, кто за этим стоит. Расчёт ориентировочный — контрразведка цели уточнится при исполнении.</div>`}`;
   const btn = ecId('ec-spy-launch');

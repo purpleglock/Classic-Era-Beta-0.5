@@ -131,7 +131,9 @@
       "Bash(node --check tools/upload-server.js)",
       "Bash(where node *)",
       "Bash(xxd)",
-      "PowerShell($p = Start-Process -FilePath \"cmd.exe\" -ArgumentList '/c','\"Загрузка артов.bat\"' -WorkingDirectory \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\" -PassThru -WindowStyle Hidden; Start-Sleep 2; try { \\(Invoke-WebRequest -Uri \"http://localhost:8787/ping\" -UseBasicParsing -TimeoutSec 3\\).Content } catch { \"PING FAILED: $_\" }; Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue)"
+      "PowerShell($p = Start-Process -FilePath \"cmd.exe\" -ArgumentList '/c','\"Загрузка артов.bat\"' -WorkingDirectory \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\" -PassThru -WindowStyle Hidden; Start-Sleep 2; try { \\(Invoke-WebRequest -Uri \"http://localhost:8787/ping\" -UseBasicParsing -TimeoutSec 3\\).Content } catch { \"PING FAILED: $_\" }; Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue)",
+      "Bash(python3 -)",
+      "Bash(cd \"/c/Users/Андрей/Desktop/Classic-Era-Beta-0.5\" && grep -n \"function economy_produce\\\\|resources\\\\|bill\\\\|jsonb_each\\\\|spend\\\\|deduct\\\\|UPDATE faction_economy\" _unit_resources.sql | head -50)"
     ]
   }
 }
