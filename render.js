@@ -195,12 +195,6 @@ function renderLocationPage(pg) {
       dossier = `<div class="loc-dossier-panel">
         <div class="loc-dhud loc-dhud-tl"></div><div class="loc-dhud loc-dhud-tr"></div>
         <div class="loc-dhud loc-dhud-bl"></div><div class="loc-dhud loc-dhud-br"></div>
-        <div class="loc-dossier-head">
-          <span class="loc-dossier-head-ic">🪐</span>
-          <span class="loc-dossier-head-t">${isCap ? 'ДОСЬЕ СТОЛИЧНОГО МИРА' : 'ДОСЬЕ ЛОКАЦИИ'}</span>
-          <span class="loc-dossier-head-line"></span>
-          <span class="loc-dossier-head-sub">${esc(pT(pg))}</span>
-        </div>
         ${groups.join('')}
       </div>`;
     }

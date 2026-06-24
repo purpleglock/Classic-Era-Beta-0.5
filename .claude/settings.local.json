@@ -120,7 +120,18 @@
       "Bash(node --check \"C:/Users/Андрей/Desktop/Classic-Era-Beta-0.5/auth.js\")",
       "Bash(cd \"/c/Users/Андрей/Desktop/Classic-Era-Beta-0.5\" && node --check economy.js && node --check admin.js && node --check constructors.js && node --check data.js && echo \"JS OK\" && grep -nE \"economy\\\\.js\\\\?v=|admin\\\\.js\\\\?v=\" index.html)",
       "Bash(ls _exchange_corp*.sql _corp*.sql)",
-      "Bash(grep -l \"'board'\" *.sql)"
+      "Bash(grep -l \"'board'\" *.sql)",
+      "Bash(curl -s \"https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/spy_portraits?select=id,race,gender,url\" -H \"apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnbmdra2lpb3B5bXZyY296dnZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MzU5MjgsImV4cCI6MjA5NTUxMTkyOH0.ejFOy6cDNsAj9yCnWOVub0L2tunm9l32BfkgBI_mZFk\")",
+      "Bash(curl -s -o \"mig-1782116561622.webp\" \"https://pgngkkiiopymvrcozvvr.supabase.co/storage/v1/object/public/wiki-images/1782116561622-z6fucs.webp\")",
+      "Bash(curl -s -o \"mig-1782116587721.webp\" \"https://pgngkkiiopymvrcozvvr.supabase.co/storage/v1/object/public/wiki-images/1782116587721-o3i2ej.webp\")",
+      "Bash(curl -s -X PATCH https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/spy_portraits?id=eq.1c7c1773-c62e-4a05-bbf4-01ce8d5b3d3b -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__' -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d '{\"url\":\"assets/portraits/mig-1782116561622.webp\",\"race\":\"Гуманоиды\"}')",
+      "Bash(curl -s -X PATCH https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/spy_portraits?id=eq.4448df47-2f71-4f19-9100-92fe43078fc3 -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__' -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d '{\"url\":\"assets/portraits/mig-1782116587721.webp\",\"race\":\"Гуманоиды\"}')",
+      "Bash(curl -s \"https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/spy_portraits?select=id,race,url\" -H \"apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmExX2NvenZ2ciIsInJvbGUiOiJhbm9uIn0.x\")",
+      "Bash(curl -s https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/spy_portraits?select=id,race,url -H 'apikey: __TRACKED_VAR__')",
+      "Bash(node --check tools/upload-server.js)",
+      "Bash(where node *)",
+      "Bash(xxd)",
+      "PowerShell($p = Start-Process -FilePath \"cmd.exe\" -ArgumentList '/c','\"Загрузка артов.bat\"' -WorkingDirectory \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\" -PassThru -WindowStyle Hidden; Start-Sleep 2; try { \\(Invoke-WebRequest -Uri \"http://localhost:8787/ping\" -UseBasicParsing -TimeoutSec 3\\).Content } catch { \"PING FAILED: $_\" }; Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue)"
     ]
   }
 }

@@ -334,11 +334,13 @@ function renderCommentItem(cmt, depth = 0) {
   // Пост «от имени локации» — особая карточка рассказчика
   if (cmt.as_location && _cmtIsLocation()) {
     const canDel = canDeleteComment(cmt);
+    const canEdit = canEditComment(cmt);
     const body = esc(cmt.body).replace(/\n/g, '<br>');
     return `
 <div class="cmt-location-voice" id="cmt-${esc(cmt.id)}" style="--depth:${depth}">
   <div class="cmt-lv-head"><span class="cmt-lv-ico">📍</span><span class="cmt-lv-name">${esc(_cmtLocationName || 'Локация')}</span><span class="cmt-lv-tag">голос локации</span>
     <span class="cmt-time">${timeAgo(cmt.created_at)}</span>
+    ${canEdit ? `<button class="cmt-edit-btn" onclick="editComment('${esc(cmt.id)}')" title="${lang === 'ru' ? 'Редактировать' : 'Edit'}">✎</button>` : ''}
     ${canDel ? `<button class="cmt-del-btn" onclick="deleteComment('${esc(cmt.id)}')" title="Удалить">✕</button>` : ''}
   </div>
   <div class="cmt-lv-body">${body}</div>

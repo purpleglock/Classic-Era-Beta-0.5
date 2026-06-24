@@ -452,9 +452,13 @@
 .loc-dgroup-t { display:flex; align-items:center; gap:10px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:2px; text-transform:uppercase; color:color-mix(in srgb, var(--te,#3ec0d0) 80%, var(--t3)); margin:0 0 10px; }
 .loc-dgroup-t span { flex:1; height:1px; background:color-mix(in srgb, var(--te,#3ec0d0) 18%, transparent); }
 .loc-dcells { position:relative; display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr)); gap:10px; }
-.loc-dcell { display:flex; align-items:center; gap:11px; padding:11px 14px; border:1px solid var(--w2); border-left:2px solid color-mix(in srgb, var(--te,#3ec0d0) 55%, transparent); border-radius:8px; background:rgba(0,0,0,.22); transition:border-color .18s, background .18s, transform .18s; }
-.loc-dcell:hover { border-left-color:var(--te,#3ec0d0); background:color-mix(in srgb, var(--te,#3ec0d0) 8%, rgba(0,0,0,.22)); transform:translateY(-1px); }
-.loc-dcell-ic { flex-shrink:0; width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-size:15px; color:var(--te,#3ec0d0); border-radius:50%; background:color-mix(in srgb, var(--te,#3ec0d0) 12%, transparent); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--te,#3ec0d0) 30%, transparent); }
+.loc-dcell { position:relative; display:flex; align-items:center; gap:11px; padding:11px 16px; border:0; border-radius:0; --cut:11px; clip-path:polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut))); background:linear-gradient(135deg, color-mix(in srgb, var(--te,#3ec0d0) 11%, rgba(0,0,0,.30)), rgba(0,0,0,.30)); transition:background .18s, transform .18s; }
+/* левый акцент-планка + контурная подсветка фаски */
+.loc-dcell::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:color-mix(in srgb, var(--te,#3ec0d0) 55%, transparent); transition:background .18s; }
+.loc-dcell:hover { background:linear-gradient(135deg, color-mix(in srgb, var(--te,#3ec0d0) 20%, rgba(0,0,0,.30)), rgba(0,0,0,.30)); transform:translateY(-1px); }
+.loc-dcell:hover::before { background:var(--te,#3ec0d0); }
+.loc-dcell-ic { flex-shrink:0; width:32px; height:32px; display:flex; align-items:center; justify-content:center; font-size:15px; color:var(--te,#3ec0d0); border-radius:0; clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%); background:color-mix(in srgb, var(--te,#3ec0d0) 16%, transparent); box-shadow:0 0 8px color-mix(in srgb, var(--te,#3ec0d0) 30%, transparent); transition:background .18s; }
+.loc-dcell:hover .loc-dcell-ic { background:color-mix(in srgb, var(--te,#3ec0d0) 26%, transparent); }
 .loc-dcell-txt { display:flex; flex-direction:column; gap:2px; min-width:0; }
 .loc-dcell-k { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:1.2px; text-transform:uppercase; color:var(--te,#3ec0d0); opacity:.8; }
 .loc-dcell-v { font-family:'Rajdhani',sans-serif; font-weight:600; font-size:15px; color:var(--t1); line-height:1.15; word-break:break-word; }
@@ -527,8 +531,33 @@
 .cmt-fac-chip { display:inline-flex; align-items:center; gap:3px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.5px; padding:1px 7px; border-radius:999px; color:var(--fac,#9fb4d8); border:1px solid color-mix(in srgb, var(--fac,#9fb4d8) 50%, transparent); background:color-mix(in srgb, var(--fac,#9fb4d8) 12%, transparent); white-space:nowrap; }
 /* Пост игрока — акцент цветом фракции */
 .cmt-item.cmt-player .cmt-bubble { border-left:2px solid color-mix(in srgb, var(--fac,#9fb4d8) 60%, transparent); background:color-mix(in srgb, var(--fac,#9fb4d8) 6%, transparent); }
-.cmt-item.cmt-player .cmt-av { box-shadow:0 0 0 2px color-mix(in srgb, var(--fac,#9fb4d8) 70%, transparent); border-radius:50%; }
 .cmt-item.cmt-player .cmt-author { color:var(--fac,#9fb4d8); font-weight:600; }
+
+/* Аватар игрока в RP-ленте — техно-рамка со скошенными углами */
+.cmt-item.cmt-player .cmt-av {
+  width:38px; height:38px;
+  box-sizing:border-box;
+  padding:3px;
+  border-radius:0;
+  box-shadow:none;
+  --cut:6px;
+  clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%,0 var(--cut));
+  background:linear-gradient(135deg,
+    color-mix(in srgb, var(--fac,#9fb4d8) 90%, transparent),
+    color-mix(in srgb, var(--fac,#9fb4d8) 35%, transparent));
+  filter:drop-shadow(0 0 5px color-mix(in srgb, var(--fac,#9fb4d8) 50%, transparent));
+}
+.cmt-item.cmt-player .cmt-av img,
+.cmt-item.cmt-player .cmt-av > span {
+  width:100% !important;
+  height:100% !important;
+  display:block;
+  border-radius:0 !important;
+  border:none !important;
+  object-fit:cover;
+  --cut:4px;
+  clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%,0 var(--cut));
+}
 
 /* Голос локации — карточка рассказчика */
 .cmt-location-voice { margin:14px 0; padding:14px 18px; text-align:center; border-radius:10px; border:1px solid color-mix(in srgb, var(--te,#3ec0d0) 35%, transparent); background:linear-gradient(180deg, color-mix(in srgb, var(--te,#3ec0d0) 9%, transparent), transparent); box-shadow:inset 0 0 30px color-mix(in srgb, var(--te,#3ec0d0) 8%, transparent); position:relative; }
@@ -537,6 +566,10 @@
 .cmt-lv-name { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--te,#3ec0d0); }
 .cmt-lv-tag { font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:1px; text-transform:uppercase; color:var(--t4); border:1px solid var(--w2); border-radius:4px; padding:1px 5px; }
 .cmt-lv-head .cmt-time { color:var(--t4); }
+/* кнопки правки/удаления в карточке «голос локации» (нет .cmt-bubble) */
+.cmt-location-voice:hover .cmt-edit-btn,
+.cmt-location-voice:hover .cmt-del-btn { opacity:1; }
+.cmt-lv-head .cmt-del-btn { margin-left:0; }
 .cmt-lv-body { font-family:'Spectral',Georgia,serif; font-style:italic; font-size:14px; line-height:1.7; color:var(--t2); max-width:620px; margin:0 auto; white-space:pre-wrap; }
 
 /* Тумблер «от имени локации» */

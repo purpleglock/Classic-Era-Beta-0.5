@@ -74,7 +74,7 @@ create policy "mza_all" on public.mza_ships for all to authenticated
 create or replace function public._mza_const(p_key text)
 returns numeric language sql immutable as $$
   select case p_key
-    when 'build_gc'      then 12000    -- ГС за постройку носителя (премия за мобильность)
+    when 'build_gc'      then 1200000  -- ГС за постройку носителя (премия за мобильность)
     when 'build_matter'  then 60       -- Программируемой материи за постройку
     when 'build_h'       then 24       -- постройка занимает сутки
     when 'shot_grav'     then 12       -- Гравиядра за один залп
@@ -195,7 +195,10 @@ revoke all on function public.mza_send(uuid,text) from public;
 grant execute on function public.mza_send(uuid,text) to authenticated;
 
 -- ── 7) RPC: ЗАЛП по планете-цели из текущей системы носителя ──
-create or replace function public.mza_fire(p_id uuid, p_target_system_id text, p_target_pid int)
+-- Снимаем прежнюю 3-арг сигнатуру (добавляем p_target_name для целей без pid).
+drop function if exists public.mza_fire(uuid, text, int);
+create or replace function public.mza_fire(p_id uuid, p_target_system_id text,
+                                           p_target_pid int, p_target_name text default null)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare fid text; sh public.mza_ships; eco public.faction_economy; res jsonb;
   grav_need numeric; have_grav numeric; tgt public.map_systems; pl jsonb; rdy timestamptz;
@@ -215,13 +218,18 @@ begin
   -- цель: планета по pid в системе
   select * into tgt from public.map_systems where id = p_target_system_id;
   if not found then raise exception 'target system not found'; end if;
-  select value into pl from jsonb_array_elements(coalesce(tgt.planets,'[]'::jsonb))
-    where (value->>'pid')::int = p_target_pid limit 1;
+  if p_target_pid is not null then
+    select value into pl from jsonb_array_elements(coalesce(tgt.planets,'[]'::jsonb))
+      where (value->>'pid')::int = p_target_pid limit 1;
+  end if;
   if pl is null then
-    -- столица/домик может жить ТОЛЬКО в colonies (нет записи в map_systems.planets):
-    -- допускаем залп по такой планете, цель = колония с этим planet_pid.
+    -- столица/домик может жить ТОЛЬКО в colonies (нет записи в map_systems.planets,
+    -- planet_pid может быть не проставлен): целим по planet_pid, иначе по ИМЕНИ.
     select coalesce(planet_name,'планета') into ptname from public.colonies
-      where system_id = p_target_system_id and planet_pid = p_target_pid limit 1;
+      where system_id = p_target_system_id
+        and ((p_target_pid is not null and planet_pid = p_target_pid)
+             or (p_target_name is not null and planet_name = p_target_name))
+      order by (planet_pid is not null) desc limit 1;
     if ptname is null then raise exception 'target planet not found'; end if;
   else
     if coalesce((pl->>'dead')::boolean, false) then raise exception 'planet already dead'; end if;
@@ -263,8 +271,8 @@ begin
   return jsonb_build_object('ok', true, 'grav', grav_need, 'ready_at', rdy, 'target', ptname,
                             'flight_h', round(fly_h,1), 'integrity', newint);
 end$$;
-revoke all on function public.mza_fire(uuid,text,int) from public;
-grant execute on function public.mza_fire(uuid,text,int) to authenticated;
+revoke all on function public.mza_fire(uuid,text,int,text) from public;
+grant execute on function public.mza_fire(uuid,text,int,text) to authenticated;
 
 -- ── 8) RPC: списать носитель МЗА (частичный возврат ГС) ──
 create or replace function public.mza_scrap(p_id uuid)

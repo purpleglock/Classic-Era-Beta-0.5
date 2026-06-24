@@ -87,7 +87,7 @@ end$$;
 create or replace function public._doom_const(p_key text)
 returns numeric language sql immutable as $$
   select case p_key
-    when 'build_gc'      then 8000     -- ГС за постройку орудия
+    when 'build_gc'      then 500000   -- ГС за постройку орудия
     when 'build_matter'  then 40       -- Программируемой материи за постройку
     when 'shot_grav'     then 20       -- Гравиядра за один залп
     when 'shot_wear'     then 20       -- износ integrity за выстрел
@@ -304,9 +304,13 @@ begin
       end loop;
       update public.map_systems set planets = newpl where id = tgt.id;
 
-      -- уничтожаем колонию на этой планете (если есть) + её постройки (каскад)
+      -- уничтожаем колонию на этой планете (если есть) + её постройки (каскад).
+      -- Цель по planet_pid; для столиц-домиков без стабильного pid — по имени.
       select * into col from public.colonies
-        where system_id = s.target_system_id and planet_pid = s.target_pid limit 1;
+        where system_id = s.target_system_id
+          and ((s.target_pid is not null and planet_pid = s.target_pid)
+               or (s.target_pid is null and s.target_planet is not null and planet_name = s.target_planet))
+        order by (planet_pid is not null) desc limit 1;
       if found then
         victim_fid := col.faction_id;
         select name into victim_name from public.faction_applications

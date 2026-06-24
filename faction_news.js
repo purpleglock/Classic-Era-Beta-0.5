@@ -45,6 +45,10 @@ function fnStripMarkup(s) {
   t = t.replace(/\r/g, '');
   // схизо-блок целиком — это скрытый рунический текст, в превью ему не место
   t = t.replace(/\[fx:schizo\][\s\S]*?\[\/fx\]/gi, ' ');
+  // блок под паролем — НЕ светим секрет в тизере, оставляем только метку
+  t = t.replace(/\[lock:[^\]\n]*\][\s\S]*?\[\/lock\]/gi, ' 🔒 ');
+  // сворачиваемая «глава» — содержимое не секретное, оставляем текст без тегов
+  t = t.replace(/\[spoiler:[^\]\n]*\]([\s\S]*?)\[\/spoiler\]/gi, '$1');
   // картинки: [img:URL] и голые URL изображений
   t = t.replace(/\[img:[^\]]*\]/gi, ' ');
   t = t.replace(/https?:\/\/\S+\.(?:jpe?g|png|gif|webp|avif|svg)(?:\?\S*)?/gi, ' ');
@@ -487,7 +491,8 @@ function fnLockHtml(meta, bodyHtml) {
   const pw = (parts[0] || '').trim();
   const title = esc((parts.slice(1).join('|').trim()) || 'Под паролем');
   return `<div class="fn-lock" data-pw="${esc(fnB64(pw))}"><div class="fn-lock-hd">🔒 ${title}</div>`
-    + `<div class="fn-lock-gate"><input type="password" class="fn-lock-inp" placeholder="Введите пароль…" `
+    + `<div class="fn-lock-gate"><input type="text" class="fn-lock-inp" placeholder="Введите пароль…" `
+    + `autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="fn-lock-${Math.random().toString(36).slice(2)}" `
     + `onkeydown="if(event.key==='Enter'){event.preventDefault();fnLockTry(this);}">`
     + `<button type="button" class="fn-lock-btn" onclick="fnLockTry(this)">Открыть</button>`
     + `<span class="fn-lock-msg"></span></div><div class="fn-lock-body" hidden>${bodyHtml}</div></div>`;

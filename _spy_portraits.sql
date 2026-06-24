@@ -17,9 +17,9 @@
 -- ── 1. Пул портретов ────────────────────────────────────────────────────────
 create table if not exists public.spy_portraits (
   id          uuid primary key default gen_random_uuid(),
-  race        text,                       -- раса (Человек/Синтет/Зоранин/…); null = подходит любой
+  race        text,                       -- раса фракции (Гуманоиды/Рептилоиды/Инсектоиды/…); null = подходит любой
   gender      text,                       -- пол (муж./жен./агендер);          null = любой
-  url         text not null,              -- публичный URL изображения (Storage / R2)
+  url         text not null,              -- путь к изображению (assets/portraits/… в папке игры)
   label       text,                       -- подпись/имя файла для админки
   created_by  uuid default auth.uid(),
   created_at  timestamptz default now()

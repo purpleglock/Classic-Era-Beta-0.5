@@ -1465,7 +1465,10 @@ function gmMzaPickPlanet(id, sys) {
   // Источник целей — те же тела, что рисует карта: gmSystemBodies сливает
   // natural-планеты map_systems.planets С КОЛОНИЯМИ (в т.ч. столицей-домиком,
   // которой нет в map_systems.planets). Иначе по столице нельзя было дать залп.
-  const planets = (gmSystemBodies(sys) || []).filter(p => p && p.pid != null && p.kind === 'planet');
+  // Цели — планеты карты (по pid) И колонии. Столица-домик может не иметь pid
+  // (нет записи в map_systems.planets, planet_pid колонии не проставлен) — её
+  // целим по ИМЕНИ, иначе по столице нельзя дать залп (см. gmMzaFireAt + mza_fire).
+  const planets = (gmSystemBodies(sys) || []).filter(p => p && p.kind === 'planet' && (p.pid != null || p.isColony));
   const el = document.getElementById('gm-opcmd'); if (!el) return;
   if (!planets.length) {
     el.innerHTML = `<div class="gm-opcmd-card">
@@ -1478,8 +1481,9 @@ function gmMzaPickPlanet(id, sys) {
   }
   const rows = planets.map(p => {
     const dead = p.dead || p.doomed;
+    const nm = encodeURIComponent(p.name || '');
     return `<button class="gm-opcmd-btn${dead ? ' gm-dis' : ' gm-opcmd-danger'}" ${dead ? 'disabled' : ''}
-        onclick="gmMzaFireAt('${id}','${esc(sys.id)}',${p.pid})">${dead ? '☠ ' : '🜨 '}${esc(p.name || ('планета ' + p.pid))}${dead ? ' (мертва)' : ''}</button>`;
+        onclick="gmMzaFireAt('${id}','${esc(sys.id)}',${p.pid == null ? 'null' : p.pid},'${nm}')">${dead ? '☠ ' : '🜨 '}${esc(p.name || ('планета ' + p.pid))}${dead ? ' (мертва)' : ''}</button>`;
   }).join('');
   el.innerHTML = `<div class="gm-opcmd-card">
       <button class="gm-close" onclick="gmCloseMzaCmd()">✕</button>
@@ -1490,11 +1494,14 @@ function gmMzaPickPlanet(id, sys) {
     </div>`;
   el.classList.remove('gm-hidden');
 }
-async function gmMzaFireAt(id, sysId, pid) {
+async function gmMzaFireAt(id, sysId, pid, nameEnc) {
   if (!confirm('Дать залп по планете? Она станет мёртвым миром, колония на ней будет стёрта.')) return;
   if (GM._defBusy) return; GM._defBusy = true;
   try {
-    const r = await gmDefRpc('mza_fire', { p_id: id, p_target_system_id: sysId, p_target_pid: pid });
+    const name = nameEnc ? decodeURIComponent(nameEnc) : null;
+    // pid может быть null (столица-домик без стабильного pid) — тогда сервер целит по имени
+    const r = await gmDefRpc('mza_fire', { p_id: id, p_target_system_id: sysId,
+                                           p_target_pid: (pid == null ? null : pid), p_target_name: name });
     toast('🜨 Залп выпущен · долёт ~' + ((r && r.flight_h) || '?') + ' ч', 'ok');
     gmCloseMzaCmd();
     await gmReloadDefense();

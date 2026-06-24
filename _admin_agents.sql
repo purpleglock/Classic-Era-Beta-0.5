@@ -9,15 +9,17 @@
 
 create or replace function public.admin_grant_agent(p_fid text, p_first text, p_last text, p_perk text)
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare oid uuid; new_id uuid;
+declare oid uuid; new_id uuid; frace text; fgender text;
 begin
   if public.current_user_role() not in ('superadmin','editor') then raise exception 'forbidden: staff only'; end if;
   if p_perk not in ('infiltrator','saboteur','ghost','analyst','handler') then raise exception 'bad perk'; end if;
-  select owner_id into oid from public.faction_applications
+  select owner_id, race into oid, frace from public.faction_applications
     where faction_id=p_fid and status='approved' order by updated_at desc limit 1;
-  insert into public.spy_agents(faction_id, owner_id, first_name, last_name, perk, ready_at)
+  -- пол случайный (раса = раса фракции, как у нанятых рекрутов)
+  fgender := (array['муж.','жен.','агендер'])[1 + floor(random()*3)::int];
+  insert into public.spy_agents(faction_id, owner_id, first_name, last_name, perk, ready_at, race, gender)
     values(p_fid, oid, coalesce(nullif(btrim(p_first),''),'Агент'),
-                       coalesce(nullif(btrim(p_last),''),'—'), p_perk, now())
+                       coalesce(nullif(btrim(p_last),''),'—'), p_perk, now(), frace, fgender)
     returning id into new_id;
   return jsonb_build_object('ok',true,'id',new_id);
 end$$;

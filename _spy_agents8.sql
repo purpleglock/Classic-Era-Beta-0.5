@@ -67,18 +67,24 @@ revoke all on function public._spy_agent_xp_mult(uuid) from public;
 -- ── 2. spy_recruits_list: атрибуты в генерации + артефакты ──
 create or replace function public.spy_recruits_list()
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare fid text; uid uuid; v_last timestamptz; i int; fn text; ln text; pk text; rc text; gn text; rp text;
+declare fid text; uid uuid; v_last timestamptz; i int; fn text; ln text; pk text; rc text; gn text; rp text; frace text;
   first_names text[] := array['Алекс','Марк','Юри','Дана','Лена','Ник','Ивар','Соня','Рэй','Тао',
                               'Мира','Кай','Лев','Зара','Орин','Вера','Дрейк','Нея','Костас','Айла'];
   last_names  text[] := array['Восс','Кейн','Орлов','Драй','Морозов','Сато','Винтер','Холт','Рейес','Ким',
                               'Блэк','Норд','Айронс','Стрелков','Грей','Фокс','Маяк','Тейн','Волков','Дельгадо'];
   perks       text[] := array['infiltrator','saboteur','ghost','analyst','handler'];
-  races       text[] := array['Человек','Синтет','Зоранин','Криор','Веспид','Терранид','Нублар'];
   genders     text[] := array['муж.','жен.','агендер'];
   repls       text[] := array['Оригинал','Оригинал','Оригинал','Клон','Репликант'];
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   fid := public._ec_my_fid(); uid := auth.uid();
+  -- Раса рекрута = раса фракции (твои шпионы — твой народ). Берём из анкеты.
+  select race into frace from public.faction_applications
+    where faction_id=fid and status='approved' order by updated_at desc limit 1;
+  if frace is null then
+    select race into frace from public.faction_applications
+      where faction_id=fid order by updated_at desc limit 1;
+  end if;
   select max(created_at) into v_last from public.spy_recruits where faction_id=fid;
   if v_last is null or v_last < now() - interval '7 days' then
     delete from public.spy_recruits where faction_id=fid;
@@ -86,7 +92,7 @@ begin
       fn := first_names[1 + floor(random()*array_length(first_names,1))::int];
       ln := last_names[1 + floor(random()*array_length(last_names,1))::int];
       pk := perks[1 + floor(random()*array_length(perks,1))::int];
-      rc := races[1 + floor(random()*array_length(races,1))::int];
+      rc := frace;  -- раса фракции (NULL → портрет «универсальный/любой»)
       gn := genders[1 + floor(random()*array_length(genders,1))::int];
       rp := repls[1 + floor(random()*array_length(repls,1))::int];
       insert into public.spy_recruits(faction_id, owner_id, first_name, last_name, perk, cost, race, gender, replication)
@@ -454,6 +460,53 @@ begin
   end loop;
 end$$;
 revoke all on function public._spy_resolve(text) from public;
+
+-- ── spy_hire: переносим расу/пол/репликацию рекрута в агента ─
+-- (старые версии spy_hire их теряли — агент выходил без расы, портрет не
+--  совпадал). Раса рекрута = раса фракции (см. spy_recruits_list выше).
+create or replace function public.spy_hire(p_recruit_id uuid)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare fid text; me public.faction_economy; rc public.spy_recruits; cap int; have int;
+begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  fid := public._ec_my_fid();
+  select * into rc from public.spy_recruits where id=p_recruit_id and faction_id=fid;
+  if not found then raise exception 'recruit not available'; end if;
+  select * into me from public.faction_economy where faction_id=fid for update;
+  if not found then raise exception 'no economy'; end if;
+  cap := public._spy_agent_cap(fid);
+  select count(*) into have from public.spy_agents where faction_id=fid and coalesce(captive,false)=false;
+  if have >= cap then raise exception 'agent cap reached (% / %)', have, cap; end if;
+  update public.faction_economy set gc = gc - rc.cost where faction_id=fid and gc >= rc.cost;
+  if not found then raise exception 'not enough GC'; end if;
+  insert into public.spy_agents(faction_id, owner_id, first_name, last_name, perk, ready_at, race, gender, replication)
+    values(fid, auth.uid(), rc.first_name, rc.last_name, rc.perk, now() + interval '1 day', rc.race, rc.gender, rc.replication);
+  delete from public.spy_recruits where id=p_recruit_id;
+  return jsonb_build_object('ok',true,'agent',rc.first_name||' '||rc.last_name,'perk',rc.perk,'cost',rc.cost,'training_turns',1);
+end$$;
+revoke all on function public.spy_hire(uuid) from public;
+grant execute on function public.spy_hire(uuid) to authenticated;
+
+-- ── Бэкфилл: раса = раса фракции ────────────────────────────
+-- У ранее нанятых агентов и текущих рекрутов раса была случайной из
+-- выдуманного списка. Проставляем расу фракции (твои шпионы — твой народ).
+-- Пол НЕ трогаем (он остаётся случайным и закреплённым за агентом).
+-- Пленных не трогаем: их раса — раса их РОДНОЙ фракции (orig_fid), а не
+-- захватчика, под которым они сейчас числятся.
+update public.spy_agents s
+  set race = fa.race
+  from public.faction_applications fa
+  where fa.faction_id = s.faction_id
+    and fa.status = 'approved'
+    and coalesce(s.captive,false) = false
+    and coalesce(s.race,'') is distinct from fa.race;
+
+update public.spy_recruits s
+  set race = fa.race
+  from public.faction_applications fa
+  where fa.faction_id = s.faction_id
+    and fa.status = 'approved'
+    and coalesce(s.race,'') is distinct from fa.race;
 
 -- ── Проверка ────────────────────────────────────────────────
 -- Новые рекруты имеют расу/пол/репликацию. Успешные боевые операции иногда

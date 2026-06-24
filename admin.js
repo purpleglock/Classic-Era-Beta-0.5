@@ -49,6 +49,7 @@ const AD = {
   byFid:     new Map(), // fid → { app, eco, colonies[], buildings[], roster[], queue[], designs[], systems[] }
   resInfo:   {},        // resName → { r, icon }
   sel:       null,      // selected faction_id
+  tab:       'factions',// верхняя вкладка консоли: factions | unions | portraits
   subtab:    'treasury',
   sysSearch: '',
   audit:     {},        // fid → { rows[], loading, err } (журнал действий, лениво)
@@ -226,7 +227,16 @@ function adPaint() {
     // содержимое (adSelectFaction), без перерисовки всей страницы — это
     // надёжнее (полный re-render #pg на Vercel почему-то не показывал панель).
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
-    body = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + adUnionsPanel() + adPortraitsPanel() + stats;
+    // ── Верхние вкладки консоли ────────────────────────────────────
+    const TABS = [['factions', '🛠 Фракции'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length]];
+    const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
+      ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
+    </div>`;
+    let tabContent;
+    if (AD.tab === 'unions')        tabContent = adUnionsPanel();
+    else if (AD.tab === 'portraits') tabContent = adPortraitsPanel();
+    else tabContent = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + stats;
+    body = tabBar + `<div style="margin-top:14px">${tabContent}</div>`;
   } catch (e) {
     console.error('[ADMIN] adPaint build error', e);
     body = `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px;margin-top:12px">Ошибка отрисовки: ${esc(e.message || String(e))}<br><button class="btn btn-gh btn-sm" onclick="go('admin',false)" style="margin-top:8px">↺ Повторить</button></div>`;
@@ -298,7 +308,10 @@ function adRenderSlot() {
   return false;
 }
 // ── Глобальный пул портретов оперативников (общий для всех фракций) ──
-const AD_PORTRAIT_RACES   = ['Человек', 'Синтет', 'Зоранин', 'Криор', 'Веспид', 'Терранид', 'Нублар'];
+// Расы — те же, что в регистрации фракций (faction_reg.js: FR_RACE). Не выдумываем.
+const AD_PORTRAIT_RACES   = (typeof FR_RACE !== 'undefined' && Array.isArray(FR_RACE) && FR_RACE.length)
+  ? FR_RACE.slice()
+  : ['Гуманоиды', 'Млекопитающие', 'Рептилоиды', 'Авианы (Птицеподобные)', 'Инсектоиды', 'Акватики (Водные)', 'Плантоиды (Растениевидные)', 'Литоиды (Каменные)', 'Синтетики / Киборги', 'Энергетические сущности'];
 const AD_PORTRAIT_GENDERS = ['муж.', 'жен.', 'агендер'];
 function adPortraitsPanel() {
   const list = AD.portraits || [];
@@ -322,12 +335,13 @@ function adPortraitsPanel() {
   }).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:14px 0">Пул пуст — загрузите первые портреты. Игра подбирает их оперативникам случайно по расе.</div>';
   return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
     <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🎭 Портреты оперативников <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· общий пул для всех фракций (${list.length})</span></div>
-    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 12px">Загружайте портреты, помечая расой и полом. Каждому оперативнику игра выбирает портрет <b>случайно</b> из подходящих по расе (и полу, если задан) — выбор закреплён за агентом. Без расы — «универсальные», подходят всем.</div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Помечайте портреты расой и полом. Каждому оперативнику игра выбирает портрет <b>случайно</b> из подходящих по расе (и полу, если задан) — выбор закреплён за агентом. Без расы — «универсальные», подходят всем.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 12px;line-height:1.5">📁 Картинки сохраняются <b>прямо в папку игры</b> <code>${AD_PORT_DIR}/</code> (не в облако) — потом публикуешь вместе с проектом. Запусти локальный сервер один раз: <code>node tools/upload-server.js</code> и держи окно открытым.</div>
     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
       <select id="ad-portrait-race" style="${inp}">${raceOpts}</select>
       <select id="ad-portrait-gender" style="${inp}">${genderOpts}</select>
       <input id="ad-portrait-file" type="file" accept="image/*" multiple style="${inp};max-width:280px">
-      <button class="btn btn-gd btn-sm" onclick="adPortraitUpload()">⬆ Загрузить</button>
+      <button class="btn btn-gd btn-sm" onclick="adPortraitUpload()">⬇ Сохранить в папку</button>
       <span id="ad-portrait-status" style="font-size:12px;color:var(--t3,#8aa0b0)"></span>
     </div>
     <div id="ad-portrait-grid">${groups}</div>
@@ -378,6 +392,24 @@ async function adUnionDelete(id, btn) {
     if (btn) { btn.disabled = false; btn.textContent = '🗑 Удалить'; }
   } finally { AD.busy = false; }
 }
+// ── Локальное сохранение портретов в папку игры (assets/portraits/) ──
+// Картинки пишутся прямо в папку проекта через ЛОКАЛЬНЫЙ аплоад-сервер
+// (tools/upload-server.js — запусти `node tools/upload-server.js`). Никакого
+// выбора папки и никакого Supabase Storage. В БД хранится только относительный
+// путь + раса/пол; потом публикуешь папку вместе с игрой.
+const AD_PORT_DIR    = 'assets/portraits';                 // путь от корня сайта (для URL)
+const AD_PORT_SERVER = 'http://localhost:8787';            // адрес tools/upload-server.js
+const AD_PORT_EXT    = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' };
+
+// Жив ли локальный сервер? (короткий пинг, чтобы дать понятную ошибку)
+async function adPortServerAlive() {
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 1500);
+    const r = await fetch(`${AD_PORT_SERVER}/ping`, { signal: ctl.signal });
+    clearTimeout(t); return r.ok;
+  } catch (e) { return false; }
+}
+
 async function adPortraitUpload() {
   const fileEl = document.getElementById('ad-portrait-file');
   const race   = (document.getElementById('ad-portrait-race')   || {}).value || null;
@@ -385,24 +417,43 @@ async function adPortraitUpload() {
   const status = document.getElementById('ad-portrait-status');
   const files  = fileEl && fileEl.files ? [...fileEl.files] : [];
   if (!files.length) { if (status) status.textContent = 'Выберите файл(ы)'; return; }
+  if (status) status.textContent = 'Проверка сервера…';
+  if (!(await adPortServerAlive())) {
+    if (status) status.textContent = `Сервер не запущен — выполни: node tools/upload-server.js`;
+    toast('Запусти локальный аплоад-сервер: node tools/upload-server.js', 'err');
+    return;
+  }
   let done = 0, fail = 0;
   for (const f of files) {
-    if (status) status.textContent = `Загрузка ${done + fail + 1}/${files.length}…`;
+    if (status) status.textContent = `Сохранение ${done + fail + 1}/${files.length}…`;
     try {
       const cf  = (typeof compressImageFile === 'function') ? await compressImageFile(f, 768, 0.85) : f;
-      const url = await ceUploadImage(cf, await getTokenFresh());
-      await dbPost('spy_portraits', { race, gender, url, label: f.name || null });
+      const ext = AD_PORT_EXT[cf.type] || 'jpg';
+      const r   = await fetch(`${AD_PORT_SERVER}/upload?ext=${ext}`, {
+        method: 'POST', headers: { 'Content-Type': cf.type || 'application/octet-stream' }, body: cf
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('HTTP ' + r.status));
+      await dbPost('spy_portraits', { race, gender, url: j.url, label: f.name || null });
       done++;
-    } catch (e) { console.error('[admin] portrait upload', e); fail++; }
+    } catch (e) { console.error('[admin] portrait save', e); fail++; }
   }
-  if (status) status.textContent = `Готово: +${done}${fail ? `, ошибок ${fail}` : ''}`;
+  if (status) status.textContent = `Готово: +${done}${fail ? `, ошибок ${fail}` : ''} → ${AD_PORT_DIR}/`;
   try { AD.portraits = await dbGet('spy_portraits', 'select=id,race,gender,url,label&order=created_at.desc'); } catch (e) {}
   adPaint();
 }
 async function adPortraitDelete(id) {
   if (!confirm('Удалить портрет из пула? (Агентам, у кого он был, подберётся другой.)')) return;
-  try { await dbDel('spy_portraits', `id=eq.${id}`); AD.portraits = (AD.portraits || []).filter(p => p.id !== id); adPaint(); }
-  catch (e) { toast('Не удалось удалить: ' + (e.message || e), 'err'); }
+  const p = (AD.portraits || []).find(x => x.id === id);
+  try {
+    await dbDel('spy_portraits', `id=eq.${id}`);
+    // Если файл лежит в папке игры — попросим сервер удалить его (best-effort).
+    if (p && p.url && p.url.indexOf(AD_PORT_DIR + '/') === 0) {
+      const name = p.url.split('/').pop();
+      fetch(`${AD_PORT_SERVER}/file?name=${encodeURIComponent(name)}`, { method: 'DELETE' }).catch(() => {});
+    }
+    AD.portraits = (AD.portraits || []).filter(x => x.id !== id); adPaint();
+  } catch (e) { toast('Не удалось удалить: ' + (e.message || e), 'err'); }
 }
 
 function adSelectFaction(fid) {
@@ -414,6 +465,7 @@ function adSelectFaction(fid) {
   const s = document.getElementById('fm-fac-select'); if (s && s.value !== (AD.sel || '')) s.value = AD.sel || '';
 }
 function adSetSubtab(t) { AD.subtab = t; if (!adRenderSlot()) adPaint(); }
+function adSetTab(t) { AD.tab = t || 'factions'; adPaint(); }
 
 function adFacPanel() {
   const e = adEntry(AD.sel);
