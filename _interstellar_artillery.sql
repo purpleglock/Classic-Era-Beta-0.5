@@ -304,6 +304,16 @@ begin
       end loop;
       update public.map_systems set planets = newpl where id = tgt.id;
 
+      -- сметаем минные поля уничтоженной планеты (и иконки минирования на карте,
+      -- которые рисуются из minefields_visible()). Через to_regclass — чтобы не
+      -- зависеть от порядка применения _defense_minefield.sql.
+      if to_regclass('public.system_minefields') is not null then
+        delete from public.system_minefields
+          where system_id = s.target_system_id
+            and ((s.target_pid is not null and planet_pid = s.target_pid)
+                 or (s.target_pid is null and planet_pid is null));
+      end if;
+
       -- уничтожаем колонию на этой планете (если есть) + её постройки (каскад).
       -- Цель по planet_pid; для столиц-домиков без стабильного pid — по имени.
       select * into col from public.colonies

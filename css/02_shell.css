@@ -148,6 +148,48 @@ button,input,select,textarea{font-family:inherit;}
   border-right:1px solid var(--w2);
   display:flex;flex-direction:column;flex-shrink:0;z-index:60;
   position:relative;
+  transition:margin-left .3s var(--ease-out), transform .3s var(--ease-out);
+}
+
+/* ─── Сворачиваемое боковое меню (десктоп) ─── */
+/* Кнопка-«шеврон» внутри шапки сайдбара */
+#sb-collapse{
+  display:none;position:absolute;top:14px;right:12px;z-index:5;
+  width:26px;height:26px;line-height:1;
+  background:transparent;border:1px solid var(--w3);color:var(--te);
+  font-size:18px;cursor:pointer;align-items:center;justify-content:center;
+  transition:all .2s;
+}
+#sb-collapse:hover{background:var(--teb);border-color:var(--te);box-shadow:inset 2px 0 0 var(--te);}
+
+/* Полоска-триггер у левого края + плавающая кнопка «показать» — видны только когда меню скрыто.
+   position:absolute → привязаны к #app (он центрирован, max-width:1600px), а НЕ к окну,
+   иначе кнопка улетает в размытые поля по краям широкого экрана. */
+#sb-edge{display:none;position:absolute;top:0;left:0;width:14px;height:100%;z-index:64;}
+#sb-reveal{
+  display:none;position:absolute;top:calc(var(--th) + 12px);left:12px;z-index:66;
+  width:34px;height:34px;line-height:1;
+  background:var(--b2);border:1px solid var(--w3);color:var(--te);
+  font-size:16px;cursor:pointer;align-items:center;justify-content:center;
+  box-shadow:0 4px 18px rgba(0,0,0,.5);transition:all .2s;
+}
+#sb-reveal:hover{background:var(--teb);border-color:var(--te);color:var(--tel);}
+
+@media (min-width:769px){
+  #sb-collapse{display:flex;}
+
+  /* Свёрнуто: сайдбар уезжает за левый край, #main растягивается на всю ширину */
+  #app.sb-collapsed #sb{margin-left:calc(-1 * var(--sb));}
+  #app.sb-collapsed #sb-edge{display:block;}
+  #app.sb-collapsed #sb-reveal{display:flex;}
+
+  /* Подсматривание: наезжаем поверх контента, НЕ раздвигая #main */
+  #app.sb-collapsed.sb-peek #sb{
+    margin-left:calc(-1 * var(--sb));
+    transform:translateX(var(--sb));
+    z-index:80;box-shadow:14px 0 60px rgba(0,0,0,.75);
+  }
+  #app.sb-collapsed.sb-peek #sb-reveal{opacity:0;pointer-events:none;}
 }
 #sb::after{
   content:'';position:absolute;top:0;right:0;bottom:0;width:2px;

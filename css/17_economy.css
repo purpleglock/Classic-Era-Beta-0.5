@@ -492,6 +492,43 @@
 .ec-slot { width: 100%; max-width: 22px; height: 8px; border-radius: 2px; background: var(--b4); border: 1px solid var(--w2); }
 .ec-slot.on { background: var(--gd); border-color: var(--gd); }
 .ec-bld-inc { font-size: 11px; color: var(--te); font-weight: 600; line-height: 1.35; min-height: 15px; }
+.ec-bld-break { margin-top: 4px; padding: 5px 7px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
+.ec-bld-break .ec-bk-line { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 1.35; }
+.ec-bld-break .ec-bk-base { color: var(--t2); }
+.ec-bld-break .ec-bk-x { color: var(--t3); opacity: 0.55; }
+.ec-bld-break .ec-bk-tot { color: var(--te); font-weight: 700; }
+.ec-bld-break .ec-bk-hi { color: #59c98a; cursor: help; }
+.ec-bld-break .ec-bk-lo { color: #e0795a; cursor: help; }
+.ec-bld-break .ec-bk-mid { color: var(--t2); cursor: help; }
+.ec-bld-break .ec-bk-note { margin-top: 3px; font-size: 9.5px; line-height: 1.3; color: var(--t3); }
+/* ── Фабрика товаров: рецепт · обеспечение · бренд ── */
+.ec-gf { margin-top: 6px; padding: 7px 9px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); font-size: 11px; }
+.ec-gf-recipe { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-family: var(--font-mono); }
+.ec-gf-in, .ec-gf-out { display: inline-flex; align-items: baseline; gap: 2px; }
+.ec-gf-in small, .ec-gf-out small { color: var(--t4); font-size: 9px; }
+.ec-gf-in.ec-gf-low { color: #e0795a; }
+.ec-gf-arrow { color: var(--t3); }
+.ec-gf-out { color: var(--te); font-weight: 700; }
+.ec-gf-warn { margin-top: 5px; font-size: 10px; line-height: 1.35; color: #e0a85a; }
+.ec-gf-prov { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.ec-gf-prov b { font-family: var(--font-mono); }
+.ec-gf-sub { color: var(--t3); font-size: 10px; margin-top: 3px; }
+.ec-gf-brand { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--w2); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 10.5px; color: var(--t2); }
+.ec-gf-brand b { color: var(--t1); }
+.ec-gf-brand i { color: var(--t4); font-weight: 400; }
+/* ── Биржа брендов ── */
+.ec-gb-mine { background: rgba(201,162,39,0.08); border: 1px solid rgba(201,162,39,0.35); border-radius: var(--radius-sm); padding: 9px 11px; }
+.ec-gb-mine-h { font-size: 12.5px; color: var(--t1); margin-bottom: 5px; }
+.ec-gb-mine-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--t2); }
+.ec-gb-mine-row b { font-family: var(--font-mono); color: var(--t1); }
+.ec-gb-hint { margin-top: 5px; font-size: 10px; color: var(--t3); line-height: 1.35; }
+.ec-gb-row { display: grid; grid-template-columns: minmax(140px, 1.6fr) 72px 96px auto; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--w1); }
+.ec-gb-brand { font-size: 12px; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-gb-brand i { color: var(--t4); font-style: normal; font-size: 10.5px; }
+.ec-gb-stock, .ec-gb-price { font-family: var(--font-mono); font-size: 11px; color: var(--t2); }
+.ec-gb-buy { display: flex; gap: 5px; align-items: center; justify-self: end; }
+.ec-gb-buy .ec-prod-qty { width: 72px; }
+@media (max-width: 640px) { .ec-gb-row { grid-template-columns: 1fr auto; gap: 4px 8px; } .ec-gb-buy { grid-column: 1 / -1; } }
 .ec-bld-act { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
 .ec-bld-act .btn { white-space: nowrap; flex-shrink: 0; }
 .ec-tnp { font-size: 10px; color: var(--t3); display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
@@ -683,6 +720,31 @@
 .ec-mk-spark { flex: 0 0 auto; min-width: 64px; text-align: center; }
 .ec-mk-price { flex: 0 0 auto; text-align: right; min-width: 120px; white-space: nowrap; }
 .ec-mk-stock { flex: 0 0 auto; color: var(--t4); min-width: 150px; text-align: right; white-space: nowrap; }
+/* карточка ресурса рынка = строка цены + панель НПС/прогноза/действий */
+.ec-mk-card {
+  border-bottom: 1px solid var(--ln, rgba(255,255,255,0.06));
+  padding: 8px 0 9px;
+}
+.ec-mk-card:last-child { border-bottom: 0; }
+.ec-mk-card.ec-mk-has { background: linear-gradient(90deg, rgba(120,180,120,0.06), transparent 60%); }
+.ec-mk-card .ec-mk-row { border: 0; padding: 0; }
+
+.ec-mk-tools {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
+  margin-top: 6px; padding-left: 4px;
+}
+.ec-mk-npc { font-size: 11.5px; color: var(--t3, var(--t4)); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.ec-mk-fc { font-style: normal; color: var(--t4); }
+.ec-mk-act { display: inline-flex; gap: 6px; align-items: center; margin-left: auto; }
+.ec-mk-q { width: 96px; }
+.ec-mk-act .btn-sm { padding: 4px 12px; }
+.ec-mk-rowpv { flex: 1 1 100%; font-size: 11.5px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.ec-mk-rowpv:empty { display: none; }
+.ec-mk-pvi i { color: var(--t4); font-style: normal; }
+@media (max-width: 560px) {
+  .ec-mk-act { margin-left: 0; flex: 1 1 100%; }
+  .ec-mk-q { flex: 1 1 auto; width: auto; }
+}
 @media (max-width: 560px) {
   /* телефон: строка = grid «имя | цена / запас». Имя слева тянется на 2 ряда,
      цена сверху-справа, запас под ней. Двойной класс перебивает базовый .ec-q-row{flex}. */
@@ -755,6 +817,10 @@
 .ec-queue, .ec-roster { display: flex; flex-direction: column; gap: 6px; }
 .ec-q-row, .ec-r-row { display: flex; align-items: center; gap: 10px; background: var(--b2); border: 1px solid var(--w2); border-radius: var(--radius-sm); padding: 8px 12px; }
 .ec-q-row .ec-r-name, .ec-r-name { flex: 1; min-width: 0; color: var(--t1); font-size: 13px; }
+/* Развёрнутый аванпост-добыча: режим-кнопка справа, селектор ресурса — отдельной строкой снизу. */
+.ec-q-row.ec-op-row { flex-wrap: wrap; }
+.ec-op-respick { flex-basis: 100%; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t2); margin-top: 2px; }
+.ec-op-respick .ec-op-res { flex: 1; min-width: 0; max-width: 260px; background: var(--b1); color: var(--t1); border: 1px solid var(--w2); border-radius: var(--radius-sm); padding: 3px 6px; font-size: 12px; }
 .ec-q-t { font-size: 11px; color: var(--te); font-family: var(--font-mono); }
 
 /* ── Прогресс-бар таймера: шкала + остаток времени ── */
@@ -912,6 +978,30 @@
 .ec-bp-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; font-family: var(--font-mono); font-size: 11px; color: var(--t3); border-bottom: 1px solid var(--w1); }
 .ec-bp-meta b { color: var(--t1); font-weight: 600; }
 .ec-bp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px 16px; max-height: 60vh; overflow-y: auto; }
+/* переиспользуемые фильтр-чипы (.ec-flt) */
+.ec-flt { font-size: 11px; padding: 4px 10px; border-radius: var(--radius-pill); border: 1px solid var(--w2); background: var(--b1); color: var(--t3); cursor: pointer; white-space: nowrap; transition: all .12s; }
+.ec-flt:hover { color: var(--t1); border-color: var(--w3, var(--w2)); }
+.ec-flt.is-on { background: var(--gd); border-color: var(--gd); color: #1a1408; font-weight: 600; }
+.ec-bp-filters { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 4px; }
+.ec-bp-grid.flt-civ   .ec-bp-card:not(.ec-bp-civ)   { display: none; }
+.ec-bp-grid.flt-mil   .ec-bp-card:not(.ec-bp-mil)   { display: none; }
+.ec-bp-grid.flt-faith .ec-bp-card:not(.ec-bp-faith) { display: none; }
+/* фильтр рынка по редкости / только моё */
+.ec-mk-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.ec-mk-list.flt-mine      .ec-mk-card:not(.ec-mk-has)              { display: none; }
+.ec-mk-list.flt-common    .ec-mk-card:not([data-rar="common"])    { display: none; }
+.ec-mk-list.flt-uncommon  .ec-mk-card:not([data-rar="uncommon"])  { display: none; }
+.ec-mk-list.flt-rare      .ec-mk-card:not([data-rar="rare"])      { display: none; }
+.ec-mk-list.flt-epic      .ec-mk-card:not([data-rar="epic"])      { display: none; }
+.ec-mk-list.flt-legendary .ec-mk-card:not([data-rar="legendary"]) { display: none; }
+/* фильтр карточек ресурсов склада */
+.ec-res-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; }
+.ec-res-cards.flt-have      .ec-res-card:not(.ec-res-has)      { display: none; }
+.ec-res-cards.flt-common    .ec-res-card:not(.ec-rar-common)    { display: none; }
+.ec-res-cards.flt-uncommon  .ec-res-card:not(.ec-rar-uncommon)  { display: none; }
+.ec-res-cards.flt-rare      .ec-res-card:not(.ec-rar-rare)      { display: none; }
+.ec-res-cards.flt-epic      .ec-res-card:not(.ec-rar-epic)      { display: none; }
+.ec-res-cards.flt-legendary .ec-res-card:not(.ec-rar-legendary) { display: none; }
 .ec-bp-card {
   --accent: var(--gd); position: relative; overflow: hidden;
   display: flex; align-items: flex-start; gap: 11px; text-align: left;
@@ -1948,16 +2038,15 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-emp-empty { font-size: 10.5px; color: var(--t4); font-style: italic; }
 
 /* ── Вкладка «Благополучие»: объяснялка механики + список систем ── */
-.ec-wf-how { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin-bottom: 18px; }
-.ec-wf-how-c { background: var(--b2); border: 1px solid var(--w2); border-left: 3px solid var(--gd); border-radius: var(--radius-sm); padding: 9px 11px; }
-.ec-wf-how-h { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; color: var(--t1); margin-bottom: 3px; }
-.ec-wf-how-h span { font-size: 15px; }
-.ec-wf-how-d { font-size: 11.5px; color: var(--t3); line-height: 1.5; }
-.ec-wf-how-d b { color: var(--t2); }
 .ec-wf-table { display: flex; flex-direction: column; gap: 4px; margin-bottom: 18px; }
 .ec-wf-head, .ec-wf-row { display: grid; grid-template-columns: minmax(110px, 1.6fr) 62px minmax(86px, 1.1fr) 82px 60px minmax(82px, 0.9fr); gap: 8px; align-items: center; }
 .ec-wf-head { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--t4); padding: 0 10px; }
-.ec-wf-row { background: var(--b2); border: 1px solid var(--w1); border-radius: var(--radius-sm); padding: 8px 10px; }
+.ec-wf-item { background: var(--b2); border: 1px solid var(--w1); border-radius: var(--radius-sm); overflow: hidden; transition: border-color .12s; }
+.ec-wf-item.open { border-color: var(--gd); }
+.ec-wf-row { padding: 8px 10px; cursor: pointer; transition: background .12s; }
+.ec-wf-row:hover { background: var(--b3, rgba(255,255,255,0.03)); }
+.ec-wf-caret { display: inline-block; color: var(--t4); margin-right: 4px; transition: transform .15s; }
+.ec-wf-item.open .ec-wf-caret { transform: rotate(90deg); color: var(--gd); }
 .ec-wf-nm { font-size: 12.5px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ec-wf-cap { color: var(--gd); }
 .ec-wf-pr { font-family: var(--font-mono); font-size: 14px; font-weight: 700; white-space: nowrap; }
@@ -1966,6 +2055,17 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-wf-bar b { font-family: var(--font-mono); font-size: 11px; }
 .ec-wf-pop, .ec-wf-jobs { font-family: var(--font-mono); font-size: 11px; color: var(--t2); white-space: nowrap; }
 .ec-wf-st { font-size: 10px; text-align: center; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--w2); white-space: nowrap; }
+/* раскрывашка деталей системы */
+.ec-wf-detail { display: none; padding: 12px 14px; border-top: 1px dashed var(--w2); background: var(--b1, rgba(0,0,0,0.15)); }
+.ec-wf-item.open .ec-wf-detail { display: block; }
+.ec-wf-d-mult { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 12px; font-size: 12px; color: var(--t2); }
+.ec-wf-d-mult b { font-family: var(--font-mono); font-size: 13px; margin: 0 2px; }
+.ec-wf-d-mult i { color: var(--t4); font-style: normal; font-size: 10.5px; }
+.ec-wf-d-mult .ec-wf-mscope { color: var(--t4); }
+.ec-wf-d-mult .ec-wf-mx { color: var(--t4); font-weight: 700; align-self: center; }
+.ec-wf-legend { font-size: 11px; color: var(--t3); margin: 2px 0 10px; line-height: 1.4; }
+.ec-wf-legend b { color: var(--t2); font-weight: 600; }
+.ec-wf-d-cap { font-size: 11.5px; color: var(--gd); padding: 4px 0; }
 @media (max-width: 640px) {
   .ec-wf-head { display: none; }
   .ec-wf-row { grid-template-columns: 1fr auto; gap: 4px 8px; }
@@ -2468,32 +2568,70 @@ body.ec-tree-fs-lock { overflow: hidden; }
    Цвет веры прокидывается через --fc (inline style на .ec-shrine). */
 .ec-shrine { position: relative; overflow: hidden; margin-bottom: 14px;
   background:
-    radial-gradient(140% 90% at 50% -20%, color-mix(in srgb, var(--fc, #c9a227) 20%, transparent), transparent 60%),
-    linear-gradient(180deg, color-mix(in srgb, var(--fc, #c9a227) 9%, var(--b2)), var(--b2));
-  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 38%, var(--w2));
-  border-radius: var(--radius-lg, 14px); padding: 18px 18px 16px; }
-.ec-shrine::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--fc, #c9a227), transparent); opacity: .85; }
-.ec-shrine-hd { display: flex; align-items: center; gap: 13px; }
-.ec-shrine-sigil { width: 48px; height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-  font-size: 26px; border-radius: 50%;
-  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--fc, #c9a227) 32%, var(--b1)), var(--b1));
-  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 55%, var(--w2));
-  box-shadow: 0 0 22px color-mix(in srgb, var(--fc, #c9a227) 30%, transparent), inset 0 0 12px color-mix(in srgb, var(--fc, #c9a227) 18%, transparent); }
-.ec-shrine-name { font-family: var(--font-display); font-weight: 800; font-size: 21px; letter-spacing: .01em; line-height: 1.12; color: var(--fc, #c9a227); }
-.ec-shrine-role { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--t3); margin-top: 3px; }
-.ec-shrine-dogma { font-size: 13.5px; color: var(--t2); font-style: italic; line-height: 1.55; margin: 13px 0 4px;
-  padding: 3px 0 3px 13px; border-left: 2px solid color-mix(in srgb, var(--fc, #c9a227) 55%, var(--w2)); }
+    radial-gradient(150% 100% at 50% -25%, color-mix(in srgb, var(--fc, #c9a227) 22%, transparent), transparent 62%),
+    linear-gradient(180deg, color-mix(in srgb, var(--fc, #c9a227) 10%, var(--b2)), var(--b2) 70%);
+  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 40%, var(--w2));
+  border-radius: var(--radius-lg, 14px); padding: 20px 20px 18px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fc, #c9a227) 14%, transparent),
+              inset 0 1px 30px color-mix(in srgb, var(--fc, #c9a227) 10%, transparent); }
+/* Гильоширная золотая рамка по верху как у алтаря */
+.ec-shrine::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, transparent, var(--fc, #c9a227) 20%, #fff6 50%, var(--fc, #c9a227) 80%, transparent);
+  opacity: .9; }
+/* Лучистое сияние-нимб за заголовком */
+.ec-shrine::after { content: ''; position: absolute; top: -90px; left: 50%; width: 320px; height: 320px;
+  transform: translateX(-50%); pointer-events: none; opacity: .5;
+  background:
+    repeating-conic-gradient(from 0deg at 50% 50%,
+      color-mix(in srgb, var(--fc, #c9a227) 16%, transparent) 0deg 6deg, transparent 6deg 12deg),
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--fc, #c9a227) 24%, transparent), transparent 60%);
+  -webkit-mask: radial-gradient(circle at 50% 50%, #000 0%, transparent 65%);
+          mask: radial-gradient(circle at 50% 50%, #000 0%, transparent 65%); }
+.ec-shrine-hd { position: relative; z-index: 1; display: flex; align-items: center; gap: 15px; }
+/* Сакральный медальон с нимбом и лучами */
+.ec-shrine-sigil { position: relative; width: 56px; height: 56px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 28px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 32%, color-mix(in srgb, var(--fc, #c9a227) 40%, var(--b1)), var(--b1) 78%);
+  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 60%, var(--w2));
+  box-shadow: 0 0 26px color-mix(in srgb, var(--fc, #c9a227) 34%, transparent),
+              inset 0 0 14px color-mix(in srgb, var(--fc, #c9a227) 22%, transparent); }
+.ec-shrine-sigil::before { content: ''; position: absolute; inset: -7px; border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg,
+    color-mix(in srgb, var(--fc, #c9a227) 70%, transparent) 0deg 3deg, transparent 3deg 15deg);
+  -webkit-mask: radial-gradient(circle, transparent 56%, #000 58%, #000 64%, transparent 66%);
+          mask: radial-gradient(circle, transparent 56%, #000 58%, #000 64%, transparent 66%);
+  opacity: .8; }
+.ec-shrine-name { font-family: var(--font-display); font-weight: 800; font-size: 22px; letter-spacing: .01em; line-height: 1.12;
+  color: var(--fc, #c9a227); text-shadow: 0 0 18px color-mix(in srgb, var(--fc, #c9a227) 45%, transparent); }
+.ec-shrine-role { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--t3); margin-top: 4px; }
+/* Догмат — как высеченное на скрижали изречение, в кавычках-обрамлении */
+.ec-shrine-dogma { position: relative; z-index: 1; font-size: 14px; color: var(--t2); font-style: italic; line-height: 1.6;
+  text-align: center; margin: 16px auto 6px; max-width: 92%; padding: 10px 18px;
+  border-top: 1px solid color-mix(in srgb, var(--fc, #c9a227) 30%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--fc, #c9a227) 30%, transparent); }
+.ec-shrine-dogma::before, .ec-shrine-dogma::after { content: '✦'; color: color-mix(in srgb, var(--fc, #c9a227) 80%, var(--w2));
+  font-style: normal; font-size: 10px; vertical-align: middle; margin: 0 8px; opacity: .85; }
 .ec-shrine-note { font-size: 11.5px; color: var(--t3); line-height: 1.55; margin: 6px 0 0; }
-.ec-bless-hd { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--t3); margin: 14px 0 8px; }
-.ec-bless-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
-.ec-bless { display: flex; align-items: center; gap: 11px; background: var(--b1);
-  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 22%, var(--w2)); border-radius: 11px; padding: 10px 12px; }
-.ec-bless-ic { font-size: 20px; width: 30px; text-align: center; flex-shrink: 0;
-  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--fc, #c9a227) 45%, transparent)); }
+/* Заголовки разделов — с орнаментальной чертой и центральным ромбом */
+.ec-bless-hd { position: relative; z-index: 1; font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--fc, #c9a227) 60%, var(--t3)); margin: 16px 0 9px;
+  display: flex; align-items: center; gap: 9px; }
+.ec-bless-hd::after { content: ''; flex: 1; height: 1px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--fc, #c9a227) 45%, transparent), transparent); }
+.ec-bless-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; }
+/* Благословения — как витражные клейма с золотым обрамлением */
+.ec-bless { position: relative; display: flex; align-items: center; gap: 12px; overflow: hidden;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--fc, #c9a227) 8%, var(--b1)), var(--b1));
+  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 28%, var(--w2)); border-radius: 12px; padding: 12px 13px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fc, #c9a227) 14%, transparent); }
+.ec-bless::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, transparent, var(--fc, #c9a227), transparent); opacity: .7; }
+.ec-bless-ic { font-size: 22px; width: 34px; height: 34px; line-height: 34px; text-align: center; flex-shrink: 0;
+  border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--fc, #c9a227) 20%, transparent), transparent 70%);
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--fc, #c9a227) 45%, transparent)); }
 .ec-bless-tx { display: flex; flex-direction: column; min-width: 0; }
-.ec-bless-v { font-family: var(--font-display); font-weight: 800; font-size: 17px; color: var(--t1); line-height: 1.05; }
-.ec-bless-l { font-size: 10.5px; color: var(--t3); line-height: 1.25; margin-top: 1px; }
+.ec-bless-v { font-family: var(--font-display); font-weight: 800; font-size: 18px; color: var(--t1); line-height: 1.05; }
+.ec-bless-l { font-size: 10.5px; color: var(--t3); line-height: 1.25; margin-top: 2px; }
 /* Справочник механики веры (что на что влияет, сколько, когда, почему) */
 .ec-mech-wrap { margin: 4px 0 14px; }
 .ec-mech-wrap > summary { list-style: none; }
@@ -2510,9 +2648,21 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-mech-now { margin-top: 7px; font-size: 11.5px; color: var(--t2); line-height: 1.45;
   border-top: 1px dashed var(--w2); padding-top: 6px; }
 .ec-mech-now b { color: var(--gd); font-weight: 800; }
-.ec-faith-pew { display: inline-flex; align-items: center; gap: 6px; margin: 3px 4px 0 0; padding: 4px 11px; font-size: 12px; color: var(--t2);
-  background: var(--b1); border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 30%, var(--w2)); border-radius: 999px; }
+.ec-faith-pew { display: inline-flex; align-items: center; gap: 6px; margin: 4px 5px 0 0; padding: 5px 13px; font-size: 12px; color: var(--t2);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--fc, #c9a227) 9%, var(--b1)), var(--b1));
+  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 34%, var(--w2)); border-radius: 999px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fc, #c9a227) 16%, transparent); }
 .ec-faith-pew b { color: var(--fc, #c9a227); font-weight: 700; }
+/* Миссионеры в пути — строки-«свитки» с золотой жилкой и печатью-конвертом */
+.ec-faith-mission { display: flex; align-items: center; gap: 11px; margin-top: 7px; padding: 9px 13px 9px 12px;
+  font-size: 12.5px; color: var(--t2); position: relative; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--fc, #c9a227) 7%, var(--b1)), var(--b1));
+  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 26%, var(--w2)); border-radius: 10px; }
+.ec-faith-mission::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, transparent, var(--fc, #c9a227), transparent); opacity: .7; }
+.ec-faith-mission b { color: var(--fc, #c9a227); font-weight: 700; }
+.ec-faith-mission-ic { font-size: 15px; flex-shrink: 0;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--fc, #c9a227) 45%, transparent)); }
 /* Модерация веры: статус-баннеры, картинка, форма правки, модалка просмотра */
 .ec-faith-status { font-size: 11.5px; line-height: 1.5; border-radius: 9px; padding: 8px 11px; margin: 0 0 12px; border: 1px solid; }
 .ec-faith-status.pend { color: var(--color-warning, #e0a030); border-color: color-mix(in srgb, var(--color-warning, #e0a030) 45%, var(--w2));
@@ -2522,15 +2672,31 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-faith-cover { margin: 0 0 12px; border-radius: 11px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 38%, var(--w2)); }
 .ec-faith-cover img { display: block; width: 100%; max-height: 200px; object-fit: cover; }
 .ec-faith-cover.lg img { max-height: 260px; }
-.ec-faith-hero { position: relative; border-radius: 10px; overflow: hidden; margin: 0 0 14px; }
-.ec-faith-hero.has-img { min-height: 180px; display: flex; align-items: flex-end;
-  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 30%, var(--w2)); }
-.ec-faith-hero.has-img::before { content: ''; position: absolute; inset: 0;
-  background-image: var(--faith-img); background-size: cover; background-position: center; filter: brightness(.65); }
-.ec-faith-hero.has-img::after { content: ''; position: absolute; inset: 0;
-  background: linear-gradient(to top, rgba(8,6,18,.93) 0%, rgba(8,6,18,.38) 50%, transparent 100%); }
-.ec-faith-hero .ec-shrine-hd { position: relative; z-index: 1; padding: 16px 14px 14px; }
-.ec-faith-hero:not(.has-img) .ec-shrine-hd { padding: 0 0 14px; }
+/* Образ веры — икона в золочёном окладе на сакральном витражном фоне.
+   Фон строится из священного цвета веры (а НЕ из размытой картинки), поэтому
+   белый фон загруженного изображения не пачкает поля. */
+.ec-faith-banner { position: relative; border-radius: 12px; overflow: hidden; margin: 0 0 16px;
+  min-height: 240px; display: flex; align-items: center; justify-content: center; padding: 26px;
+  border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 42%, var(--w2));
+  background:
+    radial-gradient(70% 120% at 50% 0%, color-mix(in srgb, var(--fc, #c9a227) 30%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in srgb, var(--fc, #c9a227) 16%, #0c0a18), #07060f 85%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fc, #c9a227) 16%, transparent), inset 0 0 80px rgba(0,0,0,.5); }
+/* Лучи славы, расходящиеся из-за иконы */
+.ec-faith-banner::before { content: ''; position: absolute; top: 50%; left: 50%; width: 560px; height: 560px;
+  transform: translate(-50%,-50%); pointer-events: none; opacity: .45;
+  background: repeating-conic-gradient(from 0deg at 50% 50%,
+    color-mix(in srgb, var(--fc, #c9a227) 30%, transparent) 0deg 4deg, transparent 4deg 13deg);
+  -webkit-mask: radial-gradient(circle, #000 8%, transparent 58%);
+          mask: radial-gradient(circle, #000 8%, transparent 58%); }
+/* Стрельчатая арка-оклад вокруг иконы (готический витраж) */
+.ec-faith-banner img { position: relative; z-index: 1; max-height: 200px; max-width: min(78%, 360px); width: auto; height: auto;
+  object-fit: contain; display: block;
+  border: 3px solid color-mix(in srgb, var(--fc, #c9a227) 70%, var(--w2));
+  border-radius: 130px 130px 10px 10px; padding: 0; background: #fff;
+  box-shadow: 0 10px 40px rgba(0,0,0,.6),
+              0 0 0 6px color-mix(in srgb, var(--fc, #c9a227) 22%, transparent),
+              0 0 36px color-mix(in srgb, var(--fc, #c9a227) 40%, transparent); }
 .ec-faith-imgrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 .ec-faith-imgprev { width: 64px; height: 64px; flex-shrink: 0; border-radius: 10px; overflow: hidden;
   border: 1px dashed color-mix(in srgb, var(--fc, #c9a227) 40%, var(--w2)); background: var(--b1);
@@ -2539,8 +2705,10 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-faith-imgprev span { font-size: 9px; color: var(--t4); text-align: center; padding: 4px; font-family: var(--font-mono); }
 .ec-faith-edit { margin: 14px 0 4px; padding: 12px; border-radius: 11px; background: var(--b1);
   border: 1px solid color-mix(in srgb, var(--fc, #c9a227) 28%, var(--w2)); }
-.ec-faith-thumb { display: inline-block; width: 18px; height: 18px; border-radius: 5px; margin-right: 7px; vertical-align: middle;
-  background-size: cover; background-position: center; border: 1px solid var(--w2); }
+.ec-faith-thumb { display: inline-block; width: 20px; height: 22px; border-radius: 11px 11px 4px 4px; margin-right: 8px; vertical-align: middle;
+  background-size: cover; background-position: center; background-color: #fff;
+  border: 1px solid color-mix(in srgb, var(--gd, #c9a227) 55%, var(--w2));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--gd, #c9a227) 30%, transparent); }
 .ec-faith-modal-back { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,.62); backdrop-filter: blur(3px);
   display: flex; align-items: center; justify-content: center; padding: 18px; overflow: auto; }
 .ec-faith-modal { position: relative; max-width: 540px; width: 100%; max-height: 90vh; overflow: auto; margin: 0; }
@@ -2708,3 +2876,27 @@ body.ec-tree-fs-lock { overflow: hidden; }
   /* подвал: заметка и «Итого» в столбик, ничего не уезжает за край */
   .ec-bill-foot { flex-direction: column; align-items: flex-start; gap: 4px; }
 }
+
+/* ═══ Гиперпейсер (МЗА) — карточки мобильных орудий судного дня ═══ */
+.ec-mza-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 8px; }
+.ec-mza-card { --acc: #e14637; position: relative; overflow: hidden;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--acc) 11%, var(--b2)), var(--b2) 62%);
+  border: 1px solid color-mix(in srgb, var(--acc) 30%, var(--w2)); border-left: 3px solid var(--acc);
+  border-radius: var(--radius-md, 10px); padding: 12px 13px; display: flex; flex-direction: column; gap: 10px; }
+.ec-mza-hd { display: flex; align-items: center; gap: 10px; }
+.ec-mza-id { min-width: 0; flex: 1; }
+.ec-mza-name { font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--t1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-mza-loc { font-size: 11px; color: var(--t3); margin-top: 1px; }
+.ec-mza-badge { flex-shrink: 0; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.ec-mza-hull-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: var(--t3); margin-bottom: 4px; }
+.ec-mza-hull-top b { font-size: 13px; }
+.ec-mza-bar { height: 7px; border-radius: 4px; background: var(--b0, #11151d); overflow: hidden; box-shadow: inset 0 0 0 1px var(--w2); }
+.ec-mza-bar i { display: block; height: 100%; border-radius: 4px; transition: width .4s ease; }
+.ec-mza-hull-sub { font-size: 10.5px; color: var(--t4); margin-top: 4px; }
+.ec-mza-stats { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.ec-mza-stat { flex: 1 1 auto; min-width: 88px; display: flex; flex-direction: column; gap: 1px;
+  background: var(--b1, rgba(255,255,255,.03)); border: 1px solid var(--w2); border-radius: 7px; padding: 5px 8px; }
+.ec-mza-k { font-size: 10px; color: var(--t4); white-space: nowrap; }
+.ec-mza-stat b { font-size: 13px; color: var(--t1); }
+.ec-mza-foot { font-size: 10.5px; color: var(--t4); border-top: 1px dashed var(--w2); padding-top: 7px; }

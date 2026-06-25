@@ -338,6 +338,60 @@ function authClick() { user ? openAp() : showAuth('login'); }
 function openMobSb() { document.getElementById('sb').classList.add('mob-open'); document.getElementById('sb-overlay').classList.add('show'); }
 function closeMobSb() { document.getElementById('sb').classList.remove('mob-open'); document.getElementById('sb-overlay').classList.remove('show'); }
 
+/* ─── Сворачиваемое боковое меню (десктоп) ─── */
+var _sbUserPref = (function(){ try { return localStorage.getItem('wk_sb_collapsed') === '1'; } catch { return false; } })();
+
+// После перехода (.3s) просим карту/виджеты пересчитать размеры под новую ширину #main
+function _sbNotifyResize() {
+  setTimeout(() => { try { window.dispatchEvent(new Event('resize')); } catch {} }, 320);
+}
+
+// Ручное сворачивание/разворачивание (кнопка-шеврон или плавающая «☰»)
+function toggleSb() {
+  const app = document.getElementById('app');
+  const collapsed = !app.classList.contains('sb-collapsed');
+  app.classList.remove('sb-peek');
+  app.classList.toggle('sb-collapsed', collapsed);
+  _sbUserPref = collapsed;
+  try { localStorage.setItem('wk_sb_collapsed', collapsed ? '1' : '0'); } catch {}
+  _sbNotifyResize();
+}
+
+// Синхронизация состояния меню при переходе между страницами.
+// На карте галактики прячем меню автоматически; на остальных — возвращаем к выбору игрока.
+function _sbSyncForRoute(slug) {
+  if (window.innerWidth <= 768) return; // на мобильных работает выдвижной drawer
+  const app = document.getElementById('app');
+  if (!app) return;
+  const before = app.classList.contains('sb-collapsed');
+  app.classList.remove('sb-peek');
+  if (slug === 'map') app.classList.add('sb-collapsed');
+  else app.classList.toggle('sb-collapsed', !!_sbUserPref);
+  if (app.classList.contains('sb-collapsed') !== before) _sbNotifyResize();
+}
+
+// Подсматривание: наведение на левый край показывает меню поверх контента
+(function _sbPeekInit(){
+  function bind(){
+    const edge = document.getElementById('sb-edge');
+    const sb = document.getElementById('sb');
+    if (edge) edge.addEventListener('mouseenter', () => {
+      const app = document.getElementById('app');
+      if (app && app.classList.contains('sb-collapsed')) app.classList.add('sb-peek');
+    });
+    if (sb) sb.addEventListener('mouseleave', () => {
+      const app = document.getElementById('app');
+      if (app) app.classList.remove('sb-peek');
+    });
+    // Когда сайдбар доехал — точно пересчитываем размеры карты/виджетов под новую ширину
+    if (sb) sb.addEventListener('transitionend', (e) => {
+      if (e.propertyName === 'margin-left') { try { window.dispatchEvent(new Event('resize')); } catch {} }
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind, { once:true });
+  else bind();
+})();
+
 function showAuth(mode) {
   document.getElementById('auth-mo-t').textContent = mode==='login' ? 'ВХОД' : 'РЕГИСТРАЦИЯ';
   if (mode==='login') {

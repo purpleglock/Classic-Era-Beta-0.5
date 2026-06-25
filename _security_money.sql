@@ -21,6 +21,10 @@ returns numeric language sql immutable as $$
     when 'science'          then 1000   when 'training' then 500
     when 'intel'            then 3000   when 'military_factory' then 1000
     when 'shipyard'         then 2000   when 'warehouse' then 800
+    when 'temple'           then 1200   -- ВЕРА: храм (_faith_setup.sql)
+    when 'starbase'         then 5000   -- Звёздная База (_defense_starbase.sql)
+    when 'flak'             then 1500   -- ПВО
+    when 'abm'              then 3000   -- ПРО
     else null end
 $$;
 -- Сколько слотов даётся бесплатно при постройке (EC_BUILD[t].free).
@@ -267,6 +271,54 @@ returns text language sql immutable as $$
     else 'unknown' end
 $$;
 
+-- Фолбэк: имя планеты → группа (легаси/сид-формат, зеркало EC_PLANET_NAME).
+create or replace function public._ec_name_group(p_name text)
+returns text language sql immutable as $$
+  select case btrim(coalesce(p_name,''))
+    when 'Катархей' then 'lava'  when 'Мёртвая планета' then 'lava'
+    when 'Супервулканическая планета' then 'volcanic'  when 'Хтонический мир' then 'lava'
+    when 'Горячий Юпитер' then 'hotgiant'  when 'Горячий Нептун' then 'hotgiant'
+    when 'Железный мир' then 'lava'  when 'Дастория' then 'volcanic'
+    when 'Литара' then 'desert'  when 'Океаническая суперземля' then 'exotic'
+    when 'Рыхлый гигант' then 'gasgiant'  when 'Железный карлик' then 'terrestrial'
+    when 'Духлесс' then 'volcanic'  when 'Терра' then 'terrestrial'
+    when 'Суперземля' then 'terrestrial'  when 'Гикеан' then 'oceanic'
+    when 'Панталассическая планета' then 'oceanic'  when 'Теракрон' then 'terrestrial'
+    when 'Мини-Нептун' then 'gasgiant'  when 'Водный Юпитер' then 'gasgiant'
+    when 'Тундровая планета' then 'terrestrial'  when 'Псамора' then 'oceanic'
+    when 'Мир дюн' then 'desert'  when 'Гельвард' then 'cryo'
+    when 'Турмион' then 'gasgiant'  when 'Ледяной гигант' then 'icegiant'
+    when 'Аммиачный мир' then 'cryo'  when 'Газовый карлик' then 'gasgiant'
+    when 'Метановый мир' then 'cryo'  when 'Суперюпитер' then 'gasgiant'
+    when 'Коричневый карлик' then 'gasgiant'  when 'Планета-сирота' then 'exotic'
+    when 'Углеродная планета' then 'cryo'  when 'Тёмный замёрзший мир' then 'cryo'
+    when 'Карликовая планета' then 'micro'  when 'Мегаастероид' then 'micro'
+    when 'Пустошь' then 'anomaly'  when 'Кротовая нора' then 'anomaly'
+    when 'Токсичный карлик' then 'anomaly'
+    else 'unknown' end
+$$;
+revoke all on function public._ec_name_group(text) from public;
+grant execute on function public._ec_name_group(text) to authenticated;
+
+-- Группа планеты — точное зеркало ecPlanetGroup (economy.js):
+-- kind → категория type → фолбэк по type-как-имени → фолбэк по name.
+-- ВАЖНО: kind-aware (пояса/аномалии). Дубль из _fix_station_belt — чтобы повторный
+-- накат этого security-слоя не затирал станции на поясах старой type-only логикой.
+create or replace function public._ec_group_of(p_planet jsonb)
+returns text language sql immutable as $$
+  select case
+    when p_planet->>'kind' = 'belt'    then 'belt'
+    when p_planet->>'kind' = 'anomaly' then 'anomaly'
+    when public._ec_planet_group(p_planet->>'type') <> 'unknown'
+         then public._ec_planet_group(p_planet->>'type')
+    when public._ec_name_group(p_planet->>'type') <> 'unknown'
+         then public._ec_name_group(p_planet->>'type')
+    else public._ec_name_group(p_planet->>'name')
+  end
+$$;
+revoke all on function public._ec_group_of(jsonb) from public;
+grant execute on function public._ec_group_of(jsonb) to authenticated;
+
 -- Планета стёрта «Дланью Неотвратимости» (межзвёздной артиллерией) — мёртвый
 -- камень: ни колонии, ни станции, ни терраформа. Зеркало флагов из _doom_resolve.
 create or replace function public._ec_planet_dead(p_pl jsonb)
@@ -350,7 +402,7 @@ begin
   pl := public._ec_planet(p_system_id, p_planet_pid);
   if pl is null then raise exception 'planet not found'; end if;
   if public._ec_planet_dead(pl) then raise exception 'planet is dead — cannot be colonized'; end if;
-  grp := public._ec_planet_group(pl->>'type');
+  grp := public._ec_group_of(pl);   -- ← kind-aware (пояс/аномалия), не затирать фикс _fix_station_belt
   if public._ec_nocol(grp) then raise exception 'planet needs a station, not colony'; end if;
 
   -- родная (или роботы — всё родное); иначе колония невозможна без терраформа
@@ -390,7 +442,7 @@ begin
   pl := public._ec_planet(p_system_id, p_planet_pid);
   if pl is null then raise exception 'planet not found'; end if;
   if public._ec_planet_dead(pl) then raise exception 'planet is dead — cannot host a station'; end if;
-  grp := public._ec_planet_group(pl->>'type');
+  grp := public._ec_group_of(pl);   -- ← kind-aware (пояс/аномалия), не затирать фикс _fix_station_belt
 
   st := public._ec_station_for(fid, grp);
   if st is null then raise exception 'no station tech for this world'; end if;
@@ -430,7 +482,7 @@ begin
   pl := public._ec_planet(p_system_id, p_planet_pid);
   if pl is null then raise exception 'planet not found'; end if;
   if public._ec_planet_dead(pl) then raise exception 'planet is dead — cannot be terraformed'; end if;
-  grp := public._ec_planet_group(pl->>'type');
+  grp := public._ec_group_of(pl);   -- ← kind-aware (пояс/аномалия), не затирать фикс _fix_station_belt
   if public._ec_nocol(grp) then raise exception 'planet needs a station, not terraform'; end if;
   if grp = any(public._race_native_envs(v_race)) then raise exception 'planet is native — colonize directly'; end if;
 

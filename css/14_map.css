@@ -128,23 +128,60 @@
 #gm-wrap.gm-deepzoom .gm-star{transform:translate(-50%,-50%);z-index:6}
 #gm-wrap.gm-deepzoom .gm-star .gm-label,
 #gm-wrap.gm-deepzoom .gm-res-overlay{display:none}
+/* система — наклонный диск (эллипс), а не плоский круг сверху: даёт ощущение
+   объёмной 3D-плоскости. Орбиты сплющиваются по Y, тела контр-масштабируются. */
 #gm-wrap.gm-deepzoom .gm-sys{display:block;position:absolute;left:50%;top:50%;width:0;height:0;
-  z-index:-1;pointer-events:none}
+  z-index:-1;pointer-events:none;transform:scaleY(.62)}
 /* кольцо орбиты: круг диаметром 2r, центрирован на звезде, медленно вращается */
 .gm-orbit{position:absolute;left:calc(var(--r) * -1);top:calc(var(--r) * -1);
   width:calc(var(--r) * 2);height:calc(var(--r) * 2);border-radius:50%;
-  border:1.5px solid rgba(150,185,235,.22);
+  border:1px solid rgba(150,185,235,.16);
   animation:gm-rift-spin var(--dur,18s) linear infinite}
-/* планета сидит в верхней точке кольца и едет по орбите вместе с ним */
-.gm-planet{position:absolute;left:50%;top:0;transform:translate(-50%,-50%);
-  width:var(--sz,9px);height:var(--sz,9px);border-radius:50%;
-  background:radial-gradient(circle at 32% 30%, #fff6, var(--zc,#8aa0bd) 60%, #0006);
-  box-shadow:0 0 7px var(--zc,#8aa0bd), 0 0 2px #000}
-.gm-planet.gm-dot-belt{background:none;border:1.5px dotted var(--zc,#8aa0bd);box-shadow:none}
+/* планета сидит в верхней точке кольца и едет по орбите; scaleY(1.61) гасит
+   сплющивание диска, чтобы тело осталось круглым шаром, а не эллипсом */
+.gm-planet{position:absolute;left:50%;top:0;transform:translate(-50%,-50%) scaleY(1.61);
+  width:var(--sz,9px);height:var(--sz,9px);border-radius:50%;overflow:hidden;
+  background:radial-gradient(circle at 30% 28%, #fff8 0%, var(--zc,#8aa0bd) 52%, #0007 100%);
+  box-shadow:0 0 7px -1px var(--zc,#8aa0bd), 0 0 2px #000}
+/* поверхность (полосы/крап) + терминатор-тень для объёма */
+.gm-planet::before,.gm-planet::after{content:"";position:absolute;inset:0;border-radius:50%}
+.gm-planet::after{background:radial-gradient(circle at 30% 28%, transparent 38%, #0009 100%)}
+/* газовый гигант — широкие облачные полосы, наклонённые под --tilt */
+.gm-look-gas::before{background:repeating-linear-gradient(var(--tilt,0deg),
+  #fff2 0 1px, transparent 1px 3px, #0003 3px 4px, transparent 4px 7px);mix-blend-mode:overlay}
+.gm-look-gas{box-shadow:0 0 9px -1px var(--zc,#caa46c),0 0 2px #000}
+/* газовый гигант с кольцом: само тело — как у gas (полосы наследуются), а тонкое
+   кольцо рисуем боковыми «ушами» через box-shadow по горизонтали */
+.gm-has-ring::before{background:repeating-linear-gradient(var(--tilt,0deg),
+  #fff2 0 1px, transparent 1px 3px, #0003 3px 4px, transparent 4px 7px);mix-blend-mode:overlay}
+.gm-has-ring{overflow:visible;box-shadow:0 0 9px -1px var(--zc,#caa46c),0 0 2px #000,
+  -8px 0 0 -3px rgba(220,200,160,.5), 8px 0 0 -3px rgba(220,200,160,.5)}
+/* океанический/земной — пятна суши и атмосферный ободок */
+.gm-look-ocean,.gm-look-terran{box-shadow:0 0 8px -1px var(--zc,#5aa6d8),0 0 2px #000,inset 0 0 3px -1px #bfe0ff}
+.gm-look-ocean::before,.gm-look-terran::before{background:
+  radial-gradient(ellipse 40% 25% at 60% 40%, #3a5d2e9c, transparent 70%),
+  radial-gradient(ellipse 30% 22% at 30% 65%, #4a6b389c, transparent 70%);mix-blend-mode:overlay}
+/* каменистый — крап кратеров */
+.gm-look-rock::before{background:
+  radial-gradient(circle at 62% 40%, #0006 0 8%, transparent 9%),
+  radial-gradient(circle at 40% 62%, #0005 0 6%, transparent 7%),
+  radial-gradient(circle at 70% 70%, #fff3 0 5%, transparent 6%)}
+/* лава — тёплые трещины */
+.gm-look-lava{box-shadow:0 0 9px -1px #ff7a3a,0 0 2px #000}
+.gm-look-lava::before{background:
+  radial-gradient(circle at 55% 45%, #ff9a4dcc 0 6%, transparent 8%),
+  radial-gradient(circle at 38% 60%, #ff6a2ab0 0 5%, transparent 7%);mix-blend-mode:screen}
+/* лёд — морозный блик */
+.gm-look-ice{box-shadow:0 0 8px -1px #bfe3ff,0 0 2px #000}
+.gm-look-ice::before{background:radial-gradient(circle at 35% 30%, #ffffffaa, transparent 55%);mix-blend-mode:screen}
+.gm-planet.gm-dot-belt{background:none;border:1.5px dotted var(--zc,#8aa0bd);box-shadow:none;overflow:visible}
+.gm-planet.gm-dot-belt::before,.gm-planet.gm-dot-belt::after{display:none}
 .gm-planet.gm-dot-anom{background:radial-gradient(circle, #fff, var(--zc,#b86cff) 60%, transparent);
-  box-shadow:0 0 9px var(--zc,#b86cff)}
+  box-shadow:0 0 9px var(--zc,#b86cff);overflow:visible}
+.gm-planet.gm-dot-anom::before,.gm-planet.gm-dot-anom::after{display:none}
 /* мёртвый мир — холодный камень без свечения */
 .gm-planet.gm-dot-dead{background:radial-gradient(circle at 35% 35%, #9a9aa2, var(--zc,#6b6b72) 70%, #1a1a1d);box-shadow:none;opacity:.85}
+.gm-planet.gm-dot-dead::before{display:none}
 /* подпись висит абсолютно под иконкой и НЕ влияет на центровку */
 .gm-label{
   position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:3px;
@@ -588,3 +625,24 @@ textarea.gm-fi{resize:vertical}
 .gm-rift-row b{color:#e6d6ff}
 .gm-rift-bad{color:#ff5a7a!important}
 .gm-rift-foot{font-family:'JetBrains Mono',monospace;font-size:10px;color:#9b7fb5;opacity:.75;font-style:italic;margin-top:8px}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ЛЁГКИЙ РЕЖИМ РЕДАКТОРА (#gm-wrap.gm-editing)
+   В правке карты дорогие визэффекты (свечения, анимации разломов/секторов,
+   drop-shadow на КАЖДОЙ звезде, многослойное «перо» границ секторов) душат
+   перерисовку на любое движение мыши. Пока редактируем — гасим их: геометрия
+   читается, перетаскивание и панорама идут плавно. На выходе всё возвращается.
+   ───────────────────────────────────────────────────────────────────── */
+#gm-wrap.gm-editing .gm-glow-layer{display:none}
+#gm-wrap.gm-editing .gm-sec-void,
+#gm-wrap.gm-editing .gm-sec-void-core{display:none}
+#gm-wrap.gm-editing .vor-rift{animation:none}
+#gm-wrap.gm-editing .vor-rift-edge{animation:none;stroke-dasharray:none}
+#gm-wrap.gm-editing .gm-rift-eye,
+#gm-wrap.gm-editing .gm-rift-ring{animation:none!important}
+#gm-wrap.gm-editing .gm-sec-selected img{animation:none}
+/* убираем тяжёлые drop-shadow с иконок звёзд (их сотни → постоянный repaint) */
+#gm-wrap.gm-editing .gm-star img{filter:none;transition:none}
+#gm-wrap.gm-editing .gm-star:hover img{filter:none;transform:scale(1.12)}
+#gm-wrap.gm-editing .gm-giant img,
+#gm-wrap.gm-editing .gm-capital img{filter:none}

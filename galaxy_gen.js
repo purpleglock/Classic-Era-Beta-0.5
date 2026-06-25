@@ -342,9 +342,18 @@
   window.resIconHtml = resIconHtml;
   window.resPrice = resPrice;
 
+  // Каталог «классов планет» для ручной выдачи в редакторе карты и админке.
+  // Каждый конкретный мир + его климат-группа (g): по g крутятся ресурсы/слоты.
+  // Плюс сами группы как обобщённые классы (в конце списка).
+  const PLANET_CLASSES = [
+    ...PLANETS.map(p => ({ id: p.id, name: p.name, g: p.g, icon: p.i, group: GRP[p.g] ? GRP[p.g].name : p.g })),
+    ...Object.keys(GRP).map(g => ({ id: 'grp_' + g, name: GRP[g].name, g, icon: '', group: GRP[g].name })),
+  ];
+
   window.GalaxyGen = {
     generate, getSlots, rollResources, resPrice,
     RESOURCES: RES_CATALOG, AMT_LEVELS, resIconHtml, resIconSrc,
     STAR_CLASSES: ['random', 'O', 'B', 'A', 'F', 'G', 'K', 'M', 'D', 'N'],
+    PLANET_CLASSES,
   };
 })();

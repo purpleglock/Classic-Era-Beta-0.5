@@ -228,13 +228,15 @@ function adPaint() {
     // надёжнее (полный re-render #pg на Vercel почему-то не показывал панель).
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
-    const TABS = [['factions', '🛠 Фракции'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length]];
+    const TABS = [['factions', '🛠 Фракции'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['planets', '🪐 Планеты'], ['market', '🏪 Рынок NPC']];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
     let tabContent;
     if (AD.tab === 'unions')        tabContent = adUnionsPanel();
     else if (AD.tab === 'portraits') tabContent = adPortraitsPanel();
+    else if (AD.tab === 'planets')   tabContent = adPlanetTexPanel();
+    else if (AD.tab === 'market')    tabContent = adMarketPanel();
     else tabContent = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + stats;
     body = tabBar + `<div style="margin-top:14px">${tabContent}</div>`;
   } catch (e) {
@@ -463,6 +465,161 @@ async function adPortraitDelete(id) {
   } catch (e) { toast('Не удалось удалить: ' + (e.message || e), 'err'); }
 }
 
+// ── Текстуры классов планет (assets/map/planets/planet_<класс>.png) ──
+// Карта (galaxy_map.js, gmmPaintBody) накладывает их на шар по «виду» мира.
+// Файлы пишутся в папку игры тем же локальным сервером, что и портреты.
+const AD_PLANET_DIR = 'assets/map/planets';
+const AD_PLANET_CLASSES = [
+  ['gas',    '🪐 Газовые гиганты',      'Газовые / ледяные / горячие гиганты — полосатые'],
+  ['terran', '🌍 Землеподобные',         'Земные, столичные, миры жизни — материки'],
+  ['ocean',  '🌊 Океанические',          'Сплошной океан'],
+  ['ice',    '❄️ Ледяные / криомиры',    'Замёрзшие миры'],
+  ['lava',   '🌋 Вулканические / лава',  'Раскалённые миры'],
+  ['rock',   '🪨 Каменистые / пустыни',  'Пустынные, экзотические, малые тела, камень'],
+];
+function adPlanetTexPanel() {
+  AD.planetTexTs = AD.planetTexTs || {};
+  const rows = AD_PLANET_CLASSES.map(([look, title, desc]) => {
+    const ts = AD.planetTexTs[look] || '';
+    const src = `${AD_PLANET_DIR}/planet_${look}.png${ts ? '?t=' + ts : ''}`;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--w2,#2a3340);border-radius:9px;background:var(--b1,#0f141b)">
+      <div style="width:60px;height:60px;border-radius:50%;flex-shrink:0;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover no-repeat;background-image:url('${src}')"></div>
+      <div style="min-width:0;flex:1">
+        <div style="font-weight:700;color:var(--t1,#e8edf2)">${title}</div>
+        <div style="font-size:11px;color:var(--t3,#8aa0b0);margin-top:2px">${desc}</div>
+      </div>
+      <input id="ad-ptex-file-${look}" type="file" accept="image/*" style="font-size:12px;max-width:200px;color:var(--t3,#8aa0b0)">
+      <button class="btn btn-gd btn-sm" onclick="adPlanetTexUpload('${look}')" style="white-space:nowrap">⬇ Залить</button>
+      <span id="ad-ptex-status-${look}" style="font-size:12px;color:var(--t3,#8aa0b0);min-width:60px"></span>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🪐 Текстуры классов планет</div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Залей по одной картинке на класс — карта наложит её на шар (свет, тень, атмосфера, вращение добавляются автоматически). Подходят квадратные картинки с диском планеты по центру; углы обрежутся в круг. Миры без своей индивидуальной картинки берут текстуру по классу.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 12px;line-height:1.5">📁 Пишется <b>прямо в папку игры</b> <code>${AD_PLANET_DIR}/</code>. Запусти один раз: <code>node tools/upload-server.js</code> и держи окно открытым. После заливки <b>обнови страницу игры</b>, чтобы карта подхватила новую картинку.</div>
+    <div style="display:flex;flex-direction:column;gap:8px">${rows}</div>
+  </div>${adPlanetSubPanel()}`;
+}
+// ── Текстуры ПОДКЛАССОВ планет (глобальные, по каталогу видов) ─────
+// Каждый вид планеты из каталога (Терра, Литара, Турмион…) может иметь свою
+// картинку cls_<id>.png. У кого её нет — карта берёт родительский КЛАСС (выше).
+// Файл фиксированного имени, перезаписью; путь не пишется в БД — карта сама
+// пробует cls_<id>.png и откатывается на класс при 404.
+function adPlanetSubList() {
+  const cat = (window.GalaxyGen && GalaxyGen.PLANET_CLASSES) || [];
+  // только реальные виды (не псевдо-группы grp_*) и не аномалии
+  return cat.filter(c => c && c.id && String(c.id).indexOf('grp_') !== 0 && c.g !== 'anomaly');
+}
+// Родительский КЛАСС (look) по группе вида — то же, что gmmLook на карте берёт по
+// группе планеты. Превью подкласса откатывается на planet_<look>.png этого класса.
+function adGroupLook(g) {
+  return ({
+    gasgiant: 'gas', icegiant: 'gas', hotgiant: 'gas',
+    oceanic: 'ocean', terrestrial: 'terran', cryo: 'ice',
+    lava: 'lava', volcanic: 'lava',
+    desert: 'rock', exotic: 'rock', micro: 'rock',
+  })[g] || 'rock';
+}
+function adPlanetSubPanel() {
+  const list = adPlanetSubList();
+  if (!list.length) {
+    return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px;font-size:12px;color:var(--t3,#8aa0b0)">
+      🌍 Текстуры подклассов: каталог планет не загружен (galaxy_gen.js).</div>`;
+  }
+  AD.subTexTs = AD.subTexTs || {};
+  // группируем по родительской группе для читаемости
+  const byGroup = {};
+  list.forEach(c => { (byGroup[c.group || c.g] = byGroup[c.group || c.g] || []).push(c); });
+  const sections = Object.keys(byGroup).map(grp => {
+    const rows = byGroup[grp].map(c => {
+      const look = adGroupLook(c.g);
+      const ts = AD.subTexTs[c.id] ? '?t=' + AD.subTexTs[c.id] : '';
+      const sub = `${AD_PLANET_DIR}/cls_${c.id}.png${ts}`;
+      const parent = `${AD_PLANET_DIR}/planet_${look}.png`;
+      // <img> с откатом: нет своей cls_*.png → показываем родительский класс
+      return `<div style="display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid var(--w2,#2a3340);border-radius:9px;background:var(--b1,#0f141b)">
+        <div style="width:46px;height:46px;border-radius:50%;flex-shrink:0;border:1px solid var(--w2,#2a3340);overflow:hidden;background:#0c1322">
+          <img src="${sub}" data-parent="${parent}" onerror="if(this.src.indexOf('planet_')<0){this.src=this.dataset.parent}" style="width:100%;height:100%;object-fit:cover;display:block">
+        </div>
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:700;color:var(--t1,#e8edf2)">${c.icon ? c.icon + ' ' : ''}${esc(c.name)}</div>
+          <div style="font-size:11px;color:var(--t3,#8aa0b0);margin-top:2px">id <code>${esc(c.id)}</code> · класс «${esc(look)}»</div>
+        </div>
+        <input id="ad-sub-file-${esc(c.id)}" type="file" accept="image/*" style="font-size:12px;max-width:170px;color:var(--t3,#8aa0b0)">
+        <button class="btn btn-gd btn-sm" onclick="adPlanetSubUpload('${esc(c.id)}','${esc(look)}')" style="white-space:nowrap">⬇ Залить</button>
+        <span id="ad-sub-st-${esc(c.id)}" style="font-size:12px;color:var(--t3,#8aa0b0);min-width:54px"></span>
+      </div>`;
+    }).join('');
+    return `<div style="margin-top:10px"><div style="font-size:12px;font-weight:700;color:var(--gdl,#5fb0e6);margin:4px 0 6px">${esc(grp)}</div>
+      <div style="display:flex;flex-direction:column;gap:6px">${rows}</div></div>`;
+  }).join('');
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🌍 Текстуры подклассов планет</div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Каждому виду планеты можно дать <b>свою</b> картинку. У кого своей нет — карта берёт родительский класс (секция выше). Превью показывает либо свою, либо родительскую.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 6px;line-height:1.5">📁 Пишется в <code>${AD_PLANET_DIR}/cls_&lt;id&gt;.png</code> сервером <code>node tools/upload-server.js</code>. После заливки обнови страницу игры.</div>
+    ${sections}
+  </div>`;
+}
+async function adPlanetSubUpload(id, look) {
+  const fileEl = document.getElementById('ad-sub-file-' + id);
+  const status = document.getElementById('ad-sub-st-' + id);
+  const f = fileEl && fileEl.files && fileEl.files[0];
+  if (!f) { if (status) status.textContent = 'выбери файл'; return; }
+  if (!(await adPortServerAlive())) {
+    if (status) status.textContent = 'сервер не запущен';
+    toast('Запусти локальный аплоад-сервер: node tools/upload-server.js', 'err');
+    return;
+  }
+  if (status) status.textContent = 'заливка…';
+  try {
+    const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, 1024, 0.9) : f;
+    // фиксированное имя cls_<id>.png (перезаписью) — карта ищет именно его
+    const r = await fetch(`${AD_PORT_SERVER}/upload?dir=planets&name=cls_${encodeURIComponent(id)}.png`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'application/octet-stream' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.subTexTs = AD.subTexTs || {}; AD.subTexTs[id] = Date.now();   // бьём кэш превью
+    if (status) status.textContent = '✓ готово';
+    toast(`Текстура подкласса «${id}» сохранена → ${j.url}`, 'ok');
+    adPaint();
+  } catch (e) {
+    console.error('[admin] planet sub tex', e);
+    if (status) status.textContent = 'ошибка';
+    toast('Не залилось: ' + (e.message || e), 'err');
+  }
+}
+async function adPlanetTexUpload(look) {
+  const fileEl = document.getElementById('ad-ptex-file-' + look);
+  const status = document.getElementById('ad-ptex-status-' + look);
+  const f = fileEl && fileEl.files && fileEl.files[0];
+  if (!f) { if (status) status.textContent = 'Выбери файл'; return; }
+  if (status) status.textContent = 'Проверка…';
+  if (!(await adPortServerAlive())) {
+    if (status) status.textContent = 'Сервер не запущен';
+    toast('Запусти локальный аплоад-сервер: node tools/upload-server.js', 'err');
+    return;
+  }
+  if (status) status.textContent = 'Заливка…';
+  try {
+    const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, 1024, 0.9) : f;
+    // имя ФИКСИРОВАННОЕ с .png — карта ищет planet_<look>.png; <img>/canvas
+    // декодируют по содержимому, поэтому JPEG-байты в .png рендерятся нормально.
+    const r = await fetch(`${AD_PORT_SERVER}/upload?dir=planets&name=planet_${look}.png`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'application/octet-stream' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.planetTexTs = AD.planetTexTs || {}; AD.planetTexTs[look] = Date.now();   // бьём кэш превью
+    if (status) status.textContent = '✓ готово';
+    toast(`Текстура «${look}» сохранена → ${j.url}`, 'ok');
+    adPaint();
+  } catch (e) {
+    console.error('[admin] planet tex', e);
+    if (status) status.textContent = 'ошибка';
+    toast('Не залилось: ' + (e.message || e), 'err');
+  }
+}
 function adSelectFaction(fid) {
   AD.sel = fid || null;        // выбор из списка (без переключения)
   AD.subtab = 'treasury';
@@ -472,7 +629,108 @@ function adSelectFaction(fid) {
   const s = document.getElementById('fm-fac-select'); if (s && s.value !== (AD.sel || '')) s.value = AD.sel || '';
 }
 function adSetSubtab(t) { AD.subtab = t; if (!adRenderSlot()) adPaint(); }
-function adSetTab(t) { AD.tab = t || 'factions'; adPaint(); }
+function adSetTab(t) {
+  AD.tab = t || 'factions';
+  adPaint();
+  if (AD.tab === 'market' && !AD.market) adMarketLoad();
+}
+
+// ── Рынок NPC: загрузка состояния (config + ресурсы) через admin-RPC ──────────
+async function adMarketLoad() {
+  try { AD.market = await adRpc('admin_market_status'); }
+  catch (e) { AD.market = { error: e.message }; }
+  adPaint();
+}
+
+// Глобальная ручка рынка: собрать значения полей и отправить
+async function adMarketCfgSave() {
+  const f = id => { const el = document.getElementById(id); const v = el ? parseFloat(el.value) : NaN; return Number.isFinite(v) ? v : null; };
+  try {
+    await adRpc('admin_market_config_set', {
+      p_elasticity: f('mc-elasticity'), p_clamp_lo: f('mc-clamp_lo'), p_clamp_hi: f('mc-clamp_hi'),
+      p_reversion: f('mc-reversion'), p_volatility: f('mc-volatility'), p_npc_react: f('mc-npc_react'),
+      p_walk: f('mc-walk'), p_shock_chance: f('mc-shock_chance'), p_player_sell: f('mc-player_sell'),
+    });
+    toast('Настройки рынка сохранены', 'ok'); await adMarketLoad();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+// Массовая ручка NPC: задать поток как долю равновесия для всех ресурсов
+async function adMarketNpcBulk() {
+  const s = parseFloat((document.getElementById('mc-bulk-supply') || {}).value);
+  const dm = parseFloat((document.getElementById('mc-bulk-demand') || {}).value);
+  try {
+    await adRpc('admin_market_npc_bulk', { p_supply_frac: Number.isFinite(s) ? s : 0.03, p_demand_frac: Number.isFinite(dm) ? dm : 0.03 });
+    toast('NPC-поток обновлён для всех ресурсов', 'ok'); await adMarketLoad();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+// Правка одного ресурса
+async function adMarketResSave(name) {
+  const f = key => { const el = document.getElementById('mr-' + key + '-' + name.replace(/[^a-zа-я0-9]/gi, '_')); const v = el ? parseFloat(el.value) : NaN; return Number.isFinite(v) ? v : null; };
+  try {
+    await adRpc('admin_market_resource_set', {
+      p_name: name, p_npc_supply: f('sup'), p_npc_demand: f('dem'),
+      p_equilibrium: f('eq'), p_base_price: f('base'), p_stock: f('stock'),
+    });
+    toast('Ресурс «' + name + '» обновлён', 'ok'); await adMarketLoad();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+function adMarketPanel() {
+  const m = AD.market;
+  const wrap = 'border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px;margin-top:18px';
+  if (!m) return `<div style="${wrap}">Загрузка состояния рынка…</div>`;
+  if (m.error) return `<div style="${wrap};color:#ff7a7a">Ошибка: ${esc(m.error)}<br><span style="font-size:11px;color:var(--t4,#6a7a88)">Применён ли _mining_market_routing.sql в Supabase?</span></div>`;
+  const c = m.config || {};
+  const inp = 'width:74px;padding:5px 7px;font-size:12px;background:var(--b1,#0f141b);color:var(--t1,#e8edf2);border:1px solid var(--w2,#2a3340);border-radius:6px';
+  const cfgField = (key, label, hint) => `<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--t3,#8aa0b0)" title="${esc(hint)}">${esc(label)}<input id="mc-${key}" type="number" step="0.01" value="${c[key] != null ? c[key] : ''}" style="${inp}"></label>`;
+  const cfgBlock = `<div style="${wrap}">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🏪 Глобальный рынок · NPC и баланс цен</div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 12px;line-height:1.5">Цена ресурса = базовая × (равновесие / запас)<sup>эластичность</sup>, обрезано рамкой множителя. NPC-арбитраж тянет цену к базовой: <b>дорого → боты продают</b> (запас↑, цена↓), <b>дёшево → скупают</b>. Чем выше «реакция NPC», тем активнее рынок гасит скачки.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+      ${cfgField('elasticity', 'Эластичность', 'Круче цена реагирует на дефицит/избыток. Меньше = плавнее. По умолч. 0.30')}
+      ${cfgField('clamp_lo', 'Мин. множ.', 'Нижняя граница множителя цены к базе (0.50 = цена не ниже половины базы)')}
+      ${cfgField('clamp_hi', 'Макс. множ.', 'Верхняя граница (2.50 = не выше 2.5× базы). Узкая рамка = меньше «до небес»')}
+      ${cfgField('reversion', 'Возврат к равн.', 'Скорость возврата запаса к равновесию за сутки (0.15)')}
+      ${cfgField('volatility', 'Волатильность', 'Случайный мультипликативный шум запаса/сут (0.02)')}
+      ${cfgField('npc_react', 'Реакция NPC', 'Сила ценового арбитража ботов. Больше = быстрее гасят скачки (0.60)')}
+      ${cfgField('walk', 'Блуждание', 'Остаточный случайный поток NPC (0.20)')}
+      ${cfgField('shock_chance', 'Шанс шока', 'Базовый шанс событийного шока за прогон рынка (0.06)')}
+      ${cfgField('player_sell', 'Сбыт игрока', 'Доля живой цены при сбыте добычи в режиме «🏪 на рынок» (0.80)')}
+      <button class="btn btn-gd btn-sm" onclick="adMarketCfgSave()">💾 Сохранить</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-top:14px;padding-top:12px;border-top:1px dashed var(--w2,#2a3340)">
+      <div style="font-size:12px;color:var(--t3,#8aa0b0)">Массово задать NPC-поток (доля равновесия/сут):</div>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--t3,#8aa0b0)">Добыча NPC<input id="mc-bulk-supply" type="number" step="0.01" value="0.03" style="${inp}"></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--t3,#8aa0b0)">Спрос NPC<input id="mc-bulk-demand" type="number" step="0.01" value="0.03" style="${inp}"></label>
+      <button class="btn btn-gh btn-sm" onclick="adMarketNpcBulk()">Применить ко всем</button>
+    </div>
+  </div>`;
+
+  const rows = (m.resources || []).map(r => {
+    const sfx = r.name.replace(/[^a-zа-я0-9]/gi, '_');
+    const ratio = r.base_price ? (r.price / r.base_price) : 1;
+    const col = ratio > 1.3 ? '#e0688a' : (ratio < 0.77 ? '#5fc98a' : 'var(--t2,#b8c4d0)');
+    const ri = `width:78px;padding:4px 6px;font-size:11px;background:var(--b1,#0f141b);color:var(--t1,#e8edf2);border:1px solid var(--w2,#2a3340);border-radius:5px`;
+    const cell = (key, val) => `<input id="mr-${key}-${sfx}" type="number" value="${Math.round(val)}" style="${ri}">`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--w2,#2a3340);flex-wrap:wrap">
+      <span style="min-width:150px;font-size:12px;color:var(--t1,#e8edf2)">${esc(r.name)}</span>
+      <span style="min-width:92px;font-size:11px;color:${col}" title="живая цена / база">💰 ${(+r.price).toFixed(1)} <span style="color:var(--t4,#6a7a88)">(×${ratio.toFixed(2)})</span></span>
+      <label style="font-size:10px;color:var(--t4,#6a7a88)">база ${cell('base', r.base_price)}</label>
+      <label style="font-size:10px;color:var(--t4,#6a7a88)">равнов. ${cell('eq', r.equilibrium)}</label>
+      <label style="font-size:10px;color:var(--t4,#6a7a88)">запас ${cell('stock', r.stock)}</label>
+      <label style="font-size:10px;color:var(--t4,#6a7a88)">⛏ добыча ${cell('sup', r.npc_supply)}</label>
+      <label style="font-size:10px;color:var(--t4,#6a7a88)">🛒 спрос ${cell('dem', r.npc_demand)}</label>
+      <button class="btn btn-gh btn-xs" onclick="adMarketResSave('${esc(r.name).replace(/'/g, "\\'")}')">✔</button>
+    </div>`;
+  }).join('') || '<div style="color:var(--t4,#6a7a88);font-size:12px;padding:12px">Рынок пуст — применён ли _market_setup.sql?</div>';
+  const resBlock = `<div style="${wrap}">
+    <div style="font-family:var(--font-display,sans-serif);font-size:15px;font-weight:700;color:var(--gdl,#5fb0e6)">📦 Ресурсы рынка <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· ${(m.resources || []).length} · «добыча NPC» = сколько боты вбрасывают, «спрос NPC» = сколько скупают</span></div>
+    <div style="margin-top:10px">${rows}</div>
+  </div>`;
+  return cfgBlock + resBlock;
+}
 
 function adFacPanel() {
   const e = adEntry(AD.sel);
@@ -590,9 +848,34 @@ function adTabResources(e) {
     `<button class="btn btn-gd btn-xs" onclick="adAddResourceAmt(${v})">+${v >= 1000 ? v/1000+'к' : v}</button>`
   ).join('');
 
+  // ── Товары (особый ресурс Фабрики: бренд + цена) ──
+  const goodsStock = Math.floor(Number(res['Товары'] || 0));
+  const goodsBrand = e.eco.goods_brand || '';
+  const goodsPrice = Number(e.eco.goods_price ?? 14);
+  const goodsBlock = `
+    <div class="fm-section-title" style="margin-top:4px">🛍 Товары (бренд)</div>
+    <div style="padding:8px 10px;border:1px solid var(--w1,#1e2630);border-radius:8px;background:var(--bg2,#121821)">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="flex:1;min-width:120px;font-size:13px;color:var(--t1,#e8edf2)">На складе: <b>${adNum(goodsStock)}</b> ед.</span>
+        <input class="fi" id="fm-goods-amt" type="number" value="100" min="1" style="width:80px" placeholder="Кол-во">
+        <button class="btn btn-gd btn-xs" onclick="adGoodsAdd()">+ Выдать</button>
+        <button class="btn btn-gd btn-xs" onclick="adGoodsAddAmt(500)">+500</button>
+        <button class="btn btn-gd btn-xs" onclick="adGoodsAddAmt(1000)">+1к</button>
+        <button class="btn btn-rd btn-xs" onclick="adGoodsAddAmt(-100)">−100</button>
+        <button class="btn btn-rd btn-xs" onclick="adGoodsZero()" title="Обнулить товары">✕</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px">
+        <input class="fi" id="fm-goods-brand" value="${esc(goodsBrand)}" placeholder="Название бренда" style="flex:2;min-width:160px">
+        <input class="fi" id="fm-goods-price" type="number" min="1" value="${goodsPrice}" style="width:90px" title="Цена за ед.">
+        <span style="font-size:11px;color:var(--t3,#8aa0b0)">ГС/ед.</span>
+        <button class="btn btn-gh btn-sm" onclick="adGoodsSetBrand()">✓ Сохранить бренд/цену</button>
+      </div>
+    </div>`;
+
   return `<div class="fm-resources">
     <div class="fm-section-title">Текущие ресурсы на складе</div>
     <div class="fm-res-list">${curRows}</div>
+    ${goodsBlock}
     <div class="fm-section-title" style="margin-top:16px">Добавить / пополнить</div>
     <div class="fm-field-row" style="flex-wrap:wrap;gap:6px;align-items:center">
       <select class="fi" id="fm-add-res-name" style="flex:2;min-width:180px">${resOptGroups}</select>
@@ -687,6 +970,53 @@ async function adDeltaRes(name, delta) {
     e.eco.resources = res;
     adLogGrant({ type: 'resource', name, delta, to: val });
     toast(`${name}: ${adNum(val)}`, 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+// ── Товары (бренд Фабрики): выдача + бренд/цена ──────────────────
+async function adGoodsAdd() {
+  const amt = Math.max(1, parseInt(document.getElementById('fm-goods-amt')?.value) || 0);
+  return adGoodsAddAmt(amt);
+}
+async function adGoodsAddAmt(amt) {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e || !e.eco) { toast('Нет экономики', 'err'); return; }
+  const cur = Number(e.eco.resources?.['Товары'] || 0);
+  const to  = Math.max(0, cur + amt);
+  AD.busy = true;
+  try {
+    const res = { ...(e.eco.resources || {}), 'Товары': to };
+    if (to === 0) delete res['Товары'];
+    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { resources: res });
+    e.eco.resources = res;
+    adLogGrant({ type: 'resource', name: 'Товары', delta: to - cur, to });
+    toast(`Товары: ${adNum(to)}`, 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+async function adGoodsZero() {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e || !e.eco) return;
+  AD.busy = true;
+  try {
+    const res = { ...(e.eco.resources || {}) }; delete res['Товары'];
+    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { resources: res });
+    e.eco.resources = res;
+    toast('Товары обнулены', 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+async function adGoodsSetBrand() {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e || !e.eco) { toast('Нет экономики', 'err'); return; }
+  const brand = document.getElementById('fm-goods-brand')?.value?.trim() || null;
+  const price = Math.max(1, Math.round(parseFloat(document.getElementById('fm-goods-price')?.value) || 14));
+  AD.busy = true;
+  try {
+    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { goods_brand: brand, goods_price: price });
+    e.eco.goods_brand = brand; e.eco.goods_price = price;
+    toast(`Бренд: ${brand || '—'} · ${price} ГС/ед.`, 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }
@@ -1371,7 +1701,8 @@ function adTabColonies(e) {
     <div class="fm-col-form">
       <select class="fi" id="fm-col-sys" style="min-width:130px">${sysOpts || '<option value="">Нет систем</option>'}</select>
       <input class="fi" id="fm-col-pname" placeholder="Планета" style="flex:1">
-      <input class="fi" id="fm-col-ptype" placeholder="Тип" value="Столичный мир" style="flex:1">
+      <select class="fi" onchange="adPickColClass(this.value)" title="Выбрать класс планеты" style="flex:1">${adColClassOpts()}</select>
+      <input class="fi" id="fm-col-ptype" placeholder="Тип (свой)" value="Столичный мир" style="flex:1">
       <input class="fi" id="fm-col-cells" type="number" value="6" min="1" max="12" style="width:60px">
       <button class="btn btn-gd btn-sm" onclick="adAddColony()">+ Добавить</button>
     </div>
@@ -1394,6 +1725,19 @@ async function adMoveColonies() {
     toast('Колонии перенесены в систему', 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
+}
+
+// Опции дропдауна «класс планеты» для выдачи колонии (каталог генератора).
+function adColClassOpts() {
+  const cat = (window.GalaxyGen && GalaxyGen.PLANET_CLASSES) || [];
+  let html = `<option value="">✎ свой класс</option>`;
+  cat.forEach(c => { html += `<option value="${esc(c.name)}">${c.icon ? c.icon + ' ' : ''}${esc(c.name)}</option>`; });
+  return html;
+}
+// Выбор класса из дропдауна — проставляем его в поле «Тип». Пустое — свой ввод.
+function adPickColClass(name) {
+  const inp = document.getElementById('fm-col-ptype');
+  if (inp && name) inp.value = name;
 }
 
 async function adAddColony() {

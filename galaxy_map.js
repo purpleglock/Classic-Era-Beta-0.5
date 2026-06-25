@@ -11,7 +11,7 @@ const GM_STAR_TYPES = ['yellow', 'red', 'blue', 'white', 'green'];
 
 // Потолок зума и порог «глубокого зума»: за GM_DEEP_SCALE звёзды раскрываются
 // в анимированные системы (звезда + орбиты планет по составу s.planets).
-const GM_MAX_SCALE = 26;
+const GM_MAX_SCALE = 42;
 const GM_DEEP_SCALE = 4;
 
 // Иконки контролов — инлайн-SVG (currentColor), чтобы не зависеть от эмодзи-шрифта:
@@ -136,7 +136,7 @@ async function loadGalaxyData() {
       // Столица (система + имя планеты) — из РЕАЛЬНОЙ столичной колонии (is_capital),
       // иначе переименование/перенос показывались бы как при регистрации.
       const [apps, cols] = await Promise.all([
-        dbGet('faction_applications', 'status=eq.approved&select=faction_id,owner_id,herald_url,leader,gov,name,system_id,planet_name'),
+        dbGet('faction_applications', 'status=eq.approved&select=faction_id,owner_id,herald_url,leader,gov,name,system_id,planet_name,capital_env'),
         dbGet('colonies', 'select=*').catch(() => []),
       ]);
       GM.colonies = cols || [];   // реальные колонии (для панели системы)
@@ -384,7 +384,10 @@ function gmWindowMove(e) {
     GM.drag.sys.x = Math.max(0, Math.min(GM_W, Math.round(x)));
     GM.drag.sys.y = Math.max(0, Math.min(GM_H, Math.round(y)));
     GM.drag.moved = true;
-    gmDraw();
+    // Лёгкий рендер: двигаем ТОЛЬКО перетаскиваемую звезду и её гиперпути,
+    // без пересчёта тяжёлой геометрии секторов/Вороного (она «душила» драг).
+    // Полную карту (заливки/границы/сектора) перерисуем один раз на отпускании.
+    gmDragRender(GM.drag.sys);
     return;
   }
   if (GM.panning && GM.panStart) {
@@ -401,10 +404,33 @@ async function gmWindowUp() {
   if (GM.drag) {
     const d = GM.drag; GM.drag = null;
     if (d.moved) {
+      gmDraw();   // полная перерисовка один раз — на финальной позиции
       try { await dbPatch('map_systems', 'id=eq.' + encodeURIComponent(d.sys.id), { x: d.sys.x, y: d.sys.y }); }
       catch (e) { toast('Не сохранилось: ' + e.message, 'err'); }
     }
   }
+}
+
+// Лёгкая перерисовка во время перетаскивания одной звезды: сдвигаем её DOM-узел
+// и пересчитываем кривые только тех гиперпутей, что в неё упираются. Тяжёлую
+// геометрию (заливки фракций, границы, сектора) НЕ трогаем — это и тормозило.
+function gmDragRender(sys) {
+  const star = document.querySelector(`#gm-stars .gm-star[data-id="${(window.CSS && CSS.escape) ? CSS.escape(sys.id) : sys.id}"]`);
+  if (star) { star.style.left = sys.x + 'px'; star.style.top = sys.y + 'px'; }
+  const lanes = document.querySelectorAll(
+    `#gm-svg .lane-layer path[data-a="${sys.id}"], #gm-svg .lane-layer path[data-b="${sys.id}"]`);
+  lanes.forEach(path => {
+    const a = GM.systems.find(s => s.id === path.dataset.a);
+    const b = GM.systems.find(s => s.id === path.dataset.b);
+    if (!a || !b) return;
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const nx = -dy / len, ny = dx / len;
+    const h = gmEdgeHash(Math.min(a.x, b.x) + Math.max(a.x, b.x) * 0.31, Math.min(a.y, b.y) + Math.max(a.y, b.y) * 0.47);
+    const bend = (h - 0.5) * 2 * Math.min(len * 0.11, 55);
+    const cx = +(mx + nx * bend).toFixed(1), cy = +(my + ny * bend).toFixed(1);
+    path.setAttribute('d', `M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`);
+  });
 }
 
 // ── Touch (мобильные жесты) ─────────────────────────────────
@@ -902,7 +928,7 @@ function gmDrawSvg() {
   const laneHtml = geo.lanes.map(L => {
     const d = `M${L.ax},${L.ay} Q${L.cx},${L.cy} ${L.bx},${L.by}`;
     const cls = 'hyperlane' + (GM.edit && GM.mode === 'unlink' ? ' gm-deletable' : '');
-    const visible = `<path class="${cls}" d="${d}" fill="none"></path>`;
+    const visible = `<path class="${cls}" data-lane="${esc(L.id)}" data-a="${esc(L.a_id)}" data-b="${esc(L.b_id)}" d="${d}" fill="none"></path>`;
     if (GM.edit && GM.mode === 'unlink') {
       const hit = `<path class="hyperlane-hit" d="${d}" fill="none" onclick="gmDeleteLane('${L.id}')"></path>`;
       return hit + visible;
@@ -1070,18 +1096,57 @@ function gmOrbitBodies(sys) {
   }
   return b;
 }
+// Стабильный псевдослучайный 0..1 из целого зерна (для вариаций тел — один и тот
+// же мир всегда выглядит одинаково между кадрами/перезагрузками).
+function gmHash01(seed) {
+  const h = Math.sin((seed + 1) * 12.9898) * 43758.5453;
+  return h - Math.floor(h);
+}
+// Класс «вида» планеты по её типу/зоне — чтобы каменистый, океанический и газовый
+// мир читались по-разному, а не одинаковыми шариками. Возвращает суффикс класса.
+function gmPlanetLook(p) {
+  const t = (p.type || '').toLowerCase();
+  if (/газ|giant|юпитер|gas/.test(t)) return 'gas';
+  if (/океан|вод|ocean|water/.test(t)) return 'ocean';
+  if (/лёд|лед|ice|мёрз|замёрз|frozen/.test(t)) return 'ice';
+  if (/пуст|desert|выжж|лав|вулк|volcan/.test(t)) return 'lava';
+  if (/земн|terran|сад|gaia|столич|жизн/.test(t)) return 'terran';
+  if (/камен|rock|скал|астер|barren|мёртв/.test(t)) return 'rock';
+  // без явного типа — по тепловой зоне: горячая→лава, холодная→лёд, иначе камень
+  if (p.zone === 'hot') return 'lava';
+  if (p.zone === 'cold') return 'ice';
+  return 'rock';
+}
 function gmOrbits(sys) {
   const planets = gmOrbitBodies(sys);
   if (!planets.length) return '';
+  const n = planets.length;
+  // радиусы орбит — по РЕАЛЬНОЙ дистанции (а.е.), а не равными шагами: отсюда
+  // неравномерные промежутки, как в настоящей системе. Нормируем в диапазон.
+  const ds = planets.map(p => +p.dist || 0);
+  const dmin = Math.min(...ds), dmax = Math.max(...ds);
+  const R_IN = 44, R_OUT = 44 + Math.min(6, n) * 22;   // ближняя/дальняя орбита
   const rings = planets.map((p, i) => {
-    const r = 38 + i * 16;                         // радиус кольца (юниты карты)
-    const dur = 16 + i * 5;                        // дальние — медленнее
-    const delay = -((i * 137) % 360) / 360 * dur;  // негативная задержка = стартовая фаза
+    const u = (n <= 1) ? 0.5 : (dmax > dmin ? (ds[i] - dmin) / (dmax - dmin) : i / (n - 1));
+    const r = Math.round(R_IN + (R_OUT - R_IN) * u);  // радиус кольца (юниты карты)
+    const dur = Math.round(18 + r * 0.28);             // дальние — заметно медленнее
+    const hv = gmHash01((p.pid != null ? p.pid * 7 : 0) + i * 31);
+    const phase = (hv * 360) | 0;                       // стабильная стартовая фаза по телу
+    const delay = -phase / 360 * dur;                  // негативная задержка = фаза орбиты
     const belt = p.kind === 'belt', anom = p.kind === 'anomaly';
-    const sz = belt ? 5 : anom ? 7 : 9;            // размер точки
-    const kc = belt ? ' gm-dot-belt' : anom ? ' gm-dot-anom' : p.dead ? ' gm-dot-dead' : '';
+    const look = gmPlanetLook(p);
+    // размер тела варьируем: газовые гиганты крупнее, камни мельче + лёгкий разброс
+    const base = belt ? 5 : anom ? 8 : look === 'gas' ? 17 : look === 'terran' || look === 'ocean' ? 12 : 10;
+    const sz = belt || anom ? base : Math.round(base * (0.85 + hv * 0.4));
+    const cls = belt ? ' gm-dot-belt'
+      : anom ? ' gm-dot-anom'
+      : p.dead ? ' gm-dot-dead'
+      : ' gm-look-' + look;
+    const zc = p.dead ? '#6b6b72' : gmZoneColor(p.zone);
+    // угол поворота полос/терминатора — тоже от зерна, чтобы свет падал по-разному
+    const tilt = (hv * 70 - 35) | 0;
     return `<div class="gm-orbit" style="--r:${r}px;--dur:${dur}s;animation-delay:${delay.toFixed(2)}s">
-        <span class="gm-planet${kc}" style="--zc:${p.dead ? '#6b6b72' : gmZoneColor(p.zone)};--sz:${sz}px"></span>
+        <span class="gm-planet${cls}" style="--zc:${zc};--sz:${sz}px;--tilt:${tilt}deg"></span>
       </div>`;
   }).join('');
   return `<div class="gm-sys" aria-hidden="true">${rings}</div>`;
@@ -1222,6 +1287,11 @@ function gmOpenPanel(sys) {
   const defRows = [];
   const mByFac = new Map();
   (GM.minefields || []).filter(m => m.system_id === sys.id).forEach(m => {
+    // не показываем мины уничтоженной («мёртвой») планеты, даже если строка в БД ещё жива
+    if (m.planet_pid != null) {
+      const pl = (sys.planets || []).find(p => +p.pid === +m.planet_pid);
+      if (pl && (pl.dead || pl.doomed)) return;
+    }
     const e = mByFac.get(m.faction_id) || { hexes: 0, hexMax: +m.hex_max || 6, mine: false };
     e.hexes += (+m.hexes || 0); e.hexMax = Math.max(e.hexMax, +m.hex_max || 6);
     e.mine = e.mine || !!m.mine; mByFac.set(m.faction_id, e);
@@ -1340,8 +1410,8 @@ function gmOpenOutpostCmd(id) {
       <button class="gm-opcmd-btn" onclick="gmOutpostCmdSend()">➤ Отправить — выберите систему</button>
       ${sh.can_deploy
         ? `<button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('recon')">🛰 Развернуть: разведка</button>
-           <button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('mining')">⛏ Развернуть: добыча</button>
-           <div class="gm-opcmd-hint">Разведка — срез по соседним державам. Добыча — ресурсы вне границ + стоянка флота.</div>`
+           <button class="gm-opcmd-btn" onclick="gmOutpostCmdDeployMining()">⛏ Развернуть: добыча</button>
+           <div class="gm-opcmd-hint">Разведка — срез по соседним державам. Добыча — ОДИН выбранный ресурс системы + стоянка флота.</div>`
         : `<button class="gm-opcmd-btn gm-dis" disabled>⚑ Развернуть в аванпост</button>
            <div class="gm-opcmd-hint">Развернуть нельзя: нужна нейтральная система, не впритык к чужой границе</div>`}
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmOutpostCmdScrap()">✕ Списать носитель</button>
@@ -1376,13 +1446,51 @@ async function gmOutpostSendTo(id, destSys) {
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); gmCloseOutpostCmd(); }
   finally { GM._defBusy = false; }
 }
-async function gmOutpostCmdDeploy(mode) {
+// Ресурсы, доступные в системе (с планет) — для выбора при развёртывании добычи.
+const GM_RAR_LABEL = { common: 'обычный', uncommon: 'необычный', rare: 'редкий', epic: 'эпический', legendary: 'легендарный' };
+function gmSysResources(systemId) {
+  const out = new Map();
+  const sys = (GM.systems || []).find(s => s.id === systemId);
+  const planets = (sys && Array.isArray(sys.planets)) ? sys.planets : [];
+  planets.forEach(p => (Array.isArray(p.resources) ? p.resources : []).forEach(ri => {
+    if (ri && ri.name && !out.has(ri.name)) out.set(ri.name, ri.r || 'common');
+  }));
+  return out;
+}
+// Подменю выбора добываемого ресурса перед развёртыванием добывающего аванпоста.
+function gmOutpostCmdDeployMining() {
+  if (!GMM.opCmd) return;
+  const sh = (GM.opShips || []).find(x => x.id === GMM.opCmd.id);
+  const res = sh ? gmSysResources(sh.system_id) : new Map();
+  const el = document.getElementById('gm-opcmd'); if (!el) return;
+  if (!res.size) {
+    el.innerHTML = `<div class="gm-opcmd-card">
+      <button class="gm-close" onclick="gmCloseOutpostCmd()">✕</button>
+      <div class="gm-opcmd-title">⛏ Добыча</div>
+      <div class="gm-opcmd-hint">В этой системе нет ресурсов для добычи. Можно развернуть без ресурса и выбрать его позже в кабинете.</div>
+      <button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('mining')">Развернуть без ресурса</button>
+      <button class="gm-opcmd-btn" onclick="gmOpenOutpostCmd('${GMM.opCmd.id}')">← Назад</button>
+    </div>`;
+    return;
+  }
+  const rows = [...res.entries()].map(([name, rar]) =>
+    `<button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('mining', ${JSON.stringify(name)})">⛏ ${esc(name)} <span class="gm-opcmd-sub">${GM_RAR_LABEL[rar] || rar}</span></button>`
+  ).join('');
+  el.innerHTML = `<div class="gm-opcmd-card">
+      <button class="gm-close" onclick="gmCloseOutpostCmd()">✕</button>
+      <div class="gm-opcmd-title">⛏ Какой ресурс добывать?</div>
+      <div class="gm-opcmd-hint">Аванпост добывает ОДИН ресурс. Выбор можно сменить позже в кабинете.</div>
+      ${rows}
+      <button class="gm-opcmd-btn" onclick="gmOpenOutpostCmd('${GMM.opCmd.id}')">← Назад</button>
+    </div>`;
+}
+async function gmOutpostCmdDeploy(mode, res) {
   if (!GMM.opCmd) return; const id = GMM.opCmd.id;
   const md = mode === 'mining' ? 'mining' : 'recon';
   if (GM._defBusy) return; GM._defBusy = true;
   try {
-    await gmDefRpc('outpost_ship_deploy', { p_id: id, p_mode: md });
-    toast(md === 'mining' ? '⛏ Добывающий аванпост развёрнут' : '🛰 Разведаванпост развёрнут', 'ok');
+    await gmDefRpc('outpost_ship_deploy', { p_id: id, p_mode: md, p_res: (md === 'mining' && res) ? res : null });
+    toast(md === 'mining' ? ('⛏ Добывающий аванпост развёрнут' + (res ? ' · ' + res : '')) : '🛰 Разведаванпост развёрнут', 'ok');
     gmCloseOutpostCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
@@ -1824,7 +1932,8 @@ function gmRenderFormPlanets() {
     } else {
       head = `<div class="gm-planet-row">
         <input class="gm-fi gm-fi-sm" placeholder="Имя" value="${esc(p.name || '')}" oninput="GM.formPlanets[${i}].name=this.value">
-        <input class="gm-fi gm-fi-sm" placeholder="Тип" value="${esc(p.type || '')}" oninput="GM.formPlanets[${i}].type=this.value">
+        <select class="gm-fi gm-fi-sm" onchange="gmPickPlanetClass(${i},this.value)" title="Выбрать класс планеты">${gmPlanetClassOpts(p)}</select>
+        <input class="gm-fi gm-fi-sm" placeholder="Тип (свой)" value="${esc(p.type || '')}" oninput="GM.formPlanets[${i}].type=this.value">
         <input class="gm-fi gm-fi-sm" placeholder="Контроль" value="${esc(p.owner || '')}" oninput="GM.formPlanets[${i}].owner=this.value">
         <input class="gm-fi gm-fi-sm" placeholder="img" value="${esc(p.img || '')}" oninput="GM.formPlanets[${i}].img=this.value">
         <button class="gm-mini-btn gm-danger" onclick="gmRemovePlanet(${i})">✕</button>
@@ -1884,6 +1993,34 @@ function gmPlanetAddRes(i) {
 function gmPlanetRemoveRes(i, j) {
   const p = GM.formPlanets[i];
   if (p && Array.isArray(p.resources)) { p.resources.splice(j, 1); gmRenderFormPlanets(); }
+}
+// Опции дропдауна «класс планеты» (каталог генератора). Первый пункт — «свой
+// класс»: выбран, если текущий type не совпал ни с одним известным классом —
+// тогда работает ручной ввод в соседнем поле «Тип (свой)».
+function gmPlanetClassOpts(p) {
+  const cat = (window.GalaxyGen && GalaxyGen.PLANET_CLASSES) || [];
+  const cur = (p && p.type || '').trim();
+  const matched = cat.some(c => c.name === cur);
+  let html = `<option value="">${matched ? '— класс планеты —' : '✎ свой класс'}</option>`;
+  let lastG = null;
+  cat.forEach(c => {
+    if (c.group !== lastG) { /* визуальный разделитель по группам не обязателен */ lastG = c.group; }
+    const sel = (c.name === cur) ? ' selected' : '';
+    html += `<option value="${esc(c.id)}"${sel}>${c.icon ? c.icon + ' ' : ''}${esc(c.name)}</option>`;
+  });
+  return html;
+}
+// Выбор класса из дропдауна: проставляем читаемый тип и климат-группу g
+// (по ней крутятся ресурсы/слоты). Пустое значение — оставить свой тип.
+function gmPickPlanetClass(i, id) {
+  const p = GM.formPlanets[i]; if (!p) return;
+  if (!id) return;
+  const cat = (window.GalaxyGen && GalaxyGen.PLANET_CLASSES) || [];
+  const c = cat.find(x => x.id === id); if (!c) return;
+  p.type = c.name;
+  p.g = c.g;
+  if (c.icon) p.icon = c.icon;
+  gmRenderFormPlanets();
 }
 function gmAddPlanetManual() { GM.formPlanets.push({ name: '', type: '', owner: '', img: '', resources: [] }); gmRenderFormPlanets(); }
 function gmRemovePlanet(i) { GM.formPlanets.splice(i, 1); gmRenderFormPlanets(); }
@@ -2076,6 +2213,61 @@ function gmmLoadImgs() {
     im.src = GM_BASE + 'stars/star_' + t + '.png';
     GMM.imgs[t] = im;
   });
+  if (GMM_USE_TEX) GMM_PLANET_LOOKS.forEach(gmmPlanetImg);
+}
+// Текстуры планет по «виду» — плоские PNG (как звёзды), накладываются на шар.
+// Файлы: assets/map/planets/planet_<look>.png. Пока файла нет — рендер мягко
+// откатывается на процедурный градиент (см. gmmPaintBody).
+// Текстуры классов планет: картинка из assets/map/planets/planet_<look>.png
+// накладывается на шар, обрезается в круг, лёгкое затемнение по краю для объёма.
+const GMM_USE_TEX = true;
+const GMM_PLANET_LOOKS = ['gas', 'ocean', 'terran', 'ice', 'lava', 'rock'];
+function gmmPlanetImg(look) {
+  const key = 'pl_' + look;
+  let im = GMM.imgs[key];
+  if (im) return im;
+  im = new Image();
+  im.onload = () => { if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRasterSoon(); };
+  im.src = GM_BASE + 'planets/planet_' + look + '.png';
+  GMM.imgs[key] = im;
+  return im;
+}
+// Текстура по произвольному пути (индивидуальная картинка планеты p.img). Кэш по src.
+function gmmTexImg(src) {
+  let im = GMM.imgs['t:' + src];
+  if (im) return im;
+  im = new Image();
+  im.onload = () => { if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRasterSoon(); };
+  im.src = src;
+  GMM.imgs['t:' + src] = im;
+  return im;
+}
+// Текстура ПОДКЛАССА планеты (глобальная, по id каталога): assets/map/planets/
+// cls_<id>.png. Нет файла → onerror помечает .failed, рендер откатится на класс.
+function gmmSubTexImg(subId) {
+  const key = 'sub_' + subId;
+  let im = GMM.imgs[key];
+  if (im) return im;
+  im = new Image();
+  im.onload = () => { if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRasterSoon(); };
+  im.onerror = () => { im.failed = true; };
+  im.src = GM_BASE + 'planets/cls_' + subId + '.png';
+  GMM.imgs[key] = im;
+  return im;
+}
+// id подкласса (ВИДА) планеты из каталога генератора. У сгенерированного тела
+// ВИД хранится в p.name ('Водный Юпитер'), а p.type — название ГРУППЫ
+// ('Газовые гиганты'). Поэтому матчим сначала по имени, затем по типу (на случай
+// вручную проставленного класса). Псевдо-группы grp_* пропускаем.
+function gmPlanetSubId(p) {
+  if (!p) return null;
+  const cat = (window.GalaxyGen && GalaxyGen.PLANET_CLASSES) || [];
+  if (!cat.length) return null;
+  const notGrp = x => String(x.id).indexOf('grp_') !== 0;
+  const byName = (p.name || '').trim();
+  let c = byName ? cat.find(x => notGrp(x) && x.name === byName) : null;
+  if (!c) { const t = (p.type || '').trim(); c = t ? cat.find(x => notGrp(x) && x.name === t) : null; }
+  return c ? c.id : null;
 }
 
 // ── Камера ──────────────────────────────────────────────────
@@ -2165,9 +2357,11 @@ function gmmBindCanvas() {
       if (!g.moved) return;
       GMM.tx = g.tx0 + dx; GMM.ty = g.ty0 + dy;
       gmmClamp();
-      const now = performance.now(), dt = Math.max(1, now - g.lt);
-      g.vx = 0.75 * ((pt.x - g.lx) / dt) + 0.25 * g.vx;   // сглаженная скорость для инерции
-      g.vy = 0.75 * ((pt.y - g.ly) / dt) + 0.25 * g.vy;
+      const now = performance.now(), dt = Math.max(8, now - g.lt);   // пол dt побольше: лаганутый кадр не раздувает скорость
+      // скорость для инерции в px/мс, зажата по модулю — иначе один скачок за лаг «выстреливал» карту в край
+      const cap = 3;
+      g.vx = Math.max(-cap, Math.min(cap, 0.75 * ((pt.x - g.lx) / dt) + 0.25 * g.vx));
+      g.vy = Math.max(-cap, Math.min(cap, 0.75 * ((pt.y - g.ly) / dt) + 0.25 * g.vy));
       g.lx = pt.x; g.ly = pt.y; g.lt = now;
       GMM.dirty = true; gmmKick();
     } else if (g.mode === 'pinch' && GMM.ptrs.size >= 2) {
@@ -2581,12 +2775,510 @@ function gmmNN(sys) {
 // Экранный радиус тела по группе планеты (p.type — отображаемое имя группы из
 // генератора): гиганты крупные, карлики мелкие — чтобы разница размеров читалась.
 // Аномалии пульсируют отдельно.
-const GMM_PG_SZ = {
-  'Газовые гиганты': 12, 'Ледяные гиганты': 11, 'Горячие гиганты': 11,
-  'Океанические': 8, 'Экзотические': 8, 'Землеподобные': 7.5, 'Пустынные': 7,
-  'Вулканические': 6.5, 'Лавовые миры': 6, 'Криомиры': 5, 'Малые тела': 4.5,
+// Размер тела задаём как ДОЛЮ от радиуса звезды — планета физически всегда мельче
+// звезды, и между классами читается масштаб. Гигант ~0.4 звезды, землеподобный ~0.17,
+// малое тело ~0.07. Имена уточняют (Суперземля крупнее, карлик/мини мельче).
+const GMM_PG_FR = {
+  'Газовые гиганты': 0.33, 'Ледяные гиганты': 0.29, 'Горячие гиганты': 0.29,
+  'Океанические': 0.17, 'Экзотические': 0.18, 'Землеподобные': 0.14, 'Пустынные': 0.12,
+  'Вулканические': 0.12, 'Лавовые миры': 0.11, 'Криомиры': 0.10, 'Малые тела': 0.06,
 };
-function gmmPlanetSz(p) { return GMM_PG_SZ[p.type] || 7; }
+function gmmPlanetFr(p) {
+  let f = GMM_PG_FR[p.type] || 0.16;
+  const n = p.name || '';
+  if (/Супер/i.test(n)) f *= 1.4;
+  else if (/Карлик|карлик|Мини|Малы|рыхл|обломок/i.test(n)) f *= 0.6;
+  if (/Юпитер|Турмион|гигант/i.test(n)) f *= 1.12;
+  return Math.min(0.5, f);   // потолок: даже самый большой гигант — половина звезды
+}
+// «вид» тела по группе генератора — чтобы поверхность рисовалась по-разному.
+// env родного мира расы (capital_env из регистрации) → класс текстуры/вида.
+const GMM_ENV_LOOK = {
+  lava: 'lava', volcanic: 'lava', terrestrial: 'terran', oceanic: 'ocean',
+  desert: 'rock', cryo: 'ice', gasgiant: 'gas', icegiant: 'gas', hotgiant: 'gas',
+  exotic: 'rock', micro: 'rock',
+};
+// Базовый оттенок тонировки по ТИПУ — так горячий гигант рыжий, ледяной синий,
+// газовый песочный и т.д. (различает то, что один «gas»-вид не различал).
+function gmmTintHue(p) {
+  const t = p.type || '';
+  if (/Горяч/i.test(t)) return 16;
+  if (/Ледян|Крио/i.test(t)) return 200;
+  if (/Газов/i.test(t)) return 40;
+  if (/Лав|Вулкан/i.test(t)) return 10;
+  if (/Океан/i.test(t)) return 205;
+  if (/Землеподоб|жизн/i.test(t)) return 120;
+  if (/Пуст|Экзот/i.test(t)) return 34;
+  return p.zone === 'hot' ? 22 : p.zone === 'cold' ? 205 : 120;
+}
+function gmmLook(p) {
+  // СТОЛИЦА: вид по выбранному при регистрации классу родного мира (capital_env),
+  // а не по generic-типу «Столичный мир» — у разных стартов он разный.
+  if (p.isCapital && p.faction_id && typeof GM !== 'undefined' && GM.facMeta) {
+    const env = (GM.facMeta[p.faction_id] || {}).capital_env;
+    if (env && GMM_ENV_LOOK[env]) return GMM_ENV_LOOK[env];
+  }
+  const t = p.type || '';
+  if (/гигант|Газов|Ледян|Горяч/i.test(t)) return 'gas';
+  if (/Океан/i.test(t)) return 'ocean';
+  if (/Земл|жизн|Столич/i.test(t)) return 'terran';
+  if (/Крио|Ледян|лёд|лед/i.test(t)) return 'ice';
+  if (/Вулкан|Лав/i.test(t)) return 'lava';
+  if (/Пуст|Экзот|Малы|камен/i.test(t)) return 'rock';
+  if (p.zone === 'hot') return 'lava';
+  if (p.zone === 'cold') return 'ice';
+  return 'rock';
+}
+// Астероид/малое тело — рисуется угловатой глыбой, а не идеальным шаром.
+function gmmIsAsteroid(p) {
+  return !p.isColony && !p.dead && /Малы|астер|обломок|каме?н/i.test(p.type || '');
+}
+// Рисует неправильную каменную глыбу (астероид) со светом от звезды.
+function gmmPaintAsteroid(ctx, px, py, sz, p, a, ldx, ldy) {
+  const seed = (p.pid != null ? p.pid : 0) + (p.name ? p.name.length : 0);
+  const rnd = k => gmHash01(seed * 5.31 + k * 17.7);
+  const N = 9 + (rnd(0) * 4 | 0);            // число вершин
+  const rot = rnd(1) * 6.2832;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const ang = rot + i / N * 6.2832;
+    const rr = sz * (0.62 + rnd(i + 2) * 0.55);   // рваный радиус → угловатость
+    const x = px + Math.cos(ang) * rr, y = py + Math.sin(ang) * rr;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.clip();
+  // каменная заливка со светом от звезды
+  const lx = px + ldx * sz * 0.6, ly = py + ldy * sz * 0.6;
+  const g = ctx.createRadialGradient(lx, ly, 0, px, py, sz * 1.4);
+  g.addColorStop(0, '#b9b1a4'); g.addColorStop(0.5, '#7d7468'); g.addColorStop(1, '#2c2823');
+  ctx.fillStyle = g; ctx.fillRect(px - sz * 2, py - sz * 2, sz * 4, sz * 4);
+  // пара кратеров-вмятин
+  for (let k = 0; k < 3; k++) {
+    const ang = rnd(k * 3 + 5) * 6.2832, d = rnd(k * 3 + 6) * sz * 0.7;
+    const cx2 = px + Math.cos(ang) * d, cy2 = py + Math.sin(ang) * d, cr = sz * (0.12 + rnd(k * 3 + 7) * 0.18);
+    ctx.globalAlpha = a * 0.4; ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(cx2, cy2, cr, 0, 6.2832); ctx.fill();
+    ctx.globalAlpha = a * 0.25; ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(cx2 - cr * 0.3, cy2 - cr * 0.3, cr * 0.55, 0, 6.2832); ctx.fill();
+  }
+  ctx.restore();
+}
+// Поверхность планеты поверх базового шара: клипуется кругом тела. seed — pid,
+// чтобы рисунок был стабилен. Газовому гиганту по seed может достаться кольцо.
+function gmmPaintBody(ctx, px, py, sz, p, zc, a, t, starX, starY) {
+  const look = gmmLook(p);
+  const seed = (p.pid != null ? p.pid : 0) + (p.name ? p.name.length : 0);
+  const rnd = k => gmHash01(seed * 9.17 + k * 53.3);
+  // свет от звезды (нужен и астероиду) — направление на центр системы
+  let ldx = -0.6, ldy = -0.6;
+  if (starX != null) { const vx = starX - px, vy = starY - py, m = Math.hypot(vx, vy) || 1; ldx = vx / m; ldy = vy / m; }
+  // астероид/малое тело — угловатая глыба, не шар
+  if (gmmIsAsteroid(p)) { gmmPaintAsteroid(ctx, px, py, sz, p, a, ldx, ldy); return; }
+
+  // ── ВНЕШНИЙ НАПРАВЛЕННЫЙ ОРЕОЛ (атмосферное рассеяние вокруг дневной стороны) ──
+  // Рисуется под планетой, светит в сторону звезды, заменяет старый круговой ореол
+  if (!p.dead && sz >= 5 && look !== 'rock') {
+    const atm = look === 'lava' ? '255,140,70' : look === 'ice' ? '210,235,255'
+      : look === 'gas' ? '255,235,190' : '150,200,255';
+    
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    // Эксцентричный радиальный градиент: центр яркости сдвинут к звезде
+    const og = ctx.createRadialGradient(
+      px + ldx * sz * 0.7, py + ldy * sz * 0.7, sz * 0.2, 
+      px + ldx * sz * 0.2, py + ldy * sz * 0.2, sz * 1.6
+    );
+    og.addColorStop(0, `rgba(${atm},${(a*0.6).toFixed(3)})`);
+    og.addColorStop(0.5, `rgba(${atm},${(a*0.15).toFixed(3)})`);
+    og.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = og; 
+    ctx.beginPath(); 
+    ctx.arc(px + ldx * sz * 0.2, py + ldy * sz * 0.2, sz * 1.6, 0, 6.2832); 
+    ctx.fill();
+    ctx.restore();
+  }
+  const rot = (rnd(7) - 0.5) * 0.9;   // наклон полос фактуры
+  const lx = px + ldx * sz * 0.5, ly = py + ldy * sz * 0.5;
+  // ── ТЕКСТУРА планеты (PNG) — индивидуальная p.img, иначе общая по виду;
+  //    если ни одна не загрузилась — процедурный мягкий шар ──
+  // GMM_USE_TEX=false: текстуры отключены, рисуем чистый процедурный шар.
+  // p.img (индивидуальная картинка из редактора) уважаем всегда; общие текстуры
+  // по классу — только если флаг включён.
+  // Откат текстур: своя картинка планеты → текстура ПОДКЛАССА (глоб., cls_<id>.png)
+  // → текстура КЛАССА (planet_<look>.png) → процедурный шар.
+  let tex = null;
+  if (p.img && String(p.img).trim()) {
+    tex = gmmTexImg(GM_BASE + p.img);
+  } else if (GMM_USE_TEX) {
+    const subId = gmPlanetSubId(p);
+    const sub = subId ? gmmSubTexImg(subId) : null;
+    tex = (sub && sub.complete && sub.naturalWidth > 0 && !sub.failed) ? sub : gmmPlanetImg(look);
+  }
+  const hasTex = !p.dead && tex && tex.complete && tex.naturalWidth > 0;
+  if (hasTex) {
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.clip();
+    // ── ВАРИАЦИЯ по seed: одна текстура класса выглядит у каждого мира иначе ──
+    const flip = rnd(5) > 0.5 ? -1 : 1;          // зеркало по горизонтали
+    const zoom = 1.0 + rnd(8) * 0.35;            // зум 1.0..1.35
+    const d = sz * 2 * zoom;
+    const yoff = (rnd(6) - 0.5) * (d - sz * 2);  // верт. сдвиг в пределах зум-запаса (видны разные пояса)
+    const baseY = py - d / 2 + yoff;
+    const pan = ((t * 0.012 + rnd(3)) % 1) * d;  // медленное вращение + стартовая фаза
+    ctx.save();
+    ctx.translate(px, py); ctx.scale(flip, 1); ctx.translate(-px, -py);
+    ctx.drawImage(tex, px - d / 2 - pan, baseY, d, d);
+    ctx.drawImage(tex, px - d / 2 - pan + d, baseY, d, d);
+    ctx.restore();
+    // тонировка — у каждого мира свой оттенок (горячие рыжее, холодные синее +
+    // случайный разброс). soft-light красит, сохраняя детали текстуры.
+    const hue = ((gmmTintHue(p) + (rnd(9) - 0.5) * 60) % 360 + 360) % 360;
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.globalAlpha = a * (0.32 + rnd(11) * 0.22);
+    ctx.fillStyle = `hsl(${hue | 0}, 60%, 55%)`;
+    ctx.fillRect(px - sz, py - sz, sz * 2, sz * 2);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = a;
+    ctx.restore();
+  } else {
+    // тело — мягкий шар
+    const rgb = gmRgb(zc);
+    const lit = `rgb(${Math.min(255, rgb[0] + 70)},${Math.min(255, rgb[1] + 70)},${Math.min(255, rgb[2] + 70)})`;
+    ctx.globalAlpha = a;
+    
+    // Основная заливка без лишней черноты по краям (тень наложится общим слоем)
+    const g = ctx.createRadialGradient(lx, ly, 0, px, py, sz * 1.05);
+    if (p.dead) {
+      // мёртвый/уничтоженный мир: обугленная серо-чёрная кора, не чистый шар
+      g.addColorStop(0, '#9a958e');
+      g.addColorStop(0.55, '#4a4640');
+      g.addColorStop(1, '#15120f');
+    } else {
+      g.addColorStop(0, lit); 
+      g.addColorStop(0.6, zc); 
+      g.addColorStop(1, `rgb(${rgb[0]*0.5|0},${rgb[1]*0.5|0},${rgb[2]*0.5|0})`); 
+    }
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
+
+    // уничтоженный мир: кратеры с подсвеченным валом + ветвящиеся тлеющие
+    // разломы, расходящиеся от ударного бассейна (след «Длани Неотвратимости»)
+    if (p.dead && sz >= 4) {
+      ctx.save(); ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.clip();
+      // мелкие кратеры: тёмная чаша + тонкий освещённый вал
+      for (let k = 0; k < 6; k++) {
+        const ang = rnd(k * 3) * 6.2832, d = rnd(k * 3 + 1) * sz * 0.78;
+        const cx2 = px + Math.cos(ang) * d, cy2 = py + Math.sin(ang) * d, cr = sz * (0.1 + rnd(k * 3 + 2) * 0.18);
+        const cg = ctx.createRadialGradient(cx2, cy2, 0, cx2, cy2, cr);
+        cg.addColorStop(0, `rgba(0,0,0,${(a * 0.6).toFixed(3)})`);
+        cg.addColorStop(0.8, `rgba(0,0,0,${(a * 0.2).toFixed(3)})`);
+        cg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(cx2, cy2, cr, 0, 6.2832); ctx.fill();
+        ctx.globalAlpha = a * 0.3; ctx.strokeStyle = '#cfc8bd'; ctx.lineWidth = Math.max(0.4, sz * 0.02);
+        ctx.beginPath(); ctx.arc(cx2 - cr * 0.15, cy2 - cr * 0.15, cr * 0.92, 0, 6.2832); ctx.stroke();
+        ctx.globalAlpha = a;
+      }
+      // ударный бассейн — большая воронка со светящимся жерлом
+      const ba = rnd(40) * 6.2832, bd = rnd(41) * sz * 0.35;
+      const bx = px + Math.cos(ba) * bd, by = py + Math.sin(ba) * bd, br = sz * 0.42;
+      let bg = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+      bg.addColorStop(0, `rgba(0,0,0,${(a * 0.7).toFixed(3)})`);
+      bg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(bx, by, br, 0, 6.2832); ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      bg = ctx.createRadialGradient(bx, by, 0, bx, by, br * 0.55);
+      bg.addColorStop(0, `rgba(255,140,50,${(a * 0.55).toFixed(3)})`);
+      bg.addColorStop(1, 'rgba(255,90,30,0)');
+      ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(bx, by, br * 0.55, 0, 6.2832); ctx.fill();
+      // ветвящиеся тлеющие разломы от бассейна наружу
+      ctx.lineCap = 'round';
+      const rays = 5;
+      for (let r2 = 0; r2 < rays; r2++) {
+        let ang = r2 / rays * 6.2832 + rnd(r2) * 0.7;
+        let x = bx, y = by, len = sz * (0.7 + rnd(r2 + 3) * 0.5), step = len / 6;
+        ctx.beginPath(); ctx.moveTo(x, y);
+        for (let s2 = 0; s2 < 6; s2++) {
+          ang += (rnd(r2 * 6 + s2) - 0.5) * 0.7;
+          x += Math.cos(ang) * step; y += Math.sin(ang) * step;
+          ctx.lineTo(x, y);
+        }
+        const grad = ctx.createLinearGradient(bx, by, x, y);
+        grad.addColorStop(0, `rgba(255,150,60,${(a * 0.6).toFixed(3)})`);
+        grad.addColorStop(1, 'rgba(120,30,10,0)');
+        ctx.strokeStyle = grad; ctx.lineWidth = Math.max(0.5, sz * 0.055); ctx.stroke();
+      }
+      ctx.restore(); ctx.globalAlpha = a;
+    }
+
+    // seed-тонировка — соседние миры одного класса отличаются оттенком
+    if (!p.dead) {
+      const hue = ((gmmTintHue(p) + (rnd(9) - 0.5) * 90) % 360 + 360) % 360;
+      ctx.save(); ctx.globalCompositeOperation = 'soft-light';
+      ctx.globalAlpha = a * (0.22 + rnd(11) * 0.28);
+      ctx.fillStyle = `hsl(${hue | 0}, 55%, 55%)`;
+      ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
+      ctx.restore(); ctx.globalAlpha = a;
+    }
+    // поверхность — крупная мягкая фактура (клип кругом). Только на крупных живых телах.
+    if (!p.dead && sz >= 6) {
+      ctx.save(); ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.clip();
+      ctx.translate(px, py); ctx.rotate(rot);
+      if (look === 'gas') {
+        for (let b = -3; b <= 3; b++) {
+          const yy = b / 3.2 * sz, warm = b & 1;
+          const bg = ctx.createLinearGradient(0, yy - sz * 0.18, 0, yy + sz * 0.18);
+          bg.addColorStop(0, 'rgba(0,0,0,0)');
+          bg.addColorStop(0.5, warm ? `rgba(255,235,200,${a*0.14})` : `rgba(40,25,15,${a*0.16})`);
+          bg.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = bg; ctx.fillRect(-sz, yy - sz * 0.2, sz * 2, sz * 0.4);
+        }
+      } else {
+        const spots = look === 'ocean' || look === 'terran' ? 3 : 4;
+        for (let k = 0; k < spots; k++) {
+          const ang = rnd(k * 2) * 6.2832, d = rnd(k * 2 + 1) * sz * 0.55;
+          const cx2 = Math.cos(ang) * d, cy2 = Math.sin(ang) * d, br = sz * (0.45 + rnd(k * 2 + 2) * 0.4);
+          let col;
+          if (look === 'ocean' || look === 'terran') col = k & 1 ? [74, 96, 52] : [40, 64, 58];
+          else if (look === 'lava') col = k & 1 ? [255, 150, 70] : [120, 30, 12];
+          else if (look === 'ice') col = [222, 240, 255];
+          else col = k & 1 ? [70, 62, 54] : [150, 140, 128];
+          const bg = ctx.createRadialGradient(cx2, cy2, 0, cx2, cy2, br);
+          const op = look === 'lava' ? a * 0.5 : a * 0.4;
+          bg.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${op})`);
+          bg.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
+          if (look === 'lava') ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(cx2, cy2, br, 0, 6.2832); ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      ctx.restore();
+    }
+  }
+  // ── ОБЩИЙ ШЕЙДИНГ (ТЕРМИНАТОР, ОБЪЕМ И БЛИК) поверх текстур и процедурного рельефа ──
+  ctx.globalAlpha = a;
+  
+  // 1. Терминатор (направленный свет от звезды)
+  // Линейный градиент идеально описывает освещенность шара (lambert).
+  const term = ctx.createLinearGradient(px + ldx * sz, py + ldy * sz, px - ldx * sz, py - ldy * sz);
+  term.addColorStop(0, 'rgba(0,0,0,0)');
+  term.addColorStop(0.35, 'rgba(0,0,0,0)');
+  term.addColorStop(0.5, 'rgba(0,0,0,0.5)'); // Экватор (ровно по центру планеты перпендикулярно свету)
+  term.addColorStop(0.75, 'rgba(0,0,0,0.95)');
+  term.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.fillStyle = term; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
+
+  // 2. Сферическое затенение по краям (ambient occlusion) для придания объема
+  const ao = ctx.createRadialGradient(px, py, sz * 0.6, px, py, sz);
+  ao.addColorStop(0, 'rgba(0,0,0,0)');
+  ao.addColorStop(1, 'rgba(0,0,0,0.6)');
+  ctx.fillStyle = ao; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
+
+  // 3. Внутреннее свечение (блик) на освещённой стороне (заменяет старые кольца-обводки)
+  // Создаем мягкий объемный свет там, где светло.
+  if (!p.dead && sz >= 5 && look !== 'rock') {
+    const atm = look === 'lava' ? '255,140,70' : look === 'ice' ? '210,235,255'
+      : look === 'gas' ? '255,235,190' : '150,200,255';
+    
+    ctx.globalCompositeOperation = 'screen';
+    const hi = ctx.createRadialGradient(px + ldx * sz * 0.5, py + ldy * sz * 0.5, 0, px, py, sz * 1.05);
+    hi.addColorStop(0, `rgba(${atm},${(a*0.5).toFixed(3)})`);
+    hi.addColorStop(0.5, `rgba(${atm},${(a*0.15).toFixed(3)})`);
+    hi.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = hi; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  } else if (hasTex) {
+    // Для обычных каменных планет с текстурой, но без атмосферы — легкий белый блик
+    ctx.globalCompositeOperation = 'screen';
+    const hi = ctx.createRadialGradient(px + ldx * sz * 0.6, py + ldy * sz * 0.6, 0, px + ldx * sz * 0.2, py + ldy * sz * 0.2, sz * 0.9);
+    hi.addColorStop(0, `rgba(255,250,235,${(a*0.25).toFixed(3)})`);
+    hi.addColorStop(1, 'rgba(255,250,235,0)');
+    ctx.fillStyle = hi; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+
+// ── РАЗНОВИДНОСТИ АНОМАЛИЙ ───────────────────────────────────────────────
+// Раньше все аномалии (кротовая нора / пустошь / токсичный карлик) рисовались
+// одинаковым белым «пульсар-шаром». Теперь у каждой свой процедурный вид.
+// kind по каталогу подкласса (надёжно) либо по имени/типу (фолбэк).
+function gmmAnomKind(p) {
+  const id = gmPlanetSubId(p);
+  if (id === 'wormhole' || id === 'blackhole' || id === 'starshard') return id;
+  const t = ((p && p.type) || '') + ' ' + ((p && p.name) || '');
+  if (/кротов|wormhole|нора/i.test(t)) return 'wormhole';
+  if (/пустош|чёрн|черн|blackhole/i.test(t)) return 'blackhole';
+  if (/токсич|starshard/i.test(t)) return 'starshard';
+  return null;
+}
+
+// seed по телу (стабильный рисунок, но у каждой аномалии свой)
+function gmmAnomSeed(p) { return (p && p.pid != null ? p.pid : 0) + (p && p.name ? p.name.length * 7 : 0) + 1; }
+
+// Кротовая нора — гравитационная воронка: множество тонких светящихся нитей,
+// закрученных в логарифмическую спираль вокруг тёмной горловины с линзовым
+// кольцом. Аддитивное смешивание даёт мягкое плазменное свечение, без «лучей».
+function gmmPaintWormhole(ctx, px, py, sz, a, t, p) {
+  const seed = gmmAnomSeed(p);
+  const rnd = k => gmHash01(seed * 3.7 + k * 11.3);
+  ctx.save();
+  ctx.translate(px, py);
+  // внешний холодно-фиолетовый ореол (двухтоновый)
+  ctx.globalCompositeOperation = 'lighter';
+  let g = ctx.createRadialGradient(0, 0, sz * 0.2, 0, 0, sz * 3.1);
+  g.addColorStop(0, `rgba(150,205,255,${(a * 0.5).toFixed(3)})`);
+  g.addColorStop(0.4, `rgba(110,120,255,${(a * 0.22).toFixed(3)})`);
+  g.addColorStop(0.75, `rgba(80,60,180,${(a * 0.1).toFixed(3)})`);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, sz * 3.1, 0, 6.2832); ctx.fill();
+  // диск из нитей: каждая — логарифмическая спираль, прорисованная точками-каплями
+  ctx.rotate(t * 0.5);
+  const arms = 5;
+  for (let arm = 0; arm < arms; arm++) {
+    const off = arm / arms * 6.2832 + rnd(arm) * 0.5;
+    const steps = 54;
+    for (let s2 = 1; s2 <= steps; s2++) {
+      const u = s2 / steps;
+      const rr = sz * (0.5 + 2.0 * u);            // от горловины наружу
+      const aa = off + u * 6.5;                    // закрутка
+      const x = Math.cos(aa) * rr, y = Math.sin(aa) * rr * 0.92;
+      // яркость: пик в средней части рукава, спад к краям
+      const br = Math.sin(u * Math.PI) * (0.5 + 0.5 * rnd(arm * 7 + s2));
+      const dot = sz * (0.16 + 0.12 * (1 - u));
+      const dg = ctx.createRadialGradient(x, y, 0, x, y, dot);
+      const hot = u < 0.45;                          // внутри теплее (бело-голубой), снаружи синее
+      dg.addColorStop(0, hot ? `rgba(225,245,255,${(a * br * 0.9).toFixed(3)})`
+                             : `rgba(150,205,255,${(a * br * 0.75).toFixed(3)})`);
+      dg.addColorStop(1, 'rgba(40,80,200,0)');
+      ctx.fillStyle = dg; ctx.beginPath(); ctx.arc(x, y, dot, 0, 6.2832); ctx.fill();
+    }
+  }
+  // тёмная горловина (стягивает свет к центру)
+  ctx.globalCompositeOperation = 'source-over';
+  g = ctx.createRadialGradient(0, 0, 0, 0, 0, sz * 0.82);
+  g.addColorStop(0, 'rgba(1,2,10,1)');
+  g.addColorStop(0.55, 'rgba(6,14,44,0.95)');
+  g.addColorStop(1, 'rgba(30,60,160,0)');
+  ctx.globalAlpha = a;
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, sz * 0.82, 0, 6.2832); ctx.fill();
+  // линзовое кольцо события + внутренний блик
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(210,240,255,${a.toFixed(3)})`;
+  ctx.lineWidth = sz * 0.1;
+  ctx.beginPath(); ctx.arc(0, 0, sz * 0.5, 0, 6.2832); ctx.stroke();
+  g = ctx.createRadialGradient(0, 0, 0, 0, 0, sz * 0.4);
+  g.addColorStop(0, `rgba(190,225,255,${(a * 0.6).toFixed(3)})`);
+  g.addColorStop(1, 'rgba(120,160,255,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, sz * 0.4, 0, 6.2832); ctx.fill();
+  ctx.restore();
+}
+
+// Пустошь (чёрная дыра) — аккреционный диск ребром с допплер-асимметрией
+// (одна сторона ярче), фотонное кольцо и линзовая дуга над горизонтом событий.
+function gmmPaintBlackhole(ctx, px, py, sz, a, t, p) {
+  const seed = gmmAnomSeed(p);
+  ctx.save();
+  ctx.translate(px, py);
+  const tilt = 0.5 + gmHash01(seed) * 0.3;     // наклон диска — у каждой свой
+  // аккреционный диск: наклонный эллипс, многослойный, с допплер-перекосом
+  ctx.save();
+  ctx.rotate(tilt);
+  ctx.scale(1, 0.3);
+  ctx.globalCompositeOperation = 'lighter';
+  for (let ring = 0; ring < 4; ring++) {
+    const rr = sz * (1.35 + ring * 0.5);
+    const grd = ctx.createRadialGradient(0, 0, sz * 0.78, 0, 0, rr);
+    grd.addColorStop(0, 'rgba(0,0,0,0)');
+    grd.addColorStop(0.66, `rgba(255,120,30,${(a * 0.16).toFixed(3)})`);
+    grd.addColorStop(0.82, `rgba(255,205,110,${(a * 0.26).toFixed(3)})`);
+    grd.addColorStop(0.93, `rgba(255,240,200,${(a * 0.2).toFixed(3)})`);
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(0, 0, rr, 0, 6.2832); ctx.fill();
+  }
+  // допплер-яркость: одна половина диска (приближающаяся) горячее
+  const dop = ctx.createLinearGradient(-sz * 2, 0, sz * 2, 0);
+  dop.addColorStop(0, `rgba(255,255,235,${(a * 0.28).toFixed(3)})`);
+  dop.addColorStop(0.5, 'rgba(0,0,0,0)');
+  dop.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = dop;
+  ctx.beginPath(); ctx.ellipse(0, 0, sz * 2.3, sz * 2.3, 0, 0, 6.2832); ctx.fill();
+  ctx.restore();
+  // линзовая дуга — кусок диска, «загнутый» над горизонтом (эффект Интерстеллар)
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineWidth = sz * 0.1;
+  ctx.strokeStyle = `rgba(255,225,160,${(a * 0.8).toFixed(3)})`;
+  ctx.beginPath(); ctx.arc(0, 0, sz * 1.18, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+  // фотонное кольцо — тонкое и яркое
+  ctx.strokeStyle = `rgba(255,238,190,${a.toFixed(3)})`;
+  ctx.lineWidth = sz * 0.1;
+  ctx.beginPath(); ctx.arc(0, 0, sz * 0.92, 0, 6.2832); ctx.stroke();
+  // горизонт событий — чёрный с мягким краем
+  ctx.globalCompositeOperation = 'source-over';
+  const eh = ctx.createRadialGradient(0, 0, sz * 0.55, 0, 0, sz * 0.92);
+  eh.addColorStop(0, '#000'); eh.addColorStop(0.85, '#000'); eh.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalAlpha = a; ctx.fillStyle = eh;
+  ctx.beginPath(); ctx.arc(0, 0, sz * 0.92, 0, 6.2832); ctx.fill();
+  ctx.restore();
+}
+
+// Токсичный карлик — болезненно-зелёный мир с пятнистой ядовитой поверхностью,
+// светящимися кислотными «лужами» и пульсирующей дымкой. Без острых «зигзагов».
+function gmmPaintToxic(ctx, px, py, sz, a, t, p) {
+  const seed = gmmAnomSeed(p);
+  const rnd = k => gmHash01(seed * 5.9 + k * 17.1);
+  const pulse = 0.5 + 0.5 * Math.sin(t * 1.6 + seed);
+  ctx.save();
+  // ядовитая дымка вокруг (двухслойная, пульсирует)
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 1;
+  let g = ctx.createRadialGradient(px, py, sz * 0.4, px, py, sz * (2.3 + 0.3 * pulse));
+  g.addColorStop(0, `rgba(180,255,90,${(a * (0.32 + 0.18 * pulse)).toFixed(3)})`);
+  g.addColorStop(0.5, `rgba(120,210,40,${(a * 0.14).toFixed(3)})`);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, sz * 2.6, 0, 6.2832); ctx.fill();
+  // тело — базовый шар со светом сбоку
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = a;
+  g = ctx.createRadialGradient(px - sz * 0.35, py - sz * 0.35, 0, px, py, sz);
+  g.addColorStop(0, '#e8ffb8');
+  g.addColorStop(0.45, '#9ed83e');
+  g.addColorStop(0.8, '#487318');
+  g.addColorStop(1, '#1d2f08');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
+  // поверхность: пятнистые кислотные регионы (клип кругом)
+  ctx.save();
+  ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.clip();
+  // тёмные ядовитые моря
+  for (let k = 0; k < 5; k++) {
+    const ang = rnd(k) * 6.2832, d = rnd(k + 5) * sz * 0.7;
+    const cx2 = px + Math.cos(ang) * d, cy2 = py + Math.sin(ang) * d, cr = sz * (0.3 + rnd(k + 10) * 0.4);
+    const sg = ctx.createRadialGradient(cx2, cy2, 0, cx2, cy2, cr);
+    sg.addColorStop(0, `rgba(40,70,18,${(a * 0.5).toFixed(3)})`);
+    sg.addColorStop(1, 'rgba(40,70,18,0)');
+    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(cx2, cy2, cr, 0, 6.2832); ctx.fill();
+  }
+  // светящиеся кислотные лужи (аддитивно, пульсируют)
+  ctx.globalCompositeOperation = 'lighter';
+  for (let k = 0; k < 4; k++) {
+    const ang = rnd(k + 20) * 6.2832, d = rnd(k + 25) * sz * 0.6;
+    const cx2 = px + Math.cos(ang) * d, cy2 = py + Math.sin(ang) * d, cr = sz * (0.18 + rnd(k + 30) * 0.22);
+    const lg = ctx.createRadialGradient(cx2, cy2, 0, cx2, cy2, cr);
+    lg.addColorStop(0, `rgba(200,255,110,${(a * (0.45 + 0.35 * pulse)).toFixed(3)})`);
+    lg.addColorStop(1, 'rgba(160,255,80,0)');
+    ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(cx2, cy2, cr, 0, 6.2832); ctx.fill();
+  }
+  ctx.restore();
+  // тонкий кислотный ободок на свету (fresnel)
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = a * 0.6;
+  ctx.lineWidth = Math.max(0.5, sz * 0.06);
+  ctx.strokeStyle = 'rgba(210,255,140,1)';
+  ctx.beginPath(); ctx.arc(px - sz * 0.06, py - sz * 0.06, sz * 0.96, Math.PI * 1.1, Math.PI * 1.95); ctx.stroke();
+  ctx.restore();
+}
+
 // Цвет свечения короны по типу звезды (rgb-строка для rgba()).
 const GMM_STAR_GLOW = {
   yellow: '255,214,140', red: '255,150,110', orange: '255,178,114', blue: '160,200,255',
@@ -2626,7 +3318,7 @@ function gmmPaintOrbits(ctx) {
   // Рост системы на СВЕРХЗУМЕ: иконки/тела капятся на camS=1, поэтому без этого
   // дальнейший зум только разносил орбиты, но не укрупнял планеты/мины. gz растёт с
   // приближением (1 у порога раскрытия → до 3.2 у потолка) — тела и гексы мин крупнее.
-  const gz = Math.max(1, Math.min(3.2, GMM.s / 4.5));
+  const gz = Math.max(1, Math.min(7, GMM.s / 4.0));   // тела растут с зумом дальше — мелкие миры можно рассмотреть
   GM.systems.forEach(sys => {
     if (!hasP(sys) || !inView(sys)) return;
     const planets = gmOrbitBodies(sys);
@@ -2634,14 +3326,20 @@ function gmmPaintOrbits(ctx) {
     const n = planets.length;
     const isFocus = sys === focus;
     const starR = Math.max(10, gmmIconPx(sys, s) * 0.5) * gz;
-    const rMax = Math.min(gmmNN(sys) * 0.42 * s, 230 * gz);   // клубок не налезает на соседа; потолок растёт на сверхзуме
-    const rIn = Math.min(starR + 22, rMax - 6);
-    // радиусы орбит — по реальной дистанции (а.е.), отсюда неравномерные интервалы
+    // система занимает не больше ~38% расстояния до ближайшего соседа; со свечением
+    // (×1.12 ниже) это ~0.42, значит даже два смежных диска тянутся навстречу по 0.42
+    // → между ними остаётся зазор ~16% и системы НЕ соприкасаются.
+    const rMax = Math.min(gmmNN(sys) * 0.38 * s, 320 * gz);
+    const rIn = Math.min(starR * 1.7, rMax - 6);              // первая орбита держит зазор от звезды
+    // радиусы орбит — по реальной дистанции (а.е.). Степенная кривая (u^1.4) сжимает
+    // внутренние орбиты у звезды и разносит внешние в пустоту — как в реальной системе
+    // (закон Тициуса–Боде): расстояния «дышат», между мирами много пространства.
     const ds = planets.map(p => +p.dist || 0);
     const dmin = Math.min(...ds), dmax = Math.max(...ds);
     const radii = planets.map((p, i) => {
       if (n <= 1) return (rIn + rMax) / 2;
-      const u = dmax > dmin ? (ds[i] - dmin) / (dmax - dmin) : i / (n - 1);
+      let u = dmax > dmin ? (ds[i] - dmin) / (dmax - dmin) : i / (n - 1);
+      u = Math.pow(u, 1.4);
       return rIn + (rMax - rIn) * u;
     });
     // ── ПРОСТРАНСТВО СИСТЕМЫ: наклонный диск-«домен» + корона звезды. Без обводки:
@@ -2683,18 +3381,75 @@ function gmmPaintOrbits(ctx) {
       ctx.lineWidth = 1; ctx.stroke();                          // чёткая нить орбиты
 
       if (p.kind === 'belt') {
-        // поле астероидов — кольцо мелких камешков, медленно дрейфует по орбите
-        const drift = (t / 80) * 6.2832;
-        const N = Math.max(28, Math.min(120, Math.round(r * 0.9)));
-        const band = Math.max(2.5, r * 0.05);
-        ctx.fillStyle = zc;
+        // поле астероидов — кольцо камней разного размера, медленно дрейфует по орбите
+        const drift = (t / 150) * 6.2832; // Сделали дрейф медленнее (делитель был 80)
+        const N = Math.max(45, Math.min(180, Math.round(r * 1.5)));
+        const band = Math.max(4, r * 0.06);
+        
+        // Отрисовка пылевого кольца (фон для пояса)
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, r, r * TILT, 0, 0, 6.2832);
+        ctx.lineWidth = band * 1.8;
+        ctx.strokeStyle = zc; // Используем цвет зоны (zc) для оттенка пыли
+        ctx.globalAlpha = a * 0.035;
+        ctx.stroke();
+        
+        // Более плотное внутреннее пылевое кольцо
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, r, r * TILT, 0, 0, 6.2832);
+        ctx.lineWidth = band * 0.7;
+        ctx.globalAlpha = a * 0.05;
+        ctx.stroke();
+        ctx.restore();
+
         for (let k = 0; k < N; k++) {
           const h = Math.sin((k + 1) * 12.9898 + i * 7.13) * 43758.5453;
           const j = h - Math.floor(h);                    // псевдослучайное 0..1 (стабильное)
-          const aa = (k / N) * 6.2832 + drift;
+          const h2 = Math.sin((k + 1) * 78.233 + i * 13.51) * 43758.5453;
+          const j2 = h2 - Math.floor(h2);
+          
+          const aa = (k / N) * 6.2832 + drift + (j2 - 0.5) * (12 / N);
           const rr = r + (j - 0.5) * 2 * band;
-          ctx.globalAlpha = a * (0.22 + 0.55 * j);
-          ctx.fillRect(cx + Math.cos(aa) * rr, cy + Math.sin(aa) * rr * TILT, 1.5, 1.5);
+          
+          const px = cx + Math.cos(aa) * rr;
+          const py = cy + Math.sin(aa) * rr * TILT;
+          
+          // Направление света от звезды (центра системы)
+          const vx = cx - px, vy = cy - py, m = Math.hypot(vx, vy) || 1;
+          const ldx = vx / m, ldy = vy / m;
+          
+          const isLarge = j > 0.82; // 18% камней будут крупными
+          const rockSz = (isLarge ? (1.1 + j2 * 0.7) : (0.4 + j2 * 0.5)) * gz; // Чуть увеличили размеры
+          const rockAlpha = a * (0.5 + 0.5 * j);
+          
+          if (rockSz >= 1.0 * gz) {
+              // Крупные камни - мини-версии мегаастероидов (с кратерами и нормальным шейдингом)
+              const dummyP = { pid: i * 1000 + k, name: '' };
+              gmmPaintAsteroid(ctx, px, py, rockSz, dummyP, rockAlpha, ldx, ldy);
+          } else {
+              // Мелкая каменная крошка - рисуем неровными многоугольниками
+              ctx.save();
+              ctx.globalAlpha = rockAlpha;
+              const g = ctx.createRadialGradient(px + ldx * rockSz * 0.5, py + ldy * rockSz * 0.5, 0, px, py, rockSz * 1.2);
+              g.addColorStop(0, '#b9b1a4'); 
+              g.addColorStop(0.5, '#7d7468'); 
+              g.addColorStop(1, '#2c2823');
+              ctx.fillStyle = g;
+              
+              ctx.beginPath();
+              const rot = j * 6.2832;
+              for (let v = 0; v < 5; v++) {
+                  const vang = rot + (v / 5) * 6.2832;
+                  const vr = rockSz * (0.65 + (Math.sin(v * 3.1 + j2 * 10) * 0.35));
+                  const vx_pt = px + Math.cos(vang) * vr;
+                  const vy_pt = py + Math.sin(vang) * vr;
+                  if (v === 0) ctx.moveTo(vx_pt, vy_pt); else ctx.lineTo(vx_pt, vy_pt);
+              }
+              ctx.closePath();
+              ctx.fill();
+              ctx.restore();
+          }
         }
         // подпись пояса — выносим наружу вправо по дуге (рисуется общим проходом)
         if (isFocus && p.name) labels.push({ name: p.name, ang: 0, r, sz: band, dim: true });
@@ -2702,26 +3457,40 @@ function gmmPaintOrbits(ctx) {
       }
 
       const isAnom = p.kind === 'anomaly';
-      const sz = (isAnom ? 6 + Math.sin(t * 0.9 + i) * 1.4 : gmmPlanetSz(p)) * gz;
+      // размер планеты — доля от радиуса звезды (всегда мельче её), ужата ×0.72,
+      // чтобы между орбитами оставалось много пустого пространства (реализм космоса).
+      const sz = isAnom ? (6 + Math.sin(t * 0.9 + i) * 1.4) * gz
+                        : Math.max(2.2 * gz, starR * gmmPlanetFr(p) * 0.72);
       // планеты разнесены по золотому углу + общий медленный дрейф: относительные
       // промежутки сохраняются, поэтому тела не сбиваются в кучу на одной стороне
       const ang = i * 2.39996 + t * 0.045;
       const px = cx + Math.cos(ang) * r, py = cy + Math.sin(ang) * r * TILT;  // наклон плоскости
-      // ореол
-      ctx.globalAlpha = a * (isAnom ? 0.6 : 0.4);
-      const gg = ctx.createRadialGradient(px, py, 0, px, py, sz * 2.6);
-      gg.addColorStop(0, zc); gg.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(px, py, sz * 2.6, 0, 6.2832); ctx.fill();
-      // тело с боковым светом (объём шара без псевдо-3D на самой карте).
-      // Мёртвый мир: тусклый камень без яркого блика — выжжен дотла.
-      ctx.globalAlpha = a;
-      const g = ctx.createRadialGradient(px - sz * 0.38, py - sz * 0.38, 0, px, py, sz);
-      if (p.dead) { g.addColorStop(0, '#9a9aa2'); g.addColorStop(0.5, zc); g.addColorStop(1, 'rgba(0,0,0,.75)'); }
-      else { g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, zc); g.addColorStop(1, 'rgba(0,0,0,.62)'); }
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
+      // разновидность аномалии (кротовая нора/пустошь/токсичный карлик) — у каждой свой вид
+      const anomKind = isAnom ? gmmAnomKind(p) : null;
+      // ореол: типизированные аномалии рисуют свой ореол сами; generic — общий
+      if (isAnom && !anomKind) {
+        ctx.globalAlpha = a * 0.6;
+        const gg = ctx.createRadialGradient(px, py, 0, px, py, sz * 2.6);
+        gg.addColorStop(0, zc); gg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(px, py, sz * 2.6, 0, 6.2832); ctx.fill();
+      }
+      // тело с боковым светом + детализированная поверхность по виду мира
+      // (полосы гигантов, материки, кратеры, лава, лёд, кольца). Аномалии —
+      // собственные процедурные рендеры; неизвестная — прежний пульсар-шар.
+      if (anomKind === 'wormhole') gmmPaintWormhole(ctx, px, py, sz, a, t, p);
+      else if (anomKind === 'blackhole') gmmPaintBlackhole(ctx, px, py, sz, a, t, p);
+      else if (anomKind === 'starshard') gmmPaintToxic(ctx, px, py, sz, a, t, p);
+      else if (isAnom) {
+        ctx.globalAlpha = a;
+        const g = ctx.createRadialGradient(px - sz * 0.38, py - sz * 0.38, 0, px, py, sz);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, zc); g.addColorStop(1, 'rgba(0,0,0,.62)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
+      } else {
+        gmmPaintBody(ctx, px, py, sz, p, zc, a, t, cx, cy);
+      }
 
       // ── «признаки жизни» колонизированного мира (базовый слой) — на мёртвом мире нет ──
-      if (p.isColony && !isAnom && !p.dead) { gmmBodyLife(ctx, px, py, sz, p, a, t); colPos.push({ px, py }); }
+      if (p.isColony && !isAnom && !p.dead) { gmmBodyLife(ctx, px, py, sz, p, a, t, cx, cy); colPos.push({ px, py }); }
 
       // ── минные ГЕКСЫ вокруг планеты (своя колония — кликабельны; чужое поле — показ) ──
       if (p.isColony && !isAnom && !p.dead && p.pid != null) gmmPlanetMineHexes(ctx, px, py, sz, TILT, a, p, sys);
@@ -2796,143 +3565,260 @@ function gmmColonyTint(bld) {
 // сонар Научного института, патрули Центра подготовки, теневые запуски спецслужб.
 // Данные чужих не грузим (разведданные) → для них только базовый слой в цвете фракции.
 // Интенсивность («развитость») — по сумме слотов своих, иначе по статусу (столица>колония).
-function gmmBodyLife(ctx, px, py, sz, body, a, t) {
+function gmmBodyLife(ctx, px, py, sz, body, a, t, cx, cy) {
   const cap = !!body.isCapital, ph = gmmBodyPhase(body);
   const bld = (GM.bldByCol && body.colId) ? GM.bldByCol[body.colId] : null;  // только свои колонии
   const fac = body.faction_id ? gmFaction(body.faction_id) : null;
   const tint = gmmColonyTint(bld);
   const [r, g, b] = tint || (fac ? gmRgb(fac.color) : [255, 200, 130]);
+  
   let dev = cap ? 1 : 0.45;
   if (body.colId && GM.devByCol) {
     const slots = GM.devByCol[body.colId];
     if (slots != null) dev = Math.max(dev, Math.min(1, 0.3 + slots / 14));
   }
-  // ── зарево городов: мягкий медленно «дышащий» ореол поверх тела (additive) ──
-  const pulse = 0.7 + 0.3 * Math.sin(t * 0.5 + ph);
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const haloR = sz * (2.0 + dev * 1.6);
-  const gg = ctx.createRadialGradient(px, py, sz * 0.6, px, py, haloR);
-  gg.addColorStop(0, `rgba(${r},${g},${b},${((0.16 + 0.22 * dev) * pulse * a).toFixed(3)})`);
-  gg.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = gg;
-  ctx.beginPath(); ctx.arc(px, py, haloR, 0, 6.2832); ctx.fill();
-  ctx.restore();
-  // ── ночные огни: крошечные неспешно мерцающие точки на диске ──
-  const lights = Math.round(3 + dev * 5);
+
+  // Вектор к звезде для расчета ночной стороны
+  let ldx = 0, ldy = 1;
+  if (cx != null && cy != null) { 
+    const vx = cx - px, vy = cy - py, m = Math.hypot(vx, vy) || 1; 
+    ldx = vx / m; ldy = vy / m; 
+  }
+
+  // ── НОЧНЫЕ ОГНИ И ЗАРЕВО ГОРОДОВ ──
+  // Вместо гигантского круглого ореола — сеть огней и локальное зарево на ночной стороне.
+  const lights = Math.round(5 + dev * 18);
   const lr = Math.min(255, r + 90), lg = Math.min(255, g + 90), lb = Math.min(255, b + 70);
+  
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
   for (let k = 0; k < lights; k++) {
     const h1 = Math.sin((k + 1) * 91.17 + ph) * 43758.5453;
     const h2 = Math.sin((k + 1) * 12.34 + ph) * 24634.6345;
-    const rr = (h1 - Math.floor(h1)) * sz * 0.8;
+    const rr = (h1 - Math.floor(h1)) * sz * 0.9; // распределение от центра к краю
     const aa = (h2 - Math.floor(h2)) * 6.2832;
-    const tw = 0.5 + 0.5 * Math.sin(t * 1.1 + k * 1.7 + ph);
-    ctx.globalAlpha = a * (0.3 + 0.5 * tw);
-    ctx.fillStyle = cap ? '#fff2c8' : `rgb(${lr},${lg},${lb})`;
-    ctx.fillRect(px + Math.cos(aa) * rr - 0.6, py + Math.sin(aa) * rr - 0.6, 1.2, 1.2);
+    
+    const dx = Math.cos(aa);
+    const dy = Math.sin(aa);
+    
+    // dot > 0 — день, dot < 0 — ночь
+    const dot = dx * ldx + dy * ldy;
+    
+    // Огни зажигаются только в тени (от терминатора и глубже)
+    if (dot < 0.1) {
+      const nightIntensity = Math.min(1, (0.1 - dot) * 1.5); // плавно ярчают к ночи
+      const tw = 0.5 + 0.5 * Math.sin(t * 1.5 + k * 1.7 + ph);
+      const alpha = a * nightIntensity * (0.4 + 0.6 * tw);
+      
+      const fx = px + dx * rr;
+      const fy = py + dy * rr;
+      
+      // Локальное атмосферное зарево над крупными мегаполисами
+      if (k < 4) {
+        const glow = ctx.createRadialGradient(fx, fy, 0, fx, fy, sz * 0.4);
+        glow.addColorStop(0, `rgba(${r},${g},${b},${(alpha * 0.65).toFixed(3)})`);
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(fx, fy, sz * 0.4, 0, 6.2832); ctx.fill();
+      }
+      
+      // Ядро города
+      ctx.globalAlpha = alpha * 0.95;
+      ctx.fillStyle = cap ? '#fff2c8' : `rgb(${lr},${lg},${lb})`;
+      ctx.beginPath(); ctx.arc(fx, fy, 0.8, 0, 6.2832); ctx.fill();
+    }
   }
-  // ── СПУТНИКИ: 1–3 точки на круговой орбите, медленно облетают планету ──
-  const moons = 1 + Math.round(dev * 2);            // развитее мир → больше спутников
-  const orbR = sz * 1.7;                            // радиус орбиты спутника
-  const spd = 0.22 + dev * 0.12;                    // медленный облёт (период ~20–30 с)
+  ctx.restore();
+
+  // ── СПУТНИКИ: 1–3 точки на круговой орбите ──
+  const moons = 1 + Math.round(dev * 2);
+  const orbR = sz * 1.45; // Спутники прижаты ближе к планете
+  const spd = 0.22 + dev * 0.12;
   for (let k = 0; k < moons; k++) {
-    const aa = ph + k * (6.2832 / moons) + t * spd * (k % 2 ? -1 : 1);  // соседние — встречь
-    const mx = px + Math.cos(aa) * orbR, my = py + Math.sin(aa) * orbR * 0.6;  // лёгкий наклон орбиты
-    ctx.globalAlpha = a * 0.85;
+    const aa = ph + k * (6.2832 / moons) + t * spd * (k % 2 ? -1 : 1);
+    const mx = px + Math.cos(aa) * orbR, my = py + Math.sin(aa) * orbR * 0.6;
+    
+    // Спутник уходит в тень планеты/выходит на свет
+    const mdot = Math.cos(aa) * ldx + Math.sin(aa) * ldy * 0.6;
+    const mlit = Math.max(0.15, 0.5 + mdot * 0.5); 
+    
+    ctx.globalAlpha = a * mlit;
     ctx.fillStyle = cap ? '#ffe7a8' : `rgb(${lr},${lg},${lb})`;
-    ctx.beginPath(); ctx.arc(mx, my, 1.5, 0, 6.2832); ctx.fill();
+    ctx.beginPath(); ctx.arc(mx, my, 1.2, 0, 6.2832); ctx.fill();
   }
+
   // ── ПОСТРОЙКО-ТОЧНЫЕ эффекты (только свои колонии: есть bld) ──
-  if (bld) gmmColonySpecials(ctx, px, py, sz, bld, ph, a, t);
+  if (bld) gmmColonySpecials(ctx, px, py, sz, bld, ph, a, t, ldx, ldy);
   ctx.globalAlpha = 1;
 }
 
-// Спецэффекты своих колоний по типам построек (дёшево: без аллокаций градиентов).
-// • Научный институт → расходящийся кольцевой импульс-сонар.
-// • Центр подготовки → патрульная эскадра: 2–3 точки на строгой круговой орбите.
-// • Центр спецслужб → редкий тусклый быстрый маркер, уходящий в космос (агент).
-function gmmColonySpecials(ctx, px, py, sz, bld, ph, a, t) {
-  // сонар науки
+// Спецэффекты своих колоний: интегрированы в орбиту, реалистичный вид.
+function gmmColonySpecials(ctx, px, py, sz, bld, ph, a, t, ldx, ldy) {
+  // Научный институт: сканирующий орбитальный луч (вместо огромного кольца)
   if (bld.science) {
-    const u = (t / 5 + ph) % 1;                       // импульс раз в ~5 с
-    const sr = sz * 1.4 + u * sz * 4.5;
-    ctx.globalAlpha = a * (1 - u) * 0.5;
-    ctx.strokeStyle = 'rgb(120,210,240)'; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.arc(px, py, sr, 0, 6.2832); ctx.stroke();
+    const u = (t / 4 + ph) % 1;
+    const sr = sz * 1.25;
+    const scanAng = u * 6.2832;
+    ctx.globalAlpha = a * 0.8;
+    ctx.strokeStyle = 'rgba(120,210,240,0.85)'; 
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(px, py, sr, scanAng, scanAng + 0.6);
+    ctx.stroke();
   }
-  // патрульная эскадра
+  // Центр подготовки: орбитальные патрули (мелкие кораблики-треугольники)
   if (bld.training) {
-    const n = bld.training > 2 ? 3 : 2, pr = sz * 1.32;
+    const n = bld.training > 2 ? 3 : 2, pr = sz * 1.35;
     ctx.fillStyle = 'rgb(176,196,222)';
     for (let k = 0; k < n; k++) {
-      const aa = ph * 2 + k * (6.2832 / n) + t * 0.55;  // строгая, чуть быстрее гражданских
-      ctx.globalAlpha = a * 0.9;
-      ctx.fillRect(px + Math.cos(aa) * pr - 0.9, py + Math.sin(aa) * pr - 0.9, 1.8, 1.8);
+      const aa = ph * 2 + k * (6.2832 / n) + t * 0.55;
+      const lx = px + Math.cos(aa) * pr;
+      const ly = py + Math.sin(aa) * pr;
+      ctx.save();
+      ctx.translate(lx, ly);
+      ctx.rotate(aa + Math.PI / 2); // Носом по курсу
+      ctx.globalAlpha = a * 0.85;
+      ctx.beginPath();
+      ctx.moveTo(0, -1.8);
+      ctx.lineTo(1.2, 1.5);
+      ctx.lineTo(-1.2, 1.5);
+      ctx.fill();
+      ctx.restore();
     }
   }
-  // теневой запуск спецслужб
+  // Центр спецслужб: реалистичный след запуска уходящего агента
   if (bld.intel) {
     const period = 9, cyc = Math.floor(t / period + ph);
     const u = (t / period + ph) - cyc;
     if (u < 0.22) {
       const k = u / 0.22;
       const hh = Math.sin(cyc * 12.9898 + ph * 4.1) * 43758.5453;
-      const ang = (hh - Math.floor(hh)) * 6.2832;       // направление — своё каждый запуск
-      const d = sz * 1.1 + k * sz * 6;
-      ctx.globalAlpha = a * (1 - k) * 0.7;
-      ctx.fillStyle = 'rgb(150,160,180)';
-      ctx.fillRect(px + Math.cos(ang) * d - 0.7, py + Math.sin(ang) * d - 0.7, 1.4, 1.4);
+      const ang = (hh - Math.floor(hh)) * 6.2832;
+      const d = sz * 1.1 + k * sz * 5;
+      
+      const trailX = px + Math.cos(ang) * (d - sz * 0.8 * k);
+      const trailY = py + Math.sin(ang) * (d - sz * 0.8 * k);
+      const headX = px + Math.cos(ang) * d;
+      const headY = py + Math.sin(ang) * d;
+      
+      ctx.globalAlpha = a * (1 - k) * 0.9;
+      // След плазмы
+      ctx.strokeStyle = 'rgba(150,160,180, 0.5)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(trailX, trailY);
+      ctx.lineTo(headX, headY);
+      ctx.stroke();
+      // Ядро корабля
+      ctx.fillStyle = 'rgb(220,235,255)';
+      ctx.beginPath(); ctx.arc(headX, headY, 1.2, 0, 6.2832); ctx.fill();
     }
   }
 }
 
-// Внутрисистемный трафик между ближайшими колониями. Пары — по ближайшему
-// соседу (ограничены по числу, чтобы не плодить связей через всю систему). Сама
-// отрисовка — НЕ линия (см. ниже): линия читалась как чертёж, а не как космос.
+// Внутрисистемный трафик между колониями. Маршруты строятся стабильно
+// (между соседними орбитами). Корабли летят по величественным орбитальным
+// дугам (переходным орбитам) очень медленно, чтобы чувствовался масштаб космоса.
 function gmmSysTraffic(ctx, colPos, a, t) {
-  const seen = new Set(), edges = [];
-  for (let i = 0; i < colPos.length && edges.length < 5; i++) {
-    let bj = -1, bd = Infinity;
-    for (let j = 0; j < colPos.length; j++) {
-      if (i === j) continue;
-      const d = Math.hypot(colPos[i].px - colPos[j].px, colPos[i].py - colPos[j].py);
-      if (d < bd) { bd = d; bj = j; }
-    }
-    if (bj < 0) continue;
-    const key = i < bj ? i + '-' + bj : bj + '-' + i;
-    if (seen.has(key)) continue; seen.add(key);
-    edges.push([colPos[i], colPos[bj]]);
+  const edges = [];
+  // Соединяем колонии последовательно, чтобы маршруты были постоянными
+  for (let i = 0; i < colPos.length - 1; i++) {
+    edges.push([colPos[i], colPos[i + 1]]);
   }
-  // БЕЗ линий-маршрутов (это читалось как чертёж). Вместо трассы — поток еле
-  // заметных искорок: отдельные корабли ловят свет и медленно дрейфуют между
-  // колониями. У потока есть ширина (боковой разброс), лёгкий изгиб траектории,
-  // разнобой скоростей и затухание у планет — чтобы ощущалось как живое движение,
-  // а не схема. Каждый «корабль» — крошечная мерцающая точка.
+
   edges.forEach(([A, B], i) => {
     const hx = B.px - A.px, hy = B.py - A.py, len = Math.hypot(hx, hy) || 1;
-    const nx = -hy / len, ny = hx / len;            // нормаль к направлению
-    const head = Math.atan2(hy, hx);                // курс «кораблика» (носом по ходу)
-    const ships = 7;
+    const nx = -hy / len, ny = hx / len;            // нормаль
+    
+    // Орбитальный прогиб траектории (чтобы трасса не была лазером, а имела вес орбиты)
+    const bowMax = len * 0.08 * (i % 2 ? 1 : -1);   
+    
+    // Контрольная точка Безье (x2, чтобы вершина параболы ровно достигала bowMax)
+    const cx = A.px + hx * 0.5 + nx * bowMax * 2;
+    const cy = A.py + hy * 0.5 + ny * bowMax * 2;
+    
+    // ── Отрисовка самой трассы (еле заметная голографическая нить маршрута) ──
+    // Это дает визуальную опору: игрок видит и чувствует траекторию торгового пути.
+    ctx.save();
+    ctx.globalAlpha = a * 0.15;
+    ctx.strokeStyle = 'rgba(150, 190, 255, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 10]);
+    ctx.beginPath();
+    ctx.moveTo(A.px, A.py);
+    ctx.quadraticCurveTo(cx, cy, B.px, B.py);
+    ctx.stroke();
+    ctx.restore();
+
+    const ships = 6; 
+    
     for (let k = 0; k < ships; k++) {
       const seed = i * 13.7 + k * 7.3;
-      const sgn = Math.sin(seed) >= 0 ? 1 : -1;
-      const lane = Math.sin(seed * 2.1) * len * 0.05;          // боковой разброс → поток шире линии
-      const spd = 0.025 + Math.abs(Math.sin(seed * 1.7)) * 0.03; // у каждого своя скорость
-      const u = (t * spd + Math.abs(Math.sin(seed))) % 1;
-      const bow = Math.sin(u * Math.PI) * len * 0.09 * sgn;     // дуга — не прямая линейка
-      const off = lane + bow;
-      const px = A.px + hx * u + nx * off, py = A.py + hy * u + ny * off;
-      const tw = 0.55 + 0.45 * Math.abs(Math.sin(t * 1.2 + seed)); // мерцание (с приподнятым дном)
-      const fade = Math.min(1, Math.sin(u * Math.PI) * 1.6);    // появляется/гаснет у планет
-      // треугольник-кораблик носом по курсу: матовый ореол + плотное ядро
+      const isReverse = (k % 2 === 0);
+      
+      const laneOffset = isReverse ? 2.5 : -2.5; 
+      
+      // ОЧЕНЬ медленная, величественная скорость (космос огромен)
+      const spd = 0.01 + (seed % 0.006);
+      
+      let u = (t * spd + (seed % 1)) % 1;
+      const actualU = isReverse ? (1 - u) : u;
+      
+      // Вычисляем точку на кривой Безье
+      const mt = 1 - actualU;
+      const bx = mt * mt * A.px + 2 * mt * actualU * cx + actualU * actualU * B.px;
+      const by = mt * mt * A.py + 2 * mt * actualU * cy + actualU * actualU * B.py;
+      
+      // Вычисляем касательную (вектор скорости) для правильного поворота
+      let dx = 2 * mt * (cx - A.px) + 2 * actualU * (B.px - cx);
+      let dy = 2 * mt * (cy - A.py) + 2 * actualU * (B.py - cy);
+      
+      const dLen = Math.hypot(dx, dy) || 1;
+      const dnx = -dy / dLen;
+      const dny = dx / dLen;
+      
+      // Смещаем корабль на его полосу (перпендикулярно текущей траектории)
+      const px = bx + dnx * laneOffset;
+      const py = by + dny * laneOffset;
+      
+      if (isReverse) { dx = -dx; dy = -dy; }
+      const drawHead = Math.atan2(dy, dx);
+      
+      // Плавное появление у планеты А и исчезновение у Б
+      const fade = Math.min(1, Math.sin(u * Math.PI) * 4.0);
+      
+      if (fade < 0.01) continue;
+      
       ctx.save();
-      ctx.translate(px, py); ctx.rotate(head);
-      ctx.globalAlpha = a * 0.32 * tw * fade;
-      ctx.fillStyle = 'rgb(150,185,235)';
-      gmmTri(ctx, 3.2);
-      ctx.globalAlpha = a * 0.95 * tw * fade;
-      ctx.fillStyle = '#e6f0ff';
-      gmmTri(ctx, 1.9);
+      ctx.translate(px, py); 
+      ctx.rotate(drawHead);
+      
+      // Плазменный след (длинный выхлоп)
+      ctx.globalAlpha = a * 0.45 * fade;
+      const trailLen = 12 + (seed % 6);
+      const trailGrad = ctx.createLinearGradient(0, 0, -trailLen, 0);
+      trailGrad.addColorStop(0, 'rgba(150, 200, 255, 0.9)');
+      trailGrad.addColorStop(1, 'rgba(150, 200, 255, 0)');
+      
+      ctx.fillStyle = trailGrad;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-trailLen, -0.7);
+      ctx.lineTo(-trailLen, 0.7);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Клиновидная форма корабля (Wedge / Arrowhead)
+      ctx.globalAlpha = a * 0.95 * fade;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(2.5, 0);          // Острый нос
+      ctx.lineTo(-1.5, -1.5);      // Левое крыло
+      ctx.lineTo(-0.5, 0);         // Вырез сзади (двигатель)
+      ctx.lineTo(-1.5, 1.5);       // Правое крыло
+      ctx.closePath();
+      ctx.fill();
+      
       ctx.restore();
     }
   });
@@ -3316,6 +4202,12 @@ function gmmBuildDefense() {
   const mAgg = new Map();
   (GM.minefields || []).forEach(m => {
     const sys = byId[m.system_id]; if (!sys) return;
+    // мёртвую планету (уничтоженную «Дланью») мин на карте не показываем —
+    // даже если строка в БД ещё не вычищена резолвером.
+    if (m.planet_pid != null) {
+      const pl = (sys.planets || []).find(p => +p.pid === +m.planet_pid);
+      if (pl && (pl.dead || pl.doomed)) return;
+    }
     const fac = gmFaction(m.faction_id);
     const col = fac ? gmRgb(fac.color) : [220, 90, 70];
     if (m.planet_pid != null) {
@@ -3517,6 +4409,99 @@ function gmmCarrierGlyph(ctx, x, y, sz, col, a, ang) {
   ctx.restore();
 }
 
+// Значок юнита на карте: ГЕРБ-ШТАНДАРТ сверху, а вниз — стреловидный клинок-корпус,
+// стилизованный под «корабль-смерть» (агрессивный кинжал с крыльями-лезвиями). Герб —
+// herald фракции (gmmFlagImg; нет картинки → заливка цветом). Тип различается формой/
+// цветом корпуса: mza — красный с реактором, носитель — корпус цвета фракции с дюзами.
+// Возвращает R (полуразмер герба) для внешней раскладки. opts:{type,hot,sel,t,integrity}.
+function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
+  const o = opts || {};
+  const mza = o.type === 'mza';
+  // корпус: у орудия — тревожно-красный, у носителя — цвет фракции
+  const hc = mza ? [228, 64, 48] : col;
+  const [hr0, hg0, hb0] = hc;
+  const hl = c => Math.min(255, c + 80), hd = c => Math.max(0, c - 55);
+  const [r, g, b] = col;
+  const lr = Math.min(255, r + 85), lg = Math.min(255, g + 85), lb = Math.min(255, b + 85);
+  const im = gmmFlagImg(fid);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+  // ── ФЛАГ СЗАДИ (рисуем ПЕРВЫМ — корабль ляжет поверх) ──
+  // небольшое полотнище с гербом на короткой мачте, чуть смещено вверх-влево; из-за
+  // корабля видна только «спинка» флага — то самое «флаг сзади».
+  const fw = sz * 1.7, fh = sz * 1.15;             // компактное полотнище
+  const fx = -fw * 0.5, fy = -sz * 1.85;           // верх-левый угол (над кораблём)
+  const amp = sz * 0.12, ph = (o.t || 0) * 3.0;    // лёгкая волна
+  const wave = xx => amp * Math.sin(((xx - fx) / fw) * 5 + ph) * (0.4 + 0.6 * (xx - fx) / fw);
+  const flagPath = () => {
+    ctx.beginPath();
+    const N = 12;
+    for (let i = 0; i <= N; i++) { const xx = fx + fw * i / N; const yy = fy + wave(xx); i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); }
+    for (let i = N; i >= 0; i--) { const xx = fx + fw * i / N; ctx.lineTo(xx, fy + fh + wave(xx + fw * 0.1)); }
+    ctx.closePath();
+  };
+  // короткая мачта позади (вертикаль через корабль)
+  ctx.lineWidth = Math.max(0.8, sz * 0.13); ctx.strokeStyle = `rgba(${lr},${lg},${lb},0.9)`;
+  ctx.beginPath(); ctx.moveTo(fx, fy - sz * 0.18); ctx.lineTo(fx, sz * 0.55); ctx.stroke();
+  ctx.fillStyle = `rgba(${lr},${lg},${lb},0.9)`;
+  ctx.beginPath(); ctx.arc(fx, fy - sz * 0.18, sz * 0.16, 0, 6.2832); ctx.fill();
+  // полотнище: заливка цветом → герб поверх
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = sz * 0.35; ctx.shadowOffsetY = sz * 0.08;
+  flagPath(); ctx.fillStyle = `rgba(${r},${g},${b},0.96)`; ctx.fill();
+  ctx.shadowColor = 'transparent';
+  if (im && im.naturalWidth) {
+    ctx.save(); flagPath(); ctx.clip();
+    const iw = im.naturalWidth, ih = im.naturalHeight, sc = Math.max(fw / iw, fh / ih);
+    ctx.drawImage(im, fx + fw / 2 - iw * sc / 2, fy + fh / 2 - ih * sc / 2, iw * sc, ih * sc);
+    ctx.restore();
+  }
+  ctx.restore();
+  flagPath(); ctx.lineWidth = Math.max(0.6, sz * 0.1); ctx.strokeStyle = `rgba(${lr},${lg},${lb},0.9)`; ctx.stroke();
+
+  // ── КОРАБЛИК СПЕРЕДИ (поверх флага), нос ВНИЗ, КОМПАКТНЫЙ (меньше звезды) ──
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = sz * 0.4; ctx.shadowOffsetY = sz * 0.1;
+  const top = -sz * 0.5, L = sz * 1.6, halfW = sz * 0.58;
+  // крылья-лезвия
+  ctx.fillStyle = `rgba(${hr0},${hg0},${hb0},0.92)`;
+  ctx.beginPath(); ctx.moveTo(sz * 0.3, top); ctx.lineTo(halfW * 1.6, top + L * 0.26); ctx.lineTo(halfW, top + L * 0.48); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-sz * 0.3, top); ctx.lineTo(-halfW * 1.6, top + L * 0.26); ctx.lineTo(-halfW, top + L * 0.48); ctx.closePath(); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  // корпус (нос вниз)
+  const gd = ctx.createLinearGradient(0, top, 0, top + L);
+  gd.addColorStop(0, `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},0.98)`);
+  gd.addColorStop(1, `rgba(${hd(hr0)},${hd(hg0)},${hd(hb0)},0.98)`);
+  ctx.fillStyle = gd;
+  ctx.beginPath();
+  ctx.moveTo(0, top + L);
+  ctx.lineTo(halfW, top + L * 0.36);
+  ctx.lineTo(sz * 0.32, top);
+  ctx.lineTo(-sz * 0.32, top);
+  ctx.lineTo(-halfW, top + L * 0.36);
+  ctx.closePath(); ctx.fill();
+  ctx.lineWidth = Math.max(0.5, sz * 0.09); ctx.strokeStyle = `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},0.95)`; ctx.stroke();
+  // реактор у кормы (у орудия пульсирует, ярче когда заряжен)
+  const flare = mza ? (o.hot ? 0.5 + 0.5 * Math.sin((o.t || 0) * 5) : 0.4) : 0.55;
+  const eg = ctx.createRadialGradient(0, top, 0, 0, top, sz * 0.7);
+  eg.addColorStop(0, mza ? `rgba(255,150,90,${flare})` : `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},${flare})`);
+  eg.addColorStop(1, `rgba(${hr0},${hg0},${hb0},0)`);
+  ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(0, top, sz * 0.7, 0, 6.2832); ctx.fill();
+  ctx.restore();
+
+  // выделение — пунктирное кольцо вокруг всего значка
+  if (o.sel) {
+    ctx.setLineDash([sz * 0.6, sz * 0.45]); ctx.lineDashOffset = -(o.t || 0) * 14;
+    ctx.lineWidth = Math.max(1, sz * 0.14); ctx.strokeStyle = 'rgba(150,225,255,0.95)';
+    ctx.beginPath(); ctx.arc(0, -sz * 0.2, sz * 1.9, 0, 6.2832); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.restore();
+  return sz;
+}
+
 // Морская/орбитальная мина: шарообразный корпус с короткими шипами-детонаторами.
 // filled — установленная мина (залита), иначе — бледный контур «свободной ячейки».
 function gmmMineGlyph(ctx, x, y, r, col, a, filled) {
@@ -3603,36 +4588,49 @@ function gmmPaintDefense(ctx) {
   });
 
   // ── Корабли-носители: idle у звезды + летящие по гиперпути ──
-  D.ships.forEach(d => {
+  // Несколько носителей в ОДНОЙ системе раньше рисовались в одной точке и
+  // перекрывали друг друга (нельзя было выбрать второго). Раскладываем их веером
+  // по горизонтали и каждому даём свою клик-зону. stackN/stackI — размер группы и
+  // место в ней; считаем заранее, чтобы знать ширину веера.
+  {
+    const grp = {};
+    D.ships.forEach(d => { if (d.kind === 'idle' && d.sys) (grp[d.sys.id] = grp[d.sys.id] || []).push(d); });
+    Object.values(grp).forEach(list => list.forEach((d, i) => { d.stackI = i; d.stackN = list.length; }));
+  }
+  D.ships.forEach(d => { try {
     if (d.kind === 'idle') {
       const tX = SX(d.sys.x), tY = SY(d.sys.y);
       if (!onScreen(tX, tY)) return;
       const ip = gmmIconPx(d.sys, s);
       // крупнее и с подложкой — носитель должно быть видно и на глубоком зуме, где
       // рядом большая планета/корона звезды, и на дальнем у мелкого значка системы.
-      const R = ip * 0.62 + 6, csz = Math.max(3.5, ip * 0.26) * zf;
-      const cX = tX + R * 1.05, cY = tY - R * 0.7 * sq;
-      const [cr, cg, cb] = d.col;
+      // КОМПАКТНО: значок должен быть МЕНЬШЕ звезды, поэтому csz заметно ужат.
+      const R = ip * 0.62 + 6, csz = Math.max(3, ip * 0.2) * zf;
+      // веер по горизонтали (значок узкий → небольшой шаг); центрируем группу
+      const n = d.stackN || 1, idx = d.stackI || 0;
+      const step = csz * 2.6;
+      const fanX = (idx - (n - 1) / 2) * step;
+      const cX = tX + R * 1.05 + fanX, cY = tY - R * 0.7 * sq;
       const sel = GMM.opCmd && GMM.opCmd.id === d.id;
-      const pulse = 0.6 + 0.4 * Math.sin(t * 3);
-      // тёмный диск-подложка + светлое кольцо: читается на любом фоне (планета/пустота)
-      ctx.save();
-      ctx.beginPath(); ctx.arc(cX, cY, csz * 1.7, 0, 6.2832);
-      ctx.fillStyle = 'rgba(8,14,24,0.74)'; ctx.fill();
-      ctx.setLineDash(sel ? [4, 3] : []); ctx.lineDashOffset = -t * 8;
-      ctx.lineWidth = 1.8;
-      ctx.strokeStyle = sel ? `rgba(150,225,255,${0.95 * pulse})`
-        : `rgba(${Math.min(255, cr + 80)},${Math.min(255, cg + 80)},${Math.min(255, cb + 80)},0.92)`;
-      ctx.beginPath(); ctx.arc(cX, cY, csz * 1.7, 0, 6.2832); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-      gmmCarrierGlyph(ctx, cX, cY, csz, d.col, 1, -0.5);
-      if (d.mza && d.canFire) {   // Гиперпейсер готова к залпу — оранжево-красная точка
-        ctx.fillStyle = 'rgba(255,140,60,0.98)';
-        ctx.beginPath(); ctx.arc(cX + csz * 1.55, cY - csz * 1.55, Math.max(2, csz * 0.42), 0, 6.2832); ctx.fill();
-      } else if (!d.mza && d.canDeploy) {   // носитель аванпоста — «здесь можно развернуть» (зелёная точка)
+      // Корабль с флагом-штандартом за спиной (герб фракции — прямо на карте).
+      const ER = gmmUnitEmblem(ctx, cX, cY, csz, GM.myFid, d.col,
+        { type: d.mza ? 'mza' : 'carrier', hot: !!(d.mza && d.canFire), sel, t });
+      // Гиперпейсер: шкала корпуса НАД флагом (виден износ прямо на карте)
+      if (d.mza) {
+        const bw = ER * 1.7, bh = Math.max(2, csz * 0.3), bx = cX - bw / 2, by = cY - ER * 2.15 - bh;
+        const ip2 = Math.max(0, Math.min(100, +d.integrity || 0)) / 100;
+        ctx.fillStyle = 'rgba(8,14,24,0.82)';
+        ctx.fillRect(bx - 0.5, by - 0.5, bw + 1, bh + 1);
+        ctx.fillStyle = ip2 >= 0.6 ? 'rgba(80,200,130,0.95)' : ip2 >= 0.3 ? 'rgba(220,170,60,0.95)' : 'rgba(220,90,70,0.95)';
+        ctx.fillRect(bx, by, bw * ip2, bh);
+      }
+      // готовность действия — точка у вольного края флага (верх-право)
+      if (d.mza && d.canFire) {            // готов к залпу — оранжевая
+        ctx.fillStyle = 'rgba(255,150,60,0.98)';
+        ctx.beginPath(); ctx.arc(cX + ER * 0.95, cY - ER * 1.85, Math.max(2, csz * 0.4), 0, 6.2832); ctx.fill();
+      } else if (!d.mza && d.canDeploy) {  // можно развернуть — зелёная
         ctx.fillStyle = 'rgba(120,235,140,0.98)';
-        ctx.beginPath(); ctx.arc(cX + csz * 1.55, cY - csz * 1.55, Math.max(2, csz * 0.42), 0, 6.2832); ctx.fill();
+        ctx.beginPath(); ctx.arc(cX + ER * 0.95, cY - ER * 1.85, Math.max(2, csz * 0.4), 0, 6.2832); ctx.fill();
       }
       // подпись на глубоком зуме — чтобы носитель нельзя было не заметить
       if (deep) {
@@ -3642,10 +4640,10 @@ function gmmPaintDefense(ctx) {
         ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 3;
         ctx.fillStyle = d.mza ? 'rgba(255,210,200,0.98)' : 'rgba(222,236,255,0.96)';
         const lbl = d.mza ? (d.canFire ? '☣ Гиперпейсер · залп' : '☣ Гиперпейсер') : (d.canDeploy ? '🚀 носитель · развернуть' : '🚀 носитель');
-        ctx.fillText(lbl, cX, cY + csz * 1.95);
+        ctx.fillText(lbl, cX, cY + ER * 1.5);
         ctx.restore();
       }
-      GMM.shipHit.push({ x: cX, y: cY, r: Math.max(16, csz * 1.9), id: d.id, mza: !!d.mza });
+      GMM.shipHit.push({ x: cX, y: cY - ER * 0.3, r: Math.max(16, ER * 2.1), id: d.id, mza: !!d.mza });
       return;
     }
     // в полёте: позиция по реальному времени (нет меток → середина)
@@ -3671,7 +4669,7 @@ function gmmPaintDefense(ctx) {
     // сам носитель
     const ang = Math.atan2(SY(pt.y) - SY(back.y), SX(pt.x) - SX(back.x));
     if (onScreen(hX, hY)) gmmCarrierGlyph(ctx, hX, hY, Math.max(2.6, s * 1.1 + 2), d.col, 0.95, ang);
-  });
+  } catch (e) { if (!GMM._unitErrLogged) { GMM._unitErrLogged = true; console.error('gmm unit draw failed', e); } } });
 
   ctx.restore();
 }
@@ -3789,18 +4787,27 @@ function gmmPaintVector(ctx, camS, live) {
   // Заливки территорий. Режим «бедность» красит ячейки по просперити. Без границ и
   // без «бедности» заливки не рисуем вовсе (кнопка «Границы» убирает всю территорию,
   // как в SVG-рендере), остаются только гиперпути и звёзды.
-  if (GM.showEcon) {
-    (P.econFills || []).forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
-  } else if (GM.showBorders) {
-    P.fills.forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
+  // На глубоком зуме (раскрытие систем в орбиты) сплошная заливка территории
+  // затапливает весь экран и система в ней тонет. Гасим заливку до ~12% по мере
+  // захода вглубь (gmmDeepA: 0 на плоскости → 1 на глубоком) — система читается на
+  // тёмном космосе, обособленно. Границы/звёзды/орбиты не трогаем.
+  const fillA = 1 - 0.88 * gmmDeepA();
+  if (fillA > 0.02) {
+    if (fillA < 1) ctx.globalAlpha = fillA;
+    if (GM.showEcon) {
+      (P.econFills || []).forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
+    } else if (GM.showBorders) {
+      P.fills.forEach(f => { ctx.fillStyle = f.color; ctx.fill(f.p2d); });
+    }
+    ctx.globalAlpha = 1;
   }
   // Флаги фракций поверх их территорий: герб, мягко растворённый слой-маской к
   // границам (полупрозрачно — карта читается сквозь него). Только в режиме «Границы».
   // Флаг каждой фракции — это уже готовый слой (обрезан по территории + растворён
   // маской), поэтому здесь только drawImage в bbox территории. Рисуем и в битмап, и в
   // живой слой (одинаково) — иначе на краю битмапа был бы шов «есть флаг / нет флага».
-  if (GM.showFlags && GM.showBorders && !GM.showEcon && (P.facFills || []).length) {
-    const fa = 0.4 - 0.24 * gmmZoomT(camS);   // на обзоре заметнее, при заходе в системы мягче
+  if (!live && GM.showFlags && GM.showBorders && !GM.showEcon && (P.facFills || []).length) {
+    const fa = (0.4 - 0.24 * gmmZoomT(camS)) * (1 - 0.9 * gmmDeepA());   // на обзоре заметнее, на глубоком зуме почти исчезают
     if (fa > 0.02) {
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
       P.facFills.forEach(f => {

@@ -110,6 +110,8 @@ async function go(slug, push=true) {
   if (editMode) exitEdit(false);
   // На мобильных закрываем боковое меню при переходе (категория/раздел/страница)
   if (typeof closeMobSb === 'function') closeMobSb();
+  // На десктопе авто-скрываем меню на карте, на остальных страницах — по выбору игрока
+  if (typeof _sbSyncForRoute === 'function') _sbSyncForRoute(slug);
   if (_navAbort) { _navAbort.abort(); _navAbort=null; }
   const seq = ++_navSeq;
 

@@ -71,6 +71,38 @@ returns numeric language sql immutable as $$
     )), 2)::numeric
 $$;
 
+-- ── ПЛОЩАДЬ под кривой цены на отрезке запаса [a,b] = ∫ price d(stock) ─────────
+--    Это ТОЧНАЯ стоимость партии (а не цена×кол-во по одной точке). Интеграл
+--    аддитивен: area(s,s+20)+area(s+20,s+30) = area(s,s+30) — значит дробить
+--    сделку на 20+10 БЕСПОЛЕЗНО (даёт ровно то же, что и 30), а любой круг
+--    продать↔купить строго теряет спред. Кривая = base·clamp(0.25,4.0,(eq/x)^k):
+--      x ≤ x_cap  → потолок base·4.0      (∫ линейна)
+--      x ≥ x_flr  → пол    base·0.25      (∫ линейна)
+--      между      → base·(eq/x)^k, ∫ = base·eq^k·x^(1-k)/(1-k)
+create or replace function public._market_area(p_base numeric, p_a numeric, p_b numeric, p_eq numeric)
+returns numeric language sql immutable as $$
+  with c as (
+    select 0.45::numeric as k, 0.25::numeric as clo, 4.0::numeric as chi,
+           greatest(coalesce(p_base,2),0)::numeric as base,
+           greatest(coalesce(p_eq,1),1)::numeric   as eq,
+           greatest(coalesce(p_a,0),0)::numeric     as a,
+           greatest(coalesce(p_b,0),0)::numeric     as b
+  ), g as (
+    select *, eq*power(chi, -1.0/k) as x_cap, eq*power(clo, -1.0/k) as x_flr from c
+  )
+  select case when b <= a then 0 else (
+      -- регион A: запас ниже x_cap → цена на потолке base·chi (линейно)
+      greatest(0, least(b, x_cap) - a) * base * chi
+      -- регион B: рабочий участок кривой base·(eq/x)^k
+      + case when least(b, x_flr) > greatest(a, x_cap)
+          then base*power(eq,k)*( power(least(b,x_flr),1-k) - power(greatest(a,x_cap),1-k) )/(1-k)
+          else 0 end
+      -- регион C: запас выше x_flr → цена на полу base·clo (линейно)
+      + greatest(0, b - greatest(a, x_flr)) * base * clo
+    ) end
+  from g
+$$;
+
 -- ── Таблицы рынка ───────────────────────────────────────────────────────────
 create table if not exists public.market_resources (
   name        text primary key,
@@ -193,11 +225,24 @@ begin
 end$$;
 
 -- ════════════════════════════════════════════════════════════════════════════
---  Продажа на рынок: +запас (цена вниз), ГС по живой цене ×0.8 ×доктрина
+--  Продажа на рынок: +запас (цена вниз), ГС по СРЕДНЕЙ цене исполнения ×0.8
+--
+--  АНТИ-ЭКСПЛОЙТ. Раньше вся партия исполнялась по ПРЕД-сделочной цене и к тому
+--  же домножалась на доктринный gc (≥1, у торговцев ≥1.25). Это давало вечный
+--  насос: продать дорого (дефицит) → обрушить цену → выкупить дёшево, оставшись
+--  и с ресурсом, и с прибылью. Теперь:
+--    • цена исполнения = ИНТЕГРАЛ цены по изменению запаса (площадь под кривой),
+--      а не цена×кол-во по одной точке. Интеграл аддитивен, поэтому дробление
+--      сделки (20+10 вместо 30) даёт РОВНО ту же сумму — лазейки нет; крупная
+--      сделка двигает цену против себя по ходу исполнения, манипуляция убыточна;
+--    • доктринный множитель к спотовому рынку НЕ применяется (он и так крутит
+--      экспорт/караваны/фабрики в economy_accrue) — спот = нейтральная площадка
+--      с фиксированным спредом 20%: продажа 0.8×, покупка 1.0× → круг = убыток.
 -- ════════════════════════════════════════════════════════════════════════════
 create or replace function public.market_sell_resource(p_name text, p_units numeric)
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare fid text; eco public.faction_economy; have numeric; mr public.market_resources; px numeric; gain numeric;
+declare fid text; eco public.faction_economy; have numeric; mr public.market_resources;
+        px1 numeric; new_stock numeric; gross numeric; gain numeric;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   if p_units is null or p_units <= 0 then raise exception 'bad units'; end if;
@@ -209,8 +254,10 @@ begin
   if have < p_units then raise exception 'not enough resource'; end if;
 
   mr := public._market_ensure(p_name);   -- блокирует строку рынка
-  px := mr.price;
-  gain := floor(p_units * px * 0.8 * (public._faction_mods(fid)->>'gc')::numeric);
+  new_stock := mr.stock + p_units;
+  px1   := public._market_price_calc(mr.base_price, new_stock, mr.equilibrium);   -- цена ПОСЛЕ
+  gross := public._market_area(mr.base_price, mr.stock, new_stock, mr.equilibrium); -- ∫ цены по сделке
+  gain  := floor(gross * 0.8);                                                    -- спред 20%, без доктрины
 
   update public.faction_economy
      set resources = jsonb_set(coalesce(resources,'{}'::jsonb), array[p_name], to_jsonb(have - p_units), true),
@@ -218,21 +265,22 @@ begin
    where faction_id = fid;
   -- запас рынка растёт → цена пересчитывается вниз
   update public.market_resources
-     set stock = stock + p_units,
-         price = public._market_price_calc(base_price, stock + p_units, equilibrium),
+     set stock = new_stock,
+         price = px1,
          updated_at = now()
    where name = p_name;
 
-  return jsonb_build_object('ok', true, 'gain', gain, 'price', px);
+  return jsonb_build_object('ok', true, 'gain', gain, 'unit', round(gain/p_units,2), 'newprice', px1);
 end$$;
 
 -- ════════════════════════════════════════════════════════════════════════════
---  Покупка с рынка: −запас (цена вверх), списываем ГС по живой цене
---  Запас рынка конечен: нельзя купить больше, чем есть.
+--  Покупка с рынка: −запас (цена вверх), списываем ГС по ИНТЕГРАЛУ цены сделки
+--  Запас рынка конечен: нельзя купить больше, чем есть; запас может дойти до 0.
 -- ════════════════════════════════════════════════════════════════════════════
 create or replace function public.market_buy_resource(p_name text, p_units numeric)
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare fid text; eco public.faction_economy; mr public.market_resources; px numeric; cost numeric;
+declare fid text; eco public.faction_economy; mr public.market_resources;
+        px1 numeric; new_stock numeric; cost numeric;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   if p_units is null or p_units <= 0 then raise exception 'bad units'; end if;
@@ -241,9 +289,11 @@ begin
   if not found then raise exception 'no economy'; end if;
 
   mr := public._market_ensure(p_name);   -- блокирует строку рынка
+  -- конечный запас: нельзя купить больше, чем реально есть на рынке
   if mr.stock < p_units then raise exception 'not enough on market'; end if;
-  px := mr.price;
-  cost := ceil(p_units * px);
+  new_stock := mr.stock - p_units;                                                 -- может быть 0
+  px1  := public._market_price_calc(mr.base_price, new_stock, mr.equilibrium);      -- цена ПОСЛЕ
+  cost := ceil(public._market_area(mr.base_price, new_stock, mr.stock, mr.equilibrium)); -- ∫ цены по сделке
   if eco.gc < cost then raise exception 'not enough GC'; end if;
 
   update public.faction_economy
@@ -251,14 +301,15 @@ begin
          resources = jsonb_set(coalesce(resources,'{}'::jsonb), array[p_name],
                        to_jsonb(coalesce((resources->>p_name)::numeric,0) + p_units), true)
    where faction_id = fid;
-  -- запас рынка падает → цена пересчитывается вверх
+  -- запас рынка падает → цена пересчитывается вверх (запас НЕ зажимается на 1:
+  -- иначе он бы никогда не истощался и можно было скупать по 1 ед. бесконечно)
   update public.market_resources
-     set stock = greatest(1, stock - p_units),
-         price = public._market_price_calc(base_price, greatest(1, stock - p_units), equilibrium),
+     set stock = new_stock,
+         price = px1,
          updated_at = now()
    where name = p_name;
 
-  return jsonb_build_object('ok', true, 'cost', cost, 'price', px);
+  return jsonb_build_object('ok', true, 'cost', cost, 'unit', round(cost/p_units,2), 'newprice', px1);
 end$$;
 
 -- ── Совместимость: старый economy_sell_resource → живая цена (на случай, если

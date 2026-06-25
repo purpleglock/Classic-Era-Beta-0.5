@@ -23,8 +23,22 @@ const crypto = require('crypto');
 
 const PORT     = process.env.PORT ? Number(process.env.PORT) : 8787;
 const ROOT     = path.resolve(__dirname, '..');               // корень проекта
-const REL_DIR  = 'assets/portraits';                          // путь от корня сайта
+const REL_DIR  = 'assets/portraits';                          // путь от корня сайта (по умолчанию)
 const DEST_DIR = path.join(ROOT, 'assets', 'portraits');
+
+// Разрешённые папки назначения (защита от записи куда попало). Ключ — значение
+// query ?dir=, значение — путь от корня сайта. Заливка планет шлёт dir=planets.
+const ALLOWED_DIRS = {
+  portraits: 'assets/portraits',
+  planets:   'assets/map/planets',
+};
+// Возвращает {rel, abs} для папки назначения по query ?dir= (или дефолт-портреты).
+function destDir(dirKey) {
+  const rel = ALLOWED_DIRS[dirKey] || REL_DIR;
+  const abs = path.join(ROOT, ...rel.split('/'));
+  fs.mkdirSync(abs, { recursive: true });
+  return { rel, abs };
+}
 
 const EXT_BY_MIME = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' };
 const MAX_BYTES   = 12 * 1024 * 1024;                         // 12 МБ потолок на файл
@@ -70,11 +84,16 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       if (aborted) return;
       if (!size) return json(res, 400, { ok: false, error: 'пустое тело' });
-      const name = `${Date.now()}-${crypto.randomBytes(3).toString('hex')}.${ext}`;
-      const dest = path.join(DEST_DIR, name);
+      const { rel: relDir, abs: absDir } = destDir(url.searchParams.get('dir'));
+      // ?name= — фиксированное имя (для заливки классов планет, перезаписью);
+      //          иначе случайное (портреты — пул, имена не должны конфликтовать).
+      const fixed = safeName(url.searchParams.get('name'));
+      const name = fixed ? (/\.[a-z0-9]+$/i.test(fixed) ? fixed : `${fixed}.${ext}`)
+                         : `${Date.now()}-${crypto.randomBytes(3).toString('hex')}.${ext}`;
+      const dest = path.join(absDir, name);
       fs.writeFile(dest, Buffer.concat(chunks), (err) => {
         if (err) { console.error('[upload] write', err); return json(res, 500, { ok: false, error: String(err.message || err) }); }
-        const rel = `${REL_DIR}/${name}`;
+        const rel = `${relDir}/${name}`;
         console.log(`[upload] +${(size / 1024).toFixed(0)} КБ → ${rel}`);
         json(res, 200, { ok: true, url: rel, name });
       });
@@ -87,9 +106,10 @@ const server = http.createServer((req, res) => {
   if (req.method === 'DELETE' && url.pathname === '/file') {
     const name = safeName(url.searchParams.get('name'));
     if (!name) return json(res, 400, { ok: false, error: 'плохое имя' });
-    fs.unlink(path.join(DEST_DIR, name), (err) => {
+    const { rel: relDir, abs: absDir } = destDir(url.searchParams.get('dir'));
+    fs.unlink(path.join(absDir, name), (err) => {
       if (err && err.code !== 'ENOENT') { console.error('[delete]', err); return json(res, 500, { ok: false, error: String(err.message || err) }); }
-      console.log(`[delete] ${REL_DIR}/${name}`);
+      console.log(`[delete] ${relDir}/${name}`);
       json(res, 200, { ok: true });
     });
     return;
