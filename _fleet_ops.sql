@@ -9,9 +9,10 @@
 --   2) ТОПЛИВО НА ПЕРЕЛЁТ (fleet_send) — каждый переброс/возврат тратит
 --      топливо со склада. Расход = (топливо на класс корабля) × число
 --      кораблей × ЧИСЛО ГИПЕРПРЫЖКОВ между системами (а не время в пути).
---      Классы распределены по топливу:
---        корвет/фрегат → Гелий-3,  эсминец/крейсер → Дейтерий,
---        линкор/дредноут → Старвис.
+--      Классы жгут ОСНОВНОЕ топливо тира + ВТОРИЧНОЕ:
+--        корвет/фрегат   → Гелий-3  + Метан,
+--        эсминец/крейсер → Дейтерий + Углерод,
+--        линкор/дредноут → Старвис  + Изотопы.
 --      Не хватает топлива — переброс не состоится (внятная ошибка).
 --
 -- Зеркало клиента: economy.js + galaxy_map.js (EC_FLEET_FUEL / gmFleetFuel*).
@@ -65,7 +66,7 @@ revoke all on function public._fleet_jumps(text,text) from public;
 create or replace function public._fleet_fuel_for(p_comp jsonb, p_jumps int)
 returns jsonb language plpgsql stable security definer set search_path=public as $$
 declare
-  elem jsonb; k text; qty int; j int; res text; per numeric; cur numeric;
+  elem jsonb; k text; qty int; j int; cur numeric; fuels jsonb; fk text; fp numeric;
   out jsonb := '{}'::jsonb;
 begin
   j := greatest(1, coalesce(p_jumps, 1));
@@ -77,17 +78,21 @@ begin
       select data->>'class' into k from public.faction_units
         where id = nullif(elem->>'unit_id', '')::uuid;
     end if;
+    -- Каждый класс жжёт ОСНОВНОЕ топливо тира + вторичное: лёгкие — Метан,
+    -- средние (дейтериевый тир) — Углерод, тяжёлые (линкор/дредноут) — Изотопы.
     case k
-      when 'corvette'    then res := 'Гелий-3'; per := 1;
-      when 'frigate'     then res := 'Гелий-3'; per := 2;
-      when 'destroyer'   then res := 'Дейтерий'; per := 2;
-      when 'cruiser'     then res := 'Дейтерий'; per := 3;
-      when 'battleship'  then res := 'Старвис';  per := 2;
-      when 'dreadnought' then res := 'Старвис';  per := 4;
-      else                    res := 'Гелий-3'; per := 2;   -- неизвестный класс ≈ фрегат
+      when 'corvette'    then fuels := '{"Гелий-3":1,"Метан":1}';
+      when 'frigate'     then fuels := '{"Гелий-3":2,"Метан":1}';
+      when 'destroyer'   then fuels := '{"Дейтерий":2,"Углерод":1}';
+      when 'cruiser'     then fuels := '{"Дейтерий":3,"Углерод":2}';
+      when 'battleship'  then fuels := '{"Старвис":2,"Изотопы":1}';
+      when 'dreadnought' then fuels := '{"Старвис":4,"Изотопы":2}';
+      else                    fuels := '{"Гелий-3":2,"Метан":1}';   -- неизвестный класс ≈ фрегат
     end case;
-    cur := coalesce((out->>res)::numeric, 0);
-    out := jsonb_set(out, array[res], to_jsonb(cur + per * qty * j), true);
+    for fk, fp in select key, (value)::numeric from jsonb_each_text(fuels) loop
+      cur := coalesce((out->>fk)::numeric, 0);
+      out := jsonb_set(out, array[fk], to_jsonb(cur + fp * qty * j), true);
+    end loop;
   end loop;
   return out;
 end$$;
@@ -347,6 +352,6 @@ grant execute on function public.fleets_mine() to authenticated;
 
 -- ── Проверка ────────────────────────────────────────────────
 -- 1) _fleet_jumps(соседи) = 1; _fleet_jumps(через 2 рукава) = 2.
--- 2) Флот из 3 корветов на 2 прыжка → Гелий-3 = 1*3*2 = 6.
+-- 2) Флот из 3 корветов на 2 прыжка → Гелий-3 = 1*3*2 = 6, Метан = 1*3*2 = 6.
 -- 3) fleet_send без топлива на складе → exception «не хватает топлива».
 -- 4) fleet_edit вне системы с верфью → exception «только в системе со своей верфью».

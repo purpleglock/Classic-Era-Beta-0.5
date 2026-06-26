@@ -23,8 +23,10 @@ const EC_SPY_OPS = {
   steal_tech:    { label: 'Кража технологий',    diff: 45, base: 4, need: 'deep',  icon: '🧪', desc: 'Украсть технологию (мин. 2 агента). Добавится в ваше дерево.' },
   mass_demolish: { label: 'Массовый снос',       diff: 45, base: 3, need: 'deep',  minAgents: 2, icon: '🏚', desc: 'Уничтожить сразу N зданий цели (N = число агентов, max 5). Мин. 2 агента. Саботёр усиливает.' },
   faith_impose:  { label: 'Тайная секта',        diff: 28, base: 3, need: 'basic', icon: '🛐', desc: 'Внедрить тайную секту вашей веры в чужую державу. Работает как храм (доход и сила — вам), пока контрразведка цели её не вскроет. Нужна исповедуемая вера.' },
+  subspace_hunt: { label: 'Подпространственная охота', diff: 40, base: 2, need: '', tactical: true, icon: '🛰', desc: 'Вскрыть скрытые гиперкрейсера цели — при успехе они подсветятся на карте на 2 суток (крит — 4). Иначе их не видно ни с разведкой, ни без.' },
+  fleet_sabotage:{ label: 'Диверсия против флота', diff: 34, base: 2, need: '', tactical: true, targetFleet: true, icon: '⚙', desc: 'Подрыв вражеского флота. По степени успеха: крит → выводит из строя часть кораблей состава; обычный успех → обездвиживает флот на сутки. Сопротивление — «защита ВС» цели.' },
 };
-const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'steal_res', 'sabotage', 'destabilize', 'kill_agent', 'steal_tech', 'mass_demolish', 'faith_impose'];
+const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'steal_res', 'sabotage', 'destabilize', 'kill_agent', 'steal_tech', 'mass_demolish', 'faith_impose', 'subspace_hunt', 'fleet_sabotage'];
 // Перки агентов (зеркало _spy_agents6.sql). Перк-бонус РАСТЁТ с уровнем агента (+2/ур.).
 const EC_SPY_PERKS = {
   infiltrator: { label: 'Инфильтратор', icon: '🕵', desc: '+12% успех краж (казна, технологии, ресурсы). С уровнем — больше.' },
@@ -1244,6 +1246,9 @@ async function _ecLoadImpl() {
   EC.raidStatus = raidStatus || { ships: 0, convoy: 0, raids: 0, policy: 0, free: 0 };  // статус флота
   EC.tradeCargo = tradeCargo || { total: 0, used: 0, free: 0 };   // грузоподъёмность торгового флота
   EC.spyAgency = spyAgency || { cap: 0, hired: 0, roster: [], recruits: [], refresh_at: null };  // агентура: ростер + рынок
+  // Контрразведка с именным назначением (2 роли state/forces) — из spy_counter_list
+  // (вложен в ответ spy_recruits_list). Падаем на пустой объект, если срез не накачен.
+  EC.spyCounter = (EC.spyAgency && EC.spyAgency.counterintel) || { state_power: 0, forces_power: 0, assignments: [] };
   EC.diplo = diploStatus || { union: null, members: [], invites: [], vassals: [] };  // союзы и вассалитеты
   EC.faith = faithStatus || { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };  // вера: статус
   if (!Array.isArray(EC.faith.faiths)) EC.faith.faiths = EC.faith.faith ? [EC.faith.faith] : [];  // мультивера: все исповедуемые
@@ -3666,21 +3671,25 @@ function ecFleetSectionHtml() {
 }
 
 // ── Топливо перелёта (зеркало _fleet_ops.sql: _fleet_fuel_for) ──
-// Класс корабля → топливо и расход на 1 корабль за 1 прыжок. Лёгкие жгут
-// Гелий-3, средние — Дейтерий, тяжёлые — Старвис. Неизвестный класс ≈ фрегат.
+// Класс корабля → топливо и расход на 1 корабль за 1 прыжок. Жжёт ОСНОВНОЕ
+// топливо тира (Гелий-3 / Дейтерий / Старвис) + ВТОРИЧНОЕ (Метан / Углерод /
+// Изотопы). Неизвестный класс ≈ фрегат.
 const EC_FLEET_FUEL = {
-  corvette:   { res: 'Гелий-3',  per: 1 }, frigate:    { res: 'Гелий-3',  per: 2 },
-  destroyer:  { res: 'Дейтерий', per: 2 }, cruiser:    { res: 'Дейтерий', per: 3 },
-  battleship: { res: 'Старвис',  per: 2 }, dreadnought:{ res: 'Старвис',  per: 4 },
+  corvette:   [{ res: 'Гелий-3',  per: 1 }, { res: 'Метан',   per: 1 }],
+  frigate:    [{ res: 'Гелий-3',  per: 2 }, { res: 'Метан',   per: 1 }],
+  destroyer:  [{ res: 'Дейтерий', per: 2 }, { res: 'Углерод', per: 1 }],
+  cruiser:    [{ res: 'Дейтерий', per: 3 }, { res: 'Углерод', per: 2 }],
+  battleship: [{ res: 'Старвис',  per: 2 }, { res: 'Изотопы', per: 1 }],
+  dreadnought:[{ res: 'Старвис',  per: 4 }, { res: 'Изотопы', per: 2 }],
 };
-const EC_FLEET_FUEL_DEF = { res: 'Гелий-3', per: 2 };
+const EC_FLEET_FUEL_DEF = [{ res: 'Гелий-3', per: 2 }, { res: 'Метан', per: 1 }];
 // Карта {ресурс: количество} на ОДИН прыжок для данного состава.
 function ecFleetFuelPerJump(comp) {
   const out = {};
   (comp || []).forEach(c => {
     const qty = Math.max(0, c.qty || 0); if (!qty) return;
-    const f = EC_FLEET_FUEL[c.cls] || EC_FLEET_FUEL_DEF;
-    out[f.res] = (out[f.res] || 0) + f.per * qty;
+    const fs = EC_FLEET_FUEL[c.cls] || EC_FLEET_FUEL_DEF;
+    fs.forEach(f => { out[f.res] = (out[f.res] || 0) + f.per * qty; });
   });
   return out;
 }
@@ -6419,14 +6428,73 @@ const EC_SPY_ST = {
   counterintel: { t: 'в контрразведке', c: 'var(--pu,#b07bd8)',           ic: '🛡' },
   ready:        { t: 'в строю',         c: 'var(--ok,#7bd88f)',            ic: '✓' },
 };
-// Какие готовые агенты числятся в резерве контрразведки. Резерв задан ЧИСЛОМ
-// (counter_agents) — конкретные агенты на сервере не закреплены, поэтому для
-// наглядности помечаем последние N готовых агентов в порядке ростера.
+// Какие агенты назначены в контрразведку — теперь ИМЕННО (faction_counterintel),
+// а не «последние N». Берём из EC.spyCounter.assignments (срез _spy_fleet_ops).
 function ecSpyCounterIds() {
-  const n = EC.eco ? (EC.eco.counter_agents || 0) : 0;
-  if (n <= 0) return new Set();
-  const ready = ecSpyReadyAgents();
-  return new Set(ready.slice(Math.max(0, ready.length - n)).map(a => a.id));
+  return new Set(((EC.spyCounter && EC.spyCounter.assignments) || []).map(x => x.agent_id));
+}
+// Роль агента в контрразведке ('state' | 'forces' | null).
+function ecSpyCounterRole(id) {
+  const a = ((EC.spyCounter && EC.spyCounter.assignments) || []).find(x => x.agent_id === id);
+  return a ? a.role : null;
+}
+// Поставить/снять агента в роль контрразведки (state=государство, forces=ВС).
+function ecCounterAgent(id, role, on) {
+  ecRpcAct('spy_counter_set', { p_agent_id: id, p_role: role, p_on: on },
+    on ? 'Агент в контрразведке' : 'Агент снят с защиты');
+}
+// Подгрузка видимых флотов всех держав (для селектора цели диверсии). Кэш в EC.fleetsVisible.
+async function ecLoadFleetsVisible() {
+  try {
+    const r = await ecRpc('fleets_visible');
+    EC.fleetsVisible = Array.isArray(r) ? r : [];
+  } catch (e) { EC.fleetsVisible = EC.fleetsVisible || []; }
+  if (typeof ecSpyCalcLive === 'function') ecSpyCalcLive();   // обновить селектор, если планировщик открыт
+}
+// Из выпадающего списка: ставит выбранного агента в роль.
+function ecCounterPick(role, sel) {
+  const id = sel && sel.value; if (!id) return;
+  ecCounterAgent(id, role, true);
+}
+// Блок «Контрразведка» с двумя ролями и поимённым выбором агентов.
+function ecCounterIntelBlock(free) {
+  const assigns = (EC.spyCounter && EC.spyCounter.assignments) || [];
+  const ready = ecSpyReadyAgents();                       // готовые, не на операции
+  const roster = ecSpyRoster ? ecSpyRoster() : ((EC.spyAgency || {}).roster || []);
+  const byId = id => roster.find(a => a.id === id) || assigns.find(a => a.agent_id === id) || {};
+  // свободные для назначения = готовые и ещё не в контрразведке
+  const assignedSet = new Set(assigns.map(a => a.agent_id));
+  const freeAgents = ready.filter(a => !assignedSet.has(a.id));
+  const roleCol = (role, label, icon, sub) => {
+    const mine = assigns.filter(a => a.role === role);
+    const chips = mine.length ? mine.map(a => {
+      const ag = byId(a.agent_id); const pk = ecPerk(a.perk || ag.perk);
+      return `<span class="ec-ci-chip" style="border-color:${ecPerkColor(a.perk || ag.perk)}">
+          ${pk.icon} <b>${esc((a.first_name || ag.first_name || '') + ' ' + (a.last_name || ag.last_name || ''))}</b>
+          <i style="opacity:.7;font-style:normal">ур.${a.level || ag.level || 1}</i>
+          <button class="ec-ci-x" title="Снять с защиты" onclick="ecCounterAgent('${esc(a.agent_id)}','${role}',false)">✕</button>
+        </span>`;
+    }).join('') : '<i style="color:var(--t4);font-style:normal">никто не назначен</i>';
+    const opts = freeAgents.map(a => `<option value="${esc(a.id)}">${esc(a.first_name + ' ' + a.last_name)} · ${ecPerk(a.perk).label} · ур.${a.level || 1}</option>`).join('');
+    const picker = freeAgents.length
+      ? `<select class="ec-ci-sel" onchange="ecCounterPick('${role}', this)"><option value="">＋ поставить агента…</option>${opts}</select>`
+      : '<i style="color:var(--t4);font-style:normal">свободных агентов нет</i>';
+    return `<div class="ec-ci-col">
+        <div class="ec-ci-col-t"><b>${icon} ${esc(label)}</b> <i style="color:var(--t4);font-style:normal">${esc(sub)}</i></div>
+        <div class="ec-ci-chips">${chips}</div>
+        <div class="ec-ci-add">${picker}</div>
+      </div>`;
+  };
+  // Колонии — защита конкретной колонии от саботажа по ней (роль = id колонии).
+  const colCols = (EC.colonies || []).map(c =>
+    roleCol(c.id, c.planet_name || 'Колония', '🏗', 'защита этой колонии от саботажа по ней')).join('');
+  return `<div class="ec-dip-card"><div class="ec-dip-t">🛡 Контрразведка <span class="ec-hint">в защите: ${ecNum((EC.eco && EC.eco.counter_agents) || 0)} · свободно ${ecNum(free)}</span></div>
+      <div class="ec-ci-cols" style="display:flex;gap:10px;flex-wrap:wrap">
+        ${roleCol('state', 'Защита государства', '🏛', 'ловит шпионов кабинета: казна, технологии, дестабилизация')}
+        ${roleCol('forces', 'Защита вооружённых сил', '⚔', 'сопротивление диверсиям против флота (подпространственная охота, саботаж)')}
+        ${colCols}
+      </div>
+      <div class="cn-fac-hint" style="margin-top:6px">Ставьте <b>конкретных</b> агентов в роль. Чем выше их уровень — тем сильнее защита (мощь: 🏛 ${ecNum((EC.spyCounter || {}).state_power || 0)} · ⚔ ${ecNum((EC.spyCounter || {}).forces_power || 0)}). <b>Центр</b> ловит шпионов по казне/технологиям, <b>колония</b> — саботаж именно по ней, <b>ВС</b> — диверсии против флота. Назначенные агенты не идут на операции.</div></div>`;
 }
 // Бейдж уровня в виде шевронов (RP-погоны): заполнено = уровень, всего 5.
 function ecLevelPips(lv) {
@@ -6449,6 +6517,13 @@ function ecHash(str) { let h = 2166136261; for (let i = 0; i < (str || '').lengt
 // Подбор портрета агенту из общего пула (EC.spyPortraits): сперва раса+пол,
 // затем только раса, затем «универсальные» (без расы), затем любой. Выбор
 // СТАБИЛЕН (seed = id агента), поэтому портрет закреплён за конкретным агентом.
+// Может ли раса брать обезличенный/гуманоидный арт по фолбэку. Гуманоиды,
+// млекопитающие и неизвестная раса — да; экзотика — нет (иначе у растения/робота
+// лицо гуманоида). Подбор арта именно по расе всё равно работает, если он загружен.
+function ecRaceAllowsGenericArt(race) {
+  if (!race) return true;
+  return race === 'Гуманоиды' || race === 'Млекопитающие';
+}
 function ecAgentPortraitUrl(a) {
   const pool = (EC.spyPortraits || []).filter(p => p && p.url);
   if (!pool.length) return null;
@@ -6456,8 +6531,14 @@ function ecAgentPortraitUrl(a) {
   let cand = pool.filter(p => p.race === race && p.gender === gender);
   if (!cand.length) cand = pool.filter(p => p.race === race && (!p.gender || p.gender === gender));
   if (!cand.length) cand = pool.filter(p => p.race === race);
-  if (!cand.length) cand = pool.filter(p => !p.race);
-  if (!cand.length) cand = pool;
+  // Только «человекоподобные» расы (и неизвестная) могут брать обезличенный/любой
+  // портрет. Для экзотики (растения, насекомые, неорганики) чужой гуманоидный арт
+  // выглядит абсурдно — лучше показать иконку-плейсхолдер (вернуть null).
+  if (!cand.length && ecRaceAllowsGenericArt(race)) {
+    cand = pool.filter(p => !p.race);
+    if (!cand.length) cand = pool;
+  }
+  if (!cand.length) return null;
   const idx = ecHash(String(a.id || (a.first_name + a.last_name) || '')) % cand.length;
   return cand[idx].url;
 }
@@ -6577,12 +6658,14 @@ const EC_SPY_OP_CATS = [
   ['econ',    '💰 Экономический удар',  'Кражи и подрыв хозяйства цели'],
   ['direct',  '💥 Прямое действие',     'Саботаж, снос и устранение'],
   ['special', '🛐 Особые операции',     'Идеологическое внедрение'],
+  ['tactical','🛰 Тактический слой',     'Охота и диверсии против флота'],
 ];
 const EC_SPY_OP_CAT = {
   recon_basic: 'recon', recon_deep: 'recon',
   steal_gc: 'econ', steal_res: 'econ', steal_tech: 'econ', destabilize: 'econ',
   sabotage: 'direct', mass_demolish: 'direct', kill_agent: 'direct',
   faith_impose: 'special',
+  subspace_hunt: 'tactical', fleet_sabotage: 'tactical',
 };
 // Требование операции — короткий бейдж (что нужно, чтобы открыть).
 function ecSpyOpReq(d) {
@@ -6634,22 +6717,10 @@ function ecTabIntel() {
       </div>
     </div>`;
 
-  // Контрразведка — распределение агентов по объектам (Центр + колонии)
-  const cmap = (EC.eco && EC.eco.counter_map) || {};
-  const ciScopes = [['hq', '🏛 Центр', 'казна, технологии, дестабилизация']]
-    .concat((EC.colonies || []).map(c => [c.id, '🏗 ' + (c.planet_name || 'Колония'), 'защита от саботажа по ней']));
-  const ciRows = ciScopes.map(([key, label, sub]) => {
-    const n = +(cmap[key] || 0);
-    return `<div class="ec-ci-row" style="gap:8px">
-        <span style="flex:1;text-align:left;min-width:0"><b>${esc(label)}</b> <i style="color:var(--t4);font-style:normal">${esc(sub)}</i></span>
-        <button class="btn btn-gh btn-sm" ${n <= 0 ? 'disabled' : ''} onclick="ecCounterIntel('${esc(key)}', ${n - 1})">−</button>
-        <span class="ec-ci-val" style="min-width:24px;text-align:center">${n}</span>
-        <button class="btn btn-gh btn-sm" ${free <= 0 ? 'disabled' : ''} onclick="ecCounterIntel('${esc(key)}', ${n + 1})">＋</button>
-      </div>`;
-  }).join('');
-  const ciBlock = `<div class="ec-dip-card"><div class="ec-dip-t">🛡 Контрразведка <span class="ec-hint">всего в защите: ${ecNum(ci)} · свободно ${ecNum(free)}</span></div>
-      ${ciRows}
-      <div class="cn-fac-hint" style="margin-top:6px">Сажайте агентов на объекты: <b>Центр</b> ловит шпионов по казне/технологиям/дестабилизации, <b>колония</b> — саботаж именно по ней. Перк 🛡 Куратор усиливает КР везде и ускоряет расследования.</div></div>`;
+  // Контрразведка — ИМЕННОЕ назначение в две роли (зеркало _spy_fleet_ops.sql):
+  //   state  — защита государства (контршпионаж кабинета);
+  //   forces — защита вооружённых сил (сопротивление диверсиям против флота).
+  const ciBlock = ecCounterIntelBlock(free);
 
   // Планировщик операции (вынесен в ecSpyPlannerHtml для перерисовки при смене цели)
   let planner;
@@ -8676,6 +8747,8 @@ function ecPickSpyOp(op) {
     return;
   }
   EC.spyOp = op;
+  // тактические операции против флота — подгрузить видимые флоты цели для селектора
+  if ((EC_SPY_OPS[op] || {}).targetFleet) ecLoadFleetsVisible();
   const ops = ecId('ec-spy-ops');
   if (ops) ops.innerHTML = ecSpyOpsHtml();   // перерисовать карточки операций (галочки/выделение)
   else document.querySelectorAll('.ec-spy-op').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes(`'${op}'`)));
@@ -8731,7 +8804,20 @@ function ecSpyCalcLive() {
         colEl.innerHTML = `<div class="ec-trade-label">Колония-цель</div>
           <select id="ec-spy-colony-sel" onchange="EC.spyColony=this.value;ecSpyCalcLive()">${cols.map(x => `<option value="${esc(x.id)}"${x.id === EC.spyColony ? ' selected' : ''}>${esc(x.name)}${Array.isArray(x.buildings) ? ` · ${x.buildings.length} построек` : ''}</option>`).join('')}</select>`;
       }
-    } else { colEl.innerHTML = ''; }
+    } else if (op === 'fleet_sabotage') {
+      // флот-цель: видимые вражеские флоты выбранной державы (fleets_visible)
+      const fls = (EC.fleetsVisible || []).filter(f => f.faction_id === EC.spyTarget);
+      if (!fls.length) { colEl.innerHTML = '<div class="ec-trade-note warn" style="margin:6px 0">⚠ У этой державы нет флотов на карте (или они вне зоны видимости).</div>'; colErr = 'Нет видимых флотов цели'; EC.spyFleetTarget = null; }
+      else {
+        if (!EC.spyFleetTarget || !fls.find(x => x.id === EC.spyFleetTarget)) EC.spyFleetTarget = fls[0].id;
+        colEl.innerHTML = `<div class="ec-trade-label">Флот-цель</div>
+          <select id="ec-spy-fleet-sel" onchange="EC.spyFleetTarget=this.value;ecSpyCalcLive()">${fls.map(x => {
+            const sz = x.intel ? `${x.ships} кор.` : 'состав неизвестен';
+            const loc = x.status === 'transit' ? 'в полёте' : 'в системе';
+            return `<option value="${esc(x.id)}"${x.id === EC.spyFleetTarget ? ' selected' : ''}>${esc(x.name || 'Флот')} · ${sz} · ${loc}</option>`;
+          }).join('')}</select>`;
+      }
+    } else { colEl.innerHTML = ''; EC.spyFleetTarget = null; }
   }
   // госуровневая операция требует сети (≥2 агента)
   let netErr = (op === 'steal_tech' && picks.length === 1) ? 'Госуровень: нужна сеть — минимум 2 агента' : '';
@@ -8772,6 +8858,15 @@ function ecSpyLaunch() {
   if (!picks.length) { toast('Выберите хотя бы одного агента', 'err'); return; }
   const c = ecSpyCalcLive(); if (!c) return;
   if (c.gateErr) { toast(c.gateErr, 'err'); return; }
+  const d = EC_SPY_OPS[EC.spyOp] || {};
+  // Тактические операции (флот) — отдельный RPC spy_fleet_op, исполняются мгновенно.
+  if (d.tactical) {
+    if (d.targetFleet && !EC.spyFleetTarget) { toast('Выберите вражеский флот-цель', 'err'); return; }
+    ecRpcAct('spy_fleet_op',
+      { p_target_fid: EC.spyTarget, p_op: EC.spyOp, p_agent_ids: picks, p_fleet_id: d.targetFleet ? EC.spyFleetTarget : null },
+      `Операция «${d.label}» проведена`);
+    return;
+  }
   const colonyId = (EC.spyOp === 'sabotage') ? (EC.spyColony || null) : null;
   ecRpcAct('spy_launch', { p_target_fid: EC.spyTarget, p_op: EC.spyOp, p_agent_ids: picks, p_colony_id: colonyId }, `Операция «${EC_SPY_OPS[EC.spyOp].label}» запущена (${c.turns} ход.)`);
 }

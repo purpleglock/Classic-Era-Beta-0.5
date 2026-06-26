@@ -2,6 +2,20 @@
    GUIDEBOOK  ·  css/19_guide.css
    ══════════════════════════════════════════════════════════════ */
 
+/* Бейдж-чип рядом с заголовком h3 (иконка механики) */
+.gb-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 9px;
+  font-size: 0.78em;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--color-accent-soft, rgba(180,140,60,.15));
+  border: 1px solid var(--color-border, rgba(255,255,255,.12));
+  color: var(--color-accent, #d9b46a);
+  vertical-align: middle;
+}
+
 /* Таблица ресурсов (иконка + название) */
 .gb-res-cell { display: inline-flex; align-items: center; gap: 7px; }
 .gb-res-table img.res-ic { width: 1.3em; height: 1.3em; vertical-align: -0.25em; }

@@ -2903,3 +2903,19 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-mza-k { font-size: 10px; color: var(--t4); white-space: nowrap; }
 .ec-mza-stat b { font-size: 13px; color: var(--t1); }
 .ec-mza-foot { font-size: 10.5px; color: var(--t4); border-top: 1px dashed var(--w2); padding-top: 7px; }
+
+/* ── Контрразведка: две роли (state/forces) с именным выбором агентов ── */
+.ec-ci-col { flex: 1 1 220px; min-width: 200px; background: var(--b0, #0c1322);
+  border: 1px solid var(--w2, rgba(255,255,255,.08)); border-radius: 8px; padding: 8px 9px; }
+.ec-ci-col-t { font-size: 11.5px; margin-bottom: 6px; }
+.ec-ci-chips { display: flex; flex-wrap: wrap; gap: 5px; min-height: 24px; align-items: flex-start; }
+.ec-ci-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+  padding: 2px 6px; border: 1px solid var(--w2, rgba(255,255,255,.18)); border-radius: 6px;
+  background: color-mix(in srgb, var(--ag-col, #b07bd8) 12%, var(--b0, #0c1322)); }
+.ec-ci-chip b { font-weight: 600; }
+.ec-ci-x { background: none; border: none; color: var(--err, #e06a5a); cursor: pointer;
+  font-size: 12px; line-height: 1; padding: 0 1px; }
+.ec-ci-x:hover { color: #ff8a78; }
+.ec-ci-add { margin-top: 7px; }
+.ec-ci-sel { width: 100%; font-size: 11px; padding: 4px 6px; border-radius: 6px;
+  background: var(--b1, #111a2c); color: var(--t1, #dfe8f5); border: 1px solid var(--w2, rgba(255,255,255,.12)); }

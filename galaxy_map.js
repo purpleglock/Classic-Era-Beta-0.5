@@ -56,7 +56,7 @@ function gmToggleControls() {
 
 const GM = {
   systems: [], lanes: [], factions: [], sectors: [],
-  minefields: [], outposts: [], opShips: [], mzaShips: [], fleets: [],  // оборона: видимые поля/аванпосты + мои носители аванпостов + мои Гиперпейсер + мои флоты (через RPC)
+  minefields: [], outposts: [], opShips: [], mzaShips: [], fleets: [], fleetsVis: [], mzaVis: [],  // оборона: видимые поля/аванпосты + мои носители аванпостов + мои Гиперпейсер + мои флоты + видимость чужих флотов/вскрытых гиперкрейсеров (через RPC)
   scale: 1, tx: 0, ty: 0,
   edit: false, mode: 'select',   // select | link | unlink | add | sector
   editSession: false,            // ПК: редактор зашёл в правку карты → старый SVG-рендер
@@ -95,7 +95,7 @@ function gmExitEdit() {
 // ── Загрузка данных ─────────────────────────────────────────
 async function loadGalaxyData() {
   try {
-    const [sys, lanes, facs, secs, routes, econ, salvos, mines, outposts, opShips, mzaShips, fleets] = await Promise.all([
+    const [sys, lanes, facs, secs, routes, econ, salvos, mines, outposts, opShips, mzaShips, fleets, fleetsVis, mzaVis] = await Promise.all([
       dbGet('map_systems', 'select=*'),
       dbGet('map_hyperlanes', 'select=*'),
       dbGet('map_factions', 'select=*&order=sort.asc'),
@@ -115,6 +115,10 @@ async function loadGalaxyData() {
       user ? apiFetch('rpc/outpost_ships_mine',  { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       user ? apiFetch('rpc/mza_ships_mine',      { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       user ? apiFetch('rpc/fleets_mine',         { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      // ВИДИМОСТЬ ЧУЖИХ: флоты всех держав (состав скрыт без разведки) + вскрытые
+      // гиперкрейсера. _fleet_intel.sql может быть не накачен → []. Гостям не нужно.
+      user ? apiFetch('rpc/fleets_visible',      { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      user ? apiFetch('rpc/mza_visible',         { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
     ]);
     GM.systems = (sys || []).map(s => ({ ...s, x: +s.x, y: +s.y, planets: s.planets || [] }));
     GM.lanes = lanes || [];
@@ -126,6 +130,8 @@ async function loadGalaxyData() {
     GM.opShips    = Array.isArray(opShips) ? opShips : [];    // мои корабли-носители аванпостов (idle/в полёте)
     GM.mzaShips   = Array.isArray(mzaShips) ? mzaShips : [];  // мои Гиперпейсер — мобильные «Длани» (idle/в полёте)
     GM.fleets     = Array.isArray(fleets) ? fleets : [];      // мои флоты — мобильные соединения (idle/в полёте)
+    GM.fleetsVis  = Array.isArray(fleetsVis) ? fleetsVis : [];// флоты ВСЕХ держав (видимость; состав скрыт без разведки)
+    GM.mzaVis     = Array.isArray(mzaVis) ? mzaVis : [];      // ВСКРЫТЫЕ чужие гиперкрейсера
     GM.sectors = (secs || []).map(s => ({ ...s, system_ids: s.system_ids || [] }));
     GM.econ = {};   // system_id → { status, prosperity } для режима «бедность»
     (econ || []).forEach(e => { if (e && e.system_id) GM.econ[e.system_id] = { status: e.status, prosperity: +e.prosperity }; });
@@ -1355,7 +1361,7 @@ function gmDefRpc(fn, body) {
 async function gmReloadDefense(reopenSysId) {
   if (!user) return;
   try {
-    const [mines, outposts, ships, mzas, fleets, salvos] = await Promise.all([
+    const [mines, outposts, ships, mzas, fleets, salvos, fleetsVis, mzaVis] = await Promise.all([
       gmDefRpc('minefields_visible').catch(() => GM.minefields || []),
       gmDefRpc('outposts_visible').catch(() => GM.outposts || []),
       gmDefRpc('outpost_ships_mine').catch(() => GM.opShips || []),
@@ -1363,12 +1369,16 @@ async function gmReloadDefense(reopenSysId) {
       gmDefRpc('fleets_mine').catch(() => GM.fleets || []),
       // залпы в полёте (doomgun + Гиперпейсер — общая таблица) для анимации снаряда на карте
       dbGet('doom_salvos', 'status=eq.in_flight&select=origin_system_id,target_system_id,target_pid,target_planet,launched_at,ready_at,faction_id').catch(() => GM.salvos || []),
+      gmDefRpc('fleets_visible').catch(() => GM.fleetsVis || []),
+      gmDefRpc('mza_visible').catch(() => GM.mzaVis || []),
     ]);
     GM.minefields = Array.isArray(mines) ? mines : [];
     GM.outposts = Array.isArray(outposts) ? outposts : [];
     GM.opShips = Array.isArray(ships) ? ships : [];
     GM.mzaShips = Array.isArray(mzas) ? mzas : [];
     GM.fleets = Array.isArray(fleets) ? fleets : [];
+    GM.fleetsVis = Array.isArray(fleetsVis) ? fleetsVis : [];
+    GM.mzaVis = Array.isArray(mzaVis) ? mzaVis : [];
     GM.salvos = Array.isArray(salvos) ? salvos : (GM.salvos || []);
     if (GMM.active) { gmmBuildDefense(); gmmBuildSalvos(); GMM.dirty = true; gmmKick(); }
     // если открыта панель этой системы — обновим её (число гексов/аванпостов/носителей)
@@ -1644,12 +1654,16 @@ async function gmMzaCmdScrap() {
 //  Та же плашка #gm-opcmd: перебросить (вся карта) / вернуть на базу / распустить.
 // ════════════════════════════════════════════════════════════
 // ── Топливо перелёта (зеркало _fleet_ops.sql) ──
+// Каждый класс жжёт ОСНОВНОЕ топливо тира + ВТОРИЧНОЕ (Метан/Углерод/Изотопы).
 const GM_FLEET_FUEL = {
-  corvette:   { res: 'Гелий-3',  per: 1 }, frigate:    { res: 'Гелий-3',  per: 2 },
-  destroyer:  { res: 'Дейтерий', per: 2 }, cruiser:    { res: 'Дейтерий', per: 3 },
-  battleship: { res: 'Старвис',  per: 2 }, dreadnought:{ res: 'Старвис',  per: 4 },
+  corvette:   [{ res: 'Гелий-3',  per: 1 }, { res: 'Метан',   per: 1 }],
+  frigate:    [{ res: 'Гелий-3',  per: 2 }, { res: 'Метан',   per: 1 }],
+  destroyer:  [{ res: 'Дейтерий', per: 2 }, { res: 'Углерод', per: 1 }],
+  cruiser:    [{ res: 'Дейтерий', per: 3 }, { res: 'Углерод', per: 2 }],
+  battleship: [{ res: 'Старвис',  per: 2 }, { res: 'Изотопы', per: 1 }],
+  dreadnought:[{ res: 'Старвис',  per: 4 }, { res: 'Изотопы', per: 2 }],
 };
-const GM_FLEET_FUEL_DEF = { res: 'Гелий-3', per: 2 };
+const GM_FLEET_FUEL_DEF = [{ res: 'Гелий-3', per: 2 }, { res: 'Метан', per: 1 }];
 // Число гиперпрыжков between системами: BFS по GM.lanes; если путь недостижим —
 // оценка по дистанции / средней длине рукава (зеркало _fleet_jumps).
 function gmFleetJumps(from, to) {
@@ -1678,8 +1692,8 @@ function gmFleetFuelCost(comp, jumps) {
   const out = {}; const j = Math.max(1, jumps || 1);
   (comp || []).forEach(c => {
     const qty = Math.max(0, c.qty || 0); if (!qty) return;
-    const f = GM_FLEET_FUEL[c.cls] || GM_FLEET_FUEL_DEF;
-    out[f.res] = (out[f.res] || 0) + f.per * qty * j;
+    const fs = GM_FLEET_FUEL[c.cls] || GM_FLEET_FUEL_DEF;
+    fs.forEach(f => { out[f.res] = (out[f.res] || 0) + f.per * qty * j; });
   });
   return out;
 }
@@ -4398,7 +4412,8 @@ function gmmBuildDefense() {
   // мои корабли-носители аванпостов. Цвет — моей фракции.
   const myFac = GM.myFid ? gmFaction(GM.myFid) : null;
   const myCol = myFac ? gmRgb(myFac.color) : [150, 210, 255];
-  if ((GM.opShips || []).length || (GM.mzaShips || []).length || (GM.fleets || []).length) {
+  if ((GM.opShips || []).length || (GM.mzaShips || []).length || (GM.fleets || []).length
+      || (GM.fleetsVis || []).length || (GM.mzaVis || []).length) {
     // граф гиперпутей для прокладки маршрута летящих кораблей (как у караванов)
     const adj = {};
     GM.lanes.forEach(l => { (adj[l.a_id] = adj[l.a_id] || []).push(l.b_id); (adj[l.b_id] = adj[l.b_id] || []).push(l.a_id); });
@@ -4454,6 +4469,22 @@ function gmmBuildDefense() {
     const fleetCol = [120, 200, 235];
     (GM.fleets || []).forEach(fl => pushShip(fl, { fleet: true, side: 'left', col: fleetCol,
       ships: +fl.ships || 0, canRecall: !!fl.can_recall }));
+
+    // ── ВИДИМОСТЬ ЧУЖИХ ─────────────────────────────────────────
+    // Флоты других держав: видны все, но численность (ships) приходит null,
+    // если состав не вскрыт разведкой — тогда бейдж рисует «⚓?». Цвет — фракции.
+    (GM.fleetsVis || []).filter(fl => fl.mine === false).forEach(fl => {
+      const ff = gmFaction(fl.faction_id); const col = ff ? gmRgb(ff.color) : [150, 160, 175];
+      pushShip(fl, { fleet: true, side: 'left', col, enemy: true, fid: fl.faction_id,
+        ships: (fl.intel && fl.ships != null) ? +fl.ships : null,
+        intel: fl.intel !== false && fl.ships != null,
+        facName: fl.faction_name });
+    });
+    // Вскрытые чужие гиперкрейсера (только idle — позиция точная; transit без пути не рисуем).
+    (GM.mzaVis || []).filter(sh => sh.status === 'idle' && sh.system_id).forEach(sh => {
+      const ff = gmFaction(sh.faction_id); const col = ff ? gmRgb(ff.color) : mzaCol;
+      pushShip(sh, { mza: true, enemy: true, col, fid: sh.faction_id, facName: sh.faction_name, spotReason: sh.reason });
+    });
   }
 }
 
@@ -4636,15 +4667,16 @@ function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
     // УГЛОВАТЫЙ значок соединения: жёсткий клин-шеврон (нос вниз) с парой эскортов
     // по бокам. Никаких скруглений/глоу-пятен — только острые грани под общий
     // гранёный стиль интерфейса. Шеврон рисуется ломаной с резкими углами.
+    // Нос — ВВЕРХ (остриём к курсу), чтобы клин читался как «соединение идёт».
     const chevron = (ox, oy, s, fill) => {
-      const t = oy - s * 0.5, len = s * 1.5, hw = s * 0.55, notch = s * 0.30;
+      const top = oy - s * 0.85, len = s * 1.6, hw = s * 0.55, notch = s * 0.30;
       ctx.beginPath();
-      ctx.moveTo(ox, t + len);              // нос вниз
-      ctx.lineTo(ox + hw, t + notch);       // правое крыло
-      ctx.lineTo(ox + hw * 0.5, t);         // правый срез
-      ctx.lineTo(ox, t + len * 0.30);       // вырез кормы
-      ctx.lineTo(ox - hw * 0.5, t);         // левый срез
-      ctx.lineTo(ox - hw, t + notch);       // левое крыло
+      ctx.moveTo(ox, top);                       // нос ВВЕРХ
+      ctx.lineTo(ox + hw, top + len - notch);    // правое крыло (отведено назад)
+      ctx.lineTo(ox + hw * 0.5, top + len);      // правый кончик кормы
+      ctx.lineTo(ox, top + len * 0.70);          // вырез кормы (снизу)
+      ctx.lineTo(ox - hw * 0.5, top + len);      // левый кончик кормы
+      ctx.lineTo(ox - hw, top + len - notch);    // левое крыло
       ctx.closePath();
       if (fill) { ctx.fillStyle = fill; ctx.fill(); }
       ctx.lineWidth = Math.max(0.5, s * 0.12);
@@ -4652,10 +4684,10 @@ function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
     };
     const flagFill = `rgba(${hd(hr0)},${hd(hg0)},${hd(hb0)},0.95)`;
     const leadFill = `rgba(${hr0},${hg0},${hb0},0.98)`;
-    chevron(-sz * 0.78, sz * 0.42, sz * 0.60, flagFill);   // левый эскорт (позади)
-    chevron(sz * 0.78, sz * 0.42, sz * 0.60, flagFill);    // правый эскорт (позади)
+    chevron(-sz * 0.80, sz * 0.62, sz * 0.58, flagFill);   // левый эскорт (позади/ниже)
+    chevron(sz * 0.80, sz * 0.62, sz * 0.58, flagFill);    // правый эскорт (позади/ниже)
     ctx.shadowColor = 'transparent';
-    chevron(0, -sz * 0.12, sz * 1.0, leadFill);            // флагман (впереди, крупнее)
+    chevron(0, sz * 0.20, sz * 0.95, leadFill);            // флагман (впереди/выше, крупнее)
   } else {
     const top = -sz * 0.5, L = sz * 1.6, halfW = sz * 0.58;
     // крылья-лезвия
@@ -4811,23 +4843,46 @@ function gmmPaintDefense(ctx) {
       const cX = tX + sgn * R * 1.05 + fanX, cY = tY - R * 0.7 * sq;
       const sel = (GMM.opCmd && GMM.opCmd.id === d.id) || (GMM.fleetCmd && GMM.fleetCmd.id === d.id);
       // Корабль с флагом-штандартом за спиной (герб фракции — прямо на карте).
-      const ER = gmmUnitEmblem(ctx, cX, cY, csz, GM.myFid, d.col,
+      const ER = gmmUnitEmblem(ctx, cX, cY, csz, d.fid || GM.myFid, d.col,
         { type: d.mza ? 'mza' : (d.fleet ? 'fleet' : 'carrier'), hot: !!(d.mza && d.canFire), sel, t });
       // Флот: бейдж с числом кораблей у нижнего края значка.
-      if (d.fleet && d.ships) {
+      if (d.fleet) {
         ctx.save();
-        ctx.font = '700 ' + Math.max(8, csz * 1.5).toFixed(0) + 'px system-ui, sans-serif';
-        const txt = '⚓' + d.ships, bw = ctx.measureText(txt).width + csz * 0.9, bh = Math.max(7, csz * 2);
-        const bx = cX - bw / 2, by = cY + ER * 0.55;
-        ctx.fillStyle = 'rgba(10,20,32,0.88)';
-        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, bh / 2) : ctx.rect(bx, by, bw, bh); ctx.fill();
-        ctx.strokeStyle = 'rgba(120,200,235,0.85)'; ctx.lineWidth = Math.max(0.5, csz * 0.12); ctx.stroke();
-        ctx.fillStyle = 'rgba(210,235,255,0.98)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        // Состав виден только при разведке/срезах: иначе «??» вместо числа.
+        const known = d.intel !== false && d.ships != null;
+        const txt = '⚓' + (known ? d.ships : '?');
+        ctx.font = '700 ' + Math.max(8, csz * 1.45).toFixed(0) + 'px ui-monospace, "Consolas", monospace';
+        const bw = ctx.measureText(txt).width + csz * 1.0, bh = Math.max(7, csz * 1.9);
+        const bx = cX - bw / 2, by = cY + ER * 0.55, ch = bh * 0.32;   // ch — скос углов
+        // гранёный тег: прямоугольник со срезанными углами (без скруглений)
+        ctx.beginPath();
+        ctx.moveTo(bx + ch, by);
+        ctx.lineTo(bx + bw - ch, by);
+        ctx.lineTo(bx + bw, by + ch);
+        ctx.lineTo(bx + bw, by + bh - ch);
+        ctx.lineTo(bx + bw - ch, by + bh);
+        ctx.lineTo(bx + ch, by + bh);
+        ctx.lineTo(bx, by + bh - ch);
+        ctx.lineTo(bx, by + ch);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(10,20,32,0.9)'; ctx.fill();
+        ctx.strokeStyle = known ? 'rgba(120,200,235,0.9)' : 'rgba(150,165,180,0.8)';
+        ctx.lineWidth = Math.max(0.5, csz * 0.12); ctx.stroke();
+        ctx.fillStyle = known ? 'rgba(210,235,255,0.98)' : 'rgba(170,185,200,0.95)';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(txt, cX, by + bh / 2 + 0.5);
         ctx.restore();
       }
-      // Гиперпейсер: шкала корпуса НАД флагом (виден износ прямо на карте)
-      if (d.mza) {
+      // Чужой вскрытый гиперкрейсер — тревожный пульс-кольцо «обнаружен»
+      if (d.mza && d.enemy) {
+        const pr = ER * (1.4 + 0.25 * (0.5 + 0.5 * Math.sin((t || 0) * 4)));
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,90,70,0.9)'; ctx.lineWidth = Math.max(1, csz * 0.18);
+        ctx.beginPath(); ctx.arc(cX, cY - ER * 0.2, pr, 0, 6.2832); ctx.stroke();
+        ctx.restore();
+      }
+      // Гиперпейсер: шкала корпуса НАД флагом (виден износ прямо на карте) — только свой
+      if (d.mza && !d.enemy) {
         const bw = ER * 1.7, bh = Math.max(2, csz * 0.3), bx = cX - bw / 2, by = cY - ER * 2.15 - bh;
         const ip2 = Math.max(0, Math.min(100, +d.integrity || 0)) / 100;
         ctx.fillStyle = 'rgba(8,14,24,0.82)';
@@ -4849,13 +4904,15 @@ function gmmPaintDefense(ctx) {
         ctx.font = '600 11px system-ui, sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'top';
         ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 3;
-        ctx.fillStyle = d.mza ? 'rgba(255,210,200,0.98)' : (d.fleet ? 'rgba(205,232,255,0.98)' : 'rgba(222,236,255,0.96)');
-        const lbl = d.mza ? (d.canFire ? '☣ Гиперпейсер · залп' : '☣ Гиперпейсер')
-          : (d.fleet ? '⚓ Флот' : (d.canDeploy ? '🚀 носитель · развернуть' : '🚀 носитель'));
+        ctx.fillStyle = d.enemy ? 'rgba(255,180,170,0.98)' : (d.mza ? 'rgba(255,210,200,0.98)' : (d.fleet ? 'rgba(205,232,255,0.98)' : 'rgba(222,236,255,0.96)'));
+        const enemyTag = d.enemy && d.facName ? ` · ${d.facName}` : '';
+        const lbl = d.mza ? (d.enemy ? '☣ Чужой гиперкрейсер · обнаружен' + enemyTag : (d.canFire ? '☣ Гиперпейсер · залп' : '☣ Гиперпейсер'))
+          : (d.fleet ? (d.enemy ? '⚓ Чужой флот' + enemyTag : '⚓ Флот') : (d.canDeploy ? '🚀 носитель · развернуть' : '🚀 носитель'));
         ctx.fillText(lbl, cX, cY + ER * (d.fleet ? 2.95 : 1.5));
         ctx.restore();
       }
-      GMM.shipHit.push({ x: cX, y: cY - ER * 0.3, r: Math.max(16, ER * 2.1), id: d.id, mza: !!d.mza, fleet: !!d.fleet });
+      // в клик-зоны командования попадают только СВОИ юниты (чужие — только индикация)
+      if (!d.enemy) GMM.shipHit.push({ x: cX, y: cY - ER * 0.3, r: Math.max(16, ER * 2.1), id: d.id, mza: !!d.mza, fleet: !!d.fleet });
       return;
     }
     // в полёте: позиция по реальному времени (нет меток → середина)
