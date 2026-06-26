@@ -228,7 +228,7 @@ function adPaint() {
     // надёжнее (полный re-render #pg на Vercel почему-то не показывал панель).
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
-    const TABS = [['factions', '🛠 Фракции'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['planets', '🪐 Планеты'], ['market', '🏪 Рынок NPC']];
+    const TABS = [['factions', '🛠 Фракции'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['planets', '🪐 Планеты'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)']];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -237,6 +237,7 @@ function adPaint() {
     else if (AD.tab === 'portraits') tabContent = adPortraitsPanel();
     else if (AD.tab === 'planets')   tabContent = adPlanetTexPanel();
     else if (AD.tab === 'market')    tabContent = adMarketPanel();
+    else if (AD.tab === 'mktsim')    tabContent = adMarketSimPanel();
     else tabContent = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + stats;
     body = tabBar + `<div style="margin-top:14px">${tabContent}</div>`;
   } catch (e) {
@@ -2197,14 +2198,6 @@ function adTabTesting(e) {
     ${row('🏴‍☠️ Завершить рейды немедленно', 'Все активные рейды этой фракции (как атакующего и как цели) резолвятся сейчас: бой, добыча, потери, раскрытие.', `<button class="btn btn-gd" onclick="adTestSpeedRaids()">Завершить рейды</button>`)}
     ${row('🕵 Завершить шпионаж немедленно', 'Агенты мгновенно дообучаются, активные операции резолвятся сейчас.', `<button class="btn btn-gd" onclick="adTestSpeedSpy()">Завершить шпионаж</button>`)}
     ${row('⏩ Форсировать тик дохода', `Начислить доход за сутки немедленно (last_tick откатится на 25 ч). Последний доход: ${fmtT(lastTick)}.`, `<button class="btn btn-gd" onclick="adTestForceTick()" ${eco ? '' : 'disabled'}>Начислить доход</button>`)}
-    ${row('📈 Промотать биржу (симуляция курса)', 'Прогоняет официальный биржевой курс ВПЕРЁД прямо сейчас, не дожидаясь тика (раз в 3 ч): шаги по 3 часа двигают курсы трендами + учитывают настрой по новостям, опц. сутки прокручивают спот-рынок. Глобально (на весь сектор). Заодно резолвятся ликвидации/экспирации.',
-      `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-        <div style="display:flex;gap:6px;align-items:center">
-          <label class="fm-dim" style="font-size:11px">шагов×3ч</label><input id="ad-mkt-steps" type="number" min="1" max="60" value="4" class="ec-input" style="width:70px">
-          <label class="fm-dim" style="font-size:11px">суток</label><input id="ad-mkt-days" type="number" min="0" max="30" value="0" class="ec-input" style="width:64px">
-        </div>
-        <button class="btn btn-gd" onclick="adTestMarketAdvance()">Промотать биржу</button>
-      </div>`)}
     ${row('🜨 Приземлить залп артиллерии', 'Все снаряды «Длани Неотвратимости» этой фракции, что в полёте, мгновенно поражают цель: планета-цель превращается в мёртвый камень, колония на ней стирается.', `<button class="btn btn-gd" onclick="adTestSpeedDoom()">Приземлить залп</button>`)}
     ${row('🜨 Выдать орудие судного дня', 'Поставить готовую «Длань Неотвратимости» (целостность 100%) на первую колонию фракции со свободной ячейкой — без исследования и затрат. Заодно открывает технологию «Сама неотвратимость».', `<button class="btn btn-gd" onclick="adGrantDoomgun()">Выдать орудие</button>`)}
     ${row('☣ Выдать Гиперпейсер в конкретной системе', 'Спавнит готовый Гиперпейсер (мобильное орудие судного дня) сразу на карте — в выбранной системе. Без исследования и затрат; технология открывается заодно. Пусто = первая колония фракции.',
@@ -2228,16 +2221,146 @@ async function adTestSpeedDoom() {
   finally { AD.busy = false; }
 }
 
+// Мини-график (SVG-полилиния), масштаб по min/max ряда.
+function adSpark(vals, w, h, color) {
+  const a = (vals || []).map(Number).filter(Number.isFinite);
+  if (a.length < 2) return `<svg width="${w}" height="${h}" style="display:block"></svg>`;
+  const mn = Math.min(...a), mx = Math.max(...a), rng = (mx - mn) || 1;
+  const pts = a.map((v, i) => {
+    const x = (i / (a.length - 1)) * (w - 2) + 1;
+    const y = h - 1 - ((v - mn) / rng) * (h - 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const up = a[a.length - 1] >= a[0];
+  return `<svg width="${w}" height="${h}" style="display:block">
+    <polyline points="${pts}" fill="none" stroke="${color || (up ? '#5fc98a' : '#e0688a')}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+// ── Верхняя вкладка: Биржа (симуляция + объяснение, как работает) ───────────
+function adMarketSimPanel() {
+  const nf = v => (+v).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+  const sim = AD.marketSim;
+  const idxSeries = AD.marketSimIdx || [];
+  const hist = AD.marketSimHist || {};
+
+  // ── Объяснение механики (раскрывашка) ──
+  const explain = `<details open style="margin:0 0 14px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22)">
+    <summary style="cursor:pointer;padding:11px 14px;font-weight:600;color:var(--gdl,#5fb0e6)">❔ Как работает биржа — коротко</summary>
+    <div style="padding:0 16px 14px;font-size:13px;line-height:1.6;color:var(--t2,#c0ccd6)">
+      <p style="margin:6px 0"><b>Официальный курс</b> — это цена, по которой считаются ставки игроков (маржа/фьючерсы/опционы). Игроки <b>не могут двигать её</b> своими сделками — только сама галактика. Поэтому накрутить цену под свою ставку нельзя.</p>
+      <p style="margin:6px 0"><b>Движение:</b> курс шагает раз в <b>3 часа</b>. У каждого ресурса свой <b>тренд</b> (держится ~12 ч, потом может перекатиться), плюс лёгкий шум и возврат к базовой цене. Курс заперт в коридоре <b>×0.35…×2.80</b> от базы.</p>
+      <p style="margin:6px 0"><b>Настрой = реакции + реальные события.</b> (а) Реакции игроков на новости за сутки (👍 +8 / 👎 −8) — перевес негатива наклоняет тренды вниз, позитива вверх; менять реакцию нельзя. (б) <b>Реальные события «Хроники сектора»</b> за 6 ч двигают курс по смыслу: удар <b>Длани/МЗА</b> (планета стёрта → дефицит → ресурсы <b>вверх</b>), <b>тайные операции/конфликты</b> (нестабильность → вверх), <b>дефолт</b> по облигациям (вниз), появление/рост фракций и союзы (спрос). Разрушение/конфликт дают паре ресурсов <b>резкий скачок вверх</b>.</p>
+      <p style="margin:6px 0;color:var(--t3,#8aa0b0)">Игрок зарабатывает, угадав направление тренда и встав по нему с плечом. Дом берёт комиссию ≈0.5%, выплаты — из ограниченного резерва (печати денег нет).</p>
+    </div>
+  </details>`;
+
+  // ── График индекса по твоим прогонам ──
+  let idxChart = '';
+  if (idxSeries.length >= 2) {
+    const first = idxSeries[0], last = idxSeries[idxSeries.length - 1];
+    const pct = first ? (last / first - 1) * 100 : 0;
+    idxChart = `<div style="margin:0 0 14px;border:1px solid var(--w2,#2a3340);border-radius:10px;padding:12px 14px;background:var(--b2,#141a22)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-weight:600">📊 Индекс рынка <span class="fm-dim" style="font-weight:400;font-size:11px">— по твоим прогонам (${idxSeries.length} точек)</span></span>
+        <span>${nf(last)} <span style="color:${pct >= 0 ? 'var(--gd,#5fc98a)' : 'var(--err,#e0688a)'}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span></span>
+      </div>
+      ${adSpark(idxSeries, 600, 70)}
+    </div>`;
+  }
+
+  // ── Таблица результата последнего прогона + мини-графики по ресурсам ──
+  let resultBlock = `<div class="fm-dim" style="margin-top:4px;font-size:12px">Нажми «Промотать биржу» — появятся графики и таблица «было → стало» по каждому ресурсу.</div>`;
+  if (sim) {
+    const changes = sim.changes || [];
+    const idxB = +sim.index_before || 0, idxA = +sim.index_after || 0;
+    const idxPct = idxB ? (idxA / idxB - 1) * 100 : 0;
+    const t = sim.tick || {};
+    const rows = changes.map(c => {
+      const p = +c.pct || 0;
+      const col = p > 0 ? 'var(--gd,#5fc98a)' : p < 0 ? 'var(--err,#e0688a)' : 'var(--t3,#8aa0b0)';
+      const arr = p > 0 ? '▲' : p < 0 ? '▼' : '▬';
+      const series = hist[c.name] || [];
+      return `<tr style="border-top:1px solid var(--w2,#222c38)">
+        <td style="padding:4px 10px">${esc(c.name)}</td>
+        <td style="padding:4px 10px">${adSpark(series, 90, 24, col === 'var(--t3,#8aa0b0)' ? '#8aa0b0' : (p >= 0 ? '#5fc98a' : '#e0688a'))}</td>
+        <td style="padding:4px 10px;text-align:right;color:var(--t3,#8aa0b0)">${nf(c.before)}</td>
+        <td style="padding:4px 10px;text-align:right">→ <b>${nf(c.after)}</b> ГС</td>
+        <td style="padding:4px 10px;text-align:right;color:${col}"><b>${arr} ${p > 0 ? '+' : ''}${p}%</b></td>
+      </tr>`;
+    }).join('');
+    resultBlock = `<div style="margin-top:4px;border:1px solid var(--w2,#2a3340);border-radius:10px;overflow:hidden">
+      <div style="padding:9px 12px;background:rgba(95,176,230,.10);font-size:12px;display:flex;flex-wrap:wrap;gap:16px;align-items:center">
+        <span>Прогон: <b>${sim.steps} шаг(ов) ×3ч</b>${sim.days ? ` + <b>${sim.days} сут</b>` : ''}</span>
+        <span>Индекс: ${nf(idxB)} → <b>${nf(idxA)}</b> <span style="color:${idxPct >= 0 ? 'var(--gd,#5fc98a)' : 'var(--err,#e0688a)'}">${idxPct >= 0 ? '+' : ''}${idxPct.toFixed(1)}%</span></span>
+        <span>Настрой новостей: <b style="color:${(+t.mood || 0) > 0 ? 'var(--gd,#5fc98a)' : (+t.mood || 0) < 0 ? 'var(--err,#e0688a)' : 'var(--t2)'}">${t.mood ?? 0}</b></span>
+        ${(() => { const ev = t.events || {}; const parts = []; if (+ev.destr) parts.push(`☠ разрушения: ${ev.destr}`); if (+ev.confl) parts.push(`⚠ конфликты: ${ev.confl}`); if (+ev.fin) parts.push(`🏛 дефолты: ${ev.fin}`); if (+ev.growth) parts.push(`⬡ рост: ${ev.growth}`); return parts.length ? `<span class="fm-dim" style="font-size:11px">события 6ч → ${parts.join(' · ')}</span>` : '<span class="fm-dim" style="font-size:11px">событий в ленте за 6ч нет</span>'; })()}
+        ${t.shock ? '<span style="color:var(--gdl,#5fb0e6)">⚡ дефицитный шок от события</span>' : ''}
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="color:var(--t3,#8aa0b0);font-size:10px;text-transform:uppercase;letter-spacing:.04em">
+          <th style="text-align:left;padding:6px 10px">Ресурс</th>
+          <th style="text-align:left;padding:6px 10px">График</th>
+          <th style="text-align:right;padding:6px 10px">Было</th>
+          <th style="text-align:right;padding:6px 10px">Стало</th>
+          <th style="text-align:right;padding:6px 10px">Движение</th>
+        </tr></thead>
+        <tbody>${rows || `<tr><td colspan="5" style="padding:10px;text-align:center;color:var(--t3)">нет данных</td></tr>`}</tbody>
+      </table>
+    </div>`;
+  }
+
+  return `<div style="max-width:900px">
+    ${explain}
+    <div class="fm-danger-act" style="align-items:center;border:1px solid var(--w2,#2a3340);border-radius:10px;padding:12px 14px;margin-bottom:14px">
+      <div class="fm-danger-label"><div style="font-weight:600">⏩ Промотать рынок вперёд</div><div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400">Шаг = 3 часа курса. Сутки = прогон спот-рынка (NPC-сток). Глобально на весь сектор; заодно резолвятся ликвидации/экспирации.</div></div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <div style="display:flex;gap:6px;align-items:center">
+          <label class="fm-dim" style="font-size:11px">шагов×3ч</label><input id="ad-mkt-steps" type="number" min="1" max="60" value="4" class="ec-input" style="width:70px">
+          <label class="fm-dim" style="font-size:11px">суток</label><input id="ad-mkt-days" type="number" min="0" max="30" value="0" class="ec-input" style="width:64px">
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-gh btn-sm" onclick="adMarketSimReset()" title="Очистить графики">Сброс</button>
+          <button class="btn btn-gd" onclick="adMarketAdvance()">Промотать биржу</button>
+        </div>
+      </div>
+    </div>
+    ${idxChart}
+    ${resultBlock}
+  </div>`;
+}
+
+// Очистить накопленные графики симуляции
+function adMarketSimReset() {
+  AD.marketSim = null; AD.marketSimIdx = []; AD.marketSimHist = {};
+  adPaint();
+}
+
 // Промотать биржу: глобальный прогон курса (шаги по 3ч + опц. сутки спота).
-async function adTestMarketAdvance() {
+// Копим серии для графиков (индекс + по ресурсам), результат в AD.marketSim.
+async function adMarketAdvance() {
   if (AD.busy) return;
   const steps = Math.max(1, Math.min(60, parseInt(document.getElementById('ad-mkt-steps')?.value, 10) || 1));
   const days  = Math.max(0, Math.min(30, parseInt(document.getElementById('ad-mkt-days')?.value, 10) || 0));
   AD.busy = true;
   try {
     const r = await apiFetch('rpc/admin_test_market_advance', { method: 'POST', body: JSON.stringify({ p_steps: steps, p_days: days }) });
+    AD.marketSim = r;
+    // накопление серий для графиков
+    if (!AD.marketSimIdx) AD.marketSimIdx = [];
+    if (!AD.marketSimHist) AD.marketSimHist = {};
+    if (!AD.marketSimIdx.length && r.index_before != null) AD.marketSimIdx.push(+r.index_before);
+    if (r.index_after != null) AD.marketSimIdx.push(+r.index_after);
+    (r.changes || []).forEach(c => {
+      const h = AD.marketSimHist[c.name] || (AD.marketSimHist[c.name] = []);
+      if (!h.length && c.before != null) h.push(+c.before);
+      h.push(+c.after);
+      if (h.length > 40) h.shift();
+    });
+    if (AD.marketSimIdx.length > 40) AD.marketSimIdx = AD.marketSimIdx.slice(-40);
     const t = r?.tick || {};
-    toast(`Биржа промотана: ${r?.steps || 0} шаг(ов) ×3ч, ${r?.days || 0} сут · настрой новостей ${t.sentiment ?? 0}`, 'ok');
+    toast(`Биржа промотана: ${r?.steps || 0}×3ч${r?.days ? ` +${r.days}сут` : ''} · настрой ${t.mood ?? 0}${t.shock ? ' · ⚡шок' : ''}`, 'ok');
+    adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }

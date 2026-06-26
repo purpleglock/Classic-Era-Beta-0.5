@@ -73,43 +73,50 @@ returns numeric language sql stable as $$
   from public.market_resources
 $$;
 
--- ── _market_shock переопределён: те же сценарии, но безусловные UPDATE получают
---    WHERE true (иначе pg_safeupdate валит вызов внутри market_tick на шоке). ──
+-- ── _market_shock переопределён: ТОЛЬКО колебания СПОТ-стока (NPC «Рынка»), БЕЗ
+--    выдуманных новостей. Раньше он постил фейковые «война/месторождение/бум» в
+--    ленту — это сбивало с толку (события ненастоящие). Реальные события сектора
+--    теперь двигают ОФИЦИАЛЬНЫЙ курс через _market_news_pulse (см. ниже). ──
 create or replace function public._market_shock()
 returns void language plpgsql security definer set search_path=public as $$
-declare kind int; tgt text; v_title text; v_body text; v_color text;
 begin
-  kind := floor(random()*4)::int;
-  if kind = 0 then
-    update public.market_resources set stock = greatest(1, stock * (0.55 + random()*0.15))
-      where name in ('Железо','Титан','Медь','Платина','Изотопы','Дейтерий');
-    v_title := '⚔ Военный спрос вздул цены на металлы';
-    v_body  := 'Эскалация в секторе: верфи и арсеналы скупают железо, титан и платину. Котировки металлов резко пошли вверх.';
-    v_color := 'rgba(224,104,138,0.55)';
-  elsif kind = 1 then
-    select name into tgt from public.market_resources
-      where name in (select name from public.resource_rarity where rarity in ('rare','epic','legendary'))
-      order by random() limit 1;
-    if tgt is null then return; end if;
-    update public.market_resources set stock = stock * (1.6 + random()*0.8) where name = tgt;
-    v_title := '⛏ Открыто богатое месторождение: ' || tgt;
-    v_body  := format('Разведчики наткнулись на крупную залежь — рынок «%s» захлестнуло предложением, цена просела.', tgt);
-    v_color := 'rgba(95,201,138,0.55)';
-  elsif kind = 2 then
-    update public.market_resources set stock = greatest(1, stock * (0.82 + random()*0.10)) where true;
-    v_title := '📈 Торговый бум в секторе';
-    v_body  := 'Оживление караванных путей подняло спрос по всей номенклатуре — цены подросли широким фронтом.';
-    v_color := 'rgba(201,162,39,0.55)';
-  else
-    update public.market_resources set stock = stock * (1.12 + random()*0.12) where true;
-    v_title := '📉 Спад спроса накрыл рынки';
-    v_body  := 'Снижение деловой активности оставило склады переполненными — котировки поползли вниз по всему рынку.';
-    v_color := 'rgba(120,150,190,0.55)';
-  end if;
+  case floor(random()*4)::int
+    when 0 then update public.market_resources set stock = greatest(1, stock * (0.55 + random()*0.15))
+                  where name in ('Железо','Титан','Медь','Платина','Изотопы','Дейтерий');
+    when 1 then update public.market_resources set stock = greatest(1, stock * (0.82 + random()*0.10)) where true;
+    else        update public.market_resources set stock = stock * (1.12 + random()*0.12) where true;
+  end case;
   update public.market_resources
      set price = public._market_price_calc(base_price, stock, equilibrium), updated_at = now()
    where true;
-  begin perform public._post_life_news(v_title, v_body, v_color, '[]'::jsonb); exception when others then null; end;
+end$$;
+
+-- ── РЕАЛЬНЫЕ СОБЫТИЯ ЛЕНТЫ → РЫНОК. Сканируем «Хронику сектора» (faction_news,
+--    kind='bulletin') за последние 6 ч и классифицируем по смыслу:
+--      • РАЗРУШЕНИЕ (удар Длани/МЗА, планета стёрта) → дефицит ресурсов → ВВЕРХ;
+--      • КОНФЛИКТ/ТАЙНЫЕ ОПЕРАЦИИ (слухи, шпионаж, саботаж, рейд) → нестабильность → ВВЕРХ;
+--      • ДЕФОЛТ по облигациям → финансовый стресс → ВНИЗ;
+--      • РОСТ (новая держава/фракция, союз, вассал, обращение, достижение) → спрос → мягко ВВЕРХ.
+--    Возвращает наклон рынка (bias, ограничен _ex_sent_max) + флаг дефицита (scarcity)
+--    для резкого шока + счётчики для админ-панели. Никаких новых новостей НЕ постит.
+create or replace function public._market_news_pulse()
+returns jsonb language plpgsql stable security definer set search_path=public as $$
+declare destr int; confl int; fin int; growth int; bias numeric;
+begin
+  select
+    count(*) filter (where title ~* 'уничтож|ст[её]рт|м[её]ртв|залп по системе|длан|гиперпейс|неотврат'),
+    count(*) filter (where title ~* 'слух|шпион|саботаж|диверс|рейд|нападен|захват|война|вторжен|переворот'),
+    count(*) filter (where title ~* 'дефолт'),
+    count(*) filter (where title ~* 'союз|вассал|обращен|достижен|держав|фракци|колониз|расшир|нов(ая|ый) ')
+    into destr, confl, fin, growth
+  from public.faction_news
+  where kind = 'bulletin' and created_at > now() - interval '6 hours';
+  destr := coalesce(destr,0); confl := coalesce(confl,0); fin := coalesce(fin,0); growth := coalesce(growth,0);
+  bias := (destr*1.0 + confl*0.6 + growth*0.25 - fin*1.0) * 0.004;
+  return jsonb_build_object(
+    'bias',     greatest(-public._ex_sent_max(), least(public._ex_sent_max(), bias)),
+    'scarcity', (destr + confl) > 0,
+    'destr', destr, 'confl', confl, 'fin', fin, 'growth', growth);
 end$$;
 
 -- ════════════════════════════════════════════════════════════════════════════
@@ -120,7 +127,7 @@ end$$;
 create or replace function public.market_tick()
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare st public.market_state; d int; i int; shocked boolean := false; rsteps int; permin int;
-        v_sent numeric := 0; v_sentbias numeric := 0;
+        v_sent numeric := 0; v_mood numeric := 0; v_react numeric := 0; v_pulse jsonb := '{}'::jsonb;
 begin
   begin perform public.bonds_settle();          exception when others then null; end;
   begin perform public.exchange_session_sync(); exception when others then null; end;
@@ -142,32 +149,41 @@ begin
   rsteps := floor(extract(epoch from (now() - coalesce(st.ref_tick, st.last_tick))) / (permin * 60));
   if rsteps >= 1 then
     rsteps := least(rsteps, 60);
-    -- НАСТРОЙ РЫНКА ОТ НОВОСТЕЙ: суммарная позиция реакций игроков за сутки
-    -- (approve +8 / disapprove −8). Больше негатива → рынок проседает, больше
-    -- позитива → растёт. Вклад ограничен _ex_sent_max (НЕ доминирует над трендом).
+    -- НАСТРОЙ СЕКТОРА = РЕАКЦИИ ИГРОКОВ + РЕАЛЬНЫЕ СОБЫТИЯ ЛЕНТЫ. Он НАПРАВЛЯЕТ
+    -- новые тренды (волной), а НЕ плюсуется плоско каждый шаг. (а) реакции на
+    -- новости за сутки (👍+8/👎−8); (б) реальные события «Хроники» за 6 ч (удар
+    -- Длани/МЗА, тайные операции, дефолты, рост фракций) через _market_news_pulse.
     begin
       select coalesce(sum(weight),0) into v_sent
         from public.news_reactions where created_at > now() - interval '24 hours';
     exception when others then v_sent := 0; end;
-    v_sentbias := greatest(-public._ex_sent_max(), least(public._ex_sent_max(), v_sent / 8.0 * 0.0008));
+    v_react := v_sent / 8.0 * 0.001;
+    begin v_pulse := public._market_news_pulse(); exception when others then v_pulse := '{}'::jsonb; end;
+    v_mood := greatest(-public._ex_sent_max(), least(public._ex_sent_max(),
+                v_react + coalesce((v_pulse->>'bias')::numeric, 0)));
     for i in 1..rsteps loop
+      -- тренд держится с шансом keep; при перекате новый тренд = случайный ± с
+      -- наклоном к настрою сектора (негатив тянет вниз, позитив — вверх)
       update public.market_resources
          set ref_drift = case when random() < public._ex_ref_keep()
                               then ref_drift
-                              else (random()-0.5)*2*public._ex_ref_vol() end
+                              else (random()-0.5)*2*public._ex_ref_vol() + v_mood end
        where true;                                            -- pg_safeupdate требует WHERE
       update public.market_resources
          set ref_price = round( (greatest(base_price * public._ex_ref_lo(),
                            least(base_price * public._ex_ref_hi(),
-               coalesce(ref_price, base_price) * (1 + ref_drift + v_sentbias + (random()-0.5)*0.012)
+               coalesce(ref_price, base_price) * (1 + ref_drift + (random()-0.5)*0.012)
                + (base_price - coalesce(ref_price, base_price)) * public._ex_ref_revert()
              )))::numeric, 4)         -- ::numeric: random() делает выражение double, а round(double,int) в PG нет
        where true;
     end loop;
-    -- иногда шок-новость → сильный тренд паре ресурсов (виден в «Хронике сектора»)
-    if random() < least(0.5, 0.06 * rsteps) then
+    -- ДЕФИЦИТНЫЙ ШОК ОТ РЕАЛЬНОГО СОБЫТИЯ: если в ленте было разрушение (удар
+    -- Длани/МЗА) или конфликт/тайные операции — паре ресурсов резкий тренд ВВЕРХ
+    -- (дефицит/нестабильность). Не выдумка — реакция на то, что реально произошло.
+    if coalesce((v_pulse->>'scarcity')::boolean, false) then
+      shocked := true;
       update public.market_resources
-         set ref_drift = (random()-0.5)*4*public._ex_ref_vol()
+         set ref_drift = (0.4 + random()*0.6) * 4 * public._ex_ref_vol()   -- строго ВВЕРХ
        where name in (select name from public.market_resources order by random() limit 3);
     end if;
     update public.market_index set value = public._market_index_value(), updated_at = now() where id = 1;
@@ -187,7 +203,7 @@ begin
 
   -- ════ СУТОЧНЫЙ ТИК: спот-сток (двигает живую цену «Рынка») раз в игровые сутки ═
   d := floor(extract(epoch from (now() - st.last_tick)) / 86400.0);
-  if d < 1 then return jsonb_build_object('ok', true, 'days', 0, 'ref_steps', rsteps, 'sentiment', round(v_sentbias,4)); end if;
+  if d < 1 then return jsonb_build_object('ok', true, 'days', 0, 'ref_steps', rsteps, 'shock', shocked, 'mood', round(v_mood,4), 'events', v_pulse); end if;
   d := least(d, 30);
   for i in 1..d loop
     update public.market_resources
@@ -216,7 +232,7 @@ begin
     exception when others then null; end;
   end if;
   update public.market_state set last_tick = last_tick + (d || ' days')::interval where id = 1;
-  return jsonb_build_object('ok', true, 'days', d, 'ref_steps', rsteps, 'shock', shocked, 'sentiment', round(v_sentbias,4));
+  return jsonb_build_object('ok', true, 'days', d, 'ref_steps', rsteps, 'shock', shocked, 'mood', round(v_mood,4), 'events', v_pulse);
 end$$;
 
 -- ════════════════════════════════════════════════════════════════════════════
@@ -409,6 +425,43 @@ do $$ begin
 end $$;
 
 -- ════════════════════════════════════════════════════════════════════════════
+--  НОВОСТИ → РЫНОК: реакция на новость теперь ОДНОРАЗОВА. Игрок больше не может
+--  менять мнение туда-сюда и накручивать настрой сектора (а через него — курсы).
+--  Переопределяет news_react из _diplomacy_relations.sql (fair_casino применять
+--  ПОСЛЕ него). Первая реакция фиксирует балл отношений + настрой; повтор → отказ.
+-- ════════════════════════════════════════════════════════════════════════════
+create or replace function public.news_react(p_news_id uuid, p_stance text)
+returns int language plpgsql security definer set search_path=public as $$
+declare v_fid text; v_owner uuid; v_to text; v_new int; v_score int;
+begin
+  perform public.assert_not_banned();
+  select faction_id, owner_id into v_fid, v_owner
+    from public.faction_applications
+    where owner_id = auth.uid() and status = 'approved'
+    order by updated_at desc limit 1;
+  if v_fid is null then raise exception 'no approved faction'; end if;
+  select faction_id into v_to from public.faction_news where id = p_news_id;
+  if v_to is null then raise exception 'news not found'; end if;
+  if v_to = v_fid then raise exception 'cannot react to own faction news'; end if;
+  -- ОДНОРАЗОВО: уже реагировал на эту новость → отказ (анти-накрутка настроя рынка)
+  if exists (select 1 from public.news_reactions where news_id = p_news_id and reactor_fid = v_fid) then
+    raise exception 'мнение об этой новости уже выражено — изменить нельзя';
+  end if;
+  v_new := case p_stance when 'approve' then 8 when 'neutral' then 0 when 'disapprove' then -8 else null end;
+  if v_new is null then raise exception 'bad stance'; end if;
+  insert into public.news_reactions (news_id, reactor_fid, reactor_owner, stance, weight)
+    values (p_news_id, v_fid, v_owner, p_stance, v_new);
+  insert into public.faction_relations (from_fid, to_fid, score, updated_at)
+    values (v_fid, v_to, greatest(-100, least(100, v_new)), now())
+    on conflict (from_fid, to_fid)
+    do update set score = greatest(-100, least(100, public.faction_relations.score + v_new)), updated_at = now();
+  select score into v_score from public.faction_relations where from_fid = v_fid and to_fid = v_to;
+  return v_score;
+end$$;
+revoke all on function public.news_react(uuid, text) from public;
+grant execute on function public.news_react(uuid, text) to authenticated;
+
+-- ════════════════════════════════════════════════════════════════════════════
 --  АДМИН-СИМУЛЯЦИЯ: ручной «пропуск хода» рынка для тестов (вкладка «🧪 Тест»).
 --  Отматывает таймеры назад и зовёт живой market_tick → курс шагает СРАЗУ,
 --  не дожидаясь 3-часового тика. Только стафф. (Стиль _admin_testing.sql.)
@@ -417,19 +470,33 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 create or replace function public.admin_test_market_advance(p_steps int, p_days int default 0)
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare n int; dd int; per int; res jsonb;
+declare n int; dd int; per int; res jsonb; before_j jsonb; idx_before numeric; changes jsonb;
 begin
   if public.current_user_role() not in ('superadmin','editor') then raise exception 'forbidden: staff only'; end if;
   n   := greatest(0, least(60, coalesce(p_steps,1)));
   dd  := greatest(0, least(30, coalesce(p_days,0)));
   per := public._ex_ref_period_min();
+  -- снимок курсов ДО
+  select jsonb_object_agg(name, ref_price) into before_j from public.market_resources;
+  select value into idx_before from public.market_index where id = 1;
   insert into public.market_state(id, last_tick, ref_tick) values (1, now(), now()) on conflict (id) do nothing;
   update public.market_state
      set ref_tick  = coalesce(ref_tick, last_tick) - ((n * per) || ' minutes')::interval,
          last_tick = last_tick - (dd || ' days')::interval
    where id = 1;
   res := public.market_tick();
-  return jsonb_build_object('ok', true, 'steps', n, 'days', dd, 'tick', res);
+  -- что на что поменялось (сортировка по величине движения)
+  select jsonb_agg(jsonb_build_object(
+           'name', name,
+           'before', round(coalesce((before_j->>name)::numeric, ref_price), 4),
+           'after',  ref_price,
+           'pct', round( ((ref_price / nullif((before_j->>name)::numeric,0)) - 1) * 100, 2))
+         order by abs((ref_price / nullif((before_j->>name)::numeric,0)) - 1) desc)
+    into changes
+    from public.market_resources;
+  return jsonb_build_object('ok', true, 'steps', n, 'days', dd,
+    'index_before', idx_before, 'index_after', (select value from public.market_index where id = 1),
+    'changes', coalesce(changes, '[]'::jsonb), 'tick', res);
 end$$;
 revoke all on function public.admin_test_market_advance(int,int) from public;
 grant execute on function public.admin_test_market_advance(int,int) to authenticated;
@@ -451,7 +518,9 @@ grant execute on function public.market_buy_resource(text,numeric)           to 
 --  pg_safeupdate (session-preload в Supabase) требует WHERE → ставим where true.
 -- ════════════════════════════════════════════════════════════════════════════
 update public.market_resources
-   set ref_price = base_price, ref_drift = 0, price = base_price, stock = equilibrium, updated_at = now()
+   set ref_price = base_price,
+       ref_drift = (random()-0.5) * 2 * public._ex_ref_vol(),   -- стартовый тренд случаен (±), а не 0 → курсы сразу в движении
+       price = base_price, stock = equilibrium, updated_at = now()
    where true;
 insert into public.market_state(id, last_tick, ref_tick) values (1, now(), now())
   on conflict (id) do update set last_tick = now(), ref_tick = now();

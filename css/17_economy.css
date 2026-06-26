@@ -735,9 +735,12 @@
 }
 .ec-mk-npc { font-size: 11.5px; color: var(--t3, var(--t4)); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
 .ec-mk-fc { font-style: normal; color: var(--t4); }
-.ec-mk-act { display: inline-flex; gap: 6px; align-items: center; margin-left: auto; }
+.ec-mk-act { display: inline-flex; gap: 6px; align-items: center; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .ec-mk-q { width: 96px; }
 .ec-mk-act .btn-sm { padding: 4px 12px; }
+.ec-mk-quick { display: inline-flex; gap: 4px; align-items: center; }
+.ec-mk-qbtn { padding: 3px 7px !important; font-size: 11px; line-height: 1.1; opacity: .85; }
+.ec-mk-qbtn:hover { opacity: 1; }
 .ec-mk-rowpv { flex: 1 1 100%; font-size: 11.5px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .ec-mk-rowpv:empty { display: none; }
 .ec-mk-pvi i { color: var(--t4); font-style: normal; }

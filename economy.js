@@ -4533,6 +4533,12 @@ function ecMarketBlock(stock) {
         <span class="ec-mk-npc">${netTxt}
           <i class="ec-mk-fc" title="прогноз цены к началу следующего цикла — ориентир, сместят сделки игроков и шоки">🔮 след. цикл: <b style="color:${fcl}">${fdir} ~${ecNum(Math.round(fc.price))}</b> ${fpct >= 0 ? '+' : ''}${fpct}%</i></span>
         <span class="ec-mk-act">
+          <span class="ec-mk-quick">
+            <button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQAdd('${esc(n)}',${i},100)" title="+100 к количеству">+100</button>
+            <button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQAdd('${esc(n)}',${i},1000)" title="+1000 к количеству">+1к</button>
+            ${mine > 0 ? `<button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQSet('${esc(n)}',${i},${mine})" title="весь ваш склад — для быстрой продажи">склад ${ecNum(mine)}</button>` : ''}
+            <button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQSet('${esc(n)}',${i},0)" title="сбросить">×</button>
+          </span>
           <input type="number" id="ec-mk-q-${i}" min="1" placeholder="кол-во" class="ec-prod-qty ec-mk-q" oninput="ecRowPrev('${esc(n)}',${i})">
           <button class="btn btn-gd btn-sm" onclick="ecRowTrade('${esc(n)}','buy',${i})">Купить</button>
           <button class="btn btn-gh btn-sm" onclick="ecRowTrade('${esc(n)}','sell',${i})">Продать</button>
@@ -4916,7 +4922,7 @@ function ecExRules(d) {
       </div>
       <div style="line-height:1.65;font-size:13px;color:var(--t2)">
         <p style="margin:0 0 7px">📊 <b>Сделки считаются по официальному биржевому курсу</b>, который <b>Биржевой совет</b> пересчитывает <b>раз в 3 часа</b> — не ваши сделки. Поэтому скупить или обвалить ресурс, чтобы качнуть цену под свою ставку, <b>невозможно в принципе</b>: курс живёт отдельно от рынка.</p>
-        <p style="margin:0 0 7px">📈 <b>Курс трендит и реагирует на новости</b> — его двигает галактика: дефицит/профицит ресурсов, события-шоки, и <b>настрой по новостям</b> (много негативных реакций игроков → рынок проседает, позитивных → растёт). Навык = прочитать тренд или новость и поймать движение с плечом.</p>
+        <p style="margin:0 0 7px">📈 <b>Курс трендит и реагирует на реальные события сектора</b> — удар Длани/МЗА (планета стёрта → дефицит → цены вверх), тайные операции и конфликты (нестабильность → вверх), дефолты по облигациям (вниз), рост фракций и союзы (спрос). Плюс <b>настрой по новостям</b>: много 👎-реакций игроков → рынок проседает, 👍 → растёт. Навык = прочитать ленту и поймать движение с плечом.</p>
         <p style="margin:0 0 7px">💸 <b>Палата берёт небольшую комиссию</b> на входе (≈0.5%) — позиция стартует с лёгкого минуса, как разница покупки/продажи на настоящей бирже. Так палата держится в плюсе, а не печатает кредиты.</p>
         <p style="margin:0">🏦 <b>Выигрыши палата платит из своего резерва</b>, а он наполняется проигрышами и комиссиями. Палата <b>не печатает кредиты из воздуха</b> — сколько внесено, столько и можно выплатить, не больше.</p>
       </div>
@@ -8112,6 +8118,17 @@ function ecRowTrade(name, act, i) {
   } else {
     ecRpcAct('market_sell_resource', { p_name: name, p_units: units }, `Продано: ${esc(name)} ×${ecNum(units)}`);
   }
+}
+// Быстрый ввод количества: +100/+1к прибавляют к полю, «склад» ставит весь остаток.
+function ecRowQAdd(name, i, d) {
+  const el = ecId('ec-mk-q-' + i); if (!el) return;
+  el.value = Math.max(0, (parseInt(el.value) || 0) + d);
+  ecRowPrev(name, i);
+}
+function ecRowQSet(name, i, v) {
+  const el = ecId('ec-mk-q-' + i); if (!el) return;
+  el.value = Math.max(0, Math.round(v)) || '';
+  ecRowPrev(name, i);
 }
 // Живой предпросмотр строки: почём пройдёт сделка и как сдвинет цену (зеркало сервера)
 function ecRowPrev(name, i) {

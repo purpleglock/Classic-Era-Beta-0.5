@@ -134,7 +134,8 @@
       "PowerShell($p = Start-Process -FilePath \"cmd.exe\" -ArgumentList '/c','\"Загрузка артов.bat\"' -WorkingDirectory \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\" -PassThru -WindowStyle Hidden; Start-Sleep 2; try { \\(Invoke-WebRequest -Uri \"http://localhost:8787/ping\" -UseBasicParsing -TimeoutSec 3\\).Content } catch { \"PING FAILED: $_\" }; Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue)",
       "Bash(python3 -)",
       "Bash(cd \"/c/Users/Андрей/Desktop/Classic-Era-Beta-0.5\" && grep -n \"function economy_produce\\\\|resources\\\\|bill\\\\|jsonb_each\\\\|spend\\\\|deduct\\\\|UPDATE faction_economy\" _unit_resources.sql | head -50)",
-      "Bash(node -c admin.js)"
+      "Bash(node -c admin.js)",
+      "Bash(grep -rhnoE \"'[^']{0,50}\\(УНИЧТОЖ|ГИПЕРПЕЙ|стёрт|мёртв|залп|ЗАЛП|СЛУХИ|Дефолт|союз|Вассал|Обращение|Достижение|держав|фракци|колониз|расшир\\)[^']{0,40}'\" _mza.sql _faction_reg.sql _faction_system.sql _capital_location.sql _interstellar_artillery.sql)"
     ]
   }
 }
