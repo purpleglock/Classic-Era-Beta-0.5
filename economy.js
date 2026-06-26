@@ -3644,18 +3644,51 @@ function ecFleetSectionHtml() {
       <div class="ec-cap">Укажите, сколько кораблей каждого типа забрать, выберите систему с колонией и сформируйте флот. Он появится на <b>галактической карте</b> значком ⚓ <b>слева от звезды</b> — оттуда перебрасывайте его по гиперпутям, возвращайте на базу или распускайте. Роспуск возвращает корабли в состав.</div>` : ''}`;
 
   const fleetRows = fleets.map(fl => {
+    if (EC.fleetEdit === fl.id) return ecFleetEditorHtml(fl);
     const comp = (fl.composition || []).map(c => `${esc(c.unit_name || '?')} ×${ecNum(c.qty)}`).join(', ');
-    const right = fl.status === 'transit'
-      ? ecProgressISO(fl.depart_at, fl.arrive_at, 1, 'прибывает')
-      : `<button class="ec-bld-del" title="Распустить флот — корабли вернутся в состав" onclick="ecFleetDisband('${fl.id}')">✕</button>`;
+    const fuelHint = fl.status === 'transit' ? '' : ecFleetFuelHint(fl.composition);
+    let right;
+    if (fl.status === 'transit') {
+      right = ecProgressISO(fl.depart_at, fl.arrive_at, 1, 'прибывает');
+    } else {
+      const editBtn = fl.editable
+        ? `<button class="ec-bld-del" style="color:var(--te)" title="Редактировать состав (нужна стоянка у своей верфи)" onclick="ecFleetEditOpen('${fl.id}')">✎</button>`
+        : '';
+      right = `${editBtn}<button class="ec-bld-del" title="Распустить флот — корабли вернутся в состав" onclick="ecFleetDisband('${fl.id}')">✕</button>`;
+    }
     const where = fl.status === 'transit' ? `→ ${esc(ecSysName(fl.dest_sys))}` : `в системе ${esc(ecSysName(fl.system_id))}`;
-    return `<div class="ec-q-row"><span class="ec-r-name">⚓ Флот${fl.name ? ' «' + esc(fl.name) + '»' : ''} <span class="ec-hint">${comp || '—'} · ${where}</span></span>${right}</div>`;
+    return `<div class="ec-q-row"><span class="ec-r-name">⚓ Флот${fl.name ? ' «' + esc(fl.name) + '»' : ''} <span class="ec-hint">${comp || '—'} · ${where}${fuelHint ? ' · ⛽ ' + fuelHint + '/прыжок' : ''}</span></span>${right}</div>`;
   }).join('');
 
   return `<div class="ec-section-title">⚓ Сформировать флот <span class="ec-hint">— из кораблей состава; управление на карте</span></div>
     ${formBlock}
     ${fleets.length ? `<div class="ec-sub-title" style="margin-top:10px">Мои флоты · ${fleets.length}</div>${fleetRows}` : ''}`;
 }
+
+// ── Топливо перелёта (зеркало _fleet_ops.sql: _fleet_fuel_for) ──
+// Класс корабля → топливо и расход на 1 корабль за 1 прыжок. Лёгкие жгут
+// Гелий-3, средние — Дейтерий, тяжёлые — Старвис. Неизвестный класс ≈ фрегат.
+const EC_FLEET_FUEL = {
+  corvette:   { res: 'Гелий-3',  per: 1 }, frigate:    { res: 'Гелий-3',  per: 2 },
+  destroyer:  { res: 'Дейтерий', per: 2 }, cruiser:    { res: 'Дейтерий', per: 3 },
+  battleship: { res: 'Старвис',  per: 2 }, dreadnought:{ res: 'Старвис',  per: 4 },
+};
+const EC_FLEET_FUEL_DEF = { res: 'Гелий-3', per: 2 };
+// Карта {ресурс: количество} на ОДИН прыжок для данного состава.
+function ecFleetFuelPerJump(comp) {
+  const out = {};
+  (comp || []).forEach(c => {
+    const qty = Math.max(0, c.qty || 0); if (!qty) return;
+    const f = EC_FLEET_FUEL[c.cls] || EC_FLEET_FUEL_DEF;
+    out[f.res] = (out[f.res] || 0) + f.per * qty;
+  });
+  return out;
+}
+// «Дейтерий 12, Гелий-3 4» — компактная подпись расхода.
+function ecFleetFuelFmt(map) {
+  return Object.keys(map || {}).filter(k => map[k] > 0).map(k => `${k} ${ecNum(map[k])}`).join(', ');
+}
+function ecFleetFuelHint(comp) { return ecFleetFuelFmt(ecFleetFuelPerJump(comp)); }
 
 // Сформировать флот из выбранных кораблей в системе своей колонии.
 async function ecFleetForm() {
@@ -3682,6 +3715,108 @@ async function ecFleetDisband(id) {
   try {
     const r = await ecRpc('fleet_disband', { p_id: id });
     toast('Флот распущен · +' + ecNum((r && r.returned) || 0) + ' кор. в состав', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+
+// ── Редактирование флота (зеркало _fleet_ops.sql: fleet_edit) ──
+// Доступно только когда флот стоит у своей верфи (fl.editable). Игрок ставит
+// итоговое число каждого корабля; разница списывается из состава или
+// возвращается в него. EC.fleetEdit — id редактируемого флота, EC.fleetEditDelta
+// — карта unit_id → дельта (положительная = добрать из состава, отрицательная =
+// вернуть в состав).
+function ecFleetEditOpen(id) {
+  EC.fleetEdit = id;
+  EC.fleetEditDelta = {};
+  const fl = (EC.fleets || []).find(f => f.id === id);
+  EC.fleetEditName = (fl && fl.name) || '';
+  ecPaintCabinet();
+}
+function ecFleetEditClose() {
+  EC.fleetEdit = null; EC.fleetEditDelta = {}; EC.fleetEditName = '';
+  ecPaintCabinet();
+}
+// Свободные корабли состава по unit_id (не занятые во флотах — сервер их уже снял).
+function ecRosterShipsByUid() {
+  const m = {};
+  (EC.roster || []).filter(r => r.category === 'ship' && r.unit_id).forEach(r => {
+    if (!m[r.unit_id]) m[r.unit_id] = { unit_id: r.unit_id, name: r.unit_name, qty: 0 };
+    m[r.unit_id].qty += r.qty || 0;
+  });
+  return m;
+}
+function ecFleetEditAdjust(uid, delta) {
+  const fl = (EC.fleets || []).find(f => f.id === EC.fleetEdit); if (!fl) return;
+  const comp = (fl.composition || []).find(c => c.unit_id === uid);
+  const inFleet = comp ? (comp.qty || 0) : 0;
+  const avail = (ecRosterShipsByUid()[uid] || {}).qty || 0;
+  let d = (EC.fleetEditDelta[uid] || 0) + delta;
+  d = Math.max(-inFleet, Math.min(avail, d));   // не ниже 0 в составе флота, не выше запаса
+  EC.fleetEditDelta[uid] = d;
+  const cont = ecId('ec-fleet-editor'); if (cont) cont.innerHTML = ecFleetEditorInner(fl);
+}
+// Внутренность редактора (без обёртки) — чтобы перерисовывать только её.
+function ecFleetEditorInner(fl) {
+  EC.fleetEditDelta = EC.fleetEditDelta || {};
+  const comp = fl.composition || [];
+  const roster = ecRosterShipsByUid();
+  // объединяем юниты во флоте и свободные в составе
+  const rows = {};
+  comp.forEach(c => { rows[c.unit_id] = { unit_id: c.unit_id, name: c.unit_name, cls: c.cls, inFleet: c.qty || 0, avail: 0 }; });
+  Object.values(roster).forEach(s => {
+    if (!rows[s.unit_id]) rows[s.unit_id] = { unit_id: s.unit_id, name: s.name, cls: null, inFleet: 0, avail: 0 };
+    rows[s.unit_id].avail = s.qty;
+  });
+  const list = Object.values(rows).sort((a, b) => (b.inFleet + b.avail) - (a.inFleet + a.avail)).map(r => {
+    const d = EC.fleetEditDelta[r.unit_id] || 0;
+    const fin = r.inFleet + d;
+    const canMinus = fin > 0, canPlus = d < r.avail;
+    const dTxt = d > 0 ? ` <span style="color:var(--te)">+${ecNum(d)}</span>` : d < 0 ? ` <span style="color:var(--rd,#d66)">${ecNum(d)}</span>` : '';
+    return `<div class="ec-q-row">
+        <span class="ec-r-name">🚀 ${esc(r.name || '?')} <span class="ec-hint">в составе ×${ecNum(r.avail)}${dTxt}</span></span>
+        <span style="display:flex;align-items:center;gap:6px">
+          <button class="ec-mine-btn" ${canMinus ? '' : 'disabled'} onclick="ecFleetEditAdjust('${esc(r.unit_id)}',-1)">−</button>
+          <b style="min-width:26px;text-align:center">${ecNum(fin)}</b>
+          <button class="ec-mine-btn" ${canPlus ? '' : 'disabled'} title="${canPlus ? '' : 'нет свободных в составе'}" onclick="ecFleetEditAdjust('${esc(r.unit_id)}',1)">+</button>
+        </span>
+      </div>`;
+  }).join('');
+  // прогноз состава после правок → топливо/прыжок
+  const projComp = Object.values(rows).map(r => ({ cls: r.cls, qty: r.inFleet + (EC.fleetEditDelta[r.unit_id] || 0) })).filter(c => c.qty > 0);
+  const total = projComp.reduce((a, c) => a + c.qty, 0);
+  const fuel = ecFleetFuelHint(projComp);
+  return `<div class="ec-prod-form" style="margin-bottom:8px">
+      <input type="text" id="ec-fleet-edit-name" class="ec-prod-qty" style="width:200px" maxlength="40" placeholder="имя флота" value="${esc(EC.fleetEditName || '')}">
+    </div>
+    ${list || '<div class="ec-empty" style="padding:6px">Нет кораблей.</div>'}
+    <div class="ec-cap">Итог: <b>${ecNum(total)}</b> кор.${fuel ? ` · ⛽ ${fuel}/прыжок` : ''}. Добор «+» снимает корабли из состава, «−» возвращает их в состав. Сохраняйте у своей верфи.</div>
+    <div class="ec-prod-form" style="gap:6px;margin-top:8px">
+      <button class="btn btn-gd btn-sm" ${total > 0 ? '' : 'disabled'} onclick="ecFleetEditApply('${fl.id}')">💾 Сохранить</button>
+      <button class="btn btn-gh btn-sm" onclick="ecFleetEditClose()">Отмена</button>
+    </div>`;
+}
+function ecFleetEditorHtml(fl) {
+  return `<div class="ec-q-row" style="flex-direction:column;align-items:stretch;background:rgba(120,200,235,0.06);border:1px solid rgba(120,200,235,0.25);border-radius:8px;padding:10px">
+      <div class="ec-sub-title" style="margin:0 0 6px">✎ Правка флота${fl.name ? ' «' + esc(fl.name) + '»' : ''} <span class="ec-hint">· в системе ${esc(ecSysName(fl.system_id))}</span></div>
+      <div id="ec-fleet-editor">${ecFleetEditorInner(fl)}</div>
+    </div>`;
+}
+async function ecFleetEditApply(id) {
+  if (EC.busy) return;
+  const add = [], remove = [];
+  Object.keys(EC.fleetEditDelta || {}).forEach(uid => {
+    const d = EC.fleetEditDelta[uid] || 0;
+    if (d > 0) add.push({ unit_id: uid, qty: d });
+    else if (d < 0) remove.push({ unit_id: uid, qty: -d });
+  });
+  const nm = (ecId('ec-fleet-edit-name')?.value || '').trim();
+  if (!add.length && !remove.length && nm === (EC.fleetEditName || '')) { ecFleetEditClose(); return; }
+  EC.busy = true;
+  try {
+    const r = await ecRpc('fleet_edit', { p_id: id, p_add: add, p_remove: remove, p_name: nm });
+    toast('⚓ Флот обновлён · ' + ecNum((r && r.ships) || 0) + ' кор.', 'ok');
+    EC.fleetEdit = null; EC.fleetEditDelta = {}; EC.fleetEditName = '';
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }

@@ -1643,6 +1643,49 @@ async function gmMzaCmdScrap() {
 //  ФЛОТ — управление прямо на карте (значок ⚓ слева от звезды)
 //  Та же плашка #gm-opcmd: перебросить (вся карта) / вернуть на базу / распустить.
 // ════════════════════════════════════════════════════════════
+// ── Топливо перелёта (зеркало _fleet_ops.sql) ──
+const GM_FLEET_FUEL = {
+  corvette:   { res: 'Гелий-3',  per: 1 }, frigate:    { res: 'Гелий-3',  per: 2 },
+  destroyer:  { res: 'Дейтерий', per: 2 }, cruiser:    { res: 'Дейтерий', per: 3 },
+  battleship: { res: 'Старвис',  per: 2 }, dreadnought:{ res: 'Старвис',  per: 4 },
+};
+const GM_FLEET_FUEL_DEF = { res: 'Гелий-3', per: 2 };
+// Число гиперпрыжков between системами: BFS по GM.lanes; если путь недостижим —
+// оценка по дистанции / средней длине рукава (зеркало _fleet_jumps).
+function gmFleetJumps(from, to) {
+  if (!from || !to || from === to) return 0;
+  const adj = {};
+  (GM.lanes || []).forEach(l => { (adj[l.a_id] = adj[l.a_id] || []).push(l.b_id); (adj[l.b_id] = adj[l.b_id] || []).push(l.a_id); });
+  const q = [from], dist = { [from]: 0 };
+  while (q.length) {
+    const c = q.shift();
+    if (c === to) return dist[c];
+    (adj[c] || []).forEach(nb => { if (dist[nb] === undefined) { dist[nb] = dist[c] + 1; q.push(nb); } });
+  }
+  // недостижимо по трассам → оценка по дистанции
+  const sa = (GM.systems || []).find(s => s.id === from), sb = (GM.systems || []).find(s => s.id === to);
+  if (!sa || !sb || !GM.lanes || !GM.lanes.length) return 1;
+  let sum = 0, n = 0;
+  GM.lanes.forEach(l => {
+    const a = (GM.systems || []).find(s => s.id === l.a_id), b = (GM.systems || []).find(s => s.id === l.b_id);
+    if (a && b) { sum += Math.hypot(b.x - a.x, b.y - a.y); n++; }
+  });
+  const avg = n ? sum / n : 0;
+  return avg ? Math.max(1, Math.ceil(Math.hypot(sb.x - sa.x, sb.y - sa.y) / avg)) : 1;
+}
+// Карта {ресурс: количество} на N прыжков для состава.
+function gmFleetFuelCost(comp, jumps) {
+  const out = {}; const j = Math.max(1, jumps || 1);
+  (comp || []).forEach(c => {
+    const qty = Math.max(0, c.qty || 0); if (!qty) return;
+    const f = GM_FLEET_FUEL[c.cls] || GM_FLEET_FUEL_DEF;
+    out[f.res] = (out[f.res] || 0) + f.per * qty * j;
+  });
+  return out;
+}
+function gmFleetFuelFmt(map) {
+  return Object.keys(map || {}).filter(k => map[k] > 0).map(k => `${k} ${Math.round(map[k])}`).join(', ');
+}
 function gmOpenFleetCmd(id) {
   const fl = (GM.fleets || []).find(x => x.id === id && x.status === 'idle');
   if (!fl) return;
@@ -1652,11 +1695,13 @@ function gmOpenFleetCmd(id) {
   const el = document.getElementById('gm-opcmd'); if (!el) return;
   const sysName = (GM.systems.find(s => s.id === fl.system_id) || {}).name || fl.system_id;
   const comp = (fl.composition || []).map(c => `${esc(c.unit_name || '?')} ×${c.qty}`).join(', ');
+  const fuel = gmFleetFuelFmt(gmFleetFuelCost(fl.composition, 1));
   el.innerHTML = `<div class="gm-opcmd-card">
       <button class="gm-close" onclick="gmCloseFleetCmd()">✕</button>
       <div class="gm-opcmd-title">⚓ Флот${fl.name ? ' «' + esc(fl.name) + '»' : ''}</div>
       <div class="gm-opcmd-sub">в системе ${esc(sysName)} · ${+fl.ships || 0} кор.</div>
       ${comp ? `<div class="gm-opcmd-hint">${comp}</div>` : ''}
+      ${fuel ? `<div class="gm-opcmd-hint">⛽ ${esc(fuel)} / прыжок</div>` : ''}
       <button class="gm-opcmd-btn" onclick="gmFleetCmdSend()">➤ Перебросить — выберите систему</button>
       ${fl.can_recall ? `<button class="gm-opcmd-btn" onclick="gmFleetCmdRecall()">⚓ Вернуть на базу</button>` : ''}
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetCmdDisband()">✕ Распустить флот</button>
@@ -1677,11 +1722,36 @@ function gmFleetCmdSend() {
       <button class="gm-opcmd-btn" onclick="gmCloseFleetCmd()">Отмена</button>
     </div>`;
 }
+// Выбрана система-цель → показываем стоимость (прыжки + топливо) и просим подтвердить.
+function gmFleetConfirmSend(id, destSys) {
+  const fl = (GM.fleets || []).find(x => x.id === id);
+  if (!fl) { gmCloseFleetCmd(); return; }
+  GMM.fleetCmd = { id, mode: 'confirm' };
+  const sysName = (GM.systems.find(s => s.id === destSys) || {}).name || destSys;
+  const jumps = gmFleetJumps(fl.system_id, destSys);
+  const fuel = gmFleetFuelFmt(gmFleetFuelCost(fl.composition, jumps));
+  const el = document.getElementById('gm-opcmd');
+  if (el) el.innerHTML = `<div class="gm-opcmd-card">
+      <button class="gm-close" onclick="gmCloseFleetCmd()">✕</button>
+      <div class="gm-opcmd-title">➤ Перебросить в ${esc(sysName)}?</div>
+      <div class="gm-opcmd-sub">${jumps} ${gmPlural(jumps, 'прыжок', 'прыжка', 'прыжков')}</div>
+      <div class="gm-opcmd-hint">⛽ Топливо: ${fuel ? esc(fuel) : '—'}</div>
+      <button class="gm-opcmd-btn" onclick="gmFleetSendTo('${id}','${destSys}')">✓ Перебросить</button>
+      <button class="gm-opcmd-btn" onclick="gmCloseFleetCmd()">Отмена</button>
+    </div>`;
+}
+function gmPlural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
+}
 async function gmFleetSendTo(id, destSys) {
   if (GM._defBusy) return; GM._defBusy = true;
   try {
     const r = await gmDefRpc('fleet_send', { p_id: id, p_dest_sys: destSys });
-    toast('⚓ Флот в пути · долёт ~' + ((r && r.fly_h) || '?') + ' ч', 'ok');
+    const fuel = gmFleetFuelFmt((r && r.fuel) || {});
+    toast('⚓ Флот в пути · долёт ~' + ((r && r.fly_h) || '?') + ' ч' + (fuel ? ' · ⛽ ' + fuel : ''), 'ok');
     gmCloseFleetCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); gmCloseFleetCmd(); }
@@ -1692,7 +1762,8 @@ async function gmFleetCmdRecall() {
   if (GM._defBusy) return; GM._defBusy = true;
   try {
     const r = await gmDefRpc('fleet_recall', { p_id: id });
-    toast('⚓ Флот возвращается на базу · долёт ~' + ((r && r.fly_h) || '?') + ' ч', 'ok');
+    const fuel = gmFleetFuelFmt((r && r.fuel) || {});
+    toast('⚓ Флот возвращается на базу · долёт ~' + ((r && r.fly_h) || '?') + ' ч' + (fuel ? ' · ⛽ ' + fuel : ''), 'ok');
     gmCloseFleetCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
@@ -2562,7 +2633,7 @@ function gmmTapAt(lx, ly) {
   // 0в) РЕЖИМ ПРИЦЕЛИВАНИЯ флота: клик по системе = перебросить туда, по пустоте = отмена.
   if (GMM.fleetCmd && GMM.fleetCmd.mode === 'target') {
     const tgt = sysAtScreen();
-    if (tgt) gmFleetSendTo(GMM.fleetCmd.id, tgt.id);
+    if (tgt) gmFleetConfirmSend(GMM.fleetCmd.id, tgt.id);
     else { gmCloseFleetCmd(); toast('Переброска отменена', ''); }
     return;
   }
@@ -4556,34 +4627,62 @@ function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
   ctx.restore();
   flagPath(); ctx.lineWidth = Math.max(0.6, sz * 0.1); ctx.strokeStyle = `rgba(${lr},${lg},${lb},0.9)`; ctx.stroke();
 
-  // ── КОРАБЛИК СПЕРЕДИ (поверх флага), нос ВНИЗ, КОМПАКТНЫЙ (меньше звезды) ──
+  // ── СИЛУЭТ СПЕРЕДИ (поверх флага), нос ВНИЗ, КОМПАКТНЫЙ (меньше звезды) ──
+  // Флот — не один корпус, а КЛИН из 3 кораблей (флагман + 2 эскорта): сразу
+  // читается «соединение», а не одиночный носитель/орудие.
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = sz * 0.4; ctx.shadowOffsetY = sz * 0.1;
-  const top = -sz * 0.5, L = sz * 1.6, halfW = sz * 0.58;
-  // крылья-лезвия
-  ctx.fillStyle = `rgba(${hr0},${hg0},${hb0},0.92)`;
-  ctx.beginPath(); ctx.moveTo(sz * 0.3, top); ctx.lineTo(halfW * 1.6, top + L * 0.26); ctx.lineTo(halfW, top + L * 0.48); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(-sz * 0.3, top); ctx.lineTo(-halfW * 1.6, top + L * 0.26); ctx.lineTo(-halfW, top + L * 0.48); ctx.closePath(); ctx.fill();
-  ctx.shadowColor = 'transparent';
-  // корпус (нос вниз)
-  const gd = ctx.createLinearGradient(0, top, 0, top + L);
-  gd.addColorStop(0, `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},0.98)`);
-  gd.addColorStop(1, `rgba(${hd(hr0)},${hd(hg0)},${hd(hb0)},0.98)`);
-  ctx.fillStyle = gd;
-  ctx.beginPath();
-  ctx.moveTo(0, top + L);
-  ctx.lineTo(halfW, top + L * 0.36);
-  ctx.lineTo(sz * 0.32, top);
-  ctx.lineTo(-sz * 0.32, top);
-  ctx.lineTo(-halfW, top + L * 0.36);
-  ctx.closePath(); ctx.fill();
-  ctx.lineWidth = Math.max(0.5, sz * 0.09); ctx.strokeStyle = `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},0.95)`; ctx.stroke();
-  // реактор у кормы (у орудия пульсирует, ярче когда заряжен)
-  const flare = mza ? (o.hot ? 0.5 + 0.5 * Math.sin((o.t || 0) * 5) : 0.4) : 0.55;
-  const eg = ctx.createRadialGradient(0, top, 0, 0, top, sz * 0.7);
-  eg.addColorStop(0, mza ? `rgba(255,150,90,${flare})` : `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},${flare})`);
-  eg.addColorStop(1, `rgba(${hr0},${hg0},${hb0},0)`);
-  ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(0, top, sz * 0.7, 0, 6.2832); ctx.fill();
+  if (o.type === 'fleet') {
+    // УГЛОВАТЫЙ значок соединения: жёсткий клин-шеврон (нос вниз) с парой эскортов
+    // по бокам. Никаких скруглений/глоу-пятен — только острые грани под общий
+    // гранёный стиль интерфейса. Шеврон рисуется ломаной с резкими углами.
+    const chevron = (ox, oy, s, fill) => {
+      const t = oy - s * 0.5, len = s * 1.5, hw = s * 0.55, notch = s * 0.30;
+      ctx.beginPath();
+      ctx.moveTo(ox, t + len);              // нос вниз
+      ctx.lineTo(ox + hw, t + notch);       // правое крыло
+      ctx.lineTo(ox + hw * 0.5, t);         // правый срез
+      ctx.lineTo(ox, t + len * 0.30);       // вырез кормы
+      ctx.lineTo(ox - hw * 0.5, t);         // левый срез
+      ctx.lineTo(ox - hw, t + notch);       // левое крыло
+      ctx.closePath();
+      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+      ctx.lineWidth = Math.max(0.5, s * 0.12);
+      ctx.strokeStyle = `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},0.98)`; ctx.stroke();
+    };
+    const flagFill = `rgba(${hd(hr0)},${hd(hg0)},${hd(hb0)},0.95)`;
+    const leadFill = `rgba(${hr0},${hg0},${hb0},0.98)`;
+    chevron(-sz * 0.78, sz * 0.42, sz * 0.60, flagFill);   // левый эскорт (позади)
+    chevron(sz * 0.78, sz * 0.42, sz * 0.60, flagFill);    // правый эскорт (позади)
+    ctx.shadowColor = 'transparent';
+    chevron(0, -sz * 0.12, sz * 1.0, leadFill);            // флагман (впереди, крупнее)
+  } else {
+    const top = -sz * 0.5, L = sz * 1.6, halfW = sz * 0.58;
+    // крылья-лезвия
+    ctx.fillStyle = `rgba(${hr0},${hg0},${hb0},0.92)`;
+    ctx.beginPath(); ctx.moveTo(sz * 0.3, top); ctx.lineTo(halfW * 1.6, top + L * 0.26); ctx.lineTo(halfW, top + L * 0.48); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-sz * 0.3, top); ctx.lineTo(-halfW * 1.6, top + L * 0.26); ctx.lineTo(-halfW, top + L * 0.48); ctx.closePath(); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    // корпус (нос вниз)
+    const gd = ctx.createLinearGradient(0, top, 0, top + L);
+    gd.addColorStop(0, `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},0.98)`);
+    gd.addColorStop(1, `rgba(${hd(hr0)},${hd(hg0)},${hd(hb0)},0.98)`);
+    ctx.fillStyle = gd;
+    ctx.beginPath();
+    ctx.moveTo(0, top + L);
+    ctx.lineTo(halfW, top + L * 0.36);
+    ctx.lineTo(sz * 0.32, top);
+    ctx.lineTo(-sz * 0.32, top);
+    ctx.lineTo(-halfW, top + L * 0.36);
+    ctx.closePath(); ctx.fill();
+    ctx.lineWidth = Math.max(0.5, sz * 0.09); ctx.strokeStyle = `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},0.95)`; ctx.stroke();
+    // реактор у кормы (у орудия пульсирует, ярче когда заряжен)
+    const flare = mza ? (o.hot ? 0.5 + 0.5 * Math.sin((o.t || 0) * 5) : 0.4) : 0.55;
+    const eg = ctx.createRadialGradient(0, top, 0, 0, top, sz * 0.7);
+    eg.addColorStop(0, mza ? `rgba(255,150,90,${flare})` : `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},${flare})`);
+    eg.addColorStop(1, `rgba(${hr0},${hg0},${hb0},0)`);
+    ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(0, top, sz * 0.7, 0, 6.2832); ctx.fill();
+  }
   ctx.restore();
 
   // выделение — пунктирное кольцо вокруг всего значка
