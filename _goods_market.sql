@@ -1,27 +1,24 @@
 -- ============================================================
--- ТОВАРЫ НА РЫНКЕ/БИРЖЕ
---   Регистрирует продукт «Товары» (с Фабрики товаров) как позицию
---   галактического рынка market_resources → появляется на вкладке «Рынок»
---   (ручная купля/продажа по живой цене) и на «Бирже» (спот + деривативы).
+-- ТОВАРЫ НА РЫНКЕ/БИРЖЕ — ОТМЕНЕНО (см. _goods_off_exchange.sql)
 --
--- ПРИМЕНЯТЬ ПОСЛЕ: _market_setup.sql и _goods_factory.sql. Идемпотентно.
+-- РАНЬШЕ этот срез регистрировал «Товары» позицией market_resources, чтобы они
+-- торговались на «Рынке» и «Бирже». Это оказалось ЭКСПЛОЙТОМ: товары — благо,
+-- которое игрок чеканит фабрикой почти бесплатно и без потолка, поэтому их выход
+-- на общий рынок дал (1) спот-кран ГС и (2) доение пула дома через деривативы
+-- (игрок сам двигает цену своего выпуска → ползёт mark → выигрыш против пула).
 --
--- ⚠ Рынок/биржа ОБЩИЕ для всех держав → позиция называется «Товары» (единый
---   коммодити). Бренд игрока («своё название») — это витрина в его кабинете;
---   отдельные ИМЕННЫЕ листинги каждой державы на общей бирже = отдельная фича.
+-- РЕШЕНИЕ: товары НЕ торгуются на бирже. Их экономика — только кабинет:
+--   • провизия населения (economy_accrue, _goods_factory.sql);
+--   • бренд-биржа goods_buy (P2P, игрок↔игрок — _goods_brand_market.sql).
+-- И провизия, и бренд читают faction_economy.resources, а НЕ market_resources.
+--
+-- Файл оставлен идемпотентным НА УДАЛЕНИЕ: если его прогонят повторно, он просто
+-- ещё раз снесёт «Товары» с рынка, а не вернёт их. Полный гейт (отказ
+-- _market_ensure по «Товарам») — в _goods_off_exchange.sql.
 -- ============================================================
 
-insert into public.market_resources (name, base_price, price, stock, equilibrium, npc_supply, npc_demand)
-values ('Товары', 14, 14, 4000, 4000, 120, 120)
-on conflict (name) do update
-  set base_price = excluded.base_price,
-      equilibrium = excluded.equilibrium;
-
--- Пересчёт цены по текущему запасу (если функция рынка уже есть).
-update public.market_resources
-  set price = public._market_price_calc(base_price, stock, equilibrium),
-      updated_at = now()
-  where name = 'Товары';
+delete from public.market_price_history where name = 'Товары';
+delete from public.market_resources     where name = 'Товары';
 
 -- Проверка:
--- select name, base_price, price, stock from public.market_resources where name='Товары';
+-- select * from public.market_resources where name = 'Товары';   -- ожидаем 0 строк

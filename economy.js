@@ -4497,7 +4497,9 @@ function ecMarketBlock(stock) {
   const names = Object.keys(mk).sort((a, b) => (mk[b].price || 0) - (mk[a].price || 0));
   if (!names.length) {
     return `<div class="ec-dip-card"><div class="ec-dip-t">🏪 Галактический рынок</div>
-      <div class="ec-empty" style="padding:8px">Рынок ещё не инициализирован. Примените <b>_market_setup.sql</b> в Supabase.</div></div>`;
+      <div class="ec-empty" style="padding:8px">⚙ Галактический рынок ещё открывается — котировки появятся, как только заработают торги.
+        <details style="margin-top:7px;opacity:.55"><summary style="cursor:pointer">для администратора</summary>
+          Примените <code>_market_setup.sql</code> и обновите страницу.</details></div></div>`;
   }
   const rows = names.map((n, i) => {
     const m = mk[n], rar = ecResRarity(n);
@@ -4730,16 +4732,15 @@ const EC_EX_CLOSED = {};
 function ecTabExchange() {
   let sub = EC.exSub || 'corps';
   if (EC_EX_CLOSED[sub]) sub = 'corps';   // не залипаем на закрытой вкладке
-  const subTabs = [['corps', '🏢', 'Организации'], ['orders', '📋', 'Заказы'], ['index', '📊', 'Индекс'],
+  const subTabs = [['corps', '🏢', 'Организации'], ['orders', '📋', 'Заказы'],
     ['margin', '📈', 'Маржа'], ['futures', '📅', 'Фьючерсы'], ['options', '🎲', 'Опционы'], ['bonds', '🏛', 'Облигации']];
   const subNav = `<div class="ec-tabs" style="margin:4px 0 12px">${subTabs.map(([id, ic, l]) =>
     EC_EX_CLOSED[id]
       ? `<button class="ec-tab" disabled title="На реконструкции" style="opacity:.45;cursor:not-allowed"><span class="ec-tab-ic">🔒</span><span class="ec-tab-l">${l}</span></button>`
       : `<button class="ec-tab${sub === id ? ' on' : ''}" onclick="ecSetExSub('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`
   ).join('')}</div>`;
-  const closedBanner = `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;margin:0 0 12px;border:1px solid #2f6b46;border-radius:8px;background:rgba(95,201,138,.10);color:#9fe0b6;font-size:13px;line-height:1.5">🛡 <span><b>Биржа перебалансирована.</b> Деривативы рассчитываются по <b>усреднённой mark-цене</b> (спотовая накачка больше не двигает расчёт), выплаты идут из <b>ограниченного пула дома</b> (казино не печатает деньги), плечо снижено до <b>×2</b>, ставка ограничена. Сверхприбыль закрыта.</span></div>`;
+  const closedBanner = `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;margin:0 0 12px;border:1px solid #2f6b46;border-radius:8px;background:rgba(95,201,138,.10);color:#9fe0b6;font-size:13px;line-height:1.5">🛡 <span><b>Честные торги.</b> Деривативы считаются по <b>официальному биржевому курсу</b>, который <b>Биржевой совет</b> пересчитывает <b>раз в 3 часа</b> — <b>ваши сделки на курс не влияют</b>, накрутить цену под свою ставку нельзя. <b>Палата</b> берёт небольшую <b>комиссию</b> с каждой ставки, а выигрыши выплачивает из <b>своего резерва</b> (он наполняется проигрышами и комиссиями, кредиты из воздуха не печатаются), плечо до <b>×2</b>.</span></div>`;
   const body = sub === 'orders' ? ecExOrdersBlock()
-    : sub === 'index' ? ecExIndexBlock()
     : sub === 'margin' ? ecExMarginBlock()
     : sub === 'futures' ? ecExFuturesBlock()
     : sub === 'options' ? ecExOptionsBlock()
@@ -4749,7 +4750,7 @@ function ecTabExchange() {
   const sesTag = ses.open
     ? `<b style="color:#5fc98a">● торги открыты</b> до ${ses.close_hour}:00 UTC`
     : `<b style="color:#e0688a">● торги закрыты</b> · открытие в ${ses.open_hour}:00 UTC`;
-  return `${ecIntro('📊', 'Биржа', `Финансовые инструменты, привязанные к реальной экономике галактики. ${sesTag}.`, ['<b>Организации</b> — объедините реальные постройки; вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%). Доли продаются другим фракциям.', '<b>Секторный спрос</b> — доход и котировки крутит сама галактика: дефицит сырья поднимает рудники, очередь кораблей — верфи, торговые пути — хабы (множитель 0.25×…3.0×).', '<b>Индекс</b> — корзина цен ресурсов (ETF). <b>Облигации</b> — займ под купон. Сделки с долями — только при <b>открытых торгах</b>; на закрытии фиксинг и дивиденды.', '<b>Маржа</b> — лонг/шорт с плечом до ×2 (ликвидация при просадке залога). <b>Фьючерсы</b> — срочные контракты с расчётом по экспирации. <b>Опционы</b> — колл/пут за премию. Расчёт идёт по усреднённой <b>mark-цене</b>, выплаты — из ограниченного пула дома. Спот-торговля ресурсами — во вкладке «Торговля → Рынок».', '<b>Заказы</b> — разместите госзаказ на закупку ресурса (деньги блокируются в <b>эскроу</b>); заказ объявляется в ленте сектора, и любая фракция выполняет его из своих запасов — полностью или частями. Гарантированная оплата из эскроу.'])}${subNav}${closedBanner}${body}`;
+  return `${ecIntro('📊', 'Биржа', `Финансовые инструменты, привязанные к реальной экономике галактики. ${sesTag}.`, ['<b>Организации</b> — объедините реальные постройки; вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%). Доли продаются другим фракциям.', '<b>Спрос отраслей</b> — доход и котировки двигает сама галактика: дефицит сырья поднимает рудники, очередь кораблей — верфи, торговые пути — хабы (множитель 0.25×…3.0×).', '<b>Облигации</b> — займ под купон. Сделки с долями — только при <b>открытых торгах</b>; на закрытии фиксинг и дивиденды.', '<b>Маржа</b> — лонг/шорт с плечом до ×2 (ликвидация при просадке залога). <b>Фьючерсы</b> — срочные контракты с расчётом по экспирации. <b>Опционы</b> — колл/пут за премию. Расчёт идёт по <b>официальному курсу</b> (его пересчитывает Биржевой совет раз в 3 часа, а не ваши сделки; курс двигают дефициты ресурсов и события-новости) с <b>комиссией палаты</b>; выигрыши — из резерва палаты. Спот-торговля ресурсами — во вкладке «Торговля → Рынок».', '<b>Заказы</b> — разместите госзаказ на закупку ресурса (деньги блокируются в <b>эскроу</b>); заказ объявляется в ленте сектора, и любая фракция выполняет его из своих запасов — полностью или частями. Гарантированная оплата из эскроу.'])}${subNav}${closedBanner}${body}`;
 }
 
 // Карточка индекса рынка / ETF: значение, тренд, спарклайн, моя позиция, формы.
@@ -4764,9 +4765,10 @@ function ecExIndexBlock() {
     : val < base * 0.995 ? `<span style="color:#e0688a">▼</span>`
       : `<span style="color:var(--t4)">▬</span>`;
   const spark = ecSparkline(idx.spark, up ? '#5fc98a' : '#e0688a', 220, 56);
+  const spread = +ex.spread || 0.005;    // комиссия дома по индексу (доля на сторону)
   const units = +hold.units || 0, basis = +hold.basis || 0;
-  const posVal = units * val;            // текущая стоимость позиции
-  const pl = posVal - basis;             // нереализованный P/L
+  const posVal = units * val * (1 - spread);  // во что реально продастся (за вычетом комиссии)
+  const pl = posVal - basis;             // нереализованный P/L (как если продать сейчас)
   const plPct = basis > 0 ? Math.round(pl / basis * 100) : 0;
   const plCol = pl >= 0 ? 'var(--gd)' : 'var(--err)';
   const gc = (EC.eco && EC.eco.gc) || 0;
@@ -4776,10 +4778,11 @@ function ecExIndexBlock() {
         <span class="ec-r-name" style="flex:1 1 100%">Моя позиция</span>
         <span>Паёв: <b>${units.toFixed(3)}</b></span>
         <span>Вложено: <b>${ecNum(Math.round(basis))} ГС</b></span>
-        <span>Сейчас: <b>${ecNum(Math.round(posVal))} ГС</b></span>
+        <span title="за вычетом комиссии дома ${(spread * 100).toFixed(1)}%">Продастся за: <b>${ecNum(Math.round(posVal))} ГС</b></span>
         <span>Прибыль: <b style="color:${plCol}">${pl >= 0 ? '+' : ''}${ecNum(Math.round(pl))} ГС (${plPct >= 0 ? '+' : ''}${plPct}%)</b></span>
-      </div>`
-    : `<div class="cn-fac-hint" style="margin-top:8px">Позиции нет. Купите паи на ГС — они подорожают, если рынок в целом вырастет.</div>`;
+      </div>
+      <div class="cn-fac-hint" style="margin-top:4px">Старт с минуса — это комиссия дома (${(spread * 100).toFixed(1)}% на сторону). Курс обновляется <b>каждые ~10 минут</b>: позиция уйдёт в плюс, когда индекс подрастёт выше комиссии.</div>`
+    : `<div class="cn-fac-hint" style="margin-top:8px">Позиции нет. Купите паи на ГС — они подорожают, если корзина курсов вырастет. Учтите комиссию дома ${(spread * 100).toFixed(1)}% и то, что индекс пересчитывается каждые ~10 минут.</div>`;
 
   const form = `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px;margin-top:8px">
       <input type="number" id="ec-ix-gc" min="1" placeholder="вложить ГС" class="ec-prod-qty">
@@ -4788,10 +4791,10 @@ function ecExIndexBlock() {
       <button class="btn btn-gh btn-sm" onclick="ecIndexSell()">Продать</button>
       ${units > 0.0001 ? `<button class="btn btn-gh btn-sm" onclick="ecIndexSellAll()" title="Продать всю позицию">Всё</button>` : ''}
     </div>
-    <div class="cn-fac-hint" style="margin-top:5px">1 пай = текущее значение индекса (${ecNum(Math.round(val))} ГС). В казне: ${ecNum(Math.round(gc))} ГС.</div>`;
+    <div class="cn-fac-hint" style="margin-top:5px">1 пай ≈ значение индекса (${ecNum(Math.round(val))} ГС), покупка/продажа с комиссией ${(spread * 100).toFixed(1)}%. В казне: ${ecNum(Math.round(gc))} ГС.</div>`;
 
   return `<div class="ec-dip-card">
-    <div class="ec-dip-t">📊 Индекс рынка <span class="ec-hint">— корзина живых цен всех ресурсов, база = 1000</span></div>
+    <div class="ec-dip-t">📊 Индекс рынка <span class="ec-hint">— корзина официальных курсов ресурсов (база = 1000) · обновляется каждые ~10 минут</span></div>
     <div class="ec-q-row" style="align-items:center;gap:14px">
       <span style="font-size:26px;font-weight:700">${trend} ${ecNum(Math.round(val))}</span>
       <span style="color:${up ? '#5fc98a' : '#e0688a'}">${dpct >= 0 ? '+' : ''}${dpct}% к базе</span>
@@ -4803,10 +4806,14 @@ function ecExIndexBlock() {
 }
 
 // ── Общая карточка «инструмент недоступен» (RPC не ответил → SQL не применён) ──
+// Игроку — внутриигровой текст; техническая подсказка скрыта под спойлером для админа.
 function ecDerivNA(title, file) {
   return `<div class="ec-dip-card ec-corp-warn">
-    <div class="ec-dip-t">${title} — недоступно</div>
-    <div class="cn-fac-hint">Сервер не вернул данные. Примените <b>${file}</b> в Supabase → SQL Editor, затем выполните <code>notify pgrst, 'reload schema';</code> и обновите страницу.</div>
+    <div class="ec-dip-t">${title} — зал на профилактике</div>
+    <div class="cn-fac-hint">⚙ Этот зал биржи временно закрыт на техническое обслуживание. Биржевой совет уже работает над возобновлением торгов — загляните чуть позже.
+      <details style="margin-top:7px;opacity:.55"><summary style="cursor:pointer">для администратора</summary>
+        <span style="word-break:break-word">Примените <code>${file}</code>, затем <code>notify pgrst, 'reload schema';</code> и обновите страницу.</span></details>
+    </div>
   </div>`;
 }
 // Бейдж стороны позиции
@@ -4818,6 +4825,13 @@ function ecSideBadge(side) {
 const ecPlCol = v => (+v >= 0 ? 'var(--gd)' : 'var(--err)');
 const ecSign  = v => (+v >= 0 ? '+' : '');
 const ecDays  = iso => { const ms = new Date(iso) - Date.now(); return ms <= 0 ? 0 : Math.ceil(ms / 86400000); };
+// Официальный биржевой курс ресурса (на нём считаются деривативы): последняя
+// точка истории market_price_history = ref_price; фолбэк — спотовая цена статуса.
+function ecRefPx(r) {
+  const sp = (EC.market && EC.market[r.name] && EC.market[r.name].spark) || [];
+  const last = sp.length ? +sp[sp.length - 1] : NaN;
+  return Number.isFinite(last) && last > 0 ? last : (+r.price || 0);
+}
 
 // ── Доска котировок: живая цена + %Δ к базе + мини-график по ресурсам.
 //    Спарклайны берутся из market_price_history (EC.market[name].spark, грузится
@@ -4826,9 +4840,9 @@ const ecDays  = iso => { const ms = new Date(iso) - Date.now(); return ms <= 0 ?
 function ecDerivPriceBoard(resources, limit) {
   const mk = EC.market || {};
   const list = (resources || []).map(r => {
-    const px = +r.price || 0, base = +r.base || 0;
+    const px = ecRefPx(r), base = +r.base || 0;   // официальный курс, не спот
     return { name: r.name, px, base, dpct: base > 0 ? (px / base - 1) * 100 : 0 };
-  }).sort((a, b) => Math.abs(b.dpct) - Math.abs(a.dpct)).slice(0, limit || 12);
+  }).sort((a, b) => Math.abs(b.dpct) - Math.abs(a.dpct)).slice(0, limit || 999);
   if (!list.length) return '';
   const rows = list.map(r => {
     const up = r.px >= r.base, d = Math.round(r.dpct);
@@ -4842,7 +4856,7 @@ function ecDerivPriceBoard(resources, limit) {
       </div>`;
   }).join('');
   return `<div class="ec-dip-card">
-      <div class="ec-dip-t">📉 Котировки <span class="ec-hint">— живая цена и динамика (крупнейшие движения сверху); на этом вы и зарабатываете</span></div>
+      <div class="ec-dip-t">📉 Котировки <span class="ec-hint">— официальный курс всех ресурсов и динамика (крупнейшие движения сверху, обновление раз в 3 часа); на этом вы и зарабатываете</span></div>
       ${rows}
     </div>`;
 }
@@ -4901,8 +4915,10 @@ function ecExRules(d) {
         ${house ? chip('🏦', 'Резерв палаты', `${ecNum(Math.round(house))} ГС`) : ''}
       </div>
       <div style="line-height:1.65;font-size:13px;color:var(--t2)">
-        <p style="margin:0 0 7px">📊 <b>Сделки считаются по биржевому курсу</b> — усреднённой цене ресурса за последние сутки, а не по сиюминутной. Поэтому скупить или обвалить ресурс на рынке, чтобы качнуть цену под свою ставку, <b>бесполезно</b>: курс так быстро не сдвинуть.</p>
-        <p style="margin:0">🏦 <b>Выигрыши палата платит из своего резерва</b>, а он наполняется проигрышами других торговцев. Палата <b>не печатает кредиты из воздуха</b> — сколько проиграно, столько и можно выиграть, не больше.</p>
+        <p style="margin:0 0 7px">📊 <b>Сделки считаются по официальному биржевому курсу</b>, который <b>Биржевой совет</b> пересчитывает <b>раз в 3 часа</b> — не ваши сделки. Поэтому скупить или обвалить ресурс, чтобы качнуть цену под свою ставку, <b>невозможно в принципе</b>: курс живёт отдельно от рынка.</p>
+        <p style="margin:0 0 7px">📈 <b>Курс трендит и реагирует на новости</b> — его двигает галактика: дефицит/профицит ресурсов, события-шоки, и <b>настрой по новостям</b> (много негативных реакций игроков → рынок проседает, позитивных → растёт). Навык = прочитать тренд или новость и поймать движение с плечом.</p>
+        <p style="margin:0 0 7px">💸 <b>Палата берёт небольшую комиссию</b> на входе (≈0.5%) — позиция стартует с лёгкого минуса, как разница покупки/продажи на настоящей бирже. Так палата держится в плюсе, а не печатает кредиты.</p>
+        <p style="margin:0">🏦 <b>Выигрыши палата платит из своего резерва</b>, а он наполняется проигрышами и комиссиями. Палата <b>не печатает кредиты из воздуха</b> — сколько внесено, столько и можно выплатить, не больше.</p>
       </div>
     </div>`;
 }
@@ -4936,7 +4952,7 @@ function ecExMarginBlock() {
       <span>итог <b style="color:${ecPlCol(p.realized)}">${ecSign(p.realized)}${ecNum(Math.round(p.realized))} ГС</b></span>
     </div>`).join('') || '<div class="cn-fac-hint">История пуста.</div>';
 
-  const opts = (d.resources || []).map(r => `<option value="${esc(r.name)}">${esc(r.name)} · ${ecNum(+r.price)} ГС</option>`).join('');
+  const opts = (d.resources || []).map(r => `<option value="${esc(r.name)}">${esc(r.name)} · ${ecNum(ecRefPx(r))} ГС</option>`).join('');
   const form = `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px;margin-top:6px">
       <select id="ec-mg-res" class="ec-prod-qty" style="max-width:180px">${opts}</select>
       <input type="number" id="ec-mg-coll" min="100" placeholder="залог ГС" class="ec-prod-qty" style="max-width:120px">
@@ -4985,7 +5001,7 @@ function ecExFuturesBlock() {
       <span>итог <b style="color:${ecPlCol(p.realized)}">${ecSign(p.realized)}${ecNum(Math.round(p.realized))} ГС</b></span>
     </div>`).join('') || '<div class="cn-fac-hint">История пуста.</div>';
 
-  const opts = (d.resources || []).map(r => `<option value="${esc(r.name)}">${esc(r.name)} · ${ecNum(+r.price)} ГС</option>`).join('');
+  const opts = (d.resources || []).map(r => `<option value="${esc(r.name)}">${esc(r.name)} · ${ecNum(ecRefPx(r))} ГС</option>`).join('');
   const form = `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px;margin-top:6px">
       <select id="ec-ft-res" class="ec-prod-qty" style="max-width:170px">${opts}</select>
       <input type="number" id="ec-ft-coll" min="100" placeholder="залог ГС" class="ec-prod-qty" style="max-width:110px">
@@ -5031,7 +5047,7 @@ function ecExOptionsBlock() {
       <span>итог <b style="color:${ecPlCol(p.realized)}">${ecSign(p.realized)}${ecNum(Math.round(p.realized))} ГС</b></span>
     </div>`).join('') || '<div class="cn-fac-hint">История пуста.</div>';
 
-  const opts = (d.resources || []).map(r => `<option value="${esc(r.name)}" data-px="${+r.price}">${esc(r.name)} · ${ecNum(+r.price)} ГС</option>`).join('');
+  const opts = (d.resources || []).map(r => `<option value="${esc(r.name)}" data-px="${ecRefPx(r)}">${esc(r.name)} · ${ecNum(ecRefPx(r))} ГС</option>`).join('');
   const form = `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px;margin-top:6px">
       <select id="ec-op-res" class="ec-prod-qty" style="max-width:170px" onchange="ecOptionsPreview()">${opts}</select>
       <select id="ec-op-kind" class="ec-prod-qty" style="max-width:100px" onchange="ecOptionsPreview()"><option value="call">КОЛЛ ▲</option><option value="put">ПУТ ▼</option></select>
@@ -5222,11 +5238,13 @@ function ecExCorpsBlock() {
     const err = EC.corpsErr || '';
     const schemaCache = /schema cache|Could not find|PGRST20\d|does not exist/i.test(err);
     return `<div class="ec-dip-card ec-corp-warn">
-      <div class="ec-dip-t">🏢 Биржа корпораций недоступна</div>
-      <div class="cn-fac-hint">Сервер не вернул данные организаций.${err ? ` Ответ сервера:<br><code style="color:var(--err);word-break:break-word">${esc(err)}</code>` : ''}</div>
-      <div class="cn-fac-hint" style="margin-top:8px">${schemaCache
-        ? 'Похоже, PostgREST ещё не увидел новые функции (кэш схемы). Выполните в SQL Editor: <code>notify pgrst, \'reload schema\';</code> и обновите страницу через минуту.'
-        : 'Если <b>_exchange_corps.sql</b> применялся с красной ошибкой — Supabase откатывает весь скрипт. Перезапустите файл и убедитесь, что внизу «Success».'}</div></div>`;
+      <div class="ec-dip-t">🏢 Реестр организаций на профилактике</div>
+      <div class="cn-fac-hint">⚙ Биржевой реестр компаний временно закрыт на техническое обслуживание. Котировки долей и дивиденды вернутся, как только торговая палата возобновит работу.
+        <details style="margin-top:7px;opacity:.55"><summary style="cursor:pointer">для администратора</summary>
+          ${err ? `Ответ сервера: <code style="color:var(--err);word-break:break-word">${esc(err)}</code><br>` : ''}${schemaCache
+            ? 'Кэш схемы: выполните <code>notify pgrst, \'reload schema\';</code> и обновите страницу через минуту.'
+            : 'Если <code>_exchange_corps.sql</code> применялся с ошибкой — скрипт откатывается целиком. Перезапустите файл и убедитесь, что внизу «Success».'}</details>
+      </div></div>`;
   }
   const ses = c.session || { open: false };
   const free = c.free_buildings || [];

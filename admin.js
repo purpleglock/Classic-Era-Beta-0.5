@@ -2197,6 +2197,14 @@ function adTabTesting(e) {
     ${row('🏴‍☠️ Завершить рейды немедленно', 'Все активные рейды этой фракции (как атакующего и как цели) резолвятся сейчас: бой, добыча, потери, раскрытие.', `<button class="btn btn-gd" onclick="adTestSpeedRaids()">Завершить рейды</button>`)}
     ${row('🕵 Завершить шпионаж немедленно', 'Агенты мгновенно дообучаются, активные операции резолвятся сейчас.', `<button class="btn btn-gd" onclick="adTestSpeedSpy()">Завершить шпионаж</button>`)}
     ${row('⏩ Форсировать тик дохода', `Начислить доход за сутки немедленно (last_tick откатится на 25 ч). Последний доход: ${fmtT(lastTick)}.`, `<button class="btn btn-gd" onclick="adTestForceTick()" ${eco ? '' : 'disabled'}>Начислить доход</button>`)}
+    ${row('📈 Промотать биржу (симуляция курса)', 'Прогоняет официальный биржевой курс ВПЕРЁД прямо сейчас, не дожидаясь тика (раз в 3 ч): шаги по 3 часа двигают курсы трендами + учитывают настрой по новостям, опц. сутки прокручивают спот-рынок. Глобально (на весь сектор). Заодно резолвятся ликвидации/экспирации.',
+      `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <div style="display:flex;gap:6px;align-items:center">
+          <label class="fm-dim" style="font-size:11px">шагов×3ч</label><input id="ad-mkt-steps" type="number" min="1" max="60" value="4" class="ec-input" style="width:70px">
+          <label class="fm-dim" style="font-size:11px">суток</label><input id="ad-mkt-days" type="number" min="0" max="30" value="0" class="ec-input" style="width:64px">
+        </div>
+        <button class="btn btn-gd" onclick="adTestMarketAdvance()">Промотать биржу</button>
+      </div>`)}
     ${row('🜨 Приземлить залп артиллерии', 'Все снаряды «Длани Неотвратимости» этой фракции, что в полёте, мгновенно поражают цель: планета-цель превращается в мёртвый камень, колония на ней стирается.', `<button class="btn btn-gd" onclick="adTestSpeedDoom()">Приземлить залп</button>`)}
     ${row('🜨 Выдать орудие судного дня', 'Поставить готовую «Длань Неотвратимости» (целостность 100%) на первую колонию фракции со свободной ячейкой — без исследования и затрат. Заодно открывает технологию «Сама неотвратимость».', `<button class="btn btn-gd" onclick="adGrantDoomgun()">Выдать орудие</button>`)}
     ${row('☣ Выдать Гиперпейсер в конкретной системе', 'Спавнит готовый Гиперпейсер (мобильное орудие судного дня) сразу на карте — в выбранной системе. Без исследования и затрат; технология открывается заодно. Пусто = первая колония фракции.',
@@ -2216,6 +2224,20 @@ async function adTestSpeedDoom() {
     const r = await apiFetch('rpc/admin_test_speed_doom', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel }) });
     toast(`Залпы приземлены: ${r?.landed || 0}`, 'ok');
     await adReloadPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+// Промотать биржу: глобальный прогон курса (шаги по 3ч + опц. сутки спота).
+async function adTestMarketAdvance() {
+  if (AD.busy) return;
+  const steps = Math.max(1, Math.min(60, parseInt(document.getElementById('ad-mkt-steps')?.value, 10) || 1));
+  const days  = Math.max(0, Math.min(30, parseInt(document.getElementById('ad-mkt-days')?.value, 10) || 0));
+  AD.busy = true;
+  try {
+    const r = await apiFetch('rpc/admin_test_market_advance', { method: 'POST', body: JSON.stringify({ p_steps: steps, p_days: days }) });
+    const t = r?.tick || {};
+    toast(`Биржа промотана: ${r?.steps || 0} шаг(ов) ×3ч, ${r?.days || 0} сут · настрой новостей ${t.sentiment ?? 0}`, 'ok');
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }

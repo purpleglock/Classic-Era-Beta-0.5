@@ -79,20 +79,21 @@ begin
     v_color := 'rgba(95,201,138,0.55)';
   elsif kind = 2 then
     -- ТОРГОВЫЙ БУМ: общий спрос (запас слегка вниз → цены вверх широким фронтом)
-    update public.market_resources set stock = greatest(1, stock * (0.82 + random()*0.10));
+    update public.market_resources set stock = greatest(1, stock * (0.82 + random()*0.10)) where true;
     v_title := '📈 Торговый бум в секторе';
     v_body  := 'Оживление караванных путей подняло спрос по всей номенклатуре — цены подросли широким фронтом.';
     v_color := 'rgba(201,162,39,0.55)';
   else
     -- РЕЦЕССИЯ: общий избыток (запас вверх → цены вниз)
-    update public.market_resources set stock = stock * (1.12 + random()*0.12);
+    update public.market_resources set stock = stock * (1.12 + random()*0.12) where true;
     v_title := '📉 Спад спроса накрыл рынки';
     v_body  := 'Снижение деловой активности оставило склады переполненными — котировки поползли вниз по всему рынку.';
     v_color := 'rgba(120,150,190,0.55)';
   end if;
   -- пересчёт цен от нового запаса
   update public.market_resources
-     set price = public._market_price_calc(base_price, stock, equilibrium), updated_at = now();
+     set price = public._market_price_calc(base_price, stock, equilibrium), updated_at = now()
+   where true;
   begin perform public._post_life_news(v_title, v_body, v_color, '[]'::jsonb); exception when others then null; end;
 end$$;
 
