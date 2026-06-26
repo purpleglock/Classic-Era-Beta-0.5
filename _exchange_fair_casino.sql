@@ -48,8 +48,13 @@ create or replace function public._ex_ref_hi()      returns numeric language sql
 
 -- ── Комиссия дома и лимиты — человеческие (защита на якоре, не на удушении) ──
 create or replace function public._ex_open_edge()    returns numeric language sql immutable as $$ select 0.005::numeric  $$;  -- комиссия на входе в маржу/фьючерс: 0.5% (×2 плечо → старт ≈ −1%, не −6%)
-create or replace function public._ex_spot_max_frac() returns numeric language sql immutable as $$ select 0.15::numeric   $$;  -- потолок ОДНОЙ спот-заявки = 15% оборота (анти-кран спота)
+create or replace function public._ex_spot_max_frac() returns numeric language sql immutable as $$ select 0.25::numeric   $$;  -- потолок ОДНОЙ спот-заявки = 25% оборота (анти-кран спота)
 create or replace function public._ex_spot_day_frac() returns numeric language sql immutable as $$ select 0.60::numeric   $$;  -- потолок СУТОЧНОГО объёма спота на державу/ресурс = 60% оборота
+-- Абсолютные «полы» лимитов: чтобы мелкие рынки (легендарки, equilibrium≈20) не упирались
+-- в смешные 3 шт. за сделку. Анти-манипуляция остаётся (цена сама падает по кривой), но
+-- торговать можно по-человечески: минимум 100 за заявку, 300 в сутки — независимо от оборота.
+create or replace function public._ex_spot_min_cap()    returns numeric language sql immutable as $$ select 100::numeric   $$;  -- НИЖНИЙ предел потолка одной заявки
+create or replace function public._ex_spot_day_min_cap() returns numeric language sql immutable as $$ select 300::numeric   $$;  -- НИЖНИЙ предел суточного потолка
 create or replace function public._ex_index_spread()  returns numeric language sql immutable as $$ select 0.003::numeric  $$;  -- спред индекса: 0.3% на сторону
 -- max_coll / coll_frac / max_open / index_cap / margin_max_lev — оставляем как в
 -- _exchange_safeguards.sql (100k / 25% / 6 / 500k / ×2): нормальные, не душат.
@@ -337,7 +342,7 @@ create or replace function public._ex_spot_day_reserve(p_fid text, p_name text, 
 returns void language plpgsql security definer set search_path=public as $$
 declare today date := (now() at time zone 'utc')::date; used numeric; day_cap numeric;
 begin
-  day_cap := greatest(1, floor(coalesce(p_eq,1) * public._ex_spot_day_frac()));
+  day_cap := greatest(public._ex_spot_day_min_cap(), floor(coalesce(p_eq,1) * public._ex_spot_day_frac()));
   select coalesce(units,0) into used from public.market_daily_vol
     where faction_id = p_fid and name = p_name and day = today for update;
   if coalesce(used,0) + p_units > day_cap then
@@ -361,7 +366,7 @@ begin
   if have < p_units then raise exception 'not enough resource'; end if;
 
   mr := public._market_ensure(p_name);
-  cap_units := greatest(1, floor(mr.equilibrium * public._ex_spot_max_frac()));
+  cap_units := greatest(public._ex_spot_min_cap(), floor(mr.equilibrium * public._ex_spot_max_frac()));
   if p_units > cap_units then raise exception 'order too large: max % units per trade', cap_units; end if;
   perform public._ex_spot_day_reserve(fid, p_name, p_units, mr.equilibrium);   -- суточный потолок
   new_stock := mr.stock + p_units;
@@ -392,7 +397,7 @@ begin
   if not found then raise exception 'no economy'; end if;
 
   mr := public._market_ensure(p_name);
-  cap_units := greatest(1, floor(mr.equilibrium * public._ex_spot_max_frac()));
+  cap_units := greatest(public._ex_spot_min_cap(), floor(mr.equilibrium * public._ex_spot_max_frac()));
   if p_units > cap_units then raise exception 'order too large: max % units per trade', cap_units; end if;
   if mr.stock < p_units then raise exception 'not enough on market'; end if;
   perform public._ex_spot_day_reserve(fid, p_name, p_units, mr.equilibrium);   -- суточный потолок

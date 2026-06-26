@@ -1149,7 +1149,7 @@ async function ecLoad() {
 async function _ecLoadImpl() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, goodsBoard, marketCfg] = await Promise.all([
+  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, goodsBoard, marketCfg, myFleets] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1202,6 +1202,7 @@ async function _ecLoadImpl() {
     ecRpc('mza_ships_mine').catch(() => []),      // Гиперпейсер: мои мобильные «Длани» (building/idle/в полёте) — управление на карте
     ecRpc('goods_market_board').catch(() => []),  // биржа брендов: товары всех держав (своя строка на рынке)
     dbGet('market_config', `select=elasticity,clamp_lo,clamp_hi,reversion,volatility,npc_react,walk&limit=1`).catch(() => null),  // живые параметры рынка (зеркало _market_price_calc/_market_area для предпросмотра)
+    ecRpc('fleets_mine').catch(() => []),         // флоты: мои мобильные соединения (idle/в полёте) — управление на карте
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1214,6 +1215,7 @@ async function _ecLoadImpl() {
   EC.outposts = Array.isArray(defOutposts) ? defOutposts : [];  // оборона: развёрнутые аванпосты
   EC.opShips = Array.isArray(defOpShips) ? defOpShips : [];     // оборона: мои корабли-носители
   EC.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];        // Гиперпейсер: мои мобильные «Длани»
+  EC.fleets = Array.isArray(myFleets) ? myFleets : [];          // флоты: мои мобильные соединения (формируются из состава, двигаются по карте)
   EC.goodsBoard = Array.isArray(goodsBoard) ? goodsBoard : [];  // биржа брендов: товары всех держав
   EC.outpostIntel = Array.isArray(defOutIntel) ? defOutIntel : [];  // оборона: разведданные разведаванпостов (срез по соседям)
   EC.spyPortraits = Array.isArray(spyPortraits) ? spyPortraits : [];  // агентура: общий пул портретов (подбор на клиенте)
@@ -3601,7 +3603,88 @@ function ecTabForces() {
       ${inQueue ? `<div class="ec-ov-card ec-ov-clk" onclick="ecSetTab('milbuild')"><div class="ec-ov-v" style="color:var(--color-warning, #e0a030)">${ecNum(inQueue)}</div><div class="ec-ov-k">🏭 В очереди</div></div>` : ''}
     </div>
     <div class="ec-section-title">Боевой состав</div>
-    ${rosterHtml}`;
+    ${rosterHtml}
+    ${ecFleetSectionHtml()}`;
+}
+
+// ── «Сформировать флот» (зеркало _army_fleet.sql) ──
+// Флот собирается из РЕАЛЬНЫХ кораблей состава, размещается в системе своей
+// колонии и управляется на ГАЛАКТИЧЕСКОЙ КАРТЕ (клик по значку флота слева от
+// звезды): переброска / возврат на базу / роспуск. Здесь — только формирование
+// и список флотов с роспуском.
+function ecFleetSectionHtml() {
+  // свободные корабли состава (те, что не заняты в уже сформированных флотах —
+  // их сервер уже снял из unit_production, поэтому EC.roster показывает остаток)
+  const stock = {};
+  (EC.roster || []).filter(r => r.category === 'ship' && r.unit_id).forEach(r => {
+    const k = r.unit_id;
+    if (!stock[k]) stock[k] = { unit_id: r.unit_id, name: r.unit_name, qty: 0 };
+    stock[k].qty += r.qty || 0;
+  });
+  const ships = Object.values(stock).filter(s => s.qty > 0).sort((a, b) => (b.qty || 0) - (a.qty || 0));
+  const colSysIds = [...new Set((EC.colonies || []).map(c => c.system_id))];
+  const fleets = EC.fleets || [];
+
+  const pick = ships.length
+    ? ships.map(s => `<div class="ec-q-row">
+        <span class="ec-r-name">🚀 ${esc(s.name)} <span class="ec-hint">в составе ×${ecNum(s.qty)}</span></span>
+        <input type="number" class="ec-fleet-q ec-prod-qty" data-uid="${esc(s.unit_id)}" min="0" max="${s.qty}" value="0" style="width:70px">
+      </div>`).join('')
+    : `<div class="ec-empty" style="padding:8px;line-height:1.45">Свободных кораблей нет. Постройте флот во вкладке «🏭 Строительство вооружённых сил» — или распустите существующий флот, чтобы вернуть корабли в состав.</div>`;
+
+  const canForm = ships.length && colSysIds.length;
+  const formBlock = !colSysIds.length
+    ? `<div class="ec-empty" style="padding:8px">Нет колоний для размещения флота.</div>`
+    : `${pick}
+      ${ships.length ? `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px;margin-top:8px">
+        <select id="ec-fleet-sys">${colSysIds.map(sid => `<option value="${esc(sid)}">${esc(ecSysName(sid))}</option>`).join('')}</select>
+        <input type="text" id="ec-fleet-name" class="ec-prod-qty" style="width:160px" maxlength="40" placeholder="имя флота (необязательно)">
+        <button class="btn btn-gd btn-sm" ${canForm ? '' : 'disabled'} onclick="ecFleetForm()">⚓ Сформировать флот</button>
+      </div>
+      <div class="ec-cap">Укажите, сколько кораблей каждого типа забрать, выберите систему с колонией и сформируйте флот. Он появится на <b>галактической карте</b> значком ⚓ <b>слева от звезды</b> — оттуда перебрасывайте его по гиперпутям, возвращайте на базу или распускайте. Роспуск возвращает корабли в состав.</div>` : ''}`;
+
+  const fleetRows = fleets.map(fl => {
+    const comp = (fl.composition || []).map(c => `${esc(c.unit_name || '?')} ×${ecNum(c.qty)}`).join(', ');
+    const right = fl.status === 'transit'
+      ? ecProgressISO(fl.depart_at, fl.arrive_at, 1, 'прибывает')
+      : `<button class="ec-bld-del" title="Распустить флот — корабли вернутся в состав" onclick="ecFleetDisband('${fl.id}')">✕</button>`;
+    const where = fl.status === 'transit' ? `→ ${esc(ecSysName(fl.dest_sys))}` : `в системе ${esc(ecSysName(fl.system_id))}`;
+    return `<div class="ec-q-row"><span class="ec-r-name">⚓ Флот${fl.name ? ' «' + esc(fl.name) + '»' : ''} <span class="ec-hint">${comp || '—'} · ${where}</span></span>${right}</div>`;
+  }).join('');
+
+  return `<div class="ec-section-title">⚓ Сформировать флот <span class="ec-hint">— из кораблей состава; управление на карте</span></div>
+    ${formBlock}
+    ${fleets.length ? `<div class="ec-sub-title" style="margin-top:10px">Мои флоты · ${fleets.length}</div>${fleetRows}` : ''}`;
+}
+
+// Сформировать флот из выбранных кораблей в системе своей колонии.
+async function ecFleetForm() {
+  if (EC.busy) return;
+  const sel = ecId('ec-fleet-sys'); if (!sel || !sel.value) { toast('Выберите систему с колонией', 'err'); return; }
+  const units = [];
+  document.querySelectorAll('.ec-fleet-q').forEach(inp => { const q = parseInt(inp.value, 10) || 0; if (q > 0) units.push({ unit_id: inp.dataset.uid, qty: q }); });
+  if (!units.length) { toast('Укажите, сколько кораблей забрать во флот', 'err'); return; }
+  const nm = (ecId('ec-fleet-name')?.value || '').trim();
+  EC.busy = true;
+  try {
+    const r = await ecRpc('fleet_form', { p_system_id: sel.value, p_name: nm || null, p_units: units });
+    toast('⚓ Флот сформирован · ' + ecNum((r && r.ships) || 0) + ' кор. · управляйте им на карте', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+
+// Распустить флот — корабли возвращаются в состав (unit_production).
+async function ecFleetDisband(id) {
+  if (EC.busy) return;
+  if (!confirm('Распустить флот? Все его корабли вернутся в боевой состав.')) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('fleet_disband', { p_id: id });
+    toast('Флот распущен · +' + ecNum((r && r.returned) || 0) + ' кор. в состав', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
 }
 
 // Метр вместимости/мощности: подпись + значение used/cap + бар + примечание.
@@ -3966,6 +4049,18 @@ function ecPerkColor(perk) {
 function ecFacSelect(id) { const opts = ecOtherFactions().map(f => `<option value="${esc(f.faction_id)}">${esc(f.name)}</option>`).join(''); return `<select id="${id}">${opts || '<option value="">— нет фракций —</option>'}</select>`; }
 function ecErr(m) {
   m = m || '';
+  // PostgREST отдаёт ошибку JSON-ом ({"code":...,"message":"..."}) — вытащим текст,
+  // чтобы игроку не вываливался сырой объект с code/hint/details.
+  let raw = m;
+  try { const j = JSON.parse(m); if (j && j.message) raw = m = j.message; } catch (_) {}
+  // Лимит размера сделки (анти-манипуляция рынком): max N единиц за раз.
+  const big = m.match(/(?:too large|units per trade)[^\d]*(\d+)/i);
+  if (big) return `Слишком крупная сделка: рынок такого объёма не выдержит. Можно не больше ${big[1]} ед. за раз — разбейте на несколько сделок`;
+  if (m.includes('too large') || m.includes('units per trade')) return 'Слишком крупная сделка — уменьшите количество и попробуйте снова';
+  // Суточный потолок объёма по ресурсу (сбрасывается в 00:00 UTC).
+  const day = m.match(/daily volume limit for (.+?):\s*(\d+)\s*used of\s*(\d+)/i);
+  if (day) return `Дневной лимит торговли «${day[1]}» исчерпан: ${day[2]} из ${day[3]} ед. за сутки. Лимит обнулится в 00:00 UTC`;
+  if (m.includes('daily volume limit')) return 'Дневной лимит торговли этим ресурсом исчерпан (сброс в 00:00 UTC)';
   if (m.includes('not enough resource')) return 'Недостаточно ресурса на складе';
   if (m.includes('not enough on market')) return 'На рынке нет столько ресурса';
   if (m.includes('not enough GC') || m.includes('not enough gc')) return 'Недостаточно ГС';
