@@ -79,6 +79,9 @@ async function renderHome() {
   // Биржевая бегущая лента в «Ленте сектора» — дозаполняем асинхронно (не блокирует главную)
   if (typeof fnLoadCorpTicker === 'function') fnLoadCorpTicker();
 
+  // Диалоговое окно новеллы — печатная машинка + перелистывание реплик
+  requestAnimationFrame(() => { try { heroVNInit(); } catch (e) {} });
+
   // Клик по обложке открывает изображение в полном размере
   requestAnimationFrame(() => {
     const heroImg = document.querySelector('#hp-hero-cover .hp-hero-img');
@@ -2348,6 +2351,13 @@ function heroGreeting(user) {
   name = name.trim();
   // та же фраза на всю сессию для этого имени — никаких «прыжков» при перерисовке
   if (_heroGreet && _heroGreet.name === name) return _heroGreet.text;
+  const greets = heroGreetPhrases(name);
+  const text = greets[Math.floor(Math.random() * greets.length)];
+  _heroGreet = { name, text };
+  return text;
+}
+// Пул фраз-приветствий (те же, что были на обложке) — переиспользуется новеллой.
+function heroGreetPhrases(name) {
   const en = (typeof lang !== 'undefined' && lang === 'en');
   const greets = en ? [
     `Welcome back, ${name}`, `Good to see you, ${name}`, `${name} on deck`,
@@ -2398,11 +2408,180 @@ function heroGreeting(user) {
     else if (h < 18) greets.push(`Добрый день, ${name}`, `Хорошего дня, ${name}`);
     else greets.push(`Добрый вечер, ${name}`, `Вечереет, ${name}`);
   }
-  const text = greets[Math.floor(Math.random() * greets.length)];
-  _heroGreet = { name, text };
-  return text;
+  return greets;
+}
+// Имя игрока для подстановки {name} в реплики новеллы (или нейтральное).
+function _heroPlayerName(user) {
+  let name = '';
+  if (user && ['superadmin', 'editor', 'moderator', 'player'].includes(user.role)) {
+    name = ((typeof userProfile !== 'undefined' && userProfile.display_name) || '').trim()
+      || (user.email ? user.email.split('@')[0] : '');
+  }
+  if (!name) { try { name = (localStorage.getItem('wk_greet_name') || '').trim(); } catch (e) {} }
+  return name || (lang === 'en' ? 'commander' : 'командир');
+}
+// Выбранный диалог новеллы кэшируется на сессию (не «прыгает» при перерисовках).
+let _heroVNPick = null; // { sig, dlg }
+// Дефолтные диалоги: КАЖДАЯ исходная фраза-приветствие = отдельный диалог.
+// Используются, пока админ не настроил свои (новелла всегда что-то показывает).
+function heroDefaultDialogues() {
+  let lines = [];
+  try { if (typeof heroGreetPhrases === 'function') lines = heroGreetPhrases('{name}'); } catch (e) {}
+  lines = [...new Set((lines || []).map(s => (s || '').trim()).filter(Boolean))];
+  return lines.map((l, i) => ({ id: '__d' + i, spriteId: '', speaker: '', lines: [l] }));
+}
+// Текущий слот времени суток для расписания диалогов.
+function _heroTimeSlot() {
+  const h = new Date().getHours();
+  if (h < 5)  return 'night';
+  if (h < 12) return 'morning';
+  if (h < 18) return 'day';
+  return 'evening';
+}
+// Нормализовать реплику: строка → {text, spriteId}. Обратная совместимость.
+function _heroLineObj(l) {
+  if (l && typeof l === 'object') return { text: String(l.text || ''), spriteId: l.spriteId || '', speaker: l.speaker || '' };
+  return { text: String(l || ''), spriteId: '', speaker: '' };
+}
+// Есть ли в диалоге хоть одна непустая реплика.
+function _heroDlgHasText(d) {
+  return d && Array.isArray(d.lines) && d.lines.some(l => _heroLineObj(l).text.trim());
+}
+// Собрать обложку-новеллу: спрайт + диалоговое окно с печатной машинкой.
+// Новелла — ЕДИНСТВЕННЫЙ режим обложки: если диалоги не настроены, берём дефолтные.
+function buildHeroVN(coverUrl, user) {
+  const cfg = (typeof _heroVN !== 'undefined' && _heroVN) ? _heroVN : {};
+  const sprites   = Array.isArray(cfg.sprites)   ? cfg.sprites   : [];
+  let dialogues = (Array.isArray(cfg.dialogues) ? cfg.dialogues : []).filter(_heroDlgHasText);
+  if (!dialogues.length) dialogues = heroDefaultDialogues();
+  if (!dialogues.length) return null;   // совсем нет фраз — обычная обложка (фолбэк)
+
+  // Расписание: оставляем диалоги, подходящие по времени суток ('any'/нет → всегда).
+  const slot = _heroTimeSlot();
+  const timed = dialogues.filter(d => !d.time || d.time === 'any' || d.time === slot);
+  const pool = timed.length ? timed : dialogues;
+
+  // Сигнатура — чтобы выбор не «прыгал» при перерисовке, но обновлялся при правке.
+  const sig = JSON.stringify(pool.map(d => d.id || ''));
+  let dlg = (_heroVNPick && _heroVNPick.sig === sig) ? _heroVNPick.dlg : null;
+  if (!dlg || pool.indexOf(dlg) < 0) { dlg = pool[Math.floor(Math.random() * pool.length)]; _heroVNPick = { sig, dlg }; }
+
+  const name   = _heroPlayerName(user);
+  const sub    = s => String(s == null ? '' : s).replace(/\$?\{name\}/g, name);
+  const dlgFallbackSprite = sprites.find(s => s.id === dlg.spriteId) || sprites.find(s => s.url) || null;
+  // Реплики → [{t:текст, s:[url,url,...], c:count, n:имя}]. Спрайт/имя могут быть СВОИ у каждой реплики.
+  // Поле s теперь массив спрайтов (для поддержки множественных), count — число одновременно видимых.
+  const items = dlg.lines.map(_heroLineObj).map(l => {
+    const t = sub(l.text);
+    if (!t.trim()) return null;
+    const cnt = Math.max(1, Math.min(4, (l && l.count) || 1));
+    const sp = (l.spriteId && sprites.find(s => s.id === l.spriteId)) || dlgFallbackSprite;
+    // Если спрайтов несколько (count > 1) — берём count спрайтов из списка
+    let spriteUrls = [];
+    if (sp) {
+      spriteUrls = [sp.url];
+      // Добавляем дополнительные спрайты
+      for (let i = 1; i < cnt && i < sprites.length; i++) {
+        const nextSprite = sprites[(sprites.indexOf(sp) + i) % sprites.length];
+        if (nextSprite && !spriteUrls.includes(nextSprite.url)) spriteUrls.push(nextSprite.url);
+      }
+    }
+    return { t, s: spriteUrls, c: cnt, n: sub(l.speaker || dlg.speaker || '') };
+  }).filter(Boolean);
+  if (!items.length) return null;
+
+  const url = (coverUrl || '').trim();
+  const bgLayer = url
+    ? `<img class="hp-hero-img" src="${esc(url)}" alt="" loading="eager">`
+    : `<div class="hp-hero-noimg"></div>`;
+  // Спрайт-слой: контейнер с несколькими спрайтами (для поддержки 1-4 персонажей одновременно).
+  const first = items[0];
+  let spriteHtml = '';
+  if (first && first.s && first.s.length) {
+    spriteHtml = first.s.map((url, idx) =>
+      `<img class="hp-vn-sprite hp-vn-sprite-${idx}" data-sprite-idx="${idx}" src="${esc(url)}" alt="" loading="eager">`
+    ).join('');
+  }
+  const spriteLayer = `<div class="hp-vn-sprites" id="hp-vn-sprites" data-count="${first ? first.c || 1 : 1}">${spriteHtml}</div>`;
+  const uploadBtn = user?.role === 'superadmin'
+    ? `<button class="hp-hero-upload-btn" id="hero-upload-btn" onclick="triggerHeroCoverUpload()" style="display:block;z-index:20;">✎ Обложка</button>`
+    : '';
+
+  // Все реплики прячем в data-атрибут — печатает и перелистывает heroVNInit().
+  const linesAttr = esc(JSON.stringify(items));
+  return `<div class="hp-hero-cover hp-vn" id="hp-hero-cover">
+    ${bgLayer}
+    <div class="hp-hero-grad"></div>
+    ${spriteLayer}
+    <div class="hp-hero-frame"></div>
+    <span class="hpc-corner hpc-tl"></span><span class="hpc-corner hpc-tr"></span>
+    <span class="hpc-corner hpc-bl"></span><span class="hpc-corner hpc-br"></span>
+    <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" role="button" tabindex="0">
+      <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
+      <div class="hp-vn-text" id="hp-vn-text"></div>
+      <div class="hp-vn-foot">
+        <span class="hp-vn-next" id="hp-vn-next">${lang === 'en' ? '⏩ skip' : '⏩ пропустить'}</span>
+        ${buildHeroCta(user)}
+      </div>
+    </div>
+    ${uploadBtn}
+  </div>`;
+}
+// «Главное меню» новеллы для НЕзарегистрированных (аноним / залогинен без фракции):
+// заставка с названием игры, спрайтом и вертикальным меню — как титульный экран VN.
+function buildHeroMenu(coverUrl, user) {
+  const cfg = (typeof _heroVN !== 'undefined' && _heroVN) ? _heroVN : {};
+  const sprites = Array.isArray(cfg.sprites) ? cfg.sprites : [];
+  const sprite = sprites.find(s => s.url) || null;
+  const _homePg = _pgCache.get('home');
+  const _titleRu = (_homePg?.title || 'КЛАССИЧЕСКАЯ ЭРА').trim().toUpperCase();
+  const _titleEn = (_homePg?.title_ru || 'CLASSIC ERA').trim().toUpperCase();
+  const title = (lang === 'en' ? _titleEn : _titleRu) || 'КЛАССИЧЕСКАЯ ЭРА';
+  const en = (lang === 'en');
+
+  const url = (coverUrl || '').trim();
+  const bgLayer = url
+    ? `<img class="hp-hero-img" src="${esc(url)}" alt="" loading="eager">`
+    : `<div class="hp-hero-noimg"></div>`;
+  const spriteLayer = sprite ? `<img class="hp-vn-sprite" src="${esc(sprite.url)}" alt="" loading="eager">` : '';
+  const uploadBtn = user?.role === 'superadmin'
+    ? `<button class="hp-hero-upload-btn" id="hero-upload-btn" onclick="triggerHeroCoverUpload()" style="display:block;z-index:20;">✎ Обложка</button>`
+    : '';
+
+  // Пункты меню зависят от состояния входа.
+  const items = [];
+  if (!user) {
+    items.push(`<button class="hp-menu-btn hp-menu-primary" onclick="showAuth('login')"><span class="hp-menu-ic">▶</span>${en ? 'Sign in' : 'Войти'}</button>`);
+    items.push(`<button class="hp-menu-btn" onclick="showAuth('register')"><span class="hp-menu-ic">＋</span>${en ? 'Create account' : 'Создать аккаунт'}</button>`);
+  } else {
+    items.push(`<button class="hp-menu-btn hp-menu-primary" onclick="go('faction-new')"><span class="hp-menu-ic">⬡</span>${en ? 'Register a faction' : 'Зарегистрировать фракцию'}</button>`);
+    items.push(`<button class="hp-menu-btn" onclick="go('factions')"><span class="hp-menu-ic">◇</span>${en ? 'Browse factions' : 'К фракциям'}</button>`);
+  }
+  const tagline = en ? 'A living galaxy of factions, fleets and intrigue' : 'Живая галактика фракций, флотов и интриг';
+
+  return `<div class="hp-hero-cover hp-vn hp-vnmenu" id="hp-hero-cover">
+    ${bgLayer}
+    <div class="hp-hero-grad"></div>
+    ${spriteLayer}
+    <div class="hp-hero-frame"></div>
+    <span class="hpc-corner hpc-tl"></span><span class="hpc-corner hpc-tr"></span>
+    <span class="hpc-corner hpc-bl"></span><span class="hpc-corner hpc-br"></span>
+    <div class="hp-menu-scrim"></div>
+    <div class="hp-menu">
+      <span class="hp-menu-kick"></span>
+      <h1 class="hp-menu-title">${esc(title)}</h1>
+      <div class="hp-menu-tag">${esc(tagline)}</div>
+      <div class="hp-menu-list">${items.join('')}</div>
+    </div>
+    ${uploadBtn}
+  </div>`;
 }
 function buildHero(coverUrl, user) {
+  // Незарегистрированный (аноним или вошёл, но без фракции) — титульное меню новеллы.
+  const isPlayer = (typeof ecCanAccess === 'function') && ecCanAccess();
+  if (!isPlayer) return buildHeroMenu(coverUrl, user);
+  const _vn = buildHeroVN(coverUrl, user);
+  if (_vn) return _vn;
   const _homePg = _pgCache.get('home');
   // title = RU надпись, title_ru = EN надпись (исторически так в схеме)
   const _titleRu = (_homePg?.title || 'КЛАССИЧЕСКАЯ ЭРА').trim().toUpperCase();
@@ -2434,6 +2613,117 @@ function buildHero(coverUrl, user) {
     </div>
     ${uploadBtn}
   </div>`;
+}
+
+// Печатная машинка с АВТОПРОИГРЫВАНИЕМ: реплики печатаются как при чтении,
+// затем пауза «на прочтение» и сама собой идёт следующая реплика. Клик —
+// дотипить/пропустить к следующей. Дойдя до конца — останавливается.
+let _heroVNStop = null;
+function heroVNInit() {
+  if (_heroVNStop) { try { _heroVNStop(); } catch (e) {} _heroVNStop = null; }
+  const box  = document.getElementById('hp-vn-box');
+  const out  = document.getElementById('hp-vn-text');
+  const next = document.getElementById('hp-vn-next');
+  if (!box || !out) return;
+  let lines;
+  try { lines = JSON.parse(box.getAttribute('data-lines') || '[]'); } catch (e) { lines = []; }
+  if (!lines.length) return;
+
+  // реплика = {t:текст, s:[url,...], c:count, n:имя} (или строка — обратная совместимость)
+  const T = i => { const l = lines[i]; return (l && typeof l === 'object') ? String(l.t || '') : String(l || ''); };
+  const S = i => { const l = lines[i]; return (l && typeof l === 'object') ? (Array.isArray(l.s) ? l.s : (l.s ? [l.s] : [])) : []; };
+  const C = i => { const l = lines[i]; return (l && typeof l === 'object' && l.c) ? Math.max(1, Math.min(4, l.c)) : 1; };
+  const N = i => { const l = lines[i]; return (l && typeof l === 'object') ? (l.n || '') : ''; };
+  const sprContainer = document.getElementById('hp-vn-sprites');
+  const nameEl = document.getElementById('hp-vn-name');
+
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  let idx = 0, typing = false, charTimer = null, holdTimer = null;
+  function clearTimers() {
+    if (charTimer) { clearInterval(charTimer); charTimer = null; }
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  }
+  _heroVNStop = clearTimers;
+  // пауза на прочтение реплики (зависит от длины), мин/макс ограничены
+  function readPause(s) { return Math.max(1200, Math.min(5000, 700 + (s || '').length * 60)); }
+  function setHint(done) {
+    if (!next) return;
+    const lastLine = idx >= lines.length - 1;
+    next.textContent = (lastLine && done) ? (en ? '↺ replay' : '↺ снова')
+                     : (en ? '⏩ skip' : '⏩ пропустить');
+  }
+  // Сменить спрайты и имя под текущую реплику (с красивой анимацией смены).
+  function applyScene(i) {
+    if (sprContainer) {
+      const urls = S(i);
+      const cnt = C(i);
+      sprContainer.setAttribute('data-count', cnt);
+      const existingImgs = sprContainer.querySelectorAll('img');
+
+      // Убираем/добавляем спрайты по счёту
+      for (let idx = 0; idx < Math.max(urls.length, existingImgs.length); idx++) {
+        let img = existingImgs[idx];
+        const newUrl = urls[idx] || '';
+
+        if (!img && newUrl) {
+          // Создать новый спрайт
+          img = document.createElement('img');
+          img.className = `hp-vn-sprite hp-vn-sprite-${idx}`;
+          img.setAttribute('data-sprite-idx', idx);
+          img.src = newUrl;
+          img.loading = 'eager';
+          img.alt = '';
+          sprContainer.appendChild(img);
+          // Анимация появления
+          img.style.animation = 'none'; void img.offsetWidth;
+          img.style.animation = 'hpVnSpriteEnter 0.5s ease-out';
+        } else if (img && newUrl && img.src !== newUrl) {
+          // Обновить существующий спрайт с анимацией
+          img.style.animation = 'hpVnSpriteExit 0.25s ease-in';
+          setTimeout(() => {
+            img.src = newUrl;
+            img.style.animation = 'none'; void img.offsetWidth;
+            img.style.animation = 'hpVnSpriteEnter 0.5s ease-out';
+          }, 200);
+        } else if (img && !newUrl) {
+          // Убрать спрайт
+          img.style.animation = 'hpVnSpriteExit 0.3s ease-in forwards';
+          setTimeout(() => img.remove(), 250);
+        }
+      }
+
+      sprContainer.style.display = urls.length ? '' : 'none';
+    }
+    if (nameEl) { const nm = N(i); nameEl.textContent = nm; nameEl.style.display = nm ? '' : 'none'; }
+  }
+  function scheduleNext() {
+    if (idx < lines.length - 1) holdTimer = setTimeout(() => play(idx + 1), readPause(T(idx)));
+    else setHint(true);   // последняя реплика — стоп
+  }
+  function finishLine() {                 // реплика допечатана
+    out.textContent = T(idx); typing = false; box.classList.remove('typing');
+    setHint(true); scheduleNext();
+  }
+  function play(i) {
+    clearTimers(); idx = i; typing = true; box.classList.add('typing');
+    applyScene(i);
+    // Анимация появления текста при смене реплики
+    out.style.animation = 'none'; void out.offsetWidth;
+    out.style.animation = 'hpVnTextFade 0.25s ease-out';
+    let pos = 0; out.textContent = ''; setHint(false);
+    const line = T(idx);
+    charTimer = setInterval(() => {
+      pos++; out.textContent = line.slice(0, pos);
+      if (pos >= line.length) { clearInterval(charTimer); charTimer = null; finishLine(); }
+    }, 34);
+  }
+  function onTap() {
+    if (typing) { clearTimers(); finishLine(); return; }   // дотипить сразу
+    clearTimers(); play((idx + 1) % lines.length);          // к следующей (по кругу)
+  }
+  box.addEventListener('click', (e) => { if (e.target.closest('.hp-hero-cta')) return; onTap(); });
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap(); } });
+  play(0);
 }
 
 // ══════════════════════════════════════════════════════════════

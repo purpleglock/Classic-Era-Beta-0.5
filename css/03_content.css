@@ -250,6 +250,180 @@
   .hpc-corner{width:18px;height:18px}
 }
 
+/* ── HOME HERO — режим визуальной новеллы (спрайт + диалоговое окно) ── */
+.hp-hero-cover.hp-vn{
+  align-items:stretch;justify-content:flex-start;
+  min-height:300px;max-height:520px;
+}
+/* фон под новеллой темнее — спрайт и текст должны читаться */
+.hp-vn .hp-hero-grad{
+  background:
+    linear-gradient(to top, var(--b0) 4%, rgba(7,9,13,.55) 38%, rgba(7,9,13,.30) 66%, rgba(7,9,13,.55) 100%),
+    radial-gradient(90% 80% at 50% 40%, transparent 22%, rgba(4,5,9,.6) 100%);
+}
+/* контейнер спрайтов — поддержка 1-4 персонажей одновременно */
+.hp-vn-sprites{
+  position:absolute;z-index:3;inset:0;right:auto;bottom:0;
+  width:100%;height:100%;pointer-events:none;
+  display:flex;align-items:flex-end;justify-content:flex-end;
+  gap:clamp(2px,2vw,12px);padding-right:clamp(8px,5vw,64px);
+}
+/* спрайт персонажа — въезжает снизу-справа с анимацией */
+.hp-vn-sprite{
+  height:96%;max-height:520px;width:auto;flex-shrink:0;
+  object-fit:contain;object-position:bottom;
+  filter:drop-shadow(0 6px 26px rgba(0,0,0,.65));
+  pointer-events:none;
+  transform-origin:bottom center;
+  animation:hpVnSprite .55s cubic-bezier(.2,.9,.25,1) both;
+}
+@keyframes hpVnSprite{
+  from{opacity:0;transform:translateY(34px) scale(.98)}
+  to{opacity:1;transform:none}
+}
+/* плавное появление спрайта при смене фразы */
+@keyframes hpVnSpriteEnter{
+  from{opacity:0;transform:translateY(20px) scale(.95)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+/* плавное исчезновение спрайта при смене фразы */
+@keyframes hpVnSpriteExit{
+  from{opacity:1;transform:translateY(0) scale(1)}
+  to{opacity:0;transform:translateY(-20px) scale(.95)}
+}
+/* плавный переход текста диалога */
+@keyframes hpVnTextFade{
+  from{opacity:0;transform:translateY(4px)}
+  to{opacity:1;transform:translateY(0)}
+}
+/* диалоговое окно — внизу, поверх всего */
+.hp-vn-box{
+  position:absolute;z-index:6;left:clamp(12px,4vw,46px);right:clamp(12px,4vw,46px);
+  bottom:clamp(14px,4vh,30px);
+  padding:16px 20px 13px;cursor:pointer;
+  background:linear-gradient(180deg,rgba(9,13,20,.82),rgba(6,9,14,.92));
+  border:1px solid rgba(46,155,224,.55);
+  border-radius:12px;
+  box-shadow:0 10px 40px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.04), 0 0 32px rgba(46,155,224,.16);
+  backdrop-filter:blur(3px);
+  animation:hpVnBox .4s ease both .12s;
+}
+@keyframes hpVnBox{ from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
+.hp-vn-box:focus-visible{outline:2px solid var(--gdl,#5fb0e6);outline-offset:2px}
+/* левая акцент-полоса (как в визуальных новеллах) */
+.hp-vn-box::before{
+  content:'';position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:3px;
+  background:linear-gradient(180deg,#5fb0e6,rgba(46,155,224,.15));
+  box-shadow:0 0 12px rgba(46,155,224,.6);
+}
+/* «именная табличка» — приподнята над окном */
+.hp-vn-name{
+  position:absolute;top:-15px;left:18px;
+  font-family:'Rajdhani',sans-serif;font-weight:700;font-size:clamp(14px,1.8vw,18px);
+  letter-spacing:.08em;color:#0a141d;text-transform:uppercase;
+  padding:4px 14px 3px;border-radius:7px;
+  background:linear-gradient(180deg,#8fd2ff,#4f9fdc);
+  box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 18px rgba(46,155,224,.5);
+}
+.hp-vn-box:has(.hp-vn-name){margin-top:0}
+.hp-vn-box .hp-vn-name + .hp-vn-text{margin-top:6px}
+.hp-vn-text{
+  font-family:'Inter','Rajdhani',sans-serif;
+  font-size:clamp(15px,1.9vw,21px);line-height:1.5;
+  color:#eaf4ff;min-height:2.9em;
+  text-shadow:0 1px 4px rgba(0,0,0,.8);
+  white-space:pre-wrap;
+}
+/* мигающий курсор-каретка во время печати */
+.hp-vn-box.typing .hp-vn-text::after{
+  content:'▋';margin-left:1px;color:#5fb0e6;
+  animation:hpVnCaret .7s steps(1) infinite;
+}
+@keyframes hpVnCaret{ 50%{opacity:0} }
+.hp-vn-foot{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-top:11px;flex-wrap:wrap;
+}
+.hp-vn-next{
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.12em;
+  color:var(--gdl,#5fb0e6);opacity:.8;
+  animation:hpVnBlink 1.4s ease-in-out infinite;
+}
+@keyframes hpVnBlink{ 50%{opacity:.35} }
+.hp-vn-foot .hp-hero-cta{margin:0;pointer-events:auto}
+@media (max-width:768px){
+  .hp-hero-cover.hp-vn{min-height:240px}
+  .hp-vn-sprites{padding-right:0;gap:0}
+  .hp-vn-sprite{opacity:.92;max-width:60vw}
+  .hp-vn-box{padding:12px 14px 11px}
+  .hp-vn-text{min-height:3.4em}
+}
+
+/* ── HOME HERO — титульное «главное меню» (незарег. игрок) ── */
+.hp-vnmenu{ align-items:center; justify-content:flex-start; }
+/* мягкая тёмная вуаль слева — чтобы текст читался поверх пёстрого фона */
+.hp-menu-scrim{
+  position:absolute;inset:0;z-index:4;pointer-events:none;
+  background:linear-gradient(90deg, rgba(5,7,11,.92) 0%, rgba(5,7,11,.72) 32%, rgba(5,7,11,.22) 55%, transparent 72%);
+}
+.hp-menu{
+  position:relative;z-index:6;
+  margin-left:clamp(20px,5.5vw,68px);max-width:520px;
+  animation:hpMenuIn .55s cubic-bezier(.2,.9,.25,1) both;
+}
+@keyframes hpMenuIn{ from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
+.hp-menu-kick{
+  display:block;width:54px;height:3px;border-radius:3px;margin-bottom:16px;
+  background:linear-gradient(90deg,var(--gdl,#5fb0e6),transparent);
+  box-shadow:0 0 14px rgba(46,155,224,.6);
+}
+.hp-menu-title{
+  font-family:'Rajdhani',sans-serif;font-weight:700;margin:0;
+  font-size:clamp(34px,5.4vw,64px);line-height:.95;letter-spacing:clamp(1px,.5vw,5px);
+  text-transform:uppercase;color:#f1f8ff;
+  text-shadow:0 2px 10px rgba(0,0,0,.85),0 0 40px rgba(46,155,224,.35);
+}
+.hp-menu-tag{
+  font-family:'Inter','Rajdhani',sans-serif;font-size:clamp(12px,1.4vw,15px);
+  color:#aac4d8;letter-spacing:.02em;margin:12px 0 24px;
+  text-shadow:0 1px 4px rgba(0,0,0,.8);
+}
+.hp-menu-list{ display:flex;flex-direction:column;gap:11px;width:clamp(240px,30vw,300px); }
+.hp-menu-btn{
+  position:relative;display:flex;align-items:center;gap:13px;
+  font-family:'Rajdhani',sans-serif;font-weight:600;font-size:clamp(14px,1.5vw,16px);
+  letter-spacing:.07em;text-transform:uppercase;text-align:left;
+  padding:13px 16px;cursor:pointer;color:#e6f3ff;
+  background:rgba(10,15,22,.62);
+  border:1px solid rgba(120,170,205,.22);
+  border-radius:10px;
+  transition:transform .16s ease,background .2s ease,border-color .2s ease,box-shadow .2s ease,padding .16s ease;
+}
+.hp-menu-btn::after{                       /* шеврон, выезжает при наведении */
+  content:'›';position:absolute;right:15px;font-size:20px;line-height:1;
+  color:var(--gdl,#5fb0e6);opacity:0;transform:translateX(-6px);transition:.18s ease;
+}
+.hp-menu-btn:hover{
+  transform:translateX(5px);padding-right:26px;
+  background:rgba(18,34,50,.8);border-color:rgba(95,176,230,.65);
+  box-shadow:0 8px 26px rgba(0,0,0,.5),0 0 20px rgba(46,155,224,.18);
+}
+.hp-menu-btn:hover::after{ opacity:.9;transform:none; }
+.hp-menu-ic{ color:var(--gdl,#5fb0e6);font-size:1.05em;width:1.15em;text-align:center;flex:0 0 auto; }
+.hp-menu-primary{
+  background:linear-gradient(100deg,rgba(46,120,180,.42),rgba(16,40,64,.55));
+  border-color:rgba(95,176,230,.6);
+  box-shadow:0 0 22px rgba(46,155,224,.18);
+}
+.hp-menu-primary:hover{ background:linear-gradient(100deg,rgba(58,140,205,.55),rgba(20,52,82,.7)); }
+@media (max-width:768px){
+  .hp-menu{margin-left:16px;max-width:80%}
+  .hp-menu-scrim{background:linear-gradient(90deg, rgba(5,7,11,.94) 0%, rgba(5,7,11,.7) 45%, transparent 90%);}
+  .hp-menu-list{width:auto;max-width:300px}
+  .hp-menu-tag{margin:8px 0 16px}
+  .hp-vnmenu .hp-vn-sprite{opacity:.5}
+}
+
 
 /* ── HOME HERO — cinematic ── */
 .hp-hero{

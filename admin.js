@@ -45,6 +45,7 @@ const AD = {
   designs:   [],        // faction_units (all)
   routes:    [],        // trade_routes (all)
   portraits: [],        // spy_portraits (общий пул портретов оперативников)
+  vn:        null,      // визуальная новелла главной { enabled, sprites[], dialogues[] }
   unions:    [],        // diplo_unions (все союзы — реестр для удаления)
   byFid:     new Map(), // fid → { app, eco, colonies[], buildings[], roster[], queue[], designs[], systems[] }
   resInfo:   {},        // resName → { r, icon }
@@ -129,6 +130,7 @@ async function adLoadDetails() {
   AD.faithFids = new Set((faiths || []).map(f => f.faction_id));
   AD.portraits = portraits || [];
   try { AD.unions = await adRpc('union_admin_list') || []; } catch (e) { AD.unions = []; }
+  await adVNLoad();
 }
 
 // Лёгкий вызов SECURITY DEFINER RPC из админ-панели (свежий токен + JSON).
@@ -228,14 +230,17 @@ function adPaint() {
     // надёжнее (полный re-render #pg на Vercel почему-то не показывал панель).
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
-    const TABS = [['factions', '🛠 Фракции'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['planets', '🪐 Планеты'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)']];
+    const TABS = [['factions', '🛠 Фракции'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)']];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
     let tabContent;
     if (AD.tab === 'unions')        tabContent = adUnionsPanel();
     else if (AD.tab === 'portraits') tabContent = adPortraitsPanel();
+    else if (AD.tab === 'vn')        tabContent = adVNPanel();
     else if (AD.tab === 'planets')   tabContent = adPlanetTexPanel();
+    else if (AD.tab === 'guide')     tabContent = adGuideCoversPanel();
+    else if (AD.tab === 'ach')       tabContent = adAchPanel();
     else if (AD.tab === 'market')    tabContent = adMarketPanel();
     else if (AD.tab === 'mktsim')    tabContent = adMarketSimPanel();
     else tabContent = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + stats;
@@ -464,6 +469,514 @@ async function adPortraitDelete(id) {
     }
     AD.portraits = (AD.portraits || []).filter(x => x.id !== id); adPaint();
   } catch (e) { toast('Не удалось удалить: ' + (e.message || e), 'err'); }
+}
+
+// ── Визуальная новелла главной: спрайты персонажей + редактор реплик ──
+// Конфиг хранится в site_settings (ключ wk_hero_vn) одним JSON. Спрайты —
+// картинки прямо в папку игры assets/hero/ через тот же локальный аплоад-сервер
+// (dir=hero). Главная (render.js buildHeroVN) случайно выбирает диалог и печатает
+// его реплики по очереди в диалоговом окне с печатной машинкой.
+const AD_VN_DIR = 'assets/hero';
+function adVNDefault() { return { enabled: false, sprites: [], dialogues: [] }; }
+async function adVNLoad() {
+  let fresh = false;
+  try {
+    let dbRaw = null;
+    try { dbRaw = (typeof getSiteSetting === 'function') ? await getSiteSetting('wk_hero_vn') : null; } catch (e) {}
+    let dbCfg = null, locCfg = null;
+    try { dbCfg = dbRaw ? (typeof dbRaw === 'string' ? JSON.parse(dbRaw) : dbRaw) : null; } catch (e) {}
+    try { locCfg = JSON.parse(localStorage.getItem('wk_hero_vn') || 'null'); } catch (e) {}
+    // Побеждает более свежий (по _ts) — локальные правки не теряются, если запись в БД не прошла.
+    const cfg = (typeof _vnPickNewer === 'function') ? _vnPickNewer(dbCfg, locCfg) : (dbCfg || locCfg);
+    fresh = !cfg;
+    AD.vn = cfg || adVNDefault();
+  } catch (e) { AD.vn = adVNDefault(); fresh = true; }
+  if (!AD.vn || typeof AD.vn !== 'object') AD.vn = adVNDefault();
+  AD.vn.sprites   = Array.isArray(AD.vn.sprites)   ? AD.vn.sprites   : [];
+  AD.vn.dialogues = Array.isArray(AD.vn.dialogues) ? AD.vn.dialogues : [];
+  // Первое открытие (конфига ещё нет) — засеять редактор исходными фразами
+  // обложки как ГОТОВЫМ редактируемым диалогом. Их можно править и вешать спрайт.
+  if (fresh && !AD.vn.dialogues.length) AD.vn.dialogues = adVNSeedDialogues();
+  AD.vn.dialogues.forEach(adVNNorm);            // привести реплики к объектам {text,spriteId}
+}
+// Расписание: когда диалог может всплывать (слот времени суток).
+const AD_VN_TIMES = [
+  ['any', '🕘 всегда'], ['morning', '🌅 утро (5–11)'], ['day', '☀️ день (12–17)'],
+  ['evening', '🌇 вечер (18–23)'], ['night', '🌙 ночь (0–4)'],
+];
+// Нормализовать диалог: реплики-строки → {text,spriteId}; поле time; миграция старого spriteId.
+function adVNNorm(d) {
+  if (!d.id) d.id = adVNId();
+  if (d.time == null) d.time = 'any';
+  const lines = Array.isArray(d.lines) ? d.lines : [];
+  d.lines = lines.map(l => (typeof l === 'string')
+    ? { text: l, spriteId: d.spriteId || '', count: 1 }                       // старый формат: наследуем спрайт диалога
+    : { text: String((l && l.text) || ''), spriteId: (l && l.spriteId) || '', count: Math.max(1, Math.min(4, (l && l.count) || 1)) });
+  if (!d.lines.length) d.lines = [{ text: '', spriteId: '', count: 1 }];
+  return d;
+}
+// Исходные фразы-приветствия обложки → КАЖДАЯ ФРАЗА = ОТДЕЛЬНЫЙ диалог
+// ({name} — плейсхолдер). На главной случайно всплывает один из них; в каждый
+// можно дописать ещё реплики (со своими спрайтами).
+function adVNSeedDialogues() {
+  let lines = [];
+  try { if (typeof heroGreetPhrases === 'function') lines = heroGreetPhrases('{name}'); } catch (e) {}
+  lines = [...new Set((lines || []).map(s => (s || '').trim()).filter(Boolean))];
+  return lines.map(l => ({ id: adVNId(), time: 'any', speaker: '', lines: [{ text: l, spriteId: '' }] }));
+}
+function adVNId() { return 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+// Снять текущие значения формы в AD.vn (чтобы не терять правки при перерисовке/сохранении).
+function adVNCollect() {
+  if (!AD.vn) return;
+  const en = document.getElementById('ad-vn-enabled');
+  if (en) AD.vn.enabled = !!en.checked;
+  (AD.vn.sprites || []).forEach(s => {
+    const n = document.getElementById('ad-vn-spn-' + s.id);
+    if (n) s.name = n.value || '';
+  });
+  (AD.vn.dialogues || []).forEach(d => {
+    const nm = document.getElementById('ad-vn-nm-' + d.id);
+    const tm = document.getElementById('ad-vn-tm-' + d.id);
+    if (nm) d.speaker = nm.value || '';
+    if (tm) d.time    = tm.value || 'any';
+    (d.lines || []).forEach((ln, i) => {
+      const tx = document.getElementById('ad-vn-lt-' + d.id + '-' + i);
+      const sp = document.getElementById('ad-vn-ls-' + d.id + '-' + i);
+      const ct = document.getElementById('ad-vn-lc-' + d.id + '-' + i);
+      if (tx) ln.text     = tx.value || '';
+      if (sp) ln.spriteId = sp.value || '';
+      if (ct) ln.count    = Math.max(1, Math.min(4, parseInt(ct.value) || 1));
+    });
+  });
+}
+// Сохранить конфиг. ЛОКАЛЬНЫЙ кэш пишем ВСЕГДА (сайт читает его и работает сразу
+// на этом устройстве), затем пробуем БД (общий конфиг). Если БД отказала (нет
+// прав на site_settings) — пробрасываем ошибку, но локально уже сохранено.
+async function adVNPersist() {
+  adVNCollect();
+  AD.vn._ts = Date.now();                       // метка свежести — побеждает при синхронизации
+  const json = JSON.stringify(AD.vn);
+  try {
+    if (typeof _heroVN !== 'undefined') _heroVN = JSON.parse(json);
+    localStorage.setItem('wk_hero_vn', json);
+  } catch (e) {}
+  if (typeof saveSiteSetting !== 'function') throw new Error('saveSiteSetting недоступна');
+  await saveSiteSetting('wk_hero_vn', json);   // может бросить — обработают вызывающие
+}
+function adVNPanel() {
+  if (!AD.vn) AD.vn = adVNDefault();
+  const inp = 'padding:8px 10px;font-size:13px;background:var(--b2,#141a22);color:var(--t1,#e8edf2);border:1px solid var(--w2,#2a3340);border-radius:8px';
+  const sprites = AD.vn.sprites || [];
+  const dialogues = AD.vn.dialogues || [];
+
+  // ── Пул спрайтов ──
+  const spriteCards = sprites.map(s => `<div style="width:104px">
+      <div style="position:relative;width:104px;height:130px;border-radius:8px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/contain no-repeat;background-image:url('${esc(s.url)}')">
+        <button class="btn btn-gh btn-xs" title="Удалить спрайт" onclick="adVNSpriteDelete('${esc(s.id)}')" style="position:absolute;top:3px;right:3px;min-width:0;padding:2px 6px;background:rgba(8,12,22,.8)">✕</button>
+      </div>
+      <input id="ad-vn-spn-${esc(s.id)}" value="${esc(s.name || '')}" placeholder="имя" style="${inp};width:100%;margin-top:4px;font-size:11px;padding:5px 7px">
+    </div>`).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:10px 0">Спрайтов пока нет — загрузи первый PNG/WebP персонажа (лучше с прозрачным фоном).</div>';
+
+  const spriteOpts = id => ['<option value="">— без спрайта —</option>']
+    .concat(sprites.map(s => `<option value="${esc(s.id)}"${id === s.id ? ' selected' : ''}>${esc(s.name || s.id)}</option>`)).join('');
+
+  const timeOpts = t => AD_VN_TIMES.map(([v, l]) => `<option value="${v}"${(t || 'any') === v ? ' selected' : ''}>${esc(l)}</option>`).join('');
+
+  // ── Редактор диалогов: у каждой РЕПЛИКИ свой спрайт + количество спрайтов в кадре; у диалога — время показа ──
+  const dlgCards = dialogues.map((d, i) => {
+    const lineRows = (d.lines || []).map((ln, li) => {
+      const cnt = Math.max(1, Math.min(4, (ln && ln.count) || 1));
+      return `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:6px">
+        <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88);padding-top:9px;min-width:16px">${li + 1}</span>
+        <select id="ad-vn-ls-${esc(d.id)}-${li}" title="Спрайт для этой реплики" style="${inp};min-width:130px;font-size:12px">${spriteOpts(ln.spriteId)}</select>
+        <select id="ad-vn-lc-${esc(d.id)}-${li}" title="Сколько спрайтов в кадре (1-4)" style="${inp};min-width:80px;font-size:12px">
+          <option value="1"${cnt === 1 ? ' selected' : ''}>1 спрайт</option>
+          <option value="2"${cnt === 2 ? ' selected' : ''}>2 спрайта</option>
+          <option value="3"${cnt === 3 ? ' selected' : ''}>3 спрайта</option>
+          <option value="4"${cnt === 4 ? ' selected' : ''}>4 спрайта</option>
+        </select>
+        <textarea id="ad-vn-lt-${esc(d.id)}-${li}" rows="1" placeholder="Реплика… {name}" style="${inp};flex:1;resize:vertical;line-height:1.45;font-size:13px;min-height:36px">${esc(ln.text || '')}</textarea>
+        <button class="btn btn-gh btn-xs" title="Удалить реплику" onclick="adVNRemoveLine('${esc(d.id)}',${li})" style="white-space:nowrap">✕</button>
+      </div>`; }).join('');
+    return `<div style="border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:12px 13px;margin-top:10px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+        <span style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0)">#${i + 1}</span>
+        <label style="font-size:12px;color:var(--t3,#8aa0b0)">Имя:</label>
+        <input id="ad-vn-nm-${esc(d.id)}" value="${esc(d.speaker || '')}" placeholder="Капитан Юри" style="${inp};flex:1;min-width:120px">
+        <label style="font-size:12px;color:var(--t3,#8aa0b0)">Время:</label>
+        <select id="ad-vn-tm-${esc(d.id)}" title="Когда этот диалог может всплывать" style="${inp};min-width:150px">${timeOpts(d.time)}</select>
+        <button class="btn btn-rd btn-xs" onclick="adVNRemoveDialogue('${esc(d.id)}')" title="Удалить диалог" style="white-space:nowrap">🗑</button>
+      </div>
+      ${lineRows}
+      <button class="btn btn-gh btn-xs" onclick="adVNAddLine('${esc(d.id)}')" style="margin-top:8px">+ реплика</button>
+    </div>`;
+  }).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:10px 0">Диалогов нет. Добавь первый — персонаж заговорит на главной.</div>';
+
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">💬 Визуальная новелла главной</div>
+    </div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Обложка главной — это новелла: случайно всплывает один подходящий по времени диалог, реплики печатаются по очереди и сами листаются. <code>{name}</code> подставит имя игрока. У <b>каждой реплики</b> свой спрайт (меняется по ходу диалога с гладкой анимацией), количество спрайтов в кадре (1–4, для групповых сцен), и имя говорящего; у диалога — <b>время суток</b>, когда он может показаться.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 14px;line-height:1.5">📁 Спрайты сохраняются <b>в папку игры</b> <code>${AD_VN_DIR}/</code>. Запусти локальный сервер: <code>node tools/upload-server.js</code>. Лучше PNG/WebP с прозрачным фоном.</div>
+
+    <div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:7px">СПРАЙТЫ <span style="color:var(--t4,#6a7a88)">· ${sprites.length}</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;margin-bottom:8px">${spriteCards}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:6px 0 18px">
+      <input id="ad-vn-file" type="file" accept="image/*" multiple style="${inp};max-width:280px">
+      <button class="btn btn-gd btn-sm" onclick="adVNSpriteUpload()">⬇ Загрузить спрайт(ы)</button>
+      <span id="ad-vn-up-status" style="font-size:12px;color:var(--t3,#8aa0b0)"></span>
+    </div>
+
+    <div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px;border-top:1px solid var(--w2,#2a3340);padding-top:14px">ДИАЛОГИ <span style="color:var(--t4,#6a7a88)">· ${dialogues.length}</span></div>
+    ${dlgCards}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+      <button class="btn btn-gh btn-sm" onclick="adVNAddDialogue()">+ Добавить диалог</button>
+      <button class="btn btn-gh btn-sm" onclick="adVNSeedRestore()" title="Добавить диалог из стандартных фраз-приветствий обложки (их можно отредактировать)">↺ Стандартные фразы</button>
+      <button class="btn btn-gd btn-sm" onclick="adVNSave()">💾 Сохранить новеллу</button>
+    </div>
+  </div>`;
+}
+// Загрузить ОДИН файл-спрайт → вернуть URL. Сначала локальный аплоад-сервер
+// (в папку игры assets/hero), если он поднят; иначе — обычная загрузка
+// (Supabase Storage / base64), чтобы работало и без локального сервера.
+async function adVNUploadOne(f, serverUp) {
+  if (serverUp) {
+    const cf  = (typeof compressImageFile === 'function') ? await compressImageFile(f, 1024, 0.9) : f;
+    const ext = AD_PORT_EXT[cf.type] || 'webp';
+    const r   = await fetch(`${AD_PORT_SERVER}/upload?dir=hero&ext=${ext}`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'application/octet-stream' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.ok && j.url) return j.url;
+    throw new Error(j.error || ('сервер: HTTP ' + r.status));
+  }
+  // Фолбэк без локального сервера: тот же загрузчик, что у обложек.
+  if (typeof handleImgUpload !== 'function') throw new Error('загрузчик недоступен');
+  return await new Promise((resolve, reject) => {
+    let settled = false;
+    const done = u => { if (!settled) { settled = true; resolve(u); } };
+    const fail = () => { if (!settled) { settled = true; reject(new Error('загрузка не удалась')); } };
+    setTimeout(fail, 30000);
+    try { handleImgUpload(f, done); } catch (e) { reject(e); }
+  });
+}
+async function adVNSpriteUpload() {
+  const fileEl = document.getElementById('ad-vn-file');
+  const status = document.getElementById('ad-vn-up-status');
+  const files  = fileEl && fileEl.files ? [...fileEl.files] : [];
+  if (!files.length) { if (status) status.textContent = 'Выберите файл(ы)'; return; }
+  adVNCollect();
+  if (status) status.textContent = 'Загрузка…';
+  const serverUp = await adPortServerAlive();   // есть локальный сервер? иначе — Storage/base64
+  let done = 0, fail = 0, lastErr = '';
+  for (const f of files) {
+    if (status) status.textContent = `Загрузка ${done + fail + 1}/${files.length}…`;
+    try {
+      const url = await adVNUploadOne(f, serverUp);
+      if (!url) throw new Error('пустой URL');
+      AD.vn.sprites.push({ id: adVNId(), name: (f.name || '').replace(/\.[^.]+$/, '') || 'спрайт', url });
+      done++;
+    } catch (e) { console.error('[admin] vn sprite', e); fail++; lastErr = e.message || String(e); }
+  }
+  // Первый загруженный спрайт автоматически вешаем на реплики без спрайта —
+  // чтобы он сразу показывался на главной (и было видно связь в селектах).
+  if (done && AD.vn.sprites.length) {
+    const firstId = AD.vn.sprites[0].id;
+    (AD.vn.dialogues || []).forEach(d => (d.lines || []).forEach(ln => { if (!ln.spriteId) ln.spriteId = firstId; }));
+  }
+  let dbErr = '';
+  try { await adVNPersist(); } catch (e) { dbErr = e.message || String(e); }   // локально уже сохранено
+  if (status) status.textContent = `Файлов: ${files.length} · успешно: ${done} · ошибок: ${fail} · спрайтов в списке: ${AD.vn.sprites.length}${lastErr ? ` · ошибка: ${lastErr}` : ''}${dbErr ? ` · БД: ${dbErr}` : ''}`;
+  if (done && !dbErr) toast(`Спрайт загружен (+${done})`, 'ok');
+  else if (done && dbErr) toast(`Спрайт сохранён локально (+${done}); в общую БД не записалось`, 'err');
+  else if (!done) toast('Не удалось загрузить спрайт: ' + (lastErr || 'неизвестная ошибка'), 'err');
+  adPaint();
+}
+async function adVNSpriteDelete(id) {
+  if (!confirm('Удалить спрайт? Он отвяжется от всех диалогов.')) return;
+  adVNCollect();
+  const s = (AD.vn.sprites || []).find(x => x.id === id);
+  AD.vn.sprites = (AD.vn.sprites || []).filter(x => x.id !== id);
+  (AD.vn.dialogues || []).forEach(d => {
+    if (d.spriteId === id) d.spriteId = '';
+    (d.lines || []).forEach(ln => { if (ln.spriteId === id) ln.spriteId = ''; });
+  });
+  if (s && s.url && s.url.indexOf(AD_VN_DIR + '/') === 0) {
+    const name = s.url.split('/').pop();
+    fetch(`${AD_PORT_SERVER}/file?dir=hero&name=${encodeURIComponent(name)}`, { method: 'DELETE' }).catch(() => {});
+  }
+  try { await adVNPersist(); } catch (e) { toast('Не удалось сохранить: ' + (e.message || e), 'err'); }
+  adPaint();
+}
+function adVNAddDialogue() {
+  adVNCollect();
+  const first = (AD.vn.sprites || [])[0];
+  AD.vn.dialogues.push({ id: adVNId(), time: 'any', speaker: '', lines: [{ text: '', spriteId: first ? first.id : '' }] });
+  adPaint();
+}
+function adVNAddLine(did) {
+  adVNCollect();
+  const d = (AD.vn.dialogues || []).find(x => x.id === did);
+  if (d) { d.lines = d.lines || []; const prev = d.lines[d.lines.length - 1]; d.lines.push({ text: '', spriteId: (prev && prev.spriteId) || '' }); }
+  adPaint();
+}
+function adVNRemoveLine(did, idx) {
+  adVNCollect();
+  const d = (AD.vn.dialogues || []).find(x => x.id === did);
+  if (d && Array.isArray(d.lines)) { d.lines.splice(idx, 1); if (!d.lines.length) d.lines.push({ text: '', spriteId: '' }); }
+  adPaint();
+}
+function adVNSeedRestore() {
+  adVNCollect();
+  const seed = adVNSeedDialogues();
+  if (!seed.length) { toast('Не удалось получить стандартные фразы', 'err'); return; }
+  const spid = (AD.vn.sprites || [])[0]?.id || '';
+  seed.forEach(d => (d.lines || []).forEach(ln => { if (!ln.spriteId) ln.spriteId = spid; }));
+  AD.vn.dialogues.push(...seed);
+  adPaint();
+}
+function adVNRemoveDialogue(id) {
+  adVNCollect();
+  AD.vn.dialogues = (AD.vn.dialogues || []).filter(d => d.id !== id);
+  adPaint();
+}
+async function adVNSave() {
+  try {
+    await adVNPersist();
+    toast('Новелла сохранена', 'ok');
+  } catch (e) {
+    // Локально уже сохранено (внутри adVNPersist) — на этом устройстве работает.
+    toast('Сохранено локально. В общую БД не записалось (нет прав на site_settings): ' + (e.message || e), 'err');
+  }
+  adPaint();
+}
+
+// ── Обложки разделов гайдбука (assets/guide/<id-раздела>.jpg) ─────────
+// Грузятся тем же локальным аплоад-сервером (tools/upload-server.js, dir=guide),
+// фикс. именем = id раздела (перезапись). БД не нужна: гайд сам подхватывает
+// файл фоном со слой-маской (gbApplyCovers в guide.js). Список разделов — из
+// GB_SECTIONS (guide.js, доступен в рантайме).
+const AD_GUIDE_DIR = 'assets/guide';
+function adGuideCoversPanel() {
+  const secs = (typeof GB_SECTIONS !== 'undefined' && Array.isArray(GB_SECTIONS)) ? GB_SECTIONS : [];
+  const bust = AD.gcBust || '';
+  const cards = secs.map(s => {
+    const url = `${AD_GUIDE_DIR}/${s.id}.jpg${bust ? `?t=${bust}` : ''}`;
+    return `<div style="width:150px">
+      <div style="position:relative;width:150px;height:90px;border-radius:9px;border:1px solid var(--w2,#2a3340);overflow:hidden;background:#0c1322 center/cover no-repeat">
+        <img src="${esc(url)}" alt="" onload="this.style.opacity=1" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+             style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font-size:26px">${s.icon || '◆'}</div>
+      </div>
+      <div style="font-size:11px;color:var(--t2,#c4d0da);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(s.label)}">${esc(s.label)}</div>
+      <input type="file" accept="image/*" id="ad-gc-${esc(s.id)}" style="display:none" onchange="adGuideCoverUpload('${esc(s.id)}', this)">
+      <button class="btn btn-gh btn-xs" style="margin-top:4px;width:100%" onclick="document.getElementById('ad-gc-${esc(s.id)}').click()">⬆ Обложка</button>
+      <div id="ad-gc-st-${esc(s.id)}" style="font-size:9px;color:var(--t4,#6a7a88);min-height:11px;text-align:center"></div>
+    </div>`;
+  }).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:14px 0">Список разделов гайда недоступен (guide.js не загружен).</div>';
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">📖 Обложки разделов гайда <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· ${secs.length} разделов</span></div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Каждому разделу — своя картинка-обложка. Она рисуется фоном со сложной слой-маской прозрачности (мягко растворяется по краям и снизу). Загрузка перезаписывает обложку раздела.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 12px;line-height:1.5">📁 Сохраняется <b>прямо в папку игры</b> <code>${AD_GUIDE_DIR}/&lt;id&gt;.jpg</code>. Запусти локальный сервер: <code>node tools/upload-server.js</code> и держи окно открытым.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:14px">${cards}</div>
+  </div>`;
+}
+// Перекодировать картинку-файл в JPEG-Blob нужного размера (канвас).
+function adImageToJpeg(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width: w, height: h } = img;
+      const k = Math.min(1, maxDim / Math.max(w, h));
+      w = Math.round(w * k); h = Math.round(h * k);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);   // подложка под прозрачность PNG
+      ctx.drawImage(img, 0, 0, w, h);
+      c.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/jpeg', quality || 0.85);
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => reject(new Error('не удалось прочитать изображение'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function adGuideCoverUpload(secId, inputEl) {
+  const f = inputEl && inputEl.files && inputEl.files[0];
+  const st = document.getElementById(`ad-gc-st-${secId}`);
+  if (!f) return;
+  if (st) st.textContent = 'Проверка сервера…';
+  if (!(await adPortServerAlive())) {
+    if (st) st.textContent = 'Сервер не запущен';
+    toast('Запусти локальный аплоад-сервер: node tools/upload-server.js', 'err');
+    return;
+  }
+  try {
+    if (st) st.textContent = 'Сохранение…';
+    // Конвертируем в реальный JPEG (гайд ждёт <id>.jpg). Имя с расширением —
+    // сервер сохранит его как есть, не подменяя по content-type.
+    const blob = await adImageToJpeg(f, 1280, 0.85);
+    const r  = await fetch(`${AD_PORT_SERVER}/upload?dir=guide&name=${encodeURIComponent(secId + '.jpg')}`, {
+      method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.gcBust = Date.now();              // сбросить кэш превью
+    if (st) st.textContent = 'Готово ✓';
+    toast(`Обложка раздела «${secId}» сохранена`, 'ok');
+    adPaint();
+  } catch (e) {
+    console.error('[admin] guide cover', e);
+    if (st) st.textContent = 'Ошибка';
+    toast('Не удалось сохранить обложку: ' + (e.message || e), 'err');
+  }
+}
+
+// ── Ачивки: арт (assets/ach/<id>.webp) + правки подписей (_overrides.json) ──
+// Арт грузится локальным сервером (dir=ach). Тексты (имя/цитата/описание/
+// условие) пишутся в assets/ach/_overrides.json — economy.js накладывает их
+// поверх каталога EC_ACH. Числа условий и реальные награды — за сервером БД.
+const AD_ACH_DIR = 'assets/ach';
+const AD_ACH_FIELDS = [['name', 'Название'], ['quote', 'Цитата'], ['desc', 'Описание'], ['cond', 'Условие']];
+function adAchPanel() {
+  const ids  = (typeof EC_ACH_ORDER !== 'undefined' && Array.isArray(EC_ACH_ORDER)) ? EC_ACH_ORDER : [];
+  const cat  = (typeof EC_ACH !== 'undefined') ? EC_ACH : {};
+  if (!ids.length || typeof EC_ACH === 'undefined') {
+    return `<div style="margin-top:24px;color:var(--t4,#6a7a88);font-size:13px">Каталог ачивок недоступен (economy.js не загружен).</div>`;
+  }
+  // Лениво подтянуть текущие правки из файла (один раз).
+  if (AD.achOv == null) { AD.achOv = {}; adAchLoadOv(); }
+  const ov   = AD.achOv || {};
+  const bust = AD.achBust || '';
+  const inp  = 'width:100%;box-sizing:border-box;padding:6px 8px;font-size:12px;background:var(--b1,#0f141b);color:var(--t1,#e8edf2);border:1px solid var(--w2,#2a3340);border-radius:7px';
+  const cards = ids.filter(id => cat[id]).map(id => {
+    const a = cat[id];
+    const url = `${AD_ACH_DIR}/${id}.webp${bust ? `?t=${bust}` : ''}`;
+    const fields = AD_ACH_FIELDS.map(([k, lbl]) => {
+      const v = (ov[id] && ov[id][k] != null) ? ov[id][k] : (a[k] || '');
+      const edited = ov[id] && ov[id][k] != null && ov[id][k] !== '';
+      const fid = `ad-ach-${k}-${esc(id)}`;
+      const tag = (k === 'desc' || k === 'quote')
+        ? `<textarea id="${fid}" rows="2" style="${inp};resize:vertical">${esc(v)}</textarea>`
+        : `<input id="${fid}" type="text" value="${esc(v)}" style="${inp}">`;
+      return `<label style="display:block;margin-top:6px"><span style="font-size:10px;color:var(--t4,#6a7a88)">${lbl}${edited ? ' ✎' : ''}</span>${tag}</label>`;
+    }).join('');
+    return `<div style="width:280px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:10px">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <div style="position:relative;width:104px;height:65px;flex-shrink:0;border-radius:8px;overflow:hidden;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover">
+          <img src="${esc(url)}" alt="" onload="this.style.opacity=1" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+               style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s">
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font-size:24px">${a.ic || '🏆'}</div>
+        </div>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:9px;font-family:monospace;color:var(--t4,#6a7a88);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(id)}</div>
+          <div style="font-size:10px;color:var(--te,#3ec0d0);margin-top:2px">🏆 +${(+a.reward || 0)} ГС <span style="color:var(--t4,#6a7a88)">(награда за сервером)</span></div>
+          <input type="file" accept="image/*" id="ad-ach-file-${esc(id)}" style="display:none" onchange="adAchArtUpload('${esc(id)}', this)">
+          <button class="btn btn-gh btn-xs" style="margin-top:5px;width:100%" onclick="document.getElementById('ad-ach-file-${esc(id)}').click()">⬆ Арт</button>
+        </div>
+      </div>
+      ${fields}
+      <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
+        <button class="btn btn-gd btn-xs" onclick="adAchSaveText('${esc(id)}')">💾 Сохранить</button>
+        <button class="btn btn-gh btn-xs" title="Вернуть подписи из каталога" onclick="adAchResetText('${esc(id)}')">↺ Сброс</button>
+        <span id="ad-ach-st-${esc(id)}" style="font-size:9px;color:var(--t4,#6a7a88)"></span>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🏆 Ачивки <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· арт и подписи (${ids.length})</span></div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Заливай арт (${AD_ACH_DIR}/&lt;id&gt;.webp, 16:10) и правь подписи — имя, цитату, описание, условие. Правки сохраняются в <code>${AD_ACH_DIR}/_overrides.json</code> и накладываются поверх каталога. <b>Числа условий и реальная награда считаются на сервере</b> — здесь только подписи.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 12px;line-height:1.5">📁 Пишется <b>прямо в папку игры</b>. Запусти: <code>node tools/upload-server.js</code> и держи окно открытым.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">${cards}</div>
+  </div>`;
+}
+async function adAchLoadOv() {
+  try {
+    const r = await fetch(`${AD_ACH_DIR}/_overrides.json?t=${Date.now()}`);
+    AD.achOv = r.ok ? (await r.json().catch(() => ({}))) || {} : {};
+  } catch (e) { AD.achOv = {}; }
+  if (AD.tab === 'ach') adPaint();
+}
+// Записать текущий объект правок в файл assets/ach/_overrides.json.
+async function adAchPushOv(stEl) {
+  if (!(await adPortServerAlive())) {
+    if (stEl) stEl.textContent = 'нет сервера';
+    toast('Запусти локальный аплоад-сервер: node tools/upload-server.js', 'err');
+    return false;
+  }
+  const r = await fetch(`${AD_PORT_SERVER}/upload?dir=ach&name=${encodeURIComponent('_overrides.json')}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(AD.achOv || {}, null, 2)
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.ok) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+  return true;
+}
+async function adAchSaveText(id) {
+  const st = document.getElementById(`ad-ach-st-${id}`);
+  const cat = EC_ACH[id] || {};
+  const entry = {};
+  AD_ACH_FIELDS.forEach(([k]) => {
+    const el = document.getElementById(`ad-ach-${k}-${id}`);
+    const v = el ? el.value.trim() : '';
+    // Храним только реально изменённые поля (отличные от каталога).
+    if (v && v !== (cat[k] || '')) entry[k] = v;
+  });
+  AD.achOv = AD.achOv || {};
+  if (Object.keys(entry).length) AD.achOv[id] = entry; else delete AD.achOv[id];
+  try {
+    if (st) st.textContent = 'Сохранение…';
+    if (!(await adAchPushOv(st))) return;
+    // Живой оверлей в каталоге, чтобы игра и превью сразу видели правки.
+    if (typeof EC_ACH !== 'undefined' && EC_ACH[id]) {
+      AD_ACH_FIELDS.forEach(([k]) => { if (entry[k] != null) EC_ACH[id][k] = entry[k]; });
+    }
+    if (st) st.textContent = 'Готово ✓';
+    toast(`Подписи «${id}» сохранены`, 'ok');
+  } catch (e) {
+    console.error('[admin] ach save', e);
+    if (st) st.textContent = 'Ошибка';
+    toast('Не удалось сохранить: ' + (e.message || e), 'err');
+  }
+}
+async function adAchResetText(id) {
+  if (!(AD.achOv && AD.achOv[id])) { toast('У этой ачивки нет правок', 'ok'); return; }
+  if (!confirm(`Сбросить подписи «${id}» к каталогу по умолчанию?`)) return;
+  delete AD.achOv[id];
+  const st = document.getElementById(`ad-ach-st-${id}`);
+  try {
+    if (!(await adAchPushOv(st))) return;
+    toast(`Подписи «${id}» сброшены — обнови страницу, чтобы увидеть каталожные`, 'ok');
+    adPaint();
+  } catch (e) { toast('Не удалось сбросить: ' + (e.message || e), 'err'); }
+}
+async function adAchArtUpload(id, inputEl) {
+  const f = inputEl && inputEl.files && inputEl.files[0];
+  const st = document.getElementById(`ad-ach-st-${id}`);
+  if (!f) return;
+  if (st) st.textContent = 'Проверка сервера…';
+  if (!(await adPortServerAlive())) {
+    if (st) st.textContent = 'нет сервера';
+    toast('Запусти локальный аплоад-сервер: node tools/upload-server.js', 'err');
+    return;
+  }
+  try {
+    if (st) st.textContent = 'Сохранение…';
+    // Арт ачивок — webp (как ждёт economy.js). compressImageFile отдаёт image/webp.
+    const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, 960, 0.85) : f;
+    const r  = await fetch(`${AD_PORT_SERVER}/upload?dir=ach&name=${encodeURIComponent(id + '.webp')}`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.achBust = Date.now();
+    if (st) st.textContent = 'Готово ✓';
+    toast(`Арт ачивки «${id}» сохранён`, 'ok');
+    adPaint();
+  } catch (e) {
+    console.error('[admin] ach art', e);
+    if (st) st.textContent = 'Ошибка';
+    toast('Не удалось сохранить арт: ' + (e.message || e), 'err');
+  }
 }
 
 // ── Текстуры классов планет (assets/map/planets/planet_<класс>.png) ──
