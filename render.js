@@ -2468,24 +2468,25 @@ function buildHeroVN(coverUrl, user) {
 
   const name   = _heroPlayerName(user);
   const sub    = s => String(s == null ? '' : s).replace(/\$?\{name\}/g, name);
-  const dlgFallbackSprite = sprites.find(s => s.id === dlg.spriteId) || sprites.find(s => s.url) || null;
-  // Реплики → [{t:текст, s:[url,url,...], c:count, n:имя}]. Спрайт/имя могут быть СВОИ у каждой реплики.
-  // Поле s теперь массив спрайтов (для поддержки множественных), count — число одновременно видимых.
+  // Реплики → [{t:текст, s:[url,url,...], c:count, n:имя}].
+  // Поле s теперь массив спрайтов по ID из spriteIds, count — число видимых.
   const items = dlg.lines.map(_heroLineObj).map(l => {
     const t = sub(l.text);
     if (!t.trim()) return null;
     const cnt = Math.max(1, Math.min(4, (l && l.count) || 1));
-    const sp = (l.spriteId && sprites.find(s => s.id === l.spriteId)) || dlgFallbackSprite;
-    // Если спрайтов несколько (count > 1) — берём count спрайтов из списка
-    let spriteUrls = [];
-    if (sp) {
-      spriteUrls = [sp.url];
-      // Добавляем дополнительные спрайты
-      for (let i = 1; i < cnt && i < sprites.length; i++) {
-        const nextSprite = sprites[(sprites.indexOf(sp) + i) % sprites.length];
-        if (nextSprite && !spriteUrls.includes(nextSprite.url)) spriteUrls.push(nextSprite.url);
-      }
+    const spriteIds = Array.isArray(l.spriteIds) ? l.spriteIds : (l.spriteId ? [l.spriteId] : []);
+    // Преобразовать ID спрайтов → URL (пустые → берём дефолтный спрайт)
+    let spriteUrls = spriteIds.map(id => {
+      if (!id) return null;  // пустой ID = нет спрайта
+      const sp = sprites.find(s => s.id === id);
+      return sp ? sp.url : null;
+    }).filter(Boolean);
+    // Если спрайтов меньше чем count, заполнить дефолтным (первым доступным)
+    const defaultSprite = sprites.find(s => s.url) || null;
+    while (spriteUrls.length < cnt && defaultSprite) {
+      spriteUrls.push(defaultSprite.url);
     }
+    spriteUrls = spriteUrls.slice(0, cnt);
     return { t, s: spriteUrls, c: cnt, n: sub(l.speaker || dlg.speaker || '') };
   }).filter(Boolean);
   if (!items.length) return null;

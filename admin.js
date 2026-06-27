@@ -509,10 +509,18 @@ function adVNNorm(d) {
   if (!d.id) d.id = adVNId();
   if (d.time == null) d.time = 'any';
   const lines = Array.isArray(d.lines) ? d.lines : [];
-  d.lines = lines.map(l => (typeof l === 'string')
-    ? { text: l, spriteId: d.spriteId || '', count: 1 }                       // старый формат: наследуем спрайт диалога
-    : { text: String((l && l.text) || ''), spriteId: (l && l.spriteId) || '', count: Math.max(1, Math.min(4, (l && l.count) || 1)) });
-  if (!d.lines.length) d.lines = [{ text: '', spriteId: '', count: 1 }];
+  d.lines = lines.map(l => {
+    if (typeof l === 'string') {
+      return { text: l, spriteIds: [d.spriteId || ''], count: 1 };  // старый формат
+    }
+    const cnt = Math.max(1, Math.min(4, (l && l.count) || 1));
+    let spriteIds = Array.isArray(l.spriteIds) ? l.spriteIds : (l.spriteId ? [l.spriteId] : []);
+    // Заполнить до нужного размера пустыми строками
+    while (spriteIds.length < cnt) spriteIds.push('');
+    spriteIds = spriteIds.slice(0, cnt);
+    return { text: String((l && l.text) || ''), spriteIds, count: cnt };
+  });
+  if (!d.lines.length) d.lines = [{ text: '', spriteIds: [''], count: 1 }];
   return d;
 }
 // Исходные фразы-приветствия обложки → КАЖДАЯ ФРАЗА = ОТДЕЛЬНЫЙ диалог
@@ -525,6 +533,22 @@ function adVNSeedDialogues() {
   return lines.map(l => ({ id: adVNId(), time: 'any', speaker: '', lines: [{ text: l, spriteId: '' }] }));
 }
 function adVNId() { return 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+// Пересчитать селекторы спрайтов при изменении количества
+function adVNUpdateLineCount(dialogId, lineIdx, newCount) {
+  const cnt = Math.max(1, Math.min(4, parseInt(newCount) || 1));
+  adVNCollect();  // сохранить текущие значения
+  const dlg = (AD.vn && AD.vn.dialogues) ? AD.vn.dialogues.find(d => d.id === dialogId) : null;
+  if (!dlg || !dlg.lines || !dlg.lines[lineIdx]) return;
+
+  const ln = dlg.lines[lineIdx];
+  if (!Array.isArray(ln.spriteIds)) ln.spriteIds = [];
+  // Заполнить/обрезать до нужного размера
+  while (ln.spriteIds.length < cnt) ln.spriteIds.push('');
+  ln.spriteIds = ln.spriteIds.slice(0, cnt);
+  ln.count = cnt;
+
+  adPaint();  // перерисовать панель
+}
 // Снять текущие значения формы в AD.vn (чтобы не терять правки при перерисовке/сохранении).
 function adVNCollect() {
   if (!AD.vn) return;
@@ -541,11 +565,18 @@ function adVNCollect() {
     if (tm) d.time    = tm.value || 'any';
     (d.lines || []).forEach((ln, i) => {
       const tx = document.getElementById('ad-vn-lt-' + d.id + '-' + i);
-      const sp = document.getElementById('ad-vn-ls-' + d.id + '-' + i);
       const ct = document.getElementById('ad-vn-lc-' + d.id + '-' + i);
-      if (tx) ln.text     = tx.value || '';
-      if (sp) ln.spriteId = sp.value || '';
-      if (ct) ln.count    = Math.max(1, Math.min(4, parseInt(ct.value) || 1));
+      if (tx) ln.text = tx.value || '';
+      if (ct) ln.count = Math.max(1, Math.min(4, parseInt(ct.value) || 1));
+      // Собрать все выбранные спрайты для этой строки
+      ln.spriteIds = [];
+      for (let sIdx = 0; sIdx < (ln.count || 1); sIdx++) {
+        const sp = document.getElementById('ad-vn-ls-' + d.id + '-' + i + '-' + sIdx);
+        if (sp) ln.spriteIds.push(sp.value || '');
+      }
+      // Миграция старого поля spriteId → spriteIds
+      if (ln.spriteId && !ln.spriteIds.length) ln.spriteIds = [ln.spriteId];
+      delete ln.spriteId;
     });
   });
 }
@@ -582,21 +613,32 @@ function adVNPanel() {
 
   const timeOpts = t => AD_VN_TIMES.map(([v, l]) => `<option value="${v}"${(t || 'any') === v ? ' selected' : ''}>${esc(l)}</option>`).join('');
 
-  // ── Редактор диалогов: у каждой РЕПЛИКИ свой спрайт + количество спрайтов в кадре; у диалога — время показа ──
+  // ── Редактор диалогов: у каждой РЕПЛИКИ свои спрайты (1-4) + количество; у диалога — время показа ──
   const dlgCards = dialogues.map((d, i) => {
     const lineRows = (d.lines || []).map((ln, li) => {
       const cnt = Math.max(1, Math.min(4, (ln && ln.count) || 1));
-      return `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:6px">
-        <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88);padding-top:9px;min-width:16px">${li + 1}</span>
-        <select id="ad-vn-ls-${esc(d.id)}-${li}" title="Спрайт для этой реплики" style="${inp};min-width:130px;font-size:12px">${spriteOpts(ln.spriteId)}</select>
-        <select id="ad-vn-lc-${esc(d.id)}-${li}" title="Сколько спрайтов в кадре (1-4)" style="${inp};min-width:80px;font-size:12px">
-          <option value="1"${cnt === 1 ? ' selected' : ''}>1 спрайт</option>
-          <option value="2"${cnt === 2 ? ' selected' : ''}>2 спрайта</option>
-          <option value="3"${cnt === 3 ? ' selected' : ''}>3 спрайта</option>
-          <option value="4"${cnt === 4 ? ' selected' : ''}>4 спрайта</option>
-        </select>
-        <textarea id="ad-vn-lt-${esc(d.id)}-${li}" rows="1" placeholder="Реплика… {name}" style="${inp};flex:1;resize:vertical;line-height:1.45;font-size:13px;min-height:36px">${esc(ln.text || '')}</textarea>
-        <button class="btn btn-gh btn-xs" title="Удалить реплику" onclick="adVNRemoveLine('${esc(d.id)}',${li})" style="white-space:nowrap">✕</button>
+      const spriteIds = Array.isArray(ln.spriteIds) ? ln.spriteIds : (ln.spriteId ? [ln.spriteId] : []);
+      // Заполнить массив спрайтов до нужного размера пустыми строками
+      while (spriteIds.length < cnt) spriteIds.push('');
+      spriteIds.length = cnt; // обрезать лишние
+
+      const spriteSelects = spriteIds.map((sId, sIdx) =>
+        `<select id="ad-vn-ls-${esc(d.id)}-${li}-${sIdx}" title="Спрайт #${sIdx + 1} для этой сцены" style="${inp};min-width:120px;font-size:12px">${spriteOpts(sId)}</select>`
+      ).join('');
+
+      return `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;flex-wrap:wrap">
+        <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88);padding-top:9px;min-width:16px;flex-basis:100%">${li + 1}</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;flex-basis:100%">
+          ${spriteSelects}
+          <select id="ad-vn-lc-${esc(d.id)}-${li}" title="Сколько спрайтов в кадре (1-4)" style="${inp};min-width:80px;font-size:12px" onchange="adVNUpdateLineCount('${esc(d.id)}', ${li}, this.value)">
+            <option value="1"${cnt === 1 ? ' selected' : ''}>1 спрайт</option>
+            <option value="2"${cnt === 2 ? ' selected' : ''}>2 спрайта</option>
+            <option value="3"${cnt === 3 ? ' selected' : ''}>3 спрайта</option>
+            <option value="4"${cnt === 4 ? ' selected' : ''}>4 спрайта</option>
+          </select>
+        </div>
+        <textarea id="ad-vn-lt-${esc(d.id)}-${li}" rows="1" placeholder="Реплика… {name}" style="${inp};flex:1;resize:vertical;line-height:1.45;font-size:13px;min-height:36px;flex-basis:100%">${esc(ln.text || '')}</textarea>
+        <button class="btn btn-gh btn-xs" title="Удалить реплику" onclick="adVNRemoveLine('${esc(d.id)}',${li})" style="white-space:nowrap;flex-basis:100%;align-self:flex-end">✕</button>
       </div>`; }).join('');
     return `<div style="border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:12px 13px;margin-top:10px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
