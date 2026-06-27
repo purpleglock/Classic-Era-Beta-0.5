@@ -720,11 +720,15 @@ async function adVNSpriteUpload() {
       done++;
     } catch (e) { console.error('[admin] vn sprite', e); fail++; lastErr = e.message || String(e); }
   }
-  // Первый загруженный спрайт автоматически вешаем на реплики без спрайта —
-  // чтобы он сразу показывался на главной (и было видно связь в селектах).
+  // Первый загруженный спрайт автоматически вешаем ТОЛЬКО на реплики, где ещё
+  // ничего не выбрано (пустой spriteIds) — чтобы он сразу показывался на главной,
+  // но НЕ затирал уже выбранные спрайты. Пишем в новый формат spriteIds.
   if (done && AD.vn.sprites.length) {
     const firstId = AD.vn.sprites[0].id;
-    (AD.vn.dialogues || []).forEach(d => (d.lines || []).forEach(ln => { if (!ln.spriteId) ln.spriteId = firstId; }));
+    (AD.vn.dialogues || []).forEach(d => (d.lines || []).forEach(ln => {
+      const has = (Array.isArray(ln.spriteIds) && ln.spriteIds.some(Boolean)) || ln.spriteId;
+      if (!has) { ln.spriteIds = [firstId]; ln.count = 1; delete ln.spriteId; }
+    }));
   }
   let dbErr = '';
   try { await adVNPersist(); } catch (e) { dbErr = e.message || String(e); }   // локально уже сохранено

@@ -2,6 +2,20 @@
 // RENDER — home, page, section, blocks, markdown, nav
 // ════════════════════════════════════════════════════════════
 
+// Ключ состояния обложки главной: меняется ТОЛЬКО когда обложку реально надо
+// перестроить (вход/выход, смена роли/фракции, новый конфиг новеллы, обложка, язык).
+// Случайный выбор реплики и подстановка имени в ключ НЕ входят — иначе обложка
+// дёргалась бы при каждом повторном рендере главной.
+function _homeCoverKey() {
+  const u = (typeof user !== 'undefined' && user) ? user : null;
+  const vnTs = (typeof _heroVN !== 'undefined' && _heroVN && _heroVN._ts) || 0;
+  const fac  = (typeof _myFactionApproved !== 'undefined' && _myFactionApproved) ? '1' : '0';
+  const lg   = (typeof lang !== 'undefined') ? lang : 'ru';
+  // Имя в ключ НЕ входит: иначе подгрузка профиля меняла ключ → обложка
+  // пересобиралась и новелла перезапускалась. Имя резолвится из кэша уже на первом
+  // кадре (см. _heroPlayerName + кэш wk_greet_name), поэтому оно стабильно.
+  return [u ? u.id : 'anon', u ? u.role : '-', u && u.is_banned ? 'b' : '-', fac, vnTs, _heroCoverUrl || '', lg].join('|');
+}
 async function renderHome() {
   if (!_pgCache.has('home')) await loadHomePage();
   let customHtml = '';
@@ -69,18 +83,58 @@ async function renderHome() {
   const sectionsHtml = strips ? `<section class="home-block"><div class="hb-head"><span class="hb-tag">${T('sections')}</span></div><div class="sec-grid">${strips}</div></section>` : `<p class="hp-empty-note">${user?'Создайте разделы и статьи.':'Войдите для редактирования.'}</p>`;
 
   // ── Вестник фракций: одобренные новости ──
+  // НЕ блокируем показ обложки/новеллы сетевым запросом новостей — иначе колесо
+  // загрузки крутится «вхолостую», хотя новелла уже готова. Берём то, что уже есть
+  // в кэше FN; если ещё не грузили — тянем в ФОНЕ и перерисовываем по готовности
+  // (обложка сохраняется живой через _homeCoverKey, новелла не перезапускается).
   let newsHtml = '';
-  if (typeof fnLoadApproved === 'function') {
-    try { await fnLoadApproved(); newsHtml = fnHomeBlockHtml(); } catch (e) { newsHtml = ''; }
+  if (typeof fnHomeBlockHtml === 'function') {
+    try { newsHtml = fnHomeBlockHtml(); } catch (e) { newsHtml = ''; }
+  }
+  // ── Лента сектора: события и достижения для новеллы ──
+  // Данные загружаются для новеллы (стоицист рассказывает о событиях),
+  // но блок "Лента сектора" НЕ отображается на главной странице.
+  let eventsHtml = '';
+  // if (typeof fnEventsFeedHtml === 'function') {
+  //   try { eventsHtml = fnEventsFeedHtml(); } catch (e) { eventsHtml = ''; }
+  // }
+  if (typeof fnLoadApproved === 'function' && !FN._loaded && !FN._loading) {
+    FN._loading = true;
+    fnLoadApproved().then(() => {
+      FN._loaded = true; FN._loading = false;
+      if ((typeof curSlug === 'undefined') || curSlug === 'home' || !curSlug) { try { renderHome(); } catch (e) {} }
+    }).catch(() => { FN._loading = false; });
   }
 
-  setPg(`${heroHtml}${customHtml}${newsHtml}${sectionsHtml}${clRows ? `<section class="home-block"><div class="hb-head"><span class="hb-tag">${T('recentChanges')}</span></div><div class="cl-list">${clRows}</div></section>` : ''}${contribsHtml}`);
+  // Главную перерисовывают МНОГО раз при старте (кеш→сессия→свежие данные→авто-обновления).
+  // Чтобы обложка-новелла не дёргалась/не перезапускалась, СОХРАНЯЕМ живой DOM-узел обложки
+  // и переносим его в новый каркас, если ключ состояния не изменился (ключ НЕ зависит от
+  // случайного выбора реплики/подстановки имени — только от того, что реально меняет вид).
+  const _liveCover = document.getElementById('hp-hero-cover');
+  const _curKey = _homeCoverKey();
+  const _liveKey = _liveCover ? _liveCover.getAttribute('data-cover-key') : null;
+
+  setPg(`${heroHtml}${customHtml}${newsHtml}${eventsHtml}${sectionsHtml}${clRows ? `<section class="home-block"><div class="hb-head"><span class="hb-tag">${T('recentChanges')}</span></div><div class="cl-list">${clRows}</div></section>` : ''}${contribsHtml}`);
+
+  let _coverPreserved = false;
+  const _newCover = document.getElementById('hp-hero-cover');
+  if (_newCover) {
+    if (_liveCover && _liveKey !== null && _liveKey === _curKey) {
+      _newCover.replaceWith(_liveCover);   // состояние то же — оставляем уже живую обложку (печать не рвём)
+      _coverPreserved = true;
+    } else {
+      _newCover.setAttribute('data-cover-key', _curKey);
+    }
+  }
 
   // Биржевая бегущая лента в «Ленте сектора» — дозаполняем асинхронно (не блокирует главную)
   if (typeof fnLoadCorpTicker === 'function') fnLoadCorpTicker();
 
-  // Диалоговое окно новеллы — печатная машинка + перелистывание реплик
-  requestAnimationFrame(() => { try { heroVNInit(); } catch (e) {} });
+  // Диалоговое окно новеллы — печатная машинка + выбор (достижения/события/биржа).
+  // Если обложка сохранена живой — печать НЕ трогаем (контроллер уже работает).
+  requestAnimationFrame(() => {
+    if (!_coverPreserved) { try { heroVNInit(); } catch (e) {} }
+  });
 
   // Клик по обложке открывает изображение в полном размере
   requestAnimationFrame(() => {
@@ -2337,9 +2391,10 @@ function _heroLikelyLoggedIn() {
 function heroGreeting(user) {
   let name = null;
   if (user && ['superadmin', 'editor', 'moderator', 'player'].includes(user.role)) {
-    name = ((typeof userProfile !== 'undefined' && userProfile.display_name) || '').trim()
-      || (user.email ? user.email.split('@')[0] : '') || 'командир';
-    try { localStorage.setItem('wk_greet_name', name); } catch (e) {}
+    const disp = ((typeof userProfile !== 'undefined' && userProfile.display_name) || '').trim();
+    name = disp || (user.email ? user.email.split('@')[0] : '') || 'командир';
+    // В кэш кладём ТОЛЬКО настоящее имя — иначе им «затравится» новелла (xlopetsgod).
+    if (disp) { try { localStorage.setItem('wk_greet_name', disp); } catch (e) {} }
   } else if (user) {
     return null;                       // залогинен, но viewer → бренд
   } else if (_heroLikelyLoggedIn()) {  // сессия грузится → оптимистично приветствуем по кэшу
@@ -2413,11 +2468,16 @@ function heroGreetPhrases(name) {
 // Имя игрока для подстановки {name} в реплики новеллы (или нейтральное).
 function _heroPlayerName(user) {
   let name = '';
+  let cached = '';
+  try { cached = (localStorage.getItem('wk_greet_name') || '').trim(); } catch (e) {}
+  // Старый кэш мог быть «затравлен» префиксом email — не показываем его как имя.
+  if (cached && user && user.email && cached === user.email.split('@')[0]) cached = '';
   if (user && ['superadmin', 'editor', 'moderator', 'player'].includes(user.role)) {
-    name = ((typeof userProfile !== 'undefined' && userProfile.display_name) || '').trim()
-      || (user.email ? user.email.split('@')[0] : '');
+    // ТОЛЬКО отображаемое имя (display_name), без префикса email. Пока профиль
+    // грузится — кэшированное имя, иначе нейтральное. Никаких xlopetsgod.
+    name = ((typeof userProfile !== 'undefined' && userProfile.display_name) || '').trim() || cached;
   }
-  if (!name) { try { name = (localStorage.getItem('wk_greet_name') || '').trim(); } catch (e) {} }
+  if (!name) name = cached;
   return name || (lang === 'en' ? 'commander' : 'командир');
 }
 // Выбранный диалог новеллы кэшируется на сессию (не «прыгает» при перерисовках).
@@ -2438,10 +2498,15 @@ function _heroTimeSlot() {
   if (h < 18) return 'day';
   return 'evening';
 }
-// Нормализовать реплику: строка → {text, spriteId}. Обратная совместимость.
+// Нормализовать реплику: строка → {text, spriteIds, count}. Обратная совместимость:
+// старое поле spriteId → массив spriteIds, count = число спрайтов в кадре (1–4).
 function _heroLineObj(l) {
-  if (l && typeof l === 'object') return { text: String(l.text || ''), spriteId: l.spriteId || '', speaker: l.speaker || '' };
-  return { text: String(l || ''), spriteId: '', speaker: '' };
+  if (l && typeof l === 'object') {
+    const spriteIds = Array.isArray(l.spriteIds) ? l.spriteIds.slice() : (l.spriteId ? [l.spriteId] : []);
+    const count = Math.max(1, Math.min(4, l.count || spriteIds.length || 1));
+    return { text: String(l.text || ''), spriteIds, count, spriteId: l.spriteId || '', speaker: l.speaker || '' };
+  }
+  return { text: String(l || ''), spriteIds: [], count: 1, spriteId: '', speaker: '' };
 }
 // Есть ли в диалоге хоть одна непустая реплика.
 function _heroDlgHasText(d) {
@@ -2517,23 +2582,144 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-hero-frame"></div>
     <span class="hpc-corner hpc-tl"></span><span class="hpc-corner hpc-tr"></span>
     <span class="hpc-corner hpc-bl"></span><span class="hpc-corner hpc-br"></span>
-    <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" role="button" tabindex="0">
+    <div class="hp-vn-idx" id="hp-vn-idx" aria-hidden="true"><div class="hp-vn-idx-cap">📈 ${lang === 'en' ? 'EXCHANGE · LIVE INDEX' : 'БИРЖА · ИНДЕКС В ЭФИРЕ'}</div><div id="hp-vn-ticker"></div></div>
+    <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
+      <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
       <div class="hp-vn-text" id="hp-vn-text"></div>
+      <div class="hp-vn-banner" id="hp-vn-banner" aria-hidden="true"></div>
+      <div class="hp-vn-choices" id="hp-vn-choices"></div>
       <div class="hp-vn-foot">
-        <span class="hp-vn-next" id="hp-vn-next">${lang === 'en' ? '⏩ skip' : '⏩ пропустить'}</span>
+        <div class="hp-vn-ctrl">
+          <button class="hp-vn-btn hp-vn-back" id="hp-vn-back" type="button" hidden onclick="event.stopPropagation();heroVNDoBack()">↩ ${lang === 'en' ? 'back' : 'назад'}</button>
+          <button class="hp-vn-btn hp-vn-next" id="hp-vn-next" type="button">${lang === 'en' ? '⏩ skip' : '⏩ пропустить'}</button>
+        </div>
         ${buildHeroCta(user)}
       </div>
     </div>
     ${uploadBtn}
   </div>`;
 }
+// Это событие за сегодня или вчера? (по календарной дате published_at/created_at)
+function _heroIsToday(n) {
+  const d = new Date(n.published_at || n.created_at || 0);
+  if (isNaN(d)) return false;
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  // Проверяем: сегодня или вчера
+  const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  const isYesterday = d.getFullYear() === yesterday.getFullYear() && d.getMonth() === yesterday.getMonth() && d.getDate() === yesterday.getDate();
+  
+  return isToday || isYesterday;
+}
+// Контекстное меню новеллы. Уровень 1 — категории (heroVNChoice). Уровень 2 —
+// СПИСОК конкретных достижений/событий за сегодня, игрок сам выбирает запись →
+// heroVNTell озвучивает её устами персонажа. 'idx' — фраза + анимированный индекс.
+let _heroVNCat = null;   // активная категория ('ach'|'events') для кнопки «назад»
+function heroVNChoice(kind) {
+  if (!_heroVNCtl) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  if (kind === 'menu') { _heroVNCat = null; _heroVNCtl.menu(); return; }
+
+  if (kind === 'ach' || kind === 'events') {
+    _heroVNCat = kind;
+    const ev = (typeof FN !== 'undefined' && Array.isArray(FN.events)) ? FN.events : [];
+    const list = (kind === 'ach')
+      ? ev.filter(n => typeof fnIsAch === 'function' && fnIsAch(n) && _heroIsToday(n))
+      : ev.filter(n => !(typeof fnIsAch === 'function' && fnIsAch(n)) && _heroIsToday(n));
+    const flag = n => (typeof fnFeedFlagHtml === 'function') ? fnFeedFlagHtml(n) : '';
+    let html;
+    if (!list.length) {
+      html = `<div class="hp-vn-choice-empty">${kind === 'ach'
+        ? (en ? 'No achievements today.' : 'Сегодня достижений нет.')
+        : (en ? 'No events today.' : 'Сегодня событий нет.')}</div>`;
+    } else {
+      html = list.slice(0, 12).map(n => {
+        const label = (kind === 'ach')
+          ? (String(n.title || '').replace(/^🏆\s*Достижение:\s*/, '').trim() || (en ? 'Achievement' : 'Достижение'))
+          : (String(n.title || '').trim() || (en ? 'Event' : 'Событие'));
+        return `<button class="hp-vn-choice hp-vn-choice-item" onclick="event.stopPropagation();heroVNTell('${esc(n.id)}')">${kind === 'ach' ? '🏆' : '•'} ${flag(n)}<span class="hp-vn-choice-it-t">${esc(label)}</span></button>`;
+      }).join('');
+    }
+    // «Назад» живёт в подвале рядом с «пропустить» (а не отдельной строкой над списком).
+    _heroVNCtl.setChoices(html);
+    _heroVNCtl.showBack(() => heroVNChoice('menu'));
+    return;
+  }
+
+  if (kind === 'idx') {
+    _heroVNCat = null;
+    const spk = _heroVNCtl.speaker();
+    const has = (typeof FN !== 'undefined' && FN._corpTickerHtml);
+    const phrase = has
+      ? (en ? 'The exchange is feverish today — see for yourself.' : 'Биржа сегодня лихорадит — взгляни сама.')
+      : (en ? 'The exchange is quiet — quotes are loading…' : 'На бирже затишье — котировки подгружаются…');
+    _heroVNCtl.narrate([{ t: phrase, n: spk }], { onComplete: heroVNShowIdx });
+  }
+}
+// Озвучить конкретную выбранную запись устами персонажа (печать в окне).
+function heroVNTell(id) {
+  if (!_heroVNCtl || typeof FN === 'undefined' || !FN.byId) return;
+  const n = FN.byId.get(id);
+  if (!n) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  const spk = _heroVNCtl.speaker();
+  const mk = t => ({ t, n: spk });
+  const body = String(n.body || '').replace(/\s+/g, ' ').trim();
+  const trim = (s, lim) => s.length > lim ? s.slice(0, lim - 1).trim() + '…' : s;
+  // ОДНА реплика: «А, 「фракция」…» → КОРОТКАЯ ПАУЗА (символ ) → текст.
+  const speak = body || String(n.title || '').trim();
+  const tail = speak ? trim(speak, 300) : (en ? 'The wire is silent on it.' : 'Эфир молчит об этом.');
+  const lines = [mk(tail)];
+  if (typeof heroVNShowBanner === 'function') heroVNShowBanner(n);
+  const cat = _heroVNCat || 'menu';
+  _heroVNCtl.narrate(lines, { back: () => heroVNChoice(cat) });
+}
+// Герб причастной державы — ФОНОМ за текстом окна (водяной знак, как в статье).
+// Плюс для достижения — карточка ачивки ПОД текстом. Событие без причастной
+// фракции → ни фона, ни карточки (никакого «мусора»).
+function heroVNShowBanner(n) {
+  const bg = document.getElementById('hp-vn-bgflag');
+  if (bg) {
+    const url = (typeof fnHeroFlagUrl === 'function') ? fnHeroFlagUrl(n) : '';
+    if (url) { bg.style.backgroundImage = `url("${String(url).replace(/"/g, '%22')}")`; bg.classList.add('show'); }
+    else { bg.classList.remove('show'); bg.style.backgroundImage = ''; }
+  }
+  const el = document.getElementById('hp-vn-banner');
+  if (el) {
+    const html = (typeof fnHeroBannerHtml === 'function') ? fnHeroBannerHtml(n) : '';
+    el.innerHTML = html || '';
+    if (html) { el.classList.add('show'); el.setAttribute('aria-hidden', 'false'); }
+    else { el.classList.remove('show'); el.setAttribute('aria-hidden', 'true'); }
+  }
+}
+function heroVNHideBanner() {
+  const el = document.getElementById('hp-vn-banner');
+  if (el) { el.classList.remove('show'); el.setAttribute('aria-hidden', 'true'); el.innerHTML = ''; }
+  const bg = document.getElementById('hp-vn-bgflag');
+  if (bg) { bg.classList.remove('show'); bg.style.backgroundImage = ''; }
+}
+// Показать анимированную ленту индексов ОТДЕЛЬНО от диалогового окна.
+function heroVNShowIdx() {
+  const idxEl = document.getElementById('hp-vn-idx');
+  if (!idxEl) return;
+  idxEl.setAttribute('aria-hidden', 'false');
+  idxEl.classList.add('show');
+  if (typeof fnLoadCorpTicker === 'function') { try { fnLoadCorpTicker(); } catch (e) {} }
+}
+function heroVNHideIdx() {
+  const idxEl = document.getElementById('hp-vn-idx');
+  if (!idxEl) return;
+  idxEl.classList.remove('show');
+  idxEl.setAttribute('aria-hidden', 'true');
+}
+// Кнопка «назад» из режима рассказа — вызывает запомненный обработчик возврата.
+function heroVNDoBack() { if (_heroVNCtl && typeof _heroVNCtl.back === 'function') _heroVNCtl.back(); }
 // «Главное меню» новеллы для НЕзарегистрированных (аноним / залогинен без фракции):
 // заставка с названием игры, спрайтом и вертикальным меню — как титульный экран VN.
 function buildHeroMenu(coverUrl, user) {
-  const cfg = (typeof _heroVN !== 'undefined' && _heroVN) ? _heroVN : {};
-  const sprites = Array.isArray(cfg.sprites) ? cfg.sprites : [];
-  const sprite = sprites.find(s => s.url) || null;
   const _homePg = _pgCache.get('home');
   const _titleRu = (_homePg?.title || 'КЛАССИЧЕСКАЯ ЭРА').trim().toUpperCase();
   const _titleEn = (_homePg?.title_ru || 'CLASSIC ERA').trim().toUpperCase();
@@ -2544,7 +2730,8 @@ function buildHeroMenu(coverUrl, user) {
   const bgLayer = url
     ? `<img class="hp-hero-img" src="${esc(url)}" alt="" loading="eager">`
     : `<div class="hp-hero-noimg"></div>`;
-  const spriteLayer = sprite ? `<img class="hp-vn-sprite" src="${esc(sprite.url)}" alt="" loading="eager">` : '';
+  // Для НЕзарегистрированного (титульное меню) спрайт и угловые «линии оформления»
+  // не показываем — есть рамка hp-hero-frame, остальное лишний визуальный шум.
   const uploadBtn = user?.role === 'superadmin'
     ? `<button class="hp-hero-upload-btn" id="hero-upload-btn" onclick="triggerHeroCoverUpload()" style="display:block;z-index:20;">✎ Обложка</button>`
     : '';
@@ -2563,10 +2750,7 @@ function buildHeroMenu(coverUrl, user) {
   return `<div class="hp-hero-cover hp-vn hp-vnmenu" id="hp-hero-cover">
     ${bgLayer}
     <div class="hp-hero-grad"></div>
-    ${spriteLayer}
     <div class="hp-hero-frame"></div>
-    <span class="hpc-corner hpc-tl"></span><span class="hpc-corner hpc-tr"></span>
-    <span class="hpc-corner hpc-bl"></span><span class="hpc-corner hpc-br"></span>
     <div class="hp-menu-scrim"></div>
     <div class="hp-menu">
       <span class="hp-menu-kick"></span>
@@ -2579,7 +2763,14 @@ function buildHeroMenu(coverUrl, user) {
 }
 function buildHero(coverUrl, user) {
   // Незарегистрированный (аноним или вошёл, но без фракции) — титульное меню новеллы.
-  const isPlayer = (typeof ecCanAccess === 'function') && ecCanAccess();
+  // ВАЖНО: ecCanAccess() требует загруженных данных кабинета (EC.app), которых на
+  // главной может ещё не быть → игрок мельком видел анон-меню. Поэтому считаем игроком
+  // и по роли, и по флагу одобренной фракции (_myFactionApproved, кэшируется в localStorage).
+  const isPlayer = !!(user && !user.is_banned && (
+    ((typeof ecCanAccess === 'function') && ecCanAccess()) ||
+    (typeof _myFactionApproved !== 'undefined' && _myFactionApproved) ||
+    ['player', 'superadmin', 'editor', 'moderator'].includes(user.role)
+  ));
   if (!isPlayer) return buildHeroMenu(coverUrl, user);
   const _vn = buildHeroVN(coverUrl, user);
   if (_vn) return _vn;
@@ -2620,15 +2811,28 @@ function buildHero(coverUrl, user) {
 // затем пауза «на прочтение» и сама собой идёт следующая реплика. Клик —
 // дотипить/пропустить к следующей. Дойдя до конца — останавливается.
 let _heroVNStop = null;
+let _heroVNResume = null;   // { sig, idx } — позволяет продолжить idle-новеллу после перерисовки, а не начинать заново
+let _heroVNCtl = null;      // контроллер активной новеллы: narrate / reset / speaker (для выбора в окне)
 function heroVNInit() {
   if (_heroVNStop) { try { _heroVNStop(); } catch (e) {} _heroVNStop = null; }
   const box  = document.getElementById('hp-vn-box');
   const out  = document.getElementById('hp-vn-text');
   const next = document.getElementById('hp-vn-next');
+  const choicesEl = document.getElementById('hp-vn-choices');
   if (!box || !out) return;
-  let lines;
-  try { lines = JSON.parse(box.getAttribute('data-lines') || '[]'); } catch (e) { lines = []; }
-  if (!lines.length) return;
+  const sig = box.getAttribute('data-lines') || '';
+  let idleLines;
+  try { idleLines = JSON.parse(sig); } catch (e) { idleLines = []; }
+  if (!idleLines.length) return;
+  const idleSpeaker = box.getAttribute('data-speaker') || '';
+
+  // Активный сценарий (idle-новелла ИЛИ нарратив-ответ на выбор).
+  let lines = idleLines, loop = true, onCompleteOnce = null;
+  // Idle стартует с сохранённой позиции (анти-моргание при повторных рендерах).
+  let startAt = 0;
+  if (_heroVNResume && _heroVNResume.sig === sig && _heroVNResume.idx > 0 && _heroVNResume.idx < idleLines.length) {
+    startAt = _heroVNResume.idx;
+  }
 
   // реплика = {t:текст, s:[url,...], c:count, n:имя} (или строка — обратная совместимость)
   const T = i => { const l = lines[i]; return (l && typeof l === 'object') ? String(l.t || '') : String(l || ''); };
@@ -2637,6 +2841,8 @@ function heroVNInit() {
   const N = i => { const l = lines[i]; return (l && typeof l === 'object') ? (l.n || '') : ''; };
   const sprContainer = document.getElementById('hp-vn-sprites');
   const nameEl = document.getElementById('hp-vn-name');
+  const backBtn = document.getElementById('hp-vn-back');
+  function setBack(on) { if (backBtn) backBtn.hidden = !on; }
 
   const en = (typeof lang !== 'undefined' && lang === 'en');
   let idx = 0, typing = false, charTimer = null, holdTimer = null;
@@ -2650,6 +2856,12 @@ function heroVNInit() {
   function setHint(done) {
     if (!next) return;
     const lastLine = idx >= lines.length - 1;
+    if (!loop) {   // режим рассказа: «пропустить», пока есть что листать; в конце прячем (есть кнопка «назад»)
+      next.hidden = !!(lastLine && done);
+      if (!next.hidden) next.textContent = en ? '⏩ skip' : '⏩ пропустить';
+      return;
+    }
+    next.hidden = false;
     next.textContent = (lastLine && done) ? (en ? '↺ replay' : '↺ снова')
                      : (en ? '⏩ skip' : '⏩ пропустить');
   }
@@ -2667,7 +2879,7 @@ function heroVNInit() {
         const newUrl = urls[idx] || '';
 
         if (!img && newUrl) {
-          // Создать новый спрайт
+          // Создать новый спрайт — БЕЗ анимации (мгновенно)
           img = document.createElement('img');
           img.className = `hp-vn-sprite hp-vn-sprite-${idx}`;
           img.setAttribute('data-sprite-idx', idx);
@@ -2675,56 +2887,124 @@ function heroVNInit() {
           img.loading = 'eager';
           img.alt = '';
           sprContainer.appendChild(img);
-          // Анимация появления
-          img.style.animation = 'none'; void img.offsetWidth;
-          img.style.animation = 'hpVnSpriteEnter 0.5s ease-out';
         } else if (img && newUrl && img.src !== newUrl) {
-          // Обновить существующий спрайт с анимацией
-          img.style.animation = 'hpVnSpriteExit 0.25s ease-in';
-          setTimeout(() => {
-            img.src = newUrl;
-            img.style.animation = 'none'; void img.offsetWidth;
-            img.style.animation = 'hpVnSpriteEnter 0.5s ease-out';
-          }, 200);
+          // Обновить существующий спрайт — мгновенная подмена
+          img.src = newUrl;
         } else if (img && !newUrl) {
-          // Убрать спрайт
-          img.style.animation = 'hpVnSpriteExit 0.3s ease-in forwards';
-          setTimeout(() => img.remove(), 250);
+          // Убрать спрайт — мгновенно
+          img.remove();
         }
       }
 
       sprContainer.style.display = urls.length ? '' : 'none';
     }
-    if (nameEl) { const nm = N(i); nameEl.textContent = nm; nameEl.style.display = nm ? '' : 'none'; }
+    if (nameEl) { const nm = N(i) || (loop ? '' : idleSpeaker); nameEl.textContent = nm; nameEl.style.display = nm ? '' : 'none'; }
   }
   function scheduleNext() {
-    if (idx < lines.length - 1) holdTimer = setTimeout(() => play(idx + 1), readPause(T(idx)));
-    else setHint(true);   // последняя реплика — стоп
+    if (idx < lines.length - 1) { holdTimer = setTimeout(() => play(idx + 1), readPause(T(idx))); return; }
+    setHint(true);   // последняя реплика
+    if (!loop && onCompleteOnce) { const cb = onCompleteOnce; onCompleteOnce = null; try { cb(); } catch (e) {} }
   }
+  // Спец-символ в тексте = короткая пауза печати («вдох» после «…»), в показе его нет.
+  const PAUSE_MARK = String.fromCharCode(1);
+  const stripPause = s => String(s == null ? '' : s).split(PAUSE_MARK).join('');
   function finishLine() {                 // реплика допечатана
-    out.textContent = T(idx); typing = false; box.classList.remove('typing');
+    out.textContent = stripPause(T(idx)); typing = false; box.classList.remove('typing');
     setHint(true); scheduleNext();
   }
-  function play(i) {
-    clearTimers(); idx = i; typing = true; box.classList.add('typing');
+  function play(i, instant) {
+    clearTimers(); idx = i;
+    if (loop) _heroVNResume = { sig, idx: i };   // позицию запоминаем только для idle
     applyScene(i);
-    // Анимация появления текста при смене реплики
-    out.style.animation = 'none'; void out.offsetWidth;
-    out.style.animation = 'hpVnTextFade 0.25s ease-out';
+    const raw = T(idx);
+    const display = stripPause(raw);
+    const pauseAt = raw.indexOf(PAUSE_MARK);   // позиция паузы в ВИДИМОМ тексте
+    // instant — первая реплика после (пере)инициализации: показываем сразу, без
+    // перепечатывания, чтобы новелла НЕ «перезапускалась» на каждом ре-рендере.
+    if (instant) {
+      typing = false; box.classList.remove('typing');
+      out.textContent = display; setHint(true); scheduleNext();
+      return;
+    }
+    typing = true; box.classList.add('typing');
     let pos = 0; out.textContent = ''; setHint(false);
-    const line = T(idx);
-    charTimer = setInterval(() => {
-      pos++; out.textContent = line.slice(0, pos);
-      if (pos >= line.length) { clearInterval(charTimer); charTimer = null; finishLine(); }
-    }, 34);
+    function tick() {
+      pos++; out.textContent = display.slice(0, pos);
+      // дошли до места паузы — замираем на ~0.6с, потом печатаем дальше
+      if (pauseAt >= 0 && pos === pauseAt) {
+        clearInterval(charTimer); charTimer = null;
+        holdTimer = setTimeout(() => { holdTimer = null; charTimer = setInterval(tick, 30); }, 600);
+        return;
+      }
+      if (pos >= display.length) { clearInterval(charTimer); charTimer = null; finishLine(); }
+    }
+    charTimer = setInterval(tick, 30);
+  }
+  function renderChoices() {
+    setBack(false);
+    if (!choicesEl) return;
+    const opts = [
+      ['ach',    '🏆 ' + (en ? "Today's achievements" : 'Достижения за сегодня')],
+      ['events', '📰 ' + (en ? 'Sector events' : 'События сектора')],
+      ['idx',    '📈 ' + (en ? "How's the exchange?" : 'Что там на бирже?')],
+    ];
+    choicesEl.innerHTML = opts.map(([k, l]) =>
+      `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');
+  }
+  // В режиме рассказа «назад» живёт в подвале рядом с «пропустить» (кнопкой),
+  // а список выбора очищаем — он не нужен, пока персонаж говорит.
+  function showBackChoice() {
+    if (choicesEl) choicesEl.innerHTML = '';
+    setBack(true);
   }
   function onTap() {
     if (typing) { clearTimers(); finishLine(); return; }   // дотипить сразу
-    clearTimers(); play((idx + 1) % lines.length);          // к следующей (по кругу)
+    const lastLine = idx >= lines.length - 1;
+    if (lastLine && !loop) { heroVNDoBack(); return; }      // конец рассказа — назад
+    clearTimers(); play(loop ? (idx + 1) % lines.length : Math.min(idx + 1, lines.length - 1));
   }
-  box.addEventListener('click', (e) => { if (e.target.closest('.hp-hero-cta')) return; onTap(); });
+  box.addEventListener('click', (e) => { if (e.target.closest('.hp-hero-cta') || e.target.closest('.hp-vn-choices')) return; onTap(); });
   box.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap(); } });
-  play(0);
+
+  // Вернуть idle-новеллу (выйти из режима рассказа): восстановить реплики и снова листать.
+  function stopNarration() {
+    lines = idleLines; loop = true; onCompleteOnce = null;
+    box.classList.remove('hp-vn-narrating');
+    setBack(false);
+    if (typeof heroVNHideIdx === 'function') heroVNHideIdx();
+    if (typeof heroVNHideBanner === 'function') heroVNHideBanner();
+    // Возвращаемся на сохранённую позицию idle и показываем её СРАЗУ (без
+    // перепечатывания с нуля) — «назад» не должен перезапускать новеллу.
+    let resumeAt = 0;
+    if (_heroVNResume && _heroVNResume.sig === sig && _heroVNResume.idx > 0 && _heroVNResume.idx < idleLines.length) {
+      resumeAt = _heroVNResume.idx;
+    }
+    play(resumeAt, true);
+  }
+  // Контроллер — контекстное меню/рассказ рулят активным сценарием.
+  _heroVNCtl = {
+    back: null,
+    setChoices(html) { if (choicesEl) choicesEl.innerHTML = html; },   // подменю-список (idle продолжается)
+    showBack(fn) { if (typeof fn === 'function') this.back = fn; setBack(true); },  // показать «назад» в подвале
+    hideBack() { this.back = null; setBack(false); },
+    menu() { stopNarration(); renderChoices(); },                      // к главным категориям
+    narrate(ls, opts) {                       // персонаж рассказывает выбранное
+      opts = opts || {};
+      lines = (ls && ls.length) ? ls : idleLines;
+      loop = false; onCompleteOnce = opts.onComplete || null;
+      // «назад» из рассказа: сначала вернуть idle, потом показать целевое меню/список
+      const target = opts.back || (() => renderChoices());
+      this.back = () => { stopNarration(); try { target(); } catch (e) {} };
+      box.classList.add('hp-vn-narrating');
+      showBackChoice();
+      play(0);
+    },
+    reset() { this.back = null; stopNarration(); renderChoices(); },   // полный сброс к idle + меню
+    speaker() { return idleSpeaker || N(0) || ''; }
+  };
+
+  renderChoices();
+  play(startAt, true);   // первая реплика — мгновенно (без эффекта перезапуска)
 }
 
 // ══════════════════════════════════════════════════════════════

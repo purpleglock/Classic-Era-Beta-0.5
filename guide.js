@@ -2,7 +2,6 @@
 
 const GB_SECTIONS = [
   { id: 'gb-intro',     icon: '◈', label: 'С чего начать' },
-  { id: 'gb-rules',     icon: '⚖', label: 'Правила проекта' },
   { id: 'gb-reg',       icon: '◷', label: 'Регистрация' },
   { id: 'gb-wizard',    icon: '⬡', label: 'Создание фракции' },
   { id: 'gb-doctrine',  icon: '⚑', label: 'Доктрина: все бонусы' },
@@ -161,22 +160,54 @@ function gbRichTable() {
 // ГС/слот/сутки (цена × добыча). Данные — из каталога GalaxyGen (один источник).
 const GB_RES_RATE = { common: 25, uncommon: 12, rare: 6, epic: 3, legendary: 1 };
 const GB_RAR_N = { common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5 };
+// Роль ресурса в механиках (по имени из GalaxyGen). Ресурс может иметь несколько ролей.
+// fuel — топливо флота · army — сырьё на корабли/дивизии · goods — Фабрика товаров · doom — «Длань».
+const GB_RES_ROLE = {
+  'Железо': ['army', 'goods'], 'Силикаты': ['goods'], 'Лёд': ['goods'], 'Жидкая вода': ['goods'],
+  'Углерод': ['fuel'], 'Метан': ['fuel'], 'Титан': ['army'], 'Редкоземельные руды': ['army'],
+  'Изотопы': ['fuel', 'army'], 'Дейтерий': ['fuel', 'army'], 'Гелий-3': ['fuel', 'army'],
+  'Старвис': ['fuel'], 'Стелларит': ['army'],
+  'Гравиядро': ['doom'], 'Программируемая материя': ['doom'],
+};
+const GB_ROLE_TAG = {
+  fuel:  { ic: '⛽', label: 'топливо' },
+  army:  { ic: '⚔', label: 'армия' },
+  goods: { ic: '🛍', label: 'товары' },
+  doom:  { ic: '🜨', label: 'судный день' },
+};
+function gbRoleChips(name) {
+  return (GB_RES_ROLE[name] || []).map(r => {
+    const t = GB_ROLE_TAG[r]; if (!t) return '';
+    return `<span class="gb-role gb-role-${r}">${t.ic} ${t.label}</span>`;
+  }).join(' ') || '<span class="gb-role gb-role-sell">💰 продажа</span>';
+}
+function gbResFilter(cat, btn) {
+  document.querySelectorAll('.gb-resfilter .gb-rf-btn').forEach(b => b.classList.toggle('on', b === btn));
+  document.querySelectorAll('.gb-res-table tbody tr').forEach(tr => {
+    tr.style.display = (cat === 'all' || (tr.dataset.roles || '').split(' ').includes(cat)) ? '' : 'none';
+  });
+}
 function gbResTable() {
   const cat = (window.GalaxyGen && GalaxyGen.RESOURCES) || [];
   if (!cat.length) return '<p class="gb-muted">Каталог ресурсов недоступен.</p>';
   const ic = (R) => (GalaxyGen.resIconHtml ? GalaxyGen.resIconHtml(R.name, 'gb-res-ic') : (R.icon || ''));
   const rows = cat.slice().sort((a, b) => (a.price - b.price) || a.name.localeCompare(b.name)).map(R => {
     const rate = GB_RES_RATE[R.r] || 25;
-    return `<tr>
+    const roles = (GB_RES_ROLE[R.name] || []).join(' ');
+    return `<tr data-roles="${roles}">
       <td><span class="gb-res-cell">${ic(R)} ${R.name}</span></td>
       <td><span class="gb-rar gb-rar-${GB_RAR_N[R.r] || 1}">${R.rname}</span></td>
+      <td>${gbRoleChips(R.name)}</td>
       <td>${R.price} ГС</td>
       <td>${rate}</td>
       <td><b>${R.price * rate}</b></td>
     </tr>`;
   }).join('');
-  return `<div class="gb-table-wrap"><table class="gb-table gb-res-table">
-    <thead><tr><th>Ресурс</th><th>Редкость</th><th>Цена/ед</th><th>Добыча/сут</th><th>ГС за слот/сут</th></tr></thead>
+  const filters = [['all', '◆ Все'], ['fuel', '⛽ Топливо'], ['army', '⚔ Армия'], ['goods', '🛍 Товары'], ['doom', '🜨 Судный день']];
+  const fbar = `<div class="gb-resfilter">${filters.map(([k, l], i) =>
+    `<button class="gb-rf-btn${i === 0 ? ' on' : ''}" onclick="gbResFilter('${k}',this)">${l}</button>`).join('')}</div>`;
+  return `${fbar}<div class="gb-table-wrap"><table class="gb-table gb-res-table">
+    <thead><tr><th>Ресурс</th><th>Редкость</th><th>Роль</th><th>Цена/ед</th><th>Добыча/сут</th><th>ГС за слот/сут</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }
@@ -274,12 +305,20 @@ function gbFigShip() {
 // Благосостояние: шкала просперити 0.85…1.30 + рычаг плотности.
 function gbFigProsperity() {
   const body = `<div class="gb-fig-body">
+    <div class="gb-flow" style="margin-bottom:12px">
+      ${gbNode('', '🏭', 'Доход здания', 'слоты × …')}
+      ${gbArr()}
+      ${gbNode('b', '⚖', '× Труд системы', 'жители ÷ места')}
+      ${gbArr('g')}
+      ${gbNode('p', '🛍', '× Товары державы', '×0.90 … ×1.10')}
+      ${gbArr('g')}
+      ${gbNode('g', '💰', 'ГС в казну', '')}
+    </div>
     <div class="gb-gauge-bar"></div>
-    <div class="gb-gauge-ticks"><span>×0.85</span><span>×1.0</span><span>×1.15</span><span>×1.30</span></div>
-    <div class="gb-gauge-zones"><span class="err">◄ стагнация · бедность</span><span class="ok">богатство · столица ►</span></div>
-    <div class="gb-fig-foot">Рычаг — <b>плотность застройки</b>: меньше построек на население → больше свободных рабочих рук → выше просперити. <b>Столица всегда в зелёной зоне.</b></div>
+    <div class="gb-gauge-zones"><span class="err">◄ нехватка рук · бедность</span><span class="ok">избыток рук · столица ►</span></div>
+    <div class="gb-fig-foot"><b>Труд</b> — свой для каждой системы (плотность застройки). <b>Товары</b> — один множитель на всю державу (Фабрика товаров кормит население). <b>Столица всегда в зелёной зоне.</b></div>
   </div>`;
-  return gbFig('Благосостояние', body, 'Доход ГС-зданий = слоты × <b>просперити</b> системы. Мягкая полоса <b>×0.85 … ×1.30</b> без обвалов.');
+  return gbFig('Благосостояние — два множителя', body, 'Доход ГС-зданий = слоты × <b>труд системы</b> × <b>товары державы</b>. Мягкие полосы без обвалов.');
 }
 
 // Биржа: безтекстовый мини-график индекса (SVG) + HTML-чипы инструментов.
@@ -593,7 +632,7 @@ function renderGuidebook() {
         <div class="gb-tr gb-th"><span>Уровень</span><span>Время</span><span>Стоимость</span></div>
         <div class="gb-tr"><span>Простое</span><span>1 день</span><span>1 000 ГС</span></div>
         <div class="gb-tr"><span>Сложное</span><span>2 дня</span><span>1 800 ГС + 60 ОН</span></div>
-        <div class="gb-tr"><span>Экстремальное</span><span>4 дня</span><span>3 200 ГС + 200 ОН</span></div>
+        <div class="gb-tr"><span>Экстремальное</span><span>4 дня</span><span>4 800 ГС + 30 ОН</span></div>
       </div>
 
       <div class="gb-note gb-note-info">
@@ -701,6 +740,7 @@ function renderGuidebook() {
       <div class="gb-bld-grid">
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⚙</span><b>Гражданская фабрика</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">Основной источник ГС: +200 ГС/сут за слот. Итог зависит от <b>просперити системы</b> (баланс спрос/предложение) и спроса на товары — в дефицитной по сырью/труду системе доход просядет, в сбалансированной вырастет.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⛏</span><b>Добывающий завод</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">Добыча ресурсов планеты (сам ГС не даёт). Несколько слотов можно назначить на один ресурс — добыча суммируется. Ценность зависит от редкости месторождения.</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">🛍</span><b>Фабрика товаров</b></div><div class="gb-bld-cost">1 200 ГС · первый бесплатно</div><div class="gb-bld-d">Из воды и сырья делает товары: каждый слот = <b>6 воды + 4 сырья → 10 товаров/сут</b>. Товары кормят население всей державы (обеспечение → общий множитель дохода ×0.90…×1.10), излишек продаётся на бирже. Входы: Лёд/Жидкая вода и Железо/Силикаты.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⇄</span><b>Торговый хаб</b></div><div class="gb-bld-cost">1 000 ГС · 1 слот</div><div class="gb-bld-d">Доход в ГС, но только при активных торговых путях.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">◆</span><b>Товарная биржа</b></div><div class="gb-bld-cost">1 500 ГС · 1 слот</div><div class="gb-bld-d">Сама продаёт накопленные ресурсы за ГС (50–75% цены по редкости), без торговых путей.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">📦</span><b>Склад</b></div><div class="gb-bld-cost">800 ГС · 1 слот</div><div class="gb-bld-d">Поднимает лимит ёмкости склада ресурсов (+500 за слот). Нужен, если копите добычу в режиме «Склад».</div></div>
@@ -720,33 +760,47 @@ function renderGuidebook() {
     <!-- БЛАГОСОСТОЯНИЕ -->
     <section id="gb-prosperity" class="gb-section">
       <h2 class="gb-h2"><span class="gb-h2-icon">◈</span>Благосостояние систем</h2>
-      <p>Доход ваших ГС-зданий — это не фиксированная цифра. Каждое здание даёт <b>слоты</b>, а слоты умножаются на <b>просперити</b> (благосостояние) системы, в которой стоит планета. Богатая система платит больше, бедная — меньше. Это главный «скрытый» множитель экономики, и управлять им проще, чем кажется.</p>
+      <p>Доход ваших ГС-зданий — это <b>не</b> фиксированная цифра. Каждое здание даёт <b>слоты</b>, а итоговый доход = слоты × <b>два множителя</b>: благополучие <b>системы</b> (свой для каждой) и обеспечение товарами <b>всей державы</b> (общий). Оба видны на вкладке <strong>«Благополучие»</strong>.</p>
       ${gbFigProsperity()}
 
-      <h3 class="gb-h3">Один рычаг — плотность застройки</h3>
-      <p>Население системы даёт <b>рабочие руки</b>. Каждая постройка эти руки забирает. Считайте так: <b>мало построек на большое население</b> → рук в избытке → система <b>богатеет</b> (просперити растёт к ×1.30). <b>Плотно застроили</b> небольшое население → рук не хватает → просперити мягко проседает (вплоть до ×0.85).</p>
-      <ul class="gb-ul">
-        <li>Полоса просперити <b>мягкая: ×0.85 … ×1.30</b>. Резких обвалов нет — доход «дышит», а не рушится.</li>
-        <li><b>Столичная система всегда богата и спокойна</b> — большое население, простор для застройки. Её просперити не падает, население не бунтует.</li>
-        <li>Военные постройки (верфь, военный завод) ГС не приносят, но рабочие руки <b>занимают</b> — учитывайте это при застройке доходных систем.</li>
-        <li>Соседние системы <b>вашей же державы</b> по гиперпути немного делятся излишком благополучия (<b>спилловер</b>). На целый сектор влияют события — <b>война, пираты, экономический бум</b>.</li>
-      </ul>
-      <div class="gb-note gb-note-info">
-        <span class="gb-note-i">i</span>
-        <div>Шкалы сырья и товаров — <b>справочные</b>: на реальный доход они влияют слабо (товарная премия фабрик — лёгкие ±15%). Главное — труд: <b>население ÷ рабочие места</b>.</div>
+      <h3 class="gb-h3">Словарь вкладки «Благополучие»</h3>
+      <p>В таблице систем шесть колонок — вот что каждая значит:</p>
+      <div class="gb-kv-grid">
+        <div class="gb-kv-row"><span class="gb-kv-key">👥 Жители</span><span class="gb-kv-val"><b>Население системы</b> — сумма населения всех ваших колоний в ней. Жители дают рабочие руки и едят товары. (Процент рядом — доля заселённости, она падает при долгой бедности.)</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">👷 Места</span><span class="gb-kv-val"><b>Рабочие места</b> — сколько рук требуют все постройки системы (включая военные). Чем плотнее застройка, тем больше мест.</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">⚖ Труд (покрытие)</span><span class="gb-kv-val">Отношение <b>жители ÷ рабочие места</b> в %. &gt;100% — рук в избытке (хорошо), &lt;100% — нехватка рук (давит доход).</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">× Благополучие</span><span class="gb-kv-val"><b>Множитель дохода</b> всех построек системы, выводится из покрытия труда. Богатая система платит больше, бедная — меньше.</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">Статус</span><span class="gb-kv-val">«в достатке» / «волнения» / «стагнация» — насколько системе хватает рук. ★ Столица всегда «в достатке».</span></div>
       </div>
 
+      <h3 class="gb-h3">Рычаг 1 — труд системы (плотность застройки)</h3>
+      <p>Главный рычаг прост: <b>мало построек на большое население</b> → рук в избытке → система <b>богатеет</b> (благополучие растёт). <b>Плотно застроили</b> небольшое население → рук не хватает → благополучие мягко проседает.</p>
+      <ul class="gb-ul">
+        <li>Полоса благополучия <b>мягкая</b>: резких обвалов нет — доход «дышит», а не рушится.</li>
+        <li><b>Столичная система всегда богата и спокойна</b> — большое население, простор для застройки. Её доход не падает, население не бунтует.</li>
+        <li>Военные постройки (верфь, военный завод) ГС не приносят, но рабочие места <b>занимают</b> — учитывайте это в доходных системах.</li>
+        <li>Соседние системы <b>вашей же державы</b> по гиперпути немного делятся излишком благополучия (<b>спилловер</b>). На целый сектор влияют события — <b>война, пираты, бум</b>.</li>
+      </ul>
+
+      <h3 class="gb-h3">Рычаг 2 — товары державы <span class="gb-badge">🛍</span></h3>
+      <p>Второй множитель <b>один на всю державу</b>: население <b>ест товары</b>, которые делает <a class="gb-link" onclick="gbScrollTo('gb-buildings')">Фабрика товаров</a> (вода + сырьё → товары). Чем лучше обеспечено население, тем выше общий множитель дохода — в полосе <b>×0.90 … ×1.10</b>.</p>
+      <ul class="gb-ul">
+        <li><b>Обеспечение = товары ÷ спрос населения.</b> Хватает (100%+) → доход всех построек ×1.10; дефицит → проседает к ×0.90.</li>
+        <li>Спрос растёт вместе с населением державы — расширяясь, не забывайте строить фабрики товаров.</li>
+        <li>Излишек товаров продаётся на бирже. Входы (Лёд / Жидкая вода и Железо / Силикаты) надо <b>добывать</b>, иначе фабрика простаивает.</li>
+      </ul>
+
       <h3 class="gb-h3">Бедность: последствия и лечение</h3>
-      <p>Если рабочих рук долго не хватает, система медленно копит напряжение: <b>волнения → стагнация</b> (доход слегка обрезан, мягкий потолок ×0.90). Бедность <b>мягкая</b> — она понемногу гонит население (доля заселённости падает медленно, но <b>не ниже 85%</b>) и лишь в крайнем случае выливается в редкие <b>беспорядки</b> с небольшим разовым ущербом казне.</p>
+      <p>Если рабочих рук долго не хватает, система копит напряжение: <b>волнения → стагнация</b> (доход слегка обрезан). Бедность <b>мягкая</b> — она понемногу гонит население (доля заселённости падает, но не до нуля) и лишь в крайнем случае даёт редкие <b>беспорядки</b> с разовым ущербом казне.</p>
       <div class="gb-kv-grid">
         <div class="gb-kv-row"><span class="gb-kv-key">🏗 Разрядить застройку</span><span class="gb-kv-val">Коренное лечение: меньше построек на население — больше свободных рук. Расселяйте доходные здания по разным системам.</span></div>
-        <div class="gb-kv-row"><span class="gb-kv-key">💰 Дотация</span><span class="gb-kv-val">Деньги из казны напрямую поднимают просперити системы.</span></div>
-        <div class="gb-kv-row"><span class="gb-kv-key">🍞 Продпайки</span><span class="gb-kv-val">Мгновенно сбивают накопленное напряжение.</span></div>
-        <div class="gb-kv-row"><span class="gb-kv-key">🚀 Экстренный импорт</span><span class="gb-kv-val">Закрывает дефицит и тормозит рост напряжения.</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">💰 Дотация</span><span class="gb-kv-val">+0.25 к благополучию на 5 дней. Деньги напрямую поднимают доход — лечит симптом, не корень.</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">📦 Снабжение</span><span class="gb-kv-val">−3 напряжения сразу + малый буст на 3 дня. Быстро сбивает волнения.</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">🚀 Экстренный импорт</span><span class="gb-kv-val">+0.15 на 7 дней и тормозит рост напряжения, пока строите производство.</span></div>
       </div>
       <div class="gb-note gb-note-tip">
         <span class="gb-note-i">★</span>
-        <div>Где смотреть: индекс <b>«Бедность»</b> в «Обзоре» и секция <b>«Бедность и благополучие»</b> во вкладке «Территория» — карточки систем с причинами и подсказками-рычагами. Стоимость экстренных мер растёт с населением системы.</div>
+        <div>Где смотреть: индекс <b>«Бедность»</b> в «Обзоре» и вкладка <b>«Благополучие»</b> — клик по строке системы раскрывает причины дефицита и кнопки мер. Стоимость экстренных мер растёт с населением системы.</div>
       </div>
     </section>
 
@@ -1193,6 +1247,7 @@ function renderGuidebook() {
   if (typeof setAct === 'function') setAct('guide');
 
   gbMakeCollapsible();
+  gbApplyCovers();
 
   requestAnimationFrame(() => {
     const links = document.querySelectorAll('.gb-toc-link');
@@ -1206,6 +1261,28 @@ function renderGuidebook() {
       });
     }, { rootMargin: '-15% 0px -75% 0px' });
     document.querySelectorAll('.gb-section').forEach(s => obs.observe(s));
+  });
+}
+
+// ── Обложки разделов ──────────────────────────────────────────────────
+// Для каждого раздела гайда (id="gb-…") пробуем подгрузить картинку-обложку
+// assets/guide/<id>.jpg (грузится в админке, вкладка «Обложки»). Если файл
+// есть — вставляем её фоном со сложной слой-маской прозрачности (см.
+// .gb-cover в css/19_guide.css). Нет файла — раздел остаётся как был.
+function gbApplyCovers() {
+  document.querySelectorAll('.gb-main .gb-section[id^="gb-"]').forEach(sec => {
+    if (sec.querySelector(':scope > .gb-cover')) return;
+    const url = `assets/guide/${sec.id}.jpg`;
+    const img = new Image();
+    img.onload = () => {
+      if (sec.querySelector(':scope > .gb-cover')) return;
+      const cv = document.createElement('div');
+      cv.className = 'gb-cover';
+      cv.style.backgroundImage = `url('${url}')`;
+      sec.insertBefore(cv, sec.firstChild);
+      sec.classList.add('has-cover');
+    };
+    img.src = url;
   });
 }
 

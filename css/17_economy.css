@@ -2183,6 +2183,14 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-bdg-exp:hover { border-left-color: var(--err, #ff6b6b); }
 .ec-bdg-var .ec-bdg-val.pos { color: var(--t3, #8aa0b0); }
 
+/* Потоки ВНЕ начисления тика — приглушённый блок, чтобы не путать с «Чистым доходом» */
+.ec-bdg-extra { margin-top: 11px; padding: 9px 10px; border: 1px dashed var(--w2, #2a3340); border-radius: 8px; background: color-mix(in srgb, var(--b1, #0d1117) 60%, transparent); opacity: .9; }
+.ec-bdg-extra-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-family: var(--font-display, sans-serif); font-weight: 700; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--t3, #8aa0b0); }
+.ec-bdg-extra-sum { font-family: var(--font-mono, monospace); font-size: 11px; color: var(--t4, #6a7a88); }
+.ec-bdg-extra-note { font-size: 10.5px; line-height: 1.4; color: var(--t4, #6a7a88); margin: 5px 0 8px; }
+.ec-bdg-extra .ec-bdg-row { display: grid; grid-template-columns: 26px minmax(0,1fr) auto; gap: 11px; opacity: .82; }
+.ec-bdg-row-extra .ec-bdg-val.pos { color: var(--t3, #8aa0b0); }
+
 /* Прочие потоки (наука/агенты/доктрина) — чипы, не дублируют свои панели */
 .ec-bdg-flows { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
 .ec-bdg-flow {

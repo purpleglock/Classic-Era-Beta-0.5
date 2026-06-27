@@ -558,7 +558,7 @@ const EC_GRP_LABEL = { lava: 'Лавовые', volcanic: 'Вулканическ
 // type = имя группы (генератор)
 const EC_GRP_NAME = { 'Лавовые миры': 'lava', 'Вулканические': 'volcanic', 'Землеподобные': 'terrestrial', 'Океанические': 'oceanic', 'Пустынные': 'desert', 'Криомиры': 'cryo', 'Газовые гиганты': 'gasgiant', 'Ледяные гиганты': 'icegiant', 'Горячие гиганты': 'hotgiant', 'Экзотические': 'exotic', 'Малые тела': 'micro', 'Аномалии': 'anomaly' };
 // фолбэк: имя планеты → группа (сид-данные/старый формат)
-const EC_PLANET_NAME = { 'Катархей': 'lava', 'Мёртвая планета': 'lava', 'Супервулканическая планета': 'volcanic', 'Хтонический мир': 'lava', 'Горячий Юпитер': 'hotgiant', 'Горячий Нептун': 'hotgiant', 'Железный мир': 'lava', 'Дастория': 'volcanic', 'Литара': 'desert', 'Океаническая суперземля': 'exotic', 'Рыхлый гигант': 'gasgiant', 'Железный карлик': 'terrestrial', 'Духлесс': 'volcanic', 'Терра': 'terrestrial', 'Суперземля': 'terrestrial', 'Гикеан': 'oceanic', 'Панталассическая планета': 'oceanic', 'Теракрон': 'terrestrial', 'Мини-Нептун': 'gasgiant', 'Водный Юпитер': 'gasgiant', 'Тундровая планета': 'terrestrial', 'Псамора': 'oceanic', 'Мир дюн': 'desert', 'Гельвард': 'cryo', 'Турмион': 'gasgiant', 'Ледяной гигант': 'icegiant', 'Аммиачный мир': 'cryo', 'Газовый карлик': 'gasgiant', 'Метановый мир': 'cryo', 'Суперюпитер': 'gasgiant', 'Коричневый карлик': 'gasgiant', 'Планета-сирота': 'exotic', 'Углеродная планета': 'cryo', 'Тёмный замёрзший мир': 'cryo', 'Карликовая планета': 'micro', 'Мегаастероид': 'micro', 'Пустошь': 'anomaly', 'Кротовая нора': 'anomaly', 'Токсичный карлик': 'anomaly' };
+const EC_PLANET_NAME = { 'Катархей': 'lava', 'Мёртвая планета': 'lava', 'Супервулканическая планета': 'volcanic', 'Хтонический мир': 'lava', 'Горячий Юпитер': 'hotgiant', 'Горячий Нептун': 'hotgiant', 'Железный мир': 'lava', 'Дастория': 'volcanic', 'Литара': 'desert', 'Океаническая суперземля': 'exotic', 'Рыхлый гигант': 'gasgiant', 'Железный карлик': 'terrestrial', 'Духлесс': 'volcanic', 'Терра': 'terrestrial', 'Суперземля': 'terrestrial', 'Гикеан': 'oceanic', 'Панталассическая планета': 'oceanic', 'Теракрон': 'terrestrial', 'Мини-Нептун': 'gasgiant', 'Водный Юпитер': 'gasgiant', 'Тундровая планета': 'terrestrial', 'Псамора': 'oceanic', 'Мир дюн': 'desert', 'Гельвард': 'cryo', 'Турмион': 'gasgiant', 'Ледяной гигант': 'icegiant', 'Аммиачный мир': 'cryo', 'Газовый карлик': 'gasgiant', 'Метановый мир': 'cryo', 'Суперюпитер': 'gasgiant', 'Коричневый карлик': 'gasgiant', 'Планета-сирота': 'exotic', 'Углеродная планета': 'cryo', 'Тёмный замёрзший мир': 'cryo', 'Карликовая планета': 'micro', 'Мегаастероид': 'micro', 'Черная дыра': 'anomaly', 'Кротовая нора': 'anomaly', 'Токсичный карлик': 'anomaly' };
 const EC_NOCOL = new Set(['gasgiant', 'icegiant', 'hotgiant', 'anomaly', 'belt']);
 function ecPlanetGroup(p) {
   if (!p) return 'unknown';
@@ -1103,10 +1103,16 @@ async function ecRenderDashboard() {
   }
   try {
     if (!EC.actAs) await ecBootOnce();   // создаём экономику + начисляем доход (тост внутри). В режиме администрации тик не запускаем — он резолвит фракцию по auth.uid()
-    await ecLoad();
+    // ФАЗА 1: ядро — кабинет появляется СРАЗУ, не дожидаясь биржи/веры/обороны/артиллерии.
+    await _ecLoadCore();
     ecPaintCabinet();
     // Личные сообщения админа этой фракции — всплывают 1 раз при входе в кабинет.
     if (typeof fnCheckPrivatePopup === 'function') fnCheckPrivatePopup(EC.app.faction_id);
+    // ФАЗА 2: подсистемы вкладок догружаем фоном; по готовности до-рисовываем экран,
+    // если игрок ещё в кабинете (мог уйти на карту/в вики за время загрузки).
+    _ecLoadRest().then(() => {
+      if (curSlug === 'economy' && EC.app && EC.app.faction_id) ecPaintCabinet();
+    }).catch(() => {});
   } catch (e) {
     // Никакого вечного спиннера — показываем причину и кнопку повтора
     setPg(`<div class="ec-wrap"><div class="sempty" style="gap:12px;flex-direction:column">
@@ -1141,21 +1147,33 @@ function ecCached(key, fetcher) {
 
 // Дедуп параллельных загрузок: пока один ecLoad в полёте, повторные вызовы
 // (быстрые действия подряд, двойной рендер) ждут его, а не запускают ещё ~40 RPC.
-let _ecLoadInFlight = null;
+let _ecLoadInFlight = null, _ecCoreInFlight = null, _ecRestInFlight = null;
+// Полная загрузка (ядро + подсистемы) — для перезагрузки кабинета после действий.
 async function ecLoad() {
   if (_ecLoadInFlight) return _ecLoadInFlight;
-  _ecLoadInFlight = _ecLoadImpl();
+  _ecLoadInFlight = (async () => { await _ecLoadCore(); await _ecLoadRest(); })();
   try { return await _ecLoadInFlight; }
   finally { _ecLoadInFlight = null; }
 }
-async function _ecLoadImpl() {
+// ── ФАЗА 1 (ядро) ── Данные для обложки, казны и стартовых вкладок (Обзор/Колонии/
+// Силы/Территория). Грузится ПЕРЕД первой отрисовкой — кабинет появляется сразу, не
+// дожидаясь биржи/веры/обороны/артиллерии. Тяжёлые подсистемы вкладок — в _ecLoadRest.
+async function _ecLoadCore() {
+  if (_ecCoreInFlight) return _ecCoreInFlight;
+  _ecCoreInFlight = _ecLoadCoreImpl();
+  try { return await _ecCoreInFlight; }
+  finally { _ecCoreInFlight = null; }
+}
+async function _ecLoadCoreImpl() {
   EC.fid = EC.app.faction_id;
   const fid = encodeURIComponent(EC.fid);
-  const [ecoRows, cols, blds, sys, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, spyAgency, diploStatus, incomeHistory, faithStatus, faithList, passiveIntel, techLayout, techPrereq, market, exchange, bonds, corps, spatial, sectors, margin, futures, options, doom, defMines, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, goodsBoard, marketCfg, myFleets] = await Promise.all([
+  // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
+  // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
+  ecResetDeferred();
+  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
-    Promise.resolve(null),   // EC.systems выводится из allSys ниже — НЕ дёргаем map_systems второй раз (экономия запросов к БД)
     dbGet('faction_units', `or=(faction_id.eq.${fid},faction_id.is.null)&order=name.asc`).catch(() => []),
     dbGet('unit_production', `faction_id=eq.${fid}&order=created_at.desc`).catch(() => []),
     dbGet('map_systems', `select=id,name,faction,x,y,planets`).catch(() => []),
@@ -1169,60 +1187,26 @@ async function _ecLoadImpl() {
     ecRpc('spy_incoming').catch(() => []),
     // Отношения: только свои пары (RLS отдаёт где я from или to)
     dbGet('faction_relations', `or=(from_fid.eq.${fid},to_fid.eq.${fid})`).catch(() => []),
-    // Предложения обмена (RLS отдаёт где я from или to)
     dbGet('barter_offers', `status=eq.pending&order=created_at.desc`).catch(() => []),
-    // Предложения продажи технологий/чертежей (RLS отдаёт где я продавец или покупатель)
     dbGet('tech_offers', `status=eq.pending&order=created_at.desc`).catch(() => []),
-    // Рейды: только свои (RLS); статус флота для панели
     dbGet('raid_missions', `actor_fid=eq.${fid}&order=created_at.desc&limit=40`).catch(() => []),
     ecRpc('raid_status').catch(() => null),
     ecRpc('trade_capacity').catch(() => null),   // грузоподъёмность торгового флота
-    ecRpc('spy_recruits_list').catch(() => null),   // агентура: ростер + еженедельный рынок рекрутов
-    ecRpc('diplo_status').catch(() => null),         // союзы: федерация/конфедерация + вассалитеты
-    dbGet('income_history', `owner_id=eq.${user.id}&order=tick_at.desc&limit=30`).catch(() => []),  // доход по времени (история для графиков статистики)
-    ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции (вера, роль, сила, скидка)
-    ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий (для вступления)
-    ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез по союзникам/торг.партнёрам/друзьям
-    ecCached('techLayout', () => dbGet('tech_layout', `select=node_id,x,y,icon,img,nocore`)),   // PoE-раскладка дерева — статична, кэш на сессию
-    ecCached('techPrereq', () => dbGet('tech_prereq', `select=node_id,prereq`)),   // связи дерева (prereq) — статичны, кэш на сессию
-    dbGet('market_resources', `select=name,base_price,price,stock,equilibrium,npc_supply,npc_demand`).catch(() => []),  // галактический рынок: живые цены/запасы + NPC-поток (зеркало для UI и ecResPriceN)
-    ecRpc('exchange_status').catch(() => null),   // биржа: индекс/ETF + спарклайны цен ресурсов + моя позиция
-    ecRpc('bonds_status').catch(() => null),      // биржа: облигации — мои выпуски/держания + рынок чужих бумаг
-    ecRpc('corps_status').catch(e => ({ __err: (e && e.message) || 'нет ответа' })),   // биржа: корпорации (ошибку показываем в UI)
-    ecRpc('spatial_status').catch(() => []),   // пространственная экономика: NET-баланс систем (с учётом торговых караванов между игроками)
-    dbGet('map_sectors', `select=id,name,system_ids,econ_event,econ_mod,econ_until`).catch(() => []),   // сектора + эконом-события (срез 4)
-    ecRpc('margin_status').catch(() => null),    // биржа: маржа — лонги/шорты с плечом (срез 5)
-    ecRpc('futures_status').catch(() => null),   // биржа: фьючерсы — срочные контракты (срез 6)
-    ecRpc('options_status').catch(() => null),   // биржа: опционы — колл/пут (срез 7)
-    ecRpc('doom_status').catch(() => null),       // межзвёздная артиллерия: орудия + залпы в полёте
-    ecRpc('minefields_visible').catch(() => []),  // оборона: минные поля (свои + разведанные чужие)
-    ecRpc('outposts_visible').catch(() => []),    // оборона: развёрнутые аванпосты (свои + разведанные чужие)
-    ecRpc('outpost_ships_mine').catch(() => []),  // оборона: мои корабли-носители аванпостов (building/idle/в полёте)
-    ecRpc('outpost_intel').catch(() => []),       // оборона: разведданные от РАЗВЕД-аванпостов (срез по соседним державам)
-    ecCached('spyPortraits', () => dbGet('spy_portraits', `select=id,race,gender,url`)),  // пул портретов (админ-загрузка) — статичен, кэш на сессию
-    ecRpc('orders_status').catch(() => null),     // биржа: заказы (госзаказы/RFQ) — мои заказы + доска чужих
-    ecRpc('mza_ships_mine').catch(() => []),      // Гиперпейсер: мои мобильные «Длани» (building/idle/в полёте) — управление на карте
-    ecRpc('goods_market_board').catch(() => []),  // биржа брендов: товары всех держав (своя строка на рынке)
-    dbGet('market_config', `select=elasticity,clamp_lo,clamp_hi,reversion,volatility,npc_react,walk&limit=1`).catch(() => null),  // живые параметры рынка (зеркало _market_price_calc/_market_area для предпросмотра)
-    ecRpc('fleets_mine').catch(() => []),         // флоты: мои мобильные соединения (idle/в полёте) — управление на карте
+    dbGet('income_history', `owner_id=eq.${user.id}&order=tick_at.desc&limit=30`).catch(() => []),  // доход по времени (графики статистики)
+    ecRpc('spatial_status').catch(() => []),   // пространственная экономика: NET-баланс систем (просперити Обзора)
+    dbGet('map_sectors', `select=id,name,system_ids,econ_event,econ_mod,econ_until`).catch(() => []),   // сектора + эконом-события
+    dbGet('market_resources', `select=name,base_price,price,stock,equilibrium,npc_supply,npc_demand`).catch(() => []),  // галактический рынок
+    dbGet('market_config', `select=elasticity,clamp_lo,clamp_hi,reversion,volatility,npc_react,walk&limit=1`).catch(() => null),  // живые параметры рынка
+    ecRpc('diplo_status').catch(() => null),         // союзы: федерация/конфедерация + вассалитеты (нужны Обзору)
+    ecRpc('spy_recruits_list').catch(() => null),   // агентура: ростер + рынок рекрутов (счётчик в Обзоре)
+    ecRpc('minefields_visible').catch(() => []),  // оборона: минные поля (счётчик в Обзоре)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
   EC.buildings = blds || [];
   // Свои системы выводим из общего списка allSys (он уже содержит faction/planets) — без второго запроса к map_systems.
   EC.systems = (allSys || []).filter(s => String(s.faction) === String(EC.fid)).map(s => ({ ...s, planets: s.planets || [] }));
-  // Межзвёздная артиллерия: орудия фракции (с integrity) + залпы в полёте + баланс.
-  EC.doom = (doom && typeof doom === 'object') ? doom : { guns: [], salvos: [], const: {} };
-  EC.minefields = Array.isArray(defMines) ? defMines : [];      // оборона: видимые минные поля (гексы)
-  EC.outposts = Array.isArray(defOutposts) ? defOutposts : [];  // оборона: развёрнутые аванпосты
-  EC.opShips = Array.isArray(defOpShips) ? defOpShips : [];     // оборона: мои корабли-носители
-  EC.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];        // Гиперпейсер: мои мобильные «Длани»
-  EC.fleets = Array.isArray(myFleets) ? myFleets : [];          // флоты: мои мобильные соединения (формируются из состава, двигаются по карте)
-  EC.goodsBoard = Array.isArray(goodsBoard) ? goodsBoard : [];  // биржа брендов: товары всех держав
-  EC.outpostIntel = Array.isArray(defOutIntel) ? defOutIntel : [];  // оборона: разведданные разведаванпостов (срез по соседям)
-  EC.spyPortraits = Array.isArray(spyPortraits) ? spyPortraits : [];  // агентура: общий пул портретов (подбор на клиенте)
-  EC.doomByBuilding = {};
-  (EC.doom.guns || []).forEach(g => { if (g && g.building_id) EC.doomByBuilding[g.building_id] = g; });
+  EC.minefields = Array.isArray(defMines) ? defMines : [];      // оборона: видимые минные поля (гексы) — счётчик в Обзоре
   // Пространственная экономика: NET-баланс системы (покрытия R/G/C/труд, просперити, статус), индекс по system_id.
   EC.spatial = {};
   (Array.isArray(spatial) ? spatial : []).forEach(b => { if (b && b.system_id) EC.spatial[b.system_id] = b; });
@@ -1250,26 +1234,7 @@ async function _ecLoadImpl() {
   // (вложен в ответ spy_recruits_list). Падаем на пустой объект, если срез не накачен.
   EC.spyCounter = (EC.spyAgency && EC.spyAgency.counterintel) || { state_power: 0, forces_power: 0, assignments: [] };
   EC.diplo = diploStatus || { union: null, members: [], invites: [], vassals: [] };  // союзы и вассалитеты
-  EC.faith = faithStatus || { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };  // вера: статус
-  if (!Array.isArray(EC.faith.faiths)) EC.faith.faiths = EC.faith.faith ? [EC.faith.faith] : [];  // мультивера: все исповедуемые
-  EC.faithList = faithList || [];           // вера: реестр религий
-  // мультивера: справочник «id веры → {name,color}» для подписи храмов (свои исповедуемые + публичный реестр)
-  EC.faithById = {};
-  (EC.faith.faiths || []).forEach(f => { if (f && f.id) EC.faithById[f.id] = { name: f.name, color: f.color }; });
-  (EC.faithList || []).forEach(f => { if (f && f.id && !EC.faithById[f.id]) EC.faithById[f.id] = { name: f.name, color: f.color }; });
   EC.incomeHistory = incomeHistory || [];   // снимки дохода по тикам (доход по времени)
-  // PoE-раскладка дерева исследований: node_id → { x, y, icon, img }. Косметика поверх
-  // авто-раскладки — узлы без записи раскидываются автоматически (см. ecResLayout).
-  EC.techLayout = {};
-  (Array.isArray(techLayout) ? techLayout : []).forEach(r => { if (r && r.node_id) EC.techLayout[r.node_id] = r; });
-  // Staff-override связей дерева: node_id → массив prereq. Накладывается на дефолт
-  // из ecBuildResearch (см. overlay там). Сбрасываем мемо, чтобы overlay применился.
-  EC.techPrereq = {};
-  (Array.isArray(techPrereq) ? techPrereq : []).forEach(r => { if (r && r.node_id) EC.techPrereq[r.node_id] = Array.isArray(r.prereq) ? r.prereq : []; });
-  EC._research = null;
-  // Пассивная разведка: размытый срез по фракциям, с кем есть торговый путь / хорошие отношения / союз. Индекс по fid.
-  EC.passive = {};
-  (Array.isArray(passiveIntel) ? passiveIntel : []).forEach(p => { if (p && p.target_fid) EC.passive[p.target_fid] = p; });
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
   // карта редкости/иконки ресурсов: сначала полный каталог (источник истины —
@@ -1294,31 +1259,87 @@ async function _ecLoadImpl() {
     k: +_mc.elasticity || 0.45, lo: +_mc.clamp_lo || 0.25, hi: +_mc.clamp_hi || 4.0,
     reversion: +_mc.reversion || 0.08, npc_react: +_mc.npc_react || 0, walk: +_mc.walk || 0
   } : { k: 0.45, lo: 0.25, hi: 4.0, reversion: 0.08, npc_react: 0, walk: 0 };
+}
 
-  // Биржа (срез 2): индекс рынка + моя ETF-позиция + спарклайны цен ресурсов.
-  // exchange_status() — SECURITY DEFINER RPC. Спарклайны цен подмешиваем в EC.market[name].spark.
+// ── ФАЗА 2 (подсистемы вкладок) ── Биржа/деривативы/заказы, вера, разведка-портреты/
+// пассив, оборона-аванпосты, флоты, артиллерия, дерево исследований, ачивки. Грузится
+// ФОНОМ после первой отрисовки кабинета; по готовности вызывающий до-рисовывает экран.
+async function _ecLoadRest() {
+  if (_ecRestInFlight) return _ecRestInFlight;
+  _ecRestInFlight = _ecLoadRestImpl();
+  try { return await _ecRestInFlight; }
+  finally { _ecRestInFlight = null; }
+}
+async function _ecLoadRestImpl() {
+  if (!EC.app || !EC.fid) return;
+  const [faithStatus, faithList, passiveIntel, techLayout, techPrereq, exchange, bonds, corps, margin, futures, options, doom, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, goodsBoard, myFleets] = await Promise.all([
+    ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции
+    ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий
+    ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез
+    ecCached('techLayout', () => dbGet('tech_layout', `select=node_id,x,y,icon,img,nocore`)),   // раскладка дерева — кэш на сессию
+    ecCached('techPrereq', () => dbGet('tech_prereq', `select=node_id,prereq`)),   // связи дерева — кэш на сессию
+    ecRpc('exchange_status').catch(() => null),   // биржа: индекс/ETF + спарклайны
+    ecRpc('bonds_status').catch(() => null),      // биржа: облигации
+    ecRpc('corps_status').catch(e => ({ __err: (e && e.message) || 'нет ответа' })),   // биржа: корпорации
+    ecRpc('margin_status').catch(() => null),    // биржа: маржа (срез 5)
+    ecRpc('futures_status').catch(() => null),   // биржа: фьючерсы (срез 6)
+    ecRpc('options_status').catch(() => null),   // биржа: опционы (срез 7)
+    ecRpc('doom_status').catch(() => null),       // межзвёздная артиллерия
+    ecRpc('outposts_visible').catch(() => []),    // оборона: развёрнутые аванпосты
+    ecRpc('outpost_ships_mine').catch(() => []),  // оборона: мои корабли-носители
+    ecRpc('outpost_intel').catch(() => []),       // оборона: разведданные разведаванпостов
+    ecCached('spyPortraits', () => dbGet('spy_portraits', `select=id,race,gender,url`)),  // пул портретов — кэш на сессию
+    ecRpc('orders_status').catch(() => null),     // биржа: заказы (госзаказы/RFQ)
+    ecRpc('mza_ships_mine').catch(() => []),      // Гиперпейсер: мои мобильные «Длани»
+    ecRpc('goods_market_board').catch(() => []),  // биржа брендов
+    ecRpc('fleets_mine').catch(() => []),         // флоты: мои мобильные соединения
+  ]);
+  // Межзвёздная артиллерия: орудия фракции (с integrity) + залпы в полёте + баланс.
+  EC.doom = (doom && typeof doom === 'object') ? doom : { guns: [], salvos: [], const: {} };
+  EC.doomByBuilding = {};
+  (EC.doom.guns || []).forEach(g => { if (g && g.building_id) EC.doomByBuilding[g.building_id] = g; });
+  EC.outposts = Array.isArray(defOutposts) ? defOutposts : [];  // оборона: развёрнутые аванпосты
+  EC.opShips = Array.isArray(defOpShips) ? defOpShips : [];     // оборона: мои корабли-носители
+  EC.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];        // Гиперпейсер: мои мобильные «Длани»
+  EC.fleets = Array.isArray(myFleets) ? myFleets : [];          // флоты: мои мобильные соединения
+  EC.goodsBoard = Array.isArray(goodsBoard) ? goodsBoard : [];  // биржа брендов: товары всех держав
+  EC.outpostIntel = Array.isArray(defOutIntel) ? defOutIntel : [];  // оборона: разведданные разведаванпостов
+  EC.spyPortraits = Array.isArray(spyPortraits) ? spyPortraits : [];  // агентура: общий пул портретов
+  EC.faith = faithStatus || { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };  // вера: статус
+  if (!Array.isArray(EC.faith.faiths)) EC.faith.faiths = EC.faith.faith ? [EC.faith.faith] : [];  // мультивера: все исповедуемые
+  EC.faithList = faithList || [];           // вера: реестр религий
+  // мультивера: справочник «id веры → {name,color}» для подписи храмов
+  EC.faithById = {};
+  (EC.faith.faiths || []).forEach(f => { if (f && f.id) EC.faithById[f.id] = { name: f.name, color: f.color }; });
+  (EC.faithList || []).forEach(f => { if (f && f.id && !EC.faithById[f.id]) EC.faithById[f.id] = { name: f.name, color: f.color }; });
+  // PoE-раскладка дерева исследований: node_id → { x, y, icon, img }.
+  EC.techLayout = {};
+  (Array.isArray(techLayout) ? techLayout : []).forEach(r => { if (r && r.node_id) EC.techLayout[r.node_id] = r; });
+  // Staff-override связей дерева. Сбрасываем мемо, чтобы overlay применился.
+  EC.techPrereq = {};
+  (Array.isArray(techPrereq) ? techPrereq : []).forEach(r => { if (r && r.node_id) EC.techPrereq[r.node_id] = Array.isArray(r.prereq) ? r.prereq : []; });
+  EC._research = null;
+  // Пассивная разведка: размытый срез по фракциям. Индекс по fid.
+  EC.passive = {};
+  (Array.isArray(passiveIntel) ? passiveIntel : []).forEach(p => { if (p && p.target_fid) EC.passive[p.target_fid] = p; });
+  // Биржа (срез 2): индекс рынка + ETF-позиция + спарклайны (подмешиваем в EC.market[name].spark).
   EC.exchange = exchange || { index: { value: 1000, base: 1000, spark: [] }, holdings: { units: 0, basis: 0 }, resources: {} };
   const exRes = (EC.exchange && EC.exchange.resources) || {};
   Object.keys(exRes).forEach(n => { if (EC.market[n]) EC.market[n].spark = (exRes[n] || []).map(Number); });
-  // Облигации (срез 3): мои выпуски/держания + рынок чужих бумаг (bonds_status RPC).
-  EC.bonds = bonds || { issuer: [], holdings: [], market: [] };
-  // Корпорации (срез 4a): мои корпорации/доли в чужих/стакан/свободные постройки + сессия (corps_status RPC).
-  // null = RPC не ответил (SQL не применён или ошибка) — UI покажет диагностику с текстом ошибки.
+  EC.bonds = bonds || { issuer: [], holdings: [], market: [] };   // облигации (срез 3)
+  // Корпорации (срез 4a): null = RPC не ответил — UI покажет диагностику с текстом ошибки.
   EC.corpsErr = (corps && corps.__err) || null;
   EC.corps = EC.corpsErr ? null : corps;
-  // Деривативы (срезы 5–7): маржа (лонги/шорты), фьючерсы, опционы. null = RPC не ответил (SQL не применён).
-  EC.margin  = margin  || null;
+  EC.margin  = margin  || null;   // деривативы (срезы 5–7): маржа/фьючерсы/опционы
   EC.futures = futures || null;
   EC.options = options || null;
-  // Заказы (срез 8): госзаказы/RFQ — мои заказы + доска чужих (orders_status RPC). null = SQL не применён.
-  EC.orders = orders || null;
+  EC.orders = orders || null;     // заказы (срез 8): госзаказы/RFQ
 
   // Ачивки: сервер пересчитывает условия, выдаёт новые и начисляет ГС.
-  // Считаем ПОСЛЕ загрузки (gc мог измениться при выдаче — патчим из ответа).
   try {
     const ach = await ecRpc('ach_check');
     EC.ach = (ach && ach.earned) || [];
-    if (ach && ach.gc != null) EC.eco.gc = ach.gc;
+    if (ach && ach.gc != null && EC.eco) EC.eco.gc = ach.gc;
     if (ach && ach.newly > 0 && Array.isArray(ach.new_ids) && ach.new_ids.length) {
       const names = ach.new_ids.map(id => (EC_ACH[id] || {}).name || id).join(', ');
       const tot = ach.new_ids.reduce((a, id) => a + ((EC_ACH[id] || {}).reward || 0), 0);
@@ -1329,6 +1350,19 @@ async function _ecLoadImpl() {
       });
     }
   } catch (e) { EC.ach = EC.ach || []; }
+}
+
+// Безопасные дефолты подсистем фазы 2 — ставятся ДО первой отрисовки кабинета, чтобы
+// клик по ещё-не-загруженной вкладке (Биржа/Вера/Оборона/Длань…) не падал на undefined.
+function ecResetDeferred() {
+  EC.doom = { guns: [], salvos: [], const: {} }; EC.doomByBuilding = {};
+  EC.outposts = []; EC.opShips = []; EC.mzaShips = []; EC.fleets = []; EC.goodsBoard = []; EC.outpostIntel = []; EC.spyPortraits = [];
+  EC.faith = { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 }; EC.faithList = []; EC.faithById = {};
+  EC.passive = {}; EC.techLayout = {}; EC.techPrereq = {}; EC._research = null;
+  EC.exchange = { index: { value: 1000, base: 1000, spark: [] }, holdings: { units: 0, basis: 0 }, resources: {} };
+  EC.bonds = { issuer: [], holdings: [], market: [] }; EC.corps = null; EC.corpsErr = null;
+  EC.margin = null; EC.futures = null; EC.options = null; EC.orders = null;
+  EC.ach = EC.ach || [];
 }
 async function ecReloadPaint() { await ecLoad(); ecPaintCabinet(); }
 
@@ -1550,8 +1584,11 @@ function ecGcIncome() {
   const policy = ecPolicyCostDay();
   const ex = ecExchangeIncome();
   const op = ecOutpostMineTotals();   // добывающие аванпосты: +ГС/сут (ленивый settle, вне основного тика)
-  const net = factory + trade + temple + tithe + sects + cv.net + market + exportGc - policy + ex.net + op.gc;
-  return { factory, trade, temple, tithe, sects, caravan: cv, market, export: exportGc, policy, exchange: ex, outpost: op, net };
+  // НАЧИСЛЯЕТ ТИК (зеркало economy_accrue → income_history): постройки + караваны + биржа + экспорт − политика.
+  const net = factory + trade + cv.net + market + exportGc - policy;
+  // НЕ входит в основной тик (вера/биржевые потоки/аванпосты — отдельный/ленивый settle, в income_history их нет).
+  const netExtra = temple + tithe + sects + ex.net + op.gc;
+  return { factory, trade, temple, tithe, sects, caravan: cv, market, export: exportGc, policy, exchange: ex, outpost: op, net, netExtra };
 }
 // Регулярные ГС-потоки с БИРЖИ за ход — чтобы «Чистый доход» учитывал ВСЁ, а не
 // только постройки/караваны. Берём строго то, что НЕ задвоится с доходом фабрик:
@@ -2666,6 +2703,20 @@ const EC_ACH = {
     desc: 'Все добродетели обретены. Дальше только пример другим.',
     cond: 'Получи все остальные достижения' },
 };
+// Правки подписей ачивок (имя/цитата/описание/условие) админ заливает файлом
+// assets/ach/_overrides.json (вкладка «Ачивки» в «Управлении»). Накладываем
+// поверх каталога при загрузке — числа условий/наград по-прежнему за сервером.
+(function ecAchLoadOverrides() {
+  try {
+    fetch('assets/ach/_overrides.json?t=' + Date.now())
+      .then(r => r.ok ? r.json() : null)
+      .then(ov => {
+        if (!ov || typeof ov !== 'object') return;
+        Object.keys(ov).forEach(id => { if (EC_ACH[id] && ov[id]) Object.assign(EC_ACH[id], ov[id]); });
+      })
+      .catch(() => {});
+  } catch (e) {}
+})();
 const EC_ACH_ORDER = ['sibi_imperare', 'constantia', 'cosmopolites', 'amor_fati', 'dichotomia', 'temperantia',
   'sophia', 'prudentia', 'fortitudo', 'iustitia', 'magnum_opus',
   // ── Большой набор ──
@@ -2934,26 +2985,30 @@ function ecTabOverview() {
   const facSlots = ecSlotsSum('factory'), trSlots = ecSlotsSum('trade'), marketSlots = ecSlotsSum('market'), tmplSlots = ecSlotsSum('temple');
   // Полная разбивка ГС-дохода — единый источник с шапкой «Доход/сутки» (зеркало economy_accrue).
   const g = ecGcIncome();
-  // Источники ГС-дохода (с долей-вкладом для столбика)
+  // Источники ГС-дохода (с долей-вкладом для столбика). moneyInc = статьи, которые РЕАЛЬНО
+  // начисляет серверный тик economy_accrue (зеркало income_history); extraInc = потоки вне тика
+  // (вера/биржевые купоны/аванпосты — отдельный/ленивый settle, в «Чистый доход» НЕ входят).
   const moneyInc = [];
+  const extraInc = [];
   if (facSlots) moneyInc.push({ ic: '🏭', name: 'Гражданские фабрики', sub: `${ecNum(facSlots)} слот. × 200`, gc: g.factory, tab: 'colonies' });
   if (trSlots)  moneyInc.push({ ic: '💱', name: 'Торговые хабы', sub: `${ecNum(trSlots)} слот. × 100`, gc: g.trade, tab: 'trade' });
-  if (g.temple) moneyInc.push({ ic: '🛐', name: 'Храмы веры', sub: `${ecNum(tmplSlots)} слот. × 150`, gc: g.temple, tab: 'faith' });
-  if (g.tithe)  moneyInc.push({ ic: '🤝', name: 'Десятина с адептов', sub: 'доля дохода чужих храмов', gc: g.tithe, tab: 'faith' });
-  if (g.sects)  moneyInc.push({ ic: '🕯', name: 'Тайные секты', sub: 'covert-храмы за рубежом', gc: g.sects, tab: 'faith' });
   if (_out.length) moneyInc.push({ ic: '🚚', name: 'Караваны · продажа', sub: `${_out.length} пут. → партнёрам`, gc: _outGc, tab: 'trade' });
   if (_in.length)  moneyInc.push({ ic: '📦', name: 'Доля с поставок', sub: `${_in.length} пут. ← вам шлют`, gc: _inGc, tab: 'trade' });
   if (g.market) moneyInc.push({ ic: '📈', name: 'Товарная биржа', sub: `${ecNum(marketSlots)} слот. · продаёт склад`, gc: g.market, tab: 'trade' });
   if (g.export) moneyInc.push({ ic: '📤', name: 'Экспорт добычи', sub: 'поток export-заводов', gc: g.export, tab: 'trade' });
   if (g.policy) moneyInc.push({ ic: '📜', name: 'Торговая политика', sub: 'апкип NPC-конвоя', gc: -g.policy, tab: 'raids' });
-  // Биржа: регулярные потоки (облигации/дивиденды/синергия) — без задвоения с фабриками.
+  // ── НЕ входит в тик (информативно, не суммируется в «Чистый доход») ──
+  if (g.temple) extraInc.push({ ic: '🛐', name: 'Храмы веры', sub: `${ecNum(tmplSlots)} слот. × 150`, gc: g.temple, tab: 'faith' });
+  if (g.tithe)  extraInc.push({ ic: '🤝', name: 'Десятина с адептов', sub: 'доля дохода чужих храмов', gc: g.tithe, tab: 'faith' });
+  if (g.sects)  extraInc.push({ ic: '🕯', name: 'Тайные секты', sub: 'covert-храмы за рубежом', gc: g.sects, tab: 'faith' });
+  // Биржа: регулярные потоки (облигации/дивиденды/синергия) — отдельный settle вне основного тика.
   const _ex = g.exchange;
-  if (_ex.bonds)   moneyInc.push({ ic: '🏦', name: 'Облигации · купоны', sub: _ex.bondOut ? `${ecNum(_ex.bondIn)} держателю − ${ecNum(_ex.bondOut)} выплаты эмитента` : 'купон по моим вложениям', gc: _ex.bonds, tab: 'exchange' });
-  if (_ex.corpDiv) moneyInc.push({ ic: '🏢', name: 'Дивиденды · чужие доли', sub: 'мои доли в чужих корпорациях', gc: _ex.corpDiv, tab: 'exchange' });
-  if (_ex.corpSyn) moneyInc.push({ ic: '⚡', name: 'Синергия корпораций', sub: 'бонус моих корпораций сверх дохода построек', gc: _ex.corpSyn, tab: 'exchange' });
+  if (_ex.bonds)   extraInc.push({ ic: '🏦', name: 'Облигации · купоны', sub: _ex.bondOut ? `${ecNum(_ex.bondIn)} держателю − ${ecNum(_ex.bondOut)} выплаты эмитента` : 'купон по моим вложениям', gc: _ex.bonds, tab: 'exchange' });
+  if (_ex.corpDiv) extraInc.push({ ic: '🏢', name: 'Дивиденды · чужие доли', sub: 'мои доли в чужих корпорациях', gc: _ex.corpDiv, tab: 'exchange' });
+  if (_ex.corpSyn) extraInc.push({ ic: '⚡', name: 'Синергия корпораций', sub: 'бонус моих корпораций сверх дохода построек', gc: _ex.corpSyn, tab: 'exchange' });
   // Добывающие аванпосты вне границ: ГС/сут (плюс ресурсы — в панели «Ресурсы»).
   const _op = g.outpost || { gc: 0, n: 0, totals: new Map() };
-  if (_op.n) moneyInc.push({ ic: '🛰', name: 'Аванпосты · добыча', sub: `${_op.n} аванпост. вне границ × ${EC_OUTPOST_MINE_GC}`, gc: _op.gc, tab: 'outposts' });
+  if (_op.n) extraInc.push({ ic: '🛰', name: 'Аванпосты · добыча', sub: `${_op.n} аванпост. вне границ × ${EC_OUTPOST_MINE_GC}`, gc: _op.gc, tab: 'outposts' });
   const _povDrag = (typeof ecPovertyDrag === 'function') ? ecPovertyDrag() : 0;
   const netGc = g.net;
   const maxGc = moneyInc.reduce((a, x) => Math.max(a, Math.abs(x.gc)), 0) || 1;
@@ -2967,6 +3022,21 @@ function ecTabOverview() {
       <span class="ec-bdg-val ${neg ? 'neg' : 'pos'}">${neg ? '−' : '+'}${ecNum(Math.abs(x.gc))}</span>
     </button>`;
   }).join('');
+  // Потоки ВНЕ тика — те же строки, но приглушённые и с пометкой «не в начислении тика».
+  const extraSum = extraInc.reduce((a, x) => a + x.gc, 0);
+  const extraRows = extraInc.length ? extraInc.map(x => {
+    const neg = x.gc < 0;
+    return `<button type="button" class="ec-bdg-row ec-bdg-row-extra" onclick="ecSetTab('${x.tab}')">
+      <span class="ec-bdg-ic">${x.ic}</span>
+      <span class="ec-bdg-info"><span class="ec-bdg-name">${esc(x.name)}</span><span class="ec-bdg-sub">${esc(x.sub)}</span></span>
+      <span class="ec-bdg-val ${neg ? 'neg' : 'pos'}">${neg ? '−' : '+'}${ecNum(Math.abs(x.gc))}</span>
+    </button>`;
+  }).join('') : '';
+  const extraBlock = extraInc.length ? `<div class="ec-bdg-extra">
+      <div class="ec-bdg-extra-hd">Вне начисления тика <span class="ec-bdg-extra-sum">≈ +${ecNum(extraSum)} ГС/сут</span></div>
+      <div class="ec-bdg-extra-note">Эти потоки (вера, биржевые купоны/дивиденды, аванпосты) считаются отдельно от основного тика и в «Чистый доход» не входят — поэтому в казну за ход падает только сумма выше.</div>
+      ${extraRows}
+    </div>` : '';
   // Товарная биржа теперь числовой строкой в moneyInc (оценка по складу) — отдельный плейсхолдер не нужен.
   const marketRow = '';
   const expRow = _resOutTotal ? `<button type="button" class="ec-bdg-row ec-bdg-exp" onclick="ecSetTab('trade')">
@@ -2984,7 +3054,7 @@ function ecTabOverview() {
   // Достижения — РАЗОВЫЕ награды (не в /сут): показываем накопленную сумму отдельной строкой.
   const _achTot = ecAchTotal();
   if (_achTot) flows.push(`<span class="ec-bdg-flow" onclick="ecSetTab('achievements')"><span class="ec-bdg-flow-ic">🏆</span>достижения <b class="pos">+${ecNum(_achTot)}</b> ГС <small>(разово, получено)</small></span>`);
-  const hasBudget = moneyInc.length || marketSlots || _resOutTotal || flows.length;
+  const hasBudget = moneyInc.length || extraInc.length || marketSlots || _resOutTotal || flows.length;
   // ── Раскрываемая детальная справка по казне: формула каждого источника + состав (donut) ──
   const gcMulPct = Math.round((gcMul - 1) * 100);
   const fxRow = (ic, name, formula, gc) => `<div class="ec-bdg-dt-row">
@@ -3016,7 +3086,7 @@ function ecTabOverview() {
       ${_povDrag ? `<div class="ec-bdg-dt-warn">💸 Бедность съедает ≈ −${ecNum(_povDrag)} ГС/сут: фабрики и хабы в небогатых системах режутся просперити (уже учтено в строках «Фабрики»/«Хабы»). Поднимайте благополучие во вкладке «Благополучие».</div>` : ''}
       ${inc.debuff ? `<div class="ec-bdg-dt-warn">🔥 Дестабилизация режет денежный доход на ${Math.round(inc.debuff * 100)}% — уже учтено в суммах.</div>` : ''}
       <div class="ec-ovx-hint">Доход начисляется в конце каждого хода (тика). Доктрина даёт ×${gcMul.toFixed(2)} к ГС-потокам${gcMulPct ? ` (${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''} (к доходу биржи не применяется). Содержания армии/зданий нет — постройка тратит ГС разово.</div>
-      <div class="ec-ovx-hint">📊 Учтены все потоки тика: храмы (вера), десятина, секты, Товарная биржа (оценка по складу) и экспорт добычи — это даёт ту же сумму, что начислит сервер. Спекуляции (маржа/фьючерсы/опционы) переменны и в «/сут» не входят. Биржа корпораций: доход построек внутри своих корпораций уже сидит в строке «Фабрики/Хабы» — из них берётся только синергия (без задвоения). 🏆 Награды за достижения — разовые, показаны отдельной строкой.</div>
+      <div class="ec-ovx-hint">📊 «Чистый доход» = ровно те статьи, что начисляет тик сервера (зеркало income_history): фабрики+хабы, караваны, Товарная биржа (оценка по складу), экспорт добычи, − торговая политика. Вера (храмы/десятина/секты), биржевые купоны/дивиденды/синергия и аванпосты считаются ОТДЕЛЬНО от основного тика и показаны в блоке «Вне начисления тика» — в «Чистый доход» они не входят. Спекуляции (маржа/фьючерсы/опционы) переменны и в «/сут» не входят. 🏆 Награды за достижения — разовые, показаны отдельной строкой.</div>
     </div>`;
   const budget = `<div class="ec-ovx-panel ec-bdg-panel">
     <div class="ec-ovx-panel-t">💰 Казна <span class="ec-ovx-panel-sub">доходы и расходы за сутки</span></div>
@@ -3027,6 +3097,7 @@ function ecTabOverview() {
         ${inc.debuff ? `<span class="ec-bdg-net-warn">🔥 дестабилизация −${Math.round(inc.debuff * 100)}%</span>` : ''}
       </div>
       ${(moneyRows || marketRow) ? `<div class="ec-bdg-rows">${moneyRows}${marketRow}</div>` : ''}
+      ${extraBlock}
       ${flows.length ? `<div class="ec-bdg-flows">${flows.join('')}</div>` : ''}
       ${ecOvFold('bdg', '🔍 Подробно: формулы и состав', 'откуда каждый ГС')}
       ${ecOvExpanded('bdg') ? bdgDetail : ''}`

@@ -210,7 +210,7 @@ function fnHomeBlockHtml() {
       <div class="fn-feed-news">${items}</div>
     </section>`;
   }
-  return newsSection + fnEventsFeedHtml();
+  return newsSection;
 }
 
 // ── Лента сектора: компактная лента системных событий (слухи + сводки) ──
@@ -264,6 +264,45 @@ function fnAchCardHtml(n) {
       ${ach.quote ? `<div class="fn-ach-quote">«${esc(ach.quote)}»</div>` : ''}
       ${ach.desc  ? `<div class="fn-ach-desc">${esc(ach.desc)}</div>` : ''}
       ${ach.reward ? `<span class="fn-ach-reward">◆ +${num(ach.reward)} ГС</span>` : ''}
+    </div>
+  </div>`;
+}
+// ── Новелла: герб причастной державы (ФОНОМ за текстом) + карточка ачивки ──
+// Когда герой на обложке рассказывает о сводке, герб причастной державы ложится
+// ФОНОМ-водяным знаком за текстом окна (как `.fn-art-bgflag` в статье), а для
+// достижения под текстом раскрывается карточка самой ачивки. Событие БЕЗ
+// причастной фракции (биржа и т.п.) → ни фона, ни карточки.
+// URL герба для фоновой подложки окна ('' — нет причастной державы/герба).
+function fnHeroFlagUrl(n) {
+  if (!n) return '';
+  const fac = (typeof fnEventFaction === 'function') ? fnEventFaction(n) : null;
+  return (fac && fac.herald_url) || '';
+}
+// HTML под текстом: игровая плашка достижения (для ачивок). Иначе '' — флаг
+// уже отрисован фоном через fnHeroFlagUrl.
+function fnHeroBannerHtml(n) {
+  if (!n) return '';
+  if (!(typeof fnIsAch === 'function' && fnIsAch(n))) return '';
+  return (typeof fnHeroAchHtml === 'function') ? fnHeroAchHtml(n) : '';
+}
+// Игровая плашка достижения для новеллы — БЕЗ декоративных символов (◆/⬡/🏆),
+// плоский sci-fi в токенах окна. Отдельная от статейной fnAchCardHtml.
+function fnHeroAchHtml(n) {
+  const found = (typeof fnAchLookup === 'function') ? fnAchLookup(n) : null;
+  if (!found) return '';
+  const { id, ach } = found;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  const num = (v) => (typeof ecNum === 'function') ? ecNum(v) : v;
+  const art = `<div class="hp-vn-ach-art"><img src="${esc('assets/ach/' + id + '.webp')}" alt="" loading="lazy" onerror="this.style.display='none'"></div>`;
+  return `<div class="hp-vn-ach">
+    ${art}
+    <div class="hp-vn-ach-body">
+      <div class="hp-vn-ach-kick">${en ? 'Achievement unlocked' : 'Достижение получено'}</div>
+      <div class="hp-vn-ach-name">${esc(ach.name || '')}</div>
+      ${ach.cond  ? `<div class="hp-vn-ach-cond">${esc(ach.cond)}</div>` : ''}
+      ${ach.quote ? `<div class="hp-vn-ach-quote">«${esc(ach.quote)}»</div>` : ''}
+      ${ach.desc  ? `<div class="hp-vn-ach-desc">${esc(ach.desc)}</div>` : ''}
+      ${ach.reward ? `<div class="hp-vn-ach-reward">+${num(ach.reward)} ГС</div>` : ''}
     </div>
   </div>`;
 }
@@ -383,19 +422,20 @@ function fnCorpTickerHtml(cs) {
   </div>`;
 }
 async function fnLoadCorpTicker() {
-  const mount = document.getElementById('fn-corp-ticker');
-  if (!mount) return;
+  // Цели: лента сектора (#fn-corp-ticker) и боковая лента индексов в новелле (#hp-vn-ticker).
+  const mounts = () => [document.getElementById('fn-corp-ticker'), document.getElementById('hp-vn-ticker')].filter(Boolean);
+  const fill = html => mounts().forEach(m => { m.innerHTML = html; });
+  if (!mounts().length) return;
   if (typeof user === 'undefined' || !user || typeof ecRpc !== 'function') return;
   // Кэш на сессию: не дёргаем тяжёлый RPC при каждом возврате на главную.
   if (FN._corpTickerHtml != null && (Date.now() - (FN._corpTickerAt || 0) < 90000)) {
-    mount.innerHTML = FN._corpTickerHtml; return;
+    fill(FN._corpTickerHtml); return;
   }
   let cs = null;
   try { cs = await ecRpc('corps_status'); } catch (e) { return; }
   const html = fnCorpTickerHtml(cs);
   FN._corpTickerHtml = html; FN._corpTickerAt = Date.now();
-  const m2 = document.getElementById('fn-corp-ticker');
-  if (m2) m2.innerHTML = html;
+  fill(html);
 }
 async function fnLoadMoreEvents() {
   const off = (FN.events || []).length;

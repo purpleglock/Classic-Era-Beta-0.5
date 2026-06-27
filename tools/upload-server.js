@@ -31,6 +31,9 @@ const DEST_DIR = path.join(ROOT, 'assets', 'portraits');
 const ALLOWED_DIRS = {
   portraits: 'assets/portraits',
   planets:   'assets/map/planets',
+  guide:     'assets/guide',          // обложки разделов гайдбука (фикс. имя = id раздела)
+  ach:       'assets/ach',            // арт ачивок (<id>.webp) + правки подписей (_overrides.json)
+  hero:      'assets/hero',           // спрайты персонажей для диалогового окна главной (визуальная новелла)
 };
 // Возвращает {rel, abs} для папки назначения по query ?dir= (или дефолт-портреты).
 function destDir(dirKey) {

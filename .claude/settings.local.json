@@ -135,7 +135,10 @@
       "Bash(python3 -)",
       "Bash(cd \"/c/Users/Андрей/Desktop/Classic-Era-Beta-0.5\" && grep -n \"function economy_produce\\\\|resources\\\\|bill\\\\|jsonb_each\\\\|spend\\\\|deduct\\\\|UPDATE faction_economy\" _unit_resources.sql | head -50)",
       "Bash(node -c admin.js)",
-      "Bash(grep -rhnoE \"'[^']{0,50}\\(УНИЧТОЖ|ГИПЕРПЕЙ|стёрт|мёртв|залп|ЗАЛП|СЛУХИ|Дефолт|союз|Вассал|Обращение|Достижение|держав|фракци|колониз|расшир\\)[^']{0,40}'\" _mza.sql _faction_reg.sql _faction_system.sql _capital_location.sql _interstellar_artillery.sql)"
+      "Bash(grep -rhnoE \"'[^']{0,50}\\(УНИЧТОЖ|ГИПЕРПЕЙ|стёрт|мёртв|залп|ЗАЛП|СЛУХИ|Дефолт|союз|Вассал|Обращение|Достижение|держав|фракци|колониз|расшир\\)[^']{0,40}'\" _mza.sql _faction_reg.sql _faction_system.sql _capital_location.sql _interstellar_artillery.sql)",
+      "Bash(sed -i 's#render.js?v=20260627vnbox#render.js?v=20260627vnchoice#; s#css/index.css?v=20260627vn15#css/index.css?v=20260627vn16#g' index.html)",
+      "Bash(sed -i 's#03_content.css?v=20260627vnbox#03_content.css?v=20260627vnchoice#' css/index.css)",
+      "Bash(perl -i -pe 's/\\\\x01/\\\\\\\\u0001/g' render.js)"
     ]
   }
 }

@@ -87,7 +87,7 @@
     { id: 'darkfrozen', name: 'Тёмный замёрзший мир', g: 'cryo', i: '🌑', s: [4], w: 4, rings: 2, mm: 1 },
     { id: 'proto', name: 'Карликовая планета', g: 'micro', i: '🪨', s: [0, 1, 2, 3, 4], w: 11, rings: 2, mm: 1 },
     { id: 'megaast', name: 'Мегаастероид', g: 'micro', i: '🌑', s: [0, 1, 2, 3, 4], w: 11, rings: 0, mm: 0 },
-    { id: 'blackhole', name: 'Пустошь', g: 'anomaly', i: '⚫', s: [4], w: 1, rings: 0, mm: 0, anomaly: true },
+    { id: 'blackhole', name: 'Черная дыра', g: 'anomaly', i: '⚫', s: [4], w: 1, rings: 0, mm: 0, anomaly: true },
     { id: 'wormhole', name: 'Кротовая нора', g: 'anomaly', i: '🌀', s: [4], w: 1, rings: 0, mm: 0, anomaly: true },
     { id: 'starshard', name: 'Токсичный карлик', g: 'anomaly', i: '✴️', s: [0, 1], w: 1, rings: 0, mm: 0, anomaly: true },
   ];

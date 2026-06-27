@@ -2954,17 +2954,17 @@ function gmmNN(sys) {
 // звезды, и между классами читается масштаб. Гигант ~0.4 звезды, землеподобный ~0.17,
 // малое тело ~0.07. Имена уточняют (Суперземля крупнее, карлик/мини мельче).
 const GMM_PG_FR = {
-  'Газовые гиганты': 0.33, 'Ледяные гиганты': 0.29, 'Горячие гиганты': 0.29,
-  'Океанические': 0.17, 'Экзотические': 0.18, 'Землеподобные': 0.14, 'Пустынные': 0.12,
+  'Газовые гиганты': 0.30, 'Ледяные гиганты': 0.27, 'Горячие гиганты': 0.26,
+  'Океанические': 0.16, 'Экзотические': 0.17, 'Землеподобные': 0.14, 'Пустынные': 0.12,
   'Вулканические': 0.12, 'Лавовые миры': 0.11, 'Криомиры': 0.10, 'Малые тела': 0.06,
 };
 function gmmPlanetFr(p) {
   let f = GMM_PG_FR[p.type] || 0.16;
   const n = p.name || '';
-  if (/Супер/i.test(n)) f *= 1.4;
+  if (/Супер/i.test(n)) f *= 1.28;
   else if (/Карлик|карлик|Мини|Малы|рыхл|обломок/i.test(n)) f *= 0.6;
-  if (/Юпитер|Турмион|гигант/i.test(n)) f *= 1.12;
-  return Math.min(0.5, f);   // потолок: даже самый большой гигант — половина звезды
+  if (/Юпитер|Турмион|гигант/i.test(n)) f *= 1.1;
+  return Math.min(0.44, f);   // потолок: даже самый большой гигант заметно мельче звезды
 }
 // «вид» тела по группе генератора — чтобы поверхность рисовалась по-разному.
 // env родного мира расы (capital_env из регистрации) → класс текстуры/вида.
@@ -3053,26 +3053,26 @@ function gmmPaintBody(ctx, px, py, sz, p, zc, a, t, starX, starY) {
   // астероид/малое тело — угловатая глыба, не шар
   if (gmmIsAsteroid(p)) { gmmPaintAsteroid(ctx, px, py, sz, p, a, ldx, ldy); return; }
 
-  // ── ВНЕШНИЙ НАПРАВЛЕННЫЙ ОРЕОЛ (атмосферное рассеяние вокруг дневной стороны) ──
-  // Рисуется под планетой, светит в сторону звезды, заменяет старый круговой ореол
+  // ── АТМОСФЕРНЫЙ ЛИМБ (тонкое рассеяние света по кромке тела) ──
+  // Вместо толстого смещённого «пузыря» — узкое кольцо у самого края планеты,
+  // ровное по всему диску и чуть ярче на дневной стороне. Читается как атмосфера,
+  // а не как нимб. Газовому гиганту даём ещё мягче, чтобы не «фонил».
   if (!p.dead && sz >= 5 && look !== 'rock') {
-    const atm = look === 'lava' ? '255,140,70' : look === 'ice' ? '210,235,255'
-      : look === 'gas' ? '255,235,190' : '150,200,255';
-    
+    const atm = look === 'lava' ? '255,150,90' : look === 'ice' ? '205,232,255'
+      : look === 'gas' ? '236,222,196' : '160,205,255';
+    const k = look === 'gas' ? 0.7 : 1;            // гигант — приглушённее
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
-    // Эксцентричный радиальный градиент: центр яркости сдвинут к звезде
-    const og = ctx.createRadialGradient(
-      px + ldx * sz * 0.7, py + ldy * sz * 0.7, sz * 0.2, 
-      px + ldx * sz * 0.2, py + ldy * sz * 0.2, sz * 1.6
-    );
-    og.addColorStop(0, `rgba(${atm},${(a*0.6).toFixed(3)})`);
-    og.addColorStop(0.5, `rgba(${atm},${(a*0.15).toFixed(3)})`);
-    og.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = og; 
-    ctx.beginPath(); 
-    ctx.arc(px + ldx * sz * 0.2, py + ldy * sz * 0.2, sz * 1.6, 0, 6.2832); 
-    ctx.fill();
+    // Рассеяние света атмосферой: эксцентричный градиент со СМЕЩЁННЫМ к звезде
+    // центром — ярче у дневной кромки, мягко тает к терминатору и на ночной стороне
+    // исчезает сам, без жёсткого клипа. Так подсвет «ложится» вдоль той же тени.
+    const gx = px + ldx * sz * 0.55, gy = py + ldy * sz * 0.55;   // центр свечения сдвинут к звезде
+    const rim = ctx.createRadialGradient(gx, gy, sz * 0.25, gx, gy, sz * 1.55);
+    rim.addColorStop(0, `rgba(${atm},${(a * 0.26 * k).toFixed(3)})`);
+    rim.addColorStop(0.55, `rgba(${atm},${(a * 0.08 * k).toFixed(3)})`);
+    rim.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = rim;
+    ctx.beginPath(); ctx.arc(gx, gy, sz * 1.55, 0, 6.2832); ctx.fill();
     ctx.restore();
   }
   const rot = (rnd(7) - 0.5) * 0.9;   // наклон полос фактуры
@@ -3254,13 +3254,13 @@ function gmmPaintBody(ctx, px, py, sz, p, zc, a, t, starX, starY) {
   // 3. Внутреннее свечение (блик) на освещённой стороне (заменяет старые кольца-обводки)
   // Создаем мягкий объемный свет там, где светло.
   if (!p.dead && sz >= 5 && look !== 'rock') {
-    const atm = look === 'lava' ? '255,140,70' : look === 'ice' ? '210,235,255'
-      : look === 'gas' ? '255,235,190' : '150,200,255';
-    
+    const atm = look === 'lava' ? '255,150,90' : look === 'ice' ? '205,232,255'
+      : look === 'gas' ? '236,222,196' : '160,205,255';
+    const k = look === 'gas' ? 0.55 : 1;            // на гиганте блик мягче, без жёлтого пятна
     ctx.globalCompositeOperation = 'screen';
-    const hi = ctx.createRadialGradient(px + ldx * sz * 0.5, py + ldy * sz * 0.5, 0, px, py, sz * 1.05);
-    hi.addColorStop(0, `rgba(${atm},${(a*0.5).toFixed(3)})`);
-    hi.addColorStop(0.5, `rgba(${atm},${(a*0.15).toFixed(3)})`);
+    const hi = ctx.createRadialGradient(px + ldx * sz * 0.55, py + ldy * sz * 0.55, 0, px + ldx * sz * 0.4, py + ldy * sz * 0.4, sz * 0.85);
+    hi.addColorStop(0, `rgba(${atm},${(a*0.34*k).toFixed(3)})`);
+    hi.addColorStop(0.55, `rgba(${atm},${(a*0.1*k).toFixed(3)})`);
     hi.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = hi; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
@@ -3511,12 +3511,41 @@ function gmmPaintOrbits(ctx) {
     // (закон Тициуса–Боде): расстояния «дышат», между мирами много пространства.
     const ds = planets.map(p => +p.dist || 0);
     const dmin = Math.min(...ds), dmax = Math.max(...ds);
-    const radii = planets.map((p, i) => {
+    // ── ЭКРАННЫЙ РАЗМЕР каждого тела считаем ДО раскладки орбит, чтобы развести
+    //    орбиты с учётом радиусов тел (иначе крупные гиганты налезали на соседей). ──
+    const baseSz = planets.map(p => {
+      if (p.kind === 'belt') return 7 * gz;                 // запас под ширину кольца пояса
+      if (p.kind === 'anomaly') return 7 * gz;
+      return Math.max(2.2 * gz, starR * gmmPlanetFr(p) * 0.72);
+    });
+    const GAP = 5 * gz;   // гарантированный чистый зазор между краями соседних тел
+    // желаемые радиусы по дистанции (Тициус–Боде: внутренние сжаты, внешние в пустоту)
+    const wantR = planets.map((p, i) => {
       if (n <= 1) return (rIn + rMax) / 2;
       let u = dmax > dmin ? (ds[i] - dmin) / (dmax - dmin) : i / (n - 1);
       u = Math.pow(u, 1.4);
       return rIn + (rMax - rIn) * u;
     });
+    // раскладка от звезды наружу с минимальным зазором (размер тел масштабируется,
+    // если система переполнена и иначе тела не помещаются в домен).
+    const buildRadii = s => {
+      const rr = wantR.slice();
+      rr[0] = Math.max(rr[0], rIn + s[0]);
+      for (let i = 1; i < n; i++) {
+        const need = rr[i - 1] + s[i - 1] + s[i] + GAP;
+        if (rr[i] < need) rr[i] = need;
+      }
+      return rr;
+    };
+    let bodyScale = 1, radii = buildRadii(baseSz);
+    for (let pass = 0; pass < 7 && n > 1; pass++) {
+      const s = baseSz.map(v => v * bodyScale);
+      radii = buildRadii(s);
+      const outer = radii[n - 1] + s[n - 1];
+      if (outer <= rMax) break;
+      bodyScale *= (rMax / outer) * 0.97;     // тесно — ужимаем тела, сохраняя зазоры
+    }
+    const sizes = baseSz.map(v => v * bodyScale);
     // ── ПРОСТРАНСТВО СИСТЕМЫ: наклонный диск-«домен» + корона звезды. Без обводки:
     //    территория обособлена самим светящимся диском, тонированным в цвет фракции-
     //    владельца (нейтральная — холодный синий). Свет держится по диску и мягко
@@ -3546,14 +3575,29 @@ function gmmPaintOrbits(ctx) {
     ctx.restore();
     const labels = [];   // подписи планет/поясов — собираем здесь, рисуем после тел
     const colPos = [];   // экранные позиции колоний — для внутрисистемного трафика
+    // ── ПРОХОД 1: только нити орбит. Рисуем ВСЕ орбиты до тел, чтобы кольцо внешней
+    //    планеты не перечёркивало тело внутренней (раньше всё шло одним циклом). ──
+    for (let i = 0; i < n; i++) {
+      const p = planets[i], r = radii[i], zc = p.dead ? '#6b6b72' : gmZoneColor(p.zone);
+      const ry = r * TILT, rgb = gmRgb(zc);
+      // мягкая «подложка» нити — широкая полупрозрачная линия БЕЗ shadowBlur
+      // (тень-блюр на каждую орбиту убивал fps). Даёт ощущение объёма дёшево.
+      const near = a * (isFocus ? 0.5 : 0.3), far = near * 0.28;
+      const grad = ctx.createLinearGradient(cx, cy - ry, cx, cy + ry);
+      grad.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${far.toFixed(3)})`);
+      grad.addColorStop(0.5, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${((near + far) * 0.5).toFixed(3)})`);
+      grad.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${near.toFixed(3)})`);
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.ellipse(cx, cy, r, ry, 0, 0, 6.2832);
+      ctx.strokeStyle = grad; ctx.lineWidth = isFocus ? 2.4 : 1.6;
+      ctx.globalAlpha = 0.34; ctx.stroke();                 // широкая мягкая подложка
+      ctx.beginPath(); ctx.ellipse(cx, cy, r, ry, 0, 0, 6.2832);
+      ctx.lineWidth = isFocus ? 1.1 : 0.8;
+      ctx.globalAlpha = 1; ctx.stroke();                    // чёткая нить поверх
+    }
+    // ── ПРОХОД 2: тела (пояса/планеты/аномалии) поверх орбит. ──
     for (let i = 0; i < n; i++) {
       const p = planets[i], r = radii[i], zc = p.dead ? '#6b6b72' : gmZoneColor(p.zone);  // мёртвый мир — холодный камень
-      // орбита — наклонный эллипс, тонированный под зону, с лёгким двойным свечением
-      ctx.beginPath(); ctx.ellipse(cx, cy, r, r * TILT, 0, 0, 6.2832);
-      ctx.globalAlpha = a * (isFocus ? 0.12 : 0.07);
-      ctx.strokeStyle = zc; ctx.lineWidth = 3; ctx.stroke();    // мягкий ореол линии
-      ctx.globalAlpha = a * (isFocus ? 0.4 : 0.24);
-      ctx.lineWidth = 1; ctx.stroke();                          // чёткая нить орбиты
 
       if (p.kind === 'belt') {
         // поле астероидов — кольцо камней разного размера, медленно дрейфует по орбите
@@ -3632,10 +3676,9 @@ function gmmPaintOrbits(ctx) {
       }
 
       const isAnom = p.kind === 'anomaly';
-      // размер планеты — доля от радиуса звезды (всегда мельче её), ужата ×0.72,
-      // чтобы между орбитами оставалось много пустого пространства (реализм космоса).
-      const sz = isAnom ? (6 + Math.sin(t * 0.9 + i) * 1.4) * gz
-                        : Math.max(2.2 * gz, starR * gmmPlanetFr(p) * 0.72);
+      // размер тела — предрассчитан в sizes[] (с учётом зазоров/переполнения системы),
+      // аномалии слегка пульсируют поверх базы.
+      const sz = isAnom ? sizes[i] * (1 + 0.16 * Math.sin(t * 0.9 + i)) : sizes[i];
       // планеты разнесены по золотому углу + общий медленный дрейф: относительные
       // промежутки сохраняются, поэтому тела не сбиваются в кучу на одной стороне
       const ang = i * 2.39996 + t * 0.045;

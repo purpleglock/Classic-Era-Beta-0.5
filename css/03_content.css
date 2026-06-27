@@ -251,9 +251,11 @@
 }
 
 /* ── HOME HERO — режим визуальной новеллы (спрайт + диалоговое окно) ── */
+/* Обложка-новелла крупнее обычной — заполняет место и вмещает боковой перечень. */
 .hp-hero-cover.hp-vn{
   align-items:stretch;justify-content:flex-start;
-  min-height:300px;max-height:520px;
+  aspect-ratio:1200/520;
+  min-height:340px;max-height:600px;
 }
 /* фон под новеллой темнее — спрайт и текст должны читаться */
 .hp-vn .hp-hero-grad{
@@ -275,92 +277,236 @@
   filter:drop-shadow(0 6px 26px rgba(0,0,0,.65));
   pointer-events:none;
   transform-origin:bottom center;
-  animation:hpVnSprite .55s cubic-bezier(.2,.9,.25,1) both;
-}
-@keyframes hpVnSprite{
-  from{opacity:0;transform:translateY(34px) scale(.98)}
-  to{opacity:1;transform:none}
-}
-/* плавное появление спрайта при смене фразы */
-@keyframes hpVnSpriteEnter{
-  from{opacity:0;transform:translateY(20px) scale(.95)}
-  to{opacity:1;transform:translateY(0) scale(1)}
-}
-/* плавное исчезновение спрайта при смене фразы */
-@keyframes hpVnSpriteExit{
-  from{opacity:1;transform:translateY(0) scale(1)}
-  to{opacity:0;transform:translateY(-20px) scale(.95)}
-}
-/* плавный переход текста диалога */
-@keyframes hpVnTextFade{
-  from{opacity:0;transform:translateY(4px)}
-  to{opacity:1;transform:translateY(0)}
+  /* без анимации появления на старте — новелла должна быть СРАЗУ готова, а не
+     «выезжать» при каждом повторном рендере (mid-dialog смены ставят animation инлайн). */
 }
 /* диалоговое окно — внизу, поверх всего */
 .hp-vn-box{
-  position:absolute;z-index:6;left:clamp(12px,4vw,46px);right:clamp(12px,4vw,46px);
-  bottom:clamp(14px,4vh,30px);
-  padding:16px 20px 13px;cursor:pointer;
-  background:linear-gradient(180deg,rgba(9,13,20,.82),rgba(6,9,14,.92));
-  border:1px solid rgba(46,155,224,.55);
-  border-radius:12px;
-  box-shadow:0 10px 40px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.04), 0 0 32px rgba(46,155,224,.16);
-  backdrop-filter:blur(3px);
-  animation:hpVnBox .4s ease both .12s;
+  position:absolute;z-index:6;left:clamp(12px,3.5vw,40px);right:clamp(12px,3.5vw,40px);
+  bottom:clamp(12px,3vh,24px);
+  padding:14px 20px 12px;cursor:pointer;
+  background:hsl(216 16% 11% / .72);
+  border:1px solid var(--w2,rgba(255,255,255,.10));
+  border-left:2px solid var(--gd,#3a9bdc);
+  border-radius:3px;
+  box-shadow:0 16px 40px -14px rgba(0,0,0,.6);
+  backdrop-filter:saturate(1.1) blur(8px);
+  /* без анимации появления — окно сразу на месте (не дёргается при перерендере) */
 }
-@keyframes hpVnBox{ from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
-.hp-vn-box:focus-visible{outline:2px solid var(--gdl,#5fb0e6);outline-offset:2px}
-/* левая акцент-полоса (как в визуальных новеллах) */
-.hp-vn-box::before{
-  content:'';position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:3px;
-  background:linear-gradient(180deg,#5fb0e6,rgba(46,155,224,.15));
-  box-shadow:0 0 12px rgba(46,155,224,.6);
-}
-/* «именная табличка» — приподнята над окном */
+.hp-vn-box:focus-visible{outline:1px solid var(--gd,#3a9bdc);outline-offset:2px}
+/* «имя говорящего» — плоский HUD-заголовок с уходящей вправо линией (как .hp-cl-hdr) */
 .hp-vn-name{
-  position:absolute;top:-15px;left:18px;
-  font-family:'Rajdhani',sans-serif;font-weight:700;font-size:clamp(14px,1.8vw,18px);
-  letter-spacing:.08em;color:#0a141d;text-transform:uppercase;
-  padding:4px 14px 3px;border-radius:7px;
-  background:linear-gradient(180deg,#8fd2ff,#4f9fdc);
-  box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 18px rgba(46,155,224,.5);
+  display:flex;align-items:center;gap:11px;margin-bottom:7px;
+  font-family:'Rajdhani',sans-serif;font-weight:700;font-size:clamp(12px,1.4vw,14px);
+  letter-spacing:.14em;color:var(--gdl,#5fb0e6);text-transform:uppercase;
 }
-.hp-vn-box:has(.hp-vn-name){margin-top:0}
-.hp-vn-box .hp-vn-name + .hp-vn-text{margin-top:6px}
+.hp-vn-name::after{
+  content:'';flex:1;height:1px;
+  background:linear-gradient(to right,var(--w2,rgba(255,255,255,.10)),transparent);
+}
 .hp-vn-text{
   font-family:'Inter','Rajdhani',sans-serif;
-  font-size:clamp(15px,1.9vw,21px);line-height:1.5;
-  color:#eaf4ff;min-height:2.9em;
-  text-shadow:0 1px 4px rgba(0,0,0,.8);
+  font-size:clamp(14px,1.65vw,17px);line-height:1.55;
+  color:var(--t1,#eaf4ff);min-height:2.3em;letter-spacing:.004em;
+  text-shadow:0 1px 3px rgba(0,0,0,.7);
   white-space:pre-wrap;
 }
 /* мигающий курсор-каретка во время печати */
 .hp-vn-box.typing .hp-vn-text::after{
-  content:'▋';margin-left:1px;color:#5fb0e6;
+  content:'▋';margin-left:1px;color:var(--gd,#3a9bdc);
   animation:hpVnCaret .7s steps(1) infinite;
 }
 @keyframes hpVnCaret{ 50%{opacity:0} }
 .hp-vn-foot{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  margin-top:11px;flex-wrap:wrap;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:10px;flex-wrap:wrap;
 }
-.hp-vn-next{
-  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.12em;
-  color:var(--gdl,#5fb0e6);opacity:.8;
-  animation:hpVnBlink 1.4s ease-in-out infinite;
+/* кластер навигации — реальные кнопки «назад» / «пропустить·снова» рядом */
+.hp-vn-ctrl{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.hp-vn-btn{
+  cursor:pointer;pointer-events:auto;
+  font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;line-height:1;
+  color:var(--t3,#6a7a88);
+  background:transparent;
+  border:1px solid var(--w2,rgba(255,255,255,.10));border-radius:3px;
+  padding:7px 12px;
+  transition:background .14s,border-color .14s,color .14s;
 }
-@keyframes hpVnBlink{ 50%{opacity:.35} }
+.hp-vn-btn:hover{background:var(--w1,rgba(255,255,255,.06));border-color:var(--w3,rgba(255,255,255,.18));color:var(--t1,#eaf4ff)}
+.hp-vn-btn[hidden]{display:none}
+/* «пропустить/снова» — основное действие, акцентом */
+.hp-vn-next{color:var(--gdl,#5fb0e6);border-color:color-mix(in srgb,var(--gd,#3a9bdc) 35%,transparent)}
+.hp-vn-next:hover{color:#fff;border-color:var(--gd,#3a9bdc);background:color-mix(in srgb,var(--gd,#3a9bdc) 12%,transparent)}
 .hp-vn-foot .hp-hero-cta{margin:0;pointer-events:auto}
+
+/* ── Выбор в диалоговом окне новеллы — плоский список строк ── */
+.hp-vn-choices{
+  display:flex;flex-direction:column;margin-top:11px;
+  border-top:1px solid var(--w1,rgba(255,255,255,.06));
+  max-height:148px;overflow:auto;scrollbar-width:thin;
+}
+.hp-vn-choices:empty{margin-top:0;border-top:none}
+.hp-vn-choices::-webkit-scrollbar{width:5px}
+.hp-vn-choices::-webkit-scrollbar-thumb{background:var(--w2,rgba(255,255,255,.10));border-radius:4px}
+.hp-vn-choice{
+  cursor:pointer;pointer-events:auto;display:flex;align-items:center;gap:10px;width:100%;
+  background:transparent;border:none;border-bottom:1px solid var(--w1,rgba(255,255,255,.06));
+  color:var(--t2,#b8c4cf);padding:10px 4px;text-align:left;
+  font-family:'Rajdhani','Inter',sans-serif;font-size:clamp(13px,1.35vw,15px);font-weight:600;
+  letter-spacing:.01em;transition:color .14s,background .14s,padding-left .14s;
+}
+.hp-vn-choice:hover{color:var(--t1,#eaf4ff);background:color-mix(in srgb,var(--gd,#3a9bdc) 7%,transparent);padding-left:10px}
+/* запись в списке (уровень 2) — герб/иконка + текст в одну строку с обрезкой */
+.hp-vn-choice-item{font-weight:500;font-size:clamp(12px,1.25vw,14px)}
+.hp-vn-choice-item img,.hp-vn-choice-item .fn-fr-flag{width:15px;height:15px;object-fit:contain;flex-shrink:0;border-radius:3px;opacity:0.9}
+.hp-vn-choice-it-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hp-vn-choice-empty{
+  color:var(--t3,#9fb3c4);font-family:'Inter',sans-serif;font-size:13px;
+  padding:9px 4px;
+}
+
+/* ── Анимированная лента индексов — ОТДЕЛЬНО от диалогового окна ── */
+.hp-vn-idx{
+  position:absolute;z-index:7;
+  left:clamp(12px,4vw,46px);right:clamp(12px,4vw,46px);
+  bottom:calc(clamp(14px,4vh,30px) + 156px);
+  background:linear-gradient(180deg,rgba(9,13,20,.9),rgba(6,9,14,.95));
+  border:1px solid rgba(46,155,224,.5);border-radius:11px;
+  box-shadow:0 12px 40px rgba(0,0,0,.55), 0 0 30px rgba(46,155,224,.16);
+  backdrop-filter:blur(4px);overflow:hidden;
+  opacity:0;transform:translateY(10px);pointer-events:none;
+  transition:opacity .3s ease,transform .3s ease;
+}
+.hp-vn-idx.show{opacity:1;transform:none;pointer-events:auto}
+.hp-vn-idx-cap{
+  font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;
+  color:var(--gdl,#5fb0e6);padding:7px 12px 6px;
+  border-bottom:1px solid rgba(46,155,224,.22);background:rgba(46,155,224,.06);
+}
+
+/* ── Новелла: герб державы ФОНОМ за текстом (водяной знак, как в статье) ── */
+.hp-vn-box{overflow:hidden}   /* держим водяной знак в границах окна */
+.hp-vn-bgflag{
+  position:absolute;inset:0;z-index:0;pointer-events:none;
+  background-size:cover;background-repeat:no-repeat;background-position:right 24%;
+  opacity:0;filter:saturate(.5) contrast(.95);
+  /* приглушаем со стороны текста (слева) → чистая читаемость, герб «уходит» вправо */
+  -webkit-mask-image:linear-gradient(to left, #000 0%, rgba(0,0,0,.45) 48%, transparent 88%);
+  mask-image:linear-gradient(to left, #000 0%, rgba(0,0,0,.45) 48%, transparent 88%);
+  transition:opacity .35s ease;
+}
+.hp-vn-bgflag.show{opacity:.13}
+/* контент окна — НАД водяным знаком */
+.hp-vn-box > .hp-vn-name,
+.hp-vn-box > .hp-vn-text,
+.hp-vn-box > .hp-vn-banner,
+.hp-vn-box > .hp-vn-choices,
+.hp-vn-box > .hp-vn-foot{position:relative;z-index:1}
+/* карточка достижения ПОД текстом (раскрывается max-height-переходом) */
+.hp-vn-banner{
+  overflow:auto;scrollbar-width:thin;
+  opacity:0;max-height:0;margin-top:0;transform:translateY(-4px);
+  transition:opacity .26s ease,max-height .26s ease,margin-top .26s ease,transform .26s ease;
+}
+.hp-vn-banner.show{opacity:1;max-height:min(42vh,340px);margin-top:12px;transform:none}
+.hp-vn-banner:not(.show){pointer-events:none}
+.hp-vn-banner::-webkit-scrollbar{width:5px}
+.hp-vn-banner::-webkit-scrollbar-thumb{background:var(--w2,rgba(255,255,255,.10));border-radius:4px}
+
+/* ── Игровая плашка достижения в новелле (без символов, плоский sci-fi) ── */
+.hp-vn-ach{
+  display:flex;gap:16px;align-items:center;padding:13px 15px;position:relative;overflow:hidden;
+  border-radius:4px;
+  border:1px solid color-mix(in srgb,var(--gd,#3a9bdc) 24%,var(--w2,rgba(255,255,255,.10)));
+  border-left:2px solid var(--gd,#3a9bdc);
+  background:linear-gradient(135deg, color-mix(in srgb,var(--gd,#3a9bdc) 9%, hsl(216 18% 10% / .92)), hsl(216 18% 9% / .94));
+}
+.hp-vn-ach-art{
+  flex:0 0 auto;width:80px;height:80px;border-radius:4px;overflow:hidden;
+  background:radial-gradient(circle at 50% 30%, color-mix(in srgb,var(--gd,#3a9bdc) 20%,transparent), transparent 70%), var(--b3,#0f141b);
+  border:1px solid color-mix(in srgb,var(--gd,#3a9bdc) 34%,transparent);
+}
+.hp-vn-ach-art img{width:100%;height:100%;object-fit:cover;display:block}
+.hp-vn-ach-body{min-width:0;flex:1;display:flex;flex-direction:column}
+.hp-vn-ach-kick{
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--gdl,#5fb0e6);margin-bottom:6px;opacity:.92;
+}
+.hp-vn-ach-name{
+  font-family:'Rajdhani',sans-serif;font-weight:800;font-size:clamp(17px,2vw,22px);line-height:1.1;
+  color:var(--t1,#eaf4ff);margin-bottom:8px;
+}
+.hp-vn-ach-cond{
+  align-self:flex-start;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.02em;
+  color:var(--t1,#eaf4ff);padding:3px 9px;border-radius:3px;margin-bottom:9px;
+  background:color-mix(in srgb,var(--gd,#3a9bdc) 11%,transparent);
+  border:1px solid color-mix(in srgb,var(--gd,#3a9bdc) 28%,transparent);
+}
+.hp-vn-ach-quote{font-style:italic;font-size:13.5px;color:var(--t1,#eaf4ff);line-height:1.5;margin-bottom:4px}
+.hp-vn-ach-desc{font-size:13px;color:var(--t2,#b8c4cf);line-height:1.5}
+.hp-vn-ach-reward{
+  align-self:flex-start;margin-top:11px;font-family:'JetBrains Mono',monospace;font-weight:600;
+  font-size:12px;letter-spacing:.04em;color:var(--gdl,#5fb0e6);padding:5px 12px;border-radius:3px;
+  background:color-mix(in srgb,var(--gd,#3a9bdc) 11%,transparent);
+  border:1px solid color-mix(in srgb,var(--gd,#3a9bdc) 32%,transparent);
+}
+
 @media (max-width:768px){
-  .hp-hero-cover.hp-vn{min-height:240px}
-  .hp-vn-sprites{padding-right:0;gap:0}
-  .hp-vn-sprite{opacity:.92;max-width:60vw}
-  .hp-vn-box{padding:12px 14px 11px}
-  .hp-vn-text{min-height:3.4em}
+  /* СТЕКОВАЯ раскладка: баннер (картинка+спрайт) сверху, диалог карточкой снизу —
+     никаких наложений, всё читаемо и тапабельно. */
+  .hp-hero-cover.hp-vn{
+    display:block;position:relative;aspect-ratio:auto;min-height:0;max-height:none;
+    overflow:visible;border:none;background:transparent;
+    /* НЕ во весь экран: иначе карточка/кнопки вылезают за край (был full-bleed) */
+    margin:0 0 16px;width:100%;box-sizing:border-box;
+  }
+  .hp-vn-box,.hp-vn-choices,.hp-vn-choice{box-sizing:border-box;max-width:100%}
+  /* баннер — картинка фиксированной высоты в потоке */
+  .hp-vn .hp-hero-img,.hp-vn .hp-hero-noimg{
+    position:relative;height:34vh;min-height:200px;width:100%;object-fit:cover;display:block;
+    border-radius:10px 10px 0 0;
+  }
+  /* градиент и спрайт — только над баннером */
+  .hp-vn .hp-hero-grad{top:0;bottom:auto;height:34vh;min-height:200px;border-radius:10px 10px 0 0}
+  .hp-vn-sprites{top:0;bottom:auto;height:34vh;min-height:200px;align-items:flex-end;justify-content:center;padding:0}
+  .hp-vn-sprite{opacity:.97;max-width:62vw;max-height:96%}
+  /* рамку/уголки на телефоне убираем — лишний шум поверх стека */
+  .hp-vn .hp-hero-frame,.hp-vn .hpc-corner{display:none}
+  /* биржевой тикер — НЕ overlay, а обычная полоса в потоке (между баннером и диалогом) */
+  .hp-vn .hp-vn-idx{
+    position:relative;left:0;right:0;bottom:auto;margin:10px 0 0;width:100%;
+    transform:none;transition:opacity .25s ease;
+  }
+  .hp-vn .hp-vn-idx:not(.show){display:none}
+  /* баннер-флаг на мобиле — без внутреннего скролла, в потоке под текстом */
+  .hp-vn .hp-vn-banner.show{max-height:none;overflow:visible}
+  /* диалог — обычная карточка под баннером */
+  .hp-vn-box{
+    position:relative;left:0;right:0;bottom:0;margin:0;
+    padding:16px 16px 14px;border-radius:0 0 6px 6px;border-top:none;border-left:2px solid var(--gd,#3a9bdc);
+    max-height:none;overflow:visible;cursor:default;
+  }
+  .hp-vn-name{font-size:13px}
+  .hp-vn-text{font-size:16px;line-height:1.5;min-height:auto}
+  .hp-vn-foot{margin-top:12px;gap:10px}
+  .hp-vn-foot .hp-hero-cta{font-size:14px;padding:10px 14px}
+  /* меню выбора — без внутр. прокрутки, крупнее тапы */
+  .hp-vn-choices{max-height:none;overflow:visible}
+  .hp-vn-choice{padding:12px 4px;font-size:15px}
+  .hp-vn-choice:hover{padding-left:8px}
+  .hp-vn-choice-item{font-size:14px}
+  /* кнопка правки обложки — в угол баннера */
+  .hp-vn .hp-hero-upload-btn{top:6px;left:6px;right:auto;font-size:10px;padding:4px 8px}
+}
+@media (max-width:430px){
+  .hp-vn .hp-hero-img,.hp-vn .hp-hero-noimg,.hp-vn .hp-hero-grad,.hp-vn-sprites{height:30vh;min-height:180px}
+  .hp-vn-sprite{max-width:66vw}
+  .hp-vn-text{font-size:15px}
 }
 
 /* ── HOME HERO — титульное «главное меню» (незарег. игрок) ── */
-.hp-vnmenu{ align-items:center; justify-content:flex-start; }
+.hp-vnmenu{ align-items:center; justify-content:center; }
 /* мягкая тёмная вуаль слева — чтобы текст читался поверх пёстрого фона */
 .hp-menu-scrim{
   position:absolute;inset:0;z-index:4;pointer-events:none;
@@ -368,25 +514,25 @@
 }
 .hp-menu{
   position:relative;z-index:6;
-  margin-left:clamp(20px,5.5vw,68px);max-width:520px;
+  margin-left:clamp(20px,5.5vw,68px);
+  margin-top:80px;
+  max-width:520px;
   animation:hpMenuIn .55s cubic-bezier(.2,.9,.25,1) both;
 }
 @keyframes hpMenuIn{ from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
 .hp-menu-kick{
-  display:block;width:54px;height:3px;border-radius:3px;margin-bottom:16px;
-  background:linear-gradient(90deg,var(--gdl,#5fb0e6),transparent);
-  box-shadow:0 0 14px rgba(46,155,224,.6);
+  display:none;
 }
 .hp-menu-title{
   font-family:'Rajdhani',sans-serif;font-weight:700;margin:0;
-  font-size:clamp(34px,5.4vw,64px);line-height:.95;letter-spacing:clamp(1px,.5vw,5px);
+  font-size:clamp(32px,5vw,58px);line-height:1;letter-spacing:clamp(1px,.5vw,5px);
   text-transform:uppercase;color:#f1f8ff;
-  text-shadow:0 2px 10px rgba(0,0,0,.85),0 0 40px rgba(46,155,224,.35);
+  text-shadow:0 3px 12px rgba(0,0,0,.9),0 0 45px rgba(46,155,224,.4);
 }
 .hp-menu-tag{
-  font-family:'Inter','Rajdhani',sans-serif;font-size:clamp(12px,1.4vw,15px);
-  color:#aac4d8;letter-spacing:.02em;margin:12px 0 24px;
-  text-shadow:0 1px 4px rgba(0,0,0,.8);
+  font-family:'Inter','Rajdhani',sans-serif;font-size:clamp(12px,1.35vw,14px);
+  color:#b8d0e4;letter-spacing:.02em;margin:10px 0 20px 0;line-height:1.4;
+  text-shadow:0 1px 6px rgba(0,0,0,.9);font-weight:400;
 }
 .hp-menu-list{ display:flex;flex-direction:column;gap:11px;width:clamp(240px,30vw,300px); }
 .hp-menu-btn{

@@ -154,6 +154,7 @@ async function init() {
       await loadUserRole(session.user); updAuthUI();
     } else if (event === 'SIGNED_OUT') {
       user = null; userProfile = { display_name:'', avatar_url:'' }; _pgCache.clear(); _myFactionApproved = false;
+      try { localStorage.removeItem('wk_fac_approved'); } catch(e) {}
       if (editMode) exitEdit(false);
       closeAp(); updAuthUI();
       await Promise.all([loadPgs(), loadProfiles(), loadHomePage()]);
@@ -174,6 +175,15 @@ function loadProfile() {
   if (!user) { userProfile = { display_name:'', avatar_url:'' }; return; }
   const saved = localStorage.getItem('wk_profile_' + user.id);
   if (saved) { try { Object.assign(userProfile, JSON.parse(saved)); } catch {} }
+  _cacheGreetName();
+}
+// Кэшируем отображаемое имя для новеллы, чтобы оно было готово на ПЕРВОМ кадре
+// следующей загрузки (до сети) и новелла не перезапускалась из-за подгрузки имени.
+function _cacheGreetName() {
+  try {
+    const dn = (userProfile && userProfile.display_name || '').trim();
+    if (dn) localStorage.setItem('wk_greet_name', dn);
+  } catch (e) {}
 }
 function getDisplayName() {
   if (!user) return '';
@@ -195,6 +205,7 @@ async function loadProfiles() {
         userProfile.display_name = mine.display_name || '';
         userProfile.avatar_url = mine.avatar_url || '';
         try { localStorage.setItem('wk_profile_' + user.id, JSON.stringify(userProfile)); } catch(e) {}
+        _cacheGreetName();
       }
     }
   } catch(e) { allProfiles = []; }
@@ -270,6 +281,7 @@ async function saveProfileFromForm() {
   } catch(e) { toast('Не удалось сохранить профиль: ' + e.message, 'err'); return; }
   userProfile = { display_name: displayName, avatar_url: avatarUrl };
   localStorage.setItem('wk_profile_' + user.id, JSON.stringify(userProfile));
+  _cacheGreetName();
   try { await sb.auth.updateUser({ data: { display_name: displayName, avatar_url: avatarUrl } }); } catch(e) {}
   const _si = allProfiles.findIndex(p => p.email === user.email);
   const _pd = { email: user.email, display_name: displayName, avatar_url: avatarUrl };
@@ -316,7 +328,8 @@ async function loadUserRole(authUser) {
     try {
       const fr = await getJSON(`${SB_URL}/rest/v1/faction_applications?owner_id=eq.${authUser.id}&status=eq.approved&select=id&limit=1`);
       _myFactionApproved = Array.isArray(fr) && fr.length > 0;
-      if (_myFactionApproved) { try { buildNav(); } catch(e) {} }
+      try { localStorage.setItem('wk_fac_approved', _myFactionApproved ? '1' : '0'); } catch(e) {}
+      if (_myFactionApproved) { try { buildNav(); if (curSlug === 'home' || !curSlug) renderHome(); } catch(e) {} }
     } catch(e) {}
 
     // Метаданные профиля — вторично, с таймаутом 4 с (не должны вешать роль/меню)
@@ -327,6 +340,7 @@ async function loadUserRole(authUser) {
         userProfile.display_name = mu.user_metadata.display_name || '';
         userProfile.avatar_url   = mu.user_metadata.avatar_url   || '';
         localStorage.setItem('wk_profile_' + user.id, JSON.stringify(userProfile));
+        _cacheGreetName();
       } else { loadProfile(); }
     } catch { loadProfile(); }
   } catch(e) {
