@@ -255,7 +255,9 @@
 .hp-hero-cover.hp-vn{
   align-items:stretch;justify-content:flex-start;
   aspect-ratio:1200/520;
-  min-height:340px;max-height:600px;
+  /* высоту ограничиваем И пикселями, И долей экрана — на широких/невысоких окнах
+     обложка не должна вылезать за видимую область и обрезать кнопки/диалог */
+  min-height:340px;max-height:min(600px,80vh);
 }
 /* фон под новеллой темнее — спрайт и текст должны читаться */
 .hp-vn .hp-hero-grad{
@@ -540,7 +542,9 @@
 .hp-menu{
   position:relative;z-index:6;
   margin-left:clamp(20px,5.5vw,68px);
-  margin-top:80px;
+  /* отступ сверху — доля высоты, а не фикс 80px: на невысоких окнах меню
+     не съезжает вниз и нижняя кнопка не уходит за край обложки */
+  margin-top:clamp(20px,7vh,72px);
   max-width:520px;
   animation:hpMenuIn .55s cubic-bezier(.2,.9,.25,1) both;
 }
@@ -593,6 +597,16 @@
   .hp-menu-list{width:auto;max-width:300px}
   .hp-menu-tag{margin:8px 0 16px}
   .hp-vnmenu .hp-vn-sprite{opacity:.5}
+}
+/* НИЗКИЕ окна (альбомная ориентация / короткий экран): обложка-меню сжимается,
+   чтобы заголовок + тег + ОБЕ кнопки гарантированно влезали без обрезки. */
+@media (max-height:560px){
+  .hp-hero-cover.hp-vnmenu{aspect-ratio:auto;min-height:0;height:auto;max-height:none}
+  .hp-menu{margin-top:clamp(14px,4vh,40px);margin-bottom:18px}
+  .hp-menu-title{font-size:clamp(26px,4.4vw,46px)}
+  .hp-menu-tag{margin:6px 0 12px}
+  .hp-menu-list{gap:9px}
+  .hp-menu-btn{padding:10px 14px}
 }
 
 

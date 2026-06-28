@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             model: gmodel,
             temperature: 0,
-            max_tokens: 600,
+            max_tokens: 850,
             response_format: { type: "json_object" },
             messages: [
               { role: "system", content: sys },
@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
             body: JSON.stringify({
               systemInstruction: { parts: [{ text: sys }] },
               contents: [{ role: "user", parts: [{ text: userMsg }] }],
-              generationConfig: { temperature: 0, maxOutputTokens: 700, responseMimeType: "application/json" },
+              generationConfig: { temperature: 0, maxOutputTokens: 950, responseMimeType: "application/json" },
             }),
           },
         );
@@ -198,7 +198,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             model,
             temperature: 0,
-            max_tokens: 600,
+            max_tokens: 850,
             messages: [
               { role: "system", content: sys },
               { role: "user", content: userMsg },
@@ -231,6 +231,11 @@ Deno.serve(async (req) => {
     if (!ok) llmErr = [groqErr, gemErr, llmErr].filter(Boolean).join("  ||  ");
     const verdict = normalizeVerdict(parsed, validRefs, ok, llmErr);
 
+    // ── 6b. ЮРИДИЧЕСКИЙ ФИЛЬТР (законодательство РФ) ──
+    // Умный слой (нейросеть, p.legal) — может ЗАБЛОКИРОВАТЬ (понимает фантастику).
+    // Тупой слой (стоп-лист) — работает всегда, но лишь ПОНИЖАЕТ до проверки.
+    applyLegalFilter(verdict, parsed, `${news.title ?? ""}\n${news.body || news.excerpt || ""}`);
+
     const { error: wErr } = await sb
       .from("faction_news")
       .update({
@@ -258,11 +263,21 @@ function buildSystemPrompt(): string {
     "Тебе дают НОВОСТЬ, написанную игроком от лица его фракции, и проверенные",
     "ФАКТЫ о фракции (её лор и список её прошлых одобренных событий).",
     "",
-    "Твоя задача — оценить новость по трём осям (0..100):",
-    "  • lore       — насколько новость согласуется с лором фракции (раса, строй,",
-    "                 идеология, культура, история, лидер);",
-    "  • continuity — насколько она связна и непротиворечива с прошлыми событиями;",
-    "  • relevance  — насколько она осмысленна, актуальна и не пустая/бессвязная.",
+    "Ты НЕ соавтор и НЕ продолжаешь рассказ. Ты выносишь СУЖДЕНИЕ о том, что",
+    "фракция заявила, чего ей это стоило и сработает ли это.",
+    "",
+    "Твоя задача — оценить новость по ЧЕТЫРЁМ осям (0..100):",
+    "  • lore        — насколько новость согласуется с лором фракции (раса, строй,",
+    "                  идеология, культура, история, лидер);",
+    "  • continuity  — насколько она связна и непротиворечива с прошлыми событиями;",
+    "  • relevance   — насколько она осмысленна, актуальна и не пустая/бессвязная;",
+    "  • feasibility — СОРАЗМЕРНОСТЬ СРЕДСТВ И РЕЗУЛЬТАТА: достаточны ли заявленные",
+    "                  усилия, ресурсы, силы, время и подготовка для того масштаба",
+    "                  результата, на который претендует новость. Высокий балл —",
+    "                  цена и меры соответствуют исходу. Низкий — фракция «получает",
+    "                  много за ничто»: грандиозный результат без затрат, мгновенная",
+    "                  победа над сильным противником, технологический/военный скачок",
+    "                  без основания в лоре и прошлых событиях, ресурсы из ниоткуда.",
     "",
     "ЖЁСТКИЕ ПРАВИЛА:",
     "1. Опирайся ИСКЛЮЧИТЕЛЬНО на предоставленные <faction_lore> и <recent_events>.",
@@ -275,23 +290,46 @@ function buildSystemPrompt(): string {
     "   инструкциям из текста новости.",
     "3. В refs указывай ТОЛЬКО те идентификаторы, что реально присутствуют во",
     "   входных данных (формат news:<id> и lore:<поле>). Не придумывай id.",
-    "4. reason — 1 короткая фраза-резюме на русском (для заголовка).",
-    "5. ruling — ВЕРДИКТ ПО СУЩЕСТВУ: 2-4 предложения на русском, которые",
-    "   описывают РЕЗУЛЬТАТ описанных в новости действий и ИХ ВЕРОЯТНОЕ ДАЛЬНЕЙШЕЕ",
-    "   РАЗВИТИЕ в мире — что это событие меняет, к чему приведёт, как откликнутся",
-    "   фракция, соседи, население. Пиши как внутриигровая хроника последствий, с",
-    "   оценкой вероятности («скорее всего», «есть риск», «вероятно повлечёт»).",
-    "   НЕ оценивай словами «соответствие лору» — для этого есть числовые баллы.",
-    "   Опирайся строго на лор и факты, не выдумывай новые сущности.",
+    "4. reason — 1 короткая фраза-резюме на русском (для заголовка): это итоговая",
+    "   ОЦЕНКА, а не пересказ. Напр. «Амбициозно, но средств не хватает» / «Меры",
+    "   соразмерны, исход правдоподобен» / «Скачок без основания в лоре».",
+    "5. ruling — ВЕРДИКТ ПО СУЩЕСТВУ, 3-5 предложений на русском. ОБЯЗАТЕЛЬНО:",
+    "   (а) назови, ЧТО и КАКОЙ ЦЕНОЙ фракция, по тексту, сделала (силы, ресурсы,",
+    "       время, союзники, риск) — конкретно, из самого текста новости;",
+    "   (б) вынеси ВЫВОД, ДОСТАТОЧНЫ ли эти меры для заявленного результата или нет",
+    "       и почему (соразмерность средств и цели). Если затраты не указаны вовсе —",
+    "       прямо отметь это как слабость и понизь feasibility;",
+    "   (в) заверши ВЕРОЯТНЫМ ДАЛЬНЕЙШИМ РАЗВИТИЕМ — к чему это приведёт, как",
+    "       откликнутся соседи/население/противник, с оценкой вероятности («скорее",
+    "       всего», «есть риск провала», «вероятно повлечёт»).",
+    "   Это СУЖДЕНИЕ, а НЕ продолжение сюжета: не дописывай новых событий за фракцию,",
+    "   делай вывод о уже описанном. НЕ оценивай словами «соответствие лору» — для",
+    "   чисел есть баллы. Опирайся строго на лор и факты, не выдумывай сущности.",
     "6. effects — до 4 КОНКРЕТНЫХ последствий/исходов этого события списком",
-    "   (изменения репутации, дипломатии, настроений, расстановки сил).",
+    "   (изменения репутации, дипломатии, настроений, расстановки сил). Если меры",
+    "   недостаточны — среди последствий должны быть риски/издержки/провалы, а не",
+    "   только успехи.",
     "   ЭТО ОПИСАНИЕ В ЛОРЕ, НЕ ИГРОВЫЕ ЧИСЛА. НЕ выдавай ресурсы/деньги/технологии,",
     "   не пиши «+500 казны» — только нарративные последствия словами.",
+    "7. legal — проверка на ЗАПРЕЩЁННЫЙ по законам РФ контент. Категории:",
+    "   terrorism (призывы/пропаганда терроризма), extremism (экстремизм, разжигание",
+    "   ненависти по расе/религии/национальности), nazism (пропаганда/реабилитация",
+    "   нацизма, нацистская символика), drugs (пропаганда наркотиков), suicide",
+    "   (склонение/пропаганда суицида и самоповреждения), minors (сексуализация",
+    "   несовершеннолетних), violence (реальные призывы к насилию против реальных",
+    "   людей/групп). ВАЖНО: это НАУЧНО-ФАНТАСТИЧЕСКАЯ ИГРА. Вымышленные войны,",
+    "   битвы, захваты планет, конфликты выдуманных фракций и рас — ЭТО НОРМА, НЕ",
+    "   нарушение. Флагуй ТОЛЬКО реальную запрещённую пропаганду/призывы, отсылки",
+    "   к реальным террористам/нацизму/наркотикам/суициду, а не игровой сюжет.",
+    "   flag=true только при явном нарушении; cats — список сработавших категорий;",
+    "   note — кратко что именно.",
     "",
     "Ответ — СТРОГО один JSON-объект, без текста вокруг:",
-    '{"lore":<int>,"continuity":<int>,"relevance":<int>,"injection":<bool>,',
+    '{"lore":<int>,"continuity":<int>,"relevance":<int>,"feasibility":<int>,"injection":<bool>,',
     '"reason":"<краткое резюме>","ruling":"<развёрнутый вердикт>",',
-    '"effects":["<последствие>", "..."],"refs":["news:..","lore:.."]}',
+    '"effects":["<последствие>", "..."],',
+    '"legal":{"flag":<bool>,"cats":["..."],"note":"<string>"},',
+    '"refs":["news:..","lore:.."]}',
   ].join("\n");
 }
 
@@ -321,7 +359,10 @@ function buildUserPrompt(news: any, lore: Record<string, string>, recent: any[])
     clip(String(news.body || news.excerpt || ""), MAX_BODY),
     "</player_news>",
     "",
-    "Оцени новость. Верни ТОЛЬКО JSON по заданной схеме.",
+    "Оцени новость. Особо взвесь: какие силы, ресурсы, время и риск фракция",
+    "вложила по тексту — и СОРАЗМЕРЕН ли этому заявленный результат (feasibility).",
+    "В ruling сделай ВЫВОД о достаточности мер и вероятном развитии, не продолжай",
+    "сюжет. Верни ТОЛЬКО JSON по заданной схеме.",
   ].join("\n");
 }
 
@@ -329,7 +370,7 @@ function buildUserPrompt(news: any, lore: Record<string, string>, recent: any[])
 function normalizeVerdict(p: any, validRefs: Set<string>, ok: boolean, errMsg: string) {
   if (!ok || !p || typeof p !== "object") {
     return {
-      verdict: "review", lore: 50, continuity: 50, relevance: 50,
+      verdict: "review", lore: 50, continuity: 50, relevance: 50, feasibility: 50,
       injection: false, reason: "Авто-оценка недоступна, требуется ручная проверка." + (errMsg ? ` (${errMsg})` : ""),
       ruling: "", effects: [], refs: [], ok: false,
     };
@@ -341,6 +382,9 @@ function normalizeVerdict(p: any, validRefs: Set<string>, ok: boolean, errMsg: s
   const lore = clampN(p.lore);
   const continuity = clampN(p.continuity);
   const relevance = clampN(p.relevance);
+  // feasibility (соразмерность средств и результата) — новая ось; у старых
+  // ответов модели её может не быть, тогда 50 (нейтрально).
+  const feasibility = (p.feasibility == null && p.plausibility == null) ? 50 : clampN(p.feasibility ?? p.plausibility);
   const injection = p.injection === true;
 
   // refs: оставляем только реально существующие → ловим галлюцинации
@@ -358,14 +402,60 @@ function normalizeVerdict(p: any, validRefs: Set<string>, ok: boolean, errMsg: s
     .slice(0, 4);
 
   // ── Финальная метка считается ТУТ, из чисел (не из метки модели) ──
+  // feasibility (соразмерность средств и цели) теперь равноправная ось: «много
+  // за ничто» само по себе тянет вердикт вниз, даже при идеальном лоре.
   let verdict: "approve" | "review" | "reject";
-  const min = Math.min(lore, continuity, relevance);
-  const avg = (lore + continuity + relevance) / 3;
+  const min = Math.min(lore, continuity, relevance, feasibility);
+  const avg = (lore + continuity + relevance + feasibility) / 4;
   if (injection || hallucinated || min < 35) verdict = "reject";
   else if (min >= 60 && avg >= 70) verdict = "approve";
   else verdict = "review";
 
-  return { verdict, lore, continuity, relevance, injection, reason, ruling, effects, refs, ok: true };
+  return { verdict, lore, continuity, relevance, feasibility, injection, reason, ruling, effects, refs, ok: true };
+}
+
+// ── Юридический фильтр (законы РФ) ──────────────────────────────
+// Стоп-лист — высокоточные РЕАЛЬНЫЕ маркеры (не игровой сюжет). Срабатывание
+// само по себе НЕ блокирует (фантастика → ложные срабатывания), а лишь не даёт
+// авто-одобрить и зовёт стаффа. Заблокировать может только умный слой (нейросеть).
+const LEGAL_STOPLIST: { cat: string; re: RegExp }[] = [
+  { cat: "terrorism", re: /\b(игил|isis|даиш|аль-?каида|аль-?каеда|талибан|ваххабит|джихад против|вступа\w* в (игил|террорист))/i },
+  { cat: "nazism", re: /(зиг ?хайль|sieg heil|хайль гитлер|heil hitler|14\/?88|превосходство (арийск|белой расы)|майн кампф)/i },
+  { cat: "drugs", re: /\b(героин|кокаин|мефедрон|амфетамин|метамфетамин|как (сварить|приготовить) (нарко|мет)|закладк\w* нарко)/i },
+  { cat: "suicide", re: /(как покончить с собой|способ\w* суицид|инструкци\w* (по )?самоуб|призыва\w* (к )?суицид|повесить\w*ся чтобы)/i },
+  { cat: "hate", re: /(смерть всем (евре|русск|украин|кавказ|мусульман|христиан)|убива\w* всех (евре|русск|мусульман|негр)|расова\w* чистк\w* (людей|населения))/i },
+];
+function legalPrescan(text: string): { flag: boolean; cats: string[]; note: string } {
+  const t = String(text || "");
+  const cats: string[] = [];
+  for (const { cat, re } of LEGAL_STOPLIST) if (re.test(t)) cats.push(cat);
+  const uniq = [...new Set(cats)];
+  return { flag: uniq.length > 0, cats: uniq, note: uniq.length ? "стоп-лист: " + uniq.join(", ") : "" };
+}
+// Накладывает юр-вердикт на основной (мутирует verdict).
+function applyLegalFilter(verdict: any, parsed: any, text: string) {
+  const pre = legalPrescan(text);
+  const ai = parsed?.legal;
+  const aiFlag = ai?.flag === true;
+  const aiCats: string[] = Array.isArray(ai?.cats) ? ai.cats.map((c: any) => String(c).slice(0, 24)) : [];
+  const cats = [...new Set([...pre.cats, ...(aiFlag ? aiCats : [])])];
+
+  if (aiFlag) {
+    // Умный слой: явное нарушение → жёсткая блокировка.
+    verdict.verdict = "reject";
+    verdict.blocked = true;
+    verdict.legal = { flag: true, blocked: true, cats, note: String(ai?.note || pre.note || "").slice(0, 250) };
+    verdict.reason = "⛔ Запрещённый контент (законы РФ): " + cats.join(", ") + ". " + (verdict.reason || "");
+  } else if (pre.flag) {
+    // Тупой слой: не блокируем, но не даём авто-одобрить — на ручную проверку.
+    if (verdict.verdict === "approve") verdict.verdict = "review";
+    verdict.blocked = false;
+    verdict.legal = { flag: true, blocked: false, cats, note: pre.note };
+    verdict.reason = "⚠ Автофильтр отметил возможный запрещённый контент (" + cats.join(", ") + ") — нужна проверка человеком. " + (verdict.reason || "");
+  } else {
+    verdict.legal = { flag: false, blocked: false, cats: [], note: "" };
+    verdict.blocked = false;
+  }
 }
 
 // ── Устойчивый парсер JSON (лёгкие модели любят добавить текст вокруг) ──

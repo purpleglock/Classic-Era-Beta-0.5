@@ -870,6 +870,12 @@ textarea.fn-c-body {
   margin-bottom: 10px; padding: 8px 11px; border-radius: 5px; font-size: 12.5px; line-height: 1.4;
   color: #ffb4b4; border: 1px solid color-mix(in srgb, #ff6b6b 40%, var(--w2)); background: color-mix(in srgb, #ff6b6b 9%, transparent);
 }
+.fn-ai-legal { border-color: color-mix(in srgb, #ff8c1a 45%, var(--w2)); background: color-mix(in srgb, #ff8c1a 10%, transparent); color: #ffcf99; font-weight: 600; }
+.fn-ai-legal-block {
+  border-color: #ff3b3b; background: color-mix(in srgb, #ff3b3b 16%, transparent); color: #ffd0d0;
+  font-weight: 800; letter-spacing: .02em; box-shadow: 0 0 18px color-mix(in srgb, #ff3b3b 22%, transparent);
+}
+.fn-ai-legal-note { margin-top: 5px; font-weight: 400; font-size: 12px; opacity: .9; }
 .fn-ai-reason { font-size: 13.5px; line-height: 1.6; }
 .fn-ai-effects { margin-top: 14px; }
 .fn-ai-effect { border-color: color-mix(in srgb, var(--fn-accent) 30%, var(--w2, #2a3340)); }

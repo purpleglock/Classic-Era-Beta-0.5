@@ -1,7 +1,7 @@
 /* НОВАЯ ЭРА — WIKI UI · Main Entry Point */
 @import './01_tokens.css';
 @import './02_shell.css';
-@import './03_content.css?v=20260628ach';
+@import './03_content.css?v=20260628vnresp';
 @import './04_ui.css?v=20260610a';
 @import './05_panels.css';
 @import './06_system.css';
@@ -17,7 +17,7 @@
 @import './17_economy.css?v=20260625goods3';
 @import './18_admin.css?v=20260607a';
 @import './19_guide.css?v=20260627gap';
-@import './20_news.css?v=20260628aiverdict3';
+@import './20_news.css?v=20260628aiverdict5';
 @import './21_perf.css';
 @import './22_tickets.css';
 

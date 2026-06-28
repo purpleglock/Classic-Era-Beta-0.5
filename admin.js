@@ -1235,7 +1235,7 @@ async function adNewsLoad() {
   try {
     AD.news = await dbGet('faction_news',
       'owner_id=not.is.null&order=created_at.desc&limit=120'
-      + '&select=id,title,body,faction_name,faction_color,faction_id,owner_id,status,scope,published_at,created_at,ai_verdict,staff_verdict')
+      + '&select=id,title,body,faction_name,faction_color,faction_id,owner_id,status,published_at,created_at,ai_verdict,staff_verdict')
       || [];
   } catch (e) { AD.news = { error: e.message }; }
   adPaint();
@@ -1270,6 +1270,13 @@ async function adNewsVerdict(id, btn) {
   finally { adPaint(); }
 }
 
+// Раскрыть/свернуть полный текст новости в админ-ленте.
+function adNewsToggle(id) {
+  AD.newsOpen = AD.newsOpen || {};
+  AD.newsOpen[id] = !AD.newsOpen[id];
+  adPaint();
+}
+
 // Удалить новость из админ-ленты.
 async function adNewsDelete(id) {
   if (!confirm('Удалить новость безвозвратно?')) return;
@@ -1300,19 +1307,26 @@ function adNewsPanel() {
     const staff = n.staff_verdict ? `<span style="font-size:11px;color:var(--gdl,#5fb0e6)" title="${esc((n.staff_verdict || '').slice(0,200))}">⚖ есть вердикт админа</span>` : '';
     const fac = n.faction_name ? esc(n.faction_name.toUpperCase()) : 'ФРАКЦИЯ';
     const accent = n.faction_color || 'var(--gd,#3a7fbf)';
-    const scope = n.scope ? `<span style="font-size:10px;color:var(--t4,#6a7a88)">${esc(n.scope)}</span>` : '';
-    const excerpt = esc((n.body || '').replace(/\s+/g, ' ').trim().slice(0, 220));
+    const full = (n.body || '').replace(/\s+/g, ' ').trim();
+    const open = !!(AD.newsOpen && AD.newsOpen[n.id]);
+    const long = full.length > 220;
+    const bodyHtml = open
+      ? `<div style="font-size:12px;color:var(--t2,#c2d0db);line-height:1.6;white-space:pre-wrap">${esc((n.body || '').trim())}</div>`
+      : `<div style="font-size:12px;color:var(--t3,#8aa0b0);line-height:1.5">${esc(full.slice(0, 220))}${long ? '…' : ''}</div>`;
+    const readBtn = long
+      ? `<button class="btn btn-gh btn-xs" onclick="adNewsToggle('${esc(n.id)}')">${open ? '▲ Свернуть' : '📖 Читать полностью'}</button>`
+      : '';
     return `<div style="${cardCss};border-left:3px solid ${esc(accent)}">
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
         <span style="font-size:11px;font-weight:700;letter-spacing:.06em;color:${esc(accent)}">${fac}</span>
-        ${scope}
         <span style="font-size:10px;color:var(--t4,#6a7a88);margin-left:auto">${esc((typeof fnStardate === 'function') ? fnStardate(n.published_at || n.created_at) : (n.created_at || ''))}</span>
       </div>
       <div style="font-size:14px;font-weight:600;color:var(--t1,#e8edf2)">${esc(n.title || 'Без заголовка')}</div>
-      <div style="font-size:12px;color:var(--t3,#8aa0b0);line-height:1.5">${excerpt}${(n.body || '').length > 220 ? '…' : ''}</div>
+      ${bodyHtml}
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:2px">
         ${badge}${staff}
         <span style="margin-left:auto;display:flex;gap:6px">
+          ${readBtn}
           <button class="btn btn-gd btn-xs" onclick="adNewsVerdict('${esc(n.id)}', this)">🧠 ${v ? 'Переоценить' : 'Вердикт'}</button>
           <button class="btn btn-gh btn-xs" onclick="adNewsDelete('${esc(n.id)}')">🗑 Удалить</button>
         </span>

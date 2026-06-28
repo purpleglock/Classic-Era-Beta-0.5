@@ -994,11 +994,15 @@ function fnAiBar(label, val) {
 }
 function fnRenderAiVerdictBlock(n) {
   const v = n && n.ai_verdict;
-  // Игрок видит только на своей; стафф — на любой.
-  const mine = n && user && n.owner_id === user.id;
-  if (!v || (!fnIsStaff() && !mine)) return '';
+  // Нейро-вердикт публичный — виден всем под любой новостью.
+  if (!v) return '';
   const meta = FN_AI_LABELS[v.verdict] || FN_AI_LABELS.review;
   const inj = v.injection ? `<div class="fn-ai-flag">⚠ Замечена попытка манипуляции текстом — оценка снижена.</div>` : '';
+  // Юридический фильтр (законы РФ): блокировка или отметка на проверку.
+  const lg = v.legal;
+  const legalHtml = (lg && lg.flag) ? `<div class="fn-ai-flag fn-ai-legal${lg.blocked ? ' fn-ai-legal-block' : ''}">
+      ${lg.blocked ? '⛔ ЗАБЛОКИРОВАНО: запрещённый по законам РФ контент' : '⚠ Автофильтр: возможный запрещённый контент — требуется проверка человеком'}${lg.cats && lg.cats.length ? ' · ' + esc(lg.cats.join(', ')) : ''}${lg.note ? `<div class="fn-ai-legal-note">${esc(lg.note)}</div>` : ''}
+    </div>` : '';
   // Развёрнутый вердикт-«колонка»; если его нет (старые записи) — краткое резюме.
   const rulingTxt = (v.ruling || '').trim() || (v.reason || '').trim();
   const rulingHtml = rulingTxt ? `<div class="fn-verdict-body fn-ai-reason">${fnRenderBody(rulingTxt)}</div>` : '';
@@ -1020,7 +1024,9 @@ function fnRenderAiVerdictBlock(n) {
       ${fnAiBar('Соответствие лору', v.lore)}
       ${fnAiBar('Связность с событиями', v.continuity)}
       ${fnAiBar('Актуальность', v.relevance)}
+      ${v.feasibility != null ? fnAiBar('Соразмерность средств', v.feasibility) : ''}
     </div>
+    ${legalHtml}
     ${inj}
     ${rulingHtml}
     ${effectsHtml}
