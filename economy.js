@@ -8950,12 +8950,13 @@ function ecSpyLaunch() {
   const c = ecSpyCalcLive(); if (!c) return;
   if (c.gateErr) { toast(c.gateErr, 'err'); return; }
   const d = EC_SPY_OPS[EC.spyOp] || {};
-  // Тактические операции (флот) — отдельный RPC spy_fleet_op, исполняются мгновенно.
+  // Тактические операции (флот) — отдельный RPC spy_fleet_op, но запускаются ПО ТАЙМЕРУ
+  // (как обычные): агенты уходят на c.turns ходов, результат и слух — при завершении.
   if (d.tactical) {
     if (d.targetFleet && !EC.spyFleetTarget) { toast('Выберите вражеский флот-цель', 'err'); return; }
     ecRpcAct('spy_fleet_op',
       { p_target_fid: EC.spyTarget, p_op: EC.spyOp, p_agent_ids: picks, p_fleet_id: d.targetFleet ? EC.spyFleetTarget : null },
-      `Операция «${d.label}» проведена`);
+      `Операция «${d.label}» запущена (${c.turns} ход.)`);
     return;
   }
   const colonyId = (EC.spyOp === 'sabotage') ? (EC.spyColony || null) : null;
