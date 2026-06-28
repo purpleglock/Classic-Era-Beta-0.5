@@ -94,8 +94,22 @@ function ecAgentAttr(a) {
   return parts.length ? parts.join(' · ') : '';
 }
 async function ecSpyHire(id) {
-  await ecRpcAct('spy_hire', { p_recruit_id: id }, 'Агент нанят');
-  if (document.getElementById('ec-recruits-host')) ecRecruitsRender();   // окно открыто — обновить список рекрутов
+  // ЛЁГКИЙ найм: не гоняем полный ecReloadPaint (≈40 RPC + перерисовка всего
+  // кабинета под открытым окном — давало «мигание окон»). Достаточно обновить
+  // агентуру одним запросом и перерисовать вкладку из памяти.
+  if (EC.busy) return; EC.busy = true;
+  try {
+    await ecRpc('spy_hire', { p_recruit_id: id });
+    // списываем стоимость локально (шапка казны), пока не пришёл свежий ростер
+    const rec = ((EC.spyAgency && EC.spyAgency.recruits) || []).find(r => r.id === id);
+    if (rec && EC.eco) EC.eco.gc = Math.max(0, (EC.eco.gc || 0) - (rec.cost || 0));
+    toast('Агент нанят', 'ok');
+    const ag = await ecRpc('spy_recruits_list').catch(() => null);
+    if (ag) { EC.spyAgency = ag; EC.spyCounter = ag.counterintel || EC.spyCounter; }
+    ecPaintCabinet();   // перерисовка текущей вкладки из EC — без сетевого релоада/лоадера
+    if (document.getElementById('ec-recruits-host')) ecRecruitsRender();   // окно открыто — обновить список рекрутов
+  } catch (e) { toast(ecErr(e.message), 'err'); }
+  finally { EC.busy = false; }
 }
 function ecSpyFire(id) { if (confirm('Уволить агента?')) ecRpcAct('spy_agent_fire', { p_id: id }, 'Агент уволен'); }
 // Сила спецслужб от доктрины (связь с agents_flat): +5% за пункт.

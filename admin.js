@@ -230,13 +230,12 @@ function adPaint() {
     // надёжнее (полный re-render #pg на Vercel почему-то не показывал панель).
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
-    const TABS = [['factions', '🛠 Фракции'], ['news', '📰 Новости', (AD.news || []).length], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)']];
+    const TABS = [['factions', '🛠 Фракции'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)']];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
     let tabContent;
-    if (AD.tab === 'news')          tabContent = adNewsPanel();
-    else if (AD.tab === 'unions')        tabContent = adUnionsPanel();
+    if (AD.tab === 'unions')        tabContent = adUnionsPanel();
     else if (AD.tab === 'portraits') tabContent = adPortraitsPanel();
     else if (AD.tab === 'vn')        tabContent = adVNPanel();
     else if (AD.tab === 'planets')   tabContent = adPlanetTexPanel();
@@ -1219,7 +1218,6 @@ function adSetTab(t) {
   AD.tab = t || 'factions';
   adPaint();
   if (AD.tab === 'market' && !AD.market) adMarketLoad();
-  if (AD.tab === 'news' && !AD.news) adNewsLoad();
 }
 
 // ── Рынок NPC: загрузка состояния (config + ресурсы) через admin-RPC ──────────
