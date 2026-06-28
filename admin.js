@@ -230,12 +230,13 @@ function adPaint() {
     // надёжнее (полный re-render #pg на Vercel почему-то не показывал панель).
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
-    const TABS = [['factions', '🛠 Фракции'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)']];
+    const TABS = [['factions', '🛠 Фракции'], ['news', '📰 Новости', (AD.news || []).length], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)']];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
     let tabContent;
-    if (AD.tab === 'unions')        tabContent = adUnionsPanel();
+    if (AD.tab === 'news')          tabContent = adNewsPanel();
+    else if (AD.tab === 'unions')        tabContent = adUnionsPanel();
     else if (AD.tab === 'portraits') tabContent = adPortraitsPanel();
     else if (AD.tab === 'vn')        tabContent = adVNPanel();
     else if (AD.tab === 'planets')   tabContent = adPlanetTexPanel();
@@ -1218,6 +1219,7 @@ function adSetTab(t) {
   AD.tab = t || 'factions';
   adPaint();
   if (AD.tab === 'market' && !AD.market) adMarketLoad();
+  if (AD.tab === 'news' && !AD.news) adNewsLoad();
 }
 
 // ── Рынок NPC: загрузка состояния (config + ресурсы) через admin-RPC ──────────
@@ -1225,6 +1227,108 @@ async function adMarketLoad() {
   try { AD.market = await adRpc('admin_market_status'); }
   catch (e) { AD.market = { error: e.message }; }
   adPaint();
+}
+
+// ── Новости игроков: лента всех публикаций + нейро-вердикты ───────────────────
+// Грузим только авторские новости (owner_id задан), свежие сверху.
+async function adNewsLoad() {
+  try {
+    AD.news = await dbGet('faction_news',
+      'owner_id=not.is.null&order=created_at.desc&limit=120'
+      + '&select=id,title,body,faction_name,faction_color,faction_id,owner_id,status,scope,published_at,created_at,ai_verdict,staff_verdict')
+      || [];
+  } catch (e) { AD.news = { error: e.message }; }
+  adPaint();
+}
+
+// Запросить/переоценить нейро-вердикт по новости из админ-ленты.
+async function adNewsVerdict(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '🧠 Оцениваю…'; }
+  let token = (typeof SB_ANON !== 'undefined') ? SB_ANON : '';
+  try { token = await getTokenFresh(); } catch (e) {}
+  try {
+    const r = await fetch(FN_AI_VERDICT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: (typeof SB_ANON !== 'undefined' ? SB_ANON : ''), Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ news_id: id }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.error) { toast('Нейро-оценка: ' + (d.error || ('HTTP ' + r.status)), 'err'); }
+    else {
+      const v = d.verdict || {};
+      toast('Нейро-оценка готова: ' + (v.verdict || '—') + (v.ok === false ? ' (модель не ответила корректно)' : ''), 'ok');
+      // Подтянуть свежую строку и обновить кэш ленты.
+      try {
+        const rows = await dbGet('faction_news', `id=eq.${encodeURIComponent(id)}&limit=1`);
+        if (rows && rows[0] && Array.isArray(AD.news)) {
+          const i = AD.news.findIndex(n => n.id === id);
+          if (i >= 0) AD.news[i] = Object.assign({}, AD.news[i], rows[0]);
+        }
+      } catch (e) {}
+    }
+  } catch (e) { toast('Нейро-оценка: ' + (e.message || String(e)), 'err'); }
+  finally { adPaint(); }
+}
+
+// Удалить новость из админ-ленты.
+async function adNewsDelete(id) {
+  if (!confirm('Удалить новость безвозвратно?')) return;
+  try {
+    await dbDel('faction_news', `id=eq.${encodeURIComponent(id)}`);
+    if (Array.isArray(AD.news)) AD.news = AD.news.filter(n => n.id !== id);
+    toast('Удалено', 'ok');
+    adPaint();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+function adNewsPanel() {
+  const wrap = 'border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px;margin-top:18px';
+  const list = AD.news;
+  if (!list) return `<div style="${wrap}">Загрузка новостей…</div>`;
+  if (list.error) return `<div style="${wrap};color:#ff7a7a">Ошибка: ${esc(list.error)}</div>`;
+  if (!list.length) return `<div style="${wrap};color:var(--t3,#8aa0b0)">Пока нет новостей от игроков.</div>`;
+
+  const vMeta = (typeof FN_AI_LABELS !== 'undefined') ? FN_AI_LABELS : {};
+  const cardCss = 'border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:12px 14px;display:flex;flex-direction:column;gap:8px';
+  const rows = list.map(n => {
+    const v = n.ai_verdict;
+    const meta = v ? (vMeta[v.verdict] || vMeta.review || {}) : null;
+    const vColor = meta && meta.cls === 'ok' ? '#5fd08a' : meta && meta.cls === 'bad' ? '#ff7a7a' : meta && meta.cls === 'mid' ? '#e6c25f' : 'var(--t4,#6a7a88)';
+    const badge = v
+      ? `<span style="font-size:11px;color:${vColor};border:1px solid ${vColor};border-radius:5px;padding:2px 7px" title="${esc((v.ruling || v.reason || '').slice(0, 200))}">🧠 ${esc((meta && meta.ic) || '')} ${esc((meta && meta.t) || v.verdict || '')}${v.injection ? ' ⚠' : ''}</span>`
+      : `<span style="font-size:11px;color:var(--t4,#6a7a88);border:1px dashed var(--w2,#2a3340);border-radius:5px;padding:2px 7px">нет вердикта</span>`;
+    const staff = n.staff_verdict ? `<span style="font-size:11px;color:var(--gdl,#5fb0e6)" title="${esc((n.staff_verdict || '').slice(0,200))}">⚖ есть вердикт админа</span>` : '';
+    const fac = n.faction_name ? esc(n.faction_name.toUpperCase()) : 'ФРАКЦИЯ';
+    const accent = n.faction_color || 'var(--gd,#3a7fbf)';
+    const scope = n.scope ? `<span style="font-size:10px;color:var(--t4,#6a7a88)">${esc(n.scope)}</span>` : '';
+    const excerpt = esc((n.body || '').replace(/\s+/g, ' ').trim().slice(0, 220));
+    return `<div style="${cardCss};border-left:3px solid ${esc(accent)}">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+        <span style="font-size:11px;font-weight:700;letter-spacing:.06em;color:${esc(accent)}">${fac}</span>
+        ${scope}
+        <span style="font-size:10px;color:var(--t4,#6a7a88);margin-left:auto">${esc((typeof fnStardate === 'function') ? fnStardate(n.published_at || n.created_at) : (n.created_at || ''))}</span>
+      </div>
+      <div style="font-size:14px;font-weight:600;color:var(--t1,#e8edf2)">${esc(n.title || 'Без заголовка')}</div>
+      <div style="font-size:12px;color:var(--t3,#8aa0b0);line-height:1.5">${excerpt}${(n.body || '').length > 220 ? '…' : ''}</div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:2px">
+        ${badge}${staff}
+        <span style="margin-left:auto;display:flex;gap:6px">
+          <button class="btn btn-gd btn-xs" onclick="adNewsVerdict('${esc(n.id)}', this)">🧠 ${v ? 'Переоценить' : 'Вердикт'}</button>
+          <button class="btn btn-gh btn-xs" onclick="adNewsDelete('${esc(n.id)}')">🗑 Удалить</button>
+        </span>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div style="${wrap}">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">📰 Новости игроков</div>
+      <span style="font-size:12px;color:var(--t3,#8aa0b0)">${list.length}${list.length >= 120 ? ' (последние)' : ''}</span>
+      <button class="btn btn-gh btn-sm" style="margin-left:auto" onclick="AD.news=null;adNewsLoad()">↻ Обновить</button>
+    </div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin-bottom:12px;line-height:1.5">Все публикации игроков с нейро-вердиктами. Кнопка «🧠 Вердикт» запросит нейро-оценку (или переоценит), «🗑 Удалить» уберёт новость безвозвратно.</div>
+    <div style="display:flex;flex-direction:column;gap:10px">${rows}</div>
+  </div>`;
 }
 
 // Глобальная ручка рынка: собрать значения полей и отправить
