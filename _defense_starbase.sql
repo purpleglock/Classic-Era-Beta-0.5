@@ -68,13 +68,24 @@ $$;
 revoke all on function public._fleet_capacity(text) from public;
 grant execute on function public._fleet_capacity(text) to authenticated;
 
--- Сколько кораблей фракция уже «держит» (готовые + в очереди + в ремонте).
+-- Сколько кораблей фракция уже «держит» (готовые + в очереди + в ремонте + развёрнутые в соединениях).
+-- ВАЖНО: fleet_form (_army_fleet.sql) снимает корабли из unit_production и складывает снимком
+-- в fleets.composition. Чтобы гейт вместимости не обходился через формирование флота, считаем
+-- и корабли, ушедшие в соединения. to_regclass защищает от отсутствия таблицы fleets (срез не накачен).
 create or replace function public._fleet_used(p_fid text)
-returns int language sql stable security definer set search_path=public as $$
-  select coalesce(sum(qty),0)::int from public.unit_production
+returns int language plpgsql stable security definer set search_path=public as $$
+declare v_prod int; v_fleet int := 0;
+begin
+  select coalesce(sum(qty),0)::int into v_prod from public.unit_production
    where faction_id = p_fid and category = 'ship'
-     and status in ('done','queued','damaged')
-$$;
+     and status in ('done','queued','damaged');
+  if to_regclass('public.fleets') is not null then
+    select coalesce(sum((c->>'qty')::int),0)::int into v_fleet
+      from public.fleets f, jsonb_array_elements(f.composition) c
+     where f.faction_id = p_fid;
+  end if;
+  return v_prod + coalesce(v_fleet,0);
+end$$;
 revoke all on function public._fleet_used(text) from public;
 grant execute on function public._fleet_used(text) to authenticated;
 

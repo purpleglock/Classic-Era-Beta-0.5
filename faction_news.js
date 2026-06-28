@@ -226,20 +226,58 @@ function fnFeedFlagHtml(n) {
   if (f && f.herald_url) return `<img class="fn-fr-flag" src="${esc(f.herald_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`;
   return '';
 }
-// Картинка достижения (assets/ach/<id>.webp) по имени из тела «…«Имя»…». '' если не нашли.
+// Картинка достижения (assets/ach/<id>.webp). '' если не нашли.
 function fnAchImg(n) {
-  const m = /достижени[ея]\s+«([^»]+)»/i.exec(n && n.body || '');
-  if (!m || typeof EC_ACH === 'undefined') return '';
-  const nm = m[1];
-  for (const id in EC_ACH) { if (EC_ACH[id] && EC_ACH[id].name === nm) return `assets/ach/${id}.webp`; }
-  return '';
+  const f = fnAchLookup(n);
+  return f ? `assets/ach/${f.id}.webp` : '';
 }
-// По имени достижения из тела новости найти его id и запись каталога EC_ACH. null если нет.
+// Нормализация имени для устойчивого сравнения: регистр, пробелы, кавычки,
+// ё→е. Чтобы «крутое  Имя» и «Крутое Имя» матчились, а не давали пустую карточку.
+function fnNormName(s) {
+  return String(s == null ? '' : s)
+    .replace(/[«»"“”„‟]/g, '')       // любые кавычки прочь
+    .replace(/ё/gi, 'е')             // ё/е равнозначны
+    .replace(/\s+/g, ' ')            // схлопнуть пробелы
+    .trim().toLowerCase();
+}
+// По новости найти id и запись каталога EC_ACH. null если не нашли.
+// Имя берём НАДЁЖНЕЕ всего из заголовка («🏆 Достижение: Имя» — его же проверяет
+// fnIsAch), тело и «ёлочки» — лишь запасные источники. Сравнение нормализованное,
+// плюс фолбэк «имя каталога целиком встречается в тексте» для нестандартных формулировок.
 function fnAchLookup(n) {
-  const m = /достижени[ея]\s+«([^»]+)»/i.exec(n && n.body || '');
-  if (!m || typeof EC_ACH === 'undefined') return null;
-  const nm = m[1];
-  for (const id in EC_ACH) { if (EC_ACH[id] && EC_ACH[id].name === nm) return { id, ach: EC_ACH[id] }; }
+  if (!n || typeof EC_ACH === 'undefined') return null;
+  const title = String(n.title || '');
+  const body  = String(n.body  || '');
+  // 1) кандидаты-имена из разных мест, по убыванию надёжности
+  const cands = [];
+  const mt = /Достижени[ея]\s*:\s*(.+?)\s*$/i.exec(title);
+  if (mt) cands.push(mt[1]);
+  const mb = /достижени[ея]\s+«([^»]+)»/i.exec(body);
+  if (mb) cands.push(mb[1]);
+  const mq = /«([^»]+)»/.exec(title) || /«([^»]+)»/.exec(body);
+  if (mq) cands.push(mq[1]);
+  // 2) точное (нормализованное) совпадение по любому кандидату
+  for (const raw of cands) {
+    const key = fnNormName(raw);
+    if (!key) continue;
+    for (const id in EC_ACH) {
+      if (EC_ACH[id] && fnNormName(EC_ACH[id].name) === key) return { id, ach: EC_ACH[id] };
+    }
+  }
+  // 3) фолбэк: имя из каталога целиком встречается в заголовке/теле
+  const hay = fnNormName(title + ' ' + body);
+  let best = null;
+  for (const id in EC_ACH) {
+    const nm = fnNormName(EC_ACH[id] && EC_ACH[id].name);
+    if (nm && nm.length >= 3 && hay.indexOf(nm) !== -1 && (!best || nm.length > best.len)) {
+      best = { id, ach: EC_ACH[id], len: nm.length };
+    }
+  }
+  if (best) return { id: best.id, ach: best.ach };
+  // 4) не нашли — подсказка в консоль для отладки каталога
+  if (typeof console !== 'undefined' && console.debug) {
+    console.debug('[ach] карточка не построена: имя не найдено в EC_ACH', { title, cands });
+  }
   return null;
 }
 // Карточка самого достижения для статьи новости: арт (или значок-фолбэк) + название +
@@ -293,8 +331,14 @@ function fnHeroAchHtml(n) {
   const { id, ach } = found;
   const en = (typeof lang !== 'undefined' && lang === 'en');
   const num = (v) => (typeof ecNum === 'function') ? ecNum(v) : v;
-  const art = `<div class="hp-vn-ach-art"><img src="${esc('assets/ach/' + id + '.webp')}" alt="" loading="lazy" onerror="this.style.display='none'"></div>`;
+  // Арт ачивки, при сбое загрузки — значок-фолбэк (ach.ic или 🏆), а не пустой квадрат.
+  const glyph = esc(ach.ic || '🏆');
+  const art = `<div class="hp-vn-ach-art">
+    <img src="${esc('assets/ach/' + id + '.webp')}" alt="" loading="lazy" onerror="this.closest('.hp-vn-ach-art').classList.add('noimg')">
+    <span class="hp-vn-ach-glyph" aria-hidden="true">${glyph}</span>
+  </div>`;
   return `<div class="hp-vn-ach">
+    <span class="hp-vn-ach-scan" aria-hidden="true"></span>
     ${art}
     <div class="hp-vn-ach-body">
       <div class="hp-vn-ach-kick">${en ? 'Achievement unlocked' : 'Достижение получено'}</div>
@@ -421,6 +465,204 @@ function fnCorpTickerHtml(cs) {
     <div class="ec-tick"><div class="ec-tick-run">${items}${items}</div></div>
   </div>`;
 }
+// ── Ситуативный совет по бирже (для новеллы) ────────────────
+// Читает срез corps_status (board котировок + сессия), оценивает настроение
+// рынка (средняя дневная динамика + ширина роста) и возвращает СЛУЧАЙНУЮ
+// реплику из пула, подходящего к текущей ситуации. Не «из вакуума» — числа и
+// имена лидера/аутсайдера берём из живых котировок.
+function _fnPick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+// Дней до экспирации позиции (фьючерс/опцион). +Infinity, если даты нет.
+function _fnDaysTo(iso) {
+  if (!iso) return Infinity;
+  const t = Date.parse(iso);
+  return isNaN(t) ? Infinity : (t - Date.now()) / 86400000;
+}
+// Советы по ЛИЧНЫМ деривативам игрока (маржа/фьючерсы/опционы). Возвращает
+// { urgent:[], notable:[] } — urgent = риск ликвидации/экспирация сегодня/крупный
+// минус (приоритет), notable = прибыль/идущие позиции/контанго. Числа реальные.
+function _fnDerivAdvice(margin, futures, options, en) {
+  const urgent = [], notable = [];
+  const sideRu = s => s === 'short' ? 'шорт' : 'лонг';
+  const sideEn = s => s === 'short' ? 'short' : 'long';
+  const pct = x => (x >= 0 ? '+' : '') + Math.round(x) + '%';
+  // близость к ликвидации: |цена−ликв| / цена
+  const liqNear = p => p.liq && p.price ? Math.abs(p.price - p.liq) / p.price : 1;
+
+  // ── Маржинальные позиции ──
+  (margin && margin.open || []).forEach(p => {
+    const ln = liqNear(p), profit = (p.pnl || 0) >= 0;
+    const roi = p.collateral ? (p.pnl / p.collateral) * 100 : 0;
+    if (ln <= 0.07 && p.pnl < 0) {
+      urgent.push(en
+        ? `Your ${sideEn(p.side)} on ${p.resource} is a breath from liquidation — price ${Math.round(p.price)}, wall at ${Math.round(p.liq)}. Add collateral or cut it.`
+        : `Твой ${sideRu(p.side)} по «${p.resource}» в шаге от ликвидации — цена ${Math.round(p.price)}, стена на ${Math.round(p.liq)}. Доливай залог или режь.`);
+    } else if (roi <= -45) {
+      urgent.push(en
+        ? `That ${sideEn(p.side)} on ${p.resource} is deep red — ${pct(roi)} on your collateral at ×${p.leverage}. Leverage cuts both ways.`
+        : `Тот ${sideRu(p.side)} по «${p.resource}» глубоко в минусе — ${pct(roi)} к залогу при ×${p.leverage}. Плечо режет в обе стороны.`);
+    } else if (roi >= 60) {
+      notable.push(en
+        ? `Your ${sideEn(p.side)} on ${p.resource} is up ${pct(roi)} on collateral. A good moment to bank some of it.`
+        : `Твой ${sideRu(p.side)} по «${p.resource}» даёт ${pct(roi)} к залогу. Хороший момент часть зафиксировать.`);
+    } else {
+      notable.push(en
+        ? `${p.resource} ${sideEn(p.side)} is running at ×${p.leverage}, ${profit ? 'green' : 'red'} for now. Keep an eye on the liq line.`
+        : `«${p.resource}», ${sideRu(p.side)} ×${p.leverage}, пока ${profit ? 'в плюсе' : 'в минусе'}. Поглядывай на линию ликвидации.`);
+    }
+  });
+
+  // ── Фьючерсы ──
+  (futures && futures.open || []).forEach(p => {
+    const d = _fnDaysTo(p.expires_at), profit = (p.pnl || 0) >= 0;
+    if (d <= 1) {
+      urgent.push(en
+        ? `Your ${p.resource} future expires within the day — it settles to spot whether you like it or not. Decide now.`
+        : `Твой фьючерс на «${p.resource}» гасится в течение суток — расчёт по споту, хочешь ты того или нет. Решай сейчас.`);
+    } else if (d <= 3) {
+      notable.push(en
+        ? `The ${p.resource} future has ${Math.ceil(d)} days left and sits ${profit ? 'in profit' : 'underwater'}. Expiry is near.`
+        : `У фьючерса на «${p.resource}» осталось ${Math.ceil(d)} дн., и он ${profit ? 'в плюсе' : 'под водой'}. Экспирация близко.`);
+    } else {
+      notable.push(en
+        ? `You're holding a ${p.resource} future, ${profit ? 'green' : 'red'} for now — contango does the rest until expiry.`
+        : `Держишь фьючерс на «${p.resource}», пока ${profit ? 'в плюсе' : 'в минусе'} — до экспирации доделает контанго.`);
+    }
+  });
+
+  // ── Опционы ──
+  (options && options.open || []).forEach(p => {
+    const d = _fnDaysTo(p.expires_at), itm = (p.intrinsic || 0) > 0;
+    const kindRu = p.kind === 'put' ? 'пут' : 'колл';
+    if (d <= 1) {
+      (itm ? urgent : notable).push(en
+        ? `Your ${p.kind} on ${p.resource} expires within the day — ${itm ? `it's in the money (${Math.round(p.intrinsic)}). Exercise or close before it's worthless.` : 'it’s out of the money. Likely it just burns.'}`
+        : `Твой ${kindRu} на «${p.resource}» истекает в течение суток — ${itm ? `он в деньгах (${Math.round(p.intrinsic)}). Исполни или закрой, пока не сгорел.` : 'он вне денег. Скорее всего просто сгорит.'}`);
+    } else if (itm && (p.value || 0) >= (p.premium_paid || 0) * 1.5) {
+      notable.push(en
+        ? `That ${p.kind} on ${p.resource} is well in the money — worth far more than its premium. Closing early locks the win.`
+        : `Тот ${kindRu} на «${p.resource}» крепко в деньгах — стоит куда больше премии. Закрыть досрочно — зафиксировать выигрыш.`);
+    } else {
+      notable.push(en
+        ? `You hold a ${p.kind} on ${p.resource}, ${itm ? 'in the money' : 'still out of the money'}. Time decay is the enemy.`
+        : `У тебя ${kindRu} на «${p.resource}», ${itm ? 'в деньгах' : 'пока вне денег'}. Главный враг — распад по времени.`);
+    }
+  });
+
+  return { urgent, notable };
+}
+function fnMarketMoodAdvice(cs, en) {
+  const board = (cs && cs.board) || [];
+  const open = !!(cs && cs.session && cs.session.open);
+  // Нет котировок — затишье/закрыто.
+  if (!board.length) {
+    return open
+      ? _fnPick(en
+          ? ['The board is bare today — no one is trading. Best to wait.',
+             'Quiet on the floor — not a single quote moving.']
+          : ['Доска пуста — никто не торгует. Лучше выждать.',
+             'В зале тихо — ни одной котировки не шелохнётся.'])
+      : _fnPick(en
+          ? ['Trading is closed — come back when the bell rings.',
+             'The exchange is shut for now. Nothing to do but wait for the open.']
+          : ['Торги закрыты — загляни, когда ударит гонг.',
+             'Биржа сейчас на замке. Остаётся ждать открытия.']);
+  }
+  const chgOf = (b) => {
+    const f = (b.spark && b.spark.length) ? +b.spark[0] : b.share_price;
+    return f ? (b.share_price / f - 1) * 100 : 0;
+  };
+  let sum = 0, up = 0, best = null, worst = null;
+  board.forEach(b => {
+    const ch = chgOf(b);
+    sum += ch; if (ch >= 0) up++;
+    if (!best  || ch > best.ch)  best  = { name: b.name, ch };
+    if (!worst || ch < worst.ch) worst = { name: b.name, ch };
+  });
+  const avg = sum / board.length;
+  const breadth = up / board.length;          // доля растущих
+  const r = (x) => (x >= 0 ? '+' : '') + Math.round(x) + '%';
+  const bN = best ? best.name : '', wN = worst ? worst.name : '';
+  const closedTail = open ? '' : (en ? ' But the bell has rung — trading is closed.' : ' Но гонг уже прозвучал — торги закрыты.');
+  let pool;
+  if (avg >= 4) {                              // бурный рост
+    pool = en
+      ? [`The board is on fire — ${bN} leads at ${r(best.ch)}. Ride it, but don't get greedy.`,
+         `Euphoria today: almost everything is green. ${bN} is the talk of the floor.`,
+         `Bulls are charging — ${Math.round(breadth*100)}% of papers up. A day to take profit, not chase.`]
+      : [`Доска пылает — ${bN} ведёт на ${r(best.ch)}. Лови момент, но не жадничай.`,
+         `Сегодня эйфория: почти всё в зелёном. О ${bN} говорит весь зал.`,
+         `Быки в атаке — растёт ${Math.round(breadth*100)}% бумаг. День фиксировать прибыль, а не догонять.`];
+  } else if (avg >= 1.2) {                      // умеренный рост
+    pool = en
+      ? [`Mood is upbeat — ${bN} up ${r(best.ch)}, the rest follows quietly.`,
+         `A calm green day. Nothing wild, but the trend leans up.`,
+         `Buyers have the edge today. ${bN} is the one to watch.`]
+      : [`Настрой бодрый — ${bN} прибавляет ${r(best.ch)}, остальные тихо подтягиваются.`,
+         `Спокойный зелёный день. Без безумств, но тренд клонит вверх.`,
+         `Сегодня перевес у покупателей. Приглядись к ${bN}.`];
+  } else if (avg > -1.2) {                      // боковик
+    pool = en
+      ? [`The market is undecided — half up, half down. A day for patience.`,
+         `Flat and nervous: ${bN} ${r(best.ch)}, ${wN} ${r(worst.ch)}. No clear hand.`,
+         `Choppy waters. I'd watch before I'd wager.`]
+      : [`Рынок в нерешительности — половина вверх, половина вниз. День для терпения.`,
+         `Вяло и нервно: ${bN} ${r(best.ch)}, ${wN} ${r(worst.ch)}. Чёткой руки нет.`,
+         `Качка на воде. Я бы сперва присмотрелась, а не ставила.`];
+  } else if (avg > -4) {                         // умеренное падение
+    pool = en
+      ? [`Sellers are pressing — ${wN} down ${r(worst.ch)}. Careful with new positions.`,
+         `A red drift across the board. Bargain hunters may stir, but don't catch a falling knife.`,
+         `The mood has soured today. ${wN} is dragging the floor down.`]
+      : [`Продавцы давят — ${wN} теряет ${r(worst.ch)}. С новыми позициями осторожнее.`,
+         `Красный дрейф по всей доске. Охотники за дешевизной зашевелятся, но не лови падающий нож.`,
+         `Настроение скисло. ${wN} тянет зал вниз.`];
+  } else {                                       // обвал
+    pool = en
+      ? [`Panic on the floor — ${wN} collapses ${r(worst.ch)}, ${Math.round((1-breadth)*100)}% of papers bleeding.`,
+         `A rout today. Better to sit on your money than rush to buy the dip.`,
+         `The board is drowning in red. Even ${bN}, the day's "best", is barely holding.`]
+      : [`Паника в зале — ${wN} рушится на ${r(worst.ch)}, кровит ${Math.round((1-breadth)*100)}% бумаг.`,
+         `Сегодня разгром. Лучше переждать с деньгами на руках, чем спешить откупать падение.`,
+         `Доска тонет в красном. Даже ${bN}, «лучший» за день, едва держится.`];
+  }
+  return _fnPick(pool) + closedTail;
+}
+// Итоговый совет: ЛИЧНЫЕ деривативы важнее настроения рынка. Срочное (риск
+// ликвидации/экспирация) — всегда; заметное (прибыль/идущие позиции) — часто;
+// иначе общий настрой по котировкам. Числа и имена — из живых срезов.
+function fnExchangeAdviceFrom(d, en) {
+  d = d || {};
+  const { urgent, notable } = _fnDerivAdvice(d.margin, d.futures, d.options, en);
+  if (urgent.length) return _fnPick(urgent);
+  if (notable.length && Math.random() < 0.7) return _fnPick(notable);
+  return fnMarketMoodAdvice(d.cs, en);
+}
+// СИНХРОННЫЙ совет — берёт только уже загруженные данные (кабинет EC.* или кэш
+// FN.*), поэтому реплика печатается мгновенно, без подвисания/«глитча» окна.
+// Если в кэше ничего нет, возвращает '' (зовущий даст нейтральный фолбэк).
+function fnExchangeAdvice(en) {
+  const EChas = (typeof EC !== 'undefined') ? EC : {};
+  const pick = (cacheKey, ecKey) => FN[cacheKey] || EChas[ecKey] || null;
+  const cs      = pick('_corpStatus',    'corps');
+  const margin  = pick('_marginStatus',  'margin');
+  const futures = pick('_futuresStatus', 'futures');
+  const options = pick('_optionsStatus', 'options');
+  if (!cs && !margin && !futures && !options) { fnWarmExchange(); return ''; }
+  return fnExchangeAdviceFrom({ cs, margin, futures, options }, en);
+}
+// Тихо прогреть кэш срезов на будущее (fire-and-forget, без блокировки UI).
+function fnWarmExchange() {
+  if (FN._exWarming) return;
+  if (!(typeof user !== 'undefined' && user && typeof ecRpc === 'function')) return;
+  FN._exWarming = true;
+  const set = (k, p) => p.then(v => { FN[k] = v; }).catch(() => {});
+  Promise.all([
+    set('_corpStatus',    ecRpc('corps_status')),
+    set('_marginStatus',  ecRpc('margin_status')),
+    set('_futuresStatus', ecRpc('futures_status')),
+    set('_optionsStatus', ecRpc('options_status')),
+  ]).finally(() => { FN._exWarming = false; });
+}
 async function fnLoadCorpTicker() {
   // Цели: лента сектора (#fn-corp-ticker) и боковая лента индексов в новелле (#hp-vn-ticker).
   const mounts = () => [document.getElementById('fn-corp-ticker'), document.getElementById('hp-vn-ticker')].filter(Boolean);
@@ -433,9 +675,74 @@ async function fnLoadCorpTicker() {
   }
   let cs = null;
   try { cs = await ecRpc('corps_status'); } catch (e) { return; }
+  FN._corpStatus = cs;   // сырой срез для ситуативного совета в новелле
   const html = fnCorpTickerHtml(cs);
   FN._corpTickerHtml = html; FN._corpTickerAt = Date.now();
   fill(html);
+}
+// ── Бегущая строка ЛИЧНЫХ позиций игрока (маржа/фьючерсы/опционы) ──
+// Идёт ОТДЕЛЬНОЙ лентой над котировками компаний в новелле. Числа реальные —
+// из срезов margin_status/futures_status/options_status. Нет позиций → '' (строка
+// просто не показывается).
+function fnDerivTickerHtml(margin, futures, options, en) {
+  const num = (typeof ecNum === 'function') ? ecNum : (v => Math.round(Number(v || 0)).toLocaleString('ru-RU'));
+  const col = up => up ? '#5fc98a' : '#e0688a';
+  const pct = x => (x >= 0 ? '+' : '') + Math.round(x) + '%';
+  const sval = v => (v >= 0 ? '+' : '') + num(Math.round(v));
+  const daysTo = iso => { if (!iso) return Infinity; const t = Date.parse(iso); return isNaN(t) ? Infinity : (t - Date.now()) / 86400000; };
+  const items = [];
+  // Маржинальные лонги/шорты: ROI к залогу + предупреждение о близкой ликвидации.
+  (margin && margin.open || []).forEach(p => {
+    const up = (p.pnl || 0) >= 0;
+    const roi = p.collateral ? (p.pnl / p.collateral) * 100 : 0;
+    const side = p.side === 'short' ? (en ? 'short' : 'шорт') : (en ? 'long' : 'лонг');
+    const liqNear = (p.liq && p.price) ? Math.abs(p.price - p.liq) / p.price : 1;
+    const warn = (liqNear <= 0.08 && (p.pnl || 0) < 0) ? '⚠ ' : '';
+    items.push(`<span class="ec-tick-item">${warn}<b>${esc(p.resource)}</b> ${side} ×${p.leverage || 1} <span style="color:${col(up)}">${pct(roi)}</span></span>`);
+  });
+  // Фьючерсы: P&L + песочные часы при экспирации в течение суток.
+  (futures && futures.open || []).forEach(p => {
+    const up = (p.pnl || 0) >= 0;
+    const exp = daysTo(p.expires_at) <= 1 ? ' ⏳' : '';
+    items.push(`<span class="ec-tick-item"><b>${esc(p.resource)}</b> ${en ? 'fut' : 'фьюч'}${exp} <span style="color:${col(up)}">${sval(p.pnl || 0)}</span></span>`);
+  });
+  // Опционы: в деньгах / вне денег + экспирация.
+  (options && options.open || []).forEach(p => {
+    const itm = (p.intrinsic || 0) > 0;
+    const exp = daysTo(p.expires_at) <= 1 ? ' ⏳' : '';
+    const kind = p.kind === 'put' ? (en ? 'put' : 'пут') : (en ? 'call' : 'колл');
+    items.push(`<span class="ec-tick-item"><b>${esc(p.resource)}</b> ${kind}${exp} <span style="color:${col(itm)}">${itm ? (en ? 'ITM' : 'в деньгах') : (en ? 'OTM' : 'вне денег')}</span></span>`);
+  });
+  if (!items.length) return '';
+  const cap = en ? '💼 MY POSITIONS' : '💼 МОИ ПОЗИЦИИ';
+  const run = items.join('');
+  return `<div class="fn-corp-ticker">
+    <span class="fn-corp-ticker-cap">${cap}</span>
+    <div class="ec-tick"><div class="ec-tick-run">${run}${run}</div></div>
+  </div>`;
+}
+// Заполнить ленту личных позиций в новелле (#hp-vn-myticker). Берёт прогретый
+// кэш срезов (fnWarmExchange), при отсутствии — догружает сам.
+async function fnLoadMyTicker() {
+  const mount = document.getElementById('hp-vn-myticker');
+  if (!mount) return;
+  if (typeof user === 'undefined' || !user || typeof ecRpc !== 'function') { mount.innerHTML = ''; return; }
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  let m = FN._marginStatus, f = FN._futuresStatus, o = FN._optionsStatus;
+  if (m == null && f == null && o == null) {
+    try {
+      const r = await Promise.all([
+        ecRpc('margin_status').catch(() => null),
+        ecRpc('futures_status').catch(() => null),
+        ecRpc('options_status').catch(() => null),
+      ]);
+      m = r[0]; f = r[1]; o = r[2];
+      FN._marginStatus = m; FN._futuresStatus = f; FN._optionsStatus = o;
+    } catch (e) { return; }
+  }
+  // Если #hp-vn-myticker уже исчез (игрок ушёл с биржи), не трогаем.
+  if (!document.getElementById('hp-vn-myticker')) return;
+  mount.innerHTML = fnDerivTickerHtml(m, f, o, en);
 }
 async function fnLoadMoreEvents() {
   const off = (FN.events || []).length;

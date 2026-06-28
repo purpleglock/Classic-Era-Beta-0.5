@@ -126,8 +126,10 @@
    убираем подпись/ресурсы и показываем орбиты по составу s.planets. */
 .gm-sys{display:none}
 #gm-wrap.gm-deepzoom .gm-star{transform:translate(-50%,-50%);z-index:6}
-#gm-wrap.gm-deepzoom .gm-star .gm-label,
-#gm-wrap.gm-deepzoom .gm-res-overlay{display:none}
+#gm-wrap.gm-deepzoom .gm-star .gm-label{display:none}
+/* сводка над звездой не исчезает рывком — плавно гаснет, пока иконки «перетекают»
+   на планеты (см. .gm-orbit-res) */
+#gm-wrap.gm-deepzoom .gm-res-overlay{opacity:0}
 /* система — наклонный диск (эллипс), а не плоский круг сверху: даёт ощущение
    объёмной 3D-плоскости. Орбиты сплющиваются по Y, тела контр-масштабируются. */
 #gm-wrap.gm-deepzoom .gm-sys{display:block;position:absolute;left:50%;top:50%;width:0;height:0;
@@ -252,7 +254,26 @@
   display:none;align-items:center;gap:4px;white-space:nowrap;
   padding:5px 7px;border-radius:9px;z-index:7;pointer-events:none;
   background:hsl(216 30% 5% / .88);border:1px solid var(--w2);
+  transition:opacity .3s ease;
 }
+/* ── Глубокий зум + режим «ресурсы»: иконки ресурсов едут на самих планетах ──
+   .gm-orbit-res висит в той же точке орбиты, что и планета, и контр-вращается
+   (reverse того же gm-rift-spin), чтобы бейдж всегда стоял прямо. Внутренний
+   слой даёт смещение над планетой, компенсацию сплющивания диска (scaleY) и
+   pop-анимацию «перетекания» при входе в систему. */
+.gm-orbit-res{position:absolute;left:50%;top:0;width:0;height:0;pointer-events:none;
+  animation:gm-rift-spin var(--dur,18s) linear infinite reverse}
+.gm-orbit-res-in{position:absolute;left:0;top:0;display:none;
+  align-items:center;gap:3px;white-space:nowrap;padding:3px 4px;border-radius:7px;
+  background:hsl(216 30% 5% / .82);border:1px solid var(--w2);
+  transform:translate(-50%,-150%) scaleY(1.61)}
+#gm-wrap.gm-deepzoom.gm-show-res .gm-orbit-res-in{display:flex;
+  animation:gm-res-pop .5s cubic-bezier(.2,1.25,.5,1) both}
+@keyframes gm-res-pop{
+  from{opacity:0;transform:translate(-50%,-35%) scaleY(1.61) scale(.2)}
+  to{opacity:1;transform:translate(-50%,-150%) scaleY(1.61) scale(1)}}
+.gm-orbit-res-in .gm-res-pin{width:22px;height:22px;border-radius:4px}
+.gm-orbit-res-in .gm-res-pin img.res-ic,.gm-orbit-res-in .gm-res-pin .res-ic{width:17px;height:17px;font-size:15px}
 #gm-wrap.gm-show-res .gm-res-overlay{display:flex}
 /* в режиме ресурсов подписи звёзд приглушаем, чтобы не мешали сводкам */
 #gm-wrap.gm-show-res .gm-label{opacity:.22}
@@ -385,6 +406,36 @@
 .gm-opcmd-btn:hover{border-color:var(--gdl);background:hsl(216 22% 16% / .95)}
 .gm-opcmd-btn.gm-dis{opacity:.45;cursor:not-allowed}
 .gm-opcmd-btn.gm-opcmd-danger:hover{border-color:var(--err);color:var(--err)}
+
+/* ════════ КОМАНДНЫЙ ПУНКТ (список всех моих мобильных юнитов, слева) ════════ */
+#gm-roster{position:absolute;top:12px;left:12px;width:284px;max-width:calc(100% - 24px);
+  max-height:calc(100% - 24px);overflow-y:auto;z-index:31;
+  background:hsl(216 22% 7% / .95);backdrop-filter:blur(10px);
+  border:1px solid var(--w2);border-radius:14px;padding:12px 12px 14px;box-shadow:0 18px 50px rgba(0,0,0,.6)}
+#gm-roster.gm-hidden{display:none!important}
+.gm-r-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.gm-r-title{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--gdl)}
+.gm-r-bar .gm-close{position:static;font-size:16px;line-height:1}
+.gm-roster-empty{font-size:12px;color:var(--t3);line-height:1.45;padding:6px 2px}
+.gm-r-group{margin-bottom:10px}
+.gm-r-head{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--t3);margin:2px 0 5px;border-bottom:1px solid var(--w1);padding-bottom:4px}
+.gm-r-row{display:flex;align-items:center;gap:9px;width:100%;text-align:left;cursor:pointer;
+  background:hsl(216 18% 11% / .7);border:1px solid var(--w1);border-radius:9px;padding:7px 9px;margin-bottom:4px;
+  transition:border-color .15s,background .15s}
+.gm-r-row:hover{border-color:var(--gdl);background:hsl(216 22% 15% / .95)}
+.gm-r-row.gm-r-transit{opacity:.82}
+.gm-r-ico{font-size:16px;flex-shrink:0;width:20px;text-align:center}
+.gm-r-main{display:flex;flex-direction:column;min-width:0;flex:1}
+.gm-r-name{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:13px;color:var(--t1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gm-r-where{font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gm-r-tags{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
+.gm-r-tag{font-size:9.5px;color:var(--t2);background:hsl(216 18% 16% / .8);border:1px solid var(--w1);
+  border-radius:10px;padding:1px 6px;white-space:nowrap}
+.gm-r-tag.gm-r-rdy{color:#7be08a;border-color:hsl(135 50% 40% / .6)}
+.gm-r-tag.gm-r-fly{color:#7cc4ff;border-color:hsl(210 60% 50% / .6)}
+.gm-ctl.gm-ctl-roster.gm-active{border-color:var(--gdl);color:var(--gdl)}
 
 /* ════════ РЕДАКТОР СЕКТОРА (панель справа, живёт пока режим «Сектора») ════════ */
 #gm-sector{

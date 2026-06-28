@@ -477,7 +477,7 @@ async function adPortraitDelete(id) {
 // (dir=hero). Главная (render.js buildHeroVN) случайно выбирает диалог и печатает
 // его реплики по очереди в диалоговом окне с печатной машинкой.
 const AD_VN_DIR = 'assets/hero';
-function adVNDefault() { return { enabled: false, sprites: [], dialogues: [] }; }
+function adVNDefault() { return { enabled: false, sprites: [], dialogues: [], catSprites: {} }; }
 async function adVNLoad() {
   let fresh = false;
   try {
@@ -494,6 +494,7 @@ async function adVNLoad() {
   if (!AD.vn || typeof AD.vn !== 'object') AD.vn = adVNDefault();
   AD.vn.sprites   = Array.isArray(AD.vn.sprites)   ? AD.vn.sprites   : [];
   AD.vn.dialogues = Array.isArray(AD.vn.dialogues) ? AD.vn.dialogues : [];
+  if (!AD.vn.catSprites || typeof AD.vn.catSprites !== 'object') AD.vn.catSprites = {};
   // Первое открытие (конфига ещё нет) — засеять редактор исходными фразами
   // обложки как ГОТОВЫМ редактируемым диалогом. Их можно править и вешать спрайт.
   if (fresh && !AD.vn.dialogues.length) AD.vn.dialogues = adVNSeedDialogues();
@@ -554,6 +555,15 @@ function adVNCollect() {
   if (!AD.vn) return;
   const en = document.getElementById('ad-vn-enabled');
   if (en) AD.vn.enabled = !!en.checked;
+  if (!AD.vn.catSprites || typeof AD.vn.catSprites !== 'object') AD.vn.catSprites = {};
+  ['ach', 'events', 'idx'].forEach(k => {
+    const slots = {};
+    AD_VN_TIMES.forEach(([slot]) => {
+      const sel = document.getElementById('ad-vn-cat-' + k + '-' + slot);
+      if (sel && sel.value) slots[slot] = sel.value;
+    });
+    AD.vn.catSprites[k] = slots;   // объект по времени: {any, morning, day, evening, night}
+  });
   (AD.vn.sprites || []).forEach(s => {
     const n = document.getElementById('ad-vn-spn-' + s.id);
     if (n) s.name = n.value || '';
@@ -599,6 +609,7 @@ function adVNPanel() {
   const inp = 'padding:8px 10px;font-size:13px;background:var(--b2,#141a22);color:var(--t1,#e8edf2);border:1px solid var(--w2,#2a3340);border-radius:8px';
   const sprites = AD.vn.sprites || [];
   const dialogues = AD.vn.dialogues || [];
+  const cat = AD.vn.catSprites || {};
 
   // ── Пул спрайтов ──
   const spriteCards = sprites.map(s => `<div style="width:104px">
@@ -668,6 +679,20 @@ function adVNPanel() {
       <button class="btn btn-gd btn-sm" onclick="adVNSpriteUpload()">⬇ Загрузить спрайт(ы)</button>
       <span id="ad-vn-up-status" style="font-size:12px;color:var(--t3,#8aa0b0)"></span>
     </div>
+
+    <div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px;border-top:1px solid var(--w2,#2a3340);padding-top:14px">СПРАЙТЫ КАТЕГОРИЙ</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 10px;line-height:1.5">Какой спрайт показывать, пока игрок смотрит раздел в окне новеллы. Можно задать спрайт на время суток; «всегда» — общий запасной, если на текущее время ничего не указано. Пусто — оставить спрайт реплики.</div>
+    ${[['events','📰 События'],['idx','📈 Биржа'],['ach','🏆 Достижения']].map(([k,lbl]) => {
+      const cv = (cat || {})[k];
+      const cur = slot => (cv && typeof cv === 'object') ? (cv[slot] || '') : (slot === 'any' ? (cv || '') : '');
+      const sels = AD_VN_TIMES.map(([slot, slbl]) =>
+        `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t3,#8aa0b0)"><span style="min-width:104px">${esc(slbl)}</span><select id="ad-vn-cat-${k}-${slot}" style="${inp};min-width:150px;font-size:12px">${spriteOpts(cur(slot))}</select></label>`
+      ).join('');
+      return `<div style="margin-bottom:14px;padding:10px 12px;border:1px solid var(--w2,#2a3340);border-radius:8px;background:var(--b2,#141a22)">
+        <div style="font-size:13px;color:var(--t1,#e8edf2);margin-bottom:8px;font-weight:600">${esc(lbl)}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 18px">${sels}</div>
+      </div>`;
+    }).join('')}
 
     <div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px;border-top:1px solid var(--w2,#2a3340);padding-top:14px">ДИАЛОГИ <span style="color:var(--t4,#6a7a88)">· ${dialogues.length}</span></div>
     ${dlgCards}

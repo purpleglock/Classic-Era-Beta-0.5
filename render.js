@@ -2517,6 +2517,21 @@ function _heroDlgHasText(d) {
 function buildHeroVN(coverUrl, user) {
   const cfg = (typeof _heroVN !== 'undefined' && _heroVN) ? _heroVN : {};
   const sprites   = Array.isArray(cfg.sprites)   ? cfg.sprites   : [];
+  // Спрайты-«ведущие» под категории меню: ачивки / события / биржа. В конфиге это
+  // ID спрайтов (cfg.catSprites.{ach,events,idx}). Значение бывает строкой (общий,
+  // legacy) ИЛИ объектом по времени суток {any,morning,day,evening,night}. Резолвим
+  // под ТЕКУЩИЙ слот: спец-слот → иначе «общий» (any). Если ничего — пусто.
+  const _catSpr = (cfg.catSprites && typeof cfg.catSprites === 'object') ? cfg.catSprites : {};
+  const _curSlot = _heroTimeSlot();
+  const _spUrl = id => { const sp = sprites.find(s => s.id === id); return sp ? sp.url : ''; };
+  const _resolveCat = v => {
+    if (!v) return '';
+    if (typeof v === 'string') return _spUrl(v);                 // legacy: один ID = общий
+    const id = v[_curSlot] || v.any || '';                       // по времени → общий
+    return _spUrl(id);
+  };
+  _heroVNCatSprites = { ach: _resolveCat(_catSpr.ach), events: _resolveCat(_catSpr.events), idx: _resolveCat(_catSpr.idx) };
+  _heroVNPinUrl = null;
   let dialogues = (Array.isArray(cfg.dialogues) ? cfg.dialogues : []).filter(_heroDlgHasText);
   if (!dialogues.length) dialogues = heroDefaultDialogues();
   if (!dialogues.length) return null;   // совсем нет фраз — обычная обложка (фолбэк)
@@ -2582,7 +2597,7 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-hero-frame"></div>
     <span class="hpc-corner hpc-tl"></span><span class="hpc-corner hpc-tr"></span>
     <span class="hpc-corner hpc-bl"></span><span class="hpc-corner hpc-br"></span>
-    <div class="hp-vn-idx" id="hp-vn-idx" aria-hidden="true"><div class="hp-vn-idx-cap">📈 ${lang === 'en' ? 'EXCHANGE · LIVE INDEX' : 'БИРЖА · ИНДЕКС В ЭФИРЕ'}</div><div id="hp-vn-ticker"></div></div>
+    <div class="hp-vn-idx" id="hp-vn-idx" aria-hidden="true"><div class="hp-vn-idx-cap">📈 ${lang === 'en' ? 'EXCHANGE · LIVE INDEX' : 'БИРЖА · ИНДЕКС В ЭФИРЕ'}</div><div id="hp-vn-myticker"></div><div id="hp-vn-ticker"></div></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2618,13 +2633,35 @@ function _heroIsToday(n) {
 // СПИСОК конкретных достижений/событий за сегодня, игрок сам выбирает запись →
 // heroVNTell озвучивает её устами персонажа. 'idx' — фраза + анимированный индекс.
 let _heroVNCat = null;   // активная категория ('ach'|'events') для кнопки «назад»
+let _heroVNView = null;  // что игрок сейчас смотрит ('ach'|'events'|'idx'|null=меню) — гасит отложенный показ ленты биржи при уходе
+// URL спрайтов под категории меню (ach/events/idx) — отдельный «ведущий» персонаж,
+// которого показываем, пока игрок смотрит достижения / события / биржу. Заполняется
+// в buildHeroVN из cfg.catSprites. _heroVNPinUrl — какой спрайт сейчас «приколот»
+// (перекрывает спрайты реплик); null = обычный режим (спрайты idle-реплик).
+let _heroVNCatSprites = {};
+let _heroVNPinUrl = null;
+// Приколоть спрайт категории (если он настроен) и сразу обновить сцену.
+function heroVNPin(kind) {
+  const url = _heroVNCatSprites && _heroVNCatSprites[kind];
+  _heroVNPinUrl = url || null;
+  if (_heroVNCtl && typeof _heroVNCtl.refreshScene === 'function') _heroVNCtl.refreshScene();
+}
+function heroVNUnpin() {
+  _heroVNPinUrl = null;
+  if (_heroVNCtl && typeof _heroVNCtl.refreshScene === 'function') _heroVNCtl.refreshScene();
+}
 function heroVNChoice(kind) {
   if (!_heroVNCtl) return;
   const en = (typeof lang !== 'undefined' && lang === 'en');
-  if (kind === 'menu') { _heroVNCat = null; _heroVNCtl.menu(); return; }
+  // Уходим с биржи на любой другой экран — гасим ленту индексов СРАЗУ и снимаем
+  // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
+  _heroVNView = kind;
+  if (kind !== 'idx' && typeof heroVNHideIdx === 'function') heroVNHideIdx();
+  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); _heroVNCtl.menu(); return; }
 
   if (kind === 'ach' || kind === 'events') {
     _heroVNCat = kind;
+    heroVNPin(kind);
     const ev = (typeof FN !== 'undefined' && Array.isArray(FN.events)) ? FN.events : [];
     const list = (kind === 'ach')
       ? ev.filter(n => typeof fnIsAch === 'function' && fnIsAch(n) && _heroIsToday(n))
@@ -2651,11 +2688,12 @@ function heroVNChoice(kind) {
 
   if (kind === 'idx') {
     _heroVNCat = null;
+    heroVNPin('idx');
     const spk = _heroVNCtl.speaker();
-    const has = (typeof FN !== 'undefined' && FN._corpTickerHtml);
-    const phrase = has
-      ? (en ? 'The exchange is feverish today — see for yourself.' : 'Биржа сегодня лихорадит — взгляни сама.')
-      : (en ? 'The exchange is quiet — quotes are loading…' : 'На бирже затишье — котировки подгружаются…');
+    // Сначала — СЛУЧАЙНЫЙ совет с учётом реальной ситуации на рынке, потом панель.
+    // Совет СИНХРОННЫЙ (из кэша) — печатается сразу, без подвисания окна.
+    const fallback = (en ? 'Let me pull up the board…' : 'Сейчас подниму сводку по бирже…');
+    const phrase = (typeof fnExchangeAdvice === 'function' && fnExchangeAdvice(en)) || fallback;
     _heroVNCtl.narrate([{ t: phrase, n: spk }], { onComplete: heroVNShowIdx });
   }
 }
@@ -2703,11 +2741,16 @@ function heroVNHideBanner() {
 }
 // Показать анимированную ленту индексов ОТДЕЛЬНО от диалогового окна.
 function heroVNShowIdx() {
+  // Защита от гонки: реплика-совет печатается асинхронно, и её onComplete мог
+  // сработать уже ПОСЛЕ того, как игрок ушёл с биржи (на события/ачивки/в меню).
+  // Показываем ленту только если биржа всё ещё открытый экран.
+  if (_heroVNView !== 'idx') return;
   const idxEl = document.getElementById('hp-vn-idx');
   if (!idxEl) return;
   idxEl.setAttribute('aria-hidden', 'false');
   idxEl.classList.add('show');
   if (typeof fnLoadCorpTicker === 'function') { try { fnLoadCorpTicker(); } catch (e) {} }
+  if (typeof fnLoadMyTicker === 'function') { try { fnLoadMyTicker(); } catch (e) {} }
 }
 function heroVNHideIdx() {
   const idxEl = document.getElementById('hp-vn-idx');
@@ -2868,8 +2911,10 @@ function heroVNInit() {
   // Сменить спрайты и имя под текущую реплику (с красивой анимацией смены).
   function applyScene(i) {
     if (sprContainer) {
-      const urls = S(i);
-      const cnt = C(i);
+      // Приколотый спрайт категории (ачивки/события/биржа) перекрывает спрайты реплик.
+      const pinned = (typeof _heroVNPinUrl !== 'undefined' && _heroVNPinUrl) ? _heroVNPinUrl : null;
+      const urls = pinned ? [pinned] : S(i);
+      const cnt = pinned ? 1 : C(i);
       sprContainer.setAttribute('data-count', cnt);
       const existingImgs = sprContainer.querySelectorAll('img');
 
@@ -2943,10 +2988,12 @@ function heroVNInit() {
   function renderChoices() {
     setBack(false);
     if (!choicesEl) return;
+    // Прогреть срезы биржи заранее, пока игрок выбирает — к клику «биржа» данные уже в кэше.
+    if (typeof fnWarmExchange === 'function') fnWarmExchange();
     const opts = [
-      ['ach',    '🏆 ' + (en ? "Today's achievements" : 'Достижения за сегодня')],
       ['events', '📰 ' + (en ? 'Sector events' : 'События сектора')],
       ['idx',    '📈 ' + (en ? "How's the exchange?" : 'Что там на бирже?')],
+      ['ach',    '🏆 ' + (en ? "Today's achievements" : 'Достижения за сегодня')],
     ];
     choicesEl.innerHTML = opts.map(([k, l]) =>
       `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');
@@ -2971,6 +3018,12 @@ function heroVNInit() {
     lines = idleLines; loop = true; onCompleteOnce = null;
     box.classList.remove('hp-vn-narrating');
     setBack(false);
+    _heroVNView = null;
+    _heroVNCat = null;
+    // Снять «приколотый» спрайт категории — иначе при возврате к idle (особенно
+    // через «назад» во время речи) персонаж застывает на спрайте биржи/событий
+    // и не возвращается к стартовому.
+    if (typeof heroVNUnpin === 'function') heroVNUnpin();
     if (typeof heroVNHideIdx === 'function') heroVNHideIdx();
     if (typeof heroVNHideBanner === 'function') heroVNHideBanner();
     // Возвращаемся на сохранённую позицию idle и показываем её СРАЗУ (без
@@ -2999,7 +3052,8 @@ function heroVNInit() {
       showBackChoice();
       play(0);
     },
-    reset() { this.back = null; stopNarration(); renderChoices(); },   // полный сброс к idle + меню
+    reset() { this.back = null; if (typeof heroVNUnpin === 'function') heroVNUnpin(); stopNarration(); renderChoices(); },   // полный сброс к idle + меню
+    refreshScene() { applyScene(idx); },                              // перерисовать спрайты под текущей реплику/прикол
     speaker() { return idleSpeaker || N(0) || ''; }
   };
 

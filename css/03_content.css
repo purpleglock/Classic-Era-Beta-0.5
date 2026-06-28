@@ -379,6 +379,8 @@
   transition:opacity .3s ease,transform .3s ease;
 }
 .hp-vn-idx.show{opacity:1;transform:none;pointer-events:auto}
+/* Личная лента позиций (маржа/фьючерсы/опционы) над котировками компаний */
+#hp-vn-myticker:not(:empty){border-bottom:1px solid rgba(46,155,224,.18)}
 .hp-vn-idx-cap{
   font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;
   color:var(--gdl,#5fb0e6);padding:7px 12px 6px;
@@ -423,12 +425,35 @@
   background:linear-gradient(135deg, color-mix(in srgb,var(--gd,#3a9bdc) 9%, hsl(216 18% 10% / .92)), hsl(216 18% 9% / .94));
 }
 .hp-vn-ach-art{
-  flex:0 0 auto;width:80px;height:80px;border-radius:4px;overflow:hidden;
+  flex:0 0 auto;width:80px;height:80px;border-radius:4px;overflow:hidden;position:relative;z-index:1;
   background:radial-gradient(circle at 50% 30%, color-mix(in srgb,var(--gd,#3a9bdc) 20%,transparent), transparent 70%), var(--b3,#0f141b);
   border:1px solid color-mix(in srgb,var(--gd,#3a9bdc) 34%,transparent);
 }
-.hp-vn-ach-art img{width:100%;height:100%;object-fit:cover;display:block}
-.hp-vn-ach-body{min-width:0;flex:1;display:flex;flex-direction:column}
+.hp-vn-ach-art img{width:100%;height:100%;object-fit:cover;display:block;position:relative;z-index:1}
+/* значок-фолбэк под картинкой: виден только когда арт не загрузился (.noimg) */
+.hp-vn-ach-glyph{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:34px;opacity:0;pointer-events:none;
+}
+.hp-vn-ach-art.noimg img{display:none}
+.hp-vn-ach-art.noimg .hp-vn-ach-glyph{opacity:.85}
+/* тонкий диагональный блик, пробегающий при раскрытии карточки */
+.hp-vn-ach-scan{
+  position:absolute;top:0;left:-60%;width:55%;height:100%;pointer-events:none;z-index:0;
+  background:linear-gradient(105deg,transparent,color-mix(in srgb,var(--gd,#3a9bdc) 22%,transparent),transparent);
+  transform:skewX(-14deg);
+}
+.hp-vn-banner.show .hp-vn-ach-scan{animation:hpVnAchScan 1.15s ease-out .12s 1}
+@keyframes hpVnAchScan{from{left:-60%}to{left:130%}}
+@media (prefers-reduced-motion:reduce){.hp-vn-banner.show .hp-vn-ach-scan{animation:none}}
+/* угловой акцент сверху-справа — лёгкая «техно»-засечка */
+.hp-vn-ach::after{
+  content:"";position:absolute;top:0;right:0;width:26px;height:26px;pointer-events:none;
+  border-top:2px solid color-mix(in srgb,var(--gd,#3a9bdc) 55%,transparent);
+  border-right:2px solid color-mix(in srgb,var(--gd,#3a9bdc) 55%,transparent);
+  border-top-right-radius:4px;opacity:.7;
+}
+.hp-vn-ach-body{min-width:0;flex:1;display:flex;flex-direction:column;position:relative;z-index:1}
 .hp-vn-ach-kick{
   font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;
   color:var(--gdl,#5fb0e6);margin-bottom:6px;opacity:.92;

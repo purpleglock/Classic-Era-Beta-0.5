@@ -27,6 +27,9 @@ const GM_ICO = {
   fs: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></svg>',
   edit: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10.5-10.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
   collapse: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9.5l5 5 5-5"/></svg>',
+  roster: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4.2-7 13.8-7-13.8z"/><path d="M12 3v17.8M5.4 8.5L12 11l6.6-2.5"/></svg>',
+  outpost: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 8.8V4M12 19.2V15M8.8 12H4M20 12h-4.2"/><path d="M5.6 5.6l2.4 2.4M16 16l2.4 2.4M18.4 5.6L16 8M8 16l-2.4 2.4"/></svg>',
+  fleeticon: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l6 3.3-6 3.3-6-3.3z"/><path d="M16.5 11l4 2.2-4 2.2M7.5 11l-4 2.2 4 2.2M12 12.5l6 3.3-6 3.3-6-3.3z"/></svg>',
 };
 function gmCtlBtns() {
   return `
@@ -38,6 +41,8 @@ function gmCtlBtns() {
         ${gmResFilterHtml()}
         <button class="gm-ctl${GM.showEcon ? ' gm-active' : ''}" title="Бедность систем" id="gm-ctl-econ" onclick="gmToggleEcon()">${GM_ICO.econ}</button>
         ${gmEconLegendHtml()}
+        <button class="gm-ctl${GM.showOutposts ? ' gm-active' : ''}" title="Аванпосты на карте" id="gm-ctl-outposts" onclick="gmToggleOutposts()">${GM_ICO.outpost}</button>
+        <button class="gm-ctl${GM.showFleets ? ' gm-active' : ''}" title="Флоты на карте" id="gm-ctl-fleets" onclick="gmToggleFleets()">${GM_ICO.fleeticon}</button>
         <button class="gm-ctl" title="Приблизить" onclick="gmZoomBtn(1)">${GM_ICO.zin}</button>
         <button class="gm-ctl" title="Отдалить" onclick="gmZoomBtn(-1)">${GM_ICO.zout}</button>
         <button class="gm-ctl" title="Вся карта" onclick="gmFit()">${GM_ICO.fit}</button>
@@ -66,6 +71,7 @@ const GM = {
   panning: false, panStart: null,
   loaded: false,
   showBorders: true, showFlags: true, fullscreen: false, ctlCollapsed: false,
+  showOutposts: true, showFleets: true, // видимость аванпостов / флотов на карте
   showRes: false,                // режим «ресурсы систем»
   showEcon: false,               // режим «бедность» (просперити систем)
   resRarities: ['rare', 'epic', 'legendary'], // какие редкости показывать на карте
@@ -496,6 +502,19 @@ function gmToggleFlags() {
   GM.showFlags = !GM.showFlags;
   document.getElementById('gm-ctl-flags')?.classList.toggle('gm-active', GM.showFlags);
   if (GMM.active) gmmRaster();
+}
+// Видимость аванпостов / флотов: оборонный слой рисуется поверх битмапа каждый кадр
+// (gmmPaintDefense), поэтому растеризовать заново не нужно — достаточно пометить кадр
+// «грязным» и пнуть цикл. Скрытые юниты не попадают и в клик-зоны (см. gmmPaintDefense).
+function gmToggleOutposts() {
+  GM.showOutposts = !GM.showOutposts;
+  document.getElementById('gm-ctl-outposts')?.classList.toggle('gm-active', GM.showOutposts);
+  if (GMM.active) { GMM.dirty = true; gmmKick(); }
+}
+function gmToggleFleets() {
+  GM.showFleets = !GM.showFleets;
+  document.getElementById('gm-ctl-fleets')?.classList.toggle('gm-active', GM.showFleets);
+  if (GMM.active) { GMM.dirty = true; gmmKick(); }
 }
 // ── Режим «ресурсы систем» ──────────────────────────────────
 // Над каждой звездой — сводка ресурсов системы (уникальные по названию ресурсы
@@ -1078,6 +1097,7 @@ function gmSystemBodies(sys) {
     // пояса/аномалии остаются как есть; всё прочее без класса считаем планетой
     const b = { name: p.name || '', kind: p.kind || 'planet', zone: p.zone, dist: p.dist, type: p.type,
                 dead: !!(p.dead || p.doomed),   // ☠ выжжена «Дланью Неотвратимости» — рисуем мёртвым камнем
+                resources: Array.isArray(p.resources) ? p.resources : [],  // для режима «ресурсы» на глуб.зуме
                 pid: Number.isInteger(p.pid) ? p.pid : null };
     if (nm && nm === capName) b.isCapital = true;
     byName.set(nm || ('__p' + anon++), b);
@@ -1153,8 +1173,24 @@ function gmOrbits(sys) {
     const zc = p.dead ? '#6b6b72' : gmZoneColor(p.zone);
     // угол поворота полос/терминатора — тоже от зерна, чтобы свет падал по-разному
     const tilt = (hv * 70 - 35) | 0;
+    // Режим «ресурсы» на глубоком зуме: иконки ресурсов этого тела «слетают» со
+    // сводки над звездой и едут на самой планете. Контр-вращение держит их прямо,
+    // pop-анимация (см. CSS) даёт плавную трансформацию при входе в систему.
+    const pres = (p.dead ? [] : (p.resources || []))
+      .filter(rr => rr && rr.name && GM.resRarities.includes(rr.r || 'common'));
+    let resBadge = '';
+    if (pres.length) {
+      const PMAX = 3;
+      const ic = pres.slice(0, PMAX).map(rr =>
+        `<span class="gm-res-pin r-${rr.r || 'common'}" data-name="${esc(rr.name)}" data-r="${esc(gmRarName(rr.r))}">${gmResIc(rr)}</span>`).join('');
+      const more = pres.length > PMAX ? `<span class="gm-res-pin gm-res-more">+${pres.length - PMAX}</span>` : '';
+      resBadge = `<span class="gm-orbit-res" style="--dur:${dur}s;animation-delay:${delay.toFixed(2)}s">
+          <span class="gm-orbit-res-in">${ic}${more}</span>
+        </span>`;
+    }
     return `<div class="gm-orbit" style="--r:${r}px;--dur:${dur}s;animation-delay:${delay.toFixed(2)}s">
         <span class="gm-planet${cls}" style="--zc:${zc};--sz:${sz}px;--tilt:${tilt}deg"></span>
+        ${resBadge}
       </div>`;
   }).join('');
   return `<div class="gm-sys" aria-hidden="true">${rings}</div>`;
@@ -1327,7 +1363,7 @@ function gmOpenPanel(sys) {
   });
   // мои флоты (мобильные соединения), стоящие (idle) в этой системе
   (GM.fleets || []).filter(fl => fl.status === 'idle' && fl.system_id === sys.id).forEach(fl => {
-    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:rgba(120,200,235,.9)"></span><span class="gm-col-nm">⚓ Флот${fl.name ? ': ' + esc(fl.name) : ''}</span><span class="gm-col-ty">${+fl.ships || 0} кор. · клик по ⚓ слева</span></div>`);
+    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:rgba(120,200,235,.9)"></span><span class="gm-col-nm">Флот${fl.name ? ': ' + esc(fl.name) : ''}</span><span class="gm-col-ty">${+fl.ships || 0} кор. · клик по значку слева</span></div>`);
   });
   const defBlock = defRows.length
     ? `<div class="gm-panel-sub">Оборона · ${defRows.length}</div><div class="gm-collist">${defRows.join('')}</div>` : '';
@@ -1381,6 +1417,7 @@ async function gmReloadDefense(reopenSysId) {
     GM.mzaVis = Array.isArray(mzaVis) ? mzaVis : [];
     GM.salvos = Array.isArray(salvos) ? salvos : (GM.salvos || []);
     if (GMM.active) { gmmBuildDefense(); gmmBuildSalvos(); GMM.dirty = true; gmmKick(); }
+    if (GM._rosterOn) gmRosterRender();   // живой список юнитов
     // если открыта панель этой системы — обновим её (число гексов/аванпостов/носителей)
     const p = document.getElementById('gm-panel');
     if (reopenSysId && p && !p.classList.contains('gm-hidden')) {
@@ -1650,6 +1687,102 @@ async function gmMzaCmdScrap() {
 }
 
 // ════════════════════════════════════════════════════════════
+//  КОМАНДНЫЙ ПУНКТ — единый список ВСЕХ моих мобильных юнитов
+//  (носители аванпостов, Гиперпейсер, флоты). Клик по строке =
+//  навести камеру на юнит + открыть его командную плашку. Чтобы
+//  не приходилось выцеливать мелкие значки на карте.
+// ════════════════════════════════════════════════════════════
+function gmmCenterSystem(sysId, ns) {
+  const sys = (GM.systems || []).find(s => s.id === sysId);
+  if (!sys || !GMM.active) return;
+  ns = Math.min(GM_MAX_SCALE, Math.max(ns || GMM.s, 0.7));
+  const to = gmmClampCam({ s: ns, tx: GMM.vw / 2 - sys.x * ns, ty: GMM.vh / 2 - sys.y * ns });
+  gmmAnimTo(to, 380);
+}
+function gmRosterEta(arriveAt) {
+  if (!arriveAt) return '';
+  const ms = Date.parse(arriveAt) - Date.now();
+  if (!(ms > 0)) return 'прибывает';
+  const h = ms / 3600000;
+  return h < 1 ? '<1 ч' : ('~' + Math.round(h) + ' ч');
+}
+function gmRosterToggle() {
+  const el = document.getElementById('gm-roster'); if (!el) return;
+  if (el.classList.contains('gm-hidden')) { GM._rosterOn = true; gmRosterRender(); }
+  else { GM._rosterOn = false; el.classList.add('gm-hidden'); }
+  document.getElementById('gm-controls')?.querySelector('.gm-ctl-roster')?.classList.toggle('gm-active', GM._rosterOn);
+}
+// Собрать единый список моих юнитов с метаданными для рендера/клика.
+function gmRosterUnits() {
+  const sysName = id => (GM.systems.find(s => s.id === id) || {}).name || id || '—';
+  const out = [];
+  (GM.opShips || []).forEach(sh => out.push({
+    type: 'outpost', id: sh.id, icon: '🚀', name: sh.name || 'Носитель аванпоста',
+    status: sh.status, sysId: sh.system_id, destId: sh.dest_sys, arrive: sh.arrive_at,
+    ready: sh.status === 'idle' && !!sh.can_deploy, readyLabel: 'к развёртыванию', sysName,
+  }));
+  (GM.mzaShips || []).forEach(sh => out.push({
+    type: 'mza', id: sh.id, icon: '☣', name: sh.name || 'Гиперпейсер',
+    status: sh.status, sysId: sh.system_id, destId: sh.dest_sys, arrive: sh.arrive_at,
+    extra: 'корпус ' + Math.round(+sh.integrity || 0) + '%',
+    ready: sh.status === 'idle' && !!sh.can_fire, readyLabel: 'залп готов', sysName,
+  }));
+  (GM.fleets || []).forEach(fl => out.push({
+    type: 'fleet', id: fl.id, icon: '⚓', name: fl.name || 'Флот',
+    status: fl.status, sysId: fl.system_id, destId: fl.dest_sys, arrive: fl.arrive_at,
+    extra: (+fl.ships || 0) + ' кор.', ready: false, sysName,
+  }));
+  return out;
+}
+function gmRosterRender() {
+  const el = document.getElementById('gm-roster'); if (!el) return;
+  if (!GM._rosterOn) { el.classList.add('gm-hidden'); return; }
+  const units = gmRosterUnits();
+  let body;
+  if (!units.length) {
+    body = `<div class="gm-roster-empty">Нет мобильных юнитов.<br>Носители, флоты и Гиперпейсер строятся в кабинете на Верфи.</div>`;
+  } else {
+    const TLAB = { outpost: 'Носители аванпостов', mza: 'Гиперпейсер', fleet: 'Флоты' };
+    const order = ['fleet', 'mza', 'outpost'];
+    body = order.filter(t => units.some(u => u.type === t)).map(t => {
+      const rows = units.filter(u => u.type === t).map(u => {
+        const transit = u.status === 'transit';
+        const where = transit
+          ? `→ ${esc(u.sysName(u.destId))} · ${gmRosterEta(u.arrive)}`
+          : `в системе ${esc(u.sysName(u.sysId))}`;
+        const tags = [];
+        if (u.extra) tags.push(`<span class="gm-r-tag">${esc(u.extra)}</span>`);
+        if (transit) tags.push(`<span class="gm-r-tag gm-r-fly">в пути</span>`);
+        else if (u.ready) tags.push(`<span class="gm-r-tag gm-r-rdy">${esc(u.readyLabel)}</span>`);
+        return `<button class="gm-r-row${transit ? ' gm-r-transit' : ''}" onclick="gmRosterGo('${u.type}','${u.id}')">
+            <span class="gm-r-ico">${u.icon}</span>
+            <span class="gm-r-main"><span class="gm-r-name">${esc(u.name)}</span><span class="gm-r-where">${where}</span></span>
+            <span class="gm-r-tags">${tags.join('')}</span>
+          </button>`;
+      }).join('');
+      return `<div class="gm-r-group"><div class="gm-r-head">${TLAB[t]}</div>${rows}</div>`;
+    }).join('');
+  }
+  el.innerHTML = `<div class="gm-r-bar"><span class="gm-r-title">📡 Командный пункт</span>
+      <button class="gm-close" onclick="gmRosterToggle()">✕</button></div>${body}`;
+  el.classList.remove('gm-hidden');
+}
+// Клик по строке: навести камеру на юнит и открыть его плашку (если стоит).
+function gmRosterGo(type, id) {
+  const u = gmRosterUnits().find(x => x.type === type && String(x.id) === String(id));
+  if (!u) return;
+  if (u.status === 'transit') {
+    gmmCenterSystem(u.destId);
+    toast('Юнит в пути → ' + u.sysName(u.destId) + ' · ' + gmRosterEta(u.arrive), 'info');
+    return;
+  }
+  gmmCenterSystem(u.sysId);
+  if (type === 'outpost') gmOpenOutpostCmd(id);
+  else if (type === 'mza') gmOpenMzaCmd(id);
+  else if (type === 'fleet') gmOpenFleetCmd(id);
+}
+
+// ════════════════════════════════════════════════════════════
 //  ФЛОТ — управление прямо на карте (значок ⚓ слева от звезды)
 //  Та же плашка #gm-opcmd: перебросить (вся карта) / вернуть на базу / распустить.
 // ════════════════════════════════════════════════════════════
@@ -1700,6 +1833,36 @@ function gmFleetFuelCost(comp, jumps) {
 function gmFleetFuelFmt(map) {
   return Object.keys(map || {}).filter(k => map[k] > 0).map(k => `${k} ${Math.round(map[k])}`).join(', ');
 }
+// Римская запись числа (для бейджа «сколько флотов в стопке»). 1..39 хватает с запасом.
+function gmRoman(n) {
+  n = Math.max(0, Math.floor(+n || 0));
+  if (n <= 0) return '';
+  const map = [[10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
+  let s = '';
+  for (const [v, sym] of map) while (n >= v) { s += sym; n -= v; }
+  return s;
+}
+
+// Несколько СВОИХ флотов в одной системе схлопнуты в одну стопку — клик открывает
+// выбор, каким флотом командовать. ids — список id флотов в стопке.
+function gmOpenFleetStack(ids) {
+  const list = (ids || []).map(id => (GM.fleets || []).find(x => x.id === id && x.status === 'idle')).filter(Boolean);
+  if (!list.length) return;
+  if (list.length === 1) { gmOpenFleetCmd(list[0].id); return; }
+  GMM.opCmd = null; GMM.mzaCmd = null; GMM.fleetCmd = null;
+  GMM.dirty = true; gmmKick();
+  const el = document.getElementById('gm-opcmd'); if (!el) return;
+  const sysName = (GM.systems.find(s => s.id === list[0].system_id) || {}).name || list[0].system_id;
+  const rows = list.map(fl => `<button class="gm-opcmd-btn" onclick="gmOpenFleetCmd('${fl.id}')">${esc(fl.name || 'Флот')} · ${+fl.ships || 0} кор.</button>`).join('');
+  el.innerHTML = `<div class="gm-opcmd-card">
+      <button class="gm-close" onclick="gmCloseFleetCmd()">✕</button>
+      <div class="gm-opcmd-title">Флоты в системе ${esc(sysName)}</div>
+      <div class="gm-opcmd-sub">${list.length} ${gmPlural(list.length, 'флот', 'флота', 'флотов')} · выберите</div>
+      ${rows}
+    </div>`;
+  el.classList.remove('gm-hidden');
+}
+
 function gmOpenFleetCmd(id) {
   const fl = (GM.fleets || []).find(x => x.id === id && x.status === 'idle');
   if (!fl) return;
@@ -1712,12 +1875,12 @@ function gmOpenFleetCmd(id) {
   const fuel = gmFleetFuelFmt(gmFleetFuelCost(fl.composition, 1));
   el.innerHTML = `<div class="gm-opcmd-card">
       <button class="gm-close" onclick="gmCloseFleetCmd()">✕</button>
-      <div class="gm-opcmd-title">⚓ Флот${fl.name ? ' «' + esc(fl.name) + '»' : ''}</div>
+      <div class="gm-opcmd-title">Флот${fl.name ? ' «' + esc(fl.name) + '»' : ''}</div>
       <div class="gm-opcmd-sub">в системе ${esc(sysName)} · ${+fl.ships || 0} кор.</div>
       ${comp ? `<div class="gm-opcmd-hint">${comp}</div>` : ''}
       ${fuel ? `<div class="gm-opcmd-hint">⛽ ${esc(fuel)} / прыжок</div>` : ''}
       <button class="gm-opcmd-btn" onclick="gmFleetCmdSend()">➤ Перебросить — выберите систему</button>
-      ${fl.can_recall ? `<button class="gm-opcmd-btn" onclick="gmFleetCmdRecall()">⚓ Вернуть на базу</button>` : ''}
+      ${fl.can_recall ? `<button class="gm-opcmd-btn" onclick="gmFleetCmdRecall()">↩ Вернуть на базу</button>` : ''}
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetCmdDisband()">✕ Распустить флот</button>
     </div>`;
   el.classList.remove('gm-hidden');
@@ -1765,7 +1928,7 @@ async function gmFleetSendTo(id, destSys) {
   try {
     const r = await gmDefRpc('fleet_send', { p_id: id, p_dest_sys: destSys });
     const fuel = gmFleetFuelFmt((r && r.fuel) || {});
-    toast('⚓ Флот в пути · долёт ~' + ((r && r.fly_h) || '?') + ' ч' + (fuel ? ' · ⛽ ' + fuel : ''), 'ok');
+    toast('Флот в пути · долёт ~' + ((r && r.fly_h) || '?') + ' ч' + (fuel ? ' · ⛽ ' + fuel : ''), 'ok');
     gmCloseFleetCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); gmCloseFleetCmd(); }
@@ -1777,7 +1940,7 @@ async function gmFleetCmdRecall() {
   try {
     const r = await gmDefRpc('fleet_recall', { p_id: id });
     const fuel = gmFleetFuelFmt((r && r.fuel) || {});
-    toast('⚓ Флот возвращается на базу · долёт ~' + ((r && r.fly_h) || '?') + ' ч' + (fuel ? ' · ⛽ ' + fuel : ''), 'ok');
+    toast('Флот возвращается на базу · долёт ~' + ((r && r.fly_h) || '?') + ' ч' + (fuel ? ' · ⛽ ' + fuel : ''), 'ok');
     gmCloseFleetCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
@@ -2346,8 +2509,9 @@ function gmmRender(host) {
   host.innerHTML = `
     <div id="gm-wrap" class="${touch ? 'gm-mobile' : 'gm-canvas-desk'}">
       <div id="gm-viewport"><canvas id="gmm-cv"></canvas></div>
-      <div id="gm-controls">${gmCtlBtns()}${deskEdit ? `<button class="gm-ctl gm-ctl-edit" title="Редактировать карту" onclick="gmEnterEdit()">${GM_ICO.edit}</button>` : ''}</div>
+      <div id="gm-controls"><button class="gm-ctl gm-ctl-roster" title="Командный пункт — мои корабли, флоты, носители" onclick="gmRosterToggle()">${GM_ICO.roster}</button>${gmCtlBtns()}${deskEdit ? `<button class="gm-ctl gm-ctl-edit" title="Редактировать карту" onclick="gmEnterEdit()">${GM_ICO.edit}</button>` : ''}</div>
       <div id="gm-panel" class="gm-hidden"></div>
+      <div id="gm-roster" class="gm-hidden"></div>
       <div id="gm-opcmd" class="gm-hidden"></div>
     </div>`;
   GMM.cv = document.getElementById('gmm-cv');
@@ -2661,7 +2825,7 @@ function gmmTapAt(lx, ly) {
   if (GMM.shipHit && GMM.shipHit.length) {
     let best = null, bd = 1e9;
     GMM.shipHit.forEach(h => { const d = Math.hypot(h.x - lx, h.y - ly); if (d < h.r && d < bd) { bd = d; best = h; } });
-    if (best) { if (best.mza) gmOpenMzaCmd(best.id); else if (best.fleet) gmOpenFleetCmd(best.id); else gmOpenOutpostCmd(best.id); return; }
+    if (best) { if (best.mza) gmOpenMzaCmd(best.id); else if (best.fleet) { if (best.stack && best.stack.length > 1) gmOpenFleetStack(best.stack); else gmOpenFleetCmd(best.id); } else gmOpenOutpostCmd(best.id); return; }
   }
   if (GMM.opCmd) gmCloseOutpostCmd();   // клик мимо — закрываем плашку
   if (GMM.mzaCmd) gmCloseMzaCmd();
@@ -3670,6 +3834,8 @@ function gmmPaintOrbits(ctx) {
               ctx.restore();
           }
         }
+        // ресурсы пояса — плашка над верхней точкой кольца (астероиды часто и держат добычу)
+        if (GM.showRes) gmmPaintPlanetRes(ctx, cx, cy - r * TILT, band + 4, p, a);
         // подпись пояса — выносим наружу вправо по дуге (рисуется общим проходом)
         if (isFocus && p.name) labels.push({ name: p.name, ang: 0, r, sz: band, dim: true });
         continue;
@@ -3713,6 +3879,8 @@ function gmmPaintOrbits(ctx) {
       // ── минные ГЕКСЫ вокруг планеты (своя колония — кликабельны; чужое поле — показ) ──
       if (p.isColony && !isAnom && !p.dead && p.pid != null) gmmPlanetMineHexes(ctx, px, py, sz, TILT, a, p, sys);
 
+      // ресурсы тела — плашка «перетекает» сюда со звезды по мере раскрытия системы
+      if (GM.showRes && !p.dead) gmmPaintPlanetRes(ctx, px, py, sz, p, a);
       if (isFocus && p.name) labels.push({ name: p.name, ang, r, sz, dead: p.dead });
     }
     // внутрисистемный трафик: еле заметные конвои между колониями системы
@@ -4707,30 +4875,37 @@ function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = sz * 0.4; ctx.shadowOffsetY = sz * 0.1;
   if (o.type === 'fleet') {
-    // УГЛОВАТЫЙ значок соединения: жёсткий клин-шеврон (нос вниз) с парой эскортов
-    // по бокам. Никаких скруглений/глоу-пятен — только острые грани под общий
-    // гранёный стиль интерфейса. Шеврон рисуется ломаной с резкими углами.
-    // Нос — ВВЕРХ (остриём к курсу), чтобы клин читался как «соединение идёт».
-    const chevron = (ox, oy, s, fill) => {
-      const top = oy - s * 0.85, len = s * 1.6, hw = s * 0.55, notch = s * 0.30;
+    // Соединение = три КОРАБЛЯ (флагман + 2 эскорта), нос ВВЕРХ. Силуэт — узкий
+    // стреловидный корпус с заострённым носом, парой коротких крыльев у кормы и
+    // вырезом-дюзой снизу: читается как звездолёт, а не как «гора»/шеврон.
+    const hull = (ox, oy, s, fill) => {
+      const nose = oy - s * 0.95;          // кончик носа (вверх)
+      const tail = oy + s * 0.85;          // корма (вниз)
+      const bw = s * 0.34;                  // полуширина корпуса
+      const ww = s * 0.62;                  // размах крыльев
+      const wy = oy + s * 0.30;             // крылья ближе к корме
       ctx.beginPath();
-      ctx.moveTo(ox, top);                       // нос ВВЕРХ
-      ctx.lineTo(ox + hw, top + len - notch);    // правое крыло (отведено назад)
-      ctx.lineTo(ox + hw * 0.5, top + len);      // правый кончик кормы
-      ctx.lineTo(ox, top + len * 0.70);          // вырез кормы (снизу)
-      ctx.lineTo(ox - hw * 0.5, top + len);      // левый кончик кормы
-      ctx.lineTo(ox - hw, top + len - notch);    // левое крыло
+      ctx.moveTo(ox, nose);                 // нос
+      ctx.lineTo(ox + bw, oy);              // правый борт (середина)
+      ctx.lineTo(ox + ww, wy);             // правое крыло
+      ctx.lineTo(ox + bw * 0.7, wy);       // вход крыла в корпус
+      ctx.lineTo(ox + bw * 0.55, tail);    // правая корма
+      ctx.lineTo(ox, tail - s * 0.28);     // вырез дюзы (снизу)
+      ctx.lineTo(ox - bw * 0.55, tail);    // левая корма
+      ctx.lineTo(ox - bw * 0.7, wy);
+      ctx.lineTo(ox - ww, wy);             // левое крыло
+      ctx.lineTo(ox - bw, oy);              // левый борт
       ctx.closePath();
       if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-      ctx.lineWidth = Math.max(0.5, s * 0.12);
+      ctx.lineWidth = Math.max(0.5, s * 0.11);
       ctx.strokeStyle = `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},0.98)`; ctx.stroke();
     };
-    const flagFill = `rgba(${hd(hr0)},${hd(hg0)},${hd(hb0)},0.95)`;
+    const escFill = `rgba(${hd(hr0)},${hd(hg0)},${hd(hb0)},0.95)`;
     const leadFill = `rgba(${hr0},${hg0},${hb0},0.98)`;
-    chevron(-sz * 0.80, sz * 0.62, sz * 0.58, flagFill);   // левый эскорт (позади/ниже)
-    chevron(sz * 0.80, sz * 0.62, sz * 0.58, flagFill);    // правый эскорт (позади/ниже)
+    hull(-sz * 0.78, sz * 0.55, sz * 0.62, escFill);   // левый эскорт (позади/ниже)
+    hull(sz * 0.78, sz * 0.55, sz * 0.62, escFill);    // правый эскорт (позади/ниже)
     ctx.shadowColor = 'transparent';
-    chevron(0, sz * 0.20, sz * 0.95, leadFill);            // флагман (впереди/выше, крупнее)
+    hull(0, sz * 0.12, sz * 1.0, leadFill);            // флагман (впереди/выше, крупнее)
   } else {
     const top = -sz * 0.5, L = sz * 1.6, halfW = sz * 0.58;
     // крылья-лезвия
@@ -4847,8 +5022,8 @@ function gmmPaintDefense(ctx) {
     gmmMineRing(ctx, tX, tY + R * 0.62 * sq, hr, sq, d.col, d.hexes, d.hexMax, a);
   });
 
-  // ── Аванпосты: станция над звездой ──
-  D.outposts.forEach(d => {
+  // ── Аванпосты: станция над звездой ── (можно скрыть тоглом)
+  if (GM.showOutposts !== false) D.outposts.forEach(d => {
     const tX = SX(d.sys.x), tY = SY(d.sys.y);
     if (!onScreen(tX, tY)) return;
     const ip = gmmIconPx(d.sys, s);
@@ -4863,12 +5038,14 @@ function gmmPaintDefense(ctx) {
   // место в ней; считаем заранее, чтобы знать ширину веера.
   {
     const grp = {};
-    // группируем по СТОРОНЕ (left=флоты, right=носители/Гиперпейсер) — иначе значки на
-    // разных боках от звезды считали бы общий веер и налезали друг на друга.
-    D.ships.forEach(d => { if (d.kind === 'idle' && d.sys) { const k = d.sys.id + '|' + (d.side || 'right'); (grp[k] = grp[k] || []).push(d); } });
-    Object.values(grp).forEach(list => list.forEach((d, i) => { d.stackI = i; d.stackN = list.length; }));
+    // группируем по СТОРОНЕ (left=флоты, right=носители/Гиперпейсер) и по ВЛАДЕЛЬЦУ
+    // (свои / каждая чужая держава отдельно) — иначе значки на разных боках/разных
+    // держав считали бы общий веер и налезали друг на друга.
+    D.ships.forEach(d => { if (d.kind === 'idle' && d.sys) { const owner = d.enemy ? ('e' + (d.fid || '')) : 'mine'; const k = d.sys.id + '|' + (d.side || 'right') + '|' + owner; (grp[k] = grp[k] || []).push(d); } });
+    Object.values(grp).forEach(list => list.forEach((d, i) => { d.stackI = i; d.stackN = list.length; d.stackPeers = list; }));
   }
   D.ships.forEach(d => { try {
+    if (d.fleet && GM.showFleets === false) return;   // флоты скрыты тоглом (значок + клик-зона)
     if (d.kind === 'idle') {
       const tX = SX(d.sys.x), tY = SY(d.sys.y);
       if (!onScreen(tX, tY)) return;
@@ -4877,10 +5054,15 @@ function gmmPaintDefense(ctx) {
       // рядом большая планета/корона звезды, и на дальнем у мелкого значка системы.
       // КОМПАКТНО: значок должен быть МЕНЬШЕ звезды, поэтому csz заметно ужат.
       const R = ip * 0.62 + 6, csz = Math.max(3, ip * 0.2) * zf;
-      // веер по горизонтали (значок узкий → небольшой шаг); центрируем группу
       const n = d.stackN || 1, idx = d.stackI || 0;
+      // ФЛОТЫ одной державы в одной системе СХЛОПЫВАЕМ в одну стопку: рисует только
+      // представитель (stackI===0), остальные пропускаем; число флотов показываем
+      // римской цифрой. Носители/Гиперпейсер по-прежнему раскладываем веером.
+      const stacked = !!d.fleet && n > 1;
+      if (stacked && idx !== 0) return;
+      // веер по горизонтали (значок узкий → небольшой шаг); центрируем группу
       const step = csz * 2.6;
-      const fanX = (idx - (n - 1) / 2) * step;
+      const fanX = stacked ? 0 : (idx - (n - 1) / 2) * step;
       // флоты сидят СЛЕВА от звезды (side='left'), носители/Гиперпейсер — справа.
       const sgn = d.side === 'left' ? -1 : 1;
       const cX = tX + sgn * R * 1.05 + fanX, cY = tY - R * 0.7 * sq;
@@ -4891,9 +5073,16 @@ function gmmPaintDefense(ctx) {
       // Флот: бейдж с числом кораблей у нижнего края значка.
       if (d.fleet) {
         ctx.save();
-        // Состав виден только при разведке/срезах: иначе «??» вместо числа.
-        const known = d.intel !== false && d.ships != null;
-        const txt = '⚓' + (known ? d.ships : '?');
+        // В стопке суммируем корабли всех флотов державы; «известно», только если
+        // состав каждого вскрыт разведкой (иначе «?»).
+        let known, shipN;
+        if (stacked) {
+          known = true; shipN = 0;
+          d.stackPeers.forEach(p => { if (p.intel !== false && p.ships != null) shipN += +p.ships; else known = false; });
+        } else {
+          known = d.intel !== false && d.ships != null; shipN = d.ships;
+        }
+        const txt = '' + (known ? shipN : '?');
         ctx.font = '700 ' + Math.max(8, csz * 1.45).toFixed(0) + 'px ui-monospace, "Consolas", monospace';
         const bw = ctx.measureText(txt).width + csz * 1.0, bh = Math.max(7, csz * 1.9);
         const bx = cX - bw / 2, by = cY + ER * 0.55, ch = bh * 0.32;   // ch — скос углов
@@ -4915,6 +5104,31 @@ function gmmPaintDefense(ctx) {
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(txt, cX, by + bh / 2 + 0.5);
         ctx.restore();
+        // Стопка: римская цифра «сколько флотов» гранёным чипом у верх-правого края флага.
+        if (stacked) {
+          ctx.save();
+          const rtxt = gmRoman(n) || String(n);
+          ctx.font = '800 ' + Math.max(8, csz * 1.25).toFixed(0) + 'px ui-monospace, "Consolas", monospace';
+          const rw = ctx.measureText(rtxt).width + csz * 0.9, rh = Math.max(7, csz * 1.7);
+          const rx = cX + ER * 0.55, ry = cY - ER * 2.0, rc = rh * 0.3;
+          ctx.beginPath();
+          ctx.moveTo(rx + rc, ry);
+          ctx.lineTo(rx + rw - rc, ry);
+          ctx.lineTo(rx + rw, ry + rc);
+          ctx.lineTo(rx + rw, ry + rh - rc);
+          ctx.lineTo(rx + rw - rc, ry + rh);
+          ctx.lineTo(rx + rc, ry + rh);
+          ctx.lineTo(rx, ry + rh - rc);
+          ctx.lineTo(rx, ry + rc);
+          ctx.closePath();
+          const [cr0, cg0, cb0] = d.col;
+          ctx.fillStyle = `rgba(${cr0},${cg0},${cb0},0.95)`; ctx.fill();
+          ctx.strokeStyle = 'rgba(8,16,26,0.9)'; ctx.lineWidth = Math.max(0.5, csz * 0.12); ctx.stroke();
+          ctx.fillStyle = 'rgba(8,16,26,0.98)';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(rtxt, rx + rw / 2, ry + rh / 2 + 0.5);
+          ctx.restore();
+        }
       }
       // Чужой вскрытый гиперкрейсер — тревожный пульс-кольцо «обнаружен»
       if (d.mza && d.enemy) {
@@ -4949,13 +5163,15 @@ function gmmPaintDefense(ctx) {
         ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 3;
         ctx.fillStyle = d.enemy ? 'rgba(255,180,170,0.98)' : (d.mza ? 'rgba(255,210,200,0.98)' : (d.fleet ? 'rgba(205,232,255,0.98)' : 'rgba(222,236,255,0.96)'));
         const enemyTag = d.enemy && d.facName ? ` · ${d.facName}` : '';
+        const fleetLbl = d.enemy ? 'Чужой флот' + enemyTag : (stacked ? `Флоты · ${n}` : 'Флот');
         const lbl = d.mza ? (d.enemy ? '☣ Чужой гиперкрейсер · обнаружен' + enemyTag : (d.canFire ? '☣ Гиперпейсер · залп' : '☣ Гиперпейсер'))
-          : (d.fleet ? (d.enemy ? '⚓ Чужой флот' + enemyTag : '⚓ Флот') : (d.canDeploy ? '🚀 носитель · развернуть' : '🚀 носитель'));
+          : (d.fleet ? fleetLbl : (d.canDeploy ? '🚀 носитель · развернуть' : '🚀 носитель'));
         ctx.fillText(lbl, cX, cY + ER * (d.fleet ? 2.95 : 1.5));
         ctx.restore();
       }
-      // в клик-зоны командования попадают только СВОИ юниты (чужие — только индикация)
-      if (!d.enemy) GMM.shipHit.push({ x: cX, y: cY - ER * 0.3, r: Math.max(16, ER * 2.1), id: d.id, mza: !!d.mza, fleet: !!d.fleet });
+      // в клик-зоны командования попадают только СВОИ юниты (чужие — только индикация).
+      // Стопка флотов несёт список id — клик откроет выбор, каким командовать.
+      if (!d.enemy) GMM.shipHit.push({ x: cX, y: cY - ER * 0.3, r: Math.max(16, ER * 2.1), id: d.id, mza: !!d.mza, fleet: !!d.fleet, stack: stacked ? d.stackPeers.map(p => p.id) : null });
       return;
     }
     // в полёте: позиция по реальному времени (нет меток → середина)
@@ -5360,7 +5576,9 @@ function gmmPaintStars(ctx, camS) {
       }
     }
     ctx.globalAlpha = 1;
-    if (GM.showRes) gmmPaintResPins(ctx, s, iw, camS);
+    // плашка ресурсов над звездой гаснет по мере раскрытия системы (deep-альфа) —
+    // иконки «перетекают» на сами планеты в gmmPaintOrbits
+    if (GM.showRes) gmmPaintResPins(ctx, s, iw, camS, 1 - gmmDeepA());
     ctx.restore();
     if (showAll || important) cands.push({ s, iw, important });
   });
@@ -5418,9 +5636,12 @@ function gmmResImg(name) {
   GMM.resImgs[name] = im;
   return null;
 }
-function gmmPaintResPins(ctx, s, iw, camS) {
+function gmmPaintResPins(ctx, s, iw, camS, alpha) {
+  alpha = alpha == null ? 1 : alpha;
+  if (alpha <= 0.01) return;   // глубокий зум: плашка над звездой погасла, иконки уехали на планеты
   const list = gmSysRes(s).filter(r => GM.resRarities.includes(r.r || 'common'));
   if (!list.length) return;
+  ctx.save(); ctx.globalAlpha *= alpha;
   if (camS < 0.2) {   // далеко: вместо плашки — точка цвета самой ценной редкости
     ctx.fillStyle = GMM_RAR_C[list[0].r] || GMM_RAR_C.common;
     const r = 3.6 / camS;
@@ -5465,6 +5686,49 @@ function gmmPaintResPins(ctx, s, iw, camS) {
   // сохраняем позиции иконок для тултипа при наведении
   if (!GMM.resHitMap) GMM.resHitMap = [];
   GMM.resHitMap.push(...resNames.map(rn => ({ sys: s, ...rn })));
+  ctx.restore();
+}
+// Иконки ресурсов ОДНОГО тела на глубоком зуме — компактная плашка над планетой/
+// поясом (экранные координаты). Иконки «перетекают» сюда со сводки над звездой по
+// мере роста deep-альфы (a). Самая ценная редкость — первой.
+function gmmPaintPlanetRes(ctx, px, py, sz, p, a) {
+  if (a <= 0.02) return;
+  const list = (p.resources || []).filter(r => r && r.name && GM.resRarities.includes(r.r || 'common'))
+    .sort((x, y) => (GM_RARITY_ORDER[y.r] || 0) - (GM_RARITY_ORDER[x.r] || 0));
+  if (!list.length) return;
+  const MAX = 3, shown = list.slice(0, MAX);
+  const more = list.length > MAX ? '+' + (list.length - MAX) : '';
+  const tile = 17, gap = 2, padX = 4, padY = 3;
+  const wMore = more ? more.length * 8 + 4 : 0;
+  const W = shown.length * tile + (shown.length - 1) * gap + wMore + padX * 2;
+  const H = tile + padY * 2;
+  const x0 = px - W / 2, y0 = py - sz - H - 5;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(7,10,18,.86)';
+  ctx.strokeStyle = 'rgba(160,190,230,.32)'; ctx.lineWidth = 1;
+  gmmRoundRect(ctx, x0, y0, W, H, 5); ctx.fill(); ctx.stroke();
+  let cx = x0 + padX; const iy = y0 + padY;
+  shown.forEach(r => {
+    const col = GMM_RAR_C[r.r] || GMM_RAR_C.common;
+    ctx.fillStyle = 'rgba(255,255,255,.06)';
+    gmmRoundRect(ctx, cx, iy, tile, tile, 3); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 1.2;
+    gmmRoundRect(ctx, cx, iy, tile, tile, 3); ctx.stroke();
+    const im = gmmResImg(r.name), ic = tile * 0.78, off = (tile - ic) / 2;
+    if (im) ctx.drawImage(im, cx + off, iy + off, ic, ic);
+    else {
+      ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `${(ic * 0.95).toFixed(1)}px sans-serif`;
+      ctx.fillText(r.icon || '◆', cx + tile / 2, iy + tile / 2);
+    }
+    cx += tile + gap;
+  });
+  if (more) {
+    ctx.fillStyle = '#9fb1c8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 11px Rajdhani, sans-serif';
+    ctx.fillText(more, x0 + W - padX - wMore / 2, y0 + H / 2);
+  }
+  ctx.restore();
 }
 function gmmRoundRect(ctx, x, y, w, h, r) {
   if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return; }

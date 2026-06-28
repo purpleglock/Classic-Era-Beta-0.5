@@ -625,10 +625,15 @@ function ecCaps() {
     hasMil: mf > 0, hasShipyard: sy > 0, hasStarbase: ecSlotsSum('starbase') > 0, robot,
   };
 }
-// Сколько кораблей фракция уже держит (готовые + очередь + повреждённые + в ремонте). Зеркало _fleet_used.
+// Сколько кораблей фракция уже держит. Зеркало _fleet_used.
+// ВАЖНО: корабли, собранные в соединения (EC.fleets), сервер СНИМАЕТ из unit_production
+// (см. fleet_form в _army_fleet.sql), поэтому в составе/ростере их уже нет. Чтобы метр и
+// гейт вместимости не «теряли» развёрнутый флот, добавляем сюда корабли из соединений.
 function ecFleetUsed() {
   const ships = arr => (arr || []).filter(r => r.category === 'ship').reduce((a, r) => a + (r.qty || 0), 0);
-  return ships(EC.roster) + ships(EC.queue) + ships(EC.damaged) + ships(EC.repairing);
+  const inFleets = (EC.fleets || []).reduce((a, fl) =>
+    a + (fl.composition || []).reduce((b, c) => b + (c.qty || 0), 0), 0);
+  return ships(EC.roster) + ships(EC.queue) + ships(EC.damaged) + ships(EC.repairing) + inFleets;
 }
 // Сколько пехоты / техники / кораблей «съедает» дивизия за ход.
 // Пехота → мощность Центра Подготовки (caps.training), наземная техника и авиация →
