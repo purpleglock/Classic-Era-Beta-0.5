@@ -1105,6 +1105,7 @@
 .ec-case-m.none { color: var(--t4, var(--t3)); }
 .ec-case-act { min-width: 92px; text-align: right; }
 .ec-case-accused { font-family: var(--font-mono); font-size: 10.5px; color: var(--t2); }
+.ec-case-ruled { font-family: var(--font-mono); font-size: 10px; color: var(--t3); opacity: .65; }
 .ec-case-confirm { position: absolute; inset: 0; background: hsl(216 24% 4% / 0.78); display: grid; place-items: center; padding: 20px; border-radius: var(--radius-lg); }
 .ec-case-confirm-in { width: 100%; max-width: 360px; background: var(--b3); border: 1px solid var(--w2); border-radius: var(--radius-md); padding: 18px; text-align: center; }
 .ec-case-confirm-t { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--t1); margin-bottom: 8px; }

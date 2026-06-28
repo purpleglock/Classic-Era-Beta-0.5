@@ -2539,7 +2539,10 @@ function buildHeroVN(coverUrl, user) {
   // Расписание: оставляем диалоги, подходящие по времени суток ('any'/нет → всегда).
   const slot = _heroTimeSlot();
   const timed = dialogues.filter(d => !d.time || d.time === 'any' || d.time === slot);
-  const pool = timed.length ? timed : dialogues;
+  // На текущий слот ничего не назначено? НЕ вываливаем чужие (утренние/ночные)
+  // реплики — берём дежурные фразы, они сами корректны по времени суток.
+  let pool = timed;
+  if (!pool.length) { const def = heroDefaultDialogues(); pool = def.length ? def : dialogues; }
 
   // Сигнатура — чтобы выбор не «прыгал» при перерисовке, но обновлялся при правке.
   const sig = JSON.stringify(pool.map(d => d.id || ''));

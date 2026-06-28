@@ -25,8 +25,9 @@ const EC_SPY_OPS = {
   faith_impose:  { label: 'Тайная секта',        diff: 28, base: 3, need: 'basic', icon: '🛐', desc: 'Внедрить тайную секту вашей веры в чужую державу. Работает как храм (доход и сила — вам), пока контрразведка цели её не вскроет. Нужна исповедуемая вера.' },
   subspace_hunt: { label: 'Подпространственная охота', diff: 40, base: 2, need: '', tactical: true, icon: '🛰', desc: 'Вскрыть скрытые гиперкрейсера цели — при успехе они подсветятся на карте на 2 суток (крит — 4). Иначе их не видно ни с разведкой, ни без.' },
   fleet_sabotage:{ label: 'Диверсия против флота', diff: 34, base: 2, need: '', tactical: true, targetFleet: true, icon: '⚙', desc: 'Подрыв вражеского флота. По степени успеха: крит → выводит из строя часть кораблей состава; обычный успех → обездвиживает флот на сутки. Сопротивление — «защита ВС» цели.' },
+  outpost_strike:{ label: 'Подрыв аванпоста', diff: 32, base: 2, need: '', tactical: true, icon: '💣', desc: 'Диверсанты уничтожают развёрнутый аванпост цели. Крит — добивает корабль-носитель в той же системе. Сопротивление — «защита ВС» цели. Разведка не нужна.' },
 };
-const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'steal_res', 'sabotage', 'destabilize', 'kill_agent', 'steal_tech', 'mass_demolish', 'faith_impose', 'subspace_hunt', 'fleet_sabotage'];
+const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'steal_res', 'sabotage', 'destabilize', 'kill_agent', 'steal_tech', 'mass_demolish', 'faith_impose', 'subspace_hunt', 'fleet_sabotage', 'outpost_strike'];
 // Перки агентов (зеркало _spy_agents6.sql). Перк-бонус РАСТЁТ с уровнем агента (+2/ур.).
 const EC_SPY_PERKS = {
   infiltrator: { label: 'Инфильтратор', icon: '🕵', desc: '+12% успех краж (казна, технологии, ресурсы). С уровнем — больше.' },
@@ -5705,10 +5706,20 @@ function ecExCorpsBlock() {
   }).join('') || `<div class="cn-fac-hint">Нет долей в продаже${ses.open ? '' : ' · торги сейчас закрыты'}.</div>`;
 
   // ── Мои доли в чужих организациях ──
-  const holds = (c.holdings || []).map(h => `<div class="ec-corp-offer">
+  const holds = (c.holdings || []).map(h => {
+    const myListed = (c.listings || []).filter(l => l.mine && l.corp_id === h.corp_id);
+    const listedRows = myListed.map(l => `<div class="ec-corp-listed"><span>📤 В продаже: <b>${ecNum(l.shares)}</b> долей по <b>${ecNum(Math.round(l.price))} ГС</b></span><button class="ec-bld-del" title="Снять с продажи" onclick="ecCorpCancelListing('${l.id}')">✕</button></div>`).join('');
+    return `<div class="ec-corp-offer">
       <span class="ec-corp-offer-main"><b>${esc(h.name)}</b> <i style="color:var(--t4)">(${esc(h.founder)})</i><br>
         <span class="ec-corp-offer-sub">${ecNum(h.shares)}/${ecNum(h.total_shares)} долей = ${ecNum(Math.round(h.value))} ГС · дивиденд ≈ ${ecNum(Math.round((h.daily_gross || 0) * h.shares / Math.max(1, h.total_shares)))} ГС/ход</span></span>
-    </div>`).join('') || '<div class="cn-fac-hint">Вы не держите чужих долей.</div>';
+      ${listedRows}
+      <div class="ec-corp-sell">
+        <input type="number" id="ec-co-ls-sh-${h.corp_id}" min="1" max="${h.shares}" placeholder="долей на продажу (есть ${ecNum(h.shares)})" class="ec-prod-qty">
+        <input type="number" id="ec-co-ls-pr-${h.corp_id}" min="1" placeholder="цена за долю (котир. ${ecNum(Math.round(h.share_price))})" class="ec-prod-qty">
+        <button class="btn btn-gh btn-sm" onclick="ecCorpListShares('${h.corp_id}')">Выставить доли</button>
+      </div>
+    </div>`;
+  }).join('') || '<div class="cn-fac-hint">Вы не держите чужих долей.</div>';
 
   const sesPill = ses.open
     ? `<span class="ec-corp-ses on">● торги открыты</span>`
@@ -6741,7 +6752,7 @@ const EC_SPY_OP_CAT = {
   steal_gc: 'econ', steal_res: 'econ', steal_tech: 'econ', destabilize: 'econ',
   sabotage: 'direct', mass_demolish: 'direct', kill_agent: 'direct',
   faith_impose: 'special',
-  subspace_hunt: 'tactical', fleet_sabotage: 'tactical',
+  subspace_hunt: 'tactical', fleet_sabotage: 'tactical', outpost_strike: 'tactical',
 };
 // Требование операции — короткий бейдж (что нужно, чтобы открыть).
 function ecSpyOpReq(d) {
@@ -7388,7 +7399,9 @@ function ecSpyCaseRender(c) {
     const marks = EC_CASE_DIMS.map(d => `<span class="ec-case-cell">${_ecCaseMark((s.marks || {})[d[0]])}</span>`).join('');
     const accuseBtn = closed
       ? (c.accused === s.fid ? `<span class="ec-case-accused">${c.verdict === 'solved' ? '✅ виновен' : '⚖ обвинён'}</span>` : '')
-      : `<button class="btn btn-rd btn-xs" onclick="ecSpyCaseAccuse('${esc(s.fid)}')">⚖ Обвинить</button>`;
+      : (s.consistent
+          ? `<button class="btn btn-rd btn-xs" onclick="ecSpyCaseAccuse('${esc(s.fid)}')">⚖ Обвинить</button>`
+          : `<span class="ec-case-ruled" title="Отсеян уликами — обвинять нельзя">— отсеян</span>`);
     return `<div class="ec-case-row${s.consistent ? ' consistent' : ' ruled-out'}">
       <span class="ec-case-sus">${ecFacFlag(s.fid, 22)}<b>${esc(s.name)}</b></span>
       <span class="ec-case-marks">${marks}</span>
@@ -8673,7 +8686,9 @@ function ecCorpListShares(corp) {
   if (!price) { toast('Укажите цену', 'err'); return; }
   // нельзя выставить больше, чем держишь (сервер тоже режет эскроу)
   const co = ((EC.corps && EC.corps.mine) || []).find(x => x.id === corp);
-  if (co && shares > co.my_shares) { toast(`У вас только ${ecNum(co.my_shares)} долей`, 'err'); return; }
+  const hd = ((EC.corps && EC.corps.holdings) || []).find(x => x.corp_id === corp);
+  const have = co ? co.my_shares : (hd ? hd.shares : null);
+  if (have != null && shares > have) { toast(`У вас только ${ecNum(have)} долей`, 'err'); return; }
   ecRpcAct('corp_list_shares', { p_corp: corp, p_shares: shares, p_price: price }, 'Доли выставлены');
 }
 function ecCorpCancelListing(id) { ecRpcAct('corp_cancel_listing', { p_listing: id }, 'Снято с продажи'); }
