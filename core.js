@@ -12,7 +12,7 @@
 //     SB_ANON = anon / public key
 //     Подробности в SETUP.md
 const SB_URL  = 'https://pgngkkiiopymvrcozvvr.supabase.co';
-const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnbmdra2lpb3B5bXZyY296dnZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MzU5MjgsImV4cCI6MjA5NTUxMTkyOH0.ejFOy6cDNsAj9yCnWOVub0L2tunm9l32BfkgBI_mZFk';
+const SB_ANON = 'sb_publishable_f_xjq0WQcf2AUdHWjk1-XQ_BDLpsoiS';
 
 // ────────────────────────────────────────────────────────────────────────────────────────────────────
 // SUPABASE CLIENT
