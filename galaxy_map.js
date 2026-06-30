@@ -1,3 +1,6 @@
+// © 2025–2026 Setis241 (setisalanstrong@gmail.com). Все права защищены.
+// Проприетарное ПО. Использование, копирование, изменение и распространение
+// без письменного разрешения правообладателя запрещены. См. файл LICENSE.
 // ════════════════════════════════════════════════════════════
 // GALAXY MAP — интерактивная карта галактики (часть вики)
 // Данные: Supabase (map_systems / map_hyperlanes / map_factions)
@@ -4682,8 +4685,9 @@ function gmmBuildDefense() {
       ships: +fl.ships || 0, canRecall: !!fl.can_recall }));
 
     // ── ВИДИМОСТЬ ЧУЖИХ ─────────────────────────────────────────
-    // Флоты других держав: видны все, но численность (ships) приходит null,
-    // если состав не вскрыт разведкой — тогда бейдж рисует «⚓?». Цвет — фракции.
+    // Флоты других держав: сервер (fleets_visible) отдаёт только ОБНАРУЖЕННЫЕ —
+    // в зоне сенсора (свои/соседние системы) или при разведке владельца. Число
+    // (ships) приходит null без разведки → бейдж рисует «⚓?». Цвет — фракции.
     (GM.fleetsVis || []).filter(fl => fl.mine === false).forEach(fl => {
       const ff = gmFaction(fl.faction_id); const col = ff ? gmRgb(ff.color) : [150, 160, 175];
       pushShip(fl, { fleet: true, side: 'left', col, enemy: true, fid: fl.faction_id,
@@ -5083,52 +5087,35 @@ function gmmPaintDefense(ctx) {
           known = d.intel !== false && d.ships != null; shipN = d.ships;
         }
         const txt = '' + (known ? shipN : '?');
-        ctx.font = '700 ' + Math.max(8, csz * 1.45).toFixed(0) + 'px ui-monospace, "Consolas", monospace';
-        const bw = ctx.measureText(txt).width + csz * 1.0, bh = Math.max(7, csz * 1.9);
-        const bx = cX - bw / 2, by = cY + ER * 0.55, ch = bh * 0.32;   // ch — скос углов
-        // гранёный тег: прямоугольник со срезанными углами (без скруглений)
-        ctx.beginPath();
-        ctx.moveTo(bx + ch, by);
-        ctx.lineTo(bx + bw - ch, by);
-        ctx.lineTo(bx + bw, by + ch);
-        ctx.lineTo(bx + bw, by + bh - ch);
-        ctx.lineTo(bx + bw - ch, by + bh);
-        ctx.lineTo(bx + ch, by + bh);
-        ctx.lineTo(bx, by + bh - ch);
-        ctx.lineTo(bx, by + ch);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(10,20,32,0.9)'; ctx.fill();
-        ctx.strokeStyle = known ? 'rgba(120,200,235,0.9)' : 'rgba(150,165,180,0.8)';
-        ctx.lineWidth = Math.max(0.5, csz * 0.12); ctx.stroke();
-        ctx.fillStyle = known ? 'rgba(210,235,255,0.98)' : 'rgba(170,185,200,0.95)';
+        // Численность — БЕЗ плашки: тонкая светящаяся цифра прямо под кораблём, с
+        // тёмной обводкой для читаемости над любым фоном (HUD-подпись, не «знак»).
+        ctx.save();
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(txt, cX, by + bh / 2 + 0.5);
-        ctx.restore();
-        // Стопка: римская цифра «сколько флотов» гранёным чипом у верх-правого края флага.
+        const ny = cY + ER * 0.64, fs = Math.max(8, csz * 1.5);
+        const [nr, ng, nb] = known ? d.col : [168, 180, 196];
+        ctx.font = '700 ' + fs.toFixed(0) + 'px ui-monospace, "Consolas", monospace';
+        const mainW = ctx.measureText(txt).width;
+        ctx.lineWidth = Math.max(1, csz * 0.45); ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(4,9,16,0.92)';
+        ctx.shadowColor = `rgba(${nr},${ng},${nb},0.55)`; ctx.shadowBlur = csz * 0.9;
+        ctx.strokeText(txt, cX, ny);
+        ctx.shadowColor = 'transparent';
+        ctx.fillStyle = known
+          ? `rgba(${Math.min(255, nr + 60)},${Math.min(255, ng + 50)},${Math.min(255, nb + 45)},0.99)`
+          : 'rgba(194,206,220,0.97)';
+        ctx.fillText(txt, cX, ny);
+        // Стопка: «сколько флотов» мелким приглушённым «×N» у правого верха числа.
         if (stacked) {
-          ctx.save();
-          const rtxt = gmRoman(n) || String(n);
-          ctx.font = '800 ' + Math.max(8, csz * 1.25).toFixed(0) + 'px ui-monospace, "Consolas", monospace';
-          const rw = ctx.measureText(rtxt).width + csz * 0.9, rh = Math.max(7, csz * 1.7);
-          const rx = cX + ER * 0.55, ry = cY - ER * 2.0, rc = rh * 0.3;
-          ctx.beginPath();
-          ctx.moveTo(rx + rc, ry);
-          ctx.lineTo(rx + rw - rc, ry);
-          ctx.lineTo(rx + rw, ry + rc);
-          ctx.lineTo(rx + rw, ry + rh - rc);
-          ctx.lineTo(rx + rw - rc, ry + rh);
-          ctx.lineTo(rx + rc, ry + rh);
-          ctx.lineTo(rx, ry + rh - rc);
-          ctx.lineTo(rx, ry + rc);
-          ctx.closePath();
-          const [cr0, cg0, cb0] = d.col;
-          ctx.fillStyle = `rgba(${cr0},${cg0},${cb0},0.95)`; ctx.fill();
-          ctx.strokeStyle = 'rgba(8,16,26,0.9)'; ctx.lineWidth = Math.max(0.5, csz * 0.12); ctx.stroke();
-          ctx.fillStyle = 'rgba(8,16,26,0.98)';
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText(rtxt, rx + rw / 2, ry + rh / 2 + 0.5);
-          ctx.restore();
+          const sub = '×' + n, sfs = Math.max(6, csz * 0.92);
+          ctx.font = '700 ' + sfs.toFixed(0) + 'px ui-monospace, "Consolas", monospace';
+          ctx.textAlign = 'left';
+          const sx = cX + mainW / 2 + csz * 0.3, sy = ny - fs * 0.3;
+          ctx.lineWidth = Math.max(0.8, csz * 0.3); ctx.strokeStyle = 'rgba(4,9,16,0.9)';
+          ctx.strokeText(sub, sx, sy);
+          ctx.fillStyle = `rgba(${Math.min(255, nr + 40)},${Math.min(255, ng + 30)},${Math.min(255, nb + 25)},0.92)`;
+          ctx.fillText(sub, sx, sy);
         }
+        ctx.restore();
       }
       // Чужой вскрытый гиперкрейсер — тревожный пульс-кольцо «обнаружен»
       if (d.mza && d.enemy) {

@@ -1,3 +1,6 @@
+// © 2025–2026 Setis241 (setisalanstrong@gmail.com). Все права защищены.
+// Проприетарное ПО. Использование, копирование, изменение и распространение
+// без письменного разрешения правообладателя запрещены. См. файл LICENSE.
 // ================================================================
 // ADMIN.JS — консоль управления фракциями (суперадмины + эдиторы)
 // Все действия идут напрямую через dbGet/dbPost/dbPatch/dbDel;
@@ -2910,7 +2913,99 @@ function adTabTesting(e) {
       </div>`)}
     ${row('☣ Приземлить залп Гиперпейсера', 'Все гиперпейсеры фракции мгновенно прибывают, а их снаряды в полёте поражают цель: планета-цель становится мёртвым камнем, колония на ней стирается.', `<button class="btn btn-gd" onclick="adTestSpeedMza()">Приземлить залп</button>`)}
     ${row('🛐 Удалить религию фракции', 'Удаляет веру, основанную этой фракцией. Адепты, признания и тайные секты уходят каскадом. Необратимо.', `<button class="btn btn-rd" onclick="adTestDeleteFaith()">Удалить религию</button>`)}
+    ${adTestSpySection()}
   </div>`;
+}
+
+// ── Подсекция: провести операцию шпионажа ОТ выбранной фракции ПРОТИВ другой ──
+// Выдаёт разведку (базовую/глубокую) или запускает любую операцию мгновенно,
+// без требований по интелу/агентам (admin_test_spy_op, _admin_test_spy.sql).
+// Выбранная фракция (AD.sel) — исполнитель; цель выбирается из списка.
+const AD_SPY_OPS = [
+  ['recon_basic',   '🔍 Базовая разведка',     'Выдаёт исполнителю базовый срез по цели (казна, ОН, агенты, колонии, постройки). Открывает basic-операции против цели.'],
+  ['recon_deep',    '🔬 Глубокая разведка',    'Полный срез: состав построек по колониям, юниты, число технологий. Открывает deep-операции против цели.'],
+  ['steal_gc',      '💰 Кража казны',          'Крадёт долю ГС со счёта цели в пользу исполнителя.'],
+  ['steal_res',     '📦 Кража ресурсов',       'Крадёт случайный ресурс со склада цели (объём растёт от числа «агентов»).'],
+  ['steal_tech',    '🔬 Кража технологий',     'Похищает одну неизвестную исполнителю технологию цели.'],
+  ['sabotage',      '💥 Саботаж',              'Уничтожает одно случайное здание цели.'],
+  ['mass_demolish', '🧨 Массовый снос',        'Сносит N зданий цели (N = число «агентов», максимум 5).'],
+  ['destabilize',   '🌀 Дестабилизация',       'Накладывает на цель дебафф −25% на 3 дня.'],
+  ['kill_agent',    '🗡 Ликвидация агента',    'Убивает случайного готового агента цели.'],
+  ['faith_impose',  '🛐 Насаждение веры',      'Навязывает цели веру исполнителя (нужна своя вера, цель — без веры).'],
+];
+
+function adTestSpySection() {
+  const acts = AD.sel || '';
+  const targets = [...AD.byFid.entries()]
+    .filter(([fid]) => fid !== acts)
+    .sort((a, b) => (a[1].app.name || '').localeCompare(b[1].app.name || '', 'ru'))
+    .map(([fid, e]) => `<option value="${esc(fid)}">${esc(e.app.name)}${e.eco ? '' : ' (нет экономики)'}</option>`)
+    .join('');
+  const ops = AD_SPY_OPS.map(([code, lbl]) => `<option value="${esc(code)}">${esc(lbl)}</option>`).join('');
+  return `<div class="fm-danger-act" style="align-items:flex-start;flex-direction:column;gap:10px">
+    <div class="fm-danger-label" style="width:100%">
+      <div>🕵 Провести операцию против фракции</div>
+      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Выбранная фракция выступает <b>исполнителем</b>. Операция выполняется мгновенно, с гарантированным успехом и без раскрытия — без требований по разведке/агентам. Разведка (базовая/глубокая) открывает соответствующие операции против цели.</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;width:100%">
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1 1 200px">
+        <label class="fm-dim" style="font-size:11px">Цель</label>
+        <select id="ad-spy-target" class="ec-input" style="min-width:180px"><option value="">— выберите цель —</option>${targets}</select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1 1 200px">
+        <label class="fm-dim" style="font-size:11px">Операция</label>
+        <select id="ad-spy-op" class="ec-input" style="min-width:200px" onchange="adSpyOpHint()">${ops}</select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;width:96px">
+        <label class="fm-dim" style="font-size:11px">«Агентов»</label>
+        <input id="ad-spy-agents" type="number" min="1" max="5" value="2" class="ec-input" style="width:96px">
+      </div>
+      <button class="btn btn-gd" onclick="adTestSpyOp()">Провести</button>
+    </div>
+    <div id="ad-spy-hint" class="fm-dim" style="font-size:11px;line-height:1.4">${esc(AD_SPY_OPS[0][2])}</div>
+  </div>`;
+}
+
+function adSpyOpHint() {
+  const code = document.getElementById('ad-spy-op')?.value;
+  const m = AD_SPY_OPS.find(o => o[0] === code);
+  const el = document.getElementById('ad-spy-hint');
+  if (el && m) el.textContent = m[2];
+}
+
+async function adTestSpyOp() {
+  if (!AD.sel || AD.busy) return;
+  const target = document.getElementById('ad-spy-target')?.value || '';
+  const op = document.getElementById('ad-spy-op')?.value || '';
+  const agents = Math.max(1, Math.min(5, parseInt(document.getElementById('ad-spy-agents')?.value, 10) || 1));
+  if (!target) { toast('Выберите цель', 'err'); return; }
+  if (!op) { toast('Выберите операцию', 'err'); return; }
+  const opLabel = (AD_SPY_OPS.find(o => o[0] === op) || [, op])[1];
+  const tgtName = (AD.byFid.get(target) || { app: {} }).app.name || target;
+  if (!confirm(`Провести «${opLabel}» от фракции «${AD.byFid.get(AD.sel)?.app.name || AD.sel}» против «${tgtName}»?`)) return;
+  AD.busy = true;
+  try {
+    const r = await apiFetch('rpc/admin_test_spy_op', { method: 'POST', body: JSON.stringify({ p_actor_fid: AD.sel, p_target_fid: target, p_op: op, p_agents: agents }) });
+    const ok = r?.outcome === 'success';
+    toast(`${opLabel} → ${tgtName}: ${ok ? 'успех' : 'без эффекта'}${adSpyResultLine(op, r?.result)}`, ok ? 'ok' : 'err');
+    await adReloadPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+// Короткая сводка результата операции для тоста.
+function adSpyResultLine(op, res) {
+  if (!res || typeof res !== 'object') return '';
+  if (op === 'recon_basic' || op === 'recon_deep') return ` · разведка выдана`;
+  if (op === 'steal_gc' && res.gc != null) return ` · ${adNum(res.gc)} ГС`;
+  if (op === 'steal_res' && res.resource) return ` · ${res.amount} ${res.resource}`;
+  if (op === 'steal_tech' && res.tech) return ` · «${res.tech}»`;
+  if (op === 'sabotage' && res.building) return ` · снесено: ${res.building}`;
+  if (op === 'mass_demolish' && res.count != null) return ` · снесено зданий: ${res.count}`;
+  if (op === 'kill_agent' && res.agent_name) return ` · ${res.agent_name}`;
+  if (op === 'faith_impose' && res.faith) return ` · «${res.faith}»`;
+  if (res.note) return ` · ${res.note}`;
+  return '';
 }
 
 async function adTestSpeedDoom() {

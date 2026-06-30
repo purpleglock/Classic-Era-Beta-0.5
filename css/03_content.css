@@ -282,34 +282,54 @@
   /* без анимации появления на старте — новелла должна быть СРАЗУ готова, а не
      «выезжать» при каждом повторном рендере (mid-dialog смены ставят animation инлайн). */
 }
-/* диалоговое окно — внизу, поверх всего */
+/* диалоговое окно — внизу, поверх всего; полноценный VN-текстбокс */
 .hp-vn-box{
   position:absolute;z-index:6;left:clamp(12px,3.5vw,40px);right:clamp(12px,3.5vw,40px);
   bottom:clamp(12px,3vh,24px);
-  padding:14px 20px 12px;cursor:pointer;
-  background:hsl(216 16% 11% / .72);
-  border:1px solid var(--w2,rgba(255,255,255,.10));
-  border-left:2px solid var(--gd,#3a9bdc);
-  border-radius:3px;
-  box-shadow:0 16px 40px -14px rgba(0,0,0,.6);
-  backdrop-filter:saturate(1.1) blur(8px);
+  padding:24px 24px 14px;cursor:pointer;
+  /* overflow:visible — плашка-табличка имени «нависает» над верхней кромкой */
+  overflow:visible;
+  background:linear-gradient(180deg, hsl(216 18% 12% / .80), hsl(216 22% 8% / .84));
+  border:1px solid color-mix(in srgb,var(--gd,#3a9bdc) 24%, var(--w2,rgba(255,255,255,.10)));
+  border-left:3px solid var(--gd,#3a9bdc);
+  border-radius:4px;
+  box-shadow:0 18px 48px -16px rgba(0,0,0,.7), 0 0 0 1px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
+  backdrop-filter:saturate(1.15) blur(10px);
   /* без анимации появления — окно сразу на месте (не дёргается при перерендере) */
 }
+/* верхняя «техно»-линия по кромке окна */
+.hp-vn-box::before{
+  content:'';position:absolute;top:-1px;left:40px;right:16px;height:1px;z-index:2;pointer-events:none;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--gd,#3a9bdc) 65%,transparent) 40%,transparent);
+  opacity:.75;
+}
+/* угловая засечка снизу-справа — лёгкий sci-fi-акцент рамки */
+.hp-vn-box::after{
+  content:'';position:absolute;right:-1px;bottom:-1px;width:22px;height:22px;z-index:2;pointer-events:none;
+  border-right:2px solid color-mix(in srgb,var(--gd,#3a9bdc) 50%,transparent);
+  border-bottom:2px solid color-mix(in srgb,var(--gd,#3a9bdc) 50%,transparent);
+  border-bottom-right-radius:4px;opacity:.6;
+}
 .hp-vn-box:focus-visible{outline:1px solid var(--gd,#3a9bdc);outline-offset:2px}
-/* «имя говорящего» — плоский HUD-заголовок с уходящей вправо линией (как .hp-cl-hdr) */
+/* «имя говорящего» — плавающая угловатая табличка-таб на верхней кромке окна */
 .hp-vn-name{
-  display:flex;align-items:center;gap:11px;margin-bottom:7px;
-  font-family:'Rajdhani',sans-serif;font-weight:700;font-size:clamp(12px,1.4vw,14px);
-  letter-spacing:.14em;color:var(--gdl,#5fb0e6);text-transform:uppercase;
+  position:absolute;top:-16px;left:18px;z-index:3;
+  display:inline-flex;align-items:center;gap:8px;
+  padding:7px 20px 7px 14px;
+  font-family:'Rajdhani',sans-serif;font-weight:700;font-size:clamp(13px,1.5vw,16px);
+  letter-spacing:.16em;color:#f2f9ff;text-transform:uppercase;line-height:1;
+  background:linear-gradient(135deg, var(--gd,#3a9bdc), color-mix(in srgb,var(--gd,#3a9bdc) 55%, #0a0d12));
+  border:1px solid color-mix(in srgb,var(--gdl,#5fb0e6) 55%,transparent);
+  border-bottom:none;
+  clip-path:polygon(0 0, 100% 0, calc(100% - 13px) 100%, 0 100%);
+  box-shadow:0 -2px 16px rgba(46,155,224,.30), 0 5px 12px -5px rgba(0,0,0,.65);
+  text-shadow:0 1px 2px rgba(0,0,0,.45);
 }
-.hp-vn-name::after{
-  content:'';flex:1;height:1px;
-  background:linear-gradient(to right,var(--w2,rgba(255,255,255,.10)),transparent);
-}
+.hp-vn-name::after{content:none}
 .hp-vn-text{
   font-family:'Inter','Rajdhani',sans-serif;
-  font-size:clamp(14px,1.65vw,17px);line-height:1.55;
-  color:var(--t1,#eaf4ff);min-height:2.3em;letter-spacing:.004em;
+  font-size:clamp(15px,1.75vw,18px);line-height:1.6;
+  color:var(--t1,#eaf4ff);min-height:2.4em;letter-spacing:.005em;
   text-shadow:0 1px 3px rgba(0,0,0,.7);
   white-space:pre-wrap;
 }
@@ -319,6 +339,13 @@
   animation:hpVnCaret .7s steps(1) infinite;
 }
 @keyframes hpVnCaret{ 50%{opacity:0} }
+/* индикатор «дальше» — пульсирующий ▾ после допечатанной реплики в рассказе */
+.hp-vn-box.hp-vn-narrating:not(.typing) .hp-vn-text::after{
+  content:'▾';margin-left:7px;color:var(--gd,#3a9bdc);font-size:.82em;
+  display:inline-block;animation:hpVnCont 1.15s ease-in-out infinite;
+  text-shadow:0 0 8px color-mix(in srgb,var(--gd,#3a9bdc) 70%,transparent);
+}
+@keyframes hpVnCont{0%,100%{transform:translateY(0);opacity:.45}50%{transform:translateY(3px);opacity:1}}
 .hp-vn-foot{
   display:flex;align-items:center;justify-content:space-between;gap:10px;
   margin-top:10px;flex-wrap:wrap;
@@ -340,7 +367,17 @@
 /* «пропустить/снова» — основное действие, акцентом */
 .hp-vn-next{color:var(--gdl,#5fb0e6);border-color:color-mix(in srgb,var(--gd,#3a9bdc) 35%,transparent)}
 .hp-vn-next:hover{color:#fff;border-color:var(--gd,#3a9bdc);background:color-mix(in srgb,var(--gd,#3a9bdc) 12%,transparent)}
-.hp-vn-foot .hp-hero-cta{margin:0;pointer-events:auto}
+.hp-vn-foot .hp-hero-cta{
+  margin:0;pointer-events:auto;
+  padding:12px 28px;font-size:13.5px;letter-spacing:2.5px;
+  box-shadow:0 0 20px var(--gds), 0 6px 18px rgba(0,0,0,.5);
+  animation:hpVnCtaPulse 2.6s ease-in-out infinite;
+}
+.hp-vn-foot .hp-hero-cta:hover{animation:none}
+@keyframes hpVnCtaPulse{
+  0%,100%{box-shadow:0 0 16px var(--gds), 0 6px 18px rgba(0,0,0,.5)}
+  50%{box-shadow:0 0 34px var(--gdd), 0 6px 22px rgba(0,0,0,.55)}
+}
 
 /* ── Выбор в диалоговом окне новеллы — плоский список строк ── */
 .hp-vn-choices{
@@ -390,9 +427,8 @@
 }
 
 /* ── Новелла: герб державы ФОНОМ за текстом (водяной знак, как в статье) ── */
-.hp-vn-box{overflow:hidden}   /* держим водяной знак в границах окна */
 .hp-vn-bgflag{
-  position:absolute;inset:0;z-index:0;pointer-events:none;
+  position:absolute;inset:0;z-index:0;pointer-events:none;border-radius:inherit;
   background-size:cover;background-repeat:no-repeat;background-position:right 24%;
   opacity:0;filter:saturate(.5) contrast(.95);
   /* приглушаем со стороны текста (слева) → чистая читаемость, герб «уходит» вправо */
@@ -401,8 +437,7 @@
   transition:opacity .35s ease;
 }
 .hp-vn-bgflag.show{opacity:.13}
-/* контент окна — НАД водяным знаком */
-.hp-vn-box > .hp-vn-name,
+/* контент окна — НАД водяным знаком (имя позиционируется само, z-index:3) */
 .hp-vn-box > .hp-vn-text,
 .hp-vn-box > .hp-vn-banner,
 .hp-vn-box > .hp-vn-choices,
@@ -514,7 +549,12 @@
     padding:16px 16px 14px;border-radius:0 0 6px 6px;border-top:none;border-left:2px solid var(--gd,#3a9bdc);
     max-height:none;overflow:visible;cursor:default;
   }
-  .hp-vn-name{font-size:13px}
+  /* на мобиле табличка имени — в потоке, флажком сверху карточки (не «нависает») */
+  .hp-vn-name{
+    position:relative;top:auto;left:auto;z-index:1;
+    align-self:flex-start;margin:0 0 9px;font-size:13px;
+    clip-path:none;border-radius:4px;border-bottom:1px solid color-mix(in srgb,var(--gdl,#5fb0e6) 40%,transparent);
+  }
   .hp-vn-text{font-size:16px;line-height:1.5;min-height:auto}
   .hp-vn-foot{margin-top:12px;gap:10px}
   .hp-vn-foot .hp-hero-cta{font-size:14px;padding:10px 14px}

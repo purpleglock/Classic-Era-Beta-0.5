@@ -1,3 +1,6 @@
+// © 2025–2026 Setis241 (setisalanstrong@gmail.com). Все права защищены.
+// Проприетарное ПО. Использование, копирование, изменение и распространение
+// без письменного разрешения правообладателя запрещены. См. файл LICENSE.
 // ════════════════════════════════════════════════════════════
 // AUTH — init, session, profile, auth UI
 // ════════════════════════════════════════════════════════════
@@ -406,13 +409,54 @@ function _sbSyncForRoute(slug) {
   else bind();
 })();
 
+// ── Правовые документы (Политика конфиденциальности / Соглашение) ──────────
+// Версия документов. При существенном изменении текстов поднимите дату —
+// тогда система попросит игроков принять новую редакцию.
+const LEGAL_VERSION = '2026-06-30';
+const LEGAL_DOCS = {
+  privacy: { file: 'legal/PRIVACY.md', title: 'ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ' },
+  terms:   { file: 'legal/TERMS.md',   title: 'ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ' }
+};
+const _legalCache = {};
+
+async function openLegal(slug) {
+  const doc = LEGAL_DOCS[slug]; if (!doc) return;
+  const t = document.getElementById('legal-mo-t');
+  const b = document.getElementById('legal-body');
+  if (t) t.textContent = doc.title;
+  if (b) b.innerHTML = '<div style="opacity:.6;padding:20px">Загрузка…</div>';
+  om('mo-legal');
+  try {
+    if (!_legalCache[slug]) {
+      const r = await fetch(doc.file + '?v=' + LEGAL_VERSION);
+      if (!r.ok) throw new Error('not found');
+      _legalCache[slug] = await r.text();
+    }
+    if (b) b.innerHTML = (typeof renderMd === 'function')
+      ? renderMd(_legalCache[slug])
+      : '<pre style="white-space:pre-wrap">' + _legalCache[slug].replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) + '</pre>';
+  } catch (e) {
+    if (b) b.innerHTML = '<div style="padding:20px;color:#ff9a9a">Не удалось загрузить документ.</div>';
+  }
+}
+
+// Зафиксировать согласие на сервере (вызывается после успешной регистрации)
+async function recordLegalConsent() {
+  try {
+    await sb.rpc('legal_accept', { p_docs: [
+      { slug: 'privacy', version: LEGAL_VERSION },
+      { slug: 'terms',   version: LEGAL_VERSION }
+    ]});
+  } catch (e) { console.warn('[wiki] legal consent record failed:', e); }
+}
+
 function showAuth(mode) {
   document.getElementById('auth-mo-t').textContent = mode==='login' ? 'ВХОД' : 'РЕГИСТРАЦИЯ';
   if (mode==='login') {
     document.getElementById('auth-form').innerHTML = `<div class="auth-box"><div class="auth-ey">${lang==='ru'?'ИДЕНТИФИКАЦИЯ':'SIGN IN'}</div><div class="fg"><label class="fl">Email</label><input class="fi" id="al-u" type="email" autocomplete="email"></div><div class="fg"><label class="fl">${lang==='ru'?'Пароль':'Password'}</label><input class="fi" id="al-p" type="password" autocomplete="current-password"></div><button class="btn btn-gd btn-fw" style="margin-top:6px" id="login-btn" onclick="subLogin()">${lang==='ru'?'Войти':'Sign In'}</button><div class="auth-sw">${lang==='ru'?'Нет аккаунта?':'No account?'} <a onclick="showAuth('register')">${lang==='ru'?'Зарегистрироваться':'Register'}</a></div></div>`;
     document.getElementById('al-p').addEventListener('keydown', e => { if(e.key==='Enter') subLogin(); });
   } else {
-    document.getElementById('auth-form').innerHTML = `<div class="auth-box"><div class="auth-ey">${lang==='ru'?'НОВЫЙ АККАУНТ':'NEW ACCOUNT'}</div><div class="fg"><label class="fl">Email</label><input class="fi" id="ar-u" type="email" autocomplete="email"></div><div class="fg"><label class="fl">${lang==='ru'?'Пароль (мин. 8)':'Password (min. 8)'}</label><input class="fi" id="ar-p" type="password" autocomplete="new-password"></div><div class="fg"><label class="fl">${lang==='ru'?'Повторите пароль':'Confirm password'}</label><input class="fi" id="ar-p2" type="password" autocomplete="new-password"></div><button class="btn btn-gd btn-fw" style="margin-top:6px" id="reg-btn" onclick="subReg()">${lang==='ru'?'Зарегистрироваться':'Register'}</button><div class="auth-sw">${lang==='ru'?'Есть аккаунт?':'Have an account?'} <a onclick="showAuth('login')">${lang==='ru'?'Войти':'Sign In'}</a></div></div>`;
+    document.getElementById('auth-form').innerHTML = `<div class="auth-box"><div class="auth-ey">${lang==='ru'?'НОВЫЙ АККАУНТ':'NEW ACCOUNT'}</div><div class="fg"><label class="fl">Email</label><input class="fi" id="ar-u" type="email" autocomplete="email"></div><div class="fg"><label class="fl">${lang==='ru'?'Пароль (мин. 8)':'Password (min. 8)'}</label><input class="fi" id="ar-p" type="password" autocomplete="new-password"></div><div class="fg"><label class="fl">${lang==='ru'?'Повторите пароль':'Confirm password'}</label><input class="fi" id="ar-p2" type="password" autocomplete="new-password"></div><label class="auth-consent" style="display:flex;gap:8px;align-items:flex-start;margin:10px 0 4px;font-size:12px;line-height:1.5;cursor:pointer"><input type="checkbox" id="ar-agree" style="margin-top:2px;flex-shrink:0"><span>${lang==='ru'?'Я ознакомлен(а) и принимаю':'I have read and accept the'} <a onclick="event.preventDefault();openLegal('terms')" style="text-decoration:underline">${lang==='ru'?'Пользовательское соглашение':'Terms of Use'}</a> ${lang==='ru'?'и':'and'} <a onclick="event.preventDefault();openLegal('privacy')" style="text-decoration:underline">${lang==='ru'?'Политику конфиденциальности':'Privacy Policy'}</a>${lang==='ru'?', включая согласие на обработку персональных данных.':', including consent to processing of personal data.'}</span></label><button class="btn btn-gd btn-fw" style="margin-top:6px" id="reg-btn" onclick="subReg()">${lang==='ru'?'Зарегистрироваться':'Register'}</button><div class="auth-sw">${lang==='ru'?'Есть аккаунт?':'Have an account?'} <a onclick="showAuth('login')">${lang==='ru'?'Войти':'Sign In'}</a></div></div>`;
     document.getElementById('ar-p2').addEventListener('keydown', e => { if(e.key==='Enter') subReg(); });
   }
   om('mo-auth'); setTimeout(() => document.querySelector('#auth-form .fi')?.focus(), 60);
@@ -440,6 +484,11 @@ async function subLogin() {
     // Обновление UI/данных — в фоне, не блокирует вход (onAuthStateChange тоже подхватит)
     (async () => {
       try {
+        // если регистрация требовала подтверждения email — фиксируем согласие сейчас
+        if (localStorage.getItem('wk_legal_pending')) {
+          await recordLegalConsent();
+          try { localStorage.removeItem('wk_legal_pending'); } catch(e){}
+        }
         await loadUserRole(data.user);
         loadProfile();
         updAuthUI();
@@ -464,18 +513,26 @@ async function subReg() {
   if (!email||!pass) { toast('Заполните все поля','err'); return; }
   if (pass.length<8) { toast('Пароль минимум 8 символов','err'); return; }
   if (pass!==pass2)  { toast('Пароли не совпадают','err'); return; }
+  if (!document.getElementById('ar-agree')?.checked) {
+    toast('Примите Пользовательское соглашение и Политику конфиденциальности','err'); return;
+  }
   const btn = document.getElementById('reg-btn');
   _authBusy=true; if(btn) btn.disabled=true;
   try {
     const { data, error } = await sb.auth.signUp({ email, password: pass });
     if (error) throw error;
-    if (data.user && !data.session) { toast('Проверьте email для подтверждения','inf'); cm('mo-auth'); }
+    if (data.user && !data.session) {
+      // сессии ещё нет (нужно подтверждение email) — запомним согласие,
+      // зафиксируем на сервере при первом входе
+      try { localStorage.setItem('wk_legal_pending', LEGAL_VERSION); } catch(e){}
+      toast('Проверьте email для подтверждения','inf'); cm('mo-auth');
+    }
     else if (data.session) {
       // Закрываем модалку сразу, данные подтягиваем в фоне
       cm('mo-auth');
       toast('Аккаунт создан!','ok');
       (async () => {
-        try { await loadUserRole(data.user); updAuthUI(); await loadPgs(); buildNav(); }
+        try { await recordLegalConsent(); await loadUserRole(data.user); updAuthUI(); await loadPgs(); buildNav(); }
         catch(e2) { console.warn('[wiki] post-register refresh failed:', e2); }
       })();
     }
