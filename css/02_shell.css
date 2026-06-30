@@ -771,6 +771,9 @@ a.n-home, a.n-sub, a.np, a.ng-t { text-decoration:none; }
 }
 
 /* ── legal document modal ── */
+/* выше гейта согласия (99998) и бан-гейта (99999), чтобы документ
+   открывался поверх блокирующего окна, а не за ним */
+#mo-legal { z-index: 100000; }
 .legal-body { font-size: 13px; line-height: 1.65; color: var(--t2); }
 .legal-body h1 { font-size: 19px; margin: 0 0 12px; }
 .legal-body h2 { font-size: 15px; margin: 18px 0 8px; }

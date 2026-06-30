@@ -587,8 +587,69 @@ function enforceBan() {
   document.body.style.overflow = 'hidden';
 }
 
+// ── Гейт согласия с документами (для УЖЕ зарегистрированных игроков) ─────────
+// Если вошедший игрок ещё не принял актуальную версию документов —
+// показываем блокирующее окно. Закрывает и приход новой редакции
+// (поднимите LEGAL_VERSION — у всех снова попросит согласие).
+let _legalOk = false, _legalChecking = false;
+
+function _removeLegalGate() {
+  const g = document.getElementById('legal-gate');
+  if (g) g.remove();
+  if (!document.getElementById('ban-gate')) document.body.style.overflow = '';
+}
+
+async function enforceLegalConsent() {
+  if (!user) { _legalOk = false; _removeLegalGate(); return; }
+  if (user.is_banned) { _removeLegalGate(); return; } // забаненному не до согласий
+  if (_legalOk || _legalChecking) return;
+  _legalChecking = true;
+  try {
+    const { data, error } = await sb
+      .from('legal_consents').select('doc_slug').eq('doc_version', LEGAL_VERSION);
+    if (error) return; // таблицы нет / ошибка — не блокируем вход
+    const s = new Set((data || []).map(r => r.doc_slug));
+    if (s.has('privacy') && s.has('terms')) { _legalOk = true; _removeLegalGate(); return; }
+    _showLegalGate();
+  } catch (e) { /* сеть — не блокируем */ }
+  finally { _legalChecking = false; }
+}
+
+function _showLegalGate() {
+  if (document.getElementById('legal-gate')) return;
+  const g = document.createElement('div');
+  g.id = 'legal-gate';
+  g.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(8,10,14,.97);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px';
+  g.innerHTML = `
+    <div style="max-width:480px;border:1px solid #2a3340;border-radius:14px;padding:30px 28px;background:linear-gradient(135deg,#141a22,#0e131a);box-shadow:0 20px 60px rgba(0,0,0,.6)">
+      <div style="font-family:Rajdhani,sans-serif;font-size:21px;font-weight:800;letter-spacing:.5px;color:#cdd8e2;margin-bottom:12px">Подтверждение документов</div>
+      <div style="font-size:13px;line-height:1.6;color:#aebac6;margin-bottom:16px">Чтобы продолжить пользоваться проектом, ознакомьтесь и примите
+        <a onclick="openLegal('terms')" style="color:#7fb0ff;text-decoration:underline;cursor:pointer">Пользовательское соглашение</a> и
+        <a onclick="openLegal('privacy')" style="color:#7fb0ff;text-decoration:underline;cursor:pointer">Политику конфиденциальности</a>,
+        включая согласие на обработку персональных данных.</div>
+      <label style="display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.5;color:#aebac6;cursor:pointer;margin-bottom:18px">
+        <input type="checkbox" id="legal-gate-cb" style="margin-top:2px;flex-shrink:0" onchange="var b=document.getElementById('legal-gate-ok');if(b)b.disabled=!this.checked">
+        <span>Я ознакомлен(а) и принимаю указанные документы.</span></label>
+      <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+        <button class="btn btn-gh" onclick="doLogout()">Выйти</button>
+        <button class="btn btn-gd" id="legal-gate-ok" disabled onclick="acceptLegalGate()">Принять и продолжить</button>
+      </div>
+    </div>`;
+  document.body.appendChild(g);
+  document.body.style.overflow = 'hidden';
+}
+
+async function acceptLegalGate() {
+  const btn = document.getElementById('legal-gate-ok'); if (btn) btn.disabled = true;
+  await recordLegalConsent();
+  _legalOk = true;
+  _removeLegalGate();
+  try { toast('Спасибо! Документы приняты','ok'); } catch(e){}
+}
+
 function updAuthUI() {
   enforceBan();
+  enforceLegalConsent();
   try { if (typeof tkUpdateVisibility === 'function') tkUpdateVisibility(); } catch (e) {}
   const btn = document.getElementById('auth-btn'); const dot = document.getElementById('adot'); const av = document.getElementById('auth-av'); const eb = document.getElementById('edit-btn');
   if (!btn) return;
