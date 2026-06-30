@@ -1931,10 +1931,10 @@ function ecDoctrineSpecials(app) {
     out.push('🪐 Все планеты родные — без терраформа');
     out.push('⚙ Пехота на Военном Заводе ×3');
     out.push('🔬 +1 слот исследований (машинный разум)');
-    out.push('⬢ 2 захвата подряд, затем перезарядка');
-  } else if (research.includes('pol.house_heavens')) {
-    out.push('⬢ 2 захвата подряд, затем перезарядка — «Дом в небесах»');
   }
+  // Пул захватов складывается по источникам (Экспансионизм + «Дом в небесах» + роботы).
+  const claimMax = ecClaimMax();
+  if (claimMax > 1) out.push(`⬢ ${claimMax} захвата подряд, затем перезарядка`);
   if (research.includes('pol.mind_supremacy')) out.push('🔬 +2 слота исследований — «Превосходство разума»');
   else if (research.includes('pol.light_knowledge')) out.push('🔬 +1 слот исследований — «Свет знаний»');
   const techno = ecTechnoSlots(app);
@@ -4169,8 +4169,15 @@ function ecClaimCooldownMs() {
   if (!EC.eco.last_system_claim) return 0;
   return Math.max(0, new Date(EC.eco.last_system_claim).getTime() + ecClaimCdDays() * 86400000 - Date.now());
 }
-// «Дом в небесах» (pol.house_heavens) ИЛИ роботы → пул из 2 захватов вместо 1.
-function ecClaimMax() { return (ecIsRobot() || ecIsExpansionist() || (EC.eco.research || []).includes('pol.house_heavens')) ? 2 : 1; }
+// Размер пула захватов: СКЛАДЫВАЕТСЯ по источникам, без потолка (зеркало economy_claim_system).
+//   база 1  +1 Экспансионизм  +1 «Дом в небесах»  +1 роботы.
+function ecClaimMax() {
+  let n = 1;
+  if (ecIsExpansionist()) n++;
+  if ((EC.eco.research || []).includes('pol.house_heavens')) n++;
+  if (ecIsRobot()) n++;
+  return n;
+}
 // Сколько захватов осталось в пуле (зеркало модели «пул» в economy_claim_system):
 //   кулдаун идёт → 0; кулдаун прошёл → пул пополнен (max); пул открыт → max − использовано.
 function ecClaimsLeft() {
@@ -4216,8 +4223,13 @@ function ecTabTerritory() {
         <button class="btn ${canClaim ? 'btn-gd' : 'btn-gh'} btn-sm" ${canClaim ? '' : 'disabled'} onclick="ecClaimSystem('${esc(id)}')">Колонизировать систему · ${ecNum(ecClaimCost())} ГС</button></div>`; }).join('')
     : `<div class="ec-empty">Нет смежных свободных систем. Расширяйтесь вдоль гиперпутей — соседние ничьи системы появятся здесь.</div>`;
   const claimMax = ecClaimMax();
+  const claimSrc = [
+    ecIsExpansionist() ? 'Экспансионизм' : null,
+    (EC.eco.research || []).includes('pol.house_heavens') ? '«Дом в небесах»' : null,
+    ecIsRobot() ? 'роботы' : null
+  ].filter(Boolean);
   const claimBullet = claimMax > 1
-    ? `Стоит ${ecNum(EC_CLAIM_COST)} ГС. Можно взять <b>${claimMax} системы подряд</b>${ecIsRobot() ? ' (бонус роботов)' : ' («Дом в небесах»)'}, затем перезарядка <b>${ecClaimCdDays()} дн.</b>`
+    ? `Стоит ${ecNum(EC_CLAIM_COST)} ГС. Можно взять <b>${claimMax} системы подряд</b>${claimSrc.length ? ' (' + claimSrc.join(' + ') + ')' : ''}, затем перезарядка <b>${ecClaimCdDays()} дн.</b>`
     : `Стоит ${ecNum(EC_CLAIM_COST)} ГС. После захвата — перезарядка <b>${ecClaimCdDays()} дн.</b> (срок зависит от доктрины).`;
   return `${ecIntro('🌐', 'Территория и расширение', 'Захватывайте звёздные системы, чтобы получать новые планеты под колонии.', ['Колонизировать можно только систему, <b>смежную по гиперпути</b> с вашей и <b>ничью</b> (серую).', claimBullet, 'Получив систему — заселяйте её планеты во вкладке «🏗 Колонии».'])}<div class="ec-section-title">Карта территории <span class="ec-hint">— ваши системы и доступные для колонизации</span></div>
     ${ecMinimap()}
@@ -6725,18 +6737,50 @@ function ecRecruitCard(r, atCap) {
   </div>`;
 }
 // ── Рынок рекрутов: отдельное окно (не забивает кабинет) ──
+// Остаток до метки времени словами: «2 д 3 ч» / «3 ч 42 мин» / «57 сек».
+function ecCountdown(ts) {
+  if (!ts) return null;
+  let s = Math.floor((new Date(ts).getTime() - Date.now()) / 1000);
+  if (s <= 0) return 'обновляется…';
+  const d = Math.floor(s / 86400); s -= d * 86400;
+  const h = Math.floor(s / 3600);  s -= h * 3600;
+  const m = Math.floor(s / 60);    s -= m * 60;
+  if (d > 0) return `${d} д ${h} ч`;
+  if (h > 0) return `${h} ч ${m} мин`;
+  if (m > 0) return `${m} мин ${s} сек`;
+  return `${s} сек`;
+}
+// Тик живого таймера в окне рынка: обновляет все .ec-rec-cd; на нуле — подтянуть свежий пул.
+function ecRecruitsTick() {
+  if (!document.getElementById('ec-recruits-host')) { ecRecruitsStopTimer(); return; }
+  const ag = EC.spyAgency;
+  const ts = ag && ag.refresh_at ? new Date(ag.refresh_at).getTime() : 0;
+  if (ts && ts - Date.now() <= 0 && !EC._recReloading) {     // окно суток истекло — обновить пул
+    EC._recReloading = true;
+    ecRpc('spy_recruits_list').then(a => {
+      if (a) { EC.spyAgency = a; EC.spyCounter = a.counterintel || EC.spyCounter; }
+      if (document.getElementById('ec-recruits-host')) ecRecruitsRender();
+      ecPaintCabinet();
+    }).catch(() => {}).finally(() => { EC._recReloading = false; });
+    return;
+  }
+  const txt = ecCountdown(ag && ag.refresh_at);
+  document.querySelectorAll('.ec-rec-cd').forEach(el => { el.textContent = txt || ''; });
+}
+function ecRecruitsStartTimer() { ecRecruitsStopTimer(); EC._recTimer = setInterval(ecRecruitsTick, 1000); }
+function ecRecruitsStopTimer() { if (EC._recTimer) { clearInterval(EC._recTimer); EC._recTimer = null; } }
 function ecRecruitsHtml() {
   const ag = EC.spyAgency || { cap: 0, hired: 0, recruits: [], refresh_at: null };
-  const refreshDays = ag.refresh_at ? Math.max(0, Math.ceil((new Date(ag.refresh_at).getTime() - Date.now()) / 86400000)) : null;
+  const cd = ecCountdown(ag.refresh_at);
   const atCap = (ag.hired || 0) >= (ag.cap || 0);
   const recruitsHtml = (ag.recruits || []).length
     ? `<div class="ec-agent-grid">${ag.recruits.map(r => ecRecruitCard(r, atCap)).join('')}</div>`
-    : '<div class="ec-empty" style="padding:14px">Список рекрутов пуст — обновится автоматически.</div>';
+    : `<div class="ec-empty" style="padding:14px">Список рекрутов пуст — свежие${cd ? ` через <b class="ec-rec-cd">${cd}</b>` : ' подвезут автоматически'}.</div>`;
   return `<div class="ec-recruits-modal-back" onclick="ecRecruitsClose(event)">
     <div class="ec-recruits-modal" onclick="event.stopPropagation()">
       <div class="ec-recruits-hd">
         <div><div class="ec-recruits-ttl">📋 Рынок рекрутов</div>
-          <div class="ec-recruits-sub">штат ${ag.hired || 0}/${ag.cap || 0}${refreshDays != null ? ` · обновится через ${refreshDays} дн.` : ''}${atCap ? ' · <b style="color:var(--color-warning,#e0a030)">потолок достигнут — стройте Центр Спецслужб</b>' : ''}</div></div>
+          <div class="ec-recruits-sub">штат ${ag.hired || 0}/${ag.cap || 0}${cd ? ` · обновление через <b class="ec-rec-cd">${cd}</b>` : ''}${atCap ? ' · <b style="color:var(--color-warning,#e0a030)">потолок достигнут — стройте Центр Спецслужб</b>' : ''}</div></div>
         <button class="ec-recruits-x" onclick="ecRecruitsClose()" title="Закрыть">✕</button>
       </div>
       <div class="ec-recruits-body">${recruitsHtml}</div>
@@ -6746,10 +6790,12 @@ function ecRecruitsOpen() {
   let host = document.getElementById('ec-recruits-host');
   if (!host) { host = document.createElement('div'); host.id = 'ec-recruits-host'; document.body.appendChild(host); }
   host.innerHTML = ecRecruitsHtml();
+  ecRecruitsStartTimer();
 }
 function ecRecruitsRender() { const host = document.getElementById('ec-recruits-host'); if (host) host.innerHTML = ecRecruitsHtml(); }
 function ecRecruitsClose(ev) {
   if (ev && ev.target && !ev.target.classList.contains('ec-recruits-modal-back') && ev.target.tagName !== 'BUTTON') return;
+  ecRecruitsStopTimer();
   document.getElementById('ec-recruits-host')?.remove();
 }
 
@@ -6847,7 +6893,7 @@ function ecTabIntel() {
 
   // Агентура: ростер нанятых (карточки-досье) + еженедельный рынок рекрутов
   const ag = EC.spyAgency || { cap: 0, hired: 0, roster: [], recruits: [], refresh_at: null };
-  const refreshDays = ag.refresh_at ? Math.max(0, Math.ceil((new Date(ag.refresh_at).getTime() - Date.now()) / 86400000)) : null;
+  const refreshCd = ecCountdown(ag.refresh_at);
   const atCap = (ag.hired || 0) >= (ag.cap || 0);
   const rosterHtml = (ag.roster || []).length
     ? `<div class="ec-agent-grid">${ag.roster.map(ecAgentCard).join('')}</div>`
@@ -6857,7 +6903,7 @@ function ecTabIntel() {
   const agencyBlock = `<div class="ec-dip-card">
       <div class="ec-dip-t" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <span>🕵 Агентура <span class="ec-hint">штат оперативников (${ag.hired || 0}/${ag.cap || 0})</span></span>
-        <button class="btn btn-gd btn-sm ec-recruit-open" onclick="ecRecruitsOpen()" title="${atCap ? 'Достигнут потолок — стройте Центр Спецслужб' : 'Нанять новых оперативников'}">📋 Рынок рекрутов${recCount ? ` · ${recCount}` : ''}${refreshDays != null ? ` <i style="opacity:.7;font-style:normal">· ${refreshDays} дн.</i>` : ''}</button>
+        <button class="btn btn-gd btn-sm ec-recruit-open" onclick="ecRecruitsOpen()" title="${atCap ? 'Достигнут потолок — стройте Центр Спецслужб' : 'Нанять новых оперативников'}">📋 Рынок рекрутов${recCount ? ` · ${recCount}` : ''}${refreshCd ? ` <i style="opacity:.7;font-style:normal">· ${refreshCd}</i>` : ''}</button>
       </div>
       ${rosterHtml}
       <div class="cn-fac-hint" style="margin-top:8px">Шевроны = <b>уровень</b> (растёт за успешные операции: выше успех, ниже раскрытие, сильнее перк; на 5-м — <b>второй перк</b>). 🎓 <b>Обучить</b> — тайная подготовка (2 ход., 120 ГС): +150 XP гарантированно, без риска.</div>

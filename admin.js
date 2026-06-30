@@ -230,12 +230,14 @@ function adPaint() {
     // надёжнее (полный re-render #pg на Vercel почему-то не показывал панель).
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
-    const TABS = [['factions', '🛠 Фракции'], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)']];
+    const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)']];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
     let tabContent;
-    if (AD.tab === 'unions')        tabContent = adUnionsPanel();
+    if (AD.tab === 'roadmap')        tabContent = adRmPanel();
+    else if (AD.tab === 'unions')   tabContent = adUnionsPanel();
     else if (AD.tab === 'portraits') tabContent = adPortraitsPanel();
     else if (AD.tab === 'vn')        tabContent = adVNPanel();
     else if (AD.tab === 'planets')   tabContent = adPlanetTexPanel();
@@ -1218,6 +1220,7 @@ function adSetTab(t) {
   AD.tab = t || 'factions';
   adPaint();
   if (AD.tab === 'market' && !AD.market) adMarketLoad();
+  if (AD.tab === 'roadmap' && !(AD.rm && AD.rm.loaded)) adRmLoad();
 }
 
 // ── Рынок NPC: загрузка состояния (config + ресурсы) через admin-RPC ──────────
@@ -3319,3 +3322,944 @@ async function adReloadPaint() {
   } catch (e) { toast('Ошибка обновления: ' + e.message, 'err'); }
   adPaint();
 }
+
+// ════════════════════════════════════════════════════════════════
+//  ДОРОЖНАЯ КАРТА РАЗРАБОТКИ — планировщик задач и дедлайнов
+//  Таблицы: dev_tasks + dev_roadmap_config (_dev_roadmap.sql).
+//  Три уровня: «Приёмная» (пул) → «Дорожная карта» (авто-план) →
+//  «Рассмотрение» (триаж: отказ/включение). Движок раскладки (WSJF +
+//  упаковка по рабочему календарю) считается живьём здесь, на клиенте.
+// ════════════════════════════════════════════════════════════════
+const RM_PRIO   = { 1:{l:'Низкий',c:'#5a7a8a'}, 2:{l:'Средний',c:'#5fb0e6'}, 3:{l:'Высокий',c:'#e6a35f'}, 4:{l:'Критичный',c:'#e6655f'} };
+const RM_STATUS = { pool:{l:'В пуле',c:'#8aa0b0'}, planned:{l:'В карте',c:'#5fb0e6'}, active:{l:'В работе',c:'#5fe6a3'}, testing:{l:'Тестирование',c:'#c08fe6'}, done:{l:'Завершено',c:'#7a8a6a'}, rejected:{l:'Отклонено',c:'#e6655f'} };
+const RM_TEST_DAYS = 7; // задача в тестировании держится 7 дней, затем авто-завершение
+const RM_CFG_DEF = { capacity_h:6, skip_weekends:true, w_value:1.0, w_priority:1.0, w_urgency:2.0, w_age:0.5, start_date:null };
+
+// ── АВТО-ОЦЕНКА ТРУДОЗАТРАТ ──────────────────────────────────────
+// «Направление» = реальная подсистема проекта, base = типичная база часов
+// под её сложность/связность (экономика и карта тяжелее, текстуры легче).
+// Для 'manual' (вне проекта) — оценка вводится руками. Каталог отражает то,
+// что реально есть в репозитории (срезы _economy/_market/_exchange/_spy/…,
+// зеркала economy.js/galaxy_map.js, админ-консоль и т.д.).
+const RM_AREAS = [
+  { id:'economy',  l:'Экономика / просперити',        base:14 },
+  { id:'market',   l:'Рынок / цены / добыча',          base:12 },
+  { id:'exchange', l:'Биржа / деривативы',             base:16 },
+  { id:'spy',      l:'Шпионаж / агенты',               base:16 },
+  { id:'faith',    l:'Вера / религия',                 base:14 },
+  { id:'diplo',    l:'Дипломатия / союзы',             base:12 },
+  { id:'defense',  l:'Оборона / орудия',               base:16 },
+  { id:'fleet',    l:'Флоты / перемещение',            base:14 },
+  { id:'map',      l:'Галактическая карта / рендер',   base:18 },
+  { id:'research', l:'Технологии / древо',             base:12 },
+  { id:'units',    l:'Юниты / конструктор',            base:14 },
+  { id:'mining',   l:'Добыча / ресурсы',               base:12 },
+  { id:'news',     l:'Новости / лента / события',      base:10 },
+  { id:'admin',    l:'Админ-консоль / инструменты',    base:10 },
+  { id:'ui',       l:'Общий UI / визуал',              base:8  },
+  { id:'planets',  l:'Планеты / текстуры / локации',   base:8  },
+  { id:'core',     l:'Ядро / Supabase / производит.',  base:12 },
+  { id:'manual',   l:'⌨ Вне проекта — ввести вручную', base:0  },
+];
+const RM_WTYPES = [
+  { id:'balance',  l:'Баланс / тюнинг чисел',          k:0.4 },
+  { id:'bugfix',   l:'Багфикс',                         k:0.6 },
+  { id:'mirror',   l:'Зеркало клиента (JS под SQL)',    k:0.7 },
+  { id:'ui',       l:'UI-панель / вкладка',             k:1.0 },
+  { id:'migration',l:'Миграция / бэкфилл данных',       k:1.2 },
+  { id:'slice',    l:'Новый SQL-срез (логика)',         k:1.4 },
+  { id:'refactor', l:'Рефактор / переработка',          k:1.6 },
+  { id:'feature',  l:'Полная фича (SQL+клиент+UI)',     k:2.2 },
+];
+const RM_CPLX = [
+  { id:'s', l:'Простая',        k:0.5 },
+  { id:'m', l:'Средняя',        k:1.0 },
+  { id:'l', l:'Крупная',        k:1.8 },
+  { id:'xl',l:'Очень крупная',  k:3.0 },
+];
+// Возвращает оценку в часах (кратно 0.5, минимум 1). null = ручной ввод.
+function adRmEstimate(areaId, typeId, cplxId) {
+  if (areaId === 'manual') return null;
+  const a = RM_AREAS.find(x => x.id === areaId) || RM_AREAS[0];
+  const t = RM_WTYPES.find(x => x.id === typeId) || RM_WTYPES.find(x => x.id === 'slice');
+  const c = RM_CPLX.find(x => x.id === cplxId) || RM_CPLX[1];
+  const raw = a.base * t.k * c.k;
+  return Math.max(1, Math.round(raw * 2) / 2);
+}
+function adRmAreaLabel(id) { const a = RM_AREAS.find(x => x.id === id); return a ? a.l : id; }
+function adRmTypeLabel(id) { const t = RM_WTYPES.find(x => x.id === id); return t ? t.l : id; }
+
+function adRmState() {
+  if (!AD.rm) AD.rm = { loaded:false, loading:false, err:null, tasks:[], cfg:Object.assign({}, RM_CFG_DEF), level:'roadmap', editing:null, showRejected:false };
+  return AD.rm;
+}
+
+// ── Загрузка задач + конфига ────────────────────────────────────
+async function adRmLoad() {
+  const S = adRmState();
+  S.loading = true; S.err = null; adPaint();
+  try {
+    const [tasks, cfgRows] = await Promise.all([
+      dbGet('dev_tasks', 'select=*&order=created_at.desc').catch(e => { throw e; }),
+      dbGet('dev_roadmap_config', 'id=eq.1&select=*').catch(() => []),
+    ]);
+    S.tasks = (tasks || []).map(adRmNorm);
+    // авто-завершение: «тестирование» истекло (прошло 7 дней) → завершено
+    const now = Date.now();
+    const expired = S.tasks.filter(t => t.status === 'testing' && t.testing_until && new Date(t.testing_until).getTime() <= now);
+    for (const t of expired) {
+      try { await dbPatch('dev_tasks', 'id=eq.' + t.id, { status:'done' }); t.status = 'done'; } catch (_) {}
+    }
+    const c = (cfgRows && cfgRows[0]) || {};
+    S.cfg = Object.assign({}, RM_CFG_DEF, {
+      capacity_h:Number(c.capacity_h ?? 6), skip_weekends:c.skip_weekends !== false,
+      w_value:Number(c.w_value ?? 1), w_priority:Number(c.w_priority ?? 1),
+      w_urgency:Number(c.w_urgency ?? 2), w_age:Number(c.w_age ?? 0.5),
+      start_date:c.start_date || null,
+    });
+    S.loaded = true;
+  } catch (e) {
+    S.err = e.message || String(e);
+    if (/relation .*dev_tasks.* does not exist|404|Not Found|PGRST205/i.test(S.err)) S.needSql = true;
+  }
+  S.loading = false; adPaint();
+}
+function adRmNorm(t) {
+  t.priority = Number(t.priority) || 2;
+  t.value    = Number(t.value); if (!t.value && t.value !== 0) t.value = 5;
+  t.effort_h = Number(t.effort_h) || 0;
+  t.progress = Number(t.progress) || 0;
+  t.depends_on = Array.isArray(t.depends_on) ? t.depends_on.map(Number) : [];
+  t.tags = Array.isArray(t.tags) ? t.tags : [];
+  t.images = Array.isArray(t.images) ? t.images : [];
+  return t;
+}
+
+// ── Утилиты дат/чисел ───────────────────────────────────────────
+function adRmToday() { const d = new Date(); d.setHours(0,0,0,0); return d; }
+function adRmDayFloor(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function adRmClamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+// idx-й рабочий день (0-based) от start (пропуская выходные, если skipW)
+function adRmWorkDay(start, idx, skipW) {
+  let d = adRmDayFloor(start), i = 0;
+  while (true) {
+    const wd = d.getDay();
+    if (!skipW || (wd !== 0 && wd !== 6)) { if (i === idx) return new Date(d); i++; }
+    d.setDate(d.getDate() + 1);
+    if (i > 5000) return new Date(d);
+  }
+}
+// рабочий-дневной индекс календарной даты относительно start
+function adRmIdxOfDate(start, date, skipW) {
+  const a = adRmDayFloor(start), b = adRmDayFloor(date);
+  let cur = new Date(a), count = 0;
+  if (b >= a) { while (cur < b) { cur.setDate(cur.getDate()+1); const wd=cur.getDay(); if (!skipW || (wd!==0 && wd!==6)) count++; } return count; }
+  while (cur > b) { cur.setDate(cur.getDate()-1); const wd=cur.getDay(); if (!skipW || (wd!==0 && wd!==6)) count--; } return count;
+}
+function adRmFmtDate(d) { return d ? d.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit' }) : '—'; }
+function adRmFmtFull(d) { return d ? d.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'2-digit' }) : '—'; }
+
+// ── ДВИЖОК ПЛАНИРОВЩИКА: WSJF + последовательная упаковка по календарю ──
+// Один разработчик-ресурс (задачи не пересекаются). Порядок выбирается жадно
+// по WSJF (Cost of Delay / размер) среди готовых (зависимости выполнены),
+// дедлайны влияют на срочность → тянут задачу вперёд. Возвращает копии задач
+// с проектными датами _startDate/_endDate, флагом _late и оценками.
+function adRmSchedule(tasks, cfg) {
+  const cap   = Math.max(0.5, Number(cfg.capacity_h) || 6);
+  const skipW = !!cfg.skip_weekends;
+  const W = { value:+cfg.w_value || 1, prio:+cfg.w_priority || 1, urg:+cfg.w_urgency || 2, age:+cfg.w_age || 0.5 };
+  const start = cfg.start_date ? new Date(cfg.start_date + 'T00:00:00') : adRmToday();
+  const today = adRmToday();
+  const sched = tasks.filter(t => t.status === 'planned' || t.status === 'active');
+  const byId  = new Map(tasks.map(t => [t.id, t]));
+
+  sched.forEach(t => {
+    const effortDays = Math.max(0.1, (Number(t.effort_h) || 0) / cap);
+    const valueScore = adRmClamp(Number(t.value) || 5, 0, 10);
+    const prioScore  = ({ 1:2.5, 2:5, 3:7.5, 4:10 })[t.priority] || 5;
+    const ageDays    = Math.max(0, (today - new Date(t.created_at)) / 864e5);
+    const ageScore   = Math.min(10, ageDays / 3);
+    let urg;
+    if (t.deadline) {
+      const dl = new Date(t.deadline + 'T23:59:59');
+      const daysToDl = (dl - today) / 864e5;
+      const slack = daysToDl - effortDays;
+      urg = slack <= 0 ? 10 : adRmClamp(10 * (1 - slack / 30), 0, 10);
+    } else urg = 2;
+    const cod = W.value*valueScore + W.prio*prioScore + W.urg*urg + W.age*ageScore;
+    t._cod = cod; t._effortDays = effortDays; t._wsjf = cod / Math.max(0.5, effortDays);
+    t._urg = urg; t._prioScore = prioScore; t._valueScore = valueScore;
+  });
+
+  const placed = new Map();
+  const remaining = new Set(sched.map(t => t.id));
+  let resourceFree = 0, guard = 0;
+  while (remaining.size && guard++ < 10000) {
+    const ready = [...remaining].map(id => byId.get(id)).filter(t =>
+      (t.depends_on || []).filter(d => remaining.has(d)).length === 0);
+    const cyc = ready.length === 0;
+    const pool = cyc ? [...remaining].map(id => byId.get(id)) : ready;
+    // активные — всегда вперёд (они уже в работе), далее по WSJF
+    const pick = pool.sort((a, b) =>
+      (b.status === 'active') - (a.status === 'active') || b._wsjf - a._wsjf)[0];
+    let depFin = 0;
+    (pick.depends_on || []).forEach(d => { const p = placed.get(d); if (p) depFin = Math.max(depFin, p.finishWH); });
+    const s = Math.max(resourceFree, depFin);
+    const f = s + (Number(pick.effort_h) || 0);
+    placed.set(pick.id, { startWH:s, finishWH:f, cycle:cyc });
+    resourceFree = f;
+    remaining.delete(pick.id);
+  }
+
+  const out = sched.map(t => {
+    const p = placed.get(t.id) || { startWH:0, finishWH:0 };
+    const startIdx = Math.floor(p.startWH / cap);
+    const endIdx   = Math.max(startIdx, Math.ceil(p.finishWH / cap) - 1);
+    const startDate = adRmWorkDay(start, startIdx, skipW);
+    const endDate   = adRmWorkDay(start, endIdx, skipW);
+    let late = false, slackDays = null;
+    if (t.deadline) {
+      const dl = new Date(t.deadline + 'T23:59:59');
+      late = endDate > dl;
+      slackDays = Math.round((dl - endDate) / 864e5);
+    }
+    return Object.assign({}, t, { _startIdx:startIdx, _endIdx:endIdx, _startDate:startDate, _endDate:endDate, _late:late, _slackDays:slackDays, _cycle:p.cycle });
+  }).sort((a, b) => a._startIdx - b._startIdx || b._wsjf - a._wsjf);
+  out._start = start; out._cap = cap; out._skipW = skipW;
+  return out;
+}
+
+// ── Главная панель ──────────────────────────────────────────────
+function adRmPanel() {
+  const S = adRmState();
+  if (S.needSql) return adRmSqlHint();
+  if (!S.loaded && !S.err) return `<div class="sload" style="min-height:160px"><div class="pulse-loader"></div></div>`;
+  if (S.err && !S.loaded) return `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px">Ошибка загрузки: ${esc(S.err)}<br><button class="btn btn-gh btn-sm" onclick="adRmLoad()" style="margin-top:8px">↺ Повторить</button></div>`;
+
+  const pool   = S.tasks.filter(t => t.status === 'pool').length;
+  const planned= S.tasks.filter(t => t.status === 'planned' || t.status === 'active').length;
+  const levels = [
+    ['capture', '➕ Приёмная',       null],
+    ['roadmap', '🗺 Дорожная карта', planned || null],
+    ['triage',  '⚖ Рассмотрение',   pool || null],
+  ];
+  const nav = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+    ${levels.map(([id, lbl, n]) => `<button class="btn ${S.level === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adRmSetLevel('${id}')" style="font-size:13px;padding:8px 14px">${lbl}${n != null ? ` <span style="opacity:.6;font-size:11px">${n}</span>` : ''}</button>`).join('')}
+    <div style="flex:1"></div>
+    <button class="btn btn-gh btn-sm" onclick="adRmLoad()" title="Перезагрузить из БД">↻</button>
+  </div>`;
+
+  let body;
+  try {
+    if (S.level === 'capture')      body = adRmCaptureView();
+    else if (S.level === 'triage')  body = adRmTriageView();
+    else                            body = adRmRoadmapView();
+  } catch (e) {
+    body = `<div style="color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px">Ошибка раздела: ${esc(e.message || String(e))}</div>`;
+  }
+
+  const head = `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:6px">
+    <div>
+      <div style="font-family:var(--font-display,sans-serif);font-size:19px;font-weight:700;color:var(--gdl,#5fb0e6);letter-spacing:.5px">🗺 Дорожная карта разработки</div>
+      <div style="font-size:12px;color:var(--t3,#8aa0b0);margin-top:4px">Авто-планировщик: срочность (WSJF) + проектные сроки по дедлайнам. ${S.tasks.length} задач · в пуле ${pool} · в карте ${planned}</div>
+    </div>
+  </div>`;
+  return head + nav + body;
+}
+
+function adRmSqlHint() {
+  return `<div style="padding:20px;border:1px solid var(--gd,#3a7fbf);border-radius:10px;background:var(--b2,#141a22)">
+    <div style="font-size:15px;font-weight:700;color:var(--gdl,#5fb0e6);margin-bottom:8px">⚙ Нужно применить SQL-срез</div>
+    <div style="font-size:13px;color:var(--t2,#c0ccd6);line-height:1.5">
+      Таблицы планировщика ещё нет в базе. Откройте <b>Supabase → SQL Editor</b> и выполните файл
+      <code style="background:var(--b3,#0f141b);padding:2px 6px;border-radius:4px">_dev_roadmap.sql</code> целиком (создаёт <code>dev_tasks</code> + <code>dev_roadmap_config</code> с RLS только для стаффа). Затем — кнопка ниже.
+    </div>
+    <button class="btn btn-gd btn-sm" onclick="adRmLoad()" style="margin-top:12px">↻ Я применил — проверить</button>
+  </div>`;
+}
+
+function adRmSetLevel(l) { adRmState().level = l; adPaint(); }
+
+// ────────────────────────────────────────────────────────────────
+//  УРОВЕНЬ 1 — ПРИЁМНАЯ (быстрый ввод задачи в общий пул)
+// ────────────────────────────────────────────────────────────────
+function adRmCaptureView() {
+  const S = adRmState();
+  const linkable = S.tasks.filter(t => t.status !== 'rejected');
+  const inp = 'width:100%;padding:9px 11px;font-size:14px;background:var(--b2,#141a22);color:var(--t1,#e8edf2);border:1px solid var(--w2,#2a3340);border-radius:7px;box-sizing:border-box';
+  const lbl = 'display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin:0 0 5px';
+  const recent = S.tasks.filter(t => t.status === 'pool').slice(0, 6);
+  const est0 = adRmEstimate('economy', 'slice', 'm');
+
+  return `<div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:22px;align-items:start">
+    <div style="border:1px solid var(--w2,#2a3340);border-radius:12px;background:var(--b2,#141a22);padding:20px">
+      <div style="font-size:15px;font-weight:700;color:var(--t1,#e8edf2);margin-bottom:4px">Новая задача → общий пул</div>
+      <div style="font-size:12px;color:var(--t3,#8aa0b0);margin-bottom:16px">Сначала фиксируем мысль. Приоритет и сроки можно уточнить позже на «Рассмотрении».</div>
+
+      <div style="margin-bottom:14px"><label style="${lbl}">Заголовок</label>
+        <input id="rm-n-title" style="${inp}" placeholder="Что нужно сделать"></div>
+
+      <div style="margin-bottom:14px"><label style="${lbl}">Описание / критерии готовности</label>
+        <textarea id="rm-n-body" rows="3" style="${inp};resize:vertical" placeholder="Подробности, зачем, как проверить готовность"></textarea></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div><label style="${lbl}">Приоритет</label>
+          <select id="rm-n-prio" style="${inp}">${[1,2,3,4].map(p => `<option value="${p}"${p===2?' selected':''}>${RM_PRIO[p].l}</option>`).join('')}</select></div>
+        <div><label style="${lbl}">Ценность (1–10)</label>
+          <input id="rm-n-value" type="number" min="1" max="10" value="5" style="${inp}"></div>
+      </div>
+
+      <div style="margin-bottom:14px"><label style="${lbl}">Направление работ</label>
+        <select id="rm-n-area" style="${inp}" onchange="adRmEstChange()">
+          ${RM_AREAS.map(a => `<option value="${a.id}"${a.id==='economy'?' selected':''}>${esc(a.l)}</option>`).join('')}
+        </select></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px" id="rm-n-estrow">
+        <div><label style="${lbl}">Тип работ</label>
+          <select id="rm-n-wtype" style="${inp}" onchange="adRmEstChange()">
+            ${RM_WTYPES.map(t => `<option value="${t.id}"${t.id==='slice'?' selected':''}>${esc(t.l)}</option>`).join('')}</select></div>
+        <div><label style="${lbl}">Масштаб</label>
+          <select id="rm-n-cplx" style="${inp}" onchange="adRmEstChange()">
+            ${RM_CPLX.map(c => `<option value="${c.id}"${c.id==='m'?' selected':''}>${esc(c.l)}</option>`).join('')}</select></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px">
+        <div><label style="${lbl}">Оценка, часов</label>
+          <input id="rm-n-effort" type="number" min="0.5" step="0.5" value="${est0}" style="${inp}" oninput="document.getElementById('rm-n-auto').checked=false;adRmEstHint()"></div>
+        <div><label style="${lbl}">Дедлайн (необязательно)</label>
+          <input id="rm-n-deadline" type="date" style="${inp}"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--t3,#8aa0b0);margin-bottom:16px;cursor:pointer">
+        <input id="rm-n-auto" type="checkbox" checked onchange="adRmEstChange()"> оценивать автоматически по направлению
+        <span id="rm-n-esthint" style="color:var(--t4,#6a7a88);font-size:11px">≈ ${est0} ч</span>
+      </label>
+
+      <div style="margin-bottom:14px"><label style="${lbl}">Теги (через запятую)</label>
+        <input id="rm-n-tags" style="${inp}" placeholder="bug, экономика, ui"></div>
+
+      <div style="margin-bottom:18px"><label style="${lbl}">Зависит от (предшественники)</label>
+        <select id="rm-n-deps" multiple size="${Math.min(5, Math.max(2, linkable.length))}" style="${inp};height:auto">
+          ${linkable.map(t => `<option value="${t.id}">${esc(t.code || ('#'+t.id))} · ${esc((t.title||'').slice(0,48))}</option>`).join('') || '<option disabled>пока нет других задач</option>'}
+        </select>
+        <div style="font-size:11px;color:var(--t4,#6a7a88);margin-top:4px">Ctrl/⌘ — выбрать несколько. Задача не начнётся раньше, чем завершатся предшественники.</div></div>
+
+      <div style="margin-bottom:18px"><label style="${lbl}">Картинки (скриншоты, макеты)</label>
+        <div id="rm-n-imgs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">${adRmThumbStrip(_rmNewImgs, 'adRmUnstageImg')}</div>
+        <input type="file" accept="image/*" multiple id="rm-n-imgfile" style="display:none" onchange="adRmStageImg(this)">
+        <button class="btn btn-gh btn-sm" type="button" onclick="document.getElementById('rm-n-imgfile').click()">🖼 Добавить картинки</button>
+        <span style="font-size:11px;color:var(--t4,#6a7a88);margin-left:8px">сжимаются автоматически</span></div>
+
+      <button class="btn btn-gd" onclick="adRmCreate()" style="width:100%;padding:11px;font-size:14px;font-weight:700">➕ Добавить в пул</button>
+    </div>
+
+    <div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:10px">Недавно в пуле</div>
+      ${recent.length ? recent.map(t => adRmMiniCard(t)).join('') : `<div style="padding:18px;border:1px dashed var(--w2,#2a3340);border-radius:10px;color:var(--t4,#6a7a88);font-size:12px;text-align:center">Пул пуст — добавьте первую задачу</div>`}
+      ${recent.length ? `<button class="btn btn-gh btn-sm" onclick="adRmSetLevel('triage')" style="width:100%;margin-top:10px">⚖ Перейти к рассмотрению →</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function adRmMiniCard(t) {
+  const p = RM_PRIO[t.priority] || RM_PRIO[2];
+  return `<div style="border:1px solid var(--w2,#2a3340);border-left:3px solid ${p.c};border-radius:8px;background:var(--b2,#141a22);padding:10px 12px;margin-bottom:8px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(t.code || '')}</span>
+      <span style="font-size:13px;font-weight:600;color:var(--t1,#e8edf2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.title)}</span>
+    </div>
+    <div style="font-size:11px;color:var(--t3,#8aa0b0);margin-top:3px">${p.l} · ${t.effort_h} ч${t.deadline ? ` · до ${esc(t.deadline)}` : ''}</div>
+  </div>`;
+}
+
+// Пересчёт авто-оценки при смене направления/типа/масштаба или галки «авто».
+// Меняет ТОЛЬКО значение поля и подсказку — без перерисовки формы (фокус цел).
+function adRmEstChange() {
+  const g = id => document.getElementById(id);
+  const area = g('rm-n-area') ? g('rm-n-area').value : 'manual';
+  const isManual = area === 'manual';
+  const auto = g('rm-n-auto');
+  const estRow = g('rm-n-estrow');
+  // вне проекта — прячем тип/масштаб, оценка только вручную
+  if (estRow) estRow.style.display = isManual ? 'none' : 'grid';
+  if (auto) { auto.disabled = isManual; if (isManual) auto.checked = false; }
+  if (!isManual && auto && auto.checked) {
+    const est = adRmEstimate(area, g('rm-n-wtype').value, g('rm-n-cplx').value);
+    if (g('rm-n-effort')) g('rm-n-effort').value = est;
+  }
+  adRmEstHint();
+}
+function adRmEstHint() {
+  const g = id => document.getElementById(id);
+  const span = g('rm-n-esthint'); if (!span) return;
+  const area = g('rm-n-area') ? g('rm-n-area').value : 'manual';
+  if (area === 'manual') { span.textContent = 'вручную'; return; }
+  const est = adRmEstimate(area, g('rm-n-wtype').value, g('rm-n-cplx').value);
+  const auto = g('rm-n-auto');
+  span.textContent = (auto && auto.checked) ? `≈ ${est} ч` : `(авто ≈ ${est} ч)`;
+}
+
+async function adRmCreate() {
+  const g = id => document.getElementById(id);
+  const title = (g('rm-n-title').value || '').trim();
+  if (!title) { toast('Введите заголовок', 'err'); return; }
+  const deps = [...(g('rm-n-deps').selectedOptions || [])].map(o => Number(o.value)).filter(Boolean);
+  const tags = (g('rm-n-tags').value || '').split(',').map(s => s.trim()).filter(Boolean);
+  const area = g('rm-n-area') ? g('rm-n-area').value : 'manual';
+  const wtype = g('rm-n-wtype') ? g('rm-n-wtype').value : null;
+  const cplx = g('rm-n-cplx') ? g('rm-n-cplx').value : null;
+  const autoEst = !!(g('rm-n-auto') && g('rm-n-auto').checked) && area !== 'manual';
+  const row = {
+    title,
+    body: (g('rm-n-body').value || '').trim(),
+    status: 'pool',
+    priority: Number(g('rm-n-prio').value) || 2,
+    value: adRmClamp(Number(g('rm-n-value').value) || 5, 1, 10),
+    effort_h: Math.max(0.5, Number(g('rm-n-effort').value) || 8),
+    deadline: g('rm-n-deadline').value || null,
+    area, work_type: wtype, complexity: cplx, effort_auto: autoEst,
+    tags, depends_on: deps, images: _rmNewImgs.slice(),
+    created_email: (typeof user !== 'undefined' && user && user.email) || null,
+  };
+  try {
+    const ins = await dbPost('dev_tasks', row);
+    const created = Array.isArray(ins) ? ins[0] : ins;
+    if (created) adRmState().tasks.unshift(adRmNorm(created));
+    _rmNewImgs = [];
+    toast(`Задача ${created && created.code ? created.code : ''} в пуле`, 'ok');
+    adPaint();
+  } catch (e) { toast('Не сохранилось: ' + (e.message || e), 'err'); }
+}
+
+// ────────────────────────────────────────────────────────────────
+//  УРОВЕНЬ 3 — РАССМОТРЕНИЕ (триаж пула: отказ / включение в карту)
+// ────────────────────────────────────────────────────────────────
+function adRmTriageView() {
+  const S = adRmState();
+  const pool = S.tasks.filter(t => t.status === 'pool');
+  const rejected = S.tasks.filter(t => t.status === 'rejected');
+
+  const head = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+    <div style="font-size:14px;color:var(--t2,#c0ccd6)">На рассмотрении: <b style="color:var(--t1,#e8edf2)">${pool.length}</b></div>
+    <div style="flex:1"></div>
+    <label style="font-size:12px;color:var(--t3,#8aa0b0);display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" ${S.showRejected ? 'checked' : ''} onchange="adRmState().showRejected=this.checked;adPaint()"> показать отклонённые (${rejected.length})</label>
+  </div>`;
+
+  const cards = pool.length
+    ? pool.map(t => adRmTriageCard(t)).join('')
+    : `<div style="padding:30px;border:1px dashed var(--w2,#2a3340);border-radius:12px;color:var(--t4,#6a7a88);text-align:center">Пул пуст. Новые задачи добавляются на «Приёмной».</div>`;
+
+  let rejBlock = '';
+  if (S.showRejected && rejected.length) {
+    rejBlock = `<div style="margin-top:22px"><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t4,#6a7a88);margin-bottom:10px">Отклонённые</div>
+      ${rejected.map(t => `<div style="border:1px solid var(--w1,#1e2630);border-radius:8px;background:var(--b3,#0f141b);padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;opacity:.75">
+        <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(t.code||'')}</span>
+        <span style="flex:1;min-width:0;font-size:13px;color:var(--t2,#c0ccd6);text-decoration:line-through;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.title)}</span>
+        ${t.reject_reason ? `<span style="font-size:11px;color:var(--t4,#6a7a88)">${esc(t.reject_reason)}</span>` : ''}
+        <button class="btn btn-gh btn-sm" onclick="adRmReconsider(${t.id})" title="Вернуть в пул">↩</button>
+        <button class="btn btn-gh btn-sm" onclick="adRmDelete(${t.id})" title="Удалить">🗑</button>
+      </div>`).join('')}</div>`;
+  }
+  return head + cards + rejBlock;
+}
+
+function adRmTriageCard(t) {
+  const S = adRmState();
+  const p = RM_PRIO[t.priority] || RM_PRIO[2];
+  const inp = 'padding:6px 8px;font-size:12px;background:var(--b3,#0f141b);color:var(--t1,#e8edf2);border:1px solid var(--w2,#2a3340);border-radius:6px';
+  const lbl = 'font-size:10px;color:var(--t4,#6a7a88);display:block;margin-bottom:3px';
+  const depNames = (t.depends_on || []).map(id => { const d = S.tasks.find(x => x.id === id); return d ? (d.code || ('#'+id)) : ('#'+id); });
+  return `<div style="border:1px solid var(--w2,#2a3340);border-left:3px solid ${p.c};border-radius:12px;background:var(--b2,#141a22);padding:16px;margin-bottom:12px">
+    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
+      <span style="font-family:monospace;font-size:11px;color:var(--t4,#6a7a88);padding-top:2px">${esc(t.code||'')}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:700;color:var(--t1,#e8edf2)">${esc(t.title)}</div>
+        ${t.body ? `<div style="font-size:12px;color:var(--t3,#8aa0b0);margin-top:4px;white-space:pre-wrap">${esc(t.body)}</div>` : ''}
+        ${(t.tags && t.tags.length) ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px">${t.tags.map(tg => `<span style="font-size:10px;background:var(--b3,#0f141b);border:1px solid var(--w2,#2a3340);color:var(--t3,#8aa0b0);padding:2px 7px;border-radius:10px">${esc(tg)}</span>`).join('')}</div>` : ''}
+        ${depNames.length ? `<div style="font-size:11px;color:var(--t4,#6a7a88);margin-top:6px">↳ зависит от: ${esc(depNames.join(', '))}</div>` : ''}
+      </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;padding:12px 0;border-top:1px solid var(--w1,#1e2630)">
+      <div><label style="${lbl}">Направление</label>
+        <select id="rm-t-area-${t.id}" style="${inp}" onchange="adRmSet(${t.id},'area',this.value)">${RM_AREAS.map(a => `<option value="${a.id}"${a.id===(t.area||'manual')?' selected':''}>${esc(a.l)}</option>`).join('')}</select></div>
+      <div><label style="${lbl}">Тип</label>
+        <select id="rm-t-wtype-${t.id}" style="${inp}" onchange="adRmSet(${t.id},'work_type',this.value)">${RM_WTYPES.map(x => `<option value="${x.id}"${x.id===(t.work_type||'slice')?' selected':''}>${esc(x.l)}</option>`).join('')}</select></div>
+      <div><label style="${lbl}">Масштаб</label>
+        <select id="rm-t-cplx-${t.id}" style="${inp}" onchange="adRmSet(${t.id},'complexity',this.value)">${RM_CPLX.map(x => `<option value="${x.id}"${x.id===(t.complexity||'m')?' selected':''}>${esc(x.l)}</option>`).join('')}</select></div>
+      <div><button class="btn btn-gh btn-sm" onclick="adRmReEstimate(${t.id})" title="Посчитать часы по направлению">≈ оценить</button></div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end;padding:0 0 4px">
+      <div><label style="${lbl}">Приоритет</label>
+        <select style="${inp}" onchange="adRmSet(${t.id},'priority',this.value,true)">${[1,2,3,4].map(x => `<option value="${x}"${x===t.priority?' selected':''}>${RM_PRIO[x].l}</option>`).join('')}</select></div>
+      <div><label style="${lbl}">Ценность</label>
+        <input type="number" min="1" max="10" value="${t.value}" style="${inp};width:64px" onchange="adRmSet(${t.id},'value',this.value,true)"></div>
+      <div><label style="${lbl}">Часов${t.effort_auto ? ' <span style="color:var(--gdl,#5fb0e6)">авто</span>' : ''}</label>
+        <input type="number" min="0.5" step="0.5" value="${t.effort_h}" style="${inp};width:74px" onchange="adRmSetEffort(${t.id},this.value)"></div>
+      <div><label style="${lbl}">Дедлайн</label>
+        <input type="date" value="${t.deadline||''}" style="${inp}" onchange="adRmSet(${t.id},'deadline',this.value||null)"></div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-gh btn-sm" onclick="adRmReject(${t.id})" style="color:#e6655f;border-color:#e6655f">✕ Отклонить</button>
+        <button class="btn btn-gd btn-sm" onclick="adRmAccept(${t.id})">✓ В дорожную карту →</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Ручная правка часов в триаже = снимаем флаг авто-оценки.
+async function adRmSetEffort(id, value) {
+  await adRmPatch(id, { effort_h: Math.max(0.5, Number(value) || 8), effort_auto: false });
+}
+// Пересчитать часы по выбранному направлению/типу/масштабу (кнопка «≈ оценить»).
+async function adRmReEstimate(id) {
+  const g = sfx => document.getElementById('rm-t-' + sfx + '-' + id);
+  const area = g('area') ? g('area').value : 'manual';
+  if (area === 'manual') { toast('«Вне проекта» — задайте часы вручную', 'err'); return; }
+  const est = adRmEstimate(area, g('wtype').value, g('cplx').value);
+  await adRmPatch(id, { area, work_type:g('wtype').value, complexity:g('cplx').value, effort_h:est, effort_auto:true }, `Оценка ≈ ${est} ч`);
+}
+
+async function adRmAccept(id) {
+  await adRmPatch(id, { status:'planned', planned_at:new Date().toISOString() }, 'В дорожной карте');
+}
+async function adRmReject(id) {
+  const reason = (prompt('Причина отказа (необязательно):', '') || '').trim();
+  await adRmPatch(id, { status:'rejected', reject_reason:reason || null }, 'Отклонено');
+}
+async function adRmReconsider(id) { await adRmPatch(id, { status:'pool', reject_reason:null }, 'Возвращено в пул'); }
+
+// ────────────────────────────────────────────────────────────────
+//  УРОВЕНЬ 2 — ДОРОЖНАЯ КАРТА (авто-планировщик + Гант + таблица)
+// ────────────────────────────────────────────────────────────────
+function adRmRoadmapView() {
+  const S = adRmState();
+  const scheduled = adRmSchedule(S.tasks, S.cfg);
+  const testing = S.tasks.filter(t => t.status === 'testing');
+  const done = S.tasks.filter(t => t.status === 'done');
+
+  if (!scheduled.length && !testing.length && !done.length) {
+    return `<div style="padding:30px;border:1px dashed var(--w2,#2a3340);border-radius:12px;color:var(--t4,#6a7a88);text-align:center">
+      В карте пока нет задач. Включите их на «Рассмотрении».
+      <div style="margin-top:12px"><button class="btn btn-gh btn-sm" onclick="adRmSetLevel('triage')">⚖ К рассмотрению</button></div></div>`;
+  }
+
+  // KPI
+  const totalH = scheduled.reduce((a, t) => a + (t.effort_h || 0), 0);
+  const endIdx = scheduled.reduce((m, t) => Math.max(m, t._endIdx), 0);
+  const finishDate = scheduled.length ? adRmWorkDay(scheduled._start, endIdx, scheduled._skipW) : null;
+  const atRisk  = scheduled.filter(t => t._late).length;
+  const overdue = scheduled.filter(t => t.deadline && new Date(t.deadline) < adRmToday() && t.status !== 'done').length;
+  const kpi = (label, val, color) => `<div style="flex:1 1 120px;min-width:110px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:12px 14px">
+    <div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--t4,#6a7a88)">${label}</div>
+    <div style="font-size:20px;font-weight:700;color:${color||'var(--t1,#e8edf2)'};margin-top:3px;font-family:var(--font-display,sans-serif)">${val}</div></div>`;
+  const kpis = `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+    ${kpi('Задач в плане', scheduled.length)}
+    ${kpi('Трудозатраты', (totalH/Math.max(1,S.cfg.capacity_h)).toFixed(1) + ' дн', 'var(--gdl,#5fb0e6)')}
+    ${kpi('Финиш плана', adRmFmtFull(finishDate), 'var(--gdl,#5fb0e6)')}
+    ${kpi('Под риском', atRisk, atRisk ? '#e6a35f' : 'var(--t1,#e8edf2)')}
+    ${kpi('На тесте', testing.length, testing.length ? '#c08fe6' : 'var(--t1,#e8edf2)')}
+    ${kpi('Просрочено', overdue, overdue ? '#e6655f' : 'var(--t1,#e8edf2)')}
+  </div>`;
+
+  return adRmControls() + kpis + adRmGantt(scheduled) + adRmTable(scheduled, testing, done);
+}
+
+function adRmControls() {
+  const S = adRmState(), c = S.cfg;
+  const ni = (id, val, attrs) => `<input id="${id}" value="${val}" ${attrs} onchange="adRmCfgFromInputs()" style="width:64px;padding:6px 8px;font-size:12px;background:var(--b3,#0f141b);color:var(--t1,#e8edf2);border:1px solid var(--w2,#2a3340);border-radius:6px">`;
+  const lbl = 'font-size:10px;color:var(--t4,#6a7a88);display:block;margin-bottom:3px';
+  return `<div style="border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:12px 14px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:16px;align-items:end">
+    <div><label style="${lbl}">Часов/день</label>${ni('rm-cap', c.capacity_h, 'type="number" min="1" step="0.5"')}</div>
+    <div><label style="${lbl}">Старт плана</label><input id="rm-start" type="date" value="${c.start_date||''}" onchange="adRmCfgFromInputs()" style="padding:6px 8px;font-size:12px;background:var(--b3,#0f141b);color:var(--t1,#e8edf2);border:1px solid var(--w2,#2a3340);border-radius:6px"></div>
+    <label style="font-size:12px;color:var(--t3,#8aa0b0);display:flex;align-items:center;gap:6px;cursor:pointer;padding-bottom:6px">
+      <input id="rm-skipw" type="checkbox" ${c.skip_weekends ? 'checked' : ''} onchange="adRmCfgFromInputs()"> без выходных</label>
+    <div style="width:1px;align-self:stretch;background:var(--w2,#2a3340)"></div>
+    <div style="font-size:10px;color:var(--t4,#6a7a88);align-self:center">Веса срочности:</div>
+    <div><label style="${lbl}">ценность</label>${ni('rm-wv', c.w_value, 'type="number" min="0" step="0.1"')}</div>
+    <div><label style="${lbl}">приоритет</label>${ni('rm-wp', c.w_priority, 'type="number" min="0" step="0.1"')}</div>
+    <div><label style="${lbl}">дедлайн</label>${ni('rm-wu', c.w_urgency, 'type="number" min="0" step="0.1"')}</div>
+    <div><label style="${lbl}">возраст</label>${ni('rm-wa', c.w_age, 'type="number" min="0" step="0.1"')}</div>
+    <div style="flex:1"></div>
+    <button class="btn btn-gh btn-sm" onclick="adRmCfgReset()" title="Сбросить веса">↺ сброс</button>
+  </div>`;
+}
+
+function adRmCfgFromInputs() {
+  const S = adRmState(), g = id => document.getElementById(id);
+  const c = S.cfg;
+  if (g('rm-cap'))  c.capacity_h    = Math.max(1, Number(g('rm-cap').value) || 6);
+  if (g('rm-start'))c.start_date    = g('rm-start').value || null;
+  if (g('rm-skipw'))c.skip_weekends = g('rm-skipw').checked;
+  if (g('rm-wv'))   c.w_value       = Math.max(0, Number(g('rm-wv').value) || 0);
+  if (g('rm-wp'))   c.w_priority    = Math.max(0, Number(g('rm-wp').value) || 0);
+  if (g('rm-wu'))   c.w_urgency     = Math.max(0, Number(g('rm-wu').value) || 0);
+  if (g('rm-wa'))   c.w_age         = Math.max(0, Number(g('rm-wa').value) || 0);
+  adRmCfgPersist();
+  adPaint();
+}
+function adRmCfgReset() { Object.assign(adRmState().cfg, RM_CFG_DEF); adRmCfgPersist(); adPaint(); }
+let _rmCfgTimer = null;
+function adRmCfgPersist() {
+  clearTimeout(_rmCfgTimer);
+  const c = adRmState().cfg;
+  _rmCfgTimer = setTimeout(() => {
+    dbPatch('dev_roadmap_config', 'id=eq.1', {
+      capacity_h:c.capacity_h, skip_weekends:c.skip_weekends, w_value:c.w_value,
+      w_priority:c.w_priority, w_urgency:c.w_urgency, w_age:c.w_age, start_date:c.start_date,
+    }).catch(() => {});
+  }, 600);
+}
+
+// ── Гант-диаграмма (горизонтальная шкала рабочих дней) ──────────
+function adRmGantt(scheduled) {
+  const S = adRmState();
+  const start = scheduled._start, skipW = scheduled._skipW;
+  const horizon = Math.min(80, scheduled.reduce((m, t) => Math.max(m, t._endIdx), 0) + 1);
+  const PX = 30, labelW = 230;
+  const todayIdx = adRmIdxOfDate(start, adRmToday(), skipW);
+
+  // шапка дат — метки каждые ~3 дня + границы недель
+  let ticks = '';
+  for (let i = 0; i <= horizon; i++) {
+    const d = adRmWorkDay(start, i, skipW);
+    const isMon = d.getDay() === 1;
+    if (i % 3 === 0 || isMon) {
+      ticks += `<div style="position:absolute;left:${i*PX}px;top:0;font-size:9px;color:var(--t4,#6a7a88);white-space:nowrap;${isMon?'border-left:1px solid var(--w2,#2a3340);padding-left:3px':''}">${adRmFmtDate(d)}</div>`;
+    }
+  }
+  const todayLine = (todayIdx >= 0 && todayIdx <= horizon)
+    ? `<div style="position:absolute;left:${todayIdx*PX}px;top:0;bottom:0;width:2px;background:rgba(95,230,163,.5);z-index:1" title="сегодня"></div>` : '';
+
+  const rows = scheduled.map(t => {
+    const p = RM_PRIO[t.priority] || RM_PRIO[2];
+    const x = t._startIdx * PX;
+    const w = Math.max(PX - 4, (t._endIdx - t._startIdx + 1) * PX - 4);
+    const barColor = t._late ? '#e6655f' : (t.status === 'active' ? '#5fe6a3' : p.c);
+    const pct = t.status === 'active' ? Math.max(6, Math.min(100, t.progress || 0)) : 0;
+    // маркер дедлайна
+    let dl = '';
+    if (t.deadline) {
+      const di = adRmIdxOfDate(start, new Date(t.deadline + 'T00:00:00'), skipW);
+      if (di >= 0 && di <= horizon) dl = `<div style="position:absolute;left:${di*PX}px;top:1px;bottom:1px;width:0;border-left:2px dashed ${t._late?'#e6655f':'#e6a35f'};z-index:2" title="дедлайн ${esc(t.deadline)}"></div>`;
+    }
+    return `<div style="display:flex;align-items:center;border-bottom:1px solid var(--w1,#1e2630);min-height:30px;cursor:pointer" onclick="adRmOpenDetail(${t.id})" title="Открыть карточку задачи">
+      <div style="width:${labelW}px;flex:0 0 ${labelW}px;padding:4px 10px 4px 0;overflow:hidden">
+        <div style="font-size:12px;color:var(--t1,#e8edf2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.title)}${(t.images&&t.images.length)?' 📎':''}</div>
+        <div style="font-family:monospace;font-size:9px;color:var(--t4,#6a7a88)">${esc(t.code||'')} · ${t.effort_h}ч${t._late?' · <span style=\"color:#e6655f\">срыв</span>':''}</div>
+      </div>
+      <div style="position:relative;flex:1;height:30px;min-width:${horizon*PX}px">
+        ${dl}
+        <div style="position:absolute;left:${x}px;top:5px;height:20px;width:${w}px;background:${barColor};opacity:.92;border-radius:5px;box-shadow:0 1px 3px rgba(0,0,0,.35);overflow:hidden" title="${esc(t.code||'')} ${esc(t.title)}\n${adRmFmtFull(t._startDate)} → ${adRmFmtFull(t._endDate)}">
+          ${pct ? `<div style="position:absolute;left:0;top:0;bottom:0;width:${pct}%;background:rgba(255,255,255,.25)"></div>` : ''}
+          <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;color:#0c1218;white-space:nowrap;text-shadow:0 1px 0 rgba(255,255,255,.2)">${esc((t.code||'').replace('T-',''))}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div style="border:1px solid var(--w2,#2a3340);border-radius:12px;background:var(--b2,#141a22);overflow:hidden;margin-bottom:16px">
+    <div style="padding:10px 14px;border-bottom:1px solid var(--w2,#2a3340);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t3,#8aa0b0);display:flex;justify-content:space-between;align-items:center">
+      <span>Гант · проектные сроки</span>
+      <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:var(--t4,#6a7a88)">━ полоса = работа · ┊ зелёная = сегодня · ┆ оранжевая = дедлайн</span>
+    </div>
+    <div style="overflow-x:auto;padding:0 14px 14px">
+      <div style="display:flex;min-width:${labelW + horizon*PX}px">
+        <div style="width:${labelW}px;flex:0 0 ${labelW}px"></div>
+        <div style="position:relative;flex:1;height:16px;min-width:${horizon*PX}px;margin-bottom:2px">${ticks}</div>
+      </div>
+      <div style="position:relative">
+        <div style="position:absolute;left:${labelW}px;right:0;top:0;bottom:0">${todayLine}</div>
+        ${rows}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Таблица плана + тестирование + завершённые ──────────────────
+function adRmTable(scheduled, testing, done) {
+  const cellH = 'padding:8px 10px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--t4,#6a7a88);text-align:left;white-space:nowrap';
+  const head = `<div style="display:flex;align-items:center;background:var(--b3,#0f141b);border-bottom:1px solid var(--w2,#2a3340)">
+    <div style="${cellH};flex:2 1 200px;min-width:160px">Задача</div>
+    <div style="${cellH};flex:0 0 70px;text-align:right">WSJF</div>
+    <div style="${cellH};flex:0 0 60px;text-align:right">Часов</div>
+    <div style="${cellH};flex:0 0 110px">Старт → финиш</div>
+    <div style="${cellH};flex:0 0 90px">Дедлайн</div>
+    <div style="${cellH};flex:0 0 70px;text-align:right">Запас</div>
+    <div style="${cellH};flex:0 0 160px;text-align:right">Действия</div>
+  </div>`;
+
+  const rank = scheduled.map((t, i) => {
+    const p = RM_PRIO[t.priority] || RM_PRIO[2];
+    const st = RM_STATUS[t.status] || RM_STATUS.planned;
+    const slack = t._slackDays;
+    const slackTxt = slack == null ? '—' : (slack < 0 ? `−${-slack} дн` : `${slack} дн`);
+    const slackCol = slack == null ? 'var(--t4,#6a7a88)' : (slack < 0 ? '#e6655f' : (slack <= 2 ? '#e6a35f' : '#5fe6a3'));
+    const cell = 'padding:9px 10px;font-size:12px;color:var(--t2,#c0ccd6);display:flex;align-items:center';
+    return `<div style="display:flex;align-items:stretch;border-bottom:1px solid var(--w1,#1e2630);${t._late?'background:rgba(230,101,95,.06)':''}">
+      <div style="${cell};flex:2 1 200px;min-width:160px;gap:8px;cursor:pointer" onclick="adRmOpenDetail(${t.id})" title="Открыть карточку">
+        <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88);flex:0 0 auto">${i+1}.</span>
+        <span style="width:6px;height:6px;border-radius:50%;background:${p.c};flex:0 0 auto" title="${p.l}"></span>
+        <div style="min-width:0">
+          <div style="color:var(--t1,#e8edf2);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.title)}${(t.images&&t.images.length)?' <span style="color:var(--t4,#6a7a88);font-size:11px">📎'+t.images.length+'</span>':''}</div>
+          <div style="font-family:monospace;font-size:9px;color:var(--t4,#6a7a88)">${esc(t.code||'')} <span style="color:${st.c}">●</span> ${st.l}${t._cycle?' · <span style="color:#e6a35f">цикл завис.</span>':''}</div>
+        </div>
+      </div>
+      <div style="${cell};flex:0 0 70px;justify-content:flex-end;font-family:monospace;color:var(--gdl,#5fb0e6)">${(t._wsjf||0).toFixed(1)}</div>
+      <div style="${cell};flex:0 0 60px;justify-content:flex-end;font-family:monospace">${t.effort_h}</div>
+      <div style="${cell};flex:0 0 110px;font-family:monospace;font-size:11px">${adRmFmtDate(t._startDate)} → ${adRmFmtDate(t._endDate)}</div>
+      <div style="${cell};flex:0 0 90px;font-family:monospace;font-size:11px;color:${t._late?'#e6655f':'var(--t2,#c0ccd6)'}">${t.deadline ? esc(t.deadline.slice(5)) : '—'}</div>
+      <div style="${cell};flex:0 0 70px;justify-content:flex-end;font-family:monospace;color:${slackCol}">${slackTxt}</div>
+      <div style="${cell};flex:0 0 160px;justify-content:flex-end;gap:5px">
+        ${t.status === 'planned' ? `<button class="btn btn-gh btn-sm" onclick="adRmStart(${t.id})" title="В работу">▶</button>` : ''}
+        ${t.status === 'active' ? `<button class="btn btn-gh btn-sm" onclick="adRmProgress(${t.id})" title="Прогресс">${t.progress||0}%</button>` : ''}
+        <button class="btn btn-gd btn-sm" onclick="adRmDone(${t.id})" title="Готово → на тестирование (${RM_TEST_DAYS} дн)">✓</button>
+        <button class="btn btn-gh btn-sm" onclick="adRmToPool(${t.id})" title="Вернуть в пул">↩</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // ── Блок тестирования (7 дней до авто-завершения) ──
+  let testBlock = '';
+  if (testing.length) {
+    testBlock = `<div style="padding:10px 14px;background:rgba(192,143,230,.08);border-top:1px solid var(--w2,#2a3340);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#c08fe6">🧪 На тестировании (${testing.length}) — авто-завершение через ${RM_TEST_DAYS} дн</div>
+      ${testing.map(t => {
+        const left = t.testing_until ? Math.max(0, Math.ceil((new Date(t.testing_until).getTime() - Date.now()) / 864e5)) : 0;
+        const totalMs = RM_TEST_DAYS * 864e5;
+        const pct = t.testing_until ? adRmClamp(100 * (1 - (new Date(t.testing_until).getTime() - Date.now()) / totalMs), 0, 100) : 0;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--w1,#1e2630)">
+          <span style="color:#c08fe6">🧪</span>
+          <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(t.code||'')}</span>
+          <span style="flex:1;min-width:0;font-size:13px;color:var(--t1,#e8edf2);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="adRmOpenDetail(${t.id})">${esc(t.title)}${(t.images&&t.images.length)?' 📎':''}</span>
+          <div style="flex:0 0 120px;height:6px;background:var(--b3,#0f141b);border-radius:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:#c08fe6"></div></div>
+          <span style="flex:0 0 64px;text-align:right;font-size:11px;color:#c08fe6">${left} дн</span>
+          <button class="btn btn-gd btn-sm" onclick="adRmComplete(${t.id})" title="Завершить досрочно">✓ завершить</button>
+          <button class="btn btn-gh btn-sm" onclick="adRmReactivate(${t.id})" title="Вернуть в работу">↩</button>
+        </div>`;
+      }).join('')}`;
+  }
+
+  let doneBlock = '';
+  if (done.length) {
+    doneBlock = `<div style="padding:10px 14px;background:var(--b3,#0f141b);border-top:1px solid var(--w2,#2a3340);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t4,#6a7a88)">Завершено (${done.length})</div>
+      ${done.map(t => `<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--w1,#1e2630);opacity:.7">
+        <span style="color:#5fe6a3">✓</span>
+        <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(t.code||'')}</span>
+        <span style="flex:1;min-width:0;font-size:13px;color:var(--t2,#c0ccd6);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="adRmOpenDetail(${t.id})">${esc(t.title)}${(t.images&&t.images.length)?' 📎':''}</span>
+        <span style="font-size:11px;color:var(--t4,#6a7a88)">${t.done_at ? adRmFmtFull(new Date(t.done_at)) : ''}</span>
+        <button class="btn btn-gh btn-sm" onclick="adRmToPool(${t.id})" title="Переоткрыть">↩</button>
+      </div>`).join('')}`;
+  }
+
+  return `<div style="border:1px solid var(--w2,#2a3340);border-radius:12px;background:var(--b2,#141a22);overflow:hidden">
+    <div style="overflow-x:auto"><div style="min-width:760px">${head}${rank || '<div style="padding:18px;color:var(--t4,#6a7a88);text-align:center">Нет активных задач в плане</div>'}${testBlock}${doneBlock}</div></div>
+  </div>`;
+}
+
+// ── Действия со статусами ───────────────────────────────────────
+async function adRmStart(id)   { await adRmPatch(id, { status:'active', started_at:new Date().toISOString() }, 'В работе'); }
+// «Готово» → на тестирование 7 дней (по истечении авто-завершится при загрузке)
+async function adRmDone(id)    {
+  const until = new Date(Date.now() + RM_TEST_DAYS * 864e5).toISOString();
+  await adRmPatch(id, { status:'testing', progress:100, done_at:new Date().toISOString(), testing_until:until }, `На тестировании ${RM_TEST_DAYS} дн`);
+}
+async function adRmComplete(id)   { await adRmPatch(id, { status:'done', testing_until:null }, 'Завершено'); }
+async function adRmReactivate(id) { await adRmPatch(id, { status:'active', testing_until:null }, 'Вернулось в работу'); }
+async function adRmToPool(id)  { await adRmPatch(id, { status:'pool', progress:0, testing_until:null }, 'В пуле'); }
+async function adRmProgress(id) {
+  const t = adRmState().tasks.find(x => x.id === id);
+  const v = prompt('Прогресс, % (0–100):', String((t && t.progress) || 0));
+  if (v == null) return;
+  await adRmPatch(id, { progress: adRmClamp(Number(v) || 0, 0, 100) }, 'Прогресс обновлён');
+}
+
+// ── Универсальные CRUD-обёртки ──────────────────────────────────
+async function adRmSet(id, field, value, isNum) {
+  let v = value;
+  if (isNum) v = Number(value);
+  if (field === 'value') v = adRmClamp(v, 1, 10);
+  if (field === 'priority') v = adRmClamp(v, 1, 4);
+  if (field === 'effort_h') v = Math.max(0.5, v);
+  await adRmPatch(id, { [field]: v });
+}
+async function adRmPatch(id, patch, okMsg) {
+  try {
+    const res = await dbPatch('dev_tasks', 'id=eq.' + id, patch);
+    const row = Array.isArray(res) ? res[0] : res;
+    const S = adRmState();
+    const i = S.tasks.findIndex(t => t.id === id);
+    if (i >= 0) S.tasks[i] = adRmNorm(Object.assign({}, S.tasks[i], row || patch));
+    if (okMsg) toast(okMsg, 'ok');
+    adPaint();
+    if (adRmState().detailId === id) adRmRenderDetail();
+  } catch (e) { toast('Не сохранилось: ' + (e.message || e), 'err'); }
+}
+async function adRmDelete(id) {
+  if (!confirm('Удалить задачу безвозвратно?')) return;
+  try {
+    await dbDel('dev_tasks', 'id=eq.' + id);
+    const S = adRmState();
+    S.tasks = S.tasks.filter(t => t.id !== id);
+    if (adRmState().detailId === id) adRmCloseDetail();
+    toast('Удалено', 'ok'); adPaint();
+  } catch (e) { toast('Ошибка удаления: ' + (e.message || e), 'err'); }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  КАРТИНКИ ЗАДАЧ — сжатие в webp + хранение data-URL в dev_tasks.images
+//  (стафф-инструмент, малый трафик → самодостаточно, без Storage-бакета)
+// ════════════════════════════════════════════════════════════════
+let _rmNewImgs = [];   // стейджинг картинок для новой задачи (приёмная)
+
+async function adRmFileToDataURL(file) {
+  const cf = (typeof compressImageFile === 'function') ? await compressImageFile(file, 900, 0.8) : file;
+  return await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error('не прочитать файл'));
+    r.readAsDataURL(cf);
+  });
+}
+// Полоска миниатюр с крестиком удаления (removeFn(idx) — имя глобальной функции)
+function adRmThumbStrip(imgs, removeFn) {
+  if (!imgs || !imgs.length) return '';
+  return imgs.map((src, i) => `<div style="position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--w2,#2a3340)">
+    <img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block" onclick="adRmLightbox('${i}',this)" data-full="1">
+    <button type="button" onclick="${removeFn}(${i})" title="Удалить" style="position:absolute;top:2px;right:2px;width:18px;height:18px;line-height:16px;text-align:center;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:12px;cursor:pointer">×</button>
+  </div>`).join('');
+}
+
+// ── Стейджинг для новой задачи ──
+async function adRmStageImg(input) {
+  const files = input && input.files ? [...input.files] : [];
+  for (const f of files) {
+    try { _rmNewImgs.push(await adRmFileToDataURL(f)); } catch (e) { toast('Картинка: ' + e.message, 'err'); }
+  }
+  input.value = '';
+  const box = document.getElementById('rm-n-imgs');
+  if (box) box.innerHTML = adRmThumbStrip(_rmNewImgs, 'adRmUnstageImg');
+}
+function adRmUnstageImg(i) {
+  _rmNewImgs.splice(i, 1);
+  const box = document.getElementById('rm-n-imgs');
+  if (box) box.innerHTML = adRmThumbStrip(_rmNewImgs, 'adRmUnstageImg');
+}
+
+// ── Картинки существующей задачи (в модалке) ──
+async function adRmAddImg(id, input) {
+  const files = input && input.files ? [...input.files] : [];
+  if (!files.length) return;
+  const t = adRmState().tasks.find(x => x.id === id); if (!t) return;
+  const imgs = (t.images || []).slice();
+  for (const f of files) {
+    try { imgs.push(await adRmFileToDataURL(f)); } catch (e) { toast('Картинка: ' + e.message, 'err'); }
+  }
+  input.value = '';
+  await adRmPatch(id, { images: imgs });
+  adRmRenderDetail();
+}
+async function adRmDelImg(id, i) {
+  const t = adRmState().tasks.find(x => x.id === id); if (!t) return;
+  const imgs = (t.images || []).slice();
+  imgs.splice(i, 1);
+  await adRmPatch(id, { images: imgs });
+  adRmRenderDetail();
+}
+
+// ════════════════════════════════════════════════════════════════
+//  МОДАЛКА КАРТОЧКИ ЗАДАЧИ (клик по строке/полосе Ганта)
+// ════════════════════════════════════════════════════════════════
+function adRmOpenDetail(id) {
+  adRmState().detailId = id;
+  let host = document.getElementById('rm-detail-host');
+  if (!host) { host = document.createElement('div'); host.id = 'rm-detail-host'; document.body.appendChild(host); }
+  adRmRenderDetail();
+  document.addEventListener('keydown', adRmEscClose);
+}
+function adRmEscClose(e) { if (e.key === 'Escape') adRmCloseDetail(); }
+function adRmCloseDetail() {
+  adRmState().detailId = null;
+  const host = document.getElementById('rm-detail-host');
+  if (host) host.innerHTML = '';
+  document.removeEventListener('keydown', adRmEscClose);
+}
+function adRmRenderDetail() {
+  const host = document.getElementById('rm-detail-host'); if (!host) return;
+  const S = adRmState();
+  const t = S.tasks.find(x => x.id === S.detailId);
+  if (!t) { host.innerHTML = ''; return; }
+  const p = RM_PRIO[t.priority] || RM_PRIO[2];
+  const st = RM_STATUS[t.status] || RM_STATUS.pool;
+  const sched = adRmSchedule(S.tasks, S.cfg).find(x => x.id === t.id);
+  const depNames = (t.depends_on || []).map(d => { const x = S.tasks.find(z => z.id === d); return x ? (x.code || ('#'+d)) : ('#'+d); });
+  const chip = (label, val, col) => `<div style="background:var(--b3,#0f141b);border:1px solid var(--w2,#2a3340);border-radius:8px;padding:8px 10px;min-width:90px">
+    <div style="font-size:10px;color:var(--t4,#6a7a88);text-transform:uppercase;letter-spacing:.05em">${label}</div>
+    <div style="font-size:13px;font-weight:600;color:${col||'var(--t1,#e8edf2)'};margin-top:2px">${val}</div></div>`;
+
+  let testLine = '';
+  if (t.status === 'testing' && t.testing_until) {
+    const left = Math.max(0, Math.ceil((new Date(t.testing_until).getTime() - Date.now()) / 864e5));
+    testLine = `<div style="margin-top:12px;padding:10px 12px;background:rgba(192,143,230,.1);border:1px solid #c08fe6;border-radius:8px;color:#c08fe6;font-size:13px">🧪 На тестировании — авто-завершение через <b>${left} дн</b> (${adRmFmtFull(new Date(t.testing_until))})</div>`;
+  }
+
+  const imgs = t.images || [];
+  const imgGrid = imgs.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${imgs.map((src, i) => `<div style="position:relative;width:120px;height:90px;border-radius:8px;overflow:hidden;border:1px solid var(--w2,#2a3340)">
+        <img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in" onclick="adRmLightboxSrc(this.src)">
+        <button type="button" onclick="adRmDelImg(${t.id},${i})" title="Удалить" style="position:absolute;top:3px;right:3px;width:20px;height:20px;line-height:18px;text-align:center;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;cursor:pointer">×</button>
+      </div>`).join('')}</div>`
+    : `<div style="font-size:12px;color:var(--t4,#6a7a88);margin-top:6px">Картинок нет</div>`;
+
+  const body = `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+      <div style="min-width:0">
+        <div style="font-family:monospace;font-size:11px;color:var(--t4,#6a7a88)">${esc(t.code||'')} · <span style="color:${st.c}">●</span> ${st.l}</div>
+        <div style="font-size:19px;font-weight:700;color:var(--t1,#e8edf2);margin-top:4px">${esc(t.title)}</div>
+      </div>
+      <button class="btn btn-gh btn-sm" onclick="adRmCloseDetail()" title="Закрыть (Esc)">✕</button>
+    </div>
+    ${testLine}
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">
+      ${chip('Приоритет', p.l, p.c)}
+      ${chip('Ценность', t.value + ' / 10')}
+      ${chip('Оценка', t.effort_h + ' ч' + (t.effort_auto ? ' (авто)' : ''))}
+      ${t.area ? chip('Направление', esc(adRmAreaLabel(t.area))) : ''}
+      ${t.deadline ? chip('Дедлайн', esc(t.deadline), sched && sched._late ? '#e6655f' : 'var(--t1)') : ''}
+      ${sched ? chip('План', adRmFmtFull(sched._startDate) + ' → ' + adRmFmtFull(sched._endDate)) : ''}
+      ${sched ? chip('WSJF', (sched._wsjf||0).toFixed(1), 'var(--gdl,#5fb0e6)') : ''}
+    </div>
+    ${(t.tags && t.tags.length) ? `<div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:5px">${t.tags.map(tg => `<span style="font-size:11px;background:var(--b3,#0f141b);border:1px solid var(--w2,#2a3340);color:var(--t3,#8aa0b0);padding:3px 9px;border-radius:11px">#${esc(tg)}</span>`).join('')}</div>` : ''}
+    ${depNames.length ? `<div style="font-size:12px;color:var(--t4,#6a7a88);margin-top:10px">↳ Зависит от: ${esc(depNames.join(', '))}</div>` : ''}
+
+    <div style="margin-top:16px"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:6px">Описание</div>
+      <div style="font-size:13px;color:var(--t2,#c0ccd6);line-height:1.55;white-space:pre-wrap">${t.body ? esc(t.body) : '<span style=\"color:var(--t4,#6a7a88)\">— нет описания —</span>'}</div></div>
+
+    <div style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t3,#8aa0b0)">Картинки (${imgs.length})</div>
+        <div><input type="file" accept="image/*" multiple id="rm-d-imgfile" style="display:none" onchange="adRmAddImg(${t.id},this)">
+          <button class="btn btn-gh btn-sm" onclick="document.getElementById('rm-d-imgfile').click()">🖼 Добавить</button></div>
+      </div>
+      ${imgGrid}
+    </div>
+
+    <div style="margin-top:18px;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;border-top:1px solid var(--w1,#1e2630);padding-top:14px">
+      ${t.status === 'pool' ? `<button class="btn btn-gd btn-sm" onclick="adRmAccept(${t.id});adRmCloseDetail()">✓ В дорожную карту</button>` : ''}
+      ${t.status === 'planned' ? `<button class="btn btn-gh btn-sm" onclick="adRmStart(${t.id})">▶ В работу</button>` : ''}
+      ${(t.status === 'planned' || t.status === 'active') ? `<button class="btn btn-gd btn-sm" onclick="adRmDone(${t.id})">✓ Готово → тест</button>` : ''}
+      ${t.status === 'testing' ? `<button class="btn btn-gd btn-sm" onclick="adRmComplete(${t.id})">✓ Завершить</button><button class="btn btn-gh btn-sm" onclick="adRmReactivate(${t.id})">↩ В работу</button>` : ''}
+      <button class="btn btn-gh btn-sm" onclick="adRmDelete(${t.id})" style="color:#e6655f;border-color:#e6655f">🗑 Удалить</button>
+    </div>`;
+
+  host.innerHTML = `<div onclick="if(event.target===this)adRmCloseDetail()" style="position:fixed;inset:0;background:rgba(6,10,16,.72);z-index:9000;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:5vh 16px">
+    <div style="width:100%;max-width:640px;background:var(--b1,#0c1218);border:1px solid var(--w2,#2a3340);border-radius:14px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.5)">${body}</div>
+  </div>`;
+}
+
+// ── Лайтбокс одной картинки ──
+function adRmLightboxSrc(src) {
+  let lb = document.getElementById('rm-lightbox');
+  if (!lb) { lb = document.createElement('div'); lb.id = 'rm-lightbox'; document.body.appendChild(lb); }
+  lb.onclick = () => { lb.innerHTML = ''; };
+  lb.innerHTML = `<div style="position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9500;display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out">
+    <img src="${src}" style="max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.6)"></div>`;
+}
+function adRmLightbox(i, el) { if (el && el.src) adRmLightboxSrc(el.src); }
