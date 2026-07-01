@@ -35,8 +35,8 @@ async function renderHome() {
     const iconHtml = sec.icon && sec.icon.startsWith('http')
       ? `<img src="${esc(sec.icon)}" alt="">`
       : `<span class="st-glyph">${esc(sec.icon||'◇')}</span>`;
-    return `<a class="sec-tile" onclick="go('sec:${esc(sec.slug)}')">
-      <div class="st-media"><img src="${esc(imgUrl)}" loading="lazy" alt=""></div>
+    return `<a class="sec-tile" onclick="go('sec:${jsq(sec.slug)}')">
+      <div class="st-media"><img src="${esc(safeUrl(imgUrl))}" loading="lazy" alt=""></div>
       <div class="st-scrim"></div>
       <div class="st-top"><span class="st-ico">${iconHtml}</span><span class="st-count">${esc(String(cnt).padStart(2,'0'))}</span></div>
       <div class="st-foot">
@@ -52,7 +52,7 @@ async function renderHome() {
     const isNew = Math.abs(new Date(p.updated_at||0)-new Date(p.created_at||0))<60000;
     const sec2 = p.section ? sections.find(s=>s.slug===p.section) : null;
     const authorName = userLabel(p.created_by||'');
-    return `<div class="cl-row" onclick="go('${esc(p.slug)}')"><span class="cl-type ${isNew?'ct-new':'ct-edit'}">${isNew?T('new_tag'):T('edit_tag')}</span><div class="cl-info"><span class="cl-title">${esc(pT(p))}</span><span class="cl-author">✍ ${esc(authorName)}</span></div>${sec2 ? `<span class="cl-sec-tag">${esc(sN(sec2))}</span>` : ''}<span class="cl-date">${timeAgo(p.updated_at)}</span></div>`;
+    return `<div class="cl-row" onclick="go('${jsq(p.slug)}')"><span class="cl-type ${isNew?'ct-new':'ct-edit'}">${isNew?T('new_tag'):T('edit_tag')}</span><div class="cl-info"><span class="cl-title">${esc(pT(p))}</span><span class="cl-author">✍ ${esc(authorName)}</span></div>${sec2 ? `<span class="cl-sec-tag">${esc(sN(sec2))}</span>` : ''}<span class="cl-date">${timeAgo(p.updated_at)}</span></div>`;
   }).join('');
 
   const contribMap = {}; pages.filter(isVisiblePage).forEach(p=>{ if(p.created_by) contribMap[p.created_by]=(contribMap[p.created_by]||0)+1; });
@@ -62,8 +62,8 @@ async function renderHome() {
   const contribsHtml = sortedContribs.length ? `<section class="home-block hp-contribs"><div class="hb-head"><span class="hb-tag">${T('contributors')}</span></div><div class="contrib-grid">${sortedContribs.map(([email, cnt], idx) => {
     const rank = idx + 1;
     const rankClass = rank <= 3 ? ` rank-${rank}` : '';
-    const emailAttr = esc(email).replace(/'/g,'&#39;'); const name = email.includes('@') ? email.split('@')[0] : email; const hue = [...email].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
-    const prof = getProfileOf(email); const displayName = prof.display_name || name; const avUrl = prof.avatar_url || '';
+    const name = email.includes('@') ? email.split('@')[0] : email; const hue = [...email].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
+    const prof = getProfileOf(email); const displayName = prof.display_name || name; const avUrl = safeAvatar(prof.avatar_url);
     const avHtml = avUrl ? `<img src="${esc(avUrl)}" loading="lazy">` : `<span style="font-size:20px;font-family:Rajdhani,sans-serif;font-weight:900;color:hsl(${hue},60%,72%)">${esc(displayName.slice(0,2).toUpperCase())}</span>`;
     const barPct = Math.min(100, Math.round((cnt / 100) * 100));
     const rankNumHtml = rank <= 9 ? `<div class="contrib-rank-num">${rank}</div>` : '';
@@ -77,7 +77,7 @@ async function renderHome() {
     const barHue = (tierHue + 10) % 360;
     const barSat = Math.min(40 + tier * 3, 80);
     const barLight = Math.min(45 + tier * 1.5, 65);
-    return `<div class="contrib-card${rankClass}" onclick="openContribModal('${emailAttr}','${esc(displayName).replace(/'/g,'&#39;')}','${esc(avUrl).replace(/'/g,'&#39;')}',${hue},${cnt})" title="Посмотреть профиль" style="background:linear-gradient(145deg, hsl(${tierHue},${tierSat}%,${tierLight}%) 0%, hsl(${tierHue},${tierSat - 4}%,${tierLight - 3}%) 100%); border-color:hsl(${tierHue},${tierBorderSat}%,${tierBorderLight}%); ${tierGlow}"><div class="contrib-scan"></div><div class="contrib-card-top"><div class="contrib-av-wrap"><div class="contrib-av" style="background:linear-gradient(135deg, hsl(${tierHue},${tierSat + 5}%,${tierLight + 4}%) 0%, hsl(${tierHue},${tierSat}%,${tierLight}%) 100%);border-color:hsl(${tierHue},${tierBorderSat + 10}%,${tierBorderLight + 8}%)">${avHtml}</div><div class="contrib-av-ring" style="color:hsl(${tierHue},${tierSat + 25}%,${50 + tier * 1.5}%)"></div>${rankNumHtml}</div><div class="contrib-card-info"><div class="contrib-name">${esc(displayName)}</div></div></div><div class="contrib-card-bottom"><div class="contrib-stat-bar"><div class="contrib-stat-fill" style="width:${barPct}%; background:linear-gradient(90deg, hsl(${barHue},${barSat}%,${barLight}%) 0%, hsl(${barHue},${barSat + 10}%,${barLight + 8}%) 100%); box-shadow: 0 0 ${tier * 1.5}px hsla(${barHue}, ${barSat}%, ${barLight}%, ${Math.min(tier * 0.05, 0.6)});"></div></div><div class="contrib-cnt">${cnt}&nbsp;СТР</div></div></div>`;
+    return `<div class="contrib-card${rankClass}" onclick="openContribModal('${jsq(email)}','${jsq(displayName)}','${jsq(safeAvatar(avUrl))}',${hue},${cnt})" title="Посмотреть профиль" style="background:linear-gradient(145deg, hsl(${tierHue},${tierSat}%,${tierLight}%) 0%, hsl(${tierHue},${tierSat - 4}%,${tierLight - 3}%) 100%); border-color:hsl(${tierHue},${tierBorderSat}%,${tierBorderLight}%); ${tierGlow}"><div class="contrib-scan"></div><div class="contrib-card-top"><div class="contrib-av-wrap"><div class="contrib-av" style="background:linear-gradient(135deg, hsl(${tierHue},${tierSat + 5}%,${tierLight + 4}%) 0%, hsl(${tierHue},${tierSat}%,${tierLight}%) 100%);border-color:hsl(${tierHue},${tierBorderSat + 10}%,${tierBorderLight + 8}%)">${avHtml}</div><div class="contrib-av-ring" style="color:hsl(${tierHue},${tierSat + 25}%,${50 + tier * 1.5}%)"></div>${rankNumHtml}</div><div class="contrib-card-info"><div class="contrib-name">${esc(displayName)}</div></div></div><div class="contrib-card-bottom"><div class="contrib-stat-bar"><div class="contrib-stat-fill" style="width:${barPct}%; background:linear-gradient(90deg, hsl(${barHue},${barSat}%,${barLight}%) 0%, hsl(${barHue},${barSat + 10}%,${barLight + 8}%) 100%); box-shadow: 0 0 ${tier * 1.5}px hsla(${barHue}, ${barSat}%, ${barLight}%, ${Math.min(tier * 0.05, 0.6)});"></div></div><div class="contrib-cnt">${cnt}&nbsp;СТР</div></div></div>`;
   }).join('')}</div></section>` : '';
 
   // ── Единая обложка главной (одно изображение) ──
@@ -192,7 +192,7 @@ async function renderPage(pg) {
   const wrapDraft = (inner) => isDraft ? `<div class="scp-draft-banner">⚠ ЧЕРНОВИК — ДОКУМЕНТ НЕ ЗАВЕРШЁН</div><div class="scp-redact-wrap"><div class="scp-redact-inner">${inner}</div></div>` : inner;
 
   if (kids.length > 0) {
-    const grid = kids.some(k=>k.image_url) ? `<div class="cgrid">${kids.map(mkCard).join('')}</div>` : `<div class="flat-grid">${kids.map(k=>`<div class="flat-row" onclick="go('${esc(k.slug)}')">${esc(pT(k))}</div>`).join('')}</div>`;
+    const grid = kids.some(k=>k.image_url) ? `<div class="cgrid">${kids.map(mkCard).join('')}</div>` : `<div class="flat-grid">${kids.map(k=>`<div class="flat-row" onclick="go('${jsq(k.slug)}')">${esc(pT(k))}</div>`).join('')}</div>`;
     setPg(`${cover}${wrapDraft(grid+(content?`<div class="prose">${renderBlocks(content)}</div>`:''))}`);
     renderCommentsSection(pg.slug);
   } else {
@@ -304,7 +304,7 @@ function _renderAbilityPageInline(pg) {
   const iconUrl = pg.image_url || (typeof getAbilityIconUrl==='function' ? getAbilityIconUrl(pT(pg)) : null);
   const statItems = [range&&{k:'Дальность',v:range}, cost&&{k:'Стоимость',v:cost}, trigger&&{k:'Триггер',v:trigger}, ...bonuses.map(([k,v])=>({k,v,accent:true})), ...immunities.map(im=>({k:'Иммунитет',v:im}))].filter(Boolean);
   const draftBanner = isDraft ? `<div class="scp-draft-banner">⚠ ЧЕРНОВИК</div>` : '';
-  setPg(`${draftBanner}<div class="abx-page" style="--tc:${AT.c}"><div class="abx-card"><div class="abx-bolts abx-bolt-tl"></div><div class="abx-bolts abx-bolt-tr"></div><div class="abx-bolts abx-bolt-bl"></div><div class="abx-bolts abx-bolt-br"></div>${iconUrl?`<div class="abx-image-side"><img src="${esc(iconUrl)}" loading="eager" onclick="openLightbox('${esc(iconUrl)}','${esc(pT(pg))}');return false;" alt="${esc(pT(pg))}"><div class="abx-image-mask"></div></div>`:'<div class="abx-image-side" style="background:#1f1812"></div>'}<div class="abx-content-side"><div class="abx-type" style="border-color:${AT.c};color:${AT.c}">${AT.ru.toUpperCase()}</div><h1 class="abx-name">${esc(pT(pg))}</h1><div class="abx-divider"></div>${effect?`<div class="abx-effect" style="border-left-color:${AT.c}">${esc(effect)}</div>`:''} ${desc?`<p class="abx-desc">${esc(desc)}</p>`:''} ${otherBlocks.length?`<div class="prose abx-blocks">${otherBlocks.map(renderBlock).join('')}</div>`:''} ${statItems.length?`<div class="abx-stats">${statItems.map(s=>`<div class="abx-stat-item"><span class="abx-stat-k">${esc(s.k)}</span><span class="abx-stat-v"${s.accent?` style="color:${AT.c}"`:''}>${esc(s.v)}</span></div>`).join('')}</div>`:''}</div></div></div>`);
+  setPg(`${draftBanner}<div class="abx-page" style="--tc:${AT.c}"><div class="abx-card"><div class="abx-bolts abx-bolt-tl"></div><div class="abx-bolts abx-bolt-tr"></div><div class="abx-bolts abx-bolt-bl"></div><div class="abx-bolts abx-bolt-br"></div>${iconUrl?`<div class="abx-image-side"><img src="${esc(safeUrl(iconUrl))}" loading="eager" onclick="openLightbox('${jsq(safeUrl(iconUrl))}','${jsq(pT(pg))}');return false;" alt="${esc(pT(pg))}"><div class="abx-image-mask"></div></div>`:'<div class="abx-image-side" style="background:#1f1812"></div>'}<div class="abx-content-side"><div class="abx-type" style="border-color:${AT.c};color:${AT.c}">${AT.ru.toUpperCase()}</div><h1 class="abx-name">${esc(pT(pg))}</h1><div class="abx-divider"></div>${effect?`<div class="abx-effect" style="border-left-color:${AT.c}">${esc(effect)}</div>`:''} ${desc?`<p class="abx-desc">${esc(desc)}</p>`:''} ${otherBlocks.length?`<div class="prose abx-blocks">${otherBlocks.map(renderBlock).join('')}</div>`:''} ${statItems.length?`<div class="abx-stats">${statItems.map(s=>`<div class="abx-stat-item"><span class="abx-stat-k">${esc(s.k)}</span><span class="abx-stat-v"${s.accent?` style="color:${AT.c}"`:''}>${esc(s.v)}</span></div>`).join('')}</div>`:''}</div></div></div>`);
   renderCommentsSection(pg.slug);
 }
 
@@ -500,8 +500,8 @@ function pvRefreshOptions(slug) {
   if (keyBox) {
     const keys = Array.from(keyMap.keys()).sort((a, b) => a.localeCompare(b, 'ru'));
     if (st.key !== 'all' && !keyMap.has(st.key)) st.key = 'all';
-    keyBox.innerHTML = `<button class="pv-kchip${st.key==='all'?' on':''}" data-k="all" onclick="pvSetKey('${esc(slug)}','all')">${lang==='en'?'Any characteristic':'Любая характеристика'}</button>`
-      + keys.map(k => `<button class="pv-kchip${st.key===k?' on':''}" data-k="${esc(k)}" onclick="pvSetKey('${esc(slug)}','${esc(k)}')">${esc(_pvPrettyKey(k))}</button>`).join('');
+    keyBox.innerHTML = `<button class="pv-kchip${st.key==='all'?' on':''}" data-k="all" onclick="pvSetKey('${jsq(slug)}','all')">${lang==='en'?'Any characteristic':'Любая характеристика'}</button>`
+      + keys.map(k => `<button class="pv-kchip${st.key===k?' on':''}" data-k="${esc(k)}" onclick="pvSetKey('${jsq(slug)}','${jsq(k)}')">${esc(_pvPrettyKey(k))}</button>`).join('');
   }
 
   const valBox = document.getElementById('pv-val-chips');
@@ -511,17 +511,17 @@ function pvRefreshOptions(slug) {
   if (valBox) {
     if (st.val && !selectedValues.includes(st.val)) st.val = '';
     valBox.style.display = (st.key !== 'all' && !isNumericKey) ? '' : 'none';
-    valBox.innerHTML = `<button class="pv-vchip${!st.val?' on':''}" data-v="" onclick="pvSetVal('${esc(slug)}','')">${lang==='en'?'Any value':'Любое значение'}</button>`
-      + selectedValues.map(v => `<button class="pv-vchip${st.val===v?' on':''}" data-v="${esc(v)}" onclick="pvSetVal('${esc(slug)}','${esc(v)}')">${esc(_pvDisplayTerm(st.key, v))}</button>`).join('');
+    valBox.innerHTML = `<button class="pv-vchip${!st.val?' on':''}" data-v="" onclick="pvSetVal('${jsq(slug)}','')">${lang==='en'?'Any value':'Любое значение'}</button>`
+      + selectedValues.map(v => `<button class="pv-vchip${st.val===v?' on':''}" data-v="${esc(v)}" onclick="pvSetVal('${jsq(slug)}','${jsq(v)}')">${esc(_pvDisplayTerm(st.key, v))}</button>`).join('');
   }
 
   if (sortBox) {
     sortBox.style.display = (st.key !== 'all' && isNumericKey) ? '' : 'none';
     if (!isNumericKey) st.sort = 'none';
     sortBox.innerHTML =
-      `<button class="pv-schip${st.sort==='none'?' on':''}" data-s="none" onclick="pvSetSort('${esc(slug)}','none')">${lang==='en'?'No sorting':'Без сортировки'}</button>` +
-      `<button class="pv-schip${st.sort==='desc'?' on':''}" data-s="desc" onclick="pvSetSort('${esc(slug)}','desc')">${lang==='en'?'More to less':'Больше к меньшему'}</button>` +
-      `<button class="pv-schip${st.sort==='asc'?' on':''}" data-s="asc" onclick="pvSetSort('${esc(slug)}','asc')">${lang==='en'?'Less to more':'Меньше к большему'}</button>`;
+      `<button class="pv-schip${st.sort==='none'?' on':''}" data-s="none" onclick="pvSetSort('${jsq(slug)}','none')">${lang==='en'?'No sorting':'Без сортировки'}</button>` +
+      `<button class="pv-schip${st.sort==='desc'?' on':''}" data-s="desc" onclick="pvSetSort('${jsq(slug)}','desc')">${lang==='en'?'More to less':'Больше к меньшему'}</button>` +
+      `<button class="pv-schip${st.sort==='asc'?' on':''}" data-s="asc" onclick="pvSetSort('${jsq(slug)}','asc')">${lang==='en'?'Less to more':'Меньше к большему'}</button>`;
   }
 }
 
@@ -739,7 +739,7 @@ function renderWeaponPreviewPage(pg, kids, otherBlocks) {
       data-caliber="${w.caliber}"
       data-weight="${w.weight}"
       data-firerate="${w.fireRate}"
-      onclick="go('${esc(w.slug)}')">
+      onclick="go('${jsq(w.slug)}')">
       
       <div class="wpv-card-scan"></div>
       
@@ -830,7 +830,7 @@ function renderWeaponPreviewPage(pg, kids, otherBlocks) {
   setPg(`${draftBanner}${cover}
     <div class="pv-wrap wpv-wrap">
       <div class="wpv-toolbar">
-        <button class="wpv-filter-btn" onclick="wpvToggleFilters('${esc(pg.slug)}')">
+        <button class="wpv-filter-btn" onclick="wpvToggleFilters('${jsq(pg.slug)}')">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M8 1L10.5 6H13.5L9 10L10.5 15L8 12L5.5 15L7 10L2.5 6H5.5L8 1Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
           </svg>
@@ -838,15 +838,15 @@ function renderWeaponPreviewPage(pg, kids, otherBlocks) {
           <span class="wpv-filter-count" id="wpv-filter-count-${esc(pg.slug)}">0</span>
         </button>
         <div class="wpv-quick-sort">
-          <button class="wpv-sort-btn${st.sort==='damage-desc'?' active':''}" onclick="wpvSetSort('${esc(pg.slug)}','damage-desc')" title="Сортировка по урону">
+          <button class="wpv-sort-btn${st.sort==='damage-desc'?' active':''}" onclick="wpvSetSort('${jsq(pg.slug)}','damage-desc')" title="Сортировка по урону">
             <span>Урон</span>
             <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2L6 10M6 10L3 7M6 10L9 7" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
           </button>
-          <button class="wpv-sort-btn${st.sort==='range-desc'?' active':''}" onclick="wpvSetSort('${esc(pg.slug)}','range-desc')" title="Сортировка по дальности">
+          <button class="wpv-sort-btn${st.sort==='range-desc'?' active':''}" onclick="wpvSetSort('${jsq(pg.slug)}','range-desc')" title="Сортировка по дальности">
             <span>Дальность</span>
             <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2L6 10M6 10L3 7M6 10L9 7" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
           </button>
-          <button class="wpv-sort-btn${st.sort==='caliber-desc'?' active':''}" onclick="wpvSetSort('${esc(pg.slug)}','caliber-desc')" title="Сортировка по калибру">
+          <button class="wpv-sort-btn${st.sort==='caliber-desc'?' active':''}" onclick="wpvSetSort('${jsq(pg.slug)}','caliber-desc')" title="Сортировка по калибру">
             <span>Калибр</span>
             <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2L6 10M6 10L3 7M6 10L9 7" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
           </button>
@@ -863,32 +863,32 @@ function renderWeaponPreviewPage(pg, kids, otherBlocks) {
             <div class="wpv-filter-section">
               <div class="wpv-filter-title">Класс оружия</div>
               <div class="wpv-filter-options" data-group="class">
-                <label class="wpv-filter-option"><input type="radio" name="class-${esc(pg.slug)}" value="all" ${st.weaponClass==='all'?'checked':''} onchange="wpvSetClass('${esc(pg.slug)}','all')"><span>Все</span></label>
-                ${weaponClasses.map(c => `<label class="wpv-filter-option"><input type="radio" name="class-${esc(pg.slug)}" value="${esc(c)}" ${st.weaponClass===c?'checked':''} onchange="wpvSetClass('${esc(pg.slug)}','${esc(c)}')"><span>${esc(classLabels[c] || c)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="class-${esc(pg.slug)}" value="all" ${st.weaponClass==='all'?'checked':''} onchange="wpvSetClass('${jsq(pg.slug)}','all')"><span>Все</span></label>
+                ${weaponClasses.map(c => `<label class="wpv-filter-option"><input type="radio" name="class-${esc(pg.slug)}" value="${esc(c)}" ${st.weaponClass===c?'checked':''} onchange="wpvSetClass('${jsq(pg.slug)}','${jsq(c)}')"><span>${esc(classLabels[c] || c)}</span></label>`).join('')}
               </div>
             </div>
             
             <div class="wpv-filter-section">
               <div class="wpv-filter-title">Технология</div>
               <div class="wpv-filter-options" data-group="tech">
-                <label class="wpv-filter-option"><input type="radio" name="tech-${esc(pg.slug)}" value="all" ${st.techType==='all'?'checked':''} onchange="wpvSetTech('${esc(pg.slug)}','all')"><span>Все</span></label>
-                ${techTypes.map(t => `<label class="wpv-filter-option"><input type="radio" name="tech-${esc(pg.slug)}" value="${esc(t)}" ${st.techType===t?'checked':''} onchange="wpvSetTech('${esc(pg.slug)}','${esc(t)}')"><span>${esc(techLabels[t] || t)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="tech-${esc(pg.slug)}" value="all" ${st.techType==='all'?'checked':''} onchange="wpvSetTech('${jsq(pg.slug)}','all')"><span>Все</span></label>
+                ${techTypes.map(t => `<label class="wpv-filter-option"><input type="radio" name="tech-${esc(pg.slug)}" value="${esc(t)}" ${st.techType===t?'checked':''} onchange="wpvSetTech('${jsq(pg.slug)}','${jsq(t)}')"><span>${esc(techLabels[t] || t)}</span></label>`).join('')}
               </div>
             </div>
             
             <div class="wpv-filter-section">
               <div class="wpv-filter-title">Тип урона</div>
               <div class="wpv-filter-options" data-group="dmgtype">
-                <label class="wpv-filter-option"><input type="radio" name="dmgtype-${esc(pg.slug)}" value="all" ${st.damageType==='all'?'checked':''} onchange="wpvSetDamageType('${esc(pg.slug)}','all')"><span>Все</span></label>
-                ${damageTypes.map(d => `<label class="wpv-filter-option"><input type="radio" name="dmgtype-${esc(pg.slug)}" value="${esc(d)}" ${st.damageType===d?'checked':''} onchange="wpvSetDamageType('${esc(pg.slug)}','${esc(d)}')"><span>${esc(damageLabels[d] || d)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="dmgtype-${esc(pg.slug)}" value="all" ${st.damageType==='all'?'checked':''} onchange="wpvSetDamageType('${jsq(pg.slug)}','all')"><span>Все</span></label>
+                ${damageTypes.map(d => `<label class="wpv-filter-option"><input type="radio" name="dmgtype-${esc(pg.slug)}" value="${esc(d)}" ${st.damageType===d?'checked':''} onchange="wpvSetDamageType('${jsq(pg.slug)}','${jsq(d)}')"><span>${esc(damageLabels[d] || d)}</span></label>`).join('')}
               </div>
             </div>
             
             <div class="wpv-filter-section">
               <div class="wpv-filter-title">Редкость</div>
               <div class="wpv-filter-options" data-group="rarity">
-                <label class="wpv-filter-option"><input type="radio" name="rarity-${esc(pg.slug)}" value="all" ${st.rarity==='all'?'checked':''} onchange="wpvSetRarity('${esc(pg.slug)}','all')"><span>Все</span></label>
-                ${rarities.map(r => `<label class="wpv-filter-option"><input type="radio" name="rarity-${esc(pg.slug)}" value="${esc(r)}" ${st.rarity===r?'checked':''} onchange="wpvSetRarity('${esc(pg.slug)}','${esc(r)}')"><span>${esc(rarityLabels[r] || r)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="rarity-${esc(pg.slug)}" value="all" ${st.rarity==='all'?'checked':''} onchange="wpvSetRarity('${jsq(pg.slug)}','all')"><span>Все</span></label>
+                ${rarities.map(r => `<label class="wpv-filter-option"><input type="radio" name="rarity-${esc(pg.slug)}" value="${esc(r)}" ${st.rarity===r?'checked':''} onchange="wpvSetRarity('${jsq(pg.slug)}','${jsq(r)}')"><span>${esc(rarityLabels[r] || r)}</span></label>`).join('')}
               </div>
             </div>
           </div>
@@ -897,48 +897,48 @@ function renderWeaponPreviewPage(pg, kids, otherBlocks) {
             ${damageRanges.length ? `<div class="wpv-filter-section">
               <div class="wpv-filter-title">Урон</div>
               <div class="wpv-filter-options" data-group="damage">
-                <label class="wpv-filter-option"><input type="radio" name="damage-${esc(pg.slug)}" value="all" ${st.damageRange==='all'?'checked':''} onchange="wpvSetDamageRange('${esc(pg.slug)}','all')"><span>Любой</span></label>
-                ${damageRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="damage-${esc(pg.slug)}" value="${i}" ${st.damageRange===String(i)?'checked':''} onchange="wpvSetDamageRange('${esc(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="damage-${esc(pg.slug)}" value="all" ${st.damageRange==='all'?'checked':''} onchange="wpvSetDamageRange('${jsq(pg.slug)}','all')"><span>Любой</span></label>
+                ${damageRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="damage-${esc(pg.slug)}" value="${i}" ${st.damageRange===String(i)?'checked':''} onchange="wpvSetDamageRange('${jsq(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
               </div>
             </div>` : ''}
             
             ${rangeRanges.length ? `<div class="wpv-filter-section">
               <div class="wpv-filter-title">Дальность</div>
               <div class="wpv-filter-options" data-group="range">
-                <label class="wpv-filter-option"><input type="radio" name="range-${esc(pg.slug)}" value="all" ${st.rangeRange==='all'?'checked':''} onchange="wpvSetRangeRange('${esc(pg.slug)}','all')"><span>Любая</span></label>
-                ${rangeRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="range-${esc(pg.slug)}" value="${i}" ${st.rangeRange===String(i)?'checked':''} onchange="wpvSetRangeRange('${esc(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="range-${esc(pg.slug)}" value="all" ${st.rangeRange==='all'?'checked':''} onchange="wpvSetRangeRange('${jsq(pg.slug)}','all')"><span>Любая</span></label>
+                ${rangeRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="range-${esc(pg.slug)}" value="${i}" ${st.rangeRange===String(i)?'checked':''} onchange="wpvSetRangeRange('${jsq(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
               </div>
             </div>` : ''}
             
             ${caliberRanges.length ? `<div class="wpv-filter-section">
               <div class="wpv-filter-title">Калибр</div>
               <div class="wpv-filter-options" data-group="caliber">
-                <label class="wpv-filter-option"><input type="radio" name="caliber-${esc(pg.slug)}" value="all" ${st.caliberRange==='all'?'checked':''} onchange="wpvSetCaliberRange('${esc(pg.slug)}','all')"><span>Любой</span></label>
-                ${caliberRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="caliber-${esc(pg.slug)}" value="${i}" ${st.caliberRange===String(i)?'checked':''} onchange="wpvSetCaliberRange('${esc(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="caliber-${esc(pg.slug)}" value="all" ${st.caliberRange==='all'?'checked':''} onchange="wpvSetCaliberRange('${jsq(pg.slug)}','all')"><span>Любой</span></label>
+                ${caliberRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="caliber-${esc(pg.slug)}" value="${i}" ${st.caliberRange===String(i)?'checked':''} onchange="wpvSetCaliberRange('${jsq(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
               </div>
             </div>` : ''}
             
             ${weightRanges.length ? `<div class="wpv-filter-section">
               <div class="wpv-filter-title">Вес</div>
               <div class="wpv-filter-options" data-group="weight">
-                <label class="wpv-filter-option"><input type="radio" name="weight-${esc(pg.slug)}" value="all" ${st.weightRange==='all'?'checked':''} onchange="wpvSetWeightRange('${esc(pg.slug)}','all')"><span>Любой</span></label>
-                ${weightRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="weight-${esc(pg.slug)}" value="${i}" ${st.weightRange===String(i)?'checked':''} onchange="wpvSetWeightRange('${esc(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="weight-${esc(pg.slug)}" value="all" ${st.weightRange==='all'?'checked':''} onchange="wpvSetWeightRange('${jsq(pg.slug)}','all')"><span>Любой</span></label>
+                ${weightRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="weight-${esc(pg.slug)}" value="${i}" ${st.weightRange===String(i)?'checked':''} onchange="wpvSetWeightRange('${jsq(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
               </div>
             </div>` : ''}
             
             ${fireRateRanges.length ? `<div class="wpv-filter-section">
               <div class="wpv-filter-title">Темп стрельбы</div>
               <div class="wpv-filter-options" data-group="firerate">
-                <label class="wpv-filter-option"><input type="radio" name="firerate-${esc(pg.slug)}" value="all" ${st.fireRateRange==='all'?'checked':''} onchange="wpvSetFireRateRange('${esc(pg.slug)}','all')"><span>Любой</span></label>
-                ${fireRateRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="firerate-${esc(pg.slug)}" value="${i}" ${st.fireRateRange===String(i)?'checked':''} onchange="wpvSetFireRateRange('${esc(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="firerate-${esc(pg.slug)}" value="all" ${st.fireRateRange==='all'?'checked':''} onchange="wpvSetFireRateRange('${jsq(pg.slug)}','all')"><span>Любой</span></label>
+                ${fireRateRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="firerate-${esc(pg.slug)}" value="${i}" ${st.fireRateRange===String(i)?'checked':''} onchange="wpvSetFireRateRange('${jsq(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
               </div>
             </div>` : ''}
           </div>
         </div>
         
         <div class="wpv-filter-actions">
-          <button class="wpv-reset-btn" onclick="wpvResetFilters('${esc(pg.slug)}')">Сбросить все</button>
-          <button class="wpv-close-btn" onclick="wpvToggleFilters('${esc(pg.slug)}')">Закрыть</button>
+          <button class="wpv-reset-btn" onclick="wpvResetFilters('${jsq(pg.slug)}')">Сбросить все</button>
+          <button class="wpv-close-btn" onclick="wpvToggleFilters('${jsq(pg.slug)}')">Закрыть</button>
         </div>
       </div>
       
@@ -1068,7 +1068,7 @@ function renderArmorPreviewPage(pg, kids, otherBlocks) {
       data-hp="${a.hp}"
       data-pen="${a.penMm}"
       data-weight="${a.weight}"
-      onclick="go('${esc(a.slug)}')">
+      onclick="go('${jsq(a.slug)}')">
       
       <div class="wpv-card-scan"></div>
       
@@ -1151,7 +1151,7 @@ function renderArmorPreviewPage(pg, kids, otherBlocks) {
   setPg(`${draftBanner}${cover}
     <div class="pv-wrap wpv-wrap apv-wrap">
       <div class="wpv-toolbar">
-        <button class="wpv-filter-btn" onclick="apvToggleFilters('${esc(pg.slug)}')">
+        <button class="wpv-filter-btn" onclick="apvToggleFilters('${jsq(pg.slug)}')">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M8 1L10.5 6H13.5L9 10L10.5 15L8 12L5.5 15L7 10L2.5 6H5.5L8 1Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
           </svg>
@@ -1159,11 +1159,11 @@ function renderArmorPreviewPage(pg, kids, otherBlocks) {
           <span class="wpv-filter-count" id="apv-filter-count-${esc(pg.slug)}">0</span>
         </button>
         <div class="wpv-quick-sort">
-          <button class="wpv-sort-btn${st.sort==='hp-desc'?' active':''}" onclick="apvSetSort('${esc(pg.slug)}','hp-desc')" title="Сортировка по HP">
+          <button class="wpv-sort-btn${st.sort==='hp-desc'?' active':''}" onclick="apvSetSort('${jsq(pg.slug)}','hp-desc')" title="Сортировка по HP">
             <span>HP</span>
             <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2L6 10M6 10L3 7M6 10L9 7" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
           </button>
-          <button class="wpv-sort-btn${st.sort==='pen-desc'?' active':''}" onclick="apvSetSort('${esc(pg.slug)}','pen-desc')" title="Сортировка по пробитию">
+          <button class="wpv-sort-btn${st.sort==='pen-desc'?' active':''}" onclick="apvSetSort('${jsq(pg.slug)}','pen-desc')" title="Сортировка по пробитию">
             <span>Пробитие</span>
             <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2L6 10M6 10L3 7M6 10L9 7" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
           </button>
@@ -1180,24 +1180,24 @@ function renderArmorPreviewPage(pg, kids, otherBlocks) {
             <div class="wpv-filter-section">
               <div class="wpv-filter-title">Класс брони</div>
               <div class="wpv-filter-options" data-group="class">
-                <label class="wpv-filter-option"><input type="radio" name="aclass-${esc(pg.slug)}" value="all" ${st.armorClass==='all'?'checked':''} onchange="apvSetClass('${esc(pg.slug)}','all')"><span>Все</span></label>
-                ${armorClasses.map(c => `<label class="wpv-filter-option"><input type="radio" name="aclass-${esc(pg.slug)}" value="${esc(c)}" ${st.armorClass===c?'checked':''} onchange="apvSetClass('${esc(pg.slug)}','${esc(c)}')"><span>${esc(classLabels[c] || c)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="aclass-${esc(pg.slug)}" value="all" ${st.armorClass==='all'?'checked':''} onchange="apvSetClass('${jsq(pg.slug)}','all')"><span>Все</span></label>
+                ${armorClasses.map(c => `<label class="wpv-filter-option"><input type="radio" name="aclass-${esc(pg.slug)}" value="${esc(c)}" ${st.armorClass===c?'checked':''} onchange="apvSetClass('${jsq(pg.slug)}','${jsq(c)}')"><span>${esc(classLabels[c] || c)}</span></label>`).join('')}
               </div>
             </div>
             
             ${laserRatings.length ? `<div class="wpv-filter-section">
               <div class="wpv-filter-title">Лазер рейтинг</div>
               <div class="wpv-filter-options" data-group="laser">
-                <label class="wpv-filter-option"><input type="radio" name="laser-${esc(pg.slug)}" value="all" ${st.laserRating==='all'?'checked':''} onchange="apvSetLaser('${esc(pg.slug)}','all')"><span>Все</span></label>
-                ${laserRatings.map(l => `<label class="wpv-filter-option"><input type="radio" name="laser-${esc(pg.slug)}" value="${esc(l)}" ${st.laserRating===l?'checked':''} onchange="apvSetLaser('${esc(pg.slug)}','${esc(l)}')"><span>${esc(l)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="laser-${esc(pg.slug)}" value="all" ${st.laserRating==='all'?'checked':''} onchange="apvSetLaser('${jsq(pg.slug)}','all')"><span>Все</span></label>
+                ${laserRatings.map(l => `<label class="wpv-filter-option"><input type="radio" name="laser-${esc(pg.slug)}" value="${esc(l)}" ${st.laserRating===l?'checked':''} onchange="apvSetLaser('${jsq(pg.slug)}','${jsq(l)}')"><span>${esc(l)}</span></label>`).join('')}
               </div>
             </div>` : ''}
             
             <div class="wpv-filter-section">
               <div class="wpv-filter-title">Редкость</div>
               <div class="wpv-filter-options" data-group="rarity">
-                <label class="wpv-filter-option"><input type="radio" name="ararity-${esc(pg.slug)}" value="all" ${st.rarity==='all'?'checked':''} onchange="apvSetRarity('${esc(pg.slug)}','all')"><span>Все</span></label>
-                ${rarities.map(r => `<label class="wpv-filter-option"><input type="radio" name="ararity-${esc(pg.slug)}" value="${esc(r)}" ${st.rarity===r?'checked':''} onchange="apvSetRarity('${esc(pg.slug)}','${esc(r)}')"><span>${esc(rarityLabels[r] || r)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="ararity-${esc(pg.slug)}" value="all" ${st.rarity==='all'?'checked':''} onchange="apvSetRarity('${jsq(pg.slug)}','all')"><span>Все</span></label>
+                ${rarities.map(r => `<label class="wpv-filter-option"><input type="radio" name="ararity-${esc(pg.slug)}" value="${esc(r)}" ${st.rarity===r?'checked':''} onchange="apvSetRarity('${jsq(pg.slug)}','${jsq(r)}')"><span>${esc(rarityLabels[r] || r)}</span></label>`).join('')}
               </div>
             </div>
           </div>
@@ -1206,32 +1206,32 @@ function renderArmorPreviewPage(pg, kids, otherBlocks) {
             ${hpRanges.length ? `<div class="wpv-filter-section">
               <div class="wpv-filter-title">HP брони</div>
               <div class="wpv-filter-options" data-group="hp">
-                <label class="wpv-filter-option"><input type="radio" name="hp-${esc(pg.slug)}" value="all" ${st.hpRange==='all'?'checked':''} onchange="apvSetHpRange('${esc(pg.slug)}','all')"><span>Любой</span></label>
-                ${hpRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="hp-${esc(pg.slug)}" value="${i}" ${st.hpRange===String(i)?'checked':''} onchange="apvSetHpRange('${esc(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="hp-${esc(pg.slug)}" value="all" ${st.hpRange==='all'?'checked':''} onchange="apvSetHpRange('${jsq(pg.slug)}','all')"><span>Любой</span></label>
+                ${hpRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="hp-${esc(pg.slug)}" value="${i}" ${st.hpRange===String(i)?'checked':''} onchange="apvSetHpRange('${jsq(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
               </div>
             </div>` : ''}
             
             ${penRanges.length ? `<div class="wpv-filter-section">
               <div class="wpv-filter-title">Пробитие</div>
               <div class="wpv-filter-options" data-group="pen">
-                <label class="wpv-filter-option"><input type="radio" name="pen-${esc(pg.slug)}" value="all" ${st.penRange==='all'?'checked':''} onchange="apvSetPenRange('${esc(pg.slug)}','all')"><span>Любое</span></label>
-                ${penRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="pen-${esc(pg.slug)}" value="${i}" ${st.penRange===String(i)?'checked':''} onchange="apvSetPenRange('${esc(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="pen-${esc(pg.slug)}" value="all" ${st.penRange==='all'?'checked':''} onchange="apvSetPenRange('${jsq(pg.slug)}','all')"><span>Любое</span></label>
+                ${penRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="pen-${esc(pg.slug)}" value="${i}" ${st.penRange===String(i)?'checked':''} onchange="apvSetPenRange('${jsq(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
               </div>
             </div>` : ''}
             
             ${weightRanges.length ? `<div class="wpv-filter-section">
               <div class="wpv-filter-title">Вес</div>
               <div class="wpv-filter-options" data-group="weight">
-                <label class="wpv-filter-option"><input type="radio" name="aweight-${esc(pg.slug)}" value="all" ${st.weightRange==='all'?'checked':''} onchange="apvSetWeightRange('${esc(pg.slug)}','all')"><span>Любой</span></label>
-                ${weightRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="aweight-${esc(pg.slug)}" value="${i}" ${st.weightRange===String(i)?'checked':''} onchange="apvSetWeightRange('${esc(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
+                <label class="wpv-filter-option"><input type="radio" name="aweight-${esc(pg.slug)}" value="all" ${st.weightRange==='all'?'checked':''} onchange="apvSetWeightRange('${jsq(pg.slug)}','all')"><span>Любой</span></label>
+                ${weightRanges.map((r,i) => `<label class="wpv-filter-option"><input type="radio" name="aweight-${esc(pg.slug)}" value="${i}" ${st.weightRange===String(i)?'checked':''} onchange="apvSetWeightRange('${jsq(pg.slug)}','${i}')"><span>${esc(r.label)}</span></label>`).join('')}
               </div>
             </div>` : ''}
           </div>
         </div>
         
         <div class="wpv-filter-actions">
-          <button class="wpv-reset-btn" onclick="apvResetFilters('${esc(pg.slug)}')">Сбросить все</button>
-          <button class="wpv-close-btn" onclick="apvToggleFilters('${esc(pg.slug)}')">Закрыть</button>
+          <button class="wpv-reset-btn" onclick="apvResetFilters('${jsq(pg.slug)}')">Сбросить все</button>
+          <button class="wpv-close-btn" onclick="apvToggleFilters('${jsq(pg.slug)}')">Закрыть</button>
         </div>
       </div>
       
@@ -1291,7 +1291,7 @@ function renderPreviewPage(pg) {
   _previewState[pg.slug] = _previewState[pg.slug] || { chip: 'all', key: 'all', val: '', sort: 'none' };
   const st = _previewState[pg.slug];
   const chipsHtml = chips.map(c =>
-    `<button class="pv-chip${st.chip===c.id?' on':''}" onclick="pvSetFilter('${esc(pg.slug)}','${esc(c.id)}',this)">${esc(c.label)}</button>`
+    `<button class="pv-chip${st.chip===c.id?' on':''}" onclick="pvSetFilter('${jsq(pg.slug)}','${jsq(c.id)}',this)">${esc(c.label)}</button>`
   ).join('');
   const cardsHtml = cards.map(c => {
     const specText = c.specs.map(([k,v]) => `${k} ${v}`).join(' ');
@@ -1310,7 +1310,7 @@ function renderPreviewPage(pg) {
       const isPrice = /^(цена|стоимость|price|cost)$/i.test(k);
       return `<span class="pv-c-chip${isPrice?' pv-c-chip--price':''}">${esc(_pvPrettyKey(k))}: ${esc(v)}</span>`;
     }).join('');
-    return `<div class="pv-card" data-type="${esc(c.pageType)}" data-title="${esc(c.title)}" data-spec="${esc(specText)}" data-pairs="${esc(pairsText)}" onclick="go('${esc(c.slug)}')">
+    return `<div class="pv-card" data-type="${esc(c.pageType)}" data-title="${esc(c.title)}" data-spec="${esc(specText)}" data-pairs="${esc(pairsText)}" onclick="go('${jsq(c.slug)}')">
       <div class="pv-c-media">${c.image?`<img src="${esc(c.image)}" alt="${esc(c.title)}" loading="lazy">`:`<div class="pv-c-noimg">◈</div>`}<div class="pv-c-media-grad"></div></div>
       <div class="pv-c-body">
         <div class="pv-c-topline">
@@ -1356,8 +1356,8 @@ function renderPreviewPage(pg) {
 const mkCard = pg => {
   const typeClass = pg.page_type ? `card-${pg.page_type}` : 'card-default';
   return pg.image_url 
-    ? `<div class="card ${typeClass}" onclick="go('${esc(pg.slug)}')"><img src="${esc(pg.image_url)}" alt="${esc(pT(pg))}" loading="lazy"><div class="card-ov"><div class="card-hud-tl"></div><div class="card-hud-tr"></div><div class="card-status"></div></div><div class="card-nm"><span class="card-title">${esc(pT(pg))}</span></div></div>` 
-    : `<div class="card ${typeClass}" onclick="go('${esc(pg.slug)}')"><div class="card-noimg"></div><div class="card-ov"><div class="card-hud-tl"></div><div class="card-hud-tr"></div><div class="card-status"></div></div><div class="card-nm"><span class="card-title">${esc(pT(pg))}</span></div></div>`;
+    ? `<div class="card ${typeClass}" onclick="go('${jsq(pg.slug)}')"><img src="${esc(pg.image_url)}" alt="${esc(pT(pg))}" loading="lazy"><div class="card-ov"><div class="card-hud-tl"></div><div class="card-hud-tr"></div><div class="card-status"></div></div><div class="card-nm"><span class="card-title">${esc(pT(pg))}</span></div></div>` 
+    : `<div class="card ${typeClass}" onclick="go('${jsq(pg.slug)}')"><div class="card-noimg"></div><div class="card-ov"><div class="card-hud-tl"></div><div class="card-hud-tr"></div><div class="card-status"></div></div><div class="card-nm"><span class="card-title">${esc(pT(pg))}</span></div></div>`;
 };
 
 function renderSectionPage(sec) {
@@ -1369,13 +1369,13 @@ function renderSectionPage(sec) {
     : `<div class="art-page-header art-page-header--nocov"><h1 class="art-h1">${esc(sN(sec))}</h1></div>`;
 
   let grid='';
-  if (directPgs.length) grid = directPgs.some(p=>p.image_url) ? `<div class="cgrid">${directPgs.map(mkCard).join('')}</div>` : `<div class="flat-grid">${directPgs.map(k=>`<div class="flat-row" onclick="go('${esc(k.slug)}')">${esc(pT(k))}</div>`).join('')}</div>`;
+  if (directPgs.length) grid = directPgs.some(p=>p.image_url) ? `<div class="cgrid">${directPgs.map(mkCard).join('')}</div>` : `<div class="flat-grid">${directPgs.map(k=>`<div class="flat-row" onclick="go('${jsq(k.slug)}')">${esc(pT(k))}</div>`).join('')}</div>`;
   const subHtml = subSecs.map(sub=>{
     const spgs=pages.filter(p=>isVisiblePage(p)&&p.section===sub.slug&&!p.parent_slug).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
     if (!spgs.length&&!user) return '';
-    const sg=spgs.some(p=>p.image_url)?`<div class="cgrid">${spgs.map(mkCard).join('')}</div>`:`<div class="flat-grid">${spgs.map(k=>`<div class="flat-row" onclick="go('${esc(k.slug)}')">${esc(pT(k))}</div>`).join('')}</div>`;
+    const sg=spgs.some(p=>p.image_url)?`<div class="cgrid">${spgs.map(mkCard).join('')}</div>`:`<div class="flat-grid">${spgs.map(k=>`<div class="flat-row" onclick="go('${jsq(k.slug)}')">${esc(pT(k))}</div>`).join('')}</div>`;
     const iconHtml = sub.icon ? `<img src="${esc(sub.icon)}" alt="" style="width:20px;height:20px;object-fit:contain;vertical-align:middle;margin-right:6px">` : '<span style="margin-right:6px">◈</span>';
-    return `<div class="grp-hdr"><span class="grp-hdr-t" onclick="go('sec:${esc(sub.slug)}')">${iconHtml}${esc(sN(sub))}</span></div>${sg}`;
+    return `<div class="grp-hdr"><span class="grp-hdr-t" onclick="go('sec:${jsq(sub.slug)}')">${iconHtml}${esc(sN(sub))}</span></div>${sg}`;
   }).filter(Boolean).join('');
 
   const isFracSec = sec.slug?.includes('frak')||sec.slug?.includes('frac')||sec.name_ru?.toLowerCase().includes('фракц');
@@ -1455,8 +1455,8 @@ function renderBlock(b) {
     case 'stats': return `<div class="blk blk-stat-row">${(b.items||[]).map(it=>`<div class="blk-stat-item"><span class="blk-stat-val">${esc((lang==='en'&&it.val_en?.trim())?it.val_en:it.val||'')}</span><span class="blk-stat-lbl">${esc((lang==='en'&&it.label_en?.trim())?it.label_en:it.label||'')}</span></div>`).join('')}</div>`;
     case 'timeline': return `<div class="blk blk-timeline">${(b.items||[]).map(it=>{const d=(lang==='en'&&it.date_en?.trim())?it.date_en:it.date||'';const tx=(lang==='en'&&it.text_en?.trim())?it.text_en:it.text||((lang==='en'&&it.title_en?.trim())?it.title_en:it.title||'');return `<div class="blk-timeline-item">${d?`<div class="blk-timeline-date">${esc(d)}</div>`:''}${tx?`<div class="blk-timeline-text">${esc(tx)}</div>`:''}</div>`;}).join('')}</div>`;
     case 'text': return `<div class="blk prose">${renderMd((lang==='en'&&b.content_en?.trim())?b.content_en:b.content||'')}</div>`;
-    case 'image': return `<div class="blk blk-image">${b.url?`<img src="${esc(safeUrl(b.url))}" alt="${esc(b.alt||'')}" loading="lazy" style="width:100%;max-height:${parseInt(b.maxh,10)||480}px;object-fit:cover;display:block;border:1px solid var(--w2);cursor:zoom-in" onclick="event.preventDefault();event.stopPropagation();openLightbox('${esc(safeUrl(b.url))}','${esc(b.alt||'')}');return false;">`:''}${b.caption?`<div class="bim-caption">${esc(b.caption)}</div>`:''}</div>`;
-    case 'imgtext': return `<div class="blk blk-imgtext lay-${safeClass(b.layout,SAFE_LAYOUTS_IMGTEXT,'l')}"><div class="bim-i"><img src="${esc(safeUrl(b.imgUrl||''))}" alt="${esc(b.imgAlt||'')}" loading="lazy" style="cursor:zoom-in" onclick="event.preventDefault();event.stopPropagation();openLightbox('${esc(safeUrl(b.imgUrl||''))}','${esc(b.imgAlt||'')}');return false;">${((lang==='en'&&b.caption_en?.trim())?b.caption_en:b.caption)?`<div class="bim-caption">${esc(((lang==='en'&&b.caption_en?.trim())?b.caption_en:b.caption))}</div>`:''}</div><div class="bim-t"><div class="prose">${renderMd((lang==='en'&&b.content_en?.trim())?b.content_en:b.content||'')}</div></div></div>`;
+    case 'image': return `<div class="blk blk-image">${b.url?`<img src="${esc(safeUrl(b.url))}" alt="${esc(b.alt||'')}" loading="lazy" style="width:100%;max-height:${parseInt(b.maxh,10)||480}px;object-fit:cover;display:block;border:1px solid var(--w2);cursor:zoom-in" onclick="event.preventDefault();event.stopPropagation();openLightbox('${jsq(safeUrl(b.url))}','${jsq(b.alt||'')}');return false;">`:''}${b.caption?`<div class="bim-caption">${esc(b.caption)}</div>`:''}</div>`;
+    case 'imgtext': return `<div class="blk blk-imgtext lay-${safeClass(b.layout,SAFE_LAYOUTS_IMGTEXT,'l')}"><div class="bim-i"><img src="${esc(safeUrl(b.imgUrl||''))}" alt="${esc(b.imgAlt||'')}" loading="lazy" style="cursor:zoom-in" onclick="event.preventDefault();event.stopPropagation();openLightbox('${jsq(safeUrl(b.imgUrl||''))}','${jsq(b.imgAlt||'')}');return false;">${((lang==='en'&&b.caption_en?.trim())?b.caption_en:b.caption)?`<div class="bim-caption">${esc(((lang==='en'&&b.caption_en?.trim())?b.caption_en:b.caption))}</div>`:''}</div><div class="bim-t"><div class="prose">${renderMd((lang==='en'&&b.content_en?.trim())?b.content_en:b.content||'')}</div></div></div>`;
     case 'callout': { const ct=(lang==='en'&&b.title_en?.trim())?b.title_en:b.title||''; return `<div class="blk blk-callout c-${safeClass(b.variant,SAFE_VARIANTS_CALLOUT,'info')}"><span class="blk-callout-ico">${esc(b.icon||'ℹ️')}</span><div>${ct?`<div class="blk-callout-title">${esc(ct)}</div>`:''}<div class="blk-callout-body prose">${renderMd((lang==='en'&&b.content_en?.trim())?b.content_en:b.content||'')}</div></div></div>`; }
     case 'frame': return `<div class="blk blk-frame"><div class="blk-frame-label">${esc((lang==='en'&&b.label_en?.trim())?b.label_en:b.label||'')}</div><div class="blk-frame-body prose">${renderMd((lang==='en'&&b.content_en?.trim())?b.content_en:b.content||'')}</div></div>`;
     case 'table': { const heads=(lang==='en'&&b.headers_en?.length)?b.headers_en.map((v,i)=>String(v||'').trim()||(b.headers||[])[i]||''):b.headers||[]; const rows=(lang==='en'&&b.rows_en?.length)?b.rows_en.map((row,ri)=>row.map((c,ci)=>String(c||'').trim()||((b.rows||[])[ri]||[])[ci]||'')):b.rows||[]; return `<div class="blk blk-table"><table><thead><tr>${heads.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; }
@@ -1498,13 +1498,13 @@ function il(t) {
   t=t.replace(/\[fx:schizo\]([\s\S]*?)\[\/fx\]/g,(_,s)=>mark(schizoWrap(s)));
 
   // images first - with onclick handler
-  t=t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,(_,alt,url)=>mark(`<img src="${esc(safeUrl(url))}" alt="${esc(alt)}" loading="lazy" style="cursor:zoom-in" onclick="event.preventDefault();event.stopPropagation();openLightbox('${esc(safeUrl(url))}','${esc(alt)}');return false;">`));
+  t=t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,(_,alt,url)=>mark(`<img src="${esc(safeUrl(url))}" alt="${esc(alt)}" loading="lazy" style="cursor:zoom-in" onclick="event.preventDefault();event.stopPropagation();openLightbox('${jsq(safeUrl(url))}','${jsq(alt)}');return false;">`));
   
   // Remove image links syntax [![alt](img)](link) -> just image
   t=t.replace(/\[(\x00\d+\x00)\]\([^)]+\)/g, '$1');
   
   // page links
-  t=t.replace(/\[page:([^\]]+)\]/g,(_,s)=>{const pg=pages.find(x=>x.slug===s);return mark(`<a href="javascript:void(0)" onclick="go('${esc(s)}')">${pg?esc(pT(pg)):esc(s)}</a>`);});
+  t=t.replace(/\[page:([^\]]+)\]/g,(_,s)=>{const pg=pages.find(x=>x.slug===s);return mark(`<a href="javascript:void(0)" onclick="go('${jsq(s)}')">${pg?esc(pT(pg)):esc(s)}</a>`);});
   
   // regular links
   t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_,text,url)=>mark(`<a href="${esc(safeUrl(url))}" target="_blank">${esc(text)}</a>`));
@@ -1520,7 +1520,7 @@ function il(t) {
     const ic = url
       ? `<img class="md-fac-flag" src="${esc(safeUrl(url))}" alt="" onerror="this.outerHTML='⬡'">`
       : '⬡';
-    return mark(`<span class="md-fac" onclick="if(typeof fnGotoFaction==='function')fnGotoFaction('${esc(fid)}',event)" title="Перейти к фракции «${esc(s)}»">${ic}<span>${esc(s)}</span></span>`);
+    return mark(`<span class="md-fac" onclick="if(typeof fnGotoFaction==='function')fnGotoFaction('${jsq(fid)}',event)" title="Перейти к фракции «${esc(s)}»">${ic}<span>${esc(s)}</span></span>`);
   });
 
   // standard MD (innermost — process first so they can be nested inside others)
@@ -1681,7 +1681,7 @@ function buildNav(filt='') {
       matched.forEach(p=>{
         const sec=p.section?sections.find(s=>s.slug===p.section):null;
         const trail=sec?`<span style="font-size:9px;color:var(--t4);font-family:JetBrains Mono,monospace;display:block;margin-top:1px;letter-spacing:.5px">${sN(sec)}</span>`:'';
-        h+=`<a class="np${curSlug===p.slug?' on':''}" href="#${esc(p.slug)}" onclick="return navGo(event,'${esc(p.slug)}')">${esc(pT(p))}${trail}</a>`;
+        h+=`<a class="np${curSlug===p.slug?' on':''}" href="#${esc(p.slug)}" onclick="return navGo(event,'${jsq(p.slug)}')">${esc(pT(p))}${trail}</a>`;
       });
     }
     document.getElementById('nav').innerHTML=h; setAct(curSlug||'home'); return;
@@ -1710,7 +1710,7 @@ function buildNav(filt='') {
     const cntHtml = totalCnt ? `<span class="nl-cnt">${totalCnt}</span>` : '';
 
     h+=`<div class="ns${isOpen?' op':''}" id="ns-${sec.id}">`;
-    h+=`<div class="nl-hdr${isSecPage?' on':''}" id="nlh-${sec.id}" onclick="tgNs('${sec.id}','${esc(sec.slug)}')">${bigIconHtml}${iconHtml}<span class="nl-name">${esc(sN(sec))}</span>${cntHtml}<span class="nl-arr">▶</span></div>`;
+    h+=`<div class="nl-hdr${isSecPage?' on':''}" id="nlh-${escId(sec.id)}" onclick="tgNs('${jsq(sec.id)}','${jsq(sec.slug)}')">${bigIconHtml}${iconHtml}<span class="nl-name">${esc(sN(sec))}</span>${cntHtml}<span class="nl-arr">▶</span></div>`;
     h+=`<div class="nl-body" id="nlb-${sec.id}">`;
     directPgs.forEach(p=>{h+=npEl(p,pages);});
     subSecs.forEach(sub=>{
@@ -1740,8 +1740,8 @@ function npEl(p,all) {
   const kids=all.filter(c=>isVisiblePage(c)&&c.parent_slug===p.slug).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
   const dd=(user&&p.status==='draft')?'<span class="np-d">DFT</span>':'';
   const isOpen=kids.some(k=>k.slug===curSlug||all.filter(c=>isVisiblePage(c)&&c.parent_slug===k.slug).some(c=>c.slug===curSlug));
-  if(!kids.length) return `<a class="np${curSlug===p.slug?' on':''}" id="np-${p.slug}" href="#${esc(p.slug)}" onclick="return navGo(event,'${esc(p.slug)}')">${esc(pT(p))}${dd}</a>`;
-  return `<div class="ng${isOpen||curSlug===p.slug?' op':''}" id="ngp-${p.slug}"><div class="ng-hdr${curSlug===p.slug?' on':''}" id="ngph-${p.slug}" onclick="tgNgP('${p.slug}')"><span class="ng-arr">▶</span><a class="ng-t" href="#${esc(p.slug)}" onclick="event.stopPropagation();return navGo(event,'${esc(p.slug)}')">${esc(pT(p))}${dd}</a></div><div class="ng-body">${kids.map(k=>npEl(k,all)).join('')}</div></div>`;
+  if(!kids.length) return `<a class="np${curSlug===p.slug?' on':''}" id="np-${escId(p.slug)}" href="#${esc(p.slug)}" onclick="return navGo(event,'${jsq(p.slug)}')">${esc(pT(p))}${dd}</a>`;
+  return `<div class="ng${isOpen||curSlug===p.slug?' op':''}" id="ngp-${escId(p.slug)}"><div class="ng-hdr${curSlug===p.slug?' on':''}" id="ngph-${escId(p.slug)}" onclick="tgNgP('${jsq(p.slug)}')"><span class="ng-arr">▶</span><a class="ng-t" href="#${esc(p.slug)}" onclick="event.stopPropagation();return navGo(event,'${jsq(p.slug)}')">${esc(pT(p))}${dd}</a></div><div class="ng-body">${kids.map(k=>npEl(k,all)).join('')}</div></div>`;
 }
 
 const tgNs = (id, secSlug) => {
@@ -1813,7 +1813,7 @@ function updTopBcSec(sec) {
   const parts=[`<span class="bc-item" onclick="go('home')">${T('home')}</span>`];
   if(sec){
     const parSec=sec.parent_id?sections.find(s=>s.id===sec.parent_id):null;
-    if(parSec) parts.push(`<span class="bc-sep">›</span><span class="bc-item" onclick="go('sec:${esc(parSec.slug)}')">${esc(sN(parSec))}</span>`);
+    if(parSec) parts.push(`<span class="bc-sep">›</span><span class="bc-item" onclick="go('sec:${jsq(parSec.slug)}')">${esc(sN(parSec))}</span>`);
     parts.push(`<span class="bc-sep">›</span><span class="bc-current">${esc(sN(sec))}</span>`);
   }
   el.innerHTML=parts.join('');
@@ -1826,12 +1826,12 @@ function updTopBc(slug, pg) {
     const sec=sections.find(s=>s.slug===pg.section);
     if(sec){
       const parSec=sec.parent_id?sections.find(s=>s.id===sec.parent_id):null;
-      if(parSec) parts.push(`<span class="bc-sep">›</span><span class="bc-item" onclick="go('sec:${esc(parSec.slug)}')">${esc(sN(parSec))}</span>`);
-      parts.push(`<span class="bc-sep">›</span><span class="bc-item" onclick="go('sec:${esc(sec.slug)}')">${esc(sN(sec))}</span>`);
+      if(parSec) parts.push(`<span class="bc-sep">›</span><span class="bc-item" onclick="go('sec:${jsq(parSec.slug)}')">${esc(sN(parSec))}</span>`);
+      parts.push(`<span class="bc-sep">›</span><span class="bc-item" onclick="go('sec:${jsq(sec.slug)}')">${esc(sN(sec))}</span>`);
     }
     const chain=[]; let cur=pg;
     while(cur.parent_slug){const par=pages.find(x=>x.slug===cur.parent_slug);if(!par) break;chain.unshift(par);cur=par;}
-    chain.forEach(pp=>parts.push(`<span class="bc-sep">›</span><span class="bc-item" onclick="go('${esc(pp.slug)}')">${esc(pT(pp))}</span>`));
+    chain.forEach(pp=>parts.push(`<span class="bc-sep">›</span><span class="bc-item" onclick="go('${jsq(pp.slug)}')">${esc(pT(pp))}</span>`));
     parts.push(`<span class="bc-sep">›</span><span class="bc-current">${esc(pT(pg))}</span>`);
   } else { parts.push(`<span class="bc-sep">›</span><span class="bc-current">${esc(slug)}</span>`); }
   el.innerHTML=parts.join('');
@@ -2683,7 +2683,7 @@ function heroVNChoice(kind) {
         const label = (kind === 'ach')
           ? (String(n.title || '').replace(/^🏆\s*Достижение:\s*/, '').trim() || (en ? 'Achievement' : 'Достижение'))
           : (String(n.title || '').trim() || (en ? 'Event' : 'Событие'));
-        return `<button class="hp-vn-choice hp-vn-choice-item" onclick="event.stopPropagation();heroVNTell('${esc(n.id)}')">${kind === 'ach' ? '🏆' : '•'} ${flag(n)}<span class="hp-vn-choice-it-t">${esc(label)}</span></button>`;
+        return `<button class="hp-vn-choice hp-vn-choice-item" onclick="event.stopPropagation();heroVNTell('${jsq(n.id)}')">${kind === 'ach' ? '🏆' : '•'} ${flag(n)}<span class="hp-vn-choice-it-t">${esc(label)}</span></button>`;
       }).join('');
     }
     // «Назад» живёт в подвале рядом с «пропустить» (а не отдельной строкой над списком).
@@ -3996,7 +3996,7 @@ function renderAbilityPage(pg) {
     
     <!-- LEFT: Image with fade mask -->
     ${iconUrl ? `<div class="abx-image-side">
-      <img src="${esc(iconUrl)}" loading="eager" onclick="event.preventDefault();event.stopPropagation();openLightbox('${esc(iconUrl)}','${esc(pT(pg))}');return false;" alt="${esc(pT(pg))}">
+      <img src="${esc(safeUrl(iconUrl))}" loading="eager" onclick="event.preventDefault();event.stopPropagation();openLightbox('${jsq(safeUrl(iconUrl))}','${jsq(pT(pg))}');return false;" alt="${esc(pT(pg))}">
       <div class="abx-image-mask"></div>
     </div>` : '<div class="abx-image-side" style="background:#1f1812"></div>'}
     
@@ -4066,7 +4066,7 @@ async function renderFactionPage(pg) {
       const pg2 = pages.find(p=>p.slug===c.slug);
       const stMap = {active:'АКТИВЕН',dead:'ПОГИБ',retired:'НА ПОКОЕ'};
       const stCls = {active:'st-active',dead:'st-dead',retired:'st-retired'}[c.status]||'st-retired';
-      return `<div class="fac-member" onclick="go('${esc(c.slug)}')">
+      return `<div class="fac-member" onclick="go('${jsq(c.slug)}')">
         ${pg2?.image_url ? `<img src="${esc(pg2.image_url)}" class="fac-member-av" loading="lazy">` : `<div class="fac-member-av fac-member-av--ph">${esc((c.name||'?').slice(0,2).toUpperCase())}</div>`}
         <div class="fac-member-info">
           <div class="fac-member-name">${esc(c.name||c.slug)}</div>
@@ -4811,7 +4811,7 @@ async function renderCharacterPage(pg) {
     ]) { const v=parseInt(_ib(s,key),10); if(v) tags.push(`${v>0?'+':''}${v} ${lbl}`); }
     const slug = gp?.slug||s;
 
-    return `<div class="ch-gear-row" style="--rc:${rc}" ${slug?`onclick="go('${esc(slug)}')"`:''}>
+    return `<div class="ch-gear-row" style="--rc:${rc}" ${slug?`onclick="go('${jsq(slug)}')"`:''}>
       ${img?`<img class="ch-gear-img" src="${esc(img)}" loading="lazy">`
            :`<div class="ch-gear-img ch-gear-img--ph" style="border-color:${rc}; box-shadow: 0 0 15px ${rc}40 inset;">${SI[slt]||'◈'}</div>`}
       <div class="ch-gear-body">
@@ -4843,7 +4843,7 @@ async function renderCharacterPage(pg) {
     const liveDesc= _ib(aSlug,'Эффект') || _ib(aSlug,'Описание') || a.desc || '';
     return `<div class="ch-ab-card">
       <div class="ch-ab-top">
-        <span class="ch-ab-name"${ap?` onclick="go('${esc(ap.slug)}')" style="cursor:pointer"`:''}>
+        <span class="ch-ab-name"${ap?` onclick="go('${jsq(ap.slug)}')" style="cursor:pointer"`:''}>
           ${esc(a.name||'—')}${ap?' <span class="ch-arrow">↗</span>':''}
         </span>
         <span class="ch-ab-type" style="color:${clr}" data-tip="${esc(TT[liveType]||liveType)}">${esc(liveType)}</span>
@@ -5577,7 +5577,7 @@ function renderRelatedArticles() {
     <div class="related-header">${lang === 'ru' ? 'БЛИЗКИЕ ПО ТЕМЕ' : 'RELATED ARTICLES'}</div>
     <div class="related-list">
       ${selected.map(item => `
-        <div class="related-item" onclick="go('${esc(item.page.slug)}')">
+        <div class="related-item" onclick="go('${jsq(item.page.slug)}')">
           ${item.hasImage ? `<div class="related-img"><img src="${esc(item.page.image_url)}" alt="${esc(pT(item.page))}" loading="lazy"></div>` : ''}
           <div class="related-content">
             <span class="related-icon">◆</span>

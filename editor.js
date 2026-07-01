@@ -1965,7 +1965,8 @@ async function changeMyPassword() {
 async function openContribModal(email, displayName, avUrl, hue, cnt) {
   const isSA = user && user.role === 'superadmin';
   const isMe = user && user.email === email;
-  const avHtml = avUrl ? `<img src="${esc(avUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" loading="lazy">` : `<span style="font-size:22px;font-family:Rajdhani,sans-serif;font-weight:700;color:hsl(${hue},60%,70%)">${esc(displayName.slice(0,2).toUpperCase())}</span>`;
+  const _av = safeAvatar(avUrl);
+  const avHtml = _av ? `<img src="${esc(_av)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" loading="lazy">` : `<span style="font-size:22px;font-family:Rajdhani,sans-serif;font-weight:700;color:hsl(${hue},60%,70%)">${esc(displayName.slice(0,2).toUpperCase())}</span>`;
 
   const myPgs = pages.filter(p=>isVisiblePage(p)&&p.created_by===email).sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0)).slice(0,8);
   const pgsHtml = myPgs.length ? myPgs.map(p=>{ const s=p.section?sections.find(s=>s.slug===p.section):null; return `<div class="contrib-pg-row" onclick="cm('mo-contrib');go('${esc(p.slug)}')"><div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(pT(p))}</div>${s?`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--t4)">${esc(sN(s))}</div>`:''}</div><span style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--t4);flex-shrink:0">${timeAgo(p.updated_at)}</span><span class="ir-b ${p.status==='published'?'bp-b':'bd-b'}">${p.status==='published'?'PUB':'DFT'}</span></div>`; }).join('') : `<p style="color:var(--t3);font-size:12px;text-align:center;padding:16px 0">Нет страниц</p>`;

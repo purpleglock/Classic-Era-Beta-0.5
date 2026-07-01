@@ -228,9 +228,8 @@ function userLabel(email) {
 function getAvatarHtml(email, avatarUrl, displayName, size=28) {
   // Только настоящая ссылка — иначе мусор вроде "Хуй" уходил в <img src> и
   // браузер дёргал /Хуй -> 404. Невалидное значение игнорируем (рисуем инициалы).
-  const _u = (avatarUrl || '').trim();
-  const validUrl = /^(https?:\/\/|data:image\/)/i.test(_u);
-  if (validUrl) return `<img src="${esc(_u)}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1px solid rgba(100,180,220,.2)" loading="lazy" onerror="this.style.display='none'">`;
+  const _u = safeAvatar(avatarUrl);
+  if (_u) return `<img src="${esc(_u)}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1px solid rgba(100,180,220,.2)" loading="lazy" onerror="this.style.display='none'">`;
   const name = displayName || (email||'').split('@')[0] || '?';
   const initials = name.slice(0,2).toUpperCase();
   const hue = [...(email||'')].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
@@ -259,13 +258,15 @@ function openProfileModal() {
   cm('mo-auth'); om('mo-profile');
 }
 function previewProfileAv() {
-  const url = document.getElementById('prof-avatar')?.value?.trim() || '';
+  const url = safeAvatar(document.getElementById('prof-avatar')?.value?.trim() || '');
   const name = document.getElementById('prof-name')?.value?.trim() || getDisplayName();
   const prev = document.getElementById('prof-av-preview');
   if (!prev) return;
-  prev.innerHTML = url
-    ? `<img src="${esc(url)}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentElement.innerHTML='${esc(getAvatarHtml(user?.email||'','',(document.getElementById('prof-name')?.value||'').trim(),64))}'>`
-    : getAvatarHtml(user?.email||'', '', name, 64);
+  // При ошибке загрузки картинки просто прячем её и показываем инициалы —
+  // без вставки готового HTML в onerror (тот вариант ломался на кавычках в имени).
+  prev.innerHTML = getAvatarHtml(user?.email||'', '', name, 64)
+    + (url ? `<img src="${esc(url)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.remove()">` : '');
+  prev.style.position = 'relative';
 }
 async function uploadProfileAv(input) {
   const file = input?.files?.[0];

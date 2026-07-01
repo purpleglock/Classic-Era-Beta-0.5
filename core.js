@@ -68,8 +68,16 @@ window.addEventListener('error', function (e) {
 
 // Общий аплоадер картинок: пишет в R2 (если настроен), иначе — в Supabase Storage.
 // Возвращает публичный URL загруженного файла. file уже должен быть сжат вызывающим кодом.
+// Разрешённые типы/размер загрузки. ЭТО КЛИЕНТСКИЙ БАРЬЕР (UX + отсечь случайное):
+// его легко обойти через консоль, поэтому НАСТОЯЩИЙ лимит обязан стоять в политике
+// Supabase Storage (см. _security_hardening.sql). SVG сознательно НЕ разрешён —
+// он может нести <script>/onload и выполнится при открытии картинки.
+const CE_UPLOAD_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' };
+const CE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024; // 10 МБ
 async function ceUploadImage(file, token) {
-  const ext = ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' })[file.type] || 'jpg';
+  if (!file || !CE_UPLOAD_TYPES[file.type]) throw new Error('Недопустимый тип файла: разрешены JPEG, PNG, GIF, WEBP (SVG запрещён)');
+  if (file.size > CE_UPLOAD_MAX_BYTES) throw new Error(`Файл слишком большой (${(file.size/1048576).toFixed(1)} МБ, максимум 10 МБ)`);
+  const ext = CE_UPLOAD_TYPES[file.type] || 'jpg';
   const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   if (R2_PUBLIC && R2_UPLOAD) {
     const r = await fetch(`${R2_UPLOAD}/${name}`, {
@@ -288,6 +296,14 @@ const pC = p => lang==='en' ? (p.content_ru?.trim()||p.content||'') : (p.content
 const sN = s => lang==='en' ? (s.name_en?.trim()||s.name_ru||'') : (s.name_ru?.trim()||s.name_en||'');
 const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const escId = s => String(s??'').replace(/[^a-zA-Z0-9_-]/g,'');
+// jsq — экранирование строки для вставки ВНУТРЬ JS-строки, которая сама лежит
+// в HTML-атрибуте, напр. onclick="fn('${jsq(x)}')".
+// esc() тут НЕ спасает: браузер HTML-декодирует атрибут ДО запуска обработчика,
+// превращая &#39; обратно в ' → значение выходит из JS-строки и исполняется как
+// код (stored XSS). Мы кодируем каждый не-буквенно-цифровой символ в \uXXXX;
+// движок JS декодирует их обратно в исходный текст в момент запуска, поэтому
+// отображение (напр. подпись в лайтбоксе) остаётся правильным.
+const jsq = s => String(s??'').replace(/[^0-9A-Za-z]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4,'0'));
 const isVisiblePage = p => !p.slug?.startsWith('_') && !(p.page_type === 'location' && !canSeeLocations());
 const fmtD = d => { if(!d) return '—'; const dt=new Date(d); return `${dt.getDate()} ${MOS[dt.getMonth()]} ${dt.getFullYear()}`; };
 const uid  = () => Math.random().toString(36).slice(2,8);
@@ -303,6 +319,18 @@ function safeUrl(u) {
   const lo = u.trim().toLowerCase().replace(/\s/g,'');
   if (/^(javascript|data|vbscript|blob):/.test(lo)) return '#';
   return u;
+}
+// safeAvatar — валидатор URL аватара. Пропускает http(s) и data:image РАСТР
+// (png/jpeg/gif/webp), но НЕ data:image/svg+xml: SVG может нести <script>/onload
+// и исполнялся бы прямо в теге <img>. Всё прочее (javascript:, vbscript:, svg,
+// произвольный текст) → '' (вызвавший код нарисует инициалы). Возвращает пустую
+// строку, если URL небезопасен/некорректен.
+function safeAvatar(u) {
+  const s = String(u || '').trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^data:image\/(png|jpe?g|gif|webp);/i.test(s)) return s;
+  return '';
 }
 // URL для CSS-контекста (background-image:url(...)). esc() здесь НЕ спасает: браузер
 // HTML-декодирует &#39;/&quot; обратно в кавычки → выход из url('...') и CSS-инъекция.
