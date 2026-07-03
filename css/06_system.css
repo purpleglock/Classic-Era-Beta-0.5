@@ -60,8 +60,8 @@
 
   /* ───── HOME ───── */
   .hp-hero { height:200px;margin:0 -14px; }
-  .hp-logo { font-size:32px;letter-spacing:5px; }
-  .hp-tagline { font-size:7px;letter-spacing:3px; }
+  .hp-logo { font-size:32px;letter-spacing: calc(5px * var(--deco-ls-mult, 1)); }
+  .hp-tagline { font-size:7px;letter-spacing: calc(3px * var(--deco-ls-mult, 1)); }
   .hp-collage { margin:0 -14px 20px;aspect-ratio:16/6;max-height:180px; }
 
   /* Home strips — mobile card style */
@@ -85,7 +85,7 @@
   }
   .hps-hdr { gap:8px; }
   .hps-icon { font-size:14px; }
-  .hps-name { font-size:12px;letter-spacing:1px; }
+  .hps-name { font-size:12px;letter-spacing: calc(1px * var(--deco-ls-mult, 1)); }
   .hps-cnt { font-size:8px;padding:2px 7px;clip-path:polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 0 100%); }
   .hps-arrow { right:12px;font-size:16px; }
   .hps-pill {
@@ -124,7 +124,7 @@
   }
   .art-h1 {
     font-size:22px !important;
-    letter-spacing:1px !important;
+    letter-spacing: calc(1px * var(--deco-ls-mult, 1)) !important;
     color:hsl(220 20% 92%) !important;
     line-height:1.2 !important;
     padding:0 !important;
@@ -134,7 +134,7 @@
   .art-page-header--nocov { margin:16px 0 18px !important; }
   .art-page-header--nocov .art-h1 { font-size:22px !important; }
 
-  .sec-h1 { font-size:20px !important;letter-spacing:1px !important; }
+  .sec-h1 { font-size:20px !important;letter-spacing: calc(1px * var(--deco-ls-mult, 1)) !important; }
   .sec-h1::before,.sec-h1::after { display:none !important; }
   .sec-page-header { margin-top:14px !important;margin-bottom:16px !important; }
 
@@ -166,11 +166,11 @@
   /* Прочее */
   .blk-quote { padding:14px 16px; }
   .blk-quote-text { font-size:14px; }
-  .blk-heading.h-scan { font-size:20px;letter-spacing:2px; }
-  .blk-heading.h-gold { font-size:22px;letter-spacing:2px; }
+  .blk-heading.h-scan { font-size:20px;letter-spacing: calc(2px * var(--deco-ls-mult, 1)); }
+  .blk-heading.h-gold { font-size:22px;letter-spacing: calc(2px * var(--deco-ls-mult, 1)); }
   .blk-stat-row { flex-wrap:wrap; }
-  .blk-stat-item { min-width:50%;border-right:none;border-bottom:1px solid var(--w2); }
-  .blk-stat-item:nth-child(odd) { border-right:1px solid var(--w2); }
+  .blk-stat-item { min-width:50%;border-right:none;border-bottom: var(--deco-frame-w, 1px) solid var(--w2); }
+  .blk-stat-item:nth-child(odd) { border-right: var(--deco-frame-w, 1px) solid var(--w2); }
   .blk-stat-item:last-child { border-bottom:none; }
   .blk-stat-val { font-size:26px; }
   .blk-timeline { padding-left:22px; }
@@ -205,11 +205,11 @@
 
   /* Contrib modal */
   .mo-contrib-panel { flex-direction:column;max-height:90vh;width:calc(100vw - 24px);max-width:100%;overflow:hidden; }
-  .cmp-left { width:100%;min-width:0;flex-direction:row;padding:12px 14px;gap:12px;align-items:center;border-right:none;border-bottom:1px solid var(--w2);flex-shrink:0; }
+  .cmp-left { width:100%;min-width:0;flex-direction:row;padding:12px 14px;gap:12px;align-items:center;border-right:none;border-bottom: var(--deco-frame-w, 1px) solid var(--w2);flex-shrink:0; }
   .cmp-av-frame { width:56px;height:56px;flex-shrink:0; }
   .mo-contrib-panel .contrib-mo-av { width:48px;height:48px;font-size:15px; }
   .cmp-id { text-align:left;flex:1 1 0;min-width:0;overflow:hidden; }
-  .mo-contrib-panel .contrib-mo-name { font-size:12px;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block; }
+  .mo-contrib-panel .contrib-mo-name { font-size:12px;letter-spacing: calc(.5px * var(--deco-ls-mult, 1));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block; }
   .mo-contrib-panel .contrib-mo-email { font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block; }
   .cmp-label { margin-bottom:4px;font-size:7px; }
   .cmp-stat-block,.cmp-edit-btn,.cmp-scanbeam { display:none; }
@@ -223,12 +223,12 @@
 
   /* Profile */
   .prof-stats-row { grid-template-columns:1fr 1fr; }
-  .prof-stat { border-bottom:1px solid var(--w2); }
-  .prof-stat:nth-child(odd) { border-right:1px solid var(--w2); }
+  .prof-stat { border-bottom: var(--deco-frame-w, 1px) solid var(--w2); }
+  .prof-stat:nth-child(odd) { border-right: var(--deco-frame-w, 1px) solid var(--w2); }
   .prof-stat:last-child,.prof-stat:nth-last-child(2):nth-child(odd) { border-bottom:none; }
 
   /* Battle map */
-  .blk-bm > div > div[style*="width:195px"] { width:100% !important;border-left:none !important;border-top:1px solid rgba(74 158 200/.1); }
+  .blk-bm > div > div[style*="width:195px"] { width:100% !important;border-left:none !important;border-top: var(--deco-frame-w, 1px) solid rgba(74 158 200/.1); }
 }
 
 
@@ -237,18 +237,18 @@
   :root { --sidebar-w:88vw; }
   #pg { padding:0 12px 60px; }
 
-  .hp-logo { font-size:26px;letter-spacing:4px; }
+  .hp-logo { font-size:26px;letter-spacing: calc(4px * var(--deco-ls-mult, 1)); }
   .hp-collage { aspect-ratio:16/5;max-height:140px; }
   .hps-cnt { display:none; }
   .cgrid { grid-template-columns:1fr; }
   .blk-gallery.g2,.blk-gallery.g3 { grid-template-columns:1fr; }
 
   .art-cov { height:44vw !important;max-height:180px !important; }
-  .art-h1 { font-size:18px !important;letter-spacing:0.5px !important; }
+  .art-h1 { font-size:18px !important;letter-spacing: calc(0.5px * var(--deco-ls-mult, 1)) !important; }
   .sec-h1 { font-size:17px !important; }
 
-  .blk-heading.h-scan { font-size:17px;letter-spacing:1.5px; }
-  .blk-heading.h-gold { font-size:18px;letter-spacing:2px; }
+  .blk-heading.h-scan { font-size:17px;letter-spacing: calc(1.5px * var(--deco-ls-mult, 1)); }
+  .blk-heading.h-gold { font-size:18px;letter-spacing: calc(2px * var(--deco-ls-mult, 1)); }
   .blk-stat-val { font-size:22px; }
   .blk-timeline { padding-left:18px; }
 
@@ -256,19 +256,19 @@
   .fgr .fg.half { grid-column:span 2; }
   .bp-modal { max-height:95vh; }
   .bp-grid { grid-template-columns:1fr 1fr;gap:4px;padding:10px; }
-  .toast { font-size:10px;padding:9px 14px;letter-spacing:.5px; }
+  .toast { font-size:10px;padding:9px 14px;letter-spacing: calc(.5px * var(--deco-ls-mult, 1)); }
   
   /* Admin panel tabs - responsive */
   .apt {
     font-size:8px;
-    letter-spacing:1px;
+    letter-spacing: calc(1px * var(--deco-ls-mult, 1));
     padding:8px 10px;
   }
   
   /* Buttons - responsive */
   .btn {
     font-size:8px;
-    letter-spacing:1.5px;
+    letter-spacing: calc(1.5px * var(--deco-ls-mult, 1));
     padding:0 12px;
     height:30px;
     gap:4px;
@@ -283,8 +283,8 @@
 
 /* ── 360px ── */
 @media (max-width: 360px) {
-  .hp-logo { font-size:20px;letter-spacing:3px; }
-  .logo-name { font-size:14px;letter-spacing:3px; }
+  .hp-logo { font-size:20px;letter-spacing: calc(3px * var(--deco-ls-mult, 1)); }
+  .logo-name { font-size:14px;letter-spacing: calc(3px * var(--deco-ls-mult, 1)); }
   .cgrid { grid-template-columns:1fr; }
   .blk-stat-item { min-width:100%;border-right:none; }
   .bp-grid { grid-template-columns:1fr; }
@@ -293,14 +293,14 @@
   .ap-tabs { padding:4px 6px; gap:3px; }
   .apt {
     font-size:7px;
-    letter-spacing:0.5px;
+    letter-spacing: calc(0.5px * var(--deco-ls-mult, 1));
     padding:7px 8px;
   }
   
   /* Buttons - ultra small */
   .btn {
     font-size:7px;
-    letter-spacing:1px;
+    letter-spacing: calc(1px * var(--deco-ls-mult, 1));
     padding:0 10px;
     height:28px;
   }

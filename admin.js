@@ -234,7 +234,7 @@ function adPaint() {
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
     const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
-    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)']];
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук']];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -248,6 +248,7 @@ function adPaint() {
     else if (AD.tab === 'ach')       tabContent = adAchPanel();
     else if (AD.tab === 'market')    tabContent = adMarketPanel();
     else if (AD.tab === 'mktsim')    tabContent = adMarketSimPanel();
+    else if (AD.tab === 'brand')     tabContent = adBrandPanel();
     else tabContent = selector + `<div id="fm-panel-slot">${adPanelSlotHtml()}</div>` + stats;
     body = tabBar + `<div style="margin-top:14px">${tabContent}</div>`;
   } catch (e) {
@@ -1401,6 +1402,7 @@ function adSetTab(t) {
   adPaint();
   if (AD.tab === 'market' && !AD.market) adMarketLoad();
   if (AD.tab === 'roadmap' && !(AD.rm && AD.rm.loaded)) adRmLoad();
+  if (AD.tab === 'brand') bbRefreshFromDb();
 }
 
 // ── Рынок NPC: загрузка состояния (config + ресурсы) через admin-RPC ──────────
@@ -4543,3 +4545,423 @@ function adRmLightboxSrc(src) {
     <img src="${src}" style="max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.6)"></div>`;
 }
 function adRmLightbox(i, el) { if (el && el.src) adRmLightboxSrc(el.src); }
+
+// ════════════════════════════════════════════════════════════════════
+// БРЕНДБУК — вкладка консоли управления: дизайн-токены всего сайта
+// ════════════════════════════════════════════════════════════════════
+// Правим CSS-переменные из css/01_tokens.css — они каскадом задают вид
+// каждого UI-элемента. Хранятся ТОЛЬКО переопределения (site_settings,
+// ключ wk_brandbook); применение/загрузка — в core.js (applyBrandbook).
+// Слева — контролы по группам, справа — липкая «витрина»: живые образцы
+// всех элементов, которые перекрашиваются в момент движения слайдера.
+
+// Схема токенов. Типы: range (слайдер, min/max/step/unit), color
+// (пикер+текст), text (сырой CSS). d = дефолт из 01_tokens.css.
+// grad — градиент дорожки слайдера, sw — живой цвет точки у строки.
+const BB_SCHEMA = [
+  { t:'🎨 Палитра каналов', open:true, items:[
+    { k:'--hue-gold',   l:'Акцент — тон',            c:'range', min:0, max:360, step:1, unit:'',  d:'206', grad:'hue', sw:'hsl(var(--hue-gold) var(--sat-gold) 55%)' },
+    { k:'--sat-gold',   l:'Акцент — насыщенность',   c:'range', min:0, max:100, step:1, unit:'%', d:'72%', grad:'sat:--hue-gold', sw:'hsl(var(--hue-gold) var(--sat-gold) 55%)' },
+    { k:'--hue-cyan',   l:'Ссылки — тон',            c:'range', min:0, max:360, step:1, unit:'',  d:'192', grad:'hue', sw:'hsl(var(--hue-cyan) var(--sat-cyan) 55%)' },
+    { k:'--sat-cyan',   l:'Ссылки — насыщенность',   c:'range', min:0, max:100, step:1, unit:'%', d:'80%', grad:'sat:--hue-cyan', sw:'hsl(var(--hue-cyan) var(--sat-cyan) 55%)' },
+    { k:'--hue-red',    l:'Опасность — тон',         c:'range', min:0, max:360, step:1, unit:'',  d:'352', grad:'hue', sw:'hsl(var(--hue-red) var(--sat-red) 60%)' },
+    { k:'--sat-red',    l:'Опасность — насыщенность',c:'range', min:0, max:100, step:1, unit:'%', d:'75%', grad:'sat:--hue-red', sw:'hsl(var(--hue-red) var(--sat-red) 60%)' },
+    { k:'--hue-purple', l:'Лор — тон',               c:'range', min:0, max:360, step:1, unit:'',  d:'265', grad:'hue', sw:'hsl(var(--hue-purple) var(--sat-purple) 65%)' },
+    { k:'--sat-purple', l:'Лор — насыщенность',      c:'range', min:0, max:100, step:1, unit:'%', d:'70%', grad:'sat:--hue-purple', sw:'hsl(var(--hue-purple) var(--sat-purple) 65%)' },
+    { k:'--hue-space',  l:'Фон/сталь — тон',         c:'range', min:0, max:360, step:1, unit:'',  d:'216', grad:'hue', sw:'hsl(var(--hue-space) var(--sat-space) 26%)' },
+    { k:'--sat-space',  l:'Фон/сталь — насыщенность',c:'range', min:0, max:60,  step:1, unit:'%', d:'14%', grad:'sat:--hue-space', sw:'hsl(var(--hue-space) var(--sat-space) 26%)' },
+  ]},
+  { t:'✨ Детали и орнаментика (рамки, полоски)', open:true, items:[
+    { k:'--deco-frame-w',     l:'Рамки — толщина',            c:'range', min:0, max:3,  step:1,    unit:'px', d:'1px' },
+    { k:'--deco-accent-w',    l:'Акцентная полоса — тонкая',  c:'range', min:0, max:6,  step:1,    unit:'px', d:'2px' },
+    { k:'--deco-accent-w-lg', l:'Акцентная полоса — широкая', c:'range', min:0, max:10, step:1,    unit:'px', d:'3px' },
+    { k:'--deco-corner-cut',  l:'Срез угла карточек',         c:'range', min:0, max:28, step:1,    unit:'px', d:'12px' },
+    { k:'--deco-scan-step',   l:'Штриховка — шаг',            c:'range', min:2, max:10, step:1,    unit:'px', d:'3px' },
+    { k:'--deco-scan-op',     l:'Штриховка — видимость',      c:'range', min:0, max:1,  step:0.05, unit:'',   d:'1' },
+    { k:'--deco-glow-op',     l:'Угловые свечения — сила',    c:'range', min:0, max:1,  step:0.05, unit:'',   d:'1' },
+    { k:'--deco-ls-mult',     l:'Разрядка капс-текста ×',     c:'range', min:0, max:2,  step:0.05, unit:'',   d:'1' },
+    { k:'--deco-tick-op',     l:'Тик-бары «||||» — видимость',c:'range', min:0, max:1,  step:0.05, unit:'',   d:'1' },
+  ]},
+  { t:'🌑 Поверхности — глубина темноты', items:[
+    { k:'--l-surface-0', l:'Слой 0 — фон страницы', c:'range', min:0, max:40, step:1, unit:'%', d:'8%',  grad:'lum', sw:'var(--primitive-surface-0)' },
+    { k:'--l-surface-1', l:'Слой 1 — базовый фон',  c:'range', min:0, max:40, step:1, unit:'%', d:'11%', grad:'lum', sw:'var(--primitive-surface-1)' },
+    { k:'--l-surface-2', l:'Слой 2 — панели',       c:'range', min:0, max:40, step:1, unit:'%', d:'14%', grad:'lum', sw:'var(--primitive-surface-2)' },
+    { k:'--l-surface-3', l:'Слой 3 — карточки',     c:'range', min:0, max:45, step:1, unit:'%', d:'17%', grad:'lum', sw:'var(--primitive-surface-3)' },
+    { k:'--l-surface-4', l:'Слой 4 — приподнятые',  c:'range', min:0, max:50, step:1, unit:'%', d:'21%', grad:'lum', sw:'var(--primitive-surface-4)' },
+    { k:'--l-surface-5', l:'Слой 5 — hover/тултипы',c:'range', min:0, max:55, step:1, unit:'%', d:'26%', grad:'lum', sw:'var(--primitive-surface-5)' },
+  ]},
+  { t:'✏️ Текст', items:[
+    { k:'--primitive-text-100', l:'Основной текст',  c:'color', d:'hsl(216 10% 95%)', sw:'var(--primitive-text-100)' },
+    { k:'--primitive-text-300', l:'Вторичный текст', c:'color', d:'hsl(216 10% 75%)', sw:'var(--primitive-text-300)' },
+    { k:'--primitive-text-500', l:'Приглушённый',    c:'color', d:'hsl(216 15% 55%)', sw:'var(--primitive-text-500)' },
+    { k:'--primitive-text-700', l:'Отключённый',     c:'color', d:'hsl(216 20% 35%)', sw:'var(--primitive-text-700)' },
+  ]},
+  { t:'🚦 Статусы', items:[
+    { k:'--primitive-green-500', l:'Успех (ok)',     c:'color', d:'hsl(150, 70%, 45%)', twin:'--primitive-green-900', sw:'var(--primitive-green-500)' },
+    { k:'--primitive-rose-500',  l:'Ошибка (err)',   c:'color', d:'hsl(350, 80%, 60%)', twin:'--primitive-rose-900',  sw:'var(--primitive-rose-500)' },
+    { k:'--primitive-amber-500', l:'Предупреждение', c:'color', d:'hsl(35, 90%, 55%)',  twin:'--primitive-amber-900', sw:'var(--primitive-amber-500)' },
+  ]},
+  { t:'🔠 Шрифты', items:[
+    { k:'--font-display', l:'Заголовки (display)', c:'text', d:"'Rajdhani', 'Exo 2', sans-serif" },
+    { k:'--font-body',    l:'Основной (body)',     c:'text', d:"'Inter', 'Exo 2', system-ui, sans-serif" },
+    { k:'--font-mono',    l:'Моноширинный (mono)', c:'text', d:"'JetBrains Mono', 'Fira Code', monospace" },
+  ]},
+  { t:'🔡 Размеры текста', items:[
+    { k:'--text-xs',  l:'XS — подписи',   c:'range', min:0.5, max:1.2, step:0.01, unit:'rem', d:'0.70rem' },
+    { k:'--text-sm',  l:'SM — мелкий',    c:'range', min:0.6, max:1.4, step:0.01, unit:'rem', d:'0.85rem' },
+    { k:'--text-md',  l:'MD — базовый',   c:'range', min:0.8, max:1.6, step:0.01, unit:'rem', d:'1.00rem' },
+    { k:'--text-lg',  l:'LG — подзаголовки', c:'range', min:0.9, max:2.0, step:0.01, unit:'rem', d:'1.15rem' },
+    { k:'--text-xl',  l:'XL — заголовки', c:'range', min:1.0, max:2.6, step:0.05, unit:'rem', d:'1.50rem' },
+    { k:'--text-2xl', l:'2XL — крупные',  c:'range', min:1.2, max:3.4, step:0.05, unit:'rem', d:'2.00rem' },
+    { k:'--text-3xl', l:'3XL — hero',     c:'range', min:1.5, max:4.2, step:0.05, unit:'rem', d:'2.50rem' },
+    { k:'--text-4xl', l:'4XL — витрина',  c:'range', min:1.8, max:5.0, step:0.05, unit:'rem', d:'3.00rem' },
+  ]},
+  { t:'📐 Геометрия и макет', items:[
+    { k:'--radius-sm',  l:'Скругление S',  c:'range', min:0, max:20, step:1, unit:'px', d:'6px'  },
+    { k:'--radius-md',  l:'Скругление M',  c:'range', min:0, max:28, step:1, unit:'px', d:'10px' },
+    { k:'--radius-lg',  l:'Скругление L',  c:'range', min:0, max:36, step:1, unit:'px', d:'16px' },
+    { k:'--radius-xl',  l:'Скругление XL', c:'range', min:0, max:48, step:1, unit:'px', d:'24px' },
+    { k:'--cut',        l:'Срез углов (sci-fi)', c:'range', min:0, max:24, step:1, unit:'px', d:'10px' },
+    { k:'--layout-sidebar-width', l:'Ширина сайдбара', c:'range', min:200, max:380, step:2, unit:'px', d:'268px' },
+    { k:'--layout-topbar-height', l:'Высота топбара',  c:'range', min:40,  max:88,  step:1, unit:'px', d:'56px'  },
+  ]},
+  { t:'⏱ Анимации', items:[
+    { k:'--duration-fast',   l:'Быстрая',   c:'range', min:0, max:600,  step:10, unit:'ms', d:'150ms' },
+    { k:'--duration-normal', l:'Обычная',   c:'range', min:0, max:900,  step:10, unit:'ms', d:'250ms' },
+    { k:'--duration-slow',   l:'Медленная', c:'range', min:0, max:1500, step:10, unit:'ms', d:'400ms' },
+  ]},
+  { t:'🔘 Кнопки', items:[
+    { k:'--btn-bg',           l:'Фон',              c:'text', d:'var(--color-surface-raised)' },
+    { k:'--btn-bg-hover',     l:'Фон (hover)',      c:'text', d:'var(--color-surface-overlay)' },
+    { k:'--btn-border',       l:'Рамка',            c:'text', d:'var(--color-border)' },
+    { k:'--btn-text',         l:'Текст',            c:'text', d:'var(--color-text)' },
+    { k:'--btn-radius',       l:'Скругление',       c:'text', d:'var(--radius-md)' },
+    { k:'--btn-primary-bg',   l:'Основная — фон',   c:'text', d:'var(--color-accent)' },
+    { k:'--btn-primary-text', l:'Основная — текст', c:'text', d:'var(--color-canvas)' },
+  ]},
+  { t:'📝 Поля ввода', items:[
+    { k:'--input-bg',           l:'Фон',           c:'text', d:'var(--color-surface)' },
+    { k:'--input-border',       l:'Рамка',         c:'text', d:'var(--color-border)' },
+    { k:'--input-border-focus', l:'Рамка (фокус)', c:'text', d:'var(--color-accent)' },
+    { k:'--input-text',         l:'Текст',         c:'text', d:'var(--color-text)' },
+    { k:'--input-placeholder',  l:'Плейсхолдер',   c:'text', d:'var(--color-text-faint)' },
+    { k:'--input-radius',       l:'Скругление',    c:'text', d:'var(--radius-md)' },
+  ]},
+  { t:'🃏 Карточки, бейджи, панели', items:[
+    { k:'--card-bg',       l:'Карточка — фон',       c:'text', d:'var(--color-surface-raised)' },
+    { k:'--card-border',   l:'Карточка — рамка',     c:'text', d:'var(--color-border)' },
+    { k:'--card-radius',   l:'Карточка — скругление',c:'text', d:'var(--radius-lg)' },
+    { k:'--card-shadow',   l:'Карточка — тень',      c:'text', d:'var(--shadow-md)' },
+    { k:'--badge-bg',      l:'Бейдж — фон',          c:'text', d:'var(--color-surface-overlay)' },
+    { k:'--badge-text',    l:'Бейдж — текст',        c:'text', d:'var(--color-text-muted)' },
+    { k:'--badge-radius',  l:'Бейдж — скругление',   c:'text', d:'var(--radius-sm)' },
+    { k:'--tooltip-bg',    l:'Тултип — фон',         c:'text', d:'var(--primitive-surface-5)' },
+    { k:'--tooltip-text',  l:'Тултип — текст',       c:'text', d:'var(--color-text)' },
+    { k:'--sidebar-bg',    l:'Сайдбар — фон',        c:'text', d:'var(--color-surface)' },
+    { k:'--topbar-bg',     l:'Топбар — фон',         c:'text', d:'var(--glass-bg)' },
+  ]},
+  { t:'🌫 Тени и свечения', items:[
+    { k:'--shadow-sm', l:'Тень S', c:'text', d:'0 2px 4px rgba(0,0,0,0.2), 0 0 0 1px var(--color-border-subtle)' },
+    { k:'--shadow-md', l:'Тень M', c:'text', d:'0 4px 12px rgba(0,0,0,0.3), 0 0 0 1px var(--color-border)' },
+    { k:'--shadow-lg', l:'Тень L', c:'text', d:'0 12px 24px rgba(0,0,0,0.4), 0 0 0 1px var(--color-border-medium)' },
+    { k:'--glow-accent', l:'Свечение акцента', c:'text', d:'0 0 12px var(--color-accent-glow)' },
+    { k:'--glow-link',   l:'Свечение ссылок',  c:'text', d:'0 0 12px var(--color-link-glow)' },
+  ]},
+];
+
+let bbVars = {};      // черновик переопределений (применён вживую на :root)
+let bbDirty = false;  // есть несохранённые правки
+
+const BB_INDEX = {};
+BB_SCHEMA.forEach(g => g.items.forEach(it => { BB_INDEX[it.k] = it; }));
+
+// Черновик заново сеем из сохранённого конфига, только пока нет правок —
+// adPaint() перерисовывает вкладку часто, и живые правки терять нельзя.
+function bbEnsureInit() {
+  if (bbDirty) return;
+  bbVars = Object.assign({}, (typeof _brandbook !== 'undefined' && _brandbook && _brandbook.vars) || {});
+}
+
+// Подтянуть свежий конфиг из БД при заходе на вкладку (правки с другого
+// устройства). Локальный черновик с правками не трогаем.
+async function bbRefreshFromDb() {
+  try {
+    const raw = (typeof getSiteSetting === 'function') ? await getSiteSetting('wk_brandbook') : null;
+    if (!raw) return;
+    let dbCfg = null;
+    try { dbCfg = (typeof raw === 'string') ? JSON.parse(raw) : raw; } catch (e) {}
+    if (!dbCfg) return;
+    const fresher = _vnPickNewer(dbCfg, _brandbook);
+    if (fresher === _brandbook) return;
+    _brandbook = fresher;
+    localStorage.setItem('wk_brandbook', JSON.stringify(fresher));
+    if (!bbDirty) {
+      applyBrandbook(fresher.vars || {});
+      if (AD.tab === 'brand') { bbEnsureInit(); adPaint(); }
+    }
+  } catch (e) { /* оффлайн/нет прав — работаем с локальным */ }
+}
+
+// ── Панель вкладки ──────────────────────────────────────────────
+function adBrandPanel() {
+  bbEnsureInit();
+  const nOv = Object.keys(bbVars).length;
+  return `
+  <div class="bb-layout">
+    <div class="bb-main">
+      <div class="bb-head">
+        <div>
+          <div class="bb-title">🎨 Брендбук сайта</div>
+          <div class="bb-sub">Единый источник стиля: цвета, шрифты, геометрия, компоненты. Правки применяются вживую (витрина справа и весь сайт), сохранение — кнопкой. Токены хранятся в site_settings и применяются каждому посетителю.</div>
+        </div>
+      </div>
+      <div class="bb-toolbar">
+        <button class="btn btn-gd btn-sm" onclick="bbSaveAll()">💾 Сохранить</button>
+        <button class="btn btn-gh btn-sm" onclick="bbResetAll()">↺ Сбросить всё</button>
+        <button class="btn btn-gh btn-sm" onclick="bbExport()">⧉ Экспорт</button>
+        <button class="btn btn-gh btn-sm" onclick="bbImport()">📥 Импорт</button>
+        <span class="bb-status" id="bb-status">${nOv ? `переопределено: ${nOv}` : 'все токены — по умолчанию'}</span>
+      </div>
+      ${BB_SCHEMA.map((g, gi) => bbGroupHtml(g, gi)).join('')}
+    </div>
+    <aside class="bb-side">${bbShowcaseHtml()}</aside>
+  </div>`;
+}
+
+// ── Витрина: живые образцы всех элементов (всё на var(), обновляется само) ──
+function bbShowcaseHtml() {
+  const ladder = (name, pre) => `
+    <div class="bbx-lrow">
+      <span class="bbx-lname">${name}</span>
+      ${[900,600,500,400,300].map(s => `<span class="bbx-lsw" style="background:var(${pre}-${s})" title="${pre}-${s}"></span>`).join('')}
+    </div>`;
+  return `
+  <div class="bbx">
+    <div class="bbx-cap">ВИТРИНА · обновляется вживую</div>
+
+    <div class="bbx-sec">Мини-макет</div>
+    <div class="bbx-mock">
+      <div class="bbx-mock-top"><span class="bbx-dot"></span><span class="bbx-mock-logo">НОВАЯ ЭРА</span><span class="bbx-mock-nav">поиск · разделы</span></div>
+      <div class="bbx-mock-body">
+        <div class="bbx-mock-sb"><i></i><i class="on"></i><i></i><i></i></div>
+        <div class="bbx-mock-pg">
+          <div class="bbx-mock-card">
+            <b>Заголовок статьи</b>
+            <span>Основной текст страницы, <a href="javascript:void(0)">ссылка</a> и <em>приглушённая деталь</em>.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bbx-sec">Карточка ленты — детали</div>
+    <div class="bbx-news">
+      <div class="bbx-news-inner">
+        <div class="bbx-news-kick"><i></i>ААА'ДУКИЛЬ</div>
+        <div class="bbx-news-title">Де-эскалация конфликта в спорном регионе</div>
+        <div class="bbx-news-x">После длительных переговоров стороны достигли соглашения…</div>
+        <div class="bbx-news-foot"><span>ЗВ.ДАТА 3000.184 · 03:10</span><span class="bbx-news-tick">||||||||</span></div>
+      </div>
+    </div>
+
+    <div class="bbx-sec">Кнопки и элементы</div>
+    <div class="bbx-row">
+      <button class="btn btn-gd btn-sm">Основная</button>
+      <button class="btn btn-gh btn-sm">Обычная</button>
+      <button class="btn btn-sv btn-sm">Успех</button>
+    </div>
+    <div class="bbx-row">
+      <input class="fi" style="max-width:150px" placeholder="Поле ввода…">
+      <span class="bb-badge">БЕЙДЖ</span>
+      <a href="javascript:void(0)" style="color:var(--te)">Ссылка</a>
+    </div>
+    <div class="bbx-row">
+      <span class="bb-chip" style="color:var(--ok);border-color:var(--ok);background:var(--color-success-bg)">успех</span>
+      <span class="bb-chip" style="color:var(--err);border-color:var(--err);background:var(--color-error-bg)">ошибка</span>
+      <span class="bb-chip" style="color:var(--color-warning);border-color:var(--color-warning);background:var(--color-warning-bg)">важно</span>
+      <span class="bb-chip" style="color:var(--pu);border-color:var(--pu);background:var(--pub)">лор</span>
+    </div>
+
+    <div class="bbx-sec">Карточка</div>
+    <div class="bbx-card">
+      <div class="bbx-card-h">Хроника сектора</div>
+      <div class="bbx-card-t">Вторичный текст описания карточки. <span>Приглушённая деталь мелким.</span></div>
+      <div class="bbx-card-m">MONO ▸ АКЦЕНТ · 12:00</div>
+    </div>
+
+    <div class="bbx-sec">Палитра — производные оттенки</div>
+    ${ladder('Акцент', '--primitive-gold')}
+    ${ladder('Ссылки', '--primitive-cyan')}
+    ${ladder('Опасность', '--primitive-red')}
+    ${ladder('Лор', '--primitive-purple')}
+
+    <div class="bbx-sec">Поверхности 0→5</div>
+    <div class="bbx-srf">${[0,1,2,3,4,5].map(i => `<div style="background:var(--primitive-surface-${i})">${i}</div>`).join('')}</div>
+
+    <div class="bbx-sec">Текст</div>
+    <div class="bbx-txt">
+      <div style="color:var(--t1)">Основной — заголовки и значения</div>
+      <div style="color:var(--t2)">Вторичный — описания</div>
+      <div style="color:var(--t3)">Приглушённый — подписи</div>
+      <div style="color:var(--t4)">Отключённый — неактивное</div>
+    </div>
+
+    <div class="bbx-sec">Шкала типографики</div>
+    <div class="bbx-type">
+      ${['xs','sm','md','lg','xl','2xl'].map(s => `<div><span class="bbx-type-tag">${s.toUpperCase()}</span><span style="font-size:var(--text-${s});font-family:var(--font-body);color:var(--t1)">Аа Классическая эра</span></div>`).join('')}
+    </div>
+
+    <div class="bbx-sec">Скругления и тени</div>
+    <div class="bbx-row">
+      ${['sm','md','lg','xl'].map(r => `<div class="bbx-rad" style="border-radius:var(--radius-${r})">${r}</div>`).join('')}
+    </div>
+    <div class="bbx-row" style="padding:6px 2px 10px">
+      ${['sm','md','lg'].map(s => `<div class="bbx-shadow" style="box-shadow:var(--shadow-${s})">тень ${s}</div>`).join('')}
+    </div>
+  </div>`;
+}
+
+// ── Группы и строки контролов ───────────────────────────────────
+function bbGroupHtml(g, gi) {
+  const ovCount = g.items.filter(it => bbVars[it.k] != null).length;
+  return `<details class="bb-grp"${g.open ? ' open' : ''}>
+    <summary>${esc(g.t)}${ovCount ? ` <span class="bb-grp-ov">⬤ ${ovCount}</span>` : ''}</summary>
+    <div class="bb-grp-body">${g.items.map((it, ii) => bbRowHtml(it, gi, ii)).join('')}</div>
+  </details>`;
+}
+
+function bbTrackStyle(it) {
+  if (it.grad === 'hue') return 'background:linear-gradient(90deg,hsl(0 80% 55%),hsl(60 80% 55%),hsl(120 80% 45%),hsl(180 80% 50%),hsl(240 80% 60%),hsl(300 80% 55%),hsl(360 80% 55%))';
+  if (it.grad && it.grad.startsWith('sat:')) { const h = it.grad.slice(4); return `background:linear-gradient(90deg,hsl(var(${h}) 0% 55%),hsl(var(${h}) 100% 55%))`; }
+  if (it.grad === 'lum') return 'background:linear-gradient(90deg,hsl(var(--hue-space) var(--sat-space) 0%),hsl(var(--hue-space) var(--sat-space) 55%))';
+  return '';
+}
+
+function bbRowHtml(it, gi, ii) {
+  const id = `bb-${gi}-${ii}`;
+  const cur = bbVars[it.k];
+  const ov = cur != null;
+  const sw = it.sw ? `<span class="bb-sw" style="background:${it.sw}"></span>` : '';
+  let ctl = '';
+  if (it.c === 'range') {
+    const num = parseFloat(ov ? cur : it.d) || 0;
+    ctl = `<input type="range" class="bb-range" id="${id}" min="${it.min}" max="${it.max}" step="${it.step}" value="${num}"
+             style="${bbTrackStyle(it)}" oninput="bbOnRange('${it.k}','${id}','${it.unit}')">
+           <span class="bb-val" id="${id}-v">${num}${it.unit}</span>`;
+  } else if (it.c === 'color') {
+    ctl = `<input type="color" id="${id}-p" onchange="bbOnColorPick('${it.k}','${id}')" title="Выбрать цвет">
+           <input type="text" class="fi bb-txt" id="${id}" value="${ov ? esc(cur) : ''}" placeholder="${esc(it.d)}"
+             oninput="bbOnText('${it.k}','${id}')">`;
+  } else {
+    ctl = `<input type="text" class="fi bb-txt wide" id="${id}" value="${ov ? esc(cur) : ''}" placeholder="${esc(it.d)}"
+             oninput="bbOnText('${it.k}','${id}')">`;
+  }
+  return `<div class="bb-row${ov ? ' bb-ov' : ''}" data-k="${it.k}">
+    <span class="bb-lbl-wrap">${sw}<label class="bb-lbl" title="${esc(it.k)}">${esc(it.l)}</label></span>
+    <div class="bb-ctl">${ctl}</div>
+    <button class="bb-x" title="Сбросить к значению по умолчанию" onclick="bbResetVar('${it.k}')">↺</button>
+  </div>`;
+}
+
+// ── Обработчики (живое применение без перерисовки страницы) ─────
+function bbSet(k, v) {
+  if (v == null || v === '') delete bbVars[k];
+  else bbVars[k] = v;
+  // статус-цвета: фоновая пара -900 следует за основным автоматически
+  const it = BB_INDEX[k];
+  if (it && it.twin) {
+    if (bbVars[k]) bbVars[it.twin] = `color-mix(in srgb, ${bbVars[k]} 10%, transparent)`;
+    else delete bbVars[it.twin];
+  }
+  applyBrandbook(bbVars);
+  bbDirty = true;
+  const row = document.querySelector(`.bb-row[data-k="${k}"]`);
+  if (row) row.classList.toggle('bb-ov', bbVars[k] != null);
+  const st = document.getElementById('bb-status');
+  if (st) { st.textContent = `переопределено: ${Object.keys(bbVars).length} · не сохранено`; st.classList.add('dirty'); }
+}
+function bbOnRange(k, id, unit) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const v = el.value + unit;
+  const out = document.getElementById(id + '-v');
+  if (out) out.textContent = v;
+  bbSet(k, v);
+}
+function bbOnText(k, id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const v = el.value.trim();
+  // та же валидация, что при применении (bbSanitizeVars в core.js)
+  if (v && (v.length > 300 || /[<>{};]|url\s*\(/i.test(v))) return;
+  bbSet(k, v);
+}
+function bbOnColorPick(k, id) {
+  const p = document.getElementById(id + '-p');
+  const t = document.getElementById(id);
+  if (!p || !t) return;
+  t.value = p.value;
+  bbSet(k, p.value);
+}
+function bbResetVar(k) {
+  bbSet(k, '');
+  // вернуть контролу дефолт без полной перерисовки (не сбивать фокус/скролл)
+  const row = document.querySelector(`.bb-row[data-k="${k}"]`);
+  const it = BB_INDEX[k];
+  if (!row || !it) return;
+  if (it.c === 'range') {
+    const inp = row.querySelector('input[type="range"]');
+    const out = row.querySelector('.bb-val');
+    const num = parseFloat(it.d) || 0;
+    if (inp) inp.value = num;
+    if (out) out.textContent = num + it.unit;
+  } else {
+    const inp = row.querySelector('input[type="text"]');
+    if (inp) inp.value = '';
+  }
+}
+
+// ── Сохранение / сброс / перенос ────────────────────────────────
+async function bbSaveAll() {
+  const cfg = { _ts: Date.now(), vars: bbSanitizeVars(bbVars) };
+  const json = JSON.stringify(cfg);
+  localStorage.setItem('wk_brandbook', json);   // локально — сразу
+  _brandbook = cfg;
+  try {
+    await saveSiteSetting('wk_brandbook', json);
+    bbDirty = false;
+    const st = document.getElementById('bb-status');
+    if (st) { st.textContent = `сохранено · переопределено: ${Object.keys(cfg.vars).length}`; st.classList.remove('dirty'); }
+    toast('Брендбук сохранён — применяется всем посетителям', 'ok');
+  } catch (e) {
+    toast('Сохранено локально, но в общую БД не записалось: ' + (e.message || e), 'err');
+  }
+}
+async function bbResetAll() {
+  if (!confirm('Сбросить ВСЕ токены брендбука к значениям по умолчанию?')) return;
+  bbVars = {};
+  applyBrandbook({});
+  await bbSaveAll();
+  bbDirty = false;
+  adPaint();
+}
+function bbExport() {
+  const json = JSON.stringify({ _ts: Date.now(), vars: bbSanitizeVars(bbVars) }, null, 2);
+  const done = () => toast('Брендбук скопирован в буфер обмена', 'ok');
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(json).then(done, () => prompt('Скопируйте вручную:', json));
+  else prompt('Скопируйте вручную:', json);
+}
+function bbImport() {
+  const raw = prompt('Вставьте JSON брендбука (из «Экспорт»):');
+  if (!raw) return;
+  try {
+    const cfg = JSON.parse(raw);
+    const vars = bbSanitizeVars(cfg.vars || cfg); // принимаем и {vars:{}}, и голый {--k:v}
+    bbVars = vars;
+    applyBrandbook(bbVars);
+    bbDirty = true;
+    adPaint();
+    toast('Импортировано — проверьте витрину и сохраните', 'inf');
+  } catch (e) {
+    toast('Не удалось разобрать JSON: ' + e.message, 'err');
+  }
+}

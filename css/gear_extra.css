@@ -7,12 +7,12 @@
   gap: 4px;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity .15s;
+  transition: opacity var(--duration-fast);
 }
 .cs-gear-item:hover .cs-gear-actions { opacity: 1; }
 .cs-gear-btn {
   background: none;
-  border: 1px solid rgba(255,255,255,.1);
+  border: var(--deco-frame-w, 1px) solid rgba(255,255,255,.1);
   color: rgba(255,255,255,.4);
   font-size: 11px;
   width: 26px;
@@ -21,7 +21,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all .15s;
+  transition: all var(--duration-fast);
   padding: 0;
   line-height: 1;
 }

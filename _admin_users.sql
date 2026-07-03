@@ -102,8 +102,12 @@ begin
     insert into public.user_roles (user_id, role, is_banned) values (p_user_id, 'viewer', p_banned);
   end if;
   -- GoTrue-уровень: забанен → токены не выдаются и не обновляются
+  -- ВАЖНО: не 'infinity' — GoTrue (Go) не умеет сканировать infinity в *time.Time
+  -- ("unsupported Scan, storing driver.Value type string into type *time.Time"),
+  -- из-за чего ломается ВЕСЬ вход (в т.ч. OAuth-колбэк) для забаненного.
+  -- Конечная дальняя дата = «бан навсегда» без падения драйвера.
   update auth.users
-    set banned_until = case when p_banned then 'infinity'::timestamptz else null end
+    set banned_until = case when p_banned then (now() + interval '100 years') else null end
     where id = p_user_id;
 end$$;
 revoke all on function public.admin_set_user_ban(uuid, boolean) from public;

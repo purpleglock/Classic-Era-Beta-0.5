@@ -19,14 +19,23 @@
     --sat-cyan:    80%;
     --sat-red:     75%;
     --sat-purple:  70%;
-  
+
+    /* Светлота поверхностей — отдельными токенами, чтобы брендбук мог
+       управлять «глубиной темноты» без переписывания формул ниже. */
+    --l-surface-0:  8%;
+    --l-surface-1: 11%;
+    --l-surface-2: 14%;
+    --l-surface-3: 17%;
+    --l-surface-4: 21%;
+    --l-surface-5: 26%;
+
     /* ── Фоновые поверхности (Вытаскиваем из кромешной тьмы) ───────── */
-    --primitive-surface-0: hsl(var(--hue-space) var(--sat-space)   8%);  /* void */
-    --primitive-surface-1: hsl(var(--hue-space) var(--sat-space)  11%);  /* base bg */
-    --primitive-surface-2: hsl(var(--hue-space) var(--sat-space)  14%);  /* panels */
-    --primitive-surface-3: hsl(var(--hue-space) var(--sat-space)  17%);  /* cards */
-    --primitive-surface-4: hsl(var(--hue-space) var(--sat-space)  21%);  /* raised */
-    --primitive-surface-5: hsl(var(--hue-space) var(--sat-space)  26%);  /* hover */
+    --primitive-surface-0: hsl(var(--hue-space) var(--sat-space) var(--l-surface-0));  /* void */
+    --primitive-surface-1: hsl(var(--hue-space) var(--sat-space) var(--l-surface-1));  /* base bg */
+    --primitive-surface-2: hsl(var(--hue-space) var(--sat-space) var(--l-surface-2));  /* panels */
+    --primitive-surface-3: hsl(var(--hue-space) var(--sat-space) var(--l-surface-3));  /* cards */
+    --primitive-surface-4: hsl(var(--hue-space) var(--sat-space) var(--l-surface-4));  /* raised */
+    --primitive-surface-5: hsl(var(--hue-space) var(--sat-space) var(--l-surface-5));  /* hover */
   
     /* ── Белые оверлеи (бордеры, делители - чуть прозрачнее) ───────── */
     --primitive-white-4:  rgba(255, 255, 255, 0.03);
@@ -199,6 +208,20 @@
     --radius-xl:  24px;
     --radius-pill: 9999px;
     --cut:        10px;
+
+    /* ── Детали и орнаментика (управляются брендбуком) ──────────────
+       Весь sci-fi декор сайта — рамки, акцентные полосы, штриховки,
+       срезы углов, свечения, разрядка капса, тик-бары — читает эти
+       токены; правка здесь (или в брендбуке) меняет детали ВЕЗДЕ. */
+    --deco-frame-w:     1px;   /* толщина рамок карточек/панелей/полей */
+    --deco-accent-w:    2px;   /* тонкая акцентная полоса (карточки лент) */
+    --deco-accent-w-lg: 3px;   /* широкая акцентная полоса (цитаты/выноски) */
+    --deco-corner-cut: 12px;   /* срез угла карточек (sci-fi clip) */
+    --deco-scan-step:   3px;   /* шаг штриховки-сканлайнов */
+    --deco-scan-op:     1;     /* видимость сканлайнов (0..1, множитель) */
+    --deco-glow-op:     1;     /* сила угловых свечений (0..1, множитель) */
+    --deco-ls-mult:     1;     /* множитель разрядки капс-текста */
+    --deco-tick-op:     1;     /* деко-метки/тик-бары «||||» (0 = скрыть) */
   
     --duration-instant:  80ms;
     --duration-fast:    150ms;

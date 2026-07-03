@@ -9,15 +9,15 @@
 .home-block:first-of-type{margin-top:18px}
 .hb-head{
   position:relative;margin:0 0 16px;padding-bottom:9px;
-  border-bottom:1px solid var(--w2);
+  border-bottom: var(--deco-frame-w, 1px) solid var(--w2);
 }
 .hb-head::after{
   content:'';position:absolute;left:0;bottom:-1px;width:64px;height:2px;
   background:var(--gd);box-shadow:0 0 12px var(--gd);
 }
 .hb-tag{
-  font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;
-  letter-spacing:4px;text-transform:uppercase;color:var(--gdl);
+  font-family: var(--font-mono);font-size:12px;font-weight:600;
+  letter-spacing: calc(4px * var(--deco-ls-mult, 1));text-transform:uppercase;color:var(--gdl);
 }
 
 /* ── Разделы: сетка плиток ──────────────────────────────────────────── */
@@ -27,10 +27,10 @@
   gap:14px;
 }
 .sec-tile{
-  position:relative;display:block;height:152px;border-radius:14px;overflow:hidden;
-  background:var(--b2);border:1px solid var(--w2);cursor:pointer;text-decoration:none;
+  position:relative;display:block;height:152px;border-radius:var(--radius-lg);overflow:hidden;
+  background:var(--b2);border: var(--deco-frame-w, 1px) solid var(--w2);cursor:pointer;text-decoration:none;
   box-shadow:0 6px 18px rgba(0,0,0,.35);
-  transition:transform .35s var(--ease-out), box-shadow .35s, border-color .35s;
+  transition:transform var(--duration-slow) var(--ease-out), box-shadow var(--duration-slow), border-color var(--duration-slow);
 }
 .sec-tile:hover{
   transform:translateY(-4px);border-color:var(--gd);
@@ -40,7 +40,7 @@
 .st-media img{
   width:100%;height:100%;object-fit:cover;
   filter:brightness(.6) saturate(.9) contrast(1.05);
-  transition:transform .6s var(--ease-out), filter .4s;
+  transition:transform var(--duration-slow) var(--ease-out), filter var(--duration-slow);
 }
 .sec-tile:hover .st-media img{transform:scale(1.08);filter:brightness(.78) saturate(1.05)}
 .st-scrim{
@@ -52,31 +52,31 @@
   display:flex;align-items:center;justify-content:space-between;
 }
 .st-ico{
-  width:34px;height:34px;border-radius:9px;flex-shrink:0;
+  width:34px;height:34px;border-radius:var(--radius-md);flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   background:hsl(216 20% 7% / .62);backdrop-filter:blur(6px);
-  border:1px solid var(--w2);color:var(--gdl);font-size:16px;
+  border: var(--deco-frame-w, 1px) solid var(--w2);color:var(--gdl);font-size:16px;
 }
 .st-ico img{width:18px;height:18px;object-fit:contain}
 .st-glyph{line-height:1}
 .st-count{
-  font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;letter-spacing:1px;
-  color:var(--gdl);padding:3px 9px;border-radius:7px;
-  background:hsl(216 20% 7% / .62);backdrop-filter:blur(6px);border:1px solid var(--w2);
+  font-family: var(--font-mono);font-size:11px;font-weight:500;letter-spacing: calc(1px * var(--deco-ls-mult, 1));
+  color:var(--gdl);padding:3px 9px;border-radius:var(--radius-md);
+  background:hsl(216 20% 7% / .62);backdrop-filter:blur(6px);border: var(--deco-frame-w, 1px) solid var(--w2);
 }
 .st-foot{position:absolute;left:14px;right:14px;bottom:12px;z-index:2;display:flex;flex-direction:column;gap:3px}
 .st-name{
-  font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px;
-  letter-spacing:1.5px;text-transform:uppercase;color:#eaf3fb;line-height:1.08;
+  font-family: var(--font-display);font-weight:700;font-size:18px;
+  letter-spacing: calc(1.5px * var(--deco-ls-mult, 1));text-transform:uppercase;color:#eaf3fb;line-height:1.08;
   text-shadow:0 2px 8px rgba(0,0,0,.7);
 }
 .st-meta{
-  font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;
+  font-family: var(--font-mono);font-size:9px;letter-spacing: calc(1.5px * var(--deco-ls-mult, 1));
   color:var(--t3);text-transform:uppercase;
 }
 .st-edge{
   position:absolute;left:0;top:0;bottom:0;width:3px;z-index:3;
-  background:var(--gd);opacity:0;transition:opacity .35s;
+  background:var(--gd);opacity:0;transition:opacity var(--duration-slow);
 }
 .sec-tile:hover .st-edge{opacity:1;box-shadow:0 0 14px var(--gd)}
 
@@ -84,20 +84,20 @@
 .cl-list{display:flex;flex-direction:column;gap:6px;max-height:none;overflow:visible}
 .cl-row{
   display:flex!important;align-items:center;gap:12px;padding:10px 14px!important;
-  background:var(--b2)!important;border:1px solid var(--w1)!important;
-  border-radius:10px!important;clip-path:none!important;
+  background:var(--b2)!important;border: var(--deco-frame-w, 1px) solid var(--w1)!important;
+  border-radius:var(--radius-md)!important;clip-path:none!important;
   position:relative;overflow:hidden;cursor:pointer;
-  transition:border-color .2s, background .2s, transform .2s!important;
+  transition:border-color var(--duration-normal), background var(--duration-normal), transform var(--duration-normal)!important;
 }
 .cl-row::before{
   content:''!important;display:block!important;
   position:absolute;left:0;top:0;bottom:0;width:3px;
-  background:var(--gd);opacity:0;transition:opacity .2s;
+  background:var(--gd);opacity:0;transition:opacity var(--duration-normal);
 }
 .cl-row:hover{border-color:var(--gd)!important;background:var(--b3)!important;transform:translateX(2px)}
 .cl-row:hover::before{opacity:1}
-.cl-type{border-radius:6px!important;clip-path:none!important}
-.cl-sec-tag{border-radius:6px!important;clip-path:none!important}
+.cl-type{border-radius:var(--radius-sm)!important;clip-path:none!important}
+.cl-sec-tag{border-radius:var(--radius-sm)!important;clip-path:none!important}
 
 /* ── Обложка главной: убрана неудачная стилизация ─────────── */
 
@@ -107,7 +107,7 @@
 /* ── Сайдбар и Навигация: Скругления, отступы, новый спайн ─────────── */
 #sb {
   background: hsl(var(--hue-space) var(--sat-space) 5% / 0.85) !important;
-  border-right: 1px solid var(--w1) !important;
+  border-right: var(--deco-frame-w, 1px) solid var(--w1) !important;
   box-shadow: 4px 0 24px rgba(0,0,0,0.4) !important;
 }
 .logo, .sb-srch, .sb-foot {
@@ -115,15 +115,15 @@
   border-bottom-color: var(--w1) !important;
 }
 #srch {
-  border-radius: 8px !important;
+  border-radius: var(--radius-md) !important;
   background: hsl(var(--hue-space) var(--sat-space) 15% / 0.6) !important;
   border-color: var(--w1) !important;
 }
 .n-home, .nl-hdr, .ng-hdr, .np {
-  border-radius: 8px !important;
+  border-radius: var(--radius-md) !important;
   margin: 2px 12px !important;
   border-left: none !important;
-  transition: all .25s var(--ease-out) !important;
+  transition: all var(--duration-normal) var(--ease-out) !important;
 }
 .n-home:hover, .nl-hdr:hover, .ng-hdr:hover, .np:hover {
   background: hsl(var(--hue-space) var(--sat-space) 25% / 0.35) !important;
@@ -144,7 +144,7 @@
 /* ── Полотно (Canvas) и Topbar ──────────────────────────────────────── */
 #top {
   background: hsl(var(--hue-space) var(--sat-space) 7% / 0.85) !important;
-  border-bottom: 1px solid var(--w1) !important;
+  border-bottom: var(--deco-frame-w, 1px) solid var(--w1) !important;
 }
 #cw {
   background: hsl(var(--hue-space) var(--sat-space) 8% / 0.9) !important;
@@ -154,7 +154,7 @@
 }
 
 /* ── Кнопки: скругление вместо скосов ──────────────────────────────── */
-.tbtn, .btn{clip-path:none!important;border-radius:9px!important}
+.tbtn, .btn{clip-path:none!important;border-radius:var(--radius-md)!important}
 
 /* ── Мобильная адаптация плиток ────────────────────────────────────── */
 @media (max-width:600px){

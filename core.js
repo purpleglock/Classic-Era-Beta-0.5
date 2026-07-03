@@ -286,6 +286,59 @@ async function loadHeroVN() {
 }
 loadHeroVN();
 
+// ── Брендбук UI (дизайн-токены всего сайта) ──
+// Конфиг хранится в site_settings (ключ wk_brandbook) как JSON-строка:
+//   { _ts, vars: { "--hue-gold": "206", "--radius-md": "12px", ... } }
+// Хранятся ТОЛЬКО переопределения — дефолты живут в css/01_tokens.css.
+// Применение = inline-переменные на <html> (:root), т.е. поверх токенов CSS;
+// весь остальной CSS уже опирается на эти переменные, поэтому правка
+// брендбука в админке меняет вид всего сайта. Кэш в localStorage — чтобы
+// тема применялась мгновенно, до ответа БД (без «мигания» дефолтной темой).
+function bbSanitizeVars(vars) {
+  const out = {};
+  if (!vars || typeof vars !== 'object') return out;
+  for (const [k, v] of Object.entries(vars)) {
+    if (!/^--[a-z0-9-]{1,64}$/i.test(k)) continue;
+    const val = String(v ?? '').trim();
+    // значения — только безопасный CSS: без разметки/фигурных скобок/url()
+    if (!val || val.length > 300 || /[<>{};]|url\s*\(/i.test(val)) continue;
+    out[k] = val;
+  }
+  return out;
+}
+let _bbAppliedKeys = [];
+function applyBrandbook(vars) {
+  const st = document.documentElement.style;
+  _bbAppliedKeys.forEach(k => st.removeProperty(k));
+  const clean = bbSanitizeVars(vars);
+  Object.entries(clean).forEach(([k, v]) => st.setProperty(k, v));
+  _bbAppliedKeys = Object.keys(clean);
+}
+let _brandbook = (() => {
+  try { return JSON.parse(localStorage.getItem('wk_brandbook') || 'null') || null; } catch (e) { return null; }
+})();
+if (_brandbook && _brandbook.vars) applyBrandbook(_brandbook.vars);
+async function loadBrandbook() {
+  try {
+    const r = await fetch(
+      `${SB_URL}/rest/v1/site_settings?key=eq.wk_brandbook&select=value&limit=1`,
+      { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + getToken() } }
+    );
+    if (!r.ok) return;
+    const data = await r.json();
+    const raw = data?.[0]?.value;
+    let dbCfg = null;
+    try { dbCfg = raw ? ((typeof raw === 'string') ? JSON.parse(raw) : raw) : null; } catch (e) {}
+    if (!dbCfg) return;
+    // как и у новеллы: побеждает более свежий конфиг (метка _ts)
+    const cfg = _vnPickNewer(dbCfg, _brandbook);
+    _brandbook = cfg;
+    localStorage.setItem('wk_brandbook', JSON.stringify(cfg));
+    applyBrandbook(cfg.vars || {});
+  } catch (e) { /* нет таблицы/настройки — сайт живёт на дефолтных токенах */ }
+}
+loadBrandbook();
+
 // ────────────────────────────────────────────────────────────────────────────────────────────────────
 // I18N
 // ────────────────────────────────────────────────────────────────────────────────────────────────────

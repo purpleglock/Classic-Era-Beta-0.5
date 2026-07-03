@@ -243,12 +243,14 @@ function fnHomeBlockHtml() {
     const readmore = bulletin ? 'СВОДКА ▸' : rumor ? '|||||||| ' : '||||||||';
     return `<article class="fn-card${lead ? ' fn-card-lead' : ''}${rumor ? ' fn-card-is-rumor' : ''}${bulletin ? ' fn-card-is-bulletin' : ''}" data-fn-id="${esc(n.id)}" onclick="fnOpenArticle('${esc(n.id)}')" style="--fn-accent:${esc(accent)}">
       ${fnIsStaff() ? `<button class="fn-card-del" title="Удалить (админ)" onclick="fnAdminDelete('${esc(n.id)}',event)">✕</button>` : ''}
-      ${cardCover}
-      <div class="fn-card-body">
-        <div class="fn-card-kicker">${kicker}</div>
-        <h3 class="fn-card-title">${esc(n.title || 'Без заголовка')}</h3>
-        <p class="fn-card-excerpt">${esc(fnExcerpt(n))}</p>
-        <div class="fn-card-foot"><span class="fn-card-date">${esc(fnStardate(n.published_at || n.created_at))}</span><span class="fn-readmore">${readmore}</span></div>
+      <div class="fn-card-inner">
+        ${cardCover}
+        <div class="fn-card-body">
+          <div class="fn-card-kicker">${kicker}</div>
+          <h3 class="fn-card-title">${esc(n.title || 'Без заголовка')}</h3>
+          <p class="fn-card-excerpt">${esc(fnExcerpt(n))}</p>
+          <div class="fn-card-foot"><span class="fn-card-date">${esc(fnStardate(n.published_at || n.created_at))}</span><span class="fn-readmore">${readmore}</span></div>
+        </div>
       </div>
     </article>`;
   };
@@ -1228,8 +1230,10 @@ function fnReactionBlockHtml(n, myFac) {
     const on = selKey != null && selKey === o.key;
     return `<button class="fn-react-opt fn-stance-${o.stance}${on ? ' on' : ''}"
       onclick="fnReact('${esc(n.id)}','${o.stance}','${esc(o.key)}')">
-      <span class="fn-react-ic">${FN_STANCE_ICON[o.stance]}</span>
-      <span class="fn-react-txt">${esc(o.text)}</span></button>`;
+      <div class="fn-react-opt-inner">
+        <span class="fn-react-ic">${FN_STANCE_ICON[o.stance]}</span>
+        <span class="fn-react-txt">${esc(o.text)}</span>
+      </div></button>`;
   }).join('');
 
   let rel = '';
@@ -1294,8 +1298,10 @@ function fnNpcChoiceBlockHtml(n) {
     const stance = ['approve', 'neutral', 'disapprove'].includes(c.stance) ? c.stance : 'neutral';
     const on = chosen === i;
     return `<button class="fn-react-opt fn-stance-${stance}${on ? ' on' : ''}" onclick="fnNpcChoose('${esc(n.id)}',${i})">
-      <span class="fn-react-ic">${FN_STANCE_ICON[stance]}</span>
-      <span class="fn-react-txt">${esc(c.text)}</span></button>`;
+      <div class="fn-react-opt-inner">
+        <span class="fn-react-ic">${FN_STANCE_ICON[stance]}</span>
+        <span class="fn-react-txt">${esc(c.text)}</span>
+      </div></button>`;
   }).join('');
   return `<div class="fn-react fn-react-npc">
     <div class="fn-react-hd">ВАШ ОТВЕТ <span class="fn-react-sub">// ${chosen != null ? 'выбор сохранён' : 'выберите вариант'}</span></div>

@@ -150,7 +150,12 @@
       "PowerShell(node --check faction_system.js)",
       "PowerShell(node --check faction_reg.js)",
       "PowerShell(node --check faction_news.js)",
-      "PowerShell(node --check admin.js)"
+      "PowerShell(node --check admin.js)",
+      "Bash(cat \"C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\4ecf4afc-1b4d-4fdf-871f-3b49914103a2\\\\scratchpad\\\\ad_brand.js\")",
+      "Bash(python -)",
+      "Bash(cat \"C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\4ecf4afc-1b4d-4fdf-871f-3b49914103a2\\\\scratchpad\\\\bb_styles2.css\")",
+      "Bash(sed -i 's|18_admin.css?v=20260703brand|18_admin.css?v=20260703brand2|' css/index.css)",
+      "Bash(sed -i 's|admin.js?v=20260703privacy|admin.js?v=20260703brand|; s|css/index.css?v=20260703brand|css/index.css?v=20260703brand2|g' index.html)"
     ]
   }
 }

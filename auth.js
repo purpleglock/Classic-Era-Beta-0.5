@@ -47,10 +47,21 @@ async function init() {
   // ── Возврат с Google OAuth (PKCE): ?code= меняем на сессию ──
   // detectSessionInUrl выключен (хэш занят роутером), поэтому обмен делаем сами.
   try {
+    // Ошибка может прийти и в query (?error=), и в хэше (#...&error=) — читаем оба.
+    const _hq = new URLSearchParams((location.hash || '').replace(/^#\/?/, '').split('?').slice(1).join('?') || (location.hash || '').replace(/^#/, ''));
     const _oq = new URLSearchParams(location.search);
-    if (_oq.get('error_description') || _oq.get('error')) {
-      toast('Вход через Google отменён: ' + (_oq.get('error_description') || _oq.get('error')), 'err');
-      history.replaceState(null, '', location.pathname + location.hash);
+    const _err = _oq.get('error') || _hq.get('error');
+    const _edesc = _oq.get('error_description') || _hq.get('error_description') || '';
+    if (_err || _edesc) {
+      // Всегда чистим URL и уводим на главную, чтобы не осталась «Страница не найдена».
+      history.replaceState(null, '', location.pathname);
+      const _isBan = /ban|block|заблок|forbidden|access[_ ]denied/i.test(_err + ' ' + _edesc);
+      if (_isBan) {
+        showLoginBlockedGate();
+      } else {
+        // Не показываем сырой SQL/технический текст — только по-человечески.
+        toast('Не удалось войти через Google. Попробуйте ещё раз позже.', 'err');
+      }
     } else if (_oq.get('code')) {
       const { error: _oerr } = await sb.auth.exchangeCodeForSession(_oq.get('code'));
       history.replaceState(null, '', location.pathname + location.hash);
@@ -623,6 +634,26 @@ function enforceBan() {
   }
   const em = document.getElementById('ban-gate-email');
   if (em) em.textContent = user.email || '';
+  document.body.style.overflow = 'hidden';
+}
+
+// ── Баннер «вход заблокирован» ──────────────────────────────────
+// Для случая, когда забаненному GoTrue вообще не выдаёт сессию (banned_until):
+// сессии нет → enforceBan() не сработает, поэтому показываем свой оверлей
+// прямо по ошибке OAuth-колбэка. Визуально совпадает с enforceBan().
+function showLoginBlockedGate() {
+  if (document.getElementById('ban-gate')) return;
+  const gate = document.createElement('div');
+  gate.id = 'ban-gate';
+  gate.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(8,10,14,.97);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px';
+  gate.innerHTML = `
+    <div style="max-width:440px;text-align:center;border:1px solid #a33;border-radius:14px;padding:34px 28px;background:linear-gradient(135deg,#1a1012,#120c10);box-shadow:0 20px 60px rgba(0,0,0,.6)">
+      <div style="font-size:52px;line-height:1;margin-bottom:14px">⛔</div>
+      <div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:800;letter-spacing:1px;color:#ff7a7a;margin-bottom:10px">АККАУНТ ЗАБЛОКИРОВАН</div>
+      <div style="font-size:13px;line-height:1.6;color:#c0ccd6;margin-bottom:22px">Вход ограничен администрацией.<br>Если считаете это ошибкой — свяжитесь с администрацией.</div>
+      <button class="btn btn-gh" onclick="document.getElementById('ban-gate').remove();document.body.style.overflow=''" style="border-color:#a33;color:#ff9a9a">Закрыть</button>
+    </div>`;
+  document.body.appendChild(gate);
   document.body.style.overflow = 'hidden';
 }
 
