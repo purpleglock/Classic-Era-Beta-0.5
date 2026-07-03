@@ -292,7 +292,7 @@ function adStatsTable() {
     return `<div onclick="adSelectFaction('${esc(fid)}')" style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--w1,#1e2630);cursor:pointer;background:${isSel ? 'color-mix(in srgb,var(--gd,#3a7fbf) 12%,transparent)' : 'transparent'}">
       <div style="flex:2 1 170px;min-width:140px">
         <div style="font-weight:600;color:var(--t1,#e8edf2);margin-bottom:2px">${esc(e.app.name)}</div>
-        <div style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(e.app.race || '—')} · <span style="color:var(--te,#3ec0d0)">${esc(e.app.owner_email || '—')}</span></div>
+        <div style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(e.app.race || '—')} · <span style="color:var(--te,#3ec0d0)">${esc(adOwnerLabel(e))}</span></div>
       </div>
       ${c(hasEco ? adNum(eco.gc) : '—')}${c(hasEco ? adNum(eco.science) : '—')}${c(hasEco ? adNum(eco.agents) : '—')}
       ${c(e.colonies.length)}${c(e.buildings.length)}${c(e.systems.length)}${c(rosterQty)}${c(tech)}
@@ -553,6 +553,7 @@ function adVNUpdateLineCount(dialogId, lineIdx, newCount) {
   ln.spriteIds = ln.spriteIds.slice(0, cnt);
   ln.count = cnt;
 
+  AD.vnPrev = { did: dialogId, li: lineIdx };   // предпросмотр — на эту реплику
   adPaint();  // перерисовать панель
 }
 // Снять текущие значения формы в AD.vn (чтобы не терять правки при перерисовке/сохранении).
@@ -639,30 +640,31 @@ function adVNPanel() {
       spriteIds.length = cnt; // обрезать лишние
 
       const spriteSelects = spriteIds.map((sId, sIdx) =>
-        `<select id="ad-vn-ls-${esc(d.id)}-${li}-${sIdx}" title="Спрайт #${sIdx + 1} для этой сцены" style="${inp};min-width:120px;font-size:12px">${spriteOpts(sId)}</select>`
+        `<select id="ad-vn-ls-${esc(d.id)}-${li}-${sIdx}" title="Спрайт #${sIdx + 1} для этой сцены" style="${inp};min-width:120px;font-size:12px" onfocus="adVNPrevUser('${esc(d.id)}',${li})" onchange="adVNPrevRepaint()">${spriteOpts(sId)}</select>`
       ).join('');
 
       return `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;flex-wrap:wrap">
         <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88);padding-top:9px;min-width:16px;flex-basis:100%">${li + 1}</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;flex-basis:100%">
           ${spriteSelects}
-          <select id="ad-vn-lc-${esc(d.id)}-${li}" title="Сколько спрайтов в кадре (1-4)" style="${inp};min-width:80px;font-size:12px" onchange="adVNUpdateLineCount('${esc(d.id)}', ${li}, this.value)">
+          <select id="ad-vn-lc-${esc(d.id)}-${li}" title="Сколько спрайтов в кадре (1-4)" style="${inp};min-width:80px;font-size:12px" onfocus="adVNPrevUser('${esc(d.id)}',${li})" onchange="adVNUpdateLineCount('${esc(d.id)}', ${li}, this.value)">
             <option value="1"${cnt === 1 ? ' selected' : ''}>1 спрайт</option>
             <option value="2"${cnt === 2 ? ' selected' : ''}>2 спрайта</option>
             <option value="3"${cnt === 3 ? ' selected' : ''}>3 спрайта</option>
             <option value="4"${cnt === 4 ? ' selected' : ''}>4 спрайта</option>
           </select>
         </div>
-        <textarea id="ad-vn-lt-${esc(d.id)}-${li}" rows="1" placeholder="Реплика… {name}" style="${inp};flex:1;resize:vertical;line-height:1.45;font-size:13px;min-height:36px;flex-basis:100%">${esc(ln.text || '')}</textarea>
+        <textarea id="ad-vn-lt-${esc(d.id)}-${li}" rows="1" placeholder="Реплика… {name}" style="${inp};flex:1;resize:vertical;line-height:1.45;font-size:13px;min-height:36px;flex-basis:100%" onfocus="adVNPrevUser('${esc(d.id)}',${li})" oninput="adVNPrevText()">${esc(ln.text || '')}</textarea>
         <button class="btn btn-gh btn-xs" title="Удалить реплику" onclick="adVNRemoveLine('${esc(d.id)}',${li})" style="white-space:nowrap;flex-basis:100%;align-self:flex-end">✕</button>
       </div>`; }).join('');
     return `<div style="border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:12px 13px;margin-top:10px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
         <span style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0)">#${i + 1}</span>
         <label style="font-size:12px;color:var(--t3,#8aa0b0)">Имя:</label>
-        <input id="ad-vn-nm-${esc(d.id)}" value="${esc(d.speaker || '')}" placeholder="Капитан Юри" style="${inp};flex:1;min-width:120px">
+        <input id="ad-vn-nm-${esc(d.id)}" value="${esc(d.speaker || '')}" placeholder="Капитан Юри" style="${inp};flex:1;min-width:120px" onfocus="adVNPrevUser('${esc(d.id)}',-1)" oninput="adVNPrevText()">
         <label style="font-size:12px;color:var(--t3,#8aa0b0)">Время:</label>
         <select id="ad-vn-tm-${esc(d.id)}" title="Когда этот диалог может всплывать" style="${inp};min-width:150px">${timeOpts(d.time)}</select>
+        <button class="btn btn-gh btn-xs" onclick="adVNPrevUser('${esc(d.id)}',0)" title="Показать этот диалог в предпросмотре" style="white-space:nowrap">👁</button>
         <button class="btn btn-rd btn-xs" onclick="adVNRemoveDialogue('${esc(d.id)}')" title="Удалить диалог" style="white-space:nowrap">🗑</button>
       </div>
       ${lineRows}
@@ -700,14 +702,189 @@ function adVNPanel() {
     }).join('')}
 
     <div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px;border-top:1px solid var(--w2,#2a3340);padding-top:14px">ДИАЛОГИ <span style="color:var(--t4,#6a7a88)">· ${dialogues.length}</span></div>
-    ${dlgCards}
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
-      <button class="btn btn-gh btn-sm" onclick="adVNAddDialogue()">+ Добавить диалог</button>
-      <button class="btn btn-gh btn-sm" onclick="adVNSeedRestore()" title="Добавить диалог из стандартных фраз-приветствий обложки (их можно отредактировать)">↺ Стандартные фразы</button>
-      <button class="btn btn-gd btn-sm" onclick="adVNSave()">💾 Сохранить новеллу</button>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 10px;line-height:1.5">Справа — живая сцена как на главной: кликни в реплику (или 👁 у диалога) — она сразу на сцене; текст и спрайты обновляются на лету, ◀ ▶ листают реплики, «прогон» проигрывает диалог с печатной машинкой.</div>
+    <style>
+      #ad-vn-split{display:flex;flex-direction:row-reverse;gap:14px;align-items:flex-start}
+      #ad-vn-edcol{flex:1 1 auto;min-width:0}
+      #ad-vn-prevcol{flex:0 0 42%;max-width:540px;position:sticky;top:10px;z-index:30}
+      @media(max-width:1000px){
+        #ad-vn-split{display:block}
+        #ad-vn-prevcol{max-width:none;margin-bottom:10px}
+      }
+      /* компактная сцена: те же классы hp-vn, но ужатые под колонку */
+      #ad-vn-preview .hp-hero-cover.hp-vn{aspect-ratio:1200/560;min-height:190px;max-height:400px}
+      #ad-vn-preview .hp-vn-box{left:10px;right:10px;bottom:10px;padding:16px 14px 10px}
+      #ad-vn-preview .hp-vn-text{font-size:13px;line-height:1.5;min-height:2em}
+      #ad-vn-preview .hp-vn-name{font-size:11px;top:-13px;padding:5px 14px 5px 10px;letter-spacing:.12em}
+    </style>
+    <div id="ad-vn-split">
+      <div id="ad-vn-prevcol"><div id="ad-vn-preview">${adVNPrevHtml()}</div></div>
+      <div id="ad-vn-edcol">
+        ${dlgCards}
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+          <button class="btn btn-gh btn-sm" onclick="adVNAddDialogue()">+ Добавить диалог</button>
+          <button class="btn btn-gh btn-sm" onclick="adVNSeedRestore()" title="Добавить диалог из стандартных фраз-приветствий обложки (их можно отредактировать)">↺ Стандартные фразы</button>
+          <button class="btn btn-gd btn-sm" onclick="adVNSave()">💾 Сохранить новеллу</button>
+        </div>
+      </div>
     </div>
   </div>`;
 }
+// ── Живой предпросмотр сцены в редакторе новеллы ──
+// AD.vnPrev = {did, li} — какая реплика на «сцене»; переживает adPaint. Сцена
+// собирается из ТЕКУЩИХ значений формы (не из сохранённого конфига) и рендерится
+// теми же классами hp-vn, что на главной — вид 1-в-1.
+function _adVNSub(s) { return String(s == null ? '' : s).replace(/\$?\{name\}/g, 'Командор'); }
+function adVNSceneHtml(d, li) {
+  const $id = x => document.getElementById(x);
+  const ln = (d.lines || [])[li] || {};
+  const txEl = $id('ad-vn-lt-' + d.id + '-' + li);
+  const nmEl = $id('ad-vn-nm-' + d.id);
+  const ctEl = $id('ad-vn-lc-' + d.id + '-' + li);
+  const text = txEl ? txEl.value : (ln.text || '');
+  const speaker = nmEl ? nmEl.value : (d.speaker || '');
+  const cnt = Math.max(1, Math.min(4, parseInt(ctEl ? ctEl.value : (ln.count || 1)) || 1));
+  const sprites = (AD.vn && AD.vn.sprites) || [];
+  const urlOf = id => { const sp = sprites.find(x => x.id === id); return sp ? sp.url : null; };
+  let urls = [];
+  for (let s = 0; s < cnt; s++) {
+    const sel = $id('ad-vn-ls-' + d.id + '-' + li + '-' + s);
+    const id = sel ? sel.value : ((Array.isArray(ln.spriteIds) ? ln.spriteIds : [ln.spriteId])[s] || '');
+    const u = id ? urlOf(id) : null;
+    if (u) urls.push(u);
+  }
+  // Как на главной: недостающие до count добиваются первым доступным спрайтом
+  const def = sprites.find(s => s.url) || null;
+  while (urls.length < cnt && def) urls.push(def.url);
+  urls = urls.slice(0, cnt);
+  const cover = (typeof _heroCoverUrl !== 'undefined' && _heroCoverUrl) ? String(_heroCoverUrl).trim() : '';
+  const bg = cover ? `<img class="hp-hero-img" src="${esc(cover)}" alt="">` : `<div class="hp-hero-noimg"></div>`;
+  const sprHtml = urls.map((u, i) => `<img class="hp-vn-sprite hp-vn-sprite-${i}" src="${esc(u)}" alt="">`).join('');
+  const nm = _adVNSub(speaker);
+  return `<div class="hp-hero-cover hp-vn" style="margin:0;width:100%;border:1px solid var(--w2,#2a3340);border-radius:0 0 10px 10px;pointer-events:none">
+    ${bg}
+    <div class="hp-hero-grad"></div>
+    <div class="hp-vn-sprites" data-count="${cnt}"${urls.length ? '' : ' style="display:none"'}>${sprHtml}</div>
+    <div class="hp-vn-box" style="cursor:default">
+      <div class="hp-vn-name" id="ad-vn-prev-name"${nm ? '' : ' style="display:none"'}>${esc(nm)}</div>
+      <div class="hp-vn-text" id="ad-vn-prev-text">${esc(_adVNSub(text))}</div>
+    </div>
+  </div>`;
+}
+function adVNPrevHtml() {
+  const dialogues = (AD.vn && AD.vn.dialogues) || [];
+  if (!dialogues.length) return '';
+  let st = AD.vnPrev;
+  let d = st ? dialogues.find(x => x.id === st.did) : null;
+  if (!d) { d = dialogues[0]; st = AD.vnPrev = { did: d.id, li: 0 }; }
+  const total = Math.max(1, (d.lines || []).length);
+  const li = Math.max(0, Math.min(st.li || 0, total - 1));
+  st.li = li;
+  const idx = dialogues.indexOf(d);
+  const min = !!AD.vnPrevMin;
+  const bar = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;background:var(--b1,#0f141b);border:1px solid var(--w2,#2a3340);${min ? 'border-radius:10px' : 'border-bottom:none;border-radius:10px 10px 0 0'}">
+      <span style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0)">🔍 СЦЕНА</span>
+      <span style="font-size:11px;color:var(--t3,#8aa0b0)">диалог #${idx + 1} · реплика ${li + 1}/${total}</span>
+      <span style="flex:1"></span>
+      ${min ? '' : `<button class="btn btn-gh btn-xs" onclick="adVNPrevStep(-1)" title="Предыдущая реплика">◀</button>
+      <button class="btn btn-gh btn-xs" onclick="adVNPrevStep(1)" title="Следующая реплика">▶</button>
+      <button class="btn btn-gh btn-xs" onclick="adVNPrevPlay()" title="Проиграть весь диалог с печатной машинкой">▶▶ прогон</button>`}
+      <button class="btn btn-gh btn-xs" onclick="adVNPrevToggle()" title="${min ? 'Показать сцену' : 'Спрятать сцену'}">${min ? '▸ сцена' : '▾ свернуть'}</button>
+    </div>`;
+  return min ? bar : bar + adVNSceneHtml(d, li);
+}
+// Свернуть/развернуть сцену (полезно на узком экране).
+function adVNPrevToggle() {
+  adVNPrevStopPlay();
+  AD.vnPrevMin = !AD.vnPrevMin;
+  const host = document.getElementById('ad-vn-preview');
+  if (host) host.innerHTML = adVNPrevHtml();
+}
+// Перерисовать/показать сцену. forceType — печатная машинка даже без смены реплики.
+function adVNPrevShow(did, li, forceType) {
+  const dialogues = (AD.vn && AD.vn.dialogues) || [];
+  const d = dialogues.find(x => x.id === did);
+  if (!d) return;
+  const total = Math.max(1, (d.lines || []).length);
+  if (li == null || li < 0) li = (AD.vnPrev && AD.vnPrev.did === did) ? (AD.vnPrev.li || 0) : 0;
+  li = Math.max(0, Math.min(li, total - 1));
+  const changed = !AD.vnPrev || AD.vnPrev.did !== did || AD.vnPrev.li !== li;
+  AD.vnPrev = { did, li };
+  const host = document.getElementById('ad-vn-preview');
+  if (!host) return;
+  host.innerHTML = adVNPrevHtml();
+  if (changed || forceType) {
+    const el = document.getElementById('ad-vn-prev-text');
+    if (el) adVNPrevType(el.textContent);
+  }
+}
+// Клик/фокус пользователя в форме — останавливает «прогон» и показывает реплику.
+function adVNPrevUser(did, li) { adVNPrevStopPlay(); adVNPrevShow(did, li); }
+// Полная перерисовка текущей сцены без машинки (смена спрайта/количества).
+function adVNPrevRepaint() { const st = AD.vnPrev; if (st) adVNPrevShow(st.did, st.li); }
+// Лёгкое обновление на лету: только текст и имя, без пересоздания картинок.
+function adVNPrevText() {
+  const st = AD.vnPrev;
+  if (!st) return;
+  if (AD._vnPrevTimer) { clearInterval(AD._vnPrevTimer); AD._vnPrevTimer = null; }
+  const tEl = document.getElementById('ad-vn-prev-text');
+  if (!tEl) return;
+  const box = tEl.closest('.hp-vn-box');
+  if (box) box.classList.remove('typing');
+  const tx = document.getElementById('ad-vn-lt-' + st.did + '-' + st.li);
+  const nm = document.getElementById('ad-vn-nm-' + st.did);
+  if (tx) tEl.textContent = _adVNSub(tx.value);
+  const nEl = document.getElementById('ad-vn-prev-name');
+  if (nEl && nm) { const v = _adVNSub(nm.value); nEl.textContent = v; nEl.style.display = v ? '' : 'none'; }
+}
+function adVNPrevStep(delta) {
+  const st = AD.vnPrev;
+  if (!st) return;
+  adVNPrevStopPlay();
+  adVNPrevShow(st.did, (st.li || 0) + (delta || 0));
+}
+// Печатная машинка предпросмотра (как на главной, но проще).
+function adVNPrevType(full) {
+  if (AD._vnPrevTimer) { clearInterval(AD._vnPrevTimer); AD._vnPrevTimer = null; }
+  const el = document.getElementById('ad-vn-prev-text');
+  if (!el) return;
+  const box = el.closest('.hp-vn-box');
+  let i = 0;
+  el.textContent = '';
+  if (box) box.classList.add('typing');
+  AD._vnPrevTimer = setInterval(() => {
+    i += 2;
+    el.textContent = full.slice(0, i);
+    if (i >= full.length) {
+      clearInterval(AD._vnPrevTimer); AD._vnPrevTimer = null;
+      if (box) box.classList.remove('typing');
+    }
+  }, 24);
+}
+// «Прогон»: проиграть все реплики диалога подряд с паузой на прочтение.
+function adVNPrevPlay() {
+  const st = AD.vnPrev;
+  if (!st) return;
+  const dialogues = (AD.vn && AD.vn.dialogues) || [];
+  const d = dialogues.find(x => x.id === st.did);
+  if (!d) return;
+  adVNPrevStopPlay();
+  const total = Math.max(1, (d.lines || []).length);
+  let i = 0;
+  const step = () => {
+    if (!document.getElementById('ad-vn-preview')) { AD._vnPlayTimer = null; return; }
+    adVNPrevShow(st.did, i, true);
+    const el = document.getElementById('ad-vn-prev-text');
+    const len = el ? el.textContent.length : 0;
+    i++;
+    if (i >= total) { AD._vnPlayTimer = null; return; }
+    // время печати + пауза на прочтение (как readPause на главной)
+    AD._vnPlayTimer = setTimeout(step, len * 12 + Math.max(1200, Math.min(5000, 700 + len * 60)));
+  };
+  step();
+}
+function adVNPrevStopPlay() { if (AD._vnPlayTimer) { clearTimeout(AD._vnPlayTimer); AD._vnPlayTimer = null; } }
+
 // Загрузить ОДИН файл-спрайт → вернуть URL. Сначала локальный аплоад-сервер
 // (в папку игры assets/hero), если он поднят; иначе — обычная загрузка
 // (Supabase Storage / base64), чтобы работало и без локального сервера.
@@ -1454,7 +1631,7 @@ function adFacPanel() {
     <div class="fm-panel-hd" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;background:color-mix(in srgb,var(--gd,#3a7fbf) 8%,transparent);border-bottom:1px solid var(--w2,#2a3340)">
       <div>
         <div class="fm-panel-title" style="font-family:var(--font-display,sans-serif);font-size:18px;font-weight:700;color:var(--gdl,#5fb0e6)">${esc(e.app.name)}</div>
-        <div class="fm-panel-sub" style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88);margin-top:4px">${esc(e.app.faction_id)} · ${esc(e.app.race || '—')} · <a class="fm-link" style="color:var(--te,#3ec0d0)" href="mailto:${esc(e.app.owner_email || '')}">${esc(e.app.owner_email || '—')}</a></div>
+        <div class="fm-panel-sub" style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88);margin-top:4px">${esc(e.app.faction_id)} · ${esc(e.app.race || '—')} · <span style="color:var(--te,#3ec0d0)">${esc(adOwnerLabel(e))}</span></div>
       </div>
       <button class="btn btn-gh btn-xs" onclick="adSelectFaction('${esc(AD.sel)}')">✕ Закрыть</button>
     </div>
@@ -2447,6 +2624,15 @@ function adPickColClass(name) {
   if (inp && name) inp.value = name;
 }
 
+// Подпись владельца: почта из таблиц вычищена (приватность) — берём из
+// staff-RPC admin_list_users (AD.users), иначе отображаемое имя по owner_id.
+function adOwnerLabel(e) {
+  const oid = e?.app?.owner_id;
+  return e?.app?.owner_email
+    || (AD.users || []).find(u => u.user_id === oid)?.email
+    || (oid ? ((typeof userLabel === 'function' && userLabel(oid)) || oid) : '—');
+}
+
 async function adAddColony() {
   if (!AD.sel || AD.busy) return;
   const e = adEntry(AD.sel); if (!e) return;
@@ -2456,7 +2642,6 @@ async function adAddColony() {
   const cells  = Math.max(1, parseInt(document.getElementById('fm-col-cells')?.value) || 6);
   if (!sysId || !pName) { toast('Укажите систему и название планеты', 'err'); return; }
   const ownerId    = (e.eco?.owner_id) || e.app?.owner_id;
-  const ownerEmail = (e.eco?.owner_email) || e.app?.owner_email;
   // Snapshot planet resources if the planet exists in map data
   const sys = AD.systems.find(s => s.id === sysId);
   const planet = sys && (sys.planets || []).find(p => p.name === pName);
@@ -2795,7 +2980,7 @@ function adAuditFilter(cat) { AD.auditCat = cat; if (!adRenderSlot()) adPaint();
 function adTabOwner(e) {
   const hasOwner = !!(e.app.owner_id);
   const ownerLine = hasOwner
-    ? `<b style="color:var(--t1,#e8edf2)">${esc(e.app.owner_email || '—')}</b> <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(e.app.owner_id)}</span>`
+    ? `<b style="color:var(--t1,#e8edf2)">${esc(adOwnerLabel(e))}</b> <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(e.app.owner_id)}</span>`
     : `<b style="color:var(--color-warning,#e0a030)">— бесхозное (нет владельца)</b>`;
 
   // выпадающий список игроков для передачи (лениво из admin_list_users)
@@ -2855,7 +3040,7 @@ function adEnterCabinet() {
 async function adVacateFaction() {
   if (!AD.sel || AD.busy) return;
   const e = adEntry(AD.sel); if (!e) return;
-  const who = e.app.owner_email || e.app.owner_id || 'владелец';
+  const who = adOwnerLabel(e) || 'владелец';
   if (!confirm(`Снять игрока (${who}) с государства «${e.app.name}»?\n\nСтрана останется целой, но станет бесхозной. Бывший владелец сможет подать новую анкету. Данные не удаляются.`)) return;
   AD.busy = true;
   try {
@@ -3286,7 +3471,7 @@ async function adInitEco() {
   AD.busy = true;
   try {
     const rows = await dbPost('faction_economy', {
-      faction_id: AD.sel, owner_id: e.app.owner_id, owner_email: e.app.owner_email,
+      faction_id: AD.sel, owner_id: e.app.owner_id,
       gc: 0, science: 0, tnp: 0, agents: 0, resources: {}, research: [], last_tick: new Date().toISOString()
     });
     if (rows?.[0]) { e.eco = rows[0]; AD.ecos.push(rows[0]); }

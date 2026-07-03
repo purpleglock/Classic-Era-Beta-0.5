@@ -218,7 +218,7 @@ async function saveEdit() {
       const _tEn=document.getElementById('ei-title-en')?.value?.trim()||'CLASSIC ERA';
       const _hb={content,updated_at:now,title:_tRu,title_ru:_tEn};
       if (editData._homeId) { await dbPatch('pages',`id=eq.${editData._homeId}`,_hb); }
-      else { await dbPost('pages',{slug:'home',..._hb,content_ru:'',status:'published',sort_order:-1,created_by:user.email,created_at:now}); localStorage.removeItem('wk_home_content'); }
+      else { await dbPost('pages',{slug:'home',..._hb,content_ru:'',status:'published',sort_order:-1,author_id:user.id,created_at:now}); localStorage.removeItem('wk_home_content'); }
       _pgCache.delete('home'); await loadHomePage(); exitEdit(true); await renderHome(); toast(T('saveOk'),'ok');
     } catch(e) { toast(T('saveErr')+' '+e.message,'err'); } return;
   }
@@ -227,7 +227,7 @@ async function saveEdit() {
   const body={ title, content:JSON.stringify(editBlocks), updated_at:new Date().toISOString(), title_ru:document.getElementById('ei-ten')?.value?.trim()||'', content_ru:'', status:editData.status||'draft', section:document.getElementById('ei-sec')?.value||null, parent_slug:document.getElementById('ei-par')?.value||null, image_url:editData.image_url||null, cover_height:editData.cover_height||null, cover_pos:editData.cover_pos||null, cover_type:editData.cover_type||'standard', exclude_from_collage:editData.exclude_from_collage||false, tags:editData.tags||null, page_type:document.getElementById('ei-pgtype')?.value||editData.page_type||'article' };
   try {
     if(editData.id) await dbPatch('pages',`id=eq.${editData.id}`,body);
-    else { body.created_by=user.email; await dbPost('pages',body); }
+    else { body.author_id=user.id; await dbPost('pages',body); }
     await loadPgs(); buildNav();
     const finalSlug=document.getElementById('ei-slug')?.value?.trim()||editData.slug;
     _pgCache.delete(finalSlug); exitEdit(true); go(finalSlug, false); toast(T('saveOk'),'ok');
@@ -1613,9 +1613,9 @@ async function doCreateNew(){
     if(pgType==='faction')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Фракция',title:t,sections:[{name:'Основное',rows:[{key:'Тип',val:''},{key:'Столица',val:''},{key:'Лидер',val:''},{key:'Основана',val:''},{key:'Идеология',val:''}]}]},{type:'text',id:uid(),content:''}]);
     if(pgType==='preview')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Превью',title:t,sections:[{name:'Базовые',rows:[{key:'Скорость',val:''},{key:'Мощность',val:''},{key:'Точность',val:''}]},{name:'Дополнительно',rows:[{key:'Класс',val:''},{key:'Роль',val:''},{key:'Особенность',val:''}]}]},{type:'text',id:uid(),content:''}]);
     if(pgType==='location')initContent=JSON.stringify([{type:'infobox',id:uid(),label:'Локация',title:t,sections:[{name:'Обстановка',rows:[{key:'Сектор',val:''},{key:'Система',val:''},{key:'Контроль',val:''},{key:'Опасность',val:''}]}]},{type:'text',id:uid(),content:'Опишите атмосферу места: что видят и слышат прибывшие сюда персонажи.'}]);
-    await dbPost('pages',{slug:sl,title:t,section:sec,parent_slug:par,status:'draft',sort_order:0,content:initContent,page_type:pgType,created_at:now,updated_at:now,created_by:user.email});
+    await dbPost('pages',{slug:sl,title:t,section:sec,parent_slug:par,status:'draft',sort_order:0,content:initContent,page_type:pgType,created_at:now,updated_at:now,author_id:user.id});
     if(pgType==='character'){
-      try{await fetch(`${SB_URL}/rest/v1/characters`,{method:'POST',headers:{'apikey':SB_ANON,'Authorization':'Bearer '+getToken(),'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({slug:sl,name:t,class:'soldier',play_start:new Date().toISOString().slice(0,10),owner_email:user.email,stats:{str:10,dex:10,con:10,int:10,wis:10,cha:10},abilities:[],gear:[],extra:{}})});}catch(e2){}
+      try{await fetch(`${SB_URL}/rest/v1/characters`,{method:'POST',headers:{'apikey':SB_ANON,'Authorization':'Bearer '+getToken(),'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({slug:sl,name:t,class:'soldier',play_start:new Date().toISOString().slice(0,10),owner_id:user.id,stats:{str:10,dex:10,con:10,int:10,wis:10,cha:10},abilities:[],gear:[],extra:{}})});}catch(e2){}
     }
     toast('Страница создана!','ok');cm('mo-new');await loadPgs();buildNav();go(sl);}catch(e){toast('Ошибка: '+e.message,'err');}
 }
@@ -1624,7 +1624,7 @@ function openAp(){if(!user)return;apOpen=true;document.getElementById('ap').clas
 function closeAp(){apOpen=false;document.getElementById('ap').classList.remove('open');}
 function renderAp(){
   if(!user)return;
-  const dn = getDisplayName(); const avHtml = getAvatarHtml(user.email, userProfile.avatar_url, userProfile.display_name, 40);
+  const dn = getDisplayName(); const avHtml = getAvatarHtml(user.id, userProfile.avatar_url, userProfile.display_name, 40);
   const rl={superadmin:'Superadmin',editor:'Editor',moderator:'Moderator',player:'Игрок',viewer:'Viewer'}; const rc={superadmin:'r-sa',editor:'r-ed',moderator:'r-mo',player:'r-pl',viewer:'r-vi'};
   document.getElementById('ap-un').textContent = dn; document.getElementById('ap-ur').textContent=rl[user.role]||user.role; document.getElementById('ap-ur').className='ap-ur '+(rc[user.role]||'');
   let apAvEl = document.getElementById('ap-av-wrap');
@@ -1644,14 +1644,14 @@ async function renderApTab(){
   const b=document.getElementById('ap-body'); b.innerHTML='<div class="sload" style="min-height:60px"><div class="quote-loader">' + getRandomQuote() + '</div></div>';
   if(apTab==='profile'){
     const hasName = !!(userProfile.display_name && userProfile.display_name.trim());
-    const dn=getDisplayName(); const avBig=getAvatarHtml(user.email,userProfile.avatar_url,dn,72);
+    const dn=getDisplayName(); const avBig=getAvatarHtml(user.id,userProfile.avatar_url,dn,72);
     const rl={superadmin:'SUPERADMIN',editor:'РЕДАКТОР',moderator:'МОДЕРАТОР',player:'ИГРОК',viewer:'ЗРИТЕЛЬ'}; const rc={superadmin:'var(--gdl)',editor:'var(--tel)',moderator:'var(--pul)',player:'var(--ok)',viewer:'var(--t3)'};
     const isStaff = ['superadmin','editor','moderator'].includes(user.role);
 
     // Вики-метрики показываем только редакторам/админам — у игроков они всегда 0.
     let statsHtml = '';
     if (isStaff) {
-      const myPgs = pages.filter(p=>isVisiblePage(p)&&(p.created_by===user.email||p.created_by===user.id));
+      const myPgs = pages.filter(p=>isVisiblePage(p)&&(p.author_id===user.id||p.created_by===user.email||p.created_by===user.id));
       const myPubCount = myPgs.filter(p=>p.status==='published').length, myDftCount = myPgs.filter(p=>p.status==='draft').length;
       statsHtml = `<div class="prof-stats-grid">
         <div class="prof-stat-card"><div class="prof-stat-icon">📄</div><div class="prof-stat-val">${myPgs.length}</div><div class="prof-stat-lbl">Всего страниц</div></div>
@@ -1721,21 +1721,11 @@ async function renderApTab(){
         </button>
       </div>
       <div class="prof-divider"></div>
-      <div class="prof-form">
-        <div class="fg">
-          <label class="fl">Текущий пароль</label>
-          <input class="fi" id="prof-curpass" type="password" placeholder="Для подтверждения личности" autocomplete="current-password">
-        </div>
-        <div class="fg">
-          <label class="fl">Новый пароль</label>
-          <input class="fi" id="prof-newpass" type="password" placeholder="Минимум 8 символов" autocomplete="new-password">
-        </div>
-        <button class="btn btn-gh btn-fw" onclick="changeMyPassword()">
-          <span style="margin-right:6px">🔑</span> Сменить пароль
-        </button>
+      <div style="font-size:11px;color:var(--t4);line-height:1.6;padding:2px 2px 6px">
+        🔐 Вход выполняется через Google — пароля на сайте нет, менять нечего.
       </div>`;
   } else if(apTab==='mypages'){
-    const myPgs = pages.filter(p=>isVisiblePage(p)&&(p.created_by===user.email||p.created_by===user.id));
+    const myPgs = pages.filter(p=>isVisiblePage(p)&&(p.author_id===user.id||p.created_by===user.email||p.created_by===user.id));
     if(!myPgs.length){b.innerHTML=`<div style="text-align:center;padding:24px 0"><div style="font-size:36px;opacity:.15;margin-bottom:10px">◈</div><div style="font-family:Rajdhani,sans-serif;font-size:10px;letter-spacing:2px;color:var(--t3)">Нет страниц</div></div>`;return;}
     const rows=myPgs.sort((a,x)=>new Date(x.updated_at||0)-new Date(a.updated_at||0)).map(p=>`<div class="ir"><div class="ir-n" onclick="go('${esc(p.slug)}');closeAp()">${esc(pT(p))}</div><span style="font-family:JetBrains Mono,monospace;font-size:8px;color:var(--t4);flex-shrink:0">${timeAgo(p.updated_at)}</span><span class="ir-b ${p.status==='published'?'bp-b':'bd-b'}">${p.status==='published'?'PUB':'DFT'}</span></div>`).join('');
     b.innerHTML=`<div style="margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--te)">${myPgs.length} страниц</div><div class="il">${rows}</div>`;
@@ -1775,13 +1765,13 @@ async function renderApTab(){
       const userCards = allUsers.map(u => {
         const email = u.email || '';
         // для текущего пользователя берём свежий локальный профиль (минуя кэш БД)
-        const localProf = (user && email === user.email) ? getProfileOf(email) : null;
+        const localProf = (user && u.user_id === user.id) ? getProfileOf(user.id) : null;
         const name = email.includes('@') ? email.split('@')[0] : 'Без email';
         const displayName = (localProf?.display_name) || u.display_name || name;
         const avatarUrl = (localProf?.avatar_url) || u.avatar_url || '';
         const hue = email ? [...email].reduce((a,c)=>a+c.charCodeAt(0),0) % 360 : 180;
 
-        const userPages = email ? pages.filter(p => isVisiblePage(p) && p.created_by === email) : [];
+        const userPages = pages.filter(p => isVisiblePage(p) && (p.author_id === u.user_id || (email && p.created_by === email)));
         const pubCount = userPages.filter(p => p.status === 'published').length;
         const draftCount = userPages.filter(p => p.status === 'draft').length;
 
@@ -1930,45 +1920,21 @@ async function saveProfileFromApForm() {
     }); 
   } catch(e) {}
   
-  const _si = allProfiles.findIndex(p => p.email === user.email); const _pd = { email: user.email, display_name: displayName, avatar_url: avatarUrl };
+  const _si = allProfiles.findIndex(p => p.user_id === user.id); const _pd = { user_id: user.id, display_name: displayName, avatar_url: avatarUrl };
   if (_si >= 0) allProfiles[_si] = _pd; else allProfiles.push(_pd);
   updAuthUI(); await renderHome(); renderAp(); toast('Профиль сохранён!', 'ok');
 }
 
-// Смена пароля текущего пользователя (Supabase Auth) с подтверждением текущего
-// пароля (re-authentication) — чтобы по открытой чужой сессии нельзя было
-// перехватить аккаунт, не зная старый пароль.
-async function changeMyPassword() {
-  if (!user) return;
-  const cur = document.getElementById('prof-curpass')?.value || '';
-  const np  = document.getElementById('prof-newpass')?.value || '';
-  if (!cur) { toast('Введите текущий пароль', 'err'); return; }
-  if (np.length < 8) { toast('Новый пароль минимум 8 символов', 'err'); return; }
-  if (np === cur) { toast('Новый пароль совпадает с текущим', 'err'); return; }
-  try {
-    // подтверждаем личность текущим паролем — прямой запрос токена,
-    // не меняя текущую сессию и не дёргая auth-события
-    const vr = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
-      method: 'POST', headers: { 'apikey': SB_ANON, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: user.email, password: cur }),
-    });
-    if (!vr.ok) { toast('Неверный текущий пароль', 'err'); return; }
-    const { error } = await sb.auth.updateUser({ password: np });
-    if (error) throw error;
-    const c = document.getElementById('prof-curpass'); if (c) c.value = '';
-    const f = document.getElementById('prof-newpass'); if (f) f.value = '';
-    toast('Пароль изменён', 'ok');
-  } catch (e) { toast('Ошибка смены пароля: ' + (e.message || e), 'err'); }
-}
+// Смена пароля удалена: вход только через Google OAuth, паролей на сайте нет.
 
-// ВЫРЕЗАН КРИВОЙ ЗАПРОС user_roles по EMAIL (решение ошибки 400 Bad Request)
-async function openContribModal(email, displayName, avUrl, hue, cnt) {
+// key = author_id (uuid) или легаси-email со старых страниц
+async function openContribModal(key, displayName, avUrl, hue, cnt) {
   const isSA = user && user.role === 'superadmin';
-  const isMe = user && user.email === email;
+  const isMe = user && (key === user.id || key === user.email);
   const _av = safeAvatar(avUrl);
   const avHtml = _av ? `<img src="${esc(_av)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" loading="lazy">` : `<span style="font-size:22px;font-family:Rajdhani,sans-serif;font-weight:700;color:hsl(${hue},60%,70%)">${esc(displayName.slice(0,2).toUpperCase())}</span>`;
 
-  const myPgs = pages.filter(p=>isVisiblePage(p)&&p.created_by===email).sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0)).slice(0,8);
+  const myPgs = pages.filter(p=>isVisiblePage(p)&&(p.author_id===key||p.created_by===key)).sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0)).slice(0,8);
   const pgsHtml = myPgs.length ? myPgs.map(p=>{ const s=p.section?sections.find(s=>s.slug===p.section):null; return `<div class="contrib-pg-row" onclick="cm('mo-contrib');go('${esc(p.slug)}')"><div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(pT(p))}</div>${s?`<div style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--t4)">${esc(sN(s))}</div>`:''}</div><span style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--t4);flex-shrink:0">${timeAgo(p.updated_at)}</span><span class="ir-b ${p.status==='published'?'bp-b':'bd-b'}">${p.status==='published'?'PUB':'DFT'}</span></div>`; }).join('') : `<p style="color:var(--t3);font-size:12px;text-align:center;padding:16px 0">Нет страниц</p>`;
 
   let roleHtml = ''; let banHtml = '';
@@ -2055,7 +2021,7 @@ async function doSaveSec(){
 
 function openEditUsr(userId,role,email,banned){
   email = email || '';
-  const prof = email ? (getProfileOf(email) || {}) : {};
+  const prof = getProfileOf(userId) || {};
   // null-safe: разметка модалки могла быть упрощена (часть полей удалена),
   // поэтому пишем только в реально существующие элементы — иначе функция
   // падала на отсутствующем поле и модалка вообще не открывалась.
@@ -2089,8 +2055,8 @@ async function doSaveUsr(){
     }
     if(email){
       await apiFetch('rpc/admin_set_profile_name',{method:'POST',body:JSON.stringify({p_email:email,p_name:name})});
-      const si=allProfiles.findIndex(p=>p.email===email);
-      if(si>=0) allProfiles[si]={...allProfiles[si],display_name:name}; else allProfiles.push({email:email,display_name:name,avatar_url:''});
+      const si=allProfiles.findIndex(p=>p.user_id===id);
+      if(si>=0) allProfiles[si]={...allProfiles[si],display_name:name}; else allProfiles.push({user_id:id,display_name:name,avatar_url:''});
     }
     toast('Сохранено!','ok');cm('mo-usr');renderApTab();
     if(curSlug==='home' && typeof renderHome==='function') renderHome();
@@ -2104,7 +2070,7 @@ async function deleteUserProfile(){
   if(!confirm(`Удалить профиль «${email}»?\nИмя и аватар будут сброшены (останется только email). Игровой аккаунт и роль не затрагиваются.`)) return;
   try{
     await apiFetch('rpc/admin_delete_profile',{method:'POST',body:JSON.stringify({p_email:email})});
-    const si=allProfiles.findIndex(p=>p.email===email);
+    const si=allProfiles.findIndex(p=>p.user_id===document.getElementById('eu-id')?.value);
     if(si>=0) allProfiles.splice(si,1);
     toast('Профиль удалён','ok');cm('mo-usr');renderApTab();
     if(curSlug==='home' && typeof renderHome==='function') renderHome();
@@ -2451,7 +2417,7 @@ async function enterEditCharacter(pg){
   let ch=null;
   try{const r=await dbGet('characters',`slug=eq.${encodeURIComponent(pg.slug)}&select=*&limit=1`);ch=r?.[0]||null;}catch(e){}
   if(!editData) return; // пользователь вышел пока шёл запрос
-  if(!ch)ch={slug:pg.slug,name:pT(pg),class:'soldier',faction:'',status:'active',play_start:new Date().toISOString().slice(0,10),owner_email:user?.email||'',stats:{str:10,dex:10,con:10,int:10,wis:10,cha:10},abilities:[],gear:[],extra:{}};
+  if(!ch)ch={slug:pg.slug,name:pT(pg),class:'soldier',faction:'',status:'active',play_start:new Date().toISOString().slice(0,10),owner_id:user?.id||null,stats:{str:10,dex:10,con:10,int:10,wis:10,cha:10},abilities:[],gear:[],extra:{}};
   editData._char=ch;
   const[factions,abLib,itemLib]=await Promise.all([loadCharLib('fraki'),loadCharLib('sposob'),loadCharLib('snaragenie')]);
   if(!editData) return;
@@ -2632,7 +2598,7 @@ function renderCharEditUI(pg,ch){
     <button class="btn btn-gh btn-sm" style="margin-top:6px" onclick="charAddGear()">+ Добавить снаряжение</button>
 
     <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div class="ed-mf"><label class="ed-ml">Email игрока</label><input class="ed-mi" id="ch-owner" value="${esc(ch.owner_email||user?.email||'')}"></div>
+      <div class="ed-mf"><label class="ed-ml">ID игрока (uuid)</label><input class="ed-mi" id="ch-owner" value="${esc(ch.owner_id||user?.id||'')}" placeholder="uuid владельца"></div>
       <div class="ed-mf"><label class="ed-ml">Теги</label><input class="ed-mi" id="ch-tags" value="${esc(pg.tags||'')}" placeholder="командир, империя, герой" oninput="editData.tags=this.value"></div>
     </div>
   </div>
@@ -2864,7 +2830,9 @@ async function saveCharEdit(){
   // play_end — только если статус dead или retired
   const endVal = document.getElementById('ch-end')?.value||'';
   ch.play_end = (ch.status==='dead'||ch.status==='retired') && endVal ? endVal : null;
-  ch.owner_email=(document.getElementById('ch-owner')?.value||'').trim()||user?.email||'';
+  // владелец — uuid (email больше не храним); мусорное значение не отправляем
+  { const _ov=(document.getElementById('ch-owner')?.value||'').trim();
+    ch.owner_id=/^[0-9a-f-]{36}$/i.test(_ov)?_ov:(user?.id||null); }
   ch.extra={...ch.extra,
     subtitle:(document.getElementById('ch-subtitle')?.value||'').trim(),
     bio:document.getElementById('ch-bio')?.value||''
@@ -2880,10 +2848,10 @@ async function saveCharEdit(){
       tags:editData.tags||null,
       updated_at:now,section:editData.section||null,parent_slug:editData.parent_slug||null};
     if(editData.id) await dbPatch('pages',`id=eq.${editData.id}`,pageBody);
-    else{pageBody.slug=editData.slug;pageBody.created_by=user?.email||'';pageBody.created_at=now;await dbPost('pages',pageBody);}
+    else{pageBody.slug=editData.slug;pageBody.author_id=user?.id||null;pageBody.created_at=now;await dbPost('pages',pageBody);}
     const charBody={slug:editData.slug,name:ch.name,class:ch.class,faction:ch.faction||null,
       status:ch.status,play_start:ch.play_start,play_end:ch.play_end||null,
-      owner_email:ch.owner_email,stats:ch.stats,abilities:ch.abilities,gear:ch.gear,
+      owner_id:ch.owner_id||null,stats:ch.stats,abilities:ch.abilities,gear:ch.gear,
       extra:ch.extra,updated_at:now};
     // PATCH if exists, POST if new
     const existing=await dbGet('characters',`slug=eq.${encodeURIComponent(editData.slug)}&select=slug&limit=1`).catch(()=>null);

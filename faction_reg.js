@@ -640,7 +640,7 @@ async function frUpsert(status, extra) {
   frSyncStep();
   const d = FR.data;
   const body = {
-    owner_id: user.id, owner_email: user.email, status,
+    owner_id: user.id, status,
     name: d.name, color: d.color, gov: d.gov, regime: d.regime, leader: d.leader, civ_type: d.civ_type,
     system_id: d.system_id, system_name: d.system_name, planet_name: d.planet_name, capital_env: d.capital_env || null,
     buildings: d.buildings, bonus_money: d.bonus_money,
@@ -874,7 +874,7 @@ async function frRenderAppsTab(b) {
       return `<div class="fr-app" id="fr-app-${a.id}">
       <div class="fr-app-hd">${badge}<span class="fr-swatch" style="background:${a.color}"></span>
         <b>${esc(a.name || 'Без названия')}</b>
-        <span class="fr-app-by">${esc(a.owner_email || '')}</span></div>
+        <span class="fr-app-by">${esc(a.owner_email || userLabel(a.owner_id) || '')}</span></div>
       <div class="fr-app-meta">★ ${esc(a.system_name || '—')} · ${esc(a.gov || '')} · ${esc(a.race || '')}</div>
       <div class="fr-app-acts">
         <button class="btn btn-gh btn-sm" onclick="frViewFaction('${a.id}')">Детали</button>

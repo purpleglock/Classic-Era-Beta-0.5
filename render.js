@@ -51,19 +51,20 @@ async function renderHome() {
   const clRows = sorted.map(p => {
     const isNew = Math.abs(new Date(p.updated_at||0)-new Date(p.created_at||0))<60000;
     const sec2 = p.section ? sections.find(s=>s.slug===p.section) : null;
-    const authorName = userLabel(p.created_by||'');
+    const authorName = userLabel(p.author_id || p.created_by || '');
     return `<div class="cl-row" onclick="go('${jsq(p.slug)}')"><span class="cl-type ${isNew?'ct-new':'ct-edit'}">${isNew?T('new_tag'):T('edit_tag')}</span><div class="cl-info"><span class="cl-title">${esc(pT(p))}</span><span class="cl-author">✍ ${esc(authorName)}</span></div>${sec2 ? `<span class="cl-sec-tag">${esc(sN(sec2))}</span>` : ''}<span class="cl-date">${timeAgo(p.updated_at)}</span></div>`;
   }).join('');
 
-  const contribMap = {}; pages.filter(isVisiblePage).forEach(p=>{ if(p.created_by) contribMap[p.created_by]=(contribMap[p.created_by]||0)+1; });
-  allProfiles.forEach(prof=>{ if(prof.email && !contribMap[prof.email]) contribMap[prof.email]=0; });
+  // ключ автора = author_id (uuid); created_by-email — легаси-фолбэк до этапа 3
+  const contribMap = {}; pages.filter(isVisiblePage).forEach(p=>{ const k=p.author_id||p.created_by; if(k) contribMap[k]=(contribMap[k]||0)+1; });
+  allProfiles.forEach(prof=>{ if(prof.user_id && !(prof.user_id in contribMap)) contribMap[prof.user_id]=0; });
   const sortedContribs = Object.entries(contribMap).sort((a,b)=>b[1]-a[1]);
   const maxCnt = Math.max(100, sortedContribs.length ? sortedContribs[0][1] : 1);
-  const contribsHtml = sortedContribs.length ? `<section class="home-block hp-contribs"><div class="hb-head"><span class="hb-tag">${T('contributors')}</span></div><div class="contrib-grid">${sortedContribs.map(([email, cnt], idx) => {
+  const contribsHtml = sortedContribs.length ? `<section class="home-block hp-contribs"><div class="hb-head"><span class="hb-tag">${T('contributors')}</span></div><div class="contrib-grid">${sortedContribs.map(([key, cnt], idx) => {
     const rank = idx + 1;
     const rankClass = rank <= 3 ? ` rank-${rank}` : '';
-    const name = email.includes('@') ? email.split('@')[0] : email; const hue = [...email].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
-    const prof = getProfileOf(email); const displayName = prof.display_name || name; const avUrl = safeAvatar(prof.avatar_url);
+    const name = key.includes('@') ? key.split('@')[0] : 'Участник'; const hue = [...key].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
+    const prof = getProfileOf(key); const displayName = prof.display_name || name; const avUrl = safeAvatar(prof.avatar_url);
     const avHtml = avUrl ? `<img src="${esc(avUrl)}" loading="lazy">` : `<span style="font-size:20px;font-family:Rajdhani,sans-serif;font-weight:900;color:hsl(${hue},60%,72%)">${esc(displayName.slice(0,2).toUpperCase())}</span>`;
     const barPct = Math.min(100, Math.round((cnt / 100) * 100));
     const rankNumHtml = rank <= 9 ? `<div class="contrib-rank-num">${rank}</div>` : '';
@@ -77,7 +78,7 @@ async function renderHome() {
     const barHue = (tierHue + 10) % 360;
     const barSat = Math.min(40 + tier * 3, 80);
     const barLight = Math.min(45 + tier * 1.5, 65);
-    return `<div class="contrib-card${rankClass}" onclick="openContribModal('${jsq(email)}','${jsq(displayName)}','${jsq(safeAvatar(avUrl))}',${hue},${cnt})" title="Посмотреть профиль" style="background:linear-gradient(145deg, hsl(${tierHue},${tierSat}%,${tierLight}%) 0%, hsl(${tierHue},${tierSat - 4}%,${tierLight - 3}%) 100%); border-color:hsl(${tierHue},${tierBorderSat}%,${tierBorderLight}%); ${tierGlow}"><div class="contrib-scan"></div><div class="contrib-card-top"><div class="contrib-av-wrap"><div class="contrib-av" style="background:linear-gradient(135deg, hsl(${tierHue},${tierSat + 5}%,${tierLight + 4}%) 0%, hsl(${tierHue},${tierSat}%,${tierLight}%) 100%);border-color:hsl(${tierHue},${tierBorderSat + 10}%,${tierBorderLight + 8}%)">${avHtml}</div><div class="contrib-av-ring" style="color:hsl(${tierHue},${tierSat + 25}%,${50 + tier * 1.5}%)"></div>${rankNumHtml}</div><div class="contrib-card-info"><div class="contrib-name">${esc(displayName)}</div></div></div><div class="contrib-card-bottom"><div class="contrib-stat-bar"><div class="contrib-stat-fill" style="width:${barPct}%; background:linear-gradient(90deg, hsl(${barHue},${barSat}%,${barLight}%) 0%, hsl(${barHue},${barSat + 10}%,${barLight + 8}%) 100%); box-shadow: 0 0 ${tier * 1.5}px hsla(${barHue}, ${barSat}%, ${barLight}%, ${Math.min(tier * 0.05, 0.6)});"></div></div><div class="contrib-cnt">${cnt}&nbsp;СТР</div></div></div>`;
+    return `<div class="contrib-card${rankClass}" onclick="openContribModal('${jsq(key)}','${jsq(displayName)}','${jsq(safeAvatar(avUrl))}',${hue},${cnt})" title="Посмотреть профиль" style="background:linear-gradient(145deg, hsl(${tierHue},${tierSat}%,${tierLight}%) 0%, hsl(${tierHue},${tierSat - 4}%,${tierLight - 3}%) 100%); border-color:hsl(${tierHue},${tierBorderSat}%,${tierBorderLight}%); ${tierGlow}"><div class="contrib-scan"></div><div class="contrib-card-top"><div class="contrib-av-wrap"><div class="contrib-av" style="background:linear-gradient(135deg, hsl(${tierHue},${tierSat + 5}%,${tierLight + 4}%) 0%, hsl(${tierHue},${tierSat}%,${tierLight}%) 100%);border-color:hsl(${tierHue},${tierBorderSat + 10}%,${tierBorderLight + 8}%)">${avHtml}</div><div class="contrib-av-ring" style="color:hsl(${tierHue},${tierSat + 25}%,${50 + tier * 1.5}%)"></div>${rankNumHtml}</div><div class="contrib-card-info"><div class="contrib-name">${esc(displayName)}</div></div></div><div class="contrib-card-bottom"><div class="contrib-stat-bar"><div class="contrib-stat-fill" style="width:${barPct}%; background:linear-gradient(90deg, hsl(${barHue},${barSat}%,${barLight}%) 0%, hsl(${barHue},${barSat + 10}%,${barLight + 8}%) 100%); box-shadow: 0 0 ${tier * 1.5}px hsla(${barHue}, ${barSat}%, ${barLight}%, ${Math.min(tier * 0.05, 0.6)});"></div></div><div class="contrib-cnt">${cnt}&nbsp;СТР</div></div></div>`;
   }).join('')}</div></section>` : '';
 
   // ── Единая обложка главной (одно изображение) ──
@@ -4056,7 +4057,7 @@ async function renderFactionPage(pg) {
 
   // Async: load characters that have this faction name
   try {
-    const chars = await dbGet('characters', `faction=eq.${encodeURIComponent(name)}&select=slug,name,class,status,owner_email&order=name.asc`) || [];
+    const chars = await dbGet('characters', `faction=eq.${encodeURIComponent(name)}&select=slug,name,class,status&order=name.asc`) || [];
     const el = document.getElementById('fac-members-list');
     if (!el) return;
     if (!chars.length) { el.innerHTML = '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:rgba(255,255,255,.25);padding:16px 0">Нет участников</div>'; return; }

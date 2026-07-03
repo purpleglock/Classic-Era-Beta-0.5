@@ -321,7 +321,7 @@ async function fracSubmit() {
       exclude_from_collage: _fracData.exclude_from_collage || false,
       section: charSection,
       parent_slug: 'gosudarstva',
-      created_by: user.email,
+      author_id: user.id,
       created_at: now, updated_at: now,
     });
 
@@ -338,7 +338,6 @@ async function fracSubmit() {
         income_bonus_per_member: incomePer,
         image_url: _fracData.image_url || null,
         description: _fracData.description || '',
-        owner_email: user.email,
         created_at: now, updated_at: now,
       }),
     });

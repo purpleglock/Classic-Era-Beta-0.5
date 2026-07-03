@@ -139,7 +139,18 @@
       "Bash(sed -i 's#render.js?v=20260627vnbox#render.js?v=20260627vnchoice#; s#css/index.css?v=20260627vn15#css/index.css?v=20260627vn16#g' index.html)",
       "Bash(sed -i 's#03_content.css?v=20260627vnbox#03_content.css?v=20260627vnchoice#' css/index.css)",
       "Bash(perl -i -pe 's/\\\\x01/\\\\\\\\u0001/g' render.js)",
-      "Bash(xargs grep -n \"create table\")"
+      "Bash(xargs grep -n \"create table\")",
+      "PowerShell(node --check core.js)",
+      "PowerShell(node --check auth.js)",
+      "PowerShell(node --check data.js)",
+      "PowerShell(node --check render.js)",
+      "PowerShell(node --check editor.js)",
+      "PowerShell(node --check comments.js)",
+      "PowerShell(node --check character.js)",
+      "PowerShell(node --check faction_system.js)",
+      "PowerShell(node --check faction_reg.js)",
+      "PowerShell(node --check faction_news.js)",
+      "PowerShell(node --check admin.js)"
     ]
   }
 }

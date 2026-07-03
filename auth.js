@@ -44,6 +44,21 @@ async function init() {
     route();               // первый кадр из кеша — мгновенно, без ожидания сети
   }
 
+  // ── Возврат с Google OAuth (PKCE): ?code= меняем на сессию ──
+  // detectSessionInUrl выключен (хэш занят роутером), поэтому обмен делаем сами.
+  try {
+    const _oq = new URLSearchParams(location.search);
+    if (_oq.get('error_description') || _oq.get('error')) {
+      toast('Вход через Google отменён: ' + (_oq.get('error_description') || _oq.get('error')), 'err');
+      history.replaceState(null, '', location.pathname + location.hash);
+    } else if (_oq.get('code')) {
+      const { error: _oerr } = await sb.auth.exchangeCodeForSession(_oq.get('code'));
+      history.replaceState(null, '', location.pathname + location.hash);
+      if (_oerr) toast('Не удалось завершить вход: ' + _oerr.message, 'err');
+      else toast('Добро пожаловать!', 'ok');
+    }
+  } catch(e) { console.warn('[wiki] oauth exchange failed:', e); }
+
   // ── Восстановление сессии (с жёстким таймаутом 10 с) ──
   // Когда роль реально подгрузится (даже позже таймаута) — обновляем навигацию
   // и ПЕРЕРИСОВЫВАЕМ текущую страницу: если это была стафф-страница
@@ -87,7 +102,7 @@ async function init() {
   // Sync profile from DB if localStorage had nothing (e.g. fresh Vercel deploy)
   try {
     if (user && !userProfile.display_name && !userProfile.avatar_url) {
-      const dbProf = allProfiles.find(p => p.email === user.email);
+      const dbProf = allProfiles.find(p => p.user_id === user.id);
       if (dbProf) {
         userProfile.display_name = dbProf.display_name || '';
         userProfile.avatar_url = dbProf.avatar_url || '';
@@ -194,16 +209,17 @@ function getDisplayName() {
 }
 async function loadProfiles() {
   try {
-    const rows = await dbGet('profiles', 'select=email,display_name,avatar_url') || [];
-    // дедуп по email (в таблице бывают дубли) — последняя запись побеждает
+    // public_profiles — витрина БЕЗ email (см. _author_id_privacy.sql).
+    // Ключ профиля теперь user_id (uuid), почта клиенту не приходит вовсе.
+    const rows = await dbGet('public_profiles', 'select=user_id,display_name,avatar_url') || [];
     const map = new Map();
-    rows.forEach(r => { if (r && r.email) map.set(r.email, r); });
+    rows.forEach(r => { if (r && r.user_id) map.set(r.user_id, r); });
     allProfiles = [...map.values()];
     // БД — источник истины: синхронизируем профиль текущего пользователя из базы,
     // перетирая возможно устаревший localStorage-кэш (иначе ник расходится между
     // устройствами/сессиями — на каждом висит свой старый кэш).
     if (user) {
-      const mine = map.get(user.email);
+      const mine = map.get(user.id);
       if (mine) {
         userProfile.display_name = mine.display_name || '';
         userProfile.avatar_url = mine.avatar_url || '';
@@ -213,17 +229,21 @@ async function loadProfiles() {
     }
   } catch(e) { allProfiles = []; }
 }
-function getProfileOf(email) {
-  // для текущего пользователя — его актуальный профиль (минуя возможные дубли/устаревшие строки в таблице)
-  if (user && email === user.email && (userProfile.display_name || userProfile.avatar_url)) {
-    return { email, display_name: userProfile.display_name || '', avatar_url: userProfile.avatar_url || '' };
+// key = user_id (uuid); старые данные могли остаться с email-ключом — тоже принимаем
+function getProfileOf(key) {
+  // для текущего пользователя — его актуальный профиль (минуя устаревшие строки в таблице)
+  if (user && (key === user.id || key === user.email) && (userProfile.display_name || userProfile.avatar_url)) {
+    return { user_id: user.id, display_name: userProfile.display_name || '', avatar_url: userProfile.avatar_url || '' };
   }
-  return allProfiles.find(x => x.email === email) || {};
+  return allProfiles.find(x => x.user_id === key) || {};
 }
-function userLabel(email) {
-  const prof = getProfileOf(email);
+function userLabel(key) {
+  const prof = getProfileOf(key);
   if (prof.display_name?.trim()) return prof.display_name.trim();
-  return (email||'').split('@')[0] || '—';
+  // без профиля: email-ключ (легаси) → префикс; uuid → нейтральное «Участник»
+  const s = String(key || '');
+  if (s.includes('@')) return s.split('@')[0];
+  return s ? 'Участник' : '—';
 }
 function getAvatarHtml(email, avatarUrl, displayName, size=28) {
   // Только настоящая ссылка — иначе мусор вроде "Хуй" уходил в <img src> и
@@ -264,7 +284,7 @@ function previewProfileAv() {
   if (!prev) return;
   // При ошибке загрузки картинки просто прячем её и показываем инициалы —
   // без вставки готового HTML в onerror (тот вариант ломался на кавычках в имени).
-  prev.innerHTML = getAvatarHtml(user?.email||'', '', name, 64)
+  prev.innerHTML = getAvatarHtml(user?.id||'', '', name, 64)
     + (url ? `<img src="${esc(url)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.remove()">` : '');
   prev.style.position = 'relative';
 }
@@ -287,8 +307,8 @@ async function saveProfileFromForm() {
   localStorage.setItem('wk_profile_' + user.id, JSON.stringify(userProfile));
   _cacheGreetName();
   try { await sb.auth.updateUser({ data: { display_name: displayName, avatar_url: avatarUrl } }); } catch(e) {}
-  const _si = allProfiles.findIndex(p => p.email === user.email);
-  const _pd = { email: user.email, display_name: displayName, avatar_url: avatarUrl };
+  const _si = allProfiles.findIndex(p => p.user_id === user.id);
+  const _pd = { user_id: user.id, display_name: displayName, avatar_url: avatarUrl };
   if (_si >= 0) allProfiles[_si] = _pd; else allProfiles.push(_pd);
   cm('mo-profile'); updAuthUI(); await renderHome(); toast('Профиль сохранён!', 'ok');
 }
@@ -451,94 +471,43 @@ async function recordLegalConsent() {
   } catch (e) { console.warn('[wiki] legal consent record failed:', e); }
 }
 
-function showAuth(mode) {
-  document.getElementById('auth-mo-t').textContent = mode==='login' ? 'ВХОД' : 'РЕГИСТРАЦИЯ';
-  if (mode==='login') {
-    document.getElementById('auth-form').innerHTML = `<div class="auth-box"><div class="auth-ey">${lang==='ru'?'ИДЕНТИФИКАЦИЯ':'SIGN IN'}</div><div class="fg"><label class="fl">Email</label><input class="fi" id="al-u" type="email" autocomplete="email"></div><div class="fg"><label class="fl">${lang==='ru'?'Пароль':'Password'}</label><input class="fi" id="al-p" type="password" autocomplete="current-password"></div><button class="btn btn-gd btn-fw" style="margin-top:6px" id="login-btn" onclick="subLogin()">${lang==='ru'?'Войти':'Sign In'}</button><div class="auth-sw">${lang==='ru'?'Нет аккаунта?':'No account?'} <a onclick="showAuth('register')">${lang==='ru'?'Зарегистрироваться':'Register'}</a></div></div>`;
-    document.getElementById('al-p').addEventListener('keydown', e => { if(e.key==='Enter') subLogin(); });
-  } else {
-    document.getElementById('auth-form').innerHTML = `<div class="auth-box"><div class="auth-ey">${lang==='ru'?'НОВЫЙ АККАУНТ':'NEW ACCOUNT'}</div><div class="fg"><label class="fl">Email</label><input class="fi" id="ar-u" type="email" autocomplete="email"></div><div class="fg"><label class="fl">${lang==='ru'?'Пароль (мин. 8)':'Password (min. 8)'}</label><input class="fi" id="ar-p" type="password" autocomplete="new-password"></div><div class="fg"><label class="fl">${lang==='ru'?'Повторите пароль':'Confirm password'}</label><input class="fi" id="ar-p2" type="password" autocomplete="new-password"></div><label class="auth-consent" style="display:flex;gap:8px;align-items:flex-start;margin:10px 0 4px;font-size:12px;line-height:1.5;cursor:pointer"><input type="checkbox" id="ar-agree" style="margin-top:2px;flex-shrink:0"><span>${lang==='ru'?'Я ознакомлен(а) и принимаю':'I have read and accept the'} <a onclick="event.preventDefault();openLegal('terms')" style="text-decoration:underline">${lang==='ru'?'Пользовательское соглашение':'Terms of Use'}</a> ${lang==='ru'?'и':'and'} <a onclick="event.preventDefault();openLegal('privacy')" style="text-decoration:underline">${lang==='ru'?'Политику конфиденциальности':'Privacy Policy'}</a>${lang==='ru'?', включая согласие на обработку персональных данных.':', including consent to processing of personal data.'}</span></label><button class="btn btn-gd btn-fw" style="margin-top:6px" id="reg-btn" onclick="subReg()">${lang==='ru'?'Зарегистрироваться':'Register'}</button><div class="auth-sw">${lang==='ru'?'Есть аккаунт?':'Have an account?'} <a onclick="showAuth('login')">${lang==='ru'?'Войти':'Sign In'}</a></div></div>`;
-    document.getElementById('ar-p2').addEventListener('keydown', e => { if(e.key==='Enter') subReg(); });
-  }
-  om('mo-auth'); setTimeout(() => document.querySelector('#auth-form .fi')?.focus(), 60);
+// Единственный способ входа/регистрации — Google OAuth. Пароль-формы удалены:
+// сайт не принимает и не хранит пароли, e-mail отдаёт только Google-провайдер.
+function showAuth(_mode) {
+  document.getElementById('auth-mo-t').textContent = lang==='ru' ? 'ВХОД' : 'SIGN IN';
+  document.getElementById('auth-form').innerHTML = `<div class="auth-box">
+    <div class="auth-ey">${lang==='ru'?'ИДЕНТИФИКАЦИЯ':'SIGN IN'}</div>
+    <p style="font-size:12.5px;line-height:1.6;color:var(--t2);margin:4px 0 14px">${lang==='ru'
+      ? 'Вход и регистрация выполняются только через аккаунт Google — без паролей на сайте.'
+      : 'Sign-in and registration are available only via a Google account — no passwords stored on this site.'}</p>
+    <button class="btn btn-gd btn-fw" id="google-btn" onclick="signInWithGoogle()" style="display:flex;align-items:center;justify-content:center;gap:10px">
+      <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      ${lang==='ru'?'Войти через Google':'Continue with Google'}
+    </button>
+    <div style="font-size:11px;line-height:1.55;color:var(--t3);margin-top:12px">${lang==='ru'
+      ? `Продолжая, вы соглашаетесь с <a onclick="event.preventDefault();openLegal('terms')" style="text-decoration:underline;cursor:pointer">Пользовательским соглашением</a> и <a onclick="event.preventDefault();openLegal('privacy')" style="text-decoration:underline;cursor:pointer">Политикой конфиденциальности</a>. После первого входа мы попросим подтвердить согласие явно.`
+      : `By continuing you agree to the <a onclick="event.preventDefault();openLegal('terms')" style="text-decoration:underline;cursor:pointer">Terms of Use</a> and <a onclick="event.preventDefault();openLegal('privacy')" style="text-decoration:underline;cursor:pointer">Privacy Policy</a>. We will ask for explicit consent after your first sign-in.`}</div>
+  </div>`;
+  om('mo-auth');
 }
 
 let _authBusy = false;
-async function subLogin() {
+async function signInWithGoogle() {
   if (_authBusy) return;
-  const email = document.getElementById('al-u')?.value?.trim()||'';
-  const password = document.getElementById('al-p')?.value||'';
-  if (!email||!password) { toast('Заполните все поля','err'); return; }
-  const btn = document.getElementById('login-btn');
-  _authBusy = true; if(btn) btn.disabled=true;
+  const btn = document.getElementById('google-btn');
+  _authBusy = true; if (btn) btn.disabled = true;
   try {
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    // redirectTo должен быть в allowlist Supabase (Auth → URL Configuration)
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: location.origin + location.pathname }
+    });
     if (error) throw error;
-
-    // Вход удался — ЗАКРЫВАЕМ модалку и приветствуем СРАЗУ.
-    // Раньше cm('mo-auth') стоял ПОСЛЕ await loadPgs/loadProfiles/… —
-    // на медленном Supabase это держало окно входа открытым 10-30 с
-    // и логин выглядел зависшим.
-    cm('mo-auth');
-    toast('Добро пожаловать!','ok');
-
-    // Обновление UI/данных — в фоне, не блокирует вход (onAuthStateChange тоже подхватит)
-    (async () => {
-      try {
-        // если регистрация требовала подтверждения email — фиксируем согласие сейчас
-        if (localStorage.getItem('wk_legal_pending')) {
-          await recordLegalConsent();
-          try { localStorage.removeItem('wk_legal_pending'); } catch(e){}
-        }
-        await loadUserRole(data.user);
-        loadProfile();
-        updAuthUI();
-        _pgCache.clear();
-        await Promise.all([loadPgs(), loadProfiles(), loadHomePage()]);
-        await loadHeroCoverFromDb();
-        buildNav();
-        if (curSlug==='home' || !curSlug) renderHome(); else go(curSlug, false);
-      } catch(e2) {
-        console.warn('[wiki] post-login refresh failed:', e2);
-      }
-    })();
-  } catch(e) { toast(e.message||'Ошибка входа','err'); }
-  finally { _authBusy=false; if(btn) btn.disabled=false; }
-}
-
-async function subReg() {
-  if (_authBusy) return;
-  const email = document.getElementById('ar-u')?.value?.trim()||'';
-  const pass   = document.getElementById('ar-p')?.value||'';
-  const pass2  = document.getElementById('ar-p2')?.value||'';
-  if (!email||!pass) { toast('Заполните все поля','err'); return; }
-  if (pass.length<8) { toast('Пароль минимум 8 символов','err'); return; }
-  if (pass!==pass2)  { toast('Пароли не совпадают','err'); return; }
-  if (!document.getElementById('ar-agree')?.checked) {
-    toast('Примите Пользовательское соглашение и Политику конфиденциальности','err'); return;
+    // страница сейчас уйдёт на accounts.google.com — состояние не сбрасываем
+  } catch(e) {
+    toast('Не удалось начать вход: ' + (e.message||e), 'err');
+    _authBusy = false; if (btn) btn.disabled = false;
   }
-  const btn = document.getElementById('reg-btn');
-  _authBusy=true; if(btn) btn.disabled=true;
-  try {
-    const { data, error } = await sb.auth.signUp({ email, password: pass });
-    if (error) throw error;
-    if (data.user && !data.session) {
-      // сессии ещё нет (нужно подтверждение email) — запомним согласие,
-      // зафиксируем на сервере при первом входе
-      try { localStorage.setItem('wk_legal_pending', LEGAL_VERSION); } catch(e){}
-      toast('Проверьте email для подтверждения','inf'); cm('mo-auth');
-    }
-    else if (data.session) {
-      // Закрываем модалку сразу, данные подтягиваем в фоне
-      cm('mo-auth');
-      toast('Аккаунт создан!','ok');
-      (async () => {
-        try { await recordLegalConsent(); await loadUserRole(data.user); updAuthUI(); await loadPgs(); buildNav(); }
-        catch(e2) { console.warn('[wiki] post-register refresh failed:', e2); }
-      })();
-    }
-  } catch(e) { toast(e.message||'Ошибка','err'); }
-  finally { _authBusy=false; if(btn) btn.disabled=false; }
 }
 
 // ВАЖНО: Разлочили кнопку Выхода. Мы больше не ждем ответа от зависшего SDK.

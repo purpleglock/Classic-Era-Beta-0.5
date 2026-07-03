@@ -53,7 +53,7 @@ async function loadComments(slug) {
       + `&is_deleted=eq.false`
       + `&order=created_at.asc`
       + `&limit=${CMT_PAGE_SIZE}`
-      + `&select=id,page_slug,user_id,user_email,body,created_at,parent_id,as_location`;
+      + `&select=id,page_slug,user_id,body,created_at,parent_id,as_location`;
     const r = await fetch(url, {
       headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token }
     });
@@ -126,7 +126,6 @@ async function submitComment() {
       const payload = {
         page_slug:  _cmtSlug,
         user_id:    user.id,
-        user_email: user.email,
         body:       body,
         parent_id:  _cmtReplyTo || null,
         as_location: !!(_cmtIsLocation() && _cmtAsLocation && typeof isLocationStaff === 'function' && isLocationStaff()),
@@ -193,8 +192,8 @@ function replyToComment(id) {
       indicator.className = 'cmt-reply-indicator';
       form.insertBefore(indicator, form.firstChild);
     }
-    const prof = getProfileOf(cmt.user_email);
-    const displayName = prof.display_name || (cmt.user_email || '').split('@')[0] || '?';
+    const prof = getProfileOf(cmt.user_id);
+    const displayName = prof.display_name || 'Участник';
     indicator.innerHTML = `
       <span class="cmt-reply-text">↩ ${lang === 'ru' ? 'Ответ на комментарий' : 'Reply to'} <strong>${esc(displayName)}</strong></span>
       <button class="cmt-reply-cancel" onclick="cancelReply()">✕</button>
@@ -322,11 +321,11 @@ async function _cmtLoadFactions() {
   _cmtFactionMap = {};
   try {
     const token = getToken();
-    const url = `${SB_URL}/rest/v1/faction_applications?status=eq.approved&select=owner_email,name,color`;
+    const url = `${SB_URL}/rest/v1/faction_applications?status=eq.approved&select=owner_id,name,color`;
     const r = await fetch(url, { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + token } });
     if (!r.ok) return;
     const rows = await r.json();
-    (rows || []).forEach(f => { if (f.owner_email) _cmtFactionMap[f.owner_email] = { name: f.name || '', color: f.color || '' }; });
+    (rows || []).forEach(f => { if (f.owner_id) _cmtFactionMap[f.owner_id] = { name: f.name || '', color: f.color || '' }; });
   } catch (e) { /* фракции необязательны */ }
 }
 // Читаемый на тёмном фоне цвет фракции (используем frReadable, если доступен)
@@ -349,10 +348,10 @@ function renderCommentItem(cmt, depth = 0) {
   <div class="cmt-lv-body">${body}</div>
 </div>`;
   }
-  const prof        = getProfileOf(cmt.user_email);
-  const displayName = prof.display_name || (cmt.user_email || '').split('@')[0] || '?';
+  const prof        = getProfileOf(cmt.user_id);
+  const displayName = prof.display_name || 'Участник';
   const avatarUrl   = prof.avatar_url   || '';
-  const avHtml      = getAvatarHtml(cmt.user_email, avatarUrl, displayName, 32);
+  const avHtml      = getAvatarHtml(cmt.user_id, avatarUrl, displayName, 32);
   const canDel      = canDeleteComment(cmt);
   const canEdit     = canEditComment(cmt);
   const isOwn       = user && user.id === cmt.user_id;
@@ -361,7 +360,7 @@ function renderCommentItem(cmt, depth = 0) {
   const bodyHtml = esc(cmt.body).replace(/\n/g, '<br>');
 
   // В режиме локации: автор с одобренной фракцией = игрок → чип фракции + акцент её цветом
-  const fac = _cmtIsLocation() ? _cmtFactionMap[cmt.user_email] : null;
+  const fac = _cmtIsLocation() ? _cmtFactionMap[cmt.user_id] : null;
   const facCol = fac ? _cmtFacColor(fac.color) : '';
   const facChip = fac ? `<span class="cmt-fac-chip" style="--fac:${facCol}">⬡ ${esc(fac.name)}</span>` : '';
   const playerCls = fac ? ' cmt-player' : '';
@@ -464,7 +463,7 @@ function renderCommentsSection(slug) {
   let formHtml = '';
   if (canWrite) {
     const prof = userProfile;
-    const avHtml = getAvatarHtml(user.email, prof.avatar_url, prof.display_name || user.email.split('@')[0], 32);
+    const avHtml = getAvatarHtml(user.id, prof.avatar_url, prof.display_name || user.email.split('@')[0], 32);
     const ph = isLoc
       ? (lang === 'ru' ? 'Опишите действие вашего персонажа…' : 'Describe your action…')
       : (lang === 'ru' ? 'Оставить комментарий…' : 'Leave a comment…');
@@ -520,7 +519,7 @@ function renderCommentsSection(slug) {
   const currentPage = pages.find(p => p.slug === slug);
   const sec2 = currentPage?.section ? sections.find(s => s.slug === currentPage.section) : null;
   const tagsHtml = currentPage?.tags ? `<span>🏷 ${currentPage.tags.split(',').map(t => `<span class="art-tag">${esc(t.trim())}</span>`).join(' ')}</span>` : '';
-  const metaHtml = currentPage ? `<div class="art-meta"><span>📅 ${fmtD(currentPage.updated_at)}</span><span>✍ ${esc(userLabel(currentPage.created_by||''))}</span>${sec2?`<span>📁 ${esc(sN(sec2))}</span>`:''}${tagsHtml}</div>` : '';
+  const metaHtml = currentPage ? `<div class="art-meta"><span>📅 ${fmtD(currentPage.updated_at)}</span><span>✍ ${esc(userLabel(currentPage.author_id||currentPage.created_by||''))}</span>${sec2?`<span>📁 ${esc(sN(sec2))}</span>`:''}${tagsHtml}</div>` : '';
   
   const headerHtml = `
 <div class="cmt-section-hdr">

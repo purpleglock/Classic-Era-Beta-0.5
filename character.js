@@ -118,7 +118,7 @@ let _regData = {};
 
 function openCharRegister() {
   if (!user) { showAuth('login'); return; }
-  const myChar = pages.find(p=>p.page_type==='character'&&p.created_by===user.email);
+  const myChar = pages.find(p=>p.page_type==='character'&&(p.author_id===user.id||p.created_by===user.email));
   if (myChar) { toast('У вас уже есть персонаж','inf'); go(myChar.slug); closeAp?.(); return; }
   _regStep = 1;
   const _initCls = CLASS_DEFS['soldier'];
@@ -379,9 +379,9 @@ async function regSubmit() {
   const charSection = parentPage?.section || null;
   const charParent  = parentPage?.slug    || null;
   try {
-    await dbPost('pages',{slug,title:name,title_ru:name,content:'[]',page_type:'character',status:'published',image_url:_regData.image_url||null,exclude_from_collage:_regData.exclude_from_collage||false,section:charSection,parent_slug:charParent,created_by:user.email,created_at:now,updated_at:now});
+    await dbPost('pages',{slug,title:name,title_ru:name,content:'[]',page_type:'character',status:'published',image_url:_regData.image_url||null,exclude_from_collage:_regData.exclude_from_collage||false,section:charSection,parent_slug:charParent,author_id:user.id,created_at:now,updated_at:now});
     const token=await getTokenFresh();
-    const r=await fetch(`${SB_URL}/rest/v1/characters`,{method:'POST',headers:{'apikey':SB_ANON,'Authorization':'Bearer '+token,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({slug,name,class:_regData.class,faction:_regData.faction||'',status:'active',play_start:now.slice(0,10),play_end:null,owner_email:user.email,stats:finalStats,abilities:_regData.abilities,gear:[],extra,updated_at:now})});
+    const r=await fetch(`${SB_URL}/rest/v1/characters`,{method:'POST',headers:{'apikey':SB_ANON,'Authorization':'Bearer '+token,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({slug,name,class:_regData.class,faction:_regData.faction||'',status:'active',play_start:now.slice(0,10),play_end:null,owner_id:user.id,stats:finalStats,abilities:_regData.abilities,gear:[],extra,updated_at:now})});
     if(!r.ok&&r.status!==204)throw new Error('HTTP '+r.status);
     document.getElementById('char-reg-screen').style.display='none'; await loadPgs(); buildNav(); go(slug,false); toast(`✓ Персонаж создан! Начислено ${creditsFmt(sc)} ЭК`,'ok');
   } catch(e){toast('Ошибка: '+e.message,'err');if(btn)btn.disabled=false;}

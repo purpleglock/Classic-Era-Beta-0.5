@@ -20,7 +20,7 @@ function _cachePgs() {
     const slim = pages.map(p => ({
       id: p.id, slug: p.slug, title: p.title, title_ru: p.title_ru,
       section: p.section, parent_slug: p.parent_slug, status: p.status,
-      page_type: p.page_type, sort_order: p.sort_order, created_by: p.created_by,
+      page_type: p.page_type, sort_order: p.sort_order, created_by: p.created_by, author_id: p.author_id,
       updated_at: p.updated_at, created_at: p.created_at, image_url: p.image_url,
       infobox: p.infobox
     }));

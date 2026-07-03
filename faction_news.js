@@ -1065,7 +1065,7 @@ function fnVerdictPreviewHtml() {
   const text = (document.getElementById('fn-c-verdict')?.value || '').trim();
   const grants = fnGrantsCollect();
   if (!text && !grants.length) return '<div class="fn-verdict-empty">Пока пусто — напишите комментарий или выдайте награды через панель ниже.</div>';
-  return fnRenderVerdictBlock({ staff_verdict: text, staff_grants: grants, verdict_by: user?.email, verdict_at: new Date().toISOString() });
+  return fnRenderVerdictBlock({ staff_verdict: text, staff_grants: grants, verdict_by: (typeof getDisplayName === 'function' && getDisplayName()) || 'штаб', verdict_at: new Date().toISOString() });
 }
 function fnVerdictPreviewRefresh() {
   const pv = document.getElementById('fn-c-verdict-preview');
@@ -1998,7 +1998,7 @@ function fnCoverRemove() {
 // ── Админ-публикация: выбор автора (НПС / своя / любая фракция) ──
 async function fnLoadAuthorFacs() {
   if (FN.authorFacs) return FN.authorFacs;
-  try { FN.authorFacs = await dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,color,herald_url,owner_id,owner_email&order=name.asc') || []; }
+  try { FN.authorFacs = await dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,color,herald_url,owner_id&order=name.asc') || []; }
   catch (e) { FN.authorFacs = []; }
   return FN.authorFacs;
 }
@@ -2009,7 +2009,7 @@ async function fnPopulateAuthorSelect(existing) {
   let html = '';
   if (mine && mine.faction_id) html += `<option value="self">Моя фракция: ${esc(mine.name || '—')}</option>`;
   html += `<optgroup label="Фракции игроков">` + facs.map(f =>
-    `<option value="fac:${esc(f.faction_id)}" data-name="${esc(f.name || '')}" data-color="${esc(f.color || '')}" data-owner="${esc(f.owner_id || '')}" data-email="${esc(f.owner_email || '')}">${esc(f.name || '—')}</option>`
+    `<option value="fac:${esc(f.faction_id)}" data-name="${esc(f.name || '')}" data-color="${esc(f.color || '')}" data-owner="${esc(f.owner_id || '')}">${esc(f.name || '—')}</option>`
   ).join('') + `</optgroup>`;
   html += `<optgroup label="Особые НПС">` +
     Object.keys(FN_SPECIAL_NPC).map(k => `<option value="special:${k}">◈ ${esc(FN_SPECIAL_NPC[k].name)} — таинственный НПС</option>`).join('') +
@@ -2071,7 +2071,7 @@ async function fnResolveAuthor() {
     if (!sp) { toast('Неизвестный НПС', 'err'); return null; }
     // особый НПС публикуется в основную ленту с фиксированным крутым флагом-символом
     return { faction_id: null, faction_name: sp.name, faction_color: sp.color, author_herald: sp.herald,
-      owner_id: user.id, owner_email: user.email, kind: 'news' };
+      owner_id: user.id, kind: 'news' };
   }
   if (mode === 'npc') {
     const name = (document.getElementById('fn-c-npc-name')?.value || '').trim();
@@ -2081,18 +2081,18 @@ async function fnResolveAuthor() {
     // Куда: «Вестник» (owner_id = админ → попадает в основную ленту) или «Лента сектора» (owner_id null).
     const toNews = (document.getElementById('fn-c-npc-place')?.value || 'sector') === 'news';
     return { faction_id: null, faction_name: name, faction_color: color, author_herald: herald,
-      owner_id: toNews ? user.id : null, owner_email: toNews ? user.email : null, kind: toNews ? 'news' : 'bulletin' };
+      owner_id: toNews ? user.id : null, kind: toNews ? 'news' : 'bulletin' };
   }
   if (mode === 'self') {
     const fac = await fnGetMyFaction();
     if (!fac || !fac.faction_id) { toast('У вас нет одобренной фракции', 'err'); return null; }
-    return { faction_id: fac.faction_id, faction_name: fac.name || null, faction_color: fac.color || null, author_herald: null, owner_id: user.id, owner_email: user.email, kind: 'news' };
+    return { faction_id: fac.faction_id, faction_name: fac.name || null, faction_color: fac.color || null, author_herald: null, owner_id: user.id, kind: 'news' };
   }
   if (mode && mode.indexOf('fac:') === 0) {
     const opt = sel.options[sel.selectedIndex];
     const fid = mode.slice(4);
     if (!fid) { toast('Выберите фракцию', 'err'); return null; }
-    return { faction_id: fid, faction_name: opt?.dataset.name || null, faction_color: opt?.dataset.color || null, author_herald: null, owner_id: opt?.dataset.owner || null, owner_email: opt?.dataset.email || null, kind: 'news' };
+    return { faction_id: fid, faction_name: opt?.dataset.name || null, faction_color: opt?.dataset.color || null, author_herald: null, owner_id: opt?.dataset.owner || null, kind: 'news' };
   }
   toast('Выберите автора публикации', 'err'); return null;
 }
@@ -2116,7 +2116,7 @@ async function fnSubmit() {
   } else {
     const fac = await fnGetMyFaction();
     if (!fac || !fac.faction_id) { toast('Новости пишут только владельцы одобренной фракции', 'err'); return; }
-    author = { faction_id: fac.faction_id, faction_name: fac.name || null, faction_color: fac.color || null, owner_id: user.id, owner_email: user.email, kind: 'news' };
+    author = { faction_id: fac.faction_id, faction_name: fac.name || null, faction_color: fac.color || null, owner_id: user.id, kind: 'news' };
   }
   const now = new Date().toISOString();
 let fxArr = [];
@@ -2143,10 +2143,10 @@ let fxArr = [];
         Object.assign(patch, {
           faction_id: author.faction_id, faction_name: author.faction_name, faction_color: author.faction_color,
           author_herald: author.author_herald || null,
-          owner_id: author.owner_id, owner_email: author.owner_email, kind: author.kind,
-          status: isPrivate ? 'private' : 'approved', published_at: (prev && prev.published_at) || now, reviewed_by: user.email,
+          owner_id: author.owner_id, kind: author.kind,
+          status: isPrivate ? 'private' : 'approved', published_at: (prev && prev.published_at) || now, reviewed_by: getDisplayName() || 'штаб',
           staff_verdict, staff_grants: staff_grants?.length ? staff_grants : null,
-          verdict_by: hasVerdict ? user.email : (prev && prev.verdict_by) || null,
+          verdict_by: hasVerdict ? (getDisplayName() || 'штаб') : (prev && prev.verdict_by) || null,
           verdict_at: hasVerdict ? now : (prev && prev.verdict_at) || null,
         });
       } else {
@@ -2162,15 +2162,15 @@ let fxArr = [];
         faction_name: author.faction_name,
         faction_color: author.faction_color,
         author_herald: author.author_herald || null,
-        owner_id: author.owner_id, owner_email: author.owner_email,
+        owner_id: author.owner_id,
         kind: author.kind, fx,
         title, excerpt: null, body, image_url, reactions, mentions: fnParseMentions(),
         status: isPrivate ? 'private' : (staff ? 'approved' : 'pending'),
         published_at: (staff || isPrivate) ? now : null,
-        reviewed_by: staff ? user.email : null,
+        reviewed_by: staff ? (getDisplayName() || 'штаб') : null,
         staff_verdict: staff ? staff_verdict : null,
         staff_grants: staff && staff_grants?.length ? staff_grants : null,
-        verdict_by: hasVerdict ? user.email : null,
+        verdict_by: hasVerdict ? (getDisplayName() || 'штаб') : null,
         verdict_at: hasVerdict ? now : null,
       });
       // Нейро-оценка свежей новости игрока (id из representation-ответа).
@@ -2195,7 +2195,7 @@ async function fnApprove(id) {
   FN.busy = true;
   try {
     await dbPatch('faction_news', `id=eq.${encodeURIComponent(id)}`,
-      { status: 'approved', published_at: new Date().toISOString(), reviewed_by: user.email, reject_reason: null, updated_at: new Date().toISOString() });
+      { status: 'approved', published_at: new Date().toISOString(), reviewed_by: getDisplayName() || 'штаб', reject_reason: null, updated_at: new Date().toISOString() });
     toast('Опубликовано ✓', 'ok');
     document.getElementById('fn-mod-' + id)?.remove();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
@@ -2209,7 +2209,7 @@ async function fnReject(id) {
   FN.busy = true;
   try {
     await dbPatch('faction_news', `id=eq.${encodeURIComponent(id)}`,
-      { status: 'rejected', reject_reason: reason, reviewed_by: user.email, updated_at: new Date().toISOString() });
+      { status: 'rejected', reject_reason: reason, reviewed_by: getDisplayName() || 'штаб', updated_at: new Date().toISOString() });
     toast('Отклонено', 'inf');
     document.getElementById('fn-mod-' + id)?.remove();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }

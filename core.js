@@ -31,6 +31,9 @@ const sb = supabase.createClient(SB_URL, SB_ANON, {
     lock: (_name, _acquireTimeout, fn) => fn(),
     autoRefreshToken: true,
     detectSessionInUrl: false,
+    // Вход через Google — PKCE: возврат с ?code=..., обмен на сессию делаем
+    // сами в auth.js init() (detectSessionInUrl оставлен false — хэш занят роутером #slug).
+    flowType: 'pkce',
   }
 });
 
