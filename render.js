@@ -4734,7 +4734,7 @@ window.uDC = function(n, sl, slt) {
              'Калибр','Буст скорости','Буст радаров','Буст щитов'];
   var ss = []; kk.forEach(function(k){ var v=ib2[k]||ib2[k.toLowerCase()]||''; if(v&&v!=='0') ss.push([k,v]); });
   var ds = ib2['Описание']||ib2['описание']||'';
-  var e = function(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var e = esc; // глобальный esc экранирует и кавычки — иначе img/sl (польз. контент) ломают src="..."/data-s="..." → XSS
   var linkHtml = sl ? '<div class="un-dc-link" onclick="go(this.dataset.s)" data-s="'+e(sl)+'">Открыть статью &#8594;</div>' : '';
   return ['<div class="un-dc">',
     img ? '<div class="un-dc-img"><img src="'+e(img)+'" alt="'+e(n)+'" loading="lazy"></div>' : '',
@@ -4795,7 +4795,9 @@ window.uShowDetail = function(name, sl, slt, panelId) {
 };
 
 async function renderUnitPage(pg) {
-  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Используем ГЛОБАЛЬНЫЙ esc (core.js) — он экранирует и кавычки (&quot;/&#39;),
+  // без этого имена/URL из инфобокса (пользовательский контент) ломали атрибуты
+  // src="..."/data-tip="..." → stored XSS. Для JS-строк в onclick ниже — jsq().
   const pT  = p => p?.title || p?.name || '';
 
   // Парсим инфобокс из content
@@ -5108,7 +5110,7 @@ async function renderUnitPage(pg) {
     ? '<div class="un-weap-list">'+weapList2.map(function(w){
         var gp=pages.find(function(p){return (p.title||p.name||'')===w.name;});
         var sl=gp?gp.slug:w.name;
-        return '<div class="un-weap-row" onclick="uShowDetail(\''+esc(w.name)+'\',\''+esc(sl)+'\',\'weapon\',\'un-detail-weapons\')" style="cursor:pointer" data-tip="'+esc('⚔ '+w.name+'\nУрон: '+w.dmg+(w.range?'\nДальность: '+w.range:''))+'">'
+        return '<div class="un-weap-row" onclick="uShowDetail(\''+jsq(w.name)+'\',\''+jsq(sl)+'\',\'weapon\',\'un-detail-weapons\')" style="cursor:pointer" data-tip="'+esc('⚔ '+w.name+'\nУрон: '+w.dmg+(w.range?'\nДальность: '+w.range:''))+'">'
           +'<div class="un-weap-name">'+esc(w.name)+'</div>'
           +(w.range?'<div class="un-weap-range">'+esc(w.range)+'</div>':'')
           +'<div class="un-weap-dmg">'+w.dmg+'</div>'
@@ -5128,7 +5130,7 @@ async function renderUnitPage(pg) {
         var sl=gp?gp.slug:name;
         var ep=parseFloat(_ibv(name,'Потребление энергии')||0)||0;
         var cp=parseFloat(_ibv(name,'Штраф вместимости')||0)||0;
-        return '<div class="un-mod-item" onclick="uShowDetail(\''+esc(name)+'\',\''+esc(sl)+'\',\''+slt+'\',\'un-detail-modules\')" style="cursor:pointer">'
+        return '<div class="un-mod-item" onclick="uShowDetail(\''+jsq(name)+'\',\''+jsq(sl)+'\',\''+jsq(slt)+'\',\'un-detail-modules\')" style="cursor:pointer">'
           +'<div class="un-mod-dot" style="background:'+color+'"></div>'
           +'<div class="un-mod-name">'+esc(name)+'</div>'
           +(ep||cp?'<div class="un-mod-cost">'+(ep?'−'+ep+' МВт':'')+( ep&&cp?' ':'')+( cp?'−'+cp+' вмст':'')+'</div>':'')

@@ -169,7 +169,8 @@
       "Bash(node /tmp/t5.js)",
       "Bash(node /tmp/t6.js)",
       "Bash(node /tmp/t7.js)",
-      "Bash(grep -n \"gmmPlanetImg\\\\|gmmLook\\\\b\\\\|function gmmLook\\\\|GMM_USE_TEX\\\\s*=\\\\|gmmTexImg\\\\|planet_\\\\${\" galaxy_map.js)"
+      "Bash(grep -n \"gmmPlanetImg\\\\|gmmLook\\\\b\\\\|function gmmLook\\\\|GMM_USE_TEX\\\\s*=\\\\|gmmTexImg\\\\|planet_\\\\${\" galaxy_map.js)",
+      "Bash(awk 'NR>=4797 && NR<=5400 { if \\($0 ~ /onclick=/ && $0 ~ /esc\\\\\\(/\\) print NR\": \"$0 }' render.js)"
     ]
   }
 }

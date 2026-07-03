@@ -303,11 +303,11 @@ function refreshBlockPropsPanel(){ renderBlockEditor(); }
 function blockMiniPreview(b){
   const esc2=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   switch(b.type){
-    case 'text': return `<div class="sbp-text">${(b.content||'').slice(0,120)||'<span style="opacity:.3">…</span>'}</div>`;
+    case 'text': return `<div class="sbp-text">${esc((b.content||'').slice(0,120))||'<span style="opacity:.3">…</span>'}</div>`;
     case 'heading': return `<div class="sbp-heading">${esc2(b.text||'').slice(0,60)||'<span style="opacity:.3">…</span>'}</div>`;
     case 'toc': return `<div class="sbp-placeholder">≡ ${lang==='ru'?'Содержание (авто)':'Contents (auto)'}</div>`;
-    case 'image': return b.url?`<div class="sbp-img"><img src="${esc2(b.url)}" style="max-height:60px;max-width:100%;object-fit:cover;border-radius:2px"></div>`:`<div class="sbp-placeholder">🖼 ${esc2(b.caption||'Image')}</div>`;
-    case 'imgtext': return `<div class="sbp-imgtext"><div style="flex:0 0 40px;height:32px;background:var(--w2);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:10px;opacity:.4">🖼</div><div class="sbp-text">${(b.content||'').slice(0,80)||'…'}</div></div>`;
+    case 'image': return b.url?`<div class="sbp-img"><img src="${esc(safeUrl(b.url))}" style="max-height:60px;max-width:100%;object-fit:cover;border-radius:2px"></div>`:`<div class="sbp-placeholder">🖼 ${esc2(b.caption||'Image')}</div>`;
+    case 'imgtext': return `<div class="sbp-imgtext"><div style="flex:0 0 40px;height:32px;background:var(--w2);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:10px;opacity:.4">🖼</div><div class="sbp-text">${esc((b.content||'').slice(0,80))||'…'}</div></div>`;
     case 'callout': return `<div class="sbp-callout sbp-callout-${b.variant||'info'}">${esc2(b.icon||'ℹ')} ${esc2(b.title||'').slice(0,50)||'…'}</div>`;
     case 'alert': return `<div class="sbp-alert">${esc2(b.title||b.variant||'').slice(0,60)||'…'}</div>`;
     case 'quote': return `<div class="sbp-quote">❞ ${esc2(b.text||'').slice(0,80)||'…'}</div>`;
