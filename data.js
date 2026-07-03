@@ -134,6 +134,9 @@ async function go(slug, push=true) {
     return;
   }
 
+  // На карте: прячем подвал и запрещаем прокрутку страницы (карта = полный экран)
+  document.body.classList.toggle('route-map', slug === 'map');
+
   if (slug.startsWith('sec:')) {
     curSlug = slug; const sec = sections.find(s=>s.slug===slug.slice(4));
     setAct(slug); updTopBcSec(sec); updAuthUI(); renderSectionPage(sec); return;

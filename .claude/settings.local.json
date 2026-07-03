@@ -155,7 +155,21 @@
       "Bash(python -)",
       "Bash(cat \"C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\4ecf4afc-1b4d-4fdf-871f-3b49914103a2\\\\scratchpad\\\\bb_styles2.css\")",
       "Bash(sed -i 's|18_admin.css?v=20260703brand|18_admin.css?v=20260703brand2|' css/index.css)",
-      "Bash(sed -i 's|admin.js?v=20260703privacy|admin.js?v=20260703brand|; s|css/index.css?v=20260703brand|css/index.css?v=20260703brand2|g' index.html)"
+      "Bash(sed -i 's|admin.js?v=20260703privacy|admin.js?v=20260703brand|; s|css/index.css?v=20260703brand|css/index.css?v=20260703brand2|g' index.html)",
+      "Bash(sed -i 's/galaxy_map.js?v=20260703secstyle/galaxy_map.js?v=20260703seclayer/' index.html)",
+      "Bash(sed -i \"s/14_map.css?v=20260703secstyle/14_map.css?v=20260703seclayer/\" css/index.css)",
+      "Bash(sed -i 's/galaxy_map.js?v=20260703secframe/galaxy_map.js?v=20260703sectop/' index.html)",
+      "Bash(sed -i 's/galaxy_map.js?v=20260703sectop/galaxy_map.js?v=20260703cyberplate/' index.html)",
+      "Bash(sed -i 's/galaxy_map.js?v=20260703pllocaltag/galaxy_map.js?v=20260703stardesign/' index.html)",
+      "Bash(sed -i 's/galaxy_map.js?v=20260703stardesign/galaxy_map.js?v=20260703cutfix/' index.html)",
+      "Bash(cat)",
+      "Bash(node /tmp/t.js)",
+      "Bash(node /tmp/t3.js)",
+      "Bash(node /tmp/t4.js)",
+      "Bash(node /tmp/t5.js)",
+      "Bash(node /tmp/t6.js)",
+      "Bash(node /tmp/t7.js)",
+      "Bash(grep -n \"gmmPlanetImg\\\\|gmmLook\\\\b\\\\|function gmmLook\\\\|GMM_USE_TEX\\\\s*=\\\\|gmmTexImg\\\\|planet_\\\\${\" galaxy_map.js)"
     ]
   }
 }

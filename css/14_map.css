@@ -1,6 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════════════
    GALAXY MAP — стили карты галактики (электрик-блю тема)
    ───────────────────────────────────────────────────────────────────── */
+/* ── Страница карты = полный экран: подвал скрыт, прокрутка страницы отключена ── */
+body.route-map #site-footer{display:none}
+body.route-map #cw{overflow:hidden}
+/* !important — перебиваем 07_premium.css `#pg{padding:0 28px 80px !important}` (и его
+   мобильный `0 16px 60px`), иначе на странице карты остаются боковые отступы */
+body.route-map #pg{padding:0!important;min-height:100%;height:100%}
+body.route-map #gm-wrap{height:100%;min-height:0}
+
 #gm-wrap{position:relative;width:100%;height:calc(100vh - var(--th) - 52px);min-height:460px}
 #gm-viewport{
   position:relative;width:100%;height:100%;overflow:hidden;
@@ -14,7 +22,7 @@
     transparent 62%, rgba(4,6,12,.22) 84%, rgba(4,6,12,.5) 100%);
 }
 #gm-viewport.gm-grabbing{cursor:grabbing}
-#gm-canvas{position:absolute;top:0;left:0;width:6600px;height:4124px;transform-origin:0 0;
+#gm-canvas{position:absolute;top:0;left:0;width:8580px;height:5360px;transform-origin:0 0;
   will-change:transform;backface-visibility:hidden}
 /* Космический фон СГЕНЕРИРОВАН КОДОМ (без картинки): тёмная база + туманности +
    звёздная россыпь — всё CSS-градиентами. Композитится на GPU, не лагает. */
@@ -63,41 +71,65 @@
 /* ════════ СЕКТОРА — подложка территории + чистая граница ════════ */
 .sec-layer{pointer-events:none}
 .sec-fill-layer{pointer-events:none}
-/* цветная подложка территории сектора — ТОЛЬКО на обзоре (.gm-sec-far) */
-.gm-sec-fill{opacity:.42;mix-blend-mode:screen;display:none}
-#gm-wrap.gm-sec-far .gm-sec-fill{display:block}
-/* ── Граница сектора = ПУСТОТА, а не «государственная» линия ──
-   мягкое тёмное «разрежение» в тон туману войны: перо из трёх слоёв
-   (широкий → узкий, без жёсткого края и без цвета) — секторы просто
-   плавно тают друг от друга. Видно лишь на обзоре (.gm-sec-far). */
-.gm-sec-void,.gm-sec-void-core,.gm-sec-line{
-  stroke:#070a12;stroke-linecap:round;stroke-linejoin:round;opacity:0;transition:opacity var(--duration-normal);
+/* цветная подложка территории сектора — крупная читаемая ЦВЕТНАЯ ОБЛАСТЬ.
+   Видна на обзоре (.gm-sec-far). Плотная (не screen-blend), сектор = цельный регион. */
+.gm-sec-fill{opacity:0;display:none;transition:opacity var(--duration-normal)}
+#gm-wrap.gm-sec-far .gm-sec-fill{display:block;opacity:.5}
+
+/* ── Граница сектора = ЯРКИЙ СПЛОШНОЙ СВЕТЯЩИЙСЯ КОНТУР в цвете сектора ──
+   не пунктир и не «крепостной» рубеж фракций: широкое гало + плотное ядро,
+   обрамляющее цветную область. Цвет приходит из inline stroke; виден на обзоре. */
+.gm-sec-glow,.gm-sec-line{
+  stroke-linecap:round;stroke-linejoin:round;opacity:0;
+  transition:opacity var(--duration-normal);
 }
-.gm-sec-void{stroke-width:var(--sec-void-w,20)}
-.gm-sec-void-core{stroke-width:var(--sec-void-core,11)}
-.gm-sec-line{stroke-width:var(--sec-w,5)}
-#gm-wrap.gm-sec-far .gm-sec-void{opacity:.12}
-#gm-wrap.gm-sec-far .gm-sec-void-core{opacity:.18}
-#gm-wrap.gm-sec-far .gm-sec-line{opacity:.24}
+.gm-sec-glow{stroke-width:var(--sec-glow-w,16);filter:blur(2px)}
+.gm-sec-line{stroke-width:var(--sec-w,3.5)}
+/* второй слой — средний ореол между гало и ядром */
+.gm-sec-line-b{stroke-width:calc(var(--sec-w,3.5) * 1.9);filter:blur(1px)}
+#gm-wrap.gm-sec-far .gm-sec-glow{opacity:.22}
+#gm-wrap.gm-sec-far .gm-sec-line{opacity:.95}
+#gm-wrap.gm-sec-far .gm-sec-line-b{opacity:.4}
 /* широкая прозрачная хит-зона — кликабельна ТОЛЬКО на обзоре (.gm-sec-far) */
 .gm-sec-hit{stroke:transparent;stroke-width:var(--sec-hit-w,16);pointer-events:none}
 #gm-wrap.gm-sec-far .gm-sec-hit{pointer-events:stroke;cursor:pointer}
-/* метка-название сектора — видна ТОЛЬКО на обзоре (.gm-sec-far) */
+/* метка сектора = ФУТУРИСТИЧНАЯ ПЛАШКА со срезанными углами.
+   «Обводка» — слой-подложка (.gm-sec-plate-b цвет + .gm-sec-plate фон-инсет),
+   НЕ stroke: контур со срезами линией резался бы криво. Видна на обзоре. */
+.gm-sec-mark{display:none}
+#gm-wrap.gm-sec-far .gm-sec-mark{display:block;cursor:pointer;pointer-events:auto}
+.gm-sec-plate-b{opacity:.9}                    /* нижний слой = цвет «обводки» */
+.gm-sec-plate{fill:rgba(8,11,18,.94)}          /* верхний слой = тёмный фон плашки */
+.gm-sec-accent{opacity:.95}                    /* сдержанный акцент-планка слева */
 .gm-sec-label{
-  font-family: var(--font-display);font-weight:600;
-  font-size:var(--sec-font,24px);letter-spacing: calc(.12em * var(--deco-ls-mult, 1));text-anchor:middle;dominant-baseline:middle;
-  text-transform:uppercase;opacity:.55;pointer-events:none;cursor:pointer;display:none;
-  paint-order:stroke;stroke:rgba(0,0,0,.7);stroke-width:.6px;
-  transition:opacity var(--duration-fast);
+  font-family: var(--font-display);font-weight:800;
+  letter-spacing: calc(.08em * var(--deco-ls-mult, 1));text-anchor:middle;dominant-baseline:middle;
+  text-transform:uppercase;opacity:.95;
 }
-#gm-wrap.gm-sec-far .gm-sec-label{display:block;pointer-events:auto}
-#gm-wrap.gm-sec-far .gm-sec-label:hover{opacity:.9}
+/* мелкий моно-тег над плашкой */
+.gm-sec-tag2{
+  font-family: var(--font-mono);font-weight:700;
+  letter-spacing: calc(.3em * var(--deco-ls-mult, 1));
+  text-anchor:middle;dominant-baseline:middle;opacity:.6;
+}
+.gm-sec-mark:hover .gm-sec-plate-b{opacity:1}
+.gm-sec-mark:hover .gm-sec-label{opacity:1}
 #gm-svg.gm-noborders .sec-layer,#gm-svg.gm-noborders .sec-fill-layer{display:none}
+/* тумблер «Сектора» выключен — обзорный слой полностью убран */
+#gm-svg.gm-nosectors .sec-layer,#gm-svg.gm-nosectors .sec-fill-layer{display:none}
 
-/* ════════ ОБЗОР СЕКТОРОВ — на сильном отдалении гасим системы, сектора выразительнее ════════ */
+/* ════════ ОБЗОР СЕКТОРОВ — СЕКТОРА = ОТДЕЛЬНЫЙ ДОМИНИРУЮЩИЙ СЛОЙ ════════
+   На сильном отдалении (и когда слой секторов включён) фракционная «политика»
+   отступает: заливки тускнеют и обесцвечиваются, границы/флаги/подписи гаснут —
+   остаётся чистая мозаика секторов. Если сектора выключены (.gm-sectors-off) —
+   ничего не глушим, обычная политическая карта. */
+#gm-wrap.gm-sec-overview:not(.gm-sectors-off) .vor-layer{opacity:.32;filter:saturate(.55) brightness(.7)}
+#gm-wrap.gm-sec-overview:not(.gm-sectors-off) .vor-border-layer{opacity:.18}
 #gm-wrap.gm-sec-overview #gm-stars{opacity:.42;transition:opacity var(--duration-normal)}
+#gm-wrap.gm-sec-overview:not(.gm-sectors-off) #gm-stars{opacity:.28}
 #gm-wrap.gm-sec-overview .gm-label{display:none!important}
 #gm-wrap.gm-sec-overview .lane-layer{opacity:.5}
+#gm-wrap.gm-sec-overview:not(.gm-sectors-off) .lane-layer{opacity:.28}
 
 /* Звёзды */
 #gm-stars{position:absolute;inset:0;pointer-events:none}
@@ -241,7 +273,7 @@
 #gm-wrap.gm-show-econ .gm-label{opacity:.55}
 /* Легенда — вертикальный столбик под кнопкой (панель контролов узкая, горизонтальная
    раскладка раньше «съезжала» из колонки влево) */
-#gm-econ-legend{display:flex;flex-direction:column;gap:4px;align-items:flex-end;margin:2px 0}
+#gm-econ-legend{display:flex;flex-direction:column;gap:4px;align-items:flex-start;margin:1px 0 3px 30px}
 #gm-econ-legend.gm-hidden{display:none}
 .gm-el{font-size:10px;line-height:1;padding:3px 7px;border-radius:var(--radius-sm);border: var(--deco-frame-w, 1px) solid var(--w2);background:hsl(216 30% 5% / .7);white-space:nowrap}
 .gm-el-poor{color:#e74c3c}
@@ -315,7 +347,7 @@
 .gm-res-more{width:auto;border:none;background:none;font-family: var(--font-display);font-weight:700;font-size:15px;color:var(--t3)}
 
 /* Полоска фильтров редкости (под кнопкой «Ресурсы») */
-#gm-res-filter{display:flex;flex-direction:column;gap:4px;margin:2px 0}
+#gm-res-filter{display:flex;flex-direction:column;gap:4px;margin:1px 0 3px 30px}
 .gm-rf{
   width:38px;height:24px;display:flex;align-items:center;justify-content:center;
   font-family: var(--font-display);font-weight:700;font-size:13px;cursor:pointer;
@@ -343,23 +375,64 @@
   background:hsl(216 20% 6% / .8);border: var(--deco-frame-w, 1px) solid var(--w2);border-radius:var(--radius-md);padding:4px 10px;
 }
 
-/* Контролы (границы/зум/фуллскрин) */
-#gm-controls{position:absolute;right:12px;bottom:12px;z-index:25;display:flex;flex-direction:column;gap:6px}
-.gm-ctl-group{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+/* ════════ ПАНЕЛЬ РЕЖИМОВ КАРТЫ (слои + инструменты + вид) — карточка в углу ════════ */
+#gm-controls{
+  position:absolute;right:12px;bottom:12px;z-index:25;
+  width:212px;max-width:calc(100% - 24px);max-height:calc(100% - 24px);
+  overflow-y:auto;overflow-x:hidden;
+  display:flex;flex-direction:column;gap:5px;
+  background:hsl(216 24% 8% / .94);backdrop-filter:blur(10px);
+  border: var(--deco-frame-w, 1px) solid var(--w2);border-radius:var(--radius-lg);
+  padding:9px 10px 10px;box-shadow:0 14px 40px rgba(0,0,0,.55);
+}
+/* шапка панели: заголовок + кнопка «свернуть» */
+.gm-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.gm-panel-ttl{font-family: var(--font-display);font-weight:700;font-size:13px;letter-spacing: calc(.4px * var(--deco-ls-mult, 1));color:var(--gdl)}
+.gm-ctl-group{display:flex;flex-direction:column;gap:4px}
 .gm-ctl-group.gm-collapsed{display:none}
-.gm-ctl-toggle{align-self:flex-end}
+/* Подпись-разделитель между блоками (Слои / Инструменты / Вид) */
+.gm-ctl-sec{
+  font:600 8.5px/1 'JetBrains Mono',monospace;letter-spacing:.14em;
+  color:hsl(210 25% 62% / .8);text-transform:uppercase;
+  padding:6px 2px 4px;margin-top:2px;
+  border-bottom: var(--deco-frame-w, 1px) solid hsl(206 40% 40% / .28);
+  user-select:none;pointer-events:none;
+}
+.gm-ctl-sec:first-child{margin-top:0}
+
+/* базовая кнопка контрола */
+.gm-ctl{
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;line-height:1;cursor:pointer;
+  background:hsl(216 22% 12% / .85);color:#cddcf0;
+  border: var(--deco-frame-w, 1px) solid hsl(210 25% 40% / .45);border-radius:var(--radius-md);
+  transition:all var(--duration-normal);
+}
+.gm-ctl:not(.gm-ctl-row):not(.gm-ctl-toggle){width:38px;height:38px}
+.gm-ctl:hover{border-color:var(--gd);color:var(--gdl);background:hsl(216 26% 16% / .9)}
+.gm-ico{width:20px;height:20px;display:block;pointer-events:none}
+#gm-wrap.gm-mobile .gm-ico{width:22px;height:22px}
+.gm-ctl.gm-active{color:var(--gdl);border-color:var(--gd);background:hsl(206 55% 20% / .5);box-shadow:0 0 8px hsl(206 72% 50% / .28)}
+
+/* строка-слой: иконка слева + подпись, во всю ширину панели */
+.gm-ctl-row{
+  width:100%;justify-content:flex-start;gap:9px;height:32px;padding:0 9px;
+  font-family: var(--font-display);font-weight:600;font-size:12.5px;
+  color:var(--t2);text-align:left;
+}
+.gm-ctl-row .gm-ctl-ic{display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.gm-ctl-row .gm-ctl-lb{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.gm-ctl-row.gm-active{color:#eaf3fb}
+
+/* кнопка «свернуть» — компактная, без рамки */
+.gm-ctl-toggle{width:26px;height:26px;background:none;border:none;color:hsl(210 25% 62% / .85)}
+.gm-ctl-toggle:hover{background:none;color:var(--gdl)}
 .gm-ctl-toggle .gm-ico{transition:transform var(--duration-normal)}
 .gm-ctl-toggle.gm-on .gm-ico{transform:rotate(180deg)}
-.gm-ctl{
-  width:38px;height:38px;display:flex;align-items:center;justify-content:center;
-  font-size:18px;line-height:1;cursor:pointer;
-  background:hsl(216 22% 9% / .92);color:#d4e2f7;border: var(--deco-frame-w, 1px) solid hsl(210 25% 40% / .5);border-radius:var(--radius-md);
-  backdrop-filter:blur(6px);transition:all var(--duration-normal);
-}
-.gm-ctl:hover{border-color:var(--gd);color:var(--gdl)}
-.gm-ico{width:21px;height:21px;display:block;pointer-events:none}
-#gm-wrap.gm-mobile .gm-ico{width:23px;height:23px}
-.gm-ctl.gm-active{color:var(--gdl);border-color:var(--gd);box-shadow:0 0 10px hsl(206 72% 50% / .3)}
+
+/* ряд кнопок «Вид» — компактные квадраты в строку */
+.gm-ctl-viewrow{display:flex;gap:5px}
+.gm-ctl-viewrow .gm-ctl{flex:1;height:34px}
 
 /* Фуллскрин — нативный (:fullscreen) и CSS-фолбэк (.gm-fullscreen) */
 #gm-wrap:fullscreen{width:100vw;height:100vh;background:#04060c}
@@ -645,6 +718,14 @@ textarea.gm-fi{resize:vertical}
 /* контролы — пальцевые размеры */
 #gm-wrap.gm-mobile .gm-ctl{width:42px;height:42px;font-size:19px}
 #gm-wrap.gm-mobile .gm-rf{width:42px;height:26px}
+/* Панель режимов на телефоне: ширина по контенту (не жёсткие 212px), ближе к углу.
+   Свёрнута (по умолчанию) — сжимается до одной кнопки-стрелки, без заголовка. */
+#gm-wrap.gm-mobile #gm-controls{width:auto;max-width:calc(100% - 20px);right:10px;bottom:10px;padding:7px 8px 8px}
+#gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed){padding:4px}
+#gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed) .gm-panel-head{gap:0}
+#gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed) .gm-panel-ttl{display:none}
+/* раскрытая: аккуратные пальцевые строки-слои */
+#gm-wrap.gm-mobile .gm-ctl-row{height:38px;font-size:13px}
 /* панель системы — нижний лист на всю ширину */
 #gm-wrap.gm-mobile #gm-panel{
   top:auto;left:0;right:0;bottom:0;width:100%;max-width:none;max-height:58%;
@@ -709,8 +790,11 @@ textarea.gm-fi{resize:vertical}
    читается, перетаскивание и панорама идут плавно. На выходе всё возвращается.
    ───────────────────────────────────────────────────────────────────── */
 #gm-wrap.gm-editing .gm-glow-layer{display:none}
-#gm-wrap.gm-editing .gm-sec-void,
-#gm-wrap.gm-editing .gm-sec-void-core{display:none}
+#gm-wrap.gm-editing .gm-sec-glow{display:none}
+#gm-wrap.gm-editing .gm-sec-line,
+#gm-wrap.gm-editing .gm-sec-line-b,
+#gm-wrap.gm-editing .gm-sec-fill{animation:none}
+#gm-wrap.gm-editing .gm-sec-line-b{filter:none}
 #gm-wrap.gm-editing .vor-rift{animation:none}
 #gm-wrap.gm-editing .vor-rift-edge{animation:none;stroke-dasharray:none}
 #gm-wrap.gm-editing .gm-rift-eye,
