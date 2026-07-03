@@ -2605,6 +2605,8 @@ function buildHeroVN(coverUrl, user) {
     <span class="hpc-corner hpc-tl"></span><span class="hpc-corner hpc-tr"></span>
     <span class="hpc-corner hpc-bl"></span><span class="hpc-corner hpc-br"></span>
     <div class="hp-vn-idx" id="hp-vn-idx" aria-hidden="true"><div class="hp-vn-idx-cap">📈 ${lang === 'en' ? 'EXCHANGE · LIVE INDEX' : 'БИРЖА · ИНДЕКС В ЭФИРЕ'}</div><div id="hp-vn-myticker"></div><div id="hp-vn-ticker"></div></div>
+    <div class="hp-vn-colony" id="hp-vn-colony" aria-hidden="true"></div>
+    <div class="hp-vn-poem" id="hp-vn-poem" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2664,7 +2666,13 @@ function heroVNChoice(kind) {
   // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
   _heroVNView = kind;
   if (kind !== 'idx' && typeof heroVNHideIdx === 'function') heroVNHideIdx();
-  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); _heroVNCtl.menu(); return; }
+  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPoemClose(); _heroVNCtl.menu(); return; }
+
+  // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
+  if (kind === 'colony') { _heroVNCat = null; heroVNPoemClose(); heroVNColonyOpen(); return; }
+
+  // «Поэма недели» — общегалактический стих: голосование за слово дня поверх сцены.
+  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemOpen(); return; }
 
   if (kind === 'ach' || kind === 'events') {
     _heroVNCat = kind;
@@ -2765,6 +2773,629 @@ function heroVNHideIdx() {
   idxEl.classList.remove('show');
   idxEl.setAttribute('aria-hidden', 'true');
 }
+
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · режим «Колонизация» — крупный план ГРАНИЦ и ТЕРРИТОРИЙ держав
+// (заливки фракций, гербы, гиперпути), стрелки экспансии к ничейным системам
+// и РАБОЧАЯ колонизация с пулом захватов. Переиспользует данные и механику
+// кабинета (EC.*, RPC economy_claim_system) — то же, что во вкладке «Территория».
+// ══════════════════════════════════════════════════════════════
+function heroVNColonyClose() {
+  const el = document.getElementById('hp-vn-colony');
+  if (!el) return;
+  el.classList.remove('show');
+  el.setAttribute('aria-hidden', 'true');
+  if (_heroVNView === 'colony') _heroVNView = null;
+}
+// «Назад» из карты — вернуться к меню новеллы (оно закроет оверлей).
+function heroVNColonyReturn() { heroVNChoice('menu'); }
+
+// Шапка оверлея (заголовок + «назад») — одна на все состояния.
+function _heroColonyHead(en) {
+  return `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">${en ? 'Colonization' : 'Колонизация'}</span>
+    <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNColonyReturn()">↩ ${en ? 'back' : 'назад'}</button>
+  </div>`;
+}
+
+async function heroVNColonyOpen() {
+  const el = document.getElementById('hp-vn-colony');
+  if (!el) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  el.classList.add('show');
+  el.setAttribute('aria-hidden', 'false');
+  el.innerHTML = _heroColonyHead(en) +
+    `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Charting the frontier…' : 'Строю карту рубежей…'}</div></div>`;
+  try {
+    // Данные кабинета (карта всех держав, гербы, экономика, пул захватов) — те же, что
+    // во вкладке «Территория». Уже загружены в сессии → переиспользуем без перезапроса.
+    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    // Нужна СВОЯ одобренная держава (не просто стафф-доступ) — иначе колонизировать нечем.
+    if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
+      if (!el.classList.contains('show')) return;
+      el.innerHTML = _heroColonyHead(en) + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Register a faction to chart its borders and colonize systems.' : 'Зарегистрируйте державу — и здесь появятся её границы и колонизация систем.'}</div></div>`;
+      return;
+    }
+    if (typeof EC === 'undefined' || !EC.allSystems || !EC.allSystems.length) { if (typeof ecLoad === 'function') await ecLoad(); }
+    // Геометрию территорий превью берёт из движка большой карты (GM). Подгружаем её,
+    // если игрок ещё не открывал карту в этой сессии — иначе заливок/границ не будет.
+    if (typeof loadGalaxyData === 'function' && (typeof GM === 'undefined' || !GM.loaded || !(GM.systems && GM.systems.length))) {
+      try { await loadGalaxyData(); } catch (e) {}
+    }
+    if (!el.classList.contains('show')) return;   // игрок успел закрыть — не подменяем чужой экран
+    el.innerHTML = _heroColonyBuild(en);
+  } catch (e) {
+    if (!el.classList.contains('show')) return;
+    el.innerHTML = _heroColonyHead(en) +
+      `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Star charts are unavailable right now.' : 'Звёздные карты сейчас недоступны.'}</div></div>`;
+  }
+}
+
+// Колонизировать систему прямо из карты новеллы (та же RPC, что в кабинете), затем
+// перерисовать оверлей свежими данными. Валидация зеркалит ecClaimSystem.
+async function heroVNColonyClaim(systemId) {
+  if (typeof EC === 'undefined' || EC.busy) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  if (typeof ecClaimsLeft === 'function' && ecClaimsLeft() <= 0) { toast(en ? 'Colonization on cooldown' : 'Колонизация системы на перезарядке', 'err'); return; }
+  const cost = (typeof ecClaimCost === 'function') ? ecClaimCost() : 0;
+  const money = typeof ecNum === 'function' ? ecNum : (x => x);
+  if ((EC.eco && EC.eco.gc || 0) < cost) { toast((en ? 'Not enough GC: need ' : 'Недостаточно ГС: нужно ') + money(cost), 'err'); return; }
+  const cd = (typeof ecClaimCdDays === 'function') ? ecClaimCdDays() : 1;
+  if (!confirm((en ? 'Colonize the system for ' : 'Колонизировать систему за ') + money(cost) + (en ? ' GC? (once per ' : ' ГС? (раз в ') + cd + (en ? ' d.)' : ' дн.)'))) return;
+  EC.busy = true;
+  try {
+    await ecRpc('economy_claim_system', { p_system_id: systemId });
+    toast(en ? 'System colonized!' : 'Система колонизирована!', 'ok');
+    if (typeof ecLoad === 'function') await ecLoad();
+    if (typeof loadGalaxyData === 'function' && typeof GM !== 'undefined' && GM.loaded) { try { await loadGalaxyData(); } catch (e) {} }
+    const el = document.getElementById('hp-vn-colony');
+    if (el && el.classList.contains('show')) el.innerHTML = _heroColonyBuild(en);
+  } catch (e) {
+    const m = e.message || '';
+    toast(m.includes('cooldown') ? (en ? 'Colonization on cooldown' : 'Колонизация системы на перезарядке')
+      : m.includes('adjacent') ? (en ? 'System does not border your territory' : 'Система не граничит с вашей территорией')
+      : m.includes('already') ? (en ? 'System already taken' : 'Система уже занята')
+      : m.includes('not enough') ? (en ? 'Not enough GC' : 'Недостаточно ГС')
+      : (en ? 'Error: ' : 'Ошибка: ') + m, 'err');
+  } finally { EC.busy = false; }
+}
+
+// Сборка оверлея из данных кабинета (EC): территории ВСЕХ держав с заливками/границами/
+// гербами, стрелки экспансии, пул захватов и рабочие кнопки колонизации.
+function _heroColonyBuild(en) {
+  const head = _heroColonyHead(en);
+  const nf = n => (+n).toFixed(1);
+  const EXP = '#5fe0a0';   // цвет экспансии — стрелки и цели колонизации
+
+  // Владение берём из кабинета (EC) — надёжный источник «моих» систем.
+  const myFid = (typeof EC !== 'undefined' && EC.fid) || null;
+  const mineIds = (typeof ecMySysIds === 'function') ? ecMySysIds()
+    : new Set(((typeof EC !== 'undefined' && EC.allSystems) || []).filter(s => s.faction === myFid).map(s => s.id));
+  if (!myFid || !mineIds.size) {
+    return head + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Your realm holds no systems on the map yet.' : 'У вашей державы пока нет систем на карте.'}</div></div>`;
+  }
+
+  // Геометрия — из РЕАЛЬНОГО движка галактической карты (Вороного-ячейки, границы
+  // фронтов, изогнутые гиперпути, звёздные спрайты). Те же «готовые решения», что и в
+  // полноэкранной карте → превью один-в-один. Нужен загруженный GM (+ d3 для ячеек).
+  const GMok = (typeof GM !== 'undefined' && GM.loaded && Array.isArray(GM.systems) && GM.systems.length);
+  const sysList = GMok ? GM.systems : ((typeof EC !== 'undefined' && EC.allSystems) || []);
+  const laneList = GMok ? (GM.lanes || []) : ((typeof EC !== 'undefined' && EC.lanes) || []);
+  if (!sysList.length) return head + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Star charts are unavailable right now.' : 'Звёздные карты сейчас недоступны.'}</div></div>`;
+  const byId = new Map(sysList.map(s => [s.id, s]));
+  const capSet = new Set((GMok && GM.capitals) ? Object.keys(GM.capitals)
+    : ((typeof EC !== 'undefined' && EC.colonies) || []).filter(c => c.is_capital).map(c => c.system_id));
+  const claimIds = (typeof ecClaimableIds === 'function') ? ecClaimableIds() : [];
+  const claimSet = new Set(claimIds);
+
+  const mine = [...mineIds].map(id => byId.get(id)).filter(Boolean);
+  if (!mine.length) {
+    return head + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Your realm holds no systems on the map yet.' : 'У вашей державы пока нет систем на карте.'}</div></div>`;
+  }
+
+  // ── Геометрия территорий (нужна ДО кадрирования: рамка строится по полигонам) ──
+  let myColor = (typeof EC !== 'undefined' && EC.app && EC.app.color) || null;
+  let geo = null;
+  try { if (GMok && typeof gmBuildGeo === 'function') geo = gmBuildGeo(); } catch (e) { geo = null; }
+
+  // ── Кадр: ВСЯ граница государства целиком (полигоны моих ячеек, не только звёзды)
+  //    + цели колонизации; пропорции рамки подгоняются под контейнер, чтобы
+  //    preserveAspectRatio="slice" не срезал ни кусочка территории. ──
+  const framePts = [];
+  mine.forEach(s => framePts.push([s.x, s.y]));
+  claimIds.forEach(id => { const t = byId.get(id); if (t) framePts.push([t.x, t.y]); });
+  if (geo) geo.fills.forEach(f => { if (f.sys && mineIds.has(f.sys.id) && f.pts) f.pts.forEach(p => framePts.push(p)); });
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  framePts.forEach(p => { minX = Math.min(minX, p[0]); minY = Math.min(minY, p[1]); maxX = Math.max(maxX, p[0]); maxY = Math.max(maxY, p[1]); });
+  let w = Math.max(maxX - minX, 1), h = Math.max(maxY - minY, 1);
+  const pad = Math.max(90, Math.max(w, h) * 0.22);   // воздух вокруг границы + соседи для контекста
+  minX -= pad; minY -= pad; w += pad * 2; h += pad * 2;
+  // Пропорции реального окна карты (оверлей уже в DOM) → рамка того же аспекта,
+  // slice ничего не режет, государство всегда видно целиком.
+  let aspect = 1.5;
+  try {
+    const host = document.getElementById('hp-vn-colony');
+    if (host && host.clientWidth && host.clientHeight) {
+      const W = host.clientWidth, H = host.clientHeight;
+      const narrow = W <= 640;
+      const side = narrow ? 0 : Math.min(290, Math.max(190, W * 0.27)) + 14;
+      const padX = 2 * Math.min(26, Math.max(14, W * 0.026));
+      const mw = Math.max(1, W - side - padX);
+      const mh = Math.max(1, narrow ? Math.max(240, H * 0.46) : H - 48 - 28);
+      aspect = Math.min(2.6, Math.max(0.7, mw / mh));
+    }
+  } catch (e) {}
+  if (w / h < aspect) { const nw = h * aspect; minX -= (nw - w) / 2; w = nw; }
+  else { const nh = w / aspect; minY -= (nh - h) / 2; h = nh; }
+  const R = Math.max(w, h);
+  const mIn = R * 0.14;   // поле включения ячеек/спрайтов, частично заходящих в кадр
+  const inFrame = (x, y) => x >= minX - mIn && x <= minX + w + mIn && y >= minY - mIn && y <= minY + h + mIn;
+  const ptsIn = pts => pts && pts.some(p => inFrame(p[0], p[1]));
+  const dOf = (pts, close) => 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + (close ? 'Z' : '');
+
+  let fillMine = '', fillOther = '', mineOutline = '', glowB = '', lineB = '', laneHtml = '';
+  if (geo) {
+    // Заливки: МОИ ячейки — отдельным слоем на полную яркость; чужие — приглушены
+    // (муть + пониженная непрозрачность), чтобы фокус был на моём государстве.
+    geo.fills.filter(f => ptsIn(f.pts)).forEach(f => {
+      const d = dOf(f.pts, true);
+      if (f.isRift) { fillOther += `<path class="vor-cell vor-rift" d="${d}" stroke="none"></path>`; return; }
+      const isMine = mineIds.has(f.sys.id);
+      if (isMine && !myColor && f.fac) myColor = f.fac.color;
+      const fill = f.fac ? f.fac.color : 'rgba(120,140,170,0.05)';
+      const p = `<path class="vor-cell${f.fac ? ' vor-claimed' : ' vor-neutral'}" d="${d}" fill="${fill}" stroke="none"></path>`;
+      if (isMine) fillMine += p; else fillOther += p;
+    });
+    // Моя территория — ЯРКИЙ светящийся контур (широкое мягкое гало + чёткая белая
+    // линия сверху), как выделенное государство на референс-инфографике.
+    mineOutline = geo.fills.filter(f => mineIds.has(f.sys.id) && ptsIn(f.pts)).map(f => {
+      const d = dOf(f.pts, true);
+      return `<path d="${d}" fill="none" stroke="${myColor}" stroke-width="${nf(R * 0.011)}" stroke-linejoin="round" opacity=".5"></path>`
+        + `<path d="${d}" fill="none" stroke="#eaf6ff" stroke-width="${nf(R * 0.006)}" stroke-linejoin="round" opacity=".35"></path>`
+        + `<path d="${d}" fill="none" stroke="#fff" stroke-width="${nf(R * 0.0028)}" stroke-linejoin="round" opacity=".95"></path>`;
+    }).join('');
+    const fb = [], nb = [];
+    geo.edges.forEach(e => {
+      if (!ptsIn(e.pts)) return;
+      const d = dOf(e.pts);
+      if (e.kind === 'front') fb.push(`<path class="vor-cell vor-edge vor-claimed vor-front" d="${d}" fill="none" stroke="${e.color}"></path>`);
+      else if (e.kind === 'rift') fb.push(`<path class="vor-cell vor-edge vor-rift-edge" d="${d}" fill="none"></path>`);
+      else if (e.kind === 'fac') fb.push(`<path class="vor-cell vor-edge vor-claimed" d="${d}" fill="none" stroke="${e.color}"></path>`);
+      else nb.push(`<path class="vor-cell vor-edge vor-neutral" d="${d}" fill="none" stroke="${e.color}"></path>`);
+    });
+    glowB = fb.join(''); lineB = nb.join('') + fb.join('');
+    laneHtml = geo.lanes.filter(L => inFrame(L.ax, L.ay) || inFrame(L.bx, L.by)).map(L =>
+      `<path class="hyperlane" d="M${L.ax},${L.ay} Q${L.cx},${L.cy} ${L.bx},${L.by}" fill="none"></path>`).join('');
+  } else {
+    // Фолбэк без d3: прямые гиперпути (заливок нет, но карта не пустая).
+    laneHtml = laneList.map(l => {
+      const a = byId.get(l.a_id), b = byId.get(l.b_id);
+      if (!a || !b || (!inFrame(a.x, a.y) && !inFrame(b.x, b.y))) return '';
+      return `<path class="hyperlane" d="M${nf(a.x)},${nf(a.y)}L${nf(b.x)},${nf(b.y)}" fill="none"></path>`;
+    }).join('');
+  }
+  if (!myColor) myColor = 'var(--gd,#3a9bdc)';
+
+  // ── Звёзды: кастомные киберпанк-глифы вместо PNG-спрайтов —
+  //    4-лучевая гранёная искра + пунктирное ромб-кольцо + белое ядро,
+  //    цвет по типу звезды (как у спрайтов star_<type>.png). ──
+  const STARC = { yellow: '#ffd75e', red: '#ff6a4e', blue: '#6fb9f0', white: '#eef6ff', green: '#45e0b4' };
+  let starsHtml = '';
+  sysList.forEach(s => {
+    if (!inFrame(s.x, s.y) || s.faction === 'rift') return;
+    const a = s.is_giant ? R * 0.024 : R * 0.014;
+    const c = STARC[s.star_type] || STARC.yellow;
+    const k = a * 0.26;
+    const spark = `0,${nf(-a)} ${nf(k)},${nf(-k)} ${nf(a)},0 ${nf(k)},${nf(k)} 0,${nf(a)} ${nf(-k)},${nf(k)} ${nf(-a)},0 ${nf(-k)},${nf(-k)}`;
+    const q = a * 0.95;
+    starsHtml += `<g transform="translate(${nf(s.x)},${nf(s.y)})" style="pointer-events:none">
+      <circle r="${nf(a * 2)}" fill="${c}" opacity=".14" filter="url(#hpvncGlow)"></circle>
+      <rect x="${nf(-q)}" y="${nf(-q)}" width="${nf(q * 2)}" height="${nf(q * 2)}" transform="rotate(45)" fill="none" stroke="${c}" stroke-width="${nf(Math.max(R * 0.0016, 0.4))}" stroke-dasharray="${nf(q * 0.7)},${nf(q * 0.5)}" opacity="${s.is_giant ? '.55' : '.35'}"></rect>
+      <polygon points="${spark}" fill="${c}" opacity=".95"></polygon>
+      <circle r="${nf(a * 0.28)}" fill="#fff" opacity=".92"></circle>
+    </g>`;
+  });
+
+  // ── Подсветка моих систем: мягкое гало под спрайтом + метка столицы ──
+  let myNodes = '';
+  mine.forEach(s => {
+    if (!inFrame(s.x, s.y)) return;
+    const isCap = capSet.has(s.id);
+    const r = isCap ? R * 0.02 : R * 0.013;
+    myNodes += `<g>
+      <circle cx="${nf(s.x)}" cy="${nf(s.y)}" r="${nf(r * (isCap ? 3.2 : 2.2))}" fill="${myColor}" opacity="${isCap ? '.32' : '.18'}" filter="url(#hpvncGlow)"></circle>
+      ${isCap ? `<rect x="${nf(-r * 1.55)}" y="${nf(-r * 1.55)}" width="${nf(r * 3.1)}" height="${nf(r * 3.1)}" transform="translate(${nf(s.x)} ${nf(s.y)}) rotate(45)" fill="none" stroke="#fff" stroke-width="${nf(R * 0.0022)}" opacity=".7"></rect>
+      <text x="${nf(s.x)}" y="${nf(s.y - r * 2.3)}" fill="#fff" font-size="${nf(R * 0.03)}" text-anchor="middle" style="pointer-events:none">★</text>
+      <text x="${nf(s.x)}" y="${nf(s.y - r * 4.1)}" fill="#eaf6ff" font-size="${nf(R * 0.015)}" text-anchor="middle" font-family="var(--font-mono)" letter-spacing="1.5" opacity=".8" style="pointer-events:none">${en ? 'CAPITAL' : 'СТОЛИЦА'}</text>` : ''}
+    </g>`;
+  });
+
+  // ── Стрелки экспансии + пульсирующие кликабельные цели колонизации ──
+  const canClaim = (typeof ecClaimsLeft === 'function' ? ecClaimsLeft() : 0) > 0;
+  let arrows = '', tNodes = '', tLabels = '';
+  claimIds.forEach(id => {
+    const t = byId.get(id); if (!t || !inFrame(t.x, t.y)) return;
+    let from = mine[0], best = Infinity;
+    mine.forEach(s => { const d = Math.hypot(t.x - s.x, t.y - s.y); if (d < best) { best = d; from = s; } });
+    const dx = t.x - from.x, dy = t.y - from.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
+    arrows += `<line x1="${nf(from.x + ux * R * 0.02)}" y1="${nf(from.y + uy * R * 0.02)}" x2="${nf(t.x - ux * R * 0.035)}" y2="${nf(t.y - uy * R * 0.035)}" stroke="${EXP}" stroke-width="${nf(R * 0.0045)}" marker-end="url(#hpvncArrow)" opacity=".9"></line>`;
+    const tr = R * 0.016;
+    const dia = r => `0,${nf(-r)} ${nf(r)},0 0,${nf(r)} ${nf(-r)},0`;
+    tNodes += `<g transform="translate(${nf(t.x)},${nf(t.y)})" style="cursor:pointer" onclick="event.stopPropagation();heroVNColonyClaim('${jsq(id)}')">
+      <circle r="${nf(R * 0.032)}" fill="transparent"></circle>
+      ${canClaim ? `<polygon points="${dia(tr)}" fill="none" stroke="${EXP}" stroke-width="${nf(R * 0.0022)}" opacity=".6"><animateTransform attributeName="transform" type="scale" values="1;1.9" dur="1.8s" repeatCount="indefinite"></animateTransform><animate attributeName="opacity" values=".6;0" dur="1.8s" repeatCount="indefinite"></animate></polygon>` : ''}
+      <polygon points="${dia(tr)}" fill="rgba(8,14,22,.78)" stroke="${EXP}" stroke-width="${nf(R * 0.004)}" stroke-dasharray="${nf(R * 0.009)},${nf(R * 0.007)}" opacity="${canClaim ? '1' : '.5'}"><title>${esc(t.name)} — ${canClaim ? (en ? 'colonize' : 'колонизировать') : (en ? 'on cooldown' : 'на перезарядке')}</title></polygon>
+      <circle r="${nf(R * 0.0045)}" fill="${EXP}" opacity="${canClaim ? '1' : '.55'}"></circle>
+    </g>`;
+    tLabels += `<text x="${nf(t.x)}" y="${nf(t.y - R * 0.03)}" fill="${EXP}" font-size="${nf(R * 0.02)}" text-anchor="middle" font-family="var(--font-mono)" opacity=".95" style="pointer-events:none">${esc(String(t.name || '').slice(0, 16))}</text>`;
+  });
+
+  // ── Метки систем: плашка с названием (мои + столицы + гиганты, чтобы не засорять) ──
+  let labels = '';
+  const fs = R * 0.019;
+  sysList.forEach(s => {
+    if (!inFrame(s.x, s.y) || claimSet.has(s.id) || s.faction === 'rift') return;
+    if (!(mineIds.has(s.id) || capSet.has(s.id) || s.is_giant)) return;
+    const nm = String(s.name || ''); if (!nm) return;
+    const hw = nm.length * fs * 0.3 + fs * 0.5, hh = fs * 0.75;
+    const ly = s.y + (s.is_giant ? R * 0.05 : R * 0.032);
+    // Гранёная плашка (срез верхнего левого и нижнего правого угла) + цветной тик слева
+    const ct = hh * 0.75;
+    const tick = mineIds.has(s.id) ? myColor : 'rgba(150,175,205,.55)';
+    labels += `<g style="pointer-events:none">
+      <polygon points="${nf(s.x - hw + ct)},${nf(ly - hh)} ${nf(s.x + hw)},${nf(ly - hh)} ${nf(s.x + hw)},${nf(ly + hh - ct)} ${nf(s.x + hw - ct)},${nf(ly + hh)} ${nf(s.x - hw)},${nf(ly + hh)} ${nf(s.x - hw)},${nf(ly - hh + ct)}" fill="rgba(6,10,16,.82)" stroke="rgba(255,255,255,.13)" stroke-width="${nf(R * 0.0015)}"></polygon>
+      <rect x="${nf(s.x - hw)}" y="${nf(ly - hh + ct)}" width="${nf(Math.max(R * 0.0032, 0.6))}" height="${nf(hh * 2 - ct)}" fill="${tick}"></rect>
+      <text x="${nf(s.x)}" y="${nf(ly + fs * 0.34)}" fill="#e6f0fb" font-size="${nf(fs)}" text-anchor="middle" font-family="var(--font-display)" font-weight="700">${esc(nm)}</text>
+    </g>`;
+  });
+
+  // ── Флаг МОЕГО государства — полупрозрачная «печать» ПОД слоем границ,
+  //    обрезанная по территории (clipPath из моих ячеек), у самой глубинной
+  //    системы (дальше всех от чужих) — не на стыке границ. ──
+  let crest = '', crestClip = '';
+  const myInView = mine.filter(s => inFrame(s.x, s.y));
+  if (myInView.length) {
+    const others = sysList.filter(s => !mineIds.has(s.id) && s.faction !== 'rift');
+    let anchor = myInView[0], bestScore = -Infinity;
+    myInView.forEach(s => {
+      let dmin = Infinity;
+      others.forEach(o => { const d = Math.hypot(o.x - s.x, o.y - s.y); if (d < dmin) dmin = d; });
+      if (dmin > bestScore) { bestScore = dmin; anchor = s; }
+    });
+    const herald = (typeof EC !== 'undefined' && EC.app && (EC.app.herald_url || EC.app.image_url)) || '';
+    const nm = String((typeof EC !== 'undefined' && EC.app && EC.app.name) || '').toUpperCase();
+    if (geo) {
+      const terr = geo.fills.filter(f => f.sys && mineIds.has(f.sys.id) && f.pts)
+        .map(f => `<path d="${dOf(f.pts, true)}"></path>`).join('');
+      if (terr) crestClip = `<clipPath id="hpvncTerr">${terr}</clipPath>`;
+    }
+    const fw = R * 0.2, fh = fw * 0.66;
+    crest = `<g style="pointer-events:none">
+      ${herald ? `<g ${crestClip ? 'clip-path="url(#hpvncTerr)"' : ''} opacity=".28"><image href="${esc(herald)}" xlink:href="${esc(herald)}" x="${nf(anchor.x - fw / 2)}" y="${nf(anchor.y - fh / 2)}" width="${nf(fw)}" height="${nf(fh)}" preserveAspectRatio="xMidYMid slice"></image></g>` : ''}
+      ${nm ? `<text x="${nf(anchor.x)}" y="${nf(anchor.y + fh * 0.5 + R * 0.028)}" fill="#fff" font-size="${nf(R * 0.026)}" text-anchor="middle" font-family="var(--font-display)" font-weight="800" letter-spacing="1.5" opacity=".92" style="paint-order:stroke;stroke:#05080d;stroke-width:${nf(R * 0.004)};stroke-linejoin:round">${esc(nm)}</text>` : ''}
+    </g>`;
+  }
+
+  // ── Тусклый звёздный фон + виньетка (глубина, без перегруза) ──
+  let _seed = (Math.abs(Math.floor(minX * 131 + minY * 71 + w * 17)) % 2147483646) + 1;
+  const _rnd = () => (_seed = (_seed * 16807) % 2147483647) / 2147483647;
+  let bgStars = '';
+  for (let i = 0; i < 90; i++) {
+    const sx = minX + _rnd() * w, sy = minY + _rnd() * h, sr = R * (0.0011 + _rnd() * 0.0022);
+    bgStars += `<circle cx="${nf(sx)}" cy="${nf(sy)}" r="${nf(sr)}" fill="#cfe4ff" opacity="${nf(0.05 + _rnd() * 0.13)}"></circle>`;
+  }
+
+  const defs = `<defs>
+    ${crestClip}
+    <filter id="hpvncGlow" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="${nf(R * 0.012)}"></feGaussianBlur></filter>
+    <filter id="hpvncMute"><feColorMatrix type="saturate" values="0.5"></feColorMatrix></filter>
+    <filter id="hpvncDrop" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="${nf(R * 0.003)}" stdDeviation="${nf(R * 0.005)}" flood-color="#000" flood-opacity="0.55"></feDropShadow></filter>
+    <marker id="hpvncArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${EXP}"></path></marker>
+    <radialGradient id="hpvncVig" cx="50%" cy="44%" r="72%">
+      <stop offset="0%" stop-color="#000" stop-opacity="0"></stop>
+      <stop offset="60%" stop-color="#000" stop-opacity="0"></stop>
+      <stop offset="100%" stop-color="#05080d" stop-opacity=".72"></stop>
+    </radialGradient>
+  </defs>`;
+  const vignette = `<rect x="${nf(minX)}" y="${nf(minY)}" width="${nf(w)}" height="${nf(h)}" fill="url(#hpvncVig)" style="pointer-events:none"></rect>`;
+  const cellW = nf(Math.max(R * 0.0016, 0.3)), laneW = nf(Math.max(R * 0.003, 0.5));
+  const mainSvg = `<svg class="hpvnc-map" viewBox="${nf(minX)} ${nf(minY)} ${nf(w)} ${nf(h)}" preserveAspectRatio="xMidYMid slice" style="--cell-w:${cellW};--lane-w:${laneW}" xmlns:xlink="http://www.w3.org/1999/xlink">
+    ${defs}
+    <g opacity=".85">${bgStars}</g>
+    <g class="vor-layer" opacity=".42" filter="url(#hpvncMute)">${fillOther}</g>
+    <g class="vor-layer">${fillMine}</g>
+    <g>${crest}</g>
+    <g>${mineOutline}</g>
+    <g class="vor-border-layer gm-glow-layer" opacity=".5">${glowB}</g>
+    <g class="vor-border-layer" opacity=".72">${lineB}</g>
+    <g class="lane-layer" opacity=".8">${laneHtml}</g>
+    <g>${starsHtml}</g>
+    <g>${myNodes}</g>
+    <g>${arrows}</g>
+    <g>${tNodes}</g>
+    ${vignette}
+    <g>${labels}</g>
+    <g>${tLabels}</g>
+  </svg>`;
+
+  // ── Мини-обзор всей карты + рамка текущего кадра ──
+  let aX = Infinity, aY = Infinity, bX = -Infinity, bY = -Infinity;
+  sysList.forEach(s => { aX = Math.min(aX, s.x); aY = Math.min(aY, s.y); bX = Math.max(bX, s.x); bY = Math.max(bY, s.y); });
+  const gw = Math.max(bX - aX, 1), gh = Math.max(bY - aY, 1);
+  const gp = Math.max(gw, gh) * 0.06;
+  const GR = Math.max(gw, gh);
+  const facColor = s => {
+    if (mineIds.has(s.id)) return myColor;
+    const f = (typeof gmFaction === 'function') ? gmFaction(s.faction) : null;
+    return (f && f.color) || (s.faction ? 'rgba(200,120,120,.7)' : 'rgba(150,170,195,.4)');
+  };
+  const dots = sysList.map(s => {
+    const isMine = mineIds.has(s.id);
+    const r = isMine ? GR * 0.012 : GR * 0.006;
+    return `<circle cx="${nf(s.x)}" cy="${nf(s.y)}" r="${nf(r)}" fill="${facColor(s)}" opacity="${isMine ? '1' : (s.faction ? '.72' : '.42')}"></circle>`;
+  }).join('');
+  const vp = `<rect x="${nf(minX)}" y="${nf(minY)}" width="${nf(w)}" height="${nf(h)}" fill="rgba(234,246,255,.05)" stroke="#eaf6ff" stroke-width="${nf(GR * 0.004)}" stroke-dasharray="${nf(GR * 0.012)},${nf(GR * 0.01)}"></rect>`;
+  const miniSvg = `<svg viewBox="${nf(aX - gp)} ${nf(aY - gp)} ${nf(gw + gp * 2)} ${nf(gh + gp * 2)}" preserveAspectRatio="xMidYMid meet"><g>${dots}</g>${vp}</svg>`;
+
+  // ── Панель экспансии: пул захватов, цена, перезарядка, кнопки колонизации ──
+  const left = (typeof ecClaimsLeft === 'function') ? ecClaimsLeft() : 0;
+  const max = (typeof ecClaimMax === 'function') ? ecClaimMax() : 1;
+  const cost = (typeof ecClaimCost === 'function') ? ecClaimCost() : 0;
+  const cdDays = (typeof ecClaimCdDays === 'function') ? ecClaimCdDays() : 1;
+  const cdMs = (typeof ecClaimCooldownMs === 'function') ? ecClaimCooldownMs() : 0;
+  const gc = (typeof EC !== 'undefined' && EC.eco && EC.eco.gc) || 0;
+  const money = typeof ecNum === 'function' ? ecNum : (x => x);
+  const statusHtml = left > 0
+    ? `<b>${en ? 'Available' : 'Доступно'}</b> · ${en ? 'claims left' : 'осталось захватов'} <b>${left}/${max}</b><br><span>${en ? 'once per' : 'раз в'} ${cdDays} ${en ? 'd.' : 'дн.'} · ${money(cost)} ГС · ${en ? 'treasury' : 'казна'} ${money(gc)} ГС</span>`
+    : `<b>${en ? 'Cooldown' : 'Перезарядка'}</b> · ~${Math.max(1, Math.ceil(cdMs / 86400000))} ${en ? 'd.' : 'дн.'}<br><span>${en ? 'once per' : 'раз в'} ${cdDays} ${en ? 'd.' : 'дн.'} · ${money(cost)} ГС</span>`;
+  const rows = claimIds.length
+    ? claimIds.map(id => {
+        const s = byId.get(id); if (!s) return '';
+        const ok = left > 0 && gc >= cost;
+        return `<div class="hp-vn-col-crow"><span class="hp-vn-col-titem-t">★ ${esc(s.name)}</span><button class="hp-vn-col-cbtn" ${ok ? '' : 'disabled'} onclick="event.stopPropagation();heroVNColonyClaim('${jsq(id)}')"><span class="hp-vn-col-cbtn-l">${en ? 'Colonize' : 'Колонизировать'}</span><span class="hp-vn-col-cbtn-c">${money(cost)} ГС</span></button></div>`;
+      }).join('')
+    : `<div class="hp-vn-col-empty" style="height:auto;padding:12px 0;justify-content:flex-start;text-align:left">${en ? 'No neutral systems border your realm. Expand along hyperlanes.' : 'Нет смежных ничейных систем. Расширяйтесь вдоль гиперпутей.'}</div>`;
+
+  // ── Досье моего государства (герб, название, правление, столица) ──
+  const dHerald = (typeof EC !== 'undefined' && EC.app && (EC.app.herald_url || EC.app.image_url)) || '';
+  const dName = (typeof EC !== 'undefined' && EC.app && EC.app.name) || (en ? 'My realm' : 'Моя держава');
+  const dGov = (typeof EC !== 'undefined' && EC.app && EC.app.gov) || '';
+  const dLeader = (typeof EC !== 'undefined' && EC.app && EC.app.leader) || '';
+  const dSub = [dGov, dLeader].filter(Boolean).join(' · ');
+  const capSys = mine.find(s => capSet.has(s.id));
+  const dCap = capSys ? capSys.name : '—';
+  const dossier = `<div class="hp-vn-col-dossier">
+    <div class="hp-vn-col-crest" style="--fc:${myColor}">${dHerald ? `<img src="${esc(dHerald)}" alt="" onerror="this.parentElement.textContent='⬡'">` : '⬡'}</div>
+    <div class="hp-vn-col-idnt">
+      <span class="hp-vn-col-fname">${esc(dName)}</span>
+      ${dSub ? `<span class="hp-vn-col-fsub">${esc(dSub)}</span>` : ''}
+      <span class="hp-vn-col-fcap">★ ${en ? 'Capital' : 'Столица'}: <b>${esc(dCap)}</b></span>
+    </div>
+  </div>`;
+
+  const body = `<div class="hp-vn-col-body">
+    <div class="hp-vn-col-main">${mainSvg}</div>
+    <aside class="hp-vn-col-side">
+      ${dossier}
+      <div class="hp-vn-col-mini"><span class="hp-vn-col-mini-cap">${en ? 'Sector overview' : 'Обзор сектора'}</span>${miniSvg}</div>
+      <div class="hp-vn-col-info">
+        <span class="hp-vn-col-info-cap">${en ? 'Expansion' : 'Экспансия'}</span>
+        <div class="hp-vn-col-scroll">
+          <div class="hp-vn-col-stat"><b>${claimIds.length}</b><span>${en ? 'systems to colonize' : 'систем для колонизации'}</span></div>
+          <div class="hp-vn-col-stat"><b>${mine.length}</b><span>${en ? 'systems held' : 'систем под контролем'}</span></div>
+          <div class="hp-vn-col-claimstat ${left > 0 ? 'ok' : 'cd'}">${statusHtml}</div>
+          <div class="hp-vn-col-crows">${rows}</div>
+        </div>
+      </div>
+    </aside>
+  </div>`;
+  return head + body;
+}
+
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · «Поэма недели» — общегалактический стих (в духе DDLC).
+// Каждый день все державы голосуют за слово; победитель в конце дня (UTC)
+// разворачивается в строку. За неделю — 7 строк, в конце недели ВСЕ
+// получают баф/дебаф/ничего по доминирующей теме. Сервер: _vn_poem.sql
+// (RPC poem_state / poem_vote, ленивый сеттл — крон не нужен).
+// ══════════════════════════════════════════════════════════════
+// Зеркало тем сервера (_poem_theme_ru): иконка + подпись.
+const HERO_POEM_THEMES = {
+  war: ['⚔', 'Война', 'War'], hope: ['☀', 'Надежда', 'Hope'], dark: ['🌑', 'Тьма', 'Dark'],
+  love: ['❤', 'Единство', 'Unity'], space: ['✦', 'Космос', 'Space'], wealth: ['◆', 'Богатство', 'Wealth'],
+  knowledge: ['📖', 'Знание', 'Knowledge'], chaos: ['🌀', 'Хаос', 'Chaos'], mixed: ['…', 'Разноголосица', 'Discord'],
+};
+let _heroPoemState = null;   // последний poem_state (для перерисовок)
+let _heroPoemBusy = false;
+let _heroPoemTimer = null;   // тикер обратного отсчёта до конца дня
+let _heroPoemType = null;    // печатная машинка свежей строки
+
+function _heroPoemClearTimers() {
+  if (_heroPoemTimer) { clearInterval(_heroPoemTimer); _heroPoemTimer = null; }
+  if (_heroPoemType) { clearInterval(_heroPoemType); _heroPoemType = null; }
+}
+function heroVNPoemClose() {
+  _heroPoemClearTimers();
+  const el = document.getElementById('hp-vn-poem');
+  if (!el) return;
+  el.classList.remove('show');
+  el.setAttribute('aria-hidden', 'true');
+  if (_heroVNView === 'poem') _heroVNView = null;
+}
+function heroVNPoemReturn() { heroVNChoice('menu'); }
+// Шапка — тот же каркас, что у колонизации (hp-vn-col-head).
+function _heroPoemHead(en) {
+  return `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">${en ? 'Poem of the week' : 'Поэма недели'}</span>
+    <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNPoemReturn()">↩ ${en ? 'back' : 'назад'}</button>
+  </div>`;
+}
+async function heroVNPoemOpen() {
+  const el = document.getElementById('hp-vn-poem');
+  if (!el) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  _heroPoemClearTimers();
+  el.classList.add('show');
+  el.setAttribute('aria-hidden', 'false');
+  el.innerHTML = _heroPoemHead(en) +
+    `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Opening the book…' : 'Открываю книгу…'}</div></div>`;
+  try {
+    const st = await ecRpc('poem_state');
+    if (!el.classList.contains('show')) return;   // игрок успел уйти
+    _heroPoemState = st;
+    el.innerHTML = _heroPoemBuild(st, en);
+    _heroPoemAfterRender(st, true);
+  } catch (e) {
+    if (!el.classList.contains('show')) return;
+    el.innerHTML = _heroPoemHead(en) +
+      `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'The book refuses to open. Apply _vn_poem.sql?' : 'Книга не открывается. Срез _vn_poem.sql применён?'}</div></div>`;
+  }
+}
+// Проголосовать за слово дня (повторный клик по другому слову = передумал).
+async function heroVNPoemVote(wordId) {
+  if (_heroPoemBusy) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  if (_heroPoemState && !_heroPoemState.me) { toast(en ? 'Register a faction to vote' : 'Голосуют только державы — зарегистрируйте фракцию', 'err'); return; }
+  _heroPoemBusy = true;
+  try {
+    const st = await ecRpc('poem_vote', { p_word: wordId });
+    _heroPoemState = st;
+    const el = document.getElementById('hp-vn-poem');
+    if (el && el.classList.contains('show')) {
+      _heroPoemClearTimers();
+      el.innerHTML = _heroPoemBuild(st, en);
+      _heroPoemAfterRender(st, false);   // без перепечатки строк
+    }
+    toast(en ? 'Your word is cast' : 'Слово отдано', 'ok');
+  } catch (e) {
+    const m = e.message || '';
+    toast(m.includes('closed') ? (en ? 'Voting is closed for today' : 'Голосование за сегодня закрыто')
+      : m.includes('no approved faction') ? (en ? 'Register a faction to vote' : 'Голосуют только державы')
+      : (en ? 'Error: ' : 'Ошибка: ') + m, 'err');
+  } finally { _heroPoemBusy = false; }
+}
+// «дд.мм – дд.мм» диапазон недели из week_start (YYYY-MM-DD).
+function _heroPoemWeekRange(ws) {
+  const a = new Date(ws + 'T00:00:00Z');
+  if (isNaN(a)) return '';
+  const b = new Date(a); b.setUTCDate(b.getUTCDate() + 6);
+  const f = d => String(d.getUTCDate()).padStart(2, '0') + '.' + String(d.getUTCMonth() + 1).padStart(2, '0');
+  return f(a) + ' – ' + f(b);
+}
+function _heroPoemBuild(st, en) {
+  const head = _heroPoemHead(en);
+  const themes = HERO_POEM_THEMES;
+  const thIco = t => (themes[t] || themes.mixed)[0];
+  const thLbl = t => (themes[t] || themes.mixed)[en ? 2 : 1];
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+  const lines = Array.isArray(st.lines) ? st.lines : [];
+  const byDay = new Map(lines.map(l => [l.d, l]));
+  const lastResolved = lines.length ? lines[lines.length - 1].d : -1;
+
+  // ── Левая страница: сама поэма (7 слотов: строка / «сегодня» / пусто) ──
+  let pageRows = '';
+  for (let d = 0; d < 7; d++) {
+    const l = byDay.get(d);
+    if (l) {
+      const idAttr = (d === lastResolved) ? ' id="hp-vnp-lastline"' : '';
+      pageRows += `<div class="hp-vnp-row"><span class="hp-vnp-num">${ROMAN[d]}</span><span class="hp-vnp-line"${idAttr} title="${esc(thLbl(l.theme))}">${esc(l.line || '…')}</span></div>`;
+    } else if (d === st.day_idx) {
+      pageRows += `<div class="hp-vnp-row hp-vnp-today"><span class="hp-vnp-num">${ROMAN[d]}</span><span class="hp-vnp-line">${en ? '— the galaxy is choosing a word —' : '— галактика выбирает слово —'}</span></div>`;
+    } else {
+      pageRows += `<div class="hp-vnp-row hp-vnp-empty"><span class="hp-vnp-num">${ROMAN[d]}</span><span class="hp-vnp-line">· · ·</span></div>`;
+    }
+  }
+  const book = `<div class="hp-vnp-book">
+    <div class="hp-vnp-page">
+      <div class="hp-vnp-ptitle">${en ? 'SONG OF THE WEEK' : 'ПЕСНЬ НЕДЕЛИ'}</div>
+      <div class="hp-vnp-pdates">${esc(_heroPoemWeekRange(st.week_start || ''))}</div>
+      ${pageRows}
+      <div class="hp-vnp-psign">${en ? 'written by every faction of the galaxy' : 'пишется всеми державами галактики'}</div>
+    </div>
+  </div>`;
+
+  // ── Правая колонка: слово дня + эффект прошлой недели ──
+  const opts = Array.isArray(st.options) ? st.options : [];
+  const maxV = Math.max(1, ...opts.map(o => +o.votes || 0));
+  const myVote = st.my_vote || null;
+  const wordBtns = opts.map(o => {
+    const sel = (myVote === o.id) ? ' sel' : '';
+    const pct = Math.round(100 * (+o.votes || 0) / maxV);
+    return `<button class="hp-vnp-word${sel}" ${st.me ? '' : 'disabled '}onclick="event.stopPropagation();heroVNPoemVote('${jsq(o.id)}')">
+      <span class="hp-vnp-w-t">${esc(o.word)}</span>
+      <span class="hp-vnp-w-th">${thIco(o.theme)} ${esc(thLbl(o.theme))}</span>
+      <span class="hp-vnp-w-bar"><i style="width:${pct}%"></i></span>
+      <span class="hp-vnp-w-n">${+o.votes || 0}</span>
+    </button>`;
+  }).join('');
+  const myOpt = opts.find(o => o.id === myVote);
+  const preview = myOpt
+    ? `<div class="hp-vnp-preview">${en ? 'If it wins' : 'Если победит'}: <i>«${esc(myOpt.preview || '')}»</i></div>`
+    : `<div class="hp-vnp-preview dim">${st.me
+        ? (en ? 'Pick the word the poem will grow from.' : 'Выберите слово — из него вырастет строка.')
+        : (en ? 'Only factions may vote.' : 'Голосуют только зарегистрированные державы.')}</div>`;
+
+  const last = st.last || null;
+  const fx = last && last.effect ? last.effect : null;
+  const tone = fx ? (fx.tone || 'none') : 'none';
+  const fxBlock = fx
+    ? `<div class="hp-vnp-fx ${tone}">
+        <span class="hp-vnp-fx-cap">${en ? 'LAST WEEK\'S VERDICT' : 'ПРИГОВОР ПРОШЛОЙ НЕДЕЛИ'}</span>
+        <b>${thIco(fx.theme)} ${esc(fx.title || '')}</b>
+        <span class="hp-vnp-fx-d">${esc(fx.descr || '')}</span>
+      </div>`
+    : `<div class="hp-vnp-fx none"><span class="hp-vnp-fx-cap">${en ? 'LAST WEEK' : 'ПРОШЛАЯ НЕДЕЛЯ'}</span><span class="hp-vnp-fx-d">${en ? 'The first song is still being written…' : 'Первая песнь ещё только пишется…'}</span></div>`;
+  const lastPoem = (last && Array.isArray(last.lines) && last.lines.length)
+    ? `<details class="hp-vnp-last"><summary>${en ? 'Read last week\'s poem' : 'Прочесть прошлую поэму'} · ${esc(_heroPoemWeekRange(last.week_start || ''))}</summary>
+        <div class="hp-vnp-last-p">${last.lines.map(l => `<span>${esc(l.line || '')}</span>`).join('')}</div>
+      </details>`
+    : '';
+
+  const side = `<aside class="hp-vnp-side">
+    <div class="hp-vnp-cap">${en ? 'WORD OF THE DAY' : 'СЛОВО ДНЯ'} ${(st.day_idx || 0) + 1}/7 · <span id="hp-vnp-cd">—:—</span></div>
+    <div class="hp-vnp-words">${wordBtns}</div>
+    ${preview}
+    <div class="hp-vnp-total">${en ? 'factions voted today' : 'держав проголосовало сегодня'}: <b>${+st.total_votes || 0}</b></div>
+    ${fxBlock}
+    ${lastPoem}
+  </aside>`;
+
+  return head + `<div class="hp-vn-col-body hp-vnp-body">${book}${side}</div>`;
+}
+// Пост-рендер: обратный отсчёт до конца дня + печатная машинка свежей строки.
+function _heroPoemAfterRender(st, animate) {
+  // отсчёт до полуночи UTC; по нулю — перезагрузить состояние (день сменился)
+  const endAt = Date.now() + Math.max(0, +st.closes_s || 0) * 1000;
+  const tick = () => {
+    const cd = document.getElementById('hp-vnp-cd');
+    if (!cd) { _heroPoemClearTimers(); return; }
+    const left = Math.max(0, Math.floor((endAt - Date.now()) / 1000));
+    const h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60);
+    cd.textContent = '⏳ ' + h + ':' + String(m).padStart(2, '0');
+    if (left <= 0) {
+      _heroPoemClearTimers();
+      const el = document.getElementById('hp-vn-poem');
+      if (el && el.classList.contains('show')) heroVNPoemOpen();
+    }
+  };
+  tick();
+  _heroPoemTimer = setInterval(tick, 30000);
+  // свежайшая строка печатается «пером» — только при открытии книги
+  if (animate) {
+    const lastEl = document.getElementById('hp-vnp-lastline');
+    if (lastEl) {
+      const full = lastEl.textContent;
+      let pos = 0;
+      lastEl.textContent = '';
+      _heroPoemType = setInterval(() => {
+        pos++;
+        lastEl.textContent = full.slice(0, pos);
+        if (pos >= full.length) { clearInterval(_heroPoemType); _heroPoemType = null; }
+      }, 34);
+    }
+  }
+}
+
 // Кнопка «назад» из режима рассказа — вызывает запомненный обработчик возврата.
 function heroVNDoBack() { if (_heroVNCtl && typeof _heroVNCtl.back === 'function') _heroVNCtl.back(); }
 // «Главное меню» новеллы для НЕзарегистрированных (аноним / залогинен без фракции):
@@ -3001,6 +3632,8 @@ function heroVNInit() {
       ['events', '📰 ' + (en ? 'Sector events' : 'События сектора')],
       ['idx',    '📈 ' + (en ? "How's the exchange?" : 'Что там на бирже?')],
       ['ach',    '🏆 ' + (en ? "Today's achievements" : 'Достижения за сегодня')],
+      ['colony', '🌍 ' + (en ? 'Colonization' : 'Колонизация')],
+      ['poem',   '🖋 ' + (en ? 'Poem of the week' : 'Поэма недели')],
     ];
     choicesEl.innerHTML = opts.map(([k, l]) =>
       `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');

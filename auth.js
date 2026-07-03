@@ -64,9 +64,28 @@ async function init() {
       }
     } else if (_oq.get('code')) {
       const { error: _oerr } = await sb.auth.exchangeCodeForSession(_oq.get('code'));
+      // Код одноразовый — сразу убираем из URL, чтобы обновление страницы не
+      // запускало повторный обмен тем же ?code= (верификатор уже израсходован).
       history.replaceState(null, '', location.pathname + location.hash);
-      if (_oerr) toast('Не удалось завершить вход: ' + _oerr.message, 'err');
-      else toast('Добро пожаловать!', 'ok');
+      if (_oerr) {
+        // «PKCE code verifier not found» может быть БЕЗОБИДНЫМ: повторный обмен
+        // тем же кодом, когда вход уже удался (init отработал дважды / перезагрузка
+        // с кодом в URL). Если сессия при этом ЕСТЬ — вход состоялся, не пугаем.
+        let _hasSess = false;
+        try { const { data: _sd } = await sb.auth.getSession(); _hasSess = !!_sd?.session; } catch (e) {}
+        if (_hasSess) {
+          toast('Добро пожаловать!', 'ok');
+        } else {
+          // Реальная неудача (сессии нет): не показываем сырой технический текст —
+          // почти всегда причина в том, что вход начали и завершили в разных
+          // браузерах/на разных адресах (www ↔ без www), и хранилище пусто.
+          toast(lang === 'ru'
+            ? 'Не удалось завершить вход. Откройте страницу входа и попробуйте ещё раз в том же браузере.'
+            : 'Sign-in could not be completed. Please try again in the same browser.', 'err');
+        }
+      } else {
+        toast('Добро пожаловать!', 'ok');
+      }
     }
   } catch(e) { console.warn('[wiki] oauth exchange failed:', e); }
 

@@ -282,33 +282,32 @@
   /* без анимации появления на старте — новелла должна быть СРАЗУ готова, а не
      «выезжать» при каждом повторном рендере (mid-dialog смены ставят animation инлайн). */
 }
-/* диалоговое окно — внизу, поверх всего; полноценный VN-текстбокс */
+/* диалоговое окно — внизу, поверх всего; киберпанк-панель со срезанными углами.
+   Само окно НЕ клипаем (плашка имени «нависает» над верхней кромкой), срезы несут
+   два слоя-подложки: ::before = цвет «обводки», ::after = инсет-фон + левый акцент. */
 .hp-vn-box{
   position:absolute;z-index:6;left:clamp(12px,3.5vw,40px);right:clamp(12px,3.5vw,40px);
   bottom:clamp(12px,3vh,24px);
   padding:24px 24px 14px;cursor:pointer;
-  /* overflow:visible — плашка-табличка имени «нависает» над верхней кромкой */
   overflow:visible;
-  background:linear-gradient(180deg, hsl(216 18% 12% / .80), hsl(216 22% 8% / .84));
-  border: var(--deco-frame-w, 1px) solid color-mix(in srgb,var(--gd,#3a9bdc) 24%, var(--w2,rgba(255,255,255,.10)));
-  border-left: var(--deco-accent-w-lg, 3px) solid var(--gd,#3a9bdc);
-  border-radius:var(--radius-sm);
-  box-shadow:0 18px 48px -16px rgba(0,0,0,.7), 0 0 0 1px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
-  backdrop-filter:saturate(1.15) blur(10px);
+  background:transparent;border:none;border-radius:0;
   /* без анимации появления — окно сразу на месте (не дёргается при перерендере) */
 }
-/* верхняя «техно»-линия по кромке окна */
 .hp-vn-box::before{
-  content:'';position:absolute;top:-1px;left:40px;right:16px;height:1px;z-index:2;pointer-events:none;
-  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--gd,#3a9bdc) 65%,transparent) 40%,transparent);
-  opacity:.75;
+  content:'';position:absolute;inset:0;z-index:-2;pointer-events:none;
+  background:linear-gradient(180deg,
+    color-mix(in srgb,var(--gd,#3a9bdc) 52%,transparent),
+    color-mix(in srgb,var(--gd,#3a9bdc) 20%,rgba(255,255,255,.08)));
+  clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));
+  filter:drop-shadow(0 18px 40px rgba(0,0,0,.6));
 }
-/* угловая засечка снизу-справа — лёгкий sci-fi-акцент рамки */
 .hp-vn-box::after{
-  content:'';position:absolute;right:-1px;bottom:-1px;width:22px;height:22px;z-index:2;pointer-events:none;
-  border-right:2px solid color-mix(in srgb,var(--gd,#3a9bdc) 50%,transparent);
-  border-bottom:2px solid color-mix(in srgb,var(--gd,#3a9bdc) 50%,transparent);
-  border-bottom-right-radius:var(--radius-sm);opacity:.6;
+  content:'';position:absolute;inset:1px;z-index:-1;pointer-events:none;
+  background:
+    linear-gradient(90deg,var(--gd,#3a9bdc) 0,var(--gd,#3a9bdc) 3px,transparent 3px),
+    linear-gradient(180deg, hsl(216 18% 12% / .82), hsl(216 22% 8% / .86));
+  clip-path:polygon(0 0,calc(100% - 17px) 0,100% 17px,100% 100%,17px 100%,0 calc(100% - 17px));
+  backdrop-filter:saturate(1.15) blur(10px);
 }
 .hp-vn-box:focus-visible{outline:1px solid var(--gd,#3a9bdc);outline-offset:2px}
 /* «имя говорящего» — плавающая угловатая табличка-таб на верхней кромке окна */
@@ -318,9 +317,9 @@
   padding:7px 20px 7px 14px;
   font-family: var(--font-display);font-weight:700;font-size:clamp(13px,1.5vw,16px);
   letter-spacing: calc(.16em * var(--deco-ls-mult, 1));color:#f2f9ff;text-transform:uppercase;line-height:1;
+  /* срез + border несовместимы (правило форм-языка) — табличка без обводки */
   background:linear-gradient(135deg, var(--gd,#3a9bdc), color-mix(in srgb,var(--gd,#3a9bdc) 55%, #0a0d12));
-  border: var(--deco-frame-w, 1px) solid color-mix(in srgb,var(--gdl,#5fb0e6) 55%,transparent);
-  border-bottom:none;
+  border:none;
   clip-path:polygon(0 0, 100% 0, calc(100% - 13px) 100%, 0 100%);
   box-shadow:0 -2px 16px rgba(46,155,224,.30), 0 5px 12px -5px rgba(0,0,0,.65);
   text-shadow:0 1px 2px rgba(0,0,0,.45);
@@ -352,55 +351,84 @@
 }
 /* кластер навигации — реальные кнопки «назад» / «пропустить·снова» рядом */
 .hp-vn-ctrl{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+/* кнопки навигации — гранёные чипы (клип + подложка-«обводка» + инсет-фон, без border) */
 .hp-vn-btn{
-  cursor:pointer;pointer-events:auto;
+  position:relative;z-index:0;cursor:pointer;pointer-events:auto;
   font-family: var(--font-mono);font-size:10.5px;letter-spacing: calc(.14em * var(--deco-ls-mult, 1));
   text-transform:uppercase;line-height:1;
   color:var(--t3,#6a7a88);
-  background:transparent;
-  border: var(--deco-frame-w, 1px) solid var(--w2,rgba(255,255,255,.10));border-radius:3px;
-  padding:7px 12px;
-  transition:background var(--duration-fast),border-color var(--duration-fast),color var(--duration-fast);
+  background:transparent;border:none;border-radius:0;
+  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+  padding:8px 13px;
+  transition:color var(--duration-fast);
 }
-.hp-vn-btn:hover{background:var(--w1,rgba(255,255,255,.06));border-color:var(--w3,rgba(255,255,255,.18));color:var(--t1,#eaf4ff)}
+.hp-vn-btn::before{content:'';position:absolute;inset:0;z-index:-2;background:var(--w2,rgba(255,255,255,.10))}
+.hp-vn-btn::after{
+  content:'';position:absolute;inset:1px;z-index:-1;background:hsl(216 20% 8% / .8);
+  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+  transition:background var(--duration-fast);
+}
+.hp-vn-btn:hover{color:var(--t1,#eaf4ff)}
+.hp-vn-btn:hover::after{background:hsl(216 20% 13% / .9)}
 .hp-vn-btn[hidden]{display:none}
 /* «пропустить/снова» — основное действие, акцентом */
-.hp-vn-next{color:var(--gdl,#5fb0e6);border-color:color-mix(in srgb,var(--gd,#3a9bdc) 35%,transparent)}
-.hp-vn-next:hover{color:#fff;border-color:var(--gd,#3a9bdc);background:color-mix(in srgb,var(--gd,#3a9bdc) 12%,transparent)}
+.hp-vn-next{color:var(--gdl,#5fb0e6)}
+.hp-vn-next::before{background:color-mix(in srgb,var(--gd,#3a9bdc) 40%,transparent)}
+.hp-vn-next:hover{color:#fff}
+.hp-vn-next:hover::after{background:color-mix(in srgb,var(--gd,#3a9bdc) 16%,hsl(216 20% 8%))}
 .hp-vn-foot .hp-hero-cta{
   margin:0;pointer-events:auto;
   padding:12px 28px;font-size:13.5px;letter-spacing: calc(2.5px * var(--deco-ls-mult, 1));
-  box-shadow:0 0 20px var(--gds), 0 6px 18px rgba(0,0,0,.5);
-  animation:hpVnCtaPulse 2.6s ease-in-out infinite;
+  /* box-shadow срезался бы клипом CTA — свечение через drop-shadow по форме */
+  box-shadow:none;
+  filter:drop-shadow(0 0 14px var(--gds)) drop-shadow(0 6px 14px rgba(0,0,0,.45));
 }
-.hp-vn-foot .hp-hero-cta:hover{animation:none}
-@keyframes hpVnCtaPulse{
-  0%,100%{box-shadow:0 0 16px var(--gds), 0 6px 18px rgba(0,0,0,.5)}
-  50%{box-shadow:0 0 34px var(--gdd), 0 6px 22px rgba(0,0,0,.55)}
-}
+.hp-vn-foot .hp-hero-cta:hover{filter:drop-shadow(0 0 22px var(--gdd)) drop-shadow(0 8px 16px rgba(0,0,0,.5))}
 
-/* ── Выбор в диалоговом окне новеллы — плоский список строк ── */
+/* ── Выбор в диалоговом окне новеллы — на десктопе ГОРИЗОНТАЛЬНАЯ сетка гранёных
+   чипов (вертикальный список удобен только на телефоне — там и остаётся, см. медиа).
+   Отделён от реплики: воздух сверху + линия-разделитель со светящейся засечкой. ── */
 .hp-vn-choices{
-  display:flex;flex-direction:column;margin-top:11px;
-  border-top: var(--deco-frame-w, 1px) solid var(--w1,rgba(255,255,255,.06));
-  max-height:148px;overflow:auto;scrollbar-width:thin;
+  position:relative;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:9px;
+  margin-top:18px;padding-top:14px;
+  border-top: var(--deco-frame-w, 1px) solid color-mix(in srgb,var(--gd,#3a9bdc) 32%, var(--w1,rgba(255,255,255,.06)));
+  max-height:170px;overflow:auto;scrollbar-width:thin;
 }
-.hp-vn-choices:empty{margin-top:0;border-top:none}
+/* короткая яркая засечка в начале разделителя — «здесь начинаются действия» */
+.hp-vn-choices::before{
+  content:'';position:absolute;top:-1px;left:0;width:42px;height:2px;pointer-events:none;
+  background:var(--gd,#3a9bdc);border-radius:2px;
+  box-shadow:0 0 8px color-mix(in srgb,var(--gd,#3a9bdc) 80%,transparent);
+}
+.hp-vn-choices:empty{margin-top:0;padding-top:0;border-top:none}
+.hp-vn-choices:empty::before{display:none}
 .hp-vn-choices::-webkit-scrollbar{width:5px}
 .hp-vn-choices::-webkit-scrollbar-thumb{background:var(--w2,rgba(255,255,255,.10));border-radius:var(--radius-sm)}
+/* вариант ответа — гранёный чип: клип по срезам, «обводка» и фон = слои-подложки */
 .hp-vn-choice{
-  cursor:pointer;pointer-events:auto;display:flex;align-items:center;gap:10px;width:100%;
-  background:transparent;border:none;border-bottom: var(--deco-frame-w, 1px) solid var(--w1,rgba(255,255,255,.06));
-  color:var(--t2,#b8c4cf);padding:10px 4px;text-align:left;
+  position:relative;z-index:0;cursor:pointer;pointer-events:auto;
+  display:flex;align-items:center;gap:10px;width:100%;
+  background:transparent;border:none;border-radius:0;
+  clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+  color:var(--t2,#b8c4cf);padding:11px 14px;text-align:left;
   font-family: var(--font-display);font-size:clamp(13px,1.35vw,15px);font-weight:600;
-  letter-spacing: calc(.01em * var(--deco-ls-mult, 1));transition:color var(--duration-fast),background var(--duration-fast),padding-left var(--duration-fast);
+  letter-spacing: calc(.01em * var(--deco-ls-mult, 1));transition:color var(--duration-fast);
 }
-.hp-vn-choice:hover{color:var(--t1,#eaf4ff);background:color-mix(in srgb,var(--gd,#3a9bdc) 7%,transparent);padding-left:10px}
+.hp-vn-choice::before{content:'';position:absolute;inset:0;z-index:-2;background:color-mix(in srgb,var(--gd,#3a9bdc) 30%,var(--w1,rgba(255,255,255,.06)))}
+.hp-vn-choice::after{
+  content:'';position:absolute;inset:1px;z-index:-1;background:hsl(216 24% 8% / .85);
+  clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+  transition:background var(--duration-fast);
+}
+.hp-vn-choice:hover{color:var(--t1,#eaf4ff)}
+.hp-vn-choice:hover::after{background:color-mix(in srgb,var(--gd,#3a9bdc) 14%,hsl(216 24% 8%))}
 /* запись в списке (уровень 2) — герб/иконка + текст в одну строку с обрезкой */
 .hp-vn-choice-item{font-weight:500;font-size:clamp(12px,1.25vw,14px)}
 .hp-vn-choice-item img,.hp-vn-choice-item .fn-fr-flag{width:15px;height:15px;object-fit:contain;flex-shrink:0;border-radius:3px;opacity:0.9}
 .hp-vn-choice-it-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hp-vn-choice-empty{
+  grid-column:1/-1;
   color:var(--t3,#9fb3c4);font-family:'Inter',sans-serif;font-size:13px;
   padding:9px 4px;
 }
@@ -410,12 +438,18 @@
   position:absolute;z-index:7;
   left:clamp(12px,4vw,46px);right:clamp(12px,4vw,46px);
   bottom:calc(clamp(14px,4vh,30px) + 156px);
-  background:linear-gradient(180deg,rgba(9,13,20,.9),rgba(6,9,14,.95));
-  border: var(--deco-frame-w, 1px) solid rgba(46,155,224,.5);border-radius:var(--radius-md);
-  box-shadow:0 12px 40px rgba(0,0,0,.55), 0 0 30px rgba(46,155,224,.16);
+  /* гранёная панель: клип по срезам, «обводка» = ::before, фон = ::after */
+  background:transparent;border:none;border-radius:0;
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));
   backdrop-filter:blur(4px);overflow:hidden;
   opacity:0;transform:translateY(10px);pointer-events:none;
   transition:opacity var(--duration-normal) ease,transform var(--duration-normal) ease;
+}
+.hp-vn-idx::before{content:'';position:absolute;inset:0;z-index:-2;background:rgba(46,155,224,.5)}
+.hp-vn-idx::after{
+  content:'';position:absolute;inset:1px;z-index:-1;
+  background:linear-gradient(180deg,rgba(9,13,20,.9),rgba(6,9,14,.95));
+  clip-path:polygon(0 0,calc(100% - 13px) 0,100% 13px,100% 100%,13px 100%,0 calc(100% - 13px));
 }
 .hp-vn-idx.show{opacity:1;transform:none;pointer-events:auto}
 /* Личная лента позиций (маржа/фьючерсы/опционы) над котировками компаний */
@@ -426,9 +460,312 @@
   border-bottom: var(--deco-frame-w, 1px) solid rgba(46,155,224,.22);background:rgba(46,155,224,.06);
 }
 
+/* ── Новелла: режим «Колонизация» — киберпанк-оверлей карты границ державы ──
+   Форма-язык: срезанные углы (клипы), обводка = слой-подложка (::before цвет +
+   ::after инсет-фон), НЕ border — border с clip-path несовместим. Минимум
+   эффектов: два акцента (голубой --gd интерфейса + зелёный экспансии). */
+.hp-vn-colony{
+  position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;
+  background:linear-gradient(180deg, hsl(216 26% 6% / .93), hsl(216 30% 4% / .96));
+  backdrop-filter:saturate(1.1) blur(6px);
+  opacity:0;pointer-events:none;transition:opacity var(--duration-normal) ease;
+  border-radius:inherit;overflow:hidden;
+  --cyb-cut:14px;
+  --cyb-line:color-mix(in srgb,var(--gd,#3a9bdc) 32%,transparent);
+}
+.hp-vn-colony.show{opacity:1;pointer-events:auto}
+/* Общий каркас гранёной панели: клип по срезам + подложка-«обводка» + инсет-фон */
+.hp-vn-col-main,.hp-vn-col-dossier,.hp-vn-col-mini,.hp-vn-col-info,.hp-vn-col-claimstat{
+  position:relative;z-index:0;border:none;border-radius:0;background:transparent;
+  clip-path:polygon(0 0,calc(100% - var(--cyb-cut)) 0,100% var(--cyb-cut),100% 100%,var(--cyb-cut) 100%,0 calc(100% - var(--cyb-cut)));
+}
+.hp-vn-col-main::before,.hp-vn-col-dossier::before,.hp-vn-col-mini::before,.hp-vn-col-info::before,.hp-vn-col-claimstat::before{
+  content:"";position:absolute;inset:0;z-index:-2;background:var(--cyb-bd,var(--cyb-line));
+}
+.hp-vn-col-main::after,.hp-vn-col-dossier::after,.hp-vn-col-mini::after,.hp-vn-col-info::after,.hp-vn-col-claimstat::after{
+  content:"";position:absolute;inset:1px;z-index:-1;
+  background:var(--cyb-bg,hsl(216 22% 8% / .88));
+  clip-path:polygon(0 0,calc(100% - var(--cyb-cut)) 0,100% var(--cyb-cut),100% 100%,var(--cyb-cut) 100%,0 calc(100% - var(--cyb-cut)));
+}
+.hp-vn-col-head{
+  position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px clamp(14px,2.6vw,26px);
+  border-bottom: var(--deco-frame-w, 1px) solid var(--cyb-line);
+  background:linear-gradient(90deg, color-mix(in srgb,var(--gd,#3a9bdc) 10%,transparent), transparent 70%);
+}
+/* Акцент-сегмент на нижней кромке шапки — скошенный «шов» */
+.hp-vn-col-head::after{
+  content:"";position:absolute;left:0;bottom:-1px;width:clamp(90px,14vw,160px);height:2px;
+  background:var(--gd,#3a9bdc);clip-path:polygon(0 0,100% 0,calc(100% - 8px) 100%,0 100%);
+}
+.hp-vn-col-title{
+  display:flex;align-items:center;gap:10px;
+  font-family: var(--font-display);font-weight:800;text-transform:uppercase;
+  font-size:clamp(14px,1.7vw,18px);letter-spacing: calc(.14em * var(--deco-ls-mult, 1));color:#eaf6ff;
+}
+/* Угловой маркер-треугольник вместо эмодзи */
+.hp-vn-col-title::before{
+  content:"";flex:0 0 auto;width:11px;height:11px;
+  background:var(--gd,#3a9bdc);clip-path:polygon(0 0,100% 0,100% 100%);
+}
+.hp-vn-col-x{
+  position:relative;z-index:0;cursor:pointer;pointer-events:auto;
+  font-family: var(--font-mono);font-size:11px;
+  letter-spacing: calc(.14em * var(--deco-ls-mult, 1));text-transform:uppercase;
+  color:var(--gdl,#5fb0e6);background:transparent;border:none;border-radius:0;padding:8px 14px;
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:color var(--duration-fast);
+}
+.hp-vn-col-x::before{content:"";position:absolute;inset:0;z-index:-2;background:color-mix(in srgb,var(--gd,#3a9bdc) 45%,transparent)}
+.hp-vn-col-x::after{
+  content:"";position:absolute;inset:1px;z-index:-1;background:hsl(216 24% 7% / .9);
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:background var(--duration-fast);
+}
+.hp-vn-col-x:hover{color:#fff}
+.hp-vn-col-x:hover::after{background:color-mix(in srgb,var(--gd,#3a9bdc) 22%,hsl(216 24% 7%))}
+.hp-vn-col-body{flex:1;min-height:0;display:flex;gap:14px;padding:14px clamp(14px,2.6vw,26px)}
+.hp-vn-col-main{
+  flex:1 1 auto;min-width:0;overflow:hidden;
+  --cyb-bg:radial-gradient(circle at 50% 40%, rgba(20,32,48,.55), rgba(6,9,14,.85));
+}
+.hp-vn-col-main svg{width:100%;height:100%;display:block}
+.hp-vn-col-side{flex:0 0 clamp(190px,27%,290px);display:flex;flex-direction:column;gap:12px;min-height:0}
+/* Досье моего государства — герб + название + правление + столица (шапка панели) */
+.hp-vn-col-dossier{
+  display:flex;align-items:center;gap:11px;padding:11px 12px 11px 15px;
+  --cyb-cut:10px;
+  --cyb-bd:color-mix(in srgb,var(--gd,#3a9bdc) 42%,transparent);
+  --cyb-bg:linear-gradient(90deg,var(--gd,#3a9bdc) 0,var(--gd,#3a9bdc) 3px,transparent 3px),
+           linear-gradient(135deg, color-mix(in srgb,var(--gd,#3a9bdc) 10%, hsl(216 20% 9% / .94)), hsl(216 22% 8% / .95));
+}
+.hp-vn-col-crest{
+  position:relative;z-index:0;flex:0 0 auto;width:46px;height:46px;
+  display:flex;align-items:center;justify-content:center;padding:2px;
+  font-size:22px;color:var(--fc,#5fb0e6);background:transparent;border:none;border-radius:0;box-shadow:none;
+  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+}
+.hp-vn-col-crest::before{content:"";position:absolute;inset:0;z-index:-2;background:color-mix(in srgb,var(--fc,#5fb0e6) 60%,transparent)}
+.hp-vn-col-crest::after{
+  content:"";position:absolute;inset:2px;z-index:-1;
+  background:radial-gradient(circle at 50% 32%, color-mix(in srgb,var(--fc,#5fb0e6) 24%,transparent), transparent 70%), #0e1420;
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+}
+.hp-vn-col-crest img{
+  width:100%;height:100%;object-fit:cover;display:block;
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+}
+.hp-vn-col-idnt{min-width:0;display:flex;flex-direction:column;gap:2px}
+.hp-vn-col-fname{
+  font-family:var(--font-display);font-weight:800;font-size:15px;line-height:1.1;color:#eaf6ff;
+  text-transform:uppercase;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.hp-vn-col-fsub{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3,#8296a8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hp-vn-col-fcap{font-family:var(--font-display);font-size:11px;color:var(--t2,#b8c4cf)}
+.hp-vn-col-fcap b{color:#eaf6ff}
+.hp-vn-col-mini{
+  overflow:hidden;aspect-ratio:4/3;--cyb-cut:10px;
+  --cyb-bd:var(--w2,rgba(255,255,255,.1));
+  --cyb-bg:radial-gradient(circle at 50% 40%, rgba(16,24,38,.55), rgba(5,8,12,.85));
+}
+.hp-vn-col-mini svg{width:100%;height:100%;display:block}
+.hp-vn-col-mini-cap,.hp-vn-col-info-cap{
+  position:absolute;top:6px;left:8px;z-index:1;pointer-events:none;
+  font-family: var(--font-mono);font-size:9px;letter-spacing: calc(.16em * var(--deco-ls-mult, 1));
+  text-transform:uppercase;color:var(--gdl,#5fb0e6);opacity:.85;
+}
+.hp-vn-col-info{
+  flex:1;min-height:0;display:flex;flex-direction:column;
+  padding:26px 12px 12px;--cyb-cut:10px;
+  --cyb-bd:var(--w2,rgba(255,255,255,.1));
+  --cyb-bg:hsl(216 22% 8% / .66);
+}
+.hp-vn-col-info-cap{position:static;display:block;flex:0 0 auto;margin:-14px 0 9px}
+.hp-vn-col-scroll{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
+.hp-vn-col-stat{
+  display:flex;align-items:baseline;gap:8px;margin-bottom:10px;
+  font-family: var(--font-display);
+}
+.hp-vn-col-stat b{font-size:clamp(20px,2.4vw,26px);color:#eaf6ff;line-height:1}
+.hp-vn-col-stat span{font-size:11px;color:var(--t3,#8296a8);text-transform:uppercase;letter-spacing:.08em}
+/* Статус пула захватов (доступно / перезарядка) */
+.hp-vn-col-claimstat{
+  margin:4px 0 12px;padding:9px 11px;--cyb-cut:9px;
+  --cyb-bd:var(--w2,rgba(255,255,255,.1));
+  font-family: var(--font-display);font-size:12px;line-height:1.5;color:var(--t2,#b8c4cf);
+}
+.hp-vn-col-claimstat b{color:#eaf6ff;font-weight:700}
+.hp-vn-col-claimstat span{color:var(--t3,#8296a8);font-family:var(--font-mono);font-size:10.5px}
+.hp-vn-col-claimstat.ok{--cyb-bd:color-mix(in srgb,#5fe0a0 45%,transparent);--cyb-bg:color-mix(in srgb,#5fe0a0 9%,hsl(216 22% 8%))}
+.hp-vn-col-claimstat.cd{--cyb-bd:color-mix(in srgb,var(--gd,#3a9bdc) 35%,transparent);--cyb-bg:color-mix(in srgb,var(--gd,#3a9bdc) 7%,hsl(216 22% 8%))}
+/* Список смежных ничьих систем + кнопка колонизации */
+.hp-vn-col-crows{display:flex;flex-direction:column;gap:1px}
+.hp-vn-col-crow{
+  display:flex;align-items:center;gap:10px;padding:8px 2px;
+  border-bottom: var(--deco-frame-w, 1px) solid var(--w1,rgba(255,255,255,.05));
+  font-family: var(--font-display);font-size:13px;color:var(--t2,#b8c4cf);
+}
+.hp-vn-col-titem-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hp-vn-col-cbtn{
+  flex:0 0 auto;cursor:pointer;pointer-events:auto;display:flex;flex-direction:column;align-items:center;line-height:1.15;
+  font-family: var(--font-mono);letter-spacing: calc(.05em * var(--deco-ls-mult, 1));
+  color:#08130d;background:#5fe0a0;border:none;border-radius:0;padding:6px 12px;font-weight:700;white-space:nowrap;
+  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+  transition:filter var(--duration-fast);
+}
+.hp-vn-col-cbtn-l{font-size:10px}
+.hp-vn-col-cbtn-c{font-size:9px;opacity:.72}
+.hp-vn-col-cbtn:hover:not(:disabled){filter:brightness(1.12)}
+.hp-vn-col-cbtn:disabled{cursor:not-allowed;background:var(--w2,rgba(255,255,255,.10));color:var(--t3,#8296a8)}
+.hp-vn-col-empty{
+  color:var(--t3,#9fb3c4);font-family:'Inter',sans-serif;font-size:13.5px;line-height:1.6;
+  display:flex;align-items:center;justify-content:center;height:100%;text-align:center;padding:20px;
+}
+
+/* ── Новелла: «Поэма недели» — общегалактический стих (DDLC-вайб).
+   Слева «бумажная» страница книги (тёплая бумага поверх тёмного — единственный
+   светлый акцент), справа голосование за слово дня. Каркас/шапка переиспользуют
+   hp-vn-col-*; срезанные углы = слой-подложка, НЕ border. */
+.hp-vn-poem{
+  position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;
+  background:linear-gradient(180deg, hsl(216 26% 6% / .93), hsl(216 30% 4% / .96));
+  backdrop-filter:saturate(1.1) blur(6px);
+  opacity:0;pointer-events:none;transition:opacity var(--duration-normal) ease;
+  border-radius:inherit;overflow:hidden;
+  --cyb-cut:14px;
+  --cyb-line:color-mix(in srgb,var(--gd,#3a9bdc) 32%,transparent);
+}
+.hp-vn-poem.show{opacity:1;pointer-events:auto}
+.hp-vnp-body{overflow:auto;scrollbar-width:thin}
+/* Страница книги: обводка = ::before (тёплый кант), бумага = ::after */
+.hp-vnp-book{flex:1 1 auto;min-width:0;display:flex}
+.hp-vnp-page{
+  position:relative;z-index:0;flex:1;min-width:0;display:flex;flex-direction:column;
+  padding:20px clamp(18px,3vw,42px) 16px;
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));
+}
+.hp-vnp-page::before{content:"";position:absolute;inset:0;z-index:-2;background:rgba(216,196,156,.6)}
+.hp-vnp-page::after{
+  content:"";position:absolute;inset:1px;z-index:-1;
+  background:linear-gradient(160deg,#f2e9d2,#e7dcbe 70%,#dfd2b0);
+  clip-path:polygon(0 0,calc(100% - 13px) 0,100% 13px,100% 100%,13px 100%,0 calc(100% - 13px));
+}
+.hp-vnp-ptitle{
+  font-family:var(--font-display);font-weight:800;font-size:13px;letter-spacing:.22em;
+  color:#5a4c32;text-align:center;
+}
+.hp-vnp-pdates{
+  font-family:var(--font-mono);font-size:9.5px;letter-spacing:.14em;color:#8a7a58;
+  text-align:center;margin:3px 0 14px;
+}
+.hp-vnp-row{display:flex;align-items:baseline;gap:12px;padding:5px 0;min-height:26px}
+.hp-vnp-num{flex:0 0 24px;text-align:right;font-family:var(--font-mono);font-size:9.5px;color:#a08c60}
+.hp-vnp-line{
+  font-family:Georgia,'Times New Roman',serif;font-style:italic;
+  font-size:clamp(13.5px,1.6vw,16.5px);line-height:1.45;color:#3b3226;
+}
+.hp-vnp-row.hp-vnp-today .hp-vnp-line{color:#8a7a58;font-size:12.5px;letter-spacing:.04em}
+.hp-vnp-row.hp-vnp-empty .hp-vnp-line{color:#c4b48c;letter-spacing:.3em}
+.hp-vnp-psign{
+  margin-top:auto;padding-top:14px;text-align:right;
+  font-family:Georgia,serif;font-style:italic;font-size:11px;color:#a08c60;
+}
+/* Правая колонка: слово дня, счётчики, эффект */
+.hp-vnp-side{flex:0 0 clamp(210px,30%,300px);display:flex;flex-direction:column;gap:10px;min-height:0;overflow:auto;scrollbar-width:thin}
+.hp-vnp-cap{
+  font-family:var(--font-mono);font-size:10px;letter-spacing: calc(.16em * var(--deco-ls-mult, 1));
+  text-transform:uppercase;color:var(--gdl,#5fb0e6);
+}
+.hp-vnp-words{display:flex;flex-direction:column;gap:6px}
+.hp-vnp-word{
+  position:relative;z-index:0;cursor:pointer;border:none;border-radius:0;background:transparent;
+  display:grid;grid-template-columns:1fr auto;grid-template-areas:"w th" "bar n";
+  align-items:center;column-gap:10px;row-gap:5px;padding:9px 12px;text-align:left;
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:filter var(--duration-fast);
+}
+.hp-vnp-word::before{content:"";position:absolute;inset:0;z-index:-2;background:var(--w2,rgba(255,255,255,.12))}
+.hp-vnp-word::after{
+  content:"";position:absolute;inset:1px;z-index:-1;background:hsl(216 22% 9% / .92);
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+}
+.hp-vnp-word:hover:not(:disabled){filter:brightness(1.18)}
+.hp-vnp-word:disabled{cursor:not-allowed;opacity:.6}
+.hp-vnp-word.sel::before{background:var(--gd,#3a9bdc)}
+.hp-vnp-word.sel::after{background:color-mix(in srgb,var(--gd,#3a9bdc) 14%,hsl(216 22% 9%))}
+.hp-vnp-w-t{grid-area:w;font-family:var(--font-display);font-weight:700;font-size:14.5px;color:#eaf6ff}
+.hp-vnp-w-th{grid-area:th;font-family:var(--font-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3,#8296a8);white-space:nowrap}
+.hp-vnp-w-bar{grid-area:bar;height:3px;background:var(--w1,rgba(255,255,255,.06));overflow:hidden}
+.hp-vnp-w-bar i{display:block;height:100%;background:var(--gd,#3a9bdc);transition:width var(--duration-normal) ease}
+.hp-vnp-w-n{grid-area:n;font-family:var(--font-mono);font-size:10px;color:var(--t3,#8296a8);text-align:right;min-width:18px}
+.hp-vnp-preview{
+  font-family:Georgia,serif;font-size:12px;line-height:1.5;color:var(--t2,#b8c4cf);
+  padding:8px 10px;border-left:2px solid var(--gd,#3a9bdc);background:hsl(216 22% 9% / .5);
+}
+.hp-vnp-preview.dim{border-left-color:var(--w2,rgba(255,255,255,.12));color:var(--t3,#8296a8)}
+.hp-vnp-total{font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;color:var(--t3,#8296a8)}
+.hp-vnp-total b{color:#eaf6ff}
+/* Приговор недели: баф — зелёный, дебаф — красный, пусто — серый (акцент кромкой) */
+.hp-vnp-fx{
+  display:flex;flex-direction:column;gap:4px;padding:9px 11px;margin-top:2px;
+  border-left:2px solid var(--w2,rgba(255,255,255,.12));background:hsl(216 22% 9% / .5);
+  font-family:var(--font-display);font-size:12px;line-height:1.45;color:var(--t2,#b8c4cf);
+}
+.hp-vnp-fx b{color:#eaf6ff;font-size:13px}
+.hp-vnp-fx-cap{font-family:var(--font-mono);font-size:8.5px;letter-spacing:.16em;color:var(--t3,#8296a8)}
+.hp-vnp-fx-d{font-size:11.5px;color:var(--t3,#9fb3c4)}
+.hp-vnp-fx.good{border-left-color:#5fe0a0}
+.hp-vnp-fx.good b{color:#5fe0a0}
+.hp-vnp-fx.bad{border-left-color:#e0705f}
+.hp-vnp-fx.bad b{color:#e0705f}
+.hp-vnp-last summary{
+  cursor:pointer;font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;
+  color:var(--t3,#8296a8);padding:4px 0;
+}
+.hp-vnp-last summary:hover{color:var(--gdl,#5fb0e6)}
+.hp-vnp-last-p{display:flex;flex-direction:column;gap:3px;padding:8px 0 4px}
+.hp-vnp-last-p span{font-family:Georgia,serif;font-style:italic;font-size:12px;line-height:1.45;color:var(--t2,#b8c4cf)}
+@media (max-width:960px){
+  .hp-vnp-side{flex:0 0 clamp(190px,34%,240px)}
+}
+@media (max-width:640px){
+  .hp-vn-poem{position:relative;inset:auto;border-radius:var(--radius-sm)}
+  .hp-vn-poem:not(.show){display:none}
+  .hp-vnp-body{flex-direction:column;gap:12px;padding:12px}
+  .hp-vnp-book{flex:0 0 auto}
+  .hp-vnp-page{padding:16px 16px 12px}
+  .hp-vnp-side{flex:0 0 auto;overflow:visible}
+}
+
+/* ── Планшет/узкий десктоп: панель уже, но всё ещё сбоку ── */
+@media (max-width:960px){
+  .hp-vn-col-side{flex:0 0 clamp(160px,32%,220px)}
+}
+/* ── Телефон: карта сверху во всю ширину, обзор+экспансия — колонкой под ней ── */
+@media (max-width:640px){
+  .hp-vn-colony{position:relative;inset:auto;border-radius:var(--radius-sm)}
+  .hp-vn-colony:not(.show){display:none}
+  .hp-vn-col-head{padding:11px 14px}
+  .hp-vn-col-title{font-size:15px}
+  .hp-vn-col-body{flex-direction:column;gap:12px;padding:12px;overflow:auto;scrollbar-width:thin}
+  .hp-vn-col-main{flex:0 0 auto;height:46vh;min-height:240px}
+  .hp-vn-col-side{flex:0 0 auto;flex-direction:column;gap:12px}
+  .hp-vn-col-mini{aspect-ratio:16/7}
+  .hp-vn-col-info{flex:0 0 auto}
+  .hp-vn-col-scroll{overflow:visible}
+  .hp-vn-col-stat b{font-size:24px}
+  /* строку колонизации разворачиваем: имя сверху, кнопка на всю ширину */
+  .hp-vn-col-crow{flex-wrap:wrap;gap:6px 10px;padding:10px 2px}
+  .hp-vn-col-cbtn{flex:1 1 100%;flex-direction:row;justify-content:center;gap:8px;padding:9px 12px}
+  .hp-vn-col-cbtn-l{font-size:11px}
+  .hp-vn-col-cbtn-c{font-size:10px}
+}
+
 /* ── Новелла: герб державы ФОНОМ за текстом (водяной знак, как в статье) ── */
 .hp-vn-bgflag{
-  position:absolute;inset:0;z-index:0;pointer-events:none;border-radius:inherit;
+  position:absolute;inset:0;z-index:0;pointer-events:none;border-radius:0;
+  /* повторяем срезы окна — водяной знак не выступает из гранёной панели */
+  clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));
   background-size:cover;background-repeat:no-repeat;background-position:right 24%;
   opacity:0;filter:saturate(.5) contrast(.95);
   /* приглушаем со стороны текста (слева) → чистая читаемость, герб «уходит» вправо */
@@ -455,11 +792,18 @@
 
 /* ── Игровая плашка достижения в новелле (без символов, плоский sci-fi) ── */
 .hp-vn-ach{
-  display:flex;gap:16px;align-items:center;padding:13px 15px;position:relative;overflow:hidden;
-  border-radius:var(--radius-sm);
-  border: var(--deco-frame-w, 1px) solid color-mix(in srgb,var(--gd,#3a9bdc) 24%,var(--w2,rgba(255,255,255,.10)));
-  border-left: var(--deco-accent-w, 2px) solid var(--gd,#3a9bdc);
-  background:linear-gradient(135deg, color-mix(in srgb,var(--gd,#3a9bdc) 9%, hsl(216 18% 10% / .92)), hsl(216 18% 9% / .94));
+  display:flex;gap:16px;align-items:center;padding:13px 15px;position:relative;z-index:0;overflow:hidden;
+  /* гранёная карточка: сам элемент = слой «обводки», ::before = инсет-фон с левым акцентом */
+  border:none;border-radius:0;
+  background:color-mix(in srgb,var(--gd,#3a9bdc) 30%,var(--w2,rgba(255,255,255,.10)));
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));
+}
+.hp-vn-ach::before{
+  content:'';position:absolute;inset:1px;z-index:-1;
+  background:
+    linear-gradient(90deg,var(--gd,#3a9bdc) 0,var(--gd,#3a9bdc) 2px,transparent 2px),
+    linear-gradient(135deg, color-mix(in srgb,var(--gd,#3a9bdc) 9%, hsl(216 18% 10% / .96)), hsl(216 18% 9% / .97));
+  clip-path:polygon(0 0,calc(100% - 11px) 0,100% 11px,100% 100%,11px 100%,0 calc(100% - 11px));
 }
 .hp-vn-ach-art{
   flex:0 0 auto;width:80px;height:80px;border-radius:var(--radius-sm);overflow:hidden;position:relative;z-index:1;
@@ -483,13 +827,7 @@
 .hp-vn-banner.show .hp-vn-ach-scan{animation:hpVnAchScan 1.15s ease-out .12s 1}
 @keyframes hpVnAchScan{from{left:-60%}to{left:130%}}
 @media (prefers-reduced-motion:reduce){.hp-vn-banner.show .hp-vn-ach-scan{animation:none}}
-/* угловой акцент сверху-справа — лёгкая «техно»-засечка */
-.hp-vn-ach::after{
-  content:"";position:absolute;top:0;right:0;width:26px;height:26px;pointer-events:none;
-  border-top:2px solid color-mix(in srgb,var(--gd,#3a9bdc) 55%,transparent);
-  border-right:2px solid color-mix(in srgb,var(--gd,#3a9bdc) 55%,transparent);
-  border-top-right-radius:var(--radius-sm);opacity:.7;
-}
+/* угловой notch убран: срез угла сам несёт акцент (минимализм форм-языка) */
 .hp-vn-ach-body{min-width:0;flex:1;display:flex;flex-direction:column;position:relative;z-index:1}
 .hp-vn-ach-kick{
   font-family: var(--font-mono);font-size:9.5px;letter-spacing: calc(.22em * var(--deco-ls-mult, 1));text-transform:uppercase;
@@ -543,25 +881,24 @@
   .hp-vn .hp-vn-idx:not(.show){display:none}
   /* баннер-флаг на мобиле — без внутреннего скролла, в потоке под текстом */
   .hp-vn .hp-vn-banner.show{max-height:none;overflow:visible}
-  /* диалог — обычная карточка под баннером */
+  /* диалог — обычная карточка под баннером (слои срезов работают и тут) */
   .hp-vn-box{
     position:relative;left:0;right:0;bottom:0;margin:0;
-    padding:16px 16px 14px;border-radius:0 0 var(--radius-sm) var(--radius-sm);border-top:none;border-left: var(--deco-accent-w, 2px) solid var(--gd,#3a9bdc);
+    padding:16px 16px 14px;
     max-height:none;overflow:visible;cursor:default;
   }
-  /* на мобиле табличка имени — в потоке, флажком сверху карточки (не «нависает») */
+  /* на мобиле табличка имени — в потоке, флажком сверху карточки (не «нависает»),
+     срез сохраняем — единый форм-язык */
   .hp-vn-name{
     position:relative;top:auto;left:auto;z-index:1;
     align-self:flex-start;margin:0 0 9px;font-size:13px;
-    clip-path:none;border-radius:var(--radius-sm);border-bottom: var(--deco-frame-w, 1px) solid color-mix(in srgb,var(--gdl,#5fb0e6) 40%,transparent);
   }
   .hp-vn-text{font-size:16px;line-height:1.5;min-height:auto}
   .hp-vn-foot{margin-top:12px;gap:10px}
   .hp-vn-foot .hp-hero-cta{font-size:14px;padding:10px 14px}
-  /* меню выбора — без внутр. прокрутки, крупнее тапы */
-  .hp-vn-choices{max-height:none;overflow:visible}
-  .hp-vn-choice{padding:12px 4px;font-size:15px}
-  .hp-vn-choice:hover{padding-left:8px}
+  /* меню выбора — на телефоне ВЕРТИКАЛЬНЫЙ столбец (тут он и удобен), без прокрутки */
+  .hp-vn-choices{grid-template-columns:1fr;gap:8px;max-height:none;overflow:visible}
+  .hp-vn-choice{padding:12px 14px;font-size:15px}
   .hp-vn-choice-item{font-size:14px}
   /* кнопка правки обложки — в угол баннера */
   .hp-vn .hp-hero-upload-btn{top:6px;left:6px;right:auto;font-size:10px;padding:4px 8px}
@@ -610,9 +947,10 @@
   letter-spacing: calc(.07em * var(--deco-ls-mult, 1));text-transform:uppercase;text-align:left;
   padding:13px 16px;cursor:pointer;color:#e6f3ff;
   background:rgba(10,15,22,.62);
-  border: var(--deco-frame-w, 1px) solid rgba(120,170,205,.22);
-  border-radius:var(--radius-md);
-  transition:transform var(--duration-fast) ease,background var(--duration-normal) ease,border-color var(--duration-normal) ease,box-shadow var(--duration-normal) ease,padding var(--duration-fast) ease;
+  /* киберпанк-срез вместо скругления; border со срезом несовместим — без обводки */
+  border:none;border-radius:0;
+  clip-path:polygon(11px 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%,0 11px);
+  transition:transform var(--duration-fast) ease,background var(--duration-normal) ease,filter var(--duration-normal) ease,padding var(--duration-fast) ease;
 }
 .hp-menu-btn::after{                       /* шеврон, выезжает при наведении */
   content:'›';position:absolute;right:15px;font-size:20px;line-height:1;
@@ -620,15 +958,15 @@
 }
 .hp-menu-btn:hover{
   transform:translateX(5px);padding-right:26px;
-  background:rgba(18,34,50,.8);border-color:rgba(95,176,230,.65);
-  box-shadow:0 8px 26px rgba(0,0,0,.5),0 0 20px rgba(46,155,224,.18);
+  background:rgba(18,34,50,.8);
+  /* box-shadow клип срезал бы — свечение по форме через drop-shadow */
+  filter:drop-shadow(0 8px 20px rgba(0,0,0,.5)) drop-shadow(0 0 12px rgba(46,155,224,.22));
 }
 .hp-menu-btn:hover::after{ opacity:.9;transform:none; }
 .hp-menu-ic{ color:var(--gdl,#5fb0e6);font-size:1.05em;width:1.15em;text-align:center;flex:0 0 auto; }
 .hp-menu-primary{
-  background:linear-gradient(100deg,rgba(46,120,180,.42),rgba(16,40,64,.55));
-  border-color:rgba(95,176,230,.6);
-  box-shadow:0 0 22px rgba(46,155,224,.18);
+  background:linear-gradient(100deg,rgba(46,120,180,.5),rgba(16,40,64,.62));
+  filter:drop-shadow(0 0 12px rgba(46,155,224,.2));
 }
 .hp-menu-primary:hover{ background:linear-gradient(100deg,rgba(58,140,205,.55),rgba(20,52,82,.7)); }
 @media (max-width:768px){

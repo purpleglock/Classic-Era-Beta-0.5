@@ -311,7 +311,7 @@ begin
   return jsonb_build_object('ok',true,'correct',correct,
     'actor_name', case when correct then public._fac_name(actor) else null end,
     'accused_name', public._fac_name(p_suspect_fid),
-    'case', public._spy_case_view((select * from public.spy_missions where id=m.id), fid));
+    'case', public._spy_case_view((select m2 from public.spy_missions m2 where m2.id=m.id), fid));
 end$$;
 revoke all on function public.spy_case_accuse(uuid,text) from public;
 grant execute on function public.spy_case_accuse(uuid,text) to authenticated;
