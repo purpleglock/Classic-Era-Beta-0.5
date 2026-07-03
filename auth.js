@@ -474,28 +474,90 @@ async function recordLegalConsent() {
 // Единственный способ входа/регистрации — Google OAuth. Пароль-формы удалены:
 // сайт не принимает и не хранит пароли, e-mail отдаёт только Google-провайдер.
 function showAuth(_mode) {
-  document.getElementById('auth-mo-t').textContent = lang==='ru' ? 'ВХОД' : 'SIGN IN';
-  document.getElementById('auth-form').innerHTML = `<div class="auth-box">
-    <div class="auth-ey">${lang==='ru'?'ИДЕНТИФИКАЦИЯ':'SIGN IN'}</div>
-    <p style="font-size:12.5px;line-height:1.6;color:var(--t2);margin:4px 0 14px">${lang==='ru'
-      ? 'Вход и регистрация выполняются только через аккаунт Google — без паролей на сайте.'
-      : 'Sign-in and registration are available only via a Google account — no passwords stored on this site.'}</p>
-    <button class="btn btn-gd btn-fw" id="google-btn" onclick="signInWithGoogle()" style="display:flex;align-items:center;justify-content:center;gap:10px">
-      <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-      ${lang==='ru'?'Войти через Google':'Continue with Google'}
+  const ru = lang === 'ru';
+  document.getElementById('auth-mo-t').textContent = ru ? 'ВХОД' : 'SIGN IN';
+  document.getElementById('auth-form').innerHTML = `<div class="au">
+    <div class="au-stars s1"></div>
+    <div class="au-stars s2"></div>
+    <div class="au-scan"></div>
+    <div class="au-glow"></div>
+    <div class="au-corner au-c-tl"></div><div class="au-corner au-c-tr"></div>
+    <div class="au-corner au-c-bl"></div><div class="au-corner au-c-br"></div>
+    <div class="au-seal" aria-hidden="true">
+      <span class="au-radar"></span>
+      <span class="au-ring au-ring-1"></span>
+      <span class="au-ring au-ring-2"></span>
+      <span class="au-core"></span>
+      <img class="au-emblem" src="assets/wiki-emblem.png" alt=""
+        onload="this.closest('.au-seal').classList.add('has-emblem')" onerror="this.remove()">
+    </div>
+    <div class="au-ey">${ru ? 'Защищённый канал · Классическая Эра' : 'Secure channel · Classic Era'}</div>
+    <div class="au-title">${ru ? 'Идентификация' : 'Identification'}</div>
+    <div class="au-div"></div>
+    <div class="au-term" id="au-term">&nbsp;</div>
+    <button class="au-gbtn" id="google-btn" onclick="signInWithGoogle()">
+      <span class="au-gbtn-sheen"></span>
+      <span class="au-gbtn-ic"><svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span>
+      <span class="au-gbtn-t">${ru ? 'Войти через Google' : 'Continue with Google'}</span>
+      <span class="au-gbtn-arr">▸</span>
     </button>
-    <div style="font-size:11px;line-height:1.55;color:var(--t3);margin-top:12px">${lang==='ru'
-      ? `Продолжая, вы соглашаетесь с <a onclick="event.preventDefault();openLegal('terms')" style="text-decoration:underline;cursor:pointer">Пользовательским соглашением</a> и <a onclick="event.preventDefault();openLegal('privacy')" style="text-decoration:underline;cursor:pointer">Политикой конфиденциальности</a>. После первого входа мы попросим подтвердить согласие явно.`
-      : `By continuing you agree to the <a onclick="event.preventDefault();openLegal('terms')" style="text-decoration:underline;cursor:pointer">Terms of Use</a> and <a onclick="event.preventDefault();openLegal('privacy')" style="text-decoration:underline;cursor:pointer">Privacy Policy</a>. We will ask for explicit consent after your first sign-in.`}</div>
+    <div class="au-legal">${ru
+      ? `Продолжая, вы соглашаетесь с <a onclick="event.preventDefault();openLegal('terms')">Пользовательским соглашением</a> и <a onclick="event.preventDefault();openLegal('privacy')">Политикой конфиденциальности</a>.`
+      : `By continuing you agree to the <a onclick="event.preventDefault();openLegal('terms')">Terms of Use</a> and <a onclick="event.preventDefault();openLegal('privacy')">Privacy Policy</a>.`}</div>
   </div>`;
+  _auFxWire(ru);
   om('mo-auth');
+}
+
+// Живой слой окна входа: печатающийся терминал + параллакс за курсором
+function _auFxWire(ru) {
+  clearTimeout(window._auTt);
+  const term = document.getElementById('au-term');
+  const seq = ru
+    ? ['установка защищённого канала…', 'канал установлен', 'подтвердите личность, командующий']
+    : ['establishing secure link…', 'link established', 'confirm your identity, commander'];
+  let li = 0;
+  const type = () => {
+    const s = seq[li]; let c = 0;
+    const tick = () => {
+      if (!document.body.contains(term)) return; // окно перерисовали/закрыли
+      term.textContent = s.slice(0, ++c);
+      if (c < s.length) window._auTt = setTimeout(tick, 20 + Math.random() * 38);
+      else if (li < seq.length - 1) window._auTt = setTimeout(() => { li++; type(); }, li === 0 ? 500 : 650);
+    };
+    tick();
+  };
+  window._auTt = setTimeout(type, 400);
+
+  const au = document.querySelector('#mo-auth .au');
+  if (!au) return;
+  au.addEventListener('mousemove', e => {
+    const r = au.getBoundingClientRect();
+    au.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    au.style.setProperty('--my', (e.clientY - r.top) + 'px');
+    au.style.setProperty('--px', ((e.clientX - r.left) / r.width - .5).toFixed(3));
+    au.style.setProperty('--py', ((e.clientY - r.top) / r.height - .5).toFixed(3));
+  });
+  au.addEventListener('mouseleave', () => {
+    au.style.setProperty('--px', 0); au.style.setProperty('--py', 0);
+  });
 }
 
 let _authBusy = false;
 async function signInWithGoogle() {
   if (_authBusy) return;
   const btn = document.getElementById('google-btn');
-  _authBusy = true; if (btn) btn.disabled = true;
+  _authBusy = true;
+  if (btn) {
+    btn.disabled = true; btn.classList.add('busy');
+    const t = btn.querySelector('.au-gbtn-t');
+    if (t) t.textContent = lang === 'ru' ? 'Установка связи…' : 'Connecting…';
+  }
+  const tm = document.getElementById('au-term');
+  if (tm) {
+    clearTimeout(window._auTt);
+    tm.textContent = lang === 'ru' ? 'перенаправление на защищённый узел Google…' : 'redirecting to Google secure node…';
+  }
   try {
     // redirectTo должен быть в allowlist Supabase (Auth → URL Configuration)
     const { error } = await sb.auth.signInWithOAuth({
@@ -506,7 +568,14 @@ async function signInWithGoogle() {
     // страница сейчас уйдёт на accounts.google.com — состояние не сбрасываем
   } catch(e) {
     toast('Не удалось начать вход: ' + (e.message||e), 'err');
-    _authBusy = false; if (btn) btn.disabled = false;
+    _authBusy = false;
+    if (btn) {
+      btn.disabled = false; btn.classList.remove('busy');
+      const t = btn.querySelector('.au-gbtn-t');
+      if (t) t.textContent = lang === 'ru' ? 'Войти через Google' : 'Continue with Google';
+    }
+    const tm2 = document.getElementById('au-term');
+    if (tm2) tm2.textContent = lang === 'ru' ? 'сбой соединения — попробуйте ещё раз' : 'connection failed — try again';
   }
 }
 
