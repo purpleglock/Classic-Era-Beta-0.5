@@ -2658,6 +2658,7 @@ function gmmRender(host) {
   // Класс gm-mobile (пальцевые контролы, нижний лист-панель) — только на тач-устройствах;
   // на ПК canvas-режим использует десктопную панель/контролы (класс gm-canvas-desk).
   const touch = gmIsMobile();
+  GMM.mobile = touch;   // узкий тач-вьюпорт: мельче плашки нейминга (см. gmmPaintSecLabels)
   const deskEdit = !touch && gmCanEdit();   // на ПК редактор может уйти в правку карты
   // На телефоне список слоёв длинный и съедает пол-экрана — по умолчанию держим панель
   // свёрнутой (виден компактный ярлык со стрелкой), пользователь раскрывает по тапу.
@@ -5586,15 +5587,40 @@ function gmmPaintSecLabels(ctx, camS) {
   const secA = 1 - gmmZoomT(camS);
   if (secA <= 0.01) return;
   const dpr = GMM.dpr, u = 1 / camS;
+  // На телефоне вьюпорт узкий — плашки крупнее физически налезают одна на другую;
+  // уменьшаем базовый кегль, чтобы читались и реже конфликтовали.
+  const fs = GMM.mobile ? 13 : 17;
   ctx.save();
   ctx.setTransform(camS * dpr, 0, 0, camS * dpr, GMM.tx * dpr, GMM.ty * dpr);
+  const boxes = [], pad = 3 * u;
   P.secLabels.forEach(l => {
     // тот же вертикальный сдвиг под наклон плоскости, что и у звёзд
     const scY = l.y * camS + GMM.ty, dyW = (gmmTY(scY) - scY) / camS;
-    gmmNamePlate(ctx, l.x, l.y + dyW, (l.name || '').toUpperCase(), u,
-      { color: l.color, fs: 17, alpha: secA, tag: '◈ СЕКТОР', weight: 800 });
+    // защита от наложений: считаем габарит плашки (как в gmmNamePlate, variant=major)
+    // и пропускаем плашку, если она налезает на уже отрисованную — иначе на отзумке
+    // соседние сектора рисуют плашки друг поверх друга.
+    const cyp = l.y + dyW;
+    const b = gmmPlateBox(ctx, l.x, cyp, (l.name || '').toUpperCase(), fs, u);
+    let clash = false;
+    for (const r of boxes) {
+      if (b.x0 < r.x1 + pad && b.x1 > r.x0 - pad && b.y0 < r.y1 + pad && b.y1 > r.y0 - pad) { clash = true; break; }
+    }
+    if (clash) return;
+    boxes.push(b);
+    gmmNamePlate(ctx, l.x, cyp, (l.name || '').toUpperCase(), u,
+      { color: l.color, fs, alpha: secA, tag: '◈ СЕКТОР', weight: 800 });
   });
   ctx.restore();
+}
+
+// Габарит плашки нейминга (variant=major) БЕЗ отрисовки — для отсева наложений.
+// Формула ширины/высоты повторяет gmmNamePlate (major): padX=7u, capW=6u, gap=5u, padY=5u.
+function gmmPlateBox(ctx, cx, cy, text, fpx, u) {
+  const f = fpx * u;
+  ctx.font = `800 ${f.toFixed(1)}px Rajdhani, 'Exo 2', sans-serif`;
+  const tw = ctx.measureText(text).width;
+  const hw = (tw + 6 * u + 5 * u) / 2 + 7 * u, hh = f * 0.5 + 5 * u;
+  return { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };
 }
 
 // Путь прямоугольника со СРЕЗАННЫМИ углами (октагон) — общий помощник для плашек
@@ -5969,8 +5995,10 @@ function gmmPaintUnionLabels(ctx, camS) {
   const capPos = {};
   for (const sid in caps) { const s = GM.systems.find(x => x.id === sid); if (s) capPos[caps[sid]] = s; }
   const dpr = GMM.dpr, u = 1 / camS;
+  const fs = GMM.mobile ? 12 : 15;
   ctx.save();
   ctx.setTransform(camS * dpr, 0, 0, camS * dpr, GMM.tx * dpr, GMM.ty * dpr);
+  const boxes = [], pad = 3 * u;
   GM.unions.forEach(un => {
     const pts = (un.fids || []).map(fid => capPos[fid]).filter(Boolean);
     if (!pts.length) return;
@@ -5979,8 +6007,17 @@ function gmmPaintUnionLabels(ctx, camS) {
     const scY = cy * camS + GMM.ty, dyW = (gmmTY(scY) - scY) / camS;   // тот же сдвиг под наклон плоскости
     const tag = un.kind === 'confederation' ? '◇ КОНФЕДЕРАЦИЯ'
       : un.kind === 'vassal' ? '◇ ВАССАЛИТЕТ' : '◆ ФЕДЕРАЦИЯ';
-    gmmNamePlate(ctx, cx, cy + dyW, (un.name || 'Союз').toUpperCase(), u,
-      { color: gmReadable(un.color || '#5a7fb0'), fs: 15, alpha: A, tag, weight: 800 });
+    // отсев наложений, как у секторов — на отзумке союзы кучкуются
+    const cyp = cy + dyW;
+    const b = gmmPlateBox(ctx, cx, cyp, (un.name || 'Союз').toUpperCase(), fs, u);
+    let clash = false;
+    for (const r of boxes) {
+      if (b.x0 < r.x1 + pad && b.x1 > r.x0 - pad && b.y0 < r.y1 + pad && b.y1 > r.y0 - pad) { clash = true; break; }
+    }
+    if (clash) return;
+    boxes.push(b);
+    gmmNamePlate(ctx, cx, cyp, (un.name || 'Союз').toUpperCase(), u,
+      { color: gmReadable(un.color || '#5a7fb0'), fs, alpha: A, tag, weight: 800 });
   });
   ctx.restore();
 }

@@ -293,19 +293,34 @@ begin
   select faction_id into v_fid from public.faction_applications
     where owner_id = auth.uid() and status = 'approved' order by updated_at desc limit 1;
 
-  -- варианты сегодняшнего слова + живые счётчики голосов
+  -- варианты сегодняшнего слова + живые счётчики голосов + ФЛАГИ проголосовавших держав
   select jsonb_agg(jsonb_build_object(
       'id', w.id, 'word', w.word, 'theme', w.theme,
       'preview', w.lines[1 + public._poem_hash(v_week::text || v_day || w.id) % array_length(w.lines, 1)],
-      'votes', coalesce(c.n, 0)) order by o.ord)
+      'votes', coalesce(c.n, 0),
+      'voters', coalesce(c.voters, '[]'::jsonb)) order by o.ord)
     into v_opts
   from public.poem_days d,
        lateral (select value #>> '{}' as wid, ordinality as ord
                 from jsonb_array_elements(d.options) with ordinality) o
   join public.poem_words w on w.id = o.wid
   left join lateral (
-      select count(*)::int as n from public.poem_votes v
-      where v.week_start = d.week_start and v.day_idx = d.day_idx and v.word_id = w.id
+      select count(*)::int as n,
+             coalesce(jsonb_agg(jsonb_build_object(
+                 'fid', vv.faction_id, 'name', vv.name,
+                 'crest', vv.herald_url, 'color', vv.color)
+               order by vv.created_at) filter (where vv.rn <= 16), '[]'::jsonb) as voters
+      from (
+        select v.faction_id, v.created_at, a.name, a.herald_url, a.color,
+               row_number() over (order by v.created_at) as rn
+        from public.poem_votes v
+        left join lateral (
+            select name, herald_url, color from public.faction_applications
+            where faction_id = v.faction_id and status = 'approved'
+            order by updated_at desc limit 1
+          ) a on true
+        where v.week_start = d.week_start and v.day_idx = d.day_idx and v.word_id = w.id
+      ) vv
     ) c on true
   where d.week_start = v_week and d.day_idx = v_day;
 

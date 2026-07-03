@@ -3274,6 +3274,27 @@ async function heroVNPoemVote(wordId) {
       : (en ? 'Error: ' : 'Ошибка: ') + m, 'err');
   } finally { _heroPoemBusy = false; }
 }
+// Ряд флагов держав, отдавших голос за слово. voters = [{fid,name,crest,color}]
+// (сервер отдаёт до 16). Показываем до 10 гербов + «+N», чтобы не растекалось.
+function _heroPoemFlags(voters, totalVotes) {
+  const list = Array.isArray(voters) ? voters : [];
+  if (!list.length) return '';
+  const MAX = 10;
+  const shown = list.slice(0, MAX);
+  const chips = shown.map(v => {
+    const nm = esc(v.name || v.fid || '—');
+    const col = v.color || 'rgba(120,140,170,.6)';
+    const initial = esc(String(v.name || v.fid || '?').trim().charAt(0).toUpperCase() || '?');
+    if (v.crest) {
+      return `<span class="hp-vnp-flag" title="${nm}" style="--fc:${esc(col)}"><img src="${esc(v.crest)}" alt="" loading="lazy" onerror="this.remove();this.parentNode&&(this.parentNode.classList.add('noimg'),this.parentNode.setAttribute('data-i','${initial}'))"></span>`;
+    }
+    return `<span class="hp-vnp-flag noimg" title="${nm}" data-i="${initial}" style="--fc:${esc(col)}"></span>`;
+  }).join('');
+  // остаток сверх показанных гербов (учитывая, что сервер мог урезать до 16)
+  const rest = Math.max(0, (+totalVotes || list.length) - shown.length);
+  const more = rest > 0 ? `<span class="hp-vnp-flag-more">+${rest}</span>` : '';
+  return `<span class="hp-vnp-w-flags">${chips}${more}</span>`;
+}
 // «дд.мм – дд.мм» диапазон недели из week_start (YYYY-MM-DD).
 function _heroPoemWeekRange(ws) {
   const a = new Date(ws + 'T00:00:00Z');
@@ -3320,12 +3341,15 @@ function _heroPoemBuild(st, en) {
   const myVote = st.my_vote || null;
   const wordBtns = opts.map(o => {
     const sel = (myVote === o.id) ? ' sel' : '';
-    const pct = Math.round(100 * (+o.votes || 0) / maxV);
+    const votes = +o.votes || 0;
+    const pct = Math.round(100 * votes / maxV);
+    const flags = _heroPoemFlags(o.voters, votes);
     return `<button class="hp-vnp-word${sel}" ${st.me ? '' : 'disabled '}onclick="event.stopPropagation();heroVNPoemVote('${jsq(o.id)}')">
       <span class="hp-vnp-w-t">${esc(o.word)}</span>
       <span class="hp-vnp-w-th">${thIco(o.theme)} ${esc(thLbl(o.theme))}</span>
       <span class="hp-vnp-w-bar"><i style="width:${pct}%"></i></span>
-      <span class="hp-vnp-w-n">${+o.votes || 0}</span>
+      <span class="hp-vnp-w-n">${votes}</span>
+      ${flags}
     </button>`;
   }).join('');
   const myOpt = opts.find(o => o.id === myVote);

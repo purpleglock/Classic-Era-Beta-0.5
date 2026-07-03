@@ -347,8 +347,11 @@
 @keyframes hpVnCont{0%,100%{transform:translateY(0);opacity:.45}50%{transform:translateY(3px);opacity:1}}
 .hp-vn-foot{
   display:flex;align-items:center;justify-content:space-between;gap:10px;
-  margin-top:10px;flex-wrap:wrap;
+  margin-top:10px;flex-wrap:wrap;max-width:100%;
 }
+/* кнопки в подвале не должны распирать окно за край: разрешаем перенос/сжатие */
+.hp-vn-foot > *{max-width:100%}
+.hp-vn-ctrl{flex-wrap:wrap;min-width:0}
 /* кластер навигации — реальные кнопки «назад» / «пропустить·снова» рядом */
 .hp-vn-ctrl{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 /* кнопки навигации — гранёные чипы (клип + подложка-«обводка» + инсет-фон, без border) */
@@ -390,7 +393,8 @@
    Отделён от реплики: воздух сверху + линия-разделитель со светящейся засечкой. ── */
 .hp-vn-choices{
   position:relative;
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:9px;
+  /* min(215px,100%) — иначе трек минимум 215px и грид вылезает за узкий контейнер */
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(min(215px,100%),1fr));gap:9px;
   margin-top:18px;padding-top:14px;
   border-top: var(--deco-frame-w, 1px) solid color-mix(in srgb,var(--gd,#3a9bdc) 32%, var(--w1,rgba(255,255,255,.06)));
   max-height:170px;overflow:auto;scrollbar-width:thin;
@@ -679,7 +683,7 @@
 .hp-vnp-words{display:flex;flex-direction:column;gap:6px}
 .hp-vnp-word{
   position:relative;z-index:0;cursor:pointer;border:none;border-radius:0;background:transparent;
-  display:grid;grid-template-columns:1fr auto;grid-template-areas:"w th" "bar n";
+  display:grid;grid-template-columns:1fr auto;grid-template-areas:"w th" "bar n" "flags flags";
   align-items:center;column-gap:10px;row-gap:5px;padding:9px 12px;text-align:left;
   clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
   transition:filter var(--duration-fast);
@@ -698,6 +702,24 @@
 .hp-vnp-w-bar{grid-area:bar;height:3px;background:var(--w1,rgba(255,255,255,.06));overflow:hidden}
 .hp-vnp-w-bar i{display:block;height:100%;background:var(--gd,#3a9bdc);transition:width var(--duration-normal) ease}
 .hp-vnp-w-n{grid-area:n;font-family:var(--font-mono);font-size:10px;color:var(--t3,#8296a8);text-align:right;min-width:18px}
+/* Флаги/гербы держав, отдавших голос за это слово */
+.hp-vnp-w-flags{grid-area:flags;display:flex;flex-wrap:wrap;align-items:center;gap:3px;margin-top:1px}
+.hp-vnp-flag{
+  position:relative;flex:0 0 auto;width:16px;height:16px;overflow:hidden;
+  background:var(--fc,rgba(120,140,170,.6));
+  box-shadow:0 0 0 1px hsl(216 22% 9% / .9);
+  clip-path:polygon(3px 0,100% 0,100% calc(100% - 3px),calc(100% - 3px) 100%,0 100%,0 3px);
+}
+.hp-vnp-flag img{width:100%;height:100%;object-fit:cover;display:block}
+.hp-vnp-flag.noimg{display:flex;align-items:center;justify-content:center}
+.hp-vnp-flag.noimg::after{
+  content:attr(data-i);font-family:var(--font-display);font-weight:700;font-size:9px;
+  color:#0b1017;line-height:1;
+}
+.hp-vnp-flag-more{
+  font-family:var(--font-mono);font-size:9px;color:var(--t3,#8296a8);
+  padding:0 3px;align-self:center;
+}
 .hp-vnp-preview{
   font-family:Georgia,serif;font-size:12px;line-height:1.5;color:var(--t2,#b8c4cf);
   padding:8px 10px;border-left:2px solid var(--gd,#3a9bdc);background:hsl(216 22% 9% / .5);
@@ -852,7 +874,10 @@
   border: var(--deco-frame-w, 1px) solid color-mix(in srgb,var(--gd,#3a9bdc) 32%,transparent);
 }
 
-@media (max-width:768px){
+/* Стек-раскладку включаем на телефонах (≤768) И на любых ТАЧ-устройствах до 1024px
+   (ландшафтные телефоны, складные, планшеты) — там десктопная абсолютная раскладка
+   диалога/кнопок/тикера вылезала за экран. */
+@media (max-width:768px), (pointer:coarse) and (max-width:1024px){
   /* СТЕКОВАЯ раскладка: баннер (картинка+спрайт) сверху, диалог карточкой снизу —
      никаких наложений, всё читаемо и тапабельно. */
   .hp-hero-cover.hp-vn{
@@ -3430,3 +3455,72 @@
 .sb-sbk-section-hd{display:flex;gap:6px;margin-bottom:6px}
 .sb-sbk-section-hd .sb-fi{flex:1}
 .sb-sbk-entry{border-top: var(--deco-frame-w, 1px) dashed var(--w2);padding-top:8px;margin-top:8px}
+
+/* ФИКС КНОПОК НОВЕЛЛЫ ДЛЯ МОБИЛОК (ВСТАВИТЬ В КОНЕЦ ФАЙЛА) */
+@media (max-width:768px), (pointer:coarse) and (max-width:1024px) {
+  
+  /* Контейнер кнопок и футер складываем в колонку, чтобы ничего не выпирало */
+  .hp-vn-foot {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Блок с кнопками навигации растягиваем на всю ширину */
+  .hp-vn-ctrl {
+    width: 100% !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    flex-wrap: nowrap !important;
+  }
+  
+  /* Сами чипы-кнопки делят место поровну и переносят текст, если надо */
+  .hp-vn-btn {
+    flex: 1 1 0% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding: 10px 4px !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    min-width: 0 !important;
+  }
+
+  /* Большая кнопка CTA тоже подстраивается под ширину */
+  .hp-vn-foot .hp-hero-cta {
+    width: 100% !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Сетка выборов: жестко 1 колонка, не вылезает за края */
+  .hp-vn-choices {
+    grid-template-columns: 1fr !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Кнопка выбора: разрешаем тексту переноситься, если он длинный */
+  .hp-vn-choice {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    height: auto !important;
+    min-height: 44px !important;
+  }
+  
+  /* Сбрасываем обрезку многоточием для длинных реплик, чтобы они читались в несколько строк */
+  .hp-vn-choice-it-t {
+    white-space: normal !important;
+    overflow: visible !important;
+  }
+}
+
+/* Экстра-фикс для совсем узких экранов (меньше 430px) */
+@media (max-width:430px) {
+  .hp-vn-btn {
+    font-size: 9px !important;
+  }
+}

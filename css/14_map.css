@@ -703,12 +703,44 @@ textarea.gm-fi{resize:vertical}
 /* ════════ МОБИЛЬНЫЙ РЕНДЕРЕР (canvas, #gm-wrap.gm-mobile) ════════ */
 /* 100dvh вместо 100vh: на телефонах адресная строка «съедает» vh */
 @supports (height:100dvh){
-  #gm-wrap{height:calc(100dvh - var(--th) - 52px)}
-  #gm-wrap.gm-fullscreen{height:100dvh}
+  #gm-wrap{
+    height:calc(100dvh - var(--th) - 52px);
+    touch-action: none; /* Запрещаем системный зум на всей области карты */
+  }
+  #gm-wrap.gm-fullscreen{
+    height:100dvh;
+    touch-action: none; 
+  }
 }
+
+/* Прибиваем вьюпорт, чтобы жесты не утекали наружу */
+#gm-viewport {
+  touch-action: none; 
+}
+
 /* канвас точно по вьюпорту; backing-размер (×dpr) задаёт JS */
 #gmm-cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 #gm-wrap.gm-mobile #gm-viewport{cursor:default}
+/* контролы — пальцевые размеры */
+#gm-wrap.gm-mobile .gm-ctl{
+  width:42px;
+  height:42px;
+  font-size:19px;
+  touch-action: manipulation; /* Блокируем дабл-тап зум на кнопках карты */
+}
+@media (max-width: 768px) {
+  /* Принудительно сдуваем гигантские плашки секторов на мобилках */
+  .gm-sec-mark {
+    scale: 0.4; /* Подбери значение (0.3 - 0.5), чтобы размер стал адекватным */
+    transform-origin: center;
+    transform-box: fill-box; /* Заставляет скейлиться ровно от центра самой плашки */
+  }
+
+  /* Если иконки звезд тоже пухнут, сдуваем и их */
+  .gm-star {
+    scale: 0.5;
+  }
+}
 /* ПК в canvas-режиме: «схватить и тянуть» как на интерактивных картах */
 #gm-wrap.gm-canvas-desk #gm-viewport{cursor:grab}
 #gm-wrap.gm-canvas-desk #gm-viewport:active{cursor:grabbing}
