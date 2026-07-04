@@ -752,7 +752,10 @@ textarea.gm-fi{resize:vertical}
 #gm-wrap.gm-mobile .gm-rf{width:42px;height:26px}
 /* Панель режимов на телефоне: ширина по контенту (не жёсткие 212px), ближе к углу.
    Свёрнута (по умолчанию) — сжимается до одной кнопки-стрелки, без заголовка. */
-#gm-wrap.gm-mobile #gm-controls{width:auto;max-width:calc(100% - 20px);right:10px;bottom:10px;padding:7px 8px 8px}
+/* bottom:64px — поднимаем над плавающей кнопкой поддержки (#tk-fab, 40px @ bottom:16px),
+   иначе тикет перекрывает панель/легенду и по ней нельзя тапнуть.
+   max-height + overflow — чтобы длинный список слоёв не уезжал за верх экрана. */
+#gm-wrap.gm-mobile #gm-controls{width:auto;max-width:calc(100% - 20px);max-height:calc(100dvh - var(--th) - 130px);overflow-y:auto;right:10px;bottom:64px;padding:7px 8px 8px}
 #gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed){padding:4px}
 #gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed) .gm-panel-head{gap:0}
 #gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed) .gm-panel-ttl{display:none}
@@ -814,26 +817,44 @@ textarea.gm-fi{resize:vertical}
 .gm-rift-bad{color:#ff5a7a!important}
 .gm-rift-foot{font-family: var(--font-mono);font-size:10px;color:#9b7fb5;opacity:.75;font-style:italic;margin-top:8px}
 
+/* ── Canvas-редактор (правка карты на GMM, тот же рендер, что и просмотр) ──
+   Тулбар/формы/панель сектора — те же DOM-оверлеи; курсор-прицел, пока
+   инструменты включены (класс gm-editing вешает gmToggleEdit). */
+#gm-wrap.gm-editcanvas.gm-editing #gmm-cv{cursor:crosshair}
+
 /* ═══════════════════════════════════════════════════════════════════════
-   ЛЁГКИЙ РЕЖИМ РЕДАКТОРА (#gm-wrap.gm-editing)
-   В правке карты дорогие визэффекты (свечения, анимации разломов/секторов,
-   drop-shadow на КАЖДОЙ звезде, многослойное «перо» границ секторов) душат
-   перерисовку на любое движение мыши. Пока редактируем — гасим их: геометрия
-   читается, перетаскивание и панорама идут плавно. На выходе всё возвращается.
+   ЛЁГКИЙ РЕЖИМ РЕДАКТОРА (#gm-wrap.gm-editor)
+   SVG-рендер остался ТОЛЬКО как редактор карты (просмотр — canvas/GMM),
+   поэтому класс висит всю сессию редактора. Дорогие визэффекты (туманности
+   фона, свечения, анимации разломов/секторов, drop-shadow на КАЖДОЙ звезде,
+   многослойное «перо» границ) душат перерисовку и «мигают» — здесь они не
+   нужны: геометрия читается, перетаскивание и панорама идут плавно.
+   Финальный рендер карты (canvas) эти правила НЕ затрагивают.
    ───────────────────────────────────────────────────────────────────── */
-#gm-wrap.gm-editing .gm-glow-layer{display:none}
-#gm-wrap.gm-editing .gm-sec-glow{display:none}
-#gm-wrap.gm-editing .gm-sec-line,
-#gm-wrap.gm-editing .gm-sec-line-b,
-#gm-wrap.gm-editing .gm-sec-fill{animation:none}
-#gm-wrap.gm-editing .gm-sec-line-b{filter:none}
-#gm-wrap.gm-editing .vor-rift{animation:none}
-#gm-wrap.gm-editing .vor-rift-edge{animation:none;stroke-dasharray:none}
-#gm-wrap.gm-editing .gm-rift-eye,
-#gm-wrap.gm-editing .gm-rift-ring{animation:none!important}
-#gm-wrap.gm-editing .gm-sec-selected img{animation:none}
+/* фон: плоская тьма вместо туманностей и звёздной россыпи */
+#gm-wrap.gm-editor #gm-bg{background-image:none}
+#gm-wrap.gm-editor #gm-viewport::after{display:none}
+#gm-wrap.gm-editor .gm-glow-layer{display:none}
+#gm-wrap.gm-editor .gm-sec-glow{display:none}
+#gm-wrap.gm-editor .gm-sec-line,
+#gm-wrap.gm-editor .gm-sec-line-b,
+#gm-wrap.gm-editor .gm-sec-fill{animation:none;transition:none}
+#gm-wrap.gm-editor .gm-sec-line-b{filter:none}
+#gm-wrap.gm-editor .vor-cell{transition:none}
+#gm-wrap.gm-editor .vor-rift{animation:none}
+#gm-wrap.gm-editor .vor-rift-edge{animation:none;stroke-dasharray:none}
+#gm-wrap.gm-editor .gm-rift-eye,
+#gm-wrap.gm-editor .gm-rift-ring{animation:none!important;box-shadow:none}
+/* маркер «звезда в редактируемом секторе»: кольцо остаётся, но не крутится */
+#gm-wrap.gm-editor .gm-sec-selected::before{animation:none;box-shadow:none}
+#gm-wrap.gm-editor .gm-sec-selected img{animation:none}
+/* орбитальные системы глубокого зума — чистая декорация, в редакторе их нет */
+#gm-wrap.gm-editor .gm-sys{display:none!important}
 /* убираем тяжёлые drop-shadow с иконок звёзд (их сотни → постоянный repaint) */
-#gm-wrap.gm-editing .gm-star img{filter:none;transition:none}
-#gm-wrap.gm-editing .gm-star:hover img{filter:none;transform:scale(1.12)}
-#gm-wrap.gm-editing .gm-giant img,
-#gm-wrap.gm-editing .gm-capital img{filter:none}
+#gm-wrap.gm-editor .gm-star img{filter:none;transition:none}
+#gm-wrap.gm-editor .gm-star:hover img{filter:none;transform:scale(1.12)}
+#gm-wrap.gm-editor .gm-giant img,
+#gm-wrap.gm-editor .gm-capital img{filter:none}
+#gm-wrap.gm-editor .gm-linksel img{filter:none;outline:2px solid var(--gd,#7fc4ff);outline-offset:2px}
+#gm-wrap.gm-editor .gm-star::before{transition:none;text-shadow:none}
+#gm-wrap.gm-editor .gm-label{text-shadow:0 1px 3px #000}

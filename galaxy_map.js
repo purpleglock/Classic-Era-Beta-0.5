@@ -12,7 +12,7 @@
 // большом тёмном пространстве (ничейная пустота вокруг), а не упиралась в края.
 // Координаты систем в БД не трогаются — расширяется только холст, а вид по
 // умолчанию (gmmCover/gmFit) центрируется на кластере звёзд, не на всём холсте.
-const GM_W = 8580, GM_H = 5360;
+const GM_W = 9580, GM_H = 6360;
 const GM_BASE = 'assets/map/';
 const GM_STAR_TYPES = ['yellow', 'red', 'blue', 'white', 'green'];
 
@@ -117,9 +117,8 @@ const GM = {
 function gmCanEdit() { return !!(user && ['superadmin', 'editor'].includes(user.role)); }
 function gmFaction(id) { return GM.factions.find(f => f.id === id) || null; }
 
-// ПК: вход/выход из редактора карты. Просмотр идёт быстрым canvas-рендером,
-// а правка (двигать звёзды/пути/сектора) — в старом SVG-рендере, который
-// рисуется только при GM.editSession (см. renderGalaxyMap).
+// Вход/выход из редактора карты. И просмотр, и правка идут ОДНИМ canvas-рендером
+// (GMM); editSession лишь добавляет тулбар и включает инструменты (см. gmmRender).
 function gmEnterEdit() {
   if (!gmCanEdit()) return;
   GM.editSession = true;
@@ -160,6 +159,7 @@ async function loadGalaxyData() {
       user ? apiFetch('rpc/mza_visible',         { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
     ]);
     GM.systems = (sys || []).map(s => ({ ...s, x: +s.x, y: +s.y, planets: s.planets || [] }));
+    GM._cbox = null; // сброс кэша области звёзд
     GM.lanes = lanes || [];
     GM.factions = facs || [];
     GM.routes = routes || [];
@@ -248,11 +248,18 @@ async function renderGalaxyMap() {
     if (document.getElementById('pg') !== host) return; // ушли со страницы
   }
 
-  // Быстрый canvas-рендерер (GMM) — и на телефоне, и на ПК: SVG/DOM-вариант
-  // при зуме пере-растеризует весь вектор → мигание и адские лаги (см. блок GMM).
-  // Старый SVG-рендер остаётся ТОЛЬКО как редактор карты: редактор входит в него
-  // кнопкой «Редактировать», что выставляет GM.editSession (см. gmEnterEdit).
-  if (gmIsMobile() || !GM.editSession) { GM.edit = false; gmmRender(host); return; }
+  // Быстрый canvas-рендерер (GMM) — и просмотр, И РЕДАКТОР. Правка карты идёт тем же
+  // техпроцессом, что и просмотр: SVG/DOM-вариант на каждое движение перерисовывал
+  // сотни DOM-узлов и мигал. Инструменты редактора навешаны на canvas: клики —
+  // gmmEditTap, перетаскивание звезды — жест dragstar в gmmBindCanvas, подсветка
+  // выбора — gmmPaintEditOverlay. Старый SVG-редактор оставлен как аварийный
+  // запасной вход: ?gmsvg=1 в адресе.
+  const svgEditor = GM.editSession && /[?&]gmsvg=1/.test(location.search);
+  if (!svgEditor) {
+    GM.edit = false; GM.mode = 'select'; GM.linkFrom = null; GM.sectorDraft = null; GM.drag = null;
+    gmmRender(host);
+    return;
+  }
   GMM.active = false;
 
   // сброс временного состояния (DOM пересоздаётся при каждом входе)
@@ -260,8 +267,11 @@ async function renderGalaxyMap() {
   GM.drag = null; GM.panning = false; GM.fullscreen = false; GM.touch = null;
 
   const canEdit = gmCanEdit();
+  // gm-editor: SVG-рендер живёт только как редактор — постоянный «лёгкий режим»
+  // (без туманностей/свечений/анимаций), см. блок в 14_map.css. Финальный просмотр
+  // карты идёт canvas-рендером (GMM) и этим классом не затрагивается.
   host.innerHTML = `
-    <div id="gm-wrap">
+    <div id="gm-wrap" class="gm-editor">
       <div id="gm-viewport">
         <div id="gm-bg"></div>
         <div id="gm-canvas">
@@ -300,11 +310,30 @@ function gmToolbarHtml() {
 }
 
 // ── Камера: fit / clamp / apply ─────────────────────────────
+// Прямоугольник, реально занятый звёздами (+поля). Звёзды сгруппированы в верхней
+// части холста GM_W×GM_H, низ пустой — камеру нужно центрировать/ограничивать
+// именно по этой области, иначе кластер прижимается к верху, а снизу чёрная пустота.
+function gmContentBox() {
+  if (!GM.systems || !GM.systems.length) return { x0: 0, y0: 0, x1: GM_W, y1: GM_H };
+  if (GM._cbox && GM._cbox.n === GM.systems.length) return GM._cbox;
+  const xs = GM.systems.map(s => s.x), ys = GM.systems.map(s => s.y);
+  const pad = 500;
+  const b = {
+    x0: Math.max(0,    Math.min(...xs) - pad),
+    y0: Math.max(0,    Math.min(...ys) - pad),
+    x1: Math.min(GM_W, Math.max(...xs) + pad),
+    y1: Math.min(GM_H, Math.max(...ys) + pad),
+    n: GM.systems.length,
+  };
+  GM._cbox = b;
+  return b;
+}
 function gmMinScale() {
   const vp = document.getElementById('gm-viewport');
   if (!vp) return 0.1;
-  // contain: видно всю галактику целиком
-  return Math.min(vp.clientWidth / GM_W, vp.clientHeight / GM_H);
+  // contain: видно всю область звёзд целиком (а не весь пустой холст)
+  const b = gmContentBox();
+  return Math.min(vp.clientWidth / (b.x1 - b.x0), vp.clientHeight / (b.y1 - b.y0));
 }
 function gmFit() {
   if (GMM.active) { gmmFit(true); return; }
@@ -333,11 +362,14 @@ function gmClamp() {
   const w = vp.clientWidth, h = vp.clientHeight;
   const minScale = gmMinScale();
   GM.scale = Math.min(Math.max(GM.scale, minScale), GM_MAX_SCALE);
-  const mw = GM_W * GM.scale, mh = GM_H * GM.scale;
-  GM.tx = Math.min(0, Math.max(GM.tx, w - mw));
-  GM.ty = Math.min(0, Math.max(GM.ty, h - mh));
-  if (mw < w) GM.tx = (w - mw) / 2;
-  if (mh < h) GM.ty = (h - mh) / 2;
+  // Ограничиваем панораму по области звёзд, а не по всему холсту:
+  // так низ карты не «убегает» в пустоту, а кластер центрируется, если он меньше окна.
+  const b = gmContentBox();
+  const cw = (b.x1 - b.x0) * GM.scale, ch = (b.y1 - b.y0) * GM.scale;
+  GM.tx = Math.min(-b.x0 * GM.scale, Math.max(GM.tx, w - b.x1 * GM.scale));
+  GM.ty = Math.min(-b.y0 * GM.scale, Math.max(GM.ty, h - b.y1 * GM.scale));
+  if (cw < w) GM.tx = w / 2 - (b.x0 + b.x1) / 2 * GM.scale;
+  if (ch < h) GM.ty = h / 2 - (b.y0 + b.y1) / 2 * GM.scale;
 }
 let _gmStrokeT = null;
 function gmApply() {
@@ -351,8 +383,9 @@ function gmApply() {
     const k = Math.max(0.5, Math.min(2.2, Math.pow(GM.scale, -0.3)));
     c.style.setProperty('--gm-icon-k', k.toFixed(3));
   }
-  // Глубокий зум: звёзды раскрываются в анимированные системы (орбиты по составу)
-  document.getElementById('gm-wrap')?.classList.toggle('gm-deepzoom', GM.scale >= GM_DEEP_SCALE);
+  // Глубокий зум: звёзды раскрываются в анимированные системы (орбиты по составу).
+  // В редакторе (editSession) не включаем — орбиты там не рисуются, а подписи нужны.
+  document.getElementById('gm-wrap')?.classList.toggle('gm-deepzoom', GM.scale >= GM_DEEP_SCALE && !GM.editSession);
   // Толщину обводок обновляем НЕ каждый кадр зума (это меняет CSS-переменные и
   // заставляет перерисовывать весь SVG → лаги), а с задержкой, после остановки.
   clearTimeout(_gmStrokeT);
@@ -431,6 +464,7 @@ function gmWindowMove(e) {
     GM.drag.sys.x = Math.max(0, Math.min(GM_W, Math.round(x)));
     GM.drag.sys.y = Math.max(0, Math.min(GM_H, Math.round(y)));
     GM.drag.moved = true;
+    GM._cbox = null; // координаты изменились — пересчитать область звёзд
     // Лёгкий рендер: двигаем ТОЛЬКО перетаскиваемую звезду и её гиперпути,
     // без пересчёта тяжёлой геометрии секторов/Вороного (она «душила» драг).
     // Полную карту (заливки/границы/сектора) перерисуем один раз на отпускании.
@@ -725,7 +759,23 @@ if (!window._gmFsBound) {
 }
 
 // ── Отрисовка (Вороной + гиперпути + звёзды) ────────────────
+// В canvas-режиме (GMM, т.е. и просмотр, и редактор) эти три функции — мост от
+// редакторского кода к canvas-конвейеру: перестройка мира (debounce, чтобы
+// oninput-правки цвета/имени сектора не пекли растр на каждый символ) либо
+// лёгкий кадр для оверлеев (кольца выбора). SVG-ветки остаются для ?gmsvg=1.
+let _gmmEditT = 0;
+function gmmEditRefresh() {
+  if (!GMM.active) return;
+  GMM.dirty = true; gmmKick();          // оверлеи (кольца/подсветки) — мгновенно
+  clearTimeout(_gmmEditT);
+  _gmmEditT = setTimeout(() => {
+    if (!GMM.active || !GMM.cv || !GMM.cv.isConnected) return;
+    gmmBuildWorld();
+    gmmRaster(1);
+  }, 60);
+}
 function gmDraw() {
+  if (GMM.active) { gmmEditRefresh(); return; }
   gmDrawSvg();
   gmDrawStars();
 }
@@ -1051,6 +1101,7 @@ function gmBuildGeo() {
 }
 
 function gmDrawSvg() {
+  if (GMM.active) { gmmEditRefresh(); return; }
   const svg = document.getElementById('gm-svg');
   if (!svg) return;
   const geo = gmBuildGeo();
@@ -1132,13 +1183,15 @@ function gmDrawSvg() {
 
   // Свечение — широкий полупрозрачный контур БЕЗ SVG-фильтра (feGaussianBlur тормозил
   // при пане/зуме). Дёшево композитится.
+  // Редактор: glow-дубли границ и гало/ореол секторов не собираем вовсе —
+  // это чистая декорация, а DOM у неё размером с сами границы.
   svg.innerHTML =
     `<g class="vor-layer">${fillHtml}</g>`
     + `<g class="sec-fill-layer">${secFillHtml}</g>`
-    + `<g class="vor-border-layer gm-glow-layer">${fb}</g>`
+    + (GM.editSession ? '' : `<g class="vor-border-layer gm-glow-layer">${fb}</g>`)
     + `<g class="vor-border-layer">${neutralBorderHtml.join('')}${fb}</g>`
     + `<g class="lane-layer">${laneHtml}</g>`
-    + `<g class="sec-layer">${secGlow}${secLineB}${secLine}${secLabelHtml}${secHit}</g>`;
+    + `<g class="sec-layer">${GM.editSession ? '' : secGlow + secLineB}${secLine}${secLabelHtml}${secHit}</g>`;
   svg.classList.toggle('gm-noborders', !GM.showBorders);
   svg.classList.toggle('gm-nosectors', !GM.showSectors);
   document.getElementById('gm-wrap')?.classList.toggle('gm-sectors-off', !GM.showSectors);
@@ -1195,6 +1248,8 @@ function gmReadable(c) {
 }
 
 function gmDrawStars() {
+  // canvas: звёзды рисуются живьём каждый кадр — достаточно освежить кадр (оверлеи)
+  if (GMM.active) { GMM.dirty = true; gmmKick(); return; }
   const layer = document.getElementById('gm-stars');
   if (!layer) return;
   const caps = GM.capitals || {};
@@ -1220,7 +1275,6 @@ function gmDrawStars() {
         <img src="${GM_BASE}stars/star_${esc(s.star_type || 'yellow')}.png" draggable="false" alt="">
         ${capHtml}
         ${gmResOverlay(s)}
-        ${gmOrbits(s)}
         <span class="gm-label">${esc(s.name)}</span>
       </div>`;
   }).join('');
@@ -2534,7 +2588,7 @@ async function gmSaveForm() {
   try {
     await dbPatch('map_systems', 'id=eq.' + encodeURIComponent(id), body);
     const s = GM.systems.find(x => x.id === id);
-    if (s) Object.assign(s, body);
+    if (s) { Object.assign(s, body); s._bodies = null; }   // сброс кэша тел (орбиты глуб. зума)
     gmCloseForm(); gmDraw(); toast('Сохранено', 'ok');
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
@@ -2659,16 +2713,22 @@ function gmmRender(host) {
   // на ПК canvas-режим использует десктопную панель/контролы (класс gm-canvas-desk).
   const touch = gmIsMobile();
   GMM.mobile = touch;   // узкий тач-вьюпорт: мельче плашки нейминга (см. gmmPaintSecLabels)
-  const deskEdit = !touch && gmCanEdit();   // на ПК редактор может уйти в правку карты
+  const deskEdit = gmCanEdit();   // редактор карты доступен и на ПК, и на телефоне
+  // Сессия редактора: тот же canvas-рендер, но с тулбаром инструментов и координатами.
+  const edit = GM.editSession && deskEdit;
+  if (GM.editSession && !deskEdit) GM.editSession = false;   // права ушли — обычный просмотр
   // На телефоне список слоёв длинный и съедает пол-экрана — по умолчанию держим панель
   // свёрнутой (виден компактный ярлык со стрелкой), пользователь раскрывает по тапу.
   // Делаем это один раз, чтобы не перебивать ручное состояние при перерисовках.
   if (touch && !GM._ctlInit) { GM.ctlCollapsed = true; GM._ctlInit = true; }
   host.innerHTML = `
-    <div id="gm-wrap" class="${touch ? 'gm-mobile' : 'gm-canvas-desk'}">
+    <div id="gm-wrap" class="${touch ? 'gm-mobile' : 'gm-canvas-desk'}${edit ? ' gm-editcanvas' : ''}">
       <div id="gm-viewport"><canvas id="gmm-cv"></canvas></div>
-      <div id="gm-controls">${gmCtlBtns({ roster: true, edit: deskEdit })}</div>
+      ${edit ? '<div id="gm-coord">X: 0 | Y: 0</div>' : ''}
+      <div id="gm-controls">${gmCtlBtns({ roster: !edit, edit: deskEdit && !edit })}</div>
+      ${edit ? gmToolbarHtml() : ''}
       <div id="gm-panel" class="gm-hidden"></div>
+      <div id="gm-form" class="gm-hidden"></div>
       <div id="gm-roster" class="gm-hidden"></div>
       <div id="gm-opcmd" class="gm-hidden"></div>
     </div>`;
@@ -2858,6 +2918,11 @@ function gmmBindCanvas() {
     GMM.vel = null; GMM.anim = null;
     if (GMM.ptrs.size === 1) {
       const p = GMM.ptrs.get(e.pointerId), now = performance.now();
+      // Редактор, режим «Двигать»: палец/мышь на звезде — таскаем её, а не карту
+      if (GM.editSession && GM.edit && GM.mode === 'select') {
+        const sys = gmmSysAtScreen(p.x, p.y);
+        if (sys) { GMM.gesture = { mode: 'dragstar', id: e.pointerId, sys, moved: false, sx: p.x, sy: p.y, t0: now }; return; }
+      }
       GMM.gesture = { mode: 'pan', id: e.pointerId, sx: p.x, sy: p.y, tx0: GMM.tx, ty0: GMM.ty,
         moved: false, t0: now, lx: p.x, ly: p.y, lt: now, vx: 0, vy: 0 };
     } else if (GMM.ptrs.size === 2) gmmStartPinch();
@@ -2870,6 +2935,19 @@ function gmmBindCanvas() {
     pt.x = e.clientX - r.left; pt.y = e.clientY - r.top;
     const g = GMM.gesture;
     if (!g) return;
+    if (g.mode === 'dragstar' && e.pointerId === g.id) {
+      if (!g.moved && Math.hypot(pt.x - g.sx, pt.y - g.sy) > 5) g.moved = true;
+      if (!g.moved) return;
+      // Звезда рисуется живьём каждый кадр (gmmPaintStars по GM.systems) — двигается
+      // сразу; территории/пути в Path2D пересоберём один раз на отпускании.
+      const w = gmmScreenToWorld(pt.x, pt.y);
+      g.sys.x = Math.max(0, Math.min(GM_W, Math.round(w.x)));
+      g.sys.y = Math.max(0, Math.min(GM_H, Math.round(w.y)));
+      GM._cbox = null;
+      gmmRefreshLanes();                // пути тянутся за звездой живьём
+      GMM.dirty = true; gmmKick();
+      return;
+    }
     if (g.mode === 'pan' && e.pointerId === g.id) {
       const dx = pt.x - g.sx, dy = pt.y - g.sy;
       if (!g.moved && Math.hypot(dx, dy) > 7) g.moved = true;
@@ -2906,6 +2984,19 @@ function gmmBindCanvas() {
     }
     if (GMM.ptrs.size) return;
     GMM.gesture = null;
+    // Редактор: отпустили перетаскиваемую звезду — сохранить и пересобрать мир;
+    // если не двигали — это клик по звезде (открыть форму и т.п. через gmmTapAt).
+    if (g && g.mode === 'dragstar') {
+      if (g.moved) {
+        gmmEditRefresh();
+        dbPatch('map_systems', 'id=eq.' + encodeURIComponent(g.sys.id), { x: g.sys.x, y: g.sys.y })
+          .catch(err => toast('Не сохранилось: ' + err.message, 'err'));
+      } else if (e.type === 'pointerup') {
+        const r = GMM.rect || cv.getBoundingClientRect();
+        gmmTapAt(e.clientX - r.left, e.clientY - r.top);
+      }
+      return;
+    }
     if (!g || g.mode !== 'pan') return;
     const now = performance.now();
     if (!g.moved && e.type === 'pointerup' && now - g.t0 < 500) {
@@ -2926,8 +3017,16 @@ function gmmBindCanvas() {
     // Прямой зум к курсору (без анимации — она спамила перерастеризацию и лагала).
     gmmZoomAt(e.clientX - r.left, e.clientY - r.top, GMM.s * (e.deltaY > 0 ? 1 / 1.2 : 1.2), false);
   }, { passive: false });
-  // тултип названия ресурса при наведении курсора
+  // тултип названия ресурса при наведении курсора (+ табло координат в редакторе)
   cv.addEventListener('mousemove', (e) => {
+    if (GM.editSession) {
+      const el = document.getElementById('gm-coord');
+      if (el) {
+        const r = cv.getBoundingClientRect();
+        const w = gmmScreenToWorld(e.clientX - r.left, e.clientY - r.top);
+        el.textContent = `X: ${Math.round(w.x)} | Y: ${Math.round(w.y)}`;
+      }
+    }
     if (!GM.showRes || !GMM.resHitMap || !GMM.resHitMap.length) { gmmHideResTip(); return; }
     const r = cv.getBoundingClientRect();
     const mx = e.clientX - r.left, my = e.clientY - r.top;
@@ -2969,18 +3068,78 @@ function gmmStartPinch() {
   GMM.gesture = { mode: 'pinch', d0, s0: GMM.s, wx: (cx - GMM.tx) / GMM.s, wy: (cy - GMM.ty) / GMM.s };
 }
 
+// Ближайшая система под точкой экрана (радиус попадания как у тапа)
+function gmmSysAtScreen(lx, ly) {
+  let best = null, bd = 1e9;
+  GM.systems.forEach(s => {
+    const sx = s.x * GMM.s + GMM.tx, sy = gmmTY(s.y * GMM.s + GMM.ty);
+    const d = Math.hypot(sx - lx, sy - ly), rad = Math.max(24, gmmIconPx(s, GMM.s) * 0.7);
+    if (d < rad && d < bd) { bd = d; best = s; }
+  });
+  return best;
+}
+// Экран → мир с учётом «завала» плоскости (обратное к sx = x·s+tx, sy = gmmTY(y·s+ty))
+function gmmScreenToWorld(lx, ly) {
+  const k = gmmTiltK(), p = GMM.vh / 2;
+  const py = p + (ly - p) / k;
+  return { x: (lx - GMM.tx) / GMM.s, y: (py - GMM.ty) / GMM.s };
+}
+// Гиперпуть под точкой экрана: та же кривая (изгиб по хэшу концов), что в gmBuildGeo;
+// семплируем и меряем экранную дистанцию. Для режима «Убрать путь».
+function gmmLaneAt(lx, ly) {
+  let best = null, bd = 11;   // порог попадания, px
+  GM.lanes.forEach(l => {
+    const a = GM.systems.find(s => s.id === l.a_id), b = GM.systems.find(s => s.id === l.b_id);
+    if (!a || !b) return;
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const nx = -dy / len, ny = dx / len;
+    const h = gmEdgeHash(Math.min(a.x, b.x) + Math.max(a.x, b.x) * 0.31, Math.min(a.y, b.y) + Math.max(a.y, b.y) * 0.47);
+    const bend = (h - 0.5) * 2 * Math.min(len * 0.11, 55);
+    const cx = mx + nx * bend, cy = my + ny * bend;
+    for (let i = 0; i <= 24; i++) {
+      const t = i / 24, u = 1 - t;
+      const wx = u * u * a.x + 2 * u * t * cx + t * t * b.x;
+      const wy = u * u * a.y + 2 * u * t * cy + t * t * b.y;
+      const sx = wx * GMM.s + GMM.tx, sy = gmmTY(wy * GMM.s + GMM.ty);
+      const d = Math.hypot(sx - lx, sy - ly);
+      if (d < bd) { bd = d; best = l; }
+    }
+  });
+  return best;
+}
+// Клики инструментов редактора (canvas). Вызывается из gmmTapAt при GM.edit.
+function gmmEditTap(lx, ly) {
+  const sys = gmmSysAtScreen(lx, ly);
+  if (GM.mode === 'link') { if (sys) gmLinkClick(sys); return; }
+  if (GM.mode === 'sector') {
+    if (sys) { gmSectorToggleSys(sys.id); return; }
+    const secId = gmmSectorAt(lx, ly);
+    if (secId && secId !== '__draft__') gmSectorEdit(secId);
+    return;
+  }
+  if (GM.mode === 'unlink') {
+    const lane = gmmLaneAt(lx, ly);
+    if (lane) gmDeleteLane(lane.id);
+    return;
+  }
+  if (GM.mode === 'add') {
+    if (sys) { gmOpenForm(sys); return; }   // по звезде — не плодим дубль, открываем её
+    const w = gmmScreenToWorld(lx, ly);
+    gmAddStar(Math.max(0, Math.min(GM_W, Math.round(w.x))), Math.max(0, Math.min(GM_H, Math.round(w.y))));
+    return;
+  }
+  // select: клик по звезде — форма редактирования, по пустоте — закрыть панели
+  if (sys) { GMM.selId = sys.id; GMM.dirty = true; gmmKick(); gmOpenForm(sys); }
+  else { gmClosePanel(); gmCloseForm(); }
+}
+
 function gmmTapAt(lx, ly) {
   const now = performance.now();
   const dbl = (now - GMM.lastTap < 320 && Math.hypot(lx - GMM.ltx, ly - GMM.lty) < 40);
-  const sysAtScreen = () => {
-    let best = null, bd = 1e9;
-    GM.systems.forEach(s => {
-      const sx = s.x * GMM.s + GMM.tx, sy = gmmTY(s.y * GMM.s + GMM.ty);
-      const d = Math.hypot(sx - lx, sy - ly), rad = Math.max(24, gmmIconPx(s, GMM.s) * 0.7);
-      if (d < rad && d < bd) { bd = d; best = s; }
-    });
-    return best;
-  };
+  const sysAtScreen = () => gmmSysAtScreen(lx, ly);
+  // ── РЕДАКТОР КАРТЫ: включённые инструменты перехватывают клик ──
+  if (GM.editSession && GM.edit) { gmmEditTap(lx, ly); return; }
   // 0) РЕЖИМ ПРИЦЕЛИВАНИЯ носителя: клик по системе = отправить туда, по пустоте = отмена.
   if (GMM.opCmd && GMM.opCmd.mode === 'target') {
     const tgt = sysAtScreen();
@@ -3113,12 +3272,11 @@ function gmmFrame(ts) {
     const now = performance.now();
     const moving = !!(GMM.gesture || GMM.anim || GMM.vel) || (now - (GMM.lastWheel || 0) < 180);
     if (moving) {
-      // ВО ВРЕМЯ жеста. Чистый ПАН битмап НЕ пере-печём — покрытие края держит живой
-      // слой территорий (см. gmmBlit), а пере-печь туман (138 радиальных градиентов)
-      // каждые 110мс = рывки. Дешёвый низкоразрешённый растр делаем только при смене
-      // ЗУМА (битмап становится мыльным/каша на переходе обзор↔системы), иначе ждём
-      // утихания. Чистый полноразмерный — как жест уймётся (debounce).
-      if (gmmZoomChanged() && now - GMM.lastRaster > 110) gmmRaster(0.6);
+      // ВО ВРЕМЯ жеста битмап НЕ пере-печём вовсе. Раньше при смене зума пекли дешёвый
+      // низкоразрешённый растр (0.6) — он давал ту самую «мыльный→чёткий» вспышку
+      // (мигание). Теперь во время движения показываем текущий битмап, линейно
+      // растянутый (чуть мягкий), а чёткий полноразмерный печём ОДИН раз, как жест
+      // уймётся (debounce). Один переход вместо череды вспышек.
       gmmRasterSoon();
     } else {
       gmmRaster(1);      // покой — сразу начисто
@@ -3147,24 +3305,8 @@ function gmmBlit() {
     gmmPaintSpace(ctx, cs, wx0, wy0, wx1, wy1, !gmmOverview(cs));
     ctx.restore();
   }
-  // ЖИВОЙ ВЕКТОРНЫЙ МИР ПОД битмапом — каждый кадр. Тот же дешёвый слой (территории,
-  // сектора, границы, ГИПЕРПУТИ, метки регионов), что печётся в битмап, но рисуемый
-  // живьём. Битмап непрозрачен и кроет его там, где успел перерастеризоваться; а на
-  // крае, который битмап при пане ещё не докрыл, мгновенно видно ВСЁ (и пути, и
-  // регионы), без «пустого квадрата». Рисуем с тем же наклоном плоскости ky, что и
-  // битмап (drawImage … gmmTY … *ky) → контуры совпадают, без шва. Туман — плоский
-  // (без дорогих прорех у звёзд): в крае этого достаточно, точные прорехи добьёт битмап.
-  {
-    const cs = GMM.s, ky = gmmTiltK(), pv = GMM.vh / 2, P = GMM.paths;
-    if (P) {
-      ctx.save();
-      // тот же мировой transform, что и у битмапа: вертикальный масштаб ky вокруг центра
-      ctx.setTransform(cs * dpr, 0, 0, cs * ky * dpr, GMM.tx * dpr, (pv * (1 - ky) + ky * GMM.ty) * dpr);
-      gmmPaintVector(ctx, cs, true);   // live: без тяжёлых флагов-клипов (их даёт битмап)
-      if (P.fogPath) { ctx.fillStyle = 'rgba(4,6,14,0.88)'; ctx.fill(P.fogPath); }
-      ctx.restore();
-    }
-  }
+  // Битмап теперь несёт ТОЛЬКО фон (космос + звёздная россыпь) — см. gmmPaint.
+  // Рисуем его СРАЗУ после живого космофона, ПОД векторным миром.
   const b = GMM.bmp;
   if (b) {
     const f = GMM.s / b.scale;   // битмап-px → CSS-px
@@ -3172,6 +3314,21 @@ function gmmBlit() {
     const dx = b.wx * GMM.s + GMM.tx, dy = b.wy * GMM.s + GMM.ty;
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(b.cv, 0, 0, b.pw, b.ph, dx, gmmTY(dy), b.pw * f, b.ph * f * ky);
+  }
+  // ЖИВОЙ ВЕКТОРНЫЙ МИР — каждый кадр, ПОВЕРХ фонового битмапа. Территории, сектора,
+  // границы, флаги, гиперпути рисуются живьём по ТЕКУЩЕМУ зуму: толщина линий и
+  // контуры всегда точные, ничего не «щёлкает» при перепечке битмапа (в битмапе
+  // вектора больше нет — раньше именно его растяжение мыло→чётко и давало мигание).
+  // Рисуем с тем же наклоном плоскости ky, что и битмап → контуры совпадают, без шва.
+  {
+    const cs = GMM.s, ky = gmmTiltK(), pv = GMM.vh / 2, P = GMM.paths;
+    if (P) {
+      ctx.save();
+      // тот же мировой transform, что и у битмапа: вертикальный масштаб ky вокруг центра
+      ctx.setTransform(cs * dpr, 0, 0, cs * ky * dpr, GMM.tx * dpr, (pv * (1 - ky) + ky * GMM.ty) * dpr);
+      gmmPaintVector(ctx, cs, true);   // live: теперь ЕДИНСТВЕННАЯ отрисовка мира (с флагами)
+      ctx.restore();
+    }
   }
   // ЖИВОЙ СЛОЙ ОБЪЕКТОВ: звёзды / подписи / иконки ресурсов рисуются каждый кадр
   // в МИРОВОЙ системе координат по ТЕКУЩЕМУ зуму. Их экранный размер сублинейный
@@ -3194,12 +3351,36 @@ function gmmBlit() {
       ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
     }
   }
+  gmmPaintEditOverlay(ctx);  // редактор: кольца выбранных звёзд (линковка/сектор)
   gmmPaintLaneTraffic(ctx);  // караваны по гиперпутям (как только видны сами пути)
   gmmPaintSalvos(ctx);   // залпы межзвёздной артиллерии в полёте (на любом зуме)
   gmmPaintOrbits(ctx);   // живой оверлей анимированных систем (на глубоком зуме)
   gmmPaintDeepFx(ctx);   // HUD-переход «вход в систему»: рамка/скобки/скан/импульс
   gmmPaintDefense(ctx);  // оборона: аванпосты/носители — ПОВЕРХ орбит, иначе на глубоком
                          // зуме большая планета/корона звезды перекрывают значки
+}
+
+// Оверлей редактора: отмеченные звёзды (первая точка гиперпути, состав сектора).
+// Живёт в экранных координатах поверх кадра, как кольцо GMM.selId — без перепечки мира.
+function gmmPaintEditOverlay(ctx) {
+  if (!GM.editSession || !GM.edit) return;
+  const ring = (sys, col) => {
+    const sx = sys.x * GMM.s + GMM.tx, sy = gmmTY(sys.y * GMM.s + GMM.ty);
+    const R = Math.max(13, gmmIconPx(sys, GMM.s) * 0.62 + 7);
+    ctx.beginPath(); ctx.arc(sx, sy, R, 0, 6.2832);
+    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+  };
+  if (GM.mode === 'link' && GM.linkFrom) {
+    const s = GM.systems.find(x => x.id === GM.linkFrom);
+    if (s) ring(s, 'rgba(120,225,255,.95)');
+  }
+  if (GM.mode === 'sector' && GM.sectorDraft) {
+    (GM.sectorDraft.system_ids || []).forEach(id => {
+      const s = GM.systems.find(x => x.id === id);
+      if (s) ring(s, 'rgba(140,210,255,.9)');
+    });
+  }
 }
 
 // Стилизованный HUD-переход при заходе в ПОЛНЫЙ зум системы. Вокруг системы в фокусе
@@ -4587,6 +4768,30 @@ function gmmBuildWorld() {
   gmmBuildDefense();
 }
 
+// Лёгкая пересборка ТОЛЬКО кривых гиперпутей — для живого перетаскивания звезды в
+// редакторе: пути тянутся за звездой каждый кадр, а тяжёлый Вороной (территории/
+// границы/сектора) пересчитывается один раз на отпускании (gmmEditRefresh).
+function gmmRefreshLanes() {
+  if (!GMM.paths) return;
+  const byId = new Map(GM.systems.map(s => [s.id, s]));
+  let lanesD = '';
+  GMM.laneGeo = new Map();
+  GM.lanes.forEach(l => {
+    const a = byId.get(l.a_id), b = byId.get(l.b_id);
+    if (!a || !b) return;
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const nx = -dy / len, ny = dx / len;
+    const h = gmEdgeHash(Math.min(a.x, b.x) + Math.max(a.x, b.x) * 0.31, Math.min(a.y, b.y) + Math.max(a.y, b.y) * 0.47);
+    const bend = (h - 0.5) * 2 * Math.min(len * 0.11, 55);
+    const cx = +(mx + nx * bend).toFixed(1), cy = +(my + ny * bend).toFixed(1);
+    lanesD += `M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`;
+    GMM.laneGeo.set(l.a_id + '|' + l.b_id, { ax: a.x, ay: a.y, cx, cy, bx: b.x, by: b.y });
+    GMM.laneGeo.set(l.b_id + '|' + l.a_id, { ax: b.x, ay: b.y, cx, cy, bx: a.x, by: a.y });
+  });
+  GMM.paths.lanes = lanesD ? new Path2D(lanesD) : null;
+}
+
 // Караваны торговых маршрутов: для каждого активного trade_route считаем путь по
 // гиперпутям (BFS, как ecPath) и собираем ломаную из кривых-сегментов (та же
 // геометрия, что у нарисованных гиперпутей). По ней потом «летят» кораблики.
@@ -5371,13 +5576,7 @@ function gmmBezPt(g, u) {
 function gmmPaintSpace(ctx, camS, wx0, wy0, wx1, wy1, stars) {
   ctx.fillStyle = '#05060b';
   ctx.fillRect(wx0, wy0, wx1 - wx0, wy1 - wy0);
-  GMM_NEBULAE.forEach(([px, py, pr, c, a]) => {
-    const cx = px * GM_W, cy = py * GM_H, R = pr * GM_W;
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-    g.addColorStop(0, `rgba(${c},${a})`); g.addColorStop(1, `rgba(${c},0)`);
-    ctx.fillStyle = g;
-    ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-  });
+  // Цветные туманности отключены (минимализм): ровный тёмный космофон без пятен.
   if (stars !== false) gmmPaintStarfield(ctx, camS, wx0, wy0, wx1, wy1);
   ctx.strokeStyle = 'rgba(120,160,220,.14)'; ctx.lineWidth = 1.5 / camS;
   ctx.strokeRect(0, 0, GM_W, GM_H);
@@ -5385,13 +5584,12 @@ function gmmPaintSpace(ctx, camS, wx0, wy0, wx1, wy1, stars) {
 
 function gmmPaint(ctx, camS, wx0, wy0, wx1, wy1) {
   gmmPaintSpace(ctx, camS, wx0, wy0, wx1, wy1);
-  if (!GMM.paths) return;
-  gmmPaintVector(ctx, camS);
-  gmmPaintFog(ctx);
-  // (штриховка ничейных регионов убрана — карта чище)
-  // Звёзды/подписи/иконки ресурсов в битмап НЕ запекаем — их рисует живой слой
-  // (gmmBlit → gmmPaintStars) по текущему зуму. В битмапе только то, что честно
-  // масштабируется линейно при растяжении: фон, территории, туман, границы, пути.
+  // Векторный мир (территории/границы/флаги/пути) в битмап БОЛЬШЕ НЕ ПЕЧЁМ — он
+  // рисуется живьём каждый кадр в gmmBlit поверх этого фона. Раньше запечённый
+  // вектор при жесте зума растягивался (мыло), а после перепечки «щёлкал» в чёткий —
+  // это и было мигание. В битмапе остаётся только фон: космос + звёздная россыпь
+  // (единственное дорогое, что стоит кэшировать; её лёгкий снап при перепечке
+  // незаметен — тусклые точки). Звёзды систем/подписи — тоже живой слой (gmmPaintStars).
 }
 
 // Герб/флаг фракции (ленивая загрузка из анкеты, перерисовка по onload). Картинку
@@ -5470,10 +5668,12 @@ function gmmPaintVector(ctx, camS, live) {
   // тёмном космосе, обособленно. Границы/звёзды/орбиты не трогаем.
   // secDom — «доминирование секторов»: на обзоре (при вкл. слое секторов) фракционные
   // заливки/флаги/границы отступают, чтобы сектора читались как отдельный слой карты.
-  const secA = 1 - gmmZoomT(camS);
+  // В редакторе секторов слой виден на ЛЮБОМ зуме (иначе вблизи не с чем работать)
+  const secEditing = GM.editSession && GM.edit && GM.mode === 'sector';
+  const secA = secEditing ? Math.max(0.85, 1 - gmmZoomT(camS)) : 1 - gmmZoomT(camS);
   // Сектора — САМОСТОЯТЕЛЬНЫЙ слой: показываются независимо от «Границ» (раньше гасли
   // вместе с ними). Границы фракций отступают под сектора только если сами включены.
-  const secShow = GM.showSectors && !GM.showEcon;
+  const secShow = (GM.showSectors || secEditing) && !GM.showEcon;
   const secDom = secShow ? secA : 0;
   // Линза СОЮЗОВ: пока слой включён, прочие слои (заливки/границы/флаги) приглушаются на
   // обзоре, чтобы союзные области читались обособленно (так же сделано для секторов) —
@@ -5495,9 +5695,9 @@ function gmmPaintVector(ctx, camS, live) {
   // Флаги фракций поверх их территорий: герб, мягко растворённый слой-маской к
   // границам (полупрозрачно — карта читается сквозь него). Только в режиме «Границы».
   // Флаг каждой фракции — это уже готовый слой (обрезан по территории + растворён
-  // маской), поэтому здесь только drawImage в bbox территории. Рисуем и в битмап, и в
-  // живой слой (одинаково) — иначе на краю битмапа был бы шов «есть флаг / нет флага».
-  if (!live && GM.showFlags && GM.showBorders && !GM.showEcon && (P.facFills || []).length) {
+  // маской), поэтому здесь только drawImage в bbox территории — дёшево и в живом
+  // слое каждый кадр (в битмап вектор больше не печётся, флаги рисуются только тут).
+  if (GM.showFlags && GM.showBorders && !GM.showEcon && (P.facFills || []).length) {
     const fa = (0.4 - 0.24 * gmmZoomT(camS)) * (1 - 0.9 * gmmDeepA()) * (1 - secDom) * (1 - 0.85 * uniDom);   // на обзоре секторов/союзов флаги гаснут, уступая слою
     if (fa > 0.02) {
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
@@ -5582,9 +5782,10 @@ function gmmPaintVector(ctx, camS, live) {
 function gmmPaintSecLabels(ctx, camS) {
   const P = GMM.paths;
   if (!P || !P.secLabels || !P.secLabels.length) return;
-  const secShow = GM.showSectors && !GM.showEcon;
+  const secEditing = GM.editSession && GM.edit && GM.mode === 'sector';
+  const secShow = (GM.showSectors || secEditing) && !GM.showEcon;
   if (!secShow) return;
-  const secA = 1 - gmmZoomT(camS);
+  const secA = secEditing ? Math.max(0.85, 1 - gmmZoomT(camS)) : 1 - gmmZoomT(camS);
   if (secA <= 0.01) return;
   const dpr = GMM.dpr, u = 1 / camS;
   // На телефоне вьюпорт узкий — плашки крупнее физически налезают одна на другую;
@@ -5846,6 +6047,9 @@ function gmmPlanetTag(ctx, cx, cy, text, u, opt) {
 // Рисуем на отдельном слое (та же мировая система координат), затем компонуем —
 // иначе «прорехи» (destination-out) стёрли бы и территории под ними.
 function gmmPaintFog(ctx) {
+  return;   // Туман войны отключён (минимализм): тёмная пелена над пустотой +
+            // офскрин-канва с 138 радиальными «прорехами» у звёзд были дорогими и
+            // мерцали при перепечатке. Пустота теперь — просто ровный космофон.
   const P = GMM.paths;
   if (!P || !P.fogPath) return;
   const pw = ctx.canvas.width, ph = ctx.canvas.height, m = ctx.getTransform();
