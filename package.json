@@ -1,0 +1,11 @@
+{
+  "name": "classic-era",
+  "version": "0.5.0",
+  "private": true,
+  "scripts": {
+    "build": "node tools/build_dist.js"
+  },
+  "devDependencies": {
+    "terser": "^5.31.0"
+  }
+}

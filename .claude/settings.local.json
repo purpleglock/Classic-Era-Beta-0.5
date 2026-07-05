@@ -170,7 +170,14 @@
       "Bash(node /tmp/t6.js)",
       "Bash(node /tmp/t7.js)",
       "Bash(grep -n \"gmmPlanetImg\\\\|gmmLook\\\\b\\\\|function gmmLook\\\\|GMM_USE_TEX\\\\s*=\\\\|gmmTexImg\\\\|planet_\\\\${\" galaxy_map.js)",
-      "Bash(awk 'NR>=4797 && NR<=5400 { if \\($0 ~ /onclick=/ && $0 ~ /esc\\\\\\(/\\) print NR\": \"$0 }' render.js)"
+      "Bash(awk 'NR>=4797 && NR<=5400 { if \\($0 ~ /onclick=/ && $0 ~ /esc\\\\\\(/\\) print NR\": \"$0 }' render.js)",
+      "Bash(npm install *)",
+      "Bash(node tools/build_dist.js)",
+      "PowerShell(node tools/build_dist.js)",
+      "PowerShell(node -e \"console.log\\('cwd=', process.cwd\\(\\)\\); console.log\\(process.version\\)\")",
+      "PowerShell($out = node \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\tools\\\\build_dist.js\"; Write-Output \"EXIT=$LASTEXITCODE\"; Write-Output $out)",
+      "PowerShell(node -e \"const {minify}=require\\('terser'\\); minify\\('function test\\(\\){ var longName=1; return longName; }',{compress:true,mangle:true}\\).then\\(r=>console.log\\('TERSER OK:',r.code\\)\\).catch\\(e=>{console.error\\(e\\);process.exit\\(1\\)}\\)\")",
+      "PowerShell(node -e \"const fs=require\\('fs'\\),p=require\\('path'\\); const R='C:/Users/'+[1040,1085,1076,1088,1077,1081].map\\(c=>String.fromCharCode\\(c\\)\\).join\\(''\\)+'/Desktop/Classic-Era-Beta-0.5'; console.log\\('exists', fs.existsSync\\(R\\)\\); fs.rmSync\\(R+'/dist',{recursive:true,force:true}\\); fs.mkdirSync\\(R+'/dist'\\); console.log\\('mkdir ok'\\); fs.cpSync\\(R+'/css',R+'/dist/css',{recursive:true}\\); console.log\\('css ok'\\); fs.cpSync\\(R+'/legal',R+'/dist/legal',{recursive:true}\\); console.log\\('legal ok'\\); fs.cpSync\\(R+'/assets',R+'/dist/assets',{recursive:true}\\); console.log\\('assets ok'\\)\")"
     ]
   }
 }
