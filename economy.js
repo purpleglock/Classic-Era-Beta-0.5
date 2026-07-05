@@ -1936,7 +1936,7 @@ function ecDoctrineSpecials(app) {
     out.push('🔬 +1 слот исследований (машинный разум)');
   }
   // Пул захватов складывается по источникам (Экспансионизм + «Дом в небесах» + роботы).
-  const claimMax = ecClaimMax();
+  const claimMax = ecClaimMax(app);
   if (claimMax > 1) out.push(`⬢ ${claimMax} захвата подряд, затем перезарядка`);
   if (research.includes('pol.mind_supremacy')) out.push('🔬 +2 слота исследований — «Превосходство разума»');
   else if (research.includes('pol.light_knowledge')) out.push('🔬 +1 слот исследований — «Свет знаний»');
@@ -4174,11 +4174,12 @@ function ecClaimCooldownMs() {
 }
 // Размер пула захватов: СКЛАДЫВАЕТСЯ по источникам, без потолка (зеркало economy_claim_system).
 //   база 1  +1 Экспансионизм  +1 «Дом в небесах»  +1 роботы.
-function ecClaimMax() {
+function ecClaimMax(app) {
+  app = app || EC.app || {};
   let n = 1;
-  if (ecIsExpansionist()) n++;
-  if ((EC.eco.research || []).includes('pol.house_heavens')) n++;
-  if (ecIsRobot()) n++;
+  if (app.ideology === 'Экспансионизм') n++;
+  if (((EC.eco && EC.eco.research) || []).includes('pol.house_heavens')) n++;
+  if (app.race === 'Синтетики / Киборги' || app.gov === 'Машинный разум (ИИ)') n++;
   return n;
 }
 // Сколько захватов осталось в пуле (зеркало модели «пул» в economy_claim_system):
