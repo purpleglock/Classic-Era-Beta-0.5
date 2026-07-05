@@ -369,7 +369,12 @@ function frStepSystem(d) {
     <div class="fr-planet-pick" id="f-planet-pick"></div>`;
 }
 // Выбор типа столичной планеты — родной мир расы. Имя вводится игроком (поле f-planet),
-// тип определяется расой (EC_HAB). Если родных миров несколько — игрок выбирает.
+// тип определяется расой (EC_HAB). Если родных миров несколько — игрок выбирает карточкой.
+const FR_ENV_IMG = {
+  terrestrial: 'planet_terran', oceanic: 'planet_ocean', desert: 'planet_rock',
+  volcanic: 'cls_supervolc', lava: 'planet_lava', cryo: 'planet_ice',
+  micro: 'asteroid', exotic: 'cls_diamond',
+};
 function frRenderPlanetPick() {
   const box = document.getElementById('f-planet-pick'); if (!box) return;
   const race = FR.data.race;
@@ -379,22 +384,27 @@ function frRenderPlanetPick() {
   if (!FR.data.capital_env || !envs.includes(FR.data.capital_env)) FR.data.capital_env = envs[0];
   const env = FR.data.capital_env;
   const cap = (typeof ecCapital === 'function') ? ecCapital(env) : null;
-  // карточка с характеристиками выбранной столицы
+  const img = e => `${GM_BASE_SAFE()}planets/${FR_ENV_IMG[e] || 'planet_terran'}.png`;
+  const cards = envs.map(e => {
+    const c = (typeof ecCapital === 'function') ? ecCapital(e) : { title: lbl[e] || e };
+    const type = (lbl[e] || e) === c.title ? '' : `<div class="fr-env-type">${esc(lbl[e] || e)}</div>`;
+    return `<div class="fr-env-card${env === e ? ' on' : ''}" onclick="frPickCapEnv('${e}')">
+      <div class="fr-env-img"><img src="${img(e)}" alt="" onerror="this.style.display='none'"></div>
+      <div class="fr-env-name">${esc(c.title)}</div>${type}
+    </div>`;
+  }).join('');
+  // досье выбранной столицы: характеристики + игровой бонус
   const card = cap ? `<div class="fr-cap-card">
-      <div class="fr-cap-card-hd"><span class="fr-cap-card-title">🪐 ${esc(cap.title)}</span><span class="fr-cap-card-type">${esc(lbl[env] || env)}</span></div>
+      <div class="fr-cap-card-hd"><span class="fr-cap-card-title">${esc(cap.title)}</span><span class="fr-cap-card-type">${esc(lbl[env] || env)}</span></div>
       <div class="fr-cap-card-flavor">${esc(cap.flavor)}</div>
       <div class="fr-cap-card-stats">
-        <span class="fr-cap-stat">⬚ Ячейки застройки: <b>${cap.cells}</b></span>
-        <span class="fr-cap-stat">◆ Ресурсы: <b>${cap.res.map(esc).join(', ')}</b></span>
+        <span class="fr-cap-stat">Ячейки застройки <b>${cap.cells}</b></span>
+        <span class="fr-cap-stat">Ресурсы <b>${cap.res.map(esc).join(', ')}</b></span>
       </div>
       <div class="fr-cap-card-bonus">${(typeof ecChoiceChips === 'function') ? ecChoiceChips('capital', env) : ''}</div>
     </div>` : '';
-  if (envs.length <= 1) {
-    box.innerHTML = `<div class="fr-cap-label">Родной мир столицы (по расе): <b>${esc(lbl[env] || env)}</b> — единственный для вашей расы.</div>${card}`;
-    return;
-  }
-  const chips = envs.map(e => `<div class="fr-cap-chip${env === e ? ' on' : ''}" onclick="frPickCapEnv('${e}')">${esc(lbl[e] || e)}</div>`).join('');
-  box.innerHTML = `<div class="fr-cap-label">Родной мир столицы (по расе):</div><div class="fr-cap-chips">${chips}</div>${card}`;
+  box.innerHTML = `<div class="fr-cap-label">Родной мир столицы — определяется расой${envs.length <= 1 ? ' · единственный вариант' : ''}</div>
+    <div class="fr-env-grid">${cards}</div>${card}`;
 }
 function frOnRegRace(v) { FR.data.race = v; frRenderPlanetPick(); }
 function frPickCapEnv(env) { FR.data.capital_env = env; frSaveLocal(); frRenderPlanetPick(); }
