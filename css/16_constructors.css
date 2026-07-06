@@ -218,24 +218,22 @@
 .cn-imgbox-empty::after { content: '⬡ нет картинки'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; font-family: var(--font-mono); font-size: 9px; color: var(--t4); text-align: center; padding: 4px; line-height: 1.2; }
 .cn-h-img.cn-imgbox-empty::after, .cn-u-img.cn-imgbox-empty::after { content: '⬡'; font-size: 13px; }
 
-/* Схема корабля вид сверху (живая, рисуется кодом) */
+/* Схема корабля вид сверху (живая, рисуется кодом).
+   Полотно без внутренних полей: инструменты и тумблеры — оверлеями поверх SVG,
+   подпись класса и комплектация — штампами внутри самого чертежа. */
 .cn-schem-panel { padding: 0; overflow: hidden; }
-.cn-schem-cap { padding: 13px 16px 2px; font-family: var(--font-mono); font-size: 12px; color: var(--t3); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
-.cn-schem-k { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--t1); letter-spacing: var(--ls-tight); }
-.cn-schem-t { color: var(--t2); }
-.cn-schem-m { color: var(--te); }
-.cn-schematic { position: relative; display: flex; justify-content: center; padding: 4px 8px; }
-.cn-schem-svg { width: 100%; max-width: 720px; height: auto; display: block; margin: 0 auto; }
+.cn-schematic { position: relative; display: flex; justify-content: center; padding: 0; }
+.cn-schem-svg { width: 100%; height: auto; display: block; margin: 0 auto; }
 .cn-schem-over { position: absolute; left: 14px; bottom: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--err); }
-.cn-schem-tools { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 4px; }
-.cn-schem-tools .btn { flex: 0 0 auto; }
 .cn-schem-wrap { position: relative; }
-.cn-schem-toggles { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
-.cn-schem-toggles .btn { background: var(--b2); }
+.cn-schem-toggles { position: absolute; top: 6px; right: 6px; display: flex; gap: 6px; z-index: 2; }
+.cn-schem-tools { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; z-index: 2; }
+.cn-schem-tools .btn, .cn-schem-toggles .btn { flex: 0 0 auto; background: var(--b2); }
 .cn-schem-tools .btn.on, .cn-schem-toggles .btn.on { border-color: var(--gd); color: var(--gd); }
-.cn-schem-hint { padding: 4px 16px 0; font-size: 10.5px; color: var(--t4); line-height: 1.45; }
 .cn-assign-head { display: flex; gap: 8px; margin-top: 12px; }
-.cn-schem-legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 16px 14px; border-top: var(--deco-frame-w, 1px) solid var(--w1); }
+/* Однострочный подвал схемы: короткая подсказка + легенда, без отдельных блоков */
+.cn-schem-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 7px 2px 0; }
+.cn-schem-hint { font-size: 10px; color: var(--t4); line-height: 1.4; margin-right: auto; }
 .cn-lg { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--t3); }
 .cn-lg i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: 0 0 auto; }
 .cn-lg-empty { border: 1.5px dashed var(--t4); background: transparent !important; border-radius: 50%; }
@@ -287,6 +285,23 @@
 .cn-pick-body { margin-top: 14px; display: flex; flex-direction: column; gap: 18px; }
 .cn-pick-h { font-family: var(--font-mono); font-size: 10px; letter-spacing: calc(.1em * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--te); margin-bottom: 8px; }
 
+/* Вкладки-фильтры по калибру (сначала калибр → потом орудие этого калибра) */
+.cn-pick-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.cn-pick-tab {
+  padding: 6px 12px; font-size: 12px; font-weight: 600; color: var(--t2);
+  background: var(--w1); border: 1px solid transparent; border-radius: 6px;
+  cursor: pointer; transition: background var(--transition-fast), color var(--transition-fast);
+}
+.cn-pick-tab:hover { color: var(--te); }
+.cn-pick-tab.on { background: color-mix(in srgb, var(--te) 18%, var(--b1)); color: var(--te); border-color: color-mix(in srgb, var(--te) 45%, transparent); }
+/* Киберпанк-модалка: прямые углы, моно, срез-подложка активной вкладки */
+.cn-modal-ov.cn-cyb .cn-pick-tab {
+  border-radius: 0; border: none; font-family: var(--font-mono); font-size: 10px;
+  text-transform: uppercase; letter-spacing: calc(.06em * var(--deco-ls-mult, 1));
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);
+}
+.cn-modal-ov.cn-cyb .cn-pick-tab.on { background: var(--te); color: var(--b1); }
+
 /* Картинка корпуса в карточке каталога */
 .cn-card-ico-img { padding: 0; overflow: hidden; }
 .cn-card-ico-img .cn-imgbox { width: 100%; height: 100%; }
@@ -334,6 +349,155 @@
 .cn-info-card:hover .cn-info-pick { border-color: var(--gd); }
 .cn-info-pick.cn-info-lk { color: var(--t4); }
 
+/* ═══════════════════════════════════════════════════════════════
+   КИБЕРПАНК-ОФОРМЛЕНИЕ КОРАБЕЛЬНОЙ ВЕРФИ (.cn-cyb)
+   Срезанные углы = слой-подложка (::before рамка + ::after фон),
+   без border — рамка обрезалась бы clip-path. Акценты: --gd / --te.
+   ─────────────────────────────────────────────────────────────── */
+.cn-cyb .cn-panel { position: relative; border: none; background: transparent; border-radius: 0; z-index: 1; }
+.cn-cyb .cn-panel::before {
+  content: ''; position: absolute; inset: 0; z-index: -2; background: var(--w2);
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+}
+.cn-cyb .cn-panel::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1; background: var(--b2);
+  clip-path: polygon(0 0, calc(100% - 13.3px) 0, 100% 13.3px, 100% 100%, 0 100%);
+}
+/* Полотно верфи — единственная панель с золотой кромкой слева */
+.cn-cyb .cn-stage::before { background: linear-gradient(90deg, var(--gd) 0 3px, var(--w2) 3px); }
+.cn-cyb .cn-stage::after {
+  inset: 1px 1px 1px 3px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gd) 6%, transparent), transparent 56px), var(--b2);
+}
+.cn-cyb .cn-panel h3 {
+  font-family: var(--font-display); font-size: 11px; font-weight: 900;
+  letter-spacing: calc(2px * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t2);
+}
+.cn-cyb .cn-panel h3::before { content: '// '; color: var(--te); font-weight: 700; }
+
+/* Название корабля — терминальная строка с подчёркиванием */
+.cn-cyb .cn-stage-name { background: transparent; border: none; border-bottom: 1px solid var(--w2); border-radius: 0; padding: 8px 2px 10px; font-size: 18px; letter-spacing: .4px; }
+.cn-cyb .cn-stage-name:focus { border-bottom-color: var(--gd); }
+
+/* Чипы систем — срезанные */
+.cn-cyb .cn-slot-chip { position: relative; border: none; background: transparent; border-radius: 0; z-index: 1; padding: 6px 14px 6px 10px; }
+.cn-cyb .cn-slot-chip::before {
+  content: ''; position: absolute; inset: 0; z-index: -2; background: var(--w2);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+  transition: background var(--transition-fast);
+}
+.cn-cyb .cn-slot-chip::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1; background: var(--b1);
+  clip-path: polygon(0 0, calc(100% - 7.3px) 0, 100% 7.3px, 100% 100%, 0 100%);
+}
+.cn-cyb .cn-slot-chip:hover { transform: none; }
+.cn-cyb .cn-slot-chip:hover::before { background: var(--gd); }
+.cn-cyb .cn-slot-lbl { color: var(--te); }
+
+/* Игровой HUD: плитки ТТХ + шкала энергосети */
+.cn-hud { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin-top: 12px; }
+.cn-hud:empty { display: none; }
+.cn-hud-t { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 1px; padding: 7px 10px 6px; }
+.cn-hud-t::before {
+  content: ''; position: absolute; inset: 0; z-index: -2; background: var(--w2);
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);
+}
+.cn-hud-t::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1; background: var(--b1);
+  clip-path: polygon(0 0, calc(100% - 6.3px) 0, 100% 6.3px, 100% 100%, 0 100%);
+}
+.cn-hud-t b { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--t1); line-height: 1.15; white-space: nowrap; }
+.cn-hud-t span { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: calc(.07em * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t3); }
+.cn-hud-t.gd b { color: var(--gd); }
+.cn-hud-t.te b { color: var(--te); }
+.cn-hud-e { grid-column: 1 / -1; position: relative; z-index: 1; padding: 8px 12px 10px; }
+.cn-hud-e::before {
+  content: ''; position: absolute; inset: 0; z-index: -2; background: var(--w2);
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);
+}
+.cn-hud-e::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1; background: var(--b1);
+  clip-path: polygon(0 0, calc(100% - 6.3px) 0, 100% 6.3px, 100% 100%, 0 100%);
+}
+.cn-hud-e-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-family: var(--font-mono); }
+.cn-hud-e-hd span { font-size: 8.5px; letter-spacing: calc(.07em * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t3); }
+.cn-hud-e-hd b { font-size: 11px; color: var(--te); }
+.cn-hud-bar { height: 6px; margin-top: 6px; background: var(--w1); clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 100%, 0 100%); }
+.cn-hud-bar i { display: block; height: 100%; background: var(--te); transition: width .25s ease; }
+.cn-hud-e.warn .cn-hud-bar i, .cn-hud-e.warn .cn-hud-e-hd b { background: var(--gd); color: var(--gd); }
+.cn-hud-e.over .cn-hud-bar i, .cn-hud-e.over .cn-hud-e-hd b { background: var(--err); color: var(--err); }
+.cn-hud-e.warn .cn-hud-e-hd b, .cn-hud-e.over .cn-hud-e-hd b { background: none; }
+
+/* Схема: голографическая подсветка, HUD-надписи, живые узлы */
+.cn-cyb .cn-schematic { background: radial-gradient(ellipse at 50% 45%, color-mix(in srgb, var(--te) 4%, transparent), transparent 70%); }
+.cn-cyb .cn-schem-svg { max-width: 100%; }
+
+/* Экран верфи во всю ширину; минимум хрома — кораблю максимум места */
+.cn-wrap.cn-cyb { max-width: min(1400px, 96vw); padding: 14px 16px 40px; }
+.cn-cyb .cn-present { gap: 10px; }
+.cn-cyb .cn-panel { padding: 13px 14px 15px; }
+.cn-cyb .cn-stage { padding: 12px 12px 6px; }
+.cn-cyb .cn-schem-wrap { margin-top: 10px; }
+.cn-cyb .cn-schem-cap { font-size: 11px; }
+.cn-cyb .cn-schem-hint, .cn-cyb .cn-lg { font-family: var(--font-mono); font-size: 10px; }
+.cn-cyb .cn-node { transition: filter var(--transition-fast); }
+.cn-cyb .cn-node:hover { filter: drop-shadow(0 0 4px var(--gd)); }
+.cn-cyb .cn-bay:hover polygon { stroke: var(--gd); }
+.cn-arc { transition: opacity var(--transition-fast); pointer-events: none; }
+.cn-cyb .cn-node:hover .cn-arc { opacity: .35; }
+.cn-cyb .cn-flame { animation: cnFlame 1.15s ease-in-out infinite; }
+@keyframes cnFlame { 0%, 100% { opacity: .95; } 45% { opacity: .58; } 70% { opacity: .82; } }
+.cn-cyb .cn-core { animation: cnCore 2.6s ease-in-out infinite; }
+@keyframes cnCore { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+.cn-cyb .cn-shieldfx { animation: cnShieldFx 4s ease-in-out infinite; }
+@keyframes cnShieldFx { 0%, 100% { opacity: .95; } 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) {
+  .cn-cyb .cn-flame, .cn-cyb .cn-core, .cn-cyb .cn-shieldfx { animation: none; }
+}
+
+/* Кнопки инструментов схемы — прямые углы, моно */
+.cn-cyb .cn-schem-tools .btn, .cn-cyb .cn-schem-toggles .btn, .cn-cyb .cn-assign-head .btn {
+  border-radius: 0; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: calc(.06em * var(--deco-ls-mult, 1));
+}
+.cn-cyb .cn-slotrow { border-radius: 0; }
+
+/* Ангары — срез + бирюзовая кромка */
+.cn-cyb .cn-hangar { position: relative; border: none; background: transparent; border-radius: 0; z-index: 1; }
+.cn-cyb .cn-hangar::before {
+  content: ''; position: absolute; inset: 0; z-index: -2;
+  background: linear-gradient(90deg, var(--te) 0 3px, var(--w1) 3px);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+.cn-cyb .cn-hangar::after {
+  content: ''; position: absolute; inset: 1px 1px 1px 3px; z-index: -1; background: var(--b1);
+  clip-path: polygon(0 0, calc(100% - 7.3px) 0, 100% 7.3px, 100% 100%, 0 100%);
+}
+
+/* Модалки выбора (оверлей получает .cn-cyb из JS) */
+.cn-modal-ov.cn-cyb .cn-modal {
+  border: none; border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--te) 6%, var(--b2)), var(--b2) 90px);
+}
+.cn-modal-ov.cn-cyb .cn-modal-name { font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: calc(1.5px * var(--deco-ls-mult, 1)); }
+.cn-modal-ov.cn-cyb .cn-modal-name::before { content: '// '; color: var(--te); }
+.cn-modal-ov.cn-cyb .cn-modal-x, .cn-modal-ov.cn-cyb .btn { border-radius: 0; }
+.cn-modal-ov.cn-cyb .cn-info-card {
+  border: none; border-radius: 0; background: transparent; position: relative; z-index: 1;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+.cn-modal-ov.cn-cyb .cn-info-card::before {
+  content: ''; position: absolute; inset: 0; z-index: -2; background: var(--w2);
+  transition: background var(--transition-fast);
+}
+.cn-modal-ov.cn-cyb .cn-info-card::after { content: ''; position: absolute; inset: 1px; z-index: -1; background: var(--b1); }
+.cn-modal-ov.cn-cyb .cn-info-card:hover { transform: none; box-shadow: none; }
+.cn-modal-ov.cn-cyb .cn-info-card:hover::before, .cn-modal-ov.cn-cyb .cn-info-card.on::before { background: var(--gd); }
+.cn-modal-ov.cn-cyb .cn-info-card.on { box-shadow: none; }
+.cn-modal-ov.cn-cyb .cn-info-card.locked:hover::before { background: var(--w2); }
+.cn-modal-ov.cn-cyb .cn-info-pick { border-radius: 0; }
+.cn-modal-ov.cn-cyb .cn-pick-h::before { content: '// '; color: var(--te); }
+
 /* ── Адаптив ── */
 @media (max-width: 900px) {
   .cn-grid { grid-template-columns: 1fr; }
@@ -360,6 +524,8 @@
   .cn-schem-tools { padding: 0 12px 4px; }
   .cn-schem-legend { gap: 9px 12px; padding: 10px 12px 14px; }
   .cn-stats-grid { grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .cn-hud { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .cn-hud-t b { font-size: 13px; }
   .cn-hub-grid { grid-template-columns: 1fr; }
   .cn-cat-grid { grid-template-columns: 1fr; }
   .cn-info-card .cn-info-img { aspect-ratio: 16 / 7; }

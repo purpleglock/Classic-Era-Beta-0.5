@@ -4140,7 +4140,12 @@ async function ecOutpostSetRes(id, res) {
   try {
     await ecRpc('outpost_set_resource', { p_id: id, p_res: res || null });
     toast(res ? '⛏ Аванпост добывает: ' + res : 'Ресурс добычи сброшен', 'ok');
-    await ecReloadPaint();
+    // Правим выбранный ресурс локально и перерисовываем из памяти — без полного ecLoad
+    // (47 запросов). outpost_set_resource меняет ТОЛЬКО это поле и не каскадит серверную
+    // экономику (рынок/просперити не тикают), поэтому клиентское зеркало точно. Паттерн
+    // ecSetMineMode. Экономит запись/чтение БД на каждом переключении ресурса аванпоста.
+    const o = (EC.outposts || []).find(x => x.id === id); if (o) o.mine_res = res || null;
+    ecPaintCabinet();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
 }

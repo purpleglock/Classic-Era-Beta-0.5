@@ -858,7 +858,11 @@ function fnRenderBody(body) {
     (m0, u) => { const h = fnMusicHtml(u); return h ? stash(h) : m0; });
   t = t.replace(/^(https?:\/\/\S+)[ \t]*$/gim,
     (m0, u) => { const h = fnMusicHtml(u); return h ? stash(h) : m0; });
-  t = t.replace(/\[fx:schizo\]([\s\S]*?)\[\/fx\]/gi, (_, inner) => {
+  t = t.replace(/\[fx:schizo\]([\s\S]*?)\[\/fx\]/gi, (m0, inner) => {
+    // Однострочный (инлайновый) шизотекст оставляем renderMd — он отрендерит его
+    // прямо внутри абзаца через il() и НЕ порвёт предложение. В отдельный блок
+    // выносим только многострочный (renderMd рубит по строкам и не увидел бы тег).
+    if (!/\n/.test(inner)) return m0;
     const i = blocks.push(typeof schizoWrap === 'function' ? schizoWrap(inner) : esc(inner)) - 1;
     return `\n\nSZ${i}\n\n`;
   });

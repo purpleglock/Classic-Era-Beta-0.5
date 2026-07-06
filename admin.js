@@ -234,7 +234,7 @@ function adPaint() {
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
     const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
-    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук']];
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['weapons', '🔫 Орудия'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук']];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -246,6 +246,7 @@ function adPaint() {
     else if (AD.tab === 'planets')   tabContent = adPlanetTexPanel();
     else if (AD.tab === 'guide')     tabContent = adGuideCoversPanel();
     else if (AD.tab === 'ach')       tabContent = adAchPanel();
+    else if (AD.tab === 'weapons')   tabContent = adWeaponImgPanel();
     else if (AD.tab === 'market')    tabContent = adMarketPanel();
     else if (AD.tab === 'mktsim')    tabContent = adMarketSimPanel();
     else if (AD.tab === 'brand')     tabContent = adBrandPanel();
@@ -412,7 +413,10 @@ async function adUnionDelete(id, btn) {
 // выбора папки и никакого Supabase Storage. В БД хранится только относительный
 // путь + раса/пол; потом публикуешь папку вместе с игрой.
 const AD_PORT_DIR    = 'assets/portraits';                 // путь от корня сайта (для URL)
-const AD_PORT_SERVER = 'http://localhost:8787';            // адрес tools/upload-server.js
+// 127.0.0.1 (а не localhost): сервер слушает IPv4-loopback, а браузер для
+// «localhost» часто берёт IPv6 (::1) → соединение не проходит и панель врёт
+// «нет сервера». Явный IPv4 убирает этот промах.
+const AD_PORT_SERVER = 'http://127.0.0.1:8787';            // адрес tools/upload-server.js
 const AD_PORT_EXT    = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' };
 
 // Жив ли локальный сервер? (короткий пинг, чтобы дать понятную ошибку)
@@ -475,6 +479,70 @@ async function adPortraitDelete(id) {
     }
     AD.portraits = (AD.portraits || []).filter(x => x.id !== id); adPaint();
   } catch (e) { toast('Не удалось удалить: ' + (e.message || e), 'err'); }
+}
+
+// ── Вкладка: Картинки орудий (корабельная верфь) ──────────────────
+// Арт орудия кладётся в assets/constructors/ под ДЕТЕРМИНИРОВАННЫМ именем
+// ship_weapon_<слаг>_<idx>.webp (тот же путь, что рисует cnImgPath). БД не нужна —
+// файл на известном месте сам подхватится схемой (cnWpnImgReady) и карточками.
+// Данные орудий берём из constructors.js (CN_SHIP.weapons, cnGroupSlug, cnImgPath).
+function adWeaponImgPanel() {
+  const WP = (typeof CN_SHIP !== 'undefined' && CN_SHIP.weapons) ? CN_SHIP.weapons : null;
+  if (!WP) return `<div style="margin-top:24px;color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px">Данные орудий недоступны (constructors.js не загружен).</div>`;
+  const slugOf = g => (typeof cnGroupSlug === 'function') ? cnGroupSlug('ship', 'weapon', g) : 'x';
+  const pathOf = (slug, idx) => (typeof cnImgPath === 'function') ? cnImgPath('ship', 'weapon', slug, idx) : ('assets/constructors/ship_weapon_' + slug + '_' + idx + '.webp');
+  const bust = AD.wpnBust || {};
+  const groups = Object.keys(WP).map(g => {
+    const slug = slugOf(g);
+    const cards = WP[g].map((it, idx) => {
+      const key = slug + '-' + idx, url = pathOf(slug, idx), src = url + (bust[url] ? ('?t=' + bust[url]) : '');
+      return `<div style="width:150px;display:flex;flex-direction:column;gap:6px">
+        <div style="position:relative;width:150px;height:94px;border:1px solid var(--w2,#2a3340);border-radius:8px;background:#0c1322;overflow:hidden">
+          <img id="ad-wpn-img-${key}" src="${esc(src)}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;font-size:10px;color:var(--t4,#6a7a88);text-align:center;padding:6px">нет картинки</div>
+        </div>
+        <div style="font-size:11px;color:var(--t1,#e8edf2);line-height:1.25;min-height:28px">${esc(it.name)}</div>
+        <div style="font-family:monospace;font-size:9px;color:var(--t4,#6a7a88);word-break:break-all">ship_weapon_${slug}_${idx}.webp</div>
+        <input type="file" accept="image/*" id="ad-wpn-file-${key}" style="display:none" onchange="adWeaponImgUpload('${slug}',${idx})">
+        <button class="btn btn-gh btn-xs" onclick="document.getElementById('ad-wpn-file-${key}').click()">⬆ Загрузить</button>
+        <div id="ad-wpn-st-${key}" style="font-size:9px;color:var(--te,#3ec0d0);min-height:11px"></div>
+      </div>`;
+    }).join('');
+    return `<div style="margin-top:16px">
+      <div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:8px">${esc(g)} <span style="color:var(--t4,#6a7a88)">· слаг ${esc(slug)}</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px">${cards}</div>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🔫 Картинки орудий (корабли)</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:6px 0 4px;line-height:1.5">📁 Сохраняются <b>прямо в папку игры</b> <code>assets/constructors/</code> под именем <code>ship_weapon_&lt;слаг&gt;_&lt;idx&gt;.webp</code>. Запусти локальный сервер: <code>node tools/upload-server.js</code> и держи окно открытым. Картинка появится в узле орудия на схеме конструктора и в карточках выбора. После заливки <b>обнови страницу игры</b>.</div>
+    ${groups}
+  </div>`;
+}
+async function adWeaponImgUpload(slug, idx) {
+  const key = slug + '-' + idx;
+  const fileEl = document.getElementById('ad-wpn-file-' + key);
+  const st = document.getElementById('ad-wpn-st-' + key);
+  const f = fileEl && fileEl.files && fileEl.files[0];
+  if (!f) return;
+  if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = 'Проверка сервера…'; }
+  if (!(await adPortServerAlive())) { if (st) { st.style.color = '#ff7a7a'; st.textContent = 'нет сервера'; } toast('Запусти локальный аплоад-сервер: node tools/upload-server.js', 'err'); return; }
+  try {
+    if (st) st.textContent = 'Сжатие…';
+    const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, 512, 0.85) : f;
+    if (st) st.textContent = 'Загрузка…';
+    const name = 'ship_weapon_' + slug + '_' + idx + '.webp';
+    const r = await fetch(`${AD_PORT_SERVER}/upload?dir=constructors&ext=webp&name=${encodeURIComponent(name)}`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('HTTP ' + r.status));
+    AD.wpnBust = AD.wpnBust || {}; AD.wpnBust[j.url] = Date.now();
+    const img = document.getElementById('ad-wpn-img-' + key);
+    if (img) { img.style.display = 'block'; if (img.nextElementSibling) img.nextElementSibling.style.display = 'none'; img.src = j.url + '?t=' + AD.wpnBust[j.url]; }
+    if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = '✓ загружено'; }
+  } catch (e) { if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 40); } toast('Не удалось: ' + (e.message || e), 'err'); }
+  finally { if (fileEl) fileEl.value = ''; }
 }
 
 // ── Визуальная новелла главной: спрайты персонажей + редактор реплик ──

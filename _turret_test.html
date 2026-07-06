@@ -1,0 +1,47 @@
+<!doctype html><meta charset="utf-8">
+<style>
+  :root{--b1:#0a1418;--te:#3fe0d0;--gd:#c9a24b;--w1:#16323a;--t2:#8fb0bd;--transition-fast:.15s;--deco-ls-mult:1;--font-mono:monospace;}
+  body{background:#08171c;margin:0;font:13px monospace;color:#cfe4ff}
+  .row{display:flex;gap:20px;padding:20px;flex-wrap:wrap;align-items:flex-start}
+  .cell{background:radial-gradient(ellipse at 50% 45%,#0e2a30,transparent 70%);border:1px solid #16323a}
+  h3{margin:6px 12px;color:#9fd}
+  svg{display:block}
+  /* пикер-мокап */
+  .cn-pick-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:12px}
+  .cn-pick-tab{padding:6px 12px;font-size:10px;font-weight:600;color:var(--t2);background:var(--w1);border:none;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.6px;cursor:pointer;clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%)}
+  .cn-pick-tab.on{background:var(--te);color:var(--b1)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px;width:420px}
+  .card{background:var(--w1);padding:10px;font-size:12px;color:#cfe4ff}
+</style>
+<div class="row" id="root"></div>
+<div class="row"><div class="cell"><h3>Пикер: вкладки-фильтры по калибру</h3>
+  <div class="cn-pick-tabs" id="tabs"></div>
+  <div class="grid" id="cards"></div>
+</div></div>
+<script>
+const WIMG='assets/constructors/ship_weapon_heavy_0.webp';
+const grid=`<defs><pattern id="g" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M30 0H0v30" fill="none" stroke="#16323a" stroke-width="0.6"/></pattern></defs><rect width="360" height="220" fill="url(#g)" opacity="0.4"/>`;
+function esc(s){return s;}
+// НОВЫЙ арт: целиком, натуральный аспект, без кружка, поворот по dir
+function newArt(p,wt,dir){
+  const ar=512/219;
+  const L=16+11*wt, Wd=L/ar;
+  return `<g transform="translate(${p[0]} ${p[1]}) rotate(${dir})"><image href="${WIMG}" x="${(-L*0.40).toFixed(1)}" y="${(-Wd/2).toFixed(1)}" width="${L.toFixed(1)}" height="${Wd.toFixed(1)}" preserveAspectRatio="xMidYMid meet"/></g>`;
+}
+function svg(inner){return `<svg viewBox="0 0 360 220" width="360" height="220">${grid}${inner}</svg>`;}
+const root=document.getElementById('root');
+root.insertAdjacentHTML('beforeend',`<div class="cell"><h3>Стволы вперёд (dir=-90) — без кружка</h3>${svg(newArt([180,110],2.2,-90))}</div>`);
+root.insertAdjacentHTML('beforeend',`<div class="cell"><h3>Стволы влево (порт, dir=180)</h3>${svg(newArt([180,110],2.2,180))}</div>`);
+root.insertAdjacentHTML('beforeend',`<div class="cell"><h3>Стволы вправо (старборд, dir=0)</h3>${svg(newArt([180,110],2.2,0))}</div>`);
+// мокап вкладок
+const GROUPS=['Лёгкие','Средние','Тяжёлые','Сверхтяжёлые','Ракетное','Зенитное'];
+const WPN={'Тяжёлые':['240-мм рельсовый ускоритель','300-мм тройное баллистич.','четырёхств. мегалазер','тяжёлое импульсное']};
+let active='Тяжёлые';
+function render(){
+  document.getElementById('tabs').innerHTML=GROUPS.map(g=>`<button class="cn-pick-tab${g===active?' on':''}" onclick="pick('${g}')">${g}</button>`).join('');
+  const list=WPN[active]||['(орудия калибра «'+active+'»)'];
+  document.getElementById('cards').innerHTML=list.map(n=>`<div class="card">${n}</div>`).join('');
+}
+window.pick=g=>{active=g;render();};
+render();
+</script>

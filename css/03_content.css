@@ -769,6 +769,160 @@
   .hp-vnp-side{flex:0 0 auto;overflow:visible}
 }
 
+/* ── Новелла: «Рейтинг игроков» — засекреченная аналитическая сводка.
+   Тот же форм-язык, что у колонизации: срезанные углы клипом, «обводка» =
+   слой-подложка (::before цвет + ::after инсет-фон), НЕ border. Два акцента:
+   голубой --gd (аналитика) + золото лидера. Конкретных цифр нет — значения
+   «замазаны» блоками █ (сводка обезличена по замыслу). */
+.hp-vn-rating{
+  position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;
+  background:linear-gradient(180deg, hsl(216 26% 6% / .93), hsl(216 30% 4% / .96));
+  backdrop-filter:saturate(1.1) blur(6px);
+  opacity:0;pointer-events:none;transition:opacity var(--duration-normal) ease;
+  border-radius:inherit;overflow:hidden;
+  --cyb-cut:14px;
+  --cyb-line:color-mix(in srgb,var(--gd,#3a9bdc) 32%,transparent);
+  --vnr-gold:#e0b45f;
+}
+.hp-vn-rating.show{opacity:1;pointer-events:auto}
+/* Чип уровня допуска в шапке — единственное золото вне графиков */
+.hp-vnr-clr{
+  font-family:var(--font-mono);font-size:9px;letter-spacing: calc(.22em * var(--deco-ls-mult, 1));
+  text-transform:uppercase;color:var(--vnr-gold);padding:5px 12px;white-space:nowrap;
+  background:color-mix(in srgb,var(--vnr-gold) 9%,transparent);
+  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+}
+/* Гранёная панель сводки: клип по срезам + подложка-«обводка» + инсет-фон */
+.hp-vnr-panel{
+  position:relative;z-index:0;border:none;border-radius:0;background:transparent;
+  clip-path:polygon(0 0,calc(100% - var(--cyb-cut)) 0,100% var(--cyb-cut),100% 100%,var(--cyb-cut) 100%,0 calc(100% - var(--cyb-cut)));
+}
+.hp-vnr-panel::before{content:"";position:absolute;inset:0;z-index:-2;background:var(--cyb-bd,var(--cyb-line))}
+.hp-vnr-panel::after{
+  content:"";position:absolute;inset:1px;z-index:-1;
+  background:var(--cyb-bg,hsl(216 22% 8% / .88));
+  clip-path:polygon(0 0,calc(100% - var(--cyb-cut)) 0,100% var(--cyb-cut),100% 100%,var(--cyb-cut) 100%,0 calc(100% - var(--cyb-cut)));
+}
+/* Вкладки инфографик — гранёные кнопки под шапкой; активная залита --gd */
+.hp-vnr-tabs{
+  display:flex;flex-wrap:wrap;gap:6px;
+  padding:10px clamp(14px,2.6vw,26px) 0;
+}
+.hp-vnr-tab{
+  position:relative;z-index:0;cursor:pointer;pointer-events:auto;
+  border:none;border-radius:0;background:transparent;
+  font-family:var(--font-mono);font-size:10px;
+  letter-spacing: calc(.12em * var(--deco-ls-mult, 1));text-transform:uppercase;
+  color:var(--t3,#8296a8);padding:8px 15px;
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:color var(--duration-fast);
+}
+.hp-vnr-tab::before{content:"";position:absolute;inset:0;z-index:-2;background:var(--w2,rgba(255,255,255,.12))}
+.hp-vnr-tab::after{
+  content:"";position:absolute;inset:1px;z-index:-1;background:hsl(216 22% 9% / .92);
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:background var(--duration-fast);
+}
+.hp-vnr-tab:hover{color:#eaf6ff}
+.hp-vnr-tab.on{color:#06121c;font-weight:700}
+.hp-vnr-tab.on::before{background:var(--gd,#3a9bdc)}
+.hp-vnr-tab.on::after{background:var(--gd,#3a9bdc)}
+.hp-vnr-body{flex:1;min-height:0;flex-direction:column;gap:9px}
+/* Единая сцена вкладки: сканлайны в фоне-подложке + водяной штамп секретности */
+.hp-vnr-main{
+  flex:1 1 auto;min-width:0;min-height:0;overflow:hidden;
+  --cyb-bg:repeating-linear-gradient(0deg,transparent 0 3px,rgba(160,200,240,.016) 3px 4px),
+           radial-gradient(circle at 50% 42%, rgba(20,32,48,.6), rgba(6,9,14,.9));
+}
+/* Плашка лидера дисциплины — правый верхний угол сцены, золотом */
+.hp-vnr-lead{
+  position:absolute;top:5px;right:12px;z-index:2;pointer-events:none;
+  max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:var(--font-mono);font-size:9.5px;
+  letter-spacing: calc(.1em * var(--deco-ls-mult, 1));text-transform:uppercase;
+  color:var(--vnr-gold);padding:4px 9px;background:hsl(216 30% 5% / .6);
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+}
+.hp-vnr-cap{
+  position:absolute;top:7px;left:10px;z-index:1;pointer-events:none;
+  font-family:var(--font-mono);font-size:9px;letter-spacing: calc(.16em * var(--deco-ls-mult, 1));
+  text-transform:uppercase;color:var(--gdl,#5fb0e6);opacity:.9;
+}
+/* «Живая сводка»: пульсирующий ромб у заголовка круга */
+.hp-vnr-live{display:inline-flex;align-items:center;gap:7px}
+.hp-vnr-live::before{
+  content:"";width:6px;height:6px;flex:0 0 auto;background:var(--gd,#3a9bdc);
+  clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);
+  animation:hpVnrPulse 2.2s ease-in-out infinite;
+}
+@keyframes hpVnrPulse{0%,100%{opacity:1}50%{opacity:.25}}
+/* Индекс восприятия: ранг + герб + имя + расходящаяся ± шкала от нулевой оси.
+   Список всех держав — прокручивается внутри сцены. */
+.hp-vnr-rows{
+  position:absolute;inset:0;z-index:1;overflow:auto;scrollbar-width:thin;
+  display:flex;flex-direction:column;gap:7px;padding:28px 14px 14px;
+}
+.hp-vnr-scale{
+  display:flex;align-items:center;gap:8px;margin-bottom:4px;flex:0 0 auto;
+  font-family:var(--font-mono);font-size:8.5px;color:var(--t3,#8296a8);
+}
+.hp-vnr-scale i{flex:1;height:4px;background:linear-gradient(90deg,#e0705f,rgba(255,255,255,.14) 50%,var(--gd,#3a9bdc))}
+.hp-vnr-row{
+  flex:0 0 auto;display:grid;grid-template-columns:18px minmax(0,1fr) 1.1fr 34px;
+  align-items:center;gap:8px;font-family:var(--font-mono);font-size:9.5px;
+}
+.hp-vnr-row-r{color:var(--t3,#8296a8);letter-spacing:.05em}
+.hp-vnr-row-f{display:flex;align-items:center;gap:7px;min-width:0}
+.hp-vnr-row-f img{
+  width:15px;height:15px;object-fit:cover;flex:0 0 auto;
+  clip-path:polygon(3px 0,100% 0,100% calc(100% - 3px),calc(100% - 3px) 100%,0 100%,0 3px);
+}
+.hp-vnr-row-f i{
+  width:9px;height:9px;flex:0 0 auto;background:var(--c,#3a9bdc);
+  clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);
+}
+.hp-vnr-row-f b{
+  font-weight:400;letter-spacing:.05em;color:var(--t2,#b8c4cf);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.hp-vnr-row-l{flex:0 0 auto;font-size:8.5px;color:var(--t3,#8296a8)}   /* число дипсвязей */
+.hp-vnr-bar{position:relative;height:9px;background:var(--w1,rgba(255,255,255,.05));overflow:hidden}
+.hp-vnr-bar::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--w2,rgba(255,255,255,.14));z-index:1}
+.hp-vnr-bar i{position:absolute;top:1px;bottom:1px;display:block}
+.hp-vnr-bar i.up{left:50%;background:var(--gd,#3a9bdc);clip-path:polygon(0 0,100% 0,calc(100% - 4px) 100%,0 100%)}
+.hp-vnr-bar i.dn{right:50%;background:#e0705f;clip-path:polygon(4px 0,100% 0,100% 100%,0 100%)}
+.hp-vnr-row-v{color:var(--t2,#b8c4cf);text-align:right}
+.hp-vnr-row.top .hp-vnr-row-r,.hp-vnr-row.top .hp-vnr-row-v,.hp-vnr-row.top .hp-vnr-row-f b{color:var(--vnr-gold)}
+/* Единый список долей (сфера/потоки/отрасли): бар слева направо, ширина —
+   от лидера дисциплины; бар лидера золотом. Состав отраслей — сегментами. */
+.hp-vnr-row.solo{grid-template-columns:18px minmax(0,1.05fr) 1fr 46px}
+.hp-vnr-bar.solo::before{display:none}
+.hp-vnr-bar.solo i.fill{left:0;background:var(--gd,#3a9bdc);opacity:.8;clip-path:polygon(0 0,100% 0,calc(100% - 4px) 100%,0 100%)}
+.hp-vnr-row.top .hp-vnr-bar.solo i.fill:not(.seg){background:var(--vnr-gold,#e0b45f)}
+.hp-vnr-bar.solo i.seg{display:flex;background:transparent}
+.hp-vnr-bar.solo i.seg s{display:block;height:100%;min-width:2px}
+.hp-vnr-bar.solo i.seg s.c{background:var(--gd,#3a9bdc)}          /* гражданские */
+.hp-vnr-bar.solo i.seg s.m{background:#e0705f}                    /* военные */
+.hp-vnr-bar.solo i.seg s.h{background:rgba(230,240,250,.45)}      /* храмы */
+/* Стрелка динамики эфира у имени державы */
+.hp-vnr-tr{flex:0 0 auto;font-size:10px}
+.hp-vnr-tr.up{color:var(--gd,#3a9bdc)}
+.hp-vnr-tr.dn{color:#e0705f}
+.hp-vnr-tr.fl{color:var(--t3,#8296a8)}
+.hp-vnr-note{
+  flex:0 0 auto;font-family:var(--font-mono);font-size:9px;line-height:1.6;
+  letter-spacing:.04em;color:var(--t3,#8296a8);padding:0 4px;
+}
+@media (max-width:640px){
+  .hp-vn-rating{position:relative;inset:auto;border-radius:var(--radius-sm)}
+  .hp-vn-rating:not(.show){display:none}
+  .hp-vnr-clr{display:none}
+  .hp-vnr-tabs{padding:10px 12px 0}
+  .hp-vnr-tab{flex:1 1 auto;text-align:center;padding:8px 10px}
+  .hp-vnr-body{gap:10px;padding:12px}
+  .hp-vnr-main{flex:0 0 auto;height:min(96vw,430px)}
+}
+
 /* ── Планшет/узкий десктоп: панель уже, но всё ещё сбоку ── */
 @media (max-width:960px){
   .hp-vn-col-side{flex:0 0 clamp(160px,32%,220px)}

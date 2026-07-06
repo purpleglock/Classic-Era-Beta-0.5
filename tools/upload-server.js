@@ -34,6 +34,7 @@ const ALLOWED_DIRS = {
   guide:     'assets/guide',          // обложки разделов гайдбука (фикс. имя = id раздела)
   ach:       'assets/ach',            // арт ачивок (<id>.webp) + правки подписей (_overrides.json)
   hero:      'assets/hero',           // спрайты персонажей для диалогового окна главной (визуальная новелла)
+  constructors: 'assets/constructors', // арты компонентов конструктора (орудия: ship_weapon_<slug>_<idx>.webp)
 };
 // Возвращает {rel, abs} для папки назначения по query ?dir= (или дефолт-портреты).
 function destDir(dirKey) {
@@ -121,8 +122,11 @@ const server = http.createServer((req, res) => {
   json(res, 404, { ok: false, error: 'not found' });
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`\n  🎨 Аплоад-сервер портретов запущен`);
-  console.log(`     http://localhost:${PORT}  →  ${path.relative(ROOT, DEST_DIR).replace(/\\/g, '/')}/`);
+// Без явного хоста Node слушает на unspecified-адресе (dual-stack): достижимо и
+// по 127.0.0.1 (IPv4), и по ::1/localhost (IPv6). Раньше был жёсткий '127.0.0.1',
+// и браузер, резолвя localhost в IPv6, не мог достучаться → «нет сервера».
+server.listen(PORT, () => {
+  console.log(`\n  🎨 Аплоад-сервер артов запущен`);
+  console.log(`     http://127.0.0.1:${PORT}  →  ${path.relative(ROOT, DEST_DIR).replace(/\\/g, '/')}/`);
   console.log(`     Держи это окно открытым, пока грузишь арты в админке. Ctrl+C — выход.\n`);
 });

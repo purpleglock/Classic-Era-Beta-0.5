@@ -621,6 +621,11 @@ textarea.fi { resize: vertical; min-height: 80px; line-height: 1.6; }
 }
 
 /* ── INLINE BACKGROUND HIGHLIGHTS ── */
+/* Подсветка-бокс не рвётся посередине фразы: держим её единым цельным боксом,
+   иначе при переносе часть слов уезжает на отдельную строку без рамки. */
+.bg-cyber, .bg-gold, .bg-danger, .bg-lore {
+  white-space: nowrap;
+}
 .bg-cyber { background: rgba(74, 127, 165, 0.15); border: var(--deco-frame-w, 1px) solid rgba(74, 127, 165, 0.4); padding: 0 5px 1px; color: var(--tel); border-radius: 0; }
 .bg-gold { background: rgba(176, 112, 48, 0.15); border: var(--deco-frame-w, 1px) solid rgba(176, 112, 48, 0.4); padding: 0 5px 1px; color: var(--gdl); border-radius: 0; }
 .bg-danger { background: rgba(168, 48, 48, 0.15); border: var(--deco-frame-w, 1px) solid rgba(168, 48, 48, 0.5); padding: 0 5px 1px; color: #e05050; border-radius: 0; }
@@ -700,6 +705,7 @@ textarea.fi { resize: vertical; min-height: 80px; line-height: 1.6; }
 
 /* ── FX: SCHIZO («шизотекст»: руны + фонарик) ── */
 .fx-schizo { cursor: crosshair; }
+.fx-schizo .sz-w { white-space: nowrap; }   /* слово-обёртка: буквы не рвутся посередине, перенос только по пробелам */
 .fx-schizo .sz-c { position: relative; display: inline-block; }
 .fx-schizo .sz-sp { display: inline-block; width: .3em; }
 .fx-schizo .sz-real { visibility: hidden; transition: text-shadow var(--duration-fast); }   /* занимает место → раскладка стабильна */

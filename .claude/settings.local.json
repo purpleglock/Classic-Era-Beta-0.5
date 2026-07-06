@@ -180,7 +180,19 @@
       "PowerShell(node -e \"const fs=require\\('fs'\\),p=require\\('path'\\); const R='C:/Users/'+[1040,1085,1076,1088,1077,1081].map\\(c=>String.fromCharCode\\(c\\)\\).join\\(''\\)+'/Desktop/Classic-Era-Beta-0.5'; console.log\\('exists', fs.existsSync\\(R\\)\\); fs.rmSync\\(R+'/dist',{recursive:true,force:true}\\); fs.mkdirSync\\(R+'/dist'\\); console.log\\('mkdir ok'\\); fs.cpSync\\(R+'/css',R+'/dist/css',{recursive:true}\\); console.log\\('css ok'\\); fs.cpSync\\(R+'/legal',R+'/dist/legal',{recursive:true}\\); console.log\\('legal ok'\\); fs.cpSync\\(R+'/assets',R+'/dist/assets',{recursive:true}\\); console.log\\('assets ok'\\)\")",
       "PowerShell(\\(Get-Content index.html -Raw\\) -replace 'css/index\\\\.css\\\\?v=20260705regcyb', 'css/index.css?v=20260706borders3' | Set-Content index.html -Encoding utf8 -NoNewline)",
       "WebFetch(domain:treblo.com)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(cat > *)",
+      "Bash(python \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/e66fda5d-7361-42bd-a985-e7dc4f36e716/scratchpad/serve.py\")",
+      "Bash(ls -la .claude/)",
+      "Bash(curl -s http://127.0.0.1:8731/bgtest.html -o /dev/null -w \"%{http_code}\\\\n\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8731 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { try { Stop-Process -Id $_.OwningProcess -Force -ErrorAction Stop } catch {} }; \"ok\")",
+      "PowerShell(npm run build 2>&1)",
+      "Bash(node --check \"/c/Users/Андрей/Desktop/Classic-Era-Beta-0.5/constructors.js\")",
+      "PowerShell(\\(Get-Content constructors.js | Measure-Object -Line\\).Lines; \\(Get-Content css/16_constructors.css | Measure-Object -Line\\).Lines)",
+      "Read(//c/Users/Андрей/Downloads/**)",
+      "Bash(pip install *)",
+      "Bash(python -m pip install pypdf pdfplumber reportlab)",
+      "Bash(python \"C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\c45e0654-b769-4706-8f9b-73d3fb2b5e1c\\\\scratchpad\\\\build.py\")"
     ]
   }
 }
