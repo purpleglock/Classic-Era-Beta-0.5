@@ -956,6 +956,99 @@
 .ec-force-empty-ic { font-size: 26px; opacity: .7; }
 .ec-force-empty-sub { color: var(--t3); font-size: 12px; }
 
+/* ── Киберпанк-оформление вкладки «Вооружённые силы» ──
+   Срезанные углы = слой-подложка (::before рамка + ::after фон), без border:
+   рамка обрезалась бы clip-path. Акценты прежние: --gd армия / --te флот. */
+.ec-cyb-forces .ec-intro {
+  position: relative; border: none; background: transparent; border-radius: 0; z-index: 1;
+  padding: 14px 16px 12px;
+}
+.ec-cyb-forces .ec-intro::before {
+  content: ''; position: absolute; inset: 0; z-index: -2;
+  background: linear-gradient(90deg, var(--gd) 0 3px, var(--w2) 3px);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+.ec-cyb-forces .ec-intro::after {
+  content: ''; position: absolute; inset: 1px 1px 1px 3px; z-index: -1;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--gd) 7%, transparent), transparent 46px),
+    var(--b2);
+  clip-path: polygon(0 0, calc(100% - 11.3px) 0, 100% 11.3px, 100% 100%, 0 100%);
+}
+.ec-cyb-forces .ec-intro-hd {
+  font-family: var(--font-display); font-size: 11px; font-weight: 900;
+  letter-spacing: calc(2.5px * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t1);
+}
+.ec-cyb-forces .ec-section-title {
+  border-bottom: none; position: relative; padding-bottom: 8px;
+  font-family: var(--font-display); font-size: 11px; font-weight: 900;
+  letter-spacing: calc(2.5px * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t2);
+}
+.ec-cyb-forces .ec-section-title::before { content: '//'; color: var(--te); font-weight: 700; }
+.ec-cyb-forces .ec-section-title::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: linear-gradient(90deg, var(--w3), var(--w1) 45%, transparent);
+}
+/* Сводка: карточки-панели со срезом */
+.ec-cyb-forces .ec-force-stats .ec-ov-card {
+  position: relative; border: none; background: transparent; border-radius: 0; z-index: 1;
+}
+.ec-cyb-forces .ec-force-stats .ec-ov-card::before {
+  content: ''; position: absolute; inset: 0; z-index: -2; background: var(--w2);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+  transition: background var(--duration-fast);
+}
+.ec-cyb-forces .ec-force-stats .ec-ov-card::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1; background: var(--b2);
+  clip-path: polygon(0 0, calc(100% - 7.3px) 0, 100% 7.3px, 100% 100%, 0 100%);
+}
+.ec-cyb-forces .ec-force-stats .ec-ov-clk:hover::before { background: var(--gd); }
+/* Заголовок группы: срез + акцентная кромка слева внутри подложки */
+.ec-cyb-forces .ec-force-hd {
+  border: none; background: transparent; border-radius: 0; position: relative; z-index: 1;
+}
+.ec-cyb-forces .ec-force-hd::before {
+  content: ''; position: absolute; inset: 0; z-index: -2;
+  background: linear-gradient(90deg, var(--accent) 0 3px, color-mix(in srgb, var(--accent) 40%, var(--w2)) 3px);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+.ec-cyb-forces .ec-force-hd::after {
+  content: ''; position: absolute; inset: 1px 1px 1px 3px; z-index: -1;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 13%, var(--b2)), var(--b2) 62%);
+  clip-path: polygon(0 0, calc(100% - 7.3px) 0, 100% 7.3px, 100% 100%, 0 100%);
+}
+.ec-cyb-forces .ec-force-hd-l {
+  font-family: var(--font-display); font-size: 11px; font-weight: 900;
+  letter-spacing: calc(2px * var(--deco-ls-mult, 1)); text-transform: uppercase;
+}
+.ec-cyb-forces .ec-force-hd-ct { border-radius: 0; }
+/* Карточки юнитов: срез, акцентная кромка, неоновый ховер */
+.ec-cyb-forces .ec-force-card {
+  border: none; background: transparent; border-radius: 0;
+}
+.ec-cyb-forces .ec-force-card::before {
+  inset: 0; width: auto; opacity: 1; z-index: -2;
+  background: linear-gradient(90deg, var(--accent) 0 3px, var(--w2) 3px);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+  transition: background var(--duration-fast);
+}
+.ec-cyb-forces .ec-force-card::after {
+  content: ''; position: absolute; inset: 1px 1px 1px 3px; z-index: -1; background: var(--b2);
+  clip-path: polygon(0 0, calc(100% - 7.3px) 0, 100% 7.3px, 100% 100%, 0 100%);
+  transition: background var(--duration-fast);
+}
+.ec-cyb-forces .ec-force-card:hover::before { background: linear-gradient(90deg, var(--accent) 0 3px, color-mix(in srgb, var(--accent) 55%, var(--w2)) 3px); }
+.ec-cyb-forces .ec-force-card:hover::after { background: color-mix(in srgb, var(--accent) 6%, var(--b2)); }
+.ec-cyb-forces .ec-force-tok {
+  border: none; border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+  box-shadow: none;
+  background:
+    radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--accent) 28%, var(--b1)), var(--b1));
+}
+.ec-cyb-forces .ec-force-sub { color: color-mix(in srgb, var(--accent) 55%, var(--t3)); }
+.ec-cyb-forces .ec-force-empty { border-radius: 0; }
+
 /* ── Каталог постройки: модалка выбора → подтверждение ── */
 .ec-build-btn .ec-build-free { font-family: var(--font-mono); font-size: 11px; opacity: .85; margin-left: 5px; font-weight: 600; }
 .ec-bp-ov {
@@ -1134,6 +1227,16 @@
 .ec-dip-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .ec-dip-card { background: var(--b2); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-md); padding: 14px; }
 .ec-dip-t { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--t1); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+/* Границы: пофракционные переключатели с гербами (ecBordersBlock) */
+.ec-bord-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; margin-top: 8px; }
+.ec-bord-fac { display: flex; align-items: center; gap: 8px; background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); padding: 6px 9px; font: inherit; font-size: 12.5px; color: var(--t1); cursor: pointer; text-align: left; transition: border-color .15s, background .15s; }
+.ec-bord-fac:hover { border-color: var(--gd); }
+.ec-bord-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-bord-lock { flex-shrink: 0; font-size: 13px; opacity: .55; }
+.ec-bord-fac.ec-bord-closed { background: color-mix(in srgb, var(--err, #e05a5a) 10%, var(--b1)); border-color: color-mix(in srgb, var(--err, #e05a5a) 45%, var(--w2)); }
+.ec-bord-fac.ec-bord-closed .ec-bord-name { color: var(--err, #e05a5a); }
+.ec-bord-fac.ec-bord-closed .ec-bord-lock { opacity: 1; }
+
 .ec-loan-note { width: 100%; box-sizing: border-box; background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); padding: 7px 9px; font-size: 12px; outline: none; }
 .ec-loan-note:focus { border-color: var(--gd); }
 .ec-q-row .btn-xs { flex-shrink: 0; }

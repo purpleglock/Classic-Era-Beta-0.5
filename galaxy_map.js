@@ -40,6 +40,7 @@ const GM_ICO = {
   sectors: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h7v7H3zM14 4h7v7h-7zM3 15h7v5H3zM14 13h7v7h-7z"/></svg>',
   mines: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.4"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.9 2.9M15.5 15.5l2.9 2.9M18.4 5.6l-2.9 2.9M8.5 15.5l-2.9 2.9"/></svg>',
   unions: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="7" r="2.6"/><circle cx="12" cy="17" r="2.6"/><path d="M8.7 8.6l6.6 0M8 9.2l2.6 5.6M16 9.2l-2.6 5.6"/></svg>',
+  blocked: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6.3 17.7L17.7 6.3"/></svg>',
 };
 function gmCtlBtns(opts) {
   // Панель режимов карты: карточка со списком слоёв (иконка + подпись, чтобы было
@@ -61,6 +62,7 @@ function gmCtlBtns(opts) {
         ${row('borders', GM.showBorders, GM_ICO.borders, 'Границы фракций', 'gmToggleBorders()')}
         ${row('sectors', GM.showSectors, GM_ICO.sectors, 'Сектора', 'gmToggleSectors()')}
         ${row('unions', GM.showUnions, GM_ICO.unions, 'Союзы', 'gmToggleUnions()')}
+        ${row('blocked', GM.showBlocked, GM_ICO.blocked, 'Закрытые границы', 'gmToggleBlocked()')}
         ${row('flags', GM.showFlags, GM_ICO.flags, 'Флаги фракций', 'gmToggleFlags()')}
         ${row('res', GM.showRes, GM_ICO.res, 'Ресурсы систем', 'gmToggleRes()')}
         ${gmResFilterHtml()}
@@ -105,6 +107,8 @@ const GM = {
   showMines: false,              // режим отображения/управления минами (по умолчанию ВЫКЛ)
   showUnions: false,             // режим отображения союзов (федерации/конфедерации)
   unions: null,                  // ленивая загрузка союзов: [{id,name,color,kind,fids:[]}] (null=не грузили)
+  showBlocked: false,            // режим «закрытые границы» (куда нашим флотам нельзя)
+  blockedFids: null,             // fid фракций, закрывших границы для нас (RPC borders_blocked_fids)
   showRes: false,                // режим «ресурсы систем»
   showEcon: false,               // режим «бедность» (просперити систем)
   resRarities: ['rare', 'epic', 'legendary'], // какие редкости показывать на карте
@@ -176,6 +180,13 @@ async function loadGalaxyData() {
     (econ || []).forEach(e => { if (e && e.system_id) GM.econ[e.system_id] = { status: e.status, prosperity: +e.prosperity }; });
     GM.loaded = true;
     GM.dataAt = Date.now();   // отметка свежести — фоновое обновление карты дросселируется по ней
+    // fid закрывших границы ДЛЯ НАС — нужен для обхода закрытых систем при
+    // прокладке трасс летящих флотов (не только для слоя карты). Список приходит
+    // ПОЗЖЕ первой запечки геометрии (гонка!) → по прибытии перестраиваем
+    // оборону (трассы флотов) и перерисовываем, если карта открыта.
+    if (user) gmLoadBlocked().then(() => {
+      if (GMM.active && GMM.cv && GMM.cv.isConnected) { gmmBuildDefense(); GMM.dirty = true; gmmKick(); }
+    });
     // мета фракций (флаг/герб, лидер) из анкет — необязательно
     GM.facMeta = {};
     try {
@@ -624,6 +635,33 @@ async function gmLoadUnions() {
   }
   GM.unions = out;
 }
+// Режим ЗАКРЫТЫХ ГРАНИЦ: киберпанк-штриховка территорий, куда НАШИМ флотам нельзя
+// (чужие фракции, закрывшие границы ДЛЯ НАС — мой fid в их borders_closed_fids;
+// союзники по федерации/конфедерации не в счёт).
+// Список отдаёт сервер (RPC borders_blocked_fids — RLS чужой экономики не раскрываем).
+// Обновляем при КАЖДОМ включении: границы открывают/закрывают чаще, чем меняют союзы.
+async function gmToggleBlocked() {
+  GM.showBlocked = !GM.showBlocked;
+  document.getElementById('gm-ctl-blocked')?.classList.toggle('gm-active', GM.showBlocked);
+  if (GM.showBlocked) {
+    await gmLoadBlocked();
+    if (!GM.showBlocked) return;   // слой могли выключить, пока грузился список
+    if (!(GM.blockedFids || []).length) toast('Сейчас никто не закрыл границы для вас', 'ok');
+  }
+  if (GMM.active) gmmRaster();
+}
+// Список фракций, закрывших границы для нас (RPC borders_blocked_fids). Вынесен
+// отдельно, потому что дёргается из ДВУХ мест: при ручном включении слоя и при заходе
+// на карту, если слой уже был включён ранее (GM.showBlocked живёт между переходами) —
+// иначе тумблер горит активным, а штриховки нет до повторного нажатия.
+async function gmLoadBlocked() {
+  try {
+    const r = await gmDefRpc('borders_blocked_fids');
+    GM.blockedFids = Array.isArray(r) ? r : [];
+  } catch (e) { GM.blockedFids = GM.blockedFids || []; }
+  return GM.blockedFids;
+}
+
 // ── Режим «ресурсы систем» ──────────────────────────────────
 // Над каждой звездой — сводка ресурсов системы (уникальные по названию ресурсы
 // всех её планет). Что именно показывать — задают фильтры по редкости, чтобы
@@ -2748,6 +2786,10 @@ function gmmRender(host) {
   GMM.cv.height = Math.max(1, Math.round(GMM.vh * GMM.dpr));
   gmmCover();
   gmmRaster();
+  // Слой «закрытые границы» мог остаться включённым с прошлого захода (GM живёт между
+  // переходами): тумблер отрисовался активным — значит и штриховку надо показать сразу,
+  // перезапросив список закрывших, а не ждать ручного повторного нажатия.
+  if (GM.showBlocked) gmLoadBlocked().then(() => { if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRaster(); });
   // дорисовка, когда подгрузятся веб-шрифты (подписи в битмапе)
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
     if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRaster();
@@ -4990,13 +5032,23 @@ function gmmBuildDefense() {
     // граф гиперпутей для прокладки маршрута летящих кораблей (как у караванов)
     const adj = {};
     GM.lanes.forEach(l => { (adj[l.a_id] = adj[l.a_id] || []).push(l.b_id); (adj[l.b_id] = adj[l.b_id] || []).push(l.a_id); });
-    const bfs = (from, to) => {
+    // fid фракций, закрывших границы ДЛЯ НАС: наши флоты обходят их системы,
+    // как на сервере (_fleet_bfs). avoidBlocked=false для чужих флотов — их
+    // маршрут не подчиняется НАШЕМУ списку (чужие границы нам по RLS не видны).
+    const blockedSet = new Set(GM.blockedFids || []);
+    const bfs = (from, to, avoidBlocked) => {
       if (!from || !to || from === to) return null;
+      const skip = avoidBlocked && blockedSet.size;
       const q = [from], prev = { [from]: null }, seen = new Set([from]);
       while (q.length) {
         const c = q.shift();
         if (c === to) { const p = []; let n = to; while (n != null) { p.unshift(n); n = prev[n]; } return p; }
-        (adj[c] || []).forEach(nb => { if (!seen.has(nb)) { seen.add(nb); prev[nb] = c; q.push(nb); } });
+        (adj[c] || []).forEach(nb => {
+          if (seen.has(nb)) return;
+          // не прокладываем маршрут СКВОЗЬ закрытую для нас систему (кроме цели)
+          if (skip && nb !== to) { const os = byId[nb]; if (os && os.faction && blockedSet.has(os.faction)) return; }
+          seen.add(nb); prev[nb] = c; q.push(nb);
+        });
       }
       return null;
     };
@@ -5013,8 +5065,12 @@ function gmmBuildDefense() {
         if (!a || !b) return;
         const la = sh.depart_at ? Date.parse(sh.depart_at) : null;
         const ra = sh.arrive_at ? Date.parse(sh.arrive_at) : null;
-        // путь по гиперпутям; если связного маршрута нет — прямая дуга (как у залпа)
-        const path = (GMM.laneGeo && bfs(sh.from_sys, sh.dest_sys)) || null;
+        // путь по гиперпутям; свои флоты обходят закрытые для нас границы
+        // (чужие — нет: extra.enemy). Обхода нет → путь по чистой топологии
+        // (флоты летают ТОЛЬКО по трассам); прямая дуга — лишь если трасс
+        // между from и dest нет вовсе (дыра в данных).
+        const path = (GMM.laneGeo && (bfs(sh.from_sys, sh.dest_sys, !(extra && extra.enemy))
+                                      || bfs(sh.from_sys, sh.dest_sys, false))) || null;
         let segs = null, total = 0, g = null;
         if (path && path.length >= 2) {
           segs = [];
@@ -5587,6 +5643,8 @@ function gmmPaint(ctx, camS, wx0, wy0, wx1, wy1) {
   // масштаб не меняется — сдвиг точный, без размытия. Звёзды/подписи остаются живым
   // слоем (им нужен экранно-постоянный размер) — см. gmmPaintStars в gmmBlit.
   gmmPaintVector(ctx, camS, false);
+  // «Закрытые границы» — поверх векторного мира, только в битмапе (статичный слой)
+  gmmPaintBlocked(ctx, camS, wx0, wy0, wx1, wy1);
 }
 
 // Герб/флаг фракции (ленивая загрузка из анкеты, перерисовка по onload). Картинку
@@ -6112,6 +6170,56 @@ function gmmPaintNeutralHatch(ctx, camS, wx0, wy0, wx1, wy1) {
     }
     ctx.restore();
   }
+  ctx.restore();
+}
+
+// Слой ЗАКРЫТЫХ ГРАНИЦ: территории фракций из GM.blockedFids (нам туда нельзя) —
+// «запретная зона» в киберпанк-стиле: тёмная вуаль + диагональные неон-полосы +
+// предупреждающий контур (гало + чёткий пунктир). Один акцент-цвет (правила UI).
+// Печётся в битмап (статично): анимация в растр-кэше невозможна, и это дёшево —
+// прецедент границы разлома («анимация дорого на телефоне»).
+function gmmPaintBlocked(ctx, camS, wx0, wy0, wx1, wy1) {
+  if (!GM.showBlocked || !GM.blockedFids || !GM.blockedFids.length) return;
+  const P = GMM.paths;
+  if (!P || !P.facFills || !P.facFills.length) return;
+  const fade = 1 - 0.75 * gmmDeepA();   // на глубоком зуме гаснет (обзорный слой)
+  if (fade < 0.05) return;
+  const set = new Set(GM.blockedFids);
+  const u = 1 / camS;
+  const NEON = '255,45,106';            // единственный акцент слоя — неон-маджента
+  const CORE = '255,150,185';           // высветленное ядро того же тона (читаемость границы)
+  ctx.save();
+  ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
+  P.facFills.forEach(f => {
+    if (!set.has(f.fid)) return;
+    // куллинг: территория целиком вне кадра (+поле)
+    if (f.bx + f.bw < wx0 - 40 || f.bx > wx1 + 40 || f.by + f.bh < wy0 - 40 || f.by > wy1 + 40) return;
+    const cx = f.bx + f.bw / 2, cy = f.by + f.bh / 2;
+    const ext = Math.hypot(f.bw, f.bh) / 2 + 20;
+    // 1) тело зоны: «карантинная» вуаль гасит цвет фракции + диагональная неон-хазард-лента
+    ctx.save();
+    ctx.clip(f.p2d);
+    ctx.globalAlpha = 0.46 * fade;
+    ctx.fillStyle = 'rgb(9,3,13)';
+    ctx.fillRect(f.bx - 2, f.by - 2, f.bw + 4, f.bh + 4);
+    ctx.translate(cx, cy); ctx.rotate(-Math.PI / 4);
+    const band = 22 * u;                // период ленты ~ постоянный на экране
+    for (let x = -ext; x <= ext; x += band) {
+      ctx.globalAlpha = 0.13 * fade;    // тело полосы — мягкая неон-заливка
+      ctx.fillStyle = `rgb(${NEON})`;
+      ctx.fillRect(x, -ext, band * 0.44, ext * 2);
+      ctx.globalAlpha = 0.7 * fade;     // светящаяся кромка полосы (яркий край хазард-ленты)
+      ctx.fillRect(x - 1.3 * u, -ext, 1.3 * u, ext * 2);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // 2) контур-«силовое поле»: слоёное неон-гало (bloom без теней) + пунктирное ядро
+    ctx.globalAlpha = 0.16 * fade; ctx.strokeStyle = `rgb(${NEON})`; ctx.lineWidth = 9 * u; ctx.stroke(f.p2d);
+    ctx.globalAlpha = 0.32 * fade; ctx.lineWidth = 4.5 * u; ctx.stroke(f.p2d);
+    ctx.globalAlpha = 0.92 * fade; ctx.strokeStyle = `rgb(${CORE})`; ctx.lineWidth = 1.6 * u;
+    ctx.setLineDash([10 * u, 6 * u]); ctx.stroke(f.p2d); ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  });
   ctx.restore();
 }
 

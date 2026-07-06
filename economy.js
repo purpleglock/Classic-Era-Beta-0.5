@@ -1949,6 +1949,8 @@ function ecDoctrineSpecials(app) {
       out.push(`${n.station.icon || '★'} ${n.name} — станция на ${n.station.cells} ячеек`);
     }
   });
+  const _bcN = (EC.eco && Array.isArray(EC.eco.borders_closed_fids)) ? EC.eco.borders_closed_fids.length : 0;
+  if (_bcN) out.push(`🔒 Границы закрыты для ${_bcN} фракц. — их флоты в ваши системы не летают`);
   return out;
 }
 // Сводка конкретных стартовых плюшек доктрины (постройки + технологии).
@@ -3695,7 +3697,7 @@ function ecTabForces() {
   const totShip = EC.roster.filter(r => r.category === 'ship').reduce((a, r) => a + (r.qty || 0), 0);
   const inQueue = EC.queue.reduce((a, q) => a + (q.qty || 0), 0);
 
-  return `${ecIntro('⚔', 'Вооружённые силы государства', 'Текущий состав ваших вооружённых сил — сформированные дивизии и построенный флот.', ['Войска производятся во вкладке «🏭 Строительство вооружённых сил».', 'Готовые заказы пополняют этот состав в конце игрового хода.'])}<div class="ec-section-title">Сводка</div>
+  return `<div class="ec-cyb-forces">${ecIntro('⚔', 'Вооружённые силы государства', 'Текущий состав ваших вооружённых сил — сформированные дивизии и построенный флот.', ['Войска производятся во вкладке «🏭 Строительство вооружённых сил».', 'Готовые заказы пополняют этот состав в конце игрового хода.'])}<div class="ec-section-title">Сводка</div>
     <div class="ec-ov-grid ec-force-stats">
       <div class="ec-ov-card"><div class="ec-ov-v" style="color:var(--gd)">${ecNum(totDiv)}</div><div class="ec-ov-k">⚔ Дивизий</div></div>
       <div class="ec-ov-card"><div class="ec-ov-v" style="color:var(--te)">${ecNum(totShip)}</div><div class="ec-ov-k">🚀 Кораблей</div></div>
@@ -3703,7 +3705,7 @@ function ecTabForces() {
     </div>
     <div class="ec-section-title">Боевой состав</div>
     ${rosterHtml}
-    ${ecFleetSectionHtml()}`;
+    ${ecFleetSectionHtml()}</div>`;
 }
 
 // ── «Сформировать флот» (зеркало _army_fleet.sql) ──
@@ -5955,12 +5957,51 @@ function ecTabDiplomacy() {
       ${asBorrower.length ? `<div class="ec-r-sec">Я заёмщик</div>${borrowerHtml}` : ''}
     </div>`;
 
-  return `${ecIntro('🤝', 'Дипломатия', 'Союзы, отношения и кредиты. Федерация/конфедерация дают защиту и общий флот; вассал платит сюзерену дань. Торговля и обмен — на вкладке «Торговля».', ['<b>Федерация/конфедерация</b> — союз нескольких держав: защита караванов и от разведки, общий флот.', '<b>Вассалитет</b> — вассал платит сюзерену дань с дохода (как у Paradox).', 'Можно выдавать займы; споры по долгам решает МГА.'])}<div class="ec-section-title">Союзы <span class="ec-hint">— федерация · конфедерация · вассалитет</span></div>
+  return `${ecIntro('🤝', 'Дипломатия', 'Союзы, отношения и кредиты. Федерация/конфедерация дают защиту и общий флот; вассал платит сюзерену дань. Торговля и обмен — на вкладке «Торговля».', ['<b>Федерация/конфедерация</b> — союз нескольких держав: защита караванов и от разведки, общий флот.', '<b>Вассалитет</b> — вассал платит сюзерену дань с дохода (как у Paradox).', '<b>Границы</b> — закрываются для выбранных фракций: их флоты не войдут в ваши системы.', 'Можно выдавать займы; споры по долгам решает МГА.'])}<div class="ec-section-title">Границы <span class="ec-hint">— пограничный контроль</span></div>
+    <div class="ec-dip-grid">${ecBordersBlock()}</div>
+    <div class="ec-section-title">Союзы <span class="ec-hint">— федерация · конфедерация · вассалитет</span></div>
     ${ecAllianceBlock()}
     <div class="ec-section-title">Отношения <span class="ec-hint">— дипломатический респект</span></div>
     ${ecRelationsBlock()}
     <div class="ec-section-title">Кредиты</div>
     <div class="ec-dip-grid">${loanBlock}</div>`;
+}
+
+// Блок «Границы»: пофракционное закрытие границ (зеркало _borders_closed.sql).
+// Клик по гербу переключает: fid в списке → его флоты в наши системы не летают,
+// гипермаршруты идут в обход. Союзники по федерации/конфедерации проходят всегда.
+function ecBordersClosedFids() {
+  return (EC.eco && Array.isArray(EC.eco.borders_closed_fids)) ? EC.eco.borders_closed_fids : [];
+}
+function ecBordersBlock() {
+  const closed = new Set(ecBordersClosedFids());
+  const others = ecOtherFactions();
+  const state = closed.size
+    ? `<b style="color:var(--err)">🔒 Закрыты для ${closed.size} из ${others.length}</b> — флоты выбранных фракций не могут прилетать в ваши системы, а их гипермаршруты сквозь вас строятся в обход. Союзники по федерации/конфедерации проходят.`
+    : `<b style="color:var(--ok,#7bd88f)">🔓 Открыты</b> — любые флоты летают через ваши системы свободно. Клик по фракции закрывает границу для неё.`;
+  const rows = others.map(f => {
+    const c = closed.has(f.faction_id);
+    return `<button class="ec-bord-fac${c ? ' ec-bord-closed' : ''}" onclick="ecBordersToggle('${jsq(f.faction_id)}', ${c ? 'false' : 'true'})" title="${c ? 'Открыть границу для' : 'Закрыть границу для'} «${esc(f.name)}»">
+        ${ecFacFlag(f.faction_id, 24)}<span class="ec-bord-name">${esc(f.name)}</span><span class="ec-bord-lock">${c ? '🔒' : '🔓'}</span>
+      </button>`;
+  }).join('');
+  return `<div class="ec-dip-card">
+      <div class="ec-dip-t">🛂 Границы государства</div>
+      <div style="font-size:12.5px;color:var(--t2);margin:6px 0">${state}</div>
+      ${others.length ? `<div class="ec-bord-grid">${rows}</div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+        ${closed.size < others.length ? '<button class="btn btn-gh btn-xs" onclick="ecBordersAll(true)">🔒 Закрыть для всех</button>' : ''}
+        ${closed.size ? '<button class="btn btn-gh btn-xs" onclick="ecBordersAll(false)">🔓 Открыть все</button>' : ''}
+      </div>` : '<div class="ec-empty">Нет других фракций.</div>'}
+    </div>`;
+}
+function ecBordersToggle(fid, close) {
+  ecRpcAct('borders_set', { p_fid: fid, p_closed: !!close },
+    close ? `Границы закрыты для «${ecFacName(fid)}»` : `Границы открыты для «${ecFacName(fid)}»`);
+}
+function ecBordersAll(close) {
+  if (close && !confirm('Закрыть границы для ВСЕХ фракций? Их флоты не смогут прилетать в ваши системы (союзники по федерации/конфедерации проходят). Открыть обратно можно в любой момент.')) return;
+  ecRpcAct('borders_set', { p_fid: null, p_closed: !!close }, close ? 'Границы закрыты для всех' : 'Границы открыты');
 }
 
 // Блок союзов: федерация/конфедерация (группа) + вассалитет (парный пакт). Слайс 1.

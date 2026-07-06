@@ -320,6 +320,79 @@
 }
 .fn-art-img:hover img { filter: brightness(1) saturate(1); }
 
+/* ── Музыка по ссылке: click-to-load плеер (YouTube / SoundCloud) ──
+   До клика обе площадки выглядят одинаково: компактная аудио-строка
+   (кнопка ▶ + миниатюра + подпись). После клика — узкая полоса плеера. */
+.fn-music {
+  margin: 24px 0; overflow: hidden; position: relative;
+  border: var(--deco-frame-w, 1px) solid color-mix(in srgb, var(--fn-accent, #e8b04a) 30%, var(--w2, #2a3340));
+  background: var(--b0);
+}
+.fn-music-load {
+  display: flex; align-items: center; gap: 14px; width: 100%; margin: 0; border: 0;
+  background: transparent; color: var(--t1, #dfe7ee); cursor: pointer; font: inherit;
+  text-align: left; position: relative; padding: 12px 14px;
+}
+.fn-music-load:hover { background: color-mix(in srgb, var(--fn-accent, #e8b04a) 7%, transparent); }
+.fn-music-play {
+  flex: 0 0 auto; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center;
+  font-size: 17px; padding-left: 4px;
+  color: var(--b0, #0b0e12); background: var(--fn-accent, #e8b04a);
+  clip-path: polygon(26% 0, 100% 0, 100% 74%, 74% 100%, 0 100%, 0 26%);
+  transition: transform var(--duration-normal);
+}
+.fn-music-load:hover .fn-music-play { transform: scale(1.08); }
+.fn-music-thumb {
+  flex: 0 0 auto; width: 66px; height: 40px; object-fit: cover;
+  filter: brightness(.85) saturate(.8);
+}
+.fn-music-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fn-music-ttl {
+  font-weight: 600; font-size: 14px; text-transform: capitalize;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fn-music-src {
+  font-family: var(--font-mono, monospace); font-size: 10px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--t3, #8aa0b0);
+}
+/* Аудио-режим YouTube: наш плеер-бар (название + таймлайн + время + повтор) */
+.fn-music-bar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+.fn-music-bar .fn-music-play { cursor: pointer; border: 0; font: inherit; font-size: 17px; }
+.fn-music-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.fn-music-tl {
+  display: block; height: 6px; cursor: pointer; position: relative;
+  background: var(--w2, #2a3340);
+}
+.fn-music-tl::before { content: ''; position: absolute; inset: -7px 0; }  /* зона клика шире полосы */
+.fn-music-tl-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+  background: var(--fn-accent, #e8b04a); pointer-events: none;
+  transition: width .3s linear;
+}
+.fn-music-time {
+  flex: 0 0 auto; font-family: var(--font-mono, monospace); font-size: 11px;
+  color: var(--t3, #8aa0b0); letter-spacing: .06em; white-space: nowrap;
+}
+.fn-music-rep {
+  flex: 0 0 auto; border: 0; background: transparent; cursor: pointer;
+  font-size: 17px; line-height: 1; padding: 4px 2px; color: var(--t4, #6a7a88);
+  transition: color var(--duration-normal);
+}
+.fn-music-rep:hover { color: var(--t2, #b8c6d2); }
+.fn-music-rep.on { color: var(--fn-accent, #e8b04a); }
+/* Играет: кнопка = ❚❚, строка подсвечена */
+.fn-music.playing { border-color: color-mix(in srgb, var(--fn-accent, #e8b04a) 60%, transparent); }
+.fn-music.playing .fn-music-play { padding-left: 0; font-size: 12px; letter-spacing: 2px; }
+.fn-music.playing .fn-music-thumb { filter: brightness(1) saturate(1); }
+/* Скрытый iframe аудио-режима: звук идёт, картинки нет */
+.fn-music iframe.fn-music-hidden {
+  position: absolute; left: 0; bottom: 0; width: 2px; height: 2px;
+  opacity: 0; pointer-events: none; border: 0;
+}
+/* SoundCloud / Яндекс Музыка: после клика — видимый компакт-плеер на месте карточки */
+.fn-music-sc.on iframe { display: block; width: 100%; height: 166px; border: 0; }
+.fn-music-ym.on iframe { display: block; width: 100%; height: 100px; border: 0; }
+
 /* ── Слухи о тайных операциях (авто, в стиле телеги) ── */
 .fn-card-rumor { color: var(--t3, #8aa0b0) !important; border-color: var(--w3, #3a4656) !important; background: transparent !important; }
 .fn-card-rumor::before { display: none !important; }

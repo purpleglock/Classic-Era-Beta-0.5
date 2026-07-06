@@ -683,7 +683,7 @@
 .hp-vnp-words{display:flex;flex-direction:column;gap:6px}
 .hp-vnp-word{
   position:relative;z-index:0;cursor:pointer;border:none;border-radius:0;background:transparent;
-  display:grid;grid-template-columns:1fr auto;grid-template-areas:"w th" "bar n" "flags flags";
+  display:grid;grid-template-columns:1fr auto;grid-template-areas:"w th" "bar n" "hint hint" "flags flags";
   align-items:center;column-gap:10px;row-gap:5px;padding:9px 12px;text-align:left;
   clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
   transition:filter var(--duration-fast);
@@ -720,11 +720,21 @@
   font-family:var(--font-mono);font-size:9px;color:var(--t3,#8296a8);
   padding:0 3px;align-self:center;
 }
+/* Подсказка на слове: баф/дебаф темы для галактики + эхо/гашение антипода */
+.hp-vnp-w-hint{grid-area:hint;display:flex;flex-wrap:wrap;gap:8px;font-family:var(--font-mono);font-size:9px;letter-spacing:.05em}
+.hp-vnp-w-hint b{font-weight:400}
+.hp-vnp-w-hint b.up{color:#5fe0a0}
+.hp-vnp-w-hint b.dn{color:#e0705f}
 .hp-vnp-preview{
   font-family:Georgia,serif;font-size:12px;line-height:1.5;color:var(--t2,#b8c4cf);
   padding:8px 10px;border-left:2px solid var(--gd,#3a9bdc);background:hsl(216 22% 9% / .5);
 }
 .hp-vnp-preview.dim{border-left-color:var(--w2,rgba(255,255,255,.12));color:var(--t3,#8296a8)}
+/* Строка строфы, с которой зарифмуется сегодняшняя */
+.hp-vnp-pair{
+  font-family:Georgia,serif;font-size:11.5px;line-height:1.5;color:var(--t3,#9fb3c4);
+  padding:6px 10px;border-left:2px solid var(--w2,rgba(255,255,255,.12));background:hsl(216 22% 9% / .4);
+}
 .hp-vnp-total{font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;color:var(--t3,#8296a8)}
 .hp-vnp-total b{color:#eaf6ff}
 /* Приговор недели: баф — зелёный, дебаф — красный, пусто — серый (акцент кромкой) */

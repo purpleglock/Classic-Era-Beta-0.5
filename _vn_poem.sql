@@ -378,44 +378,45 @@ begin
     v_note := ' Строфа сложилась в один голос — эффект усилен в полтора раза.';
   end if;
 
+  -- Числа скромные: это символический недельный штрих, а не источник дохода.
   case v_theme
     when 'hope' then
       update public.faction_economy
-        set gc = gc + least(round(15000 * v_mult), greatest(round(500 * v_mult), round(gc * 0.02 * v_mult)));
+        set gc = gc + least(round(3000 * v_mult), greatest(round(100 * v_mult), round(gc * 0.005 * v_mult)));
       v_fx := jsonb_build_object('theme', v_theme, 'tone', 'good', 'title', 'Прилив надежды',
-        'descr', 'Казна каждой державы выросла на 2% (от 500 до 15 000 ГС).' || v_note);
+        'descr', 'Казна каждой державы выросла на 0.5% (от 100 до 3 000 ГС).' || v_note);
     when 'wealth' then
-      update public.faction_economy set gc = gc + round(3000 * v_mult);
+      update public.faction_economy set gc = gc + round(500 * v_mult);
       v_fx := jsonb_build_object('theme', v_theme, 'tone', 'good', 'title', 'Золотая неделя',
-        'descr', 'Каждая держава получила 3 000 ГС.' || v_note);
+        'descr', 'Каждая держава получила 500 ГС.' || v_note);
     when 'knowledge' then
-      update public.faction_economy set science = science + round(250 * v_mult);
+      update public.faction_economy set science = science + round(30 * v_mult);
       v_fx := jsonb_build_object('theme', v_theme, 'tone', 'good', 'title', 'Век просвещения',
-        'descr', 'Каждая держава получила 250 очков науки.' || v_note);
+        'descr', 'Каждая держава получила 30 очков науки.' || v_note);
     when 'love' then
-      update public.faction_economy set tnp = tnp + round(250 * v_mult);
+      update public.faction_economy set tnp = tnp + round(30 * v_mult);
       v_fx := jsonb_build_object('theme', v_theme, 'tone', 'good', 'title', 'Узы единства',
-        'descr', 'Каждая держава получила 250 товаров.' || v_note);
+        'descr', 'Каждая держава получила 30 товаров.' || v_note);
     when 'space' then
-      update public.faction_economy set gc = gc + round(1000 * v_mult), science = science + round(100 * v_mult);
+      update public.faction_economy set gc = gc + round(150 * v_mult), science = science + round(15 * v_mult);
       v_fx := jsonb_build_object('theme', v_theme, 'tone', 'good', 'title', 'Зов горизонта',
-        'descr', 'Каждая держава получила 1 000 ГС и 100 очков науки.' || v_note);
+        'descr', 'Каждая держава получила 150 ГС и 15 очков науки.' || v_note);
     when 'war' then
       update public.faction_economy
-        set gc = greatest(0, gc - least(round(10000 * v_mult), greatest(round(300 * v_mult), round(gc * 0.015 * v_mult))));
+        set gc = greatest(0, gc - least(round(2000 * v_mult), greatest(round(100 * v_mult), round(gc * 0.005 * v_mult))));
       v_fx := jsonb_build_object('theme', v_theme, 'tone', 'bad', 'title', 'Мобилизация',
-        'descr', 'Военные приготовления съели 1.5% казны каждой державы (от 300 до 10 000 ГС).' || v_note);
+        'descr', 'Военные приготовления съели 0.5% казны каждой державы (от 100 до 2 000 ГС).' || v_note);
     when 'dark' then
       update public.faction_economy
-        set gc = greatest(0, gc - least(round(20000 * v_mult), greatest(round(500 * v_mult), round(gc * 0.025 * v_mult))));
+        set gc = greatest(0, gc - least(round(4000 * v_mult), greatest(round(200 * v_mult), round(gc * 0.01 * v_mult))));
       v_fx := jsonb_build_object('theme', v_theme, 'tone', 'bad', 'title', 'Тень над сектором',
-        'descr', 'Упадок духа: −2.5% казны каждой державы (от 500 до 20 000 ГС).' || v_note);
+        'descr', 'Упадок духа: −1% казны каждой державы (от 200 до 4 000 ГС).' || v_note);
     when 'chaos' then
       update public.faction_economy
-        set gc = greatest(0, gc - round(1000 * v_mult)
-          + public._poem_hash(p_week::text || faction_id) % (round(4001 * v_mult))::int);
+        set gc = greatest(0, gc - round(200 * v_mult)
+          + public._poem_hash(p_week::text || faction_id) % (round(801 * v_mult))::int);
       v_fx := jsonb_build_object('theme', v_theme, 'tone', 'good', 'title', 'Колесо хаоса',
-        'descr', 'Каждой державе выпал свой жребий: от −1 000 до +3 000 ГС.' || v_note);
+        'descr', 'Каждой державе выпал свой жребий: от −200 до +600 ГС.' || v_note);
     else
       v_fx := jsonb_build_object('theme', 'mixed', 'tone', 'none', 'title', 'Разноголосица',
         'descr', 'Эффекта нет.');

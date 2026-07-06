@@ -3195,15 +3195,21 @@ function _heroColonyBuild(en) {
 // ══════════════════════════════════════════════════════════════
 // НОВЕЛЛА · «Поэма недели» — общегалактический стих (в духе DDLC).
 // Каждый день все державы голосуют за слово; победитель в конце дня (UTC)
-// разворачивается в строку. За неделю — 7 строк, в конце недели ВСЕ
-// получают баф/дебаф/ничего по доминирующей теме. Сервер: _vn_poem.sql
-// (RPC poem_state / poem_vote, ленивый сеттл — крон не нужен).
+// разворачивается в строку. Неделя = 3 строфы (I–II · III–IV · V–VII),
+// строки внутри строфы РИФМУЮТСЯ (у слова 3 варианта строки — по рифмовой
+// семье строфы). Темы-антиподы гасят друг друга, цельная строфа = эффект ×1.5.
+// Сервер: _vn_poem.sql (RPC poem_state / poem_vote, ленивый сеттл — крон не нужен).
 // ══════════════════════════════════════════════════════════════
 // Зеркало тем сервера (_poem_theme_ru): иконка + подпись.
 const HERO_POEM_THEMES = {
   war: ['⚔', 'Война', 'War'], hope: ['☀', 'Надежда', 'Hope'], dark: ['🌑', 'Тьма', 'Dark'],
   love: ['❤', 'Единство', 'Unity'], space: ['✦', 'Космос', 'Space'], wealth: ['◆', 'Богатство', 'Wealth'],
   knowledge: ['📖', 'Знание', 'Knowledge'], chaos: ['🌀', 'Хаос', 'Chaos'], mixed: ['…', 'Разноголосица', 'Discord'],
+};
+// Зеркало антиподов сервера (_poem_oppo): строка антипода гасит строку темы.
+const HERO_POEM_OPPO = {
+  war: 'love', love: 'war', hope: 'dark', dark: 'hope',
+  knowledge: 'chaos', chaos: 'knowledge', wealth: 'space', space: 'wealth',
 };
 let _heroPoemState = null;   // последний poem_state (для перерисовок)
 let _heroPoemBusy = false;
@@ -3339,16 +3345,28 @@ function _heroPoemBuild(st, en) {
   const opts = Array.isArray(st.options) ? st.options : [];
   const maxV = Math.max(1, ...opts.map(o => +o.votes || 0));
   const myVote = st.my_vote || null;
+  // сколько строк каждой темы уже в стихе — для подсказок «усилит/погасит»
+  const themeCnt = {};
+  lines.forEach(l => { themeCnt[l.theme] = (themeCnt[l.theme] || 0) + 1; });
   const wordBtns = opts.map(o => {
     const sel = (myVote === o.id) ? ' sel' : '';
     const votes = +o.votes || 0;
     const pct = Math.round(100 * votes / maxV);
     const flags = _heroPoemFlags(o.voters, votes);
+    // тема уже звучит в стихе / погасит строку темы-антипода
+    const same = themeCnt[o.theme] || 0;
+    const op = HERO_POEM_OPPO[o.theme];
+    const against = (op && themeCnt[op]) || 0;
+    const bits = [];
+    if (same) bits.push(`<b class="up">⛓ ${en ? 'echoes' : 'уже в стихе'} ×${same}</b>`);
+    if (against) bits.push(`<b class="dn">⚡ ${en ? 'mutes' : 'гасит'} ${thIco(op)} ×${against}</b>`);
+    const hint = bits.length ? `<span class="hp-vnp-w-hint">${bits.join(' ')}</span>` : '';
     return `<button class="hp-vnp-word${sel}" ${st.me ? '' : 'disabled '}onclick="event.stopPropagation();heroVNPoemVote('${jsq(o.id)}')">
       <span class="hp-vnp-w-t">${esc(o.word)}</span>
       <span class="hp-vnp-w-th">${thIco(o.theme)} ${esc(thLbl(o.theme))}</span>
       <span class="hp-vnp-w-bar"><i style="width:${pct}%"></i></span>
       <span class="hp-vnp-w-n">${votes}</span>
+      ${hint}
       ${flags}
     </button>`;
   }).join('');
@@ -3358,6 +3376,10 @@ function _heroPoemBuild(st, en) {
     : `<div class="hp-vnp-preview dim">${st.me
         ? (en ? 'Pick the word the poem will grow from.' : 'Выберите слово — из него вырастет строка.')
         : (en ? 'Only factions may vote.' : 'Голосуют только зарегистрированные державы.')}</div>`;
+  // строка той же строфы, с которой зарифмуется сегодняшняя (если уже написана)
+  const pair = st.pair && st.pair.line
+    ? `<div class="hp-vnp-pair">🕮 ${en ? 'Rhymes with line' : 'В рифму к строке'} ${ROMAN[st.pair.d] || ''}: <i>«${esc(st.pair.line)}»</i></div>`
+    : '';
 
   const last = st.last || null;
   const fx = last && last.effect ? last.effect : null;
@@ -3378,6 +3400,7 @@ function _heroPoemBuild(st, en) {
   const side = `<aside class="hp-vnp-side">
     <div class="hp-vnp-cap">${en ? 'WORD OF THE DAY' : 'СЛОВО ДНЯ'} ${(st.day_idx || 0) + 1}/7 · <span id="hp-vnp-cd">—:—</span></div>
     <div class="hp-vnp-words">${wordBtns}</div>
+    ${pair}
     ${preview}
     <div class="hp-vnp-total">${en ? 'factions voted today' : 'держав проголосовало сегодня'}: <b>${+st.total_votes || 0}</b></div>
     ${fxBlock}

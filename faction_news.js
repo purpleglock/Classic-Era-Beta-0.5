@@ -99,6 +99,9 @@ function fnStripMarkup(s) {
   t = t.replace(/\[lock:[^\]\n]*\][\s\S]*?\[\/lock\]/gi, ' 🔒 ');
   // сворачиваемая «глава» — содержимое не секретное, оставляем текст без тегов
   t = t.replace(/\[spoiler:[^\]\n]*\]([\s\S]*?)\[\/spoiler\]/gi, '$1');
+  // музыка: [music:URL] и голые ссылки на площадки — в тизере только метка
+  t = t.replace(/\[music:[^\]]*\]/gi, ' 🎵 ');
+  t = t.replace(/https?:\/\/(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be|soundcloud\.com|music\.yandex\.[a-z]+)\/\S+/gi, ' 🎵 ');
   // картинки: [img:URL] и голые URL изображений
   t = t.replace(/\[img:[^\]]*\]/gi, ' ');
   t = t.replace(/https?:\/\/\S+\.(?:jpe?g|png|gif|webp|avif|svg)(?:\?\S*)?/gi, ' ');
@@ -814,6 +817,9 @@ function fnBodyToParas(body) {
   let isFirst = true;
   return String(body || '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
     .map(p => {
+      // [music:URL] или голая музыкальная ссылка — плеер (null для чужих доменов)
+      const mus = p.match(/^\[music:(https?:\/\/[^\]\s]+)\]$/i) || (p.match(/^https?:\/\/\S+$/i) ? [null, p] : null);
+      if (mus) { const h = fnMusicHtml(mus[1]); if (h) return h; }
       // [img:URL] или голый URL картинки — рендерим как изображение
       const imgMatch = p.match(/^\[img:(https?:\/\/.+)\]$/i)
         || (p.match(/^https?:\/\/\S+$/i) && p.match(/\.(jpe?g|png|gif|webp|avif|svg)(\?[^\s]*)?$/i) ? [null, p] : null);
@@ -846,6 +852,12 @@ function fnRenderBody(body) {
     (_, title, inner) => stash(fnSpoilerHtml(title, fnRenderBody(inner))));
   t = t.replace(/\[lock:([^\]\n]*?)\]([\s\S]*?)\[\/lock\]/gi,
     (_, meta, inner) => stash(fnLockHtml(meta, fnRenderBody(inner))));
+  // Музыка: [music:URL] или голая ссылка YouTube/SoundCloud на отдельной строке
+  // → безопасный плеер (fnMusicHtml вернёт null для чужих доменов — тогда как было)
+  t = t.replace(/\[music:(https?:\/\/[^\]\s]+)\]/gi,
+    (m0, u) => { const h = fnMusicHtml(u); return h ? stash(h) : m0; });
+  t = t.replace(/^(https?:\/\/\S+)[ \t]*$/gim,
+    (m0, u) => { const h = fnMusicHtml(u); return h ? stash(h) : m0; });
   t = t.replace(/\[fx:schizo\]([\s\S]*?)\[\/fx\]/gi, (_, inner) => {
     const i = blocks.push(typeof schizoWrap === 'function' ? schizoWrap(inner) : esc(inner)) - 1;
     return `\n\nSZ${i}\n\n`;
@@ -916,6 +928,193 @@ function fnLockTry(el) {
     box.classList.add('fn-lock-shake');
     setTimeout(() => box.classList.remove('fn-lock-shake'), 420);
   }
+}
+
+// ── Музыка по ссылке (YouTube / SoundCloud) ──────────────────
+// Безопасность: из пользовательской ссылки берётся ТОЛЬКО ID/путь,
+// провалидированный жёстким регэкспом по белому списку доменов; iframe всегда
+// собирается из нашего шаблона. Сырая ссылка юзера в разметку не попадает.
+function fnMusicParse(url) {
+  const u = String(url || '').trim();
+  let m = u.match(/^https?:\/\/(?:www\.|m\.|music\.)?youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|live\/|embed\/)([A-Za-z0-9_-]{11})(?:[?&#]|$)/i)
+       || u.match(/^https?:\/\/youtu\.be\/([A-Za-z0-9_-]{11})(?:[?&#]|$)/i);
+  if (m) return { kind: 'yt', id: m[1] };
+  // soundcloud.com/автор/трек, автор/трек/s-секрет (unlisted), автор/sets/плейлист
+  m = u.match(/^https?:\/\/(?:www\.)?soundcloud\.com\/([A-Za-z0-9][\w-]*(?:\/[\w-]+){1,2})\/?(?:\?[^\s]*)?$/i);
+  if (m && !/^(?:discover|search|stream|upload|you|messages|settings|pages|charts|people|tags)\//i.test(m[1] + '/')) {
+    return { kind: 'sc', path: m[1] };
+  }
+  // Яндекс Музыка: album/<id>/track/<id> или track/<id> (id — только цифры)
+  m = u.match(/^https?:\/\/music\.yandex\.(?:ru|com|by|kz|ua)\/album\/(\d+)\/track\/(\d+)/i);
+  if (m) return { kind: 'ym', track: m[2], album: m[1] };
+  m = u.match(/^https?:\/\/music\.yandex\.(?:ru|com|by|kz|ua)\/track\/(\d+)/i);
+  if (m) return { kind: 'ym', track: m[1] };
+  return null;
+}
+// HTML карточки плеера. Click-to-load: iframe создаётся только по клику —
+// статья не тянет тяжёлые плееры и не шлёт площадкам ни одного запроса до клика
+// (у YouTube грузится только картинка-превью с i.ytimg.com).
+function fnMusicHtml(url) {
+  const p = fnMusicParse(url);
+  if (!p) return null;
+  if (p.kind === 'yt') {
+    const embed = 'https://www.youtube-nocookie.com/embed/' + p.id + '?autoplay=1';
+    return `<div class="fn-music fn-music-yt"><button type="button" class="fn-music-load" data-embed="${esc(embed)}" onclick="fnMusicLoad(this)">`
+      + `<span class="fn-music-play">▶</span>`
+      + `<img class="fn-music-thumb" src="https://i.ytimg.com/vi/${esc(p.id)}/mqdefault.jpg" loading="lazy" alt="">`
+      + `<span class="fn-music-meta"><span class="fn-music-ttl">Аудиозапись</span><span class="fn-music-src">YouTube</span></span></button></div>`;
+  }
+  if (p.kind === 'ym') {
+    const embed = 'https://music.yandex.ru/iframe/#track/' + p.track + (p.album ? '/' + p.album : '');
+    return `<div class="fn-music fn-music-ym"><button type="button" class="fn-music-load" data-embed="${esc(embed)}" onclick="fnMusicLoad(this)">`
+      + `<span class="fn-music-play">▶</span><span class="fn-music-meta"><span class="fn-music-ttl">Аудиозапись</span><span class="fn-music-src">Яндекс Музыка</span></span></button></div>`;
+  }
+  const embed = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent('https://soundcloud.com/' + p.path)
+    + '&color=%23e8b04a&auto_play=true&visual=false&show_teaser=false';
+  const name = (p.path.split('/').filter(s => s && s !== 'sets' && !/^s-/i.test(s)).pop() || 'трек').replace(/[-_]+/g, ' ');
+  return `<div class="fn-music fn-music-sc"><button type="button" class="fn-music-load" data-embed="${esc(embed)}" onclick="fnMusicLoad(this)">`
+    + `<span class="fn-music-play">▶</span><span class="fn-music-meta"><span class="fn-music-ttl">${esc(name)}</span><span class="fn-music-src">SoundCloud</span></span></button></div>`;
+}
+// Клик по карточке → создаём iframe. Src перепроверяется по белому списку ещё
+// раз (защита в глубину: с чужим src iframe просто не создастся).
+// YouTube — «аудио-режим»: сам плеер живёт в невидимом iframe, а карточка
+// превращается в наш аудио-плеер (название, таймлайн с перемоткой, пауза,
+// повтор) — управление и статусы через postMessage-протокол YouTube-iframe.
+function fnMusicLoad(btn) {
+  const box = btn && btn.closest('.fn-music');
+  const src = (btn && btn.getAttribute('data-embed')) || '';
+  const okYt = src.startsWith('https://www.youtube-nocookie.com/embed/');
+  const okSc = src.startsWith('https://w.soundcloud.com/player/?');
+  const okYm = src.startsWith('https://music.yandex.ru/iframe/');
+  if (!box || (!okYt && !okSc && !okYm)) return;
+  box._fnCard = box.innerHTML;   // исходная карточка — для fnMusicStopAll
+  if (okYt) {
+    const th = box.querySelector('.fn-music-thumb');
+    const thumbSrc = (th && th.getAttribute('src')) || '';
+    box.innerHTML = `<div class="fn-music-bar">
+      <button type="button" class="fn-music-play" onclick="fnMusicToggle(this)">❚❚</button>
+      ${thumbSrc ? `<img class="fn-music-thumb" src="${esc(thumbSrc)}" alt="">` : ''}
+      <span class="fn-music-mid">
+        <span class="fn-music-ttl">Аудиозапись</span>
+        <span class="fn-music-tl" onclick="fnMusicSeek(event,this)"><span class="fn-music-tl-fill"></span></span>
+      </span>
+      <span class="fn-music-time">–:––</span>
+      <button type="button" class="fn-music-rep" onclick="fnMusicRepeat(this)" title="Повторять трек">⟳</button>
+    </div>`;
+    const f = document.createElement('iframe');
+    f.src = src + '&enablejsapi=1';
+    f.className = 'fn-music-hidden';
+    f.setAttribute('allow', 'autoplay; encrypted-media');
+    f.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+    f.setAttribute('referrerpolicy', 'origin');
+    f.title = 'YouTube audio';
+    // подписка на статусы плеера; шлём несколько раз — плеер может быть не готов
+    const hail = () => { try { f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'fnmusic' }), 'https://www.youtube-nocookie.com'); } catch (e) {} };
+    f.addEventListener('load', () => { hail(); setTimeout(hail, 700); setTimeout(hail, 2000); });
+    if (!FN.musicMsgHooked) {
+      FN.musicMsgHooked = true;
+      window.addEventListener('message', fnMusicOnMessage);
+    }
+    box.appendChild(f);
+    box.classList.add('on');
+    fnMusicState(box, true);
+    return;
+  }
+  // SoundCloud / Яндекс Музыка: видимый родной компакт-плеер на месте карточки
+  const f = document.createElement('iframe');
+  f.src = src;
+  f.setAttribute('allow', 'autoplay; encrypted-media');
+  f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups');
+  f.setAttribute('referrerpolicy', 'origin');
+  box.classList.add('on');
+  box.textContent = '';
+  box.appendChild(f);
+}
+// Статусы/прогресс от YouTube-iframe (infoDelivery). Один listener на страницу.
+function fnMusicOnMessage(ev) {
+  if (ev.origin !== 'https://www.youtube-nocookie.com') return;
+  let d; try { d = JSON.parse(ev.data); } catch (e) { return; }
+  const info = d && d.info;
+  if (!info) return;
+  document.querySelectorAll('.fn-music-yt iframe').forEach(fr => {
+    if (fr.contentWindow !== ev.source) return;
+    const box = fr.closest('.fn-music');
+    if (!box) return;
+    if (info.videoData && info.videoData.title) {
+      const t = box.querySelector('.fn-music-ttl');
+      if (t && t.textContent !== info.videoData.title) t.textContent = info.videoData.title;
+    }
+    if (typeof info.duration === 'number' && info.duration > 0) box.dataset.dur = info.duration;
+    if (typeof info.currentTime === 'number') fnMusicProgress(box, info.currentTime);
+    if (typeof info.playerState === 'number') {
+      // 1 = играет, 3 = буферизация; 2 = пауза; 0 = кончился (повтор — если включён)
+      if (info.playerState === 0 && box.dataset.rep === '1') {
+        fnMusicCmd(box, 'seekTo', [0, true]); fnMusicCmd(box, 'playVideo');
+      } else {
+        fnMusicState(box, info.playerState === 1 || info.playerState === 3);
+      }
+    }
+  });
+}
+// Команда плееру в iframe (playVideo / pauseVideo / seekTo …).
+function fnMusicCmd(box, func, args) {
+  const f = box && box.querySelector('iframe');
+  if (!f) return;
+  try { f.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: args || [] }), 'https://www.youtube-nocookie.com'); } catch (e) {}
+}
+function fnMusicToggle(btn) {
+  const box = btn && btn.closest('.fn-music');
+  if (!box) return;
+  const playing = box.classList.contains('playing');
+  fnMusicCmd(box, playing ? 'pauseVideo' : 'playVideo');
+  fnMusicState(box, !playing);
+}
+// Клик по таймлайну → перемотка (доля ширины × длительность).
+function fnMusicSeek(ev, tl) {
+  const box = tl && tl.closest('.fn-music');
+  const dur = parseFloat(box && box.dataset.dur) || 0;
+  if (!dur) return;
+  const r = tl.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+  fnMusicCmd(box, 'seekTo', [frac * dur, true]);
+  fnMusicCmd(box, 'playVideo');
+  fnMusicProgress(box, frac * dur);
+  fnMusicState(box, true);
+}
+function fnMusicRepeat(btn) {
+  const box = btn && btn.closest('.fn-music');
+  if (!box) return;
+  box.dataset.rep = box.dataset.rep === '1' ? '' : '1';
+  btn.classList.toggle('on', box.dataset.rep === '1');
+}
+function fnMusicFmt(s) {
+  s = Math.max(0, Math.round(s || 0));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function fnMusicProgress(box, cur) {
+  const dur = parseFloat(box.dataset.dur) || 0;
+  const fill = box.querySelector('.fn-music-tl-fill');
+  if (fill && dur) fill.style.width = Math.min(100, cur / dur * 100) + '%';
+  const t = box.querySelector('.fn-music-time');
+  if (t) t.textContent = fnMusicFmt(cur) + (dur ? ' / ' + fnMusicFmt(dur) : '');
+}
+// Переключить вид плеера: играет (❚❚) / пауза (▶).
+function fnMusicState(box, playing) {
+  if (!box) return;
+  box.classList.toggle('playing', !!playing);
+  const p = box.querySelector('.fn-music-play');
+  if (p) p.textContent = playing ? '❚❚' : '▶';
+}
+// Заглушить все плееры в контейнере (закрытие статьи/композитора): iframe
+// уничтожается (звук гаснет), карточка возвращается в вид «до клика».
+function fnMusicStopAll(root) {
+  (root || document).querySelectorAll('.fn-music.on').forEach(box => {
+    const f = box.querySelector('iframe');
+    if (f) f.remove();
+    if (box._fnCard) box.innerHTML = box._fnCard;
+    box.classList.remove('on', 'playing');
+    box.dataset.rep = ''; box.dataset.dur = '';
+  });
 }
 
 // ── Вердикт администрации (комментарий + журнал выдач) ────────
@@ -1386,7 +1585,8 @@ function fnOpenArticle(id) {
 }
 function fnCloseArticle() {
   FN._openId = null;
-  document.getElementById('fn-article')?.classList.remove('show');
+  const m = document.getElementById('fn-article');
+  if (m) { fnMusicStopAll(m); m.classList.remove('show'); }
   document.body.style.overflow = '';
 }
 
@@ -1744,6 +1944,7 @@ function fnOpenComposer(id) {
           <button type="button" class="mdt" title="Подсветка" onclick="fnMd('[bg:cyber]','[/bg]','текст')">▮</button>
           <span class="mdt-sep"></span>
           <button type="button" class="mdt" title="Картинка по ссылке" onclick="fnInsertImgUrl()">🖼</button>
+          <button type="button" class="mdt" title="Музыка по ссылке — YouTube, SoundCloud или Яндекс Музыка" onclick="fnInsertMusicUrl()">🎵</button>
           <button type="button" class="mdt" title="Сворачиваемый блок (как глава)" onclick="fnMd('[spoiler:Глава]\\n','\\n[/spoiler]','скрытый текст')">▸</button>
           <button type="button" class="mdt" title="Спойлер под паролем" onclick="fnMd('[lock:пароль|Секрет]\\n','\\n[/lock]','секретный текст')">🔒</button>
           ${fnIsStaff() ? `<span class="mdt-sep"></span>
@@ -1803,7 +2004,8 @@ function fnCloseComposer() {
   clearTimeout(FN.draftT);
   fnDraftSave();   // финальное сохранение — закрытие/обрыв не теряет последние буквы
   if (typeof AD !== 'undefined') AD.embed = null;
-  document.getElementById('fn-composer')?.classList.remove('show');
+  const m = document.getElementById('fn-composer');
+  if (m) { fnMusicStopAll(m); m.classList.remove('show'); }
 }
 
 // ── Автосохранение черновика новости (localStorage) ─────────
@@ -1961,6 +2163,12 @@ function fnInsertImgUrl() {
   if (!url) return;
   if (!/^https?:\/\//i.test(url)) { toast('Нужна ссылка вида http(s)://…', 'err'); return; }
   fnMd('\n\n[img:' + url + ']\n\n', '', '');
+}
+function fnInsertMusicUrl() {
+  const url = (prompt('Ссылка на трек — YouTube, SoundCloud или Яндекс Музыка:', '') || '').trim();
+  if (!url) return;
+  if (!fnMusicParse(url)) { toast('Не похоже на трек YouTube/SoundCloud/Яндекс Музыки. Пример: https://music.yandex.ru/album/123/track/456', 'err'); return; }
+  fnMd('\n\n[music:' + url + ']\n\n', '', '');
 }
 function fnInsertImg(input) {
   const file = input?.files?.[0];

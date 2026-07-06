@@ -185,7 +185,7 @@
 .fr-empty{color:var(--t3);font-size:13px;padding:20px;text-align:center;grid-column:1/-1}
 
 /* модалка просмотра фракции */
-.fr-modal-ov{display:none;position:fixed;inset:0;z-index:60;background:rgba(0,2,8,.8);backdrop-filter:blur(4px);align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
+.fr-modal-ov{display:none;position:fixed;inset:0;z-index:140;background:rgba(0,2,8,.8);backdrop-filter:blur(4px);align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
 .fr-modal-ov.show{display:flex}
 .fr-modal{position:relative;width:520px;max-width:100%;background:hsl(216 24% 8% / .98);border: var(--deco-frame-w, 1px) solid var(--w3);border-radius:var(--radius-lg);padding:22px}
 .fr-view-hd{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding-right:30px}
