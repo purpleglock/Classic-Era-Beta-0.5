@@ -26,10 +26,21 @@ begin
     return NEW;
   end if;
 
-  -- Обычный игрок: статус только черновик/на-модерации.
-  if NEW.status is distinct from 'draft' and NEW.status is distinct from 'pending' then
+  -- Обычный игрок: статус только черновик/на-модерации, ЛИБО правка уже
+  -- одобренной анкеты (approved→approved) — смена имени/лидера/лора и т.п.
+  -- Самоодобрение непринятой анкеты (draft/pending/rejected → approved) по-прежнему
+  -- запрещено: разрешаем approved только когда OLD.status уже был approved.
+  if NEW.status is distinct from 'draft'
+     and NEW.status is distinct from 'pending'
+     and not (TG_OP = 'UPDATE' and OLD.status = 'approved' and NEW.status = 'approved') then
     raise exception 'forbidden: only staff can approve/reject applications'
       using errcode = 'check_violation';
+  end if;
+
+  -- Правка одобренной анкеты игроком ВСЕГДА уходит на повторную проверку:
+  -- игрок не может сам снять флаг и протащить изменения мимо модерации.
+  if TG_OP = 'UPDATE' and OLD.status = 'approved' and NEW.status = 'approved' then
+    NEW.pending_review := true;
   end if;
 
   -- faction_id и reviewed_by проставляет только сервер при одобрении.
@@ -58,6 +69,8 @@ create trigger trg_guard_faction_app
 alter table public.faction_applications enable row level security;
 
 -- ── Проверка ────────────────────────────────────────────────
--- Под игроком в консоли должно падать с 'forbidden':
---   dbPatch('faction_applications','id=eq.'+FR.data.id,{status:'approved'})
+-- Под игроком в консоли должно падать с 'forbidden' (самоодобрение непринятой):
+--   dbPatch('faction_applications','id=eq.<draft/pending>',{status:'approved'})
 -- Сохранение черновика / подача на модерацию — работают как раньше.
+-- Правка УЖЕ одобренной анкеты (approved→approved) владельцем — работает и
+-- принудительно взводит pending_review=true (уходит в очередь модерации).

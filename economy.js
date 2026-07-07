@@ -589,7 +589,10 @@ function ecPlanetGroup(p) {
   return 'unknown';
 }
 function ecColonizable(p) { return !EC_NOCOL.has(ecPlanetGroup(p)); }
-function ecNative(p, race) { return (EC_HAB[race] || []).includes(ecPlanetGroup(p)); }
+// Роботы (раса «Синтетики / Киборги» ИЛИ правление «Машинный разум») колонизируют
+// ЛЮБОЙ пригодный мир напрямую — без терраформа. Зеркало сервера: economy_colonize
+// (native := _faction_is_robot(fid) or grp = any(_race_native_envs(...))).
+function ecNative(p, race) { return ecIsRobot() || (EC_HAB[race] || []).includes(ecPlanetGroup(p)); }
 // Небожители: конфиг станции, если ИЗУЧЕНА технология, открывающая группу планет g.
 function ecStationFor(group) {
   const done = (EC.eco && EC.eco.research) || [];
