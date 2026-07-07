@@ -133,6 +133,11 @@ const FR_GOV_IDEO_BAN = {
   'Машинный разум (ИИ)': ['Спиритуализм'],                     // синтетический интеллект, холодная логика
 };
 
+// Машинный разум (ИИ) — синтетическая цивилизация: раса жёстко фиксируется
+// на «Синтетики / Киборги» (нельзя быть роботами и одновременно гуманоидами).
+const FR_MACHINE_GOV = 'Машинный разум (ИИ)';
+const FR_MACHINE_RACE = 'Синтетики / Киборги';
+function frRaceForcedByGov(gov) { return gov === FR_MACHINE_GOV ? FR_MACHINE_RACE : null; }
 function frAllowedRegimes(gov) { return FR_GOV_REGIME[gov] || FR_REGIME; }
 function frAllowedIdeologies(gov) {
   const banned = FR_GOV_IDEO_BAN[gov] || [];
@@ -142,6 +147,14 @@ function frCheckIdeoConflict(chosen) { return FR_IDEO_CONFLICTS[chosen] || []; }
 function frOnGovChange(gov) {
   FR.data.gov = gov;
   frSetDesc('f-gov-d', FR_GOV_DESC, gov, 'gov');
+  // Машинный разум принудительно фиксирует расу на синтетиках.
+  const forced = frRaceForcedByGov(gov);
+  if (forced && FR.data.race !== forced) {
+    FR.data.race = forced;
+    const rr = document.getElementById('f-reg-race'); if (rr) rr.value = forced;
+    const cr = document.getElementById('c-race'); if (cr) cr.value = forced;
+    if (typeof frRenderPlanetPick === 'function') frRenderPlanetPick();
+  }
   const allowed = frAllowedRegimes(gov);
   const sel = document.getElementById('f-regime'); if (!sel) return;
   const val = allowed.includes(sel.value) ? sel.value : allowed[0];
@@ -354,6 +367,8 @@ function frStepSystem(d) {
         <input class="fi" id="f-planet" value="${esc(cap.planet_name || d.planet_name || '')}" placeholder="Название планеты" oninput="FR.data.planet_name=this.value.trim()"></div>
       <div class="fr-note" style="margin-top:8px">Изменение имени уйдёт на <b>проверку администрации</b> вместе с анкетой (кнопка «Сохранить» внизу). После одобрения название обновится на карте, странице фракций и в кабинете.</div>`;
   }
+  const forcedRace = frRaceForcedByGov(d.gov);
+  if (forcedRace) d.race = forcedRace; // синхронизация расы с формой правления
   return `<h3 class="fr-h3">Столичная система</h3>
     <p class="fr-note">Выберите <b>свободную</b> звезду: <span style="color:var(--gd)">голубые</span> свободны, серые заняты. Ваша столичная планета будет создана прямо в этой системе на карте.</p>
     <div class="fr-minimap" id="f-minimap"><div class="sload" style="min-height:60px"><div class="pulse-loader"></div></div></div>
@@ -362,7 +377,9 @@ function frStepSystem(d) {
     <div class="fr-sys-list" id="f-sys-list"></div>
     <div class="fgr2" style="margin-top:14px">
       <div class="fg"><label class="fl">Раса (определяет родные миры)</label>
-        ${frSel('f-reg-race', FR_RACE, d.race, "frOnRegRace(this.value)")}</div>
+        ${frRaceForcedByGov(d.gov)
+          ? `<div class="fr-locked" style="margin:0">🔒 Раса закреплена формой правления «${esc(d.gov)}»: <b>${esc(d.race)}</b></div><input type="hidden" id="f-reg-race" value="${esc(d.race)}">`
+          : frSel('f-reg-race', FR_RACE, d.race, "frOnRegRace(this.value)")}</div>
       <div class="fg"><label class="fl">Название столичной планеты</label>
         <input class="fi" id="f-planet" value="${esc(d.planet_name)}" placeholder="Имя вашей столицы" oninput="FR.data.planet_name=this.value"></div>
     </div>
@@ -452,6 +469,8 @@ function frStepBuildings(d) {
     </label>`;
 }
 function frStepCulture(d) {
+  const forcedRace = frRaceForcedByGov(d.gov);
+  if (forcedRace) d.race = forcedRace; // синхронизация на случай, если раса выбрана до формы правления
   const ideoOpts = frAllowedIdeologies(d.gov);
   if (!ideoOpts.includes(d.ideology)) d.ideology = ideoOpts[0]; // сброс несовместимой идеологии
   const ideoHint = (FR_GOV_IDEO_BAN[d.gov] || []).length
@@ -461,6 +480,8 @@ function frStepCulture(d) {
       <div class="fg"><label class="fl">Биологический вид (раса)</label>
         ${FR.editApproved
           ? `<div class="fr-locked" style="margin:0">🔒 Раса закреплена за фракцией: <b>${esc(d.race)}</b> — изменить нельзя.</div><input type="hidden" id="c-race" value="${esc(d.race)}">`
+          : forcedRace
+          ? `<div class="fr-locked" style="margin:0">🔒 Раса закреплена формой правления «${esc(d.gov)}»: <b>${esc(d.race)}</b></div><input type="hidden" id="c-race" value="${esc(d.race)}">`
           : frSel('c-race', FR_RACE, d.race, "frSetDesc('c-race-d',FR_RACE_DESC,this.value,'race')")}
         <div class="fr-opt-desc" id="c-race-d">${frOptInit(FR_RACE_DESC, d.race, 'race')}</div></div>
       <div class="fg"><label class="fl">Идеология / Этика</label>

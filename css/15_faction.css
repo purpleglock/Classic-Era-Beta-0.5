@@ -109,8 +109,9 @@
 .mm-zoom-btn:hover{background:var(--b3);color:var(--gd)}
 .mm-zoom-btn:active{background:var(--b4);transform:scale(.95)}
 .mm-zoom-viewport{flex:1;overflow:hidden;max-height:300px;display:flex;align-items:center;justify-content:center;user-select:none}
-.mm-zoom-viewport svg{display:block;width:100%;height:auto;transform-origin:center;transition:transform var(--duration-fast) ease-out;cursor:grab}
+.mm-zoom-viewport svg{display:block;width:100%;height:auto;transform-origin:center;transition:transform var(--duration-fast) ease-out;cursor:grab;touch-action:none}
 .mm-zoom-viewport svg:active{cursor:grabbing}
+.mm-zoom-viewport svg.mm-panning{transition:none;will-change:transform}
 .fr-minimap svg{display:block;width:100%;height:auto;max-height:300px}
 .fr-mm-dot{transition:r var(--duration-fast), fill var(--duration-fast)}
 .fr-mm-dot.taken{fill:#3a4660;stroke:#222c3e;stroke-width:2}

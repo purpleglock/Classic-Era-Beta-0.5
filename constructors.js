@@ -542,28 +542,89 @@ function cnHullOutlinePts(st, wf) {
   return R.concat(L);
 }
 function cnHullSmooth(H, wf) { return cnCatmullClosed(cnHullOutlinePts(H.st, wf)); }
+// Плотный сэмпл ЗАМКНУТОЙ кривой Catmull-Rom (те же контрольные, что и cnCatmullClosed,
+// но возвращаем точки, а не path). Нужен, чтобы щит был параллелен ВИДИМОМУ гладкому
+// корпусу, а не ломаной по станциям → зазор одинаков по всему обводу.
+function cnCatmullPoly(pts, seg) {
+  const n = pts.length; if (n < 3) return pts.map(p => p.slice());
+  seg = seg || 8; const out = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    for (let s = 0; s < seg; s++) {
+      const t = s / seg, u = 1 - t;
+      out.push([
+        u * u * u * p1[0] + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * p2[0],
+        u * u * u * p1[1] + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * p2[1]
+      ]);
+    }
+  }
+  return out;
+}
+function cnPolyPath(poly) { return 'M' + poly.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + 'Z'; }
 // Единичная нормаль ребра a→b (поворот направления на −90°).
 function cnEdgeNormal(a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1; return [dy / L, -dx / L]; }
 // ИСТИННАЯ параллельная оболочка: смещение полигона по нормали на ПОСТОЯННОЕ
 // расстояние d (px). В отличие от масштаба-от-центра, толщина стоянки одинакова
 // по всему обводу и не раздувается вдоль оси у вытянутых корпусов. Знак нормали
 // ориентируем наружу от центроида; на выпуклых углах — ограниченная miter-правка.
-function cnOffsetPoly(pts, d) {
+function cnOffsetPoly(pts, d, miterLim) {
+  miterLim = miterLim || 2;
   const n = pts.length; if (n < 3) return pts.map(p => p.slice());
-  let cx = 0, cy = 0; for (const p of pts) { cx += p[0]; cy += p[1]; } cx /= n; cy /= n;
+  // Наружу определяем по ОБХОДУ (знак площади), а не по центроиду: у вытянутого
+  // корпуса с вогнутой «талией» центроидная эвристика заворачивала нормаль внутрь
+  // в дентах бортов → оболочка проваливалась в корпус. Знак обхода корректен везде.
+  let area = 0; for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
+  const sgn = area > 0 ? 1 : -1;
   const out = [];
   for (let i = 0; i < n; i++) {
     const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n];
     const n1 = cnEdgeNormal(p0, p1), n2 = cnEdgeNormal(p1, p2);
     let nx = n1[0] + n2[0], ny = n1[1] + n2[1], len = Math.hypot(nx, ny);
     if (len < 1e-3) { nx = n1[0]; ny = n1[1]; len = Math.hypot(nx, ny) || 1; }
-    nx /= len; ny /= len;
-    if (nx * (p1[0] - cx) + ny * (p1[1] - cy) < 0) { nx = -nx; ny = -ny; }   // наружу
+    nx = nx / len * sgn; ny = ny / len * sgn;                                // наружу по обходу
     const cosHalf = Math.max(0.42, Math.abs(n1[0] * nx + n1[1] * ny));
-    const m = Math.min(d / cosHalf, d * 2);                                  // miter-лимит
+    const m = Math.min(d / cosHalf, d * miterLim);                           // miter-лимит
     out.push([p1[0] + nx * m, p1[1] + ny * m]);
   }
   return out;
+}
+// ОКРУГЛЁННАЯ параллельная оболочка: то же постоянное смещение d, но выпуклые углы
+// (нос, корма, транцевые денты) закрываются ДУГОЙ радиуса d, а не miter-остриём. Даёт
+// гладкое поле, которое полностью накрывает даже острый нос корпуса, без спайков и срезов.
+function cnOffsetRound(pts, d) {
+  const n = pts.length; if (n < 3) return pts.map(p => p.slice());
+  let area = 0; for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
+  const sgn = area > 0 ? 1 : -1;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n];
+    let n1 = cnEdgeNormal(p0, p1), n2 = cnEdgeNormal(p1, p2);
+    n1 = [n1[0] * sgn, n1[1] * sgn]; n2 = [n2[0] * sgn, n2[1] * sgn];          // наружу по обходу
+    const a1 = Math.atan2(n1[1], n1[0]);
+    let da = Math.atan2(n2[1], n2[0]) - a1;
+    while (da > Math.PI) da -= 2 * Math.PI;
+    while (da < -Math.PI) da += 2 * Math.PI;
+    out.push([p1[0] + n1[0] * d, p1[1] + n1[1] * d]);
+    if (da > 0.25) {                                                          // выпуклый угол → веер точек по дуге
+      const steps = Math.min(10, Math.ceil(da / 0.3));
+      for (let s = 1; s < steps; s++) { const a = a1 + da * s / steps; out.push([p1[0] + Math.cos(a) * d, p1[1] + Math.sin(a) * d]); }
+    }
+    out.push([p1[0] + n2[0] * d, p1[1] + n2[1] * d]);
+  }
+  return out;
+}
+// Выпуклая оболочка набора точек (Эндрю, monotone chain). Щит = энергопузырь, поэтому
+// строим его вокруг ВЫПУКЛОГО контура корпуса → гладкий обвод без вмятин транца и без
+// самопересечений (значит и без паразитных чёрточек у носа/кормы).
+function cnConvexHull(pts) {
+  const p = pts.map(x => x.slice()).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (p.length < 3) return p;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = []; for (const q of p) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  const up = []; for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  lo.pop(); up.pop(); return lo.concat(up);
 }
 // Надстройка («остров») по центру корпуса — на ней стоят мостик и реактор.
 function cnIslandPath(H) {
@@ -573,14 +634,31 @@ function cnIslandPath(H) {
   const st = ys.map((y, i) => [y, Math.min(cnHullHalf(H, y) * wf[i], 26)]);
   return cnCatmullClosed(cnHullOutlinePts(st, 1));
 }
-const CN_SHIP_ST = {
-  corvette:    { st: [[58, 0], [74, 7], [92, 12], [116, 13], [132, 11], [148, 26], [170, 34], [188, 26], [212, 20], [238, 22], [256, 34], [286, 36], [300, 24], [318, 18]], nose: 84, y0: 112, y1: 300, rows: 5 },
-  frigate:     { st: [[46, 0], [62, 8], [84, 14], [110, 16], [128, 13], [146, 30], [172, 40], [196, 32], [222, 24], [246, 26], [266, 40], [300, 42], [316, 26], [336, 20]], nose: 78, y0: 106, y1: 320, rows: 6 },
-  destroyer:   { st: [[38, 0], [54, 7], [80, 12], [112, 16], [136, 14], [156, 24], [184, 30], [210, 24], [236, 20], [262, 30], [286, 26], [306, 34], [330, 36], [346, 22], [356, 16]], nose: 72, y0: 100, y1: 340, rows: 7 },
-  cruiser:     { st: [[40, 0], [58, 12], [82, 22], [108, 26], [126, 22], [144, 44], [172, 56], [200, 46], [224, 38], [248, 52], [282, 56], [312, 58], [334, 36], [352, 24]], nose: 74, y0: 100, y1: 334, rows: 7 },
-  battleship:  { st: [[34, 0], [52, 14], [78, 26], [104, 32], [124, 28], [142, 52], [170, 64], [198, 56], [222, 46], [244, 62], [276, 66], [308, 68], [334, 44], [368, 26]], nose: 68, y0: 96, y1: 352, rows: 8 },
-  dreadnought: { st: [[26, 0], [46, 16], [74, 30], [102, 38], [124, 32], [142, 60], [172, 74], [202, 64], [228, 52], [250, 70], [284, 76], [318, 78], [344, 50], [384, 28]], nose: 62, y0: 92, y1: 370, rows: 9 },
+// Чистый силуэт боевого корабля (вид сверху): острый нос-клин → плечи → ПАРАЛЛЕЛЬНЫЙ
+// мидель на максимальном бимсе → плавный сход к плоской корме-транцу с дюзами. Монотонно
+// до макс. бимса, потом мягкий спад — БЕЗ волн-выпуклостей. Грани прямые (faceted) →
+// механический, «космо-военный» вид, а не органический блоб.
+const CN_HULL_PROFILE = [
+  [0.00, 0.00], [0.06, 0.20], [0.16, 0.48], [0.28, 0.74], [0.40, 0.92],
+  [0.48, 1.00], [0.66, 1.00], [0.76, 0.95], [0.86, 0.86], [0.94, 0.78], [1.00, 0.66],
+];
+function cnGenStations(tipY, sternY, beam) {
+  return CN_HULL_PROFILE.map(([t, f]) => [Math.round(tipY + (sternY - tipY) * t), Math.round(beam * f)]);
+}
+// [tipY, sternY, beam(полубимс), rows(рядов узлов)]
+const CN_SHIP_DIM = {
+  corvette:    [70, 300, 34, 5],
+  frigate:     [66, 320, 42, 6],
+  destroyer:   [62, 340, 40, 7],
+  cruiser:     [66, 336, 56, 7],
+  battleship:  [60, 354, 68, 8],
+  dreadnought: [54, 372, 82, 9],
 };
+const CN_SHIP_ST = {};
+for (const k in CN_SHIP_DIM) {
+  const [tipY, sternY, beam, rows] = CN_SHIP_DIM[k];
+  CN_SHIP_ST[k] = { st: cnGenStations(tipY, sternY, beam), nose: tipY + 8, y0: tipY + 34, y1: sternY - 12, rows };
+}
 const CN_SHIP_GEO = {};
 for (const stK in CN_SHIP_ST) {
   const d = CN_SHIP_ST[stK], stLast = d.st[d.st.length - 1];
@@ -751,43 +829,23 @@ function cnPolyDots(poly, spacing) {
   for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length], dx = b[0] - a[0], dy = b[1] - a[1], steps = Math.max(1, Math.round(Math.hypot(dx, dy) / spacing)); for (let s = 0; s < steps; s++) { const t = s / steps; pts.push([a[0] + dx * t, a[1] + dy * t]); } }
   return pts;
 }
-// ЩИТ (киберпанк): не неоновая труба, а ТЕХНИЧЕСКИЙ барьер — параллельная
-// оболочка на постоянном отступе (cnOffsetPoly) + сегментированная решётка кромки
-// + эмиттер-риски (короткие радиальные штрихи корпус→барьер, откуда «проецируется»
-// поле). Три стиля по типу, размер/плотность по силе. Мерцает через .cn-shieldfx.
-// d — отступ оболочки в px (см. cnDrawShip).
+// ЩИТ — ЧИСТЫЙ энергобарьер: мягкое поле в зазоре + ОДНА аккуратная параллельная
+// кромка, огибающая видимый корпус. Без штрихов-эмиттеров, точек и пунктиров (это давало
+// «фуз»/шум). Цвет — по типу щита, яркость — по силе. Оболочка идёт по гладкому силуэту,
+// самопересечения в глубоких выемках выброшены (барьер перекидывается через устье).
 function cnShieldSvg(H, sIdx, rt, d) {
   const col = sIdx === 0 ? 'var(--te)' : sIdx === 1 ? 'var(--gd)' : 'var(--t2)';
-  const op = +(0.30 + 0.16 * rt).toFixed(2);
-  const hull = cnHullOutlinePts(H.st, 1);              // силуэт корпуса (станции)
-  const shell = cnOffsetPoly(hull, d);                 // истинная параллельная оболочка
-  const shellD = cnCatmullClosed(shell);
-  // приглушённое поле в зазоре корпус↔оболочка (корпус перекроет внутреннюю часть)
-  let s = `<path d="${shellD}" fill="color-mix(in srgb, ${col} 5%, transparent)" stroke="none"/>`;
-  // эмиттер-риски: штрих от точки корпуса наружу к барьеру (по нормали, ∝ отступу)
-  const emit = (frac, every, w) => {
-    let e = '';
-    for (let i = 0; i < hull.length; i += every) {
-      const a = hull[i], b = shell[i];
-      e += `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${(a[0] + (b[0] - a[0]) * frac).toFixed(1)}" y2="${(a[1] + (b[1] - a[1]) * frac).toFixed(1)}" stroke="${col}" stroke-width="${w}" opacity="${(op * 0.6).toFixed(2)}"/>`;
-    }
-    return e;
-  };
-  if (sIdx === 0) {                        // Дефлекторный — сплошной барьер + узлы-эмиттеры
-    s += emit(0.5, 1, 0.7);
-    s += `<path d="${shellD}" fill="none" stroke="${col}" stroke-width="1.1" stroke-linejoin="round" opacity="${op}"/>`;
-    s += shell.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${(0.8 + rt * 0.4).toFixed(1)}" fill="${col}" opacity="${(op * 0.9).toFixed(2)}"/>`).join('');
-    return s;
-  }
-  if (sIdx === 1) {                        // Энергетический — сегментированная решётка (ячейки)
-    s += emit(0.6, 1, 0.7);
-    s += `<path d="${shellD}" fill="none" stroke="${col}" stroke-width="1.2" stroke-dasharray="8 6" stroke-linecap="butt" stroke-linejoin="round" opacity="${op}"/>`;
-    s += `<path d="${cnCatmullClosed(cnOffsetPoly(hull, d * 0.5))}" fill="none" stroke="${col}" stroke-width="0.6" stroke-dasharray="3 6" opacity="${(op * 0.5).toFixed(2)}"/>`;   // внутренняя нить-сетка = глубина
-    return s;
-  }
-  s += emit(0.4, 2, 0.6);                  // Корпускулярный — редкие искры по орбите барьера
-  const dots = cnPolyDots(shell, 15 - rt * 4);
-  return s + dots.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${(0.9 + rt * 0.5).toFixed(1)}" fill="${col}" opacity="${(op * 1.2).toFixed(2)}"/>`).join('');
+  const op = +(0.36 + 0.18 * rt).toFixed(2);
+  // Барьер идёт по ТОМУ ЖЕ гранёному силуэту, что рисуется на экране (не по сглаженной
+  // версии) — иначе острый нос корпуса торчал бы за скруглённым щитом. Miter 5 → нос/корма
+  // получают полноценный остроконечный колпак, а не срез.
+  const hull = cnConvexHull(cnHullOutlinePts(H.st, 1));
+  const shellD = cnPolyPath(cnOffsetRound(hull, d));
+  const inner = cnPolyPath(cnOffsetRound(hull, d * 0.55));
+  // мягкое поле (заливка зазора) + внутреннее свечение + одна крепкая кромка
+  return `<path d="${shellD}" fill="color-mix(in srgb, ${col} 9%, transparent)" stroke="none"/>`
+    + `<path d="${inner}" fill="none" stroke="${col}" stroke-width="0.6" opacity="${(op * 0.35).toFixed(2)}"/>`
+    + `<path d="${shellD}" fill="none" stroke="${col}" stroke-width="${(1.1 + rt * 0.7).toFixed(1)}" stroke-linejoin="round" opacity="${op}"/>`;
 }
 
 // Живая схема корабля вид сверху — рисуется из CN.shipLayout, без картинок.
@@ -825,51 +883,51 @@ function cnDrawShip() {
   const flameLen = Math.min(60, 20 + (engObj ? engObj.speed : 20)) * (engPlasma ? 1.18 : 1);
   P.push(`<g class="cn-flame"><ellipse cx="160" cy="${e[1]}" rx="${Math.min(cnHullHalf(H, e[1] - 6) * 0.8, 30).toFixed(1)}" ry="6" fill="${engGlowCol}" opacity="0.16"/>${cnEngineSvg(H, engObj)}</g>`);
 
-  // КОРПУС + бронепояс (толщина пояса/обводки зависит от брони) — гладкий силуэт
+  // КОРПУС: если загружен арт-тело (ship_type_<k>_<t>.webp → ship_class_<k>.webp) —
+  // показываем его как корабль (обрезка по силуэту). Иначе — ЧИСТЫЙ гранёный силуэт
+  // (прямые грани = механический вид), минимум акцентов: пояс, осевая, мостик, реактор.
   const maxAr = Math.max(...db.armors[k].map(a => a.armor)) || 1, aRt = (armorObj ? armorObj.armor : 0) / maxAr;
-  const sw = (1.4 + aRt * 2.4).toFixed(1), beltW = +(1 - (0.05 + aRt * 0.14)).toFixed(3);
-  P.push(`<path d="${cnHullSmooth(H, 1)}" fill="color-mix(in srgb, var(--gd) 26%, var(--b2))" stroke="var(--gd)" stroke-width="${sw}" stroke-linejoin="round"/>`);
-  // Бронепояс: полоса между внешним корпусом и внутренней палубой (ширина по броне)
-  P.push(`<path d="${cnHullSmooth(H, beltW)}" fill="var(--b1)" stroke="color-mix(in srgb, var(--gd) 40%, transparent)" stroke-width="0.7" stroke-linejoin="round"/>`);
-
-  // ДЕТАЛИЗАЦИЯ КОРПУСА: палубные обводки (следуют корпусу), настил, силовой набор
-  P.push(`<path d="${cnHullSmooth(H, Math.max(0.2, beltW - 0.12))}" fill="none" stroke="var(--w2)" stroke-width="0.6" opacity="0.5" stroke-linejoin="round"/>`);
-  P.push(`<path d="${cnHullSmooth(H, Math.max(0.14, beltW - 0.26))}" fill="none" stroke="var(--w2)" stroke-width="0.5" opacity="0.32" stroke-linejoin="round"/>`);
-  for (const lf of [0.34, 0.62]) {   // продольные линии обшивки — палубный настил
-    let dp = '', dn = '';
-    for (let yy = H.nose + 8; yy <= e[1] - 6; yy += 6) { const hw = cnHullHalf(H, yy) * lf; dp += (dp ? 'L' : 'M') + (160 + hw).toFixed(1) + ',' + yy + ' '; dn += (dn ? 'L' : 'M') + (160 - hw).toFixed(1) + ',' + yy + ' '; }
-    P.push(`<path d="${dp}" fill="none" stroke="var(--w2)" stroke-width="0.4" opacity="0.26"/><path d="${dn}" fill="none" stroke="var(--w2)" stroke-width="0.4" opacity="0.26"/>`);
+  const sw = (1.4 + aRt * 2.0).toFixed(1), beltW = +(1 - (0.03 + aRt * 0.07)).toFixed(3);
+  const hullPath = cnPolyPath(cnHullOutlinePts(H.st, 1));
+  const brY = H.nose + (e[1] - H.nose) * 0.24, coreCy = H.nose + (e[1] - H.nose) * 0.56;
+  const typeImg = cnImgPath(CN.cat, 'type', k, tIdx), classImg = cnImgPath(CN.cat, 'class', k);
+  const bodyImg = cnWpnImgReady(typeImg) ? typeImg : cnWpnImgReady(classImg) ? classImg : null;
+  P.push(`<path d="${hullPath}" fill="color-mix(in srgb, var(--gd) 22%, var(--b2))" stroke="var(--gd)" stroke-width="${sw}" stroke-linejoin="round"/>`);
+  if (bodyImg) {                                       // АРТ-ТЕЛО, обрезанное по силуэту корпуса
+    const Ln = e[1] - H.nose, Bm = H.maxHW * 2, cyMid = (H.nose + e[1]) / 2;
+    P.push(`<clipPath id="cnBodyClip"><path d="${hullPath}"/></clipPath>`
+      + `<g clip-path="url(#cnBodyClip)"><g transform="translate(160 ${cyMid.toFixed(1)}) rotate(90)">`
+      + `<image href="${esc(bodyImg)}" xlink:href="${esc(bodyImg)}" x="${(-Ln / 2).toFixed(1)}" y="${(-Bm / 2).toFixed(1)}" width="${Ln.toFixed(1)}" height="${Bm.toFixed(1)}" preserveAspectRatio="xMidYMid slice"/></g></g>`
+      + `<path d="${hullPath}" fill="none" stroke="var(--gd)" stroke-width="${sw}" stroke-linejoin="round" opacity="0.9"/>`);
+  } else {                                             // ЧИСТЫЙ ГРАНЁНЫЙ СИЛУЭТ (фолбэк без арта)
+    P.push(`<path d="${cnPolyPath(cnHullOutlinePts(H.st, beltW))}" fill="var(--b1)" stroke="color-mix(in srgb, var(--gd) 40%, transparent)" stroke-width="0.7" stroke-linejoin="round"/>`);
+    P.push(`<path d="${cnPolyPath(cnHullOutlinePts(H.st, Math.max(0.2, beltW - 0.2)))}" fill="none" stroke="var(--w2)" stroke-width="0.6" opacity="0.35" stroke-linejoin="round"/>`);
+    P.push(`<line x1="160" y1="${(H.nose + 4).toFixed(1)}" x2="160" y2="${(e[1] - 6).toFixed(1)}" stroke="var(--w2)" stroke-width="1" opacity="0.32"/>`);   // осевая
+    // СЕКЦИИ КОРПУСА: поперечные переборки делят тело на нос / центр / машинное — грани по борту.
+    // Даёт «построенный» вид вместо силуэта-пятна.
+    [0.22, 0.44, 0.66, 0.82].forEach(t => {
+      const y = H.nose + (e[1] - H.nose) * t, hw = cnHullHalf(H, y) * beltW;
+      if (hw < 6) return;
+      P.push(`<line x1="${(160 - hw).toFixed(1)}" y1="${y.toFixed(1)}" x2="${(160 + hw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--gd)" stroke-width="0.7" opacity="0.28"/>`);
+    });
+    // РЁБРА КОРПУСА: короткие штрихи-шпангоуты вдоль бортов — фактура обшивки.
+    for (let t = 0.14; t < 0.9; t += 0.09) {
+      const y = H.nose + (e[1] - H.nose) * t, hw = cnHullHalf(H, y) * beltW;
+      if (hw < 10) continue;
+      [-1, 1].forEach(s => P.push(`<line x1="${(160 + s * hw).toFixed(1)}" y1="${y.toFixed(1)}" x2="${(160 + s * (hw - 5)).toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--w2)" stroke-width="0.6" opacity="0.22"/>`));
+    }
+    // мостик — компактная надстройка-блок у носа (не стрелка), с «остеклением»
+    const brW = Math.min(11, cnHullHalf(H, brY) * 0.42), brH = Math.min(15, (e[1] - H.nose) * 0.055);
+    P.push(`<g><title>Командный мостик</title>`
+      + `<rect x="${(160 - brW).toFixed(1)}" y="${(brY - brH / 2).toFixed(1)}" width="${(brW * 2).toFixed(1)}" height="${brH.toFixed(1)}" rx="2" fill="color-mix(in srgb, var(--te) 16%, var(--b2))" stroke="var(--te)" stroke-width="0.9" opacity="0.85"/>`
+      + `<line x1="${(160 - brW * 0.7).toFixed(1)}" y1="${(brY - brH * 0.18).toFixed(1)}" x2="${(160 + brW * 0.7).toFixed(1)}" y2="${(brY - brH * 0.18).toFixed(1)}" stroke="var(--te)" stroke-width="0.8" opacity="0.7"/></g>`);
+    if (reactObj) {                                    // реактор — одна точка-акцент по центру
+      const maxE = Math.max(...db.reactors[k].map(r => r.energy)) || 1, eRt = reactObj.energy / maxE, r0 = 4 + eRt * 5;
+      P.push(`<g class="cn-core"><title>Реактор: ${esc(reactObj.name)} · ${cnNum(reactObj.energy)} E</title>`
+        + `<circle cx="160" cy="${coreCy.toFixed(1)}" r="${(r0 * 1.7).toFixed(1)}" fill="var(--gd)" opacity="0.14"/>`
+        + `<circle cx="160" cy="${coreCy.toFixed(1)}" r="${r0.toFixed(1)}" fill="color-mix(in srgb, var(--gd) 55%, var(--b1))" stroke="var(--gd)" stroke-width="1.1"/></g>`);
+    }
   }
-  for (let fy = H.nose + 16; fy < e[1] - 12; fy += 22) {   // шпангоуты — поперечный набор
-    const fw = cnHullHalf(H, fy) * 0.9; if (fw < 9) continue;
-    P.push(`<line x1="${(160 - fw).toFixed(1)}" y1="${fy}" x2="${(160 + fw).toFixed(1)}" y2="${fy}" stroke="var(--w2)" stroke-width="0.45" opacity="0.24"/>`);
-  }
-  P.push(`<line x1="160" y1="${(H.nose + 2).toFixed(1)}" x2="160" y2="${(e[1] - 4).toFixed(1)}" stroke="var(--w2)" stroke-width="1.3" opacity="0.4"/>`);   // киль
-
-  // НАДСТРОЙКА («остров») — центральный блок, на нём стоят мостик и реактор
-  P.push(`<path class="cn-island" d="${cnIslandPath(H)}" fill="color-mix(in srgb, var(--gd) 12%, var(--b2))" stroke="color-mix(in srgb, var(--gd) 45%, transparent)" stroke-width="0.8" stroke-linejoin="round"/>`);
-  for (const t of [0.44, 0.54]) {   // надстроечные короба / вентиляция на острове
-    const yy = H.nose + (e[1] - H.nose) * t, iw = Math.min(cnHullHalf(H, yy) * 0.26, 11);
-    P.push(`<rect x="${(160 - iw).toFixed(1)}" y="${(yy - 3).toFixed(1)}" width="${(iw * 2).toFixed(1)}" height="6" rx="1.2" fill="color-mix(in srgb, var(--gd) 20%, var(--b1))" stroke="color-mix(in srgb, var(--gd) 40%, transparent)" stroke-width="0.5"/>`);
-  }
-  const brY = H.nose + (e[1] - H.nose) * 0.30, brW = Math.min(12, cnHullHalf(H, brY) * 0.4);
-  P.push(`<g><title>Командный мостик</title><polygon points="${(160 - brW).toFixed(1)},${(brY + 7).toFixed(1)} ${(160 - brW * 0.55).toFixed(1)},${(brY - 5.5).toFixed(1)} ${(160 + brW * 0.55).toFixed(1)},${(brY - 5.5).toFixed(1)} ${(160 + brW).toFixed(1)},${(brY + 7).toFixed(1)}" fill="color-mix(in srgb, var(--te) 18%, var(--b2))" stroke="var(--te)" stroke-width="0.8" opacity="0.8"/><line x1="${(160 - brW * 0.45).toFixed(1)}" y1="${(brY - 1.5).toFixed(1)}" x2="${(160 + brW * 0.45).toFixed(1)}" y2="${(brY - 1.5).toFixed(1)}" stroke="var(--te)" stroke-width="0.9" opacity="0.7"/></g>`);
-  const coreCy = H.nose + (e[1] - H.nose) * 0.56;
-  if (reactObj) {                                     // реакторное ядро: размер и свечение по мощности
-    const maxE = Math.max(...db.reactors[k].map(r => r.energy)) || 1, eRt = reactObj.energy / maxE;
-    const r0 = 5 + eRt * 6;
-    P.push(`<g class="cn-core"><title>Реактор: ${esc(reactObj.name)} · ${cnNum(reactObj.energy)} E</title>`
-      + `<circle cx="160" cy="${coreCy.toFixed(1)}" r="${(r0 * 1.9).toFixed(1)}" fill="var(--gd)" opacity="${(0.10 + eRt * 0.12).toFixed(2)}"/>`
-      + `<circle cx="160" cy="${coreCy.toFixed(1)}" r="${(r0 * 1.25).toFixed(1)}" fill="none" stroke="var(--gd)" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.7"/>`
-      + `<circle cx="160" cy="${coreCy.toFixed(1)}" r="${r0.toFixed(1)}" fill="color-mix(in srgb, var(--gd) 55%, var(--b1))" stroke="var(--gd)" stroke-width="1.2"/></g>`);
-  }
-  for (let i = 0; i < 3; i++) {                       // радиаторные рёбра у кормы
-    const ry = e[1] - 16 - i * 7, hw2 = cnHullHalf(H, ry) * 0.82;
-    if (hw2 < 14) continue;
-    P.push(`<line x1="${(160 - hw2).toFixed(1)}" y1="${ry}" x2="${(160 - hw2 + 9).toFixed(1)}" y2="${ry}" stroke="var(--te)" stroke-width="1.6" opacity="0.5"/><line x1="${(160 + hw2 - 9).toFixed(1)}" y1="${ry}" x2="${(160 + hw2).toFixed(1)}" y2="${ry}" stroke="var(--te)" stroke-width="1.6" opacity="0.5"/>`);
-  }
-  // носовая сенсорная мачта
-  P.push(`<line x1="160" y1="${(tipY - 1).toFixed(1)}" x2="160" y2="${(tipY - 13).toFixed(1)}" stroke="var(--te)" stroke-width="1" opacity="0.8"/><circle cx="160" cy="${(tipY - 15).toFixed(1)}" r="2" fill="var(--te)" opacity="0.9"/>`);
 
   // ── Расчёт посадочных мест ЗАРАНЕЕ: узлы орудий, отсеки — чтобы связать их магистралями ──
   const bayN = L.bays.length;
@@ -882,26 +940,20 @@ function cnDrawShip() {
     rooms = cnHullRooms(H, Math.max(baseRooms, bayN));
   }
 
-  // ЭНЕРГОМАГИСТРАЛИ: шина от реактора по килю — к мостику, дюзам, каждому орудию и модулю.
-  // Схема перестаёт быть набором разрозненных значков: всё запитано от одного ядра.
-  if (reactObj) {
-    const cnd = (x, y) => `<path class="cn-conduit" d="M160,${coreCy.toFixed(1)} L160,${y.toFixed(1)} L${x.toFixed(1)},${y.toFixed(1)}" fill="none" stroke="var(--te)" stroke-width="0.8" stroke-dasharray="5 4" opacity="0.45"/>`;
-    let cN = cnd(160, brY + 8) + cnd(160, e[1] - 10);
-    if (CN.schemShow.weapons) L.mounts.forEach((s2, i) => { if (s2 && s2.w) { const p = mPos(i); if (p) cN += cnd(p[0], p[1]); } });
-    rooms.forEach((rm, i) => { if (i < bayN && L.bays[i] && L.bays[i].m) cN += cnd(rm.cx, rm.cy); });
-    P.push(`<g class="cn-power"><title>Энергосеть: реактор питает все системы</title>${cN}</g>`);
-  }
-
-  // ВНУТРЕННИЕ ОТСЕКИ (аккуратная разбивка пространства) + модули в них
+  // ОТСЕКИ/МОДУЛИ: лёгкие кликабельные ячейки. Занятый модуль — заливка + значок;
+  // пустой активный — тонкий пунктир; свободное место — почти прозрачно (не спорит с телом).
+  // Без коридора/люков/переборок — только то, что несёт смысл (где стоит модуль).
   let modCount = 0;
   if (CN.schemShow.bays) {
     rooms.forEach((rm, i) => {
       const active = i < bayN, m = active && L.bays[i] && L.bays[i].m; if (m) modCount++;
       const pts = rm.poly.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-      const fill = m ? 'color-mix(in srgb, var(--gd) 20%, transparent)' : 'transparent';   // transparent = кликабельна вся комната
-      const stroke = m ? 'var(--gd)' : active ? 'var(--t3)' : 'var(--w2)';
+      const fill = m ? 'color-mix(in srgb, var(--gd) 22%, transparent)' : 'transparent';
+      const stroke = m ? 'var(--gd)' : active ? 'var(--t3)' : 'transparent';
       const title = m ? 'Модуль: ' + esc(db.modules[m.g][m.idx].name) : active ? 'Пустой отсек — нажми: поставить модуль или удалить' : 'Внутреннее пространство — нажми, чтобы сделать отсек';
-      P.push(`<g class="cn-bay" style="cursor:pointer" onclick="${active ? `cnNodeClick('bay',${i})` : `cnRoomAddAt(${i})`}"><title>${title}</title><polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="${active ? 1.2 : 0.6}" stroke-dasharray="${active && !m ? '3 2' : '0'}" opacity="${active ? 0.95 : 0.4}"/>${m ? cnModuleMarker(L.bays[i].m.g, rm.cx, rm.cy) : ''}</g>`);
+      P.push(`<g class="cn-bay" style="cursor:pointer" onclick="${active ? `cnNodeClick('bay',${i})` : `cnRoomAddAt(${i})`}"><title>${title}</title>`
+        + `<polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="${m ? 1.2 : 0.8}" stroke-linejoin="round" stroke-dasharray="${active && !m ? '3 3' : '0'}" opacity="${m ? 0.95 : active ? 0.45 : 0.16}"/>`
+        + `${m ? cnModuleMarker(L.bays[i].m.g, rm.cx, rm.cy) : ''}</g>`);
     });
   }
 
@@ -949,14 +1001,15 @@ function cnDrawShip() {
   });
 
   // ── СБОРКА ПОЛОТНА ──────────────────────────────────────────
-  // Фиксированная сцена 960×400: шрифты и толщины всегда одного размера,
+  // Фиксированная сцена 960×470: шрифты и толщины всегда одного размера,
   // корабль вписывается масштабом (учёт щита, факела и подписей), поля минимальные.
-  const VW = 960, VH = 400, CY = 208;
-  const topEdge = Math.min(tipY - 20, tipY - shieldPad - 6);
-  const botEdge = Math.max(e[1] + flameLen + 10, e[1] + shieldPad + 6);
-  const halfW = H.maxHW + shieldD + 14;
+  // Сцена стала выше и корабль крупнее → используем всю ширину панели.
+  const VW = 960, VH = 470, CY = 244;
+  const topEdge = Math.min(tipY - 16, tipY - shieldPad - 4);
+  const botEdge = Math.max(e[1] + flameLen + 8, e[1] + shieldPad + 4);
+  const halfW = H.maxHW + shieldD + 10;
   const shipLen = botEdge - topEdge;
-  const sc = Math.min(908 / shipLen, 312 / (halfW * 2));
+  const sc = Math.min(936 / shipLen, 384 / (halfW * 2));
   const ox = (VW - shipLen * sc) / 2;
   const gT = `translate(${(ox + botEdge * sc).toFixed(2)},${(CY - 160 * sc).toFixed(2)}) scale(${sc.toFixed(4)}) rotate(90)`;
   const SX = hy => ox + (botEdge - hy) * sc;          // координата вдоль корпуса → экранный X

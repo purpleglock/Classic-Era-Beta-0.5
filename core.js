@@ -815,18 +815,30 @@ function mapZoomInit(viewportId) {
   const viewport = document.getElementById(viewportId);
   if (!viewport) return;
   mapZoomClean(viewportId);
-  mapZoomState[viewportId] = { scale: 1, panX: 0, panY: 0, dragging: false, startX: 0, startY: 0, listeners: {} };
+  mapZoomState[viewportId] = {
+    scale: 1, panX: 0, panY: 0, dragging: false, startX: 0, startY: 0,
+    pinchDist: 0, pinchScale: 1, raf: 0, listeners: {},
+  };
   const s = mapZoomState[viewportId];
+  // на телефоне жесты карты не должны прокручивать/масштабировать саму страницу
+  viewport.style.touchAction = 'none';
   s.listeners.wheel = (e) => mapZoomWheel(e, viewportId);
   s.listeners.mousedown = (e) => mapPanStart(e, viewportId);
   s.listeners.mousemove = (e) => mapPanMove(e, viewportId);
   s.listeners.mouseup = (e) => mapPanEnd(e, viewportId);
   s.listeners.mouseleave = (e) => mapPanEnd(e, viewportId);
+  s.listeners.touchstart = (e) => mapTouchStart(e, viewportId);
+  s.listeners.touchmove = (e) => mapTouchMove(e, viewportId);
+  s.listeners.touchend = (e) => mapTouchEnd(e, viewportId);
   viewport.addEventListener('wheel', s.listeners.wheel, { passive: false });
   viewport.addEventListener('mousedown', s.listeners.mousedown);
   viewport.addEventListener('mousemove', s.listeners.mousemove);
   viewport.addEventListener('mouseup', s.listeners.mouseup);
   viewport.addEventListener('mouseleave', s.listeners.mouseleave);
+  viewport.addEventListener('touchstart', s.listeners.touchstart, { passive: false });
+  viewport.addEventListener('touchmove', s.listeners.touchmove, { passive: false });
+  viewport.addEventListener('touchend', s.listeners.touchend);
+  viewport.addEventListener('touchcancel', s.listeners.touchend);
 }
 function mapZoomClean(viewportId) {
   const state = mapZoomState[viewportId];
@@ -834,11 +846,16 @@ function mapZoomClean(viewportId) {
   const viewport = document.getElementById(viewportId);
   if (!viewport) return;
   const l = state.listeners;
+  if (state.raf) cancelAnimationFrame(state.raf);
   viewport.removeEventListener('wheel', l.wheel);
   viewport.removeEventListener('mousedown', l.mousedown);
   viewport.removeEventListener('mousemove', l.mousemove);
   viewport.removeEventListener('mouseup', l.mouseup);
   viewport.removeEventListener('mouseleave', l.mouseleave);
+  viewport.removeEventListener('touchstart', l.touchstart);
+  viewport.removeEventListener('touchmove', l.touchmove);
+  viewport.removeEventListener('touchend', l.touchend);
+  viewport.removeEventListener('touchcancel', l.touchend);
   delete mapZoomState[viewportId];
 }
 function mapZoomWheel(e, viewportId) {
@@ -856,6 +873,7 @@ function mapPanStart(e, viewportId) {
   state.dragging = true;
   state.startX = e.clientX;
   state.startY = e.clientY;
+  mapZoomInteracting(viewportId, true);
 }
 function mapPanMove(e, viewportId) {
   const state = mapZoomState[viewportId];
@@ -872,6 +890,59 @@ function mapPanEnd(e, viewportId) {
   const state = mapZoomState[viewportId];
   if (!state) return;
   state.dragging = false;
+  mapZoomInteracting(viewportId, false);
+}
+// ── Тач: одним пальцем — панорамирование, двумя — пинч-зум ──
+function mapTouchDist(t) {
+  const dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+  return Math.hypot(dx, dy);
+}
+function mapTouchStart(e, viewportId) {
+  const state = mapZoomState[viewportId];
+  if (!state) return;
+  if (e.touches.length === 1) {
+    state.dragging = true;
+    state.startX = e.touches[0].clientX;
+    state.startY = e.touches[0].clientY;
+  } else if (e.touches.length === 2) {
+    state.dragging = false;
+    state.pinchDist = mapTouchDist(e.touches);
+    state.pinchScale = state.scale;
+  }
+  mapZoomInteracting(viewportId, true);
+}
+function mapTouchMove(e, viewportId) {
+  const state = mapZoomState[viewportId];
+  if (!state) return;
+  e.preventDefault();
+  if (e.touches.length === 2 && state.pinchDist > 0) {
+    const d = mapTouchDist(e.touches);
+    state.scale = Math.max(0.5, Math.min(4, state.pinchScale * (d / state.pinchDist)));
+    mapZoomUpdate(viewportId);
+  } else if (e.touches.length === 1 && state.dragging) {
+    const dx = e.touches[0].clientX - state.startX;
+    const dy = e.touches[0].clientY - state.startY;
+    state.panX += dx;
+    state.panY += dy;
+    state.startX = e.touches[0].clientX;
+    state.startY = e.touches[0].clientY;
+    mapZoomUpdate(viewportId);
+  }
+}
+function mapTouchEnd(e, viewportId) {
+  const state = mapZoomState[viewportId];
+  if (!state) return;
+  if (!e.touches || e.touches.length === 0) {
+    state.dragging = false;
+    state.pinchDist = 0;
+    mapZoomInteracting(viewportId, false);
+  } else if (e.touches.length === 1) {
+    // палец сняли с пинча — продолжаем как панорамирование
+    state.pinchDist = 0;
+    state.dragging = true;
+    state.startX = e.touches[0].clientX;
+    state.startY = e.touches[0].clientY;
+  }
 }
 function mapZoomIn(viewportId) {
   const state = mapZoomState[viewportId];
@@ -885,10 +956,22 @@ function mapZoomOut(viewportId) {
   state.scale = Math.max(0.5, state.scale / 1.2);
   mapZoomUpdate(viewportId);
 }
-function mapZoomUpdate(viewportId) {
+// Во время жеста снимаем CSS-transition с SVG (иначе каждый кадр анимируется — рывки/мигание)
+function mapZoomInteracting(viewportId, on) {
   const viewport = document.getElementById(viewportId);
   if (!viewport) return;
-  const state = mapZoomState[viewportId];
   const svg = viewport.querySelector('svg');
-  if (svg) svg.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.scale})`;
+  if (svg) svg.classList.toggle('mm-panning', on);
+}
+function mapZoomUpdate(viewportId) {
+  const state = mapZoomState[viewportId];
+  if (!state || state.raf) return;
+  // применяем transform один раз за кадр (rAF) — глушим лишние перерисовки
+  state.raf = requestAnimationFrame(() => {
+    state.raf = 0;
+    const viewport = document.getElementById(viewportId);
+    if (!viewport) return;
+    const svg = viewport.querySelector('svg');
+    if (svg) svg.style.transform = `translate3d(${state.panX}px, ${state.panY}px, 0) scale(${state.scale})`;
+  });
 }

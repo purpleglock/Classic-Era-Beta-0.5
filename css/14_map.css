@@ -750,12 +750,12 @@ textarea.gm-fi{resize:vertical}
 /* контролы — пальцевые размеры */
 #gm-wrap.gm-mobile .gm-ctl{width:42px;height:42px;font-size:19px}
 #gm-wrap.gm-mobile .gm-rf{width:42px;height:26px}
-/* Панель режимов на телефоне: ширина по контенту (не жёсткие 212px), ближе к углу.
-   Свёрнута (по умолчанию) — сжимается до одной кнопки-стрелки, без заголовка. */
-/* bottom:64px — поднимаем над плавающей кнопкой поддержки (#tk-fab, 40px @ bottom:16px),
-   иначе тикет перекрывает панель/легенду и по ней нельзя тапнуть.
-   max-height + overflow — чтобы длинный список слоёв не уезжал за верх экрана. */
-#gm-wrap.gm-mobile #gm-controls{width:auto;max-width:calc(100% - 20px);max-height:calc(100dvh - var(--th) - 130px);overflow-y:auto;right:10px;bottom:64px;padding:7px 8px 8px}
+/* Панель режимов на телефоне: ширина по контенту (не жёсткие 212px), ровно в нижнем углу.
+   Свёрнута (по умолчанию) — сжимается до одной кнопки-стрелки, без заголовка.
+   Тикет-кнопка на карте скрыта (body.route-map #tk-fab), поэтому садимся в bottom:12px.
+   max-height считаем ОТ КОНТЕЙНЕРА (#gm-wrap), а не от вьюпорта — тогда длинный
+   список слоёв всегда остаётся внутри карты и не уезжает криво за её верх. */
+#gm-wrap.gm-mobile #gm-controls{width:auto;max-width:calc(100% - 20px);max-height:calc(100% - 24px);overflow-y:auto;right:10px;bottom:12px;padding:7px 8px 8px}
 #gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed){padding:4px}
 #gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed) .gm-panel-head{gap:0}
 #gm-wrap.gm-mobile #gm-controls:has(.gm-ctl-group.gm-collapsed) .gm-panel-ttl{display:none}

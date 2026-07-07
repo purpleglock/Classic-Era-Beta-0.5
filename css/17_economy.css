@@ -889,8 +889,9 @@
 .ec-minimap .mm-zoom-btn:hover { background: var(--b3); color: var(--gd); }
 .ec-minimap .mm-zoom-btn:active { background: var(--b4); transform: scale(.95); }
 .ec-minimap .mm-zoom-viewport { flex: 1; overflow: hidden; max-height: 420px; display: flex; align-items: center; justify-content: center; user-select: none; }
-.ec-minimap .mm-zoom-viewport svg { width: 100%; height: auto; max-height: 420px; display: block; transform-origin: center; transition: transform var(--duration-fast) ease-out; cursor: grab; }
+.ec-minimap .mm-zoom-viewport svg { width: 100%; height: auto; max-height: 420px; display: block; transform-origin: center; transition: transform var(--duration-fast) ease-out; cursor: grab; touch-action: none; }
 .ec-minimap .mm-zoom-viewport svg:active { cursor: grabbing; }
+.ec-minimap .mm-zoom-viewport svg.mm-panning { transition: none; will-change: transform; }
 .ec-mm-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 2px 4px; font-size: 11px; color: var(--t3); }
 .ec-mm-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .ec-mm-legend i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }

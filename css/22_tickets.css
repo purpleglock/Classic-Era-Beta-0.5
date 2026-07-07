@@ -15,6 +15,9 @@
   transform: translateY(-1px);
 }
 #tk-fab:active { transform: translateY(0); }
+/* На карте тикет-кнопку прячем: она в том же нижнем углу, что и панель слоёв
+   (#gm-controls) — перекрывала легенду и мешала по ней тапать. */
+body.route-map #tk-fab { display: none !important; }
 .tk-fab-ic { color: inherit; flex-shrink: 0; width: 18px; height: 18px; }
 .tk-fab-l { display: none; }  /* подпись — в title-тултипе, кнопка компактная */
 .tk-hd-t { display: inline-flex; align-items: center; gap: 8px; }
