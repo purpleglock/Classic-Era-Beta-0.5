@@ -868,18 +868,10 @@
 .ec-r-qty { font-family: var(--font-display); font-weight: 700; color: var(--gd); }
 
 /* ── Выбор столичной планеты в регистрации ── */
-.fr-planet-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 6px; max-height: 240px; overflow-y: auto; }
-.fr-pl { position: relative; background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); padding: 9px 10px; cursor: pointer; transition: border-color var(--duration-fast); }
-.fr-pl:hover { border-color: var(--w3); }
-.fr-pl.on { border-color: var(--gd); box-shadow: inset 0 0 0 1px var(--gd); }
-.fr-pl-no { opacity: .55; cursor: not-allowed; }
-.fr-pl-name { display: block; font-family: var(--font-display); font-weight: 600; font-size: 13px; color: var(--t1); }
-.fr-pl-sub { display: block; font-size: 10px; color: var(--t3); margin-top: 1px; }
-.fr-pl-tag { display: inline-block; margin-top: 5px; font-size: 9px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: calc(.04em * var(--deco-ls-mult, 1)); padding: 1px 6px; border-radius: var(--radius-pill); border: var(--deco-frame-w, 1px) solid; }
-.fr-pl-tag.native { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
-.fr-pl-tag.foreign { color: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 50%, transparent); }
-.fr-pl-tag.no { color: var(--t4); border-color: var(--w2); }
-.fr-pl > i { position: absolute; top: 8px; right: 8px; color: var(--gd); font-style: normal; }
+/* Контейнер шага «Столица»: обычный блок (парадный портрет + сетка типов внутри
+   имеют собственную раскладку). НЕ grid и БЕЗ внутреннего скролла — иначе выбор
+   мира прокручивался бы в тесном окошке. Оформление — в 15_faction.css. */
+.fr-planet-pick { display: block; margin-top: 6px; }
 
 /* ── Миникарта территории ── */
 .ec-minimap { background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-md); padding: 8px; overflow: hidden; }

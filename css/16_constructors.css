@@ -247,13 +247,26 @@
 .cn-schem-list { display: none; flex-direction: column; gap: 8px; padding: 4px 14px; }
 @media (pointer: coarse), (max-width: 640px) { .cn-schem-list { display: flex; } }
 .cn-slotrow {
-  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px;
-  text-align: left; background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-md);
-  padding: 10px 12px; cursor: pointer; color: var(--t1); -webkit-tap-highlight-color: transparent;
+  display: flex; align-items: stretch; gap: 6px; width: 100%; min-height: 54px;
+  background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-md);
+  color: var(--t1); -webkit-tap-highlight-color: transparent; overflow: hidden;
   transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.cn-slotrow-main {
+  display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-align: left;
+  background: none; border: 0; padding: 10px 12px; cursor: pointer; color: inherit; -webkit-tap-highlight-color: transparent;
 }
 .cn-slotrow:active { border-color: var(--gd); background: color-mix(in srgb, var(--gd) 8%, var(--b1)); }
 .cn-slotrow.filled { border-left: var(--deco-accent-w-lg, 3px) solid var(--gd); }
+.cn-slotrow-move {
+  flex: 0 0 auto; width: 46px; align-self: stretch; background: none; cursor: pointer;
+  border: 0; border-left: var(--deco-frame-w, 1px) solid var(--w2); color: var(--te); font-size: 18px;
+  -webkit-tap-highlight-color: transparent; transition: background var(--transition-fast);
+}
+.cn-slotrow-move:active { background: color-mix(in srgb, var(--gd) 12%, transparent); }
+.cn-slotrow-move.on { background: var(--gd); color: var(--b1); }
+.cn-slotrow.placing { border-color: var(--gd); box-shadow: 0 0 0 1px var(--gd) inset; }
+.cn-placing .cn-schem-svg { cursor: crosshair; }
 .cn-slotrow-ico { flex: 0 0 auto; width: 22px; text-align: center; font-size: 17px; color: var(--te); }
 .cn-slotrow-b { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .cn-slotrow-lbl { font-family: var(--font-mono); font-size: 9px; letter-spacing: calc(.08em * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t3); }

@@ -22,7 +22,7 @@ const FR_BUILDINGS = [
   { id: 'mil', name: 'Корабельная Верфь', price: 10 },
 ];
 const FR_POINTS = 20;
-const FR_STEPS = ['Политика', 'Цвет', 'Система', 'Постройки', 'Культура', 'История', 'Обзор'];
+const FR_STEPS = ['Политика', 'Цвет', 'Система', 'Столица', 'Постройки', 'Культура', 'История', 'Обзор'];
 
 // ── Описания вариантов (влияние на государство — для погружения) ──
 const FR_GOV_DESC = {
@@ -293,10 +293,11 @@ function frRenderStep() {
     case 0: body = frStepPolitics(d); break;
     case 1: body = frStepColor(d); break;
     case 2: body = frStepSystem(d); break;
-    case 3: body = frStepBuildings(d); break;
-    case 4: body = frStepCulture(d); break;
-    case 5: body = frStepHistory(d); break;
-    case 6: body = frStepReview(d); break;
+    case 3: body = frStepCapital(d); break;
+    case 4: body = frStepBuildings(d); break;
+    case 5: body = frStepCulture(d); break;
+    case 6: body = frStepHistory(d); break;
+    case 7: body = frStepReview(d); break;
   }
   const dots = FR_STEPS.map((s, i) =>
     `<div class="fr-dot${i === FR.step ? ' on' : ''}${i < FR.step ? ' done' : ''}" onclick="frGoStep(${i})"><span>${i + 1}</span><label>${s}</label></div>`).join('');
@@ -318,6 +319,7 @@ function frRenderStep() {
     </div>
   </div>`);
   if (FR.step === 2 && !FR.editApproved) frRenderSystemPicker();
+  if (FR.step === 3) frRenderPlanetPick();
 }
 
 // ── Шаги ─────────────────────────────────────────────────────
@@ -362,28 +364,40 @@ function frStepSystem(d) {
     const cap = FR.myCapital || { system_name: d.system_name, planet_name: d.planet_name };
     return `<h3 class="fr-h3">Столичная система</h3>
       <div class="fr-locked">🔒 Стартовая система закреплена за фракцией и не может быть изменена.</div>
-      <div class="fr-sys-picked">Столица: <b>${esc(cap.system_name || '—')}${cap.planet_name ? ' / ' + esc(cap.planet_name) : ''}</b></div>
-      <div class="fg" style="margin-top:12px"><label class="fl">Название столичной планеты</label>
-        <input class="fi" id="f-planet" value="${esc(cap.planet_name || d.planet_name || '')}" placeholder="Название планеты" oninput="FR.data.planet_name=this.value.trim()"></div>
-      <div class="fr-note" style="margin-top:8px">Изменение имени уйдёт на <b>проверку администрации</b> вместе с анкетой (кнопка «Сохранить» внизу). После одобрения название обновится на карте, странице фракций и в кабинете.</div>`;
+      <div class="fr-sys-picked">Система: <b>${esc(cap.system_name || '—')}</b></div>`;
   }
-  const forcedRace = frRaceForcedByGov(d.gov);
-  if (forcedRace) d.race = forcedRace; // синхронизация расы с формой правления
   return `<h3 class="fr-h3">Столичная система</h3>
-    <p class="fr-note">Выберите <b>свободную</b> звезду: <span style="color:var(--gd)">голубые</span> свободны, серые заняты. Ваша столичная планета будет создана прямо в этой системе на карте.</p>
+    <p class="fr-note">Выберите <b>свободную</b> звезду: <span style="color:var(--gd)">голубые</span> свободны, серые заняты. Ваша столичная планета будет создана прямо в этой системе на карте. Тип мира и название столицы — на следующем шаге.</p>
     <div class="fr-minimap" id="f-minimap"><div class="sload" style="min-height:60px"><div class="pulse-loader"></div></div></div>
     <div class="fg"><input class="fi" id="f-sys-search" placeholder="Поиск системы..." oninput="frFilterSystems(this.value)"></div>
     <div class="fr-sys-picked" id="f-sys-picked">${d.system_id ? `Выбрано: <b>${esc(d.system_name)}</b>` : 'Система не выбрана'}</div>
-    <div class="fr-sys-list" id="f-sys-list"></div>
-    <div class="fgr2" style="margin-top:14px">
-      <div class="fg"><label class="fl">Раса (определяет родные миры)</label>
-        ${frRaceForcedByGov(d.gov)
-          ? `<div class="fr-locked" style="margin:0">🔒 Раса закреплена формой правления «${esc(d.gov)}»: <b>${esc(d.race)}</b></div><input type="hidden" id="f-reg-race" value="${esc(d.race)}">`
-          : frSel('f-reg-race', FR_RACE, d.race, "frOnRegRace(this.value)")}</div>
-      <div class="fg"><label class="fl">Название столичной планеты</label>
-        <input class="fi" id="f-planet" value="${esc(d.planet_name)}" placeholder="Имя вашей столицы" oninput="FR.data.planet_name=this.value"></div>
-    </div>
-    <div class="fr-planet-pick" id="f-planet-pick"></div>`;
+    <div class="fr-sys-list" id="f-sys-list"></div>`;
+}
+// ── Столица: отдельный шаг — раса → родной мир → наречение ──
+function frStepCapital(d) {
+  const forcedRace = frRaceForcedByGov(d.gov);
+  if (forcedRace) d.race = forcedRace; // синхронизация расы с формой правления
+  if (FR.editApproved) {
+    const cap = FR.myCapital || { system_name: d.system_name, planet_name: d.planet_name };
+    return `<h3 class="fr-h3">Столичный мир</h3>
+      <div class="fr-locked">🔒 Раса и тип родного мира закреплены за фракцией.</div>
+      <div class="fr-cap-name">
+        <label class="fr-cap-name-lbl">◈ Наречение столицы</label>
+        <input class="fi fr-cap-name-in" id="f-planet" value="${esc(cap.planet_name || d.planet_name || '')}" placeholder="Название планеты" oninput="FR.data.planet_name=this.value.trim()">
+        <div class="fr-cap-name-hint">Изменение имени уйдёт на <b>проверку администрации</b> вместе с анкетой. После одобрения название обновится на карте, странице фракций и в кабинете.</div>
+      </div>`;
+  }
+  return `<h3 class="fr-h3">Столичный мир</h3>
+    <p class="fr-note">Родной мир вашего народа. Раса определяет доступные типы планет; тип мира задаёт ресурсы, ячейки застройки и стартовый бонус.</p>
+    <div class="fg"><label class="fl">Раса — определяет родные миры</label>
+      ${forcedRace
+        ? `<div class="fr-locked" style="margin:0">🔒 Раса закреплена формой правления «${esc(d.gov)}»: <b>${esc(d.race)}</b></div><input type="hidden" id="f-reg-race" value="${esc(d.race)}">`
+        : frSel('f-reg-race', FR_RACE, d.race, "frOnRegRace(this.value)")}</div>
+    <div class="fr-planet-pick" id="f-planet-pick"></div>
+    <div class="fr-cap-name">
+      <label class="fr-cap-name-lbl">◈ Наречение столицы</label>
+      <input class="fi fr-cap-name-in" id="f-planet" value="${esc(d.planet_name)}" placeholder="Впишите имя вашей столицы" oninput="FR.data.planet_name=this.value">
+    </div>`;
 }
 // Выбор типа столичной планеты — родной мир расы. Имя вводится игроком (поле f-planet),
 // тип определяется расой (EC_HAB). Если родных миров несколько — игрок выбирает карточкой.
@@ -392,6 +406,110 @@ const FR_ENV_IMG = {
   volcanic: 'cls_supervolc', lava: 'planet_lava', cryo: 'planet_ice',
   micro: 'asteroid', exotic: 'cls_diamond',
 };
+// ── Планета-сфера: равнопромежуточная текстура (PNG) → освещённый шар на canvas ──
+// Текстуры planet_*.png / cls_*.png — плоские развёртки; показывать их сырыми нельзя.
+// Наматываем текстуру на диск (клип-круг + двойная отрисовка для бесшовного вращения),
+// накладываем терминатор (свет верх-слева) и атмосферный ободок. Тот же приём, что на
+// карте галактики, но самодостаточный и лёгкий. Герой вращается, карточки — статичны.
+const _frTexCache = {};
+function frTex(url) {
+  let im = _frTexCache[url];
+  if (im) return im;
+  im = new Image(); im.decoding = 'async'; im.src = url; _frTexCache[url] = im;
+  return im;
+}
+// Малые тела (астероиды) — НЕ сферы: их текстура это спрайт камня, а не развёртка.
+// Такие показываем как есть (спрайт целиком), без намотки на шар и без ободка.
+const FR_SPRITE_ENV = { micro: 1 };
+function frDrawSphere(cv, url, animate, sprite) {
+  if (!cv) return;
+  const ctx = cv.getContext('2d'); if (!ctx) return;
+  const im = frTex(url);
+  if (cv._frRAF) { cancelAnimationFrame(cv._frRAF); cv._frRAF = 0; }
+  const t0 = performance.now();
+  const ldx = -0.52, ldy = -0.56; // направление света: верхний левый угол
+  function render(now) {
+    if (!cv.isConnected) { cv._frRAF = 0; return; } // ушли со шага — гасим цикл
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cssW = cv.clientWidth || (cv.parentElement ? cv.parentElement.clientWidth : 0) || 120;
+    const cssH = cv.clientHeight || cssW;
+    const pw = Math.round(cssW * dpr), ph = Math.round(cssH * dpr);
+    if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+    const W = cv.width, H = cv.height, cx = W / 2, cy = H / 2, r = Math.min(W, H) * 0.46;
+    ctx.clearRect(0, 0, W, H);
+    const ready = im.complete && im.naturalWidth > 0;
+
+    // ── МАЛОЕ ТЕЛО: спрайт целиком, лёгкая направленная тень по силуэту ──
+    if (sprite) {
+      if (ready) {
+        const s = Math.min((r * 2.05) / im.naturalWidth, (r * 2.05) / im.naturalHeight);
+        const w = im.naturalWidth * s, h = im.naturalHeight * s;
+        ctx.drawImage(im, cx - w / 2, cy - h / 2, w, h);
+        // объём: свет/тень только поверх непрозрачных пикселей камня
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-atop';
+        const sh = ctx.createLinearGradient(cx + ldx * r, cy + ldy * r, cx - ldx * r, cy - ldy * r);
+        sh.addColorStop(0, 'rgba(255,248,232,0.14)');
+        sh.addColorStop(0.5, 'rgba(0,0,0,0)');
+        sh.addColorStop(1, 'rgba(2,4,12,0.55)');
+        ctx.fillStyle = sh; ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+        ctx.restore();
+      }
+      return; // без вращения, без клипа, без ободка
+    }
+
+    // ── ПЛАНЕТА-СФЕРА: текстура-развёртка, намотанная на диск ──
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832); ctx.clip();
+    if (ready) {
+      const d = r * 2 * 1.06, pan = animate ? (((now - t0) * 0.00003) % 1) * d : 0, by = cy - d / 2;
+      ctx.drawImage(im, cx - d / 2 - pan, by, d, d);
+      ctx.drawImage(im, cx - d / 2 - pan + d, by, d, d);
+    } else {
+      const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, 0, cx, cy, r);
+      g.addColorStop(0, '#35507a'); g.addColorStop(1, '#0a1526');
+      ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    }
+    // 1. терминатор — линейный градиент вдоль света (день/ночь, главный объём)
+    const term = ctx.createLinearGradient(cx + ldx * r, cy + ldy * r, cx - ldx * r, cy - ldy * r);
+    term.addColorStop(0, 'rgba(0,0,0,0)');
+    term.addColorStop(0.34, 'rgba(0,0,0,0)');
+    term.addColorStop(0.5, 'rgba(0,0,0,0.42)');
+    term.addColorStop(0.75, 'rgba(0,0,0,0.86)');
+    term.addColorStop(1, 'rgba(0,2,8,0.97)');
+    ctx.fillStyle = term; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    // 2. краевое затенение (limb darkening) — округлость
+    const ao = ctx.createRadialGradient(cx, cy, r * 0.58, cx, cy, r);
+    ao.addColorStop(0, 'rgba(0,0,0,0)');
+    ao.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = ao; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    // 3. блик на освещённой стороне (screen — мягкий объёмный свет)
+    ctx.globalCompositeOperation = 'screen';
+    const hi = ctx.createRadialGradient(cx + ldx * r * 0.5, cy + ldy * r * 0.5, 0, cx + ldx * r * 0.35, cy + ldy * r * 0.35, r * 0.9);
+    hi.addColorStop(0, 'rgba(155,205,255,0.36)');
+    hi.addColorStop(0.5, 'rgba(155,205,255,0.10)');
+    hi.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = hi; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
+    // 4. атмосферный ободок (мягкий, снаружи диска — без жёсткого кольца)
+    const rim = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, r * 1.1);
+    rim.addColorStop(0, 'rgba(110,175,255,0)');
+    rim.addColorStop(0.82, 'rgba(110,175,255,0.15)');
+    rim.addColorStop(1, 'rgba(140,200,255,0)');
+    ctx.fillStyle = rim; ctx.beginPath(); ctx.arc(cx, cy, r * 1.1, 0, 6.2832); ctx.fill();
+    if (animate) cv._frRAF = requestAnimationFrame(render);
+  }
+  if (!(im.complete && im.naturalWidth > 0)) im.addEventListener('load', () => render(performance.now()), { once: true });
+  // Рисуем сразу (синхронно), а не ждём кадра: requestAnimationFrame тормозится/паузится
+  // в фоновой вкладке, из-за чего статичные карточки могли остаться пустыми. Анимированный
+  // герой внутри render() сам ставит следующий кадр через RAF.
+  render(performance.now());
+}
+// Перерисовать все сферы шага (после ресайза/поворота — статичные карточки не саморесайзятся)
+function frRedrawPlanets() {
+  document.querySelectorAll('.fr-planet-pick canvas[data-tex]').forEach(cv => frDrawSphere(cv, cv.dataset.tex, cv.dataset.anim === '1', cv.dataset.sprite === '1'));
+}
 function frRenderPlanetPick() {
   const box = document.getElementById('f-planet-pick'); if (!box) return;
   const race = FR.data.race;
@@ -406,22 +524,30 @@ function frRenderPlanetPick() {
     const c = (typeof ecCapital === 'function') ? ecCapital(e) : { title: lbl[e] || e };
     const type = (lbl[e] || e) === c.title ? '' : `<div class="fr-env-type">${esc(lbl[e] || e)}</div>`;
     return `<div class="fr-env-card${env === e ? ' on' : ''}" onclick="frPickCapEnv('${e}')">
-      <div class="fr-env-img"><img src="${img(e)}" alt="" onerror="this.style.display='none'"></div>
+      <div class="fr-env-img"><canvas class="fr-env-cv" data-tex="${img(e)}"${FR_SPRITE_ENV[e] ? ' data-sprite="1"' : ''}></canvas></div>
       <div class="fr-env-name">${esc(c.title)}</div>${type}
     </div>`;
   }).join('');
-  // досье выбранной столицы: характеристики + игровой бонус
-  const card = cap ? `<div class="fr-cap-card">
-      <div class="fr-cap-card-hd"><span class="fr-cap-card-title">${esc(cap.title)}</span><span class="fr-cap-card-type">${esc(lbl[env] || env)}</span></div>
-      <div class="fr-cap-card-flavor">${esc(cap.flavor)}</div>
-      <div class="fr-cap-card-stats">
-        <span class="fr-cap-stat">Ячейки застройки <b>${cap.cells}</b></span>
-        <span class="fr-cap-stat">Ресурсы <b>${cap.res.map(esc).join(', ')}</b></span>
+  // Парадный портрет выбранного мира: вращающийся шар + досье (характеристики, ресурсы, бонус).
+  const bonus = (typeof ecChoiceChips === 'function') ? ecChoiceChips('capital', env) : '';
+  const hero = cap ? `<div class="fr-cap-hero">
+      <div class="fr-cap-hero-orbit"><canvas class="fr-cap-hero-cv" data-tex="${img(env)}" data-anim="1"${FR_SPRITE_ENV[env] ? ' data-sprite="1"' : ''}></canvas></div>
+      <div class="fr-cap-hero-info">
+        <div class="fr-cap-hero-type">${esc(lbl[env] || env)}</div>
+        <div class="fr-cap-hero-title">${esc(cap.title)}</div>
+        <div class="fr-cap-hero-flavor">${esc(cap.flavor)}</div>
+        <div class="fr-cap-hero-stats">
+          <span class="fr-cap-stat"><i>Ячейки застройки</i><b>${cap.cells}</b></span>
+          <span class="fr-cap-stat"><i>Ресурсы</i><b>${cap.res.map(esc).join(' · ')}</b></span>
+        </div>
+        ${bonus ? `<div class="fr-cap-hero-bonus">${bonus}</div>` : ''}
       </div>
-      <div class="fr-cap-card-bonus">${(typeof ecChoiceChips === 'function') ? ecChoiceChips('capital', env) : ''}</div>
     </div>` : '';
-  box.innerHTML = `<div class="fr-cap-label">Родной мир столицы — определяется расой${envs.length <= 1 ? ' · единственный вариант' : ''}</div>
-    <div class="fr-env-grid">${cards}</div>${card}`;
+  box.innerHTML = `${hero}
+    <div class="fr-cap-label">Тип родного мира — определяется расой${envs.length <= 1 ? ' · единственный вариант' : ''}</div>
+    <div class="fr-env-grid">${cards}</div>`;
+  // отрисовать планеты-сферы (герой вращается, карточки статичны; малые тела — спрайтом)
+  box.querySelectorAll('canvas[data-tex]').forEach(cv => frDrawSphere(cv, cv.dataset.tex, cv.dataset.anim === '1', cv.dataset.sprite === '1'));
 }
 function frOnRegRace(v) { FR.data.race = v; frRenderPlanetPick(); }
 function frPickCapEnv(env) { FR.data.capital_env = env; frSaveLocal(); frRenderPlanetPick(); }
@@ -535,10 +661,10 @@ function frSyncStep() {
   const d = FR.data, g = id => document.getElementById(id);
   if (FR.step === 0) { d.name = g('f-name').value.trim(); d.gov = g('f-gov').value; d.regime = g('f-regime').value; d.leader = g('f-leader').value.trim(); d.civ_type = g('f-type').value; }
   else if (FR.step === 1) { d.color = frHexToRgba(g('f-color').value, 0.34); }
-  else if (FR.step === 2) { if (g('f-planet')) d.planet_name = g('f-planet').value.trim(); }
-  else if (FR.step === 4) { d.race = g('c-race').value; d.ideology = g('c-ideo').value; d.culture = g('c-features').value.trim(); }
-  else if (FR.step === 5) { d.link = g('h-link').value.trim(); if (g('h-history')) d.history = g('h-history').value; }
-  // step3 (постройки) и герб синхронизируются в своих обработчиках
+  else if (FR.step === 3) { if (g('f-planet')) d.planet_name = g('f-planet').value.trim(); if (g('f-reg-race')) d.race = g('f-reg-race').value; }
+  else if (FR.step === 5) { d.race = g('c-race').value; d.ideology = g('c-ideo').value; d.culture = g('c-features').value.trim(); }
+  else if (FR.step === 6) { d.link = g('h-link').value.trim(); if (g('h-history')) d.history = g('h-history').value; }
+  // step2 (система — выбор мышью), step4 (постройки) и герб синхронизируются в своих обработчиках
 }
 function frGoStep(i) { frSyncStep(); FR.step = i; frSaveLocal(); frRenderStep(); }
 function frNext() {
@@ -575,6 +701,9 @@ function frBindAutosave() {
   document.addEventListener('input', e => { if (inWizard(e)) frSaveLocalDebounced(); });
   document.addEventListener('change', e => { if (inWizard(e)) frSaveLocalDebounced(); });
   window.addEventListener('beforeunload', () => { try { clearTimeout(_frSaveTimer); frSaveLocal(); } catch (e) {} });
+  // при ресайзе/повороте — перерисовать статичные сферы-карточки под новый размер
+  let _frResizeTimer = null;
+  window.addEventListener('resize', () => { clearTimeout(_frResizeTimer); _frResizeTimer = setTimeout(frRedrawPlanets, 180); });
 }
 
 function frColorPreview(hex) {
@@ -622,7 +751,6 @@ async function frRenderSystemPicker() {
   }
   frRenderMinimap();
   frFilterSystems(document.getElementById('f-sys-search')?.value || '');
-  frRenderPlanetPick();
 }
 function GM_BASE_SAFE() { return (typeof GM_BASE !== 'undefined') ? GM_BASE : 'assets/map/'; }
 
@@ -698,7 +826,7 @@ async function frSubmit() {
   if (FR.editApproved && FR.lockedRace) FR.data.race = FR.lockedRace;
   if (!FR.data.name) { toast('Укажите название', 'err'); FR.step = 0; frRenderStep(); return; }
   if (typeof badName === 'function' && badName(FR.data.name)) { toast('Название фракции содержит недопустимые слова (мат или запрещённое)', 'err'); FR.step = 0; frRenderStep(); return; }
-  if (typeof badName === 'function' && badName(FR.data.planet_name)) { toast('Название столичной планеты содержит недопустимые слова (мат или запрещённое)', 'err'); FR.step = 2; frRenderStep(); return; }
+  if (typeof badName === 'function' && badName(FR.data.planet_name)) { toast('Название столичной планеты содержит недопустимые слова (мат или запрещённое)', 'err'); FR.step = 3; frRenderStep(); return; }
   if (!FR.data.system_id) { toast('Выберите систему', 'err'); FR.step = 2; frRenderStep(); return; }
   FR.busy = true;
   try {
