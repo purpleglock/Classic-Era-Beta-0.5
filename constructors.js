@@ -332,6 +332,9 @@ function cnWpnImgReady(path) {
   im.src = path;
   return false;
 }
+// Первый СУЩЕСТВУЮЩИЙ арт из списка кандидатов (конкретный → общий фолбэк).
+// Проба асинхронная: когда файл догрузится, cnWpnImgReady сам перерисует схему.
+function cnFirstImg(paths) { for (const p of paths) if (cnWpnImgReady(p)) return p; return null; }
 // ASCII-слаги групп оружия/модулей (для имён файлов картинок — без кириллицы)
 const CN_GROUP_SLUG = {
   ship: {
@@ -634,16 +637,50 @@ function cnIslandPath(H) {
   const st = ys.map((y, i) => [y, Math.min(cnHullHalf(H, y) * wf[i], 26)]);
   return cnCatmullClosed(cnHullOutlinePts(st, 1));
 }
-// Чистый силуэт боевого корабля (вид сверху): острый нос-клин → плечи → ПАРАЛЛЕЛЬНЫЙ
-// мидель на максимальном бимсе → плавный сход к плоской корме-транцу с дюзами. Монотонно
-// до макс. бимса, потом мягкий спад — БЕЗ волн-выпуклостей. Грани прямые (faceted) →
-// механический, «космо-военный» вид, а не органический блоб.
-const CN_HULL_PROFILE = [
-  [0.00, 0.00], [0.06, 0.20], [0.16, 0.48], [0.28, 0.74], [0.40, 0.92],
-  [0.48, 1.00], [0.66, 1.00], [0.76, 0.95], [0.86, 0.86], [0.94, 0.78], [1.00, 0.66],
-];
-function cnGenStations(tipY, sternY, beam) {
-  return CN_HULL_PROFILE.map(([t, f]) => [Math.round(tipY + (sternY - tipY) * t), Math.round(beam * f)]);
+// Силуэты боевых кораблей (вид сверху): У КАЖДОГО КЛАССА СВОЙ характерный обвод —
+// пары [t вдоль оси 0..1, доля полубимса]. Грани прямые (faceted) → механический вид.
+// Ступеньки/денты по борту = крылья, спонсоны, казематы — узнаваемость класса, не «блоб».
+const CN_HULL_PROFILES = {
+  // Корвет — стремительный дротик: длинный игольчатый нос, короткие крылья за миделем,
+  // резкий срез задней кромки крыла, узкая корма.
+  corvette: [
+    [0.00, 0.00], [0.08, 0.14], [0.26, 0.36], [0.44, 0.58], [0.52, 0.72],
+    [0.58, 1.00], [0.68, 0.96], [0.74, 0.62], [0.88, 0.58], [1.00, 0.46],
+  ],
+  // Фрегат — клин с боковыми спонсонами: умеренный нос, резкий вынос спонсонов
+  // к миделю, ступень внутрь и сужающаяся корма.
+  frigate: [
+    [0.00, 0.00], [0.07, 0.22], [0.20, 0.46], [0.34, 0.62], [0.42, 0.66],
+    [0.46, 0.92], [0.62, 1.00], [0.70, 0.72], [0.84, 0.68], [0.92, 0.56], [1.00, 0.44],
+  ],
+  // Эсминец — длинный клинок: быстрый набор ширины, почти параллельные борта
+  // на большей части длины, скошенный подзор кормы.
+  destroyer: [
+    [0.00, 0.00], [0.05, 0.16], [0.14, 0.44], [0.24, 0.78], [0.34, 0.92],
+    [0.42, 0.94], [0.50, 1.00], [0.78, 0.98], [0.84, 0.80], [0.92, 0.76], [1.00, 0.60],
+  ],
+  // Крейсер — хищные скулы: ширина набирается прямо у носа, длинный мидель,
+  // талия и лёгкий развал у машинного (гондолы двигателей).
+  cruiser: [
+    [0.00, 0.00], [0.05, 0.28], [0.12, 0.58], [0.22, 0.86], [0.30, 1.00],
+    [0.52, 0.98], [0.60, 0.84], [0.72, 0.82], [0.82, 0.86], [0.92, 0.72], [1.00, 0.52],
+  ],
+  // Линкор — тяжёлая плита: ТУПОЙ бронированный форштевень (не игла), широченный
+  // мидель во всю длину, ступень-каземат по борту, широкая корма.
+  battleship: [
+    [0.00, 0.22], [0.04, 0.40], [0.12, 0.62], [0.22, 0.78], [0.30, 0.84],
+    [0.36, 1.00], [0.64, 1.00], [0.72, 0.86], [0.80, 0.84], [0.90, 0.78], [1.00, 0.68],
+  ],
+  // Дредноут — монумент: таранный шпиль-форштевень, расширение ДВУМЯ ступенями
+  // (ярусы надстроек), максимальный бимс ближе к корме, массивный транец.
+  dreadnought: [
+    [0.00, 0.00], [0.10, 0.18], [0.16, 0.38], [0.24, 0.42], [0.32, 0.66],
+    [0.40, 0.70], [0.50, 0.92], [0.58, 1.00], [0.76, 1.00], [0.86, 0.90], [0.94, 0.84], [1.00, 0.72],
+  ],
+};
+function cnGenStations(k, tipY, sternY, beam) {
+  const prof = CN_HULL_PROFILES[k] || CN_HULL_PROFILES.destroyer;
+  return prof.map(([t, f]) => [Math.round(tipY + (sternY - tipY) * t), Math.round(beam * f)]);
 }
 // [tipY, sternY, beam(полубимс), rows(рядов узлов)]
 const CN_SHIP_DIM = {
@@ -657,7 +694,7 @@ const CN_SHIP_DIM = {
 const CN_SHIP_ST = {};
 for (const k in CN_SHIP_DIM) {
   const [tipY, sternY, beam, rows] = CN_SHIP_DIM[k];
-  CN_SHIP_ST[k] = { st: cnGenStations(tipY, sternY, beam), nose: tipY + 8, y0: tipY + 34, y1: sternY - 12, rows };
+  CN_SHIP_ST[k] = { st: cnGenStations(k, tipY, sternY, beam), nose: tipY + 8, y0: tipY + 34, y1: sternY - 12, rows };
 }
 const CN_SHIP_GEO = {};
 for (const stK in CN_SHIP_ST) {
@@ -833,7 +870,7 @@ function cnPolyDots(poly, spacing) {
 // кромка, огибающая видимый корпус. Без штрихов-эмиттеров, точек и пунктиров (это давало
 // «фуз»/шум). Цвет — по типу щита, яркость — по силе. Оболочка идёт по гладкому силуэту,
 // самопересечения в глубоких выемках выброшены (барьер перекидывается через устье).
-function cnShieldSvg(H, sIdx, rt, d) {
+function cnShieldSvg(H, sIdx, rt, d, tex) {
   const col = sIdx === 0 ? 'var(--te)' : sIdx === 1 ? 'var(--gd)' : 'var(--t2)';
   const op = +(0.36 + 0.18 * rt).toFixed(2);
   // Барьер идёт по ТОМУ ЖЕ гранёному силуэту, что рисуется на экране (не по сглаженной
@@ -842,8 +879,21 @@ function cnShieldSvg(H, sIdx, rt, d) {
   const hull = cnConvexHull(cnHullOutlinePts(H.st, 1));
   const shellD = cnPolyPath(cnOffsetRound(hull, d));
   const inner = cnPolyPath(cnOffsetRound(hull, d * 0.55));
+  // ТЕКСТУРА ЩИТА (ship_shieldtex_*): энергоузор внутри купола — обрезка по оболочке,
+  // экранное смешение → узор «светится», а не закрашивает корабль. Арт горизонтальный
+  // (нос вправо), как и арт корпуса — контр-поворот на 90°.
+  let texLayer = '';
+  if (tex) {
+    const ys = H.st.map(p => p[0]), y0 = Math.min(...ys) - d, y1 = Math.max(...ys) + d;
+    const Ln = y1 - y0, Bm = (H.maxHW + d) * 2, cyMid = (y0 + y1) / 2;
+    texLayer = `<clipPath id="cnShieldClip"><path d="${shellD}"/></clipPath>`
+      + `<g clip-path="url(#cnShieldClip)" opacity="${(0.30 + 0.25 * rt).toFixed(2)}" style="mix-blend-mode:screen">`
+      + `<g transform="translate(160 ${cyMid.toFixed(1)}) rotate(90)">`
+      + `<image href="${esc(tex)}" xlink:href="${esc(tex)}" x="${(-Ln / 2).toFixed(1)}" y="${(-Bm / 2).toFixed(1)}" width="${Ln.toFixed(1)}" height="${Bm.toFixed(1)}" preserveAspectRatio="xMidYMid slice"/></g></g>`;
+  }
   // мягкое поле (заливка зазора) + внутреннее свечение + одна крепкая кромка
   return `<path d="${shellD}" fill="color-mix(in srgb, ${col} 9%, transparent)" stroke="none"/>`
+    + texLayer
     + `<path d="${inner}" fill="none" stroke="${col}" stroke-width="0.6" opacity="${(op * 0.35).toFixed(2)}"/>`
     + `<path d="${shellD}" fill="none" stroke="${col}" stroke-width="${(1.1 + rt * 0.7).toFixed(1)}" stroke-linejoin="round" opacity="${op}"/>`;
 }
@@ -874,7 +924,9 @@ function cnDrawShip() {
     const maxSh = Math.max(...db.shields[k].map(x => x.shield)) || 1, rt = Math.min(1, shieldObj.shield / maxSh);
     shieldD = 9 + 7 * rt;                 // постоянный стоячий зазор корпус↔барьер
     shieldPad = shieldD * 2 + 6;          // запас на miter у острых носа/кормы
-    P.push(`<g class="cn-shieldfx">${cnShieldSvg(H, sIdx, rt, shieldD)}</g>`);
+    // своя текстура щита: ship_shieldtex_<класс>_<номер щита> → общий ship_shieldtex_<класс>
+    const shTex = cnFirstImg([cnImgPath(CN.cat, 'shieldtex', k, sIdx), cnImgPath(CN.cat, 'shieldtex', k)]);
+    P.push(`<g class="cn-shieldfx">${cnShieldSvg(H, sIdx, rt, shieldD, shTex)}</g>`);
   }
 
   // ДВИГАТЕЛЬ — число дюз и тип (ион/плазма) из выбранного двигателя + живой факел
@@ -892,16 +944,29 @@ function cnDrawShip() {
   const brY = H.nose + (e[1] - H.nose) * 0.24, coreCy = H.nose + (e[1] - H.nose) * 0.56;
   const typeImg = cnImgPath(CN.cat, 'type', k, tIdx), classImg = cnImgPath(CN.cat, 'class', k);
   const bodyImg = cnWpnImgReady(typeImg) ? typeImg : cnWpnImgReady(classImg) ? classImg : null;
+  // ОФОРМЛЕНИЕ КОРПУСА из файлов (все слои опциональны, обрезаются по силуэту):
+  //  · текстура брони ship_armortex_<класс>_<номер брони> → ship_armortex_<класс> — обшивка
+  //    выбранной брони поверх тела (плиты, клёпка, керамика…);
+  //  · декор ship_decor_<класс>_<подкласс> → ship_decor_<класс> — эмблемы, полосы, надписи
+  //    (PNG/WebP с прозрачностью) — рисуется ПОВЕРХ всего корпуса.
+  // Арт кладётся горизонтально (нос вправо) — как и арт-тело.
+  const aIdx = +cnId('cn-armor').value || 0;
+  const armorTex = cnFirstImg([cnImgPath(CN.cat, 'armortex', k, aIdx), cnImgPath(CN.cat, 'armortex', k)]);
+  const decorImg = cnFirstImg([cnImgPath(CN.cat, 'decor', k, tIdx), cnImgPath(CN.cat, 'decor', k)]);
+  const Ln = e[1] - H.nose, Bm = H.maxHW * 2, cyMid = (H.nose + e[1]) / 2;
+  const cnBodyArt = (img, op, blend) => `<g clip-path="url(#cnBodyClip)"${op != null ? ` opacity="${op}"` : ''}${blend ? ` style="mix-blend-mode:${blend}"` : ''}>`
+    + `<g transform="translate(160 ${cyMid.toFixed(1)}) rotate(90)">`
+    + `<image href="${esc(img)}" xlink:href="${esc(img)}" x="${(-Ln / 2).toFixed(1)}" y="${(-Bm / 2).toFixed(1)}" width="${Ln.toFixed(1)}" height="${Bm.toFixed(1)}" preserveAspectRatio="xMidYMid slice"/></g></g>`;
+  P.push(`<clipPath id="cnBodyClip"><path d="${hullPath}"/></clipPath>`);
   P.push(`<path d="${hullPath}" fill="color-mix(in srgb, var(--gd) 22%, var(--b2))" stroke="var(--gd)" stroke-width="${sw}" stroke-linejoin="round"/>`);
   if (bodyImg) {                                       // АРТ-ТЕЛО, обрезанное по силуэту корпуса
-    const Ln = e[1] - H.nose, Bm = H.maxHW * 2, cyMid = (H.nose + e[1]) / 2;
-    P.push(`<clipPath id="cnBodyClip"><path d="${hullPath}"/></clipPath>`
-      + `<g clip-path="url(#cnBodyClip)"><g transform="translate(160 ${cyMid.toFixed(1)}) rotate(90)">`
-      + `<image href="${esc(bodyImg)}" xlink:href="${esc(bodyImg)}" x="${(-Ln / 2).toFixed(1)}" y="${(-Bm / 2).toFixed(1)}" width="${Ln.toFixed(1)}" height="${Bm.toFixed(1)}" preserveAspectRatio="xMidYMid slice"/></g></g>`
+    P.push(cnBodyArt(bodyImg)
+      + (armorTex ? cnBodyArt(armorTex, 0.85) : '')
       + `<path d="${hullPath}" fill="none" stroke="var(--gd)" stroke-width="${sw}" stroke-linejoin="round" opacity="0.9"/>`);
   } else {                                             // ЧИСТЫЙ ГРАНЁНЫЙ СИЛУЭТ (фолбэк без арта)
     P.push(`<path d="${cnPolyPath(cnHullOutlinePts(H.st, beltW))}" fill="var(--b1)" stroke="color-mix(in srgb, var(--gd) 40%, transparent)" stroke-width="0.7" stroke-linejoin="round"/>`);
     P.push(`<path d="${cnPolyPath(cnHullOutlinePts(H.st, Math.max(0.2, beltW - 0.2)))}" fill="none" stroke="var(--w2)" stroke-width="0.6" opacity="0.35" stroke-linejoin="round"/>`);
+    if (armorTex) P.push(cnBodyArt(armorTex, 0.85));   // обшивка брони поверх силуэта (линии рисуются выше)
     P.push(`<line x1="160" y1="${(H.nose + 4).toFixed(1)}" x2="160" y2="${(e[1] - 6).toFixed(1)}" stroke="var(--w2)" stroke-width="1" opacity="0.32"/>`);   // осевая
     // СЕКЦИИ КОРПУСА: поперечные переборки делят тело на нос / центр / машинное — грани по борту.
     // Даёт «построенный» вид вместо силуэта-пятна.
@@ -928,6 +993,8 @@ function cnDrawShip() {
         + `<circle cx="160" cy="${coreCy.toFixed(1)}" r="${r0.toFixed(1)}" fill="color-mix(in srgb, var(--gd) 55%, var(--b1))" stroke="var(--gd)" stroke-width="1.1"/></g>`);
     }
   }
+  // ДЕКОР (эмблемы/полосы/тактические надписи с прозрачным фоном) — поверх всего корпуса
+  if (decorImg) P.push(cnBodyArt(decorImg));
 
   // ── Расчёт посадочных мест ЗАРАНЕЕ: узлы орудий, отсеки — чтобы связать их магистралями ──
   const bayN = L.bays.length;
@@ -1004,9 +1071,9 @@ function cnDrawShip() {
   // Фиксированная сцена 960×470: шрифты и толщины всегда одного размера,
   // корабль вписывается масштабом (учёт щита, факела и подписей), поля минимальные.
   // Сцена стала выше и корабль крупнее → используем всю ширину панели.
-  const topEdge = Math.min(tipY - 16, tipY - shieldPad - 4);
-  const botEdge = Math.max(e[1] + flameLen + 8, e[1] + shieldPad + 4);
-  const halfW = H.maxHW + shieldD + 10;
+  const topEdge = Math.min(tipY - 10, tipY - shieldPad - 2);
+  const botEdge = Math.max(e[1] + flameLen + 6, e[1] + shieldPad + 2);
+  const halfW = H.maxHW + shieldD + 6;
   const shipLen = botEdge - topEdge;
   // На телефоне разворачиваем корпус ВЕРТИКАЛЬНО носом вниз (портретная сцена) — так корабль
   // крупнее и занимает высоту экрана, а не жмётся в узкую горизонтальную полоску.
@@ -1014,14 +1081,14 @@ function cnDrawShip() {
   let VW, VH, CY, sc, ox = 0, gT, SX, axis;
   if (mob) {
     VW = 470; VH = 900; CY = VW / 2;
-    sc = Math.min((VH - 80) / shipLen, (VW - 36) / (halfW * 2));
+    sc = Math.min((VH - 56) / shipLen, (VW - 28) / (halfW * 2));
     const midShip = (topEdge + botEdge) / 2;
     gT = `translate(${(VW / 2).toFixed(2)},${(VH / 2).toFixed(2)}) scale(${sc.toFixed(4)}) rotate(180) translate(${(-160).toFixed(2)},${(-midShip).toFixed(2)})`;
     SX = () => VW / 2;                                 // выноски на портрете отключены — заглушка
     axis = `<line x1="${CY}" y1="20" x2="${CY}" y2="${VH - 20}" stroke="var(--w1)" stroke-width="0.8" stroke-dasharray="2 9" opacity="0.5"/>`;
   } else {
     VW = 960; VH = 470; CY = 244;
-    sc = Math.min(936 / shipLen, 384 / (halfW * 2));
+    sc = Math.min(944 / shipLen, 408 / (halfW * 2));
     ox = (VW - shipLen * sc) / 2;
     gT = `translate(${(ox + botEdge * sc).toFixed(2)},${(CY - 160 * sc).toFixed(2)}) scale(${sc.toFixed(4)}) rotate(90)`;
     SX = hy => ox + (botEdge - hy) * sc;               // координата вдоль корпуса → экранный X

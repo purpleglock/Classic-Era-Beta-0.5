@@ -234,7 +234,7 @@ function adPaint() {
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
     const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
-    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['weapons', '🔫 Орудия'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук']];
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук']];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -246,6 +246,7 @@ function adPaint() {
     else if (AD.tab === 'planets')   tabContent = adPlanetTexPanel();
     else if (AD.tab === 'guide')     tabContent = adGuideCoversPanel();
     else if (AD.tab === 'ach')       tabContent = adAchPanel();
+    else if (AD.tab === 'shipart')   tabContent = adShipArtPanel();
     else if (AD.tab === 'weapons')   tabContent = adWeaponImgPanel();
     else if (AD.tab === 'market')    tabContent = adMarketPanel();
     else if (AD.tab === 'mktsim')    tabContent = adMarketSimPanel();
@@ -479,6 +480,113 @@ async function adPortraitDelete(id) {
     }
     AD.portraits = (AD.portraits || []).filter(x => x.id !== id); adPaint();
   } catch (e) { toast('Не удалось удалить: ' + (e.message || e), 'err'); }
+}
+
+// ── Вкладка: Оформление корабля (корпус, броня, щит, текстуры, декор) ──
+// Всё кладётся в assets/constructors/ под ДЕТЕРМИНИРОВАННЫМИ именами (те же, что
+// читает cnImgPath на схеме конструктора). БД не нужна — файл на известном месте сам
+// подхватывается. Тот же локальный аплоад-сервер (node tools/upload-server.js), что и
+// у орудий. Прозрачность (для декора) сохраняется — compressImageFile пишет webp с альфой.
+function adArtKey(fn) { return fn.replace(/[^A-Za-z0-9]+/g, '_'); }
+function adShipArtTile(label, filename, opt) {
+  opt = opt || {};
+  const url = 'assets/constructors/' + filename;
+  const bust = (AD.artBust && AD.artBust[url]) ? ('?t=' + AD.artBust[url]) : '';
+  const key = adArtKey(filename);
+  const w = opt.wide ? 190 : 138, h = opt.wide ? 82 : 92;
+  return `<div style="width:${w}px;display:flex;flex-direction:column;gap:5px">
+    <div style="position:relative;width:${w}px;height:${h}px;border:1px solid var(--w2,#2a3340);border-radius:8px;background:${opt.alpha ? 'repeating-conic-gradient(#161c26 0% 25%, #0c1322 0% 50%) 50%/16px 16px' : '#0c1322'};overflow:hidden">
+      <img id="ad-art-img-${key}" src="${esc(url + bust)}" style="width:100%;height:100%;object-fit:${opt.wide ? 'cover' : 'contain'};display:block" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;font-size:10px;color:var(--t4,#6a7a88);text-align:center;padding:6px">нет файла</div>
+    </div>
+    <div style="font-size:11px;color:var(--t1,#e8edf2);line-height:1.2;min-height:26px">${esc(label)}</div>
+    <div style="font-family:monospace;font-size:8px;color:var(--t4,#6a7a88);word-break:break-all">${esc(filename)}</div>
+    <input type="file" accept="image/*" id="ad-art-file-${key}" style="display:none" onchange="adShipArtUpload('${filename}',${opt.max || 1024})">
+    <button class="btn btn-gh btn-xs" onclick="document.getElementById('ad-art-file-${key}').click()">⬆ Загрузить</button>
+    <div id="ad-art-st-${key}" style="font-size:9px;color:var(--te,#3ec0d0);min-height:11px"></div>
+  </div>`;
+}
+function adShipArtSection(title, hint, tiles) {
+  return `<div style="margin-top:18px">
+    <div style="font-family:monospace;font-size:12px;color:var(--te,#3ec0d0);margin-bottom:2px">${title}</div>
+    ${hint ? `<div style="font-size:10px;color:var(--t4,#6a7a88);margin-bottom:8px;line-height:1.4">${hint}</div>` : ''}
+    <div style="display:flex;flex-wrap:wrap;gap:12px">${tiles.join('')}</div>
+  </div>`;
+}
+function adShipArtPanel() {
+  const DB = (typeof CN_SHIP !== 'undefined') ? CN_SHIP : null;
+  if (!DB) return `<div style="margin-top:24px;color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px">Данные кораблей недоступны (constructors.js не загружен).</div>`;
+  const classes = Object.keys(DB.data);
+  const k = (AD.artClass && DB.data[AD.artClass]) ? AD.artClass : classes[0];
+  const cls = DB.data[k];
+
+  const picker = `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px">
+    ${classes.map(c => `<button class="btn ${c === k ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="AD.artClass='${c}';adPaint()">${esc(DB.data[c].name)}</button>`).join('')}
+  </div>`;
+
+  // Корпус: hero-тело класса + арт каждой специализации
+  const hullTiles = [adShipArtTile('Hero-тело (общее для класса)', `ship_class_${k}.webp`, { wide: true, max: 1200 })];
+  (cls.types || []).forEach((t, i) => hullTiles.push(adShipArtTile(t.name, `ship_type_${k}_${i}.webp`, { wide: true, max: 1200 })));
+
+  // Броня: карточка компонента + ТЕКСТУРА обшивки (armortex) + общая текстура класса
+  const armorTiles = [adShipArtTile('Общая текстура брони (класс)', `ship_armortex_${k}.webp`, { wide: true, max: 1024 })];
+  (DB.armors[k] || []).forEach((a, i) => {
+    armorTiles.push(adShipArtTile(a.name + ' · карточка', `ship_armor_${k}_${i}.webp`, { max: 512 }));
+    armorTiles.push(adShipArtTile(a.name + ' · текстура', `ship_armortex_${k}_${i}.webp`, { wide: true, max: 1024 }));
+  });
+
+  // Щит: карточка + ТЕКСТУРА купола (shieldtex) + общая текстура класса
+  const shieldTiles = [adShipArtTile('Общая текстура щита (класс)', `ship_shieldtex_${k}.webp`, { wide: true, max: 1024 })];
+  (DB.shields[k] || []).forEach((s, i) => {
+    shieldTiles.push(adShipArtTile(s.name + ' · карточка', `ship_shield_${k}_${i}.webp`, { max: 512 }));
+    shieldTiles.push(adShipArtTile(s.name + ' · текстура', `ship_shieldtex_${k}_${i}.webp`, { wide: true, max: 1024 }));
+  });
+
+  // Реактор + двигатель: карточки компонентов
+  const reacTiles = (DB.reactors[k] || []).map((r, i) => adShipArtTile(r.name, `ship_reactor_${k}_${i}.webp`, { max: 512 }));
+  const engTiles = (DB.engines[k] || []).map((e, i) => adShipArtTile(e.name, `ship_engine_${k}_${i}.webp`, { max: 512 }));
+
+  // Декор: общий класса + под каждую специализацию (нужна прозрачность)
+  const decorTiles = [adShipArtTile('Декор класса (общий)', `ship_decor_${k}.webp`, { wide: true, alpha: true, max: 1200 })];
+  (cls.types || []).forEach((t, i) => decorTiles.push(adShipArtTile(t.name, `ship_decor_${k}_${i}.webp`, { wide: true, alpha: true, max: 1200 })));
+
+  const sections = adShipArtSection('🚀 Корпус (тело корабля)', 'Картинка рисуется телом корабля на схеме (обрезается по силуэту). Арт горизонтально, носом ВПРАВО. У специализации приоритет над общим hero.', hullTiles)
+    + adShipArtSection('🛡 Броня', 'Карточка — в выборе брони. Текстура — обшивка поверх корпуса, меняется с выбранной бронёй (номерная перекрывает общую).', armorTiles)
+    + adShipArtSection('🔵 Щит', 'Карточка — в выборе щита. Текстура — энергоузор внутри купола щита (светится, blend screen). Порядок щитов: 0 Дефлекторный · 1 Энергетический · 2 Корпускулярный.', shieldTiles)
+    + adShipArtSection('⚡ Реакторы', '', reacTiles)
+    + adShipArtSection('🔥 Двигатели', '', engTiles)
+    + adShipArtSection('✦ Декор (эмблемы, полосы, надписи)', 'Рисуется ПОВЕРХ корпуса. НУЖЕН прозрачный фон (клетчатка = прозрачность). Номерной перекрывает общий класса.', decorTiles);
+
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🚀 Оформление кораблей</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:6px 0 4px;line-height:1.5">📁 Всё сохраняется <b>прямо в папку игры</b> <code>assets/constructors/</code> под фиксированными именами. Запусти локальный сервер один раз: <code>node tools/upload-server.js</code> и держи окно открытым. После заливки <b>обнови страницу игры</b> — картинка появится на схеме конструктора и в карточках. Все слоты необязательны: чего нет — рисуется векторный фолбэк.</div>
+    ${picker}
+    ${sections}
+  </div>`;
+}
+async function adShipArtUpload(filename, maxDim) {
+  const key = adArtKey(filename);
+  const fileEl = document.getElementById('ad-art-file-' + key);
+  const st = document.getElementById('ad-art-st-' + key);
+  const f = fileEl && fileEl.files && fileEl.files[0];
+  if (!f) return;
+  if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = 'Проверка сервера…'; }
+  if (!(await adPortServerAlive())) { if (st) { st.style.color = '#ff7a7a'; st.textContent = 'нет сервера'; } toast('Запусти локальный аплоад-сервер: node tools/upload-server.js', 'err'); if (fileEl) fileEl.value = ''; return; }
+  try {
+    if (st) st.textContent = 'Сжатие…';
+    const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, maxDim || 1024, 0.88) : f;
+    if (st) st.textContent = 'Загрузка…';
+    const r = await fetch(`${AD_PORT_SERVER}/upload?dir=constructors&ext=webp&name=${encodeURIComponent(filename)}`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('HTTP ' + r.status));
+    AD.artBust = AD.artBust || {}; AD.artBust[j.url] = Date.now();
+    const img = document.getElementById('ad-art-img-' + key);
+    if (img) { img.style.display = 'block'; if (img.nextElementSibling) img.nextElementSibling.style.display = 'none'; img.src = j.url + '?t=' + AD.artBust[j.url]; }
+    if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = '✓ загружено'; }
+  } catch (e) { if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 40); } toast('Не удалось: ' + (e.message || e), 'err'); }
+  finally { if (fileEl) fileEl.value = ''; }
 }
 
 // ── Вкладка: Картинки орудий (корабельная верфь) ──────────────────

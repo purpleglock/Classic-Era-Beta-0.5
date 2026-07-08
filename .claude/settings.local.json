@@ -194,7 +194,9 @@
       "Bash(python -m pip install pypdf pdfplumber reportlab)",
       "Bash(python \"C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\c45e0654-b769-4706-8f9b-73d3fb2b5e1c\\\\scratchpad\\\\build.py\")",
       "Bash(ls *.json)",
-      "Bash(grep -A10 '\"scripts\"' package.json)"
+      "Bash(grep -A10 '\"scripts\"' package.json)",
+      "Bash(ls tools/upload-server.js)",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('constructors.js','utf8'\\)\\); console.log\\('syntax OK'\\)\")"
     ]
   }
 }
