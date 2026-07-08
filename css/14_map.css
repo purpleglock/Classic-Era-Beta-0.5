@@ -8,6 +8,15 @@ body.route-map #cw{overflow:hidden}
    мобильный `0 16px 60px`), иначе на странице карты остаются боковые отступы */
 body.route-map #pg{padding:0!important;min-height:100%;height:100%}
 body.route-map #gm-wrap{height:100%;min-height:0}
+/* На мобилке #app/#main заданы через 100vh, куда браузер включает зону под
+   адресной строкой → карта (#gm-wrap height:100%) вылезает ниже видимой области,
+   и панель контролов (bottom:12px) проваливается под экран, а тапнуть нельзя
+   (прокрутка страницы карты отключена). Пиннем оболочку карты к ДИНАМИЧЕСКОМУ
+   вьюпорту (dvh), чтобы низ всегда был на экране. */
+@supports (height:100dvh){
+  body.route-map #app,
+  body.route-map #main{height:100dvh}
+}
 
 #gm-wrap{position:relative;width:100%;height:calc(100vh - var(--th) - 52px);min-height:460px}
 #gm-viewport{
