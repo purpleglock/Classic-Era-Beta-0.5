@@ -246,6 +246,10 @@
    На десктопе скрыт (узлы на схеме кликаются мышью); на touch — показан. */
 .cn-schem-list { display: none; flex-direction: column; gap: 8px; padding: 4px 14px; }
 @media (pointer: coarse), (max-width: 640px) { .cn-schem-list { display: flex; } }
+/* На телефоне схема — портретная (корабль носом вниз): даём высоту, но не выше экрана. */
+@media (pointer: coarse), (max-width: 640px) {
+  .cn-schem-svg { width: auto; max-width: 100%; max-height: 68vh; }
+}
 .cn-slotrow {
   display: flex; align-items: stretch; gap: 6px; width: 100%; min-height: 54px;
   background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-md);

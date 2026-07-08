@@ -1004,15 +1004,29 @@ function cnDrawShip() {
   // Фиксированная сцена 960×470: шрифты и толщины всегда одного размера,
   // корабль вписывается масштабом (учёт щита, факела и подписей), поля минимальные.
   // Сцена стала выше и корабль крупнее → используем всю ширину панели.
-  const VW = 960, VH = 470, CY = 244;
   const topEdge = Math.min(tipY - 16, tipY - shieldPad - 4);
   const botEdge = Math.max(e[1] + flameLen + 8, e[1] + shieldPad + 4);
   const halfW = H.maxHW + shieldD + 10;
   const shipLen = botEdge - topEdge;
-  const sc = Math.min(936 / shipLen, 384 / (halfW * 2));
-  const ox = (VW - shipLen * sc) / 2;
-  const gT = `translate(${(ox + botEdge * sc).toFixed(2)},${(CY - 160 * sc).toFixed(2)}) scale(${sc.toFixed(4)}) rotate(90)`;
-  const SX = hy => ox + (botEdge - hy) * sc;          // координата вдоль корпуса → экранный X
+  // На телефоне разворачиваем корпус ВЕРТИКАЛЬНО носом вниз (портретная сцена) — так корабль
+  // крупнее и занимает высоту экрана, а не жмётся в узкую горизонтальную полоску.
+  const mob = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse), (max-width: 640px)').matches;
+  let VW, VH, CY, sc, ox = 0, gT, SX, axis;
+  if (mob) {
+    VW = 470; VH = 900; CY = VW / 2;
+    sc = Math.min((VH - 80) / shipLen, (VW - 36) / (halfW * 2));
+    const midShip = (topEdge + botEdge) / 2;
+    gT = `translate(${(VW / 2).toFixed(2)},${(VH / 2).toFixed(2)}) scale(${sc.toFixed(4)}) rotate(180) translate(${(-160).toFixed(2)},${(-midShip).toFixed(2)})`;
+    SX = () => VW / 2;                                 // выноски на портрете отключены — заглушка
+    axis = `<line x1="${CY}" y1="20" x2="${CY}" y2="${VH - 20}" stroke="var(--w1)" stroke-width="0.8" stroke-dasharray="2 9" opacity="0.5"/>`;
+  } else {
+    VW = 960; VH = 470; CY = 244;
+    sc = Math.min(936 / shipLen, 384 / (halfW * 2));
+    ox = (VW - shipLen * sc) / 2;
+    gT = `translate(${(ox + botEdge * sc).toFixed(2)},${(CY - 160 * sc).toFixed(2)}) scale(${sc.toFixed(4)}) rotate(90)`;
+    SX = hy => ox + (botEdge - hy) * sc;               // координата вдоль корпуса → экранный X
+    axis = `<line x1="20" y1="${CY}" x2="${VW - 20}" y2="${CY}" stroke="var(--w1)" stroke-width="0.8" stroke-dasharray="2 9" opacity="0.5"/>`;
+  }
 
   // Выноски-подписи: фикс-слоты верхней кромки, сортировка по X — без наездов
   const fMono = w => `style="font:${w} 12px var(--font-mono);letter-spacing:1.2px;fill:var(--t3)"`;
@@ -1022,7 +1036,7 @@ function cnDrawShip() {
   marks.push([SX(e[1] - 4), 'МАРШЕВЫЕ ДЮЗЫ']);
   marks.sort((a, b) => a[0] - b[0]);
   const slotW = (VW - 96) / Math.max(marks.length, 1);
-  const anns = marks.map((mk, i) => {
+  const anns = mob ? '' : marks.map((mk, i) => {
     const lx = 48 + slotW * i, ly = 18;
     return `<circle cx="${mk[0].toFixed(1)}" cy="${CY}" r="2.2" fill="var(--te)"/>`
       + `<path d="M${mk[0].toFixed(1)},${CY} L${(lx + 8).toFixed(1)},${ly + 9} h10" fill="none" stroke="var(--w3)" stroke-width="0.8"/>`
@@ -1035,12 +1049,14 @@ function cnDrawShip() {
   const cnCb = (x, y, dx, dy) => `<path d="M${x + dx * 14},${y} L${x},${y} L${x},${y + dy * 14}" fill="none" stroke="var(--te)" stroke-width="1.4" opacity="0.6"/>`;
   const deco = `<defs><pattern id="cnGrid" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M30 0H0v30" fill="none" stroke="var(--w1)" stroke-width="0.6"/></pattern></defs>`
     + `<rect x="0" y="0" width="${VW}" height="${VH}" fill="url(#cnGrid)" opacity="0.35"/>`
-    + `<line x1="20" y1="${CY}" x2="${VW - 20}" y2="${CY}" stroke="var(--w1)" stroke-width="0.8" stroke-dasharray="2 9" opacity="0.5"/>`
+    + axis
     + cnCb(14, 12, 1, 1) + cnCb(VW - 14, 12, -1, 1) + cnCb(14, VH - 12, 1, -1) + cnCb(VW - 14, VH - 12, -1, -1)
     + `<text x="30" y="${VH - 16}" style="font:700 12px var(--font-mono);letter-spacing:2.5px;fill:var(--t4)">${esc(k.toUpperCase())} // ${esc(cls.name.toUpperCase())}${tName ? ' · ' + esc(tName.toUpperCase()) : ''}</text>`
     + `<text x="${VW - 30}" y="${VH - 16}" text-anchor="end" style="font:600 11px var(--font-mono);letter-spacing:1.5px;fill:var(--te)">${capTx}</text>`;
   host.innerHTML = `<svg viewBox="0 0 ${VW} ${VH}" class="cn-schem-svg" role="img" aria-label="Схема корабля вид сверху (горизонтально)">${deco}<g id="cn-schem-g" transform="${gT}">${P.join('')}</g><g class="cn-schem-ann">${anns}</g></svg>`;
-  host.onclick = cnPlaceTapHandler;                      // в тач-режиме постановки: касание по схеме переносит выбранный узел
+  // Перехватываем касание в фазе ПЕРЕХВАТА (до onclick узлов/пустых мест), чтобы в режиме
+  // постановки тап переносил выбранный узел, а не добавлял новые. Вешаем один раз на контейнер.
+  if (!host._placeBound) { host.addEventListener('click', cnPlaceTapHandler, true); host._placeBound = true; }
   const wrap = host.closest('.cn-schem-wrap'); if (wrap) wrap.classList.toggle('cn-placing', CN.placing != null);
 
   // Мобильный список слотов: SVG-узлы (r≈4.5px) на телефоне почти неподжимаемы —
@@ -1122,10 +1138,12 @@ function cnPlaceMount(i) {
 }
 // Обработчик касания по схеме в режиме постановки (навешивается на контейнер #cn-schematic).
 function cnPlaceTapHandler(evt) {
-  if (CN.placing == null) return;
+  if (CN.placing == null) return;                        // обычный режим — не мешаем клику по узлу
   const L = CN.shipLayout, slot = L && L.mounts[CN.placing];
   if (!slot) { CN.placing = null; return; }
   evt.preventDefault();
+  evt.stopPropagation();                                 // гасим onclick пустых мест (иначе плодятся узлы)
+  if (evt.stopImmediatePropagation) evt.stopImmediatePropagation();
   const p = cnMountToLocal(evt); if (!p) return;
   const H = CN.shipGeo;
   if (H) {
