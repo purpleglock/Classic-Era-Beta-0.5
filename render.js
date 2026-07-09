@@ -2615,6 +2615,7 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-colony" id="hp-vn-colony" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-planets" id="hp-vn-planets" aria-hidden="true"></div>
     <div class="hp-vn-poem" id="hp-vn-poem" aria-hidden="true"></div>
+    <div class="hp-vn-assembly" id="hp-vn-assembly" aria-hidden="true"></div>
     <div class="hp-vn-rating" id="hp-vn-rating" aria-hidden="true"></div>
     <div class="hp-vn-research" id="hp-vn-research" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
@@ -2676,22 +2677,25 @@ function heroVNChoice(kind) {
   // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
   _heroVNView = kind;
   if (kind !== 'idx' && typeof heroVNHideIdx === 'function') heroVNHideIdx();
-  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); _heroVNCtl.menu(); return; }
+  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); _heroVNCtl.menu(); return; }
 
   // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
-  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNColonyOpen(); return; }
+  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNColonyOpen(); return; }
 
   // «Управление колониями» — перечень планет державы + сцена планеты с постройками.
-  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNPlanetsOpen(); return; }
+  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNPlanetsOpen(); return; }
 
   // «Поэма недели» — общегалактический стих: голосование за слово дня поверх сцены.
-  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNPoemOpen(); return; }
+  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNPoemOpen(); return; }
+
+  // «Ассамблея» — тайные роли и законы, бьющие по всей галактике (Secret Hitler-лайк).
+  if (kind === 'assembly') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNAssemblyOpen(); return; }
 
   // «Рейтинг игроков» — засекреченная аналитическая сводка (декоративная инфографика).
-  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNResearchClose(); heroVNRatingOpen(); return; }
+  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNResearchClose(); heroVNRatingOpen(); return; }
 
   // «Исследования» — научный пульт державы: всё дерево технологий поверх сцены.
-  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchOpen(); return; }
+  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchOpen(); return; }
 
   if (kind === 'ach' || kind === 'events') {
     _heroVNCat = kind;
@@ -3481,6 +3485,318 @@ function _heroPoemAfterRender(st, animate) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · «Межзвёздная Ассамблея» — социальная игра с тайными ролями
+// (Secret Hitler-лайк). Заявка до старта созыва → кресла по жребию →
+// ежедневные раунды (Спикер/Канцлер/голосование/закон), законы бьют
+// по ВСЕЙ галактике. Сервер: _vn_assembly.sql (RPC assembly_*).
+// ══════════════════════════════════════════════════════════════
+// Зеркала сервера: роли и спецвласти Директив (_asm_power).
+const HERO_ASM_ROLES = {
+  lib:    ['🕊', 'Федералист', 'Federalist'],
+  gal:    ['🜃', 'Галактоцентрист', 'Galactocentrist'],
+  archon: ['👁', 'АРХОНТ', 'ARCHON'],
+};
+function _heroAsmPower(seats, gal) {
+  if (seats <= 6) return ({ 3: 'peek', 4: 'execute', 5: 'execute' })[gal] || null;
+  if (seats <= 8) return ({ 2: 'investigate', 3: 'special', 4: 'execute', 5: 'execute' })[gal] || null;
+  return ({ 1: 'investigate', 2: 'investigate', 3: 'special', 4: 'execute', 5: 'execute' })[gal] || null;
+}
+const HERO_ASM_POWER_ICO = { investigate: '🔍', special: '🗳', peek: '👁', execute: '☠' };
+const HERO_ASM_POWER_RU = {
+  investigate: 'Проверка лояльности', special: 'Внеочередные выборы',
+  peek: 'Взгляд в колоду', execute: 'Казнь',
+};
+let _heroAsmState = null;
+let _heroAsmBusy = false;
+let _heroAsmTimer = null;
+
+function heroVNAssemblyClose() {
+  if (_heroAsmTimer) { clearInterval(_heroAsmTimer); _heroAsmTimer = null; }
+  const el = document.getElementById('hp-vn-assembly');
+  if (!el) return;
+  el.classList.remove('show');
+  el.setAttribute('aria-hidden', 'true');
+  if (_heroVNView === 'assembly') _heroVNView = null;
+}
+function heroVNAssemblyReturn() { heroVNChoice('menu'); }
+function _heroAsmHead(en) {
+  return `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">🏛 ${en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея'}</span>
+    <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNAssemblyReturn()">↩ ${en ? 'back' : 'назад'}</button>
+  </div>`;
+}
+async function heroVNAssemblyOpen() {
+  const el = document.getElementById('hp-vn-assembly');
+  if (!el) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  if (_heroAsmTimer) { clearInterval(_heroAsmTimer); _heroAsmTimer = null; }
+  el.classList.add('show');
+  el.setAttribute('aria-hidden', 'false');
+  el.innerHTML = _heroAsmHead(en) +
+    `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Convening the chamber…' : 'Собираю зал заседаний…'}</div></div>`;
+  try {
+    const st = await ecRpc('assembly_state');
+    if (!el.classList.contains('show')) return;
+    _heroAsmState = st;
+    el.innerHTML = _heroAsmBuild(st, en);
+    _heroAsmAfterRender(st);
+  } catch (e) {
+    if (!el.classList.contains('show')) return;
+    el.innerHTML = _heroAsmHead(en) +
+      `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'The chamber is sealed. Apply _vn_assembly.sql?' : 'Зал заседаний опечатан. Срез _vn_assembly.sql применён?'}</div></div>`;
+  }
+}
+// Универсальный вызов действия: сервер возвращает свежий state — перерисовка.
+async function heroVNAsmAct(fn, args, okMsg) {
+  if (_heroAsmBusy) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  _heroAsmBusy = true;
+  try {
+    const st = await ecRpc(fn, args || {});
+    _heroAsmState = st;
+    const el = document.getElementById('hp-vn-assembly');
+    if (el && el.classList.contains('show')) {
+      if (_heroAsmTimer) { clearInterval(_heroAsmTimer); _heroAsmTimer = null; }
+      el.innerHTML = _heroAsmBuild(st, en);
+      _heroAsmAfterRender(st);
+    }
+    if (okMsg) toast(okMsg, 'ok');
+  } catch (e) {
+    const m = e.message || '';
+    toast(m.includes('no approved faction') ? (en ? 'Register a faction first' : 'Сначала зарегистрируйте фракцию')
+      : m.includes('already signed') ? (en ? 'Already signed up' : 'Заявка уже подана')
+      : (en ? 'Error: ' : 'Ошибка: ') + m, 'err');
+  } finally { _heroAsmBusy = false; }
+}
+// Герб-чип участника (или инициал на подложке цвета фракции).
+function _heroAsmCrest(m) {
+  const nm = esc(m.name || m.fid || '—');
+  const initial = esc(String(m.name || m.fid || '?').trim().charAt(0).toUpperCase() || '?');
+  const col = m.color || 'rgba(120,140,170,.6)';
+  if (m.crest) return `<span class="hp-vna-crest" title="${nm}" style="--fc:${esc(col)}"><img src="${esc(m.crest)}" alt="" loading="lazy" onerror="this.remove();this.parentNode&&(this.parentNode.classList.add('noimg'),this.parentNode.setAttribute('data-i','${initial}'))"></span>`;
+  return `<span class="hp-vna-crest noimg" title="${nm}" data-i="${initial}" style="--fc:${esc(col)}"></span>`;
+}
+function _heroAsmSeatName(st, seat) {
+  const m = (st.members || []).find(x => x.seat === seat && !x.replaced);
+  return m ? (m.name || m.fid) : ('№' + seat);
+}
+function _heroAsmBuild(st, en) {
+  const head = _heroAsmHead(en);
+  const conv = st.conv || {};
+  const me = st.me;
+  const r = st.round;
+  const members = (st.members || []).filter(m => m.seat != null && !m.replaced).sort((a, b) => a.seat - b.seat);
+  const lobby = (st.members || []).filter(m => m.seat == null && !m.replaced);
+
+  // ── Запись в созыв ──
+  if (conv.status === 'signup') {
+    const n = +conv.signups || 0;
+    const startD = conv.start_date ? new Date(conv.start_date + 'T00:00:00Z') : null;
+    const dstr = startD ? String(startD.getUTCDate()).padStart(2, '0') + '.' + String(startD.getUTCMonth() + 1).padStart(2, '0') : '—';
+    const signed = !!(st.members || []).find(m => m.me);
+    const crests = (st.members || []).map(m => _heroAsmCrest(m)).join('');
+    const cta = signed
+      ? `<div class="hp-vna-signed">✓ ${en ? 'Your application is in. The convocation opens on ' : 'Заявка подана. Созыв откроется '} ${dstr} (UTC).</div>`
+      : `<button class="hp-vna-cta" ${st.me_faction ? '' : 'disabled '}onclick="event.stopPropagation();heroVNAsmAct('assembly_signup',null,'${en ? 'Application filed' : 'Заявка подана'}')">📜 ${en ? 'Apply for a seat' : 'Подать заявку на участие'}</button>`;
+    const lastBlock = _heroAsmLast(st, en);
+    return head + `<div class="hp-vn-col-body hp-vna-body"><div class="hp-vna-main">
+      <div class="hp-vna-intro">
+        <div class="hp-vna-cap">${en ? 'CONVOCATION · SIGNUP' : 'СОЗЫВ · ЗАПИСЬ ДЕЛЕГАТОВ'}</div>
+        <p>${en
+          ? 'A game of hidden loyalties. Among the delegates hide the <b>Galactocentrists</b> and their secret <b>Archon</b>. Every enacted law strikes the whole galaxy. One session per day.'
+          : 'Игра скрытых лояльностей. Среди делегатов прячутся <b>Галактоцентристы</b> и их тайный <b>Архонт</b>. Каждый принятый закон бьёт по всей галактике. Одно заседание в день.'}</p>
+        <p class="hp-vna-dim">${en
+          ? 'Needs 5+ factions; first 10 get seats by lot, the rest join as lobbyists (advisory vote + substitute bench). Deadlines: nominate till 12:00, vote till 17:00, laws till midnight (UTC). Two missed turns — your seat goes to a lobbyist.'
+          : 'Нужно 5+ держав; кресла получают до 10 по жребию, остальные — лоббисты (совещательный голос + скамейка замен). Дедлайны дня: номинация до 12:00, голосование до 17:00, законы до полуночи (UTC). Две неявки — кресло уходит лоббисту.'}</p>
+        ${cta}
+        <div class="hp-vna-total">${en ? 'applications' : 'заявок'}: <b>${n}</b> / 5 ${en ? 'min' : 'мин'} · ${en ? 'opens' : 'старт'} ${dstr}</div>
+        <div class="hp-vna-crests">${crests}</div>
+      </div>${lastBlock}</div></div>`;
+  }
+
+  // ── Активный созыв: доска ──
+  const seats = +conv.seats || members.length;
+  let libRow = '';
+  for (let i = 1; i <= 5; i++) libRow += `<span class="hp-vna-slot lib${i <= conv.lib_laws ? ' on' : ''}">${i <= conv.lib_laws ? '🕊' : ''}</span>`;
+  let galRow = '';
+  for (let i = 1; i <= 6; i++) {
+    const p = _heroAsmPower(seats, i);
+    galRow += `<span class="hp-vna-slot gal${i <= conv.gal_laws ? ' on' : ''}" title="${p ? esc(HERO_ASM_POWER_RU[p]) : ''}">${i <= conv.gal_laws ? '🜃' : (p ? HERO_ASM_POWER_ICO[p] : '')}</span>`;
+  }
+  let trackerRow = '';
+  for (let i = 1; i <= 3; i++) trackerRow += `<span class="hp-vna-tr${i <= conv.tracker ? ' on' : ''}"></span>`;
+  const board = `<div class="hp-vna-board">
+    <div class="hp-vna-track"><span class="hp-vna-track-cap lib">${en ? 'FEDERATION' : 'ФЕДЕРАЦИЯ'} ${conv.lib_laws}/5</span>${libRow}</div>
+    <div class="hp-vna-track"><span class="hp-vna-track-cap gal">${en ? 'DIRECTIVES' : 'ДИРЕКТИВЫ'} ${conv.gal_laws}/6</span>${galRow}</div>
+    <div class="hp-vna-track"><span class="hp-vna-track-cap">${en ? 'FAILED ELECTIONS' : 'ПРОВАЛЫ ВЫБОРОВ'}</span>${trackerRow}<span class="hp-vna-deck">🂠 ${+conv.deck_left || 0}</span></div>
+  </div>`;
+
+  // ── Карточка фазы ──
+  const mySeat = me && me.seat != null && me.alive && !me.replaced ? me.seat : null;
+  const spkName = _heroAsmSeatName(st, r.speaker_seat);
+  const nomName = r.nominee_seat ? _heroAsmSeatName(st, r.nominee_seat) : '';
+  const cd = `<span id="hp-vna-cd">—:—</span>`;
+  let act = '';
+  if (r.phase === 'nominate') {
+    if (mySeat === r.speaker_seat) {
+      const btns = (r.eligible || []).map(s =>
+        `<button class="hp-vna-btn" onclick="event.stopPropagation();heroVNAsmAct('assembly_nominate',{p_seat:${s}})">№${s} · ${esc(_heroAsmSeatName(st, s))}</button>`).join('');
+      act = `<div class="hp-vna-cap">🎤 ${en ? 'YOU are the Speaker — nominate a Chancellor' : 'ВЫ — Спикер: назначьте Канцлера'} · ${cd}</div><div class="hp-vna-btns">${btns}</div>`;
+    } else {
+      act = `<div class="hp-vna-cap">🎤 ${en ? 'Speaker' : 'Спикер'} «${esc(spkName)}» ${en ? 'is choosing a Chancellor' : 'выбирает Канцлера'} · ${cd}</div>`;
+    }
+  } else if (r.phase === 'vote') {
+    const myV = r.my_vote;
+    const can = me && me.alive && !me.replaced;
+    const advisory = me && me.seat == null;
+    act = `<div class="hp-vna-cap">🗳 ${en ? 'Government on the ballot' : 'Голосование за правительство'} · ${cd}</div>
+      <div class="hp-vna-gov">${en ? 'Speaker' : 'Спикер'}: <b>${esc(spkName)}</b> · ${en ? 'Chancellor' : 'Канцлер'}: <b>${esc(nomName)}</b></div>
+      ${can ? `<div class="hp-vna-btns">
+        <button class="hp-vna-btn ja${myV === true ? ' sel' : ''}" onclick="event.stopPropagation();heroVNAsmAct('assembly_vote',{p_ja:true})">✔ JA${advisory ? ' *' : ''}</button>
+        <button class="hp-vna-btn nein${myV === false ? ' sel' : ''}" onclick="event.stopPropagation();heroVNAsmAct('assembly_vote',{p_ja:false})">✖ NEIN${advisory ? ' *' : ''}</button>
+      </div>${advisory ? `<div class="hp-vna-dim">* ${en ? 'lobbyist vote is advisory' : 'голос лоббиста — совещательный'}</div>` : ''}` : ''}
+      <div class="hp-vna-total">${en ? 'votes cast' : 'голосов подано'}: <b>${+r.votes_cast || 0}</b> / ${+r.votes_total || 0}
+      ${r.advisory && (r.advisory.ja || r.advisory.nein) ? ` · ${en ? 'lobby' : 'лобби'}: ${r.advisory.ja || 0}↑ ${r.advisory.nein || 0}↓` : ''}</div>`;
+  } else if (r.phase === 'legislate') {
+    const myTurn = (!r.speaker_discarded && mySeat === r.speaker_seat) || (r.speaker_discarded && mySeat === r.nominee_seat);
+    if (myTurn && Array.isArray(r.hand)) {
+      const fn = r.speaker_discarded ? 'assembly_enact_law' : 'assembly_discard';
+      const capTxt = r.speaker_discarded
+        ? (en ? '📜 YOU are the Chancellor — pick the law to ENACT' : '📜 ВЫ — Канцлер: выберите закон, который ВСТУПИТ В СИЛУ')
+        : (en ? '🎤 YOU are the Speaker — pick the card to DISCARD' : '🎤 ВЫ — Спикер: выберите карту, которую СБРОСИТЬ');
+      const cards = r.hand.map((c, i) =>
+        `<button class="hp-vna-card ${c === 'L' ? 'lib' : 'gal'}" onclick="event.stopPropagation();heroVNAsmAct('${fn}',{p_idx:${i + 1}})">
+          <b>${c === 'L' ? '🕊' : '🜃'}</b><span>${c === 'L' ? (en ? 'FEDERATION LAW' : 'ЗАКОН ФЕДЕРАЦИИ') : (en ? 'DIRECTIVE' : 'ДИРЕКТИВА')}</span></button>`).join('');
+      act = `<div class="hp-vna-cap">${capTxt} · ${cd}</div><div class="hp-vna-cards">${cards}</div>`;
+    } else {
+      act = `<div class="hp-vna-cap">⚖ ${en ? 'The government deliberates behind closed doors' : 'Правительство совещается за закрытыми дверями'} · ${cd}</div>
+        <div class="hp-vna-gov">${esc(spkName)} → ${esc(nomName)}${r.speaker_discarded ? (en ? ' · Chancellor is choosing' : ' · слово за Канцлером') : (en ? ' · Speaker is discarding' : ' · Спикер сбрасывает карту')}</div>`;
+    }
+  } else if (r.phase === 'power') {
+    const powRu = HERO_ASM_POWER_RU[r.power] || r.power;
+    if (mySeat === r.speaker_seat) {
+      if (r.power === 'peek') {
+        act = `<div class="hp-vna-cap">👁 ${en ? 'YOUR power' : 'ВАША спецвласть'}: ${esc(powRu)} · ${cd}</div>
+          <div class="hp-vna-btns"><button class="hp-vna-btn" onclick="event.stopPropagation();heroVNAsmAct('assembly_power',{p_seat:null})">👁 ${en ? 'Peek at top 3 cards' : 'Взглянуть на 3 верхние карты'}</button></div>`;
+      } else {
+        const btns = members.filter(m => m.alive && m.seat !== mySeat).map(m =>
+          `<button class="hp-vna-btn" onclick="event.stopPropagation();heroVNAsmAct('assembly_power',{p_seat:${m.seat}})">№${m.seat} · ${esc(m.name || m.fid)}</button>`).join('');
+        act = `<div class="hp-vna-cap">${HERO_ASM_POWER_ICO[r.power] || ''} ${en ? 'YOUR power' : 'ВАША спецвласть'}: ${esc(powRu)} — ${en ? 'choose a target' : 'выберите цель'} · ${cd}</div><div class="hp-vna-btns">${btns}</div>`;
+      }
+    } else {
+      act = `<div class="hp-vna-cap">${HERO_ASM_POWER_ICO[r.power] || ''} ${en ? 'The Speaker wields a special power' : 'Спикер применяет спецвласть'}: ${esc(powRu)} · ${cd}</div>`;
+    }
+  } else { // done
+    const law = r.law;
+    act = `<div class="hp-vna-cap">🌙 ${en ? 'Session adjourned — next sitting tomorrow' : 'Заседание закрыто — следующее завтра'} · ${cd}</div>
+      ${r.vote_passed === false ? `<div class="hp-vna-dim">${en ? 'The government was voted down.' : 'Правительство провалено голосованием.'}</div>` : ''}
+      ${law ? `<div class="hp-vna-law ${r.enacted === 'L' ? 'lib' : 'gal'}"><b>${esc(law.title || '')}</b><span>${esc(law.descr || '')}</span></div>` : ''}`;
+  }
+  // результат спецвласти — только Спикеру
+  let powRes = '';
+  if (r.power_result) {
+    const pr = r.power_result;
+    if (pr.peek) powRes = `<div class="hp-vna-dim">👁 ${en ? 'Top of deck' : 'Верх колоды'}: ${pr.peek.map(c => c === 'L' ? '🕊' : '🜃').join(' ')}</div>`;
+    else if (pr.party) powRes = `<div class="hp-vna-dim">🔍 №${pr.seat} — ${pr.party === 'lib' ? (en ? 'FEDERALIST' : 'ФЕДЕРАЛИСТ') : (en ? 'GALACTOCENTRIST' : 'ГАЛАКТОЦЕНТРИСТ')}</div>`;
+  }
+  const warn = conv.gal_laws >= 3
+    ? `<div class="hp-vna-warn">⚠ ${en ? 'After the 3rd Directive: electing the Archon as Chancellor ends the game' : 'После 3-й Директивы избрание Архонта Канцлером = победа заговора'}</div>` : '';
+  const phaseCard = `<div class="hp-vna-phase">${act}${powRes}${warn}</div>`;
+
+  // ── Участники ──
+  const votesByFid = {};
+  (r.votes || []).forEach(v => { votesByFid[v.fid] = v.vote; });
+  const rows = members.map(m => {
+    const tags = [];
+    if (m.seat === r.speaker_seat) tags.push('🎤');
+    if (m.seat === r.nominee_seat) tags.push('📜');
+    if (!m.alive) tags.push('☠');
+    if (m.missed > 0 && m.alive) tags.push('⚠'.repeat(Math.min(2, m.missed)));
+    const v = votesByFid[m.fid];
+    const vTag = (v === true) ? '<i class="ja">JA</i>' : (v === false) ? '<i class="nein">NEIN</i>' : '';
+    return `<div class="hp-vna-row${m.me ? ' me' : ''}${m.alive ? '' : ' dead'}">
+      <span class="hp-vna-seatno">№${m.seat}</span>${_heroAsmCrest(m)}
+      <span class="hp-vna-nm">${esc(m.name || m.fid)}</span>
+      <span class="hp-vna-tags">${tags.join(' ')} ${vTag}</span></div>`;
+  }).join('');
+  const lobbyRow = lobby.length
+    ? `<div class="hp-vna-lobby"><span class="hp-vna-cap">${en ? 'LOBBYISTS' : 'ЛОББИСТЫ'} (${lobby.length})</span>${lobby.map(m => _heroAsmCrest(m)).join('')}</div>` : '';
+
+  // ── Моя тайная роль ──
+  let roleCard = '';
+  if (me && me.role) {
+    const rr = HERO_ASM_ROLES[me.role] || HERO_ASM_ROLES.lib;
+    const allies = (me.allies || []).map(a =>
+      `№${a.seat} ${esc(_heroAsmSeatName(st, a.seat))}${a.role === 'archon' ? ' 👁' : ''}`).join(' · ');
+    roleCard = `<div class="hp-vna-role ${me.role}">
+      <span class="hp-vna-cap">${en ? 'YOUR SECRET ROLE' : 'ВАША ТАЙНАЯ РОЛЬ'}</span>
+      <b>${rr[0]} ${esc(en ? rr[2] : rr[1])}</b>
+      ${allies ? `<span class="hp-vna-dim">${en ? 'Known allies' : 'Известные соратники'}: ${allies}</span>` : ''}
+      ${!me.alive ? `<span class="hp-vna-dim">☠ ${en ? 'You were executed' : 'Вы казнены'}</span>` : ''}
+      ${me.replaced ? `<span class="hp-vna-dim">↩ ${en ? 'Your seat passed to a lobbyist' : 'Ваше кресло перешло лоббисту'}</span>` : ''}
+    </div>`;
+  } else if (me && me.seat == null) {
+    roleCard = `<div class="hp-vna-role"><span class="hp-vna-cap">${en ? 'YOU ARE A LOBBYIST' : 'ВЫ — ЛОББИСТ'}</span>
+      <span class="hp-vna-dim">${en ? 'Advisory vote; first in line for a vacated seat.' : 'Совещательный голос; первый в очереди на освободившееся кресло.'}</span></div>`;
+  } else if (!me) {
+    roleCard = `<div class="hp-vna-role"><span class="hp-vna-cap">${en ? 'SPECTATOR' : 'ВЫ — ЗРИТЕЛЬ'}</span>
+      <span class="hp-vna-dim">${en ? 'Signups reopen after this convocation.' : 'Запись откроется после завершения созыва.'}</span></div>`;
+  }
+
+  // ── Журнал ──
+  const hist = (st.history || []).slice(0, 10).map(h => {
+    const res = h.vote_passed === false && !h.enacted ? (en ? 'election failed' : 'выборы провалены')
+      : h.enacted ? ((h.enacted === 'L' ? '🕊 ' : '🜃 ') + (h.law_title || '')) : '—';
+    return `<div class="hp-vna-h"><span>#${h.no}</span> ${esc(_heroAsmSeatName(st, h.speaker_seat))}${h.nominee_seat ? ' → ' + esc(_heroAsmSeatName(st, h.nominee_seat)) : ''}: ${esc(res)}</div>`;
+  }).join('');
+  const histBlock = hist ? `<div class="hp-vna-hist"><span class="hp-vna-cap">${en ? 'CHRONICLE' : 'ХРОНИКА СОЗЫВА'}</span>${hist}</div>` : '';
+
+  const side = `<aside class="hp-vna-side">${roleCard}
+    <div class="hp-vna-members"><span class="hp-vna-cap">${en ? 'DELEGATES' : 'ДЕЛЕГАТЫ'} · ${en ? 'round' : 'раунд'} ${r.no}</span>${rows}${lobbyRow}</div>
+    ${histBlock}</aside>`;
+  return head + `<div class="hp-vn-col-body hp-vna-body"><div class="hp-vna-main">${board}${phaseCard}${_heroAsmLast(st, en)}</div>${side}</div>`;
+}
+// Итог прошлого созыва: победитель + вскрытые роли (сворачиваемый блок).
+function _heroAsmLast(st, en) {
+  const last = st.last;
+  if (!last || !last.winner) return '';
+  const winTxt = last.winner === 'lib'
+    ? (en ? '🕊 FEDERATION WON' : '🕊 ПОБЕДА ФЕДЕРАЦИИ')
+    : (en ? '🜃 GALACTOCENTRISTS WON' : '🜃 ПОБЕДА ГАЛАКТОЦЕНТРИСТОВ');
+  const reasons = {
+    laws: en ? 'by enacted laws' : 'по принятым законам',
+    archon_elected: en ? 'the Archon was elected Chancellor' : 'Архонт избран Канцлером',
+    archon_executed: en ? 'the Archon was executed' : 'Архонт казнён',
+  };
+  const roles = (last.members || []).map(m => {
+    const rr = HERO_ASM_ROLES[m.role] || HERO_ASM_ROLES.lib;
+    return `<span class="hp-vna-rev ${m.role || 'lib'}">№${m.seat} ${esc(m.name || m.fid)} — ${rr[0]} ${esc(en ? rr[2] : rr[1])}</span>`;
+  }).join('');
+  return `<details class="hp-vna-last"><summary>${winTxt} · ${esc(reasons[last.reason] || '')} · 🕊${last.lib_laws} / 🜃${last.gal_laws}</summary>
+    <div class="hp-vna-rev-list">${roles}</div></details>`;
+}
+// Обратный отсчёт до ближайшего дедлайна; по нулю — перезагрузить состояние.
+function _heroAsmAfterRender(st) {
+  const r = st.round;
+  if (!r || !document.getElementById('hp-vna-cd')) return;
+  const endAt = Date.now() + Math.max(0, +r.closes_s || 0) * 1000;
+  const tick = () => {
+    const cd = document.getElementById('hp-vna-cd');
+    if (!cd) { if (_heroAsmTimer) { clearInterval(_heroAsmTimer); _heroAsmTimer = null; } return; }
+    const left = Math.max(0, Math.floor((endAt - Date.now()) / 1000));
+    const h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60);
+    cd.textContent = '⏳ ' + h + ':' + String(m).padStart(2, '0');
+    if (left <= 0) {
+      if (_heroAsmTimer) { clearInterval(_heroAsmTimer); _heroAsmTimer = null; }
+      const el = document.getElementById('hp-vn-assembly');
+      if (el && el.classList.contains('show')) heroVNAssemblyOpen();
+    }
+  };
+  tick();
+  _heroAsmTimer = setInterval(tick, 30000);
+}
+
 // Кнопка «назад» из режима рассказа — вызывает запомненный обработчик возврата.
 function heroVNDoBack() { if (_heroVNCtl && typeof _heroVNCtl.back === 'function') _heroVNCtl.back(); }
 // «Главное меню» новеллы для НЕзарегистрированных (аноним / залогинен без фракции):
@@ -3722,6 +4038,7 @@ function heroVNInit() {
       ['planets', '🪐 ' + (en ? 'Colony management' : 'Управление колониями')],
       ['research', '🔬 ' + (en ? 'Research' : 'Исследования')],
       ['poem',   '🖋 ' + (en ? 'Poem of the week' : 'Поэма недели')],
+      ['assembly', '🏛 ' + (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
     ];
     choicesEl.innerHTML = opts.map(([k, l]) =>
       `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');
