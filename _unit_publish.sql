@@ -274,11 +274,30 @@ begin
     select * into u_row from public.faction_units where id = p_unit_id;
     if not found then raise exception 'unit not found'; end if;
     if not (u_row.owner_id = auth.uid() or is_staff) then raise exception 'not your unit'; end if;
+    -- Класс корпуса / категорию менять нельзя, пока существуют построенные юниты этого
+    -- дизайна (в составе или во флотах): иначе корабли, купленные по цене старого класса,
+    -- задним числом превращаются в другой класс (эксплойт + каша в списках состава).
+    if ((u_row.data->>'class') is distinct from (p_data->>'class')
+        or u_row.category is distinct from p_category)
+       and (exists(select 1 from public.unit_production where unit_id = p_unit_id)
+            or exists(select 1 from public.fleets
+                      where composition::text like '%' || p_unit_id::text || '%')) then
+      raise exception 'нельзя менять класс/категорию дизайна, пока существуют построенные по нему юниты — спишите их или создайте новый дизайн';
+    end if;
     update public.faction_units set
       category = p_category, name = p_name,
       faction_id = p_faction_id, faction_name = p_faction_name, faction_color = p_faction_color,
       summary = v_sum, data = p_data, card_text = p_card_text, updated_at = now()
     where id = p_unit_id returning * into u_row;
+    -- Переименование дизайна догоняет уже построенные юниты: unit_name в составе
+    -- и в снимках composition флотов, иначе группировка по unit_id показывает старое имя.
+    update public.unit_production set unit_name = p_name where unit_id = p_unit_id;
+    update public.fleets f
+       set composition = (select jsonb_agg(
+             case when e->>'unit_id' = p_unit_id::text
+                  then jsonb_set(e, '{unit_name}', to_jsonb(p_name)) else e end)
+           from jsonb_array_elements(f.composition) e)
+     where f.composition::text like '%' || p_unit_id::text || '%';
     return to_jsonb(u_row);
   end if;
 
