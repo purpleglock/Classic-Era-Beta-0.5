@@ -908,6 +908,85 @@ function cnShieldSvg(H, sIdx, rt, d, tex) {
 }
 
 // Живая схема корабля вид сверху — рисуется из CN.shipLayout, без картинок.
+// ── ДЕКАЛЬ ЭКИПАЖА: флаг фракции + имя корабля, нанесённые краской на броню ──
+// Наносится в ЛЕВЫЙ НИЖНИЙ угол пояса брони на экране (кормовой участок
+// правого борта в координатах корпуса) с отступом; если пояс там узкий —
+// осевой фолбэк по палубе. Кегль мелкий, зона повторяет форму пояса.
+// Рисуется ДО cnHullEdgeShade и в клипе силуэта → светотень/AO корпуса ложатся
+// ПОВЕРХ декали, как на настоящей окрашенной обшивке; сама краска — с тёмной
+// подрезкой-канавкой (в лад с engrave-гравировкой остального оформления).
+function cnShipDecal(H, k) {
+  // Нет имени — нет декали. Никаких заглушек-плейсхолдеров на борту.
+  const name = ((cnId('cn-name') || {}).value || '').trim().toUpperCase();
+  if (!name) return '';
+  const fac = CN.myApp || {};
+  const col = fac.color || '#cfd6dd';
+  // ПОСАДКА: ЛЕВЫЙ НИЗ ПОЯСА БРОНИ на экране. Сцена развёрнута на 90° (нос
+  // вправо, правый борт x>160 → низ экрана), значит «левый низ» в координатах
+  // корпуса = кормовой участок правого борта. Текст ЛОЖИТСЯ НА КРИВУЮ (textPath
+  // по средней линии пояса: кольцо силуэт hw ↔ шов палубы 0.55·hw), т.е.
+  // повторяет форму брони, а не режется клипом на изломах силуэта. Кегль — от
+  // фактической толщины пояса; длина при нехватке дожимается textLength.
+  const sternY = H.engine[1] - 4, margin = 3;
+  const hwAt = y => cnHullHalf(H, y);
+  const gap = 2.5;
+  // Опорные точки средней линии пояса: от кормы (с отступом) к носу.
+  const pts = [];
+  for (let y = sternY - margin; y >= H.nose + 4; y -= 2) {
+    const h = hwAt(y);
+    pts.push({ y, x: 160 + h * 0.775, th: h * 0.45 });   // th = толщина кольца брони в этом сечении
+  }
+  if (pts.length < 2) return '';
+  const acc = [0];                                       // накопленная длина дуги вдоль средней линии
+  for (let i = 1; i < pts.length; i++) acc[i] = acc[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  // Кегль ОТ КРУПНОГО к мелкому (маркировка нарочно мелкая, не плакат): для
+  // каждого f ищем ближайший к корме непрерывный участок пояса, где кольцо
+  // толще строки и дуги хватает на флаг+имя (до 12% дожимаем textLength).
+  // Позиция важнее кегля: сперва ищем посадку, стартующую ПРЯМО у кормы
+  // (дуга старта ≤ 14 ед. от якоря) — пусть мельче, но в углу; и только если
+  // нигде у кормы не влезло, разрешаем зоне уезжать вдоль пояса к носу.
+  let fit = null;
+  for (const nearStern of [true, false]) {
+    for (let f = 3.1; f >= 1.5 && !fit; f -= 0.15) {
+      const fw = f + 3, natural = name.length * f * 0.68, need = fw + gap + natural;
+      for (let s = 0; s < pts.length; s++) {
+        if (nearStern && acc[s] > 14) break;             // кормовой проход: дальше не уходим
+        if (pts[s].th < f * 1.4) continue;               // пояс тоньше строки — скользим к носу
+        let e = s;
+        while (e + 1 < pts.length && pts[e + 1].th >= f * 1.4) e++;
+        const avail = acc[e] - acc[s];
+        if (avail >= need * 0.88) { fit = { fs: f, flagW: fw, s, e, textLen: Math.min(natural, avail - fw - gap) }; break; }
+        s = e;                                           // участок короток — прыгаем за него
+      }
+    }
+    if (fit) break;
+  }
+  if (!fit) return '';
+  const { fs, flagW, s, e, textLen } = fit;
+  // Путь строки: баз. линия смещена от середины кольца наружу на 0.36·f —
+  // глифы (растут к палубе) оказываются отцентрованы по толщине пояса.
+  const dPath = pts.slice(s, e + 1).map((p, i) => `${i ? 'L' : 'M'}${(p.x + fs * 0.36).toFixed(1)} ${p.y.toFixed(1)}`).join('');
+  const url = fac.herald_url;
+  const ini = esc(((fac.name || '?').slice(0, 2)).toUpperCase());
+  // Флаг: герб фракции (приглушён под фактуру обшивки), фолбэк — инициалы в рамке цвета фракции
+  const flag = url
+    ? `<image href="${esc(url)}" xlink:href="${esc(url)}" x="0" y="${(-flagW / 2).toFixed(1)}" width="${flagW}" height="${flagW}" preserveAspectRatio="xMidYMid slice" opacity="0.75" style="filter:saturate(0.5) brightness(0.85) contrast(0.9)"/>`
+      + `<rect x="0" y="${(-flagW / 2).toFixed(1)}" width="${flagW}" height="${flagW}" fill="none" stroke="#000" stroke-width="0.5" opacity="0.5"/>`
+    : `<rect x="0" y="${(-flagW / 2).toFixed(1)}" width="${flagW}" height="${flagW}" fill="none" stroke="#cfd6dd" stroke-width="0.6" opacity="0.55"/>`
+      + `<text x="${(flagW / 2).toFixed(1)}" y="${(fs * 0.32).toFixed(1)}" text-anchor="middle" style="font:700 ${(fs * 0.55).toFixed(1)}px var(--font-mono);fill:#cfd6dd" opacity="0.7">${ini}</text>`;
+  // Флаг стоит в начале пути (у кормы), имя идёт по кривой пояса за ним.
+  // Путь направлен корма→нос (-y) → после разворота сцены (90°) текст читается
+  // слева направо, глифы «растут» к палубе — как трафарет вдоль пояса.
+  // Нейтральный трафарет (#cfd6dd, как контур корпуса) — НИКАКОГО цвета фракции
+  // в тексте: цветное пятно на тёмной броне выглядит наклейкой, не маркировкой.
+  return `<g clip-path="url(#cnBodyClip)" opacity="0.75">`
+    + `<path id="cnDecalPath_${k}" d="${dPath}" fill="none"/>`
+    + `<g transform="translate(${pts[s].x.toFixed(1)} ${pts[s].y.toFixed(1)}) rotate(-90)">${flag}</g>`
+    + `<text style="font:700 ${fs.toFixed(1)}px var(--font-mono);letter-spacing:0.5px;fill:#cfd6dd" opacity="0.8">`
+    + `<textPath href="#cnDecalPath_${k}" xlink:href="#cnDecalPath_${k}" startOffset="${(flagW + gap).toFixed(1)}" textLength="${textLen.toFixed(1)}" lengthAdjust="spacingAndGlyphs">${esc(name)}</textPath>`
+    + `</text></g>`;   // ⚠️ ОДИН открытый <g> — ровно один </g>, иначе слои после декали теряют разворот сцены
+}
+
 function cnDrawShip() {
   if (CN.cat !== 'ship' || !CN.def || !CN.def.cardUI) return;
   const host = cnId('cn-schematic'); if (!host) return;
@@ -1030,6 +1109,7 @@ function cnDrawShip() {
   if (bodyImg) {                                       // АРТ-ТЕЛО, обрезанное по силуэту корпуса
     P.push(cnBodyArt(bodyImg)
       + (armorTex ? cnBodyArt(armorTex, 0.92, null, 'cnBeltClip') + cnBeltSeam() : '')  // броня ТОЛЬКО поясом по бортам
+      + cnShipDecal(H, k)                              // декаль (флаг+имя) ПОД светотенью — краска на броне
       + cnHullEdgeShade()                              // светотень: боковой свет, AO, контактная тень
       + cnHullDetail(true)                             // оформление ПОВЕРХ арта — тенями, в лад с текстурой
       // Кант корпуса: тёмный обжим + тонкая приглушённая линия ВМЕСТО жирного неона —
@@ -1040,6 +1120,7 @@ function cnDrawShip() {
     P.push(`<path d="${cnPolyPath(cnHullOutlinePts(H.st, beltW))}" fill="var(--b1)" stroke="color-mix(in srgb, #cfd6dd 30%, transparent)" stroke-width="0.7" stroke-linejoin="round"/>`);
     P.push(`<path d="${cnPolyPath(cnHullOutlinePts(H.st, Math.max(0.2, beltW - 0.2)))}" fill="none" stroke="var(--w2)" stroke-width="0.6" opacity="0.35" stroke-linejoin="round"/>`);
     if (armorTex) { P.push(cnBodyArt(armorTex, 0.92, null, 'cnBeltClip')); P.push(cnBeltSeam()); }  // броня поясом по бортам
+    P.push(cnShipDecal(H, k));                         // декаль (флаг+имя) и на голом силуэте
     P.push(cnHullDetail(false));                       // полный греблинг на голом силуэте
   }
   // ДЕКОР (эмблемы/полосы/тактические надписи с прозрачным фоном) — поверх всего корпуса
@@ -1396,9 +1477,14 @@ function cnRowInfo(g, idx, type) { cnInfoModal(type === 'weapon' ? 'Вооруж
 // ════════════════════════════════════════════════════════════
 // ИССЛЕДОВАНИЯ — что доступно без исследования + гейтинг
 // ════════════════════════════════════════════════════════════
+// «Исследовать всё»: бесплатной базы больше НЕТ — каждый класс и каждая группа
+// оружия открываются исследованием (бывшая база стала дешёвыми корнями дерева,
+// см. EC_TECH_STARTER в economy.js; существующим фракциям выдана бэкфиллом в
+// _research_total.sql). Пустые списки оставлены — id-контракт и cnUnitReqTech
+// продолжают работать без изменений.
 const CN_BASE = {
-  classes: { ship: ['corvette'], ground: ['light'], aviation: ['light'] },
-  weapons: { ship: ['Легкие', 'Средние'], ground: ['Противопехотное', 'Противотанковое'], aviation: ['Курсовое вооружение'] },
+  classes: { ship: [], ground: [], aviation: [] },
+  weapons: { ship: [], ground: [], aviation: [] },
 };
 async function cnLoadResearch() {
   CN.unlocked = new Set(); CN.staffAll = false;
@@ -1479,7 +1565,7 @@ async function cnVehRender(cat) {
   const stageHtml = `
       <div class="cn-present cn-present-full">
         <div class="cn-panel cn-stage">
-          <input id="cn-name" class="cn-stage-name" placeholder="Название корабля…" value="${esc(edit ? edit.name : '')}">
+          <input id="cn-name" class="cn-stage-name" placeholder="Название корабля…" value="${esc(edit ? edit.name : '')}" oninput="cnDrawShip()">
           <div class="cn-slots">
             ${slotSel('class', 'cnVehHandleClass()')}
             ${def.hasType ? slotSel('type', 'cnVehCalc()') : ''}

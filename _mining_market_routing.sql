@@ -263,7 +263,8 @@ begin
           mine_flow := jsonb_set(mine_flow, array[rname], to_jsonb(coalesce((mine_flow->>rname)::numeric,0) + rate*d), true);
           flow_rar  := jsonb_set(flow_rar,  array[rname], to_jsonb(rr), true);
         else
-          res_add := jsonb_set(res_add, array[rname], to_jsonb(coalesce((res_add->>rname)::numeric,0) + rate*d), true);
+          res_add  := jsonb_set(res_add,  array[rname], to_jsonb(coalesce((res_add->>rname)::numeric,0) + rate*d), true);
+          flow_rar := jsonb_set(flow_rar, array[rname], to_jsonb(rr), true);  -- ◄ редкость потока для Товарной биржи
         end if;
       end loop;
     end loop;
@@ -326,30 +327,27 @@ begin
     end loop;
     export_gc := round(export_gc * m_gc);
 
-    -- товарная биржа (btype=market): пассивный сбыт накопленного склада
+    -- товарная биржа (btype=market): сбывает СВЕЖЕДОБЫТЫЙ поток (mine_mode=store) за ГС,
+    -- по ценности × доля редкости, до лимита слотов×25/сут, дороже — первым. НАКОПЛЕННЫЙ
+    -- СКЛАД НЕ ТРОГАЕТ: раньше биржа перебирала запас по ВСЕМ залежам колоний, и колонизация
+    -- новой системы с Гравиядром/Стелларитом разом сливала стратегический резерв (вкл. топливо
+    -- Длани). Теперь продаётся только поток этого тика; всё, что не продано, копится на складе.
     market_cap := (select coalesce(sum(slots_open),0) from public.colony_buildings
                    where faction_id = p_fid and btype = 'market') * 25 * d;
     if market_cap > 0 then
       for r in
-        select u.res_name, u.res_rar, u.avail from (
-          select distinct on (q.nm) q.nm as res_name, q.rr as res_rar,
-            greatest(0, coalesce((eco.resources->>q.nm)::numeric,0)
-                        + coalesce((res_add->>q.nm)::numeric,0)
-                        - coalesce((res_sub->>q.nm)::numeric,0)) as avail
-          from (
-            select (e.value->>'name') as nm, coalesce(e.value->>'r','common') as rr
-            from public.colonies c, jsonb_array_elements(c.resources) e
-            where c.faction_id = p_fid
-          ) q
-          order by q.nm, public._res_value(q.nm, q.rr) desc
-        ) u
-        where u.avail > 0
-        order by public._res_value(u.res_name, u.res_rar) desc
+        select t.nm as res_name, coalesce(flow_rar->>t.nm,'common') as res_rar,
+               coalesce((res_add->>t.nm)::numeric,0) as avail
+        from jsonb_object_keys(res_add) as t(nm)
+        where coalesce((res_add->>t.nm)::numeric,0) > 0
+        order by public._res_value(t.nm, coalesce(flow_rar->>t.nm,'common')) desc
       loop
         exit when market_cap <= 0;
         sell := least(r.avail, market_cap);
-        res_sub := jsonb_set(res_sub, array[r.res_name],
-                     to_jsonb(coalesce((res_sub->>r.res_name)::numeric,0) + sell), true);
+        if sell <= 0 then continue; end if;
+        -- вычитаем проданное из ПОТОКА (не со склада) — на склад ляжет только остаток
+        res_add := jsonb_set(res_add, array[r.res_name],
+                     to_jsonb(coalesce((res_add->>r.res_name)::numeric,0) - sell), true);
         market_gc := market_gc + sell * public._res_value(r.res_name, r.res_rar) *
           (case r.res_rar when 'legendary' then 0.75 when 'epic' then 0.70 when 'rare' then 0.65 when 'uncommon' then 0.55 else 0.5 end);
         market_cap := market_cap - sell;

@@ -726,7 +726,7 @@ function renderGuidebook() {
       </div>
 
       <h3 class="gb-h3">Как превратить ресурсы в ГС</h3>
-      <p>Коротко: <b>💱 Экспорт</b> → караваны (полная цена + дипломатия, остаток авто-продажа 60%); <b>📈 Товарная биржа</b> → продаёт складское (50–75%); <b>бартер</b> → отдать/продать вручную. Подробно — в разделе <a class="gb-link" onclick="gbScrollTo('gb-trade')">«Торговля»</a>.</p>
+      <p>Коротко: <b>💱 Экспорт</b> → караваны (полная цена + дипломатия, остаток авто-продажа 60%); <b>📈 Товарная биржа</b> → сбывает поток добычи, не трогая склад (50–75%); <b>бартер</b> → отдать/продать вручную. Подробно — в разделе <a class="gb-link" onclick="gbScrollTo('gb-trade')">«Торговля»</a>.</p>
       <div class="gb-note gb-note-tip">
         <span class="gb-note-i">★</span>
         <div>Дорогие ресурсы (эпические/легендарные) выгоднее возить караванами по полной цене, а дешёвый «вал» — сбрасывать на бирже автоматически.</div>
@@ -745,7 +745,7 @@ function renderGuidebook() {
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⛏</span><b>Добывающий завод</b></div><div class="gb-bld-cost">500 ГС · 2 слота сразу</div><div class="gb-bld-d">Добыча ресурсов планеты (сам ГС не даёт). Несколько слотов можно назначить на один ресурс — добыча суммируется. Ценность зависит от редкости месторождения.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">🛍</span><b>Фабрика товаров</b></div><div class="gb-bld-cost">1 200 ГС · первый бесплатно</div><div class="gb-bld-d">Из воды и сырья делает товары: каждый слот = <b>6 воды + 4 сырья → 10 товаров/сут</b>. Товары кормят население всей державы (обеспечение → общий множитель дохода ×0.90…×1.10), излишек продаётся на бирже. Входы: Лёд/Жидкая вода и Железо/Силикаты.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⇄</span><b>Торговый хаб</b></div><div class="gb-bld-cost">1 000 ГС · 1 слот</div><div class="gb-bld-d">Доход в ГС, но только при активных торговых путях.</div></div>
-        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">◆</span><b>Товарная биржа</b></div><div class="gb-bld-cost">1 500 ГС · 1 слот</div><div class="gb-bld-d">Сама продаёт накопленные ресурсы за ГС (50–75% цены по редкости), без торговых путей.</div></div>
+        <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">◆</span><b>Товарная биржа</b></div><div class="gb-bld-cost">1 500 ГС · 1 слот</div><div class="gb-bld-d">Сама сбывает свежедобытый поток (заводы в режиме «Склад») за ГС (50–75% цены по редкости), без торговых путей. Накопленный склад НЕ трогает.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">📦</span><b>Склад</b></div><div class="gb-bld-cost">800 ГС · 1 слот</div><div class="gb-bld-d">Поднимает лимит ёмкости склада ресурсов (+500 за слот). Нужен, если копите добычу в режиме «Склад».</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">✦</span><b>Научный институт</b></div><div class="gb-bld-cost">1 000 ГС · 1 слот</div><div class="gb-bld-d">Прирост очков науки за каждый слот.</div></div>
         <div class="gb-bld"><div class="gb-bld-h"><span class="gb-bld-ic">⚔</span><b>Центр подготовки</b></div><div class="gb-bld-cost">500 ГС · 1 слот</div><div class="gb-bld-d">Позволяет производить пехоту.</div></div>
@@ -989,7 +989,7 @@ function renderGuidebook() {
       <div class="gb-kv-grid">
         <div class="gb-kv-row"><span class="gb-kv-key">📦 Склад</span><span class="gb-kv-val">Режим добывающего завода: ресурс копится в пул (лимит — склады). Караванам недоступен.</span></div>
         <div class="gb-kv-row"><span class="gb-kv-key">💱 Экспорт</span><span class="gb-kv-val">Режим завода: добыча идёт в <b>караваны</b>; что караваны не разобрали — авто-продаётся по 60%.</span></div>
-        <div class="gb-kv-row"><span class="gb-kv-key">📈 Товарная биржа</span><span class="gb-kv-val">Здание продаёт <b>складские</b> ресурсы каждый цикл (50–75% по редкости).</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">📈 Товарная биржа</span><span class="gb-kv-val">Здание сбывает <b>свежедобытый поток</b> (заводы в режиме «Склад») каждый цикл (50–75% по редкости); накопленный склад не трогает.</span></div>
       </div>
       <div class="gb-note gb-note-info">
         <span class="gb-note-i">i</span>

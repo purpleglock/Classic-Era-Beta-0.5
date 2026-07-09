@@ -1107,7 +1107,7 @@ function gmBuildGeo() {
     [s0, s1].forEach((sid, idx) => {
       if (!sid || sid === (idx === 0 ? s1 : s0)) return;
       const sec = sectorsR.find(x => x.id === sid);
-      if (sec) secEdges.push({ secId: sid, color: gmReadable(sec.color || '#7cc8ff'), pts });
+      if (sec) secEdges.push({ secId: sid, color: gmNeon(sec.color || '#7cc8ff'), pts });
     });
   });
 
@@ -1244,9 +1244,12 @@ function gmUpdateStrokes() {
   svg.style.setProperty('--lane-w', (3 / s).toFixed(2));
   svg.style.setProperty('--cell-w', (1.4 / s).toFixed(2));
   // Сектора: ширины/пунктир/хит-зона постоянны на экране (в юнитах = px/scale)
-  svg.style.setProperty('--sec-w', (3.2 / s).toFixed(2));
-  svg.style.setProperty('--sec-glow-w', (14 / s).toFixed(2));
+  svg.style.setProperty('--sec-w', (1.3 / s).toFixed(2));
+  svg.style.setProperty('--sec-glow-w', (16 / s).toFixed(2));
   svg.style.setProperty('--sec-hit-w', (16 / s).toFixed(2));
+  // картографические засечки: редкий короткий дэш в мировых юнитах
+  const d = k => (k / s).toFixed(2);
+  svg.style.setProperty('--sec-dash', `${d(1.2)} ${d(26)}`);
   // LOD подписей: вдали (мелкий зум) прячем имена рядовых систем — остаются
   // только гиганты, столицы и разломы. Вблизи показываем все.
   const wrap = document.getElementById('gm-wrap');
@@ -1276,6 +1279,19 @@ function gmRgb(c) {
   const m = /rgba?\(([^)]+)\)/.exec(c);
   if (m) { const p = m[1].split(',').map(s => parseFloat(s)); return [p[0] | 0, p[1] | 0, p[2] | 0]; }
   return [140, 160, 190];
+}
+// СТАЛЬ: оттенок сектора, но сильно приглушённый — тактическая карта, не неон.
+// Насыщенность зажата в 18–38%, светлота фиксированная: цвета различимы, но
+// вся палитра сидит в одном сдержанном «военном» регистре.
+function gmNeon(c) {
+  let [r, g, b] = gmRgb(c).map(v => v / 255);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let h = 210, s = 0.22;
+  if (d > 0.04) {
+    h = (mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60;
+    s = Math.min(0.38, Math.max(0.18, d / (1 - Math.abs(2 * l - 1) || 1) * 0.5));
+  }
+  return `hsl(${h.toFixed(0)} ${(s * 100).toFixed(0)}% 64%)`;
 }
 // возвращает цвет, гарантированно читаемый на тёмном фоне (тёмные осветляет, сохраняя оттенок)
 function gmReadable(c) {
@@ -5821,19 +5837,20 @@ function gmmPaintVector(ctx, camS, live) {
   }
   // Слой союзов: связи между столицами союзников (поверх путей, под секторами/звёздами)
   if (GM.showUnions) gmmPaintUnions(ctx, camS);
-  // границы секторов = ЯРКИЙ СПЛОШНОЙ СВЕТЯЩИЙСЯ КОНТУР в цвете сектора (не пунктир,
-  // не «крепостной» рубеж фракций): широкое гало + плотное ядро. Обрамляет цветную
-  // область → сектор читается как цельный самостоятельный регион.
+  // границы секторов = ЖЁСТКИЙ HUD-РУБЕЖ (киберпанк, зеркало SVG-версии):
+  // плоская полоса-зона без размытия + поперечные тех-риски (короткий дэш на
+  // широком штрихе = перпендикулярные засечки) + тонкое яркое ядро с острыми стыками.
   if (secShow && P.secEdges && P.secEdges.length && secA > 0.01) {
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // внешнее широкое гало
-    ctx.globalAlpha = .22 * secA; ctx.lineWidth = 13 / camS;
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    // ТАКТИЧЕСКАЯ ГРАНИЦА (зеркало SVG): едва заметная тонировка зоны +
+    // волосяная линия + редкие поперечные картографические засечки
+    ctx.globalAlpha = .07 * secA; ctx.lineWidth = 16 / camS;
     P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
-    // средний ореол
-    ctx.globalAlpha = .4 * secA; ctx.lineWidth = 6 / camS;
+    ctx.globalAlpha = .45 * secA; ctx.lineWidth = 7 / camS;
+    ctx.setLineDash([1.2 / camS, 26 / camS]);
     P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
-    // яркое сплошное ядро
-    ctx.globalAlpha = .95 * secA; ctx.lineWidth = 3.2 / camS;
+    ctx.setLineDash([]);
+    ctx.globalAlpha = .9 * secA; ctx.lineWidth = 1.3 / camS;
     P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
     ctx.globalAlpha = 1;
   }

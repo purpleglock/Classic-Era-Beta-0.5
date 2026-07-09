@@ -2613,8 +2613,10 @@ function buildHeroVN(coverUrl, user) {
     <span class="hpc-corner hpc-bl"></span><span class="hpc-corner hpc-br"></span>
     <div class="hp-vn-idx" id="hp-vn-idx" aria-hidden="true"><div class="hp-vn-idx-cap">📈 ${lang === 'en' ? 'EXCHANGE · LIVE INDEX' : 'БИРЖА · ИНДЕКС В ЭФИРЕ'}</div><div id="hp-vn-myticker"></div><div id="hp-vn-ticker"></div></div>
     <div class="hp-vn-colony" id="hp-vn-colony" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-planets" id="hp-vn-planets" aria-hidden="true"></div>
     <div class="hp-vn-poem" id="hp-vn-poem" aria-hidden="true"></div>
     <div class="hp-vn-rating" id="hp-vn-rating" aria-hidden="true"></div>
+    <div class="hp-vn-research" id="hp-vn-research" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2674,16 +2676,22 @@ function heroVNChoice(kind) {
   // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
   _heroVNView = kind;
   if (kind !== 'idx' && typeof heroVNHideIdx === 'function') heroVNHideIdx();
-  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPoemClose(); heroVNRatingClose(); _heroVNCtl.menu(); return; }
+  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); _heroVNCtl.menu(); return; }
 
   // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
-  if (kind === 'colony') { _heroVNCat = null; heroVNPoemClose(); heroVNRatingClose(); heroVNColonyOpen(); return; }
+  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNColonyOpen(); return; }
+
+  // «Управление колониями» — перечень планет державы + сцена планеты с постройками.
+  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNPlanetsOpen(); return; }
 
   // «Поэма недели» — общегалактический стих: голосование за слово дня поверх сцены.
-  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNRatingClose(); heroVNPoemOpen(); return; }
+  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNPoemOpen(); return; }
 
   // «Рейтинг игроков» — засекреченная аналитическая сводка (декоративная инфографика).
-  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNRatingOpen(); return; }
+  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNResearchClose(); heroVNRatingOpen(); return; }
+
+  // «Исследования» — научный пульт державы: всё дерево технологий поверх сцены.
+  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchOpen(); return; }
 
   if (kind === 'ach' || kind === 'events') {
     _heroVNCat = kind;
@@ -2987,23 +2995,24 @@ function _heroColonyBuild(en) {
   }
   if (!myColor) myColor = 'var(--gd,#3a9bdc)';
 
-  // ── Звёзды: кастомные киберпанк-глифы вместо PNG-спрайтов —
-  //    4-лучевая гранёная искра + пунктирное ромб-кольцо + белое ядро,
-  //    цвет по типу звезды (как у спрайтов star_<type>.png). ──
+  // ── Звёзды: «блик объектива» — мягкое гало + два тонких вытянутых луча
+  //    + яркое ядро с белым центром; у гигантов дополнительное кольцо.
+  //    Цвет по типу звезды (как у спрайтов star_<type>.png). ──
   const STARC = { yellow: '#ffd75e', red: '#ff6a4e', blue: '#6fb9f0', white: '#eef6ff', green: '#45e0b4' };
   let starsHtml = '';
   sysList.forEach(s => {
     if (!inFrame(s.x, s.y) || s.faction === 'rift') return;
-    const a = s.is_giant ? R * 0.024 : R * 0.014;
+    const a = s.is_giant ? R * 0.028 : R * 0.016;   // длина луча блика
     const c = STARC[s.star_type] || STARC.yellow;
-    const k = a * 0.26;
-    const spark = `0,${nf(-a)} ${nf(k)},${nf(-k)} ${nf(a)},0 ${nf(k)},${nf(k)} 0,${nf(a)} ${nf(-k)},${nf(k)} ${nf(-a)},0 ${nf(-k)},${nf(-k)}`;
-    const q = a * 0.95;
+    const wv = a * 0.15;                             // толщина луча у ядра
+    const ray = `0,${nf(-a)} ${nf(wv)},0 0,${nf(a)} ${nf(-wv)},0`;
     starsHtml += `<g transform="translate(${nf(s.x)},${nf(s.y)})" style="pointer-events:none">
-      <circle r="${nf(a * 2)}" fill="${c}" opacity=".14" filter="url(#hpvncGlow)"></circle>
-      <rect x="${nf(-q)}" y="${nf(-q)}" width="${nf(q * 2)}" height="${nf(q * 2)}" transform="rotate(45)" fill="none" stroke="${c}" stroke-width="${nf(Math.max(R * 0.0016, 0.4))}" stroke-dasharray="${nf(q * 0.7)},${nf(q * 0.5)}" opacity="${s.is_giant ? '.55' : '.35'}"></rect>
-      <polygon points="${spark}" fill="${c}" opacity=".95"></polygon>
-      <circle r="${nf(a * 0.28)}" fill="#fff" opacity=".92"></circle>
+      <circle r="${nf(a * 1.7)}" fill="${c}" opacity=".2" filter="url(#hpvncGlow)"></circle>
+      ${s.is_giant ? `<circle r="${nf(a * 0.78)}" fill="none" stroke="${c}" stroke-width="${nf(Math.max(R * 0.0014, 0.35))}" opacity=".4"></circle>` : ''}
+      <polygon points="${ray}" fill="${c}" opacity=".92"></polygon>
+      <polygon points="${ray}" transform="rotate(90)" fill="${c}" opacity=".92"></polygon>
+      <circle r="${nf(a * 0.3)}" fill="${c}"></circle>
+      <circle r="${nf(a * 0.16)}" fill="#fff" opacity=".95"></circle>
     </g>`;
   });
 
@@ -3041,15 +3050,21 @@ function _heroColonyBuild(en) {
     tLabels += `<text x="${nf(t.x)}" y="${nf(t.y - R * 0.03)}" fill="${EXP}" font-size="${nf(R * 0.02)}" text-anchor="middle" font-family="var(--font-mono)" opacity=".95" style="pointer-events:none">${esc(String(t.name || '').slice(0, 16))}</text>`;
   });
 
-  // ── Метки систем: плашка с названием (мои + столицы + гиганты, чтобы не засорять) ──
+  // ── Метки систем: мои и столицы — на гранёной плашке; остальные звёзды
+  //    в кадре — лёгкий текст с тёмной обводкой (чтобы всё было читаемо). ──
   let labels = '';
   const fs = R * 0.019;
   sysList.forEach(s => {
     if (!inFrame(s.x, s.y) || claimSet.has(s.id) || s.faction === 'rift') return;
-    if (!(mineIds.has(s.id) || capSet.has(s.id) || s.is_giant)) return;
     const nm = String(s.name || ''); if (!nm) return;
-    const hw = nm.length * fs * 0.3 + fs * 0.5, hh = fs * 0.75;
+    const plate = mineIds.has(s.id) || capSet.has(s.id);
     const ly = s.y + (s.is_giant ? R * 0.05 : R * 0.032);
+    if (!plate) {
+      const ofs = fs * 0.8;
+      labels += `<text x="${nf(s.x)}" y="${nf(ly + ofs * 0.34)}" fill="#c6d4e4" font-size="${nf(ofs)}" text-anchor="middle" font-family="var(--font-mono)" letter-spacing=".5" opacity=".85" style="pointer-events:none;paint-order:stroke;stroke:#05080d;stroke-width:${nf(R * 0.0045)};stroke-linejoin:round">${esc(nm)}</text>`;
+      return;
+    }
+    const hw = nm.length * fs * 0.3 + fs * 0.5, hh = fs * 0.75;
     // Гранёная плашка (срез верхнего левого и нижнего правого угла) + цветной тик слева
     const ct = hh * 0.75;
     const tick = mineIds.has(s.id) ? myColor : 'rgba(150,175,205,.55)';
@@ -3060,10 +3075,11 @@ function _heroColonyBuild(en) {
     </g>`;
   });
 
-  // ── Флаг МОЕГО государства — полупрозрачная «печать» ПОД слоем границ,
-  //    обрезанная по территории (clipPath из моих ячеек), у самой глубинной
-  //    системы (дальше всех от чужих) — не на стыке границ. ──
-  let crest = '', crestClip = '';
+  // ── Флаг МОЕГО государства — заполняет ВСЮ территорию: изображение герба
+  //    растянуто по bbox моих ячеек (slice) и обрезано clipPath'ом по ним,
+  //    как «прокрашенная флагом» страна на инфографике. Название — у самой
+  //    глубинной системы (дальше всех от чужих), не на стыке границ. ──
+  let crest = '', crestClip = '', crestName = '';
   const myInView = mine.filter(s => inFrame(s.x, s.y));
   if (myInView.length) {
     const others = sysList.filter(s => !mineIds.has(s.id) && s.faction !== 'rift');
@@ -3075,16 +3091,26 @@ function _heroColonyBuild(en) {
     });
     const herald = (typeof EC !== 'undefined' && EC.app && (EC.app.herald_url || EC.app.image_url)) || '';
     const nm = String((typeof EC !== 'undefined' && EC.app && EC.app.name) || '').toUpperCase();
+    // bbox всех моих ячеек — рамка растяжки флага
+    let tx0 = Infinity, ty0 = Infinity, tx1 = -Infinity, ty1 = -Infinity, terr = '';
     if (geo) {
-      const terr = geo.fills.filter(f => f.sys && mineIds.has(f.sys.id) && f.pts)
-        .map(f => `<path d="${dOf(f.pts, true)}"></path>`).join('');
+      geo.fills.filter(f => f.sys && mineIds.has(f.sys.id) && f.pts).forEach(f => {
+        terr += `<path d="${dOf(f.pts, true)}"></path>`;
+        f.pts.forEach(p => { tx0 = Math.min(tx0, p[0]); ty0 = Math.min(ty0, p[1]); tx1 = Math.max(tx1, p[0]); ty1 = Math.max(ty1, p[1]); });
+      });
       if (terr) crestClip = `<clipPath id="hpvncTerr">${terr}</clipPath>`;
     }
-    const fw = R * 0.2, fh = fw * 0.66;
-    crest = `<g style="pointer-events:none">
-      ${herald ? `<g ${crestClip ? 'clip-path="url(#hpvncTerr)"' : ''} opacity=".28"><image href="${esc(herald)}" xlink:href="${esc(herald)}" x="${nf(anchor.x - fw / 2)}" y="${nf(anchor.y - fh / 2)}" width="${nf(fw)}" height="${nf(fh)}" preserveAspectRatio="xMidYMid slice"></image></g>` : ''}
-      ${nm ? `<text x="${nf(anchor.x)}" y="${nf(anchor.y + fh * 0.5 + R * 0.028)}" fill="#fff" font-size="${nf(R * 0.026)}" text-anchor="middle" font-family="var(--font-display)" font-weight="800" letter-spacing="1.5" opacity=".92" style="paint-order:stroke;stroke:#05080d;stroke-width:${nf(R * 0.004)};stroke-linejoin:round">${esc(nm)}</text>` : ''}
-    </g>`;
+    const hasBox = isFinite(tx0) && tx1 > tx0 && ty1 > ty0;
+    const fx = hasBox ? tx0 : anchor.x - R * 0.1, fy = hasBox ? ty0 : anchor.y - R * 0.066;
+    const fw = hasBox ? tx1 - tx0 : R * 0.2, fh = hasBox ? ty1 - ty0 : R * 0.132;
+    // Флаг-печать — ПОД границами (обрезан по территории).
+    crest = herald && crestClip
+      ? `<g style="pointer-events:none" clip-path="url(#hpvncTerr)" opacity=".22" filter="url(#hpvncMute)"><image href="${esc(herald)}" xlink:href="${esc(herald)}" x="${nf(fx)}" y="${nf(fy)}" width="${nf(fw)}" height="${nf(fh)}" preserveAspectRatio="xMidYMid slice"></image></g>`
+      : '';
+    // Название государства — ОТДЕЛЬНЫЙ слой ПОВЕРХ границ (крупная надпись у ядра).
+    crestName = nm
+      ? `<text x="${nf(anchor.x)}" y="${nf(anchor.y + R * 0.082)}" fill="#fff" font-size="${nf(R * 0.03)}" text-anchor="middle" font-family="var(--font-display)" font-weight="800" letter-spacing="2" opacity=".96" style="pointer-events:none;paint-order:stroke;stroke:#05080d;stroke-width:${nf(R * 0.006)};stroke-linejoin:round">${esc(nm)}</text>`
+      : '';
   }
 
   // ── Тусклый звёздный фон + виньетка (глубина, без перегруза) ──
@@ -3127,6 +3153,7 @@ function _heroColonyBuild(en) {
     ${vignette}
     <g>${labels}</g>
     <g>${tLabels}</g>
+    <g>${crestName}</g>
   </svg>`;
 
   // ── Мини-обзор всей карты + рамка текущего кадра ──
@@ -3692,6 +3719,8 @@ function heroVNInit() {
       ['ach',    '🏆 ' + (en ? "Today's achievements" : 'Достижения за сегодня')],
       ['rating', '📊 ' + (en ? 'Player ratings' : 'Рейтинг игроков')],
       ['colony', '🌍 ' + (en ? 'Colonization' : 'Колонизация')],
+      ['planets', '🪐 ' + (en ? 'Colony management' : 'Управление колониями')],
+      ['research', '🔬 ' + (en ? 'Research' : 'Исследования')],
       ['poem',   '🖋 ' + (en ? 'Poem of the week' : 'Поэма недели')],
     ];
     choicesEl.innerHTML = opts.map(([k, l]) =>
@@ -3758,6 +3787,163 @@ function heroVNInit() {
 
   renderChoices();
   play(startAt, true);   // первая реплика — мгновенно (без эффекта перезапуска)
+}
+
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · «Исследования» — научный пульт державы поверх сцены.
+// Собственное оформление (НЕ копия кабинета): рельсы-категории слева,
+// карточки технологий со статусами (изучено / в работе / в очереди /
+// доступно / закрыто), живой запуск через те же RPC, что и кабинет
+// (economy_research / economy_research_queue). Каталог — ecBuildResearch().
+// ══════════════════════════════════════════════════════════════
+let _htState = null;   // { cat } — активная ветка науки
+
+function heroVNResearchClose() {
+  const el = document.getElementById('hp-vn-research');
+  if (!el) return;
+  el.classList.remove('show');
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '';
+  if (_heroVNView === 'research') _heroVNView = null;
+}
+function heroVNResearchReturn() { heroVNChoice('menu'); }
+function heroVNResearchCat(c) { if (_htState) { _htState.cat = c; _htRenderTech(); } }
+
+async function heroVNResearchOpen() {
+  const el = document.getElementById('hp-vn-research');
+  if (!el) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  el.classList.add('show');
+  el.setAttribute('aria-hidden', 'false');
+  el.innerHTML = _htHead(en) +
+    `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Booting the science console…' : 'Запускаю научный пульт…'}</div></div>`;
+  try {
+    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
+      if (!el.classList.contains('show')) return;
+      el.innerHTML = _htHead(en) + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Register a faction to open its research console.' : 'Зарегистрируйте державу — и здесь откроется её научный пульт.'}</div></div>`;
+      return;
+    }
+    if (!EC.eco || !Array.isArray(EC.eco.research)) { if (typeof ecLoad === 'function') await ecLoad(); }
+    if (!el.classList.contains('show')) return;
+    _htState = { cat: (_htState && _htState.cat) || 'ship' };
+    _htRenderTech();
+  } catch (e) {
+    if (!el.classList.contains('show')) return;
+    el.innerHTML = _htHead(en) + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'The science grid is offline.' : 'Научная сеть сейчас недоступна.'}</div></div>`;
+  }
+}
+
+// Шапка — каркас как у рейтинга/колонизации + чип «научный отдел».
+function _htHead(en) {
+  return `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">${en ? 'Research' : 'Исследования'}</span>
+    <span class="hp-vnr-clr">${en ? 'imperial science division' : 'научный отдел державы'}</span>
+    <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNResearchReturn()">↩ ${en ? 'back' : 'назад'}</button>
+  </div>`;
+}
+// Осталось до готовности слота (r — ISO-время окончания).
+function _htLeft(r) {
+  const ms = new Date(r) - Date.now();
+  if (!(ms > 0)) return 'скоро';
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h} ч ${m} мин` : `${m} мин`;
+}
+
+// Полный рендер пульта: сводка (ОН/слоты/прогресс) + рельса веток + карточки.
+function _htRenderTech() {
+  const el = document.getElementById('hp-vn-research');
+  if (!el || !el.classList.contains('show')) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  if (typeof ecBuildResearch !== 'function' || typeof EC === 'undefined' || !EC.eco) {
+    el.innerHTML = _htHead(en) + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'The science grid is offline.' : 'Научная сеть сейчас недоступна.'}</div></div>`;
+    return;
+  }
+  const all = ecBuildResearch();
+  const done = new Set(EC.eco.research || []);
+  const slots = (typeof ecActiveResearch === 'function') ? ecActiveResearch() : [];
+  const activeMap = new Map(slots.map(s => [s.n, s.r]));
+  const queue = (typeof ecResearchQueueArr === 'function') ? ecResearchQueueArr() : [];
+  const maxSlots = (typeof ecResearchSlots === 'function') ? ecResearchSlots() : 1;
+  const sci = +(EC.eco.science || 0);
+  const cost = n => (typeof ecResearchCost === 'function') ? ecResearchCost(n.cost) : (n.cost || 0);
+
+  // Сводка-чипы: ОН, слоты, общий прогресс.
+  const totalDone = all.filter(n => done.has(n.id)).length;
+  const chips = `<div class="hp-vnt-stats">
+    <span class="hp-vnt-chip"><i>🧪</i><b>${(typeof ecNum === 'function') ? ecNum(sci) : sci}</b> ${en ? 'science' : 'ОН'}</span>
+    <span class="hp-vnt-chip"><i>⚗</i><b>${slots.length}/${maxSlots}</b> ${en ? 'labs busy' : 'слотов занято'}</span>
+    <span class="hp-vnt-chip"><i>📚</i><b>${totalDone}</b>/${all.length} ${en ? 'researched' : 'изучено'}</span>
+  </div>`;
+
+  // Рельса категорий с мини-прогрессом каждой ветки.
+  const cats = (typeof EC_RES_CATS !== 'undefined') ? EC_RES_CATS : [];
+  const cat = _htState.cat;
+  const rail = `<div class="hp-vnt-rail">${cats.map(([id, label, icon]) => {
+    const nodes = all.filter(n => n.cat === id);
+    const dn = nodes.filter(n => done.has(n.id)).length;
+    const pct = nodes.length ? Math.round(dn / nodes.length * 100) : 0;
+    return `<button class="hp-vnt-cat${id === cat ? ' on' : ''}" type="button" onclick="event.stopPropagation();heroVNResearchCat('${id}')">
+      <span class="hp-vnt-cat-ic">${icon}</span><span class="hp-vnt-cat-l">${esc(label)}</span>
+      <span class="hp-vnt-cat-bar"><i style="width:${pct}%"></i></span><span class="hp-vnt-cat-n">${dn}/${nodes.length}</span>
+    </button>`;
+  }).join('')}</div>`;
+
+  // Карточки активной ветки: сортировка по глубине (тиру), потом по цене.
+  const byId = new Map(all.map(n => [n.id, n]));
+  const dcache = {};
+  const depth = n => (typeof ecTechDepth === 'function') ? ecTechDepth(n, byId, dcache) : 0;
+  const nodes = all.filter(n => n.cat === cat).sort((a, b) => depth(a) - depth(b) || cost(a) - cost(b));
+  const nameOf = id => (byId.get(id) || { name: id }).name;
+  const cards = nodes.map(n => {
+    const c = cost(n);
+    const prereqMiss = (n.prereq || []).filter(p => !done.has(p));
+    let st, badge, act = '', foot = '';
+    if (done.has(n.id)) {
+      st = 'done'; badge = `✓ ${en ? 'researched' : 'изучено'}`;
+    } else if (activeMap.has(n.id)) {
+      st = 'active'; badge = `⚗ ${en ? 'in progress' : 'в работе'}`;
+      foot = `<div class="hp-vnt-prog"><i></i></div><div class="hp-vnt-left">${en ? 'ready in' : 'готово через'} ${_htLeft(activeMap.get(n.id))}</div>`;
+    } else if (queue.includes(n.id)) {
+      st = 'queued'; badge = `⏳ ${en ? 'queued' : 'в очереди'} #${queue.indexOf(n.id) + 1}`;
+    } else if (prereqMiss.length) {
+      st = 'locked'; badge = '🔒';
+      foot = `<div class="hp-vnt-req">${en ? 'requires' : 'нужно'}: ${prereqMiss.map(p => `<span>${esc(nameOf(p))}</span>`).join('')}</div>`;
+    } else {
+      const canNow = slots.length < maxSlots && sci >= c;
+      st = 'avail'; badge = '';
+      act = canNow
+        ? `<button class="hp-vnt-go" type="button" onclick="event.stopPropagation();heroVNTechGo('${jsq(n.id)}',false)">▶ ${en ? 'Research' : 'Исследовать'}</button>`
+        : `<button class="hp-vnt-go q" type="button" ${sci < c && queue.length >= 12 ? 'disabled' : ''} onclick="event.stopPropagation();heroVNTechGo('${jsq(n.id)}',true)">⏳ ${en ? 'Queue' : 'В очередь'}</button>`;
+    }
+    return `<div class="hp-vnt-card ${st}">
+      <div class="hp-vnt-row1">
+        <span class="hp-vnt-name">${esc(n.name)}</span>
+        <span class="hp-vnt-cost${sci < c && st === 'avail' ? ' lack' : ''}">${(typeof ecNum === 'function') ? ecNum(c) : c} ${en ? 'sci' : 'ОН'}</span>
+      </div>
+      ${badge ? `<div class="hp-vnt-badge ${st}">${badge}</div>` : ''}
+      <div class="hp-vnt-desc">${esc(n.desc || '')}</div>
+      ${foot}${act}
+    </div>`;
+  }).join('') || `<div class="hp-vn-col-empty">${en ? 'Nothing here yet.' : 'В этой ветке пока пусто.'}</div>`;
+
+  el.innerHTML = _htHead(en) + chips + `<div class="hp-vnt-wrap">${rail}<div class="hp-vnt-grid">${cards}</div></div>`;
+}
+
+// Запуск исследования / постановка в очередь — те же серверные RPC, что в кабинете.
+async function heroVNTechGo(id, toQueue) {
+  if (typeof EC === 'undefined' || EC.busy) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  EC.busy = true;
+  try {
+    if (toQueue) await ecRpc('economy_research_queue', { p_node: id });
+    else await ecRpc('economy_research', { p_node: id, p_cost: 0 });
+    toast(toQueue ? (en ? 'Queued' : 'Добавлено в очередь') : (en ? 'Research started' : 'Исследование начато'), 'ok');
+    if (typeof ecLoad === 'function') await ecLoad();
+  } catch (e) {
+    toast((typeof ecErr === 'function') ? ecErr(e.message) : ('Ошибка: ' + e.message), 'err');
+  } finally { EC.busy = false; }
+  _htRenderTech();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -6602,4 +6788,210 @@ if (typeof document !== 'undefined') {
   } else {
     initRedactedSystem();
   }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · «Управление колониями» — перечень всех планет державы
+// (красивые карточки, как в регистрации) → клик по планете открывает
+// СЦЕНУ: задний фон планеты (арт assets/vn/colony/bg_<look>.webp,
+// заливается батником) + установленные здания спрайтами
+// (assets/vn/colony/bld_<btype>.webp). Управление постройками — те же
+// рабочие механики кабинета (ecBuildPicker / ecBuildingRow / RPC).
+// Пока арта нет — мягкий фолбэк: градиент класса планеты и иконки зданий.
+// ══════════════════════════════════════════════════════════════
+const HVP_ART = 'assets/vn/colony/';
+let _hvp = { mode: 'list', colonyId: null, bldId: null };
+
+function heroVNPlanetsClose() {
+  const el = document.getElementById('hp-vn-planets');
+  if (!el) return;
+  el.classList.remove('show');
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '';
+  if (_heroVNView === 'planets') _heroVNView = null;
+}
+function heroVNPlanetsReturn() { heroVNChoice('menu'); }
+
+// Класс «вида» планеты (gas/ocean/ice/lava/terran/rock) — тем же правилом,
+// что и текстуры большой карты; фолбэк, если движок карты не загружен.
+function _hvpLook(c) {
+  const p = { type: c.planet_type || '', zone: c.zone };
+  if (typeof gmPlanetLook === 'function') return gmPlanetLook(p);
+  const t = (p.type || '').toLowerCase();
+  if (/газ|giant|gas/.test(t)) return 'gas';
+  if (/океан|вод|ocean/.test(t)) return 'ocean';
+  if (/лёд|лед|ice|мёрз|замёрз/.test(t)) return 'ice';
+  if (/пуст|desert|выжж|лав|вулк/.test(t)) return 'lava';
+  if (/земн|terran|сад|gaia|столич|жизн/.test(t)) return 'terran';
+  return 'rock';
+}
+// Текстура-развёртка планеты (та же, что на карте и в регистрации) — наматывается
+// на canvas-сферу с терминатором и атмосферой (frDrawSphere из faction_reg.js).
+function _hvpTex(look) {
+  const base = (typeof GM_BASE !== 'undefined') ? GM_BASE : 'assets/map/';
+  return base + 'planets/planet_' + look + '.png';
+}
+// Отрисовать все планеты-сферы оверлея (карточки статичны, герой сцены вращается).
+function _hvpDrawSpheres(el) {
+  if (typeof frDrawSphere !== 'function') return;
+  el.querySelectorAll('canvas[data-tex]').forEach(cv => frDrawSphere(cv, cv.dataset.tex, cv.dataset.anim === '1', false));
+}
+// Фон планеты: персональный арт по pid (bg_p<pid>.webp) поверх классового (bg_<look>.webp).
+// onerror каскадом откатывает personal → класс → чистый градиент (CSS-класс look).
+function _hvpBgImg(c, cls) {
+  const look = _hvpLook(c);
+  const byClass = HVP_ART + 'bg_' + look + '.webp';
+  const personal = (c.planet_pid != null && c.planet_pid !== '') ? HVP_ART + 'bg_p' + c.planet_pid + '.webp' : '';
+  const src = personal || byClass;
+  const fall = personal
+    ? "this.onerror=function(){this.style.display='none'};this.src='" + byClass + "'"
+    : "this.style.display='none'";
+  return `<img class="${cls}" src="${esc(src)}" alt="" draggable="false" onerror="${fall}">`;
+}
+
+async function heroVNPlanetsOpen() {
+  const el = document.getElementById('hp-vn-planets');
+  if (!el) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  el.classList.add('show');
+  el.setAttribute('aria-hidden', 'false');
+  el.innerHTML = _hvpHead(en) +
+    `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Contacting the colonies…' : 'Связываюсь с колониями…'}</div></div>`;
+  try {
+    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
+      if (!el.classList.contains('show')) return;
+      el.innerHTML = _hvpHead(en) + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Register a faction — and its colonies will report here.' : 'Зарегистрируйте державу — и здесь появятся доклады её колоний.'}</div></div>`;
+      return;
+    }
+    if (!EC.colonies || !EC.colonies.length || !EC.buildings) { if (typeof ecLoad === 'function') await ecLoad(); }
+    if (!el.classList.contains('show')) return;
+    _hvp = { mode: 'list', colonyId: null, bldId: null };
+    _hvpRender();
+  } catch (e) {
+    if (!el.classList.contains('show')) return;
+    el.innerHTML = _hvpHead(en) +
+      `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Colonial network is unreachable right now.' : 'Колониальная сеть сейчас недоступна.'}</div></div>`;
+  }
+}
+
+// Шапка — тот же каркас, что у колонизации/рейтинга; в режиме планеты слева
+// добавляется кнопка «к списку».
+function _hvpHead(en, colony) {
+  const back = colony
+    ? `<button class="hp-vn-col-x hvp-back" type="button" onclick="event.stopPropagation();heroVNPlanetsList()">↩ ${en ? 'all planets' : 'к списку'}</button>`
+    : '';
+  const title = colony ? esc(colony.planet_name || (en ? 'Colony' : 'Колония')) : (en ? 'Colony management' : 'Управление колониями');
+  return `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">${title}</span>
+    <span class="hvp-headr">${back}<button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNPlanetsReturn()">↩ ${en ? 'back' : 'назад'}</button></span>
+  </div>`;
+}
+
+// Перерисовать активный экран свежими данными EC (вызывается и из ecReloadPaint).
+function _hvpRender() {
+  const el = document.getElementById('hp-vn-planets');
+  if (!el || !el.classList.contains('show')) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  if (_hvp.mode === 'planet') {
+    const c = (EC.colonies || []).find(x => x.id === _hvp.colonyId);
+    if (c) { el.innerHTML = _hvpHead(en, c) + _hvpScene(en, c); _hvpDrawSpheres(el); return; }
+    _hvp = { mode: 'list', colonyId: null, bldId: null };   // колонию потеряли — назад к списку
+  }
+  el.innerHTML = _hvpHead(en) + _hvpListHtml(en);
+  _hvpDrawSpheres(el);
+}
+function heroVNPlanetsRefresh() { try { _hvpRender(); } catch (e) {} }
+function heroVNPlanetsList() { _hvp = { mode: 'list', colonyId: null, bldId: null }; _hvpRender(); }
+function heroVNPlanetsShow(colonyId) { _hvp = { mode: 'planet', colonyId: colonyId, bldId: null }; _hvpRender(); }
+function heroVNPlanetsBld(bldId) { if (_hvp.mode !== 'planet') return; _hvp.bldId = (_hvp.bldId === bldId ? null : bldId); _hvpRender(); }
+function heroVNPlanetsBuild(colonyId) { if (typeof ecBuildPicker === 'function') ecBuildPicker(colonyId); }
+
+// ── Экран 1: перечень всех планет державы (карточки) ──
+function _hvpListHtml(en) {
+  const cols = (EC.colonies || []).slice();
+  if (!cols.length) {
+    return `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Your realm holds no colonies yet. Colonize a suitable world first.' : 'У вашей державы пока нет колоний. Сначала колонизируйте пригодный мир в разделе «Колонизация».'}</div></div>`;
+  }
+  // столица — первой, дальше по числу построек
+  const bldOf = id => (EC.buildings || []).filter(b => b.colony_id === id);
+  cols.sort((a, b) => (b.is_capital ? 1 : 0) - (a.is_capital ? 1 : 0) || bldOf(b.id).length - bldOf(a.id).length);
+  const sysName = id => { const s = ((EC.allSystems || []).find(x => x.id === id)) || ((EC.systems || []).find(x => x.id === id)); return (s && s.name) || ''; };
+  const cards = cols.map(c => {
+    const blds = bldOf(c.id);
+    const cells = c.cells || (typeof EC_DEFAULT_CELLS !== 'undefined' ? EC_DEFAULT_CELLS : 6);
+    const pend = (EC.projects || []).filter(p => p.kind === 'build' && p.colony_id === c.id).length;
+    const used = blds.length + pend;
+    const look = _hvpLook(c);
+    const res = (c.resources || []).slice(0, 4).map(r => `<span class="hvp-res" title="${esc(r.name || '')}">${esc(r.icon || '◈')}</span>`).join('');
+    return `<button class="hvp-card" type="button" onclick="event.stopPropagation();heroVNPlanetsShow('${jsq(c.id)}')">
+      <span class="hvp-card-orb hvp-look-${look}">
+        <span class="fr-env-img hvp-orb"><canvas class="fr-env-cv" data-tex="${esc(_hvpTex(look))}"></canvas></span>
+        ${c.is_capital ? `<span class="hvp-cap">★ ${en ? 'CAPITAL' : 'СТОЛИЦА'}</span>` : ''}
+      </span>
+      <span class="hvp-card-body">
+        <span class="hvp-card-nm">${esc(c.planet_name || (en ? 'Colony' : 'Колония'))}</span>
+        <span class="hvp-card-ty">${esc(c.planet_type || '')}${sysName(c.system_id) ? ' · ' + esc(sysName(c.system_id)) : ''}</span>
+        <span class="hvp-card-meta">
+          <span class="hvp-chip" title="${en ? 'building cells' : 'ячейки застройки'}">⬚ ${used}/${cells}</span>
+          <span class="hvp-chip" title="${en ? 'buildings' : 'постройки'}">🏗 ${blds.length}${pend ? ' <i>+' + pend + '⏳</i>' : ''}</span>
+          ${res ? `<span class="hvp-chip hvp-chip-res">${res}</span>` : ''}
+        </span>
+      </span>
+    </button>`;
+  }).join('');
+  return `<div class="hp-vn-col-body hvp-body"><div class="hvp-grid">${cards}</div></div>`;
+}
+
+// ── Экран 2: сцена планеты — фон-арт + здания на «участках» + управление ──
+function _hvpScene(en, c) {
+  const look = _hvpLook(c);
+  const cells = c.cells || (typeof EC_DEFAULT_CELLS !== 'undefined' ? EC_DEFAULT_CELLS : 6);
+  const blds = (EC.buildings || []).filter(b => b.colony_id === c.id);
+  const pends = (EC.projects || []).filter(p => p.kind === 'build' && p.colony_id === c.id);
+  const free = cells - blds.length - pends.length;
+  const ICON = (typeof EC_BLD_ICON !== 'undefined') ? EC_BLD_ICON : {};
+  const NAME = t => (typeof EC_BUILD !== 'undefined' && EC_BUILD[t]) ? EC_BUILD[t].name : t;
+
+  // участки: здания (спрайт-арт с фолбэком на иконку) → стройки → пустые «+»
+  const tiles = blds.map(b => `<button class="hvp-tile${_hvp.bldId === b.id ? ' on' : ''}" type="button" title="${esc(NAME(b.btype))}" onclick="event.stopPropagation();heroVNPlanetsBld('${jsq(b.id)}')">
+      <img class="hvp-tile-art" src="${HVP_ART}bld_${esc(b.btype)}.webp" alt="" draggable="false" onerror="this.style.display='none'">
+      <span class="hvp-tile-ic">${ICON[b.btype] || '⌂'}</span>
+      <span class="hvp-tile-nm">${esc(NAME(b.btype))}</span>
+      <span class="hvp-tile-sl">${b.slots_open || 0}◈</span>
+    </button>`).join('')
+    + pends.map(p => `<span class="hvp-tile hvp-tile-pend" title="${esc(p.label || '')}"><span class="hvp-tile-ic">⏳</span><span class="hvp-tile-nm">${en ? 'building…' : 'строится…'}</span></span>`).join('')
+    + Array.from({ length: Math.max(0, free) }, () => `<button class="hvp-tile hvp-tile-free" type="button" title="${en ? 'Build' : 'Построить'}" onclick="event.stopPropagation();heroVNPlanetsBuild('${jsq(c.id)}')"><span class="hvp-tile-ic">+</span><span class="hvp-tile-nm">${en ? 'build' : 'построить'}</span></button>`).join('');
+
+  // панель управления выбранным зданием — РАБОЧАЯ строка кабинета (слоты/добыча/снос)
+  let manage = '';
+  const sel = _hvp.bldId ? blds.find(b => b.id === _hvp.bldId) : null;
+  if (sel && typeof ecBuildingRow === 'function') {
+    manage = `<div class="hvp-manage" onclick="event.stopPropagation()">${ecBuildingRow(sel)}</div>`;
+  } else {
+    manage = `<div class="hvp-manage hvp-manage-hint">${en ? 'Select a building on the surface to manage it, or press «+» to build.' : 'Выберите здание на поверхности, чтобы управлять им, или нажмите «+», чтобы построить новое.'}</div>`;
+  }
+  const res = (c.resources || []).map(r => `<span class="hvp-res-row"><span class="hvp-res">${esc(r.icon || '◈')}</span>${esc(r.name || '')}</span>`).join('')
+    || `<span class="hvp-res-none">${en ? 'no deposits' : 'месторождений нет'}</span>`;
+
+  return `<div class="hp-vn-col-body hvp-body hvp-body-scene">
+    <div class="hvp-scene hvp-look-${look}">
+      ${_hvpBgImg(c, 'hvp-scene-art')}
+      <div class="hvp-scene-grad"></div>
+      <div class="hvp-scene-hero">
+        <span class="fr-cap-hero-orbit hvp-hero-orbit"><canvas class="fr-cap-hero-cv" data-tex="${esc(_hvpTex(look))}" data-anim="1"></canvas></span>
+        <span class="hvp-scene-cap">${c.is_capital ? '★ ' : ''}${esc(c.planet_name || '')} <i>${esc(c.planet_type || '')}</i></span>
+      </div>
+      <div class="hvp-tiles">${tiles}</div>
+    </div>
+    <div class="hvp-side">
+      <div class="hp-vn-col-info hvp-info">
+        <div class="hvp-info-row"><span>⬚ ${en ? 'Cells' : 'Ячейки'}</span><b>${blds.length + pends.length}/${cells}</b></div>
+        <div class="hvp-info-row"><span>💰 ${en ? 'Treasury' : 'Казна'}</span><b>${typeof ecNum === 'function' ? ecNum((EC.eco && EC.eco.gc) || 0) : ((EC.eco && EC.eco.gc) || 0)} ГС</b></div>
+        <div class="hvp-info-res">${res}</div>
+      </div>
+      ${manage}
+    </div>
+  </div>`;
 }

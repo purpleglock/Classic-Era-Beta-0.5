@@ -1,7 +1,7 @@
 /* НОВАЯ ЭРА — WIKI UI · Main Entry Point */
 @import './01_tokens.css?v=20260703brand5';
 @import './02_shell.css?v=20260703brand5';
-@import './03_content.css?v=20260706rate5';
+@import './03_content.css?v=20260709research2';
 @import './04_ui.css?v=20260706bghl1';
 @import './05_panels.css?v=20260705regcyb';
 @import './06_system.css?v=20260703brand5';
@@ -11,7 +11,7 @@
 @import './10_patch.css?v=20260703brand5';
 @import './12_preview.css?v=20260703brand5';
 @import './13_redesign.css?v=20260703brand5';
-@import './14_map.css?v=20260708mapdvh1';
+@import './14_map.css?v=20260709secborder1';
 @import './15_faction.css?v=20260708capsphere2';
 @import './16_constructors.css?v=20260709touchplace2';
 @import './17_economy.css?v=20260708capstep1';

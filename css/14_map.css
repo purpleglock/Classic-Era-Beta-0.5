@@ -85,20 +85,30 @@ body.route-map #gm-wrap{height:100%;min-height:0}
 .gm-sec-fill{opacity:0;display:none;transition:opacity var(--duration-normal)}
 #gm-wrap.gm-sec-far .gm-sec-fill{display:block;opacity:.5}
 
-/* ── Граница сектора = ЯРКИЙ СПЛОШНОЙ СВЕТЯЩИЙСЯ КОНТУР в цвете сектора ──
-   не пунктир и не «крепостной» рубеж фракций: широкое гало + плотное ядро,
-   обрамляющее цветную область. Цвет приходит из inline stroke; виден на обзоре. */
+/* ── Граница сектора = ЖЁСТКИЙ HUD-РУБЕЖ (киберпанк) ──
+   без блюра и скруглений: тонкое яркое ядро с острыми стыками (miter) +
+   плоская широкая полоса-зона + поперечные тех-риски (короткий дэш на ШИРОКОМ
+   штрихе = ряд перпендикулярных засечек вдоль линии, медленный «марш»).
+   Цвет приходит из inline stroke; виден на обзоре. */
 .gm-sec-glow,.gm-sec-line{
-  stroke-linecap:round;stroke-linejoin:round;opacity:0;
+  stroke-linecap:butt;stroke-linejoin:miter;opacity:0;
   transition:opacity var(--duration-normal);
 }
-.gm-sec-glow{stroke-width:var(--sec-glow-w,16);filter:blur(2px)}
-.gm-sec-line{stroke-width:var(--sec-w,3.5)}
-/* второй слой — средний ореол между гало и ядром */
-.gm-sec-line-b{stroke-width:calc(var(--sec-w,3.5) * 1.9);filter:blur(1px)}
-#gm-wrap.gm-sec-far .gm-sec-glow{opacity:.22}
-#gm-wrap.gm-sec-far .gm-sec-line{opacity:.95}
-#gm-wrap.gm-sec-far .gm-sec-line-b{opacity:.4}
+/* ТАКТИЧЕСКАЯ ГРАНИЦА: сдержанная, как на военной карте. Три плоских слоя:
+   широкая едва заметная тонировка приграничной зоны (.gm-sec-glow, без blur) +
+   волосяная чёткая линия (.gm-sec-line) + редкие поперечные картографические
+   засечки (.gm-sec-line-b: короткий дэш на широком штрихе). Цвета приглушены
+   в gmNeon (сталь). Никаких свечений и анимаций. */
+.gm-sec-glow{stroke-width:var(--sec-glow-w,16)}
+.gm-sec-line{stroke-width:var(--sec-w,1.3)}
+.gm-sec-line-b{
+  filter:none;
+  stroke-width:calc(var(--sec-w,1.3) * 5.5);
+  stroke-dasharray:var(--sec-dash,1.2 26);
+}
+#gm-wrap.gm-sec-far .gm-sec-glow{opacity:.07}
+#gm-wrap.gm-sec-far .gm-sec-line{opacity:.9}
+#gm-wrap.gm-sec-far .gm-sec-line-b{opacity:.45}
 /* широкая прозрачная хит-зона — кликабельна ТОЛЬКО на обзоре (.gm-sec-far) */
 .gm-sec-hit{stroke:transparent;stroke-width:var(--sec-hit-w,16);pointer-events:none}
 #gm-wrap.gm-sec-far .gm-sec-hit{pointer-events:stroke;cursor:pointer}

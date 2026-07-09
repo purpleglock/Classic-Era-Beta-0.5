@@ -333,7 +333,7 @@ const EC_BLD_HOWTO = {
   mining:           'Назначьте слоты на месторождения ниже. Несколько слотов на один ресурс = больше добычи.',
   goodsfab:         'Перерабатывает воду (Лёд/Жидкая вода) и сырьё (Железо/Силикаты) в товары. Держите запас входов на складе — без них фабрика простаивает. Товары кормят население (обеспечение): хватает → доход растёт, дефицит → проседает. Излишек продаётся на бирже. Название товара задаётся кнопкой ниже.',
   trade:            'Доход только при активном торговом пути (вкладка «Торговля»).',
-  market:           'Сама продаёт накопленные ресурсы за ГС (50–75% цены по редкости), без торговых путей.',
+  market:           'Сама сбывает свежедобытый поток (заводы в режиме «Склад») за ГС (50–75% цены по редкости), без торговых путей. Накопленный склад НЕ трогает — стратегический запас в безопасности.',
   warehouse:        'Каждый слот склада повышает лимит общего хранилища (+500). Без склада лимит мал — лишняя добыча теряется (или ставьте завод в режим «Экспорт»).',
   science:          'Даёт очки науки (ОН) для исследований.',
   training:         'Даёт мощность для производства пехоты (заказ — во вкладке «Строительство вооружённых сил»).',
@@ -1398,7 +1398,15 @@ function ecResetDeferred() {
   EC.margin = null; EC.futures = null; EC.options = null; EC.orders = null;
   EC.ach = EC.ach || [];
 }
-async function ecReloadPaint() { await ecLoad(); ecPaintCabinet(); }
+async function ecReloadPaint() {
+  await ecLoad();
+  // Кабинет перерисовываем ТОЛЬКО когда игрок в нём: ecPaintCabinet() делает
+  // setPg() (замена всей страницы), и вызов с главной «перекидывал» в кабинет.
+  if (typeof curSlug !== 'undefined' && curSlug === 'economy') ecPaintCabinet();
+  // Оверлей «Управление колониями» в новелле живёт на тех же данных EC —
+  // после любого действия перерисовываем и его (если открыт).
+  if (typeof heroVNPlanetsRefresh === 'function') heroVNPlanetsRefresh();
+}
 
 // ── Превью дохода (зеркало RPC) ─────────────────────────────
 // Пространственная экономика (срез 2): просперити/цена товаров системы постройки
@@ -1567,14 +1575,29 @@ function ecTitheIncome() {
 function ecSectIncome() { return (+((EC.faith || {}).active_sects) || 0) * 150; }
 // Доля выручки по редкости при продаже на Товарной бирже — зеркало economy_accrue (market_gc).
 const EC_MARKET_FRAC = { legendary: 0.75, epic: 0.70, rare: 0.65, uncommon: 0.55, common: 0.50 };
-// Доход ТОВАРНОЙ БИРЖИ за сутки: продаёт складские ресурсы по ценности × доля редкости,
-// до лимита market_slots×25/сут, по убыванию ценности. ×доктрина. Зеркало market_gc.
+// Дневной поток добычи в режиме СКЛАД (mine_mode=store) — то, что «Товарная биржа»
+// может сбыть. Зеркало res_add в economy_accrue. Биржа НЕ трогает накопленный склад
+// (иначе колонизация новой залежи разом сливала бы стратегический запас).
+function ecStoreFlowEntries() {
+  const gross = {};
+  (EC.buildings || []).filter(b => b.btype === 'mining' && (b.mine_mode || 'store') === 'store').forEach(b => {
+    const res = ecMiningPlanetRes(b);
+    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
+      const ri = res.find(x => x.name === t); if (!ri) return;
+      gross[t] = (gross[t] || 0) + ecMineRate(ri.r, ri.amt);
+    });
+  });
+  return Object.entries(gross).filter(([, v]) => v > 0);
+}
+// Доход ТОВАРНОЙ БИРЖИ за сутки: сбывает СВЕЖЕДОБЫТЫЙ поток (mine_mode=store) по ценности
+// × доля редкости, до лимита market_slots×25/сут, по убыванию ценности. НАКОПЛЕННЫЙ СКЛАД
+// НЕ ТРОГАЕТ. ×доктрина. Зеркало market_gc.
 function ecMarketIncome() {
   let cap = ecSlotsSum('market') * 25;
   if (cap <= 0) return 0;
   let gc = 0;
-  const stock = ecResEntries().map(([n, q]) => [n, q, ecResRarity(n)]).sort((a, b) => ecResVal(b[0]) - ecResVal(a[0]));
-  for (const [n, q, rar] of stock) {
+  const flow = ecStoreFlowEntries().map(([n, q]) => [n, q, ecResRarity(n)]).sort((a, b) => ecResVal(b[0]) - ecResVal(a[0]));
+  for (const [n, q, rar] of flow) {
     if (cap <= 0) break;
     const sell = Math.min(q, cap);
     if (sell <= 0) continue;
@@ -2268,7 +2291,7 @@ function ecStatsInner() {
     const parts = [
       chip(+r.gc_build, '', `🏭 +${ecNum(+r.gc_build)}`, 'Гражданские фабрики и торговые хабы — основной доход ГС'),
       chip(+r.gc_trade, '', `🚚 +${ecNum(+r.gc_trade)}`, 'Караваны — продажа и доля с поставок'),
-      chip(+r.gc_market, '', `📈 +${ecNum(+r.gc_market)}`, 'Товарная биржа — продажа ресурсов со склада за ГС'),
+      chip(+r.gc_market, '', `📈 +${ecNum(+r.gc_market)}`, 'Товарная биржа — сбыт свежедобытого потока за ГС (склад не трогает)'),
       chip(+r.gc_export, '', `📤 +${ecNum(+r.gc_export)}`, 'Экспорт добычи караванами'),
       chip(+r.gc_policy, 'neg', `📜 −${ecNum(+r.gc_policy)}`, 'Апкип торговой политики — расход ГС'),
       chip(+r.mined, 'res', `⛏ ${ecNum(+r.mined)}`, 'Добыто ресурсов на склад за этот ход'),
@@ -3030,7 +3053,7 @@ function ecTabOverview() {
   if (trSlots)  moneyInc.push({ ic: '💱', name: 'Торговые хабы', sub: `${ecNum(trSlots)} слот. × 100`, gc: g.trade, tab: 'trade' });
   if (_out.length) moneyInc.push({ ic: '🚚', name: 'Караваны · продажа', sub: `${_out.length} пут. → партнёрам`, gc: _outGc, tab: 'trade' });
   if (_in.length)  moneyInc.push({ ic: '📦', name: 'Доля с поставок', sub: `${_in.length} пут. ← вам шлют`, gc: _inGc, tab: 'trade' });
-  if (g.market) moneyInc.push({ ic: '📈', name: 'Товарная биржа', sub: `${ecNum(marketSlots)} слот. · продаёт склад`, gc: g.market, tab: 'trade' });
+  if (g.market) moneyInc.push({ ic: '📈', name: 'Товарная биржа', sub: `${ecNum(marketSlots)} слот. · сбыт добычи`, gc: g.market, tab: 'trade' });
   if (g.export) moneyInc.push({ ic: '📤', name: 'Экспорт добычи', sub: 'поток export-заводов', gc: g.export, tab: 'trade' });
   if (g.policy) moneyInc.push({ ic: '📜', name: 'Торговая политика', sub: 'апкип NPC-конвоя', gc: -g.policy, tab: 'raids' });
   // ── НЕ входит в тик (информативно, не суммируется в «Чистый доход») ──
@@ -3106,7 +3129,7 @@ function ecTabOverview() {
   if (g.sects)  detRows.push(fxRow('🕯', 'Тайные секты', `активные covert-храмы × 150${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''}`, g.sects));
   if (_out.length) detRows.push(fxRow('🚚', 'Караваны · продажа', `${_out.length} путь(ей): объём × цена − срез пиратов`, _outGc));
   if (_in.length) detRows.push(fxRow('📦', 'Доля с поставок', `${_in.length} путь(ей): ${Math.round(EC_DEST_CUT * 100)}% от объёма партнёра`, _inGc));
-  if (g.market) detRows.push(fxRow('📈', 'Товарная биржа', `${ecNum(marketSlots)} слот · продаёт склад по ценности × 50–75% (до ${ecNum(marketSlots * 25)} ед/сут)`, g.market));
+  if (g.market) detRows.push(fxRow('📈', 'Товарная биржа', `${ecNum(marketSlots)} слот · сбыт добытого потока по ценности × 50–75% (до ${ecNum(marketSlots * 25)} ед/сут, склад не трогает)`, g.market));
   if (g.export) detRows.push(fxRow('📤', 'Экспорт добычи', `свободный поток export-заводов × ценность × 0.6`, g.export));
   if (g.policy) detRows.push(fxRow('📜', 'Торговая политика', `апкип NPC-конвоя (защита караванов)`, -g.policy));
   if (_ex.bonds)   detRows.push(fxRow('🏦', 'Облигации · купоны', `купоны по вложениям ${ecNum(_ex.bondIn)} − выплаты как эмитент ${ecNum(_ex.bondOut)}`, _ex.bonds));
@@ -4348,6 +4371,7 @@ function ecErr(m) {
   if (m.includes('empty name')) return 'Пустое название';
   if (m.includes('missing prerequisites')) return 'Не изучены технологии, нужные для чертежа';
   if (m.includes('seller lacks tech')) return 'У вас нет этой технологии';
+  if (m.includes('tech trade cooldown')) return 'Торговля технологиями — не чаще 1 сделки в 3 дня';
   if (m.includes('recipient not found')) return 'Получатель не найден';
   if (m.includes('bad price')) return 'Неверная цена';
   return 'Ошибка: ' + m;
@@ -7662,17 +7686,27 @@ EC_POLITICS.forEach(n => { if (n.bonus) EC_RESEARCH_BONUS[n.id] = n.bonus; });
 // Значение = ключ класса (k из CN_*.data). Базовый класс/отсутствие → узел-корень ветки.
 const EC_TECH_TREE = {
   ship: {
-    weapon: { 'Тяжёлые': 'cruiser', 'Сверхтяжёлые': 'battleship', 'Ракетное': 'destroyer', 'Зенитное': 'frigate' },
+    weapon: { 'Легкие': 'corvette', 'Средние': 'frigate', 'Тяжёлые': 'cruiser', 'Сверхтяжёлые': 'battleship', 'Ракетное': 'destroyer', 'Зенитное': 'frigate' },
     comp:   { engine: 'frigate', reactor: 'destroyer', armor: 'destroyer', shield: 'cruiser' },
   },
   ground: {
-    weapon: { 'Артиллерия и ПВО': 'artillery' },
+    weapon: { 'Противопехотное': 'light', 'Противотанковое': 'medium', 'Артиллерия и ПВО': 'artillery' },
     comp:   { engine: 'medium', armor: 'heavy', shield: 'heavy' },
   },
   aviation: {
-    weapon: { 'Ракетное и бомбовое': 'medium', 'Спецоборудование': 'heavy' },
+    weapon: { 'Курсовое вооружение': 'light', 'Ракетное и бомбовое': 'medium', 'Спецоборудование': 'heavy' },
     comp:   { engine: 'medium', reactor: 'medium', armor: 'heavy', shield: 'heavy' },
   },
+};
+// «Исследовать всё в конструкторах»: бывшая бесплатная база (CN_BASE) стала
+// СТАРТОВЫМИ исследованиями — дешёвые корни дерева, не сдвигающие цены легаси-
+// узлов (не увеличивают счётчик тира). Существующим фракциям выданы бэкфиллом
+// (_research_total.sql). Зеркало: tech_nodes в SQL.
+const EC_TECH_STARTER = {
+  'cls.ship.corvette': 1, 'cls.ground.light': 1, 'cls.aviation.light': 1,
+  'wpn.ship.Легкие': 1, 'wpn.ship.Средние': 1,
+  'wpn.ground.Противопехотное': 1, 'wpn.ground.Противотанковое': 1,
+  'wpn.aviation.Курсовое вооружение': 1,
 };
 // Дерево исследований: узлы того же id-формата (cls./wpn./comp.) — id-контракт с
 // конструкторами сохранён. Добавлены branch/prereq/desc для древовидной раскладки.
@@ -7690,23 +7724,30 @@ function ecBuildResearch() {
     const clsId = k => (k && !baseCls.includes(k) && db.data[k]) ? ['cls.' + cat + '.' + k] : [];
 
     // ── Класс-хребет (линейная цепочка по тирам) ──
+    // Стартовые классы (бывшая база) — дёшево (3 ОН) и БЕЗ сдвига тир-счётчика,
+    // чтобы цены легаси-узлов не поменялись от их появления в цепочке.
     let prev = null, ci = 0;
     Object.keys(db.data).forEach(k => {
       if (baseCls.includes(k)) return;
       const id = 'cls.' + cat + '.' + k;
+      const startr = EC_TECH_STARTER[id];
       out.push({ id, cat, catLabel, branch: 'class', name: db.data[k].name,
-        desc: 'Открывает класс в конструкторе и ветку технологий', cost: 5 * Math.pow(2, ci), prereq: prev ? [prev] : [] });
-      prev = id; ci++;
+        desc: startr ? 'Стартовый класс: открывает ветку конструктора' : 'Открывает класс в конструкторе и ветку технологий',
+        cost: startr ? 3 : 5 * Math.pow(2, ci), prereq: prev ? [prev] : [] });
+      prev = id; if (!startr) ci++;
     });
 
     // ── Оружие (ветви, привязаны к классу-тиру) ──
+    // Стартовые группы (бывшая база) — 5 ОН и без сдвига счётчика цен.
     const baseW = base.weapons[cat] || [];
     let wi = 0;
     Object.keys(db.weapons || {}).forEach(g => {
       if (baseW.includes(g)) return;
-      out.push({ id: 'wpn.' + cat + '.' + g, cat, catLabel, branch: 'weapon', name: g,
-        desc: 'Разблокирует орудия «' + g + '» в конструкторе', cost: 12 + wi * 8, prereq: clsId(tree.weapon && tree.weapon[g]) });
-      wi++;
+      const wid = 'wpn.' + cat + '.' + g;
+      const startr = EC_TECH_STARTER[wid];
+      out.push({ id: wid, cat, catLabel, branch: 'weapon', name: g,
+        desc: 'Разблокирует орудия «' + g + '» в конструкторе', cost: startr ? 5 : 12 + wi * 8, prereq: clsId(tree.weapon && tree.weapon[g]) });
+      if (!startr) wi++;
     });
 
     // ── Компоненты (ветви) ──

@@ -923,6 +923,113 @@
   .hp-vnr-main{flex:0 0 auto;height:min(96vw,430px)}
 }
 
+/* ── Новелла: «Исследования» — научный пульт державы.
+   Тот же форм-язык (срезы клипом, подложка вместо border), ОДИН акцент —
+   научный циан --vnt-sci; золото не используется. Слева рельса веток с
+   мини-прогрессом, справа сетка карточек технологий. */
+.hp-vn-research{
+  position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;
+  background:linear-gradient(180deg, hsl(196 30% 6% / .93), hsl(210 32% 4% / .96));
+  backdrop-filter:saturate(1.1) blur(6px);
+  opacity:0;pointer-events:none;transition:opacity var(--duration-normal) ease;
+  border-radius:inherit;overflow:hidden;
+  --vnt-sci:#54d0c8;
+  --vnt-line:color-mix(in srgb,var(--vnt-sci) 30%,transparent);
+}
+.hp-vn-research.show{opacity:1;pointer-events:auto}
+.hp-vn-research .hp-vnr-clr{color:var(--vnt-sci);background:color-mix(in srgb,var(--vnt-sci) 9%,transparent)}
+/* Сводка-чипы под шапкой: ОН / слоты / прогресс */
+.hp-vnt-stats{display:flex;flex-wrap:wrap;gap:6px;padding:10px clamp(14px,2.6vw,26px) 0}
+.hp-vnt-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--t3,#8296a8);padding:6px 12px;background:hsl(200 24% 9% / .9);
+  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+}
+.hp-vnt-chip b{color:var(--vnt-sci);font-weight:700}
+.hp-vnt-chip i{font-style:normal;opacity:.9}
+/* Каркас: рельса веток + прокручиваемая сетка карточек */
+.hp-vnt-wrap{flex:1;min-height:0;display:flex;gap:10px;padding:10px clamp(14px,2.6vw,26px) 14px}
+.hp-vnt-rail{flex:0 0 190px;display:flex;flex-direction:column;gap:6px;overflow:auto;scrollbar-width:thin}
+.hp-vnt-cat{
+  position:relative;z-index:0;cursor:pointer;border:none;border-radius:0;background:transparent;
+  display:grid;grid-template-columns:20px 1fr;grid-template-areas:"ic l" "ic bar" "ic n";
+  column-gap:8px;row-gap:3px;align-items:center;text-align:left;
+  padding:8px 11px;color:var(--t3,#8296a8);
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:color var(--duration-fast);
+}
+.hp-vnt-cat::before{content:"";position:absolute;inset:0;z-index:-2;background:var(--w2,rgba(255,255,255,.12))}
+.hp-vnt-cat::after{
+  content:"";position:absolute;inset:1px;z-index:-1;background:hsl(204 22% 9% / .92);
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+}
+.hp-vnt-cat:hover{color:#eaf6ff}
+.hp-vnt-cat.on{color:#eafffb}
+.hp-vnt-cat.on::before{background:var(--vnt-sci)}
+.hp-vnt-cat-ic{grid-area:ic;font-size:15px}
+.hp-vnt-cat-l{grid-area:l;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hp-vnt-cat-bar{grid-area:bar;height:3px;background:var(--w1,rgba(255,255,255,.06));overflow:hidden}
+.hp-vnt-cat-bar i{display:block;height:100%;background:var(--vnt-sci);opacity:.85}
+.hp-vnt-cat-n{grid-area:n;font-size:8.5px;opacity:.75}
+.hp-vnt-grid{
+  flex:1;min-width:0;overflow:auto;scrollbar-width:thin;align-content:start;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;
+}
+/* Карточка технологии: статус задаёт левую кромку и приглушение */
+.hp-vnt-card{
+  position:relative;z-index:0;display:flex;flex-direction:column;gap:5px;
+  padding:10px 12px 11px;color:var(--t2,#b8c4cf);
+  clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+}
+.hp-vnt-card::before{content:"";position:absolute;inset:0;z-index:-2;background:var(--w2,rgba(255,255,255,.1))}
+.hp-vnt-card::after{
+  content:"";position:absolute;inset:1px;z-index:-1;background:hsl(206 24% 8% / .92);
+  clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+}
+.hp-vnt-card.done::before{background:color-mix(in srgb,var(--vnt-sci) 45%,transparent)}
+.hp-vnt-card.active::before{background:var(--vnt-sci)}
+.hp-vnt-card.locked{opacity:.62}
+.hp-vnt-row1{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.hp-vnt-name{font-weight:700;font-size:12.5px;color:#dceef2;line-height:1.25}
+.hp-vnt-cost{flex:0 0 auto;font-family:var(--font-mono);font-size:9.5px;color:var(--vnt-sci)}
+.hp-vnt-cost.lack{color:#e0705f}
+.hp-vnt-badge{font-family:var(--font-mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase}
+.hp-vnt-badge.done{color:var(--vnt-sci)}
+.hp-vnt-badge.active{color:var(--vnt-sci);animation:hpVnrPulse 2.2s ease-in-out infinite}
+.hp-vnt-badge.queued{color:var(--t3,#8296a8)}
+.hp-vnt-desc{font-size:11px;line-height:1.45;color:var(--t3,#8296a8)}
+.hp-vnt-req{display:flex;flex-wrap:wrap;gap:4px;font-family:var(--font-mono);font-size:8.5px;color:var(--t3,#8296a8)}
+.hp-vnt-req span{
+  padding:2px 7px;background:var(--w1,rgba(255,255,255,.05));
+  clip-path:polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px);
+}
+.hp-vnt-prog{height:3px;background:var(--w1,rgba(255,255,255,.06));overflow:hidden}
+.hp-vnt-prog i{display:block;height:100%;width:40%;background:var(--vnt-sci);animation:hpVntScan 1.8s linear infinite}
+@keyframes hpVntScan{from{transform:translateX(-100%)}to{transform:translateX(260%)}}
+.hp-vnt-left{font-family:var(--font-mono);font-size:9px;color:var(--vnt-sci);letter-spacing:.06em}
+.hp-vnt-go{
+  align-self:flex-start;margin-top:2px;position:relative;z-index:0;cursor:pointer;
+  border:none;border-radius:0;background:var(--vnt-sci);color:#06211f;
+  font-family:var(--font-mono);font-size:10px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;padding:7px 14px;
+  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+  transition:filter var(--duration-fast);
+}
+.hp-vnt-go:hover{filter:brightness(1.12)}
+.hp-vnt-go.q{background:transparent;color:var(--vnt-sci);box-shadow:inset 0 0 0 1px var(--vnt-line)}
+.hp-vnt-go[disabled]{opacity:.45;cursor:not-allowed}
+@media (max-width:640px){
+  .hp-vn-research{position:relative;inset:auto;border-radius:var(--radius-sm)}
+  .hp-vn-research:not(.show){display:none}
+  .hp-vn-research .hp-vnr-clr{display:none}
+  .hp-vnt-wrap{flex-direction:column;padding:10px 12px 12px}
+  .hp-vnt-rail{flex:0 0 auto;flex-direction:row;flex-wrap:wrap}
+  .hp-vnt-cat{grid-template-columns:16px 1fr;padding:7px 9px}
+  .hp-vnt-grid{max-height:min(96vw,460px)}
+}
+
 /* ── Планшет/узкий десктоп: панель уже, но всё ещё сбоку ── */
 @media (max-width:960px){
   .hp-vn-col-side{flex:0 0 clamp(160px,32%,220px)}
@@ -3687,4 +3794,156 @@
   .hp-vn-btn {
     font-size: 9px !important;
   }
+}
+
+/* ══ Новелла: «Управление колониями» — перечень планет + сцена планеты ══
+   Каркас (шапка/срезы/подложки) наследуется от .hp-vn-colony — тот же оверлей.
+   Фолбэк-градиенты классов планет работают, пока арт bg_<look>.webp не залит. */
+.hvp-headr{display:flex;align-items:center;gap:8px}
+.hvp-body{overflow:auto;scrollbar-width:thin}
+.hvp-look-gas{--hvp-g1:#3a2f52;--hvp-g2:#141024}
+.hvp-look-ocean{--hvp-g1:#12405e;--hvp-g2:#081726}
+.hvp-look-ice{--hvp-g1:#2e4a5e;--hvp-g2:#0d1a24}
+.hvp-look-lava{--hvp-g1:#5a2412;--hvp-g2:#1a0906}
+.hvp-look-terran{--hvp-g1:#1f4a30;--hvp-g2:#0a1810}
+.hvp-look-rock{--hvp-g1:#3d3a34;--hvp-g2:#12100d}
+
+/* ── Экран 1: карточки планет ── */
+.hvp-grid{
+  flex:1;display:grid;gap:14px;align-content:start;
+  grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
+}
+.hvp-card{
+  position:relative;z-index:0;display:flex;flex-direction:column;text-align:left;
+  cursor:pointer;padding:0;border:none;border-radius:0;background:transparent;color:inherit;
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));
+  transition:transform var(--duration-fast) ease;
+}
+.hvp-card::before{content:"";position:absolute;inset:0;z-index:-2;background:var(--cyb-line)}
+.hvp-card::after{
+  content:"";position:absolute;inset:1px;z-index:-1;background:hsl(216 22% 8% / .92);
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));
+}
+.hvp-card:hover{transform:translateY(-2px)}
+.hvp-card:hover::before{background:color-mix(in srgb,var(--gd,#3a9bdc) 62%,transparent)}
+/* планета-сфера карточки — тот же приём, что в регистрации (canvas frDrawSphere),
+   на «звёздном» подиуме с мягкой подсветкой класса планеты снизу */
+.hvp-card-orb{
+  position:relative;display:flex;align-items:center;justify-content:center;height:128px;overflow:hidden;
+  background:
+    radial-gradient(1px 1px at 18% 30%, rgba(255,255,255,.5), transparent 55%),
+    radial-gradient(1px 1px at 72% 18%, rgba(255,255,255,.38), transparent 55%),
+    radial-gradient(1.5px 1.5px at 86% 62%, rgba(255,255,255,.3), transparent 55%),
+    radial-gradient(1px 1px at 38% 76%, rgba(255,255,255,.28), transparent 55%),
+    radial-gradient(ellipse at 50% 135%, var(--hvp-g1,#26303e), transparent 72%),
+    linear-gradient(180deg, hsl(216 30% 5%), hsl(216 26% 8%));
+}
+/* сфера рисуется классами регистрации (fr-env-img/fr-env-cv) — здесь только размер */
+.hvp-orb{width:96px;height:96px;margin:0}
+.hvp-card:hover .fr-env-cv{filter:drop-shadow(0 0 14px color-mix(in srgb,var(--gd,#3a9bdc) 45%,transparent))}
+.hvp-cap{
+  position:absolute;top:8px;left:0;padding:3px 10px 3px 8px;
+  font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;color:#0c1018;
+  background:var(--gold,#c9a227);clip-path:polygon(0 0,100% 0,calc(100% - 7px) 100%,0 100%);
+}
+.hvp-card-body{display:flex;flex-direction:column;gap:4px;padding:10px 12px 12px}
+.hvp-card-nm{
+  font-family:var(--font-display);font-weight:800;font-size:14px;color:#eaf6ff;
+  text-transform:uppercase;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.hvp-card-ty{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3,#8296a8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hvp-card-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:3px}
+.hvp-chip{
+  font-family:var(--font-mono);font-size:10px;color:var(--t2,#b8c4cf);
+  padding:2px 7px;background:rgba(46,155,224,.08);
+  clip-path:polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px);
+}
+.hvp-chip i{font-style:normal;color:var(--gdl,#5fb0e6)}
+.hvp-res{font-size:11px}
+
+/* ── Экран 2: сцена планеты ── */
+.hvp-body-scene{gap:14px}
+.hvp-scene{
+  position:relative;flex:1 1 auto;min-width:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;
+  background:radial-gradient(ellipse at 50% 130%,var(--hvp-g1,#26303e),var(--hvp-g2,#0a0e14));
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));
+}
+.hvp-scene-art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.hvp-scene-grad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(5,8,13,.82) 92%)}
+/* герой сцены: вращающаяся планета-сфера + имя; арт-фон (когда зальют) ляжет позади */
+.hvp-scene-hero{
+  position:relative;z-index:2;flex:1 1 auto;min-height:120px;
+  display:flex;align-items:center;justify-content:center;gap:20px;padding:14px;
+}
+/* шар героя — парадный портрет регистрации (fr-cap-hero-orbit): круглое свечение,
+   плавание; запас отступов, чтобы клип-срезы сцены его никогда не резали */
+.hvp-hero-orbit{width:clamp(120px,22vh,160px);height:clamp(120px,22vh,160px);margin:16px 0 16px 16px}
+.hvp-scene-cap{
+  font-family:var(--font-display);font-weight:800;font-size:clamp(15px,2vw,20px);color:#eaf6ff;
+  text-transform:uppercase;letter-spacing:.06em;text-shadow:0 1px 6px rgba(0,0,0,.8);
+  display:flex;flex-direction:column;gap:3px;
+}
+.hvp-scene-cap i{font-style:normal;font-family:var(--font-mono);font-weight:400;font-size:10px;letter-spacing:.1em;color:var(--t2,#b8c4cf)}
+/* «участки» застройки поверх нижней кромки сцены */
+.hvp-tiles{
+  position:relative;z-index:2;display:grid;gap:8px;padding:10px;
+  grid-template-columns:repeat(auto-fill,minmax(96px,1fr));
+}
+.hvp-tile{
+  position:relative;z-index:0;display:flex;flex-direction:column;align-items:center;gap:3px;
+  min-height:86px;padding:8px 6px 7px;cursor:pointer;border:none;border-radius:0;background:transparent;color:inherit;
+  clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px));
+  transition:transform var(--duration-fast) ease;
+}
+.hvp-tile::before{content:"";position:absolute;inset:0;z-index:-2;background:rgba(255,255,255,.14)}
+.hvp-tile::after{
+  content:"";position:absolute;inset:1px;z-index:-1;background:hsl(216 24% 7% / .82);
+  clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px));
+}
+.hvp-tile:hover{transform:translateY(-2px)}
+.hvp-tile:hover::before{background:color-mix(in srgb,var(--gd,#3a9bdc) 60%,transparent)}
+.hvp-tile.on::before{background:var(--gd,#3a9bdc)}
+.hvp-tile.on::after{background:color-mix(in srgb,var(--gd,#3a9bdc) 14%,hsl(216 24% 7% / .9))}
+.hvp-tile-art{width:100%;height:44px;object-fit:contain;display:block;filter:drop-shadow(0 3px 5px rgba(0,0,0,.55))}
+/* эмодзи-фолбэк прячется, когда спрайт загрузился (img стоит перед span) */
+.hvp-tile-art:not([style*="none"]) + .hvp-tile-ic{display:none}
+.hvp-tile-ic{font-size:22px;line-height:44px;height:44px}
+.hvp-tile-nm{
+  font-family:var(--font-mono);font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--t2,#b8c4cf);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;
+}
+.hvp-tile-sl{position:absolute;top:4px;right:7px;font-family:var(--font-mono);font-size:9px;color:var(--gdl,#5fb0e6)}
+.hvp-tile-pend{cursor:default;opacity:.75}
+.hvp-tile-pend::before{background:rgba(255,255,255,.08)}
+.hvp-tile-free::before{background:color-mix(in srgb,#5fe0a0 34%,transparent)}
+.hvp-tile-free .hvp-tile-ic{color:#5fe0a0}
+.hvp-tile-free .hvp-tile-nm{color:#5fe0a0}
+.hvp-tile-free:hover::before{background:#5fe0a0}
+
+/* правая панель: сводка + управление зданием */
+.hvp-side{flex:0 0 clamp(220px,30%,320px);display:flex;flex-direction:column;gap:12px;min-height:0;overflow:auto;scrollbar-width:thin}
+.hvp-info{padding:11px 13px;display:flex;flex-direction:column;gap:7px}
+.hvp-info-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3,#8296a8)}
+.hvp-info-row b{font-family:var(--font-display);font-size:13px;color:#eaf6ff}
+.hvp-info-res{display:flex;flex-direction:column;gap:4px;margin-top:2px;padding-top:7px;border-top:1px solid var(--cyb-line)}
+.hvp-res-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2,#b8c4cf)}
+.hvp-res-none{font-family:var(--font-mono);font-size:9.5px;color:var(--t3,#8296a8)}
+.hvp-manage{min-height:0}
+.hvp-manage .ec-bld{background:hsl(216 22% 9% / .92);border-color:var(--cyb-line)}
+.hvp-manage-hint{
+  padding:14px 13px;font-size:12px;line-height:1.5;color:var(--t3,#8296a8);
+  background:hsl(216 22% 8% / .6);border:1px dashed rgba(255,255,255,.12);
+}
+
+/* мобилка: сцена сверху, панель под ней (тот же паттерн, что у колонизации) */
+@media (max-width:640px){
+  .hp-vn-planets{position:relative;inset:auto;border-radius:var(--radius-sm)}
+  .hp-vn-planets:not(.show){display:none}
+  .hvp-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .hvp-card-orb{height:104px}
+  .hvp-card-orb .hvp-cv{width:76px;height:76px}
+  .hvp-body-scene{flex-direction:column}
+  .hvp-scene{flex:0 0 auto;min-height:300px}
+  .hvp-tiles{grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}
+  .hvp-side{flex:0 0 auto;overflow:visible}
 }

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>colony harness</title>
+<link rel="stylesheet" href="css/index.css">
+<style>
+  body { background:#05080d; margin:0; }
+  .hp-vn-colony { position:fixed; inset:0; display:block !important; }
+</style>
+</head>
+<body>
+<div class="hp-vn-colony show" id="hp-vn-colony"></div>
+<script>
+// ── стабы окружения ДО render.js ──
+function toast(){}
+var lang = 'ru';
+</script>
+<script src="render.js"></script>
+<script>
+// ── стабы данных ПОСЛЕ render.js ──
+if (typeof esc === 'undefined') window.esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+if (typeof jsq === 'undefined') window.jsq = s => String(s).replace(/'/g, "\\'");
+
+const hex = (cx, cy, r, j) => Array.from({length:6}, (_,i)=>{
+  const a = Math.PI/3*i + (j||0);
+  return [cx + Math.cos(a)*r*(0.85+0.3*Math.sin(i*2.7)), cy + Math.sin(a)*r*(0.85+0.3*Math.cos(i*1.9))];
+});
+
+const SYS = [
+  {id:'s1', name:'Синли-Бей', x:520, y:420, faction:'me', star_type:'yellow'},
+  {id:'s2', name:'Лира', x:380, y:580, faction:'me', star_type:'blue'},
+  {id:'s3', name:'Третир', x:300, y:300, faction:'f2', star_type:'red', is_giant:true},
+  {id:'s4', name:'Зоцид', x:150, y:420, faction:'f2', star_type:'white'},
+  {id:'s5', name:'Сомну', x:700, y:640, faction:'f3', star_type:'green'},
+  {id:'s6', name:'Кресс', x:660, y:300, faction:null, star_type:'yellow'},
+  {id:'s7', name:'Ирвон', x:240, y:660, faction:null, star_type:'red'},
+  {id:'s8', name:'Ольта', x:560, y:700, faction:null, star_type:'blue'},
+];
+const byId2 = Object.fromEntries(SYS.map(s=>[s.id,s]));
+const FACS = { me:{color:'#9a4fd0'}, f2:{color:'#3a8f6a'}, f3:{color:'#2f6d8f'} };
+
+window.EC = {
+  fid:'me', busy:false,
+  app:{ faction_id:'me', color:'#9a4fd0', name:'Ордо Келум', gov:'Теократия', leader:'Neverslo IX',
+        herald_url:'assets/constructors/ship_weapon_light_0.webp' },
+  eco:{ gc: 12000 },
+  allSystems: SYS, lanes: [], colonies:[{system_id:'s1', is_capital:true}],
+};
+window.ecMySysIds = () => new Set(['s1','s2']);
+window.ecClaimableIds = () => ['s6'];
+window.ecClaimsLeft = () => 1;
+window.ecClaimMax = () => 1;
+window.ecClaimCost = () => 3000;
+window.ecClaimCdDays = () => 4;
+window.ecClaimCooldownMs = () => 0;
+window.ecNum = n => (+n).toLocaleString('ru-RU');
+window.gmFaction = fid => FACS[fid] || null;
+window.GM = { loaded:true, systems: SYS, lanes:[{a_id:'s1',b_id:'s2'},{a_id:'s1',b_id:'s6'},{a_id:'s2',b_id:'s7'},{a_id:'s1',b_id:'s3'},{a_id:'s2',b_id:'s8'},{a_id:'s5',b_id:'s8'}], capitals:{s1:true} };
+window.gmBuildGeo = () => ({
+  fills: SYS.map(s => ({ sys:s, fac: FACS[s.faction]||null, pts: hex(s.x, s.y, 110, s.x*0.01) })),
+  edges: [
+    { kind:'fac', color:'#9a4fd0', pts: hex(520,420,110,5.2).slice(0,4) },
+    { kind:'front', color:'#c44', pts: hex(300,300,110,3).slice(0,3) },
+  ],
+  lanes: [{ax:520,ay:420,bx:380,by:580,cx:430,cy:470},{ax:520,ay:420,bx:660,by:300,cx:600,cy:380},{ax:380,ay:580,bx:240,by:660,cx:300,cy:600}],
+});
+
+document.getElementById('hp-vn-colony').innerHTML = _heroColonyBuild(false);
+</script>
+</body>
+</html>

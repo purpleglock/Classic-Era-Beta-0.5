@@ -1,0 +1,38 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>decal harness</title>
+<style>
+  :root { --b1:#0d1b22; --b2:#122630; --w1:#24404d; --w2:#9fc3d4; --t2:#d9b25c; --t3:#5d7b8a; --t4:#7e97a4; --te:#54d2e0; --gd:#e0b45c; --err:#e06060; --font-mono:ui-monospace,monospace; }
+  body { background:#081218; margin:0; }
+  .cn-schematic { width:960px; margin:12px auto; }
+  svg { width:100%; display:block; background:#0a161d; }
+  h4 { color:#9fc3d4; font-family:monospace; margin:10px 20px 2px; }
+</style></head><body>
+<script>
+  const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const user = { id:'test', role:'superadmin' };
+</script>
+<script src="constructors.js"></script>
+<div id="ctl" style="display:none">
+  <select id="cn-class"></select><select id="cn-type"><option value="0">0</option></select>
+  <select id="cn-armor"><option value="1" selected>1</option></select>
+  <select id="cn-shield"><option value="1" selected>1</option></select>
+  <select id="cn-engine"><option value="0" selected>0</option></select>
+  <select id="cn-reactor"><option value="0">0</option></select>
+  <input id="cn-name" value="ГНЕВ БЕСКОНЕЧНОЙ СПРАВЕДЛИВОСТИ">
+</div>
+<div id="out"></div>
+<script>
+  CN.cat = 'ship'; CN.def = CN_DEFS.ship;
+  CN.myApp = { name: 'Супердемократия Люмена', color: '#e0a93d', herald_url: null };
+  const out = document.getElementById('out');
+  const clsSel = document.getElementById('cn-class');
+  for (const k in CN_SHIP_GEO) {
+    clsSel.innerHTML = `<option value="${k}" selected>${k}</option>`;
+    CN.shipLayout = { mounts: [{ w: null }, { w: null }], bays: [{ m: null }, { m: null }] }; CN.schemShow = { weapons: true, bays: true };
+    const h = document.createElement('h4'); h.textContent = k; out.appendChild(h);
+    const d = document.createElement('div'); d.id = 'cn-schematic'; d.className = 'cn-schematic'; out.appendChild(d);
+    cnDrawShip();
+    d.id = 'done-' + k;
+  }
+</script>
+</body></html>
