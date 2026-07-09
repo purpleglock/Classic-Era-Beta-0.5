@@ -524,6 +524,17 @@ function adShipArtPanel() {
     ${classes.map(c => `<button class="btn ${c === k ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="AD.artClass='${c}';adPaint()">${esc(DB.data[c].name)}</button>`).join('')}
   </div>`;
 
+  // Общие файлы БЕЗ суффикса класса — фолбэк для ВСЕХ классов сразу
+  // (приоритет: подкласс → класс → общий; см. cnGenImg в constructors.js).
+  const genTiles = [
+    adShipArtTile('Тело корабля (все классы)', 'ship_class.webp', { wide: true, max: 1200 }),
+    adShipArtTile('Текстура брони (все классы)', 'ship_armortex.webp', { wide: true, max: 1024 }),
+    adShipArtTile('Текстура щита (все классы)', 'ship_shieldtex.webp', { wide: true, max: 1024 }),
+    adShipArtTile('Декор (все классы)', 'ship_decor.webp', { wide: true, alpha: true, max: 1200 }),
+  ];
+  const genSection = adShipArtSection('🌐 Общее для ВСЕХ классов',
+    'Один файл на всю линейку: применяется к любому классу, у которого нет своего файла. Файлы конкретного класса/подкласса (ниже, по вкладкам) перекрывают общий.', genTiles);
+
   // Корпус: hero-тело класса + арт каждой специализации
   const hullTiles = [adShipArtTile('Hero-тело (общее для класса)', `ship_class_${k}.webp`, { wide: true, max: 1200 })];
   (cls.types || []).forEach((t, i) => hullTiles.push(adShipArtTile(t.name, `ship_type_${k}_${i}.webp`, { wide: true, max: 1200 })));
@@ -560,6 +571,7 @@ function adShipArtPanel() {
   return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
     <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🚀 Оформление кораблей</div>
     <div style="font-size:11px;color:var(--t4,#6a7a88);margin:6px 0 4px;line-height:1.5">📁 Всё сохраняется <b>прямо в папку игры</b> <code>assets/constructors/</code> под фиксированными именами. Запусти локальный сервер один раз: <code>node tools/upload-server.js</code> и держи окно открытым. После заливки <b>обнови страницу игры</b> — картинка появится на схеме конструктора и в карточках. Все слоты необязательны: чего нет — рисуется векторный фолбэк.</div>
+    ${genSection}
     ${picker}
     ${sections}
   </div>`;

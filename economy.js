@@ -591,8 +591,16 @@ function ecPlanetGroup(p) {
 function ecColonizable(p) { return !EC_NOCOL.has(ecPlanetGroup(p)); }
 // Роботы (раса «Синтетики / Киборги» ИЛИ правление «Машинный разум») колонизируют
 // ЛЮБОЙ пригодный мир напрямую — без терраформа. Зеркало сервера: economy_colonize
-// (native := _faction_is_robot(fid) or grp = any(_race_native_envs(...))).
-function ecNative(p, race) { return ecIsRobot() || (EC_HAB[race] || []).includes(ecPlanetGroup(p)); }
+// (native := _faction_native_all(fid) or grp = any(_race_native_envs(...))).
+// ── Легаси-исключение (разовое): фракции, взявшие правление «Машинный разум (ИИ)»
+//    с БИОЛОГИЧЕСКОЙ расой ещё до разделения перка. Для них «жить где угодно без
+//    терраформа» НЕ действует — терраформ обязателен, как у их расы. Прочие
+//    робо-бонусы (наука ×2, захваты ×2, пехота ×3) сохраняются. Зеркало сервера:
+//    public._faction_native_all (fid <> любой из этого списка). НЕ общее правило.
+const EC_HAB_NOSHORTCUT = new Set(['fac_d9662abfe6']); // «Супердемократия Люмена» (Гуманоиды + ИИ)
+// «Все миры родные / терраформ не нужен» — роботы, КРОМЕ легаси-исключений.
+function ecNativeAll() { return ecIsRobot() && !EC_HAB_NOSHORTCUT.has(EC.fid); }
+function ecNative(p, race) { return ecNativeAll() || (EC_HAB[race] || []).includes(ecPlanetGroup(p)); }
 // Небожители: конфиг станции, если ИЗУЧЕНА технология, открывающая группу планет g.
 function ecStationFor(group) {
   const done = (EC.eco && EC.eco.research) || [];

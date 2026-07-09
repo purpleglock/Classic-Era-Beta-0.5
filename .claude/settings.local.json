@@ -196,7 +196,9 @@
       "Bash(ls *.json)",
       "Bash(grep -A10 '\"scripts\"' package.json)",
       "Bash(ls tools/upload-server.js)",
-      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('constructors.js','utf8'\\)\\); console.log\\('syntax OK'\\)\")"
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('constructors.js','utf8'\\)\\); console.log\\('syntax OK'\\)\")",
+      "mcp__claude-in-chrome__list_connected_browsers",
+      "Bash(node \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/0f274168-9b21-4141-a3e0-b51c2915dae6/scratchpad/harness.js\" constructors.js)"
     ]
   }
 }

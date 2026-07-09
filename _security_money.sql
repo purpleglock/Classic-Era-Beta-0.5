@@ -389,6 +389,20 @@ returns jsonb language sql stable security definer set search_path=public as $$
   limit 1
 $$;
 
+-- «Все миры родные / терраформ не нужен» — роботы, КРОМЕ легаси-исключений:
+-- фракции, взявшие правление «Машинный разум (ИИ)» с БИОЛОГИЧЕСКОЙ расой ещё до
+-- разделения перка (у них тело живое → терраформ обязателен). Прочие робо-бонусы
+-- (наука ×2, захваты ×2, пехота ×3) остаются на _faction_is_robot — НЕ меняем.
+-- Зеркало клиента: economy.js EC_HAB_NOSHORTCUT / ecNativeAll. Чтобы добавить
+-- фракцию — допиши faction_id в NOT IN (...). Также см. _fix_hab_legacy_exception.sql.
+create or replace function public._faction_native_all(p_fid text)
+returns boolean language sql stable security definer set search_path=public as $$
+  select public._faction_is_robot(p_fid)
+     and p_fid not in ('fac_d9662abfe6');   -- «Супердемократия Люмена» (Гуманоиды + ИИ)
+$$;
+revoke all on function public._faction_native_all(text) from public;
+grant execute on function public._faction_native_all(text) to authenticated;
+
 -- ── RPC: КОЛОНИЗАЦИЯ родной планеты (мгновенно) ─────────────
 create or replace function public.economy_colonize(p_system_id text, p_planet_pid int)
 returns jsonb language plpgsql security definer set search_path=public as $$
@@ -405,8 +419,8 @@ begin
   grp := public._ec_group_of(pl);   -- ← kind-aware (пояс/аномалия), не затирать фикс _fix_station_belt
   if public._ec_nocol(grp) then raise exception 'planet needs a station, not colony'; end if;
 
-  -- родная (или роботы — всё родное); иначе колония невозможна без терраформа
-  native := public._faction_is_robot(fid)
+  -- родная (или роботы — всё родное, КРОМЕ легаси-исключений); иначе нужен терраформ
+  native := public._faction_native_all(fid)
             or grp = any(public._race_native_envs(v_race));
   if not native then raise exception 'planet not native — use terraform'; end if;
 
@@ -475,7 +489,7 @@ declare fid text; v_race text; pl jsonb; grp text; tier int;
 begin
   fid := public._ec_my_fid();
   if p_planet_pid is null then raise exception 'planet has no pid'; end if;
-  if public._faction_is_robot(fid) then raise exception 'robots colonize directly, no terraform'; end if;
+  if public._faction_native_all(fid) then raise exception 'robots colonize directly, no terraform'; end if;
   select race into v_race from public.faction_applications
     where faction_id = fid and status='approved' order by updated_at desc limit 1;
 
