@@ -206,7 +206,12 @@
       "PowerShell(node --check \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\render.js\"; if \\($?\\) { \"SYNTAX OK\" }; $f=\"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\index.html\"; $t=[IO.File]::ReadAllText\\($f\\); $t=$t.Replace\\(\"colmgmt1\",\"colmgmt2\"\\); [IO.File]::WriteAllText\\($f,$t\\); $c=\"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\css\\\\index.css\"; $t2=[IO.File]::ReadAllText\\($c\\); $t2=$t2.Replace\\(\"03_content.css?v=20260709colmgmt1\",\"03_content.css?v=20260709colmgmt2\"\\); [IO.File]::WriteAllText\\($c,$t2\\); \"BUMP2 OK\")",
       "PowerShell(node --check \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\render.js\"; node --check \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\economy.js\"; if \\($?\\) { \"SYNTAX OK\" }; $f=\"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\index.html\"; $t=[IO.File]::ReadAllText\\($f\\); $t=$t.Replace\\(\"colmgmt2\",\"colmgmt3\"\\); [IO.File]::WriteAllText\\($f,$t\\); $c=\"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\css\\\\index.css\"; $t2=[IO.File]::ReadAllText\\($c\\); $t2=$t2.Replace\\(\"colmgmt2\",\"colmgmt3\"\\); [IO.File]::WriteAllText\\($c,$t2\\); \"BUMP3 OK\")",
       "Bash(curl -s \"https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/unit_production?select=faction_id&limit=3\" -H \"apikey: sb_publishable_f_xjq0WQcf2AUdHWjk1-XQ_BDLpsoiS\")",
-      "Bash(curl -s \"https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/faction_units?faction_id=eq.fac_b5c2c1f7ee&select=id,name,category,data&limit=50\" -H \"apikey: sb_publishable_f_xjq0WQcf2AUdHWjk1-XQ_BDLpsoiS\")"
+      "Bash(curl -s \"https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/faction_units?faction_id=eq.fac_b5c2c1f7ee&select=id,name,category,data&limit=50\" -H \"apikey: sb_publishable_f_xjq0WQcf2AUdHWjk1-XQ_BDLpsoiS\")",
+      "Bash(sed -i 's/render.js?v=20260709assembly1/render.js?v=20260710assembly2/; s/css\\\\/index.css?v=20260709assembly1/css\\\\/index.css?v=20260710assembly2/g' index.html)",
+      "Bash(sed -i \"s/03_content.css?v=20260709research2/03_content.css?v=20260710assembly2/\" css/index.css)",
+      "Bash(sed -i 's/admin.js?v=20260710assembly4/admin.js?v=20260710assembly5/' index.html)",
+      "PowerShell(\\(Get-Content index.html -Raw\\) -replace 'render\\\\.js\\\\?v=20260710assembly4','render.js?v=20260711fxwrap1' -replace 'index\\\\.css\\\\?v=20260710assembly3','index.css?v=20260711fxwrap1' | Set-Content index.html -Encoding utf8 -NoNewline)",
+      "mcp__claude-in-chrome__navigate"
     ]
   }
 }

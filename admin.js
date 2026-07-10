@@ -350,7 +350,8 @@ function adPortraitsPanel() {
     </div>`;
   }).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:14px 0">Пул пуст — загрузите первые портреты. Игра подбирает их оперативникам случайно по расе.</div>';
   return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
-    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🎭 Портреты оперативников <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· общий пул для всех фракций (${list.length})</span></div>
+    ${adAsmArtSection()}
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6);border-top:1px solid var(--w2,#2a3340);padding-top:14px">🎭 Портреты оперативников <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· общий пул для всех фракций (${list.length})</span></div>
     <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Помечайте портреты расой и полом. Каждому оперативнику игра выбирает портрет <b>случайно</b> из подходящих по расе (и полу, если задан) — выбор закреплён за агентом. Без расы — «универсальные», подходят всем.</div>
     <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 12px;line-height:1.5">📁 Картинки сохраняются <b>прямо в папку игры</b> <code>${AD_PORT_DIR}/</code> (не в облако) — потом публикуешь вместе с проектом. Запусти локальный сервер один раз: <code>node tools/upload-server.js</code> и держи окно открытым.</div>
     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
@@ -798,6 +799,55 @@ async function adVNPersist() {
   } catch (e) {}
   if (typeof saveSiteSetting !== 'function') throw new Error('saveSiteSetting недоступна');
   await saveSiteSetting('wk_hero_vn', json);   // может бросить — обработают вызывающие
+}
+// ── Арт карт Межзвёздной Ассамблеи ──
+// URL-ы хранятся в site_settings (ключ wk_asm_cards) одним JSON — клиент
+// подхватывает их раньше файлов assets/assembly/*; пустой слот = файл/CSS-фолбэк.
+const AD_ASM_KINDS = [
+  ['card_lib', '🕊 Закон Федерации'], ['card_gal', '🜃 Директива'], ['card_back', '🂠 Рубашка карты'],
+  ['role_lib', 'Роль: Федералист'], ['role_gal', 'Роль: Галактоцентрист'], ['role_archon', '👁 Роль: АРХОНТ'],
+];
+function adAsmCfg() { try { return JSON.parse(localStorage.getItem('wk_asm_cards') || 'null') || {}; } catch (e) { return {}; } }
+async function adAsmCfgSave(cfg) {
+  cfg._ts = Date.now();
+  localStorage.setItem('wk_asm_cards', JSON.stringify(cfg));   // локально — сразу
+  if (typeof saveSiteSetting !== 'function') throw new Error('saveSiteSetting недоступна');
+  await saveSiteSetting('wk_asm_cards', JSON.stringify(cfg));  // общая БД — для всех
+}
+async function adAsmArtUpload(kind, el) {
+  const f = el.files && el.files[0];
+  if (!f) return;
+  try {
+    const serverUp = await adPortServerAlive();
+    const url = await adVNUploadOne(f, serverUp);
+    if (!url) throw new Error('пустой URL');
+    const cfg = adAsmCfg(); cfg[kind] = url;
+    await adAsmCfgSave(cfg);
+    toast('Арт карты загружен', 'ok');
+  } catch (e) { toast('Не удалось загрузить: ' + (e.message || e), 'err'); }
+  adPaint();
+}
+async function adAsmArtClear(kind) {
+  if (!confirm('Убрать арт этого слота? Карта вернётся к файлу/рисованному виду.')) return;
+  const cfg = adAsmCfg(); delete cfg[kind];
+  try { await adAsmCfgSave(cfg); } catch (e) { toast('Не сохранилось в БД: ' + (e.message || e), 'err'); }
+  adPaint();
+}
+function adAsmArtSection() {
+  const cfg = adAsmCfg();
+  const cells = AD_ASM_KINDS.map(([k, lbl]) => {
+    const u = cfg[k];
+    return `<div style="width:112px">
+      <div style="position:relative;width:112px;height:140px;border-radius:8px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover no-repeat;${u ? `background-image:url('${esc(u)}');` : ''}display:flex;align-items:center;justify-content:center">
+        ${u ? `<button class="btn btn-gh btn-xs" title="Убрать арт" onclick="adAsmArtClear('${k}')" style="position:absolute;top:3px;right:3px;min-width:0;padding:2px 6px;background:rgba(8,12,22,.8)">✕</button>` : `<span style="font-size:24px;opacity:.4">🃏</span>`}
+      </div>
+      <div style="font-size:10.5px;color:var(--t3,#8aa0b0);margin:4px 0 3px;line-height:1.3">${lbl}</div>
+      <label class="btn btn-gh btn-xs" style="display:block;text-align:center;cursor:pointer">⬆ загрузить<input type="file" accept="image/*" style="display:none" onchange="adAsmArtUpload('${k}',this)"></label>
+    </div>`;
+  }).join('');
+  return `<div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px">🏛 АССАМБЛЕЯ — АРТ КАРТ</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 10px;line-height:1.5">Картинки карт законов и ролей экрана «Межзвёздная Ассамблея». Загруженное здесь сохраняется в общую БД и видно всем игрокам сразу. Пустой слот — карта берёт файл assets/assembly/*.webp (батник tools/assembly_cards.bat) или рисуется сама. Карты ≈500×700, роли — широкие (баннер).</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px">${cells}</div>`;
 }
 function adVNPanel() {
   if (!AD.vn) AD.vn = adVNDefault();

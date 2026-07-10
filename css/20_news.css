@@ -228,6 +228,8 @@
   margin: 0 0 18px; padding: 8px 16px; border-left: var(--deco-accent-w-lg, 3px) solid var(--fn-accent, #5fb0e6);
   background: color-mix(in srgb, var(--fn-accent, #5fb0e6) 7%, transparent);
   color: var(--t1, #e8edf2); font-style: italic; }
+.fn-art-body blockquote p, .fn-c-preview blockquote p { margin: 0 0 12px; }
+.fn-art-body blockquote p:last-child, .fn-c-preview blockquote p:last-child { margin-bottom: 0; }
 .fn-art-body hr { border: 0; border-top: var(--deco-frame-w, 1px) solid var(--w2, #2a3340); margin: 22px 0; }
 .fn-art-body code {
   font-family: var(--fn-mono, monospace); font-size: .92em;

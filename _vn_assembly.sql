@@ -97,6 +97,17 @@ create table if not exists public.assembly_votes (
   primary key (conv_id, round_no, faction_id)
 );
 
+-- ── Штрафы за самовольный выход из активного созыва:
+--    запрет на участие до выплаты Ассамблее 500 000 ГС ──
+create table if not exists public.assembly_penalties (
+  faction_id text primary key,
+  fine       bigint not null default 500000,
+  created_at timestamptz not null default now(),
+  paid_at    timestamptz
+);
+alter table public.assembly_penalties enable row level security;
+revoke all on public.assembly_penalties from anon, authenticated;
+
 alter table public.assembly_convocations enable row level security;
 alter table public.assembly_members      enable row level security;
 alter table public.assembly_rounds       enable row level security;
@@ -642,6 +653,8 @@ begin
 
   return jsonb_build_object(
     'me_faction', v_fid is not null,
+    'me_fine', (select fine from public.assembly_penalties
+                where faction_id = v_fid and paid_at is null),
     'conv', jsonb_build_object(
       'id', c.id, 'status', c.status, 'start_date', c.start_date, 'seats', c.seats,
       'lib_laws', c.lib_laws, 'gal_laws', c.gal_laws, 'tracker', c.tracker,
@@ -683,6 +696,10 @@ declare ctx record; c public.assembly_convocations; r public.assembly_rounds; me
 begin
   ctx := public._asm_ctx(); c := ctx.o_conv; r := ctx.o_round; me := ctx.o_me;
   if me.faction_id is not null then raise exception 'already signed up'; end if;
+  if exists (select 1 from public.assembly_penalties
+             where faction_id = public._asm_my_fid() and paid_at is null) then
+    raise exception 'assembly fine unpaid';
+  end if;
   insert into public.assembly_members(conv_id, faction_id, owner)
     values (c.id, public._asm_my_fid(), auth.uid());
   return public.assembly_state();
@@ -820,3 +837,77 @@ begin
 end$$;
 revoke all on function public.assembly_power(int) from public, anon;
 grant execute on function public.assembly_power(int) to authenticated;
+
+-- ── Самовольный выход из сессии ──
+--    Во время записи — просто отзыв заявки (без последствий).
+--    Из активного созыва — кресло уходит первому лоббисту (наследует роль),
+--    на беглеца накладывается штраф 500 000 ГС: запрет на участие до выплаты.
+--    Если замены нет — делегат выбывает из игры; дезертирство Архонта = победа Федерации.
+create or replace function public.assembly_leave()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare ctx record; c public.assembly_convocations; r public.assembly_rounds;
+        me public.assembly_members; sub public.assembly_members;
+begin
+  ctx := public._asm_ctx(); c := ctx.o_conv; r := ctx.o_round; me := ctx.o_me;
+  if me.faction_id is null or me.replaced then raise exception 'not a member'; end if;
+
+  if c.status = 'signup' then
+    delete from public.assembly_members where conv_id=c.id and faction_id=me.faction_id;
+    return public.assembly_state();
+  end if;
+
+  if me.seat is not null and me.alive then
+    select * into sub from public.assembly_members
+      where conv_id=c.id and seat is null and not replaced and faction_id <> me.faction_id
+      order by joined_at limit 1;
+    if found then
+      update public.assembly_members set seat=null, replaced=true
+        where conv_id=c.id and faction_id=me.faction_id;
+      update public.assembly_members set seat=me.seat, role=me.role, missed=0
+        where conv_id=c.id and faction_id=sub.faction_id;
+      perform public._asm_news('🏛 Делегат покинул Ассамблею',
+        'Кресло №' || me.seat || ' самовольно оставлено. Место занял лоббист; на беглеца наложен штраф 500 000 ГС.');
+    else
+      update public.assembly_members set seat=null, replaced=true, alive=false
+        where conv_id=c.id and faction_id=me.faction_id;
+      if me.role = 'archon' then
+        update public.assembly_convocations
+          set status='done', winner='lib', win_reason='archon_fled', finished_at=now()
+          where id=c.id;
+        perform public._asm_news('🏛 Созыв завершён: АРХОНТ ДЕЗЕРТИРОВАЛ',
+          'Покинувший заседание делегат оказался скрытым Архонтом. Заговор обезглавлен — Федерация победила.');
+      else
+        perform public._asm_news('🏛 Делегат покинул Ассамблею',
+          'Кресло №' || me.seat || ' опустело: замены в очереди лоббистов нет. На беглеца наложен штраф 500 000 ГС.');
+      end if;
+    end if;
+  else
+    update public.assembly_members set replaced=true
+      where conv_id=c.id and faction_id=me.faction_id;
+  end if;
+
+  insert into public.assembly_penalties(faction_id) values (me.faction_id)
+    on conflict (faction_id) do update set fine=500000, created_at=now(), paid_at=null;
+  perform public._asm_ensure();   -- выход мог снять блокировку фазы (ранний резолв)
+  return public.assembly_state();
+end$$;
+revoke all on function public.assembly_leave() from public, anon;
+grant execute on function public.assembly_leave() to authenticated;
+
+-- ── Выплата штрафа Ассамблее (снимает запрет на участие) ──
+create or replace function public.assembly_pay_fine()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_fid text; p public.assembly_penalties;
+begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  v_fid := public._asm_my_fid();
+  if v_fid is null then raise exception 'no approved faction'; end if;
+  select * into p from public.assembly_penalties where faction_id=v_fid and paid_at is null;
+  if not found then raise exception 'no fine'; end if;
+  update public.faction_economy set gc = gc - p.fine where faction_id=v_fid and gc >= p.fine;
+  if not found then raise exception 'not enough gc'; end if;
+  update public.assembly_penalties set paid_at=now() where faction_id=v_fid;
+  return public.assembly_state();
+end$$;
+revoke all on function public.assembly_pay_fine() from public, anon;
+grant execute on function public.assembly_pay_fine() to authenticated;

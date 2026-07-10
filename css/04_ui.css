@@ -694,7 +694,7 @@ textarea.fi { resize: vertical; min-height: 80px; line-height: 1.6; }
 .fx-glitch::after { color: #0cf; animation: glitch-bot 5s infinite; clip-path: polygon(0 62%, 100% 62%, 100% 100%, 0 100%); }
 
 /* ── FX: JITTER ── */
-.fx-jitter { display: inline-flex; gap: 0; align-items: baseline; }
+.fx-jitter { display: inline; }   /* inline, не flex: строка переносится по пробелам, не вылетает за экран */
 .fx-jitter .jl { display: inline-block; animation: jitter-shake var(--jd, .18s) steps(2) infinite alternate; }
 @keyframes jitter-shake { 0% { transform: translate(var(--jx1, 0px), var(--jy1, 0px)); } 100% { transform: translate(var(--jx2, 0px), var(--jy2, 0px)); } }
 
@@ -707,7 +707,7 @@ textarea.fi { resize: vertical; min-height: 80px; line-height: 1.6; }
 .fx-schizo { cursor: crosshair; }
 .fx-schizo .sz-w { white-space: nowrap; }   /* слово-обёртка: буквы не рвутся посередине, перенос только по пробелам */
 .fx-schizo .sz-c { position: relative; display: inline-block; }
-.fx-schizo .sz-sp { display: inline-block; width: .3em; }
+.fx-schizo .sz-sp { display: inline; }   /* обычный inline-пробел = точка переноса строки (inline-block ломал перенос) */
 .fx-schizo .sz-real { visibility: hidden; transition: text-shadow var(--duration-fast); }   /* занимает место → раскладка стабильна */
 .fx-schizo .sz-rune {
   position: absolute; left: 50%; top: 0; transform: translateX(-50%); white-space: pre;
