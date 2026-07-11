@@ -1204,7 +1204,7 @@ async function _ecLoadCoreImpl() {
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
-  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines] = await Promise.all([
+  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1234,6 +1234,8 @@ async function _ecLoadCoreImpl() {
     ecRpc('diplo_status').catch(() => null),         // союзы: федерация/конфедерация + вассалитеты (нужны Обзору)
     ecRpc('spy_recruits_list').catch(() => null),   // агентура: ростер + рынок рекрутов (счётчик в Обзоре)
     ecRpc('minefields_visible').catch(() => []),  // оборона: минные поля (счётчик в Обзоре)
+    dbGet('faction_res_flows', `faction_id=eq.${fid}`).catch(() => []),   // потоки: настройки по ресурсам (вкладка «Потоки»)
+    dbGet('mining_concessions', `or=(from_fid.eq.${fid},to_fid.eq.${fid})&order=created_at.desc`).catch(() => []),  // концессии (право добычи)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1268,6 +1270,10 @@ async function _ecLoadCoreImpl() {
   // (вложен в ответ spy_recruits_list). Падаем на пустой объект, если срез не накачен.
   EC.spyCounter = (EC.spyAgency && EC.spyAgency.counterintel) || { state_power: 0, forces_power: 0, assignments: [] };
   EC.diplo = diploStatus || { union: null, members: [], invites: [], vassals: [] };  // союзы и вассалитеты
+  // Потоки: настройки по ресурсам (faction_res_flows → карта по имени) + концессии (обе стороны)
+  EC.resFlows = {};
+  (Array.isArray(resFlows) ? resFlows : []).forEach(f => { if (f && f.res_name) EC.resFlows[f.res_name] = f; });
+  EC.concessions = Array.isArray(concessions) ? concessions : [];
   EC.incomeHistory = incomeHistory || [];   // снимки дохода по тикам (доход по времени)
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
@@ -1536,12 +1542,74 @@ function ecIncomePreview() {
 // Исходящие (я продаю) учитывают доктрину (× m.gc); входящие — доля партнёра (EC_DEST_CUT).
 function ecCaravanIncome() {
   const m = ecFactionMods();
+  const now = Date.now();
   const act = (EC.routes || []).filter(r => r.status === 'active');
   const out = act.filter(r => r.a_fid === EC.fid);   // исходящие — я продаю
   const inn = act.filter(r => r.b_fid === EC.fid);   // входящие — доля партнёра
-  const outGc = Math.round(out.reduce((a, r) => a + (r.volume || 0) * (r.price || 0), 0) * (m.gc || 1));
-  const inGc  = inn.reduce((a, r) => a + Math.round((r.volume || 0) * (r.price || 0) * EC_DEST_CUT), 0);
-  return { out: outGc, inc: inGc, net: outGc + inGc, outRoutes: out, inRoutes: inn };
+  // Валовый экспортный поток добычи — общий пул mine_flow: сервер отгружает караванам
+  // ТОЛЬКО реально добытое export-заводами за тик, маршруты черпают пул по очереди.
+  const flow = {};
+  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
+    const res = ecMiningPlanetRes(b);
+    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
+      if (ecEffMode(b, t) !== 'export' || ecIsConceded(b.colony_id, t)) return;
+      const ri = res.find(x => x.name === t); if (!ri) return;
+      flow[t] = (flow[t] || 0) + ecMineRate(ri.r, ri.amt);
+    });
+  });
+  let outRaw = 0, contractRaw = 0, riskRaw = 0, transitN = 0, shortUnits = 0;
+  // ПОТОКИ: маршруты с «брать со склада» добирают недостающее из запаса (общий остаток на все пути)
+  const storeLeft = { ...((EC.eco && EC.eco.resources) || {}) };
+  out.forEach(r => {
+    const dip = ecDipCoef(r.b_fid);
+    // мультигруз оплачивается по редкости (_res_price), одиночный — по цене контракта
+    const items = (Array.isArray(r.cargo) && r.cargo.length)
+      ? r.cargo.map(ci => ({ res: ci.res, vol: +ci.vol || 0, price: ecResPrice(ecResRarity(ci.res)) }))
+      : [{ res: r.resource, vol: +r.volume || 0, price: +r.price || 0 }];
+    const inTransit = r.transit_until && new Date(r.transit_until).getTime() > now;
+    if (inTransit) { transitN++; items.forEach(i => { contractRaw += i.vol * i.price * dip; }); return; }
+    let gcRoute = 0;
+    items.forEach(i => {
+      contractRaw += i.vol * i.price * dip;
+      const avail = flow[i.res] || 0;
+      let shipped = Math.min(i.vol, avail);
+      flow[i.res] = avail - shipped;
+      // ПОТОКИ: добор недостающего объёма со склада (галочка «брать со склада» у пути)
+      if (r.from_store && shipped < i.vol) {
+        const st = Math.min(i.vol - shipped, Math.max(0, +storeLeft[i.res] || 0));
+        storeLeft[i.res] = (+storeLeft[i.res] || 0) - st;
+        shipped += st;
+      }
+      if (shipped < i.vol) shortUnits += i.vol - shipped;
+      if (shipped <= 0) return;
+      gcRoute += shipped * i.price * dip;
+    });
+    // пиратские угрозы: шанс срыва рейса за тик (без конвоя 0.80; с конвоем 0.40, древние 0.65)
+    const thr = Array.isArray(r.threats) ? r.threats : [];
+    if (thr.length && gcRoute > 0) {
+      const escorted = (+r.convoy || 0) > 0;
+      let pSafe = 1;
+      thr.forEach(t => { pSafe *= 1 - ((t && t.type) === 'ancient' ? (escorted ? 0.65 : 0.80) : (escorted ? 0.40 : 0.80)); });
+      riskRaw += gcRoute * (1 - pSafe);
+    }
+    outRaw += gcRoute;
+  });
+  const gcM = m.gc || 1;
+  const outGc = Math.round(outRaw * gcM);           // реально отгружаемое (поток × цена × дипломатия × доктрина)
+  const contract = Math.round(contractRaw * gcM);   // «бумажный» максимум по контрактам
+  const risk = Math.round(riskRaw * gcM);           // ожидаемые потери от пиратов
+  // Входящие: 50% × дипломатия партнёра ко мне; реальная сумма ограничена ДОБЫЧЕЙ партнёра
+  // (нам не видна) — поэтому это верхняя оценка.
+  const inGc = inn.reduce((a, r) => {
+    const rel = (EC.relations || []).find(x => x.from_fid === r.a_fid && x.to_fid === EC.fid);
+    const dip = Math.max(0.8, Math.min(1.2, 1 + (rel ? +rel.score || 0 : 0) / 500));
+    const items = (Array.isArray(r.cargo) && r.cargo.length)
+      ? r.cargo.map(ci => ({ vol: +ci.vol || 0, price: ecResPrice(ecResRarity(ci.res)) }))
+      : [{ vol: +r.volume || 0, price: +r.price || 0 }];
+    return a + items.reduce((s, i) => s + Math.round(i.vol * i.price * EC_DEST_CUT * dip), 0);
+  }, 0);
+  return { out: outGc, inc: inGc, net: outGc - risk + inGc,
+    contract, short: Math.round(shortUnits), risk, transitN, outRoutes: out, inRoutes: inn };
 }
 // Множитель доктрины к ГС-потокам (доктрина × срез дестабилизации) — единый рычаг,
 // зеркало m_gc в economy_accrue. Используют market/export/preview, чтобы не расходились.
@@ -1575,14 +1643,28 @@ function ecTitheIncome() {
 function ecSectIncome() { return (+((EC.faith || {}).active_sects) || 0) * 150; }
 // Доля выручки по редкости при продаже на Товарной бирже — зеркало economy_accrue (market_gc).
 const EC_MARKET_FRAC = { legendary: 0.75, epic: 0.70, rare: 0.65, uncommon: 0.55, common: 0.50 };
+// ── Потоки ресурсов (вкладка «Потоки», зеркало _res_flows.sql) ──
+// Настройки потока ресурса; null = записи нет, всё по умолчанию (режим здания, без лимитов).
+function ecFlowCfg(name) { return (EC.resFlows || {})[name] || null; }
+// Эффективный режим потока: панель «Потоки» перекрывает режим здания. Зеркало eff_mode accrue v6.
+function ecEffMode(b, resName) {
+  const f = ecFlowCfg(resName);
+  if (f && f.mode) return f.mode;
+  return (b && b.mine_mode === 'export') ? 'export' : 'store';
+}
+// Залежь отдана мною в концессию — её поток уходит другой державе (в мои потоки не входит).
+function ecIsConceded(colonyId, resName) {
+  return (EC.concessions || []).some(c => c.colony_id === colonyId && c.res_name === resName && c.from_fid === EC.fid);
+}
 // Дневной поток добычи в режиме СКЛАД (mine_mode=store) — то, что «Товарная биржа»
 // может сбыть. Зеркало res_add в economy_accrue. Биржа НЕ трогает накопленный склад
 // (иначе колонизация новой залежи разом сливала бы стратегический запас).
 function ecStoreFlowEntries() {
   const gross = {};
-  (EC.buildings || []).filter(b => b.btype === 'mining' && (b.mine_mode || 'store') === 'store').forEach(b => {
+  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
     const res = ecMiningPlanetRes(b);
     (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
+      if (ecEffMode(b, t) !== 'store' || ecIsConceded(b.colony_id, t)) return;
       const ri = res.find(x => x.name === t); if (!ri) return;
       gross[t] = (gross[t] || 0) + ecMineRate(ri.r, ri.amt);
     });
@@ -1592,25 +1674,45 @@ function ecStoreFlowEntries() {
 // Доход ТОВАРНОЙ БИРЖИ за сутки: сбывает СВЕЖЕДОБЫТЫЙ поток (mine_mode=store) по ценности
 // × доля редкости, до лимита market_slots×25/сут, по убыванию ценности. НАКОПЛЕННЫЙ СКЛАД
 // НЕ ТРОГАЕТ. ×доктрина. Зеркало market_gc.
-function ecMarketIncome() {
+function ecMarketCalc() {
   let cap = ecSlotsSum('market') * 25;
-  if (cap <= 0) return 0;
+  const left = {};
+  const flowAll = ecStoreFlowEntries();
+  if (cap <= 0) return { gc: 0, left: Object.fromEntries(flowAll) };
   let gc = 0;
-  const flow = ecStoreFlowEntries().map(([n, q]) => [n, q, ecResRarity(n)]).sort((a, b) => ecResVal(b[0]) - ecResVal(a[0]));
+  const flow = flowAll.map(([n, q]) => [n, q, ecResRarity(n)]).sort((a, b) => ecResVal(b[0]) - ecResVal(a[0]));
   for (const [n, q, rar] of flow) {
-    if (cap <= 0) break;
-    const sell = Math.min(q, cap);
-    if (sell <= 0) continue;
-    gc += sell * ecResVal(n) * (EC_MARKET_FRAC[rar] || 0.5);
-    cap -= sell;
+    const f = ecFlowCfg(n);
+    const lim = (f && f.market_limit != null) ? +f.market_limit : null;   // ПОТОКИ: лимит биржи /сут
+    let sell = Math.min(q, Math.max(0, cap));
+    if (lim != null) sell = Math.min(sell, lim);
+    if (sell > 0) { gc += sell * ecResVal(n) * (EC_MARKET_FRAC[rar] || 0.5); cap -= sell; }
+    left[n] = q - sell;
   }
-  return Math.round(gc * ecGcMul());
+  // ПОТОКИ: явный добор со склада (market_from_store ед./сут), в пределах остатка лимита биржи
+  const store = (EC.eco && EC.eco.resources) || {};
+  Object.values(EC.resFlows || {}).forEach(f => {
+    if (cap <= 0 || !f || !(+f.market_from_store > 0)) return;
+    const sell = Math.min(+f.market_from_store, +store[f.res_name] || 0, cap);
+    if (sell <= 0) return;
+    gc += sell * ecResVal(f.res_name) * (EC_MARKET_FRAC[ecResRarity(f.res_name)] || 0.5);
+    cap -= sell;
+  });
+  return { gc: Math.round(gc * ecGcMul()), left };
 }
+function ecMarketIncome() { return ecMarketCalc().gc; }
 // Доход ЭКСПОРТА за сутки: свободный экспортный поток (export-заводы − занятое караванами)
 // × ценность × 0.6. ×доктрина. Зеркало economy_accrue (export_gc).
 function ecExportIncome() {
   let gc = 0;
   ecExtractEntries().forEach(([n, q]) => { gc += (+q || 0) * ecResVal(n) * 0.6; });
+  // ПОТОКИ: перелив на склад выключен (to_store=false) — непроданный биржей остаток
+  // потока авто-продаётся как экспорт ×0.6 (зеркало merge-ветки accrue v6).
+  const left = ecMarketCalc().left;
+  Object.entries(left).forEach(([n, q]) => {
+    const f = ecFlowCfg(n);
+    if (f && f.to_store === false && q > 0) gc += q * ecResVal(n) * 0.6;
+  });
   return Math.round(gc * ecGcMul());
 }
 // Расход на торговую политику за сутки (NPC-конвой) — зеркало policy_cost (НЕ ×доктрина).
@@ -1795,7 +1897,7 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['trade', '⇄', 'Торговля'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['trade', '⇄', 'Торговля'], ['flows', '🔀', 'Потоки'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   // Длань Неотвратимости — отдельная вкладка-пульт, появляется когда орудие доступно
   // (исследование открыто или орудие уже стоит).
   if (ecDoomUnlocked()) tabs.splice(13, 0, ['doom', '🜨', 'Длань Неотвратимости']);
@@ -1806,6 +1908,7 @@ function ecPaintCabinet() {
     : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
     : EC.tab === 'welfare' ? ecTabWelfare()
     : EC.tab === 'trade' ? ecTabTrade()
+    : EC.tab === 'flows' ? ecTabFlows()
     : EC.tab === 'exchange' ? ecTabExchange()
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'faith' ? ecTabFaith() : EC.tab === 'intel' ? ecTabIntel()
     : EC.tab === 'raids' ? ecTabRaids()
@@ -3051,8 +3154,9 @@ function ecTabOverview() {
   const extraInc = [];
   if (facSlots) moneyInc.push({ ic: '🏭', name: 'Гражданские фабрики', sub: `${ecNum(facSlots)} слот. × 200`, gc: g.factory, tab: 'colonies' });
   if (trSlots)  moneyInc.push({ ic: '💱', name: 'Торговые хабы', sub: `${ecNum(trSlots)} слот. × 100`, gc: g.trade, tab: 'trade' });
-  if (_out.length) moneyInc.push({ ic: '🚚', name: 'Караваны · продажа', sub: `${_out.length} пут. → партнёрам`, gc: _outGc, tab: 'trade' });
-  if (_in.length)  moneyInc.push({ ic: '📦', name: 'Доля с поставок', sub: `${_in.length} пут. ← вам шлют`, gc: _inGc, tab: 'trade' });
+  if (_out.length) moneyInc.push({ ic: '🚚', name: 'Караваны · продажа', sub: `${_out.length} пут. → партнёрам${_cv.short ? ` · поток покрывает ${Math.round(_outGc / Math.max(1, _cv.contract) * 100)}% контрактов` : ''}${_cv.transitN ? ` · ${_cv.transitN} в пути` : ''}`, gc: _outGc, tab: 'trade' });
+  if (_cv.risk) moneyInc.push({ ic: '🏴', name: 'Пиратские угрозы', sub: 'ожидаемые потери рейсов под угрозой', gc: -_cv.risk, tab: 'trade' });
+  if (_in.length)  moneyInc.push({ ic: '📦', name: 'Доля с поставок', sub: `${_in.length} пут. ← вам шлют · до добычи партнёра`, gc: _inGc, tab: 'trade' });
   if (g.market) moneyInc.push({ ic: '📈', name: 'Товарная биржа', sub: `${ecNum(marketSlots)} слот. · сбыт добычи`, gc: g.market, tab: 'trade' });
   if (g.export) moneyInc.push({ ic: '📤', name: 'Экспорт добычи', sub: 'поток export-заводов', gc: g.export, tab: 'trade' });
   if (g.policy) moneyInc.push({ ic: '📜', name: 'Торговая политика', sub: 'апкип NPC-конвоя', gc: -g.policy, tab: 'raids' });
@@ -3127,8 +3231,9 @@ function ecTabOverview() {
   if (g.temple) detRows.push(fxRow('🛐', 'Храмы веры', `${ecNum(tmplSlots)} слот × 150${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''} (пока исповедуешь веру храма)`, g.temple));
   if (g.tithe)  detRows.push(fxRow('🤝', 'Десятина с адептов', `доля дохода храмов адептов вашей веры${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''}`, g.tithe));
   if (g.sects)  detRows.push(fxRow('🕯', 'Тайные секты', `активные covert-храмы × 150${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''}`, g.sects));
-  if (_out.length) detRows.push(fxRow('🚚', 'Караваны · продажа', `${_out.length} путь(ей): объём × цена − срез пиратов`, _outGc));
-  if (_in.length) detRows.push(fxRow('📦', 'Доля с поставок', `${_in.length} путь(ей): ${Math.round(EC_DEST_CUT * 100)}% от объёма партнёра`, _inGc));
+  if (_out.length) detRows.push(fxRow('🚚', 'Караваны · продажа', `${_out.length} путь(ей): мин(объём, поток export-добычи) × цена × дипломатия (±20%)${gcMulPct ? ` × доктрина` : ''}`, _outGc));
+  if (_cv.risk) detRows.push(fxRow('🏴', 'Пиратские угрозы', `рейсы под угрозой срываются с шансом 40–80% (конвой снижает риск)`, -_cv.risk));
+  if (_in.length) detRows.push(fxRow('📦', 'Доля с поставок', `${_in.length} путь(ей): ${Math.round(EC_DEST_CUT * 100)}% × дипломатия партнёра · верхняя оценка (ограничена его добычей)`, _inGc));
   if (g.market) detRows.push(fxRow('📈', 'Товарная биржа', `${ecNum(marketSlots)} слот · сбыт добытого потока по ценности × 50–75% (до ${ecNum(marketSlots * 25)} ед/сут, склад не трогает)`, g.market));
   if (g.export) detRows.push(fxRow('📤', 'Экспорт добычи', `свободный поток export-заводов × ценность × 0.6`, g.export));
   if (g.policy) detRows.push(fxRow('📜', 'Торговая политика', `апкип NPC-конвоя (защита караванов)`, -g.policy));
@@ -3141,11 +3246,13 @@ function ecTabOverview() {
       ${composition ? `<div class="ec-bdg-dt-sect">Состав дохода</div>${composition}` : ''}
       <div class="ec-bdg-dt-sect">Формулы по источникам</div>
       <div class="ec-bdg-dt-list">${detRows.join('') || '<div class="ec-ovx-hint">Денежных источников нет.</div>'}</div>
+      ${_cv.short ? `<div class="ec-bdg-dt-warn">🚚 Караваны недогружены: контракты обещают ≈ +${ecNum(_cv.contract)} ГС/сут, но export-поток добычи покрывает лишь +${ecNum(_outGc)} — не хватает ${ecNum(_cv.short)} ед. сырья/сут. Переведите добывающие заводы в режим «экспорт», расширьте добычу нужных ресурсов или урежьте объёмы маршрутов.</div>` : ''}
+      ${_cv.transitN ? `<div class="ec-bdg-dt-warn">🚀 ${_cv.transitN} караван(ов) ещё в пути — их доход начнётся после прибытия и в сумму выше не входит.</div>` : ''}
       ${_resOutTotal ? `<div class="ec-bdg-dt-warn">📤 Вывоз ресурсов караванами: −${ecNum(_resOutTotal)} ед/сут (${_resOutTxt}) — это расход сырья, не денег.</div>` : ''}
       ${_povDrag ? `<div class="ec-bdg-dt-warn">💸 Бедность съедает ≈ −${ecNum(_povDrag)} ГС/сут: фабрики и хабы в небогатых системах режутся просперити (уже учтено в строках «Фабрики»/«Хабы»). Поднимайте благополучие во вкладке «Благополучие».</div>` : ''}
       ${inc.debuff ? `<div class="ec-bdg-dt-warn">🔥 Дестабилизация режет денежный доход на ${Math.round(inc.debuff * 100)}% — уже учтено в суммах.</div>` : ''}
       <div class="ec-ovx-hint">Доход начисляется в конце каждого хода (тика). Доктрина даёт ×${gcMul.toFixed(2)} к ГС-потокам${gcMulPct ? ` (${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''} (к доходу биржи не применяется). Содержания армии/зданий нет — постройка тратит ГС разово.</div>
-      <div class="ec-ovx-hint">📊 «Чистый доход» = ровно те статьи, что начисляет тик сервера (зеркало income_history): фабрики+хабы, караваны, Товарная биржа (оценка по складу), экспорт добычи, − торговая политика. Вера (храмы/десятина/секты), биржевые купоны/дивиденды/синергия и аванпосты считаются ОТДЕЛЬНО от основного тика и показаны в блоке «Вне начисления тика» — в «Чистый доход» они не входят. Спекуляции (маржа/фьючерсы/опционы) переменны и в «/сут» не входят. 🏆 Награды за достижения — разовые, показаны отдельной строкой.</div>
+      <div class="ec-ovx-hint">📊 «Чистый доход» = ровно те статьи, что начисляет тик сервера (зеркало income_history): фабрики+хабы, караваны, Товарная биржа (оценка по складу), экспорт добычи, − торговая политика. Вера (храмы/десятина/секты), биржевые купоны/дивиденды/синергия и аванпосты считаются ОТДЕЛЬНО от основного тика и показаны в блоке «Вне начисления тика» — в «Чистый доход» они не входят. Спекуляции (маржа/фьючерсы/опционы) переменны и в «/сут» не входят. 🏆 Награды за достижения — разовые, показаны отдельной строкой. 🏛 Законы Межзвёздной Ассамблеи и 🖋 итоги «Поэмы недели» — разовые выплаты/поборы по всей галактике: они падают в казну напрямую и объявляются в ленте новостей.</div>
     </div>`;
   const budget = `<div class="ec-ovx-panel ec-bdg-panel">
     <div class="ec-ovx-panel-t">💰 Казна <span class="ec-ovx-panel-sub">доходы и расходы за сутки</span></div>
@@ -4596,10 +4703,11 @@ function ecCvCargoToggle(res) {
 // Валовый ЭКСПОРТНЫЙ поток ресурса /ход (сумма export-заводов — зеркало mine_flow до караванов).
 function ecExtractRateGross(resName) {
   let total = 0;
-  (EC.buildings || []).filter(b => b.btype === 'mining' && b.mine_mode === 'export').forEach(b => {
+  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
     const res = ecMiningPlanetRes(b);
     (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
-      if (t === resName) { const ri = res.find(x => x.name === resName); if (ri) total += ecMineRate(ri.r, ri.amt); }
+      if (t !== resName || ecEffMode(b, t) !== 'export' || ecIsConceded(b.colony_id, t)) return;
+      const ri = res.find(x => x.name === resName); if (ri) total += ecMineRate(ri.r, ri.amt);
     });
   });
   return total;
@@ -4654,9 +4762,10 @@ function ecTravelTurns(oSys, dSys) {
 // Что фракция отдаёт в ЭКСПОРТ — список для каравана (свободный поток /ход, не валовая добыча).
 function ecExtractEntries() {
   const gross = {};
-  (EC.buildings || []).filter(b => b.btype === 'mining' && b.mine_mode === 'export').forEach(b => {
+  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
     const res = ecMiningPlanetRes(b);
     (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
+      if (ecEffMode(b, t) !== 'export' || ecIsConceded(b.colony_id, t)) return;
       const ri = res.find(x => x.name === t); if (!ri) return;
       gross[t] = (gross[t] || 0) + ecMineRate(ri.r, ri.amt);
     });
@@ -4776,10 +4885,16 @@ function ecRouteRow(r) {
     ? `<span class="ec-route-badge wait">🚀 в пути · прибудет ${ecFmtLeft(transitMs)}</span>`
     : `<span class="ec-route-badge ok">✓ активен</span>`;
   const incomeTxt = inTransit ? `<i style="color:var(--t3)"> · доход после прибытия</i>` : ` · <b style="color:var(--gd)">+${ecNum(income)} ГС/ход</b>`;
+  // ПОТОКИ: караван может добирать недостающий объём со склада (галочка на пути)
+  const storeBtn = isOrigin
+    ? `<button class="btn btn-xs ${r.from_store ? 'btn-gd' : 'btn-gh'}" style="margin-left:6px"
+        title="${r.from_store ? 'Недостающий объём добирается со склада — выключить' : 'Если добычи не хватает, добирать недостающее со склада'}"
+        onclick="ecRouteFromStore('${r.id}',${r.from_store ? 'false' : 'true'})">📦 со склада: ${r.from_store ? 'вкл' : 'выкл'}</button>`
+    : '';
   return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
       ${badge}
       <b>${ecRouteCargoText(r)}</b>/ход · ${verb}${incomeTxt}
-      <i style="color:${threats.length ? 'var(--color-warning)' : 'var(--ok)'}"> · ${esc(riskTxt)}</i>
+      <i style="color:${threats.length ? 'var(--color-warning)' : 'var(--ok)'}"> · ${esc(riskTxt)}</i>${storeBtn}
     </span><button class="ec-bld-del" title="Закрыть путь" onclick="ecTradeClose('${r.id}')">✕</button></div>`;
 }
 
@@ -5025,6 +5140,148 @@ function ecResFilter(btn, mode) {
 }
 
 // ── Вкладка «Торговля»: рынок · караваны · обмен (бартер с кораблями) ──
+// ── Вкладка «Потоки» ────────────────────────────────────────
+// Единая панель управления добычей: по каждому ресурсу видно, сколько добывается,
+// сколько уходит караванам / на Товарную биржу / на склад, и здесь же всё настраивается
+// (режим, лимиты биржи, перелив, разовая продажа). Галочки со зданий убраны — один
+// статичный набор настроек на державу (faction_res_flows, зеркало _res_flows.sql).
+function ecFlowRowsData() {
+  const rows = {};
+  const mk = (n) => rows[n] || (rows[n] = { mine: 0, exp: 0, sto: 0, conc: 0 });
+  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
+    const res = ecMiningPlanetRes(b);
+    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
+      const ri = res.find(x => x.name === t); if (!ri) return;
+      const rate = ecMineRate(ri.r || 'common', ri.amt);
+      const row = mk(t);
+      row.mine += rate;
+      if (ecIsConceded(b.colony_id, t)) row.conc += rate;
+      else if (ecEffMode(b, t) === 'export') row.exp += rate;
+      else row.sto += rate;
+    });
+  });
+  // ресурсы, которых нет в добыче, но есть на складе или в настройках — тоже показываем
+  Object.keys((EC.eco && EC.eco.resources) || {}).forEach(n => { if ((+EC.eco.resources[n] || 0) > 0) mk(n); });
+  Object.keys(EC.resFlows || {}).forEach(n => mk(n));
+  return rows;
+}
+function ecTabFlows() {
+  const rows = ecFlowRowsData();
+  const names = Object.keys(rows).sort((a, b) => ecResVal(b) - ecResVal(a));
+  EC._flowRows = names;
+  const store = (EC.eco && EC.eco.resources) || {};
+  const committed = ecCommittedExtractFlow();
+  const mCalc = ecMarketCalc();
+  const marketCap = ecSlotsSum('market') * 25;
+  const capStore = 1000 + ecSlotsSum('warehouse') * 500;
+  const hasMarket = marketCap > 0;
+
+  const head = `<div class="ec-q-row" style="font-weight:600;color:var(--t3);font-size:12px">
+      <span style="flex:2">Ресурс</span><span style="flex:1">⛏ Добыча/сут</span>
+      <span style="flex:1">Режим</span><span style="flex:1">🚚 Караваны</span>
+      <span style="flex:1.4">🏪 Биржа: лимит · со склада/сут</span>
+      <span style="flex:1">📦 Склад</span><span style="flex:1.4">Разовая продажа</span><span style="width:80px"></span>
+    </div>`;
+  const list = names.map((n, i) => {
+    const r = rows[n];
+    const f = ecFlowCfg(n) || {};
+    const mode = f.mode || '';
+    const effTxt = r.exp > 0 && r.sto > 0 ? 'смешанный' : r.exp > 0 ? 'экспорт' : 'склад';
+    const cvUse = Math.min(committed[n] || 0, r.exp);
+    const concTxt = r.conc > 0 ? `<div style="color:var(--color-warning);font-size:11px">⚖ ${ecNum(r.conc)}/сут в концессии</div>` : '';
+    const stQty = +store[n] || 0;
+    return `<div class="ec-q-row" style="align-items:center">
+      <span style="flex:2">${ecResIcon(n)} <b>${esc(n)}</b> <i style="color:var(--t4);font-style:normal">· ${ecResPriceN(n)} ГС</i>${concTxt}</span>
+      <span style="flex:1" title="экспорт ${ecNum(r.exp)} · склад ${ecNum(r.sto)}">${r.mine ? `+${ecNum(r.mine)}` : '<span style="color:var(--t4)">—</span>'}</span>
+      <span style="flex:1"><select id="ec-fl-mode-${i}" class="ec-prod-qty" style="width:100%" title="Куда идёт поток этого ресурса со ВСЕХ заводов">
+        <option value="" ${mode === '' ? 'selected' : ''}>авто (${effTxt})</option>
+        <option value="store" ${mode === 'store' ? 'selected' : ''}>📦 склад/биржа</option>
+        <option value="export" ${mode === 'export' ? 'selected' : ''}>🚚 экспорт</option>
+      </select></span>
+      <span style="flex:1" title="Занято активными караванами">${cvUse ? `−${ecNum(cvUse)}/сут` : '<span style="color:var(--t4)">—</span>'}</span>
+      <span style="flex:1.4;display:flex;gap:4px">
+        <input type="number" id="ec-fl-lim-${i}" class="ec-prod-qty" style="width:50%" min="0" placeholder="∞"
+          value="${f.market_limit != null ? +f.market_limit : ''}" title="Максимум ед./сут, что биржа продаёт из потока (пусто = без лимита, 0 = не продавать)">
+        <input type="number" id="ec-fl-fs-${i}" class="ec-prod-qty" style="width:50%" min="0" placeholder="0"
+          value="${+f.market_from_store > 0 ? +f.market_from_store : ''}" title="Сколько ед./сут биржа ДОБИРАЕТ со склада (0 = склад не трогать)">
+      </span>
+      <span style="flex:1"><label title="Переливать остаток потока на склад (иначе — авто-продажа ×0.6)" style="display:flex;align-items:center;gap:4px;cursor:pointer">
+        <input type="checkbox" id="ec-fl-st-${i}" ${f.to_store === false ? '' : 'checked'}> ${ecNum(stQty)}</label></span>
+      <span style="flex:1.4;display:flex;gap:4px">
+        <input type="number" id="ec-fl-sell-${i}" class="ec-prod-qty" style="width:55%" min="1" placeholder="кол-во" ${stQty > 0 && hasMarket ? '' : 'disabled'}>
+        <button class="btn btn-gh btn-xs" ${stQty > 0 && hasMarket ? '' : 'disabled'} title="${hasMarket ? 'Продать со склада сейчас (цена биржи × доктрина)' : 'Нужна Товарная биржа'}" onclick="ecFlowSellNow(${i})">Продать</button>
+      </span>
+      <span style="width:80px;text-align:right"><button class="btn btn-gd btn-xs" onclick="ecFlowApply(${i})">Применить</button></span>
+    </div>`;
+  }).join('');
+
+  // ── Концессии (право добычи) ──
+  const myDeps = [];
+  (EC.colonies || []).forEach(c => (Array.isArray(c.resources) ? c.resources : []).forEach(r => {
+    if (r && r.name && !ecIsConceded(c.id, r.name)) myDeps.push({ cid: c.id, res: r.name, label: `${c.planet_name || 'колония'} · ${r.name}` });
+  }));
+  const facOpts = (EC.factions || []).filter(f => f.faction_id !== EC.fid)
+    .map(f => `<option value="${esc(f.faction_id)}">${esc(f.name)}</option>`).join('');
+  const depOpts = myDeps.map(dp => `<option value="${esc(dp.cid)}|${esc(dp.res)}">${esc(dp.label)}</option>`).join('');
+  const given = (EC.concessions || []).filter(c => c.from_fid === EC.fid);
+  const got = (EC.concessions || []).filter(c => c.to_fid === EC.fid);
+  const concRow = (c, mine) => {
+    const col = (EC.colonies || []).find(x => x.id === c.colony_id);
+    const who = mine ? `→ ${esc(ecFacName(c.to_fid))}` : `← ${esc(ecFacName(c.from_fid))}`;
+    return `<div class="ec-q-row"><span class="ec-r-name">${ecResIcon(c.res_name)} <b>${esc(c.res_name)}</b>${col ? ` · ${esc(col.planet_name || '')}` : ''} ${who}</span>
+      <button class="ec-bld-del" title="${mine ? 'Отозвать право добычи' : 'Отказаться от концессии'}" onclick="ecConcRevoke('${c.id}')">✕</button></div>`;
+  };
+  const concHtml = `<div class="ec-r-sec" style="margin-top:18px">⚖ Концессии — право добычи</div>
+    <div class="ec-hint" style="margin:4px 0 8px">Поток конкретной залежи можно передать другой державе: месторождение остаётся у вас, а добыча капает получателю на склад (он сам решает, продавать или копить). Интерим факторий.</div>
+    ${myDeps.length ? `<div class="ec-prod-form" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <select id="ec-conc-dep" class="ec-prod-qty" style="min-width:220px">${depOpts}</select>
+      <select id="ec-conc-fac" class="ec-prod-qty" style="min-width:180px">${facOpts}</select>
+      <button class="btn btn-gd btn-sm" onclick="ecConcGrant()">Передать право добычи</button>
+    </div>` : '<div class="ec-hint">Нет свободных залежей для передачи.</div>'}
+    ${given.length ? `<div class="ec-r-sec">Отдано мной</div>${given.map(c => concRow(c, true)).join('')}` : ''}
+    ${got.length ? `<div class="ec-r-sec">Получено мной</div>${got.map(c => concRow(c, false)).join('')}` : ''}`;
+
+  return `${ecIntro('🔀', 'Потоки ресурсов',
+    'Одна панель на державу: что добывается, что уходит караванам, что продаёт Товарная биржа и что копится на складе. Настройки действуют на ресурс ЦЕЛИКОМ (по всем заводам) и перекрывают режимы зданий.',
+    [`Биржа сбывает до <b>${ecNum(marketCap)}</b> ед./сут (слоты Товарной биржи × 25); прогноз выручки: <b>+${ecNum(mCalc.gc)} ГС/сут</b>.`,
+     `Ёмкость склада: <b>${ecNum(capStore)}</b> ед. на ресурс (1000 + слоты Склада × 500).`,
+     'Лимит биржи «0» = ресурс не продаётся вовсе; «со склада/сут» &gt; 0 — биржа добирает из запаса.',
+     'Караваны берут только из экспортного потока; галочка «📦 со склада» на пути (вкладка «Торговля») разрешает добирать из запаса.'])}
+    ${names.length ? head + list : '<div class="ec-hint">Нет добычи и запасов — постройте Добывающий завод и назначьте месторождения.</div>'}
+    ${concHtml}`;
+}
+async function ecFlowApply(i) {
+  const n = (EC._flowRows || [])[i]; if (!n) return;
+  const mode = ecId(`ec-fl-mode-${i}`)?.value || null;
+  const limRaw = (ecId(`ec-fl-lim-${i}`)?.value ?? '').trim();
+  const lim = limRaw === '' ? null : Math.max(0, +limRaw || 0);
+  const fs = Math.max(0, +(ecId(`ec-fl-fs-${i}`)?.value || 0) || 0);
+  const toStore = !!ecId(`ec-fl-st-${i}`)?.checked;
+  ecRpcAct('res_flow_set', { p_res: n, p_mode: mode, p_market_limit: lim, p_market_from_store: fs, p_to_store: toStore },
+    `Поток «${n}» настроен`);
+}
+function ecFlowSellNow(i) {
+  const n = (EC._flowRows || [])[i]; if (!n) return;
+  const qty = Math.max(0, parseInt(ecId(`ec-fl-sell-${i}`)?.value) || 0);
+  if (!qty) { toast('Укажите количество', 'err'); return; }
+  ecRpcAct('res_sell_now', { p_res: n, p_qty: qty }, `Продано со склада: ${ecNum(qty)} ${n}`);
+}
+function ecRouteFromStore(id, on) {
+  ecRpcAct('trade_route_from_store', { p_id: id, p_on: !!on },
+    on ? 'Караван будет добирать недостающее со склада' : 'Караван берёт только из добычи');
+}
+function ecConcGrant() {
+  const dep = ecId('ec-conc-dep')?.value || '', fac = ecId('ec-conc-fac')?.value || '';
+  const [cid, res] = dep.split('|');
+  if (!cid || !res) { toast('Выберите залежь', 'err'); return; }
+  if (!fac) { toast('Выберите фракцию', 'err'); return; }
+  ecRpcAct('concession_grant', { p_colony: cid, p_res: res, p_to_fid: fac }, 'Право добычи передано');
+}
+function ecConcRevoke(id) {
+  if (!confirm('Прекратить концессию? Поток залежи вернётся владельцу.')) return;
+  ecRpcAct('concession_revoke', { p_id: id }, 'Концессия прекращена');
+}
+
 function ecTabTrade() {
   const others = ecOtherFactions(), noOthers = !others.length;
   const tradeCap = ecSlotsSum('trade');
@@ -9193,10 +9450,9 @@ function ecBuildingRow(b) {
     } else {
       mineHtml = `<div class="ec-bld-mine-empty">◌ планета без ресурсов — заводу нечего добывать</div>`;
     }
-    // Режим завода: копить на складе ИЛИ сразу экспортировать поток за ГС
-    const mode = b.mine_mode || 'store';
-    const mkModeBtn = (m, label, title) => `<button class="btn btn-xs ${mode === m ? 'btn-gd' : 'btn-gh'}" title="${title}" onclick="ecSetMineMode('${b.id}','${m}')">${label}</button>`;
-    mineHtml += `<div class="ec-bld-mine-hd" style="display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap">Поток: ${mkModeBtn('export', '🚚 Торговый путь', 'Поток отдаётся караванам (вкладка «Торговля»). Остаток авто-продаётся за ГС')} ${mkModeBtn('market', '🏪 На рынок', 'Сбывать добычу прямо на живой галактический рынок: запас ресурса растёт → его цена падает, ГС по живой цене')} ${mkModeBtn('store', '📦 На склад', 'Копить ресурсы на складе (до лимита ёмкости)')}</div>`;
+    // ПОТОКИ: режим потока настраивается теперь ПО РЕСУРСУ в одной панели —
+    // вкладка «Потоки» (галочки со зданий убраны, панель одна на державу).
+    mineHtml += `<div class="ec-bld-mine-hd" style="margin-top:8px;color:var(--t3)">Куда идёт добыча — настраивается во вкладке <a href="#" onclick="ecSetTab('flows');return false" style="color:var(--gd)">🔀 Потоки</a></div>`;
   }
   // мультивера: у храма пишем, чьей он религии
   let faithBadge = '';

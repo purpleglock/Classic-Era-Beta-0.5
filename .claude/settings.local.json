@@ -213,7 +213,10 @@
       "PowerShell(\\(Get-Content index.html -Raw\\) -replace 'render\\\\.js\\\\?v=20260710assembly4','render.js?v=20260711fxwrap1' -replace 'index\\\\.css\\\\?v=20260710assembly3','index.css?v=20260711fxwrap1' | Set-Content index.html -Encoding utf8 -NoNewline)",
       "mcp__claude-in-chrome__navigate",
       "Bash(sed -i 's/20260711asmtip2/20260711asmchat1/g' index.html)",
-      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('render.js','utf8'\\)\\)\")"
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('render.js','utf8'\\)\\)\")",
+      "Bash(awk 'NR>=150 && NR<=232' _goods_factory.sql)",
+      "Bash(awk 'NR>=4640 && NR<=4700' economy.js)",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('economy.js','utf8'\\)\\)\")"
     ]
   }
 }
