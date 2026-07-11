@@ -513,7 +513,7 @@ function renderGuidebook() {
       <div class="gb-tbl">
         <div class="gb-tr gb-th"><span>Здание</span><span>Очки</span><span>Что даёт</span></div>
         <div class="gb-tr"><span>Гражданская фабрика</span><span>5</span><span>Доход в ГС (бесплатно для Colony)</span></div>
-        <div class="gb-tr"><span>Добывающий завод</span><span>5</span><span>Добыча планетарных ресурсов</span></div>
+        <div class="gb-tr"><span>Добывающий завод</span><span>5</span><span>Добыча простых ресурсов (только обычные залежи); необычные+ качают Глубинный комплекс и Экзотический экстрактор — строятся уже в игре</span></div>
         <div class="gb-tr"><span>Торговый хаб</span><span>5</span><span>Доход в ГС через торговые пути</span></div>
         <div class="gb-tr"><span>Центр подготовки</span><span>5</span><span>Производство пехоты</span></div>
         <div class="gb-tr"><span>Центр спецслужб</span><span>5</span><span>Прирост агентов (бесплатно для Frontier)</span></div>

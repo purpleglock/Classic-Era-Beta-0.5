@@ -15,8 +15,8 @@
 --      колонии уходит ДРУГОЙ державе (интерим факторий: месторождение остаётся
 --      на месте, добычу получает торговец).
 --   3) trade_routes.from_store — караван добирает недостающий объём СО СКЛАДА.
---   4) res_sell_now — разовая продажа со склада через Товарную биржу (явное
---      действие игрока; авто-слива склада по-прежнему НЕТ).
+--   4) res_sell_now — разовая продажа со склада (явное действие игрока,
+--      Товарная биржа НЕ нужна; авто-слива склада по-прежнему НЕТ).
 --
 -- ВАЖНО (источник истины): пересоздаёт economy_accrue как СТРОГОЕ надмножество
 -- версии из _faith_multi.sql (строки -- ВЕРА / -- ВЕРА-2 / -- ВЕРА-4 / -- МУЛЬТИ
@@ -152,8 +152,9 @@ end$$;
 revoke all on function public.concession_revoke(uuid) from public;
 grant execute on function public.concession_revoke(uuid) to authenticated;
 
--- ── 5) RPC: разовая продажа со склада через биржу ───────────
--- Явное действие игрока (в отличие от бывшего авто-слива): нужна Товарная биржа,
+-- ── 5) RPC: разовая продажа со склада ───────────────────────
+-- Явное действие игрока (в отличие от бывшего авто-слива). Товарная биржа НЕ
+-- нужна — это сброс запаса по невыгодной ставке (50–75% цены);
 -- цена = ценность × доля редкости × доктрина (те же числа, что market_gc в тике).
 create or replace function public.res_sell_now(p_res text, p_qty numeric)
 returns jsonb language plpgsql security definer set search_path=public as $$
@@ -164,10 +165,6 @@ begin
   fid := public._ec_my_fid();
   if coalesce(btrim(p_res),'') = '' then raise exception 'resource required'; end if;
   if coalesce(p_qty,0) <= 0 then raise exception 'qty must be positive'; end if;
-  if coalesce((select sum(slots_open) from public.colony_buildings
-               where faction_id = fid and btype = 'market'),0) <= 0 then
-    raise exception 'no market: build a commodity market first';
-  end if;
   select * into eco from public.faction_economy where faction_id = fid for update;
   if not found then raise exception 'no economy row'; end if;
   avail := coalesce((eco.resources->>btrim(p_res))::numeric, 0);

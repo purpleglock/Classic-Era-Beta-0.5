@@ -291,7 +291,9 @@ const ecReadable = c => (typeof frReadable === 'function') ? frReadable(c) : (c 
 // Каталог зданий — зеркало _economy_setup.sql (для цен и превью дохода; источник истины дохода — RPC)
 const EC_BUILD = {
   factory:          { name: 'Гражданская фабрика', cost: 500,  ladder: [0, 0, 500, 1500, 1500, 3000], free: 2, inc: { gc: 200 }, cat: 'civ', desc: '+200 ГС за слот' },
-  mining:           { name: 'Добывающий завод',    cost: 500,  ladder: [0, 0, 500, 1500, 1500, 3000], free: 2, inc: {}, cat: 'civ', desc: 'Добыча ресурсов: слоты → месторождения планеты' },
+  mining:           { name: 'Добывающий завод',    cost: 500,  ladder: [0, 0, 500, 1500, 1500, 3000], free: 2, inc: {}, cat: 'civ', desc: 'Добыча ПРОСТЫХ ресурсов планеты: только обычные залежи' },
+  mining_deep:      { name: 'Глубинный горный комплекс', cost: 2500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Добыча ЦЕННЫХ ресурсов планеты: необычные и редкие залежи' },
+  mining_exotic:    { name: 'Экзотический экстрактор',   cost: 8000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Добыча ЭЛИТНЫХ залежей планеты (эпические и легендарные) — единственный способ качать уникальные ресурсы' },
   trade:            { name: 'Торговый хаб',         cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 100 }, cat: 'civ', desc: '+100 ГС за слот (торговый путь)' },
   market:           { name: 'Товарная биржа',       cost: 1500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Продаёт добытые ресурсы за ГС (50–75% цены по редкости), без торговых путей' },
   goodsfab:         { name: 'Фабрика товаров',       cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Из воды и сырья делает товары: каждый слот = 6 воды + 4 сырья → 10 товаров/сут. Товары кормят население (обеспечение → доход), излишек продаётся на бирже' },
@@ -314,7 +316,7 @@ const EC_BUILD = {
 const EC_DOOM_BUILD_MATTER = 40, EC_DOOM_SHOT_GRAV = 20;
 // Гиперпейсер — мобильная «Длань» (зеркало _mza_const): цена постройки + расход залпа.
 const EC_MZA_BUILD_GC = 1200000, EC_MZA_BUILD_MATTER = 60, EC_MZA_SHOT_GRAV = 12, EC_MZA_SHOT_WEAR = 25;
-const EC_ORDER = ['factory', 'mining', 'goodsfab', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'starbase', 'flak', 'abm', 'temple'];
+const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'starbase', 'flak', 'abm', 'temple'];
 // Рецепт фабрики товаров (зеркало _goods_factory.sql): на слот/сутки.
 const EC_GOODS = { water: 6, mat: 4, out: 10, demandDiv: 12, price: 12, sellFrac: 0.6 };
 // Имена ресурсов-входов (как в data.js/galaxy_gen.js): вода и сырьё.
@@ -330,9 +332,11 @@ const EC_REPAIR_COST_FRAC = 0.50;
 // Короткая подсказка «как пользоваться» для каждого типа здания (показывается в карточке).
 const EC_BLD_HOWTO = {
   factory:          'Пассивный доход ГС. Открывайте слоты — каждый добавляет +200 ГС/сут.',
-  mining:           'Назначьте слоты на месторождения ниже. Несколько слотов на один ресурс = больше добычи.',
+  mining:           'Копает автоматически все ОБЫЧНЫЕ залежи планеты. Необычные и выше не берёт — для них Глубинный комплекс и Экстрактор.',
+  mining_deep:      'Копает автоматически НЕОБЫЧНЫЕ и РЕДКИЕ залежи планеты. Обычные не трогает — их берёт Добывающий завод.',
+  mining_exotic:    'Копает автоматически ЭПИЧЕСКИЕ и ЛЕГЕНДАРНЫЕ залежи планеты. Ставьте только там, где такая залежь есть — иначе будет простаивать.',
   goodsfab:         'Перерабатывает воду (Лёд/Жидкая вода) и сырьё (Железо/Силикаты) в товары. Держите запас входов на складе — без них фабрика простаивает. Товары кормят население (обеспечение): хватает → доход растёт, дефицит → проседает. Излишек продаётся на бирже. Название товара задаётся кнопкой ниже.',
-  trade:            'Доход только при активном торговом пути (вкладка «Торговля»).',
+  trade:            'Доход только при активном торговом пути (вкладка «Торговля и потоки» → Караваны).',
   market:           'Сама сбывает свежедобытый поток (заводы в режиме «Склад») за ГС (50–75% цены по редкости), без торговых путей. Накопленный склад НЕ трогает — стратегический запас в безопасности.',
   warehouse:        'Каждый слот склада повышает лимит общего хранилища (+500). Без склада лимит мал — лишняя добыча теряется (или ставьте завод в режим «Экспорт»).',
   science:          'Даёт очки науки (ОН) для исследований.',
@@ -348,7 +352,7 @@ const EC_BLD_HOWTO = {
 };
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
-  factory: '🏭', mining: '⛏', goodsfab: '🛍', trade: '💱', market: '📈',
+  factory: '🏭', mining: '⛏', mining_deep: '⚒', mining_exotic: '💎', goodsfab: '🛍', trade: '💱', market: '📈',
   science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', warehouse: '📦', temple: '🛐', doomgun: '🜨',
   starbase: '🛰', flak: '🎯', abm: '🚀',
 };
@@ -1632,7 +1636,7 @@ function ecCaravanIncome() {
   // Валовый экспортный поток добычи — общий пул mine_flow: сервер отгружает караванам
   // ТОЛЬКО реально добытое export-заводами за тик, маршруты черпают пул по очереди.
   const flow = {};
-  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
+  (EC.buildings || []).filter(ecIsMiner).forEach(b => {
     ecMineYields(b).forEach(y => {
       if (ecEffMode(b, y.name) !== 'export' || ecIsConceded(b.colony_id, y.name)) return;
       flow[y.name] = (flow[y.name] || 0) + y.rate;
@@ -1742,7 +1746,7 @@ function ecIsConceded(colonyId, resName) {
 // (иначе колонизация новой залежи разом сливала бы стратегический запас).
 function ecStoreFlowEntries() {
   const gross = {};
-  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
+  (EC.buildings || []).filter(ecIsMiner).forEach(b => {
     ecMineYields(b).forEach(y => {
       if (ecEffMode(b, y.name) !== 'store' || ecIsConceded(b.colony_id, y.name)) return;
       gross[y.name] = (gross[y.name] || 0) + y.rate;
@@ -1904,18 +1908,37 @@ function ecResEntries() { const res = (EC.eco && EC.eco.resources) || {}; return
 const EC_RICHNESS = { 'колоссально': 3.0, 'очень много': 2.5, 'много': 2.0, 'умеренно': 1.5, 'мало': 1.0, 'следы': 0.6 };
 function ecRichMult(amt) { const v = EC_RICHNESS[String(amt || '').trim()]; return v == null ? 1.5 : v; }
 // Добыча за слот/сутки: редкость × богатство месторождения × доктрина — зеркало economy_accrue.
-function ecMineRate(rar, amt) { return Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 25) * ecRichMult(amt) * ecFactionMods().mine)); }
-// БЮДЖЕТ v3: авто-добыча — завод копает ВСЕ залежи своей планеты, темп по залежи =
+function ecMineRate(rar, amt) { return Math.min(50, Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 25) * ecRichMult(amt) * ecFactionMods().mine))); }
+// ЯРУСЫ ДОБЫЧИ: каждая добывающая постройка берёт только залежи своего яруса —
+// зеркало public._mine_tier_ok в _budget_wellbeing.sql.
+const EC_MINE_TIERS = { mining: ['common'], mining_deep: ['uncommon', 'rare'], mining_exotic: ['epic', 'legendary'] };
+function ecIsMiner(b) { return !!(b && EC_MINE_TIERS[b.btype]); }
+// БЮДЖЕТ v3: авто-добыча — завод копает залежи СВОЕГО ЯРУСА на планете, темп по залежи =
 // база(редкость) × богатство × доктрина × (слоты/3). Слоты = рабочие руки от
 // промышленного бюджета и населения. Зеркало цикла mining в economy_accrue.
 function ecMineYields(b) {
-  if (!b || b.btype !== 'mining') return [];
-  const slotMul = Math.max(1, +b.slots_open || 1) / 3;
+  if (!ecIsMiner(b)) return [];
+  const tiers = EC_MINE_TIERS[b.btype];
   const mine = ecFactionMods().mine;
-  return ecMiningPlanetRes(b).map(ri => ({
-    name: ri.name, r: ri.r || 'common', amt: ri.amt, icon: ri.icon || '◈',
-    rate: Math.max(1, Math.round((EC_RES_RATE[ri.r || 'common'] || 25) * ecRichMult(ri.amt) * mine * slotMul)),
-  }));
+  // Сырой темп постройки по залежи (до планетарного капа)
+  const raw = (bb, ri) => Math.min(50, Math.max(1, Math.round((EC_RES_RATE[ri.r || 'common'] || 25) * ecRichMult(ri.amt) * mine * Math.max(1, +bb.slots_open || 1) / 3)));
+  // КАП: 50/сут с ПЛАНЕТЫ по ресурсу — заводы НЕ складываются сверх капа
+  // (зеркало col_mined в economy_accrue). Постройки раньше в списке выбирают кап первыми.
+  const sameCol = (EC.buildings || []).filter(x => ecIsMiner(x) && x.colony_id === b.colony_id);
+  const idx = Math.max(0, sameCol.indexOf(b));
+  // Фолбэк редкости: у старых снимков поле r бывает пустым — добираем из каталога
+  // (ecResRarity), иначе ценная залежь сойдёт за common и достанется заводу.
+  return ecMiningPlanetRes(b).filter(ri => tiers.includes(ri.r || ecResRarity(ri.name))).map(ri => {
+    const rr = ri.r || ecResRarity(ri.name);
+    let already = 0;
+    for (let i = 0; i < idx; i++) {
+      if (EC_MINE_TIERS[sameCol[i].btype].includes(rr)) already += Math.min(raw(sameCol[i], ri), Math.max(0, 50 - already));
+    }
+    return {
+      name: ri.name, r: ri.r || 'common', amt: ri.amt, icon: ri.icon || '◈',
+      rate: Math.max(0, Math.min(raw(b, ri), 50 - already)),
+    };
+  }).filter(y => y.rate > 0);
 }
 // Стоимость экспансии (колонизация/терраформ/обустройство) с учётом доктрины (mods.colonize).
 function ecColonizeCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().colonize)); }
@@ -1939,7 +1962,7 @@ function ecMiningPlanetRes(b) {
 // Суммарная АВТО-добыча по всем mining-зданиям колонии (для заголовка).
 // Выбор месторождений убран: завод копает все залежи планеты (ecMineYields).
 function ecColonyMinePreview(blds, planet) {
-  const mBlds = blds.filter(b => b.btype === 'mining');
+  const mBlds = blds.filter(ecIsMiner);
   if (!mBlds.length) return '';
   const totals = new Map();
   const rars = new Map();
@@ -1994,7 +2017,7 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['trade', '⇄', 'Торговля'], ['flows', '🔀', 'Потоки'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['flows', '⇄', 'Торговля и потоки'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   // Длань Неотвратимости — отдельная вкладка-пульт, появляется когда орудие доступно
   // (исследование открыто или орудие уже стоит).
   if (ecDoomUnlocked()) tabs.splice(13, 0, ['doom', '🜨', 'Длань Неотвратимости']);
@@ -2004,7 +2027,7 @@ function ecPaintCabinet() {
     : EC.tab === 'outposts' ? ecTabOutposts()
     : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
     : EC.tab === 'welfare' ? ecTabWelfare()
-    : EC.tab === 'trade' ? ecTabTrade()
+    : EC.tab === 'trade' ? ecTabFlows()   // легаси-ссылки: «Торговля» слита в «Потоки»
     : EC.tab === 'flows' ? ecTabFlows()
     : EC.tab === 'exchange' ? ecTabExchange()
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'faith' ? ecTabFaith() : EC.tab === 'intel' ? ecTabIntel()
@@ -2060,7 +2083,11 @@ function ecPaintCabinet() {
     if (mount && typeof fnRenderNewsTab === 'function') { fnRenderNewsTab(mount); }
   }
 }
-function ecSetTab(t) { EC.tab = t; ecPaintCabinet(); }
+function ecSetTab(t) {
+  // «Торговля» слита во вкладку «Потоки»: старые ссылки ведут на под-вкладку караванов
+  if (t === 'trade') { t = 'flows'; if (!EC.flowSub || EC.flowSub === 'flows') EC.flowSub = 'caravans'; }
+  EC.tab = t; ecPaintCabinet();
+}
 
 // ── Состояние «Обзора»-статистики: раскрытые секции, активный график, окно истории ──
 function ecOvState() {
@@ -2238,7 +2265,7 @@ function ecDoctrineHtml(app) {
 // какое богатство месторождения и какой вклад в добычу — для подробной справки.
 function ecMineTotals() {
   const totals = new Map();
-  EC.buildings.filter(b => b.btype === 'mining').forEach(b => {
+  EC.buildings.filter(ecIsMiner).forEach(b => {
     const colony = EC.colonies.find(c => c.id === b.colony_id);
     const colName = (colony && (colony.name || colony.planet_name)) || '—';
     const slots = Math.max(1, +b.slots_open || 1);
@@ -3415,7 +3442,7 @@ function ecTabOverview() {
     if (colChips || opChips) {
       foot = `<div class="ec-res-card-src"><span class="ec-res-card-src-k">откуда:</span>${colChips}${opChips}</div>`;
     } else if (r.have > 0) {
-      foot = `<div class="ec-res-card-why">в запасе, добыча не ведётся — назначьте месторождение «${esc(r.n)}» добывающему заводу во вкладке «Колонии»</div>`;
+      foot = `<div class="ec-res-card-why">в запасе, добыча не ведётся — постройте на планете с залежью «${esc(r.n)}» добывающую постройку её яруса (завод — обычные, глубинный комплекс — необычные/редкие, экстрактор — эпические/легендарные)</div>`;
     } else {
       foot = `<div class="ec-res-card-why">не добывается и склад пуст</div>`;
     }
@@ -3648,9 +3675,10 @@ function ecPlanetResChips(p) {
 // Подсказка «что выгодно строить» по ресурсам/пригодности планеты
 function ecPlanetBuildHint(p) {
   const res = (p && Array.isArray(p.resources)) ? p.resources.filter(r => r && r.name) : [];
-  const rich = res.some(r => ['rare', 'epic', 'legendary'].includes(r.r));
   const tips = [];
-  if (res.length) tips.push(`⛏ Добывающий завод${rich ? ' — ценные ресурсы!' : ''}`);
+  if (res.some(r => (r.r || 'common') === 'common')) tips.push('⛏ Добывающий завод');
+  if (res.some(r => ['uncommon', 'rare'].includes(r.r))) tips.push('⚒ Глубинный комплекс — ценные ресурсы!');
+  if (res.some(r => ['epic', 'legendary'].includes(r.r))) tips.push('💎 Экзотический экстрактор — элитная залежь!');
   if (ecColonizable(p)) tips.push('🏭 Фабрика · 🔬 Институт');
   return tips.length ? `<div class="ec-pl-hint">💡 Выгодно: ${tips.join(' · ')}</div>` : '';
 }
@@ -4799,7 +4827,7 @@ function ecCvCargoToggle(res) {
 // Валовый ЭКСПОРТНЫЙ поток ресурса /ход (сумма export-заводов — зеркало mine_flow до караванов).
 function ecExtractRateGross(resName) {
   let total = 0;
-  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
+  (EC.buildings || []).filter(ecIsMiner).forEach(b => {
     ecMineYields(b).forEach(y => {
       if (y.name !== resName || ecEffMode(b, y.name) !== 'export' || ecIsConceded(b.colony_id, y.name)) return;
       total += y.rate;
@@ -4857,7 +4885,7 @@ function ecTravelTurns(oSys, dSys) {
 // Что фракция отдаёт в ЭКСПОРТ — список для каравана (свободный поток /ход, не валовая добыча).
 function ecExtractEntries() {
   const gross = {};
-  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
+  (EC.buildings || []).filter(ecIsMiner).forEach(b => {
     ecMineYields(b).forEach(y => {
       if (ecEffMode(b, y.name) !== 'export' || ecIsConceded(b.colony_id, y.name)) return;
       gross[y.name] = (gross[y.name] || 0) + y.rate;
@@ -5241,7 +5269,7 @@ function ecResFilter(btn, mode) {
 function ecFlowRowsData() {
   const rows = {};
   const mk = (n) => rows[n] || (rows[n] = { mine: 0, exp: 0, sto: 0, conc: 0 });
-  (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
+  (EC.buildings || []).filter(ecIsMiner).forEach(b => {
     ecMineYields(b).forEach(y => {
       const row = mk(y.name);
       row.mine += y.rate;
@@ -5266,11 +5294,11 @@ function ecTabFlows() {
   const capStore = 1000 + ecSlotsSum('warehouse') * 500;
   const hasMarket = marketCap > 0;
 
-  const head = `<div class="ec-q-row" style="font-weight:600;color:var(--t3);font-size:12px">
-      <span style="flex:2">Ресурс</span><span style="flex:1">⛏ Добыча/сут</span>
-      <span style="flex:1">Режим</span><span style="flex:1">🚚 Караваны</span>
-      <span style="flex:1.4">🏪 Биржа: лимит · со склада/сут</span>
-      <span style="flex:1">📦 Склад</span><span style="flex:1.4">Разовая продажа</span><span style="width:80px"></span>
+  const head = `<div class="ec-q-row ec-fl-row ec-fl-head">
+      <span class="ec-fl-name">Ресурс</span><span class="ec-fl-mine">⛏ Добыча/сут</span>
+      <span class="ec-fl-mode">Режим</span><span class="ec-fl-cv">🚚 Караваны</span>
+      <span class="ec-fl-mk">🏪 Биржа: лимит · со склада/сут</span>
+      <span class="ec-fl-st">📦 Склад</span><span class="ec-fl-sell">Разовая продажа</span><span class="ec-fl-act"></span>
     </div>`;
   const list = names.map((n, i) => {
     const r = rows[n];
@@ -5280,28 +5308,28 @@ function ecTabFlows() {
     const cvUse = Math.min(committed[n] || 0, r.exp);
     const concTxt = r.conc > 0 ? `<div style="color:var(--color-warning);font-size:11px">⚖ ${ecNum(r.conc)}/сут в концессии</div>` : '';
     const stQty = +store[n] || 0;
-    return `<div class="ec-q-row" style="align-items:center">
-      <span style="flex:2">${ecResIcon(n)} <b>${esc(n)}</b> <i style="color:var(--t4);font-style:normal">· ${ecResPriceN(n)} ГС</i>${concTxt}</span>
-      <span style="flex:1" title="экспорт ${ecNum(r.exp)} · склад ${ecNum(r.sto)}">${r.mine ? `+${ecNum(r.mine)}` : '<span style="color:var(--t4)">—</span>'}</span>
-      <span style="flex:1"><select id="ec-fl-mode-${i}" class="ec-prod-qty" style="width:100%" title="Куда идёт поток этого ресурса со ВСЕХ заводов">
+    return `<div class="ec-q-row ec-fl-row">
+      <span class="ec-fl-name">${ecResIcon(n)} <b>${esc(n)}</b> <i style="color:var(--t4);font-style:normal">· ${ecResPriceN(n)} ГС</i>${concTxt}</span>
+      <span class="ec-fl-mine" title="экспорт ${ecNum(r.exp)} · склад ${ecNum(r.sto)}"><i class="ec-fl-lb">⛏ Добыча/сут</i>${r.mine ? `+${ecNum(r.mine)}` : '<span style="color:var(--t4)">—</span>'}</span>
+      <span class="ec-fl-mode"><i class="ec-fl-lb">Режим потока</i><select id="ec-fl-mode-${i}" class="ec-prod-qty" title="Куда идёт поток этого ресурса со ВСЕХ заводов">
         <option value="" ${mode === '' ? 'selected' : ''}>авто (${effTxt})</option>
         <option value="store" ${mode === 'store' ? 'selected' : ''}>📦 склад/биржа</option>
         <option value="export" ${mode === 'export' ? 'selected' : ''}>🚚 экспорт</option>
       </select></span>
-      <span style="flex:1" title="Занято активными караванами">${cvUse ? `−${ecNum(cvUse)}/сут` : '<span style="color:var(--t4)">—</span>'}</span>
-      <span style="flex:1.4;display:flex;gap:4px">
-        <input type="number" id="ec-fl-lim-${i}" class="ec-prod-qty" style="width:50%" min="0" placeholder="∞"
+      <span class="ec-fl-cv" title="Занято активными караванами"><i class="ec-fl-lb">🚚 Караваны</i>${cvUse ? `−${ecNum(cvUse)}/сут` : '<span style="color:var(--t4)">—</span>'}</span>
+      <span class="ec-fl-mk"><i class="ec-fl-lb">🏪 Биржа: лимит · со склада/сут</i><span class="ec-fl-mk-in">
+        <input type="number" id="ec-fl-lim-${i}" class="ec-prod-qty" min="0" placeholder="∞"
           value="${f.market_limit != null ? +f.market_limit : ''}" title="Максимум ед./сут, что биржа продаёт из потока (пусто = без лимита, 0 = не продавать)">
-        <input type="number" id="ec-fl-fs-${i}" class="ec-prod-qty" style="width:50%" min="0" placeholder="0"
+        <input type="number" id="ec-fl-fs-${i}" class="ec-prod-qty" min="0" placeholder="0"
           value="${+f.market_from_store > 0 ? +f.market_from_store : ''}" title="Сколько ед./сут биржа ДОБИРАЕТ со склада (0 = склад не трогать)">
-      </span>
-      <span style="flex:1"><label title="Переливать остаток потока на склад (иначе — авто-продажа ×0.6)" style="display:flex;align-items:center;gap:4px;cursor:pointer">
+      </span></span>
+      <span class="ec-fl-st"><i class="ec-fl-lb">📦 На склад · запас</i><label title="Переливать остаток потока на склад (иначе — авто-продажа ×0.6)">
         <input type="checkbox" id="ec-fl-st-${i}" ${f.to_store === false ? '' : 'checked'}> ${ecNum(stQty)}</label></span>
-      <span style="flex:1.4;display:flex;gap:4px">
-        <input type="number" id="ec-fl-sell-${i}" class="ec-prod-qty" style="width:55%" min="1" placeholder="кол-во" ${stQty > 0 && hasMarket ? '' : 'disabled'}>
-        <button class="btn btn-gh btn-xs" ${stQty > 0 && hasMarket ? '' : 'disabled'} title="${hasMarket ? 'Продать со склада сейчас (цена биржи × доктрина)' : 'Нужна Товарная биржа'}" onclick="ecFlowSellNow(${i})">Продать</button>
-      </span>
-      <span style="width:80px;text-align:right"><button class="btn btn-gd btn-xs" onclick="ecFlowApply(${i})">Применить</button></span>
+      <span class="ec-fl-sell"><i class="ec-fl-lb">Разовая продажа со склада</i><span class="ec-fl-sell-in">
+        <input type="number" id="ec-fl-sell-${i}" class="ec-prod-qty" min="1" max="${stQty}" placeholder="кол-во" ${stQty > 0 ? '' : 'disabled'}>
+        <button class="btn btn-gh btn-xs" ${stQty > 0 ? '' : 'disabled'} title="${stQty > 0 ? 'Продать со склада сейчас (50–75% цены в зависимости от редкости)' : 'Склад пуст'}" onclick="ecFlowSellNow(${i})">Продать</button>
+      </span></span>
+      <span class="ec-fl-act"><button class="btn btn-gd btn-xs" onclick="ecFlowApply(${i})">Применить</button></span>
     </div>`;
   }).join('');
 
@@ -5323,23 +5351,33 @@ function ecTabFlows() {
   };
   const concHtml = `<div class="ec-r-sec" style="margin-top:18px">⚖ Концессии — право добычи</div>
     <div class="ec-hint" style="margin:4px 0 8px">Поток конкретной залежи можно передать другой державе: месторождение остаётся у вас, а добыча капает получателю на склад (он сам решает, продавать или копить). Интерим факторий.</div>
-    ${myDeps.length ? `<div class="ec-prod-form" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-      <select id="ec-conc-dep" class="ec-prod-qty" style="min-width:220px">${depOpts}</select>
-      <select id="ec-conc-fac" class="ec-prod-qty" style="min-width:180px">${facOpts}</select>
+    ${myDeps.length ? `<div class="ec-prod-form ec-conc-form">
+      <select id="ec-conc-dep" class="ec-prod-qty">${depOpts}</select>
+      <select id="ec-conc-fac" class="ec-prod-qty">${facOpts}</select>
       <button class="btn btn-gd btn-sm" onclick="ecConcGrant()">Передать право добычи</button>
     </div>` : '<div class="ec-hint">Нет свободных залежей для передачи.</div>'}
     ${given.length ? `<div class="ec-r-sec">Отдано мной</div>${given.map(c => concRow(c, true)).join('')}` : ''}
     ${got.length ? `<div class="ec-r-sec">Получено мной</div>${got.map(c => concRow(c, false)).join('')}` : ''}`;
 
-  return `${ecIntro('🔀', 'Потоки ресурсов',
+  const flowsBody = `${ecIntro('🔀', 'Потоки ресурсов',
     'Одна панель на державу: что добывается, что уходит караванам, что продаёт Товарная биржа и что копится на складе. Настройки действуют на ресурс ЦЕЛИКОМ (по всем заводам) и перекрывают режимы зданий.',
     [`Биржа сбывает до <b>${ecNum(marketCap)}</b> ед./сут (слоты Товарной биржи × 25); прогноз выручки: <b>+${ecNum(mCalc.gc)} ГС/сут</b>.`,
      `Ёмкость склада: <b>${ecNum(capStore)}</b> ед. на ресурс (1000 + слоты Склада × 500).`,
      'Лимит биржи «0» = ресурс не продаётся вовсе; «со склада/сут» &gt; 0 — биржа добирает из запаса.',
-     'Караваны берут только из экспортного потока; галочка «📦 со склада» на пути (вкладка «Торговля») разрешает добирать из запаса.'])}
+     'Разовая продажа сбывает запас со склада сразу (50–75% цены, Товарная биржа не нужна).',
+     'Караваны берут только из экспортного потока; галочка «📦 со склада» на пути (под-вкладка «Караваны») разрешает добирать из запаса.'])}
     ${names.length ? head + list : '<div class="ec-hint">Нет добычи и запасов — постройте Добывающий завод и назначьте месторождения.</div>'}
     ${concHtml}`;
+
+  // ── Под-вкладки: Потоки + вся торговля (караваны/рынок/обмен) в одном месте ──
+  const sub = EC.flowSub || 'flows';
+  const subTabs = [['flows', '🔀', 'Потоки'], ['caravans', '🚛', 'Караваны'], ['market', '🏪', 'Рынок'], ['barter', '🤝', 'Обмен']];
+  const subNav = `<div class="ec-tabs" style="margin:4px 0 12px">${subTabs.map(([id, ic, l]) => `<button class="ec-tab${sub === id ? ' on' : ''}" onclick="ecSetFlowSub('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('')}</div>`;
+  const body = sub === 'flows' ? `<div class="ec-flows-tab">${flowsBody}</div>`
+    : `<div class="ec-trade-tab">${ecTradeSubBody(sub)}</div>`;
+  return `<div class="ec-flowx">${subNav}${body}</div>`;
 }
+function ecSetFlowSub(s) { EC.flowSub = s; ecPaintCabinet(); }
 async function ecFlowApply(i) {
   const n = (EC._flowRows || [])[i]; if (!n) return;
   const mode = ecId(`ec-fl-mode-${i}`)?.value || null;
@@ -5372,7 +5410,9 @@ function ecConcRevoke(id) {
   ecRpcAct('concession_revoke', { p_id: id }, 'Концессия прекращена');
 }
 
-function ecTabTrade() {
+// Тело торговой под-вкладки («Караваны»/«Рынок»/«Обмен») — рендерится внутри
+// вкладки «Торговля и потоки» (ecTabFlows). Бывшая отдельная вкладка «Торговля».
+function ecTradeSubBody(sub) {
   const others = ecOtherFactions(), noOthers = !others.length;
   const tradeCap = ecSlotsSum('trade');
   const used = EC.routes.filter(r => r.a_fid === EC.fid && ['pending', 'active'].includes(r.status)).length;
@@ -5453,15 +5493,12 @@ function ecTabTrade() {
       ${active.length ? `<div class="ec-r-sec">Активные пути</div>${active.map(ecRouteRow).join('')}` : ''}
       ${pendingOut.length ? `<div class="ec-r-sec">Отправленные</div>${outHtml}` : ''}</div>`;
 
-  const sub = EC.tradeSub || 'caravans';
-  const subTabs = [['caravans', '🚛', 'Караваны'], ['market', '🏪', 'Рынок'], ['barter', '🤝', 'Обмен']];
-  const subNav = `<div class="ec-tabs" style="margin:4px 0 12px">${subTabs.map(([id, ic, l]) => `<button class="ec-tab${sub === id ? ' on' : ''}" onclick="ecSetTradeSub('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('')}</div>`;
   const subBody = sub === 'market' ? `${resBlock}${ecGoodsBoard()}`
     : sub === 'barter' ? `${barterBlock}<div class="ec-section-title">Технологии и чертежи</div>${ecTechMarketBlock()}`
       : caravanBlock;
-  return `<div class="ec-trade-tab">${ecIntro('⇄', 'Торговля', 'Превращайте ресурсы в ГС и обменивайтесь активами с другими фракциями.', ['<b>Караваны</b> — постоянные пути (поток добычи к партнёру, доход каждый ход). <b>Рынок</b> — продать со склада за 80%. <b>Обмен</b> — подарки/сделки и биржа техов и чертежей.'])}${subNav}${subBody}</div>`;
+  return `${ecIntro('⇄', 'Торговля', 'Превращайте ресурсы в ГС и обменивайтесь активами с другими фракциями.', ['<b>Караваны</b> — постоянные пути (поток добычи к партнёру, доход каждый ход). <b>Рынок</b> — продать со склада за 80%. <b>Обмен</b> — подарки/сделки и биржа техов и чертежей.'])}${subBody}`;
 }
-function ecSetTradeSub(s) { EC.tradeSub = s; ecPaintCabinet(); }
+function ecSetTradeSub(s) { EC.flowSub = s; ecPaintCabinet(); }   // легаси: старые ссылки на под-вкладки торговли
 
 // ── Вкладка «Биржа»: финансовые инструменты поверх рынка ресурсов ──
 // Срез 2: индекс рынка / ETF. Под-вкладки-заготовки под облигации/акции/фьючерсы
@@ -5491,7 +5528,7 @@ function ecTabExchange() {
   const sesTag = ses.open
     ? `<b style="color:#5fc98a">● торги открыты</b> до ${ses.close_hour}:00 UTC`
     : `<b style="color:#e0688a">● торги закрыты</b> · открытие в ${ses.open_hour}:00 UTC`;
-  return `${ecIntro('📊', 'Биржа', `Финансовые инструменты, привязанные к реальной экономике галактики. ${sesTag}.`, ['<b>Организации</b> — объедините реальные постройки; вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%). Доли продаются другим фракциям.', '<b>Спрос отраслей</b> — доход и котировки двигает сама галактика: дефицит сырья поднимает рудники, очередь кораблей — верфи, торговые пути — хабы (множитель 0.25×…3.0×).', '<b>Облигации</b> — займ под купон. Сделки с долями — только при <b>открытых торгах</b>; на закрытии фиксинг и дивиденды.', '<b>Маржа</b> — лонг/шорт с плечом до ×2 (ликвидация при просадке залога). <b>Фьючерсы</b> — срочные контракты с расчётом по экспирации. <b>Опционы</b> — колл/пут за премию. Расчёт идёт по <b>официальному курсу</b> (его пересчитывает Биржевой совет раз в 3 часа, а не ваши сделки; курс двигают дефициты ресурсов и события-новости) с <b>комиссией палаты</b>; выигрыши — из резерва палаты. Спот-торговля ресурсами — во вкладке «Торговля → Рынок».', '<b>Заказы</b> — разместите госзаказ на закупку ресурса (деньги блокируются в <b>эскроу</b>); заказ объявляется в ленте сектора, и любая фракция выполняет его из своих запасов — полностью или частями. Гарантированная оплата из эскроу.'])}${subNav}${closedBanner}${body}`;
+  return `${ecIntro('📊', 'Биржа', `Финансовые инструменты, привязанные к реальной экономике галактики. ${sesTag}.`, ['<b>Организации</b> — объедините реальные постройки; вместе они дают <b>синергию</b> (+3% дохода за постройку, до +30%). Доли продаются другим фракциям.', '<b>Спрос отраслей</b> — доход и котировки двигает сама галактика: дефицит сырья поднимает рудники, очередь кораблей — верфи, торговые пути — хабы (множитель 0.25×…3.0×).', '<b>Облигации</b> — займ под купон. Сделки с долями — только при <b>открытых торгах</b>; на закрытии фиксинг и дивиденды.', '<b>Маржа</b> — лонг/шорт с плечом до ×2 (ликвидация при просадке залога). <b>Фьючерсы</b> — срочные контракты с расчётом по экспирации. <b>Опционы</b> — колл/пут за премию. Расчёт идёт по <b>официальному курсу</b> (его пересчитывает Биржевой совет раз в 3 часа, а не ваши сделки; курс двигают дефициты ресурсов и события-новости) с <b>комиссией палаты</b>; выигрыши — из резерва палаты. Спот-торговля ресурсами — во вкладке «Торговля и потоки → Рынок».', '<b>Заказы</b> — разместите госзаказ на закупку ресурса (деньги блокируются в <b>эскроу</b>); заказ объявляется в ленте сектора, и любая фракция выполняет его из своих запасов — полностью или частями. Гарантированная оплата из эскроу.'])}${subNav}${closedBanner}${body}`;
 }
 
 // Карточка индекса рынка / ETF: значение, тренд, спарклайн, моя позиция, формы.
@@ -6344,7 +6381,7 @@ function ecTabDiplomacy() {
       ${asBorrower.length ? `<div class="ec-r-sec">Я заёмщик</div>${borrowerHtml}` : ''}
     </div>`;
 
-  return `${ecIntro('🤝', 'Дипломатия', 'Союзы, отношения и кредиты. Федерация/конфедерация дают защиту и общий флот; вассал платит сюзерену дань. Торговля и обмен — на вкладке «Торговля».', ['<b>Федерация/конфедерация</b> — союз нескольких держав: защита караванов и от разведки, общий флот.', '<b>Вассалитет</b> — вассал платит сюзерену дань с дохода (как у Paradox).', '<b>Границы</b> — закрываются для выбранных фракций: их флоты не войдут в ваши системы.', 'Можно выдавать займы; споры по долгам решает МГА.'])}<div class="ec-section-title">Границы <span class="ec-hint">— пограничный контроль</span></div>
+  return `${ecIntro('🤝', 'Дипломатия', 'Союзы, отношения и кредиты. Федерация/конфедерация дают защиту и общий флот; вассал платит сюзерену дань. Торговля и обмен — на вкладке «Торговля и потоки».', ['<b>Федерация/конфедерация</b> — союз нескольких держав: защита караванов и от разведки, общий флот.', '<b>Вассалитет</b> — вассал платит сюзерену дань с дохода (как у Paradox).', '<b>Границы</b> — закрываются для выбранных фракций: их флоты не войдут в ваши системы.', 'Можно выдавать займы; споры по долгам решает МГА.'])}<div class="ec-section-title">Границы <span class="ec-hint">— пограничный контроль</span></div>
     <div class="ec-dip-grid">${ecBordersBlock()}</div>
     <div class="ec-section-title">Союзы <span class="ec-hint">— федерация · конфедерация · вассалитет</span></div>
     ${ecAllianceBlock()}
@@ -9533,9 +9570,9 @@ function ecBuildingRow(b) {
   const openBtn = `<span class="ec-slot-auto" data-tip="Слоты выставляет финансирование отрасли во вкладке «Благополучие» (и хватает ли населения на рабочие места)" onclick="ecSetTab('welfare')">🏛 авто</span>`;
   const slotCount = `<span class="ec-slot-count">${b.slots_open}/${EC_MAX_SLOTS}</span>`;
   let mineHtml = '';
-  if (b.btype === 'mining') {
-    // БЮДЖЕТ v3: добыча автоматическая — завод копает ВСЕ залежи планеты,
-    // темп ×(слоты/3). Выбор «что добывать» убран; маршруты — вкладка «Потоки».
+  if (ecIsMiner(b)) {
+    // БЮДЖЕТ v3 + ЯРУСЫ: добыча автоматическая — постройка копает залежи
+    // СВОЕГО яруса, темп ×(слоты/3). Маршруты — вкладка «Потоки».
     const yields = ecMineYields(b);
     if (yields.length) {
       const rows = yields.map(y => `<div class="ec-mine-row active">
@@ -9546,7 +9583,7 @@ function ecBuildingRow(b) {
       const mul = (Math.max(1, +b.slots_open || 1) / 3);
       mineHtml = `<div class="ec-bld-mine-hd">⛏ Добывается автоматически <span class="ec-mine-slots-used" data-tip="Слоты — рабочие руки: темп добычи ×(слоты/3). Слоты выставляет промышленный бюджет и население.">${b.slots_open} слот. · темп ×${mul.toFixed(2)}</span></div><div class="ec-mine-list">${rows}</div>`;
     } else {
-      mineHtml = `<div class="ec-bld-mine-empty">◌ планета без ресурсов — заводу нечего добывать</div>`;
+      mineHtml = `<div class="ec-bld-mine-empty">◌ на планете нет залежей ${b.btype === 'mining' ? 'обычных' : b.btype === 'mining_deep' ? 'необычных/редких' : 'эпических/легендарных'} ресурсов — постройке нечего добывать</div>`;
     }
     mineHtml += `<div class="ec-bld-mine-hd" style="margin-top:8px;color:var(--t3)">Куда идёт добыча (склад/экспорт/биржа) — во вкладке <a href="#" onclick="ecSetTab('flows');return false" style="color:var(--gd)">🔀 Потоки</a></div>`;
   }

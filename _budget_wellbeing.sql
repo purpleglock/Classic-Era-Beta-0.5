@@ -224,6 +224,42 @@ do $$ begin
   end if;
 end $$;
 
+-- ── 4a) ЯРУСЫ ДОБЫЧИ: каталог построек ──────────────────────
+-- Добывающий завод копает только ПРОСТЫЕ залежи (common).
+-- Ценные ярусы требуют своих построек:
+--   mining_deep   «Глубинный горный комплекс» — uncommon + rare
+--   mining_exotic «Экзотический экстрактор»   — epic + legendary
+-- ⚠ КЛОББЕР: _ec_bld_base переопределяется также в _goods_factory /
+-- _security_money / _defense_starbase — при перекате тех файлов
+-- продублируйте строки «-- ЯРУСЫ:». Зеркало клиента: EC_BUILD/EC_MINE_TIERS.
+create or replace function public._ec_bld_base(p_btype text)
+returns numeric language sql immutable as $$
+  select case p_btype
+    when 'factory'          then 500    when 'mining'   then 500
+    when 'trade'            then 1000   when 'market'   then 1500
+    when 'science'          then 1000   when 'training' then 500
+    when 'intel'            then 3000   when 'military_factory' then 1000
+    when 'shipyard'         then 2000   when 'warehouse' then 800
+    when 'temple'            then 1200
+    when 'starbase'         then 5000
+    when 'flak'             then 1500
+    when 'abm'              then 3000
+    when 'goodsfab'         then 1200
+    when 'mining_deep'      then 2500   -- ЯРУСЫ: uncommon + rare
+    when 'mining_exotic'    then 8000   -- ЯРУСЫ: epic + legendary
+    else null end
+$$;
+
+-- ЯРУСЫ: допустимые редкости залежей по типу добывающей постройки.
+create or replace function public._mine_tier_ok(p_btype text, p_rar text)
+returns boolean language sql immutable as $$
+  select case p_btype
+    when 'mining'        then p_rar = 'common'
+    when 'mining_deep'   then p_rar in ('uncommon','rare')
+    when 'mining_exotic' then p_rar in ('epic','legendary')
+    else false end
+$$;
+
 -- ── 5a) Ручной выбор «что добывать» ОТКЛЮЧЁН ────────────────
 -- Добыча автоматическая (все залежи планеты), маршрутизация — вкладка «Потоки».
 do $$ begin
@@ -331,6 +367,8 @@ declare
   av_lyod numeric; av_water numeric; av_iron numeric; av_silic numeric;
   goods_demand numeric := 0; goods_have numeric; goods_eaten numeric := 0;
   goods_cov numeric := 1; goods_welfare numeric := 1; goods_gc numeric := 0;
+  -- КАП ДОБЫЧИ: 50/сут с ПЛАНЕТЫ по ресурсу, заводы НЕ складываются сверх капа
+  col_mined jsonb := '{}'::jsonb; ckey text; already numeric;
 begin
   select * into eco from public.faction_economy where faction_id = p_fid for update;
   if not found then return jsonb_build_object('faction_id',p_fid,'days',0); end if;
@@ -433,22 +471,35 @@ begin
     end if;
 
     -- БЮДЖЕТ: авто-добыча — завод копает ВСЕ залежи планеты, выбор убран.
+    -- ЯРУСЫ: каждая добывающая постройка берёт только залежи своего яруса
+    -- (_mine_tier_ok): mining → common, mining_deep → uncommon/rare,
+    -- mining_exotic → epic/legendary.
     -- Темп = база(редкость) × богатство × доктрина × (слоты/3): слоты — рабочие
     -- руки от промышленного бюджета и населения. Зеркало ecMineYields в economy.js.
     for bld in
-      select cb.colony_id, cb.slots_open, coalesce(cb.mine_mode,'store') as mine_mode, c.resources as cres
+      select cb.colony_id, cb.btype, cb.slots_open, coalesce(cb.mine_mode,'store') as mine_mode, c.resources as cres
       from public.colony_buildings cb
       join public.colonies c on c.id = cb.colony_id
-      where cb.faction_id = p_fid and cb.btype = 'mining'
+      where cb.faction_id = p_fid and cb.btype in ('mining','mining_deep','mining_exotic')
         and c.resources is not null and jsonb_array_length(c.resources) > 0
     loop
       for relem in select value from jsonb_array_elements(bld.cres) loop
         rname := relem->>'name';
         if rname is null then continue; end if;
-        rr := coalesce(relem->>'r','common');
+        -- ЯРУСЫ: у старых снимков колоний поле r бывает пустым — добираем из каталога
+        -- resource_rarity, иначе ценная залежь сошла бы за common и досталась заводу.
+        rr := coalesce(relem->>'r', (select rarity from public.resource_rarity where name = rname), 'common');
+        if not public._mine_tier_ok(bld.btype, rr) then continue; end if;  -- ЯРУСЫ: не тот ярус — пропуск
         rate := case rr when 'uncommon' then 12 when 'rare' then 6 when 'epic' then 3 when 'legendary' then 1 else 25 end;
-        rate := greatest(1, round(rate * public._richness_mult(relem->>'amt') * m_mine
-                                       * greatest(1, coalesce(bld.slots_open,1)) / 3.0));
+        -- КАП: при любых баффах не больше 50/сут с ПЛАНЕТЫ по ресурсу —
+        -- несколько заводов НЕ складываются сверх капа (зеркало ecMineYields).
+        rate := least(50, greatest(1, round(rate * public._richness_mult(relem->>'amt') * m_mine
+                                       * greatest(1, coalesce(bld.slots_open,1)) / 3.0)));
+        ckey := bld.colony_id || '|' || rname;
+        already := coalesce((col_mined->>ckey)::numeric, 0);
+        rate := least(rate, 50 - already);
+        if rate <= 0 then continue; end if;
+        col_mined := jsonb_set(col_mined, array[ckey], to_jsonb(already + rate), true);
         -- ПОТОКИ: концессия — поток этой залежи уходит держателю права добычи
         v_conc_fid := null;
         select mc.to_fid into v_conc_fid from public.mining_concessions mc

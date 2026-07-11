@@ -3072,3 +3072,69 @@ body.ec-tree-fs-lock { overflow: hidden; }
   .ec-bud-row { grid-template-columns: 22px 1fr auto; }
   .ec-bud-eff, .ec-bud-cost { grid-column: 2 / -1; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ПОТОКИ РЕСУРСОВ (вкладка «Торговля и потоки» → под-вкладка «Потоки»).
+   Десктоп: строка-флекс по колонкам (классы вместо inline-стилей).
+   Мобилка: строка превращается в карточку-грид с подписями .ec-fl-lb.
+   ───────────────────────────────────────────────────────────────────── */
+.ec-fl-row { align-items: center; }
+.ec-fl-row .ec-fl-name { flex: 2; min-width: 0; }
+.ec-fl-row .ec-fl-mine, .ec-fl-row .ec-fl-mode, .ec-fl-row .ec-fl-cv, .ec-fl-row .ec-fl-st { flex: 1; min-width: 0; }
+.ec-fl-row .ec-fl-mk, .ec-fl-row .ec-fl-sell { flex: 1.4; min-width: 0; }
+.ec-fl-row .ec-fl-act { width: 84px; flex: 0 0 auto; text-align: right; }
+.ec-fl-row .ec-fl-mode select { width: 100%; }
+.ec-fl-row .ec-fl-mk-in, .ec-fl-row .ec-fl-sell-in { display: flex; gap: 4px; }
+.ec-fl-row .ec-fl-mk-in input { width: 50%; min-width: 0; }
+.ec-fl-row .ec-fl-sell-in input { width: 55%; min-width: 0; }
+.ec-fl-row .ec-fl-st label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.ec-fl-lb { display: none; }   /* подписи ячеек видны только на мобилке */
+.ec-fl-head { font-weight: 600; color: var(--t3); font-size: 12px; }
+
+@media (max-width: 700px) {
+  /* под-вкладки Потоки/Караваны/Рынок/Обмен — равной ширины (как в торговле) */
+  .ec-flowx > .ec-tabs { gap: 4px; }
+  .ec-flowx > .ec-tabs .ec-tab { flex: 1 1 0; justify-content: center; padding: 8px 4px; min-width: 0; }
+  .ec-flowx > .ec-tabs .ec-tab-l { font-size: 11px; }
+  .ec-flows-tab .ec-fl-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "name name"
+      "mine cv"
+      "mode mode"
+      "mk mk"
+      "st sell"
+      "act act";
+    gap: 8px 12px;
+    padding: 12px;
+  }
+  .ec-flows-tab .ec-fl-row.ec-fl-head { display: none; }   /* ПОСЛЕ grid-правила, чтобы перебить его */
+  .ec-flows-tab .ec-fl-name { grid-area: name; font-size: 13.5px; line-height: 1.35; }
+  .ec-flows-tab .ec-fl-mine { grid-area: mine; }
+  .ec-flows-tab .ec-fl-cv   { grid-area: cv; }
+  .ec-flows-tab .ec-fl-mode { grid-area: mode; }
+  .ec-flows-tab .ec-fl-mk   { grid-area: mk; }
+  .ec-flows-tab .ec-fl-st   { grid-area: st; }
+  .ec-flows-tab .ec-fl-sell { grid-area: sell; }
+  .ec-flows-tab .ec-fl-act  { grid-area: act; width: auto; text-align: right; }
+  .ec-flows-tab .ec-fl-act .btn { width: 100%; }
+  .ec-flows-tab .ec-fl-lb {
+    display: block; font-style: normal; font-size: 10.5px; color: var(--t4);
+    text-transform: uppercase; letter-spacing: calc(.4px * var(--deco-ls-mult, 1));
+    margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ec-flows-tab .ec-fl-row select, .ec-flows-tab .ec-fl-row input[type="number"] { padding: 9px 10px; font-size: 13px; }
+  .ec-flows-tab .ec-fl-sell-in input { width: auto; flex: 1 1 60px; }
+  .ec-flows-tab .ec-fl-sell-in .btn { flex: 0 0 auto; }
+
+  /* Концессии: форма и строки — вертикально, селекты во всю ширину */
+  .ec-flows-tab .ec-conc-form { flex-direction: column; align-items: stretch; }
+  .ec-flows-tab .ec-conc-form select { width: 100%; min-width: 0; }
+  .ec-flows-tab .ec-conc-form .btn { width: 100%; }
+  .ec-flows-tab .ec-q-row:not(.ec-fl-row) { flex-wrap: wrap; gap: 6px 10px; }
+  .ec-flows-tab .ec-q-row:not(.ec-fl-row) .ec-r-name { flex: 1 1 100%; min-width: 0; line-height: 1.4; }
+}
+/* Концессии, десктоп: форма в строку с переносом */
+.ec-conc-form { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.ec-conc-form select { min-width: 200px; flex: 1 1 200px; }

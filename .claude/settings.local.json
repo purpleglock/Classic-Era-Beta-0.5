@@ -225,7 +225,13 @@
       "Bash(sed -i 's/\\(детали систем переписаны словами\\)/\\(детали словами; товары различают «нет фабрики»\\\\/«простаивает без входов»\\\\/«мало слотов»\\)/' MEMORY.md)",
       "Bash(grep -c \"МЕМ\" ../nonexistent)",
       "Bash(sed -i 's|- \\\\[Budget wellbeing\\\\]\\(budget-wellbeing.md\\) — «🏛 Бюджет державы» v4[^\\\\n]*|&|' /dev/null)",
-      "Bash(grep -n \"Budget wellbeing\" \"/c/Users/Андрей/.claude/projects/C--Users--------Desktop-Classic-Era-Beta-0-5/memory/MEMORY.md\")"
+      "Bash(grep -n \"Budget wellbeing\" \"/c/Users/Андрей/.claude/projects/C--Users--------Desktop-Classic-Era-Beta-0-5/memory/MEMORY.md\")",
+      "Bash(sed -i 's|economy.js?v=20260712minetiers2|economy.js?v=20260712tradeflows1|' index.html)",
+      "Bash(sed -i 's|css/index.css?v=20260712slotwhy2|css/index.css?v=20260712tradeflows1|g' index.html)",
+      "Bash(sed -i \"s|17_economy.css?v=20260712slotwhy2|17_economy.css?v=20260712tradeflows1|\" css/index.css)",
+      "PowerShell(node --check economy.js)",
+      "Bash(curl -s -X POST https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/rpc/res_flow_set -H 'apikey: sb_publishable_f_xjq0WQcf2AUdHWjk1-XQ_BDLpsoiS' -H 'Content-Type: application/json' -d '{\"p_res\":\"Железо\",\"p_mode\":\"store\",\"p_market_limit\":null,\"p_market_from_store\":0,\"p_to_store\":true}')",
+      "Bash(curl -s -X POST https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/rpc/res_flow_set -H 'apikey: sb_publishable_f_xjq0WQcf2AUdHWjk1-XQ_BDLpsoiS' -H 'Content-Type: application/json' -d '{\"p_res\":\"Iron\",\"p_mode\":\"store\"}')"
     ]
   }
 }
