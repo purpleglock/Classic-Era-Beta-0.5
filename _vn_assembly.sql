@@ -161,19 +161,20 @@ $$;
 create or replace function public._asm_law_apply(p_law jsonb)
 returns void language plpgsql security definer set search_path=public as $$
 begin
+  -- pg_safeupdate (session-preload в Supabase) требует WHERE → ставим where true
   case p_law->>'id'
-    when 'fed_trade'   then update public.faction_economy set gc = gc + least(2500, greatest(100, round(gc * 0.01)));
-    when 'fed_science' then update public.faction_economy set science = science + 25;
-    when 'fed_goods'   then update public.faction_economy set tnp = tnp + 20;
-    when 'fed_grant'   then update public.faction_economy set gc = gc + 400;
-    when 'fed_dual'    then update public.faction_economy set gc = gc + 200, science = science + 12;
-    when 'fed_amnesty' then update public.faction_economy set gc = gc + least(1800, greatest(80, round(gc * 0.007)));
-    when 'gal_tax'     then update public.faction_economy set gc = greatest(0, gc - least(2500, greatest(100, round(gc * 0.01))));
-    when 'gal_censor'  then update public.faction_economy set science = greatest(0, science - 15);
-    when 'gal_requis'  then update public.faction_economy set tnp = greatest(0, tnp - 15);
-    when 'gal_levy'    then update public.faction_economy set gc = greatest(0, gc - 300);
-    when 'gal_darktax' then update public.faction_economy set gc = greatest(0, gc - least(1800, greatest(80, round(gc * 0.007))));
-    when 'gal_double'  then update public.faction_economy set gc = greatest(0, gc - 200), science = greatest(0, science - 8);
+    when 'fed_trade'   then update public.faction_economy set gc = gc + least(2500, greatest(100, round(gc * 0.01))) where true;
+    when 'fed_science' then update public.faction_economy set science = science + 25 where true;
+    when 'fed_goods'   then update public.faction_economy set tnp = tnp + 20 where true;
+    when 'fed_grant'   then update public.faction_economy set gc = gc + 400 where true;
+    when 'fed_dual'    then update public.faction_economy set gc = gc + 200, science = science + 12 where true;
+    when 'fed_amnesty' then update public.faction_economy set gc = gc + least(1800, greatest(80, round(gc * 0.007))) where true;
+    when 'gal_tax'     then update public.faction_economy set gc = greatest(0, gc - least(2500, greatest(100, round(gc * 0.01)))) where true;
+    when 'gal_censor'  then update public.faction_economy set science = greatest(0, science - 15) where true;
+    when 'gal_requis'  then update public.faction_economy set tnp = greatest(0, tnp - 15) where true;
+    when 'gal_levy'    then update public.faction_economy set gc = greatest(0, gc - 300) where true;
+    when 'gal_darktax' then update public.faction_economy set gc = greatest(0, gc - least(1800, greatest(80, round(gc * 0.007)))) where true;
+    when 'gal_double'  then update public.faction_economy set gc = greatest(0, gc - 200), science = greatest(0, science - 8) where true;
     else null;
   end case;
 end$$;
@@ -911,3 +912,124 @@ begin
 end$$;
 revoke all on function public.assembly_pay_fine() from public, anon;
 grant execute on function public.assembly_pay_fine() to authenticated;
+
+-- ════════════════════════════════════════════════════════════════════
+-- ЧАТ АССАМБЛЕИ — кулуары зала заседаний.
+-- Писать могут только участники созыва (кресла и лоббисты), читать — все
+-- (наблюдатели тоже: переговоры публичны). Галактоцентристы и Архонт могут
+-- ставить галочку «шёпот заговора»: такое сообщение видят только они.
+-- После завершения созыва шёпот вскрывается вместе с ролями — читают все.
+-- Живость без Realtime: клиент опрашивает assembly_chat_list(p_after)
+-- раз в ~10 секунд и дотягивает только новые сообщения.
+-- ════════════════════════════════════════════════════════════════════
+create table if not exists public.assembly_chat (
+  id         bigint generated always as identity primary key,
+  conv_id    bigint not null references public.assembly_convocations(id) on delete cascade,
+  faction_id text   not null,
+  body       text   not null,
+  whisper    boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists assembly_chat_conv_idx on public.assembly_chat (conv_id, id);
+alter table public.assembly_chat enable row level security;
+revoke all on public.assembly_chat from anon, authenticated;
+
+-- Может ли фракция видеть шёпот созыва: заговорщик-gal — всегда; Архонт —
+-- ТОЛЬКО при 5-6 креслах (при 7+ он не знает соратников — канал выдал бы их,
+-- зеркало правила «известные соратники» из assembly_state); созыв done — все.
+create or replace function public._asm_chat_sees_whisper(p_conv bigint, p_fid text)
+returns boolean language sql stable security definer set search_path=public as $$
+  select exists (select 1 from public.assembly_convocations where id = p_conv and status = 'done')
+      or exists (select 1 from public.assembly_members m
+                 join public.assembly_convocations c on c.id = m.conv_id
+                 where m.conv_id = p_conv and m.faction_id = p_fid and not m.replaced
+                   and (m.role = 'gal' or (m.role = 'archon' and coalesce(c.seats, 10) <= 6)))
+$$;
+revoke all on function public._asm_chat_sees_whisper(bigint, text) from public, anon, authenticated;
+
+-- ── Чтение: p_after = id последнего уже полученного сообщения (0 = всё, до 80) ──
+create or replace function public.assembly_chat_list(p_after bigint default 0)
+returns jsonb language plpgsql stable security definer set search_path=public as $$
+declare
+  v_fid text; c public.assembly_convocations;
+  v_sees boolean; v_can boolean; v_msgs jsonb;
+begin
+  v_fid := public._asm_my_fid();
+  select * into c from public.assembly_convocations order by id desc limit 1;
+  if c.id is null then return jsonb_build_object('conv', null, 'msgs', '[]'::jsonb); end if;
+
+  v_sees := v_fid is not null and public._asm_chat_sees_whisper(c.id, v_fid);
+  -- писать шёпотом может тот же круг, что его видит (активный созыв)
+  v_can  := c.status = 'active' and v_sees;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', t.id, 'fid', t.faction_id, 'body', t.body, 'whisper', t.whisper,
+      'ts', t.created_at, 'mine', t.faction_id = v_fid,
+      'name', t.name, 'crest', t.crest, 'color', t.color) order by t.id), '[]'::jsonb)
+    into v_msgs
+  from (
+    select ch.*, a.name, a.herald_url as crest, a.color
+    from public.assembly_chat ch
+    left join lateral (select name, herald_url, color from public.faction_applications
+        where faction_id = ch.faction_id and status = 'approved'
+        order by updated_at desc limit 1) a on true
+    where ch.conv_id = c.id and ch.id > p_after
+      and (not ch.whisper or v_sees)
+    order by ch.id desc limit 80
+  ) t;
+
+  return jsonb_build_object(
+    'conv', c.id, 'status', c.status,
+    'can_post', v_fid is not null and exists (
+        select 1 from public.assembly_members where conv_id = c.id and faction_id = v_fid),
+    'can_whisper', v_can,
+    'msgs', v_msgs);
+end$$;
+revoke all on function public.assembly_chat_list(bigint) from public, anon;
+grant execute on function public.assembly_chat_list(bigint) to authenticated;
+
+-- ── Отправка. Шёпот доступен только заговорщикам активного созыва. ──
+create or replace function public.assembly_chat_post(p_body text, p_whisper boolean default false, p_after bigint default 0)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_fid text; c public.assembly_convocations; v_body text; v_last timestamptz;
+begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  perform public._asm_ensure();
+  v_fid := public._asm_my_fid();
+  if v_fid is null then raise exception 'no approved faction'; end if;
+
+  select * into c from public.assembly_convocations order by id desc limit 1;
+  if c.id is null or c.status = 'done' then raise exception 'no active convocation'; end if;
+  if not exists (select 1 from public.assembly_members
+                 where conv_id = c.id and faction_id = v_fid) then
+    raise exception 'not a member';
+  end if;
+
+  v_body := trim(coalesce(p_body, ''));
+  if length(v_body) < 1 then raise exception 'empty message'; end if;
+  if length(v_body) > 500 then raise exception 'message too long'; end if;
+
+  -- антифлуд: не чаще 1 сообщения в 3 секунды
+  select max(created_at) into v_last from public.assembly_chat
+    where conv_id = c.id and faction_id = v_fid;
+  if v_last is not null and v_last > now() - interval '3 seconds' then
+    raise exception 'too fast';
+  end if;
+
+  -- шёпот: тот же круг, что видит канал (gal всегда, Архонт лишь при ≤6 креслах)
+  if p_whisper and not public._asm_chat_sees_whisper(c.id, v_fid) then
+    raise exception 'whisper not allowed';
+  end if;
+
+  insert into public.assembly_chat(conv_id, faction_id, body, whisper)
+    values (c.id, v_fid, v_body, coalesce(p_whisper, false));
+
+  -- держим не больше 400 сообщений на созыв
+  delete from public.assembly_chat
+    where conv_id = c.id and id not in (
+      select id from public.assembly_chat where conv_id = c.id order by id desc limit 400);
+
+  return public.assembly_chat_list(p_after);
+end$$;
+revoke all on function public.assembly_chat_post(text, boolean, bigint) from public, anon;
+grant execute on function public.assembly_chat_post(text, boolean, bigint) to authenticated;

@@ -4011,15 +4011,25 @@
 .hp-vna-track-cap.gal{color:var(--vna-gal)}
 /* срезы без обводок: пустой слот = светлее фон, занятый = цветовая заливка */
 .hp-vna-slot{
-  display:flex;align-items:center;justify-content:center;width:34px;height:24px;font-size:13px;color:var(--t3,#8296a8);
+  display:flex;align-items:center;justify-content:center;width:46px;height:34px;font-size:18px;color:var(--t3,#8296a8);
   background:hsl(216 20% 14% / .9);
-  clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  transition:background var(--duration-fast,.15s) ease;
 }
+.hp-vna-slot:hover{background:hsl(216 22% 20% / .95)}
 .hp-vna-slot.lib.on{background:color-mix(in srgb,var(--gd,#3a9bdc) 38%,hsl(216 22% 10%));color:#eaf6ff}
 .hp-vna-slot.gal.on{background:color-mix(in srgb,var(--vna-gal) 38%,hsl(216 22% 10%));color:#f4eaff}
-.hp-vna-tr{width:12px;height:12px;border-radius:50%;background:var(--w2,rgba(255,255,255,.1))}
+.hp-vna-slot.lib.on:hover{background:color-mix(in srgb,var(--gd,#3a9bdc) 52%,hsl(216 22% 10%))}
+.hp-vna-slot.gal.on:hover{background:color-mix(in srgb,var(--vna-gal) 52%,hsl(216 22% 10%))}
+.hp-vna-tr{width:15px;height:15px;border-radius:50%;background:var(--w2,rgba(255,255,255,.1))}
 .hp-vna-tr.on{background:#e0705f;box-shadow:0 0 6px rgba(224,112,95,.6)}
-.hp-vna-deck{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--t3,#8296a8)}
+.hp-vna-deck{
+  margin-left:auto;font-family:var(--font-mono);font-size:11.5px;color:var(--t2,#aebfce);
+  padding:4px 10px;background:hsl(216 20% 14% / .9);
+  clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);
+}
+/* значки-теги у делегатов: под ними есть подсказка */
+.hp-vna-tags span[data-tip]{cursor:help}
 
 /* степпер дня: фазы заседания + обратный отсчёт */
 .hp-vna-stepper{display:flex;align-items:center;flex-wrap:wrap;gap:6px;row-gap:4px}
@@ -4241,10 +4251,86 @@
 .hp-vna-g-pow span{font-size:11.5px;line-height:1.5;color:var(--t3,#9fb3c4)}
 .hp-vna-g-pow b{color:#eaf6ff;font-weight:600}
 
+/* ── Кулуары зала: живой чат Ассамблеи ── */
+.hp-vna-chat{display:flex;flex-direction:column;gap:6px;padding:9px 10px;background:hsl(216 22% 8% / .85);
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.hp-vna-chat-list{display:flex;flex-direction:column;gap:5px;max-height:220px;min-height:64px;overflow-y:auto;scrollbar-width:thin;padding-right:2px}
+.hp-vna-main .hp-vna-chat-list{max-height:280px}
+.hp-vna-msg{font-size:11px;line-height:1.45;color:var(--t2,#b8c4cf)}
+.hp-vna-msg-nm{font-family:var(--font-mono);font-size:10px;color:var(--gdl,#5fb0e6);margin-right:4px}
+.hp-vna-msg-t{font-family:var(--font-mono);font-size:8.5px;color:var(--t4,#5c6b7a);margin-right:4px}
+.hp-vna-msg-b{color:var(--t2,#b8c4cf);word-break:break-word}
+.hp-vna-chat-crest{width:14px;height:14px;object-fit:contain;vertical-align:-3px;margin-right:4px}
+.hp-vna-msg.mine .hp-vna-msg-b{color:#eaf6ff}
+.hp-vna-msg.wh{padding:3px 6px;background:hsl(268 30% 13% / .75);border-left:2px solid var(--vna-gal,#b07fe0)}
+.hp-vna-msg.wh .hp-vna-msg-b{color:#d9c8ef}
+.hp-vna-msg-wh{font-style:normal;font-size:10px;color:var(--vna-gal,#b07fe0);margin-right:4px;cursor:help}
+.hp-vna-chat-form{display:flex;align-items:center;gap:6px}
+.hp-vna-chat-form input[type=text]{
+  flex:1 1 auto;min-width:0;padding:6px 8px;border:1px solid hsl(210 30% 26% / .6);border-radius:0;
+  background:hsl(216 24% 6% / .9);color:#eaf6ff;font-size:11.5px;font-family:inherit;
+}
+.hp-vna-chat-form input[type=text]:focus{outline:none;border-color:var(--gd,#3a9bdc)}
+.hp-vna-chat-form .hp-vna-btn{flex:0 0 auto;padding:6px 10px}
+.hp-vna-chat-wh{display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;
+  font-family:var(--font-mono);font-size:9.5px;letter-spacing:.05em;color:var(--vna-gal,#b07fe0)}
+.hp-vna-chat-wh input{accent-color:var(--vna-gal,#b07fe0);margin:0}
+.hp-vna-chat.whmode .hp-vna-chat-form input[type=text]{border-color:var(--vna-gal,#b07fe0);background:hsl(268 28% 9% / .9)}
+
+/* ── Мобилка: одна колонка, крупные тач-цели, чат под большой палец ── */
 @media (max-width:640px){
   .hp-vn-assembly{position:relative;inset:auto;border-radius:var(--radius-sm)}
   .hp-vn-assembly:not(.show){display:none}
-  .hp-vna-body{flex-direction:column;gap:12px;padding:12px}
+  .hp-vna-body{flex-direction:column;gap:14px;padding:10px}
+  .hp-vna-main{gap:10px}
   .hp-vna-side{flex:0 0 auto;overflow:visible}
+
+  /* степпер: компактные чипы, отсчёт — своей строкой во всю ширину */
+  .hp-vna-stepper{gap:4px}
+  .hp-vna-step{padding:6px 8px;font-size:9px}
+  .hp-vna-step i{display:none}
+  .hp-vna-step-ln{display:none}
+  .hp-vna-step-cd{flex:0 0 100%;margin-left:0;text-align:right;font-size:11.5px}
+
+  /* доска: подписи треков во всю строку, слоты чуть плотнее */
   .hp-vna-track-cap{flex:0 0 100%}
+  .hp-vna-slot{width:42px;height:36px;font-size:17px}
+  .hp-vna-deck{margin-left:auto;font-size:11px}
+
+  /* ваши действия: кнопки ЗА/ПРОТИВ на всю ширину, под палец */
+  .hp-vna-btns{gap:8px}
+  .hp-vna-btn.big{flex:1 1 40%;padding:14px 10px;font-size:13px}
+  .hp-vna-cards{justify-content:center;gap:10px}
+  .hp-vna-card{width:124px;height:176px}
+  .hp-vna-card-act{padding:8px 4px;font-size:10px}
+
+  /* делегаты: высокие ряды — по ним надо попадать пальцем при номинации/казни */
+  .hp-vna-row{padding:9px 6px;font-size:13px;gap:9px}
+  .hp-vna-row .hp-vna-crest{width:24px;height:24px}
+  .hp-vna-seatno{flex-basis:30px;font-size:10.5px}
+  .hp-vna-tags{font-size:12.5px}
+  .hp-vna-tags i{font-size:9.5px;padding:2px 5px}
+  .hp-vna-role b{font-size:15px}
+  .hp-vna-role .hp-vna-dim{font-size:10.5px}
+
+  /* кулуары: рослая лента, ввод 16px (iOS не зумит), заметная кнопка отправки */
+  .hp-vna-chat{padding:10px}
+  .hp-vna-chat-list, .hp-vna-main .hp-vna-chat-list{max-height:min(320px,44vh)}
+  .hp-vna-msg{font-size:12.5px}
+  .hp-vna-msg-nm{font-size:11px}
+  .hp-vna-chat-form{flex-wrap:wrap}
+  .hp-vna-chat-wh{flex:0 0 100%;font-size:11px;padding:2px 0}
+  .hp-vna-chat-wh input{width:16px;height:16px}
+  .hp-vna-chat-form input[type=text]{font-size:16px;padding:9px 10px}
+  .hp-vna-chat-form .hp-vna-btn{padding:11px 16px;font-size:14px}
+
+  /* штраф/выход/итог */
+  .hp-vna-cta{align-self:stretch;text-align:center;padding:13px 18px;font-size:12px}
+  .hp-vna-leave{padding:11px 14px}
+
+  /* регламент: оверлей почти во весь экран, читаемые карты */
+  .hp-vna-g-in{margin:6px;padding:12px 12px}
+  .hp-vna-g-cards{gap:8px}
+  .hp-vna-g-cards .hp-vna-card{width:96px;height:138px}
+  .hp-vna-g-role{flex:1 1 100%;min-width:0}
 }
