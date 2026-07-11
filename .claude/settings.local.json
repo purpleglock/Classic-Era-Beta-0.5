@@ -216,7 +216,9 @@
       "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('render.js','utf8'\\)\\)\")",
       "Bash(awk 'NR>=150 && NR<=232' _goods_factory.sql)",
       "Bash(awk 'NR>=4640 && NR<=4700' economy.js)",
-      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('economy.js','utf8'\\)\\)\")"
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('economy.js','utf8'\\)\\)\")",
+      "PowerShell(\\(Get-Content index.html -Raw\\) -replace 'css/index\\\\.css\\\\?v=20260711asmchat1','css/index.css?v=20260712budget1' -replace 'economy\\\\.js\\\\?v=20260712flows1','economy.js?v=20260712budget1' | Set-Content index.html -NoNewline -Encoding utf8)",
+      "PowerShell($c = [IO.File]::ReadAllText\\(\"$pwd\\\\index.html\"\\); $c = $c.Replace\\('css/index.css?v=20260711asmchat1','css/index.css?v=20260712budget1'\\).Replace\\('economy.js?v=20260712flows1','economy.js?v=20260712budget1'\\); [IO.File]::WriteAllText\\(\"$pwd\\\\index.html\", $c\\))"
     ]
   }
 }

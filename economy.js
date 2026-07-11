@@ -1011,9 +1011,50 @@ function ecWelfareSysRow(bal, isCap) {
 // Развернуть/свернуть детали строки системы (без перерисовки всей вкладки).
 function ecWfToggle(sid) { document.getElementById('wf-i-' + sid)?.classList.toggle('open'); }
 
+// ── Панель «Бюджет державы»: 5 ползунков финансирования ─────
+// Ползунки правят слоты построек (авто, от населения), скорость военпрома,
+// науку, благополучие и склады. Зеркало _budget_wellbeing.sql.
+function ecBudgetPanel() {
+  const pop = ecBudgetPop();
+  const rows = Object.keys(EC_BUDGET).map(k => {
+    const d = EC_BUDGET[k], lvl = ecBudgetLvl(k);
+    const cost = lvl * d.k * pop;
+    const eff = k === 'military'
+      ? (lvl === 0 ? '⛔ юниты не строятся' : `постройка юнитов ×${d.mults[lvl]} времени`)
+      : d.mults ? `множитель ×${d.mults[lvl].toFixed(2)}` : `до ${EC_BUDGET_SLOTS[lvl]} слот./постройка`;
+    const dots = [0, 1, 2, 3, 4].map(i =>
+      `<button class="ec-bud-dot${i <= lvl ? ' on' : ''}${i === lvl ? ' cur' : ''}" title="${EC_BUDGET_LVL[i]}" onclick="ecBudgetSet('${k}',${i})"></button>`).join('');
+    return `<div class="ec-bud-row" data-tip="${esc(d.desc)}">
+      <span class="ec-bud-ic">${d.ic}</span>
+      <span class="ec-bud-nm">${d.name}<i class="ec-bud-lvl">${EC_BUDGET_LVL[lvl]}</i></span>
+      <span class="ec-bud-dots">${dots}</span>
+      <span class="ec-bud-eff">${eff}</span>
+      <span class="ec-bud-cost">${cost ? `−${ecNum(cost)} ГС/сут` : '—'}</span>
+    </div>`;
+  }).join('');
+  return `<div class="ec-bud-panel">
+    <div class="ec-section-title">🏛 Бюджет державы <span class="ec-hint">— финансирование отраслей: ставка × уровень × ${ecNum(pop)} населения</span></div>
+    <div class="ec-bud-legend">Слоты построек больше не покупаются вручную — их выставляет финансирование профильной отрасли, а населения должно хватать на рабочие места (иначе слоты срезаются). Итог: <b>−${ecNum(ecBudgetUpkeep())} ГС/сут</b> · благополучие ×${ecBudgetGcMult().toFixed(2)} ко всему доходу.</div>
+    ${rows}
+  </div>`;
+}
+async function ecBudgetSet(key, lvl) {
+  if (EC.busy) return;
+  const b = { industry: ecBudgetLvl('industry'), military: ecBudgetLvl('military'), science: ecBudgetLvl('science'), social: ecBudgetLvl('social'), infra: ecBudgetLvl('infra') };
+  if (b[key] === lvl) return;
+  b[key] = lvl;
+  EC.busy = true;
+  try {
+    await ecRpc('budget_set', { p_industry: b.industry, p_military: b.military, p_science: b.science, p_social: b.social, p_infra: b.infra });
+    toast(`${EC_BUDGET[key].ic} ${EC_BUDGET[key].name}: ${EC_BUDGET_LVL[lvl]}`, 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+
 // Вкладка «Благополучие»: одна интерактивная таблица систем (клик по строке = детали + меры).
 function ecTabWelfare() {
-  const head = `<div class="ec-section-title">⚖ Благополучие систем <span class="ec-hint">— клик по строке: множители дохода и меры помощи</span></div>
+  const head = `${ecBudgetPanel()}<div class="ec-section-title">⚖ Благополучие систем <span class="ec-hint">— клик по строке: множители дохода и меры помощи</span></div>
     <div class="ec-wf-legend">Доход построек = <b>⚖ труд системы</b> (свой для каждой) × <b>🛍 товары державы</b> (общий множитель). Это два разных рычага.</div>`;
   if (!Object.keys(EC.spatial || {}).length) {
     return `${head}<div class="ec-empty">Пока нет систем с колониями — благополучие появится, когда заселите планеты.</div>`;
@@ -1204,7 +1245,7 @@ async function _ecLoadCoreImpl() {
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
-  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions] = await Promise.all([
+  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, budgetRows] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1236,6 +1277,7 @@ async function _ecLoadCoreImpl() {
     ecRpc('minefields_visible').catch(() => []),  // оборона: минные поля (счётчик в Обзоре)
     dbGet('faction_res_flows', `faction_id=eq.${fid}`).catch(() => []),   // потоки: настройки по ресурсам (вкладка «Потоки»)
     dbGet('mining_concessions', `or=(from_fid.eq.${fid},to_fid.eq.${fid})&order=created_at.desc`).catch(() => []),  // концессии (право добычи)
+    dbGet('faction_budget', `faction_id=eq.${fid}`).catch(() => []),   // бюджет державы (ползунки финансирования)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1274,6 +1316,8 @@ async function _ecLoadCoreImpl() {
   EC.resFlows = {};
   (Array.isArray(resFlows) ? resFlows : []).forEach(f => { if (f && f.res_name) EC.resFlows[f.res_name] = f; });
   EC.concessions = Array.isArray(concessions) ? concessions : [];
+  // Бюджет державы: ползунки 0..4 (дефолт 2 — «норма», зеркало _budget_wellbeing.sql)
+  EC.budget = (Array.isArray(budgetRows) && budgetRows[0]) || { industry: 2, military: 2, science: 2, social: 2, infra: 2 };
   EC.incomeHistory = incomeHistory || [];   // снимки дохода по тикам (доход по времени)
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
@@ -1530,7 +1574,7 @@ function ecIncomePreview() {
   const m = ecFactionMods();
   const dz = ecDebuffPct();
   const gw = ecGoodsInfo().welfare;   // обеспечение товарами (зеркало economy_accrue)
-  const gcMul = m.gc * (1 - dz) * gw;   // доктрина × дестабилизация × обеспечение
+  const gcMul = m.gc * (1 - dz) * gw * ecBudgetGcMult();   // доктрина × дестабилизация × обеспечение × благополучие (соцбюджет)
   return {
     gc: Math.round(gc * gcMul),
     science: Math.max(0, science + m.sci_flat),
@@ -1724,6 +1768,27 @@ function ecPolicyCostDay() {
 // Итоговый ГС-доход за сутки в разбивке — ПОЛНОЕ зеркало economy_accrue v5: постройки
 // (фабрики+хабы+храмы+десятина+секты) ×доктрина + караваны + Товарная биржа + экспорт
 // − торговая политика + регулярные потоки биржи. Единый источник для шапки и «Казны».
+// ── Бюджет державы (зеркало _budget_wellbeing.sql) ───────────
+// 5 ползунков 0..4; каждый уровень стоит ФИКС ГС/сут × население (Σ ячеек колоний).
+const EC_BUDGET = {
+  industry: { ic: '🏭', name: 'Промышленность', k: 4, desc: 'Слоты гражданских построек: фабрик, хабов, складов, добычи, храмов.' },
+  military: { ic: '⚔', name: 'Оборонзаказ',     k: 5, desc: 'Слоты военных построек + скорость постройки юнитов. На нуле корабли и войска НЕ строятся вовсе.', mults: [null, 1.5, 1.0, 0.8, 0.65] },
+  science:  { ic: '🔬', name: 'Образование',     k: 4, desc: 'Слоты НИИ и разведцентров + множитель очков науки.', mults: [0.5, 0.8, 1.0, 1.2, 1.4] },
+  social:   { ic: '⚖', name: 'Соцобеспечение',  k: 4, desc: 'Благополучие: множитель ВСЕГО денежного дохода державы.', mults: [0.85, 0.95, 1.0, 1.08, 1.15] },
+  infra:    { ic: '🚚', name: 'Инфраструктура',  k: 3, desc: 'Ёмкость складов ресурсов.', mults: [0.8, 0.9, 1.0, 1.15, 1.3] },
+};
+const EC_BUDGET_LVL = ['нет финансирования', 'скудно', 'норма', 'усиленно', 'максимум'];
+const EC_BUDGET_SLOTS = [1, 2, 3, 5, 6];   // целевые слоты постройки по уровню профильного ползунка
+function ecBudgetLvl(key) { const v = +(EC.budget && EC.budget[key]); return isNaN(v) ? 2 : Math.max(0, Math.min(4, v)); }
+function ecBudgetPop() { return (EC.colonies || []).reduce((a, c) => a + (+c.cells || 0), 0); }
+// Апкип бюджета ГС/сут = население × Σ(уровень × ставка) — зеркало _budget_upkeep
+function ecBudgetUpkeep() {
+  const pop = ecBudgetPop();
+  return Math.round(pop * Object.keys(EC_BUDGET).reduce((a, k) => a + ecBudgetLvl(k) * EC_BUDGET[k].k, 0));
+}
+// Благополучие от соцобеспечения — множитель всего ГС-дохода (зеркало _budget_gc_mult)
+function ecBudgetGcMult() { return EC_BUDGET.social.mults[ecBudgetLvl('social')]; }
+
 function ecGcIncome() {
   const inc = ecIncomePreview();
   const gcMul = inc.gcMul != null ? inc.gcMul : 1;
@@ -1744,10 +1809,11 @@ function ecGcIncome() {
   const ex = ecExchangeIncome();
   const op = ecOutpostMineTotals();   // добывающие аванпосты: +ГС/сут (ленивый settle, вне основного тика)
   // НАЧИСЛЯЕТ ТИК (зеркало economy_accrue → income_history): постройки + караваны + биржа + экспорт − политика.
-  const net = factory + trade + cv.net + market + exportGc - policy;
+  const budget = ecBudgetUpkeep();   // апкип бюджета державы (зеркало _budget_upkeep)
+  const net = factory + trade + cv.net + market + exportGc - policy - budget;
   // НЕ входит в основной тик (вера/биржевые потоки/аванпосты — отдельный/ленивый settle, в income_history их нет).
   const netExtra = temple + tithe + sects + ex.net + op.gc;
-  return { factory, trade, temple, tithe, sects, caravan: cv, market, export: exportGc, policy, exchange: ex, outpost: op, net, netExtra };
+  return { factory, trade, temple, tithe, sects, caravan: cv, market, export: exportGc, policy, budget, exchange: ex, outpost: op, net, netExtra };
 }
 // Регулярные ГС-потоки с БИРЖИ за ход — чтобы «Чистый доход» учитывал ВСЁ, а не
 // только постройки/караваны. Берём строго то, что НЕ задвоится с доходом фабрик:
@@ -3160,6 +3226,7 @@ function ecTabOverview() {
   if (g.market) moneyInc.push({ ic: '📈', name: 'Товарная биржа', sub: `${ecNum(marketSlots)} слот. · сбыт добычи`, gc: g.market, tab: 'trade' });
   if (g.export) moneyInc.push({ ic: '📤', name: 'Экспорт добычи', sub: 'поток export-заводов', gc: g.export, tab: 'trade' });
   if (g.policy) moneyInc.push({ ic: '📜', name: 'Торговая политика', sub: 'апкип NPC-конвоя', gc: -g.policy, tab: 'raids' });
+  if (g.budget) moneyInc.push({ ic: '🏛', name: 'Бюджет державы', sub: 'финансирование отраслей × население', gc: -g.budget, tab: 'welfare' });
   // ── НЕ входит в тик (информативно, не суммируется в «Чистый доход») ──
   if (g.temple) extraInc.push({ ic: '🛐', name: 'Храмы веры', sub: `${ecNum(tmplSlots)} слот. × 150`, gc: g.temple, tab: 'faith' });
   if (g.tithe)  extraInc.push({ ic: '🤝', name: 'Десятина с адептов', sub: 'доля дохода чужих храмов', gc: g.tithe, tab: 'faith' });
@@ -3237,6 +3304,7 @@ function ecTabOverview() {
   if (g.market) detRows.push(fxRow('📈', 'Товарная биржа', `${ecNum(marketSlots)} слот · сбыт добытого потока по ценности × 50–75% (до ${ecNum(marketSlots * 25)} ед/сут, склад не трогает)`, g.market));
   if (g.export) detRows.push(fxRow('📤', 'Экспорт добычи', `свободный поток export-заводов × ценность × 0.6`, g.export));
   if (g.policy) detRows.push(fxRow('📜', 'Торговая политика', `апкип NPC-конвоя (защита караванов)`, -g.policy));
+  if (g.budget) detRows.push(fxRow('🏛', 'Бюджет державы', `${ecNum(ecBudgetPop())} нас. × ставки отраслей (вкладка «Благополучие»)`, -g.budget));
   if (_ex.bonds)   detRows.push(fxRow('🏦', 'Облигации · купоны', `купоны по вложениям ${ecNum(_ex.bondIn)} − выплаты как эмитент ${ecNum(_ex.bondOut)}`, _ex.bonds));
   if (_ex.corpDiv) detRows.push(fxRow('🏢', 'Дивиденды (чужие доли)', `выручка × моя доля по чужим корпорациям`, _ex.corpDiv));
   if (_ex.corpSyn) detRows.push(fxRow('⚡', 'Синергия моих корпораций', `доход построек × синергия × моя доля (сверх дохода фабрик)`, _ex.corpSyn));
@@ -9414,13 +9482,8 @@ function ecBuildingRow(b) {
   const inc = ecBuildingIncome(b);
   const incTxt = inc.gc ? `+${ecNum(inc.gc)} ГС / сутки` : inc.science ? `+${ecNum(inc.science)} ОН / сутки` : d.desc;
   const dots = Array.from({ length: EC_MAX_SLOTS }, (_, i) => `<span class="ec-slot ${i < b.slots_open ? 'on' : ''}"></span>`).join('');
-  const maxed = b.slots_open >= EC_MAX_SLOTS;
-  const pendSlot = ecPendingSlot(b.id);
-  const openBtn = maxed
-    ? `<span class="ec-maxed">${EC_MAX_SLOTS}/${EC_MAX_SLOTS}</span>`
-    : pendSlot
-      ? `<span class="ec-proj-tag" title="${ecProjEtaTxt(pendSlot)}">⏳ слот строится</span><button class="ec-bld-del" title="Отменить слот (возврат ½ ГС)" onclick="ecCancelProject('${pendSlot.id}')">✕</button>`
-      : `<button class="btn btn-gh btn-xs" onclick="ecOpenSlot('${b.id}')">+ слот · ${ecNum(ecBuildCost(d.ladder[b.slots_open]))} ГС</button>`;
+  // Слоты открывает бюджет (профильный ползунок × население), вручную не покупаются.
+  const openBtn = `<span class="ec-slot-auto" data-tip="Слоты выставляет финансирование отрасли во вкладке «Благополучие» (и хватает ли населения на рабочие места)" onclick="ecSetTab('welfare')">🏛 авто</span>`;
   const slotCount = `<span class="ec-slot-count">${b.slots_open}/${EC_MAX_SLOTS}</span>`;
   let mineHtml = '';
   if (b.btype === 'mining') {
@@ -10467,21 +10530,7 @@ async function ecBuildDo(colonyId, btype, faithId) {
   finally { EC.busy = false; }
 }
 
-// Строительство слота здания — отложенный проект (1 ход).
-async function ecOpenSlot(buildingId) {
-  if (EC.busy) return;
-  const b = EC.buildings.find(x => x.id === buildingId); if (!b) return;
-  const d = EC_BUILD[b.btype]; if (!d) return;
-  if (b.slots_open >= EC_MAX_SLOTS) { toast('Все слоты открыты', 'inf'); return; }
-  if (ecPendingSlot(buildingId)) { toast('Слот уже строится', 'inf'); return; }
-  EC.busy = true;
-  try {
-    await ecRpc('economy_open_slot', { p_building_id: buildingId });
-    toast('Слот заложен — откроется через 1 день', 'ok');
-    await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
-  finally { EC.busy = false; }
-}
+// Слоты построек открывает бюджет (ecBudgetPanel) — ручного economy_open_slot больше нет.
 
 async function ecToggleTnp(buildingId, checked) {
   try { await ecRpc('economy_set_tnp', { p_building_id: buildingId, p_on: !!checked }); await ecReloadPaint(); }
@@ -10510,14 +10559,11 @@ async function ecHabitat(colonyId) {
   finally { EC.busy = false; }
 }
 
-// Полная вложенная стоимость здания: база постройки + все ПЛАТНЫЕ открытые слоты
-// (бесплатные стартовые слоты d.free идут с базой). Цены — по текущим правилам/доктрине.
+// Вложенная стоимость здания = только база постройки: слоты открывает бюджет
+// бесплатно, поэтому в возврат при сносе они не входят (зеркало economy_demolish).
 function ecBuildingInvested(b) {
   const d = EC_BUILD[b.btype]; if (!d) return 0;
-  let gc = ecBuildCost(d.cost || 0);
-  const free = d.free || 0;
-  for (let i = free; i < (b.slots_open || 0); i++) gc += ecBuildCost((d.ladder && d.ladder[i]) || 0);
-  return gc;
+  return ecBuildCost(d.cost || 0);
 }
 async function ecDemolish(buildingId) {
   const b = EC.buildings.find(x => x.id === buildingId); if (!b) return;
