@@ -1,23 +1,39 @@
 -- ============================================================
--- БЮДЖЕТ ДЕРЖАВЫ · благополучие v2 · авто-слоты построек
+-- БЮДЖЕТ ДЕРЖАВЫ · благополучие v4 · живое население · авто-добыча · ТОВАРЫ
 -- Применять в Supabase → SQL Editor ПОСЛЕ _res_flows.sql. Идемпотентно.
 --
 -- Что даёт:
 --   1) faction_budget — 5 ползунков финансирования (0..4, по умолч. 2):
---        industry — промышленность: слоты гражданских построек
+--        industry — промышленность: слоты гражданских построек (и темп добычи!)
 --        military — оборонзаказ: слоты военных построек + скорость постройки
 --                   юнитов; УРОВЕНЬ 0 = юниты НЕ строятся вовсе
 --        science  — образование/наука: слоты науки/разведцентров + множитель ОН
---        social   — соцобеспечение: благополучие = множитель ВСЕГО ГС-дохода
+--        social   — соцобеспечение: благополучие (× весь ГС-доход) + РОСТ НАСЕЛЕНИЯ
 --        infra    — инфраструктура: множитель ёмкости складов
---   2) Каждый уровень стоит ФИКС ГС/сут × население державы (население =
---      сумма ячеек колоний). Апкип списывается в economy_accrue и виден
---      в income.budget.
---   3) СЛОТЫ ПОСТРОЕК БОЛЬШЕ НЕ ОТКРЫВАЮТСЯ ВРУЧНУЮ: economy_open_slot
---      отозван. Раз в тик _budget_auto_slots выставляет slots_open каждой
---      постройки из уровня профильного ползунка, срезая всё пропорционально,
---      если населения не хватает (рабочих мест больше, чем жителей).
---   4) Скорость военпрома: триггер на unit_production правит ready_at
+--   2) ЖИВОЕ НАСЕЛЕНИЕ (colonies.pop): каждая колония держит численность.
+--        · потолок = ячейки × 100 (колонизация/терраформ поднимают потолок)
+--        · старт/бэкфилл = ячейки × 50, пол = ячейки × 10 (не вымирает в ноль)
+--        · рост %/сут = соцобеспечение [-2, +0.5, +1.5, +2.5, +3.5]
+--          + до +1%/сут за ПОЛНОЕ обеспечение ТОВАРАМИ (второй рычаг роста)
+--      Население = налоговая база (апкип бюджета) и рабочие руки (слоты).
+--   3) ЦЕНА ПРОГРЕССИВНАЯ: апкип = население × скидка(нас.) × Σ(ставка × вес).
+--      Вес уровня [0,1,2,4,7] — «норма» дешёвая, «максимум» кусается; ставки
+--      на душу 0.12/0.15/0.12/0.12/0.09; скидка малых держав 50%→100% к 10к нас.
+--      Апкип списывается в economy_accrue и виден в income.budget.
+--   3a) ТОВАРЫ ВОССТАНОВЛЕНЫ: блок производства/обеспечения из _goods_factory.sql
+--      клобберился версиями accrue начиная с _faith_multi — возвращён сюда.
+--      Спрос = живое население/600 товаров/сут; welfare ×[0.90..1.10] к доходу
+--      построек; излишек продаётся на Товарной бирже первым (12 ГС × 0.6).
+--   4) СЛОТЫ НЕ ОТКРЫВАЮТСЯ ВРУЧНУЮ: economy_open_slot отозван. Раз в тик
+--      _budget_auto_slots выставляет slots_open из уровня профильного ползунка;
+--      КАЖДЫЙ СЛОТ ТРЕБУЕТ 50 ЖИТЕЛЕЙ — не хватает рабочих рук, слоты
+--      срезаются пропорционально по всем постройкам.
+--   5) АВТО-ДОБЫЧА: mining-завод копает ВСЕ залежи своей планеты сам,
+--      выбор «что добывать» убран (mining_assign отозван). Темп по залежи =
+--      база(редкость) × богатство × доктрина × (слоты/3): слоты — рабочие
+--      руки, т.е. добыча растёт от промышленного бюджета и населения.
+--      Куда идёт поток (склад/экспорт/биржа/лимиты) — ТОЛЬКО вкладка «Потоки».
+--   6) Скорость военпрома: триггер на unit_production правит ready_at
 --      (уровень 1 = ×1.5 дольше, 2 = как раньше, 3 = ×0.8, 4 = ×0.65),
 --      уровень 0 — запрет заказа. Триггер не клоббирует RPC заказа юнитов.
 --
@@ -28,6 +44,9 @@
 -- ============================================================
 
 -- ── 1) СХЕМА ────────────────────────────────────────────────
+-- Живое население колонии (null = ещё не бэкфилнено, считается как cells×50)
+alter table public.colonies add column if not exists pop numeric;
+
 create table if not exists public.faction_budget (
   faction_id text primary key,
   industry   smallint not null default 2 check (industry between 0 and 4),
@@ -52,21 +71,54 @@ returns public.faction_budget language sql stable as $$
     row(p_fid, 2,2,2,2,2, now())::public.faction_budget);
 $$;
 
--- Население державы = сумма ячеек заселённых колоний.
+-- Население державы = сумма живого населения колоний (бэкфилл: ячейки×50).
 create or replace function public._fac_pop(p_fid text)
 returns numeric language sql stable as $$
-  select coalesce(sum(coalesce(c.cells,0)),0)::numeric
+  select coalesce(sum(coalesce(c.pop, coalesce(c.cells,0)*50)),0)::numeric
   from public.colonies c where c.faction_id = p_fid;
 $$;
 
--- ФИКС цена уровня на душу населения, ГС/сут (зеркало: EC_BUDGET в economy.js)
---   industry 4 · military 5 · science 4 · social 4 · infra 3
+-- Потолок населения державы = ячейки × 100 (зеркало EC_POP_CAP в economy.js)
+create or replace function public._fac_pop_cap(p_fid text)
+returns numeric language sql stable as $$
+  select coalesce(sum(coalesce(c.cells,0)),0)::numeric * 100
+  from public.colonies c where c.faction_id = p_fid;
+$$;
+
+-- Прирост населения %/сут от соцобеспечения (зеркало EC_POP_GROWTH в economy.js).
+-- Уровень 0 = люди бегут (−2%/сут); «норма» = +1.5%/сут.
+create or replace function public._pop_growth(p_lvl int)
+returns numeric language sql immutable as $$
+  select (array[-0.02, 0.005, 0.015, 0.025, 0.035])[greatest(0,least(4,p_lvl)) + 1]::numeric;
+$$;
+
+-- Вес уровня ползунка: цена растёт ПРОГРЕССИВНО — «норма» дешёвая, «максимум»
+-- кусается. Зеркало EC_BUDGET_W в economy.js.
+create or replace function public._budget_lvl_w(p_lvl int)
+returns numeric language sql immutable as $$
+  select (array[0, 1, 2, 4, 7])[greatest(0,least(4,p_lvl)) + 1]::numeric;
+$$;
+
+-- Скидка малых держав: до 10 000 населения ставка растёт с 50% до 100% —
+-- новичок платит вполцены, империя за каждую душу платит сполна.
+-- Зеркало ecBudgetPopMult в economy.js.
+create or replace function public._budget_pop_mult(p_pop numeric)
+returns numeric language sql immutable as $$
+  select 0.5 + 0.5 * least(1, greatest(0, p_pop) / 10000.0);
+$$;
+
+-- Апкип бюджета ГС/сут = население × скидка(население) × Σ(ставка × вес уровня).
+-- Ставки НА ДУШУ (зеркало EC_BUDGET.k): industry 0.12 · military 0.15 ·
+-- science 0.12 · social 0.12 · infra 0.09. «Норма» по всем = 1.2 ГС/чел до скидки.
 create or replace function public._budget_upkeep(p_fid text)
 returns numeric language plpgsql stable as $$
 declare b public.faction_budget; pop numeric;
 begin
   b := public._budget_row(p_fid); pop := public._fac_pop(p_fid);
-  return round(pop * (b.industry*4 + b.military*5 + b.science*4 + b.social*4 + b.infra*3));
+  return round(pop * public._budget_pop_mult(pop) *
+    ( public._budget_lvl_w(b.industry)*0.12 + public._budget_lvl_w(b.military)*0.15
+    + public._budget_lvl_w(b.science)*0.12  + public._budget_lvl_w(b.social)*0.12
+    + public._budget_lvl_w(b.infra)*0.09 ));
 end$$;
 
 -- Благополучие: множитель ВСЕГО ГС-дохода построек от соцобеспечения.
@@ -105,8 +157,9 @@ returns text language sql immutable as $$
 $$;
 
 -- ── 3) Авто-слоты: население + бюджет определяют ячейки ─────
--- Целевые слоты = уровень профильного ползунка; если рабочих мест выходит
--- больше населения — все постройки срезаются пропорционально (минимум 1).
+-- Целевые слоты = уровень профильного ползунка; КАЖДЫЙ СЛОТ ТРЕБУЕТ 50 ЖИТЕЛЕЙ
+-- (зеркало EC_POP_PER_SLOT). Не хватает рабочих рук — все постройки срезаются
+-- пропорционально (минимум 1).
 create or replace function public._budget_auto_slots(p_fid text)
 returns void language plpgsql security definer set search_path=public as $$
 declare
@@ -124,7 +177,7 @@ begin
   from public.colony_buildings cb where cb.faction_id = p_fid;
 
   if total_target <= 0 then return; end if;
-  scale := least(1.0, pop / total_target);   -- населения меньше, чем мест → срез
+  scale := least(1.0, pop / (total_target * 50));    -- 50 жителей на слот → срез при нехватке
 
   update public.colony_buildings cb
      set slots_open = greatest(1, least(6, round(public._budget_slot_target(
@@ -169,6 +222,16 @@ do $$ begin
    where n.nspname = 'public' and p.proname = 'economy_open_slot';
   if found then
     revoke execute on function public.economy_open_slot(uuid) from authenticated;
+  end if;
+end $$;
+
+-- ── 5a) Ручной выбор «что добывать» ОТКЛЮЧЁН ────────────────
+-- Добыча автоматическая (все залежи планеты), маршрутизация — вкладка «Потоки».
+do $$ begin
+  perform 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'mining_assign';
+  if found then
+    revoke execute on function public.mining_assign(uuid, jsonb) from authenticated;
   end if;
 end $$;
 
@@ -237,7 +300,7 @@ create trigger trg_budget_unit_gate
 create or replace function public.economy_accrue(p_fid text)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare
-  eco public.faction_economy; d int;
+  eco public.faction_economy; d int; d_raw int;  -- БЮДЖЕТ: d_raw = фактический разрыв, d = начисляемый (кап 3 сут)
   inc_gc numeric:=0; inc_sci numeric:=0; inc_agents int:=0; trade_gc numeric:=0; pirate boolean:=false;
   r record; col record; bld record; relem jsonb; thr jsonb;
   res_add jsonb := '{}'::jsonb; res_sub jsonb := '{}'::jsonb; merged jsonb; k text;
@@ -263,6 +326,12 @@ declare
   bdg public.faction_budget;                         -- БЮДЖЕТ: ползунки
   bdg_cost numeric := 0;                             -- БЮДЖЕТ: апкип ГС/сут
   w_mult numeric := 1;                               -- БЮДЖЕТ: благополучие (× ГС-доход)
+  -- ТОВАРЫ (восстановлено из _goods_factory.sql — клобберилось с _faith_multi)
+  gf_slots numeric := 0; gf_ratio numeric := 0; gf_made numeric := 0;
+  gf_water_need numeric; gf_mat_need numeric; take numeric; need numeric;
+  av_lyod numeric; av_water numeric; av_iron numeric; av_silic numeric;
+  goods_demand numeric := 0; goods_have numeric; goods_eaten numeric := 0;
+  goods_cov numeric := 1; goods_welfare numeric := 1; goods_gc numeric := 0;
 begin
   select * into eco from public.faction_economy where faction_id = p_fid for update;
   if not found then return jsonb_build_object('faction_id',p_fid,'days',0); end if;
@@ -287,9 +356,15 @@ begin
   perform public._spy_resolve(p_fid);
   perform public._raid_resolve(p_fid);
 
-  d := floor(extract(epoch from (now()-eco.last_tick))/86400.0);
+  d_raw := floor(extract(epoch from (now()-eco.last_tick))/86400.0);
+  -- БЮДЖЕТ: КАП ДОБОРА — начисляем максимум за 3 суток; хвост СГОРАЕТ (last_tick
+  -- сдвигается на весь d_raw). Иначе первый тик после долгого простоя (или после
+  -- применения новой механики) разом высыпает rate×d по каждой залежи до капа
+  -- склада — так игроки и получили «тысячи товаров».
+  d := least(d_raw, 3);
 
   if d >= 1 then perform public._budget_auto_slots(p_fid); end if;  -- БЮДЖЕТ: слоты от населения и бюджета
+  -- (рост населения — НИЖЕ, после расчёта обеспечения товарами: товары дают бонус к росту)
 
   has_faith := exists(select 1 from public.faith_membership where faction_id = p_fid);  -- ВЕРА
 
@@ -358,20 +433,23 @@ begin
       end loop;
     end if;
 
+    -- БЮДЖЕТ: авто-добыча — завод копает ВСЕ залежи планеты, выбор убран.
+    -- Темп = база(редкость) × богатство × доктрина × (слоты/3): слоты — рабочие
+    -- руки от промышленного бюджета и населения. Зеркало ecMineYields в economy.js.
     for bld in
-      select cb.colony_id, cb.mining_targets, coalesce(cb.mine_mode,'store') as mine_mode, c.resources as cres  -- ПОТОКИ: + colony_id
+      select cb.colony_id, cb.slots_open, coalesce(cb.mine_mode,'store') as mine_mode, c.resources as cres
       from public.colony_buildings cb
       join public.colonies c on c.id = cb.colony_id
       where cb.faction_id = p_fid and cb.btype = 'mining'
-        and jsonb_array_length(coalesce(cb.mining_targets,'[]'::jsonb)) > 0
         and c.resources is not null and jsonb_array_length(c.resources) > 0
     loop
-      for rname in select value from jsonb_array_elements_text(bld.mining_targets) loop
-        select value into relem from jsonb_array_elements(bld.cres) where value->>'name' = rname limit 1;
-        if relem is null then continue; end if;
+      for relem in select value from jsonb_array_elements(bld.cres) loop
+        rname := relem->>'name';
+        if rname is null then continue; end if;
         rr := coalesce(relem->>'r','common');
         rate := case rr when 'uncommon' then 12 when 'rare' then 6 when 'epic' then 3 when 'legendary' then 1 else 25 end;
-        rate := greatest(1, round(rate * public._richness_mult(relem->>'amt') * m_mine));
+        rate := greatest(1, round(rate * public._richness_mult(relem->>'amt') * m_mine
+                                       * greatest(1, coalesce(bld.slots_open,1)) / 3.0));
         -- ПОТОКИ: концессия — поток этой залежи уходит держателю права добычи
         v_conc_fid := null;
         select mc.to_fid into v_conc_fid from public.mining_concessions mc
@@ -411,6 +489,67 @@ begin
           where fe.faction_id = k;
       end loop;
     end loop;
+
+    -- ════════ ТОВАРЫ: производство (вода+сырьё → товары) ════════
+    -- Восстановлено из _goods_factory.sql (блок клобберился с _faith_multi).
+    select coalesce(sum(slots_open),0) into gf_slots
+      from public.colony_buildings where faction_id=p_fid and btype='goodsfab';
+    if gf_slots > 0 then
+      av_lyod  := greatest(0, coalesce((eco.resources->>'Лёд')::numeric,0)         + coalesce((res_add->>'Лёд')::numeric,0)         - coalesce((res_sub->>'Лёд')::numeric,0));
+      av_water := greatest(0, coalesce((eco.resources->>'Жидкая вода')::numeric,0) + coalesce((res_add->>'Жидкая вода')::numeric,0) - coalesce((res_sub->>'Жидкая вода')::numeric,0));
+      av_iron  := greatest(0, coalesce((eco.resources->>'Железо')::numeric,0)      + coalesce((res_add->>'Железо')::numeric,0)      - coalesce((res_sub->>'Железо')::numeric,0));
+      av_silic := greatest(0, coalesce((eco.resources->>'Силикаты')::numeric,0)    + coalesce((res_add->>'Силикаты')::numeric,0)    - coalesce((res_sub->>'Силикаты')::numeric,0));
+      gf_water_need := 6 * gf_slots * d;
+      gf_mat_need   := 4 * gf_slots * d;
+      gf_ratio := least(1,
+        case when gf_water_need > 0 then (av_lyod + av_water) / gf_water_need else 1 end,
+        case when gf_mat_need   > 0 then (av_iron + av_silic) / gf_mat_need   else 1 end);
+      gf_ratio := greatest(0, gf_ratio);
+      if gf_ratio > 0 then
+        gf_made := round(10 * gf_slots * d * gf_ratio);
+        need := gf_water_need * gf_ratio;
+        take := least(need, av_lyod);
+        if take > 0 then res_sub := jsonb_set(res_sub, array['Лёд'], to_jsonb(coalesce((res_sub->>'Лёд')::numeric,0)+take), true); need := need - take; end if;
+        if need > 0 then take := least(need, av_water);
+          if take > 0 then res_sub := jsonb_set(res_sub, array['Жидкая вода'], to_jsonb(coalesce((res_sub->>'Жидкая вода')::numeric,0)+take), true); end if;
+        end if;
+        need := gf_mat_need * gf_ratio;
+        take := least(need, av_iron);
+        if take > 0 then res_sub := jsonb_set(res_sub, array['Железо'], to_jsonb(coalesce((res_sub->>'Железо')::numeric,0)+take), true); need := need - take; end if;
+        if need > 0 then take := least(need, av_silic);
+          if take > 0 then res_sub := jsonb_set(res_sub, array['Силикаты'], to_jsonb(coalesce((res_sub->>'Силикаты')::numeric,0)+take), true); end if;
+        end if;
+        res_add := jsonb_set(res_add, array['Товары'], to_jsonb(coalesce((res_add->>'Товары')::numeric,0) + gf_made), true);
+      end if;
+    end if;
+
+    -- ════════ ТОВАРЫ: обеспечение ЖИВОГО населения ════════
+    -- БЮДЖЕТ: спрос = население / 600 товаров/сут (зеркало EC_GOODS_DEMAND_DIV).
+    goods_demand := public._fac_pop(p_fid) / 600.0 * d;
+    goods_have := greatest(0, coalesce((eco.resources->>'Товары')::numeric,0)
+                              + coalesce((res_add->>'Товары')::numeric,0)
+                              - coalesce((res_sub->>'Товары')::numeric,0));
+    if goods_demand > 0 then
+      goods_eaten := least(goods_have, goods_demand);
+      if goods_eaten > 0 then
+        res_sub := jsonb_set(res_sub, array['Товары'], to_jsonb(coalesce((res_sub->>'Товары')::numeric,0) + goods_eaten), true);
+      end if;
+      goods_cov := round(least(1.5, goods_have / goods_demand), 3);
+    else
+      goods_cov := 1;
+    end if;
+    -- обеспечение → множитель дохода построек: covered≥1 → ×1.10, дефицит → к ×0.90
+    goods_welfare := round(least(1.10, greatest(0.90, 0.90 + 0.20 * least(1, goods_cov))), 3);
+
+    -- БЮДЖЕТ: рост населения = соцобеспечение + бонус за товары (до +1%/сут при
+    -- полном обеспечении). Потолок ячейки×100, пол ячейки×10, бэкфилл ячейки×50.
+    update public.colonies c
+       set pop = least(coalesce(c.cells,0)*100,
+                   greatest(coalesce(c.cells,0)*10,
+                     round(coalesce(c.pop, coalesce(c.cells,0)*50)
+                           * power(1 + public._pop_growth(bdg.social)
+                                     + 0.01 * least(1, goods_cov), d))))
+     where c.faction_id = p_fid;
 
     for r in select cargo, resource, volume, price, convoy, threats, b_fid, transit_until, from_store from public.trade_routes where status='active' and a_fid=p_fid loop  -- ПОТОКИ: + from_store
       if r.transit_until is not null and r.transit_until > now() then continue; end if;
@@ -487,11 +626,23 @@ begin
     market_cap := (select coalesce(sum(slots_open),0) from public.colony_buildings
                    where faction_id = p_fid and btype = 'market') * 25 * d;
     if market_cap > 0 then
+      -- ТОВАРЫ: излишек (сверх обеспечения) продаётся первым по 12 ГС/ед × 0.6
+      goods_have := greatest(0, coalesce((eco.resources->>'Товары')::numeric,0)
+                                + coalesce((res_add->>'Товары')::numeric,0)
+                                - coalesce((res_sub->>'Товары')::numeric,0));
+      if goods_have > 0 then
+        sell := least(goods_have, market_cap);
+        res_sub := jsonb_set(res_sub, array['Товары'], to_jsonb(coalesce((res_sub->>'Товары')::numeric,0) + sell), true);
+        goods_gc := sell * 12 * 0.6;          -- ×m_gc применится к market_gc ниже (не дублируем)
+        market_gc := market_gc + goods_gc;
+        goods_gc := round(goods_gc * m_gc);   -- для отчёта sold_gc
+        market_cap := market_cap - sell;
+      end if;
       for r in
         select t.nm as res_name, coalesce(flow_rar->>t.nm,'common') as res_rar,
                coalesce((res_add->>t.nm)::numeric,0) as avail
         from jsonb_object_keys(res_add) as t(nm)
-        where coalesce((res_add->>t.nm)::numeric,0) > 0
+        where t.nm <> 'Товары' and coalesce((res_add->>t.nm)::numeric,0) > 0   -- ТОВАРЫ: проданы выше
         order by public._res_value(t.nm, coalesce(flow_rar->>t.nm,'common')) desc
       loop
         exit when market_cap <= 0;
@@ -543,17 +694,17 @@ begin
     end loop;
 
     update public.faction_economy
-      set gc = greatest(0, gc + round(inc_gc * m_gc * d) + trade_gc + market_gc + export_gc - policy_cost * d - bdg_cost * d),  -- БЮДЖЕТ: апкип
+      set gc = greatest(0, gc + round(inc_gc * m_gc * goods_welfare * d) + trade_gc + market_gc + export_gc - policy_cost * d - bdg_cost * d),  -- БЮДЖЕТ: апкип · ТОВАРЫ: × welfare
           science = science + greatest(0, inc_sci    + (mods->>'sci_flat')::numeric)    * d,
           agents  = agents  + greatest(0, inc_agents + (mods->>'agents_flat')::numeric) * d,
           resources = merged,
-          last_tick = last_tick + (d || ' days')::interval
+          last_tick = last_tick + (d_raw || ' days')::interval  -- БЮДЖЕТ: сдвиг на ВЕСЬ разрыв — хвост сверх капа сгорает
       where faction_id=p_fid returning * into eco;
 
     insert into public.income_history(faction_id, owner_id, days, gc_build, gc_trade, gc_market, gc_export, gc_policy, gc_net, gc_after, sci, agents_n, mined)
       values(p_fid, eco.owner_id, d,
-        round(inc_gc * m_gc * d), trade_gc, market_gc, export_gc, (policy_cost + bdg_cost) * d,  -- БЮДЖЕТ: апкип в расходах
-        round(inc_gc * m_gc * d) + trade_gc + market_gc + export_gc - (policy_cost + bdg_cost) * d,
+        round(inc_gc * m_gc * goods_welfare * d), trade_gc, market_gc, export_gc, (policy_cost + bdg_cost) * d,  -- БЮДЖЕТ: апкип в расходах
+        round(inc_gc * m_gc * goods_welfare * d) + trade_gc + market_gc + export_gc - (policy_cost + bdg_cost) * d,
         eco.gc,
         greatest(0, inc_sci    + (mods->>'sci_flat')::numeric)    * d,
         greatest(0, inc_agents + (mods->>'agents_flat')::numeric) * d,
@@ -567,8 +718,10 @@ begin
 
   return jsonb_build_object('faction_id',eco.faction_id,'gc',eco.gc,'science',eco.science,'agents',eco.agents,
     'resources',eco.resources,'last_tick',eco.last_tick,'days',d, 'mods', mods,
+    'goods', jsonb_build_object('brand', eco.goods_brand, 'demand', round(goods_demand),  -- ТОВАРЫ
+       'coverage', goods_cov, 'welfare', goods_welfare, 'made', gf_made, 'ratio', gf_ratio, 'sold_gc', goods_gc),
     'income', jsonb_build_object(
-      'gc',     round(inc_gc * m_gc),
+      'gc',     round(inc_gc * m_gc * goods_welfare),
       'science',greatest(0, inc_sci    + (mods->>'sci_flat')::numeric),
       'agents', greatest(0, inc_agents + (mods->>'agents_flat')::numeric),
       'trade',  trade_gc, 'market', market_gc, 'export', export_gc,
@@ -577,7 +730,9 @@ begin
     'budget', jsonb_build_object(                                       -- БЮДЖЕТ: ползунки для клиента
       'industry', bdg.industry, 'military', bdg.military, 'science', bdg.science,
       'social', bdg.social, 'infra', bdg.infra,
-      'pop', public._fac_pop(p_fid), 'upkeep', bdg_cost, 'w_mult', w_mult));
+      'pop', public._fac_pop(p_fid), 'pop_cap', public._fac_pop_cap(p_fid),
+      'growth', public._pop_growth(bdg.social),
+      'upkeep', bdg_cost, 'w_mult', w_mult));
 end$$;
 revoke all on function public.economy_accrue(text) from public;
 

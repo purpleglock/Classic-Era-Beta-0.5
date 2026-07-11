@@ -218,7 +218,14 @@
       "Bash(awk 'NR>=4640 && NR<=4700' economy.js)",
       "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('economy.js','utf8'\\)\\)\")",
       "PowerShell(\\(Get-Content index.html -Raw\\) -replace 'css/index\\\\.css\\\\?v=20260711asmchat1','css/index.css?v=20260712budget1' -replace 'economy\\\\.js\\\\?v=20260712flows1','economy.js?v=20260712budget1' | Set-Content index.html -NoNewline -Encoding utf8)",
-      "PowerShell($c = [IO.File]::ReadAllText\\(\"$pwd\\\\index.html\"\\); $c = $c.Replace\\('css/index.css?v=20260711asmchat1','css/index.css?v=20260712budget1'\\).Replace\\('economy.js?v=20260712flows1','economy.js?v=20260712budget1'\\); [IO.File]::WriteAllText\\(\"$pwd\\\\index.html\", $c\\))"
+      "PowerShell($c = [IO.File]::ReadAllText\\(\"$pwd\\\\index.html\"\\); $c = $c.Replace\\('css/index.css?v=20260711asmchat1','css/index.css?v=20260712budget1'\\).Replace\\('economy.js?v=20260712flows1','economy.js?v=20260712budget1'\\); [IO.File]::WriteAllText\\(\"$pwd\\\\index.html\", $c\\))",
+      "Read(//c/Users/Андрей/.claude/projects/C--Users--------Desktop-Classic-Era-Beta-0-5/memory/**)",
+      "Bash(sed -i 's/клиент ?v=20260712budget3/клиент ?v=20260712welfare1 \\(детали систем переписаны словами\\)/' MEMORY.md)",
+      "Bash(sed -i 's/?v=20260712welfare1/?v=20260712welfare2/g' MEMORY.md budget-wellbeing.md)",
+      "Bash(sed -i 's/\\(детали систем переписаны словами\\)/\\(детали словами; товары различают «нет фабрики»\\\\/«простаивает без входов»\\\\/«мало слотов»\\)/' MEMORY.md)",
+      "Bash(grep -c \"МЕМ\" ../nonexistent)",
+      "Bash(sed -i 's|- \\\\[Budget wellbeing\\\\]\\(budget-wellbeing.md\\) — «🏛 Бюджет державы» v4[^\\\\n]*|&|' /dev/null)",
+      "Bash(grep -n \"Budget wellbeing\" \"/c/Users/Андрей/.claude/projects/C--Users--------Desktop-Classic-Era-Beta-0-5/memory/MEMORY.md\")"
     ]
   }
 }

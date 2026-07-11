@@ -2158,11 +2158,24 @@ body.ec-tree-fs-lock { overflow: hidden; }
 /* раскрывашка деталей системы */
 .ec-wf-detail { display: none; padding: 12px 14px; border-top: var(--deco-frame-w, 1px) dashed var(--w2); background: var(--b1, rgba(0,0,0,0.15)); }
 .ec-wf-item.open .ec-wf-detail { display: block; }
-.ec-wf-d-mult { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 12px; font-size: 12px; color: var(--t2); }
-.ec-wf-d-mult b { font-family: var(--font-mono); font-size: 13px; margin: 0 2px; }
-.ec-wf-d-mult i { color: var(--t4); font-style: normal; font-size: 10.5px; }
-.ec-wf-d-mult .ec-wf-mscope { color: var(--t4); }
-.ec-wf-d-mult .ec-wf-mx { color: var(--t4); font-weight: 700; align-self: center; }
+/* итоговая строка «сколько приносит» + причины словами */
+.ec-wf-verdict { font-size: 12.5px; color: var(--t2); line-height: 1.45; margin-bottom: 12px; }
+.ec-wf-verdict b { font-family: var(--font-mono); font-size: 14px; margin: 0 2px; }
+.ec-wf-why { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.ec-why-row { padding: 8px 10px; background: var(--b2, rgba(255,255,255,0.03)); border-left: 3px solid var(--w2); }
+.ec-why-row.ec-cov-lo  { border-left-color: var(--err); }
+.ec-why-row.ec-cov-mid { border-left-color: var(--color-warning); }
+.ec-why-row.ec-cov-hi  { border-left-color: var(--ok); }
+.ec-why-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.ec-why-nm { font-size: 12px; font-weight: 600; color: var(--t1); white-space: nowrap; }
+.ec-why-scope { font-style: normal; font-weight: 400; font-size: 10px; color: var(--t4); border: 1px solid var(--w2); border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
+.ec-why-head .ec-cov-bar { flex: 1; }
+.ec-why-mul { font-family: var(--font-mono); font-size: 13px; white-space: nowrap; }
+.ec-cov-lo  .ec-why-mul { color: var(--err); }
+.ec-cov-mid .ec-why-mul { color: var(--color-warning); }
+.ec-cov-hi  .ec-why-mul { color: var(--ok); }
+.ec-why-txt { font-size: 11.5px; color: var(--t3); line-height: 1.45; }
+.ec-why-fix { color: var(--t2); font-weight: 600; }
 .ec-wf-legend { font-size: 11px; color: var(--t3); margin: 2px 0 10px; line-height: 1.4; }
 .ec-wf-legend b { color: var(--t2); font-weight: 600; }
 .ec-wf-d-cap { font-size: 11.5px; color: var(--gd); padding: 4px 0; }
@@ -3028,6 +3041,12 @@ body.ec-tree-fs-lock { overflow: hidden; }
 /* ── Бюджет державы: 5 ползунков финансирования (вкладка «Благополучие») ── */
 .ec-bud-panel { margin-bottom: 18px; }
 .ec-bud-legend { font-size: 11.5px; color: var(--t2, #9fb0c8); margin: 0 0 8px; line-height: 1.45; }
+/* Сводка населения: численность/потолок · прирост · рабочие руки */
+.ec-bud-pop { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.ec-bud-pop-i { font-size: 12px; color: var(--t2, #9fb0c8); padding: 5px 10px;
+  background: var(--b0, #0c1322); border: var(--deco-frame-w, 1px) solid var(--w2, rgba(255,255,255,.08));
+  border-radius: var(--radius-md); cursor: default; }
+.ec-bud-pop-i b { color: var(--t1, #e8eefb); }
 .ec-bud-row { display: grid; grid-template-columns: 22px minmax(120px, 1fr) auto minmax(140px, 1fr) auto;
   gap: 10px; align-items: center; padding: 7px 9px; margin-bottom: 4px;
   background: var(--b0, #0c1322); border: var(--deco-frame-w, 1px) solid var(--w2, rgba(255,255,255,.08));
@@ -3045,6 +3064,10 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-bud-cost { font-size: 11.5px; font-weight: 600; color: var(--err, #e06a5a); white-space: nowrap; }
 .ec-slot-auto { font-size: 10.5px; color: var(--t2, #9fb0c8); cursor: pointer; white-space: nowrap; }
 .ec-slot-auto:hover { color: var(--gdl, #5fb0e6); }
+/* Рабочие в постройке (👷N, ⚠ = срезано населением); детали в тултипе */
+.ec-bld-slotwhy { font-family: var(--font-mono); font-size: 10px; color: var(--t4); cursor: pointer; }
+.ec-bld-slotwhy:hover { color: var(--t2, #9fb0c8); }
+.ec-bld-slotwhy.cut { color: var(--err); }
 @media (max-width: 640px) {
   .ec-bud-row { grid-template-columns: 22px 1fr auto; }
   .ec-bud-eff, .ec-bud-cost { grid-column: 2 / -1; }

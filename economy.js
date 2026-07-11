@@ -913,52 +913,66 @@ function ecPovertyPanel() {
   </div>`;
 }
 
-// Что наполняет шкалу и что её опустошает (мех-ка _building_vector: supply/demand).
-const EC_COV_INFO = {
-  l: { ic: '👷', label: 'Труд',
-       up: 'население', down: 'рабочие места всех построек' },
-  r: { ic: '⛏', label: 'Сырьё',
-       up: 'добывающие заводы', down: 'фабрики, что его перерабатывают' },
-};
-// Одна строка-полоса обеспеченности ресурса: бар + % + оценка + ОТКУДА/КУДА.
-function ecCovBar(k, cov) {
-  const info = EC_COV_INFO[k] || { ic: '•', label: k, up: '?', down: '?' };
-  const pct = Math.round(cov * 100);
-  const cls = cov < 0.4 ? 'lo' : (cov < 0.7 ? 'mid' : 'hi');
-  const word = cov < 0.4 ? 'критично' : (cov < 0.7 ? 'нехватка' : 'в норме');
-  return `<div class="ec-cov-row ec-cov-${cls}">
-    <span class="ec-cov-lbl">${info.ic} ${info.label}</span>
-    <span class="ec-cov-bar"><i style="width:${Math.min(100, pct)}%"></i></span>
-    <span class="ec-cov-pct">${pct}%</span>
-    <span class="ec-cov-word">${word}</span>
-    <span class="ec-cov-drv">↑ ${info.up} · ↓ ${info.down}</span>
+// Одна причина «почему доход такой»: множитель + бар + объяснение словами + что делать.
+function ecWhyRow(ic, name, scope, mul, covPct, text, fix) {
+  const pct = Math.max(0, Math.min(100, Math.round(covPct)));
+  const cls = mul == null ? (pct < 40 ? 'lo' : pct < 70 ? 'mid' : 'hi')
+    : (mul < 0.97 ? 'lo' : (mul > 1.03 ? 'hi' : 'mid'));
+  return `<div class="ec-why-row ec-cov-${cls}">
+    <div class="ec-why-head">
+      <span class="ec-why-nm">${ic} ${name} <i class="ec-why-scope">${scope}</i></span>
+      <span class="ec-cov-bar"><i style="width:${pct}%"></i></span>
+      <b class="ec-why-mul">${mul == null ? pct + '%' : '×' + mul.toFixed(2)}</b>
+    </div>
+    <div class="ec-why-txt">${text}${fix ? ` <span class="ec-why-fix">→ ${fix}</span>` : ''}</div>
   </div>`;
 }
 
-// Раскрываемая панель под строкой системы: множители дохода + снабжение + меры.
-// Переиспользует ecCovBar/ecPovDeficits/EC_RELIEF — без отдельных карточек-лекций.
+// Раскрываемая панель под строкой системы: итог + причины словами + меры помощи.
 function ecWelfareDetail(bal, isCap) {
   const pr = +bal.prosperity || 1;
-  const prCls = pr < 0.97 ? 'lo' : (pr > 1.03 ? 'hi' : 'mid');
   const cov = bal.coverage || {};
-  const covRows = ['l', 'r'].map(k => [k, cov[k] == null ? 1 : +cov[k]])
-    .sort((a, b) => a[1] - b[1]).map(([k, c]) => ecCovBar(k, c)).join('');
-  const defs = ecPovDeficits(bal);
-  const lever = defs.find(d => d.k === 'l') ? '💡 Не хватает рабочих рук: построек больше, чем тянет население. Снизьте плотность застройки.'
-    : pr > 1.05 ? '💡 Рук с запасом — система на подъёме. Можно ставить ещё доходные постройки.'
-    : '💡 Система в балансе.';
-  // обеспечение товарами — общедержавный множитель дохода (реальная цепочка фабрики товаров)
   const g = ecGoodsInfo();
-  const gwCls = g.welfare < 0.97 ? 'lo' : (g.welfare > 1.03 ? 'hi' : 'mid');
-  // множители дохода — наглядно, без воды (отвечает «почему доход такой»)
-  // Доход построек системы = СИСТЕМНЫЙ труд × ДЕРЖАВНОЕ обеспечение товарами.
-  // Это два РАЗНЫХ рычага: труд считается по этой системе, товары — общие на всю державу.
-  const mult = `<div class="ec-wf-d-mult">
-    <span class="ec-wf-mscope">Доход построек = </span>
-    <span title="СИСТЕМНЫЙ рычаг: население этой системы ÷ рабочие места её построек. Меньше плотность застройки → выше.">⚖ Труд системы <b class="ec-cov-${prCls}">×${pr.toFixed(2)}</b></span>
-    <span class="ec-wf-mx">×</span>
-    <span title="ДЕРЖАВНЫЙ рычаг (один на всю державу, не по системе): население ест товары с Фабрик товаров. Хватает → доход выше, дефицит → ниже.">🛍 Товары державы <b class="ec-cov-${gwCls}">×${g.welfare.toFixed(2)}</b> <i>(${Math.round(g.cov * 100)}% спроса)</i></span>
+  const total = pr * g.welfare;
+  const totCls = total < 0.97 ? 'lo' : (total > 1.03 ? 'hi' : 'mid');
+  const totWord = total < 0.97 ? 'меньше обычного' : (total > 1.03 ? 'больше обычного' : 'обычный доход');
+  const verdict = `<div class="ec-wf-verdict">Постройки этой системы приносят
+    <b class="ec-cov-${totCls}">×${total.toFixed(2)}</b> дохода <span class="ec-why-scope">(${totWord})</span>.
+    Ниже — из чего складывается и что подкрутить.</div>`;
+  // причина 1: труд — своя для каждой системы
+  const pop = Math.round(+bal.pop || 0);
+  const jobs = Math.round((bal.labor && +bal.labor.demand) || 0);
+  const cl = cov.l == null ? 1 : +cov.l;
+  const labTxt = jobs <= 0 ? `Рабочих построек нет — труд не ограничивает.`
+    : cl >= 1 ? `Жителей ${ecNum(pop)}, рабочих мест ${ecNum(jobs)} — рук хватает всем, есть запас.`
+    : `Жителей ${ecNum(pop)}, а рабочих мест ${ecNum(jobs)} — люди закрывают только ${Math.round(cl * 100)}% мест, остальные постройки простаивают.`;
+  const labFix = jobs > 0 && cl < 1
+    ? `ждать роста населения (поднимите соцобеспечение/товары в бюджете) или снести часть построек`
+    : (pr > 1.05 ? `можно ставить ещё доходные постройки` : '');
+  // причина 2: товары — ОДИН множитель на всю державу
+  const gPct = Math.round(g.cov * 100);
+  const lowW = g.waterNeed > 0 && g.water < g.waterNeed;
+  const lowM = g.matNeed > 0 && g.mat < g.matNeed;
+  let gTxt, gFix = '';
+  if (g.cov >= 1) {
+    gTxt = `Фабрики товаров полностью кормят население державы товарами.`;
+  } else if (g.slots <= 0) {
+    gTxt = `Фабрик товаров нет — население державы сидит без товаров, доход везде срезан.`;
+    gFix = `постройте 🛍 Фабрику товаров — множитель общий для всех систем`;
+  } else if (g.ratio < 1) {
+    const lacks = [lowW ? `воды (${ecNum(g.water)} из ${ecNum(g.waterNeed)})` : '', lowM ? `сырья (${ecNum(g.mat)} из ${ecNum(g.matNeed)})` : ''].filter(Boolean).join(' и ');
+    gTxt = `Фабрика товаров есть, но простаивает: на складе не хватает ${lacks} — выпуск ${Math.round(g.ratio * 100)}% от полного.`;
+    gFix = `добывайте ${EC_GOODS_WATER.join('/')} и ${EC_GOODS_MAT.join('/')} и держите запас на складе (режим «на склад» во «🔀 Потоках»)`;
+  } else {
+    gTxt = `Фабрика работает (+${ecNum(g.made)} товаров/сут), но это лишь ${gPct}% спроса населения державы.`;
+    gFix = `откройте больше слотов Фабрики товаров`;
+  }
+  const why = `<div class="ec-wf-why">
+    ${ecWhyRow('👷', 'Труд', 'только эта система', pr, cl * 100, labTxt, labFix)}
+    ${ecWhyRow('🛍', 'Товары', 'вся держава', g.welfare, gPct, gTxt, gFix)}
+    ${ecRawWhyRow(bal)}
   </div>`;
+  const mult = verdict + why;
   let acts;
   if (isCap) {
     acts = `<div class="ec-wf-d-cap">★ Столица не беднеет никогда — экстренные меры ей не нужны.</div>`;
@@ -978,7 +992,21 @@ function ecWelfareDetail(bal, isCap) {
     }).join('');
     acts = `<div class="ec-pov-acts-k">Экстренная помощь за ГС (временная):</div><div class="ec-pov-card-acts">${btns}</div>`;
   }
-  return `${mult}<div class="ec-pov-covs"><div class="ec-pov-covs-k">Снабжение системы:</div>${covRows}</div><div class="ec-pov-card-lever">${lever}</div>${acts}`;
+  return `${mult}${acts}`;
+}
+
+// Причина 3 (показываем ТОЛЬКО если в системе есть фабрики): хватает ли им сырья.
+// Сырьё не режет доход напрямую — оно двигает местные цены, поэтому строка отдельная.
+function ecRawWhyRow(bal) {
+  const demR = (bal.demand && +bal.demand.r) || 0;
+  if (demR <= 0) return '';
+  const supR = (bal.supply && +bal.supply.r) || 0;
+  const cr = (bal.coverage && bal.coverage.r != null) ? +bal.coverage.r : 1;
+  const prR = (bal.prices && +bal.prices.r) || 1;
+  const txt = cr >= 1 ? `Добывающие заводы дают ${ecNum(Math.round(supR))} сырья — фабрикам системы хватает.`
+    : `Фабрикам системы нужно ${ecNum(Math.round(demR))} сырья, заводы дают только ${ecNum(Math.round(supR))} (${Math.round(cr * 100)}%). Это не режет доход, но местное сырьё дороже (цена ×${prR.toFixed(2)}).`;
+  const fix = cr < 1 ? `постройте добывающий завод в этой системе или у соседей` : '';
+  return ecWhyRow('⛏', 'Сырьё', 'снабжение фабрик', null, cr * 100, txt, fix);
 }
 
 // Одна строка системы: имя · доход(благополучие) · товарная цена · труд · жители · места · статус.
@@ -1018,7 +1046,7 @@ function ecBudgetPanel() {
   const pop = ecBudgetPop();
   const rows = Object.keys(EC_BUDGET).map(k => {
     const d = EC_BUDGET[k], lvl = ecBudgetLvl(k);
-    const cost = lvl * d.k * pop;
+    const cost = Math.round(EC_BUDGET_W[lvl] * d.k * pop * ecBudgetPopMult(pop));
     const eff = k === 'military'
       ? (lvl === 0 ? '⛔ юниты не строятся' : `постройка юнитов ×${d.mults[lvl]} времени`)
       : d.mults ? `множитель ×${d.mults[lvl].toFixed(2)}` : `до ${EC_BUDGET_SLOTS[lvl]} слот./постройка`;
@@ -1032,9 +1060,22 @@ function ecBudgetPanel() {
       <span class="ec-bud-cost">${cost ? `−${ecNum(cost)} ГС/сут` : '—'}</span>
     </div>`;
   }).join('');
+  const cap = ecBudgetPopCap();
+  const grB = ecBudgetGrowthBase(), grG = ecBudgetGrowthGoods(), gr = grB + grG;
+  const dPop = Math.round(pop * gr);
+  const jobs = Math.floor(pop / EC_POP_PER_SLOT);
+  const pm = ecBudgetPopMult(pop);
+  const grTxt = gr >= 0 ? `+${(gr * 100).toFixed(1)}%` : `${(gr * 100).toFixed(1)}%`;
+  const grCls = gr < 0 ? 'ec-cov-lo' : (gr < 0.015 ? 'ec-cov-mid' : 'ec-cov-hi');
   return `<div class="ec-bud-panel">
-    <div class="ec-section-title">🏛 Бюджет державы <span class="ec-hint">— финансирование отраслей: ставка × уровень × ${ecNum(pop)} населения</span></div>
-    <div class="ec-bud-legend">Слоты построек больше не покупаются вручную — их выставляет финансирование профильной отрасли, а населения должно хватать на рабочие места (иначе слоты срезаются). Итог: <b>−${ecNum(ecBudgetUpkeep())} ГС/сут</b> · благополучие ×${ecBudgetGcMult().toFixed(2)} ко всему доходу.</div>
+    <div class="ec-section-title">🏛 Бюджет державы <span class="ec-hint">— цена растёт с населением и уровнем</span></div>
+    <div class="ec-bud-pop">
+      <span class="ec-bud-pop-i" data-tip="Население живёт в ячейках колоний: потолок = ячейки × ${EC_POP_CAP_CELL}. Колонизация и терраформ добавляют ячейки — поднимают потолок.">👥 Население <b>${ecNum(pop)}</b> / ${ecNum(cap)}</span>
+      <span class="ec-bud-pop-i ${grCls}" data-tip="Прирост = соцобеспечение (${(grB * 100).toFixed(1)}%: ${EC_POP_GROWTH.map((g, i) => `${EC_BUDGET_LVL[i]} ${g >= 0 ? '+' : ''}${(g * 100).toFixed(1)}%`).join(' · ')}) + товары (${grG >= 0 ? '+' : ''}${(grG * 100).toFixed(1)}%: полное обеспечение Фабрикой товаров даёт до +1.0%/сут).">${gr >= 0 ? '📈' : '📉'} ${grTxt}/сут (${dPop >= 0 ? '+' : ''}${ecNum(dPop)} чел.) <i style="font-style:normal;opacity:.7">⚖${(grB * 100).toFixed(1)} + 🛍${(grG * 100).toFixed(1)}</i></span>
+      <span class="ec-bud-pop-i" data-tip="Каждый рабочий слот постройки требует ${EC_POP_PER_SLOT} жителей. Не хватает рук — слоты всех построек срезаются пропорционально.">👷 хватает на <b>${ecNum(jobs)}</b> слот.</span>
+      <span class="ec-bud-pop-i" data-tip="Скидка малых держав: до 10 000 населения ставки бюджета идут от 50% до 100%. Чем больше империя — тем дороже каждая душа.">🏷 ставка ×${pm.toFixed(2)}</span>
+    </div>
+    <div class="ec-bud-legend">Как это играется: <b>население</b> — и налоговая база, и рабочие руки (${EC_POP_PER_SLOT} жителей = 1 слот постройки; слоты двигают доход, науку и темп добычи). Растёт от <b>соцобеспечения</b> и <b>товаров</b> (Фабрика товаров), потолок поднимают новые ячейки (колонизация/терраформ). Цена уровней <b>прогрессивная</b> (веса ${EC_BUDGET_W.join('/')}): «норма» дешёвая, «максимум» кусается. Итог: <b>−${ecNum(ecBudgetUpkeep())} ГС/сут</b> · благополучие ×${ecBudgetGcMult().toFixed(2)} ко всему доходу.</div>
     ${rows}
   </div>`;
 }
@@ -1054,8 +1095,8 @@ async function ecBudgetSet(key, lvl) {
 
 // Вкладка «Благополучие»: одна интерактивная таблица систем (клик по строке = детали + меры).
 function ecTabWelfare() {
-  const head = `${ecBudgetPanel()}<div class="ec-section-title">⚖ Благополучие систем <span class="ec-hint">— клик по строке: множители дохода и меры помощи</span></div>
-    <div class="ec-wf-legend">Доход построек = <b>⚖ труд системы</b> (свой для каждой) × <b>🛍 товары державы</b> (общий множитель). Это два разных рычага.</div>`;
+  const head = `${ecBudgetPanel()}<div class="ec-section-title">⚖ Благополучие систем <span class="ec-hint">— нажмите на строку системы, чтобы увидеть подробности</span></div>
+    <div class="ec-wf-legend">Простыми словами: чем больше в системе <b>жителей</b> относительно её построек — тем выше её доход. А <b>🛍 Фабрики товаров</b> дают общий бонус (или штраф) сразу всей державе. Зелёное — хорошо, жёлтое/красное — теряете деньги.</div>`;
   if (!Object.keys(EC.spatial || {}).length) {
     return `${head}<div class="ec-empty">Пока нет систем с колониями — благополучие появится, когда заселите планеты.</div>`;
   }
@@ -1067,9 +1108,9 @@ function ecTabWelfare() {
   const gCls = gInfo.welfare < 0.97 ? 'stagnation' : (gInfo.welfare > 1.03 ? 'ok' : '');
   const summary = `<div class="ec-pov-sum">
     <span class="ec-pov-sum-i">⚖ <b>${ecNum(all.length)}</b> систем(ы)</span>
-    <span class="ec-pov-sum-i ec-sb-${gCls}" title="ДЕРЖАВНЫЙ множитель дохода от товаров (один на всю державу). Население ест товары с Фабрик товаров.">🛍 товары <b>×${gInfo.welfare.toFixed(2)}</b> <i>(${Math.round(gInfo.cov * 100)}%)</i></span>
-    <span class="ec-pov-sum-i ec-sb-${s.stagn ? 'stagnation' : (s.unrest ? 'unrest' : 'ok')}"><b>${ecNum(s.unrest + s.stagn)}</b> требуют внимания</span>
-    <span class="ec-pov-sum-i"><b>${s.poorPct}%</b> населения в нужде</span>
+    <span class="ec-pov-sum-i ec-sb-${gCls}" data-tip="Общий бонус к доходу всех систем от Фабрик товаров. Меньше ×1.00 — товаров не хватает, стройте Фабрики товаров.">🛍 товары: доход <b>×${gInfo.welfare.toFixed(2)}</b>${gInfo.welfare >= 1 ? '' : gInfo.slots > 0 ? ' — фабрика простаивает' : ' — стройте фабрики товаров'}</span>
+    <span class="ec-pov-sum-i ec-sb-${s.stagn ? 'stagnation' : (s.unrest ? 'unrest' : 'ok')}" data-tip="Системы в волнениях или стагнации — раскройте их строки ниже, там же кнопки помощи."><b>${ecNum(s.unrest + s.stagn)}</b> бедных систем</span>
+    <span class="ec-pov-sum-i" data-tip="Доля жителей державы, живущих в бедных системах."><b>${s.poorPct}%</b> населения в нужде</span>
     ${drag ? `<span class="ec-pov-sum-i ec-sb-stagnation" title="Сколько ГС/сут недополучает казна из-за благополучия<1 в бедных системах">💸 <b>−${ecNum(drag)}</b> ГС/сут от бедности</span>` : ''}
     ${s.revolt ? `<span class="ec-pov-sum-i ec-sb-stagnation">🔥 <b>${ecNum(s.revolt)}</b> беспорядков</span>` : ''}
     ${s.relief ? `<span class="ec-pov-sum-i ec-sb-ok">🤝 <b>${ecNum(s.relief)}</b> под помощью</span>` : ''}
@@ -1514,9 +1555,9 @@ function ecGoodsInfo() {
   const ratio = slots <= 0 ? 0 : Math.max(0, Math.min(1,
     waterNeed > 0 ? water / waterNeed : 1, matNeed > 0 ? mat / matNeed : 1));
   const made = Math.round(EC_GOODS.out * slots * ratio);
-  // население державы (ёмкость × заселённость) → спрос на товары
-  const pop = (EC.colonies || []).reduce((a, c) => a + (+c.cells || 0) * (c.pop_mult == null ? 1 : +c.pop_mult), 0);
-  const demand = pop / EC_GOODS.demandDiv;
+  // ЖИВОЕ население державы → спрос на товары: pop/600 (зеркало accrue v8)
+  const pop = ecBudgetPop();
+  const demand = pop / 600;
   const have = stock + made;
   const cov = demand <= 0 ? 1 : Math.min(1.5, have / demand);
   const welfare = Math.min(1.10, Math.max(0.90, 0.90 + 0.20 * Math.min(1, cov)));
@@ -1594,11 +1635,9 @@ function ecCaravanIncome() {
   // ТОЛЬКО реально добытое export-заводами за тик, маршруты черпают пул по очереди.
   const flow = {};
   (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
-    const res = ecMiningPlanetRes(b);
-    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
-      if (ecEffMode(b, t) !== 'export' || ecIsConceded(b.colony_id, t)) return;
-      const ri = res.find(x => x.name === t); if (!ri) return;
-      flow[t] = (flow[t] || 0) + ecMineRate(ri.r, ri.amt);
+    ecMineYields(b).forEach(y => {
+      if (ecEffMode(b, y.name) !== 'export' || ecIsConceded(b.colony_id, y.name)) return;
+      flow[y.name] = (flow[y.name] || 0) + y.rate;
     });
   });
   let outRaw = 0, contractRaw = 0, riskRaw = 0, transitN = 0, shortUnits = 0;
@@ -1706,11 +1745,9 @@ function ecIsConceded(colonyId, resName) {
 function ecStoreFlowEntries() {
   const gross = {};
   (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
-    const res = ecMiningPlanetRes(b);
-    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
-      if (ecEffMode(b, t) !== 'store' || ecIsConceded(b.colony_id, t)) return;
-      const ri = res.find(x => x.name === t); if (!ri) return;
-      gross[t] = (gross[t] || 0) + ecMineRate(ri.r, ri.amt);
+    ecMineYields(b).forEach(y => {
+      if (ecEffMode(b, y.name) !== 'store' || ecIsConceded(b.colony_id, y.name)) return;
+      gross[y.name] = (gross[y.name] || 0) + y.rate;
     });
   });
   return Object.entries(gross).filter(([, v]) => v > 0);
@@ -1768,23 +1805,43 @@ function ecPolicyCostDay() {
 // Итоговый ГС-доход за сутки в разбивке — ПОЛНОЕ зеркало economy_accrue v5: постройки
 // (фабрики+хабы+храмы+десятина+секты) ×доктрина + караваны + Товарная биржа + экспорт
 // − торговая политика + регулярные потоки биржи. Единый источник для шапки и «Казны».
-// ── Бюджет державы (зеркало _budget_wellbeing.sql) ───────────
-// 5 ползунков 0..4; каждый уровень стоит ФИКС ГС/сут × население (Σ ячеек колоний).
+// ── Бюджет державы (зеркало _budget_wellbeing.sql v3) ────────
+// 5 ползунков 0..4; каждый уровень стоит СТАВКУ ГС/сут НА ДУШУ живого населения.
 const EC_BUDGET = {
-  industry: { ic: '🏭', name: 'Промышленность', k: 4, desc: 'Слоты гражданских построек: фабрик, хабов, складов, добычи, храмов.' },
-  military: { ic: '⚔', name: 'Оборонзаказ',     k: 5, desc: 'Слоты военных построек + скорость постройки юнитов. На нуле корабли и войска НЕ строятся вовсе.', mults: [null, 1.5, 1.0, 0.8, 0.65] },
-  science:  { ic: '🔬', name: 'Образование',     k: 4, desc: 'Слоты НИИ и разведцентров + множитель очков науки.', mults: [0.5, 0.8, 1.0, 1.2, 1.4] },
-  social:   { ic: '⚖', name: 'Соцобеспечение',  k: 4, desc: 'Благополучие: множитель ВСЕГО денежного дохода державы.', mults: [0.85, 0.95, 1.0, 1.08, 1.15] },
-  infra:    { ic: '🚚', name: 'Инфраструктура',  k: 3, desc: 'Ёмкость складов ресурсов.', mults: [0.8, 0.9, 1.0, 1.15, 1.3] },
+  industry: { ic: '🏭', name: 'Промышленность', k: 0.12, desc: 'Слоты гражданских построек (фабрики, хабы, склады, храмы) и ТЕМП ДОБЫЧИ: добывающий завод копает быстрее с каждым слотом.' },
+  military: { ic: '⚔', name: 'Оборонзаказ',     k: 0.15, desc: 'Слоты военных построек + скорость постройки юнитов. На нуле корабли и войска НЕ строятся вовсе.', mults: [null, 1.5, 1.0, 0.8, 0.65] },
+  science:  { ic: '🔬', name: 'Образование',     k: 0.12, desc: 'Слоты НИИ и разведцентров + множитель очков науки.', mults: [0.5, 0.8, 1.0, 1.2, 1.4] },
+  social:   { ic: '⚖', name: 'Соцобеспечение',  k: 0.12, desc: 'Благополучие (множитель ВСЕГО денежного дохода) и РОСТ НАСЕЛЕНИЯ: на нуле люди бегут (−2%/сут).', mults: [0.85, 0.95, 1.0, 1.08, 1.15] },
+  infra:    { ic: '🚚', name: 'Инфраструктура',  k: 0.09, desc: 'Ёмкость складов ресурсов.', mults: [0.8, 0.9, 1.0, 1.15, 1.3] },
 };
 const EC_BUDGET_LVL = ['нет финансирования', 'скудно', 'норма', 'усиленно', 'максимум'];
 const EC_BUDGET_SLOTS = [1, 2, 3, 5, 6];   // целевые слоты постройки по уровню профильного ползунка
+// Вес уровня: цена ПРОГРЕССИВНАЯ — «норма» дешёвая, «максимум» кусается (зеркало _budget_lvl_w)
+const EC_BUDGET_W = [0, 1, 2, 4, 7];
+// Скидка малых держав: до 10к населения ставка 50%→100% (зеркало _budget_pop_mult)
+function ecBudgetPopMult(pop) { return 0.5 + 0.5 * Math.min(1, Math.max(0, pop) / 10000); }
+// ── Население (зеркало _fac_pop / _pop_growth / _budget_auto_slots) ──
+const EC_POP_PER_SLOT = 50;                // жителей на один рабочий слот (было 500 — душило доходы)
+const EC_POP_CAP_CELL = 100;               // потолок жителей на ячейку колонии
+const EC_POP_START_CELL = 50;              // старт/бэкфилл жителей на ячейку
+const EC_POP_GROWTH = [-0.02, 0.005, 0.015, 0.025, 0.035];  // %/сут по уровню соцобеспечения
 function ecBudgetLvl(key) { const v = +(EC.budget && EC.budget[key]); return isNaN(v) ? 2 : Math.max(0, Math.min(4, v)); }
-function ecBudgetPop() { return (EC.colonies || []).reduce((a, c) => a + (+c.cells || 0), 0); }
-// Апкип бюджета ГС/сут = население × Σ(уровень × ставка) — зеркало _budget_upkeep
+// Живое население державы: colonies.pop (бэкфилл cells×50 для старых записей)
+function ecBudgetPop() {
+  return Math.round((EC.colonies || []).reduce((a, c) =>
+    a + (c.pop != null ? +c.pop : (+c.cells || 0) * EC_POP_START_CELL), 0));
+}
+function ecBudgetPopCap() { return (EC.colonies || []).reduce((a, c) => a + (+c.cells || 0), 0) * EC_POP_CAP_CELL; }
+// Рост населения %/сут = соцобеспечение + бонус за обеспечение товарами
+// (до +1%/сут при полном покрытии) — зеркало роста pop в economy_accrue.
+function ecBudgetGrowthBase() { return EC_POP_GROWTH[ecBudgetLvl('social')]; }
+function ecBudgetGrowthGoods() { return 0.01 * Math.min(1, ecGoodsInfo().cov); }
+function ecBudgetGrowth() { return ecBudgetGrowthBase() + ecBudgetGrowthGoods(); }
+// Апкип ГС/сут = население × скидка(нас.) × Σ(ставка × вес уровня) — зеркало _budget_upkeep
 function ecBudgetUpkeep() {
   const pop = ecBudgetPop();
-  return Math.round(pop * Object.keys(EC_BUDGET).reduce((a, k) => a + ecBudgetLvl(k) * EC_BUDGET[k].k, 0));
+  return Math.round(pop * ecBudgetPopMult(pop) *
+    Object.keys(EC_BUDGET).reduce((a, k) => a + EC_BUDGET_W[ecBudgetLvl(k)] * EC_BUDGET[k].k, 0));
 }
 // Благополучие от соцобеспечения — множитель всего ГС-дохода (зеркало _budget_gc_mult)
 function ecBudgetGcMult() { return EC_BUDGET.social.mults[ecBudgetLvl('social')]; }
@@ -1850,6 +1907,18 @@ const EC_RICHNESS = { 'колоссально': 3.0, 'очень много': 2.
 function ecRichMult(amt) { const v = EC_RICHNESS[String(amt || '').trim()]; return v == null ? 1.5 : v; }
 // Добыча за слот/сутки: редкость × богатство месторождения × доктрина — зеркало economy_accrue.
 function ecMineRate(rar, amt) { return Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 25) * ecRichMult(amt) * ecFactionMods().mine)); }
+// БЮДЖЕТ v3: авто-добыча — завод копает ВСЕ залежи своей планеты, темп по залежи =
+// база(редкость) × богатство × доктрина × (слоты/3). Слоты = рабочие руки от
+// промышленного бюджета и населения. Зеркало цикла mining в economy_accrue.
+function ecMineYields(b) {
+  if (!b || b.btype !== 'mining') return [];
+  const slotMul = Math.max(1, +b.slots_open || 1) / 3;
+  const mine = ecFactionMods().mine;
+  return ecMiningPlanetRes(b).map(ri => ({
+    name: ri.name, r: ri.r || 'common', amt: ri.amt, icon: ri.icon || '◈',
+    rate: Math.max(1, Math.round((EC_RES_RATE[ri.r || 'common'] || 25) * ecRichMult(ri.amt) * mine * slotMul)),
+  }));
+}
 // Стоимость экспансии (колонизация/терраформ/обустройство) с учётом доктрины (mods.colonize).
 function ecColonizeCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().colonize)); }
 // Стоимость построек и слотов с учётом доктрины (mods.build).
@@ -1869,57 +1938,21 @@ function ecMiningPlanetRes(b) {
   const planet = ecFindPlanet(sys, colony.planet_name, colony.planet_pid) || colony;
   return (planet && Array.isArray(planet.resources)) ? planet.resources.filter(r => r && r.name) : [];
 }
-// Суммарная добыча назначенных месторождений по всем mining-зданиям колонии (для заголовка)
+// Суммарная АВТО-добыча по всем mining-зданиям колонии (для заголовка).
+// Выбор месторождений убран: завод копает все залежи планеты (ecMineYields).
 function ecColonyMinePreview(blds, planet) {
   const mBlds = blds.filter(b => b.btype === 'mining');
   if (!mBlds.length) return '';
-  const res = (planet && Array.isArray(planet.resources)) ? planet.resources.filter(r => r && r.name) : [];
-  if (!res.length) return '';
   const totals = new Map();
-  mBlds.forEach(b => {
-    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(name => {
-      const ri = res.find(r => r.name === name); if (!ri) return;
-      const rate = ecMineRate(ri.r || 'common', ri.amt);
-      totals.set(name, (totals.get(name) || 0) + rate);
-    });
-  });
-  if (!totals.size) {
-    const totalSlots = mBlds.reduce((s, b) => s + b.slots_open, 0);
-    return `<div class="ec-pl-mine ec-mine-empty">⛏ Добывающий завод (${totalSlots} слот.) — раскройте колонию и выберите месторождения</div>`;
-  }
-  const chips = [...totals.entries()].map(([name, total]) => {
-    const ri = res.find(r => r.name === name) || {};
-    return `<span class="ec-rchip ec-rchip-mine ec-rar-${ri.r || 'common'}" title="${esc(name)}: +${total}/сут"><span class="ec-rchip-i">${ecResIcon(name)}</span>${esc(name)} <b>+${total}</b></span>`;
-  }).join('');
+  const rars = new Map();
+  mBlds.forEach(b => ecMineYields(b).forEach(y => {
+    totals.set(y.name, (totals.get(y.name) || 0) + y.rate);
+    rars.set(y.name, y.r);
+  }));
+  if (!totals.size) return '';
+  const chips = [...totals.entries()].map(([name, total]) =>
+    `<span class="ec-rchip ec-rchip-mine ec-rar-${rars.get(name) || 'common'}" title="${esc(name)}: +${total}/сут"><span class="ec-rchip-i">${ecResIcon(name)}</span>${esc(name)} <b>+${total}</b></span>`).join('');
   return `<div class="ec-pl-mine"><span class="ec-pl-lbl">⛏ Добывается:</span>${chips}<span class="ec-mine-hint">/сут</span></div>`;
-}
-// Назначить месторождения для mining-здания
-async function ecMiningAssign(bid, targets) {
-  if (EC.busy) return; EC.busy = true;
-  try {
-    await ecRpc('mining_assign', { p_building_id: bid, p_targets: targets });
-    const b = EC.buildings.find(x => x.id === bid);
-    if (b) b.mining_targets = targets;
-    ecPaintCabinet();
-  } catch(e) { toast(ecErr(e.message), 'err'); }
-  finally { EC.busy = false; }
-}
-// Назначить/снять один слот добычи на ресурс (delta = +1 / -1).
-// targets — массив имён ресурсов с допустимыми повторами: ["Железо","Железо","Золото"]
-// = 2 слота на Железо, 1 на Золото. Каждый слот добывает по своему rate.
-function ecMineCell(bid, resName, delta) {
-  const b = EC.buildings.find(x => x.id === bid);
-  if (!b) return;
-  const targets = [...(Array.isArray(b.mining_targets) ? b.mining_targets : [])];
-  if (delta > 0) {
-    if (targets.length >= b.slots_open) { toast(`Все слоты заняты (${b.slots_open}/${b.slots_open}) — откройте ещё слот`, 'err'); return; }
-    targets.push(resName);
-  } else {
-    const idx = targets.indexOf(resName);
-    if (idx < 0) return;
-    targets.splice(idx, 1);
-  }
-  ecMiningAssign(bid, targets);
 }
 
 // ── Рендер кабинета ─────────────────────────────────────────
@@ -2208,19 +2241,16 @@ function ecDoctrineHtml(app) {
 function ecMineTotals() {
   const totals = new Map();
   EC.buildings.filter(b => b.btype === 'mining').forEach(b => {
-    const res = ecMiningPlanetRes(b);
     const colony = EC.colonies.find(c => c.id === b.colony_id);
     const colName = (colony && (colony.name || colony.planet_name)) || '—';
-    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(name => {
-      const ri = res.find(r => r.name === name); if (!ri) return;
-      // Богатство месторождения (amt) ВЛИЯЕТ на добычу — учитываем как в колонии-превью.
-      const rate = ecMineRate(ri.r || 'common', ri.amt);
-      const cur = totals.get(name) || { rate: 0, r: ri.r || 'common', icon: ri.icon || '◈', slots: 0, srcs: new Map() };
-      cur.rate += rate; cur.slots += 1;
-      const s = cur.srcs.get(colName) || { rate: 0, slots: 0, amt: ri.amt };
-      s.rate += rate; s.slots += 1; s.amt = ri.amt;
+    const slots = Math.max(1, +b.slots_open || 1);
+    ecMineYields(b).forEach(y => {
+      const cur = totals.get(y.name) || { rate: 0, r: y.r, icon: y.icon, slots: 0, srcs: new Map() };
+      cur.rate += y.rate; cur.slots += slots;
+      const s = cur.srcs.get(colName) || { rate: 0, slots: 0, amt: y.amt };
+      s.rate += y.rate; s.slots += slots; s.amt = y.amt;
       cur.srcs.set(colName, s);
-      totals.set(name, cur);
+      totals.set(y.name, cur);
     });
   });
   return totals;
@@ -4772,10 +4802,9 @@ function ecCvCargoToggle(res) {
 function ecExtractRateGross(resName) {
   let total = 0;
   (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
-    const res = ecMiningPlanetRes(b);
-    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
-      if (t !== resName || ecEffMode(b, t) !== 'export' || ecIsConceded(b.colony_id, t)) return;
-      const ri = res.find(x => x.name === resName); if (ri) total += ecMineRate(ri.r, ri.amt);
+    ecMineYields(b).forEach(y => {
+      if (y.name !== resName || ecEffMode(b, y.name) !== 'export' || ecIsConceded(b.colony_id, y.name)) return;
+      total += y.rate;
     });
   });
   return total;
@@ -4831,11 +4860,9 @@ function ecTravelTurns(oSys, dSys) {
 function ecExtractEntries() {
   const gross = {};
   (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
-    const res = ecMiningPlanetRes(b);
-    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
-      if (ecEffMode(b, t) !== 'export' || ecIsConceded(b.colony_id, t)) return;
-      const ri = res.find(x => x.name === t); if (!ri) return;
-      gross[t] = (gross[t] || 0) + ecMineRate(ri.r, ri.amt);
+    ecMineYields(b).forEach(y => {
+      if (ecEffMode(b, y.name) !== 'export' || ecIsConceded(b.colony_id, y.name)) return;
+      gross[y.name] = (gross[y.name] || 0) + y.rate;
     });
   });
   const committed = ecCommittedExtractFlow();
@@ -5217,15 +5244,12 @@ function ecFlowRowsData() {
   const rows = {};
   const mk = (n) => rows[n] || (rows[n] = { mine: 0, exp: 0, sto: 0, conc: 0 });
   (EC.buildings || []).filter(b => b.btype === 'mining').forEach(b => {
-    const res = ecMiningPlanetRes(b);
-    (Array.isArray(b.mining_targets) ? b.mining_targets : []).forEach(t => {
-      const ri = res.find(x => x.name === t); if (!ri) return;
-      const rate = ecMineRate(ri.r || 'common', ri.amt);
-      const row = mk(t);
-      row.mine += rate;
-      if (ecIsConceded(b.colony_id, t)) row.conc += rate;
-      else if (ecEffMode(b, t) === 'export') row.exp += rate;
-      else row.sto += rate;
+    ecMineYields(b).forEach(y => {
+      const row = mk(y.name);
+      row.mine += y.rate;
+      if (ecIsConceded(b.colony_id, y.name)) row.conc += y.rate;
+      else if (ecEffMode(b, y.name) === 'export') row.exp += y.rate;
+      else row.sto += y.rate;
     });
   });
   // ресурсы, которых нет в добыче, но есть на складе или в настройках — тоже показываем
@@ -9476,6 +9500,31 @@ async function ecMgaVerdict(id, action) {
   catch (e) { toast(ecErr(e.message), 'err'); }
 }
 
+// ── Почему у постройки столько слотов (зеркало _budget_auto_slots) ──
+// Профиль ползунка: военные → Оборонзаказ, наука/разведка → Образование, остальное → Промышленность.
+function ecBudgetCatOf(btype) {
+  if (['shipyard', 'military_factory', 'training', 'starbase'].includes(btype)) return 'military';
+  if (['science', 'intel'].includes(btype)) return 'science';
+  return 'industry';
+}
+function ecSlotWhy(b) {
+  const cat = ecBudgetCatOf(b.btype);
+  const lvl = ecBudgetLvl(cat);
+  const target = EC_BUDGET_SLOTS[lvl];
+  const pop = ecBudgetPop();
+  // Сколько рабочих мест хочет ВСЯ держава при текущих ползунках — от этого срез.
+  const totalTarget = (EC.buildings || []).reduce((a, x) =>
+    a + EC_BUDGET_SLOTS[ecBudgetLvl(ecBudgetCatOf(x.btype))], 0);
+  const need = totalTarget * EC_POP_PER_SLOT;
+  const cut = totalTarget > 0 && pop < need;                  // рук не хватает — слоты срезаны
+  const workers = Math.max(1, +b.slots_open || 1) * EC_POP_PER_SLOT;
+  const budName = EC_BUDGET[cat].name;
+  const tip = `Слоты открывает бюджет, вручную не покупаются. Ползунок «${budName}» = «${EC_BUDGET_LVL[lvl]}» → цель ${target} слот. на такую постройку. Каждый слот — ${EC_POP_PER_SLOT} рабочих. Всего державе нужно ${ecNum(need)} жителей на ${totalTarget} мест, есть ${ecNum(pop)}${cut ? ' — рук не хватает, слоты ВСЕХ построек срезаны пропорционально' : ' — хватает'}.`;
+  const fix = cut ? 'рук не хватает → растите население (соцобеспечение, товары)'
+    : (lvl < 4 ? `Больше слотов — поднять «${budName}».` : 'Бюджет на максимуме.');
+  return `<span class="ec-bld-slotwhy${cut ? ' cut' : ''}" data-tip="${esc(tip + ' ' + fix)}" onclick="ecSetTab('welfare')">👷${ecNum(workers)}${cut ? '⚠' : ''}</span>`;
+}
+
 function ecBuildingRow(b) {
   if (b.btype === 'doomgun') return ecDoomgunRow(b);
   const d = EC_BUILD[b.btype]; if (!d) return '';
@@ -9487,35 +9536,21 @@ function ecBuildingRow(b) {
   const slotCount = `<span class="ec-slot-count">${b.slots_open}/${EC_MAX_SLOTS}</span>`;
   let mineHtml = '';
   if (b.btype === 'mining') {
-    const allRes = ecMiningPlanetRes(b);
-    const targets = Array.isArray(b.mining_targets) ? b.mining_targets : [];
-    const used = targets.length;
-    const free = b.slots_open - used;
-    if (allRes.length) {
-      const rows = allRes.map(r => {
-        const cnt = targets.filter(t => t === r.name).length;
-        const rate = ecMineRate(r.r || 'common', r.amt);
-        const total = rate * cnt;
-        const canAdd = free > 0;
-        const cls = cnt ? 'active' : '';
-        return `<div class="ec-mine-row ${cls}">
-          <span class="ec-mine-ic ec-rar-${r.r || 'common'}">${esc(r.icon || '◈')}</span>
-          <span class="ec-mine-nm">${esc(r.name)}</span>
-          <span class="ec-mine-rt">${cnt ? `+${total}/сут` : `<span class="ec-mine-rt-dim">+${rate}/яч.</span>`}</span>
-          <span class="ec-mine-step">
-            <button class="ec-mine-btn" ${cnt ? '' : 'disabled'} title="Снять слот" onclick="ecMineCell(${ecArg(b.id)},${ecArg(r.name)},-1)">−</button>
-            <span class="ec-mine-cnt ${cnt ? 'on' : ''}">${cnt}</span>
-            <button class="ec-mine-btn" ${canAdd ? '' : 'disabled'} title="${canAdd ? 'Добавить слот' : 'Нет свободных слотов'}" onclick="ecMineCell(${ecArg(b.id)},${ecArg(r.name)},1)">+</button>
-          </span>
-        </div>`;
-      }).join('');
-      mineHtml = `<div class="ec-bld-mine-hd">⛏ Месторождения <span class="ec-mine-slots-used">${used}/${b.slots_open} слотов занято</span></div><div class="ec-mine-list">${rows}</div>`;
+    // БЮДЖЕТ v3: добыча автоматическая — завод копает ВСЕ залежи планеты,
+    // темп ×(слоты/3). Выбор «что добывать» убран; маршруты — вкладка «Потоки».
+    const yields = ecMineYields(b);
+    if (yields.length) {
+      const rows = yields.map(y => `<div class="ec-mine-row active">
+          <span class="ec-mine-ic ec-rar-${y.r}">${esc(y.icon)}</span>
+          <span class="ec-mine-nm">${esc(y.name)}</span>
+          <span class="ec-mine-rt">+${y.rate}/сут</span>
+        </div>`).join('');
+      const mul = (Math.max(1, +b.slots_open || 1) / 3);
+      mineHtml = `<div class="ec-bld-mine-hd">⛏ Добывается автоматически <span class="ec-mine-slots-used" data-tip="Слоты — рабочие руки: темп добычи ×(слоты/3). Слоты выставляет промышленный бюджет и население.">${b.slots_open} слот. · темп ×${mul.toFixed(2)}</span></div><div class="ec-mine-list">${rows}</div>`;
     } else {
       mineHtml = `<div class="ec-bld-mine-empty">◌ планета без ресурсов — заводу нечего добывать</div>`;
     }
-    // ПОТОКИ: режим потока настраивается теперь ПО РЕСУРСУ в одной панели —
-    // вкладка «Потоки» (галочки со зданий убраны, панель одна на державу).
-    mineHtml += `<div class="ec-bld-mine-hd" style="margin-top:8px;color:var(--t3)">Куда идёт добыча — настраивается во вкладке <a href="#" onclick="ecSetTab('flows');return false" style="color:var(--gd)">🔀 Потоки</a></div>`;
+    mineHtml += `<div class="ec-bld-mine-hd" style="margin-top:8px;color:var(--t3)">Куда идёт добыча (склад/экспорт/биржа) — во вкладке <a href="#" onclick="ecSetTab('flows');return false" style="color:var(--gd)">🔀 Потоки</a></div>`;
   }
   // мультивера: у храма пишем, чьей он религии
   let faithBadge = '';
@@ -9544,7 +9579,7 @@ function ecBuildingRow(b) {
     ${mineHtml}
     ${b.btype === 'goodsfab' ? ecGoodsHtml(b) : ''}
     ${b.btype === 'abm' ? ecAbmAmmoHtml(b) : ''}
-    <div class="ec-bld-act">${slotCount}${openBtn}</div>
+    <div class="ec-bld-act">${slotCount}${ecSlotWhy(b)}${openBtn}</div>
   </div>`;
 }
 
