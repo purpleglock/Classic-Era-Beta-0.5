@@ -740,6 +740,7 @@ function updAuthUI() {
   enforceBan();
   enforceLegalConsent();
   try { if (typeof tkUpdateVisibility === 'function') tkUpdateVisibility(); } catch (e) {}
+  try { if (typeof chUpdateVisibility === 'function') chUpdateVisibility(); } catch (e) {}
   const btn = document.getElementById('auth-btn'); const dot = document.getElementById('adot'); const av = document.getElementById('auth-av'); const eb = document.getElementById('edit-btn');
   if (!btn) return;
   if (user) {

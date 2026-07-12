@@ -71,11 +71,13 @@ begin
   if not found then raise exception 'no approved faction'; end if;
   if p_target_fid = app.faction_id then raise exception 'self'; end if;
 
+  -- ВЕРА-4/секта: нужна СВОЯ вера; цель может исповедовать веру (внедряем ТАЙНУЮ секту),
+  -- запрещаем лишь держать две свои секты в одной державе. НЕ гейтим по вере цели.
   if p_op = 'faith_impose' then
     if not exists(select 1 from public.faith_membership where faction_id=app.faction_id) then
       raise exception 'you follow no faith to spread'; end if;
-    if exists(select 1 from public.faith_membership where faction_id=p_target_fid) then
-      raise exception 'target already follows a faith'; end if;
+    if exists(select 1 from public.faith_sects where owner_fid=app.faction_id and host_fid=p_target_fid and status='active') then
+      raise exception 'you already run a sect in that nation'; end if;
   end if;
 
   select * into me from public.faction_economy where faction_id=app.faction_id for update;

@@ -1,0 +1,209 @@
+/* ── Общий чат «Гиперсвязь» (Realtime Broadcast, без БД) ──
+   Открывается модалкой по центру, как окно тикетов. Киберпанк-канон:
+   срезанные углы = clip-path на слое-подложке, НЕ border. Акцент один — --te. */
+
+/* ── Кнопка над тикетами ── */
+#ch-fab {
+  position: fixed; right: 16px; bottom: 66px; z-index: 95;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; padding: 0; border: none; cursor: pointer;
+  background: transparent; color: var(--t3, #8aa0b0);
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .45));
+  transition: color var(--duration-fast), transform var(--duration-fast);
+}
+#ch-fab::before {
+  content: ''; position: absolute; inset: 0; z-index: -2; background: var(--w3, #2a3340);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+#ch-fab::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  background: color-mix(in srgb, var(--b2, #141a22) 92%, transparent);
+  clip-path: polygon(0 0, calc(100% - 9.3px) 0, 100% 9.3px, 100% 100%, 9.3px 100%, 0 calc(100% - 9.3px));
+}
+#ch-fab:hover { color: var(--te, #3ec0d0); transform: translateY(-1px); }
+#ch-fab:hover::before { background: color-mix(in srgb, var(--te, #3ec0d0) 60%, var(--w3, #2a3340)); }
+#ch-fab:active { transform: translateY(0); }
+/* На карте прячем вместе с тикетами (тот же угол, что панель слоёв) */
+body.route-map #ch-fab { display: none !important; }
+.ch-fab-ic { color: inherit; flex-shrink: 0; }
+.ch-fab-badge {
+  position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px; z-index: 1;
+  background: var(--te, #3ec0d0); color: #04240f;
+  font-family: var(--font-mono, monospace); font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 5px 100%, 0 calc(100% - 5px));
+}
+
+/* ── Оверлей на весь экран (как tk-ov) ── */
+.ch-ov {
+  position: fixed; inset: 0; z-index: 9100; display: none; align-items: center; justify-content: center;
+  padding: 28px 14px; background: rgba(4, 6, 10, .82); backdrop-filter: blur(3px);
+}
+.ch-ov.show { display: flex; }
+
+/* ── Модалка ── */
+.ch-modal {
+  position: relative; width: 100%; max-width: 860px; height: min(640px, calc(100vh - 56px));
+  display: flex; flex-direction: column;
+  filter: drop-shadow(0 30px 80px rgba(0, 0, 0, .6));
+}
+.ch-modal::before {
+  content: ''; position: absolute; inset: 0; z-index: -2;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--te, #3ec0d0) 55%, var(--w3, #2a3340)), var(--w3, #2a3340) 110px);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+}
+.ch-modal::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--te, #3ec0d0) 8%, transparent), transparent 110px),
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(255, 255, 255, .012) 3px 4px),
+    var(--b1, #0d1117);
+  clip-path: polygon(0 0, calc(100% - 17.3px) 0, 100% 17.3px, 100% 100%, 17.3px 100%, 0 calc(100% - 17.3px));
+}
+
+/* Шапка */
+.ch-hd { display: flex; align-items: center; gap: 14px; padding: 16px 22px 12px; }
+.ch-hd-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ch-hd-k {
+  font-family: var(--font-mono, monospace); font-size: 9px; letter-spacing: .28em;
+  color: var(--te, #3ec0d0); text-transform: uppercase; white-space: nowrap;
+}
+.ch-hd-t {
+  font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 700; font-size: 22px;
+  letter-spacing: calc(.04em * var(--deco-ls-mult, 1)); color: var(--t1, #e8edf2); white-space: nowrap; line-height: 1.1;
+}
+.ch-status {
+  margin-left: auto; font-family: var(--font-mono, monospace); font-size: 9.5px; letter-spacing: .12em;
+  color: var(--te, #3ec0d0); white-space: nowrap;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--te, #3ec0d0) 60%, transparent);
+}
+.ch-status.down { color: var(--warn, #d0a840); text-shadow: none; }
+.ch-x { background: none; border: none; color: var(--t3, #8aa0b0); font-size: 16px; cursor: pointer; padding: 4px 8px; }
+.ch-x:hover { color: var(--err, #e05050); }
+
+/* Тело: лог + сайдбар «на связи» */
+.ch-body { flex: 1; min-height: 0; display: flex; gap: 0; }
+.ch-main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0 0 18px 22px; }
+.ch-side {
+  width: 218px; flex-shrink: 0; display: flex; flex-direction: column;
+  margin: 0 18px 18px 18px; padding: 12px 14px; min-height: 0;
+  background: color-mix(in srgb, var(--b2, #141a22) 75%, transparent);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+.ch-side-t {
+  font-family: var(--font-mono, monospace); font-size: 9px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--t3, #8aa0b0); margin-bottom: 10px;
+}
+.ch-side-t b { color: var(--te, #3ec0d0); font-weight: 400; }
+.ch-side-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.ch-who { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; font-size: 12px; }
+.ch-who-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--fc, var(--te)); align-self: center; flex-shrink: 0;
+  box-shadow: 0 0 5px var(--fc, var(--te)); }
+.ch-who-n { font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 600; color: var(--t1, #e8edf2); }
+.ch-who-f { font-family: var(--font-mono, monospace); font-size: 8.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--fc, var(--t3)); width: 100%; padding-left: 12px; }
+
+/* Дисклеймер */
+.ch-note {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 6px 11px;
+  font-family: var(--font-mono, monospace); font-size: 9.5px; letter-spacing: .04em;
+  color: var(--t3, #8aa0b0);
+  background: color-mix(in srgb, var(--te, #3ec0d0) 6%, transparent);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+.ch-note-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--te, #3ec0d0); flex-shrink: 0;
+  box-shadow: 0 0 6px var(--te, #3ec0d0); animation: ch-pulse 2.4s ease-in-out infinite; }
+@keyframes ch-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+
+/* Лог */
+.ch-log { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 14px 6px 0; display: flex; flex-direction: column; gap: 10px; }
+.ch-empty {
+  margin: auto; text-align: center; padding: 20px 10px; line-height: 1.8;
+  font-size: 13px; color: var(--t4, #6a7a88); font-style: italic;
+}
+.ch-empty.sm { font-size: 11px; margin: 8px 0; padding: 0; text-align: left; }
+.ch-msg { position: relative; display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px 9px 14px; }
+.ch-msg::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(90deg, var(--fc, var(--te)) 0 2px, color-mix(in srgb, var(--b2, #141a22) 82%, transparent) 2px);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
+}
+.ch-msg.staff::before {
+  background: linear-gradient(90deg, var(--ok, #4caf6a) 0 2px, color-mix(in srgb, var(--ok, #4caf6a) 8%, color-mix(in srgb, var(--b2, #141a22) 82%, transparent)) 2px);
+}
+/* Аватарка автора */
+.ch-msg-av { flex-shrink: 0; }
+.ch-msg-main { flex: 1; min-width: 0; }
+.ch-av-img, .ch-av-ini {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--fc, var(--te)) 45%, transparent);
+}
+.ch-av-img { object-fit: cover; background: var(--b2, #141a22); }
+.ch-av-ini { font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 700; font-size: 12px; }
+.ch-msg-hd { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 3px; }
+.ch-msg-a {
+  font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 700; font-size: 13.5px;
+  letter-spacing: calc(.03em * var(--deco-ls-mult, 1)); color: var(--t1, #e8edf2);
+}
+.ch-msg.staff .ch-msg-a { color: var(--ok, #4caf6a); }
+.ch-msg-f {
+  font-family: var(--font-mono, monospace); font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--fc, var(--t3, #8aa0b0)); padding: 1px 7px;
+  background: color-mix(in srgb, var(--fc, var(--t3, #8aa0b0)) 12%, transparent);
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+}
+.ch-msg-w { margin-left: auto; font-family: var(--font-mono, monospace); font-size: 9px; color: var(--t4, #6a7a88); }
+.ch-msg-b { font-size: 13px; line-height: 1.55; color: var(--t2, #c0ccd6); word-break: break-word; white-space: pre-wrap; }
+
+/* Ввод. Обводку даёт слой-подложка (clip-path режет border → канон: не border) */
+.ch-input-row { display: flex; gap: 10px; padding: 12px 14px 0 0; }
+.ch-inp-wrap { position: relative; flex: 1; min-width: 0; }
+.ch-inp-wrap::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; background: var(--w2, #232c36);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  transition: background var(--duration-fast);
+}
+.ch-inp-wrap::after {
+  content: ''; position: absolute; inset: 1px; z-index: 0; background: var(--b2, #141a22);
+  clip-path: polygon(0 0, calc(100% - 9.3px) 0, 100% 9.3px, 100% 100%, 0 100%);
+}
+.ch-inp-wrap:focus-within::before { background: var(--te, #3ec0d0); }
+.ch-inp {
+  position: relative; z-index: 1; width: 100%; border: none; outline: none; padding: 10px 13px;
+  background: transparent; color: var(--t1, #e8edf2); font-size: 13.5px; font-family: inherit;
+}
+.ch-inp::placeholder { color: var(--t4, #6a7a88); font-style: italic; }
+.ch-send {
+  flex-shrink: 0; border: none; cursor: pointer; padding: 0 20px;
+  background: var(--te, #3ec0d0); color: #04240f;
+  font-family: var(--font-display, 'Rajdhani', sans-serif); font-weight: 700; font-size: 13.5px;
+  letter-spacing: calc(.04em * var(--deco-ls-mult, 1)); text-transform: uppercase;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+.ch-send:hover { filter: brightness(1.1); }
+
+/* Скроллбары */
+.ch-log::-webkit-scrollbar, .ch-side-list::-webkit-scrollbar { width: 4px; }
+.ch-log::-webkit-scrollbar-thumb, .ch-side-list::-webkit-scrollbar-thumb { background: var(--w3, #2a3340); }
+.ch-log::-webkit-scrollbar-thumb:hover { background: var(--te, #3ec0d0); }
+
+/* Мобилка: модалка во весь экран, прямые углы edge-to-edge, сайдбар прячем */
+@media (max-width: 640px) {
+  .ch-ov { padding: 0; backdrop-filter: none; }
+  .ch-modal {
+    max-width: none; height: 100vh; height: 100dvh; filter: none;
+  }
+  /* На весь экран срезанные углы ни к чему — распрямляем подложки */
+  .ch-modal::before, .ch-modal::after { clip-path: none; inset: 0; }
+  .ch-side { display: none; }
+  .ch-hd { padding: calc(12px + env(safe-area-inset-top)) 14px 10px; }
+  .ch-hd-t { font-size: 19px; }
+  .ch-status { font-size: 8.5px; }
+  .ch-main { padding: 0 14px calc(12px + env(safe-area-inset-bottom)); }
+  .ch-log { padding-right: 2px; }
+  .ch-note { font-size: 9px; padding: 6px 10px; }
+  .ch-input-row { padding: 10px 0 0; gap: 8px; }
+  .ch-inp { padding: 12px 13px; font-size: 16px; }   /* 16px — iOS не зумит при фокусе */
+  .ch-send { padding: 0 16px; }
+  .ch-av-img, .ch-av-ini { width: 26px; height: 26px; }
+}
