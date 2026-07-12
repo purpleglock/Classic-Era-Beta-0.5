@@ -1291,7 +1291,7 @@ async function _ecLoadCoreImpl() {
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
-  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, budgetRows] = await Promise.all([
+  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1324,6 +1324,7 @@ async function _ecLoadCoreImpl() {
     dbGet('faction_res_flows', `faction_id=eq.${fid}`).catch(() => []),   // потоки: настройки по ресурсам (вкладка «Потоки»)
     dbGet('mining_concessions', `or=(from_fid.eq.${fid},to_fid.eq.${fid})&order=created_at.desc`).catch(() => []),  // концессии (право добычи)
     dbGet('concession_slots', `order=created_at.asc`).catch(() => []),   // купленные слоты концессионера (RLS отдаёт мои и на моих колониях)
+    ecRpc('concessions_info').catch(() => []),   // имена планет/систем концессионных колоний (чужие колонии по RLS не видны)
     dbGet('faction_budget', `faction_id=eq.${fid}`).catch(() => []),   // бюджет державы (ползунки финансирования)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
@@ -1364,6 +1365,8 @@ async function _ecLoadCoreImpl() {
   (Array.isArray(resFlows) ? resFlows : []).forEach(f => { if (f && f.res_name) EC.resFlows[f.res_name] = f; });
   EC.concessions = Array.isArray(concessions) ? concessions : [];
   EC.concSlots = Array.isArray(concSlots) ? concSlots : [];   // слоты концессионера (extra/lease) по колониям
+  EC.concInfo = {};   // colony_id → {planet_name, system_name} для подписей концессий
+  (Array.isArray(concInfo) ? concInfo : []).forEach(x => { if (x && x.colony_id) EC.concInfo[x.colony_id] = x; });
   // Бюджет державы: ползунки 0..4 (дефолт 2 — «норма», зеркало _budget_wellbeing.sql)
   EC.budget = (Array.isArray(budgetRows) && budgetRows[0]) || { industry: 2, military: 2, science: 2, social: 2, infra: 2 };
   EC.incomeHistory = incomeHistory || [];   // снимки дохода по тикам (доход по времени)
@@ -5254,50 +5257,60 @@ function ecTabFlows() {
   const depOpts = myDeps.map(dp => `<option value="${esc(dp.cid)}|${esc(dp.res)}">${esc(dp.label)}</option>`).join('');
   const given = (EC.concessions || []).filter(c => c.from_fid === EC.fid);
   const got = (EC.concessions || []).filter(c => c.to_fid === EC.fid);
-  // v5: концессии — механика КОРПОРАЦИЙ. Слоты на колонию: 1 бесплатный вне
-  // ячеек + 1 докупается корпорацией (2500 ГС) + 2 выкупаются у владельца
-  // (4000 ГС + аренда 150 ГС/сут владельцу). Итого до 4 домиков на колонию.
+  // v5: концессии — механика КОРПОРАЦИЙ, сгруппированы ПО КОЛОНИЯМ (системам).
+  // Одна ячейка на колонию: планета · система · залежи · слоты СТРОКОЙ (как в
+  // науке). Слоты: 1 бесплатный вне ячеек + 1 корпоративный (2500 ГС) +
+  // 2 выкупных у владельца (4000 ГС + аренда 150 ГС/сут). Макс 4 домика.
   const concColStat = (cid) => {
     const slots = (EC.concSlots || []).filter(s => s.colony_id === cid && s.fid === EC.fid);
     const bld = (EC.buildings || []).filter(b => b.colony_id === cid).length;   // мои постройки на чужой колонии = только концессионные
     const pend = (EC.projects || []).filter(p => p.kind === 'build' && p.colony_id === cid).length;
-    return { slots, used: bld + pend, cap: 1 + slots.length,
+    return { slots, bld, pend, used: bld + pend, cap: 1 + slots.length,
              extra: slots.filter(s => s.kind === 'extra').length,
              lease: slots.filter(s => s.kind === 'lease').length };
   };
-  const concRow = (c, mine) => {
-    const col = (EC.colonies || []).find(x => x.id === c.colony_id);
-    const who = mine ? `→ ${esc(ecFacName(c.to_fid))}` : `← ${esc(ecFacName(c.from_fid))}`;
-    const cRar = ecResRarity(c.res_name);
-    const bt = cRar === 'common' ? 'mining' : (cRar === 'epic' || cRar === 'legendary') ? 'mining_exotic' : 'mining_deep';
-    let build = '';
-    if (mine) {
-      // сторона владельца: показываем аренду с выкупленных слотов этого концессионера
-      const rent = (EC.concSlots || []).filter(s => s.colony_id === c.colony_id && s.fid === c.to_fid && s.kind === 'lease')
-        .reduce((a, s) => a + (+s.rent || 0), 0);
-      if (rent) build = `<span class="ec-hint">🤝 аренда слотов: <b>+${ecNum(rent)} ГС/сут</b></span>`;
-    } else {
-      const st = concColStat(c.colony_id);
-      const myTier = (EC.buildings || []).filter(b => b.colony_id === c.colony_id && (EC_MINE_TIERS[b.btype] || []).includes(cRar)).length;
-      build = st.used < st.cap
-        ? `<button class="btn btn-gd btn-sm" title="Построить добывающий домик этого яруса (готов через сутки; ячейки владельца не занимает). Домиков на колонии: ${st.used}/${st.cap}" onclick="ecConcBuild('${c.id}','${bt}')">🏗 ${esc(EC_BUILD[bt].name)} · ${ecNum(ecBuildCost(EC_BUILD[bt].cost))} ГС</button>`
-        : `<span class="ec-hint">${myTier ? '✓ ' : ''}домиков ${st.used}/${st.cap} — докупите слот ниже</span>`;
-    }
-    return `<div class="ec-q-row"><span class="ec-r-name">${ecResIcon(c.res_name)} <b>${esc(c.res_name)}</b> <span class="ec-hint">(${ecRarLabel(cRar)})</span>${col ? ` · ${esc(col.planet_name || '')}` : ''} ${who}</span>${build}
-      <button class="ec-bld-del" title="${mine ? 'Отозвать право добычи (домики получателя снесутся, ½ цены ему вернётся)' : 'Отказаться от концессии (мои домики там снесутся, ½ цены вернётся)'}" onclick="ecConcRevoke('${c.id}')">✕</button></div>`;
+  const concPlace = (cid, fallbackFid) => {
+    const i = (EC.concInfo || {})[cid] || {};
+    const p = esc(i.planet_name || 'колония'), s = i.system_name ? ` · сист. ${esc(i.system_name)}` : '';
+    return `🪐 <b>${p}</b>${s}${fallbackFid ? ` · ${esc(ecFacName(fallbackFid))}` : ''}`;
   };
-  // Строка управления слотами — одна на колонию (сторона концессионера)
-  const concSlotRow = (cid) => {
+  // Ячейка колонии-концессии: всё в одной — место, залежи, слоты, покупка
+  const concColCell = (cid, list, mine) => {
     const st = concColStat(cid);
-    const c0 = (EC.concessions || []).find(x => x.colony_id === cid) || {};
-    const cName = `колония ${esc(ecFacName(c0.from_fid) || '')}`;
-    const btnExtra = st.extra < 1
-      ? `<button class="btn btn-gh btn-xs" title="Корпорация докупает 1 слот вне ячеек планеты (деньги сгорают)" onclick="ecConcSlotBuy('${cid}','extra')">＋ слот корпорации · 2 500 ГС</button>` : '';
-    const btnLease = st.lease < 2
-      ? `<button class="btn btn-gh btn-xs" title="Выкупить слот у владельца колонии: 4 000 ГС ему сразу + аренда 150 ГС/сут (макс 2)" onclick="ecConcSlotBuy('${cid}','lease')">🤝 выкупить слот у владельца · 4 000 ГС + 150/сут</button>` : '';
-    const rent = st.slots.filter(s => s.kind === 'lease').reduce((a, s) => a + (+s.rent || 0), 0);
-    return `<div class="ec-q-row"><span class="ec-hint">🏢 ${cName}: домиков <b>${st.used}/${st.cap}</b>${rent ? ` · аренда −${ecNum(rent)} ГС/сут` : ''}</span>${btnExtra}${btnLease}</div>`;
+    const rows = list.map(c => {
+      const cRar = ecResRarity(c.res_name);
+      const bt = cRar === 'common' ? 'mining' : (cRar === 'epic' || cRar === 'legendary') ? 'mining_exotic' : 'mining_deep';
+      let act = '';
+      if (!mine) {
+        const myTier = (EC.buildings || []).filter(b => b.colony_id === cid && (EC_MINE_TIERS[b.btype] || []).includes(cRar)).length;
+        act = st.used < st.cap
+          ? `<button class="btn btn-gd btn-xs" title="Построить ${esc(EC_BUILD[bt].name)} (готов через сутки; ячейки владельца не занимает)" onclick="ecConcBuild('${c.id}','${bt}')">🏗 ${ecNum(ecBuildCost(EC_BUILD[bt].cost))} ГС</button>`
+          : (myTier ? `<span class="ec-hint">✓ добывается</span>` : `<span class="ec-hint">нет свободных слотов</span>`);
+      }
+      return `<div class="ec-q-row"><span class="ec-r-name">${ecResIcon(c.res_name)} <b>${esc(c.res_name)}</b> <span class="ec-hint">(${ecRarLabel(cRar)})</span></span>${act}
+        <button class="ec-bld-del" title="${mine ? 'Отозвать право добычи (домики получателя снесутся, ½ цены ему вернётся)' : 'Отказаться от концессии (мои домики там снесутся, ½ цены вернётся)'}" onclick="ecConcRevoke('${c.id}')">✕</button></div>`;
+    }).join('');
+    // слоты СТРОКОЙ (как слоты исследований): ▰ занят, ▱ свободен
+    let slotLine;
+    if (mine) {
+      const rent = (EC.concSlots || []).filter(s => s.colony_id === cid && s.kind === 'lease')
+        .reduce((a, s) => a + (+s.rent || 0), 0);
+      slotLine = rent ? `<div class="ec-hint">🤝 продано слотов: аренда <b>+${ecNum(rent)} ГС/сут</b> в казну</div>` : '';
+    } else {
+      const parts = [`1 базовый`];
+      parts.push(st.extra >= 1 ? '+1 корпоративный ✓'
+        : `<a href="#" title="Корпорация докупает 1 слот вне ячеек планеты (деньги сгорают)" onclick="ecConcSlotBuy('${cid}','extra');return false">докупить корпоративный · 2 500 ГС</a>`);
+      parts.push(st.lease > 0 ? `+${st.lease} у владельца ✓${st.lease < 2 ? ` · <a href="#" title="Выкупить ещё слот у владельца: 4 000 ГС ему сразу + аренда 150 ГС/сут" onclick="ecConcSlotBuy('${cid}','lease');return false">ещё · 4 000 ГС</a>` : ''}`
+        : `<a href="#" title="Выкупить слот у владельца колонии: 4 000 ГС ему сразу + аренда 150 ГС/сут (макс 2)" onclick="ecConcSlotBuy('${cid}','lease');return false">выкупить у владельца · 4 000 ГС + 150/сут</a>`);
+      const rent = st.slots.filter(s => s.kind === 'lease').reduce((a, s) => a + (+s.rent || 0), 0);
+      if (rent) parts.push(`аренда −${ecNum(rent)} ГС/сут`);
+      if (st.pend) parts.push(`⏳ строится: ${st.pend}`);
+      slotLine = `<div class="ec-hint">Слоты: ${'▰'.repeat(Math.min(st.used, st.cap))}${'▱'.repeat(Math.max(0, st.cap - st.used))} <b>${st.used}/${st.cap}</b> · ${parts.join(' · ')}</div>`;
+    }
+    return `<div class="ec-conc-col" style="margin:6px 0 10px"><div class="ec-hint">${concPlace(cid, mine ? list[0].to_fid : list[0].from_fid)}</div>${rows}${slotLine}</div>`;
   };
+  const concGroup = (arr, mine) => [...new Set(arr.map(c => c.colony_id))]
+    .map(cid => concColCell(cid, arr.filter(c => c.colony_id === cid), mine)).join('');
   const concHtml = `<div class="ec-r-sec" style="margin-top:18px">⚖ Концессии — право добычи</div>
     <div class="ec-hint" style="margin:4px 0 8px">Право добычи конкретной залежи можно передать другой державе: колония остаётся у вас, а получатель <b>строит на ней СВОЙ добывающий домик нужного яруса</b> (кнопка появится у него в этом блоке) и добывает залежь как свою — слоты от его населения, поток в его «Потоки». Без построенного домика концессия <b>ничего не даёт</b>. Домик занимает ячейку вашей колонии; ваши заводы отданную залежь не копают. При отзыве/отказе домики получателя сносятся с возвратом ½ цены.</div>
     ${myDeps.length ? `<div class="ec-prod-form ec-conc-form">
@@ -5305,8 +5318,8 @@ function ecTabFlows() {
       <select id="ec-conc-fac" class="ec-prod-qty">${facOpts}</select>
       <button class="btn btn-gd btn-sm" onclick="ecConcGrant()">Передать право добычи</button>
     </div>` : '<div class="ec-hint">Нет свободных залежей для передачи.</div>'}
-    ${given.length ? `<div class="ec-r-sec">Отдано мной</div>${given.map(c => concRow(c, true)).join('')}` : ''}
-    ${got.length ? `<div class="ec-r-sec">Получено мной</div>${got.map(c => concRow(c, false)).join('')}${[...new Set(got.map(c => c.colony_id))].map(concSlotRow).join('')}` : ''}`;
+    ${given.length ? `<div class="ec-r-sec">Отдано мной</div>${concGroup(given, true)}` : ''}
+    ${got.length ? `<div class="ec-r-sec">Получено мной</div>${concGroup(got, false)}` : ''}`;
 
   const flowsBody = `${ecIntro('🔀', 'Потоки ресурсов',
     'Одна панель на державу: что добывается, что уходит караванам, что продаёт Товарная биржа и что копится на складе. Настройки действуют на ресурс ЦЕЛИКОМ (по всем заводам) и перекрывают режимы зданий.',

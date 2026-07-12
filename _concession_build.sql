@@ -215,7 +215,7 @@ grant execute on function public.concession_build(uuid,text) to authenticated;
 --    Если концессию отозвали, пока домик строился, — возврат ½ потраченного.
 create or replace function public._apply_colony_projects(p_fid text)
 returns void language plpgsql security definer set search_path=public as $$
-declare pr record; v_conc uuid; v_ok boolean;
+declare pr record; v_conc uuid; v_ok boolean; v_built boolean := false;
 begin
   perform public._concession_rent_sync();
   for pr in select * from public.colony_projects
@@ -234,6 +234,7 @@ begin
           insert into public.colony_buildings (colony_id, faction_id, owner_id, btype, slots_open, tnp_mode, conc)
             values (pr.colony_id, p_fid, pr.owner_id, pr.btype,
                     coalesce((pr.payload->>'free_slots')::int, 1), false, v_conc);
+          v_built := true;
         else
           update public.faction_economy
             set gc = gc + round(coalesce((pr.payload->>'spent_gc')::numeric,
@@ -246,6 +247,7 @@ begin
           values (pr.colony_id, p_fid, pr.owner_id, pr.btype,
                   coalesce((pr.payload->>'free_slots')::int, 1), false,
                   nullif(pr.payload->>'faith_id','')::uuid);     -- МУЛЬТИ: метка веры храма
+        v_built := true;
       end if;
     elsif pr.kind = 'slot' then
       update public.colony_buildings set slots_open = least(6, slots_open + 1)
@@ -267,8 +269,27 @@ begin
     end if;
     delete from public.colony_projects where id = pr.id;
   end loop;
+  -- СЛОТЫ СРАЗУ: новостройка не сидит сутки на 1 слоте до суточного accrue —
+  -- бюджетный пересчёт слотов выполняется в момент достройки (фикс «концессия
+  -- добывает по единичке»: добыча = база × слоты/3, а слоты были 1)
+  if v_built then perform public._budget_auto_slots(p_fid); end if;
 end$$;
 revoke all on function public._apply_colony_projects(text) from public;
+
+-- ── Справка для клиента: концессии обеих сторон с именами планеты/системы
+--    (чужие колонии игроку по RLS не видны — отдаём подписи через RPC) ──
+create or replace function public.concessions_info()
+returns jsonb language sql stable security definer set search_path=public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'colony_id', c.id, 'planet_name', c.planet_name,
+           'system_id', c.system_id, 'system_name', s.name)), '[]'::jsonb)
+  from (select distinct mc.colony_id from public.mining_concessions mc
+        where mc.from_fid = public._ec_my_fid() or mc.to_fid = public._ec_my_fid()) x
+  join public.colonies c on c.id = x.colony_id
+  left join public.map_systems s on s.id = c.system_id
+$$;
+revoke all on function public.concessions_info() from public, anon;
+grant execute on function public.concessions_info() to authenticated;
 
 -- ── Отзыв/отказ: снести домики получателя, оставшиеся без права (½ базы назад).
 --    Если у получателя не осталось НИ ОДНОЙ концессии на колонии — сносится всё
