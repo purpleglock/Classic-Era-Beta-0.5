@@ -299,7 +299,7 @@ const EC_BUILD = {
   mining_exotic:    { name: 'Экзотический экстрактор',   cost: 8000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Добыча ЭЛИТНЫХ залежей планеты (эпические и легендарные) — единственный способ качать уникальные ресурсы' },
   trade:            { name: 'Торговый хаб',         cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 100 }, cat: 'civ', desc: '+100 ГС за слот (торговый путь)' },
   market:           { name: 'Товарная биржа',       cost: 1500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Продаёт добытые ресурсы за ГС (50–75% цены по редкости), без торговых путей' },
-  goodsfab:         { name: 'Фабрика товаров',       cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Из воды и сырья делает товары: каждый слот = 6 воды + 4 сырья → 10 товаров/сут. Товары кормят население (обеспечение → доход), излишек продаётся на бирже' },
+  goodsfab:         { name: 'Фабрика товаров',       cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Из воды и сырья делает товары ровно под спрос населения: слот покрывает до 10 товаров/сут (0.6 воды + 0.4 сырья на товар). Обеспечение населения умножает доход державы' },
   warehouse:        { name: 'Склад',                 cost: 800,  ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Поднимает лимит хранения ресурсов (+500 ёмкости за слот)' },
   science:          { name: 'Научный Институт',     cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { science: 1 }, cat: 'mil', desc: '+1 ОН за слот' },
   training:         { name: 'Центр Подготовки',     cost: 500,  ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1000 пехоты' },
@@ -320,12 +320,12 @@ const EC_DOOM_BUILD_MATTER = 40, EC_DOOM_SHOT_GRAV = 20;
 // Гиперпейсер — мобильная «Длань» (зеркало _mza_const): цена постройки + расход залпа.
 const EC_MZA_BUILD_GC = 1200000, EC_MZA_BUILD_MATTER = 60, EC_MZA_SHOT_GRAV = 12, EC_MZA_SHOT_WEAR = 25;
 const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'starbase', 'flak', 'abm', 'temple'];
-// Рецепт фабрики товаров (зеркало _goods_factory.sql): на слот/сутки.
-const EC_GOODS = { water: 6, mat: 4, out: 10, demandDiv: 12, price: 12, sellFrac: 0.6 };
+// Рецепт фабрики товаров (зеркало accrue в _budget_wellbeing.sql): на слот/сутки.
+// Товары ДЕМАТЕРИАЛИЗОВАНЫ — не ресурс: выпуск ровно под спрос населения.
+const EC_GOODS = { water: 6, mat: 4, out: 10 };
 // Имена ресурсов-входов (как в data.js/galaxy_gen.js): вода и сырьё.
 const EC_GOODS_WATER = ['Лёд', 'Жидкая вода'];
 const EC_GOODS_MAT = ['Железо', 'Силикаты'];
-const EC_GOODS_KEY = 'Товары';
 // ПРО: цена снаряда + срок доставки (зеркало _defense_const).
 const EC_ABM_AMMO_COST = 800;
 // Вместимость флота: каждый слот Звёздной Базы даёт столько мест под корабли (зеркало _defense_const).
@@ -338,7 +338,7 @@ const EC_BLD_HOWTO = {
   mining:           'Копает автоматически все ОБЫЧНЫЕ залежи планеты. Необычные и выше не берёт — для них Глубинный комплекс и Экстрактор.',
   mining_deep:      'Копает автоматически НЕОБЫЧНЫЕ и РЕДКИЕ залежи планеты. Обычные не трогает — их берёт Добывающий завод.',
   mining_exotic:    'Копает автоматически ЭПИЧЕСКИЕ и ЛЕГЕНДАРНЫЕ залежи планеты. Ставьте только там, где такая залежь есть — иначе будет простаивать.',
-  goodsfab:         'Перерабатывает воду (Лёд/Жидкая вода) и сырьё (Железо/Силикаты) в товары. Держите запас входов на складе — без них фабрика простаивает. Товары кормят население (обеспечение): хватает → доход растёт, дефицит → проседает. Излишек продаётся на бирже. Название товара задаётся кнопкой ниже.',
+  goodsfab:         'Перерабатывает воду (Лёд/Жидкая вода) и сырьё (Железо/Силикаты) в товары РОВНО под спрос населения — ничего не копится и не продаётся. Держите запас входов на складе — без них фабрика простаивает. Обеспечение: хватает → доход растёт (до ×1.10), дефицит → проседает (до ×0.90).',
   trade:            'Доход только при активном торговом пути (вкладка «Торговля и потоки» → Караваны).',
   market:           'Сама сбывает свежедобытый поток (заводы в режиме «Склад») за ГС (50–75% цены по редкости), без торговых путей. Накопленный склад НЕ трогает — стратегический запас в безопасности.',
   warehouse:        'Каждый слот склада повышает лимит общего хранилища (+500). Без склада лимит мал — лишняя добыча теряется (или ставьте завод в режим «Экспорт»).',
@@ -971,7 +971,7 @@ function ecWelfareDetail(bal, isCap) {
     gTxt = `Фабрика товаров есть, но простаивает: на складе не хватает ${lacks} — выпуск ${Math.round(g.ratio * 100)}% от полного.`;
     gFix = `добывайте ${EC_GOODS_WATER.join('/')} и ${EC_GOODS_MAT.join('/')} и держите запас на складе (режим «на склад» во «🔀 Потоках»)`;
   } else {
-    gTxt = `Фабрика работает (+${ecNum(g.made)} товаров/сут), но это лишь ${gPct}% спроса населения державы.`;
+    gTxt = `Фабрика работает (+${ecNum(Math.round(g.made))} товаров/сут), но это лишь ${gPct}% спроса населения державы.`;
     gFix = `откройте больше слотов Фабрики товаров`;
   }
   const why = `<div class="ec-wf-why">
@@ -1402,7 +1402,7 @@ async function _ecLoadRest() {
 }
 async function _ecLoadRestImpl() {
   if (!EC.app || !EC.fid) return;
-  const [faithStatus, faithList, passiveIntel, techLayout, techPrereq, exchange, bonds, corps, margin, futures, options, doom, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, goodsBoard, myFleets] = await Promise.all([
+  const [faithStatus, faithList, passiveIntel, techLayout, techPrereq, exchange, bonds, corps, margin, futures, options, doom, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, myFleets] = await Promise.all([
     ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции
     ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий
     ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез
@@ -1421,7 +1421,6 @@ async function _ecLoadRestImpl() {
     ecCached('spyPortraits', () => dbGet('spy_portraits', `select=id,race,gender,url`)),  // пул портретов — кэш на сессию
     ecRpc('orders_status').catch(() => null),     // биржа: заказы (госзаказы/RFQ)
     ecRpc('mza_ships_mine').catch(() => []),      // Гиперпейсер: мои мобильные «Длани»
-    ecRpc('goods_market_board').catch(() => []),  // биржа брендов
     ecRpc('fleets_mine').catch(() => []),         // флоты: мои мобильные соединения
   ]);
   // Межзвёздная артиллерия: орудия фракции (с integrity) + залпы в полёте + баланс.
@@ -1432,7 +1431,6 @@ async function _ecLoadRestImpl() {
   EC.opShips = Array.isArray(defOpShips) ? defOpShips : [];     // оборона: мои корабли-носители
   EC.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];        // Гиперпейсер: мои мобильные «Длани»
   EC.fleets = Array.isArray(myFleets) ? myFleets : [];          // флоты: мои мобильные соединения
-  EC.goodsBoard = Array.isArray(goodsBoard) ? goodsBoard : [];  // биржа брендов: товары всех держав
   EC.outpostIntel = Array.isArray(defOutIntel) ? defOutIntel : [];  // оборона: разведданные разведаванпостов
   EC.spyPortraits = Array.isArray(spyPortraits) ? spyPortraits : [];  // агентура: общий пул портретов
   EC.faith = faithStatus || { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };  // вера: статус
@@ -1486,7 +1484,7 @@ async function _ecLoadRestImpl() {
 // клик по ещё-не-загруженной вкладке (Биржа/Вера/Оборона/Длань…) не падал на undefined.
 function ecResetDeferred() {
   EC.doom = { guns: [], salvos: [], const: {} }; EC.doomByBuilding = {};
-  EC.outposts = []; EC.opShips = []; EC.mzaShips = []; EC.fleets = []; EC.goodsBoard = []; EC.outpostIntel = []; EC.spyPortraits = [];
+  EC.outposts = []; EC.opShips = []; EC.mzaShips = []; EC.fleets = []; EC.outpostIntel = []; EC.spyPortraits = [];
   EC.faith = { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 }; EC.faithList = []; EC.faithById = {};
   EC.passive = {}; EC.techLayout = {}; EC.techPrereq = {}; EC._research = null;
   EC.exchange = { index: { value: 1000, base: 1000, spark: [] }, holdings: { units: 0, basis: 0 }, resources: {} };
@@ -1548,31 +1546,29 @@ function ecBuildingIncomeBreak(b) {
   </div>`;
 }
 
-// ── ФАБРИКА ТОВАРОВ: сводка цепочки (зеркало _goods_factory.sql) ──
-// Считает производство/обеспечение из текущего склада и населения державы.
+// ── ФАБРИКА ТОВАРОВ: поток под спрос (зеркало accrue из _budget_wellbeing.sql) ──
+// Товары ДЕМАТЕРИАЛИЗОВАНЫ: не ресурс, а поток внутри тика. Фабрика делает
+// ровно под спрос населения (pop/600/сут) и тратит входы пропорционально
+// фактическому выпуску. Никакого склада/излишка/продажи.
 function ecGoodsStock(name) { return +(((EC.eco && EC.eco.resources) || {})[name] || 0); }
 function ecGoodsInfo() {
   const slots = ecSlotsSum('goodsfab');
   const water = EC_GOODS_WATER.reduce((a, n) => a + ecGoodsStock(n), 0);
   const mat = EC_GOODS_MAT.reduce((a, n) => a + ecGoodsStock(n), 0);
-  const stock = ecGoodsStock(EC_GOODS_KEY);
   const waterNeed = EC_GOODS.water * slots, matNeed = EC_GOODS.mat * slots;
   const ratio = slots <= 0 ? 0 : Math.max(0, Math.min(1,
     waterNeed > 0 ? water / waterNeed : 1, matNeed > 0 ? mat / matNeed : 1));
-  const made = Math.round(EC_GOODS.out * slots * ratio);
-  // ЖИВОЕ население державы → спрос на товары: pop/600 (зеркало accrue v8)
+  // ЖИВОЕ население державы → спрос на товары: pop/600 (зеркало accrue)
   const pop = ecBudgetPop();
   const demand = pop / 600;
-  const have = stock + made;
-  const cov = demand <= 0 ? 1 : Math.min(1.5, have / demand);
-  const welfare = Math.min(1.10, Math.max(0.90, 0.90 + 0.20 * Math.min(1, cov)));
-  return { slots, water, mat, stock, waterNeed, matNeed, ratio, made, pop, demand, have, cov, welfare,
-    brand: (EC.eco && EC.eco.goods_brand) || '' };
+  const made = Math.min(demand, EC_GOODS.out * slots * ratio);
+  const cov = demand <= 0 ? 1 : Math.min(1, made / demand);
+  const welfare = Math.min(1.10, Math.max(0.90, 0.90 + 0.20 * cov));
+  return { slots, water, mat, waterNeed, matNeed, ratio, made, pop, demand, cov, welfare };
 }
-// Блок фабрики товаров в карточке: рецепт · наличие входов · бренд · обеспечение.
+// Блок фабрики товаров в карточке: рецепт · наличие входов · обеспечение.
 function ecGoodsHtml(b) {
   const g = ecGoodsInfo();
-  const brand = g.brand ? esc(g.brand) : '<i>без названия</i>';
   const lowW = g.waterNeed > 0 && g.water < g.waterNeed;
   const lowM = g.matNeed > 0 && g.mat < g.matNeed;
   const covPct = Math.round(g.cov * 100);
@@ -1580,30 +1576,18 @@ function ecGoodsHtml(b) {
   const wPct = Math.round((g.welfare - 1) * 100);
   return `<div class="ec-gf">
     <div class="ec-gf-recipe">
-      <span class="ec-gf-in ${lowW ? 'ec-gf-low' : ''}" title="Нужно ${ecNum(g.waterNeed)}/сут · на складе ${ecNum(g.water)}">💧 ${ecNum(g.water)}<small>/${ecNum(g.waterNeed)}</small></span>
-      <span class="ec-gf-in ${lowM ? 'ec-gf-low' : ''}" title="Нужно ${ecNum(g.matNeed)}/сут · на складе ${ecNum(g.mat)}">⚙️ ${ecNum(g.mat)}<small>/${ecNum(g.matNeed)}</small></span>
+      <span class="ec-gf-in ${lowW ? 'ec-gf-low' : ''}" title="Под полную мощность нужно ${ecNum(g.waterNeed)}/сут · на складе ${ecNum(g.water)}. Списывается только под фактический выпуск (0.6/товар)">💧 ${ecNum(g.water)}<small>/${ecNum(g.waterNeed)}</small></span>
+      <span class="ec-gf-in ${lowM ? 'ec-gf-low' : ''}" title="Под полную мощность нужно ${ecNum(g.matNeed)}/сут · на складе ${ecNum(g.mat)}. Списывается только под фактический выпуск (0.4/товар)">⚙️ ${ecNum(g.mat)}<small>/${ecNum(g.matNeed)}</small></span>
       <span class="ec-gf-arrow">→</span>
-      <span class="ec-gf-out" title="Фактический выпуск с учётом нехватки входов">🛍 +${ecNum(g.made)}<small>/сут</small></span>
+      <span class="ec-gf-out" title="Выпуск ровно под спрос населения — излишка не бывает">🛍 ${ecNum(Math.round(g.made))}<small>/${ecNum(Math.round(g.demand))} спрос</small></span>
     </div>
-    ${g.ratio < 1 && g.slots > 0 ? `<div class="ec-gf-warn">⚠ Не хватает ${lowW ? 'воды' : ''}${lowW && lowM ? ' и ' : ''}${lowM ? 'сырья' : ''} — выпуск ${Math.round(g.ratio * 100)}% от полного. Добывайте ${EC_GOODS_WATER.join('/')} и ${EC_GOODS_MAT.join('/')}.</div>` : ''}
+    ${g.ratio < 1 && g.slots > 0 ? `<div class="ec-gf-warn">⚠ Не хватает ${lowW ? 'воды' : ''}${lowW && lowM ? ' и ' : ''}${lowM ? 'сырья' : ''} — мощность ${Math.round(g.ratio * 100)}% от полной. Добывайте ${EC_GOODS_WATER.join('/')} и ${EC_GOODS_MAT.join('/')}.</div>` : ''}
     <div class="ec-gf-prov">
       <span>Обеспечение населения: <b class="ec-cov-${covCls}">${covPct}%</b></span>
       <span class="ec-cov-${wPct >= 0 ? 'hi' : 'lo'}" title="Обеспечение умножает доход всех построек державы">доход ×${g.welfare.toFixed(2)} (${wPct >= 0 ? '+' : ''}${wPct}%)</span>
     </div>
-    <div class="ec-gf-prov ec-gf-sub">Спрос ${ecNum(Math.round(g.demand))}/сут · на складе 🛍 ${ecNum(g.stock)}</div>
-    <div class="ec-gf-brand">Бренд: <b>${brand}</b> <button class="btn btn-gh btn-xs" onclick="ecSetGoodsBrand()">✎ назвать</button></div>
+    <div class="ec-gf-prov ec-gf-sub">Товары не копятся на складе — производятся и потребляются в момент тика</div>
   </div>`;
-}
-async function ecSetGoodsBrand() {
-  const cur = (EC.eco && EC.eco.goods_brand) || '';
-  const name = prompt('Название вашего товара (бренд), до 40 символов:', cur);
-  if (name === null) return;
-  try {
-    const nm = await ecRpc('goods_set_brand', { p_name: name });
-    if (EC.eco) EC.eco.goods_brand = nm;
-    toast(nm ? `Бренд: «${nm}»` : 'Бренд снят', 'ok');
-    if (typeof ecPaintCabinet === 'function') ecPaintCabinet();
-  } catch (e) { toast(ecErr(e.message), 'err'); }
 }
 // Итоговый доход империи с учётом доктрины государства (зеркало economy_accrue).
 // Наука/агенты — ПЛОСКИЙ бонус доктрины (+N/сут), а не процент (они дискретны).
@@ -5168,68 +5152,8 @@ function ecMarketBlock(stock) {
     </div>`;
   return `<div class="ec-dip-card"><div class="ec-dip-t">🏪 Галактический рынок <span class="ec-hint">— единые цены на всю галактику, спрос/предложение двигают их каждый ход</span></div>${filters}<div class="ec-mk-list flt-all">${rows}</div>${form}</div>`;
 }
-// ── Биржа брендов: «свой товар» отдельной строкой; чужие можно купить ──
-// Данные — EC.goodsBoard (RPC goods_market_board). Зеркало _goods_brand_market.sql.
-function ecGoodsBoard() {
-  const board = EC.goodsBoard || [];
-  const mine = board.find(x => x.fid === EC.fid);
-  const myBrand = (EC.eco && EC.eco.goods_brand) || (mine && mine.brand) || '';
-  const myPrice = (mine && +mine.price) || (EC.eco && +EC.eco.goods_price) || 14;
-  const myStock = (mine && +mine.stock) || 0;
-  // моя витрина: бренд + цена + остаток
-  const myCard = `<div class="ec-gb-mine">
-    <div class="ec-gb-mine-h">🛍 Мой товар: <b>${myBrand ? esc(myBrand) : '<i>без названия</i>'}</b></div>
-    <div class="ec-gb-mine-row">
-      <span>На складе: <b>${ecNum(myStock)}</b> ед.</span>
-      <span>Цена: <b>${ecNum(myPrice)}</b> ГС/ед.</span>
-      <button class="btn btn-gh btn-xs" onclick="ecSetGoodsBrand()">✎ название</button>
-      <button class="btn btn-gh btn-xs" onclick="ecSetGoodsPrice()">💲 цена</button>
-    </div>
-    <div class="ec-gb-hint">Товары производит «Фабрика товаров». Другие игроки покупают их под твоим брендом по этой цене — ГС идут тебе.</div>
-  </div>`;
-  // чужие бренды
-  const others = board.filter(x => x.fid !== EC.fid && +x.stock > 0);
-  const rows = others.length ? others.map(x => {
-    const price = +x.price || 14;
-    return `<div class="ec-gb-row">
-      <span class="ec-gb-brand">🏷 <b>${x.brand ? esc(x.brand) : 'Товары'}</b> <i>от ${esc(x.name || '—')}</i></span>
-      <span class="ec-gb-stock">📦 ${ecNum(+x.stock)}</span>
-      <span class="ec-gb-price">${ecNum(price)} ГС/ед</span>
-      <span class="ec-gb-buy">
-        <input type="number" id="gb-u-${esc(x.fid)}" min="1" max="${Math.floor(+x.stock)}" placeholder="кол-во" class="ec-prod-qty">
-        <button class="btn btn-gd btn-xs" onclick="ecGoodsBuy('${esc(x.fid)}')">Купить</button>
-      </span>
-    </div>`;
-  }).join('') : '<div class="ec-empty" style="padding:8px">Пока никто не выставил товары на продажу.</div>';
-  return `<div class="ec-dip-card" style="margin-top:12px">
-    <div class="ec-dip-t">🏷 Биржа брендов <span class="ec-hint">— товары держав под своими именами; покупай чужие, продавай свои</span></div>
-    ${myCard}
-    <div class="ec-section-title" style="margin-top:10px">Чужие бренды</div>
-    ${rows}
-  </div>`;
-}
-async function ecSetGoodsPrice() {
-  const cur = (EC.eco && EC.eco.goods_price) || 14;
-  const v = prompt('Цена за единицу твоего товара (ГС):', cur);
-  if (v === null) return;
-  const n = parseInt(v, 10);
-  if (!Number.isFinite(n) || n < 1) { toast('Цена должна быть ≥ 1', 'err'); return; }
-  try {
-    const p = await ecRpc('goods_set_price', { p_price: n });
-    if (EC.eco) EC.eco.goods_price = p;
-    toast(`Цена товара: ${ecNum(p)} ГС/ед`, 'ok');
-    await ecReloadPaint();
-  } catch (e) { toast(ecErr(e.message), 'err'); }
-}
-async function ecGoodsBuy(sellerFid) {
-  const units = Math.max(0, parseInt(document.getElementById('gb-u-' + sellerFid)?.value, 10) || 0);
-  if (!units) { toast('Укажите количество', 'err'); return; }
-  try {
-    const r = await ecRpc('goods_buy', { p_seller_fid: sellerFid, p_units: units });
-    toast(`Куплено ${ecNum(r.units)} «${r.brand}» за ${ecNum(r.cost)} ГС`, 'ok');
-    await ecReloadPaint();
-  } catch (e) { toast(ecErr(e.message), 'err'); }
-}
+// ── Биржа брендов УДАЛЕНА (2026-07-12): товары дематериализованы — не ресурс,
+// а поток под спрос населения внутри тика (см. ecGoodsInfo / _goods_dematerialize.sql).
 // Фильтр списка рынка по редкости / «только моё» (CSS-классом, без перерисовки).
 function ecMkFilter(btn, mode) {
   const card = btn.closest('.ec-dip-card'); if (!card) return;
@@ -5405,7 +5329,7 @@ function ecConcRevoke(id) {
 function ecConcBuild(concId, btype) {
   const cost = ecBuildCost((EC_BUILD[btype] || {}).cost || 0);
   if ((EC.eco.gc || 0) < cost) { toast('Не хватает ГС: нужно ' + ecNum(cost), 'err'); return; }
-  ecRpcAct('concession_build', { p_conc: concId, p_btype: btype }, 'Домик построен — добыча пойдёт со следующего тика');
+  ecRpcAct('concession_build', { p_conc: concId, p_btype: btype }, 'Стройка начата — домик будет готов через сутки');
 }
 
 // Тело торговой под-вкладки («Караваны»/«Рынок»/«Обмен») — рендерится внутри
@@ -5491,7 +5415,7 @@ function ecTradeSubBody(sub) {
       ${active.length ? `<div class="ec-r-sec">Активные пути</div>${active.map(ecRouteRow).join('')}` : ''}
       ${pendingOut.length ? `<div class="ec-r-sec">Отправленные</div>${outHtml}` : ''}</div>`;
 
-  const subBody = sub === 'market' ? `${resBlock}${ecGoodsBoard()}`
+  const subBody = sub === 'market' ? resBlock
     : sub === 'barter' ? `${barterBlock}<div class="ec-section-title">Технологии и чертежи</div>${ecTechMarketBlock()}`
       : caravanBlock;
   return `${ecIntro('⇄', 'Торговля', 'Превращайте ресурсы в ГС и обменивайтесь активами с другими фракциями.', ['<b>Караваны</b> — постоянные пути (поток добычи к партнёру, доход каждый ход). <b>Рынок</b> — продать со склада за 80%. <b>Обмен</b> — подарки/сделки и биржа техов и чертежей.'])}${subBody}`;
@@ -9573,7 +9497,7 @@ function ecBuildingRow(b) {
     // СВОЕГО яруса, темп ×(слоты/3). Маршруты — вкладка «Потоки».
     const yields = ecMineYields(b);
     if (yields.length) {
-      const rows = yields.map(y => `<div class="ec-mine-row active">
+      const rows = yields.map(y => `<div class="ec-mine-row active ec-rar-${y.r}">
           <span class="ec-mine-ic ec-rar-${y.r}">${esc(y.icon)}</span>
           <span class="ec-mine-nm">${esc(y.name)}</span>
           <span class="ec-mine-rt">+${y.rate}/сут</span>
@@ -9959,9 +9883,13 @@ function ecBuildPicker(colonyId) {
   const gc = EC.eco.gc || 0;
   const myFaiths = (EC.faith && EC.faith.faiths) || [];        // мультивера: исповедуемые религии
   const hasFaith = myFaiths.length > 0;                        // храм доступен только исповедующим веру
+  // добывающие домики: какие типы залежей копает каждый ярус (визуальные чипы редкости)
+  const MINE_RARS = { mining: ['common'], mining_deep: ['uncommon', 'rare'], mining_exotic: ['epic', 'legendary'] };
   const cards = EC_ORDER.filter(t => t !== 'temple' || hasFaith).map(t => {
     const d = EC_BUILD[t]; const cost = ecBuildCost(d.cost); const afford = gc >= cost;
     const catLabel = d.cat === 'civ' ? 'Гражд.' : d.cat === 'faith' ? 'Вера' : 'Воен.';
+    const mineChips = MINE_RARS[t] ? `<span class="ec-bp-mine">⛏ добывает: ${MINE_RARS[t].map(r =>
+      `<span class="ec-bp-rar ec-bp-rar-${r}">◈ ${ecRarLabel(r)}</span>`).join('')}</span>` : '';
     // мультивера: для храма сперва выбираем веру (если их несколько); иначе сразу подтверждение
     const act = t === 'temple' ? `ecBuildTempleFaith('${colonyId}')` : `ecBuildConfirm('${colonyId}','${t}')`;
     return `<button class="ec-bp-card ec-bp-${d.cat}${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="${act}">
@@ -9969,6 +9897,7 @@ function ecBuildPicker(colonyId) {
       <span class="ec-bp-info">
         <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-${d.cat}">${catLabel}</span></span>
         <span class="ec-bp-desc">${esc(d.desc)}</span>
+        ${mineChips}
         <span class="ec-bp-howto">${esc(EC_BLD_HOWTO[t] || '')}</span>
       </span>
       <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small></span>

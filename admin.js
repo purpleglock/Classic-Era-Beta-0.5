@@ -1972,34 +1972,11 @@ function adTabResources(e) {
     `<button class="btn btn-gd btn-xs" onclick="adAddResourceAmt(${v})">+${v >= 1000 ? v/1000+'к' : v}</button>`
   ).join('');
 
-  // ── Товары (особый ресурс Фабрики: бренд + цена) ──
-  const goodsStock = Math.floor(Number(res['Товары'] || 0));
-  const goodsBrand = e.eco.goods_brand || '';
-  const goodsPrice = Number(e.eco.goods_price ?? 14);
-  const goodsBlock = `
-    <div class="fm-section-title" style="margin-top:4px">🛍 Товары (бренд)</div>
-    <div style="padding:8px 10px;border:1px solid var(--w1,#1e2630);border-radius:8px;background:var(--bg2,#121821)">
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <span style="flex:1;min-width:120px;font-size:13px;color:var(--t1,#e8edf2)">На складе: <b>${adNum(goodsStock)}</b> ед.</span>
-        <input class="fi" id="fm-goods-amt" type="number" value="100" min="1" style="width:80px" placeholder="Кол-во">
-        <button class="btn btn-gd btn-xs" onclick="adGoodsAdd()">+ Выдать</button>
-        <button class="btn btn-gd btn-xs" onclick="adGoodsAddAmt(500)">+500</button>
-        <button class="btn btn-gd btn-xs" onclick="adGoodsAddAmt(1000)">+1к</button>
-        <button class="btn btn-rd btn-xs" onclick="adGoodsAddAmt(-100)">−100</button>
-        <button class="btn btn-rd btn-xs" onclick="adGoodsZero()" title="Обнулить товары">✕</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px">
-        <input class="fi" id="fm-goods-brand" value="${esc(goodsBrand)}" placeholder="Название бренда" style="flex:2;min-width:160px">
-        <input class="fi" id="fm-goods-price" type="number" min="1" value="${goodsPrice}" style="width:90px" title="Цена за ед.">
-        <span style="font-size:11px;color:var(--t3,#8aa0b0)">ГС/ед.</span>
-        <button class="btn btn-gh btn-sm" onclick="adGoodsSetBrand()">✓ Сохранить бренд/цену</button>
-      </div>
-    </div>`;
-
+  // Товары дематериализованы (2026-07-12): не ресурс, а поток под спрос —
+  // выдача/бренд/цена удалены вместе с биржей брендов.
   return `<div class="fm-resources">
     <div class="fm-section-title">Текущие ресурсы на складе</div>
     <div class="fm-res-list">${curRows}</div>
-    ${goodsBlock}
     <div class="fm-section-title" style="margin-top:16px">Добавить / пополнить</div>
     <div class="fm-field-row" style="flex-wrap:wrap;gap:6px;align-items:center">
       <select class="fi" id="fm-add-res-name" style="flex:2;min-width:180px">${resOptGroups}</select>
@@ -2098,52 +2075,8 @@ async function adDeltaRes(name, delta) {
   finally { AD.busy = false; }
 }
 
-// ── Товары (бренд Фабрики): выдача + бренд/цена ──────────────────
-async function adGoodsAdd() {
-  const amt = Math.max(1, parseInt(document.getElementById('fm-goods-amt')?.value) || 0);
-  return adGoodsAddAmt(amt);
-}
-async function adGoodsAddAmt(amt) {
-  if (!AD.sel || AD.busy) return;
-  const e = adEntry(AD.sel); if (!e || !e.eco) { toast('Нет экономики', 'err'); return; }
-  const cur = Number(e.eco.resources?.['Товары'] || 0);
-  const to  = Math.max(0, cur + amt);
-  AD.busy = true;
-  try {
-    const res = { ...(e.eco.resources || {}), 'Товары': to };
-    if (to === 0) delete res['Товары'];
-    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { resources: res });
-    e.eco.resources = res;
-    adLogGrant({ type: 'resource', name: 'Товары', delta: to - cur, to });
-    toast(`Товары: ${adNum(to)}`, 'ok'); adPaint();
-  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
-  finally { AD.busy = false; }
-}
-async function adGoodsZero() {
-  if (!AD.sel || AD.busy) return;
-  const e = adEntry(AD.sel); if (!e || !e.eco) return;
-  AD.busy = true;
-  try {
-    const res = { ...(e.eco.resources || {}) }; delete res['Товары'];
-    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { resources: res });
-    e.eco.resources = res;
-    toast('Товары обнулены', 'ok'); adPaint();
-  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
-  finally { AD.busy = false; }
-}
-async function adGoodsSetBrand() {
-  if (!AD.sel || AD.busy) return;
-  const e = adEntry(AD.sel); if (!e || !e.eco) { toast('Нет экономики', 'err'); return; }
-  const brand = document.getElementById('fm-goods-brand')?.value?.trim() || null;
-  const price = Math.max(1, Math.round(parseFloat(document.getElementById('fm-goods-price')?.value) || 14));
-  AD.busy = true;
-  try {
-    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { goods_brand: brand, goods_price: price });
-    e.eco.goods_brand = brand; e.eco.goods_price = price;
-    toast(`Бренд: ${brand || '—'} · ${price} ГС/ед.`, 'ok'); adPaint();
-  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
-  finally { AD.busy = false; }
-}
+// ── Товары: админ-выдача/бренд/цена УДАЛЕНЫ (2026-07-12) — товары
+// дематериализованы: не ресурс, а поток под спрос населения внутри тика.
 
 // ── Вкладка: Экономика ──────────────────────────────────────────
 // Полный разбор «откуда и сколько идёт дохода»: ГС с фабрик/хабов/храмов и

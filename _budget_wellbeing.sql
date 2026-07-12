@@ -20,7 +20,9 @@
 --      Вес уровня [0,1,2,4,7] — «норма» дешёвая, «максимум» кусается; ставки
 --      на душу 0.12/0.15/0.12/0.12/0.09; ставка ЕДИНАЯ для всех (скидки нет).
 --      Апкип списывается в economy_accrue и виден в income.budget.
---   3a) ТОВАРЫ ВОССТАНОВЛЕНЫ: блок производства/обеспечения из _goods_factory.sql
+--   3a) ТОВАРЫ ДЕМАТЕРИАЛИЗОВАНЫ (2026-07-12): не ресурс, а поток под спрос
+--       внутри тика — без склада, без излишка, без биржи (см. блок в accrue;
+--       разовая чистка и снятие с рынка — _goods_dematerialize.sql)
 --      клобберился версиями accrue начиная с _faith_multi — возвращён сюда.
 --      Спрос = живое население/600 товаров/сут; welfare ×[0.90..1.10] к доходу
 --      построек; излишек продаётся на Товарной бирже первым (12 ГС × 0.6).
@@ -380,8 +382,8 @@ declare
   gf_slots numeric := 0; gf_ratio numeric := 0; gf_made numeric := 0;
   gf_water_need numeric; gf_mat_need numeric; take numeric; need numeric;
   av_lyod numeric; av_water numeric; av_iron numeric; av_silic numeric;
-  goods_demand numeric := 0; goods_have numeric; goods_eaten numeric := 0;
-  goods_cov numeric := 1; goods_welfare numeric := 1; goods_gc numeric := 0;
+  goods_demand numeric := 0;
+  goods_cov numeric := 1; goods_welfare numeric := 1;
   -- КАП ДОБЫЧИ: 50/сут с ПЛАНЕТЫ по ресурсу, заводы НЕ складываются сверх капа
   col_mined jsonb := '{}'::jsonb; ckey text; already numeric; capv numeric;
 begin
@@ -545,56 +547,49 @@ begin
     -- колонии (concession_build, _concession_build.sql), и его добыча идёт через
     -- обычный цикл выше как его собственный поток (склад/экспорт/биржа).
 
-    -- ════════ ТОВАРЫ: производство (вода+сырьё → товары) ════════
-    -- Восстановлено из _goods_factory.sql (блок клобберился с _faith_multi).
+    -- ════════ ТОВАРЫ: поток ПОД СПРОС (дематериализованы 2026-07-12) ════════
+    -- Товары БОЛЬШЕ НЕ РЕСУРС: не пишутся на склад, не продаются, не копятся.
+    -- Фабрика делает РОВНО столько, сколько съедает население за тик
+    -- (спрос = pop/600/сут, зеркало EC_GOODS_DEMAND_DIV), и списывает воду/сырьё
+    -- ПРОПОРЦИОНАЛЬНО фактическому выпуску (6 воды + 4 сырья на 10 товаров).
+    -- Излишка не существует по построению — класс багов «тысячи товаров на
+    -- складе / добор за пропущенные дни / слив на биржу» невозможен.
+    goods_demand := public._fac_pop(p_fid) / 600.0 * d;
     select coalesce(sum(slots_open),0) into gf_slots
       from public.colony_buildings where faction_id=p_fid and btype='goodsfab';
-    if gf_slots > 0 then
+    if gf_slots > 0 and goods_demand > 0 then
       av_lyod  := greatest(0, coalesce((eco.resources->>'Лёд')::numeric,0)         + coalesce((res_add->>'Лёд')::numeric,0)         - coalesce((res_sub->>'Лёд')::numeric,0));
       av_water := greatest(0, coalesce((eco.resources->>'Жидкая вода')::numeric,0) + coalesce((res_add->>'Жидкая вода')::numeric,0) - coalesce((res_sub->>'Жидкая вода')::numeric,0));
       av_iron  := greatest(0, coalesce((eco.resources->>'Железо')::numeric,0)      + coalesce((res_add->>'Железо')::numeric,0)      - coalesce((res_sub->>'Железо')::numeric,0));
       av_silic := greatest(0, coalesce((eco.resources->>'Силикаты')::numeric,0)    + coalesce((res_add->>'Силикаты')::numeric,0)    - coalesce((res_sub->>'Силикаты')::numeric,0));
+      -- потолок мощности за тик и входы под ПОЛНУЮ мощность (для ratio-отчёта)
       gf_water_need := 6 * gf_slots * d;
       gf_mat_need   := 4 * gf_slots * d;
       gf_ratio := least(1,
         case when gf_water_need > 0 then (av_lyod + av_water) / gf_water_need else 1 end,
         case when gf_mat_need   > 0 then (av_iron + av_silic) / gf_mat_need   else 1 end);
       gf_ratio := greatest(0, gf_ratio);
-      if gf_ratio > 0 then
-        gf_made := round(10 * gf_slots * d * gf_ratio);
-        need := gf_water_need * gf_ratio;
+      -- выпуск = минимум из спроса и мощности, ограниченной входами
+      gf_made := least(goods_demand, 10 * gf_slots * d * gf_ratio);
+      if gf_made > 0 then
+        -- входы списываются под ФАКТИЧЕСКИЙ выпуск: 0.6 воды + 0.4 сырья на товар
+        need := gf_made * 0.6;
         take := least(need, av_lyod);
         if take > 0 then res_sub := jsonb_set(res_sub, array['Лёд'], to_jsonb(coalesce((res_sub->>'Лёд')::numeric,0)+take), true); need := need - take; end if;
         if need > 0 then take := least(need, av_water);
           if take > 0 then res_sub := jsonb_set(res_sub, array['Жидкая вода'], to_jsonb(coalesce((res_sub->>'Жидкая вода')::numeric,0)+take), true); end if;
         end if;
-        need := gf_mat_need * gf_ratio;
+        need := gf_made * 0.4;
         take := least(need, av_iron);
         if take > 0 then res_sub := jsonb_set(res_sub, array['Железо'], to_jsonb(coalesce((res_sub->>'Железо')::numeric,0)+take), true); need := need - take; end if;
         if need > 0 then take := least(need, av_silic);
           if take > 0 then res_sub := jsonb_set(res_sub, array['Силикаты'], to_jsonb(coalesce((res_sub->>'Силикаты')::numeric,0)+take), true); end if;
         end if;
-        res_add := jsonb_set(res_add, array['Товары'], to_jsonb(coalesce((res_add->>'Товары')::numeric,0) + gf_made), true);
       end if;
     end if;
-
-    -- ════════ ТОВАРЫ: обеспечение ЖИВОГО населения ════════
-    -- БЮДЖЕТ: спрос = население / 600 товаров/сут (зеркало EC_GOODS_DEMAND_DIV).
-    goods_demand := public._fac_pop(p_fid) / 600.0 * d;
-    goods_have := greatest(0, coalesce((eco.resources->>'Товары')::numeric,0)
-                              + coalesce((res_add->>'Товары')::numeric,0)
-                              - coalesce((res_sub->>'Товары')::numeric,0));
-    if goods_demand > 0 then
-      goods_eaten := least(goods_have, goods_demand);
-      if goods_eaten > 0 then
-        res_sub := jsonb_set(res_sub, array['Товары'], to_jsonb(coalesce((res_sub->>'Товары')::numeric,0) + goods_eaten), true);
-      end if;
-      goods_cov := round(least(1.5, goods_have / goods_demand), 3);
-    else
-      goods_cov := 1;
-    end if;
-    -- обеспечение → множитель дохода построек: covered≥1 → ×1.10, дефицит → к ×0.90
-    goods_welfare := round(least(1.10, greatest(0.90, 0.90 + 0.20 * least(1, goods_cov))), 3);
+    -- обеспечение = выпуск/спрос (0..1) → множитель дохода: 1 → ×1.10, 0 → ×0.90
+    goods_cov := case when goods_demand > 0 then round(least(1, gf_made / goods_demand), 3) else 1 end;
+    goods_welfare := round(least(1.10, greatest(0.90, 0.90 + 0.20 * goods_cov)), 3);
 
     -- БЮДЖЕТ: рост населения = соцобеспечение + бонус за товары (до +1%/сут при
     -- полном обеспечении). Потолок ячейки×100, пол ячейки×10, бэкфилл ячейки×50.
@@ -681,23 +676,13 @@ begin
     market_cap := (select coalesce(sum(slots_open),0) from public.colony_buildings
                    where faction_id = p_fid and btype = 'market') * 25 * d;
     if market_cap > 0 then
-      -- ТОВАРЫ: излишек (сверх обеспечения) продаётся первым по 12 ГС/ед × 0.6
-      goods_have := greatest(0, coalesce((eco.resources->>'Товары')::numeric,0)
-                                + coalesce((res_add->>'Товары')::numeric,0)
-                                - coalesce((res_sub->>'Товары')::numeric,0));
-      if goods_have > 0 then
-        sell := least(goods_have, market_cap);
-        res_sub := jsonb_set(res_sub, array['Товары'], to_jsonb(coalesce((res_sub->>'Товары')::numeric,0) + sell), true);
-        goods_gc := sell * 12 * 0.6;          -- ×m_gc применится к market_gc ниже (не дублируем)
-        market_gc := market_gc + goods_gc;
-        goods_gc := round(goods_gc * m_gc);   -- для отчёта sold_gc
-        market_cap := market_cap - sell;
-      end if;
+      -- ТОВАРЫ: автопродажа излишка УДАЛЕНА (2026-07-12) — излишка больше нет,
+      -- фабрика производит ровно под спрос населения (см. блок выше).
       for r in
         select t.nm as res_name, coalesce(flow_rar->>t.nm,'common') as res_rar,
                coalesce((res_add->>t.nm)::numeric,0) as avail
         from jsonb_object_keys(res_add) as t(nm)
-        where t.nm <> 'Товары' and coalesce((res_add->>t.nm)::numeric,0) > 0   -- ТОВАРЫ: проданы выше
+        where t.nm <> 'Товары' and coalesce((res_add->>t.nm)::numeric,0) > 0   -- ТОВАРЫ: страховка, в поток не попадают
         order by public._res_value(t.nm, coalesce(flow_rar->>t.nm,'common')) desc
       loop
         exit when market_cap <= 0;
@@ -773,8 +758,8 @@ begin
 
   return jsonb_build_object('faction_id',eco.faction_id,'gc',eco.gc,'science',eco.science,'agents',eco.agents,
     'resources',eco.resources,'last_tick',eco.last_tick,'days',d, 'mods', mods,
-    'goods', jsonb_build_object('brand', eco.goods_brand, 'demand', round(goods_demand),  -- ТОВАРЫ
-       'coverage', goods_cov, 'welfare', goods_welfare, 'made', gf_made, 'ratio', gf_ratio, 'sold_gc', goods_gc),
+    'goods', jsonb_build_object('demand', round(goods_demand),  -- ТОВАРЫ: поток под спрос, без склада/биржи
+       'coverage', goods_cov, 'welfare', goods_welfare, 'made', round(gf_made), 'ratio', gf_ratio),
     'income', jsonb_build_object(
       'gc',     round(inc_gc * m_gc * goods_welfare),
       'science',greatest(0, inc_sci    + (mods->>'sci_flat')::numeric),

@@ -582,9 +582,19 @@
 .ec-bld-mine-empty { font-size: 10px; color: var(--t4); font-style: italic; }
 /* список месторождений */
 .ec-mine-list { display: flex; flex-direction: column; gap: 1px; }
-.ec-mine-row { display: flex; align-items: center; gap: 7px; padding: 4px 6px; border-radius: var(--radius-sm); transition: background var(--duration-fast); user-select: none; }
+.ec-mine-row { display: flex; align-items: center; gap: 7px; padding: 4px 6px; border-radius: var(--radius-sm); border-left: 2px solid transparent; transition: background var(--duration-fast), border-color var(--duration-fast); user-select: none; }
 .ec-mine-row.active { background: color-mix(in srgb, var(--gd) 10%, var(--b1)); }
-.ec-mine-ic { font-size: 13px; flex-shrink: 0; }
+.ec-mine-row.ec-rar-common    { border-left-color: var(--t4); }
+.ec-mine-row.ec-rar-uncommon  { border-left-color: var(--ok); }
+.ec-mine-row.ec-rar-rare      { border-left-color: var(--te); }
+.ec-mine-row.ec-rar-epic      { border-left-color: var(--pu); }
+.ec-mine-row.ec-rar-legendary { border-left-color: var(--gd); }
+.ec-mine-ic { font-size: 13px; flex-shrink: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1.5px solid transparent; flex-shrink: 0; }
+.ec-mine-ic.ec-rar-common    { border-color: color-mix(in srgb, var(--t4) 55%, transparent); background: color-mix(in srgb, var(--t4) 10%, transparent); }
+.ec-mine-ic.ec-rar-uncommon  { border-color: color-mix(in srgb, var(--ok) 55%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.ec-mine-ic.ec-rar-rare      { border-color: color-mix(in srgb, var(--te) 55%, transparent); background: color-mix(in srgb, var(--te) 10%, transparent); }
+.ec-mine-ic.ec-rar-epic      { border-color: color-mix(in srgb, var(--pu) 55%, transparent); background: color-mix(in srgb, var(--pu) 10%, transparent); }
+.ec-mine-ic.ec-rar-legendary { border-color: color-mix(in srgb, var(--gd) 55%, transparent); background: color-mix(in srgb, var(--gd) 10%, transparent); }
 .ec-mine-nm { flex: 1; font-size: 12px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ec-mine-row.active .ec-mine-nm { color: var(--t1); font-weight: 500; }
 .ec-mine-rt { font-family: var(--font-mono); font-size: 10px; color: var(--gd); font-weight: 700; flex-shrink: 0; white-space: nowrap; min-width: 52px; text-align: right; }
@@ -1054,13 +1064,23 @@
 @keyframes ecBpRise { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .ec-bp-modal {
   width: 100%; max-width: 640px; margin: auto 0; overflow: hidden;
-  background: linear-gradient(180deg, var(--b3), var(--b2));
-  border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-lg);
-  box-shadow: 0 24px 60px -20px rgba(0,0,0,.7);
+  position: relative; z-index: 1; background: transparent; border: none; border-radius: 0;
+  filter: drop-shadow(0 24px 40px rgba(0,0,0,.6));
   animation: ecBpRise .16s var(--ease-out, ease-out);
 }
+/* киберпанк: рама и заливка модалки — подложками со срезанными углами */
+.ec-bp-modal::before {
+  content: ''; position: absolute; inset: 0; z-index: -2; background: var(--w3, var(--w2));
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+}
+.ec-bp-modal::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  background: linear-gradient(180deg, var(--b3), var(--b2));
+  clip-path: polygon(0 0, calc(100% - 15.3px) 0, 100% 15.3px, 100% 100%, 15.3px 100%, 0 calc(100% - 15.3px));
+}
 .ec-bp-hd { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: var(--deco-frame-w, 1px) solid var(--w2); }
-.ec-bp-hd-t { display: flex; align-items: center; gap: 9px; font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--t1); }
+.ec-bp-hd-t { display: flex; align-items: center; gap: 9px; font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--t1); letter-spacing: calc(1px * var(--deco-ls-mult, 1)); text-transform: uppercase; }
+.ec-bp-hd-t::before { content: '//'; color: var(--te); font-weight: 700; }
 .ec-bp-hd-ic { font-size: 18px; }
 .ec-bp-x { background: none; border: 0; color: var(--t3); font-size: 17px; cursor: pointer; padding: 3px 7px; border-radius: var(--radius-sm); line-height: 1; transition: color var(--duration-fast), background var(--duration-fast); }
 .ec-bp-x:hover { color: var(--t1); background: var(--b4); }
@@ -1072,6 +1092,14 @@
 .ec-flt:hover { color: var(--t1); border-color: var(--w3, var(--w2)); }
 .ec-flt.is-on { background: var(--gd); border-color: var(--gd); color: #1a1408; font-weight: 600; }
 .ec-bp-filters { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 4px; }
+/* киберпанк: фильтры каталога — срезанные чипы без рамки */
+.ec-bp-filters .ec-flt {
+  border: none; border-radius: 0; background: var(--w1);
+  font-family: var(--font-mono); text-transform: uppercase; letter-spacing: calc(.05em * var(--deco-ls-mult, 1)); font-size: 10px; padding: 5px 11px;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+.ec-bp-filters .ec-flt:hover { background: var(--w2); }
+.ec-bp-filters .ec-flt.is-on { background: var(--gd); color: #1a1408; }
 .ec-bp-grid.flt-civ   .ec-bp-card:not(.ec-bp-civ)   { display: none; }
 .ec-bp-grid.flt-mil   .ec-bp-card:not(.ec-bp-mil)   { display: none; }
 .ec-bp-grid.flt-faith .ec-bp-card:not(.ec-bp-faith) { display: none; }
@@ -1092,28 +1120,60 @@
 .ec-res-cards.flt-epic      .ec-res-card:not(.ec-rar-epic)      { display: none; }
 .ec-res-cards.flt-legendary .ec-res-card:not(.ec-rar-legendary) { display: none; }
 .ec-bp-card {
-  --accent: var(--gd); position: relative; overflow: hidden;
+  --accent: var(--gd); position: relative; z-index: 1;
   display: flex; align-items: flex-start; gap: 11px; text-align: left;
-  background: var(--b2); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-md); padding: 11px 12px; cursor: pointer;
-  transition: border-color var(--duration-fast), transform var(--duration-fast), box-shadow var(--duration-fast), background var(--duration-fast);
+  background: transparent; border: none; border-radius: 0; padding: 11px 12px; cursor: pointer;
+  transition: transform var(--duration-fast), filter var(--duration-fast);
 }
-.ec-bp-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); opacity: .8; }
+/* киберпанк: рама (акцентная кромка слева) + заливка — подложками со срезом */
+.ec-bp-card::before {
+  content: ''; position: absolute; inset: 0; z-index: -2;
+  background: linear-gradient(90deg, var(--accent) 0 3px, var(--w2) 3px);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  transition: background var(--duration-fast);
+}
+.ec-bp-card::after {
+  content: ''; position: absolute; inset: 1px 1px 1px 3px; z-index: -1;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 7%, var(--b2)), var(--b2) 55%);
+  clip-path: polygon(0 0, calc(100% - 9.3px) 0, 100% 9.3px, 100% 100%, 0 100%);
+  transition: background var(--duration-fast);
+}
 .ec-bp-civ { --accent: var(--gd); }
 .ec-bp-mil { --accent: var(--te); }
-.ec-bp-card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 55%, var(--w2)); transform: translateY(-1px); box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--accent) 50%, transparent); background: var(--b3); }
+.ec-bp-card:hover:not(:disabled) { transform: translateY(-1px); filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--accent) 30%, transparent)); }
+.ec-bp-card:hover:not(:disabled)::before { background: linear-gradient(90deg, var(--accent) 0 3px, color-mix(in srgb, var(--accent) 55%, var(--w2)) 3px); }
+.ec-bp-card:hover:not(:disabled)::after { background: color-mix(in srgb, var(--accent) 9%, var(--b2)); }
 .ec-bp-card:disabled, .ec-bp-card.ec-bp-noaf { opacity: .5; cursor: not-allowed; }
 .ec-bp-ic {
-  flex-shrink: 0; width: 38px; height: 38px; display: grid; place-items: center; font-size: 19px; border-radius: var(--radius-sm);
-  background: radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--accent) 26%, var(--b1)), var(--b1));
-  border: var(--deco-frame-w, 1px) solid color-mix(in srgb, var(--accent) 42%, var(--w2));
+  flex-shrink: 0; width: 38px; height: 38px; display: grid; place-items: center; font-size: 19px;
+  border: none; border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);
+  background: radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--accent) 30%, var(--b1)), var(--b1));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .ec-bp-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .ec-bp-row1 { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .ec-bp-name { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; color: var(--t1); }
-.ec-bp-cat { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: calc(.04em * var(--deco-ls-mult, 1)); text-transform: uppercase; padding: 1px 6px; border-radius: var(--radius-pill); border: var(--deco-frame-w, 1px) solid; }
-.ec-bp-cat-civ { color: var(--gd); border-color: color-mix(in srgb, var(--gd) 40%, transparent); }
-.ec-bp-cat-mil { color: var(--te); border-color: color-mix(in srgb, var(--te) 40%, transparent); }
-.ec-bp-cat-faith { color: var(--pu, #a98bff); border-color: color-mix(in srgb, var(--pu, #a98bff) 40%, transparent); }
+.ec-bp-cat {
+  font-family: var(--font-mono); font-size: 8.5px; letter-spacing: calc(.06em * var(--deco-ls-mult, 1)); text-transform: uppercase;
+  padding: 2px 7px; border: none; border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+}
+.ec-bp-cat-civ { color: var(--gd); background: color-mix(in srgb, var(--gd) 14%, transparent); }
+.ec-bp-cat-mil { color: var(--te); background: color-mix(in srgb, var(--te) 14%, transparent); }
+.ec-bp-cat-faith { color: var(--pu, #a98bff); background: color-mix(in srgb, var(--pu, #a98bff) 14%, transparent); }
+/* ярусы добычи: чипы «какие залежи копает домик» */
+.ec-bp-mine { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 1px; font-family: var(--font-mono); font-size: 9.5px; color: var(--t3); text-transform: uppercase; letter-spacing: calc(.04em * var(--deco-ls-mult, 1)); }
+.ec-bp-rar {
+  --rc: var(--t4); color: var(--rc); background: color-mix(in srgb, var(--rc) 13%, transparent);
+  padding: 1px 7px; font-weight: 700; white-space: nowrap;
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+}
+.ec-bp-rar-common    { --rc: #aeb9c4; }
+.ec-bp-rar-uncommon  { --rc: #6fd08a; }
+.ec-bp-rar-rare      { --rc: #74a8ff; }
+.ec-bp-rar-epic      { --rc: #c08aff; }
+.ec-bp-rar-legendary { --rc: #ffc24d; }
 .ec-bp-faith { --accent: var(--pu, #a98bff); }
 /* мультивера: метка религии у храма в карточке здания */
 .ec-bld-faith { display: inline-block; margin-left: 7px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; vertical-align: middle; white-space: nowrap; }
