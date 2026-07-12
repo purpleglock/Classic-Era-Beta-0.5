@@ -2230,11 +2230,11 @@ function adMineMult(e) {
 }
 
 // Добыча одной ПОСТРОЙКИ/сутки: база(редкость) × множитель, потолок = кап залежи
-// по размеру месторождения (ecMineCap, макс 20 базово / 40 с баффами).
+// по размеру месторождения (ecMineCap, макс 35 базово / 70 с баффами).
 function adMineRate(rar, amt, mult) {
-  const baseRate = (typeof EC_RES_RATE !== 'undefined' && EC_RES_RATE[rar || 'common']) || 8;
-  const capB = (typeof EC_MINE_CAP !== 'undefined' && EC_MINE_CAP[String(amt || '').trim()]) || 8;
-  const cap = Math.min(40, Math.max(1, Math.round(capB * mult)));
+  const baseRate = (typeof EC_RES_RATE !== 'undefined' && EC_RES_RATE[rar || 'common']) || 14;
+  const capB = (typeof EC_MINE_CAP !== 'undefined' && EC_MINE_CAP[String(amt || '').trim()]) || 14;
+  const cap = Math.min(70, Math.max(1, Math.round(capB * mult)));
   return Math.min(cap, Math.max(1, Math.round(baseRate * mult)));
 }
 

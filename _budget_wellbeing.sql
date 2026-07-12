@@ -263,18 +263,19 @@ returns boolean language sql immutable as $$
 $$;
 
 -- КАП: планетарный потолок добычи по ресурсу /сут зависит от РАЗМЕРА месторождения.
--- Самое большое («колоссально») = 20 базово; баффы (m_mine) поднимают кап,
--- но жёсткий потолок 40. Зеркало EC_MINE_CAP в economy.js.
+-- Самое большое («колоссально») = 35 базово; баффы (m_mine) поднимают кап,
+-- но жёсткий потолок 70 (поднято с 20/40 по требованию юзера 2026-07-12:
+-- «добыча везде маленькая — поднимем до 70 с баффами»). Зеркало EC_MINE_CAP.
 create or replace function public._mine_cap(p_amt text)
 returns numeric language sql immutable as $$
   select case btrim(coalesce(p_amt,''))
-    when 'колоссально'  then 20
-    when 'очень много'  then 16
-    when 'много'        then 12
-    when 'умеренно'     then 8
-    when 'мало'         then 5
-    when 'следы'        then 2
-    else 8 end            -- нет данных о богатстве → среднее
+    when 'колоссально'  then 35
+    when 'очень много'  then 28
+    when 'много'        then 21
+    when 'умеренно'     then 14
+    when 'мало'         then 9
+    when 'следы'        then 4
+    else 14 end           -- нет данных о богатстве → среднее
 $$;
 
 -- ── 5a) Ручной выбор «что добывать» ОТКЛЮЧЁН ────────────────
@@ -492,7 +493,7 @@ begin
     -- (_mine_tier_ok): mining → common, mining_deep → uncommon/rare,
     -- mining_exotic → epic/legendary.
     -- Темп постройки = база(редкость) × доктрина × (слоты/3), потолок КАЖДОЙ постройки =
-    -- _mine_cap(размер залежи) × баффы, максимум 40; постройки складываются целиком.
+    -- _mine_cap(размер залежи) × баффы, максимум 70; постройки складываются целиком.
     for bld in
       select cb.colony_id, cb.btype, cb.slots_open, coalesce(cb.mine_mode,'store') as mine_mode,
              c.resources as cres, c.faction_id as col_fid
@@ -510,11 +511,12 @@ begin
         if not public._mine_tier_ok(bld.btype, rr) then continue; end if;  -- ЯРУСЫ: не тот ярус — пропуск
         -- Темп ОДНОЙ постройки: база по редкости × баффы × (слоты/3). Постройки
         -- СКЛАДЫВАЮТСЯ целиком — каждая копает свой полный темп независимо.
-        rate := case rr when 'uncommon' then 5 when 'rare' then 3 when 'epic' then 2 when 'legendary' then 1 else 8 end;
+        -- базы подняты ×1.75 вместе с капами (2026-07-12, «добыча везде маленькая»)
+        rate := case rr when 'uncommon' then 9 when 'rare' then 5 when 'epic' then 4 when 'legendary' then 2 else 14 end;
         rate := greatest(1, round(rate * m_mine * greatest(1, coalesce(bld.slots_open,1)) / 3.0));
-        -- КАП КАЖДОГО ДОМИКА: потолок = размер месторождения (_mine_cap, максимум 20
+        -- КАП КАЖДОГО ДОМИКА: потолок = размер месторождения (_mine_cap, максимум 35
         -- у «колоссально») × баффы, жёсткий предел 40. Зеркало ecMineYields.
-        capv := least(40, greatest(1, round(public._mine_cap(relem->>'amt') * m_mine)));
+        capv := least(70, greatest(1, round(public._mine_cap(relem->>'amt') * m_mine)));
         rate := least(rate, capv);
         -- ПОТОКИ: концессия = право СТРОИТЬ свои добывающие домики на чужой колонии
         -- (concession_build). Домик на чужой колонии копает ТОЛЬКО залежи, отданные

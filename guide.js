@@ -147,21 +147,21 @@ function gbDocCollapse(label, rowsHtml, count, open) {
 
 // Таблица богатства месторождения (зеркало EC_MINE_CAP из economy.js): потолок добычи /сут.
 const GB_RICHNESS = [
-  ['Следы',        2], ['Мало',        5], ['Умеренно',    8],
-  ['Много',       12], ['Очень много', 16], ['Колоссально', 20],
+  ['Следы',        4], ['Мало',        9], ['Умеренно',   14],
+  ['Много',       21], ['Очень много', 28], ['Колоссально', 35],
 ];
 function gbRichTable() {
   const rows = GB_RICHNESS.map(([n, m]) =>
     `<tr><td>${n}</td><td><b>до ${m}/сут</b></td></tr>`).join('');
   return `<div class="gb-table-wrap"><table class="gb-table">
-    <thead><tr><th>Богатство залежи (с карты)</th><th>Потолок добычи одного завода (базово; с баффами — максимум 40)</th></tr></thead>
+    <thead><tr><th>Богатство залежи (с карты)</th><th>Потолок добычи одного завода (базово; с баффами — максимум 70)</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }
 
 // Полная таблица ресурсов: иконка, редкость, персональная цена, добыча/слот и
 // ГС/слот/сутки (цена × добыча). Данные — из каталога GalaxyGen (один источник).
-const GB_RES_RATE = { common: 8, uncommon: 5, rare: 3, epic: 2, legendary: 1 };   // темп одной постройки
+const GB_RES_RATE = { common: 14, uncommon: 9, rare: 5, epic: 4, legendary: 2 };   // темп одной постройки (×1.75 2026-07-12)
 const GB_RAR_N = { common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5 };
 // Роль ресурса в механиках (по имени из GalaxyGen). Ресурс может иметь несколько ролей.
 // fuel — топливо флота · army — сырьё на корабли/дивизии · goods — Фабрика товаров · doom — «Длань».

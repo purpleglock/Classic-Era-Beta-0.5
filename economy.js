@@ -255,10 +255,10 @@ function ecSpyCalc(op, agentIds, targetFid) {
 }
 // Ресурсы планет: цена продажи и добыча/слот по редкости
 const EC_RES_PRICE = { common: 2, uncommon: 10, rare: 50, epic: 200, legendary: 1200 };
-const EC_RES_RATE = { common: 8, uncommon: 5, rare: 3, epic: 2, legendary: 1 };   // темп ОДНОЙ постройки (до баффов и слотов)
-// КАП: планетарный потолок добычи ресурса /сут по РАЗМЕРУ месторождения (×баффы, жёсткий предел 40) — зеркало _mine_cap.
-const EC_MINE_CAP = { 'колоссально': 20, 'очень много': 16, 'много': 12, 'умеренно': 8, 'мало': 5, 'следы': 2 };
-function ecMineCap(amt) { const b = EC_MINE_CAP[String(amt || '').trim()]; return Math.min(40, Math.max(1, Math.round((b == null ? 8 : b) * ecFactionMods().mine))); }
+const EC_RES_RATE = { common: 14, uncommon: 9, rare: 5, epic: 4, legendary: 2 };   // темп ОДНОЙ постройки (до баффов и слотов); ×1.75 2026-07-12
+// КАП: планетарный потолок добычи ресурса /сут по РАЗМЕРУ месторождения (×баффы, жёсткий предел 70) — зеркало _mine_cap; ×1.75 2026-07-12.
+const EC_MINE_CAP = { 'колоссально': 35, 'очень много': 28, 'много': 21, 'умеренно': 14, 'мало': 9, 'следы': 4 };
+function ecMineCap(amt) { const b = EC_MINE_CAP[String(amt || '').trim()]; return Math.min(70, Math.max(1, Math.round((b == null ? 14 : b) * ecFactionMods().mine))); }
 const EC_DEST_CUT = 0.5;   // доля получателя каравана — зеркало живой economy_accrue (round(shipped*price*0.5))
 // Шанс нападения на КАЖДУЮ угрозу на пути (зеркало economy_accrue): с конвоем меньше.
 const EC_THREAT_CHANCE = { ancient: { escort: 0.65, bare: 0.80 }, pirates: { escort: 0.40, bare: 0.80 } };
@@ -1900,7 +1900,7 @@ function ecResEntries() { const res = (EC.eco && EC.eco.resources) || {}; return
 const EC_RICHNESS = { 'колоссально': 3.0, 'очень много': 2.5, 'много': 2.0, 'умеренно': 1.5, 'мало': 1.0, 'следы': 0.6 };
 function ecRichMult(amt) { const v = EC_RICHNESS[String(amt || '').trim()]; return v == null ? 1.5 : v; }
 // Добыча за слот/сутки: редкость × богатство месторождения × доктрина — зеркало economy_accrue.
-function ecMineRate(rar, amt) { return Math.min(ecMineCap(amt), Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 8) * ecFactionMods().mine))); }
+function ecMineRate(rar, amt) { return Math.min(ecMineCap(amt), Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 14) * ecFactionMods().mine))); }
 // ЯРУСЫ ДОБЫЧИ: каждая добывающая постройка берёт только залежи своего яруса —
 // зеркало public._mine_tier_ok в _budget_wellbeing.sql.
 const EC_MINE_TIERS = { mining: ['common'], mining_deep: ['uncommon', 'rare'], mining_exotic: ['epic', 'legendary'] };
@@ -1913,7 +1913,7 @@ function ecMineYields(b) {
   const tiers = EC_MINE_TIERS[b.btype];
   const mine = ecFactionMods().mine;
   // Сырой темп постройки по залежи (до планетарного капа) — постройки СКЛАДЫВАЮТСЯ
-  const raw = (bb, ri) => Math.max(1, Math.round((EC_RES_RATE[ri.r || 'common'] || 8) * mine * Math.max(1, +bb.slots_open || 1) / 3));
+  const raw = (bb, ri) => Math.max(1, Math.round((EC_RES_RATE[ri.r || 'common'] || 14) * mine * Math.max(1, +bb.slots_open || 1) / 3));
   // КАП КАЖДОГО ДОМИКА: потолок = размер месторождения (ecMineCap: макс 20 базово,
   // ×баффы, жёсткий предел 40). Постройки складываются ЦЕЛИКОМ, каждая копает свой
   // полный темп независимо — зеркало цикла mining в economy_accrue.
