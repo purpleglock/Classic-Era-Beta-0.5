@@ -471,6 +471,9 @@
 .ec-section-title { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--t1); margin: 22px 0 12px; padding-bottom: 6px; border-bottom: var(--deco-frame-w, 1px) solid var(--w1); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ec-section-title .btn { margin-left: auto; flex-shrink: 0; }
 .ec-hint { font-family: var(--font-body); font-weight: 400; font-size: 11px; color: var(--t4); }
+/* Концессии: текстовые действия в строке слотов — приглушённые, не browser-blue */
+.ec-conc-col a { color: var(--t2); text-decoration: none; border-bottom: 1px dotted var(--t4); }
+.ec-conc-col a:hover { color: var(--t1); border-bottom-color: var(--t2); }
 .ec-empty { color: var(--t3); font-size: 12px; padding: 14px; background: var(--b1); border: var(--deco-frame-w, 1px) dashed var(--w2); border-radius: var(--radius-md); }
 
 /* Колонии */

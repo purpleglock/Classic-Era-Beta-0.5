@@ -1937,8 +1937,9 @@ function ecMiningPlanetRes(b) {
   if (!colony) {
     // Домик на ЧУЖОЙ колонии (концессия): её снимка у нас нет — восстанавливаем
     // залежи из полученных концессий (сервер и так пустит только их).
+    const amts = ((EC.concInfo || {})[b.colony_id] || {}).amts || {};
     return (EC.concessions || []).filter(c => c.to_fid === EC.fid && c.colony_id === b.colony_id)
-      .map(c => ({ name: c.res_name, r: ecResRarity(c.res_name), amt: null }));
+      .map(c => ({ name: c.res_name, r: ecResRarity(c.res_name), amt: amts[c.res_name] || null }));
   }
   // ИСТИНА — снимок самой колонии (его же использует сервер при начислении добычи).
   // По имени матчить нельзя: в системе бывают ДВЕ планеты с одинаковым именем,

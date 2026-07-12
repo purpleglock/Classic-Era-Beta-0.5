@@ -282,7 +282,12 @@ create or replace function public.concessions_info()
 returns jsonb language sql stable security definer set search_path=public as $$
   select coalesce(jsonb_agg(jsonb_build_object(
            'colony_id', c.id, 'planet_name', c.planet_name,
-           'system_id', c.system_id, 'system_name', s.name)), '[]'::jsonb)
+           'system_id', c.system_id, 'system_name', s.name,
+           -- размеры залежей колонии (name→amt): клиентскому зеркалу ecMineYields
+           -- нужен реальный размер для капа домика (иначе кап по умолчанию 8)
+           'amts', (select coalesce(jsonb_object_agg(r.value->>'name', r.value->>'amt'), '{}'::jsonb)
+                    from jsonb_array_elements(coalesce(c.resources,'[]'::jsonb)) r
+                    where r.value->>'name' is not null))), '[]'::jsonb)
   from (select distinct mc.colony_id from public.mining_concessions mc
         where mc.from_fid = public._ec_my_fid() or mc.to_fid = public._ec_my_fid()) x
   join public.colonies c on c.id = x.colony_id
@@ -290,6 +295,15 @@ returns jsonb language sql stable security definer set search_path=public as $$
 $$;
 revoke all on function public.concessions_info() from public, anon;
 grant execute on function public.concessions_info() to authenticated;
+
+-- ── РАЗОВО ПРИ НАКАТЕ: пересчитать слоты всем — уже построенные концессионные
+--    домики не ждут суточного тика и сразу добывают в полный темп (фикс
+--    «эпик ×1 / редкий ×1 / необычный ×2» — домики сидели на 1 слоте) ──
+do $$ declare f record; begin
+  for f in select distinct faction_id from public.colony_buildings loop
+    perform public._budget_auto_slots(f.faction_id);
+  end loop;
+end$$;
 
 -- ── Отзыв/отказ: снести домики получателя, оставшиеся без права (½ базы назад).
 --    Если у получателя не осталось НИ ОДНОЙ концессии на колонии — сносится всё
