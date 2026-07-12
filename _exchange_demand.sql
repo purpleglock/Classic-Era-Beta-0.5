@@ -35,7 +35,7 @@ create or replace function public._demand_factor(p_bt text)
 returns numeric language plpgsql stable security definer set search_path=public as $$
 declare dem numeric; cap numeric; r numeric; m numeric;
 begin
-  if p_bt = 'mining' then
+  if p_bt in ('mining','mining_deep','mining_exotic') then
     -- ДЕФИЦИТ СЫРЬЯ: равновесие/запас. Запас мал → ratio>1 → спрос вверх.
     select coalesce(sum(equilibrium),0), coalesce(sum(stock),0) into dem, cap from public.market_resources;
     if cap <= 0 then return 1.0; end if;
@@ -93,6 +93,8 @@ returns numeric language sql stable as $$
             when 'temple'           then cb.slots_open * 150
             when 'military_factory' then cb.slots_open * 140
             when 'mining'           then cb.slots_open * 120
+            when 'mining_deep'      then cb.slots_open * 200
+            when 'mining_exotic'    then cb.slots_open * 450
             when 'trade'            then cb.slots_open * 100
             else 0 end), 0)::numeric
   from public.corp_buildings x

@@ -18,6 +18,10 @@ returns numeric language sql stable security definer set search_path=public as $
     when 'factory' then cb.slots_open * 200 * coalesce((nb->>'prosperity')::numeric,1) * coalesce((nb->'prices'->>'g')::numeric,1)
     when 'trade'   then cb.slots_open * 100 * coalesce((nb->>'prosperity')::numeric,1)
     when 'temple'  then cb.slots_open * 150 * coalesce((nb->>'prosperity')::numeric,1)
+    -- добывающие: ценность потока руды не зависит от просперити системы
+    when 'mining'        then cb.slots_open * 120
+    when 'mining_deep'   then cb.slots_open * 200
+    when 'mining_exotic' then cb.slots_open * 450
     else 0 end
   from public.colony_buildings cb
   left join public.colonies c on c.id = cb.colony_id

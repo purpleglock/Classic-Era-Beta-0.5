@@ -291,6 +291,7 @@ begin
             when 'factory'          then cb.slots_open*200 when 'shipyard' then cb.slots_open*160
             when 'temple'           then cb.slots_open*150 when 'military_factory' then cb.slots_open*140
             when 'mining'           then cb.slots_open*120 when 'trade' then cb.slots_open*100
+            when 'mining_deep'      then cb.slots_open*200 when 'mining_exotic' then cb.slots_open*450
             else 0 end))
       from public.colony_buildings cb left join public.colonies col on col.id=cb.colony_id
       where cb.faction_id = fid and cb.id not in (select building_id from public.corp_buildings)), '[]'::jsonb)
