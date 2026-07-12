@@ -2638,6 +2638,7 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-assembly" id="hp-vn-assembly" aria-hidden="true"></div>
     <div class="hp-vn-rating" id="hp-vn-rating" aria-hidden="true"></div>
     <div class="hp-vn-research" id="hp-vn-research" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo" id="hp-vn-geo" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2697,25 +2698,28 @@ function heroVNChoice(kind) {
   // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
   _heroVNView = kind;
   if (kind !== 'idx' && typeof heroVNHideIdx === 'function') heroVNHideIdx();
-  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); _heroVNCtl.menu(); return; }
+  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); _heroVNCtl.menu(); return; }
 
   // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
-  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNColonyOpen(); return; }
+  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNColonyOpen(); return; }
 
   // «Управление колониями» — перечень планет державы + сцена планеты с постройками.
-  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNPlanetsOpen(); return; }
+  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNPlanetsOpen(); return; }
 
   // «Поэма недели» — общегалактический стих: голосование за слово дня поверх сцены.
-  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNPoemOpen(); return; }
+  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNPoemOpen(); return; }
 
   // «Ассамблея» — тайные роли и законы, бьющие по всей галактике (Secret Hitler-лайк).
-  if (kind === 'assembly') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNAssemblyOpen(); return; }
+  if (kind === 'assembly') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNAssemblyOpen(); return; }
 
   // «Рейтинг игроков» — засекреченная аналитическая сводка (декоративная инфографика).
-  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNResearchClose(); heroVNRatingOpen(); return; }
+  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNRatingOpen(); return; }
 
   // «Исследования» — научный пульт державы: всё дерево технологий поверх сцены.
-  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchOpen(); return; }
+  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNGeoClose(); heroVNResearchOpen(); return; }
+
+  // «Георазведка» — казино под вывеской геологии: разведка залежей своей колонии.
+  if (kind === 'geo') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoOpen(); return; }
 
   if (kind === 'ach' || kind === 'events') {
     _heroVNCat = kind;
@@ -4371,15 +4375,16 @@ function heroVNInit() {
     // Прогреть срезы биржи заранее, пока игрок выбирает — к клику «биржа» данные уже в кэше.
     if (typeof fnWarmExchange === 'function') fnWarmExchange();
     const opts = [
-      ['events', '📰 ' + (en ? 'Sector events' : 'События сектора')],
-      ['idx',    '📈 ' + (en ? "How's the exchange?" : 'Что там на бирже?')],
-      ['ach',    '🏆 ' + (en ? "Today's achievements" : 'Достижения за сегодня')],
-      ['rating', '📊 ' + (en ? 'Player ratings' : 'Рейтинг игроков')],
-      ['colony', '🌍 ' + (en ? 'Colonization' : 'Колонизация')],
-      ['planets', '🪐 ' + (en ? 'Colony management' : 'Управление колониями')],
-      ['research', '🔬 ' + (en ? 'Research' : 'Исследования')],
-      ['poem',   '🖋 ' + (en ? 'Poem of the week' : 'Поэма недели')],
-      ['assembly', '🏛 ' + (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
+      ['events', (en ? 'Sector events' : 'События сектора')],
+      ['idx',    (en ? "How's the exchange?" : 'Что там на бирже?')],
+      ['ach',    (en ? "Today's achievements" : 'Достижения за сегодня')],
+      ['rating', (en ? 'Player ratings' : 'Рейтинг игроков')],
+      ['colony', (en ? 'Colonization' : 'Колонизация')],
+      ['planets', (en ? 'Colony management' : 'Управление колониями')],
+      ['geo',    (en ? 'Geological survey' : 'Георазведка')],
+      ['research', (en ? 'Research' : 'Исследования')],
+      ['poem',   (en ? 'Poem of the week' : 'Поэма недели')],
+      ['assembly', (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
     ];
     choicesEl.innerHTML = opts.map(([k, l]) =>
       `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');
@@ -4445,6 +4450,70 @@ function heroVNInit() {
 
   renderChoices();
   play(startAt, true);   // первая реплика — мгновенно (без эффекта перезапуска)
+}
+
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · «Георазведка» — казино под вывеской геологии поверх сцены.
+// Разметку отдаёт economy.js (ecGeoBody: стартовая панель / карточка находки),
+// данные — те же EC.* (EC.geosurvey грузится в ecLoad). Действия ecGeoSpin/
+// ecGeoAccept после RPC зовут ecReloadPaint → heroVNGeoRefresh — оверлей сам
+// перерисовывается свежим состоянием. Каркас (шапка/подложка/мобилка)
+// наследуется от .hp-vn-colony — тот же оверлей, что «Управление колониями».
+// ══════════════════════════════════════════════════════════════
+function heroVNGeoClose() {
+  const el = document.getElementById('hp-vn-geo');
+  if (!el) return;
+  el.classList.remove('show');
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '';
+  if (_heroVNView === 'geo') _heroVNView = null;
+}
+function heroVNGeoReturn() { heroVNChoice('menu'); }
+function _hgHead(en) {
+  return `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">⛏ ${en ? 'Geological survey' : 'Георазведка'}</span>
+    <span class="hp-vnr-clr">${en ? 'imperial geology corps' : 'геологический корпус державы'}</span>
+    <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNGeoReturn()">↩ ${en ? 'back' : 'назад'}</button>
+  </div>`;
+}
+// Анимированный бур-спиннер — чтобы экран не выглядел «мёртвым» на загрузке.
+function _hgSpin(label) {
+  return `<div class="hp-vn-col-body hp-vn-geo-body"><div class="ec-geo-spin"><div class="ec-geo-spin-core">⛏</div><div class="ec-geo-spin-t">${esc(label || '')}</div></div></div>`;
+}
+function _hgMsg(en, ru, enT) { return `<div class="hp-vn-col-body hp-vn-geo-body"><div class="hp-vn-col-empty">${en ? enT : ru}</div></div>`; }
+async function heroVNGeoOpen() {
+  const el = document.getElementById('hp-vn-geo');
+  if (!el) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  el.classList.add('show');
+  el.setAttribute('aria-hidden', 'false');
+  el.innerHTML = _hgHead(en) + _hgSpin(en ? 'Deploying the geology corps…' : 'Развёртываю геологический корпус…');
+  try {
+    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
+      if (!el.classList.contains('show')) return;
+      el.innerHTML = _hgHead(en) + _hgMsg(en, 'Зарегистрируйте державу — и геологи начнут искать залежи на её территории.', 'Register a faction to survey its territory.');
+      return;
+    }
+    // Данные георазведки едут с ядром экономики (EC.eco/EC.colonies/EC.geosurvey).
+    if (!EC.eco || !Array.isArray(EC.colonies) || !EC.geosurvey) { if (typeof ecLoad === 'function') await ecLoad(); }
+    if (!el.classList.contains('show')) return;
+    heroVNGeoRefresh();
+  } catch (e) {
+    if (!el.classList.contains('show')) return;
+    el.innerHTML = _hgHead(en) + _hgMsg(en, 'Геологическая сеть сейчас недоступна.', 'The geology grid is offline.');
+  }
+}
+// Перерисовать открытый оверлей свежими данными (зовётся и из ecReloadPaint).
+function heroVNGeoRefresh() {
+  const el = document.getElementById('hp-vn-geo');
+  if (!el || !el.classList.contains('show')) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  if (typeof ecGeoBody !== 'function' || typeof EC === 'undefined' || !EC.eco) {
+    el.innerHTML = _hgHead(en) + _hgMsg(en, 'Геологическая сеть сейчас недоступна.', 'The geology grid is offline.');
+    return;
+  }
+  el.innerHTML = _hgHead(en) + `<div class="hp-vn-col-body hp-vn-geo-body">${ecGeoBody()}</div>`;
 }
 
 // ══════════════════════════════════════════════════════════════

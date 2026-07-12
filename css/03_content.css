@@ -393,8 +393,9 @@
    Отделён от реплики: воздух сверху + линия-разделитель со светящейся засечкой. ── */
 .hp-vn-choices{
   position:relative;
-  /* min(215px,100%) — иначе трек минимум 215px и грид вылезает за узкий контейнер */
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(min(215px,100%),1fr));gap:9px;
+  /* flex-wrap вместо грида: basis 190px + grow — каждый ряд заполняется целиком,
+     кнопки внутри ряда равной ширины и высоты, нет рваного последнего ряда */
+  display:flex;flex-wrap:wrap;align-items:stretch;gap:9px;
   margin-top:18px;padding-top:14px;
   border-top: var(--deco-frame-w, 1px) solid color-mix(in srgb,var(--gd,#3a9bdc) 32%, var(--w1,rgba(255,255,255,.06)));
   max-height:170px;overflow:auto;scrollbar-width:thin;
@@ -412,10 +413,11 @@
 /* вариант ответа — гранёный чип: клип по срезам, «обводка» и фон = слои-подложки */
 .hp-vn-choice{
   position:relative;z-index:0;cursor:pointer;pointer-events:auto;
-  display:flex;align-items:center;gap:10px;width:100%;
+  flex:1 1 190px;min-width:min(190px,100%);
+  display:flex;align-items:center;justify-content:center;gap:10px;
   background:transparent;border:none;border-radius:0;
   clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
-  color:var(--t2,#b8c4cf);padding:11px 14px;text-align:left;
+  color:var(--t2,#b8c4cf);padding:11px 14px;text-align:center;
   font-family: var(--font-display);font-size:clamp(13px,1.35vw,15px);font-weight:600;
   letter-spacing: calc(.01em * var(--deco-ls-mult, 1));transition:color var(--duration-fast);
 }
@@ -428,11 +430,11 @@
 .hp-vn-choice:hover{color:var(--t1,#eaf4ff)}
 .hp-vn-choice:hover::after{background:color-mix(in srgb,var(--gd,#3a9bdc) 14%,hsl(216 24% 8%))}
 /* запись в списке (уровень 2) — герб/иконка + текст в одну строку с обрезкой */
-.hp-vn-choice-item{font-weight:500;font-size:clamp(12px,1.25vw,14px)}
+.hp-vn-choice-item{font-weight:500;font-size:clamp(12px,1.25vw,14px);justify-content:flex-start;text-align:left}
 .hp-vn-choice-item img,.hp-vn-choice-item .fn-fr-flag{width:15px;height:15px;object-fit:contain;flex-shrink:0;border-radius:3px;opacity:0.9}
 .hp-vn-choice-it-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hp-vn-choice-empty{
-  grid-column:1/-1;
+  flex:1 1 100%;
   color:var(--t3,#9fb3c4);font-family:'Inter',sans-serif;font-size:13px;
   padding:9px 4px;
 }
@@ -1194,8 +1196,8 @@
   .hp-vn-foot{margin-top:12px;gap:10px}
   .hp-vn-foot .hp-hero-cta{font-size:14px;padding:10px 14px}
   /* меню выбора — на телефоне ВЕРТИКАЛЬНЫЙ столбец (тут он и удобен), без прокрутки */
-  .hp-vn-choices{grid-template-columns:1fr;gap:8px;max-height:none;overflow:visible}
-  .hp-vn-choice{padding:12px 14px;font-size:15px}
+  .hp-vn-choices{flex-direction:column;gap:8px;max-height:none;overflow:visible}
+  .hp-vn-choice{flex:0 0 auto;padding:12px 14px;font-size:15px}
   .hp-vn-choice-item{font-size:14px}
   /* кнопка правки обложки — в угол баннера */
   .hp-vn .hp-hero-upload-btn{top:6px;left:6px;right:auto;font-size:10px;padding:4px 8px}
@@ -3772,13 +3774,14 @@
 
   /* Сетка выборов: жестко 1 колонка, не вылезает за края */
   .hp-vn-choices {
-    grid-template-columns: 1fr !important;
+    flex-direction: column !important;
     width: 100% !important;
     box-sizing: border-box !important;
   }
-  
+
   /* Кнопка выбора: разрешаем тексту переноситься, если он длинный */
   .hp-vn-choice {
+    flex: 0 0 auto !important;
     width: 100% !important;
     box-sizing: border-box !important;
     height: auto !important;
@@ -4333,4 +4336,22 @@
   .hp-vna-g-cards{gap:8px}
   .hp-vna-g-cards .hp-vna-card{width:96px;height:138px}
   .hp-vna-g-role{flex:1 1 100%;min-width:0}
+}
+
+/* ══════════════════════════════════════════════════════════════
+   НОВЕЛЛА · «Георазведка» (hp-vn-geo) — казино под вывеской геологии.
+   Каркас (шапка/подложка/затемнение) наследуется от .hp-vn-colony;
+   само содержимое (.ec-geo) оформлено в css/17_economy.css. Здесь —
+   только раскладка тела оверлея + мобилка. */
+.hp-vn-geo-body{display:block;overflow:auto;scrollbar-width:thin}
+.hp-vn-geo-body .ec-geo{width:100%;max-width:640px;margin:0 auto}
+@media (max-width:640px){
+  .hp-vn-geo{position:relative;inset:auto;border-radius:var(--radius-sm)}
+  .hp-vn-geo:not(.show){display:none}
+  .hp-vn-geo-body{padding:12px}
+  .hp-vn-geo-body .ec-geo-stats{gap:8px}
+  .hp-vn-geo-body .ec-geo-st{flex:1 1 100%;min-width:0;display:flex;justify-content:space-between;align-items:baseline;padding:9px 12px}
+  .hp-vn-geo-body .ec-geo-st-k{margin:0}
+  .hp-vn-geo-body .ec-geo-acts .btn{flex-basis:100%}
+  .hp-vn-geo-body .ec-geo-name{font-size:18px}
 }

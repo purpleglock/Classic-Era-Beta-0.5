@@ -3201,3 +3201,109 @@ body.ec-tree-fs-lock { overflow: hidden; }
 /* Концессии, десктоп: форма в строку с переносом */
 .ec-conc-form { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .ec-conc-form select { min-width: 200px; flex: 1 1 200px; }
+
+/* ══════════════════════════════════════════════════════════ */
+/* ⛏ ГЕОРАЗВЕДКА — казино под вывеской геологии (вкладка geosurvey) */
+/* ══════════════════════════════════════════════════════════ */
+.ec-geo { max-width: 720px; margin: 0 auto; }
+.ec-geo-intro { margin-bottom: 16px; }
+.ec-geo-intro-h {
+  font-family: var(--font-display); font-weight: 700; font-size: 20px;
+  letter-spacing: calc(.4px * var(--deco-ls-mult, 1)); margin-bottom: 6px;
+}
+.ec-geo-intro p { color: var(--t3, var(--t4)); font-size: 13.5px; line-height: 1.55; margin: 0; }
+.ec-geo-intro b { color: var(--gd); }
+
+/* — стартовая панель — */
+.ec-geo-start {
+  display: flex; flex-direction: column; gap: 10px; padding: 18px;
+  border: 1px solid var(--w2); border-radius: 12px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--gd) 8%, var(--b2)), var(--b1) 70%);
+}
+.ec-geo-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--t4); }
+.ec-geo-sel { padding: 11px 12px; font-size: 14px; width: 100%; }
+.ec-geo-go {
+  font-family: var(--font-display); font-weight: 700; font-size: 15px;
+  padding: 12px 16px; letter-spacing: .3px; cursor: pointer;
+  color: var(--gd); background: color-mix(in srgb, var(--gd) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gd) 45%, transparent); border-radius: 10px;
+}
+.ec-geo-go:hover { filter: brightness(1.06); }
+.ec-geo-go.is-off { filter: grayscale(.7) brightness(.7); cursor: not-allowed; box-shadow: none; }
+.ec-geo-warn { font-size: 12.5px; color: var(--err); text-align: center; }
+
+/* — карточка результата — */
+.ec-geo-result {
+  --accent: var(--t4); position: relative; overflow: hidden;
+  padding: 20px 20px 18px; border-radius: 14px; text-align: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--w2));
+  background: radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--accent) 16%, var(--b2)), var(--b1) 72%);
+  box-shadow: inset 0 0 40px -20px color-mix(in srgb, var(--accent) 80%, transparent), 0 10px 30px -18px color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: ecGeoReveal .42s cubic-bezier(.2, .9, .25, 1);
+}
+@keyframes ecGeoReveal { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+.ec-geo-site { font-size: 12px; color: var(--t4); margin-bottom: 8px; }
+.ec-geo-tier {
+  font-family: var(--font-display); font-weight: 700; font-size: 13px;
+  text-transform: uppercase; letter-spacing: 2px; color: var(--accent); margin-bottom: 10px;
+}
+.ec-geo-find { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.ec-geo-ic {
+  width: 46px; height: 46px; display: grid; place-items: center; font-size: 24px;
+  border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--w2));
+  background: color-mix(in srgb, var(--accent) 14%, var(--b1));
+  box-shadow: inset 0 0 14px -6px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+.ec-geo-name { font-family: var(--font-display); font-weight: 700; font-size: 22px; }
+.ec-geo-rar {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .5px; padding: 3px 10px;
+  border-radius: var(--radius-pill, 999px); color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ec-geo-meter {
+  height: 7px; border-radius: 999px; margin: 0 auto 16px; max-width: 420px;
+  background: color-mix(in srgb, var(--t4) 22%, transparent); overflow: hidden;
+}
+.ec-geo-meter > span {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, transparent), var(--accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 70%, transparent);
+  transition: width .5s cubic-bezier(.2, .9, .25, 1);
+}
+.ec-geo-stats { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+.ec-geo-st {
+  flex: 1 1 140px; min-width: 120px; padding: 10px; border-radius: 10px;
+  border: 1px solid var(--w2); background: color-mix(in srgb, var(--b2) 60%, transparent);
+}
+.ec-geo-st-k { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--t4); margin-bottom: 3px; }
+.ec-geo-st-v { display: block; font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+.ec-geo-log { font-size: 12px; color: var(--t4); margin-bottom: 14px; }
+.ec-geo-log b { color: var(--t2, inherit); }
+.ec-geo-acts { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.ec-geo-acts .btn { flex: 1 1 160px; min-width: 130px; padding: 11px 12px; font-weight: 600; cursor: pointer; }
+.ec-geo-accept { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
+.ec-geo-reroll { color: var(--te); background: color-mix(in srgb, var(--te) 12%, transparent); border: 1px solid color-mix(in srgb, var(--te) 45%, transparent); }
+.ec-geo-reroll.is-off { filter: grayscale(.7) brightness(.7); cursor: not-allowed; }
+.ec-geo-drop { color: var(--err); background: color-mix(in srgb, var(--err) 10%, transparent); border: 1px solid color-mix(in srgb, var(--err) 40%, transparent); }
+.ec-geo-acts .btn:hover { filter: brightness(1.07); }
+/* джекпот — золотое сияние поверх акцента */
+.ec-geo-t-jack { animation: ecGeoReveal .42s cubic-bezier(.2,.9,.25,1), ecGeoJack 2.4s ease-in-out infinite .42s; }
+@keyframes ecGeoJack { 0%, 100% { box-shadow: inset 0 0 40px -20px color-mix(in srgb, var(--accent) 80%, transparent), 0 10px 30px -18px color-mix(in srgb, var(--accent) 55%, transparent); } 50% { box-shadow: inset 0 0 60px -14px color-mix(in srgb, var(--accent) 95%, transparent), 0 12px 40px -14px color-mix(in srgb, var(--accent) 80%, transparent); } }
+.ec-geo-t-jack .ec-geo-tier { animation: ecGeoJackText 1.2s ease-in-out infinite; }
+@keyframes ecGeoJackText { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+@media (max-width: 560px) { .ec-geo-name { font-size: 19px; } .ec-geo-acts .btn { flex-basis: 100%; } }
+
+/* — георазведка: спиннер загрузки/крутки (чтобы экран не был «мёртвым») — */
+.ec-geo-spin { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 46px 16px; min-height: 180px; }
+.ec-geo-spin-core {
+  width: 58px; height: 58px; display: grid; place-items: center; font-size: 26px; border-radius: 50%;
+  color: var(--gd); border: 2px solid color-mix(in srgb, var(--gd) 22%, transparent); border-top-color: var(--gd);
+  box-shadow: 0 0 22px -6px color-mix(in srgb, var(--gd) 60%, transparent);
+  animation: ecGeoDrill 1s linear infinite;
+}
+@keyframes ecGeoDrill { to { transform: rotate(360deg); } }
+.ec-geo-spin-t { font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: .5px; color: var(--t3, var(--t4)); }
+/* заметка об эскалации цены (сколько уже пробурено за день) */
+.ec-geo-esc { font-size: 12px; color: var(--t4); text-align: center; }
+.ec-geo-esc b { color: var(--gd); }

@@ -1291,7 +1291,7 @@ async function _ecLoadCoreImpl() {
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
-  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows] = await Promise.all([
+  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1326,6 +1326,7 @@ async function _ecLoadCoreImpl() {
     dbGet('concession_slots', `order=created_at.asc`).catch(() => []),   // купленные слоты концессионера (RLS отдаёт мои и на моих колониях)
     ecRpc('concessions_info').catch(() => []),   // имена планет/систем концессионных колоний (чужие колонии по RLS не видны)
     dbGet('faction_budget', `faction_id=eq.${fid}`).catch(() => []),   // бюджет державы (ползунки финансирования)
+    ecRpc('geosurvey_get').catch(() => null),  // ⛏ георазведка: текущая находка + цена следующей крутки (казино)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1369,6 +1370,7 @@ async function _ecLoadCoreImpl() {
   (Array.isArray(concInfo) ? concInfo : []).forEach(x => { if (x && x.colony_id) EC.concInfo[x.colony_id] = x; });
   // Бюджет державы: ползунки 0..4 (дефолт 2 — «норма», зеркало _budget_wellbeing.sql)
   EC.budget = (Array.isArray(budgetRows) && budgetRows[0]) || { industry: 2, military: 2, science: 2, social: 2, infra: 2 };
+  EC.geosurvey = (geoState && typeof geoState === 'object') ? geoState : { current: null, spins: 0, next_cost: 10000 };   // ⛏ георазведка: находка + цена крутки
   EC.incomeHistory = incomeHistory || [];   // снимки дохода по тикам (доход по времени)
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
@@ -1505,6 +1507,8 @@ async function ecReloadPaint() {
   // Оверлей «Управление колониями» в новелле живёт на тех же данных EC —
   // после любого действия перерисовываем и его (если открыт).
   if (typeof heroVNPlanetsRefresh === 'function') heroVNPlanetsRefresh();
+  // Оверлей «Георазведка» в новелле — тоже на данных EC (EC.geosurvey).
+  if (typeof heroVNGeoRefresh === 'function') heroVNGeoRefresh();
 }
 
 // ── Превью дохода (зеркало RPC) ─────────────────────────────
@@ -3820,6 +3824,113 @@ function ecFreeRowHtml(s, p, race) {
     <div class="ec-pl-res"><span class="ec-pl-lbl">Ресурсы:</span>${ecPlanetResChips(p)}</div>
     ${cz.cls !== 'no' ? ecPlanetBuildHint(p) : ''}
   </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// ⛏ ГЕОРАЗВЕДКА — «казино под вывеской геологии». Крутка бурит недра своей
+// колонии и сразу выдаёт случайную залежь (от пустышки до джекпота).
+// ОТКАЗАТЬСЯ НЕЛЬЗЯ: либо ПРИНЯТЬ (ляжет на колонию), либо ПЕРЕБРОСИТЬ (крутка
+// дороже). Цена крутки растёт ЗА ДЕНЬ (счётчик per-фракция) и НЕ сбрасывается
+// принятием — только наутро откатывается к базе 10к. Сервер — geosurvey_get/
+// spin/accept (_geosurvey.sql). ЖИВЁТ В НОВЕЛЛЕ (оверлей hp-vn-geo,
+// render.js heroVNGeoOpen), НЕ в кабинете. ecGeoBody() отдаёт разметку.
+// ══════════════════════════════════════════════════════════════
+const EC_GEO_RAR_ACCENT = { common: 'var(--t4)', uncommon: 'var(--ok)', rare: 'var(--te)', epic: 'var(--pu)', legendary: 'var(--gd)' };
+// Зеркало _geosurvey_cost(n): n = сколько круток УЖЕ сделано сегодня (0-based).
+function ecGeoCost(n) { n = Math.max(0, +n || 0); return n === 0 ? 10000 : n === 1 ? 15000 : n === 2 ? 22500 : n === 3 ? 35000 : 35000 + (n - 3) * 15000; }
+// Состояние всегда объект: {current, colony_id, spins, next_cost}. next_cost считает сервер (geosurvey_get).
+function ecGeoState() { const s = EC.geosurvey; return (s && typeof s === 'object') ? s : { current: null, spins: 0, next_cost: 10000 }; }
+function ecGeoNextCost() { const s = ecGeoState(); return +s.next_cost || ecGeoCost(s.spins); }
+function ecGeoColLabel(c) { if (!c) return '—'; const nm = c.name || c.planet_name || 'Колония'; return `${nm} · ${ecSysName(c.system_id)}`; }
+// Ярлык «класса находки» по ориентировочной ценности потока (cap × цена редкости).
+function ecGeoTier(v) {
+  if (v < 60)   return { l: 'Пустышка',     cls: 'dud',  p: .08 };
+  if (v < 300)  return { l: 'Так себе',      cls: 'meh',  p: .30 };
+  if (v < 1500) return { l: 'Неплохо',       cls: 'ok',   p: .55 };
+  if (v < 8000) return { l: 'Богатая жила',  cls: 'rich', p: .82 };
+  return { l: 'ДЖЕКПОТ', cls: 'jack', p: 1 };
+}
+function ecGeoBody() {
+  const s = ecGeoState();
+  const gc = +(EC.eco && EC.eco.gc) || 0;
+  const cost = ecGeoNextCost();
+  const can = gc >= cost;
+  const intro = `<div class="ec-geo-intro">
+    <div class="ec-geo-intro-h">⛏ Георазведка недр</div>
+    <p>Геологи бурят недра колонии — что поднимут, заранее не скажет никто: от бесполезной пыли до колоссальной жилы легендарного ресурса. Результат выпадает <b>сразу</b>. Не понравилось — крути ещё (каждая крутка за день дороже). <b>Отказаться нельзя</b> — либо принимаешь находку на колонию, либо крутишь дальше. Наутро цена крутки откатывается к <b>10&nbsp;000&nbsp;ГС</b>.</p>
+  </div>`;
+  if (!s.current) {
+    // Решать нечего — панель запуска: выбор колонии + крутка по текущей цене.
+    const cols = (EC.colonies || []);
+    if (!cols.length) return `<div class="ec-geo">${intro}<div class="ec-empty">Нет колоний — сначала колонизируйте планету, потом ищите в её недрах.</div></div>`;
+    const opts = cols.map(c => `<option value="${esc(c.id)}">${esc(ecGeoColLabel(c))}</option>`).join('');
+    const esc0 = s.spins > 0 ? `<div class="ec-geo-esc">Сегодня уже пробурено: <b>${ecNum(s.spins)}</b> · цена растёт до завтра</div>` : '';
+    return `<div class="ec-geo">${intro}
+      <div class="ec-geo-start">
+        <label class="ec-geo-lbl">Где копаем</label>
+        <select id="ec-geo-col" class="ec-geo-sel">${opts}</select>
+        <button class="btn ec-geo-go${can ? '' : ' is-off'}" ${can ? '' : 'disabled'} onclick="ecGeoSpin()">Разведать · ${ecNum(cost)} ГС</button>
+        ${esc0}
+        ${can ? '' : `<div class="ec-geo-warn">Не хватает ГС: нужно ${ecNum(cost)}, в казне ${ecNum(gc)}</div>`}
+      </div>
+    </div>`;
+  }
+  // Есть невзятая находка — карточка результата: принять или перебросить.
+  const cur = s.current || {};
+  const rar = cur.r || 'common';
+  const amt = cur.amt || 'следы';
+  const cap = ecMineCap(amt);
+  const val = Math.round(cap * ecResPrice(rar));
+  const tier = ecGeoTier(val);
+  const col = (EC.colonies || []).find(c => c.id === s.colony_id);
+  const accent = EC_GEO_RAR_ACCENT[rar] || 'var(--t4)';
+  return `<div class="ec-geo">${intro}
+    <div class="ec-geo-result ec-geo-t-${tier.cls}" style="--accent:${accent}">
+      <div class="ec-geo-site">🪐 ${esc(ecGeoColLabel(col))}</div>
+      <div class="ec-geo-tier">${esc(tier.l)}</div>
+      <div class="ec-geo-find">
+        <span class="ec-geo-ic">${ecResIcon(cur.name)}</span>
+        <span class="ec-geo-name">${esc(cur.name || '—')}</span>
+        <span class="ec-geo-rar">${esc(ecRarLabel(rar))}</span>
+      </div>
+      <div class="ec-geo-meter"><span style="width:${Math.round(tier.p * 100)}%"></span></div>
+      <div class="ec-geo-stats">
+        <div class="ec-geo-st"><span class="ec-geo-st-k">Размер залежи</span><span class="ec-geo-st-v">${esc(amt)}</span></div>
+        <div class="ec-geo-st"><span class="ec-geo-st-k">Потолок добычи</span><span class="ec-geo-st-v">≈ ${ecNum(cap)}/сут</span></div>
+        <div class="ec-geo-st"><span class="ec-geo-st-k">Ценность потока</span><span class="ec-geo-st-v">≈ ${ecNum(val)} ГС/сут</span></div>
+      </div>
+      <div class="ec-geo-acts">
+        <button class="btn ec-geo-accept" onclick="ecGeoAccept()">✔ Принять залежь</button>
+        <button class="btn ec-geo-reroll${can ? '' : ' is-off'}" ${can ? '' : 'disabled'} onclick="ecGeoSpin('${esc(s.colony_id || '')}')">⟳ Перебросить · ${ecNum(cost)} ГС</button>
+      </div>
+      ${can ? '' : `<div class="ec-geo-warn">На новую крутку не хватает ГС (нужно ${ecNum(cost)})</div>`}
+    </div>
+  </div>`;
+}
+// Мгновенный «слот-машинный» отклик: пока летит RPC — крутящийся бур в оверлее.
+function ecGeoSpinner(label) {
+  const b = document.querySelector('#hp-vn-geo .hp-vn-geo-body');
+  if (b) b.innerHTML = `<div class="ec-geo-spin"><div class="ec-geo-spin-core">⛏</div><div class="ec-geo-spin-t">${esc(label || 'Бурим породу…')}</div></div>`;
+}
+// Действие георазведки с мгновенным спиннером (живёт в оверлее новеллы hp-vn-geo).
+async function ecGeoAct(fn, body, okMsg, label) {
+  if (EC.busy) return; EC.busy = true;
+  ecGeoSpinner(label);
+  try { await ecRpc(fn, body || {}); if (okMsg) toast(okMsg, 'ok'); await ecReloadPaint(); }
+  catch (e) { toast(ecErr(e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+// Крутка: без аргумента — стартовая (колония из селекта); с colonyId — реролл той же колонии.
+function ecGeoSpin(colonyId) {
+  const cid = colonyId || ecId('ec-geo-col')?.value;
+  if (!cid) { toast('Выберите колонию', 'err'); return; }
+  const cost = ecGeoNextCost();
+  if ((+(EC.eco && EC.eco.gc) || 0) < cost) { toast('Не хватает ГС: нужно ' + ecNum(cost), 'err'); return; }
+  ecGeoAct('geosurvey_spin', { p_colony: cid }, null, colonyId ? 'Перебуриваем…' : 'Бурим породу…');
+}
+function ecGeoAccept() {
+  const s = ecGeoState(); if (!s.current) return;
+  ecGeoAct('geosurvey_accept', {}, 'Месторождение принято — залежь легла на колонию', 'Закрепляем участок…');
 }
 
 function ecTabColonies() {

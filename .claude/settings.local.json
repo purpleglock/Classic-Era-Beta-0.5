@@ -237,7 +237,12 @@
       "PowerShell(node --check guide.js)",
       "Bash(sed -n \"s/^const SB_ANON *= *'\\\\\\([^']*\\\\\\)'.*/\\\\1/p\" core.js)",
       "Bash(curl -s 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/resource_rarity?select=*&limit=15' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
-      "Bash(curl -s 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/colonies?select=faction_id,planet_name,resources&faction_id=eq.fac_26f25b449f&limit=8' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')"
+      "Bash(curl -s 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/colonies?select=faction_id,planet_name,resources&faction_id=eq.fac_26f25b449f&limit=8' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(awk '/⛏ ГЕОРАЗВЕДКА — казино под вывеской геологии/{f=1} f' css/17_economy.css)",
+      "Bash(sed -i 's#css/index.css?v=20260712geosurvey1#css/index.css?v=20260712geosurvey2#g; s#economy.js?v=20260712geosurvey1#economy.js?v=20260712geosurvey2#g; s#render.js?v=20260711asmchat1#render.js?v=20260712geosurvey2#g' index.html)",
+      "Bash(sed -i \"s#03_content.css?v=20260712vnchoices1#03_content.css?v=20260712geosurvey2#; s#17_economy.css?v=20260712geosurvey1#17_economy.css?v=20260712geosurvey2#\" css/index.css)",
+      "Bash(sed -i 's#css/index.css?v=20260712geosurvey2#css/index.css?v=20260712geosurvey3#g; s#economy.js?v=20260712geosurvey2#economy.js?v=20260712geosurvey3#g; s#render.js?v=20260712geosurvey2#render.js?v=20260712geosurvey3#g' index.html)",
+      "Bash(sed -i \"s#03_content.css?v=20260712geosurvey2#03_content.css?v=20260712geosurvey3#; s#17_economy.css?v=20260712geosurvey2#17_economy.css?v=20260712geosurvey3#\" css/index.css)"
     ]
   }
 }
