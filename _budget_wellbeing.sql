@@ -260,6 +260,21 @@ returns boolean language sql immutable as $$
     else false end
 $$;
 
+-- КАП: планетарный потолок добычи по ресурсу /сут зависит от РАЗМЕРА месторождения.
+-- Самое большое («колоссально») = 20 базово; баффы (m_mine) поднимают кап,
+-- но жёсткий потолок 40. Зеркало EC_MINE_CAP в economy.js.
+create or replace function public._mine_cap(p_amt text)
+returns numeric language sql immutable as $$
+  select case btrim(coalesce(p_amt,''))
+    when 'колоссально'  then 20
+    when 'очень много'  then 16
+    when 'много'        then 12
+    when 'умеренно'     then 8
+    when 'мало'         then 5
+    when 'следы'        then 2
+    else 8 end            -- нет данных о богатстве → среднее
+$$;
+
 -- ── 5a) Ручной выбор «что добывать» ОТКЛЮЧЁН ────────────────
 -- Добыча автоматическая (все залежи планеты), маршрутизация — вкладка «Потоки».
 do $$ begin
@@ -354,8 +369,8 @@ declare
   sct record; v_ci_host int; v_new_exp numeric;      -- ВЕРА-4: вскрытие чужих сект
   fcfg jsonb := '{}'::jsonb;                         -- ПОТОКИ: настройки по ресурсам
   eff_mode text; v_conc_fid text;                    -- ПОТОКИ
-  conc_out jsonb := '{}'::jsonb;                     -- ПОТОКИ: fid → {res: qty} для концессий
-  k2 text; qty numeric; rcap numeric;                -- ПОТОКИ: доставка концессий
+  conc_out jsonb := '{}'::jsonb;                     -- ПОТОКИ: (легаси, доставка концессий удалена)
+  k2 text; qty numeric; rcap numeric;                -- ПОТОКИ: (легаси)
   want numeric; extra numeric; store_avail numeric;  -- ПОТОКИ: добор со склада
   lim numeric;                                       -- ПОТОКИ: лимит биржи по ресурсу
   bdg public.faction_budget;                         -- БЮДЖЕТ: ползунки
@@ -368,7 +383,7 @@ declare
   goods_demand numeric := 0; goods_have numeric; goods_eaten numeric := 0;
   goods_cov numeric := 1; goods_welfare numeric := 1; goods_gc numeric := 0;
   -- КАП ДОБЫЧИ: 50/сут с ПЛАНЕТЫ по ресурсу, заводы НЕ складываются сверх капа
-  col_mined jsonb := '{}'::jsonb; ckey text; already numeric;
+  col_mined jsonb := '{}'::jsonb; ckey text; already numeric; capv numeric;
 begin
   select * into eco from public.faction_economy where faction_id = p_fid for update;
   if not found then return jsonb_build_object('faction_id',p_fid,'days',0); end if;
@@ -474,10 +489,11 @@ begin
     -- ЯРУСЫ: каждая добывающая постройка берёт только залежи своего яруса
     -- (_mine_tier_ok): mining → common, mining_deep → uncommon/rare,
     -- mining_exotic → epic/legendary.
-    -- Темп = база(редкость) × богатство × доктрина × (слоты/3): слоты — рабочие
-    -- руки от промышленного бюджета и населения. Зеркало ecMineYields в economy.js.
+    -- Темп постройки = база(редкость) × доктрина × (слоты/3), потолок КАЖДОЙ постройки =
+    -- _mine_cap(размер залежи) × баффы, максимум 40; постройки складываются целиком.
     for bld in
-      select cb.colony_id, cb.btype, cb.slots_open, coalesce(cb.mine_mode,'store') as mine_mode, c.resources as cres
+      select cb.colony_id, cb.btype, cb.slots_open, coalesce(cb.mine_mode,'store') as mine_mode,
+             c.resources as cres, c.faction_id as col_fid
       from public.colony_buildings cb
       join public.colonies c on c.id = cb.colony_id
       where cb.faction_id = p_fid and cb.btype in ('mining','mining_deep','mining_exotic')
@@ -490,26 +506,25 @@ begin
         -- resource_rarity, иначе ценная залежь сошла бы за common и досталась заводу.
         rr := coalesce(relem->>'r', (select rarity from public.resource_rarity where name = rname), 'common');
         if not public._mine_tier_ok(bld.btype, rr) then continue; end if;  -- ЯРУСЫ: не тот ярус — пропуск
-        rate := case rr when 'uncommon' then 12 when 'rare' then 6 when 'epic' then 3 when 'legendary' then 1 else 25 end;
-        -- КАП: при любых баффах не больше 50/сут с ПЛАНЕТЫ по ресурсу —
-        -- несколько заводов НЕ складываются сверх капа (зеркало ecMineYields).
-        rate := least(50, greatest(1, round(rate * public._richness_mult(relem->>'amt') * m_mine
-                                       * greatest(1, coalesce(bld.slots_open,1)) / 3.0)));
-        ckey := bld.colony_id || '|' || rname;
-        already := coalesce((col_mined->>ckey)::numeric, 0);
-        rate := least(rate, 50 - already);
-        if rate <= 0 then continue; end if;
-        col_mined := jsonb_set(col_mined, array[ckey], to_jsonb(already + rate), true);
-        -- ПОТОКИ: концессия — поток этой залежи уходит держателю права добычи
-        v_conc_fid := null;
-        select mc.to_fid into v_conc_fid from public.mining_concessions mc
-          where mc.colony_id = bld.colony_id and mc.res_name = rname limit 1;
-        if v_conc_fid is not null then
-          if conc_out->v_conc_fid is null then
-            conc_out := jsonb_set(conc_out, array[v_conc_fid], '{}'::jsonb, true);
+        -- Темп ОДНОЙ постройки: база по редкости × баффы × (слоты/3). Постройки
+        -- СКЛАДЫВАЮТСЯ целиком — каждая копает свой полный темп независимо.
+        rate := case rr when 'uncommon' then 5 when 'rare' then 3 when 'epic' then 2 when 'legendary' then 1 else 8 end;
+        rate := greatest(1, round(rate * m_mine * greatest(1, coalesce(bld.slots_open,1)) / 3.0));
+        -- КАП КАЖДОГО ДОМИКА: потолок = размер месторождения (_mine_cap, максимум 20
+        -- у «колоссально») × баффы, жёсткий предел 40. Зеркало ecMineYields.
+        capv := least(40, greatest(1, round(public._mine_cap(relem->>'amt') * m_mine)));
+        rate := least(rate, capv);
+        -- ПОТОКИ: концессия = право СТРОИТЬ свои добывающие домики на чужой колонии
+        -- (concession_build). Домик на чужой колонии копает ТОЛЬКО залежи, отданные
+        -- этой фракции в концессию; владелец колонии отданные залежи НЕ копает.
+        if bld.col_fid is distinct from p_fid then
+          if not exists(select 1 from public.mining_concessions mc
+                        where mc.colony_id = bld.colony_id and mc.res_name = rname
+                          and mc.to_fid = p_fid) then
+            continue;
           end if;
-          conc_out := jsonb_set(conc_out, array[v_conc_fid, rname],
-            to_jsonb(coalesce((conc_out->v_conc_fid->>rname)::numeric,0) + rate*d), true);
+        elsif exists(select 1 from public.mining_concessions mc
+                     where mc.colony_id = bld.colony_id and mc.res_name = rname) then
           continue;
         end if;
         -- ПОТОКИ: режим ресурса из панели потоков перекрывает режим здания
@@ -525,20 +540,10 @@ begin
       end loop;
     end loop;
 
-    -- ПОТОКИ: доставка концессионной добычи получателям (на их склад, до их лимита ёмкости)
-    for k in select jsonb_object_keys(conc_out) loop
-      rcap := round((1000 + coalesce((select sum(slots_open) from public.colony_buildings
-                               where faction_id = k and btype='warehouse'),0) * 500)
-                    * public._budget_cap_mult((public._budget_row(k)).infra));  -- БЮДЖЕТ: их инфраструктура
-      for k2 in select jsonb_object_keys(conc_out->k) loop
-        qty := (conc_out->k->>k2)::numeric;
-        if qty <= 0 then continue; end if;
-        update public.faction_economy fe
-          set resources = jsonb_set(coalesce(fe.resources,'{}'::jsonb), array[k2],
-                to_jsonb(least(rcap, coalesce((fe.resources->>k2)::numeric,0) + qty)), true)
-          where fe.faction_id = k;
-      end loop;
-    end loop;
+    -- ПОТОКИ: доставка «дарового» концессионного потока УДАЛЕНА (2026-07-12):
+    -- концессия больше не капает сама — получатель строит СВОИ домики на чужой
+    -- колонии (concession_build, _concession_build.sql), и его добыча идёт через
+    -- обычный цикл выше как его собственный поток (склад/экспорт/биржа).
 
     -- ════════ ТОВАРЫ: производство (вода+сырьё → товары) ════════
     -- Восстановлено из _goods_factory.sql (блок клобберился с _faith_multi).

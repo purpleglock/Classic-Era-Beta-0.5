@@ -35,6 +35,21 @@ create table if not exists public.faction_res_flows (
   updated_at        timestamptz not null default now(),
   primary key (faction_id, res_name)
 );
+-- Самолечение прод-дрейфа: если таблица когда-то была создана без ключа
+-- (faction_id, res_name), «create table if not exists» её НЕ чинит, а
+-- insert…on conflict в res_flow_set падает в рантайме («no unique or exclusion
+-- constraint») — снаружи это выглядит как «режимы не сохраняются». Догоняем
+-- ключ идемпотентно, предварительно схлопнув возможные дубли строк.
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.faction_res_flows'::regclass and contype in ('p','u')
+  ) then
+    delete from public.faction_res_flows a using public.faction_res_flows b
+      where a.ctid < b.ctid and a.faction_id = b.faction_id and a.res_name = b.res_name;
+    alter table public.faction_res_flows add primary key (faction_id, res_name);
+  end if;
+end $$;
 alter table public.faction_res_flows enable row level security;
 drop policy if exists frf_select_own on public.faction_res_flows;
 create policy frf_select_own on public.faction_res_flows
@@ -81,7 +96,7 @@ begin
     updated_at = now();
   return jsonb_build_object('ok', true);
 end$$;
-revoke all on function public.res_flow_set(text,text,numeric,numeric,boolean) from public;
+revoke all on function public.res_flow_set(text,text,numeric,numeric,boolean) from public, anon;
 grant execute on function public.res_flow_set(text,text,numeric,numeric,boolean) to authenticated;
 
 create or replace function public.res_flow_clear(p_res text)
@@ -91,7 +106,7 @@ begin
     where faction_id = public._ec_my_fid() and res_name = btrim(coalesce(p_res,''));
   return jsonb_build_object('ok', true);
 end$$;
-revoke all on function public.res_flow_clear(text) from public;
+revoke all on function public.res_flow_clear(text) from public, anon;
 grant execute on function public.res_flow_clear(text) to authenticated;
 
 -- ── 3) RPC: караван добирает со склада ──────────────────────
@@ -106,7 +121,7 @@ begin
   if not found then raise exception 'route not found or not yours'; end if;
   return jsonb_build_object('ok', true, 'from_store', coalesce(p_on,false));
 end$$;
-revoke all on function public.trade_route_from_store(uuid,boolean) from public;
+revoke all on function public.trade_route_from_store(uuid,boolean) from public, anon;
 grant execute on function public.trade_route_from_store(uuid,boolean) to authenticated;
 
 -- ── 4) RPC: концессии (право добычи залежи) ─────────────────
@@ -135,7 +150,7 @@ begin
   if new_id is null then raise exception 'deposit already conceded — revoke first'; end if;
   return jsonb_build_object('ok', true, 'id', new_id);
 end$$;
-revoke all on function public.concession_grant(uuid,text,text) from public;
+revoke all on function public.concession_grant(uuid,text,text) from public, anon;
 grant execute on function public.concession_grant(uuid,text,text) to authenticated;
 
 -- Отозвать может владелец залежи; получатель может отказаться сам.
@@ -149,7 +164,7 @@ begin
   if not found then raise exception 'concession not found'; end if;
   return jsonb_build_object('ok', true);
 end$$;
-revoke all on function public.concession_revoke(uuid) from public;
+revoke all on function public.concession_revoke(uuid) from public, anon;
 grant execute on function public.concession_revoke(uuid) to authenticated;
 
 -- ── 5) RPC: разовая продажа со склада ───────────────────────
@@ -185,7 +200,7 @@ begin
     where faction_id = fid;
   return jsonb_build_object('ok', true, 'sold', sell, 'gc', gain);
 end$$;
-revoke all on function public.res_sell_now(text,numeric) from public;
+revoke all on function public.res_sell_now(text,numeric) from public, anon;
 grant execute on function public.res_sell_now(text,numeric) to authenticated;
 
 -- ── 6) economy_accrue v6: потоки по ресурсам + концессии ────

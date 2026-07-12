@@ -255,7 +255,10 @@ function ecSpyCalc(op, agentIds, targetFid) {
 }
 // Ресурсы планет: цена продажи и добыча/слот по редкости
 const EC_RES_PRICE = { common: 2, uncommon: 10, rare: 50, epic: 200, legendary: 1200 };
-const EC_RES_RATE = { common: 25, uncommon: 12, rare: 6, epic: 3, legendary: 1 };
+const EC_RES_RATE = { common: 8, uncommon: 5, rare: 3, epic: 2, legendary: 1 };   // темп ОДНОЙ постройки (до баффов и слотов)
+// КАП: планетарный потолок добычи ресурса /сут по РАЗМЕРУ месторождения (×баффы, жёсткий предел 40) — зеркало _mine_cap.
+const EC_MINE_CAP = { 'колоссально': 20, 'очень много': 16, 'много': 12, 'умеренно': 8, 'мало': 5, 'следы': 2 };
+function ecMineCap(amt) { const b = EC_MINE_CAP[String(amt || '').trim()]; return Math.min(40, Math.max(1, Math.round((b == null ? 8 : b) * ecFactionMods().mine))); }
 const EC_DEST_CUT = 0.5;   // доля получателя каравана — зеркало живой economy_accrue (round(shipped*price*0.5))
 // Шанс нападения на КАЖДУЮ угрозу на пути (зеркало economy_accrue): с конвоем меньше.
 const EC_THREAT_CHANCE = { ancient: { escort: 0.65, bare: 0.80 }, pirates: { escort: 0.40, bare: 0.80 } };
@@ -1908,7 +1911,7 @@ function ecResEntries() { const res = (EC.eco && EC.eco.resources) || {}; return
 const EC_RICHNESS = { 'колоссально': 3.0, 'очень много': 2.5, 'много': 2.0, 'умеренно': 1.5, 'мало': 1.0, 'следы': 0.6 };
 function ecRichMult(amt) { const v = EC_RICHNESS[String(amt || '').trim()]; return v == null ? 1.5 : v; }
 // Добыча за слот/сутки: редкость × богатство месторождения × доктрина — зеркало economy_accrue.
-function ecMineRate(rar, amt) { return Math.min(50, Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 25) * ecRichMult(amt) * ecFactionMods().mine))); }
+function ecMineRate(rar, amt) { return Math.min(ecMineCap(amt), Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 8) * ecFactionMods().mine))); }
 // ЯРУСЫ ДОБЫЧИ: каждая добывающая постройка берёт только залежи своего яруса —
 // зеркало public._mine_tier_ok в _budget_wellbeing.sql.
 const EC_MINE_TIERS = { mining: ['common'], mining_deep: ['uncommon', 'rare'], mining_exotic: ['epic', 'legendary'] };
@@ -1920,25 +1923,17 @@ function ecMineYields(b) {
   if (!ecIsMiner(b)) return [];
   const tiers = EC_MINE_TIERS[b.btype];
   const mine = ecFactionMods().mine;
-  // Сырой темп постройки по залежи (до планетарного капа)
-  const raw = (bb, ri) => Math.min(50, Math.max(1, Math.round((EC_RES_RATE[ri.r || 'common'] || 25) * ecRichMult(ri.amt) * mine * Math.max(1, +bb.slots_open || 1) / 3)));
-  // КАП: 50/сут с ПЛАНЕТЫ по ресурсу — заводы НЕ складываются сверх капа
-  // (зеркало col_mined в economy_accrue). Постройки раньше в списке выбирают кап первыми.
-  const sameCol = (EC.buildings || []).filter(x => ecIsMiner(x) && x.colony_id === b.colony_id);
-  const idx = Math.max(0, sameCol.indexOf(b));
+  // Сырой темп постройки по залежи (до планетарного капа) — постройки СКЛАДЫВАЮТСЯ
+  const raw = (bb, ri) => Math.max(1, Math.round((EC_RES_RATE[ri.r || 'common'] || 8) * mine * Math.max(1, +bb.slots_open || 1) / 3));
+  // КАП КАЖДОГО ДОМИКА: потолок = размер месторождения (ecMineCap: макс 20 базово,
+  // ×баффы, жёсткий предел 40). Постройки складываются ЦЕЛИКОМ, каждая копает свой
+  // полный темп независимо — зеркало цикла mining в economy_accrue.
   // Фолбэк редкости: у старых снимков поле r бывает пустым — добираем из каталога
   // (ecResRarity), иначе ценная залежь сойдёт за common и достанется заводу.
-  return ecMiningPlanetRes(b).filter(ri => tiers.includes(ri.r || ecResRarity(ri.name))).map(ri => {
-    const rr = ri.r || ecResRarity(ri.name);
-    let already = 0;
-    for (let i = 0; i < idx; i++) {
-      if (EC_MINE_TIERS[sameCol[i].btype].includes(rr)) already += Math.min(raw(sameCol[i], ri), Math.max(0, 50 - already));
-    }
-    return {
-      name: ri.name, r: ri.r || 'common', amt: ri.amt, icon: ri.icon || '◈',
-      rate: Math.max(0, Math.min(raw(b, ri), 50 - already)),
-    };
-  }).filter(y => y.rate > 0);
+  return ecMiningPlanetRes(b).filter(ri => tiers.includes(ri.r || ecResRarity(ri.name))).map(ri => ({
+    name: ri.name, r: ri.r || 'common', amt: ri.amt, icon: ri.icon || '◈',
+    rate: Math.min(raw(b, ri), ecMineCap(ri.amt)),
+  })).filter(y => y.rate > 0);
 }
 // Стоимость экспансии (колонизация/терраформ/обустройство) с учётом доктрины (mods.colonize).
 function ecColonizeCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().colonize)); }
@@ -1950,7 +1945,12 @@ function ecResearchCost(base) { return Math.max(1, Math.round((base || 0) * ecFa
 // Ресурсы планеты для mining-здания (из данных карты или снимка колонии)
 function ecMiningPlanetRes(b) {
   const colony = EC.colonies.find(c => c.id === b.colony_id);
-  if (!colony) return [];
+  if (!colony) {
+    // Домик на ЧУЖОЙ колонии (концессия): её снимка у нас нет — восстанавливаем
+    // залежи из полученных концессий (сервер и так пустит только их).
+    return (EC.concessions || []).filter(c => c.to_fid === EC.fid && c.colony_id === b.colony_id)
+      .map(c => ({ name: c.res_name, r: ecResRarity(c.res_name), amt: null }));
+  }
   // ИСТИНА — снимок самой колонии (его же использует сервер при начислении добычи).
   // По имени матчить нельзя: в системе бывают ДВЕ планеты с одинаковым именем,
   // и .find хватает не ту (часто пустого двойника) → ресурсы «пропадают».
@@ -2280,10 +2280,10 @@ function ecMineTotals() {
   });
   return totals;
 }
-// Добыча с ДОБЫВАЮЩИХ аванпостов за сутки — зеркало _outpost_mining_settle:
-// каждый mode='mining' аванпост тянет ОДИН выбранный ресурс (o.mine_res) со
-// планет своей системы по фикс-ставкам (вне границ — ниже колониальных)
-// + EC_OUTPOST_MINE_GC ГС/сут. Пока ресурс не выбран — только ГС.
+// Добыча с ДОБЫВАЮЩИХ аванпостов за сутки — зеркало _outpost_mining_settle v2:
+// каждый mode='mining' аванпост тянет ВСЕ ресурсы планет своей системы, КРОМЕ
+// эпических и легендарных (элита — только экзотический экстрактор на колонии),
+// по фикс-ставкам (вне границ — ниже колониальных) + EC_OUTPOST_MINE_GC ГС/сут.
 // Возвращает { totals: Map(res→{rate,r,srcs:Map(sys→{rate,n})}), gc, n }.
 const EC_OUTPOST_MINE_GC = 75;
 const EC_OUTPOST_RES_RATE = { uncommon: 6, rare: 3, epic: 1, legendary: 1, common: 12 };
@@ -2303,14 +2303,14 @@ function ecOutpostMineTotals() {
   const byId = new Map((EC.allSystems || []).map(s => [s.id, s]));
   (EC.outposts || []).filter(o => o.mine && o.mode === 'mining').forEach(o => {
     n++; gc += EC_OUTPOST_MINE_GC;
-    if (!o.mine_res) return;   // ресурс не выбран — только ГС-стипендия
     const sys = byId.get(o.system_id);
     const sysName = (sys && sys.name) || (typeof ecSysName === 'function' ? ecSysName(o.system_id) : o.system_id);
     const planets = (sys && Array.isArray(sys.planets)) ? sys.planets : [];
     planets.forEach(p => {
       (Array.isArray(p.resources) ? p.resources : []).forEach(ri => {
-        if (!ri || ri.name !== o.mine_res) return;   // только выбранный ресурс
-        const rar = ri.r || 'common';
+        if (!ri || !ri.name) return;
+        const rar = ri.r || ecResRarity(ri.name);
+        if (rar === 'epic' || rar === 'legendary') return;   // элита — только экзотический экстрактор
         const rate = EC_OUTPOST_RES_RATE[rar] != null ? EC_OUTPOST_RES_RATE[rar] : EC_OUTPOST_RES_RATE.common;
         const cur = totals.get(ri.name) || { rate: 0, r: rar, srcs: new Map() };
         cur.rate += rate;
@@ -3424,7 +3424,7 @@ function ecTabOverview() {
   const resSummary = `<div class="ec-res-sum">
     <span class="ec-res-sum-i"><b class="${mineDay ? 'ok' : 'dim'}">${mineDay ? '+' + ecNum(mineDay) : '0'}</b> ед/сут добыча</span>
     <span class="ec-res-sum-i"><b>${ecNum(minedKinds)}</b> вид(ов) добывается</span>
-    ${_op.n ? `<span class="ec-res-sum-i" data-tip="Каждый добывающий аванпост вне границ тянет ОДИН выбранный ресурс своей системы + ${EC_OUTPOST_MINE_GC} ГС/сут. Нет места на складе — ресурс не добывается.">🛰 <b>${ecNum(_op.n)}</b> аванпост. добычи · +${ecNum(opMineDay)} ед/сут${_op.gc ? ' + ' + ecNum(_op.gc) + ' ГС' : ''}</span>` : ''}
+    ${_op.n ? `<span class="ec-res-sum-i" data-tip="Каждый добывающий аванпост вне границ тянет ВСЕ ресурсы своей системы, кроме эпических и легендарных, + ${EC_OUTPOST_MINE_GC} ГС/сут. Кламп по ёмкости склада для каждого ресурса — переполнение сгорает.">🛰 <b>${ecNum(_op.n)}</b> аванпост. добычи · +${ecNum(opMineDay)} ед/сут${_op.gc ? ' + ' + ecNum(_op.gc) + ' ГС' : ''}</span>` : ''}
     ${mineDay && freeCap > 0 ? `<span class="ec-res-sum-i">склад полон через <b>${ecNum(daysFull)}</b> ход(ов)</span>` : (mineDay && freeCap <= 0 ? '<span class="ec-res-sum-i ec-res-sum-warn">⚠ склад полон — добыча на склад остановлена (нет места — нет добычи)</span>' : '')}
   </div>`;
   // Карточка ресурса: верх (иконка + полное имя + редкость), числа (добыча/склад/цена),
@@ -4294,8 +4294,8 @@ function ecSysName(id) { const s = (EC.allSystems || []).find(x => x.id === id);
 function ecTabOutposts() {
   return `${ecIntro('🛰', 'Аванпосты', 'Форпосты в нейтральном космосе вне ваших границ. Сначала на <b>Верфи</b> строится корабль-носитель (сутки), затем на карте вы отправляете его в нейтральную систему и разворачиваете, выбирая режим.', [
     '<b>🛰 Разведка</b> — раскрывает оборону системы и даёт размытый срез по соседним по гиперпутям державам (внизу — «Разведсводка»).',
-    '<b>⛏ Добыча</b> — работает как вынесенный добывающий завод: каждые сутки тянет <b>ОДИН выбранный ресурс</b> с планет своей системы + ГС, и служит стоянкой флота (+' + EC_OUTPOST_CAP + ' мест). Ресурс выбирается из доступных в системе.',
-    'Режим можно <b>переключать</b> у уже развёрнутого аванпоста, как и <b>добываемый ресурс</b> — в списке ниже.',
+    '<b>⛏ Добыча</b> — работает как вынесенный добывающий завод: каждые сутки тянет <b>ВСЕ ресурсы</b> с планет своей системы, <b>кроме эпических и легендарных</b> (элиту качает только Экзотический экстрактор на колонии), + ГС, и служит стоянкой флота (+' + EC_OUTPOST_CAP + ' мест).',
+    'Режим можно <b>переключать</b> у уже развёрнутого аванпоста — в списке ниже.',
     'Нельзя входить в чужие границы; разворачивать — не впритык к чужой границе.'])}
     ${ecOutpostPanelHtml()}`;
 }
@@ -4305,16 +4305,14 @@ function ecOutpostModeLabel(mode) {
     ? `⛏ добыча <span class="ec-hint">+${EC_OUTPOST_CAP} мест флота</span>`
     : `🛰 разведка <span class="ec-hint">— срез по соседним державам</span>`;
 }
-// Селектор добываемого ресурса для развёрнутого добывающего аванпоста.
-// Аванпост добывает ОДИН ресурс из доступных в своей системе (на выбор).
-function ecOutpostResPicker(o) {
+// Список добываемых ресурсов системы аванпоста (v2: все, кроме эпик/легендарных).
+function ecOutpostResList(o) {
   const res = ecSysResources(o.system_id);
-  if (!res.size) return '<span class="ec-hint">в системе нет ресурсов для добычи</span>';
-  const opts = ['<option value="">— выберите ресурс —</option>'].concat(
-    [...res.entries()].map(([name, m]) =>
-      `<option value="${esc(name)}"${o.mine_res === name ? ' selected' : ''}>${esc(name)} · ${ecRarLabel(m.r)}</option>`)
-  ).join('');
-  return `<select class="ec-op-res" title="Добываемый ресурс аванпоста" onchange="ecOutpostSetRes('${o.id}', this.value)">${opts}</select>`;
+  const list = [...res.entries()].filter(([name, m]) => {
+    const r = m.r || ecResRarity(name);
+    return r !== 'epic' && r !== 'legendary';
+  }).map(([name]) => esc(name));
+  return list.length ? 'добывает: ' + list.join(', ') : 'в системе нет доступных ресурсов (элита не в счёт)';
 }
 function ecOutpostPanelHtml() {
   const mine = (EC.outposts || []).filter(o => o.mine);
@@ -4337,7 +4335,8 @@ function ecOutpostPanelHtml() {
   const opRows = mine.map(o => {
     const toMining = o.mode !== 'mining';
     const swBtn = `<button class="btn btn-gh btn-sm" style="padding:1px 8px;font-size:11px" title="Переключить режим аванпоста" onclick="ecOutpostSetMode('${o.id}','${toMining ? 'mining' : 'recon'}')">${toMining ? '→ ⛏ добыча' : '→ 🛰 разведка'}</button>`;
-    const resPick = o.mode === 'mining' ? `<div class="ec-op-respick">⛏ ресурс: ${ecOutpostResPicker(o)}</div>` : '';
+    // v2: аванпост добывает все ресурсы системы (кроме эпик/легендарных) — пикер убран
+    const resPick = o.mode === 'mining' ? `<div class="ec-op-respick"><span class="ec-hint">⛏ ${ecOutpostResList(o)}</span></div>` : '';
     return `<div class="ec-q-row ec-op-row"><span class="ec-r-name">🛰 ${esc(ecSysName(o.system_id))}${o.name ? ' · ' + esc(o.name) : ''} <span class="ec-hint">${ecOutpostModeLabel(o.mode)}</span></span>${swBtn}${resPick}</div>`;
   }).join('');
   // Разведданные разведаванпостов: размытый срез по соседним по гиперпутям державам.
@@ -4398,22 +4397,8 @@ async function ecOutpostSetMode(id, mode) {
   finally { EC.busy = false; }
 }
 
-// Сменить добываемый ресурс развёрнутого аванпоста (1 ресурс из системы на выбор).
-async function ecOutpostSetRes(id, res) {
-  if (EC.busy) return;
-  EC.busy = true;
-  try {
-    await ecRpc('outpost_set_resource', { p_id: id, p_res: res || null });
-    toast(res ? '⛏ Аванпост добывает: ' + res : 'Ресурс добычи сброшен', 'ok');
-    // Правим выбранный ресурс локально и перерисовываем из памяти — без полного ecLoad
-    // (47 запросов). outpost_set_resource меняет ТОЛЬКО это поле и не каскадит серверную
-    // экономику (рынок/просперити не тикают), поэтому клиентское зеркало точно. Паттерн
-    // ecSetMineMode. Экономит запись/чтение БД на каждом переключении ресурса аванпоста.
-    const o = (EC.outposts || []).find(x => x.id === id); if (o) o.mine_res = res || null;
-    ecPaintCabinet();
-  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
-  finally { EC.busy = false; }
-}
+// v2: выбор добываемого ресурса убран — аванпост копает все ресурсы системы,
+// кроме эпических и легендарных (ecOutpostSetRes/outpost_set_resource выпилены).
 
 async function ecShipyardRepair(id, qty) {
   if (EC.busy) return;
@@ -5346,11 +5331,18 @@ function ecTabFlows() {
   const concRow = (c, mine) => {
     const col = (EC.colonies || []).find(x => x.id === c.colony_id);
     const who = mine ? `→ ${esc(ecFacName(c.to_fid))}` : `← ${esc(ecFacName(c.from_fid))}`;
-    return `<div class="ec-q-row"><span class="ec-r-name">${ecResIcon(c.res_name)} <b>${esc(c.res_name)}</b>${col ? ` · ${esc(col.planet_name || '')}` : ''} ${who}</span>
-      <button class="ec-bld-del" title="${mine ? 'Отозвать право добычи' : 'Отказаться от концессии'}" onclick="ecConcRevoke('${c.id}')">✕</button></div>`;
+    // v2: концессия = право построить СВОЙ добывающий домик нужного яруса на чужой колонии
+    const cRar = ecResRarity(c.res_name);
+    const bt = cRar === 'common' ? 'mining' : (cRar === 'epic' || cRar === 'legendary') ? 'mining_exotic' : 'mining_deep';
+    const myBld = (EC.buildings || []).filter(b => b.colony_id === c.colony_id && (EC_MINE_TIERS[b.btype] || []).includes(cRar)).length;
+    const build = mine ? '' : myBld
+      ? `<span class="ec-hint">✓ ${esc(EC_BUILD[bt].name)} ×${myBld} — добыча идёт в мои потоки</span>`
+      : `<button class="btn btn-gd btn-sm" title="Построить свой добывающий домик на этой колонии — без него концессия не добывает" onclick="ecConcBuild('${c.id}','${bt}')">🏗 ${esc(EC_BUILD[bt].name)} · ${ecNum(ecBuildCost(EC_BUILD[bt].cost))} ГС</button>`;
+    return `<div class="ec-q-row"><span class="ec-r-name">${ecResIcon(c.res_name)} <b>${esc(c.res_name)}</b> <span class="ec-hint">(${ecRarLabel(cRar)})</span>${col ? ` · ${esc(col.planet_name || '')}` : ''} ${who}</span>${build}
+      <button class="ec-bld-del" title="${mine ? 'Отозвать право добычи (домики получателя снесутся, ½ цены ему вернётся)' : 'Отказаться от концессии (мои домики там снесутся, ½ цены вернётся)'}" onclick="ecConcRevoke('${c.id}')">✕</button></div>`;
   };
   const concHtml = `<div class="ec-r-sec" style="margin-top:18px">⚖ Концессии — право добычи</div>
-    <div class="ec-hint" style="margin:4px 0 8px">Поток конкретной залежи можно передать другой державе: месторождение остаётся у вас, а добыча капает получателю на склад (он сам решает, продавать или копить). Интерим факторий.</div>
+    <div class="ec-hint" style="margin:4px 0 8px">Право добычи конкретной залежи можно передать другой державе: колония остаётся у вас, а получатель <b>строит на ней СВОЙ добывающий домик нужного яруса</b> (кнопка появится у него в этом блоке) и добывает залежь как свою — слоты от его населения, поток в его «Потоки». Без построенного домика концессия <b>ничего не даёт</b>. Домик занимает ячейку вашей колонии; ваши заводы отданную залежь не копают. При отзыве/отказе домики получателя сносятся с возвратом ½ цены.</div>
     ${myDeps.length ? `<div class="ec-prod-form ec-conc-form">
       <select id="ec-conc-dep" class="ec-prod-qty">${depOpts}</select>
       <select id="ec-conc-fac" class="ec-prod-qty">${facOpts}</select>
@@ -5406,8 +5398,14 @@ function ecConcGrant() {
   ecRpcAct('concession_grant', { p_colony: cid, p_res: res, p_to_fid: fac }, 'Право добычи передано');
 }
 function ecConcRevoke(id) {
-  if (!confirm('Прекратить концессию? Поток залежи вернётся владельцу.')) return;
+  if (!confirm('Прекратить концессию? Добывающие домики получателя на этой колонии снесутся (½ цены вернётся ему), залежь вернётся владельцу.')) return;
   ecRpcAct('concession_revoke', { p_id: id }, 'Концессия прекращена');
+}
+// Построить свой добывающий домик на чужой колонии по концессии (concession_build).
+function ecConcBuild(concId, btype) {
+  const cost = ecBuildCost((EC_BUILD[btype] || {}).cost || 0);
+  if ((EC.eco.gc || 0) < cost) { toast('Не хватает ГС: нужно ' + ecNum(cost), 'err'); return; }
+  ecRpcAct('concession_build', { p_conc: concId, p_btype: btype }, 'Домик построен — добыча пойдёт со следующего тика');
 }
 
 // Тело торговой под-вкладки («Караваны»/«Рынок»/«Обмен») — рендерится внутри

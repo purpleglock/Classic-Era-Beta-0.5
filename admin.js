@@ -2296,11 +2296,13 @@ function adMineMult(e) {
   return { mult: Math.max(0.3, 1 + rawMine + resBonus), resBonus };
 }
 
-// Добыча одного слота/сутки: редкость × богатство месторождения × множитель.
+// Добыча одной ПОСТРОЙКИ/сутки: база(редкость) × множитель, потолок = кап залежи
+// по размеру месторождения (ecMineCap, макс 20 базово / 40 с баффами).
 function adMineRate(rar, amt, mult) {
-  const baseRate = (typeof EC_RES_RATE !== 'undefined' && EC_RES_RATE[rar || 'common']) || 25;
-  const rich = (typeof ecRichMult === 'function') ? ecRichMult(amt) : 1.5;
-  return Math.max(1, Math.round(baseRate * rich * mult));
+  const baseRate = (typeof EC_RES_RATE !== 'undefined' && EC_RES_RATE[rar || 'common']) || 8;
+  const capB = (typeof EC_MINE_CAP !== 'undefined' && EC_MINE_CAP[String(amt || '').trim()]) || 8;
+  const cap = Math.min(40, Math.max(1, Math.round(capB * mult)));
+  return Math.min(cap, Math.max(1, Math.round(baseRate * mult)));
 }
 
 function adTabMining(e) {

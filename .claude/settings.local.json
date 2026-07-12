@@ -231,7 +231,13 @@
       "Bash(sed -i \"s|17_economy.css?v=20260712slotwhy2|17_economy.css?v=20260712tradeflows1|\" css/index.css)",
       "PowerShell(node --check economy.js)",
       "Bash(curl -s -X POST https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/rpc/res_flow_set -H 'apikey: sb_publishable_f_xjq0WQcf2AUdHWjk1-XQ_BDLpsoiS' -H 'Content-Type: application/json' -d '{\"p_res\":\"Железо\",\"p_mode\":\"store\",\"p_market_limit\":null,\"p_market_from_store\":0,\"p_to_store\":true}')",
-      "Bash(curl -s -X POST https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/rpc/res_flow_set -H 'apikey: sb_publishable_f_xjq0WQcf2AUdHWjk1-XQ_BDLpsoiS' -H 'Content-Type: application/json' -d '{\"p_res\":\"Iron\",\"p_mode\":\"store\"}')"
+      "Bash(curl -s -X POST https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/rpc/res_flow_set -H 'apikey: sb_publishable_f_xjq0WQcf2AUdHWjk1-XQ_BDLpsoiS' -H 'Content-Type: application/json' -d '{\"p_res\":\"Iron\",\"p_mode\":\"store\"}')",
+      "Bash(curl -s https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/ -H 'apikey: sb_publishable_f_xjq0WQcf2AUdHWjk1-XQ_BDLpsoiS' -o /tmp/openapi.json)",
+      "Bash(node -e \"const s=require\\('/tmp/openapi.json'\\);console.log\\(JSON.stringify\\(s.definitions['faction_res_flows']||'NOT FOUND',null,1\\)\\)\")",
+      "PowerShell(node --check guide.js)",
+      "Bash(sed -n \"s/^const SB_ANON *= *'\\\\\\([^']*\\\\\\)'.*/\\\\1/p\" core.js)",
+      "Bash(curl -s 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/resource_rarity?select=*&limit=15' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s 'https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/colonies?select=faction_id,planet_name,resources&faction_id=eq.fac_26f25b449f&limit=8' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__')"
     ]
   }
 }
