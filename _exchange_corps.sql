@@ -100,9 +100,14 @@ $$;
 create or replace function public._corp_daily_gross(p_corp uuid)
 returns numeric language sql stable as $$
   select coalesce(sum(case cb.btype
-            when 'factory' then cb.slots_open * 200
-            when 'trade'   then cb.slots_open * 100
-            when 'temple'  then cb.slots_open * 150
+            when 'factory'       then cb.slots_open * 200
+            when 'trade'         then cb.slots_open * 100
+            when 'temple'        then cb.slots_open * 150
+            -- добывающие (в т.ч. концессионные на чужих колониях, cb.conc):
+            -- зеркало ценности потока руды, конвертированной биржей в ГС
+            when 'mining'        then cb.slots_open * 80
+            when 'mining_deep'   then cb.slots_open * 200
+            when 'mining_exotic' then cb.slots_open * 450
             else 0 end), 0)::numeric
   from public.corp_buildings x
   join public.colony_buildings cb on cb.id = x.building_id
