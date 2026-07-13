@@ -39,6 +39,11 @@
 --      (уровень 1 = ×1.5 дольше, 2 = как раньше, 3 = ×0.8, 4 = ×0.65),
 --      уровень 0 — запрет заказа. Триггер не клоббирует RPC заказа юнитов.
 --
+-- ВОЛНА (2026-07-13): храмы = ретрансляторы идей. Ставка ГС/слот берётся из
+-- _faith_temple_rate (слайс _faith_monuments.sql — накатить ПЕРЕД этим файлом,
+-- иначе UPDATE colonies с faith_monuments упадёт). Десятина — по ставке адепта.
+-- Памятник Веры: +0.5%/сут к росту населения своей колонии.
+--
 -- ВАЖНО (источник истины): пересоздаёт economy_accrue как СТРОГОЕ
 -- надмножество версии из _res_flows.sql (строки -- ВЕРА / -- МУЛЬТИ /
 -- -- ПОТОКИ сохранены). Добавленное помечено «-- БЮДЖЕТ:». При будущих
@@ -367,6 +372,7 @@ declare
   citem jsonb; cargo_price numeric;
   policy_cost numeric := 0;
   has_faith boolean := false;                       -- ВЕРА
+  trate numeric := 150;                              -- ВОЛНА: ставка храма ГС/слот (_faith_temple_rate)
   tithe_gc numeric := 0;                             -- ВЕРА-2: десятина основателю
   v_sects int := 0;                                  -- ВЕРА-4: мои активные секты
   sct record; v_ci_host int; v_new_exp numeric;      -- ВЕРА-4: вскрытие чужих сект
@@ -422,6 +428,10 @@ begin
   -- (рост населения — НИЖЕ, после расчёта обеспечения товарами: товары дают бонус к росту)
 
   has_faith := exists(select 1 from public.faith_membership where faction_id = p_fid);  -- ВЕРА
+  -- ВОЛНА: храм = ретранслятор идей; ставка зависит от охвата населения
+  -- (формула в _faith_monuments.sql → _faith_temple_rate). До наката того
+  -- слайса функции нет — остаёмся на старом флэте 150.
+  begin trate := public._faith_temple_rate(p_fid); exception when undefined_function then trate := 150; end;
 
   -- ПОТОКИ: настройки потоков по ресурсам (одна панель на державу)
   select coalesce(jsonb_object_agg(f.res_name, jsonb_build_object(
@@ -437,20 +447,32 @@ begin
     elsif r.btype='intel' then inc_agents := inc_agents + r.slots_open*1;
     elsif r.btype='temple' and (                                                      -- МУЛЬТИ: доход лишь пока исповедуешь веру храма
         (r.faith_id is not null and public._faith_member(p_fid, r.faith_id))
-        or (r.faith_id is null and has_faith)) then inc_gc := inc_gc + r.slots_open*150;  -- ВЕРА
+        or (r.faith_id is null and has_faith)) then inc_gc := inc_gc + r.slots_open*trate;  -- ВЕРА · ВОЛНА: динамическая ставка
     end if;
   end loop;
 
   inc_sci := inc_sci * public._budget_sci_mult(bdg.science);   -- БЮДЖЕТ: образование × ОН
 
   -- ВЕРА-2: если я основатель веры — получаю 20% дохода храмов всех адептов/признавших.
+  -- ВОЛНА: десятина считается по ДИНАМИЧЕСКОЙ ставке КАЖДОГО адепта — что храм
+  -- реально приносит адепту, с того и десятина (иначе основатель богател бы
+  -- на храмах, которые сами ничего не «наловили»).
   if exists(select 1 from public.faiths where founder_fid = p_fid) then
-    select coalesce(sum(cb.slots_open),0) * 150 * 0.20 into tithe_gc
-    from public.faith_membership m
-    join public.faiths f on f.id = m.faith_id and f.founder_fid = p_fid
-    join public.colony_buildings cb on cb.faction_id = m.faction_id and cb.btype = 'temple'
-      and (cb.faith_id = f.id or cb.faith_id is null)            -- МУЛЬТИ: только храмы этой веры (null=старые)
-    where m.role <> 'founder';
+    begin
+      select coalesce(sum(cb.slots_open * public._faith_temple_rate(m.faction_id)),0) * 0.20 into tithe_gc
+      from public.faith_membership m
+      join public.faiths f on f.id = m.faith_id and f.founder_fid = p_fid
+      join public.colony_buildings cb on cb.faction_id = m.faction_id and cb.btype = 'temple'
+        and (cb.faith_id = f.id or cb.faith_id is null)          -- МУЛЬТИ: только храмы этой веры (null=старые)
+      where m.role <> 'founder';
+    exception when undefined_function then                        -- ВОЛНА: слайс памятников ещё не накачен
+      select coalesce(sum(cb.slots_open),0) * 150 * 0.20 into tithe_gc
+      from public.faith_membership m
+      join public.faiths f on f.id = m.faith_id and f.founder_fid = p_fid
+      join public.colony_buildings cb on cb.faction_id = m.faction_id and cb.btype = 'temple'
+        and (cb.faith_id = f.id or cb.faith_id is null)
+      where m.role <> 'founder';
+    end;
     inc_gc := inc_gc + coalesce(tithe_gc, 0);
   end if;
 
@@ -595,12 +617,17 @@ begin
 
     -- БЮДЖЕТ: рост населения = соцобеспечение + бонус за товары (до +1%/сут при
     -- полном обеспечении). Потолок ячейки×100, пол ячейки×10, бэкфилл ячейки×50.
+    -- ВОЛНА: Памятник Веры даёт колонии +0.5%/сут к росту (благополучие) —
+    -- работает и до модерации облика, как бонусы храмов.
     update public.colonies c
        set pop = least(coalesce(c.cells,0)*100,
                    greatest(coalesce(c.cells,0)*10,
                      round(coalesce(c.pop, coalesce(c.cells,0)*50)
                            * power(1 + public._pop_growth(bdg.social)
-                                     + 0.01 * least(1, goods_cov), d))))
+                                     + 0.01 * least(1, goods_cov)
+                                     + case when exists(select 1 from public.faith_monuments fm
+                                                        where fm.colony_id = c.id and fm.status <> 'rejected')
+                                            then 0.005 else 0 end, d))))
      where c.faction_id = p_fid;
 
     for r in select cargo, resource, volume, price, convoy, threats, b_fid, transit_until, from_store from public.trade_routes where status='active' and a_fid=p_fid loop  -- ПОТОКИ: + from_store
@@ -729,15 +756,17 @@ begin
           * public._res_value(k, coalesce(flow_rar->>k,'common')) * 0.6 * m_gc);
         continue;
       end if;
-      merged := jsonb_set(merged, array[k], to_jsonb(least(cap, coalesce((merged->>k)::numeric,0) + (res_add->>k)::numeric)), true);
+      -- ОКРУГЛЕНИЕ: склад хранит только целые — дробные вычеты фабрики товаров
+      -- (×0.6 воды / ×0.4 сырья на товар) иначе размазывают хвосты по всем ресурсам
+      merged := jsonb_set(merged, array[k], to_jsonb(round(least(cap, coalesce((merged->>k)::numeric,0) + (res_add->>k)::numeric))), true);
     end loop;
     for k in select jsonb_object_keys(res_sub) loop
-      merged := jsonb_set(merged, array[k], to_jsonb(greatest(0, coalesce((merged->>k)::numeric,0) - (res_sub->>k)::numeric)), true);
+      merged := jsonb_set(merged, array[k], to_jsonb(round(greatest(0, coalesce((merged->>k)::numeric,0) - (res_sub->>k)::numeric))), true);
     end loop;
 
     update public.faction_economy
       set gc = greatest(0, gc + round(inc_gc * m_gc * goods_welfare * d) + trade_gc + market_gc + export_gc - policy_cost * d - bdg_cost * d),  -- БЮДЖЕТ: апкип · ТОВАРЫ: × welfare
-          science = science + greatest(0, inc_sci    + (mods->>'sci_flat')::numeric)    * d,
+          science = science + round(greatest(0, inc_sci    + (mods->>'sci_flat')::numeric)    * d),  -- ОКРУГЛЕНИЕ: наука тоже целая
           agents  = agents  + greatest(0, inc_agents + (mods->>'agents_flat')::numeric) * d,
           resources = merged,
           last_tick = last_tick + (d_raw || ' days')::interval  -- БЮДЖЕТ: сдвиг на ВЕСЬ разрыв — хвост сверх капа сгорает

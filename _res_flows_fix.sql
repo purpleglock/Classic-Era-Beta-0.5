@@ -54,7 +54,7 @@ begin
   select * into eco from public.faction_economy where faction_id = fid for update;
   if not found then raise exception 'no economy row'; end if;
   avail := coalesce((eco.resources->>btrim(p_res))::numeric, 0);
-  sell := least(p_qty, avail);
+  sell := floor(least(p_qty, avail));  -- ОКРУГЛЕНИЕ: продаём только целые единицы, дробный p_qty с клиента не дробит склад
   if sell <= 0 then raise exception 'nothing to sell: warehouse is empty for this resource'; end if;
   rr := coalesce((select rarity from public.resource_rarity where name = btrim(p_res)),'common');
   m_gc := (public._faction_mods(fid)->>'gc')::numeric;

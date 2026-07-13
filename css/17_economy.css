@@ -2787,6 +2787,23 @@ body.ec-tree-fs-lock { overflow: hidden; }
   opacity: .8; }
 .ec-shrine-name { font-family: var(--font-display); font-weight: 800; font-size: 22px; letter-spacing: calc(.01em * var(--deco-ls-mult, 1)); line-height: 1.12;
   color: var(--fc, #c9a227); text-shadow: 0 0 18px color-mix(in srgb, var(--fc, #c9a227) 45%, transparent); }
+/* ВОЛНА: квадратик-медальон убран — имя веры само стало символом.
+   Титул по центру: кикер → имя с орнаментами-лучами → роль. */
+.ec-shrine-hd-title { justify-content: center; }
+.ec-shrine-title { text-align: center; min-width: 0; }
+.ec-shrine-kicker { font-family: var(--font-mono); font-size: 9px; letter-spacing: calc(.34em * var(--deco-ls-mult, 1)); text-transform: uppercase;
+  color: color-mix(in srgb, var(--fc, #c9a227) 55%, var(--t3)); margin-bottom: 7px; }
+.ec-shrine-name-grand { display: flex; align-items: center; justify-content: center; gap: 14px;
+  font-size: 27px; letter-spacing: calc(.05em * var(--deco-ls-mult, 1)); text-transform: uppercase;
+  background: linear-gradient(180deg, #fff8 0%, var(--fc, #c9a227) 45%, color-mix(in srgb, var(--fc, #c9a227) 55%, #000) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--fc, #c9a227) 40%, transparent)); }
+.ec-shrine-name-grand::before, .ec-shrine-name-grand::after { content: ''; flex: 0 1 64px; height: 1px; margin-top: 2px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--fc, #c9a227) 75%, transparent));
+  -webkit-text-fill-color: initial; }
+.ec-shrine-name-grand::after { background: linear-gradient(90deg, color-mix(in srgb, var(--fc, #c9a227) 75%, transparent), transparent); }
+.ec-shrine-hd-title .ec-shrine-role { margin-top: 6px; }
+@media (max-width: 560px) { .ec-shrine-name-grand { font-size: 20px; gap: 9px; } }
 .ec-shrine-role { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: calc(.09em * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t3); margin-top: 4px; }
 /* Догмат — как высеченное на скрижали изречение, в кавычках-обрамлении */
 .ec-shrine-dogma { position: relative; z-index: 1; font-size: 14px; color: var(--t2); font-style: italic; line-height: 1.6;

@@ -1021,12 +1021,13 @@ function frCloseView() { document.getElementById('fr-modal')?.classList.remove('
 // ════════════════════════════════════════════════════════════
 async function frRenderAppsTab(b) {
   b.innerHTML = `<div class="sload" style="min-height:60px"><div class="quote-loader">Загрузка...</div></div>`;
-  let apps = [], faiths = [], unions = [], corps = [];
+  let apps = [], faiths = [], unions = [], corps = [], mons = [];
   try { apps = await dbGet('faction_applications', 'or=(status.eq.pending,pending_review.eq.true)&order=updated_at.asc') || []; } catch (e) { b.innerHTML = `<p style="color:var(--err)">Ошибка: ${esc(e.message)}</p>`; return; }
   try { faiths = await frRpc('faith_pending_list') || []; } catch (e) { faiths = []; }
   try { unions = await frRpc('union_pending_list') || []; } catch (e) { unions = []; }
   try { corps = await frRpc('corp_pending_list') || []; } catch (e) { corps = []; }
-  if (!apps.length && !faiths.length && !unions.length && !corps.length) { b.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--t3)">Нет анкет на модерации</div>`; return; }
+  try { mons = await frRpc('faith_monuments_pending_list') || []; } catch (e) { mons = []; }  // ВОЛНА: памятники веры
+  if (!apps.length && !faiths.length && !unions.length && !corps.length && !mons.length) { b.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--t3)">Нет анкет на модерации</div>`; return; }
   const appsHtml = apps.map(a => {
       const isEdit = a.status === 'approved' && a.pending_review;
       const badge = isEdit ? `<span class="fr-app-badge edit">ИЗМЕНЕНИЯ</span>` : `<span class="fr-app-badge new">НОВАЯ</span>`;
@@ -1103,11 +1104,36 @@ async function frRenderAppsTab(b) {
         <button class="btn btn-rd btn-sm" onclick="frCorpReview('${c.id}',false)">✕ Отклонить</button>
       </div></div>`;
     }).join('');
-  b.innerHTML = `<div style="margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--te)">${apps.length + faiths.length + unions.length + corps.length} на модерации</div>`
+  const monsHtml = mons.map(m => {
+      const img = m.image_url ? `<img src="${esc(m.image_url)}" alt="" style="width:46px;height:46px;border-radius:8px;object-fit:cover;flex-shrink:0">` : '';
+      return `<div class="fr-app" id="fr-mon-${m.id}">
+      <div class="fr-app-hd"><span class="fr-app-badge new">ПАМЯТНИК</span>${img}
+        <b>🗿 «${esc(m.name || 'Без названия')}»</b>
+        <span class="fr-app-by">${esc(m.founder_name || m.faction_id || '')}</span></div>
+      <div class="fr-app-meta">вера «${esc(m.faith_name || '—')}» · колония ${esc(m.colony_name || '—')}</div>
+      ${m.description ? `<div class="fr-app-meta" style="font-style:italic">«${esc(m.description)}»</div>` : ''}
+      <div class="fr-app-acts">
+        <button class="btn btn-gd btn-sm" onclick="frMonReview('${m.id}',true)">✓ Одобрить</button>
+        <button class="btn btn-rd btn-sm" onclick="frMonReview('${m.id}',false)">✕ Отклонить</button>
+      </div></div>`;
+    }).join('');
+  b.innerHTML = `<div style="margin-bottom:10px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--te)">${apps.length + faiths.length + unions.length + corps.length + mons.length} на модерации</div>`
     + appsHtml
     + (faiths.length ? `<div class="fr-app-group">🛐 Религии</div>${faithsHtml}` : '')
+    + (mons.length ? `<div class="fr-app-group">🗿 Памятники веры</div>${monsHtml}` : '')
     + (unions.length ? `<div class="fr-app-group">🤝 Союзы</div>${unionsHtml}` : '')
     + (corps.length ? `<div class="fr-app-group">🏢 Организации</div>${corpsHtml}` : '');
+}
+// ВОЛНА: вердикт по памятнику веры (бонусы уже работают, модерация — только облик)
+async function frMonReview(id, approve) {
+  let reason = null;
+  if (!approve) { reason = prompt('Причина отклонения (увидит основатель):', ''); if (reason === null) return; }
+  else if (!confirm('Одобрить памятник? Его облик станет виден миру.')) return;
+  try {
+    await frRpc('faith_monument_review', { p_id: id, p_approve: !!approve, p_reason: reason });
+    toast(approve ? 'Одобрено ✓' : 'Отклонено', approve ? 'ok' : 'inf');
+    document.getElementById('fr-mon-' + id)?.remove();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
 async function frCorpReview(id, approve) {
   let reason = null;

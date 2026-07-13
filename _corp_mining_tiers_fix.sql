@@ -6,7 +6,8 @@
 --  залежи (_concession_build.sql), поэтому концессионные почти всегда именно
 --  этих ярусов — и давали 0, пока обычный mining давал 120/слот.
 --
---  Применять ПОСЛЕ _exchange_demand.sql и _exchange_corp_moderation.sql.
+--  Применять ПОСЛЕ _exchange_demand.sql, _exchange_corp_moderation.sql и
+--  _exchange_corp_index.sql (нужны corp_index/_corp_spark/corp_index_tick).
 --  Ставки-зеркало ярусов: mining 120, mining_deep 200, mining_exotic 450 ГС/слот.
 --  Идемпотентно.
 -- ════════════════════════════════════════════════════════════════════════════
@@ -72,12 +73,15 @@ returns numeric language sql stable as $$
   where x.corp_id = p_corp
 $$;
 
--- ── 3) corps_status v4 — копия v3 (_exchange_corp_moderation.sql), исправлен
---      лишь daily_gc свободных домиков: ярусы добычи больше не «+0/ход» ───────
+-- ── 3) corps_status v5 — надмножество v4e (_exchange_corp_index.sql): сохранены
+--      'index'/'board'/'spark' и corp_index_tick() (в прошлой ревизии этого файла
+--      они клоббернулись копией v3 → доска «нет одобренных организаций»);
+--      исправлен daily_gc свободных домиков: ярусы добычи больше не «+0/ход» ───
 create or replace function public.corps_status()
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare fid text;
 begin
+  begin perform public.corp_index_tick(); exception when others then null; end;   -- ИНДЕКС: рынок проживает прошедшие дни
   fid := public._ec_my_fid();
   return jsonb_build_object(
     'session', jsonb_build_object(
@@ -92,6 +96,25 @@ begin
        'military_factory', public._demand_factor('military_factory'),
        'trade',            public._demand_factor('trade'),
        'temple',           public._demand_factor('temple')),
+    'index', jsonb_build_object(                                               -- ИНДЕКС
+       'value', (select value from public.corp_index where id=1),
+       'base',  (select base_value from public.corp_index where id=1),
+       'spark', public._corp_spark(null, 40)),
+    'board', coalesce((                                                        -- ИНДЕКС: вся доска котировок (одобренные)
+      select jsonb_agg(jsonb_build_object(
+        'id', c.id, 'name', c.name, 'founder', coalesce(c.founder_name, public._fac_name(c.faction_id)),
+        'mine', (c.faction_id = fid),
+        'image_url', c.image_url,
+        'share_price', c.share_price, 'total_shares', c.total_shares,
+        'sector_mult', public._corp_sector_mult(c.id),
+        'daily_gross', public._corp_daily_net(c.id),
+        'spark', public._corp_spark(c.id, 24),
+        'my_shares', coalesce((select shares from public.corp_shares s where s.corp_id=c.id and s.holder_fid=fid),0),
+        'ask', (select jsonb_build_object('id', l.id, 'price', l.price, 'shares', l.shares)
+                from public.corp_listings l where l.corp_id = c.id and l.seller_fid <> fid
+                order by l.price asc limit 1)
+      ) order by (c.share_price * c.total_shares) desc)
+      from public.corporations c where c.status = 'approved'), '[]'::jsonb),
     'mine', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', c.id, 'name', c.name, 'total_shares', c.total_shares, 'share_price', c.share_price,
@@ -99,6 +122,7 @@ begin
         'efficiency', public._corp_efficiency(c.id),
         'sector_mult', public._corp_sector_mult(c.id),                         -- СПРОС
         'daily_gross', public._corp_daily_net(c.id),
+        'spark', public._corp_spark(c.id, 24),                                 -- ИНДЕКС
         'description', c.description, 'image_url', c.image_url,                 -- МОД: контент (учредитель видит свой)
         'status', c.status, 'pending_review', c.pending_review,                -- МОД: статус модерации
         'pending', c.pending, 'reject_reason', c.reject_reason,                -- МОД: что предложено / причина отказа
@@ -116,6 +140,7 @@ begin
         'shares', s.shares, 'total_shares', c.total_shares, 'share_price', c.share_price,
         'value', round(s.shares * c.share_price),
         'sector_mult', public._corp_sector_mult(c.id),                         -- СПРОС
+        'spark', public._corp_spark(c.id, 24),                                 -- ИНДЕКС
         'description', case when c.status='approved' then c.description else null end,  -- МОД: чужой контент только одобренный
         'image_url',   case when c.status='approved' then c.image_url   else null end,  -- МОД:
         'daily_gross', public._corp_daily_net(c.id)))

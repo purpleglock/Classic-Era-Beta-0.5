@@ -288,7 +288,7 @@ function ecResIcon(name) {
 }
 
 const ecId = id => document.getElementById(id);
-const ecNum = n => Number(n || 0).toLocaleString('ru-RU');
+const ecNum = n => Math.round(Number(n || 0)).toLocaleString('ru-RU');
 const ecReadable = c => (typeof frReadable === 'function') ? frReadable(c) : (c || '#cfe3ff');
 
 // Каталог зданий — зеркало _economy_setup.sql (для цен и превью дохода; источник истины дохода — RPC)
@@ -6640,13 +6640,16 @@ function ecUnionImgClear(hiddenId, prevId) {
 
 // ── ВЕРА (религия) · справочник механики ────────────────────
 // Подробное объяснение: что на что влияет, сколько, как, когда и почему.
-// Числа берутся из faith_status (зеркало серверных формул _faith_setup.sql):
-//   доход храма 150 ГС/слот/сут; скидка спирит/теократ 2%/слот до 30%,
-//   прочие 1.2%/слот до 18%, флоту — половина; десятина основателю 20% (30 ГС/слот).
+// Числа берутся из faith_status (зеркало серверных формул: _faith_setup.sql +
+// _faith_monuments.sql). ВОЛНА: храм — ретранслятор идей; ставка ГС/слот
+// динамическая: 150 × (0.35 + 0.65×охват^0.7) × рвение × сеть × памятники,
+// коридор 40…240. Расчёт ТОЛЬКО на сервере — клиент показывает готовые числа.
 function ecFaithMechanics(fs) {
   const spirit   = !!fs.can_found;                       // спирит/теократ → усиленная вера
   const strength = fs.strength || 0;                     // паства = сумма слотов всех храмов
-  const income   = fs.temple_income || 150;             // ГС за слот в сутки
+  const income   = fs.temple_income || 150;             // ГС за слот в сутки (живая ставка)
+  const wave     = fs.wave || {};                        // ВОЛНА: охват/зона/памятники
+  const covPct   = Math.round((wave.coverage || 0) * 100);
   const disc     = Math.round((fs.unit_discount || 0) * 100);
   const tithePct = Math.round((fs.tithe_pct || 0.20) * 100);
   const perSlot  = spirit ? 2 : 1.2;                     // % скидки за слот
@@ -6661,8 +6664,11 @@ function ecFaithMechanics(fs) {
     ? `Сейчас у вас <b>${ecNum(strength)}</b> слот(ов) храмов.`
     : `Сейчас храмов нет — постройте Храм Веры во вкладке «Колонии», чтобы запустить все бонусы.`;
   const nowIncome = strength > 0
-    ? `Сейчас: <b>${ecNum(strength)}</b> слот(ов) × ${income} = <b>+${ecNum(dayIncome)} ГС/сут</b>.`
+    ? `Сейчас ставка <b>${ecNum(income)} ГС/слот</b> (охват ${covPct}%): ${ecNum(strength)} слот(ов) × ${ecNum(income)} = <b>+${ecNum(dayIncome)} ГС/сут</b>.`
     : `Сейчас: 0 ГС — нет храмов.`;
+  const nowCov = strength > 0
+    ? `Сейчас зона вещания <b>${ecNum(wave.reach || 0)}</b> душ при населении <b>${ecNum(Math.round(wave.pop || 0))}</b> → охват <b>${covPct}%</b>${(wave.monuments_n || 0) ? ` (усилен ${ecNum(wave.monuments_n)} памятником(ами))` : ''}.`
+    : `Охват 0% — идеям нужен хотя бы один храм-ретранслятор.`;
   let nowDisc;
   if (strength <= 0) {
     nowDisc = `Сейчас скидки нет — нужен хотя бы один слот храма.`;
@@ -6675,7 +6681,7 @@ function ecFaithMechanics(fs) {
     ? (() => {
         const fromAdepts = (fs.adepts || []).filter(a => a.role !== 'founder').reduce((s, a) => s + (a.flock || 0), 0);
         return fromAdepts > 0
-          ? `Сейчас вам платят <b>${ecNum(fromAdepts)}</b> чужих слот(ов) → <b>+${ecNum(fromAdepts * titheSlot)} ГС/сут</b> десятины.`
+          ? `Сейчас вам платят <b>${ecNum(fromAdepts)}</b> чужих слот(ов) → <b>≈ +${ecNum(fromAdepts * titheSlot)} ГС/сут</b> десятины (точная сумма — по ставке каждого адепта).`
           : `Сейчас адептов с храмами нет — рассылайте миссии признания, чтобы пошла десятина.`;
       })()
     : isReco
@@ -6697,15 +6703,21 @@ function ecFaithMechanics(fs) {
       ${row('🛐', 'Сила веры (паства)',
         `<b>Что:</b> суммарное число слотов всех ваших Храмов Веры — это база, от которой считаются <b>все</b> бонусы ниже. <b>Как растёт:</b> стройте и расширяйте храмы во вкладке «Колонии» (каждое расширение = +слоты). <b>Почему:</b> чем шире паства, тем сильнее культ.`,
         nowStrength)}
-      ${row('💰', 'Доход храмов',
-        `<b>Сколько:</b> <b>+${income} ГС</b> за каждый слот в сутки. <b>Когда:</b> начисляется ежедневным тиком экономики, пока вы исповедуете религию храма. <b>Почему:</b> храмы — культовые предприятия, духовный аналог торговли. Доход прекращается, если отречься от веры храма.`,
+      ${row('📡', 'Охват населения — храм как ретранслятор идей',
+        `<b>Что:</b> каждый слот храма «вещает» на <b>120 душ</b>; памятники веры расширяют зону (+10% за памятник). Доля населения державы, попавшая под влияние, и есть <b>охват</b> — главный рычаг дохода. <b>Почему:</b> вера — не касса, а идея: пустому залу проповедовать бессмысленно, но и горстка храмов не окормит миллионы. Растёт население — стройте новые храмы, иначе охват (и ставка) тает.`,
+        nowCov)}
+      ${row('💰', 'Доход храмов — динамическая ставка',
+        `<b>Сколько:</b> от <b>40</b> до <b>240 ГС</b> за слот в сутки: базовые 150 × (0.35 + 0.65 × охват<sup>0.7</sup>) × <b>рвение</b> (при нищем соцобеспечении народ ищет утешение в вере — до ×1.20; при щедром — ×0.88) × <b>сеть</b> (+3% за каждую чужую державу в ваших верах, до ×1.15) × <b>памятники</b> (+5% за памятник, до ×1.25). <b>Когда:</b> ежедневным тиком, пока вы исповедуете религию храма.`,
         nowIncome)}
       ${row('⚔', 'Удешевление войск',
         `<b>Сколько:</b> ${spirit ? '<b>−2%</b> за слот, потолок <b>−30%</b>' : '<b>−1.2%</b> за слот, потолок <b>−18%</b>'} (вы — ${spirit ? 'спиритуалист/теократия, усиленная вера' : 'обычная держава'}). Корабли (флот) получают <b>половину</b> скидки. <b>Когда:</b> применяется при постройке войск и кораблей. <b>Почему:</b> вера вдохновляет народ на службу; духовным державам — сильнее.`,
         nowDisc)}
       ${row('🤝', `Десятина основателю (+${tithePct}%)`,
-        `<b>Сколько:</b> основатель веры получает <b>${tithePct}%</b> дохода храмов каждого адепта = <b>${titheSlot} ГС</b> за чужой слот в сутки. <b>Когда:</b> ежедневным тиком, пока адепт исповедует вашу веру. <b>Почему:</b> награда за распространение — рассылайте миссии признания, чтобы паства (и десятина) росла.`,
+        `<b>Сколько:</b> основатель веры получает <b>${tithePct}%</b> дохода храмов каждого адепта — по <b>его собственной</b> динамической ставке (что храм реально приносит адепту, с того и десятина). <b>Когда:</b> ежедневным тиком, пока адепт исповедует вашу веру. <b>Почему:</b> награда за распространение — рассылайте миссии признания, чтобы паства (и десятина) росла.`,
         nowTithe)}
+      ${row('🗿', 'Памятники веры',
+        `<b>Кто:</b> только основатель религии. <b>Цена:</b> <b>600</b> 🧬 Реликтового дерева + <b>10 000 ГС</b>, максимум <b>один на колонию</b>. <b>Что дают:</b> +0.5%/сут к росту населения своей колонии (благополучие), +10% к зоне вещания храмов и +5% к ставке дохода (за каждый). Оформление (название, образ, описание) проходит модерацию, как регистрация религии; бонусы действуют сразу.`,
+        (wave.monuments_n || 0) > 0 ? `Сейчас у вас <b>${ecNum(wave.monuments_n)}</b> памятник(ов).` : (isFounder ? 'Памятников пока нет — воздвигните первый в разделе ниже.' : 'Касается только основателей вер.'))}
       ${row('🕊', 'Кто может исповедовать',
         `<b>Свободно</b> основать или принять веру могут идеология «Спиритуализм» и форма правления «Теократия» (и администрация). <b>Прочие</b> народы обращаются только по предложению признания от основателя. Своя религия — <b>лишь одна</b>; чужих можно исповедовать несколько.`,
         spirit ? `Вам открыт путь веры: можно основать свою и принимать чужие.` : `Вам нужно дождаться предложения признания от основателя веры.`)}
@@ -6724,7 +6736,7 @@ function ecFaithMechanics(fs) {
 // «Колонии», тип «Храм Веры») → +ГС и удешевление постройки войск.
 function ecTabFaith() {
   const fs = EC.faith || { faith: null, can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };
-  const intro = ecIntro('🛐', 'Вера', 'Спиритуалисты и теократии основывают религии. Исповедующие строят Храмы Веры — каждый слот даёт пассивный доход и удешевляет постройку войск. Чем больше паствы (слотов храмов), тем сильнее эффект.', [
+  const intro = ecIntro('🛐', 'Вера', 'Спиритуалисты и теократии основывают религии. Храмы Веры — ретрансляторы идей: они кораптят население, и чем большая доля жителей державы под влиянием культа, тем выше ставка дохода каждого слота (от 40 до 240 ГС/сут). Заодно вера удешевляет постройку войск.', [
     '<b>Основать веру</b> могут идеология «Спиритуализм», форма правления «Теократия» и администрация (свою — только одну).',
     '<b>Несколько религий</b>: держава может исповедовать сразу несколько вер и строить храмы разных религий — при постройке храма указывается его религия.',
     '<b>Храм Веры</b> строится во вкладке «Колонии». Доход храма идёт, пока вы исповедуете его религию.',
@@ -6785,20 +6797,24 @@ function ecTabFaith() {
     mine = `<div class="ec-shrine" style="--fc:${fc}">
         ${stBanner}
         ${banner}
-        <div class="ec-shrine-hd">
-          <div class="ec-shrine-sigil">🛐</div>
-          <div><div class="ec-shrine-name">«${esc(f.name)}»</div>
-            <div class="ec-shrine-role">${roleTxt} · ${ecNum(adepts.length)} народ(ов) в лоне веры</div></div>
+        <div class="ec-shrine-hd ec-shrine-hd-title">
+          <div class="ec-shrine-title">
+            <div class="ec-shrine-kicker">санктум · символ веры</div>
+            <div class="ec-shrine-name ec-shrine-name-grand">${esc(f.name)}</div>
+            <div class="ec-shrine-role">${roleTxt} · ${ecNum(adepts.length)} народ(ов) в лоне веры</div>
+          </div>
         </div>
         ${f.dogma ? `<div class="ec-shrine-dogma">«${esc(f.dogma)}»</div>` : ''}
         ${editForm}
         <div class="ec-bless-hd">Благословения веры — паства ${strength} слот(ов) храмов</div>
         <div class="ec-bless-grid">
-          ${blessTile('💰', '+' + income, 'ГС с каждого храма')}
+          ${blessTile('📡', Math.round(((fs.wave || {}).coverage || 0) * 100) + '%', 'населения под влиянием')}
+          ${blessTile('💰', '+' + income, 'ГС/слот — живая ставка')}
           ${blessTile('⚔', '−' + disc + '%', disc > 0 ? 'дешевле войска (флот — вдвое)' : 'войска (стройте храмы)')}
           ${blessTile('🛐', strength, 'сила паствы')}
           ${isFounder ? blessTile('🤝', '+' + tithePct + '%', 'десятина с адептов') : ''}
         </div>
+        ${ecFaithMonuments(fs, isFounder)}
         ${fs.role === 'recognized' ? `<div class="ec-shrine-note" style="margin-top:10px">🕊 Вы под покровительством чужой веры: с дохода ваших храмов её основатель взимает десятину ${tithePct}%.</div>` : ''}
         ${adeptsHtml ? `<div class="ec-bless-hd" style="margin-top:16px">Паства веры</div><div>${adeptsHtml}</div>` : ''}
         ${spreadBlock}
@@ -6811,9 +6827,10 @@ function ecTabFaith() {
     mine = ecFaithFoundCard(false);
   } else {
     mine = `<div class="ec-shrine" style="--fc:#6a6f7a">
-        <div class="ec-shrine-hd"><div class="ec-shrine-sigil">🔒</div>
-          <div><div class="ec-shrine-name" style="color:var(--t3)">Путь веры закрыт</div>
-            <div class="ec-shrine-role">нужна духовная природа державы</div></div></div>
+        <div class="ec-shrine-hd ec-shrine-hd-title"><div class="ec-shrine-title">
+          <div class="ec-shrine-kicker">санктум</div>
+          <div class="ec-shrine-name ec-shrine-name-grand" style="color:var(--t3)">Путь веры закрыт</div>
+          <div class="ec-shrine-role">нужна духовная природа державы</div></div></div>
         <div class="ec-shrine-note">Учреждать и принимать веру по своей воле могут лишь державы с идеологией «Спиритуализм» или формой правления «Теократия». Прочие народы могут обратиться в чужую веру только по зову её основателя — следите за предложениями признания.</div>
       </div>`;
   }
@@ -6885,6 +6902,63 @@ function ecTabFaith() {
     ${exposedHtml}
     ${registry}`;
 }
+// ── Памятники веры (ВОЛНА) ──────────────────────────────────
+// Основатель религии воздвигает памятник (600 Реликтового дерева + 10 000 ГС,
+// один на колонию): +0.5%/сут к росту населения колонии, +10% к зоне вещания
+// храмов, +5% к ставке. Оформление уходит на модерацию (как регистрация веры).
+function ecFaithMonuments(fs, isFounder) {
+  const mons = fs.monuments || [];
+  const cost = (fs.wave || {}).monument_cost || { wood: 600, gc: 10000 };
+  const stTxt = m => m.status === 'pending' ? '<span class="ec-q-t">⏳ облик на модерации</span>'
+    : m.status === 'rejected' ? `<span class="ec-q-t" style="color:var(--err)">✕ отклонён${m.reject_reason ? ' · ' + esc(m.reject_reason) : ''}</span>` : '';
+  const list = mons.map(m => `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+      ${m.image_url ? `<span class="ec-faith-thumb" style="background-image:url('${esc(m.image_url)}')"></span>` : '🗿 '}
+      <b>«${esc(m.name)}»</b> · ${esc(m.colony_name || 'колония')} ${stTxt(m)}
+    </span>${(isFounder && m.status === 'rejected') ? `<button class="btn btn-gh btn-xs" onclick="ecFaithMonEdit('${m.id}')">✎ переоформить</button>` : ''}</div>`).join('');
+  if (!isFounder) return list ? `<div class="ec-bless-hd" style="margin-top:16px">Памятники веры</div><div>${list}</div>` : '';
+  const taken = new Set(mons.map(m => m.colony_id));
+  const free = (EC.colonies || []).filter(c => !taken.has(c.id));
+  const opts = free.map(c => `<option value="${esc(c.id)}">${esc(c.planet_name || c.id)}</option>`).join('');
+  const wood = Math.floor(+((EC.eco && EC.eco.resources || {})['Реликтовое дерево']) || 0);
+  const form = free.length ? `<div class="ec-prod-form" style="margin-top:8px;flex-wrap:wrap">
+      <select id="ec-mon-colony" class="ec-loan-note" style="min-width:150px">${opts}</select>
+      <input id="ec-mon-name" placeholder="название памятника" class="ec-loan-note" style="flex:1;min-width:150px" maxlength="60">
+      <button class="btn btn-gd btn-sm" onclick="ecFaithMonBuild()">Воздвигнуть</button>
+    </div>
+    <input id="ec-mon-desc" placeholder="описание (необязательно)" class="ec-loan-note" style="margin-top:8px;width:100%" maxlength="300">
+    <input type="hidden" id="ec-mon-img" value="">
+    <div class="ec-faith-imgrow">
+      <div class="ec-faith-imgprev" id="ec-mon-imgprev"><span>нет образа</span></div>
+      <label class="btn btn-gh btn-sm">📷 Образ памятника<input type="file" accept="image/*" style="display:none" onchange="ecFaithImg(this,'ec-mon-img','ec-mon-imgprev')"></label>
+    </div>` : '<div class="ec-empty">Во всех ваших колониях уже стоят памятники.</div>';
+  return `<div class="ec-bless-hd" style="margin-top:16px">🗿 Памятники веры — цена ${ecNum(cost.wood)} 🧬 Реликтового дерева + ${ecNum(cost.gc)} ГС</div>
+    <div class="ec-shrine-note">Монумент кораптит умы: +0.5%/сут к росту населения колонии, +10% к зоне вещания храмов и +5% к ставке дохода. Один на колонию; облик проходит модерацию. У вас на складе: <b>${ecNum(wood)}</b> 🧬.</div>
+    ${list ? `<div style="margin-top:8px">${list}</div>` : ''}
+    ${form}`;
+}
+function ecFaithMonBuild() {
+  const colony = ecId('ec-mon-colony')?.value;
+  const name = ecId('ec-mon-name')?.value?.trim();
+  const desc = ecId('ec-mon-desc')?.value?.trim() || null;
+  const image = ecId('ec-mon-img')?.value?.trim() || null;
+  if (!colony) { toast('Выберите колонию', 'err'); return; }
+  if (!name) { toast('Введите название памятника', 'err'); return; }
+  ecRpcAct('faith_monument_build', { p_colony_id: colony, p_name: name, p_description: desc, p_image_url: image },
+    'Памятник воздвигнут — облик отправлен на модерацию');
+}
+// Переоформление отклонённого памятника (образ сохраняется прежний)
+function ecFaithMonEdit(id) {
+  const m = ((EC.faith && EC.faith.monuments) || []).find(x => x.id === id);
+  if (!m) return;
+  const name = prompt('Новое название памятника:', m.name || '');
+  if (name === null) return;
+  if (!name.trim()) { toast('Название не может быть пустым', 'err'); return; }
+  const desc = prompt('Описание (необязательно):', m.description || '');
+  if (desc === null) return;
+  ecRpcAct('faith_monument_edit', { p_id: id, p_name: name.trim(), p_description: desc.trim() || null, p_image_url: m.image_url || null },
+    'Памятник переоформлен — снова на модерации');
+}
+
 // Карточка основания веры. additional=true — когда держава уже исповедует другие веры.
 function ecFaithFoundCard(additional) {
   const title = additional ? 'Основать собственную веру' : 'Провозгласить веру';
@@ -6893,9 +6967,10 @@ function ecFaithFoundCard(additional) {
     ? 'Вы вольны исповедовать чужие веры, но провозгласить можете и собственную религию — основать дозволено только одну.'
     : 'Учредите новый культ и поведите за собой народы — либо примите одну из уже сияющих в галактике религий ниже.';
   return `<div class="ec-shrine" style="--fc:#c9a227${additional ? ';margin-top:14px' : ''}">
-        <div class="ec-shrine-hd"><div class="ec-shrine-sigil">✶</div>
-          <div><div class="ec-shrine-name" style="color:var(--gd)">${title}</div>
-            <div class="ec-shrine-role">${role}</div></div></div>
+        <div class="ec-shrine-hd ec-shrine-hd-title"><div class="ec-shrine-title">
+          <div class="ec-shrine-kicker">санктум</div>
+          <div class="ec-shrine-name ec-shrine-name-grand" style="color:var(--gd)">${title}</div>
+          <div class="ec-shrine-role">${role}</div></div></div>
         <div class="ec-shrine-note">${note}</div>
         <div class="ec-shrine-note" style="color:var(--t4)">Новая религия проходит модерацию администрации, как анкета фракции: её облик станет виден миру после одобрения. Бонусы храмов действуют сразу.</div>
         <div class="ec-prod-form" style="margin-top:12px;flex-wrap:wrap">
