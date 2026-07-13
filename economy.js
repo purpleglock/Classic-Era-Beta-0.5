@@ -306,6 +306,7 @@ const EC_BUILD = {
   intel:            { name: 'Центр Спецслужб',      cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 агент' },
   military_factory: { name: 'Военный Завод',        cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 100 ед. техники' },
   shipyard:         { name: 'Корабельная Верфь',    cost: 2000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 корабль / 12 МЛА' },
+  airfield:         { name: 'Аэрокосмический Завод', cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 12 ед. авиации (МАРШ: авиация строится здесь, не на Верфи)' },
   temple:           { name: 'Храм Веры',            cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 150 }, cat: 'faith', desc: '+150 ГС за слот и удешевляет постройку войск. При постройке выбираете, чьей религии храм (можно строить храмы разных вер)' },
   // ─ ОБОРОННЫЕ СТРУКТУРЫ (зеркало _defense_*.sql) ─
   starbase:         { name: 'Звёздная База',         cost: 5000, ladder: [0, 5000, 5000, 8000, 8000, 12000], free: 1, inc: {}, cat: 'mil', desc: 'Вместимость флота: +50 кораблей за слот. Без неё нельзя строить корабли сверх лимита (содержания нет — только вместимость)' },
@@ -319,7 +320,7 @@ const EC_BUILD = {
 const EC_DOOM_BUILD_MATTER = 40, EC_DOOM_SHOT_GRAV = 20;
 // Гиперпейсер — мобильная «Длань» (зеркало _mza_const): цена постройки + расход залпа.
 const EC_MZA_BUILD_GC = 1200000, EC_MZA_BUILD_MATTER = 60, EC_MZA_SHOT_GRAV = 12, EC_MZA_SHOT_WEAR = 25;
-const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'starbase', 'flak', 'abm', 'temple'];
+const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'airfield', 'starbase', 'flak', 'abm', 'temple'];
 // Рецепт фабрики товаров (зеркало accrue в _budget_wellbeing.sql): на слот/сутки.
 // Товары ДЕМАТЕРИАЛИЗОВАНЫ — не ресурс: выпуск ровно под спрос населения.
 const EC_GOODS = { water: 6, mat: 4, out: 10 };
@@ -346,7 +347,8 @@ const EC_BLD_HOWTO = {
   training:         'Даёт мощность для производства пехоты (заказ — во вкладке «Строительство вооружённых сил»).',
   intel:            'Даёт агентов для разведки (вкладка «Разведка»).',
   military_factory: 'Даёт мощность для производства наземной техники (вкладка «Строительство вооружённых сил»).',
-  shipyard:         'Даёт мощность для постройки кораблей и авиации (вкладка «Строительство вооружённых сил»).',
+  shipyard:         'Даёт мощность для постройки кораблей (вкладка «Строительство вооружённых сил»).',
+  airfield:         'Даёт мощность для производства АВИАЦИИ (12 ед. за слот в ход). Юниты авиации потом собираются в армии — режим карты «Звёздный марш».',
   starbase:         'Открывает вместимость флота (+50 кораблей за слот). Нельзя строить корабли сверх суммарной вместимости баз — это не содержание, а «места под флот». Уже имеющийся флот сверх лимита остаётся, но новые корабли заблокированы, пока не построите базу/слот.',
   flak:             'Пассивная защита планеты от авиации: снижает урон вражеских авиагрупп при ударе по этой планете. Боезапаса не требует.',
   abm:              'Перехватывает удары по планете (орбитальные удары, залп орудия судного дня). Каждый перехват тратит снаряд. Снаряды докупаются за ГС и прибывают через 1 день. Нет снарядов — удар проходит.',
@@ -356,7 +358,7 @@ const EC_BLD_HOWTO = {
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
   factory: '🏭', mining: '⛏', mining_deep: '⚒', mining_exotic: '💎', goodsfab: '🛍', trade: '💱', market: '📈',
-  science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', warehouse: '📦', temple: '🛐', doomgun: '🜨',
+  science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', airfield: '✈', warehouse: '📦', temple: '🛐', doomgun: '🜨',
   starbase: '🛰', flak: '🎯', abm: '🚀',
 };
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
@@ -622,7 +624,7 @@ function ecStationTechFor(group) {
 }
 
 // ── Производство ────────────────────────────────────────────
-const EC_BLD_LABEL = { training: 'Центр Подготовки', military_factory: 'Военный Завод', shipyard: 'Корабельная Верфь' };
+const EC_BLD_LABEL = { training: 'Центр Подготовки', military_factory: 'Военный Завод', shipyard: 'Корабельная Верфь', airfield: 'Аэрокосмический Завод' };
 const EC_VEH_WEIGHT = { tank_light: 1, tank_mbt: 2, tank_heavy: 4, tank_walker: 4, btr_wheel: 1, bmp_track: 2, btr_hover: 1, art_mortar: 1, art_sau: 2, art_rszo: 2, art_laser: 4 };
 const EC_GROUND_WEIGHT = { light: 1, medium: 2, artillery: 2, heavy: 4, walker: 4 };
 function ecUnitWeight(u) { return EC_GROUND_WEIGHT[(u && u.data && u.data.class) || ''] || 2; }
@@ -642,7 +644,7 @@ function ecIsRobot() {
 function ecIsExpansionist() { return (EC.app || {}).ideology === 'Экспансионизм'; }
 const EC_INF_PER_SLOT = 1000, EC_ROBOT_INF_PER_SLOT = 3000;
 function ecCaps() {
-  const tr = ecSlotsSum('training'), mf = ecSlotsSum('military_factory'), sy = ecSlotsSum('shipyard');
+  const tr = ecSlotsSum('training'), mf = ecSlotsSum('military_factory'), sy = ecSlotsSum('shipyard'), af = ecSlotsSum('airfield');
   const robot = ecIsRobot();
   // Роботы «собирают» пехоту как технику — на Военном Заводе, втрое эффективнее.
   const infFromMf = robot ? mf * EC_ROBOT_INF_PER_SLOT : 0;
@@ -655,6 +657,7 @@ function ecCaps() {
   return {
     training: robot ? infFromMf : infFromTr,   // суммарная мощность пехоты
     military: mf * 100, ships: sy, mla: sy * 12,
+    aviation: af * 12, hasAirfield: af > 0,          // МАРШ: авиация строится на Аэрокосмическом Заводе
     fleetCap,                                   // мест под корабли (суммарно)
     fleetBaseCap: baseCap, fleetOutpostCap: outpostCap, fleetOutposts: opMining,
     hasTraining: robot ? mf > 0 : tr > 0,       // у роботов «носитель пехоты» = Военный Завод
@@ -694,16 +697,18 @@ function ecDivManpower(div) {
   return { inf, tech, ships };
 }
 function ecPendingUse() {
-  let ships = 0, inf = 0, tech = 0;
+  let ships = 0, inf = 0, tech = 0, avia = 0;
   EC.queue.forEach(q => {
     const qty = q.qty || 1;
     if (q.category === 'ship') { ships += qty; return; }
+    if (q.category === 'ground') { tech += qty; return; }      // МАРШ: юниты наземки
+    if (q.category === 'aviation') { avia += qty; return; }    // МАРШ: юниты авиации
     if (q.category === 'division') {
       const d = EC.designs.find(x => x.id === q.unit_id && x.category === 'division');
       if (d) { const mp = ecDivManpower(d); inf += mp.inf * qty; tech += mp.tech * qty; ships += mp.ships * qty; }
     }
   });
-  return { ships, inf, tech };
+  return { ships, inf, tech, avia };
 }
 function ecHasBuilding(bt) { return EC.buildings.some(b => b.btype === bt); }
 // Имя компонента состава дивизии (сток или зарегистрированная техника)
@@ -1080,7 +1085,19 @@ function ecBudgetPanel() {
       <span class="ec-bud-pop-i ${grCls}" data-tip="Прирост = соцобеспечение (${(grB * 100).toFixed(1)}%: ${EC_POP_GROWTH.map((g, i) => `${EC_BUDGET_LVL[i]} ${g >= 0 ? '+' : ''}${(g * 100).toFixed(1)}%`).join(' · ')}) + товары (${grG >= 0 ? '+' : ''}${(grG * 100).toFixed(1)}%: полное обеспечение Фабрикой товаров даёт до +1.0%/сут).">${gr >= 0 ? '📈' : '📉'} ${grTxt}/сут (${dPop >= 0 ? '+' : ''}${ecNum(dPop)} чел.) <i style="font-style:normal;opacity:.7">⚖${(grB * 100).toFixed(1)} + 🛍${(grG * 100).toFixed(1)}</i></span>
       <span class="ec-bud-pop-i" data-tip="Каждый рабочий слот постройки требует ${EC_POP_PER_SLOT} жителей. Не хватает рук — слоты всех построек срезаются пропорционально.">👷 хватает на <b>${ecNum(jobs)}</b> слот.</span>
     </div>
-    <div class="ec-bud-legend">Как это играется: <b>население</b> — и налоговая база, и рабочие руки (${EC_POP_PER_SLOT} жителей = 1 слот постройки; слоты двигают доход, науку и темп добычи). Растёт от <b>соцобеспечения</b> и <b>товаров</b> (Фабрика товаров), потолок поднимают новые ячейки (колонизация/терраформ). Цена уровней <b>прогрессивная</b> (веса ${EC_BUDGET_W.join('/')}): «норма» дешёвая, «максимум» кусается. Итог: <b>−${ecNum(ecBudgetUpkeep())} ГС/сут</b> · благополучие ×${ecBudgetGcMult().toFixed(2)} ко всему доходу.</div>
+    <div class="ec-bud-legend">Как это играется: <b>население</b> — и налоговая база, и рабочие руки (${EC_POP_PER_SLOT} жителей = 1 слот постройки; слоты двигают доход, науку и темп добычи). Растёт от <b>соцобеспечения</b> и <b>товаров</b> (Фабрика товаров), потолок поднимают новые ячейки (колонизация/терраформ). Цена уровней <b>прогрессивная</b> (веса ${EC_BUDGET_W.join('/')}): «норма» дешёвая, «максимум» кусается. Итог: <b>−${ecNum(ecBudgetUpkeep())} ГС/сут</b>.</div>
+    ${(() => {  // БЛАГО v5: индекс благополучия с разбивкой (сервер: budget.wb_* из accrue)
+      const w = ecWellbeing();
+      const sgn = v => (v >= 0 ? '+' : '') + v.toFixed(2);
+      const cls = w.wb >= 1 ? 'ec-cov-hi' : (w.wb >= 0.9 ? 'ec-cov-mid' : 'ec-cov-lo');
+      return `<div class="ec-bud-pop" style="margin-top:6px">
+        <span class="ec-bud-pop-i ${cls}" data-tip="Индекс благополучия множит ВЕСЬ денежный доход и пропускную способность Товарной биржи (благополучную державу охотнее слушает рынок). Складывается из соцобеспечения, характера народа и власти, и штрафов за перегруз флота и гарнизонов.">⚖ Индекс благополучия <b>×${w.wb.toFixed(2)}</b></span>
+        <span class="ec-bud-pop-i" data-tip="Соцобеспечение — уровень ползунка ниже.">⚖ база ${w.base.toFixed(2)}</span>
+        <span class="ec-bud-pop-i" data-tip="Идентичность: раса + форма правления + режим + идеология. У каждого народа свой характер благополучия.">${w.ident >= 0 ? '🧬' : '🧬'} народ ${sgn(w.ident)}</span>
+        ${w.fpen ? `<span class="ec-bud-pop-i ec-cov-lo" data-tip="Флот раздут сверх вместимости Звёздных Баз — милитаризация давит на общество. Стройте базы или сокращайте флот.">🛰 перегруз флота −${w.fpen.toFixed(2)}</span>` : ''}
+        ${w.gpen ? `<span class="ec-bud-pop-i ec-cov-lo" data-tip="Войска стоят на колониях сверх порога мирного гарнизона (${'20 юнитов или население/10'}) — оккупационный дискомфорт. Рассредоточьте армии.">🪖 гарнизоны −${w.gpen.toFixed(2)}</span>` : ''}
+      </div>`;
+    })()}
     ${rows}
   </div>`;
 }
@@ -1409,7 +1426,7 @@ async function _ecLoadRest() {
 }
 async function _ecLoadRestImpl() {
   if (!EC.app || !EC.fid) return;
-  const [faithStatus, faithList, passiveIntel, techLayout, techPrereq, exchange, bonds, corps, margin, futures, options, doom, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, myFleets] = await Promise.all([
+  const [faithStatus, faithList, passiveIntel, techLayout, techPrereq, exchange, bonds, corps, margin, futures, options, doom, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, myFleets, myArmies] = await Promise.all([
     ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции
     ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий
     ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез
@@ -1429,6 +1446,7 @@ async function _ecLoadRestImpl() {
     ecRpc('orders_status').catch(() => null),     // биржа: заказы (госзаказы/RFQ)
     ecRpc('mza_ships_mine').catch(() => []),      // Гиперпейсер: мои мобильные «Длани»
     ecRpc('fleets_mine').catch(() => []),         // флоты: мои мобильные соединения
+    ecRpc('armies_mine').catch(() => []),         // МАРШ: мои армии на колониях
   ]);
   // Межзвёздная артиллерия: орудия фракции (с integrity) + залпы в полёте + баланс.
   EC.doom = (doom && typeof doom === 'object') ? doom : { guns: [], salvos: [], const: {} };
@@ -1438,6 +1456,7 @@ async function _ecLoadRestImpl() {
   EC.opShips = Array.isArray(defOpShips) ? defOpShips : [];     // оборона: мои корабли-носители
   EC.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];        // Гиперпейсер: мои мобильные «Длани»
   EC.fleets = Array.isArray(myFleets) ? myFleets : [];          // флоты: мои мобильные соединения
+  EC.armies = Array.isArray(myArmies) ? myArmies : [];          // МАРШ: мои армии на колониях
   EC.outpostIntel = Array.isArray(defOutIntel) ? defOutIntel : [];  // оборона: разведданные разведаванпостов
   EC.spyPortraits = Array.isArray(spyPortraits) ? spyPortraits : [];  // агентура: общий пул портретов
   EC.faith = faithStatus || { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };  // вера: статус
@@ -1491,7 +1510,7 @@ async function _ecLoadRestImpl() {
 // клик по ещё-не-загруженной вкладке (Биржа/Вера/Оборона/Длань…) не падал на undefined.
 function ecResetDeferred() {
   EC.doom = { guns: [], salvos: [], const: {} }; EC.doomByBuilding = {};
-  EC.outposts = []; EC.opShips = []; EC.mzaShips = []; EC.fleets = []; EC.outpostIntel = []; EC.spyPortraits = [];
+  EC.outposts = []; EC.opShips = []; EC.mzaShips = []; EC.fleets = []; EC.armies = []; EC.outpostIntel = []; EC.spyPortraits = [];
   EC.faith = { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 }; EC.faithList = []; EC.faithById = {};
   EC.passive = {}; EC.techLayout = {}; EC.techPrereq = {}; EC._research = null;
   EC.exchange = { index: { value: 1000, base: 1000, spark: [] }, holdings: { units: 0, basis: 0 }, resources: {} };
@@ -1613,7 +1632,7 @@ function ecIncomePreview() {
   const m = ecFactionMods();
   const dz = ecDebuffPct();
   const gw = ecGoodsInfo().welfare;   // обеспечение товарами (зеркало economy_accrue)
-  const gcMul = m.gc * (1 - dz) * gw * ecBudgetGcMult();   // доктрина × дестабилизация × обеспечение × благополучие (соцбюджет)
+  const gcMul = m.gc * (1 - dz) * gw * ecWellbeing().wb;   // доктрина × дестабилизация × обеспечение × ИНДЕКС БЛАГОПОЛУЧИЯ (v5)
   return {
     gc: Math.round(gc * gcMul),
     science: Math.max(0, science + m.sci_flat),
@@ -1843,6 +1862,59 @@ function ecBudgetUpkeep() {
 }
 // Благополучие от соцобеспечения — множитель всего ГС-дохода (зеркало _budget_gc_mult)
 function ecBudgetGcMult() { return EC_BUDGET.social.mults[ecBudgetLvl('social')]; }
+
+// ── БЛАГО v5: единый индекс благополучия (зеркало _wellbeing_armies.sql) ──
+// wb = соцобеспечение + идентичность (раса/политика) − перегруз флота − гарнизоны.
+// Идентичность: у каждой расы и политики свой профиль (зеркало _wb_identity).
+const EC_WB_IDENT = {
+  race: { 'Гуманоиды': 0.03, 'Млекопитающие': 0.05, 'Рептилоиды': -0.02, 'Авианы (Птицеподобные)': 0.01,
+    'Инсектоиды': -0.03, 'Акватики (Водные)': 0.04, 'Плантоиды (Растениевидные)': 0.06,
+    'Литоиды (Каменные)': -0.04, 'Синтетики / Киборги': 0, 'Энергетические сущности': 0.02 },
+  gov: { 'Республика': 0.04, 'Монархия': 0.02, 'Империя': -0.03, 'Олигархия': -0.04, 'Диктатура': -0.05,
+    'Теократия': 0.03, 'Технократия': 0.02, 'Корпоратократия': -0.02, 'Коллективный разум': 0.05, 'Машинный разум (ИИ)': 0 },
+  regime: { 'Демократический': 0.04, 'Эгалитарный': 0.06, 'Меритократический': 0.02, 'Плутократический': -0.05,
+    'Олигархический': -0.03, 'Авторитарный': -0.03, 'Тоталитарный': -0.06, 'Деспотичный': -0.06, 'Деспотизм': -0.04, 'Анархический': -0.02 },
+  ideology: { 'Пацифизм': 0.05, 'Ксенофилия': 0.03, 'Спиритуализм': 0.02, 'Экоцентризм': 0.03,
+    'Милитаризм (Культ силы)': -0.04, 'Ксенофобия': -0.03, 'Экспансионизм': -0.02, 'Изоляционизм': 0.01,
+    'Технократия (Культ науки)': 0.01, 'Трансгуманизм': 0.02, 'Индустриализм': -0.01 },
+};
+function ecWbIdent() {
+  const a = EC.app || {};
+  const w = (EC_WB_IDENT.race[a.race] || 0) + (EC_WB_IDENT.gov[a.gov] || 0)
+          + (EC_WB_IDENT.regime[a.regime] || 0) + (EC_WB_IDENT.ideology[a.ideology] || 0);
+  return Math.max(-0.20, Math.min(0.20, Math.round(w * 1000) / 1000));
+}
+// Штраф перегруза флота: 100% перебора вместимости = −0.12, потолок −0.35 (зеркало _fleet_overcap_pen)
+function ecFleetOverPen() {
+  const used = ecFleetUsed(), cap = ecCaps().fleetCap;
+  const over = Math.max(0, used - cap);
+  if (over <= 0) return 0;
+  return Math.round(Math.min(0.35, 0.12 * over / Math.max(cap, 50)) * 1000) / 1000;
+}
+// Гарнизоны: порог «мирного гарнизона» колонии и перегруз (зеркала _garrison_free/_garrison_over_ratio)
+function ecGarrisonFree(col) { return Math.max(20, Math.round((col.pop != null ? +col.pop : (+col.cells || 0) * EC_POP_START_CELL) / 10)); }
+function ecGarrisonUnits(colonyId) {
+  return (EC.armies || []).filter(a => a.status === 'idle' && a.colony_id === colonyId)
+    .reduce((s, a) => s + (+a.units || 0), 0);
+}
+function ecGarrisonPen() {
+  let s = 0;
+  (EC.colonies || []).forEach(c => {
+    const free = ecGarrisonFree(c), units = ecGarrisonUnits(c.id);
+    s += Math.max(0, units - free) / Math.max(1, free);
+  });
+  return Math.round(Math.min(0.25, 0.06 * s) * 1000) / 1000;
+}
+// Итоговый индекс: берём серверную разбивку (accrue → budget.wb_*), иначе зеркалим.
+function ecWellbeing() {
+  const b = (EC.eco && EC.eco.budget) || {};
+  const base  = b.wb_base != null ? +b.wb_base : ecBudgetGcMult();
+  const ident = b.wb_ident != null ? +b.wb_ident : ecWbIdent();
+  const fpen  = b.wb_fleet_pen != null ? +b.wb_fleet_pen : ecFleetOverPen();
+  const gpen  = b.wb_garrison_pen != null ? +b.wb_garrison_pen : ecGarrisonPen();
+  const wb = Math.max(0.55, Math.min(1.35, Math.round((base + ident - fpen - gpen) * 1000) / 1000));
+  return { base, ident, fpen, gpen, wb };
+}
 
 function ecGcIncome() {
   const inc = ecIncomePreview();
@@ -4312,14 +4384,32 @@ function ecCapMeter(icon, label, used, cap, opts) {
 }
 
 // ── Вкладка 2: «Строительство вооружённых сил» — производство и очередь ──
+// МАРШ: дивизии НЕ строятся экономикой. Строятся ЮНИТЫ (наземка/авиация) в рамках
+// пропускной способности построек; армии формируются из готовых юнитов (как флоты).
 function ecTabMilBuild() {
   const caps = ecCaps(), use = ecPendingUse();
-  const divisions = EC.designs.filter(d => d.category === 'division');
   const ships = EC.designs.filter(d => d.category === 'ship');
+  const groundUnits = (EC.designs || []).filter(d => d.category === 'ground');
+  const aviaUnits = (EC.designs || []).filter(d => d.category === 'aviation');
 
-  const divHtml = divisions.length
-    ? `<div class="ec-div-grid">${divisions.map(ecDivBuildCard).join('')}</div>`
-    : `<div class="ec-empty">Нет дивизий. Спроектируйте дивизию в Конструкторе дивизий. <button class="btn btn-gh btn-sm" style="margin-left:8px" onclick="go('build-division')">⛬ Конструктор дивизий</button></div>`;
+  // МАРШ: производство юнитов наземки (Военный Завод) и авиации (Аэрокосмический Завод)
+  const unitForm = (list, cat) => {
+    const isAvia = cat === 'aviation';
+    if (isAvia && !caps.hasAirfield) return `<div class="ec-empty">Нужен Аэрокосмический Завод — постройте его во вкладке «Колонии».</div>`;
+    if (!isAvia && !caps.hasMil) return `<div class="ec-empty">Нужен Военный Завод — постройте его во вкладке «Колонии».</div>`;
+    if (!list.length) return `<div class="ec-empty">Нет проектов. Спроектируйте в Конструкторе. <button class="btn btn-gh btn-sm" style="margin-left:8px" onclick="go('build-${isAvia ? 'aviation' : 'ground'}')">⚒ Конструктор</button></div>`;
+    return `<div class="ec-prod-form">
+      <select id="ec-${cat}-sel" onchange="ecUnitBillUpd('${cat}')">${list.map(d => `<option value="${esc(d.id)}">${esc(d.name)} — ${ecNum((d.summary && d.summary.cost) || 0)} ГС</option>`).join('')}</select>
+      <input type="number" id="ec-${cat}-qty" value="1" min="1" class="ec-prod-qty" oninput="ecUnitBillUpd('${cat}')">
+      <button class="btn btn-gd btn-sm" onclick="ecProduceUnit('${cat}')">＋ Заказать</button>
+    </div>
+    <div id="ec-${cat}-bill" class="ec-ship-bill">${ecUnitBillHtml(list[0], 1)}</div>
+    <div class="ec-meter-row">
+      ${isAvia
+        ? ecCapMeter('✈', 'Аэрокосмический Завод за ход', use.avia, caps.aviation, { unit: 'ед. авиации', overOk: false })
+        : ecCapMeter('🛠', 'Военный Завод за ход', use.tech, caps.military, { unit: 'ед. техники', overOk: false })}
+    </div>`;
+  };
 
   let shipForm;
   if (!caps.hasShipyard) shipForm = `<div class="ec-empty">Нужна Корабельная Верфь — постройте её во вкладке «Колонии».</div>`;
@@ -4342,21 +4432,120 @@ function ecTabMilBuild() {
     ? EC.queue.map(q => `<div class="ec-q-row"><span class="ec-r-name">${esc(q.unit_name)} ×${ecNum(q.qty)}</span>${ecProgressISO(q.created_at, q.ready_at, 1, 'готово на след. ходу')}<button class="ec-bld-del" title="Отменить" onclick="ecCancelProd('${q.id}')">✕</button></div>`).join('')
     : `<div class="ec-empty" style="padding:8px">Очередь пуста.</div>`;
 
-  const infLine = caps.robot
-    ? `Пехота-роботы → <b>Военный завод</b> (×3: ${ecNum(EC_ROBOT_INF_PER_SLOT)}/слот), техника → <b>Военный завод</b>, корабли → <b>Корабельная верфь</b>.`
-    : 'Объём производства зависит от слотов военных зданий: пехота → <b>Центр подготовки</b>, техника → <b>Военный завод</b>, корабли → <b>Корабельная верфь</b>.';
-  const divHint = caps.robot
-    ? '— роботы собирают пехоту и технику на Военном Заводе (Центр Подготовки не нужен)'
-    : '— комплектование: нужны здания под состав (пехота → Подготовка, техника → Воензавод)';
-  const groundCap = `<div class="ec-cap">Пехота: <b>${ecNum(caps.training)} ед./ход</b>${caps.robot ? ' <span class="ec-rbadge">⚙ робо-сборка ×3</span>' : ''} · Техника: <b>${ecNum(caps.military)} ед./ход</b></div>`;
-  return `${ecIntro('🏭', 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, а заказ на производство — здесь.', [infLine, 'Нет проектов? Откройте «⚒ Конструкторы» и спроектируйте дивизию или корабль.', 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».'])}<div class="ec-section-title">Дивизии <span class="ec-hint">${divHint}</span></div>
-    ${groundCap}
-    ${divHtml}
+  const infLine = 'Объём производства зависит от слотов военных зданий: техника → <b>Военный завод</b>, авиация → <b>Аэрокосмический завод</b>, корабли → <b>Корабельная верфь</b>.';
+  return `${ecIntro('🏭', 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, заказ — здесь. Дивизии больше не строятся: постройте юниты и <b>сформируйте из них армию</b> — она встанет гарнизоном на колонии и перебрасывается в режиме карты «Звёздный марш».', [infLine, 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».', 'Гарнизон сверх порога (20 юнитов или население/10) давит на благополучие колонии.'])}<div class="ec-section-title">Наземная техника <span class="ec-hint">— юниты строятся на Военном Заводе</span></div>
+    ${unitForm(groundUnits, 'ground')}
+    <div class="ec-section-title">Авиация <span class="ec-hint">— юниты строятся на Аэрокосмическом Заводе</span></div>
+    ${unitForm(aviaUnits, 'aviation')}
     <div class="ec-section-title">Флот <span class="ec-hint">— корабли строятся на Верфи поштучно</span></div>
     ${shipForm}
     ${ecRepairPanelHtml(caps)}
+    <div class="ec-section-title">⚔ Армии <span class="ec-hint">— именные соединения из готовых юнитов; переброска — режим карты «Звёздный марш»</span></div>
+    ${ecArmyPanelHtml()}
     <div class="ec-section-title">В очереди <span class="ec-hint">— доставка в конце хода (сутки)</span></div>
     <div class="ec-queue">${queueHtml}</div>`;
+}
+
+// МАРШ: заказ юнита наземки/авиации (зеркало ecProduceShip)
+function ecUnitBillUpd(cat) {
+  const box = ecId('ec-' + cat + '-bill'), sel = ecId('ec-' + cat + '-sel'); if (!box || !sel) return;
+  const u = EC.designs.find(d => d.id === sel.value && d.category === cat);
+  box.innerHTML = ecUnitBillHtml(u, Math.max(1, parseInt(ecId('ec-' + cat + '-qty')?.value) || 1));
+}
+async function ecProduceUnit(cat) {
+  if (EC.busy) return;
+  const sel = ecId('ec-' + cat + '-sel'); if (!sel || !sel.value) { toast('Выберите проект', 'err'); return; }
+  const qty = Math.max(1, parseInt(ecId('ec-' + cat + '-qty')?.value) || 1);
+  const u = EC.designs.find(d => d.id === sel.value && d.category === cat); if (!u) { toast('Проект не найден', 'err'); return; }
+  const caps = ecCaps(), use = ecPendingUse();
+  if (cat === 'aviation') {
+    if (!caps.hasAirfield) { toast('Нужен Аэрокосмический Завод', 'err'); return; }
+    if (use.avia + qty > caps.aviation) { toast(`Лимит Аэрокосмического Завода на ход: ${ecNum(use.avia)}/${ecNum(caps.aviation)} — откройте слоты или ждите хода`, 'err'); return; }
+  } else {
+    if (!caps.hasMil) { toast('Нужен Военный Завод', 'err'); return; }
+    if (use.tech + qty > caps.military) { toast(`Лимит Военного Завода на ход: ${ecNum(use.tech)}/${ecNum(caps.military)} — откройте слоты или ждите хода`, 'err'); return; }
+  }
+  EC.busy = true;
+  try {
+    const r = await ecRpc('economy_produce', { p_unit_id: u.id, p_qty: qty });
+    const sc = r && +r.surcharge || 0;
+    toast(`Заказано: ${u.name} ×${qty}` + (sc > 0 ? ` · докуплено сырья на ${ecNum(sc)} ГС` : ''), 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+
+// ── МАРШ: армии (зеркало флотов, но по колониям) ─────────────
+function ecArmyRoster() {   // готовые юниты, годные в армию
+  return (EC.roster || []).filter(r => ['ground', 'aviation', 'division'].includes(r.category) && (r.qty || 0) > 0);
+}
+function ecColonyName(colonyId) {
+  const c = (EC.colonies || []).find(x => x.id === colonyId);
+  return c ? (c.planet_name || 'колония') : 'колония';
+}
+function ecArmyPanelHtml() {
+  const armies = EC.armies || [];
+  const rows = armies.map(a => {
+    const where = a.status === 'transit'
+      ? `на марше → ${esc(ecColonyName(a.dest_colony))}, прибытие ${a.arrive_at ? new Date(a.arrive_at).toLocaleString('ru') : '—'}`
+      : `гарнизон: ${esc(a.planet_name || ecColonyName(a.colony_id))}`;
+    const comp = (a.composition || []).map(c => `${esc(c.unit_name || 'юнит')} ×${ecNum(c.qty || 0)}`).join(', ');
+    return `<div class="ec-q-row">
+      <span class="ec-r-name">🪖 ${esc(a.name || 'Армия')} <span class="ec-hint">· ${ecNum(a.units || 0)} юнит. · ${where}</span><br><span class="ec-hint">${comp}</span></span>
+      ${a.status === 'idle' ? `<button class="btn btn-gh btn-sm" onclick="go('map')" title="Переброска — на карте, режим «Звёздный марш»">🗺 На карту</button>
+      <button class="ec-bld-del" title="Распустить — юниты вернутся в состав" onclick="ecArmyDisband('${a.id}')">✕</button>` : ''}
+    </div>`;
+  }).join('');
+  // Перегруз гарнизонов по колониям
+  const overRows = (EC.colonies || []).map(c => {
+    const units = ecGarrisonUnits(c.id); if (!units) return '';
+    const free = ecGarrisonFree(c), over = units > free;
+    return `<span class="ec-bud-pop-i ${over ? 'ec-cov-lo' : ''}" data-tip="${over ? 'Перегруз давит на благополучие державы и рост колонии' : 'В пределах мирного гарнизона'}">${esc(c.planet_name || 'колония')}: ${ecNum(units)}/${ecNum(free)}</span>`;
+  }).filter(Boolean).join('');
+  const roster = ecArmyRoster();
+  const formUi = !((EC.colonies || []).length) ? '' : !roster.length
+    ? `<div class="ec-empty" style="padding:8px">Нет готовых юнитов наземки/авиации — закажите производство выше.</div>`
+    : `<div class="ec-prod-form" style="flex-wrap:wrap">
+        <select id="ec-army-colony">${(EC.colonies || []).map(c => `<option value="${esc(c.id)}">${esc(c.planet_name || 'колония')}</option>`).join('')}</select>
+        <input type="text" id="ec-army-name" placeholder="Имя армии (например «1-я ударная»)" style="min-width:180px">
+      </div>
+      <div class="ec-queue">${roster.map((r, i) => `<div class="ec-q-row"><span class="ec-r-name">${esc(r.unit_name)} <span class="ec-hint">· в составе ${ecNum(r.qty)}</span></span>
+        <input type="number" class="ec-prod-qty ec-army-take" data-uid="${esc(r.unit_id)}" min="0" max="${r.qty}" value="0"></div>`).join('')}</div>
+      <button class="btn btn-gd btn-sm" style="margin-top:6px" onclick="ecArmyForm()">⚔ Сформировать армию</button>`;
+  return `${armies.length ? rows : `<div class="ec-empty" style="padding:8px">Армий нет — сформируйте из готовых юнитов ниже.</div>`}
+    ${overRows ? `<div class="ec-bud-pop" style="margin:6px 0">🪖 Гарнизоны: ${overRows}</div>` : ''}
+    <div class="ec-hint" style="margin:8px 0 4px">Новая армия — выберите колонию формирования и состав:</div>
+    ${formUi}`;
+}
+async function ecArmyForm() {
+  if (EC.busy) return;
+  const colonyId = ecId('ec-army-colony')?.value;
+  const name = (ecId('ec-army-name')?.value || '').trim();
+  const units = [...document.querySelectorAll('.ec-army-take')]
+    .map(el => ({ unit_id: el.dataset.uid, qty: Math.max(0, parseInt(el.value) || 0) }))
+    .filter(u => u.qty > 0);
+  if (!colonyId) { toast('Выберите колонию формирования', 'err'); return; }
+  if (!units.length) { toast('Выберите хотя бы один юнит', 'err'); return; }
+  EC.busy = true;
+  try {
+    const r = await ecRpc('army_form', { p_colony_id: colonyId, p_name: name || null, p_units: units });
+    toast(`Армия сформирована · ${ecNum((r && r.units) || 0)} юнит.` +
+      (r && r.garrison > r.garrison_free ? ' · ⚠ гарнизон сверх порога — благополучие просядет' : ''), 'ok');
+    EC.armies = await ecRpc('armies_mine').catch(() => EC.armies);
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+async function ecArmyDisband(id) {
+  if (EC.busy) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('army_disband', { p_id: id });
+    toast('Армия распущена · +' + ecNum((r && r.returned) || 0) + ' юнит. в состав', 'inf');
+    EC.armies = await ecRpc('armies_mine').catch(() => EC.armies);
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
 }
 
 // Цена ремонта корабля = доля стоимости постройки его проекта (зеркало _repair_cost).
@@ -6641,9 +6830,9 @@ function ecUnionImgClear(hiddenId, prevId) {
 // ── ВЕРА (религия) · справочник механики ────────────────────
 // Подробное объяснение: что на что влияет, сколько, как, когда и почему.
 // Числа берутся из faith_status (зеркало серверных формул: _faith_setup.sql +
-// _faith_monuments.sql). ВОЛНА: храм — ретранслятор идей; ставка ГС/слот
-// динамическая: 150 × (0.35 + 0.65×охват^0.7) × рвение × сеть × памятники,
-// коридор 40…240. Расчёт ТОЛЬКО на сервере — клиент показывает готовые числа.
+// _faith_monuments.sql). ВОЛНА: храм — ретранслятор идей; ставка ГС/слот =
+// min(240, 150 + 90×охват^0.7 × рвение × сеть × памятники) — пол 150 (старый
+// флэт), охват даёт только бонус. Расчёт ТОЛЬКО на сервере.
 function ecFaithMechanics(fs) {
   const spirit   = !!fs.can_found;                       // спирит/теократ → усиленная вера
   const strength = fs.strength || 0;                     // паства = сумма слотов всех храмов
@@ -6666,9 +6855,11 @@ function ecFaithMechanics(fs) {
   const nowIncome = strength > 0
     ? `Сейчас ставка <b>${ecNum(income)} ГС/слот</b> (охват ${covPct}%): ${ecNum(strength)} слот(ов) × ${ecNum(income)} = <b>+${ecNum(dayIncome)} ГС/сут</b>.`
     : `Сейчас: 0 ГС — нет храмов.`;
-  const nowCov = strength > 0
-    ? `Сейчас зона вещания <b>${ecNum(wave.reach || 0)}</b> душ при населении <b>${ecNum(Math.round(wave.pop || 0))}</b> → охват <b>${covPct}%</b>${(wave.monuments_n || 0) ? ` (усилен ${ecNum(wave.monuments_n)} памятником(ами))` : ''}.`
-    : `Охват 0% — идеям нужен хотя бы один храм-ретранслятор.`;
+  const nowCov = !fs.wave
+    ? `Данные охвата появятся после обновления сервера — пока действует базовая ставка 150 ГС/слот.`
+    : strength > 0
+      ? `Сейчас зона вещания <b>${ecNum(wave.reach || 0)}</b> душ при населении <b>${ecNum(Math.round(wave.pop || 0))}</b> → охват <b>${covPct}%</b>${(wave.monuments_n || 0) ? ` (усилен ${ecNum(wave.monuments_n)} памятником(ами))` : ''}.`
+      : `Охват 0% — идеям нужен хотя бы один храм-ретранслятор.`;
   let nowDisc;
   if (strength <= 0) {
     nowDisc = `Сейчас скидки нет — нужен хотя бы один слот храма.`;
@@ -6704,10 +6895,10 @@ function ecFaithMechanics(fs) {
         `<b>Что:</b> суммарное число слотов всех ваших Храмов Веры — это база, от которой считаются <b>все</b> бонусы ниже. <b>Как растёт:</b> стройте и расширяйте храмы во вкладке «Колонии» (каждое расширение = +слоты). <b>Почему:</b> чем шире паства, тем сильнее культ.`,
         nowStrength)}
       ${row('📡', 'Охват населения — храм как ретранслятор идей',
-        `<b>Что:</b> каждый слот храма «вещает» на <b>120 душ</b>; памятники веры расширяют зону (+10% за памятник). Доля населения державы, попавшая под влияние, и есть <b>охват</b> — главный рычаг дохода. <b>Почему:</b> вера — не касса, а идея: пустому залу проповедовать бессмысленно, но и горстка храмов не окормит миллионы. Растёт население — стройте новые храмы, иначе охват (и ставка) тает.`,
+        `<b>Что:</b> каждый слот храма «вещает» на <b>120 душ</b>; памятники веры расширяют зону (+10% за памятник). Доля населения державы, попавшая под влияние, и есть <b>охват</b> — рычаг бонуса к ставке. <b>Почему:</b> больше храмов выгодно дважды: растёт база (слоты × ставка) и ширится зона вещания → выше охват → выше сама ставка. Растёт население — стройте новые храмы, чтобы бонус не таял.`,
         nowCov)}
       ${row('💰', 'Доход храмов — динамическая ставка',
-        `<b>Сколько:</b> от <b>40</b> до <b>240 ГС</b> за слот в сутки: базовые 150 × (0.35 + 0.65 × охват<sup>0.7</sup>) × <b>рвение</b> (при нищем соцобеспечении народ ищет утешение в вере — до ×1.20; при щедром — ×0.88) × <b>сеть</b> (+3% за каждую чужую державу в ваших верах, до ×1.15) × <b>памятники</b> (+5% за памятник, до ×1.25). <b>Когда:</b> ежедневным тиком, пока вы исповедуете религию храма.`,
+        `<b>Сколько:</b> гарантированные <b>150 ГС</b> за слот в сутки + бонус за охват до <b>240 ГС</b>: 150 + 90 × охват<sup>0.7</sup> × <b>рвение</b> (при нищем соцобеспечении народ ищет утешение в вере — до ×1.20) × <b>сеть</b> (+3% за каждую чужую державу в ваших верах, до ×1.15) × <b>памятники</b> (+5% за памятник, до ×1.25). Ниже 150 ставка не падает никогда. <b>Когда:</b> ежедневным тиком, пока вы исповедуете религию храма.`,
         nowIncome)}
       ${row('⚔', 'Удешевление войск',
         `<b>Сколько:</b> ${spirit ? '<b>−2%</b> за слот, потолок <b>−30%</b>' : '<b>−1.2%</b> за слот, потолок <b>−18%</b>'} (вы — ${spirit ? 'спиритуалист/теократия, усиленная вера' : 'обычная держава'}). Корабли (флот) получают <b>половину</b> скидки. <b>Когда:</b> применяется при постройке войск и кораблей. <b>Почему:</b> вера вдохновляет народ на службу; духовным державам — сильнее.`,
@@ -6736,7 +6927,7 @@ function ecFaithMechanics(fs) {
 // «Колонии», тип «Храм Веры») → +ГС и удешевление постройки войск.
 function ecTabFaith() {
   const fs = EC.faith || { faith: null, can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };
-  const intro = ecIntro('🛐', 'Вера', 'Спиритуалисты и теократии основывают религии. Храмы Веры — ретрансляторы идей: они кораптят население, и чем большая доля жителей державы под влиянием культа, тем выше ставка дохода каждого слота (от 40 до 240 ГС/сут). Заодно вера удешевляет постройку войск.', [
+  const intro = ecIntro('🛐', 'Вера', 'Спиритуалисты и теократии основывают религии. Храмы Веры — ретрансляторы идей: они кораптят население: каждый слот даёт гарантированные 150 ГС/сут, а чем большая доля жителей державы под влиянием культа, тем выше бонус — до 240 ГС/слот. Заодно вера удешевляет постройку войск.', [
     '<b>Основать веру</b> могут идеология «Спиритуализм», форма правления «Теократия» и администрация (свою — только одну).',
     '<b>Несколько религий</b>: держава может исповедовать сразу несколько вер и строить храмы разных религий — при постройке храма указывается его религия.',
     '<b>Храм Веры</b> строится во вкладке «Колонии». Доход храма идёт, пока вы исповедуете его религию.',
@@ -6808,8 +6999,8 @@ function ecTabFaith() {
         ${editForm}
         <div class="ec-bless-hd">Благословения веры — паства ${strength} слот(ов) храмов</div>
         <div class="ec-bless-grid">
-          ${blessTile('📡', Math.round(((fs.wave || {}).coverage || 0) * 100) + '%', 'населения под влиянием')}
-          ${blessTile('💰', '+' + income, 'ГС/слот — живая ставка')}
+          ${fs.wave ? blessTile('📡', Math.round((fs.wave.coverage || 0) * 100) + '%', 'населения под влиянием') : ''}
+          ${blessTile('💰', '+' + income, fs.wave ? 'ГС/слот — живая ставка' : 'ГС с каждого храма')}
           ${blessTile('⚔', '−' + disc + '%', disc > 0 ? 'дешевле войска (флот — вдвое)' : 'войска (стройте храмы)')}
           ${blessTile('🛐', strength, 'сила паствы')}
           ${isFounder ? blessTile('🤝', '+' + tithePct + '%', 'десятина с адептов') : ''}
@@ -6907,6 +7098,7 @@ function ecTabFaith() {
 // один на колонию): +0.5%/сут к росту населения колонии, +10% к зоне вещания
 // храмов, +5% к ставке. Оформление уходит на модерацию (как регистрация веры).
 function ecFaithMonuments(fs, isFounder) {
+  if (!fs.wave) return '';   // сервер ещё без _faith_monuments.sql — RPC памятников нет
   const mons = fs.monuments || [];
   const cost = (fs.wave || {}).monument_cost || { wood: 600, gc: 10000 };
   const stTxt = m => m.status === 'pending' ? '<span class="ec-q-t">⏳ облик на модерации</span>'
@@ -9982,8 +10174,11 @@ async function ecTerraform(sysId, planetName, planetType, cells, pid) {
 // ── Производство юнитов ─────────────────────────────────────
 const _ecReady = () => new Date((EC.eco.last_tick ? new Date(EC.eco.last_tick).getTime() : Date.now()) + 86400000).toISOString();
 
-// Комплектование дивизии — нужны здания под её состав
+// МАРШ: комплектование дивизий экономикой ОТКЛЮЧЕНО (сервер тоже отклонит).
 async function ecProduceDivision(divId) {
+  toast('Дивизии больше не строятся: закажите юниты во вкладке «Военпром» и сформируйте из них армию', 'err');
+  return;
+  /* eslint-disable no-unreachable */
   if (EC.busy) return;
   const div = EC.designs.find(d => d.id === divId && d.category === 'division'); if (!div) { toast('Дивизия не найдена', 'err'); return; }
   const qty = Math.max(1, parseInt(ecId('ec-div-qty-' + divId)?.value) || 1);

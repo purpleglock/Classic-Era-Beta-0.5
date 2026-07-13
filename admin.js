@@ -2101,8 +2101,8 @@ function adTabEconomy(e) {
   const facSlots = adSlotsOf(e, 'factory'), tradeSlots = adSlotsOf(e, 'trade'), templeSlots = adSlotsOf(e, 'temple');
   const facBase    = facSlots * 200;
   const tradeBase  = tradeSlots * 100;
-  // ВОЛНА: ставка храма динамическая (40…240, охват населения — _faith_monuments.sql);
-  // тут показываем базовые 150 как ориентир — точный расчёт только на сервере.
+  // ВОЛНА: ставка храма динамическая (пол 150, бонус за охват до 240 —
+  // _faith_monuments.sql); тут показываем пол 150 — точный расчёт только на сервере.
   const templeBase = hasFaith ? templeSlots * 150 : 0;
   const bldGcBase  = facBase + tradeBase + templeBase;
   const bldGcFinal = Math.round(bldGcBase * gcMul);
