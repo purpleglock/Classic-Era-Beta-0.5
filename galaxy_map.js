@@ -204,6 +204,10 @@ async function loadGalaxyData() {
         dbGet('colonies', 'select=*').catch(() => []),
       ]);
       GM.colonies = cols || [];   // реальные колонии (для панели системы)
+      // МАРШ: тела систем (sys._bodies) могли закэшироваться ДО прихода колоний —
+      // тогда у планет нет colId/isColony и армии не магнитятся к планетам. Сбрасываем.
+      GM.systems.forEach(s => { s._bodies = null; });
+      if (GMM.active && GMM.cv && GMM.cv.isConnected) { GMM.dirty = true; gmmKick(); }
       GM.capitals = {};   // system_id -> faction_id (актуальная столица)
       GM.capPlanet = {};  // system_id -> имя столичной планеты (актуальное)
       (apps || []).forEach(a => { if (a.faction_id) GM.facMeta[a.faction_id] = a; });
@@ -5659,7 +5663,7 @@ function gmmPaintDefense(ctx) {
     // группируем по СТОРОНЕ (left=флоты, right=носители/Гиперпейсер) и по ВЛАДЕЛЬЦУ
     // (свои / каждая чужая держава отдельно) — иначе значки на разных боках/разных
     // держав считали бы общий веер и налезали друг на друга.
-    D.ships.forEach(d => { if (d.kind === 'idle' && d.sys) { const owner = d.enemy ? ('e' + (d.fid || '')) : 'mine'; const k = d.sys.id + '|' + (d.side || 'right') + '|' + owner + (d.army ? '|a' : ''); (grp[k] = grp[k] || []).push(d); } });
+    D.ships.forEach(d => { if (d.kind === 'idle' && d.sys) { const owner = d.enemy ? ('e' + (d.fid || '')) : 'mine'; const k = d.sys.id + '|' + (d.side || 'right') + '|' + owner + (d.army ? '|a' + (d.colony || '') : ''); (grp[k] = grp[k] || []).push(d); } });
     Object.values(grp).forEach(list => list.forEach((d, i) => { d.stackI = i; d.stackN = list.length; d.stackPeers = list; }));
   }
   D.ships.forEach(d => { try {
