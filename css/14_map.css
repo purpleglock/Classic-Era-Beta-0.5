@@ -498,6 +498,7 @@ body.route-map #gm-wrap{height:100%;min-height:0}
 .gm-opcmd-btn:hover{border-color:var(--gdl);background:hsl(216 22% 16% / .95)}
 .gm-opcmd-btn.gm-dis{opacity:.45;cursor:not-allowed}
 .gm-opcmd-btn.gm-opcmd-danger:hover{border-color:var(--err);color:var(--err)}
+.gm-opcmd-sel{background:hsl(216 22% 13% / .9);border:1px solid var(--w2);border-radius:var(--radius-md);color:var(--t1);padding:8px 10px;font-size:13px}
 
 /* ════════ КОМАНДНЫЙ ПУНКТ (список всех моих мобильных юнитов, слева) ════════ */
 #gm-roster{position:absolute;top:12px;left:12px;width:284px;max-width:calc(100% - 24px);

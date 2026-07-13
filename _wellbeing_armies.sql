@@ -90,11 +90,10 @@ $$;
 revoke all on function public._garrison_units(uuid) from public;
 
 -- Порог «мирного гарнизона» колонии: до него штрафа нет.
--- 20 юнитов минимум, дальше — население/10 (зеркало ecGarrisonFree).
+-- Плоский порог 7000 юнитов на колонию (зеркало ecGarrisonFree).
 create or replace function public._garrison_free(p_colony uuid)
 returns int language sql stable security definer set search_path=public as $$
-  select greatest(20, round(coalesce(c.pop, coalesce(c.cells,0)*50) / 10.0))::int
-  from public.colonies c where c.id = p_colony
+  select 7000
 $$;
 revoke all on function public._garrison_free(uuid) from public;
 
@@ -107,7 +106,8 @@ $$;
 revoke all on function public._garrison_over_ratio(uuid) from public;
 
 -- ── 2) RPC армий ────────────────────────────────────────────
--- Сформировать армию из ГОТОВЫХ юнитов (ground/aviation/division) на своей колонии.
+-- Сформировать армию из ГОТОВЫХ юнитов (ground/aviation) на своей колонии.
+-- Дивизии выпилены совсем: старые стеки расформированы (_divisions_disband.sql).
 create or replace function public.army_form(p_colony_id uuid, p_name text, p_units jsonb)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare
@@ -129,15 +129,15 @@ begin
     if uid is null or want <= 0 then continue; end if;
 
     select coalesce(sum(qty),0) into avail from public.unit_production
-      where faction_id=fid and status='done' and category in ('ground','aviation','division') and unit_id=uid;
+      where faction_id=fid and status='done' and category in ('ground','aviation') and unit_id=uid;
     if avail < want then raise exception 'недостаточно юнитов в составе (нужно %, есть %)', want, avail; end if;
 
     select unit_name, category into uname, ucat from public.unit_production
-      where faction_id=fid and status='done' and category in ('ground','aviation','division') and unit_id=uid limit 1;
+      where faction_id=fid and status='done' and category in ('ground','aviation') and unit_id=uid limit 1;
 
     rem := want;
     for r in select id, qty from public.unit_production
-        where faction_id=fid and status='done' and category in ('ground','aviation','division') and unit_id=uid
+        where faction_id=fid and status='done' and category in ('ground','aviation') and unit_id=uid
         order by created_at asc loop
       exit when rem <= 0;
       take := least(r.qty, rem);
@@ -177,6 +177,13 @@ begin
   if to_sys is null then raise exception 'перебрасывать армии можно только на свои колонии'; end if;
   if p_dest_colony = ar.colony_id then raise exception 'армия уже там'; end if;
   select system_id into from_sys from public.colonies where id=ar.colony_id;
+
+  -- та же система: наземная переброска между колониями мгновенна — иначе армия
+  -- «летела» бы часами по нулевому маршруту (клиент рисовал петлю вокруг звезды)
+  if from_sys is not distinct from to_sys then
+    update public.armies set colony_id=p_dest_colony where id=p_id;
+    return jsonb_build_object('ok', true, 'instant', true, 'fly_h', 0);
+  end if;
 
   fly_h := coalesce(public._fleet_fly_hours(from_sys, to_sys), 2.0) * 1.5;
   update public.armies

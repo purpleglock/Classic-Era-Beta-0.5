@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════
---  ИССЛЕДОВАТЬ ВСЁ В КОНСТРУКТОРАХ + КУЛДАУН ТОРГОВЛИ ТЕХНОЛОГИЯМИ
+--  ИССЛЕДОВАТЬ ВСЁ В КОНСТРУКТОРАХ + ТОРГОВЛЯ ТЕХНОЛОГИЯМИ БЕЗ КУЛДАУНА
 --
 --  1) Бесплатной «базы» конструкторов больше нет: КАЖДЫЙ класс и КАЖДАЯ
 --     группа оружия — исследование. Бывшая база стала дешёвыми корнями
@@ -9,8 +9,7 @@
 --     2026-07-09 (сгенерировано из живого дерева, легаси-цены сохранены).
 --  2) БЭКФИЛЛ «не с нуля»: все существующие фракции пользовались базой —
 --     8 стартовых узлов выдаются им даром, ничего не ломается.
---  3) ТОРГОВЛЯ ТЕХНОЛОГИЯМИ: каждая фракция может закрыть не больше
---     1 сделки в 3 дня (проверяются ОБЕ стороны сделки; tech_offers.accepted_at).
+--  3) ТОРГОВЛЯ ТЕХНОЛОГИЯМИ: без кулдауна (лимит «1 сделка в 3 дня» отменён).
 --
 --  Применять в Supabase → SQL Editor ПОСЛЕ _research_queue.sql и
 --  _migration_tech_market.sql (переопределяет tech_offer_propose/accept).
@@ -125,24 +124,15 @@ where exists (
   ]) t
   where not (coalesce(e.research,'[]'::jsonb) ? t));
 
--- ── 3) ТОРГОВЛЯ ТЕХНОЛОГИЯМИ: кулдаун «1 сделка в 3 дня» на фракцию ──
+-- ── 3) ТОРГОВЛЯ ТЕХНОЛОГИЯМИ (без кулдауна) ──
 alter table public.tech_offers add column if not exists accepted_at timestamptz;
 -- бэкдейт старых принятых сделок (точного времени нет — берём created_at)
 update public.tech_offers set accepted_at = created_at where status = 'accepted' and accepted_at is null;
 
--- Последняя закрытая сделка фракции (любая сторона) моложе 3 дней?
-create or replace function public._tech_trade_on_cooldown(p_fid text)
-returns boolean language sql stable security definer set search_path=public as $$
-  select exists(
-    select 1 from public.tech_offers
-    where status = 'accepted' and accepted_at > now() - interval '3 days'
-      and (seller_fid = p_fid or buyer_fid = p_fid));
-$$;
-revoke all on function public._tech_trade_on_cooldown(text) from public;
-grant execute on function public._tech_trade_on_cooldown(text) to authenticated;
+-- если черновая версия с кулдауном уже каталась — прибираем функцию
+drop function if exists public._tech_trade_on_cooldown(text);
 
--- Предложить (продавец): ранняя проверка кулдауна — не даём вешать
--- предложения, которые всё равно нельзя будет принять.
+-- Предложить (продавец)
 create or replace function public.tech_offer_propose(
   p_buyer_fid text, p_kind text,
   p_tech_key text, p_tech_label text,
@@ -159,9 +149,6 @@ begin
   if p_buyer_fid = app.faction_id then raise exception 'self'; end if;
   select owner_id into b_owner from public.faction_applications where faction_id=p_buyer_fid and status='approved' order by updated_at desc limit 1;
   if b_owner is null then raise exception 'recipient not found'; end if;
-
-  -- кулдаун: сделка (в любой роли) не чаще раза в 3 дня — ранняя проверка продавца
-  if public._tech_trade_on_cooldown(app.faction_id) then raise exception 'tech trade cooldown'; end if;
 
   if p_kind = 'tech' then
     if coalesce(p_tech_key,'') = '' then raise exception 'no tech'; end if;
@@ -189,10 +176,6 @@ begin
   if not found then raise exception 'offer not found'; end if;
   if off.status <> 'pending' then raise exception 'offer not pending'; end if;
   if off.buyer_owner <> auth.uid() then raise exception 'forbidden'; end if;
-
-  -- 1 сделка в 3 дня на фракцию (обе стороны сделки)
-  if public._tech_trade_on_cooldown(off.seller_fid) then raise exception 'tech trade cooldown'; end if;
-  if public._tech_trade_on_cooldown(off.buyer_fid)  then raise exception 'tech trade cooldown'; end if;
 
   select gc, research into bal, bresearch from public.faction_economy where faction_id=off.buyer_fid for update;
   if bal is null then raise exception 'no economy'; end if;
@@ -246,4 +229,3 @@ end$$;
 -- select count(*) from public.tech_nodes;                              -- 73
 -- select node_id from public.tech_nodes where base_cost <= 5;          -- стартеры на месте
 -- select faction_id, research ? 'cls.ship.corvette' from public.faction_economy limit 5;  -- бэкфилл
--- select public._tech_trade_on_cooldown('<fid>');

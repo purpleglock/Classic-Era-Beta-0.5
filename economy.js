@@ -1095,7 +1095,7 @@ function ecBudgetPanel() {
         <span class="ec-bud-pop-i" data-tip="Соцобеспечение — уровень ползунка ниже.">⚖ база ${w.base.toFixed(2)}</span>
         <span class="ec-bud-pop-i" data-tip="Идентичность: раса + форма правления + режим + идеология. У каждого народа свой характер благополучия.">${w.ident >= 0 ? '🧬' : '🧬'} народ ${sgn(w.ident)}</span>
         ${w.fpen ? `<span class="ec-bud-pop-i ec-cov-lo" data-tip="Флот раздут сверх вместимости Звёздных Баз — милитаризация давит на общество. Стройте базы или сокращайте флот.">🛰 перегруз флота −${w.fpen.toFixed(2)}</span>` : ''}
-        ${w.gpen ? `<span class="ec-bud-pop-i ec-cov-lo" data-tip="Войска стоят на колониях сверх порога мирного гарнизона (${'20 юнитов или население/10'}) — оккупационный дискомфорт. Рассредоточьте армии.">🪖 гарнизоны −${w.gpen.toFixed(2)}</span>` : ''}
+        ${w.gpen ? `<span class="ec-bud-pop-i ec-cov-lo" data-tip="Войска стоят на колониях сверх порога мирного гарнизона (${'7000 юнитов на колонию'}) — оккупационный дискомфорт. Рассредоточьте армии.">🪖 гарнизоны −${w.gpen.toFixed(2)}</span>` : ''}
       </div>`;
     })()}
     ${rows}
@@ -1892,7 +1892,7 @@ function ecFleetOverPen() {
   return Math.round(Math.min(0.35, 0.12 * over / Math.max(cap, 50)) * 1000) / 1000;
 }
 // Гарнизоны: порог «мирного гарнизона» колонии и перегруз (зеркала _garrison_free/_garrison_over_ratio)
-function ecGarrisonFree(col) { return Math.max(20, Math.round((col.pop != null ? +col.pop : (+col.cells || 0) * EC_POP_START_CELL) / 10)); }
+function ecGarrisonFree(col) { return 7000; }  // плоский порог 7000 юнитов/колонию
 function ecGarrisonUnits(colonyId) {
   return (EC.armies || []).filter(a => a.status === 'idle' && a.colony_id === colonyId)
     .reduce((s, a) => s + (+a.units || 0), 0);
@@ -3295,7 +3295,7 @@ function ecAchOverviewTeaser() {
 
 function ecTabOverview() {
   const sumCat = c => EC.roster.filter(r => r.category === c).reduce((a, r) => a + (r.qty || 0), 0);
-  const ships = sumCat('ship'), divs = sumCat('division'), ground = sumCat('ground'), avia = sumCat('aviation');
+  const ships = sumCat('ship'), ground = sumCat('ground'), avia = sumCat('aviation');
   const queued = EC.queue.reduce((a, r) => a + (r.qty || 0), 0);
   const totalCells = EC.colonies.reduce((a, c) => a + (c.cells || EC_DEFAULT_CELLS), 0);
   const usedCells = EC.buildings.length;
@@ -3591,7 +3591,7 @@ function ecTabOverview() {
       ${ecOvBar(used, cap, cls)}
     </div>` : '';
   // Раскрываемая разбивка армии по проектам внутри категорий + очередь.
-  const armyCats = [['ship', '🚀 Корабли'], ['division', '⚔ Дивизии'], ['ground', '🛡 Наземка'], ['aviation', '✈ Авиация']];
+  const armyCats = [['ship', '🚀 Корабли'], ['ground', '🛡 Наземка'], ['aviation', '✈ Авиация']];
   const armyDetailRows = armyCats.map(([cat, label]) => {
     const items = EC.roster.filter(r => r.category === cat);
     if (!items.length) return '';
@@ -3619,7 +3619,6 @@ function ecTabOverview() {
     <div class="ec-ovx-panel-t">⚔ Вооружённые силы ${queued ? `<span class="ec-ovx-panel-sub ec-ov-clk" onclick="ecSetTab('milbuild')">в очереди: ${ecNum(queued)}</span>` : ''}</div>
     <div class="ec-ovx-stat-grid">
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v ec-ovx-c-sci">${ecNum(ships)}</div><div class="ec-ovx-stat-k">🚀 Корабли</div></div>
-      <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v ec-ovx-c-gc">${ecNum(divs)}</div><div class="ec-ovx-stat-k">⚔ Дивизии</div></div>
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v">${ecNum(ground)}</div><div class="ec-ovx-stat-k">🛡 Наземка</div></div>
       <div class="ec-ovx-stat ec-ov-clk" onclick="ecSetTab('forces')"><div class="ec-ovx-stat-v">${ecNum(avia)}</div><div class="ec-ovx-stat-k">✈ Авиация</div></div>
       ${fleetCapBar}
@@ -4115,7 +4114,7 @@ function ecTabForces() {
   EC.roster.forEach(r => { const k = (r.category || '') + '|' + (r.unit_name || ''); if (!stock[k]) stock[k] = { name: r.unit_name, category: r.category, qty: 0 }; stock[k].qty += r.qty || 0; });
   const all = Object.values(stock);
   let rosterHtml = '';
-  [['division', '⚔', 'Дивизии', 'army', 'Дивизия'], ['ship', '🚀', 'Флот', 'fleet', 'Корабль']].forEach(([c, ic, lbl, mod, unit]) => {
+  [['ground', '🛡', 'Наземная техника', 'army', 'Юнит'], ['aviation', '✈', 'Авиация', 'army', 'Юнит'], ['ship', '🚀', 'Флот', 'fleet', 'Корабль']].forEach(([c, ic, lbl, mod, unit]) => {
     const arr = all.filter(s => s.category === c).sort((a, b) => (b.qty || 0) - (a.qty || 0));
     if (!arr.length) return;
     const tot = arr.reduce((a, s) => a + (s.qty || 0), 0);
@@ -4131,18 +4130,20 @@ function ecTabForces() {
   });
   if (!rosterHtml) rosterHtml = `<div class="ec-force-empty"><span class="ec-force-empty-ic">🎖</span><div>Вооружённых сил пока нет.<br><span class="ec-force-empty-sub">Сформируйте их во вкладке «🏭 Строительство вооружённых сил».</span></div></div>`;
 
-  const totDiv = EC.roster.filter(r => r.category === 'division').reduce((a, r) => a + (r.qty || 0), 0);
+  const totUnits = EC.roster.filter(r => r.category === 'ground' || r.category === 'aviation').reduce((a, r) => a + (r.qty || 0), 0);
   const totShip = EC.roster.filter(r => r.category === 'ship').reduce((a, r) => a + (r.qty || 0), 0);
   const inQueue = EC.queue.reduce((a, q) => a + (q.qty || 0), 0);
 
-  return `<div class="ec-cyb-forces">${ecIntro('⚔', 'Вооружённые силы государства', 'Текущий состав ваших вооружённых сил — сформированные дивизии и построенный флот.', ['Войска производятся во вкладке «🏭 Строительство вооружённых сил».', 'Готовые заказы пополняют этот состав в конце игрового хода.'])}<div class="ec-section-title">Сводка</div>
+  return `<div class="ec-cyb-forces">${ecIntro('⚔', 'Вооружённые силы государства', 'Текущий состав ваших вооружённых сил — юниты наземки/авиации и построенный флот.', ['Войска производятся во вкладке «🏭 Строительство вооружённых сил».', 'Готовые заказы пополняют этот состав в конце игрового хода.'])}<div class="ec-section-title">Сводка</div>
     <div class="ec-ov-grid ec-force-stats">
-      <div class="ec-ov-card"><div class="ec-ov-v" style="color:var(--gd)">${ecNum(totDiv)}</div><div class="ec-ov-k">⚔ Дивизий</div></div>
+      <div class="ec-ov-card"><div class="ec-ov-v" style="color:var(--gd)">${ecNum(totUnits)}</div><div class="ec-ov-k">🪖 Юнитов</div></div>
       <div class="ec-ov-card"><div class="ec-ov-v" style="color:var(--te)">${ecNum(totShip)}</div><div class="ec-ov-k">🚀 Кораблей</div></div>
       ${inQueue ? `<div class="ec-ov-card ec-ov-clk" onclick="ecSetTab('milbuild')"><div class="ec-ov-v" style="color:var(--color-warning, #e0a030)">${ecNum(inQueue)}</div><div class="ec-ov-k">🏭 В очереди</div></div>` : ''}
     </div>
     <div class="ec-section-title">Боевой состав</div>
     ${rosterHtml}
+    <div class="ec-section-title">⚔ Сформировать армию <span class="ec-hint">— из готовых юнитов состава (наземка/авиация); переброска — режим карты «Звёздный марш»</span></div>
+    ${ecArmyPanelHtml()}
     ${ecFleetSectionHtml()}</div>`;
 }
 
@@ -4440,8 +4441,6 @@ function ecTabMilBuild() {
     <div class="ec-section-title">Флот <span class="ec-hint">— корабли строятся на Верфи поштучно</span></div>
     ${shipForm}
     ${ecRepairPanelHtml(caps)}
-    <div class="ec-section-title">⚔ Армии <span class="ec-hint">— именные соединения из готовых юнитов; переброска — режим карты «Звёздный марш»</span></div>
-    ${ecArmyPanelHtml()}
     <div class="ec-section-title">В очереди <span class="ec-hint">— доставка в конце хода (сутки)</span></div>
     <div class="ec-queue">${queueHtml}</div>`;
 }
@@ -4477,7 +4476,7 @@ async function ecProduceUnit(cat) {
 
 // ── МАРШ: армии (зеркало флотов, но по колониям) ─────────────
 function ecArmyRoster() {   // готовые юниты, годные в армию
-  return (EC.roster || []).filter(r => ['ground', 'aviation', 'division'].includes(r.category) && (r.qty || 0) > 0);
+  return (EC.roster || []).filter(r => ['ground', 'aviation'].includes(r.category) && (r.qty || 0) > 0);
 }
 function ecColonyName(colonyId) {
   const c = (EC.colonies || []).find(x => x.id === colonyId);
@@ -4504,7 +4503,7 @@ function ecArmyPanelHtml() {
   }).filter(Boolean).join('');
   const roster = ecArmyRoster();
   const formUi = !((EC.colonies || []).length) ? '' : !roster.length
-    ? `<div class="ec-empty" style="padding:8px">Нет готовых юнитов наземки/авиации — закажите производство выше.</div>`
+    ? `<div class="ec-empty" style="padding:8px">Нет готовых юнитов наземки/авиации — закажите их во вкладке «🏭 Строительство вооружённых сил».</div>`
     : `<div class="ec-prod-form" style="flex-wrap:wrap">
         <select id="ec-army-colony">${(EC.colonies || []).map(c => `<option value="${esc(c.id)}">${esc(c.planet_name || 'колония')}</option>`).join('')}</select>
         <input type="text" id="ec-army-name" placeholder="Имя армии (например «1-я ударная»)" style="min-width:180px">
@@ -4877,7 +4876,6 @@ function ecErr(m) {
   if (m.includes('empty name')) return 'Пустое название';
   if (m.includes('missing prerequisites')) return 'Не изучены технологии, нужные для чертежа';
   if (m.includes('seller lacks tech')) return 'У вас нет этой технологии';
-  if (m.includes('tech trade cooldown')) return 'Торговля технологиями — не чаще 1 сделки в 3 дня';
   if (m.includes('recipient not found')) return 'Получатель не найден';
   if (m.includes('bad price')) return 'Неверная цена';
   return 'Ошибка: ' + m;
@@ -6204,7 +6202,7 @@ function ecDemandPanel(dem) {
     ['mining', '⛏', 'Рудники', 'чем меньше сырья на рынке — тем выше'],
     ['factory', '🏭', 'Фабрики', 'растёт с уровнем цен на рынке'],
     ['shipyard', '🚀', 'Верфи', 'растёт с очередью постройки кораблей'],
-    ['military_factory', '⚙', 'Военпром', 'растёт с очередью дивизий и авиации'],
+    ['military_factory', '⚙', 'Военпром', 'растёт с очередью юнитов и авиации'],
     ['trade', '💱', 'Торг. хабы', 'растёт с числом активных торговых путей'],
     ['temple', '🛐', 'Храмы', 'растёт с охватом веры в галактике'],
   ];

@@ -80,7 +80,8 @@ const CN_HUB = [
   { slug: 'build-ship', ico: '🚀', name: 'Корабельная верфь', desc: 'Космические корабли: от корветов до дредноутов. Реактор, броня, щиты, ангары, вооружение.', cat: 'ship' },
   { slug: 'build-ground', ico: '🛡', name: 'Завод тяжёлого машиностроения', desc: 'Наземная техника: БТР, танки, САУ, шагоходы. Ходовая, броня, орудия.', cat: 'ground' },
   { slug: 'build-aviation', ico: '✈', name: 'Аэрокосмический цех', desc: 'Авиация: истребители, бомбардировщики, шаттлы. Микрореактор, авионика, подвесы.', cat: 'aviation' },
-  { slug: 'build-division', ico: '⛬', name: 'Конструктор дивизий', desc: 'Формирование армий из пехоты, танков, артиллерии и авиации в составе дивизии.', cat: 'division' },
+  // Конструктор дивизий убран из хаба: армии теперь формируются из готовых юнитов
+  // («Звёздный марш»). Билдер доступен только для правки уже созданных дивизий (cnEdit).
 ];
 
 async function cnRenderHub() {
@@ -2158,6 +2159,12 @@ async function cnRenderDivision() {
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
   await cnLoadMyFaction();
   if (!cnCanAccess()) { cnGate(); return; }
+  // Новые дивизии не создаются: юниты собираются в армии («Звёздный марш»).
+  // Билдер открывается только для правки уже существующей дивизии (или админом).
+  if (!edit && !cnIsStaff()) {
+    toast('Дивизии больше не проектируются: стройте юниты и формируйте из них армии во вкладке «Военпром»', '');
+    go('cat-divisions'); return;
+  }
   CN.cat = 'division'; CN.def = null; CN.lastDiv = null; CN.editUnit = edit || null;
   await cnLoadDivUnits();
   const facBlock = await cnFactionPublishBlock();
@@ -2477,7 +2484,9 @@ async function cnRenderCatalog(cat) {
 }
 function cnPaintCatalog() {
   const cat = CN.catCat, meta = CN_CAT_META[cat], units = CN.catUnits || [];
-  const canBuild = cnCanAccess();
+  // Дивизии: «+ Создать» скрыт — новые дивизии не проектируются (армии из юнитов),
+  // существующие остаются в каталоге и годятся в армии.
+  const canBuild = cat === 'division' ? cnIsStaff() : cnCanAccess();
   const facMap = new Map();
   units.forEach(u => { const key = u.faction_id || ''; if (!facMap.has(key)) facMap.set(key, { name: cnFacName(u), color: u.faction_color || '', n: 0 }); facMap.get(key).n++; });
   const chips = [`<button class="cn-chip-btn${CN.catFilter === '*' ? ' on' : ''}" onclick="cnCatFilter('*')">Все <i>${units.length}</i></button>`]

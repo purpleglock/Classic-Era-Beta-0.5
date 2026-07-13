@@ -2264,28 +2264,47 @@ function gmOpenArmyStack(ids) {
     </div>`;
   el.classList.remove('gm-hidden');
 }
-function gmOpenArmyCmd(id) {
+// Поэтапная плашка: main (сводка + действия) → move (выбор цели селектом) → disband (подтверждение).
+function gmOpenArmyCmd(id, step) {
   const ar = (GM.armies || []).find(x => x.id === id && x.status === 'idle');
   if (!ar) return;
   GMM.opCmd = null; GMM.mzaCmd = null; GMM.fleetCmd = null;
   GMM.armyCmd = { id };
   GMM.dirty = true; gmmKick();
   const el = document.getElementById('gm-opcmd'); if (!el) return;
-  const comp = (ar.composition || []).map(c => `${esc(c.unit_name || '?')} ×${c.qty}`).join(', ');
-  const dests = gmMyColonies().filter(c => c.id !== ar.colony_id);
-  const destBtns = dests.length
-    ? dests.map(c => `<button class="gm-opcmd-btn" onclick="gmArmySendTo('${ar.id}','${c.id}')">➤ ${esc(c.planet_name || 'колония')} <span style="opacity:.65">· ${esc((GM.systems.find(s => s.id === c.system_id) || {}).name || '')}</span></button>`).join('')
-    : `<div class="gm-opcmd-hint">Перебрасывать некуда — армии стоят только на своих колониях.</div>`;
-  el.innerHTML = `<div class="gm-opcmd-card">
-      <button class="gm-close" onclick="gmCloseArmyCmd()">✕</button>
+  step = step || 'main';
+  const head = `<button class="gm-close" onclick="gmCloseArmyCmd()">✕</button>
       <div class="gm-opcmd-title">🪖 Армия${ar.name ? ' «' + esc(ar.name) + '»' : ''}</div>
-      <div class="gm-opcmd-sub">гарнизон: ${esc(ar.planet_name || 'колония')} · ${+ar.units || 0} юнит.</div>
-      ${comp ? `<div class="gm-opcmd-hint">${comp}</div>` : ''}
-      <div class="gm-opcmd-hint">Звёздный марш — переброска на свою колонию (транспорты ×1.5 медленнее флота):</div>
-      ${destBtns}
+      <div class="gm-opcmd-sub">гарнизон: ${esc(ar.planet_name || 'колония')} · ${+ar.units || 0} юнит.</div>`;
+  let body = '';
+  if (step === 'move') {
+    // Шаг 2: выбор колонии назначения — селект, сгруппированный по системам
+    const dests = gmMyColonies().filter(c => c.id !== ar.colony_id);
+    if (!dests.length) body = `<div class="gm-opcmd-hint">Перебрасывать некуда — армии стоят только на своих колониях.</div>
+      <button class="gm-opcmd-btn" onclick="gmOpenArmyCmd('${ar.id}')">← Назад</button>`;
+    else {
+      const bySys = {};
+      dests.forEach(c => { const sn = (GM.systems.find(s => s.id === c.system_id) || {}).name || 'система'; (bySys[sn] = bySys[sn] || []).push(c); });
+      const opts = Object.keys(bySys).sort().map(sn =>
+        `<optgroup label="✦ ${esc(sn)}">${bySys[sn].map(c => `<option value="${c.id}">${esc(c.planet_name || 'колония')}</option>`).join('')}</optgroup>`).join('');
+      body = `<div class="gm-opcmd-hint">Куда перебросить? Только свои колонии; транспорты идут ×1.5 медленнее флота.</div>
+        <select id="gm-army-dest" class="gm-opcmd-sel" style="width:100%;margin:4px 0">${opts}</select>
+        <button class="gm-opcmd-btn" onclick="gmArmySendTo('${ar.id}', document.getElementById('gm-army-dest').value)">➤ Начать марш</button>
+        <button class="gm-opcmd-btn" onclick="gmOpenArmyCmd('${ar.id}')">← Назад</button>`;
+    }
+  } else if (step === 'disband') {
+    body = `<div class="gm-opcmd-hint">Распустить армию? Все её юниты (${+ar.units || 0}) вернутся в состав вооружённых сил.</div>
+      <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmArmyDisband('${ar.id}')">✕ Да, распустить</button>
+      <button class="gm-opcmd-btn" onclick="gmOpenArmyCmd('${ar.id}')">← Назад</button>`;
+  } else {
+    // Шаг 1: сводка + три действия
+    const comp = (ar.composition || []).map(c => `${esc(c.unit_name || '?')} ×${c.qty}`).join(', ');
+    body = `${comp ? `<div class="gm-opcmd-hint">${comp}</div>` : ''}
+      <button class="gm-opcmd-btn" onclick="gmOpenArmyCmd('${ar.id}','move')">➤ Перебросить…</button>
       ${ar.can_recall ? `<button class="gm-opcmd-btn" onclick="gmArmyRecall('${ar.id}')">↩ Вернуть домой</button>` : ''}
-      <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmArmyDisband('${ar.id}')">✕ Распустить армию</button>
-    </div>`;
+      <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmOpenArmyCmd('${ar.id}','disband')">✕ Распустить…</button>`;
+  }
+  el.innerHTML = `<div class="gm-opcmd-card">${head}${body}</div>`;
   el.classList.remove('gm-hidden');
 }
 function gmCloseArmyCmd() {
@@ -2296,7 +2315,8 @@ async function gmArmySendTo(id, destColony) {
   if (GM._defBusy) return; GM._defBusy = true;
   try {
     const r = await gmDefRpc('army_send', { p_id: id, p_dest_colony: destColony });
-    toast('Армия на марше · прибытие ~' + ((r && r.fly_h) || '?') + ' ч', 'ok');
+    if (r && r.instant) toast('Армия переброшена — колония в той же системе', 'ok');
+    else toast('Армия на марше · прибытие ~' + ((r && r.fly_h) || '?') + ' ч', 'ok');
     gmCloseArmyCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); gmCloseArmyCmd(); }
@@ -2313,7 +2333,7 @@ async function gmArmyRecall(id) {
   finally { GM._defBusy = false; }
 }
 async function gmArmyDisband(id) {
-  if (!confirm('Распустить армию? Все её юниты вернутся в состав.')) return;
+  // подтверждение — шаг 'disband' плашки gmOpenArmyCmd, сюда приходим уже после него
   if (GM._defBusy) return; GM._defBusy = true;
   try {
     const r = await gmDefRpc('army_disband', { p_id: id });
@@ -3337,7 +3357,9 @@ function gmmTapAt(lx, ly) {
   // 2) КЛИК ПО МОЕМУ НОСИТЕЛЮ → командная плашка (отправить / развернуть / списать).
   if (GMM.shipHit && GMM.shipHit.length) {
     let best = null, bd = 1e9;
-    GMM.shipHit.forEach(h => { const d = Math.hypot(h.x - lx, h.y - ly); if (d < h.r && d < bd) { bd = d; best = h; } });
+    // МАРШ: в режиме «Звёздный марш» армии в приоритете — их клик-зона внизу
+    // перекрывается флотской, иначе флот перехватывал бы почти каждый тап
+    GMM.shipHit.forEach(h => { let d = Math.hypot(h.x - lx, h.y - ly); if (d >= h.r) return; if (h.army && GM.showArmies) d -= h.r * 0.45; if (d < bd) { bd = d; best = h; } });
     if (best) { if (best.mza) gmOpenMzaCmd(best.id); else if (best.army) { if (best.stack && best.stack.length > 1) gmOpenArmyStack(best.stack); else gmOpenArmyCmd(best.id); } else if (best.fleet) { if (best.stack && best.stack.length > 1) gmOpenFleetStack(best.stack); else gmOpenFleetCmd(best.id); } else gmOpenOutpostCmd(best.id); return; }
   }
   if (GMM.opCmd) gmCloseOutpostCmd();   // клик мимо — закрываем плашку
@@ -4113,6 +4135,7 @@ function gmStarGlow(tp) { return GMM_STAR_GLOW[tp] || '255,210,150'; }
 function gmmPaintOrbits(ctx) {
   GMM.mineHex = [];                 // клик-зоны гексов мин (пересобираются каждый глубокий кадр)
   GMM.focusFx = null;               // геометрия системы в фокусе — для HUD-перехода (gmmPaintDeepFx)
+  GMM.colonyXY = {};                // МАРШ: экранные позиции планет-колоний (colId → {x,y,r}) — армии магнитятся к ним
   const a = gmmDeepA();
   if (a <= 0.01) return;
   const s = GMM.s, tx = GMM.tx, ty = GMM.ty;
@@ -4356,6 +4379,8 @@ function gmmPaintOrbits(ctx) {
 
       // ── «признаки жизни» колонизированного мира (базовый слой) — на мёртвом мире нет ──
       if (p.isColony && !isAnom && !p.dead) { gmmBodyLife(ctx, px, py, sz, p, a, t, cx, cy); colPos.push({ px, py }); }
+      // МАРШ: запоминаем экранную позицию планеты-колонии — армии рисуются у неё, а не у звезды
+      if (p.isColony && !isAnom && p.colId) GMM.colonyXY[p.colId] = { x: px, y: py, r: sz };
 
       // ── минные ГЕКСЫ вокруг планеты (своя колония — кликабельны; чужое поле — показ) ──
       if (GM.showMines && p.isColony && !isAnom && !p.dead && p.pid != null) gmmPlanetMineHexes(ctx, px, py, sz, TILT, a, p, sys);
@@ -5149,7 +5174,7 @@ function gmmBuildDefense() {
   const myFac = GM.myFid ? gmFaction(GM.myFid) : null;
   const myCol = myFac ? gmRgb(myFac.color) : [150, 210, 255];
   if ((GM.opShips || []).length || (GM.mzaShips || []).length || (GM.fleets || []).length
-      || (GM.fleetsVis || []).length || (GM.mzaVis || []).length) {
+      || (GM.fleetsVis || []).length || (GM.mzaVis || []).length || (GM.armies || []).length) {
     // граф гиперпутей для прокладки маршрута летящих кораблей (как у караванов)
     const adj = {};
     GM.lanes.forEach(l => { (adj[l.a_id] = adj[l.a_id] || []).push(l.b_id); (adj[l.b_id] = adj[l.b_id] || []).push(l.a_id); });
@@ -5182,6 +5207,13 @@ function gmmBuildDefense() {
         return;
       }
       if (sh.status === 'transit' && sh.from_sys && sh.dest_sys) {
+        // транзит внутри ОДНОЙ системы (армия между колониями одной звезды):
+        // маршрут нулевой — рисуем как стоящего у звезды, а не петлю-артефакт
+        if (sh.from_sys === sh.dest_sys) {
+          const sys0 = byId[sh.from_sys]; if (!sys0) return;
+          GMM.defense.ships.push(Object.assign({ kind: 'idle', sys: sys0, col: myCol, id: sh.id, name: sh.name }, extra));
+          return;
+        }
         const a = byId[sh.from_sys], b = byId[sh.dest_sys];
         if (!a || !b) return;
         const la = sh.depart_at ? Date.parse(sh.depart_at) : null;
@@ -5226,7 +5258,8 @@ function gmmBuildDefense() {
       id: a.id, name: a.name, status: a.status,
       system_id: a.system_id, from_sys: a.from_system_id, dest_sys: a.dest_system_id,
       depart_at: a.depart_at, arrive_at: a.arrive_at,
-    }, { army: true, fleet: true, side: 'left', col: armyCol, ships: +a.units || 0 }));
+    }, { army: true, fleet: true, side: 'left', col: armyCol, ships: +a.units || 0,
+         colony: a.colony_id, fromCol: a.from_colony, destCol: a.dest_colony }));
 
     // ── ВИДИМОСТЬ ЧУЖИХ ─────────────────────────────────────────
     // Флоты других держав: сервер (fleets_visible) отдаёт только ОБНАРУЖЕННЫЕ —
@@ -5454,6 +5487,43 @@ function gmmUnitEmblem(ctx, x, y, sz, fid, col, opts) {
     hull(sz * 0.78, sz * 0.55, sz * 0.62, escFill);    // правый эскорт (позади/ниже)
     ctx.shadowColor = 'transparent';
     hull(0, sz * 0.12, sz * 1.0, leadFill);            // флагман (впереди/выше, крупнее)
+  } else if (o.type === 'army') {
+    // МАРШ: армия — силуэт ТАНКА (гусеницы + корпус + башня со стволом):
+    // с первого взгляда читается «наземка», не спутать с флотом/носителем.
+    const line = `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},0.98)`;
+    const lw = Math.max(0.5, sz * 0.11);
+    // гусеничная лента — приплюснутая «пилюля» снизу
+    const ty0 = sz * 0.55, th = sz * 0.55, tw = sz * 1.55;
+    const trg = ctx.createLinearGradient(0, ty0 - th / 2, 0, ty0 + th / 2);
+    trg.addColorStop(0, `rgba(${hd(hr0)},${hd(hg0)},${hd(hb0)},0.98)`);
+    trg.addColorStop(1, 'rgba(10,16,24,0.98)');
+    ctx.fillStyle = trg;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(-tw / 2, ty0 - th / 2, tw, th, th / 2);
+    else { ctx.arc(-tw / 2 + th / 2, ty0, th / 2, Math.PI / 2, -Math.PI / 2); ctx.arc(tw / 2 - th / 2, ty0, th / 2, -Math.PI / 2, Math.PI / 2); ctx.closePath(); }
+    ctx.fill(); ctx.lineWidth = lw; ctx.strokeStyle = line; ctx.stroke();
+    // катки — три тёмных круга в ленте
+    ctx.fillStyle = 'rgba(6,10,16,0.9)';
+    [-tw * 0.28, 0, tw * 0.28].forEach(ox => { ctx.beginPath(); ctx.arc(ox, ty0, th * 0.26, 0, 6.2832); ctx.fill(); });
+    ctx.shadowColor = 'transparent';
+    // корпус — трапеция над гусеницами
+    const hg2 = ctx.createLinearGradient(0, -sz * 0.15, 0, ty0);
+    hg2.addColorStop(0, `rgba(${hl(hr0)},${hl(hg0)},${hl(hb0)},0.98)`);
+    hg2.addColorStop(1, `rgba(${hd(hr0)},${hd(hg0)},${hd(hb0)},0.98)`);
+    ctx.fillStyle = hg2;
+    ctx.beginPath();
+    ctx.moveTo(-tw / 2 + sz * 0.08, ty0 - th * 0.45);
+    ctx.lineTo(-tw * 0.36, -sz * 0.05);
+    ctx.lineTo(tw * 0.36, -sz * 0.05);
+    ctx.lineTo(tw / 2 - sz * 0.08, ty0 - th * 0.45);
+    ctx.closePath(); ctx.fill();
+    ctx.lineWidth = lw; ctx.strokeStyle = line; ctx.stroke();
+    // башня — купол + ствол вправо-вверх
+    ctx.fillStyle = `rgba(${hr0},${hg0},${hb0},0.98)`;
+    ctx.beginPath(); ctx.arc(0, -sz * 0.08, sz * 0.42, Math.PI, 0); ctx.closePath(); ctx.fill();
+    ctx.lineWidth = lw; ctx.strokeStyle = line; ctx.stroke();
+    ctx.lineWidth = Math.max(1, sz * 0.16); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(sz * 0.28, -sz * 0.22); ctx.lineTo(sz * 1.05, -sz * 0.42); ctx.stroke();
   } else {
     const top = -sz * 0.5, L = sz * 1.6, halfW = sz * 0.58;
     // крылья-лезвия
@@ -5614,11 +5684,18 @@ function gmmPaintDefense(ctx) {
       const fanX = stacked ? 0 : (idx - (n - 1) / 2) * step;
       // флоты сидят СЛЕВА от звезды (side='left'), носители/Гиперпейсер — справа.
       const sgn = d.side === 'left' ? -1 : 1;
-      const cX = tX + sgn * R * 1.05 + fanX, cY = tY - R * 0.7 * sq;
-      const sel = (GMM.opCmd && GMM.opCmd.id === d.id) || (GMM.fleetCmd && GMM.fleetCmd.id === d.id);
+      // МАРШ: армии сидят СНИЗУ-слева от звезды — флот (сверху-слева) их не перекрывает
+      let cX = tX + sgn * R * 1.05 + fanX, cY = tY + (d.army ? R * 0.95 * sq : -R * 0.7 * sq);
+      // МАРШ: на глубоком зуме армия магнитится к СВОЕЙ ПЛАНЕТЕ-колонии, а не к звезде
+      // (позиции планет кладёт gmmPaintOrbits в GMM.colonyXY каждый кадр)
+      if (d.army && d.colony && GMM.colonyXY && GMM.colonyXY[d.colony]) {
+        const pp = GMM.colonyXY[d.colony];
+        cX = pp.x + fanX; cY = pp.y - (pp.r + csz * 1.9);
+      }
+      const sel = (GMM.opCmd && GMM.opCmd.id === d.id) || (GMM.fleetCmd && GMM.fleetCmd.id === d.id) || (GMM.armyCmd && GMM.armyCmd.id === d.id);
       // Корабль с флагом-штандартом за спиной (герб фракции — прямо на карте).
       const ER = gmmUnitEmblem(ctx, cX, cY, csz, d.fid || GM.myFid, d.col,
-        { type: d.mza ? 'mza' : (d.fleet ? 'fleet' : 'carrier'), hot: !!(d.mza && d.canFire), sel, t });
+        { type: d.mza ? 'mza' : (d.army ? 'army' : (d.fleet ? 'fleet' : 'carrier')), hot: !!(d.mza && d.canFire), sel, t });
       // Флот: бейдж с числом кораблей у нижнего края значка.
       if (d.fleet) {
         ctx.save();
@@ -5726,6 +5803,17 @@ function gmmPaintDefense(ctx) {
     ctx.setLineDash([4, 4]); ctx.lineDashOffset = -t * 6;
     ctx.strokeStyle = `rgba(${lr},${lg},${lb},0.3)`; ctx.lineWidth = 1.1;
     if (d.segs) drawTrace(uu => gmmSegPt(d.segs, d.total, uu)); else drawTrace(uu => gmmBezPt(d.g, uu));
+    // МАРШ: на глубоком зуме дотягиваем маршрут армии ОТ ПЛАНЕТЫ отправления и
+    // ДО ПЛАНЕТЫ назначения (трасса гиперпути идёт звезда→звезда, а армия — колония→колония)
+    if (d.army && GMM.colonyXY) {
+      const w0 = d.segs ? gmmSegPt(d.segs, d.total, 0) : gmmBezPt(d.g, 0);
+      const w1 = d.segs ? gmmSegPt(d.segs, d.total, 1) : gmmBezPt(d.g, 1);
+      const p0 = d.fromCol && GMM.colonyXY[d.fromCol], p1 = d.destCol && GMM.colonyXY[d.destCol];
+      ctx.beginPath();
+      if (p0) { ctx.moveTo(p0.x, p0.y); ctx.lineTo(SX(w0.x), SY(w0.y)); }
+      if (p1) { ctx.moveTo(SX(w1.x), SY(w1.y)); ctx.lineTo(p1.x, p1.y); }
+      if (p0 || p1) ctx.stroke();
+    }
     ctx.setLineDash([]);
     // сам носитель
     const ang = Math.atan2(SY(pt.y) - SY(back.y), SX(pt.x) - SX(back.x));
