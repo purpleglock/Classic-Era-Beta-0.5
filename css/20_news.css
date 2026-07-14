@@ -140,6 +140,27 @@
   .fn-card-body { padding: 12px 14px 13px; gap: 8px; }
 }
 
+/* ── Архив «Вестника»: все выпуски в газетных карточках ────── */
+#fn-archive { z-index: 8990; } /* статья (#fn-article, 9000) открывается ПОВЕРХ архива */
+.fn-arch-btn {
+  margin-left: auto; padding: 4px 12px; cursor: pointer; white-space: nowrap;
+  font-family: var(--fn-mono); font-size: 10px; letter-spacing: calc(.12em * var(--deco-ls-mult, 1)); text-transform: uppercase;
+  color: var(--fn-accent, #5fb0e6); background: transparent;
+  border: var(--deco-frame-w, 1px) solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 45%, transparent);
+  border-radius: 3px;
+}
+.fn-arch-btn:hover { background: color-mix(in srgb, var(--fn-accent, #5fb0e6) 16%, transparent); }
+.fn-arch {
+  position: relative; width: 100%; max-width: 1080px; margin: auto; overflow: hidden;
+  background: linear-gradient(180deg, var(--b2, #141a22), var(--b1, #0d1117));
+  border: var(--deco-frame-w, 1px) solid color-mix(in srgb, var(--fn-accent, #5fb0e6) 40%, var(--w2, #2a3340));
+  border-radius: var(--radius-sm);
+  box-shadow: 0 30px 90px rgba(0,0,0,.65), 0 0 50px color-mix(in srgb, var(--fn-accent, #5fb0e6) 12%, transparent);
+}
+.fn-arch-inner { padding: 16px; }
+.fn-arch-foot { display: flex; justify-content: center; padding: 14px 0 2px; }
+@media (max-width: 600px) { .fn-arch-inner { padding: 10px; } }
+
 /* ── Полноэкранная депеша (sci-fi холо-терминал) ───────────── */
 .fn-art-ov {
   position: fixed; inset: 0; z-index: 9000; display: none;

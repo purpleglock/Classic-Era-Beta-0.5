@@ -82,7 +82,9 @@ async function renderHome() {
   }).join('')}</div></section>` : '';
 
   // ── Единая обложка главной (одно изображение) ──
-  const heroHtml = buildHero(_heroCoverUrl, user);
+  // Если обложку не загружали — используем красивый фоновый арт (assets/bg.jpg),
+  // чтобы не заводить отдельную картинку под главную.
+  const heroHtml = buildHero(_heroCoverUrl || 'assets/bg.jpg', user);
 
   const sectionsHtml = strips ? `<section class="home-block"><div class="hb-head"><span class="hb-tag">${T('sections')}</span></div><div class="sec-grid">${strips}</div></section>` : `<p class="hp-empty-note">${user?'Создайте разделы и статьи.':'Войдите для редактирования.'}</p>`;
 
@@ -2618,9 +2620,8 @@ function buildHeroVN(coverUrl, user) {
     ).join('');
   }
   const spriteLayer = `<div class="hp-vn-sprites" id="hp-vn-sprites" data-count="${first ? first.c || 1 : 1}">${spriteHtml}</div>`;
-  const uploadBtn = user?.role === 'superadmin'
-    ? `<button class="hp-hero-upload-btn" id="hero-upload-btn" onclick="triggerHeroCoverUpload()" style="display:block;z-index:20;">✎ Обложка</button>`
-    : '';
+  // Обложку на главной не грузим — используется фоновый арт; кнопка загрузки убрана.
+  const uploadBtn = '';
 
   // Все реплики прячем в data-атрибут — печатает и перелистывает heroVNInit().
   const linesAttr = esc(JSON.stringify(items));
@@ -2980,7 +2981,7 @@ function _heroColonyBuild(en) {
   const ptsIn = pts => pts && pts.some(p => inFrame(p[0], p[1]));
   const dOf = (pts, close) => 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + (close ? 'Z' : '');
 
-  let fillMine = '', fillOther = '', mineOutline = '', glowB = '', lineB = '', laneHtml = '';
+  let fillMine = '', fillOther = '', glowB = '', lineB = '', laneHtml = '';
   if (geo) {
     // Заливки: МОИ ячейки — отдельным слоем на полную яркость; чужие — приглушены
     // (муть + пониженная непрозрачность), чтобы фокус был на моём государстве.
@@ -2993,24 +2994,28 @@ function _heroColonyBuild(en) {
       const p = `<path class="vor-cell${f.fac ? ' vor-claimed' : ' vor-neutral'}" d="${d}" fill="${fill}" stroke="none"></path>`;
       if (isMine) fillMine += p; else fillOther += p;
     });
-    // Моя территория — ЯРКИЙ светящийся контур (широкое мягкое гало + чёткая белая
-    // линия сверху), как выделенное государство на референс-инфографике.
-    mineOutline = geo.fills.filter(f => mineIds.has(f.sys.id) && ptsIn(f.pts)).map(f => {
-      const d = dOf(f.pts, true);
-      return `<path d="${d}" fill="none" stroke="${myColor}" stroke-width="${nf(R * 0.011)}" stroke-linejoin="round" opacity=".5"></path>`
-        + `<path d="${d}" fill="none" stroke="#eaf6ff" stroke-width="${nf(R * 0.006)}" stroke-linejoin="round" opacity=".35"></path>`
-        + `<path d="${d}" fill="none" stroke="#fff" stroke-width="${nf(R * 0.0028)}" stroke-linejoin="round" opacity=".95"></path>`;
-    }).join('');
-    const fb = [], nb = [];
+    // ── ГРАНИЦЫ: единый контур державы (движок уже схлопнул внутренние рёбра —
+    //    рисуем только внешнюю кромку территории, не по-регионно). Стиль —
+    //    киберпанк: тонкая цветная неон-линия + мягкое гало; у МОЕЙ державы сверху
+    //    белая нить и бегущий пунктир-«скан». Чужие приглушены. ──
+    const solid = c => (typeof gmSolidColor === 'function' && c) ? gmSolidColor(c) : c;
+    const _fm = (typeof GM !== 'undefined' && GM.facMeta) || {};
+    const myFacCol = (_fm[myFid] && _fm[myFid].color) || (typeof EC !== 'undefined' && EC.app && EC.app.color) || myColor;
+    const mySolid = solid(myFacCol);
+    const GW = R * 0.0075, LW = R * 0.0021, HW = R * 0.0011;
+    let bGlow = '', bLine = '';
     geo.edges.forEach(e => {
       if (!ptsIn(e.pts)) return;
       const d = dOf(e.pts);
-      if (e.kind === 'front') fb.push(`<path class="vor-cell vor-edge vor-claimed vor-front" d="${d}" fill="none" stroke="${e.color}"></path>`);
-      else if (e.kind === 'rift') fb.push(`<path class="vor-cell vor-edge vor-rift-edge" d="${d}" fill="none"></path>`);
-      else if (e.kind === 'fac') fb.push(`<path class="vor-cell vor-edge vor-claimed" d="${d}" fill="none" stroke="${e.color}"></path>`);
-      else nb.push(`<path class="vor-cell vor-edge vor-neutral" d="${d}" fill="none" stroke="${e.color}"></path>`);
+      if (e.kind === 'neutral') { bLine += `<path d="${d}" fill="none" stroke="rgba(155,175,205,.2)" stroke-width="${nf(LW * 0.7)}" stroke-linecap="round"></path>`; return; }
+      if (e.kind === 'rift') { bLine += `<path d="${d}" fill="none" stroke="#c060ff" stroke-width="${nf(LW)}" stroke-dasharray="${nf(R * 0.007)},${nf(R * 0.006)}" opacity=".55" stroke-linecap="round"></path>`; return; }
+      const col = e.color || myColor;
+      const mineE = !!mySolid && col === mySolid;
+      bGlow += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${nf(mineE ? GW : GW * 0.62)}" opacity="${mineE ? '.5' : '.24'}" stroke-linejoin="round" stroke-linecap="round"></path>`;
+      bLine += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${nf(mineE ? LW : LW * 0.82)}" opacity="${mineE ? '.95' : '.62'}" stroke-linejoin="round" stroke-linecap="round"></path>`;
+      if (mineE) bLine += `<path d="${d}" fill="none" stroke="#eaf6ff" stroke-width="${nf(HW)}" opacity=".75" stroke-linejoin="round" stroke-linecap="round"></path>`;
     });
-    glowB = fb.join(''); lineB = nb.join('') + fb.join('');
+    glowB = bGlow; lineB = bLine;
     laneHtml = geo.lanes.filter(L => inFrame(L.ax, L.ay) || inFrame(L.bx, L.by)).map(L =>
       `<path class="hyperlane" d="M${L.ax},${L.ay} Q${L.cx},${L.cy} ${L.bx},${L.by}" fill="none"></path>`).join('');
   } else {
@@ -3023,24 +3028,26 @@ function _heroColonyBuild(en) {
   }
   if (!myColor) myColor = 'var(--gd,#3a9bdc)';
 
-  // ── Звёзды: «блик объектива» — мягкое гало + два тонких вытянутых луча
-  //    + яркое ядро с белым центром; у гигантов дополнительное кольцо.
-  //    Цвет по типу звезды (как у спрайтов star_<type>.png). ──
+  // ── Звёзды: мягкий «блум» + бело-горячее ядро + тонкий тающий 4-лучевой блик
+  //    (дифракционная звёздочка, как в астрофото). Лучи очень тонкие и полу-
+  //    прозрачные — читаются как сияние, а не крест. Цвет по типу звезды. ──
   const STARC = { yellow: '#ffd75e', red: '#ff6a4e', blue: '#6fb9f0', white: '#eef6ff', green: '#45e0b4' };
+  const spike = (len, wid) => `0,${nf(-len)} ${nf(wid)},0 0,${nf(len)} ${nf(-wid)},0`;   // тонкий ромб-луч, сходящийся в точки
   let starsHtml = '';
   sysList.forEach(s => {
     if (!inFrame(s.x, s.y) || s.faction === 'rift') return;
-    const a = s.is_giant ? R * 0.028 : R * 0.016;   // длина луча блика
+    const a = s.is_giant ? R * 0.02 : R * 0.012;
     const c = STARC[s.star_type] || STARC.yellow;
-    const wv = a * 0.15;                             // толщина луча у ядра
-    const ray = `0,${nf(-a)} ${nf(wv)},0 0,${nf(a)} ${nf(-wv)},0`;
+    const ln = a * 2.6, wd = a * 0.045;
     starsHtml += `<g transform="translate(${nf(s.x)},${nf(s.y)})" style="pointer-events:none">
-      <circle r="${nf(a * 1.7)}" fill="${c}" opacity=".2" filter="url(#hpvncGlow)"></circle>
-      ${s.is_giant ? `<circle r="${nf(a * 0.78)}" fill="none" stroke="${c}" stroke-width="${nf(Math.max(R * 0.0014, 0.35))}" opacity=".4"></circle>` : ''}
-      <polygon points="${ray}" fill="${c}" opacity=".92"></polygon>
-      <polygon points="${ray}" transform="rotate(90)" fill="${c}" opacity=".92"></polygon>
-      <circle r="${nf(a * 0.3)}" fill="${c}"></circle>
-      <circle r="${nf(a * 0.16)}" fill="#fff" opacity=".95"></circle>
+      <circle r="${nf(a * 2.3)}" fill="${c}" opacity=".1" filter="url(#hpvncGlow)"></circle>
+      <g filter="url(#hpvncEdgeGlow)" opacity=".35">
+        <polygon points="${spike(ln, wd)}" fill="${c}"></polygon>
+        <polygon points="${spike(ln, wd)}" transform="rotate(90)" fill="${c}"></polygon>
+      </g>
+      <circle r="${nf(a * 0.95)}" fill="${c}" opacity=".4" filter="url(#hpvncEdgeGlow)"></circle>
+      <circle r="${nf(a * 0.42)}" fill="${c}"></circle>
+      <circle r="${nf(a * 0.19)}" fill="#fff"></circle>
     </g>`;
   });
 
@@ -3053,8 +3060,7 @@ function _heroColonyBuild(en) {
     myNodes += `<g>
       <circle cx="${nf(s.x)}" cy="${nf(s.y)}" r="${nf(r * (isCap ? 3.2 : 2.2))}" fill="${myColor}" opacity="${isCap ? '.32' : '.18'}" filter="url(#hpvncGlow)"></circle>
       ${isCap ? `<rect x="${nf(-r * 1.55)}" y="${nf(-r * 1.55)}" width="${nf(r * 3.1)}" height="${nf(r * 3.1)}" transform="translate(${nf(s.x)} ${nf(s.y)}) rotate(45)" fill="none" stroke="#fff" stroke-width="${nf(R * 0.0022)}" opacity=".7"></rect>
-      <text x="${nf(s.x)}" y="${nf(s.y - r * 2.3)}" fill="#fff" font-size="${nf(R * 0.03)}" text-anchor="middle" style="pointer-events:none">★</text>
-      <text x="${nf(s.x)}" y="${nf(s.y - r * 4.1)}" fill="#eaf6ff" font-size="${nf(R * 0.015)}" text-anchor="middle" font-family="var(--font-mono)" letter-spacing="1.5" opacity=".8" style="pointer-events:none">${en ? 'CAPITAL' : 'СТОЛИЦА'}</text>` : ''}
+      <text x="${nf(s.x)}" y="${nf(s.y - r * 2.3)}" fill="#fff" font-size="${nf(R * 0.026)}" text-anchor="middle" style="pointer-events:none">★</text>` : ''}
     </g>`;
   });
 
@@ -3080,16 +3086,33 @@ function _heroColonyBuild(en) {
 
   // ── Метки систем: мои и столицы — на гранёной плашке; остальные звёзды
   //    в кадре — лёгкий текст с тёмной обводкой (чтобы всё было читаемо). ──
+  //    АДАПТИВНОСТЬ: чем больше систем в кадре (большая держава), тем мельче
+  //    шрифт и тем строже прячем второстепенные метки — иначе плашки с
+  //    названиями наползают друг на друга и превращаются в кашу. ──
+  let inFrameCount = 0, mineInFrameCount = 0;
+  sysList.forEach(s => {
+    if (inFrame(s.x, s.y) && s.faction !== 'rift' && !claimSet.has(s.id)) {
+      inFrameCount++; if (mineIds.has(s.id)) mineInFrameCount++;
+    }
+  });
+  // Шрифт сжимается ∝ 1/√(число моих систем): суммарная «краска» подписей
+  // держится примерно постоянной, метки не растут в кучу.
+  const lblK = Math.max(0.42, Math.min(1, Math.sqrt(13 / Math.max(1, mineInFrameCount))));
+  const showNeutral = inFrameCount <= 34;     // на крупной карте чужие звёзды не подписываем
+  const dense = mineInFrameCount > 26;        // много своих → плашка только у столиц, прочее — лёгкий текст
   let labels = '';
-  const fs = R * 0.019;
+  const fs = R * 0.019 * lblK;
   sysList.forEach(s => {
     if (!inFrame(s.x, s.y) || claimSet.has(s.id) || s.faction === 'rift') return;
     const nm = String(s.name || ''); if (!nm) return;
-    const plate = mineIds.has(s.id) || capSet.has(s.id);
+    const isMine = mineIds.has(s.id), isCap = capSet.has(s.id);
+    const plate = isCap || (isMine && !dense);
     const ly = s.y + (s.is_giant ? R * 0.05 : R * 0.032);
     if (!plate) {
+      if (!isMine && !isCap && !showNeutral) return;   // чужие метки на плотной карте прячем
       const ofs = fs * 0.8;
-      labels += `<text x="${nf(s.x)}" y="${nf(ly + ofs * 0.34)}" fill="#c6d4e4" font-size="${nf(ofs)}" text-anchor="middle" font-family="var(--font-mono)" letter-spacing=".5" opacity=".85" style="pointer-events:none;paint-order:stroke;stroke:#05080d;stroke-width:${nf(R * 0.0045)};stroke-linejoin:round">${esc(nm)}</text>`;
+      const tint = isMine ? '#dfeafc' : '#c6d4e4';
+      labels += `<text x="${nf(s.x)}" y="${nf(ly + ofs * 0.34)}" fill="${tint}" font-size="${nf(ofs)}" text-anchor="middle" font-family="var(--font-mono)" letter-spacing=".5" opacity="${isMine ? '.92' : '.8'}" style="pointer-events:none;paint-order:stroke;stroke:#05080d;stroke-width:${nf(R * 0.0045)};stroke-linejoin:round">${esc(nm)}</text>`;
       return;
     }
     const hw = nm.length * fs * 0.3 + fs * 0.5, hh = fs * 0.75;
@@ -3103,42 +3126,38 @@ function _heroColonyBuild(en) {
     </g>`;
   });
 
-  // ── Флаг МОЕГО государства — заполняет ВСЮ территорию: изображение герба
-  //    растянуто по bbox моих ячеек (slice) и обрезано clipPath'ом по ним,
-  //    как «прокрашенная флагом» страна на инфографике. Название — у самой
-  //    глубинной системы (дальше всех от чужих), не на стыке границ. ──
-  let crest = '', crestClip = '', crestName = '';
-  const myInView = mine.filter(s => inFrame(s.x, s.y));
-  if (myInView.length) {
-    const others = sysList.filter(s => !mineIds.has(s.id) && s.faction !== 'rift');
-    let anchor = myInView[0], bestScore = -Infinity;
-    myInView.forEach(s => {
-      let dmin = Infinity;
-      others.forEach(o => { const d = Math.hypot(o.x - s.x, o.y - s.y); if (d < dmin) dmin = d; });
-      if (dmin > bestScore) { bestScore = dmin; anchor = s; }
+  // ── Флаги держав — КАЖДАЯ фракция «прокрашена» своим гербом по её ячейкам
+  //    (clipPath по территории). Моя ярче, чужие приглушены — чтобы читались
+  //    как отдельные страны. Гербы из GM.facMeta (анкеты), для своей — EC.app.
+  //    Границы и названия здесь НЕ рисуем (контур — единый слой из geo.edges,
+  //    названий на карте нет — они в досье справа). ──
+  const facMeta = (typeof GM !== 'undefined' && GM.facMeta) || {};
+  let crest = '', crestClip = '';
+  if (geo) {
+    const groups = new Map();   // fid -> { cells:[pts], pts:[p] }
+    geo.fills.forEach(f => {
+      if (!f.sys || f.isRift || !f.fac || !f.pts) return;
+      const fid = f.sys.faction; if (!fid || fid === 'rift' || !ptsIn(f.pts)) return;
+      let g = groups.get(fid);
+      if (!g) { g = { cells: [], pts: [] }; groups.set(fid, g); }
+      g.cells.push(f.pts);
+      f.pts.forEach(p => g.pts.push(p));
     });
-    const herald = (typeof EC !== 'undefined' && EC.app && (EC.app.herald_url || EC.app.image_url)) || '';
-    const nm = String((typeof EC !== 'undefined' && EC.app && EC.app.name) || '').toUpperCase();
-    // bbox всех моих ячеек — рамка растяжки флага
-    let tx0 = Infinity, ty0 = Infinity, tx1 = -Infinity, ty1 = -Infinity, terr = '';
-    if (geo) {
-      geo.fills.filter(f => f.sys && mineIds.has(f.sys.id) && f.pts).forEach(f => {
-        terr += `<path d="${dOf(f.pts, true)}"></path>`;
-        f.pts.forEach(p => { tx0 = Math.min(tx0, p[0]); ty0 = Math.min(ty0, p[1]); tx1 = Math.max(tx1, p[0]); ty1 = Math.max(ty1, p[1]); });
-      });
-      if (terr) crestClip = `<clipPath id="hpvncTerr">${terr}</clipPath>`;
-    }
-    const hasBox = isFinite(tx0) && tx1 > tx0 && ty1 > ty0;
-    const fx = hasBox ? tx0 : anchor.x - R * 0.1, fy = hasBox ? ty0 : anchor.y - R * 0.066;
-    const fw = hasBox ? tx1 - tx0 : R * 0.2, fh = hasBox ? ty1 - ty0 : R * 0.132;
-    // Флаг-печать — ПОД границами (обрезан по территории).
-    crest = herald && crestClip
-      ? `<g style="pointer-events:none" clip-path="url(#hpvncTerr)" opacity=".22" filter="url(#hpvncMute)"><image href="${esc(herald)}" xlink:href="${esc(herald)}" x="${nf(fx)}" y="${nf(fy)}" width="${nf(fw)}" height="${nf(fh)}" preserveAspectRatio="xMidYMid slice"></image></g>`
-      : '';
-    // Название государства — ОТДЕЛЬНЫЙ слой ПОВЕРХ границ (крупная надпись у ядра).
-    crestName = nm
-      ? `<text x="${nf(anchor.x)}" y="${nf(anchor.y + R * 0.082)}" fill="#fff" font-size="${nf(R * 0.03)}" text-anchor="middle" font-family="var(--font-display)" font-weight="800" letter-spacing="2" opacity=".96" style="pointer-events:none;paint-order:stroke;stroke:#05080d;stroke-width:${nf(R * 0.006)};stroke-linejoin:round">${esc(nm)}</text>`
-      : '';
+    let clipDefs = '', flagLayer = '';
+    let gi = 0;
+    groups.forEach((g, fid) => {
+      const isMine = fid === myFid;
+      const meta = facMeta[fid] || (isMine ? (typeof EC !== 'undefined' ? EC.app : null) : null);
+      const herald = (meta && (meta.herald_url || meta.image_url)) || '';
+      if (!herald) return;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      g.pts.forEach(p => { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); });
+      if (!isFinite(x0) || x1 <= x0 || y1 <= y0) return;
+      const cid = 'hpvncTerr' + (gi++);
+      clipDefs += `<clipPath id="${cid}">${g.cells.map(pts => `<path d="${dOf(pts, true)}"></path>`).join('')}</clipPath>`;
+      flagLayer += `<g style="pointer-events:none" clip-path="url(#${cid})" opacity="${isMine ? '.22' : '.12'}" filter="url(#hpvncMute)"><image href="${esc(herald)}" xlink:href="${esc(herald)}" x="${nf(x0)}" y="${nf(y0)}" width="${nf(x1 - x0)}" height="${nf(y1 - y0)}" preserveAspectRatio="xMidYMid slice"></image></g>`;
+    });
+    crestClip = clipDefs; crest = flagLayer;
   }
 
   // ── Тусклый звёздный фон + виньетка (глубина, без перегруза) ──
@@ -3153,6 +3172,7 @@ function _heroColonyBuild(en) {
   const defs = `<defs>
     ${crestClip}
     <filter id="hpvncGlow" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="${nf(R * 0.012)}"></feGaussianBlur></filter>
+    <filter id="hpvncEdgeGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="${nf(R * 0.0035)}"></feGaussianBlur></filter>
     <filter id="hpvncMute"><feColorMatrix type="saturate" values="0.5"></feColorMatrix></filter>
     <filter id="hpvncDrop" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="${nf(R * 0.003)}" stdDeviation="${nf(R * 0.005)}" flood-color="#000" flood-opacity="0.55"></feDropShadow></filter>
     <marker id="hpvncArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${EXP}"></path></marker>
@@ -3167,12 +3187,11 @@ function _heroColonyBuild(en) {
   const mainSvg = `<svg class="hpvnc-map" viewBox="${nf(minX)} ${nf(minY)} ${nf(w)} ${nf(h)}" preserveAspectRatio="xMidYMid slice" style="--cell-w:${cellW};--lane-w:${laneW}" xmlns:xlink="http://www.w3.org/1999/xlink">
     ${defs}
     <g opacity=".85">${bgStars}</g>
-    <g class="vor-layer" opacity=".42" filter="url(#hpvncMute)">${fillOther}</g>
+    <g class="vor-layer" opacity=".52" filter="url(#hpvncMute)">${fillOther}</g>
     <g class="vor-layer">${fillMine}</g>
     <g>${crest}</g>
-    <g>${mineOutline}</g>
-    <g class="vor-border-layer gm-glow-layer" opacity=".5">${glowB}</g>
-    <g class="vor-border-layer" opacity=".72">${lineB}</g>
+    <g filter="url(#hpvncEdgeGlow)" opacity=".8">${glowB}</g>
+    <g opacity=".95">${lineB}</g>
     <g class="lane-layer" opacity=".8">${laneHtml}</g>
     <g>${starsHtml}</g>
     <g>${myNodes}</g>
@@ -3181,7 +3200,6 @@ function _heroColonyBuild(en) {
     ${vignette}
     <g>${labels}</g>
     <g>${tLabels}</g>
-    <g>${crestName}</g>
   </svg>`;
 
   // ── Мини-обзор всей карты + рамка текущего кадра ──
@@ -4159,9 +4177,8 @@ function buildHeroMenu(coverUrl, user) {
     : `<div class="hp-hero-noimg"></div>`;
   // Для НЕзарегистрированного (титульное меню) спрайт и угловые «линии оформления»
   // не показываем — есть рамка hp-hero-frame, остальное лишний визуальный шум.
-  const uploadBtn = user?.role === 'superadmin'
-    ? `<button class="hp-hero-upload-btn" id="hero-upload-btn" onclick="triggerHeroCoverUpload()" style="display:block;z-index:20;">✎ Обложка</button>`
-    : '';
+  // Обложку на главной не грузим — используется фоновый арт; кнопка загрузки убрана.
+  const uploadBtn = '';
 
   // Пункты меню зависят от состояния входа.
   const items = [];
@@ -4213,9 +4230,8 @@ function buildHero(coverUrl, user) {
     ? `<img class="hp-hero-img" src="${esc(url)}" data-img-url="${esc(url)}" alt="" loading="eager">`
     : `<div class="hp-hero-noimg"></div>`;
 
-  const uploadBtn = user?.role === 'superadmin'
-    ? `<button class="hp-hero-upload-btn" id="hero-upload-btn" onclick="triggerHeroCoverUpload()" style="display:block;z-index:20;">✎ Обложка</button>`
-    : '';
+  // Обложку на главной не грузим — используется фоновый арт; кнопка загрузки убрана.
+  const uploadBtn = '';
 
   return `<div class="hp-hero-cover" id="hp-hero-cover">
     ${imgLayer}

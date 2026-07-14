@@ -3324,3 +3324,61 @@ body.ec-tree-fs-lock { overflow: hidden; }
 /* заметка об эскалации цены (сколько уже пробурено за день) */
 .ec-geo-esc { font-size: 12px; color: var(--t4); text-align: center; }
 .ec-geo-esc b { color: var(--gd); }
+
+/* ══════════════════════════════════════════════════════════════
+   ИНДИКАТОР ОЖИДАНИЯ СЕРВЕРА (EC.busy → #ec-wait)
+   Эмблема вики с тонким вращающимся кольцом-акцентом. Приглушённо:
+   мягкий тёмный фон, лёгкое дыхание логотипа — не режет глаз.
+   ══════════════════════════════════════════════════════════════ */
+#ec-wait {
+  position: fixed; inset: 0; z-index: 99999;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--b0, #05070c) 46%, transparent);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .3s ease, visibility .3s ease;
+}
+#ec-wait.on { opacity: 1; visibility: visible; pointer-events: auto; }
+.ec-wait-box {
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  transform: translateY(5px) scale(.97); transition: transform .34s cubic-bezier(.2,.9,.25,1);
+}
+#ec-wait.on .ec-wait-box { transform: translateY(0) scale(1); }
+.ec-wait-core { position: relative; width: 88px; height: 88px;
+  display: flex; align-items: center; justify-content: center; }
+/* Плавное кольцо: конический градиент с затухающим хвостом, вырезанный
+   маской в тонкую окружность. Вращается линейно и непрерывно (GPU),
+   без резких сегментов — глазу мягко. */
+.ec-wait-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--gd, #d4af37) 12%, transparent) 90deg,
+    color-mix(in srgb, var(--gd, #d4af37) 78%, transparent) 320deg,
+    transparent 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
+  animation: ecWaitSpin 1.4s linear infinite;
+  will-change: transform;
+}
+/* эмблема вики — приглушена, мягко пульсирует свечением (без скачков масштаба) */
+.ec-wait-logo {
+  width: 50px; height: 50px; object-fit: contain;
+  animation: ecWaitGlow 2.6s ease-in-out infinite;
+  will-change: opacity, filter;
+}
+.ec-wait-txt {
+  font-family: var(--font-mono, monospace); font-size: 10.5px; letter-spacing: .16em;
+  text-transform: uppercase; color: color-mix(in srgb, var(--t3, #9fb0c8) 80%, transparent);
+  animation: ecWaitBlink 2.6s ease-in-out infinite;
+}
+@keyframes ecWaitSpin { to { transform: rotate(360deg); } }
+@keyframes ecWaitGlow {
+  0%, 100% { opacity: .6;  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--gd, #d4af37) 14%, transparent)); }
+  50%      { opacity: .92; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--gd, #d4af37) 30%, transparent)); }
+}
+@keyframes ecWaitBlink { 0%, 100% { opacity: .4; } 50% { opacity: .8; } }
+@media (prefers-reduced-motion: reduce) {
+  .ec-wait-ring { animation-duration: 3s; }
+  .ec-wait-logo, .ec-wait-txt { animation: none; opacity: .8; }
+}

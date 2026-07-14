@@ -16,6 +16,9 @@
 --   • Расписание цены N-й крутки за день (0-я = первая): 10к / 15к / 22.5к /
 --     35к / далее +15к за каждую следующую. Зеркало клиента ecGeoCost().
 --
+-- Принятие находки пишется в ЛЕНТУ СОБЫТИЙ (◈ Хроника сектора) через
+-- _post_life_news + _news_pick — это событие мира, а НЕ новость государства.
+-- Зависимость: _news_mentions.sql (_post_life_news) + _events_prose.sql (_news_pick).
 -- Не применялось автоматически: катить как обычный срез экономики.
 -- Зеркало клиента — economy.js (ecGeoBody) + render.js (heroVNGeoOpen),
 -- ?v=20260712geosurvey3
@@ -139,6 +142,7 @@ grant execute on function public.geosurvey_spin(uuid) to authenticated;
 create or replace function public.geosurvey_accept()
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare fid text; st public.geosurvey_state; dep jsonb;
+        v_nm text; v_col text; v_res text; v_amt text;
 begin
   fid := public._ec_my_fid();
   select * into st from public.geosurvey_state where faction_id = fid for update;
@@ -149,6 +153,25 @@ begin
     set resources = coalesce(resources, '[]'::jsonb) || dep
     where id = st.colony_id and faction_id = fid;
   if not found then raise exception 'colony gone: колония больше не ваша — находка не принята'; end if;
+
+  -- Событие в ЛЕНТУ СОБЫТИЙ (◈ Хроника сектора), не в новости государств. Best-effort.
+  begin
+    v_nm  := coalesce(nullif(public._fac_name(fid),''), 'Одна из держав');
+    v_res := coalesce(st.current->>'name','залежь');
+    v_amt := coalesce(st.current->>'amt','');
+    select planet_name into v_col from public.colonies where id = st.colony_id;
+    v_col := coalesce(nullif(v_col,''),'одной из колоний');
+    perform public._post_life_news(
+      '⛏ Новое месторождение: ' || v_nm,
+      public._news_pick(array[
+        format('Геологи державы %s закладывают шурф на %s — и находка подтверждается: залежь ресурса «%s» (%s). Буровые вышки разворачиваются к новому участку.', v_nm, v_col, v_res, v_amt),
+        format('%s объявляет об открытии месторождения на %s: «%s», %s. Караванщики уже прикидывают новые маршруты.', v_nm, v_col, v_res, v_amt),
+        format('Разведка %s не подвела — недра %s отдают залежь «%s» (%s). Инженеры спешат застолбить участок.', v_nm, v_col, v_res, v_amt)
+      ]),
+      'rgba(180,140,90,0.5)',
+      jsonb_build_array(fid));
+  exception when others then null;
+  end;
 
   -- current гасим, но spins/day НЕ трогаем: эскалация цены переживает принятие
   update public.geosurvey_state set current = null, colony_id = null, updated_at = now()

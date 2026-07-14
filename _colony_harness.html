@@ -56,7 +56,12 @@ window.ecClaimCdDays = () => 4;
 window.ecClaimCooldownMs = () => 0;
 window.ecNum = n => (+n).toLocaleString('ru-RU');
 window.gmFaction = fid => FACS[fid] || null;
-window.GM = { loaded:true, systems: SYS, lanes:[{a_id:'s1',b_id:'s2'},{a_id:'s1',b_id:'s6'},{a_id:'s2',b_id:'s7'},{a_id:'s1',b_id:'s3'},{a_id:'s2',b_id:'s8'},{a_id:'s5',b_id:'s8'}], capitals:{s1:true} };
+window.GM = { loaded:true, systems: SYS, lanes:[{a_id:'s1',b_id:'s2'},{a_id:'s1',b_id:'s6'},{a_id:'s2',b_id:'s7'},{a_id:'s1',b_id:'s3'},{a_id:'s2',b_id:'s8'},{a_id:'s5',b_id:'s8'}], capitals:{s1:true},
+  facMeta:{
+    me:{ name:'Ордо Келум', color:'#9a4fd0', herald_url:'assets/constructors/ship_weapon_light_0.webp' },
+    f2:{ name:'Лига Зоцида', color:'#3a8f6a', herald_url:'assets/constructors/ship_weapon_heavy_0.webp' },
+    f3:{ name:'Синдикат Сомну', color:'#2f6d8f', herald_url:'assets/constructors/ship_weapon_medium_0.webp' },
+  } };
 window.gmBuildGeo = () => ({
   fills: SYS.map(s => ({ sys:s, fac: FACS[s.faction]||null, pts: hex(s.x, s.y, 110, s.x*0.01) })),
   edges: [

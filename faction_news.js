@@ -225,10 +225,8 @@ function fnEventFaction(n) {
   return best;
 }
 
-// HTML-блок для главной: «Вестник фракций» (новости игроков) + «Лента сектора» (события).
-function fnHomeBlockHtml() {
-  const list = FN.approved || [];
-  const card = (n, lead) => {
+// Газетная карточка новости (общая для «Вестника» на главной и архива).
+function fnCardHtml(n, lead) {
     const kind = fnKind(n);               // news | rumor | bulletin
     const rumor = kind === 'rumor', bulletin = kind === 'bulletin';
     // Цвет фракции игрока НЕ используем (бывает кислотным) — единый тон темы.
@@ -256,16 +254,69 @@ function fnHomeBlockHtml() {
         </div>
       </div>
     </article>`;
-  };
+}
+
+// HTML-блок для главной: «Вестник фракций» (новости игроков) + «Лента сектора» (события).
+function fnHomeBlockHtml() {
+  const list = FN.approved || [];
   let newsSection = '';
   if (list.length) {
-    const items = list.slice(0, 20).map(n => card(n, false)).join('');
+    const items = list.slice(0, 20).map(n => fnCardHtml(n, false)).join('');
     newsSection = `<section class="home-block fn-home">
-      <div class="hb-head"><span class="hb-tag">ВЕСТНИК ФРАКЦИЙ</span><span class="fn-home-sub">// ВХОДЯЩИЕ ПЕРЕДАЧИ · ${list.length}</span></div>
+      <div class="hb-head"><span class="hb-tag">ВЕСТНИК ФРАКЦИЙ</span><span class="fn-home-sub">// ВХОДЯЩИЕ ПЕРЕДАЧИ · ${list.length}</span>
+        <button class="fn-arch-btn" onclick="fnOpenArchive()">📚 Архив выпусков</button></div>
       <div class="fn-feed-news">${items}</div>
     </section>`;
   }
   return newsSection;
+}
+
+// ── Архив «Вестника»: ВСЕ опубликованные новости фракций ────────
+// Полноэкранный оверлей с теми же газетными карточками, что и на главной,
+// но без лимита: грузим страницами по 30, «Показать ещё» докручивает вглубь.
+// Клик по карточке открывает статью поверх архива (fnOpenArticle).
+const FN_ARCH_PAGE = 30;
+async function fnOpenArchive() {
+  const modal = document.getElementById('fn-archive') || (() => {
+    const m = document.createElement('div'); m.id = 'fn-archive'; m.className = 'fn-art-ov';
+    m.onclick = e => { if (e.target === m) fnCloseArchive(); };
+    document.body.appendChild(m); return m;
+  })();
+  modal.innerHTML = `<div class="fn-arch">
+    <div class="fn-art-bar"><span class="fn-art-bar-l">📚 АРХИВ ВЕСТНИКА ФРАКЦИЙ</span><span class="fn-art-bar-r">◈◈</span></div>
+    <button class="fn-art-close" onclick="fnCloseArchive()">✕</button>
+    <div class="fn-arch-inner">
+      <div class="fn-feed-news" id="fn-arch-list"><div class="sload" style="min-height:80px"><div class="quote-loader">Поднимаю подшивку…</div></div></div>
+      <div class="fn-arch-foot"><button class="btn btn-gh" id="fn-arch-more" style="display:none" onclick="fnArchiveMore()">▾ Показать ещё</button></div>
+    </div>
+  </div>`;
+  modal.classList.add('show');
+  document.body.style.overflow = 'hidden';
+  FN.archive = [];
+  await fnArchiveMore(true);
+}
+async function fnArchiveMore(first) {
+  const list = document.getElementById('fn-arch-list');
+  if (!list) return;
+  const off = (FN.archive || []).length;
+  let rows = [];
+  try {
+    rows = await dbGet('faction_news',
+      `status=eq.approved&owner_id=not.is.null&order=published_at.desc.nullslast,created_at.desc&offset=${off}&limit=${FN_ARCH_PAGE}`) || [];
+  } catch (e) { rows = []; }
+  if (first) list.innerHTML = '';
+  FN.archive = (FN.archive || []).concat(rows);
+  rows.forEach(n => FN.byId.set(n.id, n));           // чтобы fnOpenArticle нашёл запись
+  if (rows.length) list.insertAdjacentHTML('beforeend', rows.map(n => fnCardHtml(n, false)).join(''));
+  else if (first) list.innerHTML = `<div style="color:var(--t3);font-size:13px;padding:14px">Архив пуст — опубликованных новостей пока нет.</div>`;
+  const more = document.getElementById('fn-arch-more');
+  if (more) more.style.display = rows.length < FN_ARCH_PAGE ? 'none' : '';
+}
+function fnCloseArchive() {
+  const m = document.getElementById('fn-archive');
+  if (m) m.classList.remove('show');
+  // Если поверх архива не открыта статья — вернуть прокрутку страницы.
+  if (!document.getElementById('fn-article')?.classList.contains('show')) document.body.style.overflow = '';
 }
 
 // ── Лента сектора: компактная лента системных событий (слухи + сводки) ──
@@ -1591,7 +1642,8 @@ function fnCloseArticle() {
   FN._openId = null;
   const m = document.getElementById('fn-article');
   if (m) { fnMusicStopAll(m); m.classList.remove('show'); }
-  document.body.style.overflow = '';
+  // Под статьёй мог остаться открытый архив — тогда прокрутку страницы не возвращаем.
+  if (!document.getElementById('fn-archive')?.classList.contains('show')) document.body.style.overflow = '';
 }
 
 // ── Личные сообщения фракции (private) ──────────────────────

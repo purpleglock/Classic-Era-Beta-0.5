@@ -2157,7 +2157,20 @@ async function handleImgUpload(file, onUrl) {
 function slugify(s){const m={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'yo',ж:'zh',з:'z',и:'i',й:'j',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'kh',ц:'ts',ч:'ch',ш:'sh',щ:'shch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};return s.toLowerCase().split('').map(c=>m[c]!==undefined?m[c]:c).join('').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
 function om(id){document.getElementById(id)?.classList.add('open');}
 function cm(id){document.getElementById(id)?.classList.remove('open');}
-function toast(msg,type='inf'){const el=document.createElement('div');el.className=`toast t${type}`;el.textContent=msg;document.getElementById('toasts').appendChild(el);setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),300);},3500);}
+function toast(msg,type='inf'){
+  const el=document.createElement('div');el.className=`toast t${type}`;
+  const close=()=>{el.style.opacity='0';setTimeout(()=>el.remove(),300);};
+  el.textContent=msg;
+  // Ошибки НЕ мигают и не пропадают сами — висят, пока не нажмёшь (OK / клик по плашке).
+  if(type==='err'){
+    el.style.pointerEvents='auto';el.style.cursor='pointer';el.title='Нажмите, чтобы закрыть';
+    const ok=document.createElement('span');ok.className='toast-ok';ok.textContent='OK ✕';el.appendChild(ok);
+    el.onclick=close;
+  } else {
+    setTimeout(close,3500);
+  }
+  document.getElementById('toasts').appendChild(el);
+}
 
 
 

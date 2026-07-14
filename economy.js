@@ -10,7 +10,55 @@
 //             auth.js (user), faction_reg.js (frReadable)
 // ════════════════════════════════════════════════════════════
 
-const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], projects: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], dossiers: [], alerts: [], passive: {}, tab: 'overview', busy: false, openColony: null, openSys: null, spyTarget: null, spyOp: 'recon_basic', spyAgents: 1 };
+const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], projects: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], dossiers: [], alerts: [], passive: {}, tab: 'overview', _busy: false, openColony: null, openSys: null, spyTarget: null, spyOp: 'recon_basic', spyAgents: 1 };
+// ── Индикатор ожидания сервера ───────────────────────────────
+// EC.busy выставляется true в начале почти каждого серверного действия
+// (постройка/улучшение/производство/исследование…) и false в конце.
+// Вешаем на него единый красивый оверлей-«прогрев варпа»: показываем не
+// сразу (задержка ~220мс — быстрые операции не мигают), держим минимум
+// ~450мс, чтобы вспышка не резала глаз.
+let _ecWaitShowT = null, _ecWaitShownAt = 0, _ecWaitHideT = null;
+function ecWaitEl() {
+  let el = document.getElementById('ec-wait');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ec-wait'; el.setAttribute('aria-hidden', 'true');
+    el.innerHTML = '<div class="ec-wait-box">'
+      + '<div class="ec-wait-core"><span class="ec-wait-ring"></span>'
+      + '<img class="ec-wait-logo" src="assets/wiki-emblem.png" alt=""></div>'
+      + '<div class="ec-wait-txt">Обработка на сервере…</div></div>';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function ecWaitOn() {
+  if (_ecWaitHideT) { clearTimeout(_ecWaitHideT); _ecWaitHideT = null; }
+  if (_ecWaitShowT || document.getElementById('ec-wait')?.classList.contains('on')) return;
+  _ecWaitShowT = setTimeout(() => {
+    _ecWaitShowT = null; _ecWaitShownAt = Date.now();
+    ecWaitEl().classList.add('on');
+  }, 220);
+}
+function ecWaitOff() {
+  if (_ecWaitShowT) { clearTimeout(_ecWaitShowT); _ecWaitShowT = null; return; }
+  const el = document.getElementById('ec-wait');
+  if (!el || !el.classList.contains('on')) return;
+  const wait = Math.max(0, 450 - (Date.now() - _ecWaitShownAt));
+  _ecWaitHideT = setTimeout(() => { _ecWaitHideT = null; el.classList.remove('on'); }, wait);
+}
+Object.defineProperty(EC, 'busy', {
+  get() { return this._busy; },
+  set(v) { this._busy = v; try { v ? ecWaitOn() : ecWaitOff(); } catch (_) {} },
+});
+// «Тихая» занятость: тот же ре-энтри-гейт, но БЕЗ глобального оверлея
+// «Обработка на сервере…». Для экранов со своим локальным спиннером
+// (георазведка в новелле — крутящийся бур), чтобы две ожидающие
+// анимации не наслаивались друг на друга.
+Object.defineProperty(EC, 'busyQuiet', {
+  get() { return this._busy; },
+  set(v) { this._busy = v; },
+});
+
 const EC_CLAIM_COST = 3000, EC_CLAIM_CD_DAYS = 4;
 // ── ТАЙНЫЕ ОПЕРАЦИИ — каталог (зеркало spy_launch/ spy_resolve в SQL) ──
 // diff — сложность; base — базовая длительность (ходов); need — нужная разведка
@@ -3985,11 +4033,13 @@ function ecGeoSpinner(label) {
 }
 // Действие георазведки с мгновенным спиннером (живёт в оверлее новеллы hp-vn-geo).
 async function ecGeoAct(fn, body, okMsg, label) {
-  if (EC.busy) return; EC.busy = true;
+  // busyQuiet: локальный бур-спиннер уже показывает ожидание — глобальный
+  // оверлей «Обработка на сервере…» здесь лишний (иначе две анимации разом).
+  if (EC.busy) return; EC.busyQuiet = true;
   ecGeoSpinner(label);
   try { await ecRpc(fn, body || {}); if (okMsg) toast(okMsg, 'ok'); await ecReloadPaint(); }
   catch (e) { toast(ecErr(e.message), 'err'); await ecReloadPaint(); }
-  finally { EC.busy = false; }
+  finally { EC.busyQuiet = false; }
 }
 // Крутка: без аргумента — стартовая (колония из селекта); с colonyId — реролл той же колонии.
 function ecGeoSpin(colonyId) {
@@ -4878,6 +4928,8 @@ function ecErr(m) {
   if (m.includes('seller lacks tech')) return 'У вас нет этой технологии';
   if (m.includes('recipient not found')) return 'Получатель не найден';
   if (m.includes('bad price')) return 'Неверная цена';
+  if (m.includes('military budget is zero')) return 'Оборонзаказ на нуле — юниты не строятся. Поднимите ползунок «⚔ Оборонзаказ» в «🏛 Бюджет державы» выше 0, затем повторите заказ.';
+  if (m.includes('not produced here') || m.includes('category is not produced')) return 'Этот тип не строится во Военпроме — проверьте, что заложен корабль/наземка/авиация, а не что-то ещё.';
   return 'Ошибка: ' + m;
 }
 async function ecRpcAct(fn, body, okMsg) {
