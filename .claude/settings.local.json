@@ -250,7 +250,9 @@
       "Bash(git diff *)",
       "Bash(python \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/d610ec97-0905-42e7-be1d-b14d45a09740/scratchpad/mem.py\")",
       "Bash(node t.js)",
-      "Bash(xargs sed -i 's/20260715rift1/20260715rift2/g')"
+      "Bash(xargs sed -i 's/20260715rift1/20260715rift2/g')",
+      "Bash(sort -u -t: -k3)",
+      "Bash(sort -u -t= -k2)"
     ]
   }
 }
