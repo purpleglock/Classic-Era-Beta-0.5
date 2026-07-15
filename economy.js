@@ -1513,9 +1513,10 @@ async function _ecLoadRest() {
 }
 async function _ecLoadRestImpl() {
   if (!EC.app || !EC.fid) return;
-  const [faithStatus, faithList, passiveIntel, techLayout, techPrereq, exchange, bonds, corps, margin, futures, options, doom, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, myFleets, myArmies] = await Promise.all([
+  const [faithStatus, faithList, faithMembers, passiveIntel, techLayout, techPrereq, exchange, bonds, corps, margin, futures, options, doom, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, myFleets, myArmies] = await Promise.all([
     ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции
     ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий
+    dbGet('faith_membership', `select=faction_id,faith_id,role`).catch(() => []),   // кто вообще исповедует веру → кандидаты в духовные патроны Разлома
     ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез
     ecCached('techLayout', () => dbGet('tech_layout', `select=node_id,x,y,icon,img,nocore`)),   // раскладка дерева — кэш на сессию
     ecCached('techPrereq', () => dbGet('tech_prereq', `select=node_id,prereq`)),   // связи дерева — кэш на сессию
@@ -1549,6 +1550,7 @@ async function _ecLoadRestImpl() {
   EC.faith = faithStatus || { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };  // вера: статус
   if (!Array.isArray(EC.faith.faiths)) EC.faith.faiths = EC.faith.faith ? [EC.faith.faith] : [];  // мультивера: все исповедуемые
   EC.faithList = faithList || [];           // вера: реестр религий
+  EC.faithMembers = faithMembers || [];     // fid → вера: кандидаты в духовные патроны (см. ecPatronBlock)
   // мультивера: справочник «id веры → {name,color}» для подписи храмов
   EC.faithById = {};
   (EC.faith.faiths || []).forEach(f => { if (f && f.id) EC.faithById[f.id] = { name: f.name, color: f.color }; });
@@ -1598,7 +1600,7 @@ async function _ecLoadRestImpl() {
 function ecResetDeferred() {
   EC.doom = { guns: [], salvos: [], const: {} }; EC.doomByBuilding = {};
   EC.outposts = []; EC.opShips = []; EC.mzaShips = []; EC.fleets = []; EC.armies = []; EC.outpostIntel = []; EC.spyPortraits = [];
-  EC.faith = { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 }; EC.faithList = []; EC.faithById = {};
+  EC.faith = { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 }; EC.faithList = []; EC.faithMembers = []; EC.faithById = {};
   EC.passive = {}; EC.techLayout = {}; EC.techPrereq = {}; EC._research = null;
   EC.exchange = { index: { value: 1000, base: 1000, spark: [] }, holdings: { units: 0, basis: 0 }, resources: {} };
   EC.bonds = { issuer: [], holdings: [], market: [] }; EC.corps = null; EC.corpsErr = null;
@@ -4281,7 +4283,8 @@ function _ecStarsPatch(i) {
 // ── Поле = ОДИН СЕКТОР КАРТЫ: Разлом резонирует с конкретным сектором
 // галактики (map_sectors / EC.sectors), карта ЗУМИТСЯ в его рамку, и сетка
 // 7×7 узлов подстраивается под этот сектор — его реальные системы и гиперлинии
-// лежат под узлами. Сектор выбирает сам Разлом на старте транса.
+// лежат под узлами. Сектор выбирает сам Разлом на старте транса (на деньги он
+// не влияет: десятина идёт духовному патрону, а не хозяевам сектора).
 // Системы вне секторов образуют «Глубокий космос». Работает для ЛЮБОГО
 // сектора. Нет данных карты — null, рендер откатится на рисованную сетку.
 function _ecStarsGroups() {
@@ -4291,17 +4294,22 @@ function _ecStarsGroups() {
   (EC.sectors || []).forEach(sec => {
     const ids = new Set(Array.isArray(sec.system_ids) ? sec.system_ids : []);
     const pts = sys.filter(s => ids.has(s.id));
-    if (pts.length) { pts.forEach(p => used.add(p.id)); groups.push({ name: String(sec.name || 'Сектор'), pts }); }
+    if (pts.length) { pts.forEach(p => used.add(p.id)); groups.push({ id: sec.id, name: String(sec.name || 'Сектор'), pts }); }
   });
   const rest = sys.filter(s => !used.has(s.id));
-  if (rest.length || !groups.length) groups.push({ name: 'Глубокий космос', pts: rest.length ? rest : sys.slice() });
+  if (rest.length || !groups.length) groups.push({ id: null, name: 'Глубокий космос', pts: rest.length ? rest : sys.slice() });
   return { sys, groups };
 }
-let _ecStarsSectorLive = 0;    // сектор транса — Разлом выбирает его сам на старте
+let _ecStarsSectorLive = null;   // id сектора идущего транса (null = «Глубокий космос»)
+function _ecStarsRandomSector() {
+  const gg = _ecStarsGroups();
+  if (!gg || !gg.groups.length) return null;
+  return gg.groups[Math.floor(Math.random() * gg.groups.length)].id;
+}
 function _ecStarsField() {
   const gg = _ecStarsGroups();
   if (!gg) return null;
-  const g = gg.groups[((_ecStarsSectorLive % gg.groups.length) + gg.groups.length) % gg.groups.length];
+  const g = gg.groups.find(x => x.id === _ecStarsSectorLive) || gg.groups[gg.groups.length - 1];
   // квадратный кадр вокруг ГРАНИЦ ЭТОГО сектора (зум карты в его рамку)
   const gx = g.pts.map(p => +p.x), gy = g.pts.map(p => +p.y);
   const minX = Math.min(...gx), maxX = Math.max(...gx), minY = Math.min(...gy), maxY = Math.max(...gy);
@@ -4361,6 +4369,32 @@ function _ecStarsField() {
   }
   return { svg, cells, name: g.name };
 }
+// ── ДУХОВНЫЙ ПАТРОНАТ (_stargaze_tithe.sql) ──
+// Кому вера доступна по уставу (спиритуалист/теократ/админ) — играют как
+// раньше: патрон не нужен, десятины нет. Остальные вверяют себя одной
+// верующей державе: её хор ведёт транс, ей же идёт 5% от поставленного.
+// Без патрона Разлом для мирянина не отзывается.
+// Выбор — постоянный (faction_economy.rift_patron_fid), одинаковый во вкладке
+// «🤝 Политика» и в зеркале на экране ставок.
+const EC_STARS_TITHE = 0.05;
+function ecPatronFree() { return !!(EC.faith && EC.faith.can_found); }
+function ecPatronFid() { return (EC.eco && EC.eco.rift_patron_fid) || null; }
+// Кандидаты в патроны: державы, которые РЕАЛЬНО исповедуют веру (кроме себя).
+function ecPatronList() {
+  const faithful = new Set((EC.faithMembers || []).map(m => m.faction_id));
+  const byFid = new Map((EC.faithMembers || []).map(m => [m.faction_id, m]));
+  return ecOtherFactions().filter(f => faithful.has(f.faction_id)).map(f => {
+    const m = byFid.get(f.faction_id) || {};
+    const fa = EC.faithById[m.faith_id];
+    return { ...f, faith: (fa && fa.name) || 'вера', founder: m.role === 'founder' };
+  });
+}
+function ecPatronName(fid) { const p = ecPatronList().find(f => f.faction_id === fid); return p ? p.name : ecFacName(fid); }
+function ecPatronSet(fid) {
+  ecRpcAct('stargaze_patron_set', { p_fid: fid || null },
+    fid ? `Держава вверена патрону «${ecPatronName(fid)}»` : 'Патронат отозван');
+}
+
 const EC_STARS_STAKES = [100, 1000, 5000, 10000, 25000, 50000, 100000];
 let _ecStarsStake = 10000, _ecStarsExtra = 0, _ecStarsBusy = false, _ecStarsFinale = null;
 function ecStarsState() { const s = EC.stargaze; return (s && typeof s === 'object') ? s : { active: false, opened: [] }; }
@@ -4384,7 +4418,9 @@ function ecStarsStartBody() {
   const gc = +(EC.eco && EC.eco.gc) || 0;
   const stake = _ecStarsStake, extra = _ecStarsExtra;
   const cost = stake * (1 + extra), picks = 3 + extra, mult = 1 + 0.25 * extra;
-  const can = gc >= cost;
+  const free = ecPatronFree(), patron = ecPatronFid();
+  // Мирянину без патрона погружаться не во что: сервер откажет.
+  const can = gc >= cost && (free || !!patron);
   const chips = EC_STARS_STAKES.map(v =>
     `<button class="ec-stars-chip${v === stake ? ' is-on' : ''}" type="button" onclick="ecStarsSetStake(${v})">${ecNum(v)}</button>`).join('');
   const extras = [0, 1, 2, 3, 4].map(e =>
@@ -4395,6 +4431,7 @@ function ecStarsStartBody() {
       <p>Вы сталкиваетесь с ощущением присуствия <b>чего-то из подпространства</b>. С его эхо, с его псионическими маяками, а также <b>Взглядом в ответ</b> - встречное касание чуждого вам разума, что принесёт <b>×6 от ставки</b>. Одна ставка - три погружения; каждая дополнительная даёт ещё одно и разгоняет множитель всех находок.</p>
     </div>
     <div class="ec-stars-start">
+      ${free ? '' : ecStarsPatronBlock(patron, cost)}
       <label class="ec-geo-lbl">Ставка, ГС</label>
       <div class="ec-stars-chips">${chips}</div>
       <label class="ec-geo-lbl">Дополнительные ставки</label>
@@ -4403,9 +4440,26 @@ function ecStarsStartBody() {
         <span>${picks} погружений</span><span>множитель ×${mult.toFixed(2).replace(/\.?0+$/, '')}</span><span>итого <b>${ecNum(cost)} ГС</b></span>
       </div>
       <button class="btn ec-geo-go${can ? '' : ' is-off'}" ${can ? '' : 'disabled'} onclick="ecStarsStart()">Войти в транс · ${ecNum(cost)} ГС</button>
-      ${can ? '' : `<div class="ec-geo-warn">Не хватает ГС: нужно ${ecNum(cost)}, в казне ${ecNum(gc)}</div>`}
+      ${gc >= cost ? '' : `<div class="ec-geo-warn">Не хватает ГС: нужно ${ecNum(cost)}, в казне ${ecNum(gc)}</div>`}
     </div>
   </div>`;
+}
+// ── Зеркало патроната на экране ставок (только для «мирян») ──
+// Тот же выбор, что во вкладке «Политика» — юзер: «чтоб не бегать по сто раз».
+function ecStarsPatronBlock(patron, cost) {
+  const list = ecPatronList();
+  if (!list.length) return `<div class="ec-geo-warn">Вверить себя некому: ни одна другая держава не исповедует веры. Пока пророки не появились, Разлом для вас глух — либо ведите к вере собственную державу.</div>`;
+  const tithe = Math.floor(cost * EC_STARS_TITHE);
+  const tiles = list.map(f =>
+    `<button class="ec-stars-sec${f.faction_id === patron ? ' is-on' : ''}" type="button" onclick="ecPatronSet('${jsq(f.faction_id)}')" style="--sec-c:${esc(f.color || '#c9a227')}" title="Вверить державу «${esc(f.name)}»">
+      <b>${esc(f.name)}</b><span>${esc(f.faith)}${f.founder ? ' · пророки' : ''}</span></button>`).join('');
+  const p = list.find(f => f.faction_id === patron) || null;
+  return `<label class="ec-geo-lbl">Духовный патрон</label>
+    <div class="ec-stars-secs">${tiles}</div>
+    ${p ? `<div class="ec-stars-tithe">
+      <div class="ec-stars-tithe-h">⚠ Десятина патрону — ${ecNum(tithe)} ГС (5% от ставки)</div>
+      <p>Ваша держава не исповедует веры, и в Разлом вас ведёт чужой хор. <b>5% поставленного</b> — ${ecNum(tithe)} ГС — уйдёт в казну державы <b>«${esc(p.name)}»</b> (${esc(p.faith)}). На ваш выигрыш это не влияет. Патрона можно сменить здесь же или во вкладке «🤝 Политика».</p>
+    </div>` : `<div class="ec-geo-warn">Выберите патрона — без верующего хора Разлом не отзовётся.</div>`}`;
 }
 // ── Активный транс: поле 7×7, клик по узлу = погружение ──
 // Открытый узел / закрытый узел (общая разметка для сетки и поля-карты).
@@ -4526,16 +4580,18 @@ async function ecStarsStart() {
   if (_ecStarsBusy) return;
   const cost = _ecStarsStake * (1 + _ecStarsExtra);
   if ((+(EC.eco && EC.eco.gc) || 0) < cost) { toast('Не хватает ГС: нужно ' + ecNum(cost), 'err'); return; }
+  if (!ecPatronFree() && !ecPatronFid()) { toast('Вверьте державу духовному патрону — без верующего хора Разлом не отзовётся', 'err'); return; }
   _ecStarsBusy = true; _ecStarsFinale = null;
   _ecStarsPhotoSalt = Math.floor(Math.random() * 997);   // новый транс — новая колода видений
   // Куда тянет медиумов, решает Разлом: сектор транса выбирается случайно
   // и фиксируется здесь на весь сеанс.
-  const gg = _ecStarsGroups();
-  _ecStarsSectorLive = Math.floor(Math.random() * (gg ? gg.groups.length : 1));
+  _ecStarsSectorLive = _ecStarsRandomSector();
   try {
     const r = await ecRpc('stargaze_start', { p_stake: _ecStarsStake, p_extra: _ecStarsExtra });
     EC.stargaze = { active: true, stake: r.stake, extras: r.extras, picks: r.picks, mult: r.mult, opened: [] };
     if (EC.eco && r.gc != null) EC.eco.gc = +r.gc;
+    if (+r.tithe > 0 && r.patron_name)
+      toast(`Десятина ${ecNum(r.tithe)} ГС ушла патрону: ${r.patron_name}`, 'ok');
   } catch (e) { toast(ecErr(e.message), 'err'); }
   finally { _ecStarsBusy = false; ecStarsRefreshOverlay(); }
 }
@@ -7229,6 +7285,8 @@ function ecTabDiplomacy() {
     ${ecAllianceBlock()}
     <div class="ec-section-title">Отношения <span class="ec-hint">— дипломатический респект</span></div>
     ${ecRelationsBlock()}
+    <div class="ec-section-title">Духовный патронат <span class="ec-hint">— кому вверена держава</span></div>
+    <div class="ec-dip-grid">${ecPatronBlock()}</div>
     <div class="ec-section-title">Кредиты</div>
     <div class="ec-dip-grid">${loanBlock}</div>`;
 }
@@ -7259,6 +7317,31 @@ function ecBordersBlock() {
         ${closed.size < others.length ? '<button class="btn btn-gh btn-xs" onclick="ecBordersAll(true)">🔒 Закрыть для всех</button>' : ''}
         ${closed.size ? '<button class="btn btn-gh btn-xs" onclick="ecBordersAll(false)">🔓 Открыть все</button>' : ''}
       </div>` : '<div class="ec-empty">Нет других фракций.</div>'}
+    </div>`;
+}
+// Блок «Духовный патронат»: кому держава вверила свои погружения в Разлом
+// (_stargaze_tithe.sql). Постоянный выбор — зеркало этого же выбора висит на
+// экране ставок казино. Верующим по уставу блок не нужен: они сами себе хор.
+function ecPatronBlock() {
+  const free = ecPatronFree(), cur = ecPatronFid(), list = ecPatronList();
+  if (free) return `<div class="ec-dip-card">
+      <div class="ec-dip-t">🜂 Духовный патронат</div>
+      <div style="font-size:12.5px;color:var(--t2);margin:6px 0"><b style="color:var(--ok,#7bd88f)">Не требуется</b> — ваша держава имеет право на веру, её медиумы входят в Разлом сами. Десятину вы никому не платите.</div>
+    </div>`;
+  const p = list.find(f => f.faction_id === cur) || null;
+  const state = p
+    ? `<b style="color:var(--gd)">Вверена «${esc(p.name)}»</b> (${esc(p.faith)}) — её хор ведёт ваши погружения в Разлом, и <b>5% каждой ставки</b> идёт ей в казну. Клик по другой державе переносит патронат.`
+    : `<b style="color:var(--err)">Патрона нет</b> — Разлом для вашей державы глух. Вверьте себя верующей державе: её хор поведёт транс, а ей отойдёт 5% ваших ставок.`;
+  const rows = list.map(f => {
+    const on = f.faction_id === cur;
+    return `<button class="ec-bord-fac${on ? ' ec-patron-on' : ''}" onclick="ecPatronSet('${jsq(on ? '' : f.faction_id)}')" title="${on ? 'Отозвать патронат у' : 'Вверить державу'} «${esc(f.name)}»">
+        ${ecFacFlag(f.faction_id, 24)}<span class="ec-bord-name">${esc(f.name)}<i class="ec-patron-faith">${esc(f.faith)}${f.founder ? ' · пророки' : ''}</i></span><span class="ec-bord-lock">${on ? '🜂' : ''}</span>
+      </button>`;
+  }).join('');
+  return `<div class="ec-dip-card">
+      <div class="ec-dip-t">🜂 Духовный патронат</div>
+      <div style="font-size:12.5px;color:var(--t2);margin:6px 0">${state}</div>
+      ${list.length ? `<div class="ec-bord-grid">${rows}</div>` : '<div class="ec-empty">Ни одна другая держава не исповедует веры — вверить себя некому.</div>'}
     </div>`;
 }
 function ecBordersToggle(fid, close) {

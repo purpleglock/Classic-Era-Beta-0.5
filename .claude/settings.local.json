@@ -258,7 +258,8 @@
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const c=JSON.parse\\(JSON.parse\\(s\\)[0].value\\);console.log\\('ключи arts:',JSON.stringify\\(Object.keys\\(c.arts||{}\\)\\),'| видений:',\\(c.list||[]\\).length,'| _ts:',c._ts\\);}\\);\")",
       "Bash(sed 's|const wy = \\(\\(p + \\(cy - p\\) / gmmTiltK\\(\\)\\) - GMM.ty\\) / GMM.s;.*|const wy = \\(cy - GMM.ty\\) / GMM.s;|; s|let ty = cy - wy \\\\* ns;|let ty = cy - wy * ns; if\\(1\\){ const to = gmmClampCam\\({s:ns,tx:cx-wx*ns,ty}\\); GMM.s=to.s;GMM.tx=to.tx;GMM.ty=to.ty; return; }|' zoom_check.js)",
       "Bash(node zoom_check_old.js)",
-      "Bash(node overlap_check.js)"
+      "Bash(node overlap_check.js)",
+      "Bash(sed -i 's|?v=20260715tithe1|?v=20260715patron1|g' index.html)"
     ]
   }
 }

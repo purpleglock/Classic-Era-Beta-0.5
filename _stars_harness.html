@@ -20,6 +20,8 @@
   window.ecNum = n => (+n || 0).toLocaleString('ru-RU');
   window.toast = () => {};
   window.ecRpc = async () => ({});
+  window.jsq = s => String(s == null ? '' : s).replace(/[^0-9A-Za-z]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+  window.ecRpcAct = async () => {};
   window.heroVNStarsRefresh = () => {};
   window.lang = 'ru';
   window.SB_URL = ''; window.SB_ANON = ''; window.getToken = () => '';
@@ -35,7 +37,10 @@
     <div class="ec-stars-load-t">КАЛИБРОВКА ОПТИКИ<span class="ec-stars-load-dots"></span></div>
   </div>
 </div>
-<div class="hwrap"><p class="hlbl">start</p><div id="h-start"></div></div>
+<div class="hwrap"><p class="hlbl">start · мирянин с патроном</p><div id="h-start"></div></div>
+<div class="hwrap"><p class="hlbl">start · мирянин без патрона</p><div id="h-start-nop"></div></div>
+<div class="hwrap"><p class="hlbl">start · верующий по уставу (десятины нет)</p><div id="h-start-free"></div></div>
+<div class="hwrap"><p class="hlbl">политика · духовный патронат</p><div id="h-patron"></div></div>
 <div class="hwrap"><p class="hlbl">round</p><div id="h-round"></div></div>
 <div class="hwrap"><p class="hlbl">finale (miss)</p><div id="h-fin"></div></div>
 <div class="hwrap"><p class="hlbl">geo result</p><div id="h-geo"></div></div>
@@ -44,9 +49,21 @@
   Object.assign(EC, { app: {}, eco: { gc: 500000 }, stargaze: { active: false, opened: [] }, colonies: [{ id: 'c1', name: 'Синли-Бей' }],
     allSystems: _sys, lanes: _lanes,
     factions: [{ faction_id: 'fac_a', name: 'Илокан', color: '#4ea3d8' }, { faction_id: 'fac_b', name: 'Иридия', color: '#c9a227' }, { faction_id: 'fac_c', name: 'Люмен', color: '#b05fc0' }],
-    sectors: [{ name: 'Илокан', system_ids: _sys.slice(0, 18).map(s => s.id) }, { name: 'Окраина', system_ids: _sys.slice(18).map(s => s.id) }] });
+    sectors: [{ id: 'sec1', name: 'Илокан', system_ids: _sys.slice(0, 18).map(s => s.id) }, { id: 'sec2', name: 'Окраина', system_ids: _sys.slice(18).map(s => s.id) }],
+    // духовный патронат: игрок = fac_me (без права на веру), верующие = fac_b/fac_c
+    fid: 'fac_me',
+    faith: { can_found: false, faiths: [] },
+    faithMembers: [{ faction_id: 'fac_b', faith_id: 'f1', role: 'founder' }, { faction_id: 'fac_c', faith_id: 'f2', role: 'member' }],
+    faithById: { f1: { name: 'Путь Иридия' }, f2: { name: 'Хор Пустоты' } } });
+  EC.eco.rift_patron_fid = 'fac_b';
   const put = (id, html) => document.getElementById(id).innerHTML = html;
   put('h-start', ecStarsStartBody());
+  put('h-patron', ecPatronBlock());
+  EC.eco.rift_patron_fid = null;
+  put('h-start-nop', ecStarsStartBody());
+  EC.faith.can_found = true;
+  put('h-start-free', ecStarsStartBody());
+  EC.faith.can_found = false; EC.eco.rift_patron_fid = 'fac_b';
   put('h-round', ecStarsRoundBody({ active: true, stake: 100000, picks: 7, mult: 2,
     opened: [{ i: 9, t: 'photo', win: 50000 }, { i: 24, t: 'comet', win: 160000 }, { i: 30, t: 'dust', win: 4000 }] }));
   const board = []; const kinds = ['dust','dust','photo','dust','comet','dust','photo'];
