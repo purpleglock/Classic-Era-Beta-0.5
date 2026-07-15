@@ -2923,6 +2923,20 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-faith-modal-x { position: absolute; top: 10px; right: 10px; z-index: 2; width: 30px; height: 30px; border-radius: 50%;
   background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); color: var(--t2); font-size: 14px; cursor: pointer; line-height: 1; }
 .ec-faith-modal-x:hover { color: var(--t1); border-color: var(--fc, #c9a227); }
+/* Шапка модалки: арт веры во всю ширину — во всю ширину карточки (гасим паддинг .ec-shrine),
+   титул лежит поверх арта на затемняющей вуали, чтобы имя читалось на любой картинке. */
+.ec-faith-hero { position: relative; z-index: 1; margin: -20px -20px 0; padding: 22px 20px 18px; }
+.ec-faith-hero.has-img { min-height: 210px; display: flex; align-items: flex-end;
+  padding-top: 96px; overflow: hidden;
+  background-image: var(--faith-img); background-size: cover; background-position: center;
+  border-bottom: var(--deco-frame-w, 1px) solid color-mix(in srgb, var(--fc, #c9a227) 45%, var(--w2)); }
+/* Вуаль: снизу почти непрозрачный фон карточки, сверху — цвет веры лёгкой дымкой */
+.ec-faith-hero.has-img::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--fc, #c9a227) 22%, transparent) 0%, transparent 42%),
+    linear-gradient(0deg, var(--b2) 4%, color-mix(in srgb, var(--b2) 78%, transparent) 45%, transparent 100%); }
+.ec-faith-hero.has-img .ec-shrine-hd { position: relative; z-index: 1; width: 100%; }
+@media (max-width: 560px) { .ec-faith-hero.has-img { min-height: 170px; padding-top: 72px; } }
 
 /* ── Биржа: корпорации (срез 4a) ─────────────────────────────── */
 .ec-corp-warn { border-color: var(--err, #c0504d); }

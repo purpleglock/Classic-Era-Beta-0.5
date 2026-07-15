@@ -7888,9 +7888,12 @@ async function ecFaithDetail(id) {
     <div class="ec-faith-modal ec-shrine" style="--fc:${fc}" onclick="event.stopPropagation()">
       <button class="ec-faith-modal-x" onclick="ecFaithDetailClose()">✕</button>
       <div class="${heroClassM}"${heroStyleM}>
-        <div class="ec-shrine-hd"><div class="ec-shrine-sigil">🛐</div>
-          <div><div class="ec-shrine-name">«${esc(d.name)}»</div>
-            <div class="ec-shrine-role">основатель ${esc(ecFacName(d.founder_fid))} · ${ecNum((d.adepts || []).length)} народ(ов) · паства ${ecNum(d.flock || 0)}</div></div></div>
+        <div class="ec-shrine-hd ec-shrine-hd-title">
+          <div class="ec-shrine-title">
+            <div class="ec-shrine-kicker">вера</div>
+            <div class="ec-shrine-name ec-shrine-name-grand">«${esc(d.name)}»</div>
+            <div class="ec-shrine-role">основатель ${esc(ecFacName(d.founder_fid))} · ${ecNum((d.adepts || []).length)} народ(ов) · паства ${ecNum(d.flock || 0)}</div>
+          </div></div>
       </div>
       ${d.dogma ? `<div class="ec-shrine-dogma">«${esc(d.dogma)}»</div>` : '<div class="ec-shrine-note">Догмат веры не записан.</div>'}
       ${adepts ? `<div class="ec-bless-hd" style="margin-top:16px">Паства веры</div><div>${adepts}</div>` : ''}

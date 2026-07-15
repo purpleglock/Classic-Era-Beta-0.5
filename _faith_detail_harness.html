@@ -1,0 +1,25 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<title>Стенд: подробности религии</title>
+<link rel="stylesheet" href="css/index.css">
+<style>body{background:#0a0912;margin:0}</style>
+</head><body>
+<div id="ec-faith-modal-host"></div>
+<script>
+const IMG = 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=900';
+const adepts = [['👑 ','Соридонский Союз Системы',43],['🙏 ','Совет Отверженных',36],['🕊 ','Цветущий Пояс',3],['🕊 ','Ааа\'дукиль',24]]
+  .map(a=>`<span class="ec-faith-pew">${a[0]}${a[1]} · паства <b>${a[2]}</b></span>`).join('');
+document.getElementById('ec-faith-modal-host').innerHTML = `<div class="ec-faith-modal-back">
+  <div class="ec-faith-modal ec-shrine" style="--fc:#c541c5">
+    <button class="ec-faith-modal-x">✕</button>
+    <div class="ec-faith-hero has-img" style="--faith-img:url('${IMG}')">
+      <div class="ec-shrine-hd ec-shrine-hd-title">
+        <div class="ec-shrine-title">
+          <div class="ec-shrine-kicker">вера</div>
+          <div class="ec-shrine-name ec-shrine-name-grand">«Самость»</div>
+          <div class="ec-shrine-role">основатель Соридонский Союз Системы · 6 народ(ов) · паства 105</div>
+        </div></div>
+    </div>
+    <div class="ec-shrine-dogma">«Всякая звезда одинока. Всякие звёзды образуют небо.»</div>
+    <div class="ec-bless-hd" style="margin-top:16px">Паства веры</div><div>${adepts}</div>
+  </div></div>`;
+</script></body></html>
