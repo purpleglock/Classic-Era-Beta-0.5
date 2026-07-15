@@ -1033,8 +1033,9 @@ body { font-family: var(--font-body)!important; font-size: 14px !important; line
 }
 .spin::after { display: none !important; }
 
-.pgi { animation: page-in .3s cubic-bezier(.2,.6,.3,1) both !important; }
-@keyframes page-in { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+/* Без «въезда» страницы: контент встаёт сразу, как только отработала загрузка
+   (translateY снизу читался как съезжание окна и дёргал экраны новеллы). */
+.pgi { animation: none !important; }
 @keyframes mo-in   { from { opacity:0; transform:scale(.97) translateY(10px); } to { opacity:1; transform:none; } }
 
 .auth-ey { font-family: var(--font-display)!important; font-size: 15px !important; letter-spacing: calc(6px * var(--deco-ls-mult, 1)) !important; background: linear-gradient(135deg, hsl(38 70% 60%), hsl(200 62% 60%)) !important; -webkit-background-clip: text !important; background-clip: text !important; -webkit-text-fill-color: transparent !important; }

@@ -2640,6 +2640,7 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-rating" id="hp-vn-rating" aria-hidden="true"></div>
     <div class="hp-vn-research" id="hp-vn-research" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo" id="hp-vn-geo" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-stars" id="hp-vn-stars" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2699,28 +2700,31 @@ function heroVNChoice(kind) {
   // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
   _heroVNView = kind;
   if (kind !== 'idx' && typeof heroVNHideIdx === 'function') heroVNHideIdx();
-  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); _heroVNCtl.menu(); return; }
+  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); _heroVNCtl.menu(); return; }
 
   // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
-  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNColonyOpen(); return; }
+  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNColonyOpen(); return; }
 
   // «Управление колониями» — перечень планет державы + сцена планеты с постройками.
-  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNPlanetsOpen(); return; }
+  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNPlanetsOpen(); return; }
 
   // «Поэма недели» — общегалактический стих: голосование за слово дня поверх сцены.
-  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNPoemOpen(); return; }
+  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNPoemOpen(); return; }
 
   // «Ассамблея» — тайные роли и законы, бьющие по всей галактике (Secret Hitler-лайк).
-  if (kind === 'assembly') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNAssemblyOpen(); return; }
+  if (kind === 'assembly') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNAssemblyOpen(); return; }
 
   // «Рейтинг игроков» — засекреченная аналитическая сводка (декоративная инфографика).
-  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNRatingOpen(); return; }
+  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNRatingOpen(); return; }
 
   // «Исследования» — научный пульт державы: всё дерево технологий поверх сцены.
-  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNGeoClose(); heroVNResearchOpen(); return; }
+  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNResearchOpen(); return; }
 
   // «Георазведка» — казино под вывеской геологии: разведка залежей своей колонии.
-  if (kind === 'geo') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoOpen(); return; }
+  if (kind === 'geo') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNStarsClose(); heroVNGeoOpen(); return; }
+
+  // «Всмотреться в Разлом» — псионический хор-казино: ставка → поле 7×7 → джекпот.
+  if (kind === 'stars') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsOpen(); return; }
 
   if (kind === 'ach' || kind === 'events') {
     _heroVNCat = kind;
@@ -2828,12 +2832,37 @@ function heroVNHideIdx() {
 // и РАБОЧАЯ колонизация с пулом захватов. Переиспользует данные и механику
 // кабинета (EC.*, RPC economy_claim_system) — то же, что во вкладке «Территория».
 // ══════════════════════════════════════════════════════════════
+// Текущий экран оверлея: 'map' — границы державы, 'sys' — карта конкретной системы.
+let _heroColonyView = { mode: 'map', sysId: null };
+function _heroColonyRender(en) {
+  return (_heroColonyView.mode === 'sys' && _heroColonyView.sysId)
+    ? _heroColonySysBuild(_heroColonyView.sysId, en)
+    : _heroColonyBuild(en);
+}
 function heroVNColonyClose() {
   const el = document.getElementById('hp-vn-colony');
   if (!el) return;
   el.classList.remove('show');
   el.setAttribute('aria-hidden', 'true');
   if (_heroVNView === 'colony') _heroVNView = null;
+}
+// Перерисовать открытый оверлей свежими данными (зовётся из ecReloadPaint после
+// колонизации/терраформа — экран сам обновляется, как георазведка/колонии).
+function heroVNColonyRefresh() {
+  const el = document.getElementById('hp-vn-colony');
+  if (!el || !el.classList.contains('show')) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  try { el.innerHTML = _heroColonyRender(en); } catch (e) {}
+}
+// Открыть карту системы (клик-«лупа» по своей системе на карте границ).
+function heroVNColonySys(sysId) {
+  _heroColonyView = { mode: 'sys', sysId };
+  heroVNColonyRefresh();
+}
+// Вернуться из карты системы к границам державы.
+function heroVNColonyMap() {
+  _heroColonyView = { mode: 'map', sysId: null };
+  heroVNColonyRefresh();
 }
 // «Назад» из карты — вернуться к меню новеллы (оно закроет оверлей).
 function heroVNColonyReturn() { heroVNChoice('menu'); }
@@ -2850,6 +2879,7 @@ async function heroVNColonyOpen() {
   const el = document.getElementById('hp-vn-colony');
   if (!el) return;
   const en = (typeof lang !== 'undefined' && lang === 'en');
+  _heroColonyView = { mode: 'map', sysId: null };   // всегда стартуем с карты границ
   el.classList.add('show');
   el.setAttribute('aria-hidden', 'false');
   el.innerHTML = _heroColonyHead(en) +
@@ -2897,7 +2927,7 @@ async function heroVNColonyClaim(systemId) {
     if (typeof ecLoad === 'function') await ecLoad();
     if (typeof loadGalaxyData === 'function' && typeof GM !== 'undefined' && GM.loaded) { try { await loadGalaxyData(); } catch (e) {} }
     const el = document.getElementById('hp-vn-colony');
-    if (el && el.classList.contains('show')) el.innerHTML = _heroColonyBuild(en);
+    if (el && el.classList.contains('show')) el.innerHTML = _heroColonyRender(en);
   } catch (e) {
     const m = e.message || '';
     toast(m.includes('cooldown') ? (en ? 'Colonization on cooldown' : 'Колонизация системы на перезарядке')
@@ -2981,18 +3011,26 @@ function _heroColonyBuild(en) {
   const ptsIn = pts => pts && pts.some(p => inFrame(p[0], p[1]));
   const dOf = (pts, close) => 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + (close ? 'Z' : '');
 
-  let fillMine = '', fillOther = '', glowB = '', lineB = '', laneHtml = '';
+  let fillMine = '', fillOther = '', dimOther = '', glowB = '', lineB = '', laneHtml = '';
+  const cellD = new Map();   // sys.id → контур его ячейки: подсветка региона при наведении
   if (geo) {
     // Заливки: МОИ ячейки — отдельным слоем на полную яркость; чужие — приглушены
     // (муть + пониженная непрозрачность), чтобы фокус был на моём государстве.
+    // Поверх чужих ячеек — мягкая тёмная вуаль (dimOther): чужие державы читаются,
+    // но взгляд держится на моей территории.
     geo.fills.filter(f => ptsIn(f.pts)).forEach(f => {
       const d = dOf(f.pts, true);
       if (f.isRift) { fillOther += `<path class="vor-cell vor-rift" d="${d}" stroke="none"></path>`; return; }
       const isMine = mineIds.has(f.sys.id);
       if (isMine && !myColor && f.fac) myColor = f.fac.color;
+      if (f.sys) cellD.set(f.sys.id, d);
       const fill = f.fac ? f.fac.color : 'rgba(120,140,170,0.05)';
       const p = `<path class="vor-cell${f.fac ? ' vor-claimed' : ' vor-neutral'}" d="${d}" fill="${fill}" stroke="none"></path>`;
-      if (isMine) fillMine += p; else fillOther += p;
+      if (isMine) fillMine += p;
+      else {
+        fillOther += p;
+        dimOther += `<path d="${d}" fill="#04070c" opacity="${f.fac ? '.30' : '.18'}" stroke="none"></path>`;
+      }
     });
     // ── ГРАНИЦЫ: единый контур державы (движок уже схлопнул внутренние рёбра —
     //    рисуем только внешнюю кромку территории, не по-регионно). Стиль —
@@ -3051,16 +3089,32 @@ function _heroColonyBuild(en) {
     </g>`;
   });
 
-  // ── Подсветка моих систем: мягкое гало под спрайтом + метка столицы ──
+  // ── Подсветка моих систем: мягкое гало + метка столицы. При наведении
+  //    подсвечивается ВЕСЬ РЕГИОН системы (её ячейка территории), а не рисуется
+  //    лупа поверх звезды: наведение отвечает на вопрос «что это за владение».
+  //    Контур ячейки лежит ВНУТРИ группы узла (потому и работает чистый :hover),
+  //    поэтому его координаты разворачиваем обратно из локальных в мировые.
+  //    Анимируем ТОЛЬКО opacity: масштабирование группы с filter:blur заставляло
+  //    браузер пересчитывать гауссиану каждый кадр — отсюда лаги. ──
   let myNodes = '';
   mine.forEach(s => {
     if (!inFrame(s.x, s.y)) return;
     const isCap = capSet.has(s.id);
     const r = isCap ? R * 0.02 : R * 0.013;
-    myNodes += `<g>
-      <circle cx="${nf(s.x)}" cy="${nf(s.y)}" r="${nf(r * (isCap ? 3.2 : 2.2))}" fill="${myColor}" opacity="${isCap ? '.32' : '.18'}" filter="url(#hpvncGlow)"></circle>
-      ${isCap ? `<rect x="${nf(-r * 1.55)}" y="${nf(-r * 1.55)}" width="${nf(r * 3.1)}" height="${nf(r * 3.1)}" transform="translate(${nf(s.x)} ${nf(s.y)}) rotate(45)" fill="none" stroke="#fff" stroke-width="${nf(R * 0.0022)}" opacity=".7"></rect>
-      <text x="${nf(s.x)}" y="${nf(s.y - r * 2.3)}" fill="#fff" font-size="${nf(R * 0.026)}" text-anchor="middle" style="pointer-events:none">★</text>` : ''}
+    const hitR = Math.max(r * 3.2, R * 0.04);
+    const cd = cellD.get(s.id);
+    const region = cd ? `<path class="hpvnc-cell" d="${cd}" transform="translate(${nf(-s.x)},${nf(-s.y)})"
+      fill="${myColor}" stroke="#eaf6ff" stroke-width="${nf(R * 0.0026)}" stroke-linejoin="round" style="pointer-events:none"></path>` : '';
+    myNodes += `<g class="hpvnc-sys" transform="translate(${nf(s.x)},${nf(s.y)})" onclick="event.stopPropagation();heroVNColonySys('${jsq(s.id)}')">
+      <title>${esc(s.name || '')} — ${en ? 'open system chart' : 'открыть карту системы'}</title>
+      ${region}
+      <circle r="${nf(hitR)}" fill="transparent"></circle>
+      <g class="hpvnc-mag">
+        <circle r="${nf(r * (isCap ? 3.2 : 2.2))}" fill="${myColor}" opacity="${isCap ? '.32' : '.18'}" filter="url(#hpvncGlow)"></circle>
+        ${isCap ? `<rect x="${nf(-r * 1.55)}" y="${nf(-r * 1.55)}" width="${nf(r * 3.1)}" height="${nf(r * 3.1)}" transform="rotate(45)" fill="none" stroke="#fff" stroke-width="${nf(R * 0.0022)}" opacity=".7"></rect>
+        <text y="${nf(-r * 2.3)}" fill="#fff" font-size="${nf(R * 0.026)}" text-anchor="middle" style="pointer-events:none">★</text>` : ''}
+      </g>
+      <circle class="hpvnc-pick" r="${nf(r * 1.5)}" fill="none" stroke="#eaf6ff" stroke-width="${nf(R * 0.002)}" style="pointer-events:none"></circle>
     </g>`;
   });
 
@@ -3190,6 +3244,7 @@ function _heroColonyBuild(en) {
     <g class="vor-layer" opacity=".52" filter="url(#hpvncMute)">${fillOther}</g>
     <g class="vor-layer">${fillMine}</g>
     <g>${crest}</g>
+    <g style="pointer-events:none">${dimOther}</g>
     <g filter="url(#hpvncEdgeGlow)" opacity=".8">${glowB}</g>
     <g opacity=".95">${lineB}</g>
     <g class="lane-layer" opacity=".8">${laneHtml}</g>
@@ -3267,9 +3322,292 @@ function _heroColonyBuild(en) {
         <div class="hp-vn-col-scroll">
           <div class="hp-vn-col-stat"><b>${claimIds.length}</b><span>${en ? 'systems to colonize' : 'систем для колонизации'}</span></div>
           <div class="hp-vn-col-stat"><b>${mine.length}</b><span>${en ? 'systems held' : 'систем под контролем'}</span></div>
+          <div class="hpvnc-hint">🔍 ${en ? 'Click your system on the map — its chart opens with planets to colonize.' : 'Клик по своей системе на карте — откроется карта системы с планетами.'}</div>
           <div class="hp-vn-col-claimstat ${left > 0 ? 'ok' : 'cd'}">${statusHtml}</div>
           <div class="hp-vn-col-crows">${rows}</div>
         </div>
+      </div>
+    </aside>
+  </div>`;
+  return head + body;
+}
+
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · Колонизация → КАРТА СИСТЕМЫ. Статичная (не анимированная) схема:
+// звезда слева, орбитальные дуги, планеты-диски с текстурами карты
+// (planet_<look>.png в клипе + светотень), статусные кольца. Справа — досье
+// планет с РАБОЧИМИ кнопками колонизации/терраформа кабинета (ecColonizeInfo →
+// ecColonize/ecTerraform/ecBuildStation, те же RPC). Дизайн — киберпанк+насапанк.
+// ══════════════════════════════════════════════════════════════
+// Класс «вида» планеты — тем же правилом, что текстуры большой карты.
+function _hpvcLook(p) {
+  if (typeof gmPlanetLook === 'function') { try { return gmPlanetLook(p); } catch (e) {} }
+  const t = String(p && p.type || '').toLowerCase();
+  if (/газ|giant|gas/.test(t)) return 'gas';
+  if (/океан|вод|ocean/.test(t)) return 'ocean';
+  if (/лёд|лед|ice|мёрз|замёрз/.test(t)) return 'ice';
+  if (/пуст|desert|выжж|лав|вулк/.test(t)) return 'lava';
+  if (/земн|terran|сад|gaia|столич|жизн/.test(t)) return 'terran';
+  return 'rock';
+}
+// Подсветить досье планеты при клике по диску на схеме.
+function heroVNColonySysFocus(i) {
+  const host = document.getElementById('hp-vn-colony');
+  if (!host) return;
+  host.querySelectorAll('.hpvnc-prow.on').forEach(x => x.classList.remove('on'));
+  const row = document.getElementById('hpvnc-prow-' + i);
+  if (row) { row.classList.add('on'); try { row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { row.scrollIntoView(); } }
+}
+function _heroColonySysBuild(sysId, en) {
+  const nf = n => (+n).toFixed(1);
+  const sys = ((typeof EC !== 'undefined' && EC.allSystems) || []).find(s => s.id === sysId)
+    || ((typeof EC !== 'undefined' && EC.systems) || []).find(s => s.id === sysId);
+  const sysName = (sys && sys.name) || (en ? 'System' : 'Система');
+  const head = `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">${esc(sysName)}</span>
+    <span class="hp-vnr-clr">${en ? 'system chart' : 'карта системы'}</span>
+    <span class="hvp-headr">
+      <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNColonyMap()">↩ ${en ? 'to the map' : 'к карте'}</button>
+      <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNColonyReturn()">↩ ${en ? 'back' : 'назад'}</button>
+    </span>
+  </div>`;
+  if (!sys) return head + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'System data is unavailable.' : 'Данные системы недоступны.'}</div></div>`;
+
+  const race = (typeof EC !== 'undefined' && EC.app && EC.app.race) || '';
+  const myColor = (typeof EC !== 'undefined' && EC.app && EC.app.color) || 'var(--gd,#3a9bdc)';
+  const cols = ((typeof EC !== 'undefined' && EC.colonies) || []).filter(c => c.system_id === sysId);
+  const colPids = new Set(cols.map(c => c.planet_pid).filter(v => v != null));
+  const colNamesNoPid = new Set(cols.filter(c => c.planet_pid == null).map(c => c.planet_name));
+  const colOf = p => cols.find(c => (p.pid != null && c.planet_pid === p.pid) || (c.planet_pid == null && c.planet_name === p.name)) || null;
+  const isOccupied = p => (p.pid != null && colPids.has(p.pid)) || colNamesNoPid.has(p.name);
+  const planets = (sys.planets || []).filter(p => p && p.name);
+
+  // ── Схема системы: звезда слева + орбитальные дуги + планеты-диски ──
+  const STARC = { yellow: '#ffd75e', red: '#ff6a4e', blue: '#6fb9f0', white: '#eef6ff', green: '#45e0b4' };
+  const LOOKC = { gas: '#c08a4e', ocean: '#2e6fa3', ice: '#9fc4d8', lava: '#8a3b2a', terran: '#3f7d4e', rock: '#6f6a63' };
+  const texBase = (typeof GM_BASE !== 'undefined') ? GM_BASE : 'assets/map/';
+  // Тип звезды: у EC.allSystems его может не быть (зависит от select в ecLoad) —
+  // тогда берём с большой карты, иначе схема красит ВСЕ звёзды жёлтым, споря с картой.
+  const starType = (() => {
+    if (STARC[sys.star_type]) return sys.star_type;
+    const g = (typeof GM !== 'undefined' && GM.systems || []).find(s => s.id === sysId);
+    return (g && STARC[g.star_type]) ? g.star_type : 'yellow';
+  })();
+  const sc = STARC[starType];
+  // Звезду берём той же текстурой, что большая карта (assets/map/stars/star_<type>.png):
+  // рисовать её голым градиентом рядом с текстурными планетами — разнобой.
+  const starTex = texBase + 'stars/star_' + starType + '.png';
+  const H = 330, cy = H / 2, starX = 78, starR = 30;
+  // Полосы подписей: фиксированные «строки» над и под линией планет. Метка НИКОГДА
+  // не висит вплотную к своему диску — иначе соседи наезжают, как только у одного
+  // тела радиус больше. Диск и его метку связывает тонкая выноска.
+  const LANE_UP = cy - 76, LANE_DN = cy + 76;
+  let W = 1000;                          // ширина холста — растёт под число планет (см. раскладку ниже)
+  const EXP = '#5fe0a0';
+
+  // Тусклый звёздный фон рисуем ПОСЛЕ раскладки — когда известна финальная W.
+  let _seed = 1; for (const ch of String(sysId)) _seed = (_seed * 31 + ch.charCodeAt(0)) % 2147483646; _seed++;
+  const _rnd = () => (_seed = (_seed * 16807) % 2147483647) / 2147483647;
+
+  const n = planets.length;
+  let orbits = '', discs = '', defs = '';
+  // Сид-случайность по pid — раскладка стабильна между перерисовками.
+  const prnd = (p, k) => {
+    let s = 7; const str = String(p.pid != null ? p.pid : p.name) + k;
+    for (const ch of str) s = (s * 31 + ch.charCodeAt(0)) % 2147483646;
+    return ((s * 16807) % 2147483647) / 2147483647;
+  };
+  const grpOf = p => (typeof ecPlanetGroup === 'function') ? ecPlanetGroup(p) : 'unknown';
+  const radiusOf = (p, grp) => {
+    const isGiant = ['gasgiant', 'icegiant', 'hotgiant'].includes(grp);
+    const cells = +p.slotsP || 0;
+    return grp === 'micro' ? 7 + prnd(p, 'r') * 2
+      : grp === 'belt' ? 9
+      : grp === 'anomaly' ? 13 + prnd(p, 'r') * 2
+      : isGiant ? 26 + prnd(p, 'r') * 6
+      : 12 + Math.min(8, cells * 0.5) + prnd(p, 'r') * 2;
+  };
+  // ── Раскладка: планеты стоят на ОДНОЙ горизонтальной линии слева-направо от
+  //    звезды, интервал ∝ размеру соседей. Вертикальную «синусоиду» убрали: она
+  //    гнала диски в подписи соседей. Метки живут в двух фиксированных полосах
+  //    (над/под линией) через одного. ──
+  const grpList = planets.map(grpOf);
+  const radList = planets.map((p, i) => radiusOf(p, grpList[i]));
+  const GAP = 26;                       // воздух между телами
+  // «След» тела: у пояса он широкий (кольцо камней), хотя сам маркер мал.
+  const footOf = (grp, r) => grp === 'belt' ? 26 : r;
+  // Полуширина подписи (имя жирным 11.5px / статус моно 8.5px) — раскладка обязана
+  // развести соседние метки, иначе длинные названия наезжают друг на друга.
+  const halfLabel = (p) => {
+    const nameW = String(p.name || '').length * 6.5;
+    const statusW = 11 * 5.2;           // статусы короткие, оценка сверху
+    return Math.max(nameW, statusW) / 2 + 7;
+  };
+  const hl = planets.map(halfLabel);
+  // Метки чередуются над/под диском ⇒ по одной «строке» стоят соседи через одного
+  // (i и i+2). Раскладываем жадно, гарантируя: (а) диски не касаются, (б) метки
+  // одной строки не пересекаются. Холст растягиваем под итог — без сжатия в кашу.
+  const xs = []; let cursor = starX + starR * 2.4 + 74;
+  planets.forEach((p, i) => {
+    let x = i === 0 ? cursor : xs[i - 1] + footOf(grpList[i - 1], radList[i - 1]) + GAP + footOf(grpList[i], radList[i]);
+    if (i >= 2) x = Math.max(x, xs[i - 2] + hl[i - 2] + hl[i] + 8);   // метки одной строки не наезжают
+    xs.push(x);
+  });
+  W = Math.max(1000, Math.round((xs[n - 1] || cursor) + hl[n - 1] + 40));
+  let bgStars = '';
+  for (let i = 0, nbg = Math.round(W / 14); i < nbg; i++) bgStars += `<circle cx="${nf(_rnd() * W)}" cy="${nf(_rnd() * H)}" r="${nf(0.5 + _rnd() * 1.2)}" fill="#cfe4ff" opacity="${nf(0.05 + _rnd() * 0.14)}"></circle>`;
+  const bodies = planets.map((p, i) => {
+    return { p, i, grp: grpList[i], rp: radList[i], px: xs[i], py: cy, labelUp: i % 2 === 1 };
+  });
+  bodies.forEach(({ p, i, grp, rp, px, py, labelUp }) => {
+    const look = _hpvcLook(p);
+    const isBelt = grp === 'belt';
+    const isAnomaly = grp === 'anomaly';
+    const isGiant = ['gasgiant', 'icegiant', 'hotgiant'].includes(grp);
+    const orbR = Math.hypot(px - starX, py - cy);
+    // Орбитальная дуга — эллипс через тело (сплюснут по вертикали).
+    if (!isBelt) orbits += `<ellipse cx="${starX}" cy="${cy}" rx="${nf(orbR)}" ry="${nf(orbR * 0.5)}" fill="none" stroke="rgba(155,180,210,.11)" stroke-width="1" stroke-dasharray="3,7"></ellipse>`;
+    // Статус: моя колония / родная / терраформ / непригодна.
+    const col = colOf(p);
+    const occupied = !!col;
+    const dead = !!(p.dead || p.doomed);
+    const colonizable = !occupied && !dead && typeof ecColonizable === 'function' && ecColonizable(p);
+    const native = colonizable && typeof ecNative === 'function' && ecNative(p, race);
+    const ringCol = occupied ? myColor : dead ? '#7a8494' : native ? EXP : colonizable ? '#e8c35f' : 'rgba(155,175,205,.35)';
+    const status = occupied ? (col.is_capital ? (en ? 'CAPITAL' : 'СТОЛИЦА') : (en ? 'COLONY' : 'КОЛОНИЯ'))
+      : dead ? (en ? 'DEAD' : 'МЕРТВА')
+      : isBelt ? (en ? 'BELT' : 'ПОЯС')
+      : isAnomaly ? (en ? 'ANOMALY' : 'АНОМАЛИЯ')
+      : native ? (en ? 'COLONIZE' : 'КОЛОНИЗАЦИЯ')
+      : colonizable ? (en ? 'TERRAFORM' : 'ТЕРРАФОРМ')
+      : (en ? 'HOSTILE' : 'НЕПРИГОДНА');
+    // Подписи: в фиксированной полосе над (labelUp) или под линией — не «висят» на
+    // диске, поэтому крупный сосед их больше не двигает. rTag — радиус тела: от
+    // него к метке идёт выноска, чтобы связь читалась.
+    const nameTags = (rTag) => {
+      const ly = labelUp ? LANE_UP : LANE_DN;
+      const tick = labelUp
+        ? `<line x1="${nf(px)}" y1="${nf(py - rTag - 3)}" x2="${nf(px)}" y2="${nf(ly + 5)}" stroke="${ringCol}" stroke-width="1" opacity=".4"></line>`
+        : `<line x1="${nf(px)}" y1="${nf(py + rTag + 3)}" x2="${nf(px)}" y2="${nf(ly - 10)}" stroke="${ringCol}" stroke-width="1" opacity=".4"></line>`;
+      return `${tick}
+      <text x="${nf(px)}" y="${nf(ly)}" fill="#e6f0fb" font-size="11.5" text-anchor="middle" font-family="var(--font-display)" font-weight="700" style="paint-order:stroke;stroke:#05080d;stroke-width:3.5;stroke-linejoin:round">${esc(p.name)}</text>
+      <text x="${nf(px)}" y="${nf(ly + 12)}" fill="${ringCol}" font-size="8.5" text-anchor="middle" font-family="var(--font-mono)" letter-spacing=".08em" style="paint-order:stroke;stroke:#05080d;stroke-width:3.5;stroke-linejoin:round">${status}</text>`;
+    };
+
+    if (isBelt) {
+      // ПОЯС: не «планета», а россыпь камней вдоль дуги своей орбиты.
+      let rocks = '';
+      // Дуга пояса сужается на дальних орбитах: иначе камни уезжают по вертикали
+      // в полосы подписей — тем сильнее, чем дальше орбита.
+      const baseA = 0;
+      const spanA = Math.min(0.9 + prnd(p, 's') * 0.5, 2 * Math.asin(Math.min(1, 30 / Math.max(1, orbR * 0.5))));
+      for (let k = 0; k < 46; k++) {
+        const a = baseA + (prnd(p, 'k' + k) - 0.5) * spanA;
+        const rr = orbR + (prnd(p, 'j' + k) - 0.5) * 26;
+        const rx = starX + rr * Math.cos(a), ry = cy + rr * Math.sin(a) * 0.5;
+        rocks += `<circle cx="${nf(rx)}" cy="${nf(ry)}" r="${nf(0.7 + prnd(p, 'z' + k) * 2.1)}" fill="#9aa4ad" opacity="${nf(0.25 + prnd(p, 'o' + k) * 0.5)}"></circle>`;
+      }
+      discs += `<g class="hpvnc-pl" onclick="event.stopPropagation();heroVNColonySysFocus(${i})">
+        <title>${esc(p.name)} · ${esc(p.type || '')}</title>
+        ${rocks}
+        <circle cx="${nf(px)}" cy="${nf(py)}" r="16" fill="transparent"></circle>
+        ${nameTags(12)}
+      </g>`;
+      return;
+    }
+    if (isAnomaly) {
+      // АНОМАЛИЯ: тёмный провал с фиолетовым свечением — никакой текстуры.
+      discs += `<g class="hpvnc-pl" onclick="event.stopPropagation();heroVNColonySysFocus(${i})">
+        <title>${esc(p.name)} · ${esc(p.type || '')}</title>
+        <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp + 14)}" fill="transparent"></circle>
+        <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp * 1.9)}" fill="#c060ff" opacity=".14" filter="url(#hpvcGlow)"></circle>
+        <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}" fill="#05070c"></circle>
+        <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp * 0.9)}" fill="none" stroke="#c060ff" stroke-width="1.6" opacity=".7"></circle>
+        <ellipse cx="${nf(px)}" cy="${nf(py)}" rx="${nf(rp * 1.55)}" ry="${nf(rp * 0.42)}" fill="none" stroke="#c060ff" stroke-width="1" opacity=".45" transform="rotate(-18 ${nf(px)} ${nf(py)})"></ellipse>
+        ${nameTags(rp)}
+      </g>`;
+      return;
+    }
+    const cid = 'hpvcp' + i;
+    defs += `<clipPath id="${cid}"><circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}"></circle></clipPath>`;
+    const tex = texBase + 'planets/planet_' + look + '.png';
+    // Кольца гигантов (сид: примерно у половины).
+    const ringed = isGiant && prnd(p, 'ring') > 0.45;
+    const ringSvg = ringed ? `
+      <ellipse cx="${nf(px)}" cy="${nf(py)}" rx="${nf(rp * 1.7)}" ry="${nf(rp * 0.5)}" fill="none" stroke="rgba(214,204,176,.5)" stroke-width="3" transform="rotate(-16 ${nf(px)} ${nf(py)})"></ellipse>
+      <ellipse cx="${nf(px)}" cy="${nf(py)}" rx="${nf(rp * 1.95)}" ry="${nf(rp * 0.58)}" fill="none" stroke="rgba(214,204,176,.22)" stroke-width="1.6" transform="rotate(-16 ${nf(px)} ${nf(py)})"></ellipse>` : '';
+    discs += `<g class="hpvnc-pl" onclick="event.stopPropagation();heroVNColonySysFocus(${i})">
+      <title>${esc(p.name)} · ${esc(p.type || '')}</title>
+      <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp + 16)}" fill="transparent"></circle>
+      <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp * 1.5)}" fill="${ringCol}" opacity=".10" filter="url(#hpvcGlow)"></circle>
+      <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}" fill="${LOOKC[look] || LOOKC.rock}"></circle>
+      <image href="${esc(tex)}" xlink:href="${esc(tex)}" x="${nf(px - rp)}" y="${nf(py - rp)}" width="${nf(rp * 2)}" height="${nf(rp * 2)}" clip-path="url(#${cid})" preserveAspectRatio="xMidYMid slice"></image>
+      <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}" fill="url(#hpvcShade)"></circle>
+      ${dead ? `<circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}" fill="rgba(6,9,14,.62)"></circle>` : ''}
+      <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp + 0.8)}" fill="none" stroke="rgba(234,246,255,.28)" stroke-width="1"></circle>
+      ${ringSvg}
+      ${(occupied || native || colonizable) ? `<circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp + 6)}" fill="none" stroke="${ringCol}" stroke-width="1.4" ${occupied ? '' : 'stroke-dasharray="5,4"'} opacity="${occupied || native ? '.9' : '.65'}"></circle>` : ''}
+      ${col && col.is_capital && !labelUp ? `<text x="${nf(px)}" y="${nf(py - rp - 10)}" fill="#fff" font-size="14" text-anchor="middle">★</text>` : ''}
+      ${nameTags(rp)}
+    </g>`;
+  });
+
+  const scene = `<svg class="hpvnc-map hpvnc-sysmap" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <defs>
+      ${defs}
+      <clipPath id="hpvcStarClip"><circle cx="${starX}" cy="${cy}" r="${nf(starR * 0.9)}"></circle></clipPath>
+      <filter id="hpvcGlow" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="8"></feGaussianBlur></filter>
+      <radialGradient id="hpvcShade" cx="32%" cy="30%" r="85%">
+        <stop offset="0%" stop-color="#fff" stop-opacity=".14"></stop>
+        <stop offset="42%" stop-color="#000" stop-opacity="0"></stop>
+        <stop offset="100%" stop-color="#020409" stop-opacity=".72"></stop>
+      </radialGradient>
+      <radialGradient id="hpvcStar" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#fff"></stop>
+        <stop offset="30%" stop-color="${sc}"></stop>
+        <stop offset="100%" stop-color="${sc}" stop-opacity="0"></stop>
+      </radialGradient>
+    </defs>
+    <g>${bgStars}</g>
+    <g>${orbits}</g>
+    <g>
+      <circle cx="${starX}" cy="${cy}" r="${nf(starR * 2.6)}" fill="url(#hpvcStar)" opacity=".2"></circle>
+      <circle cx="${starX}" cy="${cy}" r="${nf(starR * 1.3)}" fill="url(#hpvcStar)" opacity=".42"></circle>
+      <circle cx="${starX}" cy="${cy}" r="${nf(starR * 0.9)}" fill="${sc}"></circle>
+      <image href="${esc(starTex)}" xlink:href="${esc(starTex)}" x="${nf(starX - starR)}" y="${nf(cy - starR)}" width="${nf(starR * 2)}" height="${nf(starR * 2)}" clip-path="url(#hpvcStarClip)" preserveAspectRatio="xMidYMid slice"></image>
+    </g>
+    <text x="${starX}" y="${nf(cy + starR * 1.9 + 18)}" fill="${sc}" font-size="10.5" text-anchor="middle" font-family="var(--font-mono)" letter-spacing=".14em" opacity=".85" style="paint-order:stroke;stroke:#05080d;stroke-width:3">${esc(({ yellow: en ? 'YELLOW STAR' : 'ЖЁЛТАЯ ЗВЕЗДА', red: en ? 'RED STAR' : 'КРАСНАЯ ЗВЕЗДА', blue: en ? 'BLUE STAR' : 'ГОЛУБАЯ ЗВЕЗДА', white: en ? 'WHITE STAR' : 'БЕЛАЯ ЗВЕЗДА', green: en ? 'GREEN STAR' : 'ЗЕЛЁНАЯ ЗВЕЗДА' })[starType] || (en ? 'STAR' : 'ЗВЕЗДА'))}</text>
+    <g>${discs}</g>
+  </svg>`;
+
+  // ── Досье планет: чипы ресурсов + рабочие кнопки кабинета ──
+  const rows = planets.length ? planets.map((p, i) => {
+    const col = colOf(p);
+    const look = _hpvcLook(p);
+    let act, sub;
+    if (col) {
+      const blds = ((typeof EC !== 'undefined' && EC.buildings) || []).filter(b => b.colony_id === col.id).length;
+      const cap = col.cells || 6;
+      act = `<span class="hpvnc-chip mine">🏙 ${col.is_capital ? (en ? 'capital' : 'столица') : (en ? 'colony' : 'колония')}<span class="hpvnc-chip-v">⬚ ${blds}/${cap}</span></span>`;
+      sub = esc(p.type || col.planet_type || '');
+    } else if (typeof ecColonizeInfo === 'function') {
+      const cz = ecColonizeInfo(sys, p, race);
+      act = cz.btn;
+      sub = `<span class="ec-cz-${cz.cls}">${esc(cz.tag)}</span> · ${esc(cz.label)} · ⬚ ${cz.cells || +p.slotsP || 6}`;
+    } else { act = ''; sub = esc(p.type || ''); }
+    return `<div class="hpvnc-prow" id="hpvnc-prow-${i}" onclick="event.stopPropagation();heroVNColonySysFocus(${i})">
+      <div class="hpvnc-prow-hd"><i class="hpvnc-dot hpvnc-dot-${look}"></i><b>${esc(p.name)}</b><span>${sub}</span></div>
+      <div class="hpvnc-prow-res">${typeof ecPlanetResChips === 'function' ? ecPlanetResChips(p) : ''}</div>
+      <div class="hpvnc-prow-act">${act}</div>
+    </div>`;
+  }).join('') : `<div class="hp-vn-col-empty" style="height:auto;padding:12px 0">${en ? 'No planets charted in this system.' : 'В этой системе не значится планет.'}</div>`;
+
+  const body = `<div class="hp-vn-col-body">
+    <div class="hp-vn-col-main">${scene}</div>
+    <aside class="hp-vn-col-side">
+      <div class="hp-vn-col-info">
+        <span class="hp-vn-col-info-cap">${en ? 'Planets' : 'Планеты'} · ${planets.length}</span>
+        <div class="hp-vn-col-scroll"><div class="hpvnc-prows">${rows}</div></div>
       </div>
     </aside>
   </div>`;
@@ -3754,6 +4092,12 @@ function _heroAsmChatApply(resp) {
   if (form) form.hidden = !(resp.can_post && resp.status !== 'done');
   const whbox = document.getElementById('hp-vna-chat-whbox');
   if (whbox) whbox.hidden = !resp.can_whisper;
+  // Права могли пропасть (вышел из созыва, созыв кончился) — не отправляем шёпот вслепую
+  if (!resp.can_whisper && _heroAsmChatWhisper) {
+    const cb = document.getElementById('hp-vna-chat-whisper');
+    if (cb) cb.checked = false;
+    heroVNAsmChatWhisper(null);
+  }
 }
 async function _heroAsmChatPoll(full) {
   const list = document.getElementById('hp-vna-chat-list');
@@ -4398,6 +4742,7 @@ function heroVNInit() {
       ['colony', (en ? 'Colonization' : 'Колонизация')],
       ['planets', (en ? 'Colony management' : 'Управление колониями')],
       ['geo',    (en ? 'Geological survey' : 'Георазведка')],
+      ['stars',  (en ? 'Gaze into the Rift' : 'Всмотреться в Разлом')],
       ['research', (en ? 'Research' : 'Исследования')],
       ['poem',   (en ? 'Poem of the week' : 'Поэма недели')],
       ['assembly', (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
@@ -4487,14 +4832,20 @@ function heroVNGeoClose() {
 function heroVNGeoReturn() { heroVNChoice('menu'); }
 function _hgHead(en) {
   return `<div class="hp-vn-col-head">
-    <span class="hp-vn-col-title">⛏ ${en ? 'Geological survey' : 'Георазведка'}</span>
+    <span class="hp-vn-col-title"><svg class="hp-vn-stars-tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5l5 4 5-4M7 10.5l5 4 5-4M7 16.5l5 4 5-4"/></svg>${en ? 'Geological survey' : 'Георазведка'}</span>
     <span class="hp-vnr-clr">${en ? 'imperial geology corps' : 'геологический корпус державы'}</span>
     <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNGeoReturn()">↩ ${en ? 'back' : 'назад'}</button>
   </div>`;
 }
 // Анимированный бур-спиннер — чтобы экран не выглядел «мёртвым» на загрузке.
 function _hgSpin(label) {
-  return `<div class="hp-vn-col-body hp-vn-geo-body"><div class="ec-geo-spin"><div class="ec-geo-spin-core">⛏</div><div class="ec-geo-spin-t">${esc(label || '')}</div></div></div>`;
+  return `<div class="hp-vn-col-body hp-vn-geo-body"><div class="ec-stars-load">
+    <div class="ec-stars-load-core is-geo">
+      <span class="ec-stars-load-ring"></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5l5 4 5-4M7 10.5l5 4 5-4M7 16.5l5 4 5-4"/></svg>
+    </div>
+    <div class="ec-stars-load-t">${esc(label || '')}<span class="ec-stars-load-dots"></span></div>
+  </div></div>`;
 }
 function _hgMsg(en, ru, enT) { return `<div class="hp-vn-col-body hp-vn-geo-body"><div class="hp-vn-col-empty">${en ? enT : ru}</div></div>`; }
 async function heroVNGeoOpen() {
@@ -4530,6 +4881,73 @@ function heroVNGeoRefresh() {
     return;
   }
   el.innerHTML = _hgHead(en) + `<div class="hp-vn-col-body hp-vn-geo-body">${ecGeoBody()}</div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · «Всмотреться в Разлом» — псионический хор-казино поверх сцены.
+// Разметку отдаёт economy.js (ecStarsBody: панель ставки / поле 7×7 узлов /
+// финал с раскрытым Разломом и джекпотом). Действия НЕ гоняют полный ecReloadPaint —
+// казна и состояние берутся из ответа RPC, перерисовывается только оверлей.
+// Каркас (шапка/подложка/мобилка) наследуется от .hp-vn-geo/.hp-vn-colony.
+// ══════════════════════════════════════════════════════════════
+function heroVNStarsClose() {
+  const el = document.getElementById('hp-vn-stars');
+  if (!el) return;
+  el.classList.remove('show');
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '';
+  if (_heroVNView === 'stars') _heroVNView = null;
+}
+function heroVNStarsReturn() { heroVNChoice('menu'); }
+function _hsHead(en) {
+  return `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title"><svg class="hp-vn-stars-tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3"/></svg>${en ? 'Gaze into the Rift' : 'Всмотреться в Разлом'}</span>
+    <span class="hp-vnr-clr">${en ? 'psionic choir' : 'псионический хор державы'}</span>
+    <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNStarsReturn()">↩ ${en ? 'back' : 'назад'}</button>
+  </div>`;
+}
+function _hsMsg(en, ru, enT) { return `<div class="hp-vn-col-body hp-vn-geo-body hp-vn-stars-body"><div class="hp-vn-col-empty">${en ? enT : ru}</div></div>`; }
+async function heroVNStarsOpen() {
+  const el = document.getElementById('hp-vn-stars');
+  if (!el) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  el.classList.add('show');
+  el.setAttribute('aria-hidden', 'false');
+  // Загрузка: настройка резонатора — метка с бегущим кольцом и моно-статусом.
+  el.innerHTML = _hsHead(en) + `<div class="hp-vn-col-body hp-vn-geo-body hp-vn-stars-body">
+    <div class="ec-stars-load">
+      <div class="ec-stars-load-core">
+        <span class="ec-stars-load-ring"></span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg>
+      </div>
+      <div class="ec-stars-load-t">${en ? 'TUNING THE RESONATOR' : 'НАСТРОЙКА РЕЗОНАТОРА'}<span class="ec-stars-load-dots"></span></div>
+    </div></div>`;
+  try {
+    if (typeof ecStarsPhotosLoad === 'function') ecStarsPhotosLoad();   // фотоархив «Удачного кадра» — параллельно
+    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
+      if (!el.classList.contains('show')) return;
+      el.innerHTML = _hsHead(en) + _hsMsg(en, 'Зарегистрируйте державу — и хор откроет для неё Разлом.', 'Register a faction to open the Rift.');
+      return;
+    }
+    if (!EC.eco || !EC.stargaze) { if (typeof ecLoad === 'function') await ecLoad(); }
+    if (!el.classList.contains('show')) return;
+    heroVNStarsRefresh();
+  } catch (e) {
+    if (!el.classList.contains('show')) return;
+    el.innerHTML = _hsHead(en) + _hsMsg(en, 'Разлом сейчас глух — хор не слышит ничего.', 'The Rift is silent right now.');
+  }
+}
+// Перерисовать открытый оверлей свежими данными (зовётся и из ecReloadPaint).
+function heroVNStarsRefresh() {
+  const el = document.getElementById('hp-vn-stars');
+  if (!el || !el.classList.contains('show')) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  if (typeof ecStarsBody !== 'function' || typeof EC === 'undefined' || !EC.eco) {
+    el.innerHTML = _hsHead(en) + _hsMsg(en, 'Разлом сейчас глух — хор не слышит ничего.', 'The Rift is silent right now.');
+    return;
+  }
+  el.innerHTML = _hsHead(en) + `<div class="hp-vn-col-body hp-vn-geo-body hp-vn-stars-body">${ecStarsBody()}</div>`;
 }
 
 // ══════════════════════════════════════════════════════════════

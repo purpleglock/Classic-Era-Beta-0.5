@@ -349,6 +349,8 @@ function adPortraitsPanel() {
   }).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:14px 0">Пул пуст — загрузите первые портреты. Игра подбирает их оперативникам случайно по расе.</div>';
   return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
     ${adAsmArtSection()}
+    ${adStarsPhotosSection()}
+    ${adStarsArtsSection()}
     <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6);border-top:1px solid var(--w2,#2a3340);padding-top:14px">🎭 Портреты оперативников <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· общий пул для всех фракций (${list.length})</span></div>
     <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Помечайте портреты расой и полом. Каждому оперативнику игра выбирает портрет <b>случайно</b> из подходящих по расе (и полу, если задан) — выбор закреплён за агентом. Без расы — «универсальные», подходят всем.</div>
     <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 12px;line-height:1.5">📁 Картинки сохраняются <b>прямо в папку игры</b> <code>${AD_PORT_DIR}/</code> (не в облако) — потом публикуешь вместе с проектом. Запусти локальный сервер один раз: <code>node tools/upload-server.js</code> и держи окно открытым.</div>
@@ -846,6 +848,115 @@ function adAsmArtSection() {
   return `<div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px">🏛 АССАМБЛЕЯ — АРТ КАРТ</div>
     <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 10px;line-height:1.5">Картинки карт законов и ролей экрана «Межзвёздная Ассамблея». Загруженное здесь сохраняется в общую БД и видно всем игрокам сразу. Пустой слот — карта берёт файл assets/assembly/*.webp (батник tools/assembly_cards.bat) или рисуется сама. Карты ≈500×700, роли — широкие (баннер).</div>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px">${cells}</div>`;
+}
+// ── Архив видений («Всмотреться в Разлом») ──
+// Реальные снимки для приза «Видение»: URL-ы в site_settings
+// (ключ wk_stars_photos, {list:[…]}), узел-видение показывает изображение.
+function adStarsCfg() { try { return JSON.parse(localStorage.getItem('wk_stars_photos') || 'null') || {}; } catch (e) { return {}; } }
+async function adStarsCfgSave(cfg) {
+  cfg._ts = Date.now();
+  localStorage.setItem('wk_stars_photos', JSON.stringify(cfg));
+  if (typeof saveSiteSetting !== 'function') throw new Error('saveSiteSetting недоступна');
+  await saveSiteSetting('wk_stars_photos', JSON.stringify(cfg));
+}
+async function adStarsPhotoUpload(el) {
+  const files = Array.from(el.files || []);
+  if (!files.length) return;
+  try {
+    const serverUp = await adPortServerAlive();
+    const cfg = adStarsCfg(); cfg.list = Array.isArray(cfg.list) ? cfg.list : [];
+    for (const f of files) {
+      const url = await adVNUploadOne(f, serverUp);
+      if (url) cfg.list.push(url);
+    }
+    await adStarsCfgSave(cfg);
+    toast('Снимки загружены в архив видений', 'ok');
+  } catch (e) { toast('Не удалось загрузить: ' + (e.message || e), 'err'); }
+  adPaint();
+}
+async function adStarsPhotoRemove(i) {
+  if (!confirm('Убрать это видение из архива?')) return;
+  const cfg = adStarsCfg(); cfg.list = Array.isArray(cfg.list) ? cfg.list : [];
+  cfg.list.splice(i, 1);
+  try { await adStarsCfgSave(cfg); } catch (e) { toast('Не сохранилось в БД: ' + (e.message || e), 'err'); }
+  adPaint();
+}
+function adStarsPhotosSection() {
+  const list = Array.isArray(adStarsCfg().list) ? adStarsCfg().list : [];
+  const cells = list.map((u, i) => `<div style="position:relative;width:104px;height:78px;border-radius:8px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover no-repeat;background-image:url('${esc(u)}')">
+      <button class="btn btn-gh btn-xs" title="Убрать видение" onclick="adStarsPhotoRemove(${i})" style="position:absolute;top:3px;right:3px;min-width:0;padding:2px 6px;background:rgba(8,12,22,.8)">✕</button>
+    </div>`).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:6px 0">Архив пуст — приз «Видение» показывает рисованную иконку.</div>';
+  return `<div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px">РАЗЛОМ — АРХИВ ВИДЕНИЙ</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 10px;line-height:1.5">Реальные изображения для приза «Видение» во «Всмотреться в Разлом»: выпавший узел-видение показывает случайный снимок отсюда. Сохраняется в общую БД, видно всем игрокам. Лучше горизонтальные кадры неба/космоса.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">${cells}</div>
+    <label class="btn btn-gh btn-xs" style="display:inline-block;cursor:pointer;margin-bottom:14px">⬆ загрузить видения<input type="file" accept="image/*" multiple style="display:none" onchange="adStarsPhotoUpload(this)"></label>`;
+}
+// ── Арты призов Разлома: НЕСКОЛЬКО артов на КАЖДЫЙ тип находки ──
+// Хранится в том же wk_stars_photos (cfg.arts = {тип: [url,…]}); узел с призом
+// показывает арт вместо рисованной иконки. Пусто — остаётся иконка.
+// Типов на поле по многу (маяков 2, эха 4, шума 34), поэтому у каждого свой
+// СПИСОК: узлы одного типа за транс тянут разные картинки по кругу.
+// Легаси-формат (одна строка вместо массива) читается как список из одного.
+// Ключи легаси (nova/quasar/…) — зеркало _stargaze_board() и EC_STARS_TYPES.
+const AD_STARS_ART_KINDS = [
+  ['nova',   'Взгляд в ответ (джекпот)', 1],
+  ['quasar', 'Псионический маяк',        2],
+  ['comet',  'Эхо Разлома',              4],
+  ['photo',  'Видение (фолбэк архива)',  8],
+  ['dust',   'Белый шум',               34],
+];
+// Список артов типа: приводим легаси-строку к массиву.
+function adStarsArtList(cfg, kind) {
+  const v = (cfg.arts || {})[kind];
+  if (!v) return [];
+  return (Array.isArray(v) ? v : [v]).filter(Boolean);
+}
+async function adStarsArtUpload(kind, el) {
+  const files = Array.from(el.files || []);
+  if (!files.length) return;
+  try {
+    const serverUp = await adPortServerAlive();
+    const cfg = adStarsCfg(); cfg.arts = cfg.arts || {};
+    const list = adStarsArtList(cfg, kind);
+    for (const f of files) {
+      const url = await adVNUploadOne(f, serverUp);
+      if (url) list.push(url);
+    }
+    cfg.arts[kind] = list;
+    await adStarsCfgSave(cfg);
+    toast(files.length > 1 ? 'Арты приза загружены' : 'Арт приза загружен', 'ok');
+  } catch (e) { toast('Не удалось загрузить: ' + (e.message || e), 'err'); }
+  adPaint();
+}
+async function adStarsArtRemove(kind, i) {
+  if (!confirm('Убрать этот арт приза?')) return;
+  const cfg = adStarsCfg(); cfg.arts = cfg.arts || {};
+  const list = adStarsArtList(cfg, kind);
+  list.splice(i, 1);
+  if (list.length) cfg.arts[kind] = list; else delete cfg.arts[kind];
+  try { await adStarsCfgSave(cfg); } catch (e) { toast('Не сохранилось в БД: ' + (e.message || e), 'err'); }
+  adPaint();
+}
+function adStarsArtsSection() {
+  const cfg = adStarsCfg();
+  const rows = AD_STARS_ART_KINDS.map(([k, lbl, n]) => {
+    const list = adStarsArtList(cfg, k);
+    const thumbs = list.map((u, i) => `<div style="position:relative;width:76px;height:76px;border-radius:8px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover no-repeat;background-image:url('${esc(u)}')">
+        <button class="btn btn-gh btn-xs" title="Убрать арт" onclick="adStarsArtRemove('${k}',${i})" style="position:absolute;top:2px;right:2px;min-width:0;padding:1px 5px;background:rgba(8,12,22,.8)">✕</button>
+      </div>`).join('');
+    const empty = `<div style="width:76px;height:76px;border-radius:8px;border:1px dashed var(--w2,#2a3340);display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font-size:10px;text-align:center;line-height:1.2">иконка</div>`;
+    return `<div style="border-top:1px solid var(--w2,#2a3340);padding:10px 0">
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
+        <span style="font-size:12px;color:var(--t2,#c2d0dc)">${lbl}</span>
+        <span style="font-size:10.5px;color:var(--t4,#6a7a88)">${n} на поле · артов: ${list.length}</span>
+        <label class="btn btn-gh btn-xs" style="margin-left:auto;cursor:pointer">⬆ добавить<input type="file" accept="image/*" multiple style="display:none" onchange="adStarsArtUpload('${k}',this)"></label>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${thumbs || empty}</div>
+    </div>`;
+  }).join('');
+  return `<div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px">РАЗЛОМ — АРТЫ ПРИЗОВ</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 4px;line-height:1.5">Арты на каждый тип находки во «Всмотреться в Разлом»: раскрытый узел показывает картинку вместо рисованной иконки. Артов на тип можно грузить СКОЛЬКО УГОДНО — узлы одного типа за транс берут разные, по кругу; один арт = все узлы типа одинаковые, ноль = рисованная иконка. Сохраняется в общую БД, видно всем игрокам. Квадратные картинки; «Видение» сперва берёт архив видений выше, арты — запасные.</div>
+    <div style="margin-bottom:14px">${rows}</div>`;
 }
 function adVNPanel() {
   if (!AD.vn) AD.vn = adVNDefault();

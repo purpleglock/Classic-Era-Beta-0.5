@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<title>stars harness</title>
+<link rel="stylesheet" href="css/index.css?v=20260715stars10">
+<style>
+  body { background: #070a12; padding: 30px 16px; }
+  .hwrap { max-width: 700px; margin: 0 auto 40px; }
+  .hlbl { color: #6c7a90; font: 11px monospace; letter-spacing: .2em; text-transform: uppercase; margin: 0 0 12px; }
+</style>
+</head><body>
+<script>
+  // синтетическая карта: 3 фракции + «ничьи» системы, 2 сектора, гиперлинии
+  const NM = ['Илок','Икар','Блю','Драбб','Нова','Сизар','Лира','Тиаз','Треной','Цетус','Муия','Прома','Вайрон','Йолента','Энигма','Септим','Ретус','Инос','Зоцид','Астерия','Калибан','Кел-Тарис','Старлеб','Альтаир','Аркадия','Веридис','Третир','Эридан','Иерихон','Каденция'];
+  const FIDS = ['fac_a', 'fac_b', 'fac_c', null, null];
+  const _sys = NM.map((n, i) => ({ id: 's' + i, name: n, x: 100 + (i * 137) % 420, y: 80 + (i * 89) % 380, faction: FIDS[i % 5] }));
+  const _lanes = _sys.slice(0, 26).map((s, i) => ({ a_id: s.id, b_id: _sys[(i + 3) % _sys.length].id }));
+  window.EC = { app: {}, eco: { gc: 500000 }, stargaze: { active: false, opened: [] }, colonies: [{ id: 'c1', name: 'Синли-Бей' }] };
+  window.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  window.ecNum = n => (+n || 0).toLocaleString('ru-RU');
+  window.toast = () => {};
+  window.ecRpc = async () => ({});
+  window.heroVNStarsRefresh = () => {};
+  window.lang = 'ru';
+  window.SB_URL = ''; window.SB_ANON = ''; window.getToken = () => '';
+  // локальные кадры: внешние URL вешают снятие скриншота в панели браузера
+  localStorage.setItem('wk_stars_photos', JSON.stringify({ list: ['assets/hero/1782566032386-fddc5d.webp', 'assets/hero/1782566050435-eeaa90.webp', 'assets/hero/1782566078902-667e83.webp'], _ts: 1 }));
+</script>
+<script src="economy.js?v=20260715stars10"></script>
+<div class="hwrap"><p class="hlbl">loader</p>
+  <div class="ec-stars-load">
+    <div class="ec-stars-load-core"><span class="ec-stars-load-ring"></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg>
+    </div>
+    <div class="ec-stars-load-t">КАЛИБРОВКА ОПТИКИ<span class="ec-stars-load-dots"></span></div>
+  </div>
+</div>
+<div class="hwrap"><p class="hlbl">start</p><div id="h-start"></div></div>
+<div class="hwrap"><p class="hlbl">round</p><div id="h-round"></div></div>
+<div class="hwrap"><p class="hlbl">finale (miss)</p><div id="h-fin"></div></div>
+<div class="hwrap"><p class="hlbl">geo result</p><div id="h-geo"></div></div>
+<script>
+  // economy.js переопределяет EC — стабы карты кладём ПОСЛЕ его загрузки
+  Object.assign(EC, { app: {}, eco: { gc: 500000 }, stargaze: { active: false, opened: [] }, colonies: [{ id: 'c1', name: 'Синли-Бей' }],
+    allSystems: _sys, lanes: _lanes,
+    factions: [{ faction_id: 'fac_a', name: 'Илокан', color: '#4ea3d8' }, { faction_id: 'fac_b', name: 'Иридия', color: '#c9a227' }, { faction_id: 'fac_c', name: 'Люмен', color: '#b05fc0' }],
+    sectors: [{ name: 'Илокан', system_ids: _sys.slice(0, 18).map(s => s.id) }, { name: 'Окраина', system_ids: _sys.slice(18).map(s => s.id) }] });
+  const put = (id, html) => document.getElementById(id).innerHTML = html;
+  put('h-start', ecStarsStartBody());
+  put('h-round', ecStarsRoundBody({ active: true, stake: 100000, picks: 7, mult: 2,
+    opened: [{ i: 9, t: 'photo', win: 50000 }, { i: 24, t: 'comet', win: 160000 }, { i: 30, t: 'dust', win: 4000 }] }));
+  const board = []; const kinds = ['dust','dust','photo','dust','comet','dust','photo'];
+  for (let i = 0; i < 49; i++) board.push({ t: kinds[i % 7] });
+  board[35] = { t: 'nova' }; board[32] = { t: 'quasar' }; board[46] = { t: 'quasar' };
+  put('h-fin', ecStarsFinaleBody({ board, jackpot_i: 35, won: 214000, spent: 500000,
+    opened: [{ i: 9, t: 'photo', win: 50000 }, { i: 24, t: 'comet', win: 160000 }, { i: 30, t: 'dust', win: 4000 }] }));
+  // георазведка: карточка результата (стабы каталога)
+  window.ecGeoState = () => ({ current: { r: 'rare', amt: 'много', name: 'Стелларит' }, colony_id: 'c1', spins: 2 });
+  try { put('h-geo', ecGeoBody()); } catch (e) { document.getElementById('h-geo').textContent = 'geo err: ' + e.message; }
+</script>
+</body></html>

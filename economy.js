@@ -1356,13 +1356,13 @@ async function _ecLoadCoreImpl() {
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
-  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState] = await Promise.all([
+  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('faction_units', `or=(faction_id.eq.${fid},faction_id.is.null)&order=name.asc`).catch(() => []),
     dbGet('unit_production', `faction_id=eq.${fid}&order=created_at.desc`).catch(() => []),
-    dbGet('map_systems', `select=id,name,faction,x,y,planets`).catch(() => []),
+    dbGet('map_systems', `select=id,name,faction,x,y,planets,star_type,is_giant`).catch(() => []),
     ecCached('lanes', () => dbGet('map_hyperlanes', `select=a_id,b_id`)),   // топология гиперпутей не меняется по ходу игры — кэш на сессию
     dbGet('faction_applications', `status=eq.approved&select=faction_id,name,herald_url,color,gov,leader,race&order=name.asc`).catch(() => []),
     dbGet('trade_routes', `order=created_at.desc`).catch(() => []),
@@ -1392,6 +1392,7 @@ async function _ecLoadCoreImpl() {
     ecRpc('concessions_info').catch(() => []),   // имена планет/систем концессионных колоний (чужие колонии по RLS не видны)
     dbGet('faction_budget', `faction_id=eq.${fid}`).catch(() => []),   // бюджет державы (ползунки финансирования)
     ecRpc('geosurvey_get').catch(() => null),  // ⛏ георазведка: текущая находка + цена следующей крутки (казино)
+    ecRpc('stargaze_get').catch(() => null),   // 🜂 «Всмотреться в Разлом»: активный транс (казино)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1436,6 +1437,7 @@ async function _ecLoadCoreImpl() {
   // Бюджет державы: ползунки 0..4 (дефолт 2 — «норма», зеркало _budget_wellbeing.sql)
   EC.budget = (Array.isArray(budgetRows) && budgetRows[0]) || { industry: 2, military: 2, science: 2, social: 2, infra: 2 };
   EC.geosurvey = (geoState && typeof geoState === 'object') ? geoState : { current: null, spins: 0, next_cost: 10000 };   // ⛏ георазведка: находка + цена крутки
+  EC.stargaze = (starsState && typeof starsState === 'object') ? starsState : { active: false, opened: [] };   // 🜂 Разлом: активный транс
   EC.incomeHistory = incomeHistory || [];   // снимки дохода по тикам (доход по времени)
   EC.dossiers = (missions || []).filter(m => m.outcome === 'success' && (m.op === 'recon_basic' || m.op === 'recon_deep')); // мои разведданные
   EC.projects = projects || [];
@@ -1576,6 +1578,11 @@ async function ecReloadPaint() {
   if (typeof heroVNPlanetsRefresh === 'function') heroVNPlanetsRefresh();
   // Оверлей «Георазведка» в новелле — тоже на данных EC (EC.geosurvey).
   if (typeof heroVNGeoRefresh === 'function') heroVNGeoRefresh();
+  // Оверлей «Всмотреться в Разлом» — на данных EC.stargaze.
+  if (typeof heroVNStarsRefresh === 'function') heroVNStarsRefresh();
+  // Оверлей «Колонизация» в новелле (карта границ / карта системы) — после
+  // колонизации/терраформа перерисовываем свежими данными EC.
+  if (typeof heroVNColonyRefresh === 'function') heroVNColonyRefresh();
 }
 
 // ── Превью дохода (зеркало RPC) ─────────────────────────────
@@ -3975,7 +3982,7 @@ function ecGeoBody() {
   const cost = ecGeoNextCost();
   const can = gc >= cost;
   const intro = `<div class="ec-geo-intro">
-    <div class="ec-geo-intro-h">⛏ Георазведка недр</div>
+    <div class="ec-geo-intro-h">Георазведка недр</div>
     <p>Геологи бурят недра колонии — что поднимут, заранее не скажет никто: от бесполезной пыли до колоссальной жилы легендарного ресурса. Результат выпадает <b>сразу</b>. Не понравилось — крути ещё (каждая крутка за день дороже). <b>Отказаться нельзя</b> — либо принимаешь находку на колонию, либо крутишь дальше. Наутро цена крутки откатывается к <b>10&nbsp;000&nbsp;ГС</b>.</p>
   </div>`;
   if (!s.current) {
@@ -4005,7 +4012,7 @@ function ecGeoBody() {
   const accent = EC_GEO_RAR_ACCENT[rar] || 'var(--t4)';
   return `<div class="ec-geo">${intro}
     <div class="ec-geo-result ec-geo-t-${tier.cls}" style="--accent:${accent}">
-      <div class="ec-geo-site">🪐 ${esc(ecGeoColLabel(col))}</div>
+      <div class="ec-geo-site"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="4.6"/><ellipse cx="12" cy="12" rx="9.3" ry="3.1" transform="rotate(-18 12 12)"/></svg>${esc(ecGeoColLabel(col))}</div>
       <div class="ec-geo-tier">${esc(tier.l)}</div>
       <div class="ec-geo-find">
         <span class="ec-geo-ic">${ecResIcon(cur.name)}</span>
@@ -4019,8 +4026,8 @@ function ecGeoBody() {
         <div class="ec-geo-st"><span class="ec-geo-st-k">Ценность потока</span><span class="ec-geo-st-v">≈ ${ecNum(val)} ГС/сут</span></div>
       </div>
       <div class="ec-geo-acts">
-        <button class="btn ec-geo-accept" onclick="ecGeoAccept()">✔ Принять залежь</button>
-        <button class="btn ec-geo-reroll${can ? '' : ' is-off'}" ${can ? '' : 'disabled'} onclick="ecGeoSpin('${esc(s.colony_id || '')}')">⟳ Перебросить · ${ecNum(cost)} ГС</button>
+        <button class="btn ec-geo-accept" onclick="ecGeoAccept()">Принять залежь</button>
+        <button class="btn ec-geo-reroll${can ? '' : ' is-off'}" ${can ? '' : 'disabled'} onclick="ecGeoSpin('${esc(s.colony_id || '')}')">Перебросить · ${ecNum(cost)} ГС</button>
       </div>
       ${can ? '' : `<div class="ec-geo-warn">На новую крутку не хватает ГС (нужно ${ecNum(cost)})</div>`}
     </div>
@@ -4029,7 +4036,13 @@ function ecGeoBody() {
 // Мгновенный «слот-машинный» отклик: пока летит RPC — крутящийся бур в оверлее.
 function ecGeoSpinner(label) {
   const b = document.querySelector('#hp-vn-geo .hp-vn-geo-body');
-  if (b) b.innerHTML = `<div class="ec-geo-spin"><div class="ec-geo-spin-core">⛏</div><div class="ec-geo-spin-t">${esc(label || 'Бурим породу…')}</div></div>`;
+  if (b) b.innerHTML = `<div class="ec-stars-load">
+    <div class="ec-stars-load-core is-geo">
+      <span class="ec-stars-load-ring"></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5l5 4 5-4M7 10.5l5 4 5-4M7 16.5l5 4 5-4"/></svg>
+    </div>
+    <div class="ec-stars-load-t">${esc(label || 'Бурим породу…')}<span class="ec-stars-load-dots"></span></div>
+  </div>`;
 }
 // Действие георазведки с мгновенным спиннером (живёт в оверлее новеллы hp-vn-geo).
 async function ecGeoAct(fn, body, okMsg, label) {
@@ -4052,6 +4065,404 @@ function ecGeoSpin(colonyId) {
 function ecGeoAccept() {
   const s = ecGeoState(); if (!s.current) return;
   ecGeoAct('geosurvey_accept', {}, 'Месторождение принято — залежь легла на колонию', 'Закрепляем участок…');
+}
+
+// ══════════════════════════════════════════════════════════════
+// 🜂 ВСМОТРЕТЬСЯ В РАЗЛОМ — псионический хор-казино. Ставка (100…100к ГС)
+// открывает поле 7×7 узлов Разлома: базово 3 погружения; каждая ДОП. ставка
+// того же размера = +1 погружение И +25% к множителю всех выигрышей (до +4).
+// Выигрыш зачисляется сразу при вскрытии узла. В ФИНАЛЕ раскрывается ВСЁ поле —
+// обязательно видно, ГДЕ БЫЛ ДЖЕКПОТ (требование геймдизайна). Сервер —
+// stargaze_get/start/pick (_stargaze.sql), поле спрятано на сервере до финала.
+// ЖИВЁТ В НОВЕЛЛЕ (оверлей hp-vn-stars, render.js heroVNStarsOpen).
+// Действия НЕ дёргают полный ecReloadPaint (лишние ~40 RPC): казна и
+// состояние обновляются из ответа RPC, перерисовывается только оверлей.
+// ══════════════════════════════════════════════════════════════
+// Зеркало раскладки _stargaze_board(): типы призов поля (множитель от ставки).
+// Иконки — inline SVG (stroke:currentColor, цвет берут из --sc клетки):
+// эмодзи запрещены, на части систем рендерятся пустыми квадратами.
+const EC_STARS_ICONS = {
+  nova:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M7.8 4.8a7.6 7.6 0 0 0 0 9.4M16.2 4.8a7.6 7.6 0 0 1 0 9.4M9.9 7a4.2 4.2 0 0 0 0 5M14.1 7a4.2 4.2 0 0 1 0 5"/><circle cx="12" cy="9.5" r="1.7" fill="currentColor" stroke="none"/><path d="M12 11.5V20"/></svg>',
+  quasar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/><path d="M12 5a7 7 0 0 1 7 7M12 19a7 7 0 0 1-7-7M12 8.5a3.5 3.5 0 0 1 3.5 3.5M12 15.5a3.5 3.5 0 0 1-3.5-3.5"/></svg>',
+  comet:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="16.5" cy="7.5" r="3"/><path d="M13.2 10.8L5 19M11.8 7.2L4 15M16.8 12.2L10 19"/></svg>',
+  photo:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3.5" y="5.5" width="17" height="14" rx="1"/><circle cx="12" cy="12.5" r="3.4"/><path d="M16.8 8.7h.01"/></svg>',
+  dust:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 9l2.3 2 2.6-3 2.6 3 2.6-3 2.6 3 2.3-2M4 15.5l2.3 2 2.6-3 2.6 3 2.6-3 2.6 3 2.3-2"/></svg>',
+  scope:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3"/></svg>',
+};
+// Ключи (nova/quasar/…) — легаси старой «обсерватории»: они зеркалят
+// _stargaze_board() и фотоархив админки, поэтому сменилась только подача.
+const EC_STARS_TYPES = {
+  nova:   { ic: EC_STARS_ICONS.nova,   nm: 'Взгляд в ответ',    sub: 'оттуда потянулись навстречу — ДЖЕКПОТ', cls: 'nova',   m: 6 },
+  quasar: { ic: EC_STARS_ICONS.quasar, nm: 'Псионический маяк', sub: 'чужой разум вышел на связь',            cls: 'quasar', m: 2 },
+  comet:  { ic: EC_STARS_ICONS.comet,  nm: 'Эхо Разлома',       sub: 'видение занесено в кодекс',             cls: 'comet',  m: 0.8 },
+  photo:  { ic: EC_STARS_ICONS.photo,  nm: 'Видение',           sub: 'образ проступил наяву',                 cls: 'photo',  m: 0.25 },
+  dust:   { ic: EC_STARS_ICONS.dust,   nm: 'Белый шум',         sub: 'в трансе одни помехи',                  cls: 'dust',   m: 0.02 },
+};
+// ── Архив видений: реальные снимки для приза «Видение». Грузятся админкой
+// (site_settings wk_stars_photos, вкладка «Новелла»), узел-видение показывает
+// настоящее изображение. Пусто — остаётся иконка.
+let _ecStarsPhotosCfg = (() => {
+  try { return JSON.parse(localStorage.getItem('wk_stars_photos') || 'null') || {}; } catch (e) { return {}; }
+})();
+let _ecStarsPhotosFetched = false;
+async function ecStarsPhotosLoad() {
+  if (_ecStarsPhotosFetched) return;
+  _ecStarsPhotosFetched = true;
+  try {
+    const r = await fetch(
+      `${SB_URL}/rest/v1/site_settings?key=eq.wk_stars_photos&select=value&limit=1`,
+      { headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + getToken() } });
+    if (!r.ok) return;
+    const raw = (await r.json())?.[0]?.value;
+    const cfg = raw ? ((typeof raw === 'string') ? JSON.parse(raw) : raw) : null;
+    if (cfg && (cfg._ts || 0) >= (_ecStarsPhotosCfg._ts || 0)) {
+      _ecStarsPhotosCfg = cfg;
+      localStorage.setItem('wk_stars_photos', JSON.stringify(cfg));
+    }
+  } catch (e) { /* архива нет — фолбэк на иконку */ }
+}
+// Авторские арты приза (админка «Новелла» → «Разлом — арты призов»,
+// cfg.arts = {nova|quasar|comet|photo|dust: [url,…]}). У типа МОЖЕТ БЫТЬ
+// НЕСКОЛЬКО артов: маяков на поле 2, эха 4 — они тянут разные картинки,
+// а не один клон. Легаси-формат (arts[t] = одна строка) поддержан.
+// Для «Видения» архив видений приоритетнее; арты — фолбэк.
+// Нет арта — рисованная иконка.
+let _ecStarsPhotoSalt = Math.floor(Math.random() * 997);
+function _ecStarsArtList(t) {
+  const v = _ecStarsPhotosCfg.arts && _ecStarsPhotosCfg.arts[t];
+  if (!v) return [];
+  return (Array.isArray(v) ? v : [v]).filter(Boolean);
+}
+// ── Просмотр видения: лайтбокс поверх новеллы. Живёт вне тела вкладки, поэтому
+// перерисовка панели его не гасит. Клик по подложке / Esc — закрыть.
+function ecStarsPhotoOpen(src, cap) {
+  if (!src) return;
+  ecStarsPhotoClose();
+  const box = document.createElement('div');
+  box.className = 'ec-stars-lbx';
+  box.id = 'ec-stars-lbx';
+  box.innerHTML = `<div class="ec-stars-lbx-in" role="dialog" aria-label="${esc(cap || 'Видение')}">
+    <img src="${esc(src)}" alt="${esc(cap || '')}">
+    <div class="ec-stars-lbx-cap"><span>${esc(cap || 'Видение Разлома')}</span>
+      <button type="button" class="ec-stars-lbx-x" onclick="ecStarsPhotoClose()">Закрыть ✕</button></div>
+  </div>`;
+  box.onclick = e => { if (e.target === box) ecStarsPhotoClose(); };
+  document.body.appendChild(box);
+  document.addEventListener('keydown', _ecStarsLbxKey);
+  requestAnimationFrame(() => box.classList.add('show'));
+}
+function ecStarsPhotoClose() {
+  const b = document.getElementById('ec-stars-lbx');
+  if (b) b.remove();
+  document.removeEventListener('keydown', _ecStarsLbxKey);
+}
+function _ecStarsLbxKey(e) { if (e.key === 'Escape') { e.stopPropagation(); ecStarsPhotoClose(); } }
+// Раздача артов на поле: {индекс клетки → url}. Уникальность считается ПО ВСЕМУ
+// полю, а не внутри типа: один файл может лежать в списках разных типов, и
+// счётчик на тип всё равно выдавал бы одну картинку дважды. Здесь берётся
+// первый неиспользованный арт своего типа; список кончился — тип остаётся без
+// арта (рисованная иконка), но клонов на поле нет.
+function _ecStarsArtMap(entries) {
+  const map = {}, used = new Set(), n = {};
+  (entries || []).forEach(e => {
+    const t = e.t;
+    const list = (t === 'photo' && Array.isArray(_ecStarsPhotosCfg.list) && _ecStarsPhotosCfg.list.length)
+      ? _ecStarsPhotosCfg.list : _ecStarsArtList(t);
+    if (!list.length) return;
+    const base = _ecStarsPhotoSalt + (n[t] = (n[t] || 0) + 1) - 1;
+    for (let k = 0; k < list.length; k++) {
+      const u = list[(base + k) % list.length];
+      if (u && !used.has(u)) { used.add(u); map[+e.i] = u; return; }
+    }
+  });
+  return map;
+}
+// Псевдослучайная рябь узла (сеется от индекса клетки — каждый узел
+// выглядит по-своему, как кусок галактической карты).
+function _ecStarsPatch(i) {
+  let h = (i + 1) * 2654435761 >>> 0, dots = '';
+  const rnd = () => { h = (h * 1103515245 + 12345) >>> 0; return (h >>> 16) / 65536; };
+  const n = 2 + Math.floor(rnd() * 3);
+  for (let k = 0; k < n; k++)
+    dots += `<circle cx="${(8 + rnd() * 84).toFixed(1)}" cy="${(8 + rnd() * 84).toFixed(1)}" r="${(0.8 + rnd() * 1.6).toFixed(1)}" opacity="${(0.25 + rnd() * 0.5).toFixed(2)}"/>`;
+  return `<svg class="ec-stars-cell-sky" viewBox="0 0 100 100" fill="currentColor">${dots}</svg>`;
+}
+// ── Поле = ОДИН СЕКТОР КАРТЫ: Разлом резонирует с конкретным сектором
+// галактики (map_sectors / EC.sectors), карта ЗУМИТСЯ в его рамку, и сетка
+// 7×7 узлов подстраивается под этот сектор — его реальные системы и гиперлинии
+// лежат под узлами. Сектор выбирает сам Разлом на старте транса.
+// Системы вне секторов образуют «Глубокий космос». Работает для ЛЮБОГО
+// сектора. Нет данных карты — null, рендер откатится на рисованную сетку.
+function _ecStarsGroups() {
+  const sys = (EC.allSystems || []).filter(s => isFinite(+s.x) && isFinite(+s.y) && s.faction !== 'rift');
+  if (sys.length < 3) return null;
+  const used = new Set(); const groups = [];
+  (EC.sectors || []).forEach(sec => {
+    const ids = new Set(Array.isArray(sec.system_ids) ? sec.system_ids : []);
+    const pts = sys.filter(s => ids.has(s.id));
+    if (pts.length) { pts.forEach(p => used.add(p.id)); groups.push({ name: String(sec.name || 'Сектор'), pts }); }
+  });
+  const rest = sys.filter(s => !used.has(s.id));
+  if (rest.length || !groups.length) groups.push({ name: 'Глубокий космос', pts: rest.length ? rest : sys.slice() });
+  return { sys, groups };
+}
+let _ecStarsSectorLive = 0;    // сектор транса — Разлом выбирает его сам на старте
+function _ecStarsField() {
+  const gg = _ecStarsGroups();
+  if (!gg) return null;
+  const g = gg.groups[((_ecStarsSectorLive % gg.groups.length) + gg.groups.length) % gg.groups.length];
+  // квадратный кадр вокруг ГРАНИЦ ЭТОГО сектора (зум карты в его рамку)
+  const gx = g.pts.map(p => +p.x), gy = g.pts.map(p => +p.y);
+  const minX = Math.min(...gx), maxX = Math.max(...gx), minY = Math.min(...gy), maxY = Math.max(...gy);
+  const span = Math.max(maxX - minX, maxY - minY) || 1, half = span / 2 + span * 0.14;
+  const x0 = (minX + maxX) / 2 - half, y0 = (minY + maxY) / 2 - half, W = half * 2;
+  const px = v => (v - x0) / W * 100, py = v => (v - y0) / W * 100;
+  const nf = v => (+v).toFixed(2);
+  const inFrame = s => { const X = px(s.x), Y = py(s.y); return X > -8 && X < 108 && Y > -8 && Y < 108; };
+  // подложка: системы/гиперлинии в кадре (соседи по краям дают контекст, svg сам режет лишнее)
+  const vis = gg.sys.filter(inFrame);
+  const inSec = new Set(g.pts.map(p => p.id));
+  const byId = new Map(gg.sys.map(s => [s.id, s]));
+  let lanes = '';
+  (EC.lanes || []).forEach(l => {
+    const a = byId.get(l.a_id), b = byId.get(l.b_id);
+    if (a && b && (inFrame(a) || inFrame(b))) lanes += `<line x1="${nf(px(a.x))}" y1="${nf(py(a.y))}" x2="${nf(px(b.x))}" y2="${nf(py(b.y))}"/>`;
+  });
+  // Владения фракций: мягкие пятна под системами. Радиальный градиент, а НЕ
+  // SVG-фильтр: фильтр растрирует весь кадр на каждой перерисовке поля и сажает
+  // отклик клеток. Градиент — те же «границы» даром.
+  const facCol = {};
+  (EC.factions || []).forEach(f => { if (f.color) facCol[f.faction_id] = f.color; });
+  const grads = {}; let terr = '';
+  vis.forEach(s => {
+    const c = s.faction && facCol[s.faction];
+    if (!c) return;
+    const gid = 'ecStT' + s.faction.replace(/[^a-z0-9]/gi, '');
+    grads[gid] = `<radialGradient id="${gid}"><stop offset="0" stop-color="${esc(c)}" stop-opacity=".55"/><stop offset="1" stop-color="${esc(c)}" stop-opacity="0"/></radialGradient>`;
+    terr += `<circle cx="${nf(px(s.x))}" cy="${nf(py(s.y))}" r="9" fill="url(#${gid})"/>`;
+  });
+  // подписи: только системы сектора, и те, что не налезают на уже поставленную
+  const taken = [];
+  let stars = '', names = '';
+  vis.forEach(s => {
+    const own = inSec.has(s.id), X = px(s.x), Y = py(s.y);
+    stars += `<circle cx="${nf(X)}" cy="${nf(Y)}" r="${own ? 0.55 : 0.38}"${own ? '' : ' opacity=".4"'}/>`;
+    if (!s.name || !own) return;
+    const ty = Y + 2.2, w = s.name.length * 0.5 + 1;
+    if (taken.some(t => Math.abs(t.x - X) < (t.w + w) / 2 && Math.abs(t.y - ty) < 2.2)) return;
+    taken.push({ x: X, y: ty, w });
+    names += `<text x="${nf(X)}" y="${nf(ty)}">${esc(s.name)}</text>`;
+  });
+  const svg = `<svg class="ec-stars-map-bg" viewBox="0 0 100 100" aria-hidden="true">
+    <defs>${Object.values(grads).join('')}</defs>
+    <g class="ec-stars-map-terr">${terr}</g>
+    <g class="ec-stars-map-lanes">${lanes}</g>
+    <g class="ec-stars-map-stars">${stars}</g>
+    <g class="ec-stars-map-names" text-anchor="middle" font-size="1.5">${names}</g>
+    <g class="ec-stars-secbox"><text x="2.2" y="4.4">${esc(g.name.toUpperCase())}</text></g>
+  </svg>`;
+  // сетка 7×7 на весь кадр сектора
+  const code = (g.name.replace(/[^А-ЯЁA-Z]/gi, '').slice(0, 2).toUpperCase()) || 'СК';
+  const cells = [];
+  for (let i = 0; i < 49; i++) {
+    const col = i % 7, row = Math.floor(i / 7), step = 100 / 7;
+    cells.push({ i, l: col * step, t: row * step, w: step, h: step, sec: `${code}-${String.fromCharCode(65 + row)}${col + 1}` });
+  }
+  return { svg, cells, name: g.name };
+}
+const EC_STARS_STAKES = [100, 1000, 5000, 10000, 25000, 50000, 100000];
+let _ecStarsStake = 10000, _ecStarsExtra = 0, _ecStarsBusy = false, _ecStarsFinale = null;
+function ecStarsState() { const s = EC.stargaze; return (s && typeof s === 'object') ? s : { active: false, opened: [] }; }
+function ecStarsRefreshOverlay() { if (typeof heroVNStarsRefresh === 'function') heroVNStarsRefresh(); }
+// Шапка транса: ставка / множитель / сколько погружений осталось.
+function _ecStarsHud(s, left) {
+  return `<div class="ec-stars-hud">
+    <div class="ec-stars-h"><span class="ec-stars-h-k">Ставка</span><span class="ec-stars-h-v">${ecNum(s.stake)} ГС</span></div>
+    <div class="ec-stars-h"><span class="ec-stars-h-k">Множитель</span><span class="ec-stars-h-v">×${(+s.mult || 1).toFixed(2).replace(/\.?0+$/, '')}</span></div>
+    <div class="ec-stars-h"><span class="ec-stars-h-k">Погружений</span><span class="ec-stars-h-v">${left} / ${s.picks}</span></div>
+  </div>`;
+}
+function ecStarsBody() {
+  const s = ecStarsState();
+  if (_ecStarsFinale) return ecStarsFinaleBody(_ecStarsFinale);
+  if (s.active) return ecStarsRoundBody(s);
+  return ecStarsStartBody();
+}
+// ── Панель запуска: выбор депчика + доп. ставок ──
+function ecStarsStartBody() {
+  const gc = +(EC.eco && EC.eco.gc) || 0;
+  const stake = _ecStarsStake, extra = _ecStarsExtra;
+  const cost = stake * (1 + extra), picks = 3 + extra, mult = 1 + 0.25 * extra;
+  const can = gc >= cost;
+  const chips = EC_STARS_STAKES.map(v =>
+    `<button class="ec-stars-chip${v === stake ? ' is-on' : ''}" type="button" onclick="ecStarsSetStake(${v})">${ecNum(v)}</button>`).join('');
+  const extras = [0, 1, 2, 3, 4].map(e =>
+    `<button class="ec-stars-chip${e === extra ? ' is-on' : ''}" type="button" onclick="ecStarsSetExtra(${e})">+${e}</button>`).join('');
+  return `<div class="ec-stars">
+    <div class="ec-stars-intro">
+      <div class="ec-stars-intro-h">Всмотреться в Разлом</div>
+      <p>Вы сталкиваетесь с ощущением присуствия <b>чего-то из подпространства</b>. С его эхо, с его псионическими маяками, а также <b>Взглядом в ответ</b> - встречное касание чуждого вам разума, что принесёт <b>×6 от ставки</b>. Одна ставка - три погружения; каждая дополнительная даёт ещё одно и разгоняет множитель всех находок.</p>
+    </div>
+    <div class="ec-stars-start">
+      <label class="ec-geo-lbl">Ставка, ГС</label>
+      <div class="ec-stars-chips">${chips}</div>
+      <label class="ec-geo-lbl">Дополнительные ставки</label>
+      <div class="ec-stars-chips">${extras}</div>
+      <div class="ec-stars-preview">
+        <span>${picks} погружений</span><span>множитель ×${mult.toFixed(2).replace(/\.?0+$/, '')}</span><span>итого <b>${ecNum(cost)} ГС</b></span>
+      </div>
+      <button class="btn ec-geo-go${can ? '' : ' is-off'}" ${can ? '' : 'disabled'} onclick="ecStarsStart()">Войти в транс · ${ecNum(cost)} ГС</button>
+      ${can ? '' : `<div class="ec-geo-warn">Не хватает ГС: нужно ${ecNum(cost)}, в казне ${ecNum(gc)}</div>`}
+    </div>
+  </div>`;
+}
+// ── Активный транс: поле 7×7, клик по узлу = погружение ──
+// Открытый узел / закрытый узел (общая разметка для сетки и поля-карты).
+function _ecStarsCellOpen(o, ph, style) {
+  const t = EC_STARS_TYPES[o.t] || EC_STARS_TYPES.dust;
+  const view = ph ? ` onclick="ecStarsPhotoOpen('${esc(ph)}','${esc(t.nm)}')"` : '';
+  return `<button class="ec-stars-cell is-open ec-stars-c-${t.cls}${ph ? ' has-photo' : ''}" type="button"${ph ? '' : ' disabled'} ${style}${view} title="${esc(t.nm)} · +${ecNum(o.win)} ГС${ph ? ' · всмотреться' : ''}">${ph ? `<img class="ec-stars-cell-ph" src="${esc(ph)}" alt="">` : `<span class="ec-stars-cell-ic">${t.ic}</span>`}<span class="ec-stars-cell-w">+${ecNum(o.win)}</span></button>`;
+}
+function _ecStarsCellClosed(i, sec, style, patch) {
+  return `<button class="ec-stars-cell" type="button" id="ec-stars-c${i}" ${style} onclick="ecStarsPick(${i})">${patch}<span class="ec-stars-cell-sec">${esc(sec)}</span><span class="ec-stars-cell-dot">${EC_STARS_ICONS.scope}</span></button>`;
+}
+function ecStarsRoundBody(s) {
+  const opened = new Map((s.opened || []).map(o => [+o.i, o]));
+  const left = Math.max(0, (+s.picks || 0) - opened.size);
+  const arts = _ecStarsArtMap((s.opened || []).map(o => ({ i: +o.i, t: o.t })));   // по порядку вскрытия, без клонов
+  const f = _ecStarsField();                    // поле, собранное из секторов карты
+  let field = '';
+  if (f) {
+    let cs = '';
+    f.cells.forEach(c => {
+      const st = `style="left:${c.l.toFixed(2)}%;top:${c.t.toFixed(2)}%;width:${c.w.toFixed(2)}%;height:${c.h.toFixed(2)}%"`;
+      const o = opened.get(c.i);
+      cs += o ? _ecStarsCellOpen(o, arts[c.i], st) : _ecStarsCellClosed(c.i, c.sec, st, '');
+    });
+    field = `<div class="ec-stars-field">${f.svg}${cs}</div>`;
+  } else {
+    let grid = '';
+    for (let i = 0; i < 49; i++) {
+      const o = opened.get(i);
+      const sec = `${String.fromCharCode(65 + Math.floor(i / 7))}-${(i % 7) + 1}`;
+      grid += o ? _ecStarsCellOpen(o, arts[i], '') : _ecStarsCellClosed(i, sec, '', _ecStarsPatch(i));
+    }
+    field = `<div class="ec-stars-grid">${grid}</div>`;
+  }
+  const log = (s.opened || []).map(o => {
+    const t = EC_STARS_TYPES[o.t] || EC_STARS_TYPES.dust;
+    const ph = arts[+o.i];
+    const vw = ph ? ` onclick="ecStarsPhotoOpen('${esc(ph)}','${esc(t.nm)}')" title="Всмотреться в видение"` : '';
+    return `<div class="ec-stars-log-i ec-stars-c-${t.cls}${ph ? ' is-view' : ''}"${vw}><span>${ph ? `<img class="ec-stars-log-ph" src="${esc(ph)}" alt="">` : `<i class="ec-stars-log-ic">${t.ic}</i>`}${esc(t.nm)}</span><b>+${ecNum(o.win)} ГС</b></div>`;
+  }).join('');
+  return `<div class="ec-stars">
+    ${_ecStarsHud(s, left)}
+    <div class="ec-stars-hint">Выберите узел Разлома — осталось погружений: <b>${left}</b></div>
+    ${field}
+    ${log ? `<div class="ec-stars-log">${log}</div>` : ''}
+  </div>`;
+}
+// ── ФИНАЛ: раскрываем весь Разлом. Джекпот подсвечен ВСЕГДА — главный крючок. ──
+function ecStarsFinaleBody(fin) {
+  const opened = new Map((fin.opened || []).map(o => [+o.i, o]));
+  const board = fin.board || [];
+  const jackHit = opened.has(+fin.jackpot_i);
+  const f = _ecStarsField();
+  // Арты финала: сначала узлы игрока (им арт важнее — их он и разглядывает),
+  // потом остальное поле. Один арт не встречается дважды.
+  const order = [];
+  for (let i = 0; i < 49; i++) if ((board[i] || {}).t && opened.has(i)) order.push({ i, t: board[i].t });
+  for (let i = 0; i < 49; i++) if ((board[i] || {}).t && !opened.has(i)) order.push({ i, t: board[i].t });
+  const finArts = _ecStarsArtMap(order);
+  const revealCell = (i, style) => {
+    const c = board[i] || { t: 'dust' };
+    const t = EC_STARS_TYPES[c.t] || EC_STARS_TYPES.dust;
+    const mine = opened.get(i);
+    const isJack = i === +fin.jackpot_i;
+    // Арт раскрыт на всём поле, но ВСМОТРЕТЬСЯ можно только в свой узел:
+    // чужие образы остаются картинкой поля, лайтбокс их не открывает.
+    const ph = finArts[i];
+    const own = !!(ph && mine);
+    const view = own ? ` onclick="ecStarsPhotoOpen('${esc(ph)}','${esc(t.nm)}')" title="${esc(t.nm)} · всмотреться"` : ` title="${esc(t.nm)}"`;
+    return `<div class="ec-stars-cell is-reveal ec-stars-c-${t.cls}${mine ? ' is-mine' : ''}${isJack ? ' is-jack' : ''}${ph ? ' has-photo' : ''}${own ? ' is-view' : ''}" ${style}${view}>
+      ${ph ? `<img class="ec-stars-cell-ph" src="${esc(ph)}" alt="">` : `<span class="ec-stars-cell-ic">${t.ic}</span>`}${mine ? `<span class="ec-stars-cell-w">+${ecNum(mine.win)}</span>` : ''}
+    </div>`;
+  };
+  let field = '';
+  if (f) {
+    field = `<div class="ec-stars-field is-final">${f.svg}${f.cells.map(c =>
+      revealCell(c.i, `style="left:${c.l.toFixed(2)}%;top:${c.t.toFixed(2)}%;width:${c.w.toFixed(2)}%;height:${c.h.toFixed(2)}%"`)).join('')}</div>`;
+  } else {
+    let grid = '';
+    for (let i = 0; i < 49; i++) grid += revealCell(i, '');
+    field = `<div class="ec-stars-grid is-final">${grid}</div>`;
+  }
+  const won = +fin.won || 0, spent = +fin.spent || 0, net = won - spent;
+  const verdict = jackHit
+    ? 'На вас посмотрели в ответ...'
+    : `Смотрели <b>вот из этого узла</b>. Резонанс записан — в следующий раз погрузимся точнее.`;
+  // Добыча транса: ВСЕ образы, что нащупал игрок (любого типа, не только
+  // видения) — колонка сбоку от поля. Клик — образ во весь экран.
+  const mineShots = (fin.opened || []).map(o => ({
+    ph: finArts[+o.i], win: +o.win || 0,
+    nm: (EC_STARS_TYPES[o.t] || EC_STARS_TYPES.dust).nm,
+  })).filter(x => x.ph);
+  const gallery = mineShots.length ? `<div class="ec-stars-gal">
+    <div class="ec-stars-gal-h">Ваша добыча · ${mineShots.length}</div>
+    <div class="ec-stars-gal-row">${mineShots.map(x =>
+      `<button type="button" class="ec-stars-gal-i" onclick="ecStarsPhotoOpen('${esc(x.ph)}','${esc(x.nm)} · +${ecNum(x.win)} ГС')" title="${esc(x.nm)} · всмотреться">
+        <img src="${esc(x.ph)}" alt=""><span>+${ecNum(x.win)}</span></button>`).join('')}</div>
+  </div>` : '';
+  return `<div class="ec-stars">
+    <div class="ec-stars-final ${jackHit ? 'is-hit' : ''}">
+      <div class="ec-stars-final-h">${jackHit ? 'НЕ СТОИТ БЕСПОКОИТЬ ДРЕВНИХ' : 'Транс окончен'}</div>
+      <div class="ec-stars-final-v">${verdict}</div>
+    </div>
+    <div class="ec-stars-fin-row${gallery ? ' has-gal' : ''}">${field}${gallery}</div>
+    <div class="ec-stars-hud">
+      <div class="ec-stars-h"><span class="ec-stars-h-k">Поставлено</span><span class="ec-stars-h-v">${ecNum(spent)} ГС</span></div>
+      <div class="ec-stars-h"><span class="ec-stars-h-k">Выиграно</span><span class="ec-stars-h-v">${ecNum(won)} ГС</span></div>
+      <div class="ec-stars-h"><span class="ec-stars-h-k">Итог</span><span class="ec-stars-h-v ${net >= 0 ? 'is-up' : 'is-dn'}">${net >= 0 ? '+' : ''}${ecNum(net)} ГС</span></div>
+    </div>
+    <div class="ec-geo-acts"><button class="btn ec-geo-reroll" onclick="ecStarsAgain()">Погрузиться ещё раз</button></div>
+  </div>`;
+}
+function ecStarsSetStake(v) { _ecStarsStake = +v || 100; ecStarsRefreshOverlay(); }
+function ecStarsSetExtra(e) { _ecStarsExtra = Math.max(0, Math.min(4, +e || 0)); ecStarsRefreshOverlay(); }
+function ecStarsAgain() { _ecStarsFinale = null; ecStarsRefreshOverlay(); }
+async function ecStarsStart() {
+  if (_ecStarsBusy) return;
+  const cost = _ecStarsStake * (1 + _ecStarsExtra);
+  if ((+(EC.eco && EC.eco.gc) || 0) < cost) { toast('Не хватает ГС: нужно ' + ecNum(cost), 'err'); return; }
+  _ecStarsBusy = true; _ecStarsFinale = null;
+  _ecStarsPhotoSalt = Math.floor(Math.random() * 997);   // новый транс — новая колода видений
+  // Куда тянет медиумов, решает Разлом: сектор транса выбирается случайно
+  // и фиксируется здесь на весь сеанс.
+  const gg = _ecStarsGroups();
+  _ecStarsSectorLive = Math.floor(Math.random() * (gg ? gg.groups.length : 1));
+  try {
+    const r = await ecRpc('stargaze_start', { p_stake: _ecStarsStake, p_extra: _ecStarsExtra });
+    EC.stargaze = { active: true, stake: r.stake, extras: r.extras, picks: r.picks, mult: r.mult, opened: [] };
+    if (EC.eco && r.gc != null) EC.eco.gc = +r.gc;
+  } catch (e) { toast(ecErr(e.message), 'err'); }
+  finally { _ecStarsBusy = false; ecStarsRefreshOverlay(); }
+}
+async function ecStarsPick(i) {
+  if (_ecStarsBusy) return;
+  const s = ecStarsState(); if (!s.active) return;
+  _ecStarsBusy = true;
+  const cell = document.getElementById('ec-stars-c' + i);
+  if (cell) cell.classList.add('is-opening');   // «медиум нащупывает узел» — мгновенный отклик
+  try {
+    const r = await ecRpc('stargaze_pick', { p_idx: i });
+    EC.stargaze = { active: !r.done, stake: s.stake, extras: s.extras, picks: r.picks, mult: r.mult, opened: r.opened || [] };
+    if (EC.eco && r.gc != null) EC.eco.gc = +r.gc;
+    if (r.done && r.last) _ecStarsFinale = r.last;   // финал: раскрыть весь Разлом + ГДЕ БЫЛ ДЖЕКПОТ
+  } catch (e) {
+    if (cell) cell.classList.remove('is-opening');
+    toast(ecErr(e.message), 'err');
+  }
+  finally { _ecStarsBusy = false; ecStarsRefreshOverlay(); }
 }
 
 function ecTabColonies() {

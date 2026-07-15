@@ -244,7 +244,13 @@
       "Bash(sed -i 's#css/index.css?v=20260712geosurvey2#css/index.css?v=20260712geosurvey3#g; s#economy.js?v=20260712geosurvey2#economy.js?v=20260712geosurvey3#g; s#render.js?v=20260712geosurvey2#render.js?v=20260712geosurvey3#g' index.html)",
       "Bash(sed -i \"s#03_content.css?v=20260712geosurvey2#03_content.css?v=20260712geosurvey3#; s#17_economy.css?v=20260712geosurvey2#17_economy.css?v=20260712geosurvey3#\" css/index.css)",
       "PowerShell(node --check galaxy_map.js)",
-      "Bash(node -e \"console.log\\('node ok'\\)\")"
+      "Bash(node -e \"console.log\\('node ok'\\)\")",
+      "Bash(sed -i 's/20260715stars1/20260715stars2/g' index.html)",
+      "Bash(sed -i 's|финал показывает ГДЕ БЫЛ ДЖЕКПОТ; `_stargaze.sql` НЕ применён, клиент ?v=20260715stars1|финал показывает ГДЕ БЫЛ ДЖЕКПОТ; редизайн: SVG вместо эмодзи, «Чужой сигнал»/«Помехи», поле=карта неба, фотоархив wk_stars_photos в админке; `_stargaze.sql` НЕ применён, клиент ?v=20260715stars5|' MEMORY.md)",
+      "Bash(git diff *)",
+      "Bash(python \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/d610ec97-0905-42e7-be1d-b14d45a09740/scratchpad/mem.py\")",
+      "Bash(node t.js)",
+      "Bash(xargs sed -i 's/20260715rift1/20260715rift2/g')"
     ]
   }
 }

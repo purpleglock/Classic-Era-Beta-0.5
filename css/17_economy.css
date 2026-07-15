@@ -3220,110 +3220,392 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-conc-form select { min-width: 200px; flex: 1 1 200px; }
 
 /* ══════════════════════════════════════════════════════════ */
-/* ⛏ ГЕОРАЗВЕДКА — казино под вывеской геологии (вкладка geosurvey) */
+/* ГЕОРАЗВЕДКА — казино под вывеской геологии (вкладка geosurvey).
+   Киберпанк: срезанные углы через clip-path, «обводка» = слой-подложка
+   (::before поверх цветного фона), моно-подписи, без border-radius. */
 /* ══════════════════════════════════════════════════════════ */
 .ec-geo { max-width: 720px; margin: 0 auto; }
-.ec-geo-intro { margin-bottom: 16px; }
-.ec-geo-intro-h {
-  font-family: var(--font-display); font-weight: 700; font-size: 20px;
-  letter-spacing: calc(.4px * var(--deco-ls-mult, 1)); margin-bottom: 6px;
-}
-.ec-geo-intro p { color: var(--t3, var(--t4)); font-size: 13.5px; line-height: 1.55; margin: 0; }
-.ec-geo-intro b { color: var(--gd); }
+.ec-geo-intro { margin-bottom: 16px; padding-left: 14px; position: relative; }
+.ec-geo-intro::before { content: ''; position: absolute; left: 0; top: 3px; bottom: 3px; width: 3px;
+  background: linear-gradient(180deg, var(--gd), color-mix(in srgb, var(--gd) 15%, transparent)); }
+.ec-geo-intro-h { font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 7px; }
+.ec-geo-intro p { color: var(--t3, var(--t4)); font-size: 13.5px; line-height: 1.6; margin: 0; }
+.ec-geo-intro b { color: var(--gd); font-weight: 600; }
 
-/* — стартовая панель — */
+/* — стартовая панель: срез двух углов, подложка вместо рамки — */
 .ec-geo-start {
+  --cut: 14px; position: relative; z-index: 0;
   display: flex; flex-direction: column; gap: 10px; padding: 18px;
-  border: 1px solid var(--w2); border-radius: 12px;
-  background: linear-gradient(160deg, color-mix(in srgb, var(--gd) 8%, var(--b2)), var(--b1) 70%);
+  background: rgba(160,180,215,.18);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
 }
-.ec-geo-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--t4); }
+.ec-geo-start::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--gd) 7%, #0e1219), #090c13 70%); }
+.ec-geo-lbl { font-family: var(--font-mono, monospace); font-size: 10px; text-transform: uppercase; letter-spacing: .18em; color: var(--t4); }
 .ec-geo-sel { padding: 11px 12px; font-size: 14px; width: 100%; }
 .ec-geo-go {
-  font-family: var(--font-display); font-weight: 700; font-size: 15px;
-  padding: 12px 16px; letter-spacing: .3px; cursor: pointer;
-  color: var(--gd); background: color-mix(in srgb, var(--gd) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--gd) 45%, transparent); border-radius: 10px;
+  --cut: 10px; position: relative; z-index: 0; border: none; cursor: pointer;
+  font-family: var(--font-display); font-weight: 700; font-size: 14px;
+  padding: 13px 16px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--gd); background: color-mix(in srgb, var(--gd) 55%, transparent);
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  transition: background .15s;
 }
-.ec-geo-go:hover { filter: brightness(1.06); }
-.ec-geo-go.is-off { filter: grayscale(.7) brightness(.7); cursor: not-allowed; box-shadow: none; }
+.ec-geo-go::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--gd) 14%, #0d1017), #090c13); }
+.ec-geo-go:hover { background: var(--gd); }
+.ec-geo-go.is-off { filter: grayscale(.7) brightness(.7); cursor: not-allowed; }
+/* 13_redesign.css глушит скосы у всех .btn (!important) и жмёт кнопку в 32px —
+   казино возвращает себе гранёную геометрию и нормальный размер. */
+.btn.ec-geo-go {
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)) !important;
+  border-radius: 0 !important; height: auto !important;
+  font-size: 13px !important; letter-spacing: .12em !important; padding: 13px 16px !important;
+}
+.btn.ec-geo-go::after { display: none; }
 .ec-geo-warn { font-size: 12.5px; color: var(--err); text-align: center; }
 
-/* — карточка результата — */
+/* — карточка результата: гранёная плашка, акцент = редкость находки — */
 .ec-geo-result {
-  --accent: var(--t4); position: relative; overflow: hidden;
-  padding: 20px 20px 18px; border-radius: 14px; text-align: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--w2));
-  background: radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--accent) 16%, var(--b2)), var(--b1) 72%);
-  box-shadow: inset 0 0 40px -20px color-mix(in srgb, var(--accent) 80%, transparent), 0 10px 30px -18px color-mix(in srgb, var(--accent) 55%, transparent);
-  animation: ecGeoReveal .42s cubic-bezier(.2, .9, .25, 1);
+  --accent: var(--t4); --cut: 16px; position: relative; z-index: 0;
+  padding: 20px 20px 18px; text-align: center;
+  background: color-mix(in srgb, var(--accent) 45%, rgba(160,180,215,.10));
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  /* без анимации появления — карточка встаёт сразу */
 }
-@keyframes ecGeoReveal { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
-.ec-geo-site { font-size: 12px; color: var(--t4); margin-bottom: 8px; }
+.ec-geo-result::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  background: radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--accent) 13%, #0d1119), #080b12 72%); }
+.ec-geo-site { display: flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: .08em; color: var(--t4); margin-bottom: 8px; }
+.ec-geo-site svg { width: 14px; height: 14px; }
 .ec-geo-tier {
   font-family: var(--font-display); font-weight: 700; font-size: 13px;
-  text-transform: uppercase; letter-spacing: 2px; color: var(--accent); margin-bottom: 10px;
+  text-transform: uppercase; letter-spacing: .22em; color: var(--accent); margin-bottom: 10px;
 }
 .ec-geo-find { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .ec-geo-ic {
+  --cut: 9px; position: relative; z-index: 0;
   width: 46px; height: 46px; display: grid; place-items: center; font-size: 24px;
-  border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--w2));
-  background: color-mix(in srgb, var(--accent) 14%, var(--b1));
-  box-shadow: inset 0 0 14px -6px color-mix(in srgb, var(--accent) 80%, transparent);
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
 }
+.ec-geo-ic::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+  background: color-mix(in srgb, var(--accent) 14%, #0a0d14); }
 .ec-geo-name { font-family: var(--font-display); font-weight: 700; font-size: 22px; }
 .ec-geo-rar {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .5px; padding: 3px 10px;
-  border-radius: var(--radius-pill, 999px); color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  font-family: var(--font-mono, monospace); font-size: 10px; text-transform: uppercase; letter-spacing: .14em;
+  padding: 4px 10px; color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
 }
 .ec-geo-meter {
-  height: 7px; border-radius: 999px; margin: 0 auto 16px; max-width: 420px;
-  background: color-mix(in srgb, var(--t4) 22%, transparent); overflow: hidden;
+  height: 6px; margin: 0 auto 16px; max-width: 420px;
+  background: color-mix(in srgb, var(--t4) 20%, transparent); overflow: hidden;
+  clip-path: polygon(3px 0, 100% 0, calc(100% - 3px) 100%, 0 100%);
 }
 .ec-geo-meter > span {
-  display: block; height: 100%; border-radius: 999px;
+  display: block; height: 100%;
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, transparent), var(--accent));
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 70%, transparent);
   transition: width .5s cubic-bezier(.2, .9, .25, 1);
 }
-.ec-geo-stats { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+.ec-geo-stats { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
 .ec-geo-st {
-  flex: 1 1 140px; min-width: 120px; padding: 10px; border-radius: 10px;
-  border: 1px solid var(--w2); background: color-mix(in srgb, var(--b2) 60%, transparent);
+  --cut: 9px; position: relative; z-index: 0;
+  flex: 1 1 140px; min-width: 120px; padding: 10px;
+  background: rgba(160,180,215,.16);
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
 }
-.ec-geo-st-k { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--t4); margin-bottom: 3px; }
+.ec-geo-st::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  background: linear-gradient(170deg, #0f131d, #090c14); }
+.ec-geo-st-k { display: block; font-family: var(--font-mono, monospace); font-size: 9.5px; text-transform: uppercase; letter-spacing: .16em; color: var(--t4); margin-bottom: 3px; }
 .ec-geo-st-v { display: block; font-family: var(--font-display); font-weight: 700; font-size: 15px; }
 .ec-geo-log { font-size: 12px; color: var(--t4); margin-bottom: 14px; }
 .ec-geo-log b { color: var(--t2, inherit); }
 .ec-geo-acts { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-.ec-geo-acts .btn { flex: 1 1 160px; min-width: 130px; padding: 11px 12px; font-weight: 600; cursor: pointer; }
-.ec-geo-accept { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
-.ec-geo-reroll { color: var(--te); background: color-mix(in srgb, var(--te) 12%, transparent); border: 1px solid color-mix(in srgb, var(--te) 45%, transparent); }
+.ec-geo-acts .btn {
+  --cut: 10px; --ac: var(--te); position: relative; z-index: 0; border: none; cursor: pointer;
+  flex: 1 1 160px; min-width: 130px; padding: 12px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; font-size: 12.5px;
+  color: var(--ac); background: color-mix(in srgb, var(--ac) 50%, transparent);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+  transition: background .15s;
+}
+.ec-geo-acts .btn::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--ac) 12%, #0d1017), #090c13); }
+.ec-geo-acts .btn:hover { background: var(--ac); }
+.ec-geo-acts .btn {
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut))) !important;
+  border-radius: 0 !important; height: auto !important;
+  font-size: 11.5px !important; letter-spacing: .1em !important; padding: 12px !important;
+}
+.ec-geo-acts .btn::after { display: none; }
+.ec-geo-accept { --ac: var(--ok); }
+.ec-geo-reroll { --ac: var(--te); }
 .ec-geo-reroll.is-off { filter: grayscale(.7) brightness(.7); cursor: not-allowed; }
-.ec-geo-drop { color: var(--err); background: color-mix(in srgb, var(--err) 10%, transparent); border: 1px solid color-mix(in srgb, var(--err) 40%, transparent); }
-.ec-geo-acts .btn:hover { filter: brightness(1.07); }
-/* джекпот — золотое сияние поверх акцента */
-.ec-geo-t-jack { animation: ecGeoReveal .42s cubic-bezier(.2,.9,.25,1), ecGeoJack 2.4s ease-in-out infinite .42s; }
-@keyframes ecGeoJack { 0%, 100% { box-shadow: inset 0 0 40px -20px color-mix(in srgb, var(--accent) 80%, transparent), 0 10px 30px -18px color-mix(in srgb, var(--accent) 55%, transparent); } 50% { box-shadow: inset 0 0 60px -14px color-mix(in srgb, var(--accent) 95%, transparent), 0 12px 40px -14px color-mix(in srgb, var(--accent) 80%, transparent); } }
+.ec-geo-drop { --ac: var(--err); }
+/* джекпот — пылает акцентом (drop-shadow дружит с clip-path, box-shadow — нет) */
+.ec-geo-t-jack { animation: ecGeoJack 2.4s ease-in-out infinite; }
+@keyframes ecGeoJack {
+  0%, 100% { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 35%, transparent)); }
+  50%      { filter: drop-shadow(0 0 22px color-mix(in srgb, var(--accent) 70%, transparent)); }
+}
 .ec-geo-t-jack .ec-geo-tier { animation: ecGeoJackText 1.2s ease-in-out infinite; }
 @keyframes ecGeoJackText { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 @media (max-width: 560px) { .ec-geo-name { font-size: 19px; } .ec-geo-acts .btn { flex-basis: 100%; } }
 
-/* — георазведка: спиннер загрузки/крутки (чтобы экран не был «мёртвым») — */
-.ec-geo-spin { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 46px 16px; min-height: 180px; }
-.ec-geo-spin-core {
-  width: 58px; height: 58px; display: grid; place-items: center; font-size: 26px; border-radius: 50%;
-  color: var(--gd); border: 2px solid color-mix(in srgb, var(--gd) 22%, transparent); border-top-color: var(--gd);
-  box-shadow: 0 0 22px -6px color-mix(in srgb, var(--gd) 60%, transparent);
-  animation: ecGeoDrill 1s linear infinite;
+/* — лоадер казино (георазведка и звёзды): прицел + бегущее кольцо + моно-статус — */
+.ec-stars-load { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 52px 16px; min-height: 200px; }
+.ec-stars-load-core { position: relative; width: 74px; height: 74px; display: grid; place-items: center; color: var(--gd); }
+.ec-stars-load-core svg { width: 30px; height: 30px; }
+.ec-stars-load-core.is-geo svg { animation: ecGeoBob 1.1s ease-in-out infinite; }
+@keyframes ecGeoBob { 50% { transform: translateY(3px); } }
+.ec-stars-load-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--gd) 10%, transparent) 120deg,
+    color-mix(in srgb, var(--gd) 85%, transparent) 330deg,
+    transparent 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  animation: ecGeoDrill 1.3s linear infinite;
 }
 @keyframes ecGeoDrill { to { transform: rotate(360deg); } }
-.ec-geo-spin-t { font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: .5px; color: var(--t3, var(--t4)); }
+.ec-stars-load-t { font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--t3, var(--t4)); }
+.ec-stars-load-dots::after { content: ''; animation: ecStarsDots 1.4s steps(4) infinite; }
+@keyframes ecStarsDots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
 /* заметка об эскалации цены (сколько уже пробурено за день) */
-.ec-geo-esc { font-size: 12px; color: var(--t4); text-align: center; }
+.ec-geo-esc { font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: .05em; color: var(--t4); text-align: center; }
 .ec-geo-esc b { color: var(--gd); }
+
+/* ── «Посмотреть на звёзды» — обсерватория-казино (поле 7×7) ──
+   Киберпанк: срезанные углы через clip-path (обводка = слой-подложка,
+   контент лежит на ::before-подложке). Один акцент — --gd; цвета типов
+   призов появляются только на вскрытых клетках (это данные, не декор). */
+.ec-stars { max-width: 640px; margin: 0 auto; }
+.ec-stars-intro { margin-bottom: 16px; padding-left: 14px; position: relative; }
+.ec-stars-intro::before { content: ''; position: absolute; left: 0; top: 3px; bottom: 3px; width: 3px;
+  background: linear-gradient(180deg, var(--gd), color-mix(in srgb, var(--gd) 15%, transparent)); }
+.ec-stars-intro-h { font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 7px; }
+.ec-stars-intro p { color: var(--t3, var(--t4)); font-size: 13px; line-height: 1.6; margin: 0; }
+.ec-stars-intro b { color: var(--gd); font-weight: 600; }
+.ec-stars-start { display: flex; flex-direction: column; gap: 10px; }
+/* Чипы ставок: срез правого верхнего угла, подложка вместо border. */
+.ec-stars-chips { display: flex; gap: 7px; flex-wrap: wrap; }
+.ec-stars-chip {
+  --cut: 8px; position: relative; padding: 9px 14px; border: none; cursor: pointer;
+  font-family: var(--font-mono, monospace); font-size: 12.5px; font-weight: 600; letter-spacing: .04em;
+  color: var(--t3, var(--t4)); background: rgba(160,180,215,.22);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+  transition: background .15s, color .15s;
+}
+.ec-stars-chip { z-index: 0; }
+.ec-stars-chip::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+  background: linear-gradient(160deg, #10141f, #0a0d16); transition: background .15s; }
+.ec-stars-chip:hover { color: var(--t2, #dfe6f2); background: rgba(200,215,245,.4); }
+.ec-stars-chip.is-on { color: var(--gd); background: var(--gd); }
+.ec-stars-chip.is-on::before { background: linear-gradient(160deg, color-mix(in srgb, var(--gd) 14%, #10141f), #0a0d16); }
+.ec-stars-preview { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+  font-family: var(--font-mono, monospace); font-size: 12px; color: var(--t4); letter-spacing: .03em; }
+.ec-stars-preview b { color: var(--gd); }
+/* HUD сеанса: плашки со срезом и подписью-моно. */
+.ec-stars-hud { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+.ec-stars-h { --cut: 9px; position: relative; z-index: 0; padding: 8px 16px; text-align: center;
+  background: rgba(160,180,215,.16);
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.ec-stars-h::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  background: linear-gradient(170deg, #0f131d, #090c14); }
+.ec-stars-h-k { display: block; font-family: var(--font-mono, monospace); font-size: 9.5px; text-transform: uppercase; letter-spacing: .18em; color: var(--t4); margin-bottom: 3px; }
+.ec-stars-h-v { display: block; font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+.ec-stars-h-v.is-up { color: var(--ok); }
+.ec-stars-h-v.is-dn { color: var(--err); }
+.ec-stars-hint { font-family: var(--font-mono, monospace); font-size: 11.5px; letter-spacing: .05em; color: var(--t4); text-align: center; margin-bottom: 10px; text-transform: uppercase; }
+.ec-stars-hint b { color: var(--gd); }
+/* Поле 7×7 — карта неба: гранёная плашка-планшет с координатной сеткой,
+   каждая клетка — участок со своими звёздами (как сектор галактической карты). */
+.ec-stars-grid {
+  --cut: 14px; position: relative; z-index: 0;
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px;
+  max-width: 460px; margin: 0 auto 14px; padding: 10px;
+  background: rgba(160,180,215,.20);
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+}
+.ec-stars-grid::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  background:
+    repeating-linear-gradient(0deg, transparent 0 31px, rgba(150,175,220,.05) 31px 32px),
+    repeating-linear-gradient(90deg, transparent 0 31px, rgba(150,175,220,.05) 31px 32px),
+    radial-gradient(130% 100% at 50% 0%, #0b0f1a, #060810 75%);
+}
+.ec-stars-cell {
+  --cut: 7px; --sc: rgba(170,190,225,.8);
+  position: relative; z-index: 0; aspect-ratio: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px; padding: 0; border: none; cursor: pointer;
+  background: rgba(160,180,215,.18);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+  transition: background .15s, transform .12s, filter .15s;
+}
+.ec-stars-cell::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+  background: radial-gradient(circle at 32% 28%, rgba(140,165,215,.10), rgba(7,9,17,.96));
+  transition: background .15s; }
+.ec-stars-cell:not(:disabled):not(.is-reveal):hover { background: rgba(210,225,250,.55); transform: translateY(-2px); }
+/* Участок неба: свои звёздочки (как кусок галактической карты) + шифр сектора.
+   Прицел проявляется только при наведении — «телескоп смотрит сюда». */
+.ec-stars-cell-sky { position: absolute; inset: 0; width: 100%; height: 100%; color: #cfe4ff; pointer-events: none; }
+.ec-stars-cell-sec { position: absolute; left: 4px; top: 3px; font-family: var(--font-mono, monospace); font-size: 6.5px; letter-spacing: .08em; color: rgba(190,205,235,.3); pointer-events: none; }
+.ec-stars-cell-dot { display: flex; opacity: 0; transition: opacity .15s; }
+.ec-stars-cell-dot svg { width: 15px; height: 15px; color: var(--gd); }
+.ec-stars-cell:not(:disabled):not(.is-reveal):hover .ec-stars-cell-dot { opacity: 1; }
+.ec-stars-cell.is-opening { background: var(--gd); animation: ecStarsPulse .7s ease-in-out infinite; }
+@keyframes ecStarsPulse { 50% { filter: drop-shadow(0 0 9px color-mix(in srgb, var(--gd) 65%, transparent)); } }
+.ec-stars-cell-ic { display: flex; color: var(--sc); }
+.ec-stars-cell-ic svg { width: 17px; height: 17px; }
+/* «Удачный кадр» с реальной фотографией из архива обсерватории */
+.ec-stars-cell-ph { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px);
+  object-fit: cover; z-index: -1; opacity: .85;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%); }
+.ec-stars-cell.has-photo .ec-stars-cell-w { background: rgba(6,8,15,.72); padding: 1px 4px; }
+.ec-stars-log-ph { width: 26px; height: 20px; object-fit: cover; flex: none;
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%); }
+.ec-stars-cell-w { font-family: var(--font-mono, monospace); font-size: 8.5px; font-weight: 700; color: var(--t3, var(--t4)); letter-spacing: .02em; }
+/* Анимаций появления нет: ни у отдельной клетки, ни у поля финала — экран
+   встаёт сразу. Единственное движение на поле — пульс клетки под наблюдением
+   (.is-opening), то есть ожидание ответа сервера. */
+.ec-stars-cell.is-open, .ec-stars-cell.is-reveal { cursor: default; }
+/* ── ПОЛЕ ИЗ СЕКТОРОВ КАРТЫ: живая галактика подложкой, у каждого сектора
+   своя пунктирная рамка с именем, его клетки вписаны в рамку и лежат
+   поверх реальных систем/гиперлиний. Клетки позиционируются в % кадра. ── */
+.ec-stars-field {
+  --cut: 14px; position: relative; z-index: 0; aspect-ratio: 1;
+  max-width: min(560px, 78vh); margin: 0 auto 14px;
+  background: rgba(160,180,215,.20);
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+}
+.ec-stars-field::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  background: radial-gradient(130% 100% at 50% 0%, #05070d, #020308 75%);
+}
+.ec-stars-map-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* Фон карты уводим ещё глубже: поле — главное, карта только подложка-контекст */
+.ec-stars-field::after { content: ''; position: absolute; inset: 1px; z-index: 0;
+  background: rgba(3,5,10,.42); pointer-events: none;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)); }
+.ec-stars-field .ec-stars-cell { z-index: 1; }
+.ec-stars-map-terr { opacity: .34; }
+.ec-stars-map-lanes line { stroke: rgba(120,150,205,.1); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.ec-stars-map-stars circle { fill: #8ea6c4; opacity: .34; }
+.ec-stars-map-names text { fill: rgba(150,170,202,.1); font-family: var(--font-mono, monospace); letter-spacing: .04em; }
+.ec-stars-secbox rect { fill: none; stroke: rgba(110,160,220,.5); stroke-width: 1.1px; vector-effect: non-scaling-stroke; stroke-dasharray: 2.2 1.4; }
+.ec-stars-secbox text { fill: rgba(150,195,245,.62); font-family: var(--font-mono, monospace); font-size: 2px; letter-spacing: .14em; paint-order: stroke; stroke: rgba(4,6,12,.85); stroke-width: .5px; }
+/* клетки поля — прозрачные «квадраты неба» поверх карты */
+.ec-stars-field .ec-stars-cell {
+  position: absolute; aspect-ratio: auto;
+  background: rgba(160,180,215,.10);
+  clip-path: none; box-shadow: inset 0 0 0 1px rgba(120,155,215,.28);
+}
+.ec-stars-field .ec-stars-cell::before { clip-path: none; background: rgba(7,9,17,.16); }
+.ec-stars-field .ec-stars-cell:not(:disabled):not(.is-reveal):hover { background: rgba(210,225,250,.5); transform: none; box-shadow: inset 0 0 0 1px rgba(200,225,255,.7); }
+.ec-stars-field .ec-stars-cell:not(:disabled):not(.is-reveal):hover::before { background: rgba(7,9,17,.45); }
+.ec-stars-field .ec-stars-cell.is-open::before, .ec-stars-field .ec-stars-cell.is-reveal::before {
+  background: radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--sc) 22%, transparent), rgba(7,9,17,.7)); }
+.ec-stars-field .ec-stars-cell-sec { color: rgba(200,215,245,.5); text-shadow: 0 0 4px rgba(4,6,12,.95); }
+.ec-stars-field .ec-stars-cell-ph { inset: 1px; clip-path: none; }
+.ec-stars-field.is-final .ec-stars-cell:not(.is-mine):not(.is-jack) { opacity: .5; }
+.ec-stars-field .ec-stars-cell.is-mine { opacity: 1; }
+.ec-stars-c-nova   { --sc: var(--gd); }
+.ec-stars-c-quasar { --sc: var(--pu); }
+.ec-stars-c-comet  { --sc: var(--te); }
+.ec-stars-c-photo  { --sc: var(--ok); }
+.ec-stars-c-dust   { --sc: color-mix(in srgb, var(--t4) 75%, transparent); }
+.ec-stars-cell.is-open, .ec-stars-cell.is-reveal {
+  background: color-mix(in srgb, var(--sc) 42%, rgba(160,180,215,.10));
+}
+.ec-stars-cell.is-open::before, .ec-stars-cell.is-reveal::before {
+  background: radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--sc) 13%, transparent), rgba(7,9,17,.96));
+}
+.ec-stars-grid.is-final .ec-stars-cell:not(.is-mine):not(.is-jack) { opacity: .38; }
+.ec-stars-cell.is-mine { opacity: 1; background: color-mix(in srgb, var(--sc) 85%, transparent); }
+/* Джекпот в финале — главный акцент: пылает всегда, даже если его не поймали. */
+.ec-stars-cell.is-jack {
+  opacity: 1; background: var(--gd);
+  animation: ecStarsJack 1.6s ease-in-out infinite;
+}
+@keyframes ecStarsJack {
+  50% { filter: drop-shadow(0 0 13px color-mix(in srgb, var(--gd) 80%, transparent)); transform: scale(1.06); }
+}
+/* Журнал находок сеанса */
+.ec-stars-log { display: flex; flex-direction: column; gap: 4px; max-width: 440px; margin: 0 auto; }
+.ec-stars-log-i { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--t3, var(--t4)); padding: 5px 10px; background: rgba(255,255,255,.025); border-left: 2px solid color-mix(in srgb, var(--sc) 60%, transparent); }
+.ec-stars-log-i > span { display: flex; align-items: center; gap: 7px; }
+.ec-stars-log-ic { display: flex; color: var(--sc); }
+.ec-stars-log-ic svg { width: 13px; height: 13px; }
+.ec-stars-log-i b { font-family: var(--font-mono, monospace); font-size: 12px; color: var(--sc); }
+/* Финал */
+.ec-stars-final { text-align: center; margin-bottom: 14px; }
+.ec-stars-final-h { font-family: var(--font-display); font-weight: 800; font-size: 18px; letter-spacing: .16em; text-transform: uppercase; margin-bottom: 5px; }
+.ec-stars-final.is-hit .ec-stars-final-h { color: var(--gd); animation: ecGeoJackText 1.2s ease-in-out infinite; }
+.ec-stars-final-v { font-size: 13px; line-height: 1.55; color: var(--t3, var(--t4)); }
+.ec-stars-final-v b { color: var(--gd); }
+/* Плёнка сеанса: снимки, пойманные игроком (финал) */
+/* Финал: поле слева, добыча игрока — колонкой СПРАВА (внизу она ломала кадр,
+   упираясь в интерфейс новеллы). Узко — колонка уходит под поле лентой. */
+.ec-stars-fin-row { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+/* с колонкой добычи финалу нужно шире тела вкладки — иначе поле ужимается */
+.hp-vn-stars-body .ec-stars:has(.ec-stars-fin-row.has-gal) { max-width: 790px; }
+.ec-stars-fin-row > .ec-stars-field, .ec-stars-fin-row > .ec-stars-grid { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+.ec-stars-gal { flex: 0 0 116px; max-width: 116px; }
+.ec-stars-gal-h { font-family: var(--font-mono, monospace); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: rgba(190,210,240,.5); margin-bottom: 7px; }
+.ec-stars-gal-row { display: flex; flex-direction: column; gap: 7px; max-height: min(52vh, 420px); overflow-y: auto; padding-right: 4px; scrollbar-width: thin; }
+.ec-stars-gal-i { --cut: 8px; position: relative; flex: 0 0 auto; width: 100%; height: 74px; padding: 0; cursor: pointer;
+  border: none; background: rgba(160,180,215,.22); transition: transform var(--duration-fast, .12s);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut))); }
+.ec-stars-gal-i img { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); object-fit: cover;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut))); }
+.ec-stars-gal-i span { position: absolute; left: 4px; bottom: 3px; z-index: 1; font-family: var(--font-mono, monospace); font-size: 9px; font-weight: 700;
+  color: var(--gd); background: rgba(4,6,12,.78); padding: 1px 4px; }
+.ec-stars-gal-i:hover { transform: translateY(-2px); }
+/* Кликабельные носители кадра: клетка поля и строка журнала */
+.ec-stars-cell.has-photo:not(:disabled):not(.is-reveal), .ec-stars-cell.is-view, .ec-stars-log-i.is-view { cursor: zoom-in; }
+/* Чужой узел финала: образ виден, но всмотреться в него нельзя */
+.ec-stars-cell.is-reveal.has-photo:not(.is-view) { cursor: default; }
+.ec-stars-log-i.is-view:hover { background: rgba(255,255,255,.06); }
+/* Лайтбокс: кадр во весь экран поверх новеллы */
+.ec-stars-lbx { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  padding: 24px; background: rgba(2,4,9,.9); backdrop-filter: blur(4px); cursor: zoom-out;
+  opacity: 0; transition: opacity var(--duration-normal, .2s) ease; }
+.ec-stars-lbx.show { opacity: 1; }
+.ec-stars-lbx-in { --cut: 16px; position: relative; max-width: min(1000px, 92vw); cursor: default; background: rgba(160,180,215,.28);
+  padding: 1px; clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut))); }
+.ec-stars-lbx-in img { display: block; max-width: 100%; max-height: 80vh; object-fit: contain; background: #05070d;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut))); }
+.ec-stars-lbx-cap { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 12px; background: #070a12;
+  font-family: var(--font-mono, monospace); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: rgba(200,220,245,.72); }
+.ec-stars-lbx-x { cursor: pointer; border: none; background: transparent; color: var(--gd); font: inherit; padding: 4px 8px; }
+.ec-stars-lbx-x:hover { color: #fff; }
+@media (prefers-reduced-motion: reduce) { .ec-stars-lbx { transition: none; } }
+/* Иконка-прицел в шапке оверлея (render.js _hsHead) */
+.hp-vn-stars-tic { width: 15px; height: 15px; vertical-align: -2px; margin-right: 7px; color: var(--gd); }
+@media (max-width: 560px) {
+  .ec-stars-grid { gap: 4px; }
+  .ec-stars-cell-ic svg { width: 14px; height: 14px; }
+  .ec-stars-cell-w { font-size: 7.5px; }
+  .ec-stars-chip { padding: 8px 11px; font-size: 12px; }
+  .ec-stars-lbx { padding: 12px; }
+  /* мобилка: колонка не влезает рядом с полем — добыча ложится лентой под ним */
+  .ec-stars-fin-row { flex-direction: column; }
+  .ec-stars-gal { flex: 0 0 auto; max-width: 100%; width: 100%; }
+  .ec-stars-gal-row { flex-direction: row; max-height: none; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
+  .ec-stars-gal-i { width: 78px; height: 58px; flex: 0 0 auto; }
+}
 
 /* ══════════════════════════════════════════════════════════════
    ИНДИКАТОР ОЖИДАНИЯ СЕРВЕРА (EC.busy → #ec-wait)

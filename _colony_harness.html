@@ -27,9 +27,19 @@ const hex = (cx, cy, r, j) => Array.from({length:6}, (_,i)=>{
   return [cx + Math.cos(a)*r*(0.85+0.3*Math.sin(i*2.7)), cy + Math.sin(a)*r*(0.85+0.3*Math.cos(i*1.9))];
 });
 
+const PLANETS1 = [
+  {pid:1, name:'Келум Прайм', type:'Землеподобные', slotsP:12, resources:[{name:'Железо',r:'common'},{name:'Стелларит',r:'epic',icon:'✦'}]},
+  {pid:2, name:'Вирго', type:'Океанические', slotsP:8, resources:[{name:'Вода',r:'common'}]},
+  {pid:3, name:'Тарн', type:'Пустынные', slotsP:6, resources:[]},
+  {pid:9, name:'Главный пояс', type:'Пояс', kind:'belt', slotsP:0, resources:[{name:'Никель',r:'uncommon'}]},
+  {pid:4, name:'Гронд', type:'Газовые гиганты', slotsP:0, resources:[{name:'Гелий-3',r:'rare'}]},
+  {pid:6, name:'Карликовая планета', type:'Малые тела', slotsP:2, resources:[]},
+  {pid:5, name:'Мороз', type:'Криомиры', slotsP:5, resources:[{name:'Лёд',r:'common'}], dead:true},
+  {pid:7, name:'Кротовая нора', type:'Аномалии', kind:'anomaly', slotsP:0, resources:[]},
+];
 const SYS = [
-  {id:'s1', name:'Синли-Бей', x:520, y:420, faction:'me', star_type:'yellow'},
-  {id:'s2', name:'Лира', x:380, y:580, faction:'me', star_type:'blue'},
+  {id:'s1', name:'Синли-Бей', x:520, y:420, faction:'me', star_type:'yellow', planets:PLANETS1},
+  {id:'s2', name:'Лира', x:380, y:580, faction:'me', star_type:'blue', planets:PLANETS1.slice(1,3)},
   {id:'s3', name:'Третир', x:300, y:300, faction:'f2', star_type:'red', is_giant:true},
   {id:'s4', name:'Зоцид', x:150, y:420, faction:'f2', star_type:'white'},
   {id:'s5', name:'Сомну', x:700, y:640, faction:'f3', star_type:'green'},
@@ -45,8 +55,24 @@ window.EC = {
   app:{ faction_id:'me', color:'#9a4fd0', name:'Ордо Келум', gov:'Теократия', leader:'Neverslo IX',
         herald_url:'assets/constructors/ship_weapon_light_0.webp' },
   eco:{ gc: 12000 },
-  allSystems: SYS, lanes: [], colonies:[{system_id:'s1', is_capital:true}],
+  allSystems: SYS, lanes: [],
+  colonies:[{id:'c1', system_id:'s1', is_capital:true, planet_pid:1, planet_name:'Келум Прайм', planet_type:'Земная', cells:12}],
+  buildings:[{colony_id:'c1'},{colony_id:'c1'},{colony_id:'c1'}],
 };
+// ── стабы кабинета для карты системы ──
+window.ecPlanetGroup = p => p.kind === 'belt' ? 'belt' : p.kind === 'anomaly' ? 'anomaly'
+  : ({'Землеподобные':'terrestrial','Океанические':'oceanic','Пустынные':'desert','Газовые гиганты':'gasgiant','Малые тела':'micro','Криомиры':'cryo'}[p.type] || 'unknown');
+window.ecColonizable = p => !['gasgiant','belt','anomaly'].includes(ecPlanetGroup(p)) && !p.dead;
+window.ecNative = p => /земн|океан/i.test(p.type||'');
+window.ecColonizeInfo = (s, p) => {
+  if (p.dead) return { cls:'no', tag:'мёртвая', label:'Мёртвая планета', btn:'<button class="btn btn-gh btn-sm" disabled>☠ мёртвый мир</button>' };
+  if (!ecColonizable(p)) return { cls:'no', tag:'непригодна', label:'Гигант', btn:'<button class="btn btn-gh btn-sm" disabled>— нельзя</button>' };
+  if (ecNative(p)) return { cls:'native', tag:'родная', label:'Земная', btn:'<button class="btn btn-gd btn-sm">Колонизировать · 2 000 ГС</button>' };
+  return { cls:'foreign', tag:'чужая', label:'Пустынная', btn:'<button class="btn btn-sm ec-terra-btn ec-terra-t2">🌱 Терраформ · сложно · 6 000 ГС · 2 ход.</button>' };
+};
+window.ecPlanetResChips = p => (p.resources&&p.resources.length)
+  ? p.resources.map(r=>`<span class="ec-rchip ec-rar-${r.r}">${r.name}</span>`).join('')
+  : '<span class="ec-nres">◌ ресурсов нет</span>';
 window.ecMySysIds = () => new Set(['s1','s2']);
 window.ecClaimableIds = () => ['s6'];
 window.ecClaimsLeft = () => 1;

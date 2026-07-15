@@ -137,8 +137,8 @@ button,input,select,textarea{font-family:inherit;}
 /* ── CONTENT AREA ── */
 #cw{flex:1;overflow-y:auto;overflow-x:hidden;position:relative;background:var(--b0)}
 #pg{max-width:100%;margin:0 auto;padding:0 28px 80px;min-height:100%;position:relative;z-index:2}
-.pgi{animation:pgi .25s var(--ease-out) both}
-@keyframes pgi{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+/* без анимации появления — страница сразу на месте (см. 07_premium.css) */
+.pgi{animation:none}
 
 /* ─── §sidebar ─────────────────────────────────────────────── */
 
