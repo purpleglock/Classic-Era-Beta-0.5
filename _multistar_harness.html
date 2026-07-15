@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<title>multistar harness</title>
+<style>
+  body { background:#070a12; color:#cfd6dd; font:13px/1.5 monospace; padding:24px; }
+  h2 { color:#6c7a90; font-size:12px; letter-spacing:.2em; text-transform:uppercase; margin:26px 0 8px; }
+  table { border-collapse:collapse; margin:6px 0; }
+  td,th { border:1px solid #1d2534; padding:3px 10px; text-align:right; }
+  th { color:#8899b0; }
+  .sys { border:1px solid #1d2534; border-radius:6px; padding:10px 14px; margin:10px 0; max-width:900px; }
+  .st { color:#ffd970; }
+  .body { margin-left:18px; color:#9fb0c8; }
+  .moon { margin-left:38px; color:#6c7a90; font-size:12px; }
+  .res { color:#5fc257; }
+  .r-rare{color:#39bfe8}.r-epic{color:#b66cf2}.r-legendary{color:#ffa033}.r-uncommon{color:#5fc257}.r-common{color:#7f93ad}
+  button { background:#141b2a; color:#cfd6dd; border:1px solid #2a3550; padding:6px 14px; cursor:pointer; margin-right:8px; }
+</style>
+</head><body>
+<h2>Статистика (2000 роллов на класс)</h2>
+<div id="stats"></div>
+<h2>Примеры систем <button onclick="samples()">🎲 перекрутить</button>
+  <select id="cls"><option>G</option><option>O</option><option>B</option><option>A</option><option>F</option><option>K</option><option>M</option><option>D</option><option>N</option></select>
+</h2>
+<div id="samples"></div>
+<script src="galaxy_gen.js?v=harness"></script>
+<script>
+const esc = s => String(s==null?'':s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+// ── статистика ──
+function stats() {
+  const rows = [];
+  for (const cls of ['O','B','A','F','G','K','M','D','N']) {
+    const N = 2000; let multi=0, cnt=[0,0,0,0,0], bodies=0, moons=0, legendary=0, epic=0;
+    for (let i=0;i<N;i++) {
+      const r = GalaxyGen.generateMulti({ primaryCls: cls });
+      if (!r.stars.length) { cnt[0]++; continue; }
+      multi++; cnt[r.stars.length]++;
+      bodies += r.bodies.length;
+      r.bodies.forEach(b => { moons += b.moons||0; (b.resources||[]).forEach(x=>{ if(x.r==='legendary')legendary++; if(x.r==='epic')epic++; }); });
+    }
+    rows.push(`<tr><td>${cls}</td><td>${(multi/N*100).toFixed(1)}%</td><td>${cnt[1]}</td><td>${cnt[2]}</td><td>${cnt[3]}</td><td>${cnt[4]}</td><td>${multi?(bodies/multi).toFixed(1):0}</td><td>${bodies?(moons/bodies).toFixed(2):0}</td><td>${epic}</td><td>${legendary}</td></tr>`);
+  }
+  document.getElementById('stats').innerHTML =
+    `<table><tr><th>класс</th><th>кратных</th><th>+1</th><th>+2</th><th>+3</th><th>+4</th><th>тел/кратн.</th><th>лун/тело</th><th>epic Σ</th><th>leg Σ</th></tr>${rows.join('')}</table>`;
+}
+// ── примеры ──
+function samples() {
+  const cls = document.getElementById('cls').value;
+  let html = '', shown = 0, guard = 0;
+  while (shown < 5 && guard++ < 400) {
+    const r = GalaxyGen.generateMulti({ primaryCls: cls, force: true });
+    if (!r.stars.length) continue;
+    shown++;
+    html += `<div class="sys"><div class="st">★ Primary ${cls} (Альфа) + ${r.stars.length} комп.</div>`;
+    for (const s of r.stars) {
+      html += `<div class="st">&nbsp;&nbsp;★ ${s.greek} — ${esc(s.name)} (${s.cls}) · ${s.sep_au} а.е. · ${s.mass} M☉${s.dead?' · мёртвая':''}</div>`;
+      const bs = r.bodies.filter(b => b.star === s.letter);
+      if (!bs.length) { html += `<div class="body">— тел нет (предел устойчивости)</div>`; continue; }
+      for (const b of bs) {
+        const res = (b.resources||[]).map(x=>`<span class="r-${x.r}">${esc(x.name)}(${esc(x.amt)})</span>`).join(', ');
+        html += `<div class="body">${b.icon} ${esc(b.name)} · ${b.dist} а.е. · ${esc(b.zone)}${b.rings?` · кольца×${b.rings}`:''}${b.hillAu?` · r_H=${b.hillAu}`:''} ${res?'· <span class="res">'+res+'</span>':''}</div>`;
+        (b.moonsL||[]).forEach(m => html += `<div class="moon">↳ ${esc(m.name)} [${m.sz}]</div>`);
+      }
+    }
+    html += `</div>`;
+  }
+  document.getElementById('samples').innerHTML = html || '<i>не выпало кратных</i>';
+}
+stats(); samples();
+</script>
+
+<h2>UI: панель системы (gmOpenPanel) и форма (gmOpenForm)</h2>
+<link rel="stylesheet" href="css/index.css?v=harness">
+<div id="gm-wrap" style="position:relative;display:flex;gap:20px;align-items:flex-start;background:transparent">
+  <div id="gm-panel" style="position:static;max-width:430px"></div>
+  <div id="gm-form" style="position:static;max-width:520px"></div>
+</div>
+<script>
+// стабы окружения galaxy_map.js
+window.user = { role: 'superadmin' };
+window.toast = (m, t) => console.log('[toast:' + t + ']', m);
+window.dbPatch = async () => ({}); window.dbGet = async () => []; window.dbDel = async () => ({});
+window.ecCanAccess = () => false;
+</script>
+<script src="galaxy_map.js?v=harness"></script>
+<script>
+// синтетическая кратная система: главная G + компаньоны из generateMulti
+const mr = GalaxyGen.generateMulti({ primaryCls: 'G', force: true });
+const sys = {
+  id: 'test1', name: 'Кадуцея', star_type: 'yellow', is_giant: false, faction: null,
+  description: 'Тестовая кратная система для харнесса.',
+  multi: true, stars: mr.stars,
+  planets: [
+    { pid: 1, kind: 'planet', g: 'terrestrial', name: 'Терра', type: 'Землеподобные', icon: '🌍', zone: 'Обитаемая', dist: 1.0, slotsP: 10, slotsK: 4, rings: 0, moons: 1, resources: [{ name: 'Жидкая вода', icon: '🌊', r: 'rare', rname: 'ценный', amt: 'много' }] },
+    { pid: 2, kind: 'belt', g: 'belt', name: 'Главный пояс астероидов', type: 'Смешанный · Плотный', icon: '🌑', zone: 'Холод', dist: 2.8, slotsP: 0, slotsK: 2, rings: 0, moons: 0, resources: [] },
+    ...mr.bodies.map((b, i) => ({ ...b, pid: 10 + i })),
+  ],
+};
+GM.systems = [sys]; GM.factions = []; GM.colonies = [];
+try { gmOpenPanel(sys); document.getElementById('gm-panel').classList.remove('gm-hidden'); }
+catch (e) { document.getElementById('gm-panel').textContent = 'panel err: ' + e.message; }
+try { gmOpenForm(sys); } catch (e) { document.getElementById('gm-form').textContent = 'form err: ' + e.message; }
+</script>
+</body></html>

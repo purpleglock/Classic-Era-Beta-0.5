@@ -353,10 +353,234 @@
     ...Object.keys(GRP).map(g => ({ id: 'grp_' + g, name: GRP[g].name, g, icon: '', group: GRP[g].name })),
   ];
 
+  // ════════════════════════════════════════════════════════════
+  // MULTI — генератор КРАТНЫХ систем (дополнение поверх установленных звёзд).
+  // generateMulti({primaryCls, richness}) → { stars:[компаньоны], bodies:[тела компаньонов] }
+  // Тела компаньонов помечены star:'B'/'C'/… и готовы к дозаписи в planets[]
+  // системы (pid раздаёт редактор через gmAssignPids). Существующие тела НЕ трогаем.
+  // ════════════════════════════════════════════════════════════
+
+  const GREEK = ['Альфа', 'Бета', 'Гамма', 'Дельта', 'Эпсилон'];
+  const LETTERS = ['A', 'B', 'C', 'D', 'E'];
+
+  // Доля кратных по классу primary (реальная астрофизика: массивные звёзды
+  // почти всегда кратные, красные карлики — редко; Дюкенн–Майор, Рагхаван).
+  const MULT_FRAC = { O: 85, B: 78, A: 62, F: 52, G: 46, K: 34, M: 26, D: 32, N: 18 };
+  // Если кратная: распределение ЧИСЛА компаньонов (1..4 → система из 2..5 звёзд).
+  // Иерархия реальна: двойные доминируют, пятерные — экзотика.
+  const NCOMP_W = [64, 24, 9, 3];
+
+  // Класс главной последовательности по массе (M☉)
+  function clsByMass(m) {
+    if (m >= 20) return 'O'; if (m >= 3) return 'B'; if (m >= 1.5) return 'A';
+    if (m >= 1.1) return 'F'; if (m >= 0.8) return 'G'; if (m >= 0.5) return 'K';
+    return 'M';
+  }
+
+  // Компаньон: отношение масс q + шанс мёртвого остатка.
+  // q — почти плоское с подъёмом к малым q; «twin excess» (q≈1) у ТЕСНЫХ пар.
+  function genCompanion(primary, sepAu) {
+    // мёртвые компаньоны: белый карлик у эволюционировавших пар (как Сириус B),
+    // пульсар-компаньон — только у массивных primary, очень редко
+    if ((primary.cls === 'O' || primary.cls === 'B') && ch(4)) return genStar('N');
+    if ('ABFGK'.includes(primary.cls) && ch(7)) return genStar('D');
+    let q;
+    if (sepAu < 1 && ch(30)) q = 0.82 + rng() * 0.18;           // twin excess
+    else q = 0.12 + Math.pow(rng(), 1.4) * 0.88;
+    const m = Math.max(0.08, primary.mass * Math.min(q, 1));
+    return genStar(clsByMass(m));
+  }
+
+  // Иерархические сепарации (а.е.): лог-нормальное ядро (пик ~30-50 а.е. у
+  // солнцеподобных, шире у массивных), каждый следующий компонент минимум
+  // в ~3.5 раза дальше предыдущего — иначе система динамически развалится.
+  function genSeparations(n, primary) {
+    const base = primary.mass >= 3 ? 60 : 35;
+    // лог-нормаль через сумму: exp(N(ln base, ~1.1))
+    const g = () => { let s = 0; for (let i = 0; i < 6; i++) s += rng(); return (s - 3) / 0.7; };
+    const seps = [];
+    let a = Math.min(4000, Math.max(0.3, base * Math.exp(g() * 1.1)));
+    for (let i = 0; i < n; i++) {
+      seps.push(+a.toFixed(1));
+      a = a * (3.5 + rng() * 4) * (1 + rng());
+      if (a > 12000) a = 12000;
+    }
+    return seps;
+  }
+
+  // ── Сфера Хилла ──
+  // Массы планет (в массах Земли) по классам/группам — для r_H = a·∛(m/3M★)
+  const PMASS_ID = {
+    superjup: 900, browndwarf: 8000, gasgiant: 300, jupII: 320, hotjup: 250,
+    icegiant: 16, hotnep: 15, mininep: 8, superpuff: 6, gasdwarf: 4,
+    superearth: 4, earth: 1, hycean: 3, panth: 2, diamond: 5,
+    proto: 0.002, megaast: 0.0002,
+  };
+  const PMASS_GRP = { gasgiant: 150, icegiant: 15, hotgiant: 120, terrestrial: 1, oceanic: 1.5, desert: 0.5, lava: 0.7, volcanic: 0.8, cryo: 0.4, exotic: 2, micro: 0.001, anomaly: 0 };
+  function planetMassEarth(pl) { return PMASS_ID[pl.id] != null ? PMASS_ID[pl.id] : (PMASS_GRP[pl.g] || 0.5); }
+  // r_H в а.е.; m — массы Земли, M — массы Солнца (1 M☉ = 333000 M⊕)
+  function hillAu(distAu, mEarth, mStarSun) {
+    if (!mEarth || !mStarSun) return 0;
+    return distAu * Math.cbrt(mEarth / 333000 / (3 * mStarSun));
+  }
+  // ёмкость по спутникам от r_H (стабильна ~ треть-половина сферы Хилла)
+  function hillCap(rh) {
+    if (rh > 0.3) return 20; if (rh > 0.08) return 8; if (rh > 0.02) return 4;
+    if (rh > 0.005) return 2; if (rh > 0.0012) return 1; return 0;
+  }
+
+  // Расширенный каталог спутников (для кратного дополнения): виды с именами.
+  const MOON_CLS2 = [
+    { id: 'm2_reg_rock', name: 'Каменистая луна', sz: 'S', pg: ['terrestrial', 'desert', 'micro', 'lava', 'volcanic', 'cryo'] },
+    { id: 'm2_reg_ice', name: 'Ледяная луна', sz: 'S', pg: ['cryo', 'icegiant', 'gasgiant', 'oceanic'] },
+    { id: 'm2_dust', name: 'Пылевой сгусток', sz: 'S', pg: ['lava', 'volcanic', 'desert', 'hotgiant'] },
+    { id: 'm2_capt_ast', name: 'Захваченный астероид', sz: 'S', pg: ['gasgiant', 'icegiant', 'hotgiant', 'terrestrial', 'desert', 'micro', 'exotic'] },
+    { id: 'm2_io', name: 'Вулканическая луна', sz: 'M', pg: ['gasgiant', 'hotgiant', 'lava', 'volcanic'] },
+    { id: 'm2_europa', name: 'Луна с подлёдным океаном', sz: 'M', pg: ['gasgiant', 'icegiant', 'cryo'] },
+    { id: 'm2_metal', name: 'Металлическое ядро-луна', sz: 'M', pg: ['lava', 'terrestrial', 'micro', 'exotic'] },
+    { id: 'm2_cryovolc', name: 'Криовулканическая луна', sz: 'M', pg: ['icegiant', 'cryo', 'gasgiant'] },
+    { id: 'm2_titan', name: 'Титаноподобная (атмосфера)', sz: 'L', pg: ['gasgiant', 'icegiant'] },
+    { id: 'm2_ganymede', name: 'Луна-гигант', sz: 'L', pg: ['gasgiant'] },
+    { id: 'm2_bigrock', name: 'Крупная каменная луна', sz: 'L', pg: ['gasgiant', 'terrestrial', 'oceanic'] },
+    { id: 'm2_capt_dwarf', name: 'Захваченный карлик (тритоноид)', sz: 'L', pg: ['gasgiant', 'icegiant'] },
+    { id: 'm2_binary', name: 'Двойник (контактная пара)', sz: 'S', pg: ['micro', 'cryo', 'desert'] },
+  ];
+
+  // Спутники v2: количество лимитировано сферой Хилла хоста.
+  function genSatellites2(planet, distAu, mStarSun) {
+    const rings = [], moons = [];
+    if (planet.rings > 0 && ch(planet.rings)) {
+      const n = dN(6) <= 4 ? 1 : dN(6) <= 5 ? 2 : 3;
+      for (let i = 0; i < n; i++) rings.push(rc(RING_CLS).name);
+    }
+    const rh = hillAu(distAu, planetMassEarth(planet), mStarSun);
+    const cap = Math.min(hillCap(rh), planet.mm || 0);
+    if (cap <= 0) return { rings, moons, rh };
+    const base = { micro: 8, lava: 8, volcanic: 10, terrestrial: 15, desert: 12, oceanic: 12, cryo: 22, gasgiant: 60, icegiant: 55, hotgiant: 18, exotic: 10 }[planet.g] || 10;
+    if (!ch(Math.min(96, base + cap * 4))) return { rings, moons, rh };
+    let count;
+    if (cap >= 8) count = ri(2, Math.min(7, cap));          // гиганты с большой сферой Хилла — свиты лун
+    else { const mr = dN(6); count = mr <= 2 ? 1 : mr <= 4 ? ri(1, 2) : mr === 5 ? dN(3) : ri(1, Math.max(1, Math.round(cap / 2))); }
+    count = Math.min(count, cap);
+    const maxSz = (rings.length && planet.rings_ex) ? 'M' : 'L';
+    const eligible = MOON_CLS2.filter(mc => mc.pg.includes(planet.g) && !(maxSz === 'M' && mc.sz === 'L'));
+    if (!eligible.length) return { rings, moons, rh };
+    for (let i = 0; i < count; i++) {
+      // крупные луны редки: L проходит с даунвейтом
+      let mc = rc(eligible);
+      if (mc.sz === 'L' && !ch(35)) mc = rc(eligible.filter(x => x.sz !== 'L')) || mc;
+      moons.push({ name: mc.name, sz: mc.sz });
+    }
+    return { rings, moons, rh };
+  }
+
+  // ── ПРЕДУСТАНОВЛЕННЫЕ ресурсы (не «крутить», а логичная раскладка) ──
+  // Детерминированная логика: common по группе почти всегда; редкие ярусы —
+  // только при совпадении и группы/ids, И профиля звезды. Хтонит не появится
+  // на криомире у красного карлика — только там, где ему место.
+  const PRESET_AMT = { common: ['умеренно', 'много', 'очень много'], uncommon: ['мало', 'умеренно', 'много'], rare: ['мало', 'умеренно'], epic: ['следы', 'мало'], legendary: ['следы'] };
+  const PRESET_CH = { common: 88, uncommon: 55, rare: 30, epic: 45, legendary: 55 };
+  // зональные запреты: вода/органика — только обитаемая зона, льды — не в пекле
+  const ZONE_GATE = { WATER: [2], ORGANICS: [2], ICEWATER: [2, 3, 4], AMMONIA: [3, 4], METHANE: [2, 3, 4] };
+  function presetRes(pl, starCls, isBelt, beltIds, sec) {
+    const out = [];
+    for (const R of RESOURCES) {
+      if (sec != null && ZONE_GATE[R.id] && !ZONE_GATE[R.id].includes(sec)) continue;
+      const idHit = R.ids.includes(pl && pl.id);
+      const gHit = pl && R.g.includes(pl.g);
+      const beltHit = isBelt && beltIds && beltIds.includes(R.id);
+      if (!idHit && !gHit && !beltHit) continue;
+      const starHit = !R.stars.length || R.stars.includes(starCls);
+      // rare+ требует профиль звезды; epic/legendary — ещё и точечное попадание
+      if ((R.r === 'rare') && !starHit) continue;
+      if ((R.r === 'epic' || R.r === 'legendary') && (!starHit || !(idHit || beltHit))) continue;
+      let c = PRESET_CH[R.r];
+      if (R.stars.length && starHit) c += 22;
+      if (idHit) c += 25;
+      if (!ch(Math.min(97, c))) continue;
+      const lv = PRESET_AMT[R.r]; const amt = lv[ri(0, lv.length - 1)];
+      out.push({ name: R.name, icon: R.icon, r: R.r, rname: rname(R.r), amt });
+    }
+    return out;
+  }
+
+  // Орбиты компаньона: как genOrbits, но обрезаны пределом устойчивости
+  // (S-тип: планеты живут внутри ~четверти расстояния до соседней звезды,
+  // упрощённый Холман–Виггерт) + спутники по Хиллу + ресурсы presetRes.
+  function genOrbitsMulti(star, limitAu) {
+    let dist = Math.max(0.05, 0.1 * Math.sqrt(star.L));
+    const orbits = []; let hasEarth = false, hasHotJup = false, gg = 0, iceDone = false;
+    for (let i = 0; i < star.orbits; i++) {
+      dist *= (1.35 + rng() * 0.45);
+      if (dist > limitAu) break;                       // предел устойчивости
+      const T = 278 * Math.pow(star.L, .25) * Math.sqrt(1 / dist);
+      const sec = getSec(T); const isLast = (i === star.orbits - 1) || (dist * 1.6 > limitAu);
+      if (!iceDone && (sec === 3 || sec === 4)) { iceDone = true; if (ch(55)) { orbits.push({ type: 'belt', dist, sec, bt_id: 'main' }); continue; } }
+      if (isLast && sec >= 3 && ch(70)) { orbits.push({ type: 'belt', dist, sec, bt_id: 'kuiper' }); continue; }
+      if (sec === 0 && ch(14)) { orbits.push({ type: 'belt', dist, sec, bt_id: 'vulcanoid' }); continue; }
+      let pool = PLANETS.filter(p => !p.anomaly && p.s.includes(sec));
+      pool = pool.filter(p => { if (p.unique === 'earth' && hasEarth) return false; if (p.unique === 'hotjup' && hasHotJup) return false; if (p.gasGiant && gg >= 2) return ch(8); return true; });
+      if (!pool.length) pool = [PLANETS.find(p => p.id === 'proto')];
+      const tw = pool.reduce((a, p) => a + (p.w || 5), 0); let r = rng() * tw, cum = 0, chosen = pool[0];
+      for (const p of pool) { cum += (p.w || 5); if (r < cum) { chosen = p; break; } }
+      if (chosen.unique === 'earth') hasEarth = true; if (chosen.unique === 'hotjup') hasHotJup = true; if (chosen.gasGiant) gg++;
+      orbits.push({ type: 'planet', planet: chosen, dist, sec });
+    }
+    return orbits;
+  }
+
+  // Главный вход дополнения. primaryCls — класс УЖЕ установленной звезды
+  // (неизвестен/кастомный → считаем G). Возвращает компаньонов и их тела.
+  function generateMulti(opts) {
+    const o = opts || {};
+    seedRng(o.seed != null ? (o.seed >>> 0) : Math.floor(Math.random() * 0xffffffff));
+    const pCls = STARS[o.primaryCls] ? o.primaryCls : 'G';
+    const primary = genStar(pCls);
+    // сколько компаньонов
+    if (!(o.force) && !ch(MULT_FRAC[pCls] != null ? MULT_FRAC[pCls] : 45)) return { stars: [], bodies: [] };
+    let nc = 1; { const tot = NCOMP_W.reduce((a, b) => a + b, 0); let r = rng() * tot, cum = 0; for (let i = 0; i < NCOMP_W.length; i++) { cum += NCOMP_W[i]; if (r < cum) { nc = i + 1; break; } } }
+    const seps = genSeparations(nc, primary);
+    const stars = [], bodies = [];
+    for (let i = 0; i < nc; i++) {
+      const sep = seps[i];
+      const comp = genCompanion(primary, sep);
+      const letter = LETTERS[i + 1] || 'E';
+      // предел устойчивости планетной системы компаньона:
+      // ближе соседа — предыдущий компонент или primary
+      const gapIn = i === 0 ? sep : (sep - seps[i - 1]);
+      const gapOut = (i + 1 < nc) ? (seps[i + 1] - sep) : Infinity;
+      const limit = Math.max(0, Math.min(gapIn, gapOut) * 0.25);
+      stars.push({ letter, greek: GREEK[i + 1] || 'Эпсилон', cls: comp.cls, name: comp.sd.name, icon: comp.sd.e, mass: +comp.mass.toFixed(2), sep_au: sep, dead: !!comp.sd.dead });
+      if (limit < 0.15 || comp.sd.dead && limit < 0.3) continue;   // тесная пара — планет нет
+      const orbits = genOrbitsMulti(comp, limit);
+      for (const orb of orbits) {
+        if (orb.type === 'belt') {
+          const b = rollBelt(orb.bt_id, comp.cls, 1);
+          // состав ресурсов — по ТОМУ ЖЕ композиционному типу, что показан у пояса
+          const compKey = +Object.keys(BCOMP).find(k => BCOMP[k] === b.compD) || 4;
+          const beltRes = presetRes(null, comp.cls, true, BRES[compKey], orb.sec);
+          bodies.push({ kind: 'belt', g: 'belt', star: letter, name: b.bt.name, type: b.compD + ' · ' + b.densD, icon: b.bt.icon,
+            zone: ZN[orb.sec], dist: +orb.dist.toFixed(2), slotsP: 0, slotsK: Math.max(1, Math.round(b.density / 2)),
+            rings: 0, moons: 0, resources: beltRes.length ? beltRes : b.resources });
+          continue;
+        }
+        const pl = orb.planet;
+        const sat = genSatellites2(pl, orb.dist, comp.mass);
+        const sl = getSlots(pl);
+        bodies.push({ kind: 'planet', g: pl.g, star: letter, name: pl.name, type: GRP[pl.g].name, icon: pl.i,
+          zone: ZN[orb.sec], dist: +orb.dist.toFixed(2), slotsP: sl.p, slotsK: sl.k,
+          rings: sat.rings.length, ringsL: sat.rings, moons: sat.moons.length, moonsL: sat.moons,
+          hillAu: +(sat.rh || 0).toFixed(4), resources: presetRes(pl, comp.cls, false, null, orb.sec) });
+      }
+    }
+    return { stars, bodies };
+  }
+
   window.GalaxyGen = {
     generate, getSlots, rollResources, resPrice,
     RESOURCES: RES_CATALOG, AMT_LEVELS, resIconHtml, resIconSrc,
     STAR_CLASSES: ['random', 'O', 'B', 'A', 'F', 'G', 'K', 'M', 'D', 'N'],
     PLANET_CLASSES,
+    generateMulti, GREEK, STAR_LETTERS: LETTERS,
   };
 })();

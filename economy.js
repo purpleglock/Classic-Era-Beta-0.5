@@ -635,6 +635,40 @@ const EC_GRP_NAME = { 'Лавовые миры': 'lava', 'Вулканическ
 // фолбэк: имя планеты → группа (сид-данные/старый формат)
 const EC_PLANET_NAME = { 'Катархей': 'lava', 'Мёртвая планета': 'lava', 'Супервулканическая планета': 'volcanic', 'Хтонический мир': 'lava', 'Горячий Юпитер': 'hotgiant', 'Горячий Нептун': 'hotgiant', 'Железный мир': 'lava', 'Дастория': 'volcanic', 'Литара': 'desert', 'Океаническая суперземля': 'exotic', 'Рыхлый гигант': 'gasgiant', 'Железный карлик': 'terrestrial', 'Духлесс': 'volcanic', 'Терра': 'terrestrial', 'Суперземля': 'terrestrial', 'Гикеан': 'oceanic', 'Панталассическая планета': 'oceanic', 'Теракрон': 'terrestrial', 'Мини-Нептун': 'gasgiant', 'Водный Юпитер': 'gasgiant', 'Тундровая планета': 'terrestrial', 'Псамора': 'oceanic', 'Мир дюн': 'desert', 'Гельвард': 'cryo', 'Турмион': 'gasgiant', 'Ледяной гигант': 'icegiant', 'Аммиачный мир': 'cryo', 'Газовый карлик': 'gasgiant', 'Метановый мир': 'cryo', 'Суперюпитер': 'gasgiant', 'Коричневый карлик': 'gasgiant', 'Планета-сирота': 'exotic', 'Углеродная планета': 'cryo', 'Тёмный замёрзший мир': 'cryo', 'Карликовая планета': 'micro', 'Мегаастероид': 'micro', 'Черная дыра': 'anomaly', 'Кротовая нора': 'anomaly', 'Токсичный карлик': 'anomaly' };
 const EC_NOCOL = new Set(['gasgiant', 'icegiant', 'hotgiant', 'anomaly', 'belt']);
+// ── Кратность звёзд (_multi_stars.sql) ──────────────────────────
+// Тела компаньонов лежат в том же map_systems.planets с меткой star:'B'/'C'/…
+// и обычными pid, поэтому колонизация/добыча/сервер работают с ними без правок.
+// Экономике кратность нужна ровно для двух вещей: не предлагать к заселению то,
+// что скрыто галочкой «Кратность» на карте, и подписывать звезду-хозяйку.
+// Зеркало galaxy_map.js: gmCompStars / gmStarGreek.
+function ecCompStars(sys) { return (sys && sys.multi !== false && Array.isArray(sys.stars)) ? sys.stars : []; }
+function ecStarGreek(letter) {
+  const L = (window.GalaxyGen && GalaxyGen.STAR_LETTERS) || ['A', 'B', 'C', 'D', 'E'];
+  const G = (window.GalaxyGen && GalaxyGen.GREEK) || ['Альфа', 'Бета', 'Гамма', 'Дельта', 'Эпсилон'];
+  const i = L.indexOf(letter || 'A');
+  return G[i >= 0 ? i : 0];
+}
+// Тело видно, если оно у главной звезды либо у ВКЛЮЧЁННОГО компаньона. Скрытый
+// компаньон (multi=false) и осиротевшая метка star (компаньона удалили, тело
+// осталось) дают false — на карте таких тел нет, в списке колонизации тоже.
+function ecStarHostVisible(sys, p) {
+  const L = p && p.star;
+  if (!L || L === 'A') return true;
+  return ecCompStars(sys).some(s => s.letter === L);
+}
+// Подпись звезды-хозяйки для строки планеты: «β Бета · Красный карлик (M)».
+// В одиночных системах пусто — там подписывать нечего.
+function ecStarLabel(sys, p) {
+  const comps = ecCompStars(sys);
+  if (!comps.length) return '';
+  const L = (p && p.star) || 'A';
+  if (L === 'A') return `★ ${ecStarGreek('A')} — главная`;
+  const st = comps.find(s => s.letter === L);
+  if (!st) return '';
+  const cls = st.cls ? ` (${st.cls})` : '';
+  return `★ ${ecStarGreek(L)}${st.name ? ' · ' + st.name : ''}${cls}`;
+}
+
 function ecPlanetGroup(p) {
   if (!p) return 'unknown';
   if (p.kind === 'belt') return 'belt';
@@ -1362,7 +1396,10 @@ async function _ecLoadCoreImpl() {
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('faction_units', `or=(faction_id.eq.${fid},faction_id.is.null)&order=name.asc`).catch(() => []),
     dbGet('unit_production', `faction_id=eq.${fid}&order=created_at.desc`).catch(() => []),
-    dbGet('map_systems', `select=id,name,faction,x,y,planets,star_type,is_giant`).catch(() => []),
+    // stars/multi — кратность (_multi_stars.sql): stars = компаньоны [{letter,greek,…}],
+    // multi=false прячет их. Без этих полей экономика предлагала бы к колонизации
+    // тела компаньонов, скрытых на карте, и не могла бы подписать звезду-хозяйку.
+    dbGet('map_systems', `select=id,name,faction,x,y,planets,star_type,is_giant,stars,multi`).catch(() => []),
     ecCached('lanes', () => dbGet('map_hyperlanes', `select=a_id,b_id`)),   // топология гиперпутей не меняется по ходу игры — кэш на сессию
     dbGet('faction_applications', `status=eq.approved&select=faction_id,name,herald_url,color,gov,leader,race&order=name.asc`).catch(() => []),
     dbGet('trade_routes', `order=created_at.desc`).catch(() => []),
@@ -3926,10 +3963,14 @@ function ecColonyRowHtml(colony, sys) {
   // .find берёт первую (часто пустую) и затирает корректный снимок колонии.
   const mapPlanet = ecFindPlanet(sys, colony.planet_name, colony.planet_pid);
   const planet = (Array.isArray(colony.resources) && colony.resources.length) ? colony : (mapPlanet || colony);
+  // звезду-хозяйку берём с КАРТЫ (у colonies нет поля star): колония уже стоит,
+  // так что подписываем её даже если компаньон скрыт галочкой — прятать
+  // существующую колонию было бы хуже, чем показать её у выключенной звезды
+  const colStar = mapPlanet ? ecStarLabel(sys, mapPlanet) : '';
   const minePreview = ecColonyMinePreview(blds, planet);
   const head = `<div class="ec-pl ec-pl-own${open ? ' open' : ''}" onclick="ecToggleColony('${colony.id}')">
     <div class="ec-pl-top">
-      <div class="ec-pl-l"><span class="ec-pl-ic">${colony.is_capital ? '★' : '🏙'}</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name || 'Колония')}</div><div class="ec-pl-sb">${colony.is_capital ? 'Столица · ' : ''}${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div></div></div>
+      <div class="ec-pl-l"><span class="ec-pl-ic">${colony.is_capital ? '★' : '🏙'}</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(colony.planet_name || 'Колония')}${colStar ? ` <span class="ec-pl-star">${esc(colStar)}</span>` : ''}</div><div class="ec-pl-sb">${colony.is_capital ? 'Столица · ' : ''}${esc(colony.planet_type || '')}${colony.terraformed ? ' · терраформ' : ''}</div></div></div>
       <div class="ec-pl-r"><span class="ec-pl-cells">⬚ ${used}/${cap}</span>${incTxt ? `<span class="ec-pl-inc">${incTxt}/сут</span>` : ''}<span class="ec-pl-chev">${open ? '▾' : '▸'}</span></div>
     </div>
     <div class="ec-pl-res"><span class="ec-pl-lbl">Ресурсы:</span>${ecPlanetResChips(planet)}</div>
@@ -3942,9 +3983,12 @@ function ecFreeRowHtml(s, p, race) {
   const cz = ecColonizeInfo(s, p, race);
   // станция (пояс/аномалия) застраивается на cells самой станции, а не на slotsP (=0 → фолбэк 6)
   const cells = cz.cells || +p.slotsP || EC_DEFAULT_CELLS;
+  // в кратной системе имена планет разных компонентов могут совпасть — звезда-хозяйка
+  // тут единственное, что их различает
+  const star = ecStarLabel(s, p);
   return `<div class="ec-pl ec-pl-free">
     <div class="ec-pl-top">
-      <div class="ec-pl-l"><span class="ec-pl-ic">${cz.cls === 'no' ? '⊘' : '◌'}</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(p.name)}</div><div class="ec-pl-sb"><span class="ec-cz-${cz.cls}">${esc(cz.tag)}</span> · ${esc(cz.label)} · ⬚ ${cells} ячеек</div></div></div>
+      <div class="ec-pl-l"><span class="ec-pl-ic">${cz.cls === 'no' ? '⊘' : '◌'}</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(p.name)}${star ? ` <span class="ec-pl-star">${esc(star)}</span>` : ''}</div><div class="ec-pl-sb"><span class="ec-cz-${cz.cls}">${esc(cz.tag)}</span> · ${esc(cz.label)} · ⬚ ${cells} ячеек</div></div></div>
       <div class="ec-pl-r">${cz.btn}</div>
     </div>
     <div class="ec-pl-res"><span class="ec-pl-lbl">Ресурсы:</span>${ecPlanetResChips(p)}</div>
@@ -4521,8 +4565,17 @@ function ecTabColonies() {
     const live = allById.get(id);
     const own = (EC.systems || []).find(s => s.id === id);
     const name = (live && live.name) || (own && own.name) || fallbackName || 'Система';
-    const planets = ((live && live.planets) || (own && own.planets) || []).filter(p => p && p.name);
-    sysMap.set(id, { id, name, planets });
+    const src = live || own || null;
+    // stars/multi нужны для фильтра и подписи звезды — берём с того же источника,
+    // что и planets, иначе метки star ссылались бы на чужой набор компаньонов.
+    const stars = (src && Array.isArray(src.stars)) ? src.stars : null;
+    const multi = src ? src.multi : true;
+    const sysRef = { id, name, stars, multi };
+    // Тела скрытых/удалённых компаньонов не показываем: на карте их нет, и
+    // колония у невидимой звезды выглядела бы взявшейся из ниоткуда.
+    const planets = ((live && live.planets) || (own && own.planets) || [])
+      .filter(p => p && p.name && ecStarHostVisible(sysRef, p));
+    sysMap.set(id, { ...sysRef, planets });
   };
   // 1) системы, которыми владеет фракция игрока
   (EC.systems || []).forEach(s => addSys(s.id, s.name));

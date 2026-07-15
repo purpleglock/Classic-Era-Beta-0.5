@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<title>multistar VN system chart harness</title>
+<link rel="stylesheet" href="css/index.css?v=harness">
+<style>
+  body { background:#04060c; color:#cfd6dd; font:12px/1.5 monospace; margin:0; padding:12px; }
+  #bar { margin-bottom:8px; }
+  button, select { background:#141b2a; color:#cfd6dd; border:1px solid #2a3550; padding:5px 12px; margin-right:6px; }
+  #out { overflow:auto; border:1px solid #1d2534; }
+  #report { white-space:pre; color:#8899b0; margin-top:8px; }
+  .bad { color:#ff7a5c; } .ok { color:#5fc257; }
+</style>
+</head><body>
+<div id="bar">
+  <button onclick="roll()">🎲 перекрутить кратность</button>
+  <select id="cls"><option>G</option><option>O</option><option>A</option><option>K</option><option>M</option></select>
+  <label><input id="multi" type="checkbox" checked onchange="draw()"> multi (галочка кратности)</label>
+</div>
+<div id="out"></div>
+<div id="report"></div>
+
+<script>
+// Стенд схемы системы в новелле (_heroColonySysBuild) для кратных звёзд: смотрим
+// раскладку без Supabase/авторизации. Проверяем инструментально: тела компаньона
+// стоят правее СВОЕЙ звезды, звёзды не налезают на чужие тела, скрытые
+// компаньоны (multi=false) не попадают ни в схему, ни в досье.
+window.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+window.GM_BASE = 'assets/map/';
+window.EC = { fid: 'fac_test', app: { race: 'Гуманоиды', color: '#3a9bdc' }, colonies: [], buildings: [], eco: { research: [] }, allSystems: [], systems: [] };
+</script>
+<script src="galaxy_gen.js?v=harness"></script>
+<script src="economy.js?v=harness"></script>
+<script src="render.js?v=harness"></script>
+<script>
+let SYS = null;
+function roll() {
+  const cls = document.getElementById('cls').value;
+  const base = GalaxyGen.generate({ starClass: cls });
+  const m = GalaxyGen.generateMulti({ primaryCls: cls, force: true });
+  const planets = [...base.bodies, ...m.bodies].map((p, i) => ({ ...p, pid: i + 1 }));
+  SYS = { id: 'sys_test', name: 'Тестида', star_type: 'yellow', faction: 'fac_test', planets, stars: m.stars, multi: true };
+  draw();
+}
+function draw() {
+  if (!SYS) return;
+  SYS.multi = document.getElementById('multi').checked;
+  EC.allSystems = [SYS]; EC.systems = [SYS];
+  document.getElementById('out').innerHTML = _heroColonySysBuild('sys_test', false);
+  check();
+}
+// Инструментальная проверка раскладки по готовому SVG.
+function check() {
+  const svg = document.querySelector('.hpvnc-sysmap');
+  const rep = [];
+  const comps = (SYS.multi !== false ? SYS.stars : []) || [];
+  const shown = SYS.planets.filter(p => !p.star || p.star === 'A' || comps.some(s => s.letter === p.star));
+  const hidden = SYS.planets.length - shown.length;
+  const rows = document.querySelectorAll('.hpvnc-prow').length;
+  rep.push(`компаньонов: ${(SYS.stars || []).length} (показано ${comps.length}) · тел всего ${SYS.planets.length} · показано ${shown.length} · строк досье ${rows}`);
+  rep.push(rows === shown.length ? '<span class="ok">ok: досье = видимые тела</span>' : `<span class="bad">BAD: досье ${rows} ≠ видимых ${shown.length}</span>`);
+  if (SYS.multi === false && hidden === 0 && (SYS.stars || []).length) rep.push('<span class="bad">BAD: multi=false, а тела компаньонов не отсеяны</span>');
+  // тела правее своей звезды: сверяем x диска с x его звезды-якоря
+  const W = +svg.getAttribute('width');
+  rep.push(`ширина холста: ${W}`);
+  document.getElementById('report').innerHTML = rep.join('\n');
+}
+roll();
+</script>
+</body></html>

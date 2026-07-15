@@ -14,6 +14,12 @@
       "port": 3000
     },
     {
+      "name": "legacy-check",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "serve", "C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/daab014d-4855-487d-bd69-ef43c7a24bbc/scratchpad/legacy"],
+      "autoPort": true
+    },
+    {
       "name": "static-verify",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["-y", "serve", "."],

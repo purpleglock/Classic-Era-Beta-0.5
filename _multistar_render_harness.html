@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<title>multistar render harness</title>
+<style>
+  body { background:#04060c; color:#cfd6dd; font:12px/1.5 monospace; margin:0; padding:12px; }
+  #bar { margin-bottom:8px; }
+  button, select { background:#141b2a; color:#cfd6dd; border:1px solid #2a3550; padding:5px 12px; margin-right:6px; }
+  #cv { display:block; border:1px solid #1d2534; }
+  #report { white-space:pre; color:#8899b0; margin-top:8px; }
+  .bad { color:#ff7a5c; } .ok { color:#5fc257; }
+</style>
+</head><body>
+<div id="bar">
+  <button onclick="roll()">🎲 перекрутить кратность</button>
+  <select id="cls"><option>G</option><option>O</option><option>A</option><option>K</option><option>M</option></select>
+  <label>зум <input id="zoom" type="range" min="2.6" max="9" step="0.1" value="4.5" oninput="draw()"></label>
+  <button onclick="sweep()">📏 прогон по зуму</button>
+</div>
+<canvas id="cv" width="1600" height="900"></canvas>
+<div id="report"></div>
+
+<script>window.GM_GEO_DEBUG = 1;</script>
+<script src="galaxy_gen.js?v=harness"></script>
+<script src="galaxy_map.js?v=harness"></script>
+<script>
+// Стенд рендера кратных систем: подставляем минимальный GM/GMM и зовём НАСТОЯЩИЙ
+// gmmPaintOrbits + gmmPaintStars из galaxy_map.js. Нужен, чтобы смотреть раскладку
+// без Supabase/авторизации. Плюс инструментальная проверка: не пересекаются ли
+// мини-домены компаньонов между собой и с диском главной.
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+
+function mkSystem(id, x, y, cls, name, withMulti) {
+  const r = withMulti ? GalaxyGen.generateMulti({ primaryCls: cls, force: true }) : { stars: [], bodies: [] };
+  const base = GalaxyGen.generate ? null : null;
+  // тела главной звезды — простой набор, чтобы было что раскладывать
+  const planets = [
+    { kind:'planet', name:'Терра Нова', type:'Земного типа', zone:'Обитаемая', dist:1.0, pid:1, star:'A' },
+    { kind:'planet', name:'Мини-Нептун', type:'Ледяные гиганты', zone:'Холодная', dist:4.2, pid:2, star:'A' },
+    { kind:'belt',   name:'Главный пояс астероидов', zone:'Холодная', dist:2.6, pid:3, star:'A' },
+    { kind:'planet', name:'Гельвард', type:'Газовые гиганты', zone:'Холодная', dist:9.5, pid:4, star:'A' },
+  ];
+  (r.bodies || []).forEach((b, i) => planets.push(Object.assign({}, b, { pid: 100 + i })));
+  return { id, x, y, name, star_type: 'yellow', is_giant: false, faction: null,
+           stars: r.stars, multi: true, planets, _bodies: null, _nn: 900 };
+}
+
+let SYS = [];
+function roll() {
+  const cls = document.getElementById('cls').value;
+  SYS = [
+    mkSystem('s1', 5000, 3000, cls, 'Шер-Маан', true),
+    mkSystem('s2', 5900, 3000, 'K', 'Литара', false),   // сосед: проверяем, что домены не смыкаются
+  ];
+  GM.systems = SYS;
+  SYS.forEach(s => { s._bodies = null; s._nn = 900; });
+  draw();
+}
+
+function draw() {
+  const s = +document.getElementById('zoom').value;
+  Object.assign(GMM, { s, vw: cv.width, vh: cv.height, dpr: 1, paths: null, imgs: GMM.imgs || {}, colonyXY: {} });
+  // камера: система s1 в центре кадра
+  GMM.tx = cv.width / 2 - 5000 * s;
+  GMM.ty = cv.height / 2 - 3000 * s;
+  GM.colonies = []; GM.capitals = {}; GM.capPlanet = {}; GM.factions = [];
+  GM.showRes = false; GM.showMines = false;
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#04060c'; ctx.fillRect(0, 0, cv.width, cv.height);
+  gmmPaintOrbits(ctx);
+  ctx.save();
+  ctx.setTransform(s, 0, 0, s, GMM.tx, GMM.ty);
+  gmmPaintStars(ctx, s);
+  ctx.restore();
+  report();
+}
+
+// ── инструментальная проверка перекрытий мини-доменов ──
+// Повторяем ТУ ЖЕ геометрию, что и рендер, через экспортируемые величины:
+// берём gmCompLayout + те же формулы ringR/miniR, считанные из отрисованного кадра
+// нельзя — поэтому меряем по факту: пары центров и радиусов из gmCompLayout.
+// Меряем ФАКТИЧЕСКУЮ геометрию кадра (sys._geo кладёт сам рендер под GM_GEO_DEBUG),
+// а не пересчитанную здесь копию формул — иначе стенд проверял бы сам себя.
+// Нарушение = пересечение: мини-домен компаньона с лестницей орбит главной,
+// либо мини-домены компаньонов между собой (в НЕсплюснутых координатах: по
+// вертикали всё сжато наклоном TILT, и в экранных единицах зазор завышен).
+function violations(sys) {
+  const g = sys._geo; if (!g) return ['нет _geo'];
+  const bad = [];
+  const tilt = g.tilt || 1;   // наклон берём из снимка рендера: в глобале TILT не виден
+  // 1) лестница орбит главной не должна выходить за домен планет
+  if (g.radii.length) {
+    const outer = g.radii[g.radii.length - 1] + g.sizes[g.sizes.length - 1];
+    if (outer > g.rMaxP + 0.5) bad.push(`орбиты главной вышли за домен: ${outer.toFixed(1)} > rMaxP ${g.rMaxP.toFixed(1)}`);
+  }
+  const d2 = (a, b) => Math.hypot(a.ccx - b.ccx, (a.ccy - b.ccy) / (tilt || 1));
+  g.comps.forEach((c, i) => {
+    // 2) мини-домен не наезжает на орбиты главной
+    const gap = Math.hypot(c.ccx - g.cx, (c.ccy - g.cy) / (tilt || 1)) - c.miniR - g.rOuterMain;
+    if (gap < -0.5) bad.push(`${c.letter} (sep=${c.sep} а.е.) наезжает на главную: перекрытие ${(-gap).toFixed(1)}px`);
+    // 3) мини-домены компаньонов между собой
+    g.comps.forEach((o, j) => {
+      if (j <= i) return;
+      const ov = c.miniR + o.miniR - d2(c, o);
+      if (ov > 0.5) bad.push(`${c.letter}↔${o.letter}: домены перекрыты на ${ov.toFixed(1)}px`);
+      // 4) сами звёзды-компаньоны не должны сидеть друг на друге (их разводит не только
+      // угол, но и кольцо): диски солнц с запасом
+      const so = c.sr + o.sr + 4 - d2(c, o);
+      if (so > 0) bad.push(`${c.letter}↔${o.letter}: ЗВЁЗДЫ наложены на ${so.toFixed(1)}px`);
+      // 5) разные сепарации не должны схлопываться в одно кольцо
+      if (Math.abs(c.sep - o.sep) / Math.max(c.sep, o.sep) > 0.5 &&
+          Math.abs(c.ringR - o.ringR) < 12) bad.push(`${c.letter}(${c.sep}) и ${o.letter}(${o.sep}) а.е. — на одном кольце (Δ${Math.abs(c.ringR - o.ringR).toFixed(1)}px)`);
+    });
+  });
+  // 6) территория не должна простаивать: самый дальний компаньон обязан уходить
+  // к рубежу домена, иначе все звёзды сбиты в кучу посреди пустого поля
+  if (g.comps.length) {
+    const outMost = Math.max(...g.comps.map(c => c.ringR + c.miniR));
+    if (outMost < g.rMax * 0.55) bad.push(`территория простаивает: дальний край звёзд ${outMost.toFixed(0)} из rMax ${g.rMax.toFixed(0)} (${(100 * outMost / g.rMax).toFixed(0)}%)`);
+  }
+  // 7) территория не должна залезать в соседнюю систему. Сосед обычно ЗА КАДРОМ
+  // (на глубоком зуме его не рисуют, _geo нет), поэтому проверяем инвариант долей:
+  // rMax_свой + rMax_соседа ≤ пролёт NN. Доли дают в сумме 1 — сумма радиусов не
+  // может превысить расстояние между системами.
+  const nbS = SYS[1];
+  if (nbS && typeof gmmDemand === 'function') {
+    const span = gmmNN(sys) * GMM.s;
+    const dOwn = gmmDemand(sys), dNb = gmmDemand(nbS);
+    const rNb = Math.min(span * (dNb / (dOwn + dNb)), 1400 * g.gz);
+    const ov = g.rMax + rNb - span;
+    if (ov > 0.5) bad.push(`ДОМЕН НАЕХАЛ НА СОСЕДА на ${ov.toFixed(1)}px (${g.rMax.toFixed(0)} + ${rNb.toFixed(0)} > пролёт ${span.toFixed(0)})`);
+  }
+  return bad;
+}
+
+function report() {
+  const sys = SYS[0], out = [];
+  const comps = gmCompLayout(sys);
+  out.push(`компаньонов: ${comps.length}`);
+  comps.forEach(e => out.push(`  ${e.c.letter} ${e.c.cls} m=${e.c.mass} sep=${e.c.sep_au} а.е. → fr=${e.fr.toFixed(3)} off=${e.off.toFixed(3)} u=${e.u.toFixed(3)}`));
+  const bad = violations(sys);
+  out.push(bad.length ? '❌ ' + bad.join('\n❌ ') : '✅ пересечений нет на этом зуме');
+  document.getElementById('report').textContent = out.join('\n');
+}
+
+// Прогон по всему диапазону зума × много перекруток: ищем зум, на котором раскладка
+// ломается (именно так баг и ловился — «периодически» при приближении).
+function sweep() {
+  const cls = document.getElementById('cls').value;
+  const zin = document.getElementById('zoom');
+  const rolls = 60, out = [];
+  let checks = 0, fails = 0; const seen = new Set();
+  for (let r = 0; r < rolls; r++) {
+    SYS = [mkSystem('s1', 5000, 3000, cls, 'Шер-Маан', true),
+           mkSystem('s2', 5900, 3000, 'K', 'Литара', false)];
+    GM.systems = SYS;
+    if (!gmCompStars(SYS[0]).length) continue;   // одиночная выпала — не наш случай
+    for (let z = 2.6; z <= 9.001; z += 0.1) {
+      zin.value = z.toFixed(1); draw(); checks++;
+      const bad = violations(SYS[0]);
+      if (bad.length) { fails++; bad.forEach(b => seen.add(`зум ${z.toFixed(1)}: ${b}`)); }
+    }
+  }
+  out.push(`прогон: ${checks} кадров (${rolls} перекруток × зум 2.6…9.0)`);
+  out.push(fails ? `❌ кадров с наложением: ${fails}` : '✅ наложений нет ни на одном зуме');
+  [...seen].slice(0, 25).forEach(s => out.push('  ' + s));
+  document.getElementById('report').textContent = out.join('\n');
+  console.log(out.join('\n'));
+}
+
+// прогружаем спрайты звёзд, как это делает карта
+['yellow','red','blue','white','green'].forEach(t => {
+  const im = new Image();
+  im.onload = () => draw();
+  im.src = (typeof GM_BASE !== 'undefined' ? GM_BASE : '') + 'stars/star_' + t + '.png';
+  GMM.imgs[t] = im;
+});
+roll();
+</script>
+</body></html>

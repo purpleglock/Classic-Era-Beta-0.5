@@ -122,6 +122,31 @@ const GM = {
 };
 
 function gmCanEdit() { return !!(user && ['superadmin', 'editor'].includes(user.role)); }
+// ── Кратность: компаньоны системы для отрисовки (пусто, если галочка выкл) ──
+function gmCompStars(s) { return (s && s.multi !== false && Array.isArray(s.stars)) ? s.stars : []; }
+// класс генератора → легаси-тип звезды (PNG star_<type>.png) и цвет свечения
+const GM_CLS2TYPE = { O: 'blue', B: 'blue', A: 'white', F: 'yellow', G: 'yellow', K: 'red', M: 'red', D: 'white', N: 'green' };
+const GM_CLS_GLOW = { O: '110,160,255', B: '150,185,255', A: '205,220,255', F: '255,240,190', G: '255,220,130', K: '255,160,80', M: '255,110,70', D: '200,200,255', N: '80,255,190' };
+// визуальный радиус класса относительно солнцеподобной звезды: O-гигант крупный,
+// красный карлик мелкий, мёртвые остатки (D/N) — точки
+const GM_CLS_R = { O: 1.25, B: 1.08, A: 0.92, F: 0.8, G: 0.72, K: 0.56, M: 0.42, D: 0.28, N: 0.24 };
+// Экранная раскладка компаньонов кратной системы — ЕДИНАЯ для DOM-иконок, canvas-
+// обзора и глубокого зума, вся из данных генератора, а не из констант:
+//   fr  — размер в долях иконки главной (класс + масса компаньона),
+//   off — отступ от центра в долях радиуса главной (лог-шкала sep_au:
+//         тесная пара 0.3 а.е. почти касается, далёкая 10000 а.е. — заметно в стороне),
+//   u   — нормированная лог-сепарация 0..1 (для колец глубокого зума),
+//   ang — детерминированный угол по координатам системы + золотой шаг.
+function gmCompLayout(sys) {
+  const base = gmHash01(Math.round(sys.x * 7 + sys.y * 13)) * 6.2832;
+  return gmCompStars(sys).slice(0, 4).map((c, ci) => {
+    const fr = Math.max(0.14, Math.min(0.55,
+      (GM_CLS_R[c.cls] || 0.6) * 0.52 * Math.pow(Math.max(0.08, +c.mass || 0.6), 0.15)));
+    const u = Math.max(0, Math.min(1, (Math.log10(Math.max(0.3, +c.sep_au || 30)) + 0.53) / 4.6));
+    const off = 0.72 + fr + u * 1.05;
+    return { c, ci, fr, off, u, ang: base + ci * 2.39996 };
+  });
+}
 function gmFaction(id) { return GM.factions.find(f => f.id === id) || null; }
 
 // Вход/выход из редактора карты. И просмотр, и правка идут ОДНИМ canvas-рендером
@@ -325,6 +350,7 @@ function gmToolbarHtml() {
       <button class="gm-tb-btn" data-mode="link" onclick="gmSetMode('link')">⟿ Проложить</button>
       <button class="gm-tb-btn" data-mode="unlink" onclick="gmSetMode('unlink')">✕ Убрать путь</button>
       <button class="gm-tb-btn" data-mode="sector" onclick="gmSetMode('sector')">▣ Сектора</button>
+      <button class="gm-tb-btn" onclick="gmMultiApplyAll()" title="Дополнение: рассчитать кратные звёзды для всех систем, где ещё не рассчитаны">🌟 Кратность всем</button>
       <span class="gm-tb-hint" id="gm-tb-hint"></span>
     </div>
   </div>`;
@@ -1344,6 +1370,12 @@ function gmDrawStars() {
     return `<div class="gm-star${giant}${sel}${secSel}${capFid ? ' gm-capital' : ''}" data-id="${esc(s.id)}" style="left:${s.x}px;top:${s.y}px"
         onmousedown="gmStarDown(event,'${esc(s.id)}')" onclick="gmStarClick(event,'${esc(s.id)}')">
         <img src="${GM_BASE}stars/star_${esc(s.star_type || 'yellow')}.png" draggable="false" alt="">
+        ${gmCompLayout(s).map(({ c, fr, off, ang }) => {
+          // центр компаньона в % контейнера: off — в долях радиуса иконки (50%)
+          const l = 50 + Math.cos(ang) * off * 50, t = 50 + Math.sin(ang) * off * 50;
+          return `<img class="gm-comp-star" src="${GM_BASE}stars/star_${GM_CLS2TYPE[c.cls] || 'yellow'}.png"
+            style="left:${l.toFixed(1)}%;top:${t.toFixed(1)}%;width:${(fr * 100).toFixed(0)}%" draggable="false" alt="" title="${esc(gmStarGreek(c.letter))}: ${esc(c.name || '')}">`;
+        }).join('')}
         ${capHtml}
         ${gmResOverlay(s)}
         <span class="gm-label">${esc(s.name)}</span>
@@ -1371,6 +1403,10 @@ function gmSystemBodies(sys) {
   const byName = new Map(); let anon = 0;
   (sys.planets || []).forEach(p => {
     if (!p) return;
+    // тела звёзд-компаньонов не рисуем на орбитах глубокого зума главной звезды
+    // (их дистанции — вокруг СВОЕЙ звезды); в панели системы они показаны группами.
+    // Колонии на них всё равно попадут в список через sysCols ниже.
+    if (p.star && p.star !== 'A') return;
     const nm = norm(p.name);
     // пояса/аномалии остаются как есть; всё прочее без класса считаем планетой
     const b = { name: p.name || '', kind: p.kind || 'planet', zone: p.zone, dist: p.dist, type: p.type,
@@ -1380,8 +1416,11 @@ function gmSystemBodies(sys) {
     if (nm && nm === capName) b.isCapital = true;
     byName.set(nm || ('__p' + anon++), b);
   });
+  // имена тел компаньонов: колонии на них рисуются в мини-системе компаньона, не в главной
+  const compNames = new Set((sys.planets || []).filter(p => p && p.star && p.star !== 'A').map(p => norm(p.name)).filter(Boolean));
   sysCols.forEach(c => {
     const nm = norm(c.planet_name);
+    if (nm && compNames.has(nm)) return;
     const isCap = !!(c.is_capital || c.planet_type === 'Столичный мир');
     const hit = nm && byName.get(nm);
     // planet_pid колонии — стабильный идентификатор планеты (для привязки минных полей)
@@ -1402,6 +1441,26 @@ function gmOrbitBodies(sys) {
   }
   return b;
 }
+// Тела мини-системы компаньона (для глубокого зума): свои планеты/пояса из
+// planets[] с меткой star=letter + колонии на них (матч по имени/pid). Кэш на
+// объекте системы, сбрасывается вместе с _bodies (gmSaveForm/перезагрузка).
+function gmCompBodies(sys, letter) {
+  if (!sys._bodies) sys._compBodies = null;   // _bodies сброшен → и наш кэш устарел
+  const cache = sys._compBodies || (sys._compBodies = {});
+  if (cache[letter]) return cache[letter];
+  const norm = s => (s ? String(s) : '').trim().toLowerCase();
+  const cols = (GM.colonies || []).filter(c => c.system_id === sys.id);
+  const out = (sys.planets || []).filter(p => p && p.star === letter).map(p => {
+    const b = { name: p.name || '', kind: p.kind || 'planet', zone: p.zone, dist: p.dist, type: p.type,
+      dead: !!(p.dead || p.doomed), resources: Array.isArray(p.resources) ? p.resources : [],
+      pid: Number.isInteger(p.pid) ? p.pid : null };
+    const c = cols.find(c => (b.pid != null && c.planet_pid != null && +c.planet_pid === b.pid) || (norm(c.planet_name) && norm(c.planet_name) === norm(p.name)));
+    if (c) { b.isColony = true; b.faction_id = c.faction_id; b.colId = c.id; }
+    return b;
+  }).sort((x, y) => (+x.dist || 0) - (+y.dist || 0)).slice(0, 5);   // мини-домен: не больше 5 орбит
+  return (cache[letter] = out);
+}
+
 // Стабильный псевдослучайный 0..1 из целого зерна (для вариаций тел — один и тот
 // же мир всегда выглядит одинаково между кадрами/перезагрузками).
 function gmHash01(seed) {
@@ -1573,15 +1632,32 @@ function gmOpenPanel(sys) {
   // в т.ч. те, на которых стоят обычные колонии, — НЕ трогаем.
   const capCol = sysCols.find(c => c.is_capital || c.planet_type === 'Столичный мир');
   const capName = ((capCol && capCol.planet_name) || (GM.capPlanet && GM.capPlanet[sys.id]) || '').trim().toLowerCase();
-  const planets = (sys.planets || [])
+  // кратность: multi=false прячет компаньонов и их тела (данные остаются)
+  const multiOn = sys.multi !== false;
+  const compStars = (multiOn && Array.isArray(sys.stars)) ? sys.stars : [];
+  const visPlanets = (sys.planets || [])
     .filter(p => {
       if (!p) return false;
+      if (p.star && p.star !== 'A' && !compStars.some(s => s.letter === p.star)) return false; // выключено/осиротело
       const nm = (p.name ? String(p.name) : '').trim().toLowerCase();
       const isGhostCapital = nm && nm === capName && !p.kind;  // легаси-дубль столицы
       return !isGhostCapital;
-    })
-    .map((p, i) => gmPlanetView(p, i)).join('')
-    || `<p class="gm-empty">Система ещё не исследована. Данные о планетах отсутствуют.</p>`;
+    });
+  let planets;
+  if (compStars.length) {
+    // группировка по звёздам: Альфа <Имя> (главная) + компаньоны
+    const grp = [{ letter: 'A', hdr: `★ ${esc(gmStarGreek('A'))} ${esc(sys.name)}` }]
+      .concat(compStars.map(s => ({ letter: s.letter, hdr: `★ ${esc(gmStarGreek(s.letter))} ${esc(sys.name)} <span class="gm-sub-hint">${esc(s.name || '')} (${esc(s.cls || '?')}) · ${s.sep_au} а.е.</span>` })));
+    planets = grp.map(gr => {
+      const bs = visPlanets.filter(p => (p.star || 'A') === gr.letter);
+      const rows = bs.map((p, i) => gmPlanetView(p, i)).join('')
+        || `<p class="gm-empty" style="margin:2px 0 8px">Тел нет — предел устойчивости кратной системы.</p>`;
+      return `<div class="gm-panel-sub" style="margin-top:6px">${gr.hdr}</div>${rows}`;
+    }).join('');
+  } else {
+    planets = visPlanets.map((p, i) => gmPlanetView(p, i)).join('')
+      || `<p class="gm-empty">Система ещё не исследована. Данные о планетах отсутствуют.</p>`;
+  }
   const meta = fac && GM.facMeta ? GM.facMeta[fac.id] : null;
   const facBlock = fac ? (() => {
     const col = gmReadable(fac.color);
@@ -2562,7 +2638,9 @@ function gmPlanetView(p, i) {
     const kindCls = p.kind === 'belt' ? ' gm-dot-belt' : p.kind === 'anomaly' ? ' gm-dot-anom' : dead ? ' gm-dot-dead' : '';
     const sat = [];
     if (p.rings) sat.push(`кольца ×${p.rings}`);
-    if (p.moons) sat.push(`спутники ×${p.moons}`);
+    // кратное дополнение хранит именованные луны (moonsL) — показываем виды
+    if (Array.isArray(p.moonsL) && p.moonsL.length) sat.push(`спутники: ${p.moonsL.map(m => m.name).join(', ')}`);
+    else if (p.moons) sat.push(`спутники ×${p.moons}`);
     const satStr = sat.length ? ` · ${sat.join(' · ')}` : '';
     const dist = (p.dist != null) ? `<span class="gm-orb-dist">${p.dist} а.е.</span>` : '';
     // мёртвый мир: ресурсов/слотов нет, тип — «Мёртвая планета», помечаем ☠
@@ -2602,6 +2680,7 @@ function gmOpenForm(sys) {
   if (!form) return;
   GM.editId = sys.id;
   GM.formPlanets = JSON.parse(JSON.stringify(sys.planets || []));
+  GM.formStars = JSON.parse(JSON.stringify(sys.stars || []));   // компаньоны кратной системы
   const facOpts = `<option value="">— Нейтральная —</option>` +
     GM.factions.map(f => `<option value="${esc(f.id)}"${sys.faction === f.id ? ' selected' : ''}>${esc(f.name)}</option>`).join('');
   const typeOpts = GM_STAR_TYPES.map(t => `<option value="${t}"${(sys.star_type || 'yellow') === t ? ' selected' : ''}>${t}</option>`).join('');
@@ -2617,6 +2696,11 @@ function gmOpenForm(sys) {
       <div><label class="gm-fl">Фракция</label><select class="gm-fi" id="gmf-faction">${facOpts}</select></div>
     </div>
     <label class="gm-fl"><input type="checkbox" id="gmf-giant" ${sys.is_giant ? 'checked' : ''}> Гигант</label>
+    <label class="gm-fl" title="Выкл — компаньоны и их тела скрыты на карте/в панели, данные не удаляются"><input type="checkbox" id="gmf-multi" ${sys.multi === false ? '' : 'checked'}> Кратность (показ звёзд-компаньонов)</label>
+    <div class="gm-fl gm-planets-hdr">Кратные звёзды
+      <span><button class="gm-mini-btn" onclick="gmMultiRollForm()" title="Перекрутить компаньонов (тела компаньонов заменяются, тела главной звезды не трогаются)">🌟 Крутить</button></span>
+    </div>
+    <div id="gmf-stars"></div>
     <label class="gm-fl">Описание</label>
     <textarea class="gm-fi" id="gmf-desc" rows="3">${esc(sys.description || '')}</textarea>
     <div class="gm-fl gm-planets-hdr">Состав системы
@@ -2631,14 +2715,68 @@ function gmOpenForm(sys) {
       <button class="gm-tb-btn gm-danger" onclick="gmDeleteStar('${esc(sys.id)}')">Удалить систему</button>
       <button class="gm-tb-btn gm-active" onclick="gmSaveForm()">Сохранить</button>
     </div>`;
+  gmRenderFormStars();
   gmRenderFormPlanets();
+}
+
+// ── Кратность: имя звезды по букве (Альфа/Бета… <Имя системы>) ──
+function gmStarGreek(letter) {
+  const L = (window.GalaxyGen && GalaxyGen.STAR_LETTERS) || ['A', 'B', 'C', 'D', 'E'];
+  const G = (window.GalaxyGen && GalaxyGen.GREEK) || ['Альфа', 'Бета', 'Гамма', 'Дельта', 'Эпсилон'];
+  const i = L.indexOf(letter || 'A');
+  return G[i >= 0 ? i : 0];
+}
+// star_type карты (легаси-цвета) → класс генератора
+function gmStarTypeToCls(t) { return { yellow: 'G', red: 'M', blue: 'B', white: 'A', green: 'N' }[t] || 'G'; }
+
+function gmRenderFormStars() {
+  const box = document.getElementById('gmf-stars');
+  if (!box) return;
+  const st = GM.formStars || [];
+  if (!st.length) { box.innerHTML = `<div class="gm-empty" style="padding:4px 0">Компаньонов нет — одиночная звезда. Крути 🌟 если нужна кратная.</div>`; return; }
+  const sysName = document.getElementById('gmf-name')?.value || '';
+  box.innerHTML = st.map((s, i) => `<div class="gm-fp-head" style="margin:2px 0">
+      <span>${s.icon || '★'}</span>
+      <span class="gm-fp-name">${esc(gmStarGreek(s.letter))} ${esc(sysName)}</span>
+      <span class="gm-fp-meta">${esc(s.name || '')} (${esc(s.cls || '?')}) · ${s.sep_au} а.е. · ${s.mass} M☉${s.dead ? ' · мёртвая' : ''}</span>
+      <button class="gm-mini-btn gm-danger" onclick="gmMultiRemoveStar(${i})" title="Убрать компаньона и его тела">✕</button>
+    </div>`).join('');
+}
+// Перекрут кратности для ОДНОЙ системы (в форме): тела главной звезды не трогаем,
+// тела компаньонов (star:'B'+) заменяем свежим роллом. force — админ явно просит кратную.
+function gmMultiRollForm() {
+  if (!window.GalaxyGen || !GalaxyGen.generateMulti) { toast('Генератор не загружен', 'err'); return; }
+  const cls = gmStarTypeToCls(document.getElementById('gmf-type')?.value);
+  const r = GalaxyGen.generateMulti({ primaryCls: cls, force: true });
+  GM.formStars = r.stars;
+  GM.formPlanets = GM.formPlanets.filter(p => !p.star || p.star === 'A').concat(r.bodies);
+  gmRenderFormStars(); gmRenderFormPlanets();
+  toast(`Компаньонов: ${r.stars.length}, тел у них: ${r.bodies.length} — не забудь «Сохранить»`, 'ok');
+}
+function gmMultiRemoveStar(i) {
+  const s = (GM.formStars || [])[i]; if (!s) return;
+  GM.formStars.splice(i, 1);
+  GM.formPlanets = GM.formPlanets.filter(p => p.star !== s.letter);
+  gmRenderFormStars(); gmRenderFormPlanets();
 }
 
 function gmRenderFormPlanets() {
   const box = document.getElementById('gmf-planets');
   if (!box) return;
   if (!GM.formPlanets.length) { box.innerHTML = `<div class="gm-empty" style="padding:6px 0">Состав пуст. Сгенерируй 🎲 или добавь вручную.</div>`; return; }
-  box.innerHTML = GM.formPlanets.map((p, i) => {
+  // группировка по звёздам: тела без star (или 'A') — главная, дальше по компаньонам
+  const hasMulti = (GM.formStars || []).length > 0;
+  const sysName = document.getElementById('gmf-name')?.value || '';
+  const groups = [{ letter: 'A', hdr: hasMulti ? `★ ${esc(gmStarGreek('A'))} ${esc(sysName)} — главная` : '' }]
+    .concat((GM.formStars || []).map(s => ({ letter: s.letter, hdr: `★ ${esc(gmStarGreek(s.letter))} ${esc(sysName)} — ${esc(s.name || '')} (${esc(s.cls || '?')})` })));
+  box.innerHTML = groups.map(gr => {
+    const idxs = GM.formPlanets.map((p, i) => ({ p, i })).filter(x => (x.p && x.p.star ? x.p.star : 'A') === gr.letter);
+    if (!idxs.length && gr.letter !== 'A') return '';
+    const hdr = gr.hdr ? `<div class="gm-fl gm-planets-hdr" style="margin-top:8px">${gr.hdr}</div>` : '';
+    return hdr + idxs.map(({ p, i }) => gmFormPlanetCard(p, i)).join('');
+  }).join('');
+}
+function gmFormPlanetCard(p, i) {
     let head;
     if (p && p.kind) {
       const kc = p.kind === 'belt' ? ' gm-dot-belt' : p.kind === 'anomaly' ? ' gm-dot-anom' : '';
@@ -2659,7 +2797,6 @@ function gmRenderFormPlanets() {
       </div>`;
     }
     return `<div class="gm-fp-card">${head}${gmResEditSection(p, i)}</div>`;
-  }).join('');
 }
 // Секция правки ресурсов одной планеты: чипы (с удалением) + ролл + ручное добавление.
 // Формат записи — как у генератора: {name, icon, r, rname, amt}. Для экономики
@@ -2766,13 +2903,52 @@ async function gmSaveForm() {
     is_giant: document.getElementById('gmf-giant').checked,
     description: document.getElementById('gmf-desc').value.trim(),
     planets,
+    stars: GM.formStars || [],
+    multi: !!document.getElementById('gmf-multi')?.checked,
   };
   try {
-    await dbPatch('map_systems', 'id=eq.' + encodeURIComponent(id), body);
+    try {
+      await dbPatch('map_systems', 'id=eq.' + encodeURIComponent(id), body);
+    } catch (e) {
+      // колонок stars/multi ещё нет в проде (не накачен _multi_stars.sql) —
+      // сохраняем без них, чтобы не терять остальную правку
+      if (!/stars|multi/.test(e.message || '')) throw e;
+      const { stars, multi, ...legacy } = body;
+      await dbPatch('map_systems', 'id=eq.' + encodeURIComponent(id), legacy);
+      toast('Кратность не сохранена: накати _multi_stars.sql', 'err');
+    }
     const s = GM.systems.find(x => x.id === id);
-    if (s) { Object.assign(s, body); s._bodies = null; }   // сброс кэша тел (орбиты глуб. зума)
+    // сброс кэша тел (орбиты глуб. зума) и аппетита на территорию: правка кратности
+    // меняет число компаньонов → меняется и доля пролёта, которую берёт система
+    if (s) { Object.assign(s, body); s._bodies = null; s._dem = null; }
     gmCloseForm(); gmDraw(); toast('Сохранено', 'ok');
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+// ── Кратность: ГЛОБАЛЬНЫЙ апдейт всех систем (дополнение) ──
+// Идёт по системам, где кратность ещё НЕ рассчитывалась (нет sys.stars);
+// установленные звёзды и их тела не трогаются — компаньоны дописываются.
+// stars:[] у одиночных — маркер «рассчитано», чтобы не крутить повторно.
+async function gmMultiApplyAll() {
+  if (!window.GalaxyGen || !GalaxyGen.generateMulti) { toast('Генератор не загружен', 'err'); return; }
+  const todo = GM.systems.filter(s => s.faction !== 'rift' && !Array.isArray(s.stars));
+  if (!todo.length) { toast('Кратность уже рассчитана для всех систем', 'ok'); return; }
+  if (!confirm(`Рассчитать кратность для ${todo.length} систем?\nУже рассчитанные пропускаются, существующие тела не меняются.`)) return;
+  let done = 0, multi = 0;
+  for (const s of todo) {
+    const r = GalaxyGen.generateMulti({ primaryCls: gmStarTypeToCls(s.star_type) });
+    const planets = gmAssignPids([...(s.planets || []), ...r.bodies]);
+    try {
+      await dbPatch('map_systems', 'id=eq.' + encodeURIComponent(s.id), { stars: r.stars, multi: true, planets });
+      Object.assign(s, { stars: r.stars, multi: true, planets }); s._bodies = null; s._dem = null;
+      done++; if (r.stars.length) multi++;
+    } catch (e) {
+      toast(`Стоп на «${s.name}»: ${e.message}${/stars|multi/.test(e.message || '') ? ' — накати _multi_stars.sql' : ''}`, 'err');
+      break;
+    }
+  }
+  gmDraw();
+  if (done) toast(`Готово: обработано ${done}, кратных выпало ${multi}`, 'ok');
 }
 async function gmDeleteStar(id) {
   if (!confirm('Удалить систему и связанные гиперпути?')) return;
@@ -3062,10 +3238,23 @@ function gmmCover() {
   }
   gmmClamp(); GMM.dirty = true; gmmKick();
 }
+// Зум к точке экрана. ВАЖНО: на глубоком зуме плоскость завалена (gmmTY сжимает Y
+// к центру вьюпорта), поэтому мировую точку под курсором надо брать РАСТИЛЬТОВАННОЙ
+// и возвращать её с наклоном НОВОГО масштаба. Раньше здесь была плоская формула
+// (cy-ty)/s — точка под курсором уползала, и на каждом щелчке колеса вид сползал
+// к центру экрана (наклон менялся, а якорь его не учитывал).
 function gmmZoomAt(cx, cy, ns, animate) {
   ns = Math.min(Math.max(ns, gmmMinS()), GM_MAX_SCALE);
-  const wx = (cx - GMM.tx) / GMM.s, wy = (cy - GMM.ty) / GMM.s;
-  const to = gmmClampCam({ s: ns, tx: cx - wx * ns, ty: cy - wy * ns });
+  const p = GMM.vh / 2;
+  const wx = (cx - GMM.tx) / GMM.s;
+  const wy = ((p + (cy - p) / gmmTiltK()) - GMM.ty) / GMM.s;   // мировой Y под курсором
+  // наклон на новом масштабе зависит от ty, а ty — от наклона: два прохода сходятся
+  let ty = cy - wy * ns;
+  for (let i = 0; i < 2; i++) {
+    const k = gmmTiltK({ s: ns, ty });
+    ty = (p + (cy - p) / k) - wy * ns;
+  }
+  const to = gmmClampCam({ s: ns, tx: cx - wx * ns, ty });
   if (animate) gmmAnimTo(to, 280);
   else { GMM.s = to.s; GMM.tx = to.tx; GMM.ty = to.ty; GMM.dirty = true; gmmKick(); }
 }
@@ -3618,9 +3807,9 @@ function gmmPaintDeepFx(ctx) {
 }
 
 // Сила оверлея орбит: 0 на обычном зуме → 1 на глубоком (плавный заход в [lo,hi]).
-function gmmDeepA() {
+function gmmDeepA(camS) {
   const lo = 2.4, hi = 3.6;
-  const u = Math.max(0, Math.min(1, (GMM.s - lo) / (hi - lo)));
+  const u = Math.max(0, Math.min(1, ((camS == null ? GMM.s : camS) - lo) / (hi - lo)));
   return u * u * (3 - 2 * u);
 }
 // Вертикальный «завал» плоскости карты под 3D-диски систем: на глубоком зуме вся
@@ -3628,15 +3817,17 @@ function gmmDeepA() {
 // вертикали к центру экрана — как у наклонённого диска. ky: 1 — плоско «сверху»,
 // 0.5 — полный наклон (та же сплюснутость, что и у орбит). Пивот един для всех
 // слоёв (центр вьюпорта), поэтому карта и системы тилтятся как одно целое.
-function gmmTiltK() {
-  const base = gmmDeepA();                 // сила наклона по зуму (0 плоско → 1 глубоко)
+// cam (необязательный {s,ty}) — посчитать наклон для ГИПОТЕТИЧЕСКОЙ камеры, не
+// трогая текущую: нужно якорю зума, чтобы удержать точку под курсором (gmmZoomAt).
+function gmmTiltK(cam) {
+  const base = gmmDeepA(cam ? cam.s : null);   // сила наклона по зуму (0 плоско → 1 глубоко)
   if (base <= 0) return 1;
   // У верхнего/нижнего края галактики наклон ГАСИМ: сжатие плоскости к центру
   // обнажило бы полосу за краем мира (заполнить нечем → «пустота/дыра»). Полный
   // наклон только когда сверху и снизу есть запас мира ~полвьюпорта — тогда сжатая
   // плоскость всё ещё кроет экран. Ближе к краю — плавно выпрямляем (ky→1).
-  const s = GMM.s;
-  const vyTop = -GMM.ty / s, vyBot = (GMM.vh - GMM.ty) / s;   // мировые Y верх/низ кадра
+  const s = cam ? cam.s : GMM.s, ty = cam ? cam.ty : GMM.ty;
+  const vyTop = -ty / s, vyBot = (GMM.vh - ty) / s;           // мировые Y верх/низ кадра
   const need = (vyBot - vyTop) * 0.5 || 1;
   const avail = Math.min(vyTop, GM_H - vyBot);                // запас мира сверху/снизу
   const edge = Math.max(0, Math.min(1, avail / need));
@@ -3662,6 +3853,28 @@ function gmmNN(sys) {
   }
   sys._nn = isFinite(best) ? best : 700;
   return sys._nn;
+}
+// Ближайший сосед как ОБЪЕКТ (не только дистанция) — нужен, чтобы делить пролёт
+// между двумя системами по их реальным аппетитам, а не пополам вслепую.
+function gmmNNSys(sys) {
+  if (sys._nnSys !== undefined) return sys._nnSys;
+  let best = Infinity, bs = null;
+  for (const o of GM.systems) {
+    if (o === sys) continue;
+    const d = Math.hypot(o.x - sys.x, o.y - sys.y);
+    if (d < best) { best = d; bs = o; }
+  }
+  return (sys._nnSys = bs);
+}
+// «Аппетит» системы на территорию в долях пролёта до соседа. Одиночке хватает
+// малого; кратной нужно место под мини-системы — тем больше, чем их больше и чем
+// дальше разнесён самый далёкий компонент.
+function gmmDemand(sys) {
+  if (sys._dem != null) return sys._dem;   // считается на кадр для себя И соседа — кэшируем
+  const cs = gmCompStars(sys);
+  if (!cs.length) return (sys._dem = 0.38);
+  const uMax = Math.max(...gmCompLayout(sys).map(c => c.u));
+  return (sys._dem = Math.min(0.74, 0.44 + 0.05 * cs.length + 0.12 * uMax));
 }
 // Экранный радиус тела по группе планеты (p.type — отображаемое имя группы из
 // генератора): гиганты крупные, карлики мелкие — чтобы разница размеров читалась.
@@ -4176,8 +4389,30 @@ function gmmPaintOrbits(ctx) {
     // система занимает не больше ~38% расстояния до ближайшего соседа; со свечением
     // (×1.12 ниже) это ~0.42, значит даже два смежных диска тянутся навстречу по 0.42
     // → между ними остаётся зазор ~16% и системы НЕ соприкасаются.
-    const rMax = Math.min(gmmNN(sys) * 0.38 * s, 320 * gz);
-    const rIn = Math.min(starR * 1.7, rMax - 6);              // первая орбита держит зазор от звезды
+    let rMax = Math.min(gmmNN(sys) * 0.38 * s, 320 * gz);
+    // ── КРАТНОСТЬ: домен делится. Главная звезда получает внутренние ~56%,
+    //    компаньоны — собственные МИНИ-СИСТЕМЫ (солнце+орбиты+тела) на кольце снаружи. ──
+    const comps = gmCompLayout(sys);
+    // Кратной системе нужно БОЛЬШЕ места: домен растёт с числом компаньонов и с тем,
+    // как далеко разнесён самый дальний из них (rMax уже ограничен соседями, но
+    // 0.38·NN — запас: у кратных берём до 0.62·NN, зазор между системами остаётся).
+    if (comps.length) {
+      // ТЕРРИТОРИЯ = ДОЛЯ ПРОЛЁТА ПО АППЕТИТАМ, а не глухой потолок 0.47·NN. Прежний
+      // потолок был симметричным допущением («сосед возьмёт столько же»), из-за чего
+      // кратная система с четырьмя компаньонами получала ровно столько же места, что и
+      // одиночка рядом, и мини-системы жались друг к другу. Теперь пролёт делится
+      // пропорционально: кратная рядом с одиночкой берёт ~0.66·NN вместо 0.47·NN, а
+      // две кратные делят пополам. Домены по-прежнему не смыкаются: доли дают в сумме 1.
+      const nb = gmmNNSys(sys);
+      const dOwn = gmmDemand(sys), dNb = nb ? gmmDemand(nb) : 0.38;
+      rMax = Math.min(gmmNN(sys) * (dOwn / (dOwn + dNb)) * s, 1400 * gz);
+    }
+    // планетам главной остаётся внутренняя зона — тем меньше, чем ближе ближайший
+    // компаньон (тесная пара реально выедает планетную систему)
+    const rMaxP = comps.length
+      ? rMax * (0.3 + 0.26 * Math.min(...comps.map(c => c.u)))
+      : rMax;
+    const rIn = Math.min(starR * 1.7, rMaxP - 6);             // первая орбита держит зазор от звезды
     // радиусы орбит — по реальной дистанции (а.е.). Степенная кривая (u^1.4) сжимает
     // внутренние орбиты у звезды и разносит внешние в пустоту — как в реальной системе
     // (закон Тициуса–Боде): расстояния «дышат», между мирами много пространства.
@@ -4196,28 +4431,40 @@ function gmmPaintOrbits(ctx) {
       if (n <= 1) return (rIn + rMax) / 2;
       let u = dmax > dmin ? (ds[i] - dmin) / (dmax - dmin) : i / (n - 1);
       u = Math.pow(u, 1.4);
-      return rIn + (rMax - rIn) * u;
+      return rIn + (rMaxP - rIn) * u;
     });
     // раскладка от звезды наружу с минимальным зазором (размер тел масштабируется,
     // если система переполнена и иначе тела не помещаются в домен).
-    const buildRadii = s => {
+    const buildRadii = (s, gap) => {
       const rr = wantR.slice();
       rr[0] = Math.max(rr[0], rIn + s[0]);
       for (let i = 1; i < n; i++) {
-        const need = rr[i - 1] + s[i - 1] + s[i] + GAP;
+        const need = rr[i - 1] + s[i - 1] + s[i] + gap;
         if (rr[i] < need) rr[i] = need;
       }
       return rr;
     };
-    let bodyScale = 1, radii = buildRadii(baseSz);
+    let bodyScale = 1, radii = buildRadii(baseSz, GAP);
     for (let pass = 0; pass < 7 && n > 1; pass++) {
-      const s = baseSz.map(v => v * bodyScale);
-      radii = buildRadii(s);
-      const outer = radii[n - 1] + s[n - 1];
-      if (outer <= rMax) break;
-      bodyScale *= (rMax / outer) * 0.97;     // тесно — ужимаем тела, сохраняя зазоры
+      const sc = baseSz.map(v => v * bodyScale);
+      radii = buildRadii(sc, GAP * bodyScale);   // зазоры ужимаются вместе с телами
+      const out = radii[n - 1] + sc[n - 1];
+      if (out <= rMaxP) break;
+      bodyScale *= (rMaxP / out) * 0.97;    // тесно — ужимаем тела, сохраняя зазоры
     }
-    const sizes = baseSz.map(v => v * bodyScale);
+    let sizes = baseSz.map(v => v * bodyScale);
+    // ЖЁСТКАЯ посадка лестницы орбит в домен планет. Раньше нижние границы (rIn и
+    // фиксированный GAP) не ужимались, поэтому у тесной пары (rMaxP = 0.3·rMax)
+    // внешние орбиты вылезали за домен — прямо в мини-систему компаньона. Появлялось
+    // это «то на одном зуме, то на другом»: gz зажат в 1..7, а домен растёт как s,
+    // так что пропорция «домен : зазоры» плыла по мере приближения. Теперь после
+    // подгонки вся лестница уводится под rMaxP — наложение невозможно на любом зуме.
+    let rOuterMain = n ? radii[n - 1] + sizes[n - 1] : rIn;
+    if (n && rOuterMain > rMaxP) {
+      const k = rMaxP / rOuterMain;
+      radii = radii.map(v => v * k); sizes = sizes.map(v => v * k);
+      rOuterMain = rMaxP;
+    }
     // ── ПРОСТРАНСТВО СИСТЕМЫ: наклонный диск-«домен» + корона звезды. Без обводки:
     //    территория обособлена самим светящимся диском, тонированным в цвет фракции-
     //    владельца (нейтральная — холодный синий). Свет держится по диску и мягко
@@ -4228,15 +4475,35 @@ function gmmPaintOrbits(ctx) {
     if (isFocus) GMM.focusFx = { cx, cy, rMax, color: terr };   // для HUD-перехода входа в систему
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const haze = ctx.createRadialGradient(cx, cy, starR * 0.5, cx, cy, rMax * 1.12);
+    // Дальность свечения: по ячейке региона тянем до САМОГО ДАЛЬНЕГО её угла, иначе
+    // (нет ячейки) — прежний круг домена.
+    const cell = (GMM.paths && GMM.paths.sysCells) ? GMM.paths.sysCells.get(sys.id) : null;
+    const cellP = cell ? cell.p2d : null;
+    const hazeR = cell && cell.reach > 0 ? cell.reach * s : rMax * 1.12;
+    const haze = ctx.createRadialGradient(cx, cy, starR * 0.5, cx, cy, hazeR);
     haze.addColorStop(0, `rgba(${glow},${(0.12 * a).toFixed(3)})`);             // тёплый центр у звезды
-    haze.addColorStop(0.45, `rgba(${terr},${(0.075 * a).toFixed(3)})`);         // тон владельца по диску
-    haze.addColorStop(0.82, `rgba(${terr},${(0.05 * a).toFixed(3)})`);          // держим свет почти до края
-    haze.addColorStop(1, 'rgba(0,0,0,0)');                                      // мягкий невидимый рубеж
+    haze.addColorStop(0.45, `rgba(${terr},${(0.075 * a).toFixed(3)})`);         // тон владельца
+    haze.addColorStop(0.82, `rgba(${terr},${(0.05 * a).toFixed(3)})`);          // держим свет почти до рубежа
+    haze.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = haze;
-    ctx.save(); ctx.translate(cx, cy); ctx.scale(1, TILT); ctx.translate(-cx, -cy);
-    ctx.beginPath(); ctx.arc(cx, cy, rMax * 1.12, 0, 6.2832); ctx.fill();
-    ctx.restore();
+    if (cellP) {
+      // ── ДОМЕН = ЯЧЕЙКА РЕГИОНА, а не круг. Круги соседних систем неизбежно
+      //    наезжали друг на друга (радиус брался от расстояния до соседа, но форма
+      //    оставалась круглой). Клипуем свечение по границе региона — той же, что
+      //    рисует слой территорий, — поэтому домены смыкаются встык и не пересекаются.
+      const dpr = GMM.dpr, pv = GMM.vh / 2;
+      ctx.save();
+      // мир → экран с наклоном: x = wx·s+tx, y = (wy·s+ty−pv)·TILT+pv
+      ctx.setTransform(dpr * s, 0, 0, dpr * s * TILT, dpr * tx, dpr * (ty * TILT + pv * (1 - TILT)));
+      ctx.clip(cellP);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // клип уже в экранных пикселях — заливаем как раньше
+      ctx.fillRect(cx - hazeR, cy - hazeR, hazeR * 2, hazeR * 2);
+      ctx.restore();
+    } else {
+      ctx.save(); ctx.translate(cx, cy); ctx.scale(1, TILT); ctx.translate(-cx, -cy);
+      ctx.beginPath(); ctx.arc(cx, cy, hazeR, 0, 6.2832); ctx.fill();
+      ctx.restore();
+    }
     // корона звезды
     const cor = ctx.createRadialGradient(cx, cy, 0, cx, cy, starR * 2.4);
     cor.addColorStop(0, `rgba(${glow},${(0.55 * a).toFixed(3)})`);
@@ -4422,6 +4689,239 @@ function gmmPaintOrbits(ctx) {
         gmmPlanetTag(ctx, px, py, nm, 1, { color: col, fs: pfs, alpha: a, ax: bx, ay: by });
       }
     }
+
+    // ── КРАТНОСТЬ: мини-системы компаньонов — своё солнце, свои орбиты, свои тела.
+    //    Кольцо размещения снаружи домена главной (rMax·0.8), углы разнесены по
+    //    золотому шагу от детерминированной базы (не прыгают между кадрами). ──
+    // ── Раскладка мини-систем СНАЧАЛА целиком, потом отрисовка: радиус мини-домена
+    //    надо согласовать с СОСЕДЯМИ по кратной системе. Раньше каждый компаньон
+    //    считал свой miniR в одиночку — и домены наезжали друг на друга и на диск
+    //    главной (видно на кратных: 3-4 круга внахлёст). ──
+    // Радиус компаньона брался как rMaxP + (rMax·0.96 − rMaxP)·u, где u — лог-сепарация,
+    // нормированная по ВСЕЙ шкале 0.3…10000 а.е. На одну систему приходится узкая полоса
+    // радиусов, поэтому 15.7 а.е. и 76.1 а.е. (разница в ПЯТЬ раз) вставали на 430 и 487px —
+    // фактически одно кольцо. Разводил их только угол; когда углы сходились, мини-системы
+    // налезали друг на друга — отсюда «периодически». Теперь желаемый радиус по-прежнему
+    // берётся от реальной сепарации, но кольца ПРОТАЛКИВАЮТСЯ наружу, пока расстояние
+    // между центрами не покроет оба мини-домена с зазором; не влезли в домен — ужимаются
+    // сами мини-домены. Наложение больше не зависит от того, повезло ли с углами.
+    const rLo = Math.max(rMaxP, rOuterMain) + 6 * gz;   // старт — за внешней орбитой главной
+    const rHi = rMax * 0.97;                            // рубеж домена системы
+    const cgap = 6 * gz;
+    // порядок обхода — от тесных к далёким: ближний компаньон занимает место первым
+    const CG = comps.slice().sort((p, q) => p.u - q.u).map(({ c, ci, fr, u, ang: angC }) => ({
+      c, ci, fr, u, angC, sr: Math.max(3, starR * fr) }));
+    // РАСПРЕДЕЛЕНИЕ ПО ВСЕЙ ТЕРРИТОРИИ. Абсолютная лог-шкала даёт мизерный разброс
+    // (15.7 и 76.1 а.е. — впятеро разные — это u=0.375 и 0.524), поэтому все компаньоны
+    // сбивались в одно кольцо у внутреннего края, а внешняя территория стояла пустой.
+    // Порядок по сепарации задаёт слот во ВСЕЙ полосе rLo…rHi, а лог-сепарация лишь
+    // смещает внутри слота — дальний компонент по-прежнему дальше ближнего.
+    const us = CG.map(g => g.u), uLo = Math.min(...us), uHi = Math.max(...us);
+    const tOf = (g, i) => {
+      const slot = (i + 0.85) / CG.length;                        // равномерно по территории
+      const rel = uHi > uLo ? (g.u - uLo) / (uHi - uLo) : 0.5;    // порядок внутри системы
+      return Math.min(1, 0.72 * slot + 0.28 * (0.5 * rel + 0.5 * g.u));
+    };
+    // расстояния между центрами меряем в НЕсплюснутых координатах — по вертикали всё
+    // сжато наклоном, и в экранных единицах зазор был бы завышен
+    const cdist = (ax, ay, bx, by) => Math.hypot(ax - bx, (ay - by) / (TILT || 1));
+    let msc = 1;   // общий множитель мини-доменов: падает, если лестница не влезает
+    const layoutComps = () => {
+      const placed = []; let outC = 0;
+      CG.forEach((g, i) => {
+        // размер мини-домена — от ДОЛИ территории на компаньона, а не от его радиуса:
+        // иначе внешний компаньон получал огромный домен, упирался им в рубеж и msc
+        // ужимал всех до крошек (34px при территории 698)
+        const share = (rHi - rLo) / (CG.length + 0.6) * 0.46;
+        g.miniR = Math.max(g.sr * 1.5, Math.min(share, rMax * 0.3) * msc);
+        // полоса ЦЕНТРОВ с запасом под сам мини-домен на обоих концах — тогда крайний
+        // компаньон стоит у рубежа своим КРАЕМ, а не центром
+        const cLo = rLo + g.miniR + cgap, cHi = Math.max(cLo, rHi - g.miniR);
+        g.want = cLo + (cHi - cLo) * tOf(g, i);
+        let r = Math.max(g.want, cLo);
+        // выталкиваем наружу, пока мини-домен пересекает уже размещённые
+        for (let it = 0; it < 12; it++) {
+          const gx = cx + Math.cos(g.angC) * r, gy = cy + Math.sin(g.angC) * r * TILT;
+          let push = 0;
+          for (const o of placed) {
+            const need = g.miniR + o.miniR + cgap;
+            const d = cdist(gx, gy, o.ccx, o.ccy);
+            if (d < need) push = Math.max(push, need - d);
+          }
+          if (push <= 0.01) break;
+          r += push;
+        }
+        g.ringR = r;
+        g.ccx = cx + Math.cos(g.angC) * r; g.ccy = cy + Math.sin(g.angC) * r * TILT;
+        placed.push(g); outC = Math.max(outC, r + g.miniR);
+      });
+      return outC;
+    };
+    for (let pass = 0; pass < 8 && CG.length; pass++) {
+      const outC = layoutComps();
+      if (outC <= rHi) break;
+      msc *= (rHi / outC) * 0.94;   // тесно — ужимаем мини-домены, зазоры сохраняются
+    }
+    // РОСТ по фактическим зазорам: доля территории считается так, будто компаньоны
+    // стоят на одном луче, — но углы у них разные, и места обычно куда больше. Даём
+    // каждому разойтись до реального упора (соседи/диск главной/рубеж), по очереди,
+    // чтобы выросший уже учитывался следующими.
+    CG.forEach(g => {
+      let lim = Math.min(g.ringR - Math.max(rMaxP, rOuterMain) - cgap, rHi + rMax * 0.03 - g.ringR);
+      CG.forEach(o => {
+        if (o === g) return;
+        lim = Math.min(lim, cdist(g.ccx, g.ccy, o.ccx, o.ccy) - o.miniR - cgap);
+      });
+      g.miniR = Math.max(g.miniR, Math.min(lim, rMax * 0.3));
+    });
+    const compGeo = CG;
+    // ── ГИПЕРПУТЬ ДО КОМПАНЬОНА. Мини-системы висели оторванными островами: внешние
+    //    трассы приходят только к главной звезде, а до компаньонов сеть не доходила.
+    //    Тянем ветку от главной к каждому компаньону — тем же цветом и толщиной, что
+    //    магистрали в растре (hsl(206 92% 64%), 1.8px), со стрелками направления.
+    //    Линия идёт по лучу в плоскости диска (с наклоном), от края короны главной до
+    //    края мини-домена — не перечёркивает ни звезду, ни сам компаньон.
+    if (compGeo.length) {
+      const ptAt = (ang, r) => [cx + Math.cos(ang) * r, cy + Math.sin(ang) * r * TILT];
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 1.8;
+      compGeo.forEach(g => {
+        const r0 = Math.max(starR * 1.35, Math.max(rMaxP, rOuterMain) * 0.34);
+        const r1 = g.ringR - g.miniR * 0.62;
+        if (r1 <= r0) return;
+        const [x0, y0] = ptAt(g.angC, r0), [x1, y1] = ptAt(g.angC, r1);
+        ctx.strokeStyle = `rgba(90,178,255,${(0.55 * a).toFixed(3)})`;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+        // шевроны по ходу — читается как трасса, а не как спица орбиты
+        const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1;
+        const ux = dx / L, uy = dy / L, px = -uy, py = ux;
+        ctx.strokeStyle = `rgba(150,215,255,${(0.5 * a).toFixed(3)})`;
+        ctx.lineWidth = 1.2;
+        for (let k = 1; k <= 3; k++) {
+          const m = L * (k / 4), hx = x0 + ux * m, hy = y0 + uy * m, w = 3.2;
+          ctx.beginPath();
+          ctx.moveTo(hx - ux * w + px * w, hy - uy * w + py * w);
+          ctx.lineTo(hx, hy);
+          ctx.lineTo(hx - ux * w - px * w, hy - uy * w - py * w);
+          ctx.stroke();
+        }
+        ctx.lineWidth = 1.8;
+      });
+      ctx.restore();
+    }
+    // съём геометрии для стенда (_multistar_render_harness.html): включается только
+    // флагом window.GM_GEO_DEBUG, в проде мёртвый код
+    if (window.GM_GEO_DEBUG) sys._geo = { cx, cy, rMax, rMaxP, rOuterMain, starR, gz, tilt: TILT,
+      radii: radii.slice(), sizes: sizes.slice(),
+      comps: compGeo.map(g => ({ letter: g.c.letter, sep: g.c.sep_au, u: g.u, ringR: g.ringR, miniR: g.miniR, sr: g.sr, ccx: g.ccx, ccy: g.ccy })) };
+    compGeo.forEach(({ c, ci, ccx, ccy, sr, miniR }) => {
+      const cg = GM_CLS_GLOW[c.cls] || '255,220,130';
+      const bodies = gmCompBodies(sys, c.letter);
+      // дымка мини-домена + корона + ядро солнца
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      // дымка идёт РОВНО по miniR (без прежнего ×1.15 — он съедал согласованный
+      // зазор обратно, и круги снова наезжали)
+      const mh = ctx.createRadialGradient(ccx, ccy, sr * 0.4, ccx, ccy, miniR);
+      mh.addColorStop(0, `rgba(${cg},${(0.16 * a).toFixed(3)})`);
+      mh.addColorStop(0.6, `rgba(${cg},${(0.05 * a).toFixed(3)})`);
+      mh.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = mh;
+      ctx.save(); ctx.translate(ccx, ccy); ctx.scale(1, TILT); ctx.translate(-ccx, -ccy);
+      ctx.beginPath(); ctx.arc(ccx, ccy, miniR, 0, 6.2832); ctx.fill();
+      ctx.restore();
+      const cc2 = ctx.createRadialGradient(ccx, ccy, 0, ccx, ccy, sr * 2.4);
+      cc2.addColorStop(0, `rgba(${cg},${(0.6 * a).toFixed(3)})`);
+      cc2.addColorStop(0.5, `rgba(${cg},${(0.22 * a).toFixed(3)})`);
+      cc2.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = cc2;
+      ctx.beginPath(); ctx.arc(ccx, ccy, sr * 2.4, 0, 6.2832); ctx.fill();
+      ctx.restore();
+      // ядро — ТОТ ЖЕ ассет звезды, что и у главной (star_<type>.png), а не белый шар;
+      // пропорции PNG сохраняем, фолбэк — заливка цветом класса
+      const cim = GMM.imgs[GM_CLS2TYPE[c.cls] || 'yellow'];
+      ctx.globalAlpha = a;
+      if (cim && cim.complete && cim.naturalWidth) {
+        const car = cim.naturalWidth / cim.naturalHeight, cd = sr * 2.6;
+        let cdw = cd, cdh = cd; if (car >= 1) cdh = cd / car; else cdw = cd * car;
+        ctx.drawImage(cim, ccx - cdw / 2, ccy - cdh / 2, cdw, cdh);
+      } else {
+        ctx.fillStyle = `rgb(${cg})`;
+        ctx.beginPath(); ctx.arc(ccx, ccy, sr * 0.7, 0, 6.2832); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      // орбиты + тела мини-системы (упрощённый вариант главного рендера)
+      const nb = bodies.length;
+      const rInC = sr * 1.9, rOutC = miniR;
+      // орбиты мини-системы — по РЕАЛЬНОЙ дистанции тел (а.е.) с той же кривой
+      // Тициуса–Боде, что у главной: внутренние сжаты, внешние в пустоту.
+      // Раньше был линейный bi/(nb-1) — отсюда одинаковые отступы.
+      const cds = bodies.map(p => +p.dist || 0);
+      const cdmin = Math.min(...cds), cdmax = Math.max(...cds);
+      const cLabels = [];
+      for (let bi = 0; bi < nb; bi++) {
+        const p = bodies[bi];
+        const uu = nb <= 1 ? 0.5
+          : Math.pow(cdmax > cdmin ? (cds[bi] - cdmin) / (cdmax - cdmin) : bi / (nb - 1), 1.4);
+        const rr = nb === 1 ? (rInC + rOutC) / 2 : rInC + (rOutC - rInC) * uu;
+        const zc = p.dead ? '#6b6b72' : gmZoneColor(p.zone);
+        const rgb = gmRgb(zc);
+        // нить орбиты
+        ctx.beginPath(); ctx.ellipse(ccx, ccy, rr, rr * TILT, 0, 0, 6.2832);
+        ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(0.32 * a).toFixed(3)})`;
+        ctx.lineWidth = isFocus ? 1.1 : 0.8; ctx.stroke();
+        if (p.kind === 'belt') {
+          // пояс мини-системы: пыльное кольцо + горсть камней
+          ctx.save();
+          ctx.beginPath(); ctx.ellipse(ccx, ccy, rr, rr * TILT, 0, 0, 6.2832);
+          ctx.lineWidth = Math.max(2.5, rr * 0.09); ctx.strokeStyle = zc; ctx.globalAlpha = a * 0.06; ctx.stroke();
+          ctx.restore();
+          const NR = 16, drift = (t / 150) * 6.2832;
+          for (let k = 0; k < NR; k++) {
+            const j = gmHash01(k * 31 + ci * 7 + 1);
+            const aa = (k / NR) * 6.2832 + drift;
+            const px2 = ccx + Math.cos(aa) * rr, py2 = ccy + Math.sin(aa) * rr * TILT;
+            ctx.globalAlpha = a * (0.4 + 0.5 * j);
+            ctx.fillStyle = '#8d8478';
+            ctx.beginPath(); ctx.arc(px2, py2, (0.35 + j * 0.5) * gz, 0, 6.2832); ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+          if (isFocus && p.name) cLabels.push({ p, ang: 0, rr, sz: 3 });
+          continue;
+        }
+        // планета: полноценный рендер тела (полосы гигантов/лёд/кратеры — как у главной)
+        const sz = Math.max(1.8 * gz, sr * gmmPlanetFr(p) * 0.62);
+        const ang = bi * 2.39996 + t * 0.06 + ci;   // мини-системы вращаются чуть живее
+        const px2 = ccx + Math.cos(ang) * rr, py2 = ccy + Math.sin(ang) * rr * TILT;
+        gmmPaintBody(ctx, px2, py2, sz, p, zc, a, t, ccx, ccy);
+        if (p.isColony && !p.dead) { gmmBodyLife(ctx, px2, py2, sz, p, a, t, ccx, ccy); }
+        if (p.isColony && p.colId) GMM.colonyXY[p.colId] = { x: px2, y: py2, r: sz };
+        if (GM.showRes && !p.dead) gmmPaintPlanetRes(ctx, px2, py2, sz, p, a);
+        if (isFocus && p.name) cLabels.push({ p, ang, rr, sz });
+      }
+      // подпись звезды: «Бета <Имя>» — ПЛАШКОЙ, как у главной (раньше был голый
+      // fillText: единственная надпись на карте без рамки, выпадала из стиля).
+      // Компаньон — не самостоятельная система, поэтому облегчённый minor-чип.
+      {
+        const fs2 = isFocus ? 11 : 9.5;
+        const hh2 = fs2 * 0.5 + 3.5 + 1.2;
+        gmmNamePlate(ctx, ccx, ccy - miniR * TILT - 6 - hh2, `${gmStarGreek(c.letter)} ${sys.name}`, 1,
+          { variant: 'minor', color: `rgb(${cg})`, fs: fs2, weight: 700, alpha: a * (isFocus ? 1 : 0.66) });
+      }
+      // подписи тел мини-системы — только в фокусе, лёгким стилем наружу от солнца
+      if (isFocus && cLabels.length) {
+        const pfs2 = 10;
+        ctx.font = `600 ${pfs2}px Rajdhani, 'Exo 2', sans-serif`;
+        cLabels.forEach(L => {
+          const dirx = Math.cos(L.ang), diry = Math.sin(L.ang);
+          const px2 = ccx + dirx * (L.rr + L.sz + 26), py2 = ccy + diry * (L.rr + L.sz + 26) * TILT;
+          const bx = ccx + dirx * L.rr, by = ccy + diry * L.rr * TILT;
+          gmmPlanetTag(ctx, px2, py2, L.p.dead ? '☠ ' + L.p.name : L.p.name, 1,
+            { color: L.p.dead ? '#9a9aa2' : '#8fe0ff', fs: pfs2, alpha: a * 0.92, ax: bx, ay: by });
+        });
+      }
+    });
   });
   ctx.restore();
   ctx.globalAlpha = 1;
@@ -4841,6 +5341,10 @@ function gmmBuildWorld() {
   // тумана войны (gmmPaintFog), + ПОКЛЕТОЧНЫЙ список neutCells — для посекторной
   // штриховки (у каждого региона свой угол штрихов, см. gmmPaintNeutralHatch).
   let neutTerrD = ''; const neutCells = []; let hasNeut = false;
+  // Ячейка региона ПОКАЖДОЙ системе (union всех её seed-ячеек: крупная звезда
+  // разворачивается в кольцо seed'ов, поэтому кусков несколько). Нужна, чтобы
+  // домен системы на глубоком зуме светился ПО ФОРМЕ РЕГИОНА, а не кругом.
+  const sysCellD = new Map();
   geo.fills.forEach(f => {
     const isNeutral = !f.isRift && !f.fac;
     const color = f.isRift ? 'rgba(14,2,24,.8)' : (f.fac ? f.fac.color : 'rgba(120,140,170,0.04)');
@@ -4858,7 +5362,17 @@ function gmmBuildWorld() {
       const ang = gmHash01(cx * 0.017 + cy * 0.031) * Math.PI;
       neutCells.push({ d, x0, y0, x1, y1, cx, cy, ang });
     }
-    if (!f.isRift && f.sys) { const ec = gmEconFill(f.sys); econD.set(ec, (econD.get(ec) || '') + d); }
+    if (!f.isRift && f.sys) {
+      const ec = gmEconFill(f.sys); econD.set(ec, (econD.get(ec) || '') + d);
+      let e = sysCellD.get(f.sys.id);
+      if (!e) sysCellD.set(f.sys.id, (e = { d: '', reach: 0 }));
+      e.d += d;
+      // reach — до самого дальнего угла ячейки: докуда тянуть градиент свечения
+      for (const p of f.pts) {
+        const dd = Math.hypot(p[0] - f.sys.x, p[1] - f.sys.y);
+        if (dd > e.reach) e.reach = dd;
+      }
+    }
     if (!f.isRift && f.fac && f.fac.id) {
       let e = facD.get(f.fac.id);
       if (!e) { e = { d: '', color: f.fac.color, x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 }; facD.set(f.fac.id, e); }
@@ -4935,6 +5449,7 @@ function gmmBuildWorld() {
       bx: e.x0, by: e.y0, bw: Math.max(1, e.x1 - e.x0), bh: Math.max(1, e.y1 - e.y0),
     })),
     econFills: [...econD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
+    sysCells: new Map([...sysCellD].map(([id, e]) => [id, { p2d: new Path2D(e.d), reach: e.reach }])),
     fogPath: fogD ? new Path2D(fogD) : null,
     secFills: [...secFillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     edges: [...edgeD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
@@ -6711,6 +7226,23 @@ function gmmPaintStars(ctx, camS) {
         if (ar >= 1) dh = iw / ar; else dw = iw * ar;
         ctx.drawImage(im, s.x - dw / 2, s.y - dh / 2, dw, dh);
       } else { ctx.fillStyle = '#ffd76a'; ctx.beginPath(); ctx.arc(s.x, s.y, iw * 0.3, 0, 6.2832); ctx.fill(); }
+      // кратная система: спрайты компаньонов по кругу от главной звезды.
+      // Гаснут при раскрытии системы (deep) — там компаньоны рисуются мини-системами.
+      const compA = iconA * (1 - gmmDeepA());
+      if (compA > 0.02) { ctx.globalAlpha = compA;
+      gmCompLayout(s).forEach(({ c, fr, off, ang }) => {
+        const cw = iw * fr;
+        // отступ от центра — в долях РАДИУСА иконки (iw/2), по реальной сепарации;
+        // по вертикали сжат наклоном плоскости системы
+        const px = s.x + Math.cos(ang) * off * iw * 0.5, py = s.y + Math.sin(ang) * off * iw * 0.5 * gmmTiltK();
+        ctx.drawImage(gmmGlowSprite(GM_CLS_GLOW[c.cls] || '255,220,130', 0.3), px - cw * 0.7, py - cw * 0.7, cw * 1.4, cw * 1.4);
+        const cim = GMM.imgs[GM_CLS2TYPE[c.cls] || 'yellow'];
+        if (cim && cim.complete && cim.naturalWidth) {
+          const car = cim.naturalWidth / cim.naturalHeight;
+          let cdw = cw, cdh = cw; if (car >= 1) cdh = cw / car; else cdw = cw * car;
+          ctx.drawImage(cim, px - cdw / 2, py - cdh / 2, cdw, cdh);
+        } else { ctx.fillStyle = `rgb(${GM_CLS_GLOW[c.cls] || '255,220,130'})`; ctx.beginPath(); ctx.arc(px, py, cw * 0.28, 0, 6.2832); ctx.fill(); }
+      }); ctx.globalAlpha = iconA; }
       const capFid = caps[s.id];
       if (capFid) {
         ctx.font = `${(13 / camS).toFixed(2)}px sans-serif`;

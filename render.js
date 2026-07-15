@@ -3380,7 +3380,18 @@ function _heroColonySysBuild(sysId, en) {
   const colNamesNoPid = new Set(cols.filter(c => c.planet_pid == null).map(c => c.planet_name));
   const colOf = p => cols.find(c => (p.pid != null && c.planet_pid === p.pid) || (c.planet_pid == null && c.planet_name === p.name)) || null;
   const isOccupied = p => (p.pid != null && colPids.has(p.pid)) || colNamesNoPid.has(p.name);
-  const planets = (sys.planets || []).filter(p => p && p.name);
+  // ── Кратность (_multi_stars.sql): тела компаньонов лежат в том же sys.planets
+  //    с меткой star:'B'/'C'/…, а их dist отсчитан от СВОЕЙ звезды и обрезан
+  //    пределом устойчивости. Валить их в один ряд с телами главной звезды нельзя —
+  //    они скучатся у светила. Поэтому каждый компонент получает свою звезду-якорь
+  //    и свой ряд тел правее неё. Скрытые галочкой компаньоны отсеиваются.
+  const comps = (typeof ecCompStars === 'function') ? ecCompStars(sys) : [];
+  const visible = p => (typeof ecStarHostVisible === 'function') ? ecStarHostVisible(sys, p) : true;
+  const letterOf = p => (p && p.star) || 'A';
+  const allBodies = (sys.planets || []).filter(p => p && p.name && visible(p));
+  // Порядок: сперва тела главной звезды, затем по компаньонам в порядке sys.stars.
+  const starSeq = [{ letter: 'A' }].concat(comps.map(s => ({ letter: s.letter, st: s })));
+  const planets = starSeq.flatMap(s => allBodies.filter(p => letterOf(p) === s.letter));
 
   // ── Схема системы: звезда слева + орбитальные дуги + планеты-диски ──
   const STARC = { yellow: '#ffd75e', red: '#ff6a4e', blue: '#6fb9f0', white: '#eef6ff', green: '#45e0b4' };
@@ -3394,9 +3405,8 @@ function _heroColonySysBuild(sysId, en) {
     return (g && STARC[g.star_type]) ? g.star_type : 'yellow';
   })();
   const sc = STARC[starType];
-  // Звезду берём той же текстурой, что большая карта (assets/map/stars/star_<type>.png):
-  // рисовать её голым градиентом рядом с текстурными планетами — разнобой.
-  const starTex = texBase + 'stars/star_' + starType + '.png';
+  // Звёзды берём той же текстурой, что большая карта (assets/map/stars/star_<type>.png):
+  // рисовать их голым градиентом рядом с текстурными планетами — разнобой.
   const H = 330, cy = H / 2, starX = 78, starR = 30;
   // Полосы подписей: фиксированные «строки» над и под линией планет. Метка НИКОГДА
   // не висит вплотную к своему диску — иначе соседи наезжают, как только у одного
@@ -3447,26 +3457,49 @@ function _heroColonySysBuild(sysId, en) {
   // Метки чередуются над/под диском ⇒ по одной «строке» стоят соседи через одного
   // (i и i+2). Раскладываем жадно, гарантируя: (а) диски не касаются, (б) метки
   // одной строки не пересекаются. Холст растягиваем под итог — без сжатия в кашу.
-  const xs = []; let cursor = starX + starR * 2.4 + 74;
-  planets.forEach((p, i) => {
-    let x = i === 0 ? cursor : xs[i - 1] + footOf(grpList[i - 1], radList[i - 1]) + GAP + footOf(grpList[i], radList[i]);
-    if (i >= 2) x = Math.max(x, xs[i - 2] + hl[i - 2] + hl[i] + 8);   // метки одной строки не наезжают
-    xs.push(x);
+  // Раскладка идёт ПО КОМПОНЕНТАМ: звезда-якорь, её тела, затем следующая звезда.
+  // hostX[i] — x звезды, вокруг которой ходит тело i: от него считаются орбитальная
+  // дуга и дуга пояса, иначе компаньонские тела крутились бы вокруг главной звезды.
+  // Радиус компаньона — по классу (красный карлик мельче солнцеподобной, D/N — точки).
+  const CLS_R = (typeof GM_CLS_R !== 'undefined') ? GM_CLS_R : { O: 1.25, B: 1.08, A: .92, F: .8, G: .72, K: .56, M: .42, D: .28, N: .24 };
+  const compR = st => Math.max(11, starR * ((CLS_R[st && st.cls] || 0.6) / 0.72));
+  const xs = [], hostX = [];
+  const starNodes = [];                 // {letter, st, x, r, type} — якоря для отрисовки
+  let cursor = 0, k = 0;
+  starSeq.forEach((seg, si) => {
+    const isMain = si === 0;
+    const r = isMain ? starR : compR(seg.st);
+    // Главная звезда стоит на своём историческом месте; компаньон отодвигается от
+    // последнего тела предыдущего компонента — между компонентами нужен зазор,
+    // иначе звезда налезет на чужую подпись.
+    const sx = isMain ? starX : cursor + r * 2.4 + 40;
+    starNodes.push({ letter: seg.letter, st: seg.st, x: sx, r, isMain });
+    cursor = sx + r * 2.4 + (isMain ? 74 : 54);
+    const mine = planets.filter(p => letterOf(p) === seg.letter);
+    mine.forEach((p, j) => {
+      const i = k + j;
+      let x = j === 0 ? cursor : xs[i - 1] + footOf(grpList[i - 1], radList[i - 1]) + GAP + footOf(grpList[i], radList[i]);
+      if (i >= 2) x = Math.max(x, xs[i - 2] + hl[i - 2] + hl[i] + 8);   // метки одной строки не наезжают
+      xs.push(x); hostX.push(sx);
+    });
+    k += mine.length;
+    if (mine.length) cursor = xs[k - 1] + footOf(grpList[k - 1], radList[k - 1]) + hl[k - 1];
   });
-  W = Math.max(1000, Math.round((xs[n - 1] || cursor) + hl[n - 1] + 40));
+  const lastX = n ? xs[n - 1] + hl[n - 1] : cursor;
+  W = Math.max(1000, Math.round(Math.max(lastX, cursor) + 40));
   let bgStars = '';
   for (let i = 0, nbg = Math.round(W / 14); i < nbg; i++) bgStars += `<circle cx="${nf(_rnd() * W)}" cy="${nf(_rnd() * H)}" r="${nf(0.5 + _rnd() * 1.2)}" fill="#cfe4ff" opacity="${nf(0.05 + _rnd() * 0.14)}"></circle>`;
   const bodies = planets.map((p, i) => {
-    return { p, i, grp: grpList[i], rp: radList[i], px: xs[i], py: cy, labelUp: i % 2 === 1 };
+    return { p, i, grp: grpList[i], rp: radList[i], px: xs[i], py: cy, hx: hostX[i], labelUp: i % 2 === 1 };
   });
-  bodies.forEach(({ p, i, grp, rp, px, py, labelUp }) => {
+  bodies.forEach(({ p, i, grp, rp, px, py, hx, labelUp }) => {
     const look = _hpvcLook(p);
     const isBelt = grp === 'belt';
     const isAnomaly = grp === 'anomaly';
     const isGiant = ['gasgiant', 'icegiant', 'hotgiant'].includes(grp);
-    const orbR = Math.hypot(px - starX, py - cy);
-    // Орбитальная дуга — эллипс через тело (сплюснут по вертикали).
-    if (!isBelt) orbits += `<ellipse cx="${starX}" cy="${cy}" rx="${nf(orbR)}" ry="${nf(orbR * 0.5)}" fill="none" stroke="rgba(155,180,210,.11)" stroke-width="1" stroke-dasharray="3,7"></ellipse>`;
+    const orbR = Math.hypot(px - hx, py - cy);
+    // Орбитальная дуга — эллипс через тело (сплюснут по вертикали) вокруг СВОЕЙ звезды.
+    if (!isBelt) orbits += `<ellipse cx="${nf(hx)}" cy="${cy}" rx="${nf(orbR)}" ry="${nf(orbR * 0.5)}" fill="none" stroke="rgba(155,180,210,.11)" stroke-width="1" stroke-dasharray="3,7"></ellipse>`;
     // Статус: моя колония / родная / терраформ / непригодна.
     const col = colOf(p);
     const occupied = !!col;
@@ -3504,7 +3537,7 @@ function _heroColonySysBuild(sysId, en) {
       for (let k = 0; k < 46; k++) {
         const a = baseA + (prnd(p, 'k' + k) - 0.5) * spanA;
         const rr = orbR + (prnd(p, 'j' + k) - 0.5) * 26;
-        const rx = starX + rr * Math.cos(a), ry = cy + rr * Math.sin(a) * 0.5;
+        const rx = hx + rr * Math.cos(a), ry = cy + rr * Math.sin(a) * 0.5;
         rocks += `<circle cx="${nf(rx)}" cy="${nf(ry)}" r="${nf(0.7 + prnd(p, 'z' + k) * 2.1)}" fill="#9aa4ad" opacity="${nf(0.25 + prnd(p, 'o' + k) * 0.5)}"></circle>`;
       }
       discs += `<g class="hpvnc-pl" onclick="event.stopPropagation();heroVNColonySysFocus(${i})">
@@ -3552,31 +3585,56 @@ function _heroColonySysBuild(sysId, en) {
     </g>`;
   });
 
+  // ── Звёзды-якоря: главная + компаньоны, каждая со своей текстурой и подписью ──
+  const CLS2TYPE = (typeof GM_CLS2TYPE !== 'undefined') ? GM_CLS2TYPE : { O: 'blue', B: 'blue', A: 'white', F: 'yellow', G: 'yellow', K: 'red', M: 'red', D: 'white', N: 'green' };
+  const TYPE_LBL = { yellow: en ? 'YELLOW STAR' : 'ЖЁЛТАЯ ЗВЕЗДА', red: en ? 'RED STAR' : 'КРАСНАЯ ЗВЕЗДА', blue: en ? 'BLUE STAR' : 'ГОЛУБАЯ ЗВЕЗДА', white: en ? 'WHITE STAR' : 'БЕЛАЯ ЗВЕЗДА', green: en ? 'GREEN STAR' : 'ЗЕЛЁНАЯ ЗВЕЗДА' };
+  const greekOf = L => (typeof ecStarGreek === 'function') ? ecStarGreek(L) : L;
+  let starDefs = '', starSvg = '', starLbls = '';
+  starNodes.forEach((s, si) => {
+    const type = s.isMain ? starType : (STARC[CLS2TYPE[s.st && s.st.cls]] ? CLS2TYPE[s.st.cls] : 'yellow');
+    const c = STARC[type] || sc;
+    const gid = 'hpvcStar' + si, clip = 'hpvcStarClip' + si;
+    const tex = texBase + 'stars/star_' + type + '.png';
+    starDefs += `<clipPath id="${clip}"><circle cx="${nf(s.x)}" cy="${cy}" r="${nf(s.r * 0.9)}"></circle></clipPath>
+      <radialGradient id="${gid}" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#fff"></stop>
+        <stop offset="30%" stop-color="${c}"></stop>
+        <stop offset="100%" stop-color="${c}" stop-opacity="0"></stop>
+      </radialGradient>`;
+    starSvg += `<g>
+      <circle cx="${nf(s.x)}" cy="${cy}" r="${nf(s.r * 2.6)}" fill="url(#${gid})" opacity=".2"></circle>
+      <circle cx="${nf(s.x)}" cy="${cy}" r="${nf(s.r * 1.3)}" fill="url(#${gid})" opacity=".42"></circle>
+      <circle cx="${nf(s.x)}" cy="${cy}" r="${nf(s.r * 0.9)}" fill="${c}"></circle>
+      <image href="${esc(tex)}" xlink:href="${esc(tex)}" x="${nf(s.x - s.r)}" y="${nf(cy - s.r)}" width="${nf(s.r * 2)}" height="${nf(s.r * 2)}" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid slice"></image>
+    </g>`;
+    // Подпись: в одиночной системе — как было (тип звезды). В кратной каждой звезде
+    // нужно имя компонента (Альфа/Бета/…), иначе не понять, чьи это тела; у
+    // компаньона добавляем удаление от главной — это и есть смысл кратности.
+    const l1 = (starNodes.length > 1)
+      ? `${greekOf(s.letter)} ${sysName}`.toUpperCase()
+      : (TYPE_LBL[type] || (en ? 'STAR' : 'ЗВЕЗДА'));
+    const l2 = s.isMain ? (starNodes.length > 1 ? (TYPE_LBL[type] || '') : '')
+      : [s.st && s.st.name, (s.st && s.st.sep_au != null) ? `${s.st.sep_au} ${en ? 'AU' : 'а.е.'}` : ''].filter(Boolean).join(' · ');
+    const ly = cy + s.r * 1.9 + 18;
+    starLbls += `<text x="${nf(s.x)}" y="${nf(ly)}" fill="${c}" font-size="10.5" text-anchor="middle" font-family="var(--font-mono)" letter-spacing=".14em" opacity=".85" style="paint-order:stroke;stroke:#05080d;stroke-width:3">${esc(l1)}</text>`
+      + (l2 ? `<text x="${nf(s.x)}" y="${nf(ly + 12)}" fill="#8fa3ba" font-size="8.5" text-anchor="middle" font-family="var(--font-mono)" opacity=".8" style="paint-order:stroke;stroke:#05080d;stroke-width:3">${esc(l2)}</text>` : '');
+  });
+
   const scene = `<svg class="hpvnc-map hpvnc-sysmap" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns:xlink="http://www.w3.org/1999/xlink">
     <defs>
       ${defs}
-      <clipPath id="hpvcStarClip"><circle cx="${starX}" cy="${cy}" r="${nf(starR * 0.9)}"></circle></clipPath>
+      ${starDefs}
       <filter id="hpvcGlow" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="8"></feGaussianBlur></filter>
       <radialGradient id="hpvcShade" cx="32%" cy="30%" r="85%">
         <stop offset="0%" stop-color="#fff" stop-opacity=".14"></stop>
         <stop offset="42%" stop-color="#000" stop-opacity="0"></stop>
         <stop offset="100%" stop-color="#020409" stop-opacity=".72"></stop>
       </radialGradient>
-      <radialGradient id="hpvcStar" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#fff"></stop>
-        <stop offset="30%" stop-color="${sc}"></stop>
-        <stop offset="100%" stop-color="${sc}" stop-opacity="0"></stop>
-      </radialGradient>
     </defs>
     <g>${bgStars}</g>
     <g>${orbits}</g>
-    <g>
-      <circle cx="${starX}" cy="${cy}" r="${nf(starR * 2.6)}" fill="url(#hpvcStar)" opacity=".2"></circle>
-      <circle cx="${starX}" cy="${cy}" r="${nf(starR * 1.3)}" fill="url(#hpvcStar)" opacity=".42"></circle>
-      <circle cx="${starX}" cy="${cy}" r="${nf(starR * 0.9)}" fill="${sc}"></circle>
-      <image href="${esc(starTex)}" xlink:href="${esc(starTex)}" x="${nf(starX - starR)}" y="${nf(cy - starR)}" width="${nf(starR * 2)}" height="${nf(starR * 2)}" clip-path="url(#hpvcStarClip)" preserveAspectRatio="xMidYMid slice"></image>
-    </g>
-    <text x="${starX}" y="${nf(cy + starR * 1.9 + 18)}" fill="${sc}" font-size="10.5" text-anchor="middle" font-family="var(--font-mono)" letter-spacing=".14em" opacity=".85" style="paint-order:stroke;stroke:#05080d;stroke-width:3">${esc(({ yellow: en ? 'YELLOW STAR' : 'ЖЁЛТАЯ ЗВЕЗДА', red: en ? 'RED STAR' : 'КРАСНАЯ ЗВЕЗДА', blue: en ? 'BLUE STAR' : 'ГОЛУБАЯ ЗВЕЗДА', white: en ? 'WHITE STAR' : 'БЕЛАЯ ЗВЕЗДА', green: en ? 'GREEN STAR' : 'ЗЕЛЁНАЯ ЗВЕЗДА' })[starType] || (en ? 'STAR' : 'ЗВЕЗДА'))}</text>
+    <g>${starSvg}</g>
+    ${starLbls}
     <g>${discs}</g>
   </svg>`;
 
@@ -3596,7 +3654,7 @@ function _heroColonySysBuild(sysId, en) {
       sub = `<span class="ec-cz-${cz.cls}">${esc(cz.tag)}</span> · ${esc(cz.label)} · ⬚ ${cz.cells || +p.slotsP || 6}`;
     } else { act = ''; sub = esc(p.type || ''); }
     return `<div class="hpvnc-prow" id="hpvnc-prow-${i}" onclick="event.stopPropagation();heroVNColonySysFocus(${i})">
-      <div class="hpvnc-prow-hd"><i class="hpvnc-dot hpvnc-dot-${look}"></i><b>${esc(p.name)}</b><span>${sub}</span></div>
+      <div class="hpvnc-prow-hd"><i class="hpvnc-dot hpvnc-dot-${look}"></i><b>${esc(p.name)}</b>${starNodes.length > 1 ? `<em class="hpvnc-prow-star">${esc(greekOf(letterOf(p)))}</em>` : ''}<span>${sub}</span></div>
       <div class="hpvnc-prow-res">${typeof ecPlanetResChips === 'function' ? ecPlanetResChips(p) : ''}</div>
       <div class="hpvnc-prow-act">${act}</div>
     </div>`;

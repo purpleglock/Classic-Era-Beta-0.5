@@ -168,6 +168,14 @@ body.route-map #gm-wrap{height:100%;min-height:0}
   opacity:1}
 #gm-wrap.gm-sec-overview .gm-star img{opacity:0}
 .gm-star:hover img{transform:scale(1.18);filter:drop-shadow(0 0 16px rgba(140,200,255,.8))}
+/* кратность: маленькие звёзды-компаньоны поверх узла системы (позиция/размер — inline) */
+/* left/top — ЦЕНТР компаньона (считается из sep_au), поэтому сдвигаем на половину */
+.gm-star .gm-comp-star{
+  position:absolute;height:auto;pointer-events:none;
+  transform:translate(-50%,-50%);
+  filter:drop-shadow(0 0 5px rgba(200,220,255,.45));
+}
+.gm-star:hover .gm-comp-star{transform:translate(-50%,-50%)}
 .gm-giant{width:104px;height:104px}
 .gm-giant img{filter:drop-shadow(0 0 24px rgba(255,210,120,.6))}
 

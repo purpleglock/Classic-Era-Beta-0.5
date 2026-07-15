@@ -635,6 +635,8 @@
 .ec-pl-free .ec-pl-ic { opacity: .4; }
 .ec-pl-txt { min-width: 0; }
 .ec-pl-nm { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* звезда-хозяйка в кратной системе — приписка к имени, не второй акцент */
+.ec-pl-star { font-family: var(--font-mono); font-weight: 400; font-size: 10px; color: var(--t3); }
 .ec-pl-sb { font-size: 11px; color: var(--t3); margin-top: 1px; }
 .ec-pl-r { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .ec-pl-cells { font-family: var(--font-mono); font-size: 11px; color: var(--t2); background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); padding: 2px 7px; white-space: nowrap; }
