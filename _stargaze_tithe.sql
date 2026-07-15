@@ -2,6 +2,10 @@
 -- 🜂 РАЗЛОМ · ДУХОВНЫЙ ПАТРОНАТ — 5% ставки державе-покровителю
 -- ============================================================
 -- Применять ПОСЛЕ _stargaze.sql и _faith_setup.sql. Идемпотентно.
+-- ⚠️ ПЕРЕКАТЫВАТЬ ЦЕЛИКОМ: ранние ревизии этого файла уже уезжали в прод и
+-- проверяли патрона по faith_membership («исповедует»), а не по праву основать
+-- веру. Симптом расхождения: клиент показывает державу в списке, а сервер на
+-- выбор отвечает «эта держава не исповедует веры».
 --
 -- Первая версия механики гоняла десятину «по храмам в секторе транса» — юзер
 -- забраковал: слишком сложно. Теперь всё политически просто:
@@ -9,30 +13,63 @@
 --   • Кому вера доступна по «уставу» (_faith_can_found: Спиритуализм /
 --     Теократия / админ) — играют КАК РАНЬШЕ. Никакого патрона, никакой
 --     десятины: их медиумы у себя дома.
---   • Все остальные ВВЕРЯЮТ себя одной верующей державе — духовному патрону.
---     Её хор ведёт транс, и 5% от поставленного идёт ей в казну. Без патрона
---     Разлом для мирянина не отзывается вовсе.
+--   • Все остальные ВВЕРЯЮТ себя державе-патрону — той, у кого право на веру
+--     ЕСТЬ. Её хор ведёт транс, и 5% от поставленного идёт ей в казну. Без
+--     патрона Разлом для мирянина не отзывается вовсе.
 --
 -- Патрон — постоянный выбор державы (faction_economy.rift_patron_fid), а не
 -- разовая настройка ставки: назначается во вкладке «🤝 Политика» и зеркалом
 -- на экране ставок (юзер: «чтоб не бегать по сто раз»). В патроны годится
--- любая держава, которая РЕАЛЬНО исповедует веру (есть faith_membership) —
--- не сам игрок.
+-- держава с ПРАВОМ ОСНОВАТЬ веру (Спиритуализм/Теократия), а не всякая
+-- исповедующая: принять веру может кто угодно, но доход патроната — только
+-- тем, на кого вера завязана по уставу. Себя самого выбрать нельзя.
 --
 -- Десятина берётся ИЗ ставки, а не сверху: цена транса прежняя
 -- (stake × (1+extras)), выплаты игроку прежние. Меняется только то, что 5%
 -- этих денег достаётся патрону, а не исчезает в казино. Предупреждение на
 -- входе политическое: игрок видит, КОГО он спонсирует.
 --
--- Зеркало клиента — economy.js (ecStarsBody / ecPatronBlock), ?v=20260715patron1.
+-- Зеркало клиента — economy.js (ecStarsBody / ecPatronBlock), ?v=20260715patron3.
 -- ============================================================
 
-alter table public.faction_economy add column if not exists rift_patron_fid text;
+-- ── 0) Подчистка забракованной ревизии «десятина по храмам в секторе» ──
+-- Если она успела попасть в прод: там stargaze_start был с ТРЕТЬИМ аргументом
+-- (p_sector uuid), а двухаргументный — дропнут. Клиент зовёт двухаргументный,
+-- так что лишнюю перегрузку надо снести, иначе PostgREST может выбрать её.
+drop function if exists public.stargaze_start(numeric, int, uuid);
+drop function if exists public.stargaze_sectors();
+drop function if exists public._stargaze_sector_temples(uuid);
+alter table public.stargaze_state drop column if exists sector_id;
+alter table public.stargaze_state drop column if exists tithe;
 
--- ── Исповедует ли держава веру (годится ли в патроны) ──
+alter table public.faction_economy add column if not exists rift_patron_fid text;
+-- Патроны, выбранные по СТАРОМУ правилу (просто «исповедует веру»), больше не
+-- проходят: сбрасываем тех, у кого права на веру нет — иначе игрок упёрся бы в
+-- «патрон потерял право на веру» и не понял, откуда это.
+update public.faction_economy
+  set rift_patron_fid = null
+  where rift_patron_fid is not null
+    and not coalesce((
+      select a.ideology = 'Спиритуализм' or a.gov = 'Теократия'
+      from public.faction_applications a
+      where a.faction_id = faction_economy.rift_patron_fid and a.status = 'approved'
+      order by a.updated_at desc limit 1
+    ), false);
+
+-- ── Годится ли держава в патроны ──
+-- ВАЖНО: не «исповедует веру», а ИМЕЕТ ПРАВО ЕЁ ОСНОВАТЬ (Спиритуализм /
+-- Теократия). Исповедовать может кто угодно — доход же с патроната идёт только
+-- тем, на кого вера завязана по уставу.
+-- Это НЕ _faith_can_found: там есть админская ветка current_user_role(), а она
+-- смотрит на КЛИКНУВШЕГО. Через неё админ смог бы вверить державу кому угодно.
 create or replace function public._rift_patron_ok(p_fid text)
 returns boolean language sql stable security definer set search_path=public as $$
-  select exists (select 1 from public.faith_membership where faction_id = p_fid)
+  select coalesce((
+    select a.ideology = 'Спиритуализм' or a.gov = 'Теократия'
+    from public.faction_applications a
+    where a.faction_id = p_fid and a.status = 'approved'
+    order by a.updated_at desc limit 1
+  ), false)
 $$;
 revoke all on function public._rift_patron_ok(text) from public, anon;
 
@@ -51,7 +88,7 @@ begin
       raise exception 'bad patron: нельзя вверить себя самому себе';
     end if;
     if not public._rift_patron_ok(p_fid) then
-      raise exception 'bad patron: эта держава не исповедует веры — её хор не поведёт транс';
+      raise exception 'bad patron: у этой державы нет права на веру — её хор не поведёт транс';
     end if;
   end if;
 
@@ -88,14 +125,14 @@ begin
   free := public._faith_can_found(fid);
   select rift_patron_fid into patron from public.faction_economy where faction_id = fid;
 
-  -- Мирянину патрон обязателен и обязан всё ещё исповедовать веру: держава
-  -- могла отречься уже ПОСЛЕ того, как её выбрали.
+  -- Мирянину патрон обязателен и обязан всё ещё иметь право на веру: держава
+  -- могла сменить идеологию/строй уже ПОСЛЕ того, как её выбрали.
   if not free then
     if patron is null then
       raise exception 'no patron: вверьте державу духовному патрону — без верующего хора Разлом не отзовётся';
     end if;
     if not public._rift_patron_ok(patron) then
-      raise exception 'patron lapsed: ваш патрон отрёкся от веры — выберите другого';
+      raise exception 'patron lapsed: ваш патрон потерял право на веру — выберите другого';
     end if;
   else
     patron := null;

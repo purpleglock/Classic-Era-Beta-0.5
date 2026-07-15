@@ -3419,24 +3419,21 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-stars-chip:hover { color: var(--t2, #dfe6f2); background: rgba(200,215,245,.4); }
 .ec-stars-chip.is-on { color: var(--gd); background: var(--gd); }
 .ec-stars-chip.is-on::before { background: linear-gradient(160deg, color-mix(in srgb, var(--gd) 14%, #10141f), #0a0d16); }
-/* Зеркало духовного патроната на экране ставок: плитки держав-кандидатов +
-   плашка десятины. Акцент плитки — герб-цвет самой державы (--sec-c), это
-   данные, а не декор. Подложка вместо border, как везде. */
-.ec-stars-secs { display: flex; gap: 7px; flex-wrap: wrap; }
-.ec-stars-sec {
-  --cut: 9px; position: relative; z-index: 0; padding: 8px 14px; border: none; cursor: pointer; text-align: left;
-  background: rgba(160,180,215,.22); color: var(--t3, var(--t4));
+/* Зеркало духовного патроната на экране ставок: одна строка «герб + список»
+   и плашка десятины. Подложка вместо border, как везде. */
+.ec-stars-patron { display: flex; align-items: center; gap: 9px; }
+.ec-stars-patron img, .ec-stars-patron .ec-fac-flag { flex: none; }
+.ec-stars-patron-no { flex: none; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: var(--t4); background: rgba(160,180,215,.14); }
+.ec-stars-patron-sel {
+  --cut: 8px; flex: 1; min-width: 0; padding: 9px 12px; border: none; cursor: pointer;
+  font-family: var(--font-mono, monospace); font-size: 12.5px; letter-spacing: .03em;
+  color: var(--t2, #dfe6f2); background: rgba(160,180,215,.22);
   clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
-  transition: background .15s, color .15s;
+  appearance: none; -webkit-appearance: none;
 }
-.ec-stars-sec::before { content: ''; position: absolute; inset: 1px; z-index: -1;
-  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
-  background: linear-gradient(160deg, #10141f, #0a0d16); transition: background .15s; }
-.ec-stars-sec:hover { background: rgba(200,215,245,.4); color: var(--t2, #dfe6f2); }
-.ec-stars-sec.is-on { background: var(--sec-c); color: var(--t2, #dfe6f2); }
-.ec-stars-sec.is-on::before { background: linear-gradient(160deg, color-mix(in srgb, var(--sec-c) 16%, #10141f), #0a0d16); }
-.ec-stars-sec b { display: block; font-family: var(--font-display); font-weight: 700; font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; }
-.ec-stars-sec span { display: block; margin-top: 2px; font-family: var(--font-mono, monospace); font-size: 10px; letter-spacing: .04em; color: var(--t4); }
+.ec-stars-patron-sel:hover { background: rgba(200,215,245,.4); }
+.ec-stars-patron-sel option { background: #10141f; color: var(--t2, #dfe6f2); }
 .ec-stars-tithe { --cut: 10px; position: relative; z-index: 0; padding: 11px 14px;
   background: color-mix(in srgb, var(--warn, #e0a83a) 45%, transparent);
   clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }

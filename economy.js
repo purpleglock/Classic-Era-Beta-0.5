@@ -1401,7 +1401,7 @@ async function _ecLoadCoreImpl() {
     // тела компаньонов, скрытых на карте, и не могла бы подписать звезду-хозяйку.
     dbGet('map_systems', `select=id,name,faction,x,y,planets,star_type,is_giant,stars,multi`).catch(() => []),
     ecCached('lanes', () => dbGet('map_hyperlanes', `select=a_id,b_id`)),   // топология гиперпутей не меняется по ходу игры — кэш на сессию
-    dbGet('faction_applications', `status=eq.approved&select=faction_id,name,herald_url,color,gov,leader,race&order=name.asc`).catch(() => []),
+    dbGet('faction_applications', `status=eq.approved&select=faction_id,name,herald_url,color,gov,ideology,leader,race&order=name.asc`).catch(() => []),
     dbGet('trade_routes', `order=created_at.desc`).catch(() => []),
     dbGet('loans', `order=created_at.desc`).catch(() => []),
     // ТОЛЬКО свои операции (приватность); цель видит входящие через RPC (исполнитель скрыт, если не раскрыт)
@@ -1513,10 +1513,9 @@ async function _ecLoadRest() {
 }
 async function _ecLoadRestImpl() {
   if (!EC.app || !EC.fid) return;
-  const [faithStatus, faithList, faithMembers, passiveIntel, techLayout, techPrereq, exchange, bonds, corps, margin, futures, options, doom, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, myFleets, myArmies] = await Promise.all([
+  const [faithStatus, faithList, passiveIntel, techLayout, techPrereq, exchange, bonds, corps, margin, futures, options, doom, defOutposts, defOpShips, defOutIntel, spyPortraits, orders, mzaShips, myFleets, myArmies] = await Promise.all([
     ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции
     ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий
-    dbGet('faith_membership', `select=faction_id,faith_id,role`).catch(() => []),   // кто вообще исповедует веру → кандидаты в духовные патроны Разлома
     ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез
     ecCached('techLayout', () => dbGet('tech_layout', `select=node_id,x,y,icon,img,nocore`)),   // раскладка дерева — кэш на сессию
     ecCached('techPrereq', () => dbGet('tech_prereq', `select=node_id,prereq`)),   // связи дерева — кэш на сессию
@@ -1550,7 +1549,6 @@ async function _ecLoadRestImpl() {
   EC.faith = faithStatus || { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 };  // вера: статус
   if (!Array.isArray(EC.faith.faiths)) EC.faith.faiths = EC.faith.faith ? [EC.faith.faith] : [];  // мультивера: все исповедуемые
   EC.faithList = faithList || [];           // вера: реестр религий
-  EC.faithMembers = faithMembers || [];     // fid → вера: кандидаты в духовные патроны (см. ecPatronBlock)
   // мультивера: справочник «id веры → {name,color}» для подписи храмов
   EC.faithById = {};
   (EC.faith.faiths || []).forEach(f => { if (f && f.id) EC.faithById[f.id] = { name: f.name, color: f.color }; });
@@ -1600,7 +1598,7 @@ async function _ecLoadRestImpl() {
 function ecResetDeferred() {
   EC.doom = { guns: [], salvos: [], const: {} }; EC.doomByBuilding = {};
   EC.outposts = []; EC.opShips = []; EC.mzaShips = []; EC.fleets = []; EC.armies = []; EC.outpostIntel = []; EC.spyPortraits = [];
-  EC.faith = { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 }; EC.faithList = []; EC.faithMembers = []; EC.faithById = {};
+  EC.faith = { faith: null, faiths: [], can_found: false, strength: 0, unit_discount: 0, temple_income: 150 }; EC.faithList = []; EC.faithById = {};
   EC.passive = {}; EC.techLayout = {}; EC.techPrereq = {}; EC._research = null;
   EC.exchange = { index: { value: 1000, base: 1000, spark: [] }, holdings: { units: 0, basis: 0 }, resources: {} };
   EC.bonds = { issuer: [], holdings: [], market: [] }; EC.corps = null; EC.corpsErr = null;
@@ -4379,15 +4377,14 @@ function _ecStarsField() {
 const EC_STARS_TITHE = 0.05;
 function ecPatronFree() { return !!(EC.faith && EC.faith.can_found); }
 function ecPatronFid() { return (EC.eco && EC.eco.rift_patron_fid) || null; }
-// Кандидаты в патроны: державы, которые РЕАЛЬНО исповедуют веру (кроме себя).
+// Кандидаты в патроны — державы с ПРАВОМ ОСНОВАТЬ веру (спиритуалисты и
+// теократы), а не просто исповедующие: исповедовать может кто угодно, а доход
+// с патроната идёт только тем, на кого вера завязана по уставу.
+// Зеркало _faith_can_found / _rift_patron_ok (там без админской ветки).
+function ecPatronEligible(f) { return !!f && (f.ideology === 'Спиритуализм' || f.gov === 'Теократия'); }
 function ecPatronList() {
-  const faithful = new Set((EC.faithMembers || []).map(m => m.faction_id));
-  const byFid = new Map((EC.faithMembers || []).map(m => [m.faction_id, m]));
-  return ecOtherFactions().filter(f => faithful.has(f.faction_id)).map(f => {
-    const m = byFid.get(f.faction_id) || {};
-    const fa = EC.faithById[m.faith_id];
-    return { ...f, faith: (fa && fa.name) || 'вера', founder: m.role === 'founder' };
-  });
+  return ecOtherFactions().filter(ecPatronEligible).map(f =>
+    ({ ...f, faith: f.gov === 'Теократия' ? 'Теократия' : 'Спиритуализм' }));
 }
 function ecPatronName(fid) { const p = ecPatronList().find(f => f.faction_id === fid); return p ? p.name : ecFacName(fid); }
 function ecPatronSet(fid) {
@@ -4446,19 +4443,23 @@ function ecStarsStartBody() {
 }
 // ── Зеркало патроната на экране ставок (только для «мирян») ──
 // Тот же выбор, что во вкладке «Политика» — юзер: «чтоб не бегать по сто раз».
+// Здесь ОДНА строка: герб + список. Сеткой плиток, как в «Политике», экран
+// ставок засирается — держав с верой бывает под два десятка.
 function ecStarsPatronBlock(patron, cost) {
   const list = ecPatronList();
   if (!list.length) return `<div class="ec-geo-warn">Вверить себя некому: ни одна другая держава не исповедует веры. Пока пророки не появились, Разлом для вас глух — либо ведите к вере собственную державу.</div>`;
   const tithe = Math.floor(cost * EC_STARS_TITHE);
-  const tiles = list.map(f =>
-    `<button class="ec-stars-sec${f.faction_id === patron ? ' is-on' : ''}" type="button" onclick="ecPatronSet('${jsq(f.faction_id)}')" style="--sec-c:${esc(f.color || '#c9a227')}" title="Вверить державу «${esc(f.name)}»">
-      <b>${esc(f.name)}</b><span>${esc(f.faith)}${f.founder ? ' · пророки' : ''}</span></button>`).join('');
   const p = list.find(f => f.faction_id === patron) || null;
+  const opts = [`<option value=""${p ? '' : ' selected'}>— выберите патрона —</option>`].concat(
+    list.map(f => `<option value="${esc(f.faction_id)}"${f.faction_id === patron ? ' selected' : ''}>${esc(f.name)} · ${esc(f.faith)}${f.founder ? ' · пророки' : ''}</option>`)).join('');
   return `<label class="ec-geo-lbl">Духовный патрон</label>
-    <div class="ec-stars-secs">${tiles}</div>
+    <div class="ec-stars-patron">
+      ${p ? ecFacFlag(p.faction_id, 26) : '<span class="ec-stars-patron-no">🜂</span>'}
+      <select class="ec-stars-patron-sel" onchange="ecPatronSet(this.value)">${opts}</select>
+    </div>
     ${p ? `<div class="ec-stars-tithe">
       <div class="ec-stars-tithe-h">⚠ Десятина патрону — ${ecNum(tithe)} ГС (5% от ставки)</div>
-      <p>Ваша держава не исповедует веры, и в Разлом вас ведёт чужой хор. <b>5% поставленного</b> — ${ecNum(tithe)} ГС — уйдёт в казну державы <b>«${esc(p.name)}»</b> (${esc(p.faith)}). На ваш выигрыш это не влияет. Патрона можно сменить здесь же или во вкладке «🤝 Политика».</p>
+      <p>Вас ведёт чужой хор: <b>5% поставленного</b> уйдёт в казну «${esc(p.name)}». На выигрыш это не влияет.</p>
     </div>` : `<div class="ec-geo-warn">Выберите патрона — без верующего хора Разлом не отзовётся.</div>`}`;
 }
 // ── Активный транс: поле 7×7, клик по узлу = погружение ──
@@ -5468,6 +5469,10 @@ function ecErr(m) {
   // чтобы игроку не вываливался сырой объект с code/hint/details.
   let raw = m;
   try { const j = JSON.parse(m); if (j && j.message) raw = m = j.message; } catch (_) {}
+  // Клиент уехал вперёд базы: RPC в коде есть, а срез в Supabase не накачен.
+  // Сырое «could not find the function … in the schema cache» игроку бесполезно.
+  const miss = m.match(/could not find the function\s+public\.([a-z0-9_]+)/i);
+  if (miss) return `Механика «${miss[1]}» ещё не включена на сервере: обновление базы не накачено. Напишите админу — игрок тут ничего не починит`;
   // Лимит размера сделки (анти-манипуляция рынком): max N единиц за раз.
   const big = m.match(/(?:too large|units per trade)[^\d]*(\d+)/i);
   if (big) return `Слишком крупная сделка: рынок такого объёма не выдержит. Можно не больше ${big[1]} ед. за раз — разбейте на несколько сделок`;

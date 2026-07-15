@@ -48,13 +48,22 @@
   // economy.js переопределяет EC — стабы карты кладём ПОСЛЕ его загрузки
   Object.assign(EC, { app: {}, eco: { gc: 500000 }, stargaze: { active: false, opened: [] }, colonies: [{ id: 'c1', name: 'Синли-Бей' }],
     allSystems: _sys, lanes: _lanes,
-    factions: [{ faction_id: 'fac_a', name: 'Илокан', color: '#4ea3d8' }, { faction_id: 'fac_b', name: 'Иридия', color: '#c9a227' }, { faction_id: 'fac_c', name: 'Люмен', color: '#b05fc0' }],
+    // в патроны годятся ТОЛЬКО спиритуалисты/теократы (право основать веру),
+    // а не всякий, кто веру принял: fac_a — обычная держава, в списке её нет
+    factions: [{ faction_id: 'fac_a', name: 'Илокан', color: '#4ea3d8', gov: 'Республика', ideology: 'Материализм' },
+      { faction_id: 'fac_b', name: 'Иридия', color: '#c9a227', gov: 'Теократия', ideology: 'Милитаризм' },
+      { faction_id: 'fac_c', name: 'Люмен', color: '#b05fc0', gov: 'Олигархия', ideology: 'Спиритуализм' }],
     sectors: [{ id: 'sec1', name: 'Илокан', system_ids: _sys.slice(0, 18).map(s => s.id) }, { id: 'sec2', name: 'Окраина', system_ids: _sys.slice(18).map(s => s.id) }],
     // духовный патронат: игрок = fac_me (без права на веру), верующие = fac_b/fac_c
     fid: 'fac_me',
     faith: { can_found: false, faiths: [] },
-    faithMembers: [{ faction_id: 'fac_b', faith_id: 'f1', role: 'founder' }, { faction_id: 'fac_c', faith_id: 'f2', role: 'member' }],
     faithById: { f1: { name: 'Путь Иридия' }, f2: { name: 'Хор Пустоты' } } });
+  // много держав — как в проде: половина без права на веру (в списке быть не должна)
+  ['Последняя Империя Человечества','Совет Отверженных','Соридонский Союз Системы','Супердемократия Люмена','Цветущий Пояс','Ордо Келум','Консорциум Ardsheva','Корпорация «Возрождение»','Братство','Военное Наместничество Иридия','Nexus Order Keeper Service','Ааа`дукиль'].forEach((name, i) => {
+    EC.factions.push({ faction_id: 'fac_x' + i, name, color: '#7a8fb5',
+      gov: i % 3 === 0 ? 'Теократия' : 'Республика',
+      ideology: i % 3 === 1 ? 'Спиритуализм' : 'Материализм' });
+  });
   EC.eco.rift_patron_fid = 'fac_b';
   const put = (id, html) => document.getElementById(id).innerHTML = html;
   put('h-start', ecStarsStartBody());
