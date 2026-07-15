@@ -20,6 +20,9 @@
 <canvas id="cv" width="1600" height="900"></canvas>
 <div id="report"></div>
 
+<!-- d3-delaunay: без него gmVoronoiCells() возвращает [] и ЯЧЕЕК НЕТ — а граница
+     ячейки теперь главный упор раскладки, её и надо проверять -->
+<script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6/dist/d3-delaunay.min.js"></script>
 <script>window.GM_GEO_DEBUG = 1;</script>
 <script src="galaxy_gen.js?v=harness"></script>
 <script src="galaxy_map.js?v=harness"></script>
@@ -47,20 +50,39 @@ function mkSystem(id, x, y, cls, name, withMulti) {
 }
 
 let SYS = [];
+// Соседи вокруг: без них Вороной не замкнёт ячейку, а ГРАНИЦА ЯЧЕЙКИ — главный
+// упор раскладки (её и видно на карте). Кольцо систем даёт s1 честную ячейку.
+function mkRing() {
+  const out = [];
+  const R = 900, N = 6;
+  for (let i = 0; i < N; i++) {
+    const a = i * 6.2832 / N + 0.3;
+    out.push(mkSystem('n' + i, Math.round(5000 + Math.cos(a) * R), Math.round(3000 + Math.sin(a) * R), 'K', 'Сосед-' + i, false));
+  }
+  return out;
+}
+// Пересборка ячеек + сброс всех кэшей, завязанных на состав/геометрию систем.
+function buildCells() {
+  GM.systems.forEach(s => { s._bodies = null; s._nn = null; s._nnSys = undefined; s._dem = null; s._inr = null; });
+  try { gmmBuildWorld(); } catch (e) { console.warn('ячейки не построились:', e.message); GMM.paths = null; }
+  GM.systems.forEach(s => { s._inr = null; });   // gmmBuildWorld уже сбрасывает, но роняем явно
+}
 function roll() {
   const cls = document.getElementById('cls').value;
-  SYS = [
-    mkSystem('s1', 5000, 3000, cls, 'Шер-Маан', true),
-    mkSystem('s2', 5900, 3000, 'K', 'Литара', false),   // сосед: проверяем, что домены не смыкаются
-  ];
+  SYS = [mkSystem('s1', 5000, 3000, cls, 'Шер-Маан', true), ...mkRing()];
   GM.systems = SYS;
-  SYS.forEach(s => { s._bodies = null; s._nn = 900; });
+  GMM.paths = null;
+  buildCells();
   draw();
 }
 
 function draw() {
   const s = +document.getElementById('zoom').value;
-  Object.assign(GMM, { s, vw: cv.width, vh: cv.height, dpr: 1, paths: null, imgs: GMM.imgs || {}, colonyXY: {} });
+  Object.assign(GMM, { s, vw: cv.width, vh: cv.height, dpr: 1, imgs: GMM.imgs || {}, colonyXY: {} });
+  // Ячейки регионов (Вороной) — в МИРОВЫХ координатах, от зума не зависят: строим
+  // один раз на состав систем, иначе каждый кадр молотит тысячу seed'ов.
+  GMM.ctx = ctx;
+  if (!GMM.paths) buildCells();
   // камера: система s1 в центре кадра
   GMM.tx = cv.width / 2 - 5000 * s;
   GMM.ty = cv.height / 2 - 3000 * s;
@@ -132,6 +154,18 @@ function violations(sys) {
     const ov = g.rMax + rNb - span;
     if (ov > 0.5) bad.push(`ДОМЕН НАЕХАЛ НА СОСЕДА на ${ov.toFixed(1)}px (${g.rMax.toFixed(0)} + ${rNb.toFixed(0)} > пролёт ${span.toFixed(0)})`);
   }
+  // 8) ГЛАВНОЕ: ничто не должно вылезать за границу ячейки системы — её и видно
+  // на карте как тёмный многоугольник владения.
+  if (typeof gmmCellHit === 'function' && gmmCellPolys(sys)) {
+    const S = GMM.s;
+    if (gmmCellInradius(sys) * S < g.rOuterMain)
+      bad.push(`ОРБИТЫ ГЛАВНОЙ ВЫШЛИ ЗА ЯЧЕЙКУ: ${g.rOuterMain.toFixed(0)} > вписанный ${(gmmCellInradius(sys) * S).toFixed(0)}`);
+    g.comps.forEach(c => {
+      const edge = gmmCellHit(sys, c.ang) * S;
+      if (c.ringR + c.miniR > edge + 0.5)
+        bad.push(`${c.letter} ВЫШЕЛ ЗА ЯЧЕЙКУ на ${(c.ringR + c.miniR - edge).toFixed(1)}px`);
+    });
+  }
   return bad;
 }
 
@@ -153,9 +187,9 @@ function sweep() {
   const rolls = 60, out = [];
   let checks = 0, fails = 0; const seen = new Set();
   for (let r = 0; r < rolls; r++) {
-    SYS = [mkSystem('s1', 5000, 3000, cls, 'Шер-Маан', true),
-           mkSystem('s2', 5900, 3000, 'K', 'Литара', false)];
+    SYS = [mkSystem('s1', 5000, 3000, cls, 'Шер-Маан', true), ...mkRing()];
     GM.systems = SYS;
+    GMM.paths = null; buildCells();
     if (!gmCompStars(SYS[0]).length) continue;   // одиночная выпала — не наш случай
     for (let z = 2.6; z <= 9.001; z += 0.1) {
       zin.value = z.toFixed(1); draw(); checks++;

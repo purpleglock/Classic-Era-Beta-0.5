@@ -1001,7 +1001,10 @@ function gmPhantomSeeds() {
       const jy = (gmEdgeHash(bx * 1.3 + by * 0.61, by * 0.8 + gx) - 0.5) * SPACING * JITTER;
       const px = Math.max(5, Math.min(GM_W - 5, bx + jx));
       const py = Math.max(5, Math.min(GM_H - 5, by + jy));
-      if (GM.systems.some(s => Math.hypot(s.x - px, s.y - py) < MIN_D)) continue;
+      // Фантом не ставим не только вплотную к звезде, но и внутрь её кольца seed'ов:
+      // иначе вес (гигант/кратность) раздувал кольцо, а фантом резал ячейку изнутри —
+      // территория так и не росла.
+      if (GM.systems.some(s => Math.hypot(s.x - px, s.y - py) < Math.max(MIN_D, gmSysWeight(s) + 70))) continue;
       seeds.push({ id: `_ph_${gx}_${gy}`, x: px, y: py, faction: null, phantom: true });
     }
   }
@@ -1014,7 +1017,17 @@ function gmPhantomSeeds() {
 function gmSysWeight(s) {
   if (s.phantom) return 0;
   if (s.faction === 'rift') return s.id === 'rift_core' ? 120 : 0;
-  return s.is_giant ? 165 : 0;
+  // КРАТНОСТЬ = ВЕС. Территория системы — это её ячейка региона, и она была равна
+  // ячейке одиночки: фантомные seed'ы (сетка 310) режут её на ~110-155 юнитов. Всё,
+  // что глубокий зум рисовал шире, вылезало за собственную границу. Кратной системе
+  // физически принадлежит больше — звёзды-компаньоны разнесены на десятки и тысячи
+  // а.е., — поэтому её кольцо seed'ов раздвигает соседей и фантомов, и ячейка растёт
+  // ЧЕСТНО: граница расширяется вместе с содержимым, а не пробивается им.
+  const cs = gmCompStars(s);
+  const multiW = cs.length
+    ? Math.min(280, 150 + 26 * cs.length + 34 * Math.max(...gmCompLayout(s).map(c => c.u)))
+    : 0;
+  return Math.max(s.is_giant ? 165 : 0, multiW);
 }
 
 function gmVoronoiCells() {
@@ -3866,6 +3879,52 @@ function gmmNNSys(sys) {
   }
   return (sys._nnSys = bs);
 }
+// ── ГРАНИЦА СИСТЕМЫ = ЯЧЕЙКА РЕГИОНА, а не окружность ────────────────────────
+// Ячейку и видно на карте (тёмный многоугольник владения). Раскладка, упёртая в
+// круг «доля пролёта до соседа», неизбежно вылезала за неё: до соседа может быть
+// далеко, а грань ячейки — рядом. Здесь считаем, СКОЛЬКО реально места есть в
+// нужную сторону, и раскладка упирается в саму границу.
+function gmmCellPolys(sys) {
+  const c = (GMM.paths && GMM.paths.sysCells) ? GMM.paths.sysCells.get(sys.id) : null;
+  return (c && c.polys && c.polys.length) ? c.polys : null;
+}
+// Дистанция (мировые юниты) от звезды до ВНЕШНЕЙ границы ячейки по направлению ang.
+// Ячейка системы — это ОБЪЕДИНЕНИЕ кусков (звезда с весом разворачивается в кольцо
+// seed'ов, кусков несколько), поэтому берём ПОСЛЕДНЕЕ пересечение луча: первые —
+// это внутренние грани между своими же кусками, они не стены.
+// Нет ячейки → Infinity (упор останется прежним, по соседу).
+function gmmCellHit(sys, ang) {
+  const polys = gmmCellPolys(sys);
+  if (!polys) return Infinity;
+  const ox = sys.x, oy = sys.y, dx = Math.cos(ang), dy = Math.sin(ang);
+  let best = 0;
+  for (const pts of polys) {
+    for (let i = 0, n = pts.length; i < n; i++) {
+      const a = pts[i], b = pts[(i + 1) % n];
+      const ex = b[0] - a[0], ey = b[1] - a[1];
+      const den = dx * ey - dy * ex;
+      if (Math.abs(den) < 1e-9) continue;              // луч параллелен грани
+      const t = ((a[0] - ox) * ey - (a[1] - oy) * ex) / den;   // вдоль луча
+      const u = ((a[0] - ox) * dy - (a[1] - oy) * dx) / den;   // вдоль грани
+      if (t > 0 && u >= 0 && u <= 1 && t > best) best = t;
+    }
+  }
+  return best > 0 ? best : Infinity;
+}
+// Вписанный радиус = самое узкое место ячейки: минимум внешней границы по кругу
+// направлений. Круглые части системы (орбиты главной, дымка домена) обязаны
+// укладываться в него, иначе вылезут за границу владения.
+function gmmCellInradius(sys) {
+  if (sys._inr != null) return sys._inr;
+  if (!gmmCellPolys(sys)) return (sys._inr = Infinity);
+  const N = 48;
+  let best = Infinity;
+  for (let i = 0; i < N; i++) {
+    const h = gmmCellHit(sys, (i / N) * 6.2832);
+    if (h < best) best = h;
+  }
+  return (sys._inr = best);
+}
 // «Аппетит» системы на территорию в долях пролёта до соседа. Одиночке хватает
 // малого; кратной нужно место под мини-системы — тем больше, чем их больше и чем
 // дальше разнесён самый далёкий компонент.
@@ -4406,6 +4465,11 @@ function gmmPaintOrbits(ctx) {
       const nb = gmmNNSys(sys);
       const dOwn = gmmDemand(sys), dNb = nb ? gmmDemand(nb) : 0.38;
       rMax = Math.min(gmmNN(sys) * (dOwn / (dOwn + dNb)) * s, 1400 * gz);
+      // и главное — не вылезать за СВОЮ ЯЧЕЙКУ: круглая часть системы (орбиты
+      // главной, дымка) живёт внутри вписанного радиуса. Компаньонам ниже даётся
+      // упор по их собственному направлению — там места обычно больше.
+      const inr = gmmCellInradius(sys);
+      if (isFinite(inr)) rMax = Math.min(rMax, inr * s * 0.97);
     }
     // планетам главной остаётся внутренняя зона — тем меньше, чем ближе ближайший
     // компаньон (тесная пара реально выедает планетную систему)
@@ -4709,8 +4773,14 @@ function gmmPaintOrbits(ctx) {
     const rHi = rMax * 0.97;                            // рубеж домена системы
     const cgap = 6 * gz;
     // порядок обхода — от тесных к далёким: ближний компаньон занимает место первым
-    const CG = comps.slice().sort((p, q) => p.u - q.u).map(({ c, ci, fr, u, ang: angC }) => ({
-      c, ci, fr, u, angC, sr: Math.max(3, starR * fr) }));
+    const CG = comps.slice().sort((p, q) => p.u - q.u).map(({ c, ci, fr, u, ang: angC }) => {
+      // упор по СВОЕМУ направлению: до грани ячейки. Круглый rHi — лишь нижняя
+      // оценка, в сторону дальнего угла ячейки места кратно больше.
+      const hit = gmmCellHit(sys, angC);
+      const rEdge = isFinite(hit) ? hit * s * 0.94 : rHi;   // нет ячейки → прежний круглый упор
+      return { c, ci, fr, u, angC, sr: Math.max(3, starR * fr),
+        rHi: Math.max(rHi, Math.min(rEdge, 1400 * gz)) };
+    });
     // РАСПРЕДЕЛЕНИЕ ПО ВСЕЙ ТЕРРИТОРИИ. Абсолютная лог-шкала даёт мизерный разброс
     // (15.7 и 76.1 а.е. — впятеро разные — это u=0.375 и 0.524), поэтому все компаньоны
     // сбивались в одно кольцо у внутреннего края, а внешняя территория стояла пустой.
@@ -4727,16 +4797,16 @@ function gmmPaintOrbits(ctx) {
     const cdist = (ax, ay, bx, by) => Math.hypot(ax - bx, (ay - by) / (TILT || 1));
     let msc = 1;   // общий множитель мини-доменов: падает, если лестница не влезает
     const layoutComps = () => {
-      const placed = []; let outC = 0;
+      const placed = []; let over = 1;
       CG.forEach((g, i) => {
         // размер мини-домена — от ДОЛИ территории на компаньона, а не от его радиуса:
         // иначе внешний компаньон получал огромный домен, упирался им в рубеж и msc
         // ужимал всех до крошек (34px при территории 698)
-        const share = (rHi - rLo) / (CG.length + 0.6) * 0.46;
+        const share = (g.rHi - rLo) / (CG.length + 0.6) * 0.46;
         g.miniR = Math.max(g.sr * 1.5, Math.min(share, rMax * 0.3) * msc);
         // полоса ЦЕНТРОВ с запасом под сам мини-домен на обоих концах — тогда крайний
-        // компаньон стоит у рубежа своим КРАЕМ, а не центром
-        const cLo = rLo + g.miniR + cgap, cHi = Math.max(cLo, rHi - g.miniR);
+        // компаньон стоит у ГРАНИЦЫ своим КРАЕМ, а не центром
+        const cLo = rLo + g.miniR + cgap, cHi = Math.max(cLo, g.rHi - g.miniR);
         g.want = cLo + (cHi - cLo) * tOf(g, i);
         let r = Math.max(g.want, cLo);
         // выталкиваем наружу, пока мини-домен пересекает уже размещённые
@@ -4753,21 +4823,24 @@ function gmmPaintOrbits(ctx) {
         }
         g.ringR = r;
         g.ccx = cx + Math.cos(g.angC) * r; g.ccy = cy + Math.sin(g.angC) * r * TILT;
-        placed.push(g); outC = Math.max(outC, r + g.miniR);
+        placed.push(g);
+        // перебор считаем ОТНОСИТЕЛЬНО своего упора: у каждого компаньона он свой
+        over = Math.max(over, (r + g.miniR) / Math.max(1, g.rHi));
       });
-      return outC;
+      return over;
     };
     for (let pass = 0; pass < 8 && CG.length; pass++) {
-      const outC = layoutComps();
-      if (outC <= rHi) break;
-      msc *= (rHi / outC) * 0.94;   // тесно — ужимаем мини-домены, зазоры сохраняются
+      const over = layoutComps();
+      if (over <= 1) break;
+      msc *= (1 / over) * 0.94;   // тесно — ужимаем мини-домены, зазоры сохраняются
     }
     // РОСТ по фактическим зазорам: доля территории считается так, будто компаньоны
     // стоят на одном луче, — но углы у них разные, и места обычно куда больше. Даём
     // каждому разойтись до реального упора (соседи/диск главной/рубеж), по очереди,
     // чтобы выросший уже учитывался следующими.
     CG.forEach(g => {
-      let lim = Math.min(g.ringR - Math.max(rMaxP, rOuterMain) - cgap, rHi + rMax * 0.03 - g.ringR);
+      // рост тоже упирается в СВОЮ грань ячейки — за границу владения не выходим
+      let lim = Math.min(g.ringR - Math.max(rMaxP, rOuterMain) - cgap, g.rHi - g.ringR);
       CG.forEach(o => {
         if (o === g) return;
         lim = Math.min(lim, cdist(g.ccx, g.ccy, o.ccx, o.ccy) - o.miniR - cgap);
@@ -4814,7 +4887,7 @@ function gmmPaintOrbits(ctx) {
     // флагом window.GM_GEO_DEBUG, в проде мёртвый код
     if (window.GM_GEO_DEBUG) sys._geo = { cx, cy, rMax, rMaxP, rOuterMain, starR, gz, tilt: TILT,
       radii: radii.slice(), sizes: sizes.slice(),
-      comps: compGeo.map(g => ({ letter: g.c.letter, sep: g.c.sep_au, u: g.u, ringR: g.ringR, miniR: g.miniR, sr: g.sr, ccx: g.ccx, ccy: g.ccy })) };
+      comps: compGeo.map(g => ({ letter: g.c.letter, sep: g.c.sep_au, u: g.u, ang: g.angC, rHi: g.rHi, ringR: g.ringR, miniR: g.miniR, sr: g.sr, ccx: g.ccx, ccy: g.ccy })) };
     compGeo.forEach(({ c, ci, ccx, ccy, sr, miniR }) => {
       const cg = GM_CLS_GLOW[c.cls] || '255,220,130';
       const bodies = gmCompBodies(sys, c.letter);
@@ -5365,8 +5438,12 @@ function gmmBuildWorld() {
     if (!f.isRift && f.sys) {
       const ec = gmEconFill(f.sys); econD.set(ec, (econD.get(ec) || '') + d);
       let e = sysCellD.get(f.sys.id);
-      if (!e) sysCellD.set(f.sys.id, (e = { d: '', reach: 0 }));
+      if (!e) sysCellD.set(f.sys.id, (e = { d: '', reach: 0, polys: [] }));
       e.d += d;
+      // polys — сами контуры ячейки в МИРОВЫХ координатах. Нужны глубокому зуму:
+      // граница системы — это ячейка региона (её и видно), а НЕ окружность. Раскладка,
+      // упёртая в окружность по соседу, вылезала за ячейку там, где та подходит близко.
+      e.polys.push(f.pts);
       // reach — до самого дальнего угла ячейки: докуда тянуть градиент свечения
       for (const p of f.pts) {
         const dd = Math.hypot(p[0] - f.sys.x, p[1] - f.sys.y);
@@ -5439,6 +5516,8 @@ function gmmBuildWorld() {
       GMM.laneGeo.set(L.b_id + '|' + L.a_id, { ax: L.bx, ay: L.by, cx: L.cx, cy: L.cy, bx: L.ax, by: L.ay });
     }
   });
+  // ячейки пересобраны → вписанный радиус устарел (звезду могли подвинуть в редакторе)
+  GM.systems.forEach(s => { s._inr = null; });
   // границы секторов, сгруппированные по цвету (для пунктира)
   const secD = new Map();
   (geo.secEdges || []).forEach(e => secD.set(e.color, (secD.get(e.color) || '') + dOf(e.pts)));
@@ -5449,7 +5528,7 @@ function gmmBuildWorld() {
       bx: e.x0, by: e.y0, bw: Math.max(1, e.x1 - e.x0), bh: Math.max(1, e.y1 - e.y0),
     })),
     econFills: [...econD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
-    sysCells: new Map([...sysCellD].map(([id, e]) => [id, { p2d: new Path2D(e.d), reach: e.reach }])),
+    sysCells: new Map([...sysCellD].map(([id, e]) => [id, { p2d: new Path2D(e.d), reach: e.reach, polys: e.polys }])),
     fogPath: fogD ? new Path2D(fogD) : null,
     secFills: [...secFillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     edges: [...edgeD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
