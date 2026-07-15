@@ -4208,6 +4208,14 @@ async function ecStarsArtsScan() {
     if (list.length) _ecRiftArts[t] = list;
   }));
 }
+// ── Рубашка типа (админка «Новелла» → «Разлом — арты призов», cfg.backs[тип]).
+// В финале узлы, которых игрок НЕ вскрыл, показывают рубашку своего типа:
+// тип виден, сам образ — нет, его надо было доставать погружением.
+// Рубашки нет — узел рисует обычную иконку типа, как раньше.
+function _ecStarsBack(t) {
+  const v = (_ecStarsPhotosCfg.backs || {})[t];
+  return (Array.isArray(v) ? v[0] : v) || '';
+}
 function _ecStarsArtList(t) {
   if (Array.isArray(_ecRiftArts[t]) && _ecRiftArts[t].length) return _ecRiftArts[t];
   const v = _ecStarsPhotosCfg.arts && _ecStarsPhotosCfg.arts[t];
@@ -4451,11 +4459,10 @@ function ecStarsFinaleBody(fin) {
   const board = fin.board || [];
   const jackHit = opened.has(+fin.jackpot_i);
   const f = _ecStarsField();
-  // Арты финала: сначала узлы игрока (им арт важнее — их он и разглядывает),
-  // потом остальное поле. Один арт не встречается дважды.
+  // Арты финала — только на узлы игрока: чужие лежат рубашкой вверх и арт не
+  // тратят. Один арт не встречается дважды.
   const order = [];
   for (let i = 0; i < 49; i++) if ((board[i] || {}).t && opened.has(i)) order.push({ i, t: board[i].t });
-  for (let i = 0; i < 49; i++) if ((board[i] || {}).t && !opened.has(i)) order.push({ i, t: board[i].t });
   const finArts = _ecStarsArtMap(order);
   const revealCell = (i, style) => {
     const c = board[i] || { t: 'dust' };
@@ -4464,10 +4471,12 @@ function ecStarsFinaleBody(fin) {
     const isJack = i === +fin.jackpot_i;
     // Арт раскрыт на всём поле, но ВСМОТРЕТЬСЯ можно только в свой узел:
     // чужие образы остаются картинкой поля, лайтбокс их не открывает.
-    const ph = finArts[i];
+    // Свой узел — настоящий образ. Чужой — рубашка типа (образ не заработан).
+    const back = mine ? '' : _ecStarsBack(c.t);
+    const ph = mine ? finArts[i] : (back || '');
     const own = !!(ph && mine);
     const view = own ? ` onclick="ecStarsPhotoOpen('${esc(ph)}','${esc(t.nm)}')" title="${esc(t.nm)} · всмотреться"` : ` title="${esc(t.nm)}"`;
-    return `<div class="ec-stars-cell is-reveal ec-stars-c-${t.cls}${mine ? ' is-mine' : ''}${isJack ? ' is-jack' : ''}${ph ? ' has-photo' : ''}${own ? ' is-view' : ''}" ${style}${view}>
+    return `<div class="ec-stars-cell is-reveal ec-stars-c-${t.cls}${mine ? ' is-mine' : ''}${isJack ? ' is-jack' : ''}${ph ? ' has-photo' : ''}${back ? ' is-back' : ''}${own ? ' is-view' : ''}" ${style}${view}>
       ${ph ? `<img class="ec-stars-cell-ph" src="${esc(ph)}" alt="">` : `<span class="ec-stars-cell-ic">${t.ic}</span>`}${mine ? `<span class="ec-stars-cell-w">+${ecNum(mine.win)}</span>` : ''}
     </div>`;
   };

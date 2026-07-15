@@ -3535,6 +3535,8 @@ body.ec-tree-fs-lock { overflow: hidden; }
   background: radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--sc) 13%, transparent), rgba(7,9,17,.96));
 }
 .ec-stars-grid.is-final .ec-stars-cell:not(.is-mine):not(.is-jack) { opacity: .38; }
+/* Рубашка: узел чужой — образ не заработан, лежит картинкой-«спиной» типа. */
+.ec-stars-cell.is-back .ec-stars-cell-ph { filter: saturate(.5) brightness(.7); }
 .ec-stars-cell.is-mine { opacity: 1; background: color-mix(in srgb, var(--sc) 85%, transparent); }
 /* Джекпот в финале — главный акцент: пылает всегда, даже если его не поймали. */
 .ec-stars-cell.is-jack {

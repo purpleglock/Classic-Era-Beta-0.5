@@ -1028,10 +1028,42 @@ async function adStarsArtRemove(kind, i) {
   } catch (e) { toast('Не сохранилось в БД: ' + (e.message || e), 'err'); }
   adPaint();
 }
+// Рубашка типа: ОДНА картинка (cfg.backs[тип]). Ею в финале накрыты узлы,
+// которые игрок не вскрыл: тип виден, образ — нет.
+function adStarsBack(cfg, k) {
+  const v = (cfg.backs || {})[k];
+  return (Array.isArray(v) ? v[0] : v) || '';
+}
+async function adStarsBackUpload(kind, el) {
+  const f = (el.files || [])[0];
+  if (!f) return;
+  try {
+    const url = await adVNUploadOne(f, false);   // только Storage — см. adStarsArtUpload
+    if (!url) throw new Error('файл не залился');
+    if (!/^https?:/i.test(url) && !/^data:/i.test(url))
+      throw new Error('Storage вернул относительный путь — на деплое рубашка не найдётся');
+    await adStarsCfgApply(cfg => { cfg.backs = cfg.backs || {}; cfg.backs[kind] = url; });
+    toast('Рубашка загружена', 'ok');
+  } catch (e) { toast('Не удалось загрузить: ' + (e.message || e), 'err'); }
+  adPaint();
+}
+async function adStarsBackRemove(kind) {
+  if (!confirm('Убрать рубашку этого типа?')) return;
+  try {
+    await adStarsCfgApply(cfg => { if (cfg.backs) delete cfg.backs[kind]; });
+  } catch (e) { toast('Не сохранилось в БД: ' + (e.message || e), 'err'); }
+  adPaint();
+}
 function adStarsArtsSection() {
   const cfg = adStarsCfg();
   const rows = AD_STARS_ART_KINDS.map(([k, lbl, n]) => {
     const list = adStarsArtList(cfg, k);
+    const back = adStarsBack(cfg, k);
+    const backCell = back
+      ? `<div style="position:relative;width:76px;height:76px;border-radius:8px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover no-repeat;background-image:url('${esc(back)}')">
+          <button class="btn btn-gh btn-xs" title="Убрать рубашку" onclick="adStarsBackRemove('${k}')" style="position:absolute;top:2px;right:2px;min-width:0;padding:1px 5px;background:rgba(8,12,22,.8)">✕</button>
+        </div>`
+      : `<label class="btn btn-gh btn-xs" style="width:76px;height:76px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:10px;text-align:center;line-height:1.2">⬆ рубашка<input type="file" accept="image/*" style="display:none" onchange="adStarsBackUpload('${k}',this)"></label>`;
     const thumbs = list.map((u, i) => `<div style="position:relative;width:76px;height:76px;border-radius:8px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover no-repeat;background-image:url('${esc(u)}')">
         <button class="btn btn-gh btn-xs" title="Убрать арт" onclick="adStarsArtRemove('${k}',${i})" style="position:absolute;top:2px;right:2px;min-width:0;padding:1px 5px;background:rgba(8,12,22,.8)">✕</button>
       </div>`).join('');
@@ -1039,14 +1071,14 @@ function adStarsArtsSection() {
     return `<div style="border-top:1px solid var(--w2,#2a3340);padding:10px 0">
       <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
         <span style="font-size:12px;color:var(--t2,#c2d0dc)">${esc(lbl)}</span>
-        <span style="font-size:10.5px;color:var(--t4,#6a7a88)">${n} на поле · артов: ${list.length}</span>
+        <span style="font-size:10.5px;color:var(--t4,#6a7a88)">${n} на поле · артов: ${list.length}${back ? ' · рубашка есть' : ''}</span>
         <label class="btn btn-gh btn-xs" style="margin-left:auto;cursor:pointer">⬆ добавить<input type="file" accept="image/*" multiple style="display:none" onchange="adStarsArtUpload('${k}',this)"></label>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">${thumbs || empty}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">${thumbs || empty}<span style="width:1px;height:60px;background:var(--w2,#2a3340);margin:0 4px"></span>${backCell}</div>
     </div>`;
   }).join('');
   return `<div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px">РАЗЛОМ — АРТЫ ПРИЗОВ</div>
-    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 4px;line-height:1.5">Арты на каждый тип находки во «Всмотреться в Разлом»: раскрытый узел показывает картинку вместо рисованной иконки. Жми «добавить» — файл уходит в общее хранилище, ссылка одна на локалку и деплой. Артов на тип сколько угодно: узлы одного типа за транс берут разные, по кругу; один арт = все узлы типа одинаковые, ноль = рисованная иконка. Квадратные картинки; «Видение» сперва берёт архив видений выше, арты — запасные.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 4px;line-height:1.5">Арты на каждый тип находки во «Всмотреться в Разлом»: раскрытый узел показывает картинку вместо рисованной иконки. Жми «добавить» — файл уходит в общее хранилище, ссылка одна на локалку и деплой. Артов на тип сколько угодно: узлы одного типа за транс берут разные, по кругу; один арт = все узлы типа одинаковые, ноль = рисованная иконка. Квадратные картинки; «Видение» сперва берёт архив видений выше, арты — запасные. Справа за разделителем — <b>рубашка</b> типа, одна на тип: в финале ею накрыты узлы, которые игрок не вскрыл — тип видно, а сам образ нет. Рубашки нет — такой узел рисует иконку.</div>
     <div style="margin-bottom:14px">${rows}</div>`;
 }
 function adVNPanel() {
