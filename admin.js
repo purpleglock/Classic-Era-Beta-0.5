@@ -931,10 +931,11 @@ async function adStarsPhotoUpload(el) {
   const files = Array.from(el.files || []);
   if (!files.length) return;
   try {
-    const serverUp = await adPortServerAlive();
+    // Только Storage, как и арты призов: локальный сервер вернул бы путь в
+    // assets/hero, живой лишь на этой машине.
     const urls = [];
     for (const f of files) {
-      const url = await adVNUploadOne(f, serverUp);
+      const url = await adVNUploadOne(f, false);
       if (url) urls.push(url);
     }
     if (!urls.length) throw new Error('ни один файл не залился');
@@ -966,13 +967,9 @@ function adStarsPhotosSection() {
     <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">${cells}</div>
     <label class="btn btn-gh btn-xs" style="display:inline-block;cursor:pointer;margin-bottom:14px">⬆ загрузить видения<input type="file" accept="image/*" multiple style="display:none" onchange="adStarsPhotoUpload(this)"></label>`;
 }
-// ── Арты призов Разлома: НЕСКОЛЬКО артов на КАЖДЫЙ тип находки ──
-// Хранится в том же wk_stars_photos (cfg.arts = {тип: [url,…]}); узел с призом
-// показывает арт вместо рисованной иконки. Пусто — остаётся иконка.
-// Типов на поле по многу (маяков 2, эха 4, шума 34), поэтому у каждого свой
-// СПИСОК: узлы одного типа за транс тянут разные картинки по кругу.
-// Легаси-формат (одна строка вместо массива) читается как список из одного.
-// Ключи легаси (nova/quasar/…) — зеркало _stargaze_board() и EC_STARS_TYPES.
+// Типы находок Разлома и сколько узлов каждого на поле 7×7.
+// Ключи (nova/quasar/…) — легаси-зеркало _stargaze_board() и EC_STARS_TYPES,
+// они же имена файлов артов: assets/rift/<ключ>_1.webp.
 const AD_STARS_ART_KINDS = [
   ['nova',   'Взгляд в ответ (джекпот)', 1],
   ['quasar', 'Псионический маяк',        2],
@@ -986,19 +983,28 @@ function adStarsArtList(cfg, kind) {
   if (!v) return [];
   return (Array.isArray(v) ? v : [v]).filter(Boolean);
 }
+// ⚠️ Арты льём ТОЛЬКО в Supabase Storage (adVNUploadOne(f, false) — второй
+// аргумент гасит локальный аплоад-сервер). Сервер писал файл в assets/hero под
+// случайным именем и возвращал ОТНОСИТЕЛЬНЫЙ путь: на локалке картинка есть, на
+// деплое такого файла нет — из-за этого арты и «пропадали» в проде. Storage даёт
+// абсолютный URL, одинаковый для обоих доменов. Файловая раскладка
+// assets/rift/<тип>_N.webp (tools/rift_arts.bat) осталась как второй путь —
+// клиент смотрит сперва туда, потом сюда.
 async function adStarsArtUpload(kind, el) {
   const files = Array.from(el.files || []);
   if (!files.length) return;
   try {
-    const serverUp = await adPortServerAlive();
     // Сперва файлы, и только потом трогаем конфиг: пока льются картинки, соседняя
     // загрузка успевает записать свой тип — прочитанный заранее снимок его затрёт.
     const urls = [];
     for (const f of files) {
-      const url = await adVNUploadOne(f, serverUp);
+      const url = await adVNUploadOne(f, false);
       if (url) urls.push(url);
     }
     if (!urls.length) throw new Error('ни один файл не залился');
+    if (urls.some(u => !/^https?:/i.test(u) && !/^data:/i.test(u))) {
+      throw new Error('Storage вернул относительный путь — на деплое арт не найдётся');
+    }
     await adStarsCfgApply(cfg => {
       cfg.arts = cfg.arts || {};
       cfg.arts[kind] = adStarsArtList(cfg, kind).concat(urls);
@@ -1032,7 +1038,7 @@ function adStarsArtsSection() {
     const empty = `<div style="width:76px;height:76px;border-radius:8px;border:1px dashed var(--w2,#2a3340);display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font-size:10px;text-align:center;line-height:1.2">иконка</div>`;
     return `<div style="border-top:1px solid var(--w2,#2a3340);padding:10px 0">
       <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
-        <span style="font-size:12px;color:var(--t2,#c2d0dc)">${lbl}</span>
+        <span style="font-size:12px;color:var(--t2,#c2d0dc)">${esc(lbl)}</span>
         <span style="font-size:10.5px;color:var(--t4,#6a7a88)">${n} на поле · артов: ${list.length}</span>
         <label class="btn btn-gh btn-xs" style="margin-left:auto;cursor:pointer">⬆ добавить<input type="file" accept="image/*" multiple style="display:none" onchange="adStarsArtUpload('${k}',this)"></label>
       </div>
@@ -1040,7 +1046,7 @@ function adStarsArtsSection() {
     </div>`;
   }).join('');
   return `<div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px">РАЗЛОМ — АРТЫ ПРИЗОВ</div>
-    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 4px;line-height:1.5">Арты на каждый тип находки во «Всмотреться в Разлом»: раскрытый узел показывает картинку вместо рисованной иконки. Артов на тип можно грузить СКОЛЬКО УГОДНО — узлы одного типа за транс берут разные, по кругу; один арт = все узлы типа одинаковые, ноль = рисованная иконка. Сохраняется в общую БД, видно всем игрокам. Квадратные картинки; «Видение» сперва берёт архив видений выше, арты — запасные.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 4px;line-height:1.5">Арты на каждый тип находки во «Всмотреться в Разлом»: раскрытый узел показывает картинку вместо рисованной иконки. Жми «добавить» — файл уходит в общее хранилище, ссылка одна на локалку и деплой. Артов на тип сколько угодно: узлы одного типа за транс берут разные, по кругу; один арт = все узлы типа одинаковые, ноль = рисованная иконка. Квадратные картинки; «Видение» сперва берёт архив видений выше, арты — запасные.</div>
     <div style="margin-bottom:14px">${rows}</div>`;
 }
 function adVNPanel() {

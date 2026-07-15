@@ -4924,6 +4924,7 @@ async function heroVNStarsOpen() {
     </div></div>`;
   try {
     if (typeof ecStarsPhotosLoad === 'function') ecStarsPhotosLoad();   // фотоархив «Удачного кадра» — параллельно
+    if (typeof ecStarsArtsScan === 'function') ecStarsArtsScan();       // арты призов из assets/rift/ — тоже параллельно
     if (typeof ecLoadApp === 'function') await ecLoadApp();
     if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
       if (!el.classList.contains('show')) return;

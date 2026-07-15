@@ -4108,6 +4108,8 @@ let _ecStarsPhotosFetched = false;
 async function ecStarsPhotosLoad() {
   if (_ecStarsPhotosFetched) return;
   _ecStarsPhotosFetched = true;
+  // Арты призов теперь файлы — сканируем тем же заходом, кто бы ни открыл поле.
+  try { ecStarsArtsScan(); } catch (e) {}
   try {
     const r = await fetch(
       `${SB_URL}/rest/v1/site_settings?key=eq.wk_stars_photos&select=value&limit=1`,
@@ -4128,7 +4130,42 @@ async function ecStarsPhotosLoad() {
 // Для «Видения» архив видений приоритетнее; арты — фолбэк.
 // Нет арта — рисованная иконка.
 let _ecStarsPhotoSalt = Math.floor(Math.random() * 997);
+// ── Арты призов лежат ФАЙЛАМИ: assets/rift/<тип>_1.webp, _2, _3… (png/jpg/gif
+// тоже). Никакой БД: раскладка переживает деплой сама, как арт ассамблеи.
+// Файлов нет — фолбэк на легаси-список из site_settings, дальше на иконку.
+const EC_RIFT_ART_DIR  = 'assets/rift/';
+const EC_RIFT_ART_EXT  = ['webp', 'png', 'jpg', 'gif'];
+const EC_RIFT_ART_MAX  = 24;   // потолок сканирования на тип
+const _ecRiftArts = {};        // {тип: [url,…]} — заполняет ecStarsArtsScan()
+function _ecUrlExists(u) {
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => res(true);
+    im.onerror = () => res(false);
+    im.src = u;
+  });
+}
+// Сканируем подряд с _1, пока файл находится: первая дыра = конец списка.
+// Поэтому нумерация должна быть без пропусков.
+async function ecStarsArtsScan() {
+  if (_ecRiftArts._done) return;
+  _ecRiftArts._done = true;
+  await Promise.all(Object.keys(EC_STARS_TYPES).map(async t => {
+    const list = [];
+    for (let i = 1; i <= EC_RIFT_ART_MAX; i++) {
+      let hit = '';
+      for (const ext of EC_RIFT_ART_EXT) {
+        const u = `${EC_RIFT_ART_DIR}${t}_${i}.${ext}`;
+        if (await _ecUrlExists(u)) { hit = u; break; }
+      }
+      if (!hit) break;
+      list.push(hit);
+    }
+    if (list.length) _ecRiftArts[t] = list;
+  }));
+}
 function _ecStarsArtList(t) {
+  if (Array.isArray(_ecRiftArts[t]) && _ecRiftArts[t].length) return _ecRiftArts[t];
   const v = _ecStarsPhotosCfg.arts && _ecStarsPhotosCfg.arts[t];
   if (!v) return [];
   return (Array.isArray(v) ? v : [v]).filter(Boolean);
