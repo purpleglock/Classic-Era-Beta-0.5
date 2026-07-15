@@ -808,6 +808,19 @@ const AD_ASM_KINDS = [
   ['role_lib', 'Роль: Федералист'], ['role_gal', 'Роль: Галактоцентрист'], ['role_archon', '👁 Роль: АРХОНТ'],
 ];
 function adAsmCfg() { try { return JSON.parse(localStorage.getItem('wk_asm_cards') || 'null') || {}; } catch (e) { return {}; } }
+// Та же грабля, что у артов Разлома: localStorage у каждого браузера свой.
+async function adAsmCfgRefresh() {
+  try {
+    const raw = (typeof getSiteSetting === 'function') ? await getSiteSetting('wk_asm_cards') : null;
+    if (!raw) return;
+    let dbCfg = null;
+    try { dbCfg = (typeof raw === 'string') ? JSON.parse(raw) : raw; } catch (e) {}
+    if (!dbCfg) return;
+    if (_vnPickNewer(adAsmCfg(), dbCfg) !== dbCfg) return;
+    localStorage.setItem('wk_asm_cards', JSON.stringify(dbCfg));
+    if (AD.tab === 'vn') adPaint();
+  } catch (e) { /* оффлайн/нет прав — работаем с локальным кэшем */ }
+}
 async function adAsmCfgSave(cfg) {
   cfg._ts = Date.now();
   localStorage.setItem('wk_asm_cards', JSON.stringify(cfg));   // локально — сразу
@@ -853,6 +866,22 @@ function adAsmArtSection() {
 // Реальные снимки для приза «Видение»: URL-ы в site_settings
 // (ключ wk_stars_photos, {list:[…]}), узел-видение показывает изображение.
 function adStarsCfg() { try { return JSON.parse(localStorage.getItem('wk_stars_photos') || 'null') || {}; } catch (e) { return {}; } }
+// localStorage — только кэш этого браузера: на другой машине/домене он свой, и
+// правка поверх устаревшего кэша затирала бы чужие арты в общей БД. Поэтому при
+// открытии вкладки подтягиваем БД и берём свежую по _ts (как bbRefreshFromDb).
+async function adStarsCfgRefresh() {
+  try {
+    const raw = (typeof getSiteSetting === 'function') ? await getSiteSetting('wk_stars_photos') : null;
+    if (!raw) return;
+    let dbCfg = null;
+    try { dbCfg = (typeof raw === 'string') ? JSON.parse(raw) : raw; } catch (e) {}
+    if (!dbCfg) return;
+    const fresher = _vnPickNewer(adStarsCfg(), dbCfg);
+    if (fresher !== dbCfg) return;
+    localStorage.setItem('wk_stars_photos', JSON.stringify(dbCfg));
+    if (AD.tab === 'vn') adPaint();
+  } catch (e) { /* оффлайн/нет прав — работаем с локальным кэшем */ }
+}
 async function adStarsCfgSave(cfg) {
   cfg._ts = Date.now();
   localStorage.setItem('wk_stars_photos', JSON.stringify(cfg));
@@ -1750,6 +1779,7 @@ function adSetTab(t) {
   if (AD.tab === 'market' && !AD.market) adMarketLoad();
   if (AD.tab === 'roadmap' && !(AD.rm && AD.rm.loaded)) adRmLoad();
   if (AD.tab === 'brand') bbRefreshFromDb();
+  if (AD.tab === 'vn') { adStarsCfgRefresh(); adAsmCfgRefresh(); }
 }
 
 // ── Рынок NPC: загрузка состояния (config + ресурсы) через admin-RPC ──────────

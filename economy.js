@@ -4141,10 +4141,12 @@ function ecStarsPhotoOpen(src, cap) {
   const box = document.createElement('div');
   box.className = 'ec-stars-lbx';
   box.id = 'ec-stars-lbx';
+  // Закрытие — кнопкой СВЕРХУ: снизу справа сидят фиксированные #ch-fab/#tk-fab
+  // (чат и тикеты), они перекрывали кнопку в подписи на телефоне.
   box.innerHTML = `<div class="ec-stars-lbx-in" role="dialog" aria-label="${esc(cap || 'Видение')}">
+    <button type="button" class="ec-stars-lbx-x" title="Закрыть" aria-label="Закрыть" onclick="ecStarsPhotoClose()">✕</button>
     <img src="${esc(src)}" alt="${esc(cap || '')}">
-    <div class="ec-stars-lbx-cap"><span>${esc(cap || 'Видение Разлома')}</span>
-      <button type="button" class="ec-stars-lbx-x" onclick="ecStarsPhotoClose()">Закрыть ✕</button></div>
+    <div class="ec-stars-lbx-cap"><span>${esc(cap || 'Видение Разлома')}</span></div>
   </div>`;
   box.onclick = e => { if (e.target === box) ecStarsPhotoClose(); };
   document.body.appendChild(box);
