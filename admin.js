@@ -808,15 +808,26 @@ const AD_ASM_KINDS = [
   ['role_lib', 'Роль: Федералист'], ['role_gal', 'Роль: Галактоцентрист'], ['role_archon', '👁 Роль: АРХОНТ'],
 ];
 function adAsmCfg() { try { return JSON.parse(localStorage.getItem('wk_asm_cards') || 'null') || {}; } catch (e) { return {}; } }
-// Та же грабля, что у артов Разлома: localStorage у каждого браузера свой.
+// Та же грабля, что у артов Разлома: 6 слотов карт живут одной строкой в БД,
+// и снимок, прочитанный до чужой записи, вымывал чужие слоты.
+async function adAsmCfgApply(mutate) {
+  let base = null;
+  try {
+    const raw = (typeof getSiteSetting === 'function') ? await getSiteSetting('wk_asm_cards') : null;
+    base = raw ? ((typeof raw === 'string') ? JSON.parse(raw) : raw) : null;
+  } catch (e) { /* БД недоступна — правим локальный кэш */ }
+  if (!base || typeof base !== 'object') base = adAsmCfg();
+  mutate(base);
+  await adAsmCfgSave(base);
+}
 async function adAsmCfgRefresh() {
   try {
     const raw = (typeof getSiteSetting === 'function') ? await getSiteSetting('wk_asm_cards') : null;
     if (!raw) return;
     let dbCfg = null;
     try { dbCfg = (typeof raw === 'string') ? JSON.parse(raw) : raw; } catch (e) {}
-    if (!dbCfg) return;
-    if (_vnPickNewer(adAsmCfg(), dbCfg) !== dbCfg) return;
+    if (!dbCfg || typeof dbCfg !== 'object') return;
+    if (JSON.stringify(dbCfg) === localStorage.getItem('wk_asm_cards')) return;
     localStorage.setItem('wk_asm_cards', JSON.stringify(dbCfg));
     if (AD.tab === 'vn') adPaint();
   } catch (e) { /* оффлайн/нет прав — работаем с локальным кэшем */ }
@@ -834,16 +845,15 @@ async function adAsmArtUpload(kind, el) {
     const serverUp = await adPortServerAlive();
     const url = await adVNUploadOne(f, serverUp);
     if (!url) throw new Error('пустой URL');
-    const cfg = adAsmCfg(); cfg[kind] = url;
-    await adAsmCfgSave(cfg);
+    await adAsmCfgApply(cfg => { cfg[kind] = url; });
     toast('Арт карты загружен', 'ok');
   } catch (e) { toast('Не удалось загрузить: ' + (e.message || e), 'err'); }
   adPaint();
 }
 async function adAsmArtClear(kind) {
   if (!confirm('Убрать арт этого слота? Карта вернётся к файлу/рисованному виду.')) return;
-  const cfg = adAsmCfg(); delete cfg[kind];
-  try { await adAsmCfgSave(cfg); } catch (e) { toast('Не сохранилось в БД: ' + (e.message || e), 'err'); }
+  try { await adAsmCfgApply(cfg => { delete cfg[kind]; }); }
+  catch (e) { toast('Не сохранилось в БД: ' + (e.message || e), 'err'); }
   adPaint();
 }
 function adAsmArtSection() {
@@ -866,18 +876,34 @@ function adAsmArtSection() {
 // Реальные снимки для приза «Видение»: URL-ы в site_settings
 // (ключ wk_stars_photos, {list:[…]}), узел-видение показывает изображение.
 function adStarsCfg() { try { return JSON.parse(localStorage.getItem('wk_stars_photos') || 'null') || {}; } catch (e) { return {}; } }
-// localStorage — только кэш этого браузера: на другой машине/домене он свой, и
-// правка поверх устаревшего кэша затирала бы чужие арты в общей БД. Поэтому при
-// открытии вкладки подтягиваем БД и берём свежую по _ts (как bbRefreshFromDb).
+// Весь конфиг (архив видений + арты ВСЕХ типов) лежит в БД ОДНОЙ строкой, а
+// localStorage — лишь кэш этого браузера. Любая правка поверх снимка, прочитанного
+// до чужой записи, затирала чужие арты целиком: так осиротело 26 файлов в
+// assets/hero (залились, а из БД их вымыло). Поэтому пишем только так: свежую
+// базу тянем ИЗ БД прямо перед записью и меняем в ней один ключ.
+// ВАЖНО: файлы льём ДО вызова — заливка долгая, и снимок за это время протухает.
+async function adStarsCfgApply(mutate) {
+  let base = null;
+  try {
+    const raw = (typeof getSiteSetting === 'function') ? await getSiteSetting('wk_stars_photos') : null;
+    base = raw ? ((typeof raw === 'string') ? JSON.parse(raw) : raw) : null;
+  } catch (e) { /* БД недоступна — правим локальный кэш, лучше чем ничего */ }
+  if (!base || typeof base !== 'object') base = adStarsCfg();
+  mutate(base);
+  await adStarsCfgSave(base);
+}
+// Показ вкладки: зеркалим БД КАК ЕСТЬ. Слияние «свежее по _ts» тут не годится —
+// правок в буфере нет (любое действие пишется в БД сразу), зато локальный кэш с
+// более новым _ts переживал бы чужую запись и вечно показывал арты, которых в БД
+// уже нет. Админка должна показывать то же, что увидят игроки.
 async function adStarsCfgRefresh() {
   try {
     const raw = (typeof getSiteSetting === 'function') ? await getSiteSetting('wk_stars_photos') : null;
     if (!raw) return;
     let dbCfg = null;
     try { dbCfg = (typeof raw === 'string') ? JSON.parse(raw) : raw; } catch (e) {}
-    if (!dbCfg) return;
-    const fresher = _vnPickNewer(adStarsCfg(), dbCfg);
-    if (fresher !== dbCfg) return;
+    if (!dbCfg || typeof dbCfg !== 'object') return;
+    if (JSON.stringify(dbCfg) === localStorage.getItem('wk_stars_photos')) return;
     localStorage.setItem('wk_stars_photos', JSON.stringify(dbCfg));
     if (AD.tab === 'vn') adPaint();
   } catch (e) { /* оффлайн/нет прав — работаем с локальным кэшем */ }
@@ -893,21 +919,28 @@ async function adStarsPhotoUpload(el) {
   if (!files.length) return;
   try {
     const serverUp = await adPortServerAlive();
-    const cfg = adStarsCfg(); cfg.list = Array.isArray(cfg.list) ? cfg.list : [];
+    const urls = [];
     for (const f of files) {
       const url = await adVNUploadOne(f, serverUp);
-      if (url) cfg.list.push(url);
+      if (url) urls.push(url);
     }
-    await adStarsCfgSave(cfg);
+    if (!urls.length) throw new Error('ни один файл не залился');
+    await adStarsCfgApply(cfg => {
+      cfg.list = (Array.isArray(cfg.list) ? cfg.list : []).concat(urls);
+    });
     toast('Снимки загружены в архив видений', 'ok');
   } catch (e) { toast('Не удалось загрузить: ' + (e.message || e), 'err'); }
   adPaint();
 }
 async function adStarsPhotoRemove(i) {
   if (!confirm('Убрать это видение из архива?')) return;
-  const cfg = adStarsCfg(); cfg.list = Array.isArray(cfg.list) ? cfg.list : [];
-  cfg.list.splice(i, 1);
-  try { await adStarsCfgSave(cfg); } catch (e) { toast('Не сохранилось в БД: ' + (e.message || e), 'err'); }
+  const gone = (adStarsCfg().list || [])[i];
+  if (!gone) return;
+  try {
+    await adStarsCfgApply(cfg => {
+      cfg.list = (Array.isArray(cfg.list) ? cfg.list : []).filter(u => u !== gone);
+    });
+  } catch (e) { toast('Не сохранилось в БД: ' + (e.message || e), 'err'); }
   adPaint();
 }
 function adStarsPhotosSection() {
@@ -945,25 +978,35 @@ async function adStarsArtUpload(kind, el) {
   if (!files.length) return;
   try {
     const serverUp = await adPortServerAlive();
-    const cfg = adStarsCfg(); cfg.arts = cfg.arts || {};
-    const list = adStarsArtList(cfg, kind);
+    // Сперва файлы, и только потом трогаем конфиг: пока льются картинки, соседняя
+    // загрузка успевает записать свой тип — прочитанный заранее снимок его затрёт.
+    const urls = [];
     for (const f of files) {
       const url = await adVNUploadOne(f, serverUp);
-      if (url) list.push(url);
+      if (url) urls.push(url);
     }
-    cfg.arts[kind] = list;
-    await adStarsCfgSave(cfg);
-    toast(files.length > 1 ? 'Арты приза загружены' : 'Арт приза загружен', 'ok');
+    if (!urls.length) throw new Error('ни один файл не залился');
+    await adStarsCfgApply(cfg => {
+      cfg.arts = cfg.arts || {};
+      cfg.arts[kind] = adStarsArtList(cfg, kind).concat(urls);
+    });
+    toast(urls.length > 1 ? 'Арты приза загружены' : 'Арт приза загружен', 'ok');
   } catch (e) { toast('Не удалось загрузить: ' + (e.message || e), 'err'); }
   adPaint();
 }
 async function adStarsArtRemove(kind, i) {
   if (!confirm('Убрать этот арт приза?')) return;
-  const cfg = adStarsCfg(); cfg.arts = cfg.arts || {};
-  const list = adStarsArtList(cfg, kind);
-  list.splice(i, 1);
-  if (list.length) cfg.arts[kind] = list; else delete cfg.arts[kind];
-  try { await adStarsCfgSave(cfg); } catch (e) { toast('Не сохранилось в БД: ' + (e.message || e), 'err'); }
+  // Удаляем по URL, а не по индексу: база берётся из БД и порядок в ней может
+  // отличаться от того, что нарисовано на экране.
+  const gone = adStarsArtList(adStarsCfg(), kind)[i];
+  if (!gone) return;
+  try {
+    await adStarsCfgApply(cfg => {
+      cfg.arts = cfg.arts || {};
+      const list = adStarsArtList(cfg, kind).filter(u => u !== gone);
+      if (list.length) cfg.arts[kind] = list; else delete cfg.arts[kind];
+    });
+  } catch (e) { toast('Не сохранилось в БД: ' + (e.message || e), 'err'); }
   adPaint();
 }
 function adStarsArtsSection() {
