@@ -252,7 +252,10 @@
       "Bash(node t.js)",
       "Bash(xargs sed -i 's/20260715rift1/20260715rift2/g')",
       "Bash(sort -u -t: -k3)",
-      "Bash(sort -u -t= -k2)"
+      "Bash(sort -u -t= -k2)",
+      "Bash(npm run *)",
+      "Bash(curl -s \"https://pgngkkiiopymvrcozvvr.supabase.co/rest/v1/site_settings?key=eq.wk_stars_photos&select=value\" -H \"apikey: sb_publishable_f_xjq0WQcf2AUdHWjk1-XQ_BDLpsoiS\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const c=JSON.parse\\(JSON.parse\\(s\\)[0].value\\);console.log\\('ключи arts:',JSON.stringify\\(Object.keys\\(c.arts||{}\\)\\),'| видений:',\\(c.list||[]\\).length,'| _ts:',c._ts\\);}\\);\")"
     ]
   }
 }

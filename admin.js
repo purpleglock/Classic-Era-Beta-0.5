@@ -891,6 +891,19 @@ async function adStarsCfgApply(mutate) {
   if (!base || typeof base !== 'object') base = adStarsCfg();
   mutate(base);
   await adStarsCfgSave(base);
+  // ЧИТАЕМ ОБРАТНО. Файл лёг на диск, тост сказал «загружено» — а в БД пусто:
+  // именно так 26 артов и потерялись незаметно. Запись без проверки не считается.
+  try {
+    const back = (typeof getSiteSetting === 'function') ? await getSiteSetting('wk_stars_photos') : null;
+    const got  = back ? JSON.parse(typeof back === 'string' ? back : JSON.stringify(back)) : null;
+    if (!got || (got._ts || 0) !== base._ts) {
+      throw new Error('БД не приняла запись (в базе ' + (got ? 'чужая версия' : 'пусто') + ') — арт остался только в этом браузере');
+    }
+    localStorage.setItem('wk_stars_photos', JSON.stringify(got));
+  } catch (e) {
+    if (/не приняла/.test(e.message)) throw e;
+    /* сеть моргнула на перечитке — саму запись это не отменяет */
+  }
 }
 // Показ вкладки: зеркалим БД КАК ЕСТЬ. Слияние «свежее по _ts» тут не годится —
 // правок в буфере нет (любое действие пишется в БД сразу), зато локальный кэш с
