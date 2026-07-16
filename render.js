@@ -1686,17 +1686,7 @@ function buildNav(filt='') {
     const cnOn = (curSlug==='constructors'||(curSlug||'').startsWith('build-'))?' on':'';
     h+=`<a class="n-home${cnOn}" id="ntl-con" href="#constructors" onclick="return navGo(event,'constructors')"><span class="n-home-icon">⚒</span>${L('Конструкторы','Constructors')}</a>`;
   }
-  // ── Группа «Войска»: каталоги юнитов (раскрывающаяся) ──
-  const cnCats=[['cat-ships','🚀',L('Флот','Fleet')],['cat-ground','🛡',L('Наземная техника','Ground')],['cat-aviation','✈',L('Авиация','Aviation')],['cat-divisions','⛬',L('Дивизии','Divisions')]];
-  const troopsActive=(curSlug||'').startsWith('cat-');
-  h+=`<div class="n-group${troopsActive?' op':''}" id="nav-troops">
-    <div class="n-group-hdr${troopsActive?' on':''}" id="ntl-troops" onclick="document.getElementById('nav-troops').classList.toggle('op')">
-      <span class="n-home-icon">⚔</span><span class="n-group-t">${L('Войска','Forces')}</span><span class="n-group-arr">▸</span>
-    </div>
-    <div class="n-group-body">
-      ${cnCats.map(([sl,ic,nm])=>`<a class="n-sub${curSlug===sl?' on':''}" id="ntl-${sl}" href="#${sl}" onclick="return navGo(event,'${sl}')"><span class="n-home-icon">${ic}</span>${nm}</a>`).join('')}
-    </div>
-  </div>`;
+  // Группа «Войска» (каталоги юнитов cat-*) убрана: проекты доступны в кабинете игрока.
   // Администрирование — только суперадмины и эдиторы
   if (typeof adCanAccess==='function' && adCanAccess()) {
     h+=`<a class="n-home${curSlug==='admin'?' on':''}" id="ntl-adm" href="#admin" onclick="return navGo(event,'admin')"><span class="n-home-icon">🛠</span>${L('Управление','Admin')}</a>`;
@@ -1798,15 +1788,8 @@ function setAct(slug) {
     'economy': 'ntl-eco', 'admin': 'ntl-adm', 'guide': 'ntl-guide',
     'constructors': 'ntl-con', 'build-ship': 'ntl-con', 'build-ground': 'ntl-con',
     'build-aviation': 'ntl-con', 'build-division': 'ntl-con',
-    'cat-ships': 'ntl-cat-ships', 'cat-ground': 'ntl-cat-ground',
-    'cat-aviation': 'ntl-cat-aviation', 'cat-divisions': 'ntl-cat-divisions',
   };
   if (TOP_NAV[slug]) document.getElementById(TOP_NAV[slug])?.classList.add('on');
-  // Каталог войск — подсветить заголовок группы и раскрыть её
-  if (slug.startsWith('cat-')) {
-    document.getElementById('ntl-troops')?.classList.add('on');
-    document.getElementById('nav-troops')?.classList.add('op');
-  }
   // Правила проекта — подсветить активную подстраницу, заголовок группы и раскрыть её
   if (slug.startsWith('rules-')) {
     document.getElementById('ntl-'+slug)?.classList.add('on');
@@ -2747,7 +2730,46 @@ function heroVNActsToggle(force) {
   }
   const el = document.getElementById('hp-vn-choices');
   if (open && el) el.scrollTop = 0;   // раскрыли — показать список с начала
+  _heroVNActsFit();
 }
+// Список обязан упираться в НИЖНИЙ КРАЙ ЭКРАНА, а не в выдуманную высоту.
+// Окно новеллы лежит в потоке под баннером (34vh), поэтому фиксированные «340px»
+// уезжали за край: чтобы достать нижние варианты, приходилось сперва скроллить
+// страницу и только потом список. Считаем остаток места сами; если его совсем мало
+// (окно у самого низа) — подтягиваем страницу за игрока, а не заставляем его.
+// Страницу скроллит НЕ окно: у шелла `html,body{overflow:hidden}`, а бегает #cw.
+// Поэтому ищем реального прокручиваемого предка, а не трогаем window.
+function _heroVNScroller(node) {
+  for (let p = node && node.parentElement; p; p = p.parentElement) {
+    const ov = getComputedStyle(p).overflowY;
+    if ((ov === 'auto' || ov === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
+  }
+  return null;
+}
+function _heroVNActsFit() {
+  const acts = document.getElementById('hp-vn-acts');
+  const el = document.getElementById('hp-vn-choices');
+  const btn = document.getElementById('hp-vn-actbtn');
+  if (!acts || !el || !btn) return;
+  // Приглашение скрыто = десктоп: там сетка чипов со своей высотой, не трогаем.
+  if (!btn.offsetParent || !acts.classList.contains('open')) { el.style.maxHeight = ''; return; }
+  const gap = 10;
+  let avail = window.innerHeight - el.getBoundingClientRect().top - gap;
+  const NEED = 220;
+  if (avail < NEED) {                          // окно у самого низа — освободить место
+    const sc = _heroVNScroller(acts);
+    if (sc) {
+      const room = sc.scrollHeight - sc.clientHeight - sc.scrollTop;
+      const delta = Math.min(NEED - avail, Math.max(0, room));
+      // У #cw включён scroll-behavior:smooth — прокрутка анимированная, и мерить
+      // сразу после неё бессмысленно. Считаем по ЦЕЛИ, а не по факту.
+      if (delta > 0) { sc.scrollTop += delta; avail += delta; }
+    }
+  }
+  el.style.maxHeight = Math.max(132, avail) + 'px';
+}
+// Поворот экрана / смена клавиатуры — пересчитать, иначе список снова уедет за край.
+window.addEventListener('resize', () => { try { _heroVNActsFit(); } catch (e) {} });
 // Список перерисовали (меню ↔ подменю ↔ рассказ) — обновить счётчик в приглашении.
 // Состояние свитка НЕ трогаем: раскрыл один раз — ходит по спискам без лишних тапов.
 function heroVNActsSync() {

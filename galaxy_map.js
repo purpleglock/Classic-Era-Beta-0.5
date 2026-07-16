@@ -1899,7 +1899,7 @@ function gmOutpostCmdDeployMining() {
     return;
   }
   const rows = [...res.entries()].map(([name, rar]) =>
-    `<button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('mining', ${JSON.stringify(name)})">⛏ ${esc(name)} <span class="gm-opcmd-sub">${GM_RAR_LABEL[rar] || rar}</span></button>`
+    `<button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('mining', '${jsq(name)}')">⛏ ${esc(name)} <span class="gm-opcmd-sub">${GM_RAR_LABEL[rar] || rar}</span></button>`
   ).join('');
   el.innerHTML = `<div class="gm-opcmd-card">
       <button class="gm-close" onclick="gmCloseOutpostCmd()">✕</button>

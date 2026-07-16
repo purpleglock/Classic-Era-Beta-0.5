@@ -1340,8 +1340,11 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   .hp-vn-acts:not(.open) .hp-vn-choices{display:none}
   .hp-vn-acts.open .hp-vn-choices{
     margin-top:9px;
-    /* потолок ~половина экрана: список листается сам, окно новеллы стоит на месте */
-    max-height:min(46vh,340px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+    /* Стартовый потолок — скромный: точную высоту (ровно до низа экрана) ставит
+       инлайном _heroVNActsFit(). Раздувать список НЕЛЬЗЯ: окно новеллы лежит в потоке
+       под баннером, и лишняя высота уезжает за край — до нижних вариантов пришлось бы
+       сперва скроллить страницу, и только потом список. */
+    max-height:34vh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
     -webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:2px;
   }
   /* НИКАКИХ mask-image на этом блоке: маска поверх прокручиваемой области на iOS

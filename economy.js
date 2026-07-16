@@ -1390,7 +1390,7 @@ async function _ecLoadCoreImpl() {
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
-  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState] = await Promise.all([
+  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1430,6 +1430,7 @@ async function _ecLoadCoreImpl() {
     dbGet('faction_budget', `faction_id=eq.${fid}`).catch(() => []),   // бюджет державы (ползунки финансирования)
     ecRpc('geosurvey_get').catch(() => null),  // ⛏ георазведка: текущая находка + цена следующей крутки (казино)
     ecRpc('stargaze_get').catch(() => null),   // 🜂 «Всмотреться в Разлом»: активный транс (казино)
+    dbGet('galactic_ledger', `owner_id=eq.${user.id}&order=created_at.desc&limit=24`).catch(() => []),  // 🌌 разовые эффекты Ассамблеи/Поэмы (леджер, «Казна» обзора)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1441,6 +1442,7 @@ async function _ecLoadCoreImpl() {
   EC.spatial = {};
   (Array.isArray(spatial) ? spatial : []).forEach(b => { if (b && b.system_id) EC.spatial[b.system_id] = b; });
   EC.sectors = Array.isArray(sectors) ? sectors : [];   // сектора карты + эконом-события (срез 4)
+  EC.gledger = Array.isArray(gledger) ? gledger : [];    // 🌌 леджер галактических эффектов (Ассамблея/Поэма) — «Казна» обзора
   EC.designs = (designs || []);
   EC.roster = (prod || []).filter(p => p.status === 'done');
   EC.queue = (prod || []).filter(p => p.status === 'queued');
@@ -3480,6 +3482,32 @@ function ecTabOverview() {
       <div class="ec-bdg-extra-note">Эти потоки (вера, биржевые купоны/дивиденды, аванпосты) считаются отдельно от основного тика и в «Чистый доход» не входят — поэтому в казну за ход падает только сумма выше.</div>
       ${extraRows}
     </div>` : '';
+  // 🌌 Галактические эффекты — разовые выплаты/поборы Ассамблеи и Поэмы (леджер сервера
+  // galactic_ledger, _galactic_ledger.sql). Раньше падали в казну «молча» — казна росла
+  // сильнее сводки; теперь каждая правка видна строкой.
+  const _gl = Array.isArray(EC.gledger) ? EC.gledger : [];
+  const _gl7 = _gl.filter(r => (Date.now() - new Date(r.created_at).getTime()) < 7 * 864e5);
+  const _glSum = Math.round(_gl7.reduce((a, r) => a + (+r.d_gc || 0), 0));
+  const _glRow = r => {
+    const d = new Date(r.created_at);
+    const dt = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const dgc = Math.round(+r.d_gc || 0), dsci = Math.round(+r.d_sci || 0), dgds = Math.round(+r.d_goods || 0);
+    const parts = [];
+    if (dgc)  parts.push(`<b class="${dgc < 0 ? 'neg' : 'pos'}">${dgc > 0 ? '+' : '−'}${ecNum(Math.abs(dgc))} ГС</b>`);
+    if (dsci) parts.push(`<span class="ec-gal-x">${dsci > 0 ? '+' : '−'}${ecNum(Math.abs(dsci))} ОН</span>`);
+    if (dgds) parts.push(`<span class="ec-gal-x">${dgds > 0 ? '+' : '−'}${ecNum(Math.abs(dgds))} тов.</span>`);
+    return `<div class="ec-gal-row">
+      <span class="ec-gal-ic">${r.source === 'poem' ? '🖋' : '🏛'}</span>
+      <span class="ec-gal-info"><span class="ec-gal-name">${esc(r.title || '')}</span><span class="ec-gal-sub">${r.source === 'poem' ? 'Поэма недели' : 'Межзвёздная Ассамблея'} · ${dt}</span></span>
+      <span class="ec-gal-val">${parts.join(' ') || '—'}</span>
+    </div>`;
+  };
+  const galBlock = _gl.length ? `<div class="ec-gal">
+      <div class="ec-gal-hd">🌌 Галактические эффекты <span class="ec-gal-sum ${_glSum < 0 ? 'neg' : 'pos'}">${_glSum >= 0 ? '+' : '−'}${ecNum(Math.abs(_glSum))} ГС за 7 дн.</span></div>
+      <div class="ec-gal-note">Разовые выплаты и поборы на всю галактику — законы 🏛 Ассамблеи и итоги 🖋 «Поэмы недели». Падают в казну сразу и в «/сут» не входят — из-за них начисление за ход может отличаться от «Чистого дохода».</div>
+      <div class="ec-gal-rows">${_gl.slice(0, ecOvExpanded('gal') ? 24 : 4).map(_glRow).join('')}</div>
+      ${_gl.length > 4 ? ecOvFold('gal', ecOvExpanded('gal') ? '▴ Свернуть историю' : `▾ Вся история (${_gl.length})`, 'разовые эффекты галактики') : ''}
+    </div>` : '';
   // Товарная биржа теперь числовой строкой в moneyInc (оценка по складу) — отдельный плейсхолдер не нужен.
   const marketRow = '';
   const expRow = _resOutTotal ? `<button type="button" class="ec-bdg-row ec-bdg-exp" onclick="ecSetTab('trade')">
@@ -3533,7 +3561,7 @@ function ecTabOverview() {
       ${_povDrag ? `<div class="ec-bdg-dt-warn">💸 Бедность съедает ≈ −${ecNum(_povDrag)} ГС/сут: фабрики и хабы в небогатых системах режутся просперити (уже учтено в строках «Фабрики»/«Хабы»). Поднимайте благополучие во вкладке «Благополучие».</div>` : ''}
       ${inc.debuff ? `<div class="ec-bdg-dt-warn">🔥 Дестабилизация режет денежный доход на ${Math.round(inc.debuff * 100)}% — уже учтено в суммах.</div>` : ''}
       <div class="ec-ovx-hint">Доход начисляется в конце каждого хода (тика). Доктрина даёт ×${gcMul.toFixed(2)} к ГС-потокам${gcMulPct ? ` (${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''} (к доходу биржи не применяется). Содержания армии/зданий нет — постройка тратит ГС разово.</div>
-      <div class="ec-ovx-hint">📊 «Чистый доход» = ровно те статьи, что начисляет тик сервера (зеркало income_history): фабрики+хабы, караваны, Товарная биржа (оценка по складу), экспорт добычи, − торговая политика. Вера (храмы/десятина/секты), биржевые купоны/дивиденды/синергия и аванпосты считаются ОТДЕЛЬНО от основного тика и показаны в блоке «Вне начисления тика» — в «Чистый доход» они не входят. Спекуляции (маржа/фьючерсы/опционы) переменны и в «/сут» не входят. 🏆 Награды за достижения — разовые, показаны отдельной строкой. 🏛 Законы Межзвёздной Ассамблеи и 🖋 итоги «Поэмы недели» — разовые выплаты/поборы по всей галактике: они падают в казну напрямую и объявляются в ленте новостей.</div>
+      <div class="ec-ovx-hint">📊 «Чистый доход» = ровно те статьи, что начисляет тик сервера (зеркало income_history): фабрики+хабы, караваны, Товарная биржа (оценка по складу), экспорт добычи, − торговая политика. Вера (храмы/десятина/секты), биржевые купоны/дивиденды/синергия и аванпосты считаются ОТДЕЛЬНО от основного тика и показаны в блоке «Вне начисления тика» — в «Чистый доход» они не входят. Спекуляции (маржа/фьючерсы/опционы) переменны и в «/сут» не входят. 🏆 Награды за достижения — разовые, показаны отдельной строкой. 🏛 Законы Межзвёздной Ассамблеи и 🖋 итоги «Поэмы недели» — разовые выплаты/поборы по всей галактике: они падают в казну напрямую; их история — в блоке «🌌 Галактические эффекты» этой панели.</div>
     </div>`;
   const budget = `<div class="ec-ovx-panel ec-bdg-panel">
     <div class="ec-ovx-panel-t">💰 Казна <span class="ec-ovx-panel-sub">доходы и расходы за сутки</span></div>
@@ -3545,6 +3573,7 @@ function ecTabOverview() {
       </div>
       ${(moneyRows || marketRow) ? `<div class="ec-bdg-rows">${moneyRows}${marketRow}</div>` : ''}
       ${extraBlock}
+      ${galBlock}
       ${flows.length ? `<div class="ec-bdg-flows">${flows.join('')}</div>` : ''}
       ${ecOvFold('bdg', '🔍 Подробно: формулы и состав', 'откуда каждый ГС')}
       ${ecOvExpanded('bdg') ? bdgDetail : ''}`
@@ -3765,12 +3794,30 @@ function ecTabOverview() {
     : 'родные миры: ' + ((EC_HAB[EC.app.race] || []).map(g => EC_GRP_LABEL[g] || g).join(', ') || '—') + '. Чужие типы планет — через терраформ.'}</div>`;
 
   const achTeaser = ecAchOverviewTeaser();
-  return `<div class="ec-ovx-grid">${budget}${ecStatsPanel()}${resPanel}${empire}${ecPovertyPanel()}${army}${sci}${ecDoctrineHtml()}${achTeaser}</div>${raceNote}
+
+  // ── 0. СТАТУС-ЛЕНТА — ключевые виталы державы одной строкой (клик = переход) ──
+  const _wb = (typeof ecWellbeing === 'function') ? ecWellbeing() : { wb: 1 };
+  const _wbPct = Math.round(((_wb.wb || 1) - 1) * 100);
+  const _pop = (typeof ecBudgetPop === 'function') ? ecBudgetPop() : 0;
+  const vit = (ic, k, v, cls = '', tab = '', tip = '') => `<div class="ec-vit${tab ? ' ec-ov-clk' : ''}"${tab ? ` onclick="ecSetTab('${tab}')"` : ''}${tip ? ` data-tip="${esc(tip)}"` : ''}>
+      <span class="ec-vit-k">${ic} ${k}</span><span class="ec-vit-v ${cls}">${v}</span>
+    </div>`;
+  const statusStrip = `<div class="ec-vits">
+    ${vit('💰', 'доход / сут', `${netGc >= 0 ? '+' : ''}${ecNum(netGc)}`, netGc >= 0 ? 'pos' : 'neg', '', 'Чистый доход тика — разбивка в «Казне» ниже')}
+    ${_gl.length ? vit('🌌', 'галактика 7 дн', `${_glSum >= 0 ? '+' : '−'}${ecNum(Math.abs(_glSum))}`, _glSum >= 0 ? 'pos' : 'neg', '', 'Разовые эффекты Ассамблеи и Поэмы за неделю — блок «Галактические эффекты» в «Казне»') : ''}
+    ${vit('🏙', 'население', ecNum(_pop), '', 'welfare', 'Живое население державы — вкладка «Благополучие»')}
+    ${vit('☀', 'благополучие', `${_wbPct >= 0 ? '+' : ''}${_wbPct}%`, _wbPct >= 0 ? 'pos' : 'neg', 'welfare', 'Индекс благополучия умножает весь ГС-доход')}
+    ${gcPct ? vit('⚖', 'доктрина', `${gcPct > 0 ? '+' : ''}${gcPct}% ГС`, gcPct > 0 ? 'pos' : 'neg', '', 'Множитель доктрины государства к ГС-потокам') : ''}
+    ${inc.debuff ? vit('🔥', 'дестабилизация', `−${Math.round(inc.debuff * 100)}%`, 'neg', 'intel', 'Вражеская операция режет доход, пока не истечёт') : ''}
+    ${vit('🔬', 'наука / сут', `+${ecNum(inc.science || 0)}`, 'sci', 'research', 'Очки науки со слотов Научных Институтов')}
+  </div>`;
+
+  return `<div class="ec-cyb-ov">${statusStrip}<div class="ec-ovx-grid">${budget}${ecStatsPanel()}${resPanel}${empire}${ecPovertyPanel()}${army}${sci}${ecDoctrineHtml()}${achTeaser}</div>${raceNote}
     <div class="ec-ov-links">
       <button class="btn btn-gh btn-sm" onclick="go('constructors')">⚒ Конструкторы</button>
       <button class="btn btn-gh btn-sm" onclick="go('cat-ships')">🚀 Каталоги</button>
       <button class="btn btn-gh btn-sm" onclick="go('map')">🜨 Карта</button>
-    </div>`;
+    </div></div>`;
 }
 
 function ecToggleColony(id) { EC.openColony = (EC.openColony === id) ? null : id; ecPaintCabinet(); }
@@ -4006,6 +4053,20 @@ function ecFreeRowHtml(s, p, race) {
 // render.js heroVNGeoOpen), НЕ в кабинете. ecGeoBody() отдаёт разметку.
 // ══════════════════════════════════════════════════════════════
 const EC_GEO_RAR_ACCENT = { common: 'var(--t4)', uncommon: 'var(--ok)', rare: 'var(--te)', epic: 'var(--pu)', legendary: 'var(--gd)' };
+// ── Хроника удачи: лента живёт ВНУТРИ панели казино, а не в событиях мира ──
+// Раньше находки георазведки и джекпоты Разлома писались в ◈ Хронику сектора и
+// засоряли общую ленту. Теперь сервер (_luck_feed) отдаёт последние записи прямо
+// в geosurvey_get / stargaze_get / stargaze_pick, а показываем их только здесь.
+function ecLuckFeed(list, title) {
+  const rows = (Array.isArray(list) ? list : []).slice(0, 8);
+  if (!rows.length) return '';
+  return `<div class="ec-luck">
+    <div class="ec-luck-h">${esc(title)}</div>
+    ${rows.map(r => `<div class="ec-luck-i${r.me ? ' is-me' : ''}">
+      ${ecFacFlag(r.fid, 18)}<span class="ec-luck-t">${esc(r.txt || '')}</span><i class="ec-luck-at">${esc(ecAgo(r.at))}</i>
+    </div>`).join('')}
+  </div>`;
+}
 // Зеркало _geosurvey_cost(n): n = сколько круток УЖЕ сделано сегодня (0-based).
 function ecGeoCost(n) { n = Math.max(0, +n || 0); return n === 0 ? 10000 : n === 1 ? 15000 : n === 2 ? 22500 : n === 3 ? 35000 : 35000 + (n - 3) * 15000; }
 // Состояние всегда объект: {current, colony_id, spins, next_cost}. next_cost считает сервер (geosurvey_get).
@@ -4043,6 +4104,7 @@ function ecGeoBody() {
         ${esc0}
         ${can ? '' : `<div class="ec-geo-warn">Не хватает ГС: нужно ${ecNum(cost)}, в казне ${ecNum(gc)}</div>`}
       </div>
+      ${ecLuckFeed(s.feed, 'Сводки буровых')}
     </div>`;
   }
   // Есть невзятая находка — карточка результата: принять или перебросить.
@@ -4075,6 +4137,7 @@ function ecGeoBody() {
       </div>
       ${can ? '' : `<div class="ec-geo-warn">На новую крутку не хватает ГС (нужно ${ecNum(cost)})</div>`}
     </div>
+    ${ecLuckFeed(s.feed, 'Сводки буровых')}
   </div>`;
 }
 // Мгновенный «слот-машинный» отклик: пока летит RPC — крутящийся бур в оверлее.
@@ -4439,6 +4502,7 @@ function ecStarsStartBody() {
       <button class="btn ec-geo-go${can ? '' : ' is-off'}" ${can ? '' : 'disabled'} onclick="ecStarsStart()">Войти в транс · ${ecNum(cost)} ГС</button>
       ${gc >= cost ? '' : `<div class="ec-geo-warn">Не хватает ГС: нужно ${ecNum(cost)}, в казне ${ecNum(gc)}</div>`}
     </div>
+    ${ecLuckFeed(ecStarsState().feed, 'Кто ловил взгляд в ответ')}
   </div>`;
 }
 // ── Зеркало патроната на экране ставок (только для «мирян») ──
@@ -4572,6 +4636,7 @@ function ecStarsFinaleBody(fin) {
       <div class="ec-stars-h"><span class="ec-stars-h-k">Итог</span><span class="ec-stars-h-v ${net >= 0 ? 'is-up' : 'is-dn'}">${net >= 0 ? '+' : ''}${ecNum(net)} ГС</span></div>
     </div>
     <div class="ec-geo-acts"><button class="btn ec-geo-reroll" onclick="ecStarsAgain()">Погрузиться ещё раз</button></div>
+    ${ecLuckFeed(fin.feed, 'Кто ловил взгляд в ответ')}
   </div>`;
 }
 function ecStarsSetStake(v) { _ecStarsStake = +v || 100; ecStarsRefreshOverlay(); }
@@ -4589,7 +4654,9 @@ async function ecStarsStart() {
   _ecStarsSectorLive = _ecStarsRandomSector();
   try {
     const r = await ecRpc('stargaze_start', { p_stake: _ecStarsStake, p_extra: _ecStarsExtra });
-    EC.stargaze = { active: true, stake: r.stake, extras: r.extras, picks: r.picks, mult: r.mult, opened: [] };
+    // feed тянем со старого состояния: start его не отдаёт, а терять хронику нельзя.
+    EC.stargaze = { active: true, stake: r.stake, extras: r.extras, picks: r.picks, mult: r.mult,
+      opened: [], feed: ecStarsState().feed || [] };
     if (EC.eco && r.gc != null) EC.eco.gc = +r.gc;
     if (+r.tithe > 0 && r.patron_name)
       toast(`Десятина ${ecNum(r.tithe)} ГС ушла патрону: ${r.patron_name}`, 'ok');
@@ -4604,9 +4671,11 @@ async function ecStarsPick(i) {
   if (cell) cell.classList.add('is-opening');   // «медиум нащупывает узел» — мгновенный отклик
   try {
     const r = await ecRpc('stargaze_pick', { p_idx: i });
-    EC.stargaze = { active: !r.done, stake: s.stake, extras: s.extras, picks: r.picks, mult: r.mult, opened: r.opened || [] };
+    const feed = r.feed || s.feed || [];   // pick отдаёт свежую хронику — свой джекпот виден сразу
+    EC.stargaze = { active: !r.done, stake: s.stake, extras: s.extras, picks: r.picks, mult: r.mult,
+      opened: r.opened || [], feed };
     if (EC.eco && r.gc != null) EC.eco.gc = +r.gc;
-    if (r.done && r.last) _ecStarsFinale = r.last;   // финал: раскрыть весь Разлом + ГДЕ БЫЛ ДЖЕКПОТ
+    if (r.done && r.last) _ecStarsFinale = { ...r.last, feed };   // финал: раскрыть весь Разлом + ГДЕ БЫЛ ДЖЕКПОТ
   } catch (e) {
     if (cell) cell.classList.remove('is-opening');
     toast(ecErr(e.message), 'err');
@@ -6023,14 +6092,27 @@ function ecMarketBlock(stock) {
         <details style="margin-top:7px;opacity:.55"><summary style="cursor:pointer">для администратора</summary>
           Примените <code>_market_setup.sql</code> и обновите страницу.</details></div></div>`;
   }
-  const rows = names.map((n, i) => {
-    const m = mk[n], rar = ecResRarity(n);
+  // выбранный ресурс: EC.mkSel, по умолчанию — первый со своим запасом, иначе самый дорогой
+  if (!names.includes(EC.mkSel)) EC.mkSel = names.find(n => (myStock[n] || 0) > 0) || names[0];
+  const trendOf = (m) => {
     const base = m.base || m.price || 1;
-    const dpct = Math.round((m.price / base - 1) * 100);
-    const trend = m.price > base * 1.02 ? `<span style="color:#e0688a">▲</span>`
+    return m.price > base * 1.02 ? `<span style="color:#e0688a">▲</span>`
       : m.price < base * 0.98 ? `<span style="color:#5fc98a">▼</span>`
         : `<span style="color:var(--t4)">▬</span>`;
-    const mine = myStock[n] || 0;
+  };
+  // ── пикер: компактные чипы вместо простыни карточек ──
+  const chips = names.map(n => {
+    const m = mk[n], rar = ecResRarity(n), mine = myStock[n] || 0;
+    return `<button type="button" class="ec-trade-res ec-mk-chip${n === EC.mkSel ? ' on' : ''}${mine > 0 ? ' ec-mk-has' : ''}" data-rar="${esc(rar)}" onclick="ecMkSelect('${jsq(n)}')">
+      <span class="ec-trade-res-ic">${ecResIcon(n)}</span><span class="ec-trade-res-n">${esc(n)}</span>
+      <span class="ec-trade-res-meta">${trendOf(m)} ${ecNum(Math.round(m.price))} ГС${mine > 0 ? ` · 📦 ${ecNum(mine)}` : ''}</span>
+    </button>`;
+  }).join('');
+  // ── панель сделки выбранного ресурса ──
+  const detail = (() => {
+    const n = EC.mkSel, m = mk[n], rar = ecResRarity(n), mine = myStock[n] || 0;
+    const base = m.base || m.price || 1;
+    const dpct = Math.round((m.price / base - 1) * 100);
     const spark = ecSparkline(m.spark);
     // прогноз цены на следующий цикл (NPC-арбитраж + возврат к равновесию)
     const fc = ecMkForecast(base, m.stock, m.eq, m.sup, m.dem);
@@ -6044,11 +6126,11 @@ function ecMarketBlock(stock) {
       : net > 0
         ? `<span title="дорого → боты вбрасывают запас (цена вниз)">Гал.торговля: <b style="color:#5fc98a">+${ecNum(Math.round(net))}</b> поступит ⇒ цена ↓</span>`
         : `<span title="дёшево → боты скупают запас (цена вверх)">Гал.торговля: <b style="color:#e0688a">−${ecNum(Math.round(-net))}</b> скуп ⇒ цена ↑</span>`;
-    return `<div class="ec-mk-card${mine > 0 ? ' ec-mk-has' : ''}" data-rar="${esc(rar)}">
+    return `<div class="ec-mk-detail" data-rar="${esc(rar)}">
       <div class="ec-q-row ec-mk-row">
         <span class="ec-r-name ec-mk-name">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4)">(${esc(rar)})</i></span>
         <span class="ec-mk-spark" title="динамика цены за последние ходы">${spark}</span>
-        <span class="ec-mk-price">${trend} <b>${ecNum(Math.round(m.price))} ГС</b> <i style="color:var(--t4)">${dpct >= 0 ? '+' : ''}${dpct}%</i></span>
+        <span class="ec-mk-price">${trendOf(m)} <b>${ecNum(Math.round(m.price))} ГС</b> <i style="color:var(--t4)">${dpct >= 0 ? '+' : ''}${dpct}%</i></span>
         <span class="ec-mk-stock" title="запас рынка · ваш склад">📦 ${ecNum(Math.round(m.stock))} · у вас ${ecNum(mine)}</span>
       </div>
       <div class="ec-mk-tools">
@@ -6056,19 +6138,19 @@ function ecMarketBlock(stock) {
           <i class="ec-mk-fc" title="прогноз цены к началу следующего цикла — ориентир, сместят сделки игроков и шоки">🔮 след. цикл: <b style="color:${fcl}">${fdir} ~${ecNum(Math.round(fc.price))}</b> ${fpct >= 0 ? '+' : ''}${fpct}%</i></span>
         <span class="ec-mk-act">
           <span class="ec-mk-quick">
-            <button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQAdd('${esc(n)}',${i},100)" title="+100 к количеству">+100</button>
-            <button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQAdd('${esc(n)}',${i},1000)" title="+1000 к количеству">+1к</button>
-            ${mine > 0 ? `<button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQSet('${esc(n)}',${i},${mine})" title="весь ваш склад — для быстрой продажи">склад ${ecNum(mine)}</button>` : ''}
-            <button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQSet('${esc(n)}',${i},0)" title="сбросить">×</button>
+            <button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQAdd('${jsq(n)}','sel',100)" title="+100 к количеству">+100</button>
+            <button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQAdd('${jsq(n)}','sel',1000)" title="+1000 к количеству">+1к</button>
+            ${mine > 0 ? `<button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQSet('${jsq(n)}','sel',${mine})" title="весь ваш склад — для быстрой продажи">склад ${ecNum(mine)}</button>` : ''}
+            <button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQSet('${jsq(n)}','sel',0)" title="сбросить">×</button>
           </span>
-          <input type="number" id="ec-mk-q-${i}" min="1" placeholder="кол-во" class="ec-prod-qty ec-mk-q" oninput="ecRowPrev('${esc(n)}',${i})">
-          <button class="btn btn-gd btn-sm" onclick="ecRowTrade('${esc(n)}','buy',${i})">Купить</button>
-          <button class="btn btn-gh btn-sm" onclick="ecRowTrade('${esc(n)}','sell',${i})">Продать</button>
+          <input type="number" id="ec-mk-q-sel" min="1" placeholder="кол-во" class="ec-prod-qty ec-mk-q" oninput="ecRowPrev('${jsq(n)}','sel')">
+          <button class="btn btn-gd btn-sm" onclick="ecRowTrade('${jsq(n)}','buy','sel')">Купить</button>
+          <button class="btn btn-gh btn-sm" onclick="ecRowTrade('${jsq(n)}','sell','sel')">Продать</button>
         </span>
-        <span class="ec-mk-rowpv" id="ec-mk-pv-${i}"></span>
+        <span class="ec-mk-rowpv" id="ec-mk-pv-sel"></span>
       </div>
     </div>`;
-  }).join('');
+  })();
   const form = `<div class="cn-fac-hint" style="margin-top:8px">Цена живая: продажа сбивает её, покупка — поднимает; крупная сделка двигает цену прямо по ходу исполнения (площадь под кривой — дробить на 20+10 бесполезно). Запас рынка конечен. Спред 20% (продажа — 80% цены), доктрина на спот не действует. <b>🤖 НПС/цикл</b> — куда боты-арбитражёры толкают запас за один ход; <b>🔮 след. цикл</b> — прогноз цены (ориентир). Караваны выгоднее.</div>`;
   const filters = `<div class="ec-mk-filters" role="tablist">
       <button class="ec-flt is-on" onclick="ecMkFilter(this,'all')">Все</button>
@@ -6079,8 +6161,10 @@ function ecMarketBlock(stock) {
       <button class="ec-flt" onclick="ecMkFilter(this,'epic')">Эпич.</button>
       <button class="ec-flt" onclick="ecMkFilter(this,'legendary')">Легенд.</button>
     </div>`;
-  return `<div class="ec-dip-card"><div class="ec-dip-t">🏪 Галактический рынок <span class="ec-hint">— единые цены на всю галактику, спрос/предложение двигают их каждый ход</span></div>${filters}<div class="ec-mk-list flt-all">${rows}</div>${form}</div>`;
+  return `<div class="ec-dip-card"><div class="ec-dip-t">🏪 Галактический рынок <span class="ec-hint">— единые цены на всю галактику; выберите ресурс, чтобы торговать</span></div>${filters}<div class="ec-mk-list flt-all">${chips}</div>${detail}${form}</div>`;
 }
+// Выбор ресурса в пикере рынка (панель сделки перерисовывается под него).
+function ecMkSelect(n) { EC.mkSel = n; ecPaintCabinet(); }
 // ── Биржа брендов УДАЛЕНА (2026-07-12): товары дематериализованы — не ресурс,
 // а поток под спрос населения внутри тика (см. ecGoodsInfo / _goods_dematerialize.sql).
 // Фильтр списка рынка по редкости / «только моё» (CSS-классом, без перерисовки).
@@ -6136,7 +6220,7 @@ function ecTabFlows() {
       <span class="ec-fl-name">Ресурс</span><span class="ec-fl-mine">⛏ Добыча/сут</span>
       <span class="ec-fl-mode">Режим</span><span class="ec-fl-cv">🚚 Караваны</span>
       <span class="ec-fl-mk">🏪 Биржа: лимит · со склада/сут</span>
-      <span class="ec-fl-st">📦 Склад</span><span class="ec-fl-sell">Разовая продажа</span><span class="ec-fl-act"></span>
+      <span class="ec-fl-st">📦 Склад</span><span class="ec-fl-act"></span>
     </div>`;
   const list = names.map((n, i) => {
     const r = rows[n];
@@ -6163,10 +6247,6 @@ function ecTabFlows() {
       </span></span>
       <span class="ec-fl-st"><i class="ec-fl-lb">📦 На склад · запас</i><label title="Переливать остаток потока на склад (иначе — авто-продажа ×0.6)">
         <input type="checkbox" id="ec-fl-st-${i}" ${f.to_store === false ? '' : 'checked'}> ${ecNum(stQty)}</label></span>
-      <span class="ec-fl-sell"><i class="ec-fl-lb">Разовая продажа со склада</i><span class="ec-fl-sell-in">
-        <input type="number" id="ec-fl-sell-${i}" class="ec-prod-qty" min="1" max="${stQty}" placeholder="кол-во" ${stQty > 0 ? '' : 'disabled'}>
-        <button class="btn btn-gh btn-xs" ${stQty > 0 ? '' : 'disabled'} title="${stQty > 0 ? 'Продать со склада сейчас (50–75% цены в зависимости от редкости)' : 'Склад пуст'}" onclick="ecFlowSellNow(${i})">Продать</button>
-      </span></span>
       <span class="ec-fl-act"><button class="btn btn-gd btn-xs" onclick="ecFlowApply(${i})">Применить</button></span>
     </div>`;
   }).join('');
@@ -6176,9 +6256,22 @@ function ecTabFlows() {
   (EC.colonies || []).forEach(c => (Array.isArray(c.resources) ? c.resources : []).forEach(r => {
     if (r && r.name && !ecIsConceded(c.id, r.name)) myDeps.push({ cid: c.id, res: r.name, label: `${c.planet_name || 'колония'} · ${r.name}` });
   }));
-  const facOpts = (EC.factions || []).filter(f => f.faction_id !== EC.fid)
-    .map(f => `<option value="${esc(f.faction_id)}">${esc(f.name)}</option>`).join('');
-  const depOpts = myDeps.map(dp => `<option value="${esc(dp.cid)}|${esc(dp.res)}">${esc(dp.label)}</option>`).join('');
+  // Выбор залежи и получателя — кнопки-плитки (как «Границы»/«Патронат»), а не select
+  if (!myDeps.some(dp => `${dp.cid}|${dp.res}` === EC.concDep)) EC.concDep = '';
+  const concFacs = (EC.factions || []).filter(f => f.faction_id !== EC.fid);
+  if (!concFacs.some(f => f.faction_id === EC.concFac)) EC.concFac = '';
+  const depChips = myDeps.map(dp => {
+    const key = `${dp.cid}|${dp.res}`, on = EC.concDep === key;
+    return `<button class="ec-bord-fac${on ? ' ec-patron-on' : ''}" onclick="ecConcPick('concDep','${jsq(key)}')" title="Передать право добычи: ${esc(dp.label)}">
+        <span class="ec-conc-ric">${ecResIcon(dp.res)}</span><span class="ec-bord-name">${esc(dp.label)}</span><span class="ec-bord-lock">${on ? '✓' : ''}</span>
+      </button>`;
+  }).join('');
+  const facChips = concFacs.map(f => {
+    const on = EC.concFac === f.faction_id;
+    return `<button class="ec-bord-fac${on ? ' ec-patron-on' : ''}" onclick="ecConcPick('concFac','${jsq(f.faction_id)}')" title="Получатель права добычи: «${esc(f.name)}»">
+        ${ecFacFlag(f.faction_id, 24)}<span class="ec-bord-name">${esc(f.name)}</span><span class="ec-bord-lock">${on ? '✓' : ''}</span>
+      </button>`;
+  }).join('');
   const given = (EC.concessions || []).filter(c => c.from_fid === EC.fid);
   const got = (EC.concessions || []).filter(c => c.to_fid === EC.fid);
   // v5: концессии — механика КОРПОРАЦИЙ, сгруппированы ПО КОЛОНИЯМ (системам).
@@ -6237,10 +6330,10 @@ function ecTabFlows() {
     .map(cid => concColCell(cid, arr.filter(c => c.colony_id === cid), mine)).join('');
   const concHtml = `<div class="ec-r-sec" style="margin-top:18px">⚖ Концессии — право добычи</div>
     <div class="ec-hint" style="margin:4px 0 8px">Право добычи конкретной залежи можно передать другой державе: колония остаётся у вас, а получатель <b>строит на ней СВОЙ добывающий домик нужного яруса</b> (кнопка появится у него в этом блоке) и добывает залежь как свою — слоты от его населения, поток в его «Потоки». Без построенного домика концессия <b>ничего не даёт</b>. Домик занимает ячейку вашей колонии; ваши заводы отданную залежь не копают. При отзыве/отказе домики получателя сносятся с возвратом ½ цены.</div>
-    ${myDeps.length ? `<div class="ec-prod-form ec-conc-form">
-      <select id="ec-conc-dep" class="ec-prod-qty">${depOpts}</select>
-      <select id="ec-conc-fac" class="ec-prod-qty">${facOpts}</select>
-      <button class="btn btn-gd btn-sm" onclick="ecConcGrant()">Передать право добычи</button>
+    ${myDeps.length ? `<div class="ec-conc-form">
+      <div class="ec-conc-pick"><div class="ec-hint">Какую залежь передать:</div><div class="ec-bord-grid">${depChips}</div></div>
+      <div class="ec-conc-pick"><div class="ec-hint">Какой державе:</div><div class="ec-bord-grid">${facChips}</div></div>
+      <button class="btn btn-gd btn-sm" ${EC.concDep && EC.concFac ? '' : 'disabled'} onclick="ecConcGrant()">Передать право добычи</button>
     </div>` : '<div class="ec-hint">Нет свободных залежей для передачи.</div>'}
     ${given.length ? `<div class="ec-r-sec">Отдано мной</div>${concGroup(given, true)}` : ''}
     ${got.length ? `<div class="ec-r-sec">Получено мной</div>${concGroup(got, false)}` : ''}`;
@@ -6250,7 +6343,7 @@ function ecTabFlows() {
     [`Биржа сбывает до <b>${ecNum(marketCap)}</b> ед./сут (слоты Товарной биржи × 25); прогноз выручки: <b>+${ecNum(mCalc.gc)} ГС/сут</b>.`,
      `Ёмкость склада: <b>${ecNum(capStore)}</b> ед. на ресурс (1000 + слоты Склада × 500).`,
      'Лимит биржи «0» = ресурс не продаётся вовсе; «со склада/сут» &gt; 0 — биржа добирает из запаса.',
-     'Разовая продажа сбывает запас со склада сразу (50–75% цены, Товарная биржа не нужна).',
+     'Продать запас со склада вручную — на под-вкладке 🏪 Рынок: там живая цена и одна точка продажи.',
      'Караваны берут только из экспортного потока; галочка «📦 со склада» на пути (под-вкладка «Караваны») разрешает добирать из запаса.'])}
     ${names.length ? head + list : '<div class="ec-hint">Нет добычи и запасов — постройте Добывающий завод и назначьте месторождения.</div>'}
     ${concHtml}`;
@@ -6274,22 +6367,17 @@ async function ecFlowApply(i) {
   ecRpcAct('res_flow_set', { p_res: n, p_mode: mode, p_market_limit: lim, p_market_from_store: fs, p_to_store: toStore },
     `Поток «${n}» настроен`);
 }
-function ecFlowSellNow(i) {
-  const n = (EC._flowRows || [])[i]; if (!n) return;
-  const qty = Math.max(0, parseInt(ecId(`ec-fl-sell-${i}`)?.value) || 0);
-  if (!qty) { toast('Укажите количество', 'err'); return; }
-  ecRpcAct('res_sell_now', { p_res: n, p_qty: qty }, `Продано со склада: ${ecNum(qty)} ${n}`);
-}
 function ecRouteFromStore(id, on) {
   ecRpcAct('trade_route_from_store', { p_id: id, p_on: !!on },
     on ? 'Караван будет добирать недостающее со склада' : 'Караван берёт только из добычи');
 }
+function ecConcPick(k, v) { EC[k] = EC[k] === v ? '' : v; ecPaintCabinet(); }
 function ecConcGrant() {
-  const dep = ecId('ec-conc-dep')?.value || '', fac = ecId('ec-conc-fac')?.value || '';
-  const [cid, res] = dep.split('|');
+  const [cid, res] = (EC.concDep || '').split('|');
   if (!cid || !res) { toast('Выберите залежь', 'err'); return; }
-  if (!fac) { toast('Выберите фракцию', 'err'); return; }
-  ecRpcAct('concession_grant', { p_colony: cid, p_res: res, p_to_fid: fac }, 'Право добычи передано');
+  if (!EC.concFac) { toast('Выберите державу-получателя', 'err'); return; }
+  ecRpcAct('concession_grant', { p_colony: cid, p_res: res, p_to_fid: EC.concFac }, 'Право добычи передано');
+  EC.concDep = ''; EC.concFac = '';
 }
 function ecConcRevoke(id) {
   if (!confirm('Прекратить концессию? Добывающие домики получателя на этой колонии снесутся (½ цены вернётся ему), залежь вернётся владельцу.')) return;

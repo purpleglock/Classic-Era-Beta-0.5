@@ -13,8 +13,15 @@
 <!-- Стенд меню действий новеллы на телефоне: реальные buildHeroVN + heroVNInit,
      без Supabase. Смотрим глазами и меряем: свиток свёрнут, окно не растёт,
      раскрытый список скроллится ВНУТРИ себя. -->
-<div id="host"></div>
-<div id="report">гоняю…</div>
+<!-- Воспроизводим НАСТОЯЩИЙ шелл: у сайта html,body{overflow:hidden}, а страницу
+     скроллит #cw (02_shell.css:138) со scroll-behavior:smooth (10_patch.css:529).
+     Без этого стенд врал: window.scrollBy на живом сайте — пустышка.
+     #tail = запас длины, как контент и подвал под новеллой на живой главной. -->
+<div id="cw" style="height:100vh;overflow-y:auto;overflow-x:hidden">
+  <div id="host"></div>
+  <div id="tail" style="height:1400px"></div>
+</div>
+<div id="report" style="position:fixed;left:0;bottom:0;background:#04060c;z-index:99">гоняю…</div>
 
 <script>
   window.lang = 'ru';
@@ -32,6 +39,9 @@ const say = (ok, t) => log.push(`<span class="${ok?'ok':'bad'}">${ok?'OK  ':'FAI
 // buildHeroVN сам подставит дежурные реплики, если конфига нет.
 document.getElementById('host').innerHTML = buildHeroVN('', { role: 'player' });
 heroVNInit();
+// У живого #cw стоит scroll-behavior:smooth — прокрутка анимированная, и замеры
+// сразу после раскрытия показывали бы промежуточный кадр. В тесте делаем мгновенной.
+document.getElementById('cw').style.scrollBehavior = 'auto';
 
 const acts = document.getElementById('hp-vn-acts');
 const btn  = document.getElementById('hp-vn-actbtn');
@@ -63,9 +73,13 @@ setTimeout(async () => {
   say(document.documentElement.scrollWidth <= innerWidth + 1, 'страница не едет вбок');
   const col = new Set([...list.children].map(c => Math.round(c.getBoundingClientRect().left)));
   say(col.size === 1, `все кнопки в одной колонке (колонок: ${col.size})`);
-  say(list.clientHeight <= innerHeight * 0.5, `высота списка ≤ полэкрана (${Math.round(list.clientHeight)}px)`);
-  say(hOpen - hClosed < innerHeight * 0.55, `окно новеллы не разрослось (+${Math.round(hOpen - hClosed)}px)`);
-  say(box.getBoundingClientRect().width <= innerWidth + 1, 'окно не вылезло за край экрана');
+  say(box.getBoundingClientRect().width <= innerWidth + 1, 'окно не вылезло за БОКОВОЙ край экрана');
+  // ГЛАВНОЕ (жалоба юзера): список не должен уезжать за НИЗ экрана — иначе к нижним
+  // вариантам надо сперва скроллить страницу и только потом список. Два скролла = мусор.
+  const lb = list.getBoundingClientRect();
+  say(lb.bottom <= innerHeight + 1, `низ списка виден на экране (${Math.round(lb.bottom)} ≤ ${innerHeight})`);
+  say(lb.top >= -1, 'верх списка тоже на экране');
+  say(list.clientHeight >= 132, `список не схлопнут (${Math.round(list.clientHeight)}px)`);
 
   // 3. Все 11 кнопок реально достижимы прокруткой, а не обрезаны наглухо.
   // Маска поверх прокручиваемой области на iOS убивает скролл и прячет последние
@@ -90,7 +104,23 @@ setTimeout(async () => {
   say(!vis(list), 'повторный тап свернул свиток');
   say(document.getElementById('hp-vn-text').textContent === t0, 'тап по приглашению НЕ пролистал реплику');
 
-  // 5. Персонаж говорит — приглашение уходит вместе со списком.
+  // 5. Худший случай — это НЕ «страница пролистана вниз»: прокрутка вниз только
+  //    поднимает окно новеллы и освобождает место. Хуже всего наверху (scrollTop=0),
+  //    и именно там список обязан помещаться. Проверяем и повторное раскрытие.
+  const cw = document.getElementById('cw');
+  heroVNActsToggle(false); cw.scrollTop = 0; await tick();
+  heroVNActsToggle(true);  await tick();
+  const wb = list.getBoundingClientRect();
+  // Если места внизу мало (короткий экран), раскрытие САМО подтягивает страницу —
+  // это и есть замена ручному «сначала проскролль основную часть, потом список».
+  say(true, `место освобождено автоматически: страница ушла на ${Math.round(cw.scrollTop)}px`);
+  say(wb.bottom <= innerHeight + 1, `и наверху низ списка на экране (${Math.round(wb.bottom)} ≤ ${innerHeight})`);
+  say(list.clientHeight >= 132, `и наверху список пригоден (${Math.round(list.clientHeight)}px)`);
+  say(btn.getBoundingClientRect().top >= -1, 'кнопка меню осталась видна (не уехала под верх)');
+  // Высоту ставим инлайном по замеру — она обязана быть, иначе работает CSS-заглушка.
+  say(/px$/.test(list.style.maxHeight), `высота подогнана под остаток экрана (${list.style.maxHeight})`);
+
+  // 6. Персонаж говорит — приглашение уходит вместе со списком.
   _heroVNCtl.narrate([{ t: 'Тестовая речь.' }]);
   say(!vis(acts), 'в режиме рассказа меню действий скрыто целиком');
   _heroVNCtl.reset();

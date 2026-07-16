@@ -16,12 +16,13 @@
 --   • Расписание цены N-й крутки за день (0-я = первая): 10к / 15к / 22.5к /
 --     35к / далее +15к за каждую следующую. Зеркало клиента ecGeoCost().
 --
--- Принятие находки пишется в ЛЕНТУ СОБЫТИЙ (◈ Хроника сектора) через
--- _post_life_news + _news_pick — это событие мира, а НЕ новость государства.
--- Зависимость: _news_mentions.sql (_post_life_news) + _events_prose.sql (_news_pick).
+-- Принятие находки НЕ идёт в общую ленту событий (◈ Хроника сектора): удача
+-- казино засоряла мир. Вместо этого пишем в public.luck_chronicle — свою
+-- «хронику удачи», которую видно ТОЛЬКО в самом интерфейсе георазведки
+-- (kind='geo') и Разлома (kind='rift'). Отдаётся в geosurvey_get().
 -- Не применялось автоматически: катить как обычный срез экономики.
--- Зеркало клиента — economy.js (ecGeoBody) + render.js (heroVNGeoOpen),
--- ?v=20260712geosurvey3
+-- Зеркало клиента — economy.js (ecGeoBody / ecLuckFeed) + render.js (heroVNGeoOpen),
+-- ?v=20260716luckfeed1
 -- ============================================================
 
 -- ── Чистка v1 (была таблица-сессия + start/reroll/abandon) ──
@@ -47,6 +48,49 @@ drop policy if exists "geo_sel" on public.geosurvey_state;
 create policy "geo_sel" on public.geosurvey_state for select to authenticated
   using (owner_id = auth.uid());
 revoke insert, update, delete on public.geosurvey_state from public, anon, authenticated;
+
+-- ══════════════════════════════════════════════════════════════
+-- ХРОНИКА УДАЧИ — общая лента казино, живущая ВНУТРИ их интерфейсов.
+-- Дублируется идемпотентно в _stargaze.sql: срезы катятся в любом порядке.
+-- kind: 'geo' (георазведка) | 'rift' (Разлом). Читается только через
+-- _luck_feed() (security definer) — прямого select у клиента нет.
+-- ══════════════════════════════════════════════════════════════
+create table if not exists public.luck_chronicle (
+  id         bigserial primary key,
+  kind       text not null,
+  faction_id text,
+  txt        text not null,
+  at         timestamptz not null default now()
+);
+create index if not exists luck_chronicle_kind_at on public.luck_chronicle(kind, at desc);
+alter table public.luck_chronicle enable row level security;
+revoke select, insert, update, delete on public.luck_chronicle from public, anon, authenticated;
+
+-- Запись в хронику + подрезка хвоста (держим последние 40 на вид).
+create or replace function public._luck_post(p_kind text, p_fid text, p_txt text)
+returns void language plpgsql security definer set search_path=public as $$
+begin
+  insert into public.luck_chronicle(kind, faction_id, txt) values (p_kind, p_fid, p_txt);
+  delete from public.luck_chronicle c where c.kind = p_kind and c.id < (
+    select min(id) from (select id from public.luck_chronicle
+      where kind = p_kind order by id desc limit 40) t);
+exception when others then null;   -- хроника косметическая: игру не роняем
+end$$;
+
+-- Последние записи для панели: [{txt, at, fid, me}, …], новые сверху.
+create or replace function public._luck_feed(p_kind text, p_lim int default 8)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare fid text;
+begin
+  fid := public._ec_my_fid();
+  return coalesce((
+    select jsonb_agg(jsonb_build_object('txt', t.txt, 'at', t.at, 'fid', t.faction_id,
+                                        'me', t.faction_id is not distinct from fid)
+                     order by t.id desc)
+    from (select * from public.luck_chronicle where kind = p_kind
+          order by id desc limit greatest(1, coalesce(p_lim, 8))) t
+  ), '[]'::jsonb);
+end$$;
 
 -- ── Один бросок «рулетки»: редкость × размер × конкретный ресурс ──
 -- Веса: редкость common 45 / uncommon 30 / rare 15 / epic 8 / legendary 2.
@@ -91,15 +135,18 @@ declare fid text; st public.geosurvey_state; eff int;
 begin
   fid := public._ec_my_fid();
   if fid is null then
-    return jsonb_build_object('current', null, 'colony_id', null, 'spins', 0, 'next_cost', 10000);
+    return jsonb_build_object('current', null, 'colony_id', null, 'spins', 0, 'next_cost', 10000,
+      'feed', '[]'::jsonb);
   end if;
   select * into st from public.geosurvey_state where faction_id = fid;
   if not found then
-    return jsonb_build_object('current', null, 'colony_id', null, 'spins', 0, 'next_cost', 10000);
+    return jsonb_build_object('current', null, 'colony_id', null, 'spins', 0, 'next_cost', 10000,
+      'feed', public._luck_feed('geo', 8));
   end if;
   eff := case when st.day < current_date then 0 else st.spins end;   -- новый день → эскалация сброшена
   return jsonb_build_object('current', st.current, 'colony_id', st.colony_id,
-    'spins', eff, 'next_cost', public._geosurvey_cost(eff));
+    'spins', eff, 'next_cost', public._geosurvey_cost(eff),
+    'feed', public._luck_feed('geo', 8));
 end$$;
 revoke all on function public.geosurvey_get() from public, anon;
 grant execute on function public.geosurvey_get() to authenticated;
@@ -154,22 +201,16 @@ begin
     where id = st.colony_id and faction_id = fid;
   if not found then raise exception 'colony gone: колония больше не ваша — находка не принята'; end if;
 
-  -- Событие в ЛЕНТУ СОБЫТИЙ (◈ Хроника сектора), не в новости государств. Best-effort.
+  -- Запись в ХРОНИКУ БУРОВ — она видна только в самой панели георазведки,
+  -- в общую ленту событий мира такие находки больше не идут (засоряли её).
   begin
     v_nm  := coalesce(nullif(public._fac_name(fid),''), 'Одна из держав');
     v_res := coalesce(st.current->>'name','залежь');
     v_amt := coalesce(st.current->>'amt','');
     select planet_name into v_col from public.colonies where id = st.colony_id;
     v_col := coalesce(nullif(v_col,''),'одной из колоний');
-    perform public._post_life_news(
-      '⛏ Новое месторождение: ' || v_nm,
-      public._news_pick(array[
-        format('Геологи державы %s закладывают шурф на %s — и находка подтверждается: залежь ресурса «%s» (%s). Буровые вышки разворачиваются к новому участку.', v_nm, v_col, v_res, v_amt),
-        format('%s объявляет об открытии месторождения на %s: «%s», %s. Караванщики уже прикидывают новые маршруты.', v_nm, v_col, v_res, v_amt),
-        format('Разведка %s не подвела — недра %s отдают залежь «%s» (%s). Инженеры спешат застолбить участок.', v_nm, v_col, v_res, v_amt)
-      ]),
-      'rgba(180,140,90,0.5)',
-      jsonb_build_array(fid));
+    perform public._luck_post('geo', fid,
+      format('%s закладывает шурф на %s: «%s», %s.', v_nm, v_col, v_res, v_amt));
   exception when others then null;
   end;
 

@@ -26,10 +26,11 @@
 -- прячется на сервере (никакого select на таблицу!), а полная раскладка
 -- отдаётся только в ответе ПОСЛЕДНЕГО погружения (поле done).
 --
--- Выигрыш зачисляется СРАЗУ при вскрытии узла. Джекпот пишется в
--- ленту событий (◈ Хроника сектора) best-effort через _post_life_news.
--- Зеркало клиента — economy.js (ecStarsBody) + render.js (heroVNStarsOpen),
--- ?v=20260715rift1. Не применялось автоматически: катить как обычный срез.
+-- Выигрыш зачисляется СРАЗУ при вскрытии узла. Джекпот в общую ленту событий
+-- (◈ Хроника сектора) НЕ идёт — засорял мир; вместо этого строка в
+-- public.luck_chronicle (kind='rift'), видная только в самой панели Разлома.
+-- Зеркало клиента — economy.js (ecStarsBody / ecLuckFeed) + render.js (heroVNStarsOpen),
+-- ?v=20260716luckfeed1. Не применялось автоматически: катить как обычный срез.
 -- ============================================================
 
 -- ── Состояние резонатора Разлома: одна строка на фракцию ──
@@ -48,6 +49,45 @@ create table if not exists public.stargaze_state (
 alter table public.stargaze_state enable row level security;
 -- НИКАКОГО select-полиси: поле с раскладкой не должно утекать до финала.
 revoke select, insert, update, delete on public.stargaze_state from public, anon, authenticated;
+
+-- ══════════════════════════════════════════════════════════════
+-- ХРОНИКА УДАЧИ — общая лента казино ВНУТРИ их интерфейсов (см. _geosurvey.sql).
+-- Блок продублирован идемпотентно: срезы катятся в любом порядке.
+-- ══════════════════════════════════════════════════════════════
+create table if not exists public.luck_chronicle (
+  id         bigserial primary key,
+  kind       text not null,
+  faction_id text,
+  txt        text not null,
+  at         timestamptz not null default now()
+);
+create index if not exists luck_chronicle_kind_at on public.luck_chronicle(kind, at desc);
+alter table public.luck_chronicle enable row level security;
+revoke select, insert, update, delete on public.luck_chronicle from public, anon, authenticated;
+
+create or replace function public._luck_post(p_kind text, p_fid text, p_txt text)
+returns void language plpgsql security definer set search_path=public as $$
+begin
+  insert into public.luck_chronicle(kind, faction_id, txt) values (p_kind, p_fid, p_txt);
+  delete from public.luck_chronicle c where c.kind = p_kind and c.id < (
+    select min(id) from (select id from public.luck_chronicle
+      where kind = p_kind order by id desc limit 40) t);
+exception when others then null;
+end$$;
+
+create or replace function public._luck_feed(p_kind text, p_lim int default 8)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare fid text;
+begin
+  fid := public._ec_my_fid();
+  return coalesce((
+    select jsonb_agg(jsonb_build_object('txt', t.txt, 'at', t.at, 'fid', t.faction_id,
+                                        'me', t.faction_id is not distinct from fid)
+                     order by t.id desc)
+    from (select * from public.luck_chronicle where kind = p_kind
+          order by id desc limit greatest(1, coalesce(p_lim, 8))) t
+  ), '[]'::jsonb);
+end$$;
 
 -- ── Свежая раскладка Разлома: 49 призов вперемешку ──
 create or replace function public._stargaze_board()
@@ -71,10 +111,12 @@ begin
   if fid is null then return jsonb_build_object('active', false, 'opened', '[]'::jsonb); end if;
   select * into st from public.stargaze_state where faction_id = fid;
   if not found or not st.active then
-    return jsonb_build_object('active', false, 'opened', '[]'::jsonb);
+    return jsonb_build_object('active', false, 'opened', '[]'::jsonb,
+      'feed', public._luck_feed('rift', 8));
   end if;
   return jsonb_build_object('active', true, 'stake', st.stake, 'extras', st.extras,
-    'picks', st.picks, 'mult', 1 + 0.25 * st.extras, 'opened', st.opened);
+    'picks', st.picks, 'mult', 1 + 0.25 * st.extras, 'opened', st.opened,
+    'feed', public._luck_feed('rift', 8));
 end$$;
 revoke all on function public.stargaze_get() from public, anon;
 grant execute on function public.stargaze_get() to authenticated;
@@ -164,19 +206,13 @@ begin
     update public.stargaze_state set opened = op, updated_at = now() where faction_id = fid;
   end if;
 
-  -- Джекпот — событие мира (◈ Хроника сектора). Best-effort, игру не ломает.
+  -- Джекпот — строка в ХРОНИКУ ТРАНСОВ (видна только в панели Разлома).
+  -- В общую ленту событий мира джекпоты больше не пишутся. Best-effort.
   if cell->>'t' = 'nova' then
     begin
       v_nm := coalesce(nullif(public._fac_name(fid), ''), 'Одна из держав');
-      perform public._post_life_news(
-        '🜂 Разлом посмотрел в ответ: ' || v_nm,
-        public._news_pick(array[
-          format('Медиумы державы %s нащупали в Разломе живой узел — и оттуда посмотрели в ответ. Стенограммы транса расходятся по псионическим орденам сектора; говорят, гонорар хора не помещается в декларацию.', v_nm),
-          format('Псионический хор %s сорвал джекпот: погружались наугад, а из Разлома потянулись навстречу. Академии наперебой скупают права на записи контакта.', v_nm),
-          format('%s объявляет о контакте с разумом по ту сторону Разлома. Скептики ворчат «массовый психоз», медиумы державы пересчитывают премию.', v_nm)
-        ]),
-        'rgba(150,46,210,0.5)',
-        jsonb_build_array(fid));
+      perform public._luck_post('rift', fid,
+        format('На %s посмотрели в ответ: живой узел, +%s ГС.', v_nm, floor(win)::text));
     exception when others then null;
     end;
   end if;
@@ -184,6 +220,7 @@ begin
   return jsonb_build_object('ok', true, 'i', p_idx, 't', cell->>'t',
     'm', (cell->>'m')::numeric, 'win', win, 'gc', v_gc, 'done', done,
     'opened', op, 'picks', st.picks, 'mult', mult,
+    'feed', public._luck_feed('rift', 8),
     'last', case when done then fin else null end);
 end$$;
 revoke all on function public.stargaze_pick(int) from public, anon;

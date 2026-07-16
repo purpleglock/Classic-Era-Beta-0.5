@@ -735,14 +735,6 @@
 .ec-mk-spark { flex: 0 0 auto; min-width: 64px; text-align: center; }
 .ec-mk-price { flex: 0 0 auto; text-align: right; min-width: 120px; white-space: nowrap; }
 .ec-mk-stock { flex: 0 0 auto; color: var(--t4); min-width: 150px; text-align: right; white-space: nowrap; }
-/* карточка ресурса рынка = строка цены + панель НПС/прогноза/действий */
-.ec-mk-card {
-  border-bottom: var(--deco-frame-w, 1px) solid var(--ln, rgba(255,255,255,0.06));
-  padding: 8px 0 9px;
-}
-.ec-mk-card:last-child { border-bottom: 0; }
-.ec-mk-card.ec-mk-has { background: linear-gradient(90deg, rgba(120,180,120,0.06), transparent 60%); }
-.ec-mk-card .ec-mk-row { border: 0; padding: 0; }
 
 .ec-mk-tools {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
@@ -1110,12 +1102,17 @@
 .ec-bp-grid.flt-faith .ec-bp-card:not(.ec-bp-faith) { display: none; }
 /* фильтр рынка по редкости / только моё */
 .ec-mk-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
-.ec-mk-list.flt-mine      .ec-mk-card:not(.ec-mk-has)              { display: none; }
-.ec-mk-list.flt-common    .ec-mk-card:not([data-rar="common"])    { display: none; }
-.ec-mk-list.flt-uncommon  .ec-mk-card:not([data-rar="uncommon"])  { display: none; }
-.ec-mk-list.flt-rare      .ec-mk-card:not([data-rar="rare"])      { display: none; }
-.ec-mk-list.flt-epic      .ec-mk-card:not([data-rar="epic"])      { display: none; }
-.ec-mk-list.flt-legendary .ec-mk-card:not([data-rar="legendary"]) { display: none; }
+.ec-mk-list.flt-mine      .ec-mk-chip:not(.ec-mk-has)              { display: none; }
+.ec-mk-list.flt-common    .ec-mk-chip:not([data-rar="common"])    { display: none; }
+.ec-mk-list.flt-uncommon  .ec-mk-chip:not([data-rar="uncommon"])  { display: none; }
+.ec-mk-list.flt-rare      .ec-mk-chip:not([data-rar="rare"])      { display: none; }
+.ec-mk-list.flt-epic      .ec-mk-chip:not([data-rar="epic"])      { display: none; }
+.ec-mk-list.flt-legendary .ec-mk-chip:not([data-rar="legendary"]) { display: none; }
+/* пикер рынка: сетка чипов + панель сделки выбранного ресурса */
+.ec-mk-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ec-mk-chip.ec-mk-has:not(.on) { background: linear-gradient(90deg, rgba(120,180,120,0.08), var(--b1)); }
+.ec-mk-detail { background: var(--b1); padding: 10px 12px; }
+.ec-mk-detail .ec-mk-row { border: 0; padding: 0; }
 /* фильтр карточек ресурсов склада */
 .ec-res-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; }
 .ec-res-cards.flt-have      .ec-res-card:not(.ec-res-has)      { display: none; }
@@ -3182,12 +3179,11 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-fl-row { align-items: center; }
 .ec-fl-row .ec-fl-name { flex: 2; min-width: 0; }
 .ec-fl-row .ec-fl-mine, .ec-fl-row .ec-fl-mode, .ec-fl-row .ec-fl-cv, .ec-fl-row .ec-fl-st { flex: 1; min-width: 0; }
-.ec-fl-row .ec-fl-mk, .ec-fl-row .ec-fl-sell { flex: 1.4; min-width: 0; }
+.ec-fl-row .ec-fl-mk { flex: 1.4; min-width: 0; }
 .ec-fl-row .ec-fl-act { width: 84px; flex: 0 0 auto; text-align: right; }
 .ec-fl-row .ec-fl-mode select { width: 100%; }
-.ec-fl-row .ec-fl-mk-in, .ec-fl-row .ec-fl-sell-in { display: flex; gap: 4px; }
+.ec-fl-row .ec-fl-mk-in { display: flex; gap: 4px; }
 .ec-fl-row .ec-fl-mk-in input { width: 50%; min-width: 0; }
-.ec-fl-row .ec-fl-sell-in input { width: 55%; min-width: 0; }
 .ec-fl-row .ec-fl-st label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 .ec-fl-lb { display: none; }   /* подписи ячеек видны только на мобилке */
 .ec-fl-head { font-weight: 600; color: var(--t3); font-size: 12px; }
@@ -3205,7 +3201,7 @@ body.ec-tree-fs-lock { overflow: hidden; }
       "mine cv"
       "mode mode"
       "mk mk"
-      "st sell"
+      "st st"
       "act act";
     gap: 8px 12px;
     padding: 12px;
@@ -3217,7 +3213,6 @@ body.ec-tree-fs-lock { overflow: hidden; }
   .ec-flows-tab .ec-fl-mode { grid-area: mode; }
   .ec-flows-tab .ec-fl-mk   { grid-area: mk; }
   .ec-flows-tab .ec-fl-st   { grid-area: st; }
-  .ec-flows-tab .ec-fl-sell { grid-area: sell; }
   .ec-flows-tab .ec-fl-act  { grid-area: act; width: auto; text-align: right; }
   .ec-flows-tab .ec-fl-act .btn { width: 100%; }
   .ec-flows-tab .ec-fl-lb {
@@ -3226,19 +3221,19 @@ body.ec-tree-fs-lock { overflow: hidden; }
     margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .ec-flows-tab .ec-fl-row select, .ec-flows-tab .ec-fl-row input[type="number"] { padding: 9px 10px; font-size: 13px; }
-  .ec-flows-tab .ec-fl-sell-in input { width: auto; flex: 1 1 60px; }
-  .ec-flows-tab .ec-fl-sell-in .btn { flex: 0 0 auto; }
 
-  /* Концессии: форма и строки — вертикально, селекты во всю ширину */
-  .ec-flows-tab .ec-conc-form { flex-direction: column; align-items: stretch; }
-  .ec-flows-tab .ec-conc-form select { width: 100%; min-width: 0; }
-  .ec-flows-tab .ec-conc-form .btn { width: 100%; }
+  /* Концессии: кнопка передачи во всю ширину */
+  .ec-flows-tab .ec-conc-form > .btn { width: 100%; }
   .ec-flows-tab .ec-q-row:not(.ec-fl-row) { flex-wrap: wrap; gap: 6px 10px; }
   .ec-flows-tab .ec-q-row:not(.ec-fl-row) .ec-r-name { flex: 1 1 100%; min-width: 0; line-height: 1.4; }
 }
-/* Концессии, десктоп: форма в строку с переносом */
-.ec-conc-form { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-.ec-conc-form select { min-width: 200px; flex: 1 1 200px; }
+/* Концессии: два ряда кнопок-плиток (залежь → держава) + кнопка передачи */
+.ec-conc-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+.ec-conc-form > .btn { align-self: flex-start; }
+.ec-conc-form > .btn:disabled { opacity: .45; cursor: default; }
+.ec-conc-pick .ec-hint { margin-bottom: 4px; }
+.ec-conc-pick .ec-bord-grid { margin-top: 0; }
+.ec-conc-ric { flex-shrink: 0; font-size: 15px; width: 24px; text-align: center; }
 
 /* ══════════════════════════════════════════════════════════ */
 /* ГЕОРАЗВЕДКА — казино под вывеской геологии (вкладка geosurvey).
@@ -3404,6 +3399,24 @@ body.ec-tree-fs-lock { overflow: hidden; }
 /* заметка об эскалации цены (сколько уже пробурено за день) */
 .ec-geo-esc { font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: .05em; color: var(--t4); text-align: center; }
 .ec-geo-esc b { color: var(--gd); }
+
+/* ── Хроника удачи: лента находок/джекпотов ВНУТРИ панели казино ──
+   Раньше это уходило в общую ленту событий мира и засоряло её. Оформление
+   намеренно тише самой игры: один акцент (--gd) и только на своей строке. */
+.ec-luck { display: flex; flex-direction: column; gap: 3px; max-width: 520px; margin: 18px auto 0; }
+.ec-luck-h { font-family: var(--font-mono, monospace); font-size: 10px; letter-spacing: .22em;
+  text-transform: uppercase; color: var(--t4); margin-bottom: 3px; }
+.ec-luck-i { display: flex; align-items: center; gap: 8px; padding: 5px 9px; font-size: 12px;
+  color: var(--t3, var(--t4)); background: rgba(255,255,255,.025);
+  border-left: 2px solid rgba(255,255,255,.12); }
+.ec-luck-i.is-me { border-left-color: var(--gd); }
+.ec-luck-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-luck-at { flex: none; font-family: var(--font-mono, monospace); font-size: 10px;
+  font-style: normal; color: var(--t4); opacity: .75; }
+@media (max-width: 560px) {
+  .ec-luck-t { white-space: normal; }
+  .ec-luck-at { display: none; }
+}
 
 /* ── «Посмотреть на звёзды» — обсерватория-казино (поле 7×7) ──
    Киберпанк: срезанные углы через clip-path (обводка = слой-подложка,
@@ -3728,4 +3741,136 @@ body.ec-tree-fs-lock { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .ec-wait-ring { animation-duration: 3s; }
   .ec-wait-logo, .ec-wait-txt { animation: none; opacity: .8; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ОБЗОР — КИБЕРПАНК (обёртка .ec-cyb-ov). Срезанные углы через
+   clip-path, «обводка» = слой-подложка ::before (border несовместим
+   со срезом), моно-подписи, 1–2 акцента: --gd деньги / --pu галактика.
+   ══════════════════════════════════════════════════════════════ */
+/* — статус-лента виталов над сеткой — */
+.ec-vits { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.ec-vit {
+  --cut: 8px; position: relative; z-index: 0;
+  flex: 1 1 128px; min-width: 118px; padding: 9px 11px;
+  display: flex; flex-direction: column; gap: 4px;
+  background: rgba(160,180,215,.16);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.ec-vit::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+  background: linear-gradient(165deg, #0f131d, #090c14); }
+.ec-vit-k { font-family: var(--font-mono, monospace); font-size: 9.5px; text-transform: uppercase; letter-spacing: .13em; color: var(--t4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-vit-v { font-family: var(--font-display); font-weight: 700; font-size: 17px; line-height: 1; color: var(--t1); }
+.ec-vit-v.pos { color: var(--gd); }
+.ec-vit-v.neg { color: var(--err); }
+.ec-vit-v.sci { color: var(--pu); }
+.ec-vit.ec-ov-clk { cursor: pointer; transition: background .15s; }
+.ec-vit.ec-ov-clk:hover { background: color-mix(in srgb, var(--gd) 45%, rgba(160,180,215,.16)); }
+
+/* — панели: срез угла + подложка вместо рамки — */
+.ec-cyb-ov .ec-ovx-panel {
+  --cut: 14px; position: relative; z-index: 0;
+  border: none; border-radius: 0; box-shadow: none;
+  background: rgba(160,180,215,.17);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.ec-cyb-ov .ec-ovx-panel::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+  background: linear-gradient(170deg, color-mix(in srgb, var(--gd) 4%, #0d1119), #080b12 75%); }
+.ec-cyb-ov .ec-ovx-panel-t {
+  text-transform: uppercase; letter-spacing: .09em; font-size: 13px;
+  border-bottom: 1px solid color-mix(in srgb, var(--gd) 18%, transparent);
+}
+.ec-cyb-ov .ec-ovx-panel-t::before {
+  content: '//'; width: auto; height: auto; background: none; border-radius: 0;
+  color: var(--gd); font-family: var(--font-mono, monospace); font-weight: 700; font-size: 12px;
+}
+
+/* — плитки-показатели: гранёные, ховер без теней — */
+.ec-cyb-ov .ec-ovx-stat {
+  --cut: 9px; position: relative; z-index: 0;
+  border: none; border-radius: 0; box-shadow: none;
+  background: rgba(160,180,215,.14);
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+.ec-cyb-ov .ec-ovx-stat::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  background: linear-gradient(165deg, #0e121b, #090c13); }
+.ec-cyb-ov .ec-ovx-stat.ec-ov-clk:hover {
+  transform: none; box-shadow: none;
+  background: color-mix(in srgb, var(--gd) 40%, rgba(160,180,215,.14));
+}
+.ec-cyb-ov .ec-ovx-stat-v { text-shadow: none; }
+
+/* — «казначейский» итог: золотая грань — */
+.ec-cyb-ov .ec-bdg-net {
+  --cut: 12px; position: relative; z-index: 0;
+  border: none; border-radius: 0;
+  background: color-mix(in srgb, var(--gd) 55%, transparent);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.ec-cyb-ov .ec-bdg-net::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--gd) 13%, #0d1017), #090c13); }
+.ec-cyb-ov .ec-bdg-net-v { text-shadow: none; }
+
+/* — строки источников: срез правого верха, без рамок и сдвигов — */
+.ec-cyb-ov .ec-bdg-row {
+  --cut: 7px; position: relative; z-index: 0;
+  border: none; border-radius: 0;
+  background: rgba(160,180,215,.13);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+}
+.ec-cyb-ov .ec-bdg-row::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+  background: linear-gradient(170deg, #0e121b, #090c13); }
+.ec-cyb-ov .ec-bdg-row:hover { transform: none; background: color-mix(in srgb, var(--gd) 45%, rgba(160,180,215,.13)); }
+.ec-cyb-ov .ec-bdg-bar, .ec-cyb-ov .ec-bdg-bar i { border-radius: 0; }
+.ec-cyb-ov .ec-ovx-bar { border-radius: 0; }
+
+/* — чипы и блок «вне тика»: плоско, без скруглений — */
+.ec-cyb-ov .ec-bdg-flow, .ec-cyb-ov .ec-ovx-chip {
+  border: none; border-radius: 0;
+  background: rgba(160,180,215,.10);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+.ec-cyb-ov .ec-bdg-extra {
+  border: none; border-radius: 0; border-left: 2px solid var(--w2);
+  background: rgba(160,180,215,.05);
+}
+
+/* — 🌌 галактические эффекты (леджер Ассамблеи/Поэмы) — акцент --pu — */
+.ec-gal {
+  --cut: 10px; position: relative; z-index: 0;
+  margin-top: 11px; padding: 10px 12px;
+  background: color-mix(in srgb, var(--pu, #9c7bd4) 40%, transparent);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.ec-gal::before { content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+  background: linear-gradient(165deg, color-mix(in srgb, var(--pu, #9c7bd4) 9%, #0c0f17), #090b12 75%); }
+.ec-gal-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font-family: var(--font-display); font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--t1); }
+.ec-gal-sum { font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: .05em; }
+.ec-gal-sum.pos { color: var(--gd); }
+.ec-gal-sum.neg { color: var(--err); }
+.ec-gal-note { font-size: 10.5px; line-height: 1.45; color: var(--t4); margin: 5px 0 9px; }
+.ec-gal-rows { display: flex; flex-direction: column; gap: 4px; }
+.ec-gal-row {
+  display: grid; grid-template-columns: 24px minmax(0,1fr) auto; gap: 10px; align-items: center;
+  padding: 7px 9px; background: rgba(160,180,215,.08);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+.ec-gal-ic { font-size: 15px; text-align: center; }
+.ec-gal-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ec-gal-name { font-size: 12.5px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ec-gal-sub { font-family: var(--font-mono, monospace); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--t4); }
+.ec-gal-val { font-family: var(--font-mono, monospace); font-size: 12px; white-space: nowrap; display: flex; gap: 7px; align-items: baseline; }
+.ec-gal-val .pos { color: var(--gd); }
+.ec-gal-val .neg { color: var(--err); }
+.ec-gal-x { color: var(--t3); font-size: 10.5px; }
+@media (max-width: 560px) {
+  .ec-vit { flex-basis: calc(50% - 4px); min-width: 0; }
+  .ec-gal-val { flex-direction: column; gap: 1px; align-items: flex-end; }
 }

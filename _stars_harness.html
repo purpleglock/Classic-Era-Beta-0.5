@@ -2,7 +2,7 @@
 <html lang="ru"><head>
 <meta charset="utf-8">
 <title>stars harness</title>
-<link rel="stylesheet" href="css/index.css?v=20260715stars10">
+<link rel="stylesheet" href="css/index.css?v=20260716luckfeed1">
 <style>
   body { background: #070a12; padding: 30px 16px; }
   .hwrap { max-width: 700px; margin: 0 auto 40px; }
@@ -28,7 +28,7 @@
   // локальные кадры: внешние URL вешают снятие скриншота в панели браузера
   localStorage.setItem('wk_stars_photos', JSON.stringify({ list: ['assets/hero/1782566032386-fddc5d.webp', 'assets/hero/1782566050435-eeaa90.webp', 'assets/hero/1782566078902-667e83.webp'], _ts: 1 }));
 </script>
-<script src="economy.js?v=20260715stars10"></script>
+<script src="economy.js?v=20260716luckfeed1"></script>
 <div class="hwrap"><p class="hlbl">loader</p>
   <div class="ec-stars-load">
     <div class="ec-stars-load-core"><span class="ec-stars-load-ring"></span>
@@ -65,6 +65,15 @@
       ideology: i % 3 === 1 ? 'Спиритуализм' : 'Материализм' });
   });
   EC.eco.rift_patron_fid = 'fac_b';
+  // хроника удачи (_luck_feed): раньше это уходило в события мира, теперь живёт в панели
+  const _feedRift = [
+    { txt: 'На Иридию посмотрели в ответ: живой узел, +600000 ГС.', at: new Date(Date.now() - 4 * 60000).toISOString(), fid: 'fac_b', me: false },
+    { txt: 'На вашу державу посмотрели в ответ: живой узел, +120000 ГС.', at: new Date(Date.now() - 3 * 3600e3).toISOString(), fid: 'fac_me', me: true },
+    { txt: 'На Люмен посмотрели в ответ: живой узел, +18000 ГС.', at: new Date(Date.now() - 26 * 3600e3).toISOString(), fid: 'fac_c', me: false }];
+  const _feedGeo = [
+    { txt: 'Илокан закладывает шурф на Синли-Бей: «Стелларит», много.', at: new Date(Date.now() - 9 * 60000).toISOString(), fid: 'fac_a', me: false },
+    { txt: 'Иридия закладывает шурф на Кел-Тарис: «Железо», следы.', at: new Date(Date.now() - 5 * 3600e3).toISOString(), fid: 'fac_b', me: false }];
+  EC.stargaze.feed = _feedRift;
   const put = (id, html) => document.getElementById(id).innerHTML = html;
   put('h-start', ecStarsStartBody());
   put('h-patron', ecPatronBlock());
@@ -78,10 +87,10 @@
   const board = []; const kinds = ['dust','dust','photo','dust','comet','dust','photo'];
   for (let i = 0; i < 49; i++) board.push({ t: kinds[i % 7] });
   board[35] = { t: 'nova' }; board[32] = { t: 'quasar' }; board[46] = { t: 'quasar' };
-  put('h-fin', ecStarsFinaleBody({ board, jackpot_i: 35, won: 214000, spent: 500000,
+  put('h-fin', ecStarsFinaleBody({ board, jackpot_i: 35, won: 214000, spent: 500000, feed: _feedRift,
     opened: [{ i: 9, t: 'photo', win: 50000 }, { i: 24, t: 'comet', win: 160000 }, { i: 30, t: 'dust', win: 4000 }] }));
   // георазведка: карточка результата (стабы каталога)
-  window.ecGeoState = () => ({ current: { r: 'rare', amt: 'много', name: 'Стелларит' }, colony_id: 'c1', spins: 2 });
+  window.ecGeoState = () => ({ current: { r: 'rare', amt: 'много', name: 'Стелларит' }, colony_id: 'c1', spins: 2, feed: _feedGeo });
   try { put('h-geo', ecGeoBody()); } catch (e) { document.getElementById('h-geo').textContent = 'geo err: ' + e.message; }
 </script>
 </body></html>
