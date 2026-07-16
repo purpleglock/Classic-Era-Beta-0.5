@@ -68,18 +68,21 @@ setTimeout(async () => {
   say(box.getBoundingClientRect().width <= innerWidth + 1, 'окно не вылезло за край экрана');
 
   // 3. Все 11 кнопок реально достижимы прокруткой, а не обрезаны наглухо.
-  say(!acts.classList.contains('at-end'), 'список не долистан — нижний край растворён');
+  // Маска поверх прокручиваемой области на iOS убивает скролл и прячет последние
+  // кнопки под градиентом («стоп», после которого до Ассамблеи не добраться).
+  const lcs = getComputedStyle(list);
+  say(lcs.maskImage === 'none' && lcs.webkitMaskImage === 'none', 'на прокручиваемом списке НЕТ маски (иначе iOS стопорит скролл)');
   list.scrollTop = list.scrollHeight;
-  // ⚠️ Браузер предпросмотра НЕ шлёт событие scroll на программный scrollTop (проверено:
-  // свежий слушатель ловит 0). Поэтому дёргаем пересчёт сами, а живучесть проводки
-  // сторожим отдельной проверкой _edgeBound ниже.
-  _heroVNActsEdge();
   await tick();
   const last = list.querySelector('.hp-vn-choice:last-child').getBoundingClientRect();
   const lr = list.getBoundingClientRect();
-  say(last.bottom <= lr.bottom + 1 && last.top >= lr.top - 1, 'последняя кнопка («Ассамблея») долистывается');
-  say(acts.classList.contains('at-end'), 'долистали — нижняя дымка снята');
-  say(!!list._edgeBound, 'пересчёт дымки подписан на scroll списка (в живом браузере зовётся сам)');
+  say(last.bottom <= lr.bottom + 1 && last.top >= lr.top - 1, 'последняя кнопка («Ассамблея») долистывается ЦЕЛИКОМ');
+  say(Math.round(list.scrollTop) >= Math.round(list.scrollHeight - list.clientHeight) - 1, 'список долистывается до самого низа, без «стопа»');
+  // Список должен обрываться ПО КНОПКЕ — так видно, что дальше есть ещё, без дымки.
+  list.scrollTop = 0; await tick();
+  const peek = [...list.children].some(c => { const r = c.getBoundingClientRect();
+    return r.top < lr.bottom && r.bottom > lr.bottom; });
+  say(peek, 'снизу кнопка выглядывает краем — видно, что список продолжается');
 
   // 4. Тап по приглашению не листает реплику (клик по окну = следующая фраза).
   const t0 = document.getElementById('hp-vn-text').textContent;

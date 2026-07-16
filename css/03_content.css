@@ -1342,13 +1342,12 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
     margin-top:9px;
     /* потолок ~половина экрана: список листается сам, окно новеллы стоит на месте */
     max-height:min(46vh,340px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
-    -webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:10px;
+    -webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:2px;
   }
-  /* нижний край растворяется, пока список не долистан — видно, что он продолжается */
-  .hp-vn-acts.open:not(.at-end) .hp-vn-choices{
-    mask-image:linear-gradient(to bottom,#000 calc(100% - 24px),transparent);
-    -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 24px),transparent);
-  }
+  /* НИКАКИХ mask-image на этом блоке: маска поверх прокручиваемой области на iOS
+     ломает в нём скролл и прячет последние кнопки под градиентом — «стоп», после
+     которого до Ассамблеи не добраться. Что список продолжается, видно и так:
+     высота подрезана по кнопке, следующая выглядывает краем. */
   /* кнопка правки обложки — в угол баннера */
   .hp-vn .hp-hero-upload-btn{top:6px;left:6px;right:auto;font-size:10px;padding:4px 8px}
 }

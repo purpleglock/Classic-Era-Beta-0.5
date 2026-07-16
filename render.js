@@ -2747,16 +2747,6 @@ function heroVNActsToggle(force) {
   }
   const el = document.getElementById('hp-vn-choices');
   if (open && el) el.scrollTop = 0;   // раскрыли — показать список с начала
-  _heroVNActsEdge();
-}
-// Растворять нижний край списка, пока он не долистан (и не растворять, если
-// скроллить нечего) — иначе последняя кнопка выглядит выцветшей без причины.
-function _heroVNActsEdge() {
-  const acts = document.getElementById('hp-vn-acts');
-  const el = document.getElementById('hp-vn-choices');
-  if (!acts || !el) return;
-  const end = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
-  acts.classList.toggle('at-end', end);
 }
 // Список перерисовали (меню ↔ подменю ↔ рассказ) — обновить счётчик в приглашении.
 // Состояние свитка НЕ трогаем: раскрыл один раз — ходит по спискам без лишних тапов.
@@ -2768,8 +2758,6 @@ function heroVNActsSync() {
   const n = el.querySelectorAll('.hp-vn-choice').length;
   const cnt = document.getElementById('hp-vn-actbtn-n');
   if (cnt) cnt.textContent = n ? String(n) : '';
-  if (!el._edgeBound) { el._edgeBound = true; el.addEventListener('scroll', _heroVNActsEdge, { passive: true }); }
-  _heroVNActsEdge();
 }
 
 function heroVNChoice(kind) {
