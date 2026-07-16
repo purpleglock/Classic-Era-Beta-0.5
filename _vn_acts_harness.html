@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VN acts (mobile) harness</title>
+<link rel="stylesheet" href="css/index.css?v=harness">
+<style>
+  body{background:#04060c;margin:0;padding:10px;font:12px/1.5 monospace;color:#cfd6dd}
+  #report{white-space:pre;margin-top:10px;border-top:1px solid #1d2534;padding-top:8px}
+  .bad{color:#ff7a5c}.ok{color:#5fc257}
+</style>
+</head><body>
+<!-- Стенд меню действий новеллы на телефоне: реальные buildHeroVN + heroVNInit,
+     без Supabase. Смотрим глазами и меряем: свиток свёрнут, окно не растёт,
+     раскрытый список скроллится ВНУТРИ себя. -->
+<div id="host"></div>
+<div id="report">гоняю…</div>
+
+<script>
+  window.lang = 'ru';
+  window.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  window.jsq = s => String(s == null ? '' : s).replace(/['\\]/g, '\\$&');
+  window.L = (ru, en) => (lang === 'en' ? en : ru);
+  window.FN = { events: [] };
+  window.EC = { fid: 'fac_test', app: {}, colonies: [], buildings: [], eco: {}, systems: [] };
+</script>
+<script src="render.js?v=harness"></script>
+<script>
+const log = [];
+const say = (ok, t) => log.push(`<span class="${ok?'ok':'bad'}">${ok?'OK  ':'FAIL'}</span> ${t}`);
+
+// buildHeroVN сам подставит дежурные реплики, если конфига нет.
+document.getElementById('host').innerHTML = buildHeroVN('', { role: 'player' });
+heroVNInit();
+
+const acts = document.getElementById('hp-vn-acts');
+const btn  = document.getElementById('hp-vn-actbtn');
+const list = document.getElementById('hp-vn-choices');
+const box  = document.getElementById('hp-vn-box');
+const vis  = el => getComputedStyle(el).display !== 'none';
+
+const tick = () => new Promise(r => setTimeout(r, 30));
+setTimeout(async () => {
+  // 1. Свиток свёрнут: видно приглашение, а не простыня.
+  say(vis(btn), 'кнопка «Открыть меню» видна на телефоне');
+  const t = document.getElementById('hp-vn-actbtn-t');
+  // Прошлая подпись-реплика не влезала в строку и обрезалась многоточием — следим.
+  say(t.scrollWidth <= t.clientWidth + 1, `подпись влезает целиком («${t.textContent}»)`);
+  say(!vis(list), 'список кнопок свёрнут (не вываливается)');
+  say(document.getElementById('hp-vn-actbtn-n').textContent === '11', 'в приглашении счётчик действий: 11');
+  const hClosed = box.getBoundingClientRect().height;
+
+  // 2. Раскрытие: список скроллится ВНУТРИ, окно новеллы почти не растёт.
+  heroVNActsToggle();
+  const hOpen = box.getBoundingClientRect().height;
+  say(vis(list), 'список раскрылся');
+  say(t.textContent === 'Свернуть меню' && t.scrollWidth <= t.clientWidth + 1, 'раскрыто — подпись «Свернуть меню», тоже влезает');
+  say(list.scrollHeight > list.clientHeight + 2, 'список листается ВЕРТИКАЛЬНО внутри себя');
+  // Главная ловушка: базовый список — wrap-сетка. В колонке с ограниченной высотой
+  // wrap уносит кнопки в соседние колонки, и список едет ВБОК. Так быть не должно.
+  say(list.scrollWidth <= list.clientWidth + 1, 'список НЕ едет вбок (нет горизонтального скролла)');
+  say(getComputedStyle(list).flexWrap === 'nowrap', 'список одной колонкой (flex-wrap:nowrap)');
+  say(document.documentElement.scrollWidth <= innerWidth + 1, 'страница не едет вбок');
+  const col = new Set([...list.children].map(c => Math.round(c.getBoundingClientRect().left)));
+  say(col.size === 1, `все кнопки в одной колонке (колонок: ${col.size})`);
+  say(list.clientHeight <= innerHeight * 0.5, `высота списка ≤ полэкрана (${Math.round(list.clientHeight)}px)`);
+  say(hOpen - hClosed < innerHeight * 0.55, `окно новеллы не разрослось (+${Math.round(hOpen - hClosed)}px)`);
+  say(box.getBoundingClientRect().width <= innerWidth + 1, 'окно не вылезло за край экрана');
+
+  // 3. Все 11 кнопок реально достижимы прокруткой, а не обрезаны наглухо.
+  say(!acts.classList.contains('at-end'), 'список не долистан — нижний край растворён');
+  list.scrollTop = list.scrollHeight;
+  // ⚠️ Браузер предпросмотра НЕ шлёт событие scroll на программный scrollTop (проверено:
+  // свежий слушатель ловит 0). Поэтому дёргаем пересчёт сами, а живучесть проводки
+  // сторожим отдельной проверкой _edgeBound ниже.
+  _heroVNActsEdge();
+  await tick();
+  const last = list.querySelector('.hp-vn-choice:last-child').getBoundingClientRect();
+  const lr = list.getBoundingClientRect();
+  say(last.bottom <= lr.bottom + 1 && last.top >= lr.top - 1, 'последняя кнопка («Ассамблея») долистывается');
+  say(acts.classList.contains('at-end'), 'долистали — нижняя дымка снята');
+  say(!!list._edgeBound, 'пересчёт дымки подписан на scroll списка (в живом браузере зовётся сам)');
+
+  // 4. Тап по приглашению не листает реплику (клик по окну = следующая фраза).
+  const t0 = document.getElementById('hp-vn-text').textContent;
+  btn.click();
+  say(!vis(list), 'повторный тап свернул свиток');
+  say(document.getElementById('hp-vn-text').textContent === t0, 'тап по приглашению НЕ пролистал реплику');
+
+  // 5. Персонаж говорит — приглашение уходит вместе со списком.
+  _heroVNCtl.narrate([{ t: 'Тестовая речь.' }]);
+  say(!vis(acts), 'в режиме рассказа меню действий скрыто целиком');
+  _heroVNCtl.reset();
+  say(vis(acts) && vis(btn), 'после рассказа приглашение вернулось');
+
+  document.getElementById('report').innerHTML = log.join('\n');
+}, 60);
+</script>
+</body></html>

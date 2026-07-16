@@ -2646,7 +2646,15 @@ function buildHeroVN(coverUrl, user) {
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
       <div class="hp-vn-text" id="hp-vn-text"></div>
       <div class="hp-vn-banner" id="hp-vn-banner" aria-hidden="true"></div>
-      <div class="hp-vn-choices" id="hp-vn-choices"></div>
+      <div class="hp-vn-acts" id="hp-vn-acts">
+        <button class="hp-vn-actbtn" id="hp-vn-actbtn" type="button" aria-expanded="false" aria-controls="hp-vn-choices"
+          onclick="event.stopPropagation();heroVNActsToggle()">
+          <span class="hp-vn-actbtn-t" id="hp-vn-actbtn-t">${lang === 'en' ? 'Open menu' : 'Открыть меню'}</span>
+          <span class="hp-vn-actbtn-n" id="hp-vn-actbtn-n"></span>
+          <span class="hp-vn-actbtn-arr">▾</span>
+        </button>
+        <div class="hp-vn-choices" id="hp-vn-choices"></div>
+      </div>
       <div class="hp-vn-foot">
         <div class="hp-vn-ctrl">
           <button class="hp-vn-btn hp-vn-back" id="hp-vn-back" type="button" hidden onclick="event.stopPropagation();heroVNDoBack()">↩ ${lang === 'en' ? 'back' : 'назад'}</button>
@@ -2693,9 +2701,81 @@ function heroVNUnpin() {
   _heroVNPinUrl = null;
   if (_heroVNCtl && typeof _heroVNCtl.refreshScene === 'function') _heroVNCtl.refreshScene();
 }
+// ── Аппаратная «назад» телефона: экран новеллы — не страница сайта ──
+// Роутинг сайта хэшевый, а оверлеи новеллы hash не трогают, поэтому «назад»
+// уходила на ПРЕДЫДУЩУЮ страницу (обычно правила) вместо выхода из Ассамблеи
+// или Разлома — на айфоне это единственный привычный выход. Держим в истории
+// ровно одну свою запись, пока открыт любой экран новеллы.
+let _heroVNHist = false;
+function _heroVNHistPush() {
+  if (_heroVNHist) return;
+  try { history.pushState({ hpvn: 1 }, '', location.href); _heroVNHist = true; } catch (e) {}
+}
+// Ушли в меню кнопкой — снимаем свою запись сами (popstate её уже не увидит).
+function _heroVNHistDrop() {
+  if (!_heroVNHist) return;
+  _heroVNHist = false;
+  try { history.back(); } catch (e) {}
+}
+window.addEventListener('popstate', () => {
+  if (!_heroVNHist) return;            // запись не наша — это настоящий переход
+  _heroVNHist = false;
+  // Правила Ассамблеи лежат поверх экрана: первая «назад» гасит их, экран цел.
+  const g = document.getElementById('hp-vna-guide');
+  if (g && g.classList.contains('open')) { g.classList.remove('open'); _heroVNHistPush(); return; }
+  try { heroVNChoice('menu'); } catch (e) {}
+});
+// Уход со страницы новеллы — наша запись больше ничего не закрывает.
+window.addEventListener('hashchange', () => { _heroVNHist = false; });
+
+// ── Меню действий на телефоне: свиток вместо простыни ──
+// На узком экране список вываливался столбцом на два экрана и топил собой всё
+// окно. Прячем его за реплику-приглашение «Что предпримете?» — раскрывается и
+// скроллится внутри окна. На десктопе приглашение скрыто (CSS), сетка чипов
+// осталась прежней, поэтому состояние свитка там ни на что не влияет.
+function heroVNActsToggle(force) {
+  const acts = document.getElementById('hp-vn-acts');
+  if (!acts) return;
+  const open = (force === undefined) ? !acts.classList.contains('open') : !!force;
+  acts.classList.toggle('open', open);
+  const b = document.getElementById('hp-vn-actbtn');
+  if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+  const t = document.getElementById('hp-vn-actbtn-t');
+  if (t) {
+    const en = (typeof lang !== 'undefined' && lang === 'en');
+    t.textContent = open ? (en ? 'Collapse menu' : 'Свернуть меню') : (en ? 'Open menu' : 'Открыть меню');
+  }
+  const el = document.getElementById('hp-vn-choices');
+  if (open && el) el.scrollTop = 0;   // раскрыли — показать список с начала
+  _heroVNActsEdge();
+}
+// Растворять нижний край списка, пока он не долистан (и не растворять, если
+// скроллить нечего) — иначе последняя кнопка выглядит выцветшей без причины.
+function _heroVNActsEdge() {
+  const acts = document.getElementById('hp-vn-acts');
+  const el = document.getElementById('hp-vn-choices');
+  if (!acts || !el) return;
+  const end = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+  acts.classList.toggle('at-end', end);
+}
+// Список перерисовали (меню ↔ подменю ↔ рассказ) — обновить счётчик в приглашении.
+// Состояние свитка НЕ трогаем: раскрыл один раз — ходит по спискам без лишних тапов.
+function heroVNActsSync() {
+  const acts = document.getElementById('hp-vn-acts');
+  const el = document.getElementById('hp-vn-choices');
+  if (!acts || !el) return;
+  acts.classList.toggle('has-acts', el.children.length > 0);
+  const n = el.querySelectorAll('.hp-vn-choice').length;
+  const cnt = document.getElementById('hp-vn-actbtn-n');
+  if (cnt) cnt.textContent = n ? String(n) : '';
+  if (!el._edgeBound) { el._edgeBound = true; el.addEventListener('scroll', _heroVNActsEdge, { passive: true }); }
+  _heroVNActsEdge();
+}
+
 function heroVNChoice(kind) {
   if (!_heroVNCtl) return;
   const en = (typeof lang !== 'undefined' && lang === 'en');
+  if (kind === 'menu') _heroVNHistDrop(); else _heroVNHistPush();
   // Уходим с биржи на любой другой экран — гасим ленту индексов СРАЗУ и снимаем
   // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
   _heroVNView = kind;
@@ -4807,11 +4887,13 @@ function heroVNInit() {
     ];
     choicesEl.innerHTML = opts.map(([k, l]) =>
       `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');
+    heroVNActsSync();
   }
   // В режиме рассказа «назад» живёт в подвале рядом с «пропустить» (кнопкой),
   // а список выбора очищаем — он не нужен, пока персонаж говорит.
   function showBackChoice() {
     if (choicesEl) choicesEl.innerHTML = '';
+    heroVNActsSync();          // персонаж говорит — приглашение прячется вместе со списком
     setBack(true);
   }
   function onTap() {
@@ -4820,7 +4902,7 @@ function heroVNInit() {
     if (lastLine && !loop) { heroVNDoBack(); return; }      // конец рассказа — назад
     clearTimers(); play(loop ? (idx + 1) % lines.length : Math.min(idx + 1, lines.length - 1));
   }
-  box.addEventListener('click', (e) => { if (e.target.closest('.hp-hero-cta') || e.target.closest('.hp-vn-choices')) return; onTap(); });
+  box.addEventListener('click', (e) => { if (e.target.closest('.hp-hero-cta') || e.target.closest('.hp-vn-acts')) return; onTap(); });
   box.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap(); } });
 
   // Вернуть idle-новеллу (выйти из режима рассказа): восстановить реплики и снова листать.
@@ -4847,7 +4929,7 @@ function heroVNInit() {
   // Контроллер — контекстное меню/рассказ рулят активным сценарием.
   _heroVNCtl = {
     back: null,
-    setChoices(html) { if (choicesEl) choicesEl.innerHTML = html; },   // подменю-список (idle продолжается)
+    setChoices(html) { if (choicesEl) choicesEl.innerHTML = html; heroVNActsSync(); },   // подменю-список (idle продолжается)
     showBack(fn) { if (typeof fn === 'function') this.back = fn; setBack(true); },  // показать «назад» в подвале
     hideBack() { this.back = null; setBack(false); },
     menu() { stopNarration(); renderChoices(); },                      // к главным категориям

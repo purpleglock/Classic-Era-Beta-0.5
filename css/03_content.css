@@ -438,6 +438,9 @@
   color:var(--t3,#9fb3c4);font-family:'Inter',sans-serif;font-size:13px;
   padding:9px 4px;
 }
+/* обёртка меню действий: на десктопе — сквозная, всё оформление на самом списке;
+   приглашение «Что предпримете?» нужно только на телефоне (см. медиа) */
+.hp-vn-actbtn{display:none}
 
 /* ── Анимированная лента индексов — ОТДЕЛЬНО от диалогового окна ── */
 .hp-vn-idx{
@@ -1163,7 +1166,7 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 /* контент окна — НАД водяным знаком (имя позиционируется само, z-index:3) */
 .hp-vn-box > .hp-vn-text,
 .hp-vn-box > .hp-vn-banner,
-.hp-vn-box > .hp-vn-choices,
+.hp-vn-box > .hp-vn-acts,
 .hp-vn-box > .hp-vn-foot{position:relative;z-index:1}
 /* карточка достижения ПОД текстом (раскрывается max-height-переходом) */
 .hp-vn-banner{
@@ -1285,10 +1288,67 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   .hp-vn-text{font-size:16px;line-height:1.5;min-height:auto}
   .hp-vn-foot{margin-top:12px;gap:10px}
   .hp-vn-foot .hp-hero-cta{font-size:14px;padding:10px 14px}
-  /* меню выбора — на телефоне ВЕРТИКАЛЬНЫЙ столбец (тут он и удобен), без прокрутки */
-  .hp-vn-choices{flex-direction:column;gap:8px;max-height:none;overflow:visible}
+  /* ── Меню действий на телефоне: свиток, а не простыня ──
+     Десяток кнопок столбцом растягивал окно на два экрана и топил собой реплику.
+     Прячем список за приглашение в духе новеллы; раскрытый список скроллится
+     ВНУТРИ себя, поэтому окно новеллы больше не растёт. */
+  .hp-vn-acts{
+    position:relative;margin-top:18px;padding-top:14px;
+    border-top: var(--deco-frame-w, 1px) solid color-mix(in srgb,var(--gd,#3a9bdc) 32%, var(--w1,rgba(255,255,255,.06)));
+  }
+  .hp-vn-acts::before{      /* та же засечка «здесь начинаются действия» */
+    content:'';position:absolute;top:-1px;left:0;width:42px;height:2px;pointer-events:none;
+    background:var(--gd,#3a9bdc);border-radius:2px;
+    box-shadow:0 0 8px color-mix(in srgb,var(--gd,#3a9bdc) 80%,transparent);
+  }
+  .hp-vn-acts:not(.has-acts){display:none}   /* персонаж говорит — выбора нет */
+  /* разделитель переехал на обёртку — у списка своего больше нет */
+  .hp-vn-choices,.hp-vn-choices:empty{margin-top:0;padding-top:0;border-top:none}
+  .hp-vn-choices::before{display:none}
+  /* nowrap обязателен: базовый список — wrap-сетка чипов, а в колонке с ограниченной
+     высотой wrap уносит кнопки в СОСЕДНИЕ КОЛОНКИ и список едет вбок вместо вниз */
+  .hp-vn-choices{flex-direction:column;flex-wrap:nowrap;gap:8px;max-height:none;overflow:visible}
   .hp-vn-choice{flex:0 0 auto;padding:12px 14px;font-size:15px}
   .hp-vn-choice-item{font-size:14px}
+
+  /* Кнопка меню — намеренно УТИЛИТАРНАЯ, а не вторая реплика: рядом уже говорит
+     персонаж, и вторая фраза-приглашение спорила с ней и не влезала в строку.
+     Форм-язык общий с вариантами выбора — гранёный чип на слоях-подложках. */
+  .hp-vn-actbtn{
+    position:relative;z-index:0;cursor:pointer;width:100%;
+    display:flex;align-items:center;justify-content:center;gap:9px;
+    background:transparent;border:none;border-radius:0;
+    clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+    color:var(--t1,#eaf4ff);padding:13px 14px;
+    font-family:var(--font-display);font-size:15px;font-weight:600;
+    letter-spacing:calc(.01em * var(--deco-ls-mult, 1));
+  }
+  .hp-vn-actbtn::before{content:'';position:absolute;inset:0;z-index:-2;background:color-mix(in srgb,var(--gd,#3a9bdc) 55%,var(--w1,rgba(255,255,255,.06)))}
+  .hp-vn-actbtn::after{
+    content:'';position:absolute;inset:1px;z-index:-1;background:hsl(216 24% 8% / .92);
+    clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+  }
+  .hp-vn-actbtn-t{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hp-vn-actbtn-n{                 /* сколько действий ждёт за свитком */
+    flex:0 0 auto;font-size:12px;font-weight:700;color:var(--gd,#3a9bdc);
+    padding:1px 7px;background:color-mix(in srgb,var(--gd,#3a9bdc) 16%,transparent);
+  }
+  .hp-vn-actbtn-n:empty{display:none}
+  .hp-vn-actbtn-arr{flex:0 0 auto;font-size:11px;color:var(--gd,#3a9bdc);transition:transform var(--duration-fast)}
+  .hp-vn-acts.open .hp-vn-actbtn-arr{transform:rotate(180deg)}
+
+  .hp-vn-acts:not(.open) .hp-vn-choices{display:none}
+  .hp-vn-acts.open .hp-vn-choices{
+    margin-top:9px;
+    /* потолок ~половина экрана: список листается сам, окно новеллы стоит на месте */
+    max-height:min(46vh,340px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:10px;
+  }
+  /* нижний край растворяется, пока список не долистан — видно, что он продолжается */
+  .hp-vn-acts.open:not(.at-end) .hp-vn-choices{
+    mask-image:linear-gradient(to bottom,#000 calc(100% - 24px),transparent);
+    -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 24px),transparent);
+  }
   /* кнопка правки обложки — в угол баннера */
   .hp-vn .hp-hero-upload-btn{top:6px;left:6px;right:auto;font-size:10px;padding:4px 8px}
 }

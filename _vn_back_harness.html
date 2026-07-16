@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<title>VN hardware-back harness</title>
+<style>
+  body { background:#04060c; color:#cfd6dd; font:12px/1.6 monospace; margin:0; padding:12px; }
+  #report { white-space:pre; }
+  .bad { color:#ff7a5c; } .ok { color:#5fc257; }
+  .hp-vn-assembly, .hp-vn-stars { display:none; } .show { display:block; }
+</style>
+</head><body>
+<div id="report">гоняю…</div>
+
+<!-- Оверлеи новеллы: аппаратная «назад» телефона должна закрывать ИХ, а не уводить
+     на предыдущую страницу сайта (правила). Стенд без Supabase: подменяем _heroVNCtl
+     и *Open() заглушками, дёргаем history.back() и смотрим, что закрылось. -->
+<div class="hp-vn-assembly" id="hp-vn-assembly"><div id="hp-vna-guide"></div></div>
+<div class="hp-vn-stars" id="hp-vn-stars"></div>
+
+<script>window.esc = s => String(s == null ? '' : s);</script>
+<script src="render.js?v=harness"></script>
+<script>
+const log = [];
+const say = (ok, t) => log.push(`<span class="${ok ? 'ok' : 'bad'}">${ok ? 'OK  ' : 'FAIL'}</span> ${t}`);
+
+// Заглушки вместо сетевых экранов: показываем/прячем оверлей по классу show.
+_heroVNCtl = { menu(){}, setChoices(){}, showBack(){}, refreshScene(){} };
+const show = (id, on) => document.getElementById(id).classList.toggle('show', on);
+heroVNAssemblyOpen  = () => show('hp-vn-assembly', true);
+heroVNAssemblyClose = () => show('hp-vn-assembly', false);
+heroVNStarsOpen     = () => show('hp-vn-stars', true);
+heroVNStarsClose    = () => show('hp-vn-stars', false);
+for (const f of ['Colony','Planets','Poem','Rating','Research','Geo']) window['heroVN' + f + 'Close'] = () => {};
+
+const open  = id => document.getElementById(id).classList.contains('show');
+const guide = () => document.getElementById('hp-vna-guide').classList.contains('open');
+const back  = () => new Promise(r => { window.addEventListener('popstate', () => setTimeout(r, 0), { once:true }); history.back(); });
+
+(async () => {
+  const base = history.length;
+
+  // 1. Ассамблея: «назад» закрывает зал, а не уводит на прошлую страницу.
+  heroVNChoice('assembly');
+  say(open('hp-vn-assembly'), 'ассамблея открылась');
+  say(history.length === base + 1, 'экран положил в историю ровно одну запись');
+  await back();
+  say(!open('hp-vn-assembly'), '«назад» ЗАКРЫЛА ассамблею (а не ушла на правила)');
+
+  // 2. Правила ассамблеи — верхний слой: первая «назад» гасит их, зал остаётся.
+  heroVNChoice('assembly');
+  heroVNAsmGuideToggle();
+  say(guide(), 'правила открылись поверх зала');
+  await back();
+  say(!guide() && open('hp-vn-assembly'), 'первая «назад» закрыла правила, зал цел');
+  await back();
+  say(!open('hp-vn-assembly'), 'вторая «назад» закрыла зал');
+
+  // 3. Разлом — тот же путь (казино не должно запирать игрока на айфоне).
+  heroVNChoice('stars');
+  await back();
+  say(!open('hp-vn-stars'), '«назад» закрыла Разлом');
+
+  // 4. Выход кнопкой «назад» в интерфейсе не должен копить записи в истории:
+  //    иначе после экрана «назад» телефона станет пустым нажатием.
+  const h = history.length;
+  heroVNChoice('assembly'); heroVNChoice('menu');
+  await new Promise(r => setTimeout(r, 60));
+  say(history.length === h && !open('hp-vn-assembly'), 'выход кнопкой снял свою запись (история не пухнет)');
+
+  // 5. После выхода кнопкой «назад» — снова настоящая навигация по сайту.
+  say(history.state == null || !history.state.hpvn, 'история вернулась к странице сайта');
+
+  document.getElementById('report').innerHTML = log.join('\n');
+})();
+</script>
+</body></html>
