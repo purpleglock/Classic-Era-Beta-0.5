@@ -1115,8 +1115,12 @@
 @media (max-width:640px){
   .hp-vn-colony{position:relative;inset:auto;border-radius:var(--radius-sm)}
   .hp-vn-colony:not(.show){display:none}
-  .hp-vn-col-head{padding:11px 14px}
-  .hp-vn-col-title{font-size:15px}
+  /* Шапка экрана: заголовок своей строкой, «правила»/«назад» — крупные кнопки
+     ПОД ним. Впритык друг к другу они ловили промахи пальцем («назад» открывала
+     правила) — теперь каждая тянется на полстроки, между ними воздух. */
+  .hp-vn-col-head{padding:11px 14px;flex-wrap:wrap;gap:8px 14px}
+  .hp-vn-col-title{font-size:15px;flex:1 1 100%}
+  .hp-vn-col-head .hp-vn-col-x{flex:1 1 auto;padding:11px 14px;font-size:11.5px}
   .hp-vn-col-body{flex-direction:column;gap:12px;padding:12px;overflow:auto;scrollbar-width:thin}
   .hp-vn-col-main{flex:0 0 auto;height:46vh;min-height:240px}
   .hp-vn-col-side{flex:0 0 auto;flex-direction:column;gap:12px}

@@ -2689,23 +2689,38 @@ function heroVNUnpin() {
 // уходила на ПРЕДЫДУЩУЮ страницу (обычно правила) вместо выхода из Ассамблеи
 // или Разлома — на айфоне это единственный привычный выход. Держим в истории
 // ровно одну свою запись, пока открыт любой экран новеллы.
+// Правду о «нашей» записи держим НЕ в булевом флаге (он рассыхался: логин-редирект,
+// chrome-интервенция «назад», двойные тапы), а в самой истории — history.state.hpvn.
+// Флаг остался только как подсказка «мы ждём свой popstate».
 let _heroVNHist = false;
+function _heroVNIsOurs() { try { return !!(history.state && history.state.hpvn); } catch (e) { return false; } }
 function _heroVNHistPush() {
-  if (_heroVNHist) return;
+  if (_heroVNIsOurs()) { _heroVNHist = true; return; }   // запись уже стоит — не дублируем
   try { history.pushState({ hpvn: 1 }, '', location.href); _heroVNHist = true; } catch (e) {}
 }
 // Ушли в меню кнопкой — снимаем свою запись сами (popstate её уже не увидит).
 function _heroVNHistDrop() {
-  if (!_heroVNHist) return;
   _heroVNHist = false;
+  if (!_heroVNIsOurs()) return;        // записи нет (уже съедена «назад») — не трогаем чужую
   try { history.back(); } catch (e) {}
 }
+// Какой-нибудь экран новеллы сейчас развёрнут? Смотрим ПО DOM, а не по флагу:
+// флаг может отстать, а игрока запирать в экране из-за этого нельзя.
+function _heroVNScreenOpen() {
+  return document.querySelector('.hp-vn-colony.show,.hp-vn-poem.show,.hp-vn-assembly.show,.hp-vn-rating.show,.hp-vn-research.show');
+}
 window.addEventListener('popstate', () => {
-  if (!_heroVNHist) return;            // запись не наша — это настоящий переход
+  const armed = _heroVNHist || _heroVNIsOurs();
   _heroVNHist = false;
+  // Перехватываем, если открыт ЛЮБОЙ экран новеллы — даже когда учёт записи
+  // разошёлся с историей (иначе «назад» уносила на предыдущую страницу сайта).
+  if (!armed && !_heroVNScreenOpen()) return;   // ничего нашего — настоящий переход
   // Правила Ассамблеи лежат поверх экрана: первая «назад» гасит их, экран цел.
   const g = document.getElementById('hp-vna-guide');
-  if (g && g.classList.contains('open')) { g.classList.remove('open'); _heroVNHistPush(); return; }
+  const asm = document.getElementById('hp-vn-assembly');
+  if (g && g.classList.contains('open') && asm && asm.classList.contains('show')) {
+    g.classList.remove('open'); _heroVNHistPush(); return;
+  }
   try { heroVNChoice('menu'); } catch (e) {}
 });
 // Уход со страницы новеллы — наша запись больше ничего не закрывает.
@@ -4064,6 +4079,10 @@ function heroVNAssemblyClose() {
   if (!el) return;
   el.classList.remove('show');
   el.setAttribute('aria-hidden', 'true');
+  // Правила гасим вместе с залом: «open» на скрытом гайде оставался и съедал
+  // первую аппаратную «назад» на СЛЕДУЮЩЕМ экране (Разлом/Георазведка).
+  const g = document.getElementById('hp-vna-guide');
+  if (g) g.classList.remove('open');
   if (_heroVNView === 'assembly') _heroVNView = null;
 }
 function heroVNAssemblyReturn() { heroVNChoice('menu'); }

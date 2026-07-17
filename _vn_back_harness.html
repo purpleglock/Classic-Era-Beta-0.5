@@ -15,7 +15,9 @@
      на предыдущую страницу сайта (правила). Стенд без Supabase: подменяем _heroVNCtl
      и *Open() заглушками, дёргаем history.back() и смотрим, что закрылось. -->
 <div class="hp-vn-assembly" id="hp-vn-assembly"><div id="hp-vna-guide"></div></div>
-<div class="hp-vn-stars" id="hp-vn-stars"></div>
+<!-- классы как в живой разметке (render.js:2626): по .hp-vn-colony.show
+     popstate понимает «экран новеллы открыт» даже при рассинхроне флага -->
+<div class="hp-vn-colony hp-vn-geo hp-vn-stars" id="hp-vn-stars"></div>
 
 <script>window.esc = s => String(s == null ? '' : s);</script>
 <script src="render.js?v=harness"></script>
@@ -26,10 +28,10 @@ const say = (ok, t) => log.push(`<span class="${ok ? 'ok' : 'bad'}">${ok ? 'OK  
 // Заглушки вместо сетевых экранов: показываем/прячем оверлей по классу show.
 _heroVNCtl = { menu(){}, setChoices(){}, showBack(){}, refreshScene(){} };
 const show = (id, on) => document.getElementById(id).classList.toggle('show', on);
+// Стабим только *Open() (они ходят в сеть); *Close() — НАСТОЯЩИЕ, чисто DOM-ные:
+// именно в heroVNAssemblyClose живёт гашение залипшего «open» на правилах (тест 6).
 heroVNAssemblyOpen  = () => show('hp-vn-assembly', true);
-heroVNAssemblyClose = () => show('hp-vn-assembly', false);
 heroVNStarsOpen     = () => show('hp-vn-stars', true);
-heroVNStarsClose    = () => show('hp-vn-stars', false);
 for (const f of ['Colony','Planets','Poem','Rating','Research','Geo']) window['heroVN' + f + 'Close'] = () => {};
 
 const open  = id => document.getElementById(id).classList.contains('show');
@@ -69,6 +71,24 @@ const back  = () => new Promise(r => { window.addEventListener('popstate', () =>
 
   // 5. После выхода кнопкой «назад» — снова настоящая навигация по сайту.
   say(history.state == null || !history.state.hpvn, 'история вернулась к странице сайта');
+
+  // 6. ГРАБЛЯ: правила открыты → выход кнопкой «назад» (не крестиком). «open» на
+  //    скрытом гайде оставался и съедал первую аппаратную «назад» в Разломе.
+  heroVNChoice('assembly');
+  heroVNAsmGuideToggle();
+  heroVNChoice('menu');                       // вышли кнопкой, правила так и висели open
+  await new Promise(r => setTimeout(r, 60));
+  say(!guide(), 'выход из зала гасит и правила (класс open не залипает)');
+  heroVNChoice('stars');
+  await back();
+  say(!open('hp-vn-stars'), 'первая же «назад» в Разломе закрывает Разлом (её не съели правила)');
+
+  // 7. ГРАБЛЯ: учёт записи разошёлся с историей (логин-редирект, chrome-интервенция).
+  //    Экран открыт, а флаг сброшен — «назад» всё равно обязана закрыть ЭКРАН.
+  heroVNChoice('assembly');
+  _heroVNHist = false;                        // имитируем рассинхрон булевого флага
+  await back();
+  say(!open('hp-vn-assembly'), 'при рассинхроне флага «назад» всё равно закрыла экран');
 
   document.getElementById('report').innerHTML = log.join('\n');
 })();
