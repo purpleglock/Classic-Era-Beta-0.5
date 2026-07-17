@@ -2624,6 +2624,7 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-research" id="hp-vn-research" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo" id="hp-vn-geo" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-stars" id="hp-vn-stars" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-doom" id="hp-vn-doom" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2805,31 +2806,34 @@ function heroVNChoice(kind) {
   // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
   _heroVNView = kind;
   if (kind !== 'idx' && typeof heroVNHideIdx === 'function') heroVNHideIdx();
-  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); _heroVNCtl.menu(); return; }
+  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); _heroVNCtl.menu(); return; }
 
   // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
-  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNColonyOpen(); return; }
+  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNColonyOpen(); return; }
 
   // «Управление колониями» — перечень планет державы + сцена планеты с постройками.
-  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNPlanetsOpen(); return; }
+  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNPlanetsOpen(); return; }
 
   // «Поэма недели» — общегалактический стих: голосование за слово дня поверх сцены.
-  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNPoemOpen(); return; }
+  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNPoemOpen(); return; }
 
   // «Ассамблея» — тайные роли и законы, бьющие по всей галактике (Secret Hitler-лайк).
-  if (kind === 'assembly') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNAssemblyOpen(); return; }
+  if (kind === 'assembly') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNAssemblyOpen(); return; }
 
   // «Рейтинг игроков» — засекреченная аналитическая сводка (декоративная инфографика).
-  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNRatingOpen(); return; }
+  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNRatingOpen(); return; }
 
   // «Исследования» — научный пульт державы: всё дерево технологий поверх сцены.
-  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNResearchOpen(); return; }
+  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNResearchOpen(); return; }
 
   // «Георазведка» — казино под вывеской геологии: разведка залежей своей колонии.
-  if (kind === 'geo') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNStarsClose(); heroVNGeoOpen(); return; }
+  if (kind === 'geo') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNGeoOpen(); return; }
 
   // «Всмотреться в Разлом» — псионический хор-казино: ставка → поле 7×7 → джекпот.
-  if (kind === 'stars') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsOpen(); return; }
+  if (kind === 'stars') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNDoomClose(); heroVNStarsOpen(); return; }
+
+  // «Длань Неотвратимости» — протокол последнего довода (доступен после исследования)
+  if (kind === 'doom') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomOpen(); return; }
 
   if (kind === 'ach' || kind === 'events') {
     _heroVNCat = kind;
@@ -4914,6 +4918,14 @@ function heroVNInit() {
       ['poem',   (en ? 'Poem of the week' : 'Поэма недели')],
       ['assembly', (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
     ];
+    // «Длань Неотвратимости» скрыта, пока не исследована «Сама неотвратимость»:
+    // живая проверка по EC (если экономика уже загружена) либо кэш-флаг с прошлой
+    // загрузки (ставится/чистится в ecLoad; сам экран перепроверяет на сервере).
+    try {
+      const doomOn = (typeof ecDoomUnlocked === 'function' && typeof EC !== 'undefined' && EC.eco && ecDoomUnlocked())
+        || localStorage.getItem('wk_doom_unlocked') === '1';
+      if (doomOn) opts.push(['doom', (en ? 'The Hand of Inevitability' : 'Длань Неотвратимости')]);
+    } catch (e) {}
     choicesEl.innerHTML = opts.map(([k, l]) =>
       `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');
     heroVNActsSync();
@@ -5050,6 +5062,75 @@ function heroVNGeoRefresh() {
     return;
   }
   el.innerHTML = _hgHead(en) + `<div class="hp-vn-col-body hp-vn-geo-body">${ecGeoBody()}</div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · «Длань Неотвратимости» — протокол последнего довода.
+// Экран СКРЫТ, пока держава не исследовала «Саму неотвратимость»
+// (pol.inevitability): пункт меню гейтится в renderChoices, а открытие
+// перепроверяет исследование по свежим данным EC. Тело экрана отдаёт
+// economy.js (ecDoomVNBody: арсенал / наведение / снаряды), действия после
+// RPC зовут ecReloadPaint → heroVNDoomRefresh. Каркас — .hp-vn-colony.
+// ══════════════════════════════════════════════════════════════
+function heroVNDoomClose() {
+  const el = document.getElementById('hp-vn-doom');
+  if (!el) return;
+  el.classList.remove('show');
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '';
+  if (_heroVNView === 'doom') _heroVNView = null;
+}
+function heroVNDoomReturn() { heroVNChoice('menu'); }
+function _hdHead(en) {
+  return `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">${en ? 'The Hand of Inevitability' : 'Длань Неотвратимости'}</span>
+    <span class="hp-vnr-clr hp-vnd-clr">${en ? 'last-resort protocol · clearance ultima' : 'протокол последнего довода · допуск «ультима»'}</span>
+    <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNDoomReturn()">↩ ${en ? 'back' : 'назад'}</button>
+  </div>`;
+}
+function _hdMsg(en, ru, enT) { return `<div class="hp-vn-col-body hp-vn-geo-body hp-vnd-body"><div class="hp-vn-col-empty">${en ? enT : ru}</div></div>`; }
+async function heroVNDoomOpen() {
+  const el = document.getElementById('hp-vn-doom');
+  if (!el) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  el.classList.add('show');
+  el.setAttribute('aria-hidden', 'false');
+  el.innerHTML = _hdHead(en) + _hdMsg(en, 'Сверяю коды допуска…', 'Verifying clearance codes…');
+  try {
+    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
+      if (!el.classList.contains('show')) return;
+      el.innerHTML = _hdHead(en) + _hdMsg(en, 'Доступ к протоколу имеет только зарегистрированная держава.', 'Only a registered faction holds this clearance.');
+      return;
+    }
+    if (!EC.eco || !EC.doom) { if (typeof ecLoad === 'function') await ecLoad(); }
+    if (!el.classList.contains('show')) return;
+    // Гейт по исследованию: без «Самой неотвратимости» экран засекречен,
+    // даже если пункт меню всплыл по устаревшему кэш-флагу.
+    if (!(typeof ecDoomUnlocked === 'function' && ecDoomUnlocked())) {
+      try { localStorage.removeItem('wk_doom_unlocked'); } catch (e) {}
+      el.innerHTML = _hdHead(en) + _hdMsg(en,
+        '▓▓▓▓ МАТЕРИАЛ ЗАСЕКРЕЧЕН ▓▓▓▓ Ваш научный отдел ещё не готов знать, что здесь хранится.',
+        '▓▓▓▓ CLASSIFIED ▓▓▓▓ Your science division is not yet ready to know what is kept here.');
+      return;
+    }
+    try { localStorage.setItem('wk_doom_unlocked', '1'); } catch (e) {}
+    heroVNDoomRefresh();
+  } catch (e) {
+    if (!el.classList.contains('show')) return;
+    el.innerHTML = _hdHead(en) + _hdMsg(en, 'Командная сеть протокола сейчас недоступна.', 'The protocol command grid is offline.');
+  }
+}
+// Перерисовать открытый экран свежими данными (зовётся и из ecReloadPaint).
+function heroVNDoomRefresh() {
+  const el = document.getElementById('hp-vn-doom');
+  if (!el || !el.classList.contains('show')) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  if (typeof ecDoomVNBody !== 'function' || typeof EC === 'undefined' || !EC.eco) {
+    el.innerHTML = _hdHead(en) + _hdMsg(en, 'Командная сеть протокола сейчас недоступна.', 'The protocol command grid is offline.');
+    return;
+  }
+  el.innerHTML = _hdHead(en) + `<div class="hp-vn-col-body hp-vn-geo-body hp-vnd-body">${ecDoomVNBody()}</div>`;
 }
 
 // ══════════════════════════════════════════════════════════════

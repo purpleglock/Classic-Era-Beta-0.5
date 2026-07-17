@@ -1544,6 +1544,9 @@ async function _ecLoadRestImpl() {
   EC.outposts = Array.isArray(defOutposts) ? defOutposts : [];  // оборона: развёрнутые аванпосты
   EC.opShips = Array.isArray(defOpShips) ? defOpShips : [];     // оборона: мои корабли-носители
   EC.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];        // Гиперпейсер: мои мобильные «Длани»
+  // Кэш-флаг для меню новеллы: пункт «Длань Неотвратимости» показывается ещё
+  // до загрузки экономики, если в прошлый визит исследование было открыто.
+  try { if (ecDoomUnlocked()) localStorage.setItem('wk_doom_unlocked', '1'); else localStorage.removeItem('wk_doom_unlocked'); } catch (e) {}
   EC.fleets = Array.isArray(myFleets) ? myFleets : [];          // флоты: мои мобильные соединения
   EC.armies = Array.isArray(myArmies) ? myArmies : [];          // МАРШ: мои армии на колониях
   EC.outpostIntel = Array.isArray(defOutIntel) ? defOutIntel : [];  // оборона: разведданные разведаванпостов
@@ -1622,6 +1625,8 @@ async function ecReloadPaint() {
   // Оверлей «Колонизация» в новелле (карта границ / карта системы) — после
   // колонизации/терраформа перерисовываем свежими данными EC.
   if (typeof heroVNColonyRefresh === 'function') heroVNColonyRefresh();
+  // Оверлей «Длань Неотвратимости» — на данных EC.doom/EC.mzaShips.
+  if (typeof heroVNDoomRefresh === 'function') heroVNDoomRefresh();
 }
 
 // ── Превью дохода (зеркало RPC) ─────────────────────────────
@@ -11628,6 +11633,338 @@ async function ecMzaBuild() {
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   НОВЕЛЛА · «Длань Неотвратимости» — тело экрана для render.js.
+   Три среза: АРСЕНАЛ (стационарные орудия + Гиперпейсеры), НАВЕДЕНИЕ
+   (карта + панель цели — переиспользуют пульт ecDoomMap/ecDoomPanelRender
+   и его id #ec-doom-zoom/#ec-doom-panel), СНАРЯДЫ (залпы в полёте).
+   Все действия идут через существующие RPC; после них ecReloadPaint зовёт
+   heroVNDoomRefresh — экран перерисовывается сам.
+   ════════════════════════════════════════════════════════════════ */
+function ecDoomVNSt() { return EC._doomVN = EC._doomVN || { tab: 'arsenal' }; }
+function ecDoomVNTab(t) { ecDoomVNSt().tab = t; if (typeof heroVNDoomRefresh === 'function') heroVNDoomRefresh(); }
+// Выбор орудия из новеллы — НЕ через ecDoomTabSelGun: тот перерисовывает кабинет
+// (ecPaintCabinet «перекинул» бы игрока с главной). Обновляем только оверлей.
+function ecDoomVNSelGun(id) {
+  ecDoomVNSt().tab = 'aim';
+  ecDoomVNPick('car', 'gun:' + id);   // сам перерисует оверлей
+}
+// Стационарная Длань возводится на колонии — уводим в кабинет на «Колонии».
+function ecDoomVNGoBuild() {
+  try { if (typeof heroVNDoomClose === 'function') heroVNDoomClose(); } catch (e) {}
+  EC.tab = 'colonies';
+  if (typeof go === 'function') go('economy');
+}
+function ecDoomVNBody() {
+  ecDoomEnsureStyle();
+  const st = ecDoomVNSt();
+  const guns = (EC.doom && EC.doom.guns) || [];
+  const salvos = ((EC.doom && EC.doom.salvos) || []).filter(s => s.status === 'in_flight');
+  const mza = EC.mzaShips || [];
+  const grav = ecStockOf('Гравиядро'), matter = ecStockOf('Программируемая материя');
+  const armed = guns.filter(g => !g.in_flight && +g.integrity > 0).length + mza.filter(s => s.can_fire).length;
+  const strip = `<div class="hp-vnd-strip">
+    <span>протокол последнего довода · канал защищён</span>
+    <span class="hp-vnd-live${salvos.length ? ' hot' : ''}">${salvos.length
+      ? '☄ снарядов в полёте: ' + salvos.length
+      : (armed ? '● система взведена' : '○ режим ожидания')}</span>
+  </div>`;
+  const chip = (k, v, warn) => `<span class="hp-vnd-chip${warn ? ' warn' : ''}"><i>${k}</i><b>${v}</b></span>`;
+  const chips = `<div class="hp-vnd-chips">
+    ${chip('орудия', guns.length)}
+    ${chip('гиперпейсеры', mza.length)}
+    ${chip('🔮 гравиядро', ecNum(Math.floor(grav)), grav < EC_DOOM_SHOT_GRAV)}
+    ${chip('🟢 материя', ecNum(Math.floor(matter)), matter <= 0)}
+  </div>`;
+  const tabs = [['arsenal', 'Арсенал', guns.length + mza.length], ['aim', 'Наведение', 0], ['salvos', 'Снаряды', salvos.length]];
+  const rail = `<div class="hp-vnd-tabs">${tabs.map(([id, l, n]) =>
+    `<button class="hp-vnd-tab${st.tab === id ? ' on' : ''}" type="button" onclick="event.stopPropagation();ecDoomVNTab('${id}')">${l}${n ? `<i>${n}</i>` : ''}</button>`).join('')}</div>`;
+  const body = st.tab === 'aim' ? ecDoomVNAim() : st.tab === 'salvos' ? ecDoomVNSalvos(salvos) : ecDoomVNArsenal(guns, matter);
+  return strip + chips + rail + body;
+}
+// АРСЕНАЛ: доктрина + карточки стационарных орудий + секция Гиперпейсеров.
+function ecDoomVNArsenal(guns, matter) {
+  const oath = `<div class="hp-vnd-oath">Это не оружие — это приговор, которому нельзя возразить. Планета в перекрестье перестаёт быть миром: остаётся камень, помнящий, что был живым. Залп не отзывается, не перехватывается дипломатией и не прощается историей.</div>`;
+  let gunsHtml;
+  if (!guns.length) {
+    gunsHtml = `<div class="hp-vnd-empty">
+      <div class="hp-vnd-empty-t">Стационарное орудие ещё не возведено.</div>
+      <div class="hp-vnd-empty-s">«Длань Неотвратимости» закладывается на одной из колоний — 8000 ГС и ${EC_DOOM_BUILD_MATTER} 🟢 Программируемой материи.</div>
+      <button class="hp-vnd-aimbtn" type="button" onclick="event.stopPropagation();ecDoomVNGoBuild()">🏗 К колониям — возвести орудие</button>
+    </div>`;
+  } else {
+    gunsHtml = `<div class="hp-vnd-grid">${guns.map(g => {
+      const integ = Math.max(0, Math.round(+g.integrity));
+      const hull = integ >= 60 ? '#3fa66a' : integ >= 30 ? '#d8a13a' : '#ff5a5a';
+      const stTag = g.in_flight ? '☄ залп в полёте' : integ <= 0 ? '☠ разрушено' : '● на боевом дежурстве';
+      return `<div class="hp-vnd-gun">
+        <div class="hp-vnd-gun-hd"><span class="hp-vnd-gun-nm">🜨 система «${esc(ecSysName(g.system_id))}»</span><span class="hp-vnd-gun-st${g.in_flight ? ' hot' : ''}">${stTag}</span></div>
+        <div class="hp-vnd-bar"><i style="width:${integ}%;background:${hull}"></i></div>
+        <div class="hp-vnd-gun-meta"><span>целостность <b style="color:${hull}">${integ}%</b></span><span>залпов дано <b>${g.total_shots || 0}</b></span></div>
+        ${integ > 0 && !g.in_flight ? `<button class="hp-vnd-aimbtn" type="button" onclick="event.stopPropagation();ecDoomVNSelGun('${g.id}')">▸ навести</button>` : ''}
+      </div>`;
+    }).join('')}</div>
+    ${matter <= 0 ? '<div class="hp-vnd-warnline">⚠ Нет программируемой материи — орудия деградируют с каждым днём.</div>' : ''}`;
+  }
+  return oath + gunsHtml + `<div class="hp-vnd-sep"></div>` + ecMzaSection();
+}
+/* ── НАВЕДЕНИЕ · пульт запуска ─────────────────────────────────────
+   Атомпанк-протокол в три ступени: I носитель (кассеты стационарных
+   Дланей и Гиперпейсеров) → II цель (консольный реестр систем/планет,
+   БЕЗ игровой карты) → III цепь пуска: три тумблера и кнопка ПУСК.
+   Стреляет боевыми RPC: doom_fire (стационар) / mza_fire (носитель). */
+function ecDoomVNAimSt() {
+  const vn = ecDoomVNSt();
+  return vn.aim = vn.aim || { car: null, sysId: null, pid: null, q: '', tgl: { pwr: false, seal: false, oath: false } };
+}
+// Все носители приговора одним списком (боеготовые и нет — с причиной).
+function ecDoomVNCarriers() {
+  const out = [];
+  ((EC.doom && EC.doom.guns) || []).forEach(g => {
+    const integ = Math.max(0, Math.round(+g.integrity || 0));
+    out.push({ key: 'gun:' + g.id, kind: 'gun', id: g.id, ic: '🜨', nm: 'Длань «' + ecSysName(g.system_id) + '»', sys: g.system_id,
+      integ, grav: EC_DOOM_SHOT_GRAV, ready: !g.in_flight && integ > 0,
+      why: g.in_flight ? 'залп в полёте' : (integ <= 0 ? 'разрушена' : '') });
+  });
+  (EC.mzaShips || []).forEach(sh => {
+    const integ = Math.max(0, Math.round(+sh.integrity || 0));
+    out.push({ key: 'mza:' + sh.id, kind: 'mza', id: sh.id, ic: '☣', nm: 'Гиперпейсер' + (sh.name ? ' «' + sh.name + '»' : ''), sys: sh.system_id,
+      integ, grav: EC_MZA_SHOT_GRAV || 12, ready: !!sh.can_fire,
+      why: sh.status === 'building' ? 'строится' : sh.status === 'transit' ? 'в пути'
+        : sh.in_flight ? 'залп в полёте' : (integ <= 0 ? 'корпус изношен' : (sh.can_fire ? '' : 'не готов')) });
+  });
+  return out;
+}
+// Активный носитель: выбранный игроком, иначе первый боеготовый.
+function ecDoomVNCar() {
+  const st = ecDoomVNAimSt(), cars = ecDoomVNCarriers();
+  let c = st.car ? cars.find(x => x.key === st.car) : null;
+  if (!c || !c.ready) c = cars.find(x => x.ready) || null;
+  st.car = c ? c.key : null;
+  return c;
+}
+// Любое изменение ввода (носитель/система/планета) снимает взвод тумблеров.
+// Смена носителя перестраивает всё (кассеты/подлёты) — полный рефреш. Выбор
+// системы/планеты и тумблеры — точечная синхронизация: список НЕ прыгает, а
+// прокрутка реестра сохраняется (см. ecDoomVNAimSync).
+function ecDoomVNPick(part, val) {
+  const st = ecDoomVNAimSt();
+  if (part === 'car') {
+    st.car = val; st.sysId = null; st.pid = null;
+    st.tgl = { pwr: false, seal: false, oath: false };
+    if (typeof heroVNDoomRefresh === 'function') heroVNDoomRefresh();
+    return;
+  }
+  if (part === 'sys') { st.sysId = (st.sysId === val ? null : val); st.pid = null; }
+  else if (part === 'pid') st.pid = +val;
+  st.tgl = { pwr: false, seal: false, oath: false };
+  ecDoomVNAimSync();
+}
+function ecDoomVNTgl(k) {
+  const st = ecDoomVNAimSt();
+  st.tgl[k] = !st.tgl[k];
+  ecDoomVNAimSync();
+}
+// Точечно перерисовать реестр (сохранив прокрутку), секцию II.1 и цепь пуска —
+// не трогая кассеты/поиск, чтобы фокус и позиция списка не сбивались.
+function ecDoomVNAimSync() {
+  const list = document.getElementById('hd-syslist');
+  if (list) { const sc = list.scrollTop; list.innerHTML = ecDoomVNSysList(); list.scrollTop = sc; }
+  const tsec = document.getElementById('hd-targetsec');
+  if (tsec) { tsec.innerHTML = ecDoomVNTargetSec(); ecDoomPaintPlanets(tsec); }
+  const fire = document.getElementById('hd-fire');
+  if (fire) fire.innerHTML = ecDoomVNProto();
+  if (!list && !tsec && !fire && typeof heroVNDoomRefresh === 'function') heroVNDoomRefresh();
+}
+// Поиск по реестру целей: перерисовываем только список, чтобы не терять фокус.
+function ecDoomVNAimQ(v) {
+  ecDoomVNAimSt().q = v || '';
+  const host = document.getElementById('hd-syslist');
+  if (host) host.innerHTML = ecDoomVNSysList();
+}
+// Реестр систем-целей: отсортирован по подлёту, владелец подсвечен.
+function ecDoomVNSysList() {
+  const st = ecDoomVNAimSt(), car = ecDoomVNCar();
+  const q = (st.q || '').trim().toLowerCase();
+  const rows = (EC.allSystems || [])
+    .map(s => ({ s, alive: ecDoomTargetablePlanets(s).filter(p => !(p.dead || p.doomed)) }))
+    .filter(x => x.alive.length && (!car || x.s.id !== car.sys))
+    .filter(x => !q || (x.s.name || x.s.id || '').toLowerCase().includes(q))
+    .map(x => ({ ...x, fly: car ? ecDoomFlight({ system_id: car.sys }, x.s.id) : null }))
+    .sort((a, b) => (a.fly ? a.fly.dist : 1e9) - (b.fly ? b.fly.dist : 1e9));
+  if (!rows.length) return '<div class="hp-vnd-con-none">— в реестре пусто: нет систем с живыми планетами-целями —</div>';
+  return rows.map(({ s, alive, fly }) => {
+    const on = st.sysId === s.id;
+    const own = s.faction === EC.fid;
+    const ownTag = s.faction ? (own ? 'ВАША' : esc(ecFacName(s.faction))) : 'НИЧЬЯ';
+    // Флаг державы-владельца (герб или инициалы на цвете); у ничьих — прочерк-знак.
+    const flag = s.faction
+      ? (typeof ecFacFlag === 'function' ? ecFacFlag(s.faction, 22) : '')
+      : '<span class="hp-vnd-sys-noflag">◌</span>';
+    // Планеты больше НЕ разворачиваются внутри строки (чтобы список не «прыгал»
+    // при выборе на прокрутке) — выбор мира ушёл в отдельную секцию II.1.
+    return `<div class="hp-vnd-sysrow${on ? ' on' : ''}${own ? ' own' : (s.faction ? ' foe' : '')}" onclick="event.stopPropagation();ecDoomVNPick('sys','${esc(s.id)}')">
+      <div class="hp-vnd-sysrow-hd">
+        <span class="hp-vnd-sys-flag">${flag}</span>
+        <span class="hp-vnd-sys-nm">${esc(s.name || s.id)}</span>
+        <span class="hp-vnd-sys-own">${ownTag}</span>
+        <span class="hp-vnd-sys-meta">целей: ${alive.length}${fly ? ' · подлёт ≈' + fly.hours.toFixed(1) + ' ч' : ''}${on ? ' · ▾' : ''}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+// Текстура-развёртка планеты для сферы наведения: своя картинка → класс/тип.
+// Иерархия совпадает с картой галактики (assets/map/planets/…). Если движок
+// карты не загружен (автономный стенд) — вернём null, карточка покажет эмодзи.
+function ecDoomPlanetTex(p) {
+  const base = (typeof GM_BASE !== 'undefined') ? GM_BASE : 'assets/map/';
+  if (p && p.img) return base + p.img;
+  const look = (typeof gmPlanetLook === 'function') ? gmPlanetLook(p) : null;
+  return look ? base + 'planets/planet_' + look + '.png' : null;
+}
+// Намотать текстуры-развёртки на сферы (тот же приём, что в анкете державы).
+// Без движка сфер (frDrawSphere) — тихо выходим, останется эмодзи-фолбэк.
+function ecDoomPaintPlanets(root) {
+  if (typeof frDrawSphere !== 'function') return;
+  (root || document).querySelectorAll('.hp-vnd-tgt-cv[data-tex]').forEach(cv => {
+    if (cv._dpDone) return; cv._dpDone = 1;
+    frDrawSphere(cv, cv.dataset.tex, false, cv.dataset.sprite === '1');
+  });
+}
+// II.1 · ЦЕЛЬ ПОРАЖЕНИЯ — миры выбранной системы карточками с текстурами-сферами.
+function ecDoomVNTargetSec() {
+  const st = ecDoomVNAimSt();
+  const sys = st.sysId ? (EC.allSystems || []).find(s => s.id === st.sysId) : null;
+  if (!sys) return `<div class="hp-vnd-con-t"><i>II.1</i> цель поражения</div>
+    <div class="hp-vnd-tgt-empty">▸ выберите систему в реестре выше — здесь встанут её миры</div>`;
+  const own = sys.faction === EC.fid;
+  const ownTag = sys.faction ? (own ? 'ВАША' : esc(ecFacName(sys.faction))) : 'НИЧЬЯ';
+  const flag = sys.faction && typeof ecFacFlag === 'function' ? ecFacFlag(sys.faction, 22) : '';
+  const alive = ecDoomTargetablePlanets(sys).filter(p => !(p.dead || p.doomed));
+  const cards = alive.map(p => {
+    const on = st.pid === p.pid;
+    const tex = ecDoomPlanetTex(p);
+    const orb = tex
+      ? `<canvas class="hp-vnd-tgt-cv" data-tex="${esc(tex)}"></canvas>`
+      : `<i>${p.icon || '🪐'}</i>`;
+    return `<button type="button" class="hp-vnd-tgt${on ? ' on' : ''}" onclick="event.stopPropagation();ecDoomVNPick('pid',${p.pid})">
+      <span class="hp-vnd-tgt-orb">${orb}</span>
+      <span class="hp-vnd-tgt-tx"><b>${esc(p.name || 'планета ' + p.pid)}</b><small>${esc(p.type || 'мир')}</small></span>
+      <span class="hp-vnd-tgt-mk">${on ? '◎ в перекрестье' : '◌'}</span>
+    </button>`;
+  }).join('') || `<div class="hp-vnd-tgt-empty">В этой системе нет живых планет-целей.</div>`;
+  return `<div class="hp-vnd-con-t"><i>II.1</i> цель поражения · «${esc(sys.name || sys.id)}»
+      <span class="hp-vnd-sys-own ${own ? 'own' : (sys.faction ? 'foe' : '')}" style="margin-left:4px">${flag}${ownTag}</span></div>
+    <div class="hp-vnd-tgtgrid">${cards}</div>`;
+}
+// ЗАЛП с пульта новеллы: гейт — цель назначена и все три тумблера взведены.
+async function ecDoomVNFire() {
+  if (EC.busy) return;
+  const st = ecDoomVNAimSt(), car = ecDoomVNCar();
+  const sys = (EC.allSystems || []).find(s => s.id === st.sysId);
+  const tgt = sys && ecDoomTargetablePlanets(sys).find(p => p.pid === st.pid && !(p.dead || p.doomed));
+  if (!car || !sys || !tgt) { toast('Протокол не собран: назначьте носитель и планету-цель', 'err'); return; }
+  if (!(st.tgl.pwr && st.tgl.seal && st.tgl.oath)) { toast('Цепь пуска разомкнута — взведите все три тумблера', 'err'); return; }
+  if (ecStockOf('Гравиядро') < car.grav) { toast('Недостаточно Гравиядер для залпа', 'err'); return; }
+  EC.busy = true;
+  try {
+    if (car.kind === 'gun') await ecRpc('doom_fire', { p_gun_id: car.id, p_target_system_id: sys.id, p_target_pid: tgt.pid });
+    else await ecRpc('mza_fire', { p_id: car.id, p_target_system_id: sys.id, p_target_pid: tgt.pid, p_target_name: tgt.name || null });
+    ecDoomVNSt().aim = null;
+    ecDoomVNSt().tab = 'salvos';
+    toast(`🜨 Приговор выпущен по «${tgt.name || 'цели'}» — снаряд в пути`, 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+function ecDoomVNAim() {
+  const cars = ecDoomVNCarriers();
+  if (!cars.length) return `<div class="hp-vnd-empty">
+    <div class="hp-vnd-empty-t">Прицельный канал пуст.</div>
+    <div class="hp-vnd-empty-s">Ни одного носителя приговора. Возведите стационарную Длань на колонии или заложите Гиперпейсер — обе закладки в арсенале.</div>
+    <button class="hp-vnd-aimbtn" type="button" onclick="event.stopPropagation();ecDoomVNTab('arsenal')">↤ в арсенал</button>
+  </div>`;
+  const st = ecDoomVNAimSt(), car = ecDoomVNCar();
+  const grav = ecStockOf('Гравиядро');
+  // I · НОСИТЕЛЬ — кассеты
+  const cass = `<div class="hp-vnd-con-sec">
+    <div class="hp-vnd-con-t"><i>I</i> носитель приговора</div>
+    <div class="hp-vnd-cassrow">${cars.map(c => `
+      <button type="button" class="hp-vnd-cass${car && car.key === c.key ? ' on' : ''}${c.ready ? '' : ' off'}" ${c.ready ? '' : 'disabled'}
+        onclick="event.stopPropagation();ecDoomVNPick('car','${c.key}')">
+        <span class="hp-vnd-cass-ic">${c.ic}</span>
+        <span class="hp-vnd-cass-nm">${esc(c.nm)}</span>
+        <span class="hp-vnd-cass-st">${c.ready ? 'корпус ' + c.integ + '%' : esc(c.why)}</span>
+      </button>`).join('')}</div>
+  </div>`;
+  if (!car) return cass + `<div class="hp-vnd-warnline">⚠ Ни один носитель не боеготов — цепь пуска обесточена.</div>`;
+  // II · ЦЕЛЬ — консольный реестр систем (без разворота планет — см. II.1)
+  const reg = `<div class="hp-vnd-con-sec">
+    <div class="hp-vnd-con-t"><i>II</i> целеуказание · реестр обитаемых систем</div>
+    <input type="text" class="hp-vnd-con-q" value="${esc(st.q || '')}" placeholder="▸ поиск по имени системы…"
+      oninput="ecDoomVNAimQ(this.value)" onclick="event.stopPropagation()">
+    <div class="hp-vnd-syslist" id="hd-syslist">${ecDoomVNSysList()}</div>
+  </div>`;
+  // II.1 · ЦЕЛЬ ПОРАЖЕНИЯ — миры выбранной системы (текстуры-сферы), отдельная секция
+  const tgtsec = `<div class="hp-vnd-con-sec hp-vnd-con-tgt" id="hd-targetsec">${ecDoomVNTargetSec()}</div>`;
+  // III · ЦЕПЬ ПУСКА — телеметрия, тумблеры, ПУСК
+  const proto = `<div id="hd-fire">${ecDoomVNProto()}</div>`;
+  // Планеты рисуем после вставки в DOM (canvas-сферы).
+  setTimeout(() => ecDoomPaintPlanets(document.getElementById('hd-targetsec')), 0);
+  return cass + reg + tgtsec + proto;
+}
+// III · цепь пуска — отдельным блоком, чтобы обновлять точечно (ecDoomVNAimSync).
+function ecDoomVNProto() {
+  const st = ecDoomVNAimSt(), car = ecDoomVNCar();
+  if (!car) return '';
+  const grav = ecStockOf('Гравиядро');
+  const sys = st.sysId ? (EC.allSystems || []).find(s => s.id === st.sysId) : null;
+  const tgt = sys && Number.isInteger(st.pid) ? ecDoomTargetablePlanets(sys).find(p => p.pid === st.pid) : null;
+  const fly = sys ? ecDoomFlight({ system_id: car.sys }, sys.id) : null;
+  const gravOk = grav >= car.grav;
+  const tglDef = [
+    ['pwr', 'питание накопителей', gravOk ? '' : 'нет гравиядер'],
+    ['seal', 'снять пломбу ствола', ''],
+    ['oath', 'принять ответственность', ''],
+  ];
+  const canArm = !!tgt;
+  const tumbs = tglDef.map(([k, lbl, block]) => {
+    const dead = !canArm || !!block;
+    return `<button type="button" class="hp-vnd-tumb${st.tgl[k] ? ' on' : ''}${dead ? ' off' : ''}" ${dead ? 'disabled' : ''}
+      onclick="event.stopPropagation();ecDoomVNTgl('${k}')">
+      <span class="hp-vnd-tumb-sw"><i></i></span>
+      <span class="hp-vnd-tumb-lbl">${lbl}${block ? `<small>${block}</small>` : `<small>${st.tgl[k] ? 'взведено' : 'откл'}</small>`}</span>
+    </button>`;
+  }).join('');
+  const armed = canArm && gravOk && st.tgl.pwr && st.tgl.seal && st.tgl.oath;
+  return `<div class="hp-vnd-con-sec hp-vnd-con-fire">
+    <div class="hp-vnd-con-t"><i>III</i> цепь пуска</div>
+    <div class="hp-vnd-read">
+      <span><i>носитель</i><b>${car.ic} ${esc(car.nm)}</b></span>
+      <span><i>цель</i><b${tgt ? ' class="hot"' : ''}>${tgt ? esc((sys.name || sys.id) + ' · ' + (tgt.name || 'планета ' + tgt.pid)) : '— не назначена —'}</b></span>
+      <span><i>подлёт</i><b>${fly ? '≈' + fly.hours.toFixed(1) + ' ч' : '···'}</b></span>
+      <span><i>заряд</i><b class="${gravOk ? '' : 'hot'}">🔮 ${ecNum(Math.floor(grav))}/${car.grav}</b></span>
+    </div>
+    <div class="hp-vnd-tumbs">${tumbs}</div>
+    ${tgt ? `<div class="hp-vnd-warnline">⚠ Залп необратим: «${esc(tgt.name || '')}» станет мёртвым камнем, любая колония на ней — включая столицу — будет стёрта.</div>` : `<div class="hp-vnd-hint">Назначьте планету-цель в секции II.1 — тумблеры обесточены до целеуказания.</div>`}
+    <button type="button" class="hp-vnd-launch${armed ? ' armed' : ''}" ${armed ? '' : 'disabled'} onclick="event.stopPropagation();ecDoomVNFire()">
+      ${armed ? '🜨 ПУСК' : 'цепь разомкнута'}
+    </button>
+  </div>`;
+}
+// СНАРЯДЫ: приговоры в пути.
+function ecDoomVNSalvos(salvos) {
+  if (!salvos.length) return `<div class="hp-vnd-empty">
+    <div class="hp-vnd-empty-t">Небо чисто.</div>
+    <div class="hp-vnd-empty-s">Пока. Ни одного снаряда в полёте — по обе стороны прицела спят спокойно.</div>
+  </div>`;
+  return `<div class="hp-vnd-grid">${salvos.map(s => `<div class="hp-vnd-gun hp-vnd-salvo">
+    <div class="hp-vnd-gun-hd"><span class="hp-vnd-gun-nm">☄ ${esc(s.target_planet || 'цель')}</span><span class="hp-vnd-gun-st hot">приговор в пути</span></div>
+    <div class="hp-vnd-gun-meta"><span>система <b>${esc(ecSysName(s.target_system_id))}</b></span><span>${ecProgressISO(null, s.ready_at, 1, 'на подлёте')}</span></div>
+    ${ecIsStaff() ? `<button class="hp-vnd-aimbtn" type="button" onclick="event.stopPropagation();ecDoomTabSpeed()">⏩ тест: приземлить</button>` : ''}
+  </div>`).join('')}</div>`;
 }
 
 // Шаг 1.5 (только храм) — выбор веры, чьим будет храм. Если вера одна — пропускаем.

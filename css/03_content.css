@@ -4513,6 +4513,246 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   .hp-vn-geo-body .ec-geo-name{font-size:18px}
 }
 
+/* ══════════════════════════════════════════════════════════════
+   НОВЕЛЛА · «Длань Неотвратимости» (hp-vn-doom) — протокол последнего
+   довода. Каркас и мобилка наследуются от .hp-vn-colony/.hp-vn-geo
+   (элемент несёт все три класса); здесь — красная тревожная тема поверх
+   киберпанк-хрома (единственный акцент: сигнальный красный, всё чужое
+   гаснет в пепел) + собственные срезы/карточки. */
+.hp-vn-doom{
+  --gd:#ff4a3c;--gdl:#ff9a8a;
+  --cyb-line:color-mix(in srgb,#ff4a3c 34%,transparent);
+  background:linear-gradient(180deg,hsl(356 42% 6% / .95),hsl(0 50% 3% / .97));
+}
+.hp-vn-doom .hp-vn-col-title{color:#ffe9e4}
+.hp-vnd-clr{color:#c98a80}
+.hp-vnd-body{display:block;overflow:auto;scrollbar-width:thin}
+/* Контент протокола не расползается по широкому вьюпорту */
+.hp-vnd-body>*{max-width:1180px;margin-left:auto;margin-right:auto}
+/* Кабинетная форма закладки Гиперпейсера внутри протокола: гасим flex:1
+   (растягивал select на весь экран) и красим контролы под красный канал */
+.hp-vn-doom .ec-prod-form select{flex:0 1 300px;min-width:200px;max-width:320px}
+.hp-vn-doom .ec-prod-form select,.hp-vn-doom .ec-prod-form input{
+  background:hsl(0 42% 6% / .92);border:1px solid rgba(255,74,60,.35);border-radius:0;
+  color:#ffe9e4;padding:8px 10px;font-size:12px;font-family:var(--font-mono);outline:none;
+}
+.hp-vn-doom .ec-prod-form select:focus,.hp-vn-doom .ec-prod-form input:focus{border-color:#ff6a5a}
+.hp-vn-doom .ec-section-title{color:#ffd9cf}
+.hp-vn-doom .ec-sub-title,.hp-vn-doom .ec-hint,.hp-vn-doom .ec-bld-howto{color:#c9a49b}
+/* Тревожная лента-шов: косая штриховка «опасной зоны» + живой статус */
+.hp-vnd-strip{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:#e0857a;padding:7px 12px;margin-bottom:12px;
+  background:repeating-linear-gradient(-45deg,rgba(255,74,60,.09) 0 10px,transparent 10px 22px);
+  border-top:1px solid rgba(255,74,60,.28);border-bottom:1px solid rgba(255,74,60,.28);
+}
+.hp-vnd-live{color:#8f7d78}
+.hp-vnd-live.hot{color:#ffd9cf;animation:hpvndPulse 1.3s ease-in-out infinite}
+@keyframes hpvndPulse{50%{opacity:.35}}
+/* Сводка-чипы: моно-телеметрия */
+.hp-vnd-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.hp-vnd-chip{
+  display:inline-flex;align-items:baseline;gap:7px;padding:5px 10px;
+  font-family:var(--font-mono);font-size:11px;color:#d8b3ab;
+  background:hsl(0 30% 7% / .8);border:1px solid rgba(255,74,60,.18);
+}
+.hp-vnd-chip i{font-style:normal;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8f6f68}
+.hp-vnd-chip b{color:#ffe9e4}
+.hp-vnd-chip.warn{border-color:rgba(255,74,60,.55)}
+.hp-vnd-chip.warn b{color:#ff6a5a;animation:hpvndPulse 1.3s ease-in-out infinite}
+/* Срезы-вкладки: гранёные (клип + слой-подложка, НЕ border) */
+.hp-vnd-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.hp-vnd-tab{
+  position:relative;z-index:0;cursor:pointer;border:none;background:transparent;border-radius:0;
+  font-family:var(--font-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:#b08f88;padding:8px 16px;
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:color var(--duration-fast);
+}
+.hp-vnd-tab::before{content:"";position:absolute;inset:0;z-index:-2;background:rgba(255,74,60,.28)}
+.hp-vnd-tab::after{
+  content:"";position:absolute;inset:1px;z-index:-1;background:hsl(0 28% 6% / .92);
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:background var(--duration-fast);
+}
+.hp-vnd-tab:hover{color:#ffe9e4}
+.hp-vnd-tab.on{color:#ffe9e4}
+.hp-vnd-tab.on::before{background:#ff4a3c}
+.hp-vnd-tab.on::after{background:hsl(0 45% 10% / .95)}
+.hp-vnd-tab i{font-style:normal;margin-left:7px;color:#ff8d7c}
+/* Доктрина — тихий приговор под лентой */
+.hp-vnd-oath{
+  font-size:12.5px;line-height:1.65;color:#c9a49b;max-width:760px;
+  border-left:2px solid #ff4a3c;padding:2px 0 2px 12px;margin-bottom:14px;
+}
+/* Карточки орудий/снарядов */
+.hp-vnd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.hp-vnd-gun{
+  padding:11px 13px;background:hsl(0 28% 6% / .85);
+  border:1px solid rgba(255,74,60,.22);border-left:2px solid #ff4a3c;
+}
+.hp-vnd-gun-hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+.hp-vnd-gun-nm{font-family:var(--font-mono);font-size:12px;color:#ffe9e4}
+.hp-vnd-gun-st{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8f7d78;white-space:nowrap}
+.hp-vnd-gun-st.hot{color:#ff8d7c;animation:hpvndPulse 1.3s ease-in-out infinite}
+.hp-vnd-bar{height:6px;background:rgba(255,255,255,.07);overflow:hidden;margin-bottom:6px}
+.hp-vnd-bar i{display:block;height:100%;transition:width .3s}
+.hp-vnd-gun-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:11px;color:#a08880}
+.hp-vnd-gun-meta b{color:#e8d2cb;font-weight:600}
+/* Кнопка-действие: гранёный призрак в сигнальном красном */
+.hp-vnd-aimbtn{
+  position:relative;z-index:0;cursor:pointer;border:none;background:transparent;border-radius:0;
+  margin-top:10px;padding:8px 16px;
+  font-family:var(--font-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#ff9a8a;
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:color var(--duration-fast);
+}
+.hp-vnd-aimbtn::before{content:"";position:absolute;inset:0;z-index:-2;background:rgba(255,74,60,.5)}
+.hp-vnd-aimbtn::after{
+  content:"";position:absolute;inset:1px;z-index:-1;background:hsl(0 30% 7% / .92);
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:background var(--duration-fast);
+}
+.hp-vnd-aimbtn:hover{color:#fff}
+.hp-vnd-aimbtn:hover::after{background:hsl(0 45% 12% / .95)}
+.hp-vnd-warnline{margin-top:10px;font-family:var(--font-mono);font-size:11px;color:#ff6a5a}
+.hp-vnd-hint{font-size:12px;color:#a08880;margin-bottom:10px}
+.hp-vnd-sep{height:1px;background:linear-gradient(90deg,rgba(255,74,60,.35),transparent 70%);margin:18px 0 4px}
+/* ── Пульт запуска (вкладка НАВЕДЕНИЕ): три ступени атомпанк-протокола ── */
+.hp-vnd-con-sec{
+  margin-bottom:14px;padding:12px 14px 14px;
+  background:hsl(0 45% 5% / .55);
+  border:1px solid rgba(255,74,60,.22);border-left:3px solid rgba(255,74,60,.55);
+}
+.hp-vnd-con-t{
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;
+  color:#e0857a;margin-bottom:10px;display:flex;align-items:center;gap:10px;
+}
+.hp-vnd-con-t i{
+  font-style:normal;font-weight:800;color:#ff8d7c;
+  border:1px solid rgba(255,74,60,.5);padding:1px 7px;background:rgba(255,74,60,.12);
+}
+.hp-vnd-con-t::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(255,74,60,.35),transparent)}
+/* I · кассеты носителей */
+.hp-vnd-cassrow{display:flex;gap:8px;flex-wrap:wrap}
+.hp-vnd-cass{
+  display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:170px;
+  padding:8px 12px;cursor:pointer;text-align:left;
+  background:hsl(0 40% 7% / .9);border:1px solid rgba(255,74,60,.25);color:#c9a49b;
+  font-family:var(--font-mono);
+}
+.hp-vnd-cass:hover{border-color:rgba(255,74,60,.6)}
+.hp-vnd-cass.on{border-color:#ff4a3c;box-shadow:inset 0 0 0 1px #ff4a3c,0 0 14px rgba(255,74,60,.25);color:#ffe9e4}
+.hp-vnd-cass.off{opacity:.45;cursor:not-allowed}
+.hp-vnd-cass-ic{font-size:16px;line-height:1}
+.hp-vnd-cass-nm{font-size:12px;font-weight:600}
+.hp-vnd-cass-st{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8f7d78}
+.hp-vnd-cass.on .hp-vnd-cass-st{color:#ff8d7c}
+/* II · реестр целей */
+.hp-vnd-con-q{
+  display:block;width:100%;margin-bottom:8px;padding:8px 10px;
+  background:hsl(0 42% 6% / .92);border:1px solid rgba(255,74,60,.35);
+  color:#ffe9e4;font-family:var(--font-mono);font-size:12px;outline:none;
+}
+.hp-vnd-con-q:focus{border-color:#ff6a5a}
+.hp-vnd-con-q::placeholder{color:#8f6f68}
+.hp-vnd-syslist{max-height:300px;overflow:auto;scrollbar-width:thin;border-top:1px solid rgba(255,74,60,.18)}
+.hp-vnd-con-none{padding:14px 4px;font-family:var(--font-mono);font-size:11px;color:#8f7d78}
+.hp-vnd-sysrow{padding:7px 10px;border-bottom:1px solid rgba(255,74,60,.12);cursor:pointer}
+.hp-vnd-sysrow:hover{background:rgba(255,74,60,.06)}
+.hp-vnd-sysrow.on{background:rgba(255,74,60,.1);border-left:3px solid #ff4a3c;padding-left:7px}
+.hp-vnd-sysrow-hd{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.hp-vnd-sys-flag{display:inline-flex;flex:none}
+.hp-vnd-sys-flag .ec-flag{width:22px;height:22px}
+.hp-vnd-sys-noflag{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;color:#6a5852;border:1px solid rgba(160,140,135,.25)}
+.hp-vnd-sys-nm{font-family:var(--font-mono);font-size:12px;color:#ffe9e4}
+.hp-vnd-sys-own{
+  font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+  padding:1px 6px;border:1px solid rgba(160,140,135,.4);color:#a08880;
+}
+.hp-vnd-sysrow.own .hp-vnd-sys-own{border-color:rgba(120,200,150,.5);color:#8fd8ab}
+.hp-vnd-sysrow.foe .hp-vnd-sys-own{border-color:rgba(255,74,60,.55);color:#ff8d7c}
+.hp-vnd-sys-meta{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:#8f7d78}
+.hp-vnd-plts{display:flex;gap:6px;flex-wrap:wrap;padding:8px 0 3px}
+.hp-vnd-plt{
+  display:flex;align-items:center;gap:7px;padding:6px 10px;cursor:pointer;
+  background:hsl(0 40% 7% / .9);border:1px solid rgba(255,74,60,.25);color:#c9a49b;
+}
+.hp-vnd-plt:hover{border-color:rgba(255,74,60,.6)}
+.hp-vnd-plt.on{border-color:#ff4a3c;box-shadow:inset 0 0 0 1px #ff4a3c;color:#ffe9e4}
+.hp-vnd-plt i{font-style:normal;font-size:14px}
+.hp-vnd-plt b{font-size:12px}
+.hp-vnd-plt small{font-size:10px;color:#8f7d78}
+/* II.1 · цель поражения — миры выбранной системы (текстуры-сферы) */
+.hp-vnd-con-tgt .hp-vnd-con-t .hp-vnd-sys-own{margin-left:auto;display:inline-flex;align-items:center;gap:5px}
+.hp-vnd-con-tgt .hp-vnd-con-t .hp-vnd-sys-own .ec-flag{width:18px;height:18px}
+.hp-vnd-tgt-empty{padding:14px 4px;font-family:var(--font-mono);font-size:11px;color:#8f7d78}
+.hp-vnd-tgtgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.hp-vnd-tgt{
+  display:flex;align-items:center;gap:11px;padding:10px 12px;cursor:pointer;text-align:left;
+  background:hsl(0 40% 7% / .9);border:1px solid rgba(255,74,60,.25);color:#c9a49b;
+}
+.hp-vnd-tgt:hover{border-color:rgba(255,74,60,.6)}
+.hp-vnd-tgt.on{border-color:#ff4a3c;box-shadow:inset 0 0 0 1px #ff4a3c,0 0 16px rgba(255,74,60,.22);color:#ffe9e4}
+.hp-vnd-tgt-orb{position:relative;width:46px;height:46px;flex:none;display:flex;align-items:center;justify-content:center}
+.hp-vnd-tgt-orb i{font-style:normal;font-size:30px;line-height:1}
+.hp-vnd-tgt-cv{width:46px;height:46px;display:block}
+.hp-vnd-tgt.on .hp-vnd-tgt-orb::after{
+  content:"";position:absolute;inset:-4px;border:1px solid rgba(255,74,60,.7);border-radius:50%;
+  animation:dmPulse 1.4s ease-in-out infinite;pointer-events:none;
+}
+.hp-vnd-tgt-tx{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.hp-vnd-tgt-tx b{font-family:var(--font-mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hp-vnd-tgt-tx small{font-size:10px;color:#8f7d78}
+.hp-vnd-tgt-mk{font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#6a5852;flex:none}
+.hp-vnd-tgt.on .hp-vnd-tgt-mk{color:#ff8d7c}
+/* III · цепь пуска */
+.hp-vnd-read{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.hp-vnd-read span{display:flex;flex-direction:column;gap:2px}
+.hp-vnd-read i{font-style:normal;font-family:var(--font-mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#8f6f68}
+.hp-vnd-read b{font-family:var(--font-mono);font-size:12px;color:#e8d2cb;font-weight:600}
+.hp-vnd-read b.hot{color:#ff8d7c}
+.hp-vnd-tumbs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.hp-vnd-tumb{
+  display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;text-align:left;
+  background:hsl(0 40% 7% / .9);border:1px solid rgba(255,74,60,.25);color:#c9a49b;
+}
+.hp-vnd-tumb.off{opacity:.4;cursor:not-allowed}
+.hp-vnd-tumb.on{border-color:#ff4a3c;color:#ffe9e4;box-shadow:inset 0 0 0 1px rgba(255,74,60,.5)}
+.hp-vnd-tumb-sw{
+  position:relative;width:22px;height:38px;flex:none;
+  background:hsl(0 35% 4%);border:1px solid rgba(255,74,60,.4);
+}
+.hp-vnd-tumb-sw i{
+  position:absolute;left:2px;right:2px;top:2px;height:16px;
+  background:linear-gradient(180deg,#5a4a46,#2e2320);border:1px solid rgba(255,255,255,.12);
+  transition:top .12s ease-in;
+}
+.hp-vnd-tumb.on .hp-vnd-tumb-sw i{top:18px;background:linear-gradient(180deg,#ff6a5a,#a32418);box-shadow:0 0 10px rgba(255,74,60,.6)}
+.hp-vnd-tumb-lbl{display:flex;flex-direction:column;gap:1px;font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.hp-vnd-tumb-lbl small{font-size:9px;letter-spacing:.16em;color:#8f6f68}
+.hp-vnd-tumb.on .hp-vnd-tumb-lbl small{color:#ff8d7c}
+.hp-vnd-launch{
+  display:block;width:100%;margin-top:12px;padding:14px;cursor:not-allowed;
+  font-family:var(--font-display);font-weight:800;font-size:16px;letter-spacing:.3em;text-transform:uppercase;
+  color:#6b5450;background:hsl(0 35% 5%);
+  border:1px solid rgba(255,74,60,.25);
+}
+.hp-vnd-launch.armed{
+  cursor:pointer;color:#fff;
+  background:linear-gradient(180deg,#c22c1d,#7e150c);
+  border-color:#ff8d7c;
+  box-shadow:0 0 24px rgba(255,74,60,.45),inset 0 0 0 1px rgba(255,220,210,.35);
+  animation:hpvndPulse 1.3s ease-in-out infinite;
+}
+.hp-vnd-launch.armed:hover{animation:none;box-shadow:0 0 34px rgba(255,74,60,.7),inset 0 0 0 1px rgba(255,220,210,.5)}
+.hp-vnd-empty{max-width:560px;padding:22px 4px}
+.hp-vnd-empty-t{font-family:var(--font-display);font-weight:800;text-transform:uppercase;letter-spacing:.1em;font-size:15px;color:#ffe9e4;margin-bottom:6px}
+.hp-vnd-empty-s{font-size:12.5px;line-height:1.6;color:#c9a49b}
+/* Переиспользуемый пульт наведения: перекрасить его голубые чипы в тему */
+.hp-vn-doom .ec-doom-gunchip.on{border-color:#ff6a5a;box-shadow:inset 0 0 0 1px #ff6a5a}
+
 /* НОВЕЛЛА · «Посмотреть на звёзды» (hp-vn-stars) — обсерватория-казино.
    Каркас и мобилка целиком наследуются от .hp-vn-geo (элемент несёт оба
    класса); содержимое (.ec-stars) оформлено в css/17_economy.css. */

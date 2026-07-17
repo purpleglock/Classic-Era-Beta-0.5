@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>doom vn harness</title>
+<link rel="stylesheet" href="css/index.css?v=20260718doomvn4">
+<style>
+  body { background: #070a12; padding: 30px 16px; }
+  .hwrap { max-width: 1080px; margin: 0 auto 40px; }
+  .hlbl { color: #6c7a90; font: 11px monospace; letter-spacing: .2em; text-transform: uppercase; margin: 0 0 12px; }
+  .hcover { position: relative; height: 660px; border-radius: 8px; overflow: hidden; }
+</style>
+</head><body>
+<script>
+  window.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  window.jsq = s => String(s == null ? '' : s).replace(/[^0-9A-Za-z]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+  window.ecNum = n => (+n || 0).toLocaleString('ru-RU');
+  window.toast = () => {};
+  window.ecRpc = async () => ({});
+  window.lang = 'ru';
+  window.user = { id: 'u1', role: 'superadmin' };
+  window.SB_URL = ''; window.SB_ANON = ''; window.getToken = () => '';
+  window.mapZoomClean = () => {}; window.mapZoomIn = () => {}; window.mapZoomOut = () => {};
+  window.mapZoomInit = () => {};
+  window.EC = {};
+</script>
+<script src="economy.js?v=20260718doomvn4"></script>
+<script src="render.js?v=20260718doomvn4"></script>
+
+<div class="hwrap"><p class="hlbl">оверлей · арсенал (2 орудия + гиперпейсеры + залп в полёте)</p>
+  <div class="hcover hp-hero-cover hp-vn">
+    <div class="hp-vn-colony hp-vn-geo hp-vn-doom show" id="hp-vn-doom" aria-hidden="false" style="position:absolute;inset:0;z-index:8"></div>
+  </div>
+</div>
+<div class="hwrap"><p class="hlbl">оверлей · засекречено (нет исследования)</p>
+  <div class="hcover hp-hero-cover hp-vn" style="height:300px">
+    <div class="hp-vn-colony hp-vn-geo hp-vn-doom show" id="h-locked" aria-hidden="false" style="position:absolute;inset:0;z-index:8"></div>
+  </div>
+</div>
+
+<script>
+  const NM = ['Илок','Икар','Блю','Драбб','Нова','Сизар','Лира','Тиаз','Треной','Цетус','Муия','Прома','Вайрон','Йолента','Энигма','Септим','Ретус','Инос','Зоцид','Астерия'];
+  const _sys = NM.map((n, i) => ({ id: 's' + i, name: n, x: 200 + (i * 437) % 2800, y: 160 + (i * 289) % 1700,
+    faction: i % 5 === 0 ? 'fac_me' : (i % 5 === 1 ? 'fac_b' : null),
+    planets: [{ pid: i * 10 + 1, name: n + ' I', type: 'Пустынный мир', icon: '🪐' }, { pid: i * 10 + 2, name: n + ' II', type: 'Океанический мир' }] }));
+  const _lanes = _sys.slice(0, 16).map((s, i) => ({ a_id: s.id, b_id: _sys[(i + 3) % _sys.length].id }));
+  Object.assign(EC, {
+    app: { faction_id: 'fac_me', color: '#4ea3d8' }, fid: 'fac_me',
+    eco: { gc: 42000, science: 9000, research: ['pol.inevitability'],
+      resources: { 'Гравиядро': 64, 'Программируемая материя': 12 } },
+    colonies: [{ id: 'c1', system_id: 's0', planet_name: 'Илок I' }, { id: 'c2', system_id: 's5', planet_name: 'Сизар II' }],
+    allSystems: _sys, systems: _sys.filter(s => s.faction === 'fac_me'), lanes: _lanes,
+    factions: [{ faction_id: 'fac_me', name: 'Моя держава', color: '#4ea3d8' }, { faction_id: 'fac_b', name: 'Иридия', color: '#c9a227' }],
+    doom: { guns: [
+      { id: 'g1', system_id: 's0', integrity: 84, total_shots: 3, in_flight: false, building_id: 'b1' },
+      { id: 'g2', system_id: 's5', integrity: 22, total_shots: 9, in_flight: true, building_id: 'b2' }],
+      salvos: [{ id: 'sv1', gun_id: 'g2', status: 'in_flight', target_planet: 'Тиаз I', target_system_id: 's7',
+        launched_at: new Date(Date.now() - 2 * 3600e3).toISOString(), ready_at: new Date(Date.now() + 5 * 3600e3).toISOString() }],
+      const: {} },
+    mzaShips: [
+      { id: 'm1', name: 'Тихий довод', system_id: 's3', status: 'idle', integrity: 100, total_shots: 0, can_fire: true },
+      { id: 'm2', name: '', system_id: 's8', status: 'building', integrity: 100, total_shots: 0, arrive_at: new Date(Date.now() + 14 * 3600e3).toISOString() }]
+  });
+  heroVNDoomRefresh();
+  document.getElementById('h-locked').innerHTML = _hdHead(false) +
+    _hdMsg(false, '▓▓▓▓ МАТЕРИАЛ ЗАСЕКРЕЧЕН ▓▓▓▓ Ваш научный отдел ещё не готов знать, что здесь хранится.', 'classified');
+</script>
+</body></html>
