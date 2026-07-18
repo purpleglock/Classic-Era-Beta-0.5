@@ -362,12 +362,47 @@ const EC_BUILD = {
   abm:              { name: 'Комплекс ПРО',          cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: 'Перехват ударов по планете. Требует снаряды — их докупают за ГС, поставка 1 день. Нет снарядов — нет перехвата' },
   // ОРУДИЕ СУДНОГО ДНЯ — строится отдельным путём (doom_build): ГС + Программируемая
   // материя, требует исследование «Сама неотвратимость». Слоты не открываются.
-  doomgun:          { name: 'Длань Неотвратимости', cost: 500000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Межзвёздная артиллерия: залп из системы в систему превращает планету-цель в мёртвый камень. Жрёт Гравиядро на залп и Программируемую материю на содержание; с каждым выстрелом и днём деградирует, пока не распадётся.' },
+  doomgun:          { name: 'Длань Неотвратимости', cost: 500000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Межзвёздная артиллерия: залп из системы в систему превращает планету-цель в мёртвый камень. Стреляет ПОСТРОЕННЫМИ снарядами Длани (Арсенал Судного Дня); Программируемая материя нужна на содержание — без неё деградирует и распадается.' },
+  // АРСЕНАЛ СУДНОГО ДНЯ — строится отдельным RPC shellforge_build (без слотов).
+  shellforge:       { name: 'Арсенал Судного Дня', cost: 300000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Собирает снаряды Длани: 1 снаряд за 1 день. Без снарядов орудия судного дня молчат. Слотов нет.' },
+  // БАЛЛИСТИЧЕСКИЙ ВОЕНПРОМЗАВОД — RPC ballfab_build, техно pol.ballistics (без слотов).
+  ballfab:          { name: 'Баллистический военпромзавод', cost: 150000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Конвейер баллистических боеголовок для Гиперпейсера: 4 тира — лёгкая, «Фантом», кассетная, тяжёлая. 1 снаряд за 1 день. Слотов нет.' },
+  // ОЖЕРЕЛЬЕ НЕМЕЗИДЫ — мегасооружение, строится отдельным RPC nemesis_build.
+  nemesis:          { name: 'Ожерелье Немезиды', cost: 2500000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'МЕГАСООРУЖЕНИЕ: кольцо перехватчиков, прикрывающее ВСЮ систему как ПРО. 6 зарядов, восстанавливается +1/сутки — куда устойчивее к перегрузке, чем планетарная ПРО.' },
 };
 // Стоимость орудия в Программируемой материи (зеркало _doom_const('build_matter')).
 const EC_DOOM_BUILD_MATTER = 40, EC_DOOM_SHOT_GRAV = 20;
 // Гиперпейсер — мобильная «Длань» (зеркало _mza_const): цена постройки + расход залпа.
 const EC_MZA_BUILD_GC = 1200000, EC_MZA_BUILD_MATTER = 60, EC_MZA_SHOT_GRAV = 12, EC_MZA_SHOT_WEAR = 25;
+// Снаряды судного дня (зеркало _shell_const/_ball_params в _doom_shells.sql):
+// залпы Длани и Гиперпейсера тратят ПОСТРОЕННЫЙ снаряд, а не ресурсы напрямую.
+// 'doom' собирает «☢ Арсенал Судного Дня» (shellforge); тиры баллистики —
+// «🏭 Баллистический военпромзавод» (ballfab, техно pol.ballistics). 1 шт/сутки.
+const EC_SHELL = {
+  forgeGc: 300000, forgeMatter: 20, ballfabGc: 150000, hours: 24,
+  doom:         { gc: 150000, 'Гравиядро': 20, 'Программируемая материя': 8 },
+  ball_light:   { gc: 20000 },
+  ball_emp:     { gc: 60000,  'Гравиядро': 2 },
+  ball_cluster: { gc: 90000,  'Гравиядро': 4 },
+  ball_heavy:   { gc: 250000, 'Гравиядро': 1 },
+};
+const EC_SHELL_LABEL = {
+  doom: '☠ снаряд Длани', ball_light: '⚡ лёгкая баллистика', ball_emp: '👻 «Фантом»',
+  ball_cluster: '🧨 кассетная', ball_heavy: '🪨 тяжёлая',
+};
+// Паспорт тира для подсказок (зеркало _ball_params): урон/приколы.
+const EC_BALL_INFO = {
+  ball_light:   'летит вдвое быстрее · 2–6% населения · 0–1 постройка',
+  ball_emp:     'невидим для планетарной ПРО (сбивает только Немезида) · 2–5% населения · 1 постройка',
+  ball_cluster: 'широкое накрытие · 8–16% населения · 2–4 постройки',
+  ball_heavy:   'гарантированно 5 построек · 12–22% населения · бьёт ×2 радиуса · летит медленно',
+};
+const EC_BALL_KINDS = ['ball_light', 'ball_emp', 'ball_cluster', 'ball_heavy'];
+// Дальность залпа Гиперпейсера: ПРЫЖКОВ по гиперпутям (зеркало _mza_hops/mza_range_hops).
+const EC_MZA_RANGE_HOPS = 4, EC_MZA_HEAVY_RANGE_MUL = 2;
+// Ожерелье Немезиды — мегасооружение: системная ПРО (зеркало nemesis_build/_shell_const).
+// Требует технологию pol.nemesis (стоит в ветке судного дня ДО Гиперпейсера).
+const EC_NEMESIS = { gc: 2500000, res: { 'Стелларит': 50, 'Рагенод': 10, 'Гравиядро': 5 }, charges: 6, buildDays: 3 };
 const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'airfield', 'starbase', 'flak', 'abm', 'temple'];
 // Рецепт фабрики товаров (зеркало accrue в _budget_wellbeing.sql): на слот/сутки.
 // Товары ДЕМАТЕРИАЛИЗОВАНЫ — не ресурс: выпуск ровно под спрос населения.
@@ -401,13 +436,16 @@ const EC_BLD_HOWTO = {
   flak:             'Пассивная защита планеты от авиации: снижает урон вражеских авиагрупп при ударе по этой планете. Боезапаса не требует.',
   abm:              'Перехватывает удары по планете (орбитальные удары, залп орудия судного дня). Каждый перехват тратит снаряд. Снаряды докупаются за ГС и прибывают через 1 день. Нет снарядов — удар проходит.',
   temple:           'Пассивный доход ГС + «сила веры»: чем больше слотов храмов, тем дешевле постройка войск. Спиритуалистам и теократиям бонус сильнее. Требует исповедуемой веры; при постройке указывается её религия (можно держать храмы разных вер).',
-  doomgun:          'Откройте пульт орудия, выберите систему-цель и планету — залп тратит 20 Гравиядра. Снаряд летит тем дольше, чем дальше цель: от ~3 ч до соседней системы и до суток — от края до края галактики. Держите запас Программируемой материи: без неё орудие деградирует быстрее и распадётся.',
+  doomgun:          'Откройте пульт орудия, выберите систему-цель и планету — залп тратит 1 ПОСТРОЕННЫЙ снаряд Длани (собирается в Арсенале Судного Дня). Снаряд летит тем дольше, чем дальше цель: от ~3 ч до соседней системы и до суток — от края до края галактики. Держите запас Программируемой материи: без неё орудие деградирует быстрее и распадётся.',
+  shellforge:       'Заказывайте снаряды Длани прямо на строке арсенала (стирают планету; нужны Длани и Гиперпейсеру). 1 снаряд = 1 день работы; готовые ложатся на общий склад снарядов державы.',
+  ballfab:          'Заказывайте баллистику на строке завода: ⚡ лёгкая (быстрая, слабая), 👻 «Фантом» (не видна планетарной ПРО), 🧨 кассетная (2–4 постройки), 🪨 тяжёлая (1 Гравиядро, гарантированно 5 построек, бьёт ×2 радиуса). Носит только Гиперпейсер.',
+  nemesis:          'Работает само: любой залп судного дня или баллистики по ЛЮБОЙ планете этой системы перехватывается, пока есть заряды (6 макс, +1/сутки). Перехватывает раньше планетарной ПРО. Одно Ожерелье на систему.',
 };
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
   factory: '🏭', mining: '⛏', mining_deep: '⚒', mining_exotic: '💎', goodsfab: '🛍', trade: '💱', market: '📈',
   science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', airfield: '✈', warehouse: '📦', temple: '🛐', doomgun: '🜨',
-  starbase: '🛰', flak: '🎯', abm: '🚀',
+  starbase: '🛰', flak: '🎯', abm: '🚀', shellforge: '☢', ballfab: '🏭', nemesis: '⛨',
 };
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
 // Обустройство среды обитания на своей колонии (+ячейки, 1 ход)
@@ -1537,6 +1575,9 @@ async function _ecLoadRestImpl() {
     ecRpc('fleets_mine').catch(() => []),         // флоты: мои мобильные соединения
     ecRpc('armies_mine').catch(() => []),         // МАРШ: мои армии на колониях
   ]);
+  // Снаряды судного дня: склад + арсеналы + Немезиды (best-effort — SQL может быть не накатан).
+  const shells = await ecRpc('shell_status').catch(() => null);
+  EC.shells = (shells && typeof shells === 'object') ? shells : { stock: {}, forges: [], nemesis: [] };
   // Межзвёздная артиллерия: орудия фракции (с integrity) + залпы в полёте + баланс.
   EC.doom = (doom && typeof doom === 'object') ? doom : { guns: [], salvos: [], const: {} };
   EC.doomByBuilding = {};
@@ -9166,6 +9207,18 @@ const EC_POLITICS = [
   { id: 'pol.inevitability', branch: 'doom', name: 'Сама неотвратимость',     cost: 5000, prereq: [],
     special: 'artillery',
     desc: 'Запретная доктрина конца. Государство учится фокусировать гравитацию в луч, способный пройти межзвёздную бездну и вскипятить кору целой планеты. Открывает постройку «Длань Неотвратимости» — орудие, стирающее миры. Цена изучения чудовищна, и не зря: то, что нельзя забыть, лучше было не узнавать.' },
+  // Баллистический военпром — своя ветка (без пререквизитов судного дня).
+  { id: 'pol.ballistics', branch: 'doom', name: 'Межзвёздная баллистика',     cost: 800, prereq: [],
+    special: 'ballistics',
+    desc: 'Конвенционное оружие межзвёздной дальности. Открывает постройку Баллистического военпромзавода — конвейера боеголовок четырёх тиров: от лёгкой скороходной до тяжёлой, гарантированно сносящей кварталы. Носить их умеет только Гиперпейсер.' },
+  // Ожерелье Немезиды — мегасооружение, стоит в ветке ДО Гиперпейсера.
+  { id: 'pol.nemesis', branch: 'doom', name: 'Ожерелье Немезиды',             cost: 2000, prereq: ['pol.inevitability'],
+    special: 'nemesis',
+    desc: 'Ответ на собственный кошмар: кольцо орбитальных перехватчиков, накрывающее щитом ВСЮ систему. 6 зарядов, восстанавливается +1/сутки — куда устойчивее к перегрузке, чем планетарная ПРО. Открывает постройку мегасооружения «Ожерелье Немезиды».' },
+  // Гиперпейсер — капстоун ветки: ПОСЛЕ Ожерелья. Зеркало tech_nodes.pol.hyperpacer.
+  { id: 'pol.hyperpacer', branch: 'doom', name: 'Гиперпейсер',                cost: 3500, prereq: ['pol.nemesis'],
+    special: 'hyperpacer',
+    desc: 'Приговор обретает ноги: Длань, поставленная на корабельный киль. Открывает постройку Гиперпейсера — мобильного орудия судного дня, несущего и снаряды Длани, и баллистику всех тиров. Дальность залпа — 4 прыжка по гиперпутям (тяжёлая баллистика — 8).' },
 ];
 // id → bonus (для ecFactionMods). Спец-механики (special) применяются отдельно.
 const EC_RESEARCH_BONUS = {};
@@ -10666,6 +10719,9 @@ function ecSlotWhy(b) {
 
 function ecBuildingRow(b) {
   if (b.btype === 'doomgun') return ecDoomgunRow(b);
+  if (b.btype === 'shellforge') return ecShellForgeRow(b);
+  if (b.btype === 'ballfab') return ecBallFabRow(b);
+  if (b.btype === 'nemesis') return ecNemesisRow(b);
   const d = EC_BUILD[b.btype]; if (!d) return '';
   const inc = ecBuildingIncome(b);
   const incTxt = inc.gc ? `+${ecNum(inc.gc)} ГС / сутки` : inc.science ? `+${ecNum(inc.science)} ОН / сутки` : d.desc;
@@ -10719,6 +10775,92 @@ function ecBuildingRow(b) {
     ${b.btype === 'goodsfab' ? ecGoodsHtml(b) : ''}
     ${b.btype === 'abm' ? ecAbmAmmoHtml(b) : ''}
     <div class="ec-bld-act">${slotCount}${ecSlotWhy(b)}${openBtn}</div>
+  </div>`;
+}
+
+// ── Арсенал Судного Дня: заказ снарядов прямо на строке здания ──
+// Сводка заказа берётся из EC.shells.forges (RPC shell_status); 1 снаряд = 1 день.
+function ecShellForgeRow(b) {
+  const fr = ((EC.shells || {}).forges || []).find(f => f.building_id === b.id) || {};
+  const busyKind = fr.shell_kind || b.shell_kind || null;
+  const readyAt = fr.shell_ready || b.shell_ready || null;
+  const costTxt = k => {
+    const c = EC_SHELL[k];
+    return ecNum(c.gc) + ' ГС' + Object.entries(c).filter(([n]) => n !== 'gc').map(([n, q]) => ` + ${q} ${n}`).join('');
+  };
+  const canPay = k => {
+    const c = EC_SHELL[k];
+    if ((+EC.eco.gc || 0) < c.gc) return false;
+    return Object.entries(c).every(([n, q]) => n === 'gc' || ecStockOf(n) >= q);
+  };
+  const orderHtml = busyKind
+    ? `<div class="ec-bld-mine-hd" style="margin-top:8px">⚙ Собирается: <b>${EC_SHELL_LABEL[busyKind] || busyKind}</b>${readyAt ? ` · готов через ${ecEtaShort(readyAt)}` : ''}</div>`
+    : `<div class="ec-prod-form" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-rd btn-xs" ${canPay('doom') ? '' : 'disabled'} title="${esc(costTxt('doom'))}" onclick="ecShellOrder('${b.id}','doom')">☠ Снаряд Длани · ${costTxt('doom')}</button>
+      </div>`;
+  return `<div class="ec-bld ec-bld-doom" style="border-color:rgba(220,40,40,.45)">
+    <div class="ec-bld-top">
+      <span class="ec-bld-name">☢ ${esc(EC_BUILD.shellforge.name)}</span>
+      <button class="ec-bld-del" title="Снести" onclick="ecDemolish('${b.id}')">✕</button>
+    </div>
+    <div class="ec-bld-howto">Склад: <b>☠ ${ecNum(ecShellsOf('doom'))}</b> снарядов Длани. 1 снаряд = 1 день работы. Баллистику собирает отдельный 🏭 военпромзавод.</div>
+    ${orderHtml}
+  </div>`;
+}
+// ── Баллистический военпромзавод: заказ тиров баллистики ──
+function ecBallFabRow(b) {
+  const fr = ((EC.shells || {}).forges || []).find(f => f.building_id === b.id) || {};
+  const busyKind = fr.shell_kind || b.shell_kind || null;
+  const readyAt = fr.shell_ready || b.shell_ready || null;
+  const costTxt = k => {
+    const c = EC_SHELL[k];
+    return ecNum(c.gc) + ' ГС' + Object.entries(c).filter(([n]) => n !== 'gc').map(([n, q]) => ` + ${q} ${n}`).join('');
+  };
+  const canPay = k => {
+    const c = EC_SHELL[k];
+    if ((+EC.eco.gc || 0) < c.gc) return false;
+    return Object.entries(c).every(([n, q]) => n === 'gc' || ecStockOf(n) >= q);
+  };
+  const orderHtml = busyKind
+    ? `<div class="ec-bld-mine-hd" style="margin-top:8px">⚙ Собирается: <b>${EC_SHELL_LABEL[busyKind] || busyKind}</b>${readyAt ? ` · готов через ${ecEtaShort(readyAt)}` : ''}</div>`
+    : `<div class="ec-prod-form" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${EC_BALL_KINDS.map(k =>
+        `<button class="btn btn-gh btn-xs" ${canPay(k) ? '' : 'disabled'} title="${esc((EC_BALL_INFO[k] || '') + ' · ' + costTxt(k))}" onclick="ecShellOrder('${b.id}','${k}')">${EC_SHELL_LABEL[k]} · ${costTxt(k)}</button>`).join('')}
+      </div>`;
+  const stockTxt = EC_BALL_KINDS.map(k => `${EC_SHELL_LABEL[k].split(' ')[0]} ${ecNum(ecShellsOf(k))}`).join(' · ');
+  return `<div class="ec-bld" style="border-color:rgba(230,164,60,.45)">
+    <div class="ec-bld-top">
+      <span class="ec-bld-name">🏭 ${esc(EC_BUILD.ballfab.name)}</span>
+      <button class="ec-bld-del" title="Снести" onclick="ecDemolish('${b.id}')">✕</button>
+    </div>
+    <div class="ec-bld-howto">Склад баллистики: <b>${stockTxt}</b>. 1 снаряд = 1 день. Носит только Гиперпейсер.</div>
+    ${orderHtml}
+  </div>`;
+}
+async function ecShellOrder(buildingId, kind) {
+  if (EC.busy) return; EC.busy = true;
+  try {
+    await ecRpc('shell_order', { p_building_id: buildingId, p_kind: kind });
+    toast((EC_SHELL_LABEL[kind] || 'снаряд') + ' — сборка начата (1 день)', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+
+// ── Ожерелье Немезиды: заряды системной ПРО ──
+function ecNemesisRow(b) {
+  const nemo = ((EC.shells || {}).nemesis || []).find(n => n.building_id === b.id) || {};
+  const ch = Math.max(0, +(nemo.charges != null ? nemo.charges : (b.ammo || 0)));
+  const mx = +(nemo.max || EC_NEMESIS.charges);
+  const dots = Array.from({ length: mx }, (_, i) =>
+    `<span class="ec-slot ${i < ch ? 'on' : ''}" style="${i < ch ? 'background:#a05aff;border-color:#a05aff' : ''}"></span>`).join('');
+  return `<div class="ec-bld" style="border-color:rgba(150,90,255,.5)">
+    <div class="ec-bld-top">
+      <span class="ec-bld-name">⛨ ${esc(EC_BUILD.nemesis.name)} <span class="ec-bp-cat" style="background:rgba(150,90,255,.3);font-size:10px;padding:1px 6px;border-radius:6px">МЕГА</span></span>
+      <button class="ec-bld-del" title="Снести" onclick="ecDemolish('${b.id}')">✕</button>
+    </div>
+    <div class="ec-slots" title="Заряды перехвата: ${ch}/${mx}">${dots}</div>
+    <div class="ec-bld-inc" style="color:#b58aff">Заряды: <b>${ch}/${mx}</b> · реген +1/сутки</div>
+    <div class="ec-bld-howto">${esc(EC_BLD_HOWTO.nemesis)}</div>
   </div>`;
 }
 
@@ -11087,7 +11229,7 @@ function ecBuildPicker(colonyId) {
       </span>
       <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small></span>
     </button>`;
-  }).join('') + ecDoomBuildCard(colonyId, gc);
+  }).join('') + ecDoomBuildCard(colonyId, gc) + ecShellForgeBuildCard(colonyId, gc) + ecBallFabBuildCard(colonyId, gc) + ecNemesisBuildCard(colonyId, gc);
   _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
     <div class="ec-bp-modal" role="dialog" aria-modal="true">
       <div class="ec-bp-hd">
@@ -11122,6 +11264,32 @@ function ecBpFilter(btn, cat) {
 function ecStockOf(name) { return +(((EC.eco && EC.eco.resources) || {})[name] || 0); }
 // Открыто ли исследование «Сама неотвратимость».
 function ecHasDoomTech() { return ((EC.eco && EC.eco.research) || []).includes('pol.inevitability'); }
+// Открыта ли ОТДЕЛЬНАЯ технология Гиперпейсера.
+function ecHasHyperTech() { return ((EC.eco && EC.eco.research) || []).includes('pol.hyperpacer'); }
+function ecHasBallTech() { return ((EC.eco && EC.eco.research) || []).includes('pol.ballistics'); }
+function ecHasNemesisTech() { return ((EC.eco && EC.eco.research) || []).includes('pol.nemesis'); }
+// Запас построенных снарядов судного дня ('doom' | тир баллистики).
+function ecShellsOf(kind) { return +(((EC.shells || {}).stock || {})[kind] || 0); }
+// Суммарный запас баллистики всех тиров.
+function ecBallTotal() { return EC_BALL_KINDS.reduce((a, k) => a + ecShellsOf(k), 0); }
+// Прыжки по гиперпутям from→to (BFS по EC.lanes, зеркало _mza_hops).
+// null = гиперпутей нет вовсе (лимит не считаем); Infinity = недостижимо.
+function ecMzaHops(from, to) {
+  const lanes = EC.lanes || [];
+  if (!lanes.length) return null;
+  if (from === to) return 0;
+  const adj = {};
+  lanes.forEach(l => { (adj[l.a_id] = adj[l.a_id] || []).push(l.b_id); (adj[l.b_id] = adj[l.b_id] || []).push(l.a_id); });
+  const q = [from], dist = { [from]: 0 };
+  while (q.length) {
+    const c = q.shift();
+    if (c === to) return dist[c];
+    (adj[c] || []).forEach(nb => { if (dist[nb] === undefined) { dist[nb] = dist[c] + 1; q.push(nb); } });
+  }
+  return Infinity;
+}
+// Дальность тира: 4 прыжка, тяжёлая — ×2 (зеркало mza_range_hops/heavy_range_mul).
+function ecMzaMaxHops(kind) { return EC_MZA_RANGE_HOPS * (kind === 'ball_heavy' ? EC_MZA_HEAVY_RANGE_MUL : 1); }
 
 // Карточка постройки орудия в меню «Что построить» (только если изучено).
 function ecDoomBuildCard(colonyId, gc) {
@@ -11139,6 +11307,93 @@ function ecDoomBuildCard(colonyId, gc) {
       </span>
       <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small><br><small>+${EC_DOOM_BUILD_MATTER} 🟢</small></span>
     </button>`;
+}
+
+// Карточка «Арсенал Судного Дня» (только если открыта «Сама неотвратимость»).
+function ecShellForgeBuildCard(colonyId, gc) {
+  if (!ecHasDoomTech()) return '';
+  const d = EC_BUILD.shellforge;
+  const matter = ecStockOf('Программируемая материя');
+  const afford = gc >= EC_SHELL.forgeGc && matter >= EC_SHELL.forgeMatter;
+  const why = gc < EC_SHELL.forgeGc ? 'Не хватает ГС' : matter < EC_SHELL.forgeMatter ? `Нужно ${EC_SHELL.forgeMatter} 🟢 Программируемой материи (есть ${ecNum(matter)})` : '';
+  return `<button class="ec-bp-card ec-bp-mil ec-bp-doom${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecShellForgeBuildDo('${colonyId}')" title="${esc(why)}" style="border-color:rgba(220,40,40,.5)">
+      <span class="ec-bp-ic">☢</span>
+      <span class="ec-bp-info">
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mil" style="background:rgba(220,40,40,.25)">СУДНЫЙ ДЕНЬ</span></span>
+        <span class="ec-bp-desc">${esc(d.desc)}</span>
+        <span class="ec-bp-howto">${esc(EC_BLD_HOWTO.shellforge)}</span>
+      </span>
+      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(EC_SHELL.forgeGc)} <small>ГС</small><br><small>+${EC_SHELL.forgeMatter} 🟢</small></span>
+    </button>`;
+}
+async function ecShellForgeBuildDo(colonyId) {
+  if (EC.busy) return; EC.busy = true;
+  try {
+    await ecRpc('shellforge_build', { p_colony_id: colonyId });
+    ecBuildClose();
+    toast('☢ Арсенал Судного Дня — возведение начато (1 день)', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+
+// Карточка «Баллистический военпромзавод» (техно pol.ballistics).
+function ecBallFabBuildCard(colonyId, gc) {
+  if (!ecHasBallTech()) return '';
+  const d = EC_BUILD.ballfab;
+  const afford = gc >= EC_SHELL.ballfabGc;
+  return `<button class="ec-bp-card ec-bp-mil${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecBallFabBuildDo('${colonyId}')" title="${afford ? '' : 'Не хватает ГС'}" style="border-color:rgba(230,164,60,.55)">
+      <span class="ec-bp-ic">🏭</span>
+      <span class="ec-bp-info">
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mil" style="background:rgba(230,164,60,.3)">БАЛЛИСТИКА</span></span>
+        <span class="ec-bp-desc">${esc(d.desc)}</span>
+        <span class="ec-bp-howto">${esc(EC_BLD_HOWTO.ballfab)}</span>
+      </span>
+      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(EC_SHELL.ballfabGc)} <small>ГС</small></span>
+    </button>`;
+}
+async function ecBallFabBuildDo(colonyId) {
+  if (EC.busy) return; EC.busy = true;
+  try {
+    await ecRpc('ballfab_build', { p_colony_id: colonyId });
+    ecBuildClose();
+    toast('🏭 Баллистический военпромзавод — возведение начато (1 день)', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+
+// Карточка мегасооружения «Ожерелье Немезиды» (нужна технология pol.nemesis).
+function ecNemesisBuildCard(colonyId, gc) {
+  if (!ecHasNemesisTech()) return '';
+  const d = EC_BUILD.nemesis;
+  const lack = [];
+  if (gc < EC_NEMESIS.gc) lack.push('ГС');
+  Object.entries(EC_NEMESIS.res).forEach(([n, q]) => { if (ecStockOf(n) < q) lack.push(`${n} ${ecNum(ecStockOf(n))}/${q}`); });
+  const afford = !lack.length;
+  const resTxt = Object.entries(EC_NEMESIS.res).map(([n, q]) => `${q} ${n}`).join(' · ');
+  return `<button class="ec-bp-card ec-bp-mil${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecNemesisBuildDo('${colonyId}')" title="${afford ? '' : esc('Не хватает: ' + lack.join(', '))}" style="border-color:rgba(150,90,255,.55)">
+      <span class="ec-bp-ic">⛨</span>
+      <span class="ec-bp-info">
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mil" style="background:rgba(150,90,255,.3)">МЕГАСООРУЖЕНИЕ</span></span>
+        <span class="ec-bp-desc">${esc(d.desc)}</span>
+        <span class="ec-bp-howto">${esc(resTxt + ' · строится ' + EC_NEMESIS.buildDays + ' дня · одно на систему')}</span>
+      </span>
+      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(EC_NEMESIS.gc)} <small>ГС</small><br><small>+💜/🧡 ресурсы</small></span>
+    </button>`;
+}
+async function ecNemesisBuildDo(colonyId) {
+  if (EC.busy) return;
+  if (!confirm('Собрать «Ожерелье Немезиды»? ' + ecNum(EC_NEMESIS.gc) + ' ГС + ' +
+      Object.entries(EC_NEMESIS.res).map(([n, q]) => q + ' ' + n).join(', ') + '. Строится ' + EC_NEMESIS.buildDays + ' дня.')) return;
+  EC.busy = true;
+  try {
+    await ecRpc('nemesis_build', { p_colony_id: colonyId });
+    ecBuildClose();
+    toast('⛨ Ожерелье Немезиды — сборка начата (' + EC_NEMESIS.buildDays + ' дня)', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
 }
 
 // Подтверждение постройки орудия.
@@ -11219,8 +11474,8 @@ function ecDoomgunRow(b) {
 function ecDoomConsole(buildingId) {
   const b = EC.buildings.find(x => x.id === buildingId); if (!b) return;
   EC._doomBuilding = buildingId;
-  const grav = ecStockOf('Гравиядро');
-  const canFuel = grav >= EC_DOOM_SHOT_GRAV;
+  const shells = ecShellsOf('doom');
+  const canFuel = shells >= 1;
   const st = EC._doomTarget || {};
   // Все известные системы карты (allSys → EC.allSystems), с планетами.
   const sysList = (EC.allSystems || EC.systems || []);
@@ -11263,7 +11518,7 @@ function ecDoomConsole(buildingId) {
         <div class="ec-bp-hd-t"><span class="ec-bp-hd-ic">🜨</span><span>Пульт залпа — Длань Неотвратимости</span></div>
         <button class="ec-bp-x" title="Закрыть" onclick="ecBuildClose()">✕</button>
       </div>
-      <div class="ec-bp-meta"><span>🔮 Гравиядро: <b class="${canFuel ? '' : 'ec-warn'}">${ecNum(grav)}</b> / нужно ${EC_DOOM_SHOT_GRAV}</span><span>☄️ ${flyTxt}</span></div>
+      <div class="ec-bp-meta"><span>☠ Снаряды Длани: <b class="${canFuel ? '' : 'ec-warn'}">${ecNum(shells)}</b> / нужно 1</span><span>☄️ ${flyTxt}</span></div>
       <div style="padding:10px 14px">
         <label style="font-size:12px;color:var(--t3)">Система-цель</label>
         <select class="ec-input" style="width:100%;margin:4px 0 10px" onchange="ecDoomPickSys(this.value)">
@@ -11274,7 +11529,7 @@ function ecDoomConsole(buildingId) {
       </div>
       <div class="ec-bp-cf-act" style="padding:0 14px 14px">
         <button class="btn btn-gh btn-sm" onclick="ecBuildClose()">Отмена</button>
-        <button class="btn btn-rd btn-sm" ${canFire ? '' : 'disabled'} onclick="ecDoomFire('${buildingId}')">🜨 ЗАЛП (−${EC_DOOM_SHOT_GRAV} 🔮)</button>
+        <button class="btn btn-rd btn-sm" ${canFire ? '' : 'disabled'} onclick="ecDoomFire('${buildingId}')">🜨 ЗАЛП (−1 ☠ снаряд)</button>
       </div>
     </div>
   </div>`;
@@ -11406,8 +11661,8 @@ function ecDoomPanelRender() {
   const gun = ecDoomActiveGun();
   const st = EC._doomTab || {};
   const sysList = EC.allSystems || EC.systems || [];
-  const grav = ecStockOf('Гравиядро');
-  const canFuel = grav >= EC_DOOM_SHOT_GRAV;
+  const shells = ecShellsOf('doom');
+  const canFuel = shells >= 1;
   if (gun && gun.in_flight) {
     const salvo = ((EC.doom && EC.doom.salvos) || []).find(s => s.gun_id === gun.id);
     return `<div class="ec-bld-howto" style="color:#ff8a8a">☄️ Это орудие уже дало залп — снаряд в пути${salvo ? '. Подлёт: ' + ecProgressISO(null, salvo.ready_at, 1, 'на подлёте') : ''}. Дождитесь поражения цели, затем перезарядите.</div>`;
@@ -11429,12 +11684,12 @@ function ecDoomPanelRender() {
   const tgtPlanet = Number.isInteger(st.pid) ? planets.find(p => p.pid === st.pid) : null;
   const fly = ecDoomFlight(gun, st.sysId);
   const canFire = !!gun && canFuel && tgtPlanet && !(tgtPlanet.dead || tgtPlanet.doomed);
-  return `<div class="ec-bp-meta" style="margin:0 0 8px"><span>🔮 Гравиядро: <b class="${canFuel ? '' : 'ec-warn'}">${ecNum(grav)}</b> / нужно ${EC_DOOM_SHOT_GRAV}</span><span>☄️ ${fly ? esc(fly.txt) : 'от 3 ч до 24 ч'}</span></div>
+  return `<div class="ec-bp-meta" style="margin:0 0 8px"><span>☠ Снаряды Длани: <b class="${canFuel ? '' : 'ec-warn'}">${ecNum(shells)}</b> / нужно 1${canFuel ? '' : ' — постройте в Арсенале'}</span><span>☄️ ${fly ? esc(fly.txt) : 'от 3 ч до 24 ч'}</span></div>
     <div class="ec-section-title" style="margin-top:0">Цель в системе «${esc(sysName)}»</div>
     ${planetHtml}
     ${tgtPlanet ? `<div class="ec-bld-howto" style="margin-top:10px;color:#ff8a8a">Цель: <b>${esc(tgtPlanet.name || '')}</b> — после поражения станет мёртвым камнем. Любая колония на ней (в т.ч. <b>столица</b>) будет стёрта.</div>` : ''}
     <div class="ec-bp-cf-act" style="padding:12px 0 0;justify-content:flex-end">
-      <button class="btn btn-rd btn-sm" ${canFire ? '' : 'disabled'} onclick="ecDoomTabFire()">🜨 ЗАЛП (−${EC_DOOM_SHOT_GRAV} 🔮)</button>
+      <button class="btn btn-rd btn-sm" ${canFire ? '' : 'disabled'} onclick="ecDoomTabFire()">🜨 ЗАЛП (−1 ☠ снаряд)</button>
     </div>`;
 }
 // Точечная перерисовка панели (карта/зум не трогаем).
@@ -11492,7 +11747,7 @@ function ecTabDoom() {
   const salvos = ((EC.doom && EC.doom.salvos) || []).filter(s => s.status === 'in_flight');
   const intro = ecIntro('🜨', 'Длань Неотвратимости — пульт залпа',
     'Орудие судного дня стирает планету в другой системе, превращая её в мёртвый камень. Любая колония на цели — включая столицу противника — будет уничтожена.',
-    ['Залп тратит <b>' + EC_DOOM_SHOT_GRAV + ' 🔮 Гравиядра</b>. Время полёта зависит от дистанции: <b>≈3 ч</b> к соседней системе, до <b>24 ч</b> на край карты.',
+    ['Залп тратит <b>1 ☠ снаряд Длани</b> — снаряды строятся в <b>☢ Арсенале Судного Дня</b> (1/сутки). Время полёта зависит от дистанции: <b>≈3 ч</b> к соседней системе, до <b>24 ч</b> на край карты.',
       'Каждый выстрел изнашивает орудие; <b>🟢 Программируемая материя</b> на складе сдерживает деградацию между залпами.',
       'Цель защищена планетарной ПРО? Снаряд может быть перехвачен.']);
   // Нет орудия, но открыто исследование — приглашаем построить.
@@ -11501,7 +11756,7 @@ function ecTabDoom() {
       <div style="font-size:15px;margin-bottom:6px">Орудие ещё не возведено.</div>
       <div style="color:var(--t3);margin-bottom:14px">Постройте «Длань Неотвратимости» на одной из колоний — это откроет пульт наведения.</div>
       <button class="btn btn-rd btn-sm" onclick="ecSetTab('colonies')">🏗 Перейти к колониям и возвести орудие</button>
-    </div>` + ecMzaSection();
+    </div>` + ecShellArsenalSection() + ecMzaSection();
   }
   const gun = ecDoomActiveGun();
   (EC._doomTab = EC._doomTab || {}).gunId = gun.id;
@@ -11543,7 +11798,7 @@ function ecTabDoom() {
   </div>`;
   return intro + gunSel + statusCard + salvoHtml +
     `<div class="ec-section-title">Визуальное наведение <span class="ec-hint">— кликните систему-цель на карте, затем выберите планету</span></div>` +
-    consoleHtml + ecMzaSection();
+    consoleHtml + `<div style="margin-top:16px"></div>` + ecShellArsenalSection() + ecMzaSection();
 }
 
 // ── Гиперпейсер — мобильное орудие судного дня: постройка прямо в этой вкладке ──
@@ -11553,21 +11808,26 @@ function ecMzaSection() {
   const ships = EC.mzaShips || [];
   const gc = +EC.eco.gc || 0, matter = ecStockOf('Программируемая материя');
   const afford = gc >= EC_MZA_BUILD_GC && matter >= EC_MZA_BUILD_MATTER;
-  // системы со своей колонией — где можно заложить носитель
-  const sysIds = [...new Set((EC.colonies || []).map(c => c.system_id).filter(Boolean))];
-  const buildForm = !sysIds.length
-    ? `<div class="ec-empty" style="padding:8px">Нет колоний — Гиперпейсер закладывается в системе вашей колонии.</div>`
-    : `<div class="ec-prod-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0">
+  // ВОРОТА: Гиперпейсер — отдельная технология после «Самой неотвратимости».
+  const buildForm = (() => {
+    if (!ecHasHyperTech() && !ships.length) return `<div class="ec-empty" style="padding:8px">🔒 Требуется отдельная технология <b>«Гиперпейсер»</b> (ветка судного дня, после «Самой неотвратимости»).</div>`;
+    // системы со своей колонией — где можно заложить носитель
+    const sysIds = [...new Set((EC.colonies || []).map(c => c.system_id).filter(Boolean))];
+    if (!sysIds.length) return `<div class="ec-empty" style="padding:8px">Нет колоний — Гиперпейсер закладывается в системе вашей колонии.</div>`;
+    return `<div class="ec-prod-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0">
         <select id="ec-mza-sys" class="ec-input" style="min-width:180px">${sysIds.map(sid => `<option value="${esc(sid)}">${esc(ecSysName(sid))}</option>`).join('')}</select>
         <input type="text" id="ec-mza-name" class="ec-input" style="width:160px" maxlength="40" placeholder="имя (необязательно)">
-        <button class="btn btn-rd btn-sm" ${afford ? '' : 'disabled'} title="${afford ? '' : 'Не хватает ГС или Программируемой материи'}" onclick="ecMzaBuild()">☣ Заложить Гиперпейсер · ${ecNum(EC_MZA_BUILD_GC)} ГС + ${EC_MZA_BUILD_MATTER} 🟢</button>
+        <button class="btn btn-rd btn-sm" ${afford && ecHasHyperTech() ? '' : 'disabled'} title="${afford ? '' : 'Не хватает ГС или Программируемой материи'}" onclick="ecMzaBuild()">☣ Заложить Гиперпейсер · ${ecNum(EC_MZA_BUILD_GC)} ГС + ${EC_MZA_BUILD_MATTER} 🟢</button>
       </div>
-      <div class="ec-bld-howto">Строится <b>сутки</b>, затем появляется на <b>галактической карте</b>. Переброска по всей карте и залпы по планетам — кликом по носителю на карте. Залп тратит <b>${EC_MZA_SHOT_GRAV} 🔮 Гравиядра</b> и изнашивает корпус (≈4 залпа).</div>`;
+      <div class="ec-bld-howto">Строится <b>сутки</b>, затем появляется на <b>галактической карте</b>. Переброска — по всей карте; залп бьёт на <b>${EC_MZA_RANGE_HOPS} прыжка по гиперпутям</b> (🪨 тяжёлая — на ${EC_MZA_RANGE_HOPS * EC_MZA_HEAVY_RANGE_MUL}); зона подсвечивается на карте при наведении. Несёт <b>☠ снаряды Длани</b> (☢ Арсенал) и <b>💥 баллистику 4 тиров</b> (🏭 военпромзавод). Каждый залп изнашивает корпус (≈4 залпа).</div>`;
+  })();
   const haveGrav = ecStockOf('Гравиядро');
   const shipRows = ships.length
     ? `<div class="ec-mza-grid">${ships.map(sh => ecMzaCard(sh, haveGrav)).join('')}</div>`
     : '';
-  return `<div class="ec-section-title" style="margin-top:18px">☣ Гиперпейсер <span class="ec-hint">— мобильное орудие судного дня на корабле: ездит по всей карте</span></div>
+  const shellStrip = `<div class="ec-bld-howto" style="margin:4px 0">Склад снарядов: <b>☠ Длань ${ecNum(ecShellsOf('doom'))}</b> · <b>💥 баллистика ${ecNum(ecBallTotal())}</b> (${EC_BALL_KINDS.map(k => `${EC_SHELL_LABEL[k].split(' ')[0]}${ecNum(ecShellsOf(k))}`).join(' ')}) — фабрики: ☢ Арсенал и 🏭 военпромзавод (1/сутки).</div>`;
+  return `<div class="ec-section-title" style="margin-top:18px">☣ Гиперпейсер <span class="ec-hint">— мобильное орудие судного дня на корабле: дальность ${EC_MZA_RANGE_HOPS} прыжка</span></div>
+    ${shellStrip}
     ${buildForm}
     ${ships.length ? `<div class="ec-sub-title" style="margin-top:8px">Мои гиперпейсеры · ${ships.length} <span class="ec-hint">(управление — на карте)</span></div>${shipRows}` : ''}`;
 }
@@ -11596,9 +11856,10 @@ function ecMzaCard(sh, haveGrav) {
     const lbl = sh.status === 'building' ? 'готов через' : 'долёт через';
     etaRow = `<div class="ec-mza-stat"><span class="ec-mza-k">⏱ ${lbl}</span><b>${ecEtaShort(sh.arrive_at)}</b></div>`;
   }
-  // готовность залпа по Гравиядрам
-  const gravOk = haveGrav >= gravNeed;
-  const gravRow = `<div class="ec-mza-stat"><span class="ec-mza-k">🔮 Гравиядра</span><b style="color:${gravOk ? 'var(--gd,#3fa66a)' : 'var(--rd,#d65a4a)'}">${ecNum(Math.floor(haveGrav))}/${gravNeed}</b></div>`;
+  // готовность залпа по СНАРЯДАМ (строятся в Арсенале Судного Дня)
+  const shellsD = ecShellsOf('doom'), shellsB = ecBallTotal();
+  const gravOk = shellsD + shellsB > 0;
+  const gravRow = `<div class="ec-mza-stat"><span class="ec-mza-k">боекомплект</span><b style="color:${gravOk ? 'var(--gd,#3fa66a)' : 'var(--rd,#d65a4a)'}">☠${ecNum(shellsD)} · 💥${ecNum(shellsB)}</b></div>`;
   const shotsRow = `<div class="ec-mza-stat"><span class="ec-mza-k">🎯 залпов дано</span><b>${ecNum(+sh.total_shots || 0)}</b></div>`;
   const flag = ecFacFlag(EC.fid, 34);
   return `<div class="ec-mza-card">
@@ -11675,7 +11936,8 @@ function ecDoomVNBody() {
   const chips = `<div class="hp-vnd-chips">
     ${chip('орудия', guns.length)}
     ${chip('гиперпейсеры', mza.length)}
-    ${chip('🔮 гравиядро', ecNum(Math.floor(grav)), grav < EC_DOOM_SHOT_GRAV)}
+    ${chip('☠ снаряды Длани', ecNum(ecShellsOf('doom')), ecShellsOf('doom') < 1)}
+    ${chip('💥 баллистика', ecNum(ecBallTotal()), false)}
     ${chip('🟢 материя', ecNum(Math.floor(matter)), matter <= 0)}
   </div>`;
   const tabs = [['arsenal', 'Арсенал', guns.length + mza.length], ['aim', 'Наведение', 0], ['salvos', 'Снаряды', salvos.length]];
@@ -11708,7 +11970,32 @@ function ecDoomVNArsenal(guns, matter) {
     }).join('')}</div>
     ${matter <= 0 ? '<div class="hp-vnd-warnline">⚠ Нет программируемой материи — орудия деградируют с каждым днём.</div>' : ''}`;
   }
-  return oath + gunsHtml + `<div class="hp-vnd-sep"></div>` + ecMzaSection();
+  return oath + gunsHtml + `<div class="hp-vnd-sep"></div>` + ecShellArsenalSection() + `<div class="hp-vnd-sep"></div>` + ecMzaSection();
+}
+
+// ── ☢ Арсеналы + ⛨ Немезиды: сводка производства снарядов (кабинет и VN-экран) ──
+function ecShellArsenalSection() {
+  const sh = EC.shells || { stock: {}, forges: [], nemesis: [] };
+  const colName = cid => { const c = (EC.colonies || []).find(x => x.id === cid); return c ? (c.planet_name || 'колония') : 'колония'; };
+  const forges = (sh.forges || []).map(f => {
+    const isBall = f.btype === 'ballfab';
+    const busy = !!f.shell_kind;
+    const kinds = isBall ? EC_BALL_KINDS : ['doom'];
+    const act = busy
+      ? `<span class="ec-proj-tag">⚙ ${EC_SHELL_LABEL[f.shell_kind] || f.shell_kind}${f.shell_ready ? ' · ' + ecEtaShort(f.shell_ready) : ''}</span>`
+      : `<span style="display:flex;gap:6px;flex-wrap:wrap">${kinds.map(k =>
+          `<button class="btn ${k === 'doom' ? 'btn-rd' : 'btn-gh'} btn-xs" title="${esc(EC_BALL_INFO[k] || '')}" onclick="ecShellOrder('${f.building_id}','${k}')">${EC_SHELL_LABEL[k]} · ${ecNum(EC_SHELL[k].gc)} ГС</button>`).join('')}
+        </span>`;
+    return `<div class="ec-colonize-row"><div class="ec-cz-main"><span class="ec-cz-name">${isBall ? '🏭 Военпромзавод' : '☢ Арсенал'} · ${esc(colName(f.colony_id))}</span></div>${act}</div>`;
+  }).join('');
+  const nemo = (sh.nemesis || []).map(n =>
+    `<div class="ec-colonize-row"><div class="ec-cz-main">
+      <span class="ec-cz-name">⛨ Ожерелье Немезиды · ${esc(ecSysName(n.system_id))}</span>
+      <span class="ec-cz-sub" style="color:#b58aff">заряды ${n.charges}/${n.max} · реген +1/сутки · прикрывает всю систему</span>
+    </div></div>`).join('');
+  return `<div class="ec-section-title">☢ Снаряды судного дня <span class="ec-hint">— склад: ☠ ${ecNum(ecShellsOf('doom'))} · 💥 ${ecNum(ecBallTotal())}</span></div>
+    ${forges || `<div class="ec-bld-howto">Фабрик снарядов нет. Постройте <b>☢ Арсенал Судного Дня</b> (снаряды Длани) и/или <b>🏭 Баллистический военпромзавод</b> (тиры баллистики, техно «Межзвёздная баллистика») — без снарядов Длань и Гиперпейсер молчат.</div>`}
+    ${nemo ? `<div class="ec-sub-title" style="margin-top:8px">Мегасооружения</div>${nemo}` : ''}`;
 }
 /* ── НАВЕДЕНИЕ · пульт запуска ─────────────────────────────────────
    Атомпанк-протокол в три ступени: I носитель (кассеты стационарных
@@ -11717,7 +12004,7 @@ function ecDoomVNArsenal(guns, matter) {
    Стреляет боевыми RPC: doom_fire (стационар) / mza_fire (носитель). */
 function ecDoomVNAimSt() {
   const vn = ecDoomVNSt();
-  return vn.aim = vn.aim || { car: null, sysId: null, pid: null, q: '', tgl: { pwr: false, seal: false, oath: false } };
+  return vn.aim = vn.aim || { car: null, sysId: null, pid: null, q: '', shell: 'doom', tgl: { pwr: false, seal: false, oath: false } };
 }
 // Все носители приговора одним списком (боеготовые и нет — с причиной).
 function ecDoomVNCarriers() {
@@ -11725,13 +12012,13 @@ function ecDoomVNCarriers() {
   ((EC.doom && EC.doom.guns) || []).forEach(g => {
     const integ = Math.max(0, Math.round(+g.integrity || 0));
     out.push({ key: 'gun:' + g.id, kind: 'gun', id: g.id, ic: '🜨', nm: 'Длань «' + ecSysName(g.system_id) + '»', sys: g.system_id,
-      integ, grav: EC_DOOM_SHOT_GRAV, ready: !g.in_flight && integ > 0,
+      integ, shellKinds: ['doom'], ready: !g.in_flight && integ > 0,
       why: g.in_flight ? 'залп в полёте' : (integ <= 0 ? 'разрушена' : '') });
   });
   (EC.mzaShips || []).forEach(sh => {
     const integ = Math.max(0, Math.round(+sh.integrity || 0));
     out.push({ key: 'mza:' + sh.id, kind: 'mza', id: sh.id, ic: '☣', nm: 'Гиперпейсер' + (sh.name ? ' «' + sh.name + '»' : ''), sys: sh.system_id,
-      integ, grav: EC_MZA_SHOT_GRAV || 12, ready: !!sh.can_fire,
+      integ, shellKinds: ['doom'].concat(EC_BALL_KINDS), ranged: true, ready: !!sh.can_fire,
       why: sh.status === 'building' ? 'строится' : sh.status === 'transit' ? 'в пути'
         : sh.in_flight ? 'залп в полёте' : (integ <= 0 ? 'корпус изношен' : (sh.can_fire ? '' : 'не готов')) });
   });
@@ -11759,6 +12046,13 @@ function ecDoomVNPick(part, val) {
   }
   if (part === 'sys') { st.sysId = (st.sysId === val ? null : val); st.pid = null; }
   else if (part === 'pid') st.pid = +val;
+  st.tgl = { pwr: false, seal: false, oath: false };
+  ecDoomVNAimSync();
+}
+// Переключить тип снаряда Гиперпейсера (☠ Длань / 💥 баллистика) — точечный рефреш цепи пуска.
+function ecDoomVNShell(k) {
+  const st = ecDoomVNAimSt();
+  st.shell = EC_BALL_KINDS.includes(k) ? k : 'doom';
   st.tgl = { pwr: false, seal: false, oath: false };
   ecDoomVNAimSync();
 }
@@ -11867,11 +12161,17 @@ async function ecDoomVNFire() {
   const tgt = sys && ecDoomTargetablePlanets(sys).find(p => p.pid === st.pid && !(p.dead || p.doomed));
   if (!car || !sys || !tgt) { toast('Протокол не собран: назначьте носитель и планету-цель', 'err'); return; }
   if (!(st.tgl.pwr && st.tgl.seal && st.tgl.oath)) { toast('Цепь пуска разомкнута — взведите все три тумблера', 'err'); return; }
-  if (ecStockOf('Гравиядро') < car.grav) { toast('Недостаточно Гравиядер для залпа', 'err'); return; }
+  const shellKind = (car.kind === 'mza' && EC_BALL_KINDS.includes(st.shell)) ? st.shell : 'doom';
+  if (ecShellsOf(shellKind) < 1) { toast('Нет снаряда (' + EC_SHELL_LABEL[shellKind] + ') — постройте на фабрике снарядов', 'err'); return; }
+  // дальность Гиперпейсера: прыжки по гиперпутям
+  if (car.kind === 'mza') {
+    const hops = ecMzaHops(car.sys, sys.id), mx = ecMzaMaxHops(shellKind);
+    if (hops != null && hops > mx) { toast('Цель вне радиуса: дальность залпа — ' + mx + ' прыжка(ов) по гиперпутям', 'err'); return; }
+  }
   EC.busy = true;
   try {
     if (car.kind === 'gun') await ecRpc('doom_fire', { p_gun_id: car.id, p_target_system_id: sys.id, p_target_pid: tgt.pid });
-    else await ecRpc('mza_fire', { p_id: car.id, p_target_system_id: sys.id, p_target_pid: tgt.pid, p_target_name: tgt.name || null });
+    else await ecRpc('mza_fire', { p_id: car.id, p_target_system_id: sys.id, p_target_pid: tgt.pid, p_target_name: tgt.name || null, p_kind: shellKind });
     ecDoomVNSt().aim = null;
     ecDoomVNSt().tab = 'salvos';
     toast(`🜨 Приговор выпущен по «${tgt.name || 'цели'}» — снаряд в пути`, 'ok');
@@ -11919,17 +12219,35 @@ function ecDoomVNAim() {
 function ecDoomVNProto() {
   const st = ecDoomVNAimSt(), car = ecDoomVNCar();
   if (!car) return '';
-  const grav = ecStockOf('Гравиядро');
+  const shellKind = (car.kind === 'mza' && EC_BALL_KINDS.includes(st.shell)) ? st.shell : 'doom';
+  const shells = ecShellsOf(shellKind);
   const sys = st.sysId ? (EC.allSystems || []).find(s => s.id === st.sysId) : null;
   const tgt = sys && Number.isInteger(st.pid) ? ecDoomTargetablePlanets(sys).find(p => p.pid === st.pid) : null;
   const fly = sys ? ecDoomFlight({ system_id: car.sys }, sys.id) : null;
-  const gravOk = grav >= car.grav;
+  // Гиперпейсер: дальность = прыжки по гиперпутям (тяжёлая ×2)
+  const hops = (car.kind === 'mza' && sys) ? ecMzaHops(car.sys, sys.id) : null;
+  const maxHops = ecMzaMaxHops(shellKind);
+  const inRange = !(car.kind === 'mza' && hops != null && hops > maxHops);
+  const gravOk = shells >= 1;
+  // выбор снаряда — только для Гиперпейсера (несёт снаряд Длани и все тиры баллистики)
+  const ICO = { doom: '☠', ball_light: '⚡', ball_emp: '👻', ball_cluster: '🧨', ball_heavy: '🪨' };
+  const NM = { doom: 'снаряд Длани', ball_light: 'лёгкая', ball_emp: '«Фантом»', ball_cluster: 'кассетная', ball_heavy: 'тяжёлая' };
+  const shellSel = car.kind === 'mza'
+    ? `<div class="hp-vnd-cassrow" style="margin:6px 0 2px">${['doom'].concat(EC_BALL_KINDS).map(k =>
+        `<button type="button" class="hp-vnd-cass${shellKind === k ? ' on' : ''}${ecShellsOf(k) < 1 ? ' off' : ''}"
+          title="${esc(EC_BALL_INFO[k] || 'стирает планету в мёртвый камень')}"
+          onclick="event.stopPropagation();ecDoomVNShell('${k}')">
+          <span class="hp-vnd-cass-ic">${ICO[k]}</span>
+          <span class="hp-vnd-cass-nm">${NM[k]}</span>
+          <span class="hp-vnd-cass-st">на складе: ${ecNum(ecShellsOf(k))}</span>
+        </button>`).join('')}</div>`
+    : '';
   const tglDef = [
-    ['pwr', 'питание накопителей', gravOk ? '' : 'нет гравиядер'],
+    ['pwr', 'питание накопителей', gravOk ? '' : 'нет снаряда'],
     ['seal', 'снять пломбу ствола', ''],
     ['oath', 'принять ответственность', ''],
   ];
-  const canArm = !!tgt;
+  const canArm = !!tgt && inRange;
   const tumbs = tglDef.map(([k, lbl, block]) => {
     const dead = !canArm || !!block;
     return `<button type="button" class="hp-vnd-tumb${st.tgl[k] ? ' on' : ''}${dead ? ' off' : ''}" ${dead ? 'disabled' : ''}
@@ -11941,14 +12259,19 @@ function ecDoomVNProto() {
   const armed = canArm && gravOk && st.tgl.pwr && st.tgl.seal && st.tgl.oath;
   return `<div class="hp-vnd-con-sec hp-vnd-con-fire">
     <div class="hp-vnd-con-t"><i>III</i> цепь пуска</div>
+    ${shellSel}
     <div class="hp-vnd-read">
       <span><i>носитель</i><b>${car.ic} ${esc(car.nm)}</b></span>
       <span><i>цель</i><b${tgt ? ' class="hot"' : ''}>${tgt ? esc((sys.name || sys.id) + ' · ' + (tgt.name || 'планета ' + tgt.pid)) : '— не назначена —'}</b></span>
       <span><i>подлёт</i><b>${fly ? '≈' + fly.hours.toFixed(1) + ' ч' : '···'}</b></span>
-      <span><i>заряд</i><b class="${gravOk ? '' : 'hot'}">🔮 ${ecNum(Math.floor(grav))}/${car.grav}</b></span>
+      <span><i>снаряд</i><b class="${gravOk ? '' : 'hot'}">${shellKind === 'doom' ? '☠' : '💥'} ${ecNum(shells)}/1</b></span>
     </div>
     <div class="hp-vnd-tumbs">${tumbs}</div>
-    ${tgt ? `<div class="hp-vnd-warnline">⚠ Залп необратим: «${esc(tgt.name || '')}» станет мёртвым камнем, любая колония на ней — включая столицу — будет стёрта.</div>` : `<div class="hp-vnd-hint">Назначьте планету-цель в секции II.1 — тумблеры обесточены до целеуказания.</div>`}
+    ${!inRange ? `<div class="hp-vnd-warnline">⚠ Цель вне радиуса: дальность ${EC_SHELL_LABEL[shellKind]} — ${maxHops} прыжка(ов) по гиперпутям${hops === Infinity ? ' (нет маршрута)' : ' (до цели ' + hops + ')'}. Перебросьте носитель ближе или возьмите 🪨 тяжёлую.</div>` : ''}
+    ${tgt && inRange ? (shellKind === 'doom'
+      ? `<div class="hp-vnd-warnline">⚠ Залп необратим: «${esc(tgt.name || '')}» станет мёртвым камнем, любая колония на ней — включая столицу — будет стёрта.</div>`
+      : `<div class="hp-vnd-warnline">💥 ${esc(EC_SHELL_LABEL[shellKind])}: планета уцелеет — ${esc(EC_BALL_INFO[shellKind] || '')}.</div>`)
+      : (!tgt ? `<div class="hp-vnd-hint">Назначьте планету-цель в секции II.1 — тумблеры обесточены до целеуказания.</div>` : '')}
     <button type="button" class="hp-vnd-launch${armed ? ' armed' : ''}" ${armed ? '' : 'disabled'} onclick="event.stopPropagation();ecDoomVNFire()">
       ${armed ? '🜨 ПУСК' : 'цепь разомкнута'}
     </button>

@@ -1982,15 +1982,114 @@ async function gmMzaSendTo(id, destSys) {
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); gmCloseMzaCmd(); }
   finally { GM._defBusy = false; }
 }
+// Дальность залпа Гиперпейсера: ПРЫЖКИ по гиперпутям (зеркало _mza_hops в
+// _doom_shells.sql). 4 прыжка; тяжёлая баллистика — ×2 (8).
+const GM_MZA_RANGE_HOPS = 4, GM_MZA_HEAVY_MUL = 2;
+// Карта прыжков от системы-носителя: {sysId: hops} в пределах maxHops (BFS).
+function gmMzaHopMap(fromSys, maxHops) {
+  const adj = {};
+  (GM.lanes || []).forEach(l => { (adj[l.a_id] = adj[l.a_id] || []).push(l.b_id); (adj[l.b_id] = adj[l.b_id] || []).push(l.a_id); });
+  const dist = { [fromSys]: 0 }, q = [fromSys];
+  while (q.length) {
+    const c = q.shift();
+    if (dist[c] >= maxHops) continue;
+    (adj[c] || []).forEach(nb => { if (dist[nb] === undefined) { dist[nb] = dist[c] + 1; q.push(nb); } });
+  }
+  return dist;
+}
+// Прыжки до системы-цели с точки зрения носителя (Infinity = вне зоны/нет маршрута).
+function gmMzaHopsTo(sh, sysId) {
+  if (!sh || !sh.system_id) return Infinity;
+  if (!(GM.lanes || []).length) return 0;   // нет гиперпутей на карте → не ограничиваем
+  const d = gmMzaHopMap(sh.system_id, GM_MZA_RANGE_HOPS * GM_MZA_HEAVY_MUL)[sysId];
+  return d === undefined ? Infinity : d;
+}
 function gmMzaCmdFire() {
   if (!GMM.mzaCmd) return;
   GMM.mzaCmd.mode = 'fireTarget';
+  GMM.dirty = true; gmmKick();   // включить подсветку зоны поражения
   const el = document.getElementById('gm-opcmd');
   if (el) el.innerHTML = `<div class="gm-opcmd-card">
       <div class="gm-opcmd-title">🜨 Система-цель залпа</div>
-      <div class="gm-opcmd-hint">Кликните систему карты, затем выберите планету. Залп превратит её в мёртвый мир.</div>
+      <div class="gm-opcmd-hint">Дальность — <b>${GM_MZA_RANGE_HOPS} прыжка</b> по гиперпутям (🪨 тяжёлая — ${GM_MZA_RANGE_HOPS * GM_MZA_HEAVY_MUL}). Досягаемые системы помечены на карте. Кликните систему, затем выберите снаряд и планету.</div>
       <button class="gm-opcmd-btn" onclick="gmCloseMzaCmd()">Отмена</button>
     </div>`;
+}
+// ── ЗОНА ПОРАЖЕНИЯ Гиперпейсера (режим fireTarget) — сдержанно ──
+// Без спиц и заливок: тонкий пунктирный контур зоны + метки на досягаемых
+// системах. Основная зона (≤4 прыжка) — красные уголки-прицелы на обитаемых,
+// дальняя (только тяжёлая, ≤8) — приглушённые точки-ромбы.
+function gmmPaintMzaRange(ctx) {
+  if (!GMM.mzaCmd || GMM.mzaCmd.mode !== 'fireTarget') return;
+  const sh = (GM.mzaShips || []).find(x => x.id === GMM.mzaCmd.id);
+  const org = sh && (GM.systems || []).find(s => s.id === sh.system_id);
+  if (!org || !(GM.lanes || []).length) return;
+  const hops = gmMzaHopMap(org.id, GM_MZA_RANGE_HOPS * GM_MZA_HEAVY_MUL);
+  const t = performance.now() / 1000;
+  const a = 0.5 + 0.18 * Math.sin(t * 1.8);        // мягкий пульс — единственная анимация
+  const AC = 'rgba(255,74,60,';                    // один акцент (сигнальный красный)
+  // обитаемость: колонии/владелец → это и есть «в кого ебнем»
+  const colBySys = {};
+  // GM.econ — ОБЪЕКТ {system_id: {...}}, не массив (forEach по нему ронял кадр)
+  Object.keys(GM.econ || {}).forEach(sid => { if (GM.econ[sid]) colBySys[sid] = true; });
+  (GM.systems || []).forEach(s => { if (s.faction) colBySys[s.id] = true; });
+  // радиус контура основной зоны = самая дальняя система в ≤4 прыжках (+небольшой зазор)
+  let rCore = 0;
+  (GM.systems || []).forEach(s => {
+    const h = hops[s.id];
+    if (h !== undefined && h <= GM_MZA_RANGE_HOPS)
+      rCore = Math.max(rCore, Math.hypot(s.x - org.x, s.y - org.y));
+  });
+  const cx = org.x * GMM.s + GMM.tx, cy = gmmTY(org.y * GMM.s + GMM.ty);
+  const ky = 1 - 0.5 * gmmDeepA();
+  ctx.save();
+  if (rCore > 0) {
+    const R = (rCore + 60) * GMM.s;
+    ctx.beginPath(); ctx.ellipse(cx, cy, R, R * ky, 0, 0, 6.2832);
+    ctx.strokeStyle = AC + (a * 0.55) + ')';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([3, 9]);
+    ctx.lineDashOffset = -t * 8;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // метки досягаемых систем
+  (GM.systems || []).forEach(s => {
+    const h = hops[s.id];
+    if (h === undefined || s.id === org.id) return;
+    const sx = s.x * GMM.s + GMM.tx, sy = gmmTY(s.y * GMM.s + GMM.ty);
+    const core = h <= GM_MZA_RANGE_HOPS;
+    const hot = !!colBySys[s.id];
+    if (core && hot) {
+      // уголки-прицел (скобки по четырём углам) — цели основной зоны
+      const r = 10;
+      ctx.strokeStyle = AC + a + ')'; ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([ex, ey]) => {
+        ctx.moveTo(sx + ex * r, sy + ey * r - ey * 5);
+        ctx.lineTo(sx + ex * r, sy + ey * r);
+        ctx.lineTo(sx + ex * r - ex * 5, sy + ey * r);
+      });
+      ctx.stroke();
+    } else if (core) {
+      // пустая, но досягаемая — маленькая точка
+      ctx.fillStyle = AC + '.35)';
+      ctx.beginPath(); ctx.arc(sx, sy, 2.2, 0, 6.2832); ctx.fill();
+    } else {
+      // дальняя зона (только 🪨 тяжёлая) — приглушённый ромб
+      ctx.strokeStyle = 'rgba(230,164,60,.4)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - 6); ctx.lineTo(sx + 6, sy); ctx.lineTo(sx, sy + 6); ctx.lineTo(sx - 6, sy);
+      ctx.closePath(); ctx.stroke();
+    }
+  });
+  // лаконичная подпись у носителя
+  ctx.fillStyle = 'rgba(255,209,102,.85)';
+  ctx.font = '600 11px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('дальность ' + GM_MZA_RANGE_HOPS + ' прыжка · ◇ только тяжёлая', cx, cy + 26);
+  ctx.restore();
+  GMM.dirty = true;   // гоним кадры, пока зона активна (пульс контура)
 }
 // После выбора системы-цели — список её планет (целятся по pid).
 function gmMzaPickPlanet(id, sys) {
@@ -2013,6 +2112,28 @@ function gmMzaPickPlanet(id, sys) {
     </div>`;
     return;
   }
+  // ТИП СНАРЯДА: ☠ Длани / 4 тира баллистики. Хранится в GMM.mzaCmd.shell.
+  // Цели в 5..8 прыжках достаёт только 🪨 тяжёлая — остальные тумблеры гаснут.
+  const KINDS = [
+    ['doom',         '☠ Длани',    'планета → мёртвый мир, колония стёрта'],
+    ['ball_light',   '⚡ лёгкая',   'вдвое быстрее · 2–6% населения · 0–1 постройка'],
+    ['ball_emp',     '👻 Фантом',   'не видна планетарной ПРО · 2–5% населения · 1 постройка'],
+    ['ball_cluster', '🧨 кассетная', '8–16% населения · 2–4 постройки'],
+    ['ball_heavy',   '🪨 тяжёлая',  'гарантированно 5 построек · 12–22% населения · дальность ×2'],
+  ];
+  const far = (GMM.mzaCmd.hops || 0) > GM_MZA_RANGE_HOPS;   // дальняя зона
+  let shell = GMM.mzaCmd.shell || 'doom';
+  if (far) shell = 'ball_heavy';   // в дальней зоне выбора нет
+  GMM.mzaCmd.shell = shell;
+  const info = (KINDS.find(k => k[0] === shell) || KINDS[0])[2];
+  const shellRow = `<div style="display:flex;gap:4px;margin:4px 0;flex-wrap:wrap">
+      ${KINDS.map(([k, nm]) => {
+        const dis = far && k !== 'ball_heavy';
+        return `<button class="gm-opcmd-btn${shell === k ? ' gm-opcmd-danger' : ''}${dis ? ' gm-dis' : ''}" ${dis ? 'disabled' : ''}
+          style="flex:1;min-width:96px;padding:4px 6px" onclick="gmMzaShellKind('${id}','${esc(sys.id)}','${k}')">${nm}</button>`;
+      }).join('')}
+    </div>
+    <div class="gm-opcmd-hint">${esc(info)}. Нужен построенный снаряд (☢ Арсенал / 🏭 военпромзавод).${far ? ' Цель в дальней зоне — достаёт только тяжёлая.' : ''}</div>`;
   const rows = planets.map(p => {
     const dead = p.dead || p.doomed;
     const nm = encodeURIComponent(p.name || '');
@@ -2022,20 +2143,33 @@ function gmMzaPickPlanet(id, sys) {
   el.innerHTML = `<div class="gm-opcmd-card">
       <button class="gm-close" onclick="gmCloseMzaCmd()">✕</button>
       <div class="gm-opcmd-title">🜨 Залп по ${esc(sys.name || '')}</div>
+      ${shellRow}
       <div class="gm-opcmd-sub">Выберите планету-цель</div>
       ${rows}
       <button class="gm-opcmd-btn" onclick="gmMzaCmdFire()">← Другая система</button>
     </div>`;
   el.classList.remove('gm-hidden');
 }
+// Тумблер типа снаряда: запоминаем и перерисовываем плашку планет той же системы.
+function gmMzaShellKind(id, sysId, kind) {
+  if (!GMM.mzaCmd) return;
+  GMM.mzaCmd.shell = ['doom', 'ball_light', 'ball_emp', 'ball_cluster', 'ball_heavy'].includes(kind) ? kind : 'doom';
+  const sys = (GM.systems || []).find(s => s.id === sysId);
+  if (sys) gmMzaPickPlanet(id, sys);
+}
 async function gmMzaFireAt(id, sysId, pid, nameEnc) {
-  if (!confirm('Дать залп по планете? Она станет мёртвым миром, колония на ней будет стёрта.')) return;
+  const shell = (GMM.mzaCmd && GMM.mzaCmd.shell) || 'doom';
+  const warn = shell !== 'doom'
+    ? 'Дать баллистический залп? Погибнет случайная часть населения и постройки по тиру снаряда. ПРО может перехватить.'
+    : 'Дать залп по планете? Она станет мёртвым миром, колония на ней будет стёрта.';
+  if (!confirm(warn)) return;
   if (GM._defBusy) return; GM._defBusy = true;
   try {
     const name = nameEnc ? decodeURIComponent(nameEnc) : null;
     // pid может быть null (столица-домик без стабильного pid) — тогда сервер целит по имени
     const r = await gmDefRpc('mza_fire', { p_id: id, p_target_system_id: sysId,
-                                           p_target_pid: (pid == null ? null : pid), p_target_name: name });
+                                           p_target_pid: (pid == null ? null : pid), p_target_name: name,
+                                           p_kind: shell });
     toast('🜨 Залп выпущен · долёт ~' + ((r && r.flight_h) || '?') + ' ч', 'ok');
     gmCloseMzaCmd();
     await gmReloadDefense();
@@ -3544,7 +3678,14 @@ function gmmTapAt(lx, ly) {
     const tgt = sysAtScreen();
     if (!tgt) { gmCloseMzaCmd(); toast('Отменено', ''); return; }
     if (GMM.mzaCmd.mode === 'sendTarget') gmMzaSendTo(GMM.mzaCmd.id, tgt.id);
-    else gmMzaPickPlanet(GMM.mzaCmd.id, tgt);
+    else {
+      // залп: цель в пределах 8 прыжков (4 — все снаряды, 5..8 — только тяжёлая)
+      const sh = (GM.mzaShips || []).find(x => x.id === GMM.mzaCmd.id);
+      const h = gmMzaHopsTo(sh, tgt.id);
+      if (h > GM_MZA_RANGE_HOPS * GM_MZA_HEAVY_MUL) { toast('Цель вне радиуса: дальность залпа — ' + GM_MZA_RANGE_HOPS + ' прыжка (тяжёлая — ' + GM_MZA_RANGE_HOPS * GM_MZA_HEAVY_MUL + ')', 'err'); return; }
+      GMM.mzaCmd.hops = h;
+      gmMzaPickPlanet(GMM.mzaCmd.id, tgt);
+    }
     return;
   }
   // 0в) РЕЖИМ ПРИЦЕЛИВАНИЯ флота: клик по системе = перебросить туда, по пустоте = отмена.
@@ -3738,6 +3879,7 @@ function gmmBlit() {
   gmmPaintEditOverlay(ctx);  // редактор: кольца выбранных звёзд (линковка/сектор)
   gmmPaintLaneTraffic(ctx);  // караваны по гиперпутям (как только видны сами пути)
   gmmPaintSalvos(ctx);   // залпы межзвёздной артиллерии в полёте (на любом зуме)
+  gmmPaintMzaRange(ctx); // сетка радиуса залпа Гиперпейсера (режим наведения)
   gmmPaintOrbits(ctx);   // живой оверлей анимированных систем (на глубоком зуме)
   gmmPaintDeepFx(ctx);   // HUD-переход «вход в систему»: рамка/скобки/скан/импульс
   gmmPaintDefense(ctx);  // оборона: аванпосты/носители — ПОВЕРХ орбит, иначе на глубоком

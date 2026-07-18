@@ -103,7 +103,7 @@ function adBuildIndex() {
 // Ядро — лёгкие запросы, нужные для таблицы фракций (грузится за ~1 c)
 async function adLoadCore() {
   const [apps, ecos] = await Promise.all([
-    dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,owner_id,owner_email,race,civ_type,gov,regime,ideology,capital_env,system_id,system_name&order=name.asc').catch(() => []),
+    dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,owner_id,owner_email,race,civ_type,gov,regime,ideology,capital_env,system_id,system_name,herald_url&order=name.asc').catch(() => []),
     dbGet('faction_economy',  'select=*').catch(() => []),
   ]);
   AD.apps = apps || [];
@@ -215,16 +215,26 @@ function adPaint() {
       </div>
       <button class="btn btn-gh btn-sm" onclick="adReloadPaint()">↻ Обновить</button>
     </div>`;
-    // ── Выпадающий выбор фракции (надёжно, без кликов по строкам) ──
-    const opts = [...AD.byFid.entries()].map(([fid, e]) =>
-      `<option value="${esc(fid)}"${AD.sel === fid ? ' selected' : ''}>${esc(e.app.name)}${e.eco ? '' : ' (нет экономики)'}</option>`
-    ).join('');
-    const selector = `<div style="margin:18px 0;display:flex;flex-wrap:wrap;align-items:center;gap:10px">
-      <label style="font-family:var(--font-display,sans-serif);font-size:13px;font-weight:600;color:var(--t2,#c0ccd6)">Фракция:</label>
-      <select id="fm-fac-select" onchange="adSelectFaction(this.value)" style="flex:1;min-width:220px;max-width:420px;padding:10px 12px;font-size:14px;background:var(--b2,#141a22);color:var(--t1,#e8edf2);border:1px solid var(--gd,#3a7fbf);border-radius:8px;cursor:pointer">
-        <option value="">— выберите фракцию для управления —</option>
-        ${opts}
-      </select>
+    // ── Выбор фракции: плитка кнопок «герб + название» (как везде в игре) ──
+    const facBtns = [...AD.byFid.entries()].map(([fid, e]) => {
+      const on = AD.sel === fid;
+      const img = e.app.herald_url || '';
+      const herald = img
+        ? `<span style="width:26px;height:26px;flex:0 0 26px;border-radius:6px;background:#0c1322 center/cover no-repeat;background-image:url('${esc(img)}')"></span>`
+        : `<span style="width:26px;height:26px;flex:0 0 26px;border-radius:6px;background:var(--b3,#0c1322);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--t3,#8aa0b0)">⚑</span>`;
+      return `<button class="btn ${on ? 'btn-gd' : 'btn-gh'} btn-sm ad-facbtn" data-fid="${esc(fid)}" onclick="adSelectFaction('${esc(fid)}')"
+        style="display:flex;align-items:center;gap:8px;text-align:left;padding:6px 10px${on ? '' : ''}">
+        ${herald}<span style="display:flex;flex-direction:column;line-height:1.2">
+          <b style="font-size:12px">${esc(e.app.name)}</b>
+          ${e.eco ? '' : '<i style="font-size:10px;opacity:.6">нет экономики</i>'}
+        </span></button>`;
+    }).join('');
+    const selector = `<div style="margin:18px 0">
+      <div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Фракция</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${facBtns}
+        <button class="btn btn-gh btn-sm" onclick="adSelectFaction('')" style="padding:6px 10px">✕ Сбросить</button>
+      </div>
     </div>`;
     // Панель кладём в ВЫДЕЛЕННЫЙ слот. При выборе фракции меняем ТОЛЬКО его
     // содержимое (adSelectFaction), без перерисовки всей страницы — это
@@ -1864,7 +1874,12 @@ function adSelectFaction(fid) {
   AD.sysSearch = '';
   console.log('[ADMIN] select faction:', AD.sel, 'inIndex=', AD.sel ? AD.byFid.has(AD.sel) : '-');
   if (!adRenderSlot()) adPaint();   // если слота нет — полный рендер
-  const s = document.getElementById('fm-fac-select'); if (s && s.value !== (AD.sel || '')) s.value = AD.sel || '';
+  // подсветка выбранной кнопки-герба (слот перерисовывается отдельно от плитки)
+  document.querySelectorAll('.ad-facbtn').forEach(b => {
+    const on = b.dataset.fid === (AD.sel || '');
+    b.classList.toggle('btn-gd', on);
+    b.classList.toggle('btn-gh', !on);
+  });
 }
 function adSetSubtab(t) { AD.subtab = t; if (!adRenderSlot()) adPaint(); }
 function adSetTab(t) {
@@ -3407,9 +3422,23 @@ function adTabTesting(e) {
     ${row('☣ Выдать Гиперпейсер в конкретной системе', 'Спавнит готовый Гиперпейсер (мобильное орудие судного дня) сразу на карте — в выбранной системе. Без исследования и затрат; технология открывается заодно. Пусто = первая колония фракции.',
       `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
         <select id="ad-mza-sys" class="ec-input" style="min-width:200px"><option value="">— первая колония фракции —</option>${(AD.systems || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru')).map(s => `<option value="${esc(s.id)}">${esc(s.name || s.id)}${s.faction ? '' : ' · нейтр.'}</option>`).join('')}</select>
+        <input id="ad-mza-name" class="ec-input" style="min-width:200px" maxlength="40" placeholder="Название корабля (по умолч. «Гиперпейсер»)">
         <button class="btn btn-gd" onclick="adGrantMza()">Выдать Гиперпейсер</button>
       </div>`)}
     ${row('☣ Приземлить залп Гиперпейсера', 'Все гиперпейсеры фракции мгновенно прибывают, а их снаряды в полёте поражают цель: планета-цель становится мёртвым камнем, колония на ней стирается.', `<button class="btn btn-gd" onclick="adTestSpeedMza()">Приземлить залп</button>`)}
+    ${row('☢ Насыпать снарядов судного дня', 'Кладёт снаряды прямо на склад фракции — без суток ожидания Арсенала / военпромзавода. Тип: снаряд Длани или любой тир баллистики (их несёт только Гиперпейсер).',
+      `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <select id="ad-shell-kind" class="ec-input" style="min-width:200px">
+          <option value="all">— все типы сразу —</option>
+          <option value="doom">☠ Снаряд Длани</option>
+          <option value="ball_light">Баллистика · Лёгкая</option>
+          <option value="ball_emp">Баллистика · Фантом (мимо ПРО)</option>
+          <option value="ball_cluster">Баллистика · Кассетная</option>
+          <option value="ball_heavy">Баллистика · Тяжёлая</option>
+        </select>
+        <input id="ad-shell-qty" class="ec-input" type="number" min="1" max="99" value="5" style="min-width:200px" placeholder="Количество">
+        <button class="btn btn-gd" onclick="adGrantShells()">Насыпать снаряды</button>
+      </div>`)}
     ${row('🛐 Удалить религию фракции', 'Удаляет веру, основанную этой фракцией. Адепты, признания и тайные секты уходят каскадом. Необратимо.', `<button class="btn btn-rd" onclick="adTestDeleteFaith()">Удалить религию</button>`)}
     ${adTestSpySection()}
   </div>`;
@@ -3677,12 +3706,27 @@ async function adGrantMza() {
   if (!AD.sel || AD.busy) return;
   const sid = document.getElementById('ad-mza-sys')?.value || null;
   const where = sid ? (((AD.systems || []).find(s => s.id === sid) || {}).name || sid) : 'первой колонии фракции';
-  if (!confirm(`Выдать Гиперпейсер этой фракции в системе «${where}»? Появится на карте немедленно.`)) return;
+  const nm = (document.getElementById('ad-mza-name')?.value || '').trim().slice(0, 40) || 'Гиперпейсер';
+  if (!confirm(`Выдать Гиперпейсер «${nm}» этой фракции в системе «${where}»? Появится на карте немедленно.`)) return;
   AD.busy = true;
   try {
-    const r = await apiFetch('rpc/admin_grant_mza', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel, p_system_id: sid }) });
-    toast(`Гиперпейсер выдан · система «${r?.system_name || '—'}»`, 'ok');
+    const r = await apiFetch('rpc/admin_grant_mza', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel, p_system_id: sid, p_name: nm }) });
+    toast(`«${nm}» выдан · система «${r?.system_name || '—'}»`, 'ok');
     await adReloadPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+async function adGrantShells() {
+  if (!AD.sel || AD.busy) return;
+  AD.busy = true;
+  try {
+    const pick = document.getElementById('ad-shell-kind')?.value || 'all';
+    const qty = Math.max(1, Math.min(99, parseInt(document.getElementById('ad-shell-qty')?.value, 10) || 5));
+    const kinds = pick === 'all' ? ['doom', 'ball_light', 'ball_emp', 'ball_cluster', 'ball_heavy'] : [pick];
+    for (const k of kinds)
+      await apiFetch('rpc/admin_grant_shells', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel, p_kind: k, p_qty: qty }) });
+    toast(pick === 'all' ? `Снаряды насыпаны: по ${qty} шт каждого из 5 типов` : `Насыпано ${qty} шт: ${pick}`, 'ok');
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }
