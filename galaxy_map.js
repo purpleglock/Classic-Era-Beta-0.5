@@ -37,6 +37,7 @@ const GM_ICO = {
   roster: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4.2-7 13.8-7-13.8z"/><path d="M12 3v17.8M5.4 8.5L12 11l6.6-2.5"/></svg>',
   outpost: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 8.8V4M12 19.2V15M8.8 12H4M20 12h-4.2"/><path d="M5.6 5.6l2.4 2.4M16 16l2.4 2.4M18.4 5.6L16 8M8 16l-2.4 2.4"/></svg>',
   fleeticon: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l6 3.3-6 3.3-6-3.3z"/><path d="M16.5 11l4 2.2-4 2.2M7.5 11l-4 2.2 4 2.2M12 12.5l6 3.3-6 3.3-6-3.3z"/></svg>',
+  occup: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V3"/><path d="M6 4h12l-3 3.5L18 11H6z"/></svg>',
   sectors: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h7v7H3zM14 4h7v7h-7zM3 15h7v5H3zM14 13h7v7h-7z"/></svg>',
   mines: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.4"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.9 2.9M15.5 15.5l2.9 2.9M18.4 5.6l-2.9 2.9M8.5 15.5l-2.9 2.9"/></svg>',
   unions: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="7" r="2.6"/><circle cx="12" cy="17" r="2.6"/><path d="M8.7 8.6l6.6 0M8 9.2l2.6 5.6M16 9.2l-2.6 5.6"/></svg>',
@@ -64,6 +65,7 @@ function gmCtlBtns(opts) {
         ${row('sectors', GM.showSectors, GM_ICO.sectors, 'Сектора', 'gmToggleSectors()')}
         ${row('unions', GM.showUnions, GM_ICO.unions, 'Союзы', 'gmToggleUnions()')}
         ${row('blocked', GM.showBlocked, GM_ICO.blocked, 'Закрытые границы', 'gmToggleBlocked()')}
+        ${row('occup', GM.showOccup, GM_ICO.occup, 'Оккупация', 'gmToggleOccup()')}
         ${row('flags', GM.showFlags, GM_ICO.flags, 'Флаги фракций', 'gmToggleFlags()')}
         ${row('res', GM.showRes, GM_ICO.res, 'Ресурсы систем', 'gmToggleRes()')}
         ${gmResFilterHtml()}
@@ -111,6 +113,8 @@ const GM = {
   showUnions: false,             // режим отображения союзов (федерации/конфедерации)
   unions: null,                  // ленивая загрузка союзов: [{id,name,color,kind,fids:[]}] (null=не грузили)
   showBlocked: false,            // режим «закрытые границы» (куда нашим флотам нельзя)
+  showOccup: false,              // ВОЙНА: слой «Оккупация» — флаги оккупантов над занятыми системами
+  occup: null,                   // [{system_id,occupier,occupier_name,occupier_color,owner,...}] (RPC occupations_all; null=не грузили)
   blockedFids: null,             // fid фракций, закрывших границы для нас (RPC borders_blocked_fids)
   showRes: false,                // режим «ресурсы систем»
   showEcon: false,               // режим «бедность» (просперити систем)
@@ -180,17 +184,17 @@ async function loadGalaxyData() {
       // ОБОРОНА: видимые мне минные поля, аванпосты и мои корабли-носители аванпостов.
       // RPC требуют авторизации и фракции игрока → для гостей/без фракции вернут
       // ошибку, а если _defense_*.sql ещё не применён — функции нет. Везде → [].
-      user ? apiFetch('rpc/minefields_visible',  { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
-      user ? apiFetch('rpc/outposts_visible',    { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
-      user ? apiFetch('rpc/outpost_ships_mine',  { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
-      user ? apiFetch('rpc/mza_ships_mine',      { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
-      user ? apiFetch('rpc/fleets_mine',         { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      user ? apiFetch('rpc/minefields_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      user ? apiFetch('rpc/outposts_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      user ? apiFetch('rpc/outpost_ships_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      user ? apiFetch('rpc/mza_ships_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      user ? apiFetch('rpc/fleets_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       // ВИДИМОСТЬ ЧУЖИХ: флоты всех держав (состав скрыт без разведки) + вскрытые
       // гиперкрейсера. _fleet_intel.sql может быть не накачен → []. Гостям не нужно.
-      user ? apiFetch('rpc/fleets_visible',      { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
-      user ? apiFetch('rpc/mza_visible',         { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      user ? apiFetch('rpc/fleets_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      user ? apiFetch('rpc/mza_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       // МАРШ: мои армии на колониях (таблицы может не быть — _wellbeing_armies.sql)
-      user ? apiFetch('rpc/armies_mine',         { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      user ? apiFetch('rpc/armies_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
     ]);
     GM.systems = (sys || []).map(s => ({ ...s, x: +s.x, y: +s.y, planets: s.planets || [] }));
     GM._cbox = null; // сброс кэша области звёзд
@@ -199,13 +203,13 @@ async function loadGalaxyData() {
     GM.routes = routes || [];
     GM.salvos = salvos || [];   // залпы артиллерии в полёте (для визуализации на карте)
     GM.minefields = Array.isArray(mines) ? mines : [];        // оборона: минные поля (гексы)
-    GM.outposts   = Array.isArray(outposts) ? outposts : [];  // оборона: развёрнутые аванпосты
-    GM.opShips    = Array.isArray(opShips) ? opShips : [];    // мои корабли-носители аванпостов (idle/в полёте)
-    GM.mzaShips   = Array.isArray(mzaShips) ? mzaShips : [];  // мои Гиперпейсер — мобильные «Длани» (idle/в полёте)
-    GM.fleets     = Array.isArray(fleets) ? fleets : [];      // мои флоты — мобильные соединения (idle/в полёте)
-    GM.fleetsVis  = Array.isArray(fleetsVis) ? fleetsVis : [];// флоты ВСЕХ держав (видимость; состав скрыт без разведки)
-    GM.mzaVis     = Array.isArray(mzaVis) ? mzaVis : [];      // ВСКРЫТЫЕ чужие гиперкрейсера
-    GM.armies     = Array.isArray(armies) ? armies : [];      // МАРШ: мои армии (гарнизоны/на марше)
+    GM.outposts = Array.isArray(outposts) ? outposts : [];  // оборона: развёрнутые аванпосты
+    GM.opShips = Array.isArray(opShips) ? opShips : [];    // мои корабли-носители аванпостов (idle/в полёте)
+    GM.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];  // мои Гиперпейсер — мобильные «Длани» (idle/в полёте)
+    GM.fleets = Array.isArray(fleets) ? fleets : [];      // мои флоты — мобильные соединения (idle/в полёте)
+    GM.fleetsVis = Array.isArray(fleetsVis) ? fleetsVis : [];// флоты ВСЕХ держав (видимость; состав скрыт без разведки)
+    GM.mzaVis = Array.isArray(mzaVis) ? mzaVis : [];      // ВСКРЫТЫЕ чужие гиперкрейсера
+    GM.armies = Array.isArray(armies) ? armies : [];      // МАРШ: мои армии (гарнизоны/на марше)
     GM.sectors = (secs || []).map(s => ({ ...s, system_ids: s.system_ids || [] }));
     GM.econ = {};   // system_id → { status, prosperity } для режима «бедность»
     (econ || []).forEach(e => { if (e && e.system_id) GM.econ[e.system_id] = { status: e.status, prosperity: +e.prosperity }; });
@@ -366,8 +370,8 @@ function gmContentBox() {
   const xs = GM.systems.map(s => s.x), ys = GM.systems.map(s => s.y);
   const pad = 500;
   const b = {
-    x0: Math.max(0,    Math.min(...xs) - pad),
-    y0: Math.max(0,    Math.min(...ys) - pad),
+    x0: Math.max(0, Math.min(...xs) - pad),
+    y0: Math.max(0, Math.min(...ys) - pad),
     x1: Math.min(GM_W, Math.max(...xs) + pad),
     y1: Math.min(GM_H, Math.max(...ys) + pad),
     n: GM.systems.length,
@@ -474,9 +478,9 @@ function gmBindViewport() {
   // старт панорамирования / добавление звезды по пустому месту
   vp.addEventListener('mousedown', (e) => {
     if (e.target.closest('.gm-star') || e.target.closest('.hyperlane-hit') ||
-        e.target.closest('.gm-sec-hit') || e.target.closest('.gm-sec-label') ||
-        e.target.closest('#gm-panel') || e.target.closest('#gm-form') ||
-        e.target.closest('#gm-sector') || e.target.closest('#gm-toolbar')) return;
+      e.target.closest('.gm-sec-hit') || e.target.closest('.gm-sec-label') ||
+      e.target.closest('#gm-panel') || e.target.closest('#gm-form') ||
+      e.target.closest('#gm-sector') || e.target.closest('#gm-toolbar')) return;
     if (GM.edit && GM.mode === 'add') {
       const r = vp.getBoundingClientRect();
       const x = Math.round((e.clientX - r.left - GM.tx) / GM.scale);
@@ -580,8 +584,10 @@ function gmTouchStart(e) {
     const r = vp.getBoundingClientRect();
     const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
     const my = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
-    GM.touch = { mode: 'pinch', dist: gmTouchDist(e.touches), scale: GM.scale,
-      px: (mx - GM.tx) / GM.scale, py: (my - GM.ty) / GM.scale, mx, my };
+    GM.touch = {
+      mode: 'pinch', dist: gmTouchDist(e.touches), scale: GM.scale,
+      px: (mx - GM.tx) / GM.scale, py: (my - GM.ty) / GM.scale, mx, my
+    };
   }
 }
 function gmTouchMove(e) {
@@ -673,7 +679,7 @@ async function gmLoadUnions() {
     try {
       const d = await gmDefRpc('union_detail', { p_union_id: u.id });
       fids = ((d && d.members) || []).map(m => m.fid).filter(Boolean);
-    } catch (e) {}
+    } catch (e) { }
     out.push({ id: u.id, name: u.name, kind: u.kind, color: u.color || '#5a7fb0', fids });
   }
   GM.unions = out;
@@ -979,8 +985,8 @@ function gmSmoothPath(pts) {
     const c2x = p2[0] - (p3[0] - p1[0]) * k;
     const c2y = p2[1] - (p3[1] - p1[1]) * k;
     d += 'C' + c1x.toFixed(1) + ',' + c1y.toFixed(1)
-       + ' ' + c2x.toFixed(1) + ',' + c2y.toFixed(1)
-       + ' ' + p2[0].toFixed(1) + ',' + p2[1].toFixed(1);
+      + ' ' + c2x.toFixed(1) + ',' + c2y.toFixed(1)
+      + ' ' + p2[0].toFixed(1) + ',' + p2[1].toFixed(1);
   }
   return d;
 }
@@ -1384,11 +1390,11 @@ function gmDrawStars() {
         onmousedown="gmStarDown(event,'${esc(s.id)}')" onclick="gmStarClick(event,'${esc(s.id)}')">
         <img src="${GM_BASE}stars/star_${esc(s.star_type || 'yellow')}.png" draggable="false" alt="">
         ${gmCompLayout(s).map(({ c, fr, off, ang }) => {
-          // центр компаньона в % контейнера: off — в долях радиуса иконки (50%)
-          const l = 50 + Math.cos(ang) * off * 50, t = 50 + Math.sin(ang) * off * 50;
-          return `<img class="gm-comp-star" src="${GM_BASE}stars/star_${GM_CLS2TYPE[c.cls] || 'yellow'}.png"
+      // центр компаньона в % контейнера: off — в долях радиуса иконки (50%)
+      const l = 50 + Math.cos(ang) * off * 50, t = 50 + Math.sin(ang) * off * 50;
+      return `<img class="gm-comp-star" src="${GM_BASE}stars/star_${GM_CLS2TYPE[c.cls] || 'yellow'}.png"
             style="left:${l.toFixed(1)}%;top:${t.toFixed(1)}%;width:${(fr * 100).toFixed(0)}%" draggable="false" alt="" title="${esc(gmStarGreek(c.letter))}: ${esc(c.name || '')}">`;
-        }).join('')}
+    }).join('')}
         ${capHtml}
         ${gmResOverlay(s)}
         <span class="gm-label">${esc(s.name)}</span>
@@ -1422,10 +1428,12 @@ function gmSystemBodies(sys) {
     if (p.star && p.star !== 'A') return;
     const nm = norm(p.name);
     // пояса/аномалии остаются как есть; всё прочее без класса считаем планетой
-    const b = { name: p.name || '', kind: p.kind || 'planet', zone: p.zone, dist: p.dist, type: p.type,
-                dead: !!(p.dead || p.doomed),   // ☠ выжжена «Дланью Неотвратимости» — рисуем мёртвым камнем
-                resources: Array.isArray(p.resources) ? p.resources : [],  // для режима «ресурсы» на глуб.зуме
-                pid: Number.isInteger(p.pid) ? p.pid : null };
+    const b = {
+      name: p.name || '', kind: p.kind || 'planet', zone: p.zone, dist: p.dist, type: p.type,
+      dead: !!(p.dead || p.doomed),   // ☠ выжжена «Дланью Неотвратимости» — рисуем мёртвым камнем
+      resources: Array.isArray(p.resources) ? p.resources : [],  // для режима «ресурсы» на глуб.зуме
+      pid: Number.isInteger(p.pid) ? p.pid : null
+    };
     if (nm && nm === capName) b.isCapital = true;
     byName.set(nm || ('__p' + anon++), b);
   });
@@ -1464,9 +1472,11 @@ function gmCompBodies(sys, letter) {
   const norm = s => (s ? String(s) : '').trim().toLowerCase();
   const cols = (GM.colonies || []).filter(c => c.system_id === sys.id);
   const out = (sys.planets || []).filter(p => p && p.star === letter).map(p => {
-    const b = { name: p.name || '', kind: p.kind || 'planet', zone: p.zone, dist: p.dist, type: p.type,
+    const b = {
+      name: p.name || '', kind: p.kind || 'planet', zone: p.zone, dist: p.dist, type: p.type,
       dead: !!(p.dead || p.doomed), resources: Array.isArray(p.resources) ? p.resources : [],
-      pid: Number.isInteger(p.pid) ? p.pid : null };
+      pid: Number.isInteger(p.pid) ? p.pid : null
+    };
     const c = cols.find(c => (b.pid != null && c.planet_pid != null && +c.planet_pid === b.pid) || (norm(c.planet_name) && norm(c.planet_name) === norm(p.name)));
     if (c) { b.isColony = true; b.faction_id = c.faction_id; b.colId = c.id; }
     return b;
@@ -1518,8 +1528,8 @@ function gmOrbits(sys) {
     const sz = belt || anom ? base : Math.round(base * (0.85 + hv * 0.4));
     const cls = belt ? ' gm-dot-belt'
       : anom ? ' gm-dot-anom'
-      : p.dead ? ' gm-dot-dead'
-      : ' gm-look-' + look;
+        : p.dead ? ' gm-dot-dead'
+          : ' gm-look-' + look;
     const zc = p.dead ? '#6b6b72' : gmZoneColor(p.zone);
     // угол поворота полос/терминатора — тоже от зерна, чтобы свет падал по-разному
     const tilt = (hv * 70 - 35) | 0;
@@ -1690,10 +1700,10 @@ function gmOpenPanel(sys) {
   const colsBlock = sysCols.length ? `
     <div class="gm-panel-sub">Колонии · ${sysCols.length}</div>
     <div class="gm-collist">${sysCols.map(c => {
-      const f2 = gmFaction(c.faction_id); const fcol = f2 ? gmReadable(f2.color) : 'rgba(255,255,255,.4)';
-      const isCap = c.is_capital || c.planet_type === 'Столичный мир';
-      return `<div class="gm-col-row"><span class="gm-col-dot" style="background:${fcol}"></span><span class="gm-col-nm">${isCap ? '★ ' : ''}${esc(c.planet_name || 'Колония')}</span>${c.planet_type ? `<span class="gm-col-ty">${esc(c.planet_type)}</span>` : ''}</div>`;
-    }).join('')}</div>` : '';
+    const f2 = gmFaction(c.faction_id); const fcol = f2 ? gmReadable(f2.color) : 'rgba(255,255,255,.4)';
+    const isCap = c.is_capital || c.planet_type === 'Столичный мир';
+    return `<div class="gm-col-row"><span class="gm-col-dot" style="background:${fcol}"></span><span class="gm-col-nm">${isCap ? '★ ' : ''}${esc(c.planet_name || 'Колония')}</span>${c.planet_type ? `<span class="gm-col-ty">${esc(c.planet_type)}</span>` : ''}</div>`;
+  }).join('')}</div>` : '';
   // ── Оборона: видимые мне минные поля/аванпосты/мои корабли в этой системе ──
   const defRows = [];
   const mByFac = new Map();
@@ -1834,10 +1844,10 @@ function gmOpenOutpostCmd(id) {
       <div class="gm-opcmd-sub">в системе ${esc(sysName)}</div>
       <button class="gm-opcmd-btn" onclick="gmOutpostCmdSend()">➤ Отправить — выберите систему</button>
       ${sh.can_deploy
-        ? `<button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('recon')">🛰 Развернуть: разведка</button>
+      ? `<button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('recon')">🛰 Развернуть: разведка</button>
            <button class="gm-opcmd-btn" onclick="gmOutpostCmdDeployMining()">⛏ Развернуть: добыча</button>
            <div class="gm-opcmd-hint">Разведка — срез по соседним державам. Добыча — ОДИН выбранный ресурс системы + стоянка флота.</div>`
-        : `<button class="gm-opcmd-btn gm-dis" disabled>⚑ Развернуть в аванпост</button>
+      : `<button class="gm-opcmd-btn gm-dis" disabled>⚑ Развернуть в аванпост</button>
            <div class="gm-opcmd-hint">Развернуть нельзя: нужна нейтральная система, не впритык к чужой границе</div>`}
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmOutpostCmdScrap()">✕ Списать носитель</button>
     </div>`;
@@ -1951,8 +1961,8 @@ function gmOpenMzaCmd(id) {
       <div class="gm-opcmd-sub">в системе ${esc(sysName)} · корпус ${Math.round(+sh.integrity || 0)}%</div>
       <button class="gm-opcmd-btn" onclick="gmMzaCmdSend()">➤ Перебросить — выберите систему</button>
       ${sh.can_fire
-        ? `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmMzaCmdFire()">🜨 Залп — выберите систему-цель</button>`
-        : `<button class="gm-opcmd-btn gm-dis" disabled>🜨 Залп недоступен</button>
+      ? `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmMzaCmdFire()">🜨 Залп — выберите систему-цель</button>`
+      : `<button class="gm-opcmd-btn gm-dis" disabled>🜨 Залп недоступен</button>
            <div class="gm-opcmd-hint">${sh.in_flight ? 'Снаряд уже в полёте' : (+sh.integrity <= 0 ? 'Корпус изношен — спишите носитель' : 'Нет данных')}</div>`}
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmMzaCmdScrap()">✕ Списать Гиперпейсер</button>
     </div>`;
@@ -2115,11 +2125,11 @@ function gmMzaPickPlanet(id, sys) {
   // ТИП СНАРЯДА: ☠ Длани / 4 тира баллистики. Хранится в GMM.mzaCmd.shell.
   // Цели в 5..8 прыжках достаёт только 🪨 тяжёлая — остальные тумблеры гаснут.
   const KINDS = [
-    ['doom',         '☠ Длани',    'планета → мёртвый мир, колония стёрта'],
-    ['ball_light',   '⚡ лёгкая',   'вдвое быстрее · 2–6% населения · 0–1 постройка'],
-    ['ball_emp',     '👻 Фантом',   'не видна планетарной ПРО · 2–5% населения · 1 постройка'],
+    ['doom', '☠ Длани', 'планета → мёртвый мир, колония стёрта'],
+    ['ball_light', '⚡ лёгкая', 'вдвое быстрее · 2–6% населения · 0–1 постройка'],
+    ['ball_emp', '👻 Фантом', 'не видна планетарной ПРО · 2–5% населения · 1 постройка'],
     ['ball_cluster', '🧨 кассетная', '8–16% населения · 2–4 постройки'],
-    ['ball_heavy',   '🪨 тяжёлая',  'гарантированно 5 построек · 12–22% населения · дальность ×2'],
+    ['ball_heavy', '🪨 тяжёлая', 'гарантированно 5 построек · 12–22% населения · дальность ×2'],
   ];
   const far = (GMM.mzaCmd.hops || 0) > GM_MZA_RANGE_HOPS;   // дальняя зона
   let shell = GMM.mzaCmd.shell || 'doom';
@@ -2128,10 +2138,10 @@ function gmMzaPickPlanet(id, sys) {
   const info = (KINDS.find(k => k[0] === shell) || KINDS[0])[2];
   const shellRow = `<div style="display:flex;gap:4px;margin:4px 0;flex-wrap:wrap">
       ${KINDS.map(([k, nm]) => {
-        const dis = far && k !== 'ball_heavy';
-        return `<button class="gm-opcmd-btn${shell === k ? ' gm-opcmd-danger' : ''}${dis ? ' gm-dis' : ''}" ${dis ? 'disabled' : ''}
+    const dis = far && k !== 'ball_heavy';
+    return `<button class="gm-opcmd-btn${shell === k ? ' gm-opcmd-danger' : ''}${dis ? ' gm-dis' : ''}" ${dis ? 'disabled' : ''}
           style="flex:1;min-width:96px;padding:4px 6px" onclick="gmMzaShellKind('${id}','${esc(sys.id)}','${k}')">${nm}</button>`;
-      }).join('')}
+  }).join('')}
     </div>
     <div class="gm-opcmd-hint">${esc(info)}. Нужен построенный снаряд (☢ Арсенал / 🏭 военпромзавод).${far ? ' Цель в дальней зоне — достаёт только тяжёлая.' : ''}</div>`;
   const rows = planets.map(p => {
@@ -2167,9 +2177,11 @@ async function gmMzaFireAt(id, sysId, pid, nameEnc) {
   try {
     const name = nameEnc ? decodeURIComponent(nameEnc) : null;
     // pid может быть null (столица-домик без стабильного pid) — тогда сервер целит по имени
-    const r = await gmDefRpc('mza_fire', { p_id: id, p_target_system_id: sysId,
-                                           p_target_pid: (pid == null ? null : pid), p_target_name: name,
-                                           p_kind: shell });
+    const r = await gmDefRpc('mza_fire', {
+      p_id: id, p_target_system_id: sysId,
+      p_target_pid: (pid == null ? null : pid), p_target_name: name,
+      p_kind: shell
+    });
     toast('🜨 Залп выпущен · долёт ~' + ((r && r.flight_h) || '?') + ' ч', 'ok');
     gmCloseMzaCmd();
     await gmReloadDefense();
@@ -2298,12 +2310,12 @@ function gmRosterGo(type, id) {
 // ── Топливо перелёта (зеркало _fleet_ops.sql) ──
 // Каждый класс жжёт ОСНОВНОЕ топливо тира + ВТОРИЧНОЕ (Метан/Углерод/Изотопы).
 const GM_FLEET_FUEL = {
-  corvette:   [{ res: 'Гелий-3',  per: 1 }, { res: 'Метан',   per: 1 }],
-  frigate:    [{ res: 'Гелий-3',  per: 2 }, { res: 'Метан',   per: 1 }],
-  destroyer:  [{ res: 'Дейтерий', per: 2 }, { res: 'Углерод', per: 1 }],
-  cruiser:    [{ res: 'Дейтерий', per: 3 }, { res: 'Углерод', per: 2 }],
-  battleship: [{ res: 'Старвис',  per: 2 }, { res: 'Изотопы', per: 1 }],
-  dreadnought:[{ res: 'Старвис',  per: 4 }, { res: 'Изотопы', per: 2 }],
+  corvette: [{ res: 'Гелий-3', per: 1 }, { res: 'Метан', per: 1 }],
+  frigate: [{ res: 'Гелий-3', per: 2 }, { res: 'Метан', per: 1 }],
+  destroyer: [{ res: 'Дейтерий', per: 2 }, { res: 'Углерод', per: 1 }],
+  cruiser: [{ res: 'Дейтерий', per: 3 }, { res: 'Углерод', per: 2 }],
+  battleship: [{ res: 'Старвис', per: 2 }, { res: 'Изотопы', per: 1 }],
+  dreadnought: [{ res: 'Старвис', per: 4 }, { res: 'Изотопы', per: 2 }],
 };
 const GM_FLEET_FUEL_DEF = [{ res: 'Гелий-3', per: 2 }, { res: 'Метан', per: 1 }];
 // Число гиперпрыжков between системами: BFS по GM.lanes; если путь недостижим —
@@ -2589,9 +2601,9 @@ function gmSetMode(m) {
   const hint = document.getElementById('gm-tb-hint');
   if (hint) hint.textContent = m === 'add' ? 'Клик по пустому месту — новая звезда'
     : m === 'link' ? 'Клик на первую звезду, затем на вторую — проложить путь'
-    : m === 'unlink' ? 'Клик по линии гиперпути — удалить'
-    : m === 'sector' ? 'Клик по звёздам — собрать сектор; клик по границе — править существующий'
-    : 'Тащи звезду мышью; клик — редактировать';
+      : m === 'unlink' ? 'Клик по линии гиперпути — удалить'
+        : m === 'sector' ? 'Клик по звёздам — собрать сектор; клик по границе — править существующий'
+          : 'Тащи звезду мышью; клик — редактировать';
   // Форма сектора видна только в режиме «Сектора»
   if (m === 'sector') { if (!GM.sectorDraft) gmSectorNew(false); gmRenderSectorForm(); }
   else { GM.sectorDraft = null; document.getElementById('gm-sector')?.remove(); }
@@ -2717,9 +2729,9 @@ function gmRenderSectorForm() {
   const d = GM.sectorDraft || { name: '', color: 'rgba(120,200,255,0.5)', lore: '', system_ids: [] };
   const chips = d.system_ids.length
     ? d.system_ids.map(id => {
-        const s = GM.systems.find(x => x.id === id);
-        return `<span class="gm-sec-chip" onclick="gmSectorToggleSys('${id}')">${esc(s ? s.name : id)} ✕</span>`;
-      }).join('')
+      const s = GM.systems.find(x => x.id === id);
+      return `<span class="gm-sec-chip" onclick="gmSectorToggleSys('${id}')">${esc(s ? s.name : id)} ✕</span>`;
+    }).join('')
     : '<span class="gm-sec-empty">Кликай по звёздам на карте</span>';
   const list = (GM.sectors || []).map(s =>
     `<button class="gm-sec-listbtn${GM.sectorDraft && GM.sectorDraft.id === s.id ? ' gm-active' : ''}" onclick="gmSectorEdit('${s.id}')">
@@ -2924,17 +2936,17 @@ function gmRenderFormPlanets() {
   }).join('');
 }
 function gmFormPlanetCard(p, i) {
-    let head;
-    if (p && p.kind) {
-      const kc = p.kind === 'belt' ? ' gm-dot-belt' : p.kind === 'anomaly' ? ' gm-dot-anom' : '';
-      head = `<div class="gm-fp-head">
+  let head;
+  if (p && p.kind) {
+    const kc = p.kind === 'belt' ? ' gm-dot-belt' : p.kind === 'anomaly' ? ' gm-dot-anom' : '';
+    head = `<div class="gm-fp-head">
         <span class="gm-orb-dot${kc}" style="--zc:${gmZoneColor(p.zone)}"></span>
         <span class="gm-fp-name">${esc(p.name)}</span>
         <span class="gm-fp-meta">${p.dist != null ? p.dist + ' а.е. · ' : ''}${esc(p.type || '')} · ${p.slotsP || 0}П+${p.slotsK || 0}К</span>
         <button class="gm-mini-btn gm-danger" onclick="gmRemovePlanet(${i})">✕</button>
       </div>`;
-    } else {
-      head = `<div class="gm-planet-row">
+  } else {
+    head = `<div class="gm-planet-row">
         <input class="gm-fi gm-fi-sm" placeholder="Имя" value="${esc(p.name || '')}" oninput="GM.formPlanets[${i}].name=this.value">
         <select class="gm-fi gm-fi-sm" onchange="gmPickPlanetClass(${i},this.value)" title="Выбрать класс планеты">${gmPlanetClassOpts(p)}</select>
         <input class="gm-fi gm-fi-sm" placeholder="Тип (свой)" value="${esc(p.type || '')}" oninput="GM.formPlanets[${i}].type=this.value">
@@ -2942,8 +2954,8 @@ function gmFormPlanetCard(p, i) {
         <input class="gm-fi gm-fi-sm" placeholder="img" value="${esc(p.img || '')}" oninput="GM.formPlanets[${i}].img=this.value">
         <button class="gm-mini-btn gm-danger" onclick="gmRemovePlanet(${i})">✕</button>
       </div>`;
-    }
-    return `<div class="gm-fp-card">${head}${gmResEditSection(p, i)}</div>`;
+  }
+  return `<div class="gm-fp-card">${head}${gmResEditSection(p, i)}</div>`;
 }
 // Секция правки ресурсов одной планеты: чипы (с удалением) + ролл + ручное добавление.
 // Формат записи — как у генератора: {name, icon, r, rname, amt}. Для экономики
@@ -3257,6 +3269,8 @@ function gmmRender(host) {
   // переходами): тумблер отрисовался активным — значит и штриховку надо показать сразу,
   // перезапросив список закрывших, а не ждать ручного повторного нажатия.
   if (GM.showBlocked) gmLoadBlocked().then(() => { if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRaster(); });
+  // То же для слоя «Оккупация»: флаги живые, список надо перезапросить при заходе.
+  if (GM.showOccup) gmLoadOccup().then(() => { if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRasterSoon(); });
   // дорисовка, когда подгрузятся веб-шрифты (подписи в битмапе)
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
     if (GMM.active && GMM.cv && GMM.cv.isConnected) gmmRaster();
@@ -3434,7 +3448,7 @@ function gmmBindCanvas() {
   const cv = GMM.cv;
   cv.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    try { cv.setPointerCapture(e.pointerId); } catch (_) { }
     GMM.rect = cv.getBoundingClientRect();
     GMM.ptrs.set(e.pointerId, { x: e.clientX - GMM.rect.left, y: e.clientY - GMM.rect.top });
     GMM.vel = null; GMM.anim = null;
@@ -3445,8 +3459,10 @@ function gmmBindCanvas() {
         const sys = gmmSysAtScreen(p.x, p.y);
         if (sys) { GMM.gesture = { mode: 'dragstar', id: e.pointerId, sys, moved: false, sx: p.x, sy: p.y, t0: now }; return; }
       }
-      GMM.gesture = { mode: 'pan', id: e.pointerId, sx: p.x, sy: p.y, tx0: GMM.tx, ty0: GMM.ty,
-        moved: false, t0: now, lx: p.x, ly: p.y, lt: now, vx: 0, vy: 0 };
+      GMM.gesture = {
+        mode: 'pan', id: e.pointerId, sx: p.x, sy: p.y, tx0: GMM.tx, ty0: GMM.ty,
+        moved: false, t0: now, lx: p.x, ly: p.y, lt: now, vx: 0, vy: 0
+      };
     } else if (GMM.ptrs.size === 2) gmmStartPinch();
     else GMM.gesture = null;
   });
@@ -3500,8 +3516,10 @@ function gmmBindCanvas() {
       // из пинча в пан оставшимся пальцем — без скачка
       const [id] = GMM.ptrs.keys();
       const p = GMM.ptrs.get(id), now = performance.now();
-      GMM.gesture = { mode: 'pan', id, sx: p.x, sy: p.y, tx0: GMM.tx, ty0: GMM.ty,
-        moved: true, t0: now, lx: p.x, ly: p.y, lt: now, vx: 0, vy: 0 };
+      GMM.gesture = {
+        mode: 'pan', id, sx: p.x, sy: p.y, tx0: GMM.tx, ty0: GMM.ty,
+        moved: true, t0: now, lx: p.x, ly: p.y, lt: now, vx: 0, vy: 0
+      };
       return;
     }
     if (GMM.ptrs.size) return;
@@ -3863,6 +3881,7 @@ function gmmBlit() {
   ctx.save();
   ctx.setTransform(GMM.s * dpr, 0, 0, GMM.s * dpr, GMM.tx * dpr, GMM.ty * dpr);
   gmmPaintStars(ctx, GMM.s);
+  gmmPaintOccup(ctx, GMM.s);   // ВОЙНА: флаги оккупантов — поверх звёзд, тот же мировой трансформ
   ctx.restore();
   gmmPaintSecLabels(ctx, GMM.s);  // плашки нейминга секторов — ПОВЕРХ звёзд
   if (GMM.selId) {   // кольцо выбранной системы — поверх, живёт без перерисовки мира
@@ -3883,7 +3902,7 @@ function gmmBlit() {
   gmmPaintOrbits(ctx);   // живой оверлей анимированных систем (на глубоком зуме)
   gmmPaintDeepFx(ctx);   // HUD-переход «вход в систему»: рамка/скобки/скан/импульс
   gmmPaintDefense(ctx);  // оборона: аванпосты/носители — ПОВЕРХ орбит, иначе на глубоком
-                         // зуме большая планета/корона звезды перекрывают значки
+  // зуме большая планета/корона звезды перекрывают значки
 }
 
 // Оверлей редактора: отмеченные звёзды (первая точка гиперпути, состав сектора).
@@ -4254,7 +4273,7 @@ function gmmPaintBody(ctx, px, py, sz, p, zc, a, t, starX, starY) {
     const rgb = gmRgb(zc);
     const lit = `rgb(${Math.min(255, rgb[0] + 70)},${Math.min(255, rgb[1] + 70)},${Math.min(255, rgb[2] + 70)})`;
     ctx.globalAlpha = a;
-    
+
     // Основная заливка без лишней черноты по краям (тень наложится общим слоем)
     const g = ctx.createRadialGradient(lx, ly, 0, px, py, sz * 1.05);
     if (p.dead) {
@@ -4263,9 +4282,9 @@ function gmmPaintBody(ctx, px, py, sz, p, zc, a, t, starX, starY) {
       g.addColorStop(0.55, '#4a4640');
       g.addColorStop(1, '#15120f');
     } else {
-      g.addColorStop(0, lit); 
-      g.addColorStop(0.6, zc); 
-      g.addColorStop(1, `rgb(${rgb[0]*0.5|0},${rgb[1]*0.5|0},${rgb[2]*0.5|0})`); 
+      g.addColorStop(0, lit);
+      g.addColorStop(0.6, zc);
+      g.addColorStop(1, `rgb(${rgb[0] * 0.5 | 0},${rgb[1] * 0.5 | 0},${rgb[2] * 0.5 | 0})`);
     }
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
 
@@ -4336,7 +4355,7 @@ function gmmPaintBody(ctx, px, py, sz, p, zc, a, t, starX, starY) {
           const yy = b / 3.2 * sz, warm = b & 1;
           const bg = ctx.createLinearGradient(0, yy - sz * 0.18, 0, yy + sz * 0.18);
           bg.addColorStop(0, 'rgba(0,0,0,0)');
-          bg.addColorStop(0.5, warm ? `rgba(255,235,200,${a*0.14})` : `rgba(40,25,15,${a*0.16})`);
+          bg.addColorStop(0.5, warm ? `rgba(255,235,200,${a * 0.14})` : `rgba(40,25,15,${a * 0.16})`);
           bg.addColorStop(1, 'rgba(0,0,0,0)');
           ctx.fillStyle = bg; ctx.fillRect(-sz, yy - sz * 0.2, sz * 2, sz * 0.4);
         }
@@ -4364,7 +4383,7 @@ function gmmPaintBody(ctx, px, py, sz, p, zc, a, t, starX, starY) {
   }
   // ── ОБЩИЙ ШЕЙДИНГ (ТЕРМИНАТОР, ОБЪЕМ И БЛИК) поверх текстур и процедурного рельефа ──
   ctx.globalAlpha = a;
-  
+
   // 1. Терминатор (направленный свет от звезды)
   // Линейный градиент идеально описывает освещенность шара (lambert).
   const term = ctx.createLinearGradient(px + ldx * sz, py + ldy * sz, px - ldx * sz, py - ldy * sz);
@@ -4389,8 +4408,8 @@ function gmmPaintBody(ctx, px, py, sz, p, zc, a, t, starX, starY) {
     const k = look === 'gas' ? 0.55 : 1;            // на гиганте блик мягче, без жёлтого пятна
     ctx.globalCompositeOperation = 'screen';
     const hi = ctx.createRadialGradient(px + ldx * sz * 0.55, py + ldy * sz * 0.55, 0, px + ldx * sz * 0.4, py + ldy * sz * 0.4, sz * 0.85);
-    hi.addColorStop(0, `rgba(${atm},${(a*0.34*k).toFixed(3)})`);
-    hi.addColorStop(0.55, `rgba(${atm},${(a*0.1*k).toFixed(3)})`);
+    hi.addColorStop(0, `rgba(${atm},${(a * 0.34 * k).toFixed(3)})`);
+    hi.addColorStop(0.55, `rgba(${atm},${(a * 0.1 * k).toFixed(3)})`);
     hi.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = hi; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
@@ -4398,7 +4417,7 @@ function gmmPaintBody(ctx, px, py, sz, p, zc, a, t, starX, starY) {
     // Для обычных каменных планет с текстурой, но без атмосферы — легкий белый блик
     ctx.globalCompositeOperation = 'screen';
     const hi = ctx.createRadialGradient(px + ldx * sz * 0.6, py + ldy * sz * 0.6, 0, px + ldx * sz * 0.2, py + ldy * sz * 0.2, sz * 0.9);
-    hi.addColorStop(0, `rgba(255,250,235,${(a*0.25).toFixed(3)})`);
+    hi.addColorStop(0, `rgba(255,250,235,${(a * 0.25).toFixed(3)})`);
     hi.addColorStop(1, 'rgba(255,250,235,0)');
     ctx.fillStyle = hi; ctx.beginPath(); ctx.arc(px, py, sz, 0, 6.2832); ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
@@ -4455,7 +4474,7 @@ function gmmPaintWormhole(ctx, px, py, sz, a, t, p) {
       const dg = ctx.createRadialGradient(x, y, 0, x, y, dot);
       const hot = u < 0.45;                          // внутри теплее (бело-голубой), снаружи синее
       dg.addColorStop(0, hot ? `rgba(225,245,255,${(a * br * 0.9).toFixed(3)})`
-                             : `rgba(150,205,255,${(a * br * 0.75).toFixed(3)})`);
+        : `rgba(150,205,255,${(a * br * 0.75).toFixed(3)})`);
       dg.addColorStop(1, 'rgba(40,80,200,0)');
       ctx.fillStyle = dg; ctx.beginPath(); ctx.arc(x, y, dot, 0, 6.2832); ctx.fill();
     }
@@ -4749,7 +4768,7 @@ function gmmPaintOrbits(ctx) {
         const drift = (t / 150) * 6.2832; // Сделали дрейф медленнее (делитель был 80)
         const N = Math.max(45, Math.min(180, Math.round(r * 1.5)));
         const band = Math.max(4, r * 0.06);
-        
+
         // Отрисовка пылевого кольца (фон для пояса)
         ctx.save();
         ctx.beginPath();
@@ -4758,7 +4777,7 @@ function gmmPaintOrbits(ctx) {
         ctx.strokeStyle = zc; // Используем цвет зоны (zc) для оттенка пыли
         ctx.globalAlpha = a * 0.035;
         ctx.stroke();
-        
+
         // Более плотное внутреннее пылевое кольцо
         ctx.beginPath();
         ctx.ellipse(cx, cy, r, r * TILT, 0, 0, 6.2832);
@@ -4772,47 +4791,47 @@ function gmmPaintOrbits(ctx) {
           const j = h - Math.floor(h);                    // псевдослучайное 0..1 (стабильное)
           const h2 = Math.sin((k + 1) * 78.233 + i * 13.51) * 43758.5453;
           const j2 = h2 - Math.floor(h2);
-          
+
           const aa = (k / N) * 6.2832 + drift + (j2 - 0.5) * (12 / N);
           const rr = r + (j - 0.5) * 2 * band;
-          
+
           const px = cx + Math.cos(aa) * rr;
           const py = cy + Math.sin(aa) * rr * TILT;
-          
+
           // Направление света от звезды (центра системы)
           const vx = cx - px, vy = cy - py, m = Math.hypot(vx, vy) || 1;
           const ldx = vx / m, ldy = vy / m;
-          
+
           const isLarge = j > 0.82; // 18% камней будут крупными
           const rockSz = (isLarge ? (1.1 + j2 * 0.7) : (0.4 + j2 * 0.5)) * gz; // Чуть увеличили размеры
           const rockAlpha = a * (0.5 + 0.5 * j);
-          
+
           if (rockSz >= 1.0 * gz) {
-              // Крупные камни - мини-версии мегаастероидов (с кратерами и нормальным шейдингом)
-              const dummyP = { pid: i * 1000 + k, name: '' };
-              gmmPaintAsteroid(ctx, px, py, rockSz, dummyP, rockAlpha, ldx, ldy);
+            // Крупные камни - мини-версии мегаастероидов (с кратерами и нормальным шейдингом)
+            const dummyP = { pid: i * 1000 + k, name: '' };
+            gmmPaintAsteroid(ctx, px, py, rockSz, dummyP, rockAlpha, ldx, ldy);
           } else {
-              // Мелкая каменная крошка - рисуем неровными многоугольниками
-              ctx.save();
-              ctx.globalAlpha = rockAlpha;
-              const g = ctx.createRadialGradient(px + ldx * rockSz * 0.5, py + ldy * rockSz * 0.5, 0, px, py, rockSz * 1.2);
-              g.addColorStop(0, '#b9b1a4'); 
-              g.addColorStop(0.5, '#7d7468'); 
-              g.addColorStop(1, '#2c2823');
-              ctx.fillStyle = g;
-              
-              ctx.beginPath();
-              const rot = j * 6.2832;
-              for (let v = 0; v < 5; v++) {
-                  const vang = rot + (v / 5) * 6.2832;
-                  const vr = rockSz * (0.65 + (Math.sin(v * 3.1 + j2 * 10) * 0.35));
-                  const vx_pt = px + Math.cos(vang) * vr;
-                  const vy_pt = py + Math.sin(vang) * vr;
-                  if (v === 0) ctx.moveTo(vx_pt, vy_pt); else ctx.lineTo(vx_pt, vy_pt);
-              }
-              ctx.closePath();
-              ctx.fill();
-              ctx.restore();
+            // Мелкая каменная крошка - рисуем неровными многоугольниками
+            ctx.save();
+            ctx.globalAlpha = rockAlpha;
+            const g = ctx.createRadialGradient(px + ldx * rockSz * 0.5, py + ldy * rockSz * 0.5, 0, px, py, rockSz * 1.2);
+            g.addColorStop(0, '#b9b1a4');
+            g.addColorStop(0.5, '#7d7468');
+            g.addColorStop(1, '#2c2823');
+            ctx.fillStyle = g;
+
+            ctx.beginPath();
+            const rot = j * 6.2832;
+            for (let v = 0; v < 5; v++) {
+              const vang = rot + (v / 5) * 6.2832;
+              const vr = rockSz * (0.65 + (Math.sin(v * 3.1 + j2 * 10) * 0.35));
+              const vx_pt = px + Math.cos(vang) * vr;
+              const vy_pt = py + Math.sin(vang) * vr;
+              if (v === 0) ctx.moveTo(vx_pt, vy_pt); else ctx.lineTo(vx_pt, vy_pt);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
           }
         }
         // ресурсы пояса — плашка над верхней точкой кольца (астероиды часто и держат добычу)
@@ -4920,8 +4939,10 @@ function gmmPaintOrbits(ctx) {
       // оценка, в сторону дальнего угла ячейки места кратно больше.
       const hit = gmmCellHit(sys, angC);
       const rEdge = isFinite(hit) ? hit * s * 0.94 : rHi;   // нет ячейки → прежний круглый упор
-      return { c, ci, fr, u, angC, sr: Math.max(3, starR * fr),
-        rHi: Math.max(rHi, Math.min(rEdge, 1400 * gz)) };
+      return {
+        c, ci, fr, u, angC, sr: Math.max(3, starR * fr),
+        rHi: Math.max(rHi, Math.min(rEdge, 1400 * gz))
+      };
     });
     // РАСПРЕДЕЛЕНИЕ ПО ВСЕЙ ТЕРРИТОРИИ. Абсолютная лог-шкала даёт мизерный разброс
     // (15.7 и 76.1 а.е. — впятеро разные — это u=0.375 и 0.524), поэтому все компаньоны
@@ -5027,9 +5048,11 @@ function gmmPaintOrbits(ctx) {
     }
     // съём геометрии для стенда (_multistar_render_harness.html): включается только
     // флагом window.GM_GEO_DEBUG, в проде мёртвый код
-    if (window.GM_GEO_DEBUG) sys._geo = { cx, cy, rMax, rMaxP, rOuterMain, starR, gz, tilt: TILT,
+    if (window.GM_GEO_DEBUG) sys._geo = {
+      cx, cy, rMax, rMaxP, rOuterMain, starR, gz, tilt: TILT,
       radii: radii.slice(), sizes: sizes.slice(),
-      comps: compGeo.map(g => ({ letter: g.c.letter, sep: g.c.sep_au, u: g.u, ang: g.angC, rHi: g.rHi, ringR: g.ringR, miniR: g.miniR, sr: g.sr, ccx: g.ccx, ccy: g.ccy })) };
+      comps: compGeo.map(g => ({ letter: g.c.letter, sep: g.c.sep_au, u: g.u, ang: g.angC, rHi: g.rHi, ringR: g.ringR, miniR: g.miniR, sr: g.sr, ccx: g.ccx, ccy: g.ccy }))
+    };
     compGeo.forEach(({ c, ci, ccx, ccy, sr, miniR }) => {
       const cg = GM_CLS_GLOW[c.cls] || '255,220,130';
       const bodies = gmCompBodies(sys, c.letter);
@@ -5155,9 +5178,9 @@ function gmmBodyPhase(body) {
 // под неё, сразу читается, чем занят мир). null, если построек нет.
 const GMM_IND_TINT = {
   industry: [232, 150, 70],   // фабрики + добыча — ржаво-оранжевый смог
-  science:  [95, 195, 232],   // научный институт — холодный синий
+  science: [95, 195, 232],   // научный институт — холодный синий
   military: [150, 175, 205],  // подготовка + спецслужбы — стальной
-  trade:    [228, 192, 95],   // хаб + биржа + склад — золотой
+  trade: [228, 192, 95],   // хаб + биржа + склад — золотой
 };
 function gmmColonyTint(bld) {
   if (!bld) return null;
@@ -5183,7 +5206,7 @@ function gmmBodyLife(ctx, px, py, sz, body, a, t, cx, cy) {
   const fac = body.faction_id ? gmFaction(body.faction_id) : null;
   const tint = gmmColonyTint(bld);
   const [r, g, b] = tint || (fac ? gmRgb(fac.color) : [255, 200, 130]);
-  
+
   let dev = cap ? 1 : 0.45;
   if (body.colId && GM.devByCol) {
     const slots = GM.devByCol[body.colId];
@@ -5192,16 +5215,16 @@ function gmmBodyLife(ctx, px, py, sz, body, a, t, cx, cy) {
 
   // Вектор к звезде для расчета ночной стороны
   let ldx = 0, ldy = 1;
-  if (cx != null && cy != null) { 
-    const vx = cx - px, vy = cy - py, m = Math.hypot(vx, vy) || 1; 
-    ldx = vx / m; ldy = vy / m; 
+  if (cx != null && cy != null) {
+    const vx = cx - px, vy = cy - py, m = Math.hypot(vx, vy) || 1;
+    ldx = vx / m; ldy = vy / m;
   }
 
   // ── НОЧНЫЕ ОГНИ И ЗАРЕВО ГОРОДОВ ──
   // Вместо гигантского круглого ореола — сеть огней и локальное зарево на ночной стороне.
   const lights = Math.round(5 + dev * 18);
   const lr = Math.min(255, r + 90), lg = Math.min(255, g + 90), lb = Math.min(255, b + 70);
-  
+
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
   for (let k = 0; k < lights; k++) {
@@ -5209,22 +5232,22 @@ function gmmBodyLife(ctx, px, py, sz, body, a, t, cx, cy) {
     const h2 = Math.sin((k + 1) * 12.34 + ph) * 24634.6345;
     const rr = (h1 - Math.floor(h1)) * sz * 0.9; // распределение от центра к краю
     const aa = (h2 - Math.floor(h2)) * 6.2832;
-    
+
     const dx = Math.cos(aa);
     const dy = Math.sin(aa);
-    
+
     // dot > 0 — день, dot < 0 — ночь
     const dot = dx * ldx + dy * ldy;
-    
+
     // Огни зажигаются только в тени (от терминатора и глубже)
     if (dot < 0.1) {
       const nightIntensity = Math.min(1, (0.1 - dot) * 1.5); // плавно ярчают к ночи
       const tw = 0.5 + 0.5 * Math.sin(t * 1.5 + k * 1.7 + ph);
       const alpha = a * nightIntensity * (0.4 + 0.6 * tw);
-      
+
       const fx = px + dx * rr;
       const fy = py + dy * rr;
-      
+
       // Локальное атмосферное зарево над крупными мегаполисами
       if (k < 4) {
         const glow = ctx.createRadialGradient(fx, fy, 0, fx, fy, sz * 0.4);
@@ -5233,7 +5256,7 @@ function gmmBodyLife(ctx, px, py, sz, body, a, t, cx, cy) {
         ctx.fillStyle = glow;
         ctx.beginPath(); ctx.arc(fx, fy, sz * 0.4, 0, 6.2832); ctx.fill();
       }
-      
+
       // Ядро города
       ctx.globalAlpha = alpha * 0.95;
       ctx.fillStyle = cap ? '#fff2c8' : `rgb(${lr},${lg},${lb})`;
@@ -5249,11 +5272,11 @@ function gmmBodyLife(ctx, px, py, sz, body, a, t, cx, cy) {
   for (let k = 0; k < moons; k++) {
     const aa = ph + k * (6.2832 / moons) + t * spd * (k % 2 ? -1 : 1);
     const mx = px + Math.cos(aa) * orbR, my = py + Math.sin(aa) * orbR * 0.6;
-    
+
     // Спутник уходит в тень планеты/выходит на свет
     const mdot = Math.cos(aa) * ldx + Math.sin(aa) * ldy * 0.6;
-    const mlit = Math.max(0.15, 0.5 + mdot * 0.5); 
-    
+    const mlit = Math.max(0.15, 0.5 + mdot * 0.5);
+
     ctx.globalAlpha = a * mlit;
     ctx.fillStyle = cap ? '#ffe7a8' : `rgb(${lr},${lg},${lb})`;
     ctx.beginPath(); ctx.arc(mx, my, 1.2, 0, 6.2832); ctx.fill();
@@ -5272,7 +5295,7 @@ function gmmColonySpecials(ctx, px, py, sz, bld, ph, a, t, ldx, ldy) {
     const sr = sz * 1.25;
     const scanAng = u * 6.2832;
     ctx.globalAlpha = a * 0.8;
-    ctx.strokeStyle = 'rgba(120,210,240,0.85)'; 
+    ctx.strokeStyle = 'rgba(120,210,240,0.85)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(px, py, sr, scanAng, scanAng + 0.6);
@@ -5307,12 +5330,12 @@ function gmmColonySpecials(ctx, px, py, sz, bld, ph, a, t, ldx, ldy) {
       const hh = Math.sin(cyc * 12.9898 + ph * 4.1) * 43758.5453;
       const ang = (hh - Math.floor(hh)) * 6.2832;
       const d = sz * 1.1 + k * sz * 5;
-      
+
       const trailX = px + Math.cos(ang) * (d - sz * 0.8 * k);
       const trailY = py + Math.sin(ang) * (d - sz * 0.8 * k);
       const headX = px + Math.cos(ang) * d;
       const headY = py + Math.sin(ang) * d;
-      
+
       ctx.globalAlpha = a * (1 - k) * 0.9;
       // След плазмы
       ctx.strokeStyle = 'rgba(150,160,180, 0.5)';
@@ -5341,14 +5364,14 @@ function gmmSysTraffic(ctx, colPos, a, t) {
   edges.forEach(([A, B], i) => {
     const hx = B.px - A.px, hy = B.py - A.py, len = Math.hypot(hx, hy) || 1;
     const nx = -hy / len, ny = hx / len;            // нормаль
-    
+
     // Орбитальный прогиб траектории (чтобы трасса не была лазером, а имела вес орбиты)
-    const bowMax = len * 0.08 * (i % 2 ? 1 : -1);   
-    
+    const bowMax = len * 0.08 * (i % 2 ? 1 : -1);
+
     // Контрольная точка Безье (x2, чтобы вершина параболы ровно достигала bowMax)
     const cx = A.px + hx * 0.5 + nx * bowMax * 2;
     const cy = A.py + hy * 0.5 + ny * bowMax * 2;
-    
+
     // ── Отрисовка самой трассы (еле заметная голографическая нить маршрута) ──
     // Это дает визуальную опору: игрок видит и чувствует траекторию торгового пути.
     ctx.save();
@@ -5362,56 +5385,56 @@ function gmmSysTraffic(ctx, colPos, a, t) {
     ctx.stroke();
     ctx.restore();
 
-    const ships = 6; 
-    
+    const ships = 6;
+
     for (let k = 0; k < ships; k++) {
       const seed = i * 13.7 + k * 7.3;
       const isReverse = (k % 2 === 0);
-      
-      const laneOffset = isReverse ? 2.5 : -2.5; 
-      
+
+      const laneOffset = isReverse ? 2.5 : -2.5;
+
       // ОЧЕНЬ медленная, величественная скорость (космос огромен)
       const spd = 0.01 + (seed % 0.006);
-      
+
       let u = (t * spd + (seed % 1)) % 1;
       const actualU = isReverse ? (1 - u) : u;
-      
+
       // Вычисляем точку на кривой Безье
       const mt = 1 - actualU;
       const bx = mt * mt * A.px + 2 * mt * actualU * cx + actualU * actualU * B.px;
       const by = mt * mt * A.py + 2 * mt * actualU * cy + actualU * actualU * B.py;
-      
+
       // Вычисляем касательную (вектор скорости) для правильного поворота
       let dx = 2 * mt * (cx - A.px) + 2 * actualU * (B.px - cx);
       let dy = 2 * mt * (cy - A.py) + 2 * actualU * (B.py - cy);
-      
+
       const dLen = Math.hypot(dx, dy) || 1;
       const dnx = -dy / dLen;
       const dny = dx / dLen;
-      
+
       // Смещаем корабль на его полосу (перпендикулярно текущей траектории)
       const px = bx + dnx * laneOffset;
       const py = by + dny * laneOffset;
-      
+
       if (isReverse) { dx = -dx; dy = -dy; }
       const drawHead = Math.atan2(dy, dx);
-      
+
       // Плавное появление у планеты А и исчезновение у Б
       const fade = Math.min(1, Math.sin(u * Math.PI) * 4.0);
-      
+
       if (fade < 0.01) continue;
-      
+
       ctx.save();
-      ctx.translate(px, py); 
+      ctx.translate(px, py);
       ctx.rotate(drawHead);
-      
+
       // Плазменный след (длинный выхлоп)
       ctx.globalAlpha = a * 0.45 * fade;
       const trailLen = 12 + (seed % 6);
       const trailGrad = ctx.createLinearGradient(0, 0, -trailLen, 0);
       trailGrad.addColorStop(0, 'rgba(150, 200, 255, 0.9)');
       trailGrad.addColorStop(1, 'rgba(150, 200, 255, 0)');
-      
+
       ctx.fillStyle = trailGrad;
       ctx.beginPath();
       ctx.moveTo(0, 0);
@@ -5419,7 +5442,7 @@ function gmmSysTraffic(ctx, colPos, a, t) {
       ctx.lineTo(-trailLen, 0.7);
       ctx.closePath();
       ctx.fill();
-      
+
       // Клиновидная форма корабля (Wedge / Arrowhead)
       ctx.globalAlpha = a * 0.95 * fade;
       ctx.fillStyle = '#ffffff';
@@ -5430,7 +5453,7 @@ function gmmSysTraffic(ctx, colPos, a, t) {
       ctx.lineTo(-1.5, 1.5);       // Правое крыло
       ctx.closePath();
       ctx.fill();
-      
+
       ctx.restore();
     }
   });
@@ -5780,8 +5803,10 @@ function gmmBuildSalvos() {
       const bow = Math.max(60, Math.min(560, len * 0.16));
       g = { ax, ay, cx: (ax + bx) / 2 + nx * bow, cy: (ay + by) / 2 + ny * bow, bx, by };
     }
-    GMM.salvos.push({ g, sys: tgt, dx: tgt.x, dy: tgt.y, la, ra, col,
-      attacker: aName, planet: s.target_planet || '' });
+    GMM.salvos.push({
+      g, sys: tgt, dx: tgt.x, dy: tgt.y, la, ra, col,
+      attacker: aName, planet: s.target_planet || ''
+    });
   });
 }
 
@@ -5914,7 +5939,7 @@ function gmmBuildDefense() {
   const myFac = GM.myFid ? gmFaction(GM.myFid) : null;
   const myCol = myFac ? gmRgb(myFac.color) : [150, 210, 255];
   if ((GM.opShips || []).length || (GM.mzaShips || []).length || (GM.fleets || []).length
-      || (GM.fleetsVis || []).length || (GM.mzaVis || []).length || (GM.armies || []).length) {
+    || (GM.fleetsVis || []).length || (GM.mzaVis || []).length || (GM.armies || []).length) {
     // граф гиперпутей для прокладки маршрута летящих кораблей (как у караванов)
     const adj = {};
     GM.lanes.forEach(l => { (adj[l.a_id] = adj[l.a_id] || []).push(l.b_id); (adj[l.b_id] = adj[l.b_id] || []).push(l.a_id); });
@@ -5963,7 +5988,7 @@ function gmmBuildDefense() {
         // (флоты летают ТОЛЬКО по трассам); прямая дуга — лишь если трасс
         // между from и dest нет вовсе (дыра в данных).
         const path = (GMM.laneGeo && (bfs(sh.from_sys, sh.dest_sys, !(extra && extra.enemy))
-                                      || bfs(sh.from_sys, sh.dest_sys, false))) || null;
+          || bfs(sh.from_sys, sh.dest_sys, false))) || null;
         let segs = null, total = 0, g = null;
         if (path && path.length >= 2) {
           segs = [];
@@ -5989,8 +6014,10 @@ function gmmBuildDefense() {
     // Флоты — мобильные соединения: значок СЛЕВА от звезды (side='left'), стальной
     // отблеск, бейдж с числом кораблей. Не путать с носителем (справа) и Гиперпейсер.
     const fleetCol = [120, 200, 235];
-    (GM.fleets || []).forEach(fl => pushShip(fl, { fleet: true, side: 'left', col: fleetCol,
-      ships: +fl.ships || 0, canRecall: !!fl.can_recall }));
+    (GM.fleets || []).forEach(fl => pushShip(fl, {
+      fleet: true, side: 'left', col: fleetCol,
+      ships: +fl.ships || 0, canRecall: !!fl.can_recall
+    }));
     // МАРШ: армии — гарнизоны на колониях (idle у звезды колонии, transit по трассам).
     // Оливковый цвет; рисуются/кликабельны только в режиме «Звёздный марш».
     const armyCol = [150, 205, 120];
@@ -5998,8 +6025,10 @@ function gmmBuildDefense() {
       id: a.id, name: a.name, status: a.status,
       system_id: a.system_id, from_sys: a.from_system_id, dest_sys: a.dest_system_id,
       depart_at: a.depart_at, arrive_at: a.arrive_at,
-    }, { army: true, fleet: true, side: 'left', col: armyCol, ships: +a.units || 0,
-         colony: a.colony_id, fromCol: a.from_colony, destCol: a.dest_colony }));
+    }, {
+      army: true, fleet: true, side: 'left', col: armyCol, ships: +a.units || 0,
+      colony: a.colony_id, fromCol: a.from_colony, destCol: a.dest_colony
+    }));
 
     // ── ВИДИМОСТЬ ЧУЖИХ ─────────────────────────────────────────
     // Флоты других держав: сервер (fleets_visible) отдаёт только ОБНАРУЖЕННЫЕ —
@@ -6007,10 +6036,12 @@ function gmmBuildDefense() {
     // (ships) приходит null без разведки → бейдж рисует «⚓?». Цвет — фракции.
     (GM.fleetsVis || []).filter(fl => fl.mine === false).forEach(fl => {
       const ff = gmFaction(fl.faction_id); const col = ff ? gmRgb(ff.color) : [150, 160, 175];
-      pushShip(fl, { fleet: true, side: 'left', col, enemy: true, fid: fl.faction_id,
+      pushShip(fl, {
+        fleet: true, side: 'left', col, enemy: true, fid: fl.faction_id,
         ships: (fl.intel && fl.ships != null) ? +fl.ships : null,
         intel: fl.intel !== false && fl.ships != null,
-        facName: fl.faction_name });
+        facName: fl.faction_name
+      });
     });
     // Вскрытые чужие гиперкрейсера (только idle — позиция точная; transit без пути не рисуем).
     (GM.mzaVis || []).filter(sh => sh.status === 'idle' && sh.system_id).forEach(sh => {
@@ -6402,163 +6433,165 @@ function gmmPaintDefense(ctx) {
     D.ships.forEach(d => { if (d.kind === 'idle' && d.sys) { const owner = d.enemy ? ('e' + (d.fid || '')) : 'mine'; const k = d.sys.id + '|' + (d.side || 'right') + '|' + owner + (d.army ? '|a' + (d.colony || '') : ''); (grp[k] = grp[k] || []).push(d); } });
     Object.values(grp).forEach(list => list.forEach((d, i) => { d.stackI = i; d.stackN = list.length; d.stackPeers = list; }));
   }
-  D.ships.forEach(d => { try {
-    if (d.army) { if (!GM.showArmies) return; }       // МАРШ: армии видны только в режиме «Звёздный марш»
-    else if (d.fleet && GM.showFleets === false) return;   // флоты скрыты тоглом (значок + клик-зона)
-    if (d.kind === 'idle') {
-      const tX = SX(d.sys.x), tY = SY(d.sys.y);
-      if (!onScreen(tX, tY)) return;
-      const ip = gmmIconPx(d.sys, s);
-      // крупнее и с подложкой — носитель должно быть видно и на глубоком зуме, где
-      // рядом большая планета/корона звезды, и на дальнем у мелкого значка системы.
-      // КОМПАКТНО: значок должен быть МЕНЬШЕ звезды, поэтому csz заметно ужат.
-      const R = ip * 0.62 + 6, csz = Math.max(3, ip * 0.2) * zf;
-      const n = d.stackN || 1, idx = d.stackI || 0;
-      // ФЛОТЫ одной державы в одной системе СХЛОПЫВАЕМ в одну стопку: рисует только
-      // представитель (stackI===0), остальные пропускаем; число флотов показываем
-      // римской цифрой. Носители/Гиперпейсер по-прежнему раскладываем веером.
-      const stacked = !!d.fleet && n > 1;
-      if (stacked && idx !== 0) return;
-      // веер по горизонтали (значок узкий → небольшой шаг); центрируем группу
-      const step = csz * 2.6;
-      const fanX = stacked ? 0 : (idx - (n - 1) / 2) * step;
-      // флоты сидят СЛЕВА от звезды (side='left'), носители/Гиперпейсер — справа.
-      const sgn = d.side === 'left' ? -1 : 1;
-      // МАРШ: армии сидят СНИЗУ-слева от звезды — флот (сверху-слева) их не перекрывает
-      let cX = tX + sgn * R * 1.05 + fanX, cY = tY + (d.army ? R * 0.95 * sq : -R * 0.7 * sq);
-      // МАРШ: на глубоком зуме армия магнитится к СВОЕЙ ПЛАНЕТЕ-колонии, а не к звезде
-      // (позиции планет кладёт gmmPaintOrbits в GMM.colonyXY каждый кадр)
-      if (d.army && d.colony && GMM.colonyXY && GMM.colonyXY[d.colony]) {
-        const pp = GMM.colonyXY[d.colony];
-        cX = pp.x + fanX; cY = pp.y - (pp.r + csz * 1.9);
-      }
-      const sel = (GMM.opCmd && GMM.opCmd.id === d.id) || (GMM.fleetCmd && GMM.fleetCmd.id === d.id) || (GMM.armyCmd && GMM.armyCmd.id === d.id);
-      // Корабль с флагом-штандартом за спиной (герб фракции — прямо на карте).
-      const ER = gmmUnitEmblem(ctx, cX, cY, csz, d.fid || GM.myFid, d.col,
-        { type: d.mza ? 'mza' : (d.army ? 'army' : (d.fleet ? 'fleet' : 'carrier')), hot: !!(d.mza && d.canFire), sel, t });
-      // Флот: бейдж с числом кораблей у нижнего края значка.
-      if (d.fleet) {
-        ctx.save();
-        // В стопке суммируем корабли всех флотов державы; «известно», только если
-        // состав каждого вскрыт разведкой (иначе «?»).
-        let known, shipN;
-        if (stacked) {
-          known = true; shipN = 0;
-          d.stackPeers.forEach(p => { if (p.intel !== false && p.ships != null) shipN += +p.ships; else known = false; });
-        } else {
-          known = d.intel !== false && d.ships != null; shipN = d.ships;
+  D.ships.forEach(d => {
+    try {
+      if (d.army) { if (!GM.showArmies) return; }       // МАРШ: армии видны только в режиме «Звёздный марш»
+      else if (d.fleet && GM.showFleets === false) return;   // флоты скрыты тоглом (значок + клик-зона)
+      if (d.kind === 'idle') {
+        const tX = SX(d.sys.x), tY = SY(d.sys.y);
+        if (!onScreen(tX, tY)) return;
+        const ip = gmmIconPx(d.sys, s);
+        // крупнее и с подложкой — носитель должно быть видно и на глубоком зуме, где
+        // рядом большая планета/корона звезды, и на дальнем у мелкого значка системы.
+        // КОМПАКТНО: значок должен быть МЕНЬШЕ звезды, поэтому csz заметно ужат.
+        const R = ip * 0.62 + 6, csz = Math.max(3, ip * 0.2) * zf;
+        const n = d.stackN || 1, idx = d.stackI || 0;
+        // ФЛОТЫ одной державы в одной системе СХЛОПЫВАЕМ в одну стопку: рисует только
+        // представитель (stackI===0), остальные пропускаем; число флотов показываем
+        // римской цифрой. Носители/Гиперпейсер по-прежнему раскладываем веером.
+        const stacked = !!d.fleet && n > 1;
+        if (stacked && idx !== 0) return;
+        // веер по горизонтали (значок узкий → небольшой шаг); центрируем группу
+        const step = csz * 2.6;
+        const fanX = stacked ? 0 : (idx - (n - 1) / 2) * step;
+        // флоты сидят СЛЕВА от звезды (side='left'), носители/Гиперпейсер — справа.
+        const sgn = d.side === 'left' ? -1 : 1;
+        // МАРШ: армии сидят СНИЗУ-слева от звезды — флот (сверху-слева) их не перекрывает
+        let cX = tX + sgn * R * 1.05 + fanX, cY = tY + (d.army ? R * 0.95 * sq : -R * 0.7 * sq);
+        // МАРШ: на глубоком зуме армия магнитится к СВОЕЙ ПЛАНЕТЕ-колонии, а не к звезде
+        // (позиции планет кладёт gmmPaintOrbits в GMM.colonyXY каждый кадр)
+        if (d.army && d.colony && GMM.colonyXY && GMM.colonyXY[d.colony]) {
+          const pp = GMM.colonyXY[d.colony];
+          cX = pp.x + fanX; cY = pp.y - (pp.r + csz * 1.9);
         }
-        const txt = '' + (known ? shipN : '?');
-        // Численность — БЕЗ плашки: тонкая светящаяся цифра прямо под кораблём, с
-        // тёмной обводкой для читаемости над любым фоном (HUD-подпись, не «знак»).
-        ctx.save();
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        const ny = cY + ER * 0.64, fs = Math.max(8, csz * 1.5);
-        const [nr, ng, nb] = known ? d.col : [168, 180, 196];
-        ctx.font = '700 ' + fs.toFixed(0) + 'px ui-monospace, "Consolas", monospace';
-        const mainW = ctx.measureText(txt).width;
-        ctx.lineWidth = Math.max(1, csz * 0.45); ctx.lineJoin = 'round';
-        ctx.strokeStyle = 'rgba(4,9,16,0.92)';
-        ctx.shadowColor = `rgba(${nr},${ng},${nb},0.55)`; ctx.shadowBlur = csz * 0.9;
-        ctx.strokeText(txt, cX, ny);
-        ctx.shadowColor = 'transparent';
-        ctx.fillStyle = known
-          ? `rgba(${Math.min(255, nr + 60)},${Math.min(255, ng + 50)},${Math.min(255, nb + 45)},0.99)`
-          : 'rgba(194,206,220,0.97)';
-        ctx.fillText(txt, cX, ny);
-        // Стопка: «сколько флотов» мелким приглушённым «×N» у правого верха числа.
-        if (stacked) {
-          const sub = '×' + n, sfs = Math.max(6, csz * 0.92);
-          ctx.font = '700 ' + sfs.toFixed(0) + 'px ui-monospace, "Consolas", monospace';
-          ctx.textAlign = 'left';
-          const sx = cX + mainW / 2 + csz * 0.3, sy = ny - fs * 0.3;
-          ctx.lineWidth = Math.max(0.8, csz * 0.3); ctx.strokeStyle = 'rgba(4,9,16,0.9)';
-          ctx.strokeText(sub, sx, sy);
-          ctx.fillStyle = `rgba(${Math.min(255, nr + 40)},${Math.min(255, ng + 30)},${Math.min(255, nb + 25)},0.92)`;
-          ctx.fillText(sub, sx, sy);
+        const sel = (GMM.opCmd && GMM.opCmd.id === d.id) || (GMM.fleetCmd && GMM.fleetCmd.id === d.id) || (GMM.armyCmd && GMM.armyCmd.id === d.id);
+        // Корабль с флагом-штандартом за спиной (герб фракции — прямо на карте).
+        const ER = gmmUnitEmblem(ctx, cX, cY, csz, d.fid || GM.myFid, d.col,
+          { type: d.mza ? 'mza' : (d.army ? 'army' : (d.fleet ? 'fleet' : 'carrier')), hot: !!(d.mza && d.canFire), sel, t });
+        // Флот: бейдж с числом кораблей у нижнего края значка.
+        if (d.fleet) {
+          ctx.save();
+          // В стопке суммируем корабли всех флотов державы; «известно», только если
+          // состав каждого вскрыт разведкой (иначе «?»).
+          let known, shipN;
+          if (stacked) {
+            known = true; shipN = 0;
+            d.stackPeers.forEach(p => { if (p.intel !== false && p.ships != null) shipN += +p.ships; else known = false; });
+          } else {
+            known = d.intel !== false && d.ships != null; shipN = d.ships;
+          }
+          const txt = '' + (known ? shipN : '?');
+          // Численность — БЕЗ плашки: тонкая светящаяся цифра прямо под кораблём, с
+          // тёмной обводкой для читаемости над любым фоном (HUD-подпись, не «знак»).
+          ctx.save();
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          const ny = cY + ER * 0.64, fs = Math.max(8, csz * 1.5);
+          const [nr, ng, nb] = known ? d.col : [168, 180, 196];
+          ctx.font = '700 ' + fs.toFixed(0) + 'px ui-monospace, "Consolas", monospace';
+          const mainW = ctx.measureText(txt).width;
+          ctx.lineWidth = Math.max(1, csz * 0.45); ctx.lineJoin = 'round';
+          ctx.strokeStyle = 'rgba(4,9,16,0.92)';
+          ctx.shadowColor = `rgba(${nr},${ng},${nb},0.55)`; ctx.shadowBlur = csz * 0.9;
+          ctx.strokeText(txt, cX, ny);
+          ctx.shadowColor = 'transparent';
+          ctx.fillStyle = known
+            ? `rgba(${Math.min(255, nr + 60)},${Math.min(255, ng + 50)},${Math.min(255, nb + 45)},0.99)`
+            : 'rgba(194,206,220,0.97)';
+          ctx.fillText(txt, cX, ny);
+          // Стопка: «сколько флотов» мелким приглушённым «×N» у правого верха числа.
+          if (stacked) {
+            const sub = '×' + n, sfs = Math.max(6, csz * 0.92);
+            ctx.font = '700 ' + sfs.toFixed(0) + 'px ui-monospace, "Consolas", monospace';
+            ctx.textAlign = 'left';
+            const sx = cX + mainW / 2 + csz * 0.3, sy = ny - fs * 0.3;
+            ctx.lineWidth = Math.max(0.8, csz * 0.3); ctx.strokeStyle = 'rgba(4,9,16,0.9)';
+            ctx.strokeText(sub, sx, sy);
+            ctx.fillStyle = `rgba(${Math.min(255, nr + 40)},${Math.min(255, ng + 30)},${Math.min(255, nb + 25)},0.92)`;
+            ctx.fillText(sub, sx, sy);
+          }
+          ctx.restore();
         }
-        ctx.restore();
+        // Чужой вскрытый гиперкрейсер — тревожный пульс-кольцо «обнаружен»
+        if (d.mza && d.enemy) {
+          const pr = ER * (1.4 + 0.25 * (0.5 + 0.5 * Math.sin((t || 0) * 4)));
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,90,70,0.9)'; ctx.lineWidth = Math.max(1, csz * 0.18);
+          ctx.beginPath(); ctx.arc(cX, cY - ER * 0.2, pr, 0, 6.2832); ctx.stroke();
+          ctx.restore();
+        }
+        // Гиперпейсер: шкала корпуса НАД флагом (виден износ прямо на карте) — только свой
+        if (d.mza && !d.enemy) {
+          const bw = ER * 1.7, bh = Math.max(2, csz * 0.3), bx = cX - bw / 2, by = cY - ER * 2.15 - bh;
+          const ip2 = Math.max(0, Math.min(100, +d.integrity || 0)) / 100;
+          ctx.fillStyle = 'rgba(8,14,24,0.82)';
+          ctx.fillRect(bx - 0.5, by - 0.5, bw + 1, bh + 1);
+          ctx.fillStyle = ip2 >= 0.6 ? 'rgba(80,200,130,0.95)' : ip2 >= 0.3 ? 'rgba(220,170,60,0.95)' : 'rgba(220,90,70,0.95)';
+          ctx.fillRect(bx, by, bw * ip2, bh);
+        }
+        // готовность действия — точка у вольного края флага (верх-право)
+        if (d.mza && d.canFire) {            // готов к залпу — оранжевая
+          ctx.fillStyle = 'rgba(255,150,60,0.98)';
+          ctx.beginPath(); ctx.arc(cX + ER * 0.95, cY - ER * 1.85, Math.max(2, csz * 0.4), 0, 6.2832); ctx.fill();
+        } else if (!d.mza && d.canDeploy) {  // можно развернуть — зелёная
+          ctx.fillStyle = 'rgba(120,235,140,0.98)';
+          ctx.beginPath(); ctx.arc(cX + ER * 0.95, cY - ER * 1.85, Math.max(2, csz * 0.4), 0, 6.2832); ctx.fill();
+        }
+        // подпись на глубоком зуме — чтобы носитель нельзя было не заметить
+        if (deep) {
+          ctx.save();
+          ctx.font = '600 11px system-ui, sans-serif';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 3;
+          ctx.fillStyle = d.enemy ? 'rgba(255,180,170,0.98)' : (d.mza ? 'rgba(255,210,200,0.98)' : (d.fleet ? 'rgba(205,232,255,0.98)' : 'rgba(222,236,255,0.96)'));
+          const enemyTag = d.enemy && d.facName ? ` · ${d.facName}` : '';
+          const fleetLbl = d.army ? (stacked ? `Армии · ${n}` : '🪖 Армия')
+            : d.enemy ? 'Чужой флот' + enemyTag : (stacked ? `Флоты · ${n}` : 'Флот');
+          const lbl = d.mza ? (d.enemy ? '☣ Чужой гиперкрейсер · обнаружен' + enemyTag : (d.canFire ? '☣ Гиперпейсер · залп' : '☣ Гиперпейсер'))
+            : (d.fleet ? fleetLbl : (d.canDeploy ? '🚀 носитель · развернуть' : '🚀 носитель'));
+          ctx.fillText(lbl, cX, cY + ER * (d.fleet ? 2.95 : 1.5));
+          ctx.restore();
+        }
+        // в клик-зоны командования попадают только СВОИ юниты (чужие — только индикация).
+        // Стопка флотов несёт список id — клик откроет выбор, каким командовать.
+        if (!d.enemy) GMM.shipHit.push({ x: cX, y: cY - ER * 0.3, r: Math.max(16, ER * 2.1), id: d.id, mza: !!d.mza, fleet: !!d.fleet, army: !!d.army, stack: stacked ? d.stackPeers.map(p => p.id) : null });
+        return;
       }
-      // Чужой вскрытый гиперкрейсер — тревожный пульс-кольцо «обнаружен»
-      if (d.mza && d.enemy) {
-        const pr = ER * (1.4 + 0.25 * (0.5 + 0.5 * Math.sin((t || 0) * 4)));
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255,90,70,0.9)'; ctx.lineWidth = Math.max(1, csz * 0.18);
-        ctx.beginPath(); ctx.arc(cX, cY - ER * 0.2, pr, 0, 6.2832); ctx.stroke();
-        ctx.restore();
+      // в полёте: позиция по реальному времени (нет меток → середина)
+      let u = 0.5;
+      if (d.la != null && d.ra != null && d.ra > d.la) u = (now - d.la) / (d.ra - d.la);
+      u = Math.max(0, Math.min(1, u));
+      const [r, g, b] = d.col;
+      const lr = Math.min(255, r + 90), lg = Math.min(255, g + 90), lb = Math.min(255, b + 90);
+      let pt, back;
+      if (d.segs) { pt = gmmSegPt(d.segs, d.total, u); back = gmmSegPt(d.segs, d.total, Math.max(0, u - 0.02)); }
+      else { pt = gmmBezPt(d.g, u); back = gmmBezPt(d.g, Math.max(0, u - 0.02)); }
+      const hX = SX(pt.x), hY = SY(pt.y);
+      // трасса до цели (тонкая, бледная)
+      const drawTrace = (sampler) => {
+        const N = 24; ctx.beginPath();
+        for (let i = 0; i <= N; i++) { const p = sampler(i / N); const X = SX(p.x), Y = SY(p.y); if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y); }
+        ctx.stroke();
+      };
+      ctx.setLineDash([4, 4]); ctx.lineDashOffset = -t * 6;
+      ctx.strokeStyle = `rgba(${lr},${lg},${lb},0.3)`; ctx.lineWidth = 1.1;
+      if (d.segs) drawTrace(uu => gmmSegPt(d.segs, d.total, uu)); else drawTrace(uu => gmmBezPt(d.g, uu));
+      // МАРШ: на глубоком зуме дотягиваем маршрут армии ОТ ПЛАНЕТЫ отправления и
+      // ДО ПЛАНЕТЫ назначения (трасса гиперпути идёт звезда→звезда, а армия — колония→колония)
+      if (d.army && GMM.colonyXY) {
+        const w0 = d.segs ? gmmSegPt(d.segs, d.total, 0) : gmmBezPt(d.g, 0);
+        const w1 = d.segs ? gmmSegPt(d.segs, d.total, 1) : gmmBezPt(d.g, 1);
+        const p0 = d.fromCol && GMM.colonyXY[d.fromCol], p1 = d.destCol && GMM.colonyXY[d.destCol];
+        ctx.beginPath();
+        if (p0) { ctx.moveTo(p0.x, p0.y); ctx.lineTo(SX(w0.x), SY(w0.y)); }
+        if (p1) { ctx.moveTo(SX(w1.x), SY(w1.y)); ctx.lineTo(p1.x, p1.y); }
+        if (p0 || p1) ctx.stroke();
       }
-      // Гиперпейсер: шкала корпуса НАД флагом (виден износ прямо на карте) — только свой
-      if (d.mza && !d.enemy) {
-        const bw = ER * 1.7, bh = Math.max(2, csz * 0.3), bx = cX - bw / 2, by = cY - ER * 2.15 - bh;
-        const ip2 = Math.max(0, Math.min(100, +d.integrity || 0)) / 100;
-        ctx.fillStyle = 'rgba(8,14,24,0.82)';
-        ctx.fillRect(bx - 0.5, by - 0.5, bw + 1, bh + 1);
-        ctx.fillStyle = ip2 >= 0.6 ? 'rgba(80,200,130,0.95)' : ip2 >= 0.3 ? 'rgba(220,170,60,0.95)' : 'rgba(220,90,70,0.95)';
-        ctx.fillRect(bx, by, bw * ip2, bh);
-      }
-      // готовность действия — точка у вольного края флага (верх-право)
-      if (d.mza && d.canFire) {            // готов к залпу — оранжевая
-        ctx.fillStyle = 'rgba(255,150,60,0.98)';
-        ctx.beginPath(); ctx.arc(cX + ER * 0.95, cY - ER * 1.85, Math.max(2, csz * 0.4), 0, 6.2832); ctx.fill();
-      } else if (!d.mza && d.canDeploy) {  // можно развернуть — зелёная
-        ctx.fillStyle = 'rgba(120,235,140,0.98)';
-        ctx.beginPath(); ctx.arc(cX + ER * 0.95, cY - ER * 1.85, Math.max(2, csz * 0.4), 0, 6.2832); ctx.fill();
-      }
-      // подпись на глубоком зуме — чтобы носитель нельзя было не заметить
-      if (deep) {
-        ctx.save();
-        ctx.font = '600 11px system-ui, sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 3;
-        ctx.fillStyle = d.enemy ? 'rgba(255,180,170,0.98)' : (d.mza ? 'rgba(255,210,200,0.98)' : (d.fleet ? 'rgba(205,232,255,0.98)' : 'rgba(222,236,255,0.96)'));
-        const enemyTag = d.enemy && d.facName ? ` · ${d.facName}` : '';
-        const fleetLbl = d.army ? (stacked ? `Армии · ${n}` : '🪖 Армия')
-          : d.enemy ? 'Чужой флот' + enemyTag : (stacked ? `Флоты · ${n}` : 'Флот');
-        const lbl = d.mza ? (d.enemy ? '☣ Чужой гиперкрейсер · обнаружен' + enemyTag : (d.canFire ? '☣ Гиперпейсер · залп' : '☣ Гиперпейсер'))
-          : (d.fleet ? fleetLbl : (d.canDeploy ? '🚀 носитель · развернуть' : '🚀 носитель'));
-        ctx.fillText(lbl, cX, cY + ER * (d.fleet ? 2.95 : 1.5));
-        ctx.restore();
-      }
-      // в клик-зоны командования попадают только СВОИ юниты (чужие — только индикация).
-      // Стопка флотов несёт список id — клик откроет выбор, каким командовать.
-      if (!d.enemy) GMM.shipHit.push({ x: cX, y: cY - ER * 0.3, r: Math.max(16, ER * 2.1), id: d.id, mza: !!d.mza, fleet: !!d.fleet, army: !!d.army, stack: stacked ? d.stackPeers.map(p => p.id) : null });
-      return;
-    }
-    // в полёте: позиция по реальному времени (нет меток → середина)
-    let u = 0.5;
-    if (d.la != null && d.ra != null && d.ra > d.la) u = (now - d.la) / (d.ra - d.la);
-    u = Math.max(0, Math.min(1, u));
-    const [r, g, b] = d.col;
-    const lr = Math.min(255, r + 90), lg = Math.min(255, g + 90), lb = Math.min(255, b + 90);
-    let pt, back;
-    if (d.segs) { pt = gmmSegPt(d.segs, d.total, u); back = gmmSegPt(d.segs, d.total, Math.max(0, u - 0.02)); }
-    else { pt = gmmBezPt(d.g, u); back = gmmBezPt(d.g, Math.max(0, u - 0.02)); }
-    const hX = SX(pt.x), hY = SY(pt.y);
-    // трасса до цели (тонкая, бледная)
-    const drawTrace = (sampler) => {
-      const N = 24; ctx.beginPath();
-      for (let i = 0; i <= N; i++) { const p = sampler(i / N); const X = SX(p.x), Y = SY(p.y); if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y); }
-      ctx.stroke();
-    };
-    ctx.setLineDash([4, 4]); ctx.lineDashOffset = -t * 6;
-    ctx.strokeStyle = `rgba(${lr},${lg},${lb},0.3)`; ctx.lineWidth = 1.1;
-    if (d.segs) drawTrace(uu => gmmSegPt(d.segs, d.total, uu)); else drawTrace(uu => gmmBezPt(d.g, uu));
-    // МАРШ: на глубоком зуме дотягиваем маршрут армии ОТ ПЛАНЕТЫ отправления и
-    // ДО ПЛАНЕТЫ назначения (трасса гиперпути идёт звезда→звезда, а армия — колония→колония)
-    if (d.army && GMM.colonyXY) {
-      const w0 = d.segs ? gmmSegPt(d.segs, d.total, 0) : gmmBezPt(d.g, 0);
-      const w1 = d.segs ? gmmSegPt(d.segs, d.total, 1) : gmmBezPt(d.g, 1);
-      const p0 = d.fromCol && GMM.colonyXY[d.fromCol], p1 = d.destCol && GMM.colonyXY[d.destCol];
-      ctx.beginPath();
-      if (p0) { ctx.moveTo(p0.x, p0.y); ctx.lineTo(SX(w0.x), SY(w0.y)); }
-      if (p1) { ctx.moveTo(SX(w1.x), SY(w1.y)); ctx.lineTo(p1.x, p1.y); }
-      if (p0 || p1) ctx.stroke();
-    }
-    ctx.setLineDash([]);
-    // сам носитель
-    const ang = Math.atan2(SY(pt.y) - SY(back.y), SX(pt.x) - SX(back.x));
-    if (onScreen(hX, hY)) gmmCarrierGlyph(ctx, hX, hY, Math.max(2.6, s * 1.1 + 2), d.col, 0.95, ang);
-  } catch (e) { if (!GMM._unitErrLogged) { GMM._unitErrLogged = true; console.error('gmm unit draw failed', e); } } });
+      ctx.setLineDash([]);
+      // сам носитель
+      const ang = Math.atan2(SY(pt.y) - SY(back.y), SX(pt.x) - SX(back.x));
+      if (onScreen(hX, hY)) gmmCarrierGlyph(ctx, hX, hY, Math.max(2.6, s * 1.1 + 2), d.col, 0.95, ang);
+    } catch (e) { if (!GMM._unitErrLogged) { GMM._unitErrLogged = true; console.error('gmm unit draw failed', e); } }
+  });
 
   ctx.restore();
 }
@@ -7072,8 +7105,8 @@ function gmmPlanetTag(ctx, cx, cy, text, u, opt) {
 // иначе «прорехи» (destination-out) стёрли бы и территории под ними.
 function gmmPaintFog(ctx) {
   return;   // Туман войны отключён (минимализм): тёмная пелена над пустотой +
-            // офскрин-канва с 138 радиальными «прорехами» у звёзд были дорогими и
-            // мерцали при перепечатке. Пустота теперь — просто ровный космофон.
+  // офскрин-канва с 138 радиальными «прорехами» у звёзд были дорогими и
+  // мерцали при перепечатке. Пустота теперь — просто ровный космофон.
   const P = GMM.paths;
   if (!P || !P.fogPath) return;
   const pw = ctx.canvas.width, ph = ctx.canvas.height, m = ctx.getTransform();
@@ -7450,20 +7483,22 @@ function gmmPaintStars(ctx, camS) {
       // кратная система: спрайты компаньонов по кругу от главной звезды.
       // Гаснут при раскрытии системы (deep) — там компаньоны рисуются мини-системами.
       const compA = iconA * (1 - gmmDeepA());
-      if (compA > 0.02) { ctx.globalAlpha = compA;
-      gmCompLayout(s).forEach(({ c, fr, off, ang }) => {
-        const cw = iw * fr;
-        // отступ от центра — в долях РАДИУСА иконки (iw/2), по реальной сепарации;
-        // по вертикали сжат наклоном плоскости системы
-        const px = s.x + Math.cos(ang) * off * iw * 0.5, py = s.y + Math.sin(ang) * off * iw * 0.5 * gmmTiltK();
-        ctx.drawImage(gmmGlowSprite(GM_CLS_GLOW[c.cls] || '255,220,130', 0.3), px - cw * 0.7, py - cw * 0.7, cw * 1.4, cw * 1.4);
-        const cim = GMM.imgs[GM_CLS2TYPE[c.cls] || 'yellow'];
-        if (cim && cim.complete && cim.naturalWidth) {
-          const car = cim.naturalWidth / cim.naturalHeight;
-          let cdw = cw, cdh = cw; if (car >= 1) cdh = cw / car; else cdw = cw * car;
-          ctx.drawImage(cim, px - cdw / 2, py - cdh / 2, cdw, cdh);
-        } else { ctx.fillStyle = `rgb(${GM_CLS_GLOW[c.cls] || '255,220,130'})`; ctx.beginPath(); ctx.arc(px, py, cw * 0.28, 0, 6.2832); ctx.fill(); }
-      }); ctx.globalAlpha = iconA; }
+      if (compA > 0.02) {
+        ctx.globalAlpha = compA;
+        gmCompLayout(s).forEach(({ c, fr, off, ang }) => {
+          const cw = iw * fr;
+          // отступ от центра — в долях РАДИУСА иконки (iw/2), по реальной сепарации;
+          // по вертикали сжат наклоном плоскости системы
+          const px = s.x + Math.cos(ang) * off * iw * 0.5, py = s.y + Math.sin(ang) * off * iw * 0.5 * gmmTiltK();
+          ctx.drawImage(gmmGlowSprite(GM_CLS_GLOW[c.cls] || '255,220,130', 0.3), px - cw * 0.7, py - cw * 0.7, cw * 1.4, cw * 1.4);
+          const cim = GMM.imgs[GM_CLS2TYPE[c.cls] || 'yellow'];
+          if (cim && cim.complete && cim.naturalWidth) {
+            const car = cim.naturalWidth / cim.naturalHeight;
+            let cdw = cw, cdh = cw; if (car >= 1) cdh = cw / car; else cdw = cw * car;
+            ctx.drawImage(cim, px - cdw / 2, py - cdh / 2, cdw, cdh);
+          } else { ctx.fillStyle = `rgb(${GM_CLS_GLOW[c.cls] || '255,220,130'})`; ctx.beginPath(); ctx.arc(px, py, cw * 0.28, 0, 6.2832); ctx.fill(); }
+        }); ctx.globalAlpha = iconA;
+      }
       const capFid = caps[s.id];
       if (capFid) {
         ctx.font = `${(13 / camS).toFixed(2)}px sans-serif`;
@@ -7513,7 +7548,7 @@ function gmmPaintStars(ctx, camS) {
     const facOwn = s.faction && s.faction !== 'rift' ? gmFaction(s.faction) : null;
     const col = s.faction === 'rift' ? '#c58bff'
       : facOwn ? gmReadable(facOwn.color)
-      : '#8ba0b8';
+        : '#8ba0b8';
     gmmNamePlate(ctx, s.x, cyp, s.name, u, { color: col, fs: fpx, alpha: iconA, weight: 700, variant, isCap });
   });
   ctx.globalAlpha = 1;
@@ -7652,4 +7687,92 @@ function gmmRoundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+// ── Режим «ОККУПАЦИЯ» (война, срез 2: _war_borders_occupation.sql) ──
+// Над каждой занятой системой — древко с флагом оккупанта (герб фракции из
+// анкеты; нет герба → сплошное полотнище её цветом). Живой слой, как звёзды:
+// оккупации меняются каждый ход, печь их в битмап смысла нет.
+async function gmToggleOccup() {
+  GM.showOccup = !GM.showOccup;
+  document.getElementById('gm-ctl-occup')?.classList.toggle('gm-active', GM.showOccup);
+  if (GM.showOccup) {
+    await gmLoadOccup();
+    if (!GM.showOccup) return;   // слой могли выключить, пока грузился список
+    if (!(GM.occup || []).length) toast('Оккупированных систем сейчас нет', 'ok');
+  }
+  if (GMM.active) gmmRasterSoon();
+}
+// Список оккупаций (RPC occupations_all). Отдельно от тумблера — дёргается и при
+// заходе на карту, если слой уже был включён (GM.showOccup живёт между переходами).
+async function gmLoadOccup() {
+  try {
+    const r = await gmDefRpc('occupations_all');
+    GM.occup = Array.isArray(r) ? r : [];
+  } catch (e) { GM.occup = GM.occup || []; }   // срез не накачен → слой просто пуст
+  return GM.occup;
+}
+// Флаг оккупанта над системой. Рисуется в МИРОВЫХ координатах (вызов из gmmBlit
+// сразу после gmmPaintStars), размер держим экранно-постоянным делением на camS.
+function gmmPaintOccup(ctx, camS) {
+  if (!GM.showOccup || !GM.occup || !GM.occup.length) return;
+  const byId = {};
+  GM.occup.forEach(o => { if (o && o.system_id) byId[o.system_id] = o; });
+  const mg = 160, u = 1 / camS;
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  GM.systems.forEach(s => {
+    const o = byId[s.id]; if (!o) return;
+    const X = s.x * camS + GMM.tx, Y = s.y * camS + GMM.ty;
+    if (X < -mg || X > GMM.vw + mg || Y < -mg || Y > GMM.vh + mg) return;
+    // тот же вертикальный сдвиг под наклон плоскости, что у звёзд
+    const _scY = s.y * camS + GMM.ty, _dyW = (gmmTY(_scY) - _scY) / camS;
+    ctx.save(); ctx.translate(0, _dyW);
+
+    const iw = gmmIconPx(s, camS) / camS;      // радиус иконки звезды в мире
+    const poleH = 26 * u, fw = 22 * u, fh = 14 * u;
+    const bx = s.x + iw * 0.42, by = s.y - iw * 0.42 - poleH;   // низ древка справа-сверху от звезды
+    const col = o.occupier_color || '#e05a5a';
+
+    // 1) древко
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = 'rgba(230,238,246,0.85)';
+    ctx.lineWidth = 1.5 * u;
+    ctx.beginPath(); ctx.moveTo(bx, by + poleH); ctx.lineTo(bx, by); ctx.stroke();
+
+    // 2) полотнище: герб фракции, обрезанный по вымпелу (клин справа), либо цвет
+    const path = new Path2D();
+    path.moveTo(bx, by);
+    path.lineTo(bx + fw, by);
+    path.lineTo(bx + fw - fh * 0.38, by + fh / 2);
+    path.lineTo(bx + fw, by + fh);
+    path.lineTo(bx, by + fh);
+    path.closePath();
+
+    ctx.save();
+    ctx.clip(path);
+    const im = gmmFlagImg(o.occupier);
+    if (im) {
+      // герб растягиваем по вымпелу с сохранением пропорций (cover)
+      const ar = im.naturalWidth / im.naturalHeight;
+      let dw = fw, dh = fw / ar;
+      if (dh < fh) { dh = fh; dw = fh * ar; }
+      ctx.globalAlpha = 0.95;
+      ctx.drawImage(im, bx + (fw - dw) / 2, by + (fh - dh) / 2, dw, dh);
+    } else {
+      ctx.globalAlpha = 0.85; ctx.fillStyle = col;
+      ctx.fillRect(bx, by, fw, fh);
+    }
+    ctx.restore();
+
+    // 3) кромка вымпела цветом оккупанта — единственный акцент слоя
+    ctx.globalAlpha = 0.95;
+    ctx.strokeStyle = col; ctx.lineWidth = 1.3 * u;
+    ctx.stroke(path);
+    // мягкое гало, чтобы флаг читался поверх яркой звезды
+    ctx.globalAlpha = 0.22; ctx.lineWidth = 4 * u; ctx.stroke(path);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  });
+  ctx.restore();
 }

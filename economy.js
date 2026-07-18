@@ -1428,7 +1428,7 @@ async function _ecLoadCoreImpl() {
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
-  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger] = await Promise.all([
+  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger, warStatus, battlesList] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1469,6 +1469,8 @@ async function _ecLoadCoreImpl() {
     ecRpc('geosurvey_get').catch(() => null),  // ⛏ георазведка: текущая находка + цена следующей крутки (казино)
     ecRpc('stargaze_get').catch(() => null),   // 🜂 «Всмотреться в Разлом»: активный транс (казино)
     dbGet('galactic_ledger', `owner_id=eq.${user.id}&order=created_at.desc&limit=24`).catch(() => []),  // 🌌 разовые эффекты Ассамблеи/Поэмы (леджер, «Казна» обзора)
+    ecRpc('war_status').catch(() => null),   // ⚔ войны: активные конфликты, ноты, история (_war_declare.sql)
+    ecRpc('battles_mine').catch(() => null),   // ⚔ завязавшиеся бои: перехваты и встречи флотов (_war_intercept.sql)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1480,6 +1482,8 @@ async function _ecLoadCoreImpl() {
   EC.spatial = {};
   (Array.isArray(spatial) ? spatial : []).forEach(b => { if (b && b.system_id) EC.spatial[b.system_id] = b; });
   EC.sectors = Array.isArray(sectors) ? sectors : [];   // сектора карты + эконом-события (срез 4)
+  EC.battles = Array.isArray(battlesList) ? battlesList : [];   // ⚔ бои, в которых мы участвуем (_war_intercept.sql)
+  EC.war = warStatus || { fid: EC.fid, wars: [], open_wars: [], incoming: [], outgoing: [], history: [] };   // ⚔ войны (_war_declare.sql; пустой объект, если срез не накачен)
   EC.gledger = Array.isArray(gledger) ? gledger : [];    // 🌌 леджер галактических эффектов (Ассамблея/Поэма) — «Казна» обзора
   EC.designs = (designs || []);
   EC.roster = (prod || []).filter(p => p.status === 'done');
@@ -2223,7 +2227,7 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['flows', '⇄', 'Торговля и потоки'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['flows', '⇄', 'Торговля и потоки'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['war', '⚔', 'Война'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   // Длань Неотвратимости — отдельная вкладка-пульт, появляется когда орудие доступно
   // (исследование открыто или орудие уже стоит).
   if (ecDoomUnlocked()) tabs.splice(13, 0, ['doom', '🜨', 'Длань Неотвратимости']);
@@ -2236,6 +2240,7 @@ function ecPaintCabinet() {
     : EC.tab === 'trade' ? ecTabFlows()   // легаси-ссылки: «Торговля» слита в «Потоки»
     : EC.tab === 'flows' ? ecTabFlows()
     : EC.tab === 'exchange' ? ecTabExchange()
+    : EC.tab === 'war' ? ecTabWar()
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'faith' ? ecTabFaith() : EC.tab === 'intel' ? ecTabIntel()
     : EC.tab === 'raids' ? ecTabRaids()
     : EC.tab === 'doom' ? ecTabDoom()
@@ -12536,4 +12541,246 @@ function ecShowUnitSpecsFallback(unitName, category, design) {
     ${body}
   </div>`;
   ov.classList.add('show');
+}
+
+// ════════════════════════════════════════════════════════════
+// ВКЛАДКА «⚔ ВОЙНА» — зеркало _war_declare.sql
+// Объявление войны, созыв союзников, вступление в чужую войну,
+// мирные ноты и конференции. Всё уходит прозой в ленту событий.
+// Данные: EC.war (RPC war_status), обновляется общим перезагрузом.
+// ════════════════════════════════════════════════════════════
+const EC_WAR_KIND = {
+  status_quo:       { ic: '🕊', label: 'Белый мир',              hint: 'Война кончается ничем: все остаются при своём.' },
+  surrender:        { ic: '⚑', label: 'Капитуляция',            hint: 'Отправитель признаёт поражение.' },
+  demand_surrender: { ic: '⚔', label: 'Требование капитуляции', hint: 'Адресат должен сложить оружие.' },
+  conference:       { ic: '🏛', label: 'Мирная конференция',    hint: 'Переговоры — публичный жест, войну не заканчивает.' },
+  call_ally:        { ic: '📯', label: 'Зов союзника',           hint: 'Приглашение вступить в войну на своей стороне.' }
+};
+function ecWar() { return EC.war || { wars: [], open_wars: [], incoming: [], outgoing: [], history: [] }; }
+function ecWarArr(k) { const a = ecWar()[k]; return Array.isArray(a) ? a : []; }
+
+// Число входящих нот — для бейджа на вкладке (зовут воевать / просят мира).
+function ecWarPending() { return ecWarArr('incoming').length; }
+
+function ecTabWar() {
+  const wars = ecWarArr('wars');
+  const intro = ecIntro('⚔', 'Война', 'Объявление войны, коалиции и мир. Каждый акт публикуется в ленте событий сектора.', [
+    '<b>Объявление войны</b> снимает запрет на проход границ — но только между вами и противником.',
+    '<b>Коалиции</b> — можно позвать союзника или самому вписаться в чужую войну.',
+    '<b>Мир подписывает только зачинщик</b> стороны: младший союзник не выведет из войны всю коалицию.',
+    '<b>Конференция</b> — публичные переговоры: попадают в ленту сразу, но войну сами по себе не кончают.'
+  ]);
+  return `${intro}
+    ${ecWarIncomingBlock()}
+    ${ecWarBattlesBlock()}
+    <div class="ec-section-title">Текущие войны <span class="ec-hint">— ${wars.length ? wars.length + ' активн.' : 'мир'}</span></div>
+    ${wars.length ? wars.map(ecWarCard).join('') : '<div class="ec-dip-grid"><div class="ec-dip-card"><div class="ec-empty">Держава ни с кем не воюет. Тишина — тоже позиция.</div></div></div>'}
+    <div class="ec-section-title">Объявить войну <span class="ec-hint">— casus belli</span></div>
+    <div class="ec-dip-grid">${ecWarDeclareBlock()}</div>
+    ${ecWarOpenBlock()}
+    ${ecWarHistoryBlock()}`;
+}
+
+// ── Входящие ноты: зовы в войну и мирные предложения ──
+function ecWarIncomingBlock() {
+  const inc = ecWarArr('incoming');
+  if (!inc.length) return '';
+  const rows = inc.map(o => {
+    const k = EC_WAR_KIND[o.kind] || { ic: '✉', label: o.kind };
+    const act = o.kind === 'call_ally'
+      ? `<button class="btn btn-gd btn-xs" onclick="ecWarJoinCall('${jsq(o.id)}','${jsq(o.war_id)}')">Вступить в войну</button>
+         <button class="btn btn-gh btn-xs" onclick="ecWarDecline('${jsq(o.id)}')">Отклонить</button>`
+      : `<button class="btn btn-gd btn-xs" onclick="ecWarRespond('${jsq(o.id)}',true,'${jsq(o.kind)}')">Принять</button>
+         <button class="btn btn-gh btn-xs" onclick="ecWarRespond('${jsq(o.id)}',false,'${jsq(o.kind)}')">Отвергнуть</button>`;
+    return `<div class="ec-war-note">
+        <div class="ec-war-note-h">${k.ic} <b>${esc(k.label)}</b> — от ${esc(o.from_name || ecFacName(o.from))}</div>
+        ${o.message ? `<div class="ec-war-note-msg">«${esc(o.message)}»</div>` : ''}
+        <div class="ec-war-note-a">${act}</div>
+      </div>`;
+  }).join('');
+  return `<div class="ec-section-title">Ноты на столе <span class="ec-hint">— требуют ответа</span></div>
+    <div class="ec-dip-grid"><div class="ec-dip-card ec-war-hot">
+      <div class="ec-dip-t">✉ Входящая дипломатия</div>${rows}
+    </div></div>`;
+}
+
+// ── Карточка активной войны ──
+function ecWarCard(w) {
+  const mine = w.my_side;
+  const sides = Array.isArray(w.sides) ? w.sides : [];
+  const line = (side, title) => {
+    const list = sides.filter(s => s.side === side);
+    return `<div class="ec-war-side">
+        <div class="ec-war-side-t">${title}${side === mine ? ' <i class="ec-war-us">— мы</i>' : ''}</div>
+        <div class="ec-bord-grid">${list.map(s => `<span class="ec-bord-fac ec-war-fac">${ecFacFlag(s.fid, 22)}<span class="ec-bord-name">${esc(s.name)}</span></span>`).join('')}</div>
+      </div>`;
+  };
+  // Ноты, уже отправленные по этой войне — чтобы не слать вторую такую же.
+  const out = ecWarArr('outgoing').filter(o => o.war_id === w.id);
+  const outHtml = out.length ? `<div class="ec-war-out">Отправлено: ${out.map(o => {
+    const k = EC_WAR_KIND[o.kind] || { ic: '✉', label: o.kind };
+    return `<span class="ec-war-chip">${k.ic} ${esc(k.label)} <button class="ec-war-x" title="Отозвать ноту" onclick="ecWarWithdraw('${jsq(o.id)}')">✕</button></span>`;
+  }).join('')}</div>` : '';
+
+  // Мирные ноты подписывает только зачинщик стороны (правило сервера).
+  const leaderName = ((sides.find(s => s.side === mine && (s.fid === w.attacker || s.fid === w.defender)) || {}).name) || '—';
+  const peace = w.is_leader
+    ? `<div class="ec-war-acts">
+        <button class="btn btn-gh btn-xs" onclick="ecWarOffer('${jsq(w.id)}','status_quo')">🕊 Предложить мир (статус-кво)</button>
+        <button class="btn btn-gh btn-xs" onclick="ecWarOffer('${jsq(w.id)}','demand_surrender')">⚔ Требовать капитуляции</button>
+        <button class="btn btn-gh btn-xs" onclick="ecWarOffer('${jsq(w.id)}','surrender')">⚑ Капитулировать</button>
+      </div>`
+    : `<div class="ec-war-hint">Мирные ноты по этой войне подписывает зачинщик вашей стороны — ${esc(leaderName)}. Вам доступна конференция.</div>`;
+
+  const others = ecOtherFactions().filter(f => !sides.some(s => s.fid === f.faction_id));
+  const callHtml = others.length
+    ? `<div class="ec-prod-form" style="margin-top:8px">
+        <select id="ec-war-ally-${esc(w.id)}">${others.map(f => `<option value="${esc(f.faction_id)}">${esc(f.name)}</option>`).join('')}</select>
+        <button class="btn btn-gh btn-sm" onclick="ecWarCallAlly('${jsq(w.id)}')">📯 Позвать в войну</button>
+      </div>`
+    : '';
+
+  return `<div class="ec-dip-grid"><div class="ec-dip-card ec-war-card">
+      <div class="ec-dip-t">⚔ ${esc(w.attacker_name)} → ${esc(w.defender_name)}</div>
+      ${w.cause ? `<div class="ec-war-cause">Повод: «${esc(w.cause)}»</div>` : ''}
+      <div class="ec-war-sides">${line('attacker', 'Нападающие')}${line('defender', 'Обороняющиеся')}</div>
+      ${outHtml}
+      ${peace}
+      <div class="ec-war-acts">
+        <button class="btn btn-gh btn-xs" onclick="ecWarOffer('${jsq(w.id)}','conference')">🏛 Созвать мирную конференцию</button>
+      </div>
+      ${callHtml}
+    </div></div>`;
+}
+
+// ── Объявление войны ──
+function ecWarDeclareBlock() {
+  // Тем, с кем уже воюем, объявлять нечего.
+  const atWar = new Set();
+  ecWarArr('wars').forEach(w => (w.sides || []).forEach(s => { if (s.side !== w.my_side) atWar.add(s.fid); }));
+  const others = ecOtherFactions().filter(f => !atWar.has(f.faction_id));
+  if (!others.length) return `<div class="ec-dip-card"><div class="ec-dip-t">⚔ Объявление войны</div><div class="ec-empty">Некому объявлять: вы уже воюете со всеми, кто есть в секторе.</div></div>`;
+  return `<div class="ec-dip-card">
+      <div class="ec-dip-t">⚔ Объявление войны</div>
+      <div style="font-size:12.5px;color:var(--t2);margin:6px 0">Война снимает пограничный запрет <b>только между вами и противником</b>: его закрытые границы вас больше не остановят, как и ваши его. Акт публикуется в ленте событий сектора.</div>
+      <div class="ec-prod-form">
+        <select id="ec-war-target">${others.map(f => `<option value="${esc(f.faction_id)}">${esc(f.name)}</option>`).join('')}</select>
+        <button class="btn btn-gd btn-sm" onclick="ecWarDeclare()">Объявить войну</button>
+      </div>
+      <input id="ec-war-cause" placeholder="casus belli — повод (попадёт в хронику)" class="ec-loan-note" style="margin-top:6px">
+    </div>`;
+}
+
+// ── Чужие войны: вписаться по своей воле ──
+function ecWarOpenBlock() {
+  const open = ecWarArr('open_wars');
+  if (!open.length) return '';
+  const rows = open.map(w => `<div class="ec-q-row">
+      <span class="ec-r-name">${esc(w.attacker_name)} → ${esc(w.defender_name)}${w.cause ? ` <i class="ec-war-cause-i">«${esc(w.cause)}»</i>` : ''}</span>
+      <span style="display:flex;gap:6px">
+        <button class="btn btn-gh btn-xs" onclick="ecWarJoin('${jsq(w.id)}','attacker')">За нападающих</button>
+        <button class="btn btn-gh btn-xs" onclick="ecWarJoin('${jsq(w.id)}','defender')">За обороняющихся</button>
+      </span>
+    </div>`).join('');
+  return `<div class="ec-section-title">Чужие войны <span class="ec-hint">— можно вмешаться</span></div>
+    <div class="ec-dip-grid"><div class="ec-dip-card">
+      <div class="ec-dip-t">🌐 Конфликты сектора</div>
+      <div style="font-size:12.5px;color:var(--t2);margin:6px 0">Вступив в войну, вы становитесь врагом всей противоположной коалиции — и её границы открываются вам, а ваши ей.</div>
+      ${rows}
+    </div></div>`;
+}
+
+// ── История войн ──
+function ecWarHistoryBlock() {
+  const h = ecWarArr('history');
+  if (!h.length) return '';
+  const rows = h.map(w => {
+    const won = (w.status === 'attacker_won' && w.my_side === 'attacker') || (w.status === 'defender_won' && w.my_side === 'defender');
+    const res = w.status === 'status_quo' ? '<span class="ec-war-res">🕊 статус-кво</span>'
+      : won ? '<span class="ec-war-res ec-war-won">⚑ победа</span>'
+            : '<span class="ec-war-res ec-war-lost">⚑ поражение</span>';
+    return `<div class="ec-q-row"><span class="ec-r-name">${esc(w.attacker_name)} → ${esc(w.defender_name)}${w.cause ? ` <i class="ec-war-cause-i">«${esc(w.cause)}»</i>` : ''}</span>${res}</div>`;
+  }).join('');
+  return `<div class="ec-section-title">Летопись войн <span class="ec-hint">— последние ${h.length}</span></div>
+    <div class="ec-dip-grid"><div class="ec-dip-card"><div class="ec-dip-t">📜 Оконченные войны</div>${rows}</div></div>`;
+}
+
+// ── Действия ────────────────────────────────────────────────
+function ecWarDeclare() {
+  const sel = document.getElementById('ec-war-target'), fid = sel && sel.value;
+  if (!fid) { toast('Выберите державу', 'err'); return; }
+  const cz = (document.getElementById('ec-war-cause') || {}).value || '';
+  if (!confirm(`Объявить войну «${ecFacName(fid)}»?\n\nЭто публичный акт: он уйдёт в ленту событий сектора, а пограничный запрет между вами перестанет действовать в обе стороны.`)) return;
+  ecRpcAct('war_declare', { p_target_fid: fid, p_cause: cz }, `Война объявлена: «${ecFacName(fid)}»`);
+}
+function ecWarCallAlly(warId) {
+  const sel = document.getElementById('ec-war-ally-' + warId), fid = sel && sel.value;
+  if (!fid) { toast('Выберите державу', 'err'); return; }
+  ecRpcAct('war_call_ally', { p_war: warId, p_fid: fid, p_message: null }, `Зов отправлен: «${ecFacName(fid)}»`);
+}
+function ecWarJoin(warId, side) {
+  if (!confirm(side === 'attacker'
+    ? 'Вступить в войну на стороне нападающих? Вся коалиция обороняющихся станет вашим врагом.'
+    : 'Вступить в войну на стороне обороняющихся? Вся коалиция нападающих станет вашим врагом.')) return;
+  ecRpcAct('war_join', { p_war: warId, p_side: side, p_offer: null }, 'Вы вступили в войну');
+}
+function ecWarJoinCall(offerId, warId) {
+  if (!confirm('Ответить на зов и вступить в войну на стороне союзника?')) return;
+  ecRpcAct('war_join', { p_war: warId, p_side: null, p_offer: offerId }, 'Вы вступили в войну');
+}
+function ecWarOffer(warId, kind) {
+  const k = EC_WAR_KIND[kind] || { label: kind };
+  const q = kind === 'surrender'
+    ? 'Капитулировать? Война окончится вашим поражением, как только противник примет ноту. Отменить это будет нельзя.'
+    : kind === 'conference'
+      ? 'Созвать мирную конференцию? Она будет опубликована в ленте событий сектора немедленно.'
+      : `Отправить ноту «${k.label}» противнику?`;
+  if (!confirm(q)) return;
+  const msg = prompt(kind === 'conference'
+    ? 'Слово к конференции (попадёт в хронику сектора):'
+    : 'Условия / послание к ноте (необязательно):', '');
+  if (msg === null) return;
+  ecRpcAct('war_offer_make', { p_war: warId, p_kind: kind, p_message: msg }, `Нота отправлена: ${k.label}`);
+}
+function ecWarRespond(offerId, accept, kind) {
+  const k = EC_WAR_KIND[kind] || { label: kind };
+  if (accept && !confirm(kind === 'demand_surrender'
+    ? 'Принять требование капитуляции? Война окончится вашим поражением.'
+    : kind === 'surrender'
+      ? 'Принять капитуляцию противника? Война окончится вашей победой.'
+      : 'Принять белый мир? Война окончится, все останутся при своём.')) return;
+  ecRpcAct('war_offer_respond', { p_offer: offerId, p_accept: !!accept },
+    accept ? `Принято: ${k.label}` : 'Нота отвергнута');
+}
+function ecWarDecline(offerId) { ecRpcAct('war_offer_withdraw', { p_offer: offerId }, 'Зов отклонён'); }
+function ecWarWithdraw(offerId) { ecRpcAct('war_offer_withdraw', { p_offer: offerId }, 'Нота отозвана'); }
+
+// ── Блок «Идут сражения» (война, срез 3: _war_intercept.sql) ──
+// Пока это индикатор: бой завязался, флоты скованы. Выбор состава и
+// пошаговая доска приедут срезом 4 (_war_battle.sql) — кнопка «К бою»
+// появится здесь же, когда он будет накачен.
+function ecWarBattlesBlock() {
+  const bs = Array.isArray(EC.battles) ? EC.battles : [];
+  if (!bs.length) return '';
+  const rows = bs.map(b => {
+    const kind = b.kind === 'intercept'
+      ? '<span class="ec-war-kind">🛑 перехват на трассе</span>'
+      : '<span class="ec-war-kind">⚔ встреча флотов</span>';
+    const st = b.status === 'forming'
+      ? '<span class="ec-war-res">состав не выбран</span>'
+      : b.status === 'active' ? '<span class="ec-war-res ec-war-lost">идёт бой</span>' : '';
+    const fleets = (b.my_fleets || []).map(f => esc(f.name || 'Флот')).join(', ');
+    const cta = b.status === 'forming' ? 'Расставить флот' : 'К доске боя';
+    return `<div class="ec-war-note">
+        <div class="ec-war-note-h">⚔ <b>${esc(b.system_name || b.system_id)}</b> — против ${esc(b.foe_name)} ${kind}</div>
+        <div class="ec-war-note-msg">Скованы боем: ${fleets || '—'}. ${st}</div>
+        <div class="ec-war-note-a"><button class="btn btn-gd btn-xs" onclick="bbOpen('${jsq(b.id)}')">${cta}</button></div>
+      </div>`;
+  }).join('');
+  return `<div class="ec-section-title">Сражения <span class="ec-hint">— флоты сцепились</span></div>
+    <div class="ec-dip-grid"><div class="ec-dip-card ec-war-hot">
+      <div class="ec-dip-t">⚔ Идут сражения</div>
+      <div style="font-size:12.5px;color:var(--t2);margin:6px 0">Скованный боем флот никуда не уйдёт, пока сражение не окончено. Система под боем не оккупируется — сначала надо победить.</div>
+      ${rows}
+    </div></div>`;
 }

@@ -3874,3 +3874,39 @@ body.ec-tree-fs-lock { overflow: hidden; }
   .ec-vit { flex-basis: calc(50% - 4px); min-width: 0; }
   .ec-gal-val { flex-direction: column; gap: 1px; align-items: flex-end; }
 }
+
+/* ── Вкладка «⚔ Война» (economy.js ecTabWar, зеркало _war_declare.sql) ──
+   Минимализм: один акцент — багровый --err. Всё остальное — базовые
+   токены карточек дипломатии, чтобы вкладка читалась как её продолжение. */
+.ec-war-card { border-color: color-mix(in srgb, var(--err, #e05a5a) 30%, var(--w2)); }
+.ec-war-hot  { border-color: color-mix(in srgb, var(--err, #e05a5a) 45%, var(--w2)); }
+.ec-war-cause { font-size: 12.5px; color: var(--t2); margin: 4px 0 8px; font-style: italic; }
+.ec-war-cause-i { color: var(--t3, #8a97a3); font-size: 11.5px; font-style: italic; }
+
+.ec-war-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0; }
+@media (max-width: 640px) { .ec-war-sides { grid-template-columns: 1fr; } }
+.ec-war-side-t { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--t3, #8a97a3); margin-bottom: 5px; }
+.ec-war-us { color: var(--err, #e05a5a); font-style: normal; }
+.ec-war-fac { cursor: default; }
+.ec-war-fac:hover { border-color: var(--w2); }
+
+.ec-war-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.ec-war-hint { font-size: 12px; color: var(--t3, #8a97a3); margin-top: 8px; }
+
+.ec-war-out { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: 11.5px; color: var(--t3, #8a97a3); }
+.ec-war-chip { display: inline-flex; align-items: center; gap: 5px; background: var(--b1); border-radius: var(--radius-sm); padding: 3px 8px; font-size: 11.5px; color: var(--t2); }
+.ec-war-x { background: none; border: 0; color: var(--t3, #8a97a3); cursor: pointer; font-size: 11px; padding: 0 2px; line-height: 1; }
+.ec-war-x:hover { color: var(--err, #e05a5a); }
+
+/* Входящая нота: подложка вместо обводки — обводка на карточке уже есть. */
+.ec-war-note { background: var(--b1); border-radius: var(--radius-sm); padding: 9px 11px; margin-top: 8px; }
+.ec-war-note-h { font-size: 13px; color: var(--t1); }
+.ec-war-note-msg { font-size: 12.5px; color: var(--t2); font-style: italic; margin: 4px 0; }
+.ec-war-note-a { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+
+.ec-war-res { font-size: 11.5px; color: var(--t3, #8a97a3); white-space: nowrap; }
+.ec-war-won { color: var(--ok, #7bd88f); }
+.ec-war-lost { color: var(--err, #e05a5a); }
+
+/* Бой: тип столкновения (война, срез 3) */
+.ec-war-kind { font-size: 11.5px; color: var(--t3, #8a97a3); white-space: nowrap; }

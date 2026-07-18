@@ -3417,6 +3417,7 @@ function adTabTesting(e) {
     ${row('🏴‍☠️ Завершить рейды немедленно', 'Все активные рейды этой фракции (как атакующего и как цели) резолвятся сейчас: бой, добыча, потери, раскрытие.', `<button class="btn btn-gd" onclick="adTestSpeedRaids()">Завершить рейды</button>`)}
     ${row('🕵 Завершить шпионаж немедленно', 'Агенты мгновенно дообучаются, активные операции резолвятся сейчас.', `<button class="btn btn-gd" onclick="adTestSpeedSpy()">Завершить шпионаж</button>`)}
     ${row('⏩ Форсировать тик дохода', `Начислить доход за сутки немедленно (last_tick откатится на 25 ч). Последний доход: ${fmtT(lastTick)}.`, `<button class="btn btn-gd" onclick="adTestForceTick()" ${eco ? '' : 'disabled'}>Начислить доход</button>`)}
+    ${row('🚀 Пропустить полёт', 'Все флоты фракции, что сейчас в пути, прибывают немедленно — без ожидания времени полёта. Границы, перехват и бой на прибытии считаются как обычно.', `<button class="btn btn-gd" onclick="adTestSkipFlight()">Пропустить полёт</button>`)}
     ${row('🜨 Приземлить залп артиллерии', 'Все снаряды «Длани Неотвратимости» этой фракции, что в полёте, мгновенно поражают цель: планета-цель превращается в мёртвый камень, колония на ней стирается.', `<button class="btn btn-gd" onclick="adTestSpeedDoom()">Приземлить залп</button>`)}
     ${row('🜨 Выдать орудие судного дня', 'Поставить готовую «Длань Неотвратимости» (целостность 100%) на первую колонию фракции со свободной ячейкой — без исследования и затрат. Заодно открывает технологию «Сама неотвратимость».', `<button class="btn btn-gd" onclick="adGrantDoomgun()">Выдать орудие</button>`)}
     ${row('☣ Выдать Гиперпейсер в конкретной системе', 'Спавнит готовый Гиперпейсер (мобильное орудие судного дня) сразу на карте — в выбранной системе. Без исследования и затрат; технология открывается заодно. Пусто = первая колония фракции.',
@@ -3727,6 +3728,17 @@ async function adGrantShells() {
     for (const k of kinds)
       await apiFetch('rpc/admin_grant_shells', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel, p_kind: k, p_qty: qty }) });
     toast(pick === 'all' ? `Снаряды насыпаны: по ${qty} шт каждого из 5 типов` : `Насыпано ${qty} шт: ${pick}`, 'ok');
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+async function adTestSkipFlight() {
+  if (!AD.sel || AD.busy) return;
+  AD.busy = true;
+  try {
+    const r = await apiFetch('rpc/admin_test_skip_flight', { method: 'POST', body: JSON.stringify({ p_fid: AD.sel }) });
+    toast(`Флотов прибыло немедленно: ${r?.arrived || 0}`, 'ok');
+    await adReloadPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }
