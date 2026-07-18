@@ -57,6 +57,11 @@
       salvos: [{ id: 'sv1', gun_id: 'g2', status: 'in_flight', target_planet: 'Тиаз I', target_system_id: 's7',
         launched_at: new Date(Date.now() - 2 * 3600e3).toISOString(), ready_at: new Date(Date.now() + 5 * 3600e3).toISOString() }],
       const: {} },
+    shells: { stock: { doom: 2, ball_light: 5, ball_emp: 0, ball_cluster: 1, ball_heavy: 0 },
+      forges: [
+        { building_id: 'b3', colony_id: 'c1', btype: 'shellforge', shell_kind: null, shell_ready: null },
+        { building_id: 'b4', colony_id: 'c2', btype: 'ballfab', shell_kind: 'ball_cluster', shell_ready: new Date(Date.now() + 9 * 3600e3).toISOString() }],
+      nemesis: [{ building_id: 'b5', system_id: 's0', charges: 4, max: 6 }] },
     mzaShips: [
       { id: 'm1', name: 'Тихий довод', system_id: 's3', status: 'idle', integrity: 100, total_shots: 0, can_fire: true },
       { id: 'm2', name: '', system_id: 's8', status: 'building', integrity: 100, total_shots: 0, arrive_at: new Date(Date.now() + 14 * 3600e3).toISOString() }]

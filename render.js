@@ -4210,10 +4210,10 @@ function _heroAsmGuideHtml(en) {
 // (assembly_chat_list(p_after)) и дорисовываем их в конец ленты.
 // Шёпот заговора (галочка 🜃) виден лишь Галактоцентристам и Архонту;
 // после завершения созыва шёпот вскрывается для всех вместе с ролями.
+// Лента перевёрнута: НОВЫЕ сообщения сверху, форма ввода — над лентой.
 function _heroAsmChatHtml(en) {
   return `<div class="hp-vna-chat" id="hp-vna-chat">
     <span class="hp-vna-cap">💬 ${en ? 'CHAMBER LOBBY' : 'КУЛУАРЫ ЗАЛА'}</span>
-    <div class="hp-vna-chat-list" id="hp-vna-chat-list"><div class="hp-vna-dim">${en ? 'Listening in…' : 'Прислушиваюсь…'}</div></div>
     <div class="hp-vna-chat-form" id="hp-vna-chat-form" hidden>
       <label class="hp-vna-chat-wh" id="hp-vna-chat-whbox" hidden data-tip="${en
         ? 'Conspiracy whisper: only Galactocentrists and the Archon will see this message. Revealed to everyone after the convocation ends.'
@@ -4225,7 +4225,8 @@ function _heroAsmChatHtml(en) {
         onclick="event.stopPropagation()"
         onkeydown="event.stopPropagation();if(event.key==='Enter')heroVNAsmChatSend()">
       <button class="hp-vna-btn" onclick="event.stopPropagation();heroVNAsmChatSend()">➤</button>
-    </div></div>`;
+    </div>
+    <div class="hp-vna-chat-list" id="hp-vna-chat-list"><div class="hp-vna-dim">${en ? 'Listening in…' : 'Прислушиваюсь…'}</div></div></div>`;
 }
 function heroVNAsmChatWhisper(el) {
   _heroAsmChatWhisper = !!(el && el.checked);
@@ -4254,10 +4255,12 @@ function _heroAsmChatApply(resp) {
     if (_heroAsmChatLast !== 0 || list.querySelector('.hp-vna-dim')) {
       const dim = list.querySelector(':scope > .hp-vna-dim'); if (dim && _heroAsmChatLast === 0) dim.remove();
     }
-    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
-    list.insertAdjacentHTML('beforeend', msgs.map(m => _heroAsmChatMsg(m, en)).join(''));
+    // Свежак — СВЕРХУ: сервер отдаёт по возрастанию id, разворачиваем и кладём в начало.
+    // Если читатель ушёл вглубь ленты — не дёргаем его скролл, новые тихо появятся выше.
+    const nearTop = list.scrollTop < 48;
+    list.insertAdjacentHTML('afterbegin', msgs.slice().reverse().map(m => _heroAsmChatMsg(m, en)).join(''));
     _heroAsmChatLast = Math.max(_heroAsmChatLast, ...msgs.map(m => +m.id));
-    if (nearBottom || _heroAsmChatLast === 0) list.scrollTop = list.scrollHeight;
+    if (nearTop) list.scrollTop = 0;
   }
   const form = document.getElementById('hp-vna-chat-form');
   if (form) form.hidden = !(resp.can_post && resp.status !== 'done');
@@ -4300,7 +4303,7 @@ async function heroVNAsmChatSend() {
     inp.value = '';
     _heroAsmChatApply(resp);
     const list = document.getElementById('hp-vna-chat-list');
-    if (list) list.scrollTop = list.scrollHeight;
+    if (list) list.scrollTop = 0;   // своё сообщение — в самом верху
   } catch (e) {
     const m = e.message || '';
     toast(m.includes('too fast') ? (en ? 'Not so fast — one message per 3 s' : 'Не так быстро — 1 сообщение в 3 секунды')
@@ -4323,6 +4326,8 @@ async function heroVNAssemblyOpen() {
     const [st] = await Promise.all([ecRpc('assembly_state'), _heroAsmArtLoad()]);
     if (!el.classList.contains('show')) return;
     _heroAsmState = st;
+    await _heroAsmMarksLoad(st);   // публичные жетоны 🎯/🤝 (или локальный фолбэк)
+    if (!el.classList.contains('show')) return;
     el.innerHTML = _heroAsmBuild(st, en);
     _heroAsmAfterRender(st);
   } catch (e) {
@@ -4405,6 +4410,133 @@ function _heroAsmStepper(r, en) {
     `<span class="hp-vna-step${i === idx ? ' on' : i < idx ? ' past' : ''}"><b>${s[1]}</b> ${s[2]}<i>${s[3]}</i></span>`).join('<span class="hp-vna-step-ln"></span>')}
     <span class="hp-vna-step-cd">⏳ <span id="hp-vna-cd">—:—</span> UTC</span></div>`;
 }
+// ── Жетоны стола: 🎯 подозреваю / 🤝 доверяю — ПУБЛИЧНЫЕ ──
+// Открытый язык партии: любой участник кладёт жетон на делегата, видят ВСЕ;
+// наведение показывает, КТО именно подозревает или ободряет. Сервер —
+// _asm_marks.sql (assembly_marks_list / assembly_set_mark); пока срез не
+// применён — тихий фолбэк на localStorage (жетоны видны только вам).
+let _heroAsmMarksPub = {};   // target_fid -> {sus:[fid..], trust:[fid..]}
+let _heroAsmMarksSrv = false;
+function _heroAsmMarkKey(st) {
+  const c = (st && st.conv) || {};
+  return String(c.id || c.conv_id || c.start_date || 'cur');
+}
+function _heroAsmMyFid(st) {
+  const m = ((st || {}).members || []).find(x => x.me);
+  return m ? m.fid : (st && st.me_faction) || null;
+}
+function _heroAsmMarksLocal(st) {
+  try {
+    const all = JSON.parse(localStorage.getItem('wk_asm_marks') || '{}');
+    const mine = all[_heroAsmMarkKey(st)] || {};
+    const my = _heroAsmMyFid(st) || 'me';
+    const out = {};
+    Object.keys(mine).forEach(t => { out[t] = { sus: [], trust: [] }; out[t][mine[t]] = [my]; });
+    return out;
+  } catch (e) { return {}; }
+}
+async function _heroAsmMarksLoad(st) {
+  try {
+    _heroAsmMarksPub = (await ecRpc('assembly_marks_list')) || {};
+    _heroAsmMarksSrv = true;
+  } catch (e) {          // срез не применён / наблюдатель без фракции
+    _heroAsmMarksSrv = false;
+    _heroAsmMarksPub = _heroAsmMarksLocal(st);
+  }
+}
+function _heroAsmMarkName(st, fid) {
+  const m = ((st || {}).members || []).find(x => x.fid === fid);
+  return (m && (m.name || m.fid)) || fid;
+}
+// Мой жетон на цели + сводка чужих: бейджи «🎯 n» / «🤝 n» с перечнем имён
+function _heroAsmMarkOf(fid) {
+  const my = _heroAsmMyFid(_heroAsmState);
+  const t = _heroAsmMarksPub[fid] || {};
+  if (my && (t.sus || []).includes(my)) return 'sus';
+  if (my && (t.trust || []).includes(my)) return 'trust';
+  return '';
+}
+function _heroAsmMarkBadges(st, fid, en) {
+  const t = _heroAsmMarksPub[fid] || {};
+  const sus = t.sus || [], trust = t.trust || [];
+  const nm = arr => arr.map(f => _heroAsmMarkName(st, f)).join(', ');
+  const b = [];
+  if (sus.length) b.push(`<b class="sus" data-tip="${esc((en ? 'Under suspicion: ' : 'Подозревают: ') + nm(sus))}">🎯${sus.length > 1 ? '×' + sus.length : ''}</b>`);
+  if (trust.length) b.push(`<b class="trust" data-tip="${esc((en ? 'Vouched for: ' : 'Доверяют: ') + nm(trust))}">🤝${trust.length > 1 ? '×' + trust.length : ''}</b>`);
+  return b.join('');
+}
+function _heroAsmMarkRepaint(fid) {
+  const st = _heroAsmState;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  const q = (window.CSS && CSS.escape) ? CSS.escape(fid) : fid;
+  const tok = document.querySelector(`.hp-vna-seat[data-fid="${q}"]`);
+  if (!tok) return;
+  const mine = _heroAsmMarkOf(fid);
+  tok.classList.toggle('sus', mine === 'sus');
+  tok.classList.toggle('trust', mine === 'trust');
+  const btn = tok.querySelector('.hp-vna-mark');
+  if (btn) { btn.textContent = mine === 'sus' ? '🎯' : mine === 'trust' ? '🤝' : '🏷'; btn.classList.toggle('set', !!mine); }
+  const bd = tok.querySelector('.hp-vna-badges');
+  if (bd) bd.innerHTML = _heroAsmMarkBadges(st, fid, en);
+}
+async function heroVNAsmMark(ev, fid) {
+  if (ev) ev.stopPropagation();
+  const st = _heroAsmState;
+  if (!st) return;
+  const my = _heroAsmMyFid(st);
+  const cur = _heroAsmMarkOf(fid);
+  const next = ({ '': 'sus', sus: 'trust', trust: '' })[cur] || null;
+  // оптимистично двигаем жетон на клиенте, сервер догоняет следом
+  const t = _heroAsmMarksPub[fid] = _heroAsmMarksPub[fid] || { sus: [], trust: [] };
+  t.sus = (t.sus || []).filter(f => f !== my);
+  t.trust = (t.trust || []).filter(f => f !== my);
+  if (next && my) t[next].push(my);
+  _heroAsmMarkRepaint(fid);
+  if (_heroAsmMarksSrv) {
+    try {
+      _heroAsmMarksPub = (await ecRpc('assembly_set_mark', { p_target: fid, p_kind: next })) || _heroAsmMarksPub;
+      _heroAsmMarkRepaint(fid);
+    } catch (e) { _heroAsmMarksSrv = false; }
+  }
+  if (!_heroAsmMarksSrv) {   // фолбэк: личные пометки в localStorage
+    let all = {};
+    try { all = JSON.parse(localStorage.getItem('wk_asm_marks') || '{}'); } catch (e) { }
+    const key = _heroAsmMarkKey(st);
+    const m2 = all[key] || {};
+    if (next) m2[fid] = next; else delete m2[fid];
+    all[key] = m2;
+    try { localStorage.setItem('wk_asm_marks', JSON.stringify(all)); } catch (e) { }
+  }
+}
+// Фишка-делегат за столом: подставка с гербом, табличка имени, плашки
+// СПИКЕР/КАНЦЛЕР, карточка голоса ЗА/ПРОТИВ, метки неявок и личный жетон.
+function _heroAsmSeatTok(st, m, r, en, votesByFid, pickSeats, pickFn) {
+  const v = votesByFid[m.fid];
+  const pickable = pickSeats && pickSeats.includes(m.seat);
+  const click = pickable ? ` role="button" tabindex="0" onclick="event.stopPropagation();heroVNAsmAct('${pickFn}',{p_seat:${m.seat}})"` : '';
+  const plaque = m.seat === r.speaker_seat
+    ? `<span class="hp-vna-plaque spk" data-tip="${en ? 'Speaker of the day' : 'Спикер дня — открывает заседание и назначает Канцлера'}">🎤 ${en ? 'SPEAKER' : 'СПИКЕР'}</span>`
+    : m.seat === r.nominee_seat
+      ? `<span class="hp-vna-plaque chn" data-tip="${en ? 'Chancellor nominee' : 'Кандидат в Канцлеры'}">📜 ${en ? 'CHANCELLOR' : 'КАНЦЛЕР'}</span>`
+      : '';
+  const vTip = en ? 'Vote on the proposed government' : 'Голос по предложенному правительству';
+  const vChip = v === true ? `<b class="hp-vna-votecard ja" data-tip="${vTip}">${en ? 'JA!' : 'ЗА'}</b>`
+    : v === false ? `<b class="hp-vna-votecard nein" data-tip="${vTip}">${en ? 'NEIN' : 'ПРОТИВ'}</b>` : '';
+  const miss = (m.missed > 0 && m.alive)
+    ? `<b class="hp-vna-miss" data-tip="${en ? 'No-shows' : 'Неявки'}: ${m.missed} ${en ? '(two — seat passes on)' : '(две — кресло уходит лоббисту)'}">${'⚠'.repeat(Math.min(2, m.missed))}</b>` : '';
+  const mk = m.me ? '' : _heroAsmMarkOf(m.fid);
+  const mkTip = en
+    ? 'Put YOUR public token on this delegate (everyone sees who marked whom): suspect → trust → clear'
+    : 'Положить СВОЙ жетон на делегата — его видят все, наведение покажет кто поставил: 🎯 подозреваю → 🤝 доверяю → снять';
+  const markBtn = m.me ? '' : `<button class="hp-vna-mark${mk ? ' set' : ''}" type="button" data-tip="${esc(mkTip)}" onclick="heroVNAsmMark(event,'${esc(m.fid)}')">${mk === 'sus' ? '🎯' : mk === 'trust' ? '🤝' : '🏷'}</button>`;
+  return `<div class="hp-vna-seat${m.me ? ' me' : ''}${m.alive ? '' : ' dead'}${pickable ? ' pick' : ''}${mk ? ' ' + mk : ''}" data-fid="${esc(m.fid)}"${click}>
+    ${plaque}
+    <span class="hp-vna-seat-fig">${_heroAsmCrest(m)}${m.alive ? '' : '<i class="rip">☠</i>'}</span>
+    <span class="hp-vna-seat-plate"><i>№${m.seat}${m.me ? (en ? ' · YOU' : ' · ВЫ') : ''}</i><u>${esc(m.name || m.fid)}</u></span>
+    <span class="hp-vna-seat-und"><span class="hp-vna-badges">${_heroAsmMarkBadges(st, m.fid, en)}</span>${miss}${vChip}${pickable ? '<b class="go">▸</b>' : ''}</span>
+    ${markBtn}
+  </div>`;
+}
 function _heroAsmBuild(st, en) {
   const head = _heroAsmHead(en);
   const conv = st.conv || {};
@@ -4469,13 +4601,17 @@ function _heroAsmBuild(st, en) {
     ? `Failed elections: ${+conv.tracker || 0}/3\nOn the 3rd failure the top card of the deck is enacted automatically and the tracker resets.`
     : `Провалы выборов: ${+conv.tracker || 0}/3\nНа 3-м провале верхняя карта колоды принимается автоматически, счётчик сбрасывается.`;
   for (let i = 1; i <= 3; i++) trackerRow += `<span class="hp-vna-tr${i <= conv.tracker ? ' on' : ''}" data-tip="${esc(trTip)}"></span>`;
-  const board = `<div class="hp-vna-board">
-    <div class="hp-vna-track"><span class="hp-vna-track-cap lib">${en ? 'FEDERATION' : 'ФЕДЕРАЦИЯ'} ${conv.lib_laws}/5</span>${libRow}</div>
-    <div class="hp-vna-track"><span class="hp-vna-track-cap gal">${en ? 'DIRECTIVES' : 'ДИРЕКТИВЫ'} ${conv.gal_laws}/6</span>${galRow}</div>
-    <div class="hp-vna-track"><span class="hp-vna-track-cap">${en ? 'FAILED ELECTIONS' : 'ПРОВАЛЫ ВЫБОРОВ'}</span>${trackerRow}<span class="hp-vna-deck" data-tip="${esc(en
-      ? `Law deck\nCards left: ${+conv.deck_left || 0}. The deck holds 6 Federation laws and 11 Directives; the discard pile is reshuffled back in.`
-      : `Колода законов\nОсталось карт: ${+conv.deck_left || 0}. В колоде 6 Законов Федерации и 11 Директив; сброс замешивается обратно.`)}">🂠 ${+conv.deck_left || 0}</span></div>
-  </div>`;
+  // Две «напечатанные» доски-планшета + сукно с колодой и треком провалов —
+  // как физическая коробка Secret Hitler, но в цветах Федерации/Директив.
+  const deckTip = en
+    ? `Law deck\nCards left: ${+conv.deck_left || 0}. The deck holds 6 Federation laws and 11 Directives; the discard pile is reshuffled back in.`
+    : `Колода законов\nОсталось карт: ${+conv.deck_left || 0}. В колоде 6 Законов Федерации и 11 Директив; сброс замешивается обратно.`;
+  const libPlate = `<div class="hp-vna-plate lib"><span class="hp-vna-plate-cap">🕊 ${en ? 'FEDERATION' : 'ФЕДЕРАЦИЯ'} · ${conv.lib_laws}/5</span><div class="hp-vna-plate-row">${libRow}</div><span class="hp-vna-plate-deco">⟨⟨⟨⟨ ✦ ⟩⟩⟩⟩</span></div>`;
+  const galPlate = `<div class="hp-vna-plate gal"><span class="hp-vna-plate-cap">🜃 ${en ? 'DIRECTIVES' : 'ДИРЕКТИВЫ'} · ${conv.gal_laws}/6</span><div class="hp-vna-plate-row">${galRow}</div><span class="hp-vna-plate-deco">⟨⟨⟨⟨ ☒ ⟩⟩⟩⟩</span></div>`;
+  const feltRow = `<div class="hp-vna-felt-row">
+      <span class="hp-vna-deckpile" data-tip="${esc(deckTip)}"><b>🂠</b><i>${+conv.deck_left || 0}</i></span>
+      <span class="hp-vna-track-cap">${en ? 'FAILED ELECTIONS' : 'ПРОВАЛЫ ВЫБОРОВ'}</span>${trackerRow}
+    </div>`;
 
   // ── Карточка фазы: «что происходит» + «что делать ВАМ» ──
   const mySeat = me && me.seat != null && me.alive && !me.replaced ? me.seat : null;
@@ -4559,34 +4695,26 @@ function _heroAsmBuild(st, en) {
     ? `<div class="hp-vna-warn">⚠ ${en ? 'After the 3rd Directive: electing the Archon as Chancellor ends the game' : 'После 3-й Директивы избрание Архонта Канцлером = победа заговора'}</div>` : '';
   const phaseCard = `<div class="hp-vna-phase${myTurn ? ' act' : ''}">${act}${powRes}${warn}</div>`;
 
-  // ── Участники (кликабельны, когда ждут ВАШЕГО выбора) ──
+  // ── Делегаты — фишки ВОКРУГ доски (кликабельны, когда ждут ВАШЕГО выбора) ──
   const votesByFid = {};
   (r.votes || []).forEach(v => { votesByFid[v.fid] = v.vote; });
-  const rows = members.map(m => {
-    const tags = [];
-    const tag = (ico, tip) => tags.push(`<span data-tip="${esc(tip)}">${ico}</span>`);
-    if (m.seat === r.speaker_seat) tag('🎤', en
-      ? 'Speaker of the day\nOpens the sitting and nominates the Chancellor. The seat passes around the table each day.'
-      : 'Спикер дня\nОткрывает заседание и назначает Канцлера. Кресло Спикера идёт по кругу каждый день.');
-    if (m.seat === r.nominee_seat) tag('📜', en
-      ? 'Chancellor nominee\nIf the vote passes, together with the Speaker they enact a law.'
-      : 'Кандидат в Канцлеры\nЕсли голосование пройдёт — вместе со Спикером принимает закон.');
-    if (!m.alive) tag('☠', en
-      ? 'Executed\nRemoved from the game by the Speaker\'s special power.'
-      : 'Казнён\nУстранён из игры спецвластью Спикера.');
-    if (m.missed > 0 && m.alive) tag('⚠'.repeat(Math.min(2, m.missed)), en
-      ? `No-show: ${m.missed}\nMissed a phase deadline. Two no-shows — the seat goes to a lobbyist.`
-      : `Неявка: ${m.missed}\nПропустил дедлайн фазы. Две неявки — кресло уходит лоббисту.`);
-    const v = votesByFid[m.fid];
-    const vtTip = en ? 'Vote on the proposed government' : 'Голос по предложенному правительству';
-    const vTag = (v === true) ? `<i class="ja" data-tip="${esc(vtTip)}">${en ? 'FOR' : 'ЗА'}</i>` : (v === false) ? `<i class="nein" data-tip="${esc(vtTip)}">${en ? 'VS' : 'ПРОТИВ'}</i>` : '';
-    const pickable = pickSeats && pickSeats.includes(m.seat);
-    const click = pickable ? ` role="button" tabindex="0" onclick="event.stopPropagation();heroVNAsmAct('${pickFn}',{p_seat:${m.seat}})"` : '';
-    return `<div class="hp-vna-row${m.me ? ' me' : ''}${m.alive ? '' : ' dead'}${pickable ? ' pick' : ''}"${click}>
-      <span class="hp-vna-seatno">№${m.seat}</span>${_heroAsmCrest(m)}
-      <span class="hp-vna-nm">${esc(m.name || m.fid)}</span>
-      <span class="hp-vna-tags">${tags.join(' ')} ${vTag}${pickable ? ' <i class="go">▸</i>' : ''}</span></div>`;
-  }).join('');
+  const seatTok = m => _heroAsmSeatTok(st, m, r, en, votesByFid, pickSeats, pickFn);
+  // Рассадка по часовой вокруг стола: верх → правый борт → низ → левый борт.
+  const n = members.length;
+  const sideN = n >= 9 ? 2 : 0;   // борта занимают ширину — только когда стол полон
+  const topN = Math.ceil((n - sideN * 2) / 2);
+  const botN = n - sideN * 2 - topN;
+  const segTop = members.slice(0, topN);
+  const segRight = members.slice(topN, topN + sideN);
+  const segBot = members.slice(topN + sideN, topN + sideN + botN).reverse();
+  const segLeft = members.slice(topN + sideN + botN).reverse();
+  const table = `<div class="hp-vna-tablewrap"><div class="hp-vna-felt">
+    <div class="hp-vna-ring top">${segTop.map(seatTok).join('')}</div>
+    <div class="hp-vna-rail left">${segLeft.map(seatTok).join('')}</div>
+    <div class="hp-vna-center">${phaseCard}${libPlate}${feltRow}${galPlate}</div>
+    <div class="hp-vna-rail right">${segRight.map(seatTok).join('')}</div>
+    <div class="hp-vna-ring bottom">${segBot.map(seatTok).join('')}</div>
+  </div></div>`;
   const lobbyRow = lobby.length
     ? `<div class="hp-vna-lobby"><span class="hp-vna-cap">${en ? 'LOBBYISTS' : 'ЛОББИСТЫ'} (${lobby.length})</span>${lobby.map(m => _heroAsmCrest(m)).join('')}</div>` : '';
 
@@ -4600,13 +4728,24 @@ function _heroAsmBuild(st, en) {
     const gals = (me.allies || []).filter(a => a.role !== 'archon');
     const archLine = arch ? `<span class="hp-vna-dim">👁 <b>${en ? 'The Archon' : 'Архонт'}:</b> ${_seatTxt(arch)}</span>` : '';
     const galLine = gals.length ? `<span class="hp-vna-dim">🜃 ${en ? 'Fellow conspirators' : 'Соратники-заговорщики'}: ${gals.map(_seatTxt).join(' · ')}</span>` : '';
-    roleCard = `<div class="hp-vna-role ${me.role}">${_heroAsmArt('role_' + me.role)}
-      <span class="hp-vna-cap">${en ? 'YOUR SECRET ROLE' : 'ВАША ТАЙНАЯ РОЛЬ'}</span>
-      <b>${rr[0]} ${esc(en ? rr[2] : rr[1])}</b>
-      ${archLine}${galLine}
-      ${!me.alive ? `<span class="hp-vna-dim">☠ ${en ? 'You were executed' : 'Вы казнены'}</span>` : ''}
-      ${me.replaced ? `<span class="hp-vna-dim">↩ ${en ? 'Your seat passed to a lobbyist' : 'Ваше кресло перешло лоббисту'}</span>` : ''}
-    </div>`;
+    // Карта роли лежит РУБАШКОЙ ВВЕРХ — как на столе; переворачивается по клику,
+    // чтобы никто из заглянувших через плечо не увидел её случайно.
+    roleCard = `<div class="hp-vna-rolewrap" role="button" tabindex="0"
+      onclick="event.stopPropagation();this.classList.toggle('open')"
+      onkeydown="if(event.key==='Enter'){event.stopPropagation();this.classList.toggle('open')}">
+      <div class="hp-vna-roleflip">
+        <div class="hp-vna-roleface cover">${_heroAsmArt('card_back')}
+          <span class="hp-vna-card-em">🏛</span>
+          <span class="hp-vna-cap">${en ? 'SECRET ROLE' : 'ТАЙНАЯ РОЛЬ'}</span>
+          <span class="hp-vna-dim">${en ? 'tap the card to peek' : 'нажмите, чтобы взглянуть'}</span></div>
+        <div class="hp-vna-roleface face"><div class="hp-vna-role ${me.role}">${_heroAsmArt('role_' + me.role)}
+          <span class="hp-vna-cap">${en ? 'YOUR SECRET ROLE' : 'ВАША ТАЙНАЯ РОЛЬ'}</span>
+          <b>${rr[0]} ${esc(en ? rr[2] : rr[1])}</b>
+          ${archLine}${galLine}
+          ${!me.alive ? `<span class="hp-vna-dim">☠ ${en ? 'You were executed' : 'Вы казнены'}</span>` : ''}
+          ${me.replaced ? `<span class="hp-vna-dim">↩ ${en ? 'Your seat passed to a lobbyist' : 'Ваше кресло перешло лоббисту'}</span>` : ''}
+        </div></div>
+      </div></div>`;
   } else if (me && me.seat == null) {
     roleCard = `<div class="hp-vna-role"><span class="hp-vna-cap">${en ? 'YOU ARE A LOBBYIST' : 'ВЫ — ЛОББИСТ'}</span>
       <span class="hp-vna-dim">${en ? 'Advisory vote; first in line for a vacated seat.' : 'Совещательный голос; первый в очереди на освободившееся кресло.'}</span></div>`;
@@ -4629,9 +4768,9 @@ function _heroAsmBuild(st, en) {
   const histBlock = hist ? `<div class="hp-vna-hist"><span class="hp-vna-cap">${en ? 'CHRONICLE' : 'ХРОНИКА СОЗЫВА'}</span>${hist}</div>` : '';
 
   const side = `<aside class="hp-vna-side">${roleCard}
-    <div class="hp-vna-members"><span class="hp-vna-cap">${en ? 'DELEGATES' : 'ДЕЛЕГАТЫ'} · ${en ? 'round' : 'раунд'} ${r.no}</span>${rows}${lobbyRow}</div>
-    ${histBlock}${leaveBtn}</aside>`;
-  return head + `<div class="hp-vn-col-body hp-vna-body"><div class="hp-vna-main">${_heroAsmStepper(r, en)}${fineBlock}${phaseCard}${board}${_heroAsmChatHtml(en)}${_heroAsmLast(st, en)}</div>${side}</div>` + _heroAsmGuideHtml(en);
+    <span class="hp-vna-cap">${en ? 'ROUND' : 'РАУНД'} ${r.no}</span>
+    ${lobbyRow}${histBlock}${leaveBtn}</aside>`;
+  return head + `<div class="hp-vn-col-body hp-vna-body"><div class="hp-vna-main">${_heroAsmStepper(r, en)}${fineBlock}${table}${_heroAsmChatHtml(en)}${_heroAsmLast(st, en)}</div>${side}</div>` + _heroAsmGuideHtml(en);
 }
 // Итог прошлого созыва: победитель + вскрытые роли (сворачиваемый блок).
 function _heroAsmLast(st, en) {

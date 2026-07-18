@@ -11940,10 +11940,11 @@ function ecDoomVNBody() {
     ${chip('💥 баллистика', ecNum(ecBallTotal()), false)}
     ${chip('🟢 материя', ecNum(Math.floor(matter)), matter <= 0)}
   </div>`;
-  const tabs = [['arsenal', 'Арсенал', guns.length + mza.length], ['aim', 'Наведение', 0], ['salvos', 'Снаряды', salvos.length]];
+  const forges = ((EC.shells || {}).forges || []);
+  const tabs = [['arsenal', 'Арсенал', guns.length + mza.length], ['forge', 'Производство', forges.filter(f => f.shell_kind).length], ['aim', 'Наведение', 0], ['salvos', 'В полёте', salvos.length]];
   const rail = `<div class="hp-vnd-tabs">${tabs.map(([id, l, n]) =>
     `<button class="hp-vnd-tab${st.tab === id ? ' on' : ''}" type="button" onclick="event.stopPropagation();ecDoomVNTab('${id}')">${l}${n ? `<i>${n}</i>` : ''}</button>`).join('')}</div>`;
-  const body = st.tab === 'aim' ? ecDoomVNAim() : st.tab === 'salvos' ? ecDoomVNSalvos(salvos) : ecDoomVNArsenal(guns, matter);
+  const body = st.tab === 'aim' ? ecDoomVNAim() : st.tab === 'salvos' ? ecDoomVNSalvos(salvos) : st.tab === 'forge' ? ecDoomVNForge() : ecDoomVNArsenal(guns, matter);
   return strip + chips + rail + body;
 }
 // АРСЕНАЛ: доктрина + карточки стационарных орудий + секция Гиперпейсеров.
@@ -11970,7 +11971,68 @@ function ecDoomVNArsenal(guns, matter) {
     }).join('')}</div>
     ${matter <= 0 ? '<div class="hp-vnd-warnline">⚠ Нет программируемой материи — орудия деградируют с каждым днём.</div>' : ''}`;
   }
-  return oath + gunsHtml + `<div class="hp-vnd-sep"></div>` + ecShellArsenalSection() + `<div class="hp-vnd-sep"></div>` + ecMzaSection();
+  return oath + gunsHtml + `<div class="hp-vnd-sep"></div>` + ecMzaSection();
+}
+
+/* ── ☢ ПРОИЗВОДСТВО · вкладка VN-экрана Длани ──────────────────────
+   Склад всех 5 снарядов кассетами + заказ сборки прямо с фабрик
+   (Арсенал → снаряд Длани, военпромзавод → 4 тира баллистики). */
+function ecDoomVNForge() {
+  const sh = EC.shells || { stock: {}, forges: [], nemesis: [] };
+  const ICO = { doom: '☠', ball_light: '⚡', ball_emp: '👻', ball_cluster: '🧨', ball_heavy: '🪨' };
+  const NM = { doom: 'снаряд Длани', ball_light: 'лёгкая', ball_emp: '«Фантом»', ball_cluster: 'кассетная', ball_heavy: 'тяжёлая' };
+  // I · СКЛАД — кассеты всех пяти снарядов
+  const stock = `<div class="hp-vnd-con-sec">
+    <div class="hp-vnd-con-t"><i>I</i> склад снарядов державы</div>
+    <div class="hp-vnd-cassrow">${['doom'].concat(EC_BALL_KINDS).map(k => `
+      <div class="hp-vnd-cass${ecShellsOf(k) < 1 ? ' off' : ''}" title="${esc(EC_BALL_INFO[k] || 'стирает планету в мёртвый камень')}">
+        <span class="hp-vnd-cass-ic">${ICO[k]}</span>
+        <span class="hp-vnd-cass-nm">${NM[k]}</span>
+        <span class="hp-vnd-cass-st">на складе: <b>${ecNum(ecShellsOf(k))}</b></span>
+      </div>`).join('')}</div>
+  </div>`;
+  // II · ФАБРИКИ — заказ сборки (1 снаряд = 1 сутки на фабрику)
+  const colName = cid => { const c = (EC.colonies || []).find(x => x.id === cid); return c ? (c.planet_name || 'колония') : 'колония'; };
+  const costTxt = k => { const c = EC_SHELL[k]; return ecNum(c.gc) + ' ГС' + Object.entries(c).filter(([n]) => n !== 'gc').map(([n, q]) => ` + ${q} ${n}`).join(''); };
+  const canPay = k => { const c = EC_SHELL[k]; return (+EC.eco.gc || 0) >= c.gc && Object.entries(c).every(([n, q]) => n === 'gc' || ecStockOf(n) >= q); };
+  const forges = (sh.forges || []).map(f => {
+    const isBall = f.btype === 'ballfab';
+    const kinds = isBall ? EC_BALL_KINDS : ['doom'];
+    const act = f.shell_kind
+      ? `<div class="hp-vnd-gun-meta"><span>⚙ собирается: <b>${EC_SHELL_LABEL[f.shell_kind] || f.shell_kind}</b></span><span>${f.shell_ready ? 'готов через <b>' + ecEtaShort(f.shell_ready) + '</b>' : ''}</span></div>`
+      : `<div class="hp-vnd-cassrow" style="margin-top:6px">${kinds.map(k => `
+          <button type="button" class="hp-vnd-cass${canPay(k) ? '' : ' off'}" ${canPay(k) ? '' : 'disabled'}
+            title="${esc((EC_BALL_INFO[k] || 'стирает планету в мёртвый камень') + ' · ' + costTxt(k))}"
+            onclick="event.stopPropagation();ecDoomVNOrder('${f.building_id}','${k}')">
+            <span class="hp-vnd-cass-ic">${ICO[k]}</span>
+            <span class="hp-vnd-cass-nm">${NM[k]}</span>
+            <span class="hp-vnd-cass-st">${esc(costTxt(k))}</span>
+          </button>`).join('')}</div>`;
+    return `<div class="hp-vnd-gun">
+      <div class="hp-vnd-gun-hd"><span class="hp-vnd-gun-nm">${isBall ? '🏭 Военпромзавод' : '☢ Арсенал'} · ${esc(colName(f.colony_id))}</span>
+        <span class="hp-vnd-gun-st${f.shell_kind ? ' hot' : ''}">${f.shell_kind ? '⚙ конвейер занят' : '● конвейер свободен'}</span></div>
+      ${act}
+    </div>`;
+  }).join('');
+  const forgesSec = `<div class="hp-vnd-con-sec">
+    <div class="hp-vnd-con-t"><i>II</i> фабрики · 1 снаряд = 1 сутки</div>
+    ${forges ? `<div class="hp-vnd-grid">${forges}</div>` : `<div class="hp-vnd-empty">
+      <div class="hp-vnd-empty-t">Ни одной фабрики снарядов.</div>
+      <div class="hp-vnd-empty-s">Возведите на колонии <b>☢ Арсенал Судного Дня</b> (снаряды Длани) и/или <b>🏭 Баллистический военпромзавод</b> (тиры баллистики, техно «Межзвёздная баллистика») — без снарядов Длань и Гиперпейсер молчат.</div>
+      <button class="hp-vnd-aimbtn" type="button" onclick="event.stopPropagation();ecDoomVNGoBuild()">🏗 К колониям — заложить фабрику</button>
+    </div>`}
+  </div>`;
+  const nemo = (sh.nemesis || []).map(n => `<div class="hp-vnd-gun">
+      <div class="hp-vnd-gun-hd"><span class="hp-vnd-gun-nm">⛨ Ожерелье Немезиды · ${esc(ecSysName(n.system_id))}</span><span class="hp-vnd-gun-st">заряды ${n.charges}/${n.max}</span></div>
+      <div class="hp-vnd-gun-meta"><span>реген <b>+1/сутки</b></span><span>прикрывает всю систему</span></div>
+    </div>`).join('');
+  const nemoSec = nemo ? `<div class="hp-vnd-con-sec"><div class="hp-vnd-con-t"><i>III</i> щит · Немезиды</div><div class="hp-vnd-grid">${nemo}</div></div>` : '';
+  return stock + forgesSec + nemoSec;
+}
+// Заказ с VN-пульта: боевой ecShellOrder + перерисовка оверлея новеллы.
+async function ecDoomVNOrder(buildingId, kind) {
+  await ecShellOrder(buildingId, kind);
+  try { if (typeof heroVNDoomRefresh === 'function') heroVNDoomRefresh(); } catch (e) {}
 }
 
 // ── ☢ Арсеналы + ⛨ Немезиды: сводка производства снарядов (кабинет и VN-экран) ──

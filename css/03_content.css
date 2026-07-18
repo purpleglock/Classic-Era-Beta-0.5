@@ -4495,6 +4495,238 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   .hp-vna-g-role{flex:1 1 100%;min-width:0}
 }
 
+/* ══════ Ассамблея · ИГРОВОЙ СТОЛ ══════
+   Активный созыв = вид на настольную партию сверху: деревянная рама,
+   сукно с золотым кантом, две доски-планшета, ПОВЕСТКА ДНЯ в центре стола,
+   делегаты — фишки по всем четырём бортам. */
+.hp-vna-tablewrap{
+  padding:12px;border-radius:12px;
+  background:
+    repeating-linear-gradient(97deg,rgba(0,0,0,.20) 0 2px,transparent 2px 7px,rgba(255,255,255,.03) 7px 8px,transparent 8px 14px),
+    linear-gradient(112deg,#7a5a37 0%,#4a3520 22%,#6b4c2d 45%,#38281706 0),
+    linear-gradient(112deg,#6f5233,#3d2b19 30%,#5e442a 58%,#2e2011 82%,#4d3821);
+  box-shadow:0 12px 30px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,215,150,.28),inset 0 -1px 0 rgba(0,0,0,.6);
+}
+.hp-vna-felt{
+  position:relative;display:grid;gap:12px;padding:16px 12px;border-radius:7px;
+  padding-top:22px;   /* стоечкам СПИКЕР/КАНЦЛЕР и жетонам нужен воздух сверху */
+  grid-template-columns:auto minmax(0,1fr) auto;
+  grid-template-areas:"top top top" "left cen right" "bot bot bot";
+  background:
+    repeating-linear-gradient(0deg,rgba(255,255,255,.014) 0 1px,transparent 1px 3px),
+    radial-gradient(130% 95% at 50% 12%,hsl(203 48% 15%),hsl(207 52% 10%) 55%,hsl(211 58% 6%) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(201,167,95,.5),      /* золотой кант по периметру сукна */
+    inset 0 0 8px  rgba(201,167,95,.12),
+    inset 0 0 70px rgba(0,0,0,.7);
+}
+.hp-vna-ring{grid-area:top;display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;gap:9px;row-gap:18px}
+.hp-vna-ring.bottom{grid-area:bot;align-items:flex-start}
+.hp-vna-rail{display:flex;flex-direction:column;justify-content:center;gap:16px}
+.hp-vna-rail.left{grid-area:left}
+.hp-vna-rail.right{grid-area:right}
+.hp-vna-center{grid-area:cen;display:flex;flex-direction:column;align-items:center;gap:11px;min-width:0}
+
+/* ── фишка-делегат: стендик с крупным гербом и латунной табличкой ── */
+.hp-vna-seat{
+  position:relative;display:flex;flex-direction:column;align-items:center;gap:0;
+  width:100px;padding:10px 0 0;cursor:default;-webkit-tap-highlight-color:transparent;
+  border-radius:7px 7px 4px 4px;
+  background:linear-gradient(172deg,hsl(219 14% 21%),hsl(220 16% 12%) 58%,hsl(221 18% 9%));
+  box-shadow:0 8px 16px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.1),inset 0 0 0 1px rgba(0,0,0,.4);
+}
+/* «тень фишки» на сукне */
+.hp-vna-seat::after{content:"";position:absolute;left:6%;right:6%;bottom:-8px;height:8px;
+  background:radial-gradient(50% 100% at 50% 0,rgba(0,0,0,.55),transparent 80%)}
+.hp-vna-seat.me{box-shadow:0 8px 16px rgba(0,0,0,.55),inset 0 0 0 2px color-mix(in srgb,var(--gdl,#5fb0e6) 60%,transparent)}
+.hp-vna-seat.dead{filter:grayscale(.95) brightness(.62)}
+.hp-vna-seat.pick{cursor:pointer;animation:vnaPulse 2.2s ease-in-out infinite;
+  box-shadow:0 8px 16px rgba(0,0,0,.55),inset 0 0 0 2px var(--gdl,#5fb0e6),0 0 18px color-mix(in srgb,var(--gdl,#5fb0e6) 45%,transparent)}
+.hp-vna-seat.pick:hover{animation:none;filter:brightness(1.3);transform:translateY(-3px)}
+.hp-vna-seat-fig{position:relative;display:flex;margin-bottom:9px}
+.hp-vna-seat .hp-vna-crest{
+  width:54px;height:54px;border-radius:6px;
+  clip-path:none;box-shadow:0 4px 9px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.12);
+}
+.hp-vna-seat .hp-vna-crest.noimg::after{font-size:26px;color:#0b1017}
+.hp-vna-seat-fig .rip{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-style:normal;font-size:34px;text-shadow:0 2px 8px #000}
+/* латунная табличка имени — на всю ширину, имя не режем в хлам */
+.hp-vna-seat-plate{
+  display:flex;flex-direction:column;align-items:center;gap:1px;width:100%;padding:4px 6px 5px;
+  background:linear-gradient(180deg,#947c50 0%,#5c4b2c 46%,#75603a 54%,#463823 100%);
+  box-shadow:inset 0 1px 0 rgba(255,230,170,.55),inset 0 -1px 0 rgba(0,0,0,.55);
+}
+.hp-vna-seat-plate i{font-style:normal;font-family:var(--font-mono);font-size:8px;letter-spacing:.14em;color:#2f2614;font-weight:700}
+.hp-vna-seat-plate u{
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none;
+  font-family:var(--font-display);font-weight:700;font-size:11.5px;color:#f7ecd2;text-shadow:0 1px 1px rgba(0,0,0,.75);
+}
+/* нижний ряд фишки: жетоны стола + неявки + голос — внутри, ничего не наезжает */
+.hp-vna-seat-und{
+  display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:4px;
+  width:100%;min-height:24px;padding:3px 4px 5px;border-radius:0 0 4px 4px;
+  background:hsl(221 18% 7% / .8);
+}
+.hp-vna-seat-und b{font-style:normal;font-weight:400}
+.hp-vna-seat-und .go{color:var(--gdl,#5fb0e6);font-size:14px;text-shadow:0 0 8px var(--gdl,#5fb0e6)}
+.hp-vna-miss{font-size:10px;color:#e0b45f;cursor:help;filter:drop-shadow(0 1px 2px #000)}
+/* публичные жетоны на фишке: 🎯×n / 🤝×n, наведение — кто поставил */
+.hp-vna-badges{display:contents}
+.hp-vna-badges b{
+  display:inline-flex;align-items:center;gap:1px;padding:1px 5px;border-radius:9px;
+  font-family:var(--font-mono);font-size:9.5px;cursor:help;
+  color:#ffd9d0;background:rgba(200,66,46,.28);box-shadow:inset 0 0 0 1px rgba(224,90,70,.55);
+}
+.hp-vna-badges b.trust{color:#d2f5e0;background:rgba(52,160,102,.26);box-shadow:inset 0 0 0 1px rgba(95,224,160,.5)}
+/* золотая/серебряная стоечка СПИКЕР / КАНЦЛЕР */
+.hp-vna-plaque{
+  position:absolute;top:-12px;left:50%;transform:translateX(-50%) rotate(-1.5deg);z-index:3;white-space:nowrap;
+  padding:3px 9px;font-family:var(--font-display);font-size:8.5px;font-weight:700;letter-spacing:.14em;
+  color:#231a08;background:linear-gradient(180deg,#f6dc9a 0%,#d9ab54 45%,#f0c877 55%,#a97e35 100%);
+  clip-path:polygon(6px 0,calc(100% - 6px) 0,100% 100%,0 100%);
+  box-shadow:0 3px 7px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.6);cursor:help;
+}
+.hp-vna-plaque.chn{transform:translateX(-50%) rotate(1.5deg);color:#101820;
+  background:linear-gradient(180deg,#eef2f7 0%,#aeb9c6 45%,#d4dce5 55%,#7f8d9c 100%)}
+/* карточка голоса — плитки Ja!/Nein */
+.hp-vna-votecard{
+  padding:2px 6px;font-family:var(--font-display);font-size:8.5px;font-weight:800;letter-spacing:.06em;color:#06130a;
+  background:linear-gradient(180deg,#8cf0b0,#3fae6c);transform:rotate(-4deg);
+  box-shadow:0 2px 4px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.5);cursor:help;
+}
+.hp-vna-votecard.nein{color:#1a0a08;background:linear-gradient(180deg,#f0a08c,#c4523f);transform:rotate(4deg)}
+/* личный жетон-метка: 🎯 подозреваемый / 🤝 доверяю (видите только вы) */
+.hp-vna-mark{
+  position:absolute;top:-10px;right:-9px;z-index:4;width:26px;height:26px;padding:0;border:none;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;line-height:1;
+  color:#c9b98a;background:radial-gradient(circle at 35% 30%,hsl(220 14% 22%),hsl(221 18% 9%));
+  box-shadow:0 3px 7px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.14);
+  opacity:0;transition:opacity var(--duration-fast),transform var(--duration-fast);
+}
+.hp-vna-seat:hover .hp-vna-mark,.hp-vna-mark.set{opacity:1}
+.hp-vna-mark:hover{transform:scale(1.2)}
+.hp-vna-seat.sus{box-shadow:0 7px 14px rgba(0,0,0,.55),inset 0 0 0 2px rgba(224,90,70,.85),0 0 14px rgba(224,90,70,.35)}
+.hp-vna-seat.trust{box-shadow:0 7px 14px rgba(0,0,0,.55),inset 0 0 0 2px rgba(95,224,160,.7),0 0 14px rgba(95,224,160,.28)}
+
+/* ── доски-планшеты законов: «напечатанные» плиты на сукне ── */
+.hp-vna-plate{
+  position:relative;display:flex;flex-direction:column;gap:8px;
+  width:min(100%,560px);padding:9px 10px 7px;
+  background:
+    repeating-linear-gradient(45deg,rgba(255,255,255,.012) 0 2px,transparent 2px 5px),
+    linear-gradient(163deg,hsl(220 9% 17%),hsl(222 11% 9%) 70%,hsl(223 13% 7%));
+  clip-path:polygon(14px 0,calc(100% - 14px) 0,100% 14px,100% calc(100% - 14px),calc(100% - 14px) 100%,14px 100%,0 calc(100% - 14px),0 14px);
+  box-shadow:0 8px 18px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.07);
+}
+.hp-vna-plate-cap{
+  display:flex;align-items:center;gap:12px;justify-content:center;
+  font-family:var(--font-display);font-size:13px;font-weight:800;letter-spacing:.24em;
+  text-shadow:0 0 12px currentColor;
+}
+.hp-vna-plate-cap::before,.hp-vna-plate-cap::after{content:"";flex:1 1 24px;height:2px;background:currentColor;opacity:.5;box-shadow:0 0 6px currentColor}
+.hp-vna-plate.lib .hp-vna-plate-cap{color:var(--gdl,#5fb0e6)}
+.hp-vna-plate.gal .hp-vna-plate-cap{color:var(--vna-gal)}
+.hp-vna-plate-row{display:flex;gap:7px;justify-content:center;flex-wrap:wrap}
+.hp-vna-plate-deco{align-self:center;font-size:9px;letter-spacing:.35em;opacity:.35;user-select:none}
+.hp-vna-plate.lib .hp-vna-plate-deco{color:var(--gdl,#5fb0e6)}
+.hp-vna-plate.gal .hp-vna-plate-deco{color:var(--vna-gal)}
+/* слоты — фрезерованные углубления; принятый закон — светящаяся карта в гнезде */
+.hp-vna-plate .hp-vna-slot{
+  width:48px;height:40px;font-size:18px;background:hsl(223 20% 4% / .96);
+  box-shadow:inset 0 3px 8px rgba(0,0,0,.9),inset 0 -1px 0 rgba(255,255,255,.05);
+}
+.hp-vna-plate .hp-vna-slot:hover{background:hsl(223 18% 7%)}
+.hp-vna-plate.lib .hp-vna-slot.on{
+  background:linear-gradient(160deg,color-mix(in srgb,var(--gd,#3a9bdc) 62%,hsl(222 30% 8%)),color-mix(in srgb,var(--gd,#3a9bdc) 30%,hsl(222 30% 6%)));
+  box-shadow:inset 0 0 12px color-mix(in srgb,var(--gd,#3a9bdc) 65%,transparent),inset 0 1px 0 rgba(255,255,255,.25);color:#fff;
+}
+.hp-vna-plate.gal .hp-vna-slot.on{
+  background:linear-gradient(160deg,color-mix(in srgb,var(--vna-gal) 62%,hsl(268 30% 8%)),color-mix(in srgb,var(--vna-gal) 30%,hsl(268 30% 6%)));
+  box-shadow:inset 0 0 12px color-mix(in srgb,var(--vna-gal) 65%,transparent),inset 0 1px 0 rgba(255,255,255,.25);color:#fff;
+}
+/* сукно между досками: колода стопкой + жетоны провалов */
+.hp-vna-felt-row{display:flex;align-items:center;justify-content:center;gap:9px;flex-wrap:wrap}
+.hp-vna-felt-row .hp-vna-track-cap{flex:0 0 auto;color:#c9b98a;opacity:.8}
+.hp-vna-felt-row .hp-vna-tr{width:17px;height:17px;box-shadow:inset 0 2px 4px rgba(0,0,0,.7)}
+.hp-vna-felt-row .hp-vna-tr.on{box-shadow:0 0 10px rgba(224,112,95,.7),inset 0 1px 0 rgba(255,255,255,.4)}
+.hp-vna-deckpile{
+  position:relative;display:inline-flex;align-items:center;gap:6px;margin-right:14px;padding:7px 11px;
+  background:linear-gradient(160deg,color-mix(in srgb,var(--gd,#3a9bdc) 40%,hsl(216 30% 10%)),hsl(216 30% 8%));
+  clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);
+  box-shadow:3px 3px 0 hsl(216 24% 14%),6px 6px 0 hsl(216 24% 11%),8px 8px 12px rgba(0,0,0,.5);cursor:help;
+}
+.hp-vna-deckpile b{font-weight:400;font-size:16px;line-height:1;color:#cfe8ff}
+.hp-vna-deckpile i{font-style:normal;font-family:var(--font-mono);font-size:12px;color:#eaf6ff}
+
+/* ── ПОВЕСТКА в центре стола: карточка-регламент с золотым кантом ── */
+.hp-vna-center .hp-vna-phase{width:min(100%,560px)}
+.hp-vna-center .hp-vna-phase::before{background:linear-gradient(120deg,#caa75f,#6e5426 55%,#a8853f)}
+.hp-vna-center .hp-vna-phase::after{background:hsl(37 22% 8% / .97)}
+.hp-vna-center .hp-vna-phase.act::before{background:var(--gdl,#5fb0e6);animation:vnaPulse 2.2s ease-in-out infinite}
+.hp-vna-center .hp-vna-do{letter-spacing:.04em}
+/* голосование: массивные плитки ЗА/ПРОТИВ, как жетоны Ja!/Nein */
+.hp-vna-center .hp-vna-btns{justify-content:center;gap:18px;padding:4px 0 6px}
+.hp-vna-center .hp-vna-btn.big{
+  min-width:128px;padding:16px 20px;clip-path:none;
+  font-family:var(--font-display);font-size:15px;font-weight:800;letter-spacing:.08em;color:#06130a;
+  background:linear-gradient(180deg,#8cf0b0,#37a563);transform:rotate(-2deg);
+  box-shadow:0 5px 0 #1c5e38,0 9px 16px rgba(0,0,0,.5),inset 0 2px 0 rgba(255,255,255,.55);
+  transition:transform var(--duration-fast),box-shadow var(--duration-fast),filter var(--duration-fast);
+}
+.hp-vna-center .hp-vna-btn.big::before,.hp-vna-center .hp-vna-btn.big::after{display:none}
+.hp-vna-center .hp-vna-btn.big.nein{color:#1c0906;background:linear-gradient(180deg,#f0a08c,#c04532);transform:rotate(2deg);
+  box-shadow:0 5px 0 #6e2418,0 9px 16px rgba(0,0,0,.5),inset 0 2px 0 rgba(255,255,255,.5)}
+.hp-vna-center .hp-vna-btn.big:hover{filter:brightness(1.1);transform:rotate(0deg) translateY(-2px)}
+/* выбранная плитка — «вдавлена» в стол */
+.hp-vna-center .hp-vna-btn.big.sel{transform:rotate(0deg) translateY(4px);
+  box-shadow:0 1px 0 #1c5e38,0 3px 6px rgba(0,0,0,.5),inset 0 2px 6px rgba(0,0,0,.35);filter:saturate(1.25)}
+.hp-vna-center .hp-vna-btn.big.nein.sel{box-shadow:0 1px 0 #6e2418,0 3px 6px rgba(0,0,0,.5),inset 0 2px 6px rgba(0,0,0,.35)}
+/* карты законов в руке — веером на столе */
+.hp-vna-center .hp-vna-cards{justify-content:center}
+.hp-vna-center .hp-vna-cards .hp-vna-card{box-shadow:0 10px 20px rgba(0,0,0,.55)}
+.hp-vna-center .hp-vna-cards .hp-vna-card:nth-child(1){transform:rotate(-4deg)}
+.hp-vna-center .hp-vna-cards .hp-vna-card:nth-child(3){transform:rotate(4deg)}
+.hp-vna-center .hp-vna-cards .hp-vna-card:hover{transform:rotate(0deg) translateY(-8px) scale(1.04);z-index:2}
+
+/* ── карта тайной роли: рубашкой вверх, переворот по клику ── */
+.hp-vna-rolewrap{perspective:900px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hp-vna-roleflip{display:grid;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.5,1.4,.4,1)}
+.hp-vna-rolewrap.open .hp-vna-roleflip{transform:rotateY(180deg)}
+.hp-vna-roleface{grid-area:1/1;backface-visibility:hidden;-webkit-backface-visibility:hidden;min-width:0}
+.hp-vna-roleface.face{transform:rotateY(180deg)}
+.hp-vna-roleface.cover{
+  position:relative;z-index:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  min-height:138px;padding:14px;overflow:hidden;
+  background:
+    repeating-linear-gradient(135deg,rgba(224,180,95,.05) 0 2px,transparent 2px 8px),
+    linear-gradient(160deg,color-mix(in srgb,#e0b45f 20%,hsl(216 26% 9%)),hsl(216 28% 6%));
+  clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0 calc(100% - 10px),0 10px);
+  box-shadow:inset 0 0 0 1px rgba(224,180,95,.45),inset 0 0 24px rgba(0,0,0,.5);
+}
+.hp-vna-roleface.cover .hp-vna-cap{color:#e0b45f}
+.hp-vna-roleface.cover .hp-vna-card-em{position:static;transform:none;font-size:32px;opacity:.9}
+.hp-vna-roleface.cover .hp-vna-art{position:absolute;inset:0;z-index:-1;opacity:.5}
+.hp-vna-roleface.cover .hp-vna-art:has(img)~.hp-vna-card-em{display:none}
+.hp-vna-roleface .hp-vna-role{height:100%}
+
+/* чат: форма над лентой, свежие сообщения сверху */
+.hp-vna-chat-form{padding-bottom:3px;border-bottom:1px solid var(--w1,rgba(255,255,255,.06))}
+
+/* ── мобилка: стол складывается в колонку, борта — в ряды ── */
+@media (max-width:640px){
+  .hp-vna-tablewrap{padding:8px;border-radius:9px}
+  .hp-vna-felt{display:flex;flex-direction:column;gap:14px;padding:12px 8px}
+  .hp-vna-rail{flex-direction:row;flex-wrap:wrap;justify-content:center;gap:10px}
+  .hp-vna-rail:empty{display:none}
+  .hp-vna-ring{gap:9px;row-gap:18px}
+  .hp-vna-seat{width:104px}
+  .hp-vna-seat .hp-vna-crest{width:50px;height:50px}
+  .hp-vna-plate{padding:9px 8px 7px}
+  .hp-vna-plate .hp-vna-slot{width:46px;height:38px;font-size:18px}
+  .hp-vna-center .hp-vna-btn.big{flex:1 1 40%;min-width:0}
+  .hp-vna-mark{opacity:1}   /* на таче нет hover — жетон виден всегда */
+}
 /* ══════════════════════════════════════════════════════════════
    НОВЕЛЛА · «Георазведка» (hp-vn-geo) — казино под вывеской геологии.
    Каркас (шапка/подложка/затемнение) наследуется от .hp-vn-colony;

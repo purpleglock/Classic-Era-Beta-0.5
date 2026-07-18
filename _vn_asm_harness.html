@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>assembly board harness</title>
+<link rel="stylesheet" href="css/index.css?v=20260718asmboard3">
+<style>
+  body { background: #070a12; padding: 30px 16px; }
+  .hwrap { max-width: 1180px; margin: 0 auto 40px; }
+  .hlbl { color: #6c7a90; font: 11px monospace; letter-spacing: .2em; text-transform: uppercase; margin: 0 0 12px; }
+  .hcover { position: relative; height: 760px; border-radius: 8px; overflow: hidden; }
+</style>
+</head><body>
+<script>
+  window.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  window.jsq = s => String(s == null ? '' : s).replace(/[^0-9A-Za-z]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+  window.ecNum = n => (+n || 0).toLocaleString('ru-RU');
+  window.toast = () => {};
+  window.frReadable = c => c;
+  window.lang = 'ru';
+  window.user = { id: 'u1' };
+  window.SB_URL = ''; window.SB_ANON = ''; window.getToken = () => '';
+  window.EC = {};
+  // чат: фейковые сообщения, свежие должны оказаться СВЕРХУ ленты
+  const CHAT = { msgs: [
+    { id: 1, ts: Date.now() - 3600e3, fid: 'f1', name: 'Иридия', body: 'Спикер, номинируй меня — не пожалеешь.', mine: false },
+    { id: 2, ts: Date.now() - 1800e3, fid: 'f2', name: 'Валгор', body: 'Иридия — 🜃, я это чувствую.', mine: false },
+    { id: 3, ts: Date.now() - 900e3, fid: 'f3', name: 'Моя держава', body: 'Голосую против. Слишком гладко стелет.', mine: true },
+    { id: 4, ts: Date.now() - 60e3, fid: 'f4', name: 'Заговорщик', body: 'Держимся плана.', whisper: true, mine: false },
+  ], can_post: true, can_whisper: true, status: 'active' };
+  // публичные жетоны стола: f1 подозревают двое, f4 доверяет один
+  let MARKS = { f1: { sus: ['f0', 'f2'], trust: [] }, f4: { sus: [], trust: ['f0'] }, f3: { sus: ['f4'], trust: ['f1', 'f5'] } };
+  window.ecRpc = async (fn, args) => {
+    if (fn === 'assembly_chat_list') return (args && args.p_after > 0) ? Object.assign({}, CHAT, { msgs: [] }) : CHAT;
+    if (fn === 'assembly_marks_list') return MARKS;
+    if (fn === 'assembly_set_mark') {
+      const t = MARKS[args.p_target] = MARKS[args.p_target] || { sus: [], trust: [] };
+      t.sus = t.sus.filter(f => f !== 'f0'); t.trust = t.trust.filter(f => f !== 'f0');
+      if (args.p_kind) t[args.p_kind].push('f0');
+      return MARKS;
+    }
+    return {};
+  };
+</script>
+<script src="render.js?v=20260718asmboard3"></script>
+
+<div class="hwrap"><p class="hlbl">активный созыв · голосование · 8 кресел · вы — заговорщик</p>
+  <div class="hcover hp-hero-cover hp-vn">
+    <div class="hp-vn-assembly show" id="hp-vn-assembly" aria-hidden="false" style="position:absolute;inset:0;z-index:8"></div>
+  </div>
+</div>
+<div class="hwrap"><p class="hlbl">фаза номинации · вы — спикер (кликабельные фишки)</p>
+  <div class="hcover hp-hero-cover hp-vn" style="height:720px">
+    <div class="hp-vn-assembly show" id="h-nom" aria-hidden="false" style="position:absolute;inset:0;z-index:8"></div>
+  </div>
+</div>
+
+<script>
+  const NM = ['Моя держава', 'Иридия', 'Валгор', 'Кси-Прайм', 'Октавия', 'Тенебрис', 'Роборд', 'Люмен'];
+  const members = NM.map((n, i) => ({
+    fid: 'f' + i, name: n, seat: i + 1, alive: i !== 6, replaced: false,
+    me: i === 0, missed: i === 3 ? 1 : 0, crest: '', color: ['#4ea3d8', '#c9a227', '#b05fe0', '#5fe0a0', '#e0705f', '#8296a8', '#d8dee6', '#e0b45f'][i],
+  }));
+  const lobby = [{ fid: 'lb1', name: 'Лоббист-1', seat: null, color: '#777' }, { fid: 'lb2', name: 'Лоббист-2', seat: null, color: '#986' }];
+  const baseConv = { status: 'active', seats: 8, lib_laws: 2, gal_laws: 3, tracker: 1, deck_left: 9, id: 'conv1' };
+  const stVote = {
+    conv: baseConv,
+    me: { role: 'gal', seat: 1, alive: true, allies: [{ seat: 5, role: 'archon' }, { seat: 4, role: 'gal' }] },
+    members: members.concat(lobby),
+    round: { no: 4, phase: 'vote', speaker_seat: 2, nominee_seat: 5, my_vote: null, votes_cast: 4, votes_total: 7,
+      votes: [{ fid: 'f1', vote: true }, { fid: 'f2', vote: false }, { fid: 'f4', vote: true }, { fid: 'f5', vote: false }],
+      closes_s: 7200 },
+    history: [{ no: 3, speaker_seat: 1, nominee_seat: 3, enacted: 'G', law_title: 'Директива о реквизициях' },
+      { no: 2, speaker_seat: 8, nominee_seat: 2, vote_passed: false }],
+  };
+  const stNom = Object.assign({}, stVote, {
+    round: { no: 5, phase: 'nominate', speaker_seat: 1, nominee_seat: null, eligible: [3, 4, 6, 8], closes_s: 3600, votes: [] },
+  });
+  (async () => {
+    _heroAsmState = stVote;
+    await _heroAsmMarksLoad(stVote);
+    document.getElementById('hp-vn-assembly').innerHTML = _heroAsmBuild(stVote, false);
+    _heroAsmChatStart();
+    document.getElementById('h-nom').innerHTML = _heroAsmBuild(stNom, false).replaceAll('hp-vna-chat-list', 'x-list2').replaceAll('hp-vna-chat-form', 'x-form2');
+  })();
+</script>
+</body></html>
