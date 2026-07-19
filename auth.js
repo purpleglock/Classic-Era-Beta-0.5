@@ -59,10 +59,16 @@ async function init() {
       if (_isBan) {
         showLoginBlockedGate();
       } else {
-        // Не показываем сырой SQL/технический текст — только по-человечески.
-        toast('Не удалось войти через Google. Попробуйте ещё раз позже.', 'err');
+        // Пользователю — по-человечески и без привязки к провайдеру (их теперь
+        // несколько), но сырой текст кладём в консоль: без него причину сбоя
+        // OAuth-возврата не диагностировать.
+        console.error('[auth] OAuth вернул ошибку:', _err, '|', _edesc);
+        toast(lang === 'ru'
+          ? 'Не удалось войти. Попробуйте ещё раз позже.'
+          : 'Sign-in failed. Please try again later.', 'err');
       }
     } else if (_oq.get('code')) {
+      const _isPwReset = _oq.get('pwreset') === '1';
       const { error: _oerr } = await sb.auth.exchangeCodeForSession(_oq.get('code'));
       // Код одноразовый — сразу убираем из URL, чтобы обновление страницы не
       // запускало повторный обмен тем же ?code= (верификатор уже израсходован).
@@ -74,7 +80,8 @@ async function init() {
         let _hasSess = false;
         try { const { data: _sd } = await sb.auth.getSession(); _hasSess = !!_sd?.session; } catch (e) {}
         if (_hasSess) {
-          toast('Добро пожаловать!', 'ok');
+          if (_isPwReset) showPasswordResetGate();
+          else toast('Добро пожаловать!', 'ok');
         } else {
           // Реальная неудача (сессии нет): не показываем сырой технический текст —
           // почти всегда причина в том, что вход начали и завершили в разных
@@ -83,6 +90,9 @@ async function init() {
             ? 'Не удалось завершить вход. Откройте страницу входа и попробуйте ещё раз в том же браузере.'
             : 'Sign-in could not be completed. Please try again in the same browser.', 'err');
         }
+      } else if (_isPwReset) {
+        // Возврат по ссылке «сброс пароля»: сессия есть — просим новый пароль.
+        showPasswordResetGate();
       } else {
         toast('Добро пожаловать!', 'ok');
       }
@@ -216,7 +226,13 @@ async function restoreSession() {
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (session?.user) { await loadUserRole(session.user); loadProfile(); }
-  } catch(e) {}
+  } catch(e) {
+  } finally {
+    // Страховка: снять экран загрузки в любом исходе. Если сессии не оказалось
+    // (вход не удержался) — держать оверлей нельзя, человек останется на нём
+    // навсегда. Успешный путь снимает его раньше, внутри loadUserRole.
+    try { hideAuthLoader(); } catch(e) {}
+  }
 }
 
 function loadProfile() {
@@ -377,6 +393,12 @@ async function loadUserRole(authUser) {
     // о роли приходил уже после первичного рендера навигации (медленный канал).
     try { if (typeof buildNav === 'function') buildNav(); if (typeof updAuthUI === 'function') updAuthUI(); } catch(e) {}
 
+    // Почтовые аккаунты до одобрения заявки видят только экран ожидания.
+    try { enforceSignupApproval(authUser); } catch(e) {}
+
+    // Роль есть, шапка и меню перерисованы — сайт готов, экран загрузки убираем.
+    try { hideAuthLoader(); } catch(e) {}
+
     // Игрок = есть одобренная анкета государства (роль 'player' могла не проставиться
     // при одобрении). Даёт доступ к локациям даже без корректной роли в user_roles.
     try {
@@ -501,7 +523,7 @@ async function recordLegalConsent() {
   } catch (e) { console.warn('[wiki] legal consent record failed:', e); }
 }
 
-// Единственный способ входа/регистрации — Google OAuth. Пароль-формы удалены:
+// Вход/регистрация — только OAuth (Google, VK ID). Пароль-формы удалены:
 // сайт не принимает и не хранит пароли, e-mail отдаёт только Google-провайдер.
 function showAuth(_mode) {
   const ru = lang === 'ru';
@@ -531,6 +553,21 @@ function showAuth(_mode) {
       <span class="au-gbtn-t">${ru ? 'Войти через Google' : 'Continue with Google'}</span>
       <span class="au-gbtn-arr">▸</span>
     </button>
+    <div class="au-mail-sep"><span>${ru ? 'или по почте' : 'or with email'}</span></div>
+    <div class="au-mail" id="au-mail">
+      <input class="au-mi" id="au-nick" type="text" maxlength="40" autocomplete="nickname"
+        placeholder="${ru ? 'Позывной (имя на сайте)' : 'Callsign (display name)'}" style="display:none">
+      <input class="au-mi" id="au-email" type="email" autocomplete="email" placeholder="Email">
+      <input class="au-mi" id="au-pass" type="password" autocomplete="current-password"
+        placeholder="${ru ? 'Пароль' : 'Password'}">
+      <button class="au-gbtn au-mail-go" id="au-mail-go" onclick="emailAuthSubmit()">
+        <span class="au-gbtn-sheen"></span>
+        <span class="au-gbtn-t" id="au-mail-go-t">${ru ? 'Войти' : 'Sign in'}</span>
+        <span class="au-gbtn-arr">▸</span>
+      </button>
+      <a class="au-mail-tgl" id="au-mail-tgl" onclick="emailAuthToggle()">${ru ? 'Нет аккаунта? Подать заявку' : 'No account? Apply'}</a>
+      <a class="au-mail-tgl" id="au-mail-forgot" onclick="emailForgotPassword()">${ru ? 'Забыли пароль?' : 'Forgot password?'}</a>
+    </div>
     <div class="au-legal">${ru
       ? `Продолжая, вы соглашаетесь с <a onclick="event.preventDefault();openLegal('terms')">Пользовательским соглашением</a> и <a onclick="event.preventDefault();openLegal('privacy')">Политикой конфиденциальности</a>.`
       : `By continuing you agree to the <a onclick="event.preventDefault();openLegal('terms')">Terms of Use</a> and <a onclick="event.preventDefault();openLegal('privacy')">Privacy Policy</a>.`}</div>
@@ -575,8 +612,267 @@ function _auFxWire(ru) {
 
 let _authBusy = false;
 async function signInWithGoogle() {
+  return _oauthSignIn('google', 'google-btn', lang === 'ru' ? 'Войти через Google' : 'Continue with Google',
+    lang === 'ru' ? 'перенаправление на защищённый узел Google…' : 'redirecting to Google secure node…');
+}
+
+// ── Почта + пароль ─────────────────────────────────────────────────────────
+// Регистрация = ЗАЯВКА: аккаунт создаётся сразу, но помечен pending в
+// signup_requests (_email_signup_approval.sql) и до одобрения видит только
+// экран ожидания (showPendingGate). Админам летит сообщение в ВК через тот же
+// вебхук, что и тикеты (dynamic-responder). Google-входов гейт не касается.
+let _auMailMode = 'login';
+
+function emailAuthToggle() {
+  const ru = lang === 'ru';
+  _auMailMode = _auMailMode === 'login' ? 'signup' : 'login';
+  const s = _auMailMode === 'signup';
+  const nick = document.getElementById('au-nick');
+  const pass = document.getElementById('au-pass');
+  if (nick) nick.style.display = s ? '' : 'none';
+  if (pass) pass.autocomplete = s ? 'new-password' : 'current-password';
+  const goT = document.getElementById('au-mail-go-t');
+  if (goT) goT.textContent = s ? (ru ? 'Подать заявку' : 'Apply') : (ru ? 'Войти' : 'Sign in');
+  const tgl = document.getElementById('au-mail-tgl');
+  if (tgl) tgl.textContent = s
+    ? (ru ? 'Уже есть аккаунт? Войти' : 'Have an account? Sign in')
+    : (ru ? 'Нет аккаунта? Подать заявку' : 'No account? Apply');
+  // «Забыли пароль?» имеет смысл только на входе — на заявке пароль ещё создаётся
+  const fg = document.getElementById('au-mail-forgot');
+  if (fg) fg.style.display = s ? 'none' : '';
+}
+
+// ── Сброс пароля по почте ──────────────────────────────────────────────────
+// Письмо шлёт Supabase (шаблон Reset Password). Ссылка возвращает на сайт с
+// ?code= (PKCE) + нашей меткой ?pwreset=1: обмен кода делает init, а метка
+// говорит показать экран нового пароля. ВАЖНО: начать и закончить сброс нужно
+// в ОДНОМ браузере (verifier лежит в его localStorage) — пишем это в тосте.
+async function emailForgotPassword() {
   if (_authBusy) return;
-  const btn = document.getElementById('google-btn');
+  const ru = lang === 'ru';
+  const email = (document.getElementById('au-email')?.value || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    toast(ru ? 'Введите вашу почту в поле Email — на неё придёт ссылка для сброса.' : 'Enter your e-mail above — the reset link goes there.', 'err');
+    document.getElementById('au-email')?.focus();
+    return;
+  }
+  _authBusy = true;
+  try {
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: location.origin + location.pathname + '?pwreset=1'
+    });
+    if (error) throw error;
+    toast(ru
+      ? 'Письмо отправлено. Откройте ссылку из него В ЭТОМ ЖЕ браузере и задайте новый пароль.'
+      : 'E-mail sent. Open the link in THIS browser and set a new password.', 'ok');
+  } catch (e) {
+    toast((ru ? 'Не получилось отправить письмо: ' : 'Could not send e-mail: ') + (e.message || e), 'err');
+  } finally { _authBusy = false; }
+}
+
+// Экран задания нового пароля (после возврата по ссылке из письма).
+function showPasswordResetGate() {
+  if (document.getElementById('pwreset-gate')) return;
+  const ru = lang === 'ru';
+  const gate = document.createElement('div');
+  gate.id = 'pwreset-gate';
+  gate.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(8,10,14,.97);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px';
+  gate.innerHTML = `
+    <div style="max-width:420px;width:100%;text-align:center;border:1px solid #2a5a6a;border-radius:14px;padding:34px 28px;background:linear-gradient(135deg,#0e161c,#0a1014);box-shadow:0 20px 60px rgba(0,0,0,.6)">
+      <div style="font-size:48px;line-height:1;margin-bottom:14px">🔑</div>
+      <div style="font-family:Rajdhani,sans-serif;font-size:21px;font-weight:800;letter-spacing:1px;color:#7fd0e0;margin-bottom:10px">${ru ? 'НОВЫЙ ПАРОЛЬ' : 'NEW PASSWORD'}</div>
+      <div style="font-size:12px;line-height:1.6;color:#aebac6;margin-bottom:18px">${ru ? 'Личность подтверждена по почте. Задайте новый пароль для входа.' : 'Identity confirmed via e-mail. Set a new password.'}</div>
+      <input class="au-mi" id="pwreset-p1" type="password" autocomplete="new-password" placeholder="${ru ? 'Новый пароль (мин. 6 символов)' : 'New password (min 6 chars)'}" style="width:100%;margin-bottom:8px">
+      <input class="au-mi" id="pwreset-p2" type="password" autocomplete="new-password" placeholder="${ru ? 'Ещё раз' : 'Repeat'}" style="width:100%;margin-bottom:16px">
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-gh" onclick="doLogout()">${ru ? 'Отмена' : 'Cancel'}</button>
+        <button class="btn btn-gd" id="pwreset-ok" onclick="submitPasswordReset()">${ru ? 'Сохранить пароль' : 'Save password'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(gate);
+  document.body.style.overflow = 'hidden';
+}
+
+async function submitPasswordReset() {
+  const ru = lang === 'ru';
+  const p1 = document.getElementById('pwreset-p1')?.value || '';
+  const p2 = document.getElementById('pwreset-p2')?.value || '';
+  if (p1.length < 6) { toast(ru ? 'Пароль — минимум 6 символов.' : 'Password must be at least 6 characters.', 'err'); return; }
+  if (p1 !== p2) { toast(ru ? 'Пароли не совпадают.' : 'Passwords do not match.', 'err'); return; }
+  const btn = document.getElementById('pwreset-ok'); if (btn) btn.disabled = true;
+  try {
+    const { error } = await sb.auth.updateUser({ password: p1 });
+    if (error) throw error;
+    document.getElementById('pwreset-gate')?.remove();
+    document.body.style.overflow = '';
+    toast(ru ? 'Пароль обновлён!' : 'Password updated!', 'ok');
+    // Перезагрузка прогоняет все гейты (заявка/бан/документы) начисто —
+    // сброс пароля НЕ должен обходить экран «заявка на рассмотрении».
+    showAuthLoader(ru ? 'Пароль обновлён' : 'Password updated');
+    location.reload();
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    toast((ru ? 'Не удалось сменить пароль: ' : 'Password change failed: ') + (e.message || e), 'err');
+  }
+}
+
+async function emailAuthSubmit() {
+  if (_authBusy) return;
+  const ru = lang === 'ru';
+  const email = (document.getElementById('au-email')?.value || '').trim();
+  const pass = document.getElementById('au-pass')?.value || '';
+  const nick = (document.getElementById('au-nick')?.value || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast(ru ? 'Укажите корректный e-mail.' : 'Enter a valid e-mail.', 'err'); return; }
+  if (pass.length < 6) { toast(ru ? 'Пароль — минимум 6 символов.' : 'Password must be at least 6 characters.', 'err'); return; }
+  if (_auMailMode === 'signup' && !nick) { toast(ru ? 'Укажите позывной — под ним вас увидят на сайте.' : 'Enter a display name.', 'err'); return; }
+
+  const btn = document.getElementById('au-mail-go');
+  _authBusy = true;
+  if (btn) { btn.disabled = true; btn.classList.add('busy'); }
+  try {
+    if (_auMailMode === 'login') {
+      const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+      if (error) {
+        const friendly = /invalid login credentials/i.test(error.message)
+          ? (ru ? 'Неверная почта или пароль.' : 'Wrong e-mail or password.')
+          : /not confirmed/i.test(error.message)
+            ? (ru ? 'Почта не подтверждена.' : 'E-mail not confirmed.')
+            : error.message;
+        throw new Error(friendly);
+      }
+      cm('mo-auth');
+      // Перерисовать сайт «на месте» здесь нельзя: onAuthStateChange глушится
+      // флагом _authBusy, и SIGNED_IN уходит в пустоту — сессия уже есть, а
+      // интерфейс остаётся гостевым, и человек жмёт «Войти» по кругу.
+      // Поэтому показываем экран загрузки и перезагружаем страницу.
+      showAuthLoader(ru ? 'Связь установлена' : 'Link established');
+      location.reload();
+      return;
+    } else {
+      const { data, error } = await sb.auth.signUp({
+        email, password: pass,
+        options: { data: { display_name: nick } }
+      });
+      if (error) {
+        const friendly = /already registered/i.test(error.message)
+          ? (ru ? 'Эта почта уже зарегистрирована — попробуйте войти.' : 'This e-mail is already registered — try signing in.')
+          : error.message;
+        throw new Error(friendly);
+      }
+      if (!data.session) {
+        // В Supabase включено подтверждение почты — сессии не будет, пока
+        // человек не кликнет ссылку в письме. Заявка запишется при первом входе.
+        toast(ru ? 'Проверьте почту и подтвердите адрес, затем войдите.' : 'Check your inbox to confirm the address, then sign in.', 'ok');
+        cm('mo-auth');
+        return;
+      }
+      await _signupRequestEnsure(data.user, nick);
+      cm('mo-auth');
+      showPendingGate();
+    }
+  } catch (e) {
+    toast((ru ? 'Не получилось: ' : 'Failed: ') + (e.message || e), 'err');
+  } finally {
+    _authBusy = false;
+    if (btn) { btn.disabled = false; btn.classList.remove('busy'); }
+  }
+}
+
+// Записывает заявку (если её ещё нет) и шлёт сигнал админам в ВК.
+async function _signupRequestEnsure(authUser, nick) {
+  if (!authUser?.id) return;
+  try {
+    const { data } = await sb.from('signup_requests').select('status').eq('user_id', authUser.id).limit(1);
+    if (data && data.length) return;
+    await sb.from('signup_requests').insert({
+      user_id: authUser.id,
+      email: authUser.email,
+      name: nick || authUser.user_metadata?.display_name || ''
+    });
+  } catch (e) { console.warn('[auth] заявка не записалась:', e); }
+  // Уведомление в ВК — тем же вебхуком, что тикеты (у него уже есть все права).
+  try {
+    const { data: sess } = await sb.auth.getSession();
+    const token = sess?.session?.access_token;
+    if (!token || typeof TK_VK_WEBHOOK === 'undefined' || !TK_VK_WEBHOOK) return;
+    fetch(TK_VK_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SB_ANON, Authorization: 'Bearer ' + token },
+      body: JSON.stringify({
+        category: '📥 Новая регистрация',
+        description: `Позывной: ${nick || '—'}\nПочта: ${authUser.email}\nПримите или удалите: Управление → ПОЛЬЗ. → Заявки.`,
+        user_name: nick || authUser.email,
+        vk_link: '', screenshots: [],
+        at: new Date().toISOString()
+      })
+    }).catch(() => {});
+  } catch (e) {}
+}
+
+// ── Гейт «заявка на рассмотрении» ──────────────────────────────────────────
+// Только для аккаунтов, вошедших по почте: пока строка в signup_requests не
+// approved — сайт закрыт экраном ожидания. Google/OAuth сюда не попадают.
+async function enforceSignupApproval(authUser) {
+  try {
+    // Гейт ТОЛЬКО для строго почтовых аккаунтов. Провайдер неизвестен
+    // (кэшированный user без app_metadata и т.п.) — считаем OAuth и НЕ блокируем:
+    // лучше пропустить почтового, чем запереть гугловского.
+    const am = authUser?.app_metadata || {};
+    const provs = Array.isArray(am.providers) && am.providers.length ? am.providers : [am.provider];
+    if (provs.some(p => p && p !== 'email')) return;   // есть любой OAuth — свободен
+    if (!provs.includes('email')) return;              // провайдер неизвестен — не трогаем
+    const { data, error } = await sb.from('signup_requests').select('status').eq('user_id', authUser.id).limit(1);
+    if (error) return; // таблицы нет / сеть — не блокируем (как legal-гейт)
+    if (!data.length) { await _signupRequestEnsure(authUser, authUser.user_metadata?.display_name); showPendingGate(); return; }
+    if (data[0].status !== 'approved') showPendingGate();
+    else document.getElementById('pending-gate')?.remove();
+  } catch (e) {}
+}
+
+// ── Экран загрузки после входа по почте ───────────────────────────────────
+// Разметка лежит статикой в index.html и поднимается инлайн-скриптом ДО первого
+// кадра (по флагу wk_auth_loading), иначе успевает мигнуть гостевая шапка с
+// кнопкой «Войти». Снимаем только когда сайт реально готов — hideAuthLoader().
+function showAuthLoader(msg) {
+  const ru = lang === 'ru';
+  try { sessionStorage.setItem('wk_auth_loading', '1'); } catch (e) {}
+  const el = document.getElementById('auth-loader');
+  if (!el) return;
+  if (msg) { const t = el.querySelector('.al-t'); if (t) t.textContent = msg; }
+  const s = el.querySelector('.al-s');
+  if (s) s.textContent = ru ? 'Открываем сеанс…' : 'Opening session…';
+  el.hidden = false;
+  document.documentElement.style.overflow = 'hidden';
+}
+
+function hideAuthLoader() {
+  try { sessionStorage.removeItem('wk_auth_loading'); } catch (e) {}
+  const el = document.getElementById('auth-loader');
+  if (el) el.hidden = true;
+  document.documentElement.style.overflow = '';
+}
+
+function showPendingGate() {
+  if (document.getElementById('pending-gate')) return;
+  const ru = lang === 'ru';
+  const gate = document.createElement('div');
+  gate.id = 'pending-gate';
+  gate.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(8,10,14,.97);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px';
+  gate.innerHTML = `
+    <div style="max-width:460px;text-align:center;border:1px solid #7a6a2f;border-radius:14px;padding:34px 28px;background:linear-gradient(135deg,#17140e,#100e0a);box-shadow:0 20px 60px rgba(0,0,0,.6)">
+      <div style="font-size:52px;line-height:1;margin-bottom:14px">🛰</div>
+      <div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:800;letter-spacing:1px;color:#e8c96a;margin-bottom:10px">${ru ? 'ЗАЯВКА НА РАССМОТРЕНИИ' : 'APPLICATION PENDING'}</div>
+      <div style="font-size:13px;line-height:1.6;color:#c0ccd6;margin-bottom:22px">${ru
+        ? 'Аккаунт создан, администрация уже получила сигнал.<br>Как только заявку примут — доступ откроется. Загляните позже.'
+        : 'Your account was created and the administration has been notified.<br>Access opens once the application is approved. Check back later.'}</div>
+      <button class="btn btn-gh" onclick="doLogout()" style="border-color:#7a6a2f;color:#e8c96a">${ru ? 'Выйти' : 'Log out'}</button>
+    </div>`;
+  document.body.appendChild(gate);
+  document.body.style.overflow = 'hidden';
+}
+async function _oauthSignIn(provider, btnId, idleLabel, termMsg) {
+  if (_authBusy) return;
+  const btn = document.getElementById(btnId);
   _authBusy = true;
   if (btn) {
     btn.disabled = true; btn.classList.add('busy');
@@ -586,23 +882,23 @@ async function signInWithGoogle() {
   const tm = document.getElementById('au-term');
   if (tm) {
     clearTimeout(window._auTt);
-    tm.textContent = lang === 'ru' ? 'перенаправление на защищённый узел Google…' : 'redirecting to Google secure node…';
+    tm.textContent = termMsg;
   }
   try {
     // redirectTo должен быть в allowlist Supabase (Auth → URL Configuration)
     const { error } = await sb.auth.signInWithOAuth({
-      provider: 'google',
+      provider,
       options: { redirectTo: location.origin + location.pathname }
     });
     if (error) throw error;
-    // страница сейчас уйдёт на accounts.google.com — состояние не сбрасываем
+    // страница сейчас уйдёт на сайт провайдера — состояние не сбрасываем
   } catch(e) {
     toast('Не удалось начать вход: ' + (e.message||e), 'err');
     _authBusy = false;
     if (btn) {
       btn.disabled = false; btn.classList.remove('busy');
       const t = btn.querySelector('.au-gbtn-t');
-      if (t) t.textContent = lang === 'ru' ? 'Войти через Google' : 'Continue with Google';
+      if (t) t.textContent = idleLabel;
     }
     const tm2 = document.getElementById('au-term');
     if (tm2) tm2.textContent = lang === 'ru' ? 'сбой соединения — попробуйте ещё раз' : 'connection failed — try again';
@@ -616,6 +912,8 @@ async function doLogout() {
   try {
     if (editMode) exitEdit(false);
     closeAp();
+    // Снимаем гейт «заявка на рассмотрении» — иначе после выхода он остаётся.
+    try { document.getElementById('pending-gate')?.remove(); document.body.style.overflow = ''; } catch(e){}
     localStorage.removeItem('wk12_session');
     try { localStorage.removeItem('wk_greet_name'); } catch(e){}   // сброс приветствия по имени
     sb.auth.signOut().catch(()=>{}); // Отправляем запрос, но не ждем его, чтобы UI не вис

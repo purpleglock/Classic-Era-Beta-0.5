@@ -204,6 +204,11 @@ async function go(slug, push=true) {
     else { setPg('<div class="sempty">guide.js не загружен</div>'); }
     return;
   }
+  if (slug==='hotspots') {
+    if (typeof renderHotspots === 'function') { await renderHotspots(); }
+    else { setPg('<div class="sempty">battle_board.js не загружен</div>'); }
+    return;
+  }
   if (slug==='economy') {
     if (typeof ecRenderDashboard === 'function') { await ecRenderDashboard(); }
     else { setPg('<div class="sempty">economy.js не загружен</div>'); }

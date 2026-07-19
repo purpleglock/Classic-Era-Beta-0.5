@@ -446,6 +446,51 @@ textarea.fi { resize: vertical; min-height: 80px; line-height: 1.6; }
   clip-path: polygon(0 0, calc(100% - 11.3px) 0, 100% 11.3px, 100% 100%, 11.3px 100%, 0 calc(100% - 11.3px));
   transition: background var(--duration-normal);
 }
+/* Экран загрузки после входа (см. #auth-loader в index.html) */
+#auth-loader {
+  position: fixed; inset: 0; z-index: 100000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: rgba(8, 10, 14, .97); backdrop-filter: blur(8px);
+}
+#auth-loader[hidden] { display: none; }
+#auth-loader .al-ring {
+  width: 54px; height: 54px; border-radius: 50%;
+  border: 2px solid hsl(200 40% 25%); border-top-color: hsl(200 70% 58%);
+  animation: al-spin .8s linear infinite;
+}
+#auth-loader .al-t {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  letter-spacing: 2px; text-transform: uppercase; color: hsl(200 55% 65%);
+}
+#auth-loader .al-s { font-family: Rajdhani, sans-serif; font-size: 12px; color: hsl(210 15% 55%); }
+@keyframes al-spin { to { transform: rotate(360deg); } }
+
+/* Вход по почте: разделитель, поля, ссылка-переключатель режима */
+.au-mail-sep {
+  display: flex; align-items: center; gap: 12px; margin: 16px 0 12px;
+  font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 2px;
+  text-transform: uppercase; color: hsl(210 20% 55%);
+}
+.au-mail-sep::before, .au-mail-sep::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(210 30% 40% / .5), transparent);
+}
+.au-mail { display: flex; flex-direction: column; gap: 8px; }
+.au-mi {
+  height: 44px; padding: 0 14px; width: 100%;
+  background: hsl(212 45% 10% / .9); border: 1px solid hsl(210 35% 28% / .8);
+  color: #eaf4fc; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  transition: border-color var(--duration-fast);
+}
+.au-mi::placeholder { color: hsl(210 20% 45%); }
+.au-mi:focus { outline: none; border-color: hsl(200 62% 50%); }
+.au-mail-go { height: 46px; }
+.au-mail-tgl {
+  margin-top: 2px; text-align: center; cursor: pointer;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: .5px;
+  color: hsl(200 55% 60%); text-decoration: underline dotted;
+}
+.au-mail-tgl:hover { color: hsl(38 70% 62%); }
 .au-gbtn:hover:not(:disabled) { transform: translateY(-1px); }
 .au-gbtn:hover:not(:disabled)::before {
   background: linear-gradient(135deg, hsl(38 70% 58% / .85), hsl(30 55% 45% / .6) 45%, hsl(200 62% 56% / .8));

@@ -260,7 +260,9 @@
       "Bash(node zoom_check_old.js)",
       "Bash(node overlap_check.js)",
       "Bash(sed -i 's|?v=20260715tithe1|?v=20260715patron1|g' index.html)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(sed -i \"s/20260719yatg1/20260719yatg2/g\" index.html css/index.css)",
+      "Bash(node -e \"require\\('fs'\\).readFileSync\\('auth.js','utf8'\\);new Function\\(require\\('fs'\\).readFileSync\\('auth.js','utf8'\\)\\)\")"
     ]
   }
 }

@@ -102,6 +102,18 @@ insert into public.tech_nodes (node_id, base_cost, prereq) values
 on conflict (node_id) do update
   set base_cost = excluded.base_cost, prereq = excluded.prereq;
 
+-- Стаффские правки связей (редактор дерева) живут в overlay tech_prereq,
+-- а сервер валидирует по tech_nodes.prereq — сид выше их затёр. Возвращаем.
+do $$ begin
+  if to_regclass('public.tech_prereq') is not null then
+    update public.tech_nodes n
+       set prereq = tp.prereq
+      from public.tech_prereq tp
+     where tp.node_id = n.node_id
+       and n.prereq is distinct from tp.prereq;
+  end if;
+end $$;
+
 -- ── 2) БЭКФИЛЛ: стартеры (бывшая бесплатная база) — всем существующим ──
 -- Фракции строили корветы/лёгкую технику и стреляли базовым оружием ДО
 -- реформы — выдаём эти 8 узлов даром, чтобы ни один чертёж не сломался.

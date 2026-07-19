@@ -1673,6 +1673,10 @@ function buildNav(filt='') {
   if (typeof ecNavEnsure==='function') ecNavEnsure();
   if (typeof ecCanAccess==='function' && ecCanAccess()) {
     h+=`<a class="n-home${curSlug==='economy'?' on':''}" id="ntl-eco" href="#economy" onclick="return navGo(event,'economy')"><span class="n-home-icon">🛰</span>${L('Кабинет игрока','Cabinet')}</a>`;
+    // ☄ Горячие точки — вход в активные бои (доска боя). Бейдж = число боёв,
+    // его до-рисовывает hsNavBadge() после загрузки кабинета/страницы.
+    const hsN = (typeof EC!=='undefined' && Array.isArray(EC.battles)) ? EC.battles.length : 0;
+    h+=`<a class="n-home${curSlug==='hotspots'?' on':''}" id="ntl-hot" href="#hotspots" onclick="return navGo(event,'hotspots')"><span class="n-home-icon">☄</span>${L('Горячие точки','Hotspots')}${hsN?`<span class="hs-badge">${hsN}</span>`:''}</a>`;
   }
   h+=`<a class="n-home${curSlug==='map'?' on':''}" id="ntl-map" href="#map" onclick="return navGo(event,'map')"><span class="n-home-icon">🜨</span>${L('Карта галактики','Galaxy map')}</a>`;
   h+=`<a class="n-home${curSlug==='factions'||curSlug==='faction-new'?' on':''}" id="ntl-fac" href="#factions" onclick="return navGo(event,'factions')"><span class="n-home-icon">⬡</span>${L('Фракции','Factions')}</a>`;

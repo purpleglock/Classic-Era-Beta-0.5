@@ -1483,6 +1483,18 @@ async function _ecLoadCoreImpl() {
   (Array.isArray(spatial) ? spatial : []).forEach(b => { if (b && b.system_id) EC.spatial[b.system_id] = b; });
   EC.sectors = Array.isArray(sectors) ? sectors : [];   // сектора карты + эконом-события (срез 4)
   EC.battles = Array.isArray(battlesList) ? battlesList : [];   // ⚔ бои, в которых мы участвуем (_war_intercept.sql)
+  // ☄ Оповещение о бое: бейдж в сайдменю + разовый тост на новый бой.
+  // Раньше бой был виден только глубоко во вкладке «Война» — игроки не знали,
+  // что сражение вообще началось.
+  try {
+    if (typeof hsNavBadge === 'function') hsNavBadge(EC.battles.length);
+    const seen = JSON.parse(localStorage.getItem('wk_battles_seen') || '[]');
+    const fresh = EC.battles.filter(b => b && !seen.includes(b.id));
+    if (fresh.length) {
+      toast(`⚔ Ваш флот скован боем (${esc(fresh[0].system_name || fresh[0].system_id)}) — вкладка «☄ Горячие точки»`, 'err');
+      localStorage.setItem('wk_battles_seen', JSON.stringify(EC.battles.map(b => b.id)));
+    }
+  } catch (e) {}
   EC.war = warStatus || { fid: EC.fid, wars: [], open_wars: [], incoming: [], outgoing: [], history: [] };   // ⚔ войны (_war_declare.sql; пустой объект, если срез не накачен)
   EC.gledger = Array.isArray(gledger) ? gledger : [];    // 🌌 леджер галактических эффектов (Ассамблея/Поэма) — «Казна» обзора
   EC.designs = (designs || []);

@@ -45,6 +45,22 @@ begin
     -- Флот, уже скованный боем, пропускаем: он своё отвоёвывает.
     if public._fleet_in_battle(fl.id) is not null then continue; end if;
 
+    -- ПОДВЕЗЁННОЕ ПОДКРЕПЛЕНИЕ: в этой системе уже идёт МОЙ бой → вливаем
+    -- флот в него. Без этого привезённые корабли не попадали в battle_fleets,
+    -- а значит и в резерв (battle_pool) — «подвези подкрепление» не работало.
+    select b2.id into b from public.battles b2
+     where b2.system_id = fl.system_id and b2.status <> 'done'
+       and (b2.attacker_fid = p_fid or b2.defender_fid = p_fid)
+     limit 1;
+    if b is not null then
+      insert into public.battle_fleets(battle_id, fleet_id, fid, side)
+        values (b, fl.id, p_fid,
+                case when (select attacker_fid from public.battles where id=b) = p_fid
+                     then 'attacker' else 'defender' end)
+      on conflict (battle_id, fleet_id) do nothing;
+      continue;
+    end if;
+
     foe := public._war_hostile_fleet(p_fid, fl.system_id);
     if foe is not null then
       b := public._war_engage(fl.id, foe, fl.system_id, 'meeting');
@@ -166,6 +182,8 @@ begin
 end$$;
 
 -- ── Проверка ────────────────────────────────────────────────
+-- 0) Привезти новый флот в систему, где идёт мой бой → он появляется в
+--    резерве (battle_pool) и его можно вызвать подкреплением.
 -- 1) Два враждебных флота УЖЕ стоят в одной системе (никто никуда не летел):
 --    после наката — строка в battles, во вкладке «Война» блок «Идут сражения».
 -- 2) Свой флот стоит во вражеской системе, боя нет → строка в

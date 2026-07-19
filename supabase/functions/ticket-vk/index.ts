@@ -44,6 +44,29 @@ Deno.serve(async (req) => {
       return json({ ok: true, conversations: items });
     }
 
+    // ── Режим «новость из ленты» — превью в беседу (без кодов разметки, ≤5 предложений) ──
+    if (t.mode === "news") {
+      const NEWS_PEER = Deno.env.get("VK_NEWS_PEER_ID") ?? VK_PEER_ID;
+      if (!NEWS_PEER) return json({ error: "VK_NEWS_PEER_ID/VK_PEER_ID не заданы" }, 500);
+      const icon = t.kind === "bulletin" ? "📡" : t.kind === "rumor" ? "👁" : "📰";
+      const label = t.kind === "bulletin" ? "Сводка сектора" : t.kind === "rumor" ? "Слух" : "Новость";
+      const title = stripMarkup(t.title ?? "").slice(0, 140);
+      const preview = sentClip(stripMarkup(t.excerpt || t.body || ""), 5, 700);
+      const msg = [
+        `${icon} ${label}${t.faction_name ? " · " + stripMarkup(t.faction_name) : ""}`,
+        title ? `«${title}»` : "",
+        "",
+        preview,
+      ].filter(Boolean).join("\n");
+      const data = await vk("messages.send", {
+        access_token: VK_TOKEN, v: V, peer_id: String(NEWS_PEER),
+        random_id: String(Date.now()), message: msg, dont_parse_links: "1",
+      });
+      console.log("[ticket-vk] news → VK:", JSON.stringify(data));
+      if (data.error) return json({ ok: false, vk: data.error });
+      return json({ ok: true });
+    }
+
     if (!VK_PEER_ID) return json({ error: "VK_PEER_ID не задан в секретах функции" }, 500);
     console.log("[ticket-vk] тело:", JSON.stringify({ ...t, screenshots: (t.screenshots || []).length + " шт." }));
 

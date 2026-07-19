@@ -538,3 +538,67 @@ function bbPaintScan(ctx, W, H) {
   for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
   ctx.restore();
 }
+
+// ════════════════════════════════════════════════════════════════════
+// ☄ ГОРЯЧИЕ ТОЧКИ — страница сайдменю: все бои, в которых участвует
+// фракция, одним списком. Раньше вход в бой был закопан во вкладке
+// «⚔ Война» кабинета — игроки его не находили. Данные — battles_mine
+// (тот же RPC, что кормит кабинет), страница самодостаточна: работает
+// даже если кабинет ещё не открывали.
+// ════════════════════════════════════════════════════════════════════
+async function renderHotspots() {
+  const head = `<div class="cn-wrap"><div class="cn-head">
+      <div class="cn-eyebrow">◈ ВОЕННАЯ СВОДКА</div>
+      <h1>Горячие точки</h1>
+    </div>`;
+  if (typeof ecCanAccess !== 'function' || !ecCanAccess()) {
+    setPg(head + `<div class="hs-empty">Доступно игрокам с одобренной анкетой.</div></div>`);
+    return;
+  }
+  setPg(head + `<div class="sload"><div class="pulse-loader"></div></div></div>`);
+  let battles = [], err = null;
+  try { battles = await ecRpc('battles_mine', {}); } catch (e) { battles = null; err = e; }
+  if (typeof curSlug !== 'undefined' && curSlug !== 'hotspots') return;   // ушли со страницы, пока грузилось
+  if (!Array.isArray(battles)) {
+    // Причину показываем целиком: RPC может падать из-за ненакаченного SQL
+    // (battles_mine/_fleet_settle) — без текста это не продиагностировать.
+    let msg = (err && err.message) || 'сервер не ответил';
+    try { const j = JSON.parse(msg); if (j && j.message) msg = j.message; } catch (e) {}
+    setPg(head + `<div class="hs-empty">Сводка недоступна.<br>
+      <span class="hs-hint" style="color:var(--t3)">${esc(msg)}</span><br>
+      <button class="btn btn-gh btn-sm" style="margin-top:10px" onclick="renderHotspots()">↺ Повторить</button></div></div>`);
+    return;
+  }
+  hsNavBadge(battles.length);
+  if (!battles.length) {
+    setPg(head + `<div class="hs-empty"><div class="hs-empty-ic">🕊</div>Сейчас ваши флоты не скованы боем.<br>
+      <span class="hs-hint">Бой завязывается при встрече с врагом или перехвате на трассе — тогда точка появится здесь.</span></div></div>`);
+    return;
+  }
+  const rows = battles.map(b => {
+    const forming = b.status === 'forming';
+    const fleets = (b.my_fleets || []).map(f => esc(f.name || 'Флот')).join(', ') || '—';
+    return `<div class="hs-card${forming ? '' : ' hs-card-hot'}">
+        <div class="hs-card-top">
+          <span class="hs-kind">${b.kind === 'intercept' ? '🛑 перехват на трассе' : '⚔ встреча флотов'}</span>
+          <span class="hs-st${forming ? '' : ' hs-st-hot'}">${forming ? 'расстановка' : 'идёт бой'}</span>
+        </div>
+        <div class="hs-card-t">${esc(b.system_name || b.system_id)}</div>
+        <div class="hs-card-foe">против <b>${esc(b.foe_name || '?')}</b> · вы — ${b.my_side === 'attacker' ? 'нападающие' : 'обороняющиеся'}</div>
+        <div class="hs-card-fl">Скованы боем: ${fleets}</div>
+        <button class="btn btn-gd" onclick="bbOpen('${jsq(b.id)}')">${forming ? 'Расставить флот' : 'К доске боя'}</button>
+      </div>`;
+  }).join('');
+  setPg(head + `<div class="hs-grid">${rows}</div>
+    <div class="hs-hint" style="margin-top:14px">Скованный боем флот никуда не уйдёт, пока сражение не окончено. Система под боем не оккупируется — сначала надо победить.</div></div>`);
+}
+
+// Бейдж на пункте сайдменю «Горячие точки» — число активных боёв.
+function hsNavBadge(n) {
+  const a = document.getElementById('ntl-hot'); if (!a) return;
+  let b = a.querySelector('.hs-badge');
+  if (n > 0) {
+    if (!b) { b = document.createElement('span'); b.className = 'hs-badge'; a.appendChild(b); }
+    b.textContent = n;
+  } else if (b) b.remove();
+}

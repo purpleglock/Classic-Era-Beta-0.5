@@ -1622,6 +1622,21 @@ async function doCreateNew(){
 
 function openAp(){if(!user)return;apOpen=true;document.getElementById('ap').classList.add('open');renderAp();}
 function closeAp(){apOpen=false;document.getElementById('ap').classList.remove('open');}
+// ── Заявки на регистрацию: принять / удалить аккаунт ─────────
+async function adApproveSignup(uid){
+  try {
+    await apiFetch('rpc/admin_approve_signup', { method:'POST', body: JSON.stringify({ p_user_id: uid }) });
+    toast('Заявка принята','ok'); renderApTab();
+  } catch(e){ toast('Не удалось принять: '+e.message,'err'); }
+}
+async function adRejectSignup(uid, email){
+  if (!confirm(`Удалить аккаунт ${email || uid}?\nЭто сотрёт его полностью, без возврата.`)) return;
+  try {
+    await apiFetch('rpc/admin_reject_signup', { method:'POST', body: JSON.stringify({ p_user_id: uid }) });
+    toast('Аккаунт удалён','ok'); renderApTab();
+  } catch(e){ toast('Не удалось удалить: '+e.message,'err'); }
+}
+
 function renderAp(){
   if(!user)return;
   const dn = getDisplayName(); const avHtml = getAvatarHtml(user.id, userProfile.avatar_url, userProfile.display_name, 40);
@@ -1758,6 +1773,29 @@ async function renderApTab(){
       // удалённые анкеты — всё одним джойном.
       const allUsers = await apiFetch('rpc/admin_list_users', { method:'POST', body:'{}' }) || [];
 
+      // ── Заявки на регистрацию по почте (pending из signup_requests) ──
+      let pendHtml = '';
+      try {
+        const pend = await apiFetch('signup_requests?status=eq.pending&select=user_id,email,name,created_at&order=created_at.asc') || [];
+        if (pend.length) {
+          pendHtml = `
+            <div style="margin-bottom:16px;padding:12px;background:rgba(232,201,106,.06);border:1px solid rgba(232,201,106,.35)">
+              <div style="font-family:Rajdhani,sans-serif;font-size:9px;letter-spacing:2px;color:#e8c96a;margin-bottom:10px">📥 ЗАЯВКИ НА РЕГИСТРАЦИЮ (${pend.length})</div>
+              <div style="display:grid;gap:8px">
+                ${pend.map(p => `
+                  <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--b3);border:1px solid var(--w2)">
+                    <div style="flex:1;min-width:0">
+                      <div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name || 'Без позывного')}</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.email || '')} · ${new Date(p.created_at).toLocaleString('ru-RU')}</div>
+                    </div>
+                    <button class="btn" style="flex-shrink:0" onclick="adApproveSignup('${esc(p.user_id)}')">✔ Принять</button>
+                    <button class="btn btn-gh" style="flex-shrink:0;border-color:#a33;color:#ff9a9a" onclick="adRejectSignup('${esc(p.user_id)}','${esc(p.email || '')}')">🗑 Удалить</button>
+                  </div>`).join('')}
+              </div>
+            </div>`;
+        }
+      } catch(e) { /* таблицы нет — SQL _email_signup_approval.sql не применён */ }
+
       const roleLabels = { superadmin:'SUPERADMIN', editor:'EDITOR', moderator:'MODERATOR', player:'PLAYER', viewer:'VIEWER' };
       const roleColors = { superadmin:'gd', editor:'te', moderator:'pul', player:'ok', viewer:'w3' };
       const roleTextColors = { superadmin:'gdl', editor:'tel', moderator:'pul', player:'ok', viewer:'t3' };
@@ -1847,6 +1885,7 @@ async function renderApTab(){
       }).join('');
 
       b.innerHTML=`
+        ${pendHtml}
         <div style="font-family:'Rajdhani',sans-serif;font-size:9px;letter-spacing:2px;color:var(--te);margin-bottom:12px;padding:10px 12px;background:var(--b3);border:1px solid var(--w2)">
           ◈ УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (${allUsers.length})
           <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t4);margin-top:6px;letter-spacing:0.5px">
