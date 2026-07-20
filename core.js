@@ -120,23 +120,38 @@ function getToken() {
 // ПОЛНОСТЬЮ ОБХОДИМ ЗАВИСАЮЩИЙ getSession() SDK
 // Умное получение токена: быстрое и с защитой от зависания
 async function getTokenFresh() {
-    // 1. Сначала берем токен из localStorage — это моментально и не вешает вкладку
+    // 1. Свежий валидный токен из localStorage — моментально, без обращения к SDK.
     let token = getToken();
     if (token && token !== SB_ANON) return token;
-    
-    // 2. Если локально токена нет, дергаем SDK, но с таймаутом 2 секунды, чтобы избежать вечного зависания Web Lock
+
+    const withTimeout = (p, ms) => Promise.race([
+      p, new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
+    ]);
+
+    // 2. Токена нет или он ИСТЁК. Раньше здесь молча возвращался SB_ANON (анонимный
+    //    ключ) — из-за этого авторизованные RPC (economy_init и т.п.) уходили как
+    //    аноним → auth.uid() = null → сервер отвечал «no approved faction application»,
+    //    хотя фракция у игрока есть. Теперь СНАЧАЛА по-настоящему обновляем сессию:
+    //    refreshSession ротирует refresh-токен и пишет свежий access_token в
+    //    localStorage (storageKey wk12_session). Таймаут щедрый — «холодный» GoTrue.
     try {
-      const res = await Promise.race([
-        sb.auth.getSession(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
-      ]);
-      if (res?.data?.session?.access_token) {
-        return res.data.session.access_token;
-      }
-    } catch(e) { 
-      console.warn('[wiki] Не удалось обновить токен для загрузки:', e.message); 
+      const res = await withTimeout(sb.auth.refreshSession(), 8000);
+      if (res?.data?.session?.access_token) return res.data.session.access_token;
+    } catch(e) {
+      console.warn('[wiki] refreshSession не удался:', e.message);
     }
-    
+
+    // 3. Фолбэк: сессия могла быть валидной, но getToken её не распарсил.
+    try {
+      const res = await withTimeout(sb.auth.getSession(), 4000);
+      if (res?.data?.session?.access_token) return res.data.session.access_token;
+    } catch(e) {}
+
+    // 4. Промис refresh мог отвалиться по таймауту, но токен уже записан в
+    //    localStorage — перечитываем перед тем, как сдаться в аноним.
+    token = getToken();
+    if (token && token !== SB_ANON) return token;
+
     return SB_ANON;
   }
 

@@ -879,6 +879,14 @@ function ecNavEnsure() {
 
 async function ecRpc(fn, body) {
   const token = await getTokenFresh();
+  // Сессия истекла и обновить её не удалось: НЕ шлём запрос анонимно, иначе
+  // auth.uid() = null и сервер ответит «no approved faction application», хотя
+  // фракция у игрока есть. Внятная ошибка + маркер для экрана релогина.
+  if (!token || token === SB_ANON) {
+    const err = new Error('Сессия истекла — войдите в аккаунт заново');
+    err.authExpired = true;
+    throw err;
+  }
   // Таймаут 28 с — сырой fetch без AbortController вешал страницу
   // насмерть, если Supabase «просыпался» (cold start ~25 с).
   const ctrl = new AbortController();
@@ -1372,6 +1380,19 @@ async function ecRenderDashboard() {
       if (curSlug === 'economy' && EC.app && EC.app.faction_id) ecPaintCabinet();
     }).catch(() => {});
   } catch (e) {
+    // Истёкшая сессия (или «no approved» из-за анонимного токена) — это НЕ поломка
+    // экономики, а протухший вход. Отдельный экран: перелогиниться, а не «повторить».
+    const authExpired = e.authExpired || /approved faction application/i.test(e.message || '');
+    if (authExpired) {
+      setPg(`<div class="ec-wrap"><div class="sempty" style="gap:12px;flex-direction:column">
+        <div style="font-size:32px;opacity:.2">🔑</div>
+        <div style="font-size:13px;color:var(--t2)">Сессия истекла</div>
+        <div style="font-size:11px;color:var(--t4);max-width:320px;text-align:center">Похоже, вход в аккаунт устарел. Войдите заново — данные фракции на месте, ничего не потеряно.</div>
+        <button class="btn btn-gd" onclick="(typeof showAuth==='function'?showAuth('login'):go('home',false))">Войти заново</button>
+        <button class="btn btn-gh" onclick="go('economy',false)">↺ Повторить</button>
+      </div></div>`);
+      return;
+    }
     // Никакого вечного спиннера — показываем причину и кнопку повтора
     setPg(`<div class="ec-wrap"><div class="sempty" style="gap:12px;flex-direction:column">
       <div style="font-size:32px;opacity:.2">⏱</div>
