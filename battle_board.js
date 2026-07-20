@@ -785,7 +785,7 @@ function bbPaintScan(ctx, W, H) {
 // ════════════════════════════════════════════════════════════════════
 async function renderHotspots() {
   const head = `<div class="cn-wrap"><div class="cn-head">
-      <div class="cn-eyebrow">◈ ВОЕННАЯ СВОДКА</div>
+      <div class="cn-eyebrow">◈ СВОДКА</div>
       <h1>Горячие точки</h1>
     </div>`;
   if (typeof ecCanAccess !== 'function' || !ecCanAccess()) {
@@ -830,7 +830,7 @@ async function renderHotspots() {
     <div class="hs-hint" style="margin-top:14px">Скованный боем флот никуда не уйдёт, пока сражение не окончено. Система под боем не оккупируется — сначала надо победить.</div></div>`);
 }
 
-// Бейдж на пункте сайдменю «Горячие точки» — число активных боёв.
+// Бейдж на  сайдменю «Горячие точки» — число активных боёв.
 function hsNavBadge(n) {
   const a = document.getElementById('ntl-hot'); if (!a) return;
   let b = a.querySelector('.hs-badge');
