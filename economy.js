@@ -1355,6 +1355,24 @@ function ecExitImpersonation() {
   go('admin', false);
 }
 
+// ── Диагностика авторизации ─────────────────────────────────
+// Декодирует токен, который реально уходит на сервер: sub (= auth.uid()),
+// срок, аноним ли; плюс user.id, что думает клиент. Нужна, чтобы различать
+// «истёкшая сессия» (аноним) и «сервер не видит анкету под этим sub».
+async function _ecAuthDiag() {
+  const out = { anon: false, sub: '', exp: '', uid: (typeof user !== 'undefined' && user && user.id) || '' };
+  try {
+    const tok = await getTokenFresh();
+    if (!tok || tok === SB_ANON) { out.anon = true; return out; }
+    const p = JSON.parse(atob(tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    // анонимный ключ Supabase несёт role:"anon" и не имеет sub игрока
+    if (p.role === 'anon' || !p.sub) { out.anon = true; return out; }
+    out.sub = p.sub;
+    if (p.exp) out.exp = new Date(p.exp * 1000).toLocaleString();
+  } catch (e) { /* не смогли декодировать — оставляем как есть */ }
+  return out;
+}
+
 // ── Точка входа (#economy) ──────────────────────────────────
 async function ecRenderDashboard() {
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
@@ -1380,24 +1398,26 @@ async function ecRenderDashboard() {
       if (curSlug === 'economy' && EC.app && EC.app.faction_id) ecPaintCabinet();
     }).catch(() => {});
   } catch (e) {
-    // Истёкшая сессия (или «no approved» из-за анонимного токена) — это НЕ поломка
-    // экономики, а протухший вход. Отдельный экран: перелогиниться, а не «повторить».
-    const authExpired = e.authExpired || /approved faction application/i.test(e.message || '');
-    if (authExpired) {
-      setPg(`<div class="ec-wrap"><div class="sempty" style="gap:12px;flex-direction:column">
-        <div style="font-size:32px;opacity:.2">🔑</div>
-        <div style="font-size:13px;color:var(--t2)">Сессия истекла</div>
-        <div style="font-size:11px;color:var(--t4);max-width:320px;text-align:center">Похоже, вход в аккаунт устарел. Войдите заново — данные фракции на месте, ничего не потеряно.</div>
-        <button class="btn btn-gd" onclick="(typeof showAuth==='function'?showAuth('login'):go('home',false))">Войти заново</button>
-        <button class="btn btn-gh" onclick="go('economy',false)">↺ Повторить</button>
-      </div></div>`);
-      return;
-    }
-    // Никакого вечного спиннера — показываем причину и кнопку повтора
+    // ДИАГНОСТИКА: какой токен реально ушёл на сервер (sub = auth.uid()), не аноним ли,
+    // и что думает клиент (user.id). Показываем на экране — чтобы видеть ФАКТ, а не гадать.
+    const diag = await _ecAuthDiag();
+    const isAnon = diag.anon;
+    const noApp = /approved faction application/i.test(e.message || '');
     setPg(`<div class="ec-wrap"><div class="sempty" style="gap:12px;flex-direction:column">
-      <div style="font-size:32px;opacity:.2">⏱</div>
-      <div style="font-size:13px;color:var(--t2)">Не удалось загрузить экономику</div>
-      <div style="font-size:11px;color:var(--t4);max-width:320px;text-align:center">${esc(e.message)}<br>Если повторяется — возможно, не выполнен _economy_setup.sql, либо сервер ещё «просыпается».</div>
+      <div style="font-size:32px;opacity:.2">${isAnon ? '🔑' : '⏱'}</div>
+      <div style="font-size:13px;color:var(--t2)">${isAnon ? 'Сессия истекла' : 'Не удалось загрузить экономику'}</div>
+      <div style="font-size:11px;color:var(--t4);max-width:340px;text-align:center">${
+        isAnon
+          ? 'Вход в аккаунт устарел, обновить сессию не удалось. Войдите заново — данные фракции на месте.'
+          : esc(e.message)}</div>
+      <div style="font-size:10px;color:var(--t4);opacity:.7;font-family:monospace;max-width:360px;text-align:center;word-break:break-all;line-height:1.5">
+        токен: ${isAnon ? '<b style="color:#e08a8a">АНОНИМНЫЙ</b>' : 'есть'}${
+        diag.sub ? `<br>sub(сервер): ${esc(diag.sub)}` : ''}${
+        diag.uid ? `<br>user.id(клиент): ${esc(diag.uid)}` : ''}${
+        diag.exp ? `<br>истёк: ${esc(diag.exp)}` : ''}${
+        noApp && !isAnon ? '<br><span style="color:#e08a8a">сервер: анкета под этим sub не найдена</span>' : ''}
+      </div>
+      <button class="btn btn-gd" onclick="(typeof showAuth==='function'?showAuth('login'):go('home',false))">Войти заново</button>
       <button class="btn btn-gh" onclick="go('economy',false)">↺ Повторить</button>
     </div></div>`);
   }

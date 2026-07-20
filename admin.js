@@ -242,7 +242,7 @@ function adPaint() {
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
     const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
-    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', (AD.multiacc && Array.isArray(AD.multiacc)) ? AD.multiacc.length : null]];
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -1902,40 +1902,68 @@ async function adMarketLoad() {
 
 // ── Мультиакк: отчёт по совпадениям IP/отпечатков ────────────────────────────
 async function adMultiaccLoad() {
-  try { AD.multiacc = await adRpc('admin_multiacc_report'); }
+  try { AD.multiacc = await adRpc('admin_access_overview'); }
   catch (e) { AD.multiacc = { error: e.message }; }
   adPaint();
 }
+// Цвета групп: каждому общему ключу (IP/отпечатку) — свой стабильный оттенок,
+// чтобы «кто с кем» читалось глазами мгновенно, без сопоставления строк.
+const AD_MA_HUES = [0, 35, 90, 190, 265, 310, 55, 160, 225, 340];
+function _adMaHue(key) {
+  let h = 0; const s = String(key || '');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return AD_MA_HUES[h % AD_MA_HUES.length];
+}
 function adMultiaccPanel() {
   const d = AD.multiacc;
-  const head = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-    <div style="font-family:var(--font-display,sans-serif);font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t2,#c3d3e0)">🕵 Подозрение на мультиаккаунты</div>
-    <button class="btn btn-gh btn-sm" onclick="AD.multiacc=null;adMultiaccLoad()">↻ Обновить</button></div>`;
+  const head = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <div style="font-family:var(--font-display,sans-serif);font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t2,#c3d3e0)">🕵 Журнал доступа — все игроки</div>
+    <button class="btn btn-gh btn-sm" onclick="AD.multiacc=null;adMultiaccLoad()">↻ Обновить</button>
+    <label style="font-size:12px;opacity:.8;display:flex;align-items:center;gap:5px;cursor:pointer">
+      <input type="checkbox" ${AD.maOnlySusp ? 'checked' : ''} onchange="AD.maOnlySusp=this.checked;adPaint()"> только совпадения</label></div>`;
   if (!d) return head + `<div class="sload" style="min-height:80px"><div class="pulse-loader"></div></div>`;
   if (d.error) return head + `<div style="color:#ff7a7a;padding:12px;border:1px solid #ff7a7a;border-radius:8px">Ошибка: ${esc(d.error)}<br><span style="opacity:.7;font-size:12px">Применён ли _access_log.sql и задеплоена ли функция log-access?</span></div>`;
-  if (!Array.isArray(d) || !d.length) return head + `<div style="opacity:.7;padding:12px">Совпадений не найдено. Журнал наполняется по мере входов игроков — если только что развернули, подождите, пока подозрительные аккаунты снова зайдут.</div>`;
-  const rows = d.map(c => {
-    const who = (c.who || []).map(w => `<div style="font-size:12px">${esc(w.email || w.uid)}</div>`).join('');
-    const badge = c.kind === 'ip'
-      ? `<span style="color:#ffb454">IP</span> <code style="font-size:12px">${esc(c.key)}</code>`
-      : `<span style="color:#7ad0ff">устройство</span> <code style="font-size:11px;opacity:.7">${esc((c.key||'').slice(0,16))}</code>`;
-    const sev = c.accounts >= 3 ? '#ff5555' : '#ffb454';
-    return `<tr>
-      <td style="padding:8px 10px;border-bottom:1px solid var(--w2,#2a3340)">${badge}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid var(--w2,#2a3340);text-align:center"><b style="color:${sev};font-size:15px">${c.accounts}</b></td>
-      <td style="padding:8px 10px;border-bottom:1px solid var(--w2,#2a3340)">${who}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid var(--w2,#2a3340);font-size:11px;opacity:.7">${esc((c.last_seen||'').replace('T',' ').slice(0,16))}</td>
+  if (!Array.isArray(d) || !d.length) return head + `<div style="opacity:.7;padding:12px">Пользователей не найдено.</div>`;
+
+  const susp = d.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2);
+  const noData = d.filter(r => !r.ip && !r.fp).length;
+  const list = AD.maOnlySusp ? susp : d;
+
+  const cell = (v, shared, isIp) => {
+    if (!v) return `<span style="opacity:.35">—</span>`;
+    const txt = isIp ? esc(v) : esc(String(v).slice(0, 10));
+    if ((shared || 0) < 2) return `<code style="font-size:12px;opacity:.75">${txt}</code>`;
+    const hue = _adMaHue(v);
+    return `<code style="font-size:12px;padding:2px 7px;border-radius:5px;font-weight:700;`
+      + `background:hsla(${hue},70%,50%,.18);color:hsl(${hue},80%,68%);border:1px solid hsla(${hue},70%,55%,.5)">`
+      + `${txt} <span style="opacity:.85">×${shared}</span></code>`;
+  };
+
+  const rows = list.map(r => {
+    const max = Math.max(r.ip_shared || 0, r.fp_shared || 0);
+    const flag = max >= 3 ? '🚨' : (max >= 2 ? '⚠️' : '');
+    const bg = max >= 2 ? `background:hsla(${_adMaHue(r.ip_shared >= 2 ? r.ip : r.fp)},70%,50%,.06)` : '';
+    const dt = s => esc(String(s || '').replace('T', ' ').slice(0, 16)) || '—';
+    return `<tr style="${bg}">
+      <td style="padding:7px 10px;border-bottom:1px solid var(--w2,#2a3340);font-size:12px">${flag} ${esc(r.email || r.uid)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--w2,#2a3340)">${cell(r.ip, r.ip_shared, true)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--w2,#2a3340)">${cell(r.fp, r.fp_shared, false)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--w2,#2a3340);font-size:11px;opacity:.7;text-align:center">${r.visits || 0}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--w2,#2a3340);font-size:11px;opacity:.7">${dt(r.registered)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--w2,#2a3340);font-size:11px;opacity:.7">${dt(r.last_access)}</td>
     </tr>`;
   }).join('');
-  return head
-    + `<div style="opacity:.65;font-size:12px;margin-bottom:10px">Общий IP или устройство ≠ 100% вина (семья, один Wi-Fi, мобильный NAT). Но ≥3 аккаунтов на одном ключе — почти наверняка мультиакк. Отпечаток сбрасывается в инкогнито — доверяйте прежде всего IP.</div>`
+
+  const th = t => `<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--t3,#8aa0b0);white-space:nowrap">${t}</th>`;
+  const summary = `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:12px">
+      <span>Всего: <b>${d.length}</b></span>
+      <span style="color:${susp.length ? '#ffb454' : 'inherit'}">С совпадениями: <b>${susp.length}</b></span>
+      <span style="opacity:.6">Ещё не заходили после включения журнала: <b>${noData}</b></span></div>`;
+  return head + summary
+    + `<div style="opacity:.6;font-size:12px;margin-bottom:10px">Одинаковым цветом помечены аккаунты, делящие один IP или одно устройство; ×N — сколько всего аккаунтов на этом ключе. Общий IP ≠ 100% вина (семья, один Wi-Fi, мобильный NAT), но ⚠️ от двух — повод смотреть, 🚨 от трёх — почти наверняка мультиакк.</div>`
     + `<div class="fm-table-wrap" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
-        <thead><tr style="text-align:left">
-          <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--t3,#8aa0b0)">Общий ключ</th>
-          <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--t3,#8aa0b0);text-align:center">Аккаунтов</th>
-          <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--t3,#8aa0b0)">Кто</th>
-          <th style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--t3,#8aa0b0)">Последний вход</th>
-        </tr></thead><tbody>${rows}</tbody></table></div>`;
+        <thead><tr style="text-align:left">${th('Игрок')}${th('IP')}${th('Устройство')}${th('Входов')}${th('Регистрация')}${th('Последний вход')}</tr></thead>
+        <tbody>${rows}</tbody></table></div>`;
 }
 
 // ── Новости игроков: лента всех публикаций + нейро-вердикты ───────────────────
