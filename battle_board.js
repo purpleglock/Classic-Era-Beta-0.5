@@ -30,6 +30,10 @@ const BB = {
   place: [],         // фаза расстановки: [{unit_id, unit_name, cls, x, y}]
   poll: null,        // таймер опроса (ход противника)
   busy: false,
+  spr: {},           // кэш спрайтов кораблей: cls_side → canvas
+  tex: {},           // кэш текстур корпуса: cls → Image|null (null = грузится/нет)
+  stars: null,       // офскрин-звёздное небо (пересобирается при ресайзе)
+  raf: null,         // цикл анимации (дрейф звёзд, пульс дюз)
 };
 
 // Палитра: держим в одном месте, чтобы доска не расползлась по цветам.
@@ -39,6 +43,7 @@ const BB_C = {
   gridHi: 'rgba(90,200,230,0.22)',
   mine:   '90,220,240',    // циан — свои
   foe:    '255,60,130',    // маджента — чужие
+  grid2:  'rgba(90,200,230,0.05)',   // сетка в космосе — едва заметная разметка тактического сканера
   move:   'rgba(90,220,240,0.16)',
   fire:   'rgba(255,60,130,0.20)',
   zoneA:  'rgba(90,220,240,0.07)',
@@ -65,7 +70,8 @@ function bbClose() {
   const ov = document.getElementById('bb-ov');
   if (ov) ov.classList.remove('show');
   document.body.style.overflow = '';
-  BB.id = null; BB.st = null; BB.cv = null; BB.ctx = null;
+  if (BB.raf) { cancelAnimationFrame(BB.raf); BB.raf = null; }
+  BB.id = null; BB.st = null; BB.cv = null; BB.ctx = null; BB.stars = null;
   // состав флотов мог измениться (потери) — обновим кабинет
   if (typeof ecReload === 'function') ecReload();
 }
@@ -121,7 +127,8 @@ function bbRender() {
       </div>
       <div class="bb-body">
         <div class="bb-boardw">
-          <canvas id="bb-cv" class="bb-cv"></canvas>
+          <div class="bb-cvw"><canvas id="bb-cv" class="bb-cv"></canvas></div>
+          <div class="bb-scroll-hint" id="bb-scroll-hint">⇄ доску можно листать пальцем</div>
           ${bbPhaseBar(s, myLeft, foeLeft)}
         </div>
         <aside class="bb-side">
@@ -268,17 +275,29 @@ function bbFit() {
   const bodyW = body ? body.clientWidth : (BB.cv.parentElement.clientWidth || 600);
   const sideW = (wide && side) ? (side.offsetWidth || 300) + 16 : 0;
   const availW = Math.max(200, bodyW - sideW - 4);
-  const availH = Math.max(240, window.innerHeight - (wide ? 210 : 320));
-  BB.cell = Math.max(16, Math.floor(Math.min(availW / s.w, availH / s.h)));
+  const availH = Math.max(240, window.innerHeight - (wide ? 190 : 320));
+  // Доска целиком влезает в экран (без скролла), но клетка не мельче минимума —
+  // иначе корпуса превращаются в мух. На телефоне минимум держим 26px (цель под
+  // палец): доска шире экрана и листается внутри .bb-cvw. Верхний кап, чтобы на
+  // большой доске клетки не раздувались до почтовых марок с гигантскими зазорами.
+  const minCell = wide ? 30 : 26;
+  const fit = Math.floor(Math.min(availW / s.w, availH / s.h));
+  BB.cell = Math.max(minCell, Math.min(Math.max(fit, 1), 54));
+  const hint = document.getElementById('bb-scroll-hint');
+  if (hint) hint.style.display = (!wide && BB.cell * s.w > availW) ? 'block' : 'none';
   BB.dpr = Math.min(2, window.devicePixelRatio || 1);
   const W = BB.cell * s.w, H = BB.cell * s.h;
   BB.cv.style.width = W + 'px'; BB.cv.style.height = H + 'px';
   BB.cv.width = Math.round(W * BB.dpr); BB.cv.height = Math.round(H * BB.dpr);
+  BB.stars = null;   // небо пересобирается под новый размер
 }
 function bbCellAt(ev) {
   const r = BB.cv.getBoundingClientRect();
-  const x = Math.floor((ev.clientX - r.left) / BB.cell);
-  const y = Math.floor((ev.clientY - r.top) / BB.cell);
+  // Канвас может быть визуально сжат CSS'ом (max-width на телефоне) —
+  // пересчитываем клик из экранных px в мировые, иначе тапы едут мимо клеток.
+  const k = r.width ? (BB.cv.width / BB.dpr) / r.width : 1;
+  const x = Math.floor((ev.clientX - r.left) * k / BB.cell);
+  const y = Math.floor((ev.clientY - r.top) * k / BB.cell);
   const s = BB.st;
   if (x < 0 || y < 0 || x >= s.w || y >= s.h) return null;
   return { x, y };
@@ -396,42 +415,104 @@ async function bbConfirmDeploy() {
 // ════════════════════════════════════════════════════════════
 // РЕНДЕР
 // ════════════════════════════════════════════════════════════
-function bbPaint() {
+function bbPaint(t) {
   const s = BB.st, ctx = BB.ctx; if (!s || !ctx) return;
   const C = BB.cell, W = s.w * C, H = s.h * C;
+  t = t || performance.now();
   ctx.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  // фон + виньетка
-  ctx.fillStyle = BB_C.bg; ctx.fillRect(0, 0, W, H);
-  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.15, W / 2, H / 2, Math.max(W, H) * 0.75);
-  g.addColorStop(0, 'rgba(30,80,110,0.16)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-
+  bbPaintSpace(ctx, s, C, W, H, t);
   bbPaintZones(ctx, s, C, W, H);
   bbPaintGrid(ctx, s, C, W, H);
   bbPaintHighlights(ctx, s, C);
-  bbPaintUnits(ctx, s, C);
+  bbPaintUnits(ctx, s, C, t);
   bbPaintScan(ctx, W, H);
+
+  // цикл анимации: медленный дрейф звёзд + пульс дюз. Один rAF на доску,
+  // гасится в bbClose. Троттлим до ~24 к/с — плавно и дёшево.
+  if (!BB.raf) {
+    let last = 0;
+    const loop = ts => {
+      BB.raf = null;
+      if (!BB.id || !BB.cv) return;
+      if (ts - last > 40) { last = ts; bbPaint(ts); }
+      else BB.raf = requestAnimationFrame(loop);
+    };
+    BB.raf = requestAnimationFrame(loop);
+  }
 }
 
-// Зоны разворачивания — заливка со стороны каждого края.
+// ── КОСМОС: глубокий фон, два слоя звёзд с параллакс-дрейфом, туманности ──
+// Звёзды генерируются один раз в офскрин (шире доски), дрейф — сдвигом drawImage.
+function bbPaintSpace(ctx, s, C, W, H, t) {
+  ctx.fillStyle = '#020409'; ctx.fillRect(0, 0, W, H);
+  if (!BB.stars || BB.stars.W !== W || BB.stars.H !== H) bbBuildStars(W, H);
+  const st = BB.stars;
+  // дальний слой ползёт медленнее ближнего — параллакс даёт глубину
+  const o1 = (t * 0.0016) % st.far.width, o2 = (t * 0.004) % st.near.width;
+  ctx.drawImage(st.far, -o1, 0); ctx.drawImage(st.far, st.far.width - o1, 0);
+  ctx.drawImage(st.near, -o2, 0); ctx.drawImage(st.near, st.near.width - o2, 0);
+  // туманности: холодная у зоны циана, тёплая у зоны мадженты + ядро по центру
+  const meAtt = s.my_side === 'attacker';
+  const neb = (x, y, r, rgb, a) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${rgb},${a})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  };
+  neb(W * 0.12, H * 0.7, H * 0.9, meAtt ? BB_C.mine : BB_C.foe, 0.05);
+  neb(W * 0.88, H * 0.25, H * 0.9, meAtt ? BB_C.foe : BB_C.mine, 0.05);
+  neb(W * 0.5, H * 0.5, H * 0.75, '80,60,160', 0.05);
+  // виньетка — прижимает края
+  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.8);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+function bbBuildStars(W, H) {
+  // Офскрины строим в CSS-размере: drawImage идёт поверх setTransform(dpr),
+  // так что 1px офскрина = 1 CSS-px доски. Дальнему плану лёгкая мягкость к лицу.
+  const mkCss = (n, rMax, aMax) => {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    for (let i = 0; i < n; i++) {
+      const r = Math.random() * rMax + 0.3, a = Math.random() * aMax + 0.1;
+      // холодная гамма с редкими тёплыми звёздами — живее, но без салата
+      const col = Math.random() < 0.12 ? '255,214,170' : Math.random() < 0.4 ? '160,220,255' : '225,238,248';
+      x.fillStyle = `rgba(${col},${a})`;
+      x.beginPath(); x.arc(Math.random() * W, Math.random() * H, r, 0, 6.2832); x.fill();
+    }
+    return c;
+  };
+  const density = W * H / 1000;
+  BB.stars = { W, H, far: mkCss(Math.round(density * 0.9), 0.8, 0.35), near: mkCss(Math.round(density * 0.25), 1.5, 0.7) };
+}
+
+// Зоны разворачивания — градиент от края + светящаяся кромка, а не плоский прямоугольник.
 function bbPaintZones(ctx, s, C, W, H) {
   const meAtt = s.my_side === 'attacker';
-  ctx.fillStyle = meAtt ? BB_C.zoneA : BB_C.zoneD;
-  ctx.fillRect(0, 0, C * 3, H);
-  ctx.fillStyle = meAtt ? BB_C.zoneD : BB_C.zoneA;
-  ctx.fillRect(W - C * 3, 0, C * 3, H);
+  const zone = (x0, wpx, rgb, flip) => {
+    const g = ctx.createLinearGradient(flip ? x0 + wpx : x0, 0, flip ? x0 : x0 + wpx, 0);
+    g.addColorStop(0, `rgba(${rgb},0.10)`); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(x0, 0, wpx, H);
+    const ex = flip ? x0 : x0 + wpx;   // кромка зоны — тонкая неоновая линия
+    ctx.strokeStyle = `rgba(${rgb},0.35)`; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(ex + 0.5, 0); ctx.lineTo(ex + 0.5, H); ctx.stroke();
+  };
+  zone(0, C * 3, meAtt ? BB_C.mine : BB_C.foe, false);
+  zone(W - C * 3, C * 3, meAtt ? BB_C.foe : BB_C.mine, true);
 }
 
 function bbPaintGrid(ctx, s, C, W, H) {
+  // Сетка — разметка тактического сканера, не таблица: тонкая, каждая третья чуть ярче.
   ctx.lineWidth = 1;
   for (let x = 0; x <= s.w; x++) {
-    ctx.strokeStyle = (x % 3 === 0) ? BB_C.gridHi : BB_C.grid;
+    ctx.strokeStyle = (x % 3 === 0) ? BB_C.grid : BB_C.grid2;
     ctx.beginPath(); ctx.moveTo(x * C + 0.5, 0); ctx.lineTo(x * C + 0.5, H); ctx.stroke();
   }
   for (let y = 0; y <= s.h; y++) {
-    ctx.strokeStyle = (y % 3 === 0) ? BB_C.gridHi : BB_C.grid;
+    ctx.strokeStyle = (y % 3 === 0) ? BB_C.grid : BB_C.grid2;
     ctx.beginPath(); ctx.moveTo(0, y * C + 0.5); ctx.lineTo(W, y * C + 0.5); ctx.stroke();
   }
   // клетка под курсором
@@ -476,52 +557,208 @@ function bbPaintHighlights(ctx, s, C) {
   }
 }
 
-function bbPaintUnits(ctx, s, C) {
+function bbPaintUnits(ctx, s, C, t) {
   // расставляемые (ещё не на сервере) — полупрозрачные
   if (s.status === 'forming') {
-    BB.place.forEach(p => bbShip(ctx, C, p.x, p.y, p.cls, BB_C.mine, 1, 1, false, 0.55));
+    BB.place.forEach(p => bbShip(ctx, C, p.x, p.y, p.cls, p.unit_name, true, 1, 0, false, 0.55, t));
   }
   (s.units || []).forEach(u => {
-    const col = u.mine ? BB_C.mine : BB_C.foe;
     const done = u.mine && s.my_turn && u.moved && u.fired;
-    bbShip(ctx, C, u.x, u.y, u.cls, col, u.hp / u.max_hp,
-           u.max_shield > 0 ? u.shield / u.max_shield : 0, u.id === BB.sel, done ? 0.45 : 1);
+    bbShip(ctx, C, u.x, u.y, u.cls, u.name, u.mine, u.hp / u.max_hp,
+           u.max_shield > 0 ? u.shield / u.max_shield : 0, u.id === BB.sel, done ? 0.5 : 1, t);
   });
 }
 
-// Силуэт корабля: клин, повёрнутый к врагу. Габарит = класс.
-// Никаких спрайтов — вектор, чтобы доска не зависела от картинок.
-function bbShip(ctx, C, gx, gy, cls, col, hpFrac, shFrac, selected, alpha) {
+// ── Спрайт корабля: настоящий корпус из конструктора ────────────────
+// Силуэт класса (CN_HULL_PROFILES) + текстура обшивки (ship_class/ship_armortex),
+// неоновый кант стороны, дюзовое свечение. Рисуется ОДИН раз в офскрин на класс×
+// сторону×наличие-текстуры и кэшируется — в кадре только drawImage + живые дюзы.
+const BB_SPL = 240;   // px корпуса вдоль оси в спрайте (до dpr); нос смотрит вправо
+// Геометрия корпуса — ТА ЖЕ, что на верфи: станции CN_SHIP_GEO[cls].st ([y, полуширина]
+// нос→корма, ось x=160). Пропорции не искажаем — корабль длинный и узкий, как в конструкторе.
+function bbGeo(cls) {
+  if (typeof CN_SHIP_GEO !== 'undefined') {
+    if (CN_SHIP_GEO[cls]) return CN_SHIP_GEO[cls];
+    if (CN_SHIP_GEO.destroyer) return CN_SHIP_GEO.destroyer;
+  }
+  // конструктор не загружен — простой клин с теми же пропорциями
+  return { st: [[0, 0], [40, 16], [170, 40], [250, 30], [300, 20]], engine: [160, 300], maxHW: 40 };
+}
+// Универсальный загрузчик картинки: null = грузится, false = нет файла, Image = готово.
+// Как только картинка приходит — сбрасываем кэш спрайтов (пересоберутся с текстурой).
+function bbImg(path) {
+  if (path in BB.tex) return BB.tex[path];
+  BB.tex[path] = null;
+  const img = new Image();
+  img.onload = () => { BB.tex[path] = img; BB.spr = {}; };
+  img.onerror = () => { BB.tex[path] = false; };
+  img.src = path;
+  return null;
+}
+// Первая готовая из списка путей (как cnFirstImg в конструкторе). null пока грузятся.
+function bbFirstImg(paths) {
+  let pending = false;
+  for (const p of paths) { const r = bbImg(p); if (r) return r; if (r === null) pending = true; }
+  return pending ? null : false;
+}
+// Подобрать сохранённый проект под боевой юнит (по имени) → узнаём подкласс/декор,
+// чтобы взять ТУ ЖЕ текстуру, что в конструкторе. EC.designs может быть не загружен — тогда null.
+function bbDesignOf(name, cls) {
+  const ds = (typeof EC !== 'undefined' && EC.designs) || [];
+  const clsOf = d => d && d.data && d.data.class;
+  return ds.find(d => d && d.category === 'ship' && d.name === name && (clsOf(d) === cls || !cls))
+      || ds.find(d => d && d.category === 'ship' && d.name === name) || null;
+}
+// Ключ спрайта: класс + подкласс + сторона. Один спрайт на связку, кэшируется.
+function bbShipKey(cls, tIdx, side) { return cls + '.' + (tIdx == null ? '-' : tIdx) + '.' + side; }
+
+// Спрайт корпуса: силуэт класса + ПОЛНЫЙ стек текстур конструктора
+// (тело ship_type/ship_class, обшивка ship_armortex, декор ship_decor) + неон стороны.
+function bbSprite(cls, tIdx, side) {
+  const key = bbShipKey(cls, tIdx, side);
+  const col = side === 'mine' ? BB_C.mine : BB_C.foe;
+  const G = 'assets/constructors/';
+  const gen = kind => G + 'ship_' + kind + '.webp';
+  const cp = (kind, a, b) => G + 'ship_' + kind + '_' + a + (b != null ? '_' + b : '') + '.webp';
+  // те же приоритеты файлов, что в cnDrawShip: подкласс → класс → общий
+  const body  = bbFirstImg([tIdx != null ? cp('type', cls, tIdx) : null, cp('class', cls), gen('class')].filter(Boolean));
+  const armor = bbFirstImg([cp('armortex', cls), gen('armortex')]);
+  const decor = bbFirstImg([tIdx != null ? cp('decor', cls, tIdx) : null, cp('decor', cls), gen('decor')].filter(Boolean));
+  // Пока текстуры грузятся — отдаём временный спрайт без кэша (пересоберётся, когда придут).
+  const ready = body !== null && armor !== null && decor !== null;
+  if (ready && BB.spr[key]) return BB.spr[key];
+
+  const H = bbGeo(cls);
+  const tip = Math.min(...H.st.map(p => p[0]));
+  const stern = H.engine ? H.engine[1] : Math.max(...H.st.map(p => p[0]));
+  const L = stern - tip, halfB = H.maxHW || Math.max(...H.st.map(p => p[1]));
+  const padL = 30, padR = 10, padY = 8;          // слева запас под факел дюз
+  const k = BB_SPL / L;                           // констр.единицы → px спрайта
+  const SW = Math.round(padL + BB_SPL + padR);
+  const SH = Math.round(halfB * 2 * k + padY * 2);
+  const cyS = SH / 2;
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(SW * BB.dpr); cv.height = Math.round(SH * BB.dpr);
+  cv._geo = { padL, SW, SH, hullW: BB_SPL };      // для позиционирования на доске
+  const x = cv.getContext('2d');
+
+  // Силуэт по станциям (как cnStPath на верфи), в координатах конструктора (нос вверх).
+  const outline = wf => {
+    const R2 = H.st.map(p => [160 + p[1] * wf, p[0]]), L2 = H.st.slice().reverse().map(p => [160 - p[1] * wf, p[0]]);
+    return 'M' + R2.concat(L2).map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + 'Z';
+  };
+  const path = new Path2D(outline(1));
+  // пояс брони: кольцо силуэт ↔ внутренний контур 0.55 (как cnBeltClip на верфи)
+  const belt = new Path2D(outline(1) + ' ' + outline(0.55));
+  // Конструктор (нос вверх) → спрайт (нос вправо): sx = padL+(stern−y)·k, sy = cyS+(xc−160)·k
+  const T = () => { x.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0); x.transform(0, k, -k, 0, padL + stern * k, cyS - 160 * k); };
+  const R = () => x.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);   // обычные px спрайта
+
+  // ФАКЕЛ ДЮЗ у кормы — клинья, как на верфи (запекаем; живой пульс добавляется поверх)
+  R();
+  [[0, 1], [-0.6, 0.72], [0.6, 0.72]].forEach(([oy, sc2]) => {
+    const yj = cyS + oy * halfB * k * 0.5, fl = 24 * sc2;
+    const fg = x.createLinearGradient(padL + 2, 0, padL - fl, 0);
+    fg.addColorStop(0, `rgba(${col},0.8)`); fg.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = fg;
+    x.beginPath();
+    x.moveTo(padL + 2, yj - 3 * sc2); x.lineTo(padL + 2, yj + 3 * sc2); x.lineTo(padL - fl, yj);
+    x.closePath(); x.fill();
+  });
+
+  // тень-подложка (отрывает корабль от космоса)
+  T();
+  x.save(); x.shadowColor = 'rgba(0,0,0,0.7)'; x.shadowBlur = 10; x.fillStyle = '#0a0f16'; x.fill(path); x.restore();
+
+  // ТЕЛО: стек текстур конструктора, обрезанный по силуэту. Текстуры кладутся
+  // горизонтально (нос вправо) на полный габарит корпуса — как на верфи.
+  x.save(); T(); x.clip(path);
+  R();
+  const bx0 = padL, by0 = cyS - halfB * k, bw = BB_SPL, bh = halfB * 2 * k;
+  x.fillStyle = '#10161d'; x.fillRect(bx0 - 2, by0 - 2, bw + 4, bh + 4);   // база под полупрозрачные текстуры
+  if (body)  x.drawImage(body,  bx0, by0, bw, bh);
+  if (!body && !armor) {                                                    // совсем нет файлов — графит
+    const g = x.createLinearGradient(0, by0, 0, by0 + bh);
+    g.addColorStop(0, `rgba(${col},0.40)`); g.addColorStop(0.5, `rgba(${col},0.18)`); g.addColorStop(1, 'rgba(6,10,16,0.9)');
+    x.fillStyle = g; x.fillRect(bx0, by0, bw, bh);
+  }
+  x.fillStyle = `rgba(${col},0.06)`; x.fillRect(bx0, by0, bw, bh);          // едва заметный оттенок стороны
+  // объём цилиндра: свет по верхнему борту, тень по нижнему
+  const lg = x.createLinearGradient(0, by0, 0, by0 + bh);
+  lg.addColorStop(0, 'rgba(255,255,255,0.14)'); lg.addColorStop(0.5, 'rgba(255,255,255,0)'); lg.addColorStop(1, 'rgba(0,0,0,0.45)');
+  x.fillStyle = lg; x.fillRect(bx0, by0, bw, bh);
+  x.restore();
+
+  // ПОЯС БРОНИ: обшивка лежит ТОЛЬКО по бортам (кольцо силуэт↔внутренний контур),
+  // палуба в центре остаётся тёмной — ровно как на верфи (cnBeltClip, evenodd).
+  if (armor) {
+    x.save(); T(); x.clip(belt, 'evenodd');
+    R();
+    x.globalAlpha = 0.85; x.drawImage(armor, bx0, by0, bw, bh); x.globalAlpha = 1;
+    x.restore();
+  }
+  // ДЕКОР (эмблемы/полосы/надписи — «декали») — поверх всего корпуса, в клипе силуэта
+  if (decor) {
+    x.save(); T(); x.clip(path);
+    R();
+    x.drawImage(decor, bx0, by0, bw, bh);
+    x.restore();
+  }
+
+  // Кромка как на верфи (серый контур) + неон-гало цвета стороны для опознания
+  T();
+  x.lineJoin = 'round';
+  x.strokeStyle = `rgba(${col},0.30)`; x.lineWidth = 4.5 / k; x.stroke(path);
+  x.strokeStyle = 'rgba(207,214,221,0.85)'; x.lineWidth = 1.4 / k; x.stroke(path);
+  R();
+
+  if (ready) BB.spr[key] = cv;
+  return cv;
+}
+
+// Рисуем корабль в клетке: живые дюзы под кораблём, затем спрайт, кольцо выбора, полоски HP/щита.
+function bbShip(ctx, C, gx, gy, cls, name, isMine, hpFrac, shFrac, selected, alpha, t) {
   const s = BB.st;
   const cx = gx * C + C / 2, cy = gy * C + C / 2;
-  const k = bbClsSize(cls) * C * 0.5;
-  // свои смотрят вправо, чужие влево (нападающий всегда слева)
-  const dir = (col === BB_C.mine) === (s.my_side === 'attacker') ? 1 : -1;
+  const col = isMine ? BB_C.mine : BB_C.foe;
+  // свои смотрят к врагу (нападающий всегда слева)
+  const dir = isMine === (s.my_side === 'attacker') ? 1 : -1;
+  // подкласс из сохранённого проекта (если EC.designs под рукой) — для той же текстуры
+  const dsn = bbDesignOf(name, cls);
+  const tIdx = dsn && dsn.data && dsn.data.type != null ? dsn.data.type : null;
+  const spr = bbSprite(cls, tIdx, isMine ? 'mine' : 'foe');
+  const g = spr._geo;
+  // длина корпуса в клетках растёт с классом; пропорции — верфевые (узкий и длинный)
+  const len = C * (0.92 + bbClsSize(cls) * 0.75);
+  const sc = len / g.hullW, dw = g.SW * sc, dh = g.SH * sc;
 
   ctx.save();
   ctx.globalAlpha = alpha;
 
+  // ДЮЗЫ: живой пульс у кормы поверх запечённого факела.
+  const pulse = 0.55 + 0.45 * Math.sin((t || 0) * 0.006 + gx * 1.3 + gy * 0.7);
+  const stern = cx - dir * len * 0.5, fr = C * (0.09 + 0.07 * pulse);
+  const fg = ctx.createRadialGradient(stern, cy, 0, stern, cy, fr * 2.4);
+  fg.addColorStop(0, `rgba(${col},${0.5 * pulse})`); fg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(stern, cy, fr * 2.4, 0, 6.2832); ctx.fill();
+
   if (selected) {   // кольцо выбора
     ctx.strokeStyle = `rgba(${col},0.9)`; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(cx, cy, C * 0.46, 0, 6.2832); ctx.stroke();
+    ctx.setLineDash([4, 4]); ctx.lineDashOffset = -(t || 0) * 0.02;
+    ctx.beginPath(); ctx.arc(cx, cy, C * 0.48, 0, 6.2832); ctx.stroke();
+    ctx.setLineDash([]);
   }
 
-  // корпус
-  ctx.beginPath();
-  ctx.moveTo(cx + dir * k, cy);
-  ctx.lineTo(cx - dir * k * 0.7, cy - k * 0.62);
-  ctx.lineTo(cx - dir * k * 0.35, cy);
-  ctx.lineTo(cx - dir * k * 0.7, cy + k * 0.62);
-  ctx.closePath();
-  ctx.fillStyle = `rgba(${col},0.18)`; ctx.fill();
-  ctx.strokeStyle = `rgba(${col},0.95)`; ctx.lineWidth = 1.6; ctx.stroke();
-  // неон-гало
-  ctx.globalAlpha = alpha * 0.22; ctx.lineWidth = 5; ctx.stroke();
-  ctx.globalAlpha = alpha;
+  // спрайт корпуса (нос вправо → зеркалим для смотрящих влево)
+  ctx.translate(cx, cy);
+  if (dir < 0) ctx.scale(-1, 1);
+  ctx.drawImage(spr, -(g.padL + g.hullW / 2) * sc, -dh / 2, dw, dh);
+  ctx.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);   // сброс зеркала перед полосками
 
   // полоски состояния под корпусом
-  const bw = C * 0.72, bx = cx - bw / 2, by = cy + C * 0.34;
-  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(bx, by, bw, 3);
+  const bw = C * 0.68, bx = cx - bw / 2, by = cy + Math.max(C * 0.30, dh / 2 + 5);
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx, by, bw, 3);
   ctx.fillStyle = hpFrac > 0.5 ? `rgba(${col},0.95)` : hpFrac > 0.25 ? 'rgba(255,190,70,0.95)' : 'rgba(255,70,70,0.95)';
   ctx.fillRect(bx, by, bw * Math.max(0, Math.min(1, hpFrac)), 3);
   if (shFrac > 0) {

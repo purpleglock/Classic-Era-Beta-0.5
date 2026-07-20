@@ -104,6 +104,41 @@ Deno.serve(async (req) => {
     return json({ error: String(e) }, 500);
   }
 
+  // Снять редакторскую разметку (BBCode/FX/markdown) — порт fnStripMarkup из faction_news.js,
+  // чтобы в превью не светились коды вроде [fx:schizo], [img:URL], **жирный**, ## и т.п.
+  function stripMarkup(s: unknown): string {
+    let t = String(s ?? "").replace(/\r/g, "");
+    t = t.replace(/\[fx:schizo\][\s\S]*?\[\/fx\]/gi, " ");
+    t = t.replace(/\[lock:[^\]\n]*\][\s\S]*?\[\/lock\]/gi, " 🔒 ");
+    t = t.replace(/\[spoiler:[^\]\n]*\]([\s\S]*?)\[\/spoiler\]/gi, "$1");
+    t = t.replace(/\[music:[^\]]*\]/gi, " 🎵 ");
+    t = t.replace(/https?:\/\/(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be|soundcloud\.com|music\.yandex\.[a-z]+)\/\S+/gi, " 🎵 ");
+    t = t.replace(/\[img:[^\]]*\]/gi, " ");
+    t = t.replace(/https?:\/\/\S+\.(?:jpe?g|png|gif|webp|avif|svg)(?:\?\S*)?/gi, " ");
+    t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, " ");
+    t = t.replace(/\[\/?(?:center|left|right|c|bg|fx)(?::[^\]]*)?\]/gi, " ");
+    t = t.replace(/\[fac:[^\]|]+(?:\|[^\]]*)?\]([\s\S]*?)\[\/fac\]/gi, "$1");
+    t = t.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1");
+    t = t.replace(/^[ \t]*#{1,6}[ \t]+/gm, "");
+    t = t.replace(/^[ \t]*>[ \t]?/gm, "");
+    t = t.replace(/^[ \t]*[-*+][ \t]+/gm, "");
+    t = t.replace(/^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$/gm, " ");
+    t = t.replace(/(\*\*|__)([\s\S]*?)\1/g, "$2");
+    t = t.replace(/(\*|_)([\s\S]*?)\1/g, "$2");
+    t = t.replace(/`([^`]*)`/g, "$1");
+    return t.replace(/\s+/g, " ").trim();
+  }
+
+  // Обрезать текст до maxSent предложений (и maxChars символов), добавив «…» при усечении.
+  function sentClip(s: string, maxSent: number, maxChars: number): string {
+    const parts = s.match(/[^.!?…]+[.!?…]+(?:\s|$)|[^.!?…]+$/g) ?? [];
+    let out = parts.slice(0, maxSent).join("").trim();
+    const cut = parts.length > maxSent;
+    if (out.length > maxChars) out = out.slice(0, maxChars).replace(/\S*$/, "").trim() + "…";
+    else if (cut) out += " …";
+    return out;
+  }
+
   async function vk(method: string, params: Record<string, string>) {
     const res = await fetch(`https://api.vk.com/method/${method}`, {
       method: "POST",

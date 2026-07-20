@@ -254,26 +254,29 @@ create trigger battle_lock_fleet before update on public.fleets
 -- ── 6) Сводка боёв для клиента ───────────────────────────────
 -- Полный состав/ходы отдаёт срез 4; здесь — минимум, чтобы кабинет и
 -- карта могли показать «идёт бой» сразу после наката этого файла.
+-- ⚠ Переменная НЕ должна называться fid: battle_fleets.fid делает ссылку
+--   неоднозначной («column reference "fid" is ambiguous»), и функция падает,
+--   как только у фракции появляется первый бой.
 create or replace function public.battles_mine()
 returns jsonb language plpgsql volatile security definer set search_path=public as $$
-declare fid text;
+declare v_fid text;
 begin
-  fid := public._ec_my_fid();
-  perform public._fleet_settle(fid);   -- бои завязываются лениво, при обращении
+  v_fid := public._ec_my_fid();
+  perform public._fleet_settle(v_fid);   -- бои завязываются лениво, при обращении
   return coalesce((
     select jsonb_agg(jsonb_build_object(
       'id', b.id, 'system_id', b.system_id,
       'system_name', (select coalesce(nullif(ms.name,''), ms.id) from public.map_systems ms where ms.id = b.system_id),
       'status', b.status, 'kind', b.kind,
-      'my_side', case when b.attacker_fid = fid then 'attacker' else 'defender' end,
-      'foe', case when b.attacker_fid = fid then b.defender_fid else b.attacker_fid end,
-      'foe_name', public._war_nm(case when b.attacker_fid = fid then b.defender_fid else b.attacker_fid end),
+      'my_side', case when b.attacker_fid = v_fid then 'attacker' else 'defender' end,
+      'foe', case when b.attacker_fid = v_fid then b.defender_fid else b.attacker_fid end,
+      'foe_name', public._war_nm(case when b.attacker_fid = v_fid then b.defender_fid else b.attacker_fid end),
       'my_fleets', (select coalesce(jsonb_agg(jsonb_build_object('id', f.id, 'name', f.name)), '[]'::jsonb)
                     from public.battle_fleets bf join public.fleets f on f.id = bf.fleet_id
-                    where bf.battle_id = b.id and bf.fid = fid),
+                    where bf.battle_id = b.id and bf.fid = v_fid),
       'created_at', b.created_at) order by b.created_at desc)
     from public.battles b
-    where b.status <> 'done' and (b.attacker_fid = fid or b.defender_fid = fid)
+    where b.status <> 'done' and (b.attacker_fid = v_fid or b.defender_fid = v_fid)
   ), '[]'::jsonb);
 end$$;
 revoke all on function public.battles_mine() from public;
