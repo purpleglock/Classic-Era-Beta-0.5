@@ -256,19 +256,27 @@ function _browserFingerprint() {
 async function logAccess() {
   try {
     if (typeof user === 'undefined' || !user || !user.id) return;
-    const key = 'wk_alog_' + user.id;
-    const last = parseInt(localStorage.getItem(key) || '0', 10);
-    if (Date.now() - last < 6 * 3600 * 1000) return;   // не чаще раза в 6 ч
+    // Ключи с суффиксом v2: старые метки (их ставила версия с багом — до запроса,
+    // т.е. и при неудаче) должны быть проигнорированы, иначе журнал молчал бы 6 ч.
+    const key = 'wk_alog2_' + user.id;         // время последней УСПЕШНОЙ записи
+    const tkey = 'wk_alogtry2_' + user.id;     // время последней попытки
+    const now = Date.now();
+    if (now - parseInt(localStorage.getItem(key) || '0', 10) < 6 * 3600 * 1000) return;  // раз в 6 ч
+    if (now - parseInt(localStorage.getItem(tkey) || '0', 10) < 5 * 60 * 1000) return;   // бэкофф 5 мин
     const token = await getTokenFresh();
-    if (!token || token === SB_ANON) return;           // только реальная сессия
-    // ставим метку ДО запроса — даже при сетевой ошибке не будем долбить сервер
-    localStorage.setItem(key, String(Date.now()));
-    await fetch(LOG_ACCESS_URL, {
+    if (!token || token === SB_ANON) return;   // только реальная сессия
+    // Метку попытки ставим сразу (не долбим сервер), а «успешную» 6-часовую —
+    // ТОЛЬКО если запись реально прошла. Иначе неудача замораживала бы журнал
+    // на 6 часов, и он выглядел бы как «не обновляется».
+    localStorage.setItem(tkey, String(now));
+    const r = await fetch(LOG_ACCESS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: SB_ANON, Authorization: 'Bearer ' + token },
       body: JSON.stringify({ fp: _browserFingerprint() }),
     });
-  } catch (e) { /* журнал — best-effort, вход не ломаем */ }
+    if (r.ok) localStorage.setItem(key, String(now));
+    else console.warn('[access-log] не записалось:', r.status, await r.text().catch(() => ''));
+  } catch (e) { console.warn('[access-log] ошибка:', e && e.message); }
 }
 
 async function restoreSession() {

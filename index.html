@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260720authdiag1';
+  var BUILD = '20260720multiacc2';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -436,7 +436,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- <script src="starfield.js?v=20260607a"></script> -->
 <script src="core.js?v=20260707mmtouch"></script>
-<script src="auth.js?v=20260720multiacc1"></script>
+<script src="auth.js?v=20260720multiacc2"></script>
 <script src="data.js?v=20260720hotspot1"></script>
 <script src="armor_system.js?v=20260607a"></script>
 	<script src="weapon_system.js?v=20260607a"></script>
