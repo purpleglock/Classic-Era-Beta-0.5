@@ -196,6 +196,7 @@ async function init() {
       // того же пользователя по id.
       const prevUid = user && user.id;
       await loadUserRole(session.user); loadProfile(); updAuthUI();
+      logAccess();   // журнал доступа (антимультиакк), троттлится внутри
       const sameUser = prevUid && user && prevUid === user.id;
       if (sameUser) {
         // Тот же пользователь: тихо обновляем данные в фоне, но НЕ перерисовываем
@@ -222,10 +223,58 @@ async function init() {
   });
 }
 
+// ── Журнал доступа (антимультиакк) ──────────────────────────────
+// Реальный IP пишет Edge Function `log-access` на сервере; отсюда шлём только
+// лёгкий отпечаток браузера (canvas+screen+tz) как дополнительный признак.
+// Троттлинг: не чаще раза в 6 ч на пользователя, чтобы не спамить журнал при
+// каждом фокусе вкладки / обновлении токена.
+const LOG_ACCESS_URL = SB_URL + '/functions/v1/log-access';
+function _browserFingerprint() {
+  try {
+    const parts = [
+      navigator.userAgent, navigator.language, (navigator.languages || []).join(','),
+      screen.width + 'x' + screen.height + 'x' + (screen.colorDepth || ''),
+      new Date().getTimezoneOffset(), navigator.hardwareConcurrency || '',
+      navigator.deviceMemory || '', navigator.platform || '',
+    ];
+    // лёгкий canvas-отпечаток (без внешних либ)
+    try {
+      const c = document.createElement('canvas');
+      const ctx = c.getContext('2d');
+      ctx.textBaseline = 'top'; ctx.font = '14px Arial';
+      ctx.fillStyle = '#f60'; ctx.fillRect(0, 0, 60, 20);
+      ctx.fillStyle = '#069'; ctx.fillText('mALtiacc✦', 2, 2);
+      parts.push(c.toDataURL().slice(-64));
+    } catch (e) {}
+    // FNV-1a 32-бит → короткий стабильный хеш
+    let h = 0x811c9dc5;
+    const s = parts.join('|');
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return (h >>> 0).toString(16).padStart(8, '0');
+  } catch (e) { return ''; }
+}
+async function logAccess() {
+  try {
+    if (typeof user === 'undefined' || !user || !user.id) return;
+    const key = 'wk_alog_' + user.id;
+    const last = parseInt(localStorage.getItem(key) || '0', 10);
+    if (Date.now() - last < 6 * 3600 * 1000) return;   // не чаще раза в 6 ч
+    const token = await getTokenFresh();
+    if (!token || token === SB_ANON) return;           // только реальная сессия
+    // ставим метку ДО запроса — даже при сетевой ошибке не будем долбить сервер
+    localStorage.setItem(key, String(Date.now()));
+    await fetch(LOG_ACCESS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SB_ANON, Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ fp: _browserFingerprint() }),
+    });
+  } catch (e) { /* журнал — best-effort, вход не ломаем */ }
+}
+
 async function restoreSession() {
   try {
     const { data: { session } } = await sb.auth.getSession();
-    if (session?.user) { await loadUserRole(session.user); loadProfile(); }
+    if (session?.user) { await loadUserRole(session.user); loadProfile(); logAccess(); }
   } catch(e) {
   } finally {
     // Страховка: снять экран загрузки в любом исходе. Если сессии не оказалось
