@@ -114,6 +114,8 @@ begin
     end loop;
   end if;
   -- корабли (по имени модели) — передача владения
+  -- ВАЖНО: сохраняем unit_id (id чертежа), иначе переданный корабль не проходит
+  -- фильтры формирования флота (unit_id=…) и назначения в караван (join faction_units).
   if p_assets ? 'ships' then
     select owner_id into to_owner from public.faction_applications
       where faction_id=p_to and status='approved' order by updated_at desc limit 1;
@@ -123,17 +125,21 @@ begin
         where faction_id=p_from and category='ship' and status='done' and unit_name=nm;
       if have < q then raise exception 'not enough ships: %', nm; end if;
       remain := q;
-      for r in select id, qty from public.unit_production
+      for r in select id, qty, unit_id from public.unit_production
         where faction_id=p_from and category='ship' and status='done' and unit_name=nm order by created_at asc loop
         exit when remain <= 0;
         if r.qty <= remain then
-          delete from public.unit_production where id=r.id; remain := remain - r.qty;
+          delete from public.unit_production where id=r.id;
+          insert into public.unit_production (faction_id, owner_id, unit_id, unit_name, category, line, qty, status, ready_at, created_at)
+            values (p_to, to_owner, r.unit_id, nm, 'ship', 'shipyard', r.qty, 'done', now(), now());
+          remain := remain - r.qty;
         else
-          update public.unit_production set qty=qty-remain where id=r.id; remain := 0;
+          update public.unit_production set qty=qty-remain where id=r.id;
+          insert into public.unit_production (faction_id, owner_id, unit_id, unit_name, category, line, qty, status, ready_at, created_at)
+            values (p_to, to_owner, r.unit_id, nm, 'ship', 'shipyard', remain, 'done', now(), now());
+          remain := 0;
         end if;
       end loop;
-      insert into public.unit_production (faction_id, owner_id, unit_name, category, line, qty, status, ready_at, created_at)
-        values (p_to, to_owner, nm, 'ship', 'shipyard', q, 'done', now(), now());
     end loop;
   end if;
 end$$;
