@@ -243,7 +243,7 @@ returns int language sql stable security definer set search_path=public as $$
   left join public.faction_units u on u.id = nullif(c->>'unit_id','')::uuid
   where f.id = p_fleet
 $$;
-revoke all on function public._fleet_aa_count(text) from public;
+revoke all on function public._fleet_aa_count(uuid) from public;
 
 -- ── 7) Выбить N кораблей из состава флота (пропорционально) ──
 -- Возвращает сколько реально выбито. Пустой флот удаляется.
@@ -455,6 +455,142 @@ begin
 end$$;
 revoke all on function public._fleet_settle(text) from public;
 
+-- ── 11) ДРОНЫ В БОЮ: залп в конце каждого хода ───────────────
+-- Пост дронов в системе боя работает за свою сторону: в КОНЦЕ ХОДА крылья
+-- бьют по живым кораблям противника. ПРО противника связывает крылья ровно
+-- так же, как при пролёте (drone_aa_per_wing стволов «Зенитное» = 1 крыло),
+-- и связанные крылья сбиваются насовсем. Урон одного крыла = drone_wing_dmg,
+-- цели выбираются случайно, по одному крылу на цель. Пост сам не сбивается
+-- боем: он тратится только на связанные ПРО крылья.
+create or replace function public._hazard_const_dmg()
+returns numeric language sql immutable as $$ select 900::numeric $$;   -- урон крыла за ход
+
+-- Стволы ПРО у стороны в бою (по проектам живых кораблей)
+create or replace function public._bt_side_aa(p_battle uuid, p_side text)
+returns int language sql stable security definer set search_path=public as $$
+  select coalesce(sum(
+    coalesce((select sum(greatest(1, coalesce((w->>'q')::int, 1)))
+                from jsonb_array_elements(coalesce(u.data->'weapons','[]'::jsonb)) w
+               where w->>'g' = 'Зенитное'), 0)
+  ), 0)::int
+  from public.battle_units bu
+  left join public.faction_units u on u.id = bu.unit_id
+  where bu.battle_id = p_battle and bu.side = p_side and bu.alive
+$$;
+revoke all on function public._bt_side_aa(uuid,text) from public;
+
+create or replace function public._bt_drone_strike(p_battle uuid)
+returns void language plpgsql security definer set search_path=public as $$
+declare b public.battles; dp record; foe_side text; aa int; bound int; eff int;
+        t record; dmg numeric; absorbed numeric; hull numeric; i int;
+begin
+  select * into b from public.battles where id = p_battle;
+  if b.id is null or b.status <> 'active' then return; end if;
+
+  for dp in select * from public.system_drone_posts
+             where system_id = b.system_id and wings > 0
+               and faction_id in (b.attacker_fid, b.defender_fid)
+  loop
+    foe_side := case when dp.faction_id = b.attacker_fid then 'defender' else 'attacker' end;
+    aa    := public._bt_side_aa(p_battle, foe_side);
+    bound := least(dp.wings, floor(aa / public._hazard_const('drone_aa_per_wing'))::int);
+    eff   := dp.wings - bound;
+    if bound > 0 then
+      update public.system_drone_posts set wings = wings - bound where id = dp.id;
+      perform public._bt_log(p_battle, format('ПРО сбивает %s крыл. дронов поста «%s»',
+        bound, public._war_nm(dp.faction_id)));
+    end if;
+    if eff <= 0 then continue; end if;
+
+    for i in 1..eff loop
+      select * into t from public.battle_units
+        where battle_id = p_battle and side = foe_side and alive
+        order by random() limit 1;
+      exit when t.id is null;
+      dmg      := public._hazard_const_dmg();
+      absorbed := least(t.shield, dmg);
+      hull     := greatest(0, (dmg - absorbed) - t.armor);
+      update public.battle_units
+         set shield = t.shield - absorbed,
+             hp = greatest(0, t.hp - hull),
+             alive = (t.hp - hull) > 0
+       where id = t.id;
+      perform public._bt_log(p_battle, format('🛸 Крыло дронов «%s» → %s: %s урона%s',
+        public._war_nm(dp.faction_id), t.unit_name, round(absorbed + hull),
+        case when (t.hp - hull) <= 0 then ' — цель уничтожена' else '' end));
+    end loop;
+    delete from public.system_drone_posts where id = dp.id and wings <= 0;
+  end loop;
+
+  perform public._bt_check_end(p_battle);
+end$$;
+revoke all on function public._bt_drone_strike(uuid) from public;
+
+-- battle_end_turn — НАДМНОЖЕСТВО _war_battle.sql + залп дронов в конце хода
+create or replace function public.battle_end_turn(p_battle uuid)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare me text; b public.battles; sd text; nxt text;
+begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  me := public._ec_my_fid();
+  b  := public._bt_require_turn(p_battle, me);
+  sd := b.side_to_move;
+
+  if sd = 'attacker' then
+    update public.battles set att_turns_left = greatest(0, att_turns_left - 1) where id = p_battle;
+  else
+    update public.battles set def_turns_left = greatest(0, def_turns_left - 1) where id = p_battle;
+  end if;
+
+  -- ⛯ дроны отрабатывают ДО передачи хода — «в конце хода»
+  perform public._bt_drone_strike(p_battle);
+
+  nxt := case when sd = 'attacker' then 'defender' else 'attacker' end;
+  update public.battle_units set moved = false, fired = false
+   where battle_id = p_battle and side = nxt;
+  update public.battles
+     set side_to_move = nxt, turn_no = turn_no + 1,
+         deadline_at = now() + (public._bt_turn_hours() || ' hours')::interval
+   where id = p_battle;
+
+  perform public._bt_check_end(p_battle);
+  return jsonb_build_object('ok', true);
+end$$;
+
+-- battle_force_turn — то же самое для сгоревшего хода
+create or replace function public.battle_force_turn(p_battle uuid)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare me text; b record; sd text; nxt text;
+begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  me := public._ec_my_fid();
+  select * into b from public.battles where id = p_battle for update;
+  if b.id is null then raise exception 'no such battle'; end if;
+  if b.status <> 'active' then raise exception 'бой не идёт'; end if;
+  sd := public._bt_side(p_battle, me);
+  if sd is null then raise exception 'вы не участвуете в этом бою'; end if;
+  if b.side_to_move = sd then raise exception 'это ваш собственный ход'; end if;
+  if b.deadline_at is null or b.deadline_at > now() then
+    raise exception 'срок хода противника ещё не вышел';
+  end if;
+
+  if b.side_to_move = 'attacker' then
+    update public.battles set att_turns_left = greatest(0, att_turns_left - 1) where id = p_battle;
+  else
+    update public.battles set def_turns_left = greatest(0, def_turns_left - 1) where id = p_battle;
+  end if;
+  perform public._bt_drone_strike(p_battle);
+  nxt := case when b.side_to_move = 'attacker' then 'defender' else 'attacker' end;
+  update public.battle_units set moved = false, fired = false where battle_id = p_battle and side = nxt;
+  update public.battles
+     set side_to_move = nxt, turn_no = turn_no + 1,
+         deadline_at = now() + (public._bt_turn_hours() || ' hours')::interval
+   where id = p_battle;
+  perform public._bt_log(p_battle, 'Сторона не явилась к сроку — ход сгорел.');
+  perform public._bt_check_end(p_battle);
+  return jsonb_build_object('ok', true);
+end$$;
+
 -- ── Проверка ────────────────────────────────────────────────
 -- 1) Планетарные поля исчезли, ГС вернулись (hexes × 1000 за поле).
 -- 2) sysmine_lay без присутствия → exception; со своим флотом в системе — ок.
@@ -464,3 +600,5 @@ revoke all on function public._fleet_settle(text) from public;
 -- 4) У Б пост дронов 4 крыла; во флоте А 0 стволов «Зенитное» → потери 20..100%.
 --    Во флоте А ≥24 стволов ПРО → все крылья связаны, потерь нет, пост тает.
 -- 5) Без войны всё пролетает молча.
+-- 6) Бой в системе с постом дронов: в конце каждого хода в журнале боя строки
+--    «🛸 Крыло дронов … → …», при большом ПРО противника — «ПРО сбивает N крыл.».

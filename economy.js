@@ -4018,55 +4018,14 @@ function ecColonyManage(c) {
       ${(typeof user !== 'undefined' && user && ['superadmin','editor','moderator'].includes(user.role))
         ? `<button class="btn btn-gh btn-sm" onclick="ecRenameColony('${c.id}',${ecArg(c.planet_name || '')})" title="Переименовать планету (стафф, бесплатно)">✎ Имя</button>`
         : `<button class="btn btn-gh btn-sm" onclick="ecRenameColonyPaid('${c.id}',${ecArg(c.planet_name || '')})" title="Переименовать планету за ${EC_RENAME_COST} ГС">✎ Имя · ${EC_RENAME_COST} ГС</button>`}
-      ${ecMineButton(c)}
       <button class="btn btn-gh btn-sm ec-danger" onclick="ecAbandon('${c.id}')" title="Бросить колонию">✕ Бросить</button>
     </div>`;
 }
 
-// Минное поле у планеты колонии — застраивается ГЕКС ЗА ГЕКСОМ (зеркало
-// _defense_minefield.sql). Каждый клик «+гекс» закрывает ещё один гекс кольца
-// вокруг планеты за EC_MINE_HEX_COST; полное поле — EC_MINE_HEX_MAX гексов.
-// Никакой кнопки «заминировать всё сразу»: поле растёт по одному гексу.
-const EC_MINE_HEX_COST = 1000;
-const EC_MINE_HEX_MAX = 6;
-function ecMyMinefield(c) {
-  return (EC.minefields || []).find(m => m.mine && m.system_id === c.system_id &&
-    (m.planet_pid == null || c.planet_pid == null || +m.planet_pid === +c.planet_pid));
-}
-function ecMineButton(c) {
-  const mf = ecMyMinefield(c);
-  const hexes = mf ? Math.min(+mf.hexes || 0, +mf.hex_max || EC_MINE_HEX_MAX) : 0;
-  const hexMax = mf ? (+mf.hex_max || EC_MINE_HEX_MAX) : EC_MINE_HEX_MAX;
-  const pidArg = c.planet_pid == null ? 'null' : c.planet_pid;
-  const layBtn = hexes >= hexMax
-    ? `<button class="btn btn-gh btn-sm" disabled title="Поле полностью застроено">⛯ Поле полное · ${hexes}/${hexMax}</button>`
-    : `<button class="btn btn-gh btn-sm" onclick="ecMineLay('${c.system_id}',${pidArg})" title="Закрыть ещё один гекс минами">⛯ +гекс мин (${hexes}/${hexMax}) · ${ecNum(EC_MINE_HEX_COST)} ГС</button>`;
-  const clearBtn = mf
-    ? `<button class="btn btn-gh btn-sm" onclick="ecMineClear('${mf.id}')" title="Снять поле (возврат ~50% за гекс)">⛯ Снять поле</button>` : '';
-  return layBtn + clearBtn;
-}
-async function ecMineLay(sysId, pid) {
-  if (EC.busy) return;
-  if ((EC.eco.gc || 0) < EC_MINE_HEX_COST) { toast(`Нужно ${ecNum(EC_MINE_HEX_COST)} ГС`, 'err'); return; }
-  EC.busy = true;
-  try {
-    const r = await ecRpc('minefield_lay', { p_system_id: sysId, p_pid: pid });
-    toast(`Гекс заминирован · ${r && r.hexes || ''}/${r && r.hex_max || EC_MINE_HEX_MAX} · −${ecNum(EC_MINE_HEX_COST)} ГС`, 'ok');
-    await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
-  finally { EC.busy = false; }
-}
-async function ecMineClear(id) {
-  if (EC.busy) return;
-  if (!confirm('Снять минное поле целиком? Вернётся ~50% за каждый гекс.')) return;
-  EC.busy = true;
-  try {
-    const r = await ecRpc('minefield_clear', { p_id: id });
-    toast(`Поле снято · +${ecNum(r && r.refund || 0)} ГС`, 'ok');
-    await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
-  finally { EC.busy = false; }
-}
+// Мины у планет вырезаны реворком заграждений: минируется СИСТЕМА целиком,
+// и ставится это с карты (панель системы → «Заграждения системы»), потому что
+// право на установку даёт присутствие в системе, а не колония на планете.
+// EC.minefields по-прежнему грузится — счётчик в Обзоре считает заряды.
 
 // Переименование планеты/колонии — через единый источник истины (colonies + map_systems).
 // Стафф — бесплатно (rename_colony). Игрок-владелец — платно (colony_rename_paid, 500 ГС).

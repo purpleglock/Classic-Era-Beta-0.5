@@ -74,7 +74,7 @@ function gmCtlBtns(opts) {
         ${row('outposts', GM.showOutposts, GM_ICO.outpost, 'Аванпосты', 'gmToggleOutposts()')}
         ${row('fleets', GM.showFleets, GM_ICO.fleeticon, 'Флоты', 'gmToggleFleets()')}
         ${row('armies', GM.showArmies, GM_ICO.march, 'Звёздный марш', 'gmToggleArmies()')}
-        ${row('mines', GM.showMines, GM_ICO.mines, 'Минные поля', 'gmToggleMines()')}
+        ${row('mines', GM.showMines, GM_ICO.mines, 'Заграждения', 'gmToggleMines()')}
         ${tools.length ? `<div class="gm-ctl-sec">Инструменты</div>${tools.join('')}` : ''}
         <div class="gm-ctl-sec">Вид</div>
         <div class="gm-ctl-viewrow">
@@ -169,7 +169,7 @@ function gmExitEdit() {
 // ── Загрузка данных ─────────────────────────────────────────
 async function loadGalaxyData() {
   try {
-    const [sys, lanes, facs, secs, routes, econ, salvos, mines, outposts, opShips, mzaShips, fleets, fleetsVis, mzaVis, armies] = await Promise.all([
+    const [sys, lanes, facs, secs, routes, econ, salvos, mines, drones, outposts, opShips, mzaShips, fleets, fleetsVis, mzaVis, armies] = await Promise.all([
       dbGet('map_systems', 'select=*'),
       dbGet('map_hyperlanes', 'select=*'),
       dbGet('map_factions', 'select=*&order=sort.asc'),
@@ -185,6 +185,7 @@ async function loadGalaxyData() {
       // RPC требуют авторизации и фракции игрока → для гостей/без фракции вернут
       // ошибку, а если _defense_*.sql ещё не применён — функции нет. Везде → [].
       user ? apiFetch('rpc/minefields_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
+      user ? apiFetch('rpc/droneposts_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       user ? apiFetch('rpc/outposts_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       user ? apiFetch('rpc/outpost_ships_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       user ? apiFetch('rpc/mza_ships_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
@@ -202,7 +203,8 @@ async function loadGalaxyData() {
     GM.factions = facs || [];
     GM.routes = routes || [];
     GM.salvos = salvos || [];   // залпы артиллерии в полёте (для визуализации на карте)
-    GM.minefields = Array.isArray(mines) ? mines : [];        // оборона: минные поля (гексы)
+    GM.minefields = Array.isArray(mines) ? mines : [];        // оборона: минные заграждения систем (заряды)
+    GM.droneposts = Array.isArray(drones) ? drones : [];      // оборона: посты дронов (крылья)
     GM.outposts = Array.isArray(outposts) ? outposts : [];  // оборона: развёрнутые аванпосты
     GM.opShips = Array.isArray(opShips) ? opShips : [];    // мои корабли-носители аванпостов (idle/в полёте)
     GM.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];  // мои Гиперпейсер — мобильные «Длани» (idle/в полёте)
@@ -1707,20 +1709,27 @@ function gmOpenPanel(sys) {
   // ── Оборона: видимые мне минные поля/аванпосты/мои корабли в этой системе ──
   const defRows = [];
   const mByFac = new Map();
+  let myMines = 0, myMineMax = GM_SYSMINE_MAX;
   (GM.minefields || []).filter(m => m.system_id === sys.id).forEach(m => {
-    // не показываем мины уничтоженной («мёртвой») планеты, даже если строка в БД ещё жива
-    if (m.planet_pid != null) {
-      const pl = (sys.planets || []).find(p => +p.pid === +m.planet_pid);
-      if (pl && (pl.dead || pl.doomed)) return;
-    }
-    const e = mByFac.get(m.faction_id) || { hexes: 0, hexMax: +m.hex_max || 6, mine: false };
-    e.hexes += (+m.hexes || 0); e.hexMax = Math.max(e.hexMax, +m.hex_max || 6);
+    const e = mByFac.get(m.faction_id) || { hexes: 0, hexMax: +m.hex_max || GM_SYSMINE_MAX, mine: false };
+    e.hexes += (+m.hexes || 0); e.hexMax = Math.max(e.hexMax, +m.hex_max || GM_SYSMINE_MAX);
     e.mine = e.mine || !!m.mine; mByFac.set(m.faction_id, e);
+    if (m.mine) { myMines += (+m.hexes || 0); myMineMax = +m.hex_max || GM_SYSMINE_MAX; }
   });
   mByFac.forEach((e, fid) => {
     const f = gmFaction(fid); const c = f ? gmReadable(f.color) : 'rgba(255,120,90,.9)';
     const nm = f ? f.name : ((GM.facMeta && GM.facMeta[fid] && GM.facMeta[fid].name) || 'Неизвестно');
-    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:${c}"></span><span class="gm-col-nm">💣 Минное поле${e.mine ? ' · ваше' : ''}</span><span class="gm-col-ty">${esc(nm)} · ${Math.min(e.hexes, e.hexMax)}/${e.hexMax} гекс.</span></div>`);
+    const rm = e.mine ? `<button class="btn btn-gh btn-sm" style="padding:1px 7px;font-size:11px" onclick="gmSysMineClear('${sys.id}')" title="Снять (возврат ~50%)">снять</button>` : '';
+    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:${c}"></span><span class="gm-col-nm">💣 Мины системы${e.mine ? ' · ваши' : ''}</span><span class="gm-col-ty">${esc(nm)} · ${Math.min(e.hexes, e.hexMax)}/${e.hexMax} зар.</span>${rm}</div>`);
+  });
+  // посты дронов
+  let myWings = 0, myWingMax = GM_DRONE_MAX;
+  (GM.droneposts || []).filter(d => d.system_id === sys.id).forEach(d => {
+    const f = gmFaction(d.faction_id); const c = f ? gmReadable(f.color) : 'rgba(240,165,70,.9)';
+    const nm = f ? f.name : ((GM.facMeta && GM.facMeta[d.faction_id] && GM.facMeta[d.faction_id].name) || 'Неизвестно');
+    if (d.mine) { myWings = +d.wings || 0; myWingMax = +d.wing_max || GM_DRONE_MAX; }
+    const rm = d.mine ? `<button class="btn btn-gh btn-sm" style="padding:1px 7px;font-size:11px" onclick="gmDronePostScrap('${sys.id}')" title="Свернуть (возврат ~50%)">свернуть</button>` : '';
+    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:${c}"></span><span class="gm-col-nm">🛸 Пост дронов${d.mine ? ' · ваш' : ''}</span><span class="gm-col-ty">${esc(nm)} · ${+d.wings || 0}/${+d.wing_max || GM_DRONE_MAX} крыл.</span>${rm}</div>`);
   });
   (GM.outposts || []).filter(o => o.system_id === sys.id).forEach(o => {
     const f = gmFaction(o.faction_id); const c = f ? gmReadable(f.color) : 'rgba(150,200,245,.9)';
@@ -1742,8 +1751,23 @@ function gmOpenPanel(sys) {
   (GM.fleets || []).filter(fl => fl.status === 'idle' && fl.system_id === sys.id).forEach(fl => {
     defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:rgba(120,200,235,.9)"></span><span class="gm-col-nm">Флот${fl.name ? ': ' + esc(fl.name) : ''}</span><span class="gm-col-ty">${+fl.ships || 0} кор. · клик по значку слева</span></div>`);
   });
-  const defBlock = defRows.length
-    ? `<div class="gm-panel-sub">Оборона · ${defRows.length}</div><div class="gm-collist">${defRows.join('')}</div>` : '';
+  // ── Постройка заграждений: нужно присутствие в системе (зеркало _hazard_presence) ──
+  const hasPresence = !!(GM.myFid && (sys.faction === GM.myFid
+    || sysCols.some(c => c.faction_id === GM.myFid)
+    || (GM.fleets || []).some(fl => fl.status === 'idle' && fl.system_id === sys.id)));
+  const hazBlock = hasPresence ? `
+    <div class="gm-panel-sub">Заграждения системы</div>
+    <div class="gm-haz-acts">
+      <button class="btn btn-gh btn-sm" ${myMines >= myMineMax ? 'disabled title="Больше зарядов не встанет"' : ''}
+        onclick="gmSysMineLay('${sys.id}')" title="Минировать систему: при войне пролёт врага через неё почти наверняка кончится подрывом">
+        💣 +заряд мин (${myMines}/${myMineMax}) · ${GM_SYSMINE_COST.toLocaleString('ru')} ГС</button>
+      <button class="btn btn-gh btn-sm" ${myWings >= myWingMax ? 'disabled title="Пост полон"' : ''}
+        onclick="gmDronePostBuild('${sys.id}')" title="Крыло автономных дронов: рвёт флоты без ПРО и бьёт в конце каждого хода боя в этой системе">
+        🛸 +крыло дронов (${myWings}/${myWingMax}) · ${GM_DRONE_COST.toLocaleString('ru')} ГС</button>
+      <div class="gm-haz-hint">Дроны связываются вражеским ПРО: 6 зенитных стволов во флоте нейтрализуют одно крыло.</div>
+    </div>` : '';
+  const defBlock = (defRows.length
+    ? `<div class="gm-panel-sub">Оборона · ${defRows.length}</div><div class="gm-collist">${defRows.join('')}</div>` : '') + hazBlock;
   // Носитель аванпоста строится на Верфи в кабинете (как весь флот), не с карты —
   // здесь только управление уже построенным носителем (клик по самому носителю).
   panel.innerHTML = `
@@ -1774,8 +1798,9 @@ function gmDefRpc(fn, body) {
 async function gmReloadDefense(reopenSysId) {
   if (!user) return;
   try {
-    const [mines, outposts, ships, mzas, fleets, salvos, fleetsVis, mzaVis, armies] = await Promise.all([
+    const [mines, drones, outposts, ships, mzas, fleets, salvos, fleetsVis, mzaVis, armies] = await Promise.all([
       gmDefRpc('minefields_visible').catch(() => GM.minefields || []),
+      gmDefRpc('droneposts_visible').catch(() => GM.droneposts || []),
       gmDefRpc('outposts_visible').catch(() => GM.outposts || []),
       gmDefRpc('outpost_ships_mine').catch(() => GM.opShips || []),
       gmDefRpc('mza_ships_mine').catch(() => GM.mzaShips || []),
@@ -1787,6 +1812,7 @@ async function gmReloadDefense(reopenSysId) {
       gmDefRpc('armies_mine').catch(() => GM.armies || []),   // МАРШ
     ]);
     GM.minefields = Array.isArray(mines) ? mines : [];
+    GM.droneposts = Array.isArray(drones) ? drones : [];
     GM.outposts = Array.isArray(outposts) ? outposts : [];
     GM.opShips = Array.isArray(ships) ? ships : [];
     GM.mzaShips = Array.isArray(mzas) ? mzas : [];
@@ -1805,17 +1831,28 @@ async function gmReloadDefense(reopenSysId) {
   } catch (e) { /* тихо: оборона необязательна */ }
 }
 
-// Клик по минному гексу вокруг планеты: пустой → заложить (+гекс), занятый → снять.
-async function gmMineHexClick(h) {
-  if (GM._defBusy) return; GM._defBusy = true;
+// ── Заграждения СИСТЕМЫ (мины + посты дронов) ────────────────
+// Ставятся из панели системы. Право — присутствие: свой флаг на системе,
+// своя колония или стоящий там флот (сервер проверяет то же самое).
+const GM_SYSMINE_COST = 6000, GM_SYSMINE_MAX = 5;
+const GM_DRONE_COST = 9000, GM_DRONE_MAX = 12;
+async function gmHazardAct(fn, sysId, body, okMsg, confirmMsg) {
+  if (GM._defBusy) return;
+  if (confirmMsg && !confirm(confirmMsg)) return;
+  GM._defBusy = true;
   try {
-    const fn = h.filled ? 'minefield_unlay' : 'minefield_lay';
-    await gmDefRpc(fn, { p_system_id: h.sysId, p_pid: h.pid });
-    toast(h.filled ? 'Гекс разминирован' : 'Гекс заминирован', 'ok');
-    await gmReloadDefense(h.sysId);
+    await gmDefRpc(fn, Object.assign({ p_system_id: sysId }, body || {}));
+    toast(okMsg, 'ok');
+    await gmReloadDefense(sysId);
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
   finally { GM._defBusy = false; }
 }
+const gmSysMineLay = sysId => gmHazardAct('sysmine_lay', sysId, null, 'Заряд мин установлен');
+const gmSysMineClear = sysId => gmHazardAct('sysmine_clear', sysId, null, 'Система разминирована',
+  'Снять минные заграждения системы? Вернётся ~50% за каждый заряд.');
+const gmDronePostBuild = sysId => gmHazardAct('dronepost_build', sysId, null, 'Крыло дронов развёрнуто');
+const gmDronePostScrap = sysId => gmHazardAct('dronepost_scrap', sysId, null, 'Пост дронов свёрнут',
+  'Свернуть пост дронов? Вернётся ~50% за каждое крыло.');
 
 // Носитель аванпоста строится на Верфи в кабинете (ecOutpostBuildShip), не с карты.
 async function gmOutpostDismantleMap(id, sysId) {
@@ -3713,13 +3750,7 @@ function gmmTapAt(lx, ly) {
     else { gmCloseFleetCmd(); toast('Переброска отменена', ''); }
     return;
   }
-  // 1) ГЕКСЫ МИН вокруг планеты (глубокий зум): клик по гексу = заминировать/снять.
-  if (GMM.mineHex && GMM.mineHex.length) {
-    let best = null, bd = 1e9;
-    GMM.mineHex.forEach(h => { const d = Math.hypot(h.x - lx, h.y - ly); if (d < h.r && d < bd) { bd = d; best = h; } });
-    if (best) { gmMineHexClick(best); return; }
-  }
-  // 2) КЛИК ПО МОЕМУ НОСИТЕЛЮ → командная плашка (отправить / развернуть / списать).
+  // 1) КЛИК ПО МОЕМУ НОСИТЕЛЮ → командная плашка (отправить / развернуть / списать).
   if (GMM.shipHit && GMM.shipHit.length) {
     let best = null, bd = 1e9;
     // МАРШ: в режиме «Звёздный марш» армии в приоритете — их клик-зона внизу
@@ -4570,7 +4601,6 @@ function gmStarGlow(tp) { return GMM_STAR_GLOW[tp] || '255,210,150'; }
 // пояса — поле астероидов. У системы в фокусе (ближайшей к центру) — подписи планет.
 // Только для систем в кадре (отсев по вьюпорту) — стоимость ограничена.
 function gmmPaintOrbits(ctx) {
-  GMM.mineHex = [];                 // клик-зоны гексов мин (пересобираются каждый глубокий кадр)
   GMM.focusFx = null;               // геометрия системы в фокусе — для HUD-перехода (gmmPaintDeepFx)
   GMM.colonyXY = {};                // МАРШ: экранные позиции планет-колоний (colId → {x,y,r}) — армии магнитятся к ним
   const a = gmmDeepA();
@@ -4878,8 +4908,8 @@ function gmmPaintOrbits(ctx) {
       // МАРШ: запоминаем экранную позицию планеты-колонии — армии рисуются у неё, а не у звезды
       if (p.isColony && !isAnom && p.colId) GMM.colonyXY[p.colId] = { x: px, y: py, r: sz };
 
-      // ── минные ГЕКСЫ вокруг планеты (своя колония — кликабельны; чужое поле — показ) ──
-      if (GM.showMines && p.isColony && !isAnom && !p.dead && p.pid != null) gmmPlanetMineHexes(ctx, px, py, sz, TILT, a, p, sys);
+      // Мины у планет вырезаны: заграждения ставятся на СИСТЕМУ целиком
+      // (кольцо зарядов под звездой, панель системы).
 
       // ресурсы тела — плашка «перетекает» сюда со звезды по мере раскрытия системы
       if (GM.showRes && !p.dead) gmmPaintPlanetRes(ctx, px, py, sz, p, a);
@@ -5889,33 +5919,18 @@ function gmmPaintSalvos(ctx) {
 // Данные: minefields_visible()/outposts_visible() (свои + разведанные чужие) и
 // outpost_ships_mine() (МОИ корабли-носители — idle и в полёте). На карте — в
 // языке самой карты (как кольцо выбора/трафик), цвет = фракция владельца.
-//  • минное поле   → кольцо из hex_max гексов под звездой; первые `hexes` залиты
-//    (застроено минами), остальные — пустой контур. Видно, как поле растёт.
+//  • мины системы  → кольцо из max зарядов под звездой; первые `charges` залиты.
+//  • пост дронов   → узел с роем над звездой; точек = крыльев.
 //  • аванпост      → станция-ромб с антенной над звездой.
 //  • корабль idle  → значок носителя у звезды его системы.
 //  • корабль летит → носитель скользит по гиперпути from→dest (позиция по времени).
 function gmmBuildDefense() {
-  GMM.defense = { mines: [], outposts: [], ships: [] };
+  GMM.defense = { mines: [], outposts: [], ships: [], drones: [] };
   const byId = Object.fromEntries((GM.systems || []).map(s => [s.id, s]));
-  // минные поля → лукап по планете (system_id|pid) для гекс-кольца на глубоком зуме
-  // + агрегат по (система, фракция) для компактного значка на дальнем зуме.
-  GM.minefieldByPid = {};
+  // минные заграждения СИСТЕМЫ: агрегат по (система, фракция).
   const mAgg = new Map();
   (GM.minefields || []).forEach(m => {
     const sys = byId[m.system_id]; if (!sys) return;
-    // мёртвую планету (уничтоженную «Дланью») мин на карте не показываем —
-    // даже если строка в БД ещё не вычищена резолвером.
-    if (m.planet_pid != null) {
-      const pl = (sys.planets || []).find(p => +p.pid === +m.planet_pid);
-      if (pl && (pl.dead || pl.doomed)) return;
-    }
-    const fac = gmFaction(m.faction_id);
-    const col = fac ? gmRgb(fac.color) : [220, 90, 70];
-    if (m.planet_pid != null) {
-      GM.minefieldByPid[m.system_id + '|' + m.planet_pid] = {
-        hexes: +m.hexes || 0, hexMax: +m.hex_max || 6, mine: !!m.mine, col, faction_id: m.faction_id,
-      };
-    }
     const key = m.system_id + '|' + m.faction_id;
     let e = mAgg.get(key);
     if (!e) { e = { sys, fid: m.faction_id, mine: !!m.mine, hexes: 0, hexMax: +m.hex_max || 6 }; mAgg.set(key, e); }
@@ -5927,6 +5942,15 @@ function gmmBuildDefense() {
     const fac = gmFaction(e.fid);
     const col = fac ? gmRgb(fac.color) : [220, 90, 70];   // нет фракции → тревожный красный
     GMM.defense.mines.push({ sys: e.sys, col, hexes: Math.min(e.hexes, e.hexMax), hexMax: e.hexMax, mine: e.mine });
+  });
+  // посты дронов: по одному рою на (система, фракция).
+  (GM.droneposts || []).forEach(d => {
+    const sys = byId[d.system_id]; if (!sys) return;
+    const fac = gmFaction(d.faction_id);
+    GMM.defense.drones.push({
+      sys, col: fac ? gmRgb(fac.color) : [235, 150, 60],
+      wings: +d.wings || 0, mine: !!d.mine,
+    });
   });
   // развёрнутые аванпосты: по одному значку на (система, фракция).
   (GM.outposts || []).forEach(o => {
@@ -6051,48 +6075,6 @@ function gmmBuildDefense() {
   }
 }
 
-// Минные ГЕКСЫ вокруг конкретной планеты (глубокий зум). Полный круг из hexMax
-// гексов; первые `hexes` залиты (мины стоят). У СВОЕЙ колонии пустые гексы рисуем
-// пунктиром и регистрируем как клик-зоны (GMM.mineHex) — клик кладёт/снимает гекс.
-// У чужого поля показываем только залитые гексы (разведка), без клика.
-function gmmPlanetMineHexes(ctx, px, py, sz, TILT, a, p, sys) {
-  const mf = (GM.minefieldByPid || {})[sys.id + '|' + p.pid];
-  const mineable = !!(p.faction_id && GM.myFid && p.faction_id === GM.myFid);
-  if (!mineable && !mf) return;
-  const hexMax = mf ? mf.hexMax : 6;
-  const hexes = mf ? Math.min(mf.hexes, hexMax) : 0;
-  const myFac = GM.myFid ? gmFaction(GM.myFid) : null;
-  const col = mf ? mf.col : (myFac ? gmRgb(myFac.color) : [150, 210, 255]);
-  const [r, g, b] = col;
-  const R = sz * 2.7, hr = Math.max(2, sz * 0.52);
-  ctx.save(); ctx.lineJoin = 'round';
-  for (let i = 0; i < hexMax; i++) {
-    const ang = -Math.PI / 2 + i * (2 * Math.PI / hexMax);
-    const hx = px + Math.cos(ang) * R, hy = py + Math.sin(ang) * R * TILT;
-    const filled = i < hexes;
-    if (!filled && !mineable) continue;
-    ctx.beginPath();
-    for (let k = 0; k < 6; k++) {
-      const aa = Math.PI / 6 + k * Math.PI / 3;
-      const qx = hx + Math.cos(aa) * hr, qy = hy + Math.sin(aa) * hr * TILT;
-      if (k === 0) ctx.moveTo(qx, qy); else ctx.lineTo(qx, qy);
-    }
-    ctx.closePath();
-    if (filled) {
-      ctx.globalAlpha = a; ctx.fillStyle = `rgba(${r},${g},${b},0.5)`; ctx.fill();
-      ctx.strokeStyle = `rgba(${Math.min(255, r + 80)},${Math.min(255, g + 80)},${Math.min(255, b + 80)},0.9)`;
-      ctx.lineWidth = Math.max(0.6, hr * 0.16); ctx.stroke();
-    } else {
-      ctx.globalAlpha = a * 0.6; ctx.setLineDash([3, 3]);
-      ctx.strokeStyle = `rgba(${r},${g},${b},0.55)`; ctx.lineWidth = Math.max(0.5, hr * 0.14); ctx.stroke();
-      ctx.setLineDash([]);
-    }
-    ctx.globalAlpha = 1;
-    if (mineable) GMM.mineHex.push({ x: hx, y: hy, r: hr * 1.15, sysId: sys.id, pid: p.pid, idx: i, filled });
-  }
-  ctx.restore();
-}
-
 // Кольцо минных гексов (КОМПАКТНОЕ, дальний зум): hexMax шестиугольников веером под
 // звездой; первые `hexes` залиты. Используется, пока планеты ещё не раскрыты в орбиты.
 function gmmMineRing(ctx, cx, cy, rad, sq, col, hexes, hexMax, a) {
@@ -6102,6 +6084,35 @@ function gmmMineRing(ctx, cx, cy, rad, sq, col, hexes, hexMax, a) {
     const hx = cx + Math.cos(ang) * R, hy = cy + Math.sin(ang) * R * sq;
     gmmMineGlyph(ctx, hx, hy, rad, col, a, i < hexes);
   }
+}
+
+// Пост дронов: узел-треугольник и рой мелких машин вокруг него. Чем больше
+// крыльев, тем гуще рой (до wing_max) — опасность читается с одного взгляда.
+// sq — вертикальное сжатие карты (как у прочих глифов обороны).
+function gmmDroneSwarm(ctx, x, y, rad, sq, col, wings, a) {
+  const [r, g, b] = col;
+  const n = Math.max(1, Math.min(12, +wings || 1));
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  // узел-носитель
+  ctx.strokeStyle = `rgba(${Math.min(255, r + 70)},${Math.min(255, g + 70)},${Math.min(255, b + 70)},${a})`;
+  ctx.lineWidth = Math.max(0.7, rad * 0.18);
+  ctx.fillStyle = `rgba(${r},${g},${b},${a * 0.85})`;
+  ctx.beginPath();
+  ctx.moveTo(0, -rad * 0.62 * sq); ctx.lineTo(rad * 0.55, rad * 0.42 * sq);
+  ctx.lineTo(-rad * 0.55, rad * 0.42 * sq); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  // рой: по точке на крыло, кольцом вокруг узла
+  ctx.fillStyle = `rgba(${Math.min(255, r + 90)},${Math.min(255, g + 90)},${Math.min(255, b + 90)},${a})`;
+  for (let i = 0; i < n; i++) {
+    const ang = -Math.PI / 2 + i * (2 * Math.PI / n) + (n % 2 ? 0.25 : 0);
+    const rr = rad * (1.35 + (i % 2) * 0.35);
+    ctx.beginPath();
+    ctx.arc(Math.cos(ang) * rr, Math.sin(ang) * rr * sq, Math.max(0.7, rad * 0.16), 0, 6.2832);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 // Станция-аванпост: корпус-ромб с антенной-«тарелкой» и двумя солнечными панелями.
@@ -6399,16 +6410,26 @@ function gmmPaintDefense(ctx) {
   ctx.save();
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
-  // ── Минные поля: КОМПАКТНОЕ кольцо гексов под звездой (только на дальнем зуме).
-  // На глубоком зуме гексы рисуются вокруг самих планет в gmmPaintOrbits. ──
-  if (!deep && GM.showMines) D.mines.forEach(d => {
+  // ── Минные заграждения СИСТЕМЫ: кольцо зарядов под звездой. Мины больше не
+  // привязаны к планетам, поэтому кольцо рисуется на любом зуме. ──
+  if (GM.showMines) D.mines.forEach(d => {
     const tX = SX(d.sys.x), tY = SY(d.sys.y);
     if (!onScreen(tX, tY)) return;
     const ip = gmmIconPx(d.sys, s);
     const R = ip * 0.62 + 6;
-    const hr = Math.max(1.4, ip * 0.11) * zf;            // размер одной мины
+    const hr = Math.max(1.4, ip * 0.11) * zf;            // размер одного заряда
     const a = d.mine ? 0.85 : 0.6;                       // чужие чуть бледнее
     gmmMineRing(ctx, tX, tY + R * 0.62 * sq, hr, sq, d.col, d.hexes, d.hexMax, a);
+  });
+
+  // ── Посты дронов: рой точек над звездой, гуще с числом крыльев ──
+  if (GM.showMines) (D.drones || []).forEach(d => {
+    const tX = SX(d.sys.x), tY = SY(d.sys.y);
+    if (!onScreen(tX, tY)) return;
+    const ip = gmmIconPx(d.sys, s);
+    const R = ip * 0.62 + 6;
+    gmmDroneSwarm(ctx, tX, tY - R * 1.25 * sq, Math.max(2.2, ip * 0.22) * zf, sq,
+      d.col, d.wings, d.mine ? 0.9 : 0.62);
   });
 
   // ── Аванпосты: станция над звездой ── (можно скрыть тоглом)
