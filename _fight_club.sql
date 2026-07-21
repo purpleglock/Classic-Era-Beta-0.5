@@ -98,29 +98,16 @@ begin
 end$$;
 revoke all on function public._fc_news(text,text,jsonb) from public;
 
--- ── Старт дуэли: выбор пары, кораблей, авто-расстановка ─────
-create or replace function public._fc_start(p_event uuid)
-returns void language plpgsql security definer set search_path=public as $$
-declare ev record; picked text[]; da text; db text;
-        sa record; sb record; bid uuid; sys text;
+-- ── Спавнер дуэли: корабли, доска, авто-расстановка ─────────
+-- Общая часть боевого круга клуба И админского тестового боя.
+create or replace function public._fc_spawn_duel(da text, db text)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare sa record; sb record; bid uuid; sys text;
         ca int; cb int; sta jsonb; stb jsonb; i int;
         w int := public._bt_w(); h int := public._bt_h();
-        ya int; yb int; npc numeric;
+        ya int; yb int;
 begin
-  select * into ev from public.fc_events where id = p_event for update;
-  if ev.id is null or ev.status <> 'signup' then return; end if;
-
-  select array_agg(fid) into picked
-    from (select fid from public.fc_signups
-           where event_id = p_event order by random() limit 2) s;
-  if picked is null or array_length(picked,1) < 2 then
-    -- заявок меньше двух — продлеваем окно ещё на сутки
-    update public.fc_events
-       set signup_until = now() + (public._fc_signup_hours() || ' hours')::interval
-     where id = p_event;
-    return;
-  end if;
-  da := picked[1]; db := picked[2];
+  if da is null or db is null or da = db then raise exception 'нужны две разные державы'; end if;
 
   -- корабль А: случайный СВЕЖИЙ проект (любой фракции, обновлён с _fc_fresh_since)
   select fu.id, fu.name, coalesce((fu.summary->>'cost')::numeric, 0) as cost
@@ -206,20 +193,50 @@ begin
         coalesce((stb->>'interdict')::bool,false), coalesce((stb->>'stabil')::bool,false));
   end loop;
 
+  return jsonb_build_object('battle_id', bid,
+    'ship_a', sa.id, 'ship_b', sb.id,
+    'ship_a_name', sa.name, 'ship_b_name', sb.name,
+    'cnt_a', ca, 'cnt_b', cb);
+end$$;
+revoke all on function public._fc_spawn_duel(text,text) from public;
+
+-- ── Старт круга клуба: жребий пары + спавн + касса ──────────
+create or replace function public._fc_start(p_event uuid)
+returns void language plpgsql security definer set search_path=public as $$
+declare ev record; picked text[]; da text; db text; sp jsonb; npc numeric;
+begin
+  select * into ev from public.fc_events where id = p_event for update;
+  if ev.id is null or ev.status <> 'signup' then return; end if;
+
+  select array_agg(fid) into picked
+    from (select fid from public.fc_signups
+           where event_id = p_event order by random() limit 2) s;
+  if picked is null or array_length(picked,1) < 2 then
+    -- заявок меньше двух — продлеваем окно ещё на сутки
+    update public.fc_events
+       set signup_until = now() + (public._fc_signup_hours() || ' hours')::interval
+     where id = p_event;
+    return;
+  end if;
+  da := picked[1]; db := picked[2];
+
+  sp := public._fc_spawn_duel(da, db);
+
   -- ставка НПС: случайная, до 400 000 ГС, круглыми тысячами
   npc := (floor(random() * (public._fc_npc_max()/1000)) + 1) * 1000;
 
   update public.fc_events
      set status = 'live', duelist_a = da, duelist_b = db,
-         ship_a = sa.id, ship_b = sb.id,
-         ship_a_name = sa.name, ship_b_name = sb.name,
-         cnt_a = ca, cnt_b = cb, battle_id = bid, npc_bet = npc
+         ship_a = (sp->>'ship_a')::uuid, ship_b = (sp->>'ship_b')::uuid,
+         ship_a_name = sp->>'ship_a_name', ship_b_name = sp->>'ship_b_name',
+         cnt_a = (sp->>'cnt_a')::int, cnt_b = (sp->>'cnt_b')::int,
+         battle_id = (sp->>'battle_id')::uuid, npc_bet = npc
    where id = p_event;
 
   perform public._fc_news('🥊 Бойцовский клуб: дуэль началась',
     format('%s и %s сходятся в показательной дуэли. %s × «%s» против %s × «%s». Ставки открыты — кассы клуба принимают до %s ГС.',
-      public._war_nm(da), public._war_nm(db), ca, sa.name, cb, sb.name,
-      public._fc_bet_cap()::bigint),
+      public._war_nm(da), public._war_nm(db), sp->>'cnt_a', sp->>'ship_a_name',
+      sp->>'cnt_b', sp->>'ship_b_name', public._fc_bet_cap()::bigint),
     jsonb_build_array(da, db));
 end$$;
 revoke all on function public._fc_start(uuid) from public;
@@ -468,6 +485,62 @@ end$$;
 revoke all on function public.fc_watch_state(uuid) from public;
 grant execute on function public.fc_watch_state(uuid) to authenticated;
 
+-- ════════════════════════════════════════════════════════════
+-- 🧪 АДМИН: тестовая дуэль — ОТДЕЛЬНАЯ от сессии клуба.
+-- Один перезапускаемый бой: повторный вызов сносит старую доску
+-- (вместе с юнитами, каскадом) и разворачивает новую. Ставок/кассы
+-- нет — fc_events не трогается, сеттл клуба такой бой не видит.
+-- Смотреть можно как зрителем (fc_watch_state работает для любого
+-- kind='duel'), так и играть за стороны (обычные battle_*).
+-- ════════════════════════════════════════════════════════════
+create table if not exists public.fc_test_duel (
+  one       int primary key default 1 check (one = 1),   -- единственная строка
+  battle_id uuid references public.battles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+revoke all on public.fc_test_duel from anon, authenticated;
+
+create or replace function public.admin_test_duel(p_a text, p_b text)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare old uuid; sp jsonb;
+begin
+  if public.current_user_role() not in ('superadmin','editor') then
+    raise exception 'forbidden: staff only';
+  end if;
+  -- прежний тестовый бой сносим целиком (battle_units уходят каскадом)
+  select battle_id into old from public.fc_test_duel where one = 1;
+  if old is not null then delete from public.battles where id = old; end if;
+
+  sp := public._fc_spawn_duel(p_a, p_b);
+
+  insert into public.fc_test_duel(one, battle_id) values (1, (sp->>'battle_id')::uuid)
+    on conflict (one) do update set battle_id = excluded.battle_id, created_at = now();
+
+  return jsonb_build_object('ok', true, 'battle_id', sp->>'battle_id',
+    'ship_a_name', sp->>'ship_a_name', 'ship_b_name', sp->>'ship_b_name',
+    'cnt_a', sp->>'cnt_a', 'cnt_b', sp->>'cnt_b');
+end$$;
+revoke all on function public.admin_test_duel(text,text) from public;
+grant execute on function public.admin_test_duel(text,text) to authenticated;
+
+-- Текущий тестовый бой (для кнопки «Открыть доску» после перезагрузки админки)
+create or replace function public.admin_test_duel_state()
+returns jsonb language plpgsql stable security definer set search_path=public as $$
+declare t record; b record;
+begin
+  if public.current_user_role() not in ('superadmin','editor') then
+    raise exception 'forbidden: staff only';
+  end if;
+  select * into t from public.fc_test_duel where one = 1;
+  if t.battle_id is null then return jsonb_build_object('battle_id', null); end if;
+  select * into b from public.battles where id = t.battle_id;
+  return jsonb_build_object('battle_id', t.battle_id,
+    'status', b.status, 'winner', public._war_nm(b.winner_fid),
+    'attacker', public._war_nm(b.attacker_fid), 'defender', public._war_nm(b.defender_fid));
+end$$;
+revoke all on function public.admin_test_duel_state() from public;
+grant execute on function public.admin_test_duel_state() to authenticated;
+
 -- ── Проверка ────────────────────────────────────────────────
 -- 1) fc_state() → status='signup', signup_until через ~24ч, signups=0.
 -- 2) fc_signup() дважды → одна запись; после 2 заявок и истечения окна
@@ -477,3 +550,5 @@ grant execute on function public.fc_watch_state(uuid) to authenticated;
 -- 4) fc_watch_state(battle_id) любым игроком → все юниты видимы, my_turn=false.
 -- 5) После уничтожения одной стороны fc_state() → status='done',
 --    угадавшие получили возврат + долю банка, создан новый signup-круг.
+-- 6) admin_test_duel('F1','F2') стаффом → battle_id; повторный вызов
+--    сносит старую доску и создаёт новую; fc_state() этот бой не видит.

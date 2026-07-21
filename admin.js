@@ -3558,6 +3558,7 @@ function adTabTesting(e) {
         <button class="btn btn-gd" onclick="adGrantShells()">Насыпать снаряды</button>
       </div>`)}
     ${row('🛐 Удалить религию фракции', 'Удаляет веру, основанную этой фракцией. Адепты, признания и тайные секты уходят каскадом. Необратимо.', `<button class="btn btn-rd" onclick="adTestDeleteFaith()">Удалить религию</button>`)}
+    ${adTestDuelSection()}
     ${adTestSpySection()}
   </div>`;
 }
@@ -3880,6 +3881,62 @@ async function adTestSpeedRaids() {
     await adReloadPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
+}
+
+// ── Тестовая дуэль клуба: перезапускаемый бой ОТДЕЛЬНО от сессии клуба ──
+// Выбранная фракция (AD.sel) — сторона А; соперник из списка. Повторный
+// запуск сносит прежнюю доску и разворачивает новую (admin_test_duel).
+function adTestDuelSection() {
+  const acts = AD.sel || '';
+  const foes = [...AD.byFid.entries()]
+    .filter(([fid]) => fid !== acts)
+    .sort((a, b) => (a[1].app.name || '').localeCompare(b[1].app.name || '', 'ru'))
+    .map(([fid, e]) => `<option value="${esc(fid)}">${esc(e.app.name)}</option>`)
+    .join('');
+  const t = AD.testDuel;
+  const status = t && t.battle_id
+    ? `Текущий: ${esc(t.attacker || '?')} vs ${esc(t.defender || '?')} · ${t.status === 'done' ? 'окончен' + (t.winner ? ', победа ' + esc(t.winner) : '') : 'идёт бой'}`
+    : 'Тестовый бой ещё не создавался (или статус не загружен).';
+  return `<div class="fm-danger-act" style="align-items:flex-start;flex-direction:column;gap:10px">
+    <div class="fm-danger-label" style="width:100%">
+      <div>🥊 Тестовая дуэль клуба</div>
+      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Отдельный от сессии клуба бой на выданных случайных свежих кораблях: без заявок, ставок и кассы. Выбранная фракция — сторона А. Повторный запуск <b>сносит прежнюю доску</b> и создаёт новую.</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;width:100%">
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1 1 200px">
+        <label class="fm-dim" style="font-size:11px">Соперник (сторона Б)</label>
+        <select id="ad-duel-foe" class="ec-input" style="min-width:180px"><option value="">— выберите соперника —</option>${foes}</select>
+      </div>
+      <button class="btn btn-gd" onclick="adTestDuel()">Создать / перезапустить</button>
+      <button class="btn btn-gh" onclick="adTestDuelOpen()">Открыть доску</button>
+    </div>
+    <div class="fm-dim" style="font-size:11px;line-height:1.4">${status}</div>
+  </div>`;
+}
+async function adTestDuel() {
+  if (!AD.sel || AD.busy) return;
+  const foe = document.getElementById('ad-duel-foe')?.value;
+  if (!foe) { toast('Выберите соперника', 'err'); return; }
+  if (AD.testDuel?.battle_id && !confirm('Прежняя тестовая доска будет снесена и создана заново. Продолжить?')) return;
+  AD.busy = true;
+  try {
+    const r = await apiFetch('rpc/admin_test_duel', { method: 'POST', body: JSON.stringify({ p_a: AD.sel, p_b: foe }) });
+    AD.testDuel = { battle_id: r?.battle_id, status: 'active', attacker: AD.byFid.get(AD.sel)?.app?.name, defender: AD.byFid.get(foe)?.app?.name };
+    toast(`Дуэль создана: ${r?.cnt_a} × «${r?.ship_a_name}» против ${r?.cnt_b} × «${r?.ship_b_name}»`, 'ok');
+    adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+async function adTestDuelOpen() {
+  if (AD.busy) return;
+  try {
+    if (!AD.testDuel?.battle_id) {
+      AD.testDuel = await apiFetch('rpc/admin_test_duel_state', { method: 'POST', body: '{}' });
+      adPaint();
+    }
+    if (!AD.testDuel?.battle_id) { toast('Тестовый бой ещё не создан', 'err'); return; }
+    if (typeof bbOpen === 'function') bbOpen(AD.testDuel.battle_id, true);   // зрителем, полное зрение
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
 }
 
 async function adTestSpeedSpy() {
