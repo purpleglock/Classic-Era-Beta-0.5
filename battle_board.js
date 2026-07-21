@@ -1210,7 +1210,7 @@ async function renderHotspots() {
     const fleets = (b.my_fleets || []).map(f => esc(f.name || 'Флот')).join(', ') || '—';
     return `<div class="hs-card${forming ? '' : ' hs-card-hot'}">
         <div class="hs-card-top">
-          <span class="hs-kind">${b.kind === 'intercept' ? '🛑 перехват на трассе' : '⚔ встреча флотов'}</span>
+          <span class="hs-kind">${b.kind === 'duel' ? '🥊 дуэль Бойцовского клуба' : b.kind === 'intercept' ? '🛑 перехват на трассе' : '⚔ встреча флотов'}</span>
           <span class="hs-st${forming ? '' : ' hs-st-hot'}">${forming ? 'расстановка' : 'идёт бой'}</span>
         </div>
         <div class="hs-card-t">${esc(b.system_name || b.system_id)}</div>

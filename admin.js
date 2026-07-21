@@ -3900,7 +3900,8 @@ function adTestDuelSection() {
   return `<div class="fm-danger-act" style="align-items:flex-start;flex-direction:column;gap:10px">
     <div class="fm-danger-label" style="width:100%">
       <div>🥊 Тестовая дуэль клуба</div>
-      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Отдельный от сессии клуба бой на выданных случайных свежих кораблях: без заявок, ставок и кассы. Выбранная фракция — сторона А. Повторный запуск <b>сносит прежнюю доску</b> и создаёт новую.</div>
+      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Отдельный от сессии клуба бой на выданных случайных свежих кораблях: без заявок, ставок и кассы. Выбранная фракция — сторона А. Повторный запуск <b>сносит прежнюю доску</b> и создаёт новую.<br>
+      <b>Как подключиться:</b> обе фракции-стороны видят бой в «☄ Горячие точки» (сайдменю) и заходят оттуда с полным управлением — ходы по очереди, начинает сторона А. «Открыть доску» здесь: если ваша фракция — участник, откроется режим боя; иначе — режим зрителя (всё видно, ходить нельзя).</div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;width:100%">
       <div style="display:flex;flex-direction:column;gap:3px;flex:1 1 200px">
@@ -3921,8 +3922,10 @@ async function adTestDuel() {
   AD.busy = true;
   try {
     const r = await apiFetch('rpc/admin_test_duel', { method: 'POST', body: JSON.stringify({ p_a: AD.sel, p_b: foe }) });
-    AD.testDuel = { battle_id: r?.battle_id, status: 'active', attacker: AD.byFid.get(AD.sel)?.app?.name, defender: AD.byFid.get(foe)?.app?.name };
-    toast(`Дуэль создана: ${r?.cnt_a} × «${r?.ship_a_name}» против ${r?.cnt_b} × «${r?.ship_b_name}»`, 'ok');
+    AD.testDuel = { battle_id: r?.battle_id, status: 'active',
+      attacker_fid: r?.attacker_fid, defender_fid: r?.defender_fid,
+      attacker: AD.byFid.get(AD.sel)?.app?.name, defender: AD.byFid.get(foe)?.app?.name };
+    toast(`Дуэль создана: ${r?.cnt_a} × «${r?.ship_a_name}» против ${r?.cnt_b} × «${r?.ship_b_name}». Дуэлянты заходят через «☄ Горячие точки».`, 'ok');
     adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
@@ -3935,7 +3938,11 @@ async function adTestDuelOpen() {
       adPaint();
     }
     if (!AD.testDuel?.battle_id) { toast('Тестовый бой ещё не создан', 'err'); return; }
-    if (typeof bbOpen === 'function') bbOpen(AD.testDuel.battle_id, true);   // зрителем, полное зрение
+    // Если МОЯ фракция — одна из сторон, открываем участником (полное управление,
+    // ходы). Иначе — зрителем с полным зрением.
+    const myFid = (typeof EC !== 'undefined' && EC.app && EC.app.faction_id) || null;
+    const mine = myFid && (myFid === AD.testDuel.attacker_fid || myFid === AD.testDuel.defender_fid);
+    if (typeof bbOpen === 'function') bbOpen(AD.testDuel.battle_id, !mine);
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
 }
 

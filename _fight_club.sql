@@ -517,6 +517,7 @@ begin
     on conflict (one) do update set battle_id = excluded.battle_id, created_at = now();
 
   return jsonb_build_object('ok', true, 'battle_id', sp->>'battle_id',
+    'attacker_fid', p_a, 'defender_fid', p_b,
     'ship_a_name', sp->>'ship_a_name', 'ship_b_name', sp->>'ship_b_name',
     'cnt_a', sp->>'cnt_a', 'cnt_b', sp->>'cnt_b');
 end$$;
@@ -536,6 +537,7 @@ begin
   select * into b from public.battles where id = t.battle_id;
   return jsonb_build_object('battle_id', t.battle_id,
     'status', b.status, 'winner', public._war_nm(b.winner_fid),
+    'attacker_fid', b.attacker_fid, 'defender_fid', b.defender_fid,
     'attacker', public._war_nm(b.attacker_fid), 'defender', public._war_nm(b.defender_fid));
 end$$;
 revoke all on function public.admin_test_duel_state() from public;
