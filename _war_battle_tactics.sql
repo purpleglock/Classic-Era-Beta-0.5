@@ -93,6 +93,31 @@ returns int language sql immutable as $$
     'dreadnought',2,'ss13',1)->>cls)::int, 5);
 $$;
 
+-- Обнаружение цели одним кораблём-наблюдателем.
+--   • Визуальный контакт: цель в пределах 3 гексов — видно в ЛЮБОМ
+--     направлении (рядом не спрячешься, откуда бы ни смотрел).
+--   • Радар: светит ВПЕРЁД, в передний сектор обзора (±60° от курса).
+--     Дальность = (sensor − stealth/2), но не меньше 4 гексов; в туманности
+--     радар глохнет (только визуал). Раскрытый выстрелом враг (flash) виден
+--     без учёта скрытности. Итог: у радара логичная дальность и направление,
+--     а не «всегда скрыт».
+create or replace function public._bt_detected(
+  mx int, my int, mfacing int, msensor int,
+  tx int, ty int, tstealth int, tflash boolean)
+returns boolean language plpgsql immutable as $$
+declare d int; rel int; es int; radar int;
+begin
+  d := public._bt_dist(mx, my, tx, ty);
+  if d <= 3 then return true; end if;                 -- визуальный контакт
+  es := case when tflash then 0 else greatest(0, tstealth) end;
+  rel := ((public._bt_dirof(mx, my, tx, ty) - coalesce(mfacing, 0)) % 6 + 6) % 6;
+  if rel in (0, 1, 5) then                            -- передний сектор ±60°
+    radar := greatest(4, msensor - (es / 2)::int);
+    if d <= radar then return true; end if;
+  end if;
+  return false;
+end$$;
+
 -- ── 3) Ландшафт ─────────────────────────────────────────────
 create or replace function public._bt_terra(t jsonb, px int, py int)
 returns text language sql immutable as $$
@@ -418,9 +443,9 @@ begin
   -- захват цели: у кого-то из своих (sensor − stealth) > дистанция до неё
   if not exists(select 1 from public.battle_units m
                  where m.battle_id = p_battle and m.side = u.side and m.alive
-                   and (m.sensor - case when t.flash then 0 else t.stealth end)
-                       > public._bt_dist(m.x, m.y, t.x, t.y)) then
-    raise exception 'цель не захвачена: неопознанный контакт. Подведите корабль ближе — нужен (сенсор − скрытность) > дистанции';
+                   and public._bt_detected(m.x, m.y, m.facing, m.sensor,
+                                           t.x, t.y, t.stealth, t.flash)) then
+    raise exception 'цель не захвачена: неопознанный контакт. Наведите на неё нос корабля с радаром или подведите ближе (визуал — 3 гекса)';
   end if;
 
   if not public._bt_los_clear(b.terrain, u.x, u.y, t.x, t.y) then
@@ -714,8 +739,8 @@ begin
       cross join lateral (select exists(
           select 1 from public.battle_units m
            where m.battle_id = p_battle and m.side = sd and m.alive
-             and (m.sensor - case when u.flash then 0 else u.stealth end)
-                 > public._bt_dist(m.x, m.y, u.x, u.y)) as locked) lk
+             and public._bt_detected(m.x, m.y, m.facing, m.sensor,
+                                     u.x, u.y, u.stealth, u.flash)) as locked) lk
       where u.battle_id = p_battle and u.alive));
 end$$;
 

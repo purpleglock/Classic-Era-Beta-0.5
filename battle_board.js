@@ -132,7 +132,7 @@ function bbRender() {
           <span class="bb-vs-x">против</span>
           <span class="bb-vs-foe">${esc(foeName)}</span>
         </div>
-        <button class="bb-x" title="Свернуть доску" onclick="bbClose()">✕</button>
+        <button class="bb-exit" title="Выйти из боя на сайт" onclick="bbClose()"><span class="bb-exit-a">←</span> На сайт</button>
       </div>
       <div class="bb-body">
         <div class="bb-boardw">
@@ -145,11 +145,17 @@ function bbRender() {
             </div>
           </div>
           ${bbPhaseBar(s, myLeft, foeLeft)}
-          <div class="bb-dock${BB.dock ? '' : ' bb-dock-hide'}" id="bb-dock">
+        </div>
+        <aside class="bb-side${BB.dock ? ' bb-side-open' : ''}" id="bb-side">
+          <button class="bb-side-h" onclick="bbDockToggle()" title="${BB.dock ? 'Свернуть панель' : 'Развернуть панель'}">
+            <span class="bb-side-h-ar">${BB.dock ? '▸' : '◂'}</span>
+            <span class="bb-side-h-t">${BB.dock ? 'Свернуть' : 'Панель'}</span>
+          </button>
+          <div class="bb-side-in">
             ${s.status === 'forming' ? bbDeployPanel(s) : bbUnitPanel(s)}
             ${bbLogPanel(s)}
           </div>
-        </div>
+        </aside>
       </div>
     </div>`;
 
@@ -163,7 +169,7 @@ function bbDockToggle() { BB.dock = !BB.dock; bbRender(); }
 
 // Полоса состояния: чей ход, активации, срок явки + тумблер дока.
 function bbPhaseBar(s, myLeft, foeLeft) {
-  const dockBtn = `<button class="btn btn-gh btn-sm" onclick="bbDockToggle()">${BB.dock ? '▾ Свернуть панели' : '▴ Панели'}</button>`;
+  const dockBtn = `<button class="btn btn-gh btn-sm" onclick="bbDockToggle()">${BB.dock ? '▸ Скрыть панель' : '☰ Панель'}</button>`;
   if (s.status === 'done') {
     const won = s.winner === s.my_fid;
     return `<div class="bb-bar ${won ? 'bb-bar-won' : 'bb-bar-lost'}">
@@ -254,8 +260,9 @@ function bbUnitPanel(s) {
         ▒ туманность гасит щиты и рассеивает залпы ·
         ◎ грав. колодец тянет корабли к центру ·
         ⣿ обломки: −1 к ходу, −15% входящего урона.<br>
-        <b>Сигнатуры:</b> тусклая точка — неопознанный контакт; огонь возможен только по захваченной цели
-        (сенсор − скрытность &gt; дистанции). Выстрел раскрывает стрелявшего до его следующего хода.</div>
+        <b>Радар:</b> тусклая точка — неопознанный контакт. Вблизи (до 3 гексов) видно всех в любую сторону;
+        дальше цель ловит <b>радар — только в переднем секторе</b> (носом к цели), на дистанции ≈ сенсор − половина скрытности.
+        Выстрел раскрывает стрелявшего до его следующего хода.</div>
     </div>${reinf}`;
   const pct = v => Math.max(0, Math.min(100, v));
   const need = bbTurnNeed(u.cls);
@@ -431,7 +438,7 @@ function bbComputeReach(sel) {
 
 // Можно ли выбранным попасть по цели (зеркало battle_fire, для UX)
 function bbCanHit(sel, tgt) {
-  if (tgt.contact || !tgt.locked) return { ok: false, why: 'цель не захвачена: подведите корабль ближе (нужен сенсор − скрытность > дистанции)' };
+  if (tgt.contact || !tgt.locked) return { ok: false, why: 'цель не захвачена: наведите на неё нос корабля с радаром или подведите ближе (визуал — 3 гекса)' };
   const L = bbDist(sel, tgt);
   const rel = ((bbDirOf(sel, tgt) - sel.facing) % 6 + 6) % 6;
   const gs = (sel.wpn && sel.wpn.length) ? sel.wpn : [{ s: 'any', rng: sel.rng, dmg: sel.dmg }];
