@@ -42,7 +42,24 @@
 --     _cn_wpn_kind: ballistic→kinetic), и её урон гасится
 --     ×(1 − resist[k]). Требует применённых _armor_alchemy.sql и
 --     свежего _unit_publish.sql (armor_resist в summary).
--- ?v=20260721tactics2
+--  9) МОДУЛИ В БОЮ (summary.mods из свежего _unit_publish.sql):
+--       pd      — ПРО: доля РАКЕТНОГО урона, сбитая на подлёте (кап 0.6);
+--       jam     — РЭБ: −jam к сенсорам врагов в радиусе 5 гексов (берётся
+--                 максимум по всем глушилкам, визуал 3 гекса не глушится);
+--       stealth — маскировка: +к скрытности корабля (кап итога 12);
+--       sensor  — +к дальности захвата радара;
+--       hangar  — очки ангаров: каждые 300 = 1 авиакрыло (wings);
+--       dejam   — контр-РЭБ: снимает до N вражеских помех со своих в радиусе 5;
+--       interdict — FTL-заградитель: враг не вызывает подкрепления, пока жив;
+--       stabil  — «Альтаан»: своя сторона игнорирует интердикцию врага;
+--       eccm    — помехозащищённость радара: вычитается из вражеского глушения.
+--     Радары различаются дальностью (4–15), активные добирают дальность от
+--     мощности реактора (+1 за pwrPer E, кап pwrCap) ещё на публикации проекта.
+-- 10) АВИАНОСЦЫ. battle_launch(battle, carrier): за 1 активацию корабль
+--     с запасом авиакрыльев поднимает «Авиакрыло» на соседний свободный
+--     гекс (лёгкий быстрый юнит, вступает со следующего хода). Крыло —
+--     полноценная фигура: живёт и гибнет само, в конце боя не возвращается.
+-- ?v=20260721tactics3
 -- ============================================================
 
 -- ── 1) Схема ────────────────────────────────────────────────
@@ -54,6 +71,14 @@ alter table public.battle_units add column if not exists stealth  int not null d
 alter table public.battle_units add column if not exists flash    boolean not null default false;
 alter table public.battle_units add column if not exists wpn      jsonb;
 alter table public.battle_units add column if not exists resist   jsonb;
+alter table public.battle_units add column if not exists pd       numeric not null default 0;      -- ПРО: доля сбитых ракет
+alter table public.battle_units add column if not exists jam      int not null default 0;          -- РЭБ: помеха сенсорам врага (радиус 5)
+alter table public.battle_units add column if not exists dejam    int not null default 0;          -- контр-РЭБ: снимает помехи со своих (радиус 5)
+alter table public.battle_units add column if not exists eccm     int not null default 0;          -- помехозащищённость радара (вычитается из глушения)
+alter table public.battle_units add column if not exists interdict boolean not null default false; -- интердиктор: враг не вызывает подкрепления
+alter table public.battle_units add column if not exists stabil   boolean not null default false;  -- стабилизатор: своя сторона игнорирует интердикцию
+alter table public.battle_units add column if not exists wings    int not null default 0;          -- запас авиакрыльев (ангары)
+alter table public.battle_units add column if not exists is_wing  boolean not null default false;  -- сам является авиакрылом
 
 -- ── 2) Гекс-геометрия: шаг и направление ────────────────────
 -- Направления flat-top (углы 30°..330° через 60°, y вниз):
@@ -82,7 +107,7 @@ end$$;
 create or replace function public._bt_turnneed(cls text)
 returns int language sql immutable as $$
   select coalesce((jsonb_build_object(
-    'corvette',1,'frigate',1,'ss13',1,
+    'corvette',1,'frigate',1,'ss13',1,'wing',1,
     'destroyer',2,
     'cruiser',3,'mediumCruiser',3,'supportCarrier',3,'battleship',3,
     'hyperCruiser',3,'multiroleCarrier',3,
@@ -93,7 +118,7 @@ $$;
 create or replace function public._bt_stealth(cls text)
 returns int language sql immutable as $$
   select coalesce((jsonb_build_object(
-    'corvette',9,'frigate',8,'destroyer',7,
+    'wing',9,'corvette',9,'frigate',8,'destroyer',7,
     'cruiser',5,'mediumCruiser',5,
     'supportCarrier',4,'multiroleCarrier',4,
     'hyperCruiser',3,'battleship',3,
@@ -124,6 +149,33 @@ begin
   end if;
   return false;
 end$$;
+
+-- РЭБ: насколько задавлены сенсоры наблюдателя стороны p_side в гексе (x,y).
+-- Итог = max(jam живых вражеских глушилок в радиусе 5)
+--        − max(dejam живых СВОИХ контр-РЭБ в радиусе 5), не ниже 0.
+-- Помехозащищённость самого радара (eccm) вычитается дальше, на месте вызова.
+-- Визуал (3 гекса) помехами не глушится — это учитывает сам _bt_detected.
+create or replace function public._bt_ecm(p_battle uuid, p_side text, px int, py int)
+returns int language sql stable as $$
+  select greatest(0,
+    coalesce((select max(u.jam) from public.battle_units u
+               where u.battle_id = p_battle and u.alive and u.side <> p_side
+                 and u.jam > 0 and public._bt_dist(u.x, u.y, px, py) <= 5), 0)
+    -
+    coalesce((select max(u.dejam) from public.battle_units u
+               where u.battle_id = p_battle and u.alive and u.side = p_side
+                 and u.dejam > 0 and public._bt_dist(u.x, u.y, px, py) <= 5), 0));
+$$;
+
+-- Интердикция: подкрепления стороны p_side заблокированы, если у врага жив
+-- интердиктор, а у своей стороны нет живого стабилизатора («Альтаан»).
+create or replace function public._bt_interdicted(p_battle uuid, p_side text)
+returns boolean language sql stable as $$
+  select exists(select 1 from public.battle_units u
+                 where u.battle_id = p_battle and u.alive and u.side <> p_side and u.interdict)
+     and not exists(select 1 from public.battle_units u
+                 where u.battle_id = p_battle and u.alive and u.side = p_side and u.stabil);
+$$;
 
 -- ── 3) Ландшафт ─────────────────────────────────────────────
 create or replace function public._bt_terra(t jsonb, px int, py int)
@@ -276,7 +328,8 @@ begin
     rng := greatest(1, least(40, coalesce((sm->>'rng')::numeric, 1)));
   end if;
 
-  sens := greatest(6, least(30, round(coalesce(nullif((sm->>'radar')::numeric, 0), 10))::int));
+  sens := greatest(6, least(30, round(coalesce(nullif((sm->>'radar')::numeric, 0), 10))::int
+                                + coalesce((sm->'mods'->>'sensor')::int, 0)));
 
   return jsonb_build_object(
     'name',    u.name,
@@ -289,7 +342,16 @@ begin
     'rng',     round(rng)::int,
     'wpn',     wpn,
     'sensor',  sens,
-    'stealth', public._bt_stealth(cls),
+    -- скрытность: база класса + маскирующие модули (транспондер и пр.), кап 12
+    'stealth', least(12, public._bt_stealth(cls) + coalesce((sm->'mods'->>'stealth')::int, 0)),
+    -- модули в бою: ПРО (доля сбитых ракет), РЭБ (радиус 5), авиакрылья ангаров
+    'pd',      least(0.6, greatest(0, coalesce((sm->'mods'->>'pd')::numeric, 0))),
+    'jam',     greatest(0, coalesce((sm->'mods'->>'jam')::int, 0)),
+    'dejam',   greatest(0, coalesce((sm->'mods'->>'dejam')::int, 0)),
+    'eccm',    greatest(0, coalesce((sm->'mods'->>'eccm')::int, 0)),
+    'interdict', coalesce((sm->'mods'->>'interdict')::bool, false),
+    'stabil',    coalesce((sm->'mods'->>'stabil')::bool, false),
+    'wings',   greatest(0, floor(coalesce((sm->'mods'->>'hangar')::numeric, 0) / 300))::int,
     -- стойкости брони проекта (алхимия): гасят урон по типу орудия
     'resist',  coalesce(sm->'armor_resist',
                         '{"kinetic":0,"energy":0,"missile":0}'::jsonb));
@@ -350,13 +412,17 @@ begin
 
     insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
         hp, max_hp, armor, shield, max_shield, dmg, speed, rng,
-        facing, straight, sensor, stealth, wpn, resist)
+        facing, straight, sensor, stealth, wpn, resist, pd, jam, wings,
+        dejam, eccm, interdict, stabil)
       values (p_battle, me, sd, uid, st->>'name', st->>'cls', px, py,
         (st->>'hp')::numeric, (st->>'hp')::numeric, (st->>'armor')::numeric,
         (st->>'shield')::numeric, (st->>'shield')::numeric, (st->>'dmg')::numeric,
         (st->>'speed')::int, (st->>'rng')::int,
         fc, public._bt_turnneed(st->>'cls'), (st->>'sensor')::int, (st->>'stealth')::int,
-        st->'wpn', st->'resist');
+        st->'wpn', st->'resist',
+        coalesce((st->>'pd')::numeric,0), coalesce((st->>'jam')::int,0), coalesce((st->>'wings')::int,0),
+        coalesce((st->>'dejam')::int,0), coalesce((st->>'eccm')::int,0),
+        coalesce((st->>'interdict')::bool,false), coalesce((st->>'stabil')::bool,false));
     n := n + 1;
     if n > public._bt_cap() then raise exception 'в бой можно вывести не больше % кораблей', public._bt_cap(); end if;
   end loop;
@@ -455,12 +521,13 @@ begin
 
   dist := public._bt_dist(u.x, u.y, t.x, t.y);
 
-  -- захват цели: у кого-то из своих (sensor − stealth) > дистанция до неё
+  -- захват цели: у кого-то из своих (sensor − РЭБ врага − stealth) > дистанция до неё
   if not exists(select 1 from public.battle_units m
                  where m.battle_id = p_battle and m.side = u.side and m.alive
-                   and public._bt_detected(m.x, m.y, m.facing, m.sensor,
+                   and public._bt_detected(m.x, m.y, m.facing,
+                                           greatest(0, m.sensor - greatest(0, public._bt_ecm(p_battle, m.side, m.x, m.y) - m.eccm)),
                                            t.x, t.y, t.stealth, t.flash)) then
-    raise exception 'цель не захвачена: неопознанный контакт. Наведите на неё нос корабля с радаром или подведите ближе (визуал — 3 гекса)';
+    raise exception 'цель не захвачена: неопознанный контакт. Наведите на неё нос корабля с радаром, подведите ближе (визуал — 3 гекса) или выбейте РЭБ-глушилки врага';
   end if;
 
   if not public._bt_los_clear(b.terrain, u.x, u.y, t.x, t.y) then
@@ -491,6 +558,10 @@ begin
         -- группа без типа (старый снапшот) считается кинетикой
         rk := least(0.9, greatest(0, coalesce(
                 (t.resist->>coalesce(wg->>'k','kinetic'))::numeric, 0)));
+        -- ПРО цели: сбивает долю РАКЕТНОГО урона на подлёте (КАЗ/лазерные точки)
+        if coalesce(wg->>'k','kinetic') = 'missile' and coalesce(t.pd,0) > 0 then
+          rk := 1 - (1 - rk) * (1 - least(0.6, t.pd));
+        end if;
         dmg := dmg + (wg->>'dmg')::numeric * mult * (1 - rk);
         resisted := resisted + (wg->>'dmg')::numeric * mult * rk;
       end if;
@@ -654,6 +725,12 @@ begin
   b  := public._bt_require_turn(p_battle, me);
   sd := public._bt_side(p_battle, me);
 
+  -- интердикция: вражеский заградитель FTL блокирует подкрепления,
+  -- пока жив (снимается своим стабилизатором «Альтаан» или уничтожением носителя)
+  if public._bt_interdicted(p_battle, sd) then
+    raise exception 'подкрепление заблокировано полем интердикции: у врага работает FTL-заградитель. Уничтожьте его носителя или выведите корабль со стабилизационным полем «Альтаан»';
+  end if;
+
   -- вызов стоит ЦЕЛОГО хода: на початом ходу (после любой активации) нельзя
   if b.acts_left < public._bt_acts() then
     raise exception 'подкрепление вызывается только свежим ходом: оно стоит всех % активаций. Сейчас часть хода уже потрачена', public._bt_acts();
@@ -688,16 +765,68 @@ begin
 
   insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
       hp, max_hp, armor, shield, max_shield, dmg, speed, rng, moved, fired, acted,
-      facing, straight, sensor, stealth, wpn)
+      facing, straight, sensor, stealth, wpn, resist, pd, jam, wings,
+      dejam, eccm, interdict, stabil)
     values (p_battle, me, sd, p_unit_id, st->>'name', st->>'cls', px, py,
       (st->>'hp')::numeric, (st->>'hp')::numeric, (st->>'armor')::numeric,
       (st->>'shield')::numeric, (st->>'shield')::numeric, (st->>'dmg')::numeric,
       (st->>'speed')::int, (st->>'rng')::int, true, true, true,
-      fc, public._bt_turnneed(st->>'cls'), (st->>'sensor')::int, (st->>'stealth')::int, st->'wpn');
+      fc, public._bt_turnneed(st->>'cls'), (st->>'sensor')::int, (st->>'stealth')::int,
+      st->'wpn', st->'resist',
+      coalesce((st->>'pd')::numeric,0), coalesce((st->>'jam')::int,0), coalesce((st->>'wings')::int,0),
+      coalesce((st->>'dejam')::int,0), coalesce((st->>'eccm')::int,0),
+      coalesce((st->>'interdict')::bool,false), coalesce((st->>'stabil')::bool,false));
 
   perform public._bt_log(p_battle, format('%s вызывает подкрепление: %s', public._war_nm(me), st->>'name'));
   perform public.battle_end_turn(p_battle);
   return jsonb_build_object('ok', true);
+end$$;
+
+-- ── 9b) АВИАНОСЦЫ: запуск авиакрыла ──────────────────────────
+-- Корабль с запасом авиакрыльев (ангары, wings > 0) за одну активацию
+-- поднимает «Авиакрыло» на соседний свободный гекс. Крыло — самостоятельная
+-- лёгкая фигура (быстрая, скрытная, бьёт в упор), вступает со СЛЕДУЮЩЕГО хода.
+create or replace function public.battle_launch(p_battle uuid, p_unit uuid)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare me text; b public.battles; u record; d int; st int[]; px int := null; py int;
+begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  me := public._ec_my_fid();
+  b  := public._bt_require_turn(p_battle, me);
+  select * into u from public.battle_units where id = p_unit and battle_id = p_battle for update;
+  if u.id is null then raise exception 'no such unit'; end if;
+  if u.fid is distinct from me then raise exception 'это не ваш корабль'; end if;
+  if not u.alive then raise exception 'корабль уничтожен'; end if;
+  if u.is_wing then raise exception 'авиакрыло само авиацию не несёт'; end if;
+  if coalesce(u.wings, 0) <= 0 then raise exception 'ангары пусты: авиакрыльев больше нет'; end if;
+
+  -- свободный соседний гекс: сначала по курсу, дальше по кругу
+  for d in 0..5 loop
+    st := public._bt_step(u.x, u.y, (u.facing + d) % 6);
+    if st[1] >= 0 and st[1] < public._bt_w() and st[2] >= 0 and st[2] < public._bt_h()
+       and public._bt_terra(b.terrain, st[1], st[2]) is distinct from 'ast'
+       and not exists(select 1 from public.battle_units
+                       where battle_id = p_battle and alive and x = st[1] and y = st[2]) then
+      px := st[1]; py := st[2]; exit;
+    end if;
+  end loop;
+  if px is null then raise exception 'вокруг авианосца нет свободного гекса для взлёта'; end if;
+
+  perform public._bt_use_act(p_battle, p_unit);
+  update public.battle_units set wings = wings - 1 where id = p_unit;
+
+  -- крыло: лёгкое, быстрое, скрытное, бьёт в упор; готово со следующего хода
+  insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
+      hp, max_hp, armor, shield, max_shield, dmg, speed, rng, moved, fired, acted,
+      facing, straight, sensor, stealth, wpn, resist, pd, jam, wings, is_wing)
+    values (p_battle, me, u.side, u.unit_id, format('Авиакрыло «%s»', u.unit_name), 'wing', px, py,
+      60, 60, 0, 0, 0, 45, 9, 2, true, true, true,
+      u.facing, 1, 8, 9,
+      '[{"s":"any","rng":2,"dmg":45,"k":"kinetic"}]'::jsonb,
+      '{"kinetic":0,"energy":0,"missile":0}'::jsonb, 0, 0, 0, true);
+
+  perform public._bt_log(p_battle, format('%s поднимает авиакрыло с палубы', u.unit_name));
+  return jsonb_build_object('ok', true, 'wings_left', u.wings - 1);
 end$$;
 
 -- ── 10) Состояние: ландшафт, курсы, сигнатуры ────────────────
@@ -737,6 +866,8 @@ begin
     'can_force', (b.status='active' and b.side_to_move is distinct from sd
                   and b.deadline_at is not null and b.deadline_at <= now()),
     'winner', b.winner_fid,
+    -- интердикция: мои подкрепления сейчас заблокированы вражеским FTL-заградителем
+    'interdicted', public._bt_interdicted(p_battle, sd),
     'log', b.log,
     'terrain', coalesce(b.terrain, '[]'::jsonb),
     'pool', public.battle_pool(p_battle, me),
@@ -751,6 +882,8 @@ begin
             'armor', round(u.armor), 'dmg', round(u.dmg),
             'speed', u.speed, 'rng', u.rng,
             'sensor', u.sensor, 'stealth', u.stealth, 'flash', u.flash,
+            'pd', u.pd, 'jam', u.jam, 'wings', u.wings, 'is_wing', u.is_wing,
+            'dejam', u.dejam, 'eccm', u.eccm, 'interdict', u.interdict, 'stabil', u.stabil,
             'locked', true,
             'wpn', case when u.side = sd then coalesce(u.wpn, '[]'::jsonb) else null end,
             'moved', u.moved, 'fired', u.fired, 'acted', u.acted)
@@ -763,7 +896,8 @@ begin
       cross join lateral (select exists(
           select 1 from public.battle_units m
            where m.battle_id = p_battle and m.side = sd and m.alive
-             and public._bt_detected(m.x, m.y, m.facing, m.sensor,
+             and public._bt_detected(m.x, m.y, m.facing,
+                                     greatest(0, m.sensor - greatest(0, public._bt_ecm(p_battle, m.side, m.x, m.y) - m.eccm)),
                                      u.x, u.y, u.stealth, u.flash)) as locked) lk
       where u.battle_id = p_battle and u.alive));
 end$$;

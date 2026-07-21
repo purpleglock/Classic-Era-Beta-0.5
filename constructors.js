@@ -571,6 +571,8 @@ function cnCompStatsRows(info) {
     case 'radar': {
       const cp = o.customParameterradar || {};
       push('Дальность обзора', cp.dalnost ? cnNum(cp.dalnost) + ' кв' : 'нет');
+      if (+cp.pwrPer > 0) push('От реактора', '+1 кв за ' + cnNum(cp.pwrPer) + ' E (до +' + (cp.pwrCap || 0) + ')');
+      if (+cp.eccm > 0) push('Помехозащищённость', '−' + cp.eccm + ' к вражескому глушению');
       if (cp.diapazon) push('Диапазон', String(cp.diapazon).toUpperCase());
       if (o.power) push('Потребление', cnNum(o.power) + ' E');
       if (o.crewRequired) push('Экипаж', cnNum(o.crewRequired));
@@ -578,7 +580,21 @@ function cnCompStatsRows(info) {
       pushPrice(cnNum(o.cost) + ' ГС'); break;
     }
     case 'weapon':  push('Урон', cnNum(o.dmg)); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
-    case 'module':  if (E && o.energy) push('Потребление', cnNum(o.energy) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'module': {
+      if (E && o.energy) push('Потребление', cnNum(o.energy) + ' E');
+      if (o.capacity) push('Грузовместимость', (o.capacity > 0 ? '+' : '') + cnNum(o.capacity));
+      if (o.crewRequired) push('Экипаж', cnNum(o.crewRequired));
+      const cb = o.combat || {};
+      if (cb.pd) push('ПРО', 'сбивает ' + Math.round(cb.pd * 100) + '% ракет');
+      if (cb.jam) push('РЭБ', '−' + cb.jam + ' к сенсорам врага (радиус 5)');
+      if (cb.dejam) push('Контр-РЭБ', 'снимает до ' + cb.dejam + ' помех со своих (радиус 5)');
+      if (cb.interdict) push('Интердикция', 'враг не вызывает подкрепления, пока модуль жив');
+      if (cb.stabil) push('Стабилизация', 'своя сторона игнорирует интердикцию врага');
+      if (cb.stealth) push('Маскировка', '+' + cb.stealth + ' к скрытности');
+      if (cb.sensor) push('Сенсор', '+' + cb.sensor + ' к захвату радара');
+      if (cb.hangar) push('Авиакрылья', '+' + Math.floor(cb.hangar / 300) + ' запуск(а) в бою');
+      pushPrice(cnNum(o.cost) + ' ГС'); break;
+    }
     case 'hangar':  push('Вместимость', o.capacity + ' очк.'); push('Потребление', cnNum(o.energy) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); push('Авиагруппы', o.canHaveUnits ? 'да' : 'нет (груз)'); break;
     case 'airunit': push('Очки в ангаре', o.points); break;
   }
@@ -2237,8 +2253,15 @@ function cnUnitBill(cat, k, parts) {
   });
   (p.modules || []).forEach(({ m }) => {
     if (!m) return;
-    if ((m.cost || 0) >= 100) cnBillAdd(bill, 'Стелларит', 1);
-    else if ((m.cost || 0) >= 30) cnBillAdd(bill, 'Редкоземельные руды', 1);
+    // Сырьё модуля — из его конструкционных решений (resurs), а не плоский Стелларит:
+    // каркасные модули едят Железо/Медь, электроника — Редкоземельные, Стелларит
+    // только там, где реально заложен Старвис.
+    const r = m.resurs || {};
+    cnBillAdd(bill, 'Железо', (r.blackmetall || 0) / 20);
+    cnBillAdd(bill, 'Медь', (r.coloredmetall || 0) / 20);
+    cnBillAdd(bill, 'Титан', (r.rudametall || 0) / 20);
+    cnBillAdd(bill, 'Редкоземельные руды', (r.kristall || 0) / 20);
+    cnBillAdd(bill, 'Стелларит', (r.staarvis || 0) / 20);
   });
   (p.hangars || []).forEach(({ h }) => { if (h) cnBillAdd(bill, 'Титан', (h.capacity || 0) / 12); });
   return bill;
@@ -2433,10 +2456,17 @@ function cnVehCalc() {
     for (const key in res) res[key] = Math.round(res[key]);
     // ГС теперь из сырья (см. cnKvCost), а не из млн-прайсов Кваквантора.
     cost = cnKvCost(res, k);
-    const radarRange = (radarObj && radarObj.customParameterradar && +radarObj.customParameterradar.dalnost) || 0;
+    // Радар: базовая дальность + бонус от мощности реактора (активные станции
+    // «раскачиваются» энергией: +1 за каждые pwrPer E, кап pwrCap) + помехозащищённость.
+    const rcp = (radarObj && radarObj.customParameterradar) || null;
+    let radarRange = (rcp && +rcp.dalnost) || 0;
+    if (rcp && +rcp.pwrPer > 0 && reactObj) {
+      radarRange += Math.min(+rcp.pwrCap || 0, Math.floor(((+reactObj.power) || 0) / +rcp.pwrPer));
+    }
+    const radarEccm = (rcp && +rcp.eccm) || 0;
     // Дальность огня = max dalnost установленных орудий (зеркало rng в _unit_publish.sql)
     const fireRange = billWeapons.reduce((m, { w }) => Math.max(m, (w.customParameter && +w.customParameter.dalnost) || 0), 0);
-    kv = { res, crew, power: Math.round(power), cap: Math.round(cap), radar: radarRange, rng: fireRange, speedUnit: 'квадрат' };
+    kv = { res, crew, power: Math.round(power), cap: Math.round(cap), radar: radarRange, eccm: radarEccm, rng: fireRange, speedUnit: 'квадрат' };
   }
 
   CN.last = { hp, armor, shield, dmg, speed, cost, on: +on.toFixed(1), eCons: energyCons, eMax, energy: def.hasEnergy, hangarOver, cargo, bill, kv };

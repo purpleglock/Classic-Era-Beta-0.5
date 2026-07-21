@@ -57,8 +57,9 @@ const BB_C = {
 };
 
 // ── Открыть / закрыть ───────────────────────────────────────
-async function bbOpen(battleId) {
+async function bbOpen(battleId, spectate) {
   BB.id = battleId; BB.sel = null; BB.pick = null; BB.place = [];
+  BB.spectate = !!spectate;   // зритель дуэли клуба: полное зрение, без действий
   BB.camReady = false; BB.reach = null;
   let ov = document.getElementById('bb-ov');
   if (!ov) {
@@ -97,7 +98,7 @@ function bbStopPoll() { if (BB.poll) { clearInterval(BB.poll); BB.poll = null; }
 async function bbReload() {
   if (!BB.id) return;
   try {
-    BB.st = await ecRpc('battle_state', { p_battle: BB.id });
+    BB.st = await ecRpc(BB.spectate ? 'fc_watch_state' : 'battle_state', { p_battle: BB.id });
   } catch (e) {
     const ov = document.getElementById('bb-ov');
     if (ov) ov.innerHTML = `<div class="bb-load">Бой недоступен: ${esc(e.message || e)}<br><button class="btn btn-gh btn-sm" style="margin-top:12px" onclick="bbClose()">Закрыть</button></div>`;
@@ -114,8 +115,9 @@ async function bbReload() {
 function bbRender() {
   const s = BB.st; if (!s) return;
   const ov = document.getElementById('bb-ov'); if (!ov) return;
-  const foeName = s.my_side === 'attacker' ? s.defender_name : s.attacker_name;
-  const myName  = s.my_side === 'attacker' ? s.attacker_name : s.defender_name;
+  const spec = s.my_side === 'spectator';   // зритель дуэли клуба
+  const foeName = (spec || s.my_side === 'attacker') ? s.defender_name : s.attacker_name;
+  const myName  = (spec || s.my_side === 'attacker') ? s.attacker_name : s.defender_name;
   const myLeft  = s.my_side === 'attacker' ? s.att_turns_left : s.def_turns_left;
   const foeLeft = s.my_side === 'attacker' ? s.def_turns_left : s.att_turns_left;
 
@@ -125,7 +127,7 @@ function bbRender() {
         <div class="bb-ttl">
           <span class="bb-ttl-ic">⚔</span>
           <span class="bb-ttl-t">${esc(s.system_name || s.system_id)}</span>
-          <span class="bb-ttl-sub">${s.kind === 'intercept' ? 'перехват на трассе' : 'встреча флотов'}</span>
+          <span class="bb-ttl-sub">${s.kind === 'duel' ? '🥊 дуэль Бойцовского клуба' : s.kind === 'intercept' ? 'перехват на трассе' : 'встреча флотов'}</span>
         </div>
         <div class="bb-vs">
           <span class="bb-vs-me">${esc(myName)}</span>
@@ -171,6 +173,15 @@ function bbDockToggle() { BB.dock = !BB.dock; bbRender(); }
 function bbPhaseBar(s, myLeft, foeLeft) {
   const dockBtn = `<button class="btn btn-gh btn-sm" onclick="bbDockToggle()">${BB.dock ? '▸ Скрыть панель' : '☰ Панель'}</button>`;
   if (s.status === 'done') {
+    // Зритель дуэли: нейтральный вердикт вместо «вашей» победы/поражения.
+    if (s.my_side === 'spectator') {
+      const wn = s.winner === s.attacker ? s.attacker_name : s.defender_name;
+      return `<div class="bb-bar bb-bar-won">
+          <b>⚑ Победа: ${esc(wn || s.winner || '?')}</b>
+          <span class="bb-bar-sub">Дуэль окончена. Кассы клуба считают выплаты.</span>
+          <button class="btn btn-gd btn-sm" onclick="bbClose()">Закрыть</button>
+        </div>`;
+    }
     const won = s.winner === s.my_fid;
     return `<div class="bb-bar ${won ? 'bb-bar-won' : 'bb-bar-lost'}">
         <b>${won ? '⚑ Победа' : '⚑ Поражение'}</b>
@@ -193,8 +204,11 @@ function bbPhaseBar(s, myLeft, foeLeft) {
   const acts = mv ? `<span class="bb-acts" title="Активаций кораблями в этом ходу">
       ${'◆'.repeat(Math.max(0, s.acts_left || 0))}${'◇'.repeat(Math.max(0, actsMax - (s.acts_left || 0)))}
       <i>${s.acts_left || 0}/${actsMax}</i></span>` : '';
+  const turnLbl = s.my_side === 'spectator'
+    ? 'Ходит: ' + (s.side_to_move === 'attacker' ? (s.attacker_name || 'нападающий') : (s.defender_name || 'обороняющийся'))
+    : (mv ? 'Ваш ход' : 'Ход противника');
   return `<div class="bb-bar ${mv ? 'bb-bar-my' : 'bb-bar-foe'}">
-      <b>${mv ? 'Ваш ход' : 'Ход противника'}</b>${acts}
+      <b>${esc(turnLbl)}</b>${acts}
       <span class="bb-bar-sub">Бой до полного уничтожения одной из сторон. ${bbDeadline(s)}</span>
       ${dockBtn}
       ${mv ? `<button class="btn btn-gd btn-sm" onclick="bbEndTurn()">Завершить ход</button>` : ''}
@@ -241,8 +255,8 @@ function bbReinfPanel(s) {
   const fresh = (s.acts_left || 0) >= (s.acts_max || 6);
   return `<div class="bb-panel">
       <div class="bb-panel-t">Подкрепление</div>
-      <div class="bb-panel-h">Вызов стоит <b>целого хода</b> и делается только <b>свежим ходом</b> — пока ни один корабль не активирован. Корабль прибудет к своему краю доски и вступит в дело со следующего хода.${fresh ? '' : ' <b>Сейчас ход уже начат — вызов недоступен.</b>'}</div>
-      ${pool.map(p => `<button class="bb-pool" ${fresh ? '' : 'disabled'} onclick="bbReinforce('${jsq(p.unit_id)}')">
+      <div class="bb-panel-h">Вызов стоит <b>целого хода</b> и делается только <b>свежим ходом</b> — пока ни один корабль не активирован. Корабль прибудет к своему краю доски и вступит в дело со следующего хода.${fresh ? '' : ' <b>Сейчас ход уже начат — вызов недоступен.</b>'}${s.interdicted ? ' <b style="color:#ff5c8a">FTL-заградитель врага блокирует подкрепления — уничтожьте его носителя или выведите «Альтаан».</b>' : ''}</div>
+      ${pool.map(p => `<button class="bb-pool" ${fresh && !s.interdicted ? '' : 'disabled'} onclick="bbReinforce('${jsq(p.unit_id)}')">
           <span class="bb-pool-cls">${bbClsIco(p.cls)}</span>
           <span class="bb-pool-n">${esc(p.unit_name)}<i>${bbClsName(p.cls)} · ${p.hp} HP</i></span>
           <span class="bb-pool-q">×${p.free}</span>
@@ -279,7 +293,15 @@ function bbUnitPanel(s) {
       <div class="bb-stat"><span>Ход</span><b>${u.speed} гекс. ${u.moved ? '— израсходован' : ''}</b></div>
       <div class="bb-stat"><span>Манёвр</span><b>поворот после ${need} прямых (пройдено ${Math.min(u.straight, need)})</b></div>
       <div class="bb-stat"><span>Сенсор / скрытность</span><b>${u.sensor} / ${u.stealth}</b></div>
+      ${u.pd > 0 ? `<div class="bb-stat"><span>ПРО</span><b>сбивает ${Math.round(u.pd * 100)}% ракет</b></div>` : ''}
+      ${u.jam > 0 ? `<div class="bb-stat"><span>РЭБ</span><b>−${u.jam} к сенсорам врага (радиус 5)</b></div>` : ''}
+      ${u.dejam > 0 ? `<div class="bb-stat"><span>Контр-РЭБ</span><b>снимает до ${u.dejam} помех со своих (радиус 5)</b></div>` : ''}
+      ${u.eccm > 0 ? `<div class="bb-stat"><span>Помехозащищённость</span><b>−${u.eccm} к вражескому глушению</b></div>` : ''}
+      ${u.interdict ? `<div class="bb-stat"><span>Интердикция</span><b>враг не вызывает подкрепления</b></div>` : ''}
+      ${u.stabil ? `<div class="bb-stat"><span>Стабилизация</span><b>интердикция врага не действует</b></div>` : ''}
+      ${u.wings > 0 ? `<div class="bb-stat"><span>Авиакрылья в ангарах</span><b>${u.wings}</b></div>` : ''}
       ${wpn}
+      ${u.mine && s.my_turn && u.wings > 0 && !u.acted && s.acts_left > 0 ? `<button class="btn btn-gd btn-sm" style="margin-top:8px;width:100%" onclick="bbLaunch('${jsq(u.id)}')">🛩 Поднять авиакрыло (1 активация)</button>` : ''}
       ${u.mine && s.my_turn ? `<div class="bb-panel-h" style="margin-top:8px">${u.moved && u.fired ? 'Корабль отработал этот ход.' : (!u.acted && !(s.acts_left > 0) ? 'Активации кончились — этот корабль в этом ходу не действует.' : 'Клик по подсвеченному гексу — лететь по маршруту (учтена инерция поворота), по цели в зоне поражения — огонь. Клины на доске = секторы и дальность орудий. В корму получают ×2.')}</div>` : ''}
     </div>${bbReinfPanel(s)}`;
 }
@@ -299,21 +321,23 @@ const BB_CLS = {
   corvette:   'Корвет', frigate: 'Фрегат', destroyer: 'Эсминец',
   cruiser:    'Крейсер', battleship: 'Линкор', dreadnought: 'Дредноут',
   supportCarrier: 'Носитель поддержки', mediumCruiser: 'Средний крейсер',
-  hyperCruiser: 'Гиперкрейсер', multiroleCarrier: 'Многоцелевой носитель', ss13: 'Станция'
+  hyperCruiser: 'Гиперкрейсер', multiroleCarrier: 'Многоцелевой носитель', ss13: 'Станция',
+  wing: 'Авиакрыло'
 };
 function bbClsName(c) { return BB_CLS[c] || 'Корабль'; }
 function bbClsIco(c) {
   const n = { corvette: '▸', frigate: '▶', destroyer: '◆', cruiser: '⬢', battleship: '⬣', dreadnought: '⬟',
-              supportCarrier: '⬨', mediumCruiser: '⬢', hyperCruiser: '⬡', multiroleCarrier: '⬨', ss13: '✦' };
+              supportCarrier: '⬨', mediumCruiser: '⬢', hyperCruiser: '⬡', multiroleCarrier: '⬨', ss13: '✦', wing: '𐊾' };
   return n[c] || '▸';
 }
 function bbClsSize(c) {
   return ({ corvette: 0.42, frigate: 0.52, destroyer: 0.60, cruiser: 0.68, battleship: 0.80, dreadnought: 0.92,
-            supportCarrier: 0.66, mediumCruiser: 0.68, hyperCruiser: 0.76, multiroleCarrier: 0.78, ss13: 0.85 })[c] || 0.55;
+            supportCarrier: 0.66, mediumCruiser: 0.68, hyperCruiser: 0.76, multiroleCarrier: 0.78, ss13: 0.85,
+            wing: 0.30 })[c] || 0.55;
 }
 // Инерция: сколько прямых гексов нужно классу перед поворотом (зеркало _bt_turnneed)
 function bbTurnNeed(c) {
-  return ({ corvette: 1, frigate: 1, ss13: 1, destroyer: 2, cruiser: 3, mediumCruiser: 3,
+  return ({ corvette: 1, frigate: 1, ss13: 1, wing: 1, destroyer: 2, cruiser: 3, mediumCruiser: 3,
             supportCarrier: 3, battleship: 3, hyperCruiser: 3, multiroleCarrier: 3, dreadnought: 4 })[c] || 2;
 }
 
@@ -659,6 +683,7 @@ async function bbAct(fn, body, okMsg) {
   } finally { BB.busy = false; }
 }
 function bbMove(id, path) { return bbAct('battle_move', { p_battle: BB.id, p_unit: id, p_path: path }); }
+function bbLaunch(id) { return bbAct('battle_launch', { p_battle: BB.id, p_unit: id }, 'Авиакрыло в воздухе — вступит со следующего хода'); }
 function bbFire(id, tid) { return bbAct('battle_fire', { p_battle: BB.id, p_unit: id, p_target: tid }); }
 function bbEndTurn() {
   if (!confirm('Завершить ход? Неиспользованные активации сгорят. Корабли в астероидах получат −10% корпуса, грав. колодцы подтянут ближние корабли.')) return;

@@ -2629,6 +2629,7 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-colony hp-vn-geo" id="hp-vn-geo" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-stars" id="hp-vn-stars" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-doom" id="hp-vn-doom" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-fight" id="hp-vn-fight" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2712,7 +2713,7 @@ function _heroVNHistDrop() {
 // Какой-нибудь экран новеллы сейчас развёрнут? Смотрим ПО DOM, а не по флагу:
 // флаг может отстать, а игрока запирать в экране из-за этого нельзя.
 function _heroVNScreenOpen() {
-  return document.querySelector('.hp-vn-colony.show,.hp-vn-poem.show,.hp-vn-assembly.show,.hp-vn-rating.show,.hp-vn-research.show');
+  return document.querySelector('.hp-vn-colony.show,.hp-vn-poem.show,.hp-vn-assembly.show,.hp-vn-rating.show,.hp-vn-research.show,.hp-vn-fight.show');
 }
 window.addEventListener('popstate', () => {
   const armed = _heroVNHist || _heroVNIsOurs();
@@ -2810,34 +2811,37 @@ function heroVNChoice(kind) {
   // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
   _heroVNView = kind;
   if (kind !== 'idx' && typeof heroVNHideIdx === 'function') heroVNHideIdx();
-  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); _heroVNCtl.menu(); return; }
+  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();_heroVNCtl.menu(); return; }
 
   // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
-  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNColonyOpen(); return; }
+  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNColonyOpen(); return; }
 
   // «Управление колониями» — перечень планет державы + сцена планеты с постройками.
-  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNPlanetsOpen(); return; }
+  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNPlanetsOpen(); return; }
 
   // «Поэма недели» — общегалактический стих: голосование за слово дня поверх сцены.
-  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNPoemOpen(); return; }
+  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNPoemOpen(); return; }
 
   // «Ассамблея» — тайные роли и законы, бьющие по всей галактике (Secret Hitler-лайк).
-  if (kind === 'assembly') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNAssemblyOpen(); return; }
+  if (kind === 'assembly') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNAssemblyOpen(); return; }
 
   // «Рейтинг игроков» — засекреченная аналитическая сводка (декоративная инфографика).
-  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNRatingOpen(); return; }
+  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNRatingOpen(); return; }
 
   // «Исследования» — научный пульт державы: всё дерево технологий поверх сцены.
-  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNResearchOpen(); return; }
+  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNResearchOpen(); return; }
 
   // «Георазведка» — казино под вывеской геологии: разведка залежей своей колонии.
-  if (kind === 'geo') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNGeoOpen(); return; }
+  if (kind === 'geo') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNGeoOpen(); return; }
 
   // «Всмотреться в Разлом» — псионический хор-казино: ставка → поле 7×7 → джекпот.
-  if (kind === 'stars') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNDoomClose(); heroVNStarsOpen(); return; }
+  if (kind === 'stars') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNDoomClose(); heroVNFightClose();heroVNStarsOpen(); return; }
 
   // «Длань Неотвратимости» — протокол последнего довода (доступен после исследования)
-  if (kind === 'doom') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomOpen(); return; }
+  if (kind === 'doom') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNFightClose(); heroVNDoomOpen(); return; }
+
+  // «Бойцовский клуб» — дуэли на выданных кораблях + тотализатор поверх сцены.
+  if (kind === 'fight') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightOpen(); return; }
 
   if (kind === 'ach' || kind === 'events') {
     _heroVNCat = kind;
@@ -5058,8 +5062,11 @@ function heroVNInit() {
       ['geo',    (en ? 'Geological survey' : 'Георазведка')],
       ['stars',  (en ? 'Gaze into the Rift' : 'Всмотреться в Разлом')],
       ['research', (en ? 'Research' : 'Исследования')],
-      ['poem',   (en ? 'Poem of the week' : 'Поэма недели')],
-      ['assembly', (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
+      // ⏸ ВРЕМЕННО ОТКЛЮЧЕНЫ (вернём позже) — вместо них «Бойцовский клуб».
+      // Серверные эффекты поэмы/ассамблеи и так неактивны (их SQL не применялся).
+      // ['poem',   (en ? 'Poem of the week' : 'Поэма недели')],
+      // ['assembly', (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
+      ['fight',  (en ? 'Fight Club' : 'Бойцовский клуб')],
     ];
     // «Длань Неотвратимости» скрыта, пока не исследована «Сама неотвратимость»:
     // живая проверка по EC (если экономика уже загружена) либо кэш-флаг с прошлой
@@ -5205,6 +5212,171 @@ function heroVNGeoRefresh() {
     return;
   }
   el.innerHTML = _hgHead(en) + `<div class="hp-vn-col-body hp-vn-geo-body">${ecGeoBody()}</div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · «Бойцовский клуб» — дуэли на выданных кораблях + тотализатор.
+// Сервер: _fight_club.sql (fc_state / fc_signup / fc_bet / fc_watch_state).
+// Цикл: сутки набора заявок → сервер выбирает 2 дуэлянтов и выдаёт им
+// случайные СВЕЖИЕ корабли (±честные по стоимости) → настоящий тактический
+// бой на гекс-доске, зрители смотрят и ставят (кап 500 000 ГС) → банк
+// (проигравший пул + ставка НПС до 400 000) делится между угадавшими.
+// Каркас — .hp-vn-colony, как у Георазведки.
+// ══════════════════════════════════════════════════════════════
+let _fcPoll = null;
+let _fcState = null;
+function heroVNFightClose() {
+  const el = document.getElementById('hp-vn-fight');
+  if (!el) return;
+  el.classList.remove('show');
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '';
+  if (_fcPoll) { clearInterval(_fcPoll); _fcPoll = null; }
+  if (_heroVNView === 'fight') _heroVNView = null;
+}
+function heroVNFightReturn() { heroVNChoice('menu'); }
+function _fcHead(en) {
+  return `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">🥊 ${en ? 'Fight Club' : 'Бойцовский клуб'}</span>
+    <span class="hp-vnr-clr">${en ? 'unsanctioned arena · bets in GC' : 'несанкционированная арена · ставки в ГС'}</span>
+    <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNFightReturn()">↩ ${en ? 'back' : 'назад'}</button>
+  </div>`;
+}
+function _fcMsg(en, ru, enT) { return `<div class="hp-vn-col-body hp-vn-fc-body"><div class="hp-vn-col-empty">${en ? enT : ru}</div></div>`; }
+// «через 23 ч 15 мин» — сколько осталось до конца окна заявок
+function _fcLeft(ts) {
+  const ms = new Date(ts).getTime() - Date.now();
+  if (!(ms > 0)) return null;
+  const h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000);
+  return (h > 0 ? h + ' ч ' : '') + m + ' мин';
+}
+function _fcMoney(v) { return Math.round(Number(v) || 0).toLocaleString('ru-RU'); }
+async function heroVNFightOpen() {
+  const el = document.getElementById('hp-vn-fight');
+  if (!el) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  el.classList.add('show');
+  el.setAttribute('aria-hidden', 'false');
+  el.innerHTML = _fcHead(en) + `<div class="hp-vn-col-body hp-vn-fc-body"><div class="hp-vn-col-empty">${en ? 'Opening the arena…' : 'Открываю двери арены…'}</div></div>`;
+  await heroVNFightRefresh();
+  // лёгкий поллинг: фазы клуба и пулы ставок меняются другими игроками
+  if (_fcPoll) clearInterval(_fcPoll);
+  _fcPoll = setInterval(() => { heroVNFightRefresh(); }, 30000);
+}
+async function heroVNFightRefresh() {
+  const el = document.getElementById('hp-vn-fight');
+  if (!el || !el.classList.contains('show')) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  let st;
+  try { st = await ecRpc('fc_state'); }
+  catch (e) {
+    el.innerHTML = _fcHead(en) + _fcMsg(en, 'Двери клуба заперты. Срез _fight_club.sql применён?', 'The club is sealed. Apply _fight_club.sql?');
+    return;
+  }
+  if (!el.classList.contains('show')) return;
+  _fcState = st;
+  el.innerHTML = _fcHead(en) + `<div class="hp-vn-col-body hp-vn-fc-body">${_fcBody(st, en)}</div>`;
+}
+function _fcBody(st, en) {
+  const parts = [];
+  // ── правило клуба одной строкой ──
+  parts.push(`<div class="fc-rule">${en
+    ? 'Two random duelists. Random fresh ships, cost-matched. Real tactical battle — everyone watches, everyone bets.'
+    : 'Двое случайных дуэлянтов. Случайные свежие корабли, уравненные по стоимости. Настоящий тактический бой — все смотрят, все ставят.'}</div>`);
+
+  if (st.status === 'signup') {
+    const left = _fcLeft(st.signup_until);
+    parts.push(`<div class="fc-phase"><span class="fc-phase-tag">${en ? 'RECRUITING' : 'НАБОР ЗАЯВОК'}</span>
+      ${left ? `<span class="fc-phase-t">${en ? 'closes in ' : 'окно закроется через '}${left}</span>`
+             : `<span class="fc-phase-t">${en ? 'matching soon…' : 'жеребьёвка вот-вот…'}</span>`}</div>`);
+    parts.push(`<div class="fc-signups">${en ? 'Applications' : 'Заявок'}: <b>${st.signups | 0}</b>${(st.signups | 0) < 2 ? (en ? ' · need at least 2' : ' · нужно минимум две') : ''}</div>`);
+    parts.push(st.me_signed
+      ? `<div class="fc-ok">✔ ${en ? 'Your application is in. The lottery decides the rest.' : 'Ваша заявка принята. Дальше решает жребий.'}</div>`
+      : (st.me
+        ? `<button class="hp-vna-cta" onclick="event.stopPropagation();fcSignup()">📜 ${en ? 'Step into the ring' : 'Подать заявку в клуб'}</button>`
+        : `<div class="hp-vna-obs">👁 ${en ? 'Register a faction to fight.' : 'Зарегистрируйте державу, чтобы драться.'}</div>`));
+  }
+
+  if (st.status === 'live') {
+    parts.push(`<div class="fc-phase live"><span class="fc-phase-tag">${en ? 'FIGHT IN PROGRESS' : 'ИДЁТ БОЙ'}</span>
+      <span class="fc-phase-t">${en ? 'bets are open until the kill' : 'ставки открыты до последнего корабля'}</span></div>`);
+    parts.push(_fcDuelCards(st, en, true));
+    // ── смотреть бой: доска дуэли, для всех ──
+    parts.push(`<button class="hp-vna-cta fc-watch" onclick="event.stopPropagation();fcWatch()">📺 ${en ? 'Watch the battle' : 'Смотреть бой'}</button>`);
+    // ── касса ставок ──
+    if (st.i_duel) {
+      parts.push(`<div class="hp-vna-obs">🥊 ${en ? 'You ARE the fight. Duelists cannot bet.' : 'Вы и есть бой. Дуэлянтам ставить нельзя.'}</div>`);
+    } else if (st.me) {
+      const my = st.my_bet;
+      const leftCap = Math.max(0, (st.bet_cap || 500000) - (my ? Number(my.amount) : 0));
+      parts.push(`<div class="fc-bet">
+        <div class="fc-bet-h">${en ? 'Place a bet' : 'Сделать ставку'} <span class="fc-bet-cap">${en ? 'cap' : 'кап'} ${_fcMoney(st.bet_cap)} ГС</span></div>
+        ${my ? `<div class="fc-bet-my">${en ? 'Your bet' : 'Ваша ставка'}: <b>${_fcMoney(my.amount)} ГС</b> ${en ? 'on' : 'на'} <b>${esc(my.on_name || '')}</b></div>` : ''}
+        ${leftCap > 0 ? `
+        <div class="fc-bet-row">
+          <select id="fc-bet-on" class="fc-bet-sel" onclick="event.stopPropagation()">
+            ${my ? `<option value="${esc(my.on)}">${esc(my.on_name || '')}</option>` : `
+            <option value="${esc(st.duelist_a || '')}">${esc(st.duelist_a_name || '?')}</option>
+            <option value="${esc(st.duelist_b || '')}">${esc(st.duelist_b_name || '?')}</option>`}
+          </select>
+          <input id="fc-bet-amt" class="fc-bet-amt" type="number" min="1000" step="1000" max="${leftCap}" placeholder="${en ? 'amount' : 'сумма'}" onclick="event.stopPropagation()">
+          <button class="hp-vna-cta" onclick="event.stopPropagation();fcBetSubmit()">💰 ${en ? 'Bet' : 'Поставить'}</button>
+        </div>` : `<div class="hp-vna-obs">${en ? 'Bet cap reached.' : 'Кап ставок исчерпан.'}</div>`}
+      </div>`);
+    }
+  }
+
+  if (st.status === 'done' && st.winner) {
+    parts.push(`<div class="fc-phase"><span class="fc-phase-tag">${en ? 'VERDICT' : 'ВЕРДИКТ'}</span></div>`);
+    parts.push(_fcDuelCards(st, en, false));
+    parts.push(`<div class="fc-ok">🏆 ${en ? 'Winner' : 'Победитель'}: <b>${esc(st.winner_name || '')}</b>${st.npc_bet ? ` · ${en ? 'patron stake' : 'ставка мецената'} ${_fcMoney(st.npc_bet)} ГС` : ''}</div>`);
+    if (st.my_bet) parts.push(`<div class="fc-bet-my">${Number(st.my_bet.won) > 0
+      ? (en ? 'Your payout: ' : 'Ваша выплата: ') + '<b>' + _fcMoney(st.my_bet.won) + ' ГС</b>'
+      : (en ? 'Your bet is lost. The arena remembers.' : 'Ставка сгорела. Арена помнит.')}</div>`);
+  }
+
+  // ── летопись прошлых дуэлей ──
+  const h = Array.isArray(st.history) ? st.history : [];
+  if (h.length) {
+    parts.push(`<details class="fc-hist"><summary>${en ? 'Past duels' : 'Летопись дуэлей'} · ${h.length}</summary>
+      ${h.map(r => `<div class="fc-hist-row"><b>${esc(r.winner || '?')}</b> ${en ? 'defeated' : 'одолел(а)'} ${esc(r.winner === r.a ? r.b : r.a)} <span class="fc-hist-ships">«${esc(r.ship_a || '')}» vs «${esc(r.ship_b || '')}»</span></div>`).join('')}
+    </details>`);
+  }
+  return parts.join('');
+}
+// Карточки дуэлянтов: держава + выданный корабль + пул ставок
+function _fcDuelCards(st, en, showPools) {
+  const tot = (Number(st.pool_a) || 0) + (Number(st.pool_b) || 0);
+  const card = (name, ship, cls, cnt, pool) => `<div class="fc-duel-card">
+    <div class="fc-duel-name">${esc(name || '?')}</div>
+    <div class="fc-duel-ship">${cnt ? cnt + ' × ' : ''}«${esc(ship || '?')}»${cls ? ` <span class="fc-duel-cls">${esc(cls)}</span>` : ''}</div>
+    ${showPools ? `<div class="fc-duel-pool">${en ? 'pool' : 'пул'}: <b>${_fcMoney(pool)} ГС</b>${tot > 0 ? ' · ' + Math.round(100 * (Number(pool) || 0) / tot) + '%' : ''}</div>` : ''}
+  </div>`;
+  return `<div class="fc-duel">
+    ${card(st.duelist_a_name, st.ship_a_name, st.ship_a_cls, st.cnt_a, st.pool_a)}
+    <div class="fc-duel-vs">VS</div>
+    ${card(st.duelist_b_name, st.ship_b_name, st.ship_b_cls, st.cnt_b, st.pool_b)}
+  </div>`;
+}
+async function fcSignup() {
+  try { await ecRpc('fc_signup'); }
+  catch (e) { if (typeof ecErr === 'function') ecErr(e); }
+  heroVNFightRefresh();
+}
+async function fcBetSubmit() {
+  const on = document.getElementById('fc-bet-on');
+  const amt = document.getElementById('fc-bet-amt');
+  const v = amt ? Math.floor(Number(amt.value)) : 0;
+  if (!(v > 0)) { if (typeof ecErr === 'function') ecErr(new Error('ставка должна быть больше нуля')); return; }
+  try { await ecRpc('fc_bet', { p_on: on ? on.value : null, p_amount: v }); }
+  catch (e) { if (typeof ecErr === 'function') ecErr(e); }
+  heroVNFightRefresh();
+}
+// Открыть доску дуэли зрителем (или дуэлянтом — тогда обычный режим боя).
+function fcWatch() {
+  if (!_fcState || !_fcState.battle_id) return;
+  const spectate = !_fcState.i_duel;
+  if (typeof bbOpen === 'function') bbOpen(_fcState.battle_id, spectate);
 }
 
 // ══════════════════════════════════════════════════════════════

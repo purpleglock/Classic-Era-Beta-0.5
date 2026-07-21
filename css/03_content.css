@@ -4989,3 +4989,59 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
    Каркас и мобилка целиком наследуются от .hp-vn-geo (элемент несёт оба
    класса); содержимое (.ec-stars) оформлено в css/17_economy.css. */
 .hp-vn-stars-body .ec-stars{width:100%;max-width:640px;margin:0 auto}
+
+/* ══════════════ НОВЕЛЛА · Бойцовский клуб (hp-vn-fight) ══════════════
+   Каркас наследуется от .hp-vn-colony/.hp-vn-geo. Здесь — только тело.
+   Киберпанк: срезанные углы слоем-подложкой (::before/::after), один
+   акцент — розовый неон арены #ff3c82, второй — золото касс #e0b45f. */
+.hp-vn-fc-body{display:flex;flex-direction:column;gap:12px;padding:14px 16px;overflow-y:auto}
+.fc-rule{font-family:var(--font-mono);font-size:10.5px;line-height:1.55;color:var(--t3,#8296a8);letter-spacing:.03em}
+.fc-phase{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.fc-phase-tag{
+  position:relative;z-index:0;padding:5px 12px;font-family:var(--font-mono);font-weight:700;
+  font-size:10.5px;letter-spacing:.14em;color:#ff9cc2;
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+}
+.fc-phase-tag::before{content:"";position:absolute;inset:0;z-index:-2;background:rgba(255,60,130,.55)}
+.fc-phase-tag::after{content:"";position:absolute;inset:1px;z-index:-1;background:hsl(335 35% 10% / .94)}
+.fc-phase.live .fc-phase-tag{animation:fcPulse 1.6s ease-in-out infinite}
+@keyframes fcPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.5)}}
+.fc-phase-t{font-family:var(--font-mono);font-size:10.5px;color:var(--t3,#8296a8)}
+.fc-signups{font-size:13px;color:var(--t2,#c6d4e2)}
+.fc-ok{font-family:var(--font-mono);font-size:11.5px;color:#5fe0a0}
+.fc-duel{display:flex;align-items:stretch;gap:10px}
+.fc-duel-card{
+  position:relative;z-index:0;flex:1 1 0;display:flex;flex-direction:column;gap:5px;padding:11px 13px;
+  clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px));
+}
+.fc-duel-card::before{content:"";position:absolute;inset:0;z-index:-2;background:rgba(255,60,130,.35)}
+.fc-duel-card::after{content:"";position:absolute;inset:1px;z-index:-1;background:hsl(220 30% 9% / .94)}
+.fc-duel-name{font-weight:700;font-size:13.5px;color:var(--t1,#eef4fa)}
+.fc-duel-ship{font-size:12px;color:var(--t2,#c6d4e2)}
+.fc-duel-cls{font-family:var(--font-mono);font-size:10px;color:var(--t3,#8296a8);letter-spacing:.06em}
+.fc-duel-pool{font-family:var(--font-mono);font-size:10.5px;color:#e0b45f}
+.fc-duel-vs{align-self:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:#ff3c82;letter-spacing:.1em}
+.hp-vna-cta.fc-watch{background:#ff3c82;color:#14060c}
+.fc-bet{display:flex;flex-direction:column;gap:8px}
+.fc-bet-h{font-weight:700;font-size:13px;color:var(--t1,#eef4fa)}
+.fc-bet-cap{margin-left:8px;font-family:var(--font-mono);font-weight:400;font-size:10px;color:var(--t3,#8296a8);letter-spacing:.06em}
+.fc-bet-my{font-family:var(--font-mono);font-size:11px;color:#e0b45f}
+.fc-bet-row{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
+.fc-bet-sel,.fc-bet-amt{
+  border:none;border-radius:0;padding:9px 11px;font-family:var(--font-mono);font-size:11px;
+  color:var(--t1,#eef4fa);background:var(--w2,rgba(255,255,255,.08));
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+}
+.fc-bet-sel{min-width:150px}
+.fc-bet-amt{width:120px}
+.fc-bet-amt:focus,.fc-bet-sel:focus{outline:1px solid #e0b45f}
+.fc-hist{font-size:12px;color:var(--t2,#c6d4e2)}
+.fc-hist summary{cursor:pointer;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.06em;color:var(--t3,#8296a8)}
+.fc-hist-row{padding:6px 0;border-bottom:1px dashed var(--w2,rgba(255,255,255,.1))}
+.fc-hist-ships{font-family:var(--font-mono);font-size:10px;color:var(--t3,#8296a8)}
+@media (max-width:640px){
+  .fc-duel{flex-direction:column}
+  .fc-duel-vs{align-self:flex-start}
+  .fc-bet-sel,.fc-bet-amt{flex:1 1 auto}
+  .hp-vna-cta.fc-watch{align-self:stretch;text-align:center}
+}

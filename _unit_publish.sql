@@ -190,6 +190,10 @@ declare
   blk jsonb; mid text; cnt int; size numeric := 0; model jsonb; mbill jsonb; uid uuid; urow public.faction_units;
   rk text; rv numeric;
   m_armor numeric; m_atk numeric; m_dal numeric;
+  -- боевые эффекты модулей (ПРО/РЭБ/маскировка/сенсор/ангары) → summary.mods
+  mod_pd numeric := 0; mod_jam int := 0; mod_stealth int := 0; mod_sensor int := 0; mod_hangar numeric := 0;
+  mod_dejam int := 0; mod_interdict bool := false; mod_stabil bool := false;
+  radar_eccm int := 0;   -- помехозащищённость выбранного радара
   d_count numeric := 0; sa numeric := 0; st numeric := 0; sd numeric := 0;
   ma numeric := 0; mt numeric := 0; md numeric := 0; pct numeric;
 begin
@@ -302,14 +306,26 @@ begin
     else bill := public._cn_bill_add(bill,'Железо', wdmg/120*q); end if;
   end loop;
 
-  -- модули
+  -- модули: сырьё из конструкционных решений (resurs, зеркало cnUnitBill) +
+  -- агрегат боевых эффектов combat → summary.mods (читает боёвка, _bt_stats)
   for m in select * from jsonb_array_elements(coalesce(p_data->'modules','[]'::jsonb)) loop
     mob := db->'modules'->(m->>'g')->coalesce((m->>'idx')::int,-1);
     if mob is null then raise exception 'bad module'; end if;
     kvres := public._cn_res_add(kvres, mob, 1); on_ := on_ + modon;
     if hasEnergy then econs := econs + coalesce((mob->>'energy')::numeric,0); end if;
-    if (mob->>'cost')::numeric >= 100 then bill := public._cn_bill_add(bill,'Стелларит',1);
-    elsif (mob->>'cost')::numeric >= 30 then bill := public._cn_bill_add(bill,'Редкоземельные руды',1); end if;
+    bill := public._cn_bill_add(bill,'Железо',              coalesce((mob->'resurs'->>'blackmetall')::numeric,0)/20);
+    bill := public._cn_bill_add(bill,'Медь',                coalesce((mob->'resurs'->>'coloredmetall')::numeric,0)/20);
+    bill := public._cn_bill_add(bill,'Титан',               coalesce((mob->'resurs'->>'rudametall')::numeric,0)/20);
+    bill := public._cn_bill_add(bill,'Редкоземельные руды', coalesce((mob->'resurs'->>'kristall')::numeric,0)/20);
+    bill := public._cn_bill_add(bill,'Стелларит',           coalesce((mob->'resurs'->>'staarvis')::numeric,0)/20);
+    mod_pd      := mod_pd      + coalesce((mob->'combat'->>'pd')::numeric,0);
+    mod_jam     := greatest(mod_jam, coalesce((mob->'combat'->>'jam')::int,0));
+    mod_stealth := mod_stealth + coalesce((mob->'combat'->>'stealth')::int,0);
+    mod_sensor  := mod_sensor  + coalesce((mob->'combat'->>'sensor')::int,0);
+    mod_hangar  := mod_hangar  + coalesce((mob->'combat'->>'hangar')::numeric,0);
+    mod_dejam   := greatest(mod_dejam, coalesce((mob->'combat'->>'dejam')::int,0));
+    mod_interdict := mod_interdict or coalesce((mob->'combat'->>'interdict')::int,0) > 0;
+    mod_stabil    := mod_stabil    or coalesce((mob->'combat'->>'stabil')::int,0) > 0;
   end loop;
 
   -- ангары (только корабли)
@@ -340,6 +356,13 @@ begin
   if radarObj is not null then
     crew := crew + coalesce((radarObj->>'crewRequired')::numeric,0);
     radar_ := coalesce((radarObj->'customParameterradar'->>'dalnost')::numeric,0);
+    -- активные станции раскачиваются реактором: +1 кв за pwrPer E, кап pwrCap (зеркало cnVehCalc)
+    if coalesce((radarObj->'customParameterradar'->>'pwrPer')::numeric,0) > 0 then
+      radar_ := radar_ + least(coalesce((radarObj->'customParameterradar'->>'pwrCap')::numeric,0),
+                               floor(coalesce((reactObj->>'energy')::numeric,0)
+                                     / (radarObj->'customParameterradar'->>'pwrPer')::numeric));
+    end if;
+    radar_eccm := coalesce((radarObj->'customParameterradar'->>'eccm')::int,0);
   end if;
   for w in select * from jsonb_array_elements(coalesce(p_data->'weapons','[]'::jsonb)) loop
     wob := db->'weapons'->(w->>'g')->coalesce((w->>'idx')::int,-1);
@@ -388,6 +411,12 @@ begin
     'eCons', econs, 'eMax', emax, 'energy', hasEnergy,
     'cargo', cargo, 'bill', bill,
     'armor_resist', armor_resist,   -- стойкости брони к типам урона (для боёвки)
+    -- боевые эффекты модулей: ПРО (кап 0.6), РЭБ (радиус 5), маскировка, сенсор, авиакрылья
+    'mods', jsonb_build_object(
+      'pd', least(0.6, mod_pd), 'jam', mod_jam, 'stealth', mod_stealth,
+      'sensor', mod_sensor, 'hangar', mod_hangar,
+      'dejam', mod_dejam, 'interdict', mod_interdict, 'stabil', mod_stabil,
+      'eccm', radar_eccm),
     'className', cls->>'name', 'typeName', coalesce(typeObj->>'name',''));
 end$$;
 
