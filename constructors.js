@@ -590,13 +590,15 @@ function cnSlotSelected(slot) {
   if (!wrap || !sel) return;
   const info = slot === 'class' ? cnCompInfo('class', sel.value) : cnCompInfo(slot, null, +sel.value);
   if (!info.obj) { wrap.innerHTML = ''; return; }
-  wrap.innerHTML = `<button class="cn-slot-chip" onclick="cnOpenSlotPicker('${slot}')">
-    <span class="cn-slot-lbl">${CN_SLOT_SHORT[slot] || slot}</span>
+  const locked = slot === 'class' && cnClassLocked();
+  wrap.innerHTML = `<button class="cn-slot-chip${locked ? ' cn-slot-locked' : ''}" ${locked ? `title="Класс нельзя менять при правке — создайте новый проект" onclick="toast('Класс менять нельзя: создайте новый проект','inf')"` : `onclick="cnOpenSlotPicker('${slot}')"`}>
+    <span class="cn-slot-lbl">${locked ? '🔒 ' : ''}${CN_SLOT_SHORT[slot] || slot}</span>
     <span class="cn-slot-val">${slot === 'reactor' ? 'Ур.' + ((+sel.value || 0) + 1) + ' · ' : ''}${esc(info.obj.name)}</span>
   </button>`;
 }
 // Модалка выбора компонента слота (полные карточки; гейт по исследованиям)
 function cnOpenSlotPicker(slot) {
+  if (slot === 'class' && cnClassLocked()) { toast('Класс менять нельзя: создайте новый проект', 'inf'); return; }
   const sel = cnId('cn-' + slot); if (!sel) return;
   const cards = [...sel.options].map(opt => {
     const val = opt.value, locked = opt.disabled;
@@ -1348,7 +1350,7 @@ function cnDrawShip() {
       const pts = rm.poly.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
       const fill = m ? 'color-mix(in srgb, var(--gd) 22%, transparent)' : 'transparent';
       const stroke = m ? 'var(--gd)' : active ? 'var(--t3)' : 'transparent';
-      const title = m ? 'Модуль: ' + esc(db.modules[m.g][m.idx].name) : active ? 'Пустой отсек — нажми: поставить модуль или удалить' : 'Внутреннее пространство — нажми, чтобы сделать отсек';
+      const title = m ? 'Модуль: ' + esc((((db.modules[m.g] || [])[m.idx]) || {}).name || 'снят с производства') : active ? 'Пустой отсек — нажми: поставить модуль или удалить' : 'Внутреннее пространство — нажми, чтобы сделать отсек';
       P.push(`<g class="cn-bay" style="cursor:pointer" onclick="${active ? `cnNodeClick('bay',${i})` : `cnRoomAddAt(${i})`}"><title>${title}</title>`
         + `<polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="${m ? 1.2 : 0.8}" stroke-linejoin="round" stroke-dasharray="${active && !m ? '3 3' : '0'}" opacity="${m ? 0.95 : active ? 0.45 : 0.16}"/>`
         + `${m ? cnModuleMarker(L.bays[i].m.g, rm.cx, rm.cy) : ''}</g>`);
@@ -1375,7 +1377,8 @@ function cnDrawShip() {
     const actP = L.mounts.map((s, j) => (s && s.pos) ? [s.pos.x, s.pos.y] : (wpnMounts[j] || [160, H.nose]));
     const freeMk = [], nodeMk = [];
     wpnMounts.forEach((m, i) => {
-    const slot = L.mounts[i], active = i < L.mounts.length, w = active && slot && slot.w;
+    const slot = L.mounts[i], active = i < L.mounts.length;
+    const w = active && slot && slot.w && db.weapons[slot.w.g] && db.weapons[slot.w.g][slot.w.idx] ? slot.w : null;
     // активный узел можно таскать → используем его сохранённую позицию (slot.pos), иначе авто-место
     const p = (active && slot && slot.pos) ? [slot.pos.x, slot.pos.y] : m;
     if (w) {
@@ -1479,11 +1482,11 @@ function cnDrawShip() {
   if (listHost) {
     const rows = [];
     if (CN.schemShow.weapons) L.mounts.forEach((slot, i) => {
-      const w = slot && slot.w, item = w ? db.weapons[w.g][w.idx] : null;
+      const w = slot && slot.w, item = w ? ((db.weapons[w.g] || [])[w.idx] || null) : null;
       rows.push(cnSlotRow('mount', i, '◎', 'Узел орудия ' + (i + 1), item ? esc(item.name) : 'Пусто — поставить орудие', !!item));
     });
     if (CN.schemShow.bays) L.bays.forEach((slot, i) => {
-      const m = slot && slot.m, item = m ? db.modules[m.g][m.idx] : null;
+      const m = slot && slot.m, item = m ? ((db.modules[m.g] || [])[m.idx] || null) : null;
       rows.push(cnSlotRow('bay', i, '▦', 'Отсек ' + (i + 1), item ? esc(item.name) : 'Пусто — поставить модуль', !!item));
     });
     listHost.innerHTML = rows.length ? rows.join('') : `<div class="cn-bill-none" style="padding:8px 2px">Нет узлов и отсеков — добавьте кнопками «＋ Узел» / «＋ Отсек» на схеме.</div>`;
@@ -1917,10 +1920,18 @@ async function cnVehRender(cat) {
   </div>`);
 
   if (edit && cnId('cn-faction')) cnId('cn-faction').value = edit.faction_id || '';
-  CN.snap = null; CN._applying = false;
+  CN.snap = null; CN.snapOver = false; CN._applying = false;
   cnVehInit();
-  if (edit && edit.data) { CN._applying = true; cnVehApplyData(edit.data); CN._applying = false; CN.snap = cnVehCollectData(); }
+  // База правки может быть уже «за лимитом» (старый проект на новом балансе) —
+  // запоминаем это в snapOver, иначе жёсткий лимит откатывал бы каждое действие.
+  if (edit && edit.data) { CN._applying = true; cnVehApplyData(edit.data); CN._applying = false; CN.snap = cnVehCollectData(); CN.snapOver = !!CN.lastOver; }
 }
+
+// Класс НЕЛЬЗЯ менять при правке уже сохранённого проекта: смена класса рушит
+// совместимость компонентов (у каждого класса свои орудия/броня/двигатели) и
+// меняла бы класс УЖЕ построенных кораблей (эксплойт design-edit-class-morph).
+// Хочешь другой класс — создавай новый проект.
+function cnClassLocked() { return !!(CN.editUnit && CN.editUnit.id); }
 
 function cnVehInit() {
   const def = CN.def, cat = CN.cat;
@@ -1937,10 +1948,12 @@ function cnVehInit() {
       (g.length ? `<optgroup label="Наземные силы">${g.map(clsOpt).join('')}</optgroup>` : '') +
       (a.length ? `<optgroup label="Авиация">${a.map(clsOpt).join('')}</optgroup>` : '');
   } else cnId('cn-class').innerHTML = keys.map(clsOpt).join('');
+  if (cnClassLocked()) cnId('cn-class').disabled = true;   // класс правке не подлежит
   if (def.cardUI) cnSlotSelected('class');
   cnVehClassDeps();
 }
 function cnVehHandleClass() {
+  if (cnClassLocked()) return;   // класс при правке зафиксирован
   if (cnId('cn-weapons')) cnId('cn-weapons').innerHTML = '';
   if (cnId('cn-modules')) cnId('cn-modules').innerHTML = '';
   if (CN.def.hasHangars && cnId('cn-hangars')) cnId('cn-hangars').innerHTML = '';
@@ -2290,8 +2303,8 @@ function cnVehCalc() {
   const billWeapons = [], billModules = [], billHangars = [];   // для ресурсной ведомости
 
   if (def.cardUI) {
-    (CN.shipLayout && CN.shipLayout.mounts || []).forEach(mt => { if (!mt.w) return; const w = db.weapons[mt.w.g][mt.w.idx]; cost += w.cost; on += cls.modON; dmg += w.dmg; if (def.hasEnergy) energyCons += (w.energy || 0); billWeapons.push({ w, q: 1 }); });
-    (CN.shipLayout && CN.shipLayout.bays || []).forEach(by => { if (!by.m) return; const m = db.modules[by.m.g][by.m.idx]; cost += m.cost; on += cls.modON; if (def.hasEnergy) energyCons += (m.energy || 0); billModules.push({ m }); });
+    (CN.shipLayout && CN.shipLayout.mounts || []).forEach(mt => { if (!mt.w) return; const w = db.weapons[mt.w.g] && db.weapons[mt.w.g][mt.w.idx]; if (!w) return; cost += w.cost; on += cls.modON; dmg += w.dmg; if (def.hasEnergy) energyCons += (w.energy || 0); billWeapons.push({ w, q: 1 }); });
+    (CN.shipLayout && CN.shipLayout.bays || []).forEach(by => { if (!by.m) return; const m = db.modules[by.m.g] && db.modules[by.m.g][by.m.idx]; if (!m) return; cost += m.cost; on += cls.modON; if (def.hasEnergy) energyCons += (m.energy || 0); billModules.push({ m }); });
   } else {
     document.querySelectorAll('#cn-weapons .cn-row').forEach(row => {
       const s = JSON.parse(row.querySelector('select').value);
@@ -2364,15 +2377,20 @@ function cnVehCalc() {
   }
 
   CN.last = { hp, armor, shield, dmg, speed, cost, on: +on.toFixed(1), eCons: energyCons, eMax, energy: def.hasEnergy, hangarOver, cargo, bill, kv };
-  cnVehRenderStats();
-  if (CN.def.cardUI) cnDrawShip();
-  // Жёсткий лимит: нельзя набрать сверх показателя — откатываем последнее действие
-  if (CN._applying) return;
   // KV: остаток энергии (kv.power) и грузоподъёмности (kv.cap) не должны уходить в минус.
   const kvPowerBad = !!(CN.last.kv && CN.last.kv.power < 0);
   const kvCapBad = !!(CN.last.kv && CN.last.kv.cap < 0);
   const over = (CN.last.energy && CN.last.eCons > CN.last.eMax) || CN.last.hangarOver || kvPowerBad || kvCapBad;
-  if (over) {
+  CN.lastOver = over;   // читается загрузчиком правки (CN.snapOver)
+  cnVehRenderStats();
+  if (CN.def.cardUI) cnDrawShip();
+  // Жёсткий лимит: нельзя набрать сверх показателя — откатываем последнее действие.
+  if (CN._applying) return;
+  // ВАЖНО: если САМ загруженный проект уже за лимитом (старый дизайн на новом
+  // балансе), откат превращался в петлю — каждое действие возвращало проект в
+  // «за лимитом», и редактировать было нельзя. Пока база over — правки принимаем,
+  // чтобы игрок мог выкопаться (снять компоненты); гейт публикации остаётся.
+  if (over && !CN.snapOver) {
     if (CN.snap) {
       CN._applying = true;
       cnVehApplyData(CN.snap);
@@ -2384,6 +2402,7 @@ function cnVehCalc() {
     }
   } else {
     CN.snap = cnVehCollectData();
+    CN.snapOver = over;
   }
 }
 function cnVehRenderStats() {
@@ -2495,16 +2514,34 @@ function cnVehApplyData(d) {
   if (d.shield != null) cnId('cn-shield').value = d.shield;
   if (d.engine != null) cnId('cn-engine').value = d.engine;
   if (d.radar != null && cnId('cn-radar')) cnId('cn-radar').value = d.radar;
+  // Санация ссылок на компоненты: проект мог быть создан на СТАРОМ каталоге
+  // (до KV-синтеза) — группы/индексы орудий и модулей могли исчезнуть.
+  // Битые ссылки молча выбрасываем, иначе db.weapons[g][idx] роняет весь экран
+  // редактирования (TypeError) и проект «не редачится».
+  const okW = x => !!(x && def.db.weapons[x.g] && def.db.weapons[x.g][x.idx]);
+  const okM = x => !!(x && def.db.modules[x.g] && def.db.modules[x.g][x.idx]);
+  let dropped = 0;
   if (shipCard) {
     if (d.layout) CN.shipLayout = { mounts: (d.layout.mounts || []).map(x => {
-        if (x && ('w' in x || 'pos' in x)) return { w: x.w ? { g: x.w.g, idx: x.w.idx } : null, pos: x.pos ? { x: x.pos.x, y: x.pos.y } : null };  // новый формат {w,pos}
-        return { w: x ? { g: x.g, idx: x.idx } : null };                                                                                        // старый формат {g,idx}|null
-      }), bays: (d.layout.bays || []).map(x => ({ m: x ? { g: x.g, idx: x.idx } : null })) };
-    else CN.shipLayout = { mounts: (d.weapons || []).flatMap(w => Array.from({ length: w.q || 1 }, () => ({ w: { g: w.g, idx: w.idx } }))), bays: (d.modules || []).map(m => ({ m: { g: m.g, idx: m.idx } })) };
+        let w = null, pos = null;
+        if (x && ('w' in x || 'pos' in x)) { w = x.w ? { g: x.w.g, idx: x.w.idx } : null; pos = x.pos ? { x: x.pos.x, y: x.pos.y } : null; }  // новый формат {w,pos}
+        else if (x) w = { g: x.g, idx: x.idx };                                                                                              // старый формат {g,idx}|null
+        if (w && !okW(w)) { w = null; dropped++; }
+        return { w, pos };
+      }), bays: (d.layout.bays || []).map(x => {
+        let m = x ? { g: x.g, idx: x.idx } : null;
+        if (m && !okM(m)) { m = null; dropped++; }
+        return { m };
+      }) };
+    else CN.shipLayout = {
+      mounts: (d.weapons || []).filter(w => okW(w) || !++dropped).flatMap(w => Array.from({ length: w.q || 1 }, () => ({ w: { g: w.g, idx: w.idx } }))),
+      bays: (d.modules || []).filter(m => okM(m) || !++dropped).map(m => ({ m: { g: m.g, idx: m.idx } }))
+    };
   } else {
-    (d.weapons || []).forEach(w => cnVehAddItem('weapon', w));
-    (d.modules || []).forEach(m => cnVehAddItem('module', m));
+    (d.weapons || []).forEach(w => { if (okW(w)) cnVehAddItem('weapon', w); else dropped++; });
+    (d.modules || []).forEach(m => { if (okM(m)) cnVehAddItem('module', m); else dropped++; });
   }
+  if (dropped) toast(`Проект со старого каталога: ${dropped} комп. больше не выпускается и снято — поставьте замену`, 'inf');
   if (def.hasHangars) (d.hangars || []).forEach(h => cnVehAddHangar(h));
   if (def.cardUI) { cnSlotSelected('class'); ['type', 'reactor', 'armor', 'shield', 'engine', 'radar'].forEach(cnSlotSelected); cnHullHero(); }
   cnVehCalc();
@@ -2535,7 +2572,7 @@ function cnVehCardText() {
     const wAgg = new Map();
     (L.mounts || []).forEach(mt => { if (!mt.w) return; const key = mt.w.g + '|' + mt.w.idx; wAgg.set(key, (wAgg.get(key) || 0) + 1); });
     if (!wAgg.size) c += ` - нет\n`;
-    wAgg.forEach((q, key) => { const [g, idx] = key.split('|'); const w = db.weapons[g][+idx]; c += ` - ${w.name} x${q} (${cnNum(w.dmg * q)} урон)\n`; });
+    wAgg.forEach((q, key) => { const [g, idx] = key.split('|'); const w = (db.weapons[g] || [])[+idx]; if (!w) return; c += ` - ${w.name} x${q} (${cnNum(w.dmg * q)} урон)\n`; });
   } else {
     const ws = document.querySelectorAll('#cn-weapons .cn-row');
     if (!ws.length) c += ` - нет\n`;
@@ -2551,7 +2588,7 @@ function cnVehCardText() {
     const mAgg = new Map();
     (L.bays || []).forEach(by => { if (!by.m) return; const key = by.m.g + '|' + by.m.idx; mAgg.set(key, (mAgg.get(key) || 0) + 1); });
     if (!mAgg.size) c += ` - базовая комплектация\n`;
-    mAgg.forEach((q, key) => { const [g, idx] = key.split('|'); const m = db.modules[g][+idx]; c += ` - ${m.name}${q > 1 ? ' x' + q : ''}\n`; });
+    mAgg.forEach((q, key) => { const [g, idx] = key.split('|'); const m = (db.modules[g] || [])[+idx]; if (!m) return; c += ` - ${m.name}${q > 1 ? ' x' + q : ''}\n`; });
   } else {
     const ms = document.querySelectorAll('#cn-modules .cn-row');
     if (!ms.length) c += ` - базовая комплектация\n`;
@@ -2834,6 +2871,10 @@ async function cnPublish() {
     cnVehCalc();
     if (CN.last.energy && CN.last.eCons > CN.last.eMax) { toast(`Энергосеть перегружена: ${cnNum(CN.last.eCons)} E нужно, реактор даёт ${cnNum(CN.last.eMax)} E. Поставьте мощнее реактор или снимите системы`, 'err'); return; }
     if (CN.last.hangarOver) { toast('Ангар перегружен: авиагруппы превышают вместимость', 'err'); return; }
+    // Старые проекты теперь МОЖНО редактировать даже «за лимитом» (откат отключён
+    // для over-базы) — значит валидность держим на публикации.
+    if (CN.last.kv && CN.last.kv.power < 0) { toast(`Энергосеть перегружена: не хватает ${cnNum(-CN.last.kv.power)} ⚡ — мощнее реактор или снимите системы`, 'err'); return; }
+    if (CN.last.kv && CN.last.kv.cap < 0) { toast(`Перегруз по массе: лишние ${cnNum(-CN.last.kv.cap)} кг — снимите компоненты`, 'err'); return; }
     const def = CN.def, k = cnId('cn-class').value, cls = def.db.data[k];
     const typeObj = def.hasType ? cls.types[+cnId('cn-type').value || 0] : null;
     data = cnVehCollectData();

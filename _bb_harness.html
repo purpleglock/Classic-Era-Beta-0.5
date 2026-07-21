@@ -12,22 +12,22 @@ function toast(m){console.log('[toast]',m);}
 var EC = { designs: [] };
 const MOCK = {
   id:'b1', status:'active', kind:'intercept', system_id:'asu', system_name:'Асу',
-  w:24, h:14, cap:50, my_side:'attacker', my_fid:'me',
+  w:48, h:28, cap:50, zone:4, acts_max:6, acts_left:6, my_side:'attacker', my_fid:'me',
   attacker:'me', attacker_name:'Микустан', defender:'foe', defender_name:'Тетославия',
   side_to_move:'attacker', my_turn:true, turn_no:1,
   att_turns_left:6, def_turns_left:6, att_ready:true, def_ready:true,
   deadline_at:null, can_force:false, winner:null, log:[{m:'Бой завязан.'}],
   pool:[{unit_id:'u1',unit_name:'Вальсирующий',cls:'corvette',free:12,hp:500,dmg:1400,speed:3,rng:3}],
   units:[
-    {id:'a1',side:'attacker',mine:true, name:'Вальсирующий',cls:'corvette',   x:1, y:2, hp:500, max_hp:500, shield:100,max_shield:200,armor:10,dmg:1400,speed:3,rng:3,moved:false,fired:false},
-    {id:'a2',side:'attacker',mine:true, name:'Фрегат-тест', cls:'frigate',    x:2, y:4, hp:400, max_hp:800, shield:0,  max_shield:0,  armor:10,dmg:1400,speed:3,rng:3,moved:false,fired:false},
-    {id:'a3',side:'attacker',mine:true, name:'Эсминец-тест',cls:'destroyer',  x:1, y:6, hp:100, max_hp:900, shield:0,  max_shield:0,  armor:10,dmg:1400,speed:3,rng:3,moved:true, fired:true},
-    {id:'a4',side:'attacker',mine:true, name:'Крейсер-тест',cls:'cruiser',    x:2, y:8, hp:900, max_hp:900, shield:50, max_shield:50, armor:10,dmg:1400,speed:2,rng:4,moved:false,fired:false},
-    {id:'a5',side:'attacker',mine:true, name:'Линкор-тест', cls:'battleship', x:1, y:10,hp:900, max_hp:900, shield:50, max_shield:50, armor:10,dmg:1400,speed:1,rng:5,moved:false,fired:false},
-    {id:'a6',side:'attacker',mine:true, name:'Дредноут',    cls:'dreadnought',x:3, y:12,hp:900, max_hp:900, shield:50, max_shield:50, armor:10,dmg:1400,speed:1,rng:6,moved:false,fired:false},
-    {id:'d1',side:'defender',mine:false,name:'Враг-корвет', cls:'corvette',   x:22,y:3, hp:500, max_hp:500, shield:0,  max_shield:0,  armor:10,dmg:1400,speed:3,rng:3,moved:false,fired:false},
-    {id:'d2',side:'defender',mine:false,name:'Враг-линкор', cls:'battleship', x:21,y:7, hp:700, max_hp:900, shield:0,  max_shield:0,  armor:10,dmg:1400,speed:1,rng:5,moved:false,fired:false},
-    {id:'d3',side:'defender',mine:false,name:'Враг-дредноут',cls:'dreadnought',x:22,y:11,hp:900,max_hp:900, shield:99, max_shield:99, armor:10,dmg:1400,speed:1,rng:6,moved:false,fired:false},
+    {id:'a1',side:'attacker',mine:true, name:'Вальсирующий',cls:'corvette',   x:1, y:2, hp:500, max_hp:500, shield:100,max_shield:200,armor:10,dmg:1400,speed:3,rng:3,moved:false,fired:false,acted:false},
+    {id:'a2',side:'attacker',mine:true, name:'Фрегат-тест', cls:'frigate',    x:2, y:4, hp:400, max_hp:800, shield:0,  max_shield:0,  armor:10,dmg:1400,speed:3,rng:3,moved:false,fired:false,acted:false},
+    {id:'a3',side:'attacker',mine:true, name:'Эсминец-тест',cls:'destroyer',  x:1, y:6, hp:100, max_hp:900, shield:0,  max_shield:0,  armor:10,dmg:1400,speed:3,rng:3,moved:true, fired:true,acted:true},
+    {id:'a4',side:'attacker',mine:true, name:'Крейсер-тест',cls:'cruiser',    x:2, y:8, hp:900, max_hp:900, shield:50, max_shield:50, armor:10,dmg:1400,speed:2,rng:4,moved:false,fired:false,acted:false},
+    {id:'a5',side:'attacker',mine:true, name:'Линкор-тест', cls:'battleship', x:1, y:10,hp:900, max_hp:900, shield:50, max_shield:50, armor:10,dmg:1400,speed:1,rng:5,moved:false,fired:false,acted:false},
+    {id:'a6',side:'attacker',mine:true, name:'Дредноут',    cls:'dreadnought',x:3, y:12,hp:900, max_hp:900, shield:50, max_shield:50, armor:10,dmg:1400,speed:1,rng:6,moved:false,fired:false,acted:false},
+    {id:'d1',side:'defender',mine:false,name:'Враг-корвет', cls:'corvette',   x:45,y:5, hp:500, max_hp:500, shield:0,  max_shield:0,  armor:10,dmg:1400,speed:3,rng:3,moved:false,fired:false,acted:false},
+    {id:'d2',side:'defender',mine:false,name:'Враг-линкор', cls:'battleship', x:44,y:12, hp:700, max_hp:900, shield:0,  max_shield:0,  armor:10,dmg:1400,speed:1,rng:5,moved:false,fired:false,acted:false},
+    {id:'d3',side:'defender',mine:false,name:'Враг-дредноут',cls:'dreadnought',x:45,y:20,hp:900,max_hp:900, shield:99, max_shield:99, armor:10,dmg:1400,speed:1,rng:6,moved:false,fired:false,acted:false},
   ],
 };
 async function ecRpc(fn, body){ if(fn==='battle_state') return MOCK; console.log('[rpc]',fn,body); return {}; }

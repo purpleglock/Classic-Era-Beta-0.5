@@ -78,20 +78,32 @@
 /* ── Тело: доска + правая колонка ── */
 .bb-body { display: flex; gap: 16px; padding: 16px 18px 24px; align-items: flex-start; flex: 1; }
 .bb-boardw { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
-/* обойма канваса: на узких экранах доска скроллится пальцем внутри неё */
+/* обойма канваса: камера живёт внутри канваса (пан/пинч/зум), скролла нет */
 .bb-cvw {
-  max-width: 100%; overflow: auto; -webkit-overflow-scrolling: touch;
+  position: relative; width: 100%; max-width: 100%; overflow: hidden;
   overscroll-behavior: contain;
 }
 .bb-cv {
   display: block;
   box-shadow: 0 0 60px rgba(0,150,200,.16), 0 0 120px rgba(0,60,120,.10);
   cursor: crosshair;
+  touch-action: none;
 }
-.bb-scroll-hint {
-  display: none; margin-top: 6px; color: #55707e; font-size: 10.5px;
-  font-family: var(--font-mono, monospace); letter-spacing: .12em; text-transform: uppercase;
+/* кнопки зума поверх доски */
+.bb-zoom {
+  position: absolute; right: 10px; bottom: 10px;
+  display: flex; flex-direction: column; gap: 6px; z-index: 3;
 }
+.bb-zbtn {
+  width: 38px; height: 38px; border: 0; cursor: pointer;
+  background: rgba(10,22,30,.85); color: #8fe6ff;
+  font-size: 18px; line-height: 1; font-family: var(--font-mono, monospace);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+.bb-zbtn:hover { background: rgba(24,46,58,.95); color: #d8f6ff; }
+/* активации в полосе хода */
+.bb-acts { color: #8fe6ff; letter-spacing: .18em; font-size: 12px; white-space: nowrap; }
+.bb-acts i { font-style: normal; margin-left: 6px; color: #55707e; letter-spacing: 0; font-family: var(--font-mono, monospace); }
 .bb-side { width: 300px; flex: 0 0 300px; display: flex; flex-direction: column; gap: 12px; }
 
 /* ── Полоса состояния под доской: скошенная плашка ── */
@@ -202,7 +214,6 @@
   .bb-top { gap: 8px 10px; padding: 10px 12px; flex-wrap: wrap; }
   .bb-vs { margin-left: 0; width: 100%; order: 3; }
   .bb-x { position: absolute; top: 6px; right: 8px; }
-  .bb-scroll-hint { display: block; }
 }
 @media (max-width: 720px) {
   .bb-ov { --bb-cut: 9px; }

@@ -2,30 +2,34 @@
 // Проприетарное ПО. Использование, копирование, изменение и распространение
 // без письменного разрешения правообладателя запрещены. См. файл LICENSE.
 // ════════════════════════════════════════════════════════════════════
-// ДОСКА БОЯ — пошаговое сражение флотов (война, срез 5)
-// Написана С НУЛЯ. Зеркало _war_battle.sql.
+// ДОСКА БОЯ — пошаговое сражение флотов (переработка: ГЕКСЫ + АКТИВАЦИИ)
+// Зеркало _war_battle.sql + _war_battle_rework.sql.
 //
-// ХОД = ход СТОРОНЫ: каждый живой корабль может один раз сдвинуться и
-// один раз выстрелить, потом ход уходит противнику. 6 ходов на сторону.
-// Ход можно целиком разменять на вызов одного корабля из резерва.
+// ХОД СТОРОНЫ = 6 АКТИВАЦИЙ кораблями: активируется корабль, когда впервые
+// действует в этом ходу (ход и/или выстрел). Один корабль за ход — не больше
+// одного перемещения и одного выстрела. Ход можно целиком разменять на вызов
+// одного корабля из резерва.
 //
-// Фазы:
-//   forming — расстановка: тянем корабли из резерва в свою зону;
-//   active  — бой: клик по своему кораблю → подсветка хода и целей;
-//   done    — итог.
+// ТТХ — из конструктора (KV): подвижность = summary.speed («квадраты»),
+// дальность огня = summary.rng (max dalnost орудий). Сервер — истина.
 //
-// Рендер — canvas в мировых координатах клеток (BB.cell пикселей на клетку),
-// без внешних зависимостей. Один акцент на сторону: свои — циан, чужие —
-// маджента (правила UI: 1-2 акцента, никакого радужного салата).
+// Доска — ГЕКСЫ flat-top в odd-q offset (x = колонка, нечётные смещены вниз).
+// Рендер — canvas с КАМЕРОЙ: зум (пинч/колесо/кнопки) и панорама (драг).
+// Камера живёт в BB и НЕ сбрасывается при перерисовке — телефон больше не
+// «скидывает» доску влево после каждого хода.
 // ════════════════════════════════════════════════════════════════════
 
 const BB = {
   id: null,          // id боя
   st: null,          // ответ battle_state
   cv: null, ctx: null,
-  cell: 34, dpr: 1,
+  R: 34,             // радиус гекса в МИРОВЫХ px (зум поверх)
+  dpr: 1,
+  vw: 0, vh: 0,      // размер вьюпорта канваса (CSS px)
+  zoom: 1, camX: 0, camY: 0,   // камера: масштаб и мировая точка в левом-верхнем углу
+  camReady: false,   // камера один раз центрируется на своей зоне и дальше не трогается
   sel: null,         // выбранный свой корабль (id)
-  hover: null,       // {x,y} под курсором
+  hover: null,       // {x,y} гекс под курсором
   pick: null,        // фаза расстановки: выбранный проект из резерва
   place: [],         // фаза расстановки: [{unit_id, unit_name, cls, x, y}]
   poll: null,        // таймер опроса (ход противника)
@@ -34,25 +38,29 @@ const BB = {
   tex: {},           // кэш текстур корпуса: cls → Image|null (null = грузится/нет)
   stars: null,       // офскрин-звёздное небо (пересобирается при ресайзе)
   raf: null,         // цикл анимации (дрейф звёзд, пульс дюз)
+  ptrs: new Map(),   // активные пойнтеры (пан/пинч)
+  drag: null,        // {sx, sy, camX, camY, moved}
+  pinch: null,       // {d, zoom, mx, my}
 };
+
+const BB_SQ3 = Math.sqrt(3);
 
 // Палитра: держим в одном месте, чтобы доска не расползлась по цветам.
 const BB_C = {
   bg:     '#05070d',
-  grid:   'rgba(90,200,230,0.10)',
-  gridHi: 'rgba(90,200,230,0.22)',
+  hex:    'rgba(90,200,230,0.14)',   // кант гекса
+  hexIn:  'rgba(90,200,230,0.03)',   // едва заметная заливка сот
   mine:   '90,220,240',    // циан — свои
   foe:    '255,60,130',    // маджента — чужие
-  grid2:  'rgba(90,200,230,0.05)',   // сетка в космосе — едва заметная разметка тактического сканера
-  move:   'rgba(90,220,240,0.16)',
-  fire:   'rgba(255,60,130,0.20)',
-  zoneA:  'rgba(90,220,240,0.07)',
-  zoneD:  'rgba(255,60,130,0.07)',
+  move:   'rgba(90,220,240,0.18)',
+  fire:   'rgba(255,60,130,0.22)',
+  fireEdge: 'rgba(255,60,130,0.30)',
 };
 
 // ── Открыть / закрыть ───────────────────────────────────────
 async function bbOpen(battleId) {
   BB.id = battleId; BB.sel = null; BB.pick = null; BB.place = [];
+  BB.camReady = false;
   let ov = document.getElementById('bb-ov');
   if (!ov) {
     ov = document.createElement('div');
@@ -72,6 +80,7 @@ function bbClose() {
   document.body.style.overflow = '';
   if (BB.raf) { cancelAnimationFrame(BB.raf); BB.raf = null; }
   BB.id = null; BB.st = null; BB.cv = null; BB.ctx = null; BB.stars = null;
+  BB.ptrs.clear(); BB.drag = null; BB.pinch = null;
   // состав флотов мог измениться (потери) — обновим кабинет
   if (typeof ecReload === 'function') ecReload();
 }
@@ -127,8 +136,14 @@ function bbRender() {
       </div>
       <div class="bb-body">
         <div class="bb-boardw">
-          <div class="bb-cvw"><canvas id="bb-cv" class="bb-cv"></canvas></div>
-          <div class="bb-scroll-hint" id="bb-scroll-hint">⇄ доску можно листать пальцем</div>
+          <div class="bb-cvw">
+            <canvas id="bb-cv" class="bb-cv"></canvas>
+            <div class="bb-zoom">
+              <button class="bb-zbtn" title="Приблизить" onclick="bbZoomBtn(1.3)">+</button>
+              <button class="bb-zbtn" title="Отдалить" onclick="bbZoomBtn(1/1.3)">−</button>
+              <button class="bb-zbtn" title="К своим кораблям" onclick="bbCamHome()">⌂</button>
+            </div>
+          </div>
           ${bbPhaseBar(s, myLeft, foeLeft)}
         </div>
         <aside class="bb-side">
@@ -145,7 +160,7 @@ function bbRender() {
   bbPaint();
 }
 
-// Полоса состояния: чей ход, сколько ходов осталось, срок явки.
+// Полоса состояния: чей ход, активации, сколько ходов осталось, срок явки.
 function bbPhaseBar(s, myLeft, foeLeft) {
   if (s.status === 'done') {
     const won = s.winner === s.my_fid;
@@ -165,8 +180,12 @@ function bbPhaseBar(s, myLeft, foeLeft) {
       </div>`;
   }
   const mv = s.my_turn;
+  const actsMax = s.acts_max || 6;
+  const acts = mv ? `<span class="bb-acts" title="Активаций кораблями в этом ходу">
+      ${'◆'.repeat(Math.max(0, s.acts_left || 0))}${'◇'.repeat(Math.max(0, actsMax - (s.acts_left || 0)))}
+      <i>${s.acts_left || 0}/${actsMax}</i></span>` : '';
   return `<div class="bb-bar ${mv ? 'bb-bar-my' : 'bb-bar-foe'}">
-      <b>${mv ? 'Ваш ход' : 'Ход противника'}</b>
+      <b>${mv ? 'Ваш ход' : 'Ход противника'}</b>${acts}
       <span class="bb-bar-sub">Ходов осталось: у вас ${myLeft}, у врага ${foeLeft}. ${bbDeadline(s)}</span>
       ${mv ? `<button class="btn btn-gd btn-sm" onclick="bbEndTurn()">Завершить ход</button>` : ''}
       ${s.can_force ? `<button class="btn btn-gh btn-sm" onclick="bbForce()">Прожать просроченный ход</button>` : ''}
@@ -199,7 +218,7 @@ function bbDeployPanel(s) {
   }).join('');
   return `<div class="bb-panel">
       <div class="bb-panel-t">Резерв на поле боя</div>
-      <div class="bb-panel-h">Выберите корабль, затем клик по своей зоне. Максимум ${s.cap} на доске. Клик по уже поставленному — снять.</div>
+      <div class="bb-panel-h">Выберите корабль, затем клик по своей зоне (подсвеченные гексы у вашего края). Максимум ${s.cap} на доске. Клик по уже поставленному — снять.</div>
       ${rows || '<div class="bb-empty">Резерв пуст: в скованных боем флотах кораблей нет.</div>'}
     </div>`;
 }
@@ -220,21 +239,21 @@ function bbUnitPanel(s) {
     </div>` : '';
   if (!u) return `<div class="bb-panel">
       <div class="bb-panel-t">Корабль не выбран</div>
-      <div class="bb-panel-h">${s.my_turn ? 'Кликните по своему кораблю: подсветятся клетки хода и цели в зоне поражения.' : 'Сейчас ходит противник. Доска обновится сама.'}</div>
+      <div class="bb-panel-h">${s.my_turn ? `Кликните по своему кораблю: подсветятся гексы хода и цели в зоне поражения. За ход можно активировать ${s.acts_max || 6} кораблей.` : 'Сейчас ходит противник. Доска обновится сама.'}</div>
     </div>${reinf}`;
   const pct = v => Math.max(0, Math.min(100, v));
   return `<div class="bb-panel">
       <div class="bb-panel-t">${esc(u.name)}</div>
-      <div class="bb-panel-h">${bbClsName(u.cls)}</div>
+      <div class="bb-panel-h">${bbClsName(u.cls)}${u.mine && u.acted ? ' · <b>активирован</b>' : ''}</div>
       <div class="bb-stat"><span>Корпус</span><b>${u.hp} / ${u.max_hp}</b></div>
       <div class="bb-bar-hp"><i style="width:${pct(u.hp / u.max_hp * 100)}%"></i></div>
       ${u.max_shield > 0 ? `<div class="bb-stat"><span>Щит</span><b>${u.shield} / ${u.max_shield}</b></div>
         <div class="bb-bar-sh"><i style="width:${pct(u.shield / u.max_shield * 100)}%"></i></div>` : ''}
       <div class="bb-stat"><span>Броня</span><b>${u.armor}</b></div>
       <div class="bb-stat"><span>Залп</span><b>${u.dmg}</b></div>
-      <div class="bb-stat"><span>Ход</span><b>${u.speed} клет. ${u.moved ? '— израсходован' : ''}</b></div>
-      <div class="bb-stat"><span>Дальность</span><b>${u.rng} клет. ${u.fired ? '— уже стрелял' : ''}</b></div>
-      ${u.mine && s.my_turn ? `<div class="bb-panel-h" style="margin-top:8px">${u.moved && u.fired ? 'Корабль отработал этот ход.' : 'Клик по подсвеченной клетке — идти, по цели в зоне поражения — огонь.'}</div>` : ''}
+      <div class="bb-stat"><span>Ход</span><b>${u.speed} гекс. ${u.moved ? '— израсходован' : ''}</b></div>
+      <div class="bb-stat"><span>Дальность</span><b>${u.rng} гекс. ${u.fired ? '— уже стрелял' : ''}</b></div>
+      ${u.mine && s.my_turn ? `<div class="bb-panel-h" style="margin-top:8px">${u.moved && u.fired ? 'Корабль отработал этот ход.' : (!u.acted && !(s.acts_left > 0) ? 'Активации кончились — этот корабль в этом ходу не действует.' : 'Клик по подсвеченному гексу — идти, по цели в зоне поражения — огонь.')}</div>` : ''}
     </div>${reinf}`;
 }
 
@@ -251,78 +270,208 @@ function bbLogPanel(s) {
 // ── Классы кораблей: имя и значок ───────────────────────────
 const BB_CLS = {
   corvette:   'Корвет', frigate: 'Фрегат', destroyer: 'Эсминец',
-  cruiser:    'Крейсер', battleship: 'Линкор', dreadnought: 'Дредноут'
+  cruiser:    'Крейсер', battleship: 'Линкор', dreadnought: 'Дредноут',
+  supportCarrier: 'Носитель поддержки', mediumCruiser: 'Средний крейсер',
+  hyperCruiser: 'Гиперкрейсер', multiroleCarrier: 'Многоцелевой носитель', ss13: 'Станция'
 };
 function bbClsName(c) { return BB_CLS[c] || 'Корабль'; }
 function bbClsIco(c) {
-  const n = { corvette: '▸', frigate: '▶', destroyer: '◆', cruiser: '⬢', battleship: '⬣', dreadnought: '⬟' };
+  const n = { corvette: '▸', frigate: '▶', destroyer: '◆', cruiser: '⬢', battleship: '⬣', dreadnought: '⬟',
+              supportCarrier: '⬨', mediumCruiser: '⬢', hyperCruiser: '⬡', multiroleCarrier: '⬨', ss13: '✦' };
   return n[c] || '▸';
 }
-// Размер силуэта в долях клетки — класс читается по габариту, а не по подписи.
+// Размер силуэта в долях гекса — класс читается по габариту, а не по подписи.
 function bbClsSize(c) {
-  return ({ corvette: 0.42, frigate: 0.52, destroyer: 0.60, cruiser: 0.68, battleship: 0.80, dreadnought: 0.92 })[c] || 0.55;
+  return ({ corvette: 0.42, frigate: 0.52, destroyer: 0.60, cruiser: 0.68, battleship: 0.80, dreadnought: 0.92,
+            supportCarrier: 0.66, mediumCruiser: 0.68, hyperCruiser: 0.76, multiroleCarrier: 0.78, ss13: 0.85 })[c] || 0.55;
 }
 
-// ── Геометрия ───────────────────────────────────────────────
-function bbFit() {
-  const s = BB.st; if (!s || !BB.cv) return;
-  // Ширину считаем от ВСЕГО тела экрана минус правая колонка, а не от
-  // wrap.clientWidth: канвас меряется раньше, чем флекс отдаст место панели,
-  // и «съедает» её ширину — панель уезжала за край экрана.
-  const body = BB.cv.closest('.bb-body');
-  const side = body ? body.querySelector('.bb-side') : null;
-  const wide = window.innerWidth > 900;
-  const bodyW = body ? body.clientWidth : (BB.cv.parentElement.clientWidth || 600);
-  const sideW = (wide && side) ? (side.offsetWidth || 300) + 16 : 0;
-  const availW = Math.max(200, bodyW - sideW - 4);
-  const availH = Math.max(240, window.innerHeight - (wide ? 190 : 320));
-  // Доска целиком влезает в экран (без скролла), но клетка не мельче минимума —
-  // иначе корпуса превращаются в мух. На телефоне минимум держим 26px (цель под
-  // палец): доска шире экрана и листается внутри .bb-cvw. Верхний кап, чтобы на
-  // большой доске клетки не раздувались до почтовых марок с гигантскими зазорами.
-  const minCell = wide ? 30 : 26;
-  const fit = Math.floor(Math.min(availW / s.w, availH / s.h));
-  BB.cell = Math.max(minCell, Math.min(Math.max(fit, 1), 54));
-  const hint = document.getElementById('bb-scroll-hint');
-  if (hint) hint.style.display = (!wide && BB.cell * s.w > availW) ? 'block' : 'none';
-  BB.dpr = Math.min(2, window.devicePixelRatio || 1);
-  const W = BB.cell * s.w, H = BB.cell * s.h;
-  BB.cv.style.width = W + 'px'; BB.cv.style.height = H + 'px';
-  BB.cv.width = Math.round(W * BB.dpr); BB.cv.height = Math.round(H * BB.dpr);
-  BB.stars = null;   // небо пересобирается под новый размер
+// ── ГЕКС-ГЕОМЕТРИЯ (flat-top, odd-q offset; зеркало _bt_dist) ──
+function bbHexCenter(x, y) {
+  const R = BB.R;
+  return { px: R + x * R * 1.5, py: R * BB_SQ3 * (y + 0.5 * (x & 1)) + R * BB_SQ3 / 2 };
 }
-function bbCellAt(ev) {
-  const r = BB.cv.getBoundingClientRect();
-  // Канвас может быть визуально сжат CSS'ом (max-width на телефоне) —
-  // пересчитываем клик из экранных px в мировые, иначе тапы едут мимо клеток.
-  const k = r.width ? (BB.cv.width / BB.dpr) / r.width : 1;
-  const x = Math.floor((ev.clientX - r.left) * k / BB.cell);
-  const y = Math.floor((ev.clientY - r.top) * k / BB.cell);
-  const s = BB.st;
-  if (x < 0 || y < 0 || x >= s.w || y >= s.h) return null;
-  return { x, y };
+function bbWorldSize() {
+  const s = BB.st, R = BB.R;
+  return { W: R * 1.5 * (s.w - 1) + 2 * R, H: R * BB_SQ3 * (s.h + 0.5) };
 }
-function bbDist(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
+function bbDist(a, b) {
+  const r1 = a.y - ((a.x - (a.x & 1)) >> 1), r2 = b.y - ((b.x - (b.x & 1)) >> 1);
+  const dq = a.x - b.x, dr = r1 - r2;
+  return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
+}
+// Мировая точка → гекс: ближайший центр среди кандидатов вокруг оценённой колонки.
+function bbHexFromWorld(wx, wy) {
+  const s = BB.st, R = BB.R;
+  const cx = Math.round((wx - R) / (R * 1.5));
+  let best = null, bd = Infinity;
+  for (let x = cx - 1; x <= cx + 1; x++) {
+    if (x < 0 || x >= s.w) continue;
+    const ry = Math.round((wy - R * BB_SQ3 / 2) / (R * BB_SQ3) - 0.5 * (x & 1));
+    for (let y = ry - 1; y <= ry + 1; y++) {
+      if (y < 0 || y >= s.h) continue;
+      const c = bbHexCenter(x, y);
+      const d = (c.px - wx) ** 2 + (c.py - wy) ** 2;
+      if (d < bd) { bd = d; best = { x, y }; }
+    }
+  }
+  if (best && bd <= (R * 0.98) ** 2) return best;
+  return null;
+}
+function bbHexPath(ctx, cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 3 * i;
+    const px = cx + r * Math.cos(a), py = cy + r * Math.sin(a);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
 function bbUnitAt(x, y) {
   const s = BB.st;
   return (s.units || []).find(u => u.x === x && u.y === y)
       || BB.place.find(p => p.x === x && p.y === y) || null;
 }
-// Моя зона разворачивания: три колонки со своего края.
+// Моя зона разворачивания: s.zone колонок со своего края.
 function bbInMyZone(x) {
-  const s = BB.st;
-  return s.my_side === 'attacker' ? x <= 2 : x >= s.w - 3;
+  const s = BB.st, z = s.zone || 3;
+  return s.my_side === 'attacker' ? x < z : x >= s.w - z;
 }
 
-// ── Ввод ────────────────────────────────────────────────────
+// ── КАМЕРА ──────────────────────────────────────────────────
+function bbFit() {
+  const s = BB.st; if (!s || !BB.cv) return;
+  const wrap = BB.cv.parentElement;   // .bb-cvw
+  const wide = window.innerWidth > 900;
+  BB.vw = Math.max(240, wrap.clientWidth || 320);
+  BB.vh = Math.max(260, window.innerHeight - (wide ? 210 : 330));
+  wrap.style.height = BB.vh + 'px';
+  BB.dpr = Math.min(2, window.devicePixelRatio || 1);
+  BB.cv.style.width = BB.vw + 'px'; BB.cv.style.height = BB.vh + 'px';
+  BB.cv.width = Math.round(BB.vw * BB.dpr); BB.cv.height = Math.round(BB.vh * BB.dpr);
+  BB.stars = null;   // небо пересобирается под новый размер
+  if (!BB.camReady) { bbCamHome(); BB.camReady = true; }
+  bbCamClamp();
+}
+// Камера домой: своя зона разворачивания в кадре (свой край доски).
+function bbCamHome() {
+  const s = BB.st; if (!s) return;
+  const { W, H } = bbWorldSize();
+  // стартовый зум: доска по высоте влезает целиком, но гексы не мельче ~22px
+  BB.zoom = Math.max(Math.min(BB.vh / H, BB.vw / W) , 22 / (BB.R * BB_SQ3));
+  BB.zoom = Math.min(BB.zoom, 1.6);
+  const meAtt = s.my_side === 'attacker';
+  // свои корабли (или своя зона) — в центр кадра
+  const mine = (s.units || []).filter(u => u.mine);
+  let fx;
+  if (mine.length) fx = mine.reduce((a, u) => a + bbHexCenter(u.x, u.y).px, 0) / mine.length;
+  else fx = meAtt ? BB.R * 4 : W - BB.R * 4;
+  BB.camX = fx - BB.vw / BB.zoom / 2;
+  BB.camY = H / 2 - BB.vh / BB.zoom / 2;
+  bbCamClamp();
+  if (BB.ctx) bbPaint();
+}
+function bbCamClamp() {
+  const s = BB.st; if (!s) return;
+  const { W, H } = bbWorldSize();
+  const pad = BB.R * 2;
+  const vwW = BB.vw / BB.zoom, vwH = BB.vh / BB.zoom;
+  BB.camX = Math.max(-pad - Math.max(0, vwW - W - pad), Math.min(W + pad - vwW, BB.camX));
+  BB.camY = Math.max(-pad - Math.max(0, vwH - H - pad), Math.min(H + pad - vwH, BB.camY));
+  if (vwW >= W + pad * 2) BB.camX = (W - vwW) / 2;
+  if (vwH >= H + pad * 2) BB.camY = (H - vwH) / 2;
+}
+function bbZoomAt(f, sx, sy) {
+  const z0 = BB.zoom;
+  const z1 = Math.max(0.2, Math.min(3, z0 * f));
+  if (z1 === z0) return;
+  // точка под курсором остаётся на месте
+  BB.camX += sx / z0 - sx / z1;
+  BB.camY += sy / z0 - sy / z1;
+  BB.zoom = z1;
+  bbCamClamp();
+  bbPaint();
+}
+function bbZoomBtn(f) { bbZoomAt(f, BB.vw / 2, BB.vh / 2); }
+
+// ── Ввод: пан/пинч/клик/ховер через pointer events ──────────
+function bbScreenXY(ev) {
+  const r = BB.cv.getBoundingClientRect();
+  return { sx: ev.clientX - r.left, sy: ev.clientY - r.top };
+}
+function bbHexAt(ev) {
+  const { sx, sy } = bbScreenXY(ev);
+  return bbHexFromWorld(sx / BB.zoom + BB.camX, sy / BB.zoom + BB.camY);
+}
 function bbBindCanvas() {
-  BB.cv.onmousemove = ev => {
-    const c = bbCellAt(ev);
-    const same = BB.hover && c && BB.hover.x === c.x && BB.hover.y === c.y;
-    if (!same) { BB.hover = c; bbPaint(); }
+  const cv = BB.cv;
+  cv.style.touchAction = 'none';   // жесты обрабатываем сами — страница не скроллится
+
+  cv.onpointerdown = ev => {
+    cv.setPointerCapture(ev.pointerId);
+    BB.ptrs.set(ev.pointerId, bbScreenXY(ev));
+    if (BB.ptrs.size === 1) {
+      const p = bbScreenXY(ev);
+      BB.drag = { sx: p.sx, sy: p.sy, camX: BB.camX, camY: BB.camY, moved: false };
+      BB.pinch = null;
+    } else if (BB.ptrs.size === 2) {
+      const [a, b] = [...BB.ptrs.values()];
+      BB.pinch = { d: Math.hypot(a.sx - b.sx, a.sy - b.sy), zoom: BB.zoom };
+      BB.drag = null;
+    }
+    ev.preventDefault();
   };
-  BB.cv.onmouseleave = () => { BB.hover = null; bbPaint(); };
-  BB.cv.onclick = ev => { const c = bbCellAt(ev); if (c) bbClick(c.x, c.y); };
+  cv.onpointermove = ev => {
+    const p = bbScreenXY(ev);
+    if (BB.ptrs.has(ev.pointerId)) BB.ptrs.set(ev.pointerId, p);
+    if (BB.pinch && BB.ptrs.size >= 2) {
+      const [a, b] = [...BB.ptrs.values()];
+      const d = Math.hypot(a.sx - b.sx, a.sy - b.sy);
+      if (d > 4 && BB.pinch.d > 4) {
+        const mx = (a.sx + b.sx) / 2, my = (a.sy + b.sy) / 2;
+        const target = Math.max(0.2, Math.min(3, BB.pinch.zoom * d / BB.pinch.d));
+        bbZoomAt(target / BB.zoom, mx, my);
+      }
+      return;
+    }
+    if (BB.drag && BB.ptrs.size === 1) {
+      const dx = p.sx - BB.drag.sx, dy = p.sy - BB.drag.sy;
+      if (Math.abs(dx) + Math.abs(dy) > 6) BB.drag.moved = true;
+      if (BB.drag.moved) {
+        BB.camX = BB.drag.camX - dx / BB.zoom;
+        BB.camY = BB.drag.camY - dy / BB.zoom;
+        bbCamClamp();
+        bbPaint();
+      }
+      return;
+    }
+    // ховер (мышь без зажатия)
+    if (ev.pointerType === 'mouse' && !BB.drag) {
+      const c = bbHexAt(ev);
+      const same = BB.hover && c && BB.hover.x === c.x && BB.hover.y === c.y;
+      if (!same) { BB.hover = c; bbPaint(); }
+    }
+  };
+  cv.onpointerup = ev => {
+    const wasDrag = BB.drag && BB.drag.moved;
+    const wasPinch = !!BB.pinch;
+    BB.ptrs.delete(ev.pointerId);
+    if (BB.ptrs.size < 2) BB.pinch = null;
+    if (BB.ptrs.size === 0) {
+      const d = BB.drag; BB.drag = null;
+      if (!wasDrag && !wasPinch && d) {
+        const c = bbHexAt(ev);
+        if (c) bbClick(c.x, c.y);
+      }
+    }
+  };
+  cv.onpointercancel = ev => { BB.ptrs.delete(ev.pointerId); BB.drag = null; if (BB.ptrs.size < 2) BB.pinch = null; };
+  cv.onpointerleave = () => { if (!BB.drag) { BB.hover = null; bbPaint(); } };
+  cv.onwheel = ev => {
+    ev.preventDefault();
+    const { sx, sy } = bbScreenXY(ev);
+    bbZoomAt(ev.deltaY < 0 ? 1.15 : 1 / 1.15, sx, sy);
+  };
   window.onresize = () => { if (BB.id && BB.cv) { bbFit(); bbPaint(); } };
 }
 
@@ -354,18 +503,23 @@ function bbClick(x, y) {
   if (tgt && tgt.mine) { BB.sel = (BB.sel === tgt.id ? null : tgt.id); bbRender(); return; }
   if (!sel) return;
 
+  // новый корабль без активаций — не пускаем зря на сервер
+  const noActs = !sel.acted && !(s.acts_left > 0);
+
   // клик по врагу в зоне поражения — огонь
   if (tgt && !tgt.mine) {
     if (sel.fired) { toast('Этот корабль уже стрелял в этом ходу', 'err'); return; }
-    if (bbDist(sel, tgt) > sel.rng) { toast(`До цели ${bbDist(sel, tgt)} клет., «${sel.name}» бьёт на ${sel.rng}`, 'err'); return; }
+    if (noActs) { toast(`Активации кончились: за ход действуют не больше ${s.acts_max || 6} кораблей`, 'err'); return; }
+    if (bbDist(sel, tgt) > sel.rng) { toast(`До цели ${bbDist(sel, tgt)} гекс., «${sel.name}» бьёт на ${sel.rng}`, 'err'); return; }
     bbFire(sel.id, tgt.id);
     return;
   }
-  // клик по пустой клетке в радиусе хода — идти
+  // клик по пустому гексу в радиусе хода — идти
   if (!tgt) {
     if (sel.moved) { toast('Этот корабль уже ходил', 'err'); return; }
+    if (noActs) { toast(`Активации кончились: за ход действуют не больше ${s.acts_max || 6} кораблей`, 'err'); return; }
     const d = bbDist(sel, { x, y });
-    if (d > sel.speed) { toast(`«${sel.name}» проходит ${sel.speed} клет. за ход, а до цели ${d}`, 'err'); return; }
+    if (d > sel.speed) { toast(`«${sel.name}» проходит ${sel.speed} гекс. за ход, а до цели ${d}`, 'err'); return; }
     bbMove(sel.id, x, y);
   }
 }
@@ -385,7 +539,7 @@ async function bbAct(fn, body, okMsg) {
 function bbMove(id, x, y) { return bbAct('battle_move', { p_battle: BB.id, p_unit: id, p_x: x, p_y: y }); }
 function bbFire(id, tid) { return bbAct('battle_fire', { p_battle: BB.id, p_unit: id, p_target: tid }); }
 function bbEndTurn() {
-  if (!confirm('Завершить ход? Корабли, которые не двигались и не стреляли, простоят этот ход.')) return;
+  if (!confirm('Завершить ход? Неиспользованные активации сгорят.')) return;
   BB.sel = null;
   return bbAct('battle_end_turn', { p_battle: BB.id }, 'Ход передан противнику');
 }
@@ -413,21 +567,27 @@ async function bbConfirmDeploy() {
 }
 
 // ════════════════════════════════════════════════════════════
-// РЕНДЕР
+// РЕНДЕР: небо в экранных координатах, доска — через камеру
 // ════════════════════════════════════════════════════════════
 function bbPaint(t) {
   const s = BB.st, ctx = BB.ctx; if (!s || !ctx) return;
-  const C = BB.cell, W = s.w * C, H = s.h * C;
   t = t || performance.now();
-  ctx.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);
-  ctx.clearRect(0, 0, W, H);
 
-  bbPaintSpace(ctx, s, C, W, H, t);
-  bbPaintZones(ctx, s, C, W, H);
-  bbPaintGrid(ctx, s, C, W, H);
-  bbPaintHighlights(ctx, s, C);
-  bbPaintUnits(ctx, s, C, t);
-  bbPaintScan(ctx, W, H);
+  // фон-космос — в экранных координатах (не дёргается с камерой)
+  ctx.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);
+  ctx.clearRect(0, 0, BB.vw, BB.vh);
+  bbPaintSpace(ctx, s, BB.vw, BB.vh, t);
+
+  // мир: камера
+  const z = BB.zoom;
+  ctx.setTransform(BB.dpr * z, 0, 0, BB.dpr * z, -BB.camX * BB.dpr * z, -BB.camY * BB.dpr * z);
+  bbPaintHexes(ctx, s, t);
+  bbPaintHighlights(ctx, s);
+  bbPaintUnits(ctx, s, t);
+
+  // сканлайны — снова экранные
+  ctx.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);
+  bbPaintScan(ctx, BB.vw, BB.vh);
 
   // цикл анимации: медленный дрейф звёзд + пульс дюз. Один rAF на доску,
   // гасится в bbClose. Троттлим до ~24 к/с — плавно и дёшево.
@@ -443,14 +603,24 @@ function bbPaint(t) {
   }
 }
 
+// Только видимые в кадре гексы: колонки/строки из мировых границ вьюпорта.
+function bbVisibleCells(s) {
+  const R = BB.R;
+  const x0 = Math.max(0, Math.floor((BB.camX - 2 * R) / (R * 1.5)));
+  const x1 = Math.min(s.w - 1, Math.ceil((BB.camX + BB.vw / BB.zoom) / (R * 1.5)));
+  const y0 = Math.max(0, Math.floor((BB.camY - 2 * R) / (R * BB_SQ3)) - 1);
+  const y1 = Math.min(s.h - 1, Math.ceil((BB.camY + BB.vh / BB.zoom) / (R * BB_SQ3)) + 1);
+  return { x0, x1, y0, y1 };
+}
+
 // ── КОСМОС: глубокий фон, два слоя звёзд с параллакс-дрейфом, туманности ──
-// Звёзды генерируются один раз в офскрин (шире доски), дрейф — сдвигом drawImage.
-function bbPaintSpace(ctx, s, C, W, H, t) {
+function bbPaintSpace(ctx, s, W, H, t) {
   ctx.fillStyle = '#020409'; ctx.fillRect(0, 0, W, H);
   if (!BB.stars || BB.stars.W !== W || BB.stars.H !== H) bbBuildStars(W, H);
   const st = BB.stars;
-  // дальний слой ползёт медленнее ближнего — параллакс даёт глубину
-  const o1 = (t * 0.0016) % st.far.width, o2 = (t * 0.004) % st.near.width;
+  // дрейф от времени + лёгкий параллакс от камеры — глубина
+  const o1 = ((t * 0.0016 + BB.camX * 0.05 * BB.zoom) % st.far.width + st.far.width) % st.far.width;
+  const o2 = ((t * 0.004 + BB.camX * 0.12 * BB.zoom) % st.near.width + st.near.width) % st.near.width;
   ctx.drawImage(st.far, -o1, 0); ctx.drawImage(st.far, st.far.width - o1, 0);
   ctx.drawImage(st.near, -o2, 0); ctx.drawImage(st.near, st.near.width - o2, 0);
   // туманности: холодная у зоны циана, тёплая у зоны мадженты + ядро по центру
@@ -470,8 +640,6 @@ function bbPaintSpace(ctx, s, C, W, H, t) {
 }
 
 function bbBuildStars(W, H) {
-  // Офскрины строим в CSS-размере: drawImage идёт поверх setTransform(dpr),
-  // так что 1px офскрина = 1 CSS-px доски. Дальнему плану лёгкая мягкость к лицу.
   const mkCss = (n, rMax, aMax) => {
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
@@ -489,93 +657,88 @@ function bbBuildStars(W, H) {
   BB.stars = { W, H, far: mkCss(Math.round(density * 0.9), 0.8, 0.35), near: mkCss(Math.round(density * 0.25), 1.5, 0.7) };
 }
 
-// Зоны разворачивания — градиент от края + светящаяся кромка, а не плоский прямоугольник.
-function bbPaintZones(ctx, s, C, W, H) {
+// ── СОТЫ: стилизованные гексы + зоны разворачивания ─────────
+function bbPaintHexes(ctx, s, t) {
+  const R = BB.R, { x0, x1, y0, y1 } = bbVisibleCells(s);
   const meAtt = s.my_side === 'attacker';
-  const zone = (x0, wpx, rgb, flip) => {
-    const g = ctx.createLinearGradient(flip ? x0 + wpx : x0, 0, flip ? x0 : x0 + wpx, 0);
-    g.addColorStop(0, `rgba(${rgb},0.10)`); g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g; ctx.fillRect(x0, 0, wpx, H);
-    const ex = flip ? x0 : x0 + wpx;   // кромка зоны — тонкая неоновая линия
-    ctx.strokeStyle = `rgba(${rgb},0.35)`; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(ex + 0.5, 0); ctx.lineTo(ex + 0.5, H); ctx.stroke();
-  };
-  zone(0, C * 3, meAtt ? BB_C.mine : BB_C.foe, false);
-  zone(W - C * 3, C * 3, meAtt ? BB_C.foe : BB_C.mine, true);
-}
-
-function bbPaintGrid(ctx, s, C, W, H) {
-  // Сетка — разметка тактического сканера, не таблица: тонкая, каждая третья чуть ярче.
-  ctx.lineWidth = 1;
-  for (let x = 0; x <= s.w; x++) {
-    ctx.strokeStyle = (x % 3 === 0) ? BB_C.grid : BB_C.grid2;
-    ctx.beginPath(); ctx.moveTo(x * C + 0.5, 0); ctx.lineTo(x * C + 0.5, H); ctx.stroke();
+  const z = s.zone || 3;
+  const lw = Math.max(0.6, 1 / BB.zoom);
+  for (let x = x0; x <= x1; x++) {
+    const zoneCol = x < z ? 'att' : (x >= s.w - z ? 'def' : null);
+    const zoneRgb = zoneCol ? (zoneCol === 'att' ? (meAtt ? BB_C.mine : BB_C.foe) : (meAtt ? BB_C.foe : BB_C.mine)) : null;
+    for (let y = y0; y <= y1; y++) {
+      const c = bbHexCenter(x, y);
+      bbHexPath(ctx, c.px, c.py, R * 0.96);
+      // соты сканера: едва заметная заливка, зона — оттенок стороны
+      ctx.fillStyle = zoneRgb ? `rgba(${zoneRgb},0.06)` : BB_C.hexIn;
+      ctx.fill();
+      ctx.strokeStyle = zoneRgb ? `rgba(${zoneRgb},0.28)` : BB_C.hex;
+      ctx.lineWidth = lw;
+      ctx.stroke();
+    }
   }
-  for (let y = 0; y <= s.h; y++) {
-    ctx.strokeStyle = (y % 3 === 0) ? BB_C.grid : BB_C.grid2;
-    ctx.beginPath(); ctx.moveTo(0, y * C + 0.5); ctx.lineTo(W, y * C + 0.5); ctx.stroke();
-  }
-  // клетка под курсором
+  // гекс под курсором
   if (BB.hover) {
-    ctx.strokeStyle = 'rgba(140,240,255,0.55)'; ctx.lineWidth = 1.5;
-    ctx.strokeRect(BB.hover.x * C + 1, BB.hover.y * C + 1, C - 2, C - 2);
+    const c = bbHexCenter(BB.hover.x, BB.hover.y);
+    bbHexPath(ctx, c.px, c.py, R * 0.92);
+    ctx.strokeStyle = 'rgba(140,240,255,0.6)'; ctx.lineWidth = lw * 1.8;
+    ctx.stroke();
   }
 }
 
 // Подсветка: куда может пойти выбранный корабль и кого достаёт.
-function bbPaintHighlights(ctx, s, C) {
+function bbPaintHighlights(ctx, s) {
   if (s.status === 'forming') return;
   const sel = (s.units || []).find(u => u.id === BB.sel);
   if (!sel || !s.my_turn) return;
+  const R = BB.R, { x0, x1, y0, y1 } = bbVisibleCells(s);
+  const canAct = sel.acted || s.acts_left > 0;
 
-  if (!sel.moved) {
-    ctx.fillStyle = BB_C.move;
-    for (let dx = -sel.speed; dx <= sel.speed; dx++) {
-      const rest = sel.speed - Math.abs(dx);
-      for (let dy = -rest; dy <= rest; dy++) {
-        const x = sel.x + dx, y = sel.y + dy;
-        if (x < 0 || y < 0 || x >= s.w || y >= s.h) continue;
-        if (dx === 0 && dy === 0) continue;
-        if (bbUnitAt(x, y)) continue;
-        ctx.fillRect(x * C + 2, y * C + 2, C - 4, C - 4);
+  for (let x = x0; x <= x1; x++) {
+    for (let y = y0; y <= y1; y++) {
+      const d = bbDist(sel, { x, y });
+      if (d === 0) continue;
+      const c = bbHexCenter(x, y);
+      // гексы хода
+      if (!sel.moved && canAct && d <= sel.speed && !bbUnitAt(x, y)) {
+        bbHexPath(ctx, c.px, c.py, R * 0.82);
+        ctx.fillStyle = BB_C.move; ctx.fill();
+      }
+      // кромка зоны поражения — кольцо на дистанции rng
+      if (!sel.fired && d === sel.rng) {
+        bbHexPath(ctx, c.px, c.py, R * 0.5);
+        ctx.strokeStyle = BB_C.fireEdge; ctx.lineWidth = Math.max(0.6, 1 / BB.zoom);
+        ctx.stroke();
       }
     }
   }
-  if (!sel.fired) {
-    // кольцо дальности — контур ромба, чтобы не заливать полдоски
-    ctx.strokeStyle = 'rgba(255,60,130,0.35)'; ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    const cx = sel.x * C + C / 2, cy = sel.y * C + C / 2, r = (sel.rng + 0.5) * C;
-    ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy);
-    ctx.closePath(); ctx.stroke();
-    // цели в зоне поражения
-    ctx.fillStyle = BB_C.fire;
+  // цели в зоне поражения
+  if (!sel.fired && canAct) {
     (s.units || []).forEach(u => {
       if (u.mine || bbDist(sel, u) > sel.rng) return;
-      ctx.fillRect(u.x * C + 2, u.y * C + 2, C - 4, C - 4);
+      const c = bbHexCenter(u.x, u.y);
+      bbHexPath(ctx, c.px, c.py, R * 0.9);
+      ctx.fillStyle = BB_C.fire; ctx.fill();
     });
   }
 }
 
-function bbPaintUnits(ctx, s, C, t) {
+function bbPaintUnits(ctx, s, t) {
   // расставляемые (ещё не на сервере) — полупрозрачные
   if (s.status === 'forming') {
-    BB.place.forEach(p => bbShip(ctx, C, p.x, p.y, p.cls, p.unit_name, true, 1, 0, false, 0.55, t));
+    BB.place.forEach(p => bbShip(ctx, p.x, p.y, p.cls, p.unit_name, true, 1, 0, false, 0.55, t));
   }
   (s.units || []).forEach(u => {
-    const done = u.mine && s.my_turn && u.moved && u.fired;
-    bbShip(ctx, C, u.x, u.y, u.cls, u.name, u.mine, u.hp / u.max_hp,
-           u.max_shield > 0 ? u.shield / u.max_shield : 0, u.id === BB.sel, done ? 0.5 : 1, t);
+    const spent = u.mine && s.my_turn && ((u.moved && u.fired) || (!u.acted && !(s.acts_left > 0)));
+    bbShip(ctx, u.x, u.y, u.cls, u.name, u.mine, u.hp / u.max_hp,
+           u.max_shield > 0 ? u.shield / u.max_shield : 0, u.id === BB.sel, spent ? 0.5 : 1, t);
   });
 }
 
 // ── Спрайт корабля: настоящий корпус из конструктора ────────────────
-// Силуэт класса (CN_HULL_PROFILES) + текстура обшивки (ship_class/ship_armortex),
-// неоновый кант стороны, дюзовое свечение. Рисуется ОДИН раз в офскрин на класс×
-// сторону×наличие-текстуры и кэшируется — в кадре только drawImage + живые дюзы.
+// Силуэт класса (CN_SHIP_GEO) + текстуры обшивки, неоновый кант стороны,
+// дюзовое свечение. Рисуется ОДИН раз в офскрин и кэшируется.
 const BB_SPL = 240;   // px корпуса вдоль оси в спрайте (до dpr); нос смотрит вправо
-// Геометрия корпуса — ТА ЖЕ, что на верфи: станции CN_SHIP_GEO[cls].st ([y, полуширина]
-// нос→корма, ось x=160). Пропорции не искажаем — корабль длинный и узкий, как в конструкторе.
 function bbGeo(cls) {
   if (typeof CN_SHIP_GEO !== 'undefined') {
     if (CN_SHIP_GEO[cls]) return CN_SHIP_GEO[cls];
@@ -585,7 +748,6 @@ function bbGeo(cls) {
   return { st: [[0, 0], [40, 16], [170, 40], [250, 30], [300, 20]], engine: [160, 300], maxHW: 40 };
 }
 // Универсальный загрузчик картинки: null = грузится, false = нет файла, Image = готово.
-// Как только картинка приходит — сбрасываем кэш спрайтов (пересоберутся с текстурой).
 function bbImg(path) {
   if (path in BB.tex) return BB.tex[path];
   BB.tex[path] = null;
@@ -595,36 +757,30 @@ function bbImg(path) {
   img.src = path;
   return null;
 }
-// Первая готовая из списка путей (как cnFirstImg в конструкторе). null пока грузятся.
 function bbFirstImg(paths) {
   let pending = false;
   for (const p of paths) { const r = bbImg(p); if (r) return r; if (r === null) pending = true; }
   return pending ? null : false;
 }
-// Подобрать сохранённый проект под боевой юнит (по имени) → узнаём подкласс/декор,
-// чтобы взять ТУ ЖЕ текстуру, что в конструкторе. EC.designs может быть не загружен — тогда null.
+// Подобрать сохранённый проект под боевой юнит (по имени) → узнаём подкласс/декор.
 function bbDesignOf(name, cls) {
   const ds = (typeof EC !== 'undefined' && EC.designs) || [];
   const clsOf = d => d && d.data && d.data.class;
   return ds.find(d => d && d.category === 'ship' && d.name === name && (clsOf(d) === cls || !cls))
       || ds.find(d => d && d.category === 'ship' && d.name === name) || null;
 }
-// Ключ спрайта: класс + подкласс + сторона. Один спрайт на связку, кэшируется.
 function bbShipKey(cls, tIdx, side) { return cls + '.' + (tIdx == null ? '-' : tIdx) + '.' + side; }
 
-// Спрайт корпуса: силуэт класса + ПОЛНЫЙ стек текстур конструктора
-// (тело ship_type/ship_class, обшивка ship_armortex, декор ship_decor) + неон стороны.
+// Спрайт корпуса: силуэт класса + ПОЛНЫЙ стек текстур конструктора + неон стороны.
 function bbSprite(cls, tIdx, side) {
   const key = bbShipKey(cls, tIdx, side);
   const col = side === 'mine' ? BB_C.mine : BB_C.foe;
   const G = 'assets/constructors/';
   const gen = kind => G + 'ship_' + kind + '.webp';
   const cp = (kind, a, b) => G + 'ship_' + kind + '_' + a + (b != null ? '_' + b : '') + '.webp';
-  // те же приоритеты файлов, что в cnDrawShip: подкласс → класс → общий
   const body  = bbFirstImg([tIdx != null ? cp('type', cls, tIdx) : null, cp('class', cls), gen('class')].filter(Boolean));
   const armor = bbFirstImg([cp('armortex', cls), gen('armortex')]);
   const decor = bbFirstImg([tIdx != null ? cp('decor', cls, tIdx) : null, cp('decor', cls), gen('decor')].filter(Boolean));
-  // Пока текстуры грузятся — отдаём временный спрайт без кэша (пересоберётся, когда придут).
   const ready = body !== null && armor !== null && decor !== null;
   if (ready && BB.spr[key]) return BB.spr[key];
 
@@ -642,19 +798,16 @@ function bbSprite(cls, tIdx, side) {
   cv._geo = { padL, SW, SH, hullW: BB_SPL };      // для позиционирования на доске
   const x = cv.getContext('2d');
 
-  // Силуэт по станциям (как cnStPath на верфи), в координатах конструктора (нос вверх).
   const outline = wf => {
     const R2 = H.st.map(p => [160 + p[1] * wf, p[0]]), L2 = H.st.slice().reverse().map(p => [160 - p[1] * wf, p[0]]);
     return 'M' + R2.concat(L2).map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + 'Z';
   };
   const path = new Path2D(outline(1));
-  // пояс брони: кольцо силуэт ↔ внутренний контур 0.55 (как cnBeltClip на верфи)
   const belt = new Path2D(outline(1) + ' ' + outline(0.55));
-  // Конструктор (нос вверх) → спрайт (нос вправо): sx = padL+(stern−y)·k, sy = cyS+(xc−160)·k
   const T = () => { x.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0); x.transform(0, k, -k, 0, padL + stern * k, cyS - 160 * k); };
-  const R = () => x.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);   // обычные px спрайта
+  const R = () => x.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);
 
-  // ФАКЕЛ ДЮЗ у кормы — клинья, как на верфи (запекаем; живой пульс добавляется поверх)
+  // ФАКЕЛ ДЮЗ у кормы (запекаем; живой пульс добавляется поверх)
   R();
   [[0, 1], [-0.6, 0.72], [0.6, 0.72]].forEach(([oy, sc2]) => {
     const yj = cyS + oy * halfB * k * 0.5, fl = 24 * sc2;
@@ -670,34 +823,31 @@ function bbSprite(cls, tIdx, side) {
   T();
   x.save(); x.shadowColor = 'rgba(0,0,0,0.7)'; x.shadowBlur = 10; x.fillStyle = '#0a0f16'; x.fill(path); x.restore();
 
-  // ТЕЛО: стек текстур конструктора, обрезанный по силуэту. Текстуры кладутся
-  // горизонтально (нос вправо) на полный габарит корпуса — как на верфи.
+  // ТЕЛО: стек текстур конструктора, обрезанный по силуэту.
   x.save(); T(); x.clip(path);
   R();
   const bx0 = padL, by0 = cyS - halfB * k, bw = BB_SPL, bh = halfB * 2 * k;
-  x.fillStyle = '#10161d'; x.fillRect(bx0 - 2, by0 - 2, bw + 4, bh + 4);   // база под полупрозрачные текстуры
+  x.fillStyle = '#10161d'; x.fillRect(bx0 - 2, by0 - 2, bw + 4, bh + 4);
   if (body)  x.drawImage(body,  bx0, by0, bw, bh);
-  if (!body && !armor) {                                                    // совсем нет файлов — графит
+  if (!body && !armor) {
     const g = x.createLinearGradient(0, by0, 0, by0 + bh);
     g.addColorStop(0, `rgba(${col},0.40)`); g.addColorStop(0.5, `rgba(${col},0.18)`); g.addColorStop(1, 'rgba(6,10,16,0.9)');
     x.fillStyle = g; x.fillRect(bx0, by0, bw, bh);
   }
-  x.fillStyle = `rgba(${col},0.06)`; x.fillRect(bx0, by0, bw, bh);          // едва заметный оттенок стороны
-  // объём цилиндра: свет по верхнему борту, тень по нижнему
+  x.fillStyle = `rgba(${col},0.06)`; x.fillRect(bx0, by0, bw, bh);
   const lg = x.createLinearGradient(0, by0, 0, by0 + bh);
   lg.addColorStop(0, 'rgba(255,255,255,0.14)'); lg.addColorStop(0.5, 'rgba(255,255,255,0)'); lg.addColorStop(1, 'rgba(0,0,0,0.45)');
   x.fillStyle = lg; x.fillRect(bx0, by0, bw, bh);
   x.restore();
 
-  // ПОЯС БРОНИ: обшивка лежит ТОЛЬКО по бортам (кольцо силуэт↔внутренний контур),
-  // палуба в центре остаётся тёмной — ровно как на верфи (cnBeltClip, evenodd).
+  // ПОЯС БРОНИ: обшивка лежит ТОЛЬКО по бортам, палуба в центре тёмная.
   if (armor) {
     x.save(); T(); x.clip(belt, 'evenodd');
     R();
     x.globalAlpha = 0.85; x.drawImage(armor, bx0, by0, bw, bh); x.globalAlpha = 1;
     x.restore();
   }
-  // ДЕКОР (эмблемы/полосы/надписи — «декали») — поверх всего корпуса, в клипе силуэта
+  // ДЕКОР — поверх всего корпуса, в клипе силуэта
   if (decor) {
     x.save(); T(); x.clip(path);
     R();
@@ -705,7 +855,7 @@ function bbSprite(cls, tIdx, side) {
     x.restore();
   }
 
-  // Кромка как на верфи (серый контур) + неон-гало цвета стороны для опознания
+  // Кромка как на верфи (серый контур) + неон-гало цвета стороны
   T();
   x.lineJoin = 'round';
   x.strokeStyle = `rgba(${col},0.30)`; x.lineWidth = 4.5 / k; x.stroke(path);
@@ -716,20 +866,19 @@ function bbSprite(cls, tIdx, side) {
   return cv;
 }
 
-// Рисуем корабль в клетке: живые дюзы под кораблём, затем спрайт, кольцо выбора, полоски HP/щита.
-function bbShip(ctx, C, gx, gy, cls, name, isMine, hpFrac, shFrac, selected, alpha, t) {
+// Рисуем корабль в гексе: живые дюзы, спрайт, кольцо выбора, полоски HP/щита.
+function bbShip(ctx, gx, gy, cls, name, isMine, hpFrac, shFrac, selected, alpha, t) {
   const s = BB.st;
-  const cx = gx * C + C / 2, cy = gy * C + C / 2;
+  const { px: cx, py: cy } = bbHexCenter(gx, gy);
+  const C = BB.R * 1.72;   // «размер клетки» для габаритов силуэта
   const col = isMine ? BB_C.mine : BB_C.foe;
   // свои смотрят к врагу (нападающий всегда слева)
   const dir = isMine === (s.my_side === 'attacker') ? 1 : -1;
-  // подкласс из сохранённого проекта (если EC.designs под рукой) — для той же текстуры
   const dsn = bbDesignOf(name, cls);
   const tIdx = dsn && dsn.data && dsn.data.type != null ? dsn.data.type : null;
   const spr = bbSprite(cls, tIdx, isMine ? 'mine' : 'foe');
   const g = spr._geo;
-  // длина корпуса в клетках растёт с классом; пропорции — верфевые (узкий и длинный)
-  const len = C * (0.92 + bbClsSize(cls) * 0.75);
+  const len = C * (0.62 + bbClsSize(cls) * 0.5);
   const sc = len / g.hullW, dw = g.SW * sc, dh = g.SH * sc;
 
   ctx.save();
@@ -742,10 +891,11 @@ function bbShip(ctx, C, gx, gy, cls, name, isMine, hpFrac, shFrac, selected, alp
   fg.addColorStop(0, `rgba(${col},${0.5 * pulse})`); fg.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(stern, cy, fr * 2.4, 0, 6.2832); ctx.fill();
 
-  if (selected) {   // кольцо выбора
-    ctx.strokeStyle = `rgba(${col},0.9)`; ctx.lineWidth = 2;
+  if (selected) {   // кольцо выбора — гекс, не круг: доска-то сотовая
+    bbHexPath(ctx, cx, cy, BB.R * 0.9);
+    ctx.strokeStyle = `rgba(${col},0.9)`; ctx.lineWidth = Math.max(1, 2 / BB.zoom);
     ctx.setLineDash([4, 4]); ctx.lineDashOffset = -(t || 0) * 0.02;
-    ctx.beginPath(); ctx.arc(cx, cy, C * 0.48, 0, 6.2832); ctx.stroke();
+    ctx.stroke();
     ctx.setLineDash([]);
   }
 
@@ -753,10 +903,11 @@ function bbShip(ctx, C, gx, gy, cls, name, isMine, hpFrac, shFrac, selected, alp
   ctx.translate(cx, cy);
   if (dir < 0) ctx.scale(-1, 1);
   ctx.drawImage(spr, -(g.padL + g.hullW / 2) * sc, -dh / 2, dw, dh);
-  ctx.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);   // сброс зеркала перед полосками
+  if (dir < 0) ctx.scale(-1, 1);
+  ctx.translate(-cx, -cy);
 
   // полоски состояния под корпусом
-  const bw = C * 0.68, bx = cx - bw / 2, by = cy + Math.max(C * 0.30, dh / 2 + 5);
+  const bw = BB.R * 1.15, bx = cx - bw / 2, by = cy + Math.max(BB.R * 0.55, dh / 2 + 4);
   ctx.globalAlpha = alpha;
   ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx, by, bw, 3);
   ctx.fillStyle = hpFrac > 0.5 ? `rgba(${col},0.95)` : hpFrac > 0.25 ? 'rgba(255,190,70,0.95)' : 'rgba(255,70,70,0.95)';
@@ -778,10 +929,7 @@ function bbPaintScan(ctx, W, H) {
 
 // ════════════════════════════════════════════════════════════════════
 // ☄ ГОРЯЧИЕ ТОЧКИ — страница сайдменю: все бои, в которых участвует
-// фракция, одним списком. Раньше вход в бой был закопан во вкладке
-// «⚔ Война» кабинета — игроки его не находили. Данные — battles_mine
-// (тот же RPC, что кормит кабинет), страница самодостаточна: работает
-// даже если кабинет ещё не открывали.
+// фракция, одним списком. Данные — battles_mine.
 // ════════════════════════════════════════════════════════════════════
 async function renderHotspots() {
   const head = `<div class="cn-wrap"><div class="cn-head">
@@ -797,8 +945,6 @@ async function renderHotspots() {
   try { battles = await ecRpc('battles_mine', {}); } catch (e) { battles = null; err = e; }
   if (typeof curSlug !== 'undefined' && curSlug !== 'hotspots') return;   // ушли со страницы, пока грузилось
   if (!Array.isArray(battles)) {
-    // Причину показываем целиком: RPC может падать из-за ненакаченного SQL
-    // (battles_mine/_fleet_settle) — без текста это не продиагностировать.
     let msg = (err && err.message) || 'сервер не ответил';
     try { const j = JSON.parse(msg); if (j && j.message) msg = j.message; } catch (e) {}
     setPg(head + `<div class="hs-empty">Сводка недоступна.<br>
