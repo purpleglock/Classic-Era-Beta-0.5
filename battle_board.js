@@ -426,8 +426,8 @@ function bbComputeReach(sel) {
         const key = p.x + ':' + p.y + ':' + nf + ':' + ns;
         if (seen.has(key)) continue;
         seen.add(key);
-        const path = c.path.concat([{ x: p.x, y: p.y }]);
-        if (!reach.has(p.x + ':' + p.y)) reach.set(p.x + ':' + p.y, { steps: step, path });
+        const path = c.path.concat([{ x: p.x, y: p.y, f: nf }]);
+        if (!reach.has(p.x + ':' + p.y)) reach.set(p.x + ':' + p.y, { steps: step, path, f: nf });
         nq.push({ x: p.x, y: p.y, f: nf, st: ns, path });
       }
     }
@@ -841,6 +841,11 @@ function bbPaintHighlights(ctx, s) {
       bbHexPath(ctx, c.px, c.py, R * 0.82);
       ctx.fillStyle = BB_C.move; ctx.fill();
     });
+    // превью манёвра: наведён гекс маршрута — рисуем путь и КУДА встанет нос
+    if (BB.hover) {
+      const r = BB.reach.get(BB.hover.x + ':' + BB.hover.y);
+      if (r) bbPaintMovePreview(ctx, sel, r);
+    }
   }
   // цели: полные данные + попадает по сектору/полосе/линии огня
   if (!sel.fired && canAct) {
@@ -856,6 +861,44 @@ function bbPaintHighlights(ctx, s) {
       ctx.stroke();
     });
   }
+}
+
+// Превью манёвра: линия маршрута + куда встанет НОС в конце (учтена инерция).
+function bbPaintMovePreview(ctx, sel, r) {
+  const R = BB.R, col = BB_C.mine;
+  const pts = [{ x: sel.x, y: sel.y }].concat(r.path || []);
+  // линия маршрута
+  ctx.save();
+  ctx.strokeStyle = `rgba(${col},0.85)`;
+  ctx.lineWidth = Math.max(1.4, 2.4 / BB.zoom);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.setLineDash([6 / BB.zoom, 5 / BB.zoom]);
+  ctx.beginPath();
+  pts.forEach((p, i) => { const c = bbHexCenter(p.x, p.y); i ? ctx.lineTo(c.px, c.py) : ctx.moveTo(c.px, c.py); });
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // узловые точки поворота
+  ctx.fillStyle = `rgba(${col},0.7)`;
+  pts.forEach((p, i) => {
+    if (!i) return;
+    const c = bbHexCenter(p.x, p.y);
+    ctx.beginPath(); ctx.arc(c.px, c.py, Math.max(1.6, 2.2 / BB.zoom), 0, 6.2832); ctx.fill();
+  });
+  // финальный курс: крупная стрелка-нос на гексе назначения
+  const d = bbHexCenter(BB.hover.x, BB.hover.y);
+  const ang = bbDirAngle(r.f);
+  const tip = R * 0.72, hw = R * 0.34, back = R * 0.18;
+  const tx = d.px + Math.cos(ang) * tip, ty = d.py + Math.sin(ang) * tip;
+  const bx = d.px - Math.cos(ang) * back, by = d.py - Math.sin(ang) * back;
+  ctx.beginPath();
+  ctx.moveTo(tx, ty);
+  ctx.lineTo(bx + Math.cos(ang + 2.5) * hw, by + Math.sin(ang + 2.5) * hw);
+  ctx.lineTo(d.px - Math.cos(ang) * back * 0.3, d.py - Math.sin(ang) * back * 0.3);
+  ctx.lineTo(bx + Math.cos(ang - 2.5) * hw, by + Math.sin(ang - 2.5) * hw);
+  ctx.closePath();
+  ctx.fillStyle = `rgba(${col},0.9)`; ctx.fill();
+  ctx.strokeStyle = 'rgba(10,20,28,0.8)'; ctx.lineWidth = Math.max(0.6, 1 / BB.zoom); ctx.stroke();
+  ctx.restore();
 }
 
 function bbPaintUnits(ctx, s) {
