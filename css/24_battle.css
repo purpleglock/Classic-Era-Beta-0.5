@@ -75,9 +75,16 @@
 .bb-x:hover { color: #eaf6ff; }
 .bb-x:hover::after { background: rgba(30,58,72,.95); }
 
-/* ── Тело: доска + правая колонка ── */
-.bb-body { display: flex; gap: 16px; padding: 16px 18px 24px; align-items: flex-start; flex: 1; }
+/* ── Тело: доска на всю ширину, ВСЕ панели — в нижнем доке ── */
+.bb-body { display: flex; gap: 16px; padding: 12px 18px 24px; align-items: flex-start; flex: 1; }
 .bb-boardw { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+/* нижний док: панели плиткой под доской, сворачивается кнопкой в полосе */
+.bb-dock {
+  width: 100%; margin-top: 12px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px; align-items: start;
+}
+.bb-dock-hide { display: none; }
 /* обойма канваса: камера живёт внутри канваса (пан/пинч/зум), скролла нет */
 .bb-cvw {
   position: relative; width: 100%; max-width: 100%; overflow: hidden;
@@ -104,7 +111,6 @@
 /* активации в полосе хода */
 .bb-acts { color: #8fe6ff; letter-spacing: .18em; font-size: 12px; white-space: nowrap; }
 .bb-acts i { font-style: normal; margin-left: 6px; color: #55707e; letter-spacing: 0; font-family: var(--font-mono, monospace); }
-.bb-side { width: 300px; flex: 0 0 300px; display: flex; flex-direction: column; gap: 12px; }
 
 /* ── Полоса состояния под доской: скошенная плашка ── */
 .bb-bar {
@@ -210,7 +216,7 @@
 @media (max-width: 900px) {
   .bb-body { flex-direction: column; padding: 12px; gap: 12px; }
   .bb-boardw { width: 100%; }
-  .bb-side { width: 100%; flex: 1 1 auto; }
+  .bb-dock { grid-template-columns: 1fr; }
   .bb-top { gap: 8px 10px; padding: 10px 12px; flex-wrap: wrap; }
   .bb-vs { margin-left: 0; width: 100%; order: 3; }
   .bb-x { position: absolute; top: 6px; right: 8px; }

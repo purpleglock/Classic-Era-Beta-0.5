@@ -484,9 +484,9 @@ revoke all on function public.battle_force_turn(uuid) from public;
 grant execute on function public.battle_force_turn(uuid) to authenticated;
 
 -- ── 14) Конец боя ───────────────────────────────────────────
--- Победа, если у врага не осталось ни живых кораблей, ни резерва.
--- Кончились ходы у обеих сторон → верх берёт тот, у кого больше уцелело
--- корпусов (ничья — за обороняющимся: он удержал позицию).
+-- Победа только на уничтожение: у врага не осталось ни живых
+-- кораблей на доске, ни резерва. Лимита ходов нет — бой идёт,
+-- пока одна из сторон не выбита полностью.
 create or replace function public._bt_check_end(p_battle uuid)
 returns void language plpgsql security definer set search_path=public as $$
 declare b record; a_alive int; d_alive int; a_pool int; d_pool int;
@@ -506,8 +506,6 @@ begin
   if b.status = 'active' then
     if a_alive = 0 and a_pool = 0 then win := b.defender_fid;
     elsif d_alive = 0 and d_pool = 0 then win := b.attacker_fid;
-    elsif b.att_turns_left = 0 and b.def_turns_left = 0 then
-      win := case when a_hp > d_hp then b.attacker_fid else b.defender_fid end;
     end if;
   end if;
   if win is null then return; end if;
@@ -556,10 +554,11 @@ begin
   end loop;
 
   -- Флоты, оставшиеся без кораблей, распускаем; прочие — расковываем.
-  delete from public.fleets f
-   where f.id in (select fleet_id from public.battle_fleets where battle_id = p_battle)
+  -- алиас не должен совпадать с record-переменной f (42703: record "f" has no field "id")
+  delete from public.fleets fl
+   where fl.id in (select fleet_id from public.battle_fleets where battle_id = p_battle)
      and coalesce((select sum(greatest(0, coalesce((c->>'qty')::int,0)))
-                   from jsonb_array_elements(coalesce(f.composition,'[]'::jsonb)) c), 0) = 0;
+                   from jsonb_array_elements(coalesce(fl.composition,'[]'::jsonb)) c), 0) = 0;
 
   update public.battles
      set status = 'done', winner_fid = p_winner, ended_at = now(), side_to_move = null

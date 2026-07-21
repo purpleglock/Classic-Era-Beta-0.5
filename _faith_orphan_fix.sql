@@ -20,6 +20,17 @@ update public.colony_buildings cb
 delete from public.faith_membership m
  where not exists (select 1 from public.faiths f where f.id = m.faith_id);
 
+-- 1б) Очередь строек: недостроенный храм несёт faith_id в payload проекта
+--     (_concession_build.sql / _faith_multi.sql, _apply_colony_projects).
+--     При достройке тик вставляет здание с этим faith_id → тот же 23503,
+--     даже когда готовые здания уже вычищены. Обнуляем метку у сирот.
+update public.colony_projects
+   set payload = payload - 'faith_id'
+ where payload ? 'faith_id'
+   and nullif(payload->>'faith_id','') is not null
+   and not exists (select 1 from public.faiths f
+                   where f.id = (payload->>'faith_id')::uuid);
+
 -- 2) Пересобрать FK храма с ON DELETE SET NULL (то, что должно было приехать
 --    с _faith_multi.sql). Тогда удаление веры само обнулит храмы, а не оставит хвост.
 alter table public.colony_buildings
@@ -27,3 +38,20 @@ alter table public.colony_buildings
 alter table public.colony_buildings
   add  constraint colony_buildings_faith_id_fkey
   foreign key (faith_id) references public.faiths(id) on delete set null;
+
+-- 3) Страховка на будущее: faith_id может приехать копией из чужого места
+--    (payload очереди строек и т.п.), где FK его не обнулил. Вместо падения
+--    всего тика — молча обнуляем ссылку на несуществующую веру.
+create or replace function public._cb_faith_guard()
+returns trigger language plpgsql as $$
+begin
+  if new.faith_id is not null
+     and not exists (select 1 from public.faiths f where f.id = new.faith_id) then
+    new.faith_id := null;
+  end if;
+  return new;
+end$$;
+drop trigger if exists cb_faith_guard on public.colony_buildings;
+create trigger cb_faith_guard
+  before insert or update of faith_id on public.colony_buildings
+  for each row execute function public._cb_faith_guard();
