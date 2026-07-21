@@ -9,9 +9,10 @@
 -- Бой — НАСТОЯЩИЙ тактический (гекс-доска _war_battle_tactics), дуэлянты
 -- ходят сами, все остальные смотрят (fc_watch_state — полное зрение).
 -- Пока идёт бой, зрители ставят на победителя (кап 500 000 ГС, эскроу).
--- После боя: проигравший пул + случайная ставка НПС (до 400 000 ГС)
--- делятся между угадавшими пропорционально ставкам. Если на победителя
--- не ставил никто — весь банк уходит самому победителю дуэли.
+-- После боя: победитель дуэли получает призовой кошель клуба (250 000 ГС),
+-- а банк ставок — проигравший пул + случайная ставка НПС (до 400 000 ГС) —
+-- делится между угадавшими пропорционально ставкам. Если на победителя
+-- не ставил никто — весь банк тоже уходит победителю дуэли (поверх приза).
 -- Затем сутки паузы на набор заявок — и новый круг. Всё лениво через
 -- _fc_ensure() при каждом fc_state(), крон не нужен.
 --
@@ -30,6 +31,9 @@ create or replace function public._fc_npc_max()
 returns numeric language sql immutable as $$ select 400000::numeric $$;
 create or replace function public._fc_signup_hours()
 returns int language sql immutable as $$ select 24 $$;
+-- призовой кошель клуба: платится победителю дуэли ВСЕГДА, поверх банка ставок
+create or replace function public._fc_prize()
+returns numeric language sql immutable as $$ select 250000::numeric $$;
 
 -- ── Дуэли допускаем как отдельный вид боя ───────────────────
 alter table public.battles drop constraint if exists battles_kind_ck;
@@ -58,6 +62,8 @@ create table if not exists public.fc_events (
   constraint fc_events_status_ck check (status in ('signup','live','done'))
 );
 create index if not exists fc_events_open_idx on public.fc_events (created_at desc);
+-- рев.6: призовой кошель круга (фиксируется при старте дуэли)
+alter table public.fc_events add column if not exists prize numeric not null default 0;
 
 create table if not exists public.fc_signups (
   event_id   uuid not null references public.fc_events(id) on delete cascade,
@@ -230,13 +236,14 @@ begin
          ship_a = (sp->>'ship_a')::uuid, ship_b = (sp->>'ship_b')::uuid,
          ship_a_name = sp->>'ship_a_name', ship_b_name = sp->>'ship_b_name',
          cnt_a = (sp->>'cnt_a')::int, cnt_b = (sp->>'cnt_b')::int,
-         battle_id = (sp->>'battle_id')::uuid, npc_bet = npc
+         battle_id = (sp->>'battle_id')::uuid, npc_bet = npc,
+         prize = public._fc_prize()
    where id = p_event;
 
   perform public._fc_news('🥊 Бойцовский клуб: дуэль началась',
-    format('%s и %s сходятся в показательной дуэли. %s × «%s» против %s × «%s». Ставки открыты — кассы клуба принимают до %s ГС.',
+    format('%s и %s сходятся в показательной дуэли. %s × «%s» против %s × «%s». Приз победителю — %s ГС из кассы клуба. Ставки открыты — кассы принимают до %s ГС.',
       public._war_nm(da), public._war_nm(db), sp->>'cnt_a', sp->>'ship_a_name',
-      sp->>'cnt_b', sp->>'ship_b_name', public._fc_bet_cap()::bigint),
+      sp->>'cnt_b', sp->>'ship_b_name', public._fc_prize()::bigint, public._fc_bet_cap()::bigint),
     jsonb_build_array(da, db));
 end$$;
 revoke all on function public._fc_start(uuid) from public;
@@ -246,6 +253,7 @@ create or replace function public._fc_settle(p_event uuid)
 returns void language plpgsql security definer set search_path=public as $$
 declare ev record; b record; win text; lose text;
         pool_win numeric; pool_lose numeric; bank numeric; r record; pay numeric;
+        prz numeric;
 begin
   select * into ev from public.fc_events where id = p_event for update;
   if ev.id is null or ev.status <> 'live' or ev.settled then return; end if;
@@ -269,6 +277,12 @@ begin
     from public.fc_bets where event_id = p_event;
   bank := pool_lose + ev.npc_bet;
 
+  -- призовой кошель клуба: победителю дуэли ВСЕГДА (страховка coalesce/0 —
+  -- на случай круга, стартовавшего до этой ревизии, где prize не записан)
+  prz := coalesce(ev.prize, 0);
+  if prz <= 0 then prz := public._fc_prize(); end if;
+  update public.faction_economy set gc = gc + prz where faction_id = win;
+
   if pool_win > 0 then
     -- угадавшие: возврат ставки + доля банка пропорционально ставке
     for r in select * from public.fc_bets where event_id = p_event and on_fid = win loop
@@ -284,14 +298,15 @@ begin
   end if;
 
   update public.fc_events
-     set status = 'done', settled = true, winner_fid = win, ended_at = now()
+     set status = 'done', settled = true, winner_fid = win, ended_at = now(),
+         prize = prz
    where id = p_event;
 
   perform public._fc_news('🥊 Бойцовский клуб: вердикт арены',
-    format('Дуэль окончена: %s разбивает %s. Банк круга — %s ГС (в том числе %s ГС от анонимного мецената)%s.',
-      public._war_nm(win), public._war_nm(lose), bank::bigint, ev.npc_bet::bigint,
+    format('Дуэль окончена: %s разбивает %s. Победитель забирает приз клуба — %s ГС. Банк круга — %s ГС (в том числе %s ГС от анонимного мецената)%s.',
+      public._war_nm(win), public._war_nm(lose), prz::bigint, bank::bigint, ev.npc_bet::bigint,
       case when pool_win > 0 then ' — разделён между угадавшими'
-           else ' — целиком уходит победителю: не угадал никто' end),
+           else ' — тоже уходит победителю: не угадал никто' end),
     jsonb_build_array(win, lose));
 
   -- сутки паузы: следующий круг открывается сразу, окно заявок = 24 часа
@@ -347,6 +362,8 @@ begin
     'battle_id', ev.battle_id,
     'battle_status', (select status from public.battles where id = ev.battle_id),
     'npc_bet', case when ev.status = 'done' then ev.npc_bet else null end,
+    -- приз победителю: до старта показываем плановый, после — фактический
+    'prize', case when coalesce(ev.prize,0) > 0 then ev.prize else public._fc_prize() end,
     'bet_cap', public._fc_bet_cap(),
     'pool_a', (select coalesce(sum(amount),0) from public.fc_bets
                 where event_id = ev.id and on_fid = ev.duelist_a),
@@ -362,7 +379,7 @@ begin
         'a', public._war_nm(h.duelist_a), 'b', public._war_nm(h.duelist_b),
         'winner', public._war_nm(h.winner_fid),
         'ship_a', h.ship_a_name, 'ship_b', h.ship_b_name,
-        'npc', h.npc_bet, 'ended', h.ended_at) order by h.ended_at desc), '[]'::jsonb)
+        'npc', h.npc_bet, 'prize', h.prize, 'ended', h.ended_at) order by h.ended_at desc), '[]'::jsonb)
       from (select * from public.fc_events
              where status = 'done' and winner_fid is not null
              order by ended_at desc limit 5) h));
@@ -499,6 +516,9 @@ create table if not exists public.fc_test_duel (
   created_at timestamptz not null default now()
 );
 revoke all on public.fc_test_duel from anon, authenticated;
+-- RLS без политик: доступ только у SECURITY DEFINER-функций админа
+-- (admin_test_duel / _state), клиентам таблица закрыта. Глушит линтер Supabase.
+alter table public.fc_test_duel enable row level security;
 
 create or replace function public.admin_test_duel(p_a text, p_b text)
 returns jsonb language plpgsql security definer set search_path=public as $$
@@ -551,6 +571,7 @@ grant execute on function public.admin_test_duel_state() to authenticated;
 -- 3) fc_bet('<duelist_a>', 600000) → exception про кап 500 000.
 -- 4) fc_watch_state(battle_id) любым игроком → все юниты видимы, my_turn=false.
 -- 5) После уничтожения одной стороны fc_state() → status='done',
+--    победитель получил приз клуба (_fc_prize = 250 000 ГС, поле prize),
 --    угадавшие получили возврат + долю банка, создан новый signup-круг.
 -- 6) admin_test_duel('F1','F2') стаффом → battle_id; повторный вызов
 --    сносит старую доску и создаёт новую; fc_state() этот бой не видит.

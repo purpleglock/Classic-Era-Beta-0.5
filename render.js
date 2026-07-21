@@ -5282,7 +5282,8 @@ function _fcBody(st, en) {
   // ── правило клуба одной строкой ──
   parts.push(`<div class="fc-rule">${en
     ? 'Two random duelists. Random fresh ships, cost-matched. Real tactical battle — everyone watches, everyone bets.'
-    : 'Двое случайных дуэлянтов. Случайные свежие корабли, уравненные по стоимости. Настоящий тактический бой — все смотрят, все ставят.'}</div>`);
+    : 'Двое случайных дуэлянтов. Случайные свежие корабли, уравненные по стоимости. Настоящий тактический бой — все смотрят, все ставят.'}${st.prize
+    ? ` ${en ? 'Winner takes the club purse — ' : 'Победитель забирает приз клуба — '}<b>${_fcMoney(st.prize)} ГС</b>.` : ''}</div>`);
 
   if (st.status === 'signup') {
     const left = _fcLeft(st.signup_until);
@@ -5329,7 +5330,7 @@ function _fcBody(st, en) {
   if (st.status === 'done' && st.winner) {
     parts.push(`<div class="fc-phase"><span class="fc-phase-tag">${en ? 'VERDICT' : 'ВЕРДИКТ'}</span></div>`);
     parts.push(_fcDuelCards(st, en, false));
-    parts.push(`<div class="fc-ok">🏆 ${en ? 'Winner' : 'Победитель'}: <b>${esc(st.winner_name || '')}</b>${st.npc_bet ? ` · ${en ? 'patron stake' : 'ставка мецената'} ${_fcMoney(st.npc_bet)} ГС` : ''}</div>`);
+    parts.push(`<div class="fc-ok">🏆 ${en ? 'Winner' : 'Победитель'}: <b>${esc(st.winner_name || '')}</b>${st.prize ? ` · ${en ? 'club purse' : 'приз клуба'} ${_fcMoney(st.prize)} ГС` : ''}${st.npc_bet ? ` · ${en ? 'patron stake' : 'ставка мецената'} ${_fcMoney(st.npc_bet)} ГС` : ''}</div>`);
     if (st.my_bet) parts.push(`<div class="fc-bet-my">${Number(st.my_bet.won) > 0
       ? (en ? 'Your payout: ' : 'Ваша выплата: ') + '<b>' + _fcMoney(st.my_bet.won) + ' ГС</b>'
       : (en ? 'Your bet is lost. The arena remembers.' : 'Ставка сгорела. Арена помнит.')}</div>`);
