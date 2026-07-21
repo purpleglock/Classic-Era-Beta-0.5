@@ -148,10 +148,21 @@ end$$;
 revoke all on function public.su_propose(text) from public;
 grant execute on function public.su_propose(text) to authenticated;
 
+-- ── Оповещение в ленте новостей о заключении/расторжении унии ─
+create or replace function public._su_news(p_title text, p_body text, p_color text)
+returns void language plpgsql security definer set search_path=public as $$
+begin
+  insert into public.faction_news(faction_id, faction_name, faction_color, owner_id, owner_email,
+      title, excerpt, body, status, published_at, created_at, updated_at)
+    values (null, '⚜ ГАЛАКТИЧЕСКАЯ ХРОНИКА', coalesce(p_color,'rgba(150,160,180,0.55)'), null, null,
+      p_title, null, p_body, 'approved', now(), now(), now());
+exception when others then raise notice 'su news: %', sqlerrm; end$$;
+revoke all on function public._su_news(text,text,text) from public;
+
 -- ── RPC: ответить на предложение (принять = слияние) ────────
 create or replace function public.su_respond(p_id uuid, p_accept boolean)
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare v_fid text; u public.state_unions;
+declare v_fid text; u public.state_unions; v_lead_name text; v_partner_name text; v_lead_color text;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   v_fid := public._su_raw_fid();
@@ -166,6 +177,14 @@ begin
     raise exception 'one of the states is already in a union'; end if;
   update public.state_unions set status='active', sealed_at=now() where id=p_id;
   perform public._su_merge_assets(u.lead_fid, u.partner_fid);
+  -- оповещение в общей ленте
+  select name, color into v_lead_name, v_lead_color from public.faction_applications where faction_id=u.lead_fid and status='approved' limit 1;
+  select name into v_partner_name from public.faction_applications where faction_id=u.partner_fid and status='approved' limit 1;
+  perform public._su_news(
+    format('Провозглашена уния: «%s» и «%s»', coalesce(v_lead_name,u.lead_fid), coalesce(v_partner_name,u.partner_fid)),
+    format('Две державы объявили о государственном объединении. «%s» и «%s» отныне правят сообща: их колонии, казна и вооружённые силы объединены в единое государство под началом «%s». Флаги обеих держав сохранены.',
+      coalesce(v_lead_name,u.lead_fid), coalesce(v_partner_name,u.partner_fid), coalesce(v_lead_name,u.lead_fid)),
+    v_lead_color);
   return jsonb_build_object('ok',true,'joined',true);
 end$$;
 revoke all on function public.su_respond(uuid,boolean) from public;
@@ -188,13 +207,22 @@ grant execute on function public.su_withdraw(uuid) to authenticated;
 -- ── RPC: расторгнуть унию (активы ОСТАЮТСЯ у ведущего) ──────
 create or replace function public.su_dissolve()
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare v_fid text;
+declare v_fid text; u public.state_unions; v_lead_name text; v_partner_name text; v_lead_color text;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   v_fid := public._su_raw_fid();
-  update public.state_unions set status='dissolved'
-    where status='active' and (lead_fid=v_fid or partner_fid=v_fid);
+  select * into u from public.state_unions
+    where status='active' and (lead_fid=v_fid or partner_fid=v_fid)
+    order by sealed_at desc limit 1;
   if not found then raise exception 'no active union'; end if;
+  update public.state_unions set status='dissolved' where id=u.id;
+  select name, color into v_lead_name, v_lead_color from public.faction_applications where faction_id=u.lead_fid and status='approved' limit 1;
+  select name into v_partner_name from public.faction_applications where faction_id=u.partner_fid and status='approved' limit 1;
+  perform public._su_news(
+    format('Распалась уния: «%s» и «%s»', coalesce(v_lead_name,u.lead_fid), coalesce(v_partner_name,u.partner_fid)),
+    format('Государственное объединение «%s» и «%s» расторгнуто. Общие активы остаются за «%s»; вторая держава продолжит путь самостоятельно.',
+      coalesce(v_lead_name,u.lead_fid), coalesce(v_partner_name,u.partner_fid), coalesce(v_lead_name,u.lead_fid)),
+    v_lead_color);
   return jsonb_build_object('ok',true);
 end$$;
 revoke all on function public.su_dissolve() from public;

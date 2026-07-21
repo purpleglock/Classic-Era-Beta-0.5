@@ -1931,7 +1931,16 @@ async function cnVehRender(cat) {
 // совместимость компонентов (у каждого класса свои орудия/броня/двигатели) и
 // меняла бы класс УЖЕ построенных кораблей (эксплойт design-edit-class-morph).
 // Хочешь другой класс — создавай новый проект.
-function cnClassLocked() { return !!(CN.editUnit && CN.editUnit.id); }
+//
+// ИСКЛЮЧЕНИЕ (осиротевший класс): если проект сохранён на классе, которого в
+// каталоге БОЛЬШЕ НЕТ (класс удалён/переименован при обновлении баланса), то
+// зафиксировать нечего — совместимость и так порушена. В этом случае замок
+// снимаем и один раз просим выбрать, на какой класс перевести проект.
+function cnClassOrphan() {
+  const ek = CN.editUnit && CN.editUnit.data && CN.editUnit.data.class;
+  return !!(CN.editUnit && CN.editUnit.id && ek && CN.def && CN.def.db && !CN.def.db.data[ek]);
+}
+function cnClassLocked() { return !!(CN.editUnit && CN.editUnit.id) && !cnClassOrphan(); }
 
 function cnVehInit() {
   const def = CN.def, cat = CN.cat;
@@ -1949,6 +1958,11 @@ function cnVehInit() {
       (a.length ? `<optgroup label="Авиация">${a.map(clsOpt).join('')}</optgroup>` : '');
   } else cnId('cn-class').innerHTML = keys.map(clsOpt).join('');
   if (cnClassLocked()) cnId('cn-class').disabled = true;   // класс правке не подлежит
+  else if (cnClassOrphan()) {                              // класс исчез из каталога — просим выбрать замену
+    cnId('cn-class').disabled = false;
+    const oldName = (CN.editUnit.data && CN.editUnit.data.class) || '—';
+    toast(`Класс «${esc(oldName)}» этого проекта больше не выпускается — выберите, на какой класс его перевести`, 'inf');
+  }
   if (def.cardUI) cnSlotSelected('class');
   cnVehClassDeps();
 }
