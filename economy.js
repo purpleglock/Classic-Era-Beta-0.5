@@ -1465,6 +1465,17 @@ async function _ecLoadCore() {
 }
 async function _ecLoadCoreImpl() {
   EC.fid = EC.app.faction_id;
+  // Уния государств (_state_union.sql): если моя держава в активной унии,
+  // все общие активы живут на ведущем fid — читаем кабинет от его имени.
+  // EC.ownFid — «мой родной» fid (флаг/профиль), EC.fid — игровой (общий).
+  EC.ownFid = EC.app.faction_id; EC.stateUnion = null; EC.suProposals = [];
+  try {
+    const su = await dbGet('state_unions',
+      `or=(lead_fid.eq.${encodeURIComponent(EC.ownFid)},partner_fid.eq.${encodeURIComponent(EC.ownFid)})&status=in.(pending,active)&order=created_at.desc`);
+    EC.stateUnion = (su || []).find(u => u.status === 'active') || null;
+    EC.suProposals = (su || []).filter(u => u.status === 'pending');
+    if (EC.stateUnion) EC.fid = EC.stateUnion.lead_fid;
+  } catch (e) {}
   const fid = encodeURIComponent(EC.fid);
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
@@ -7445,6 +7456,8 @@ function ecTabDiplomacy() {
 
   return `${ecIntro('🤝', 'Дипломатия', 'Союзы, отношения и кредиты. Федерация/конфедерация дают защиту и общий флот; вассал платит сюзерену дань. Торговля и обмен — на вкладке «Торговля и потоки».', ['<b>Федерация/конфедерация</b> — союз нескольких держав: защита караванов и от разведки, общий флот.', '<b>Вассалитет</b> — вассал платит сюзерену дань с дохода (как у Paradox).', '<b>Границы</b> — закрываются для выбранных фракций: их флоты не войдут в ваши системы.', 'Можно выдавать займы; споры по долгам решает МГА.'])}<div class="ec-section-title">Границы <span class="ec-hint">— пограничный контроль</span></div>
     <div class="ec-dip-grid">${ecBordersBlock()}</div>
+    <div class="ec-section-title">Уния <span class="ec-hint">— два игрока правят одной державой</span></div>
+    <div class="ec-dip-grid">${ecStateUnionBlock()}</div>
     <div class="ec-section-title">Союзы <span class="ec-hint">— федерация · конфедерация · вассалитет</span></div>
     ${ecAllianceBlock()}
     <div class="ec-section-title">Отношения <span class="ec-hint">— дипломатический респект</span></div>
@@ -7515,6 +7528,57 @@ function ecBordersToggle(fid, close) {
 function ecBordersAll(close) {
   if (close && !confirm('Закрыть границы для ВСЕХ фракций? Их флоты не смогут прилетать в ваши системы (союзники по федерации/конфедерации проходят). Открыть обратно можно в любой момент.')) return;
   ecRpcAct('borders_set', { p_fid: null, p_closed: !!close }, close ? 'Границы закрыты для всех' : 'Границы открыты');
+}
+
+// Блок «Уния государств» (_state_union.sql): политическое решение об объединении.
+// Две державы сохраняют флаги и профили, но колонии, бюджет и вооружённые силы
+// становятся общими — оба игрока управляют одним государством (ведущий fid).
+function ecStateUnionBlock() {
+  const own = EC.ownFid || EC.fid;
+  const u = EC.stateUnion;
+  if (u) {
+    const partner = u.lead_fid === own ? u.partner_fid : u.lead_fid;
+    return `<div class="ec-dip-card">
+      <div class="ec-dip-t">⚜ Уния заключена</div>
+      <div style="display:flex;align-items:center;gap:10px;margin:8px 0">
+        ${ecFacFlag(u.lead_fid, 34)}<b style="color:var(--gd)">✕</b>${ecFacFlag(u.partner_fid, 34)}
+        <span style="font-size:13px;color:var(--t2)"><b>${esc(ecFacName(u.lead_fid))}</b> и <b>${esc(ecFacName(u.partner_fid))}</b> правят сообща</span>
+      </div>
+      <div style="font-size:12.5px;color:var(--t2)">Колонии, казна, ресурсы и вооружённые силы — общие (ведёт «${esc(ecFacName(u.lead_fid))}»). Флаги и профили держав сохранены. Партнёр: «${esc(ecFacName(partner))}».</div>
+      <div style="margin-top:8px"><button class="btn btn-gh btn-sm" onclick="ecSuDissolve()">Расторгнуть унию</button></div>
+    </div>`;
+  }
+  const incoming = (EC.suProposals || []).filter(p => p.partner_fid === own);
+  const outgoing = (EC.suProposals || []).filter(p => p.lead_fid === own);
+  const incHtml = incoming.map(p => `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+      <span class="ec-route-badge new">уния</span> <b>${esc(ecFacName(p.lead_fid))}</b> предлагает объединить государства</span>
+      <button class="btn btn-gd btn-xs" onclick="ecSuRespond('${p.id}',true)">Объединиться</button>
+      <button class="ec-bld-del" onclick="ecSuRespond('${p.id}',false)">✕</button></div>`).join('');
+  const outHtml = outgoing.map(p => `<div class="ec-q-row"><span class="ec-r-name">⏳ Предложение унии для <b>${esc(ecFacName(p.partner_fid))}</b> — ждёт ответа</span>
+      <button class="ec-bld-del" title="Отозвать" onclick="ecSuWithdraw('${p.id}')">✕</button></div>`).join('');
+  const others = ecOtherFactions();
+  return `<div class="ec-dip-card">
+      <div class="ec-dip-t">⚜ Уния государств</div>
+      <div style="font-size:12.5px;color:var(--t2);margin:6px 0">Политическое решение об объединении двух держав: флаги остаются свои, но <b>колонии, бюджет и все вооружённые силы становятся общими</b> — оба игрока управляют государством сообща. Общие активы ведёт держава-инициатор; при расторжении они остаются у неё.</div>
+      ${others.length ? `<div class="ec-prod-form">${ecFacSelect('ec-su-fac')}<button class="btn btn-gd btn-sm" onclick="ecSuPropose()">Предложить унию</button></div>` : '<div class="ec-empty">Нет других держав.</div>'}
+      ${incHtml ? `<div class="ec-r-sec">📥 Вам предлагают</div>${incHtml}` : ''}
+      ${outHtml ? `<div class="ec-r-sec">Мои предложения</div>${outHtml}` : ''}
+    </div>`;
+}
+function ecSuPropose() {
+  const fid = ecId('ec-su-fac')?.value;
+  if (!fid) { toast('Выберите державу', 'err'); return; }
+  if (!confirm(`Предложить унию державе «${ecFacName(fid)}»? Если она согласится, ваши государства объединятся: колонии, казна и войска станут общими под вашим началом.`)) return;
+  ecRpcAct('su_propose', { p_target_fid: fid }, 'Предложение унии отправлено');
+}
+function ecSuRespond(id, acc) {
+  if (acc && !confirm('Принять унию? Ваши колонии, казна, ресурсы и войска сольются с державой-инициатором в ОДНО государство. Управлять будете сообща. При расторжении общие активы остаются у инициатора. Решение серьёзное.')) return;
+  ecRpcAct('su_respond', { p_id: id, p_accept: !!acc }, acc ? 'Уния заключена — государства объединены' : 'Предложение отклонено');
+}
+function ecSuWithdraw(id) { ecRpcAct('su_withdraw', { p_id: id }, 'Предложение отозвано'); }
+function ecSuDissolve() {
+  if (!confirm('Расторгнуть унию? Общие активы (колонии, казна, войска) ОСТАНУТСЯ у державы-инициатора. Партнёр начнёт с чистого листа.')) return;
+  ecRpcAct('su_dissolve', {}, 'Уния расторгнута');
 }
 
 // Блок союзов: федерация/конфедерация (группа) + вассалитет (парный пакт). Слайс 1.

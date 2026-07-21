@@ -267,7 +267,7 @@ function bbUnitPanel(s) {
   const pct = v => Math.max(0, Math.min(100, v));
   const need = bbTurnNeed(u.cls);
   const wpn = (u.wpn && u.wpn.length ? u.wpn : [{ s: 'any', rng: u.rng, dmg: u.dmg }])
-    .map(g => `<div class="bb-stat"><span>${BB_SECT[g.s] || g.s}</span><b>${g.dmg} · дист ${Math.max(1, g.rng - 1)}–${g.rng}</b></div>`).join('');
+    .map(g => `<div class="bb-stat"><span>${BB_SECT[g.s] || g.s}</span><b>${g.dmg} · до ${g.rng} гекс.</b></div>`).join('');
   return `<div class="bb-panel">
       <div class="bb-panel-t">${esc(u.name)}</div>
       <div class="bb-panel-h">${bbClsName(u.cls)}${u.mine && u.acted ? ' · <b>активирован</b>' : ''}${u.flash ? ' · <b style="color:#ff5c8a">позиция раскрыта выстрелом</b>' : ''}</div>
@@ -280,7 +280,7 @@ function bbUnitPanel(s) {
       <div class="bb-stat"><span>Манёвр</span><b>поворот после ${need} прямых (пройдено ${Math.min(u.straight, need)})</b></div>
       <div class="bb-stat"><span>Сенсор / скрытность</span><b>${u.sensor} / ${u.stealth}</b></div>
       ${wpn}
-      ${u.mine && s.my_turn ? `<div class="bb-panel-h" style="margin-top:8px">${u.moved && u.fired ? 'Корабль отработал этот ход.' : (!u.acted && !(s.acts_left > 0) ? 'Активации кончились — этот корабль в этом ходу не действует.' : 'Клик по подсвеченному гексу — лететь по маршруту (учтена инерция поворота), по цели в зоне поражения — огонь. Корма не стреляет, в корму получают ×2.')}</div>` : ''}
+      ${u.mine && s.my_turn ? `<div class="bb-panel-h" style="margin-top:8px">${u.moved && u.fired ? 'Корабль отработал этот ход.' : (!u.acted && !(s.acts_left > 0) ? 'Активации кончились — этот корабль в этом ходу не действует.' : 'Клик по подсвеченному гексу — лететь по маршруту (учтена инерция поворота), по цели в зоне поражения — огонь. Клины на доске = секторы и дальность орудий. В корму получают ×2.')}</div>` : ''}
     </div>${bbReinfPanel(s)}`;
 }
 
@@ -444,17 +444,17 @@ function bbCanHit(sel, tgt) {
   const gs = (sel.wpn && sel.wpn.length) ? sel.wpn : [{ s: 'any', rng: sel.rng, dmg: sel.dmg }];
   let band = false, dmg = 0;
   for (const g of gs) {
-    if (L <= g.rng && L >= Math.max(1, g.rng - 1)) {
+    if (L >= 1 && L <= g.rng) {
       band = true;
       const m = g.s === 'any' ? 1
-        : g.s === 'nose' ? (rel === 0 ? 1 : null)
-        : g.s === 'right' ? ((rel === 1 || rel === 2) ? 0.85 : null)
-        : ((rel === 4 || rel === 5) ? 0.85 : null);
+        : g.s === 'nose' ? ((rel === 5 || rel === 0 || rel === 1) ? 1 : null)
+        : g.s === 'right' ? ((rel === 1 || rel === 2 || rel === 3) ? 0.9 : null)
+        : ((rel === 3 || rel === 4 || rel === 5) ? 0.9 : null);
       if (m != null) dmg += g.dmg * m;
     }
   }
-  if (!band) return { ok: false, why: `дистанция ${L} вне полос дальности орудий (орудие дальности R бьёт на R−1..R)` };
-  if (!dmg) return { ok: false, why: 'цель вне секторов обстрела: нос бьёт по курсу, батареи — в борт, корма слепая. Доверните корабль' };
+  if (!band) return { ok: false, why: `дистанция ${L} — дальше, чем бьют орудия` };
+  if (!dmg) return { ok: false, why: 'цель вне секторов обстрела: нос бьёт вперёд, борта — вбок и назад, прямо в корму огня нет. Доверните корабль' };
   if (!bbLosClear(sel, tgt)) return { ok: false, why: 'линию огня перекрывают астероиды' };
   return { ok: true, dmg: Math.round(dmg) };
 }
@@ -832,6 +832,9 @@ function bbPaintHighlights(ctx, s) {
   const R = BB.R;
   const canAct = sel.acted || s.acts_left > 0;
 
+  // секторы и дальность орудий выбранного корабля — видно, куда и как далеко бьёт
+  bbPaintArcs(ctx, sel);
+
   // гексы хода — настоящая досягаемость с инерцией
   if (!sel.moved && canAct) {
     if (!BB.reach) BB.reach = bbComputeReach(sel);
@@ -861,6 +864,38 @@ function bbPaintHighlights(ctx, s) {
       ctx.stroke();
     });
   }
+}
+
+// Секторы обстрела: для каждой группы орудий — клин по её сектору на её
+// дальность. Нос — передние 180°, борта — по 180° вбок-назад, турели — круг.
+// Радиус клина ≈ дальность в гексах (шаг гекса ≈ R·1.5).
+function bbPaintArcs(ctx, sel) {
+  const R = BB.R;
+  const gs = (sel.wpn && sel.wpn.length) ? sel.wpn : [{ s: 'any', rng: sel.rng, dmg: sel.dmg }];
+  // худшее (макс) по каждому сектору
+  const byS = {};
+  gs.forEach(g => { byS[g.s] = Math.max(byS[g.s] || 0, g.rng || 1); });
+  const { px: cx, py: cy } = bbHexCenter(sel.x, sel.y);
+  const f = sel.facing || 0;
+  const HALF = Math.PI / 2;                 // 90° в каждую сторону = сектор 180°
+  const specs = {
+    nose:  { a: bbDirAngle(f),     col: '90,220,240' },
+    right: { a: bbDirAngle(f + 2), col: '120,235,255' },
+    left:  { a: bbDirAngle(f + 4), col: '120,235,255' },
+    any:   { a: 0,                 col: '150,240,255', full: true },
+  };
+  ctx.save();
+  Object.keys(byS).forEach(sct => {
+    const sp = specs[sct]; if (!sp) return;
+    const rad = byS[sct] * R * 1.5;
+    ctx.beginPath();
+    if (sp.full) { ctx.arc(cx, cy, rad, 0, 6.2832); }
+    else { ctx.moveTo(cx, cy); ctx.arc(cx, cy, rad, sp.a - HALF, sp.a + HALF); ctx.closePath(); }
+    ctx.fillStyle = `rgba(${sp.col},0.05)`; ctx.fill();
+    ctx.strokeStyle = `rgba(${sp.col},0.28)`; ctx.lineWidth = Math.max(0.6, 1 / BB.zoom);
+    ctx.stroke();
+  });
+  ctx.restore();
 }
 
 // Превью манёвра: линия маршрута + куда встанет НОС в конце (учтена инерция).

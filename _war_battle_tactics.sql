@@ -452,20 +452,23 @@ begin
     raise exception 'линия огня перекрыта астероидами';
   end if;
 
-  -- какие орудийные группы достают: полоса дальности + сектор
+  -- какие орудийные группы достают: дальность 1..R + сектор наведения
+  -- Секторы (rel = направление на цель − курс, 0 = прямо по носу):
+  --   нос — передние 180° {5,0,1}; правый борт {1,2,3}; левый борт {3,4,5};
+  --   турели (any) — круговые. Прямо в корму (rel 3) достаёт только борт.
   rel := ((public._bt_dirof(u.x, u.y, t.x, t.y) - u.facing) % 6 + 6) % 6;
   for wg in select value from jsonb_array_elements(
       case when u.wpn is null or jsonb_array_length(u.wpn) = 0
            then jsonb_build_array(jsonb_build_object('s','any','rng',u.rng,'dmg',u.dmg))
            else u.wpn end) loop
     nsect := wg->>'s';
-    if dist <= (wg->>'rng')::int and dist >= greatest(1, (wg->>'rng')::int - 1) then
+    if dist >= 1 and dist <= (wg->>'rng')::int then
       band_ok := true;
       mult := case
         when nsect = 'any' then 1.0
-        when nsect = 'nose'  and rel = 0 then 1.0
-        when nsect = 'right' and rel in (1,2) then 0.85
-        when nsect = 'left'  and rel in (4,5) then 0.85
+        when nsect = 'nose'  and rel in (5,0,1) then 1.0
+        when nsect = 'right' and rel in (1,2,3) then 0.9
+        when nsect = 'left'  and rel in (3,4,5) then 0.9
         else null end;
       if mult is not null then
         arc_ok := true;
@@ -474,10 +477,10 @@ begin
     end if;
   end loop;
   if not band_ok then
-    raise exception 'дистанция % вне полос дальности орудий «%» (орудие с дальностью R бьёт на R−1..R)', dist, u.unit_name;
+    raise exception 'дистанция % — дальше, чем бьют орудия «%»', dist, u.unit_name;
   end if;
   if not arc_ok then
-    raise exception 'цель вне секторов обстрела: нос бьёт по курсу, батареи — в свой борт, корма слепая. Доверните корабль';
+    raise exception 'цель вне секторов обстрела: нос бьёт вперёд, борта — вбок и назад, прямо в корму огня нет. Доверните корабль';
   end if;
 
   perform public._bt_use_act(p_battle, p_unit);
