@@ -183,6 +183,7 @@ async function go(slug, push=true) {
     'build-ship': 'cnRenderShip', 'build-army': 'cnRenderArmy',
     'build-ground': 'cnRenderGround', // алиас единого армейского форжа
     'build-aviation': 'cnRenderAviation', 'build-division': 'cnRenderDivision',
+    'build-alloy': 'cnRenderAlloyForge', // ⚗ материаловедение (алхимия брони)
   };
   if (CN_ROUTES[slug]) {
     const fn = window[CN_ROUTES[slug]];

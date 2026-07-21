@@ -36,7 +36,13 @@
 --  7) ПОДКРЕПЛЕНИЕ. Вызывается ТОЛЬКО свежим ходом (все активации
 --     целы) и съедает весь ход. На нуле активаций вызвать нельзя —
 --     закрыт баг «корвет на нуле действий».
--- ?v=20260721tactics1
+--  8) СТОЙКОСТИ БРОНИ (алхимия). summary.armor_resist проекта
+--     {kinetic,energy,missile} едет в battle_units.resist; каждая
+--     орудийная группа несёт тип урона (k, по названию орудия через
+--     _cn_wpn_kind: ballistic→kinetic), и её урон гасится
+--     ×(1 − resist[k]). Требует применённых _armor_alchemy.sql и
+--     свежего _unit_publish.sql (armor_resist в summary).
+-- ?v=20260721tactics2
 -- ============================================================
 
 -- ── 1) Схема ────────────────────────────────────────────────
@@ -47,6 +53,7 @@ alter table public.battle_units add column if not exists sensor   int not null d
 alter table public.battle_units add column if not exists stealth  int not null default 5;
 alter table public.battle_units add column if not exists flash    boolean not null default false;
 alter table public.battle_units add column if not exists wpn      jsonb;
+alter table public.battle_units add column if not exists resist   jsonb;
 
 -- ── 2) Гекс-геометрия: шаг и направление ────────────────────
 -- Направления flat-top (углы 30°..330° через 60°, y вниз):
@@ -253,13 +260,16 @@ begin
     select m.s,
            greatest(1, least(40, round(coalesce(
              (cab->coalesce(u.category,'ship')->'weapons'->m.g->m.idx->>'dalnost')::numeric, 1))))::int as rng,
-           coalesce((cab->coalesce(u.category,'ship')->'weapons'->m.g->m.idx->>'dmg')::numeric, 0) * m.q as dmg
+           coalesce((cab->coalesce(u.category,'ship')->'weapons'->m.g->m.idx->>'dmg')::numeric, 0) * m.q as dmg,
+           -- тип урона для стойкостей брони: ballistic→kinetic
+           case public._cn_wpn_kind(cab->coalesce(u.category,'ship')->'weapons'->m.g->m.idx->>'name')
+             when 'missile' then 'missile' when 'energy' then 'energy' else 'kinetic' end as k
       from mounts m
      where cab->coalesce(u.category,'ship')->'weapons'->m.g->m.idx is not null
   )
-  select coalesce(jsonb_agg(jsonb_build_object('s', gg.s, 'rng', gg.rng, 'dmg', round(gg.sum_dmg))), '[]'::jsonb)
+  select coalesce(jsonb_agg(jsonb_build_object('s', gg.s, 'rng', gg.rng, 'dmg', round(gg.sum_dmg), 'k', gg.k)), '[]'::jsonb)
     into wpn
-    from (select shots.s, shots.rng, sum(shots.dmg) as sum_dmg from shots where shots.dmg > 0 group by shots.s, shots.rng) gg;
+    from (select shots.s, shots.rng, shots.k, sum(shots.dmg) as sum_dmg from shots where shots.dmg > 0 group by shots.s, shots.rng, shots.k) gg;
 
   select coalesce(max((g->>'rng')::int), 1) into rng from jsonb_array_elements(wpn) g;
   if jsonb_array_length(wpn) = 0 then
@@ -279,7 +289,10 @@ begin
     'rng',     round(rng)::int,
     'wpn',     wpn,
     'sensor',  sens,
-    'stealth', public._bt_stealth(cls));
+    'stealth', public._bt_stealth(cls),
+    -- стойкости брони проекта (алхимия): гасят урон по типу орудия
+    'resist',  coalesce(sm->'armor_resist',
+                        '{"kinetic":0,"energy":0,"missile":0}'::jsonb));
 end$$;
 revoke all on function public._bt_stats(uuid) from public;
 
@@ -337,12 +350,13 @@ begin
 
     insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
         hp, max_hp, armor, shield, max_shield, dmg, speed, rng,
-        facing, straight, sensor, stealth, wpn)
+        facing, straight, sensor, stealth, wpn, resist)
       values (p_battle, me, sd, uid, st->>'name', st->>'cls', px, py,
         (st->>'hp')::numeric, (st->>'hp')::numeric, (st->>'armor')::numeric,
         (st->>'shield')::numeric, (st->>'shield')::numeric, (st->>'dmg')::numeric,
         (st->>'speed')::int, (st->>'rng')::int,
-        fc, public._bt_turnneed(st->>'cls'), (st->>'sensor')::int, (st->>'stealth')::int, st->'wpn');
+        fc, public._bt_turnneed(st->>'cls'), (st->>'sensor')::int, (st->>'stealth')::int,
+        st->'wpn', st->'resist');
     n := n + 1;
     if n > public._bt_cap() then raise exception 'в бой можно вывести не больше % кораблей', public._bt_cap(); end if;
   end loop;
@@ -425,6 +439,7 @@ declare me text; b public.battles; u record; t record; dist int;
         wg jsonb; rel int; relt int; dmg numeric := 0; mult numeric; posmul numeric;
         absorbed numeric; hull numeric; killed boolean := false;
         tsh numeric; band_ok boolean := false; arc_ok boolean := false; nsect text;
+        rk numeric; resisted numeric := 0;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   me := public._ec_my_fid();
@@ -472,7 +487,12 @@ begin
         else null end;
       if mult is not null then
         arc_ok := true;
-        dmg := dmg + (wg->>'dmg')::numeric * mult;
+        -- стойкость брони цели к типу этой орудийной группы (алхимия):
+        -- группа без типа (старый снапшот) считается кинетикой
+        rk := least(0.9, greatest(0, coalesce(
+                (t.resist->>coalesce(wg->>'k','kinetic'))::numeric, 0)));
+        dmg := dmg + (wg->>'dmg')::numeric * mult * (1 - rk);
+        resisted := resisted + (wg->>'dmg')::numeric * mult * rk;
       end if;
     end if;
   end loop;
@@ -507,13 +527,14 @@ begin
   -- выстрел выдал позицию: скрытность стрелявшего обнулена до его следующего хода
   update public.battle_units set fired = true, flash = true where id = p_unit;
 
-  perform public._bt_log(p_battle, format('%s → %s: %s урона%s%s',
+  perform public._bt_log(p_battle, format('%s → %s: %s урона%s%s%s',
     u.unit_name, t.unit_name, round(absorbed + hull),
+    case when resisted >= 1 then format(' (броня рассеяла %s)', round(resisted)) else '' end,
     case when relt = 3 then ' (в корму ×2)' when relt <> 0 then ' (в борт ×1.25)' else '' end,
     case when killed then ' — цель уничтожена' else '' end));
   perform public._bt_check_end(p_battle);
   return jsonb_build_object('ok', true, 'shield_absorbed', round(absorbed), 'hull', round(hull),
-                            'killed', killed, 'posmul', posmul);
+                            'resisted', round(resisted), 'killed', killed, 'posmul', posmul);
 end$$;
 
 -- ── 8) Конец хода: астероиды грызут, колодцы тянут ───────────

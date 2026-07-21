@@ -1095,8 +1095,11 @@ function gmBuildGeo() {
     if (!poly) return;
     if (sys.phantom) { fog.push(gmPerturbPoly(poly)); return; }
     const fac = gmFaction(sys.faction);
+    // Уния: заливка/границы идут по ведущему (fac=единая держава), но ГЕРАЛЬДИКУ
+    // накладываем по ИСХОДНОМУ владельцу — территория партнёра держит свой флаг.
+    const flagFac = sys.union_origin ? (gmFaction(sys.union_origin) || fac) : fac;
     const pts = gmPerturbPoly(poly);
-    fills.push({ sys, fac, isRift: !!(fac && fac.id === 'rift'), pts });
+    fills.push({ sys, fac, flagFac, isRift: !!(fac && fac.id === 'rift'), pts });
     const sid = secOfSys[sys.id];
     if (sid) { const sec = sectorsR.find(x => x.id === sid); if (sec) secFills.push({ secId: sid, color: sec.color || 'rgba(120,200,255,0.5)', pts }); }
   });
@@ -5645,9 +5648,11 @@ function gmmBuildWorld() {
         if (dd > e.reach) e.reach = dd;
       }
     }
-    if (!f.isRift && f.fac && f.fac.id) {
-      let e = facD.get(f.fac.id);
-      if (!e) { e = { d: '', color: f.fac.color, x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 }; facD.set(f.fac.id, e); }
+    if (!f.isRift && f.flagFac && f.flagFac.id) {
+      // ключ = ГЕРАЛЬДИКА (исходный владелец при унии), а не ведущий: у партнёра
+      // над его территорией накладывается ЕГО флаг, а не флаг ведущего.
+      let e = facD.get(f.flagFac.id);
+      if (!e) { e = { d: '', color: f.flagFac.color, x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 }; facD.set(f.flagFac.id, e); }
       e.d += d;
       for (const p of f.pts) {
         if (p[0] < e.x0) e.x0 = p[0]; if (p[0] > e.x1) e.x1 = p[0];

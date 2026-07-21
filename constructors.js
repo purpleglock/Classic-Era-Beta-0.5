@@ -79,6 +79,7 @@ function cnGate() {
 const CN_HUB = [
   { slug: 'build-ship', ico: '🚀', name: 'Корабельная верфь', desc: 'Космические корабли: от корветов до дредноутов. Реактор, броня, щиты, ангары, вооружение.', cat: 'ship' },
   { slug: 'build-army', ico: '🪖', name: 'Планетарный арсенал', desc: 'Единый конструктор армии: пехота, БТР, танки, артиллерия, дроны, авиация. Ходовая, броня, орудия — по правилам Кваквантора.', cat: 'army' },
+  { slug: 'build-alloy', ico: '⚗', name: 'Материаловедение', desc: 'Своя броня из настоящих ресурсов. Пропорции решают: реакции и пороги рождают HP, стойкости и трейты. Сплавы идут в слот брони всех конструкторов.', cat: 'alloy' },
   // Конструктор дивизий убран из хаба: армии теперь формируются из готовых юнитов
   // («Звёздный марш»). Билдер доступен только для правки уже созданных дивизий (cnEdit).
 ];
@@ -446,6 +447,52 @@ async function cnLoadPartOverrides(force) {
   } catch (e) {}
 }
 if (typeof window !== 'undefined') { window.cnApplyPartOverrides = cnApplyPartOverrides; window.cnLoadPartOverrides = cnLoadPartOverrides; }
+
+// ── Кастомные сплавы брони (алхимия, armor_forge_ui.js) ──────
+// Загружаем сплавы своей фракции и дописываем их в слот брони ВСЕХ классов
+// KV-конструкторов. HP считает та же cnKvArmorHp (сплав несёт material/hpBoost).
+// Сервер при публикации берёт рецепт по _alloyId и пересчитывает авторитетно.
+let CN_ALLOYS = null, CN_ALLOYS_FID;
+function cnInvalidateAlloys() { CN_ALLOYS = null; }
+if (typeof window !== 'undefined') window.cnInvalidateAlloys = cnInvalidateAlloys;
+async function cnLoadAlloys(force) {
+  const fac = cnMyFactionMeta();
+  const fid = (fac && fac.faction_id) || '';
+  if (!force && CN_ALLOYS && CN_ALLOYS_FID === fid) return CN_ALLOYS;
+  CN_ALLOYS_FID = fid;
+  try {
+    let q = 'select=id,name,recipe,stats,faction_id&order=updated_at.desc';
+    if (fid) q = 'faction_id=eq.' + encodeURIComponent(fid) + '&' + q;
+    CN_ALLOYS = await dbGet('faction_armor_alloys', q) || [];
+  } catch (e) { CN_ALLOYS = []; }
+  return CN_ALLOYS;
+}
+// Превратить строку сплава в объект брони формата каталога (для db.armors[k])
+function cnAlloyToArmor(a) {
+  const st = a.stats || {};
+  return {
+    name: '⚗ ' + (a.name || 'Сплав'),
+    cost: 0,
+    armor: Math.round(st.hpBoost || 0),   // для чипов/ведомости
+    material: st.material || null,
+    category: st.category || 'composite',
+    hpBoost: st.hpBoost || 0,
+    hpPercentBoost: st.hpPercentBoost || 0,
+    capacityBoost: st.capacityBoost || 0,
+    resist: st.resist || { kinetic: 0, energy: 0, missile: 0 },
+    resurs: { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+    _alloy: true, _alloyId: a.id,
+  };
+}
+// Дописать сплавы в db.armors[k], предварительно убрав ранее вписанные (_alloy).
+function cnMergeAlloys(db) {
+  if (!db || !db.armors) return;
+  const list = (CN_ALLOYS || []).map(cnAlloyToArmor);
+  for (const k in db.armors) {
+    if (!Array.isArray(db.armors[k])) continue;
+    db.armors[k] = db.armors[k].filter(a => !a._alloy).concat(list);
+  }
+}
 
 function cnDesc(cat, kind, key, idx) {
   const d = (CN_DESC[cat] || {})[kind]; if (!d) return '';
@@ -1806,7 +1853,9 @@ async function cnVehRender(cat) {
   if (!cnCanAccess()) { cnGate(); return; }
   await cnLoadResearch();
   await cnLoadPartOverrides();   // админ-имена/описания орудий и модулей
+  await cnLoadAlloys();          // кастомные сплавы фракции в слот брони
   const def = CN_DEFS[cat];
+  cnMergeAlloys(def.db);         // дописать сплавы в db.armors[k] всех классов
   CN.cat = cat; CN.def = def; CN.last = null; CN.editUnit = edit || null;
   CN.shipLayout = { mounts: [], bays: [] }; CN.schemShow = { weapons: true, bays: true };
 
@@ -2497,6 +2546,9 @@ function cnVehCollectData() {
   if (def.hasType) d.type = +cnId('cn-type').value;
   if (def.hasReactor) d.reactor = +cnId('cn-reactor').value;
   d.armor = +cnId('cn-armor').value;
+  // Кастомный сплав: помимо индекса несём стабильный id — сервер пересчитает по рецепту.
+  const _aObj = (def.db.armors[d.class] || [])[d.armor];
+  if (_aObj && _aObj._alloyId) d.armorAlloyId = _aObj._alloyId; else delete d.armorAlloyId;
   d.shield = +cnId('cn-shield').value;
   d.engine = +cnId('cn-engine').value;
   if (def.db.radars && cnId('cn-radar')) d.radar = +cnId('cn-radar').value;
@@ -2525,6 +2577,12 @@ function cnVehApplyData(d) {
   if (def.hasType && d.type != null) cnId('cn-type').value = d.type;
   if (def.hasReactor && d.reactor != null) cnId('cn-reactor').value = d.reactor;
   if (d.armor != null) cnId('cn-armor').value = d.armor;
+  // Сплав ищем по стабильному id (индекс в db.armors мог сместиться со временем).
+  if (d.armorAlloyId) {
+    const arr = def.db.armors[d.class] || [];
+    const ai = arr.findIndex(a => a._alloyId === d.armorAlloyId);
+    if (ai >= 0) cnId('cn-armor').value = ai;
+  }
   if (d.shield != null) cnId('cn-shield').value = d.shield;
   if (d.engine != null) cnId('cn-engine').value = d.engine;
   if (d.radar != null && cnId('cn-radar')) cnId('cn-radar').value = d.radar;

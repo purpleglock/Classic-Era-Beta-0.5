@@ -174,6 +174,9 @@ declare
   db jsonb; defs jsonb; bd jsonb;
   k text; cls jsonb; typeObj jsonb; reactObj jsonb; armorObj jsonb; shieldObj jsonb; engObj jsonb;
   radarObj jsonb; radar_ numeric := 0;
+  v_alloy public.faction_armor_alloys;   -- кастомный сплав брони (алхимия), если выбран
+  armor_resist jsonb := jsonb_build_object('kinetic',0,'energy',0,'missile',0);
+  a_rid text;
   hasType bool; hasReactor bool; hasEnergy bool; hasHangars bool;
   cost numeric := 0; econs numeric := 0; emax numeric := 0; on_ numeric; modon numeric;
   dmg numeric := 0; hp numeric; armor numeric; shield numeric; speed numeric; cargo numeric := 0;
@@ -244,7 +247,27 @@ begin
 
   if hasType then typeObj := cls->'types'->coalesce((p_data->>'type')::int,0); if typeObj is null then raise exception 'bad type'; end if; end if;
   if hasReactor then reactObj := db->'reactors'->k->coalesce((p_data->>'reactor')::int,0); if reactObj is null then raise exception 'bad reactor'; end if; end if;
-  armorObj  := db->'armors'->k->coalesce((p_data->>'armor')::int,0);   if armorObj  is null then raise exception 'bad armor'; end if;
+  -- Броня: кастомный сплав (алхимия) по стабильному id ИЛИ индекс каталога.
+  -- Сплав пересчитан авторитетно при регистрации (armor_alloy_upsert) — берём его
+  -- material/hpBoost/стойкости, клиентским цифрам не доверяем. resurs=0 (в цену ГС не идёт;
+  -- расход постройки берём из РЕЦЕПТА ниже, в ведомости).
+  if nullif(p_data->>'armorAlloyId','') is not null then
+    select * into v_alloy from public.faction_armor_alloys where id = (p_data->>'armorAlloyId')::uuid;
+    if v_alloy.id is null then raise exception 'bad alloy'; end if;
+    armorObj := jsonb_build_object(
+      'material',       v_alloy.stats->'material',
+      'category',       v_alloy.stats->>'category',
+      'hpBoost',        coalesce(v_alloy.stats->'hpBoost', to_jsonb(0)),
+      'hpPercentBoost', coalesce(v_alloy.stats->'hpPercentBoost', to_jsonb(0)),
+      'capacityBoost',  coalesce(v_alloy.stats->'capacityBoost', to_jsonb(0)),
+      'armor',          coalesce(v_alloy.stats->'hpBoost', to_jsonb(0)),
+      'resurs', jsonb_build_object('blackmetall',0,'coloredmetall',0,'rudametall',0,'kristall',0,'staarvis',0)
+    );
+    armor_resist := coalesce(v_alloy.stats->'resist', armor_resist);
+  else
+    armorObj := db->'armors'->k->coalesce((p_data->>'armor')::int,0);
+    if armorObj is null then raise exception 'bad armor'; end if;
+  end if;
   shieldObj := db->'shields'->k->coalesce((p_data->>'shield')::int,0); if shieldObj is null then raise exception 'bad shield'; end if;
   engObj    := db->'engines'->k->coalesce((p_data->>'engine')::int,0); if engObj    is null then raise exception 'bad engine'; end if;
   -- Радар (KV.modules5): idx 0 = «Не выбран» — в расчёт не идёт (зеркало cnVehCalc)
@@ -332,8 +355,15 @@ begin
   for rk, rv in select key, (value)::numeric from jsonb_each_text(coalesce(cab->'hullBill'->p_cat->k,'{}'::jsonb)) loop
     bill := public._cn_bill_add(bill, rk, rv);
   end loop;
-  bill := public._cn_bill_add(bill,'Железо', (armorObj->>'armor')::numeric / (bd->>'armorFe')::numeric);
-  bill := public._cn_bill_add(bill,'Титан',  (armorObj->>'armor')::numeric / (bd->>'armorTi')::numeric);
+  if v_alloy.id is not null then
+    -- Кастомный сплав: постройка потребляет ИМЕННО рецепт (реальные ресурсы).
+    for a_rid in select key from jsonb_each(coalesce(v_alloy.recipe,'{}'::jsonb)) loop
+      bill := public._cn_bill_add(bill, public._aa_name(a_rid), (v_alloy.recipe->>a_rid)::numeric);
+    end loop;
+  else
+    bill := public._cn_bill_add(bill,'Железо', (armorObj->>'armor')::numeric / (bd->>'armorFe')::numeric);
+    bill := public._cn_bill_add(bill,'Титан',  (armorObj->>'armor')::numeric / (bd->>'armorTi')::numeric);
+  end if;
   if shield > 0 then
     bill := public._cn_bill_add(bill,'Редкоземельные руды', shield / (bd->>'shRare')::numeric);
     bill := public._cn_bill_add(bill,'Дейтерий', shield / (bd->>'shDeu')::numeric);
@@ -357,6 +387,7 @@ begin
     'dmg', dmg, 'speed', speed, 'crew', crew, 'radar', radar_, 'rng', rng, 'speedUnit', 'квадрат',
     'eCons', econs, 'eMax', emax, 'energy', hasEnergy,
     'cargo', cargo, 'bill', bill,
+    'armor_resist', armor_resist,   -- стойкости брони к типам урона (для боёвки)
     'className', cls->>'name', 'typeName', coalesce(typeObj->>'name',''));
 end$$;
 

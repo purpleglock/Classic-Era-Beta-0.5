@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260721union1';
+  var BUILD = '20260721alloy4';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -448,13 +448,15 @@
 <script src="comments.js?v=20260703privacy"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6/dist/d3-delaunay.min.js"></script>
 <script src="galaxy_gen.js?v=20260715multistar1"></script>
-<script src="galaxy_map.js?v=20260715multistar9"></script>
+<script src="galaxy_map.js?v=20260721union2"></script>
 <script src="faction_reg.js?v=20260713faithwave1"></script>
 <script src="locations.js?v=20260624a"></script>
 <script src="faction_news.js?v=20260715newsarch1"></script>
 <script src="constructors_kv.js?v=20260721kvcargo1"></script>
 <script src="constructors_kv_adapt.js?v=20260721kvcargo1"></script>
-<script src="constructors.js?v=20260721battle3"></script>
+<script src="armor_alchemy.js?v=20260721alloy3"></script>
+<script src="constructors.js?v=20260721alloy3"></script>
+<script src="armor_forge_ui.js?v=20260721alloy4"></script>
 <script src="economy.js?v=20260721union1"></script>
 <script src="battle_board.js?v=20260721union1"></script>
 <script src="admin.js?v=20260721kvcargo1"></script>

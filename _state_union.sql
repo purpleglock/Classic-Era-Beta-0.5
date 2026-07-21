@@ -103,9 +103,16 @@ begin
       where faction_id = p_partner;
   exception when others then raise notice 'su merge economy: %', sqlerrm; end;
 
-  -- 2) Системы на карте: территория партнёра переходит под ведущего
+  -- 2) Системы на карте: территория партнёра переходит под ведущего,
+  --    но ИСХОДНЫЙ владелец запоминается в union_origin — чтобы карта
+  --    рисовала СВОЙ флаг партнёра (две геральдики, одна держава).
   begin
-    update public.map_systems set faction = p_lead where faction = p_partner;
+    alter table public.map_systems add column if not exists union_origin text;
+  exception when others then null; end;
+  begin
+    update public.map_systems
+      set union_origin = coalesce(union_origin, faction), faction = p_lead
+      where faction = p_partner;
   exception when others then raise notice 'su merge systems: %', sqlerrm; end;
 
   -- 3) Обобщённо: всё, что помечено faction_id (колонии, постройки,
@@ -216,6 +223,11 @@ begin
     order by sealed_at desc limit 1;
   if not found then raise exception 'no active union'; end if;
   update public.state_unions set status='dissolved' where id=u.id;
+  -- активы остаются у ведущего → территория партнёра окончательно его,
+  -- сбрасываем origin, чтобы карта рисовала флаг ведущего
+  begin
+    update public.map_systems set union_origin = null where faction = u.lead_fid;
+  exception when others then null; end;
   select name, color into v_lead_name, v_lead_color from public.faction_applications where faction_id=u.lead_fid and status='approved' limit 1;
   select name into v_partner_name from public.faction_applications where faction_id=u.partner_fid and status='approved' limit 1;
   perform public._su_news(
