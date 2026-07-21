@@ -78,8 +78,7 @@ function cnGate() {
 // ════════════════════════════════════════════════════════════
 const CN_HUB = [
   { slug: 'build-ship', ico: '🚀', name: 'Корабельная верфь', desc: 'Космические корабли: от корветов до дредноутов. Реактор, броня, щиты, ангары, вооружение.', cat: 'ship' },
-  { slug: 'build-ground', ico: '🛡', name: 'Завод тяжёлого машиностроения', desc: 'Наземная техника: БТР, танки, САУ, шагоходы. Ходовая, броня, орудия.', cat: 'ground' },
-  { slug: 'build-aviation', ico: '✈', name: 'Аэрокосмический цех', desc: 'Авиация: истребители, бомбардировщики, шаттлы. Микрореактор, авионика, подвесы.', cat: 'aviation' },
+  { slug: 'build-army', ico: '🪖', name: 'Планетарный арсенал', desc: 'Единый конструктор армии: пехота, БТР, танки, артиллерия, дроны, авиация. Ходовая, броня, орудия — по правилам Кваквантора.', cat: 'army' },
   // Конструктор дивизий убран из хаба: армии теперь формируются из готовых юнитов
   // («Звёздный марш»). Билдер доступен только для правки уже созданных дивизий (cnEdit).
 ];
@@ -279,26 +278,45 @@ const CN_AIR = {
 };
 
 // ── Дескрипторы билдеров техники (ship/ground/aviation) ──
+// СИНТЕЗ: форжи потребляют данные Кваквантора (window.KV_DB). Если модуль KV не
+// загрузился (кэш старого index.html) — откат на прежние каталоги, чтобы не сломать
+// вернувшихся пользователей до обновления кэша. KV-классы: без типов/ангаров.
+const _KVD = (typeof window !== 'undefined' && window.KV_DB) || null;
 const CN_DEFS = {
   ship: {
-    cat: 'ship', db: CN_SHIP, title: 'Корабельная верфь', subtitle: 'Project Shipyard — космический флот',
+    cat: 'ship', db: _KVD ? _KVD.ship : CN_SHIP, title: 'Корабельная верфь', subtitle: 'Project Shipyard — космический флот',
     nameLabel: 'Название корабля', classLabel: 'Класс корпуса', engineLabel: 'Двигательная установка',
-    hasType: true, hasReactor: true, hasEnergy: true, hasHangars: true, cardUI: true,
-    excl: (k, g) => (k === 'corvette' && (g === 'Тяжёлые' || g === 'Сверхтяжёлые')) || ((k === 'frigate' || k === 'destroyer') && g === 'Сверхтяжёлые'),
+    hasType: !_KVD, hasReactor: true, hasEnergy: false, hasHangars: false, cardUI: true,
+    excl: () => false,
   },
   ground: {
-    cat: 'ground', db: CN_GROUND, title: 'Завод тяжёлого машиностроения', subtitle: 'GroundForge — наземная техника',
+    cat: 'ground', db: _KVD ? _KVD.ground : CN_GROUND, title: 'Завод тяжёлого машиностроения', subtitle: 'GroundForge — наземная техника',
     nameLabel: 'Серийное название модели', classLabel: 'Класс техники', engineLabel: 'Ходовая часть',
-    hasType: false, hasReactor: false, hasEnergy: false, hasHangars: false,
-    excl: (k, g) => (k === 'light' && g === 'Артиллерия и ПВО'),
+    hasType: false, hasReactor: true, hasEnergy: false, hasHangars: false, cardUI: _KVD ? false : false,
+    excl: () => false,
   },
   aviation: {
-    cat: 'aviation', db: CN_AIR, title: 'Аэрокосмический сборочный цех', subtitle: 'AeroForge — авиация',
+    cat: 'aviation', db: _KVD ? _KVD.aviation : CN_AIR, title: 'Аэрокосмический сборочный цех', subtitle: 'AeroForge — авиация',
     nameLabel: 'Позывной / Название модели', classLabel: 'Весовая категория', engineLabel: 'Маршевые двигатели',
-    hasType: true, hasReactor: true, hasEnergy: true, hasHangars: false,
-    excl: (k, g) => (k === 'light' && g === 'Ракетное и бомбовое'),
+    hasType: !_KVD, hasReactor: true, hasEnergy: false, hasHangars: false,
+    excl: () => false,
+  },
+  // Единый форж армии (пехота + техника + авиация). Без KV откатываемся на CN_GROUND,
+  // а старые роуты build-ground/build-aviation остаются алиасами этого форжа.
+  army: {
+    cat: 'army', db: _KVD ? _KVD.army : CN_GROUND, title: 'Планетарный арсенал', subtitle: 'ArmyForge — пехота, техника, авиация',
+    nameLabel: 'Серийное название модели', classLabel: 'Класс юнита', engineLabel: 'Ходовая / маршевые двигатели',
+    // Тот же визуальный движок, что у корабельной верфи (карточки + схема узлов)
+    hasType: false, hasReactor: true, hasEnergy: false, hasHangars: false, cardUI: !!_KVD,
+    excl: () => false,
   },
 };
+// Класс единого форжа → фактическая категория БД (каталоги/исследования/SQL живут
+// в разрезе ground/aviation, менять их контракт нельзя).
+function cnKvRealCat(k) {
+  const C = (typeof window !== 'undefined' && window.KV_CAT_CLASSES) || null;
+  return (C && C.aviation.indexOf(k) >= 0) ? 'aviation' : 'ground';
+}
 
 // ════════════════════════════════════════════════════════════
 // ВИЗУАЛЬНЫЙ ИНТЕРФЕЙС КОНСТРУКТОРА — картинки + описания компонентов
@@ -343,7 +361,19 @@ const CN_GROUP_SLUG = {
     module: { 'Радарное оборудование': 'radar', 'Радиоэлектронная борьба': 'ew', 'Активная защита': 'activedef', 'Управление': 'control', 'Спец. системы': 'special' },
   },
 };
-function cnGroupSlug(cat, type, group) { return ((CN_GROUP_SLUG[cat] || {})[type] || {})[group] || 'x'; }
+// Детерминированный ASCII-слаг для незнакомых (KV) групп: транслит + отсев мусора.
+// Без него все KV-группы падали в 'x' и их картинки затирали бы друг друга.
+const CN_TRANSLIT = { а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'i',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'c',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya' };
+function cnSlugify(s) {
+  let out = '';
+  for (const ch of String(s || '').toLowerCase()) {
+    if (/[a-z0-9]/.test(ch)) out += ch;
+    else if (CN_TRANSLIT[ch] != null) out += CN_TRANSLIT[ch];
+    else if (ch === ' ' || ch === '-' || ch === '_') out += '_';
+  }
+  return out.replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'x';
+}
+function cnGroupSlug(cat, type, group) { return ((CN_GROUP_SLUG[cat] || {})[type] || {})[group] || cnSlugify(group); }
 
 // Описания компонентов. По умолчанию "..." — заполняй вручную, порядок = порядку в данных.
 const CN_DESC = {
@@ -381,6 +411,42 @@ const CN_DESC = {
     airunit: ['...', '...', '...', '...'],
   },
 };
+// ── Админ-оверрайды названий/описаний орудий и модулей (вкладка «🔫 Орудия и модули») ──
+// site_settings.cn_part_overrides = { "cat|kind|group|idx": { n:'имя', d:'описание' } },
+// cat = ship/ground/aviation. Применяются ко всем категориям KV_DB по совпадению
+// ИСХОДНОГО имени (army — независимые копии тех же объектов). Идемпотентно (_name0).
+let CN_PART_OVR_LOADED = false;
+function cnApplyPartOverrides(ovr) {
+  const D = window.KV_DB; if (!D || !ovr) return;
+  const byName = {};
+  for (const key in ovr) {
+    const p = key.split('|'); if (p.length !== 4) continue;
+    const src = (D[p[0]] || {})[p[1] === 'weapon' ? 'weapons' : 'modules'];
+    const it = src && src[p[2]] && src[p[2]][+p[3]];
+    if (it) byName[it._name0 || it.name] = ovr[key];
+  }
+  for (const cat in D) for (const kindSrc of ['weapons', 'modules']) {
+    const S = D[cat][kindSrc]; if (!S) continue;
+    for (const g in S) S[g].forEach(it => {
+      const o = byName[it._name0 || it.name]; if (!o) return;
+      it._ovrDesc = o.d || '';
+      if (!it._name0) it._name0 = it.name;
+      it.name = o.n || it._name0;
+    });
+  }
+}
+async function cnLoadPartOverrides(force) {
+  if ((CN_PART_OVR_LOADED && !force) || !window.KV_DB) return;
+  CN_PART_OVR_LOADED = true;
+  try {
+    const rows = await dbGet('site_settings', 'key=eq.cn_part_overrides&select=value&limit=1');
+    const raw = rows && rows[0] && rows[0].value;
+    const ovr = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null;
+    if (ovr) cnApplyPartOverrides(ovr);
+  } catch (e) {}
+}
+if (typeof window !== 'undefined') { window.cnApplyPartOverrides = cnApplyPartOverrides; window.cnLoadPartOverrides = cnLoadPartOverrides; }
+
 function cnDesc(cat, kind, key, idx) {
   const d = (CN_DESC[cat] || {})[kind]; if (!d) return '';
   if (Array.isArray(d)) return d[key] || '';            // hangar/airunit: key = индекс
@@ -391,23 +457,40 @@ function cnDesc(cat, kind, key, idx) {
 
 // ── Карточки компонентов ──
 function cnChip(label, val) { return `<span class="cn-chip"><i>${esc(label)}</i>${esc(val)}</span>`; }
+// В KV-режиме итоговая цена корабля считается из конструкционных решений (cnKvCost),
+// а не из млн-прайсов отдельных компонентов — поэтому «страшную» покомпонентную
+// цену на карточках выбора не показываем.
+function cnGsChip(cost) { return window.KV_DB ? '' : cnChip('ГС', cnNum(cost)); }
 function cnSlotStatChips(slot, obj, def) {
   if (!obj) return '';
   const E = def.hasEnergy;
   switch (slot) {
     case 'class': return cnChip('база ОН', obj.baseON) + cnChip('ОН/модуль', '+' + obj.modON);
-    case 'type': return cnChip('HP', cnNum(obj.hp)) + cnChip('броня', cnNum(obj.armor)) + cnChip('ГС', cnNum(obj.cost));
-    case 'reactor': return cnChip('энергия', cnNum(obj.energy) + ' E') + cnChip('ГС', cnNum(obj.cost));
-    case 'armor': return cnChip('броня', '+' + cnNum(obj.armor)) + cnChip('ГС', cnNum(obj.cost));
-    case 'shield': return cnChip('щит', obj.shield ? cnNum(obj.shield) : 'нет') + (E && obj.energy ? cnChip('E', cnNum(obj.energy)) : '') + cnChip('ГС', cnNum(obj.cost));
-    case 'engine': return cnChip('скорость', obj.speed + ' у.е.') + (E && obj.energy ? cnChip('E', cnNum(obj.energy)) : '') + cnChip('ГС', cnNum(obj.cost));
+    case 'type': return cnChip('HP', cnNum(obj.hp)) + cnChip('броня', cnNum(obj.armor)) + cnGsChip(obj.cost);
+    case 'reactor': return cnChip('энергия', cnNum(obj.energy) + ' E') + cnGsChip(obj.cost);
+    case 'armor': return cnChip('броня', '+' + cnNum(obj.armor)) + cnGsChip(obj.cost);
+    case 'shield': return cnChip('щит', obj.shield ? cnNum(obj.shield) : 'нет') + (E && obj.energy ? cnChip('E', cnNum(obj.energy)) : '') + cnGsChip(obj.cost);
+    case 'engine': return (window.KV_DB ? cnChip('тяга', cnNum(obj.force)) : cnChip('скорость', obj.speed + ' у.е.')) + (E && obj.energy ? cnChip('E', cnNum(obj.energy)) : '') + cnGsChip(obj.cost);
+    case 'radar': { const d = obj.customParameterradar && obj.customParameterradar.dalnost; return cnChip('дальность', d ? cnNum(d) + ' кв' : 'нет') + (obj.power ? cnChip('E', cnNum(obj.power)) : ''); }
   }
   return '';
 }
 // ── Дескриптор компонента: объект данных + путь картинки + описание ──
-const CN_SLOT_TITLE = { class: 'Выбор корпуса', type: 'Выбор специализации', reactor: 'Выбор реактора', armor: 'Выбор бронирования', shield: 'Выбор щитового модуля', engine: 'Выбор двигателя' };
+const CN_SLOT_TITLE = { class: 'Выбор корпуса', type: 'Выбор специализации', reactor: 'Выбор реактора', armor: 'Выбор бронирования', shield: 'Выбор щитового модуля', engine: 'Выбор двигателя', radar: 'Выбор радара' };
+// KV: реальная категория для путей картинок и описаний. У единого «army»-форжа
+// своих файлов нет — арт/описания живут под ground/aviation (по группе или классу).
+function cnRealCatOf(kind, key) {
+  if (CN.cat !== 'army' || !window.KV_DB) return CN.cat;
+  if (kind === 'weapon' || kind === 'module') {
+    const src = kind === 'weapon' ? 'weapons' : 'modules';
+    return (KV_DB.ground && KV_DB.ground[src][key]) ? 'ground' : 'aviation';
+  }
+  return cnKvRealCat(kind === 'class' ? key : cnId('cn-class').value);
+}
 function cnCompInfo(kind, key, idx) {
-  const def = CN.def, db = def.db, cat = CN.cat, k = cnId('cn-class').value;
+  const def = CN.def, db = def.db, k = cnId('cn-class').value;
+  // army-форж не имеет своих файлов/описаний — используем реальную категорию
+  const cat = cnRealCatOf(kind, kind === 'weapon' || kind === 'module' || kind === 'class' ? key : k);
   let obj, imgPath, desc;
   switch (kind) {
     case 'class':   obj = db.data[key];          imgPath = cnImgPath(cat, 'class', key);       desc = cnDesc(cat, 'class', key); break;
@@ -416,33 +499,47 @@ function cnCompInfo(kind, key, idx) {
     case 'armor':   obj = db.armors[k][idx];     imgPath = cnImgPath(cat, 'armor', k, idx);     desc = cnDesc(cat, 'armor', k, idx); break;
     case 'shield':  obj = db.shields[k][idx];    imgPath = cnImgPath(cat, 'shield', k, idx);    desc = cnDesc(cat, 'shield', k, idx); break;
     case 'engine':  obj = db.engines[k][idx];    imgPath = cnImgPath(cat, 'engine', k, idx);    desc = cnDesc(cat, 'engine', k, idx); break;
+    case 'radar':   obj = (db.radars && db.radars[k] || [])[idx]; imgPath = cnImgPath(cat, 'radar', k, idx); desc = cnDesc(cat, 'radar', k, idx); break;
     case 'weapon':  obj = db.weapons[key][idx];  imgPath = cnImgPath(cat, 'weapon', cnGroupSlug(cat, 'weapon', key), idx); desc = cnDesc(cat, 'weapon', key, idx); break;
     case 'module':  obj = db.modules[key][idx];  imgPath = cnImgPath(cat, 'module', cnGroupSlug(cat, 'module', key), idx); desc = cnDesc(cat, 'module', key, idx); break;
     case 'hangar':  obj = db.hangarTypes.find(h => h.id == key); imgPath = cnImgPath(cat, 'hangar', key); desc = cnDesc(cat, 'hangar', +key); break;
     case 'airunit': obj = db.airUnits[idx];      imgPath = cnImgPath(cat, 'airunit', idx);      desc = cnDesc(cat, 'airunit', idx); break;
   }
+  // Приоритет описаний: админский оверрайд → ручной CN_DESC → описание из данных KV
+  if (obj) desc = obj._ovrDesc || desc || (obj.description && obj.description !== '...' ? obj.description : '');
   return { kind, key, idx, k, obj, imgPath, desc };
 }
 // Полный список характеристик ИЗ ДАННЫХ (всё, что есть в коде по компоненту)
 function cnCompStatsRows(info) {
   const o = info.obj, E = CN.def.hasEnergy, rows = [], push = (l, v) => rows.push([l, v]);
+  // В KV-режиме покомпонентную цену не показываем — итог считается из решений.
+  const pushPrice = (v) => { if (!window.KV_DB) push('Цена', v); };
   switch (info.kind) {
     case 'class':   push('База ОН', o.baseON); push('ОН за модуль', '+' + o.modON); if (o.types) push('Специализаций', o.types.length); break;
-    case 'type':    push('Прочность', cnNum(o.hp) + ' HP'); push('Броня корпуса', '+' + cnNum(o.armor) + ' AR'); push('Цена', cnNum(o.cost) + ' ГС'); break;
-    case 'reactor': push('Уровень', 'Ур. ' + ((info.idx || 0) + 1)); push('Выработка энергии', cnNum(o.energy) + ' E'); push('Цена', cnNum(o.cost) + ' ГС'); break;
-    case 'armor':   push('Броня', '+' + cnNum(o.armor) + ' AR'); push('Цена', cnNum(o.cost) + ' ГС'); break;
-    case 'shield':  push('Щит', o.shield ? cnNum(o.shield) + ' ед.' : 'нет'); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); push('Цена', cnNum(o.cost) + ' ГС'); break;
-    case 'engine':  push('Скорость', o.speed + ' у.е.'); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); push('Цена', cnNum(o.cost) + ' ГС'); break;
-    case 'weapon':  push('Урон', cnNum(o.dmg)); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); push('Цена', cnNum(o.cost) + ' ГС'); break;
-    case 'module':  if (E && o.energy) push('Потребление', cnNum(o.energy) + ' E'); push('Цена', cnNum(o.cost) + ' ГС'); break;
-    case 'hangar':  push('Вместимость', o.capacity + ' очк.'); push('Потребление', cnNum(o.energy) + ' E'); push('Цена', cnNum(o.cost) + ' ГС'); push('Авиагруппы', o.canHaveUnits ? 'да' : 'нет (груз)'); break;
+    case 'type':    push('Прочность', cnNum(o.hp) + ' HP'); push('Броня корпуса', '+' + cnNum(o.armor) + ' AR'); pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'reactor': push('Уровень', 'Ур. ' + ((info.idx || 0) + 1)); push('Выработка энергии', cnNum(o.energy) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'armor':   push('Броня', '+' + cnNum(o.armor) + ' AR'); pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'shield':  push('Щит', o.shield ? cnNum(o.shield) + ' ед.' : 'нет'); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'engine':  if (window.KV_DB) push('Тяга', cnNum(o.force)); else push('Скорость', o.speed + ' у.е.'); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'radar': {
+      const cp = o.customParameterradar || {};
+      push('Дальность обзора', cp.dalnost ? cnNum(cp.dalnost) + ' кв' : 'нет');
+      if (cp.diapazon) push('Диапазон', String(cp.diapazon).toUpperCase());
+      if (o.power) push('Потребление', cnNum(o.power) + ' E');
+      if (o.crewRequired) push('Экипаж', cnNum(o.crewRequired));
+      if (o.capacityPenalty) push('Масса', cnNum(o.capacityPenalty) + ' кг');
+      pushPrice(cnNum(o.cost) + ' ГС'); break;
+    }
+    case 'weapon':  push('Урон', cnNum(o.dmg)); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'module':  if (E && o.energy) push('Потребление', cnNum(o.energy) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'hangar':  push('Вместимость', o.capacity + ' очк.'); push('Потребление', cnNum(o.energy) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); push('Авиагруппы', o.canHaveUnits ? 'да' : 'нет (груз)'); break;
     case 'airunit': push('Очки в ангаре', o.points); break;
   }
   return rows.map(([l, v]) => `<div class="cn-info-row"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('');
 }
 // Вклад компонента в ресурсную ведомость (сырьё) — через общий расчёт cnUnitBill
 function cnPartBill(info) {
-  const cat = CN.cat, k = info.k, o = info.obj;
+  const k = info.k, o = info.obj, cat = CN.cat === 'army' ? cnKvRealCat(k) : CN.cat;
   if (info.kind === 'class') return Object.assign({}, (CN_HULL_BILL[cat] || {})[k] || {});
   if (info.kind === 'type' || info.kind === 'airunit') return {};
   const base = cnUnitBill(cat, k, {});
@@ -479,14 +576,14 @@ function cnCompFullHtml(info, action) {
 function cnInfoModal(title, body) {
   let ov = document.getElementById('cn-info-ov');
   if (!ov) { ov = document.createElement('div'); ov.id = 'cn-info-ov'; ov.className = 'cn-modal-ov'; ov.onclick = e => { if (e.target === ov) cnCloseInfo(); }; document.body.appendChild(ov); }
-  ov.classList.toggle('cn-cyb', CN.cat === 'ship');
+  ov.classList.toggle('cn-cyb', !!(CN.def && CN.def.cardUI));
   ov.innerHTML = `<div class="cn-modal cn-pick-modal"><button class="cn-modal-x" onclick="cnCloseInfo()">✕</button><div class="cn-modal-name">${esc(title)}</div><div class="cn-info-grid">${body}</div></div>`;
   ov.classList.add('show');
 }
 function cnCloseInfo() { document.getElementById('cn-info-ov')?.classList.remove('show'); }
 
 // Компактный чип ТЕКУЩЕГО выбора слота в шапке полотна (клик → модалка выбора)
-const CN_SLOT_SHORT = { class: 'Корпус', type: 'Специализация', reactor: 'Реактор', engine: 'Двигатель', armor: 'Броня', shield: 'Щит' };
+const CN_SLOT_SHORT = { class: 'Корпус', type: 'Специализация', reactor: 'Реактор', engine: 'Двигатель', armor: 'Броня', shield: 'Щит', radar: 'Радар' };
 function cnSlotSelected(slot) {
   const def = CN.def; if (!def || !def.cardUI) return;
   const wrap = cnId('cn-' + slot + '-cards'), sel = cnId('cn-' + slot);
@@ -678,6 +775,91 @@ const CN_HULL_PROFILES = {
     [0.00, 0.00], [0.10, 0.18], [0.16, 0.38], [0.24, 0.42], [0.32, 0.66],
     [0.40, 0.70], [0.50, 0.92], [0.58, 1.00], [0.76, 1.00], [0.86, 0.90], [0.94, 0.84], [1.00, 0.72],
   ],
+  // Авианосец — плавучий аэродром: тупой нос, широченная почти прямоугольная
+  // полётная палуба во всю длину, скруглённый транец. (supportCarrier)
+  carrier: [
+    [0.00, 0.30], [0.06, 0.55], [0.14, 0.80], [0.22, 0.90], [0.30, 0.94],
+    [0.42, 0.96], [0.60, 0.96], [0.72, 0.94], [0.82, 0.92], [0.92, 0.86], [1.00, 0.74],
+  ],
+  // Штурмовой авианосец — клин с угловой палубой: острее носовая часть, палуба
+  // выносится к борту ступенью, зауженная корма. (multiroleCarrier)
+  assault: [
+    [0.00, 0.10], [0.08, 0.34], [0.18, 0.60], [0.28, 0.78], [0.38, 0.88],
+    [0.50, 0.92], [0.64, 0.94], [0.76, 0.90], [0.86, 0.82], [0.94, 0.72], [1.00, 0.58],
+  ],
+  // Гиперкрейсер — сверхдлинный дротик: тонкий нос, плавный длинный набор ширины,
+  // почти параллельные борта, разнесённые гондолы двигателей у кормы. (hyperCruiser)
+  hypercruiser: [
+    [0.00, 0.00], [0.06, 0.20], [0.16, 0.44], [0.28, 0.66], [0.40, 0.80],
+    [0.50, 0.86], [0.62, 0.88], [0.74, 0.90], [0.84, 0.72], [0.92, 0.66], [1.00, 0.50],
+  ],
+  // Станция (ss13) — не корабль, а узловой хаб: симметричная короткая широкая
+  // «шайба» с тупыми оконечностями. (ss13)
+  station: [
+    [0.00, 0.40], [0.08, 0.66], [0.18, 0.86], [0.30, 0.96], [0.42, 1.00],
+    [0.58, 1.00], [0.70, 0.96], [0.82, 0.86], [0.92, 0.66], [1.00, 0.44],
+  ],
+  // ── АРМЕЙСКИЕ СИЛУЭТЫ (единый форж, вид сверху) ──
+  // ВАЖНО: контур сглаживается Catmull-Rom — резкие углы держим ДВОЙНЫМИ точками
+  // (почти совпадающие t), иначе всё расплывается в блоб.
+  // Пехотинец в силовой броне — рисуется ВЕРТИКАЛЬНО (сцена без поворота,
+  // см. stand-ветку в сборке полотна): шлем сверху → шея → наплечники-ступени →
+  // руки → талия → бёдра → ноги → ступни.
+  peh: [
+    [0.00, 0.14], [0.04, 0.28], [0.09, 0.28], [0.11, 0.16], [0.13, 0.16],
+    [0.14, 0.92], [0.17, 1.00], [0.26, 1.00], [0.29, 0.60], [0.33, 0.56],
+    [0.52, 0.50], [0.56, 0.62], [0.62, 0.62], [0.66, 0.42], [0.88, 0.38], [1.00, 0.24],
+  ],
+  // БТР — скошенный нос-клин, длинный ПАРАЛЛЕЛЬНЫЙ корпус (узкий, не овал),
+  // ступень десантного отсека, срез кормы с аппарелью.
+  btr: [
+    [0.00, 0.20], [0.05, 0.52], [0.12, 0.96], [0.15, 1.00], [0.60, 1.00],
+    [0.62, 0.90], [0.88, 0.90], [0.92, 1.00], [0.96, 1.00], [1.00, 0.80],
+  ],
+  // Танк — ЧИСТОЕ шасси корпуса (вид сверху, без ствола и башни): наклонная
+  // лобовая плита, параллельные гусеничные полки во всю длину, тупой кормовой срез.
+  tanki: [
+    [0.00, 0.55], [0.05, 0.85], [0.09, 1.00], [0.11, 1.00], [0.91, 1.00],
+    [0.93, 1.00], [0.97, 0.94], [1.00, 0.88],
+  ],
+  // САУ — шасси корпуса длиннее и ниже танкового: острее скос лба, длинные
+  // параллельные гусеницы, скошенная корма.
+  arta: [
+    [0.00, 0.42], [0.05, 0.72], [0.10, 0.96], [0.13, 1.00], [0.89, 1.00],
+    [0.93, 0.96], [1.00, 0.80],
+  ],
+  // Дрон — компактный корпус с крестовиной несущих лучей (роторные консоли по миделю).
+  dron: [
+    [0.00, 0.12], [0.12, 0.30], [0.22, 1.00], [0.36, 0.88], [0.48, 0.42],
+    [0.58, 0.42], [0.68, 0.92], [0.80, 0.98], [0.90, 0.36], [1.00, 0.22],
+  ],
+  // Космодрон — угловатый дротик с боковыми пилонами сенсоров.
+  dronkos: [
+    [0.00, 0.00], [0.10, 0.26], [0.24, 0.36], [0.36, 0.94], [0.48, 1.00],
+    [0.58, 0.52], [0.74, 0.46], [0.86, 0.68], [1.00, 0.30],
+  ],
+  // Самолёт — фюзеляж-игла, стреловидное крыло у миделя, узкая хвостовая балка, оперение.
+  aviacia: [
+    [0.00, 0.03], [0.10, 0.10], [0.28, 0.15], [0.38, 0.26], [0.50, 1.00],
+    [0.60, 0.86], [0.66, 0.22], [0.82, 0.17], [0.92, 0.52], [1.00, 0.46],
+  ],
+  // Вертолёт — округлая кабина, размах несущего винта у миделя, тонкая балка, хвостовой ротор.
+  vertihui: [
+    [0.00, 0.24], [0.08, 0.58], [0.16, 0.78], [0.26, 1.00], [0.36, 0.82],
+    [0.46, 0.42], [0.58, 0.18], [0.82, 0.14], [0.90, 0.44], [1.00, 0.38],
+  ],
+  // МЛА — истребитель-дельта: острый нос, треугольное крыло во весь размах к корме.
+  mla: [
+    [0.00, 0.02], [0.14, 0.10], [0.34, 0.20], [0.56, 0.44], [0.78, 1.00],
+    [0.88, 0.96], [0.92, 0.48], [1.00, 0.40],
+  ],
+};
+// KV-классы кораблей → характерный корпус (у части KV-ключей своего силуэта не было,
+// и они падали в фолбэк «corvette»; заодно оживляем неиспользуемые cruiser/frigate).
+const CN_KV_HULL = {
+  supportCarrier: 'carrier', multiroleCarrier: 'assault',
+  mediumCruiser: 'cruiser', hyperCruiser: 'hypercruiser', ss13: 'station',
+  // Армейские классы единого форжа рисуются СВОИМИ профилями (см. CN_HULL_PROFILES выше).
 };
 function cnGenStations(k, tipY, sternY, beam) {
   const prof = CN_HULL_PROFILES[k] || CN_HULL_PROFILES.destroyer;
@@ -691,6 +873,20 @@ const CN_SHIP_DIM = {
   cruiser:     [66, 336, 56, 7],
   battleship:  [60, 354, 68, 8],
   dreadnought: [54, 372, 82, 9],
+  carrier:     [58, 366, 78, 9],
+  assault:     [60, 360, 72, 8],
+  hypercruiser:[56, 374, 52, 8],
+  station:     [92, 320, 88, 7],
+  // Армейские классы: короче и с меньшим числом рядов узлов (масштаб не корабельный)
+  peh:         [122, 292, 30, 3],
+  btr:         [92, 322, 38, 4],
+  tanki:       [98, 318, 54, 4],
+  arta:        [82, 330, 46, 5],
+  dron:        [118, 296, 44, 3],
+  dronkos:     [114, 300, 40, 3],
+  aviacia:     [64, 332, 66, 5],
+  vertihui:    [90, 330, 50, 4],
+  mla:         [78, 322, 60, 4],
 };
 const CN_SHIP_ST = {};
 for (const k in CN_SHIP_DIM) {
@@ -989,12 +1185,12 @@ function cnShipDecal(H, k) {
 }
 
 function cnDrawShip() {
-  if (CN.cat !== 'ship' || !CN.def || !CN.def.cardUI) return;
+  if (!CN.def || !CN.def.cardUI) return;
   const host = cnId('cn-schematic'); if (!host) return;
   if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] };
   if (!CN.schemShow) CN.schemShow = { weapons: true, bays: true };
   const db = CN.def.db, k = cnId('cn-class').value, cls = db.data[k];
-  const H0 = CN_SHIP_GEO[k] || CN_SHIP_GEO.corvette;
+  const H0 = CN_SHIP_GEO[CN_KV_HULL[k] || k] || CN_SHIP_GEO.corvette;
   const tIdx = +(cnId('cn-type') || {}).value || 0;
   const H = cnTypeGeo(H0, cls, tIdx);     // силуэт зависит от подкласса (ширина по «массе»)
   CN.shipGeo = H;                          // храним актуальную геометрию для drag-обработчика узлов
@@ -1018,11 +1214,15 @@ function cnDrawShip() {
     P.push(`<g class="cn-shieldfx">${cnShieldSvg(H, sIdx, rt, shieldD, shTex)}</g>`);
   }
 
-  // ДВИГАТЕЛЬ — число дюз и тип (ион/плазма) из выбранного двигателя + живой факел
+  // ДВИГАТЕЛЬ — число дюз и тип (ион/плазма) из выбранного двигателя + живой факел.
+  // У наземки (пехота/БТР/танки/арта) дюз нет — ходовая, факел не рисуем.
+  const groundCls = CN.cat === 'army' && cnKvRealCat(k) === 'ground';
   const engPlasma = /плазм/i.test(engObj ? engObj.name : '');
-  const engGlowCol = engPlasma ? 'var(--gd)' : 'var(--te)';
-  const flameLen = Math.min(60, 20 + (engObj ? engObj.speed : 20)) * (engPlasma ? 1.18 : 1);
-  P.push(`<g class="cn-flame"><ellipse cx="160" cy="${e[1]}" rx="${Math.min(cnHullHalf(H, e[1] - 6) * 0.8, 30).toFixed(1)}" ry="6" fill="${engGlowCol}" opacity="0.16"/>${cnEngineSvg(H, engObj)}</g>`);
+  const flameLen = groundCls ? 0 : Math.min(60, 20 + (engObj ? engObj.speed : 20)) * (engPlasma ? 1.18 : 1);
+  if (!groundCls) {
+    const engGlowCol = engPlasma ? 'var(--gd)' : 'var(--te)';
+    P.push(`<g class="cn-flame"><ellipse cx="160" cy="${e[1]}" rx="${Math.min(cnHullHalf(H, e[1] - 6) * 0.8, 30).toFixed(1)}" ry="6" fill="${engGlowCol}" opacity="0.16"/>${cnEngineSvg(H, engObj)}</g>`);
+  }
 
   // КОРПУС: если загружен арт-тело (ship_type_<k>_<t>.webp → ship_class_<k>.webp) —
   // показываем его как корабль (обрезка по силуэту). Иначе — ЧИСТЫЙ гранёный силуэт
@@ -1227,8 +1427,17 @@ function cnDrawShip() {
   // На телефоне разворачиваем корпус ВЕРТИКАЛЬНО носом вниз (портретная сцена) — так корабль
   // крупнее и занимает высоту экрана, а не жмётся в узкую горизонтальную полоску.
   const mob = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse), (max-width: 640px)').matches;
+  // Пехотинец — фигура, а не корпус: рисуем СТОЯ (вертикально, головой вверх)
+  // и на десктопе, и на телефоне.
+  const stand = CN.cat === 'army' && k === 'peh';
   let VW, VH, CY, sc, ox = 0, gT, SX, axis;
-  if (mob) {
+  if (stand) {
+    VW = mob ? 470 : 960; VH = mob ? 900 : 470; CY = VW / 2;
+    sc = Math.min((VH - 56) / shipLen, (VW - 40) / (halfW * 2));
+    gT = `translate(${(VW / 2 - 160 * sc).toFixed(2)},${(28 - topEdge * sc).toFixed(2)}) scale(${sc.toFixed(4)})`;
+    SX = () => VW / 2;
+    axis = `<line x1="${(VW / 2).toFixed(1)}" y1="20" x2="${(VW / 2).toFixed(1)}" y2="${VH - 20}" stroke="var(--w1)" stroke-width="0.8" stroke-dasharray="2 9" opacity="0.5"/>`;
+  } else if (mob) {
     VW = 470; VH = 900; CY = VW / 2;
     sc = Math.min((VH - 56) / shipLen, (VW - 28) / (halfW * 2));
     const midShip = (topEdge + botEdge) / 2;
@@ -1385,6 +1594,16 @@ function cnPlaceTapHandler(evt) {
   CN.placing = null;
   cnDrawShip();
 }
+// СИНТЕЗ (KV): оружие/модули — кат-широкие группы, доступность зависит от класса.
+// db.weaponsAvail[k] / db.modulesAvail[k] = Set("group|idx"). Без KV-карт → всё доступно.
+function cnItemAvail(type, k, group, i) {
+  const av = type === 'weapon' ? CN.def.db.weaponsAvail : CN.def.db.modulesAvail;
+  if (!av || !av[k]) return true;
+  return av[k].has(group + '|' + i);
+}
+function cnGroupHasAvail(type, k, group, source) {
+  return (source[group] || []).some((it, i) => cnItemAvail(type, k, group, i));
+}
 function cnOpenAssignPicker(kind, slot, keepFilter) {
   const isW = kind === 'mount', def = CN.def, k = cnId('cn-class').value, source = isW ? def.db.weapons : def.db.modules;
   const arr = isW ? CN.shipLayout.mounts : CN.shipLayout.bays, cur = arr[slot] && (isW ? arr[slot].w : arr[slot].m);
@@ -1394,7 +1613,8 @@ function cnOpenAssignPicker(kind, slot, keepFilter) {
   for (const group in source) {
     if (isW && def.excl(k, group)) continue;
     if (isW && !cnWpnUnlocked(CN.cat, group)) continue;
-    if (!isW && !cnUnlocked('mod.' + CN.cat + '.' + group)) continue;
+    if (!isW && !cnModUnlocked(CN.cat, group)) continue;
+    if (!cnGroupHasAvail(isW ? 'weapon' : 'module', k, group, source)) continue;
     groups.push(group);
   }
   // Активная вкладка: сохранённая (при переключении) → калибр текущего орудия → первая.
@@ -1405,14 +1625,14 @@ function cnOpenAssignPicker(kind, slot, keepFilter) {
     : '';
   let secs = '';
   if (active) {
-    const cards = source[active].map((item, i) => { const info = cnCompInfo(isW ? 'weapon' : 'module', active, i); info.on = !!(cur && cur.g === active && cur.idx === i); return cnCompFullHtml(info, `cnAssignSlot('${kind}',${slot},'${esc(active)}',${i})`); }).join('');
+    const cards = source[active].map((item, i) => i).filter(i => cnItemAvail(isW ? 'weapon' : 'module', k, active, i)).map(i => { const info = cnCompInfo(isW ? 'weapon' : 'module', active, i); info.on = !!(cur && cur.g === active && cur.idx === i); return cnCompFullHtml(info, `cnAssignSlot('${kind}',${slot},'${esc(active)}',${i})`); }).join('');
     secs = `<div class="cn-info-grid">${cards}</div>`;
   }
   if (!secs) secs = `<div class="cn-bill-none" style="padding:10px">${isW ? 'Нет доступного оружия этого класса' : 'Модули ещё не исследованы (вкладка «Исследования»)'}</div>`;
   const head = `<div class="cn-assign-head">${cur ? `<button class="btn btn-gh btn-sm" onclick="cnClearSlot('${kind}',${slot})">Оставить пустым</button>` : ''}<button class="btn btn-rd btn-sm" onclick="cnDeleteSlot('${kind}',${slot})">Удалить ${isW ? 'узел' : 'отсек'}</button></div>`;
   let ov = document.getElementById('cn-pick-ov');
   if (!ov) { ov = document.createElement('div'); ov.id = 'cn-pick-ov'; ov.className = 'cn-modal-ov'; ov.onclick = e => { if (e.target === ov) cnClosePick(); }; document.body.appendChild(ov); }
-  ov.classList.toggle('cn-cyb', CN.cat === 'ship');
+  ov.classList.toggle('cn-cyb', !!(CN.def && CN.def.cardUI));
   ov.innerHTML = `<div class="cn-modal cn-pick-modal"><button class="cn-modal-x" onclick="cnClosePick()">✕</button><div class="cn-modal-name">${isW ? 'Орудие в узел' : 'Модуль в отсек'}</div>${head}${tabs}<div class="cn-pick-body">${secs}</div></div>`;
   ov.classList.add('show');
 }
@@ -1433,8 +1653,8 @@ function cnPartCardInner(type, g, idx) {
   const slug = cnGroupSlug(CN.cat, type, g);
   const img = cnImgTag(cnImgPath(CN.cat, type, slug, idx), 'cn-comp-img');
   let chips;
-  if (type === 'weapon') chips = cnChip('урон', cnNum(item.dmg)) + (E && item.energy ? cnChip('E', cnNum(item.energy)) : '') + cnChip('ГС', cnNum(item.cost));
-  else chips = (E && item.energy ? cnChip('E', cnNum(item.energy)) : '') + cnChip('ГС', cnNum(item.cost));
+  if (type === 'weapon') chips = cnChip('урон', cnNum(item.dmg)) + (E && item.energy ? cnChip('E', cnNum(item.energy)) : '') + cnGsChip(item.cost);
+  else chips = (E && item.energy ? cnChip('E', cnNum(item.energy)) : '') + cnGsChip(item.cost);
   const desc = cnDesc(CN.cat, type, g, idx);
   return `${img}<div class="cn-comp-b"><div class="cn-comp-nm">${esc(item.name)}</div><div class="cn-comp-st">${chips}</div>${desc ? `<div class="cn-comp-ds">${esc(desc)}</div>` : ''}</div>`;
 }
@@ -1445,15 +1665,16 @@ function cnOpenPartPicker(type) {
   for (const group in source) {
     if (type === 'weapon' && def.excl(k, group)) continue;
     if (type === 'weapon' && !cnWpnUnlocked(CN.cat, group)) continue;
-    if (type === 'module' && !cnUnlocked('mod.' + CN.cat + '.' + group)) continue;
-    const cards = source[group].map((item, i) =>
+    if (type === 'module' && !cnModUnlocked(CN.cat, group)) continue;
+    if (!cnGroupHasAvail(type, k, group, source)) continue;
+    const cards = source[group].map((item, i) => i).filter(i => cnItemAvail(type, k, group, i)).map(i =>
       cnCompFullHtml(cnCompInfo(type, group, i), `cnPickPart('${type}','${esc(group)}',${i})`)).join('');
     secs += `<div class="cn-pick-sec"><div class="cn-pick-h">${esc(group)}</div><div class="cn-info-grid">${cards}</div></div>`;
   }
   if (!secs) { toast(type === 'weapon' ? 'Нет доступного оружия этого класса' : 'Модули ещё не исследованы (вкладка «Исследования»)', 'inf'); return; }
   let ov = document.getElementById('cn-pick-ov');
   if (!ov) { ov = document.createElement('div'); ov.id = 'cn-pick-ov'; ov.className = 'cn-modal-ov'; ov.onclick = e => { if (e.target === ov) cnClosePick(); }; document.body.appendChild(ov); }
-  ov.classList.toggle('cn-cyb', CN.cat === 'ship');
+  ov.classList.toggle('cn-cyb', !!(CN.def && CN.def.cardUI));
   ov.innerHTML = `<div class="cn-modal cn-pick-modal">
     <button class="cn-modal-x" onclick="cnClosePick()">✕</button>
     <div class="cn-modal-name">${type === 'weapon' ? 'Выбор вооружения' : 'Выбор модуля'}</div>
@@ -1483,10 +1704,32 @@ function cnRowInfo(g, idx, type) { cnInfoModal(type === 'weapon' ? 'Вооруж
 // см. EC_TECH_STARTER в economy.js; существующим фракциям выдана бэкфиллом в
 // _research_total.sql). Пустые списки оставлены — id-контракт и cnUnitReqTech
 // продолжают работать без изменений.
-const CN_BASE = {
-  classes: { ship: [], ground: [], aviation: [] },
-  weapons: { ship: [], ground: [], aviation: [] },
+// СИНТЕЗ: гейтинг KV-каталога по исследованиям. Базово (бесплатно) открыты только
+// СТАРТЕРЫ — первый класс каждой категории и лёгкие группы оружия; остальное
+// исследуется (дерево строится из KV_DB в ecBuildResearch, зеркало tech_nodes —
+// _tech_nodes_kv.sql). army = объединение ground+aviation (гейты транслируются
+// в реальные категории). Без KV — прежнее пустое поведение (легаси-стартеры в БД).
+const CN_KV_STARTER = {
+  classes: { ship: ['corvette'], ground: ['peh'], aviation: ['dron'] },
+  weapons: {
+    ship: ['КИНЕТИЧЕСКОЕ ВООРУЖЕНИЕ'],
+    ground: ['ХОЛОДНОЕ ОРУЖИЕ', 'ЛИЧНОЕ ОРУЖИЕ'],
+    aviation: ['БОЕВЫЕ ЧАСТИ (КАМИКАДЗЕ)', 'СТРЕЛКОВОЕ ВООРУЖЕНИЕ'],
+  },
 };
+const CN_BASE = (function () {
+  const base = { classes: { ship: [], ground: [], aviation: [], army: [] }, weapons: { ship: [], ground: [], aviation: [], army: [] } };
+  const D = (typeof window !== 'undefined' && window.KV_DB) || null;
+  if (D) for (const cat of ['ship', 'ground', 'aviation']) {
+    if (!D[cat]) continue;
+    // Стартеры, пересечённые с живым каталогом (защита от рассинхрона имён)
+    base.classes[cat] = CN_KV_STARTER.classes[cat].filter(k => D[cat].data[k]);
+    base.weapons[cat] = CN_KV_STARTER.weapons[cat].filter(g => D[cat].weapons[g]);
+  }
+  base.classes.army = base.classes.ground.concat(base.classes.aviation);
+  base.weapons.army = base.weapons.ground.concat(base.weapons.aviation);
+  return base;
+})();
 async function cnLoadResearch() {
   CN.unlocked = new Set(); CN.staffAll = false;
   const fid = CN.myApp && CN.myApp.faction_id;
@@ -1521,9 +1764,24 @@ function cnUnitReqTech(unit) {
   return [...keys];
 }
 if (typeof window !== 'undefined') window.cnUnitReqTech = cnUnitReqTech;
-function cnClassUnlocked(cat, k) { return (CN_BASE.classes[cat] || []).includes(k) || cnUnlocked('cls.' + cat + '.' + k); }
-function cnWpnUnlocked(cat, g) { return (CN_BASE.weapons[cat] || []).includes(g) || cnUnlocked('wpn.' + cat + '.' + g); }
-function cnCompUnlocked(cat, t) { return cnUnlocked('comp.' + cat + '.' + t); }
+// Единый «army»-форж своих тех-ключей не имеет: гейты транслируются в реальные
+// категории (класс → своя, группа/компонент → достаточно любой из двух).
+function cnClassUnlocked(cat, k) {
+  if (cat === 'army') cat = cnKvRealCat(k);
+  return (CN_BASE.classes[cat] || []).includes(k) || cnUnlocked('cls.' + cat + '.' + k);
+}
+function cnWpnUnlocked(cat, g) {
+  if (cat === 'army') return cnWpnUnlocked('ground', g) || cnWpnUnlocked('aviation', g);
+  return (CN_BASE.weapons[cat] || []).includes(g) || cnUnlocked('wpn.' + cat + '.' + g);
+}
+function cnCompUnlocked(cat, t) {
+  if (cat === 'army') return cnCompUnlocked('ground', t) || cnCompUnlocked('aviation', t);
+  return cnUnlocked('comp.' + cat + '.' + t);
+}
+function cnModUnlocked(cat, g) {
+  if (cat === 'army') return cnModUnlocked('ground', g) || cnModUnlocked('aviation', g);
+  return cnUnlocked('mod.' + cat + '.' + g);
+}
 function cnCompOptions(cat, type, list, labelFn) {
   const open = cnCompUnlocked(cat, type);
   return list.map((it, i) => { const locked = i >= 1 && !open; return `<option value="${i}"${locked ? ' disabled' : ''}>${locked ? '🔒 ' : ''}${esc(labelFn(it, i))}</option>`; }).join('');
@@ -1533,8 +1791,10 @@ function cnCompOptions(cat, type, list, labelFn) {
 // ДВИЖОК БИЛДЕРА ТЕХНИКИ (ship / ground / aviation)
 // ════════════════════════════════════════════════════════════
 function cnRenderShip() { return cnVehRender('ship'); }
-function cnRenderGround() { return cnVehRender('ground'); }
-function cnRenderAviation() { return cnVehRender('aviation'); }
+function cnRenderArmy() { return cnVehRender(CN_DEFS.army ? 'army' : 'ground'); }
+// Старые роуты — алиасы единого армейского форжа (закладки/кэш старого index.html)
+function cnRenderGround() { return cnRenderArmy(); }
+function cnRenderAviation() { return cnRenderArmy(); }
 
 async function cnVehRender(cat) {
   const edit = CN.edit; CN.edit = null;
@@ -1542,6 +1802,7 @@ async function cnVehRender(cat) {
   await cnLoadMyFaction();
   if (!cnCanAccess()) { cnGate(); return; }
   await cnLoadResearch();
+  await cnLoadPartOverrides();   // админ-имена/описания орудий и модулей
   const def = CN_DEFS[cat];
   CN.cat = cat; CN.def = def; CN.last = null; CN.editUnit = edit || null;
   CN.shipLayout = { mounts: [], bays: [] }; CN.schemShow = { weapons: true, bays: true };
@@ -1574,6 +1835,7 @@ async function cnVehRender(cat) {
             ${slotSel('engine', 'cnVehCalc()')}
             ${slotSel('armor', 'cnVehCalc()')}
             ${slotSel('shield', 'cnVehCalc()')}
+            ${def.db.radars ? slotSel('radar', 'cnVehCalc()') : ''}
           </div>
           <div id="cn-hud" class="cn-hud"></div>
           <div class="cn-schem-wrap">
@@ -1600,7 +1862,7 @@ async function cnVehRender(cat) {
           </div>
         </div>
         ${def.hasHangars ? `<div class="cn-panel cn-hangars-panel"><h3>Ангарная палуба</h3><div id="cn-hangars"></div></div>` : ''}
-        <div class="cn-panel"><h3>Текущие ТТХ</h3><div id="cn-stats" class="cn-stats-grid"></div>${publishBtns}</div>
+        <div class="cn-panel"><h3>Ресурсы и решения</h3><div id="cn-stats" class="cn-stats-grid"></div>${publishBtns}</div>
       </div>`;
   const configHtml = `
       <div class="cn-config">
@@ -1619,6 +1881,7 @@ async function cnVehRender(cat) {
             <div class="cn-field"><label>Бронирование</label><select id="cn-armor" onchange="cnVehCalc()"></select></div>
             <div class="cn-field"><label>Щитовой модуль</label><select id="cn-shield" onchange="cnVehCalc()"></select></div>
           </div>
+          ${def.db.radars ? `<div class="cn-field"><label>Радарное оборудование</label><select id="cn-radar" onchange="cnVehCalc()"></select></div>` : ''}
           <div class="cn-field"><label>${esc(def.engineLabel)}</label><select id="cn-engine" onchange="cnVehCalc()"></select></div>
         </div>
         <div class="cn-panel">
@@ -1666,7 +1929,14 @@ function cnVehInit() {
   const ek = CN.editUnit && CN.editUnit.data && CN.editUnit.data.class;
   if (ek && def.db.data[ek] && !keys.includes(ek)) keys.push(ek);
   if (!keys.length) keys = [Object.keys(def.db.data)[0]];
-  cnId('cn-class').innerHTML = keys.map(k => `<option value="${k}">${esc(def.db.data[k].name)}</option>`).join('');
+  const clsOpt = k => `<option value="${k}">${esc(def.db.data[k].name)}</option>`;
+  if (cat === 'army' && window.KV_CAT_CLASSES) {
+    // Единый форж: классы сгруппированы по родам войск
+    const g = keys.filter(k => cnKvRealCat(k) === 'ground'), a = keys.filter(k => cnKvRealCat(k) === 'aviation');
+    cnId('cn-class').innerHTML =
+      (g.length ? `<optgroup label="Наземные силы">${g.map(clsOpt).join('')}</optgroup>` : '') +
+      (a.length ? `<optgroup label="Авиация">${a.map(clsOpt).join('')}</optgroup>` : '');
+  } else cnId('cn-class').innerHTML = keys.map(clsOpt).join('');
   if (def.cardUI) cnSlotSelected('class');
   cnVehClassDeps();
 }
@@ -1682,8 +1952,9 @@ function cnVehClassDeps() {
   if (def.hasReactor) cnId('cn-reactor').innerHTML = cnCompOptions(cat, 'reactor', def.db.reactors[k], (r, i) => `Ур.${i + 1} · ${r.name} (${r.energy} E)`);
   cnId('cn-armor').innerHTML = cnCompOptions(cat, 'armor', def.db.armors[k], a => `${a.name} (+${cnNum(a.armor)} AR)`);
   cnId('cn-shield').innerHTML = cnCompOptions(cat, 'shield', def.db.shields[k], s => s.name);
-  cnId('cn-engine').innerHTML = cnCompOptions(cat, 'engine', def.db.engines[k], e => `${e.name} (${e.speed} у.е.)`);
-  if (def.cardUI) { ['type', 'reactor', 'armor', 'shield', 'engine'].forEach(cnSlotSelected); cnHullHero(); }
+  cnId('cn-engine').innerHTML = cnCompOptions(cat, 'engine', def.db.engines[k], e => window.KV_DB ? `${e.name} (тяга ${cnNum(e.force)})` : `${e.name} (${e.speed} у.е.)`);
+  if (def.db.radars && cnId('cn-radar')) cnId('cn-radar').innerHTML = cnCompOptions(cat, 'radar', def.db.radars[k] || [], r => { const d = r.customParameterradar && r.customParameterradar.dalnost; return r.name + (d ? ` (обзор ${cnNum(d)})` : ''); });
+  if (def.cardUI) { ['type', 'reactor', 'armor', 'shield', 'engine', 'radar'].forEach(cnSlotSelected); cnHullHero(); }
   cnVehCalc();
 }
 
@@ -1702,11 +1973,13 @@ function cnVehAddItem(type, preset) {
     const isPresetGroup = preset && preset.g === group;
     if (!isPresetGroup) {
       if (type === 'weapon' && !cnWpnUnlocked(CN.cat, group)) continue;
-      if (type === 'module' && !cnUnlocked('mod.' + CN.cat + '.' + group)) continue;
+      if (type === 'module' && !cnModUnlocked(CN.cat, group)) continue;
     }
+    if (!isPresetGroup && !cnGroupHasAvail(type, k, group, source)) continue;
     const g = document.createElement('optgroup');
     g.label = group;
     source[group].forEach((item, i) => {
+      if (!isPresetGroup && !cnItemAvail(type, k, group, i)) return;
       const opt = document.createElement('option');
       opt.value = JSON.stringify({ g: group, idx: i });
       let lbl = item.name;
@@ -1916,6 +2189,87 @@ function cnBillText(bill) {
   return keys.map(nm => ` - ${nm}: ${cnNum(bill[nm])}`).join('\n');
 }
 
+// ════════════════════════════════════════════════════════════
+// МАТЕМАТИКА КВАКВАНТОРА (перенос из govno-копия.html calculateResults)
+// Активна при window.KV_DB. Скорость — в «квадратах».
+// ════════════════════════════════════════════════════════════
+const CN_KV_SPEEDCOEF = {
+  peh: 5, btr: 8, tanki: 8, arta: 8, aviacia: 140, vertihui: 50, dron: 8,
+  dronkos: 1000, mla: 1000, corvette: 1000, destroyer: 1000, supportCarrier: 1000,
+  mediumCruiser: 1000, hyperCruiser: 1000, multiroleCarrier: 1000,
+  battleship: 1000, dreadnought: 1000, ss13: 1,
+};
+// Прочность от бронеплиты: физика материала + вклад ресурсов (armorElements KV).
+function cnKvArmorHp(cls, a) {
+  if (!a || (a.name && (a.name.indexOf('Нет') === 0 || a.name === 'Нет брони'))) return 0;
+  let s = (cls.mass || 0) / 2000 + (cls.gabarit || 0) * 2;
+  let bm = 0.1, cm = 0.2, rm = 0.3, km = 0.5, sv = 1.0, dF = 1, tF = 1, hF = 1;
+  if (a.material) {
+    let at = (a.material.tensileStrength.min + a.material.tensileStrength.max) / 2;
+    let hr = a.material.heatResistance, tc = a.material.thermalConductivity;
+    at = 500 + 3000 * (1 - Math.exp(-at / 5000));
+    hr = 500 + 2500 * (1 - Math.exp(-hr / 2000));
+    tc = 100 + 1900 * (1 - Math.exp(-tc / 1000));
+    dF += a.material.density * 0.02; tF += at / 4000; hF += hr / 4000 + tc / 50000;
+  }
+  if (a.category === 'heavyMetal') { bm *= 1.5; rm *= 1.3; }
+  else if (a.category === 'lightMetal') { bm *= 0.7; km *= 1.3; cm *= 1.1; }
+  else if (a.category === 'ceramic') { km *= 1.4; rm *= 1.2; bm *= 0.8; }
+  else if (a.category === 'composite') { bm *= 1.1; cm *= 1.1; rm *= 1.1; km *= 1.1; sv *= 1.1; }
+  if (a.resurs) s += (a.resurs.blackmetall || 0) * bm + (a.resurs.coloredmetall || 0) * cm
+    + (a.resurs.rudametall || 0) * rm + (a.resurs.kristall || 0) * km + (a.resurs.staarvis || 0) * sv;
+  s *= dF * tF * hF;
+  let hp = (a.hpBoost || 0) + s;
+  if (a.hpPercentBoost) hp *= (1 + a.hpPercentBoost);
+  return hp;
+}
+// Скорость в «квадратах»: (сила_двигателя × сила_реактора) / масса × 10 / коэфф_класса.
+function cnKvSpeed(cls, k, reactObj, engObj) {
+  const rf = reactObj && reactObj.force ? reactObj.force : 1;
+  const ef = engObj && engObj.force ? engObj.force : 0;
+  if (ef <= 0) return 0;
+  const kmh = ((ef * rf) / (cls.mass || 100)) * 10;
+  let sp = Math.round(kmh / (CN_KV_SPEEDCOEF[k] || 1));
+  return sp > 100 ? 100 : sp;
+}
+// ── ГС-стоимость KV-юнита ────────────────────────────────────────────────
+// НЕ млн-прайсы Кваквантора (они раздували ГС), а: сырьё × ценность ресурса ×
+// класс корпуса + ПЛОСКАЯ (аддитивная, НЕ коэффициент) наценка от общей
+// ситуации в экономике. Итог — вменяемый ГС-масштаб, привязанный к сырью.
+const CN_KV_RES_GS = {   // ГС за единицу KV-сырья (относительно ресурса, по редкости)
+  blackmetall: 8, rudametall: 20, coloredmetall: 45, kristall: 90, staarvis: 150,
+};
+const CN_KV_CLASS_GS = { // множитель класса корпуса/модуля (сложность сборки)
+  peh: 1, btr: 1.15, tanki: 1.35, arta: 1.3,
+  dron: 1.2, aviacia: 1.5, vertihui: 1.5, dronkos: 1.7, mla: 1.8,
+  corvette: 1.8, destroyer: 2.2, supportCarrier: 2.2, mediumCruiser: 2.6,
+  hyperCruiser: 3, multiroleCarrier: 3, battleship: 3.6, dreadnought: 4.2, ss13: 3,
+};
+// Плоская наценка «от ситуации в экономике»: аддитивная база по классу, слегка
+// сдвинутая живым индексом рынка (средняя переоценка над якорем в EC.market,
+// если экономика загружена). НЕ множится на стоимость юнита — только прибавляется.
+function cnKvEconMarkup(k) {
+  let idx = 0;
+  try {
+    const M = (typeof window !== 'undefined' && window.EC && EC.market) || null;
+    if (M) {
+      let sum = 0, n = 0;
+      for (const nm in M) { const m = M[nm]; if (m && m.price > 0 && m.base_price > 0) { sum += (m.price / m.base_price - 1); n++; } }
+      if (n) idx = Math.max(-0.5, Math.min(1, sum / n));
+    }
+  } catch (e) {}
+  const flat = (CN_KV_CLASS_GS[k] || 1) * 90;   // умеренная база наценки по классу
+  return Math.max(0, Math.round(flat * (1 + idx)));
+}
+// Общий понижающий коэффициент цены за конструкционные решения (ещё раз срезано).
+const CN_KV_COST_FACTOR = 0.32;
+function cnKvCost(res, k) {
+  let base = 0;
+  for (const r in CN_KV_RES_GS) base += (res[r] || 0) * CN_KV_RES_GS[r];
+  base *= (CN_KV_CLASS_GS[k] || 1) * CN_KV_COST_FACTOR;
+  return Math.round(base + cnKvEconMarkup(k));
+}
+
 // ── Расчёт ТТХ ──
 function cnVehCalc() {
   const def = CN.def, db = def.db;
@@ -1926,13 +2280,16 @@ function cnVehCalc() {
   const armorObj = db.armors[k][+cnId('cn-armor').value || 0];
   const shieldObj = db.shields[k][+cnId('cn-shield').value || 0];
   const engObj = db.engines[k][+cnId('cn-engine').value || 0];
+  // Радар (KV.modules5): idx 0 = «Не выбран» — в расчёт не идёт (у пустышки бывают мусорные поля)
+  const radarIdx = (db.radars && cnId('cn-radar')) ? (+cnId('cn-radar').value || 0) : 0;
+  const radarObj = radarIdx > 0 ? (db.radars[k] || [])[radarIdx] : null;
 
   let cost = (typeObj ? typeObj.cost : cls.cost) + (reactObj ? reactObj.cost : 0) + armorObj.cost + shieldObj.cost + engObj.cost;
   let energyCons = def.hasEnergy ? ((shieldObj.energy || 0) + (engObj.energy || 0)) : 0;
   let dmg = 0, on = cls.baseON;
   const billWeapons = [], billModules = [], billHangars = [];   // для ресурсной ведомости
 
-  if (CN.cat === 'ship' && def.cardUI) {
+  if (def.cardUI) {
     (CN.shipLayout && CN.shipLayout.mounts || []).forEach(mt => { if (!mt.w) return; const w = db.weapons[mt.w.g][mt.w.idx]; cost += w.cost; on += cls.modON; dmg += w.dmg; if (def.hasEnergy) energyCons += (w.energy || 0); billWeapons.push({ w, q: 1 }); });
     (CN.shipLayout && CN.shipLayout.bays || []).forEach(by => { if (!by.m) return; const m = db.modules[by.m.g][by.m.idx]; cost += m.cost; on += cls.modON; if (def.hasEnergy) energyCons += (m.energy || 0); billModules.push({ m }); });
   } else {
@@ -1968,26 +2325,62 @@ function cnVehCalc() {
     });
   }
 
-  const hp = typeObj ? typeObj.hp : cls.hp;
-  const armor = (typeObj ? typeObj.armor : 0) + armorObj.armor;
+  let hp = typeObj ? typeObj.hp : cls.hp;
+  let armor = (typeObj ? typeObj.armor : 0) + armorObj.armor;
   const shield = shieldObj.shield || 0;
-  const speed = engObj.speed;
+  let speed = engObj.speed;
   const eMax = reactObj ? reactObj.energy : 0;
   // Ресурсная ведомость: корабли строятся по ней напрямую, наземка/авиация —
   // в составе дивизий (их bill агрегируется в дивизионный summary.bill).
-  const bill = cnUnitBill(CN.cat, k, { typeObj, reactObj, armorObj, shieldObj, engObj, weapons: billWeapons, modules: billModules, hangars: billHangars });
-  CN.last = { hp, armor, shield, dmg, speed, cost, on: +on.toFixed(1), eCons: energyCons, eMax, energy: def.hasEnergy, hangarOver, cargo, bill };
+  const bill = cnUnitBill(CN.cat === 'army' ? cnKvRealCat(k) : CN.cat, k, { typeObj, reactObj, armorObj, shieldObj, engObj, weapons: billWeapons, modules: billModules, hangars: billHangars });
+
+  // СИНТЕЗ: математика Кваквантора поверх — HP от физики брони, скорость в «квадратах»,
+  // ресурсы/экипаж/энергия/вместимость (наглядно в превью).
+  let kv = null;
+  if (typeof window !== 'undefined' && window.KV_DB) {
+    hp = Math.round(cnKvArmorHp(cls, armorObj));
+    armor = 0;
+    speed = cnKvSpeed(cls, k, reactObj, engObj);
+    const res = { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 };
+    const addRes = (o, q) => { if (o && o.resurs) for (const key in res) res[key] += (o.resurs[key] || 0) * (q || 1); };
+    [cls, reactObj, engObj, armorObj, shieldObj, radarObj].forEach(o => addRes(o, 1));
+    let crew = cls.crewRequired || 0;
+    let power = (reactObj && reactObj.power) || 0;
+    let cap = cls.capacity || 0;
+    power -= (engObj && engObj.power) || 0;
+    power -= (shieldObj && shieldObj.power) || 0;
+    cap += (armorObj && armorObj.capacityBoost) || 0;
+    cap += (engObj && engObj.capacityBoost) || 0;
+    if (radarObj) { crew += radarObj.crewRequired || 0; power -= radarObj.power || 0; cap -= radarObj.capacityPenalty || 0; }
+    billWeapons.forEach(({ w, q }) => { q = q || 1; crew += (w.crewRequired || 0) * q; power -= (w.power || 0) * q; cap -= (w.capacityPenalty || 0) * q; addRes(w, q); });
+    billModules.forEach(({ m }) => { crew += (m.crewRequired || 0); power -= (m.power || 0); cap += (m.capacity || 0); addRes(m, 1); });
+    for (const key in res) res[key] = Math.round(res[key]);
+    // ГС теперь из сырья (см. cnKvCost), а не из млн-прайсов Кваквантора.
+    cost = cnKvCost(res, k);
+    const radarRange = (radarObj && radarObj.customParameterradar && +radarObj.customParameterradar.dalnost) || 0;
+    // Дальность огня = max dalnost установленных орудий (зеркало rng в _unit_publish.sql)
+    const fireRange = billWeapons.reduce((m, { w }) => Math.max(m, (w.customParameter && +w.customParameter.dalnost) || 0), 0);
+    kv = { res, crew, power: Math.round(power), cap: Math.round(cap), radar: radarRange, rng: fireRange, speedUnit: 'квадрат' };
+  }
+
+  CN.last = { hp, armor, shield, dmg, speed, cost, on: +on.toFixed(1), eCons: energyCons, eMax, energy: def.hasEnergy, hangarOver, cargo, bill, kv };
   cnVehRenderStats();
   if (CN.def.cardUI) cnDrawShip();
   // Жёсткий лимит: нельзя набрать сверх показателя — откатываем последнее действие
   if (CN._applying) return;
-  const over = (CN.last.energy && CN.last.eCons > CN.last.eMax) || CN.last.hangarOver;
+  // KV: остаток энергии (kv.power) и грузоподъёмности (kv.cap) не должны уходить в минус.
+  const kvPowerBad = !!(CN.last.kv && CN.last.kv.power < 0);
+  const kvCapBad = !!(CN.last.kv && CN.last.kv.cap < 0);
+  const over = (CN.last.energy && CN.last.eCons > CN.last.eMax) || CN.last.hangarOver || kvPowerBad || kvCapBad;
   if (over) {
     if (CN.snap) {
       CN._applying = true;
       cnVehApplyData(CN.snap);
       CN._applying = false;
-      toast(CN.last.hangarOver ? 'Ангар перегружен — авиагруппа не помещается' : 'Энергосеть перегружена — реактор не тянет', 'err');
+      const msg = CN.last.hangarOver ? 'Ангар перегружен — авиагруппа не помещается'
+        : kvCapBad ? 'Превышена грузоподъёмность — компонент не помещается'
+        : 'Энергосеть перегружена — реактор не тянет';
+      toast(msg, 'err');
     }
   } else {
     CN.snap = cnVehCollectData();
@@ -1996,31 +2389,71 @@ function cnVehCalc() {
 function cnVehRenderStats() {
   const s = CN.last; if (!s) return;
   const energyOk = s.eCons <= s.eMax;
+  const spUnit = s.kv ? s.kv.speedUnit : 'у.е.';
+  // Card-UI: живые ТТХ целиком на HUD над схемой — внизу только ресурсная часть
+  // (конструкционные решения + сырьё), чтобы данные не дублировались.
+  if (CN.def && CN.def.cardUI) {
+    let rr = '';
+    if (s.kv) {
+      const r = s.kv.res, R = [['Каркас', r.blackmetall], ['Системы', r.coloredmetall], ['Броня', r.rudametall], ['Электроника', r.kristall], ['Композиты', r.staarvis]].filter(x => x[1]);
+      if (R.length) rr += `<div class="cn-stat cn-stat-bill"><span>Конструкционные решения</span><div class="cn-bill">${R.map(x => `<span class="cn-chip"><i>${x[0]}</i>${cnNum(x[1])}</span>`).join('')}</div></div>`;
+    }
+    if (s.bill && Object.keys(s.bill).length) rr += `<div class="cn-stat cn-stat-bill"><span>Сырьё / корпус</span><div class="cn-bill">${cnBillHtml(s.bill)}</div></div>`;
+    cnId('cn-stats').innerHTML = rr;
+    cnRenderHud();
+    return;
+  }
   let rows = `
     <div class="cn-stat"><span>Прочность</span><b>${cnNum(s.hp)} HP</b></div>
-    <div class="cn-stat"><span>Бронирование</span><b>${cnNum(s.armor)} AR</b></div>
+    ${s.kv ? '' : `<div class="cn-stat"><span>Бронирование</span><b>${cnNum(s.armor)} AR</b></div>`}
     <div class="cn-stat"><span>Щиты</span><b>${s.shield > 0 ? cnNum(s.shield) + ' ед.' : 'нет'}</b></div>
     <div class="cn-stat"><span>Огневая мощь</span><b>${cnNum(s.dmg)} урон</b></div>
-    <div class="cn-stat"><span>Скорость</span><b>${s.speed} у.е.</b></div>
+    <div class="cn-stat"><span>Скорость</span><b>${cnNum(s.speed)} ${spUnit}</b></div>
+    ${s.kv ? `<div class="cn-stat"><span>Экипаж</span><b>${cnNum(s.kv.crew)}</b></div>
+    <div class="cn-stat"><span>Дальность огня</span><b>${s.kv.rng ? cnNum(s.kv.rng) + ' кв' : 'нет'}</b></div>
+    <div class="cn-stat"><span>Радар</span><b>${s.kv.radar ? cnNum(s.kv.radar) + ' кв' : 'нет'}</b></div>
+    <div class="cn-stat"><span>Остаток энергии</span><b class="${s.kv.power < 0 ? 'cn-warn' : ''}">${cnNum(s.kv.power)} ⚡</b></div>
+    <div class="cn-stat"><span>Грузоподъёмность</span><b class="${s.kv.cap < 0 ? 'cn-warn' : ''}">${cnNum(s.kv.cap)} кг</b></div>` : ''}
     ${s.cargo > 0 ? `<div class="cn-stat"><span>Грузоподъёмность</span><b style="color:var(--te)">${cnNum(s.cargo)} ед.</b></div>` : ''}
     <div class="cn-stat"><span>Стоимость</span><b style="color:var(--gd)">${cnNum(s.cost)} ГС</b></div>
     <div class="cn-stat"><span>Разработка</span><b style="color:var(--te)">${s.on} ОН</b></div>`;
+  if (s.kv) {
+    const r = s.kv.res, R = [['Каркас', r.blackmetall], ['Системы', r.coloredmetall], ['Броня', r.rudametall], ['Электроника', r.kristall], ['Композиты', r.staarvis]].filter(x => x[1]);
+    if (R.length) rows += `<div class="cn-stat cn-stat-bill"><span>Конструкционные решения</span><div class="cn-bill">${R.map(x => `<span class="cn-chip"><i>${x[0]}</i>${cnNum(x[1])}</span>`).join('')}</div></div>`;
+  }
   if (s.energy) rows += `<div class="cn-stat"><span>Энергосеть</span><b class="${energyOk ? '' : 'cn-warn'}">${cnNum(s.eCons)} / ${cnNum(s.eMax)} E</b></div>`;
   if (s.bill && Object.keys(s.bill).length) rows += `<div class="cn-stat cn-stat-bill"><span>Сырьё / корпус</span><div class="cn-bill">${cnBillHtml(s.bill)}</div></div>`;
   cnId('cn-stats').innerHTML = rows;
   cnRenderHud();
 }
-// Игровой HUD над схемой (только корабельная верфь): плитки ТТХ + шкала энергосети
+// Игровой HUD над схемой (card-UI): ЕДИНСТВЕННЫЙ блок живых ТТХ — плитки с
+// подсказками, пульсом при изменении значения и warn-подсветкой перегрузов.
 function cnRenderHud() {
   const s = CN.last, host = cnId('cn-hud'); if (!host || !s) return;
-  const tile = (lbl, val, cls) => `<div class="cn-hud-t${cls ? ' ' + cls : ''}"><b>${val}</b><span>${lbl}</span></div>`;
-  let html = tile('Прочность', cnNum(s.hp)) + tile('Броня', cnNum(s.armor)) + tile('Щит', s.shield > 0 ? cnNum(s.shield) : '—')
-    + tile('Урон', cnNum(s.dmg)) + tile('Скорость', s.speed) + tile('Разработка', s.on + ' ОН', 'te') + tile('Цена', cnNum(s.cost) + ' ГС', 'gd');
+  const prev = CN._hudPrev || {}, cur = {};
+  const tile = (id, lbl, val, cls, tip) => {
+    cur[id] = String(val);
+    const chg = prev[id] !== undefined && prev[id] !== cur[id];
+    return `<div class="cn-hud-t${cls ? ' ' + cls : ''}${chg ? ' chg' : ''}"${tip ? ` title="${tip}"` : ''}><b>${val}</b><span>${lbl}</span></div>`;
+  };
+  let html = tile('hp', 'Прочность', cnNum(s.hp), '', 'Очки прочности корпуса в бою')
+    + (s.kv ? tile('crew', 'Экипаж', cnNum(s.kv.crew), '', 'Требуемый экипаж') : tile('ar', 'Броня', cnNum(s.armor)))
+    + tile('sh', 'Щит', s.shield > 0 ? cnNum(s.shield) : '—', '', 'Ёмкость защитного поля')
+    + tile('dmg', 'Урон', cnNum(s.dmg), '', 'Суммарный урон орудий за ход')
+    + tile('spd', 'Скорость', cnNum(s.speed) + (s.kv ? ' кв' : ''), '', 'Ход по карте боя, квадратов');
+  if (s.kv) {
+    html += tile('pw', 'Энергия', cnNum(s.kv.power) + ' ⚡', s.kv.power < 0 ? 'warn' : '', 'Остаток энергосети: реактор минус потребители')
+      + tile('cap', 'Груз', cnNum(s.kv.cap) + ' кг', s.kv.cap < 0 ? 'warn' : '', 'Остаток грузоподъёмности шасси/корпуса')
+      + tile('rad', 'Радар', s.kv.radar ? cnNum(s.kv.radar) + ' кв' : '—', '', 'Дальность обзора радара, квадратов');
+  }
+  html += tile('on', 'Разработка', s.on + ' ОН', 'te', 'Очки науки за публикацию проекта')
+    + tile('cost', 'Цена', cnNum(s.cost) + ' ГС', 'gd', 'Цена постройки одной единицы');
   if (s.energy && s.eMax > 0) {
     const pct = Math.min(100, Math.round(s.eCons / s.eMax * 100));
     const eCls = pct >= 100 ? ' over' : pct >= 85 ? ' warn' : '';
     html += `<div class="cn-hud-e${eCls}"><div class="cn-hud-e-hd"><span>Энергосеть</span><b>${cnNum(s.eCons)} / ${cnNum(s.eMax)} E · ${pct}%</b></div><div class="cn-hud-bar"><i style="width:${pct}%"></i></div></div>`;
   }
+  CN._hudPrev = cur;
   host.innerHTML = html;
 }
 
@@ -2033,7 +2466,8 @@ function cnVehCollectData() {
   d.armor = +cnId('cn-armor').value;
   d.shield = +cnId('cn-shield').value;
   d.engine = +cnId('cn-engine').value;
-  if (CN.cat === 'ship' && def.cardUI) {
+  if (def.db.radars && cnId('cn-radar')) d.radar = +cnId('cn-radar').value;
+  if (def.cardUI) {
     const L = CN.shipLayout || { mounts: [], bays: [] };
     d.weapons = L.mounts.filter(m => m.w).map(m => ({ g: m.w.g, idx: m.w.idx, q: 1 }));
     d.modules = L.bays.filter(b => b.m).map(b => ({ g: b.m.g, idx: b.m.idx }));
@@ -2043,10 +2477,13 @@ function cnVehCollectData() {
     d.modules = [...document.querySelectorAll('#cn-modules .cn-row')].map(r => { const s = JSON.parse(r.querySelector('select').value); return { g: s.g, idx: s.idx }; });
   }
   if (def.hasHangars) d.hangars = [...document.querySelectorAll('#cn-hangars .cn-hangar')].map(h => ({ id: +h.querySelector('.cn-h-type').value, units: [...h.querySelectorAll('.cn-u-type')].map(u => +u.value) }));
+  // Настоящая грузоподъёмность KV (остаток вместимости шасси) — фиксируем в data,
+  // чтобы сервер (_ship_cargo) считал грузоподъёмность каравана по ней, не доверяя summary.
+  d.kv_cargo = (CN.last && CN.last.kv) ? Math.max(0, Math.round(CN.last.kv.cap || 0)) : 0;
   return d;
 }
 function cnVehApplyData(d) {
-  const def = CN.def, shipCard = CN.cat === 'ship' && def.cardUI;
+  const def = CN.def, shipCard = def.cardUI;
   if (cnId('cn-weapons')) cnId('cn-weapons').innerHTML = '';
   if (cnId('cn-modules')) cnId('cn-modules').innerHTML = '';
   if (def.hasHangars && cnId('cn-hangars')) cnId('cn-hangars').innerHTML = '';
@@ -2057,6 +2494,7 @@ function cnVehApplyData(d) {
   if (d.armor != null) cnId('cn-armor').value = d.armor;
   if (d.shield != null) cnId('cn-shield').value = d.shield;
   if (d.engine != null) cnId('cn-engine').value = d.engine;
+  if (d.radar != null && cnId('cn-radar')) cnId('cn-radar').value = d.radar;
   if (shipCard) {
     if (d.layout) CN.shipLayout = { mounts: (d.layout.mounts || []).map(x => {
         if (x && ('w' in x || 'pos' in x)) return { w: x.w ? { g: x.w.g, idx: x.w.idx } : null, pos: x.pos ? { x: x.pos.x, y: x.pos.y } : null };  // новый формат {w,pos}
@@ -2068,7 +2506,7 @@ function cnVehApplyData(d) {
     (d.modules || []).forEach(m => cnVehAddItem('module', m));
   }
   if (def.hasHangars) (d.hangars || []).forEach(h => cnVehAddHangar(h));
-  if (def.cardUI) { cnSlotSelected('class'); ['type', 'reactor', 'armor', 'shield', 'engine'].forEach(cnSlotSelected); cnHullHero(); }
+  if (def.cardUI) { cnSlotSelected('class'); ['type', 'reactor', 'armor', 'shield', 'engine', 'radar'].forEach(cnSlotSelected); cnHullHero(); }
   cnVehCalc();
 }
 
@@ -2083,12 +2521,14 @@ function cnVehCardText() {
   let c = `НАЗВАНИЕ: ${name}\n`;
   c += `Класс: ${cls.name}${typeObj ? ' (' + typeObj.name + ')' : ''}\n`;
   c += `------------------------------------------\n`;
-  c += `КОРПУС: ${cnNum(s.hp)} HP / ${cnNum(s.armor)} AR\n`;
+  c += `КОРПУС: ${cnNum(s.hp)} HP${s.kv ? '' : ' / ' + cnNum(s.armor) + ' AR'}\n`;
   c += `ЩИТЫ: ${s.shield > 0 ? cnNum(s.shield) + ' ед.' : 'нет'}\n`;
-  c += `СКОРОСТЬ: ${s.speed} у.е. (${engObj.name})\n`;
+  c += `СКОРОСТЬ: ${cnNum(s.speed)} ${s.kv ? 'квадрат' : 'у.е.'} (${engObj.name})\n`;
+  if (s.kv) c += `ЭКИПАЖ: ${cnNum(s.kv.crew)}\n`;
+  if (s.kv && s.kv.radar) { const rObj = db.radars && db.radars[k] && db.radars[k][+cnId('cn-radar').value || 0]; c += `РАДАР: ${rObj ? rObj.name + ' — ' : ''}${cnNum(s.kv.radar)} кв\n`; }
   if (reactObj) c += `РЕАКТОР: ${reactObj.name} (${reactObj.energy} E)\n`;
   c += `------------------------------------------\nВООРУЖЕНИЕ:\n`;
-  const shipCard = CN.cat === 'ship' && def.cardUI;
+  const shipCard = def.cardUI;
   if (shipCard) {
     // Визуальный конструктор: состав в CN.shipLayout, агрегируем одинаковые по борту.
     const L = CN.shipLayout || { mounts: [], bays: [] };
@@ -2410,10 +2850,13 @@ async function cnPublish() {
     if (curScience < onCost) { toast(`Недостаточно ОН для разработки: нужно ${onCost}, есть ${curScience}`, 'err'); return; }
   }
 
+  // Единый армейский форж: в БД юнит уходит с реальной категорией (ground/aviation),
+  // определяемой классом — контракт каталогов/исследований/SQL не меняется.
+  const pubCat = CN.cat === 'army' ? cnKvRealCat(cnId('cn-class').value) : CN.cat;
   CN.busy = true;
   try {
     const res = await ecRpc('economy_publish_unit', {
-      p_category: CN.cat, p_name: name, p_data: data, p_card_text: card,
+      p_category: pubCat, p_name: name, p_data: data, p_card_text: card,
       p_faction_id: fac.faction_id || null, p_faction_name: fac.faction_name || null,
       p_faction_color: fac.faction_color || null,
       p_unit_id: (CN.editUnit && CN.editUnit.id) || null,
@@ -2422,7 +2865,7 @@ async function cnPublish() {
     if (row && row.id) CN.editUnit = row;
     const charged = row && row._on_charged;
     toast(isNew ? `Опубликовано ✓${charged ? ` · −${cnNum(charged)} ОН` : ''}` : 'Изменения сохранены ✓', 'ok');
-    go(cnCatRoute(CN.cat));
+    go(cnCatRoute(pubCat));
   } catch (e) { toast('Ошибка: ' + (e && e.message ? e.message : e), 'err'); }
   finally { CN.busy = false; }
 }
@@ -2445,8 +2888,8 @@ function cnCopyFallback(text) {
 // ════════════════════════════════════════════════════════════
 const CN_CAT_META = {
   ship: { title: 'Флот', ico: '🚀', build: 'build-ship', empty: 'Ни одного корабля ещё не построено.' },
-  ground: { title: 'Наземная техника', ico: '🛡', build: 'build-ground', empty: 'Наземная техника ещё не создана.' },
-  aviation: { title: 'Авиация', ico: '✈', build: 'build-aviation', empty: 'Авиапарк пока пуст.' },
+  ground: { title: 'Наземная техника', ico: '🛡', build: 'build-army', empty: 'Наземная техника ещё не создана.' },
+  aviation: { title: 'Авиация', ico: '✈', build: 'build-army', empty: 'Авиапарк пока пуст.' },
   division: { title: 'Дивизии', ico: '⛬', build: 'build-division', empty: 'Дивизии ещё не сформированы.' },
 };
 CN.catFilter = '*';

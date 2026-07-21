@@ -1790,8 +1790,8 @@ function setAct(slug) {
     'home': 'ntl-h', 'map': 'ntl-map',
     'factions': 'ntl-fac', 'faction-new': 'ntl-fac', 'locations': 'ntl-loc',
     'economy': 'ntl-eco', 'admin': 'ntl-adm', 'guide': 'ntl-guide',
-    'constructors': 'ntl-con', 'build-ship': 'ntl-con', 'build-ground': 'ntl-con',
-    'build-aviation': 'ntl-con', 'build-division': 'ntl-con',
+    'constructors': 'ntl-con', 'build-ship': 'ntl-con', 'build-army': 'ntl-con',
+    'build-ground': 'ntl-con', 'build-aviation': 'ntl-con', 'build-division': 'ntl-con',
   };
   if (TOP_NAV[slug]) document.getElementById(TOP_NAV[slug])?.classList.add('on');
   // Правила проекта — подсветить активную подстраницу, заголовок группы и раскрыть её

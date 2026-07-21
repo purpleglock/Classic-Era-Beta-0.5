@@ -242,7 +242,7 @@ function adPaint() {
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
     const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
-    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -613,48 +613,77 @@ async function adShipArtUpload(filename, maxDim) {
   finally { if (fileEl) fileEl.value = ''; }
 }
 
-// ── Вкладка: Картинки орудий (корабельная верфь) ──────────────────
-// Арт орудия кладётся в assets/constructors/ под ДЕТЕРМИНИРОВАННЫМ именем
-// ship_weapon_<слаг>_<idx>.webp (тот же путь, что рисует cnImgPath). БД не нужна —
-// файл на известном месте сам подхватится схемой (cnWpnImgReady) и карточками.
-// Данные орудий берём из constructors.js (CN_SHIP.weapons, cnGroupSlug, cnImgPath).
+// ── Вкладка: Орудия и модули (KV) — картинки + названия + описания ─────────
+// Картинки: прямо в папку игры assets/constructors/ под детерминированным именем
+// <cat>_<kind>_<слаг-группы>_<idx>.webp (тот же путь рисует cnImgPath) — БД не нужна.
+// Названия/описания: site_settings.cn_part_overrides одним JSON
+// { "cat|kind|группа|idx": { n:'имя', d:'описание' } } — клиент применяет их к
+// KV_DB при загрузке конструктора (cnLoadPartOverrides в constructors.js).
+const AD_PART_CATS = [['ship', '🚀 Корабли'], ['ground', '🪖 Наземка'], ['aviation', '✈ Авиация']];
+const AD_PART_KINDS = [['weapon', 'Орудия'], ['module', 'Модули']];
+async function adPartLoad() {
+  if (AD.partOvr !== undefined) return;
+  AD.partOvr = null;
+  let ovr = {};
+  try { const raw = await getSiteSetting('cn_part_overrides'); ovr = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {}; } catch (e) {}
+  AD.partOvr = (ovr && typeof ovr === 'object') ? ovr : {};
+  // применяем к живому каталогу, чтобы панель показывала актуальные имена
+  if (typeof cnApplyPartOverrides === 'function') cnApplyPartOverrides(AD.partOvr);
+  adPaint();
+}
+function adPartSrc(cat, kind) { return (window.KV_DB && KV_DB[cat]) ? KV_DB[cat][kind === 'weapon' ? 'weapons' : 'modules'] : null; }
 function adWeaponImgPanel() {
-  const WP = (typeof CN_SHIP !== 'undefined' && CN_SHIP.weapons) ? CN_SHIP.weapons : null;
-  if (!WP) return `<div style="margin-top:24px;color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px">Данные орудий недоступны (constructors.js не загружен).</div>`;
-  const slugOf = g => (typeof cnGroupSlug === 'function') ? cnGroupSlug('ship', 'weapon', g) : 'x';
-  const pathOf = (slug, idx) => (typeof cnImgPath === 'function') ? cnImgPath('ship', 'weapon', slug, idx) : ('assets/constructors/ship_weapon_' + slug + '_' + idx + '.webp');
+  if (!window.KV_DB) return `<div style="margin-top:24px;color:#ff7a7a;padding:16px;border:1px solid #ff7a7a;border-radius:8px">KV-каталог недоступен (constructors_kv*.js не загружены).</div>`;
+  if (AD.partOvr === undefined || AD.partOvr === null) { if (AD.partOvr === undefined) adPartLoad(); return `<div class="sload" style="min-height:120px"><div class="pulse-loader"></div></div>`; }
+  const cat = AD.partCat || 'ship', kind = AD.partKind || 'weapon';
+  const src = adPartSrc(cat, kind) || {};
   const bust = AD.wpnBust || {};
-  const groups = Object.keys(WP).map(g => {
-    const slug = slugOf(g);
-    const cards = WP[g].map((it, idx) => {
-      const key = slug + '-' + idx, url = pathOf(slug, idx), src = url + (bust[url] ? ('?t=' + bust[url]) : '');
-      return `<div style="width:150px;display:flex;flex-direction:column;gap:6px">
-        <div style="position:relative;width:150px;height:94px;border:1px solid var(--w2,#2a3340);border-radius:8px;background:#0c1322;overflow:hidden">
-          <img id="ad-wpn-img-${key}" src="${esc(src)}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+  const catBar = AD_PART_CATS.map(([c, l]) => `<button class="btn ${c === cat ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="AD.partCat='${c}';adPaint()">${l}</button>`).join('');
+  const kindBar = AD_PART_KINDS.map(([kk, l]) => `<button class="btn ${kk === kind ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="AD.partKind='${kk}';adPaint()">${l}</button>`).join('');
+  const groupsKeys = Object.keys(src);
+  const groups = groupsKeys.map((g, gi) => {
+    const slug = (typeof cnGroupSlug === 'function') ? cnGroupSlug(cat, kind, g) : 'x';
+    const cards = src[g].map((it, idx) => {
+      const key = cat + '-' + kind + '-' + gi + '-' + idx;
+      const url = (typeof cnImgPath === 'function') ? cnImgPath(cat, kind, slug, idx) : `assets/constructors/${cat}_${kind}_${slug}_${idx}.webp`;
+      const imgSrc = url + (bust[url] ? ('?t=' + bust[url]) : '');
+      const desc = it._ovrDesc || (it.description && it.description !== '...' ? it.description : '');
+      const renamed = it._name0 && it._name0 !== it.name;
+      return `<div style="width:230px;display:flex;flex-direction:column;gap:6px;border:1px solid var(--w2,#2a3340);border-radius:10px;padding:10px;background:#0c1322">
+        <div style="position:relative;width:100%;height:110px;border:1px solid var(--w2,#2a3340);border-radius:8px;background:#0a0f1a;overflow:hidden">
+          <img id="ad-part-img-${key}" src="${esc(imgSrc)}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
           <div style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;font-size:10px;color:var(--t4,#6a7a88);text-align:center;padding:6px">нет картинки</div>
         </div>
-        <div style="font-size:11px;color:var(--t1,#e8edf2);line-height:1.25;min-height:28px">${esc(it.name)}</div>
-        <div style="font-family:monospace;font-size:9px;color:var(--t4,#6a7a88);word-break:break-all">ship_weapon_${slug}_${idx}.webp</div>
-        <input type="file" accept="image/*" id="ad-wpn-file-${key}" style="display:none" onchange="adWeaponImgUpload('${slug}',${idx})">
-        <button class="btn btn-gh btn-xs" onclick="document.getElementById('ad-wpn-file-${key}').click()">⬆ Загрузить</button>
-        <div id="ad-wpn-st-${key}" style="font-size:9px;color:var(--te,#3ec0d0);min-height:11px"></div>
+        <div style="font-family:monospace;font-size:9px;color:var(--t4,#6a7a88);word-break:break-all">${cat}_${kind}_${slug}_${idx}.webp${renamed ? ` · <span style="color:var(--te,#3ec0d0)">переим.</span>` : ''}</div>
+        <input id="ad-part-nm-${key}" value="${esc(it.name)}" placeholder="Название" style="width:100%;font-size:11px;padding:5px 7px;background:#0a0f1a;border:1px solid var(--w2,#2a3340);border-radius:6px;color:var(--t1,#e8edf2)">
+        <textarea id="ad-part-ds-${key}" rows="3" placeholder="Описание (карточка выбора)" style="width:100%;font-size:11px;padding:5px 7px;background:#0a0f1a;border:1px solid var(--w2,#2a3340);border-radius:6px;color:var(--t1,#e8edf2);resize:vertical">${esc(desc)}</textarea>
+        <div style="display:flex;gap:6px">
+          <input type="file" accept="image/*" id="ad-part-file-${key}" style="display:none" onchange="adPartImgUpload('${cat}','${kind}',${gi},${idx})">
+          <button class="btn btn-gh btn-xs" onclick="document.getElementById('ad-part-file-${key}').click()">🖼 Арт</button>
+          <button class="btn btn-gd btn-xs" style="flex:1" onclick="adPartMetaSave('${cat}','${kind}',${gi},${idx})">💾 Сохранить</button>
+        </div>
+        <div id="ad-part-st-${key}" style="font-size:9px;color:var(--te,#3ec0d0);min-height:11px"></div>
       </div>`;
     }).join('');
     return `<div style="margin-top:16px">
       <div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:8px">${esc(g)} <span style="color:var(--t4,#6a7a88)">· слаг ${esc(slug)}</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:12px">${cards}</div>
     </div>`;
-  }).join('');
+  }).join('') || `<div class="fm-empty" style="margin-top:16px">Пусто</div>`;
   return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
-    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🔫 Картинки орудий (корабли)</div>
-    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:6px 0 4px;line-height:1.5">📁 Сохраняются <b>прямо в папку игры</b> <code>assets/constructors/</code> под именем <code>ship_weapon_&lt;слаг&gt;_&lt;idx&gt;.webp</code>. Запусти локальный сервер: <code>node tools/upload-server.js</code> и держи окно открытым. Картинка появится в узле орудия на схеме конструктора и в карточках выбора. После заливки <b>обнови страницу игры</b>.</div>
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🔫 Орудия и модули — арт, названия, описания</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:6px 0 10px;line-height:1.5">🖼 Картинки сохраняются <b>прямо в папку игры</b> <code>assets/constructors/</code> (нужен локальный сервер: <code>node tools/upload-server.js</code>). 💾 Названия и описания — в БД (site_settings), применяются во всех конструкторах (включая «Планетарный арсенал»). Пустое название = вернуть исходное.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">${catBar}<span style="width:12px"></span>${kindBar}</div>
     ${groups}
   </div>`;
 }
-async function adWeaponImgUpload(slug, idx) {
-  const key = slug + '-' + idx;
-  const fileEl = document.getElementById('ad-wpn-file-' + key);
-  const st = document.getElementById('ad-wpn-st-' + key);
+async function adPartImgUpload(cat, kind, gi, idx) {
+  const src = adPartSrc(cat, kind); if (!src) return;
+  const g = Object.keys(src)[gi];
+  const slug = cnGroupSlug(cat, kind, g);
+  const key = cat + '-' + kind + '-' + gi + '-' + idx;
+  const fileEl = document.getElementById('ad-part-file-' + key);
+  const st = document.getElementById('ad-part-st-' + key);
   const f = fileEl && fileEl.files && fileEl.files[0];
   if (!f) return;
   if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = 'Проверка сервера…'; }
@@ -663,18 +692,37 @@ async function adWeaponImgUpload(slug, idx) {
     if (st) st.textContent = 'Сжатие…';
     const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, 512, 0.85) : f;
     if (st) st.textContent = 'Загрузка…';
-    const name = 'ship_weapon_' + slug + '_' + idx + '.webp';
+    const name = cat + '_' + kind + '_' + slug + '_' + idx + '.webp';
     const r = await fetch(`${AD_PORT_SERVER}/upload?dir=constructors&ext=webp&name=${encodeURIComponent(name)}`, {
       method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('HTTP ' + r.status));
     AD.wpnBust = AD.wpnBust || {}; AD.wpnBust[j.url] = Date.now();
-    const img = document.getElementById('ad-wpn-img-' + key);
+    const img = document.getElementById('ad-part-img-' + key);
     if (img) { img.style.display = 'block'; if (img.nextElementSibling) img.nextElementSibling.style.display = 'none'; img.src = j.url + '?t=' + AD.wpnBust[j.url]; }
     if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = '✓ загружено'; }
   } catch (e) { if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 40); } toast('Не удалось: ' + (e.message || e), 'err'); }
   finally { if (fileEl) fileEl.value = ''; }
+}
+async function adPartMetaSave(cat, kind, gi, idx) {
+  const src = adPartSrc(cat, kind); if (!src || !AD.partOvr) return;
+  const g = Object.keys(src)[gi], it = src[g][idx];
+  const key = cat + '-' + kind + '-' + gi + '-' + idx;
+  const st = document.getElementById('ad-part-st-' + key);
+  const nm = (document.getElementById('ad-part-nm-' + key).value || '').trim();
+  const ds = (document.getElementById('ad-part-ds-' + key).value || '').trim();
+  const okey = cat + '|' + kind + '|' + g + '|' + idx;
+  const orig = it._name0 || it.name;
+  const rec = { n: (nm && nm !== orig) ? nm : '', d: ds };
+  if (!rec.n && !rec.d) delete AD.partOvr[okey]; else AD.partOvr[okey] = rec;
+  // мгновенно применяем к живому каталогу (сброс — тоже)
+  if (typeof cnApplyPartOverrides === 'function') cnApplyPartOverrides({ [okey]: rec });
+  if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = 'Сохранение…'; }
+  try {
+    await saveSiteSetting('cn_part_overrides', JSON.stringify(AD.partOvr));
+    if (st) st.textContent = '✓ сохранено';
+  } catch (e) { if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 40); } toast('Не удалось сохранить: ' + (e.message || e), 'err'); }
 }
 
 // ── Визуальная новелла главной: спрайты персонажей + редактор реплик ──
@@ -1889,6 +1937,7 @@ function adSetTab(t) {
   if (AD.tab === 'market' && !AD.market) adMarketLoad();
   if (AD.tab === 'roadmap' && !(AD.rm && AD.rm.loaded)) adRmLoad();
   if (AD.tab === 'multiacc' && !AD.multiacc) adMultiaccLoad();
+  if (AD.tab === 'weapons' && AD.partOvr === undefined) adPartLoad();
   if (AD.tab === 'brand') bbRefreshFromDb();
   if (AD.tab === 'vn') { adStarsCfgRefresh(); adAsmCfgRefresh(); }
 }

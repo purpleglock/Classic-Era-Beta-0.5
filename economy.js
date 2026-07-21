@@ -5682,7 +5682,15 @@ function ecPickTradeRes(btn) {
 }
 
 // ── Сборщик флота каравана: выбираешь ПРОЕКТЫ кораблей (грузовые → грузоподъёмность, боевые → эскорт) ──
-function ecCvShipCargo(unitId) { const d = (EC.designs || []).find(x => x.id === unitId); return (d && d.summary && +d.summary.cargo) || 0; }
+// Грузоподъёмность корабля для торговли = настоящая грузоподъёмность KV (kv.cap, кг):
+// остаток вместимости шасси после оружия/модулей/брони. Старые дизайны без KV
+// откатываются на прежнюю ангарную грузоподъёмность (summary.cargo).
+function ecCvShipCargo(unitId) {
+  const d = (EC.designs || []).find(x => x.id === unitId); if (!d) return 0;
+  const s = d.summary || {};
+  const kv = (s.kv && +s.kv.cap > 0) ? +s.kv.cap : 0;
+  return kv || (+s.cargo || 0);
+}
 function ecCvFleetGroups() {
   const by = {};
   (EC.roster || []).filter(r => r.category === 'ship').forEach(r => {
@@ -5757,7 +5765,7 @@ function ecCvFleetHtml() {
         <button class="ec-mine-btn" ${canAdd ? '' : 'disabled'} title="${title}" onclick="ecCvFleetAdd('${esc(d.id)}',1)">+</button>
       </span></div>`;
   };
-  const frHtml = freighters.length ? freighters.map(d => row(d, `📦 груз ${d.cargo}`, true)).join('')
+  const frHtml = freighters.length ? freighters.map(d => row(d, `📦 груз ${ecNum(d.cargo)}`, true)).join('')
     : '<div class="ec-empty" style="padding:6px">Нет грузовых кораблей — постройте корабль с грузовыми ангарами (Конструктор → Корабль) и заложите его в Военпроме.</div>';
   const wsHtml = warships.length ? warships.map(d => row(d, '⚔ эскорт', false)).join('')
     : '<div class="ec-empty" style="padding:6px">Нет боевых кораблей для эскорта.</div>';
@@ -5900,7 +5908,7 @@ function ecFleetSpeed() {
   let wsum = 0, w = 0;
   (EC.roster || []).filter(r => r.category === 'ship').forEach(r => {
     const d = (EC.designs || []).find(x => x.id === r.unit_id);
-    const cargo = (d && d.summary && +d.summary.cargo) || 0;
+    const cargo = ecCvShipCargo(r.unit_id);
     const speed = (d && d.summary && +d.summary.speed) || 0;
     if (cargo > 0) { wsum += speed * cargo * (r.qty || 0); w += cargo * (r.qty || 0); }
   });
@@ -9243,17 +9251,24 @@ EC_POLITICS.forEach(n => { if (n.bonus) EC_RESEARCH_BONUS[n.id] = n.bonus; });
 // Привязка оружия/компонентов к классу-тиру (тематичные prereq → ветвление дерева).
 // Значение = ключ класса (k из CN_*.data). Базовый класс/отсутствие → узел-корень ветки.
 const EC_TECH_TREE = {
+  // Легаси-имена (без KV) и KV-имена (СИНТЕЗ) вместе — ключи не пересекаются,
+  // ecBuildResearch берёт только те группы, что есть в живом каталоге.
   ship: {
-    weapon: { 'Легкие': 'corvette', 'Средние': 'frigate', 'Тяжёлые': 'cruiser', 'Сверхтяжёлые': 'battleship', 'Ракетное': 'destroyer', 'Зенитное': 'frigate' },
-    comp:   { engine: 'frigate', reactor: 'destroyer', armor: 'destroyer', shield: 'cruiser' },
+    weapon: { 'Легкие': 'corvette', 'Средние': 'frigate', 'Тяжёлые': 'cruiser', 'Сверхтяжёлые': 'battleship', 'Ракетное': 'destroyer', 'Зенитное': 'frigate',
+      'ЭНЕРГЕТИЧЕСКОЕ ВООРУЖЕНИЕ': 'destroyer', 'ВЗРЫВНОЕ ВООРУЖЕНИЕ': 'mediumCruiser', 'АНГАРЫ И АВИАГРУППЫ': 'supportCarrier', 'АВИАГРУППЫ И ДРОНЫ': 'supportCarrier' },
+    comp:   { engine: 'destroyer', reactor: 'destroyer', armor: 'mediumCruiser', shield: 'mediumCruiser', radar: 'destroyer' },
   },
   ground: {
-    weapon: { 'Противопехотное': 'light', 'Противотанковое': 'medium', 'Артиллерия и ПВО': 'artillery' },
-    comp:   { engine: 'medium', armor: 'heavy', shield: 'heavy' },
+    weapon: { 'Противопехотное': 'light', 'Противотанковое': 'medium', 'Артиллерия и ПВО': 'artillery',
+      'ШТУРМОВОЕ ОРУЖИЕ': 'peh', 'ГРАНАТЫ И МИНЫ': 'peh', 'ПУЛЕМЕТЫ': 'btr', 'ТЯЖЕЛОЕ ВООРУЖЕНИЕ': 'btr', 'ПУЛЕМЕТЫ И ТУРЕЛИ': 'btr',
+      'КИНЕТИКА': 'tanki', 'ЭНЕРГЕТИКА': 'tanki', 'РАКЕТНОЕ (БУМ)': 'tanki', 'ОСНОВНОЙ КАЛИБР': 'tanki',
+      'СТВОЛЬНАЯ АРТИЛЛЕРИЯ': 'arta', 'РЕАКТИВНЫЕ СИСТЕМЫ': 'arta' },
+    comp:   { engine: 'btr', reactor: 'btr', armor: 'tanki', shield: 'tanki', radar: 'btr' },
   },
   aviation: {
-    weapon: { 'Курсовое вооружение': 'light', 'Ракетное и бомбовое': 'medium', 'Спецоборудование': 'heavy' },
-    comp:   { engine: 'medium', reactor: 'medium', armor: 'heavy', shield: 'heavy' },
+    weapon: { 'Курсовое вооружение': 'light', 'Ракетное и бомбовое': 'medium', 'Спецоборудование': 'heavy',
+      'АВИАПУШКИ': 'aviacia', 'РАКЕТНОЕ ВООРУЖЕНИЕ': 'aviacia', 'ПУШКИ И ТУРЕЛИ': 'vertihui', 'КОСМИЧЕСКОЕ ВООРУЖЕНИЕ': 'dronkos' },
+    comp:   { engine: 'aviacia', reactor: 'aviacia', armor: 'vertihui', shield: 'dronkos', radar: 'aviacia' },
   },
 };
 // «Исследовать всё в конструкторах»: бывшая бесплатная база (CN_BASE) стала
@@ -9265,6 +9280,7 @@ const EC_TECH_STARTER = {
   'wpn.ship.Легкие': 1, 'wpn.ship.Средние': 1,
   'wpn.ground.Противопехотное': 1, 'wpn.ground.Противотанковое': 1,
   'wpn.aviation.Курсовое вооружение': 1,
+  // СИНТЕЗ (KV): стартеры нового каталога БЕСПЛАТНЫ (CN_BASE) и в дерево не входят.
 };
 // Дерево исследований: узлы того же id-формата (cls./wpn./comp.) — id-контракт с
 // конструкторами сохранён. Добавлены branch/prereq/desc для древовидной раскладки.
@@ -9272,7 +9288,14 @@ function ecBuildResearch() {
   if (EC._research) return EC._research;
   const out = [];
   const base = (typeof CN_BASE !== 'undefined') ? CN_BASE : { classes: {}, weapons: {} };
-  const DB = { ship: (typeof CN_SHIP !== 'undefined' ? CN_SHIP : null), ground: (typeof CN_GROUND !== 'undefined' ? CN_GROUND : null), aviation: (typeof CN_AIR !== 'undefined' ? CN_AIR : null) };
+  // СИНТЕЗ: дерево строится из KV-каталога (те же классы/группы, что в форжах);
+  // без KV (кэш старого index.html) — прежние легаси-каталоги.
+  const _KV = (typeof window !== 'undefined' && window.KV_DB) || null;
+  const DB = {
+    ship: _KV ? _KV.ship : (typeof CN_SHIP !== 'undefined' ? CN_SHIP : null),
+    ground: _KV ? _KV.ground : (typeof CN_GROUND !== 'undefined' ? CN_GROUND : null),
+    aviation: _KV ? _KV.aviation : (typeof CN_AIR !== 'undefined' ? CN_AIR : null),
+  };
   EC_RES_CATS.forEach(([cat, catLabel]) => {
     const db = DB[cat]; if (!db) return;
     const hasReactor = !!db.reactors;
@@ -9309,10 +9332,11 @@ function ecBuildResearch() {
     });
 
     // ── Компоненты (ветви) ──
-    const COMP_DESC = { armor: 'Модули усиленной брони — повышают выживаемость в бою', shield: 'Щиты нового поколения: выше регенерация и ёмкость', engine: 'Продвинутые двигатели: скорость, тяга и манёвренность', reactor: 'Реакторы высокой мощности — энергия для тяжёлых систем' };
+    const COMP_DESC = { armor: 'Модули усиленной брони — повышают выживаемость в бою', shield: 'Щиты нового поколения: выше регенерация и ёмкость', engine: 'Продвинутые двигатели: скорость, тяга и манёвренность', reactor: 'Реакторы высокой мощности — энергия для тяжёлых систем', radar: 'Дальнобойные радары: обзор и наведение за горизонтом' };
     const comps = [['armor', 14], ['shield', 16], ['engine', 10]];
     if (hasReactor) comps.unshift(['reactor', 16]);
-    const COMP_NAMES = { armor: 'Продвинутая броня', shield: 'Продвинутые щиты', engine: 'Продвинутые двигатели', reactor: 'Продвинутые реакторы' };
+    if (db.radars) comps.push(['radar', 12]);
+    const COMP_NAMES = { armor: 'Продвинутая броня', shield: 'Продвинутые щиты', engine: 'Продвинутые двигатели', reactor: 'Продвинутые реакторы', radar: 'Продвинутые радары' };
     comps.forEach(([t, cost]) => {
       out.push({ id: 'comp.' + cat + '.' + t, cat, catLabel, branch: t, name: COMP_NAMES[t],
         desc: COMP_DESC[t], cost, prereq: clsId(tree.comp && tree.comp[t]) });
@@ -9338,7 +9362,7 @@ function ecBuildResearch() {
     });
 
     // ── Ангары и авиакрылья (только флот) ──
-    if (cat === 'ship') {
+    if (cat === 'ship' && Array.isArray(db.hangarTypes) && db.hangarTypes.length) {
       out.push({ id: 'hangar.ship', cat, catLabel, branch: 'hangar', name: 'Ангарные палубы',
         desc: 'Ангары для базирования авиакрыльев и малых судов на борту кораблей', cost: 22, prereq: clsId('destroyer') });
       out.push({ id: 'hangar.ship.heavy', cat, catLabel, branch: 'hangar', name: 'Тяжёлые ангары',

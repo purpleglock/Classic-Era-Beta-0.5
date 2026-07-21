@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8">
+<title>army svg harness</title>
+<body style="background:#0a0e14;margin:0">
+<div id="g" style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:10px"></div>
+<script>window.esc=function(s){return String(s)};window.toast=function(){};window.go=function(){};window.setPg=function(){};window.cnId=function(){return null};</script>
+<script src="constructors_kv.js"></script>
+<script src="constructors_kv_adapt.js"></script>
+<script src="constructors.js"></script>
+<script>
+var ks=['peh','btr','tanki','arta','dron','dronkos','aviacia','vertihui','mla'];
+document.getElementById('g').innerHTML=ks.map(function(k){
+  var H=CN_SHIP_GEO[k];
+  var pts=H.st.map(function(p){return[160+p[1],p[0]]}).concat(H.st.slice().reverse().map(function(p){return[160-p[1],p[0]]}));
+  var sm=cnCatmullClosed(pts);
+  return '<div style="text-align:center;color:#8fa;font:12px monospace">'+k+
+    '<svg viewBox="20 40 280 340" style="width:100%;height:300px;display:block;transform:rotate(-90deg)">'+
+    '<path d="'+sm+'" fill="rgba(120,200,255,.12)" stroke="#7ac" stroke-width="1.5"/></svg></div>';
+}).join('');
+</script>

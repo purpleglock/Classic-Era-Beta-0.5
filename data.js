@@ -180,7 +180,8 @@ async function go(slug, push=true) {
   // ── Конструкторы юнитов фракций ──
   const CN_ROUTES = {
     'constructors': 'cnRenderHub',
-    'build-ship': 'cnRenderShip', 'build-ground': 'cnRenderGround',
+    'build-ship': 'cnRenderShip', 'build-army': 'cnRenderArmy',
+    'build-ground': 'cnRenderGround', // алиас единого армейского форжа
     'build-aviation': 'cnRenderAviation', 'build-division': 'cnRenderDivision',
   };
   if (CN_ROUTES[slug]) {

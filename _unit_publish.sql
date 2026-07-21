@@ -64,6 +64,106 @@ begin
   return (select array_agg(distinct e) from unnest(keys) e);
 end$$;
 
+-- ── СИНТЕЗ (KV): прочность от физики брони (зеркало cnKvArmorHp) ──
+create or replace function public._cn_kv_armor_hp(cls jsonb, a jsonb)
+returns numeric language plpgsql immutable as $$
+declare
+  s numeric; bm numeric:=0.1; cm numeric:=0.2; rm numeric:=0.3; km numeric:=0.5; sv numeric:=1.0;
+  dF numeric:=1; tF numeric:=1; hF numeric:=1; at numeric; hr numeric; tc numeric;
+  cat text; nm text; hp numeric; res jsonb; mat jsonb;
+begin
+  if a is null then return 0; end if;
+  nm := coalesce(a->>'name','');
+  if nm like 'Нет%' then return 0; end if;
+  s := coalesce((cls->>'mass')::numeric,0)/2000 + coalesce((cls->>'gabarit')::numeric,0)*2;
+  mat := a->'material';
+  if mat is not null and mat <> 'null'::jsonb then
+    at := ((mat->'tensileStrength'->>'min')::numeric + (mat->'tensileStrength'->>'max')::numeric)/2;
+    hr := (mat->>'heatResistance')::numeric;
+    tc := (mat->>'thermalConductivity')::numeric;
+    at := 500 + 3000*(1 - exp(-at/5000));
+    hr := 500 + 2500*(1 - exp(-hr/2000));
+    tc := 100 + 1900*(1 - exp(-tc/1000));
+    dF := dF + (mat->>'density')::numeric*0.02;
+    tF := tF + at/4000;
+    hF := hF + hr/4000 + tc/50000;
+  end if;
+  cat := a->>'category';
+  if    cat='heavyMetal' then bm:=bm*1.5; rm:=rm*1.3;
+  elsif cat='lightMetal' then bm:=bm*0.7; km:=km*1.3; cm:=cm*1.1;
+  elsif cat='ceramic'    then km:=km*1.4; rm:=rm*1.2; bm:=bm*0.8;
+  elsif cat='composite'  then bm:=bm*1.1; cm:=cm*1.1; rm:=rm*1.1; km:=km*1.1; sv:=sv*1.1;
+  end if;
+  res := a->'resurs';
+  if res is not null then
+    s := s + coalesce((res->>'blackmetall')::numeric,0)*bm + coalesce((res->>'coloredmetall')::numeric,0)*cm
+           + coalesce((res->>'rudametall')::numeric,0)*rm + coalesce((res->>'kristall')::numeric,0)*km
+           + coalesce((res->>'staarvis')::numeric,0)*sv;
+  end if;
+  s := s * dF * tF * hF;
+  hp := coalesce((a->>'hpBoost')::numeric,0) + s;
+  if (a->>'hpPercentBoost') is not null then hp := hp * (1 + (a->>'hpPercentBoost')::numeric); end if;
+  return hp;
+end$$;
+
+-- ── СИНТЕЗ (KV): скорость в «квадратах» (зеркало cnKvSpeed) ──
+create or replace function public._cn_kv_speed(cls jsonb, k text, reactObj jsonb, engObj jsonb, speedcoef jsonb)
+returns numeric language plpgsql immutable as $$
+declare rf numeric; ef numeric; kmh numeric; sp numeric; co numeric;
+begin
+  rf := coalesce((reactObj->>'force')::numeric,1); if rf=0 then rf:=1; end if;
+  ef := coalesce((engObj->>'force')::numeric,0);
+  if ef<=0 then return 0; end if;
+  kmh := ((ef*rf)/greatest(coalesce((cls->>'mass')::numeric,100),1))*10;
+  co := coalesce((speedcoef->>k)::numeric,1); if co=0 then co:=1; end if;
+  sp := round(kmh/co);
+  if sp>100 then sp:=100; end if;
+  return sp;
+end$$;
+
+-- ════════════════════════════════════════════════════════════
+-- ЦЕНА ГС из конструкционных решений (зеркало cnKvCost в constructors.js)
+-- НЕ из млн-прайсов Кваквантора: сумма решений × вес × множитель класса ×
+-- общий понижающий коэффициент + плоская наценка по классу.
+-- ════════════════════════════════════════════════════════════
+create or replace function public._cn_kv_class_gs(k text)
+returns numeric language sql immutable as $$
+  select case k
+    when 'btr' then 1.15 when 'tanki' then 1.35 when 'arta' then 1.3
+    when 'dron' then 1.2 when 'aviacia' then 1.5 when 'vertihui' then 1.5
+    when 'dronkos' then 1.7 when 'mla' then 1.8
+    when 'corvette' then 1.8 when 'destroyer' then 2.2 when 'supportCarrier' then 2.2
+    when 'mediumCruiser' then 2.6 when 'hyperCruiser' then 3 when 'multiroleCarrier' then 3
+    when 'battleship' then 3.6 when 'dreadnought' then 4.2 when 'ss13' then 3
+    else 1 end;
+$$;
+-- прибавить obj.resurs × q к аккумулятору решений
+create or replace function public._cn_res_add(acc jsonb, obj jsonb, q numeric)
+returns jsonb language sql immutable as $$
+  select case when obj is null or (obj->'resurs') is null then acc
+    else (
+      select coalesce(jsonb_object_agg(kk, vv), acc)
+      from (
+        select kk,
+          coalesce((acc->>kk)::numeric,0) + coalesce((obj->'resurs'->>kk)::numeric,0)*coalesce(q,1) as vv
+        from unnest(array['blackmetall','coloredmetall','rudametall','kristall','staarvis']) kk
+      ) t
+    ) end;
+$$;
+-- res = {blackmetall,coloredmetall,rudametall,kristall,staarvis}
+create or replace function public._cn_kv_cost(res jsonb, k text)
+returns numeric language sql immutable as $$
+  select round(
+    ( coalesce((res->>'blackmetall')::numeric,0)*8
+    + coalesce((res->>'rudametall')::numeric,0)*20
+    + coalesce((res->>'coloredmetall')::numeric,0)*45
+    + coalesce((res->>'kristall')::numeric,0)*90
+    + coalesce((res->>'staarvis')::numeric,0)*150
+    ) * public._cn_kv_class_gs(k) * 0.32          -- CN_KV_COST_FACTOR
+    + public._cn_kv_class_gs(k) * 90              -- плоская наценка (idx=0)
+  );
+$$;
+
 -- ════════════════════════════════════════════════════════════
 -- ПЕРЕСЧЁТ summary из data по каталогу (зеркало cnVehCalc / cnDivTotals)
 -- ════════════════════════════════════════════════════════════
@@ -73,10 +173,14 @@ declare
   cab jsonb := public._cn_catalog();
   db jsonb; defs jsonb; bd jsonb;
   k text; cls jsonb; typeObj jsonb; reactObj jsonb; armorObj jsonb; shieldObj jsonb; engObj jsonb;
+  radarObj jsonb; radar_ numeric := 0;
   hasType bool; hasReactor bool; hasEnergy bool; hasHangars bool;
   cost numeric := 0; econs numeric := 0; emax numeric := 0; on_ numeric; modon numeric;
   dmg numeric := 0; hp numeric; armor numeric; shield numeric; speed numeric; cargo numeric := 0;
+  rng numeric := 0;   -- дальность огня в «квадратах» = max dalnost орудий (KV customParameter)
+  crew numeric := 0; speedcoef jsonb;
   bill jsonb := '{}'::jsonb;
+  kvres jsonb := '{}'::jsonb;   -- конструкционные решения (для цены ГС)
   w jsonb; m jsonb; h jsonb; hob jsonb; wob jsonb; mob jsonb; rec jsonb;
   q int; used int; kind text; wdmg numeric;
   -- division
@@ -143,10 +247,20 @@ begin
   armorObj  := db->'armors'->k->coalesce((p_data->>'armor')::int,0);   if armorObj  is null then raise exception 'bad armor'; end if;
   shieldObj := db->'shields'->k->coalesce((p_data->>'shield')::int,0); if shieldObj is null then raise exception 'bad shield'; end if;
   engObj    := db->'engines'->k->coalesce((p_data->>'engine')::int,0); if engObj    is null then raise exception 'bad engine'; end if;
+  -- Радар (KV.modules5): idx 0 = «Не выбран» — в расчёт не идёт (зеркало cnVehCalc)
+  if coalesce((p_data->>'radar')::int,0) > 0 then
+    radarObj := db->'radars'->k->((p_data->>'radar')::int);
+    if radarObj is null then raise exception 'bad radar'; end if;
+  end if;
 
-  cost := coalesce((typeObj->>'cost')::numeric, (cls->>'cost')::numeric)
-        + coalesce((reactObj->>'cost')::numeric,0) + (armorObj->>'cost')::numeric
-        + (shieldObj->>'cost')::numeric + (engObj->>'cost')::numeric;
+  -- ЦЕНА: собираем конструкционные решения (resurs) с корпуса и компонентов,
+  -- итог считаем через _cn_kv_cost. Млн-прайсы Кваквантора в цену НЕ идут.
+  kvres := public._cn_res_add(kvres, cls, 1);
+  kvres := public._cn_res_add(kvres, reactObj, 1);
+  kvres := public._cn_res_add(kvres, engObj, 1);
+  kvres := public._cn_res_add(kvres, armorObj, 1);
+  kvres := public._cn_res_add(kvres, shieldObj, 1);
+  kvres := public._cn_res_add(kvres, radarObj, 1);
   if hasEnergy then econs := coalesce((shieldObj->>'energy')::numeric,0) + coalesce((engObj->>'energy')::numeric,0); end if;
 
   -- оружие
@@ -154,8 +268,9 @@ begin
     q := greatest(0, coalesce((w->>'q')::int,1));
     wob := db->'weapons'->(w->>'g')->coalesce((w->>'idx')::int,-1);
     if wob is null then raise exception 'bad weapon'; end if;
-    cost := cost + (wob->>'cost')::numeric * q; on_ := on_ + q * modon;
+    kvres := public._cn_res_add(kvres, wob, q); on_ := on_ + q * modon;
     wdmg := (wob->>'dmg')::numeric; dmg := dmg + wdmg * q;
+    rng := greatest(rng, coalesce((wob->>'dalnost')::numeric, 0));
     if hasEnergy then econs := econs + coalesce((wob->>'energy')::numeric,0) * q; end if;
     kind := public._cn_wpn_kind(wob->>'name');
     if kind = 'missile' then bill := public._cn_bill_add(bill,'Изотопы', wdmg/150*q);
@@ -168,7 +283,7 @@ begin
   for m in select * from jsonb_array_elements(coalesce(p_data->'modules','[]'::jsonb)) loop
     mob := db->'modules'->(m->>'g')->coalesce((m->>'idx')::int,-1);
     if mob is null then raise exception 'bad module'; end if;
-    cost := cost + (mob->>'cost')::numeric; on_ := on_ + modon;
+    kvres := public._cn_res_add(kvres, mob, 1); on_ := on_ + modon;
     if hasEnergy then econs := econs + coalesce((mob->>'energy')::numeric,0); end if;
     if (mob->>'cost')::numeric >= 100 then bill := public._cn_bill_add(bill,'Стелларит',1);
     elsif (mob->>'cost')::numeric >= 30 then bill := public._cn_bill_add(bill,'Редкоземельные руды',1); end if;
@@ -179,7 +294,7 @@ begin
     for h in select * from jsonb_array_elements(coalesce(p_data->'hangars','[]'::jsonb)) loop
       select e into hob from jsonb_array_elements(db->'hangarTypes') e where (e->>'id')::int = (h->>'id')::int limit 1;
       if hob is null then raise exception 'bad hangar'; end if;
-      cost := cost + (hob->>'cost')::numeric; on_ := on_ + modon; econs := econs + coalesce((hob->>'energy')::numeric,0);
+      kvres := public._cn_res_add(kvres, hob, 1); on_ := on_ + modon; econs := econs + coalesce((hob->>'energy')::numeric,0);
       if (hob->>'canHaveUnits')::bool = false then cargo := cargo + coalesce((hob->>'capacity')::numeric,0); end if;
       used := 0;
       for rec in select * from jsonb_array_elements(coalesce(h->'units','[]'::jsonb)) loop
@@ -190,12 +305,27 @@ begin
     end loop;
   end if;
 
-  -- ТТХ
-  hp := coalesce((typeObj->>'hp')::numeric, (cls->>'hp')::numeric);
-  armor := coalesce((typeObj->>'armor')::numeric,0) + (armorObj->>'armor')::numeric;
+  -- ТТХ — СИНТЕЗ (KV): прочность от физики брони, скорость в «квадратах», экипаж-сумма.
+  -- armor свёрнут в HP (как в клиенте). cost/on/ведомость — прежние (экономика не трогается).
+  speedcoef := cab->'speedcoef';
+  hp := round(public._cn_kv_armor_hp(cls, armorObj));
+  armor := 0;
   shield := coalesce((shieldObj->>'shield')::numeric,0);
-  speed := (engObj->>'speed')::numeric;
+  speed := public._cn_kv_speed(cls, k, reactObj, engObj, speedcoef);
   emax := coalesce((reactObj->>'energy')::numeric,0);
+  crew := coalesce((cls->>'crewRequired')::numeric,0);
+  if radarObj is not null then
+    crew := crew + coalesce((radarObj->>'crewRequired')::numeric,0);
+    radar_ := coalesce((radarObj->'customParameterradar'->>'dalnost')::numeric,0);
+  end if;
+  for w in select * from jsonb_array_elements(coalesce(p_data->'weapons','[]'::jsonb)) loop
+    wob := db->'weapons'->(w->>'g')->coalesce((w->>'idx')::int,-1);
+    if wob is not null then crew := crew + coalesce((wob->>'crewRequired')::numeric,0) * greatest(0,coalesce((w->>'q')::int,1)); end if;
+  end loop;
+  for m in select * from jsonb_array_elements(coalesce(p_data->'modules','[]'::jsonb)) loop
+    mob := db->'modules'->(m->>'g')->coalesce((m->>'idx')::int,-1);
+    if mob is not null then crew := crew + coalesce((mob->>'crewRequired')::numeric,0); end if;
+  end loop;
   if hasEnergy and econs > emax then raise exception 'energy overload'; end if;
 
   -- ведомость: корпус + компоненты (зеркало cnUnitBill)
@@ -219,9 +349,13 @@ begin
     bill := public._cn_bill_add(bill,'Гелий-3', coalesce((reactObj->>'energy')::numeric,0) / (bd->>'reHe')::numeric);
   end if;
 
+  -- Итоговая цена ГС из конструкционных решений (зеркало cnKvCost).
+  cost := public._cn_kv_cost(kvres, k);
+
   return jsonb_build_object(
     'cost', cost, 'on', round(on_,1), 'hp', hp, 'armor', armor, 'shield', shield,
-    'dmg', dmg, 'speed', speed, 'eCons', econs, 'eMax', emax, 'energy', hasEnergy,
+    'dmg', dmg, 'speed', speed, 'crew', crew, 'radar', radar_, 'rng', rng, 'speedUnit', 'квадрат',
+    'eCons', econs, 'eMax', emax, 'energy', hasEnergy,
     'cargo', cargo, 'bill', bill,
     'className', cls->>'name', 'typeName', coalesce(typeObj->>'name',''));
 end$$;

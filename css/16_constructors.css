@@ -423,10 +423,24 @@
   content: ''; position: absolute; inset: 1px; z-index: -1; background: var(--b1);
   clip-path: polygon(0 0, calc(100% - 6.3px) 0, 100% 6.3px, 100% 100%, 0 100%);
 }
-.cn-hud-t b { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--t1); line-height: 1.15; white-space: nowrap; }
+.cn-hud-t b { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--t1); line-height: 1.15; white-space: nowrap; transition: color .18s ease; }
 .cn-hud-t span { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: calc(.07em * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t3); }
 .cn-hud-t.gd b { color: var(--gd); }
 .cn-hud-t.te b { color: var(--te); }
+/* Интерактив: ховер подсвечивает грань-подложку и значение, перегруз — красным,
+   изменение значения — короткий неоновый пульс (класс chg ставит cnRenderHud) */
+.cn-hud-t::before { transition: background .18s ease; }
+.cn-hud-t:hover::before { background: color-mix(in srgb, var(--te) 55%, var(--w2)); }
+.cn-hud-t:hover b { color: var(--te); }
+.cn-hud-t.gd:hover b { color: var(--gd); }
+.cn-hud-t.warn b { color: var(--err); }
+.cn-hud-t.warn::before { background: color-mix(in srgb, var(--err) 60%, var(--w2)); }
+@keyframes cnHudPulse {
+  0% { color: var(--te); text-shadow: 0 0 12px color-mix(in srgb, var(--te) 70%, transparent); }
+  100% { text-shadow: none; }
+}
+.cn-hud-t.chg b { animation: cnHudPulse .6s ease-out; }
+.cn-hud-t.warn.chg b { animation: none; }
 .cn-hud-e { grid-column: 1 / -1; position: relative; z-index: 1; padding: 8px 12px 10px; }
 .cn-hud-e::before {
   content: ''; position: absolute; inset: 0; z-index: -2; background: var(--w2);
