@@ -1190,7 +1190,7 @@ function fnGrantsSet(arr) {
   if (AD && AD.embed) AD.embed.grants = arr || [];
 }
 function fnGrantIcon(type) {
-  return ({ treasury: '💰', resource: '📦', research: '🔬', research_all: '🔬', unit: '⚔', agent: '🕵', system: '🌐', colony: '🏗', building: '🏭' }[type]) || '◈';
+  return ({ treasury: '💰', resource: '📦', research: '🔬', research_all: '🔬', unit: '⚔', agent: '🕵', system: '🌐', colony: '🏗', building: '🏭', population: '👥' }[type]) || '◈';
 }
 function fnGrantText(g) {
   const n = typeof adNum === 'function' ? adNum : v => Number(v || 0).toLocaleString('ru-RU');
@@ -1200,6 +1200,10 @@ function fnGrantText(g) {
       return g.delta != null ? `${sign}${n(g.delta)} ${g.label || adTreasuryLabel?.(g.field) || g.field || ''}`.trim() : `${g.label}: ${n(g.to)}`;
     }
     case 'resource': return `+${n(g.delta != null ? g.delta : (g.amt || g.to))} ${g.name || 'ресурс'}`;
+    case 'population': {
+      const sign = (g.delta || 0) >= 0 ? '+' : '−';
+      return `${sign}${n(Math.abs(g.delta || 0))} населения${g.colony ? ' · ' + g.colony : ' державе'}`;
+    }
     case 'research': return g.revoke ? `Отозвана технология «${g.name}»` : `Изучена технология «${g.name}»`;
     case 'research_all': return `Выдан полный пакет технологий (${g.count || 'все'})`;
     case 'unit': return `${g.name || 'Юнит'} ×${g.qty || 1}${g.category ? ' · ' + g.category : ''}`;

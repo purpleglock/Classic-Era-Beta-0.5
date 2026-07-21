@@ -2224,9 +2224,9 @@ function adMarketPanel() {
 function adFacPanel() {
   const e = adEntry(AD.sel);
   if (!e) return '';
-  const SUBTABS = [['treasury','💰 Казна'],['economy','📊 Экономика'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['caravans','🚚 Караваны'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['army','⚔ Армия'],['agents','🕵 Агенты'],['owner','👑 Владелец'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
+  const SUBTABS = [['treasury','💰 Казна'],['economy','📊 Экономика'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['caravans','🚚 Караваны'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['population','👥 Население'],['army','⚔ Армия'],['agents','🕵 Агенты'],['owner','👑 Владелец'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
   const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="fm-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
-  const bodyMap = { treasury: adTabTreasury, economy: adTabEconomy, resources: adTabResources, mining: adTabMining, caravans: adTabCaravans, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, army: adTabArmy, agents: adTabAgents, owner: adTabOwner, testing: adTabTesting, danger: adTabDanger };
+  const bodyMap = { treasury: adTabTreasury, economy: adTabEconomy, resources: adTabResources, mining: adTabMining, caravans: adTabCaravans, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, population: adTabPopulation, army: adTabArmy, agents: adTabAgents, owner: adTabOwner, testing: adTabTesting, danger: adTabDanger };
   const renderFn = bodyMap[AD.subtab] || adTabTreasury;
   let tabBody = '';
   try { tabBody = renderFn(e); }
@@ -3252,6 +3252,118 @@ async function adSetSlots(bldId, n) {
     await dbPatch('colony_buildings', `id=eq.${bldId}`, { slots_open: n });
     const bld = AD.buildings.find(b => b.id === bldId); if (bld) bld.slots_open = n;
     toast('Слоты: ' + n, 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+// ── Вкладка: Население (живое, colonies.pop) ────────────────────
+// Потолок жителей = ячейки×100, старые записи без pop = ячейки×50 —
+// зеркала EC_POP_CAP_CELL / EC_POP_START_CELL из economy.js.
+function adPopCapCell()   { return (typeof EC_POP_CAP_CELL   !== 'undefined') ? EC_POP_CAP_CELL   : 100; }
+function adPopStartCell() { return (typeof EC_POP_START_CELL !== 'undefined') ? EC_POP_START_CELL : 50; }
+function adColPop(c)    { return Math.round(c.pop != null ? +c.pop : (+c.cells || 0) * adPopStartCell()); }
+function adColPopCap(c) { return (+c.cells || 0) * adPopCapCell(); }
+
+function adTabPopulation(e) {
+  const cols = e.colonies || [];
+  if (!cols.length) return `<div class="fm-empty">Нет колоний — населению негде жить</div>`;
+  const total = cols.reduce((a, c) => a + adColPop(c), 0);
+  const cap   = cols.reduce((a, c) => a + adColPopCap(c), 0);
+  const rows = cols.map(c => {
+    const sys = AD.systems.find(s => s.id === c.system_id);
+    const pop = adColPop(c), pcap = adColPopCap(c);
+    return `<div class="fm-res-row" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--w1,#1e2630)">
+      <span style="flex:1;min-width:120px"><b style="font-size:13px;color:var(--t1,#e8edf2)">${esc(c.planet_name)}</b> <span style="font-size:11px;color:var(--t3,#8aa0b0)">${esc(sys ? sys.name : (c.system_id || ''))}</span></span>
+      <span style="font-family:monospace;font-size:11px;color:var(--t3,#8aa0b0)" title="потолок = ячейки × ${adPopCapCell()}">до ${adNum(pcap)}</span>
+      <input class="fi" id="fm-pop-${esc(c.id)}" type="number" value="${pop}" min="0" max="${pcap}" style="width:90px;text-align:right">
+      <button class="btn btn-gh btn-xs" onclick="adDeltaColonyPop(${adArg(c.id)},100)">+100</button>
+      <button class="btn btn-gh btn-xs" onclick="adDeltaColonyPop(${adArg(c.id)},500)">+500</button>
+      <button class="btn btn-rd btn-xs" onclick="adDeltaColonyPop(${adArg(c.id)},-100)">−100</button>
+      <button class="btn btn-rd btn-xs" onclick="adDeltaColonyPop(${adArg(c.id)},-500)">−500</button>
+      <button class="btn btn-gh btn-xs" onclick="adSetColonyPop(${adArg(c.id)})" title="Установить точное значение из поля">✓</button>
+    </div>`;
+  }).join('');
+  const facBtns = [1000, 5000, 10000].map(v => `<button class="btn btn-gh btn-xs" onclick="adDeltaFacPop(${v})">+${v/1000}к</button>`).join('')
+    + [1000, 5000].map(v => `<button class="btn btn-rd btn-xs" onclick="adDeltaFacPop(${-v})">−${v/1000}к</button>`).join('');
+  return `<div class="fm-population">
+    <div class="fm-section-title">Население державы: <b style="color:var(--t1,#e8edf2)">${adNum(total)}</b> <span style="color:var(--t3,#8aa0b0)">/ ${adNum(cap)}</span></div>
+    <div class="fm-dim" style="font-size:11px;margin:4px 0 8px">Население — налоговая база и рабочие руки: определяет апкип бюджета и авто-слоты построек. Общая выдача раскидывается по колониям пропорционально свободному месту (рост) или жителям (убыль).</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:12px">
+      <span style="font-size:11px;color:var(--t3,#8aa0b0);margin-right:2px">Вся держава:</span>${facBtns}
+    </div>
+    <div class="fm-section-title">По колониям</div>
+    <div class="fm-res-list">${rows}</div>
+  </div>`;
+}
+
+async function adSetColonyPop(colId) {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e) return;
+  const c = e.colonies.find(x => String(x.id) === String(colId)); if (!c) return;
+  const raw = parseInt(document.getElementById('fm-pop-' + colId)?.value);
+  if (isNaN(raw)) { toast('Введите число', 'err'); return; }
+  await adWriteColonyPop(c, raw);
+}
+
+async function adDeltaColonyPop(colId, delta) {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e) return;
+  const c = e.colonies.find(x => String(x.id) === String(colId)); if (!c) return;
+  await adWriteColonyPop(c, adColPop(c) + delta);
+}
+
+// Записать население колонии (кламп 0..потолок) + журнал выдач вердикта.
+async function adWriteColonyPop(c, want) {
+  const old = adColPop(c);
+  const val = Math.max(0, Math.min(adColPopCap(c), Math.round(want)));
+  if (val === old) { toast('Без изменений (потолок/ноль?)', 'inf'); return; }
+  AD.busy = true;
+  try {
+    await dbPatch('colonies', `id=eq.${c.id}`, { pop: val });
+    c.pop = val;
+    adLogGrant({ type: 'population', delta: val - old, to: val, colony: c.planet_name });
+    toast(`👥 ${c.planet_name}: ${adNum(val)}`, 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+// Изменить население всей державы: раскидываем по колониям пропорционально
+// свободному месту (рост) либо текущим жителям (убыль).
+async function adDeltaFacPop(delta) {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e || !e.colonies.length) return;
+  const cols = e.colonies;
+  const dir  = delta > 0 ? 1 : -1;
+  const room = c => dir > 0 ? Math.max(0, adColPopCap(c) - adColPop(c)) : adColPop(c);
+  const totalRoom = cols.reduce((a, c) => a + room(c), 0);
+  const amount = Math.min(Math.abs(Math.round(delta)), totalRoom);
+  if (!amount) { toast(dir > 0 ? 'Все колонии заполнены — нужны новые ячейки (колонизация/терраформ)' : 'Население уже на нуле', 'err'); return; }
+  // Пропорциональный проход (floor), затем остаток — в колонии с запасом.
+  const plan = new Map();   // colony.id → величина изменения (без знака)
+  let rest = amount;
+  cols.forEach(c => {
+    const take = Math.min(room(c), Math.floor(amount * room(c) / totalRoom));
+    if (take > 0) { plan.set(c.id, take); rest -= take; }
+  });
+  for (const c of cols) {
+    if (rest <= 0) break;
+    const used = plan.get(c.id) || 0;
+    const extra = Math.min(room(c) - used, rest);
+    if (extra > 0) { plan.set(c.id, used + extra); rest -= extra; }
+  }
+  AD.busy = true;
+  try {
+    for (const c of cols) {
+      const take = plan.get(c.id);
+      if (!take) continue;
+      const val = adColPop(c) + dir * take;
+      await dbPatch('colonies', `id=eq.${c.id}`, { pop: val });
+      c.pop = val;
+    }
+    const newTotal = cols.reduce((a, c) => a + adColPop(c), 0);
+    adLogGrant({ type: 'population', delta: dir * amount, to: newTotal });
+    const cut = amount < Math.abs(Math.round(delta)) ? ' (упёрлись в потолок)' : '';
+    toast(`👥 Население державы: ${adNum(newTotal)}${cut}`, 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }

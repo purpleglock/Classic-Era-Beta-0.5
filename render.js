@@ -5289,7 +5289,7 @@ function _fcBody(st, en) {
     parts.push(`<div class="fc-phase"><span class="fc-phase-tag">${en ? 'RECRUITING' : 'НАБОР ЗАЯВОК'}</span>
       ${left ? `<span class="fc-phase-t">${en ? 'closes in ' : 'окно закроется через '}${left}</span>`
              : `<span class="fc-phase-t">${en ? 'matching soon…' : 'жеребьёвка вот-вот…'}</span>`}</div>`);
-    parts.push(`<div class="fc-signups">${en ? 'Applications' : 'Заявок'}: <b>${st.signups | 0}</b>${(st.signups | 0) < 2 ? (en ? ' · need at least 2' : ' · нужно минимум две') : ''}</div>`);
+    parts.push(`<div class="fc-signups"><b>${st.signups | 0}</b><span>${en ? 'applications in the hat' : 'заявок в шляпе жребия'}${(st.signups | 0) < 2 ? (en ? ' · need at least 2' : ' · нужно минимум две') : ''}</span></div>`);
     parts.push(st.me_signed
       ? `<div class="fc-ok">✔ ${en ? 'Your application is in. The lottery decides the rest.' : 'Ваша заявка принята. Дальше решает жребий.'}</div>`
       : (st.me
@@ -5342,7 +5342,8 @@ function _fcBody(st, en) {
       ${h.map(r => `<div class="fc-hist-row"><b>${esc(r.winner || '?')}</b> ${en ? 'defeated' : 'одолел(а)'} ${esc(r.winner === r.a ? r.b : r.a)} <span class="fc-hist-ships">«${esc(r.ship_a || '')}» vs «${esc(r.ship_b || '')}»</span></div>`).join('')}
     </details>`);
   }
-  return parts.join('');
+  // .fc-col: центрированная колонна арены (margin:auto в .hp-vn-fc-body)
+  return '<div class="fc-col">' + parts.join('') + '</div>';
 }
 // Карточки дуэлянтов: держава + выданный корабль + пул ставок
 function _fcDuelCards(st, en, showPools) {

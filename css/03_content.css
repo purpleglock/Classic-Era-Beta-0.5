@@ -4991,46 +4991,66 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hp-vn-stars-body .ec-stars{width:100%;max-width:640px;margin:0 auto}
 
 /* ══════════════ НОВЕЛЛА · Бойцовский клуб (hp-vn-fight) ══════════════
-   Каркас наследуется от .hp-vn-colony/.hp-vn-geo. Здесь — только тело.
-   Киберпанк: срезанные углы слоем-подложкой (::before/::after), один
-   акцент — розовый неон арены #ff3c82, второй — золото касс #e0b45f. */
-.hp-vn-fc-body{display:flex;flex-direction:column;gap:12px;padding:14px 16px;overflow-y:auto}
-.fc-rule{font-family:var(--font-mono);font-size:10.5px;line-height:1.55;color:var(--t3,#8296a8);letter-spacing:.03em}
-.fc-phase{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.fc-phase-tag{
-  position:relative;z-index:0;padding:5px 12px;font-family:var(--font-mono);font-weight:700;
-  font-size:10.5px;letter-spacing:.14em;color:#ff9cc2;
-  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+   Каркас наследуется от .hp-vn-colony/.hp-vn-geo, но хром экрана (шапка,
+   «назад», CTA) перекрашен через --gd/--gdl в розовый неон арены. Фон —
+   СВОЙ и НЕПРОЗРАЧНЫЙ: сквозь базовый полупрозрачный оверлей колонии
+   просвечивала главная и экран выглядел грязно. Контент — центрированная
+   колонна (margin:auto: по центру, пока контента мало; обычный скролл,
+   когда много). Киберпанк: срезанные углы слоем-подложкой, два акцента —
+   розовый арены #ff3c82 + золото касс #e0b45f. */
+.hp-vn-fight{
+  --gd:#ff3c82;--gdl:#ff7fae;
+  background:
+    radial-gradient(120% 75% at 50% 118%, rgba(255,60,130,.16), transparent 58%),
+    linear-gradient(180deg,#0b0d13 0%,#10070f 100%);
+  backdrop-filter:none;
 }
-.fc-phase-tag::before{content:"";position:absolute;inset:0;z-index:-2;background:rgba(255,60,130,.55)}
-.fc-phase-tag::after{content:"";position:absolute;inset:1px;z-index:-1;background:hsl(335 35% 10% / .94)}
+.hp-vn-fc-body{display:flex;flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:thin;padding:24px 18px}
+.hp-vn-fc-body>.hp-vn-col-empty{margin:auto}
+.fc-col{margin:auto;width:100%;max-width:660px;display:flex;flex-direction:column;gap:14px}
+.fc-rule{position:relative;padding-left:12px;font-family:var(--font-mono);font-size:10.5px;line-height:1.6;color:var(--t3,#8296a8);letter-spacing:.03em}
+.fc-rule::before{content:"";position:absolute;left:0;top:2px;bottom:2px;width:2px;background:#ff3c82}
+.fc-phase{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:2px}
+.fc-phase-tag{
+  padding:7px 16px;font-family:var(--font-mono);font-weight:700;
+  font-size:12px;letter-spacing:.16em;color:#ffb3d1;
+  background:rgba(255,60,130,.16);border-left:3px solid #ff3c82;
+}
 .fc-phase.live .fc-phase-tag{animation:fcPulse 1.6s ease-in-out infinite}
 @keyframes fcPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.5)}}
-.fc-phase-t{font-family:var(--font-mono);font-size:10.5px;color:var(--t3,#8296a8)}
-.fc-signups{font-size:13px;color:var(--t2,#c6d4e2)}
-.fc-ok{font-family:var(--font-mono);font-size:11.5px;color:#5fe0a0}
+.fc-phase-t{font-family:var(--font-mono);font-size:11px;color:var(--t3,#8296a8)}
+.fc-signups{display:flex;align-items:baseline;gap:10px}
+.fc-signups b{font-family:var(--font-display);font-weight:800;font-size:34px;line-height:1;color:#eef4fa}
+.fc-signups span{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.06em;color:var(--t3,#8296a8)}
+.fc-ok{font-family:var(--font-mono);font-size:11.5px;line-height:1.6;color:#5fe0a0}
 .fc-duel{display:flex;align-items:stretch;gap:10px}
 .fc-duel-card{
-  position:relative;z-index:0;flex:1 1 0;display:flex;flex-direction:column;gap:5px;padding:11px 13px;
-  clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px));
+  flex:1 1 0;display:flex;flex-direction:column;gap:5px;padding:12px 14px;
+  background:hsl(220 30% 9% / .55);border:1px solid rgba(255,60,130,.3);
 }
-.fc-duel-card::before{content:"";position:absolute;inset:0;z-index:-2;background:rgba(255,60,130,.35)}
-.fc-duel-card::after{content:"";position:absolute;inset:1px;z-index:-1;background:hsl(220 30% 9% / .94)}
 .fc-duel-name{font-weight:700;font-size:13.5px;color:var(--t1,#eef4fa)}
 .fc-duel-ship{font-size:12px;color:var(--t2,#c6d4e2)}
 .fc-duel-cls{font-family:var(--font-mono);font-size:10px;color:var(--t3,#8296a8);letter-spacing:.06em}
 .fc-duel-pool{font-family:var(--font-mono);font-size:10.5px;color:#e0b45f}
 .fc-duel-vs{align-self:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:#ff3c82;letter-spacing:.1em}
 .hp-vna-cta.fc-watch{background:#ff3c82;color:#14060c}
+/* Общий хром новеллы режется клипом (срезанные углы) — в клубе гасим клип и
+   даём прямые грани: кнопки и «назад» становятся честными прямоугольниками,
+   маркер заголовка — квадрат, акцентный «шов» шапки — прямой отрезок. */
+.hp-vn-fight .hp-vna-cta,
+.hp-vn-fight .hp-vn-col-x,
+.hp-vn-fight .hp-vn-col-x::after,
+.hp-vn-fight .hp-vn-col-title::before,
+.hp-vn-fight .hp-vn-col-head::after{clip-path:none}
 .fc-bet{display:flex;flex-direction:column;gap:8px}
 .fc-bet-h{font-weight:700;font-size:13px;color:var(--t1,#eef4fa)}
 .fc-bet-cap{margin-left:8px;font-family:var(--font-mono);font-weight:400;font-size:10px;color:var(--t3,#8296a8);letter-spacing:.06em}
 .fc-bet-my{font-family:var(--font-mono);font-size:11px;color:#e0b45f}
 .fc-bet-row{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
 .fc-bet-sel,.fc-bet-amt{
-  border:none;border-radius:0;padding:9px 11px;font-family:var(--font-mono);font-size:11px;
-  color:var(--t1,#eef4fa);background:var(--w2,rgba(255,255,255,.08));
-  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  border:1px solid var(--w2,rgba(255,255,255,.15));border-radius:0;padding:9px 11px;
+  font-family:var(--font-mono);font-size:11px;
+  color:var(--t1,#eef4fa);background:rgba(255,255,255,.04);
 }
 .fc-bet-sel{min-width:150px}
 .fc-bet-amt{width:120px}
@@ -5040,6 +5060,9 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .fc-hist-row{padding:6px 0;border-bottom:1px dashed var(--w2,rgba(255,255,255,.1))}
 .fc-hist-ships{font-family:var(--font-mono);font-size:10px;color:var(--t3,#8296a8)}
 @media (max-width:640px){
+  .hp-vn-fc-body{padding:16px 12px}
+  .fc-col{gap:12px}
+  .fc-signups b{font-size:28px}
   .fc-duel{flex-direction:column}
   .fc-duel-vs{align-self:flex-start}
   .fc-bet-sel,.fc-bet-amt{flex:1 1 auto}
