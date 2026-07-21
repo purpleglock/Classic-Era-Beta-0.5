@@ -1625,8 +1625,8 @@ async function _ecLoadRestImpl() {
     ecRpc('faith_status').catch(() => null),          // вера: статус текущей фракции
     ecRpc('faith_list').catch(() => []),              // вера: реестр всех религий
     ecRpc('passive_intel_all').catch(() => []),       // пассивная разведка: размытый срез
-    ecCached('techLayout', () => dbGet('tech_layout', `select=node_id,x,y,icon,img,nocore`)),   // раскладка дерева — кэш на сессию
-    ecCached('techPrereq', () => dbGet('tech_prereq', `select=node_id,prereq`)),   // связи дерева — кэш на сессию
+    ecCached('techLayout', () => dbGet('tech_layout', `select=node_id,x,y,icon,img,nocore`)).catch(() => []),   // раскладка дерева — кэш на сессию (падение справочника НЕ должно рушить весь rest-load)
+    ecCached('techPrereq', () => dbGet('tech_prereq', `select=node_id,prereq`)).catch(() => []),   // связи дерева — кэш на сессию
     ecRpc('exchange_status').catch(() => null),   // биржа: индекс/ETF + спарклайны
     ecRpc('bonds_status').catch(() => null),      // биржа: облигации
     ecRpc('corps_status').catch(e => ({ __err: (e && e.message) || 'нет ответа' })),   // биржа: корпорации
@@ -1637,7 +1637,7 @@ async function _ecLoadRestImpl() {
     ecRpc('outposts_visible').catch(() => []),    // оборона: развёрнутые аванпосты
     ecRpc('outpost_ships_mine').catch(() => []),  // оборона: мои корабли-носители
     ecRpc('outpost_intel').catch(() => []),       // оборона: разведданные разведаванпостов
-    ecCached('spyPortraits', () => dbGet('spy_portraits', `select=id,race,gender,url`)),  // пул портретов — кэш на сессию
+    ecCached('spyPortraits', () => dbGet('spy_portraits', `select=id,race,gender,url`)).catch(() => []),  // пул портретов — кэш на сессию (падение справочника НЕ должно рушить весь rest-load)
     ecRpc('orders_status').catch(() => null),     // биржа: заказы (госзаказы/RFQ)
     ecRpc('mza_ships_mine').catch(() => []),      // Гиперпейсер: мои мобильные «Длани»
     ecRpc('fleets_mine').catch(() => []),         // флоты: мои мобильные соединения
