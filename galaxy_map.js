@@ -3297,14 +3297,26 @@ function gmmRender(host) {
   gmmBuildWorld();
   gmmBindCanvas();
   if (!window._gmmRszBound) { window._gmmRszBound = true; window.addEventListener('resize', gmmOnWinResize); }
-  // первичный размер + «вся карта»
+  // первичный размер + «вся карта».
+  // ВАЖНО (мобилка): при заходе в раздел карты флекс-вьюпорт часто ещё НЕ разложен —
+  // clientWidth/Height = 0. Раньше мы всё равно инициализировались: канвас становился
+  // 1×1, gmmCover считал мусорный масштаб, а окном resize он уже не чинился → «чёрный
+  // экран, сайт мёртв». Теперь при нулевом размере откладываем инициализацию до
+  // следующего кадра, пока лэйаут не устаканится (несколько попыток, затем сдаёмся).
   const vp = document.getElementById('gm-viewport');
-  GMM.vw = vp.clientWidth; GMM.vh = vp.clientHeight;
-  GMM.dpr = Math.min(2, window.devicePixelRatio || 1);
-  GMM.cv.width = Math.max(1, Math.round(GMM.vw * GMM.dpr));
-  GMM.cv.height = Math.max(1, Math.round(GMM.vh * GMM.dpr));
-  gmmCover();
-  gmmRaster();
+  const initSize = (tries) => {
+    if (!GMM.active || !GMM.cv || !GMM.cv.isConnected) return;   // ушли со страницы
+    const w = vp.clientWidth, h = vp.clientHeight;
+    if ((!w || !h) && tries > 0) { requestAnimationFrame(() => initSize(tries - 1)); return; }
+    GMM.vw = w || vp.offsetWidth || window.innerWidth || 320;
+    GMM.vh = h || vp.offsetHeight || window.innerHeight || 480;
+    GMM.dpr = Math.min(2, window.devicePixelRatio || 1);
+    GMM.cv.width = Math.max(1, Math.round(GMM.vw * GMM.dpr));
+    GMM.cv.height = Math.max(1, Math.round(GMM.vh * GMM.dpr));
+    gmmCover();
+    gmmRaster();
+  };
+  initSize(30);
   // Слой «закрытые границы» мог остаться включённым с прошлого захода (GM живёт между
   // переходами): тумблер отрисовался активным — значит и штриховку надо показать сразу,
   // перезапросив список закрывших, а не ждать ручного повторного нажатия.
@@ -3826,6 +3838,16 @@ function gmmKick() { if (!GMM.raf && GMM.active) GMM.raf = requestAnimationFrame
 function gmmFrame(ts) {
   GMM.raf = 0;
   if (!GMM.cv || !GMM.cv.isConnected) { GMM.active = false; return; }   // ушли со страницы
+  try { gmmFrameBody(ts); }
+  catch (e) {
+    // Любое исключение в отрисовке НЕ должно ронять всю страницу (раньше падение
+    // одного кадра рвало rAF-цикл → «сайт умер, чёрный экран»). Логируем и живём:
+    // просим следующий кадр, чтобы карта попыталась дорисоваться снова.
+    console.error('[gmm] frame error', e);
+    if (GMM.active && GMM.cv && GMM.cv.isConnected) { GMM.raf = requestAnimationFrame(gmmFrame); }
+  }
+}
+function gmmFrameBody(ts) {
   let again = false;
   if (GMM.anim) {
     const a = GMM.anim, k = Math.min(1, (ts - a.t0) / a.dur);
@@ -6849,7 +6871,13 @@ function gmmPaintVector(ctx, camS, live) {
     ctx.globalAlpha = .07 * secA; ctx.lineWidth = 16 / camS;
     P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
     ctx.globalAlpha = .45 * secA; ctx.lineWidth = 7 / camS;
-    ctx.setLineDash([1.2 / camS, 26 / camS]);
+    // Поперечные засечки — короткий дэш на широком штрихе. Штрихуется ВЕСЬ путь секторов
+    // (все рёбра галактики) одним вызовом. Период задавался в МИРОВЫХ единицах как 26/camS:
+    // на приближении camS растёт, период схлопывается, и вдоль всех рёбер набегают ТЫСЯЧИ
+    // дэш-сегментов (стоимость ∝ camS) — это и был «пиздец-лаг при зуме». Ставим НИЖНИЙ
+    // предел зазора в мировых единицах → число засечек ограничено сверху на любом зуме.
+    const gap = Math.max(26 / camS, 14), dashOn = Math.min(1.2 / camS, gap * 0.05);
+    ctx.setLineDash([dashOn, gap]);
     P.secEdges.forEach(e => { ctx.strokeStyle = e.color; ctx.stroke(e.p2d); });
     ctx.setLineDash([]);
     ctx.globalAlpha = .9 * secA; ctx.lineWidth = 1.3 / camS;
@@ -6870,6 +6898,11 @@ function gmmPaintSecLabels(ctx, camS) {
   if (!secShow) return;
   const secA = secEditing ? Math.max(0.85, 1 - gmmZoomT(camS)) : 1 - gmmZoomT(camS);
   if (secA <= 0.01) return;
+  // Плашки нейминга — это градиентные плашки со срезанными углами, и рисуются они КАЖДЫЙ
+  // кадр в blit. Во время жеста/инерции/анимации это лишний per-frame расход (на телефоне
+  // ощутимый), а сами плашки декоративные. Пока карта движется — не рисуем их; как только
+  // движение уймётся, debounce-растр (gmmRasterSoon) даст финальный кадр и плашки вернутся.
+  if (GMM.gesture || GMM.anim || GMM.vel) return;
   const dpr = GMM.dpr, u = 1 / camS;
   // На телефоне вьюпорт узкий — плашки крупнее физически налезают одна на другую;
   // уменьшаем базовый кегль, чтобы читались и реже конфликтовали.
