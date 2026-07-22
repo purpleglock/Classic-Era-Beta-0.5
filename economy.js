@@ -1866,6 +1866,7 @@ function ecCaravanIncome() {
     });
   });
   let outRaw = 0, contractRaw = 0, riskRaw = 0, transitN = 0, shortUnits = 0;
+  const routeGc = {};   // доход по конкретному пути /ход — реально отгружаемое (для строки в «Караванах»)
   // ПОТОКИ: маршруты с «брать со склада» добирают недостающее из запаса (общий остаток на все пути)
   const storeLeft = { ...((EC.eco && EC.eco.resources) || {}) };
   out.forEach(r => {
@@ -1875,7 +1876,7 @@ function ecCaravanIncome() {
       ? r.cargo.map(ci => ({ res: ci.res, vol: +ci.vol || 0, price: ecResPrice(ecResRarity(ci.res)) }))
       : [{ res: r.resource, vol: +r.volume || 0, price: +r.price || 0 }];
     const inTransit = r.transit_until && new Date(r.transit_until).getTime() > now;
-    if (inTransit) { transitN++; items.forEach(i => { contractRaw += i.vol * i.price * dip; }); return; }
+    if (inTransit) { transitN++; routeGc[r.id] = null; items.forEach(i => { contractRaw += i.vol * i.price * dip; }); return; }
     let gcRoute = 0;
     items.forEach(i => {
       contractRaw += i.vol * i.price * dip;
@@ -1901,6 +1902,7 @@ function ecCaravanIncome() {
       riskRaw += gcRoute * (1 - pSafe);
     }
     outRaw += gcRoute;
+    routeGc[r.id] = Math.round(gcRoute * (m.gc || 1));   // × доктрина — как в «Обзоре»
   });
   const gcM = m.gc || 1;
   const outGc = Math.round(outRaw * gcM);           // реально отгружаемое (поток × цена × дипломатия × доктрина)
@@ -1914,10 +1916,12 @@ function ecCaravanIncome() {
     const items = (Array.isArray(r.cargo) && r.cargo.length)
       ? r.cargo.map(ci => ({ vol: +ci.vol || 0, price: ecResPrice(ecResRarity(ci.res)) }))
       : [{ vol: +r.volume || 0, price: +r.price || 0 }];
-    return a + items.reduce((s, i) => s + Math.round(i.vol * i.price * EC_DEST_CUT * dip), 0);
+    const g = items.reduce((s, i) => s + Math.round(i.vol * i.price * EC_DEST_CUT * dip), 0);
+    routeGc[r.id] = g;
+    return a + g;
   }, 0);
   return { out: outGc, inc: inGc, net: outGc - risk + inGc,
-    contract, short: Math.round(shortUnits), risk, transitN, outRoutes: out, inRoutes: inn };
+    contract, short: Math.round(shortUnits), risk, transitN, outRoutes: out, inRoutes: inn, routeGc };
 }
 // Множитель доктрины к ГС-потокам (доктрина × срез дестабилизации) — единый рычаг,
 // зеркало m_gc в economy_accrue. Используют market/export/preview, чтобы не расходились.
@@ -6038,13 +6042,14 @@ function ecRouteCargoText(r) {
   if (cargo.length) return cargo.map(ci => `${ecResIcon(ci.res)} ${esc(ci.res)} ×${ecNum(ci.vol)}`).join(', ');
   return `${ecResIcon(r.resource)} ${esc(r.resource || '')} ×${ecNum(r.volume)}`;
 }
-function ecRouteRow(r) {
+function ecRouteRow(r, routeGc) {
   const isOrigin = r.a_fid === EC.fid;
   const other = isOrigin ? (r.b_name || ecFacName(r.b_fid)) : (r.a_name || ecFacName(r.a_fid));
-  const value = (r.volume || 0) * (r.price || 0);
-  // исходящий караван (продажа) учитывает бонус доктрины к ГС — как в «Казне» обзора;
-  // входящий — фиксированная доля партнёра без доктрины.
-  const income = isOrigin ? Math.round(value * ecFactionMods().gc) : Math.round(value * EC_DEST_CUT);
+  // Доход по пути — из того же расчёта, что и «Обзор»/«Казна» (ecCaravanIncome):
+  // реально отгружаемое (ограничено экспортным потоком добычи) × дипломатия × доктрина,
+  // а не «бумажный» volume×price. Иначе строка пути завышала доход в разы.
+  const map = routeGc || ecCaravanIncome().routeGc || {};
+  const income = +map[r.id] || 0;
   const threats = r.threats || [];
   const riskPct = ecTradeRiskPct(threats, r.convoy);
   const riskTxt = threats.length ? `риск ${riskPct}%${r.convoy ? ` · 🛡${r.convoy}` : ' · без охраны'}` : 'безопасно';
@@ -6563,7 +6568,7 @@ function ecTradeSubBody(sub) {
   const caravanBlock = `<div class="ec-dip-card ec-dip-trade"><div class="ec-dip-t">Торговые караваны <span class="ec-hint">пути: ${used}/${tradeCap}</span></div>
       ${caravanForm}
       ${incoming.length ? `<div class="ec-r-sec">Входящие предложения</div>${inHtml}` : ''}
-      ${active.length ? `<div class="ec-r-sec">Активные пути</div>${active.map(ecRouteRow).join('')}` : ''}
+      ${active.length ? (() => { const _rg = ecCaravanIncome().routeGc || {}; return `<div class="ec-r-sec">Активные пути</div>${active.map(r => ecRouteRow(r, _rg)).join('')}`; })() : ''}
       ${pendingOut.length ? `<div class="ec-r-sec">Отправленные</div>${outHtml}` : ''}</div>`;
 
   const subBody = sub === 'market' ? resBlock
@@ -7061,7 +7066,7 @@ function ecExOrdersBlock() {
     const earn = ecNum(Math.round(dflt * r.price));
     const fulfill = can
       ? `<div class="ec-prod-form" style="gap:6px;margin-top:4px">
-          <input type="number" id="ec-ordf-${r.id}" min="1" max="${Math.min(r.remaining, stock)}" value="${dflt}" class="ec-prod-qty" style="max-width:120px">
+          <input type="number" id="ec-ordf-${r.id}" min="1" max="${Math.min(r.remaining, stock)}" value="${dflt}" class="ec-prod-qty" style="max-width:120px" data-res="${esc(r.resource)}" data-price="${r.price}" data-buyer="${esc(r.buyer || 'Держава')}">
           <button class="btn btn-gd btn-sm" onclick="ecOrderFulfill('${r.id}')">Выполнить → +${earn} ГС</button>
         </div>`
       : `<div class="cn-fac-hint" style="margin-top:4px">${stock <= 0 ? `Нет «${esc(r.resource)}» на складе — выполнить нельзя.` : 'Заказ уже выбран.'}</div>`;
@@ -10550,8 +10555,14 @@ function ecOrderCreate() {
     `Заказ размещён · в эскроу ${ecNum(qty * price)} ГС`);
 }
 function ecOrderFulfill(id) {
-  const qty = Math.max(0, parseInt(ecId('ec-ordf-' + id)?.value) || 0);
+  const inp = ecId('ec-ordf-' + id);
+  const qty = Math.max(0, parseInt(inp?.value) || 0);
   if (!qty) { toast('Укажите объём поставки', 'err'); return; }
+  const res = inp?.dataset.res || 'ресурс';
+  const price = +inp?.dataset.price || 0;
+  const buyer = inp?.dataset.buyer || 'Держава';
+  const earn = ecNum(Math.round(qty * price));
+  if (!confirm(`Поставить ${ecNum(qty)} ед. «${res}» покупателю «${buyer}»?\n\nСо склада спишется ${ecNum(qty)} ед., в казну поступит ${earn} ГС. Действие необратимо.`)) return;
   ecRpcAct('order_fulfill', { p_order: id, p_qty: qty }, 'Заказ выполнен — оплата зачислена');
 }
 function ecOrderCancel(id) {

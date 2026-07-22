@@ -602,7 +602,11 @@ function cnCompStatsRows(info) {
 }
 // Вклад компонента в ресурсную ведомость (сырьё) — через общий расчёт cnUnitBill
 function cnPartBill(info) {
-  const k = info.k, o = info.obj, cat = CN.cat === 'army' ? cnKvRealCat(k) : CN.cat;
+  // Для карточки корпуса ведомость берётся по КЛАССУ САМОЙ КАРТОЧКИ (info.key),
+  // а не по текущему выбранному классу (info.k) — иначе все карточки в модалке
+  // выбора корпуса показывают сырьё выбранного корпуса (наследственный баг цены).
+  const k = info.kind === 'class' ? info.key : info.k, o = info.obj,
+        cat = CN.cat === 'army' ? cnKvRealCat(k) : CN.cat;
   if (info.kind === 'class') return Object.assign({}, (CN_HULL_BILL[cat] || {})[k] || {});
   if (info.kind === 'type' || info.kind === 'airunit') return {};
   const base = cnUnitBill(cat, k, {});

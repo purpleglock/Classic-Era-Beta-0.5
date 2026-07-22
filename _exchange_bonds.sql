@@ -99,6 +99,7 @@ begin
           format('%s не смогла обслужить купон по своему займу — выпуск объявлен дефолтным. Держатели теряют вложенное.',
                  coalesce(iss.issuer_name, public._fac_name(iss.issuer_fid))),
           'rgba(224,104,138,0.55)', jsonb_build_array(iss.issuer_fid)); exception when others then null; end;
+        delete from public.bond_holdings where issue_id = iss.id;   -- держатели потеряли вложенное — убираем мёртвые бумаги
         continue;
       end if;
       update public.faction_economy set gc = gc - v_total where faction_id = iss.issuer_fid;
@@ -121,6 +122,7 @@ begin
           format('%s не вернула номинал по истёкшему займу — выпуск дефолтный.',
                  coalesce(iss.issuer_name, public._fac_name(iss.issuer_fid))),
           'rgba(224,104,138,0.55)', jsonb_build_array(iss.issuer_fid)); exception when others then null; end;
+        delete from public.bond_holdings where issue_id = iss.id;   -- дефолт при погашении — номинал не вернётся, чистим бумаги
         continue;
       end if;
       update public.faction_economy set gc = gc - v_principal where faction_id = iss.issuer_fid;

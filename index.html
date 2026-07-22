@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260722mapmobilefix1';
+  var BUILD = '20260722cvroutefix1';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
