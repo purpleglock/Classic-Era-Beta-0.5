@@ -1670,6 +1670,25 @@ function cnItemAvail(type, k, group, i) {
 function cnGroupHasAvail(type, k, group, source) {
   return (source[group] || []).some((it, i) => cnItemAvail(type, k, group, i));
 }
+// Разрешён ли компонент ИМЕННО на классе k: существует в каталоге И доступен этому
+// классу (excl-группа + карта availW/availM). Ловит эксплойт «поставил на одном
+// классе, где доступно, — перетащил дизайн на другой класс, где нельзя».
+function cnWpnAllowed(k, x) {
+  return !!(x && CN.def.db.weapons[x.g] && CN.def.db.weapons[x.g][x.idx])
+    && !(CN.def.excl && CN.def.excl(k, x.g))
+    && cnItemAvail('weapon', k, x.g, x.idx);
+}
+function cnModAllowed(k, x) {
+  return !!(x && CN.def.db.modules[x.g] && CN.def.db.modules[x.g][x.idx])
+    && cnItemAvail('module', k, x.g, x.idx);
+}
+// Список названий запрещённых для класса k компонентов в data (для сообщения/блокировки).
+function cnForbiddenParts(k, d) {
+  const out = [];
+  (d.weapons || []).forEach(w => { if (!cnWpnAllowed(k, w)) { const o = CN.def.db.weapons[w.g] && CN.def.db.weapons[w.g][w.idx]; out.push((o && o.name) || (w.g + '#' + w.idx)); } });
+  (d.modules || []).forEach(m => { if (!cnModAllowed(k, m)) { const o = CN.def.db.modules[m.g] && CN.def.db.modules[m.g][m.idx]; out.push((o && o.name) || (m.g + '#' + m.idx)); } });
+  return out;
+}
 function cnOpenAssignPicker(kind, slot, keepFilter) {
   const isW = kind === 'mount', def = CN.def, k = cnId('cn-class').value, source = isW ? def.db.weapons : def.db.modules;
   const arr = isW ? CN.shipLayout.mounts : CN.shipLayout.bays, cur = arr[slot] && (isW ? arr[slot].w : arr[slot].m);
@@ -2036,6 +2055,10 @@ function cnVehHandleClass() {
   if (cnId('cn-weapons')) cnId('cn-weapons').innerHTML = '';
   if (cnId('cn-modules')) cnId('cn-modules').innerHTML = '';
   if (CN.def.hasHangars && cnId('cn-hangars')) cnId('cn-hangars').innerHTML = '';
+  // Карточный UI держит оружие/модули в CN.shipLayout, а не в этих select'ах —
+  // при смене класса корпус другой, поэтому сбрасываем ВСЁ смонтированное,
+  // иначе на новом классе остаётся то, что ему не положено (эксплойт).
+  if (CN.def.cardUI) CN.shipLayout = { mounts: [], bays: [] };
   cnVehClassDeps();
 }
 function cnVehClassDeps() {
@@ -2620,8 +2643,12 @@ function cnVehApplyData(d) {
   // (до KV-синтеза) — группы/индексы орудий и модулей могли исчезнуть.
   // Битые ссылки молча выбрасываем, иначе db.weapons[g][idx] роняет весь экран
   // редактирования (TypeError) и проект «не редачится».
-  const okW = x => !!(x && def.db.weapons[x.g] && def.db.weapons[x.g][x.idx]);
-  const okM = x => !!(x && def.db.modules[x.g] && def.db.modules[x.g][x.idx]);
+  // Проверяем не только существование компонента, но и допустимость на ТЕКУЩЕМ классе:
+  // так открытие/пересохранение старого дизайна счищает всё, что классу не положено
+  // (наследие эксплойта смены класса), а не только битые ссылки.
+  const lk = d.class;
+  const okW = x => cnWpnAllowed(lk, x);
+  const okM = x => cnModAllowed(lk, x);
   let dropped = 0;
   if (shipCard) {
     if (d.layout) CN.shipLayout = { mounts: (d.layout.mounts || []).map(x => {
@@ -2980,6 +3007,10 @@ async function cnPublish() {
     const def = CN.def, k = cnId('cn-class').value, cls = def.db.data[k];
     const typeObj = def.hasType ? cls.types[+cnId('cn-type').value || 0] : null;
     data = cnVehCollectData();
+    // Финальный заслон эксплойта: ни одно орудие/модуль не должно быть недоступно
+    // выбранному классу (карта availW/availM + excl). Блокируем, а не молча правим.
+    const forbidden = cnForbiddenParts(data.class, data);
+    if (forbidden.length) { toast(`Классу «${esc(cls.name)}» нельзя ставить: ${forbidden.slice(0, 4).map(esc).join(', ')}${forbidden.length > 4 ? ' и др.' : ''} — снимите эти компоненты`, 'err'); return; }
     summary = { ...CN.last, className: cls.name, typeName: typeObj ? typeObj.name : '' };
     card = cnVehCardText();
   }

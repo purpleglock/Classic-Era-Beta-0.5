@@ -118,13 +118,16 @@ begin
   for i in 1..d loop
     -- NPC спрос/предложение + случайное блуждание (каждая сторона ±40%)
     update public.market_resources
-       set stock = greatest(1, stock + npc_supply*(0.6+random()*0.8) - npc_demand*(0.6+random()*0.8));
+       set stock = greatest(1, stock + npc_supply*(0.6+random()*0.8) - npc_demand*(0.6+random()*0.8))
+     where true;   -- pg_safeupdate (session-preload в Supabase) требует WHERE
     -- усиленная волатильность: дополнительный мультипликативный шум ±4%/сутки
     update public.market_resources
-       set stock = greatest(1, stock * (0.96 + random()*0.08));
+       set stock = greatest(1, stock * (0.96 + random()*0.08))
+     where true;
     -- медленный возврат запаса к равновесию (mean reversion)
     update public.market_resources
-       set stock = stock + (equilibrium - stock) * 0.08;
+       set stock = stock + (equilibrium - stock) * 0.08
+     where true;
   end loop;
 
   -- событийный шок: один раз за прогон; шанс растёт с простоем (cap 60%)
@@ -136,7 +139,8 @@ begin
   -- пересчёт цены от итогового запаса
   update public.market_resources
      set price = public._market_price_calc(base_price, stock, equilibrium),
-         updated_at = now();
+         updated_at = now()
+   where true;   -- pg_safeupdate требует WHERE
 
   -- пересчёт индекса рынка
   update public.market_index set value = public._market_index_value(), updated_at = now() where id = 1;

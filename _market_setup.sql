@@ -201,16 +201,19 @@ begin
   for i in 1..d loop
     -- NPC спрос/предложение + случайное блуждание (каждая сторона ±40%)
     update public.market_resources
-       set stock = greatest(1, stock + npc_supply*(0.6+random()*0.8) - npc_demand*(0.6+random()*0.8));
+       set stock = greatest(1, stock + npc_supply*(0.6+random()*0.8) - npc_demand*(0.6+random()*0.8))
+     where true;   -- pg_safeupdate (session-preload в Supabase) требует WHERE
     -- медленный возврат запаса к равновесию (mean reversion)
     update public.market_resources
-       set stock = stock + (equilibrium - stock) * 0.08;
+       set stock = stock + (equilibrium - stock) * 0.08
+     where true;
   end loop;
 
   -- пересчёт цены от итогового запаса
   update public.market_resources
      set price = public._market_price_calc(base_price, stock, equilibrium),
-         updated_at = now();
+         updated_at = now()
+   where true;
 
   -- снимок истории + обрезка до 60 точек на ресурс
   insert into public.market_price_history(name, price, stock, at)

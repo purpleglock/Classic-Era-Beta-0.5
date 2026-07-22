@@ -86,16 +86,20 @@ begin
     update public.market_resources
        set stock = greatest(1, stock
              + (price/nullif(base_price,0) - 1.0) * cfg.npc_react
-               * (npc_supply + npc_demand) * 0.5 * (0.7 + random()*0.6));
+               * (npc_supply + npc_demand) * 0.5 * (0.7 + random()*0.6))
+     where true;   -- pg_safeupdate (session-preload в Supabase) требует WHERE
     -- 2) остаточное случайное блуждание (×walk, симметрично) — фон, не буря
     update public.market_resources
-       set stock = greatest(1, stock + (npc_supply - npc_demand) * (random()-0.5) * 2 * cfg.walk);
+       set stock = greatest(1, stock + (npc_supply - npc_demand) * (random()-0.5) * 2 * cfg.walk)
+     where true;
     -- 3) мягкий мультипликативный шум
     update public.market_resources
-       set stock = greatest(1, stock * (1.0 + (random()-0.5)*2*cfg.volatility));
+       set stock = greatest(1, stock * (1.0 + (random()-0.5)*2*cfg.volatility))
+     where true;
     -- 4) возврат запаса к равновесию (усилен)
     update public.market_resources
-       set stock = stock + (equilibrium - stock) * cfg.reversion;
+       set stock = stock + (equilibrium - stock) * cfg.reversion
+     where true;
   end loop;
 
   -- редкий событийный шок (вероятность из конфига, растёт с простоем, cap 0.5)
@@ -104,7 +108,8 @@ begin
   end if;
 
   update public.market_resources
-     set price = public._market_price_calc(base_price, stock, equilibrium), updated_at = now();
+     set price = public._market_price_calc(base_price, stock, equilibrium), updated_at = now()
+   where true;   -- pg_safeupdate требует WHERE
 
   -- индекс рынка (если установлен _market_sim.sql)
   begin
