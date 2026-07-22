@@ -348,6 +348,7 @@ const EC_BUILD = {
   trade:            { name: 'Торговый хаб',         cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 100 }, cat: 'civ', desc: '+100 ГС за слот (торговый путь)' },
   market:           { name: 'Товарная биржа',       cost: 1500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Продаёт добытые ресурсы за ГС (50–75% цены по редкости), без торговых путей' },
   goodsfab:         { name: 'Фабрика товаров',       cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Из воды и сырья делает товары ровно под спрос населения: слот покрывает до 10 товаров/сут (0.6 воды + 0.4 сырья на товар). Обеспечение населения умножает доход державы' },
+  wellhub:          { name: 'Центр благополучия',    cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Поднимает ИНДЕКС благополучия державы. У каждой идеологии свой домик: спиритуалистам — от охвата храмов, корпоратам — от казны (с потолком), пацифистам — щедрый плоский. Лимит: 1 на систему, 5 на державу' },
   warehouse:        { name: 'Склад',                 cost: 800,  ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Поднимает лимит хранения ресурсов (+500 ёмкости за слот)' },
   science:          { name: 'Научный Институт',     cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { science: 1 }, cat: 'mil', desc: '+1 ОН за слот' },
   training:         { name: 'Центр Подготовки',     cost: 500,  ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1000 пехоты' },
@@ -403,13 +404,19 @@ const EC_MZA_RANGE_HOPS = 4, EC_MZA_HEAVY_RANGE_MUL = 2;
 // Ожерелье Немезиды — мегасооружение: системная ПРО (зеркало nemesis_build/_shell_const).
 // Требует технологию pol.nemesis (стоит в ветке судного дня ДО Гиперпейсера).
 const EC_NEMESIS = { gc: 2500000, res: { 'Стелларит': 50, 'Рагенод': 10, 'Гравиядро': 5 }, charges: 6, buildDays: 3 };
-const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'airfield', 'starbase', 'flak', 'abm', 'temple'];
+const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'wellhub', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'airfield', 'starbase', 'flak', 'abm', 'temple'];
 // Рецепт фабрики товаров (зеркало accrue в _budget_wellbeing.sql): на слот/сутки.
 // Товары ДЕМАТЕРИАЛИЗОВАНЫ — не ресурс: выпуск ровно под спрос населения.
 const EC_GOODS = { water: 6, mat: 4, out: 10 };
 // Имена ресурсов-входов (как в data.js/galaxy_gen.js): вода и сырьё.
 const EC_GOODS_WATER = ['Лёд', 'Жидкая вода'];
 const EC_GOODS_MAT = ['Железо', 'Силикаты'];
+// НАСТРАИВАЕМЫЙ РЕЦЕПТ (зеркало _consumption_factory.sql). До технологии
+// EC_GOODS_TECH фабрика работает по легаси-рецепту выше (welfare ≤ 1.10);
+// с рецептом премиальные (редкие) входы поднимают потолок до 1.25.
+const EC_GOODS_TECH = 'soc.consumer_goods';
+const EC_QUALITY_W = { legendary: 1.70, epic: 1.45, rare: 1.25, uncommon: 1.10, common: 1.00 };
+const EC_GOODS_WCAP = 1.10, EC_GOODS_QMAX = 0.15;   // потолок welfare: база 1.10 + качество ≤0.15
 // ПРО: цена снаряда + срок доставки (зеркало _defense_const).
 const EC_ABM_AMMO_COST = 800;
 // Вместимость флота: каждый слот Звёздной Базы даёт столько мест под корабли (зеркало _defense_const).
@@ -422,7 +429,8 @@ const EC_BLD_HOWTO = {
   mining:           'Копает автоматически все ОБЫЧНЫЕ залежи планеты. Необычные и выше не берёт — для них Глубинный комплекс и Экстрактор.',
   mining_deep:      'Копает автоматически НЕОБЫЧНЫЕ и РЕДКИЕ залежи планеты. Обычные не трогает — их берёт Добывающий завод.',
   mining_exotic:    'Копает автоматически ЭПИЧЕСКИЕ и ЛЕГЕНДАРНЫЕ залежи планеты. Ставьте только там, где такая залежь есть — иначе будет простаивать.',
-  goodsfab:         'Перерабатывает воду (Лёд/Жидкая вода) и сырьё (Железо/Силикаты) в товары РОВНО под спрос населения — ничего не копится и не продаётся. Держите запас входов на складе — без них фабрика простаивает. Обеспечение: хватает → доход растёт (до ×1.10), дефицит → проседает (до ×0.90).',
+  goodsfab:         'Перерабатывает воду (Лёд/Жидкая вода) и сырьё (Железо/Силикаты) в товары РОВНО под спрос населения — ничего не копится и не продаётся. Держите запас входов на складе — без них фабрика простаивает. Обеспечение: хватает → доход растёт (до ×1.10), дефицит → проседает (до ×0.90). Технология «Товары народного потребления» открывает настройку рецепта: премиальные ресурсы (Старвис/Хтонит) поднимают потолок благополучия до ×1.25.',
+  wellhub:          'Прибавка к ИНДЕКСУ благополучия (множит весь ГС-доход державы). Работает сам, пока открыт хотя бы 1 слот. Усиливается ТОЛЬКО технологиями (soc.welfare_hub2/3) — апгрейда здания нет. Больше 1 на систему и 5 на державу не поставить, суммарный вклад ограничен +0.20.',
   trade:            'Доход только при активном торговом пути (вкладка «Торговля и потоки» → Караваны).',
   market:           'Сама сбывает свежедобытый поток (заводы в режиме «Склад») за ГС (50–75% цены по редкости), без торговых путей. Накопленный склад НЕ трогает — стратегический запас в безопасности.',
   warehouse:        'Каждый слот склада повышает лимит общего хранилища (+500). Без склада лимит мал — лишняя добыча теряется (или ставьте завод в режим «Экспорт»).',
@@ -443,7 +451,7 @@ const EC_BLD_HOWTO = {
 };
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
-  factory: '🏭', mining: '⛏', mining_deep: '⚒', mining_exotic: '💎', goodsfab: '🛍', trade: '💱', market: '📈',
+  factory: '🏭', mining: '⛏', mining_deep: '⚒', mining_exotic: '💎', goodsfab: '🛍', wellhub: '🏛', trade: '💱', market: '📈',
   science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', airfield: '✈', warehouse: '📦', temple: '🛐', doomgun: '🜨',
   starbase: '🛰', flak: '🎯', abm: '🚀', shellforge: '☢', ballfab: '🏭', nemesis: '⛨',
 };
@@ -748,6 +756,11 @@ const EC_BLD_LABEL = { training: 'Центр Подготовки', military_fac
 const EC_VEH_WEIGHT = { tank_light: 1, tank_mbt: 2, tank_heavy: 4, tank_walker: 4, btr_wheel: 1, bmp_track: 2, btr_hover: 1, art_mortar: 1, art_sau: 2, art_rszo: 2, art_laser: 4 };
 const EC_GROUND_WEIGHT = { light: 1, medium: 2, artillery: 2, heavy: 4, walker: 4 };
 function ecUnitWeight(u) { return EC_GROUND_WEIGHT[(u && u.data && u.data.class) || ''] || 2; }
+// Пехотные классы единого армейского форжа (KV: 'peh'). В БД такой проект лежит
+// с category='ground' (см. cnKvRealCat), но СТРОИТСЯ он в Центре Подготовки,
+// а не на Военном Заводе — иначе пехоту вообще негде было заказать.
+const EC_INF_CLASSES = ['peh'];
+function ecIsInfDesign(u) { return !!(u && u.data && EC_INF_CLASSES.includes(u.data.class)); }
 function ecSlotsSum(t) { return EC.buildings.filter(b => b.btype === t).reduce((a, b) => a + (b.slots_open || 0), 0); }
 // Лимит ёмкости общего склада ресурсов. Зеркало _resources_phase1.sql:
 // база 1000 + 500 за каждый открытый слот здания «Склад».
@@ -821,7 +834,11 @@ function ecPendingUse() {
   EC.queue.forEach(q => {
     const qty = q.qty || 1;
     if (q.category === 'ship') { ships += qty; return; }
-    if (q.category === 'ground') { tech += qty; return; }      // МАРШ: юниты наземки
+    if (q.category === 'ground') {                             // МАРШ: юниты наземки
+      const d = EC.designs.find(x => x.id === q.unit_id);
+      if (ecIsInfDesign(d)) inf += qty; else tech += qty;      // пехота грузит Центр Подготовки
+      return;
+    }
     if (q.category === 'aviation') { avia += qty; return; }    // МАРШ: юниты авиации
     if (q.category === 'division') {
       const d = EC.designs.find(x => x.id === q.unit_id && x.category === 'division');
@@ -1100,9 +1117,13 @@ function ecWelfareDetail(bal, isCap) {
     gTxt = `Фабрик товаров нет — население державы сидит без товаров, доход везде срезан.`;
     gFix = `постройте 🛍 Фабрику товаров — множитель общий для всех систем`;
   } else if (g.ratio < 1) {
-    const lacks = [lowW ? `воды (${ecNum(g.water)} из ${ecNum(g.waterNeed)})` : '', lowM ? `сырья (${ecNum(g.mat)} из ${ecNum(g.matNeed)})` : ''].filter(Boolean).join(' и ');
+    const lacks = g.recipe
+      ? (g.lacksText || 'ресурсов рецепта')
+      : [lowW ? `воды (${ecNum(g.water)} из ${ecNum(g.waterNeed)})` : '', lowM ? `сырья (${ecNum(g.mat)} из ${ecNum(g.matNeed)})` : ''].filter(Boolean).join(' и ');
     gTxt = `Фабрика товаров есть, но простаивает: на складе не хватает ${lacks} — выпуск ${Math.round(g.ratio * 100)}% от полного.`;
-    gFix = `добывайте ${EC_GOODS_WATER.join('/')} и ${EC_GOODS_MAT.join('/')} и держите запас на складе (режим «на склад» во «🔀 Потоках»)`;
+    gFix = g.recipe
+      ? `добывайте ресурсы вашего рецепта и держите запас на складе (режим «на склад» во «🔀 Потоках»)`
+      : `добывайте ${EC_GOODS_WATER.join('/')} и ${EC_GOODS_MAT.join('/')} и держите запас на складе (режим «на склад» во «🔀 Потоках»)`;
   } else {
     gTxt = `Фабрика работает (+${ecNum(Math.round(g.made))} товаров/сут), но это лишь ${gPct}% спроса населения державы.`;
     gFix = `откройте больше слотов Фабрики товаров`;
@@ -1480,7 +1501,7 @@ async function _ecLoadCoreImpl() {
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
-  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger, warStatus, battlesList] = await Promise.all([
+  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger, warStatus, battlesList, goodsRecipeRows, resRarityRows] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1523,6 +1544,8 @@ async function _ecLoadCoreImpl() {
     dbGet('galactic_ledger', `owner_id=eq.${user.id}&order=created_at.desc&limit=24`).catch(() => []),  // 🌌 разовые эффекты Ассамблеи/Поэмы (леджер, «Казна» обзора)
     ecRpc('war_status').catch(() => null),   // ⚔ войны: активные конфликты, ноты, история (_war_declare.sql)
     ecRpc('battles_mine').catch(() => null),   // ⚔ завязавшиеся бои: перехваты и встречи флотов (_war_intercept.sql)
+    dbGet('faction_goods_recipe', `faction_id=eq.${fid}`).catch(() => []),   // 🛍 настраиваемый рецепт фабрики потребления (_consumption_factory.sql)
+    dbGet('resource_rarity', `select=name,rarity`).catch(() => []),   // 🛍 редкость ресурсов → качество рецепта (справочник; best-effort)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1581,6 +1604,15 @@ async function _ecLoadCoreImpl() {
   (Array.isArray(concInfo) ? concInfo : []).forEach(x => { if (x && x.colony_id) EC.concInfo[x.colony_id] = x; });
   // Бюджет державы: ползунки 0..4 (дефолт 2 — «норма», зеркало _budget_wellbeing.sql)
   EC.budget = (Array.isArray(budgetRows) && budgetRows[0]) || { industry: 2, military: 2, science: 2, social: 2, infra: 2 };
+  // 🛍 Настраиваемый рецепт фабрики потребления (_consumption_factory.sql):
+  // EC.recipe = сохранённый рецепт (массив {res,qty}) или null; EC.resRarity —
+  // карта редкости для качества. Сбрасываем черновик редактора, чтобы он
+  // переинициализировался из свежих серверных данных после каждой перезагрузки.
+  EC.recipe = (Array.isArray(goodsRecipeRows) && goodsRecipeRows[0] && Array.isArray(goodsRecipeRows[0].ingredients) && goodsRecipeRows[0].ingredients.length)
+    ? goodsRecipeRows[0].ingredients : null;
+  EC.resRarity = {};
+  (Array.isArray(resRarityRows) ? resRarityRows : []).forEach(r => { if (r && r.name) EC.resRarity[r.name] = r.rarity || 'common'; });
+  EC._recipeEdit = null;
   EC.geosurvey = (geoState && typeof geoState === 'object') ? geoState : { current: null, spins: 0, next_cost: 10000 };   // ⛏ георазведка: находка + цена крутки
   EC.stargaze = (starsState && typeof starsState === 'object') ? starsState : { active: false, opened: [] };   // 🜂 Разлом: активный транс
   EC.incomeHistory = incomeHistory || [];   // снимки дохода по тикам (доход по времени)
@@ -1787,43 +1819,184 @@ function ecBuildingIncomeBreak(b) {
 // ровно под спрос населения (pop/600/сут) и тратит входы пропорционально
 // фактическому выпуску. Никакого склада/излишка/продажи.
 function ecGoodsStock(name) { return +(((EC.eco && EC.eco.resources) || {})[name] || 0); }
+// 🛍 Рецепт: изучена ли технология настройки фабрики.
+function ecHasGoodsTech() { return !!(EC.eco && Array.isArray(EC.eco.research) && EC.eco.research.includes(EC_GOODS_TECH)); }
+function ecResRarity(name) { return (EC.resRarity && EC.resRarity[name]) || 'common'; }
+function ecResQ(name) { return EC_QUALITY_W[ecResRarity(name)] || 1; }
+// Предрасчёт качества рецепта (зеркало _goods_recipe): среднее качество, разнообразие.
+function ecRecipeCalc(ings) {
+  if (!Array.isArray(ings) || !ings.length) return null;
+  let qsum = 0, wsum = 0, nd = 0; const out = [];
+  ings.forEach(it => {
+    const nm = it && it.res; const qty = +(it && it.qty) || 0;
+    if (!nm || qty <= 0) return;
+    const q = ecResQ(nm); qsum += q * qty; wsum += qty; nd++;
+    out.push({ res: nm, qty, rar: ecResRarity(nm), q });
+  });
+  if (wsum <= 0) return null;
+  return { ingredients: out, qAvg: qsum / wsum, diversity: Math.min(1, nd / 3), totalQty: wsum, n: nd };
+}
 function ecGoodsInfo() {
   const slots = ecSlotsSum('goodsfab');
+  const pop = ecBudgetPop();
+  const demand = pop / 600;
+  // Рецепт активен ТОЛЬКО при изученной технологии И сохранённом рецепте; иначе легаси.
+  const rec = ecHasGoodsTech() ? ecRecipeCalc(EC.recipe) : null;
+  if (rec) {
+    // Узкое место по ВСЕМ ингредиентам (qty × out × slots), затем выпуск под спрос.
+    let ratio = slots <= 0 ? 0 : 1;
+    let lacks = [];
+    rec.ingredients.forEach(it => {
+      const need = it.qty * EC_GOODS.out * slots;
+      const have = ecGoodsStock(it.res);
+      if (need > 0) { ratio = Math.min(ratio, have / need); if (have < need) lacks.push(`${it.res} (${ecNum(Math.round(have))} из ${ecNum(Math.round(need))})`); }
+    });
+    ratio = Math.max(0, Math.min(1, slots <= 0 ? 0 : ratio));
+    const made = Math.min(demand, EC_GOODS.out * slots * ratio);
+    const cov = demand <= 0 ? 1 : Math.min(1, made / demand);
+    const gBonus = Math.min(EC_GOODS_QMAX, Math.max(0, rec.qAvg - 1)) * rec.diversity;
+    const welfare = Math.round(Math.min(EC_GOODS_WCAP + gBonus, Math.max(0.90, 0.90 + 0.20 * cov + cov * gBonus)) * 1000) / 1000;
+    return { slots, water: 0, mat: 0, waterNeed: 0, matNeed: 0, ratio, made, pop, demand, cov, welfare, recipe: rec, gBonus, cap: EC_GOODS_WCAP + gBonus, lacksText: lacks.join(' и ') };
+  }
+  // ЛЕГАСИ: вода (Лёд/Жидкая вода) 0.6 + сырьё (Железо/Силикаты) 0.4 на товар.
   const water = EC_GOODS_WATER.reduce((a, n) => a + ecGoodsStock(n), 0);
   const mat = EC_GOODS_MAT.reduce((a, n) => a + ecGoodsStock(n), 0);
   const waterNeed = EC_GOODS.water * slots, matNeed = EC_GOODS.mat * slots;
   const ratio = slots <= 0 ? 0 : Math.max(0, Math.min(1,
     waterNeed > 0 ? water / waterNeed : 1, matNeed > 0 ? mat / matNeed : 1));
-  // ЖИВОЕ население державы → спрос на товары: pop/600 (зеркало accrue)
-  const pop = ecBudgetPop();
-  const demand = pop / 600;
   const made = Math.min(demand, EC_GOODS.out * slots * ratio);
   const cov = demand <= 0 ? 1 : Math.min(1, made / demand);
   const welfare = Math.min(1.10, Math.max(0.90, 0.90 + 0.20 * cov));
-  return { slots, water, mat, waterNeed, matNeed, ratio, made, pop, demand, cov, welfare };
+  return { slots, water, mat, waterNeed, matNeed, ratio, made, pop, demand, cov, welfare, recipe: null, gBonus: 0, cap: 1.10, lacksText: '' };
 }
-// Блок фабрики товаров в карточке: рецепт · наличие входов · обеспечение.
+// Иконка редкости-качества ресурса (лаконичные цветные точки).
+function ecQIcon(rar) { return ({ legendary: '🟠', epic: '🟣', rare: '🔵', uncommon: '🟢', common: '⚪' })[rar] || '⚪'; }
+// Блок фабрики товаров в карточке: рецепт · наличие входов · обеспечение · настройка.
 function ecGoodsHtml(b) {
   const g = ecGoodsInfo();
-  const lowW = g.waterNeed > 0 && g.water < g.waterNeed;
-  const lowM = g.matNeed > 0 && g.mat < g.matNeed;
   const covPct = Math.round(g.cov * 100);
   const covCls = g.cov >= 1 ? 'hi' : (g.cov >= 0.6 ? 'mid' : 'lo');
   const wPct = Math.round((g.welfare - 1) * 100);
-  return `<div class="ec-gf">
-    <div class="ec-gf-recipe">
+  // Строка входов/выпуска: рецептная (по выбранным ресурсам) либо легаси.
+  let recipeRow;
+  if (g.recipe) {
+    recipeRow = `<div class="ec-gf-recipe">${g.recipe.ingredients.map(it => {
+      const need = Math.round(it.qty * EC_GOODS.out * g.slots);
+      const have = ecGoodsStock(it.res);
+      const low = need > 0 && have < need;
+      return `<span class="ec-gf-in ${low ? 'ec-gf-low' : ''}" title="${esc(it.res)} · редкость ${it.rar} (качество ×${it.q.toFixed(2)}) · нужно ${ecNum(need)}/сут, на складе ${ecNum(have)} (${it.qty}/товар)">${ecQIcon(it.rar)} ${ecNum(have)}<small>/${ecNum(need)} ${esc(it.res)}</small></span>`;
+    }).join('')}<span class="ec-gf-arrow">→</span>
+      <span class="ec-gf-out" title="Выпуск ровно под спрос населения — излишка не бывает">🛍 ${ecNum(Math.round(g.made))}<small>/${ecNum(Math.round(g.demand))} спрос</small></span></div>`;
+  } else {
+    const lowW = g.waterNeed > 0 && g.water < g.waterNeed;
+    const lowM = g.matNeed > 0 && g.mat < g.matNeed;
+    recipeRow = `<div class="ec-gf-recipe">
       <span class="ec-gf-in ${lowW ? 'ec-gf-low' : ''}" title="Под полную мощность нужно ${ecNum(g.waterNeed)}/сут · на складе ${ecNum(g.water)}. Списывается только под фактический выпуск (0.6/товар)">💧 ${ecNum(g.water)}<small>/${ecNum(g.waterNeed)}</small></span>
       <span class="ec-gf-in ${lowM ? 'ec-gf-low' : ''}" title="Под полную мощность нужно ${ecNum(g.matNeed)}/сут · на складе ${ecNum(g.mat)}. Списывается только под фактический выпуск (0.4/товар)">⚙️ ${ecNum(g.mat)}<small>/${ecNum(g.matNeed)}</small></span>
       <span class="ec-gf-arrow">→</span>
-      <span class="ec-gf-out" title="Выпуск ровно под спрос населения — излишка не бывает">🛍 ${ecNum(Math.round(g.made))}<small>/${ecNum(Math.round(g.demand))} спрос</small></span>
-    </div>
-    ${g.ratio < 1 && g.slots > 0 ? `<div class="ec-gf-warn">⚠ Не хватает ${lowW ? 'воды' : ''}${lowW && lowM ? ' и ' : ''}${lowM ? 'сырья' : ''} — мощность ${Math.round(g.ratio * 100)}% от полной. Добывайте ${EC_GOODS_WATER.join('/')} и ${EC_GOODS_MAT.join('/')}.</div>` : ''}
+      <span class="ec-gf-out" title="Выпуск ровно под спрос населения — излишка не бывает">🛍 ${ecNum(Math.round(g.made))}<small>/${ecNum(Math.round(g.demand))} спрос</small></span></div>`;
+  }
+  const warn = g.ratio < 1 && g.slots > 0
+    ? `<div class="ec-gf-warn">⚠ Мощность ${Math.round(g.ratio * 100)}% от полной — не хватает ${g.recipe ? (g.lacksText || 'ресурсов рецепта') : `${EC_GOODS_WATER.join('/')} / ${EC_GOODS_MAT.join('/')}`} на складе.</div>`
+    : '';
+  const qualChip = (g.recipe && g.gBonus > 0)
+    ? `<span class="ec-cov-hi" title="Качество рецепта (среднее ×${g.recipe.qAvg.toFixed(2)}) × разнообразие (${Math.round(g.recipe.diversity * 100)}%) поднимает потолок благополучия">✦ качество: потолок ×${g.cap.toFixed(2)}</span>`
+    : '';
+  return `<div class="ec-gf">
+    ${recipeRow}
+    ${warn}
     <div class="ec-gf-prov">
       <span>Обеспечение населения: <b class="ec-cov-${covCls}">${covPct}%</b></span>
       <span class="ec-cov-${wPct >= 0 ? 'hi' : 'lo'}" title="Обеспечение умножает доход всех построек державы">доход ×${g.welfare.toFixed(2)} (${wPct >= 0 ? '+' : ''}${wPct}%)</span>
+      ${qualChip}
     </div>
     <div class="ec-gf-prov ec-gf-sub">Товары не копятся на складе — производятся и потребляются в момент тика</div>
+    ${ecRecipeSection()}
   </div>`;
+}
+
+// ── 🛍 Настраиваемый рецепт потребления (панель под карточкой фабрики) ────────
+// Список ресурсов для выпадашки: то, что у державы есть на складе + справочник
+// редкостей + уже выбранные в рецепте. Отсортировано по-русски.
+function ecRecipeResList() {
+  const s = new Set();
+  Object.keys((EC.eco && EC.eco.resources) || {}).forEach(n => s.add(n));
+  Object.keys(EC.resRarity || {}).forEach(n => s.add(n));
+  (EC._recipeEdit || []).forEach(it => { if (it && it.res) s.add(it.res); });
+  return [...s].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ru'));
+}
+// Ленивая инициализация черновика из сохранённого рецепта (сброшен в ecLoad).
+function ecRecipeInit() {
+  if (EC._recipeEdit == null) EC._recipeEdit = ((EC.recipe) || []).map(x => ({ res: x.res, qty: +x.qty || 0.5 }));
+}
+// Валидация черновика (зеркало goods_recipe_set): 1..4 ингр., qty 0.1..2, сумма 0.5..3, без дублей.
+function ecRecipeValidate(ings) {
+  if (!ings.length) return 'добавьте хотя бы 1 ингредиент';
+  if (ings.length > 4) return 'не больше 4 ингредиентов';
+  const seen = new Set(); let tot = 0;
+  for (const it of ings) {
+    if (!it.res) return 'выберите ресурс в каждой строке';
+    if (seen.has(it.res)) return `ресурс дублируется: ${it.res}`;
+    seen.add(it.res);
+    if (it.qty < 0.1 || it.qty > 2) return `расход «${it.res}» должен быть 0.1..2 на товар`;
+    tot += it.qty;
+  }
+  if (tot < 0.5 || tot > 3) return 'суммарный расход на товар должен быть 0.5..3';
+  return null;
+}
+function ecRecipeEditorHtml() {
+  ecRecipeInit();
+  const list = ecRecipeResList();
+  const rows = EC._recipeEdit.map((it, i) => {
+    const opts = list.map(n => `<option value="${esc(n)}" ${n === it.res ? 'selected' : ''}>${ecQIcon(ecResRarity(n))} ${esc(n)}</option>`).join('');
+    return `<div style="display:flex;gap:6px;align-items:center;margin:4px 0">
+      <select onchange="ecRecipeEdit(${i},'res',this.value)" style="flex:1;min-width:0;background:rgba(255,255,255,.05);color:inherit;border:0;border-radius:4px;padding:4px 6px">${opts || `<option>${esc(it.res || '—')}</option>`}</select>
+      <input type="number" min="0.1" max="2" step="0.1" value="${it.qty}" onchange="ecRecipeEdit(${i},'qty',this.value)" title="расход на 1 товар" style="width:64px;background:rgba(255,255,255,.05);color:inherit;border:0;border-radius:4px;padding:4px 6px;text-align:right">
+      <button class="btn btn-gh btn-sm" onclick="ecRecipeDel(${i})" title="убрать">✕</button>
+    </div>`;
+  }).join('');
+  const draft = EC._recipeEdit.filter(x => x.res && +x.qty > 0).map(x => ({ res: x.res, qty: +x.qty }));
+  const calc = ecRecipeCalc(draft);
+  const err = ecRecipeValidate(EC._recipeEdit.map(x => ({ res: x.res, qty: +x.qty || 0 })));
+  const bonus = calc ? Math.min(EC_GOODS_QMAX, Math.max(0, calc.qAvg - 1)) * calc.diversity : 0;
+  const preview = calc
+    ? `<div class="ec-gf-sub" style="margin-top:4px">Качество ×${calc.qAvg.toFixed(2)} · разнообразие ${Math.round(calc.diversity * 100)}% · расход ${calc.totalQty.toFixed(1)}/товар → потолок благополучия <b class="ec-cov-${bonus > 0 ? 'hi' : 'mid'}">×${(EC_GOODS_WCAP + bonus).toFixed(2)}</b></div>`
+    : '';
+  return `${rows}
+    <div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap">
+      ${EC._recipeEdit.length < 4 ? `<button class="btn btn-gh btn-sm" onclick="ecRecipeAdd()">＋ ингредиент</button>` : ''}
+      <button class="btn btn-sm" onclick="ecRecipeSave()" ${err ? 'disabled' : ''} style="opacity:${err ? .5 : 1}">💾 Сохранить рецепт</button>
+      ${err ? `<span class="ec-cov-lo" style="font-size:.85em">${esc(err)}</span>` : ''}
+    </div>
+    ${preview}`;
+}
+// Секция: гейт-подсказка (без техи) либо редактор рецепта.
+function ecRecipeSection() {
+  if (!ecHasGoodsTech()) {
+    return `<div class="ec-gf-prov ec-gf-sub" style="margin-top:6px">🔒 Технология «Товары народного потребления» откроет настройку рецепта фабрики: свои ресурсы вместо воды+сырья. Премиальные входы (напр. Старвис/Хтонит) поднимут потолок благополучия с ×1.10 до ×1.25.</div>`;
+  }
+  return `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)">
+    <div class="ec-gf-sub" style="margin-bottom:4px">⚗ Рецепт потребления <span style="opacity:.7">— какие ресурсы фабрика превращает в благополучие (расход на 1 товар)</span></div>
+    <div id="ec-recipe-box">${ecRecipeEditorHtml()}</div>
+  </div>`;
+}
+function ecRecipeRerender() { const el = document.getElementById('ec-recipe-box'); if (el) el.innerHTML = ecRecipeEditorHtml(); }
+function ecRecipeEdit(i, k, v) { ecRecipeInit(); if (!EC._recipeEdit[i]) return; EC._recipeEdit[i][k] = (k === 'qty') ? (Math.round((+v || 0) * 100) / 100) : v; ecRecipeRerender(); }
+function ecRecipeDel(i) { ecRecipeInit(); EC._recipeEdit.splice(i, 1); ecRecipeRerender(); }
+function ecRecipeAdd() {
+  ecRecipeInit();
+  if (EC._recipeEdit.length >= 4) return;
+  const used = new Set(EC._recipeEdit.map(x => x.res));
+  const cand = ecRecipeResList().find(n => !used.has(n)) || '';
+  EC._recipeEdit.push({ res: cand, qty: 0.5 });
+  ecRecipeRerender();
+}
+async function ecRecipeSave() {
+  ecRecipeInit();
+  const ings = EC._recipeEdit.filter(x => x.res && +x.qty > 0).map(x => ({ res: x.res, qty: Math.round((+x.qty) * 1000) / 1000 }));
+  const err = ecRecipeValidate(ings);
+  if (err) { toast(err, 'err'); return; }
+  await ecRpcAct('goods_recipe_set', { p_ingredients: ings }, 'Рецепт фабрики потребления сохранён');
 }
 // Итоговый доход империи с учётом доктрины государства (зеркало economy_accrue).
 // Наука/агенты — ПЛОСКИЙ бонус доктрины (+N/сут), а не процент (они дискретны).
@@ -2117,15 +2290,58 @@ function ecGarrisonPen() {
   });
   return Math.round(Math.min(0.25, 0.06 * s) * 1000) / 1000;
 }
+// ДОМИК: Центры благополучия — зеркало _wb_hub_unit/_wb_hub_level/_wb_hub_bonus
+// (_welfare_hub.sql). У каждой идеологии свой домик; вклад капается на +0.20.
+const EC_WB_HUB_CAP = 0.20, EC_WB_HUB_STATE_MAX = 5;
+function ecWbHubLevel() {
+  const r = (EC.eco && EC.eco.research) || [];
+  return 1 + (r.includes('soc.welfare_hub2') ? 0.5 : 0) + (r.includes('soc.welfare_hub3') ? 0.5 : 0);
+}
+function ecWbHubUnit() {
+  const a = EC.app || {};
+  if (a.ideology === 'Спиритуализм' || a.gov === 'Теократия') {
+    // святилище: питается охватом храмов, а не деньгами
+    const cov = Math.max(0, Math.min(1, +(((EC.faith || {}).wave || {}).coverage) || 0));
+    return 0.012 + 0.030 * cov;
+  }
+  if (a.gov === 'Корпоратократия' || a.ideology === 'Индустриализм') {
+    // биржа: логарифм от казны, насыщается (не линейно от ресурсов)
+    const gc = Math.max(0, +((EC.eco || {}).gc) || 0);
+    return 0.012 + 0.024 * Math.min(1, Math.log(1 + gc / 40000) / Math.log(26));
+  }
+  if (a.ideology === 'Пацифизм' || a.regime === 'Эгалитарный') return 0.032;
+  return 0.022;
+}
+function ecWbHub() {
+  const n = (EC.buildings || []).filter(b => b.btype === 'wellhub' && (+b.slots_open || 0) >= 1).length;
+  if (n <= 0) return 0;
+  return Math.round(Math.min(EC_WB_HUB_CAP, n * ecWbHubUnit() * ecWbHubLevel()) * 1000) / 1000;
+}
+// Доступность постройки домика (зеркало гейта/лимитов в economy_build).
+function ecHubTech() { return (((EC.eco || {}).research) || []).includes('soc.welfare_hub'); }
+function ecHubCount() { return (EC.buildings || []).filter(b => b.btype === 'wellhub').length; }
+function ecHubInSystem(colonyId) {
+  const col = (EC.colonies || []).find(c => c.id === colonyId);
+  if (!col) return 0;
+  const ids = new Set((EC.colonies || []).filter(c => c.system_id === col.system_id).map(c => c.id));
+  return (EC.buildings || []).filter(b => b.btype === 'wellhub' && ids.has(b.colony_id)).length;
+}
+function ecHubBlockReason(colonyId) {
+  if (!ecHubTech()) return 'Нужна технология «Центр благополучия»';
+  if (ecHubInSystem(colonyId) >= 1) return 'В этой системе уже есть Центр благополучия (лимит 1 на систему)';
+  if (ecHubCount() >= EC_WB_HUB_STATE_MAX) return `Достигнут лимит центров в державе (${EC_WB_HUB_STATE_MAX})`;
+  return '';
+}
 // Итоговый индекс: берём серверную разбивку (accrue → budget.wb_*), иначе зеркалим.
 function ecWellbeing() {
   const b = (EC.eco && EC.eco.budget) || {};
   const base  = b.wb_base != null ? +b.wb_base : ecBudgetGcMult();
   const ident = b.wb_ident != null ? +b.wb_ident : ecWbIdent();
+  const hub   = b.wb_hub != null ? +b.wb_hub : ecWbHub();          // ДОМИК
   const fpen  = b.wb_fleet_pen != null ? +b.wb_fleet_pen : ecFleetOverPen();
   const gpen  = b.wb_garrison_pen != null ? +b.wb_garrison_pen : ecGarrisonPen();
-  const wb = Math.max(0.55, Math.min(1.35, Math.round((base + ident - fpen - gpen) * 1000) / 1000));
-  return { base, ident, fpen, gpen, wb };
+  const wb = Math.max(0.55, Math.min(1.35, Math.round((base + ident + hub - fpen - gpen) * 1000) / 1000));
+  return { base, ident, hub, fpen, gpen, wb };
 }
 
 function ecGcIncome() {
@@ -5153,28 +5369,44 @@ function ecCapMeter(icon, label, used, cap, opts) {
 // ── Вкладка 2: «Строительство вооружённых сил» — производство и очередь ──
 // МАРШ: дивизии НЕ строятся экономикой. Строятся ЮНИТЫ (наземка/авиация) в рамках
 // пропускной способности построек; армии формируются из готовых юнитов (как флоты).
+// КУПОНЫ: сколько бесплатных мгновенных закладок выдала администрация
+// (faction_economy.build_coupons, _build_coupons.sql). 1 купон = 1 юнит.
+function ecCoupons() { return Math.max(0, parseInt(EC.eco && EC.eco.build_coupons) || 0); }
+
 function ecTabMilBuild() {
   const caps = ecCaps(), use = ecPendingUse();
+  const coup = ecCoupons();
+  // Кнопка «за купон» рядом с обычным заказом — выбор игрока при каждой закладке.
+  const coupBtn = (onclick) => coup > 0
+    ? `<button class="btn btn-gh btn-sm" title="Бесплатно и мгновенно, спишет купоны по числу юнитов. Осталось: ${ecNum(coup)}" onclick="${onclick}">🎟 За купон (${ecNum(coup)})</button>`
+    : '';
   const ships = EC.designs.filter(d => d.category === 'ship');
-  const groundUnits = (EC.designs || []).filter(d => d.category === 'ground');
+  const groundAll = (EC.designs || []).filter(d => d.category === 'ground');
+  const infUnits = groundAll.filter(ecIsInfDesign);            // пехота → Центр Подготовки
+  const groundUnits = groundAll.filter(d => !ecIsInfDesign(d));// техника → Военный Завод
   const aviaUnits = (EC.designs || []).filter(d => d.category === 'aviation');
 
-  // МАРШ: производство юнитов наземки (Военный Завод) и авиации (Аэрокосмический Завод)
-  const unitForm = (list, cat) => {
-    const isAvia = cat === 'aviation';
+  // МАРШ: производство юнитов пехоты (Центр Подготовки), наземки (Военный Завод)
+  // и авиации (Аэрокосмический Завод). kind — ключ формы, не категория в БД.
+  const unitForm = (list, kind) => {
+    const isAvia = kind === 'aviation', isInf = kind === 'inf';
     if (isAvia && !caps.hasAirfield) return `<div class="ec-empty">Нужен Аэрокосмический Завод — постройте его во вкладке «Колонии».</div>`;
-    if (!isAvia && !caps.hasMil) return `<div class="ec-empty">Нужен Военный Завод — постройте его во вкладке «Колонии».</div>`;
-    if (!list.length) return `<div class="ec-empty">Нет проектов. Спроектируйте в Конструкторе. <button class="btn btn-gh btn-sm" style="margin-left:8px" onclick="go('build-${isAvia ? 'aviation' : 'ground'}')">⚒ Конструктор</button></div>`;
+    if (isInf && !caps.hasTraining) return `<div class="ec-empty">Нужен ${caps.robot ? 'Военный Завод (робо-сборка пехоты)' : 'Центр Подготовки'} — постройте его во вкладке «Колонии».</div>`;
+    if (!isAvia && !isInf && !caps.hasMil) return `<div class="ec-empty">Нужен Военный Завод — постройте его во вкладке «Колонии».</div>`;
+    if (!list.length) return `<div class="ec-empty">Нет проектов. Спроектируйте в Конструкторе. <button class="btn btn-gh btn-sm" style="margin-left:8px" onclick="go('build-${isAvia ? 'aviation' : 'army'}')">⚒ Конструктор</button></div>`;
     return `<div class="ec-prod-form">
-      <select id="ec-${cat}-sel" onchange="ecUnitBillUpd('${cat}')">${list.map(d => `<option value="${esc(d.id)}">${esc(d.name)} — ${ecNum((d.summary && d.summary.cost) || 0)} ГС</option>`).join('')}</select>
-      <input type="number" id="ec-${cat}-qty" value="1" min="1" class="ec-prod-qty" oninput="ecUnitBillUpd('${cat}')">
-      <button class="btn btn-gd btn-sm" onclick="ecProduceUnit('${cat}')">＋ Заказать</button>
+      <select id="ec-${kind}-sel" onchange="ecUnitBillUpd('${kind}')">${list.map(d => `<option value="${esc(d.id)}">${esc(d.name)} — ${ecNum((d.summary && d.summary.cost) || 0)} ГС</option>`).join('')}</select>
+      <input type="number" id="ec-${kind}-qty" value="1" min="1" class="ec-prod-qty" oninput="ecUnitBillUpd('${kind}')">
+      <button class="btn btn-gd btn-sm" onclick="ecProduceUnit('${kind}')">＋ Заказать</button>
+      ${coupBtn(`ecProduceUnit('${kind}',true)`)}
     </div>
-    <div id="ec-${cat}-bill" class="ec-ship-bill">${ecUnitBillHtml(list[0], 1)}</div>
+    <div id="ec-${kind}-bill" class="ec-ship-bill">${ecUnitBillHtml(list[0], 1)}</div>
     <div class="ec-meter-row">
       ${isAvia
         ? ecCapMeter('✈', 'Аэрокосмический Завод за ход', use.avia, caps.aviation, { unit: 'ед. авиации', overOk: false })
-        : ecCapMeter('🛠', 'Военный Завод за ход', use.tech, caps.military, { unit: 'ед. техники', overOk: false })}
+        : isInf
+          ? ecCapMeter('🪖', caps.robot ? 'Робо-сборка пехоты за ход' : 'Центр Подготовки за ход', use.inf, caps.training, { unit: 'ед. пехоты', overOk: false })
+          : ecCapMeter('🛠', 'Военный Завод за ход', use.tech, caps.military, { unit: 'ед. техники', overOk: false })}
     </div>`;
   };
 
@@ -5187,6 +5419,7 @@ function ecTabMilBuild() {
       <select id="ec-ship-sel" onchange="ecShipBillUpd()">${ships.map(d => `<option value="${esc(d.id)}">${esc(d.name)} — ${ecNum((d.summary && d.summary.cost) || 0)} ГС</option>`).join('')}</select>
       <input type="number" id="ec-ship-qty" value="1" min="1" class="ec-prod-qty" oninput="ecShipBillUpd()">
       <button class="btn btn-gd btn-sm" onclick="ecProduceShip()">＋ Заложить</button>
+      ${coupBtn('ecProduceShip(true)')}
     </div>
     <div id="ec-ship-bill" class="ec-ship-bill">${ecShipBillHtml(ships[0].id, 1)}</div>
     <div class="ec-meter-row">
@@ -5199,8 +5432,10 @@ function ecTabMilBuild() {
     ? EC.queue.map(q => `<div class="ec-q-row"><span class="ec-r-name">${esc(q.unit_name)} ×${ecNum(q.qty)}</span>${ecProgressISO(q.created_at, q.ready_at, 1, 'готово на след. ходу')}<button class="ec-bld-del" title="Отменить" onclick="ecCancelProd('${q.id}')">✕</button></div>`).join('')
     : `<div class="ec-empty" style="padding:8px">Очередь пуста.</div>`;
 
-  const infLine = 'Объём производства зависит от слотов военных зданий: техника → <b>Военный завод</b>, авиация → <b>Аэрокосмический завод</b>, корабли → <b>Корабельная верфь</b>.';
-  return `${ecIntro('🏭', 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, заказ — здесь. Дивизии больше не строятся: постройте юниты и <b>сформируйте из них армию</b> — она встанет гарнизоном на колонии и перебрасывается в режиме карты «Звёздный марш».', [infLine, 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».', 'Гарнизон сверх порога (20 юнитов или население/10) давит на благополучие колонии.'])}<div class="ec-section-title">Наземная техника <span class="ec-hint">— юниты строятся на Военном Заводе</span></div>
+  const infLine = 'Объём производства зависит от слотов военных зданий: пехота → <b>Центр Подготовки</b>, техника → <b>Военный завод</b>, авиация → <b>Аэрокосмический завод</b>, корабли → <b>Корабельная верфь</b>.';
+  return `${ecIntro('🏭', 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, заказ — здесь. Дивизии больше не строятся: постройте юниты и <b>сформируйте из них армию</b> — она встанет гарнизоном на колонии и перебрасывается в режиме карты «Звёздный марш».', [infLine, 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».', 'Гарнизон сверх порога (20 юнитов или население/10) давит на благополучие колонии.'])}${coup > 0 ? `<div class="ec-cap" style="margin-bottom:10px">🎟 <b>Купоны администрации: ${ecNum(coup)}</b> — постройка за купон бесплатна и мгновенна (без ГС, сырья, очереди и лимитов цехов). 1 купон = 1 юнит.</div>` : ''}<div class="ec-section-title">Пехота <span class="ec-hint">— ${caps.robot ? 'робо-сборка на Военном Заводе (×3)' : 'набор идёт в Центре Подготовки'}</span></div>
+    ${unitForm(infUnits, 'inf')}
+    <div class="ec-section-title">Наземная техника <span class="ec-hint">— юниты строятся на Военном Заводе</span></div>
     ${unitForm(groundUnits, 'ground')}
     <div class="ec-section-title">Авиация <span class="ec-hint">— юниты строятся на Аэрокосмическом Заводе</span></div>
     ${unitForm(aviaUnits, 'aviation')}
@@ -5212,20 +5447,33 @@ function ecTabMilBuild() {
 }
 
 // МАРШ: заказ юнита наземки/авиации (зеркало ecProduceShip)
-function ecUnitBillUpd(cat) {
-  const box = ecId('ec-' + cat + '-bill'), sel = ecId('ec-' + cat + '-sel'); if (!box || !sel) return;
-  const u = EC.designs.find(d => d.id === sel.value && d.category === cat);
-  box.innerHTML = ecUnitBillHtml(u, Math.max(1, parseInt(ecId('ec-' + cat + '-qty')?.value) || 1));
+// kind: 'inf' | 'ground' | 'aviation'. Пехота лежит в БД как 'ground', поэтому
+// выбираем проект по категории + признаку пехотного класса.
+function ecUnitPick(kind, id) {
+  return (EC.designs || []).find(d => d.id === id && (
+    kind === 'aviation' ? d.category === 'aviation'
+      : kind === 'inf' ? (d.category === 'ground' && ecIsInfDesign(d))
+        : (d.category === 'ground' && !ecIsInfDesign(d))));
 }
-async function ecProduceUnit(cat) {
+function ecUnitBillUpd(kind) {
+  const box = ecId('ec-' + kind + '-bill'), sel = ecId('ec-' + kind + '-sel'); if (!box || !sel) return;
+  box.innerHTML = ecUnitBillHtml(ecUnitPick(kind, sel.value), Math.max(1, parseInt(ecId('ec-' + kind + '-qty')?.value) || 1));
+}
+// coupon=true — закладка за купон администрации: бесплатно, мгновенно,
+// в обход зданий/лимитов цеха (сервер: economy_produce_coupon).
+async function ecProduceUnit(kind, coupon) {
   if (EC.busy) return;
-  const sel = ecId('ec-' + cat + '-sel'); if (!sel || !sel.value) { toast('Выберите проект', 'err'); return; }
-  const qty = Math.max(1, parseInt(ecId('ec-' + cat + '-qty')?.value) || 1);
-  const u = EC.designs.find(d => d.id === sel.value && d.category === cat); if (!u) { toast('Проект не найден', 'err'); return; }
+  const sel = ecId('ec-' + kind + '-sel'); if (!sel || !sel.value) { toast('Выберите проект', 'err'); return; }
+  const qty = Math.max(1, parseInt(ecId('ec-' + kind + '-qty')?.value) || 1);
+  const u = ecUnitPick(kind, sel.value); if (!u) { toast('Проект не найден', 'err'); return; }
+  if (coupon) { await ecProduceCoupon(u, qty); return; }
   const caps = ecCaps(), use = ecPendingUse();
-  if (cat === 'aviation') {
+  if (kind === 'aviation') {
     if (!caps.hasAirfield) { toast('Нужен Аэрокосмический Завод', 'err'); return; }
     if (use.avia + qty > caps.aviation) { toast(`Лимит Аэрокосмического Завода на ход: ${ecNum(use.avia)}/${ecNum(caps.aviation)} — откройте слоты или ждите хода`, 'err'); return; }
+  } else if (kind === 'inf') {
+    if (!caps.hasTraining) { toast(caps.robot ? 'Нужен Военный Завод (робо-сборка пехоты)' : 'Нужен Центр Подготовки', 'err'); return; }
+    if (use.inf + qty > caps.training) { toast(`Лимит ${caps.robot ? 'робо-сборки' : 'Центра Подготовки'} на ход: ${ecNum(use.inf)}/${ecNum(caps.training)} — откройте слоты или ждите хода`, 'err'); return; }
   } else {
     if (!caps.hasMil) { toast('Нужен Военный Завод', 'err'); return; }
     if (use.tech + qty > caps.military) { toast(`Лимит Военного Завода на ход: ${ecNum(use.tech)}/${ecNum(caps.military)} — откройте слоты или ждите хода`, 'err'); return; }
@@ -9483,6 +9731,92 @@ function ecTechnoSlots(app) {
 function ecActiveResearch() { return Array.isArray(EC.eco.research_slots) ? EC.eco.research_slots : []; }
 // Очередь технологий: массив node-id.
 function ecResearchQueueArr() { return Array.isArray(EC.eco.research_queue) ? EC.eco.research_queue : []; }
+// ── ЕДИНЫЙ ПУЛЬТ ИССЛЕДОВАНИЙ (форма из новеллы) ────────────────────────────
+// Один и тот же вид в кабинете и в VN-экране «Исследования»: сводка-чипы,
+// рельса веток слева, карточки технологий справа. Отличаются только обработчики
+// (кабинет перерисовывает кабинет, новелла — свой оверлей), поэтому имена
+// функций приходят параметрами.
+// o = { cat, catFn, goFn, en }
+function ecResearchVNHtml(o) {
+  const en = !!o.en;
+  const all = ecBuildResearch();
+  const done = new Set(EC.eco.research || []);
+  const slots = ecActiveResearch();
+  const activeMap = new Map(slots.map(s => [s.n, s.r]));
+  const queue = ecResearchQueueArr();
+  const maxSlots = ecResearchSlots();
+  const sci = +(EC.eco.science || 0);
+  const cost = n => ecResearchCost(n.cost);
+
+  const totalDone = all.filter(n => done.has(n.id)).length;
+  const chips = `<div class="hp-vnt-stats">
+    <span class="hp-vnt-chip"><i>🧪</i><b>${ecNum(sci)}</b> ${en ? 'science' : 'ОН'}</span>
+    <span class="hp-vnt-chip"><i>⚗</i><b>${slots.length}/${maxSlots}</b> ${en ? 'labs busy' : 'слотов занято'}</span>
+    <span class="hp-vnt-chip"><i>📚</i><b>${totalDone}</b>/${all.length} ${en ? 'researched' : 'изучено'}</span>
+  </div>`;
+
+  const cat = o.cat || 'ship';
+  const rail = `<div class="hp-vnt-rail">${EC_RES_CATS.map(([id, label, icon]) => {
+    const nodes = all.filter(n => n.cat === id);
+    const dn = nodes.filter(n => done.has(n.id)).length;
+    const pct = nodes.length ? Math.round(dn / nodes.length * 100) : 0;
+    return `<button class="hp-vnt-cat${id === cat ? ' on' : ''}" type="button" onclick="event.stopPropagation();${o.catFn}('${id}')">
+      <span class="hp-vnt-cat-ic">${icon}</span><span class="hp-vnt-cat-l">${esc(label)}</span>
+      <span class="hp-vnt-cat-bar"><i style="width:${pct}%"></i></span><span class="hp-vnt-cat-n">${dn}/${nodes.length}</span>
+    </button>`;
+  }).join('')}</div>`;
+
+  const byId = new Map(all.map(n => [n.id, n]));
+  const dcache = {};
+  const depth = n => ecTechDepth(n, byId, dcache);
+  const nodes = all.filter(n => n.cat === cat).sort((a, b) => depth(a) - depth(b) || cost(a) - cost(b));
+  const nameOf = id => (byId.get(id) || { name: id }).name;
+  const cards = nodes.map(n => {
+    const c = cost(n);
+    const prereqMiss = (n.prereq || []).filter(p => !done.has(p));
+    let st, badge, act = '', foot = '';
+    if (done.has(n.id)) {
+      st = 'done'; badge = `✓ ${en ? 'researched' : 'изучено'}`;
+    } else if (activeMap.has(n.id)) {
+      st = 'active'; badge = `⚗ ${en ? 'in progress' : 'в работе'}`;
+      foot = `<div class="hp-vnt-prog"><i></i></div><div class="hp-vnt-left">${en ? 'ready in' : 'готово через'} ${ecResearchLeft(activeMap.get(n.id))}</div>`;
+    } else if (queue.includes(n.id)) {
+      st = 'queued'; badge = `⏳ ${en ? 'queued' : 'в очереди'} #${queue.indexOf(n.id) + 1}`;
+    } else if (prereqMiss.length) {
+      st = 'locked'; badge = '🔒';
+      foot = `<div class="hp-vnt-req">${en ? 'requires' : 'нужно'}: ${prereqMiss.map(p => `<span>${esc(nameOf(p))}</span>`).join('')}</div>`;
+    } else {
+      const canNow = slots.length < maxSlots && sci >= c;
+      st = 'avail'; badge = '';
+      act = canNow
+        ? `<button class="hp-vnt-go" type="button" onclick="event.stopPropagation();${o.goFn}('${jsq(n.id)}',false)">▶ ${en ? 'Research' : 'Исследовать'}</button>`
+        : `<button class="hp-vnt-go q" type="button" onclick="event.stopPropagation();${o.goFn}('${jsq(n.id)}',true)">⏳ ${en ? 'Queue' : 'В очередь'}</button>`;
+    }
+    return `<div class="hp-vnt-card ${st}">
+      <div class="hp-vnt-row1">
+        <span class="hp-vnt-name">${esc(n.name)}</span>
+        <span class="hp-vnt-cost${sci < c && st === 'avail' ? ' lack' : ''}">${ecNum(c)} ${en ? 'sci' : 'ОН'}</span>
+      </div>
+      ${badge ? `<div class="hp-vnt-badge ${st}">${badge}</div>` : ''}
+      <div class="hp-vnt-desc">${esc(n.desc || '')}</div>
+      ${foot}${act}
+    </div>`;
+  }).join('') || `<div class="hp-vn-col-empty">${en ? 'Nothing here yet.' : 'В этой ветке пока пусто.'}</div>`;
+
+  return chips + `<div class="hp-vnt-wrap">${rail}<div class="hp-vnt-grid">${cards}</div></div>`;
+}
+// Осталось до готовности слота (r — ISO-время окончания).
+function ecResearchLeft(r) {
+  const ms = new Date(r) - Date.now();
+  if (!(ms > 0)) return 'скоро';
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h} ч ${m} мин` : `${m} мин`;
+}
+// Ветка пульта в кабинете (та же переменная, что у старого дерева).
+function ecResearchCatVN(c) { EC.researchCat = c; ecPaintCabinet(); }
+// Запуск/очередь из карточек пульта — обычные кабинетные действия.
+function ecTechGoVN(id, toQueue) { return toQueue ? ecQueueResearch(id) : ecResearch(id); }
+
 function ecTabResearch() {
   const all = ecBuildResearch();
   const done = new Set(EC.eco.research || []);
@@ -9530,6 +9864,22 @@ function ecTabResearch() {
         ${queue.map((id, i) => { const rsn = queueReason[id] || { ic: '', cls: 'wait', txt: '' }; return `<div class="ec-rqueue-item"><span class="ec-rqueue-n">${i + 1}</span><b>${esc(nameOf(id))}</b><span class="ec-rqueue-cost">${ecNum(ecResearchCost((all.find(n => n.id === id) || {}).cost || 0))} ОН</span><span class="ec-rqueue-why ${rsn.cls}" title="${esc(rsn.txt)}">${rsn.ic} ${esc(rsn.txt)}</span><button class="btn btn-gh btn-xs" onclick="ecDequeueResearch(${i})" title="Убрать">✕</button></div>`; }).join('')}
       </div>`
     : '';
+
+  // ── ОСНОВНОЙ ВИД: пульт из новеллы (рельса веток + карточки технологий).
+  // Радиальное дерево оставлено под staff-тумблером — им правят раскладку/связи.
+  if (!(EC.resTree && ecIsStaff())) {
+    const staffBtn = ecIsStaff()
+      ? `<button class="btn btn-gh btn-xs" onclick="EC.resTree=true;ecPaintCabinet()">🌳 Дерево (staff)</button>` : '';
+    return `${ecIntro('🔬', 'Исследования', 'Тратьте очки науки (ОН) на технологии — они открывают классы, оружие и компоненты в конструкторах.', ['ОН копятся от <b>Научных институтов</b> + бонусов доктрины. Стройте их во вкладке «Колонии».', maxSlots > 1 ? `Сейчас доступно <b>${maxSlots} слот${maxSlots > 4 ? 'ов' : 'а'}</b> исследований — столько технологий изучается параллельно.` : 'Одновременно изучается <b>одна</b> технология. Слоты дают политики «Свет знаний» (+1) и «Превосходство разума» (+2).', 'Тяжёлое оружие и продвинутые компоненты требуют сначала изучить класс-носитель.'])}
+      <div class="ec-treasury" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+        <div class="ec-res"><span class="ec-res-k">Очки науки</span><span class="ec-res-v" style="color:var(--pu)">${ecNum(sci)} ОН</span></div>
+        <div class="ec-res"><span class="ec-res-k">Доход</span><span class="ec-res-v" style="font-size:15px">+${sciInc} ОН/ход</span></div>
+      </div>
+      ${activeHtml}
+      ${queueHtml}
+      ${staffBtn}
+      <div class="ec-vnt-host">${ecResearchVNHtml({ cat: sel, catFn: 'ecResearchCatVN', goFn: 'ecTechGoVN', en: false })}</div>`;
+  }
 
   // под-вкладки родов войск — теперь это кнопки БЫСТРОГО ПЕРЕХОДА по единому
   // холсту (а не фильтр): клик скроллит к секции рода и подсвечивает её.
@@ -9768,6 +10118,7 @@ function ecTabResearch() {
     </div>
     ${activeHtml}
     ${queueHtml}
+    <button class="btn btn-gh btn-xs" onclick="EC.resTree=false;ecPaintCabinet()">↩ Вернуться к пульту</button>
     <div class="ec-rcat-tabs">${subTabs}</div>
     <div class="ec-section-title">Единое дерево исследований <span class="ec-hint">— ${slotsHint} · клик по роду войск выше — переход к ветке</span></div>
     ${tree}${treeMobile}`;
@@ -11274,11 +11625,12 @@ function ecDivBillUpd(divId) {
 }
 
 // Постройка корабля — поштучно на Верфи
-async function ecProduceShip() {
+async function ecProduceShip(coupon) {
   if (EC.busy) return;
   const sel = ecId('ec-ship-sel'); if (!sel || !sel.value) { toast('Выберите корабль', 'err'); return; }
   const qty = Math.max(1, parseInt(ecId('ec-ship-qty')?.value) || 1);
   const u = EC.designs.find(d => d.id === sel.value && d.category === 'ship'); if (!u) { toast('Проект не найден', 'err'); return; }
+  if (coupon) { await ecProduceCoupon(u, qty); return; }
   const caps = ecCaps(), use = ecPendingUse();
   if (!caps.hasShipyard) { toast('Нужна Корабельная Верфь', 'err'); return; }
   if (use.ships + qty > caps.ships) { toast(`Лимит верфи на ход: ${use.ships}/${caps.ships} кораблей — откройте слоты или ждите хода`, 'err'); return; }
@@ -11290,6 +11642,21 @@ async function ecProduceShip() {
     const r = await ecRpc('economy_produce', { p_unit_id: u.id, p_qty: qty });
     const sc = r && +r.surcharge || 0;
     toast(`Заложен корабль: ${u.name} ×${qty}` + (sc > 0 ? ` · докуплено сырья на ${ecNum(sc)} ГС` : ''), 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+
+// КУПОН: единая закладка «за купон» для кораблей/наземки/авиации/пехоты.
+// Юнит появляется в «⚔ Вооружённые силы» сразу, очередь не задействуется.
+async function ecProduceCoupon(u, qty) {
+  const have = ecCoupons();
+  if (have < qty) { toast(`Купонов не хватает: нужно ${ecNum(qty)}, есть ${ecNum(have)}`, 'err'); return; }
+  if (!confirm(`Построить «${u.name}» ×${qty} за ${ecNum(qty)} купон(ов)?\n\nБесплатно и мгновенно. Останется купонов: ${ecNum(have - qty)}.`)) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('economy_produce_coupon', { p_unit_id: u.id, p_qty: qty });
+    toast(`🎟 Готово: ${u.name} ×${qty} · осталось купонов ${ecNum((r && r.coupons_left) || 0)}`, 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
@@ -11328,14 +11695,17 @@ function ecBuildPicker(colonyId) {
   const hasFaith = myFaiths.length > 0;                        // храм доступен только исповедующим веру
   // добывающие домики: какие типы залежей копает каждый ярус (визуальные чипы редкости)
   const MINE_RARS = { mining: ['common'], mining_deep: ['uncommon', 'rare'], mining_exotic: ['epic', 'legendary'] };
-  const cards = EC_ORDER.filter(t => t !== 'temple' || hasFaith).map(t => {
-    const d = EC_BUILD[t]; const cost = ecBuildCost(d.cost); const afford = gc >= cost;
+  // ДОМИК: без технологии центр благополучия вообще не показываем (не грузим новичков)
+  const cards = EC_ORDER.filter(t => (t !== 'temple' || hasFaith) && (t !== 'wellhub' || ecHubTech())).map(t => {
+    const d = EC_BUILD[t]; const cost = ecBuildCost(d.cost);
+    const block = t === 'wellhub' ? ecHubBlockReason(colonyId) : '';   // ДОМИК: лимит 1/система, 5/держава
+    const afford = gc >= cost && !block;
     const catLabel = d.cat === 'civ' ? 'Гражд.' : d.cat === 'faith' ? 'Вера' : 'Воен.';
     const mineChips = MINE_RARS[t] ? `<span class="ec-bp-mine">⛏ добывает: ${MINE_RARS[t].map(r =>
       `<span class="ec-bp-rar ec-bp-rar-${r}">◈ ${ecRarLabel(r)}</span>`).join('')}</span>` : '';
     // мультивера: для храма сперва выбираем веру (если их несколько); иначе сразу подтверждение
     const act = t === 'temple' ? `ecBuildTempleFaith('${colonyId}')` : `ecBuildConfirm('${colonyId}','${t}')`;
-    return `<button class="ec-bp-card ec-bp-${d.cat}${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="${act}">
+    return `<button class="ec-bp-card ec-bp-${d.cat}${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'}${block ? ` title="${esc(block)}"` : ''} onclick="${act}">
       <span class="ec-bp-ic">${EC_BLD_ICON[t] || '⌂'}</span>
       <span class="ec-bp-info">
         <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-${d.cat}">${catLabel}</span></span>

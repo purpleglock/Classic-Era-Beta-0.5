@@ -55,6 +55,15 @@ create or replace function public._defense_const(p_key text)
 returns numeric language sql immutable as $$
   select case p_key
     when 'starbase_cap_per_slot' then 50      -- мест под корабли на слот базы
+    -- outpost-ключи (полный набор, чтобы этот _defense_const не ломал постройку
+    -- носителя при клоббере — см. _outpost_ship_const_fix.sql):
+    when 'outpost_ship_cost'     then 2000
+    when 'outpost_build_h'       then 24
+    when 'outpost_cap'           then 20
+    when 'outpost_refund'        then 0.50
+    when 'outpost_mine_gc'       then 75
+    when 'op_fly_h_min'          then 2
+    when 'op_fly_h_max'          then 18
     else null end
 $$;
 

@@ -312,7 +312,9 @@ function bbLogPanel(s) {
   if (!log.length) return '';
   return `<div class="bb-panel bb-log">
       <div class="bb-panel-t">Журнал</div>
-      ${log.map(l => `<div class="bb-log-l">${esc(l.m || '')}</div>`).join('')}
+      <div class="bb-log-sc">
+        ${log.map(l => `<div class="bb-log-l">${esc(l.m || '')}</div>`).join('')}
+      </div>
     </div>`;
 }
 

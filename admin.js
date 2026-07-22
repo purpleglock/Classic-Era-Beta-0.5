@@ -2224,9 +2224,9 @@ function adMarketPanel() {
 function adFacPanel() {
   const e = adEntry(AD.sel);
   if (!e) return '';
-  const SUBTABS = [['treasury','💰 Казна'],['economy','📊 Экономика'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['caravans','🚚 Караваны'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['population','👥 Население'],['army','⚔ Армия'],['agents','🕵 Агенты'],['owner','👑 Владелец'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
+  const SUBTABS = [['treasury','💰 Казна'],['economy','📊 Экономика'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['caravans','🚚 Караваны'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['population','👥 Население'],['army','⚔ Армия'],['coupons','🎟 Купоны'],['agents','🕵 Агенты'],['owner','👑 Владелец'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
   const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="fm-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
-  const bodyMap = { treasury: adTabTreasury, economy: adTabEconomy, resources: adTabResources, mining: adTabMining, caravans: adTabCaravans, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, population: adTabPopulation, army: adTabArmy, agents: adTabAgents, owner: adTabOwner, testing: adTabTesting, danger: adTabDanger };
+  const bodyMap = { treasury: adTabTreasury, economy: adTabEconomy, resources: adTabResources, mining: adTabMining, caravans: adTabCaravans, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, population: adTabPopulation, army: adTabArmy, coupons: adTabCoupons, agents: adTabAgents, owner: adTabOwner, testing: adTabTesting, danger: adTabDanger };
   const renderFn = bodyMap[AD.subtab] || adTabTreasury;
   let tabBody = '';
   try { tabBody = renderFn(e); }
@@ -3364,6 +3364,53 @@ async function adDeltaFacPop(delta) {
     adLogGrant({ type: 'population', delta: dir * amount, to: newTotal });
     const cut = amount < Math.abs(Math.round(delta)) ? ' (упёрлись в потолок)' : '';
     toast(`👥 Население державы: ${adNum(newTotal)}${cut}`, 'ok'); adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+
+// ── Вкладка: Купоны на строительство ────────────────────────────
+// faction_economy.build_coupons (_build_coupons.sql). Купон = 1 юнит,
+// построенный бесплатно и мгновенно: игрок выбирает способ при закладке.
+function adTabCoupons(e) {
+  if (!e.eco) return `<div class="fm-no-eco">Экономика не инициализирована. Перейдите в <b>⚠ Зона риска</b> → Создать экономику.</div>`;
+  const cur = Math.max(0, parseInt(e.eco.build_coupons) || 0);
+  const add = [1, 5, 10, 50].map(v => `<button class="btn btn-gh btn-xs" onclick="adDeltaCoupons(${v})">+${v}</button>`).join('');
+  const sub = [1, 5, 10].map(v => `<button class="btn btn-rd btn-xs" onclick="adDeltaCoupons(${-v})">−${v}</button>`).join('');
+  return `<div class="fm-form">
+    <div class="fm-section-title">Купоны на строительство: <b style="color:var(--t1,#e8edf2)">${adNum(cur)}</b></div>
+    <div class="fm-dim" style="font-size:11px;margin:4px 0 10px">Пока у державы есть купоны, в «🏭 Строительство вооружённых сил» рядом с обычным заказом появляется кнопка <b>«🎟 За купон»</b>: юнит строится бесплатно и мгновенно — без ГС, сырья, очереди и лимитов цехов. 1 купон = 1 юнит.</div>
+    <div class="fm-form-row">
+      <label class="fm-lbl">Купоны</label>
+      <div class="fm-field-row">
+        <input class="fi fm-num-input" id="fm-coupons" type="number" value="${cur}" min="0">
+        ${add}${sub}
+      </div>
+    </div>
+    <button class="btn btn-gd" onclick="adSetCoupons()" style="margin-top:8px">💾 Установить значение</button>
+  </div>`;
+}
+
+async function adSetCoupons() {
+  const raw = parseInt(document.getElementById('fm-coupons')?.value);
+  if (isNaN(raw)) { toast('Введите число', 'err'); return; }
+  await adWriteCoupons(raw);
+}
+async function adDeltaCoupons(delta) {
+  const e = adEntry(AD.sel); if (!e || !e.eco) return;
+  await adWriteCoupons((parseInt(e.eco.build_coupons) || 0) + delta);
+}
+async function adWriteCoupons(want) {
+  if (!AD.sel || AD.busy) return;
+  const e = adEntry(AD.sel); if (!e || !e.eco) return;
+  const old = Math.max(0, parseInt(e.eco.build_coupons) || 0);
+  const val = Math.max(0, Math.round(want));
+  if (val === old) { toast('Без изменений', 'inf'); return; }
+  AD.busy = true;
+  try {
+    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { build_coupons: val });
+    e.eco.build_coupons = val;
+    adLogGrant({ type: 'build_coupons', label: 'Купоны на строительство', delta: val - old, from: old, to: val });
+    toast(`🎟 Купоны: ${adNum(val)}`, 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }

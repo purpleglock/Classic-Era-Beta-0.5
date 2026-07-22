@@ -1447,6 +1447,7 @@ returns numeric language sql immutable as $$
     when 'mining_deep'      then 2500   -- ЯРУСЫ: uncommon + rare
     when 'mining_exotic'    then 8000   -- ЯРУСЫ: epic + legendary
     when 'airfield'         then 1200   -- МАРШ: Аэрокосмический Завод (авиация)
+    when 'wellhub'          then 3000   -- ДОМИК: Центр благополучия (идеологический, _welfare_hub.sql)
     else null end
 $$;
 
@@ -1562,6 +1563,7 @@ grant execute on function public._garrison_pen(text) to authenticated;
 create or replace function public.wellbeing_status()
 returns jsonb language plpgsql volatile security definer set search_path=public as $$
 declare fid text; b public.faction_budget; ident numeric; fpen numeric; gpen numeric; base numeric;
+  hub numeric := 0; hub_n int := 0; hub_lvl numeric := 1;   -- ДОМИК
 begin
   fid := public._ec_my_fid();
   perform public._army_settle(fid);
@@ -1570,9 +1572,15 @@ begin
   ident := public._wb_identity(fid);
   fpen  := public._fleet_overcap_pen(fid);
   gpen  := public._garrison_pen(fid);
+  begin
+    hub := public._wb_hub_bonus(fid);
+    hub_lvl := public._wb_hub_level(fid);
+    select count(*) into hub_n from public.colony_buildings where faction_id = fid and btype = 'wellhub' and coalesce(slots_open,0) >= 1;
+  exception when undefined_function then hub := 0; hub_n := 0; hub_lvl := 1; end;
   return jsonb_build_object(
     'base', base, 'ident', ident, 'fleet_pen', fpen, 'garrison_pen', gpen,
-    'wb', round(greatest(0.55, least(1.35, base + ident - fpen - gpen)), 3),
+    'hub', hub, 'hub_n', hub_n, 'hub_level', hub_lvl, 'hub_cap', 0.20, 'hub_state_max', 5,   -- ДОМИК
+    'wb', round(greatest(0.55, least(1.35, base + ident + hub - fpen - gpen)), 3),
     'fleet_used', public._fleet_used(fid), 'fleet_cap', public._fleet_capacity(fid),
     'garrisons', coalesce((
       select jsonb_agg(jsonb_build_object('colony_id', c.id, 'planet', c.planet_name,
@@ -1619,11 +1627,16 @@ declare
   wb_ident numeric := 0;                             -- БЛАГО: идентичность расы/политики
   wb_fpen numeric := 0;                              -- БЛАГО: штраф перегруза флота
   wb_gpen numeric := 0;                              -- БЛАГО: штраф гарнизонов
+  wb_hub numeric := 0;                               -- ДОМИК: бонус центров благополучия (_welfare_hub.sql)
   gf_slots numeric := 0; gf_ratio numeric := 0; gf_made numeric := 0;
   gf_water_need numeric; gf_mat_need numeric; take numeric; need numeric;
   av_lyod numeric; av_water numeric; av_iron numeric; av_silic numeric;
   goods_demand numeric := 0;
   goods_cov numeric := 1; goods_welfare numeric := 1;
+  -- РЕЦЕПТ: настраиваемая фабрика потребления (_consumption_factory.sql)
+  gr_recipe jsonb; gr_ing jsonb; gr_name text; gr_qty numeric;
+  gr_q numeric := 1; gr_div numeric := 0; gr_bonus numeric := 0;
+  gr_ratio numeric; gr_avail numeric;
   col_mined jsonb := '{}'::jsonb; ckey text; already numeric; capv numeric;
 begin
   select * into eco from public.faction_economy where faction_id = p_fid for update;
@@ -1645,8 +1658,11 @@ begin
   wb_ident := public._wb_identity(p_fid);
   wb_fpen  := public._fleet_overcap_pen(p_fid);
   wb_gpen  := public._garrison_pen(p_fid);
+  -- ДОМИК: центры благополучия (идеологическая формула, уровень от техов). Guard —
+  -- до наката _welfare_hub.sql функции нет, остаёмся на прежнем индексе.
+  begin wb_hub := public._wb_hub_bonus(p_fid); exception when undefined_function then wb_hub := 0; end;
   w_mult := round(greatest(0.55, least(1.35,
-              public._budget_gc_mult(bdg.social) + wb_ident - wb_fpen - wb_gpen)), 3);
+              public._budget_gc_mult(bdg.social) + wb_ident + wb_hub - wb_fpen - wb_gpen)), 3);
   m_gc := m_gc * w_mult;
   bdg_cost := public._budget_upkeep(p_fid);
 
@@ -1782,39 +1798,78 @@ begin
       end loop;
     end loop;
 
-    -- ════════ ТОВАРЫ: поток ПОД СПРОС ════════
+    -- ════════ ТОВАРЫ: поток ПОД СПРОС (+ настраиваемый рецепт, КАЧЕСТВО→благо) ════════
+    -- РЕЦЕПТ (_consumption_factory.sql): до техи soc.consumer_goods _goods_recipe
+    -- = NULL → легаси-хардкод (вода 0.6 + сырьё 0.4 на товар). С рецептом фабрика
+    -- ест выбранные ресурсы; премиальные (редкие) входы поднимают потолок welfare
+    -- 1.10 → 1.25 (бонус ∝ обеспечению × разнообразию).
     goods_demand := public._fac_pop(p_fid) / 600.0 * d;
     select coalesce(sum(slots_open),0) into gf_slots
       from public.colony_buildings where faction_id=p_fid and btype='goodsfab';
+    begin gr_recipe := public._goods_recipe(p_fid);
+    exception when undefined_function then gr_recipe := null; end;
     if gf_slots > 0 and goods_demand > 0 then
-      av_lyod  := greatest(0, coalesce((eco.resources->>'Лёд')::numeric,0)         + coalesce((res_add->>'Лёд')::numeric,0)         - coalesce((res_sub->>'Лёд')::numeric,0));
-      av_water := greatest(0, coalesce((eco.resources->>'Жидкая вода')::numeric,0) + coalesce((res_add->>'Жидкая вода')::numeric,0) - coalesce((res_sub->>'Жидкая вода')::numeric,0));
-      av_iron  := greatest(0, coalesce((eco.resources->>'Железо')::numeric,0)      + coalesce((res_add->>'Железо')::numeric,0)      - coalesce((res_sub->>'Железо')::numeric,0));
-      av_silic := greatest(0, coalesce((eco.resources->>'Силикаты')::numeric,0)    + coalesce((res_add->>'Силикаты')::numeric,0)    - coalesce((res_sub->>'Силикаты')::numeric,0));
-      gf_water_need := 6 * gf_slots * d;
-      gf_mat_need   := 4 * gf_slots * d;
-      gf_ratio := least(1,
-        case when gf_water_need > 0 then (av_lyod + av_water) / gf_water_need else 1 end,
-        case when gf_mat_need   > 0 then (av_iron + av_silic) / gf_mat_need   else 1 end);
-      gf_ratio := greatest(0, gf_ratio);
-      gf_made := least(goods_demand, 10 * gf_slots * d * gf_ratio);
-      if gf_made > 0 then
-        need := gf_made * 0.6;
-        take := least(need, av_lyod);
-        if take > 0 then res_sub := jsonb_set(res_sub, array['Лёд'], to_jsonb(coalesce((res_sub->>'Лёд')::numeric,0)+take), true); need := need - take; end if;
-        if need > 0 then take := least(need, av_water);
-          if take > 0 then res_sub := jsonb_set(res_sub, array['Жидкая вода'], to_jsonb(coalesce((res_sub->>'Жидкая вода')::numeric,0)+take), true); end if;
+      if gr_recipe is null then
+        -- ЛЕГАСИ: вода (Лёд→Жидкая вода) 0.6 + сырьё (Железо→Силикаты) 0.4 на товар
+        av_lyod  := greatest(0, coalesce((eco.resources->>'Лёд')::numeric,0)         + coalesce((res_add->>'Лёд')::numeric,0)         - coalesce((res_sub->>'Лёд')::numeric,0));
+        av_water := greatest(0, coalesce((eco.resources->>'Жидкая вода')::numeric,0) + coalesce((res_add->>'Жидкая вода')::numeric,0) - coalesce((res_sub->>'Жидкая вода')::numeric,0));
+        av_iron  := greatest(0, coalesce((eco.resources->>'Железо')::numeric,0)      + coalesce((res_add->>'Железо')::numeric,0)      - coalesce((res_sub->>'Железо')::numeric,0));
+        av_silic := greatest(0, coalesce((eco.resources->>'Силикаты')::numeric,0)    + coalesce((res_add->>'Силикаты')::numeric,0)    - coalesce((res_sub->>'Силикаты')::numeric,0));
+        gf_water_need := 6 * gf_slots * d;
+        gf_mat_need   := 4 * gf_slots * d;
+        gf_ratio := least(1,
+          case when gf_water_need > 0 then (av_lyod + av_water) / gf_water_need else 1 end,
+          case when gf_mat_need   > 0 then (av_iron + av_silic) / gf_mat_need   else 1 end);
+        gf_ratio := greatest(0, gf_ratio);
+        gf_made := least(goods_demand, 10 * gf_slots * d * gf_ratio);
+        if gf_made > 0 then
+          need := gf_made * 0.6;
+          take := least(need, av_lyod);
+          if take > 0 then res_sub := jsonb_set(res_sub, array['Лёд'], to_jsonb(coalesce((res_sub->>'Лёд')::numeric,0)+take), true); need := need - take; end if;
+          if need > 0 then take := least(need, av_water);
+            if take > 0 then res_sub := jsonb_set(res_sub, array['Жидкая вода'], to_jsonb(coalesce((res_sub->>'Жидкая вода')::numeric,0)+take), true); end if;
+          end if;
+          need := gf_made * 0.4;
+          take := least(need, av_iron);
+          if take > 0 then res_sub := jsonb_set(res_sub, array['Железо'], to_jsonb(coalesce((res_sub->>'Железо')::numeric,0)+take), true); need := need - take; end if;
+          if need > 0 then take := least(need, av_silic);
+            if take > 0 then res_sub := jsonb_set(res_sub, array['Силикаты'], to_jsonb(coalesce((res_sub->>'Силикаты')::numeric,0)+take), true); end if;
+          end if;
         end if;
-        need := gf_made * 0.4;
-        take := least(need, av_iron);
-        if take > 0 then res_sub := jsonb_set(res_sub, array['Железо'], to_jsonb(coalesce((res_sub->>'Железо')::numeric,0)+take), true); need := need - take; end if;
-        if need > 0 then take := least(need, av_silic);
-          if take > 0 then res_sub := jsonb_set(res_sub, array['Силикаты'], to_jsonb(coalesce((res_sub->>'Силикаты')::numeric,0)+take), true); end if;
+      else
+        -- РЕЦЕПТ: узкое место по ВСЕМ ингредиентам (qty на 1 товар), затем расход.
+        gr_ratio := 1;
+        for gr_ing in select value from jsonb_array_elements(gr_recipe->'ingredients') loop
+          gr_name := gr_ing->>'res';
+          gr_qty  := coalesce((gr_ing->>'qty')::numeric, 0);
+          if gr_qty <= 0 then continue; end if;
+          gr_avail := greatest(0, coalesce((eco.resources->>gr_name)::numeric,0)
+                                 + coalesce((res_add->>gr_name)::numeric,0)
+                                 - coalesce((res_sub->>gr_name)::numeric,0));
+          gr_ratio := least(gr_ratio, gr_avail / (gr_qty * 10 * gf_slots * d));
+        end loop;
+        gf_ratio := greatest(0, least(1, gr_ratio));
+        gf_made  := least(goods_demand, 10 * gf_slots * d * gf_ratio);
+        if gf_made > 0 then
+          for gr_ing in select value from jsonb_array_elements(gr_recipe->'ingredients') loop
+            gr_name := gr_ing->>'res';
+            gr_qty  := coalesce((gr_ing->>'qty')::numeric, 0);
+            if gr_qty <= 0 then continue; end if;
+            res_sub := jsonb_set(res_sub, array[gr_name],
+                         to_jsonb(coalesce((res_sub->>gr_name)::numeric,0) + gr_qty * gf_made), true);
+          end loop;
         end if;
+        gr_q   := coalesce((gr_recipe->>'q_avg')::numeric, 1);
+        gr_div := coalesce((gr_recipe->>'diversity')::numeric, 0);
       end if;
     end if;
     goods_cov := case when goods_demand > 0 then round(least(1, gf_made / goods_demand), 3) else 1 end;
-    goods_welfare := round(least(1.10, greatest(0.90, 0.90 + 0.20 * goods_cov)), 3);
+    -- КАЧЕСТВО: премиальный рецепт даёт бонус сверх 1.10 (потолок +0.15 → 1.25),
+    -- пропорционально обеспечению и разнообразию входов. Легаси → бонуса нет.
+    gr_bonus := case when gr_recipe is null then 0
+                     else least(0.15, greatest(0, gr_q - 1)) * gr_div end;
+    goods_welfare := round(least(1.10 + gr_bonus,
+                       greatest(0.90, 0.90 + 0.20 * goods_cov + goods_cov * gr_bonus)), 3);
 
     -- БЮДЖЕТ: рост населения = соцобеспечение + товары. ВОЛНА: Памятник Веры +0.5%/сут.
     -- БЛАГО: + идентичность (ident×0.05 — у всех разный прирост)
@@ -2000,6 +2055,7 @@ begin
       -- БЛАГО: разбивка индекса благополучия для клиента
       'wb_base', public._budget_gc_mult(bdg.social),
       'wb_ident', wb_ident, 'wb_fleet_pen', wb_fpen, 'wb_garrison_pen', wb_gpen,
+      'wb_hub', wb_hub,   -- ДОМИК
       'fleet_used', public._fleet_used(p_fid), 'fleet_cap', public._fleet_capacity(p_fid)));
 end$$;
 revoke all on function public.economy_accrue(text) from public;

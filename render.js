@@ -5588,6 +5588,11 @@ function _htRenderTech() {
     el.innerHTML = _htHead(en) + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'The science grid is offline.' : 'Научная сеть сейчас недоступна.'}</div></div>`;
     return;
   }
+  // Разметка пульта — общая с кабинетом (ecResearchVNHtml в economy.js).
+  if (typeof ecResearchVNHtml === 'function') {
+    el.innerHTML = _htHead(en) + ecResearchVNHtml({ cat: _htState.cat, catFn: 'heroVNResearchCat', goFn: 'heroVNTechGo', en });
+    return;
+  }
   const all = ecBuildResearch();
   const done = new Set(EC.eco.research || []);
   const slots = (typeof ecActiveResearch === 'function') ? ecActiveResearch() : [];

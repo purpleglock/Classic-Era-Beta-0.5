@@ -3910,3 +3910,13 @@ body.ec-tree-fs-lock { overflow: hidden; }
 
 /* Бой: тип столкновения (война, срез 3) */
 .ec-war-kind { font-size: 11.5px; color: var(--t3, #8a97a3); white-space: nowrap; }
+
+/* ── Пульт исследований в кабинете: та же вёрстка, что в новелле (hp-vnt-*).
+   Хосту нужны только акцентный токен и высота — остальное берут стили новеллы. */
+.ec-vnt-host{
+  display:flex;flex-direction:column;min-height:0;height:min(72vh,720px);margin-top:10px;
+  --vnt-sci:#54d0c8;
+  --vnt-line:color-mix(in srgb,var(--vnt-sci) 30%,transparent);
+}
+.ec-vnt-host .hp-vnt-stats,.ec-vnt-host .hp-vnt-wrap{padding-left:0;padding-right:0}
+@media (max-width:760px){ .ec-vnt-host{height:auto} }

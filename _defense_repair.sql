@@ -18,6 +18,15 @@ returns numeric language sql immutable as $$
     when 'repair_fraction'       then 0.40    -- доля боевых потерь → в ремонт
     when 'repair_cost_frac'      then 0.50    -- цена ремонта = доля стоимости постройки
     when 'repair_days'           then 1       -- срок ремонта (игровых дней)
+    -- outpost-ключи (полный набор, чтобы этот _defense_const не ломал постройку
+    -- носителя при клоббере — см. _outpost_ship_const_fix.sql):
+    when 'outpost_ship_cost'     then 2000
+    when 'outpost_build_h'       then 24
+    when 'outpost_cap'           then 20
+    when 'outpost_refund'        then 0.50
+    when 'outpost_mine_gc'       then 75
+    when 'op_fly_h_min'          then 2
+    when 'op_fly_h_max'          then 18
     else null end
 $$;
 

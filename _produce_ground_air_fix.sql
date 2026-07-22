@@ -37,8 +37,16 @@ begin
   if u.faction_id is not null and u.faction_id is distinct from fid then raise exception 'not your design'; end if;
 
   -- ★ ФИКС: наземка и авиация теперь тоже строятся (Звёздный марш)
+  -- ★ ПЕХОТА: класс 'peh' лежит в БД как category='ground' (единый армейский форж),
+  --   но набирается в ЦЕНТРЕ ПОДГОТОВКИ — линия 'training', не Военный Завод.
+  --   У роботов носитель пехоты = Военный Завод (см. _faction_is_robot), поэтому
+  --   линия выбирается по расе/правлению.
   if    u.category = 'ship'     then cat:='ship';     ln:='shipyard';         w:=1;
   elsif u.category = 'aviation' then cat:='aviation'; ln:='airfield';         w:=1;
+  elsif u.category = 'ground' and coalesce(u.data->>'class','') = 'peh' then
+    cat:='ground';
+    ln := case when public._faction_is_robot(fid) then 'military_factory' else 'training' end;
+    w:=1;
   elsif u.category = 'ground'   then cat:='ground';   ln:='military_factory'; w:=1;
   elsif u.category = 'division' then cat:='division'; ln:='army';             w:=0;
   else raise exception 'this category is not produced here'; end if;
