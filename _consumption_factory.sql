@@ -4,7 +4,7 @@
 --
 --  ЧТО ДАЁТ. До технологии фабрика товаров работает как раньше (легаси-рецепт
 --  вода 0.6 + сырьё 0.4 на 1 товар, welfare ≤ 1.10). Технология
---  «Товары народного потребления» (soc.consumer_goods) открывает панель, где
+--  «Товары народного потребления» (pol.consumer_goods) открывает панель, где
 --  игрок сам задаёт КАКИЕ ресурсы и СКОЛЬКО ест фабрика на 1 товар. Премиальный
 --  рецепт (редкие ресурсы: старвис/хтонит = epic/legendary) поднимает ПОТОЛОК
 --  благополучия с 1.10 до 1.25.
@@ -26,7 +26,7 @@
 -- ── 1) Технологический узел-гейт ────────────────────────────────────────────
 -- Хранилище изученного = faction_economy.research (jsonb-массив node_id).
 insert into public.tech_nodes (node_id, base_cost, prereq) values
-  ('soc.consumer_goods', 6, '[]'::jsonb)
+  ('pol.consumer_goods', 40, '[]'::jsonb)
 on conflict (node_id) do nothing;
 
 -- ── 2) Таблица рецепта державы ──────────────────────────────────────────────
@@ -67,7 +67,7 @@ declare
   qsum numeric := 0; wsum numeric := 0; nd int := 0;
   out_ing jsonb := '[]'::jsonb;
 begin
-  select coalesce(research,'[]'::jsonb) ? 'soc.consumer_goods'
+  select coalesce(research,'[]'::jsonb) ? 'pol.consumer_goods'
     into has_tech from public.faction_economy where faction_id = p_fid;
   if not coalesce(has_tech, false) then return null; end if;
 
@@ -108,7 +108,7 @@ begin
   fid := public._ec_my_fid();
   if fid is null then raise exception 'no faction'; end if;
 
-  if not (select coalesce(research,'[]'::jsonb) ? 'soc.consumer_goods'
+  if not (select coalesce(research,'[]'::jsonb) ? 'pol.consumer_goods'
           from public.faction_economy where faction_id = fid) then
     raise exception 'нужна технология «Товары народного потребления»';
   end if;
@@ -153,7 +153,7 @@ declare fid text; has_tech boolean; raw jsonb;
 begin
   fid := public._ec_my_fid();
   if fid is null then return jsonb_build_object('tech', false, 'ingredients', '[]'::jsonb); end if;
-  select coalesce(research,'[]'::jsonb) ? 'soc.consumer_goods' into has_tech
+  select coalesce(research,'[]'::jsonb) ? 'pol.consumer_goods' into has_tech
     from public.faction_economy where faction_id = fid;
   select ingredients into raw from public.faction_goods_recipe where faction_id = fid;
   return jsonb_build_object(
@@ -169,6 +169,6 @@ notify pgrst, 'reload schema';
 
 -- ── Проверка после применения ───────────────────────────────────────────────
 -- 1) select public.goods_recipe_get();  -- tech:false, ingredients:[]  (до изучения)
--- 2) после изучения soc.consumer_goods:
+-- 2) после изучения pol.consumer_goods:
 --    select public.goods_recipe_set('[{"res":"Старвис","qty":0.5},{"res":"Железо","qty":0.5}]');
 -- 3) select (public.economy_accrue('<fid>'))->'goods';  -- welfare учитывает качество

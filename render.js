@@ -5308,21 +5308,25 @@ function _fcBody(st, en) {
     if (st.i_duel) {
       parts.push(`<div class="hp-vna-obs">🥊 ${en ? 'You ARE the fight. Duelists cannot bet.' : 'Вы и есть бой. Дуэлянтам ставить нельзя.'}</div>`);
     } else if (st.me) {
-      const my = st.my_bet;
-      const leftCap = Math.max(0, (st.bet_cap || 500000) - (my ? Number(my.amount) : 0));
+      // рев.7: ставить можно на ОБЕ стороны, кап — отдельно на каждую.
+      const cap = st.bet_cap || 500000;
+      const mine = Array.isArray(st.my_bets) ? st.my_bets : (st.my_bet ? [st.my_bet] : []);
+      const onA = mine.find(b => b.on === st.duelist_a), onB = mine.find(b => b.on === st.duelist_b);
+      const leftA = Math.max(0, cap - (onA ? Number(onA.amount) : 0));
+      const leftB = Math.max(0, cap - (onB ? Number(onB.amount) : 0));
+      const opt = (fid, nm, left) => `<option value="${esc(fid || '')}"${left <= 0 ? ' disabled' : ''}>${esc(nm || '?')}${left <= 0 ? (en ? ' — cap reached' : ' — кап') : ''}</option>`;
       parts.push(`<div class="fc-bet">
-        <div class="fc-bet-h">${en ? 'Place a bet' : 'Сделать ставку'} <span class="fc-bet-cap">${en ? 'cap' : 'кап'} ${_fcMoney(st.bet_cap)} ГС</span></div>
-        ${my ? `<div class="fc-bet-my">${en ? 'Your bet' : 'Ваша ставка'}: <b>${_fcMoney(my.amount)} ГС</b> ${en ? 'on' : 'на'} <b>${esc(my.on_name || '')}</b></div>` : ''}
-        ${leftCap > 0 ? `
+        <div class="fc-bet-h">${en ? 'Place a bet' : 'Сделать ставку'} <span class="fc-bet-cap">${en ? 'cap' : 'кап'} ${_fcMoney(cap)} ГС ${en ? 'per side' : 'на сторону'}</span></div>
+        ${mine.map(b => `<div class="fc-bet-my">${en ? 'Your bet' : 'Ваша ставка'}: <b>${_fcMoney(b.amount)} ГС</b> ${en ? 'on' : 'на'} <b>${esc(b.on_name || '')}</b></div>`).join('')}
+        ${leftA > 0 || leftB > 0 ? `
         <div class="fc-bet-row">
           <select id="fc-bet-on" class="fc-bet-sel" onclick="event.stopPropagation()">
-            ${my ? `<option value="${esc(my.on)}">${esc(my.on_name || '')}</option>` : `
-            <option value="${esc(st.duelist_a || '')}">${esc(st.duelist_a_name || '?')}</option>
-            <option value="${esc(st.duelist_b || '')}">${esc(st.duelist_b_name || '?')}</option>`}
+            ${opt(st.duelist_a, st.duelist_a_name, leftA)}
+            ${opt(st.duelist_b, st.duelist_b_name, leftB)}
           </select>
-          <input id="fc-bet-amt" class="fc-bet-amt" type="number" min="1000" step="1000" max="${leftCap}" placeholder="${en ? 'amount' : 'сумма'}" onclick="event.stopPropagation()">
+          <input id="fc-bet-amt" class="fc-bet-amt" type="number" min="1000" step="1000" max="${cap}" placeholder="${en ? 'amount' : 'сумма'}" onclick="event.stopPropagation()">
           <button class="hp-vna-cta" onclick="event.stopPropagation();fcBetSubmit()">💰 ${en ? 'Bet' : 'Поставить'}</button>
-        </div>` : `<div class="hp-vna-obs">${en ? 'Bet cap reached.' : 'Кап ставок исчерпан.'}</div>`}
+        </div>` : `<div class="hp-vna-obs">${en ? 'Bet cap reached on both sides.' : 'Кап ставок исчерпан на обе стороны.'}</div>`}
       </div>`);
     }
   }
@@ -5331,9 +5335,10 @@ function _fcBody(st, en) {
     parts.push(`<div class="fc-phase"><span class="fc-phase-tag">${en ? 'VERDICT' : 'ВЕРДИКТ'}</span></div>`);
     parts.push(_fcDuelCards(st, en, false));
     parts.push(`<div class="fc-ok">🏆 ${en ? 'Winner' : 'Победитель'}: <b>${esc(st.winner_name || '')}</b>${st.prize ? ` · ${en ? 'club purse' : 'приз клуба'} ${_fcMoney(st.prize)} ГС` : ''}${st.npc_bet ? ` · ${en ? 'patron stake' : 'ставка мецената'} ${_fcMoney(st.npc_bet)} ГС` : ''}</div>`);
-    if (st.my_bet) parts.push(`<div class="fc-bet-my">${Number(st.my_bet.won) > 0
-      ? (en ? 'Your payout: ' : 'Ваша выплата: ') + '<b>' + _fcMoney(st.my_bet.won) + ' ГС</b>'
-      : (en ? 'Your bet is lost. The arena remembers.' : 'Ставка сгорела. Арена помнит.')}</div>`);
+    const dmine = Array.isArray(st.my_bets) ? st.my_bets : (st.my_bet ? [st.my_bet] : []);
+    dmine.forEach(b => parts.push(`<div class="fc-bet-my">${en ? 'on' : 'на'} <b>${esc(b.on_name || '')}</b> — ${Number(b.won) > 0
+      ? (en ? 'payout: ' : 'выплата: ') + '<b>' + _fcMoney(b.won) + ' ГС</b>'
+      : (en ? 'bet lost. The arena remembers.' : 'ставка сгорела. Арена помнит.')}</div>`));
   }
 
   // ── летопись прошлых дуэлей ──

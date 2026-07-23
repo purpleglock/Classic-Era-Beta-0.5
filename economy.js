@@ -414,7 +414,7 @@ const EC_GOODS_MAT = ['Железо', 'Силикаты'];
 // НАСТРАИВАЕМЫЙ РЕЦЕПТ (зеркало _consumption_factory.sql). До технологии
 // EC_GOODS_TECH фабрика работает по легаси-рецепту выше (welfare ≤ 1.10);
 // с рецептом премиальные (редкие) входы поднимают потолок до 1.25.
-const EC_GOODS_TECH = 'soc.consumer_goods';
+const EC_GOODS_TECH = 'pol.consumer_goods';
 const EC_QUALITY_W = { legendary: 1.70, epic: 1.45, rare: 1.25, uncommon: 1.10, common: 1.00 };
 const EC_GOODS_WCAP = 1.10, EC_GOODS_QMAX = 0.15;   // потолок welfare: база 1.10 + качество ≤0.15
 // ПРО: цена снаряда + срок доставки (зеркало _defense_const).
@@ -430,7 +430,7 @@ const EC_BLD_HOWTO = {
   mining_deep:      'Копает автоматически НЕОБЫЧНЫЕ и РЕДКИЕ залежи планеты. Обычные не трогает — их берёт Добывающий завод.',
   mining_exotic:    'Копает автоматически ЭПИЧЕСКИЕ и ЛЕГЕНДАРНЫЕ залежи планеты. Ставьте только там, где такая залежь есть — иначе будет простаивать.',
   goodsfab:         'Перерабатывает воду (Лёд/Жидкая вода) и сырьё (Железо/Силикаты) в товары РОВНО под спрос населения — ничего не копится и не продаётся. Держите запас входов на складе — без них фабрика простаивает. Обеспечение: хватает → доход растёт (до ×1.10), дефицит → проседает (до ×0.90). Технология «Товары народного потребления» открывает настройку рецепта: премиальные ресурсы (Старвис/Хтонит) поднимают потолок благополучия до ×1.25.',
-  wellhub:          'Прибавка к ИНДЕКСУ благополучия (множит весь ГС-доход державы). Работает сам, пока открыт хотя бы 1 слот. Усиливается ТОЛЬКО технологиями (soc.welfare_hub2/3) — апгрейда здания нет. Больше 1 на систему и 5 на державу не поставить, суммарный вклад ограничен +0.20.',
+  wellhub:          'Прибавка к ИНДЕКСУ благополучия (множит весь ГС-доход державы). Работает сам, пока открыт хотя бы 1 слот. Усиливается ТОЛЬКО технологиями «Гражданские институты» / «Общественный договор» — апгрейда здания нет. Больше 1 на систему и 5 на державу не поставить, суммарный вклад ограничен +0.20.',
   trade:            'Доход только при активном торговом пути (вкладка «Торговля и потоки» → Караваны).',
   market:           'Сама сбывает свежедобытый поток (заводы в режиме «Склад») за ГС (50–75% цены по редкости), без торговых путей. Накопленный склад НЕ трогает — стратегический запас в безопасности.',
   warehouse:        'Каждый слот склада повышает лимит общего хранилища (+500). Без склада лимит мал — лишняя добыча теряется (или ставьте завод в режим «Экспорт»).',
@@ -648,6 +648,10 @@ function ecFactionMods(app) {
   // Применяются к текущей фракции (research лежит в EC.eco, не в анкете).
   if (typeof EC !== 'undefined' && EC.eco && Array.isArray(EC.eco.research) && (!app || app === EC.app)) {
     EC.eco.research.forEach(id => add(EC_RESEARCH_BONUS[id]));
+    // КУРС ДЕРЖАВЫ — ещё одно слагаемое рядом с доктриной (зеркало _faction_mods).
+    // wb/fleet сюда не идут: они живут в индексе благополучия и штрафе перегруза.
+    const pm = ecEconPolicyMods();
+    add(Object.fromEntries(Object.entries(pm).filter(([k]) => k !== 'wb' && k !== 'fleet')));
   }
   const clamp = (v, lo) => Math.max(lo, 1 + v);
   return {
@@ -1290,7 +1294,136 @@ function ecTabWelfare() {
       <div class="ec-wf-head"><span>Система</span><span>Доход</span><span>Труд</span><span>Жители</span><span>Места</span><span>Статус</span></div>
       ${all.map(b => ecWelfareSysRow(b, capSet.has(b.system_id))).join('')}
     </div>`;
-  return `${head}${summary}${table}`;
+  return `${head}${summary}${ecRecipeSection()}${table}`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// ВКЛАДКА «🏛 КУРС ДЕРЖАВЫ» — выбор экономической политики.
+// Зеркало _econ_policy.sql: 4 готовых курса + свой (по технологии).
+// Смена — раз в 10 суток (7 с «Экономическим советом»).
+// ══════════════════════════════════════════════════════════════
+// Строка эффектов курса человеческим языком.
+function ecPolModsLine(mods) {
+  mods = mods || {};
+  const pct = (v, plusGood) => `<span class="ec-pol-e ${(plusGood ? v > 0 : v < 0) ? 'up' : 'dn'}">${v > 0 ? '+' : ''}${Math.round(v * 100)}%</span>`;
+  const out = [];
+  if (mods.gc)       out.push(`💰 доход ${pct(mods.gc, true)}`);
+  if (mods.mine)     out.push(`⛏ добыча ${pct(mods.mine, true)}`);
+  if (mods.build)    out.push(`🏗 цена построек ${pct(mods.build, false)}`);
+  if (mods.research) out.push(`🔬 цена исследований ${pct(mods.research, false)}`);
+  if (mods.colonize) out.push(`🪐 цена колоний ${pct(mods.colonize, false)}`);
+  if (mods.claim_cost) out.push(`🚩 цена захвата ${pct(mods.claim_cost, false)}`);
+  if (mods.claim_cd) out.push(`⏳ кулдаун захвата ${pct(mods.claim_cd, false)}`);
+  if (mods.sci_flat) out.push(`🔬 <span class="ec-pol-e ${mods.sci_flat > 0 ? 'up' : 'dn'}">${mods.sci_flat > 0 ? '+' : ''}${mods.sci_flat}</span> ОН/сут`);
+  if (mods.agents_flat) out.push(`🕵 <span class="ec-pol-e ${mods.agents_flat > 0 ? 'up' : 'dn'}">${mods.agents_flat > 0 ? '+' : ''}${mods.agents_flat}</span> агент/сут`);
+  if (mods.wb)       out.push(`☀ благополучие <span class="ec-pol-e ${mods.wb > 0 ? 'up' : 'dn'}">${mods.wb > 0 ? '+' : ''}${(+mods.wb).toFixed(2)}</span>`);
+  if (mods.fleet && +mods.fleet !== 1) out.push(`🚀 вместимость флота ${pct(+mods.fleet - 1, true)}`);
+  return out.length ? out.join(' · ') : '<span class="ec-hint">без эффектов</span>';
+}
+function ecPolCardHtml(key, cur, locked) {
+  const info = ecEconPolicyInfo(key);
+  const on = key === cur;
+  const isCustom = key === 'custom';
+  const noTech = isCustom && ecEconPolicyPoints() <= 0;
+  const btn = on
+    ? `<span class="ec-pol-cur">✓ действующий курс</span>`
+    : noTech
+      ? `<span class="ec-hint">🔒 нужна технология «Экономический совет»</span>`
+      : isCustom
+        ? `<button class="btn btn-gh btn-sm" onclick="document.getElementById('ec-pol-custom').scrollIntoView({behavior:'smooth'})">Настроить ниже ↓</button>`
+        : locked
+          ? `<span class="ec-hint">🔒 ${esc(locked)}</span>`
+          : `<button class="btn btn-gh btn-sm" onclick="ecPolPick('${key}')">Принять курс</button>`;
+  return `<div class="ec-pol-card${on ? ' on' : ''}">
+    <div class="ec-pol-hd"><span class="ec-pol-ic">${info.ic}</span><b>${esc(info.name)}</b></div>
+    <div class="ec-pol-tx">${esc(info.desc)}</div>
+    <div class="ec-pol-mods">${ecPolModsLine(info.mods)}</div>
+    <div class="ec-pol-act">${btn}</div>
+  </div>`;
+}
+function ecTabPolicy() {
+  const cur = ecEconPolicyKey();
+  const next = ecEconPolicyNext();
+  const cdDays = ecEconPolicyCdDays();
+  const locked = next ? `сменить курс можно ${next.toLocaleDateString('ru-RU')}` : '';
+  const head = ecIntro('🏛', 'Курс державы',
+    `Держава ведёт <b>ровно один</b> экономический курс. Он складывается с доктриной из анкеты: двигает доход, добычу, цены и <b>индекс благополучия</b>. Курс — это выбор, а не апгрейд: за каждый плюс где-то платят минусом.`,
+    [`Менять курс можно раз в <b>${cdDays}</b> суток${ecEconCouncil() ? ' (сокращено «Экономическим советом»)' : ' — «Экономический совет» сократит до 7'}.`,
+     `Четвёртый курс — <b>идеологический</b>, он свой у каждой идеологии.`,
+     `Технология «Экономический совет» открывает <b>свой курс</b>: очки по осям вручную.`]);
+  const status = `<div class="ec-pov-sum">
+    <span class="ec-pov-sum-i">🏛 курс: <b>${esc(ecEconPolicyInfo(cur).name)}</b></span>
+    <span class="ec-pov-sum-i ${next ? '' : 'ec-sb-ok'}">${next ? `⏳ смена доступна ${esc(next.toLocaleDateString('ru-RU'))}` : '✓ курс можно сменить хоть сейчас'}</span>
+    <span class="ec-pov-sum-i" data-tip="Вклад курса в индекс благополучия входит в «идентичность» и общий кламп ±0.20">☀ вклад в благополучие: <b>${((+ecEconPolicyMods().wb || 0) >= 0 ? '+' : '')}${(+ecEconPolicyMods().wb || 0).toFixed(2)}</b></span>
+  </div>`;
+  const cards = `<div class="ec-pol-grid">${EC_ECON_POLICY.map(p => ecPolCardHtml(p.key, cur, locked)).join('')}</div>`;
+  return `${head}${status}${cards}
+    <div class="ec-section-title">🛠 Свой курс <span class="ec-hint">— распределите очки по осям</span></div>
+    <div id="ec-pol-custom">${ecPolCustomHtml()}</div>`;
+}
+// ── Редактор «своего курса» ──────────────────────────────────
+function ecPolDraftInit() {
+  if (EC.polDraft) return;
+  const c = ecEconPolicyCustom();
+  EC.polDraft = {};
+  EC_ECON_CUSTOM_AXES.forEach(ax => { EC.polDraft[ax] = Math.max(-2, Math.min(2, +c[ax] || 0)); });
+}
+function ecPolDraftUsed() { ecPolDraftInit(); return EC_ECON_CUSTOM_AXES.reduce((a, ax) => a + (+EC.polDraft[ax] || 0), 0); }
+function ecPolStep(ax, d) {
+  ecPolDraftInit();
+  const v = Math.max(-2, Math.min(2, (+EC.polDraft[ax] || 0) + d));
+  const prev = EC.polDraft[ax];
+  EC.polDraft[ax] = v;
+  if (ecPolDraftUsed() > ecEconPolicyPoints()) { EC.polDraft[ax] = prev; toast('Не хватает очков — уведите какую-нибудь ось в минус', 'err'); }
+  ecPolCustomRerender();
+}
+function ecPolCustomRerender() { const el = document.getElementById('ec-pol-custom'); if (el) el.innerHTML = ecPolCustomHtml(); }
+function ecPolCustomHtml() {
+  const pts = ecEconPolicyPoints();
+  if (pts <= 0) {
+    return `<div class="ec-wf-legend">🔒 Технология «Экономический совет» (ветка «Политика» → Экономика) откроет собственную экономическую доктрину: 3 очка по осям, минусы по одной оси возвращают очки на другие. «Плановое управление» поднимет бюджет до 4 очков.</div>`;
+  }
+  ecPolDraftInit();
+  const used = ecPolDraftUsed();
+  const left = pts - used;
+  const rows = EC_ECON_CUSTOM_AXES.map(ax => {
+    const s = EC_ECON_CUSTOM_STEP[ax], st = +EC.polDraft[ax] || 0;
+    const val = s.delta * st;
+    return `<div class="ec-pol-axis">
+      <span class="ec-pol-axis-n">${s.ic} ${esc(s.name)}</span>
+      <span class="ec-pol-axis-c">
+        <button class="btn btn-gh btn-sm" ${st <= -2 ? 'disabled' : ''} onclick="ecPolStep('${ax}',-1)">−</button>
+        <b class="ec-pol-axis-v ${st > 0 ? 'up' : st < 0 ? 'dn' : ''}">${st > 0 ? '+' : ''}${st}</b>
+        <button class="btn btn-gh btn-sm" ${st >= 2 ? 'disabled' : ''} onclick="ecPolStep('${ax}',1)">+</button>
+      </span>
+      <span class="ec-pol-axis-e ${st > 0 ? 'up' : st < 0 ? 'dn' : ''}">${st ? esc(s.fmt(val)) : '—'}</span>
+    </div>`;
+  }).join('');
+  const cur = ecEconPolicyKey() === 'custom';
+  const next = ecEconPolicyNext();
+  return `<div class="ec-wf-legend">Каждый шаг «+» стоит очко, каждый «−» — возвращает. Диапазон по оси: от −2 до +2. Осмысленный курс — это перекос, а не всё по чуть-чуть.</div>
+    <div class="ec-pol-budget">Очки: <b class="${left < 0 ? 'dn' : 'up'}">${left}</b> из ${pts}</div>
+    <div class="ec-pol-axes">${rows}</div>
+    <div class="ec-pol-act" style="margin-top:10px">
+      ${next && !cur ? `<span class="ec-hint">🔒 сменить курс можно ${esc(next.toLocaleDateString('ru-RU'))}</span>`
+        : `<button class="btn btn-gd btn-sm" onclick="ecPolCustomSave()">${cur ? 'Обновить свой курс' : 'Принять свой курс'}</button>`}
+    </div>`;
+}
+// Смена готового курса. Курс — решение на недели, поэтому спрашиваем подтверждение.
+async function ecPolPick(key) {
+  const info = ecEconPolicyInfo(key);
+  if (!confirm(`Принять «${info.name}»?\n\nСледующая смена курса станет возможна через ${ecEconPolicyCdDays()} суток.`)) return;
+  EC.polDraft = null;
+  await ecRpcAct('econ_policy_set', { p_key: key, p_custom: null }, `Курс державы: ${info.name}`);
+}
+async function ecPolCustomSave() {
+  ecPolDraftInit();
+  if (ecPolDraftUsed() > ecEconPolicyPoints()) { toast('Перебор очков', 'err'); return; }
+  if (!EC_ECON_CUSTOM_AXES.some(ax => +EC.polDraft[ax])) { toast('Пустой курс — распределите хотя бы одно очко', 'err'); return; }
+  if (!confirm(`Принять свой курс?\n\nСледующая смена станет возможна через ${ecEconPolicyCdDays()} суток.`)) return;
+  const cus = {}; EC_ECON_CUSTOM_AXES.forEach(ax => { if (+EC.polDraft[ax]) cus[ax] = +EC.polDraft[ax]; });
+  EC.polDraft = null;
+  await ecRpcAct('econ_policy_set', { p_key: 'custom', p_custom: cus }, 'Свой курс державы принят');
 }
 
 // Применить меру помощи системе (тратит ГС). Зеркало RPC poverty_relief.
@@ -1911,7 +2044,6 @@ function ecGoodsHtml(b) {
       ${qualChip}
     </div>
     <div class="ec-gf-prov ec-gf-sub">Товары не копятся на складе — производятся и потребляются в момент тика</div>
-    ${ecRecipeSection()}
   </div>`;
 }
 
@@ -1973,12 +2105,12 @@ function ecRecipeEditorHtml() {
 // Секция: гейт-подсказка (без техи) либо редактор рецепта.
 function ecRecipeSection() {
   if (!ecHasGoodsTech()) {
-    return `<div class="ec-gf-prov ec-gf-sub" style="margin-top:6px">🔒 Технология «Товары народного потребления» откроет настройку рецепта фабрики: свои ресурсы вместо воды+сырья. Премиальные входы (напр. Старвис/Хтонит) поднимут потолок благополучия с ×1.10 до ×1.25.</div>`;
+    return `<div class="ec-section-title">⚗ Рецепт потребления</div>
+      <div class="ec-wf-legend">🔒 Технология «Товары народного потребления» откроет настройку: свои ресурсы вместо воды+сырья. Премиальные входы (напр. Старвис/Хтонит) поднимут потолок благополучия с ×1.10 до ×1.25.</div>`;
   }
-  return `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)">
-    <div class="ec-gf-sub" style="margin-bottom:4px">⚗ Рецепт потребления <span style="opacity:.7">— какие ресурсы фабрика превращает в благополучие (расход на 1 товар)</span></div>
-    <div id="ec-recipe-box">${ecRecipeEditorHtml()}</div>
-  </div>`;
+  return `<div class="ec-section-title">⚗ Рецепт потребления <span class="ec-hint">— общий для ВСЕЙ державы, настраивается один раз</span></div>
+    <div class="ec-wf-legend">Какие ресурсы ваши фабрики превращают в благополучие (расход на 1 товар). Чем реже сырьё — тем выше потолок благополучия, но полный бонус даёт только набор из 3 разных ресурсов.</div>
+    <div id="ec-recipe-box">${ecRecipeEditorHtml()}</div>`;
 }
 function ecRecipeRerender() { const el = document.getElementById('ec-recipe-box'); if (el) el.innerHTML = ecRecipeEditorHtml(); }
 function ecRecipeEdit(i, k, v) { ecRecipeInit(); if (!EC._recipeEdit[i]) return; EC._recipeEdit[i][k] = (k === 'qty') ? (Math.round((+v || 0) * 100) / 100) : v; ecRecipeRerender(); }
@@ -2248,6 +2380,107 @@ function ecBudgetUpkeep() {
 // Благополучие от соцобеспечения — множитель всего ГС-дохода (зеркало _budget_gc_mult)
 function ecBudgetGcMult() { return EC_BUDGET.social.mults[ecBudgetLvl('social')]; }
 
+// ══════════════════════════════════════════════════════════════
+// КУРС ДЕРЖАВЫ — экономические политики (зеркало _econ_policy.sql).
+// Держава держит РОВНО ОДИН курс. Курс — это ещё одно слагаемое рядом с
+// доктриной: проценты идут в ecFactionMods, wb — в индекс благополучия,
+// fleet — множитель вместимости флота (смягчает штраф перегруза).
+// Смена курса — раз в 10 суток (7 с «Экономическим советом»).
+// ══════════════════════════════════════════════════════════════
+const EC_ECON_POLICY = [
+  { key: 'balanced', ic: '⚖', name: 'Сбалансированный курс',
+    desc: 'Государство ни во что не вмешивается сверх меры. Ничего не даёт и ничего не отнимает — надёжный нейтральный вариант.',
+    mods: {} },
+  { key: 'civil', ic: '🕊', name: 'Гражданский курс',
+    desc: 'Приоритет — уровень жизни и деловая активность. Народ живёт лучше и охотнее платит, но шахты недофинансированы.',
+    mods: { gc: 0.15, wb: 0.05, build: 0.05, mine: -0.15 } },
+  { key: 'war', ic: '⚔', name: 'Военный курс',
+    desc: 'Сырьё и флот в приоритете: добыча растёт, держава спокойно тянет флот сверх вместимости баз. Платит за это уровень жизни и казна.',
+    mods: { mine: 0.15, fleet: 1.25, gc: -0.12, wb: -0.06 } },
+  { key: 'ideo', ic: '★', name: 'Идеологический курс',
+    desc: 'Четвёртый путь — свой у каждой идеологии.', mods: null },   // mods берутся из EC_ECON_POLICY_IDEO
+  { key: 'custom', ic: '🛠', name: 'Свой курс',
+    desc: 'Собственная экономическая доктрина: очки распределяются по осям вручную. Открывается технологией «Экономический совет».',
+    mods: null },
+];
+// Четвёртый курс — по идеологии (робот-набор переопределяет).
+const EC_ECON_POLICY_IDEO = {
+  'Технократия (Культ науки)': { name: 'Академический мандат',  mods: { research: -0.15, sci_flat: 1, gc: -0.10 } },
+  'Милитаризм (Культ силы)':   { name: 'Тотальная мобилизация', mods: { fleet: 1.35, claim_cost: -0.15, wb: -0.10 } },
+  'Пацифизм':                  { name: 'Общественное благо',    mods: { wb: 0.10, gc: 0.10, fleet: 0.80 } },
+  'Экспансионизм':             { name: 'Фронтирный уклад',      mods: { colonize: -0.20, claim_cd: -0.15, wb: -0.05 } },
+  'Изоляционизм':              { name: 'Автаркия',              mods: { gc: 0.15, mine: 0.10, colonize: 0.20 } },
+  'Ксенофилия':                { name: 'Открытые порты',        mods: { gc: 0.20, wb: 0.04, mine: -0.15 } },
+  'Ксенофобия':                { name: 'Осадное положение',     mods: { mine: 0.20, fleet: 1.15, gc: -0.15 } },
+  'Спиритуализм':              { name: 'Теократический уклад',  mods: { wb: 0.08, gc: 0.10, research: 0.10 } },
+  'Трансгуманизм':             { name: 'Программа возвышения',  mods: { research: -0.20, wb: 0.04, gc: -0.15 } },
+  'Экоцентризм':               { name: 'Заповедный уклад',      mods: { wb: 0.08, mine: 0.10, build: 0.10 } },
+  'Индустриализм':             { name: 'Пятилетка',             mods: { build: -0.20, mine: 0.15, wb: -0.06 } },
+};
+const EC_ECON_POLICY_ROBOT = { name: 'Оптимизация роя', mods: { build: -0.15, research: -0.10, mine: 0.10, wb: -0.05 } };
+// Оси «своего курса»: шаг за 1 очко, диапазон −2..+2. Минусы ВОЗВРАЩАЮТ очки.
+// Знак delta уже учитывает «что такое хорошо»: +1 по build = стройка ДЕШЕВЛЕ.
+const EC_ECON_CUSTOM_STEP = {
+  gc:       { ic: '💰', name: 'Доход',        delta: 0.06,  fmt: v => `${v > 0 ? '+' : ''}${Math.round(v * 100)}% ГС` },
+  mine:     { ic: '⛏', name: 'Добыча',        delta: 0.06,  fmt: v => `${v > 0 ? '+' : ''}${Math.round(v * 100)}% добычи` },
+  build:    { ic: '🏗', name: 'Стройка',      delta: -0.06, fmt: v => `${v > 0 ? '+' : ''}${Math.round(-v * 100)}% к цене построек` },
+  research: { ic: '🔬', name: 'Наука',        delta: -0.05, fmt: v => `${v > 0 ? '+' : ''}${Math.round(-v * 100)}% к цене исследований` },
+  wb:       { ic: '☀', name: 'Благополучие',  delta: 0.03,  fmt: v => `${v > 0 ? '+' : ''}${(v).toFixed(2)} к индексу` },
+  fleet:    { ic: '🚀', name: 'Флот',         delta: 0.10,  fmt: v => `${v > 0 ? '+' : ''}${Math.round(v * 100)}% вместимости` },
+};
+const EC_ECON_CUSTOM_AXES = ['gc', 'mine', 'build', 'research', 'wb', 'fleet'];
+function ecEconPolicyKey() { return ((EC.eco && EC.eco.econ_policy) || 'balanced'); }
+function ecEconPolicyCustom() { return (EC.eco && EC.eco.econ_policy_custom) || {}; }
+function ecEconCouncil() { return (((EC.eco || {}).research) || []).includes('pol.econ_council'); }
+function ecEconPolicyPoints() {
+  const r = ((EC.eco || {}).research) || [];
+  return r.includes('pol.econ_council2') ? 4 : r.includes('pol.econ_council') ? 3 : 0;
+}
+function ecEconPolicyCdDays() { return ecEconCouncil() ? 7 : 10; }
+// Когда курс можно сменить снова (null = хоть сейчас).
+function ecEconPolicyNext() {
+  const at = EC.eco && EC.eco.econ_policy_at;
+  if (!at) return null;
+  const t = new Date(at).getTime() + ecEconPolicyCdDays() * 86400000;
+  return t > Date.now() ? new Date(t) : null;
+}
+// Идеологический курс текущей фракции (карточка четвёртого варианта).
+function ecEconPolicyIdeo() {
+  const a = EC.app || {};
+  if (a.race === 'Синтетики / Киборги' || a.gov === 'Машинный разум (ИИ)') return EC_ECON_POLICY_ROBOT;
+  return EC_ECON_POLICY_IDEO[a.ideology] || { name: 'Собственный путь', mods: {} };
+}
+// Мод-дельты «своего курса» по сохранённой раскладке очков.
+function ecEconPolicyCustomMods(cus) {
+  cus = cus || ecEconPolicyCustom();
+  const m = {};
+  let used = 0;
+  EC_ECON_CUSTOM_AXES.forEach(ax => {
+    const st = Math.max(-2, Math.min(2, +cus[ax] || 0));
+    if (!st) return;
+    used += st;
+    if (ax === 'fleet') m.fleet = (m.fleet || 1) + EC_ECON_CUSTOM_STEP.fleet.delta * st;
+    else m[ax] = (m[ax] || 0) + EC_ECON_CUSTOM_STEP[ax].delta * st;
+  });
+  if (used > ecEconPolicyPoints()) return {};   // перебор бюджета — курс не действует
+  return m;
+}
+// ИТОГОВЫЕ дельты текущего курса (зеркало _econ_policy_mods).
+function ecEconPolicyMods() {
+  const k = ecEconPolicyKey();
+  if (k === 'ideo') return ecEconPolicyIdeo().mods || {};
+  if (k === 'custom') return ecEconPolicyPoints() > 0 ? ecEconPolicyCustomMods() : {};
+  const p = EC_ECON_POLICY.find(p => p.key === k);
+  return (p && p.mods) || {};
+}
+function ecEconPolicyFleetMult() { return +ecEconPolicyMods().fleet || 1; }
+function ecEconPolicyInfo(key) {
+  const p = EC_ECON_POLICY.find(p => p.key === key) || EC_ECON_POLICY[0];
+  if (key === 'ideo') { const i = ecEconPolicyIdeo(); return { ...p, name: `★ ${i.name}`, mods: i.mods || {} }; }
+  if (key === 'custom') return { ...p, mods: ecEconPolicyCustomMods() };
+  return p;
+}
+
 // ── БЛАГО v5: единый индекс благополучия (зеркало _wellbeing_armies.sql) ──
 // wb = соцобеспечение + идентичность (раса/политика) − перегруз флота − гарнизоны.
 // Идентичность: у каждой расы и политики свой профиль (зеркало _wb_identity).
@@ -2266,12 +2499,15 @@ const EC_WB_IDENT = {
 function ecWbIdent() {
   const a = EC.app || {};
   const w = (EC_WB_IDENT.race[a.race] || 0) + (EC_WB_IDENT.gov[a.gov] || 0)
-          + (EC_WB_IDENT.regime[a.regime] || 0) + (EC_WB_IDENT.ideology[a.ideology] || 0);
+          + (EC_WB_IDENT.regime[a.regime] || 0) + (EC_WB_IDENT.ideology[a.ideology] || 0)
+          + (+ecEconPolicyMods().wb || 0);   // КУРС ДЕРЖАВЫ (_econ_policy.sql)
   return Math.max(-0.20, Math.min(0.20, Math.round(w * 1000) / 1000));
 }
 // Штраф перегруза флота: 100% перебора вместимости = −0.12, потолок −0.35 (зеркало _fleet_overcap_pen)
 function ecFleetOverPen() {
-  const used = ecFleetUsed(), cap = ecCaps().fleetCap;
+  const used = ecFleetUsed();
+  // КУРС ДЕРЖАВЫ: военный курс расширяет терпимость к перегрузу (зеркало _fleet_overcap_pen)
+  const cap = ecCaps().fleetCap * Math.max(0.5, ecEconPolicyFleetMult());
   const over = Math.max(0, used - cap);
   if (over <= 0) return 0;
   return Math.round(Math.min(0.35, 0.12 * over / Math.max(cap, 50)) * 1000) / 1000;
@@ -2295,7 +2531,7 @@ function ecGarrisonPen() {
 const EC_WB_HUB_CAP = 0.20, EC_WB_HUB_STATE_MAX = 5;
 function ecWbHubLevel() {
   const r = (EC.eco && EC.eco.research) || [];
-  return 1 + (r.includes('soc.welfare_hub2') ? 0.5 : 0) + (r.includes('soc.welfare_hub3') ? 0.5 : 0);
+  return 1 + (r.includes('pol.welfare_hub2') ? 0.5 : 0) + (r.includes('pol.welfare_hub3') ? 0.5 : 0);
 }
 function ecWbHubUnit() {
   const a = EC.app || {};
@@ -2318,7 +2554,7 @@ function ecWbHub() {
   return Math.round(Math.min(EC_WB_HUB_CAP, n * ecWbHubUnit() * ecWbHubLevel()) * 1000) / 1000;
 }
 // Доступность постройки домика (зеркало гейта/лимитов в economy_build).
-function ecHubTech() { return (((EC.eco || {}).research) || []).includes('soc.welfare_hub'); }
+function ecHubTech() { return (((EC.eco || {}).research) || []).includes('pol.welfare_hub'); }
 function ecHubCount() { return (EC.buildings || []).filter(b => b.btype === 'wellhub').length; }
 function ecHubInSystem(colonyId) {
   const col = (EC.colonies || []).find(c => c.id === colonyId);
@@ -2511,16 +2747,17 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['flows', '⇄', 'Торговля и потоки'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['war', '⚔', 'Война'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['policy', '🏛', 'Курс державы'], ['flows', '⇄', 'Торговля и потоки'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['war', '⚔', 'Война'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   // Длань Неотвратимости — отдельная вкладка-пульт, появляется когда орудие доступно
   // (исследование открыто или орудие уже стоит).
-  if (ecDoomUnlocked()) tabs.splice(13, 0, ['doom', '🜨', 'Длань Неотвратимости']);
+  if (ecDoomUnlocked()) tabs.splice(14, 0, ['doom', '🜨', 'Длань Неотвратимости']);   // перед «Разведкой»
   const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
     : EC.tab === 'milbuild' ? ecTabMilBuild()
     : EC.tab === 'outposts' ? ecTabOutposts()
     : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
     : EC.tab === 'welfare' ? ecTabWelfare()
+    : EC.tab === 'policy' ? ecTabPolicy()
     : EC.tab === 'trade' ? ecTabFlows()   // легаси-ссылки: «Торговля» слита в «Потоки»
     : EC.tab === 'flows' ? ecTabFlows()
     : EC.tab === 'exchange' ? ecTabExchange()
@@ -9514,6 +9751,11 @@ const EC_POLITICS = [
     desc: 'Открытие рынков и налоговые льготы для межзвёздных корпораций — приток капитала в казну. +10% дохода.' },
   { id: 'pol.mercantile',   branch: 'econ',   name: 'Торговая монополия',        cost: 50, prereq: ['pol.new_deal'],    bonus: { gc: 0.10, build: -0.05 },
     desc: 'Государственный контроль над межсистемными торговыми маршрутами. +10% дохода, −5% к цене построек.' },
+  // Курс державы — свои экономические доктрины. Зеркало _econ_policy.sql.
+  { id: 'pol.econ_council',  branch: 'econ', name: 'Экономический совет',   cost: 60,  prereq: [],
+    desc: 'При правительстве появляется постоянный экономический совет. Во вкладке «🏛 Курс державы» открывается СВОЙ курс: 3 очка, которые вы сами раскладываете по осям (доход, добыча, стройка, наука, благополучие, флот) — минусы по одной оси возвращают очки на другие. Заодно курс можно менять раз в 7 суток вместо 10.' },
+  { id: 'pol.econ_council2', branch: 'econ', name: 'Плановое управление',   cost: 130, prereq: ['pol.econ_council'],
+    desc: 'Совет получает собственный аппарат планирования и доступ ко всей статистике державы. Бюджет своего курса растёт до 4 очков — можно позволить себе перекос сразу по двум направлениям.' },
   // Производство
   { id: 'pol.five_year',    branch: 'prod',   name: 'Директивная экономика',     cost: 35, prereq: [],                  bonus: { build: -0.15 },
     desc: 'Централизованное планирование производства: верфи и заводы работают по единому государственному плану. −15% к цене построек.' },
@@ -9526,6 +9768,16 @@ const EC_POLITICS = [
     desc: 'Доктрина приоритетной экспансии: флот и дипломатия брошены на расширение границ. −20% к цене захвата систем.' },
   { id: 'pol.house_heavens', branch: 'expand', name: 'Дом в небесах',            cost: 90, prereq: ['pol.total_mob'],   special: 'claim2',
     desc: 'Имперский колониальный проект: служба освоения позволяет захватить ДВЕ системы за один цикл, прежде чем уйти на кулдаун.' },
+  // Благополучие — рост уровня жизни: свой рецепт потребления + Центры благополучия.
+  // Зеркала: _consumption_factory.sql (pol.consumer_goods) и _welfare_hub.sql (pol.welfare_hub*).
+  { id: 'pol.consumer_goods', branch: 'welfare', name: 'Товары народного потребления', cost: 40, prereq: [],
+    desc: 'Госплан переходит от «лишь бы сыто» к «чтобы хорошо жилось». Открывает настройку РЕЦЕПТА фабрик потребления во вкладке «Благополучие»: вы сами решаете, какие ресурсы идут народу. Премиальное сырьё (Старвис, Хтонит) поднимает потолок благополучия с ×1.10 до ×1.25 — но полный бонус даёт лишь набор из 3 разных ресурсов.' },
+  { id: 'pol.welfare_hub',  branch: 'welfare', name: 'Центры благополучия',        cost: 45, prereq: [],
+    desc: 'Открывает постройку «Центр благополучия» — здание, поднимающее индекс благополучия всей державы. У каждой идеологии он работает по-своему: спиритуалистам — от охвата храмов, корпоратам — от казны (с быстрым насыщением), пацифистам — щедро и просто. Не более 1 на систему и 5 на державу.' },
+  { id: 'pol.welfare_hub2', branch: 'welfare', name: 'Гражданские институты',      cost: 90, prereq: ['pol.welfare_hub'],
+    desc: 'Суды, профсоюзы и муниципалитеты выходят из тени государства. Все ваши Центры благополучия становятся мощнее в полтора раза. Само здание улучшать нельзя — растёт только через эту ветку.' },
+  { id: 'pol.welfare_hub3', branch: 'welfare', name: 'Общественный договор',       cost: 160, prereq: ['pol.welfare_hub2'],
+    desc: 'Власть и население договариваются о правилах игры окончательно. Центры благополучия выходят на предельную мощность (вдвое против базовой). Суммарный вклад Центров в индекс благополучия ограничен +0.20.' },
   // Небожители — освоение НЕПРИГОДНЫХ миров через малые станции (3–5 ячеек застройки).
   // station.groups — какие группы планет открывает; station.cells — размер станции.
   { id: 'pol.cel_asteroid', branch: 'celestial', name: 'Астероидные станции',     cost: 20,  prereq: [],
@@ -9905,7 +10157,7 @@ function ecTabResearch() {
     ship:     ['class', 'type', 'weapon', 'reactor', 'engine', 'armor', 'shield', 'hangar', 'module'],
     ground:   ['class', 'type', 'weapon', 'reactor', 'engine', 'armor', 'shield', 'hangar', 'module'],
     aviation: ['class', 'type', 'weapon', 'reactor', 'engine', 'armor', 'shield', 'hangar', 'module'],
-    politics: ['econ', 'prod', 'expand', 'mind', 'celestial'],
+    politics: ['econ', 'prod', 'expand', 'welfare', 'mind', 'celestial'],
   };
 
   // ── СТАБИЛЬНАЯ РАСКЛАДКА ХОЛСТА ──────────────────────────────────────────
@@ -10126,7 +10378,7 @@ function ecTabResearch() {
 // Размер слота узла-самоцвета на холсте (десктоп). Компактный: иконка + имя.
 const EC_TREE_W = 150, EC_TREE_H = 104;
 // Дефолтные emoji-значки по ветке/роду — пока узлу не задана картинка/иконка.
-const EC_BRANCH_ICON = { class: '🚀', type: '🛰', weapon: '🎯', armor: '🛡', shield: '🔰', engine: '🚀', reactor: '⚛', hangar: '🛬', module: '📡', econ: '💰', prod: '🏭', expand: '🧭', celestial: '🌌', mind: '🧠' };
+const EC_BRANCH_ICON = { class: '🚀', type: '🛰', weapon: '🎯', armor: '🛡', shield: '🔰', engine: '🚀', reactor: '⚛', hangar: '🛬', module: '📡', econ: '💰', prod: '🏭', expand: '🧭', celestial: '🌌', mind: '🧠', welfare: '☀' };
 const EC_CAT_ICON = { ship: '🚀', ground: '⚙', aviation: '✈', politics: '🏛' };
 
 // Связи дерева — прямые «созвездные» линии центр→центр (PoE), загораются по
@@ -10495,7 +10747,7 @@ async function ecTreeToggleCore(id) {
 // Откреплён ли корневой узел от ядра «НАУКА» (staff-флаг в раскладке).
 function ecTreeNoCore(id) { const L = EC.techLayout && EC.techLayout[id]; return !!(L && L.nocore); }
 function ecBranchTag(branch) {
-  return { class: 'КЛАСС', type: 'КОРПУС', weapon: 'ОРУЖИЕ', armor: 'БРОНЯ', shield: 'ЩИТЫ', engine: 'ДВИГАТЕЛЬ', reactor: 'РЕАКТОР', hangar: 'АНГАР', module: 'СИСТЕМА', econ: 'ЭКОНОМИКА', prod: 'ПРОИЗВОДСТВО', expand: 'ЭКСПАНСИЯ', celestial: 'НЕБОЖИТЕЛИ', mind: 'РАЗУМ', doom: 'НЕОТВРАТИМОСТЬ' }[branch] || branch;
+  return { class: 'КЛАСС', type: 'КОРПУС', weapon: 'ОРУЖИЕ', armor: 'БРОНЯ', shield: 'ЩИТЫ', engine: 'ДВИГАТЕЛЬ', reactor: 'РЕАКТОР', hangar: 'АНГАР', module: 'СИСТЕМА', econ: 'ЭКОНОМИКА', prod: 'ПРОИЗВОДСТВО', expand: 'ЭКСПАНСИЯ', celestial: 'НЕБОЖИТЕЛИ', mind: 'РАЗУМ', doom: 'НЕОТВРАТИМОСТЬ', welfare: 'БЛАГОПОЛУЧИЕ' }[branch] || branch;
 }
 // Чипы бонуса политического узла (для карточки дерева).
 function ecBonusChips(b, special, station, slots) {

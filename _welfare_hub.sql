@@ -11,8 +11,8 @@
 --    · остальные                 — базовый административный центр.
 --
 --  ЛИМИТ (анти-спам): не больше 1 центра на СИСТЕМУ и 5 на державу.
---  УРОВЕНЬ поднимается ТОЛЬКО технологиями (soc.welfare_hub2/3), апгрейда самого
---  здания нет. Постройка гейтится технологией soc.welfare_hub (чтобы не грузить
+--  УРОВЕНЬ поднимается ТОЛЬКО технологиями (pol.welfare_hub2/3), апгрейда самого
+--  здания нет. Постройка гейтится технологией pol.welfare_hub (чтобы не грузить
 --  новичков). Итоговый вклад домиков в wb ограничен потолком +0.20.
 --
 --  ПОРЯДОК ПРИМЕНЕНИЯ:
@@ -25,9 +25,9 @@
 
 -- ── 1) Технологии: гейт постройки + два уровня усиления ──────────────────────
 insert into public.tech_nodes (node_id, base_cost, prereq) values
-  ('soc.welfare_hub',  5,  '[]'::jsonb),
-  ('soc.welfare_hub2', 9,  '["soc.welfare_hub"]'::jsonb),
-  ('soc.welfare_hub3', 14, '["soc.welfare_hub2"]'::jsonb)
+  ('pol.welfare_hub',  45,  '[]'::jsonb),
+  ('pol.welfare_hub2', 90,  '["pol.welfare_hub"]'::jsonb),
+  ('pol.welfare_hub3', 160, '["pol.welfare_hub2"]'::jsonb)
 on conflict (node_id) do nothing;
 
 -- ── 2) Каталог: btype 'wellhub' (суперсет _ec_bld_base; зеркалит МАРШ-версию
@@ -56,8 +56,8 @@ $$;
 create or replace function public._wb_hub_level(p_fid text)
 returns numeric language sql stable security definer set search_path=public as $$
   select 1.0
-    + case when coalesce((select research from public.faction_economy where faction_id = p_fid), '[]'::jsonb) ? 'soc.welfare_hub2' then 0.5 else 0 end
-    + case when coalesce((select research from public.faction_economy where faction_id = p_fid), '[]'::jsonb) ? 'soc.welfare_hub3' then 0.5 else 0 end;
+    + case when coalesce((select research from public.faction_economy where faction_id = p_fid), '[]'::jsonb) ? 'pol.welfare_hub2' then 0.5 else 0 end
+    + case when coalesce((select research from public.faction_economy where faction_id = p_fid), '[]'::jsonb) ? 'pol.welfare_hub3' then 0.5 else 0 end;
 $$;
 revoke all on function public._wb_hub_level(text) from public;
 grant execute on function public._wb_hub_level(text) to authenticated;
@@ -136,7 +136,7 @@ begin
 
   -- ДОМИК: Центр благополучия — гейт технологией + лимит 1/система, 5/держава.
   if p_btype = 'wellhub' then
-    if not (select coalesce(research, '[]'::jsonb) ? 'soc.welfare_hub'
+    if not (select coalesce(research, '[]'::jsonb) ? 'pol.welfare_hub'
             from public.faction_economy where faction_id = fid) then
       raise exception 'нужна технология «Центр благополучия»';
     end if;
@@ -185,6 +185,6 @@ notify pgrst, 'reload schema';
 
 -- ── Проверка после применения ───────────────────────────────────────────────
 -- 1) select public._wb_hub_unit('<fid>'), public._wb_hub_level('<fid>');
--- 2) изучить soc.welfare_hub → select public.economy_build('<colony uuid>', 'wellhub');
+-- 2) изучить pol.welfare_hub → select public.economy_build('<colony uuid>', 'wellhub');
 -- 3) второй в той же системе → ИСКЛЮЧЕНИЕ «лимит 1 на систему»
 -- 4) select public.wellbeing_status();   -- ключи hub / hub_n / hub_level / wb

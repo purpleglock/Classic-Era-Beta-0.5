@@ -3920,3 +3920,32 @@ body.ec-tree-fs-lock { overflow: hidden; }
 }
 .ec-vnt-host .hp-vnt-stats,.ec-vnt-host .hp-vnt-wrap{padding-left:0;padding-right:0}
 @media (max-width:760px){ .ec-vnt-host{height:auto} }
+
+/* ═══ КУРС ДЕРЖАВЫ (вкладка «🏛 Курс державы», _econ_policy.sql) ═══
+   Минимализм: карточка = подложка + один акцент слева у ДЕЙСТВУЮЩЕГО курса. */
+.ec-pol-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.ec-pol-card { display: flex; flex-direction: column; gap: 7px; background: var(--b0); border: var(--deco-frame-w, 1px) solid var(--w1); border-radius: var(--radius-md); padding: 12px 14px; }
+.ec-pol-card.on { border-left: var(--deco-accent-w-lg, 3px) solid var(--gd); background: color-mix(in srgb, var(--gd) 6%, var(--b0)); }
+.ec-pol-hd { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--t1); }
+.ec-pol-ic { font-size: 15px; }
+.ec-pol-tx { font-size: 12px; line-height: 1.5; color: var(--t3); }
+.ec-pol-mods { font-family: var(--font-mono); font-size: 11px; line-height: 1.7; color: var(--t3); }
+.ec-pol-e.up { color: var(--ok); }
+.ec-pol-e.dn { color: var(--err); }
+.ec-pol-act { margin-top: auto; padding-top: 4px; }
+.ec-pol-cur { font-family: var(--font-mono); font-size: 11px; color: var(--gd); }
+.ec-pol-budget { font-family: var(--font-mono); font-size: 12px; color: var(--t3); margin: 8px 0; }
+.ec-pol-budget .up { color: var(--ok); }
+.ec-pol-budget .dn { color: var(--err); }
+.ec-pol-axes { display: grid; gap: 6px; }
+.ec-pol-axis { display: grid; grid-template-columns: 1fr auto minmax(140px, 1fr); align-items: center; gap: 10px; background: var(--b0); border: var(--deco-frame-w, 1px) solid var(--w1); border-radius: var(--radius-sm); padding: 7px 11px; }
+.ec-pol-axis-n { font-size: 12px; color: var(--t2); }
+.ec-pol-axis-c { display: flex; align-items: center; gap: 7px; }
+.ec-pol-axis-v { font-family: var(--font-mono); font-size: 12px; min-width: 22px; text-align: center; color: var(--t3); }
+.ec-pol-axis-v.up, .ec-pol-axis-e.up { color: var(--ok); }
+.ec-pol-axis-v.dn, .ec-pol-axis-e.dn { color: var(--err); }
+.ec-pol-axis-e { font-family: var(--font-mono); font-size: 11px; color: var(--t4); text-align: right; }
+@media (max-width: 620px) {
+  .ec-pol-axis { grid-template-columns: 1fr auto; }
+  .ec-pol-axis-e { grid-column: 1 / -1; text-align: left; }
+}

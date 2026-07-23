@@ -79,7 +79,7 @@ create table if not exists public.fc_bets (
   amount     numeric not null check (amount > 0),
   won        numeric,              -- выплата при сеттле (null = ещё не решено)
   created_at timestamptz not null default now(),
-  primary key (event_id, fid)
+  primary key (event_id, fid, on_fid)   -- рев.7: можно ставить на ОБЕ стороны
 );
 
 alter table public.fc_events  enable row level security;
@@ -262,7 +262,8 @@ begin
     -- бой пропал (система удалена и т.п.) — вернуть все ставки и закрыть круг
     for r in select * from public.fc_bets where event_id = p_event loop
       update public.faction_economy set gc = gc + r.amount where faction_id = r.fid;
-      update public.fc_bets set won = r.amount where event_id = p_event and fid = r.fid;
+      update public.fc_bets set won = r.amount
+        where event_id = p_event and fid = r.fid and on_fid = r.on_fid;
     end loop;
     update public.fc_events set status='done', settled=true, ended_at=now() where id = p_event;
     return;
@@ -288,7 +289,8 @@ begin
     for r in select * from public.fc_bets where event_id = p_event and on_fid = win loop
       pay := round(r.amount + bank * r.amount / pool_win);
       update public.faction_economy set gc = gc + pay where faction_id = r.fid;
-      update public.fc_bets set won = pay where event_id = p_event and fid = r.fid;
+      update public.fc_bets set won = pay
+        where event_id = p_event and fid = r.fid and on_fid = win;
     end loop;
     update public.fc_bets set won = 0 where event_id = p_event and on_fid <> win;
   else
@@ -339,13 +341,12 @@ revoke all on function public._fc_ensure() from public;
 -- ── RPC: состояние клуба ─────────────────────────────────────
 create or replace function public.fc_state()
 returns jsonb language plpgsql volatile security definer set search_path=public as $$
-declare me text; ev record; my_bet record;
+declare me text; ev record;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   me := public._ec_my_fid_opt();
   perform public._fc_ensure();
   select * into ev from public.fc_events order by created_at desc limit 1;
-  select * into my_bet from public.fc_bets where event_id = ev.id and fid = me;
 
   return jsonb_build_object(
     'event_id', ev.id, 'status', ev.status,
@@ -370,9 +371,14 @@ begin
     'pool_b', (select coalesce(sum(amount),0) from public.fc_bets
                 where event_id = ev.id and on_fid = ev.duelist_b),
     'bettors', (select count(*) from public.fc_bets where event_id = ev.id),
-    'my_bet', case when my_bet.fid is null then null else
-      jsonb_build_object('on', my_bet.on_fid, 'on_name', public._war_nm(my_bet.on_fid),
-                         'amount', my_bet.amount, 'won', my_bet.won) end,
+    -- рев.7: массив ставок (можно держать на обе стороны). my_bet — для обратной совместимости (первая).
+    'my_bets', (select coalesce(jsonb_agg(jsonb_build_object(
+        'on', b.on_fid, 'on_name', public._war_nm(b.on_fid),
+        'amount', b.amount, 'won', b.won) order by b.created_at), '[]'::jsonb)
+      from public.fc_bets b where b.event_id = ev.id and b.fid = me),
+    'my_bet', (select jsonb_build_object('on', b.on_fid, 'on_name', public._war_nm(b.on_fid),
+                         'amount', b.amount, 'won', b.won)
+      from public.fc_bets b where b.event_id = ev.id and b.fid = me order by b.created_at limit 1),
     'i_duel', (me is not null and me in (ev.duelist_a, ev.duelist_b)),
     'winner', ev.winner_fid, 'winner_name', public._war_nm(ev.winner_fid),
     'history', (select coalesce(jsonb_agg(jsonb_build_object(
@@ -426,12 +432,11 @@ begin
   amt := floor(coalesce(p_amount, 0));
   if amt <= 0 then raise exception 'ставка должна быть больше нуля'; end if;
 
-  select * into old from public.fc_bets where event_id = ev.id and fid = me;
-  if old.fid is not null and old.on_fid <> p_on then
-    raise exception 'вы уже поставили на %: менять сторону нельзя', public._war_nm(old.on_fid);
-  end if;
+  -- рев.7: сторону выбираешь свободно — можно держать ставку на обе.
+  -- Кап действует отдельно на каждую сторону (old = уже поставленное на p_on).
+  select * into old from public.fc_bets where event_id = ev.id and fid = me and on_fid = p_on;
   if coalesce(old.amount, 0) + amt > public._fc_bet_cap() then
-    raise exception 'кап ставки — % ГС на круг', public._fc_bet_cap()::bigint;
+    raise exception 'кап ставки — % ГС на сторону', public._fc_bet_cap()::bigint;
   end if;
 
   select gc into have from public.faction_economy where faction_id = me for update;
@@ -440,7 +445,7 @@ begin
 
   insert into public.fc_bets(event_id, fid, on_fid, amount)
     values (ev.id, me, p_on, amt)
-    on conflict (event_id, fid) do update set amount = public.fc_bets.amount + excluded.amount;
+    on conflict (event_id, fid, on_fid) do update set amount = public.fc_bets.amount + excluded.amount;
 
   return jsonb_build_object('ok', true, 'amount', coalesce(old.amount,0) + amt);
 end$$;
