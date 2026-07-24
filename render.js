@@ -2630,6 +2630,7 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-colony hp-vn-geo hp-vn-stars" id="hp-vn-stars" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-doom" id="hp-vn-doom" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-fight" id="hp-vn-fight" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-sinli" id="hp-vn-sinli" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2812,37 +2813,38 @@ function heroVNChoice(kind) {
   // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
   _heroVNView = kind;
   if (kind !== 'idx' && typeof heroVNHideIdx === 'function') heroVNHideIdx();
-  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();_heroVNCtl.menu(); return; }
+  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();_heroVNCtl.menu(); return; }
 
   // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
-  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNColonyOpen(); return; }
+  if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();heroVNColonyOpen(); return; }
 
   // «Управление колониями» — перечень планет державы + сцена планеты с постройками.
-  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNPlanetsOpen(); return; }
+  if (kind === 'planets') { _heroVNCat = null; heroVNColonyClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();heroVNPlanetsOpen(); return; }
 
   // «Поэма недели» — общегалактический стих: голосование за слово дня поверх сцены.
-  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNPoemOpen(); return; }
+  if (kind === 'poem') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();heroVNPoemOpen(); return; }
 
   // «Ассамблея» — тайные роли и законы, бьющие по всей галактике (Secret Hitler-лайк).
-  if (kind === 'assembly') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNAssemblyOpen(); return; }
+  if (kind === 'assembly') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();heroVNAssemblyOpen(); return; }
 
   // «Рейтинг игроков» — засекреченная аналитическая сводка (декоративная инфографика).
-  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNRatingOpen(); return; }
+  if (kind === 'rating') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();heroVNRatingOpen(); return; }
 
   // «Исследования» — научный пульт державы: всё дерево технологий поверх сцены.
-  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNResearchOpen(); return; }
+  if (kind === 'research') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();heroVNResearchOpen(); return; }
 
   // «Георазведка» — казино под вывеской геологии: разведка залежей своей колонии.
-  if (kind === 'geo') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();heroVNGeoOpen(); return; }
+  if (kind === 'geo') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();heroVNGeoOpen(); return; }
 
   // «Всмотреться в Разлом» — псионический хор-казино: ставка → поле 7×7 → джекпот.
-  if (kind === 'stars') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNDoomClose(); heroVNFightClose();heroVNStarsOpen(); return; }
+  if (kind === 'stars') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();heroVNStarsOpen(); return; }
 
   // «Длань Неотвратимости» — протокол последнего довода (доступен после исследования)
-  if (kind === 'doom') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNFightClose(); heroVNDoomOpen(); return; }
+  if (kind === 'doom') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNFightClose(); heroVNSinliClose(); heroVNDoomOpen(); return; }
 
   // «Бойцовский клуб» — дуэли на выданных кораблях + тотализатор поверх сцены.
   if (kind === 'fight') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightOpen(); return; }
+  if (kind === 'sinli') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliOpen(); return; }
 
   if (kind === 'ach' || kind === 'events') {
     _heroVNCat = kind;
@@ -5129,6 +5131,13 @@ function heroVNInit() {
       // ['assembly', (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
       ['fight',  (en ? 'Fight Club' : 'Бойцовский клуб')],
     ];
+    // ⛓ Синли-бей — невольничий рынок. Скрыт для «просвещённых» держав (зеркало
+    // серверного гейта; сервер всё равно ответит 403). Показываем, если экономика
+    // ещё не загружена (сервер решит), иначе — по ecIsEnlightened().
+    try {
+      const hideSlave = (typeof ecIsEnlightened === 'function' && typeof EC !== 'undefined' && EC.app && ecIsEnlightened());
+      if (!hideSlave) opts.push(['sinli', (en ? 'Sinli-Bay (slave market)' : 'Синли-бей')]);
+    } catch (e) { opts.push(['sinli', (en ? 'Sinli-Bay (slave market)' : 'Синли-бей')]); }
     // «Длань Неотвратимости» скрыта, пока не исследована «Сама неотвратимость»:
     // живая проверка по EC (если экономика уже загружена) либо кэш-флаг с прошлой
     // загрузки (ставится/чистится в ecLoad; сам экран перепроверяет на сервере).
@@ -5273,6 +5282,146 @@ function heroVNGeoRefresh() {
     return;
   }
   el.innerHTML = _hgHead(en) + `<div class="hp-vn-col-body hp-vn-geo-body">${ecGeoBody()}</div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · «Синли-бей» — невольничий рынок. Сервер: _slavery.sql
+// (sinli_get / sinli_buy / sinli_sell). Раз в неделю сервер завозит NPC-лоты
+// рабов случайной державы; игроки выставляют своих (продавец СКРЫТ, происхождение
+// видно). Выкуп рабов СВОЕЙ державы → снова население. Просвещённым закрыто.
+// Каркас — .hp-vn-colony, как у Бойцовского клуба.
+// ══════════════════════════════════════════════════════════════
+let _snState = null;
+function heroVNSinliClose() {
+  const el = document.getElementById('hp-vn-sinli');
+  if (!el) return;
+  el.classList.remove('show');
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '';
+  if (_heroVNView === 'sinli') _heroVNView = null;
+}
+function heroVNSinliReturn() { heroVNChoice('menu'); }
+function _snMoney(v) { return Math.round(Number(v) || 0).toLocaleString('ru-RU'); }
+function _snHead(en) {
+  return `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">⛓ ${en ? 'Sinli-Bay' : 'Синли-бей'}</span>
+    <span class="hp-vnr-clr">${en ? 'slave market · origin shown, seller hidden' : 'невольничий рынок · происхождение видно, продавец скрыт'}</span>
+    <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNSinliReturn()">↩ ${en ? 'back' : 'назад'}</button>
+  </div>`;
+}
+function _snMsg(en, ru, enT) { return `<div class="hp-vn-col-body hp-vn-sinli-body"><div class="hp-vn-col-empty">${en ? enT : ru}</div></div>`; }
+async function heroVNSinliOpen() {
+  const el = document.getElementById('hp-vn-sinli');
+  if (!el) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  el.classList.add('show');
+  el.setAttribute('aria-hidden', 'false');
+  el.innerHTML = _snHead(en) + _snMsg(en, 'Открываю торговые ряды Синли-бей…', 'Opening the rows of Sinli-Bay…');
+  try {
+    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
+      if (!el.classList.contains('show')) return;
+      el.innerHTML = _snHead(en) + _snMsg(en, 'Зарегистрируйте державу, чтобы вести дела на Синли-бей.', 'Register a faction to trade at Sinli-Bay.');
+      return;
+    }
+  } catch (e) {}
+  await heroVNSinliRefresh();
+}
+async function heroVNSinliRefresh() {
+  const el = document.getElementById('hp-vn-sinli');
+  if (!el || !el.classList.contains('show')) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  let st;
+  try { st = await ecRpc('sinli_get'); }
+  catch (e) {
+    el.innerHTML = _snHead(en) + _snMsg(en, 'Ряды заперты. Срез _slavery.sql применён?', 'The rows are sealed. Apply _slavery.sql?');
+    return;
+  }
+  if (!el.classList.contains('show')) return;
+  _snState = st;
+  if (st && st.enlightened) {
+    el.innerHTML = _snHead(en) + _snMsg(en,
+      'Ваша держава — просвещённая. Работорговля здесь для вас закрыта: ни купить, ни продать, ни держать рабов.',
+      'Your state is enlightened. The slave trade is closed to you — no buying, selling, or holding slaves.');
+    return;
+  }
+  el.innerHTML = _snHead(en) + `<div class="hp-vn-col-body hp-vn-sinli-body">${_snBody(st, en)}</div>`;
+}
+function _snBody(st, en) {
+  const lots = (st && st.lots) || [];
+  const mine = (st && st.mine) || [];
+  const gc = (st && st.gc) || 0;
+  const parts = ['<div class="sn-col">'];
+  parts.push(`<div class="fc-rule">${en
+    ? 'Weekly NPC lots plus lots posted by other states. Origin is public; the seller is hidden. Buying back your OWN people frees them into your population. Slaves join your workforce and mine deposits like workers — without welfare.'
+    : 'Нет рабства более безнадежного, чем рабство тех, кто искренне считает себя свободным'}</div>`);
+  parts.push(`<div class="sn-bal">💰 ${_snMoney(gc)} ${en ? 'GC' : 'ГС'}</div>`);
+
+  // ── Мои рабы ──
+  parts.push(`<div class="sn-sec">${en ? 'My slaves' : 'Мои рабы'}</div>`);
+  if (!mine.length) {
+    parts.push(`<div class="hp-vn-col-empty" style="padding:8px">${en ? 'You hold no slaves. Raid colonies with a fleet or steal them via agents.' : 'Рабов нет. Угоняйте население налётом флота на колонию или похищайте агентами.'}</div>`);
+  } else {
+    mine.forEach(m => {
+      parts.push(`<div class="sn-row">
+        <span class="sn-row-nm">⛓ ${esc(m.origin_name || '?')} <i>${_snMoney(m.count)} ${en ? 'ppl' : 'чел.'}</i></span>
+        <button class="hp-vn-btn" type="button" onclick="event.stopPropagation();heroVNSinliSell('${esc(m.origin_fid)}',${(+m.count || 0)})">${en ? 'Sell' : 'Продать'}</button>
+      </div>`);
+    });
+  }
+
+  // ── Рынок ──
+  parts.push(`<div class="sn-sec">${en ? 'Market' : 'Рынок'}</div>`);
+  if (!lots.length) {
+    parts.push(`<div class="hp-vn-col-empty" style="padding:8px">${en ? 'No lots on the block right now.' : 'Лотов сейчас нет.'}</div>`);
+  } else {
+    lots.forEach(l => {
+      const own = l.mine_origin;
+      const tag = l.kind === 'npc' ? (en ? 'caravan lot' : 'караванный лот') : (en ? 'private lot' : 'частный лот');
+      const buyLbl = own ? (en ? 'Buy back → citizens' : 'Выкупить → население') : (en ? 'Buy' : 'Купить');
+      parts.push(`<div class="sn-row${own ? ' sn-own' : ''}">
+        <span class="sn-row-nm">⛓ ${esc(l.origin_name || '?')} <i>${_snMoney(l.count)} ${en ? 'ppl' : 'чел.'} · ${_snMoney(l.price)} ${en ? 'GC/ea' : 'ГС/чел'} · ${tag}${own ? (en ? ' · YOURS' : ' · ВАШИ') : ''}</i></span>
+        <button class="hp-vn-btn${own ? ' hp-vn-back' : ''}" type="button" onclick="event.stopPropagation();heroVNSinliBuy('${esc(l.id)}',${(+l.count || 0)},${(+l.price || 0)})">${buyLbl}</button>
+      </div>`);
+    });
+  }
+  parts.push('</div>');
+  return parts.join('');
+}
+async function heroVNSinliBuy(lotId, maxCount, price) {
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  let n = maxCount;
+  const raw = prompt(en ? `How many to buy? (max ${maxCount}, ${_snMoney(price)} GC each)` : `Сколько выкупить? (макс ${maxCount}, ${_snMoney(price)} ГС/чел)`, String(maxCount));
+  if (raw == null) return;
+  n = Math.max(1, Math.min(maxCount, Math.floor(Number(raw) || 0)));
+  if (!(n >= 1)) return;
+  try {
+    const r = await ecRpc('sinli_buy', { p_lot_id: lotId, p_count: n });
+    if (typeof toast === 'function') {
+      if (r && r.freed) toast(en ? `Freed ${_snMoney(r.bought)} people back into your population.` : `Выкуплено ${_snMoney(r.bought)} чел. — снова население.`, 'ok');
+      else toast(en ? `Bought ${_snMoney(r.bought)} slaves for ${_snMoney(r.cost)} GC.` : `Куплено ${_snMoney(r.bought)} рабов за ${_snMoney(r.cost)} ГС.`, 'ok');
+    }
+  } catch (e) {
+    const msg = ((e && e.message) || e) + '';
+    if (typeof toast === 'function') toast(msg.includes('not enough gc') ? (en ? 'Not enough GC.' : 'Не хватает ГС.') : (en ? 'Error: ' : 'Ошибка: ') + msg, 'err');
+  }
+  if (typeof ecReloadPaint === 'function') { try { await ecReloadPaint(); } catch (e) {} }
+  await heroVNSinliRefresh();
+}
+async function heroVNSinliSell(originFid, have) {
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  const raw = prompt(en ? `How many to sell? (max ${have})` : `Сколько продать? (макс ${have})`, String(have));
+  if (raw == null) return;
+  const n = Math.max(1, Math.min(have, Math.floor(Number(raw) || 0)));
+  if (!(n >= 1)) return;
+  try {
+    const r = await ecRpc('sinli_sell', { p_origin_fid: originFid, p_count: n });
+    if (typeof toast === 'function') toast(en ? `Listed ${_snMoney(r.listed)} slaves at ${_snMoney(r.price)} GC each.` : `Выставлено ${_snMoney(r.listed)} рабов по ${_snMoney(r.price)} ГС/чел.`, 'ok');
+  } catch (e) {
+    const msg = ((e && e.message) || e) + '';
+    if (typeof toast === 'function') toast((en ? 'Error: ' : 'Ошибка: ') + msg, 'err');
+  }
+  await heroVNSinliRefresh();
 }
 
 // ══════════════════════════════════════════════════════════════

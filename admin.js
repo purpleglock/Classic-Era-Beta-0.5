@@ -2493,7 +2493,6 @@ function adTabEconomy(e) {
   // ── Прочие мощности ──
   const warehouseSlots = adSlotsOf(e, 'warehouse');
   const storageCap = 1000 + warehouseSlots * 500;
-  const marketSlots = adSlotsOf(e, 'market');
   const trainSlots = adSlotsOf(e, 'training');
   const milfacSlots = adSlotsOf(e, 'military_factory');
   const shipSlots = adSlotsOf(e, 'shipyard');
@@ -2541,7 +2540,6 @@ function adTabEconomy(e) {
 
   // ── Переменные источники ──
   const varRows = [
-    marketSlots ? row('📈', 'Товарная биржа', `${marketSlots} слот. → продаёт до ${adNum(marketSlots*25)} ед. ресурсов/сут за ГС (50–75% цены)`, 'перем.', 'var(--t3,#8aa0b0)') : '',
   ].filter(Boolean).join('');
 
   // ── Прочие мощности (не доход, а что даёт) ──

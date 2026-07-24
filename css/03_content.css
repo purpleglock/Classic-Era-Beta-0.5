@@ -5013,6 +5013,30 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hp-vn-fc-body{display:flex;flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:thin;padding:24px 18px}
 .hp-vn-fc-body>.hp-vn-col-empty{margin:auto}
 .fc-col{margin:auto;width:100%;max-width:660px;display:flex;flex-direction:column;gap:14px}
+/* ⛓ Синли-бей (невольничий рынок).
+   Каркас наследуется от .hp-vn-colony/.hp-vn-geo, но базовый .hp-vn-col-body —
+   это flex-РЯД (карта+сайдбар колонии). Рынку нужна ОДНА центрированная колонна
+   со скроллом (как у .hp-vn-fc-body бойцовского клуба), иначе строки/секции
+   разъезжаются вбок. Фон СВОЙ и непрозрачный: сквозь оверлей колонии
+   просвечивала главная. Два акцента: багрянец неволи + золото касс. */
+.hp-vn-sinli{
+  --gd:#c85a52;--gdl:#e79089;
+  background:
+    radial-gradient(120% 75% at 50% 118%, rgba(200,90,82,.14), transparent 58%),
+    linear-gradient(180deg,#0b0d13 0%,#120a0a 100%);
+  backdrop-filter:none;
+}
+.hp-vn-sinli-body{flex-direction:column;flex:1 1 auto;min-height:0;gap:0;overflow-y:auto;scrollbar-width:thin;padding:22px 18px}
+.hp-vn-sinli-body>.hp-vn-col-empty{margin:auto}
+.sn-col{margin:auto;width:100%;max-width:600px;display:flex;flex-direction:column}
+.hp-vn-sinli .fc-rule::before{background:var(--gd)}
+.sn-bal{align-self:flex-start;margin:12px 0 2px;padding:6px 14px;font-family:var(--font-mono);font-size:14px;color:#e6c15a;font-weight:700;letter-spacing:.02em;background:rgba(230,193,90,.1);border-left:3px solid #e6c15a}
+.sn-sec{margin:16px 0 6px;padding-bottom:5px;font-family:var(--font-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3,#8296a8);border-bottom:1px solid rgba(255,255,255,.06)}
+.sn-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;margin:6px 0;border-radius:8px;background:rgba(200,90,82,.09);border-left:2px solid rgba(200,90,82,.5)}
+.sn-row.sn-own{background:rgba(70,150,110,.12);border-left-color:rgba(70,150,110,.6)}
+.sn-row-nm{display:flex;flex-direction:column;gap:3px;min-width:0;font-size:13px;font-weight:600;color:var(--t1,#dfe8f0)}
+.sn-row-nm i{font-style:normal;font-weight:400;color:var(--t3,#8296a8);font-size:11px;letter-spacing:.02em}
+.sn-row .hp-vn-btn{flex:0 0 auto}
 .fc-rule{position:relative;padding-left:12px;font-family:var(--font-mono);font-size:10.5px;line-height:1.6;color:var(--t3,#8296a8);letter-spacing:.03em}
 .fc-rule::before{content:"";position:absolute;left:0;top:2px;bottom:2px;width:2px;background:#ff3c82}
 .fc-phase{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:2px}

@@ -2442,9 +2442,77 @@ function gmOpenFleetCmd(id) {
       ${fuel ? `<div class="gm-opcmd-hint">⛽ ${esc(fuel)} / прыжок</div>` : ''}
       <button class="gm-opcmd-btn" onclick="gmFleetCmdSend()">➤ Перебросить — выберите систему</button>
       ${fl.can_recall ? `<button class="gm-opcmd-btn" onclick="gmFleetCmdRecall()">↩ Вернуть на базу</button>` : ''}
+      <div id="gm-fleet-raid"></div>
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetCmdDisband()">✕ Распустить флот</button>
     </div>`;
   el.classList.remove('gm-hidden');
+  gmFleetRaidLoad(id, fl.system_id);   // подтягиваем чужие караваны на пути флота
+}
+// ── ПИРАТСТВО: грабёж чужого каравана, чья трасса проходит через систему флота ──
+// Единственная проверка на сервере — заметили/нет. Список целей грузим лениво.
+async function gmFleetRaidLoad(id, sysId) {
+  const box = document.getElementById('gm-fleet-raid'); if (!box) return;
+  box.innerHTML = `<div class="gm-opcmd-hint">🏴 Ищу караваны на пути…</div>`;
+  let list = [];
+  try { list = await gmDefRpc('fleet_raid_targets', { p_fleet_id: id }); } catch (e) { box.innerHTML = ''; return; }
+  if (document.getElementById('gm-fleet-raid') !== box) return;   // меню уже сменилось
+  GMM._raidList = Array.isArray(list) ? list : [];
+  // Чужие КОЛОНИИ в системе флота — налёт с угоном населения в рабство.
+  const enemyCols = (GM.colonies || []).filter(c => c.system_id === sysId && c.faction_id && c.faction_id !== GM.myFid);
+  const colRows = enemyCols.map(c => {
+    const owner = (GM.factions || []).find(f => f.id === c.faction_id);
+    const nm = esc(c.planet_name || 'колония');
+    const own = esc((owner && owner.name) || '');
+    return `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetRaidColony('${id}','${esc(c.id)}')">⛓ Налёт на колонию: ${nm}${own ? ' · ' + own : ''}</button>`;
+  }).join('');
+  const colBlock = colRows ? `<div class="gm-opcmd-hint" style="margin-top:6px">⛓ Колонии в системе — угнать население в рабство (риск: заметят):</div>${colRows}` : '';
+
+  if (!GMM._raidList.length && !colRows) { box.innerHTML = `<div class="gm-opcmd-hint">🏴 Чужих караванов и колоний рядом нет.</div>`; return; }
+  const rows = GMM._raidList.map(rt => {
+    const res = rt.resource ? `${esc(rt.resource)} ×${(+rt.volume || 0)}` : `${(+rt.volume || 0)} ед.`;
+    return `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetRaidGo('${id}','${esc(rt.id)}')">🏴 Грабить: ${esc(rt.owner_name || '?')} · ${res} · 🛡${(+rt.convoy || 0)}</button>`;
+  }).join('');
+  const cvBlock = GMM._raidList.length ? `<div class="gm-opcmd-hint" style="margin-top:4px">🏴 Караваны на пути — грабить (риск: заметят):</div>${rows}` : '';
+  box.innerHTML = `${cvBlock}${colBlock}`;
+}
+async function gmFleetRaidColony(id, colonyId) {
+  if (GM._defBusy) return; GM._defBusy = true;
+  try {
+    const r = await gmDefRpc('fleet_raid_colony', { p_fleet_id: id, p_colony_id: colonyId });
+    if (r && r.detected) {
+      toast(`⛓ Тревога! Гарнизон «${(r.colony || 'колонии')}» отбил налёт — угона нет, отношения испорчены.`, 'err');
+    } else {
+      toast(`⛓ Налёт удался! Угнано ${(+(r && r.abducted) || 0)} жителей «${(r && r.origin_name) || '?'}» в рабство. Управляйте ими в Синли-бей.`, 'ok');
+    }
+    gmCloseFleetCmd();
+    await gmReloadDefense();
+  } catch (e) {
+    const msg = (e.message || e) + '';
+    if (msg.includes('enlightened')) toast('Просвещённые державы не занимаются работорговлей.', 'err');
+    else if (msg.includes('cooldown')) toast('Флот ещё восстанавливается после налёта (кулдаун).', 'err');
+    else toast('Ошибка: ' + msg, 'err');
+  } finally { GM._defBusy = false; }
+}
+async function gmFleetRaidGo(id, routeId) {
+  if (GM._defBusy) return; GM._defBusy = true;
+  try {
+    const r = await gmDefRpc('fleet_raid', { p_fleet_id: id, p_route_id: routeId });
+    if (r && r.detected) {
+      toast(`🏴 Засада раскрыта! Конвой «${(r.owner_name || 'цели')}» заметил флот — добычи нет, отношения испорчены.`, 'err');
+    } else {
+      const loot = [];
+      if (r && +r.loot_units) loot.push(`${(+r.loot_units)} ${esc(r.resource || 'ед.')}`);
+      if (r && +r.loot_gc) loot.push(`${(+r.loot_gc)} ГС`);
+      toast(`🏴 Караван ограблен тихо! Угнано: ${loot.length ? loot.join(' + ') : 'ничего (пустой трюм)'}.`, 'ok');
+    }
+    gmCloseFleetCmd();
+    await gmReloadDefense();
+  } catch (e) {
+    const msg = (e.message || e) + '';
+    if (msg.includes('cooldown')) toast('Флот ещё восстанавливается после налёта (кулдаун).', 'err');
+    else if (msg.includes('caravan gone')) toast('Караван уже ушёл.', 'err');
+    else toast('Ошибка: ' + msg, 'err');
+  } finally { GM._defBusy = false; }
 }
 function gmCloseFleetCmd() {
   GMM.fleetCmd = null; GMM.dirty = true; gmmKick();

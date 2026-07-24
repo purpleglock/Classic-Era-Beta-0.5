@@ -77,8 +77,9 @@ const EC_SPY_OPS = {
   subspace_hunt: { label: 'Подпространственная охота', diff: 40, base: 2, need: '', tactical: true, icon: '🛰', desc: 'Вскрыть скрытые гиперкрейсера цели — при успехе они подсветятся на карте на 2 суток (крит — 4). Иначе их не видно ни с разведкой, ни без.' },
   fleet_sabotage:{ label: 'Диверсия против флота', diff: 34, base: 2, need: '', tactical: true, targetFleet: true, icon: '⚙', desc: 'Подрыв вражеского флота. По степени успеха: крит → выводит из строя часть кораблей состава; обычный успех → обездвиживает флот на сутки. Сопротивление — «защита ВС» цели.' },
   outpost_strike:{ label: 'Подрыв аванпоста', diff: 32, base: 2, need: '', tactical: true, icon: '💣', desc: 'Диверсанты уничтожают развёрнутый аванпост цели. Крит — добивает корабль-носитель в той же системе. Сопротивление — «защита ВС» цели. Разведка не нужна.' },
+  steal_slaves:  { label: 'Похищение рабов', diff: 36, base: 2, need: '', tactical: true, slaveSteal: true, icon: '⛓', desc: 'Агенты угоняют часть рабов цели в ваши бараки (происхождение сохраняется). Срабатывает мгновенно. Недоступно просвещённым державам.' },
 };
-const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'steal_res', 'sabotage', 'destabilize', 'kill_agent', 'steal_tech', 'mass_demolish', 'faith_impose', 'subspace_hunt', 'fleet_sabotage', 'outpost_strike'];
+const EC_SPY_ORDER = ['recon_basic', 'recon_deep', 'steal_gc', 'steal_res', 'sabotage', 'destabilize', 'kill_agent', 'steal_tech', 'mass_demolish', 'faith_impose', 'subspace_hunt', 'fleet_sabotage', 'outpost_strike', 'steal_slaves'];
 // Перки агентов (зеркало _spy_agents6.sql). Перк-бонус РАСТЁТ с уровнем агента (+2/ур.).
 const EC_SPY_PERKS = {
   infiltrator: { label: 'Инфильтратор', icon: '🕵', desc: '+12% успех краж (казна, технологии, ресурсы). С уровнем — больше.' },
@@ -346,7 +347,6 @@ const EC_BUILD = {
   mining_deep:      { name: 'Глубинный горный комплекс', cost: 2500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Добыча ЦЕННЫХ ресурсов планеты: необычные и редкие залежи' },
   mining_exotic:    { name: 'Экзотический экстрактор',   cost: 8000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Добыча ЭЛИТНЫХ залежей планеты (эпические и легендарные) — единственный способ качать уникальные ресурсы' },
   trade:            { name: 'Торговый хаб',         cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { gc: 100 }, cat: 'civ', desc: '+100 ГС за слот (торговый путь)' },
-  market:           { name: 'Товарная биржа',       cost: 1500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Продаёт добытые ресурсы за ГС (50–75% цены по редкости), без торговых путей' },
   goodsfab:         { name: 'Фабрика товаров',       cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Из воды и сырья делает товары ровно под спрос населения: слот покрывает до 10 товаров/сут (0.6 воды + 0.4 сырья на товар). Обеспечение населения умножает доход державы' },
   wellhub:          { name: 'Центр благополучия',    cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Поднимает ИНДЕКС благополучия державы. У каждой идеологии свой домик: спиритуалистам — от охвата храмов, корпоратам — от казны (с потолком), пацифистам — щедрый плоский. Лимит: 1 на систему, 5 на державу' },
   warehouse:        { name: 'Склад',                 cost: 800,  ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Поднимает лимит хранения ресурсов (+500 ёмкости за слот)' },
@@ -404,7 +404,7 @@ const EC_MZA_RANGE_HOPS = 4, EC_MZA_HEAVY_RANGE_MUL = 2;
 // Ожерелье Немезиды — мегасооружение: системная ПРО (зеркало nemesis_build/_shell_const).
 // Требует технологию pol.nemesis (стоит в ветке судного дня ДО Гиперпейсера).
 const EC_NEMESIS = { gc: 2500000, res: { 'Стелларит': 50, 'Рагенод': 10, 'Гравиядро': 5 }, charges: 6, buildDays: 3 };
-const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'wellhub', 'trade', 'market', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'airfield', 'starbase', 'flak', 'abm', 'temple'];
+const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'wellhub', 'trade', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'airfield', 'starbase', 'flak', 'abm', 'temple'];
 // Рецепт фабрики товаров (зеркало accrue в _budget_wellbeing.sql): на слот/сутки.
 // Товары ДЕМАТЕРИАЛИЗОВАНЫ — не ресурс: выпуск ровно под спрос населения.
 const EC_GOODS = { water: 6, mat: 4, out: 10 };
@@ -444,7 +444,6 @@ const EC_BLD_HOWTO = {
   goodsfab:         'Перерабатывает воду (Лёд/Жидкая вода) и сырьё (Железо/Силикаты) в товары РОВНО под спрос населения — ничего не копится и не продаётся. Держите запас входов на складе — без них фабрика простаивает. Обеспечение: хватает → доход растёт (до ×1.10), дефицит → проседает (до ×0.90). Технология «Товары народного потребления» открывает настройку рецепта: премиальные ресурсы (Старвис/Хтонит) поднимают потолок благополучия до ×1.25.',
   wellhub:          'Прибавка к ИНДЕКСУ благополучия (множит весь ГС-доход державы). Работает сам, пока открыт хотя бы 1 слот. Усиливается ТОЛЬКО технологиями «Гражданские институты» / «Общественный договор» — апгрейда здания нет. Больше 1 на систему и 5 на державу не поставить, суммарный вклад ограничен +0.20.',
   trade:            'Доход только при активном торговом пути (вкладка «Торговля и потоки» → Караваны).',
-  market:           'Сама сбывает свежедобытый поток (заводы в режиме «Склад») за ГС (50–75% цены по редкости), без торговых путей. Накопленный склад НЕ трогает — стратегический запас в безопасности.',
   warehouse:        'Каждый слот склада повышает лимит общего хранилища (+500). Без склада лимит мал — лишняя добыча теряется (или ставьте завод в режим «Экспорт»).',
   science:          'Даёт очки науки (ОН) для исследований.',
   training:         'Даёт мощность для производства пехоты (заказ — во вкладке «Строительство вооружённых сил»).',
@@ -463,7 +462,7 @@ const EC_BLD_HOWTO = {
 };
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
-  factory: '🏭', mining: '⛏', mining_deep: '⚒', mining_exotic: '💎', goodsfab: '🛍', wellhub: '🏛', trade: '💱', market: '📈',
+  factory: '🏭', mining: '⛏', mining_deep: '⚒', mining_exotic: '💎', goodsfab: '🛍', wellhub: '🏛', trade: '💱',
   science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', airfield: '✈', warehouse: '📦', temple: '🛐', doomgun: '🜨',
   starbase: '🛰', flak: '🎯', abm: '🚀', shellforge: '☢', ballfab: '🏭', nemesis: '⛨',
 };
@@ -797,6 +796,14 @@ function ecIsRobot() {
 }
 // Сигнатура экспансионизма: пул из 2 захватов систем подряд (как у роботов / «Дома в небесах»).
 function ecIsExpansionist() { return (EC.app || {}).ideology === 'Экспансионизм'; }
+// «Просвещённая» держава: гуманный уклон закрывает рабство/рейды/Синли-бей (зеркало
+// серверного _faction_enlightened). regime демократ./эгалитарный ИЛИ идеология
+// Пацифизм/Ксенофилия.
+function ecIsEnlightened() {
+  const a = EC.app || {};
+  return a.regime === 'Демократический' || a.regime === 'Эгалитарный'
+      || a.ideology === 'Пацифизм' || a.ideology === 'Ксенофилия';
+}
 const EC_INF_PER_SLOT = 1000, EC_ROBOT_INF_PER_SLOT = 3000;
 function ecCaps() {
   const tr = ecSlotsSum('training'), mf = ecSlotsSum('military_factory'), sy = ecSlotsSum('shipyard'), af = ecSlotsSum('airfield');
@@ -1493,6 +1500,9 @@ async function ecBootOnce() {
         if (as && as.gain > 0) toast(`🔁 Автопродажа на рынке за ${_days} сут.: +${ecNum(as.gain)} ГС`, 'ok');
       } catch (e) {}
     }
+    // ⛓ Рабы = рабочие без благополучия: они вливаются в пул рабочих державы
+    // (серверный _fac_workers в _slavery.sql) и копают залежи как обычные рабочие —
+    // отдельного «дохода рабов» нет, всё идёт через обычный тик добычи.
     // Тост — РОВНО ОДИН раз на реальный тик (а не на каждый вызов рендера,
     // иначе при повторных рендерах из init было двойное оповещение).
     if (tick && tick.days >= 1) {
@@ -1960,6 +1970,8 @@ async function ecReloadPaint() {
   if (typeof heroVNColonyRefresh === 'function') heroVNColonyRefresh();
   // Оверлей «Длань Неотвратимости» — на данных EC.doom/EC.mzaShips.
   if (typeof heroVNDoomRefresh === 'function') heroVNDoomRefresh();
+  // ⛓ Оверлей «Синли-бей» (невольничий рынок) — свои данные (sinli_get).
+  if (typeof heroVNSinliRefresh === 'function') heroVNSinliRefresh();
 }
 
 // ── Превью дохода (зеркало RPC) ─────────────────────────────
@@ -2795,7 +2807,7 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['policy', '🏛', 'Курс державы'], ['flows', '⛏', 'Ресурсы и торговля'], ['diplomacy', '🤝', 'Дипломатия'], ['war', '⚔', 'Война'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['policy', '🏛', 'Курс державы'], ['flows', '⛏', 'Ресурсы и торговля'], ['diplomacy', '🤝', 'Дипломатия'], ['war', '⚔', 'Война'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   // Длань Неотвратимости — отдельная вкладка-пульт, появляется когда орудие доступно
   // (исследование открыто или орудие уже стоит).
   if (ecDoomUnlocked()) tabs.splice(14, 0, ['doom', '🜨', 'Длань Неотвратимости']);   // перед «Разведкой»
@@ -2811,7 +2823,7 @@ function ecPaintCabinet() {
     : EC.tab === 'exchange' ? ecTabExchange()
     : EC.tab === 'war' ? ecTabWar()
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'faith' ? ecTabFaith() : EC.tab === 'intel' ? ecTabIntel()
-    : EC.tab === 'raids' ? ecTabRaids()
+    : EC.tab === 'raids' ? ecTabFlows()   // легаси-ссылки на удалённую вкладку «Рейды» → в «Ресурсы и торговля» (там торговая политика)
     : EC.tab === 'doom' ? ecTabDoom()
     : EC.tab === 'achievements' ? ecTabAchievements()
     : EC.tab === 'news' ? ecTabNews() : ecTabColonies();
@@ -4052,7 +4064,7 @@ function ecTabOverview() {
   _out.forEach(r => { if (r.resource) _resOut[r.resource] = (_resOut[r.resource] || 0) + (r.volume || 0); });
   const _resOutTotal = Object.values(_resOut).reduce((a, b) => a + b, 0);
   const _resOutTxt = Object.entries(_resOut).map(([n, v]) => `${ecResIcon(n)} ${ecNum(v)}`).join(' · ');
-  const facSlots = ecSlotsSum('factory'), trSlots = ecSlotsSum('trade'), marketSlots = ecSlotsSum('market'), tmplSlots = ecSlotsSum('temple');
+  const facSlots = ecSlotsSum('factory'), trSlots = ecSlotsSum('trade'), tmplSlots = ecSlotsSum('temple');
   // Полная разбивка ГС-дохода — единый источник с шапкой «Доход/сутки» (зеркало economy_accrue).
   const g = ecGcIncome();
   // Источники ГС-дохода (с долей-вкладом для столбика). moneyInc = статьи, которые РЕАЛЬНО
@@ -4065,9 +4077,8 @@ function ecTabOverview() {
   if (_out.length) moneyInc.push({ ic: '🚚', name: 'Караваны · продажа', sub: `${_out.length} пут. → партнёрам${_cv.short ? ` · поток покрывает ${Math.round(_outGc / Math.max(1, _cv.contract) * 100)}% контрактов` : ''}${_cv.transitN ? ` · ${_cv.transitN} в пути` : ''}`, gc: _outGc, tab: 'trade' });
   if (_cv.risk) moneyInc.push({ ic: '🏴', name: 'Пиратские угрозы', sub: 'ожидаемые потери рейсов под угрозой', gc: -_cv.risk, tab: 'trade' });
   if (_in.length)  moneyInc.push({ ic: '📦', name: 'Доля с поставок', sub: `${_in.length} пут. ← вам шлют · до добычи партнёра`, gc: _inGc, tab: 'trade' });
-  if (g.market) moneyInc.push({ ic: '📈', name: 'Товарная биржа', sub: `${ecNum(marketSlots)} слот. · сбыт добычи`, gc: g.market, tab: 'trade' });
   if (g.export) moneyInc.push({ ic: '📤', name: 'Экспорт добычи', sub: 'поток export-заводов', gc: g.export, tab: 'trade' });
-  if (g.policy) moneyInc.push({ ic: '📜', name: 'Торговая политика', sub: 'апкип NPC-конвоя', gc: -g.policy, tab: 'raids' });
+  if (g.policy) moneyInc.push({ ic: '📜', name: 'Торговая политика', sub: 'апкип NPC-конвоя', gc: -g.policy, tab: 'trade' });
   if (g.budget) moneyInc.push({ ic: '🏛', name: 'Бюджет державы', sub: 'финансирование отраслей × население', gc: -g.budget, tab: 'welfare' });
   // ── НЕ входит в тик (информативно, не суммируется в «Чистый доход») ──
   if (g.temple) extraInc.push({ ic: '🛐', name: 'Храмы веры', sub: `${ecNum(tmplSlots)} слот. × 150`, gc: g.temple, tab: 'faith' });
@@ -4135,8 +4146,6 @@ function ecTabOverview() {
       <div class="ec-gal-rows">${_gl.slice(0, ecOvExpanded('gal') ? 24 : 4).map(_glRow).join('')}</div>
       ${_gl.length > 4 ? ecOvFold('gal', ecOvExpanded('gal') ? '▴ Свернуть историю' : `▾ Вся история (${_gl.length})`, 'разовые эффекты галактики') : ''}
     </div>` : '';
-  // Товарная биржа теперь числовой строкой в moneyInc (оценка по складу) — отдельный плейсхолдер не нужен.
-  const marketRow = '';
   const expRow = _resOutTotal ? `<button type="button" class="ec-bdg-row ec-bdg-exp" onclick="ecSetTab('trade')">
       <span class="ec-bdg-ic">📤</span>
       <span class="ec-bdg-info"><span class="ec-bdg-name">Караваны · вывоз ресурсов</span><span class="ec-bdg-sub">${_resOutTxt}</span></span>
@@ -4152,7 +4161,7 @@ function ecTabOverview() {
   // Достижения — РАЗОВЫЕ награды (не в /сут): показываем накопленную сумму отдельной строкой.
   const _achTot = ecAchTotal();
   if (_achTot) flows.push(`<span class="ec-bdg-flow" onclick="ecSetTab('achievements')"><span class="ec-bdg-flow-ic">🏆</span>достижения <b class="pos">+${ecNum(_achTot)}</b> ГС <small>(разово, получено)</small></span>`);
-  const hasBudget = moneyInc.length || extraInc.length || marketSlots || _resOutTotal || flows.length;
+  const hasBudget = moneyInc.length || extraInc.length || _resOutTotal || flows.length;
   // ── Раскрываемая детальная справка по казне: формула каждого источника + состав (donut) ──
   const gcMulPct = Math.round((gcMul - 1) * 100);
   const fxRow = (ic, name, formula, gc) => `<div class="ec-bdg-dt-row">
@@ -4169,7 +4178,6 @@ function ecTabOverview() {
   if (_out.length) detRows.push(fxRow('🚚', 'Караваны · продажа', `${_out.length} путь(ей): мин(объём, поток export-добычи) × цена × дипломатия (±20%)${gcMulPct ? ` × доктрина` : ''}`, _outGc));
   if (_cv.risk) detRows.push(fxRow('🏴', 'Пиратские угрозы', `рейсы под угрозой срываются с шансом 40–80% (конвой снижает риск)`, -_cv.risk));
   if (_in.length) detRows.push(fxRow('📦', 'Доля с поставок', `${_in.length} путь(ей): ${Math.round(EC_DEST_CUT * 100)}% × дипломатия партнёра · верхняя оценка (ограничена его добычей)`, _inGc));
-  if (g.market) detRows.push(fxRow('📈', 'Товарная биржа', `${ecNum(marketSlots)} слот · сбыт добытого потока по ценности × 50–75% (до ${ecNum(marketSlots * 25)} ед/сут, склад не трогает)`, g.market));
   if (g.export) detRows.push(fxRow('📤', 'Экспорт добычи', `свободный поток export-заводов × ценность × 0.6`, g.export));
   if (g.policy) detRows.push(fxRow('📜', 'Торговая политика', `апкип NPC-конвоя (защита караванов)`, -g.policy));
   if (g.budget) detRows.push(fxRow('🏛', 'Бюджет державы', `${ecNum(ecBudgetPop())} нас. × ставки отраслей (вкладка «Благополучие»)`, -g.budget));
@@ -4198,7 +4206,7 @@ function ecTabOverview() {
         <span class="ec-bdg-net-v">${netGc >= 0 ? '+' : ''}${ecNum(netGc)} <small>ГС</small></span>
         ${inc.debuff ? `<span class="ec-bdg-net-warn">🔥 дестабилизация −${Math.round(inc.debuff * 100)}%</span>` : ''}
       </div>
-      ${(moneyRows || marketRow) ? `<div class="ec-bdg-rows">${moneyRows}${marketRow}</div>` : ''}
+      ${moneyRows ? `<div class="ec-bdg-rows">${moneyRows}</div>` : ''}
       ${extraBlock}
       ${galBlock}
       ${flows.length ? `<div class="ec-bdg-flows">${flows.join('')}</div>` : ''}
@@ -7355,7 +7363,7 @@ function ecTradeSubBody(sub) {
       <span class="ec-route-badge wait">⏳ ждёт ответа</span>
       <b>${ecRouteCargoText(r)}</b>/ход → <b>${esc(r.b_name || ecFacName(r.b_fid))}</b> · начнёт приносить доход после принятия
     </span><button class="ec-bld-del" title="Отозвать предложение" onclick="ecTradeClose('${r.id}')">✕</button></div>`).join('');
-  const caravanBlock = `<div class="ec-dip-card ec-dip-trade"><div class="ec-dip-t">Торговые караваны <span class="ec-hint">пути: ${used}/${tradeCap}</span></div>
+  const caravanBlock = `${ecTradePolicyCard()}<div class="ec-dip-card ec-dip-trade"><div class="ec-dip-t">Торговые караваны <span class="ec-hint">пути: ${used}/${tradeCap}</span></div>
       ${caravanForm}
       ${incoming.length ? `<div class="ec-r-sec">Входящие предложения</div>${inHtml}` : ''}
       ${active.length ? (() => { const _ci = ecCaravanIncome(); return `<div class="ec-r-sec">Активные пути</div>${active.map(r => ecRouteRow(r, _ci.routeGc || {}, _ci.routeState || {})).join('')}`; })() : ''}
@@ -9309,7 +9317,7 @@ const EC_SPY_OP_CAT = {
   recon_basic: 'recon', recon_deep: 'recon',
   steal_gc: 'econ', steal_res: 'econ', steal_tech: 'econ', destabilize: 'econ',
   sabotage: 'direct', mass_demolish: 'direct', kill_agent: 'direct',
-  faith_impose: 'special',
+  faith_impose: 'special', steal_slaves: 'special',
   subspace_hunt: 'tactical', fleet_sabotage: 'tactical', outpost_strike: 'tactical',
 };
 // Требование операции — короткий бейдж (что нужно, чтобы открыть).
@@ -9523,7 +9531,7 @@ function ecSpyPlannerHtml() {
 // Операции, сгруппированные по категориям (перерисовывается при смене цели/операции).
 function ecSpyOpsHtml() {
   return EC_SPY_OP_CATS.map(([cat, label, sub]) => {
-    const ops = EC_SPY_ORDER.filter(opk => EC_SPY_OP_CAT[opk] === cat);
+    const ops = EC_SPY_ORDER.filter(opk => EC_SPY_OP_CAT[opk] === cat && !(opk === 'steal_slaves' && ecIsEnlightened()));
     if (!ops.length) return '';
     return `<div class="ec-op-group">
       <div class="ec-op-group-hd">${esc(label)} <i>${esc(sub)}</i></div>
@@ -9541,7 +9549,25 @@ const EC_TRADE_POLICY = [
   { name: 'Конвой Торговой Лиги', cost: 350, def: 18 },
 ];
 function ecRaidPolicySet(t) { ecRpcAct('raid_policy_set', { p_tier: Math.max(0, Math.min(2, t)) }, 'Торговая политика обновлена'); }
-function ecTabRaids() {
+// Карточка «Торговая политика» — платная NPC-защита ВСЕХ караванов. Раньше жила во
+// вкладке «Рейды» (удалена: грабёж теперь ведут флоты на карте, см. _fleet_raid.sql);
+// перенесена в под-вкладку «Караваны» (Ресурсы и торговля).
+function ecTradePolicyCard() {
+  const pol = (EC.raidStatus && +EC.raidStatus.policy) || 0;
+  return `<div class="ec-dip-card"><div class="ec-dip-t">📜 Торговая политика <span class="ec-hint">платная защита всех караванов от пиратов</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+        ${EC_TRADE_POLICY.map((p, i) => `<button class="btn ${i === pol ? 'btn-gd' : 'btn-gh'} btn-sm" style="display:flex;justify-content:space-between;gap:8px" onclick="ecRaidPolicySet(${i})">
+            <span>${i === pol ? '✓ ' : ''}${esc(p.name)}</span>
+            <span style="opacity:.8">${p.cost ? `${ecNum(p.cost)} ГС/ход · +${p.def} защ.` : 'бесплатно'}</span>
+          </button>`).join('')}
+      </div>
+      <div class="cn-fac-hint" style="margin-top:6px">Контракт с NPC-флотом защищает ВСЕ ваши караваны от рейдов вражеских флотов; апкип списывается каждый ход. Конвой (свои корабли на конкретный путь) добавляется сверху.</div></div>`;
+}
+// УДАЛЕНО: вкладка «Рейды». Грабёж караванов ведут флоты на карте
+// (galaxy_map.js → gmFleetRaidGo / серверный fleet_raid). Функция-заглушка на
+// случай легаси-ссылок EC.tab==='raids' → показываем «Ресурсы и торговля».
+function ecTabRaids() { return ecTabFlows(); }
+function _ecTabRaids_DEPRECATED() {
   const st = EC.raidStatus || { ships: 0, free: 0, raids: 0, policy: 0 };
   const pol = st.policy || 0; const polInfo = EC_TRADE_POLICY[pol] || EC_TRADE_POLICY[0];
   const others = ecOtherFactions();
@@ -11698,6 +11724,12 @@ function ecSpyLaunch() {
   const c = ecSpyCalcLive(); if (!c) return;
   if (c.gateErr) { toast(c.gateErr, 'err'); return; }
   const d = EC_SPY_OPS[EC.spyOp] || {};
+  // Похищение рабов — мгновенная covert-операция (свой RPC spy_steal_slaves, не очередь).
+  if (d.slaveSteal) {
+    if (ecIsEnlightened()) { toast('Просвещённые державы не занимаются работорговлей.', 'err'); return; }
+    ecRpcAct('spy_steal_slaves', { p_target_fid: EC.spyTarget, p_agents: picks.length }, `Операция «${d.label}» проведена`);
+    return;
+  }
   // Тактические операции (флот) — отдельный RPC spy_fleet_op, но запускаются ПО ТАЙМЕРУ
   // (как обычные): агенты уходят на c.turns ходов, результат и слух — при завершении.
   if (d.tactical) {
@@ -11790,7 +11822,7 @@ function ecBuildingRow(b) {
     } else {
       mineHtml = `<div class="ec-bld-mine-empty">◌ на планете нет залежей ${b.btype === 'mining' ? 'обычных' : b.btype === 'mining_deep' ? 'необычных/редких' : 'эпических/легендарных'} ресурсов — постройке нечего добывать</div>`;
     }
-    mineHtml += `<div class="ec-bld-mine-hd" style="margin-top:8px;color:var(--t3)">Куда идёт добыча (склад/экспорт/биржа) — во вкладке <a href="#" onclick="ecSetTab('flows');return false" style="color:var(--gd)">🔀 Потоки</a></div>`;
+    mineHtml += `<div class="ec-bld-mine-hd" style="margin-top:8px;color:var(--t3)">Куда идёт добыча (склад/экспорт) — во вкладке <a href="#" onclick="ecSetTab('flows');return false" style="color:var(--gd)">🔀 Потоки</a></div>`;
   }
   // мультивера: у храма пишем, чьей он религии
   let faithBadge = '';
