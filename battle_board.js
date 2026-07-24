@@ -300,13 +300,19 @@ function bbPick(uid) { BB.pick = (BB.pick === uid ? null : uid); bbRender(); }
 
 // ── Панель выбранного корабля / резерва в бою ───────────────
 const BB_SECT = { nose: 'Нос', left: 'Левый борт', right: 'Правый борт', any: 'Турели' };
+// Тестовый бой против ботов: у врага синтетический fid 'bot' (см. admin_bot_battle)
+function bbAdminBot(s) { return !!s && (s.defender === 'bot' || s.attacker === 'bot'); }
 function bbReinfPanel(s) {
   const pool = Array.isArray(s.pool) ? s.pool : [];
   if (!s.my_turn || !pool.length) return '';
-  const fresh = (s.acts_left || 0) >= (s.acts_max || 6);
+  const admin = bbAdminBot(s);
+  const fresh = admin || (s.acts_left || 0) >= (s.acts_max || 6);
+  const help = admin
+    ? `Тестовый режим: подкрепление можно вызывать <b>в любой момент хода</b>, оно <b>не тратит ход</b>, а корабль прибывает к своему краю доски <b>сразу готовым действовать</b>.`
+    : `Вызов стоит <b>целого хода</b> и делается только <b>свежим ходом</b> — пока ни один корабль не активирован. Корабль прибудет к своему краю доски и вступит в дело со следующего хода.${fresh ? '' : ' <b>Сейчас ход уже начат — вызов недоступен.</b>'}`;
   return `<div class="bb-panel">
       <div class="bb-panel-t">Подкрепление</div>
-      <div class="bb-panel-h">Вызов стоит <b>целого хода</b> и делается только <b>свежим ходом</b> — пока ни один корабль не активирован. Корабль прибудет к своему краю доски и вступит в дело со следующего хода.${fresh ? '' : ' <b>Сейчас ход уже начат — вызов недоступен.</b>'}${s.interdicted ? ' <b style="color:#ff5c8a">FTL-заградитель врага блокирует подкрепления — уничтожьте его носителя, выведите «Альтаан» или вызывайте корабли с собственным FTL-гипердвигателем (⇢).</b>' : ''}</div>
+      <div class="bb-panel-h">${help}${s.interdicted ? ' <b style="color:#ff5c8a">FTL-заградитель врага блокирует подкрепления — уничтожьте его носителя, выведите «Альтаан» или вызывайте корабли с собственным FTL-гипердвигателем (⇢).</b>' : ''}</div>
       ${pool.map(p => {
         const canJump = fresh && (!s.interdicted || p.ftl);
         return `<button class="bb-pool" ${canJump ? '' : 'disabled'} onclick="bbReinforce('${jsq(p.unit_id)}')">
@@ -753,11 +759,14 @@ function bbForce() {
 }
 function bbReinforce(uid) {
   const s = BB.st;
-  if (s && (s.acts_left || 0) < (s.acts_max || 6)) {
-    toast('Подкрепление вызывается только свежим ходом — часть активаций уже потрачена', 'err');
-    return;
+  const admin = bbAdminBot(s);
+  if (!admin) {
+    if (s && (s.acts_left || 0) < (s.acts_max || 6)) {
+      toast('Подкрепление вызывается только свежим ходом — часть активаций уже потрачена', 'err');
+      return;
+    }
+    if (!confirm('Вызвать подкрепление? Это потратит ВЕСЬ ваш ход — корабли в этом ходу не действуют.')) return;
   }
-  if (!confirm('Вызвать подкрепление? Это потратит ВЕСЬ ваш ход — корабли в этом ходу не действуют.')) return;
   BB.sel = null; BB.reach = null;
   return bbAct('battle_reinforce', { p_battle: BB.id, p_unit_id: uid, p_y: null }, 'Подкрепление вышло на позицию');
 }

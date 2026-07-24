@@ -4152,16 +4152,18 @@ async function adTestDuelOpen() {
 function adBotBattleSection() {
   const t = AD.botBattle;
   const status = t && t.battle_id
-    ? `Текущий: ${t.status === 'done' ? 'окончен' + (t.winner ? ', победа ' + esc(t.winner) : '') : 'идёт бой'}${t.bot_turn ? ' · <b>сейчас ход ботов</b>' : ' · сейчас твой ход'}`
+    ? (t.status === 'forming'
+        ? 'Текущий: <b>расстановка</b> — открой доску и выложи свой флот, затем «В бой».'
+        : `Текущий: ${t.status === 'done' ? 'окончен' + (t.winner ? ', победа ' + esc(t.winner) : '') : 'идёт бой'}${t.bot_turn ? ' · <b>сейчас ход ботов</b>' : ' · сейчас твой ход'}`)
     : 'Бой с ботами ещё не создавался (или статус не загружен).';
   return `<div class="fm-danger-act" style="align-items:flex-start;flex-direction:column;gap:10px">
     <div class="fm-danger-label" style="width:100%">
       <div>🤖 Тестовый бой с ботами</div>
-      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Обычный бой 60×80: <b>ты — нападающий (слева)</b>, боты — оборона (справа), на случайных свежих кораблях. Открой доску кнопкой «Открыть доску» и ходи как обычно — <b>боты ходят сами</b>, как только наступает их ход (каждый едет к ближайшему врагу и стреляет). Кнопка «Ход ботов» нужна лишь как ручной запуск, если доска открыта иначе (через «☄ Горячие точки»). Повторное создание <b>сносит прежнюю доску</b>.</div>
+      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Обычный бой 60×80: <b>ты — нападающий (слева)</b>, боты — оборона (справа), на случайных свежих кораблях. После создания бой встаёт в <b>фазу расстановки</b>: открой доску, <b>сам выложи свой флот из полного каталога</b> и жми «В бой» — только тогда бой начнётся, ход за тобой. Боты уже расставлены. Дальше ходи как обычно — <b>боты ходят сами</b>, как только наступает их ход (каждый едет к ближайшему врагу и стреляет). Кнопка «Ход ботов» — ручной запуск, если доска открыта иначе (через «☄ Горячие точки»). Повторное создание <b>сносит прежнюю доску</b>.</div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;width:100%">
       <div style="display:flex;flex-direction:column;gap:3px">
-        <label class="fm-dim" style="font-size:11px">Бортов на сторону</label>
+        <label class="fm-dim" style="font-size:11px">Кораблей у ботов</label>
         <input id="ad-bot-n" class="ec-input" type="number" min="1" max="80" value="3" style="width:90px">
       </div>
       <button class="btn btn-gd" onclick="adBotBattle()">Создать / перезапустить</button>
@@ -4178,8 +4180,8 @@ async function adBotBattle() {
   AD.busy = true;
   try {
     const r = await apiFetch('rpc/admin_bot_battle', { method: 'POST', body: JSON.stringify({ p_n: n }) });
-    AD.botBattle = { battle_id: r?.battle_id, status: 'active', bot_turn: false };
-    toast(`Бой создан: ${n} × «${esc(r?.my_ship || '?')}» против ${n} × «${esc(r?.bot_ship || '?')}». Открой доску.`, 'ok');
+    AD.botBattle = { battle_id: r?.battle_id, status: 'forming', bot_turn: false };
+    toast(`Бой создан: боты — ${r?.n || n} случайн. кораблей. Открой доску и расставь свой флот.`, 'ok');
     adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }

@@ -22,15 +22,22 @@ create table if not exists public.admin_bot_duel (
 alter table public.admin_bot_duel enable row level security;
 
 -- ── СПАВН боя с ботами ───────────────────────────────────────────────
--- p_my_ship / p_bot_ship — проекты кораблей (faction_units.id); null → случайный
--- живой проект. p_n — бортов на сторону (1..12).
+-- Бой создаётся в фазе РАССТАНОВКИ (status='forming'): ты — нападающий,
+-- сам выкладываешь свой флот из полного каталога (battle_pool даёт весь парк).
+-- Боты — защитник: сразу расставлены (def_ready=true) на p_n случайных
+-- существующих кораблях. Как только ты утвердишь свой состав («В бой»),
+-- battle_ready переведёт бой в active и ход будет за тобой.
+-- p_my_ship — игнорируется (корабли выбираешь в интерфейсе). p_bot_ship —
+-- если задан, ВСЕ боты на этом проекте; null → каждый борт случайный.
+-- p_n — сколько кораблей у ботов (1..80).
 create or replace function public.admin_bot_battle(p_my_ship uuid default null,
                                                    p_bot_ship uuid default null,
                                                    p_n int default 3)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare me text; bot text := public._bt_bot_fid();
         sys text; bid uuid; old uuid;
-        sm jsonb; sb jsonb; i int; n int := least(80, greatest(1, coalesce(p_n,3)));
+        sb jsonb; bship uuid; i int; placed int := 0;
+        n int := least(80, greatest(1, coalesce(p_n,3)));
         w int := public._bt_wbig(); h int := public._bt_hbig(); yy int;
         percol int; coff int; ridx int;
 begin
@@ -45,60 +52,42 @@ begin
   select battle_id into old from public.admin_bot_duel where one = 1;
   if old is not null then delete from public.battles where id = old; end if;
 
-  -- корабли: заданные или случайные живые проекты
-  if p_my_ship is null then
-    select id into p_my_ship from public.faction_units
-     where category='ship' and coalesce((summary->>'hp')::numeric,0) > 0
-     order by random() limit 1;
-  end if;
-  if p_bot_ship is null then
-    select id into p_bot_ship from public.faction_units
-     where category='ship' and coalesce((summary->>'hp')::numeric,0) > 0
-     order by random() limit 1;
-  end if;
-  sm := public._bt_stats(p_my_ship);
-  sb := public._bt_stats(p_bot_ship);
-  if sm is null or sb is null then raise exception 'проект корабля не найден (нужен опубликованный ship с hp>0)'; end if;
-
   select id into sys from public.map_systems order by random() limit 1;
   if sys is null then raise exception 'нет систем для арены'; end if;
 
+  -- фаза расстановки: ты (att_ready=false) раскладываешь сам, боты уже готовы
   insert into public.battles(system_id, attacker_fid, defender_fid, status, kind,
                              att_ready, def_ready, side_to_move, turn_no, acts_left,
                              att_turns_left, def_turns_left, deadline_at)
-    values (sys, me, bot, 'active', 'meeting', true, true, 'attacker', 1, public._bt_acts(),
-            6, 6, now() + (public._bt_turn_hours() || ' hours')::interval)
+    values (sys, me, bot, 'forming', 'meeting', false, true, 'attacker', 0, public._bt_acts(),
+            6, 6, null)
     returning id into bid;
-  perform public._bt_log(bid, '🤖 Тестовый бой с ботами. Ты — нападающий (слева).');
+  perform public._bt_log(bid, '🤖 Тестовый бой с ботами. Ты — нападающий (слева): '
+    || 'расставь свой флот из полного каталога и жми «В бой». Боты уже стоят справа.');
 
-  -- расстановка: ты в красной зоне слева, боты в бирюзовой справа. При большом
-  -- числе бортов заполняем несколько колонок у своего края, чтобы не налезали.
+  -- боты: n случайных существующих кораблей у своего (правого) края. При большом
+  -- числе бортов заполняем несколько колонок вглубь, чтобы не налезали.
   percol := greatest(1, h / 2);
   for i in 1..n loop
     coff := (i - 1) / percol;                       -- смещение колонки вглубь от края
     ridx := (i - 1) % percol;                        -- строка в колонке
     yy := least(h-1, greatest(0, ridx * 2 + (coff % 2)));
-    insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
-        hp, max_hp, armor, shield, max_shield, dmg, speed, rng,
-        facing, straight, sensor, stealth, wpn, resist, pd, jam, wings,
-        dejam, eccm, interdict, stabil)
-      values (bid, me, 'attacker', p_my_ship, sm->>'name', sm->>'cls', least(w/2-1, 1 + coff), yy,
-        (sm->>'hp')::numeric, (sm->>'hp')::numeric, (sm->>'armor')::numeric,
-        (sm->>'shield')::numeric, (sm->>'shield')::numeric, (sm->>'dmg')::numeric,
-        (sm->>'speed')::int, (sm->>'rng')::int,
-        0, public._bt_turnneed(sm->>'cls'),
-        coalesce((sm->>'sensor')::int,0), coalesce((sm->>'stealth')::int,0),
-        coalesce(sm->'wpn','[]'::jsonb), coalesce(sm->'resist','{}'::jsonb),
-        coalesce((sm->>'pd')::numeric,0), coalesce((sm->>'jam')::int,0), coalesce((sm->>'wings')::int,0),
-        coalesce((sm->>'dejam')::int,0), coalesce((sm->>'eccm')::int,0),
-        coalesce((sm->>'interdict')::bool,false), coalesce((sm->>'stabil')::bool,false));
 
-    yy := least(h-1, greatest(0, ridx * 2 + (coff % 2)));
+    if p_bot_ship is not null then
+      bship := p_bot_ship;                            -- все боты на одном проекте
+    else
+      select id into bship from public.faction_units    -- иначе каждый — случайный
+       where category='ship' and coalesce((summary->>'hp')::numeric,0) > 0
+       order by random() limit 1;
+    end if;
+    sb := public._bt_stats(bship);
+    if sb is null then continue; end if;
+
     insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
         hp, max_hp, armor, shield, max_shield, dmg, speed, rng,
         facing, straight, sensor, stealth, wpn, resist, pd, jam, wings,
         dejam, eccm, interdict, stabil)
-      values (bid, bot, 'defender', p_bot_ship, sb->>'name', sb->>'cls', greatest(w/2+1, w-2-coff), yy,
+      values (bid, bot, 'defender', bship, sb->>'name', sb->>'cls', greatest(w/2+1, w-2-coff), yy,
         (sb->>'hp')::numeric, (sb->>'hp')::numeric, (sb->>'armor')::numeric,
         (sb->>'shield')::numeric, (sb->>'shield')::numeric, (sb->>'dmg')::numeric,
         (sb->>'speed')::int, (sb->>'rng')::int,
@@ -108,13 +97,14 @@ begin
         coalesce((sb->>'pd')::numeric,0), coalesce((sb->>'jam')::int,0), coalesce((sb->>'wings')::int,0),
         coalesce((sb->>'dejam')::int,0), coalesce((sb->>'eccm')::int,0),
         coalesce((sb->>'interdict')::bool,false), coalesce((sb->>'stabil')::bool,false));
+    placed := placed + 1;
   end loop;
+  if placed = 0 then raise exception 'нет опубликованных кораблей (ship с hp>0) для ботов'; end if;
 
   insert into public.admin_bot_duel(one, battle_id) values (1, bid)
     on conflict (one) do update set battle_id = excluded.battle_id, created_at = now();
 
-  return jsonb_build_object('ok', true, 'battle_id', bid,
-    'my_ship', sm->>'name', 'bot_ship', sb->>'name', 'n', n);
+  return jsonb_build_object('ok', true, 'battle_id', bid, 'n', placed, 'phase', 'forming');
 end$$;
 revoke all on function public.admin_bot_battle(uuid,uuid,int) from public;
 grant execute on function public.admin_bot_battle(uuid,uuid,int) to authenticated;
@@ -304,8 +294,11 @@ create or replace function public.battle_pool(p_battle uuid, p_fid text)
 returns jsonb language plpgsql stable security definer set search_path=public as $$
 declare res jsonb := '[]'::jsonb; r record; used int; st jsonb;
 begin
-  -- админский полный каталог (весь опубликованный ship-парк, сорт. по классу)
-  if public._bt_admin_full(p_battle) then
+  -- админский полный каталог (весь опубликованный ship-парк, сорт. по классу) —
+  -- ТОЛЬКО для СВОЕЙ стороны стаффа. Для бота (и любой чужой стороны) считаем
+  -- обычный резерв флотов (пустой), иначе _bt_check_end видел бы у бота
+  -- неисчерпаемый резерв и бой не завершался бы после уничтожения всех его кораблей.
+  if public._bt_admin_full(p_battle) and p_fid = public._ec_my_fid() then
     select coalesce(jsonb_agg(x order by rnk, nm), '[]'::jsonb) into res from (
       select public._bt_cls_rank(s.st->>'cls') as rnk,
              coalesce(s.st->>'name','Корабль') as nm,
@@ -378,7 +371,8 @@ begin
     raise exception 'подкрепление заблокировано полем интердикции: у врага работает FTL-заградитель. Уничтожьте его носителя, выведите корабль со стабилизационным полем «Альтаан» или вызовите корабль с собственным FTL-гипердвигателем';
   end if;
 
-  if b.acts_left < public._bt_acts() then
+  -- в админском бот-бою спавн свободный: без требования свежего хода и без траты хода
+  if not is_full and b.acts_left < public._bt_acts() then
     raise exception 'подкрепление вызывается только свежим ходом: оно стоит всех % активаций. Сейчас часть хода уже потрачена', public._bt_acts();
   end if;
 
@@ -417,7 +411,7 @@ begin
     values (p_battle, me, sd, p_unit_id, st->>'name', st->>'cls', px, py,
       (st->>'hp')::numeric, (st->>'hp')::numeric, (st->>'armor')::numeric,
       (st->>'shield')::numeric, (st->>'shield')::numeric, (st->>'dmg')::numeric,
-      (st->>'speed')::int, (st->>'rng')::int, true, true, true,
+      (st->>'speed')::int, (st->>'rng')::int, not is_full, not is_full, not is_full,
       fc, public._bt_turnneed(st->>'cls'), (st->>'sensor')::int, (st->>'stealth')::int,
       st->'wpn', st->'resist',
       coalesce((st->>'pd')::numeric,0), coalesce((st->>'jam')::int,0), coalesce((st->>'wings')::int,0),
@@ -426,8 +420,95 @@ begin
       coalesce((st->>'ftl')::bool,false));
 
   perform public._bt_log(p_battle, format('%s вызывает подкрепление: %s', public._war_nm(me), st->>'name'));
-  perform public.battle_end_turn(p_battle);
+  -- в бот-бою спавн не тратит ход (корабль уже готов действовать); в обычном бою — стоит хода
+  if not is_full then
+    perform public.battle_end_turn(p_battle);
+  end if;
   return jsonb_build_object('ok', true);
 end$$;
 revoke all on function public.battle_reinforce(uuid,uuid,int) from public;
 grant execute on function public.battle_reinforce(uuid,uuid,int) to authenticated;
+
+-- ── battle_deploy: в бот-бою стафф выкладывает из ПОЛНОГО каталога ──────
+--   Перекрывает версию из _war_battle_tactics: когда бой = текущий бот-бой
+--   и вызывающий = стафф (_bt_admin_full), проверка «есть ли корабль в резерве
+--   флотов» пропускается — иначе расставить свой флот было бы нечем (у теста
+--   нет battle_fleets). Вне бот-боя логика прежняя.
+create or replace function public.battle_deploy(p_battle uuid, p_units jsonb)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare me text; sd text; b record; e jsonb; uid uuid; st jsonb;
+        cnt int; free int; used int; px int; py int; n int := 0; z int := public._bt_zone();
+        fc int; is_full boolean;
+begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  perform public._bt_arm(p_battle);           -- взвести размер доски этого боя
+  me := public._ec_my_fid();
+  select * into b from public.battles where id = p_battle for update;
+  if b.id is null then raise exception 'no such battle'; end if;
+  if b.status <> 'forming' then raise exception 'состав уже утверждён — бой идёт'; end if;
+  sd := public._bt_side(p_battle, me);
+  if sd is null then raise exception 'вы не участвуете в этом бою'; end if;
+  if (sd = 'attacker' and b.att_ready) or (sd = 'defender' and b.def_ready) then
+    raise exception 'вы уже подтвердили состав';
+  end if;
+  is_full := public._bt_admin_full(p_battle);   -- админский полный каталог
+  fc := case when sd = 'attacker' then 0 else 3 end;   -- курс: к врагу
+
+  delete from public.battle_units where battle_id = p_battle and fid = me;
+
+  for e in select value from jsonb_array_elements(coalesce(p_units,'[]'::jsonb)) loop
+    uid := nullif(e->>'unit_id','')::uuid;
+    px  := coalesce((e->>'x')::int, -1);
+    py  := coalesce((e->>'y')::int, -1);
+    if uid is null then continue; end if;
+    if py < 0 or py >= public._bt_h() then raise exception 'гекс вне доски'; end if;
+    if sd = 'attacker' and (px < 0 or px >= z) then
+      raise exception 'нападающий разворачивается в % левых колонках', z;
+    end if;
+    if sd = 'defender' and (px < public._bt_w() - z or px >= public._bt_w()) then
+      raise exception 'обороняющийся разворачивается в % правых колонках', z;
+    end if;
+
+    -- проверку «есть ли в резерве» пропускаем при админском полном каталоге
+    if not is_full then
+      select coalesce(sum(greatest(0, coalesce((c->>'qty')::int,0))), 0) into free
+        from public.battle_fleets bf
+        join public.fleets f on f.id = bf.fleet_id
+        cross join lateral jsonb_array_elements(coalesce(f.composition,'[]'::jsonb)) c
+       where bf.battle_id = p_battle and bf.fid = me and (c->>'unit_id')::uuid = uid;
+      select count(*) into used from public.battle_units
+        where battle_id = p_battle and fid = me and unit_id = uid;
+      if used >= free then raise exception 'таких кораблей в бою больше нет: «%»', coalesce(e->>'unit_name','проект'); end if;
+    end if;
+
+    if exists(select 1 from public.battle_units
+               where battle_id = p_battle and alive and x = px and y = py) then
+      raise exception 'гекс %:% уже занят — на одном гексе один корабль', px, py;
+    end if;
+
+    st := public._bt_stats(uid);
+    if st is null then raise exception 'проект корабля не найден'; end if;
+
+    insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
+        hp, max_hp, armor, shield, max_shield, dmg, speed, rng,
+        facing, straight, sensor, stealth, wpn, resist, pd, jam, wings,
+        dejam, eccm, interdict, stabil, ftl)
+      values (p_battle, me, sd, uid, st->>'name', st->>'cls', px, py,
+        (st->>'hp')::numeric, (st->>'hp')::numeric, (st->>'armor')::numeric,
+        (st->>'shield')::numeric, (st->>'shield')::numeric, (st->>'dmg')::numeric,
+        (st->>'speed')::int, (st->>'rng')::int,
+        fc, public._bt_turnneed(st->>'cls'), (st->>'sensor')::int, (st->>'stealth')::int,
+        st->'wpn', st->'resist',
+        coalesce((st->>'pd')::numeric,0), coalesce((st->>'jam')::int,0), coalesce((st->>'wings')::int,0),
+        coalesce((st->>'dejam')::int,0), coalesce((st->>'eccm')::int,0),
+        coalesce((st->>'interdict')::bool,false), coalesce((st->>'stabil')::bool,false),
+        coalesce((st->>'ftl')::bool,false));
+    n := n + 1;
+    if n > public._bt_cap() then raise exception 'в бой можно вывести не больше % кораблей', public._bt_cap(); end if;
+  end loop;
+
+  select count(*) into cnt from public.battle_units where battle_id = p_battle and fid = me;
+  return jsonb_build_object('ok', true, 'deployed', cnt);
+end$$;
+revoke all on function public.battle_deploy(uuid,jsonb) from public;
+grant execute on function public.battle_deploy(uuid,jsonb) to authenticated;
