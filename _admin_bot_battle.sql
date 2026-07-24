@@ -37,6 +37,7 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare me text; bot text := public._bt_bot_fid();
         sys text; bid uuid; old uuid;
         sb jsonb; bship uuid; i int; placed int := 0;
+        bships uuid[]; nb_ships int;
         n int := least(80, greatest(1, coalesce(p_n,3)));
         w int := public._bt_wbig(); h int := public._bt_hbig(); yy int;
         percol int; coff int; ridx int;
@@ -65,21 +66,28 @@ begin
   perform public._bt_log(bid, '🤖 Тестовый бой с ботами. Ты — нападающий (слева): '
     || 'расставь свой флот из полного каталога и жми «В бой». Боты уже стоят справа.');
 
-  -- боты: n случайных существующих кораблей у своего (правого) края. При большом
-  -- числе бортов заполняем несколько колонок вглубь, чтобы не налезали.
+  -- РАЗНЫЕ корабли ботам: собираем перемешанный список всех опубликованных
+  -- ship-проектов и раздаём по одному — пока хватает уникальных, дальше по кругу.
+  -- Так у ботов смешанный состав (разные классы и снаряжение), а не клоны.
+  if p_bot_ship is not null then
+    bships := array[p_bot_ship];                      -- принудительно один проект на всех
+  else
+    select array_agg(id order by random()) into bships
+      from public.faction_units
+     where category='ship' and coalesce((summary->>'hp')::numeric,0) > 0;
+  end if;
+  nb_ships := coalesce(array_length(bships, 1), 0);
+  if nb_ships = 0 then raise exception 'нет опубликованных кораблей (ship с hp>0) для ботов'; end if;
+
+  -- боты у своего (правого) края. При большом числе бортов заполняем несколько
+  -- колонок вглубь, чтобы не налезали.
   percol := greatest(1, h / 2);
   for i in 1..n loop
     coff := (i - 1) / percol;                       -- смещение колонки вглубь от края
     ridx := (i - 1) % percol;                        -- строка в колонке
     yy := least(h-1, greatest(0, ridx * 2 + (coff % 2)));
 
-    if p_bot_ship is not null then
-      bship := p_bot_ship;                            -- все боты на одном проекте
-    else
-      select id into bship from public.faction_units    -- иначе каждый — случайный
-       where category='ship' and coalesce((summary->>'hp')::numeric,0) > 0
-       order by random() limit 1;
-    end if;
+    bship := bships[((i - 1) % nb_ships) + 1];        -- разные проекты, потом по кругу
     sb := public._bt_stats(bship);
     if sb is null then continue; end if;
 
