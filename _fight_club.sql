@@ -110,8 +110,11 @@ create or replace function public._fc_spawn_duel(da text, db text)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare sa record; sb record; bid uuid; sys text;
         ca int; cb int; sta jsonb; stb jsonb; i int;
-        w int := public._bt_w(); h int := public._bt_h();
+        -- дуэль всегда на своей маленькой доске (не зависит от размера обычных боёв)
+        w int := public._bt_wduel(); h int := public._bt_hduel();
         ya int; yb int;
+        ax int := 1;                             -- колонна атакующего — в красной зоне (край слева)
+        bx int := public._bt_wduel()-2;          -- колонна защитника — в бирюзовой зоне (край справа)
 begin
   if da is null or db is null or da = db then raise exception 'нужны две разные державы'; end if;
 
@@ -165,19 +168,20 @@ begin
     returning id into bid;
   perform public._bt_log(bid, '🥊 Дуэль Бойцовского клуба! Победа — только на уничтожение.');
 
-  -- авто-расстановка: колонны у своих краёв, разложены по центру высоты
+  -- авто-расстановка: колонны у центра арены, разложены по центру высоты
   for i in 1..ca loop
     ya := least(h-1, greatest(0, h/2 + (i - 1 - ca/2) * 2));
     insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
         hp, max_hp, armor, shield, max_shield, dmg, speed, rng,
         facing, straight, sensor, stealth, wpn, resist, pd, jam, wings,
         dejam, eccm, interdict, stabil)
-      values (bid, da, 'attacker', sa.id, sta->>'name', sta->>'cls', 1, ya,
+      values (bid, da, 'attacker', sa.id, sta->>'name', sta->>'cls', ax, ya,
         (sta->>'hp')::numeric, (sta->>'hp')::numeric, (sta->>'armor')::numeric,
         (sta->>'shield')::numeric, (sta->>'shield')::numeric, (sta->>'dmg')::numeric,
         (sta->>'speed')::int, (sta->>'rng')::int,
-        0, public._bt_turnneed(sta->>'cls'), (sta->>'sensor')::int, (sta->>'stealth')::int,
-        sta->'wpn', sta->'resist',
+        0, public._bt_turnneed(sta->>'cls'),
+        coalesce((sta->>'sensor')::int,0), coalesce((sta->>'stealth')::int,0),
+        coalesce(sta->'wpn','[]'::jsonb), coalesce(sta->'resist','{}'::jsonb),
         coalesce((sta->>'pd')::numeric,0), coalesce((sta->>'jam')::int,0), coalesce((sta->>'wings')::int,0),
         coalesce((sta->>'dejam')::int,0), coalesce((sta->>'eccm')::int,0),
         coalesce((sta->>'interdict')::bool,false), coalesce((sta->>'stabil')::bool,false));
@@ -188,12 +192,13 @@ begin
         hp, max_hp, armor, shield, max_shield, dmg, speed, rng,
         facing, straight, sensor, stealth, wpn, resist, pd, jam, wings,
         dejam, eccm, interdict, stabil)
-      values (bid, db, 'defender', sb.id, stb->>'name', stb->>'cls', w-2, yb,
+      values (bid, db, 'defender', sb.id, stb->>'name', stb->>'cls', bx, yb,
         (stb->>'hp')::numeric, (stb->>'hp')::numeric, (stb->>'armor')::numeric,
         (stb->>'shield')::numeric, (stb->>'shield')::numeric, (stb->>'dmg')::numeric,
         (stb->>'speed')::int, (stb->>'rng')::int,
-        3, public._bt_turnneed(stb->>'cls'), (stb->>'sensor')::int, (stb->>'stealth')::int,
-        stb->'wpn', stb->'resist',
+        3, public._bt_turnneed(stb->>'cls'),
+        coalesce((stb->>'sensor')::int,0), coalesce((stb->>'stealth')::int,0),
+        coalesce(stb->'wpn','[]'::jsonb), coalesce(stb->'resist','{}'::jsonb),
         coalesce((stb->>'pd')::numeric,0), coalesce((stb->>'jam')::int,0), coalesce((stb->>'wings')::int,0),
         coalesce((stb->>'dejam')::int,0), coalesce((stb->>'eccm')::int,0),
         coalesce((stb->>'interdict')::bool,false), coalesce((stb->>'stabil')::bool,false));
@@ -458,6 +463,7 @@ returns jsonb language plpgsql volatile security definer set search_path=public 
 declare b record;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  perform public._bt_arm(p_battle);           -- взвести размер доски этого боя
   select * into b from public.battles where id = p_battle;
   if b.id is null then raise exception 'no such battle'; end if;
   if b.kind <> 'duel' then raise exception 'зрительский режим — только для дуэлей клуба'; end if;

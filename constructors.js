@@ -517,8 +517,8 @@ function cnSlotStatChips(slot, obj, def) {
     case 'type': return cnChip('HP', cnNum(obj.hp)) + cnChip('броня', cnNum(obj.armor)) + cnGsChip(obj.cost);
     case 'reactor': return cnChip('энергия', cnNum(obj.energy) + ' E') + cnGsChip(obj.cost);
     case 'armor': return cnChip('броня', '+' + cnNum(obj.armor)) + cnGsChip(obj.cost);
-    case 'shield': return cnChip('щит', obj.shield ? cnNum(obj.shield) : 'нет') + (E && obj.energy ? cnChip('E', cnNum(obj.energy)) : '') + cnGsChip(obj.cost);
-    case 'engine': return (window.KV_DB ? cnChip('тяга', cnNum(obj.force)) : cnChip('скорость', obj.speed + ' у.е.')) + (E && obj.energy ? cnChip('E', cnNum(obj.energy)) : '') + cnGsChip(obj.cost);
+    case 'shield': return cnChip('щит', obj.shield ? cnNum(obj.shield) : 'нет') + ((obj.energy || obj.power) ? cnChip('E', cnNum(obj.energy || obj.power)) : '') + cnGsChip(obj.cost);
+    case 'engine': return (window.KV_DB ? cnChip('тяга', cnNum(obj.force)) : cnChip('скорость', obj.speed + ' у.е.')) + ((obj.energy || obj.power) ? cnChip('E', cnNum(obj.energy || obj.power)) : '') + cnGsChip(obj.cost);
     case 'radar': { const d = obj.customParameterradar && obj.customParameterradar.dalnost; return cnChip('дальность', d ? cnNum(d) + ' кв' : 'нет') + (obj.power ? cnChip('E', cnNum(obj.power)) : ''); }
   }
   return '';
@@ -567,8 +567,8 @@ function cnCompStatsRows(info) {
     case 'type':    push('Прочность', cnNum(o.hp) + ' HP'); push('Броня корпуса', '+' + cnNum(o.armor) + ' AR'); pushPrice(cnNum(o.cost) + ' ГС'); break;
     case 'reactor': push('Уровень', 'Ур. ' + ((info.idx || 0) + 1)); push('Выработка энергии', cnNum(o.energy) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
     case 'armor':   push('Броня', '+' + cnNum(o.armor) + ' AR'); pushPrice(cnNum(o.cost) + ' ГС'); break;
-    case 'shield':  push('Щит', o.shield ? cnNum(o.shield) + ' ед.' : 'нет'); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
-    case 'engine':  if (window.KV_DB) push('Тяга', cnNum(o.force)); else push('Скорость', o.speed + ' у.е.'); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'shield':  push('Щит', o.shield ? cnNum(o.shield) + ' ед.' : 'нет'); { const e = +o.energy || +o.power || 0; if (e) push('Потребление', cnNum(e) + ' E'); } pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'engine':  if (window.KV_DB) push('Тяга', cnNum(o.force)); else push('Скорость', o.speed + ' у.е.'); { const e = +o.energy || +o.power || 0; if (e) push('Потребление', cnNum(e) + ' E'); } pushPrice(cnNum(o.cost) + ' ГС'); break;
     case 'radar': {
       const cp = o.customParameterradar || {};
       push('Дальность обзора', cp.dalnost ? cnNum(cp.dalnost) + ' кв' : 'нет');
@@ -580,11 +580,25 @@ function cnCompStatsRows(info) {
       if (o.capacityPenalty) push('Масса', cnNum(o.capacityPenalty) + ' кг');
       pushPrice(cnNum(o.cost) + ' ГС'); break;
     }
-    case 'weapon':  push('Урон', cnNum(o.dmg)); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'weapon': {
+      const cp = o.customParameter || {};
+      push('Урон', cnNum(o.dmg));
+      if (cp.kal && parseFloat(String(cp.kal)) > 0) push('Калибр', String(cp.kal));
+      if (+cp.skorostrelnost > 0) push('Скорострельность', cnNum(cp.skorostrelnost) + ' выстр./мин');
+      if (+cp.dalnost > 0) push('Дальность', cnNum(cp.dalnost) + ' кв');
+      if (o.damageType) push('Тип урона', String(o.damageType));
+      if (o.tech) push('Технология', String(o.tech));
+      const we = +o.energy || +o.power || 0;
+      if (we) push('Потребление', cnNum(we) + ' E');
+      if (o.crewRequired) push('Экипаж', cnNum(o.crewRequired));
+      if (+o.weight > 0) push('Масса', cnNum(o.weight) + ' т');
+      if (+o.visibility > 0) push('Заметность', '+' + cnNum(o.visibility));
+      pushPrice(cnNum(o.cost) + ' ГС'); break;
+    }
     case 'module': {
       // потребление энергии: KV-модули хранят его в power (адаптер зеркалит в energy)
       const eUse = +o.energy || +o.power || 0;
-      if (E && eUse) push('Потребление', cnNum(eUse) + ' E');
+      if (eUse) push('Потребление', cnNum(eUse) + ' E');
       if (o.capacity) push('Грузоподъёмность', (o.capacity > 0 ? '+' : '') + cnNum(o.capacity));
       if (o.crewRequired) push('Требует экипаж', cnNum(o.crewRequired));
       if (o.crewProvided) push('Даёт экипаж', '+' + cnNum(o.crewProvided));
@@ -1752,10 +1766,10 @@ function cnPartCardInner(type, g, idx) {
   const img = cnImgTag(cnImgPath(CN.cat, type, slug, idx), 'cn-comp-img');
   let chips;
   const itemE = +item.energy || +item.power || 0;
-  if (type === 'weapon') chips = cnChip('урон', cnNum(item.dmg)) + (E && itemE ? cnChip('E', cnNum(itemE)) : '') + cnGsChip(item.cost);
+  if (type === 'weapon') { const cp = item.customParameter || {}; chips = cnChip('урон', cnNum(item.dmg)) + (+cp.dalnost > 0 ? cnChip('дальность', cnNum(cp.dalnost) + ' кв') : '') + (itemE ? cnChip('E', cnNum(itemE)) : '') + cnGsChip(item.cost); }
   else {
     const cb = item.combat || {};
-    chips = (E && itemE ? cnChip('E', cnNum(itemE)) : '')
+    chips = (itemE ? cnChip('E', cnNum(itemE)) : '')
       + (item.capacity ? cnChip('груз', (item.capacity > 0 ? '+' : '') + cnNum(item.capacity)) : '')
       + (cb.interdict ? cnChip('⛔', 'интердикция') : '')
       + (cb.stabil ? cnChip('⚓', 'стабилизатор') : '')

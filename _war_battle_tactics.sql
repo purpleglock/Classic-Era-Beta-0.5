@@ -372,6 +372,7 @@ declare me text; sd text; b record; e jsonb; uid uuid; st jsonb;
         fc int;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  perform public._bt_arm(p_battle);           -- взвести размер доски этого боя
   me := public._ec_my_fid();
   select * into b from public.battles where id = p_battle for update;
   if b.id is null then raise exception 'no such battle'; end if;
@@ -447,6 +448,7 @@ declare me text; b public.battles; u record; e jsonb;
         i int; total int;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  perform public._bt_arm(p_battle);           -- взвести размер доски этого боя
   me := public._ec_my_fid();
   b  := public._bt_require_turn(p_battle, me);
   select * into u from public.battle_units where id = p_unit and battle_id = p_battle for update;
@@ -515,6 +517,7 @@ declare me text; b public.battles; u record; t record; dist int;
         rk numeric; resisted numeric := 0;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  perform public._bt_arm(p_battle);           -- взвести размер доски этого боя
   me := public._ec_my_fid();
   b  := public._bt_require_turn(p_battle, me);
   select * into u from public.battle_units where id = p_unit and battle_id = p_battle for update;
@@ -663,6 +666,7 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare me text; b public.battles; sd text; nxt text;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  perform public._bt_arm(p_battle);           -- взвести размер доски этого боя
   me := public._ec_my_fid();
   b  := public._bt_require_turn(p_battle, me);
   sd := b.side_to_move;
@@ -728,6 +732,7 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare me text; b public.battles; sd text; st jsonb; free int; used int; px int; py int; cnt int; fc int;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  perform public._bt_arm(p_battle);           -- взвести размер доски этого боя
   me := public._ec_my_fid();
   b  := public._bt_require_turn(p_battle, me);
   sd := public._bt_side(p_battle, me);
@@ -847,6 +852,7 @@ returns jsonb language plpgsql volatile security definer set search_path=public 
 declare me text; b record; sd text;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  perform public._bt_arm(p_battle);           -- взвести размер доски этого боя
   me := public._ec_my_fid();
   select * into b from public.battles where id = p_battle;
   if b.id is null then raise exception 'no such battle'; end if;

@@ -3756,6 +3756,7 @@ function adTabTesting(e) {
       </div>`)}
     ${row('🛐 Удалить религию фракции', 'Удаляет веру, основанную этой фракцией. Адепты, признания и тайные секты уходят каскадом. Необратимо.', `<button class="btn btn-rd" onclick="adTestDeleteFaith()">Удалить религию</button>`)}
     ${adTestDuelSection()}
+    ${adBotBattleSection()}
     ${adTestSpySection()}
   </div>`;
 }
@@ -4141,6 +4142,73 @@ async function adTestDuelOpen() {
     const mine = myFid && (myFid === AD.testDuel.attacker_fid || myFid === AD.testDuel.defender_fid);
     if (typeof bbOpen === 'function') bbOpen(AD.testDuel.battle_id, !mine);
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+}
+
+// ── Тестовый бой с ботами: ты (сторона А, слева) против ботов (справа) ──
+// Боты не ходят сами — их ход прогоняется кнопкой «Ход ботов» (admin_bot_turn):
+// каждый бот едет к ближайшему врагу и стреляет. Обычная доска 60×80.
+function adBotBattleSection() {
+  const t = AD.botBattle;
+  const status = t && t.battle_id
+    ? `Текущий: ${t.status === 'done' ? 'окончен' + (t.winner ? ', победа ' + esc(t.winner) : '') : 'идёт бой'}${t.bot_turn ? ' · <b>сейчас ход ботов</b>' : ' · сейчас твой ход'}`
+    : 'Бой с ботами ещё не создавался (или статус не загружен).';
+  return `<div class="fm-danger-act" style="align-items:flex-start;flex-direction:column;gap:10px">
+    <div class="fm-danger-label" style="width:100%">
+      <div>🤖 Тестовый бой с ботами</div>
+      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Обычный бой 60×80: <b>ты — нападающий (слева)</b>, боты — оборона (справа), на случайных свежих кораблях. Ходишь как обычно (через «☄ Горячие точки» или «Открыть доску»), завершаешь ход — потом жмёшь <b>«Ход ботов»</b>: каждый бот едет к ближайшему врагу и стреляет. Повторное создание <b>сносит прежнюю доску</b>.</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;width:100%">
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <label class="fm-dim" style="font-size:11px">Бортов на сторону</label>
+        <input id="ad-bot-n" class="ec-input" type="number" min="1" max="12" value="3" style="width:90px">
+      </div>
+      <button class="btn btn-gd" onclick="adBotBattle()">Создать / перезапустить</button>
+      <button class="btn btn-gh" onclick="adBotBattleOpen()">Открыть доску</button>
+      <button class="btn btn-gh" onclick="adBotTurn()">Ход ботов ▸</button>
+    </div>
+    <div class="fm-dim" style="font-size:11px;line-height:1.4">${status}</div>
+  </div>`;
+}
+async function adBotBattle() {
+  if (AD.busy) return;
+  const n = Math.max(1, Math.min(12, parseInt(document.getElementById('ad-bot-n')?.value, 10) || 3));
+  if (AD.botBattle?.battle_id && !confirm('Прежняя доска боя с ботами будет снесена и создана заново. Продолжить?')) return;
+  AD.busy = true;
+  try {
+    const r = await apiFetch('rpc/admin_bot_battle', { method: 'POST', body: JSON.stringify({ p_n: n }) });
+    AD.botBattle = { battle_id: r?.battle_id, status: 'active', bot_turn: false };
+    toast(`Бой создан: ${n} × «${esc(r?.my_ship || '?')}» против ${n} × «${esc(r?.bot_ship || '?')}». Открой доску.`, 'ok');
+    adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
+}
+async function adBotBattleOpen() {
+  if (AD.busy) return;
+  try {
+    if (!AD.botBattle?.battle_id) {
+      AD.botBattle = await apiFetch('rpc/admin_bot_battle_state', { method: 'POST', body: '{}' });
+      adPaint();
+    }
+    if (!AD.botBattle?.battle_id) { toast('Бой с ботами ещё не создан', 'err'); return; }
+    if (typeof bbOpen === 'function') bbOpen(AD.botBattle.battle_id, false);  // ты — участник
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+}
+async function adBotTurn() {
+  if (AD.busy) return;
+  try {
+    if (!AD.botBattle?.battle_id) {
+      AD.botBattle = await apiFetch('rpc/admin_bot_battle_state', { method: 'POST', body: '{}' });
+    }
+    if (!AD.botBattle?.battle_id) { toast('Бой с ботами ещё не создан', 'err'); return; }
+    AD.busy = true;
+    await apiFetch('rpc/admin_bot_turn', { method: 'POST', body: JSON.stringify({ p_battle: AD.botBattle.battle_id }) });
+    toast('Боты походили', 'ok');
+    AD.botBattle = await apiFetch('rpc/admin_bot_battle_state', { method: 'POST', body: '{}' });
+    // если доска открыта — обновим её
+    if (typeof bbReload === 'function') bbReload(); else if (typeof bbPoll === 'function') bbPoll();
+    adPaint();
+  } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
+  finally { AD.busy = false; }
 }
 
 async function adTestSpeedSpy() {
