@@ -2674,6 +2674,7 @@ function _heroIsToday(n) {
 // heroVNTell озвучивает её устами персонажа. 'idx' — фраза + анимированный индекс.
 let _heroVNCat = null;   // активная категория ('ach'|'events') для кнопки «назад»
 let _heroVNView = null;  // что игрок сейчас смотрит ('ach'|'events'|'idx'|null=меню) — гасит отложенный показ ленты биржи при уходе
+let _heroVNMarketEv = [];  // кэш недавних рыночных событий для экрана «Что там на рынке?»
 // URL спрайтов под категории меню (ach/events/idx) — отдельный «ведущий» персонаж,
 // которого показываем, пока игрок смотрит достижения / события / биржу. Заполняется
 // в buildHeroVN из cfg.catSprites. _heroVNPinUrl — какой спрайт сейчас «приколот»
@@ -2880,6 +2881,65 @@ function heroVNChoice(kind) {
     const phrase = (typeof fnExchangeAdvice === 'function' && fnExchangeAdvice(en)) || fallback;
     _heroVNCtl.narrate([{ t: phrase, n: spk }], { onComplete: heroVNShowIdx });
   }
+
+  // «Что там на рынке?» — недавние события ленты и КАК они двинули курс.
+  if (kind === 'market') {
+    _heroVNCat = 'market';
+    heroVNPin('events');
+    _heroVNCtl.setChoices(`<div class="hp-vn-choice-empty">${en ? 'Reading the wire…' : 'Читаю сводки…'}</div>`);
+    _heroVNCtl.showBack(() => heroVNChoice('menu'));
+    (typeof ecRpc === 'function' ? ecRpc('market_events_recent') : Promise.resolve([]))
+      .then(list => heroVNMarketRender(Array.isArray(list) ? list : []))
+      .catch(() => heroVNMarketRender([]));
+  }
+}
+// Классы рыночных событий → значок, ярлык и знак влияния на курс.
+function heroVNMarketKind(cls, en) {
+  const M = {
+    cata:   ['☠', en ? 'Planet destroyed'   : 'Планета уничтожена', 'up3', en ? 'market ▲ sharply — catastrophe' : 'рынок ▲ резко — катастрофа'],
+    doom:   ['🜨', en ? 'MDA activity'       : 'Активность «Длани»',  'up',  en ? 'rates ▲ — fear & scarcity'      : 'курс ▲ — страх и дефицит'],
+    destr:  ['💥', en ? 'Destruction'        : 'Разрушение',          'up',  en ? 'rates ▲ — supply loss'          : 'курс ▲ — потеря снабжения'],
+    confl:  ['⚔', en ? 'Conflict / ops'      : 'Конфликт / операции', 'up',  en ? 'rates ▲ — instability'          : 'курс ▲ — нестабильность'],
+    fin:    ['📉', en ? 'Default'            : 'Дефолт',              'dn',  en ? 'rates ▼ — financial stress'     : 'курс ▼ — фин. стресс'],
+    growth: ['📈', en ? 'Growth / alliance'  : 'Рост / союз',         'up',  en ? 'rates slightly ▲ — demand'      : 'курс слегка ▲ — спрос'],
+    flat:   ['•', en ? 'Neutral'             : 'Нейтрально',          'fl',  en ? 'no clear effect'                : 'без явного влияния'],
+  };
+  return M[cls] || M.flat;
+}
+// Отрисовать список рыночных событий с чипом влияния (устами персонажа при клике).
+function heroVNMarketRender(list) {
+  if (!_heroVNCtl) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  // Достижения фракций — НЕ рыночное событие (курс не двигают). Даже если старая
+  // серверная выборка их протащит — режем здесь, чтобы список не превращался в
+  // стену обрезанных кнопок «Достижение: …».
+  _heroVNMarketEv = (list || []).filter(n => !/достижен/i.test(String(n && n.title || '')));
+  if (!_heroVNMarketEv.length) {
+    _heroVNCtl.setChoices(`<div class="hp-vn-choice-empty">${en ? 'The market is calm — no notable events.' : 'Рынок спокоен — заметных событий нет.'}</div>`);
+    _heroVNCtl.showBack(() => heroVNChoice('menu'));
+    return;
+  }
+  const html = _heroVNMarketEv.slice(0, 14).map((n, i) => {
+    const [ic, , sign] = heroVNMarketKind(n.cls, en);
+    const arrow = sign === 'dn' ? '▼' : sign === 'fl' ? '→' : '▲';
+    const title = String(n.title || '').replace(/^[^\wА-Яа-я]+\s*/, '').trim() || (en ? 'Event' : 'Событие');
+    return `<button class="hp-vn-choice hp-vn-choice-item" onclick="event.stopPropagation();heroVNMarketTell(${i})">${ic} <span class="hp-vn-choice-it-t">${esc(title)}</span><span class="hp-vn-mkchip ${sign}">${arrow}</span></button>`;
+  }).join('');
+  _heroVNCtl.setChoices(html);
+  _heroVNCtl.showBack(() => heroVNChoice('menu'));
+}
+// Персонаж комментирует выбранное рыночное событие и его влияние на курс.
+function heroVNMarketTell(i) {
+  if (!_heroVNCtl || !Array.isArray(_heroVNMarketEv)) return;
+  const n = _heroVNMarketEv[i]; if (!n) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  const spk = _heroVNCtl.speaker();
+  const [, label, , effect] = heroVNMarketKind(n.cls, en);
+  const title = String(n.title || '').trim();
+  const line = (en
+    ? `${title}. ${label} — ${effect}.`
+    : `${title}. ${label} — ${effect}.`);
+  _heroVNCtl.narrate([{ t: line, n: spk }], { back: () => heroVNChoice('market') });
 }
 // Озвучить конкретную выбранную запись устами персонажа (печать в окне).
 function heroVNTell(id) {
@@ -5055,6 +5115,7 @@ function heroVNInit() {
     const opts = [
       ['events', (en ? 'Sector events' : 'События сектора')],
       ['idx',    (en ? "How's the exchange?" : 'Что там на бирже?')],
+      ['market', (en ? "What's moving the market?" : 'Что там на рынке?')],
       ['ach',    (en ? "Today's achievements" : 'Достижения за сегодня')],
       ['rating', (en ? 'Player ratings' : 'Рейтинг игроков')],
       ['colony', (en ? 'Colonization' : 'Колонизация')],
@@ -5074,7 +5135,7 @@ function heroVNInit() {
     try {
       const doomOn = (typeof ecDoomUnlocked === 'function' && typeof EC !== 'undefined' && EC.eco && ecDoomUnlocked())
         || localStorage.getItem('wk_doom_unlocked') === '1';
-      if (doomOn) opts.push(['doom', (en ? 'The Hand of Inevitability' : 'Длань Неотвратимости')]);
+      if (doomOn) opts.push(['doom', (en ? 'MDA Line · strike & shield' : 'Рубеж МЗА · удар и оборона')]);
     } catch (e) {}
     choicesEl.innerHTML = opts.map(([k, l]) =>
       `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');
@@ -5405,8 +5466,8 @@ function heroVNDoomClose() {
 function heroVNDoomReturn() { heroVNChoice('menu'); }
 function _hdHead(en) {
   return `<div class="hp-vn-col-head">
-    <span class="hp-vn-col-title">${en ? 'The Hand of Inevitability' : 'Длань Неотвратимости'}</span>
-    <span class="hp-vnr-clr hp-vnd-clr">${en ? 'last-resort protocol · clearance ultima' : 'протокол последнего довода · допуск «ультима»'}</span>
+    <span class="hp-vn-col-title">${en ? 'MDA Line · strike & shield' : 'Рубеж МЗА · удар и оборона'}</span>
+    <span class="hp-vnr-clr hp-vnd-clr">${en ? 'strike protocol & planetary intercept · clearance ultima' : 'протокол удара и планетарного перехвата · допуск «ультима»'}</span>
     <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNDoomReturn()">↩ ${en ? 'back' : 'назад'}</button>
   </div>`;
 }

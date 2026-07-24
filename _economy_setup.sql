@@ -155,7 +155,7 @@ create table if not exists public.colony_projects (
   owner_id    uuid,
   kind        text not null,            -- build | slot | terraform | habitat
   btype       text,                     -- build: тип здания
-  colony_id   uuid,                     -- slot / habitat
+  colony_id   uuid references public.colonies(id) on delete cascade,  -- build / slot / habitat — каскад: удаление колонии сносит её проекты (нет сирот → нет FK 23503)
   building_id uuid,                     -- slot
   system_id   text,                     -- terraform (новая планета)
   planet_name text,

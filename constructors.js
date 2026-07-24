@@ -481,6 +481,7 @@ function cnAlloyToArmor(a) {
     capacityBoost: st.capacityBoost || 0,
     resist: st.resist || { kinetic: 0, energy: 0, missile: 0 },
     resurs: { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+    quality: (st.quality != null ? st.quality : 1),   // 0.1..1.6 — качество рецепта (масштаб HP под корпус)
     _alloy: true, _alloyId: a.id,
   };
 }
@@ -2342,6 +2343,23 @@ function cnKvArmorHp(cls, a) {
   else if (a.category === 'lightMetal') { bm *= 0.7; km *= 1.3; cm *= 1.1; }
   else if (a.category === 'ceramic') { km *= 1.4; rm *= 1.2; bm *= 0.8; }
   else if (a.category === 'composite') { bm *= 1.1; cm *= 1.1; rm *= 1.1; km *= 1.1; sv *= 1.1; }
+  // ── СПЛАВ (алхимия): объём брони НЕ фиксирован, а масштабируется под корпус ──
+  // Рецепт задаёт только материал (dF/tF/hF), качество и стойкости; «сколько брони
+  // несёт корпус» берём из САМОГО класса (mass/gabarit + его конструкц. resurs как
+  // прокси размера, взвешенные категорией сплава). Так один сплав корректно работает
+  // и на пехотинце, и на линкоре — считается в контексте каждого конструктора.
+  if (a._alloy) {
+    let load = 0;
+    const cr = cls.resurs;
+    if (cr) load = (cr.blackmetall || 0) * bm + (cr.coloredmetall || 0) * cm
+      + (cr.rudametall || 0) * rm + (cr.kristall || 0) * km + (cr.staarvis || 0) * sv;
+    let base = (s + load) * dF * tF * hF;                 // s = mass/2000 + gabarit*2
+    const q = (a.quality != null ? a.quality : 1);        // 0.1..1.6
+    let hpA = base * (0.4 + 0.6 * q);                     // качество рецепта ×(0.46..1.36)
+    if (a.hpPercentBoost) hpA *= (1 + a.hpPercentBoost);  // %HP катализатора — поверх
+    hpA += (a.hpBoost || 0) * 0.2;                        // качеств. «пол» (ALLOY_FLOOR_K), чтобы мелкие корпуса (пехота/дроны) не обнулялись; для кораблей ничтожен
+    return hpA;
+  }
   if (a.resurs) s += (a.resurs.blackmetall || 0) * bm + (a.resurs.coloredmetall || 0) * cm
     + (a.resurs.rudametall || 0) * rm + (a.resurs.kristall || 0) * km + (a.resurs.staarvis || 0) * sv;
   s *= dF * tF * hF;

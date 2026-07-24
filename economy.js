@@ -360,7 +360,7 @@ const EC_BUILD = {
   // ─ ОБОРОННЫЕ СТРУКТУРЫ (зеркало _defense_*.sql) ─
   starbase:         { name: 'Звёздная База',         cost: 5000, ladder: [0, 5000, 5000, 8000, 8000, 12000], free: 1, inc: {}, cat: 'mil', desc: 'Вместимость флота: +50 кораблей за слот. Без неё нельзя строить корабли сверх лимита (содержания нет — только вместимость)' },
   flak:             { name: 'Батарея ПВО',           cost: 1500, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: 'Пассивная защита планеты от вражеской авиации: снижает урон атакующих авиагрупп (за слот)' },
-  abm:              { name: 'Комплекс ПРО',          cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: 'Перехват ударов по планете. Требует снаряды — их докупают за ГС, поставка 1 день. Нет снарядов — нет перехвата' },
+  abm:              { name: 'Комплекс ПРО',          cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: 'Прикрывает ВСЮ свою систему. Боезапаса нет: когда по вашей планете идёт залп, открывается «Окно перехвата» — вы сами угадываете профиль подхода снаряда. Слоты дают разведку и авто-отработку' },
   // ОРУДИЕ СУДНОГО ДНЯ — строится отдельным путём (doom_build): ГС + Программируемая
   // материя, требует исследование «Сама неотвратимость». Слоты не открываются.
   doomgun:          { name: 'Длань Неотвратимости', cost: 500000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Межзвёздная артиллерия: залп из системы в систему превращает планету-цель в мёртвый камень. Стреляет ПОСТРОЕННЫМИ снарядами Длани (Арсенал Судного Дня); Программируемая материя нужна на содержание — без неё деградирует и распадается.' },
@@ -417,8 +417,20 @@ const EC_GOODS_MAT = ['Железо', 'Силикаты'];
 const EC_GOODS_TECH = 'pol.consumer_goods';
 const EC_QUALITY_W = { legendary: 1.70, epic: 1.45, rare: 1.25, uncommon: 1.10, common: 1.00 };
 const EC_GOODS_WCAP = 1.10, EC_GOODS_QMAX = 0.15;   // потолок welfare: база 1.10 + качество ≤0.15
-// ПРО: цена снаряда + срок доставки (зеркало _defense_const).
-const EC_ABM_AMMO_COST = 800;
+// ПРО «Окно перехвата»: профили подхода и пороги разведки (зеркало _abm_duel.sql).
+const EC_ABM_PROFILES = [
+  { id: 'low',   ic: '◣', name: 'Низкая траектория', desc: 'Идёт над самой атмосферой, прячась в тени рельефа. Мало времени на реакцию.' },
+  { id: 'high',  ic: '◥', name: 'Высокая дуга',      desc: 'Выходит на баллистическую дугу и падает отвесно. Видно рано — сбить трудно.' },
+  { id: 'decoy', ic: '◈', name: 'Рой ложных целей',  desc: 'Снаряд идёт в облаке обманок. Сеть перегружена целями.' },
+];
+// Окно подлёта — вторая ось дуэли (early/late). Иконки: раньше «стремительно», позже «выждать».
+const EC_ABM_WINDOWS = [
+  { id: 'early', ic: '⏩', name: 'Раннее окно',  desc: 'Бьёт в первой половине подлёта — резко, но предсказуемо.' },
+  { id: 'late',  ic: '⏳', name: 'Позднее окно', desc: 'Тянет до последнего — сеть успевает остыть.' },
+];
+const EC_ABM_NARROW_SLOTS = 2;   // слотов, чтобы отсеять одну ложную версию (ось траектории)
+const EC_ABM_RADAR_SLOTS  = 4;   // слотов, чтобы радар раскрыл ОКНО подлёта
+const EC_ABM_CLEAR_SLOTS  = 6;   // слотов, чтобы взять чистую отметку + раскрыть планету-цель
 // Вместимость флота: каждый слот Звёздной Базы даёт столько мест под корабли (зеркало _defense_const).
 const EC_STARBASE_CAP_PER_SLOT = 50;
 // Верфь-ремонт: цена ремонта = доля стоимости постройки корабля (зеркало _defense_const).
@@ -442,7 +454,7 @@ const EC_BLD_HOWTO = {
   airfield:         'Даёт мощность для производства АВИАЦИИ (12 ед. за слот в ход). Юниты авиации потом собираются в армии — режим карты «Звёздный марш».',
   starbase:         'Открывает вместимость флота (+50 кораблей за слот). Нельзя строить корабли сверх суммарной вместимости баз — это не содержание, а «места под флот». Уже имеющийся флот сверх лимита остаётся, но новые корабли заблокированы, пока не построите базу/слот.',
   flak:             'Пассивная защита планеты от авиации: снижает урон вражеских авиагрупп при ударе по этой планете. Боезапаса не требует.',
-  abm:              'Перехватывает удары по планете (орбитальные удары, залп орудия судного дня). Каждый перехват тратит снаряд. Снаряды докупаются за ГС и прибывают через 1 день. Нет снарядов — удар проходит.',
+  abm:              'Пока вражеский залп в пути, вы ведёте перехват вручную: атакующий вслепую выбрал профиль подхода (низкая траектория / высокая дуга / рой ложных целей), вы вслепую наводите сеть. Совпало — планета цела. Слоты решают разведку: 2 — отсеивается одна ложная версия, 4 — радар иногда берёт чистую отметку. Не зашли до подлёта — сеть отработает сама, слабым шансом.',
   temple:           'Пассивный доход ГС + «сила веры»: чем больше слотов храмов, тем дешевле постройка войск. Спиритуалистам и теократиям бонус сильнее. Требует исповедуемой веры; при постройке указывается её религия (можно держать храмы разных вер).',
   doomgun:          'Откройте пульт орудия, выберите систему-цель и планету — залп тратит 1 ПОСТРОЕННЫЙ снаряд Длани (собирается в Арсенале Судного Дня). Снаряд летит тем дольше, чем дальше цель: от ~3 ч до соседней системы и до суток — от края до края галактики. Держите запас Программируемой материи: без неё орудие деградирует быстрее и распадётся.',
   shellforge:       'Заказывайте снаряды Длани прямо на строке арсенала (стирают планету; нужны Длани и Гиперпейсеру). 1 снаряд = 1 день работы; готовые ложатся на общий склад снарядов державы.',
@@ -458,6 +470,12 @@ const EC_BLD_ICON = {
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
 // Обустройство среды обитания на своей колонии (+ячейки, 1 ход)
 const EC_HABITAT_COST = 1000, EC_HABITAT_CELLS = 3, EC_HABITAT_TURNS = 1;
+// РАБОЧИЕ: доля населения, идущая в рабочие на месторождениях, по уровню ползунка
+// INDUSTRY (0..4) — «Снабжение». Зеркало _worker_share() в _resource_rework.sql.
+// Смена вступает в силу СО СЛЕДУЮЩЕГО ТИКА (сервер держит лаг industry_eff).
+const EC_WORKER_SHARE = [0.10, 0.20, 0.30, 0.40, 0.50];
+const EC_WORKER_PER_UNIT = 5;       // 5 рабочих на залежи = 1 ед. выхода/тик (× баффы)
+const EC_PRIORITY_COST = 6000;      // ГС за отметку системы приоритетной
 // Небожители: орбитальные/наземные станции в непригодных мирах — малые колонии (3–5 ячеек).
 const EC_STATION_COST = 300;
 // Строительство слота здания (1 ход; ГС берётся из лестницы здания)
@@ -1464,6 +1482,17 @@ async function ecBootOnce() {
     await ecRpc('economy_init');
     const tick = await ecRpc('economy_tick');
     try { localStorage.setItem(_ecTickKey(), String(Date.now())); } catch (e) {}
+    // 🔁 Автопродажа: сбыт постоянных приказов на рынок — РОВНО за прошедшие тики.
+    // Привязана к реальному числу игровых дней (tick.days), а не к заходу в кабинет:
+    // без прошедшего дня приказы НЕ исполняются (иначе «деньги за каждый вход»).
+    // (best-effort — SQL _market_autosell.sql может быть не накатан.)
+    const _days = (tick && tick.days) || 0;
+    if (_days >= 1) {
+      try {
+        const as = await ecRpc('market_autosell_run', { p_days: _days });
+        if (as && as.gain > 0) toast(`🔁 Автопродажа на рынке за ${_days} сут.: +${ecNum(as.gain)} ГС`, 'ok');
+      } catch (e) {}
+    }
     // Тост — РОВНО ОДИН раз на реальный тик (а не на каждый вызов рендера,
     // иначе при повторных рендерах из init было двойное оповещение).
     if (tick && tick.days >= 1) {
@@ -1634,7 +1663,7 @@ async function _ecLoadCoreImpl() {
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
-  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger, warStatus, battlesList, goodsRecipeRows, resRarityRows] = await Promise.all([
+  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger, warStatus, battlesList, goodsRecipeRows, resRarityRows, autosellCfg, stepLimit] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
@@ -1679,6 +1708,8 @@ async function _ecLoadCoreImpl() {
     ecRpc('battles_mine').catch(() => null),   // ⚔ завязавшиеся бои: перехваты и встречи флотов (_war_intercept.sql)
     dbGet('faction_goods_recipe', `faction_id=eq.${fid}`).catch(() => []),   // 🛍 настраиваемый рецепт фабрики потребления (_consumption_factory.sql)
     dbGet('resource_rarity', `select=name,rarity`).catch(() => []),   // 🛍 редкость ресурсов → качество рецепта (справочник; best-effort)
+    ecRpc('market_autosell_list').catch(() => ({})),   // 🔁 автопродажа: приказы «N единиц/тик» (_market_autosell.sql; best-effort)
+    ecRpc('market_step_status').catch(() => null),     // ⏱ лимит сбыта/скупки по шагам курса + таймер сброса (_market_loosen_steps.sql; best-effort)
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
@@ -1765,6 +1796,16 @@ async function _ecLoadCoreImpl() {
   // Источник истины — SQL market_resources (тикается на сервере). Питает ecResPriceN и вкладку «Рынок».
   EC.market = {};
   (Array.isArray(market) ? market : []).forEach(m => { if (m && m.name) EC.market[m.name] = { price: +m.price, base: +m.base_price, stock: +m.stock, eq: +m.equilibrium, sup: +m.npc_supply || 0, dem: +m.npc_demand || 0 }; });
+  // 🔁 Автопродажа: карта «ресурс → единиц за тик» (постоянный приказ сбыта на рынок).
+  EC.autosell = (autosellCfg && typeof autosellCfg === 'object' && !Array.isArray(autosellCfg)) ? autosellCfg : {};
+  // ⏱ Лимит сбыта/скупки по ШАГАМ курса: окно, таймер сброса, использованный объём.
+  // Фолбэк-константы = дефолты _market_loosen_steps.sql (окно 180 мин, шаг 150%/2000).
+  EC.stepLimit = (stepLimit && typeof stepLimit === 'object') ? stepLimit : {
+    period_min: 180, step_frac: 1.5, step_min_cap: 2000, order_frac: 0.45, order_min_cap: 500,
+    resets_in: 0, used: {}
+  };
+  // Абсолютный момент сброса (для таймера) — фиксируем на загрузке, тикаем от него.
+  EC._stepResetAt = Date.now() + (Math.max(0, +EC.stepLimit.resets_in || 0) * 1000);
   // Живые параметры рынка (market_config из _mining_market_routing.sql). Нужны, чтобы
   // предпросмотр/прогноз в UI считал цену по ТЕМ ЖЕ числам, что и сервер. Фолбэк —
   // дефолты _market_setup.sql (elast 0.45, зажим 0.25..4.0), если конфиг не применён.
@@ -1811,13 +1852,31 @@ async function _ecLoadRestImpl() {
   // Снаряды судного дня: склад + арсеналы + Немезиды (best-effort — SQL может быть не накатан).
   const shells = await ecRpc('shell_status').catch(() => null);
   EC.shells = (shells && typeof shells === 'object') ? shells : { stock: {}, forges: [], nemesis: [] };
+  // ПРО: входящие отметки по моим планетам (best-effort — _abm_duel.sql может быть не накатан).
+  const abmIn = await ecRpc('abm_incoming').catch(() => null);
+  EC.abmIncoming = Array.isArray(abmIn) ? abmIn : [];
   // Межзвёздная артиллерия: орудия фракции (с integrity) + залпы в полёте + баланс.
   EC.doom = (doom && typeof doom === 'object') ? doom : { guns: [], salvos: [], const: {} };
   EC.doomByBuilding = {};
+  // Профиль подхода моих залпов в полёте (сторона атакующего в «Окне перехвата»).
+  const mySalvos = await ecRpc('doom_salvos_mine').catch(() => null);
+  EC._mySalvos = Array.isArray(mySalvos) ? mySalvos : [];
+  if (EC._mySalvos.length && EC.doom && Array.isArray(EC.doom.salvos)) {
+    const byId = {}; EC._mySalvos.forEach(x => { if (x && x.id) byId[x.id] = x; });
+    EC.doom.salvos.forEach(sv => {
+      const m = byId[sv.id];
+      if (m) { sv.approach = m.approach || null; sv.window = m.window || null; sv.feint = m.feint || null; }
+    });
+  }
   (EC.doom.guns || []).forEach(g => { if (g && g.building_id) EC.doomByBuilding[g.building_id] = g; });
   EC.outposts = Array.isArray(defOutposts) ? defOutposts : [];  // оборона: развёрнутые аванпосты
   EC.opShips = Array.isArray(defOpShips) ? defOpShips : [];     // оборона: мои корабли-носители
   EC.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];        // Гиперпейсер: мои мобильные «Длани»
+  // Привязываем залп в полёте (с осями подхода) к его носителю-Гиперпейсеру.
+  if (EC.mzaShips.length && EC._mySalvos.length) {
+    const byMza = {}; EC._mySalvos.forEach(x => { if (x && x.mza_id) byMza[x.mza_id] = x; });
+    EC.mzaShips.forEach(sh => { sh.salvo = byMza[sh.id] || null; });
+  }
   // Кэш-флаг для меню новеллы: пункт «Длань Неотвратимости» показывается ещё
   // до загрузки экономики, если в прошлый визит исследование было открыто.
   try { if (ecDoomUnlocked()) localStorage.setItem('wk_doom_unlocked', '1'); else localStorage.removeItem('wk_doom_unlocked'); } catch (e) {}
@@ -2161,19 +2220,13 @@ function ecCaravanIncome() {
   const act = (EC.routes || []).filter(r => r.status === 'active');
   const out = act.filter(r => r.a_fid === EC.fid);   // исходящие — я продаю
   const inn = act.filter(r => r.b_fid === EC.fid);   // входящие — доля партнёра
-  // Валовый экспортный поток добычи — общий пул mine_flow: сервер отгружает караванам
-  // ТОЛЬКО реально добытое export-заводами за тик, маршруты черпают пул по очереди.
-  const flow = {};
-  (EC.buildings || []).filter(ecIsMiner).forEach(b => {
-    ecMineYields(b).forEach(y => {
-      if (ecEffMode(b, y.name) !== 'export' || ecIsConceded(b.colony_id, y.name)) return;
-      flow[y.name] = (flow[y.name] || 0) + y.rate;
-    });
-  });
+  // Источник груза — СКЛАД (реворк ресурсов): добыча идёт рабочими на склад, караваны
+  // черпают общий складской запас ПО ОЧЕРЕДИ. Если ресурса на складе не осталось —
+  // путь встаёт (0 отгрузки). Зеркало store_avail/цикла караванов в economy_accrue.
+  const flow = { ...((EC.eco && EC.eco.resources) || {}) };
   let outRaw = 0, contractRaw = 0, riskRaw = 0, transitN = 0, shortUnits = 0;
-  const routeGc = {};   // доход по конкретному пути /ход — реально отгружаемое (для строки в «Караванах»)
-  // ПОТОКИ: маршруты с «брать со склада» добирают недостающее из запаса (общий остаток на все пути)
-  const storeLeft = { ...((EC.eco && EC.eco.resources) || {}) };
+  const routeGc = {};      // доход по конкретному пути /ход — реально отгружаемое (для строки в «Караванах»)
+  const routeState = {};   // {id: {want, shipped, stall, short, missing[]}} — статус пути для строки
   out.forEach(r => {
     const dip = ecDipCoef(r.b_fid);
     // мультигруз оплачивается по редкости (_res_price), одиночный — по цене контракта
@@ -2181,23 +2234,22 @@ function ecCaravanIncome() {
       ? r.cargo.map(ci => ({ res: ci.res, vol: +ci.vol || 0, price: ecResPrice(ecResRarity(ci.res)) }))
       : [{ res: r.resource, vol: +r.volume || 0, price: +r.price || 0 }];
     const inTransit = r.transit_until && new Date(r.transit_until).getTime() > now;
-    if (inTransit) { transitN++; routeGc[r.id] = null; items.forEach(i => { contractRaw += i.vol * i.price * dip; }); return; }
-    let gcRoute = 0;
+    if (inTransit) { transitN++; routeGc[r.id] = null; routeState[r.id] = { transit: true }; items.forEach(i => { contractRaw += i.vol * i.price * dip; }); return; }
+    let gcRoute = 0, routeWant = 0, routeShipped = 0; const routeMissing = [];
     items.forEach(i => {
       contractRaw += i.vol * i.price * dip;
-      const avail = flow[i.res] || 0;
-      let shipped = Math.min(i.vol, avail);
+      const avail = Math.max(0, +flow[i.res] || 0);   // остаток ресурса на складе (после предыдущих путей)
+      const shipped = Math.min(i.vol, avail);
       flow[i.res] = avail - shipped;
-      // ПОТОКИ: добор недостающего объёма со склада (галочка «брать со склада» у пути)
-      if (r.from_store && shipped < i.vol) {
-        const st = Math.min(i.vol - shipped, Math.max(0, +storeLeft[i.res] || 0));
-        storeLeft[i.res] = (+storeLeft[i.res] || 0) - st;
-        shipped += st;
-      }
-      if (shipped < i.vol) shortUnits += i.vol - shipped;
+      routeWant += i.vol; routeShipped += shipped;
+      if (shipped < i.vol) { shortUnits += i.vol - shipped; routeMissing.push(i.res); }
       if (shipped <= 0) return;
       gcRoute += shipped * i.price * dip;
     });
+    routeState[r.id] = { want: routeWant, shipped: routeShipped,
+      stall: routeWant > 0 && routeShipped <= 0,     // на складе НИЧЕГО из груза → путь встал
+      short: routeShipped < routeWant,                // склад покрыл лишь часть
+      missing: routeMissing };
     // пиратские угрозы: шанс срыва рейса за тик (без конвоя 0.80; с конвоем 0.40, древние 0.65)
     const thr = Array.isArray(r.threats) ? r.threats : [];
     if (thr.length && gcRoute > 0) {
@@ -2226,7 +2278,7 @@ function ecCaravanIncome() {
     return a + g;
   }, 0);
   return { out: outGc, inc: inGc, net: outGc - risk + inGc,
-    contract, short: Math.round(shortUnits), risk, transitN, outRoutes: out, inRoutes: inn, routeGc };
+    contract, short: Math.round(shortUnits), risk, transitN, outRoutes: out, inRoutes: inn, routeGc, routeState };
 }
 // Множитель доктрины к ГС-потокам (доктрина × срез дестабилизации) — единый рычаг,
 // зеркало m_gc в economy_accrue. Используют market/export/preview, чтобы не расходились.
@@ -2319,16 +2371,12 @@ function ecMarketIncome() { return ecMarketCalc().gc; }
 // Доход ЭКСПОРТА за сутки: свободный экспортный поток (export-заводы − занятое караванами)
 // × ценность × 0.6. ×доктрина. Зеркало economy_accrue (export_gc).
 function ecExportIncome() {
-  let gc = 0;
-  ecExtractEntries().forEach(([n, q]) => { gc += (+q || 0) * ecResVal(n) * 0.6; });
-  // ПОТОКИ: перелив на склад выключен (to_store=false) — непроданный биржей остаток
-  // потока авто-продаётся как экспорт ×0.6 (зеркало merge-ветки accrue v6).
-  const left = ecMarketCalc().left;
-  Object.entries(left).forEach(([n, q]) => {
-    const f = ecFlowCfg(n);
-    if (f && f.to_store === false && q > 0) gc += q * ecResVal(n) * 0.6;
-  });
-  return Math.round(gc * ecGcMul());
+  // РЕВОРК РЕСУРСОВ (_resource_rework.sql): канал «экспорт» ВЫРЕЗАН — добыча идёт
+  // рабочими целиком на склад, сбыт только через караваны/рынок/биржу. Прежняя
+  // реализация звала ecExtractEntries(), которая после складского реворка караванов
+  // стала возвращать ВЕСЬ склад (груз для караванов), а не поток export-заводов за тик —
+  // из-за чего «Экспорт добычи» рисовал весь запас ×0.6 (фантомные сотни тысяч ГС/сут).
+  return 0;
 }
 // Расход на торговую политику за сутки (NPC-конвой) — зеркало policy_cost (НЕ ×доктрина).
 function ecPolicyCostDay() {
@@ -2747,7 +2795,7 @@ function ecIntro(icon, title, text, hints) {
 
 function ecPaintCabinet() {
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['policy', '🏛', 'Курс державы'], ['flows', '⇄', 'Торговля и потоки'], ['exchange', '📊', 'Биржа'], ['diplomacy', '🤝', 'Дипломатия'], ['war', '⚔', 'Война'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['policy', '🏛', 'Курс державы'], ['flows', '⛏', 'Ресурсы и торговля'], ['diplomacy', '🤝', 'Дипломатия'], ['war', '⚔', 'Война'], ['faith', '🛐', 'Вера'], ['intel', '🕵', 'Разведка'], ['raids', '🏴‍☠', 'Рейды'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   // Длань Неотвратимости — отдельная вкладка-пульт, появляется когда орудие доступно
   // (исследование открыто или орудие уже стоит).
   if (ecDoomUnlocked()) tabs.splice(14, 0, ['doom', '🜨', 'Длань Неотвратимости']);   // перед «Разведкой»
@@ -2814,11 +2862,18 @@ function ecPaintCabinet() {
     const mount = document.getElementById('ec-news-mount');
     if (mount && typeof fnRenderNewsTab === 'function') { fnRenderNewsTab(mount); }
   }
+  // Панель «Ресурсы»: наматываем текстуры планет на диски-сферы
+  if (EC.tab === 'flows' && (EC.flowSub || 'resources') === 'resources') {
+    try { ecDrawPlanetSpheres(); } catch (e) {}
+  }
 }
 function ecSetTab(t) {
-  // «Торговля» слита во вкладку «Потоки»: старые ссылки ведут на под-вкладку караванов
+  // «Торговля»/«Биржа» слиты во вкладку «Ресурсы и торговля»: старые ссылки ведут на под-вкладки
   if (t === 'trade') { t = 'flows'; if (!EC.flowSub || EC.flowSub === 'flows') EC.flowSub = 'caravans'; }
+  else if (t === 'exchange') { t = 'flows'; EC.flowSub = 'exchange'; }
+  else if (t === 'flows' && !EC.flowSub) { EC.flowSub = 'resources'; }
   EC.tab = t; ecPaintCabinet();
+  if (t === 'flows' && EC.flowSub === 'resources') ecLoadWorkerPlan();
 }
 
 // ── Состояние «Обзора»-статистики: раскрытые секции, активный график, окно истории ──
@@ -4154,7 +4209,27 @@ function ecTabOverview() {
 
   // ── 3. РЕСУРСЫ — добыча/сутки + склад (подробная справка: что/откуда/сколько/цена/почему) ──
   // Источники добычи: колониальные заводы (ecMineTotals) + добывающие аванпосты вне границ (_op.totals).
-  const mineT = ecMineTotals();
+  // Источник добычи: РЕВОРК — реальный выход рабочих за тик (resource_worker_plan),
+  // всё со склада. Строим зеркало план→добыча по каждой залежи (res→{rate,r,srcs}).
+  // Пока план не загружен / реворк не активен — откат на старое зеркало по домикам
+  // (ecMineTotals), чтобы панель не пустела. srcs: Map(планета→{rate,workers,amt,covered}).
+  const _wp = EC.workerPlan;
+  const planActive = !!(_wp && !_wp.error && Array.isArray(_wp.systems));
+  const mineT = planActive ? (() => {
+    const m = new Map();
+    _wp.systems.forEach(sys => (Array.isArray(sys.deposits) ? sys.deposits : []).forEach(d => {
+      const yld = +d.yield || 0, wk = Math.round(+d.workers || 0);
+      const cur = m.get(d.res) || { rate: 0, r: d.rarity || ecResRarity(d.res) || 'common', slots: 0, workers: 0, srcs: new Map() };
+      cur.rate += yld; cur.workers += wk; cur.slots += 1;
+      const key = d.planet || sys.name || '—';
+      const s = cur.srcs.get(key) || { rate: 0, workers: 0, amt: d.amt, covered: false };
+      s.rate += yld; s.workers += wk; s.amt = d.amt; s.covered = s.covered || !!d.covered;
+      cur.srcs.set(key, s);
+      m.set(d.res, cur);
+    }));
+    return m;
+  })() : ecMineTotals();
+  if (!planActive && !EC.workerPlanLoading && !EC.workerPlanErr) ecLoadWorkerPlan();  // подтянуть реальный план для обзора
   const opT = _op.totals || new Map();
   const stock = new Map(ecResEntries());
   const resNames = new Set([...mineT.keys(), ...opT.keys(), ...stock.keys()]);
@@ -4163,7 +4238,7 @@ function ecTabOverview() {
     const colRate = mt ? mt.rate : 0, opRate = ot ? ot.rate : 0;
     const rate = colRate + opRate, have = stock.get(n) || 0;
     const rar = (mt && mt.r) || (ot && ot.r) || ecResRarity(n) || 'common';
-    return { n, rate, colRate, opRate, have, rar, slots: (mt && mt.slots) || 0, srcs: (mt && mt.srcs) || null, opSrcs: (ot && ot.srcs) || null };
+    return { n, rate, colRate, opRate, have, rar, planActive, slots: (mt && mt.slots) || 0, workers: (mt && mt.workers) || 0, srcs: (mt && mt.srcs) || null, opSrcs: (ot && ot.srcs) || null };
   }).sort((a, b) => (b.rate - a.rate) || (b.have - a.have));
   const storeCap = ecStoreCap();
   const storeUsed = resRows.reduce((s, r) => s + (r.have || 0), 0);
@@ -4180,8 +4255,9 @@ function ecTabOverview() {
       </div>`;
   // Сводка-итоги: суммарная добыча/сут, виды, прогноз заполнения
   const opMineDay = resRows.reduce((s, r) => s + (r.opRate || 0), 0);
+  const effMineDay = freeCap > 0 ? mineDay : 0;   // при полном складе фактически ничего не начисляется
   const resSummary = `<div class="ec-res-sum">
-    <span class="ec-res-sum-i"><b class="${mineDay ? 'ok' : 'dim'}">${mineDay ? '+' + ecNum(mineDay) : '0'}</b> ед/сут добыча</span>
+    <span class="ec-res-sum-i"><b class="${effMineDay ? 'ok' : 'dim'}">${effMineDay ? '+' + ecNum(effMineDay) : '0'}</b> ед/сут добыча${freeCap <= 0 && mineDay ? ` <span class="ec-hint" data-tip="Потенциал +${ecNum(mineDay)}/сут не начисляется: склад полон (нет места — нет добычи).">(потенциал +${ecNum(mineDay)})</span>` : ''}</span>
     <span class="ec-res-sum-i"><b>${ecNum(minedKinds)}</b> вид(ов) добывается</span>
     ${_op.n ? `<span class="ec-res-sum-i" data-tip="Каждый добывающий аванпост вне границ тянет ВСЕ ресурсы своей системы, кроме эпических и легендарных, + ${EC_OUTPOST_MINE_GC} ГС/сут. Кламп по ёмкости склада для каждого ресурса — переполнение сгорает.">🛰 <b>${ecNum(_op.n)}</b> аванпост. добычи · +${ecNum(opMineDay)} ед/сут${_op.gc ? ' + ' + ecNum(_op.gc) + ' ГС' : ''}</span>` : ''}
     ${mineDay && freeCap > 0 ? `<span class="ec-res-sum-i">склад полон через <b>${ecNum(daysFull)}</b> ход(ов)</span>` : (mineDay && freeCap <= 0 ? '<span class="ec-res-sum-i ec-res-sum-warn">⚠ склад полон — добыча на склад остановлена (нет места — нет добычи)</span>' : '')}
@@ -4192,7 +4268,13 @@ function ecTabOverview() {
     const price = ecResPriceN(r.n);
     const rarTxt = ecRarLabel(r.rar);
     let foot;
-    const colChips = (r.srcs && r.srcs.size) ? [...r.srcs.entries()].map(([col, s]) =>
+    // РЕВОРК: источник = залежь колонии, добывают РАБОЧИЕ. Чип показывает выход и
+    // число рабочих; залежь без покрытия (рабочих <5) даёт +0 — помечаем «нет рабочих».
+    const colChips = (r.planActive && r.srcs && r.srcs.size) ? [...r.srcs.entries()].map(([pl, s]) =>
+        s.rate > 0
+          ? `<span class="ec-res-src-chip" title="${esc(pl)}: ${ecNum(s.workers)} рабочих${s.amt ? ', залежь «' + esc(s.amt) + '»' : ''} → +${ecNum(s.rate)}/сут">⛏ ${esc(pl)} · ${ecNum(s.workers)} раб. <b>+${ecNum(s.rate)}</b></span>`
+          : `<span class="ec-res-src-chip ec-res-src-idle" title="${esc(pl)}: залежь есть, но рабочих не хватает (нужно ≥5 на залежь). Поднимите «Снабжение» или сделайте систему приоритетной.">⛏ ${esc(pl)} <b>нет рабочих</b></span>`
+      ).join('') : (r.srcs && r.srcs.size) ? [...r.srcs.entries()].map(([col, s]) =>   // откат: старое зеркало по домикам
         `<span class="ec-res-src-chip" title="${esc(col)}: ${s.slots} слот(ов)${s.amt ? ', месторождение «' + esc(s.amt) + '»' : ''} → +${ecNum(s.rate)}/сут">⛏ ${esc(col)} ×${s.slots} <b>+${ecNum(s.rate)}</b></span>`
       ).join('') : '';
     const opChips = (r.opSrcs && r.opSrcs.size) ? [...r.opSrcs.entries()].map(([sys, s]) =>
@@ -4201,7 +4283,7 @@ function ecTabOverview() {
     if (colChips || opChips) {
       foot = `<div class="ec-res-card-src"><span class="ec-res-card-src-k">откуда:</span>${colChips}${opChips}</div>`;
     } else if (r.have > 0) {
-      foot = `<div class="ec-res-card-why">в запасе, добыча не ведётся — постройте на планете с залежью «${esc(r.n)}» добывающую постройку её яруса (завод — обычные, глубинный комплекс — необычные/редкие, экстрактор — эпические/легендарные)</div>`;
+      foot = `<div class="ec-res-card-why">в запасе, добыча не ведётся — ни одна ваша колония не имеет залежи «${esc(r.n)}». Добывают рабочие с залежей колоний; постройте колонию на планете с этой залежью.</div>`;
     } else {
       foot = `<div class="ec-res-card-why">не добывается и склад пуст</div>`;
     }
@@ -4231,7 +4313,7 @@ function ecTabOverview() {
         <button class="ec-flt" onclick="ecResFilter(this,'epic')">Эпич.</button>
         <button class="ec-flt" onclick="ecResFilter(this,'legendary')">Легенд.</button>
       </div><div class="ec-res-cards flt-all">${resRows.map(resCard).join('')}</div>` : '') : '<div class="ec-ovx-res-empty">Ресурсов нет. Постройте «Добывающий завод» в колонии и назначьте слотам месторождения планеты — добыча начисляется в конце каждого хода.</div>'}
-    <div class="ec-ovx-hint">Добыча = редкость месторождения × его богатство × доктрина, начисляется в конце каждого хода (тика). Сверх ёмкости склада ресурсы не копятся.${_op.n ? ` 🛰 Аванпосты добычи тянут ресурсы со всех планет своих систем по фикс-ставкам (обычн. 12, необыч. 6, ред. 3, эпич./лег. 1 ед/сут за вид) + ${EC_OUTPOST_MINE_GC} ГС/сут каждый — расчёт ленивый, вне основного тика.` : ''}</div>
+    <div class="ec-ovx-hint">${planActive ? 'Добывают <b>рабочие</b> (доля населения по ползунку «Снабжение»): за каждые 5 рабочих на залежи — 1 ед/сут × общие баффы × бонус домика, всё на склад. Управление — во вкладке «Ресурсы и торговля» → «Ресурсы».' : 'Добыча = редкость месторождения × богатство × доктрина'}, начисляется в конце каждого хода (тика). Сверх ёмкости склада ресурсы не копятся.${_op.n ? ` 🛰 Аванпосты добычи тянут ресурсы со всех планет своих систем по фикс-ставкам (обычн. 12, необыч. 6, ред. 3, эпич./лег. 1 ед/сут за вид) + ${EC_OUTPOST_MINE_GC} ГС/сут каждый — расчёт ленивый, вне основного тика.` : ''}</div>
   </div>`;
 
   // ── 4. ДЕРЖАВА ──
@@ -4472,7 +4554,9 @@ function ecColonyManage(c) {
       <button class="ec-bld-del" title="Отменить постройку (возврат затрат)" onclick="ecCancelProject('${p.id}')">✕</button>
     </div>`;
   }).join('');
-  const bHtml = blds.map(ecBuildingRow).join('') + pendBldHtml || `<div class="ec-empty" style="padding:8px 0">Пусто. Постройте структуру ↓</div>`;
+  // Тревога ПРО: входящие отметки по этой колонии (открывает «Окно перехвата»).
+  const shieldHtml = ecAbmAlertPanel(c);
+  const bHtml = (blds.map(ecBuildingRow).join('') + pendBldHtml + shieldHtml) || `<div class="ec-empty" style="padding:8px 0">Пусто. Постройте структуру ↓</div>`;
   const pendHab = ecPendingHabitat(c.id);
   const habBtn = pendHab
     ? `<span class="ec-proj-tag" title="${ecProjEtaTxt(pendHab)}">⏳ обустройство среды (${ecProjEtaTxt(pendHab)})</span>`
@@ -6318,60 +6402,92 @@ function ecCvSync() {
   const cargoEl = ecId('ec-cv-cargo'); if (cargoEl) cargoEl.innerHTML = ecCvCargoHtml();   // грузоподъёмность могла измениться
   ecTradeCalc();
 }
-// Аллокатор груза каравана: распределяем грузоподъёмность по ресурсам ДОБЫЧИ
-// Авто-распределение грузоподъёмности по выбранным месторождениям: самые ценные
-// грузим первыми, каждый ресурс — его поток добычи, пока не кончится трюм.
+// Аллокатор груза каравана: распределяем грузоподъёмность флота по выбранным
+// ресурсам СКЛАДА — самые ценные грузим первыми, каждый ресурс капается своим
+// складским запасом (за вычетом обещанного другим путям) и остатком трюма.
 function ecCvAllocate() {
   // объём ограничен И собранным флотом, И свободной вместимостью (что меньше)
   const cap = Math.min(ecCvFleetTotals().cap, ecCvFreeCap());
-  const sel = Object.keys(EC.cvCargo || {}).filter(r => EC.cvCargo[r]);
+  const sel = Object.keys(EC.cvCargo || {}).filter(r => (+EC.cvCargo[r] || 0) > 0);
   sel.sort((a, b) => ecResPriceN(b) - ecResPriceN(a));
   let rem = cap; const out = [];
   sel.forEach(res => {
-    const vol = Math.min(ecExtractRate(res), rem);
+    // хочу ВВЕДЁННЫЙ объём/тик, но не больше склада (за вычетом обещанного другим путям)
+    const want = Math.min(+EC.cvCargo[res] || 0, ecExtractRate(res));
+    const vol = Math.min(want, rem);                 // и не больше остатка трюма (ценные — первыми)
     if (vol > 0) { out.push({ res, vol }); rem -= vol; }
   });
   return out;
 }
-// Выбор месторождений для каравана: тыкаешь ресурс из своей добычи — он грузится
-// потоком (никаких ручных чисел, объём = добыча, капается грузоподъёмностью флота).
+// Выбор ресурсов для каравана: галочкой добавляешь ресурс со склада, полем ввода
+// задаёшь СКОЛЬКО его уходит партнёру КАЖДЫЙ ТИК. Введённый объём капается запасом
+// склада (ecExtractRate) и грузоподъёмностью флота — фактически уедет min(введено,склад,трюм).
 function ecCvCargoHtml() {
   EC.cvCargo = EC.cvCargo || {};
   const ex = ecExtractEntries();
-  if (!ex.length) return '<div class="ec-empty" style="padding:6px">Нет ресурсов для каравана. Переключите добывающий завод в режим 🚚 Торговый путь (вкладка «Колонии») — караванам доступен только этот поток; склад и рынок копят/сбывают сами.</div>';
+  if (!ex.length) return '<div class="ec-empty" style="padding:6px">На складе нет ресурсов для отправки. Караван возит СО СКЛАДА — накопите добычу рабочими (вкладка «Ресурсы»), и ресурсы появятся здесь. Как только выбранный ресурс на складе кончится, путь встаёт.</div>';
   const alloc = {}; ecCvAllocate().forEach(c => alloc[c.res] = c.vol);
-  return ex.map(([n, rate]) => {
-    const on = !!EC.cvCargo[n];
-    const ship = alloc[n] || 0;
+  return ex.map(([n, avail]) => {
+    const want = +EC.cvCargo[n] || 0;      // введённый пользователем объём/тик
+    const on = want > 0;
+    const ship = alloc[n] || 0;            // реально уедет (после кап склада/трюма)
     const bd = on ? 'var(--gd)' : 'var(--bd,#2a3550)';
+    const canToggle = on || avail > 0;
+    // подпись: сколько РЕАЛЬНО уедет и почему меньше запрошенного
     const tail = on
-      ? (ship > 0 ? `<b style="color:var(--gd)">грузим ${ecNum(ship)}${ship < rate ? ' · лимит трюма' : ''}</b>` : `<b style="color:var(--err)">${rate <= 0 ? 'поток занят' : 'трюм полон'}</b>`)
-      : (rate <= 0 ? `<i style="color:var(--t4);font-style:normal">занято караванами</i>` : '');
-    return `<button type="button" ${!on && rate <= 0 ? 'disabled' : ''} onclick="ecCvCargoToggle('${esc(n)}')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 10px;margin:4px 0;border-radius:8px;cursor:${!on && rate <= 0 ? 'not-allowed' : 'pointer'};border:1px solid ${bd};background:${on ? 'rgba(120,200,140,.10)' : 'transparent'};color:inherit;font:inherit;opacity:${!on && rate <= 0 ? '.55' : '1'}">
-      <span style="width:18px;height:18px;flex:none;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;border:1px solid ${on ? 'var(--gd)' : 'var(--t4)'};color:${on ? 'var(--gd)' : 'var(--t4)'};font-weight:700">${on ? '✓' : '+'}</span>
-      <span style="flex:1">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4);font-style:normal"> · ⛏ ${ecNum(rate)}/ход · ${ecResPriceN(n)} ГС/ед</i></span>
-      ${tail}
-    </button>`;
+      ? (ship > 0
+          ? `<b style="color:var(--gd)">уходит ${ecNum(ship)}/тик${ship < want ? (ship >= avail ? ' · весь склад' : ' · лимит трюма') : ''}</b>`
+          : `<b style="color:var(--err)">${avail <= 0 ? 'склад пуст' : 'трюм полон'}</b>`)
+      : (avail <= 0 ? `<i style="color:var(--t4);font-style:normal">занято другими путями</i>` : `<i style="color:var(--t4);font-style:normal">+ и задайте объём</i>`);
+    const stepper = on
+      ? `<span class="ec-mine-step" style="flex:none">
+          <button class="ec-mine-btn" title="меньше" onclick="ecCvCargoQty('${esc(n)}',${want - 1})">−</button>
+          <input class="ec-cv-qty" type="number" min="1" max="${avail}" value="${want}" title="сколько «${esc(n)}» уходит партнёру каждый тик"
+                 onchange="ecCvCargoQty('${esc(n)}',this.value)" onkeydown="if(event.key==='Enter'){this.blur();}"
+                 style="width:72px;text-align:center;padding:4px 2px;margin:0 2px;border-radius:6px;border:1px solid var(--gd);background:transparent;color:inherit;font:inherit">
+          <button class="ec-mine-btn" title="больше" ${want >= avail ? 'disabled' : ''} onclick="ecCvCargoQty('${esc(n)}',${want + 1})">+</button>
+        </span>`
+      : '';
+    return `<div style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;margin:4px 0;border-radius:8px;border:1px solid ${bd};background:${on ? 'rgba(120,200,140,.10)' : 'transparent'};opacity:${canToggle ? '1' : '.55'}">
+      <button type="button" ${canToggle ? '' : 'disabled'} onclick="ecCvCargoToggle('${esc(n)}')" title="${on ? 'убрать ресурс из каравана' : 'добавить ресурс в караван'}" style="width:20px;height:20px;flex:none;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;border:1px solid ${on ? 'var(--gd)' : 'var(--t4)'};color:${on ? 'var(--gd)' : 'var(--t4)'};background:transparent;cursor:${canToggle ? 'pointer' : 'not-allowed'};font-weight:700">${on ? '✓' : '+'}</button>
+      <span style="flex:1">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4);font-style:normal"> · 📦 склад ${ecNum(avail)} · ${ecResPriceN(n)} ГС/ед</i></span>
+      ${stepper}
+      <span style="flex:none">${tail}</span>
+    </div>`;
   }).join('');
 }
+// Добавить/убрать ресурс. При включении дефолт = сколько реально уедет со свободным
+// трюмом (как прежняя авто-загрузка), но не больше склада; дальше правится полем ввода.
 function ecCvCargoToggle(res) {
   EC.cvCargo = EC.cvCargo || {};
-  if (EC.cvCargo[res]) delete EC.cvCargo[res];
-  else if (ecExtractRate(res) <= 0) return;
-  else EC.cvCargo[res] = true;
+  if (+EC.cvCargo[res] > 0) { delete EC.cvCargo[res]; }
+  else {
+    const avail = ecExtractRate(res);
+    if (avail <= 0) return;
+    const cap = Math.min(ecCvFleetTotals().cap, ecCvFreeCap());
+    let usedByOthers = 0;
+    Object.keys(EC.cvCargo).forEach(r => { usedByOthers += Math.min(+EC.cvCargo[r] || 0, ecExtractRate(r)); });
+    const freeTrunk = Math.max(0, cap - usedByOthers);
+    const def = Math.min(avail, freeTrunk);
+    EC.cvCargo[res] = def > 0 ? def : 1;   // трюм уже полон — ставим 1, пусть виден (уедет 0)
+  }
   const el = ecId('ec-cv-cargo'); if (el) el.innerHTML = ecCvCargoHtml();
   ecTradeCalc();
 }
-// Валовый ЭКСПОРТНЫЙ поток ресурса /ход (сумма export-заводов — зеркало mine_flow до караванов).
+// Задать объём ресурса/тик из поля ввода. 0/минус — снять ресурс. Кап по складу.
+function ecCvCargoQty(res, val) {
+  EC.cvCargo = EC.cvCargo || {};
+  const v = Math.floor(+val || 0);
+  if (v <= 0) { delete EC.cvCargo[res]; }
+  else { EC.cvCargo[res] = Math.min(v, Math.max(1, ecExtractRate(res))); }
+  const el = ecId('ec-cv-cargo'); if (el) el.innerHTML = ecCvCargoHtml();
+  ecTradeCalc();
+}
+// Запас ресурса на СКЛАДЕ (faction_economy.resources). После реворка ресурсов
+// (_resource_rework.sql) добыча идёт РАБОЧИМИ на склад, а караван возит СО СКЛАДА —
+// поэтому источник груза = складской запас, а не «экспортный поток заводов» (вырезан).
 function ecExtractRateGross(resName) {
-  let total = 0;
-  (EC.buildings || []).filter(ecIsMiner).forEach(b => {
-    ecMineYields(b).forEach(y => {
-      if (y.name !== resName || ecEffMode(b, y.name) !== 'export' || ecIsConceded(b.colony_id, y.name)) return;
-      total += y.rate;
-    });
-  });
-  return total;
+  return Math.max(0, +(((EC.eco && EC.eco.resources) || {})[resName]) || 0);
 }
 // Поток, уже занятый исходящими караванами (зеркало economy_accrue: pending + active не в пути).
 function ecCommittedExtractFlow() {
@@ -6420,18 +6536,16 @@ function ecTravelTurns(oSys, dSys) {
   const adj = (EC.lanes || []).some(l => (l.a_id === oSys && l.b_id === dSys) || (l.a_id === dSys && l.b_id === oSys));
   return Math.max(1, Math.min(2, Math.ceil((adj ? 1 : 2) * 20 / Math.max(1, ecFleetSpeed()))));   // 1–2 цикла
 }
-// Что фракция отдаёт в ЭКСПОРТ — список для каравана (свободный поток /ход, не валовая добыча).
+// Что можно грузить в караван — ЗАПАС СКЛАДА за вычетом объёма, уже обещанного
+// другим исходящим караванам (склад общий на все пути). Зеркало store_avail в
+// economy_accrue: караван возит со склада, «Товары» — это поток, их не возят.
 function ecExtractEntries() {
-  const gross = {};
-  (EC.buildings || []).filter(ecIsMiner).forEach(b => {
-    ecMineYields(b).forEach(y => {
-      if (ecEffMode(b, y.name) !== 'export' || ecIsConceded(b.colony_id, y.name)) return;
-      gross[y.name] = (gross[y.name] || 0) + y.rate;
-    });
-  });
+  const stock = ((EC.eco && EC.eco.resources) || {});
   const committed = ecCommittedExtractFlow();
-  return Object.entries(gross)
-    .map(([n, g]) => [n, Math.max(0, g - (committed[n] || 0))])
+  return Object.keys(stock)
+    .filter(n => n !== 'Товары')
+    .map(n => [n, Math.max(0, (+stock[n] || 0) - (committed[n] || 0))])
+    .filter(([, v]) => v > 0)
     .sort((a, b) => b[1] - a[1]);
 }
 function ecSyncVol(v) {
@@ -6527,34 +6641,40 @@ function ecRouteCargoText(r) {
   if (cargo.length) return cargo.map(ci => `${ecResIcon(ci.res)} ${esc(ci.res)} ×${ecNum(ci.vol)}`).join(', ');
   return `${ecResIcon(r.resource)} ${esc(r.resource || '')} ×${ecNum(r.volume)}`;
 }
-function ecRouteRow(r, routeGc) {
+function ecRouteRow(r, routeGc, routeState) {
   const isOrigin = r.a_fid === EC.fid;
   const other = isOrigin ? (r.b_name || ecFacName(r.b_fid)) : (r.a_name || ecFacName(r.a_fid));
   // Доход по пути — из того же расчёта, что и «Обзор»/«Казна» (ecCaravanIncome):
-  // реально отгружаемое (ограничено экспортным потоком добычи) × дипломатия × доктрина,
-  // а не «бумажный» volume×price. Иначе строка пути завышала доход в разы.
-  const map = routeGc || ecCaravanIncome().routeGc || {};
+  // реально отгружаемое СО СКЛАДА × дипломатия × доктрина, а не «бумажный» volume×price.
+  const ci = (routeGc && routeState) ? null : ecCaravanIncome();
+  const map = routeGc || (ci && ci.routeGc) || {};
+  const stMap = routeState || (ci && ci.routeState) || {};
   const income = +map[r.id] || 0;
+  const st = stMap[r.id] || {};
   const threats = r.threats || [];
   const riskPct = ecTradeRiskPct(threats, r.convoy);
   const riskTxt = threats.length ? `риск ${riskPct}%${r.convoy ? ` · 🛡${r.convoy}` : ' · без охраны'}` : 'безопасно';
   const verb = isOrigin ? `отправляю → ${esc(other)}` : `получаю ← ${esc(other)}`;
   const transitMs = r.transit_until ? new Date(r.transit_until).getTime() - Date.now() : 0;
   const inTransit = transitMs > 0;
-  const badge = inTransit
-    ? `<span class="ec-route-badge wait">🚀 в пути · прибудет ${ecFmtLeft(transitMs)}</span>`
-    : `<span class="ec-route-badge ok">✓ активен</span>`;
-  const incomeTxt = inTransit ? `<i style="color:var(--t3)"> · доход после прибытия</i>` : ` · <b style="color:var(--gd)">+${ecNum(income)} ГС/ход</b>`;
-  // ПОТОКИ: караван может добирать недостающий объём со склада (галочка на пути)
-  const storeBtn = isOrigin
-    ? `<button class="btn btn-xs ${r.from_store ? 'btn-gd' : 'btn-gh'}" style="margin-left:6px"
-        title="${r.from_store ? 'Недостающий объём добирается со склада — выключить' : 'Если добычи не хватает, добирать недостающее со склада'}"
-        onclick="ecRouteFromStore('${r.id}',${r.from_store ? 'false' : 'true'})">📦 со склада: ${r.from_store ? 'вкл' : 'выкл'}</button>`
-    : '';
+  // Динамический статус исходящего пути по остатку СКЛАДА: встал / везёт часть / активен.
+  let badge, incomeTxt;
+  if (inTransit) {
+    badge = `<span class="ec-route-badge wait">🚀 в пути · прибудет ${ecFmtLeft(transitMs)}</span>`;
+    incomeTxt = `<i style="color:var(--t3)"> · доход после прибытия</i>`;
+  } else if (isOrigin && st.stall) {
+    const miss = (st.missing || []).map(esc).join(', ');
+    badge = `<span class="ec-route-badge" style="background:rgba(224,80,90,.18);color:var(--err)">⛔ встал</span>`;
+    incomeTxt = ` · <b style="color:var(--err)">нет груза на складе${miss ? ` (${miss})` : ''}</b>`;
+  } else {
+    badge = `<span class="ec-route-badge ok">✓ активен</span>`;
+    incomeTxt = ` · <b style="color:var(--gd)">+${ecNum(income)} ГС/ход</b>`;
+    if (isOrigin && st.short) incomeTxt += ` <i style="color:var(--color-warning)">· склад пустеет — везёт часть</i>`;
+  }
   return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
       ${badge}
       <b>${ecRouteCargoText(r)}</b>/ход · ${verb}${incomeTxt}
-      <i style="color:${threats.length ? 'var(--color-warning)' : 'var(--ok)'}"> · ${esc(riskTxt)}</i>${storeBtn}
+      <i style="color:${threats.length ? 'var(--color-warning)' : 'var(--ok)'}"> · ${esc(riskTxt)}</i>
     </span><button class="ec-bld-del" title="Закрыть путь" onclick="ecTradeClose('${r.id}')">✕</button></div>`;
 }
 
@@ -6644,6 +6764,42 @@ function ecMkForecast(base, stock, eq, sup, dem) {
   ns = ns + (eq - ns) * c.reversion;
   return { price: ecMkPrice(base, ns, eq), stock: ns };
 }
+// ── Лимиты объёма (зеркало _market_loosen_steps.sql) ──────────────────────────
+// Потолок ОДНОЙ заявки и БЮДЖЕТ НА ШАГ курса по ресурсу (из equilibrium).
+function ecMkStepCfg() {
+  return EC.stepLimit || { period_min: 180, step_frac: 1.5, step_min_cap: 2000, order_frac: 0.45, order_min_cap: 500, used: {} };
+}
+function ecMkOrderCap(m) {
+  const c = ecMkStepCfg(), eq = Math.max(1, (m && m.eq) || 1);
+  return Math.max(c.order_min_cap || 500, Math.floor(eq * (c.order_frac || 0.45)));
+}
+function ecMkStepCap(m) {
+  const c = ecMkStepCfg(), eq = Math.max(1, (m && m.eq) || 1);
+  return Math.max(c.step_min_cap || 2000, Math.floor(eq * (c.step_frac || 1.5)));
+}
+function ecMkStepUsed(name) { return Math.max(0, +((ecMkStepCfg().used || {})[name]) || 0); }
+// Человеческий обратный отсчёт до сброса шаг-лимита (из EC._stepResetAt).
+function ecMkResetTxt() {
+  const left = Math.max(0, Math.round(((EC._stepResetAt || 0) - Date.now()) / 1000));
+  if (left <= 0) return 'обновляется…';
+  const h = Math.floor(left / 3600), min = Math.floor((left % 3600) / 60);
+  if (h > 0) return `через ${h} ч ${min} мин`;
+  if (min > 0) return `через ${min} мин`;
+  return `через ${left} с`;
+}
+// Полоса лимита сбыта/скупки на шаг курса для выбранного ресурса.
+function ecMkLimitBar(name, m) {
+  const cap = ecMkStepCap(m), used = ecMkStepUsed(name), left = Math.max(0, cap - used);
+  const pct = Math.max(0, Math.min(100, Math.round(used / cap * 100)));
+  const near = pct >= 80;
+  return `<div class="ec-mk-lim" title="сколько единиц ЭТОГО ресурса вы ещё можете сбыть/скупить до сброса; лимит обновляется каждый шаг курса (~${Math.round((ecMkStepCfg().period_min || 180) / 60)} ч)">
+    <div class="ec-mk-lim-top">
+      <span>⏱ Лимит на шаг: <b class="${near ? 'ec-mk-lim-warn' : ''}">${ecNum(left)}</b> из ${ecNum(cap)} ед. свободно</span>
+      <span class="ec-mk-lim-reset">сброс ${ecMkResetTxt()} · заявка ≤ ${ecNum(ecMkOrderCap(m))}</span>
+    </div>
+    <div class="ec-mk-lim-track"><div class="ec-mk-lim-fill${near ? ' near' : ''}" style="width:${pct}%"></div></div>
+  </div>`;
+}
 // Прикидка чистого NPC-движения запаса за цикл (только арбитраж, без шума) — для подписи притока/оттока
 function ecMkNpcNet(m) {
   const c = ecMkCfg();
@@ -6705,6 +6861,7 @@ function ecMarketBlock(stock) {
         <span class="ec-mk-price">${trendOf(m)} <b>${ecNum(Math.round(m.price))} ГС</b> <i style="color:var(--t4)">${dpct >= 0 ? '+' : ''}${dpct}%</i></span>
         <span class="ec-mk-stock" title="запас рынка · ваш склад">📦 ${ecNum(Math.round(m.stock))} · у вас ${ecNum(mine)}</span>
       </div>
+      ${ecMkLimitBar(n, m)}
       <div class="ec-mk-tools">
         <span class="ec-mk-npc">${netTxt}
           <i class="ec-mk-fc" title="прогноз цены к началу следующего цикла — ориентир, сместят сделки игроков и шоки">🔮 след. цикл: <b style="color:${fcl}">${fdir} ~${ecNum(Math.round(fc.price))}</b> ${fpct >= 0 ? '+' : ''}${fpct}%</i></span>
@@ -6721,9 +6878,37 @@ function ecMarketBlock(stock) {
         </span>
         <span class="ec-mk-rowpv" id="ec-mk-pv-sel"></span>
       </div>
+      ${(() => {
+        const cur = Math.max(0, Math.round((EC.autosell || {})[n] || 0));
+        return `<div class="ec-mk-auto" title="постоянный приказ: держава сама сбывает столько единиц на рынок каждый тик">
+          <span class="ec-mk-auto-lbl">🔁 Автопродажа${cur > 0 ? `: <b>${ecNum(cur)}</b> ед./тик` : ' <i style="color:var(--t4)">— выкл.</i>'}</span>
+          <input type="number" id="ec-mk-auto-sel" min="0" step="1" value="${cur || ''}" placeholder="ед./тик" class="ec-prod-qty ec-mk-q">
+          <button class="btn btn-gh btn-sm" onclick="ecMkAutoSet('${jsq(n)}')">${cur > 0 ? 'Обновить' : 'Включить'}</button>
+          ${cur > 0 ? `<button class="btn btn-gh btn-sm" onclick="ecMkAutoOff('${jsq(n)}')" title="снять приказ">Выкл.</button>` : ''}
+        </div>`;
+      })()}
     </div>`;
   })();
-  const form = `<div class="cn-fac-hint" style="margin-top:8px">Цена живая: продажа сбивает её, покупка — поднимает; крупная сделка двигает цену прямо по ходу исполнения (площадь под кривой — дробить на 20+10 бесполезно). Запас рынка конечен. Спред 20% (продажа — 80% цены), доктрина на спот не действует. <b>🤖 НПС/цикл</b> — куда боты-арбитражёры толкают запас за один ход; <b>🔮 след. цикл</b> — прогноз цены (ориентир). Караваны выгоднее.</div>`;
+  // 🔁 Сводка всех постоянных приказов автопродажи (со всех ресурсов сразу).
+  const autoSummary = (() => {
+    const cfg = EC.autosell || {};
+    const items = Object.keys(cfg)
+      .map(n => ({ n, u: Math.max(0, Math.round(cfg[n] || 0)) }))
+      .filter(x => x.u > 0)
+      .sort((a, b) => b.u - a.u);
+    if (!items.length) {
+      return `<div class="ec-mk-auto-sum" title="постоянные приказы: держава сама сбывает ресурсы на рынок каждый тик">
+        🔁 <b>Автопродажи</b>: <i style="color:var(--t4)">нет активных приказов — включите их в панели нужного ресурса</i></div>`;
+    }
+    const chips = items.map(x => `<button type="button" class="ec-mk-auto-chip" title="перейти к настройке" onclick="ecMkSelect('${jsq(x.n)}')">
+      ${ecResIcon(x.n)} <span class="ec-mk-auto-chip-n">${esc(x.n)}</span> <b>${ecNum(x.u)}</b>/тик
+      <span class="ec-mk-auto-chip-x" title="снять приказ" onclick="event.stopPropagation();ecMkAutoOff('${jsq(x.n)}')">×</span>
+    </button>`).join('');
+    return `<div class="ec-mk-auto-sum" title="постоянные приказы: держава сама сбывает ресурсы на рынок каждый тик">
+      <span class="ec-mk-auto-sum-lbl">🔁 <b>Автопродажи</b> (${items.length}):</span>
+      <span class="ec-mk-auto-sum-chips">${chips}</span></div>`;
+  })();
+  const form = `<div class="cn-fac-hint" style="margin-top:8px">Цена живая: продажа сбивает её, покупка — поднимает; крупная сделка двигает цену прямо по ходу исполнения (площадь под кривой — дробить бесполезно). Запас рынка конечен. Спред 20% (продажа — 80% цены), доктрина на спот не действует. <b>⏱ Лимит на шаг</b> — сколько единиц ресурса можно сбыть/скупить до сброса; он обновляется каждый шаг курса (~3 ч), а не «за сутки». <b>🤖 НПС/цикл</b> — куда боты-арбитражёры толкают запас; <b>🔮 след. цикл</b> — прогноз цены (ориентир). Караваны выгоднее.</div>`;
   const filters = `<div class="ec-mk-filters" role="tablist">
       <button class="ec-flt is-on" onclick="ecMkFilter(this,'all')">Все</button>
       <button class="ec-flt" onclick="ecMkFilter(this,'mine')">📦 Только моё</button>
@@ -6733,7 +6918,7 @@ function ecMarketBlock(stock) {
       <button class="ec-flt" onclick="ecMkFilter(this,'epic')">Эпич.</button>
       <button class="ec-flt" onclick="ecMkFilter(this,'legendary')">Легенд.</button>
     </div>`;
-  return `<div class="ec-dip-card"><div class="ec-dip-t">🏪 Галактический рынок <span class="ec-hint">— единые цены на всю галактику; выберите ресурс, чтобы торговать</span></div>${filters}<div class="ec-mk-list flt-all">${chips}</div>${detail}${form}</div>`;
+  return `<div class="ec-dip-card"><div class="ec-dip-t">🏪 Галактический рынок <span class="ec-hint">— единые цены на всю галактику; выберите ресурс, чтобы торговать</span></div>${filters}<div class="ec-mk-list flt-all">${chips}</div>${detail}${autoSummary}${form}</div>`;
 }
 // Выбор ресурса в пикере рынка (панель сделки перерисовывается под него).
 function ecMkSelect(n) { EC.mkSel = n; ecPaintCabinet(); }
@@ -6778,50 +6963,9 @@ function ecFlowRowsData() {
   return rows;
 }
 function ecTabFlows() {
-  const rows = ecFlowRowsData();
-  const names = Object.keys(rows).sort((a, b) => ecResVal(b) - ecResVal(a));
-  EC._flowRows = names;
-  const store = (EC.eco && EC.eco.resources) || {};
-  const committed = ecCommittedExtractFlow();
-  const mCalc = ecMarketCalc();
-  const marketCap = ecSlotsSum('market') * 25;
-  const capStore = 1000 + ecSlotsSum('warehouse') * 500;
-  const hasMarket = marketCap > 0;
-
-  const head = `<div class="ec-q-row ec-fl-row ec-fl-head">
-      <span class="ec-fl-name">Ресурс</span><span class="ec-fl-mine">⛏ Добыча/сут</span>
-      <span class="ec-fl-mode">Режим</span><span class="ec-fl-cv">🚚 Караваны</span>
-      <span class="ec-fl-mk">🏪 Биржа: лимит · со склада/сут</span>
-      <span class="ec-fl-st">📦 Склад</span><span class="ec-fl-act"></span>
-    </div>`;
-  const list = names.map((n, i) => {
-    const r = rows[n];
-    const f = ecFlowCfg(n) || {};
-    const mode = f.mode || '';
-    const effTxt = r.exp > 0 && r.sto > 0 ? 'смешанный' : r.exp > 0 ? 'экспорт' : 'склад';
-    const cvUse = Math.min(committed[n] || 0, r.exp);
-    const concTxt = r.conc > 0 ? `<div style="color:var(--color-warning);font-size:11px">⚖ ${ecNum(r.conc)}/сут в концессии</div>` : '';
-    const stQty = +store[n] || 0;
-    return `<div class="ec-q-row ec-fl-row">
-      <span class="ec-fl-name">${ecResIcon(n)} <b>${esc(n)}</b> <i style="color:var(--t4);font-style:normal">· ${ecResPriceN(n)} ГС</i>${concTxt}</span>
-      <span class="ec-fl-mine" title="экспорт ${ecNum(r.exp)} · склад ${ecNum(r.sto)}"><i class="ec-fl-lb">⛏ Добыча/сут</i>${r.mine ? `+${ecNum(r.mine)}` : '<span style="color:var(--t4)">—</span>'}</span>
-      <span class="ec-fl-mode"><i class="ec-fl-lb">Режим потока</i><select id="ec-fl-mode-${i}" class="ec-prod-qty" title="Куда идёт поток этого ресурса со ВСЕХ заводов">
-        <option value="" ${mode === '' ? 'selected' : ''}>авто (${effTxt})</option>
-        <option value="store" ${mode === 'store' ? 'selected' : ''}>📦 склад/биржа</option>
-        <option value="export" ${mode === 'export' ? 'selected' : ''}>🚚 экспорт</option>
-      </select></span>
-      <span class="ec-fl-cv" title="Занято активными караванами"><i class="ec-fl-lb">🚚 Караваны</i>${cvUse ? `−${ecNum(cvUse)}/сут` : '<span style="color:var(--t4)">—</span>'}</span>
-      <span class="ec-fl-mk"><i class="ec-fl-lb">🏪 Биржа: лимит · со склада/сут</i><span class="ec-fl-mk-in">
-        <input type="number" id="ec-fl-lim-${i}" class="ec-prod-qty" min="0" placeholder="∞"
-          value="${f.market_limit != null ? +f.market_limit : ''}" title="Максимум ед./сут, что биржа продаёт из потока (пусто = без лимита, 0 = не продавать)">
-        <input type="number" id="ec-fl-fs-${i}" class="ec-prod-qty" min="0" placeholder="0"
-          value="${+f.market_from_store > 0 ? +f.market_from_store : ''}" title="Сколько ед./сут биржа ДОБИРАЕТ со склада (0 = склад не трогать)">
-      </span></span>
-      <span class="ec-fl-st"><i class="ec-fl-lb">📦 На склад · запас</i><label title="Переливать остаток потока на склад (иначе — авто-продажа ×0.6)">
-        <input type="checkbox" id="ec-fl-st-${i}" ${f.to_store === false ? '' : 'checked'}> ${ecNum(stQty)}</label></span>
-      <span class="ec-fl-act"><button class="btn btn-gd btn-xs" onclick="ecFlowApply(${i})">Применить</button></span>
-    </div>`;
-  }).join('');
+  // РЕВОРК РЕСУРСОВ (24.07): таблица «Потоки» (режим экспорт/склад, лимиты биржи,
+  // добор со склада) вырезана — теперь ВСЁ идёт на склад, а сбыт настраивается на
+  // под-вкладках Рынок/Караваны/Биржа. Эта под-вкладка оставлена под КОНЦЕССИИ.
 
   // ── Концессии (право добычи) ──
   const myDeps = [];
@@ -6900,8 +7044,7 @@ function ecTabFlows() {
   };
   const concGroup = (arr, mine) => [...new Set(arr.map(c => c.colony_id))]
     .map(cid => concColCell(cid, arr.filter(c => c.colony_id === cid), mine)).join('');
-  const concHtml = `<div class="ec-r-sec" style="margin-top:18px">⚖ Концессии — право добычи</div>
-    <div class="ec-hint" style="margin:4px 0 8px">Право добычи конкретной залежи можно передать другой державе: колония остаётся у вас, а получатель <b>строит на ней СВОЙ добывающий домик нужного яруса</b> (кнопка появится у него в этом блоке) и добывает залежь как свою — слоты от его населения, поток в его «Потоки». Без построенного домика концессия <b>ничего не даёт</b>. Домик занимает ячейку вашей колонии; ваши заводы отданную залежь не копают. При отзыве/отказе домики получателя сносятся с возвратом ½ цены.</div>
+  const concHtml = `
     ${myDeps.length ? `<div class="ec-conc-form">
       <div class="ec-conc-pick"><div class="ec-hint">Какую залежь передать:</div><div class="ec-bord-grid">${depChips}</div></div>
       <div class="ec-conc-pick"><div class="ec-hint">Какой державе:</div><div class="ec-bord-grid">${facChips}</div></div>
@@ -6910,25 +7053,187 @@ function ecTabFlows() {
     ${given.length ? `<div class="ec-r-sec">Отдано мной</div>${concGroup(given, true)}` : ''}
     ${got.length ? `<div class="ec-r-sec">Получено мной</div>${concGroup(got, false)}` : ''}`;
 
-  const flowsBody = `${ecIntro('🔀', 'Потоки ресурсов',
-    'Одна панель на державу: что добывается, что уходит караванам, что продаёт Товарная биржа и что копится на складе. Настройки действуют на ресурс ЦЕЛИКОМ (по всем заводам) и перекрывают режимы зданий.',
-    [`Биржа сбывает до <b>${ecNum(marketCap)}</b> ед./сут (слоты Товарной биржи × 25); прогноз выручки: <b>+${ecNum(mCalc.gc)} ГС/сут</b>.`,
-     `Ёмкость склада: <b>${ecNum(capStore)}</b> ед. на ресурс (1000 + слоты Склада × 500).`,
-     'Лимит биржи «0» = ресурс не продаётся вовсе; «со склада/сут» &gt; 0 — биржа добирает из запаса.',
-     'Продать запас со склада вручную — на под-вкладке 🏪 Рынок: там живая цена и одна точка продажи.',
-     'Караваны берут только из экспортного потока; галочка «📦 со склада» на пути (под-вкладка «Караваны») разрешает добирать из запаса.'])}
-    ${names.length ? head + list : '<div class="ec-hint">Нет добычи и запасов — постройте Добывающий завод и назначьте месторождения.</div>'}
+  const flowsBody = `${ecIntro('⚖', 'Концессии — право добычи',
+    'Право добычи конкретной залежи можно передать другой державе: колония остаётся у вас, а получатель строит на ней СВОЙ добывающий домик нужного яруса и копает залежь как свою — рабочими со своего населения, поток идёт на его склад.',
+    ['Добыча теперь идёт РАБОЧИМИ и целиком на склад — маршрутизация «экспорт/склад» убрана.',
+     'Сбыт запаса — на под-вкладках 🏪 Рынок (ручная продажа), 🚛 Караваны и 📊 Биржа.',
+     'Без построенного домика концессия ничего не даёт; домик занимает ячейку вашей колонии.'])}
     ${concHtml}`;
 
   // ── Под-вкладки: Потоки + вся торговля (караваны/рынок/обмен) в одном месте ──
-  const sub = EC.flowSub || 'flows';
-  const subTabs = [['flows', '🔀', 'Потоки'], ['caravans', '🚛', 'Караваны'], ['market', '🏪', 'Рынок'], ['barter', '🤝', 'Обмен']];
+  const sub = EC.flowSub || 'resources';
+  const subTabs = [['resources', '⛏', 'Ресурсы'], ['caravans', '🚛', 'Караваны'], ['market', '🏪', 'Рынок'], ['barter', '🤝', 'Обмен'], ['exchange', '📊', 'Биржа'], ['flows', '⚖', 'Концессии']];
   const subNav = `<div class="ec-tabs" style="margin:4px 0 12px">${subTabs.map(([id, ic, l]) => `<button class="ec-tab${sub === id ? ' on' : ''}" onclick="ecSetFlowSub('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('')}</div>`;
-  const body = sub === 'flows' ? `<div class="ec-flows-tab">${flowsBody}</div>`
+  const body = sub === 'resources' ? `<div class="ec-res-tab">${ecResourcesPanel()}</div>`
+    : sub === 'exchange' ? `<div class="ec-exch-tab">${ecTabExchange()}</div>`
+    : sub === 'flows' ? `<div class="ec-flows-tab">${flowsBody}</div>`
     : `<div class="ec-trade-tab">${ecTradeSubBody(sub)}</div>`;
   return `<div class="ec-flowx">${subNav}${body}</div>`;
 }
-function ecSetFlowSub(s) { EC.flowSub = s; ecPaintCabinet(); }
+function ecSetFlowSub(s) { EC.flowSub = s; if (s === 'resources') ecLoadWorkerPlan(); ecPaintCabinet(); }
+
+// ── РАБОЧИЕ: план распределения по системам (resource_worker_plan) ──
+async function ecLoadWorkerPlan(force) {
+  if (EC.workerPlanLoading) return;
+  if (EC.workerPlan && !force) return;
+  EC.workerPlanLoading = true;
+  try { EC.workerPlan = await ecRpc('resource_worker_plan'); EC.workerPlanErr = null; }
+  catch (e) { EC.workerPlanErr = ecErr(e.message); EC.workerPlan = EC.workerPlan || null; }
+  finally { EC.workerPlanLoading = false; ecPaintCabinet(); }
+}
+// Отметить/снять приоритетную СИСТЕМУ (все мои колонии в ней). Гарантия заполнения
+// рабочими в следующем тике; 6000 ГС при включении (снятие бесплатно).
+function ecResPriority(systemId, on) {
+  if (on && (EC.eco?.gc || 0) < EC_PRIORITY_COST) { toast('Не хватает ГС: нужно ' + ecNum(EC_PRIORITY_COST), 'err'); return; }
+  if (on && !confirm(`Сделать систему приоритетной за ${ecNum(EC_PRIORITY_COST)} ГС? Со следующего тика она гарантированно наберёт рабочих ПЕРВОЙ, до остальных систем.`)) return;
+  EC.workerPlan = null;  // план устарел → перезапросим после действия
+  ecRpcAct('resource_priority_set_system', { p_system: systemId, p_on: on },
+    on ? 'Система приоритетна — рабочие пойдут туда первыми со следующего тика' : 'Приоритет снят');
+}
+// Круглая планета-СФЕРА по colony_id. planet_<look>.png — это РАЗВЁРТКА текстуры,
+// её нельзя показывать плоским <img> (выйдет «квадрат в кружке»): наматываем на
+// диск через frDrawSphere (терминатор + краевое затенение + ободок), как на карте.
+// Фолбэк — CSS-градиент-сфера по классу вида, если движок/текстура недоступны.
+function ecPlanetThumb(colonyId) {
+  const col = (EC.colonies || []).find(c => c.id === colonyId);
+  let tex = '', look = 'rock';
+  try {
+    if (col && typeof _hvpLook === 'function') look = _hvpLook(col);
+    if (col && typeof _hvpTex === 'function') tex = _hvpTex(look);
+  } catch (e) {}
+  if (!tex || typeof frDrawSphere !== 'function')
+    return `<span class="ec-res-thumb ec-res-thumb-none" data-look="${esc(look)}"></span>`;
+  return `<canvas class="ec-res-thumb ec-res-thumb-cv" width="60" height="60" data-tex="${esc(tex)}" data-look="${esc(look)}"></canvas>`;
+}
+// Отрисовать все планеты-сферы панели «Ресурсы» (статично, без RAF-цикла).
+function ecDrawPlanetSpheres() {
+  if (typeof frDrawSphere !== 'function') return;
+  document.querySelectorAll('canvas.ec-res-thumb-cv[data-tex]').forEach(cv => {
+    if (cv._ecDrawn) return; cv._ecDrawn = true;
+    try { frDrawSphere(cv, cv.dataset.tex, false, false); } catch (e) {}
+  });
+}
+// Панель «Ресурсы»: рабочие, распределение по системам, приоритет.
+function ecResourcesPanel() {
+  const p = EC.workerPlan;
+  if (!p) {
+    if (!EC.workerPlanLoading && !EC.workerPlanErr) ecLoadWorkerPlan();
+    return EC.workerPlanErr
+      ? `<div class="ec-hint" style="color:var(--color-warning)">Не удалось загрузить план рабочих: ${esc(EC.workerPlanErr)} <button class="btn btn-gh btn-xs" onclick="ecLoadWorkerPlan(true)">↻ повторить</button></div>`
+      : `<div class="ec-hint">Считаем распределение рабочих…</div>`;
+  }
+  if (p.error) return `<div class="ec-hint">Нет державы — раздел недоступен.</div>`;
+
+  const lvl = +p.industry, effLvl = +p.industry_eff;
+  const sharePct = Math.round((+p.share) * 100);
+  const deferred = lvl !== effLvl
+    ? `<div class="ec-hint" style="color:var(--color-warning)">⏳ Снабжение изменено (уровень ${lvl}) — новая доля вступит в силу со следующего тика. Сейчас в расчёте — уровень ${effLvl}.</div>`
+    : '';
+  const systems = Array.isArray(p.systems) ? p.systems : [];
+  const totalDemand = systems.reduce((a, s) => a + (+s.demand || 0), 0);
+  const totalWork = systems.reduce((a, s) => a + (+s.workers || 0), 0);
+
+  // Разбивка общих mine-баффов по источникам (доктрина/раса/идеология/техи/курс)
+  const mMineAll = +p.m_mine || 1;
+  const src = Array.isArray(p.mine_sources) ? p.mine_sources : [];
+  const srcTxt = src.map(x => {
+    const d = +x.delta || 0;
+    const sign = d >= 0 ? '+' : '−';
+    return `${esc(x.label || x.source || '')} <b class="ec-dep-plus">${sign}${Math.abs(Math.round(d * 100))}%</b>`;
+  }).join(' · ');
+  const buffLine = mMineAll !== 1
+    ? `Общие баффы добычи: <b>×${mMineAll.toFixed(2)}</b>${srcTxt ? ` — ${srcTxt}` : ''} (действуют на КАЖДУЮ залежь сверх бонуса домика).`
+    : 'Общих баффов добычи нет (×1.00): дают доктрина/раса/идеология, полит-техи (ГОЭЛРО) и курс державы.';
+
+  const intro = ecIntro('⛏', 'Рабочие и добыча',
+    `Любая залежь копается РАБОЧИМИ — даже БЕЗ добывающего домика (по базовому капу, ×1.0). Домик не обязателен: это БУСТ — каждый его уровень +10% к добыче И к капу. Рабочие — подкласс населения; их доля настраивается ползунком «Снабжение» (Индустрия) в Благополучии/Бюджете. За каждые ${EC_WORKER_PER_UNIT} рабочих на залежи — 1 ед. её выхода в тик на склад, × множитель домика × все баффы.`,
+    [`Рабочих всего: <b>${ecNum(+p.workers_total)}</b> из <b>${ecNum(+p.pop)}</b> населения (снабжение ур.${effLvl} → <b>${sharePct}%</b>).`,
+     `Суммарный спрос систем: <b>${ecNum(totalDemand)}</b> рабочих · распределено: <b>${ecNum(totalWork)}</b>.`,
+     buffLine,
+     `Приоритетная система (★) наберёт рабочих ПЕРВОЙ в следующем тике — <b>${ecNum(+p.priority_cost || EC_PRIORITY_COST)} ГС</b> за отметку.`,
+     'Больше рабочих без смены снабжения: растить население (домики/благополучие) и метить ключевые системы приоритетом.']);
+
+  const barCol = f => f >= 100 ? 'var(--color-success,#3c9)' : f >= 50 ? 'var(--color-accent,#69f)' : 'var(--color-warning,#e94)';
+  const rows = systems.length ? systems.map(s => {
+    const fill = Math.round((+s.fill || 0) * 100);
+    const pr = !!s.priority;
+    const sid = jsq(String(s.system_id ?? ''));
+    const btn = pr
+      ? `<button class="btn btn-gh btn-xs" title="Снять приоритет (без возврата ГС)" onclick="ecResPriority('${sid}',false)">★ приоритет · снять</button>`
+      : `<button class="btn btn-gd btn-xs" title="Гарантировать заполнение рабочими в следующем тике" onclick="ecResPriority('${sid}',true)">☆ Приоритет · ${ecNum(+p.priority_cost || EC_PRIORITY_COST)} ГС</button>`;
+    const depRow = dp => {
+      const dfill = Math.round((+dp.fill || 0) * 100);
+      const cov = !!dp.covered;
+      const rarTxt = typeof ecRarLabel === 'function' ? ecRarLabel(dp.rarity) : (dp.rarity || '');
+      const amtTxt = dp.amt ? ` · ${esc(String(dp.amt))}` : '';
+      const bt = dp.btype ? (EC_BUILD[dp.btype] || {}) : {};
+      const btName = bt.name || (dp.btype === 'mining_exotic' ? 'Экзотический экстрактор' : dp.btype === 'mining_deep' ? 'Глубинный комплекс' : 'Добывающий завод');
+      const bonus = +dp.house_bonus || 0;                       // +% от лучшего домика (0 = домика нет)
+      const hasHouse = (+dp.house_slots || 0) > 0;              // есть ли добывающий домик на колонии
+      const mMine = +dp.m_mine || 1;                            // общие баффы (доктрина/вера/техи/курс)
+      const bcount = Math.max(1, +dp.bcount || 1);              // сколько добывающих домиков на колонии
+      const base = (dp.base != null) ? +dp.base : Math.floor((+dp.workers || 0) / EC_WORKER_PER_UNIT);
+      const countTxt = bcount > 1 ? `${bcount}× ` : '';
+      const status = cov
+        ? `<span class="ec-dep-ok">✓ ⛏ <b>~${ecNum(+dp.yield)}/тик</b></span>`
+        : `<span class="ec-dep-no" title="Рабочих меньше ${EC_WORKER_PER_UNIT} — залежь не добывается. Дайте системе приоритет или поднимите снабжение/население.">✗ нет рабочих</span>`;
+      // Раскрываемый разбор добычи (чтобы не засорять строку)
+      const details = `<details class="ec-dep-more">
+        <summary>разбор добычи</summary>
+        <div class="ec-dep-calc">
+          <div>👷 <b>Рабочие:</b> ${ecNum(+dp.workers)} на залежи → база <b>${ecNum(base)} ед</b> <span class="ec-dep-dim">(÷${EC_WORKER_PER_UNIT})</span></div>
+          <div>🏗 <b>Домик:</b> ${hasHouse ? `${countTxt}${esc(btName)} ур.${dp.house_slots} → <b class="ec-dep-plus">+${bonus}%</b> к добыче и капу${bcount > 1 ? ` <span class="ec-dep-dim">· ${bcount} домика: больше пропускной способности (спрос ${ecNum(+dp.demand)} раб.)</span>` : ''}` : `<span class="ec-dep-dim">нет — копается по базовому капу (×1.0). Постройте домик для +% и большего капа.</span>`}</div>
+          <div>✨ <b>Общие баффы:</b> <b class="${mMine >= 1 ? 'ec-dep-plus' : 'ec-dep-neg'}">×${mMine.toFixed(2)}</b>${srcTxt ? ` <span class="ec-dep-dim">= 1 ${src.map(x => `${(+x.delta || 0) >= 0 ? '+' : '−'} ${esc(x.label || x.source || '')} ${Math.abs(Math.round((+x.delta || 0) * 100))}%`).join(' ')}</span>` : ' <span class="ec-dep-dim">(баффов нет: их дают доктрина/раса/идеология/полит-техи/курс)</span>'}</div>
+          <div class="ec-dep-total">= ${ecNum(base)} × ${(1 + bonus / 100).toFixed(2)} × ${mMine.toFixed(2)} = ⛏ <b>~${ecNum(+dp.yield)}/тик</b> на склад</div>
+        </div>
+      </details>`;
+      return `<div class="ec-res-dep${cov ? '' : ' ec-res-dep-off'}">
+        <div class="ec-res-dep-main">
+          <span class="ec-res-dname">${typeof ecResIcon === 'function' ? ecResIcon(dp.res) : ''} <b>${esc(dp.res || '')}</b> <i class="ec-dep-rar">${esc(rarTxt)}${amtTxt}</i> <span class="ec-dep-house-tag" title="${hasHouse ? 'Добывающий домик колонии' : 'Домика нет — базовый кап ×1.0'}">🏗 ${hasHouse ? `${countTxt}ур.${dp.house_slots} +${bonus}%` : 'без домика'}</span></span>
+          <span class="ec-res-dwork" title="Рабочих на залежи / спрос">👷 ${ecNum(+dp.workers)} / ${ecNum(+dp.demand)}</span>
+          <span class="ec-res-dbar"><span class="ec-res-bar"><span class="ec-res-bar-in" style="width:${Math.min(100, dfill)}%;background:${barCol(dfill)}"></span></span><i>${dfill}%</i></span>
+          <span class="ec-res-dstat">${status}</span>
+        </div>
+        ${cov ? details : ''}
+      </div>`;
+    };
+    // Группируем залежи по КОЛОНИИ (планете) внутри системы — видно, где что.
+    const byCol = {};
+    (Array.isArray(s.deposits) ? s.deposits : []).forEach(dp => {
+      const key = String(dp.colony_id ?? dp.planet ?? '');
+      (byCol[key] = byCol[key] || { cid: dp.colony_id, planet: dp.planet || 'Колония', list: [] }).list.push(dp);
+    });
+    const colKeys = Object.keys(byCol);
+    const deps = colKeys.length ? colKeys.map(k => {
+      const g = byCol[k];
+      const cw = g.list.reduce((a, dp) => a + (+dp.workers || 0), 0);
+      const cd = g.list.reduce((a, dp) => a + (+dp.demand || 0), 0);
+      const cfill = cd > 0 ? Math.round(cw / cd * 100) : 0;
+      return `<div class="ec-res-col">
+        <div class="ec-res-colhd">
+          ${ecPlanetThumb(g.cid)}
+          <span class="ec-res-colnm"><b>${esc(g.planet)}</b><i class="ec-res-coltype">${esc(((EC.colonies || []).find(c => c.id === g.cid) || {}).planet_type || '')}</i></span>
+          <span class="ec-res-colwk" title="Рабочих на планете / нужно для максимума">${ecNum(cw)} / ${ecNum(cd)} раб.</span>
+          <span class="ec-res-colbar"><span class="ec-res-bar"><span class="ec-res-bar-in" style="width:${Math.min(100, cfill)}%;background:${barCol(cfill)}"></span></span></span>
+        </div>
+        <div class="ec-res-coltree">${g.list.map(depRow).join('')}</div>
+      </div>`;
+    }).join('') : '<div class="ec-hint" style="padding:2px 12px">Нет залежей в системе.</div>';
+    return `<div class="ec-res-sys${pr ? ' ec-res-prio' : ''}">
+      <div class="ec-q-row ec-res-syrow">
+        <span class="ec-res-syname">${pr ? '★ ' : ''}<b>${esc(s.name || 'Система')}</b></span>
+        <span class="ec-res-sywork" title="Рабочих в системе / суммарный спрос залежей">👷 ${ecNum(+s.workers)} / ${ecNum(+s.demand)}</span>
+        <span class="ec-res-sybar"><span class="ec-res-bar"><span class="ec-res-bar-in" style="width:${Math.min(100, fill)}%;background:${barCol(fill)}"></span></span><i>${fill}%</i></span>
+        <span class="ec-res-syact">${btn}</span>
+      </div>
+      <div class="ec-res-deps">${deps}</div>
+    </div>`;
+  }).join('') : '<div class="ec-hint">Нет систем с залежами. Как только у колонии появятся залежи — рабочие начнут их копать (домик не обязателен, он только бустит).</div>';
+
+  return `${intro}${deferred}
+    ${rows}
+    <div class="ec-hint" style="margin-top:10px"><button class="btn btn-gh btn-xs" onclick="ecLoadWorkerPlan(true)">↻ Обновить план</button></div>`;
+}
 async function ecFlowApply(i) {
   const n = (EC._flowRows || [])[i]; if (!n) return;
   const mode = ecId(`ec-fl-mode-${i}`)?.value || null;
@@ -6994,18 +7299,18 @@ function ecTradeSubBody(sub) {
 
   const destFac0 = others[0] && others[0].faction_id;
   const destSys0 = (EC.allSystems || []).filter(s => s.faction === destFac0);
-  // Чип-выбор ресурса каравана — из вашей ДОБЫЧИ (поток), не со склада
+  // Чип-выбор ресурса каравана — из вашего СКЛАДА (запас), караван возит со склада
   const extractEntries = ecExtractEntries();
   const resChips = extractEntries.map(([n, v], i) => {
     const rar = ecResRarity(n);
     return `<button type="button" class="ec-trade-res ec-rar-${rar}${i === 0 ? ' on' : ''}" data-res="${esc(n)}" onclick="ecPickTradeRes(this)">
       <span class="ec-trade-res-ic">${ecResIcon(n)}</span><span class="ec-trade-res-n">${esc(n)}</span>
-      <span class="ec-trade-res-meta">⛏ ${ecNum(v)}/ход · ${ecResPriceN(n)} ГС/ед</span></button>`;
+      <span class="ec-trade-res-meta">📦 склад ${ecNum(v)} · ${ecResPriceN(n)} ГС/ед</span></button>`;
   }).join('');
   const caravanForm = (tradeCap < 1) ? '<div class="ec-empty">Нужен Торговый хаб (вкладка «Колонии») — он открывает торговые пути.</div>'
     : noOthers ? '<div class="ec-empty">Нет других фракций для торговли.</div>'
       : !mySys.length ? '<div class="ec-empty">Нет ваших систем на карте — расширяйтесь (вкладка «Территория»).</div>'
-        : !extractEntries.length ? '<div class="ec-empty">Нет ресурсов для каравана. Поставьте добывающий завод в режим 🚚 Торговый путь (вкладка «Колонии») — караван возит только этот поток, склад и рынок идут своими каналами.</div>'
+        : !extractEntries.length ? '<div class="ec-empty">На складе нет ресурсов для каравана. Караван возит СО СКЛАДА — накопите добычу рабочими (вкладка «Ресурсы»). Если ресурс на складе кончится, путь встаёт до пополнения.</div>'
           : (() => {
         // ── ПОШАГОВЫЙ МАСТЕР: 1) Флот+эскорт → 2) Ресурсы → 3) Кому/куда ──
         const step = EC.cvStep = Math.min(3, Math.max(1, EC.cvStep || 1));
@@ -7021,7 +7326,7 @@ function ecTradeSubBody(sub) {
             <div id="ec-cv-fleet">${ecCvFleetHtml()}</div>
             <div class="ec-cv-nav"><span></span><button class="btn btn-gd" onclick="ecCvStep(2)">Далее: ресурсы →</button></div>`;
         } else if (step === 2) {
-          body = `<div class="ec-trade-label">Что грузим <span class="ec-hint">тыкните месторождения — флот грузит их поток, ценные первыми</span></div>
+          body = `<div class="ec-trade-label">Что грузим <span class="ec-hint">добавьте ресурсы склада и задайте объём/тик — уедет min(введено, склад, трюм)</span></div>
             <div id="ec-cv-cargo">${ecCvCargoHtml()}</div>
             <div class="ec-cv-nav"><button class="btn btn-gh" onclick="ecCvStep(1)">← Флот</button><button class="btn btn-gd" onclick="ecCvStep(3)">Далее: маршрут →</button></div>`;
         } else {
@@ -7037,7 +7342,7 @@ function ecTradeSubBody(sub) {
         }
         return `<div class="ec-trade-form">
           <div class="ec-trade-how">
-            <b>Как это работает:</b> караван — постоянное торговое соглашение. После того как партнёр <b>примет</b>, <b>каждый ход</b> ваш караван возит вашу <b>экспортную добычу</b> (режим 💱 Экспорт на заводе) и <b>оба получаете ГС</b>. Путь бессрочный, пока не закроете.
+            <b>Как это работает:</b> караван — постоянное торговое соглашение. После того как партнёр <b>примет</b>, <b>каждый ход</b> ваш караван возит выбранные ресурсы <b>со склада</b> и <b>оба получаете ГС</b>. Путь бессрочный, пока не закроете. Кончится ресурс на складе — путь <b>встаёт</b> и снова поедет, как только склад пополнится.
           </div>
           ${stepNav}${body}
         </div>`;
@@ -7053,13 +7358,13 @@ function ecTradeSubBody(sub) {
   const caravanBlock = `<div class="ec-dip-card ec-dip-trade"><div class="ec-dip-t">Торговые караваны <span class="ec-hint">пути: ${used}/${tradeCap}</span></div>
       ${caravanForm}
       ${incoming.length ? `<div class="ec-r-sec">Входящие предложения</div>${inHtml}` : ''}
-      ${active.length ? (() => { const _rg = ecCaravanIncome().routeGc || {}; return `<div class="ec-r-sec">Активные пути</div>${active.map(r => ecRouteRow(r, _rg)).join('')}`; })() : ''}
+      ${active.length ? (() => { const _ci = ecCaravanIncome(); return `<div class="ec-r-sec">Активные пути</div>${active.map(r => ecRouteRow(r, _ci.routeGc || {}, _ci.routeState || {})).join('')}`; })() : ''}
       ${pendingOut.length ? `<div class="ec-r-sec">Отправленные</div>${outHtml}` : ''}</div>`;
 
   const subBody = sub === 'market' ? resBlock
     : sub === 'barter' ? `${barterBlock}<div class="ec-section-title">Технологии и чертежи</div>${ecTechMarketBlock()}`
       : caravanBlock;
-  return `${ecIntro('⇄', 'Торговля', 'Превращайте ресурсы в ГС и обменивайтесь активами с другими фракциями.', ['<b>Караваны</b> — постоянные пути (поток добычи к партнёру, доход каждый ход). <b>Рынок</b> — продать со склада за 80%. <b>Обмен</b> — подарки/сделки и биржа техов и чертежей.'])}${subBody}`;
+  return `${ecIntro('⇄', 'Торговля', 'Превращайте ресурсы в ГС и обменивайтесь активами с другими фракциями.', ['<b>Караваны</b> — постоянные пути (возят ресурсы со склада партнёру, доход каждый ход; кончился ресурс — путь встаёт). <b>Рынок</b> — продать со склада за 80%. <b>Обмен</b> — подарки/сделки и биржа техов и чертежей.'])}${subBody}`;
 }
 function ecSetTradeSub(s) { EC.flowSub = s; ecPaintCabinet(); }   // легаси: старые ссылки на под-вкладки торговли
 
@@ -10918,12 +11223,33 @@ function ecRowTrade(name, act, i) {
   const units = Math.max(0, parseInt((ecId('ec-mk-q-' + i) || {}).value) || 0);
   const m = (EC.market || {})[name];
   if (!units) { toast('Укажите количество', 'err'); return; }
+  if (m) {
+    const oc = ecMkOrderCap(m);
+    if (units > oc) { toast(`Одна заявка — максимум ${ecNum(oc)} ед. Разбейте объём.`, 'err'); return; }
+    const left = Math.max(0, ecMkStepCap(m) - ecMkStepUsed(name));
+    if (units > left) { toast(`Лимит на шаг: свободно ${ecNum(left)} ед. Сброс ${ecMkResetTxt()}.`, 'err'); return; }
+    // Оптимистично засчитываем объём в шаг-лимит — полоса не «отстаёт» до перезагрузки.
+    EC.stepLimit = EC.stepLimit || { used: {} }; EC.stepLimit.used = EC.stepLimit.used || {};
+    EC.stepLimit.used[name] = ecMkStepUsed(name) + units;
+  }
   if (act === 'buy') {
     if (m && units > m.stock) { toast(`На рынке только ${ecNum(Math.round(m.stock))} ед.`, 'err'); return; }
     ecRpcAct('market_buy_resource', { p_name: name, p_units: units }, `Куплено: ${esc(name)} ×${ecNum(units)}`);
   } else {
     ecRpcAct('market_sell_resource', { p_name: name, p_units: units }, `Продано: ${esc(name)} ×${ecNum(units)}`);
   }
+}
+// 🔁 Автопродажа: задать «N единиц/тик» для выбранного ресурса (постоянный приказ).
+function ecMkAutoSet(name) {
+  const units = Math.max(0, parseInt((ecId('ec-mk-auto-sel') || {}).value) || 0);
+  if (!units) { toast('Укажите единиц/тик (или нажмите «Выкл.»)', 'err'); return; }
+  EC.autosell = EC.autosell || {}; EC.autosell[name] = units;   // оптимистично — панель перерисуется
+  ecRpcAct('market_autosell_set', { p_name: name, p_units: units }, `Автопродажа: ${esc(name)} ${ecNum(units)}/тик`);
+}
+// 🔁 Снять приказ автопродажи для ресурса.
+function ecMkAutoOff(name) {
+  EC.autosell = EC.autosell || {}; delete EC.autosell[name];
+  ecRpcAct('market_autosell_set', { p_name: name, p_units: 0 }, `Автопродажа снята: ${esc(name)}`);
 }
 // Быстрый ввод количества: +100/+1к прибавляют к полю, «склад» ставит весь остаток.
 function ecRowQAdd(name, i, d) {
@@ -11583,36 +11909,288 @@ function ecNemesisRow(b) {
   </div>`;
 }
 
-// Боезапас ПРО на строке здания: счётчик + докупка (доставка 1 день). Зеркало _defense_planetary.sql.
+// ══════════════════════════════════════════════════════════════════════
+//  ПРО — «ОКНО ПЕРЕХВАТА». Зеркало _abm_duel.sql.
+//  Комплекс ПРО не хранит снарядов: он даёт системе покрытие, разведку и право
+//  вести перехват вручную, пока вражеский залп в пути.
+// ══════════════════════════════════════════════════════════════════════
+function ecAbmProfile(id) { return EC_ABM_PROFILES.find(p => p.id === id) || null; }
+function ecAbmName(id) { const p = ecAbmProfile(id); return p ? p.name : '—'; }
+function ecAbmWinName(id) { const w = EC_ABM_WINDOWS.find(p => p.id === id); return w ? w.name : '—'; }
+// Входящие отметки по конкретной колонии (система + планета).
+function ecAbmIncomingFor(c) {
+  if (!c) return [];
+  return (EC.abmIncoming || []).filter(x => x.system_id === c.system_id && +x.pid === +c.planet_pid);
+}
+
+// Строка здания ПРО: что даёт узел. Ни склада, ни закупок — их больше нет.
 function ecAbmAmmoHtml(b) {
-  const ammo = +(b.ammo || 0), pend = +(b.ammo_pending || 0);
-  const pendTxt = pend > 0 ? ` <span class="ec-hint">+${ecNum(pend)} в пути${b.ammo_ready ? ' (' + ecEtaShort(b.ammo_ready) + ')' : ''}</span>` : '';
-  return `<div class="ec-bld-mine-hd" style="display:flex;align-items:center;gap:8px;margin-top:8px">
-      🚀 Снаряды ПРО: <b>${ecNum(ammo)}</b>${pendTxt}
-    </div>
-    <div class="ec-prod-form" style="margin-top:6px">
-      <input type="number" id="ec-abm-qty-${b.id}" value="5" min="1" class="ec-prod-qty">
-      <button class="btn btn-gh btn-sm" onclick="ecAbmBuyAmmo('${b.colony_id}', '${b.id}')">Докупить · ${ecNum(EC_ABM_AMMO_COST)} ГС/шт</button>
+  const slots = Math.max(0, +b.slots_open || 0);
+  const intel = slots >= EC_ABM_CLEAR_SLOTS
+    ? 'чистая отметка: истинная траектория иногда видна целиком + раскрывается планета-цель'
+    : slots >= EC_ABM_RADAR_SLOTS
+      ? 'радар вскрывает окно подлёта; одна ложная траектория отсеяна'
+      : slots >= EC_ABM_NARROW_SLOTS
+        ? 'разведка отсеивает одну ложную траекторию — выбор сужается'
+        : 'сплошной шум: оси подхода не читаются, решать придётся вслепую';
+  return `<div class="ec-bld-mine-hd" style="margin-top:8px">🚀 Узел ПРО · прикрывает всю систему</div>
+    <div class="ec-bld-howto">Слотов ${ecNum(slots)} — ${intel}. Боезапаса нет: когда по прикрытой планете идёт залп, открывается <b>Окно перехвата</b> и наводить сеть вы будете сами.</div>`;
+}
+
+// Панель тревоги в списке построек колонии: входящие отметки → вход в окно.
+function ecAbmAlertPanel(c) {
+  const inc = ecAbmIncomingFor(c);
+  if (!inc.length) return '';
+  return inc.map(x => {
+    const done = !!x.my_approach;
+    const eta = ecProgressISO(null, x.ready_at, 1, 'подлёт');
+    return `<div class="ec-bld abm-alert${done ? ' is-set' : ''}" style="grid-column:1/-1">
+      <div class="abm-alert-hd">
+        <span class="abm-alert-ic">${done ? '⛨' : '☢'}</span>
+        <span class="abm-alert-tt">${done ? 'Сеть наведена' : 'Входящая отметка'}</span>
+        <span class="abm-alert-eta">${esc(eta)}</span>
+      </div>
+      <div class="abm-alert-tx">Цель — <b>${esc(x.planet || 'планета')}</b>. ${done
+        ? `Ставка: <b>${esc(ecAbmName(x.my_approach))}</b>${x.my_window ? ` · окно «${esc(ecAbmWinName(x.my_window))}»` : ''}. Решение принято — остаётся ждать.`
+        : 'Противник тайно задал траекторию, окно подлёта' + (x.needs_target ? ' и планету-цель' : '') + '. Угадайте все оси до подлёта — ПРО собьёт снаряд. Не зайдёте — сеть отработает сама, малым шансом.'}</div>
+      <div class="ec-bld-act"><button class="btn btn-gh btn-sm" onclick="ecAbmDuelOpen('${x.salvo_id}')">${done ? 'Открыть окно' : '⌁ Вести перехват'}</button></div>
     </div>`;
+  }).join('');
 }
-// Короткая оценка времени до готовности (если нет ecProgressISO под рукой).
-function ecEtaShort(iso) {
-  const ms = new Date(iso).getTime() - Date.now();
-  if (ms <= 0) return 'скоро';
-  const h = Math.ceil(ms / 3600000);
-  return h >= 24 ? Math.ceil(h / 24) + ' дн.' : h + ' ч.';
+
+// ── Экран «Окно перехвата» (оверлей). Кибер-рамки, без тяжёлых эффектов. ──
+function ecAbmDuelOpen(salvoId) {
+  const x = (EC.abmIncoming || []).find(i => i.salvo_id === salvoId);
+  if (!x) { toast('Отметка уже отработала', 'err'); return; }
+  let host = ecId('abm-duel');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'abm-duel';
+    host.className = 'abm-duel';
+    host.addEventListener('click', e => { if (e.target === host) ecAbmDuelClose(); });
+    document.body.appendChild(host);
+  }
+  host.innerHTML = ecAbmDuelHtml(x);
+  host.classList.add('show');
+  document.body.classList.add('abm-lock');
 }
-async function ecAbmBuyAmmo(colonyId, bldId) {
+function ecAbmDuelClose() {
+  const host = ecId('abm-duel');
+  if (host) { host.classList.remove('show'); host.innerHTML = ''; }
+  document.body.classList.remove('abm-lock');
+}
+// Схема траектории профиля: маленький статичный SVG вместо абстрактного значка.
+// Планета — дуга внизу, снаряд идёт справа-сверху к цели.
+function ecAbmTraceSvg(id, state) {
+  const stroke = state === 'sel' ? 'var(--gd,#3a9bdc)' : state === 'out' ? 'var(--t4)' : 'var(--abm-red)';
+  const path = id === 'low'
+    ? '<path d="M4 30 C 40 30, 72 34, 96 44" fill="none" stroke="' + stroke + '" stroke-width="2"/>'
+    : id === 'high'
+      ? '<path d="M6 6 C 56 8, 86 18, 96 44" fill="none" stroke="' + stroke + '" stroke-width="2"/>'
+      : '<path d="M4 12 C 44 18, 72 30, 96 44" fill="none" stroke="' + stroke + '" stroke-width="2"/>'
+        + '<path d="M4 12 C 48 26, 70 40, 88 52" fill="none" stroke="' + stroke + '" stroke-width="1" opacity=".55"/>'
+        + '<path d="M4 12 C 40 12, 78 22, 98 30" fill="none" stroke="' + stroke + '" stroke-width="1" opacity=".55"/>';
+  return `<svg class="abm-trace" viewBox="0 0 104 56" width="104" height="56" aria-hidden="true">
+    <path d="M0 52 C 30 44, 74 44, 104 52 L104 56 L0 56 Z" fill="color-mix(in srgb, var(--abm-red) 22%, transparent)"/>
+    ${path}
+    <circle cx="96" cy="46" r="3" fill="${stroke}"/>
+  </svg>`;
+}
+
+// Стейджинг ставки защитника по осям (до коммита в abm_set_defense).
+function ecAbmDefState(x) {
+  EC._abmDef = EC._abmDef || {};
+  if (!EC._abmDef[x.salvo_id]) {
+    // предзаполняем раскрытыми разведкой осями — удобно, игрок может переиграть
+    EC._abmDef[x.salvo_id] = {
+      approach: x.ap_hint_kind === 'clear' ? x.ap_hint_value : null,
+      window:   x.window_known ? x.window_value : null,
+      pid:      x.target_known ? +x.target_value : null,
+    };
+  }
+  return EC._abmDef[x.salvo_id];
+}
+
+function ecAbmDuelHtml(x) {
+  const slots = +x.slots || 0;
+  const locked = !!x.my_approach;                 // сеть уже наведена на сервере
+  const st = locked ? { approach: x.my_approach, window: x.my_window, pid: x.my_pid != null ? +x.my_pid : null }
+                    : ecAbmDefState(x);
+  const kind = x.ap_hint_kind || 'none';
+  const ruled = kind === 'narrow' ? x.ap_hint_value : null;
+  const shown = kind === 'clear' ? x.ap_hint_value : null;
+  const needsTarget = !!x.needs_target;
+  const candidates = Array.isArray(x.candidates) ? x.candidates : [];
+
+  // сколько осей в игре и оценка шанса вслепую
+  const apLive = EC_ABM_PROFILES.filter(p => p.id !== ruled).length;
+  let combos = shown ? 1 : apLive;
+  if (!x.window_known) combos *= EC_ABM_WINDOWS.length;
+  if (needsTarget && !x.target_known) combos *= Math.max(1, candidates.length);
+  const chance = combos <= 1 ? 'все оси раскрыты — перехват верный' : `вслепую — 1 из ${combos}`;
+
+  // ── Ось 1: траектория (карточки) ──
+  const apCards = EC_ABM_PROFILES.map(p => {
+    const out = ruled === p.id, hot = shown === p.id, sel = st.approach === p.id;
+    const cls = 'abm-card' + (out ? ' is-out' : '') + (hot ? ' is-hot' : '') + (sel ? ' is-sel' : '');
+    const act = (locked || out) ? '' : ` onclick="ecAbmDefSet('${x.salvo_id}','approach','${p.id}')"`;
+    const cta = sel ? '✓ ВЫБРАНО' : out ? 'ИСКЛЮЧЕНО РАЗВЕДКОЙ' : hot ? '▸ ОТМЕТКА (ЧИСТО)' : '▸ НАВЕСТИ';
+    return `<button class="${cls}"${act}${(locked || out) ? ' disabled' : ''}>
+      ${ecAbmTraceSvg(p.id, sel ? 'sel' : out ? 'out' : 'hot')}
+      <span class="abm-card-nm">${esc(p.name)}</span>
+      <span class="abm-card-ds">${esc(p.desc)}</span>
+      <span class="abm-card-tag">${cta}</span>
+    </button>`;
+  }).join('');
+
+  // ── Ось 2: окно подлёта (чипы) ──
+  const winChips = EC_ABM_WINDOWS.map(w => {
+    const sel = st.window === w.id, hot = x.window_known && x.window_value === w.id;
+    const act = locked ? '' : ` onclick="ecAbmDefSet('${x.salvo_id}','window','${w.id}')"`;
+    return `<button class="abm-chip${sel ? ' is-sel' : ''}${hot ? ' is-hot' : ''}"${act}${locked ? ' disabled' : ''} title="${esc(w.desc)}">${w.ic} ${esc(w.name)}${hot ? ' · радар' : ''}</button>`;
+  }).join('');
+  const winIntel = x.window_known
+    ? `Радар вскрыл окно подлёта: <b>«${esc(ecAbmWinName(x.window_value))}»</b>.`
+    : `Окно подлёта не читается (нужно ${EC_ABM_RADAR_SLOTS} слота ПРО) — придётся угадать.`;
+
+  // ── Ось 3: планета-цель (только при ≥2 колониях в системе) ──
+  let targetBlock = '';
+  if (needsTarget) {
+    const tgChips = candidates.map(cnd => {
+      const sel = st.pid === +cnd.pid, hot = x.target_known && +x.target_value === +cnd.pid;
+      const act = locked ? '' : ` onclick="ecAbmDefSet('${x.salvo_id}','pid','${cnd.pid}')"`;
+      return `<button class="abm-chip${sel ? ' is-sel' : ''}${hot ? ' is-hot' : ''}"${act}${locked ? ' disabled' : ''}>🪐 ${esc(cnd.name || ('#' + cnd.pid))}${hot ? ' · цель' : ''}</button>`;
+    }).join('');
+    const tgIntel = x.target_known
+      ? 'Разведка указала истинную планету-цель.'
+      : `В системе ${candidates.length} ваши колонии — по какой из них бьют, неизвестно (нужно ${EC_ABM_CLEAR_SLOTS} слотов ПРО).`;
+    targetBlock = `<div class="abm-axis-lbl">Планета-цель</div>
+      <div class="abm-intel-v" style="margin:2px 0 6px">${tgIntel}</div>
+      <div class="abm-chips">${tgChips}</div>`;
+  }
+
+  const apReady = !!st.approach, winReady = !!st.window, tgReady = !needsTarget || st.pid != null;
+  const canCommit = apReady && winReady && tgReady;
+  const foot = locked
+    ? `<div class="abm-state is-set">Сеть наведена: «<b>${esc(ecAbmName(st.approach))}</b>»${st.window ? ` · окно «${esc(ecAbmWinName(st.window))}»` : ''}. Ждём подлёта — результат придёт новостью.</div>`
+    : `<div class="ec-bld-act" style="justify-content:space-between;align-items:center">
+        <span class="abm-state" style="margin:0">Перехват — только при совпадении по <b>всем</b> осям. Решение одно.</span>
+        <button class="btn btn-gh btn-sm" ${canCommit ? '' : 'disabled'} onclick="ecAbmDefCommit('${x.salvo_id}')">⛨ Навести сеть</button>
+      </div>`;
+
+  return `<div class="abm-win">
+    <div class="abm-win-hd">
+      <span class="abm-win-tt">Окно перехвата</span>
+      <span class="abm-win-sub">${esc(x.planet || 'планета')}</span>
+      <button class="abm-win-x" onclick="ecAbmDuelClose()">✕</button>
+    </div>
+    <div class="abm-win-bd">
+      <div class="abm-lead">Угадайте <b>все оси</b> подхода — тогда ПРО собьёт снаряд. Подлёт — <b>${esc(ecProgressISO(null, x.ready_at, 1, 'скоро'))}</b>.</div>
+      <div class="abm-intel">
+        <div class="abm-intel-k">Разведка · слотов ПРО ${ecNum(slots)} · ${esc(chance)}</div>
+        <div class="abm-intel-v">${kind === 'clear'
+          ? `Радар взял чистую отметку по траектории: <b>«${esc(ecAbmName(shown))}»</b>.`
+          : kind === 'narrow'
+            ? `Разведка отсеяла одну версию траектории: это <b>не</b> «${esc(ecAbmName(ruled))}».`
+            : `Траектория не читается (нужно ${EC_ABM_NARROW_SLOTS} слота ПРО).`} ${winIntel}</div>
+      </div>
+      <div class="abm-axis-lbl">Траектория</div>
+      <div class="abm-cards">${apCards}</div>
+      <div class="abm-axis-lbl">Окно подлёта</div>
+      <div class="abm-chips">${winChips}</div>
+      ${targetBlock}
+      ${foot}
+    </div>
+  </div>`;
+}
+
+function ecAbmDefSet(salvoId, axis, value) {
+  const x = (EC.abmIncoming || []).find(i => i.salvo_id === salvoId);
+  if (!x) return;
+  const st = ecAbmDefState(x);
+  st[axis] = axis === 'pid' ? +value : value;
+  ecAbmDuelOpen(salvoId);   // перерисовать оверлей с новой ставкой
+}
+async function ecAbmDefCommit(salvoId) {
   if (EC.busy) return;
-  const qty = Math.max(1, parseInt(ecId('ec-abm-qty-' + bldId)?.value) || 1);
-  const cost = EC_ABM_AMMO_COST * qty;
-  if ((EC.eco.gc || 0) < cost) { toast(`Нужно ${ecNum(cost)} ГС`, 'err'); return; }
+  const x = (EC.abmIncoming || []).find(i => i.salvo_id === salvoId);
+  if (!x) return;
+  const st = ecAbmDefState(x);
+  if (!st.approach || !st.window || (x.needs_target && st.pid == null)) { toast('Заполните все оси', 'err'); return; }
   EC.busy = true;
   try {
-    await ecRpc('abm_buy_ammo', { p_colony_id: colonyId, p_qty: qty });
-    toast(`Заказано снарядов: ${ecNum(qty)} · −${ecNum(cost)} ГС · прибудут через 1 день`, 'ok');
+    await ecRpc('abm_set_defense', { p_salvo_id: salvoId, p_approach: st.approach, p_window: st.window, p_pid: x.needs_target ? st.pid : null });
+    x.my_approach = st.approach; x.my_window = st.window; x.my_pid = st.pid;
+    ecAbmDuelOpen(salvoId);
+    toast(`ПРО наведена: ${ecAbmName(st.approach)}`, 'ok');
     await ecReloadPaint();
-  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+
+// ── Сторона атакующего: МНОГООСЕВОЙ подход залпа (траектория + окно + финт) ──
+//  Оси задаются одной транзакцией, поэтому выбор стейджится в EC._doomDuel и
+//  коммитится кнопкой. Противник ни одной оси не видит; финт — ложный профиль,
+//  который «утечёт» его разведке как правдоподобную ловушку.
+function ecDoomDuelState(salvoId) {
+  EC._doomDuel = EC._doomDuel || {};
+  if (!EC._doomDuel[salvoId]) EC._doomDuel[salvoId] = { approach: null, window: null, feint: null };
+  return EC._doomDuel[salvoId];
+}
+function ecDoomApproachHtml(salvo) {
+  if (!salvo || !salvo.id) return '';
+  return `<div class="abm-approach" id="abm-appr-${esc(salvo.id)}">${ecDoomDuelInner(salvo)}</div>`;
+}
+function ecDoomDuelInner(salvo) {
+  // Уже задано на сервере — показываем сводку осей (окно/финт видит только владелец).
+  if (salvo.approach) {
+    const win = salvo.window ? ` · окно «<b>${esc(ecAbmWinName(salvo.window))}</b>»` : '';
+    const fnt = salvo.feint ? ` · приманка «${esc(ecAbmName(salvo.feint))}»` : '';
+    return `<div class="abm-intel-k">Оси подхода · заданы</div>
+      <div class="abm-intel-v">Снаряд идёт как «<b>${esc(ecAbmName(salvo.approach))}</b>»${win}${fnt}. Расчёт ПРО противника этого не знает.</div>`;
+  }
+  const st = ecDoomDuelState(salvo.id);
+  const apCards = EC_ABM_PROFILES.map(p => `<button class="abm-card abm-card-sm${st.approach === p.id ? ' is-sel' : ''}" onclick="ecDoomDuelSet('${salvo.id}','approach','${p.id}')">
+      <span class="abm-card-ic">${p.ic}</span><span class="abm-card-nm">${esc(p.name)}</span>
+    </button>`).join('');
+  const winChips = EC_ABM_WINDOWS.map(w => `<button class="abm-chip${st.window === w.id ? ' is-sel' : ''}" onclick="ecDoomDuelSet('${salvo.id}','window','${w.id}')" title="${esc(w.desc)}">${w.ic} ${esc(w.name)}</button>`).join('');
+  // Финт: приманкой может быть только ПРОФИЛЬ, отличный от истинного.
+  const feintChips = [`<button class="abm-chip${!st.feint ? ' is-sel' : ''}" onclick="ecDoomDuelSet('${salvo.id}','feint','')">без приманки</button>`]
+    .concat(EC_ABM_PROFILES.filter(p => p.id !== st.approach).map(p =>
+      `<button class="abm-chip${st.feint === p.id ? ' is-sel' : ''}" onclick="ecDoomDuelSet('${salvo.id}','feint','${p.id}')">${p.ic} ${esc(p.name)}</button>`)).join('');
+  const ready = !!st.approach;
+  return `<div class="abm-intel-k">Профиль подхода — выберите оси залпа</div>
+    <div class="abm-intel-v">Противник угадывает <b>все</b> оси сразу. Финт подсунет его разведке ложный след. Не зададите — жребий.</div>
+    <div class="abm-axis-lbl">Траектория</div>
+    <div class="abm-cards abm-cards-sm">${apCards}</div>
+    <div class="abm-axis-lbl">Окно подлёта</div>
+    <div class="abm-chips">${winChips}</div>
+    <div class="abm-axis-lbl">Финт-приманка${st.approach ? '' : ' (сначала траектория)'}</div>
+    <div class="abm-chips">${st.approach ? feintChips : '<span class="abm-intel-v" style="opacity:.6">выберите истинную траекторию, чтобы задать приманку</span>'}</div>
+    <div class="ec-bld-act" style="margin-top:8px;justify-content:flex-end">
+      <button class="btn btn-rd btn-sm" ${ready ? '' : 'disabled'} onclick="ecDoomDuelCommit('${salvo.id}')">☄️ Задать оси и запечатать</button>
+    </div>`;
+}
+function ecDoomDuelSet(salvoId, axis, value) {
+  const st = ecDoomDuelState(salvoId);
+  st[axis] = value || null;
+  if (axis === 'approach' && st.feint === value) st.feint = null;  // приманка ≠ истина
+  const host = ecId('abm-appr-' + salvoId);
+  const salvo = ((EC.doom && EC.doom.salvos) || []).concat(EC.mzaShips ? EC.mzaShips.map(s => s.salvo).filter(Boolean) : [])
+    .find(s => s && s.id === salvoId) || { id: salvoId };
+  if (host) host.innerHTML = ecDoomDuelInner(salvo);
+}
+async function ecDoomDuelCommit(salvoId) {
+  if (EC.busy) return;
+  const st = ecDoomDuelState(salvoId);
+  if (!st.approach) { toast('Выберите траекторию', 'err'); return; }
+  EC.busy = true;
+  try {
+    await ecRpc('doom_set_duel', { p_salvo_id: salvoId, p_approach: st.approach, p_window: st.window, p_feint: st.feint });
+    toast(`Оси запечатаны: ${ecAbmName(st.approach)}`, 'ok');
+    delete EC._doomDuel[salvoId];
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
   finally { EC.busy = false; }
 }
 
@@ -12187,7 +12765,7 @@ function ecDoomgunRow(b) {
   const fireBtn = wrecked
     ? `<span class="ec-maxed" style="color:#ff6a6a">💥 распалось</span>`
     : inFlight
-      ? `<span class="ec-proj-tag" title="Снаряд в полёте">☄️ залп в пути${salvo ? ' · ' + ecProgressISO(null, salvo.ready_at, 1, 'на подлёте') : ''}</span>`
+      ? `<span class="ec-proj-tag" title="Снаряд в полёте">☄️ залп в пути${salvo ? ' · ' + ecProgressISO(null, salvo.ready_at, 1, 'на подлёте') : ''}</span>${ecDoomApproachHtml(salvo)}`
       : `<button class="btn btn-rd btn-xs" onclick="ecDoomOpenTab('${g ? g.id : ''}')" title="Открыть пульт залпа с визуальным наведением">🜨 Пульт залпа</button>`;
   return `<div class="ec-bld ec-bld-doom" style="border-color:rgba(220,40,40,.45)">
     <div class="ec-bld-top">
@@ -12403,7 +12981,8 @@ function ecDoomPanelRender() {
   const canFuel = shells >= 1;
   if (gun && gun.in_flight) {
     const salvo = ((EC.doom && EC.doom.salvos) || []).find(s => s.gun_id === gun.id);
-    return `<div class="ec-bld-howto" style="color:#ff8a8a">☄️ Это орудие уже дало залп — снаряд в пути${salvo ? '. Подлёт: ' + ecProgressISO(null, salvo.ready_at, 1, 'на подлёте') : ''}. Дождитесь поражения цели, затем перезарядите.</div>`;
+    return `<div class="ec-bld-howto" style="color:#ff8a8a">☄️ Это орудие уже дало залп — снаряд в пути${salvo ? '. Подлёт: ' + ecProgressISO(null, salvo.ready_at, 1, 'на подлёте') : ''}. Дождитесь поражения цели, затем перезарядите.</div>
+      ${ecDoomApproachHtml(salvo)}`;
   }
   if (!st.sysId) return `<div class="ec-bld-howto">🎯 Кликните звезду на карте слева, чтобы навести орудие на систему-цель.</div>`;
   const sys = sysList.find(s => s.id === st.sysId);
@@ -12617,6 +13196,7 @@ function ecMzaCard(sh, haveGrav) {
     <div class="ec-mza-stats">
       ${etaRow}${gravRow}${shotsRow}
     </div>
+    ${sh.in_flight && sh.salvo ? ecDoomApproachHtml(sh.salvo) : ''}
     <div class="ec-mza-foot">🗺 Перебросить, дать залп и списать — кликом по носителю на карте</div>
   </div>`;
 }
@@ -12679,11 +13259,43 @@ function ecDoomVNBody() {
     ${chip('🟢 материя', ecNum(Math.floor(matter)), matter <= 0)}
   </div>`;
   const forges = ((EC.shells || {}).forges || []);
-  const tabs = [['arsenal', 'Арсенал', guns.length + mza.length], ['forge', 'Производство', forges.filter(f => f.shell_kind).length], ['aim', 'Наведение', 0], ['salvos', 'В полёте', salvos.length]];
+  const incoming = (EC.abmIncoming || []);
+  const tabs = [['arsenal', 'Арсенал', guns.length + mza.length], ['forge', 'Производство', forges.filter(f => f.shell_kind).length], ['aim', 'Наведение', 0], ['salvos', 'В полёте', salvos.length], ['defense', '⛨ Оборона', incoming.length]];
   const rail = `<div class="hp-vnd-tabs">${tabs.map(([id, l, n]) =>
     `<button class="hp-vnd-tab${st.tab === id ? ' on' : ''}" type="button" onclick="event.stopPropagation();ecDoomVNTab('${id}')">${l}${n ? `<i>${n}</i>` : ''}</button>`).join('')}</div>`;
-  const body = st.tab === 'aim' ? ecDoomVNAim() : st.tab === 'salvos' ? ecDoomVNSalvos(salvos) : st.tab === 'forge' ? ecDoomVNForge() : ecDoomVNArsenal(guns, matter);
+  const body = st.tab === 'aim' ? ecDoomVNAim() : st.tab === 'salvos' ? ecDoomVNSalvos(salvos)
+    : st.tab === 'forge' ? ecDoomVNForge() : st.tab === 'defense' ? ecDoomVNDefense(incoming)
+    : ecDoomVNArsenal(guns, matter);
   return strip + chips + rail + body;
+}
+
+// ── ОБОРОНА: входящие отметки ПРО по моим планетам → вход в «Окно перехвата» ──
+function ecDoomVNDefense(incoming) {
+  if (!incoming.length) {
+    return `<div class="hp-vn-col-empty" style="padding:20px;text-align:center">
+      Небо чисто: входящих залпов по вашим планетам нет.<br>
+      <span style="color:var(--t4);font-size:12px">Когда по прикрытой ПРО планете пойдёт снаряд, здесь откроется «Окно перехвата» — и вы будете вести дуэль сами.</span>
+    </div>`;
+  }
+  const rows = incoming.map(x => {
+    const done = !!x.my_approach;
+    const eta = ecProgressISO(null, x.ready_at, 1, 'подлёт');
+    return `<div class="ec-bld abm-alert${done ? ' is-set' : ''}" style="margin:8px 0">
+      <div class="abm-alert-hd">
+        <span class="abm-alert-ic">${done ? '⛨' : '☢'}</span>
+        <span class="abm-alert-tt">${done ? 'Сеть наведена' : 'Входящая отметка'} · ${esc(x.planet || 'планета')}</span>
+        <span class="abm-alert-eta">${esc(eta)}</span>
+      </div>
+      <div class="abm-alert-tx">${done
+        ? `Ставка: <b>${esc(ecAbmName(x.my_approach))}</b>${x.my_window ? ` · окно «${esc(ecAbmWinName(x.my_window))}»` : ''}. Решение принято.`
+        : 'Противник тайно задал оси подхода. Угадайте все — снаряд будет сбит.'}</div>
+      <div class="ec-bld-act"><button class="btn btn-gh btn-sm" type="button" onclick="event.stopPropagation();ecAbmDuelOpen('${x.salvo_id}')">${done ? 'Открыть окно' : '⌁ Вести перехват'}</button></div>
+    </div>`;
+  }).join('');
+  return `<div class="hp-vnd-defense" style="padding:4px 2px">
+    <div class="hp-vn-col-empty" style="padding:6px 4px;text-align:left;color:var(--t3)">Планетарная ПРО ведёт дуэль с входящими залпами. Больше слотов ПРО — больше разведки по осям подхода.</div>
+    ${rows}
+  </div>`;
 }
 // АРСЕНАЛ: доктрина + карточки стационарных орудий + секция Гиперпейсеров.
 function ecDoomVNArsenal(guns, matter) {

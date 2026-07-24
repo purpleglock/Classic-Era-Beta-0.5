@@ -94,6 +94,25 @@ begin
   elsif cat='ceramic'    then km:=km*1.4; rm:=rm*1.2; bm:=bm*0.8;
   elsif cat='composite'  then bm:=bm*1.1; cm:=cm*1.1; rm:=rm*1.1; km:=km*1.1; sv:=sv*1.1;
   end if;
+  -- СПЛАВ (алхимия): объём брони масштабируется под корпус (mass/gabarit + resurs
+  -- корпуса как прокси размера), рецепт даёт только материал/качество/стойкости.
+  -- Зеркало ветки cnKvArmorHp (constructors.js) — число-в-число.
+  if coalesce((a->>'_alloy')::boolean, false) then
+    declare cr jsonb := cls->'resurs'; loadv numeric := 0; qv numeric; base numeric; hpa numeric;
+    begin
+      if cr is not null then
+        loadv := coalesce((cr->>'blackmetall')::numeric,0)*bm + coalesce((cr->>'coloredmetall')::numeric,0)*cm
+               + coalesce((cr->>'rudametall')::numeric,0)*rm + coalesce((cr->>'kristall')::numeric,0)*km
+               + coalesce((cr->>'staarvis')::numeric,0)*sv;
+      end if;
+      base := (s + loadv) * dF * tF * hF;
+      qv := coalesce((a->>'quality')::numeric, 1);
+      hpa := base * (0.4 + 0.6*qv);
+      if (a->>'hpPercentBoost') is not null then hpa := hpa * (1 + (a->>'hpPercentBoost')::numeric); end if;
+      hpa := hpa + coalesce((a->>'hpBoost')::numeric,0) * 0.2;   -- ALLOY_FLOOR_K (пол для мелких корпусов)
+      return hpa;
+    end;
+  end if;
   res := a->'resurs';
   if res is not null then
     s := s + coalesce((res->>'blackmetall')::numeric,0)*bm + coalesce((res->>'coloredmetall')::numeric,0)*cm
@@ -265,6 +284,8 @@ begin
       'hpPercentBoost', coalesce(v_alloy.stats->'hpPercentBoost', to_jsonb(0)),
       'capacityBoost',  coalesce(v_alloy.stats->'capacityBoost', to_jsonb(0)),
       'armor',          coalesce(v_alloy.stats->'hpBoost', to_jsonb(0)),
+      'quality',        coalesce(v_alloy.stats->'quality', to_jsonb(1)),   -- масштаб HP под корпус
+      '_alloy',         true,                                             -- ветка проп. корпусу в _cn_kv_armor_hp
       'resurs', jsonb_build_object('blackmetall',0,'coloredmetall',0,'rudametall',0,'kristall',0,'staarvis',0)
     );
     armor_resist := coalesce(v_alloy.stats->'resist', armor_resist);

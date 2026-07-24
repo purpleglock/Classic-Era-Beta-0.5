@@ -433,6 +433,11 @@
 .hp-vn-choice-item{font-weight:500;font-size:clamp(12px,1.25vw,14px);justify-content:flex-start;text-align:left}
 .hp-vn-choice-item img,.hp-vn-choice-item .fn-fr-flag{width:15px;height:15px;object-fit:contain;flex-shrink:0;border-radius:3px;opacity:0.9}
 .hp-vn-choice-it-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hp-vn-mkchip{flex-shrink:0;margin-left:auto;padding:1px 7px;border-radius:9px;font-size:11px;font-weight:700;line-height:1.4}
+.hp-vn-mkchip.up{color:#ffb4c4;background:rgba(224,104,138,0.16)}
+.hp-vn-mkchip.up3{color:#ff8aa2;background:rgba(224,40,70,0.26)}
+.hp-vn-mkchip.dn{color:#8fe0ad;background:rgba(95,201,138,0.16)}
+.hp-vn-mkchip.fl{color:var(--t4,#7a8a98);background:rgba(255,255,255,0.06)}
 .hp-vn-choice-empty{
   flex:1 1 100%;
   color:var(--t3,#9fb3c4);font-family:'Inter',sans-serif;font-size:13px;
