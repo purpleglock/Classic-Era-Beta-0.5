@@ -3661,6 +3661,10 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-stars-final.is-hit .ec-stars-final-h { color: var(--gd); animation: ecGeoJackText 1.2s ease-in-out infinite; }
 .ec-stars-final-v { font-size: 13px; line-height: 1.55; color: var(--t3, var(--t4)); }
 .ec-stars-final-v b { color: var(--gd); }
+.ec-stars-reward { margin: 10px auto 0; max-width: 460px; padding: 8px 12px; font-size: 12.5px; line-height: 1.5;
+  border-radius: 10px; background: color-mix(in srgb, var(--te, #3ec0d0) 12%, transparent);
+  color: var(--t2, var(--t3)); }
+.ec-stars-reward b { color: var(--te, #3ec0d0); }
 /* Плёнка сеанса: снимки, пойманные игроком (финал) */
 /* Финал: поле слева, добыча игрока — колонкой СПРАВА (внизу она ломала кадр,
    упираясь в интерфейс новеллы). Узко — колонка уходит под поле лентой. */
@@ -4182,6 +4186,32 @@ body.abm-lock { overflow: hidden; }
   .ec-res-syname { flex: 1 1 100%; }
   .ec-res-sybar { flex: 1 1 100%; }
 }
+
+/* ── РАБОЧИЕ: поиск, сворачивание, политика редкости ── */
+.ec-res-toolbar { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; flex-wrap: wrap; }
+.ec-res-search { flex: 1 1 220px; display: flex; align-items: center; gap: 6px; color: var(--t3); font-size: 12px; }
+.ec-res-search input { flex: 1; min-width: 0; background: var(--b1, rgba(255,255,255,.05)); border: var(--deco-frame-w,1px) solid var(--w2); border-radius: var(--radius-sm); color: var(--t1); font: inherit; font-size: 12px; padding: 5px 9px; }
+.ec-res-search input:focus { outline: 0; border-color: var(--gd, #3a9bdc); }
+.ec-res-caret { flex: 0 0 auto; background: transparent; border: 0; color: var(--t2); font-size: 12px; cursor: pointer; padding: 0 2px; line-height: 1; }
+.ec-res-caret:hover { color: var(--t1); }
+.ec-res-collapsed .ec-res-syrow { opacity: .82; }
+.ec-rar-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ec-rar-chip { background: var(--b1, rgba(255,255,255,.05)); border: var(--deco-frame-w,1px) solid var(--w2); border-radius: var(--radius-sm); color: var(--t2); font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer; }
+.ec-rar-chip:hover { color: var(--t1); }
+.ec-rar-chip.ec-rar-prio { border-color: var(--gd, #3a9bdc); color: var(--gd, #3a9bdc); }
+.ec-rar-chip.ec-rar-off { opacity: .55; text-decoration: line-through; color: var(--color-warning, #e94); border-color: var(--color-warning, #e94); }
+
+/* Всплывающее меню «Настроить приоритет» */
+.ec-prio-modal { position: fixed; inset: 0; z-index: 9000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); padding: 16px; }
+.ec-prio-box { width: min(420px, 100%); max-height: 90vh; overflow: auto; background: var(--b2, #12161c); border: var(--deco-frame-w,1px) solid var(--w2); border-radius: var(--radius-md, 10px); box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+.ec-prio-hd { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: var(--deco-frame-w,1px) solid var(--w2); color: var(--t1); font-size: 14px; }
+.ec-prio-x { background: transparent; border: 0; color: var(--t3); font-size: 15px; cursor: pointer; line-height: 1; padding: 2px 4px; }
+.ec-prio-x:hover { color: var(--t1); }
+.ec-prio-sec { padding: 12px 14px; }
+.ec-prio-sec + .ec-prio-sec { border-top: var(--deco-frame-w,1px) solid var(--w2); }
+.ec-prio-lbl { color: var(--t2); font-size: 12px; margin-bottom: 8px; }
+.ec-prio-lbl i { color: var(--t3); font-style: normal; font-size: 11px; }
+.ec-prio-sec .btn { width: 100%; }
 
 /* ── РАБОЧИЕ: система → месторождения (покрытие) ── */
 .ec-res-sys { margin: 8px 0; border: var(--deco-frame-w,1px) solid var(--w2); border-radius: var(--radius-sm); overflow: hidden; background: var(--b2); }

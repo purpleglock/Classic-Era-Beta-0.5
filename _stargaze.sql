@@ -90,17 +90,25 @@ begin
 end$$;
 
 -- ── Свежая раскладка Разлома: 49 призов вперемешку ──
+-- Каждый узел несёт: t (тип), m (множитель ×ставки — цена типа) и s (СЛОТ
+-- внутри типа, 0-based: 1-й маяк=0, 2-й=1 …). Слот — стабильный «адрес» узла:
+-- по нему клиент берёт арт из конфига (cfg.arts[t][s]). Выигрыш всегда по
+-- множителю типа — отдельных цен/имён по узлам нет.
 create or replace function public._stargaze_board()
-returns jsonb language sql volatile as $$
-  select jsonb_agg(jsonb_build_object('t', t, 'm', m) order by random())
-  from (
-    select 'nova'::text as t, 6::numeric as m
-    union all select 'quasar', 2    from generate_series(1,2)
-    union all select 'comet',  0.8  from generate_series(1,4)
-    union all select 'photo',  0.25 from generate_series(1,8)
-    union all select 'dust',   0.02 from generate_series(1,34)
-  ) x
-$$;
+returns jsonb language plpgsql volatile as $$
+begin
+  return (
+    select jsonb_agg(
+      jsonb_build_object('t', t, 'm', m, 's', s - 1) order by random())
+    from (
+      select 'nova'::text as t, 6::numeric as m, 1 as s
+      union all select 'quasar', 2,    generate_series(1, 2)
+      union all select 'comet',  0.8,  generate_series(1, 4)
+      union all select 'photo',  0.25, generate_series(1, 8)
+      union all select 'dust',   0.02, generate_series(1, 34)
+    ) x
+  );
+end$$;
 
 -- ── Текущее состояние (read-only, для клиента; поле НЕ раскрывает) ──
 create or replace function public.stargaze_get()
@@ -169,7 +177,7 @@ create or replace function public.stargaze_pick(p_idx int)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare fid text; st public.stargaze_state; cell jsonb; mult numeric; win numeric;
         op jsonb; done boolean; v_gc numeric; jack_i int; total numeric; fin jsonb;
-        v_nm text;
+        v_nm text; v_quasar int; v_photo int; v_shard text; v_classes text[];
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   fid := public._ec_my_fid();
@@ -183,12 +191,13 @@ begin
 
   cell := st.board -> p_idx;
   mult := 1 + 0.25 * st.extras;
-  win  := floor(st.stake * (cell->>'m')::numeric * mult);
+  -- Выигрыш = ставка × множитель типа × бонус за доп.ставки.
+  win := floor(st.stake * (cell->>'m')::numeric * mult);
   update public.faction_economy set gc = gc + win where faction_id = fid
     returning gc into v_gc;
 
   op   := st.opened || jsonb_build_object('i', p_idx, 't', cell->>'t',
-            'm', (cell->>'m')::numeric, 'win', win);
+            'm', (cell->>'m')::numeric, 's', (cell->>'s')::int, 'win', win);
   done := jsonb_array_length(op) >= st.picks;
 
   if done then
@@ -196,9 +205,32 @@ begin
       from jsonb_array_elements(st.board) with ordinality a(e, i)
       where e->>'t' = 'nova' limit 1;
     select coalesce(sum((e->>'win')::numeric), 0) into total from jsonb_array_elements(op) e;
+
+    -- ── НАГРАДА: осколок цикла за набор. 2 маяка (quasar) ИЛИ 3 видения (photo)
+    -- за транс → 1 классовый осколок СЛУЧАЙНОГО класса корабля, но НЕ дредноут
+    -- и НЕ линкор (и не станция). Осколок кладётся в faction_economy.cycle_shards.
+    select count(*) filter (where e->>'t' = 'quasar'),
+           count(*) filter (where e->>'t' = 'photo')
+      into v_quasar, v_photo
+      from jsonb_array_elements(op) e;
+    v_shard := null;
+    if v_quasar >= 2 or v_photo >= 3 then
+      v_classes := array['corvette','frigate','destroyer','cruiser'];
+      v_shard := v_classes[1 + floor(random() * array_length(v_classes, 1))::int];
+      begin
+        update public.faction_economy
+           set cycle_shards = jsonb_set(coalesce(cycle_shards, '{}'::jsonb),
+                 array[v_shard],
+                 to_jsonb(coalesce((cycle_shards->>v_shard)::int, 0) + 1))
+         where faction_id = fid;
+      exception when others then v_shard := null;  -- колонки нет (SQL осколков не накатан) — награда молча пропущена
+      end;
+    end if;
+
     fin := jsonb_build_object('board', st.board, 'opened', op, 'stake', st.stake,
       'extras', st.extras, 'mult', mult, 'won', total,
-      'spent', st.stake * (1 + st.extras), 'jackpot_i', jack_i);
+      'spent', st.stake * (1 + st.extras), 'jackpot_i', jack_i,
+      'shard', v_shard, 'shard_from', case when v_quasar >= 2 then 'quasar' when v_photo >= 3 then 'photo' else null end);
     update public.stargaze_state
       set active = false, board = null, opened = '[]'::jsonb, last = fin, updated_at = now()
       where faction_id = fid;

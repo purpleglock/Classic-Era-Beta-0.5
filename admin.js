@@ -1018,11 +1018,15 @@ async function adStarsPhotoRemove(i) {
 }
 function adStarsPhotosSection() {
   const list = Array.isArray(adStarsCfg().list) ? adStarsCfg().list : [];
-  const cells = list.map((u, i) => `<div style="position:relative;width:104px;height:78px;border-radius:8px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover no-repeat;background-image:url('${esc(u)}')">
-      <button class="btn btn-gh btn-xs" title="Убрать видение" onclick="adStarsPhotoRemove(${i})" style="position:absolute;top:3px;right:3px;min-width:0;padding:2px 6px;background:rgba(8,12,22,.8)">✕</button>
-    </div>`).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:6px 0">Архив пуст — приз «Видение» показывает рисованную иконку.</div>';
+  const cells = list.map((u, i) => {
+    return `<div style="width:104px">
+      <div style="position:relative;width:104px;height:78px;border-radius:8px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover no-repeat;background-image:url('${esc(u)}')">
+        <button class="btn btn-gh btn-xs" title="Убрать видение" onclick="adStarsPhotoRemove(${i})" style="position:absolute;top:3px;right:3px;min-width:0;padding:2px 6px;background:rgba(8,12,22,.8)">✕</button>
+      </div>
+    </div>`;
+  }).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:6px 0">Архив пуст — приз «Видение» показывает рисованную иконку.</div>';
   return `<div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px">РАЗЛОМ — АРХИВ ВИДЕНИЙ</div>
-    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 10px;line-height:1.5">Реальные изображения для приза «Видение» во «Всмотреться в Разлом»: выпавший узел-видение показывает случайный снимок отсюда. Сохраняется в общую БД, видно всем игрокам. Лучше горизонтальные кадры неба/космоса.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 10px;line-height:1.5">Реальные изображения для приза «Видение» во «Всмотреться в Разлом». Выпадают <b>случайно</b>: каждая клетка-«Видение» берёт из этого архива любой кадр — порядок и число не важны. Сохраняется в общую БД, видно всем игрокам. Лучше горизонтальные кадры неба/космоса.</div>
     <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">${cells}</div>
     <label class="btn btn-gh btn-xs" style="display:inline-block;cursor:pointer;margin-bottom:14px">⬆ загрузить видения<input type="file" accept="image/*" multiple style="display:none" onchange="adStarsPhotoUpload(this)"></label>`;
 }
@@ -1123,21 +1127,23 @@ function adStarsArtsSection() {
           <button class="btn btn-gh btn-xs" title="Убрать рубашку" onclick="adStarsBackRemove('${k}')" style="position:absolute;top:2px;right:2px;min-width:0;padding:1px 5px;background:rgba(8,12,22,.8)">✕</button>
         </div>`
       : `<label class="btn btn-gh btn-xs" style="width:76px;height:76px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:10px;text-align:center;line-height:1.2">⬆ рубашка<input type="file" accept="image/*" style="display:none" onchange="adStarsBackUpload('${k}',this)"></label>`;
-    const thumbs = list.map((u, i) => `<div style="position:relative;width:76px;height:76px;border-radius:8px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover no-repeat;background-image:url('${esc(u)}')">
+    const thumbs = list.map((u, i) => {
+      return `<div style="position:relative;width:76px;height:76px;border-radius:8px;border:1px solid var(--w2,#2a3340);background:#0c1322 center/cover no-repeat;background-image:url('${esc(u)}')">
         <button class="btn btn-gh btn-xs" title="Убрать арт" onclick="adStarsArtRemove('${k}',${i})" style="position:absolute;top:2px;right:2px;min-width:0;padding:1px 5px;background:rgba(8,12,22,.8)">✕</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     const empty = `<div style="width:76px;height:76px;border-radius:8px;border:1px dashed var(--w2,#2a3340);display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font-size:10px;text-align:center;line-height:1.2">иконка</div>`;
     return `<div style="border-top:1px solid var(--w2,#2a3340);padding:10px 0">
       <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
         <span style="font-size:12px;color:var(--t2,#c2d0dc)">${esc(lbl)}</span>
-        <span style="font-size:10.5px;color:var(--t4,#6a7a88)">${n} на поле · артов: ${list.length}${back ? ' · рубашка есть' : ''}</span>
+        <span style="font-size:10.5px;color:var(--t4,#6a7a88)">${n} на поле · артов: ${list.length} (выпадают вразнобой)${back ? ' · рубашка есть' : ''}</span>
         <label class="btn btn-gh btn-xs" style="margin-left:auto;cursor:pointer">⬆ добавить<input type="file" accept="image/*" multiple style="display:none" onchange="adStarsArtUpload('${k}',this)"></label>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">${thumbs || empty}<span style="width:1px;height:60px;background:var(--w2,#2a3340);margin:0 4px"></span>${backCell}</div>
     </div>`;
   }).join('');
   return `<div style="font-family:monospace;font-size:11px;color:var(--te,#3ec0d0);margin-bottom:2px">РАЗЛОМ — АРТЫ ПРИЗОВ</div>
-    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 4px;line-height:1.5">Арты на каждый тип находки во «Всмотреться в Разлом»: раскрытый узел показывает картинку вместо рисованной иконки. Жми «добавить» — файл уходит в общее хранилище, ссылка одна на локалку и деплой. Артов на тип сколько угодно: узлы одного типа за транс берут разные, по кругу; один арт = все узлы типа одинаковые, ноль = рисованная иконка. Квадратные картинки; «Видение» сперва берёт архив видений выше, арты — запасные. Справа за разделителем — <b>рубашка</b> типа, одна на тип: в финале ею накрыты узлы, которые игрок не вскрыл — тип видно, а сам образ нет. Рубашки нет — такой узел рисует иконку.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 4px;line-height:1.5">Арты на каждый тип находки во «Всмотреться в Разлом»: раскрытый узел показывает картинку вместо рисованной иконки. Жми «добавить» — файл уходит в общее хранилище, ссылка одна на локалку и деплой. <b>Выпадают случайно</b>: клетка типа берёт любой арт из списка — порядок не важен, привязки «арт → узел» нет. Один арт = все клетки типа одинаковые, ноль = рисованная иконка. Квадратные картинки; «Видение» сперва берёт архив видений выше, арты — запасные. Справа за разделителем — <b>рубашка</b> типа, одна на тип: в финале ею накрыты узлы, которые игрок не вскрыл — тип видно, а сам образ нет. Рубашки нет — такой узел рисует иконку.</div>
     <div style="margin-bottom:14px">${rows}</div>`;
 }
 function adVNPanel() {
@@ -2224,7 +2230,7 @@ function adMarketPanel() {
 function adFacPanel() {
   const e = adEntry(AD.sel);
   if (!e) return '';
-  const SUBTABS = [['treasury','💰 Казна'],['economy','📊 Экономика'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['caravans','🚚 Караваны'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['population','👥 Население'],['army','⚔ Армия'],['coupons','🎟 Купоны'],['agents','🕵 Агенты'],['owner','👑 Владелец'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
+  const SUBTABS = [['treasury','💰 Казна'],['economy','📊 Экономика'],['resources','📦 Ресурсы'],['mining','⛏ Добыча'],['caravans','🚚 Караваны'],['research','🔬 Технологии'],['territory','🌐 Территория'],['colonies','🏗 Колонии'],['population','👥 Население'],['army','⚔ Армия'],['coupons','◈ Осколки цикла'],['agents','🕵 Агенты'],['owner','👑 Владелец'],['testing','🧪 Тест'],['danger','⚠ Зона риска']];
   const tabBtns = SUBTABS.map(([id, lbl]) => `<button class="fm-stab${AD.subtab===id?' on':''}" onclick="adSetSubtab('${id}')">${lbl}</button>`).join('');
   const bodyMap = { treasury: adTabTreasury, economy: adTabEconomy, resources: adTabResources, mining: adTabMining, caravans: adTabCaravans, research: adTabResearch, territory: adTabTerritory, colonies: adTabColonies, population: adTabPopulation, army: adTabArmy, coupons: adTabCoupons, agents: adTabAgents, owner: adTabOwner, testing: adTabTesting, danger: adTabDanger };
   const renderFn = bodyMap[AD.subtab] || adTabTreasury;
@@ -3366,49 +3372,82 @@ async function adDeltaFacPop(delta) {
   finally { AD.busy = false; }
 }
 
-// ── Вкладка: Купоны на строительство ────────────────────────────
-// faction_economy.build_coupons (_build_coupons.sql). Купон = 1 юнит,
-// построенный бесплатно и мгновенно: игрок выбирает способ при закладке.
+// ── Вкладка: Осколки цикла ──────────────────────────────────────
+// Универсальный осколок — faction_economy.build_coupons (любой класс).
+// Классовые осколки — faction_economy.cycle_shards. Флот разбит ПО КЛАССАМ
+// корабля (corvette/frigate/…/dreadnought — ключи из CN_SHIP.data), поэтому
+// осколок корвета не построит дредноут. Прочие рода — свои ключи.
+// Осколок = 1 юнит, построенный бесплатно и мгновенно.
+const AD_SHARD_KINDS = [
+  ['uni', 'Универсальный', '◈', 'годится на любой класс юнитов'],
+  ['corvette', 'Корвет', '🚀', 'корабли класса «Корвет»'],
+  ['frigate', 'Фрегат', '🚀', 'корабли класса «Фрегат»'],
+  ['destroyer', 'Эсминец', '🚀', 'корабли класса «Эсминец»'],
+  ['cruiser', 'Крейсер', '🚀', 'корабли класса «Крейсер»'],
+  ['battleship', 'Линейный корабль', '🚀', 'корабли класса «Линейный корабль»'],
+  ['dreadnought', 'Дредноут', '🚀', 'корабли класса «Дредноут»'],
+  ['aviation', 'Авиация', '✈', 'авиакрылья'],
+  ['ground', 'Наземная техника', '🛠', 'техника'],
+  ['inf', 'Пехота', '🪖', 'пехотные юниты'],
+];
+function adShardCur(e, key) {
+  if (key === 'uni') return Math.max(0, parseInt(e.eco.build_coupons) || 0);
+  const s = e.eco.cycle_shards || {};
+  return Math.max(0, parseInt(s[key]) || 0);
+}
 function adTabCoupons(e) {
   if (!e.eco) return `<div class="fm-no-eco">Экономика не инициализирована. Перейдите в <b>⚠ Зона риска</b> → Создать экономику.</div>`;
-  const cur = Math.max(0, parseInt(e.eco.build_coupons) || 0);
-  const add = [1, 5, 10, 50].map(v => `<button class="btn btn-gh btn-xs" onclick="adDeltaCoupons(${v})">+${v}</button>`).join('');
-  const sub = [1, 5, 10].map(v => `<button class="btn btn-rd btn-xs" onclick="adDeltaCoupons(${-v})">−${v}</button>`).join('');
-  return `<div class="fm-form">
-    <div class="fm-section-title">Купоны на строительство: <b style="color:var(--t1,#e8edf2)">${adNum(cur)}</b></div>
-    <div class="fm-dim" style="font-size:11px;margin:4px 0 10px">Пока у державы есть купоны, в «🏭 Строительство вооружённых сил» рядом с обычным заказом появляется кнопка <b>«🎟 За купон»</b>: юнит строится бесплатно и мгновенно — без ГС, сырья, очереди и лимитов цехов. 1 купон = 1 юнит.</div>
-    <div class="fm-form-row">
-      <label class="fm-lbl">Купоны</label>
+  const rows = AD_SHARD_KINDS.map(([key, lbl, ic, hint]) => {
+    const cur = adShardCur(e, key);
+    const add = [1, 5, 10].map(v => `<button class="btn btn-gh btn-xs" onclick="adDeltaCoupons('${key}',${v})">+${v}</button>`).join('');
+    const sub = [1, 5].map(v => `<button class="btn btn-rd btn-xs" onclick="adDeltaCoupons('${key}',${-v})">−${v}</button>`).join('');
+    return `<div class="fm-form-row">
+      <label class="fm-lbl" title="${hint}">${ic} ${lbl}</label>
       <div class="fm-field-row">
-        <input class="fi fm-num-input" id="fm-coupons" type="number" value="${cur}" min="0">
+        <input class="fi fm-num-input" id="fm-shard-${key}" type="number" value="${cur}" min="0">
         ${add}${sub}
+        <button class="btn btn-gd btn-xs" onclick="adSetCoupons('${key}')">💾</button>
       </div>
-    </div>
-    <button class="btn btn-gd" onclick="adSetCoupons()" style="margin-top:8px">💾 Установить значение</button>
+    </div>`;
+  }).join('');
+  return `<div class="fm-form">
+    <div class="fm-section-title">Осколки цикла</div>
+    <div class="fm-dim" style="font-size:11px;margin:4px 0 10px">Пока у державы есть осколки, в «🏭 Строительство вооружённых сил» рядом с обычным заказом появляется кнопка <b>«◈ За осколок»</b>: юнит строится бесплатно и мгновенно — без ГС, сырья, очереди и лимитов цехов. 1 осколок = 1 юнит. На класс сначала тратятся <b>классовые</b> осколки этого класса, нехватка добирается из <b>универсальных</b>.</div>
+    ${rows}
   </div>`;
 }
 
-async function adSetCoupons() {
-  const raw = parseInt(document.getElementById('fm-coupons')?.value);
+async function adSetCoupons(key) {
+  const raw = parseInt(document.getElementById('fm-shard-' + key)?.value);
   if (isNaN(raw)) { toast('Введите число', 'err'); return; }
-  await adWriteCoupons(raw);
+  await adWriteCoupons(key, raw);
 }
-async function adDeltaCoupons(delta) {
+async function adDeltaCoupons(key, delta) {
   const e = adEntry(AD.sel); if (!e || !e.eco) return;
-  await adWriteCoupons((parseInt(e.eco.build_coupons) || 0) + delta);
+  await adWriteCoupons(key, adShardCur(e, key) + delta);
 }
-async function adWriteCoupons(want) {
+async function adWriteCoupons(key, want) {
   if (!AD.sel || AD.busy) return;
   const e = adEntry(AD.sel); if (!e || !e.eco) return;
-  const old = Math.max(0, parseInt(e.eco.build_coupons) || 0);
+  const meta = AD_SHARD_KINDS.find(k => k[0] === key) || [key, key, '◈'];
+  const old = adShardCur(e, key);
   const val = Math.max(0, Math.round(want));
   if (val === old) { toast('Без изменений', 'inf'); return; }
   AD.busy = true;
   try {
-    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, { build_coupons: val });
-    e.eco.build_coupons = val;
-    adLogGrant({ type: 'build_coupons', label: 'Купоны на строительство', delta: val - old, from: old, to: val });
-    toast(`🎟 Купоны: ${adNum(val)}`, 'ok'); adPaint();
+    let patch;
+    if (key === 'uni') {
+      patch = { build_coupons: val };
+      e.eco.build_coupons = val;
+    } else {
+      const s = Object.assign({}, e.eco.cycle_shards || {});
+      s[key] = val;
+      patch = { cycle_shards: s };
+      e.eco.cycle_shards = s;
+    }
+    await dbPatch('faction_economy', `faction_id=eq.${encodeURIComponent(AD.sel)}`, patch);
+    adLogGrant({ type: 'build_coupons', label: `Осколки цикла · ${meta[1]}`, shard: key, delta: val - old, from: old, to: val });
+    toast(`${meta[2]} ${meta[1]}: ${adNum(val)}`, 'ok'); adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }
 }

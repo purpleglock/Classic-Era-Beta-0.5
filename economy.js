@@ -306,8 +306,8 @@ function ecSpyCalc(op, agentIds, targetFid) {
 const EC_RES_PRICE = { common: 2, uncommon: 10, rare: 50, epic: 200, legendary: 1200 };
 const EC_RES_RATE = { common: 14, uncommon: 9, rare: 5, epic: 4, legendary: 2 };   // темп ОДНОЙ постройки (до баффов и слотов); ×1.75 2026-07-12
 // КАП: планетарный потолок добычи ресурса /сут по РАЗМЕРУ месторождения (×баффы, жёсткий предел 70) — зеркало _mine_cap; ×1.75 2026-07-12.
-const EC_MINE_CAP = { 'колоссально': 35, 'очень много': 28, 'много': 21, 'умеренно': 14, 'мало': 9, 'следы': 4 };
-function ecMineCap(amt) { const b = EC_MINE_CAP[String(amt || '').trim()]; return Math.min(70, Math.max(1, Math.round((b == null ? 14 : b) * ecFactionMods().mine))); }
+const EC_MINE_CAP = { 'колоссально': 14, 'очень много': 11, 'много': 8, 'умеренно': 6, 'мало': 4, 'следы': 2 };
+function ecMineCap(amt) { const b = EC_MINE_CAP[String(amt || '').trim()]; return Math.min(70, Math.max(1, Math.round((b == null ? 6 : b) * ecFactionMods().mine))); }
 const EC_DEST_CUT = 0.5;   // доля получателя каравана — зеркало живой economy_accrue (round(shipped*price*0.5))
 // Шанс нападения на КАЖДУЮ угрозу на пути (зеркало economy_accrue): с конвоем меньше.
 const EC_THREAT_CHANCE = { ancient: { escort: 0.65, bare: 0.80 }, pirates: { escort: 0.40, bare: 0.80 } };
@@ -4123,7 +4123,11 @@ function ecTabOverview() {
   // 🌌 Галактические эффекты — разовые выплаты/поборы Ассамблеи и Поэмы (леджер сервера
   // galactic_ledger, _galactic_ledger.sql). Раньше падали в казну «молча» — казна росла
   // сильнее сводки; теперь каждая правка видна строкой.
-  const _gl = Array.isArray(EC.gledger) ? EC.gledger : [];
+  // 🛑 ПАУЗА Ассамблеи и Поэмы до 03.08 — главная игровая активность меняется раз в неделю.
+  // Пока идёт пауза, галактические эффекты (законы Ассамблеи / итоги Поэмы) не показываем
+  // ни блоком, ни виталом. Снять паузу — вернуть `ASM_POEM_PAUSED = false`.
+  const ASM_POEM_PAUSED = true;
+  const _gl = (!ASM_POEM_PAUSED && Array.isArray(EC.gledger)) ? EC.gledger : [];
   const _gl7 = _gl.filter(r => (Date.now() - new Date(r.created_at).getTime()) < 7 * 864e5);
   const _glSum = Math.round(_gl7.reduce((a, r) => a + (+r.d_gc || 0), 0));
   const _glRow = r => {
@@ -4859,7 +4863,9 @@ async function ecStarsPhotosLoad() {
 // а не один клон. Легаси-формат (arts[t] = одна строка) поддержан.
 // Для «Видения» архив видений приоритетнее; арты — фолбэк.
 // Нет арта — рисованная иконка.
-let _ecStarsPhotoSalt = Math.floor(Math.random() * 997);
+// ⚠ РАЗДАЧА ДЕТЕРМИНИРОВАНА (см. _ecStarsArtMap): k-й вскрытый узел типа берёт
+// k-й арт своего списка — «явная пара» из админки, без случайного перемешивания.
+// (раньше здесь жил случайный salt — из-за него картинки «прыгали» по узлам.)
 // ── Арты призов лежат ФАЙЛАМИ: assets/rift/<тип>_1.webp, _2, _3… (png/jpg/gif
 // тоже). Никакой БД: раскладка переживает деплой сама, как арт ассамблеи.
 // Файлов нет — фолбэк на легаси-список из site_settings, дальше на иконку.
@@ -4934,25 +4940,28 @@ function ecStarsPhotoClose() {
   document.removeEventListener('keydown', _ecStarsLbxKey);
 }
 function _ecStarsLbxKey(e) { if (e.key === 'Escape') { e.stopPropagation(); ecStarsPhotoClose(); } }
-// Раздача артов на поле: {индекс клетки → url}. Уникальность считается ПО ВСЕМУ
-// полю, а не внутри типа: один файл может лежать в списках разных типов, и
-// счётчик на тип всё равно выдавал бы одну картинку дважды. Здесь берётся
-// первый неиспользованный арт своего типа; список кончился — тип остаётся без
-// арта (рисованная иконка), но клонов на поле нет.
+// Раздача артов на поле: {индекс клетки → url}. СЛУЧАЙНО, БЕЗ ПОРЯДКА:
+// клетка берёт арт своего типа по псевдослучайному хэшу от индекса клетки —
+// никакой привязки «1-й арт → 1-й узел». Сид детерминирован по индексу клетки,
+// поэтому арт клетки один и тот же в раунде и в финале, но по списку скачет.
+// Список пуст — клетка остаётся с рисованной иконкой.
 function _ecStarsArtMap(entries) {
-  const map = {}, used = new Set(), n = {};
+  const map = {};
   (entries || []).forEach(e => {
     const t = e.t;
     const list = (t === 'photo' && Array.isArray(_ecStarsPhotosCfg.list) && _ecStarsPhotosCfg.list.length)
       ? _ecStarsPhotosCfg.list : _ecStarsArtList(t);
     if (!list.length) return;
-    const base = _ecStarsPhotoSalt + (n[t] = (n[t] || 0) + 1) - 1;
-    for (let k = 0; k < list.length; k++) {
-      const u = list[(base + k) % list.length];
-      if (u && !used.has(u)) { used.add(u); map[+e.i] = u; return; }
-    }
+    // Хэш индекса клетки → индекс в списке артов (стабильно, но «вразнобой»).
+    const h = ((+e.i + 1) * 2654435761) >>> 0;
+    const u = list[h % list.length];
+    if (u) map[+e.i] = u;
   });
   return map;
+}
+// Имя узла = общее имя типа (маяк/эхо/видение). Отдельных имён по слотам нет.
+function _ecStarsNodeName(t) {
+  return (EC_STARS_TYPES[t] || EC_STARS_TYPES.dust).nm;
 }
 // Псевдослучайная рябь узла (сеется от индекса клетки — каждый узел
 // выглядит по-своему, как кусок галактической карты).
@@ -5153,8 +5162,9 @@ function ecStarsPatronBlock(patron, cost) {
 // Открытый узел / закрытый узел (общая разметка для сетки и поля-карты).
 function _ecStarsCellOpen(o, ph, style) {
   const t = EC_STARS_TYPES[o.t] || EC_STARS_TYPES.dust;
-  const view = ph ? ` onclick="ecStarsPhotoOpen('${esc(ph)}','${esc(t.nm)}')"` : '';
-  return `<button class="ec-stars-cell is-open ec-stars-c-${t.cls}${ph ? ' has-photo' : ''}" type="button"${ph ? '' : ' disabled'} ${style}${view} title="${esc(t.nm)} · +${ecNum(o.win)} ГС${ph ? ' · всмотреться' : ''}">${ph ? `<img class="ec-stars-cell-ph" src="${esc(ph)}" alt="">` : `<span class="ec-stars-cell-ic">${t.ic}</span>`}<span class="ec-stars-cell-w">+${ecNum(o.win)}</span></button>`;
+  const nm = _ecStarsNodeName(o.t, o.s);   // своё имя узла (или общее имя типа)
+  const view = ph ? ` onclick="ecStarsPhotoOpen('${esc(ph)}','${esc(nm)}')"` : '';
+  return `<button class="ec-stars-cell is-open ec-stars-c-${t.cls}${ph ? ' has-photo' : ''}" type="button"${ph ? '' : ' disabled'} ${style}${view} title="${esc(nm)} · +${ecNum(o.win)} ГС${ph ? ' · всмотреться' : ''}">${ph ? `<img class="ec-stars-cell-ph" src="${esc(ph)}" alt="">` : `<span class="ec-stars-cell-ic">${t.ic}</span>`}<span class="ec-stars-cell-w">+${ecNum(o.win)}</span></button>`;
 }
 function _ecStarsCellClosed(i, sec, style, patch) {
   return `<button class="ec-stars-cell" type="button" id="ec-stars-c${i}" ${style} onclick="ecStarsPick(${i})">${patch}<span class="ec-stars-cell-sec">${esc(sec)}</span><span class="ec-stars-cell-dot">${EC_STARS_ICONS.scope}</span></button>`;
@@ -5184,9 +5194,10 @@ function ecStarsRoundBody(s) {
   }
   const log = (s.opened || []).map(o => {
     const t = EC_STARS_TYPES[o.t] || EC_STARS_TYPES.dust;
+    const nm = _ecStarsNodeName(o.t, o.s);
     const ph = arts[+o.i];
-    const vw = ph ? ` onclick="ecStarsPhotoOpen('${esc(ph)}','${esc(t.nm)}')" title="Всмотреться в видение"` : '';
-    return `<div class="ec-stars-log-i ec-stars-c-${t.cls}${ph ? ' is-view' : ''}"${vw}><span>${ph ? `<img class="ec-stars-log-ph" src="${esc(ph)}" alt="">` : `<i class="ec-stars-log-ic">${t.ic}</i>`}${esc(t.nm)}</span><b>+${ecNum(o.win)} ГС</b></div>`;
+    const vw = ph ? ` onclick="ecStarsPhotoOpen('${esc(ph)}','${esc(nm)}')" title="Всмотреться в видение"` : '';
+    return `<div class="ec-stars-log-i ec-stars-c-${t.cls}${ph ? ' is-view' : ''}"${vw}><span>${ph ? `<img class="ec-stars-log-ph" src="${esc(ph)}" alt="">` : `<i class="ec-stars-log-ic">${t.ic}</i>`}${esc(nm)}</span><b>+${ecNum(o.win)} ГС</b></div>`;
   }).join('');
   return `<div class="ec-stars">
     ${_ecStarsHud(s, left)}
@@ -5202,22 +5213,23 @@ function ecStarsFinaleBody(fin) {
   const jackHit = opened.has(+fin.jackpot_i);
   const f = _ecStarsField();
   // Арты финала — только на узлы игрока: чужие лежат рубашкой вверх и арт не
-  // тратят. Один арт не встречается дважды.
-  const order = [];
-  for (let i = 0; i < 49; i++) if ((board[i] || {}).t && opened.has(i)) order.push({ i, t: board[i].t });
+  // тратят. Порядок — ПО ВСКРЫТИЮ (как в раунде), чтобы арт узла в финале был
+  // тем же, что игрок видел, когда его нащупал (см. _ecStarsArtMap).
+  const order = (fin.opened || []).map(o => ({ i: +o.i, t: o.t }));
   const finArts = _ecStarsArtMap(order);
   const revealCell = (i, style) => {
     const c = board[i] || { t: 'dust' };
     const t = EC_STARS_TYPES[c.t] || EC_STARS_TYPES.dust;
     const mine = opened.get(i);
     const isJack = i === +fin.jackpot_i;
+    const nm = _ecStarsNodeName(c.t, c.s);   // своё имя узла
     // Арт раскрыт на всём поле, но ВСМОТРЕТЬСЯ можно только в свой узел:
     // чужие образы остаются картинкой поля, лайтбокс их не открывает.
     // Свой узел — настоящий образ. Чужой — рубашка типа (образ не заработан).
     const back = mine ? '' : _ecStarsBack(c.t);
     const ph = mine ? finArts[i] : (back || '');
     const own = !!(ph && mine);
-    const view = own ? ` onclick="ecStarsPhotoOpen('${esc(ph)}','${esc(t.nm)}')" title="${esc(t.nm)} · всмотреться"` : ` title="${esc(t.nm)}"`;
+    const view = own ? ` onclick="ecStarsPhotoOpen('${esc(ph)}','${esc(nm)}')" title="${esc(nm)} · всмотреться"` : ` title="${esc(nm)}"`;
     return `<div class="ec-stars-cell is-reveal ec-stars-c-${t.cls}${mine ? ' is-mine' : ''}${isJack ? ' is-jack' : ''}${ph ? ' has-photo' : ''}${back ? ' is-back' : ''}${own ? ' is-view' : ''}" ${style}${view}>
       ${ph ? `<img class="ec-stars-cell-ph" src="${esc(ph)}" alt="">` : `<span class="ec-stars-cell-ic">${t.ic}</span>`}${mine ? `<span class="ec-stars-cell-w">+${ecNum(mine.win)}</span>` : ''}
     </div>`;
@@ -5232,6 +5244,8 @@ function ecStarsFinaleBody(fin) {
     field = `<div class="ec-stars-grid is-final">${grid}</div>`;
   }
   const won = +fin.won || 0, spent = +fin.spent || 0, net = won - spent;
+  // Награда-осколок за набор (2 маяка / 3 видения) — сервер вернул fin.shard.
+  const shardBanner = fin.shard ? `<div class="ec-stars-reward">◈ <b>Осколок цикла: ${esc(EC_SHIP_CLASS_LABELS[fin.shard] || fin.shard)}</b> — ${fin.shard_from === 'quasar' ? 'собраны 2 маяка' : 'собраны 3 видения'}. Бесплатная мгновенная постройка одного корабля этого класса в «🏭 Строительство».</div>` : '';
   const verdict = jackHit
     ? 'На вас посмотрели в ответ...'
     : `Смотрели <b>вот из этого узла</b>. Резонанс записан — в следующий раз погрузимся точнее.`;
@@ -5239,7 +5253,7 @@ function ecStarsFinaleBody(fin) {
   // видения) — колонка сбоку от поля. Клик — образ во весь экран.
   const mineShots = (fin.opened || []).map(o => ({
     ph: finArts[+o.i], win: +o.win || 0,
-    nm: (EC_STARS_TYPES[o.t] || EC_STARS_TYPES.dust).nm,
+    nm: _ecStarsNodeName(o.t, o.s),
   })).filter(x => x.ph);
   const gallery = mineShots.length ? `<div class="ec-stars-gal">
     <div class="ec-stars-gal-h">Ваша добыча · ${mineShots.length}</div>
@@ -5251,6 +5265,7 @@ function ecStarsFinaleBody(fin) {
     <div class="ec-stars-final ${jackHit ? 'is-hit' : ''}">
       <div class="ec-stars-final-h">${jackHit ? 'НЕ СТОИТ БЕСПОКОИТЬ ДРЕВНИХ' : 'Транс окончен'}</div>
       <div class="ec-stars-final-v">${verdict}</div>
+      ${shardBanner}
     </div>
     <div class="ec-stars-fin-row${gallery ? ' has-gal' : ''}">${field}${gallery}</div>
     <div class="ec-stars-hud">
@@ -5271,7 +5286,6 @@ async function ecStarsStart() {
   if ((+(EC.eco && EC.eco.gc) || 0) < cost) { toast('Не хватает ГС: нужно ' + ecNum(cost), 'err'); return; }
   if (!ecPatronFree() && !ecPatronFid()) { toast('Вверьте державу духовному патрону — без верующего хора Разлом не отзовётся', 'err'); return; }
   _ecStarsBusy = true; _ecStarsFinale = null;
-  _ecStarsPhotoSalt = Math.floor(Math.random() * 997);   // новый транс — новая колода видений
   // Куда тянет медиумов, решает Разлом: сектор транса выбирается случайно
   // и фиксируется здесь на весь сеанс.
   _ecStarsSectorLive = _ecStarsRandomSector();
@@ -5298,7 +5312,18 @@ async function ecStarsPick(i) {
     EC.stargaze = { active: !r.done, stake: s.stake, extras: s.extras, picks: r.picks, mult: r.mult,
       opened: r.opened || [], feed };
     if (EC.eco && r.gc != null) EC.eco.gc = +r.gc;
-    if (r.done && r.last) _ecStarsFinale = { ...r.last, feed };   // финал: раскрыть весь Разлом + ГДЕ БЫЛ ДЖЕКПОТ
+    if (r.done && r.last) {
+      _ecStarsFinale = { ...r.last, feed };   // финал: раскрыть весь Разлом + ГДЕ БЫЛ ДЖЕКПОТ
+      // Награда-осколок: начисляем в EC.eco локально, чтобы вкладка постройки
+      // сразу увидела осколок без полной перезагрузки; плюс тост.
+      if (r.last.shard) {
+        const eco = EC.eco || (EC.eco = {});
+        eco.cycle_shards = Object.assign({}, eco.cycle_shards || {});
+        eco.cycle_shards[r.last.shard] = (parseInt(eco.cycle_shards[r.last.shard]) || 0) + 1;
+        const lbl = EC_SHIP_CLASS_LABELS[r.last.shard] || r.last.shard;
+        toast(`◈ Осколок цикла: ${lbl} — за ${r.last.shard_from === 'quasar' ? '2 маяка' : '3 видения'}. Бесплатная постройка корабля этого класса!`, 'ok');
+      }
+    }
   } catch (e) {
     if (cell) cell.classList.remove('is-opening');
     toast(ecErr(e.message), 'err');
@@ -5729,17 +5754,52 @@ function ecCapMeter(icon, label, used, cap, opts) {
 // ── Вкладка 2: «Строительство вооружённых сил» — производство и очередь ──
 // МАРШ: дивизии НЕ строятся экономикой. Строятся ЮНИТЫ (наземка/авиация) в рамках
 // пропускной способности построек; армии формируются из готовых юнитов (как флоты).
-// КУПОНЫ: сколько бесплатных мгновенных закладок выдала администрация
-// (faction_economy.build_coupons, _build_coupons.sql). 1 купон = 1 юнит.
-function ecCoupons() { return Math.max(0, parseInt(EC.eco && EC.eco.build_coupons) || 0); }
+// ОСКОЛКИ ЦИКЛА: бесплатные мгновенные закладки от администрации.
+// Универсальный осколок (faction_economy.build_coupons) годится на любой класс,
+// классовые осколки (faction_economy.cycle_shards) — только на свой класс. У
+// ФЛОТА класс = класс корабля (corvette/frigate/…/dreadnought), поэтому осколок
+// корвета не построит дредноут. 1 осколок = 1 юнит. _build_coupons.sql.
+const EC_SHIP_CLASS_LABELS = { corvette: 'Корвет', frigate: 'Фрегат', destroyer: 'Эсминец', cruiser: 'Крейсер', battleship: 'Линкор', dreadnought: 'Дредноут' };
+function ecUniShards() { return Math.max(0, parseInt(EC.eco && EC.eco.build_coupons) || 0); }
+// Все классовые осколки как {ключ: n>0}. Ключи флота — классы корабля.
+function ecShards() {
+  const s = (EC.eco && EC.eco.cycle_shards) || {};
+  const out = {};
+  for (const k in s) { const n = Math.max(0, parseInt(s[k]) || 0); if (n) out[k] = n; }
+  return out;
+}
+// Классы корабля, по которым бывают осколки флота (для сводки-баннера).
+function ecShipShardKinds() { return Object.keys(EC_SHIP_CLASS_LABELS); }
+// Сколько осколков можно потратить на данный класс = классовые + универсальные.
+function ecShardAvail(kind) { return (ecShards()[kind] || 0) + ecUniShards(); }
+function ecCoupons() { return ecUniShards(); } // совместимость
+// Кнопка «◈ За осколок» для класса kind (пусто, если нечем платить).
+function ecCoupBtnHtml(kind, onclick) {
+  const av = ecShardAvail(kind);
+  return av > 0
+    ? `<button class="btn btn-gh btn-sm" title="Бесплатно и мгновенно. Тратит осколки цикла: сначала классовые, затем универсальные. Доступно для класса: ${ecNum(av)}" onclick="${onclick}">◈ За осколок (${ecNum(av)})</button>`
+    : '';
+}
+// Кнопка осколка для ВЫБРАННОГО в форме корабля: класс берём из его data.class.
+function ecShipCoupBtnHtml() {
+  const sel = ecId('ec-ship-sel');
+  const ships = (EC.designs || []).filter(d => d.category === 'ship');
+  const u = ships.find(d => d.id === (sel && sel.value)) || ships[0];
+  if (!u) return '';
+  const cls = (u.data && u.data.class) || 'corvette';
+  return ecCoupBtnHtml(cls, 'ecProduceShip(true)');
+}
 
 function ecTabMilBuild() {
   const caps = ecCaps(), use = ecPendingUse();
-  const coup = ecCoupons();
-  // Кнопка «за купон» рядом с обычным заказом — выбор игрока при каждой закладке.
-  const coupBtn = (onclick) => coup > 0
-    ? `<button class="btn btn-gh btn-sm" title="Бесплатно и мгновенно, спишет купоны по числу юнитов. Осталось: ${ecNum(coup)}" onclick="${onclick}">🎟 За купон (${ecNum(coup)})</button>`
-    : '';
+  const sh = ecShards(), uni = ecUniShards();
+  const shipShardTotal = ecShipShardKinds().reduce((a, k) => a + (sh[k] || 0), 0);
+  const totalShards = uni + Object.values(sh).reduce((a, n) => a + n, 0);
+  // Разбивка осколков флота по классам корабля — для баннера.
+  const shipShardBreak = ecShipShardKinds().filter(k => sh[k] > 0)
+    .map(k => `🚀 ${EC_SHIP_CLASS_LABELS[k]}: <b>${ecNum(sh[k])}</b>`).join(' · ');
+  // Кнопка «за осколок» рядом с обычным заказом — своя для каждого класса.
+  const coupBtn = (kind, onclick) => ecCoupBtnHtml(kind, onclick);
   const ships = EC.designs.filter(d => d.category === 'ship');
   const groundAll = (EC.designs || []).filter(d => d.category === 'ground');
   const infUnits = groundAll.filter(ecIsInfDesign);            // пехота → Центр Подготовки
@@ -5758,7 +5818,7 @@ function ecTabMilBuild() {
       <select id="ec-${kind}-sel" onchange="ecUnitBillUpd('${kind}')">${list.map(d => `<option value="${esc(d.id)}">${esc(d.name)} — ${ecNum((d.summary && d.summary.cost) || 0)} ГС</option>`).join('')}</select>
       <input type="number" id="ec-${kind}-qty" value="1" min="1" class="ec-prod-qty" oninput="ecUnitBillUpd('${kind}')">
       <button class="btn btn-gd btn-sm" onclick="ecProduceUnit('${kind}')">＋ Заказать</button>
-      ${coupBtn(`ecProduceUnit('${kind}',true)`)}
+      ${coupBtn(kind, `ecProduceUnit('${kind}',true)`)}
     </div>
     <div id="ec-${kind}-bill" class="ec-ship-bill">${ecUnitBillHtml(list[0], 1)}</div>
     <div class="ec-meter-row">
@@ -5779,7 +5839,7 @@ function ecTabMilBuild() {
       <select id="ec-ship-sel" onchange="ecShipBillUpd()">${ships.map(d => `<option value="${esc(d.id)}">${esc(d.name)} — ${ecNum((d.summary && d.summary.cost) || 0)} ГС</option>`).join('')}</select>
       <input type="number" id="ec-ship-qty" value="1" min="1" class="ec-prod-qty" oninput="ecShipBillUpd()">
       <button class="btn btn-gd btn-sm" onclick="ecProduceShip()">＋ Заложить</button>
-      ${coupBtn('ecProduceShip(true)')}
+      <span id="ec-ship-coup">${ecShipCoupBtnHtml()}</span>
     </div>
     <div id="ec-ship-bill" class="ec-ship-bill">${ecShipBillHtml(ships[0].id, 1)}</div>
     <div class="ec-meter-row">
@@ -5793,7 +5853,7 @@ function ecTabMilBuild() {
     : `<div class="ec-empty" style="padding:8px">Очередь пуста.</div>`;
 
   const infLine = 'Объём производства зависит от слотов военных зданий: пехота → <b>Центр Подготовки</b>, техника → <b>Военный завод</b>, авиация → <b>Аэрокосмический завод</b>, корабли → <b>Корабельная верфь</b>.';
-  return `${ecIntro('🏭', 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, заказ — здесь. Дивизии больше не строятся: постройте юниты и <b>сформируйте из них армию</b> — она встанет гарнизоном на колонии и перебрасывается в режиме карты «Звёздный марш».', [infLine, 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».', 'Гарнизон сверх порога (20 юнитов или население/10) давит на благополучие колонии.'])}${coup > 0 ? `<div class="ec-cap" style="margin-bottom:10px">🎟 <b>Купоны администрации: ${ecNum(coup)}</b> — постройка за купон бесплатна и мгновенна (без ГС, сырья, очереди и лимитов цехов). 1 купон = 1 юнит.</div>` : ''}<div class="ec-section-title">Пехота <span class="ec-hint">— ${caps.robot ? 'робо-сборка на Военном Заводе (×3)' : 'набор идёт в Центре Подготовки'}</span></div>
+  return `${ecIntro('🏭', 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, заказ — здесь. Дивизии больше не строятся: постройте юниты и <b>сформируйте из них армию</b> — она встанет гарнизоном на колонии и перебрасывается в режиме карты «Звёздный марш».', [infLine, 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».', 'Гарнизон сверх порога (20 юнитов или население/10) давит на благополучие колонии.'])}${totalShards > 0 ? `<div class="ec-cap" style="margin-bottom:10px">◈ <b>Осколки цикла: ${ecNum(totalShards)}</b> — постройка за осколок бесплатна и мгновенна (без ГС, сырья, очереди и лимитов цехов). 1 осколок = 1 юнит; на класс сначала тратятся его осколки, затем универсальные. Флот — по классам корабля: осколок корвета не построит дредноут.<div class="ec-hint" style="margin-top:4px">Универсальные: <b>${ecNum(uni)}</b>${shipShardBreak ? ' · ' + shipShardBreak : (shipShardTotal ? '' : '')} · ✈ Авиация: <b>${ecNum(sh.aviation || 0)}</b> · 🛠 Техника: <b>${ecNum(sh.ground || 0)}</b> · 🪖 Пехота: <b>${ecNum(sh.inf || 0)}</b></div></div>` : ''}<div class="ec-section-title">Пехота <span class="ec-hint">— ${caps.robot ? 'робо-сборка на Военном Заводе (×3)' : 'набор идёт в Центре Подготовки'}</span></div>
     ${unitForm(infUnits, 'inf')}
     <div class="ec-section-title">Наземная техника <span class="ec-hint">— юниты строятся на Военном Заводе</span></div>
     ${unitForm(groundUnits, 'ground')}
@@ -5826,7 +5886,7 @@ async function ecProduceUnit(kind, coupon) {
   const sel = ecId('ec-' + kind + '-sel'); if (!sel || !sel.value) { toast('Выберите проект', 'err'); return; }
   const qty = Math.max(1, parseInt(ecId('ec-' + kind + '-qty')?.value) || 1);
   const u = ecUnitPick(kind, sel.value); if (!u) { toast('Проект не найден', 'err'); return; }
-  if (coupon) { await ecProduceCoupon(u, qty); return; }
+  if (coupon) { await ecProduceCoupon(u, qty, kind); return; }
   const caps = ecCaps(), use = ecPendingUse();
   if (kind === 'aviation') {
     if (!caps.hasAirfield) { toast('Нужен Аэрокосмический Завод', 'err'); return; }
@@ -7116,7 +7176,8 @@ async function ecLoadWorkerPlan(force) {
   if (EC.workerPlanLoading) return;
   if (EC.workerPlan && !force) return;
   EC.workerPlanLoading = true;
-  try { EC.workerPlan = await ecRpc('resource_worker_plan'); EC.workerPlanErr = null; }
+  try { EC.workerPlan = await ecRpc('resource_worker_plan'); EC.workerPlanErr = null;
+        EC.rarPolicy = (EC.workerPlan && EC.workerPlan.rarity_policy) || {}; }  // сервер = авторитет
   catch (e) { EC.workerPlanErr = ecErr(e.message); EC.workerPlan = EC.workerPlan || null; }
   finally { EC.workerPlanLoading = false; ecPaintCabinet(); }
 }
@@ -7128,6 +7189,57 @@ function ecResPriority(systemId, on) {
   EC.workerPlan = null;  // план устарел → перезапросим после действия
   ecRpcAct('resource_priority_set_system', { p_system: systemId, p_on: on },
     on ? 'Система приоритетна — рабочие пойдут туда первыми со следующего тика' : 'Приоритет снят');
+}
+// Свернуть/развернуть ОДНУ систему без полной перерисовки (сохраняем фокус/поиск).
+function ecResToggle(sysKey) {
+  EC.resCollapsed = EC.resCollapsed || {};
+  const now = !EC.resCollapsed[sysKey];
+  EC.resCollapsed[sysKey] = now;
+  document.querySelectorAll('.ec-res-sys').forEach(el => {
+    if (el.getAttribute('data-syskey') !== sysKey) return;
+    const deps = el.querySelector('.ec-res-deps');
+    if (deps) deps.style.display = now ? 'none' : '';
+    el.classList.toggle('ec-res-collapsed', now);
+    const btn = el.querySelector('.ec-res-caret');
+    if (btn) btn.textContent = now ? '▸' : '▾';
+  });
+}
+// Свернуть/развернуть ВСЕ системы разом (перерисовываем панель).
+function ecResCollapseAll(collapse) {
+  EC.resCollapsed = EC.resCollapsed || {};
+  (EC.workerPlan?.systems || []).forEach(s => {
+    EC.resCollapsed[String(s.system_id ?? s.name ?? '')] = !!collapse;
+  });
+  ecPaintCabinet();
+}
+// Живой фильтр систем по имени/ресурсу — прячем/показываем без перерисовки.
+function ecResFilter(q) {
+  EC.resSearch = q || '';
+  const needle = (q || '').trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll('#ec-res-syslist .ec-res-sys').forEach(el => {
+    const hay = el.getAttribute('data-search') || '';
+    const hit = !needle || hay.includes(needle);
+    el.style.display = hit ? '' : 'none';
+    if (hit) shown++;
+  });
+  const nm = ecId('ec-res-nomatch');
+  if (nm) nm.style.display = shown ? 'none' : '';
+}
+// Циклировать состояние редкости и отправить всю политику на сервер.
+function ecResRarCycle(r) {
+  const cur = EC.rarPolicy || EC.workerPlan?.rarity_policy || {};
+  const off = new Set(cur.off || []), prio = new Set(cur.prio || []);
+  const st = ecRarState(cur, r);
+  // обычно → приоритет → выкл → обычно
+  if (st === 'on') { prio.add(r); off.delete(r); }
+  else if (st === 'prio') { prio.delete(r); off.add(r); }
+  else { off.delete(r); prio.delete(r); }
+  const pol = { off: [...off], prio: [...prio] };
+  EC.rarPolicy = pol;                       // оптимистично — мгновенная перерисовка чипов
+  EC.workerPlan = null;                     // план устарел → перезапросим
+  ecRpcAct('resource_rarity_policy_set', { p_policy: pol },
+    'Политика добычи по редкости обновлена — вступит в силу со следующего тика');
 }
 // Круглая планета-СФЕРА по colony_id. planet_<look>.png — это РАЗВЁРТКА текстуры,
 // её нельзя показывать плоским <img> (выйдет «квадрат в кружке»): наматываем на
@@ -7197,9 +7309,7 @@ function ecResourcesPanel() {
     const fill = Math.round((+s.fill || 0) * 100);
     const pr = !!s.priority;
     const sid = jsq(String(s.system_id ?? ''));
-    const btn = pr
-      ? `<button class="btn btn-gh btn-xs" title="Снять приоритет (без возврата ГС)" onclick="ecResPriority('${sid}',false)">★ приоритет · снять</button>`
-      : `<button class="btn btn-gd btn-xs" title="Гарантировать заполнение рабочими в следующем тике" onclick="ecResPriority('${sid}',true)">☆ Приоритет · ${ecNum(+p.priority_cost || EC_PRIORITY_COST)} ГС</button>`;
+    const btn = `<button class="btn ${pr ? 'btn-gh' : 'btn-gd'} btn-xs" title="Настроить приоритет: система и/или редкость ресурсов" onclick="ecResPrioMenu('${sid}')">${pr ? '★ Приоритет ⚙' : '☆ Приоритет ⚙'}</button>`;
     const depRow = dp => {
       const dfill = Math.round((+dp.fill || 0) * 100);
       const cov = !!dp.covered;
@@ -7258,20 +7368,98 @@ function ecResourcesPanel() {
         <div class="ec-res-coltree">${g.list.map(depRow).join('')}</div>
       </div>`;
     }).join('') : '<div class="ec-hint" style="padding:2px 12px">Нет залежей в системе.</div>';
-    return `<div class="ec-res-sys${pr ? ' ec-res-prio' : ''}">
+    // Строка поиска: имя системы + названия всех её ресурсов (нижний регистр).
+    const searchStr = ((s.name || '') + ' ' +
+      (Array.isArray(s.deposits) ? s.deposits.map(dp => dp.res || '').join(' ') : '')).toLowerCase();
+    const sysKey = String(s.system_id ?? s.name ?? '');
+    const collapsed = !!(EC.resCollapsed && EC.resCollapsed[sysKey]);
+    return `<div class="ec-res-sys${pr ? ' ec-res-prio' : ''}${collapsed ? ' ec-res-collapsed' : ''}" data-search="${esc(searchStr)}" data-syskey="${esc(sysKey)}">
       <div class="ec-q-row ec-res-syrow">
+        <button class="ec-res-caret" title="Свернуть/развернуть систему" onclick="ecResToggle('${jsq(sysKey)}')">${collapsed ? '▸' : '▾'}</button>
         <span class="ec-res-syname">${pr ? '★ ' : ''}<b>${esc(s.name || 'Система')}</b></span>
         <span class="ec-res-sywork" title="Рабочих в системе / суммарный спрос залежей">👷 ${ecNum(+s.workers)} / ${ecNum(+s.demand)}</span>
         <span class="ec-res-sybar"><span class="ec-res-bar"><span class="ec-res-bar-in" style="width:${Math.min(100, fill)}%;background:${barCol(fill)}"></span></span><i>${fill}%</i></span>
         <span class="ec-res-syact">${btn}</span>
       </div>
-      <div class="ec-res-deps">${deps}</div>
+      <div class="ec-res-deps"${collapsed ? ' style="display:none"' : ''}>${deps}</div>
     </div>`;
   }).join('') : '<div class="ec-hint">Нет систем с залежами. Как только у колонии появятся залежи — рабочие начнут их копать (домик не обязателен, он только бустит).</div>';
 
-  return `${intro}${deferred}
-    ${rows}
+  const anyCollapsed = systems.some(s => EC.resCollapsed && EC.resCollapsed[String(s.system_id ?? s.name ?? '')]);
+  const toolbar = systems.length ? `<div class="ec-res-toolbar">
+      <span class="ec-res-search">🔎 <input type="text" id="ec-res-search" placeholder="Поиск системы или ресурса…"
+        value="${esc(EC.resSearch || '')}" oninput="ecResFilter(this.value)" autocomplete="off"></span>
+      <button class="btn btn-gh btn-xs" onclick="ecResCollapseAll(${anyCollapsed ? 'false' : 'true'})">${anyCollapsed ? '▾ Развернуть всё' : '▸ Свернуть всё'}</button>
+    </div>` : '';
+
+  return `${intro}${deferred}${toolbar}
+    <div id="ec-res-syslist">${rows}</div>
+    <div class="ec-hint" id="ec-res-nomatch" style="display:none;margin:8px 0">Ничего не найдено по запросу.</div>
     <div class="ec-hint" style="margin-top:10px"><button class="btn btn-gh btn-xs" onclick="ecLoadWorkerPlan(true)">↻ Обновить план</button></div>`;
+}
+// Панель «Приоритет добычи по редкости»: каждый чип циклирует состояние
+// обычн→приоритет(★)→выкл(✗)→обычн. Авторитет — сервер (resource_rarity_policy_set);
+// EC.rarPolicy — зеркало p.rarity_policy для мгновенной перерисовки.
+const EC_RAR_SEQ = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+function ecRarState(pol, r) {
+  pol = pol || {};
+  if ((pol.off || []).includes(r)) return 'off';
+  if ((pol.prio || []).includes(r)) return 'prio';
+  return 'on';
+}
+function ecRarChips() {
+  const pol = EC.rarPolicy || EC.workerPlan?.rarity_policy || {};
+  return EC_RAR_SEQ.map(r => {
+    const st = ecRarState(pol, r);
+    const lbl = ecRarLabel(r);
+    const mark = st === 'prio' ? '★' : st === 'off' ? '✗' : '•';
+    const ttl = st === 'prio' ? 'Приоритет: рабочие идут сюда первыми' : st === 'off' ? 'Отключено: залежи этой редкости НЕ копаются' : 'Обычная добыча';
+    return `<button class="ec-rar-chip ec-rar-${st}" title="${esc(ttl)} — клик, чтобы сменить" onclick="ecResPrioMenuRar('${r}')">${mark} ${esc(lbl)}</button>`;
+  }).join('');
+}
+// ── Всплывающее меню «Настроить приоритет» (кнопка на системе) ──
+function ecCloseResMenu() {
+  const m = document.getElementById('ec-prio-modal');
+  if (m) m.remove();
+  EC._prioSid = null;
+}
+function ecResPrioMenu(sid) {
+  ecCloseResMenu();
+  const p = EC.workerPlan; if (!p) return;
+  EC._prioSid = sid;
+  const ov = document.createElement('div');
+  ov.className = 'ec-prio-modal'; ov.id = 'ec-prio-modal';
+  ov.onclick = e => { if (e.target === ov) ecCloseResMenu(); };
+  ov.innerHTML = ecResPrioMenuBody(sid);
+  document.body.appendChild(ov);
+}
+function ecResPrioMenuBody(sid) {
+  const p = EC.workerPlan || {};
+  const sys = (p.systems || []).find(s => String(s.system_id ?? s.name ?? '') === sid) || { name: '' };
+  const pr = !!sys.priority;
+  const cost = ecNum(+(p.priority_cost) || EC_PRIORITY_COST);
+  const sysBtn = pr
+    ? `<button class="btn btn-gh btn-sm" onclick="ecCloseResMenu();ecResPriority('${jsq(sid)}',false)">★ Снять приоритет системы</button>`
+    : `<button class="btn btn-gd btn-sm" onclick="ecCloseResMenu();ecResPriority('${jsq(sid)}',true)">☆ Сделать приоритетной · ${cost} ГС</button>`;
+  return `<div class="ec-prio-box" onclick="event.stopPropagation()">
+    <div class="ec-prio-hd">Приоритет добычи<button class="ec-prio-x" title="Закрыть" onclick="ecCloseResMenu()">✕</button></div>
+    <div class="ec-prio-sec">
+      <div class="ec-prio-lbl">🪐 Система «${esc(sys.name || 'без имени')}»</div>
+      ${sysBtn}
+      <div class="ec-hint" style="margin-top:5px">Гарантирует, что эта система наберёт рабочих ПЕРВОЙ со следующего тика.</div>
+    </div>
+    <div class="ec-prio-sec">
+      <div class="ec-prio-lbl">⛏ По редкости ресурсов <i>(для всей державы)</i></div>
+      <div class="ec-rar-chips" id="ec-prio-rar">${ecRarChips()}</div>
+      <div class="ec-hint" style="margin-top:5px">Клик по редкости: обычно → <b>★ приоритет</b> (копают первыми) → <b>✗ не копать</b> вовсе.</div>
+    </div>
+  </div>`;
+}
+// Клик по чипу редкости внутри меню: сменить состояние и перерисовать чипы на месте.
+function ecResPrioMenuRar(r) {
+  ecResRarCycle(r);                       // оптимистично меняет EC.rarPolicy + шлёт RPC
+  const box = document.getElementById('ec-prio-rar');
+  if (box) box.innerHTML = ecRarChips();
 }
 async function ecFlowApply(i) {
   const n = (EC._flowRows || [])[i]; if (!n) return;
@@ -12508,6 +12696,8 @@ function ecShipBillHtml(unitId, qty) {
 function ecShipBillUpd() {
   const box = ecId('ec-ship-bill'), sel = ecId('ec-ship-sel'); if (!box || !sel) return;
   box.innerHTML = ecShipBillHtml(sel.value, Math.max(1, parseInt(ecId('ec-ship-qty')?.value) || 1));
+  // Осколок флота классовый — при смене корабля пересобираем кнопку под его класс.
+  const cb = ecId('ec-ship-coup'); if (cb) cb.innerHTML = ecShipCoupBtnHtml();
 }
 function ecDivBillHtml(divId, qty) {
   return ecUnitBillHtml(EC.designs.find(d => d.id === divId && d.category === 'division'), qty);
@@ -12523,7 +12713,7 @@ async function ecProduceShip(coupon) {
   const sel = ecId('ec-ship-sel'); if (!sel || !sel.value) { toast('Выберите корабль', 'err'); return; }
   const qty = Math.max(1, parseInt(ecId('ec-ship-qty')?.value) || 1);
   const u = EC.designs.find(d => d.id === sel.value && d.category === 'ship'); if (!u) { toast('Проект не найден', 'err'); return; }
-  if (coupon) { await ecProduceCoupon(u, qty); return; }
+  if (coupon) { await ecProduceCoupon(u, qty, (u.data && u.data.class) || 'corvette'); return; }
   const caps = ecCaps(), use = ecPendingUse();
   if (!caps.hasShipyard) { toast('Нужна Корабельная Верфь', 'err'); return; }
   if (use.ships + qty > caps.ships) { toast(`Лимит верфи на ход: ${use.ships}/${caps.ships} кораблей — откройте слоты или ждите хода`, 'err'); return; }
@@ -12540,16 +12730,18 @@ async function ecProduceShip(coupon) {
   finally { EC.busy = false; }
 }
 
-// КУПОН: единая закладка «за купон» для кораблей/наземки/авиации/пехоты.
-// Юнит появляется в «⚔ Вооружённые силы» сразу, очередь не задействуется.
-async function ecProduceCoupon(u, qty) {
-  const have = ecCoupons();
-  if (have < qty) { toast(`Купонов не хватает: нужно ${ecNum(qty)}, есть ${ecNum(have)}`, 'err'); return; }
-  if (!confirm(`Построить «${u.name}» ×${qty} за ${ecNum(qty)} купон(ов)?\n\nБесплатно и мгновенно. Останется купонов: ${ecNum(have - qty)}.`)) return;
+// ОСКОЛОК ЦИКЛА: единая закладка «за осколок» для кораблей/наземки/авиации/пехоты.
+// kind — класс осколка (ship/aviation/ground/inf): тратим классовые, добор из
+// универсальных. Юнит появляется в «⚔ Вооружённые силы» сразу, минуя очередь.
+async function ecProduceCoupon(u, qty, kind) {
+  const have = ecShardAvail(kind);
+  if (have < qty) { toast(`Осколков цикла не хватает: нужно ${ecNum(qty)}, доступно ${ecNum(have)}`, 'err'); return; }
+  if (!confirm(`Построить «${u.name}» ×${qty} за ${ecNum(qty)} осколок(ов) цикла?\n\nБесплатно и мгновенно. Останется доступно: ${ecNum(have - qty)}.`)) return;
   EC.busy = true;
   try {
     const r = await ecRpc('economy_produce_coupon', { p_unit_id: u.id, p_qty: qty });
-    toast(`🎟 Готово: ${u.name} ×${qty} · осталось купонов ${ecNum((r && r.coupons_left) || 0)}`, 'ok');
+    const left = r ? ((+r.class_left || 0) + (+r.uni_left || 0)) : 0;
+    toast(`◈ Готово: ${u.name} ×${qty} · осталось осколков для класса ${ecNum(left)}`, 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }

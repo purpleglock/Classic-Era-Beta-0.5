@@ -406,11 +406,14 @@ revoke insert, update, delete on public.faction_budget from anon, authenticated;
 
 -- ── 2) Хелперы ──────────────────────────────────────────────
 -- Ползунки фракции (дефолт 2/2/2/2/2, если ещё не настраивали).
+-- ⚠ industry_eff — 8-й столбец (добавлен ALTER'ом в _resource_rework.sql, лаг-снапшот
+-- «Снабжения»). Fallback-строка ДОЛЖНА иметь то же число полей, что и таблица,
+-- иначе row(...)::faction_budget падает «too few columns». Дефолт = 2, как industry.
 create or replace function public._budget_row(p_fid text)
 returns public.faction_budget language sql stable as $$
   select coalesce(
     (select b from public.faction_budget b where b.faction_id = p_fid),
-    row(p_fid, 2,2,2,2,2, now())::public.faction_budget);
+    row(p_fid, 2,2,2,2,2, now(), 2)::public.faction_budget);
 $$;
 
 -- Население державы = сумма живого населения колоний (бэкфилл: ячейки×50).
@@ -609,13 +612,13 @@ $$;
 create or replace function public._mine_cap(p_amt text)
 returns numeric language sql immutable as $$
   select case btrim(coalesce(p_amt,''))
-    when 'колоссально'  then 35
-    when 'очень много'  then 28
-    when 'много'        then 21
-    when 'умеренно'     then 14
-    when 'мало'         then 9
-    when 'следы'        then 4
-    else 14 end           -- нет данных о богатстве → среднее
+    when 'колоссально'  then 14
+    when 'очень много'  then 11
+    when 'много'        then 8
+    when 'умеренно'     then 6
+    when 'мало'         then 4
+    when 'следы'        then 2
+    else 6 end            -- нет данных о богатстве → среднее
 $$;
 
 -- ── 5a) Ручной выбор «что добывать» ОТКЛЮЧЁН ────────────────
