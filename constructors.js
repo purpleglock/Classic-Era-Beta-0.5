@@ -582,15 +582,23 @@ function cnCompStatsRows(info) {
     }
     case 'weapon':  push('Урон', cnNum(o.dmg)); if (E) push('Потребление', cnNum(o.energy || 0) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
     case 'module': {
-      if (E && o.energy) push('Потребление', cnNum(o.energy) + ' E');
-      if (o.capacity) push('Грузовместимость', (o.capacity > 0 ? '+' : '') + cnNum(o.capacity));
-      if (o.crewRequired) push('Экипаж', cnNum(o.crewRequired));
+      // потребление энергии: KV-модули хранят его в power (адаптер зеркалит в energy)
+      const eUse = +o.energy || +o.power || 0;
+      if (E && eUse) push('Потребление', cnNum(eUse) + ' E');
+      if (o.capacity) push('Грузоподъёмность', (o.capacity > 0 ? '+' : '') + cnNum(o.capacity));
+      if (o.crewRequired) push('Требует экипаж', cnNum(o.crewRequired));
+      if (o.crewProvided) push('Даёт экипаж', '+' + cnNum(o.crewProvided));
+      if (+o.visibility > 0) push('Заметность', '+' + cnNum(o.visibility));
+      if (+o.shieldBoost > 0) push('Щит', '+' + Math.round(o.shieldBoost * 100) + '%');
+      if (+o.damageBoost > 0) push('Урон', '+' + Math.round(o.damageBoost * 100) + '%');
+      if (+o.hp > 0) push('Прочность', '+' + cnNum(o.hp) + ' HP');
       const cb = o.combat || {};
       if (cb.pd) push('ПРО', 'сбивает ' + Math.round(cb.pd * 100) + '% ракет');
       if (cb.jam) push('РЭБ', '−' + cb.jam + ' к сенсорам врага (радиус 5)');
       if (cb.dejam) push('Контр-РЭБ', 'снимает до ' + cb.dejam + ' помех со своих (радиус 5)');
-      if (cb.interdict) push('Интердикция', 'враг не вызывает подкрепления, пока модуль жив');
-      if (cb.stabil) push('Стабилизация', 'своя сторона игнорирует интердикцию врага');
+      if (cb.interdict) push('Интердикция', 'враг не вызывает подкрепления, пока модуль жив (только линкор/дредноут/станция)');
+      if (cb.stabil) push('Стабилизация', 'своя сторона игнорирует интердикцию врага (только линкор/дредноут/станция)');
+      if (cb.ftl) push('FTL-прыжок', 'корабль вызывается подкреплением сквозь вражескую интердикцию');
       if (cb.stealth) push('Маскировка', '+' + cb.stealth + ' к скрытности');
       if (cb.sensor) push('Сенсор', '+' + cb.sensor + ' к захвату радара');
       if (cb.hangar) push('Авиакрылья', '+' + Math.floor(cb.hangar / 300) + ' запуск(а) в бою');
@@ -1743,8 +1751,17 @@ function cnPartCardInner(type, g, idx) {
   const slug = cnGroupSlug(CN.cat, type, g);
   const img = cnImgTag(cnImgPath(CN.cat, type, slug, idx), 'cn-comp-img');
   let chips;
-  if (type === 'weapon') chips = cnChip('урон', cnNum(item.dmg)) + (E && item.energy ? cnChip('E', cnNum(item.energy)) : '') + cnGsChip(item.cost);
-  else chips = (E && item.energy ? cnChip('E', cnNum(item.energy)) : '') + cnGsChip(item.cost);
+  const itemE = +item.energy || +item.power || 0;
+  if (type === 'weapon') chips = cnChip('урон', cnNum(item.dmg)) + (E && itemE ? cnChip('E', cnNum(itemE)) : '') + cnGsChip(item.cost);
+  else {
+    const cb = item.combat || {};
+    chips = (E && itemE ? cnChip('E', cnNum(itemE)) : '')
+      + (item.capacity ? cnChip('груз', (item.capacity > 0 ? '+' : '') + cnNum(item.capacity)) : '')
+      + (cb.interdict ? cnChip('⛔', 'интердикция') : '')
+      + (cb.stabil ? cnChip('⚓', 'стабилизатор') : '')
+      + (cb.ftl ? cnChip('⇢', 'FTL-прыжок') : '')
+      + cnGsChip(item.cost);
+  }
   const desc = cnDesc(CN.cat, type, g, idx);
   return `${img}<div class="cn-comp-b"><div class="cn-comp-nm">${esc(item.name)}</div><div class="cn-comp-st">${chips}</div>${desc ? `<div class="cn-comp-ds">${esc(desc)}</div>` : ''}</div>`;
 }

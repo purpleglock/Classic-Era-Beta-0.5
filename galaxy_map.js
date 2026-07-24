@@ -1752,7 +1752,11 @@ function gmOpenPanel(sys) {
   });
   // мои флоты (мобильные соединения), стоящие (idle) в этой системе
   (GM.fleets || []).filter(fl => fl.status === 'idle' && fl.system_id === sys.id).forEach(fl => {
-    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:rgba(120,200,235,.9)"></span><span class="gm-col-nm">Флот${fl.name ? ': ' + esc(fl.name) : ''}</span><span class="gm-col-ty">${+fl.ships || 0} кор. · клик по значку слева</span></div>`);
+    if (fl.is_station) {
+      defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:rgba(120,200,235,.9)"></span><span class="gm-col-nm">🛰 Станция${fl.name ? ': ' + esc(fl.name) : ''}</span><span class="gm-col-ty">неподвижна · держит рубеж</span></div>`);
+    } else {
+      defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:rgba(120,200,235,.9)"></span><span class="gm-col-nm">Флот${fl.name ? ': ' + esc(fl.name) : ''}</span><span class="gm-col-ty">${+fl.ships || 0} кор. · клик по значку слева</span></div>`);
+    }
   });
   // ── Постройка заграждений: нужно присутствие в системе (зеркало _hazard_presence) ──
   const hasPresence = !!(GM.myFid && (sys.faction === GM.myFid
@@ -2283,9 +2287,9 @@ function gmRosterUnits() {
     ready: sh.status === 'idle' && !!sh.can_fire, readyLabel: 'залп готов', sysName,
   }));
   (GM.fleets || []).forEach(fl => out.push({
-    type: 'fleet', id: fl.id, icon: '⚓', name: fl.name || 'Флот',
+    type: 'fleet', id: fl.id, icon: fl.is_station ? '🛰' : '⚓', name: fl.is_station ? (fl.name || 'Станция') : (fl.name || 'Флот'),
     status: fl.status, sysId: fl.system_id, destId: fl.dest_sys, arrive: fl.arrive_at,
-    extra: (+fl.ships || 0) + ' кор.', ready: false, sysName,
+    extra: fl.is_station ? 'станция · неподвижна' : ((+fl.ships || 0) + ' кор.'), ready: false, sysName,
   }));
   (GM.armies || []).forEach(a => out.push({   // МАРШ: армии-гарнизоны
     type: 'army', id: a.id, icon: '🪖', name: a.name || 'Армия',
@@ -2433,6 +2437,19 @@ function gmOpenFleetCmd(id) {
   const el = document.getElementById('gm-opcmd'); if (!el) return;
   const sysName = (GM.systems.find(s => s.id === fl.system_id) || {}).name || fl.system_id;
   const comp = (fl.composition || []).map(c => `${esc(c.unit_name || '?')} ×${c.qty}`).join(', ');
+  // СТАНЦИЯ: неподвижная иконка — ни переброски, ни возврата, ни рейдов
+  if (fl.is_station) {
+    el.innerHTML = `<div class="gm-opcmd-card">
+      <button class="gm-close" onclick="gmCloseFleetCmd()">✕</button>
+      <div class="gm-opcmd-title">🛰 Станция${fl.name ? ' «' + esc(fl.name) + '»' : ''}</div>
+      <div class="gm-opcmd-sub">в системе ${esc(sysName)} · неподвижна</div>
+      ${comp ? `<div class="gm-opcmd-hint">${comp}</div>` : ''}
+      <div class="gm-opcmd-hint">Станция закреплена в системе: её нельзя перебрасывать. В бою держит рубеж, но не двигается по доске. Снять — распустить (вернётся в состав).</div>
+      <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmFleetCmdDisband()">✕ Снять станцию</button>
+    </div>`;
+    el.classList.remove('gm-hidden');
+    return;
+  }
   const fuel = gmFleetFuelFmt(gmFleetFuelCost(fl.composition, 1));
   el.innerHTML = `<div class="gm-opcmd-card">
       <button class="gm-close" onclick="gmCloseFleetCmd()">✕</button>
@@ -6134,7 +6151,7 @@ function gmmBuildDefense() {
     // отблеск, бейдж с числом кораблей. Не путать с носителем (справа) и Гиперпейсер.
     const fleetCol = [120, 200, 235];
     (GM.fleets || []).forEach(fl => pushShip(fl, {
-      fleet: true, side: 'left', col: fleetCol,
+      fleet: true, side: 'left', col: fleetCol, station: !!fl.is_station,
       ships: +fl.ships || 0, canRecall: !!fl.can_recall
     }));
     // МАРШ: армии — гарнизоны на колониях (idle у звезды колонии, transit по трассам).
@@ -6596,7 +6613,7 @@ function gmmPaintDefense(ctx) {
           } else {
             known = d.intel !== false && d.ships != null; shipN = d.ships;
           }
-          const txt = '' + (known ? shipN : '?');
+          const txt = d.station ? '🛰' : ('' + (known ? shipN : '?'));
           // Численность — БЕЗ плашки: тонкая светящаяся цифра прямо под кораблём, с
           // тёмной обводкой для читаемости над любым фоном (HUD-подпись, не «знак»).
           ctx.save();
@@ -6661,6 +6678,7 @@ function gmmPaintDefense(ctx) {
           ctx.fillStyle = d.enemy ? 'rgba(255,180,170,0.98)' : (d.mza ? 'rgba(255,210,200,0.98)' : (d.fleet ? 'rgba(205,232,255,0.98)' : 'rgba(222,236,255,0.96)'));
           const enemyTag = d.enemy && d.facName ? ` · ${d.facName}` : '';
           const fleetLbl = d.army ? (stacked ? `Армии · ${n}` : '🪖 Армия')
+            : d.station ? '🛰 Станция'
             : d.enemy ? 'Чужой флот' + enemyTag : (stacked ? `Флоты · ${n}` : 'Флот');
           const lbl = d.mza ? (d.enemy ? '☣ Чужой гиперкрейсер · обнаружен' + enemyTag : (d.canFire ? '☣ Гиперпейсер · залп' : '☣ Гиперпейсер'))
             : (d.fleet ? fleetLbl : (d.canDeploy ? '🚀 носитель · развернуть' : '🚀 носитель'));

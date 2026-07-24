@@ -723,7 +723,10 @@ const armorElements = {
 //   hangar  — очки авиакрыльев: каждые 300 очков = 1 запуск авиакрыла в бою
 //   dejam   — контр-РЭБ: снимает до N вражеского jam со своих наблюдателей в радиусе 5
 //   interdict — интердикция: пока носитель жив, враг НЕ может вызывать подкрепления
+//               (модули с interdict/stabil доступны только линкорам и дредноутам)
 //   stabil  — анти-интердикция: пока носитель жив, своя сторона игнорирует интердикцию врага
+//   ftl     — свой гипердвигатель: корабль прыгает подкреплением СКВОЗЬ вражескую
+//             интердикцию (заградитель врага его не держит)
 const modulesLibrary = {
     empty: { name: 'Нет выбранных модулей', price: 0, category: 'Демонстрационный модуль', power: 0, speed: 0, protectiveField: 0, modul: 0, crewRequired: 0, capacity: 0, crewProvided: 0, shieldBoost: 0, hp: 0, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 } },
 
@@ -739,7 +742,7 @@ const modulesLibrary = {
     heli_platform: { name: 'Вертолет', price: 0, category: 'Десант', visibility: 0, power: 0, capacity: -100, crewRequired: 0, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 }, lor: 'Корабли и авиация - братья на века.' },
 
     // --- ОБОРУДОВАНИЕ ---
-    ftl_ramon: { name: '«FTL Гипердвигатель «Рамонь»', price: 30000000, category: 'Конструкционные модули', visibility: 0, power: 300, capacity: 0, crewProvided: 0, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 20, staarvis: 30 }, lor: 'Двигатель, использующий переработанный Старвис. Стратегический прыжковый привод, в тактическом бою не участвует.' },
+    ftl_ramon: { name: '«FTL Гипердвигатель «Рамонь»', price: 30000000, category: 'Конструкционные модули', visibility: 0, power: 300, capacity: 0, crewProvided: 0, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 20, staarvis: 30 }, combat: { ftl: 1 }, lor: 'Двигатель, использующий переработанный Старвис. Собственный прыжковый привод пробивает вражескую интердикцию: корабль можно вызвать подкреплением даже под FTL-заградителем противника.' },
     living_module: { name: 'Складской отсек', price: 900000, category: 'Конструкционные модули', visibility: 0, power: 50, capacity: 10, crewProvided: 0, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 40, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 }, lor: 'Модуль для транспортировки грузов. Добавляет грузоподъёмности корпусу.' },
     docking_port: { name: 'Стыковочный шлюз', price: 6000000, category: 'Конструкционные модули', visibility: 0, power: 250, capacity: 100, crewRequired: 0, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 60, coloredmetall: 20, rudametall: 0, kristall: 0, staarvis: 0 }, lor: 'Причальный узел для перегрузки в космосе: серьёзная прибавка к грузовместимости.' },
     transponder: { name: 'Ренегатский транспондер', price: 15000000, category: 'Конструкционные модули', power: 500, crewRequired: 1, visibility: 0, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 0, coloredmetall: 10, rudametall: 0, kristall: 40, staarvis: 0 }, combat: { stealth: 3 }, lor: 'Имитирует сигнатуры гражданских бортов: +3 к скрытности в бою — радарам врага труднее взять корабль на захват.' },
@@ -792,32 +795,32 @@ const modules_ids = {
     mla: ['empty', 'crew_extra'],
     corvette: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'transponder', 'sidis_defense',
-        'ew_blackdomain', 'ew_graywave', 'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov',
+        'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov',
         'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
     ],
     destroyer: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'transponder', 'sidis_defense', 'tocka',
-        'ew_blackdomain', 'ew_graywave', 'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov',
+        'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov',
         'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
     ],
     supportCarrier: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'hangar', 'transponder', 'sidis_defense', 'tocka',
-        'ew_blackdomain', 'ew_graywave', 'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov',
+        'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov',
         'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
     ],
     mediumCruiser: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'transponder', 'sidis_defense', 'tocka',
-        'ew_blackdomain', 'ew_graywave', 'ew_starker', 'ew_altaan', 'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
+        'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
         'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
     ],
     hyperCruiser: [
         'empty','living_module', 'docking_port', 'transponder', 'sidis_defense', 'tocka',
-        'ew_blackdomain', 'ew_graywave', 'ew_starker', 'ew_altaan', 'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
+        'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
         'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
     ],
     multiroleCarrier: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'hangar', 'transponder', 'sidis_defense', 'tocka',
-        'ew_blackdomain', 'ew_graywave', 'ew_starker', 'ew_altaan', 'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
+        'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
         'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
     ],
     battleship: [

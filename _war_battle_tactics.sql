@@ -77,6 +77,7 @@ alter table public.battle_units add column if not exists dejam    int not null d
 alter table public.battle_units add column if not exists eccm     int not null default 0;          -- помехозащищённость радара (вычитается из глушения)
 alter table public.battle_units add column if not exists interdict boolean not null default false; -- интердиктор: враг не вызывает подкрепления
 alter table public.battle_units add column if not exists stabil   boolean not null default false;  -- стабилизатор: своя сторона игнорирует интердикцию
+alter table public.battle_units add column if not exists ftl      boolean not null default false;  -- свой гипердвигатель: прыгает подкреплением сквозь вражескую интердикцию
 alter table public.battle_units add column if not exists wings    int not null default 0;          -- запас авиакрыльев (ангары)
 alter table public.battle_units add column if not exists is_wing  boolean not null default false;  -- сам является авиакрылом
 
@@ -289,6 +290,7 @@ begin
   sm  := coalesce(u.summary, '{}'::jsonb);
   cls := nullif(u.data->>'class','');
   spd := greatest(1, least(40, round(coalesce((sm->>'speed')::numeric, 4))::int));
+  if cls = 'ss13' then spd := 0; end if;   -- станция неподвижна: не двигается на поле боя
   cab := public._cn_catalog();
 
   -- орудийные группы: (сектор, дальность) → суммарный урон
@@ -351,6 +353,9 @@ begin
     'eccm',    greatest(0, coalesce((sm->'mods'->>'eccm')::int, 0)),
     'interdict', coalesce((sm->'mods'->>'interdict')::bool, false),
     'stabil',    coalesce((sm->'mods'->>'stabil')::bool, false),
+    'ftl',       coalesce((sm->'mods'->>'ftl')::bool, false),
+    'cargo',   greatest(0, coalesce((sm->>'cargo')::numeric, 0)),
+    'crew',    greatest(0, coalesce((sm->>'crew')::numeric, 0)),
     'wings',   greatest(0, floor(coalesce((sm->'mods'->>'hangar')::numeric, 0) / 300))::int,
     -- стойкости брони проекта (алхимия): гасят урон по типу орудия
     'resist',  coalesce(sm->'armor_resist',
@@ -413,7 +418,7 @@ begin
     insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
         hp, max_hp, armor, shield, max_shield, dmg, speed, rng,
         facing, straight, sensor, stealth, wpn, resist, pd, jam, wings,
-        dejam, eccm, interdict, stabil)
+        dejam, eccm, interdict, stabil, ftl)
       values (p_battle, me, sd, uid, st->>'name', st->>'cls', px, py,
         (st->>'hp')::numeric, (st->>'hp')::numeric, (st->>'armor')::numeric,
         (st->>'shield')::numeric, (st->>'shield')::numeric, (st->>'dmg')::numeric,
@@ -422,7 +427,8 @@ begin
         st->'wpn', st->'resist',
         coalesce((st->>'pd')::numeric,0), coalesce((st->>'jam')::int,0), coalesce((st->>'wings')::int,0),
         coalesce((st->>'dejam')::int,0), coalesce((st->>'eccm')::int,0),
-        coalesce((st->>'interdict')::bool,false), coalesce((st->>'stabil')::bool,false));
+        coalesce((st->>'interdict')::bool,false), coalesce((st->>'stabil')::bool,false),
+        coalesce((st->>'ftl')::bool,false));
     n := n + 1;
     if n > public._bt_cap() then raise exception 'в бой можно вывести не больше % кораблей', public._bt_cap(); end if;
   end loop;
@@ -447,6 +453,7 @@ begin
   if u.id is null then raise exception 'no such unit'; end if;
   if u.fid is distinct from me then raise exception 'это не ваш корабль'; end if;
   if not u.alive then raise exception 'корабль уничтожен'; end if;
+  if u.cls = 'ss13' or u.speed <= 0 then raise exception 'станция неподвижна — она не двигается на поле боя'; end if;
   if u.moved then raise exception 'этот корабль уже ходил в этом ходу'; end if;
   total := coalesce(jsonb_array_length(p_path), 0);
   if total < 1 then raise exception 'пустой маршрут'; end if;
@@ -725,10 +732,15 @@ begin
   b  := public._bt_require_turn(p_battle, me);
   sd := public._bt_side(p_battle, me);
 
-  -- интердикция: вражеский заградитель FTL блокирует подкрепления,
-  -- пока жив (снимается своим стабилизатором «Альтаан» или уничтожением носителя)
-  if public._bt_interdicted(p_battle, sd) then
-    raise exception 'подкрепление заблокировано полем интердикции: у врага работает FTL-заградитель. Уничтожьте его носителя или выведите корабль со стабилизационным полем «Альтаан»';
+  st := public._bt_stats(p_unit_id);
+  if st is null then raise exception 'проект корабля не найден'; end if;
+
+  -- интердикция: вражеский заградитель FTL блокирует подкрепления, пока жив
+  -- (снимается своим стабилизатором «Альтаан», уничтожением носителя ИЛИ если у
+  --  самого корабля подкрепления есть гипердвигатель — он прыгает сквозь заграждение)
+  if public._bt_interdicted(p_battle, sd)
+     and not coalesce((st->>'ftl')::bool, false) then
+    raise exception 'подкрепление заблокировано полем интердикции: у врага работает FTL-заградитель. Уничтожьте его носителя, выведите корабль со стабилизационным полем «Альтаан» или вызовите корабль с собственным FTL-гипердвигателем';
   end if;
 
   -- вызов стоит ЦЕЛОГО хода: на початом ходу (после любой активации) нельзя
@@ -750,8 +762,6 @@ begin
     raise exception 'подкрепления нет на поле боя — его нужно сначала привезти в систему';
   end if;
 
-  st := public._bt_stats(p_unit_id);
-  if st is null then raise exception 'проект корабля не найден'; end if;
   fc := case when sd = 'attacker' then 0 else 3 end;
 
   px := case when sd = 'attacker' then 0 else public._bt_w() - 1 end;
@@ -766,7 +776,7 @@ begin
   insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
       hp, max_hp, armor, shield, max_shield, dmg, speed, rng, moved, fired, acted,
       facing, straight, sensor, stealth, wpn, resist, pd, jam, wings,
-      dejam, eccm, interdict, stabil)
+      dejam, eccm, interdict, stabil, ftl)
     values (p_battle, me, sd, p_unit_id, st->>'name', st->>'cls', px, py,
       (st->>'hp')::numeric, (st->>'hp')::numeric, (st->>'armor')::numeric,
       (st->>'shield')::numeric, (st->>'shield')::numeric, (st->>'dmg')::numeric,
@@ -775,7 +785,8 @@ begin
       st->'wpn', st->'resist',
       coalesce((st->>'pd')::numeric,0), coalesce((st->>'jam')::int,0), coalesce((st->>'wings')::int,0),
       coalesce((st->>'dejam')::int,0), coalesce((st->>'eccm')::int,0),
-      coalesce((st->>'interdict')::bool,false), coalesce((st->>'stabil')::bool,false));
+      coalesce((st->>'interdict')::bool,false), coalesce((st->>'stabil')::bool,false),
+      coalesce((st->>'ftl')::bool,false));
 
   perform public._bt_log(p_battle, format('%s вызывает подкрепление: %s', public._war_nm(me), st->>'name'));
   perform public.battle_end_turn(p_battle);
@@ -884,6 +895,7 @@ begin
             'sensor', u.sensor, 'stealth', u.stealth, 'flash', u.flash,
             'pd', u.pd, 'jam', u.jam, 'wings', u.wings, 'is_wing', u.is_wing,
             'dejam', u.dejam, 'eccm', u.eccm, 'interdict', u.interdict, 'stabil', u.stabil,
+            'ftl', u.ftl,
             'locked', true,
             'wpn', case when u.side = sd then coalesce(u.wpn, '[]'::jsonb) else null end,
             'moved', u.moved, 'fired', u.fired, 'acted', u.acted)

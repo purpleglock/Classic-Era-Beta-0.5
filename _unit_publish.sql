@@ -211,7 +211,7 @@ declare
   m_armor numeric; m_atk numeric; m_dal numeric;
   -- боевые эффекты модулей (ПРО/РЭБ/маскировка/сенсор/ангары) → summary.mods
   mod_pd numeric := 0; mod_jam int := 0; mod_stealth int := 0; mod_sensor int := 0; mod_hangar numeric := 0;
-  mod_dejam int := 0; mod_interdict bool := false; mod_stabil bool := false;
+  mod_dejam int := 0; mod_interdict bool := false; mod_stabil bool := false; mod_ftl bool := false;
   radar_eccm int := 0;   -- помехозащищённость выбранного радара
   d_count numeric := 0; sa numeric := 0; st numeric := 0; sd numeric := 0;
   ma numeric := 0; mt numeric := 0; md numeric := 0; pct numeric;
@@ -347,7 +347,14 @@ begin
     mod_dejam   := greatest(mod_dejam, coalesce((mob->'combat'->>'dejam')::int,0));
     mod_interdict := mod_interdict or coalesce((mob->'combat'->>'interdict')::int,0) > 0;
     mod_stabil    := mod_stabil    or coalesce((mob->'combat'->>'stabil')::int,0) > 0;
+    mod_ftl       := mod_ftl       or coalesce((mob->'combat'->>'ftl')::int,0) > 0;
   end loop;
+
+  -- ЗАСЛОН: модули интердикции / стабилизатора — только линкор и дредноут
+  -- (зеркало modules_ids: раньше их ставили на что угодно и заваливали ими бои)
+  if (mod_interdict or mod_stabil) and k not in ('battleship','dreadnought','ss13') then
+    raise exception 'модули интердикции и стабилизатора доступны только линкорам, дредноутам и станциям';
+  end if;
 
   -- ангары (только корабли)
   if hasHangars then
@@ -437,6 +444,7 @@ begin
       'pd', least(0.6, mod_pd), 'jam', mod_jam, 'stealth', mod_stealth,
       'sensor', mod_sensor, 'hangar', mod_hangar,
       'dejam', mod_dejam, 'interdict', mod_interdict, 'stabil', mod_stabil,
+      'ftl', mod_ftl,
       'eccm', radar_eccm),
     'className', cls->>'name', 'typeName', coalesce(typeObj->>'name',''));
 end$$;

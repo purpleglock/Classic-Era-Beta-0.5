@@ -5463,18 +5463,34 @@ function ecTabForces() {
 // колонии и управляется на ГАЛАКТИЧЕСКОЙ КАРТЕ (клик по значку флота слева от
 // звезды): переброска / возврат на базу / роспуск. Здесь — только формирование
 // и список флотов с роспуском.
+// Класс дизайна по unit_id (для отделения станций от обычных кораблей).
+function ecUnitClass(unitId) { const d = (EC.designs || []).find(x => x.id === unitId); return (d && d.data && d.data.class) || ''; }
+function ecIsStation(unitId) { return ecUnitClass(unitId) === 'ss13'; }
+
 function ecFleetSectionHtml() {
   // свободные корабли состава (те, что не заняты в уже сформированных флотах —
-  // их сервер уже снял из unit_production, поэтому EC.roster показывает остаток)
-  const stock = {};
+  // их сервер уже снял из unit_production, поэтому EC.roster показывает остаток).
+  // Станции (класс ss13) во флот НЕ идут — им отдельный блок «Разместить станцию».
+  const stock = {}, stStock = {};
   (EC.roster || []).filter(r => r.category === 'ship' && r.unit_id).forEach(r => {
-    const k = r.unit_id;
-    if (!stock[k]) stock[k] = { unit_id: r.unit_id, name: r.unit_name, qty: 0 };
-    stock[k].qty += r.qty || 0;
+    const k = r.unit_id, bag = ecIsStation(k) ? stStock : stock;
+    if (!bag[k]) bag[k] = { unit_id: r.unit_id, name: r.unit_name, qty: 0 };
+    bag[k].qty += r.qty || 0;
   });
   const ships = Object.values(stock).filter(s => s.qty > 0).sort((a, b) => (b.qty || 0) - (a.qty || 0));
+  const stations = Object.values(stStock).filter(s => s.qty > 0).sort((a, b) => (b.qty || 0) - (a.qty || 0));
   const colSysIds = [...new Set((EC.colonies || []).map(c => c.system_id))];
   const fleets = EC.fleets || [];
+
+  // Блок размещения станций отдельной иконкой на карте
+  const stationBlock = (stations.length && colSysIds.length) ? `
+    <div class="ec-section-title" style="margin-top:14px">🛰 Разместить станцию <span class="ec-hint">— неподвижной иконкой в системе колонии; не транспортируется</span></div>
+    ${stations.map(s => `<div class="ec-q-row">
+        <span class="ec-r-name">🛰 ${esc(s.name)} <span class="ec-hint">готово ×${ecNum(s.qty)}</span></span>
+        <select class="ec-station-sys ec-prod-qty" data-uid="${esc(s.unit_id)}" style="width:auto">${colSysIds.map(sid => `<option value="${esc(sid)}">${esc(ecSysName(sid))}</option>`).join('')}</select>
+        <button class="btn btn-gd btn-sm" onclick="ecStationDeploy('${esc(s.unit_id)}')">Выставить</button>
+      </div>`).join('')}
+    <div class="ec-cap">Станция встаёт в системе значком 🛰 и держит рубеж при нападении, но <b>не двигается</b> ни по карте, ни на поле боя. Снять — распустить на карте (вернётся в состав).</div>` : '';
 
   const pick = ships.length
     ? ships.map(s => `<div class="ec-q-row">
@@ -5513,7 +5529,22 @@ function ecFleetSectionHtml() {
 
   return `<div class="ec-section-title">⚓ Сформировать флот <span class="ec-hint">— из кораблей состава; управление на карте</span></div>
     ${formBlock}
+    ${stationBlock}
     ${fleets.length ? `<div class="ec-sub-title" style="margin-top:10px">Мои флоты · ${fleets.length}</div>${fleetRows}` : ''}`;
+}
+
+// Выставить станцию (класс ss13) на карту отдельной неподвижной иконкой.
+async function ecStationDeploy(uid) {
+  if (EC.busy) return;
+  const sel = document.querySelector(`.ec-station-sys[data-uid="${uid}"]`);
+  if (!sel || !sel.value) { toast('Выберите систему с колонией', 'err'); return; }
+  EC.busy = true;
+  try {
+    await ecRpc('station_deploy', { p_system_id: sel.value, p_unit_id: uid, p_name: null });
+    toast('🛰 Станция выставлена · управляйте ею на карте', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
 }
 
 // ── Топливо перелёта (зеркало _fleet_ops.sql: _fleet_fuel_for) ──

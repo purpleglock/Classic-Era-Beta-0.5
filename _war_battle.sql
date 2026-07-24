@@ -139,7 +139,13 @@ begin
     res := res || jsonb_build_array(jsonb_build_object(
       'unit_id', r.uid, 'unit_name', r.nm, 'free', r.qty - used,
       'cls', st->>'cls', 'hp', st->'hp', 'dmg', st->'dmg',
-      'speed', st->'speed', 'rng', st->'rng'));
+      'speed', st->'speed', 'rng', st->'rng',
+      -- расширенные ТТХ для карточки резерва/подкрепления
+      'shield', st->'shield', 'armor', st->'armor', 'sensor', st->'sensor',
+      'stealth', st->'stealth', 'cargo', st->'cargo', 'crew', st->'crew',
+      'pd', st->'pd', 'jam', st->'jam', 'dejam', st->'dejam',
+      'interdict', st->'interdict', 'stabil', st->'stabil', 'ftl', st->'ftl',
+      'wings', st->'wings'));
   end loop;
   return res;
 end$$;

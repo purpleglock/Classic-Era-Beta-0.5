@@ -36,6 +36,9 @@ create table if not exists public.fleets (
 );
 create index if not exists fleets_fac_idx on public.fleets(faction_id);
 create index if not exists fleets_sys_idx on public.fleets(system_id);
+-- станция (класс ss13): неподвижная «иконка» на карте — деплоится отдельно,
+-- не летает (fleet_send запрещён), но участвует в бою как обычный защитник системы
+alter table public.fleets add column if not exists is_station boolean not null default false;
 
 alter table public.fleets enable row level security;
 drop policy if exists "fleets_sel" on public.fleets;
@@ -93,6 +96,13 @@ begin
     want := greatest(0, coalesce((elem->>'qty')::int, 0));
     if uid is null or want <= 0 then continue; end if;
 
+    -- станцию (класс ss13) во флот возить нельзя — она выставляется на карту
+    -- отдельной иконкой и не транспортируется
+    if exists(select 1 from public.faction_units fu
+               where fu.id = uid and fu.data->>'class' = 'ss13') then
+      raise exception 'станцию нельзя включить во флот — она выставляется на карту отдельно и не транспортируется';
+    end if;
+
     select coalesce(sum(qty),0) into avail from public.unit_production
       where faction_id=fid and status='done' and category='ship' and unit_id=uid;
     if avail < want then raise exception 'недостаточно кораблей в составе (нужно % , есть %)', want, avail; end if;
@@ -125,6 +135,41 @@ end$$;
 revoke all on function public.fleet_form(text,text,jsonb) from public;
 grant execute on function public.fleet_form(text,text,jsonb) to authenticated;
 
+-- ── RPC: выставить станцию (класс ss13) на карту отдельной иконкой ──
+-- Берёт ОДНУ готовую станцию из состава (unit_production done, ship) и ставит её
+-- в системе своей колонии как неподвижный «флот»-станцию. Двигать её нельзя.
+create or replace function public.station_deploy(p_system_id text, p_unit_id uuid, p_name text default null)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare fid text; uid uuid := p_unit_id; uname text; r record; v_id uuid;
+begin
+  fid := public._ec_my_fid();
+  if not exists(select 1 from public.colonies where faction_id=fid and system_id=p_system_id) then
+    raise exception 'станцию можно разместить только в системе своей колонии';
+  end if;
+  if uid is null then raise exception 'не выбрана станция'; end if;
+  -- класс должен быть ss13
+  if not exists(select 1 from public.faction_units fu where fu.id=uid and fu.data->>'class'='ss13') then
+    raise exception 'на карту иконкой выставляется только станция (класс СС-13)';
+  end if;
+  -- забрать одну готовую станцию из состава (по FIFO)
+  select unit_name into uname from public.unit_production
+    where faction_id=fid and status='done' and category='ship' and unit_id=uid limit 1;
+  if uname is null then raise exception 'нет готовой станции в составе — сначала постройте её'; end if;
+  select id, qty into r from public.unit_production
+    where faction_id=fid and status='done' and category='ship' and unit_id=uid
+    order by created_at asc limit 1;
+  if r.qty <= 1 then delete from public.unit_production where id=r.id;
+  else update public.unit_production set qty=qty-1 where id=r.id; end if;
+
+  insert into public.fleets(faction_id, owner_id, name, status, system_id, home_sys, composition, is_station)
+    values(fid, auth.uid(), nullif(trim(coalesce(p_name,'')),''), 'idle', p_system_id, p_system_id,
+           jsonb_build_array(jsonb_build_object('unit_id', uid::text, 'unit_name', uname, 'qty', 1)), true)
+    returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id, 'system_id', p_system_id);
+end$$;
+revoke all on function public.station_deploy(text,uuid,text) from public;
+grant execute on function public.station_deploy(text,uuid,text) to authenticated;
+
 -- ── RPC: перебросить флот по гиперпутям в систему-цель (вся карта) ──
 create or replace function public.fleet_send(p_id uuid, p_dest_sys text)
 returns jsonb language plpgsql security definer set search_path=public as $$
@@ -135,6 +180,7 @@ begin
   select * into fl from public.fleets where id=p_id;
   if not found then raise exception 'fleet not found'; end if;
   if fl.faction_id is distinct from fid then raise exception 'not your fleet'; end if;
+  if fl.is_station then raise exception 'станция неподвижна — её нельзя перебрасывать, только распустить и выставить заново'; end if;
   if fl.status <> 'idle' then raise exception 'флот уже в пути'; end if;
   if not exists(select 1 from public.map_systems where id=p_dest_sys) then raise exception 'no such system'; end if;
   if p_dest_sys = fl.system_id then raise exception 'флот уже там'; end if;
@@ -201,7 +247,7 @@ begin
   perform public._fleet_settle(fid);
   return coalesce((
     select jsonb_agg(jsonb_build_object(
-      'id', fl.id, 'name', fl.name, 'status', fl.status,
+      'id', fl.id, 'name', fl.name, 'status', fl.status, 'is_station', fl.is_station,
       'system_id', fl.system_id, 'from_sys', fl.from_sys, 'dest_sys', fl.dest_sys,
       'home_sys', fl.home_sys, 'composition', fl.composition,
       'depart_at', fl.depart_at, 'arrive_at', fl.arrive_at,

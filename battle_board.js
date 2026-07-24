@@ -223,6 +223,26 @@ function bbDeadline(s) {
   return `Срок хода: ${h ? h + ' ч ' : ''}${m} мин.`;
 }
 
+// Компактное число для карточек резерва
+function bbNum(v) { v = +v || 0; return v >= 1000 ? Math.round(v).toLocaleString('ru') : String(Math.round(v)); }
+// Развёрнутые ТТХ корабля из резерва/подкрепления (класс, корпус, урон, ход,
+// дальность + важные детали: щит/броня, грузоподъёмность, экипаж, боевые модули).
+function bbPoolDetail(p) {
+  const bits = [bbClsName(p.cls), `${bbNum(p.hp)} HP`, `${bbNum(p.dmg)} урон`, `ход ${p.speed}`, `бьёт до ${p.rng}`];
+  if (+p.shield > 0) bits.push(`щит ${bbNum(p.shield)}`);
+  if (+p.armor > 0) bits.push(`броня ${bbNum(p.armor)}`);
+  if (+p.cargo > 0) bits.push(`грузоподъёмность ${bbNum(p.cargo)}`);
+  if (+p.crew > 0) bits.push(`экипаж ${bbNum(p.crew)}`);
+  if (+p.pd > 0) bits.push(`ПРО ${Math.round(p.pd * 100)}%`);
+  if (+p.jam > 0) bits.push(`РЭБ −${p.jam}`);
+  if (+p.dejam > 0) bits.push(`контр-РЭБ ${p.dejam}`);
+  if (+p.wings > 0) bits.push(`авиакрыльев ${p.wings}`);
+  if (p.interdict) bits.push('⛔ интердикция');
+  if (p.stabil) bits.push('⚓ стабилизатор');
+  if (p.ftl) bits.push('⇢ FTL-прыжок');
+  return bits.join(' · ');
+}
+
 // ── Панель расстановки ──────────────────────────────────────
 function bbDeployPanel(s) {
   const pool = Array.isArray(s.pool) ? s.pool : [];
@@ -235,7 +255,7 @@ function bbDeployPanel(s) {
         onclick="bbPick('${jsq(p.unit_id)}')">
         <span class="bb-pool-cls">${bbClsIco(p.cls)}</span>
         <span class="bb-pool-n">${esc(p.unit_name)}
-          <i>${bbClsName(p.cls)} · ${p.hp} HP · ${p.dmg} урон · ход ${p.speed} · бьёт до ${p.rng}</i></span>
+          <i>${bbPoolDetail(p)}</i></span>
         <span class="bb-pool-q">×${free}</span>
       </button>`;
   }).join('');
@@ -255,12 +275,15 @@ function bbReinfPanel(s) {
   const fresh = (s.acts_left || 0) >= (s.acts_max || 6);
   return `<div class="bb-panel">
       <div class="bb-panel-t">Подкрепление</div>
-      <div class="bb-panel-h">Вызов стоит <b>целого хода</b> и делается только <b>свежим ходом</b> — пока ни один корабль не активирован. Корабль прибудет к своему краю доски и вступит в дело со следующего хода.${fresh ? '' : ' <b>Сейчас ход уже начат — вызов недоступен.</b>'}${s.interdicted ? ' <b style="color:#ff5c8a">FTL-заградитель врага блокирует подкрепления — уничтожьте его носителя или выведите «Альтаан».</b>' : ''}</div>
-      ${pool.map(p => `<button class="bb-pool" ${fresh && !s.interdicted ? '' : 'disabled'} onclick="bbReinforce('${jsq(p.unit_id)}')">
+      <div class="bb-panel-h">Вызов стоит <b>целого хода</b> и делается только <b>свежим ходом</b> — пока ни один корабль не активирован. Корабль прибудет к своему краю доски и вступит в дело со следующего хода.${fresh ? '' : ' <b>Сейчас ход уже начат — вызов недоступен.</b>'}${s.interdicted ? ' <b style="color:#ff5c8a">FTL-заградитель врага блокирует подкрепления — уничтожьте его носителя, выведите «Альтаан» или вызывайте корабли с собственным FTL-гипердвигателем (⇢).</b>' : ''}</div>
+      ${pool.map(p => {
+        const canJump = fresh && (!s.interdicted || p.ftl);
+        return `<button class="bb-pool" ${canJump ? '' : 'disabled'} onclick="bbReinforce('${jsq(p.unit_id)}')">
           <span class="bb-pool-cls">${bbClsIco(p.cls)}</span>
-          <span class="bb-pool-n">${esc(p.unit_name)}<i>${bbClsName(p.cls)} · ${p.hp} HP</i></span>
+          <span class="bb-pool-n">${esc(p.unit_name)}${s.interdicted && p.ftl ? ' <b style="color:#7cf">⇢ прыжок сквозь заграждение</b>' : ''}<i>${bbPoolDetail(p)}</i></span>
           <span class="bb-pool-q">×${p.free}</span>
-        </button>`).join('')}
+        </button>`;
+      }).join('')}
     </div>`;
 }
 function bbUnitPanel(s) {
@@ -299,6 +322,7 @@ function bbUnitPanel(s) {
       ${u.eccm > 0 ? `<div class="bb-stat"><span>Помехозащищённость</span><b>−${u.eccm} к вражескому глушению</b></div>` : ''}
       ${u.interdict ? `<div class="bb-stat"><span>Интердикция</span><b>враг не вызывает подкрепления</b></div>` : ''}
       ${u.stabil ? `<div class="bb-stat"><span>Стабилизация</span><b>интердикция врага не действует</b></div>` : ''}
+      ${u.ftl ? `<div class="bb-stat"><span>FTL-гипердвигатель</span><b>прыгает подкреплением сквозь вражескую интердикцию</b></div>` : ''}
       ${u.wings > 0 ? `<div class="bb-stat"><span>Авиакрылья в ангарах</span><b>${u.wings}</b></div>` : ''}
       ${wpn}
       ${u.mine && s.my_turn && u.wings > 0 && !u.acted && s.acts_left > 0 ? `<button class="btn btn-gd btn-sm" style="margin-top:8px;width:100%" onclick="bbLaunch('${jsq(u.id)}')">🛩 Поднять авиакрыло (1 активация)</button>` : ''}
