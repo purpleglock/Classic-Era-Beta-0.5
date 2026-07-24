@@ -57,9 +57,10 @@ const BB_C = {
 };
 
 // ── Открыть / закрыть ───────────────────────────────────────
-async function bbOpen(battleId, spectate) {
+async function bbOpen(battleId, spectate, botFoe) {
   BB.id = battleId; BB.sel = null; BB.pick = null; BB.place = [];
   BB.spectate = !!spectate;   // зритель дуэли клуба: полное зрение, без действий
+  BB.botFoe = !!botFoe;       // админ-тест против ботов: боты ходят сами, автоматически
   BB.camReady = false; BB.reach = null;
   let ov = document.getElementById('bb-ov');
   if (!ov) {
@@ -109,6 +110,36 @@ async function bbReload() {
   (BB.st.terrain || []).forEach(e => BB.terr.set(e.x + ':' + e.y, e.t));
   BB.reach = null;
   bbRender();
+  bbMaybeBotTurn();
+}
+
+// Бой с ботами (админ-тест): когда наступает ход стороны-ботов — прогоняем его
+// автоматически, чтобы не бегать в админку жать «Ход ботов». Боты не могут
+// ходить сами через RPC (нет auth), поэтому их ход инициирует клиент админа.
+function bbIsStaff() {
+  return !!(typeof user !== 'undefined' && user && ['superadmin', 'editor'].includes(user.role));
+}
+async function bbMaybeBotTurn() {
+  const s = BB.st;
+  if (BB.botRunning || !s || BB.spectate) return;
+  // Пробуем прогнать за ботов, если: это помеченный бот-бой ЛИБО ты — стафф
+  // (тогда сервер сам решит — «это не бой с ботами» просто проглотим).
+  if (!BB.botFoe && !bbIsStaff()) return;
+  if (s.status !== 'active') return;
+  // не мой ход = ход стороны-ботов (я — участник, боты — противник)
+  if (s.my_turn) return;
+  BB.botRunning = true;
+  try {
+    await ecRpc('admin_bot_turn', { p_battle: BB.id });
+  } catch (e) {
+    // «сейчас ход игрока» и т.п. — тихо игнорируем, доска просто останется как есть
+    if (e && e.message && !/ход игрока|не бой с ботами/i.test(e.message))
+      toast(e.message, 'err');
+    BB.botRunning = false;
+    return;
+  }
+  BB.botRunning = false;
+  await bbReload();   // покажем результат и, если снова ход ботов, прогоним ещё
 }
 
 // ── Каркас экрана: доска сверху, ВСЕ панели в нижнем доке ────

@@ -4145,8 +4145,10 @@ async function adTestDuelOpen() {
 }
 
 // ── Тестовый бой с ботами: ты (сторона А, слева) против ботов (справа) ──
-// Боты не ходят сами — их ход прогоняется кнопкой «Ход ботов» (admin_bot_turn):
-// каждый бот едет к ближайшему врагу и стреляет. Обычная доска 60×80.
+// Боты ходят сами: когда открыта доска (bbOpen c botFoe=true), клиент админа
+// автоматически прогоняет их ход (admin_bot_turn) на bbMaybeBotTurn, как только
+// наступает ход стороны-ботов. Кнопка «Ход ботов» — ручной запасной запуск.
+// Каждый бот едет к ближайшему врагу и стреляет. Обычная доска 60×80.
 function adBotBattleSection() {
   const t = AD.botBattle;
   const status = t && t.battle_id
@@ -4155,12 +4157,12 @@ function adBotBattleSection() {
   return `<div class="fm-danger-act" style="align-items:flex-start;flex-direction:column;gap:10px">
     <div class="fm-danger-label" style="width:100%">
       <div>🤖 Тестовый бой с ботами</div>
-      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Обычный бой 60×80: <b>ты — нападающий (слева)</b>, боты — оборона (справа), на случайных свежих кораблях. Ходишь как обычно (через «☄ Горячие точки» или «Открыть доску»), завершаешь ход — потом жмёшь <b>«Ход ботов»</b>: каждый бот едет к ближайшему врагу и стреляет. Повторное создание <b>сносит прежнюю доску</b>.</div>
+      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Обычный бой 60×80: <b>ты — нападающий (слева)</b>, боты — оборона (справа), на случайных свежих кораблях. Открой доску кнопкой «Открыть доску» и ходи как обычно — <b>боты ходят сами</b>, как только наступает их ход (каждый едет к ближайшему врагу и стреляет). Кнопка «Ход ботов» нужна лишь как ручной запуск, если доска открыта иначе (через «☄ Горячие точки»). Повторное создание <b>сносит прежнюю доску</b>.</div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;width:100%">
       <div style="display:flex;flex-direction:column;gap:3px">
         <label class="fm-dim" style="font-size:11px">Бортов на сторону</label>
-        <input id="ad-bot-n" class="ec-input" type="number" min="1" max="12" value="3" style="width:90px">
+        <input id="ad-bot-n" class="ec-input" type="number" min="1" max="80" value="3" style="width:90px">
       </div>
       <button class="btn btn-gd" onclick="adBotBattle()">Создать / перезапустить</button>
       <button class="btn btn-gh" onclick="adBotBattleOpen()">Открыть доску</button>
@@ -4171,7 +4173,7 @@ function adBotBattleSection() {
 }
 async function adBotBattle() {
   if (AD.busy) return;
-  const n = Math.max(1, Math.min(12, parseInt(document.getElementById('ad-bot-n')?.value, 10) || 3));
+  const n = Math.max(1, Math.min(80, parseInt(document.getElementById('ad-bot-n')?.value, 10) || 3));
   if (AD.botBattle?.battle_id && !confirm('Прежняя доска боя с ботами будет снесена и создана заново. Продолжить?')) return;
   AD.busy = true;
   try {
@@ -4190,7 +4192,7 @@ async function adBotBattleOpen() {
       adPaint();
     }
     if (!AD.botBattle?.battle_id) { toast('Бой с ботами ещё не создан', 'err'); return; }
-    if (typeof bbOpen === 'function') bbOpen(AD.botBattle.battle_id, false);  // ты — участник
+    if (typeof bbOpen === 'function') bbOpen(AD.botBattle.battle_id, false, true);  // ты — участник, боты ходят сами
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
 }
 async function adBotTurn() {
