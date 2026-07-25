@@ -312,6 +312,7 @@ begin
              coalesce(s.st->>'name','Корабль') as nm,
              jsonb_build_object(
                'unit_id', fu.id, 'unit_name', coalesce(s.st->>'name','Корабль'), 'free', 99,
+               'cost', coalesce((fu.summary->>'cost')::numeric, 0),
                'cls', s.st->>'cls', 'hp', s.st->'hp', 'dmg', s.st->'dmg',
                'speed', s.st->'speed', 'rng', s.st->'rng',
                'shield', s.st->'shield', 'armor', s.st->'armor', 'sensor', s.st->'sensor',
@@ -346,6 +347,8 @@ begin
     st := public._bt_stats(r.uid);
     res := res || jsonb_build_array(jsonb_build_object(
       'unit_id', r.uid, 'unit_name', r.nm, 'free', r.qty - used,
+      'cost', (select coalesce((fu.summary->>'cost')::numeric, 0)
+                 from public.faction_units fu where fu.id = r.uid),
       'cls', st->>'cls', 'hp', st->'hp', 'dmg', st->'dmg',
       'speed', st->'speed', 'rng', st->'rng',
       'shield', st->'shield', 'armor', st->'armor', 'sensor', st->'sensor',

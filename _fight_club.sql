@@ -2,10 +2,12 @@
 -- 🥊 БОЙЦОВСКИЙ КЛУБ — дуэли в новелле вместо Поэмы/Ассамблеи (те на паузе).
 --
 -- Суть: игроки подают заявки; когда окно набора закрывается, сервер
--- выбирает ДВУХ случайных дуэлянтов и выдаёт каждому СЛУЧАЙНЫЙ корабль
--- из свежих проектов (любой фракции, но только обновлённых с 2026-07-21 —
--- старые сломанные проекты не берём). Численность эскадрилий сервер
--- подгоняет по стоимости, чтобы бой был ±честным.
+-- выбирает ДВУХ случайных дуэлянтов. рев.8: вместо выданного корабля каждой
+-- стороне даётся РЕЗЕРВ (пул) из свежих боеспособных проектов (любой фракции,
+-- обновлённых с 2026-07-23, с уроном И корпусом > 0 — «новый редактор»).
+-- Дуэлянт САМ драфтит флот из пула и расставляет его на доске (штатные
+-- battle_deploy/battle_ready), в рамках ЕДИНОГО бюджета обеих сторон. Кто не
+-- расставился до дедлайна — техническое поражение (форфейт).
 -- Бой — НАСТОЯЩИЙ тактический (гекс-доска _war_battle_tactics), дуэлянты
 -- ходят сами, все остальные смотрят (fc_watch_state — полное зрение).
 -- Пока идёт бой, зрители ставят на победителя (кап 500 000 ГС, эскроу).
@@ -23,8 +25,10 @@
 -- ════════════════════════════════════════════════════════════════════
 
 -- ── Константы ────────────────────────────────────────────────
+-- рев.8: корабли пула — только «новый редактор» (свежие проекты с 2026-07-23,
+-- урон и корпус > 0). Старые/пустые проекты в клуб не допускаются.
 create or replace function public._fc_fresh_since()
-returns timestamptz language sql immutable as $$ select timestamptz '2026-07-21 00:00:00+00' $$;
+returns timestamptz language sql immutable as $$ select timestamptz '2026-07-23 00:00:00+00' $$;
 create or replace function public._fc_bet_cap()
 returns numeric language sql immutable as $$ select 500000::numeric $$;
 create or replace function public._fc_npc_max()
@@ -34,11 +38,25 @@ returns int language sql immutable as $$ select 24 $$;
 -- призовой кошель клуба: платится победителю дуэли ВСЕГДА, поверх банка ставок
 create or replace function public._fc_prize()
 returns numeric language sql immutable as $$ select 250000::numeric $$;
+-- рев.8: окно расстановки флота (forming). Не расставился и не нажал «в бой»
+-- до дедлайна → техническое поражение (форфейт).
+create or replace function public._fc_form_hours()
+returns int language sql immutable as $$ select 12 $$;
+-- рев.8: бюджет драфта = множитель × медианная стоимость свежих проектов.
+-- Обе стороны получают ОДИНАКОВЫЙ бюджет — честность по построению.
+create or replace function public._fc_pool_mult()
+returns numeric language sql immutable as $$ select 5::numeric $$;
+-- сколько РАЗНЫХ проектов кладём в пул каждой стороне (выбор при драфте)
+create or replace function public._fc_pool_designs()
+returns int language sql immutable as $$ select 6 $$;
 
 -- ── Дуэли допускаем как отдельный вид боя ───────────────────
 alter table public.battles drop constraint if exists battles_kind_ck;
 alter table public.battles add constraint battles_kind_ck
   check (kind in ('meeting','intercept','duel'));
+-- рев.8: бюджет драфта дуэли (кап суммарной стоимости выставленных бортов).
+-- NULL — не дуэль/без ограничения; battle_ready проверяет только при kind='duel'.
+alter table public.battles add column if not exists duel_budget numeric;
 
 -- ── События клуба ────────────────────────────────────────────
 create table if not exists public.fc_events (
@@ -64,6 +82,9 @@ create table if not exists public.fc_events (
 create index if not exists fc_events_open_idx on public.fc_events (created_at desc);
 -- рев.6: призовой кошель круга (фиксируется при старте дуэли)
 alter table public.fc_events add column if not exists prize numeric not null default 0;
+-- рев.8: бюджет драфта круга (для табло клуба); ship_a/ship_b/cnt_* больше не
+-- используются (флот драфтится игроком из пула), остаются для истории/совместимости.
+alter table public.fc_events add column if not exists budget numeric not null default 0;
 
 create table if not exists public.fc_signups (
   event_id   uuid not null references public.fc_events(id) on delete cascade,
@@ -104,56 +125,77 @@ begin
 end$$;
 revoke all on function public._fc_news(text,text,jsonb) from public;
 
--- ── Спавнер дуэли: корабли, доска, авто-расстановка ─────────
--- Общая часть боевого круга клуба И админского тестового боя.
-create or replace function public._fc_spawn_duel(da text, db text)
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare sa record; sb record; bid uuid; sys text;
-        ca int; cb int; sta jsonb; stb jsonb; i int;
-        -- дуэль всегда на своей маленькой доске (не зависит от размера обычных боёв)
-        w int := public._bt_wduel(); h int := public._bt_hduel();
-        ya int; yb int;
-        ax int := 1;                             -- колонна атакующего — в красной зоне (край слева)
-        bx int := public._bt_wduel()-2;          -- колонна защитника — в бирюзовой зоне (край справа)
-begin
-  if da is null or db is null or da = db then raise exception 'нужны две разные державы'; end if;
-
-  -- корабль А: случайный СВЕЖИЙ проект (любой фракции, обновлён с _fc_fresh_since)
-  select fu.id, fu.name, coalesce((fu.summary->>'cost')::numeric, 0) as cost
-    into sa
-    from public.faction_units fu
-   where fu.category = 'ship'
+-- ── Свежий боеспособный проект? (новый редактор: урон и корпус > 0) ──
+-- рев.8: пул клуба берёт ТОЛЬКО такие корабли — «примерно с 23.07».
+create or replace function public._fc_qualifies(fu public.faction_units)
+returns boolean language sql immutable as $$
+  select fu.category = 'ship'
      and coalesce(fu.updated_at, fu.created_at) >= public._fc_fresh_since()
-     and coalesce((fu.summary->>'hp')::numeric, 0) > 0
-   order by random() limit 1;
-  if sa.id is null then
-    raise exception 'в клубе нет свежих кораблей: ни один проект не обновлялся с %',
+     and coalesce((fu.summary->>'hp')::numeric,  0) > 0
+     and coalesce((fu.summary->>'dmg')::numeric, 0) > 0
+$$;
+
+-- ── Сборщик пула стороны: синтетический «флот» из свежих проектов ──
+-- рев.8: вместо одного выданного корабля сторона получает РЕЗЕРВ из нескольких
+-- разных свежих проектов (любых фракций), из которого сама драфтит и расставляет
+-- флот штатным battle_deploy. Количество каждого проекта щедрое — драфт ограничен
+-- бюджетом (duel_budget), а не числом бортов в пуле.
+create or replace function public._fc_make_pool(p_battle uuid, p_fid text, p_side text,
+                                                p_budget numeric, p_sys text)
+returns int language plpgsql security definer set search_path=public as $$
+declare comp jsonb := '[]'::jsonb; r record; qty int; n int := 0; fl uuid;
+        cap int := public._bt_cap();
+begin
+  for r in
+    select fu.id, fu.name, coalesce((fu.summary->>'cost')::numeric, 0) as cost
+      from public.faction_units fu
+     where public._fc_qualifies(fu)
+     order by random()
+     limit public._fc_pool_designs()
+  loop
+    -- запас каждого проекта: сколько таких влезло бы в бюджет целиком (но не
+    -- больше кап-доски). Дешёвым даём больше, дорогим меньше — драфт гибкий.
+    qty := least(cap, greatest(1, floor(p_budget / greatest(r.cost, 1))::int));
+    comp := comp || jsonb_build_array(jsonb_build_object(
+      'unit_id', r.id, 'unit_name', r.name, 'qty', qty));
+    n := n + 1;
+  end loop;
+  if n = 0 then
+    raise exception 'в клубе нет свежих кораблей: ни один проект не обновлялся с % с уроном > 0',
       public._fc_fresh_since()::date;
   end if;
 
-  -- корабль Б: свежий проект с БЛИЖАЙШЕЙ стоимостью (из случайной выборки),
-  -- чтобы дуэль была ±честной; допускаем тот же проект у обоих — это честнее всего
-  select fu.id, fu.name, coalesce((fu.summary->>'cost')::numeric, 0) as cost
-    into sb
-    from (select * from public.faction_units fu0
-           where fu0.category = 'ship'
-             and coalesce(fu0.updated_at, fu0.created_at) >= public._fc_fresh_since()
-             and coalesce((fu0.summary->>'hp')::numeric, 0) > 0
-           order by random() limit 12) fu
-   order by abs(coalesce((fu.summary->>'cost')::numeric,0) - sa.cost), random()
-   limit 1;
+  -- синтетический флот-резерв: status='duel' (не idle/transit — на карте не всплывёт),
+  -- battle_pool читает состав через battle_fleets → fleets.composition.
+  insert into public.fleets(faction_id, name, status, system_id, composition)
+    values (p_fid, 'Резерв Бойцовского клуба', 'duel', p_sys, comp)
+    returning id into fl;
+  insert into public.battle_fleets(battle_id, fleet_id, fid, side)
+    values (p_battle, fl, p_fid, p_side);
+  return n;
+end$$;
+revoke all on function public._fc_make_pool(uuid,text,text,numeric,text) from public;
 
-  -- численность: по 3 борта базово, слабейшей стороне добираем по стоимости
-  ca := 3; cb := 3;
-  if sb.cost > 0 and sa.cost > 0 then
-    if sb.cost < sa.cost then cb := least(6, greatest(3, round(3 * sa.cost / sb.cost)::int));
-    elsif sa.cost < sb.cost then ca := least(6, greatest(3, round(3 * sb.cost / sa.cost)::int));
-    end if;
+-- ── Спавнер дуэли: доска forming + пул каждой стороне (без авто-расстановки) ──
+-- Общая часть боевого круга клуба И админского тестового боя. Бой создаётся в
+-- статусе 'forming': дуэлянты сами драфтят флот из пула и жмут «в бой».
+create or replace function public._fc_spawn_duel(da text, db text)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare bid uuid; sys text; budget numeric; med numeric; na int; nb int;
+begin
+  if da is null or db is null or da = db then raise exception 'нужны две разные державы'; end if;
+
+  -- бюджет драфта = множитель × медианная стоимость свежих проектов (обе стороны
+  -- получают одинаковый). Пол — 1, чтобы бюджет всегда позволял вывести борт.
+  select percentile_cont(0.5) within group (order by coalesce((fu.summary->>'cost')::numeric, 0))
+    into med
+    from public.faction_units fu
+   where public._fc_qualifies(fu);
+  if med is null then
+    raise exception 'в клубе нет свежих кораблей: ни один проект не обновлялся с % с уроном > 0',
+      public._fc_fresh_since()::date;
   end if;
-
-  sta := public._bt_stats(sa.id);
-  stb := public._bt_stats(sb.id);
-  if sta is null or stb is null then raise exception 'проект дуэли не найден'; end if;
+  budget := greatest(1, round(public._fc_pool_mult() * greatest(med, 1)));
 
   -- арена: случайная система (чисто сцена — оккупаций по дуэли не бывает,
   -- _war_occupy_check сам не тронет чужую систему без войны)
@@ -162,54 +204,158 @@ begin
 
   insert into public.battles(system_id, attacker_fid, defender_fid, status, kind,
                              att_ready, def_ready, side_to_move, turn_no, acts_left,
-                             deadline_at)
-    values (sys, da, db, 'active', 'duel', true, true, 'attacker', 1, public._bt_acts(),
-            now() + (public._bt_turn_hours() || ' hours')::interval)
+                             duel_budget, deadline_at)
+    values (sys, da, db, 'forming', 'duel', false, false, 'attacker', 0, public._bt_acts(),
+            budget, now() + (public._fc_form_hours() || ' hours')::interval)
     returning id into bid;
-  perform public._bt_log(bid, '🥊 Дуэль Бойцовского клуба! Победа — только на уничтожение.');
+  perform public._bt_log(bid, format(
+    '🥊 Дуэль Бойцовского клуба! Расставьте флот из выданного резерва (бюджет — %s ГС). Победа — только на уничтожение.',
+    budget::bigint));
 
-  -- авто-расстановка: колонны у центра арены, разложены по центру высоты
-  for i in 1..ca loop
-    ya := least(h-1, greatest(0, h/2 + (i - 1 - ca/2) * 2));
-    insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
-        hp, max_hp, armor, shield, max_shield, dmg, speed, rng,
-        facing, straight, sensor, stealth, wpn, resist, pd, jam, wings,
-        dejam, eccm, interdict, stabil)
-      values (bid, da, 'attacker', sa.id, sta->>'name', sta->>'cls', ax, ya,
-        (sta->>'hp')::numeric, (sta->>'hp')::numeric, (sta->>'armor')::numeric,
-        (sta->>'shield')::numeric, (sta->>'shield')::numeric, (sta->>'dmg')::numeric,
-        (sta->>'speed')::int, (sta->>'rng')::int,
-        0, public._bt_turnneed(sta->>'cls'),
-        coalesce((sta->>'sensor')::int,0), coalesce((sta->>'stealth')::int,0),
-        coalesce(sta->'wpn','[]'::jsonb), coalesce(sta->'resist','{}'::jsonb),
-        coalesce((sta->>'pd')::numeric,0), coalesce((sta->>'jam')::int,0), coalesce((sta->>'wings')::int,0),
-        coalesce((sta->>'dejam')::int,0), coalesce((sta->>'eccm')::int,0),
-        coalesce((sta->>'interdict')::bool,false), coalesce((sta->>'stabil')::bool,false));
-  end loop;
-  for i in 1..cb loop
-    yb := least(h-1, greatest(0, h/2 + (i - 1 - cb/2) * 2 + 1));
-    insert into public.battle_units(battle_id, fid, side, unit_id, unit_name, cls, x, y,
-        hp, max_hp, armor, shield, max_shield, dmg, speed, rng,
-        facing, straight, sensor, stealth, wpn, resist, pd, jam, wings,
-        dejam, eccm, interdict, stabil)
-      values (bid, db, 'defender', sb.id, stb->>'name', stb->>'cls', bx, yb,
-        (stb->>'hp')::numeric, (stb->>'hp')::numeric, (stb->>'armor')::numeric,
-        (stb->>'shield')::numeric, (stb->>'shield')::numeric, (stb->>'dmg')::numeric,
-        (stb->>'speed')::int, (stb->>'rng')::int,
-        3, public._bt_turnneed(stb->>'cls'),
-        coalesce((stb->>'sensor')::int,0), coalesce((stb->>'stealth')::int,0),
-        coalesce(stb->'wpn','[]'::jsonb), coalesce(stb->'resist','{}'::jsonb),
-        coalesce((stb->>'pd')::numeric,0), coalesce((stb->>'jam')::int,0), coalesce((stb->>'wings')::int,0),
-        coalesce((stb->>'dejam')::int,0), coalesce((stb->>'eccm')::int,0),
-        coalesce((stb->>'interdict')::bool,false), coalesce((stb->>'stabil')::bool,false));
-  end loop;
+  na := public._fc_make_pool(bid, da, 'attacker', budget, sys);
+  nb := public._fc_make_pool(bid, db, 'defender', budget, sys);
 
-  return jsonb_build_object('battle_id', bid,
-    'ship_a', sa.id, 'ship_b', sb.id,
-    'ship_a_name', sa.name, 'ship_b_name', sb.name,
-    'cnt_a', ca, 'cnt_b', cb);
+  return jsonb_build_object('battle_id', bid, 'budget', budget,
+    'pool_a', na, 'pool_b', nb);
 end$$;
 revoke all on function public._fc_spawn_duel(text,text) from public;
+
+-- ── Подтверждение состава: у дуэли — с проверкой бюджета драфта ──
+-- рев.8: переопределяем battle_ready (база — _war_battle.sql) так, чтобы для
+-- kind='duel' с заданным duel_budget суммарная стоимость выставленных бортов
+-- не превышала бюджет. Для остальных боёв поведение прежнее. Катить ПОСЛЕ
+-- _war_battle.sql (иначе базовая версия затрёт эту).
+create or replace function public.battle_ready(p_battle uuid)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare me text; sd text; b record; cnt int; spent numeric;
+begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  me := public._ec_my_fid();
+  select * into b from public.battles where id = p_battle for update;
+  if b.id is null then raise exception 'no such battle'; end if;
+  if b.status <> 'forming' then raise exception 'бой уже идёт'; end if;
+  sd := public._bt_side(p_battle, me);
+  if sd is null then raise exception 'вы не участвуете в этом бою'; end if;
+  select count(*) into cnt from public.battle_units where battle_id = p_battle and fid = me;
+  if cnt = 0 then raise exception 'выведите на доску хотя бы один корабль'; end if;
+
+  -- бюджет драфта дуэли: сумма стоимости выставленных бортов ≤ duel_budget
+  if b.kind = 'duel' and b.duel_budget is not null then
+    select coalesce(sum(coalesce((fu.summary->>'cost')::numeric, 0)), 0) into spent
+      from public.battle_units u
+      join public.faction_units fu on fu.id = u.unit_id
+     where u.battle_id = p_battle and u.fid = me;
+    if spent > b.duel_budget then
+      raise exception 'состав дороже бюджета: % из % ГС — уберите борт',
+        spent::bigint, b.duel_budget::bigint;
+    end if;
+  end if;
+
+  if sd = 'attacker' then update public.battles set att_ready = true where id = p_battle;
+  else                     update public.battles set def_ready = true where id = p_battle; end if;
+
+  -- рев.8: у дуэли резерв (пул) = материал для драфта, НЕ источник бесконечных
+  -- подкреплений. Подтвердил состав — резерв гасим: что на доске, то и весь флот.
+  -- Иначе (а) проигравший вводил бы борта из пула сверх бюджета, (б) _bt_check_end
+  -- не завершил бы бой, пока pool > 0.
+  if b.kind = 'duel' then
+    delete from public.fleets f
+      using public.battle_fleets bf
+     where bf.battle_id = p_battle and bf.fid = me and bf.fleet_id = f.id;
+  end if;
+
+  select * into b from public.battles where id = p_battle;
+  if b.att_ready and b.def_ready then
+    update public.battles
+       set status = 'active', side_to_move = 'attacker', turn_no = 1,
+           deadline_at = now() + (public._bt_turn_hours() || ' hours')::interval
+     where id = p_battle;
+    perform public._bt_log(p_battle, 'Бой начался. Первый ход за нападающими.');
+  end if;
+  return jsonb_build_object('ok', true, 'started', (b.att_ready and b.def_ready));
+end$$;
+revoke all on function public.battle_ready(uuid) from public;
+grant execute on function public.battle_ready(uuid) to authenticated;
+
+-- ── battle_state + бюджет драфта ─────────────────────────────
+-- рев.8: колонка battles.duel_budget появляется только с этим срезом (после
+-- _war_battle_tactics), поэтому добавляем её в state ЗДЕСЬ. Тело — копия
+-- tactics-версии battle_state + одно поле 'duel_budget'. Катить ПОСЛЕ
+-- _war_battle_tactics.sql. Если tactics-версия меняется — синхронизировать.
+create or replace function public.battle_state(p_battle uuid)
+returns jsonb language plpgsql volatile security definer set search_path=public as $$
+declare me text; b record; sd text;
+begin
+  if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
+  perform public._bt_arm(p_battle);
+  me := public._ec_my_fid();
+  select * into b from public.battles where id = p_battle;
+  if b.id is null then raise exception 'no such battle'; end if;
+  sd := public._bt_side(p_battle, me);
+  if sd is null then raise exception 'вы не участвуете в этом бою'; end if;
+
+  if b.terrain is null then
+    update public.battles set terrain = public._bt_gen_terrain(p_battle)
+     where id = p_battle and terrain is null;
+    select * into b from public.battles where id = p_battle;
+  end if;
+
+  return jsonb_build_object(
+    'id', b.id, 'status', b.status, 'kind', b.kind,
+    'system_id', b.system_id,
+    'system_name', (select coalesce(nullif(ms.name,''), ms.id) from public.map_systems ms where ms.id = b.system_id),
+    'w', public._bt_w(), 'h', public._bt_h(), 'cap', public._bt_cap(),
+    'zone', public._bt_zone(), 'acts_max', public._bt_acts(), 'acts_left', b.acts_left,
+    -- рев.8: бюджет драфта (для счётчика при расстановке дуэли)
+    'duel_budget', b.duel_budget,
+    'my_side', sd, 'my_fid', me,
+    'attacker', b.attacker_fid, 'attacker_name', public._war_nm(b.attacker_fid),
+    'defender', b.defender_fid, 'defender_name', public._war_nm(b.defender_fid),
+    'side_to_move', b.side_to_move, 'my_turn', (b.side_to_move = sd),
+    'turn_no', b.turn_no,
+    'att_turns_left', b.att_turns_left, 'def_turns_left', b.def_turns_left,
+    'att_ready', b.att_ready, 'def_ready', b.def_ready,
+    'deadline_at', b.deadline_at,
+    'can_force', (b.status='active' and b.side_to_move is distinct from sd
+                  and b.deadline_at is not null and b.deadline_at <= now()),
+    'winner', b.winner_fid,
+    'interdicted', public._bt_interdicted(p_battle, sd),
+    'log', b.log,
+    'terrain', coalesce(b.terrain, '[]'::jsonb),
+    'pool', public.battle_pool(p_battle, me),
+    'units', (select coalesce(jsonb_agg(
+        case when u.side = sd or lk.locked then
+          jsonb_build_object(
+            'id', u.id, 'side', u.side, 'mine', (u.fid = me),
+            'name', u.unit_name, 'cls', u.cls,
+            'x', u.x, 'y', u.y, 'facing', u.facing, 'straight', u.straight,
+            'hp', round(u.hp), 'max_hp', round(u.max_hp),
+            'shield', round(u.shield), 'max_shield', round(u.max_shield),
+            'armor', round(u.armor), 'dmg', round(u.dmg),
+            'speed', u.speed, 'rng', u.rng,
+            'sensor', u.sensor, 'stealth', u.stealth, 'flash', u.flash,
+            'pd', u.pd, 'jam', u.jam, 'wings', u.wings, 'is_wing', u.is_wing,
+            'dejam', u.dejam, 'eccm', u.eccm, 'interdict', u.interdict, 'stabil', u.stabil,
+            'ftl', u.ftl,
+            'locked', true,
+            'wpn', case when u.side = sd then coalesce(u.wpn, '[]'::jsonb) else null end,
+            'moved', u.moved, 'fired', u.fired, 'acted', u.acted)
+        else
+          jsonb_build_object(
+            'id', u.id, 'side', u.side, 'mine', false, 'contact', true,
+            'locked', false, 'x', u.x, 'y', u.y)
+        end order by u.created_at), '[]'::jsonb)
+      from public.battle_units u
+      cross join lateral (select exists(
+          select 1 from public.battle_units m
+           where m.battle_id = p_battle and m.side = sd and m.alive
+             and public._bt_detected(m.x, m.y, m.facing,
+                                     greatest(0, m.sensor - greatest(0, public._bt_ecm(p_battle, m.side, m.x, m.y) - m.eccm)),
+                                     u.x, u.y, u.stealth, u.flash)) as locked) lk
+      where u.battle_id = p_battle and u.alive));
+end$$;
+revoke all on function public.battle_state(uuid) from public;
+grant execute on function public.battle_state(uuid) to authenticated;
 
 -- ── Старт круга клуба: жребий пары + спавн + касса ──────────
 create or replace function public._fc_start(p_event uuid)
@@ -236,19 +382,20 @@ begin
   -- ставка НПС: случайная, до 400 000 ГС, круглыми тысячами
   npc := (floor(random() * (public._fc_npc_max()/1000)) + 1) * 1000;
 
+  -- рев.8: событие 'live' с момента спавна, но бой стартует в 'forming' —
+  -- дуэлянты драфтят флот. Ставки открываются, когда бой перейдёт в 'active'
+  -- (fc_bet проверяет статус боя). ship_*/cnt_* больше не заполняем.
   update public.fc_events
      set status = 'live', duelist_a = da, duelist_b = db,
-         ship_a = (sp->>'ship_a')::uuid, ship_b = (sp->>'ship_b')::uuid,
-         ship_a_name = sp->>'ship_a_name', ship_b_name = sp->>'ship_b_name',
-         cnt_a = (sp->>'cnt_a')::int, cnt_b = (sp->>'cnt_b')::int,
          battle_id = (sp->>'battle_id')::uuid, npc_bet = npc,
+         budget = (sp->>'budget')::numeric,
          prize = public._fc_prize()
    where id = p_event;
 
-  perform public._fc_news('🥊 Бойцовский клуб: дуэль началась',
-    format('%s и %s сходятся в показательной дуэли. %s × «%s» против %s × «%s». Приз победителю — %s ГС из кассы клуба. Ставки открыты — кассы принимают до %s ГС.',
-      public._war_nm(da), public._war_nm(db), sp->>'cnt_a', sp->>'ship_a_name',
-      sp->>'cnt_b', sp->>'ship_b_name', public._fc_prize()::bigint, public._fc_bet_cap()::bigint),
+  perform public._fc_news('🥊 Бойцовский клуб: жребий брошен',
+    format('%s и %s выходят на арену. Каждому выдан резерв свежих проектов — дуэлянты драфтят флот в рамках бюджета %s ГС и расставляют его на доске. Приз победителю — %s ГС из кассы клуба. Ставки откроются с началом боя (кап %s ГС).',
+      public._war_nm(da), public._war_nm(db), (sp->>'budget')::bigint,
+      public._fc_prize()::bigint, public._fc_bet_cap()::bigint),
     jsonb_build_array(da, db));
 end$$;
 revoke all on function public._fc_start(uuid) from public;
@@ -273,6 +420,44 @@ begin
     update public.fc_events set status='done', settled=true, ended_at=now() where id = p_event;
     return;
   end if;
+
+  -- рев.8: таймаут расстановки. Кто не расставился и не нажал «в бой» до
+  -- дедлайна — техническое поражение. Если оба промолчали — дуэль не состоялась.
+  if b.status = 'forming' and b.deadline_at is not null and b.deadline_at <= now() then
+    -- гасим невыставленные резервы обеих сторон (синтетические пул-флоты)
+    delete from public.fleets f
+      using public.battle_fleets bf
+     where bf.battle_id = b.id and bf.fleet_id = f.id;
+    if b.att_ready and not b.def_ready then
+      update public.battles set status='done', winner_fid=b.attacker_fid, ended_at=now()
+       where id = b.id;
+      perform public._bt_log(b.id, format('⏳ %s не расставил флот — техническое поражение. Победа %s.',
+        public._war_nm(b.defender_fid), public._war_nm(b.attacker_fid)));
+    elsif b.def_ready and not b.att_ready then
+      update public.battles set status='done', winner_fid=b.defender_fid, ended_at=now()
+       where id = b.id;
+      perform public._bt_log(b.id, format('⏳ %s не расставил флот — техническое поражение. Победа %s.',
+        public._war_nm(b.attacker_fid), public._war_nm(b.defender_fid)));
+    else
+      -- никто не расставился — дуэль не состоялась: возврат ставок, новый круг
+      for r in select * from public.fc_bets where event_id = p_event loop
+        update public.faction_economy set gc = gc + r.amount where faction_id = r.fid;
+        update public.fc_bets set won = r.amount
+          where event_id = p_event and fid = r.fid and on_fid = r.on_fid;
+      end loop;
+      update public.battles set status='done', ended_at=now() where id = b.id;
+      update public.fc_events set status='done', settled=true, ended_at=now() where id = p_event;
+      perform public._fc_news('🥊 Бойцовский клуб: дуэль не состоялась',
+        format('%s и %s не вышли на арену в срок — круг отменён, ставки возвращены.',
+          public._war_nm(ev.duelist_a), public._war_nm(ev.duelist_b)),
+        jsonb_build_array(ev.duelist_a, ev.duelist_b));
+      insert into public.fc_events(status, signup_until)
+        values ('signup', now() + (public._fc_signup_hours() || ' hours')::interval);
+      return;
+    end if;
+    select * into b from public.battles where id = ev.battle_id;   -- перечитать вердикт
+  end if;
+
   if b.status <> 'done' or b.winner_fid is null then return; end if;
 
   win  := b.winner_fid;
@@ -367,6 +552,15 @@ begin
     'cnt_a', ev.cnt_a, 'cnt_b', ev.cnt_b,
     'battle_id', ev.battle_id,
     'battle_status', (select status from public.battles where id = ev.battle_id),
+    -- рев.8: фаза расстановки (forming) — бюджет драфта, кто уже готов, дедлайн
+    'budget', case when coalesce(ev.budget,0) > 0 then ev.budget else null end,
+    'att_ready', (select att_ready from public.battles where id = ev.battle_id),
+    'def_ready', (select def_ready from public.battles where id = ev.battle_id),
+    'battle_deadline', (select deadline_at from public.battles where id = ev.battle_id),
+    -- сторона текущего игрока в дуэли (для кнопки «Расставить флот»): a|b|null
+    'i_side', case when me is null then null
+                   when me = ev.duelist_a then 'a'
+                   when me = ev.duelist_b then 'b' else null end,
     'npc_bet', case when ev.status = 'done' then ev.npc_bet else null end,
     -- приз победителю: до старта показываем плановый, после — фактический
     'prize', case when coalesce(ev.prize,0) > 0 then ev.prize else public._fc_prize() end,
@@ -425,6 +619,9 @@ begin
   perform public._fc_ensure();
   select * into ev from public.fc_events order by created_at desc limit 1 for update;
   if ev.status <> 'live' then raise exception 'ставки принимаются только во время дуэли'; end if;
+  if (select status from public.battles where id = ev.battle_id) = 'forming' then
+    raise exception 'дуэлянты ещё расставляют флот — ставки откроются с началом боя';
+  end if;
   if (select status from public.battles where id = ev.battle_id) = 'done' then
     raise exception 'бой окончен — кассы закрыты';
   end if;
@@ -549,8 +746,7 @@ begin
 
   return jsonb_build_object('ok', true, 'battle_id', sp->>'battle_id',
     'attacker_fid', p_a, 'defender_fid', p_b,
-    'ship_a_name', sp->>'ship_a_name', 'ship_b_name', sp->>'ship_b_name',
-    'cnt_a', sp->>'cnt_a', 'cnt_b', sp->>'cnt_b');
+    'budget', sp->>'budget', 'pool_a', sp->>'pool_a', 'pool_b', sp->>'pool_b');
 end$$;
 revoke all on function public.admin_test_duel(text,text) from public;
 grant execute on function public.admin_test_duel(text,text) to authenticated;
@@ -577,12 +773,18 @@ grant execute on function public.admin_test_duel_state() to authenticated;
 -- ── Проверка ────────────────────────────────────────────────
 -- 1) fc_state() → status='signup', signup_until через ~24ч, signups=0.
 -- 2) fc_signup() дважды → одна запись; после 2 заявок и истечения окна
---    fc_state() → status='live', battle_id заполнен, корабли из проектов,
---    обновлённых после 2026-07-21, cnt_a/cnt_b подогнаны по стоимости.
--- 3) fc_bet('<duelist_a>', 600000) → exception про кап 500 000.
--- 4) fc_watch_state(battle_id) любым игроком → все юниты видимы, my_turn=false.
--- 5) После уничтожения одной стороны fc_state() → status='done',
---    победитель получил приз клуба (_fc_prize = 250 000 ГС, поле prize),
---    угадавшие получили возврат + долю банка, создан новый signup-круг.
--- 6) admin_test_duel('F1','F2') стаффом → battle_id; повторный вызов
---    сносит старую доску и создаёт новую; fc_state() этот бой не видит.
+--    fc_state() → status='live', battle_id заполнен, battle_status='forming',
+--    budget>0, att_ready=def_ready=false.
+-- 3) battle_state(battle_id) дуэлянтом → pool непустой (несколько свежих
+--    проектов, каждый только с dmg>0 и updated_at≥2026-07-23), duel_budget задан.
+-- 4) battle_deploy + battle_ready дороже бюджета → exception «состав дороже
+--    бюджета»; в рамках бюджета — ok. Когда ОБА нажали «в бой» →
+--    battle_status='active', ставки открываются.
+-- 5) fc_bet во время forming → exception «дуэлянты ещё расставляют флот».
+-- 6) fc_bet('<duelist_a>', 600000) во время active → exception про кап 500 000.
+-- 7) Дедлайн forming прошёл, готова лишь одна сторона → её техническая победа,
+--    приз/банк выплачены. Обе не готовы → круг отменён, ставки возвращены.
+-- 8) После уничтожения одной стороны fc_state() → status='done', победитель
+--    получил приз (_fc_prize=250 000), угадавшие — возврат+долю, новый круг.
+-- 9) admin_test_duel('F1','F2') стаффом → battle_id в forming; обе стороны
+--    драфтят через «Горячие точки» → «Расставить флот»; fc_events не трогается.

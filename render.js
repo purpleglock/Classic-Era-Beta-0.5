@@ -5491,8 +5491,8 @@ function _fcBody(st, en) {
   const parts = [];
   // ── правило клуба одной строкой ──
   parts.push(`<div class="fc-rule">${en
-    ? 'Two random duelists. Random fresh ships, cost-matched. Real tactical battle — everyone watches, everyone bets.'
-    : 'Двое случайных дуэлянтов. Случайные свежие корабли, уравненные по стоимости. Настоящий тактический бой — все смотрят, все ставят.'}${st.prize
+    ? 'Two random duelists. Each gets a reserve of fresh warships and an equal budget — you draft and deploy your own fleet, then fight. Real tactical battle — everyone watches, everyone bets.'
+    : 'Двое случайных дуэлянтов. Каждому — резерв свежих кораблей и равный бюджет: сами собираете флот и расставляете его на доске. Настоящий тактический бой — все смотрят, все ставят.'}${st.prize
     ? ` ${en ? 'Winner takes the club purse — ' : 'Победитель забирает приз клуба — '}<b>${_fcMoney(st.prize)} ГС</b>.` : ''}</div>`);
 
   if (st.status === 'signup') {
@@ -5508,7 +5508,25 @@ function _fcBody(st, en) {
         : `<div class="hp-vna-obs">👁 ${en ? 'Register a faction to fight.' : 'Зарегистрируйте державу, чтобы драться.'}</div>`));
   }
 
-  if (st.status === 'live') {
+  // ── ФАЗА РАССТАНОВКИ: бой создан, но дуэлянты ещё драфтят флот ──
+  if (st.status === 'live' && st.battle_status === 'forming') {
+    const dl = _fcLeft(st.battle_deadline);
+    parts.push(`<div class="fc-phase"><span class="fc-phase-tag">${en ? 'FLEET DRAFT' : 'РАССТАНОВКА ФЛОТОВ'}</span>
+      ${dl ? `<span class="fc-phase-t">${en ? 'deploy within ' : 'расставить в течение '}${dl}</span>` : ''}</div>`);
+    if (st.budget) parts.push(`<div class="fc-ok">💠 ${en ? 'Draft budget per side' : 'Бюджет флота на сторону'}: <b>${_fcMoney(st.budget)} ГС</b>. ${en ? 'Pick ships from your reserve and place them.' : 'Соберите флот из выданного резерва и расставьте.'}</div>`);
+    parts.push(_fcDuelCards(st, en, 'form'));
+    if (st.i_side) {
+      // дуэлянт: открыть доску участником и расставить
+      const iReady = st.i_side === 'a' ? st.att_ready : st.def_ready;
+      parts.push(iReady
+        ? `<div class="fc-ok">✔ ${en ? 'Your fleet is set. Waiting for the opponent.' : 'Ваш флот утверждён. Ждём соперника.'}</div>`
+        : `<button class="hp-vna-cta" onclick="event.stopPropagation();fcDeploy()">⚔ ${en ? 'Deploy your fleet' : 'Расставить флот'}</button>`);
+    } else {
+      parts.push(`<div class="hp-vna-obs">👁 ${en ? 'Duelists are drafting their fleets. Betting opens when the battle starts.' : 'Дуэлянты собирают флоты. Ставки откроются с началом боя.'}</div>`);
+    }
+  }
+
+  if (st.status === 'live' && st.battle_status !== 'forming') {
     parts.push(`<div class="fc-phase live"><span class="fc-phase-tag">${en ? 'FIGHT IN PROGRESS' : 'ИДЁТ БОЙ'}</span>
       <span class="fc-phase-t">${en ? 'bets are open until the kill' : 'ставки открыты до последнего корабля'}</span></div>`);
     parts.push(_fcDuelCards(st, en, true));
@@ -5555,24 +5573,30 @@ function _fcBody(st, en) {
   const h = Array.isArray(st.history) ? st.history : [];
   if (h.length) {
     parts.push(`<details class="fc-hist"><summary>${en ? 'Past duels' : 'Летопись дуэлей'} · ${h.length}</summary>
-      ${h.map(r => `<div class="fc-hist-row"><b>${esc(r.winner || '?')}</b> ${en ? 'defeated' : 'одолел(а)'} ${esc(r.winner === r.a ? r.b : r.a)} <span class="fc-hist-ships">«${esc(r.ship_a || '')}» vs «${esc(r.ship_b || '')}»</span></div>`).join('')}
+      ${h.map(r => `<div class="fc-hist-row"><b>${esc(r.winner || '?')}</b> ${en ? 'defeated' : 'одолел(а)'} ${esc(r.winner === r.a ? r.b : r.a)}${r.ship_a || r.ship_b ? ` <span class="fc-hist-ships">«${esc(r.ship_a || '')}» vs «${esc(r.ship_b || '')}»</span>` : ''}</div>`).join('')}
     </details>`);
   }
   // .fc-col: центрированная колонна арены (margin:auto в .hp-vn-fc-body)
   return '<div class="fc-col">' + parts.join('') + '</div>';
 }
-// Карточки дуэлянтов: держава + выданный корабль + пул ставок
-function _fcDuelCards(st, en, showPools) {
+// Карточки дуэлянтов. mode: 'form' — статус готовности флота; true — пул ставок
+// (идёт бой); false — без пулов (вердикт). Корабли теперь драфтятся игроком из
+// резерва, поэтому единого «выданного корабля» больше нет.
+function _fcDuelCards(st, en, mode) {
   const tot = (Number(st.pool_a) || 0) + (Number(st.pool_b) || 0);
-  const card = (name, ship, cls, cnt, pool) => `<div class="fc-duel-card">
+  const card = (name, ready, pool) => `<div class="fc-duel-card">
     <div class="fc-duel-name">${esc(name || '?')}</div>
-    <div class="fc-duel-ship">${cnt ? cnt + ' × ' : ''}«${esc(ship || '?')}»${cls ? ` <span class="fc-duel-cls">${esc(cls)}</span>` : ''}</div>
-    ${showPools ? `<div class="fc-duel-pool">${en ? 'pool' : 'пул'}: <b>${_fcMoney(pool)} ГС</b>${tot > 0 ? ' · ' + Math.round(100 * (Number(pool) || 0) / tot) + '%' : ''}</div>` : ''}
+    ${mode === 'form'
+      ? `<div class="fc-duel-ship">${ready
+          ? (en ? '✔ fleet ready' : '✔ флот готов')
+          : (en ? '… drafting fleet' : '… собирает флот')}</div>`
+      : ''}
+    ${mode === true ? `<div class="fc-duel-pool">${en ? 'pool' : 'пул'}: <b>${_fcMoney(pool)} ГС</b>${tot > 0 ? ' · ' + Math.round(100 * (Number(pool) || 0) / tot) + '%' : ''}</div>` : ''}
   </div>`;
   return `<div class="fc-duel">
-    ${card(st.duelist_a_name, st.ship_a_name, st.ship_a_cls, st.cnt_a, st.pool_a)}
+    ${card(st.duelist_a_name, st.att_ready, st.pool_a)}
     <div class="fc-duel-vs">VS</div>
-    ${card(st.duelist_b_name, st.ship_b_name, st.ship_b_cls, st.cnt_b, st.pool_b)}
+    ${card(st.duelist_b_name, st.def_ready, st.pool_b)}
   </div>`;
 }
 async function fcSignup() {
@@ -5594,6 +5618,11 @@ function fcWatch() {
   if (!_fcState || !_fcState.battle_id) return;
   const spectate = !_fcState.i_duel;
   if (typeof bbOpen === 'function') bbOpen(_fcState.battle_id, spectate);
+}
+// Дуэлянт: открыть доску участником для драфта/расстановки флота (фаза forming).
+function fcDeploy() {
+  if (!_fcState || !_fcState.battle_id) return;
+  if (typeof bbOpen === 'function') bbOpen(_fcState.battle_id, false);
 }
 
 // ══════════════════════════════════════════════════════════════

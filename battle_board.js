@@ -223,11 +223,17 @@ function bbPhaseBar(s, myLeft, foeLeft) {
   if (s.status === 'forming') {
     const mine = s.my_side === 'attacker' ? s.att_ready : s.def_ready;
     const foe  = s.my_side === 'attacker' ? s.def_ready : s.att_ready;
-    return `<div class="bb-bar">
+    // бюджет драфта дуэли: сумма стоимости выставленного ≤ duel_budget
+    const budget = Number(s.duel_budget) || 0;
+    const spent = bbDuelSpent(s);
+    const over = budget > 0 && spent > budget;
+    const budgetSub = budget > 0
+      ? ` Бюджет: ${bbNum(spent)} / ${bbNum(budget)} ГС${over ? ' — перебор!' : ''}.` : '';
+    return `<div class="bb-bar${over ? ' bb-bar-foe' : ''}">
         <b>Расстановка</b>
-        <span class="bb-bar-sub">${mine ? 'Ваш состав утверждён.' : 'Вытащите корабли из резерва в свою зону.'} ${foe ? 'Противник готов.' : 'Противник ещё расставляет.'}</span>
+        <span class="bb-bar-sub">${mine ? 'Ваш состав утверждён.' : 'Вытащите корабли из резерва в свою зону.'} ${foe ? 'Противник готов.' : 'Противник ещё расставляет.'}${budgetSub}</span>
         ${dockBtn}
-        ${mine ? '' : `<button class="btn btn-gd btn-sm" ${BB.place.length ? '' : 'disabled'} onclick="bbConfirmDeploy()">В бой (${BB.place.length})</button>`}
+        ${mine ? '' : `<button class="btn btn-gd btn-sm" ${BB.place.length && !over ? '' : 'disabled'} onclick="bbConfirmDeploy()">В бой (${BB.place.length})</button>`}
       </div>`;
   }
   const mv = s.my_turn;
@@ -256,6 +262,13 @@ function bbDeadline(s) {
 
 // Компактное число для карточек резерва
 function bbNum(v) { v = +v || 0; return v >= 1000 ? Math.round(v).toLocaleString('ru') : String(Math.round(v)); }
+// Сумма стоимости выставленных бортов (для бюджета драфта дуэли).
+// Цена берётся из карточки пула по unit_id.
+function bbDuelSpent(s) {
+  const cost = {};
+  (Array.isArray(s.pool) ? s.pool : []).forEach(p => { cost[p.unit_id] = Number(p.cost) || 0; });
+  return BB.place.reduce((sum, p) => sum + (cost[p.unit_id] || 0), 0);
+}
 // Развёрнутые ТТХ корабля из резерва/подкрепления (класс, корпус, урон, ход,
 // дальность + важные детали: щит/броня, грузоподъёмность, экипаж, боевые модули).
 function bbPoolDetail(p) {
@@ -279,20 +292,36 @@ function bbDeployPanel(s) {
   const pool = Array.isArray(s.pool) ? s.pool : [];
   const used = {};
   BB.place.forEach(p => { used[p.unit_id] = (used[p.unit_id] || 0) + 1; });
+  const budget = Number(s.duel_budget) || 0;
   const rows = pool.map(p => {
     const free = (p.free || 0) - (used[p.unit_id] || 0);
     const on = BB.pick === p.unit_id;
+    const price = Number(p.cost) > 0 ? ` · ${bbNum(p.cost)} ГС` : '';
     return `<button class="bb-pool${on ? ' bb-pool-on' : ''}" ${free <= 0 ? 'disabled' : ''}
         onclick="bbPick('${jsq(p.unit_id)}')">
         <span class="bb-pool-cls">${bbClsIco(p.cls)}</span>
         <span class="bb-pool-n">${esc(p.unit_name)}
-          <i>${bbPoolDetail(p)}</i></span>
+          <i>${bbPoolDetail(p)}${price}</i></span>
         <span class="bb-pool-q">×${free}</span>
       </button>`;
   }).join('');
+  // счётчик бюджета драфта (только у дуэли клуба)
+  let meter = '';
+  if (budget > 0) {
+    const spent = bbDuelSpent(s);
+    const pct = Math.min(100, Math.round(100 * spent / budget));
+    const over = spent > budget;
+    meter = `<div class="bb-budget${over ? ' bb-budget-over' : ''}">
+        <div class="bb-budget-h">Бюджет флота: <b>${bbNum(spent)}</b> / ${bbNum(budget)} ГС${over ? ' — уберите борт' : ''}</div>
+        <div class="bb-budget-bar"><span style="width:${pct}%"></span></div>
+      </div>`;
+  }
   return `<div class="bb-panel">
       <div class="bb-panel-t">Резерв на поле боя</div>
-      <div class="bb-panel-h">Выберите корабль, затем клик по своей зоне (подсвеченные гексы у вашего края). Максимум ${s.cap} на доске. Клик по уже поставленному — снять.</div>
+      <div class="bb-panel-h">${budget > 0
+        ? 'Соберите флот из резерва в рамках бюджета: выберите корабль, затем клик по своей зоне (подсвеченные гексы у вашего края).'
+        : 'Выберите корабль, затем клик по своей зоне (подсвеченные гексы у вашего края).'} Максимум ${s.cap} на доске. Клик по уже поставленному — снять.</div>
+      ${meter}
       ${rows || '<div class="bb-empty">Резерв пуст: в скованных боем флотах кораблей нет.</div>'}
     </div>`;
 }

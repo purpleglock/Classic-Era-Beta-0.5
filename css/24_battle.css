@@ -199,6 +199,15 @@
 }
 .bb-panel-h { color: #6f8998; font-size: 12px; line-height: 1.5; margin-bottom: 8px; }
 .bb-empty { color: #55707e; font-size: 12px; font-style: italic; }
+/* счётчик бюджета драфта (дуэль клуба) */
+.bb-budget { margin: 0 0 10px; }
+.bb-budget-h { color: #8fb0c0; font-size: 12px; margin-bottom: 4px; }
+.bb-budget-h b { color: var(--bbc); font-family: var(--font-mono, monospace); }
+.bb-budget-bar { height: 5px; background: rgba(90,220,240,.14); border-radius: 3px; overflow: hidden; }
+.bb-budget-bar span { display: block; height: 100%; background: var(--bbc); transition: width .16s; }
+.bb-budget-over .bb-budget-h { color: #ff7f7f; }
+.bb-budget-over .bb-budget-h b { color: #ff7f7f; }
+.bb-budget-over .bb-budget-bar span { background: #ff5f5f; }
 
 /* Карточка проекта в резерве — гранёная кнопка */
 .bb-pool {

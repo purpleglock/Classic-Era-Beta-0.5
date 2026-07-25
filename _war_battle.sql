@@ -138,6 +138,8 @@ begin
     st := public._bt_stats(r.uid);
     res := res || jsonb_build_array(jsonb_build_object(
       'unit_id', r.uid, 'unit_name', r.nm, 'free', r.qty - used,
+      'cost', (select coalesce((fu.summary->>'cost')::numeric, 0)
+                 from public.faction_units fu where fu.id = r.uid),
       'cls', st->>'cls', 'hp', st->'hp', 'dmg', st->'dmg',
       'speed', st->'speed', 'rng', st->'rng',
       -- расширенные ТТХ для карточки резерва/подкрепления
