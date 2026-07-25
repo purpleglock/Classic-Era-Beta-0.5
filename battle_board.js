@@ -17,6 +17,9 @@
 // гексами при перемещении (и своём, и чужом — видно, чем занят враг), а
 // выстрелы дают трассеры/вспышки/разлёт обломков. Далёкие пустые гексы у
 // краёв гаснут во тьму — доска не «обрывается» голой сеткой.
+// СМЕНА ХОДА: при переходе хода — вспышка-баннер «Ход противника»/«Ваш ход»,
+// а камера сама доворачивается к действиям врага (и обратно к своим на своём
+// ходу), чтобы чужой манёвр/залп не оставался за кадром.
 // Все панели — В НИЖНЕМ ДОКЕ под доской (сворачивается), сбоку пусто.
 // ════════════════════════════════════════════════════════════════════
 
@@ -46,6 +49,8 @@ const BB = {
   pinch: null,
   anim: { move: new Map(), fx: [], raf: 0 },   // движение кораблей + эффекты боя
   prevU: null,       // снимок юнитов прошлого кадра (для диффа перемещений/потерь)
+  prevTurn: null,    // чей был ход в прошлом кадре ('me'|'foe'|side) — для баннера передачи хода
+  camAnim: null,     // плавный доворот камеры к действиям противника {x0,y0,x1,y1,t0,dur}
 };
 
 const BB_SQ3 = Math.sqrt(3);
@@ -86,6 +91,7 @@ function bbClose() {
   document.body.style.overflow = '';
   BB.id = null; BB.st = null; BB.cv = null; BB.ctx = null; BB.stars = null;
   BB.terr = null; BB.reach = null; BB.prevU = null;
+  BB.prevTurn = null; BB.camAnim = null;
   if (BB.anim.raf) cancelAnimationFrame(BB.anim.raf);
   BB.anim = { move: new Map(), fx: [], raf: 0 };
   BB.ptrs.clear(); BB.drag = null; BB.pinch = null;
@@ -120,10 +126,56 @@ async function bbReload() {
   (BB.st.terrain || []).forEach(e => BB.terr.set(e.x + ':' + e.y, e.t));
   BB.reach = null;
   bbRender();
+  bbTurnHandover();                       // баннер «Ход противника»/«Ваш ход» при смене хода
   bbDiffAnimate(prev, BB.st.units || []);
   // снимок для следующего диффа
   BB.prevU = (BB.st.units || []).map(u => ({ id: u.id, x: u.x, y: u.y, hp: u.hp, facing: u.facing, contact: u.contact }));
   bbMaybeBotTurn();
+}
+
+// Ключ «чей сейчас ход» для сравнения кадров. Для участника — свой/чужой,
+// для зрителя дуэли — конкретная сторона.
+function bbTurnKey(s) {
+  if (!s || s.status !== 'active') return null;
+  if (s.my_side === 'spectator') return 'side:' + (s.side_to_move || '');
+  return s.my_turn ? 'me' : 'foe';
+}
+// Баннер передачи хода: короткая вспышка поверх доски при переходе хода
+// от одной стороны к другой. Так виден сам факт «ход перешёл», а не только
+// сменившийся текст в полосе состояния.
+function bbTurnHandover() {
+  const s = BB.st; if (!s) return;
+  const key = bbTurnKey(s);
+  const prev = BB.prevTurn;
+  BB.prevTurn = key;
+  if (key == null || prev == null || key === prev) return;
+  let txt, cls;
+  if (s.my_side === 'spectator') {
+    const att = s.side_to_move === 'attacker';
+    txt = 'Ходит: ' + esc(att ? (s.attacker_name || 'нападающий') : (s.defender_name || 'обороняющийся'));
+    cls = att ? 'bb-tf-me' : 'bb-tf-foe';
+  } else if (key === 'me') {
+    txt = 'Ваш ход'; cls = 'bb-tf-me';
+    // вернуть обзор к своим кораблям — после чужого хода камера могла уехать
+    const mine = (s.units || []).filter(u => u.mine);
+    if (mine.length && !BB.drag) {
+      const cx = mine.reduce((a, u) => a + bbHexCenter(u.x, u.y).px, 0) / mine.length;
+      const cy = mine.reduce((a, u) => a + bbHexCenter(u.x, u.y).py, 0) / mine.length;
+      bbCamPanTo(cx, cy, 650);
+    }
+  } else {
+    txt = 'Ход противника'; cls = 'bb-tf-foe';
+  }
+  bbShowTurnFlash(txt, cls);
+}
+function bbShowTurnFlash(txt, cls) {
+  const host = document.querySelector('.bb-cvw'); if (!host) return;
+  const old = host.querySelector('.bb-turn-flash'); if (old) old.remove();
+  const el = document.createElement('div');
+  el.className = 'bb-turn-flash ' + cls;
+  el.innerHTML = `<span class="bb-tf-bar"></span><span class="bb-tf-t">${txt}</span><span class="bb-tf-bar"></span>`;
+  host.appendChild(el);
+  el.addEventListener('animationend', () => el.remove(), { once: true });
 }
 
 // Дифф старого и нового состава: кто сдвинулся — плавно едет; кто потерял
@@ -133,6 +185,7 @@ function bbDiffAnimate(prev, cur) {
   if (!Array.isArray(prev) || !prev.length) return;   // первый кадр — без анимации
   const pm = new Map(prev.map(u => [u.id, u]));
   const seen = new Set();
+  const foeAct = [];   // точки действий противника — камера доворачивается к ним
   cur.forEach(u => {
     seen.add(u.id);
     const p = pm.get(u.id);
@@ -144,12 +197,14 @@ function bbDiffAnimate(prev, cur) {
         f0: (p.facing || 0), f1: (u.facing || 0),
         t0: performance.now(), dur: 460,
       });
+      if (!u.mine) { const c = bbHexCenter(u.x, u.y); foeAct.push(c); }
     }
     // попадание: корпус просел, но корабль жив
     if (p.hp != null && u.hp != null && u.hp < p.hp - 0.01) {
       const c = bbHexCenter(u.x, u.y);
       bbFxAdd({ kind: 'hit', px: c.px, py: c.py, t0: performance.now(), dur: 520,
                 col: u.mine ? BB_C.mine : BB_C.foe });
+      foeAct.push(c);   // куда прилетело — тоже интересно показать
     }
   });
   // потери: были в прошлом кадре, пропали — взрыв на прежнем месте
@@ -158,7 +213,28 @@ function bbDiffAnimate(prev, cur) {
     const c = bbHexCenter(p.x, p.y);
     bbFxAdd({ kind: 'boom', px: c.px, py: c.py, t0: performance.now(), dur: 820,
               col: '255,150,60' });
+    foeAct.push(c);
   });
+  // Камера следует за действиями противника: во время его хода (или для
+  // зрителя дуэли) доводим обзор к средней точке того, что он делает, —
+  // иначе далёкий манёвр/залп остаётся за кадром.
+  const watchFoe = BB.spectate || (BB.st && !BB.st.my_turn);
+  if (watchFoe && foeAct.length && !BB.drag) {
+    const cx = foeAct.reduce((a, c) => a + c.px, 0) / foeAct.length;
+    const cy = foeAct.reduce((a, c) => a + c.py, 0) / foeAct.length;
+    bbCamPanTo(cx, cy, 700);
+  }
+  bbAnimKick();
+}
+
+// Плавный доворот камеры так, чтобы мировая точка (px,py) оказалась в центре
+// вьюпорта. Не дёргает, если точка уже почти по центру.
+function bbCamPanTo(px, py, dur) {
+  const tx = px - BB.vw / BB.zoom / 2;
+  const ty = py - BB.vh / BB.zoom / 2;
+  const x0 = BB.camX, y0 = BB.camY;
+  if (Math.hypot(tx - x0, ty - y0) < BB.R * 0.6) return;   // уже в кадре
+  BB.camAnim = { x0, y0, x1: tx, y1: ty, t0: performance.now(), dur: dur || 700 };
   bbAnimKick();
 }
 
@@ -696,6 +772,7 @@ function bbBindCanvas() {
       const p = bbScreenXY(ev);
       BB.drag = { sx: p.sx, sy: p.sy, camX: BB.camX, camY: BB.camY, moved: false };
       BB.pinch = null;
+      BB.camAnim = null;   // ручной пан отменяет авто-доворот камеры
     } else if (BB.ptrs.size === 2) {
       const [a, b] = [...BB.ptrs.values()];
       BB.pinch = { d: Math.hypot(a.sx - b.sx, a.sy - b.sy), zoom: BB.zoom };
@@ -899,8 +976,17 @@ function bbAnimTick() {
   BB.anim.move.forEach((m, id) => { if (now - m.t0 >= m.dur) BB.anim.move.delete(id); });
   // снять погасшие эффекты
   BB.anim.fx = BB.anim.fx.filter(f => now - f.t0 < f.dur);
+  // доворот камеры к действиям противника
+  const ca = BB.camAnim;
+  if (ca) {
+    const t = bbEase(Math.min(1, (now - ca.t0) / ca.dur));
+    BB.camX = bbLerp(ca.x0, ca.x1, t);
+    BB.camY = bbLerp(ca.y0, ca.y1, t);
+    bbCamClamp();
+    if (t >= 1) BB.camAnim = null;
+  }
   bbPaint();
-  if (BB.anim.move.size || BB.anim.fx.length) bbAnimKick();
+  if (BB.anim.move.size || BB.anim.fx.length || BB.camAnim) bbAnimKick();
 }
 // Экранный (мировой) центр корабля с учётом активного перемещения.
 function bbUnitCenter(u) {
