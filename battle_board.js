@@ -51,6 +51,7 @@ const BB = {
   prevU: null,       // снимок юнитов прошлого кадра (для диффа перемещений/потерь)
   prevTurn: null,    // чей был ход в прошлом кадре ('me'|'foe'|side) — для баннера передачи хода
   camAnim: null,     // плавный доворот камеры к действиям противника {x0,y0,x1,y1,t0,dur}
+  moveHint: new Map(), // id → реальный маршрут своего хода [{x,y,f}] (для анимации по гексам)
 };
 
 const BB_SQ3 = Math.sqrt(3);
@@ -91,7 +92,7 @@ function bbClose() {
   document.body.style.overflow = '';
   BB.id = null; BB.st = null; BB.cv = null; BB.ctx = null; BB.stars = null;
   BB.terr = null; BB.reach = null; BB.prevU = null;
-  BB.prevTurn = null; BB.camAnim = null;
+  BB.prevTurn = null; BB.camAnim = null; BB.moveHint.clear();
   if (BB.anim.raf) cancelAnimationFrame(BB.anim.raf);
   BB.anim = { move: new Map(), fx: [], raf: 0 };
   BB.ptrs.clear(); BB.drag = null; BB.pinch = null;
@@ -126,8 +127,8 @@ async function bbReload() {
   (BB.st.terrain || []).forEach(e => BB.terr.set(e.x + ':' + e.y, e.t));
   BB.reach = null;
   bbRender();
-  bbTurnHandover();                       // баннер «Ход противника»/«Ваш ход» при смене хода
-  bbDiffAnimate(prev, BB.st.units || []);
+  bbDiffAnimate(prev, BB.st.units || []);   // раньше баннера: дифф решает, магнитить ли к врагу
+  bbTurnHandover();                         // баннер «Ход противника»/«Ваш ход» + возврат к своим
   // снимок для следующего диффа
   BB.prevU = (BB.st.units || []).map(u => ({ id: u.id, x: u.x, y: u.y, hp: u.hp, facing: u.facing, contact: u.contact }));
   bbMaybeBotTurn();
@@ -156,12 +157,18 @@ function bbTurnHandover() {
     cls = att ? 'bb-tf-me' : 'bb-tf-foe';
   } else if (key === 'me') {
     txt = 'Ваш ход'; cls = 'bb-tf-me';
-    // вернуть обзор к своим кораблям — после чужого хода камера могла уехать
+    // вернуть обзор к своим кораблям — но НЕ перебивая только что наведённый
+    // магнит к действиям врага (тогда сначала показываем чужой залп).
     const mine = (s.units || []).filter(u => u.mine);
-    if (mine.length && !BB.drag) {
-      const cx = mine.reduce((a, u) => a + bbHexCenter(u.x, u.y).px, 0) / mine.length;
-      const cy = mine.reduce((a, u) => a + bbHexCenter(u.x, u.y).py, 0) / mine.length;
-      bbCamPanTo(cx, cy, 650);
+    if (mine.length && !BB.drag && !BB.foeActed) {
+      let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+      mine.forEach(u => { const c = bbHexCenter(u.x, u.y);
+        minx = Math.min(minx, c.px); maxx = Math.max(maxx, c.px);
+        miny = Math.min(miny, c.py); maxy = Math.max(maxy, c.py); });
+      const pad = BB.R * 8;
+      let z = Math.min(BB.vw / ((maxx - minx) + pad), BB.vh / ((maxy - miny) + pad));
+      z = Math.max(0.6, Math.min(z, 1.3));
+      bbCamFocus((minx + maxx) / 2, (miny + maxy) / 2, z, 650);
     }
   } else {
     txt = 'Ход противника'; cls = 'bb-tf-foe';
@@ -190,13 +197,10 @@ function bbDiffAnimate(prev, cur) {
     seen.add(u.id);
     const p = pm.get(u.id);
     if (!p) return;
-    // перемещение
+    // перемещение — по гексам маршрута, а не по прямой
     if ((p.x !== u.x || p.y !== u.y) && !u.contact && !p.contact) {
-      BB.anim.move.set(u.id, {
-        x0: p.x, y0: p.y, x1: u.x, y1: u.y,
-        f0: (p.facing || 0), f1: (u.facing || 0),
-        t0: performance.now(), dur: 460,
-      });
+      const mv = bbBuildMove(p, u);
+      if (mv) BB.anim.move.set(u.id, mv);
       if (!u.mine) { const c = bbHexCenter(u.x, u.y); foeAct.push(c); }
     }
     // попадание: корпус просел, но корабль жив
@@ -215,26 +219,37 @@ function bbDiffAnimate(prev, cur) {
               col: '255,150,60' });
     foeAct.push(c);
   });
-  // Камера следует за действиями противника: во время его хода (или для
-  // зрителя дуэли) доводим обзор к средней точке того, что он делает, —
-  // иначе далёкий манёвр/залп остаётся за кадром.
-  const watchFoe = BB.spectate || (BB.st && !BB.st.my_turn);
-  if (watchFoe && foeAct.length && !BB.drag) {
-    const cx = foeAct.reduce((a, c) => a + c.px, 0) / foeAct.length;
-    const cy = foeAct.reduce((a, c) => a + c.py, 0) / foeAct.length;
-    bbCamPanTo(cx, cy, 700);
+  // Камера магнитится к действиям противника: наводится на них И зумит,
+  // чтобы кадрировать залп/манёвр. Гейта «сейчас чужой ход» тут быть НЕ
+  // должно — снимок приходит опросом, когда ход УЖЕ вернулся к нам, но
+  // foeAct содержит только чужие действия, так что этого достаточно.
+  BB.foeActed = foeAct.length > 0;   // подсказка для bbTurnHandover: не тянуть камеру домой
+  if (foeAct.length && !BB.drag) {
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    foeAct.forEach(c => {
+      minx = Math.min(minx, c.px); maxx = Math.max(maxx, c.px);
+      miny = Math.min(miny, c.py); maxy = Math.max(maxy, c.py);
+    });
+    const cx = (minx + maxx) / 2, cy = (miny + maxy) / 2;
+    // подгоняем зум под охват действий + запас, но в разумных пределах
+    const pad = BB.R * 7;
+    const bw = (maxx - minx) + pad, bh = (maxy - miny) + pad;
+    let z = Math.min(BB.vw / bw, BB.vh / bh);
+    z = Math.max(0.7, Math.min(z, 1.45));
+    bbCamFocus(cx, cy, z, 700);
   }
   bbAnimKick();
 }
 
-// Плавный доворот камеры так, чтобы мировая точка (px,py) оказалась в центре
-// вьюпорта. Не дёргает, если точка уже почти по центру.
-function bbCamPanTo(px, py, dur) {
-  const tx = px - BB.vw / BB.zoom / 2;
-  const ty = py - BB.vh / BB.zoom / 2;
-  const x0 = BB.camX, y0 = BB.camY;
-  if (Math.hypot(tx - x0, ty - y0) < BB.R * 0.6) return;   // уже в кадре
-  BB.camAnim = { x0, y0, x1: tx, y1: ty, t0: performance.now(), dur: dur || 700 };
+// Плавный доворот+зум камеры: мировая точка (px,py) уезжает в центр вьюпорта,
+// а зум тянется к zoom. Интерполируем именно ЦЕНТР обзора, чтобы точка держалась
+// в кадре на всём протяжении. Не дёргает, если и так почти на месте.
+function bbCamFocus(px, py, zoom, dur) {
+  const z0 = BB.zoom;
+  const cx0 = BB.camX + BB.vw / z0 / 2, cy0 = BB.camY + BB.vh / z0 / 2;
+  const z1 = Math.max(0.2, Math.min(3, zoom || z0));
+  if (Math.hypot(px - cx0, py - cy0) < BB.R * 0.5 && Math.abs(z1 - z0) < 0.03) return;
+  BB.camAnim = { cx0, cy0, cx1: px, cy1: py, z0, z1, t0: performance.now(), dur: dur || 700 };
   bbAnimKick();
 }
 
@@ -587,6 +602,20 @@ function bbDirOf(a, b) {
   return ((Math.round((deg - 30) / 60) % 6) + 6) % 6;
 }
 function bbDirAngle(f) { return (30 + 60 * f) * Math.PI / 180; }
+// Маршрут гексами от a к b: каждый шаг — в ближайшем из 6 направлений к цели.
+// Для чужого хода точного пути нет (виден лишь старт/финиш), но так корабль
+// едет вдоль сетки, а не режет по диагонали. Возвращает [{x,y,f}] без старта.
+function bbHexLine(a, b) {
+  const out = [];
+  let cur = { x: a.x, y: a.y }, guard = 0;
+  while ((cur.x !== b.x || cur.y !== b.y) && guard++ < 60) {
+    const d = bbDirOf(cur, b);
+    const nx = bbStep(cur.x, cur.y, d);
+    out.push({ x: nx.x, y: nx.y, f: d });
+    cur = nx;
+  }
+  return out;
+}
 function bbTerra(x, y) { return BB.terr ? (BB.terr.get(x + ':' + y) || null) : null; }
 
 function bbHexFromWorld(wx, wy) {
@@ -904,7 +933,12 @@ async function bbAct(fn, body, okMsg) {
     toast((e && e.message) ? e.message : 'Не вышло', 'err');
   } finally { BB.busy = false; }
 }
-function bbMove(id, path) { return bbAct('battle_move', { p_battle: BB.id, p_unit: id, p_path: path }); }
+function bbMove(id, path) {
+  // запомним точный маршрут — чтобы корабль анимировался ПО ГЕКСАМ, а не
+  // по прямой из точки А в точку Б (диффу иначе виден только старт/финиш).
+  if (Array.isArray(path) && path.length) BB.moveHint.set(id, { path: path.slice(), t: Date.now() });
+  return bbAct('battle_move', { p_battle: BB.id, p_unit: id, p_path: path });
+}
 function bbLaunch(id) { return bbAct('battle_launch', { p_battle: BB.id, p_unit: id }, 'Авиакрыло в воздухе — вступит со следующего хода'); }
 function bbFire(id, tid) { return bbAct('battle_fire', { p_battle: BB.id, p_unit: id, p_target: tid }); }
 function bbEndTurn() {
@@ -976,22 +1010,71 @@ function bbAnimTick() {
   BB.anim.move.forEach((m, id) => { if (now - m.t0 >= m.dur) BB.anim.move.delete(id); });
   // снять погасшие эффекты
   BB.anim.fx = BB.anim.fx.filter(f => now - f.t0 < f.dur);
-  // доворот камеры к действиям противника
+  // доворот+зум камеры к действиям противника (интерполируем центр обзора)
   const ca = BB.camAnim;
   if (ca) {
     const t = bbEase(Math.min(1, (now - ca.t0) / ca.dur));
-    BB.camX = bbLerp(ca.x0, ca.x1, t);
-    BB.camY = bbLerp(ca.y0, ca.y1, t);
+    const z = bbLerp(ca.z0, ca.z1, t);
+    const cx = bbLerp(ca.cx0, ca.cx1, t), cy = bbLerp(ca.cy0, ca.cy1, t);
+    BB.zoom = z;
+    BB.camX = cx - BB.vw / z / 2;
+    BB.camY = cy - BB.vh / z / 2;
     bbCamClamp();
     if (t >= 1) BB.camAnim = null;
   }
   bbPaint();
   if (BB.anim.move.size || BB.anim.fx.length || BB.camAnim) bbAnimKick();
 }
+// Собрать твин перемещения ПО МАРШРУТУ: список гексов (свой ход — точный из
+// moveHint, чужой — реконструкция bbHexLine), из них — ломаная центров, длины
+// сегментов (для равномерной скорости) и курс на каждой вершине (плавный
+// доворот носа в поворотах).
+function bbBuildMove(p, u) {
+  let hexes = null;
+  const hint = BB.moveHint.get(u.id);
+  if (hint && Array.isArray(hint.path) && hint.path.length && Date.now() - hint.t < 20000) {
+    const last = hint.path[hint.path.length - 1];
+    if (last && last.x === u.x && last.y === u.y) hexes = hint.path;
+  }
+  BB.moveHint.delete(u.id);
+  if (!hexes) hexes = bbHexLine(p, u);
+  if (!hexes.length) return null;
+  // вершины ломаной: старт + все гексы маршрута
+  const verts = [{ x: p.x, y: p.y }].concat(hexes.map(h => ({ x: h.x, y: h.y })));
+  const pts = verts.map(v => bbHexCenter(v.x, v.y));
+  const seg = [];
+  let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const dx = pts[i + 1].px - pts[i].px, dy = pts[i + 1].py - pts[i].py;
+    const len = Math.hypot(dx, dy) || 1;
+    seg.push({ len, ang: Math.atan2(dy, dx) });
+    total += len;
+  }
+  // курс на вершинах: старт — куда поедет, повороты — среднее соседних сегментов,
+  // финиш — итоговый facing с сервера
+  const angs = new Array(pts.length);
+  angs[0] = seg[0].ang;
+  for (let i = 1; i < seg.length; i++) angs[i] = bbLerpAng(seg[i - 1].ang, seg[i].ang, 0.5);
+  angs[pts.length - 1] = bbDirAngle(u.facing || 0);
+  const n = seg.length;
+  return { pts, seg, angs, total, t0: performance.now(),
+           dur: Math.min(1100, 240 + 170 * n) };
+}
 // Экранный (мировой) центр корабля с учётом активного перемещения.
 function bbUnitCenter(u) {
   const m = u.id != null ? BB.anim.move.get(u.id) : null;
   if (!m) { const c = bbHexCenter(u.x, u.y); return { px: c.px, py: c.py, ang: bbDirAngle(u.facing || 0) }; }
+  // старый формат (прямой лерп) — на случай незавершённых твинов
+  if (m.pts) {
+    const t = bbEase(Math.min(1, (performance.now() - m.t0) / m.dur));
+    const target = t * m.total;
+    let acc = 0, i = 0;
+    while (i < m.seg.length - 1 && acc + m.seg[i].len < target) { acc += m.seg[i].len; i++; }
+    const segT = m.seg[i].len ? (target - acc) / m.seg[i].len : 0;
+    const A = m.pts[i], B = m.pts[i + 1];
+    return { px: bbLerp(A.px, B.px, segT), py: bbLerp(A.py, B.py, segT),
+             ang: bbLerpAng(m.angs[i], m.angs[i + 1], segT) };
+  }
   const t = bbEase(Math.min(1, (performance.now() - m.t0) / m.dur));
   const a = bbHexCenter(m.x0, m.y0), b = bbHexCenter(m.x1, m.y1);
   return { px: bbLerp(a.px, b.px, t), py: bbLerp(a.py, b.py, t),
