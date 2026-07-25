@@ -304,6 +304,12 @@ function ecSpyCalc(op, agentIds, targetFid) {
 }
 // Ресурсы планет: цена продажи и добыча/слот по редкости
 const EC_RES_PRICE = { common: 2, uncommon: 10, rare: 50, epic: 200, legendary: 1200 };
+// Масса ЕДИНИЦЫ ресурса (кг трюма/ед) по редкости — зеркало SQL _res_mass.
+// Редкие плотнее: занимают больше грузоподъёмности флота (kv.cap, кг). Трюм,
+// который расходует ресурс = масса × количество. Месторождений больше нет —
+// «вес» ресурса задаётся его редкостью, а фактический груз — ещё и объёмом.
+const EC_RES_MASS = { common: 1, uncommon: 2, rare: 4, epic: 8, legendary: 16 };
+function ecResMass(name) { return EC_RES_MASS[ecResRarity(name)] || 1; }
 const EC_RES_RATE = { common: 14, uncommon: 9, rare: 5, epic: 4, legendary: 2 };   // темп ОДНОЙ постройки (до баффов и слотов); ×1.75 2026-07-12
 // КАП: планетарный потолок добычи ресурса /сут по РАЗМЕРУ месторождения (×баффы, жёсткий предел 70) — зеркало _mine_cap; ×1.75 2026-07-12.
 const EC_MINE_CAP = { 'колоссально': 14, 'очень много': 11, 'много': 8, 'умеренно': 6, 'мало': 4, 'следы': 2 };
@@ -369,7 +375,7 @@ const EC_BUILD = {
   // БАЛЛИСТИЧЕСКИЙ ВОЕНПРОМЗАВОД — RPC ballfab_build, техно pol.ballistics (без слотов).
   ballfab:          { name: 'Баллистический военпромзавод', cost: 150000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Конвейер баллистических боеголовок для Гиперпейсера: 4 тира — лёгкая, «Фантом», кассетная, тяжёлая. 1 снаряд за 1 день. Слотов нет.' },
   // ОЖЕРЕЛЬЕ НЕМЕЗИДЫ — мегасооружение, строится отдельным RPC nemesis_build.
-  nemesis:          { name: 'Ожерелье Немезиды', cost: 2500000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'МЕГАСООРУЖЕНИЕ: кольцо перехватчиков, прикрывающее ВСЮ систему как ПРО. 6 зарядов, восстанавливается +1/сутки — куда устойчивее к перегрузке, чем планетарная ПРО.' },
+  nemesis:          { name: 'Ожерелье Немезиды', cost: 6000000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'МЕГАСООРУЖЕНИЕ: кольцо перехватчиков, прикрывающее ВСЮ систему. ГАРАНТИРОВАННО сбивает ЛЮБОЙ залп Длани и Гиперпейсера — без зарядов и осечек. Пока Ожерелье стоит, система неуязвима для ударов из космоса. Стоит очень дорого.' },
 };
 // Стоимость орудия в Программируемой материи (зеркало _doom_const('build_matter')).
 const EC_DOOM_BUILD_MATTER = 40, EC_DOOM_SHOT_GRAV = 20;
@@ -403,7 +409,7 @@ const EC_BALL_KINDS = ['ball_light', 'ball_emp', 'ball_cluster', 'ball_heavy'];
 const EC_MZA_RANGE_HOPS = 4, EC_MZA_HEAVY_RANGE_MUL = 2;
 // Ожерелье Немезиды — мегасооружение: системная ПРО (зеркало nemesis_build/_shell_const).
 // Требует технологию pol.nemesis (стоит в ветке судного дня ДО Гиперпейсера).
-const EC_NEMESIS = { gc: 2500000, res: { 'Стелларит': 50, 'Рагенод': 10, 'Гравиядро': 5 }, charges: 6, buildDays: 3 };
+const EC_NEMESIS = { gc: 2000000, res: { 'Стелларит': 200, 'Рагенод': 40, 'Гравиядро': 20 }, charges: 6, buildDays: 3, guaranteed: true };
 const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'wellhub', 'trade', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'airfield', 'starbase', 'flak', 'abm', 'temple'];
 // Рецепт фабрики товаров (зеркало accrue в _budget_wellbeing.sql): на слот/сутки.
 // Товары ДЕМАТЕРИАЛИЗОВАНЫ — не ресурс: выпуск ровно под спрос населения.
@@ -458,7 +464,7 @@ const EC_BLD_HOWTO = {
   doomgun:          'Откройте пульт орудия, выберите систему-цель и планету — залп тратит 1 ПОСТРОЕННЫЙ снаряд Длани (собирается в Арсенале Судного Дня). Снаряд летит тем дольше, чем дальше цель: от ~3 ч до соседней системы и до суток — от края до края галактики. Держите запас Программируемой материи: без неё орудие деградирует быстрее и распадётся.',
   shellforge:       'Заказывайте снаряды Длани прямо на строке арсенала (стирают планету; нужны Длани и Гиперпейсеру). 1 снаряд = 1 день работы; готовые ложатся на общий склад снарядов державы.',
   ballfab:          'Заказывайте баллистику на строке завода: ⚡ лёгкая (быстрая, слабая), 👻 «Фантом» (не видна планетарной ПРО), 🧨 кассетная (2–4 постройки), 🪨 тяжёлая (1 Гравиядро, гарантированно 5 построек, бьёт ×2 радиуса). Носит только Гиперпейсер.',
-  nemesis:          'Работает само: любой залп судного дня или баллистики по ЛЮБОЙ планете этой системы перехватывается, пока есть заряды (6 макс, +1/сутки). Перехватывает раньше планетарной ПРО. Одно Ожерелье на систему.',
+  nemesis:          'Работает само: ГАРАНТИРОВАННО перехватывает ЛЮБОЙ залп Длани и Гиперпейсера по ЛЮБОЙ планете этой системы — без зарядов и осечек. Пока Ожерелье стоит, система неуязвима для ударов из космоса. Одно Ожерелье на систему.',
 };
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
@@ -6501,22 +6507,30 @@ function ecCvSync() {
   const cargoEl = ecId('ec-cv-cargo'); if (cargoEl) cargoEl.innerHTML = ecCvCargoHtml();   // грузоподъёмность могла измениться
   ecTradeCalc();
 }
-// Аллокатор груза каравана: распределяем грузоподъёмность флота по выбранным
-// ресурсам СКЛАДА — самые ценные грузим первыми, каждый ресурс капается своим
-// складским запасом (за вычетом обещанного другим путям) и остатком трюма.
+// Аллокатор груза каравана: распределяем грузоподъёмность флота (kv.cap, кг) по
+// выбранным ресурсам СКЛАДА. Каждая ЕДИНИЦА ресурса весит ecResMass(res) кг, так
+// что фактический расход трюма = масса × количество. Грузим по ПЛОТНОСТИ ЦЕННОСТИ
+// (цена/кг) — сперва то, что даёт больше ГС за кг трюма. Каждый ресурс капается
+// складским запасом (за вычетом обещанного другим путям) и остатком трюма в кг.
 function ecCvAllocate() {
-  // объём ограничен И собранным флотом, И свободной вместимостью (что меньше)
-  const cap = Math.min(ecCvFleetTotals().cap, ecCvFreeCap());
+  // трюм в КГ ограничен И собранным флотом, И свободной вместимостью (что меньше)
+  let rem = Math.min(ecCvFleetTotals().cap, ecCvFreeCap());   // кг
   const sel = Object.keys(EC.cvCargo || {}).filter(r => (+EC.cvCargo[r] || 0) > 0);
-  sel.sort((a, b) => ecResPriceN(b) - ecResPriceN(a));
-  let rem = cap; const out = [];
+  sel.sort((a, b) => (ecResPriceN(b) / ecResMass(b)) - (ecResPriceN(a) / ecResMass(a)));
+  const out = [];
   sel.forEach(res => {
-    // хочу ВВЕДЁННЫЙ объём/тик, но не больше склада (за вычетом обещанного другим путям)
+    const mass = ecResMass(res);
+    // хочу ВВЕДЁННЫЙ объём/тик (ед.), но не больше склада (за вычетом обещанного другим путям)
     const want = Math.min(+EC.cvCargo[res] || 0, ecExtractRate(res));
-    const vol = Math.min(want, rem);                 // и не больше остатка трюма (ценные — первыми)
-    if (vol > 0) { out.push({ res, vol }); rem -= vol; }
+    const fit = Math.floor(rem / mass);              // сколько единиц влезет в остаток трюма
+    const vol = Math.min(want, fit);
+    if (vol > 0) { out.push({ res, vol }); rem -= vol * mass; }
   });
   return out;
+}
+// Суммарный вес выбранного груза (кг) — расход грузоподъёмности флота.
+function ecCvCargoWeight() {
+  return ecCvAllocate().reduce((a, c) => a + c.vol * ecResMass(c.res), 0);
 }
 // Выбор ресурсов для каравана: галочкой добавляешь ресурс со склада, полем ввода
 // задаёшь СКОЛЬКО его уходит партнёру КАЖДЫЙ ТИК. Введённый объём капается запасом
@@ -6530,12 +6544,13 @@ function ecCvCargoHtml() {
     const want = +EC.cvCargo[n] || 0;      // введённый пользователем объём/тик
     const on = want > 0;
     const ship = alloc[n] || 0;            // реально уедет (после кап склада/трюма)
+    const mass = ecResMass(n);             // кг за единицу — тяжёлый груз ест трюм быстрее
     const bd = on ? 'var(--gd)' : 'var(--bd,#2a3550)';
     const canToggle = on || avail > 0;
-    // подпись: сколько РЕАЛЬНО уедет и почему меньше запрошенного
+    // подпись: сколько РЕАЛЬНО уедет и почему меньше запрошенного (+ вес груза)
     const tail = on
       ? (ship > 0
-          ? `<b style="color:var(--gd)">уходит ${ecNum(ship)}/тик${ship < want ? (ship >= avail ? ' · весь склад' : ' · лимит трюма') : ''}</b>`
+          ? `<b style="color:var(--gd)">уходит ${ecNum(ship)}/тик · ${ecNum(ship * mass)} кг${ship < want ? (ship >= avail ? ' · весь склад' : ' · лимит трюма') : ''}</b>`
           : `<b style="color:var(--err)">${avail <= 0 ? 'склад пуст' : 'трюм полон'}</b>`)
       : (avail <= 0 ? `<i style="color:var(--t4);font-style:normal">занято другими путями</i>` : `<i style="color:var(--t4);font-style:normal">+ и задайте объём</i>`);
     const stepper = on
@@ -6549,7 +6564,7 @@ function ecCvCargoHtml() {
       : '';
     return `<div style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;margin:4px 0;border-radius:8px;border:1px solid ${bd};background:${on ? 'rgba(120,200,140,.10)' : 'transparent'};opacity:${canToggle ? '1' : '.55'}">
       <button type="button" ${canToggle ? '' : 'disabled'} onclick="ecCvCargoToggle('${esc(n)}')" title="${on ? 'убрать ресурс из каравана' : 'добавить ресурс в караван'}" style="width:20px;height:20px;flex:none;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;border:1px solid ${on ? 'var(--gd)' : 'var(--t4)'};color:${on ? 'var(--gd)' : 'var(--t4)'};background:transparent;cursor:${canToggle ? 'pointer' : 'not-allowed'};font-weight:700">${on ? '✓' : '+'}</button>
-      <span style="flex:1">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4);font-style:normal"> · 📦 склад ${ecNum(avail)} · ${ecResPriceN(n)} ГС/ед</i></span>
+      <span style="flex:1">${ecResIcon(n)} ${esc(n)} <i style="color:var(--t4);font-style:normal"> · 📦 склад ${ecNum(avail)} · ${ecResPriceN(n)} ГС/ед · ⚖ ${ecNum(mass)} кг/ед</i></span>
       ${stepper}
       <span style="flex:none">${tail}</span>
     </div>`;
@@ -6563,11 +6578,11 @@ function ecCvCargoToggle(res) {
   else {
     const avail = ecExtractRate(res);
     if (avail <= 0) return;
-    const cap = Math.min(ecCvFleetTotals().cap, ecCvFreeCap());
-    let usedByOthers = 0;
-    Object.keys(EC.cvCargo).forEach(r => { usedByOthers += Math.min(+EC.cvCargo[r] || 0, ecExtractRate(r)); });
-    const freeTrunk = Math.max(0, cap - usedByOthers);
-    const def = Math.min(avail, freeTrunk);
+    const cap = Math.min(ecCvFleetTotals().cap, ecCvFreeCap());   // трюм в кг
+    let usedByOthers = 0;   // кг, занятые уже выбранными ресурсами (масса × кол-во)
+    Object.keys(EC.cvCargo).forEach(r => { usedByOthers += Math.min(+EC.cvCargo[r] || 0, ecExtractRate(r)) * ecResMass(r); });
+    const freeTrunk = Math.max(0, cap - usedByOthers);            // остаток трюма, кг
+    const def = Math.min(avail, Math.floor(freeTrunk / ecResMass(res)));   // сколько ЕДИНИЦ влезет
     EC.cvCargo[res] = def > 0 ? def : 1;   // трюм уже полон — ставим 1, пусть виден (уедет 0)
   }
   const el = ecId('ec-cv-cargo'); if (el) el.innerHTML = ecCvCargoHtml();
@@ -6678,7 +6693,7 @@ function ecTradeCalc() {
   const cargo = ecCvAllocate();
   let alloc = 0, myInc = 0, partnerInc = 0; const dealParts = [];
   cargo.forEach(({ res, vol }) => {
-    alloc += vol;
+    alloc += vol * ecResMass(res);   // расход трюма в КГ (масса × кол-во)
     const ship = vol;                                  // vol уже = min(добыча, остаток трюма)
     const price = ecResPriceN(res);
     myInc += Math.round(ship * price * gcMod * dipCoef);
@@ -6721,7 +6736,7 @@ function ecTradeCalc() {
 
   sumEl.innerHTML = `
     <div class="ec-trade-deal">Каждый ход: <b>${dealParts.length ? dealParts.join(' · ') : '—'}</b> → партнёру · вы <b style="color:var(--gd)">+${ecNum(myInc)} ГС</b>, партнёр <b style="color:var(--te)">+${ecNum(partnerInc)} ГС</b></div>
-    <div class="ec-trade-srow"><span>Загрузка</span><b style="color:${alloc > cargoCap ? 'var(--err)' : 'var(--t2)'}">${ecNum(alloc)} / грузоподъёмность ${ecNum(cargoCap)}</b></div>
+    <div class="ec-trade-srow"><span>Загрузка</span><b style="color:${alloc > cargoCap ? 'var(--err)' : 'var(--t2)'}">${ecNum(alloc)} кг / грузоподъёмность ${ecNum(cargoCap)} кг</b></div>
     ${routeLine}
     ${(oSys && dSys) ? `<div class="ec-trade-srow"><span>Время в пути</span><b>🚀 ${ecTravelTurns(oSys, dSys)} ход. · скорость флота ${ecFleetSpeed()}</b></div>` : ''}
     <div class="ec-trade-srow"><span>Риск грабежа / ход</span><b style="color:${riskColor}">${riskPct}%${convoy ? ` · 🛡 конвой ${convoy}` : threats.length ? ' · без охраны' : ''}</b></div>
@@ -10358,7 +10373,7 @@ const EC_POLITICS = [
   // Ожерелье Немезиды — мегасооружение, стоит в ветке ДО Гиперпейсера.
   { id: 'pol.nemesis', branch: 'doom', name: 'Ожерелье Немезиды',             cost: 2000, prereq: ['pol.inevitability'],
     special: 'nemesis',
-    desc: 'Ответ на собственный кошмар: кольцо орбитальных перехватчиков, накрывающее щитом ВСЮ систему. 6 зарядов, восстанавливается +1/сутки — куда устойчивее к перегрузке, чем планетарная ПРО. Открывает постройку мегасооружения «Ожерелье Немезиды».' },
+    desc: 'Ответ на собственный кошмар: кольцо орбитальных перехватчиков, накрывающее щитом ВСЮ систему. ГАРАНТИРОВАННО сбивает любой залп Длани и Гиперпейсера — без зарядов и осечек. Открывает постройку мегасооружения «Ожерелье Немезиды» (стоит очень дорого).' },
   // Гиперпейсер — капстоун ветки: ПОСЛЕ Ожерелья. Зеркало tech_nodes.pol.hyperpacer.
   { id: 'pol.hyperpacer', branch: 'doom', name: 'Гиперпейсер',                cost: 3500, prereq: ['pol.nemesis'],
     special: 'hyperpacer',
@@ -10576,6 +10591,10 @@ function ecResearchVNHtml(o) {
   const cards = nodes.map(n => {
     const c = cost(n);
     const prereqMiss = (n.prereq || []).filter(p => !done.has(p));
+    // Цепочку можно ставить в очередь, если каждый предшественник изучен,
+    // изучается ИЛИ уже стоит в очереди (зеркало проверки economy_research_queue
+    // и канвы-дерева). «locked» — только когда предшественник вообще не тронут.
+    const chainOk = (n.prereq || []).every(p => done.has(p) || activeMap.has(p) || queue.includes(p));
     let st, badge, act = '', foot = '';
     if (done.has(n.id)) {
       st = 'done'; badge = `✓ ${en ? 'researched' : 'изучено'}`;
@@ -10584,11 +10603,13 @@ function ecResearchVNHtml(o) {
       foot = `<div class="hp-vnt-prog"><i></i></div><div class="hp-vnt-left">${en ? 'ready in' : 'готово через'} ${ecResearchLeft(activeMap.get(n.id))}</div>`;
     } else if (queue.includes(n.id)) {
       st = 'queued'; badge = `⏳ ${en ? 'queued' : 'в очереди'} #${queue.indexOf(n.id) + 1}`;
-    } else if (prereqMiss.length) {
+    } else if (!chainOk) {
       st = 'locked'; badge = '🔒';
       foot = `<div class="hp-vnt-req">${en ? 'requires' : 'нужно'}: ${prereqMiss.map(p => `<span>${esc(nameOf(p))}</span>`).join('')}</div>`;
     } else {
-      const canNow = slots.length < maxSlots && sci >= c;
+      // prereqMiss.length ⇒ предшественник ещё не изучен (лишь в очереди/работе):
+      // немедленный запуск невозможен, только постановка в очередь.
+      const canNow = !prereqMiss.length && slots.length < maxSlots && sci >= c;
       st = 'avail'; badge = '';
       act = canNow
         ? `<button class="hp-vnt-go" type="button" onclick="event.stopPropagation();${o.goFn}('${jsq(n.id)}',false)">▶ ${en ? 'Research' : 'Исследовать'}</button>`
@@ -12144,18 +12165,12 @@ async function ecShellOrder(buildingId, kind) {
 
 // ── Ожерелье Немезиды: заряды системной ПРО ──
 function ecNemesisRow(b) {
-  const nemo = ((EC.shells || {}).nemesis || []).find(n => n.building_id === b.id) || {};
-  const ch = Math.max(0, +(nemo.charges != null ? nemo.charges : (b.ammo || 0)));
-  const mx = +(nemo.max || EC_NEMESIS.charges);
-  const dots = Array.from({ length: mx }, (_, i) =>
-    `<span class="ec-slot ${i < ch ? 'on' : ''}" style="${i < ch ? 'background:#a05aff;border-color:#a05aff' : ''}"></span>`).join('');
   return `<div class="ec-bld" style="border-color:rgba(150,90,255,.5)">
     <div class="ec-bld-top">
       <span class="ec-bld-name">⛨ ${esc(EC_BUILD.nemesis.name)} <span class="ec-bp-cat" style="background:rgba(150,90,255,.3);font-size:10px;padding:1px 6px;border-radius:6px">МЕГА</span></span>
       <button class="ec-bld-del" title="Снести" onclick="ecDemolish('${b.id}')">✕</button>
     </div>
-    <div class="ec-slots" title="Заряды перехвата: ${ch}/${mx}">${dots}</div>
-    <div class="ec-bld-inc" style="color:#b58aff">Заряды: <b>${ch}/${mx}</b> · реген +1/сутки</div>
+    <div class="ec-bld-inc" style="color:#b58aff">🛡 Гарантированная защита · система неуязвима для Длани и Гиперпейсера</div>
     <div class="ec-bld-howto">${esc(EC_BLD_HOWTO.nemesis)}</div>
   </div>`;
 }
@@ -13628,7 +13643,7 @@ function ecDoomVNForge() {
     </div>`}
   </div>`;
   const nemo = (sh.nemesis || []).map(n => `<div class="hp-vnd-gun">
-      <div class="hp-vnd-gun-hd"><span class="hp-vnd-gun-nm">⛨ Ожерелье Немезиды · ${esc(ecSysName(n.system_id))}</span><span class="hp-vnd-gun-st">заряды ${n.charges}/${n.max}</span></div>
+      <div class="hp-vnd-gun-hd"><span class="hp-vnd-gun-nm">⛨ Ожерелье Немезиды · ${esc(ecSysName(n.system_id))}</span><span class="hp-vnd-gun-st">🛡 неуязвимость</span></div>
       <div class="hp-vnd-gun-meta"><span>реген <b>+1/сутки</b></span><span>прикрывает всю систему</span></div>
     </div>`).join('');
   const nemoSec = nemo ? `<div class="hp-vnd-con-sec"><div class="hp-vnd-con-t"><i>III</i> щит · Немезиды</div><div class="hp-vnd-grid">${nemo}</div></div>` : '';
@@ -13658,7 +13673,7 @@ function ecShellArsenalSection() {
   const nemo = (sh.nemesis || []).map(n =>
     `<div class="ec-colonize-row"><div class="ec-cz-main">
       <span class="ec-cz-name">⛨ Ожерелье Немезиды · ${esc(ecSysName(n.system_id))}</span>
-      <span class="ec-cz-sub" style="color:#b58aff">заряды ${n.charges}/${n.max} · реген +1/сутки · прикрывает всю систему</span>
+      <span class="ec-cz-sub" style="color:#b58aff">🛡 гарантированная защита · система неуязвима для Длани и Гиперпейсера</span>
     </div></div>`).join('');
   return `<div class="ec-section-title">☢ Снаряды судного дня <span class="ec-hint">— склад: ☠ ${ecNum(ecShellsOf('doom'))} · 💥 ${ecNum(ecBallTotal())}</span></div>
     ${forges || `<div class="ec-bld-howto">Фабрик снарядов нет. Постройте <b>☢ Арсенал Судного Дня</b> (снаряды Длани) и/или <b>🏭 Баллистический военпромзавод</b> (тиры баллистики, техно «Межзвёздная баллистика») — без снарядов Длань и Гиперпейсер молчат.</div>`}

@@ -59,8 +59,8 @@ returns numeric language sql immutable as $$
     when 'mza_range_hops'  then 4
     when 'heavy_range_mul' then 2       -- тяжёлая бьёт ×2 радиуса (8 прыжков)
     -- Ожерелье Немезиды
-    when 'nemo_gc'         then 500000
-    when 'nemo_charges'    then 6
+    when 'nemo_gc'         then 2000000  -- гарантированный щит стоит дорого
+    when 'nemo_charges'    then 6         -- (устар.) заряды больше не расходуются
     when 'nemo_regen_d'    then 1
     when 'nemo_build_d'    then 3
     else 0 end
@@ -295,7 +295,7 @@ begin
     where cb.faction_id = fid and cb.btype in ('shellforge','ballfab');
   select coalesce(jsonb_agg(jsonb_build_object(
            'building_id', cb.id, 'colony_id', cb.colony_id, 'system_id', c.system_id,
-           'charges', coalesce(cb.ammo,0), 'max', public._shell_const('nemo_charges'))), '[]'::jsonb)
+           'charges', 999, 'max', 999, 'guaranteed', true)), '[]'::jsonb)
     into nemo from public.colony_buildings cb join public.colonies c on c.id = cb.colony_id
     where cb.faction_id = fid and cb.btype = 'nemesis';
   return jsonb_build_object('stock', stock, 'forges', forges, 'nemesis', nemo);
@@ -612,7 +612,7 @@ create or replace function public.nemesis_build(p_colony_id uuid)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare fid text; col public.colonies; eco public.faction_economy; res jsonb;
   used int; pending int; gc_cost numeric; k text; need numeric; have numeric; fname text; sysname text;
-  cost jsonb := jsonb_build_object('Стелларит', 50, 'Рагенод', 10, 'Гравиядро', 5);
+  cost jsonb := jsonb_build_object('Стелларит', 200, 'Рагенод', 40, 'Гравиядро', 20);
 begin
   fid := public._ec_my_fid();
   select * into eco from public.faction_economy where faction_id = fid for update;
@@ -673,16 +673,15 @@ create or replace function public._doom_intercept(p_system_id text, p_pid int, p
 returns text language plpgsql security definer set search_path=public as $$
 declare r record; hit boolean; bp jsonb;
 begin
-  -- 1) Ожерелье Немезиды: любая колония системы с btype='nemesis'
+  -- 1) Ожерелье Немезиды: любая колония системы с btype='nemesis'.
+  --    ГАРАНТИРОВАННАЯ защита: сбивает ЛЮБОЙ залп Длани и Гиперпейсера,
+  --    без расхода зарядов и без осечек. Пока Ожерелье стоит — система неуязвима.
   select cb.id, cb.faction_id into r
     from public.colony_buildings cb join public.colonies c on c.id = cb.colony_id
     where cb.btype='nemesis' and c.system_id = p_system_id
-    order by coalesce(cb.ammo,0) desc limit 1;
+    limit 1;
   if found then
-    perform public._nemesis_settle(r.faction_id);
-    update public.colony_buildings set ammo = ammo - 1
-      where id = r.id and coalesce(ammo,0) > 0;
-    if found then return 'nemesis'; end if;
+    return 'nemesis';
   end if;
   -- 2) планетарная ПРО (если срез обороны применён); «Фантом» она не видит
   bp := public._ball_params(p_kind);
@@ -714,7 +713,7 @@ begin
       perform public._doom_news('⛨ ЗАЛП ПЕРЕХВАЧЕН',
         case when v_icept = 'nemesis'
           then 'Ожерелье Немезиды вспыхнуло над системой: залп по планете «'||coalesce(s.target_planet,'???')||
-               '» сбит кольцом перехватчиков ещё на подходе. Заряд Ожерелья израсходован — оно восстановится.'
+               '» сбит кольцом перехватчиков ещё на подходе. Пока Ожерелье стоит, система неуязвима — сбивать залпы оно будет вечно.'
           else 'Залп по планете «'||coalesce(s.target_planet,'???')||
                '» сбит планетарной ПРО. Планета уцелела — снаряд противоракеты израсходован.' end);
       continue;

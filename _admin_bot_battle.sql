@@ -520,3 +520,56 @@ begin
 end$$;
 revoke all on function public.battle_deploy(uuid,jsonb) from public;
 grant execute on function public.battle_deploy(uuid,jsonb) to authenticated;
+
+-- ── _bt_check_end: в бот-бою исход — ТОЛЬКО по живым кораблям ───────────
+--   Перекрывает версию из _war_battle/_battle_finish_fix. Проблема: у игрока
+--   «резерв» = бесконечный админ-каталог (battle_pool is_full), поэтому обычная
+--   проверка «нет живых И pool=0» у игрока не срабатывает НИКОГДА — потеряв весь
+--   флот, он не проигрывает и бой висит, а бот ходит в пустоту.
+--   Решение: если бой = текущий тестовый бот-бой, победа определяется просто по
+--   тому, у кого не осталось живых кораблей на доске (каталог — это удобство
+--   расстановки/подкреплений, а не боевой резерв). Обычные бои — логика прежняя.
+create or replace function public._bt_check_end(p_battle uuid)
+returns void language plpgsql security definer set search_path=public as $$
+declare b record; a_alive int; d_alive int; a_pool int; d_pool int;
+        win text; is_bot boolean;
+begin
+  select * into b from public.battles where id = p_battle;
+  if b.id is null or b.status = 'done' then return; end if;
+  if b.status <> 'active' then return; end if;
+
+  select count(*) filter (where side='attacker'), count(*) filter (where side='defender')
+    into a_alive, d_alive
+    from public.battle_units where battle_id = p_battle and alive;
+
+  -- это текущий админский бой с ботами?
+  select exists(select 1 from public.admin_bot_duel where one = 1 and battle_id = p_battle)
+    into is_bot;
+
+  if is_bot then
+    -- исход только по живым: у кого пусто на доске — тот проиграл
+    if a_alive = 0 then win := b.defender_fid;      -- игрок выбит → победа ботов
+    elsif d_alive = 0 then win := b.attacker_fid;   -- боты выбиты → победа игрока
+    end if;
+  else
+    -- обычные бои: нет живых И резерв (реальные флоты) кончился
+    select coalesce(jsonb_array_length(public.battle_pool(p_battle, b.attacker_fid)),0) into a_pool;
+    select coalesce(jsonb_array_length(public.battle_pool(p_battle, b.defender_fid)),0) into d_pool;
+    if a_alive = 0 and a_pool = 0 then win := b.defender_fid;
+    elsif d_alive = 0 and d_pool = 0 then win := b.attacker_fid;
+    end if;
+  end if;
+
+  if win is null then return; end if;
+  perform public._bt_finish(p_battle, win);
+end$$;
+revoke all on function public._bt_check_end(uuid) from public;
+grant execute on function public._bt_check_end(uuid) to authenticated;
+
+-- Разово: перепроверить текущий бот-бой — если он уже завис (игрок выбит), закроется
+do $$
+declare bid uuid;
+begin
+  select battle_id into bid from public.admin_bot_duel where one = 1;
+  if bid is not null then perform public._bt_check_end(bid); end if;
+end$$;
