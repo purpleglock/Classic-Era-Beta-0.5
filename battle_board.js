@@ -1267,9 +1267,11 @@ function bbPaintUnits(ctx, s) {
   (s.units || []).forEach(u => {
     if (u.contact) { bbContact(ctx, u); return; }
     const spent = u.mine && s.my_turn && ((u.moved && u.fired) || (!u.acted && !(s.acts_left > 0)));
-    // на расстановке форсируем курс по стороне для ВСЕХ бортов, чтобы флоты
-    // смотрели навстречу, даже если сервер не проставил facing по стороне.
-    const uu = forming ? Object.assign({}, u, { facing: bbSideFacing(u.side) }) : u;
+    // Курс по стороне форсируем для ВСЕХ бортов, которые ещё НЕ маневрировали
+    // (вся расстановка + свежевыведенные в бой корабли): флоты смотрят навстречу,
+    // даже если сервер проставил facing в другую сторону. Как только корабль
+    // реально сходил (u.moved) — доверяем настоящему курсу с сервера.
+    const uu = (forming || !u.moved) ? Object.assign({}, u, { facing: bbSideFacing(u.side) }) : u;
     bbShip(ctx, uu, spent ? 0.5 : 1);
   });
 }
