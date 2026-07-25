@@ -266,8 +266,19 @@ begin
 
   select * into b from public.battles where id = p_battle;
   if b.att_ready and b.def_ready then
+    -- рев.8: переход в active САМ взводит первый ход — свежие активации и чистые
+    -- флаги нападающего. Раньше acts_left полагался на значение из insert, и любое
+    -- касание счётчика в фазе forming давало «0/6» и мёртвый ход.
+    update public.battle_units set moved = false, fired = false, acted = false, flash = false
+     where battle_id = p_battle and side = 'attacker';
+    -- курс по стороне на старте: флоты пришли с разных краёв и должны смотреть
+    -- навстречу (нападающий слева → вправо=0, защитник справа → влево=3).
+    -- Никто ещё не маневрировал, поэтому нормализуем безопасно.
+    update public.battle_units set facing = case when side = 'defender' then 3 else 0 end
+     where battle_id = p_battle;
     update public.battles
        set status = 'active', side_to_move = 'attacker', turn_no = 1,
+           acts_left = public._bt_acts(),
            deadline_at = now() + (public._bt_turn_hours() || ' hours')::interval
      where id = p_battle;
     perform public._bt_log(p_battle, 'Бой начался. Первый ход за нападающими.');

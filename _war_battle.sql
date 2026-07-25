@@ -36,6 +36,14 @@ alter table public.battles add column if not exists log jsonb not null default '
 create or replace function public._bt_w() returns int language sql immutable as $$ select 26 $$;
 create or replace function public._bt_h() returns int language sql immutable as $$ select 16 $$;
 create or replace function public._bt_cap() returns int language sql immutable as $$ select 50 $$;
+-- Ширина зоны разворачивания (столбцов у своего края). Создаём ТОЛЬКО если её
+-- ещё нет — чтобы не затереть значение, выставленное более поздним срезом боёв.
+do $$ begin
+  if not exists (select 1 from pg_proc where proname = '_bt_zone'
+                   and pronamespace = 'public'::regnamespace) then
+    execute 'create function public._bt_zone() returns int language sql immutable as $f$ select 4 $f$';
+  end if;
+end $$;
 -- Сколько часов даётся на ход, прежде чем противник вправе его прожать.
 create or replace function public._bt_turn_hours() returns int language sql immutable as $$ select 24 $$;
 
@@ -201,11 +209,11 @@ begin
     py  := coalesce((e->>'y')::int, -1);
     if uid is null then continue; end if;
     if py < 0 or py >= public._bt_h() then raise exception 'клетка вне доски'; end if;
-    if sd = 'attacker' and (px < 0 or px > 2) then
-      raise exception 'нападающий разворачивается в трёх левых колонках';
+    if sd = 'attacker' and (px < 0 or px >= public._bt_zone()) then
+      raise exception 'нападающий разворачивается в % левых колонках', public._bt_zone();
     end if;
-    if sd = 'defender' and (px < public._bt_w()-3 or px >= public._bt_w()) then
-      raise exception 'обороняющийся разворачивается в трёх правых колонках';
+    if sd = 'defender' and (px < public._bt_w()-public._bt_zone() or px >= public._bt_w()) then
+      raise exception 'обороняющийся разворачивается в % правых колонках', public._bt_zone();
     end if;
 
     -- корабль обязан реально быть в скованных боем флотах

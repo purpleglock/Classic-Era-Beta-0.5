@@ -13,7 +13,10 @@
 // радаром — «неопознанный контакт»: точка на доске, огонь вести нельзя.
 //
 // Доска — ГЕКСЫ flat-top в odd-q offset. Рендер — canvas с камерой
-// (зум/панорама). Фон СТАТИЧЕН — никакой анимации, ничто не отвлекает.
+// (зум/панорама). Звёздный фон статичен, НО корабли ПЛАВНО скользят между
+// гексами при перемещении (и своём, и чужом — видно, чем занят враг), а
+// выстрелы дают трассеры/вспышки/разлёт обломков. Далёкие пустые гексы у
+// краёв гаснут во тьму — доска не «обрывается» голой сеткой.
 // Все панели — В НИЖНЕМ ДОКЕ под доской (сворачивается), сбоку пусто.
 // ════════════════════════════════════════════════════════════════════
 
@@ -41,6 +44,8 @@ const BB = {
   ptrs: new Map(),
   drag: null,
   pinch: null,
+  anim: { move: new Map(), fx: [], raf: 0 },   // движение кораблей + эффекты боя
+  prevU: null,       // снимок юнитов прошлого кадра (для диффа перемещений/потерь)
 };
 
 const BB_SQ3 = Math.sqrt(3);
@@ -80,7 +85,9 @@ function bbClose() {
   if (ov) ov.classList.remove('show');
   document.body.style.overflow = '';
   BB.id = null; BB.st = null; BB.cv = null; BB.ctx = null; BB.stars = null;
-  BB.terr = null; BB.reach = null;
+  BB.terr = null; BB.reach = null; BB.prevU = null;
+  if (BB.anim.raf) cancelAnimationFrame(BB.anim.raf);
+  BB.anim = { move: new Map(), fx: [], raf: 0 };
   BB.ptrs.clear(); BB.drag = null; BB.pinch = null;
   if (typeof ecReload === 'function') ecReload();
 }
@@ -98,19 +105,61 @@ function bbStopPoll() { if (BB.poll) { clearInterval(BB.poll); BB.poll = null; }
 
 async function bbReload() {
   if (!BB.id) return;
+  const prev = BB.prevU;                 // снимок кораблей до обновления
+  let next;
   try {
-    BB.st = await ecRpc(BB.spectate ? 'fc_watch_state' : 'battle_state', { p_battle: BB.id });
+    next = await ecRpc(BB.spectate ? 'fc_watch_state' : 'battle_state', { p_battle: BB.id });
   } catch (e) {
     const ov = document.getElementById('bb-ov');
     if (ov) ov.innerHTML = `<div class="bb-load">Бой недоступен: ${esc(e.message || e)}<br><button class="btn btn-gh btn-sm" style="margin-top:12px" onclick="bbClose()">Закрыть</button></div>`;
     return;
   }
+  BB.st = next;
   // ландшафт → быстрый Map для проверок и рендера
   BB.terr = new Map();
   (BB.st.terrain || []).forEach(e => BB.terr.set(e.x + ':' + e.y, e.t));
   BB.reach = null;
   bbRender();
+  bbDiffAnimate(prev, BB.st.units || []);
+  // снимок для следующего диффа
+  BB.prevU = (BB.st.units || []).map(u => ({ id: u.id, x: u.x, y: u.y, hp: u.hp, facing: u.facing, contact: u.contact }));
   bbMaybeBotTurn();
+}
+
+// Дифф старого и нового состава: кто сдвинулся — плавно едет; кто потерял
+// корпус — вспышка попадания; кто исчез — разлёт обломков. Так на доске
+// видно И свой ход, И то, чем занят противник между опросами.
+function bbDiffAnimate(prev, cur) {
+  if (!Array.isArray(prev) || !prev.length) return;   // первый кадр — без анимации
+  const pm = new Map(prev.map(u => [u.id, u]));
+  const seen = new Set();
+  cur.forEach(u => {
+    seen.add(u.id);
+    const p = pm.get(u.id);
+    if (!p) return;
+    // перемещение
+    if ((p.x !== u.x || p.y !== u.y) && !u.contact && !p.contact) {
+      BB.anim.move.set(u.id, {
+        x0: p.x, y0: p.y, x1: u.x, y1: u.y,
+        f0: (p.facing || 0), f1: (u.facing || 0),
+        t0: performance.now(), dur: 460,
+      });
+    }
+    // попадание: корпус просел, но корабль жив
+    if (p.hp != null && u.hp != null && u.hp < p.hp - 0.01) {
+      const c = bbHexCenter(u.x, u.y);
+      bbFxAdd({ kind: 'hit', px: c.px, py: c.py, t0: performance.now(), dur: 520,
+                col: u.mine ? BB_C.mine : BB_C.foe });
+    }
+  });
+  // потери: были в прошлом кадре, пропали — взрыв на прежнем месте
+  prev.forEach(p => {
+    if (seen.has(p.id) || p.contact) return;
+    const c = bbHexCenter(p.x, p.y);
+    bbFxAdd({ kind: 'boom', px: c.px, py: c.py, t0: performance.now(), dur: 820,
+              col: '255,150,60' });
+  });
+  bbAnimKick();
 }
 
 // Бой с ботами (админ-тест): когда наступает ход стороны-ботов — прогоняем его
@@ -748,6 +797,10 @@ function bbClick(x, y) {
     if (noActs) { toast(`Активации кончились: за ход действуют не больше ${s.acts_max || 6} кораблей`, 'err'); return; }
     const h = bbCanHit(sel, tgt);
     if (!h.ok) { toast(h.why, 'err'); return; }
+    const a = bbHexCenter(sel.x, sel.y), b = bbHexCenter(tgt.x, tgt.y);
+    bbFxAdd({ kind: 'beam', x0: a.px, y0: a.py, x1: b.px, y1: b.py,
+              t0: performance.now(), dur: 340, col: BB_C.mine });
+    bbAnimKick();
     bbFire(sel.id, tgt.id);
     return;
   }
@@ -814,7 +867,98 @@ async function bbConfirmDeploy() {
 }
 
 // ════════════════════════════════════════════════════════════
-// РЕНДЕР: статичный кадр (никакой анимации — ничто не отвлекает)
+// АНИМАЦИЯ: скольжение кораблей между гексами + эффекты боя.
+// Кадр рисуется обычным bbPaint(); пока есть активные твины/эффекты —
+// крутим rAF-цикл, по завершении отрисовываем финальный статичный кадр.
+// ════════════════════════════════════════════════════════════
+function bbEase(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+function bbLerp(a, b, t) { return a + (b - a) * t; }
+// Кратчайшая интерполяция угла (курс поворачивает в «ближнюю» сторону)
+function bbLerpAng(a, b, t) {
+  let d = ((b - a) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+  return a + d * t;
+}
+function bbFxAdd(fx) {
+  // немного искр для взрыва/попадания — заранее, чтобы разлёт был детерминирован
+  const n = fx.kind === 'boom' ? 14 : 6;
+  fx.spark = [];
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * 6.2832, sp = (fx.kind === 'boom' ? 1 : 0.6) * (0.5 + Math.random());
+    fx.spark.push({ a, sp, r: 0.4 + Math.random() * 0.5 });
+  }
+  BB.anim.fx.push(fx);
+}
+function bbAnimKick() {
+  if (BB.anim.raf) return;
+  BB.anim.raf = requestAnimationFrame(bbAnimTick);
+}
+function bbAnimTick() {
+  BB.anim.raf = 0;
+  const now = performance.now();
+  // снять завершённые перемещения
+  BB.anim.move.forEach((m, id) => { if (now - m.t0 >= m.dur) BB.anim.move.delete(id); });
+  // снять погасшие эффекты
+  BB.anim.fx = BB.anim.fx.filter(f => now - f.t0 < f.dur);
+  bbPaint();
+  if (BB.anim.move.size || BB.anim.fx.length) bbAnimKick();
+}
+// Экранный (мировой) центр корабля с учётом активного перемещения.
+function bbUnitCenter(u) {
+  const m = u.id != null ? BB.anim.move.get(u.id) : null;
+  if (!m) { const c = bbHexCenter(u.x, u.y); return { px: c.px, py: c.py, ang: bbDirAngle(u.facing || 0) }; }
+  const t = bbEase(Math.min(1, (performance.now() - m.t0) / m.dur));
+  const a = bbHexCenter(m.x0, m.y0), b = bbHexCenter(m.x1, m.y1);
+  return { px: bbLerp(a.px, b.px, t), py: bbLerp(a.py, b.py, t),
+           ang: bbLerpAng(bbDirAngle(m.f0), bbDirAngle(m.f1), t) };
+}
+
+// Эффекты боя поверх кораблей (в мировых координатах).
+function bbPaintFx(ctx) {
+  const now = performance.now(), R = BB.R;
+  BB.anim.fx.forEach(f => {
+    const t = Math.min(1, (now - f.t0) / f.dur);
+    ctx.save();
+    if (f.kind === 'beam') {
+      // трассер выстрела: яркая линия, гаснущая к концу
+      const a = 1 - t;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(${f.col},${0.9 * a})`;
+      ctx.lineWidth = Math.max(1.5, (2 + 2 * a) / BB.zoom);
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(f.x0, f.y0); ctx.lineTo(f.x1, f.y1); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 * a})`; ctx.lineWidth = Math.max(0.5, 1 / BB.zoom);
+      ctx.beginPath(); ctx.moveTo(f.x0, f.y0); ctx.lineTo(f.x1, f.y1); ctx.stroke();
+    } else {
+      // hit / boom: вспышка + разлёт искр
+      const grow = f.kind === 'boom' ? R * (0.4 + t * 1.1) : R * (0.2 + t * 0.5);
+      const a = 1 - t;
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(f.px, f.py, 0, f.px, f.py, grow);
+      g.addColorStop(0, `rgba(${f.col},${0.55 * a})`);
+      g.addColorStop(0.5, `rgba(${f.col},${0.22 * a})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(f.px, f.py, grow, 0, 6.2832); ctx.fill();
+      // ударное кольцо у взрыва
+      if (f.kind === 'boom') {
+        ctx.strokeStyle = `rgba(255,240,200,${0.6 * a})`;
+        ctx.lineWidth = Math.max(0.6, 1.6 * a / BB.zoom);
+        ctx.beginPath(); ctx.arc(f.px, f.py, grow * 0.9, 0, 6.2832); ctx.stroke();
+      }
+      // искры
+      (f.spark || []).forEach(s => {
+        const d = grow * (0.5 + s.sp * t);
+        const sx = f.px + Math.cos(s.a) * d, sy = f.py + Math.sin(s.a) * d;
+        ctx.fillStyle = `rgba(255,225,170,${a})`;
+        ctx.beginPath(); ctx.arc(sx, sy, Math.max(0.6, s.r * R * 0.12 * a), 0, 6.2832); ctx.fill();
+      });
+    }
+    ctx.restore();
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// РЕНДЕР: статичный кадр (поверх — активные твины/эффекты боя)
 // ════════════════════════════════════════════════════════════
 function bbPaint() {
   const s = BB.st, ctx = BB.ctx; if (!s || !ctx) return;
@@ -827,8 +971,10 @@ function bbPaint() {
   ctx.setTransform(BB.dpr * z, 0, 0, BB.dpr * z, -BB.camX * BB.dpr * z, -BB.camY * BB.dpr * z);
   bbPaintHexes(ctx, s);
   bbPaintTerrain(ctx, s);
+  bbPaintEdgeFog(ctx, s);
   bbPaintHighlights(ctx, s);
   bbPaintUnits(ctx, s);
+  bbPaintFx(ctx);
 
   ctx.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);
   bbPaintScan(ctx, BB.vw, BB.vh);
@@ -904,15 +1050,33 @@ function bbPaintTerrain(ctx, s) {
     // детермин. «случайность» от координат — рисунок не мигает между кадрами
     const rnd = k => { const v = Math.sin(x * 127.1 + y * 311.7 + k * 74.7) * 43758.5; return v - Math.floor(v); };
     if (t === 'ast') {
-      bbHexPath(ctx, c.px, c.py, R * 0.9);
-      ctx.fillStyle = 'rgba(120,110,100,0.10)'; ctx.fill();
-      for (let i = 0; i < 4; i++) {
-        const ax = c.px + (rnd(i) - 0.5) * R * 1.1, ay = c.py + (rnd(i + 9) - 0.5) * R * 1.1;
-        const ar = R * (0.12 + rnd(i + 4) * 0.16);
-        ctx.beginPath(); ctx.arc(ax, ay, ar, 0, 6.2832);
-        ctx.fillStyle = `rgba(${120 + rnd(i + 2) * 40 | 0},${110 + rnd(i + 3) * 30 | 0},100,0.55)`;
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = Math.max(0.5, 0.8 / BB.zoom); ctx.stroke();
+      // Россыпь каменных глыб — как пояс на карте: серый камень со светотенью,
+      // неправильная форма, тёмная теневая сторона, тонкий рим-свет сверху.
+      const rocks = 5 + Math.floor(rnd(20) * 2);
+      for (let i = 0; i < rocks; i++) {
+        const ax = c.px + (rnd(i) - 0.5) * R * 1.15, ay = c.py + (rnd(i + 9) - 0.5) * R * 1.15;
+        const ar = R * (0.14 + rnd(i + 4) * 0.2);
+        const sh = 0.62 + rnd(i + 5) * 0.35;    // тон камня
+        // неправильный многоугольник
+        ctx.beginPath();
+        const segs = 7;
+        for (let j = 0; j <= segs; j++) {
+          const a = (j / segs) * 6.2832;
+          const rr = ar * (0.72 + rnd(i * 13 + j) * 0.5);
+          const px = ax + Math.cos(a) * rr, py = ay + Math.sin(a) * rr;
+          j ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        }
+        ctx.closePath();
+        const g = ctx.createRadialGradient(ax - ar * 0.4, ay - ar * 0.5, ar * 0.1, ax, ay, ar * 1.3);
+        const lum = k => Math.round(k * (120 * sh));
+        g.addColorStop(0, `rgb(${lum(1.35)},${lum(1.42)},${lum(1.5)})`);
+        g.addColorStop(0.6, `rgb(${lum(0.9)},${lum(0.95)},${lum(1.02)})`);
+        g.addColorStop(1, `rgb(${lum(0.4)},${lum(0.42)},${lum(0.48)})`);
+        ctx.fillStyle = g; ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = Math.max(0.4, 0.7 / BB.zoom); ctx.stroke();
+        // рим-свет по верхней кромке
+        ctx.strokeStyle = 'rgba(200,214,226,0.3)'; ctx.lineWidth = Math.max(0.3, 0.5 / BB.zoom);
+        ctx.beginPath(); ctx.arc(ax, ay, ar * 0.85, Math.PI * 1.1, Math.PI * 1.7); ctx.stroke();
       }
     } else if (t === 'neb') {
       const g = ctx.createRadialGradient(c.px, c.py, 0, c.px, c.py, R * 1.15);
@@ -930,18 +1094,52 @@ function bbPaintTerrain(ctx, s) {
       ctx.fillStyle = 'rgba(10,14,22,0.95)'; ctx.fill();
       ctx.strokeStyle = 'rgba(140,220,255,0.8)'; ctx.lineWidth = Math.max(0.5, 1 / BB.zoom); ctx.stroke();
     } else if (t === 'deb') {
-      ctx.strokeStyle = 'rgba(170,180,190,0.45)';
-      ctx.lineWidth = Math.max(0.5, 1 / BB.zoom);
+      // Поле обломков: угловатые куски корпусной обшивки — тёмный металл
+      // с холодным кромочным бликом, редкие искры-заклёпки.
       for (let i = 0; i < 5; i++) {
-        const ax = c.px + (rnd(i) - 0.5) * R * 1.2, ay = c.py + (rnd(i + 7) - 0.5) * R * 1.2;
-        const a = rnd(i + 3) * Math.PI, l = R * 0.14;
+        const ax = c.px + (rnd(i) - 0.5) * R * 1.25, ay = c.py + (rnd(i + 7) - 0.5) * R * 1.25;
+        const rot = rnd(i + 3) * 6.2832, sz = R * (0.12 + rnd(i + 4) * 0.14);
+        const co = Math.cos(rot), si = Math.sin(rot);
+        // рваный четырёхугольник обшивки
+        const pts = [[-1, -0.5], [1.1, -0.35], [0.7, 0.6], [-0.9, 0.45]];
         ctx.beginPath();
-        ctx.moveTo(ax - Math.cos(a) * l, ay - Math.sin(a) * l);
-        ctx.lineTo(ax + Math.cos(a) * l, ay + Math.sin(a) * l);
-        ctx.stroke();
+        pts.forEach((p, j) => {
+          const px = ax + (p[0] * co - p[1] * si) * sz, py = ay + (p[0] * si + p[1] * co) * sz;
+          j ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        });
+        ctx.closePath();
+        const g = ctx.createLinearGradient(ax - sz, ay - sz, ax + sz, ay + sz);
+        g.addColorStop(0, 'rgba(88,100,112,0.9)'); g.addColorStop(1, 'rgba(26,32,40,0.9)');
+        ctx.fillStyle = g; ctx.fill();
+        ctx.strokeStyle = 'rgba(150,190,210,0.5)'; ctx.lineWidth = Math.max(0.4, 0.7 / BB.zoom); ctx.stroke();
+      }
+      // искры-осколки
+      for (let i = 0; i < 3; i++) {
+        const ax = c.px + (rnd(i + 11) - 0.5) * R * 1.4, ay = c.py + (rnd(i + 15) - 0.5) * R * 1.4;
+        ctx.fillStyle = 'rgba(180,200,215,0.5)';
+        ctx.beginPath(); ctx.arc(ax, ay, Math.max(0.5, R * 0.03), 0, 6.2832); ctx.fill();
       }
     }
   });
+}
+
+// ── ТЬМА У КРАЁВ: далёкие пустые гексы гаснут во мрак, доска не ───
+// обрывается голой сеткой. Градиенты в мировых координатах по 4 кромкам.
+function bbPaintEdgeFog(ctx, s) {
+  const { W, H } = bbWorldSize();
+  const R = BB.R, d = R * 4.2;           // глубина затухания ≈ 3 гекса
+  const dark = 'rgba(2,4,9,0.92)', clear = 'rgba(2,4,9,0)';
+  const band = (x, y, w, h, gx0, gy0, gx1, gy1) => {
+    const g = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
+    g.addColorStop(0, dark); g.addColorStop(1, clear);
+    ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  };
+  ctx.save();
+  band(-R, -R, d + R, H + 2 * R, -R, 0, d - R, 0);              // левая
+  band(W - d, -R, d + R, H + 2 * R, W + R, 0, W - d, 0);         // правая
+  band(-R, -R, W + 2 * R, d + R, 0, -R, 0, d - R);              // верх
+  band(-R, H - d, W + 2 * R, d + R, 0, H + R, 0, H - d);         // низ
+  ctx.restore();
 }
 
 // ── Подсветка: маршруты BFS + цели по секторам/полосам ──────
@@ -1056,15 +1254,23 @@ function bbPaintMovePreview(ctx, sel, r) {
   ctx.restore();
 }
 
+// Курс по стороне: нападающий пришёл слева → смотрит вправо (0), защитник
+// справа → влево (3). На расстановке никто ещё не маневрировал, поэтому курс
+// однозначно задаётся стороной — не полагаемся на facing с сервера.
+function bbSideFacing(side) { return side === 'defender' ? 3 : 0; }
 function bbPaintUnits(ctx, s) {
-  const defFacing = s.my_side === 'attacker' ? 0 : 3;
-  if (s.status === 'forming') {
+  const forming = s.status === 'forming';
+  if (forming) {
+    const defFacing = bbSideFacing(s.my_side);
     BB.place.forEach(p => bbShip(ctx, { x: p.x, y: p.y, cls: p.cls, name: p.unit_name, mine: true, facing: defFacing, hp: 1, max_hp: 1, shield: 0, max_shield: 0 }, 0.55));
   }
   (s.units || []).forEach(u => {
     if (u.contact) { bbContact(ctx, u); return; }
     const spent = u.mine && s.my_turn && ((u.moved && u.fired) || (!u.acted && !(s.acts_left > 0)));
-    bbShip(ctx, u, spent ? 0.5 : 1);
+    // на расстановке форсируем курс по стороне для ВСЕХ бортов, чтобы флоты
+    // смотрели навстречу, даже если сервер не проставил facing по стороне.
+    const uu = forming ? Object.assign({}, u, { facing: bbSideFacing(u.side) }) : u;
+    bbShip(ctx, uu, spent ? 0.5 : 1);
   });
 }
 
@@ -1209,10 +1415,11 @@ function bbSprite(cls, tIdx, side) {
 // Рисуем корабль: спрайт ПОВЁРНУТ по курсу (facing 0..5), шеврон курса,
 // полоски HP/щита горизонтальны под гексом.
 function bbShip(ctx, u, alpha) {
-  const { px: cx, py: cy } = bbHexCenter(u.x, u.y);
+  const uc = bbUnitCenter(u);
+  const cx = uc.px, cy = uc.py, ang = uc.ang;
+  const moving = u.id != null && BB.anim.move.has(u.id);
   const C = BB.R * 1.72;
   const col = u.mine ? BB_C.mine : BB_C.foe;
-  const ang = bbDirAngle(u.facing || 0);
   const dsn = bbDesignOf(u.name, u.cls);
   const tIdx = dsn && dsn.data && dsn.data.type != null ? dsn.data.type : null;
   const spr = bbSprite(u.cls, tIdx, u.mine ? 'mine' : 'foe');
@@ -1239,6 +1446,19 @@ function bbShip(ctx, u, alpha) {
   ctx.lineTo(chx + Math.cos(ang - 2.5) * BB.R * 0.13, chy + Math.sin(ang - 2.5) * BB.R * 0.13);
   ctx.closePath();
   ctx.fillStyle = `rgba(${col},0.85)`; ctx.fill();
+
+  // выхлопной след при скольжении между гексами — видно, что корабль в движении
+  if (moving) {
+    const tl = BB.R * 1.5;
+    const tx = cx - Math.cos(ang) * tl, ty = cy - Math.sin(ang) * tl;
+    const tg = ctx.createLinearGradient(cx, cy, tx, ty);
+    tg.addColorStop(0, `rgba(${col},0.5)`); tg.addColorStop(1, `rgba(${col},0)`);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = tg; ctx.lineWidth = Math.max(1.5, BB.R * 0.22); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.restore();
+  }
 
   // спрайт корпуса: нос смотрит вправо → поворот на угол курса
   ctx.translate(cx, cy);
