@@ -1,0 +1,61 @@
+<!doctype html><meta charset="utf-8">
+<title>bb ship classes harness</title>
+<body style="background:#070a10;margin:0;font:13px monospace;color:#bfe">
+<h3 style="padding:10px 14px;margin:0;color:#8fe6ff">Классы кораблей доски боя — силуэт + размер (слева меньший → справа больший)</h3>
+<div id="row" style="display:flex;align-items:flex-end;gap:4px;padding:24px 14px;overflow-x:auto"></div>
+<div id="log" style="padding:10px 14px;white-space:pre;color:#7d94a2"></div>
+<!-- стабы глобалей, которые скрипты могут дёрнуть на загрузке -->
+<script>
+  window.esc=function(s){return String(s==null?'':s)};
+  window.toast=function(){};window.go=function(){};window.setPg=function(){};
+  window.cnId=function(){return null};window.user=null;
+  window.ecRpc=function(){return Promise.resolve({})};
+  window.EC={designs:[]};
+</script>
+<script src="constructors_kv.js"></script>
+<script src="constructors_kv_adapt.js"></script>
+<script src="constructors.js"></script>
+<script src="battle_board.js"></script>
+<script>
+// Порядок = как в bbClsSize (ожидаем строго по возрастанию размера).
+var CLASSES = ['wing','corvette','supportCarrier','frigate','destroyer','hyperCruiser',
+               'cruiser','multiroleCarrier','mediumCruiser','battleship','ss13','dreadnought'];
+var BASE = 210;          // px на единицу длины (0.42+size*0.72)
+var log = [];
+var html = CLASSES.map(function(cls){
+  var H = bbGeo(cls);                       // ← ТУ ЖЕ функцию, что и доска
+  var size = bbClsSize(cls);
+  var lenFactor = 0.42 + size*0.72;         // зеркало bbShip
+  // силуэт: полубимс H.st = [[y, halfWidth],...]; строим замкнутый контур
+  var tip = Math.min.apply(null, H.st.map(function(p){return p[0]}));
+  var stern = H.engine ? H.engine[1] : Math.max.apply(null, H.st.map(function(p){return p[0]}));
+  var L = stern - tip, halfB = H.maxHW || Math.max.apply(null, H.st.map(function(p){return p[1]}));
+  var R2 = H.st.map(function(p){return [160+p[1], p[0]]});
+  var L2 = H.st.slice().reverse().map(function(p){return [160-p[1], p[0]]});
+  var pts = R2.concat(L2);
+  var sm = (typeof cnCatmullClosed==='function') ? cnCatmullClosed(pts)
+         : 'M'+pts.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1)}).join('L')+'Z';
+  // размеры отображения: длина ∝ lenFactor, ширина в той же пропорции (aspect корпуса)
+  var dispLen = BASE * lenFactor;
+  var aspect = (halfB*2) / L;               // ширина/длина корпуса
+  var dispW = dispLen * aspect;
+  var hull = (window.BB_HULL && BB_HULL[cls]) || cls;
+  var geoKey = (typeof CN_SHIP_GEO!=='undefined' && CN_SHIP_GEO[hull]) ? hull
+             : (CN_SHIP_GEO[cls] ? cls+'(direct)' : 'FALLBACK-destroyer');
+  log.push(cls.padEnd(18)+' size='+size.toFixed(2)+'  ->hull '+geoKey+
+           '  len'+Math.round(dispLen)+'px  beam'+Math.round(dispW)+'px');
+  // viewBox по фактическому диапазону контура
+  var minX=160-halfB-4, w=(halfB+4)*2, minY=tip-6, h=(stern-tip)+12;
+  return '<div style="text-align:center;color:#9fd">'+
+    '<svg viewBox="'+minX+' '+minY+' '+w+' '+h+'" '+
+    'style="width:'+dispW.toFixed(0)+'px;height:'+dispLen.toFixed(0)+'px;display:block;transform:rotate(-90deg);transform-origin:center">'+
+    '<path d="'+sm+'" fill="rgba(90,220,240,.14)" stroke="#5adcf0" stroke-width="2.2"/></svg>'+
+    '<div style="margin-top:6px;font-size:11px">'+cls+'<br><span style="color:#55707e">'+size.toFixed(2)+' · '+geoKey+'</span></div>'+
+  '</div>';
+}).join('');
+document.getElementById('row').innerHTML = html;
+document.getElementById('log').textContent = log.join('\n');
+// контроль монотонности размера
+var szs = CLASSES.map(bbClsSize), mono = szs.every(function(v,i){return i===0||v>szs[i-1]});
+document.getElementById('log').textContent += '\n\nМОНОТОННО ПО ВОЗРАСТАНИЮ: '+(mono?'ДА ✓':'НЕТ ✗');
+</script>

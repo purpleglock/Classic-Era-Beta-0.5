@@ -13,8 +13,8 @@
 // радаром — «неопознанный контакт»: точка на доске, огонь вести нельзя.
 //
 // Доска — ГЕКСЫ flat-top в odd-q offset. Рендер — canvas с камерой
-// (зум/панорама). Звёздный фон статичен, НО корабли ПЛАВНО скользят между
-// гексами при перемещении (и своём, и чужом — видно, чем занят враг), а
+// (зум/панорама). Задник — чистая тьма без звёзд, корабли ПЛАВНО скользят
+// между гексами при перемещении (и своём, и чужом — видно, чем занят враг), а
 // выстрелы дают трассеры/вспышки/разлёт обломков. Далёкие пустые гексы у
 // краёв гаснут во тьму — доска не «обрывается» голой сеткой.
 // СМЕНА ХОДА: при переходе хода — вспышка-баннер «Ход противника»/«Ваш ход»,
@@ -40,7 +40,6 @@ const BB = {
   busy: false,
   spr: {},           // кэш спрайтов кораблей
   tex: {},           // кэш текстур корпуса
-  stars: null,       // офскрин-звёздное небо (статичное)
   dock: true,        // нижний док с панелями развёрнут?
   terr: null,        // Map "x:y" → 'ast'|'neb'|'grv'|'deb'
   reach: null,       // Map "x:y" → {steps, path} для выбранного корабля
@@ -90,7 +89,7 @@ function bbClose() {
   const ov = document.getElementById('bb-ov');
   if (ov) ov.classList.remove('show');
   document.body.style.overflow = '';
-  BB.id = null; BB.st = null; BB.cv = null; BB.ctx = null; BB.stars = null;
+  BB.id = null; BB.st = null; BB.cv = null; BB.ctx = null;
   BB.terr = null; BB.reach = null; BB.prevU = null;
   BB.prevTurn = null; BB.camAnim = null; BB.moveHint.clear();
   if (BB.anim.raf) cancelAnimationFrame(BB.anim.raf);
@@ -130,7 +129,7 @@ async function bbReload() {
   bbDiffAnimate(prev, BB.st.units || []);   // раньше баннера: дифф решает, магнитить ли к врагу
   bbTurnHandover();                         // баннер «Ход противника»/«Ваш ход» + возврат к своим
   // снимок для следующего диффа
-  BB.prevU = (BB.st.units || []).map(u => ({ id: u.id, x: u.x, y: u.y, hp: u.hp, facing: u.facing, contact: u.contact }));
+  BB.prevU = (BB.st.units || []).map(u => ({ id: u.id, x: u.x, y: u.y, hp: u.hp, facing: u.facing, contact: u.contact, mine: u.mine, side: u.side }));
   bbMaybeBotTurn();
 }
 
@@ -193,6 +192,9 @@ function bbDiffAnimate(prev, cur) {
   const pm = new Map(prev.map(u => [u.id, u]));
   const seen = new Set();
   const foeAct = [];   // точки действий противника — камера доворачивается к ним
+  const spec = BB.st && BB.st.my_side === 'spectator';
+  const now = performance.now();
+  const shots = [];    // урон/потери — собираем, чтобы разложить залп во времени
   cur.forEach(u => {
     seen.add(u.id);
     const p = pm.get(u.id);
@@ -205,19 +207,42 @@ function bbDiffAnimate(prev, cur) {
     }
     // попадание: корпус просел, но корабль жив
     if (p.hp != null && u.hp != null && u.hp < p.hp - 0.01) {
-      const c = bbHexCenter(u.x, u.y);
-      bbFxAdd({ kind: 'hit', px: c.px, py: c.py, t0: performance.now(), dur: 520,
-                col: u.mine ? BB_C.mine : BB_C.foe });
-      foeAct.push(c);   // куда прилетело — тоже интересно показать
+      shots.push({ x: u.x, y: u.y, mine: u.mine, side: u.side, kind: 'hit',
+                   col: u.mine ? BB_C.mine : BB_C.foe, foe: spec || !!u.mine });
+      foeAct.push(bbHexCenter(u.x, u.y));
     }
   });
   // потери: были в прошлом кадре, пропали — взрыв на прежнем месте
   prev.forEach(p => {
     if (seen.has(p.id) || p.contact) return;
-    const c = bbHexCenter(p.x, p.y);
-    bbFxAdd({ kind: 'boom', px: c.px, py: c.py, t0: performance.now(), dur: 820,
-              col: '255,150,60' });
-    foeAct.push(c);
+    shots.push({ x: p.x, y: p.y, mine: p.mine, side: p.side, kind: 'boom',
+                 col: '255,150,60', foe: spec || !!p.mine });
+    foeAct.push(bbHexCenter(p.x, p.y));
+  });
+  // Раскладываем урон во времени. Залпы ПО НАМ (или всё, если зритель) — это
+  // ход противника: показываем чередой, с трассером и дульной вспышкой у
+  // стрелка, чтобы сам ход врага читался. Наши подтверждённые попадания
+  // (трассер уже нарисован по клику) — сразу, без повторной линии.
+  let seq = 0;
+  shots.forEach(ev => {
+    const c = bbHexCenter(ev.x, ev.y);
+    const dur = ev.kind === 'boom' ? 950 : 600;
+    if (ev.foe) {
+      const start = now + seq * 150; seq++;
+      const sh = bbNearestShooter(ev, cur);
+      if (sh) {
+        const a = bbHexCenter(sh.x, sh.y), col = bbShooterCol(sh);
+        foeAct.push(a);
+        bbFxAdd({ kind: 'flash', px: a.px, py: a.py, t0: start, dur: 240, col });
+        bbFxAdd({ kind: 'beam', x0: a.px, y0: a.py, x1: c.px, y1: c.py,
+                  t0: start, dur: 380, col, head: true });
+        bbFxAdd({ kind: ev.kind, px: c.px, py: c.py, t0: start + 300, dur, col: ev.col });
+      } else {
+        bbFxAdd({ kind: ev.kind, px: c.px, py: c.py, t0: start, dur, col: ev.col });
+      }
+    } else {
+      bbFxAdd({ kind: ev.kind, px: c.px, py: c.py, t0: now, dur, col: ev.col });
+    }
   });
   // Камера магнитится к действиям противника: наводится на них И зумит,
   // чтобы кадрировать залп/манёвр. Гейта «сейчас чужой ход» тут быть НЕ
@@ -239,6 +264,28 @@ function bbDiffAnimate(prev, cur) {
     bbCamFocus(cx, cy, z, 700);
   }
   bbAnimKick();
+}
+
+// Ближайший вражеский корабль-стрелок для восстановления трассера: снимок
+// не говорит, КТО выстрелил, — берём ближайший корабль из другого лагеря.
+function bbNearestShooter(ev, cur) {
+  let best = null, bd = Infinity;
+  for (const u of cur) {
+    if (u.contact) continue;
+    if (ev.side ? u.side === ev.side : (!!u.mine === !!ev.mine)) continue;  // стрелок — из другого лагеря
+    if (u.x === ev.x && u.y === ev.y) continue;
+    const d = bbDist({ x: u.x, y: u.y }, { x: ev.x, y: ev.y });
+    if (d < bd) { bd = d; best = u; }
+  }
+  return best;
+}
+// Цвет трассера/вспышки по стороне стрелка: мои — бирюза, чужие — малина;
+// для зрителя — по лагерю (нападающий/обороняющийся).
+function bbShooterCol(sh) {
+  if (sh.mine) return BB_C.mine;
+  if (BB.st && BB.st.my_side === 'spectator')
+    return sh.side === 'attacker' ? BB_C.mine : BB_C.foe;
+  return BB_C.foe;
 }
 
 // Плавный доворот+зум камеры: мировая точка (px,py) уезжает в центр вьюпорта,
@@ -562,10 +609,25 @@ function bbClsIco(c) {
               supportCarrier: '⬨', mediumCruiser: '⬢', hyperCruiser: '⬡', multiroleCarrier: '⬨', ss13: '✦', wing: '𐊾' };
   return n[c] || '▸';
 }
+// Относительный размер корпуса на доске (0..1) — СТРОГО по возрастанию массы/роли
+// класса, чтобы флот читался «от мелочи к громадам». Масштаб см. в bbShip.
+//   wing(МЛА) < corvette < supportCarrier < frigate < destroyer < hyperCruiser
+//   < cruiser < multiroleCarrier < mediumCruiser < battleship < ss13 < dreadnought
 function bbClsSize(c) {
-  return ({ corvette: 0.42, frigate: 0.52, destroyer: 0.60, cruiser: 0.68, battleship: 0.80, dreadnought: 0.92,
-            supportCarrier: 0.66, mediumCruiser: 0.68, hyperCruiser: 0.76, multiroleCarrier: 0.78, ss13: 0.85,
-            wing: 0.30 })[c] || 0.55;
+  return ({
+    wing: 0.28,
+    corvette: 0.40,
+    supportCarrier: 0.46,
+    frigate: 0.50,
+    destroyer: 0.56,
+    hyperCruiser: 0.64,
+    cruiser: 0.68,
+    multiroleCarrier: 0.72,
+    mediumCruiser: 0.76,
+    battleship: 0.86,
+    ss13: 0.92,
+    dreadnought: 1.00,
+  })[c] || 0.55;
 }
 // Инерция: сколько прямых гексов нужно классу перед поворотом (зеркало _bt_turnneed)
 function bbTurnNeed(c) {
@@ -740,7 +802,6 @@ function bbFit() {
   BB.dpr = Math.min(2, window.devicePixelRatio || 1);
   BB.cv.style.width = BB.vw + 'px'; BB.cv.style.height = BB.vh + 'px';
   BB.cv.width = Math.round(BB.vw * BB.dpr); BB.cv.height = Math.round(BB.vh * BB.dpr);
-  BB.stars = null;
   if (!BB.camReady) { bbCamHome(); BB.camReady = true; }
   bbCamClamp();
 }
@@ -904,8 +965,10 @@ function bbClick(x, y) {
     const h = bbCanHit(sel, tgt);
     if (!h.ok) { toast(h.why, 'err'); return; }
     const a = bbHexCenter(sel.x, sel.y), b = bbHexCenter(tgt.x, tgt.y);
+    const t0 = performance.now();
+    bbFxAdd({ kind: 'flash', px: a.px, py: a.py, t0, dur: 240, col: BB_C.mine });
     bbFxAdd({ kind: 'beam', x0: a.px, y0: a.py, x1: b.px, y1: b.py,
-              t0: performance.now(), dur: 340, col: BB_C.mine });
+              t0, dur: 380, col: BB_C.mine, head: true });
     bbAnimKick();
     bbFire(sel.id, tgt.id);
     return;
@@ -990,12 +1053,24 @@ function bbLerpAng(a, b, t) {
   return a + d * t;
 }
 function bbFxAdd(fx) {
-  // немного искр для взрыва/попадания — заранее, чтобы разлёт был детерминирован
-  const n = fx.kind === 'boom' ? 14 : 6;
-  fx.spark = [];
-  for (let i = 0; i < n; i++) {
-    const a = Math.random() * 6.2832, sp = (fx.kind === 'boom' ? 1 : 0.6) * (0.5 + Math.random());
-    fx.spark.push({ a, sp, r: 0.4 + Math.random() * 0.5 });
+  // искры/обломки для взрыва/попадания — заранее, чтобы разлёт был детерминирован
+  if (fx.kind === 'boom' || fx.kind === 'hit') {
+    const boom = fx.kind === 'boom';
+    const n = boom ? 20 : 8;
+    fx.spark = [];
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 6.2832, sp = (boom ? 1.2 : 0.7) * (0.35 + Math.random());
+      fx.spark.push({ a, sp, r: 0.35 + Math.random() * 0.6, hot: Math.random() < 0.5 });
+    }
+    if (boom) {
+      // тяжёлые обломки — летят дальше, кувыркаются и гаснут медленнее искр
+      fx.debris = [];
+      const dn = 5 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < dn; i++)
+        fx.debris.push({ a: Math.random() * 6.2832, sp: 0.5 + Math.random() * 0.9,
+                         r: 0.5 + Math.random() * 0.7, rot: Math.random() * 6.2832,
+                         spin: (Math.random() - 0.5) * 0.6 });
+    }
   }
   BB.anim.fx.push(fx);
 }
@@ -1083,44 +1158,97 @@ function bbUnitCenter(u) {
 
 // Эффекты боя поверх кораблей (в мировых координатах).
 function bbPaintFx(ctx) {
-  const now = performance.now(), R = BB.R;
+  const now = performance.now(), R = BB.R, iz = 1 / BB.zoom;
   BB.anim.fx.forEach(f => {
-    const t = Math.min(1, (now - f.t0) / f.dur);
+    const raw = (now - f.t0) / f.dur;
+    if (raw < 0) return;                 // отложенный эффект ещё не начался
+    const t = Math.min(1, raw), a = 1 - t;
     ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
     if (f.kind === 'beam') {
-      // трассер выстрела: яркая линия, гаснущая к концу
-      const a = 1 - t;
-      ctx.globalCompositeOperation = 'lighter';
+      // трассер: широкое свечение + яркое ядро + добела раскалённая нить,
+      // и летящая «болванка» с коротким хвостом — виден сам выстрел, не мазок.
+      ctx.strokeStyle = `rgba(${f.col},${0.18 * a})`;
+      ctx.lineWidth = Math.max(3, 7 * iz);
+      ctx.beginPath(); ctx.moveTo(f.x0, f.y0); ctx.lineTo(f.x1, f.y1); ctx.stroke();
       ctx.strokeStyle = `rgba(${f.col},${0.9 * a})`;
-      ctx.lineWidth = Math.max(1.5, (2 + 2 * a) / BB.zoom);
-      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(1.4, (2 + 2 * a) * iz);
       ctx.beginPath(); ctx.moveTo(f.x0, f.y0); ctx.lineTo(f.x1, f.y1); ctx.stroke();
-      ctx.strokeStyle = `rgba(255,255,255,${0.5 * a})`; ctx.lineWidth = Math.max(0.5, 1 / BB.zoom);
+      ctx.strokeStyle = `rgba(255,255,255,${0.55 * a})`;
+      ctx.lineWidth = Math.max(0.5, iz);
       ctx.beginPath(); ctx.moveTo(f.x0, f.y0); ctx.lineTo(f.x1, f.y1); ctx.stroke();
+      if (f.head) {
+        const ht = Math.min(1, t * 1.25);        // снаряд добегает чуть раньше угасания
+        const hx = bbLerp(f.x0, f.x1, ht), hy = bbLerp(f.y0, f.y1, ht);
+        const bt = Math.max(0, ht - 0.12);
+        const tx = bbLerp(f.x0, f.x1, bt), ty = bbLerp(f.y0, f.y1, bt);
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = Math.max(1.5, 3 * iz);
+        ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
+        const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, R * 0.32);
+        hg.addColorStop(0, 'rgba(255,255,255,0.95)');
+        hg.addColorStop(0.5, `rgba(${f.col},0.6)`);
+        hg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = hg;
+        ctx.beginPath(); ctx.arc(hx, hy, R * 0.32, 0, 6.2832); ctx.fill();
+      }
+    } else if (f.kind === 'flash') {
+      // дульная вспышка у стрелка: яркое ядро + быстрое кольцо
+      const gr = R * (0.2 + t * 0.55);
+      const g = ctx.createRadialGradient(f.px, f.py, 0, f.px, f.py, gr);
+      g.addColorStop(0, `rgba(255,255,255,${0.9 * a})`);
+      g.addColorStop(0.4, `rgba(${f.col},${0.5 * a})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(f.px, f.py, gr, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = `rgba(${f.col},${0.5 * a})`;
+      ctx.lineWidth = Math.max(0.5, 1.2 * a * iz);
+      ctx.beginPath(); ctx.arc(f.px, f.py, gr * 0.9, 0, 6.2832); ctx.stroke();
     } else {
-      // hit / boom: вспышка + разлёт искр
-      const grow = f.kind === 'boom' ? R * (0.4 + t * 1.1) : R * (0.2 + t * 0.5);
-      const a = 1 - t;
-      ctx.globalCompositeOperation = 'lighter';
+      // hit / boom: добела раскалённое ядро → огненный шар, ударные волны,
+      // веер искр и (у взрыва) кувыркающиеся обломки.
+      const boom = f.kind === 'boom';
+      const grow = boom ? R * (0.5 + t * 1.35) : R * (0.28 + t * 0.6);
       const g = ctx.createRadialGradient(f.px, f.py, 0, f.px, f.py, grow);
-      g.addColorStop(0, `rgba(${f.col},${0.55 * a})`);
-      g.addColorStop(0.5, `rgba(${f.col},${0.22 * a})`);
+      g.addColorStop(0, `rgba(255,255,255,${(boom ? 0.75 : 0.6) * a})`);
+      g.addColorStop(0.3, `rgba(${f.col},${0.5 * a})`);
+      g.addColorStop(0.7, `rgba(${f.col},${0.18 * a})`);
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(f.px, f.py, grow, 0, 6.2832); ctx.fill();
-      // ударное кольцо у взрыва
-      if (f.kind === 'boom') {
-        ctx.strokeStyle = `rgba(255,240,200,${0.6 * a})`;
-        ctx.lineWidth = Math.max(0.6, 1.6 * a / BB.zoom);
-        ctx.beginPath(); ctx.arc(f.px, f.py, grow * 0.9, 0, 6.2832); ctx.stroke();
+      if (boom) {
+        ctx.strokeStyle = `rgba(255,240,200,${0.7 * a})`;
+        ctx.lineWidth = Math.max(0.6, 2 * a * iz);
+        ctx.beginPath(); ctx.arc(f.px, f.py, grow * 0.95, 0, 6.2832); ctx.stroke();
+        ctx.strokeStyle = `rgba(255,180,120,${0.4 * a})`;
+        ctx.lineWidth = Math.max(0.4, 1.2 * a * iz);
+        ctx.beginPath(); ctx.arc(f.px, f.py, R * (0.3 + t * 1.9), 0, 6.2832); ctx.stroke();
       }
-      // искры
+      // искры (аддитивно)
       (f.spark || []).forEach(s => {
         const d = grow * (0.5 + s.sp * t);
         const sx = f.px + Math.cos(s.a) * d, sy = f.py + Math.sin(s.a) * d;
-        ctx.fillStyle = `rgba(255,225,170,${a})`;
-        ctx.beginPath(); ctx.arc(sx, sy, Math.max(0.6, s.r * R * 0.12 * a), 0, 6.2832); ctx.fill();
+        ctx.fillStyle = s.hot ? `rgba(255,255,235,${a})` : `rgba(255,205,150,${a})`;
+        ctx.beginPath(); ctx.arc(sx, sy, Math.max(0.6, s.r * R * 0.14 * a), 0, 6.2832); ctx.fill();
       });
+      // обломки — твёрдые тёмные осколки (обычным режимом, поверх свечения)
+      if (boom && f.debris) {
+        ctx.globalCompositeOperation = 'source-over';
+        f.debris.forEach(d => {
+          const dist = grow * (0.6 + d.sp * t);
+          const dx = f.px + Math.cos(d.a) * dist, dy = f.py + Math.sin(d.a) * dist;
+          const sz = Math.max(0.8, d.r * R * 0.16) * (1 - 0.4 * t);
+          ctx.save();
+          ctx.translate(dx, dy); ctx.rotate(d.rot + d.spin * t * 6);
+          ctx.fillStyle = `rgba(66,70,80,${0.85 * a})`;
+          ctx.fillRect(-sz / 2, -sz / 2, sz, sz);
+          ctx.strokeStyle = `rgba(200,150,110,${0.5 * a})`;
+          ctx.lineWidth = Math.max(0.3, 0.5 * iz);
+          ctx.strokeRect(-sz / 2, -sz / 2, sz, sz);
+          ctx.restore();
+        });
+      }
     }
     ctx.restore();
   });
@@ -1158,28 +1286,17 @@ function bbVisibleCells(s) {
   return { x0, x1, y0, y1 };
 }
 
-// ── КОСМОС: приглушённый статичный фон — доска важнее задника ──
+// ── КОСМОС: чистая пустота — тёмный задник без звёзд, доска важнее ──
 function bbPaintSpace(ctx, s, W, H) {
   ctx.fillStyle = '#020409'; ctx.fillRect(0, 0, W, H);
-  if (!BB.stars || BB.stars.W !== W || BB.stars.H !== H) bbBuildStars(W, H);
-  ctx.drawImage(BB.stars.far, 0, 0);
+  // лёгкий провал глубины к центру — объём без «звёздного неба»
+  const d = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
+  d.addColorStop(0, 'rgba(12,20,32,0.55)'); d.addColorStop(1, 'rgba(2,4,9,0)');
+  ctx.fillStyle = d; ctx.fillRect(0, 0, W, H);
   // виньетка — прижимает края
   const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.8);
   g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.45)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-}
-
-function bbBuildStars(W, H) {
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const x = c.getContext('2d');
-  const n = Math.round(W * H / 1400);
-  for (let i = 0; i < n; i++) {
-    const r = Math.random() * 0.8 + 0.3, a = Math.random() * 0.28 + 0.06;
-    x.fillStyle = `rgba(225,238,248,${a})`;
-    x.beginPath(); x.arc(Math.random() * W, Math.random() * H, r, 0, 6.2832); x.fill();
-  }
-  BB.stars = { W, H, far: c };
 }
 
 // ── СОТЫ ────────────────────────────────────────────────────
@@ -1465,8 +1582,19 @@ function bbContact(ctx, u) {
 
 // ── Спрайт корабля (кэш-офскрин, как раньше) ────────────────
 const BB_SPL = 240;
+// KV-класс → ключ силуэта в CN_SHIP_GEO. У части классов свой корпус лежит под
+// другим именем (carrier/assault/cruiser/hypercruiser/station), иначе они
+// сваливались в фолбэк «destroyer» и рисовались эсминцами. Зеркало CN_KV_HULL
+// (+ авиакрыло wing → истребитель-дельта mla).
+const BB_HULL = {
+  supportCarrier: 'carrier', multiroleCarrier: 'assault',
+  mediumCruiser: 'cruiser', hyperCruiser: 'hypercruiser', ss13: 'station',
+  wing: 'mla',
+};
 function bbGeo(cls) {
   if (typeof CN_SHIP_GEO !== 'undefined') {
+    const hull = BB_HULL[cls] || cls;
+    if (CN_SHIP_GEO[hull]) return CN_SHIP_GEO[hull];
     if (CN_SHIP_GEO[cls]) return CN_SHIP_GEO[cls];
     if (CN_SHIP_GEO.destroyer) return CN_SHIP_GEO.destroyer;
   }
@@ -1595,7 +1723,7 @@ function bbShip(ctx, u, alpha) {
   const tIdx = dsn && dsn.data && dsn.data.type != null ? dsn.data.type : null;
   const spr = bbSprite(u.cls, tIdx, u.mine ? 'mine' : 'foe');
   const g = spr._geo;
-  const len = C * (0.62 + bbClsSize(u.cls) * 0.5);
+  const len = C * (0.42 + bbClsSize(u.cls) * 0.72);   // разброс шире: мелочь ≈1 гекс, дредноут ≈2
   const sc = len / g.hullW, dw = g.SW * sc, dh = g.SH * sc;
 
   ctx.save();

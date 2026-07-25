@@ -34,7 +34,7 @@ returns numeric language sql immutable as $$ select 500000::numeric $$;
 create or replace function public._fc_npc_max()
 returns numeric language sql immutable as $$ select 400000::numeric $$;
 create or replace function public._fc_signup_hours()
-returns int language sql immutable as $$ select 24 $$;
+returns int language sql immutable as $$ select 6 $$;
 -- призовой кошель клуба: платится победителю дуэли ВСЕГДА, поверх банка ставок
 create or replace function public._fc_prize()
 returns numeric language sql immutable as $$ select 250000::numeric $$;
@@ -512,7 +512,7 @@ begin
            else ' — тоже уходит победителю: не угадал никто' end),
     jsonb_build_array(win, lose));
 
-  -- сутки паузы: следующий круг открывается сразу, окно заявок = 24 часа
+  -- пауза: следующий круг открывается сразу, окно заявок = _fc_signup_hours() (6ч)
   insert into public.fc_events(status, signup_until)
     values ('signup', now() + (public._fc_signup_hours() || ' hours')::interval);
 end$$;
