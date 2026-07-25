@@ -4273,9 +4273,9 @@ function ecTabOverview() {
       </div>`;
   // Сводка-итоги: суммарная добыча/сут, виды, прогноз заполнения
   const opMineDay = resRows.reduce((s, r) => s + (r.opRate || 0), 0);
-  const effMineDay = freeCap > 0 ? mineDay : 0;   // при полном складе фактически ничего не начисляется
+  const effMineDay = Math.min(mineDay, freeCap);   // на склад влезет не больше свободного места — остальное сгорает
   const resSummary = `<div class="ec-res-sum">
-    <span class="ec-res-sum-i"><b class="${effMineDay ? 'ok' : 'dim'}">${effMineDay ? '+' + ecNum(effMineDay) : '0'}</b> ед/сут добыча${freeCap <= 0 && mineDay ? ` <span class="ec-hint" data-tip="Потенциал +${ecNum(mineDay)}/сут не начисляется: склад полон (нет места — нет добычи).">(потенциал +${ecNum(mineDay)})</span>` : ''}</span>
+    <span class="ec-res-sum-i"><b class="${effMineDay ? 'ok' : 'dim'}">${effMineDay ? '+' + ecNum(effMineDay) : '0'}</b> ед/сут добыча${effMineDay < mineDay && mineDay ? ` <span class="ec-hint" data-tip="Потенциал добычи +${ecNum(mineDay)}/сут, но на склад влезет только ${ecNum(freeCap)} (свободное место). Сверх ёмкости ресурсы сгорают — нет места, нет добычи.">(потенциал +${ecNum(mineDay)})</span>` : ''}</span>
     <span class="ec-res-sum-i"><b>${ecNum(minedKinds)}</b> вид(ов) добывается</span>
     ${_op.n ? `<span class="ec-res-sum-i" data-tip="Каждый добывающий аванпост вне границ тянет ВСЕ ресурсы своей системы, кроме эпических и легендарных, + ${EC_OUTPOST_MINE_GC} ГС/сут. Кламп по ёмкости склада для каждого ресурса — переполнение сгорает.">🛰 <b>${ecNum(_op.n)}</b> аванпост. добычи · +${ecNum(opMineDay)} ед/сут${_op.gc ? ' + ' + ecNum(_op.gc) + ' ГС' : ''}</span>` : ''}
     ${mineDay && freeCap > 0 ? `<span class="ec-res-sum-i">склад полон через <b>${ecNum(daysFull)}</b> ход(ов)</span>` : (mineDay && freeCap <= 0 ? '<span class="ec-res-sum-i ec-res-sum-warn">⚠ склад полон — добыча на склад остановлена (нет места — нет добычи)</span>' : '')}
