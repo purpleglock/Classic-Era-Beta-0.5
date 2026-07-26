@@ -1263,25 +1263,12 @@ function ecBudgetPanel() {
   const grTxt = gr >= 0 ? `+${(gr * 100).toFixed(1)}%` : `${(gr * 100).toFixed(1)}%`;
   const grCls = gr < 0 ? 'ec-cov-lo' : (gr < 0.015 ? 'ec-cov-mid' : 'ec-cov-hi');
   return `<div class="ec-bud-panel">
-    <div class="ec-section-title">🏛 Бюджет державы <span class="ec-hint">— цена растёт с населением и уровнем</span></div>
     <div class="ec-bud-pop">
       <span class="ec-bud-pop-i" data-tip="Население живёт в ячейках колоний: потолок = ячейки × ${EC_POP_CAP_CELL}. Колонизация и терраформ добавляют ячейки — поднимают потолок.">👥 Население <b>${ecNum(pop)}</b> / ${ecNum(cap)}</span>
       <span class="ec-bud-pop-i ${grCls}" data-tip="Прирост = соцобеспечение (${(grB * 100).toFixed(1)}%: ${EC_POP_GROWTH.map((g, i) => `${EC_BUDGET_LVL[i]} ${g >= 0 ? '+' : ''}${(g * 100).toFixed(1)}%`).join(' · ')}) + товары (${grG >= 0 ? '+' : ''}${(grG * 100).toFixed(1)}%: полное обеспечение Фабрикой товаров даёт до +1.0%/сут).">${gr >= 0 ? '📈' : '📉'} ${grTxt}/сут (${dPop >= 0 ? '+' : ''}${ecNum(dPop)} чел.) <i style="font-style:normal;opacity:.7">⚖${(grB * 100).toFixed(1)} + 🛍${(grG * 100).toFixed(1)}</i></span>
       <span class="ec-bud-pop-i" data-tip="Каждый рабочий слот постройки требует ${EC_POP_PER_SLOT} жителей. Не хватает рук — слоты всех построек срезаются пропорционально.">👷 хватает на <b>${ecNum(jobs)}</b> слот.</span>
     </div>
     <div class="ec-bud-legend">Как это играется: <b>население</b> — и налоговая база, и рабочие руки (${EC_POP_PER_SLOT} жителей = 1 слот постройки; слоты двигают доход, науку и темп добычи). Растёт от <b>соцобеспечения</b> и <b>товаров</b> (Фабрика товаров), потолок поднимают новые ячейки (колонизация/терраформ). Цена уровней <b>прогрессивная</b> (веса ${EC_BUDGET_W.join('/')}): «норма» дешёвая, «максимум» кусается. Итог: <b>−${ecNum(ecBudgetUpkeep())} ГС/сут</b>.</div>
-    ${(() => {  // БЛАГО v5: индекс благополучия с разбивкой (сервер: budget.wb_* из accrue)
-      const w = ecWellbeing();
-      const sgn = v => (v >= 0 ? '+' : '') + v.toFixed(2);
-      const cls = w.wb >= 1 ? 'ec-cov-hi' : (w.wb >= 0.9 ? 'ec-cov-mid' : 'ec-cov-lo');
-      return `<div class="ec-bud-pop" style="margin-top:6px">
-        <span class="ec-bud-pop-i ${cls}" data-tip="Индекс благополучия множит ВЕСЬ денежный доход и пропускную способность Товарной биржи (благополучную державу охотнее слушает рынок). Складывается из соцобеспечения, характера народа и власти, и штрафов за перегруз флота и гарнизонов.">⚖ Индекс благополучия <b>×${w.wb.toFixed(2)}</b></span>
-        <span class="ec-bud-pop-i" data-tip="Соцобеспечение — уровень ползунка ниже.">⚖ база ${w.base.toFixed(2)}</span>
-        <span class="ec-bud-pop-i" data-tip="Идентичность: раса + форма правления + режим + идеология. У каждого народа свой характер благополучия.">${w.ident >= 0 ? '🧬' : '🧬'} народ ${sgn(w.ident)}</span>
-        ${w.fpen ? `<span class="ec-bud-pop-i ec-cov-lo" data-tip="Флот раздут сверх вместимости Звёздных Баз — милитаризация давит на общество. Стройте базы или сокращайте флот.">🛰 перегруз флота −${w.fpen.toFixed(2)}</span>` : ''}
-        ${w.gpen ? `<span class="ec-bud-pop-i ec-cov-lo" data-tip="Войска стоят на колониях сверх порога мирного гарнизона (${'7000 юнитов на колонию'}) — оккупационный дискомфорт. Рассредоточьте армии.">🪖 гарнизоны −${w.gpen.toFixed(2)}</span>` : ''}
-      </div>`;
-    })()}
     ${rows}
   </div>`;
 }
@@ -1299,22 +1286,172 @@ async function ecBudgetSet(key, lvl) {
   finally { EC.busy = false; }
 }
 
-// Вкладка «Благополучие»: одна интерактивная таблица систем (клик по строке = детали + меры).
+// ══════════════════════════════════════════════════════════════
+// ВКЛАДКА «⚖ БЛАГОПОЛУЧИЕ» — переработана: сверху вниз читается как рассказ
+//   1. Герой: индекс благополучия крупно + разбивка + что это даёт казне
+//   2. «Как это работает»: формула дохода живыми числами (труд × благо × товары)
+//   3. Три рычага: труд · индекс · товары — что поднимает и как крутить
+//   4. Рычаги бюджета (ползунки) + рецепт потребления
+//   5. Системы державы (клик по строке = детали + меры помощи)
+// ══════════════════════════════════════════════════════════════
+
+// Класс «хорошо/средне/плохо» по множителю (≈1.0 = норма).
+function ecWfCls(m, lo, hi) { return m < (lo != null ? lo : 0.97) ? 'lo' : (m > (hi != null ? hi : 1.03) ? 'hi' : 'mid'); }
+function ecWfWord(m) { return m < 0.97 ? 'ниже нормы' : (m > 1.03 ? 'выше нормы' : 'норма'); }
+
+// Среднее благополучие систем, взвешенное по населению (для формулы дохода).
+function ecWfAvgProsperity() {
+  let pop = 0, acc = 0;
+  Object.values(EC.spatial || {}).forEach(b => { const p = +b.pop || 0; pop += p; acc += p * (+b.prosperity || 1); });
+  return pop > 0 ? acc / pop : 1;
+}
+
+// ── 1. Герой: индекс благополучия ──────────────────────────────
+function ecWfHero() {
+  const w = ecWellbeing();
+  const inc = ecIncomePreview();
+  // Куда попадает маркер на шкале 0.55…1.35.
+  const LO = 0.55, HI = 1.35;
+  const pos = Math.max(0, Math.min(100, (w.wb - LO) / (HI - LO) * 100));
+  const normPos = (1.0 - LO) / (HI - LO) * 100;
+  const cls = ecWfCls(w.wb, 0.97, 1.03);
+  const word = w.wb < 0.9 ? 'страдает' : w.wb < 0.97 ? 'живёт хуже обычного' : w.wb <= 1.03 ? 'живёт спокойно' : w.wb < 1.15 ? 'процветает' : 'благоденствует';
+  // Вклад благополучия в казну: доход построек при ×wb против нейтрального ×1.00.
+  const wbGc = Math.round((inc.base.gc || 0) * (inc.gcMul || 1) * (1 - 1 / (w.wb || 1)));
+  // Разбивка индекса — вклад-«водопад».
+  const parts = [
+    { ic: '⚖', nm: 'Соцобеспечение', v: w.base - 1, base: true, tip: 'База индекса = уровень ползунка «Соцобеспечение» ниже. Крутится мгновенно.' },
+    { ic: '🧬', nm: 'Характер народа', v: w.ident, tip: 'Раса + форма правления + режим + идеология + курс державы. У каждого народа свой нрав (кап ±0.20).' },
+    { ic: '🏠', nm: 'Центры благополучия', v: w.hub, tip: 'Постройка «Центр благополучия» (по технологии). Свой у каждой идеологии, вклад капается на +0.20.' },
+    { ic: '🛰', nm: 'Перегруз флота', v: -w.fpen, tip: 'Флот сверх вместимости Звёздных Баз давит на общество. Стройте базы или сокращайте флот.' },
+    { ic: '🪖', nm: 'Оккупация', v: -w.gpen, tip: 'Войска на колониях сверх мирного гарнизона (7000 юнитов/колония). Рассредоточьте армии.' },
+  ].filter(p => p.base || Math.abs(p.v) >= 0.005);
+  const maxMag = Math.max(0.2, ...parts.map(p => Math.abs(p.v)));
+  const rows = parts.map(p => {
+    const good = p.v >= 0;
+    const wpct = Math.min(100, Math.abs(p.v) / maxMag * 100);
+    return `<div class="ec-wh-part" data-tip="${esc(p.tip)}">
+      <span class="ec-wh-part-n">${p.ic} ${p.nm}</span>
+      <span class="ec-wh-part-bar"><i class="${good ? 'pos' : 'neg'}" style="width:${wpct}%"></i></span>
+      <b class="ec-wh-part-v ${good ? 'ec-cov-hi' : 'ec-cov-lo'}">${good ? '+' : '−'}${Math.abs(p.v).toFixed(2)}</b>
+    </div>`;
+  }).join('');
+  // Население — фундамент всего (руки + налоги + рост).
+  const pop = ecBudgetPop(), cap = ecBudgetPopCap();
+  const grB = ecBudgetGrowthBase(), grG = ecBudgetGrowthGoods(), gr = grB + grG;
+  const dPop = Math.round(pop * gr);
+  const jobs = Math.floor(pop / EC_POP_PER_SLOT);
+  const grCls = gr < 0 ? 'ec-cov-lo' : (gr < 0.015 ? 'ec-cov-mid' : 'ec-cov-hi');
+  const fillPct = cap > 0 ? Math.min(100, Math.round(pop / cap * 100)) : 0;
+  return `<div class="ec-wh">
+    <div class="ec-wh-gauge">
+      <div class="ec-wh-big ec-cov-${cls}">×${w.wb.toFixed(2)}</div>
+      <div class="ec-wh-lbl">Индекс благополучия</div>
+      <div class="ec-wh-verdict">Держава <b class="ec-cov-${cls}">${word}</b></div>
+      <div class="ec-wh-scale">
+        <div class="ec-wh-track"><i class="ec-wh-fill ec-cov-${cls}" style="width:${pos}%"></i>
+          <span class="ec-wh-norm" style="left:${normPos}%" title="Нейтраль ×1.00"></span>
+          <span class="ec-wh-marker ec-cov-${cls}" style="left:${pos}%"></span></div>
+        <div class="ec-wh-scale-ends"><span>0.55 — беда</span><span>×1.00</span><span>процветание — 1.35</span></div>
+      </div>
+      <div class="ec-wh-impact ${wbGc >= 0 ? 'ec-cov-hi' : 'ec-cov-lo'}" data-tip="Индекс множит ВЕСЬ денежный доход и пропускную способность Товарной биржи. Это разница против нейтрального ×1.00.">
+        ${wbGc >= 0 ? '📈' : '📉'} ${wbGc >= 0 ? '+' : '−'}${ecNum(Math.abs(wbGc))} ГС/сут к казне от благополучия
+      </div>
+    </div>
+    <div class="ec-wh-side">
+      <div class="ec-wh-side-t">Из чего складывается индекс</div>
+      <div class="ec-wh-parts">${rows}</div>
+      <div class="ec-wh-pop" data-tip="Население — корень всего: рабочие руки (${EC_POP_PER_SLOT} жителей = 1 слот постройки), налоговая база и рост. Потолок поднимают новые ячейки колоний.">
+        <div class="ec-wh-pop-top">
+          <span>👥 Население <b>${ecNum(pop)}</b> / ${ecNum(cap)} <span class="ec-hint">(${fillPct}% потолка)</span></span>
+          <span class="${grCls}">${gr >= 0 ? '📈' : '📉'} ${gr >= 0 ? '+' : ''}${(gr * 100).toFixed(1)}%/сут (${dPop >= 0 ? '+' : ''}${ecNum(dPop)} чел.)</span>
+        </div>
+        <div class="ec-wh-pop-bar"><i style="width:${fillPct}%"></i></div>
+        <div class="ec-wh-pop-sub">Хватает рук на <b>${ecNum(jobs)}</b> слотов построек · рост = ⚖${(grB * 100).toFixed(1)}% соц. + 🛍${(grG * 100).toFixed(1)}% товары</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── 2. «Как это работает»: формула дохода живыми числами ───────
+function ecWfFlow() {
+  const w = ecWellbeing();
+  const g = ecGoodsInfo();
+  const avgPr = ecWfAvgProsperity();
+  const factors = [
+    { ic: '👷', nm: 'Труд', m: avgPr, scope: 'своя у каждой системы', cls: ecWfCls(avgPr) },
+    { ic: '⚖', nm: 'Благополучие', m: w.wb, scope: 'общий', cls: ecWfCls(w.wb) },
+    { ic: '🛍', nm: 'Товары', m: g.welfare, scope: 'общий', cls: ecWfCls(g.welfare) },
+  ];
+  const product = avgPr * w.wb * g.welfare;
+  const outGc = Math.round(100 * product);
+  const outCls = ecWfCls(product);
+  const chain = factors.map(f => `<div class="ec-wff-node ec-cov-${f.cls}" data-tip="Множитель «${f.nm}» (${f.scope}). ${f.nm === 'Труд' ? 'Среднее по системам, взвешено по населению. Растёт, когда жителей больше, чем рабочих мест.' : f.nm === 'Благополучие' ? 'Единый индекс державы — см. выше.' : 'Общий бонус от Фабрик товаров.'}">
+      <span class="ec-wff-ic">${f.ic}</span>
+      <span class="ec-wff-nm">${f.nm}</span>
+      <b class="ec-wff-m">×${f.m.toFixed(2)}</b>
+    </div>`).join('<span class="ec-wff-op">×</span>');
+  return `<div class="ec-section-title">🧭 Как это работает <span class="ec-hint">— из чего складывается доход построек</span></div>
+    <div class="ec-wf-legend">Доход каждой постройки — это её базовые деньги, помноженные на три «зеркала благополучия». Все три хочется держать выше <b>×1.00</b>.</div>
+    <div class="ec-wff">
+      <div class="ec-wff-base" data-tip="Условные 100 ГС базового дохода любой постройки — до множителей благополучия.">100&nbsp;ГС<small>базовых</small></div>
+      <span class="ec-wff-op">×</span>
+      ${chain}
+      <span class="ec-wff-op">=</span>
+      <div class="ec-wff-out ec-cov-${outCls}"><b>${ecNum(outGc)}</b><small>на руки</small></div>
+    </div>
+    <div class="ec-wf-legend" style="margin-top:8px">С каждых 100 ГС базового дохода держава сейчас получает <b class="ec-cov-${outCls}">${ecNum(outGc)}</b> — ${outGc >= 100 ? `на ${ecNum(outGc - 100)} больше` : `на ${ecNum(100 - outGc)} меньше`} нейтрали. ${ecWfBottleneck(factors)}</div>`;
+}
+// Подсказка «где узкое место» — самый слабый из трёх множителей.
+function ecWfBottleneck(factors) {
+  const weak = factors.slice().sort((a, b) => a.m - b.m)[0];
+  if (weak.m >= 0.99) return 'Все три множителя в порядке — узких мест нет.';
+  const fix = { 'Труд': 'растите население (соцобеспечение + товары) или снесите лишние постройки в перегруженных системах', 'Благополучие': 'поднимите соцобеспечение, смените курс державы, стройте Центры благополучия, не раздувайте флот и гарнизоны', 'Товары': 'стройте 🛍 Фабрики товаров и снабжайте их сырьём по рецепту' }[weak.nm];
+  return `Слабее всего <b>${weak.ic} ${weak.nm}</b> (×${weak.m.toFixed(2)}) — ${fix}.`;
+}
+
+// ── 3. Три рычага: труд · индекс · товары ──────────────────────
+function ecWfLevers() {
+  const w = ecWellbeing();
+  const g = ecGoodsInfo();
+  const s = ecPovertyStats();
+  const poor = s.unrest + s.stagn;
+  const gPct = Math.round(g.cov * 100);
+  const cards = [
+    { ic: '👷', nm: 'Рабочие руки', m: null, cls: poor ? (s.stagn ? 'lo' : 'mid') : 'hi',
+      state: poor ? `${poor} из ${s.n} систем без рук` : `все ${s.n} систем с запасом рук`,
+      what: 'Когда в системе жителей меньше, чем нужно постройкам, — часть построек простаивает и её доход режется. Это личный множитель системы (⚖ в таблице ниже).',
+      lever: 'Растите население (соцобеспечение + товары) или снесите лишние постройки в перегруженных системах. Точечно — «Экстренная помощь» в строке системы.' },
+    { ic: '⚖', nm: 'Индекс благополучия', m: w.wb, cls: ecWfCls(w.wb),
+      state: `сейчас ×${w.wb.toFixed(2)} — ${ecWfWord(w.wb)}`,
+      what: 'Общий множитель ВСЕГО денежного дохода и пропускной способности биржи. Складывается из соцобеспечения, нрава народа, Центров благополучия — минус штрафы за милитаризацию.',
+      lever: 'Поднимите ползунок «Соцобеспечение», смените «Курс державы», стройте Центры благополучия. Держите флот и гарнизоны в пределах — перегруз давит индекс.' },
+    { ic: '🛍', nm: 'Товары народу', m: g.welfare, cls: ecWfCls(g.welfare),
+      state: g.slots <= 0 ? 'фабрик товаров нет' : `обеспечение ${gPct}% → ×${g.welfare.toFixed(2)}`,
+      what: 'Единый бонус к доходу всех систем. Растёт, когда Фабрики товаров кормят население; редкое сырьё в рецепте поднимает потолок с ×1.10 до ×1.25.',
+      lever: g.slots <= 0 ? 'Постройте 🛍 Фабрику товаров — множитель общий для всей державы.' : g.ratio < 1 ? 'Фабрика простаивает без сырья — добывайте ресурсы рецепта и держите запас на складе.' : 'Откройте больше слотов Фабрики товаров, чтобы догнать спрос растущего населения.' },
+  ];
+  const html = cards.map(c => `<div class="ec-wl-card ec-cov-${c.cls}">
+    <div class="ec-wl-h"><span class="ec-wl-ic">${c.ic}</span><span class="ec-wl-nm">${c.nm}</span>${c.m != null ? `<b class="ec-wl-m ec-cov-${c.cls}">×${c.m.toFixed(2)}</b>` : ''}</div>
+    <div class="ec-wl-state ec-cov-${c.cls}">${c.state}</div>
+    <div class="ec-wl-what">${c.what}</div>
+    <div class="ec-wl-lever">🎚 <b>Как крутить:</b> ${c.lever}</div>
+  </div>`).join('');
+  return `<div class="ec-section-title">🎛 Три рычага благополучия <span class="ec-hint">— что на что влияет и как это поднять</span></div>
+    <div class="ec-wl-grid">${html}</div>`;
+}
+
+// Вкладка «Благополучие»: рассказ сверху вниз + интерактивная таблица систем.
 function ecTabWelfare() {
-  const head = `${ecBudgetPanel()}<div class="ec-section-title">⚖ Благополучие систем <span class="ec-hint">— нажмите на строку системы, чтобы увидеть подробности</span></div>
-    <div class="ec-wf-legend">Простыми словами: чем больше в системе <b>жителей</b> относительно её построек — тем выше её доход. А <b>🛍 Фабрики товаров</b> дают общий бонус (или штраф) сразу всей державе. Зелёное — хорошо, жёлтое/красное — теряете деньги.</div>`;
   if (!Object.keys(EC.spatial || {}).length) {
-    return `${head}<div class="ec-empty">Пока нет систем с колониями — благополучие появится, когда заселите планеты.</div>`;
+    return `${ecWfHero()}<div class="ec-empty">Пока нет систем с колониями — благополучие систем появится, когда заселите планеты.</div>`;
   }
   const capSet = new Set((EC.colonies || []).filter(c => c.is_capital).map(c => c.system_id));
   const all = Object.values(EC.spatial).slice().sort((a, b) => (+a.prosperity || 1) - (+b.prosperity || 1));
   const s = ecPovertyStats();
   const drag = ecPovertyDrag();
-  const gInfo = ecGoodsInfo();
-  const gCls = gInfo.welfare < 0.97 ? 'stagnation' : (gInfo.welfare > 1.03 ? 'ok' : '');
   const summary = `<div class="ec-pov-sum">
-    <span class="ec-pov-sum-i">⚖ <b>${ecNum(all.length)}</b> систем(ы)</span>
-    <span class="ec-pov-sum-i ec-sb-${gCls}" data-tip="Общий бонус к доходу всех систем от Фабрик товаров. Меньше ×1.00 — товаров не хватает, стройте Фабрики товаров.">🛍 товары: доход <b>×${gInfo.welfare.toFixed(2)}</b>${gInfo.welfare >= 1 ? '' : gInfo.slots > 0 ? ' — фабрика простаивает' : ' — стройте фабрики товаров'}</span>
+    <span class="ec-pov-sum-i">🌐 <b>${ecNum(all.length)}</b> систем(ы)</span>
     <span class="ec-pov-sum-i ec-sb-${s.stagn ? 'stagnation' : (s.unrest ? 'unrest' : 'ok')}" data-tip="Системы в волнениях или стагнации — раскройте их строки ниже, там же кнопки помощи."><b>${ecNum(s.unrest + s.stagn)}</b> бедных систем</span>
     <span class="ec-pov-sum-i" data-tip="Доля жителей державы, живущих в бедных системах."><b>${s.poorPct}%</b> населения в нужде</span>
     ${drag ? `<span class="ec-pov-sum-i ec-sb-stagnation" title="Сколько ГС/сут недополучает казна из-за благополучия<1 в бедных системах">💸 <b>−${ecNum(drag)}</b> ГС/сут от бедности</span>` : ''}
@@ -1325,7 +1462,15 @@ function ecTabWelfare() {
       <div class="ec-wf-head"><span>Система</span><span>Доход</span><span>Труд</span><span>Жители</span><span>Места</span><span>Статус</span></div>
       ${all.map(b => ecWelfareSysRow(b, capSet.has(b.system_id))).join('')}
     </div>`;
-  return `${head}${summary}${ecRecipeSection()}${table}`;
+  return `${ecWfHero()}
+    ${ecWfFlow()}
+    ${ecWfLevers()}
+    <div class="ec-section-title">🏛 Бюджет державы — рычаги <span class="ec-hint">— ползунки двигают благополучие, рост и слоты построек</span></div>
+    ${ecBudgetPanel()}
+    ${ecRecipeSection()}
+    <div class="ec-section-title">🌐 Системы державы <span class="ec-hint">— нажмите строку, чтобы увидеть, из чего складывается её доход и меры помощи</span></div>
+    <div class="ec-wf-legend">Сортировка — от самых бедных к богатым. Столбец <b>«Доход»</b> — личный множитель системы (труд), <b>«Труд»</b> — сколько рабочих мест закрыто жителями.</div>
+    ${summary}${table}`;
 }
 
 // ══════════════════════════════════════════════════════════════
