@@ -79,8 +79,13 @@ begin
   if not found then return; end if;
 
   -- 1) завершить готовые слоты → research[]
+  -- ДОПУСК 6 ч: суточный тик (pg_cron economy_tick_all) бьёт в фиксированное время,
+  -- а слот помечен r = старт + 24 ч РЕАЛЬНОГО времени. Если тех поставили вскоре ПОСЛЕ
+  -- суточного тика, следующий тик наступит через ~23 ч < 24 ч → строгое `r <= now()`
+  -- не срабатывало и исследование уезжало ещё на сутки («поставил вчера — сегодня не
+  -- готово»). Допуск закрывает слот на первом же суточном тике после ~18–24 ч.
   for slot in select value from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) loop
-    if (slot->>'r') is not null and (slot->>'r')::timestamptz <= now() then
+    if (slot->>'r') is not null and (slot->>'r')::timestamptz <= now() + interval '6 hours' then
       done_ids := array_append(done_ids, slot->>'n');
     else
       kept := kept || slot;

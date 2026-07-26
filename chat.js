@@ -23,10 +23,12 @@ const CH = {
   fac: null,          // {name, color} — моя фракция (для подписи в чате)
   facLoaded: false,
   retryT: null,       // таймер пересоздания канала после CLOSED
+  ghost: false,       // «невидимка»: стафф не публикует presence (нет в «На связи»)
 };
 const CH_LOG_CAP = 200;
 const CH_MSG_MAX = 500;
 const CH_SS_KEY = 'wk_chat_log';   // sessionStorage: история переживает F5
+const CH_GHOST_KEY = 'wk_chat_ghost';  // localStorage: выбор режима невидимки переживает вкладку
 
 function chCanUse() { return !!(typeof user !== 'undefined' && user && ['superadmin', 'editor', 'moderator', 'player'].includes(user.role)); }
 function chIsStaff() { return !!(typeof user !== 'undefined' && user && ['superadmin', 'editor', 'moderator'].includes(user.role)); }
@@ -35,6 +37,36 @@ function chMyName() {
     || (typeof user !== 'undefined' && user && (user.email || '').split('@')[0])
     || 'Аноним';
 }
+// Невидимка доступна только стаффу. По умолчанию ВКЛючена (чтобы не спалиться на первом входе),
+// но запоминаем явный выбор игрока в localStorage.
+function chLoadGhost() {
+  if (!chIsStaff()) { CH.ghost = false; return; }
+  try {
+    const v = localStorage.getItem(CH_GHOST_KEY);
+    CH.ghost = (v === null) ? true : (v === '1');
+  } catch (e) { CH.ghost = true; }
+}
+function chSaveGhost() { try { localStorage.setItem(CH_GHOST_KEY, CH.ghost ? '1' : '0'); } catch (e) {} }
+// Публикуем/снимаем presence по режиму. В невидимке — untrack (пропадаем из списка и счётчика).
+async function chSyncPresence() {
+  if (!CH.channel || !CH.joined) return;
+  try {
+    if (CH.ghost) { await CH.channel.untrack(); }
+    else { await CH.channel.track({ name: chMyName(), staff: chIsStaff(), fac: CH.fac?.name || '', fc: CH.fac?.color || '', av: chMyAvatar() }); }
+  } catch (e) {}
+}
+// Молчаливое управление из консоли (без кнопок — кнопка сама по себе палит).
+//   chGhost()       → показать текущий режим
+//   chGhost(false)  → стать видимым в «На связи»
+//   chGhost(true)   → снова спрятаться
+async function chGhost(on) {
+  if (!chIsStaff()) return 'только для стаффа';
+  if (typeof on === 'boolean' && on !== CH.ghost) {
+    CH.ghost = on; chSaveGhost(); await chSyncPresence();
+  }
+  return CH.ghost ? 'невидимка (тебя нет в «На связи»)' : 'виден под своим именем';
+}
+if (typeof window !== 'undefined') window.chGhost = chGhost;
 function chWhen(ts) { try { return new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
 // Валидатор ссылки на аватар для контекста <img src> (esc() уже гасит XSS в атрибуте).
 // safeAvatar() из core.js слишком строг — режет относительные/storage-пути и data:svg,
@@ -85,6 +117,7 @@ async function chLoadFaction() {
 function chMount() {
   if (document.getElementById('ch-fab')) return;
   chLoadLog();
+  chLoadGhost();
   const fab = document.createElement('button');
   fab.id = 'ch-fab';
   fab.title = 'Общий чат «Гиперсвязь» (сообщения не сохраняются)';
@@ -143,7 +176,8 @@ function chConnect() {
       if (status === 'SUBSCRIBED') {
         CH.joined = true;
         await chLoadFaction();
-        try { await CH.channel.track({ name: chMyName(), staff: chIsStaff(), fac: CH.fac?.name || '', fc: CH.fac?.color || '', av: chMyAvatar() }); } catch (e) {}
+        chLoadGhost();            // user уже авторизован — теперь роль известна
+        await chSyncPresence();   // в невидимке НЕ трекаемся — нет в «На связи»
         chRenderStatus(); chRenderOnline();
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         CH.joined = false;
@@ -184,6 +218,8 @@ async function chSend() {
   const now = Date.now();
   if (now - CH.lastSent < 2000) { toast('Не так быстро — раз в пару секунд', 'err'); return; }
   if (!CH.channel || !CH.joined) { toast('Чат ещё подключается…', 'err'); return; }
+  // В невидимке сообщение всё равно уходит под твоим именем — предупреждаем один раз.
+  if (CH.ghost && !confirm('Ты в режиме невидимки, но сообщение уйдёт под именем «' + chMyName() + '» и спалит тебя. Отправить?')) return;
   CH.busy = true;
   try {
     await CH.channel.send({ type: 'broadcast', event: 'msg', payload: { name: chMyName(), staff: chIsStaff(), fac: CH.fac?.name || '', fc: CH.fac?.color || '', av: chMyAvatar(), body } });

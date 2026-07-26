@@ -591,7 +591,8 @@ function cnCompStatsRows(info) {
       const we = +o.energy || +o.power || 0;
       if (we) push('Потребление', cnNum(we) + ' E');
       if (o.crewRequired) push('Экипаж', cnNum(o.crewRequired));
-      if (+o.weight > 0) push('Масса', cnNum(o.weight) + ' т');
+      if (+o.capacityPenalty > 0) push('Масса', cnNum(o.capacityPenalty) + ' кг');
+      else if (+o.weight > 0) push('Масса', cnNum(o.weight) + ' кг');
       if (+o.visibility > 0) push('Заметность', '+' + cnNum(o.visibility));
       pushPrice(cnNum(o.cost) + ' ГС'); break;
     }
@@ -1009,8 +1010,13 @@ function cnGenMounts(g, rows) {
   return out;
 }
 function cnMountsFor(g, need) {
+  // rows растёт под фактическое число узлов: каждый ряд даёт ≥1 позицию, поэтому
+  // потолок привязан к need (+запас), а не к фиксированным 22 — иначе у «лишних»
+  // узлов не оказывалось координаты, и они не рисовались на схеме (нельзя выбрать/
+  // перетащить), хотя энергии на них ещё хватало.
   let rows = g.rows, m = cnGenMounts(g, rows);
-  while (m.length < need && rows < 22) { rows++; m = cnGenMounts(g, rows); }
+  const cap = Math.max(22, (need | 0) + 4);
+  while (m.length < need && rows < cap) { rows++; m = cnGenMounts(g, rows); }
   return m;
 }
 // Визуал орудия: форма по группе (пушка/ракеты/ПВО), размер по ЗАТРАТАМ ЭНЕРГИИ, цвет по боеприпасу.

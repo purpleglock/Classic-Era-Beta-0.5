@@ -215,7 +215,10 @@ begin
       from jsonb_array_elements(op) e;
     v_shard := null;
     if v_quasar >= 2 or v_photo >= 3 then
-      v_classes := array['corvette','frigate','destroyer','cruiser'];
+      -- KV-классы флота (не линкор/дредноут/станция). Старые corvette/frigate/
+      -- destroyer/cruiser выпали при переходе на KV — frigate/cruiser больше нет,
+      -- и осколки с этими ключами были бы несводимы ни с одним проектом.
+      v_classes := array['corvette','destroyer','mediumCruiser','hyperCruiser'];
       v_shard := v_classes[1 + floor(random() * array_length(v_classes, 1))::int];
       begin
         update public.faction_economy

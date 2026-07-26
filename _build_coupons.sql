@@ -31,6 +31,24 @@ alter table public.faction_economy
 
 -- Осколки видны игроку в обычной выборке faction_economy (RLS уже настроена).
 
+-- МИГРАЦИЯ легаси-классов: флот переехал на KV-каталог, где классов frigate/cruiser
+-- больше нет (стали destroyer/mediumCruiser). Осколки с этими ключами были несводимы
+-- ни с одним проектом и висели мёртвым грузом — перекидываем счётчики на живые классы,
+-- складывая с уже имеющимися. Идемпотентно (после переноса старый ключ удаляется).
+update public.faction_economy fe
+   set cycle_shards = (
+     select coalesce(jsonb_object_agg(k, v), '{}'::jsonb)
+       from (
+         select case s.key when 'frigate' then 'destroyer'
+                            when 'cruiser' then 'mediumCruiser'
+                            else s.key end as k,
+                sum(s.value::int) as v
+           from jsonb_each_text(fe.cycle_shards) s
+          group by 1
+       ) m(k, v)
+   )
+ where cycle_shards ? 'frigate' or cycle_shards ? 'cruiser';
+
 -- ── Заказ за осколок ────────────────────────────────────────
 create or replace function public.economy_produce_coupon(p_unit_id uuid, p_qty int)
 returns jsonb language plpgsql security definer set search_path=public as $$

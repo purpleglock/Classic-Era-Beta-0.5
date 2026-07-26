@@ -96,7 +96,7 @@ window.KV = (function () {
 
           dronkos: [
                     { name: '˻✦˺ Аккумулятор боевого дрона АД 12 «Звездная блыскавица»', capacityBoost: 0, price: 3000000, power: 100, modul: 2, dviglo: 1, radar: 1, svaz: 1, speed: 0, resurs: { blackmetall: 0, coloredmetall: 50, rudametall: 0, kristall: 0, staarvis: 0 }, force: 50 },
-                    { name: '˻✦˺ Аккумулятор грузового дрона АД 20 «Космосервитор»', capacityBoost: 15, price: 3000000, power: 100, modul: 2, dviglo: 1, radar: 1, svaz: 1, speed: 0, resurs: { blackmetall: 0, coloredmetall: 50, rudametall: 0, kristall: 0, staarvis: 0 }, force: 69 },
+                    { name: '˻✦˺ Аккумулятор грузового дрона АД 20 «Космосервитор»', capacityBoost: 15, price: 3000000, power: 60, modul: 2, dviglo: 1, radar: 1, svaz: 1, speed: 0, resurs: { blackmetall: 0, coloredmetall: 50, rudametall: 0, kristall: 0, staarvis: 0 }, force: 69 },
 
           ],
 

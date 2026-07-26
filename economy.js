@@ -1513,8 +1513,8 @@ async function ecBootOnce() {
     // иначе при повторных рендерах из init было двойное оповещение).
     if (tick && tick.days >= 1) {
       const parts = [];
-      if (tick.income && tick.income.gc) parts.push(`+${ecNum(tick.income.gc * tick.days)} ГС`);
-      if (tick.income && tick.income.science) parts.push(`+${ecNum(tick.income.science * tick.days)} ОН`);
+      if (tick.income && tick.income.gc) { const gc = tick.income.gc * tick.days; parts.push(`${gc >= 0 ? '+' : ''}${ecNum(gc)} ГС`); }
+      if (tick.income && tick.income.science) { const sci = tick.income.science * tick.days; parts.push(`${sci >= 0 ? '+' : ''}${ecNum(sci)} ОН`); }
       if (parts.length) toast(`Доход за ${tick.days} сут.: ${parts.join(' · ')}`, 'ok');
       // Пираты срезали караваны за этот период — иначе доход «меньше превью» без объяснений.
       if (tick.income && tick.income.pirate) {
@@ -5765,7 +5765,15 @@ function ecCapMeter(icon, label, used, cap, opts) {
 // классовые осколки (faction_economy.cycle_shards) — только на свой класс. У
 // ФЛОТА класс = класс корабля (corvette/frigate/…/dreadnought), поэтому осколок
 // корвета не построит дредноут. 1 осколок = 1 юнит. _build_coupons.sql.
-const EC_SHIP_CLASS_LABELS = { corvette: 'Корвет', frigate: 'Фрегат', destroyer: 'Эсминец', cruiser: 'Крейсер', battleship: 'Линкор', dreadnought: 'Дредноут' };
+// Ключи = КЛАССЫ КОРАБЛЯ из KV-каталога (data.class). Легаси frigate/cruiser
+// оставлены как подписи на случай ещё не мигрированных осколков, но новых таких
+// классов больше не выпускается — см. миграцию в _build_coupons.sql.
+const EC_SHIP_CLASS_LABELS = {
+  corvette: 'Корвет', destroyer: 'Эсминец', mediumCruiser: 'Крейсер', hyperCruiser: 'Гиперкрейсер',
+  supportCarrier: 'Носитель поддержки', multiroleCarrier: 'Ударный носитель',
+  battleship: 'Линкор', dreadnought: 'Дредноут', ss13: 'Станция',
+  frigate: 'Фрегат (устар.)', cruiser: 'Крейсер (устар.)',
+};
 function ecUniShards() { return Math.max(0, parseInt(EC.eco && EC.eco.build_coupons) || 0); }
 // Все классовые осколки как {ключ: n>0}. Ключи флота — классы корабля.
 function ecShards() {
@@ -8144,7 +8152,7 @@ function ecExCorpsBlock() {
       <span class="ec-corp-bcard-ic">${ecBldIcon(b.btype)}</span>
       <span class="ec-corp-bcard-meta"><span class="ec-corp-bcard-n">${esc(ecBldNm(b.btype))}</span>
         <span class="ec-corp-bcard-sub">${b.colony ? esc(b.colony) + ' · ' : ''}${b.slots} сл</span></span>
-      <span class="ec-corp-bcard-gc">${b.daily_gc ? '+' + ecNum(b.daily_gc) : '0'}<small>/ход</small></span>
+      <span class="ec-corp-bcard-gc">${b.daily_gc ? (b.daily_gc >= 0 ? '+' : '') + ecNum(b.daily_gc) : '0'}<small>/ход</small></span>
     </label>`).join('');
 
   const canFound = c.can_found !== false;   // право учреждать — только «корпоративные» державы
