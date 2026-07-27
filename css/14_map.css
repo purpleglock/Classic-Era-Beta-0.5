@@ -513,11 +513,16 @@ body.route-map #gm-wrap{height:100%;min-height:0}
 .gm-opcmd-sel{background:hsl(216 22% 13% / .9);border:1px solid var(--w2);border-radius:var(--radius-md);color:var(--t1);padding:8px 10px;font-size:13px}
 
 /* ════════ КОМАНДНЫЙ ПУНКТ (список всех моих мобильных юнитов, слева) ════════ */
-#gm-roster{position:absolute;top:12px;left:12px;width:284px;max-width:calc(100% - 24px);
+#gm-roster,#gm-civlist{position:absolute;top:12px;left:12px;width:284px;max-width:calc(100% - 24px);
   max-height:calc(100% - 24px);overflow-y:auto;z-index:31;
   background:hsl(216 22% 7% / .95);backdrop-filter:blur(10px);
   border: var(--deco-frame-w, 1px) solid var(--w2);border-radius:var(--radius-lg);padding:12px 12px 14px;box-shadow:0 18px 50px rgba(0,0,0,.6)}
-#gm-roster.gm-hidden{display:none!important}
+#gm-roster.gm-hidden,#gm-civlist.gm-hidden{display:none!important}
+#gm-civlist{z-index:32}
+.gm-civ-q{width:100%;box-sizing:border-box;margin-bottom:8px;padding:6px 9px;font-size:12px;color:var(--t1);
+  background:hsl(216 18% 11% / .8);border: var(--deco-frame-w, 1px) solid var(--w1);border-radius:var(--radius-md)}
+.gm-civ-q:focus{outline:none;border-color:var(--gdl)}
+.gm-ctl.gm-ctl-civlist.gm-active{border-color:var(--gdl);color:var(--gdl)}
 .gm-r-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .gm-r-title{font-family: var(--font-display);font-weight:700;font-size:15px;color:var(--gdl)}
 .gm-r-bar .gm-close{position:static;font-size:16px;line-height:1}

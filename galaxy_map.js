@@ -53,6 +53,7 @@ function gmCtlBtns(opts) {
     `<button class="gm-ctl gm-ctl-row${on ? ' gm-active' : ''}" id="gm-ctl-${id}" title="${label}" onclick="${fn}">`
     + `<span class="gm-ctl-ic">${ico}</span><span class="gm-ctl-lb">${label}</span></button>`;
   const tools = [];
+  tools.push(`<button class="gm-ctl gm-ctl-row gm-ctl-civlist" title="Каталог дозвёздных миров — список всех цивилизаций с перелётом камеры" onclick="gmCivListToggle()"><span class="gm-ctl-ic">${GM_ICO.civs}</span><span class="gm-ctl-lb">Каталог дозвёздных</span></button>`);
   if (opts.roster) tools.push(`<button class="gm-ctl gm-ctl-row gm-ctl-roster" title="Командный пункт — мои корабли, флоты, носители" onclick="gmRosterToggle()"><span class="gm-ctl-ic">${GM_ICO.roster}</span><span class="gm-ctl-lb">Командный пункт</span></button>`);
   if (opts.edit) tools.push(`<button class="gm-ctl gm-ctl-row gm-ctl-edit" title="Редактировать карту" onclick="gmEnterEdit()"><span class="gm-ctl-ic">${GM_ICO.edit}</span><span class="gm-ctl-lb">Редактировать карту</span></button>`);
   return `
@@ -242,7 +243,8 @@ async function loadGalaxyData() {
       // Тянем только «витрину» — полная летопись грузится по клику (этап 3).
       GM.civs = {};
       try {
-        const civs = await dbGet('primitive_civs', 'select=system_id,pid,self_name,visible_tier,races,ideology,attitude,status,state_name')
+        const civs = await dbGet('primitive_civs', 'select=system_id,pid,self_name,visible_tier,races,ideology,attitude,status,state_name,planet_name,system_name,pop,patron_fid')
+          .catch(() => dbGet('primitive_civs', 'select=system_id,pid,self_name,visible_tier,races,ideology,attitude,status,state_name'))
           .catch(() => dbGet('primitive_civs', 'select=system_id,pid,self_name,visible_tier,races,ideology,attitude'));
         GM.civsBySys = {};
         (civs || []).forEach(c => {
@@ -351,6 +353,7 @@ async function renderGalaxyMap() {
       ${canEdit ? gmToolbarHtml() : ''}
       <div id="gm-panel" class="gm-hidden"></div>
       <div id="gm-form" class="gm-hidden"></div>
+      <div id="gm-civlist" class="gm-hidden"></div>
     </div>`;
 
   gmBindViewport();
@@ -687,6 +690,102 @@ function gmToggleCivs() {
   gmDrawStars();
   if (GMM.active) { GMM.dirty = true; gmmKick(); }
 }
+// ── КАТАЛОГ ДОЗВЁЗДНЫХ МИРОВ ────────────────────────────────
+// Выцеливать 🜃 глазами по всей карте невозможно: список + перелёт камеры
+// (тот же приём, что «Командный пункт» для своих юнитов).
+// Универсальный перелёт: работает и на canvas-рендере, и на старом SVG.
+function gmCenterSystem(sysId, ns) {
+  if (GMM.active) { gmmCenterSystem(sysId, ns); return; }
+  const sys = (GM.systems || []).find(s => s.id === sysId);
+  const vp = document.getElementById('gm-viewport');
+  if (!sys || !vp) return;
+  const w = vp.clientWidth, h = vp.clientHeight;
+  GM.scale = Math.min(GM_MAX_SCALE, Math.max(ns || Math.max(GM.scale, 1.6), gmMinScale()));
+  GM.tx = w / 2 - sys.x * GM.scale;
+  GM.ty = h / 2 - sys.y * GM.scale;
+  gmApply();
+}
+// Перечитать витрину цивилизаций (после генерации/ручного спавна) и обновить слой.
+async function gmCivsReload() {
+  try {
+    const civs = await dbGet('primitive_civs', 'select=system_id,pid,self_name,visible_tier,races,ideology,attitude,status,state_name,planet_name,system_name,pop,patron_fid');
+    GM.civs = {}; GM.civsBySys = {};
+    (civs || []).forEach(c => {
+      GM.civs[c.system_id + ':' + c.pid] = c;
+      (GM.civsBySys[c.system_id] = GM.civsBySys[c.system_id] || []).push(c);
+    });
+  } catch (e) { return; }
+  gmDrawStars();
+  if (GMM.active) { GMM.dirty = true; gmmKick(); }
+  if (GM._civListOn) gmCivListRender();
+}
+function gmCivListToggle() {
+  const el = document.getElementById('gm-civlist'); if (!el) return;
+  if (el.classList.contains('gm-hidden')) { GM._civListOn = true; gmCivListRender(); }
+  else { GM._civListOn = false; el.classList.add('gm-hidden'); }
+  document.getElementById('gm-controls')?.querySelector('.gm-ctl-civlist')?.classList.toggle('gm-active', GM._civListOn);
+}
+function gmCivListSearch(v) { GM._civQ = v || ''; gmCivListRender(true); }
+function gmCivListRender(keepFocus) {
+  const el = document.getElementById('gm-civlist'); if (!el) return;
+  if (!GM._civListOn) { el.classList.add('gm-hidden'); return; }
+  const q = (GM._civQ || '').trim().toLowerCase();
+  const sysName = id => (GM.systems.find(s => s.id === id) || {}).name || id || '—';
+  const all = Object.values(GM.civs || {});
+  const list = all.filter(c => {
+    if (!q) return true;
+    return [c.self_name, c.state_name, c.planet_name, sysName(c.system_id), (c.races || [])[0], c.ideology]
+      .some(x => x && String(x).toLowerCase().includes(q));
+  });
+  const GRP = [
+    { k: 'star', lb: 'Вышли к звёздам', test: c => c.status === 'spacefaring' },
+    { k: 'ward', lb: 'Под протекторатом', test: c => c.status !== 'spacefaring' && c.status !== 'dead' && c.patron_fid },
+    { k: 'live', lb: 'Дозвёздные', test: c => c.status !== 'spacefaring' && c.status !== 'dead' && !c.patron_fid },
+    { k: 'dead', lb: 'Погибшие', test: c => c.status === 'dead' },
+  ];
+  let body;
+  if (!all.length) {
+    body = `<div class="gm-roster-empty">Дозвёздных миров нет.<br>В редакторе карты — кнопка «🜃 Примитивы».</div>`;
+  } else if (!list.length) {
+    body = `<div class="gm-roster-empty">Ничего не найдено по запросу.</div>`;
+  } else {
+    const used = new Set();
+    body = GRP.map(g => {
+      const rows = list.filter(c => !used.has(c) && g.test(c));
+      rows.forEach(c => used.add(c));
+      if (!rows.length) return '';
+      const html = rows
+        .sort((a, b) => (b.visible_tier || 0) - (a.visible_tier || 0) || String(a.self_name).localeCompare(String(b.self_name)))
+        .map(c => {
+          const nm = c.status === 'spacefaring' ? (c.state_name || c.self_name) : c.self_name;
+          const where = `${esc(sysName(c.system_id))}${c.planet_name ? ' · ' + esc(c.planet_name) : ''}`;
+          const tags = [`<span class="gm-r-tag">${esc(CIV_TIER[c.visible_tier] || '?')}</span>`];
+          if ((c.races || [])[0]) tags.push(`<span class="gm-r-tag">${esc((c.races || [])[0])}</span>`);
+          return `<button class="gm-r-row${c.status === 'dead' ? ' gm-r-transit' : ''}" onclick="gmCivGo('${esc(c.system_id)}',${Number(c.pid)})">
+              <span class="gm-r-ico">${g.k === 'star' ? '★' : g.k === 'dead' ? '✝' : '🜃'}</span>
+              <span class="gm-r-main"><span class="gm-r-name">${esc(nm || '?')}</span><span class="gm-r-where">${where}</span></span>
+              <span class="gm-r-tags">${tags.join('')}</span>
+            </button>`;
+        }).join('');
+      return `<div class="gm-r-group"><div class="gm-r-head">${g.lb} · ${rows.length}</div>${html}</div>`;
+    }).join('');
+  }
+  el.innerHTML = `<div class="gm-r-bar"><span class="gm-r-title">🜃 Дозвёздные миры</span>
+      <button class="gm-close" onclick="gmCivListToggle()">✕</button></div>
+    <input id="gm-civq" class="gm-civ-q" placeholder="Поиск: народ, система, планета…" value="${esc(GM._civQ || '')}"
+      oninput="gmCivListSearch(this.value)">${body}`;
+  el.classList.remove('gm-hidden');
+  if (keepFocus) { const i = document.getElementById('gm-civq'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
+}
+// Клик по строке: включить слой, навести камеру и открыть систему.
+function gmCivGo(sysId, pid) {
+  const sys = (GM.systems || []).find(s => s.id === sysId);
+  if (!sys) { toast('Система не найдена на карте', 'err'); return; }
+  if (!GM.showCivs) gmToggleCivs();
+  gmCenterSystem(sysId, 2.2);
+  if (GM.edit && GM.mode === 'select') gmOpenForm(sys); else gmOpenPanel(sys);
+}
+
 // Значок над звездой: сколько цивилизаций в системе и что это за миры.
 function gmCivStarMark(sysId) {
   const list = (GM.civsBySys && GM.civsBySys[sysId]) || [];
@@ -3137,6 +3236,7 @@ async function gmPrimSpawnHere(sysId) {
     (GM.civsBySys[sysId] = GM.civsBySys[sysId] || []).push(civ);
     document.getElementById('gmf-prim').innerHTML = gmPrimFormSection(sys);
     gmDrawStars();
+    if (GM._civListOn) gmCivListRender();
     toast(`${civ.self_name} поселены на «${p.name}»`, 'ok');
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
@@ -3149,6 +3249,7 @@ async function gmPrimDropHere(sysId, pid) {
     const sys = GM.systems.find(s => s.id === sysId);
     if (sys) document.getElementById('gmf-prim').innerHTML = gmPrimFormSection(sys);
     gmDrawStars();
+    if (GM._civListOn) gmCivListRender();
     toast('Удалено', 'ok');
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
@@ -3434,6 +3535,8 @@ async function gmPrimApplyAll() {
       done++;
     }
     toast(`Заселено миров: ${fresh.length}${done ? `, дописано будущее: ${done}` : ''}`, 'ok');
+    await gmCivsReload();            // витрина устарела: перечитать и показать каталог
+    if (!GM._civListOn) gmCivListToggle();
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
 
@@ -3575,6 +3678,7 @@ function gmmRender(host) {
       <div id="gm-panel" class="gm-hidden"></div>
       <div id="gm-form" class="gm-hidden"></div>
       <div id="gm-roster" class="gm-hidden"></div>
+      <div id="gm-civlist" class="gm-hidden"></div>
       <div id="gm-opcmd" class="gm-hidden"></div>
     </div>`;
   GMM.cv = document.getElementById('gmm-cv');
