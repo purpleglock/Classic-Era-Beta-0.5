@@ -4987,6 +4987,71 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hp-vnd-empty{max-width:560px;padding:22px 4px}
 .hp-vnd-empty-t{font-family:var(--font-display);font-weight:800;text-transform:uppercase;letter-spacing:.1em;font-size:15px;color:#ffe9e4;margin-bottom:6px}
 .hp-vnd-empty-s{font-size:12.5px;line-height:1.6;color:#c9a49b}
+/* ── НАВЕДЕНИЕ как новелла: шапка-арт с репликой поверх → интерфейс выбора ── */
+.hp-vnd-vn{max-width:1180px}
+/* Корешок-прогресс: имена сцен, пройденные тускнеют, текущая горит */
+.hp-vnd-spine{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:12px;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase}
+.hp-vnd-spine-p{color:#6a5852}
+.hp-vnd-spine-p.past{color:#a08880}
+.hp-vnd-spine-p.on{color:#ffe9e4;border-bottom:2px solid #ff4a3c;padding-bottom:2px}
+.hp-vnd-spine-ln{width:16px;height:1px;background:rgba(255,74,60,.3)}
+/* Карта-разворот: без видимого шва между шапкой и выбором */
+.hp-vnd-vn-card{background:#0b0708;border:1px solid rgba(255,74,60,.2);border-top:2px solid #ff4a3c}
+/* Шапка-арт: картинка на весь верх, снизу растворяется в фон карты */
+.hp-vnd-banner{position:relative;min-height:230px;display:flex;flex-direction:column;justify-content:flex-end;
+  overflow:hidden;background:radial-gradient(125% 100% at 50% 15%,#3a1616,#0b0708 72%)}
+.hp-vnd-face-afraid .hp-vnd-banner,.hp-vnd-face-pleading .hp-vnd-banner{background:radial-gradient(125% 100% at 50% 15%,#4a1414,#0b0708 70%)}
+.hp-vnd-face-hollow .hp-vnd-banner{background:radial-gradient(125% 100% at 50% 15%,#241a22,#0b0708 74%)}
+.hp-vnd-banner-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 28%;
+  opacity:0;transition:opacity .5s ease}
+.hp-vnd-banner-img.ok{opacity:1}
+.hp-vnd-banner-scrim{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(11,7,8,.15) 0,rgba(11,7,8,.05) 34%,rgba(11,7,8,.72) 72%,#0b0708 100%)}
+/* Реплика поверх шапки */
+.hp-vnd-say{position:relative;z-index:2;padding:12px 16px 15px}
+.hp-vnd-say-who{font-family:var(--font-mono);font-size:9px;letter-spacing:.24em;text-transform:uppercase;
+  color:#ff8d7c;margin-bottom:7px;text-shadow:0 1px 4px #000}
+.hp-vnd-say-l{margin:0 0 6px;font-size:14px;line-height:1.6;color:#f4e6e1;max-width:640px;
+  text-shadow:0 1px 6px #000,0 0 2px #000;animation:hpvndSay .5s ease both}
+.hp-vnd-say-l:last-child{margin-bottom:0}
+.hp-vnd-say-l:nth-child(3){animation-delay:.28s}
+@keyframes hpvndSay{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+/* Staff-загрузка шапки */
+.hp-vnd-artupl{position:absolute;top:8px;right:8px;z-index:3;cursor:pointer;
+  font-family:var(--font-mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#ffcfc6;
+  background:rgba(11,7,8,.7);border:1px solid rgba(255,74,60,.5);padding:4px 8px}
+.hp-vnd-artupl:hover{color:#fff;border-color:#ff6a5a}
+/* Интерфейс выбора под шапкой */
+.hp-vnd-vn-main{padding:2px 15px 15px;display:flex;flex-direction:column}
+.hp-vnd-scene.flip-next{animation:hpvndFlipN .34s ease}
+.hp-vnd-scene.flip-back{animation:hpvndFlipB .34s ease}
+@keyframes hpvndFlipN{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+@keyframes hpvndFlipB{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:none}}
+.hp-vnd-scene{padding-top:12px}
+.hp-vnd-scene .hp-vnd-syslist{max-height:240px}
+.hp-vnd-scene .hp-vnd-con-t{margin-bottom:8px}
+.hp-vnd-scene .hp-vnd-cass{min-width:150px}
+/* Строка поиска + фильтр зоны */
+.hp-vnd-sysbar{display:flex;gap:8px;align-items:stretch;margin-bottom:8px}
+.hp-vnd-sysbar .hp-vnd-con-q{flex:1;margin:0}
+.hp-vnd-zone{flex:none;cursor:pointer;white-space:nowrap;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#b08f88;
+  background:hsl(0 40% 7% / .9);border:1px solid rgba(255,74,60,.3);padding:0 12px}
+.hp-vnd-zone b{color:#c9a49b;font-weight:600}
+.hp-vnd-zone.on{border-color:#ff4a3c;color:#ffe9e4;box-shadow:inset 0 0 0 1px rgba(255,74,60,.4)}
+.hp-vnd-zone.on b{color:#ff8d7c}
+.hp-vnd-zone-note{flex:none;display:flex;align-items:center;font-family:var(--font-mono);font-size:10px;color:#6a5852;padding:0 6px}
+/* Стрелки-перелистывание */
+.hp-vnd-pages{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px}
+.hp-vnd-page{font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  background:transparent;border:1px solid rgba(255,74,60,.3);color:#ff9a8a;padding:7px 14px;cursor:pointer}
+.hp-vnd-page-next{border-color:#ff4a3c;color:#ffe9e4}
+.hp-vnd-page:hover{border-color:#ff6a5a;color:#fff}
+.hp-vnd-page-off{opacity:.4;cursor:default;border-style:dashed}
+.hp-vnd-page-off:hover{border-color:rgba(255,74,60,.3);color:#ff9a8a}
+.hp-vnd-page-hint{font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8f6f68}
+@media(max-width:620px){.hp-vnd-banner{min-height:180px}}
 /* Переиспользуемый пульт наведения: перекрасить его голубые чипы в тему */
 .hp-vn-doom .ec-doom-gunchip.on{border-color:#ff6a5a;box-shadow:inset 0 0 0 1px #ff6a5a}
 

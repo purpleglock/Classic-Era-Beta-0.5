@@ -13878,7 +13878,7 @@ function ecShellArsenalSection() {
    Стреляет боевыми RPC: doom_fire (стационар) / mza_fire (носитель). */
 function ecDoomVNAimSt() {
   const vn = ecDoomVNSt();
-  return vn.aim = vn.aim || { car: null, sysId: null, pid: null, q: '', shell: 'doom', tgl: { pwr: false, seal: false, oath: false } };
+  return vn.aim = vn.aim || { car: null, sysId: null, pid: null, q: '', shell: 'doom', step: 0, zoneOnly: true, tgl: { pwr: false, seal: false, oath: false } };
 }
 // Все носители приговора одним списком (боеготовые и нет — с причиной).
 function ecDoomVNCarriers() {
@@ -13906,46 +13906,107 @@ function ecDoomVNCar() {
   st.car = c ? c.key : null;
   return c;
 }
-// Любое изменение ввода (носитель/система/планета) снимает взвод тумблеров.
-// Смена носителя перестраивает всё (кассеты/подлёты) — полный рефреш. Выбор
-// системы/планеты и тумблеры — точечная синхронизация: список НЕ прыгает, а
-// прокрутка реестра сохраняется (см. ecDoomVNAimSync).
+/* ── НАВЕДЕНИЕ как новелла: сцены-страницы перелистываются, наводчик у пульта
+   говорит и с каждой страницей всё меньше владеет собой. Порядок сцен зависит
+   от носителя: у стационарной Длани снаряд один (Длань), сцена выбора снаряда
+   выпадает; Гиперпейсер несёт все тиры — у него сцена снаряда есть. */
+function ecDoomVNSteps(car) {
+  return (car && car.kind === 'mza')
+    ? ['car', 'sys', 'pid', 'shell', 'chain']
+    : ['car', 'sys', 'pid', 'chain'];
+}
+function ecDoomVNStepId(car) {
+  const st = ecDoomVNAimSt(), steps = ecDoomVNSteps(car);
+  st.step = Math.max(0, Math.min(st.step | 0, steps.length - 1));
+  return steps[st.step];
+}
+// Можно ли уйти с текущей сцены дальше (гейт целеуказания).
+function ecDoomVNStepReady(stepId, car) {
+  const st = ecDoomVNAimSt();
+  if (stepId === 'car') return !!(car && car.ready);
+  if (stepId === 'sys') return !!st.sysId;
+  if (stepId === 'pid') return Number.isInteger(st.pid);
+  if (stepId === 'shell') return ecShellsOf((car && car.kind === 'mza' && EC_BALL_KINDS.includes(st.shell)) ? st.shell : 'doom') >= 1;
+  return false;
+}
+// Перелистнуть сцену вручную (стрелки внизу). dir: +1 вперёд / −1 назад.
+function ecDoomVNGo(dir) {
+  const st = ecDoomVNAimSt(), car = ecDoomVNCar(), steps = ecDoomVNSteps(car);
+  const cur = steps[st.step];
+  if (dir > 0 && !ecDoomVNStepReady(cur, car)) return;
+  st.step = Math.max(0, Math.min(st.step + dir, steps.length - 1));
+  ecDoomVNStageSync(dir > 0 ? 'next' : 'back');
+}
+// Выбор на странице только ОТМЕЧАЕТ вариант (подсветка) — дальше листаем сами
+// стрелкой ▸. Так можно спокойно покликать по вариантам, не проскакивая сцену.
 function ecDoomVNPick(part, val) {
   const st = ecDoomVNAimSt();
   if (part === 'car') {
-    st.car = val; st.sysId = null; st.pid = null;
-    st.tgl = { pwr: false, seal: false, oath: false };
-    if (typeof heroVNDoomRefresh === 'function') heroVNDoomRefresh();
-    return;
+    if (st.car !== val) { st.car = val; st.sysId = null; st.pid = null; }
+  } else if (part === 'sys') {
+    st.sysId = (st.sysId === val ? null : val); st.pid = null;
+  } else if (part === 'pid') {
+    st.pid = (st.pid === +val ? null : +val);
   }
-  if (part === 'sys') { st.sysId = (st.sysId === val ? null : val); st.pid = null; }
-  else if (part === 'pid') st.pid = +val;
   st.tgl = { pwr: false, seal: false, oath: false };
-  ecDoomVNAimSync();
+  ecDoomVNStageSync(null);
 }
-// Переключить тип снаряда Гиперпейсера (☠ Длань / 💥 баллистика) — точечный рефреш цепи пуска.
+// Выбрать тип снаряда Гиперпейсера (остаёмся на сцене — дальше стрелкой).
 function ecDoomVNShell(k) {
   const st = ecDoomVNAimSt();
   st.shell = EC_BALL_KINDS.includes(k) ? k : 'doom';
   st.tgl = { pwr: false, seal: false, oath: false };
-  ecDoomVNAimSync();
+  ecDoomVNStageSync(null);
 }
+// «В зоне поражения» — показывать только достижимые системы (для Гиперпейсера).
+function ecDoomVNZone() {
+  const st = ecDoomVNAimSt();
+  st.zoneOnly = !st.zoneOnly;
+  const list = document.getElementById('hd-syslist');
+  if (list) { const sc = list.scrollTop; list.innerHTML = ecDoomVNSysList(); list.scrollTop = sc; }
+  const b = document.getElementById('hd-zone');
+  if (b) { b.classList.toggle('on', st.zoneOnly); b.querySelector('b').textContent = st.zoneOnly ? 'в зоне поражения' : 'все обитаемые'; }
+}
+// Лицо-настроение → имя файла шапки (assets/doom/face_<face>.webp).
+function ecDoomFace(mood) {
+  return { steady: 'calm', uneasy: 'worried', shaken: 'scared', afraid: 'scared',
+    pleading: 'worried', hollow: 'empty', cold: 'cold' }[mood] || 'worried';
+}
+// Загрузка шапки-арта (только staff): шлём в локальный аплоад-сервер, dir=doom.
+async function ecDoomBannerUpload(face, inputEl) {
+  const f = inputEl && inputEl.files && inputEl.files[0]; if (!f) return;
+  try {
+    const buf = await f.arrayBuffer();
+    const r = await fetch(`http://127.0.0.1:8787/upload?dir=doom&name=face_${face}.webp`, {
+      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'сервер отказал');
+    toast(`Шапка «${face}» загружена`, 'ok');
+    EC._doomArtV = Date.now();          // сбросить кэш картинки
+    ecDoomVNStageSync(null);
+  } catch (e) {
+    toast('Нет аплоад-сервера? Запусти «Загрузка артов.bat». ' + (e.message || ''), 'err');
+  } finally { inputEl.value = ''; }
+}
+// Тумблеры цепи пуска — остаёмся на той же странице, но реплика оператора и
+// кнопка ПУСК пересчитываются (наводчик реагирует на каждый щелчок).
 function ecDoomVNTgl(k) {
   const st = ecDoomVNAimSt();
   st.tgl[k] = !st.tgl[k];
-  ecDoomVNAimSync();
+  ecDoomVNStageSync(null);
 }
-// Точечно перерисовать реестр (сохранив прокрутку), секцию II.1 и цепь пуска —
-// не трогая кассеты/поиск, чтобы фокус и позиция списка не сбивались.
-function ecDoomVNAimSync() {
-  const list = document.getElementById('hd-syslist');
-  if (list) { const sc = list.scrollTop; list.innerHTML = ecDoomVNSysList(); list.scrollTop = sc; }
-  const tsec = document.getElementById('hd-targetsec');
-  if (tsec) { tsec.innerHTML = ecDoomVNTargetSec(); ecDoomPaintPlanets(tsec); }
-  const fire = document.getElementById('hd-fire');
-  if (fire) fire.innerHTML = ecDoomVNProto();
-  if (!list && !tsec && !fire && typeof heroVNDoomRefresh === 'function') heroVNDoomRefresh();
+// Перерисовать весь разворот новеллы (портрет + реплика + сцена + стрелки).
+// dir задаёт анимацию перелистывания; null — обновление на месте (тумблеры).
+function ecDoomVNStageSync(dir) {
+  const wrap = document.getElementById('hd-aim');
+  if (!wrap) { if (typeof heroVNDoomRefresh === 'function') heroVNDoomRefresh(); return; }
+  wrap.innerHTML = ecDoomVNAimInner();
+  ecDoomPaintPlanets(wrap);
+  const scene = document.getElementById('hd-scene');
+  if (scene && dir) { scene.style.animation = 'none'; void scene.offsetWidth; scene.style.animation = ''; scene.classList.add(dir === 'back' ? 'flip-back' : 'flip-next'); }
 }
+// Совместимость: прежние вызовы точечной синхронизации ведут на полный разворот.
+function ecDoomVNAimSync() { ecDoomVNStageSync(null); }
 // Поиск по реестру целей: перерисовываем только список, чтобы не терять фокус.
 function ecDoomVNAimQ(v) {
   ecDoomVNAimSt().q = v || '';
@@ -13956,13 +14017,19 @@ function ecDoomVNAimQ(v) {
 function ecDoomVNSysList() {
   const st = ecDoomVNAimSt(), car = ecDoomVNCar();
   const q = (st.q || '').trim().toLowerCase();
+  // «В зоне поражения» имеет смысл для Гиперпейсера (радиус в прыжках); у
+  // стационарной Длани маршрутного лимита нет — фильтр её не режет.
+  const zone = st.zoneOnly && car && car.kind === 'mza';
+  const maxHops = ecMzaMaxHops(EC_BALL_KINDS.includes(st.shell) ? st.shell : 'doom');
+  const inZone = s => { if (!zone) return true; const h = ecMzaHops(car.sys, s.id); return h != null && h <= maxHops; };
   const rows = (EC.allSystems || [])
     .map(s => ({ s, alive: ecDoomTargetablePlanets(s).filter(p => !(p.dead || p.doomed)) }))
     .filter(x => x.alive.length && (!car || x.s.id !== car.sys))
     .filter(x => !q || (x.s.name || x.s.id || '').toLowerCase().includes(q))
+    .filter(x => inZone(x.s))
     .map(x => ({ ...x, fly: car ? ecDoomFlight({ system_id: car.sys }, x.s.id) : null }))
     .sort((a, b) => (a.fly ? a.fly.dist : 1e9) - (b.fly ? b.fly.dist : 1e9));
-  if (!rows.length) return '<div class="hp-vnd-con-none">— в реестре пусто: нет систем с живыми планетами-целями —</div>';
+  if (!rows.length) return `<div class="hp-vnd-con-none">— ${zone ? 'в зоне поражения нет целей — расширьте фильтр или перебросьте носитель ближе' : 'в реестре пусто: нет систем с живыми планетами-целями'} —</div>`;
   return rows.map(({ s, alive, fly }) => {
     const on = st.sysId === s.id;
     const own = s.faction === EC.fid;
@@ -14048,12 +14115,19 @@ async function ecDoomVNFire() {
     else await ecRpc('mza_fire', { p_id: car.id, p_target_system_id: sys.id, p_target_pid: tgt.pid, p_target_name: tgt.name || null, p_kind: shellKind });
     ecDoomVNSt().aim = null;
     ecDoomVNSt().tab = 'salvos';
-    toast(`🜨 Приговор выпущен по «${tgt.name || 'цели'}» — снаряд в пути`, 'ok');
+    toast(`Наводчица: «Снаряд ушёл... ${tgt.name || 'Цель'} скоро встретится со своей судьбой...»`, 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
   finally { EC.busy = false; }
 }
+// Внешняя обёртка сцены-новеллы (перерисовывается целиком в ecDoomVNStageSync).
 function ecDoomVNAim() {
+  return `<div id="hd-aim" class="hp-vnd-vn">${ecDoomVNAimInner()}</div>`;
+}
+// Названия сцен для «корешка» новеллы (тонкая полоска-прогресс сверху).
+const EC_DOOM_STEP_NM = { car: 'носитель', sys: 'система', pid: 'мир', shell: 'снаряд', chain: 'пуск' };
+// Разворот новеллы: слева — наводчик, справа — реплика и активная сцена.
+function ecDoomVNAimInner() {
   const cars = ecDoomVNCarriers();
   if (!cars.length) return `<div class="hp-vnd-empty">
     <div class="hp-vnd-empty-t">Прицельный канал пуст.</div>
@@ -14061,35 +14135,132 @@ function ecDoomVNAim() {
     <button class="hp-vnd-aimbtn" type="button" onclick="event.stopPropagation();ecDoomVNTab('arsenal')">↤ в арсенал</button>
   </div>`;
   const st = ecDoomVNAimSt(), car = ecDoomVNCar();
-  const grav = ecStockOf('Гравиядро');
-  // I · НОСИТЕЛЬ — кассеты
-  const cass = `<div class="hp-vnd-con-sec">
-    <div class="hp-vnd-con-t"><i>I</i> носитель приговора</div>
-    <div class="hp-vnd-cassrow">${cars.map(c => `
+  const steps = ecDoomVNSteps(car);
+  const stepId = car ? ecDoomVNStepId(car) : 'car';
+  const dlg = ecDoomVNDialog(stepId, car);
+  // Корешок-прогресс: пройденные / текущая / грядущие сцены.
+  const spine = `<div class="hp-vnd-spine">${steps.map((s, i) => {
+    const cls = i < st.step ? ' past' : i === st.step ? ' on' : '';
+    return `<span class="hp-vnd-spine-p${cls}">${EC_DOOM_STEP_NM[s]}</span>`;
+  }).join('<i class="hp-vnd-spine-ln"></i>')}</div>`;
+  // ШАПКА-АРТ (assets/doom/face_<face>.webp) с текстом реплики поверх, плавно
+  // растворяющаяся в интерфейс выбора ниже. Нет арта — остаётся тематический фон.
+  const face = ecDoomFace(dlg.mood);
+  const artV = EC._doomArtV || (typeof BUILD !== 'undefined' ? BUILD : '1');
+  const src = `assets/doom/face_${face}.webp?v=${artV}`;
+  const say = `<div class="hp-vnd-say" id="hd-vo">
+    <div class="hp-vnd-say-who">${dlg.who}</div>
+    ${dlg.lines.map(l => `<p class="hp-vnd-say-l">${l}</p>`).join('')}
+  </div>`;
+  const banner = `<div class="hp-vnd-banner hp-vnd-face-${dlg.mood}">
+    <img class="hp-vnd-banner-img" src="${src}" alt="" onload="this.classList.add('ok')" onerror="this.remove()">
+    <div class="hp-vnd-banner-scrim"></div>
+    ${say}
+  </div>`;
+  const scene = `<div class="hp-vnd-scene" id="hd-scene">${ecDoomVNScene(stepId, car)}</div>`;
+  const nav = ecDoomVNNav(stepId, car);
+  return `${spine}
+    <div class="hp-vnd-vn-card">
+      ${banner}
+      <div class="hp-vnd-vn-main">${scene}${nav}</div>
+    </div>`;
+}
+// Реплики наводчицы
+function ecDoomVNDialog(stepId, car) {
+  const st = ecDoomVNAimSt();
+  const who = 'НАВОДЧИЦА';
+  const sys = st.sysId ? (EC.allSystems || []).find(s => s.id === st.sysId) : null;
+  const sysNm = sys ? esc(sys.name || sys.id) : 'цель';
+  const tgt = sys && Number.isInteger(st.pid) ? ecDoomTargetablePlanets(sys).find(p => p.pid === st.pid) : null;
+  const tgtNm = tgt ? esc(tgt.name || 'планета ' + tgt.pid) : 'мир';
+  if (stepId === 'car') {
+    if (!car) return { who, mood: 'hollow', lines: [
+      'И зачем вы меня вызывали? Какая еще боеготовность, командующий? У нас нет МЗА...',
+      'Да и зачем она Вам? '] };
+    return { who, mood: 'steady', lines: [
+      `«${esc(car.nm)}» на связи. Готовы к выполнению задачи.`,
+      'Ждем Ваших указаний.'] };
+  }
+  if (stepId === 'sys') return { who, mood: 'uneasy', lines: [
+    'Развернула реестр систем. ',
+    'Подтвердите систему для обстрела.'] };
+  if (stepId === 'pid') return { who, mood: 'shaken', lines: [
+    `Т-теперь… укажите конкретный мир. В системе «${sysNm}» их несколько.`,
+    'Вы д-должны выбрать, кого именно… простите...'] };
+  if (stepId === 'shell') {
+    const k = EC_BALL_KINDS.includes(st.shell) ? st.shell : 'doom';
+    const boom = {
+      doom: 'Метрический снаряд Х67 «Ада» способен уничтожать целые миры...',
+      ball_light: 'Лёгкий снаряд Х19 «Хазар» летает быстрее остальных, однако не наносит такого же урона, как Х67. Да, погибнут тысячи... Но планета уцелеет...',
+      ball_emp: 'Снаряд Х69 «Фантом» слепит их ПРО и приходит незваным. Они не увидят его, пока крыши не осыплются им на головы.',
+      ball_cluster: 'Кассетный снаряд Х05 «Сурей» раскрывается в космосе веером и пытается обмануть ПРО. Я… я видела записи после таких..',
+      ball_heavy: 'Тяжелый снаряд Х0414 «Отей» - младший брат «Ады», к счастью, не столь же разрушительный, как она.',
+    }[k];
+    return { who, mood: 'afraid', lines: [ boom, `Выберите снаряд для «${tgtNm}». И… подумайте ещё раз.`] };
+  }
+  // chain — по числу взведённых тумблеров
+  const n = ['pwr', 'seal', 'oath'].filter(k => st.tgl[k]).length;
+  if (n === 0) return { who, mood: 'pleading', lines: [
+    'Что ж... Подтвердите готовность к пуску, командующий...',
+    `Мы... правда это делаем? По «${tgtNm}»?`] };
+  if (n === 1) return { who, mood: 'pleading', lines: ['Питание пошло... Вы уверены, командир?'] };
+  if (n === 2) return { who, mood: 'hollow', lines: ['Пломба снята. Зачем? Их же ещё можно было… есть отставить...'] };
+  return { who, mood: 'hollow', lines: ['…'] };
+}
+// Активная сцена справа под репликой: контрол текущего шага.
+function ecDoomVNScene(stepId, car) {
+  const st = ecDoomVNAimSt(), cars = ecDoomVNCarriers();
+  if (stepId === 'car') {
+    return `<div class="hp-vnd-cassrow">${cars.map(c => `
       <button type="button" class="hp-vnd-cass${car && car.key === c.key ? ' on' : ''}${c.ready ? '' : ' off'}" ${c.ready ? '' : 'disabled'}
         onclick="event.stopPropagation();ecDoomVNPick('car','${c.key}')">
         <span class="hp-vnd-cass-ic">${c.ic}</span>
         <span class="hp-vnd-cass-nm">${esc(c.nm)}</span>
         <span class="hp-vnd-cass-st">${c.ready ? 'корпус ' + c.integ + '%' : esc(c.why)}</span>
-      </button>`).join('')}</div>
-  </div>`;
-  if (!car) return cass + `<div class="hp-vnd-warnline">⚠ Ни один носитель не боеготов — цепь пуска обесточена.</div>`;
-  // II · ЦЕЛЬ — консольный реестр систем (без разворота планет — см. II.1)
-  const reg = `<div class="hp-vnd-con-sec">
-    <div class="hp-vnd-con-t"><i>II</i> целеуказание · реестр обитаемых систем</div>
-    <input type="text" class="hp-vnd-con-q" value="${esc(st.q || '')}" placeholder="▸ поиск по имени системы…"
-      oninput="ecDoomVNAimQ(this.value)" onclick="event.stopPropagation()">
-    <div class="hp-vnd-syslist" id="hd-syslist">${ecDoomVNSysList()}</div>
-  </div>`;
-  // II.1 · ЦЕЛЬ ПОРАЖЕНИЯ — миры выбранной системы (текстуры-сферы), отдельная секция
-  const tgtsec = `<div class="hp-vnd-con-sec hp-vnd-con-tgt" id="hd-targetsec">${ecDoomVNTargetSec()}</div>`;
-  // III · ЦЕПЬ ПУСКА — телеметрия, тумблеры, ПУСК
-  const proto = `<div id="hd-fire">${ecDoomVNProto()}</div>`;
-  // Планеты рисуем после вставки в DOM (canvas-сферы).
-  setTimeout(() => ecDoomPaintPlanets(document.getElementById('hd-targetsec')), 0);
-  return cass + reg + tgtsec + proto;
+      </button>`).join('')}</div>`;
+  }
+  if (stepId === 'sys') {
+    const zoneBtn = car && car.kind === 'mza'
+      ? `<button type="button" class="hp-vnd-zone${st.zoneOnly ? ' on' : ''}" id="hd-zone" onclick="event.stopPropagation();ecDoomVNZone()">
+          ◎ <b>${st.zoneOnly ? 'в зоне поражения' : 'все обитаемые'}</b></button>`
+      : `<span class="hp-vnd-zone-note">стационарная Длань достаёт до любой системы</span>`;
+    return `<div class="hp-vnd-sysbar">
+        <input type="text" class="hp-vnd-con-q" value="${esc(st.q || '')}" placeholder="▸ поиск по имени системы…"
+          oninput="ecDoomVNAimQ(this.value)" onclick="event.stopPropagation()">
+        ${zoneBtn}
+      </div>
+      <div class="hp-vnd-syslist" id="hd-syslist">${ecDoomVNSysList()}</div>`;
+  }
+  if (stepId === 'pid') return `<div id="hd-targetsec">${ecDoomVNTargetSec()}</div>`;
+  if (stepId === 'shell') {
+    const ICO = { doom: '☠', ball_light: '⚡', ball_emp: '👻', ball_cluster: '🧨', ball_heavy: '🪨' };
+    const NM = { doom: 'снаряд Длани', ball_light: 'лёгкая', ball_emp: '«Фантом»', ball_cluster: 'кассетная', ball_heavy: 'тяжёлая' };
+    const cur = EC_BALL_KINDS.includes(st.shell) ? st.shell : 'doom';
+    return `<div class="hp-vnd-cassrow">${['doom'].concat(EC_BALL_KINDS).map(k =>
+      `<button type="button" class="hp-vnd-cass${cur === k ? ' on' : ''}${ecShellsOf(k) < 1 ? ' off' : ''}"
+        title="${esc(EC_BALL_INFO[k] || 'стирает планету в мёртвый камень')}"
+        onclick="event.stopPropagation();ecDoomVNShell('${k}')">
+        <span class="hp-vnd-cass-ic">${ICO[k]}</span>
+        <span class="hp-vnd-cass-nm">${NM[k]}</span>
+        <span class="hp-vnd-cass-st">на складе: ${ecNum(ecShellsOf(k))}</span>
+      </button>`).join('')}</div>`;
+  }
+  return ecDoomVNProto();   // chain
 }
-// III · цепь пуска — отдельным блоком, чтобы обновлять точечно (ecDoomVNAimSync).
+// Стрелки-перелистывание внизу разворота.
+function ecDoomVNNav(stepId, car) {
+  const st = ecDoomVNAimSt(), steps = ecDoomVNSteps(car);
+  const back = st.step > 0
+    ? `<button type="button" class="hp-vnd-page hp-vnd-page-back" onclick="event.stopPropagation();ecDoomVNGo(-1)">◂ назад</button>`
+    : `<span class="hp-vnd-page hp-vnd-page-off">◂</span>`;
+  let fwd;
+  if (stepId === 'chain') fwd = `<span class="hp-vnd-page-hint">цепь пуска — ниже</span>`;
+  else if (ecDoomVNStepReady(stepId, car))
+    fwd = `<button type="button" class="hp-vnd-page hp-vnd-page-next" onclick="event.stopPropagation();ecDoomVNGo(1)">${EC_DOOM_STEP_NM[steps[st.step + 1]] || 'дальше'} ▸</button>`;
+  else fwd = `<span class="hp-vnd-page hp-vnd-page-off">выберите ${EC_DOOM_STEP_NM[stepId]} ▸</span>`;
+  return `<div class="hp-vnd-pages">${back}${fwd}</div>`;
+}
+// Сцена «цепь пуска»: телеметрия, три тумблера и кнопка ПУСК.
 function ecDoomVNProto() {
   const st = ecDoomVNAimSt(), car = ecDoomVNCar();
   if (!car) return '';
@@ -14098,24 +14269,10 @@ function ecDoomVNProto() {
   const sys = st.sysId ? (EC.allSystems || []).find(s => s.id === st.sysId) : null;
   const tgt = sys && Number.isInteger(st.pid) ? ecDoomTargetablePlanets(sys).find(p => p.pid === st.pid) : null;
   const fly = sys ? ecDoomFlight({ system_id: car.sys }, sys.id) : null;
-  // Гиперпейсер: дальность = прыжки по гиперпутям (тяжёлая ×2)
   const hops = (car.kind === 'mza' && sys) ? ecMzaHops(car.sys, sys.id) : null;
   const maxHops = ecMzaMaxHops(shellKind);
   const inRange = !(car.kind === 'mza' && hops != null && hops > maxHops);
   const gravOk = shells >= 1;
-  // выбор снаряда — только для Гиперпейсера (несёт снаряд Длани и все тиры баллистики)
-  const ICO = { doom: '☠', ball_light: '⚡', ball_emp: '👻', ball_cluster: '🧨', ball_heavy: '🪨' };
-  const NM = { doom: 'снаряд Длани', ball_light: 'лёгкая', ball_emp: '«Фантом»', ball_cluster: 'кассетная', ball_heavy: 'тяжёлая' };
-  const shellSel = car.kind === 'mza'
-    ? `<div class="hp-vnd-cassrow" style="margin:6px 0 2px">${['doom'].concat(EC_BALL_KINDS).map(k =>
-        `<button type="button" class="hp-vnd-cass${shellKind === k ? ' on' : ''}${ecShellsOf(k) < 1 ? ' off' : ''}"
-          title="${esc(EC_BALL_INFO[k] || 'стирает планету в мёртвый камень')}"
-          onclick="event.stopPropagation();ecDoomVNShell('${k}')">
-          <span class="hp-vnd-cass-ic">${ICO[k]}</span>
-          <span class="hp-vnd-cass-nm">${NM[k]}</span>
-          <span class="hp-vnd-cass-st">на складе: ${ecNum(ecShellsOf(k))}</span>
-        </button>`).join('')}</div>`
-    : '';
   const tglDef = [
     ['pwr', 'питание накопителей', gravOk ? '' : 'нет снаряда'],
     ['seal', 'снять пломбу ствола', ''],
@@ -14131,25 +14288,21 @@ function ecDoomVNProto() {
     </button>`;
   }).join('');
   const armed = canArm && gravOk && st.tgl.pwr && st.tgl.seal && st.tgl.oath;
-  return `<div class="hp-vnd-con-sec hp-vnd-con-fire">
-    <div class="hp-vnd-con-t"><i>III</i> цепь пуска</div>
-    ${shellSel}
-    <div class="hp-vnd-read">
-      <span><i>носитель</i><b>${car.ic} ${esc(car.nm)}</b></span>
+  return `<div class="hp-vnd-read">
+      <span><i>носитель</i><b>${esc(car.nm)}</b></span>
       <span><i>цель</i><b${tgt ? ' class="hot"' : ''}>${tgt ? esc((sys.name || sys.id) + ' · ' + (tgt.name || 'планета ' + tgt.pid)) : '— не назначена —'}</b></span>
       <span><i>подлёт</i><b>${fly ? '≈' + fly.hours.toFixed(1) + ' ч' : '···'}</b></span>
-      <span><i>снаряд</i><b class="${gravOk ? '' : 'hot'}">${shellKind === 'doom' ? '☠' : '💥'} ${ecNum(shells)}/1</b></span>
+      <span><i>снаряд</i><b class="${gravOk ? '' : 'hot'}">${esc(EC_SHELL_LABEL[shellKind].replace(/^\S+\s/, ''))} · ${ecNum(shells)}/1</b></span>
     </div>
     <div class="hp-vnd-tumbs">${tumbs}</div>
-    ${!inRange ? `<div class="hp-vnd-warnline">⚠ Цель вне радиуса: дальность ${EC_SHELL_LABEL[shellKind]} — ${maxHops} прыжка(ов) по гиперпутям${hops === Infinity ? ' (нет маршрута)' : ' (до цели ' + hops + ')'}. Перебросьте носитель ближе или возьмите 🪨 тяжёлую.</div>` : ''}
+    ${!inRange ? `<div class="hp-vnd-warnline">Цель вне радиуса: дальность ${esc(EC_SHELL_LABEL[shellKind])} — ${maxHops} прыжка(ов) по гиперпутям${hops === Infinity ? ' (нет маршрута)' : ' (до цели ' + hops + ')'}. Перебросьте носитель ближе или возьмите тяжёлую.</div>` : ''}
     ${tgt && inRange ? (shellKind === 'doom'
-      ? `<div class="hp-vnd-warnline">⚠ Залп необратим: «${esc(tgt.name || '')}» станет мёртвым камнем, любая колония на ней — включая столицу — будет стёрта.</div>`
-      : `<div class="hp-vnd-warnline">💥 ${esc(EC_SHELL_LABEL[shellKind])}: планета уцелеет — ${esc(EC_BALL_INFO[shellKind] || '')}.</div>`)
-      : (!tgt ? `<div class="hp-vnd-hint">Назначьте планету-цель в секции II.1 — тумблеры обесточены до целеуказания.</div>` : '')}
+      ? `<div class="hp-vnd-warnline">Залп необратим: «${esc(tgt.name || '')}» станет мёртвым камнем, любая колония на ней — включая столицу — будет стёрта.</div>`
+      : `<div class="hp-vnd-warnline">${esc(EC_SHELL_LABEL[shellKind])}: планета уцелеет — ${esc(EC_BALL_INFO[shellKind] || '')}.</div>`)
+      : ''}
     <button type="button" class="hp-vnd-launch${armed ? ' armed' : ''}" ${armed ? '' : 'disabled'} onclick="event.stopPropagation();ecDoomVNFire()">
-      ${armed ? '🜨 ПУСК' : 'цепь разомкнута'}
-    </button>
-  </div>`;
+      ${armed ? 'ПУСК' : 'цепь разомкнута'}
+    </button>`;
 }
 // СНАРЯДЫ: приговоры в пути.
 function ecDoomVNSalvos(salvos) {
