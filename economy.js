@@ -5485,8 +5485,8 @@ function ecStarsFinaleBody(fin) {
     field = `<div class="ec-stars-grid is-final">${grid}</div>`;
   }
   const won = +fin.won || 0, spent = +fin.spent || 0, net = won - spent;
-  // Награда-осколок за набор (2 маяка / 3 видения) — сервер вернул fin.shard.
-  const shardBanner = fin.shard ? `<div class="ec-stars-reward">◈ <b>Осколок цикла: ${esc(EC_SHIP_CLASS_LABELS[fin.shard] || fin.shard)}</b> — ${fin.shard_from === 'quasar' ? 'собраны 2 маяка' : 'собраны 3 видения'}. Бесплатная мгновенная постройка одного корабля этого класса в «🏭 Строительство».</div>` : '';
+  // Награда-осколок за набор (2 маяка / 4 видения) — сервер вернул fin.shard.
+  const shardBanner = fin.shard ? `<div class="ec-stars-reward">◈ <b>Осколок цикла: ${esc(EC_SHIP_CLASS_LABELS[fin.shard] || fin.shard)}</b> — ${fin.shard_from === 'quasar' ? 'собраны 2 маяка' : 'собраны 4 видения'}. Бесплатная мгновенная постройка одного корабля этого класса в «🏭 Строительство».</div>` : '';
   const verdict = jackHit
     ? 'На вас посмотрели в ответ...'
     : `Смотрели <b>вот из этого узла</b>. Резонанс записан — в следующий раз погрузимся точнее.`;
@@ -5562,7 +5562,7 @@ async function ecStarsPick(i) {
         eco.cycle_shards = Object.assign({}, eco.cycle_shards || {});
         eco.cycle_shards[r.last.shard] = (parseInt(eco.cycle_shards[r.last.shard]) || 0) + 1;
         const lbl = EC_SHIP_CLASS_LABELS[r.last.shard] || r.last.shard;
-        toast(`◈ Осколок цикла: ${lbl} — за ${r.last.shard_from === 'quasar' ? '2 маяка' : '3 видения'}. Бесплатная постройка корабля этого класса!`, 'ok');
+        toast(`◈ Осколок цикла: ${lbl} — за ${r.last.shard_from === 'quasar' ? '2 маяка' : '4 видения'}. Бесплатная постройка корабля этого класса!`, 'ok');
       }
     }
   } catch (e) {

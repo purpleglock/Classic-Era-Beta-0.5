@@ -206,7 +206,7 @@ begin
       where e->>'t' = 'nova' limit 1;
     select coalesce(sum((e->>'win')::numeric), 0) into total from jsonb_array_elements(op) e;
 
-    -- ── НАГРАДА: осколок цикла за набор. 2 маяка (quasar) ИЛИ 3 видения (photo)
+    -- ── НАГРАДА: осколок цикла за набор. 2 маяка (quasar) ИЛИ 4 видения (photo)
     -- за транс → 1 классовый осколок СЛУЧАЙНОГО класса корабля, но НЕ дредноут
     -- и НЕ линкор (и не станция). Осколок кладётся в faction_economy.cycle_shards.
     select count(*) filter (where e->>'t' = 'quasar'),
@@ -214,7 +214,7 @@ begin
       into v_quasar, v_photo
       from jsonb_array_elements(op) e;
     v_shard := null;
-    if v_quasar >= 2 or v_photo >= 3 then
+    if v_quasar >= 2 or v_photo >= 4 then
       -- KV-классы флота (не линкор/дредноут/станция). Старые corvette/frigate/
       -- destroyer/cruiser выпали при переходе на KV — frigate/cruiser больше нет,
       -- и осколки с этими ключами были бы несводимы ни с одним проектом.
@@ -233,7 +233,7 @@ begin
     fin := jsonb_build_object('board', st.board, 'opened', op, 'stake', st.stake,
       'extras', st.extras, 'mult', mult, 'won', total,
       'spent', st.stake * (1 + st.extras), 'jackpot_i', jack_i,
-      'shard', v_shard, 'shard_from', case when v_quasar >= 2 then 'quasar' when v_photo >= 3 then 'photo' else null end);
+      'shard', v_shard, 'shard_from', case when v_quasar >= 2 then 'quasar' when v_photo >= 4 then 'photo' else null end);
     update public.stargaze_state
       set active = false, board = null, opened = '[]'::jsonb, last = fin, updated_at = now()
       where faction_id = fid;
