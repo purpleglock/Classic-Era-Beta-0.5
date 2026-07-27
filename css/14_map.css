@@ -294,6 +294,10 @@ body.route-map #gm-wrap{height:100%;min-height:0}
 /* Маркер столицы фракции */
 .gm-cap{position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:15px;line-height:1;pointer-events:none;z-index:6;text-shadow:0 0 4px #000,0 0 9px currentColor;filter:drop-shadow(0 0 2px #000)}
 .gm-capital img{filter:drop-shadow(0 0 10px currentColor)}
+/* Слой «Дозвёздные миры»: значок жизни у звезды (по умолчанию слой выключен) */
+.gm-civmark{position:absolute;bottom:-3px;right:-2px;font-size:11px;line-height:1;pointer-events:none;z-index:6;
+  text-shadow:0 0 4px #000,0 0 8px currentColor;filter:drop-shadow(0 0 2px #000)}
+.gm-civmark b{font-size:9px;font-weight:700;vertical-align:super;margin-left:1px}
 
 /* Режим «бедность»: сами ячейки систем красятся по просперити (см. gmEconFill),
    ореолов-колец больше нет — вся инфа читается внутри границ системы. */

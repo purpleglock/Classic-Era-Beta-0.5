@@ -2631,6 +2631,7 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-colony hp-vn-geo hp-vn-doom" id="hp-vn-doom" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-fight" id="hp-vn-fight" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-sinli" id="hp-vn-sinli" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-sinli hp-vn-tama" id="hp-vn-tama" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2813,7 +2814,7 @@ function heroVNChoice(kind) {
   // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
   _heroVNView = kind;
   if (kind !== 'idx' && typeof heroVNHideIdx === 'function') heroVNHideIdx();
-  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();_heroVNCtl.menu(); return; }
+  if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); _heroVNCtl.menu(); return; }
 
   // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
   if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();heroVNColonyOpen(); return; }
@@ -2844,7 +2845,10 @@ function heroVNChoice(kind) {
 
   // «Бойцовский клуб» — дуэли на выданных кораблях + тотализатор поверх сцены.
   if (kind === 'fight') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightOpen(); return; }
-  if (kind === 'sinli') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliOpen(); return; }
+  if (kind === 'sinli') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNTamaClose(); heroVNSinliOpen(); return; }
+
+  // «Дозвёздные миры» — найденные примитивные цивилизации и решения по ним (precursor_ui.js)
+  if (kind === 'tama') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaOpen(); return; }
 
   if (kind === 'ach' || kind === 'events') {
     _heroVNCat = kind;
@@ -2951,7 +2955,9 @@ function heroVNTell(id) {
   const en = (typeof lang !== 'undefined' && lang === 'en');
   const spk = _heroVNCtl.speaker();
   const mk = t => ({ t, n: spk });
-  const body = String(n.body || '').replace(/\s+/g, ' ').trim();
+  // Читаем ЛИД, если он задан: в статье под ним идут сухие подробности (досье,
+  // цифры), которые в устах героини звучат как выписка из справочника.
+  const body = String(n.excerpt || n.body || '').replace(/\s+/g, ' ').trim();
   const trim = (s, lim) => s.length > lim ? s.slice(0, lim - 1).trim() + '…' : s;
   // ОДНА реплика: «А, 「фракция」…» → КОРОТКАЯ ПАУЗА (символ ) → текст.
   const speak = body || String(n.title || '').trim();
@@ -5130,6 +5136,7 @@ function heroVNInit() {
       // ['poem',   (en ? 'Poem of the week' : 'Поэма недели')],
       // ['assembly', (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
       ['fight',  (en ? 'Fight Club' : 'Бойцовский клуб')],
+      ['tama',   (en ? 'Pre-stellar worlds' : 'Дозвёздные миры')],
     ];
     // ⛓ Синли-бей — невольничий рынок. Скрыт для «просвещённых» держав (зеркало
     // серверного гейта; сервер всё равно ответит 403). Показываем, если экономика

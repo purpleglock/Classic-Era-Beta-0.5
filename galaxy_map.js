@@ -42,6 +42,7 @@ const GM_ICO = {
   mines: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.4"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.9 2.9M15.5 15.5l2.9 2.9M18.4 5.6l-2.9 2.9M8.5 15.5l-2.9 2.9"/></svg>',
   unions: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="7" r="2.6"/><circle cx="12" cy="17" r="2.6"/><path d="M8.7 8.6l6.6 0M8 9.2l2.6 5.6M16 9.2l-2.6 5.6"/></svg>',
   blocked: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6.3 17.7L17.7 6.3"/></svg>',
+  civs: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4L20 18H4z"/><path d="M7.6 13.2h8.8"/></svg>',
   march: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-14M12 20l4-14M20 20l-2-7"/><path d="M3 13h18"/></svg>',
 };
 function gmCtlBtns(opts) {
@@ -75,6 +76,7 @@ function gmCtlBtns(opts) {
         ${row('fleets', GM.showFleets, GM_ICO.fleeticon, 'Флоты', 'gmToggleFleets()')}
         ${row('armies', GM.showArmies, GM_ICO.march, 'Звёздный марш', 'gmToggleArmies()')}
         ${row('mines', GM.showMines, GM_ICO.mines, 'Заграждения', 'gmToggleMines()')}
+        ${row('civs', GM.showCivs, GM_ICO.civs, 'Дозвёздные миры', 'gmToggleCivs()')}
         ${tools.length ? `<div class="gm-ctl-sec">Инструменты</div>${tools.join('')}` : ''}
         <div class="gm-ctl-sec">Вид</div>
         <div class="gm-ctl-viewrow">
@@ -110,6 +112,7 @@ const GM = {
   showOutposts: true, showFleets: true, // видимость аванпостов / флотов на карте
   showArmies: false,             // МАРШ: режим «Звёздный марш» — армии на колониях (по умолчанию ВЫКЛ)
   showMines: false,              // режим отображения/управления минами (по умолчанию ВЫКЛ)
+  showCivs: false,               // слой «Дозвёздные миры»: 🜃 над системами (по умолчанию ВЫКЛ)
   showUnions: false,             // режим отображения союзов (федерации/конфедерации)
   unions: null,                  // ленивая загрузка союзов: [{id,name,color,kind,fids:[]}] (null=не грузили)
   showBlocked: false,            // режим «закрытые границы» (куда нашим флотам нельзя)
@@ -235,6 +238,18 @@ async function loadGalaxyData() {
         dbGet('colonies', 'select=*').catch(() => []),
       ]);
       GM.colonies = cols || [];   // реальные колонии (для панели системы)
+      // Дозвёздные цивилизации: показываются строкой в составе системы.
+      // Тянем только «витрину» — полная летопись грузится по клику (этап 3).
+      GM.civs = {};
+      try {
+        const civs = await dbGet('primitive_civs', 'select=system_id,pid,self_name,visible_tier,races,ideology,attitude,status,state_name')
+          .catch(() => dbGet('primitive_civs', 'select=system_id,pid,self_name,visible_tier,races,ideology,attitude'));
+        GM.civsBySys = {};
+        (civs || []).forEach(c => {
+          GM.civs[c.system_id + ':' + c.pid] = c;
+          (GM.civsBySys[c.system_id] = GM.civsBySys[c.system_id] || []).push(c);
+        });
+      } catch (e) { /* таблицы ещё нет — не мешаем карте */ }
       // МАРШ: тела систем (sys._bodies) могли закэшироваться ДО прихода колоний —
       // тогда у планет нет colId/isColony и армии не магнитятся к планетам. Сбрасываем.
       GM.systems.forEach(s => { s._bodies = null; });
@@ -357,6 +372,7 @@ function gmToolbarHtml() {
       <button class="gm-tb-btn" data-mode="unlink" onclick="gmSetMode('unlink')">✕ Убрать путь</button>
       <button class="gm-tb-btn" data-mode="sector" onclick="gmSetMode('sector')">▣ Сектора</button>
       <button class="gm-tb-btn" onclick="gmMultiApplyAll()" title="Дополнение: рассчитать кратные звёзды для всех систем, где ещё не рассчитаны">🌟 Кратность всем</button>
+      <button class="gm-tb-btn" onclick="gmPrimApplyAll()" title="Дополнение: заселить пустые миры дозвёздными цивилизациями (идемпотентно по pid)">🜃 Примитивы</button>
       <span class="gm-tb-hint" id="gm-tb-hint"></span>
     </div>
   </div>`;
@@ -660,6 +676,28 @@ function gmToggleMines() {
   GM.showMines = !GM.showMines;
   document.getElementById('gm-ctl-mines')?.classList.toggle('gm-active', GM.showMines);
   if (GMM.active) { GMM.dirty = true; gmmKick(); }
+}
+// Слой ДОЗВЁЗДНЫХ МИРОВ: по умолчанию ВЫКЛ — на общей карте это лишний шум,
+// а тем, кто их ищет, нужен именно обзор «где вообще есть жизнь».
+// 🜃 — цивилизация, ★ — уже вышедшая к звёздам держава.
+function gmToggleCivs() {
+  GM.showCivs = !GM.showCivs;
+  document.getElementById('gm-ctl-civs')?.classList.toggle('gm-active', GM.showCivs);
+  if (GM.showCivs && !Object.keys(GM.civs || {}).length) toast('Дозвёздных миров на карте нет', '');
+  gmDrawStars();
+  if (GMM.active) { GMM.dirty = true; gmmKick(); }
+}
+// Значок над звездой: сколько цивилизаций в системе и что это за миры.
+function gmCivStarMark(sysId) {
+  const list = (GM.civsBySys && GM.civsBySys[sysId]) || [];
+  if (!list.length) return '';
+  const risen = list.filter(c => c.status === 'spacefaring').length;
+  const live = list.filter(c => c.status !== 'dead');
+  if (!live.length && !risen) return '';
+  const tip = live.map(c => `${c.status === 'spacefaring' ? '★ ' + (c.state_name || c.self_name) : '🜃 ' + c.self_name}`
+    + ` · ${CIV_TIER[c.visible_tier] || '?'} · ${(c.races || [])[0] || ''}`).join('\n');
+  const col = risen ? '#9fc7ff' : '#8fd6a0';
+  return `<span class="gm-civmark" style="color:${col}" title="${esc(tip)}">${risen ? '★' : '🜃'}${live.length > 1 ? `<b>${live.length}</b>` : ''}</span>`;
 }
 // Режим СОЮЗОВ: связи между столицами стран одного союза (федерации/конфедерации),
 // цветом союза. Данные грузим лениво при первом включении (RPC union_list/detail).
@@ -1420,6 +1458,7 @@ function gmDrawStars() {
             style="left:${l.toFixed(1)}%;top:${t.toFixed(1)}%;width:${(fr * 100).toFixed(0)}%" draggable="false" alt="" title="${esc(gmStarGreek(c.letter))}: ${esc(c.name || '')}">`;
     }).join('')}
         ${capHtml}
+        ${GM.showCivs ? gmCivStarMark(s.id) : ''}
         ${gmResOverlay(s)}
         <span class="gm-label">${esc(s.name)}</span>
       </div>`;
@@ -1690,6 +1729,7 @@ function gmOpenPanel(sys) {
       const isGhostCapital = nm && nm === capName && !p.kind;  // легаси-дубль столицы
       return !isGhostCapital;
     });
+  GM._panelSys = sys.id;  // контекст для gmPlanetView: по нему ищутся дозвёздные цивилизации
   let planets;
   if (compStars.length) {
     // группировка по звёздам: Альфа <Имя> (главная) + компаньоны
@@ -2188,11 +2228,11 @@ function gmMzaPickPlanet(id, sys) {
   // ТИП СНАРЯДА: ☠ Длани / 4 тира баллистики. Хранится в GMM.mzaCmd.shell.
   // Цели в 5..8 прыжках достаёт только 🪨 тяжёлая — остальные тумблеры гаснут.
   const KINDS = [
-    ['doom', '☠ Длани', 'планета → мёртвый мир, колония стёрта'],
-    ['ball_light', '⚡ лёгкая', 'вдвое быстрее · 2–6% населения · 0–1 постройка'],
-    ['ball_emp', '👻 Фантом', 'не видна планетарной ПРО · 2–5% населения · 1 постройка'],
-    ['ball_cluster', '🧨 кассетная', '8–16% населения · 2–4 постройки'],
-    ['ball_heavy', '🪨 тяжёлая', 'гарантированно 5 построек · 12–22% населения · дальность ×2'],
+    ['doom', 'Х67 «Ада»', 'планета → мёртвый мир, колония стёрта'],
+    ['ball_light', 'Х19 «Хазар»', 'вдвое быстрее · 2–6% населения · 0–1 постройка'],
+    ['ball_emp', 'Х69 «Фантом»', 'не видна планетарной ПРО · 2–5% населения · 1 постройка'],
+    ['ball_cluster', 'Х05 «Сурей»', '8–16% населения · 2–4 постройки'],
+    ['ball_heavy', 'Х0414 «Отей»', 'гарантированно 5 построек · 12–22% населения · дальность ×2'],
   ];
   const far = (GMM.mzaCmd.hops || 0) > GM_MZA_RANGE_HOPS;   // дальняя зона
   let shell = GMM.mzaCmd.shell || 'doom';
@@ -2203,10 +2243,10 @@ function gmMzaPickPlanet(id, sys) {
       ${KINDS.map(([k, nm]) => {
     const dis = far && k !== 'ball_heavy';
     return `<button class="gm-opcmd-btn${shell === k ? ' gm-opcmd-danger' : ''}${dis ? ' gm-dis' : ''}" ${dis ? 'disabled' : ''}
-          style="flex:1;min-width:96px;padding:4px 6px" onclick="gmMzaShellKind('${id}','${esc(sys.id)}','${k}')">${nm}</button>`;
+          style="flex:1;min-width:96px;padding:4px 6px" onclick="gmMzaShellKind('${id}','${esc(sys.id)}','${k}')">${typeof ecShellIco === 'function' ? ecShellIco(k) + ' ' : ''}${nm}</button>`;
   }).join('')}
     </div>
-    <div class="gm-opcmd-hint">${esc(info)}. Нужен построенный снаряд (☢ Арсенал / 🏭 военпромзавод).${far ? ' Цель в дальней зоне — достаёт только тяжёлая.' : ''}</div>`;
+    <div class="gm-opcmd-hint">${esc(info)}. Нужен построенный снаряд (Арсенал / военпромзавод).${far ? ' Цель в дальней зоне — достаёт только «Отей».' : ''}</div>`;
   const rows = planets.map(p => {
     const dead = p.dead || p.doomed;
     const nm = encodeURIComponent(p.name || '');
@@ -2933,6 +2973,22 @@ function gmSlotsBadge(p) {
 function gmZoneColor(z) {
   return { 'Пекло': '#ff4422', 'Внутр.': '#ff8800', 'Обитаемая': '#7fdd55', 'Холод': '#33bce8', 'Пустота': '#8e8eff' }[z] || '#8aa0bd';
 }
+// Строка «здесь кто-то живёт»: тир показывается ВИДИМЫЙ (Розенкрейцеры и ушедшие
+// в космос врут разведке — см. lore/precursor_civs.md §5).
+const CIV_TIER = ['племена', 'бронза', 'железо и вера', 'паруса и пар', 'атомный век', 'на пороге космоса'];
+function gmCivBadge(p) {
+  const c = GM.civs && GM._panelSys ? GM.civs[GM._panelSys + ':' + p.pid] : null;
+  if (!c) return '';
+  // Дошедшие до звёздного полёта (недельный ход, _precursor_growth.sql) — уже держава
+  if (c.status === 'spacefaring') {
+    return `<div class="gm-orb-meta"><span class="gm-orb-sub" style="color:#9fc7ff">★ ${esc(c.state_name || c.self_name)} · молодая держава · ${esc((c.races || [])[0] || '')}</span></div>`;
+  }
+  if (c.status === 'dead') {
+    return `<div class="gm-orb-meta"><span class="gm-orb-sub" style="color:#9aa0aa">☠ ${esc(c.self_name)} · цивилизация вычеркнута</span></div>`;
+  }
+  const mood = c.attitude >= 25 ? '#7fd18a' : c.attitude <= -25 ? '#e0736a' : '#d8c07a';
+  return `<div class="gm-orb-meta"><span class="gm-orb-sub" style="color:${mood}">🜃 ${esc(c.self_name)} · ${esc(CIV_TIER[c.visible_tier] || '?')} · ${esc((c.races || [])[0] || '')}</span></div>`;
+}
 function gmPlanetView(p, i) {
   const idx = String((i || 0) + 1).padStart(2, '0');
   if (p && p.kind) { // богатый формат (из генератора)
@@ -2961,6 +3017,7 @@ function gmPlanetView(p, i) {
       <div class="gm-orb-main">
         <div class="gm-orb-top"><span class="gm-orb-name">${esc(p.name)}</span>${dist}</div>
         <div class="gm-orb-meta"><span class="gm-orb-sub">${esc(p.type || '')}${p.zone ? ` · <span class="gm-orb-zone" style="color:${zc}">${esc(p.zone)}</span>` : ''}${satStr}</span>${gmSlotsBadge(p)}</div>
+        ${gmCivBadge(p)}
         ${gmResChips(p.resources)}
       </div>
     </div>`;
@@ -3014,12 +3071,86 @@ function gmOpenForm(sys) {
     </div>
     <div class="gm-fp-note">ℹ Ресурсы влияют на отображение и на <b>будущие</b> колонизации (снимок берётся по pid при заселении). Уже колонизированные планеты сохраняют свой набор — задним числом он не меняется.</div>
     <div id="gmf-planets"></div>
+    <div class="gm-fl gm-planets-hdr">Дозвёздная цивилизация</div>
+    <div id="gmf-prim">${gmPrimFormSection(sys)}</div>
     <div class="gm-form-actions">
       <button class="gm-tb-btn gm-danger" onclick="gmDeleteStar('${esc(sys.id)}')">Удалить систему</button>
       <button class="gm-tb-btn gm-active" onclick="gmSaveForm()">Сохранить</button>
     </div>`;
   gmRenderFormStars();
   gmRenderFormPlanets();
+}
+
+// ── Дозвёздные цивилизации в редакторе системы ──────────────
+// Ручной спавн в ЛЮБУЮ систему: массовая кнопка «🜃 Примитивы» держит низкую
+// плотность (цивилизация — событие), а здесь редактор ставит их точечно, куда
+// нужно по сюжету. История и будущее считаются тем же генератором.
+function gmPrimFormSection(sys) {
+  if (!window.Precursors) return `<div class="gm-empty" style="padding:6px 0">Генератор не загружен (precursor_gen.js).</div>`;
+  const list = (GM.civsBySys && GM.civsBySys[sys.id]) || [];
+  const rows = list.map(c => {
+    const st = c.status === 'spacefaring' ? '★ держава' : c.status === 'dead' ? '☠ мертвы' : '🜃 дозвёздные';
+    return `<div class="gm-col-row">
+      <span class="gm-col-nm">${esc(c.status === 'spacefaring' ? (c.state_name || c.self_name) : c.self_name)}</span>
+      <span class="gm-col-ty">pid ${+c.pid} · ${esc(CIV_TIER[c.visible_tier] || '?')} · ${esc((c.races || [])[0] || '')} · ${st}</span>
+      <button class="gm-mini-btn gm-danger" title="Удалить цивилизацию" onclick="gmPrimDropHere('${esc(sys.id)}',${+c.pid})">✕</button>
+    </div>`;
+  }).join('');
+  // кандидаты: тела с pid и пригодной группой, где ещё никого нет
+  const busy = new Set(list.map(c => +c.pid));
+  const opts = (sys.planets || []).filter(p => p && p.pid != null && !busy.has(+p.pid)
+      && Precursors.ENV_OK.includes(Precursors.groupOf(p)))
+    .map(p => `<option value="${+p.pid}">${esc(p.name || ('тело ' + p.pid))} — ${esc(p.type || Precursors.groupOf(p))}</option>`).join('');
+  const add = opts
+    ? `<div class="gm-frow" style="align-items:end">
+         <div style="flex:1"><label class="gm-fl">Заселить тело</label>
+           <select class="gm-fi" id="gmf-prim-pid">${opts}</select></div>
+         <div><button class="gm-mini-btn" onclick="gmPrimSpawnHere('${esc(sys.id)}')" title="Сгенерировать историю и поселить цивилизацию на это тело">🜃 Заселить</button></div>
+       </div>`
+    : `<div class="gm-empty" style="padding:6px 0">Свободных пригодных тел нет: нужна планета из генератора (класс terrestrial/oceanic/desert/volcanic/cryo/micro/exotic/lava).</div>`;
+  return (rows || '') + add;
+}
+async function gmPrimSpawnHere(sysId) {
+  const sel = document.getElementById('gmf-prim-pid');
+  const sys = GM.systems.find(s => s.id === sysId);
+  if (!sel || !sys) return;
+  const pid = +sel.value;
+  const p = (sys.planets || []).find(q => +q.pid === pid);
+  if (!p) { toast('Тело не найдено', 'err'); return; }
+  const forge = (sys.planets || []).some(q => ['volcanic', 'lava'].includes(Precursors.groupOf(q)));
+  // ручной спавн обязан что-то дать: если раса на этом мире «не зажглась» — крутим сид
+  let civ = null;
+  for (let k = 0; k < 16 && !civ; k++) {
+    civ = Precursors.roll(sysId, pid, {
+      group: Precursors.groupOf(p), planetName: p.name, sysName: sys.name, forge,
+    }, { seed: k ? 'm' + k : 'v1' });
+  }
+  if (!civ) { toast('На этом теле цивилизация не зажигается — выбери другое', 'err'); return; }
+  civ.system_name = sys.name;
+  if (!confirm(`Поселить на «${p.name}»?\n\n${civ.self_name} · ${civ.races.join(' + ')}\n`
+    + `${(Precursors.PHASES[civ.phase] || {}).name || '?'} · ${civ.ideology} · ${civ.gov}\n`
+    + `До звёздного полёта шагов: ${civ.roadmap.length}`)) return;
+  try {
+    await dbPost('primitive_civs', [civ]);
+    GM.civs = GM.civs || {}; GM.civsBySys = GM.civsBySys || {};
+    GM.civs[sysId + ':' + pid] = civ;
+    (GM.civsBySys[sysId] = GM.civsBySys[sysId] || []).push(civ);
+    document.getElementById('gmf-prim').innerHTML = gmPrimFormSection(sys);
+    gmDrawStars();
+    toast(`${civ.self_name} поселены на «${p.name}»`, 'ok');
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+async function gmPrimDropHere(sysId, pid) {
+  if (!confirm('Удалить цивилизацию с этого тела? История будет потеряна.')) return;
+  try {
+    await dbDel('primitive_civs', `system_id=eq.${encodeURIComponent(sysId)}&pid=eq.${+pid}`);
+    delete (GM.civs || {})[sysId + ':' + pid];
+    if (GM.civsBySys && GM.civsBySys[sysId]) GM.civsBySys[sysId] = GM.civsBySys[sysId].filter(c => +c.pid !== +pid);
+    const sys = GM.systems.find(s => s.id === sysId);
+    if (sys) document.getElementById('gmf-prim').innerHTML = gmPrimFormSection(sys);
+    gmDrawStars();
+    toast('Удалено', 'ok');
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
 
 // ── Кратность: имя звезды по букве (Альфа/Бета… <Имя системы>) ──
@@ -3253,6 +3384,59 @@ async function gmMultiApplyAll() {
   gmDraw();
   if (done) toast(`Готово: обработано ${done}, кратных выпало ${multi}`, 'ok');
 }
+// ── Дозвёздные цивилизации: ГЛОБАЛЬНЫЙ спавн (дополнение) ──
+// Одно нажатие — как «Кратность всем». Идемпотентно по (system_id, pid):
+// уже заселённые тела пропускаются, существующие истории не переписываются.
+// Плотность низкая намеренно (лор §8): цивилизация — событие, а не тайл карты.
+async function gmPrimApplyAll() {
+  if (!window.Precursors) { toast('Генератор примитивов не загружен', 'err'); return; }
+  let have = [];
+  let hasRoadmap = true;
+  try {
+    have = await dbGet('primitive_civs', 'select=system_id,pid,phase,roadmap,state_name') || [];
+  } catch (e) {
+    hasRoadmap = false;
+    try { have = await dbGet('primitive_civs', 'select=system_id,pid') || []; }
+    catch (e2) { toast('Нет таблицы: накати _precursor_civs.sql', 'err'); return; }
+  }
+  const taken = new Set(have.map(r => r.system_id + ':' + r.pid));
+  // сектор системы → в имя, чтобы генератор узнал патрулируемые регионы (Вестуза/Авалон/Кассиопея)
+  const secOf = {};
+  (GM.sectors || []).forEach(s => (s.system_ids || []).forEach(id => { secOf[id] = s.name; }));
+  const src = GM.systems.map(s => ({ ...s, sector_name: secOf[s.id] || '' }));
+  const rolled = Precursors.generateAll(src, { seed: 'v1', density: 32 });
+  const fresh = rolled.filter(c => !taken.has(c.system_id + ':' + c.pid));
+  // Старые строки (заселены до этапа 4) не знают своего будущего: у них пустой
+  // roadmap, и недельный ход шёл бы по скупому запасному банку из SQL. Прокатываем
+  // им ту же историю заново и дописываем ТОЛЬКО будущее — прожитое не трогаем.
+  const byKey = {};
+  rolled.forEach(c => { byKey[c.system_id + ':' + c.pid] = c; });
+  const patch = !hasRoadmap ? [] : have.filter(r => {
+    const g = byKey[r.system_id + ':' + r.pid];
+    return g && (!Array.isArray(r.roadmap) || !r.roadmap.length);
+  });
+  if (!fresh.length && !patch.length) { toast('Новых цивилизаций не выпало — всё уже заселено', 'ok'); return; }
+  const byTier = fresh.reduce((a, c) => { a[c.tier] = (a[c.tier] || 0) + 1; return a; }, {});
+  const brief = Object.keys(byTier).sort().map(t => `тир ${t}: ${byTier[t]}`).join(', ') || '—';
+  if (!confirm(`Заселить ${fresh.length} миров дозвёздными цивилизациями?\n${brief}\n`
+    + (patch.length ? `\nПлюс дописать будущее (недельный ход) ${patch.length} уже существующим.\n` : '')
+    + '\nПрожитые истории не трогаются.')) return;
+  try {
+    for (let i = 0; i < fresh.length; i += 50) await dbPost('primitive_civs', fresh.slice(i, i + 50));
+    let done = 0;
+    for (const r of patch) {
+      const g = byKey[r.system_id + ':' + r.pid];
+      // будущее считаем от ФАКТИЧЕСКОЙ фазы в базе (её мог сдвинуть игрок)
+      const road = (g.roadmap || []).filter(e => e.ignite || (+e.i) > (+r.phase || 0));
+      await dbPatch('primitive_civs',
+        `system_id=eq.${encodeURIComponent(r.system_id)}&pid=eq.${+r.pid}`,
+        { roadmap: road, state_name: r.state_name || g.state_name, state_color: g.state_color });
+      done++;
+    }
+    toast(`Заселено миров: ${fresh.length}${done ? `, дописано будущее: ${done}` : ''}`, 'ok');
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
 async function gmDeleteStar(id) {
   if (!confirm('Удалить систему и связанные гиперпути?')) return;
   try {
@@ -6286,6 +6470,28 @@ function gmmDroneSwarm(ctx, x, y, rad, sq, col, wings, a) {
 }
 
 // Станция-аванпост: корпус-ромб с антенной-«тарелкой» и двумя солнечными панелями.
+// Значок дозвёздного мира на тач-карте: 🜃 (треугольник с чертой) зелёным,
+// у вышедших к звёздам — голубой. Слой по умолчанию выключен (GM.showCivs).
+function gmmCivGlyph(ctx, x, y, rad, risen, n) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const col = risen ? '159,199,255' : '143,214,160';
+  ctx.strokeStyle = `rgba(${col},0.95)`;
+  ctx.lineWidth = Math.max(0.7, rad * 0.24);
+  ctx.beginPath();
+  ctx.moveTo(0, -rad); ctx.lineTo(rad * 0.92, rad * 0.75); ctx.lineTo(-rad * 0.92, rad * 0.75); ctx.closePath();
+  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-rad * 0.5, rad * 0.16); ctx.lineTo(rad * 0.5, rad * 0.16); ctx.stroke();
+  if (risen) { ctx.fillStyle = `rgba(${col},0.35)`; ctx.fill(); }
+  if (n > 1) {
+    ctx.fillStyle = `rgba(${col},0.95)`;
+    ctx.font = `700 ${Math.max(6, rad * 1.1).toFixed(1)}px system-ui, sans-serif`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(n), rad * 1.05, -rad * 0.55);
+  }
+  ctx.restore();
+}
 function gmmOutpostGlyph(ctx, x, y, rad, col, a) {
   const [r, g, b] = col;
   ctx.save();
@@ -6610,6 +6816,20 @@ function gmmPaintDefense(ctx) {
     const R = ip * 0.62 + 6;
     gmmOutpostGlyph(ctx, tX, tY - R * 0.9 * sq, Math.max(2.5, ip * 0.2) * zf, d.col, d.mine ? 0.92 : 0.7);
   });
+
+  // ── Дозвёздные миры: значок жизни справа-снизу от звезды (слой по умолчанию ВЫКЛ) ──
+  if (GM.showCivs && GM.civsBySys) {
+    GM.systems.forEach(sys => {
+      const list = (GM.civsBySys[sys.id] || []).filter(c => c.status !== 'dead');
+      if (!list.length) return;
+      const tX = SX(sys.x), tY = SY(sys.y);
+      if (!onScreen(tX, tY)) return;
+      const ip = gmmIconPx(sys, s);
+      const R = ip * 0.62 + 6;
+      gmmCivGlyph(ctx, tX + R * 0.75, tY + R * 0.62 * sq, Math.max(2.2, ip * 0.17) * zf,
+        list.some(c => c.status === 'spacefaring'), list.length);
+    });
+  }
 
   // ── Корабли-носители: idle у звезды + летящие по гиперпути ──
   // Несколько носителей в ОДНОЙ системе раньше рисовались в одной точке и

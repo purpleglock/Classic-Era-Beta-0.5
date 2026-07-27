@@ -242,7 +242,7 @@ function adPaint() {
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
     const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
-    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['shells', 'Снаряды'], ['precursor', 'Дозвёздные'], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -254,6 +254,8 @@ function adPaint() {
     else if (AD.tab === 'planets')   tabContent = adPlanetTexPanel();
     else if (AD.tab === 'guide')     tabContent = adGuideCoversPanel();
     else if (AD.tab === 'ach')       tabContent = adAchPanel();
+    else if (AD.tab === 'shells')    tabContent = adShellArtPanel();
+    else if (AD.tab === 'precursor') tabContent = adPrecursorArtPanel();
     else if (AD.tab === 'shipart')   tabContent = adShipArtPanel();
     else if (AD.tab === 'weapons')   tabContent = adWeaponImgPanel();
     else if (AD.tab === 'market')    tabContent = adMarketPanel();
@@ -1763,6 +1765,164 @@ async function adAchArtUpload(id, inputEl) {
     adPaint();
   } catch (e) {
     console.error('[admin] ach art', e);
+    if (st) st.textContent = 'Ошибка';
+    toast('Не удалось сохранить арт: ' + (e.message || e), 'err');
+  }
+}
+
+// ── ☄ Снаряды: арты боеприпасов (assets/shells/<kind>.webp) ──────────────
+// Имена и индексы снарядов живут в economy.js (EC_SHELL_META) — здесь только
+// картинки. Игра (склад державы, фабрики, пульт наведения) сама подставит арт,
+// а если файла нет — покажет иконку. Пишет тот же локальный аплоад-сервер.
+const AD_SHELL_DIR = 'assets/shells';
+function adShellArtPanel() {
+  if (typeof EC_SHELL_META === 'undefined' || typeof EC_SHELL_KINDS === 'undefined') {
+    return `<div style="margin-top:24px;color:var(--t4,#6a7a88);font-size:13px">Каталог снарядов недоступен (economy.js не загружен).</div>`;
+  }
+  const bust = AD.shellBust || '';
+  const cards = EC_SHELL_KINDS.map(k => {
+    const m = EC_SHELL_META[k] || {};
+    const url    = `${AD_SHELL_DIR}/${k}.webp${bust ? `?t=${bust}` : ''}`;
+    const icoUrl = `${AD_SHELL_DIR}/ico_${k}.webp${bust ? `?t=${bust}` : ''}`;
+    const info = (typeof EC_BALL_INFO !== 'undefined' && EC_BALL_INFO[k]) || 'стирает планету в мёртвый камень';
+    return `<div style="width:260px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:10px">
+      <div style="position:relative;width:100%;height:150px;border-radius:8px;overflow:hidden;border:1px solid var(--w2,#2a3340);background:#0c1322">
+        <img src="${esc(url)}" alt="" onload="this.style.opacity=1" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+             style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font-size:22px;font-family:monospace;letter-spacing:.16em">${esc(m.code || '◈')}</div>
+      </div>
+      <div style="font-size:9px;font-family:monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--t4,#6a7a88);margin-top:8px">${esc(m.code || '')} · ${esc(m.cls || '')}</div>
+      <div style="font-size:15px;font-weight:700;color:var(--t1,#e8edf2);margin-top:2px">${esc(m.nm || k)}</div>
+      <div style="font-size:11px;color:var(--t3,#8aa0b0);margin-top:4px;line-height:1.4">${esc(info)}</div>
+      <div style="font-size:9px;font-family:monospace;color:var(--t4,#6a7a88);margin-top:6px">${AD_SHELL_DIR}/${esc(k)}.webp · ico_${esc(k)}.webp</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+        <div style="position:relative;width:40px;height:40px;flex-shrink:0;border-radius:8px;overflow:hidden;border:1px solid var(--w2,#2a3340);background:#0c1322">
+          <img src="${esc(icoUrl)}" alt="" onload="this.style.opacity=1" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+               style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .2s">
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font-size:9px;font-family:monospace">${esc(m.code || '◈')}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <input type="file" accept="image/*" id="ad-shell-file-${esc(k)}" style="display:none" onchange="adShellArtUpload('${esc(k)}','art', this)">
+          <input type="file" accept="image/*" id="ad-shellico-file-${esc(k)}" style="display:none" onchange="adShellArtUpload('${esc(k)}','ico', this)">
+          <button class="btn btn-gh btn-xs" style="width:100%" onclick="document.getElementById('ad-shell-file-${esc(k)}').click()">⬆ Арт (карточка)</button>
+          <button class="btn btn-gh btn-xs" style="width:100%;margin-top:4px" onclick="document.getElementById('ad-shellico-file-${esc(k)}').click()">⬆ Иконка (строки)</button>
+        </div>
+      </div>
+      <div id="ad-shell-st-${esc(k)}" style="font-size:9px;color:var(--t4,#6a7a88);margin-top:4px;min-height:12px"></div>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">Снаряды <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· арты боеприпасов (${EC_SHELL_KINDS.length})</span></div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Два файла на снаряд: <b>арт карточки</b> (<code>&lt;тип&gt;.webp</code>, вертикаль ~3:4) и <b>иконка</b> (<code>ico_&lt;тип&gt;.webp</code>, квадрат, лучше с прозрачностью — идёт в строки, кнопки и чипы). Смайликов в игре больше нет: пока файла нет, на его месте стоит индекс снаряда.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 12px;line-height:1.5">📁 Пишется <b>прямо в папку игры</b>. Запусти батник <code>node tools/upload-server.js</code> и держи окно открытым.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">${cards}</div>
+  </div>`;
+}
+async function adShellArtUpload(kind, slot, inputEl) {
+  const f = inputEl && inputEl.files && inputEl.files[0];
+  const isIco = slot === 'ico';
+  const name  = (isIco ? 'ico_' : '') + kind + '.webp';
+  const st = document.getElementById(`ad-shell-st-${kind}`);
+  if (!f) return;
+  if (st) st.textContent = 'Проверка сервера…';
+  if (!(await adPortServerAlive())) {
+    if (st) st.textContent = 'нет сервера';
+    toast('Запусти локальный аплоад-сервер: node tools/upload-server.js', 'err');
+    return;
+  }
+  try {
+    if (st) st.textContent = 'Сохранение…';
+    const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, isIco ? 128 : 900, isIco ? 0.92 : 0.85) : f;
+    const r  = await fetch(`${AD_PORT_SERVER}/upload?dir=shells&name=${encodeURIComponent(name)}`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.shellBust = Date.now();
+    if (st) st.textContent = 'Готово ✓';
+    toast(`${isIco ? 'Иконка' : 'Арт'} снаряда «${kind}» сохранена`, 'ok');
+    adPaint();
+  } catch (e) {
+    console.error('[admin] shell art', e);
+    if (st) st.textContent = 'Ошибка';
+    toast('Не удалось сохранить арт: ' + (e.message || e), 'err');
+  }
+}
+
+// ── Дозвёздные миры: иконки решений и статусов (assets/precursor/<ключ>.webp) ──
+// Во вкладке новеллы «Дозвёздные миры» эмодзи нет: каждое решение и каждый
+// статус берут арт отсюда, а пока файла нет — рисуют буквенный код (он же
+// подписан на карточке). Пишет тот же локальный аплоад-сервер, что и портреты:
+// запусти «Загрузка артов.bat» и держи окно открытым.
+const AD_PC_DIR = 'assets/precursor';
+const AD_PC_KEYS = [
+  ['world',   'МИР', 'Значок дозвёздного мира — строки списка и шапка досье'],
+  ['star',    'ЗВД', 'Мир, вышедший к звёздам (стал державой)'],
+  ['study',   'НАБ', 'Решение: Изучать'],
+  ['gift',    'ДАР', 'Решение: Дар с неба'],
+  ['envoy',   'МИС', 'Решение: Тихая миссия'],
+  ['miracle', 'ЗНМ', 'Решение: Знамение'],
+  ['uplift',  'ВОЗ', 'Решение: Возвысить / Дать им звёзды'],
+  ['protect', 'ПРТ', 'Решение: Протекторат'],
+  ['harvest', 'ВЫК', 'Решение: Выкачивать'],
+  ['convert', 'ВЕР', 'Решение: Обратить в веру'],
+  ['enslave', 'РАБ', 'Решение: Увести в рабство'],
+  ['purge',   'ЗАЧ', 'Решение: Истребить'],
+  ['st_wild',        'ДИК', 'Статус: контакта не было'],
+  ['st_uplifted',    'ВОЗ', 'Статус: возвышены'],
+  ['st_protectorate','ПРТ', 'Статус: протекторат'],
+  ['st_drained',     'ВЫП', 'Статус: выпиты досуха'],
+  ['st_dead',        'МРТ', 'Статус: мертвы'],
+  ['st_spacefaring', 'ЗВД', 'Статус: держава на карте'],
+];
+function adPrecursorArtPanel() {
+  const bust = AD.pcBust || '';
+  const cards = AD_PC_KEYS.map(([k, code, info]) => {
+    const url = `${AD_PC_DIR}/${k}.webp${bust ? `?t=${bust}` : ''}`;
+    return `<div style="width:170px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:10px">
+      <div style="position:relative;width:100%;height:110px;border-radius:8px;overflow:hidden;border:1px solid var(--w2,#2a3340);background:#0c1322">
+        <img src="${esc(url)}" alt="" onload="this.style.opacity=1" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+             style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font-size:16px;font-family:monospace;letter-spacing:.16em">${esc(code)}</div>
+      </div>
+      <div style="font-size:9px;font-family:monospace;letter-spacing:.12em;color:var(--t4,#6a7a88);margin-top:8px">${esc(code)} · ${esc(k)}.webp</div>
+      <div style="font-size:11px;color:var(--t3,#8aa0b0);margin-top:3px;line-height:1.4;min-height:30px">${esc(info)}</div>
+      <input type="file" accept="image/*" id="ad-pc-file-${esc(k)}" style="display:none" onchange="adPrecursorArtUpload('${esc(k)}', this)">
+      <button class="btn btn-gh btn-xs" style="width:100%;margin-top:6px" onclick="document.getElementById('ad-pc-file-${esc(k)}').click()">Загрузить</button>
+      <div id="ad-pc-st-${esc(k)}" style="font-size:9px;color:var(--t4,#6a7a88);margin-top:4px;min-height:12px"></div>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">Дозвёздные миры <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· иконки решений и статусов (${AD_PC_KEYS.length})</span></div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Квадрат, лучше 128×128 и с прозрачностью — идёт в строки решений, чипы статусов и шапку досье. Пока файла нет, на его месте стоит буквенный код, смайликов в этой вкладке нет.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 12px;line-height:1.5">Пишется <b>прямо в папку игры</b> (<code>${AD_PC_DIR}/</code>). Запусти батник <b>«Загрузка артов.bat»</b> и держи окно открытым.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">${cards}</div>
+  </div>`;
+}
+async function adPrecursorArtUpload(key, inputEl) {
+  const f = inputEl && inputEl.files && inputEl.files[0];
+  const st = document.getElementById(`ad-pc-st-${key}`);
+  if (!f) return;
+  if (st) st.textContent = 'Проверка сервера…';
+  if (!(await adPortServerAlive())) {
+    if (st) st.textContent = 'нет сервера';
+    toast('Запусти «Загрузка артов.bat» (node tools/upload-server.js)', 'err');
+    return;
+  }
+  try {
+    if (st) st.textContent = 'Сохранение…';
+    const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, 256, 0.92) : f;
+    const r = await fetch(`${AD_PORT_SERVER}/upload?dir=precursor&name=${encodeURIComponent(key + '.webp')}`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.pcBust = Date.now();
+    if (st) st.textContent = 'Готово';
+    toast(`Иконка «${key}» сохранена`, 'ok');
+    adPaint();
+  } catch (e) {
+    console.error('[admin] precursor art', e);
     if (st) st.textContent = 'Ошибка';
     toast('Не удалось сохранить арт: ' + (e.message || e), 'err');
   }

@@ -373,7 +373,7 @@ const EC_BUILD = {
   // АРСЕНАЛ СУДНОГО ДНЯ — строится отдельным RPC shellforge_build (без слотов).
   shellforge:       { name: 'Арсенал Судного Дня', cost: 300000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Собирает снаряды Длани: 1 снаряд за 1 день. Без снарядов орудия судного дня молчат. Слотов нет.' },
   // БАЛЛИСТИЧЕСКИЙ ВОЕНПРОМЗАВОД — RPC ballfab_build, техно pol.ballistics (без слотов).
-  ballfab:          { name: 'Баллистический военпромзавод', cost: 150000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Конвейер баллистических боеголовок для Гиперпейсера: 4 тира — лёгкая, «Фантом», кассетная, тяжёлая. 1 снаряд за 1 день. Слотов нет.' },
+  ballfab:          { name: 'Баллистический военпромзавод', cost: 150000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Конвейер баллистических боеголовок для Гиперпейсера: 4 тира — Х19 «Хазар», Х69 «Фантом», Х05 «Сурей», Х0414 «Отей». 1 снаряд за 1 день. Слотов нет.' },
   // ОЖЕРЕЛЬЕ НЕМЕЗИДЫ — мегасооружение, строится отдельным RPC nemesis_build.
   nemesis:          { name: 'Ожерелье Немезиды', cost: 6000000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'МЕГАСООРУЖЕНИЕ: кольцо перехватчиков, прикрывающее ВСЮ систему. ГАРАНТИРОВАННО сбивает ЛЮБОЙ залп Длани и Гиперпейсера — без зарядов и осечек. Пока Ожерелье стоит, система неуязвима для ударов из космоса. Стоит очень дорого.' },
 };
@@ -393,9 +393,34 @@ const EC_SHELL = {
   ball_cluster: { gc: 90000,  'Гравиядро': 4 },
   ball_heavy:   { gc: 250000, 'Гравиядро': 1 },
 };
+// ── Паспорт снарядов (ЕДИНЫЙ источник имён) ───────────────────────────────
+// Индекс + имя = как их зовёт наводчица в новелле наведения. Смайликов нет:
+// картинки заливает админка (вкладка «Снаряды») локальным аплоад-сервером —
+//   assets/shells/<kind>.webp     — большой арт карточки,
+//   assets/shells/ico_<kind>.webp — иконка в строках, чипах и тостах.
+// Файла нет — на его месте стоит индекс снаряда (Х67), а не эмодзи.
+const EC_SHELL_ART_DIR = 'assets/shells';
+const EC_SHELL_META = {
+  doom:         { code: 'Х67',   nm: '«Ада»',    cls: 'метрический снаряд Длани' },
+  ball_light:   { code: 'Х19',   nm: '«Хазар»',  cls: 'лёгкая баллистика' },
+  ball_emp:     { code: 'Х69',   nm: '«Фантом»', cls: 'баллистика-невидимка' },
+  ball_cluster: { code: 'Х05',   nm: '«Сурей»',  cls: 'кассетная баллистика' },
+  ball_heavy:   { code: 'Х0414', nm: '«Отей»',   cls: 'тяжёлая баллистика' },
+};
+function ecShellMeta(k) { return EC_SHELL_META[k] || { code: '', nm: k, cls: 'снаряд' }; }
+// «Х67 «Ада»» — как его называют на пульте.
+function ecShellName(k) { const m = ecShellMeta(k); return (m.code ? m.code + ' ' : '') + m.nm; }
+function ecShellArt(k) { return `${EC_SHELL_ART_DIR}/${k}.webp`; }
+function ecShellIcoUrl(k) { return `${EC_SHELL_ART_DIR}/ico_${k}.webp`; }
+// Иконка снаряда для строк/чипов: залитая картинка, иначе индекс текстом.
+function ecShellIco(k) {
+  const m = ecShellMeta(k);
+  return `<span class="ec-shell-ico"><img src="${ecShellIcoUrl(k)}" alt="" loading="lazy"
+    onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><i style="display:none">${esc(m.code || '◈')}</i></span>`;
+}
 const EC_SHELL_LABEL = {
-  doom: '☠ снаряд Длани', ball_light: '⚡ лёгкая баллистика', ball_emp: '👻 «Фантом»',
-  ball_cluster: '🧨 кассетная', ball_heavy: '🪨 тяжёлая',
+  doom: 'Х67 «Ада»', ball_light: 'Х19 «Хазар»', ball_emp: 'Х69 «Фантом»',
+  ball_cluster: 'Х05 «Сурей»', ball_heavy: 'Х0414 «Отей»',
 };
 // Паспорт тира для подсказок (зеркало _ball_params): урон/приколы.
 const EC_BALL_INFO = {
@@ -405,6 +430,26 @@ const EC_BALL_INFO = {
   ball_heavy:   'гарантированно 5 построек · 12–22% населения · бьёт ×2 радиуса · летит медленно',
 };
 const EC_BALL_KINDS = ['ball_light', 'ball_emp', 'ball_cluster', 'ball_heavy'];
+const EC_SHELL_KINDS = ['doom'].concat(EC_BALL_KINDS);
+function ecShellInfo(k) { return EC_BALL_INFO[k] || 'стирает планету в мёртвый камень: любая колония на ней, включая столицу, перестаёт быть'; }
+// Карточка снаряда: арт (или иконка) + индекс/имя + строка статуса.
+// o = { sub, on, off, onclick, title } — один вид на складе, на фабриках и на пульте.
+function ecShellCard(k, o) {
+  o = o || {};
+  const m = ecShellMeta(k);
+  const cls = `hp-vnd-shell${o.on ? ' on' : ''}${o.off ? ' off' : ''}`;
+  const art = `<span class="hp-vnd-shell-art"><img src="${ecShellArt(k)}" alt="" loading="lazy"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><i style="display:none">${esc(m.code || '◈')}</i></span>`;
+  const body = `${art}<span class="hp-vnd-shell-b">
+      <span class="hp-vnd-shell-code">${esc(m.code)} · ${esc(m.cls)}</span>
+      <span class="hp-vnd-shell-nm">${esc(m.nm)}</span>
+      <span class="hp-vnd-shell-st">${o.sub || ''}</span>
+    </span>`;
+  const title = esc(o.title != null ? o.title : ecShellInfo(k));
+  return o.onclick
+    ? `<button type="button" class="${cls}" ${o.off ? 'disabled' : ''} title="${title}" onclick="event.stopPropagation();${o.onclick}">${body}</button>`
+    : `<div class="${cls}" title="${title}">${body}</div>`;
+}
 // Дальность залпа Гиперпейсера: ПРЫЖКОВ по гиперпутям (зеркало _mza_hops/mza_range_hops).
 const EC_MZA_RANGE_HOPS = 4, EC_MZA_HEAVY_RANGE_MUL = 2;
 // Ожерелье Немезиды — мегасооружение: системная ПРО (зеркало nemesis_build/_shell_const).
@@ -463,7 +508,7 @@ const EC_BLD_HOWTO = {
   temple:           'Пассивный доход ГС + «сила веры»: чем больше слотов храмов, тем дешевле постройка войск. Спиритуалистам и теократиям бонус сильнее. Требует исповедуемой веры; при постройке указывается её религия (можно держать храмы разных вер).',
   doomgun:          'Откройте пульт орудия, выберите систему-цель и планету — залп тратит 1 ПОСТРОЕННЫЙ снаряд Длани (собирается в Арсенале Судного Дня). Снаряд летит тем дольше, чем дальше цель: от ~3 ч до соседней системы и до суток — от края до края галактики. Держите запас Программируемой материи: без неё орудие деградирует быстрее и распадётся.',
   shellforge:       'Заказывайте снаряды Длани прямо на строке арсенала (стирают планету; нужны Длани и Гиперпейсеру). 1 снаряд = 1 день работы; готовые ложатся на общий склад снарядов державы.',
-  ballfab:          'Заказывайте баллистику на строке завода: ⚡ лёгкая (быстрая, слабая), 👻 «Фантом» (не видна планетарной ПРО), 🧨 кассетная (2–4 постройки), 🪨 тяжёлая (1 Гравиядро, гарантированно 5 построек, бьёт ×2 радиуса). Носит только Гиперпейсер.',
+  ballfab:          'Заказывайте баллистику на строке завода: Х19 «Хазар» (быстрый, слабый), Х69 «Фантом» (не виден планетарной ПРО), Х05 «Сурей» (2–4 постройки), Х0414 «Отей» (1 Гравиядро, гарантированно 5 построек, бьёт ×2 радиуса). Носит только Гиперпейсер.',
   nemesis:          'Работает само: ГАРАНТИРОВАННО перехватывает ЛЮБОЙ залп Длани и Гиперпейсера по ЛЮБОЙ планете этой системы — без зарядов и осечек. Пока Ожерелье стоит, система неуязвима для ударов из космоса. Одно Ожерелье на систему.',
 };
 // Иконки зданий (для каталога-выбора при постройке)
@@ -12333,9 +12378,9 @@ function ecBallFabRow(b) {
   const orderHtml = busyKind
     ? `<div class="ec-bld-mine-hd" style="margin-top:8px">⚙ Собирается: <b>${EC_SHELL_LABEL[busyKind] || busyKind}</b>${readyAt ? ` · готов через ${ecEtaShort(readyAt)}` : ''}</div>`
     : `<div class="ec-prod-form" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${EC_BALL_KINDS.map(k =>
-        `<button class="btn btn-gh btn-xs" ${canPay(k) ? '' : 'disabled'} title="${esc((EC_BALL_INFO[k] || '') + ' · ' + costTxt(k))}" onclick="ecShellOrder('${b.id}','${k}')">${EC_SHELL_LABEL[k]} · ${costTxt(k)}</button>`).join('')}
+        `<button class="btn btn-gh btn-xs" ${canPay(k) ? '' : 'disabled'} title="${esc((EC_BALL_INFO[k] || '') + ' · ' + costTxt(k))}" onclick="ecShellOrder('${b.id}','${k}')">${ecShellIco(k)} ${EC_SHELL_LABEL[k]} · ${costTxt(k)}</button>`).join('')}
       </div>`;
-  const stockTxt = EC_BALL_KINDS.map(k => `${EC_SHELL_LABEL[k].split(' ')[0]} ${ecNum(ecShellsOf(k))}`).join(' · ');
+  const stockTxt = EC_BALL_KINDS.map(k => `${ecShellIco(k)} ${ecNum(ecShellsOf(k))}`).join(' · ');
   return `<div class="ec-bld" style="border-color:rgba(230,164,60,.45)">
     <div class="ec-bld-top">
       <span class="ec-bld-name">🏭 ${esc(EC_BUILD.ballfab.name)}</span>
@@ -13598,13 +13643,13 @@ function ecMzaSection() {
         <input type="text" id="ec-mza-name" class="ec-input" style="width:160px" maxlength="40" placeholder="имя (необязательно)">
         <button class="btn btn-rd btn-sm" ${afford && ecHasHyperTech() ? '' : 'disabled'} title="${afford ? '' : 'Не хватает ГС или Программируемой материи'}" onclick="ecMzaBuild()">☣ Заложить Гиперпейсер · ${ecNum(EC_MZA_BUILD_GC)} ГС + ${EC_MZA_BUILD_MATTER} 🟢</button>
       </div>
-      <div class="ec-bld-howto">Строится <b>сутки</b>, затем появляется на <b>галактической карте</b>. Переброска — по всей карте; залп бьёт на <b>${EC_MZA_RANGE_HOPS} прыжка по гиперпутям</b> (🪨 тяжёлая — на ${EC_MZA_RANGE_HOPS * EC_MZA_HEAVY_RANGE_MUL}); зона подсвечивается на карте при наведении. Несёт <b>☠ снаряды Длани</b> (☢ Арсенал) и <b>💥 баллистику 4 тиров</b> (🏭 военпромзавод). Каждый залп изнашивает корпус (≈4 залпа).</div>`;
+      <div class="ec-bld-howto">Строится <b>сутки</b>, затем появляется на <b>галактической карте</b>. Переброска — по всей карте; залп бьёт на <b>${EC_MZA_RANGE_HOPS} прыжка по гиперпутям</b> (Х0414 «Отей» — на ${EC_MZA_RANGE_HOPS * EC_MZA_HEAVY_RANGE_MUL}); зона подсвечивается на карте при наведении. Несёт <b>снаряды Длани Х67 «Ада»</b> (☢ Арсенал) и <b>баллистику 4 тиров</b> (🏭 военпромзавод). Каждый залп изнашивает корпус (≈4 залпа).</div>`;
   })();
   const haveGrav = ecStockOf('Гравиядро');
   const shipRows = ships.length
     ? `<div class="ec-mza-grid">${ships.map(sh => ecMzaCard(sh, haveGrav)).join('')}</div>`
     : '';
-  const shellStrip = `<div class="ec-bld-howto" style="margin:4px 0">Склад снарядов: <b>☠ Длань ${ecNum(ecShellsOf('doom'))}</b> · <b>💥 баллистика ${ecNum(ecBallTotal())}</b> (${EC_BALL_KINDS.map(k => `${EC_SHELL_LABEL[k].split(' ')[0]}${ecNum(ecShellsOf(k))}`).join(' ')}) — фабрики: ☢ Арсенал и 🏭 военпромзавод (1/сутки).</div>`;
+  const shellStrip = `<div class="ec-bld-howto" style="margin:4px 0">Склад снарядов: <b>${ecShellIco('doom')} Длань ${ecNum(ecShellsOf('doom'))}</b> · <b>баллистика ${ecNum(ecBallTotal())}</b> (${EC_BALL_KINDS.map(k => `${ecShellIco(k)}${ecNum(ecShellsOf(k))}`).join(' ')}) — фабрики: ☢ Арсенал и 🏭 военпромзавод (1/сутки).</div>`;
   return `<div class="ec-section-title" style="margin-top:18px">☣ Гиперпейсер <span class="ec-hint">— мобильное орудие судного дня на корабле: дальность ${EC_MZA_RANGE_HOPS} прыжка</span></div>
     ${shellStrip}
     ${buildForm}
@@ -13791,17 +13836,13 @@ function ecDoomVNArsenal(guns, matter) {
    (Арсенал → снаряд Длани, военпромзавод → 4 тира баллистики). */
 function ecDoomVNForge() {
   const sh = EC.shells || { stock: {}, forges: [], nemesis: [] };
-  const ICO = { doom: '☠', ball_light: '⚡', ball_emp: '👻', ball_cluster: '🧨', ball_heavy: '🪨' };
-  const NM = { doom: 'снаряд Длани', ball_light: 'лёгкая', ball_emp: '«Фантом»', ball_cluster: 'кассетная', ball_heavy: 'тяжёлая' };
-  // I · СКЛАД — кассеты всех пяти снарядов
+  // I · СКЛАД — паспорта всех пяти снарядов
   const stock = `<div class="hp-vnd-con-sec">
     <div class="hp-vnd-con-t"><i>I</i> склад снарядов державы</div>
-    <div class="hp-vnd-cassrow">${['doom'].concat(EC_BALL_KINDS).map(k => `
-      <div class="hp-vnd-cass${ecShellsOf(k) < 1 ? ' off' : ''}" title="${esc(EC_BALL_INFO[k] || 'стирает планету в мёртвый камень')}">
-        <span class="hp-vnd-cass-ic">${ICO[k]}</span>
-        <span class="hp-vnd-cass-nm">${NM[k]}</span>
-        <span class="hp-vnd-cass-st">на складе: <b>${ecNum(ecShellsOf(k))}</b></span>
-      </div>`).join('')}</div>
+    <div class="hp-vnd-shelfrow">${EC_SHELL_KINDS.map(k => ecShellCard(k, {
+      off: ecShellsOf(k) < 1,
+      sub: `на складе <b>${ecNum(ecShellsOf(k))}</b>`,
+    })).join('')}</div>
   </div>`;
   // II · ФАБРИКИ — заказ сборки (1 снаряд = 1 сутки на фабрику)
   const colName = cid => { const c = (EC.colonies || []).find(x => x.id === cid); return c ? (c.planet_name || 'колония') : 'колония'; };
@@ -13812,14 +13853,12 @@ function ecDoomVNForge() {
     const kinds = isBall ? EC_BALL_KINDS : ['doom'];
     const act = f.shell_kind
       ? `<div class="hp-vnd-gun-meta"><span>⚙ собирается: <b>${EC_SHELL_LABEL[f.shell_kind] || f.shell_kind}</b></span><span>${f.shell_ready ? 'готов через <b>' + ecEtaShort(f.shell_ready) + '</b>' : ''}</span></div>`
-      : `<div class="hp-vnd-cassrow" style="margin-top:6px">${kinds.map(k => `
-          <button type="button" class="hp-vnd-cass${canPay(k) ? '' : ' off'}" ${canPay(k) ? '' : 'disabled'}
-            title="${esc((EC_BALL_INFO[k] || 'стирает планету в мёртвый камень') + ' · ' + costTxt(k))}"
-            onclick="event.stopPropagation();ecDoomVNOrder('${f.building_id}','${k}')">
-            <span class="hp-vnd-cass-ic">${ICO[k]}</span>
-            <span class="hp-vnd-cass-nm">${NM[k]}</span>
-            <span class="hp-vnd-cass-st">${esc(costTxt(k))}</span>
-          </button>`).join('')}</div>`;
+      : `<div class="hp-vnd-shelfrow" style="margin-top:6px">${kinds.map(k => ecShellCard(k, {
+          off: !canPay(k),
+          sub: esc(costTxt(k)),
+          title: ecShellInfo(k) + ' · ' + costTxt(k),
+          onclick: `ecDoomVNOrder('${f.building_id}','${k}')`,
+        })).join('')}</div>`;
     return `<div class="hp-vnd-gun">
       <div class="hp-vnd-gun-hd"><span class="hp-vnd-gun-nm">${isBall ? '🏭 Военпромзавод' : '☢ Арсенал'} · ${esc(colName(f.colony_id))}</span>
         <span class="hp-vnd-gun-st${f.shell_kind ? ' hot' : ''}">${f.shell_kind ? '⚙ конвейер занят' : '● конвейер свободен'}</span></div>
@@ -13858,7 +13897,7 @@ function ecShellArsenalSection() {
     const act = busy
       ? `<span class="ec-proj-tag">⚙ ${EC_SHELL_LABEL[f.shell_kind] || f.shell_kind}${f.shell_ready ? ' · ' + ecEtaShort(f.shell_ready) : ''}</span>`
       : `<span style="display:flex;gap:6px;flex-wrap:wrap">${kinds.map(k =>
-          `<button class="btn ${k === 'doom' ? 'btn-rd' : 'btn-gh'} btn-xs" title="${esc(EC_BALL_INFO[k] || '')}" onclick="ecShellOrder('${f.building_id}','${k}')">${EC_SHELL_LABEL[k]} · ${ecNum(EC_SHELL[k].gc)} ГС</button>`).join('')}
+          `<button class="btn ${k === 'doom' ? 'btn-rd' : 'btn-gh'} btn-xs" title="${esc(EC_BALL_INFO[k] || '')}" onclick="ecShellOrder('${f.building_id}','${k}')">${ecShellIco(k)} ${EC_SHELL_LABEL[k]} · ${ecNum(EC_SHELL[k].gc)} ГС</button>`).join('')}
         </span>`;
     return `<div class="ec-colonize-row"><div class="ec-cz-main"><span class="ec-cz-name">${isBall ? '🏭 Военпромзавод' : '☢ Арсенал'} · ${esc(colName(f.colony_id))}</span></div>${act}</div>`;
   }).join('');
@@ -14233,17 +14272,12 @@ function ecDoomVNScene(stepId, car) {
   }
   if (stepId === 'pid') return `<div id="hd-targetsec">${ecDoomVNTargetSec()}</div>`;
   if (stepId === 'shell') {
-    const ICO = { doom: '☠', ball_light: '⚡', ball_emp: '👻', ball_cluster: '🧨', ball_heavy: '🪨' };
-    const NM = { doom: 'снаряд Длани', ball_light: 'лёгкая', ball_emp: '«Фантом»', ball_cluster: 'кассетная', ball_heavy: 'тяжёлая' };
     const cur = EC_BALL_KINDS.includes(st.shell) ? st.shell : 'doom';
-    return `<div class="hp-vnd-cassrow">${['doom'].concat(EC_BALL_KINDS).map(k =>
-      `<button type="button" class="hp-vnd-cass${cur === k ? ' on' : ''}${ecShellsOf(k) < 1 ? ' off' : ''}"
-        title="${esc(EC_BALL_INFO[k] || 'стирает планету в мёртвый камень')}"
-        onclick="event.stopPropagation();ecDoomVNShell('${k}')">
-        <span class="hp-vnd-cass-ic">${ICO[k]}</span>
-        <span class="hp-vnd-cass-nm">${NM[k]}</span>
-        <span class="hp-vnd-cass-st">на складе: ${ecNum(ecShellsOf(k))}</span>
-      </button>`).join('')}</div>`;
+    return `<div class="hp-vnd-shelfrow">${EC_SHELL_KINDS.map(k => ecShellCard(k, {
+      on: cur === k, off: ecShellsOf(k) < 1,
+      sub: `на складе ${ecNum(ecShellsOf(k))}`,
+      onclick: `ecDoomVNShell('${k}')`,
+    })).join('')}</div>`;
   }
   return ecDoomVNProto();   // chain
 }
@@ -14292,10 +14326,10 @@ function ecDoomVNProto() {
       <span><i>носитель</i><b>${esc(car.nm)}</b></span>
       <span><i>цель</i><b${tgt ? ' class="hot"' : ''}>${tgt ? esc((sys.name || sys.id) + ' · ' + (tgt.name || 'планета ' + tgt.pid)) : '— не назначена —'}</b></span>
       <span><i>подлёт</i><b>${fly ? '≈' + fly.hours.toFixed(1) + ' ч' : '···'}</b></span>
-      <span><i>снаряд</i><b class="${gravOk ? '' : 'hot'}">${esc(EC_SHELL_LABEL[shellKind].replace(/^\S+\s/, ''))} · ${ecNum(shells)}/1</b></span>
+      <span><i>снаряд</i><b class="${gravOk ? '' : 'hot'}">${esc(EC_SHELL_LABEL[shellKind])} · ${ecNum(shells)}/1</b></span>
     </div>
     <div class="hp-vnd-tumbs">${tumbs}</div>
-    ${!inRange ? `<div class="hp-vnd-warnline">Цель вне радиуса: дальность ${esc(EC_SHELL_LABEL[shellKind])} — ${maxHops} прыжка(ов) по гиперпутям${hops === Infinity ? ' (нет маршрута)' : ' (до цели ' + hops + ')'}. Перебросьте носитель ближе или возьмите тяжёлую.</div>` : ''}
+    ${!inRange ? `<div class="hp-vnd-warnline">Цель вне радиуса: дальность ${esc(EC_SHELL_LABEL[shellKind])} — ${maxHops} прыжка(ов) по гиперпутям${hops === Infinity ? ' (нет маршрута)' : ' (до цели ' + hops + ')'}. Перебросьте носитель ближе или возьмите Х0414 «Отей».</div>` : ''}
     ${tgt && inRange ? (shellKind === 'doom'
       ? `<div class="hp-vnd-warnline">Залп необратим: «${esc(tgt.name || '')}» станет мёртвым камнем, любая колония на ней — включая столицу — будет стёрта.</div>`
       : `<div class="hp-vnd-warnline">${esc(EC_SHELL_LABEL[shellKind])}: планета уцелеет — ${esc(EC_BALL_INFO[shellKind] || '')}.</div>`)

@@ -4886,6 +4886,34 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hp-vnd-cass-nm{font-size:12px;font-weight:600}
 .hp-vnd-cass-st{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8f7d78}
 .hp-vnd-cass.on .hp-vnd-cass-st{color:#ff8d7c}
+/* иконка снаряда в строках и кнопках (assets/shells/ico_<kind>.webp) */
+.ec-shell-ico{display:inline-flex;align-items:center;justify-content:center;vertical-align:-3px}
+.ec-shell-ico img{width:16px;height:16px;object-fit:contain;display:block}
+.ec-shell-ico i{font-style:normal;font-size:9px;letter-spacing:.06em;font-family:var(--font-mono);opacity:.8}
+/* I-бис · паспорта снарядов (склад, фабрики, выбор на пульте) */
+.hp-vnd-shelfrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(222px,1fr));gap:8px}
+.hp-vnd-shell{
+  display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;text-align:left;
+  background:hsl(0 40% 7% / .9);border:1px solid rgba(255,74,60,.25);color:#c9a49b;
+  font-family:var(--font-mono);cursor:pointer;
+}
+.hp-vnd-shell:hover{border-color:rgba(255,74,60,.6)}
+.hp-vnd-shell.on{border-color:#ff4a3c;box-shadow:inset 0 0 0 1px #ff4a3c,0 0 14px rgba(255,74,60,.25)}
+.hp-vnd-shell.off{opacity:.45;cursor:not-allowed}
+.hp-vnd-shell-art{
+  position:relative;flex:0 0 52px;width:52px;height:52px;overflow:hidden;
+  background:hsl(0 30% 10% / .9);border:1px solid rgba(255,74,60,.2);
+  display:flex;align-items:center;justify-content:center;
+}
+.hp-vnd-shell-art img{width:100%;height:100%;object-fit:cover;display:block}
+.hp-vnd-shell-art i{font-style:normal;font-size:13px;line-height:1;letter-spacing:.08em;color:#8f7d78;font-family:var(--font-mono)}
+.hp-vnd-shell-b{display:flex;flex-direction:column;gap:2px;min-width:0}
+.hp-vnd-shell-code{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8f7d78}
+.hp-vnd-shell-nm{font-size:14px;font-weight:700;color:#e8cfc8;letter-spacing:.02em}
+.hp-vnd-shell.on .hp-vnd-shell-nm{color:#ffe9e4}
+.hp-vnd-shell-st{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8f7d78}
+.hp-vnd-shell.on .hp-vnd-shell-st{color:#ff8d7c}
+.hp-vnd-shell-st b{color:#e8cfc8;font-weight:700}
 /* II · реестр целей */
 .hp-vnd-con-q{
   display:block;width:100%;margin-bottom:8px;padding:8px 10px;
@@ -4999,7 +5027,7 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 /* Карта-разворот: без видимого шва между шапкой и выбором */
 .hp-vnd-vn-card{background:#0b0708;border:1px solid rgba(255,74,60,.2);border-top:2px solid #ff4a3c}
 /* Шапка-арт: картинка на весь верх, снизу растворяется в фон карты */
-.hp-vnd-banner{position:relative;min-height:230px;display:flex;flex-direction:column;justify-content:flex-end;
+.hp-vnd-banner{position:relative;min-height:clamp(300px,46vh,520px);display:flex;flex-direction:column;justify-content:flex-end;
   overflow:hidden;background:radial-gradient(125% 100% at 50% 15%,#3a1616,#0b0708 72%)}
 .hp-vnd-face-afraid .hp-vnd-banner,.hp-vnd-face-pleading .hp-vnd-banner{background:radial-gradient(125% 100% at 50% 15%,#4a1414,#0b0708 70%)}
 .hp-vnd-face-hollow .hp-vnd-banner{background:radial-gradient(125% 100% at 50% 15%,#241a22,#0b0708 74%)}
@@ -5009,7 +5037,7 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hp-vnd-banner-scrim{position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(180deg,rgba(11,7,8,.15) 0,rgba(11,7,8,.05) 34%,rgba(11,7,8,.72) 72%,#0b0708 100%)}
 /* Реплика поверх шапки */
-.hp-vnd-say{position:relative;z-index:2;padding:12px 16px 15px}
+.hp-vnd-say{position:relative;z-index:2;padding:16px 18px 18px}
 .hp-vnd-say-who{font-family:var(--font-mono);font-size:9px;letter-spacing:.24em;text-transform:uppercase;
   color:#ff8d7c;margin-bottom:7px;text-shadow:0 1px 4px #000}
 .hp-vnd-say-l{margin:0 0 6px;font-size:14px;line-height:1.6;color:#f4e6e1;max-width:640px;
@@ -5051,7 +5079,7 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hp-vnd-page-off{opacity:.4;cursor:default;border-style:dashed}
 .hp-vnd-page-off:hover{border-color:rgba(255,74,60,.3);color:#ff9a8a}
 .hp-vnd-page-hint{font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8f6f68}
-@media(max-width:620px){.hp-vnd-banner{min-height:180px}}
+@media(max-width:620px){.hp-vnd-banner{min-height:clamp(220px,34vh,300px)}}
 /* Переиспользуемый пульт наведения: перекрасить его голубые чипы в тему */
 .hp-vn-doom .ec-doom-gunchip.on{border-color:#ff6a5a;box-shadow:inset 0 0 0 1px #ff6a5a}
 
@@ -5104,6 +5132,87 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .sn-row .hp-vn-btn{flex:0 0 auto}
 .fc-rule{position:relative;padding-left:12px;font-family:var(--font-mono);font-size:10.5px;line-height:1.6;color:var(--t3,#8296a8);letter-spacing:.03em}
 .fc-rule::before{content:"";position:absolute;left:0;top:2px;bottom:2px;width:2px;background:#ff3c82}
+/* ── 🜃 Дозвёздные: досье мира ───────────────────────────────
+   Читается как разведсводка: моно-шапка со срезанным углом (срез — слоем-
+   подложкой, не border), сетка фактов, сегментные шкалы, лента летописи.
+   Акцент один — «живой» зелёный; красным только шрамы и запреты. */
+/* иконки-арты (assets/precursor/<ключ>.webp); пока файла нет — буквенный код,
+   он же подпись под артом в админке. Никаких эмодзи. */
+.pc-ico{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:26px;height:26px;background:rgba(255,255,255,.05);overflow:hidden}
+.pc-ico::after{content:attr(data-code);font-family:var(--font-mono);font-size:8.5px;letter-spacing:.06em;color:var(--t3,#8296a8)}
+.pc-ico img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.pc-ico-sm{width:18px;height:18px}
+.pc-ico-sm::after{font-size:7px}
+.pc-ico-md{width:34px;height:34px}
+.pc-ico-lg{width:40px;height:40px}
+.pc-sub{margin:12px 0 4px;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3,#8296a8);opacity:.8}
+.pc-hero{position:relative;margin:0 0 2px;padding:14px 16px 12px;background:linear-gradient(180deg,rgba(127,209,138,.10),rgba(127,209,138,0) 70%),rgba(255,255,255,.03);clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,0 100%)}
+.pc-hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--gd,#7fd18a)}
+.pc-hero-nm{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:19px;font-weight:800;color:var(--t1,#dfe8f0);letter-spacing:.01em;line-height:1.15}
+.pc-hero-sub{margin-top:6px;font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--t3,#8296a8)}
+.pc-chip{padding:3px 10px;font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gd,#7fd18a);background:rgba(127,209,138,.12)}
+.pc-chip-dead{color:#e0736a;background:rgba(224,115,106,.12)}
+
+.pc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;margin:1px 0 0;background:rgba(255,255,255,.07)}
+.pc-fact{display:flex;flex-direction:column;gap:5px;padding:9px 12px;background:rgba(12,16,22,.92)}
+.pc-fact-k{font-family:var(--font-mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--t3,#8296a8);opacity:.75}
+.pc-fact-v{font-size:13px;font-weight:600;color:var(--t1,#dfe8f0);display:flex;align-items:center;gap:9px;flex-wrap:wrap;line-height:1.3}
+.pc-fact-v i{font-style:normal;font-weight:400;font-size:11px;color:var(--t3,#8296a8)}
+.pc-fact-n{font-family:var(--font-mono);font-size:15px;font-weight:700;letter-spacing:.02em}
+/* сегментная шкала: 10 делений, полосу режет наложенная «гребёнка» */
+.pc-meter{position:relative;flex:1 1 70px;min-width:56px;height:7px;background:rgba(255,255,255,.08)}
+.pc-meter i{display:block;height:100%}
+.pc-meter::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(10% - 2px),rgba(10,13,18,.95) calc(10% - 2px),rgba(10,13,18,.95) 10%)}
+.pc-m-wb{background:var(--gd,#7fd18a)}
+.pc-m-ok{background:#7fd18a}.pc-m-mid{background:#d8c07a}.pc-m-bad{background:#e0736a}
+
+.pc-era{margin-top:10px;padding:12px 14px;background:rgba(255,255,255,.03);border-left:2px solid var(--gd,#7fd18a)}
+.pc-era-bar{display:flex;align-items:center;gap:3px;margin-bottom:9px}
+.pc-ph{flex:1 1 0;height:9px;background:rgba(255,255,255,.1);cursor:help;font-style:normal;transition:transform .12s}
+.pc-ph:hover{transform:scaleY(1.5)}
+.pc-ph-done{background:var(--gd,#7fd18a)}
+.pc-ph-now{background:#d8c07a;box-shadow:0 0 8px rgba(216,192,122,.7)}
+.pc-ph-star{flex:0 0 auto;height:auto;margin-left:6px;background:none;font-size:12px;color:rgba(255,255,255,.25)}
+.pc-ph-star:hover{transform:none}
+.pc-ph-star.pc-ph-done{background:none;color:#9fc7ff;box-shadow:none}
+.pc-era-txt{font-family:var(--font-mono);font-size:10.5px;line-height:1.75;color:var(--t3,#8296a8);letter-spacing:.03em}
+.pc-era-txt b{color:var(--t1,#dfe8f0)}
+.pc-era-txt i{font-style:normal;opacity:.7}
+
+/* решения */
+.pc-act{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:1px 0;background:rgba(255,255,255,.035);border-left:2px solid rgba(127,209,138,.45)}
+.pc-act:hover{background:rgba(255,255,255,.06)}
+.pc-act-off{border-left-color:rgba(255,255,255,.12);opacity:.55}
+.pc-act-good{border-left-color:rgba(159,199,255,.5)}
+.pc-act-off:hover{background:rgba(255,255,255,.035)}
+.pc-act-nm{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 auto;font-size:13px;font-weight:600;color:var(--t1,#dfe8f0)}
+.pc-act-nm i{font-style:normal;font-weight:400;font-size:11px;line-height:1.5;color:var(--t3,#8296a8)}
+.pc-act-nm u{text-decoration:none;font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;color:#d8c07a}
+.pc-act-r{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.pc-act-cost{font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.03em;color:#e6c15a;white-space:nowrap}
+.pc-act-poor{color:#e0736a}
+
+/* летопись — лента времени */
+.pc-chron{display:flex;flex-direction:column;padding-left:2px}
+.pc-chr{position:relative;display:flex;gap:12px;padding:9px 0 9px 16px;border-left:1px solid rgba(255,255,255,.09)}
+.pc-chr::before{content:"";position:absolute;left:-3px;top:15px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.2)}
+.pc-chr-live::before{background:var(--gd,#7fd18a);box-shadow:0 0 7px rgba(127,209,138,.8)}
+.pc-chr-scar::before{background:#e0736a;box-shadow:0 0 7px rgba(224,115,106,.7)}
+.pc-chr-when{flex:0 0 152px;font-family:var(--font-mono);font-size:10px;line-height:1.75;letter-spacing:.04em;color:var(--t3,#8296a8);opacity:.65;cursor:help;white-space:nowrap}
+.pc-chr-live .pc-chr-when{color:var(--gd,#7fd18a);opacity:.85}
+.pc-chr-era .pc-chr-when{letter-spacing:.1em}
+.pc-chr-txt{min-width:0;font-size:12.5px;line-height:1.7;color:var(--t2,#a9bccd)}
+.pc-chr-txt b{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8296a8);margin-right:7px}
+.pc-chr-txt i{font-style:normal;color:#e0736a;font-size:11px}
+.pc-chr-scar .pc-chr-txt b{color:#e0736a}
+@media (max-width:520px){
+  .pc-grid{grid-template-columns:1fr}
+  .pc-chr{flex-direction:column;gap:2px}
+  .pc-chr-when{flex:0 0 auto}
+  .pc-act{flex-direction:column;align-items:flex-start;gap:8px}
+  .pc-act-r{align-self:stretch;justify-content:space-between}
+}
+
 .fc-phase{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:2px}
 .fc-phase-tag{
   padding:7px 16px;font-family:var(--font-mono);font-weight:700;

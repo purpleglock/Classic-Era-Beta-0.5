@@ -34,8 +34,10 @@ const ALLOWED_DIRS = {
   guide:     'assets/guide',          // обложки разделов гайдбука (фикс. имя = id раздела)
   ach:       'assets/ach',            // арт ачивок (<id>.webp) + правки подписей (_overrides.json)
   hero:      'assets/hero',           // спрайты персонажей для диалогового окна главной (визуальная новелла)
-  doom:      'assets/doom',           // шапки-арты новеллы наведения Длани (face_<mood>.webp)
+  shells:    'assets/shells',         // арты снарядов Длани и баллистики (<kind>.webp)
+  doom:      'assets/doom',         // шапки-арты новеллы наведения Длани (face_<mood>.webp)
   constructors: 'assets/constructors', // арты компонентов конструктора (орудия: ship_weapon_<slug>_<idx>.webp)
+  precursor: 'assets/precursor',    // иконки вкладки «Дозвёздные миры» (<ключ>.webp: решения и статусы)
 };
 // Возвращает {rel, abs} для папки назначения по query ?dir= (или дефолт-портреты).
 function destDir(dirKey) {
