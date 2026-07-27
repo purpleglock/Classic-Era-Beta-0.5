@@ -83,7 +83,7 @@ body.route-map #gm-wrap{height:100%;min-height:0}
 /* цветная подложка территории сектора — крупная читаемая ЦВЕТНАЯ ОБЛАСТЬ.
    Видна на обзоре (.gm-sec-far). Плотная (не screen-blend), сектор = цельный регион. */
 .gm-sec-fill{opacity:0;display:none;transition:opacity var(--duration-normal)}
-#gm-wrap.gm-sec-far .gm-sec-fill{display:block;opacity:.5}
+#gm-wrap.gm-sec-far .gm-sec-fill{display:block;opacity:.28}   /* зеркало canvas-рендера */
 
 /* ── Граница сектора = ЖЁСТКИЙ HUD-РУБЕЖ (киберпанк) ──
    без блюра и скруглений: тонкое яркое ядро с острыми стыками (miter) +
