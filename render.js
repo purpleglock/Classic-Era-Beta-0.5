@@ -5115,6 +5115,26 @@ function heroVNInit() {
     }
     charTimer = setInterval(tick, 30);
   }
+  // Разовая серверная проверка «Самой неотвратимости» для пункта «Рубеж МЗА».
+  // Нужна ровно потому, что wk_doom_unlocked — это localStorage: он привязан к
+  // origin, и на деплое (или в другом браузере) его нет, даже если технология
+  // давно исследована. Тихо, без блокировки отрисовки меню.
+  let doomProbed = false;
+  async function doomProbe() {
+    if (doomProbed) return;
+    doomProbed = true;
+    try {
+      if (typeof EC !== 'undefined' && EC.eco) return;   // экономика уже загружена — ответ был выше
+      if (typeof ecLoadApp === 'function') await ecLoadApp();
+      const fid = (typeof EC !== 'undefined' && EC.app && EC.app.faction_id) || null;
+      if (!fid || typeof apiFetch !== 'function') return;
+      const rows = await apiFetch('faction_economy?select=research&faction_id=eq.' + encodeURIComponent(fid));
+      const res = (rows && rows[0] && rows[0].research) || [];
+      if (!Array.isArray(res) || !res.includes('pol.inevitability')) return;
+      try { localStorage.setItem('wk_doom_unlocked', '1'); } catch (e) {}
+      if (choicesEl && choicesEl.children.length) renderChoices();   // меню ещё на экране — дорисовать пункт
+    } catch (e) {}
+  }
   function renderChoices() {
     setBack(false);
     if (!choicesEl) return;
@@ -5152,6 +5172,10 @@ function heroVNInit() {
       const doomOn = (typeof ecDoomUnlocked === 'function' && typeof EC !== 'undefined' && EC.eco && ecDoomUnlocked())
         || localStorage.getItem('wk_doom_unlocked') === '1';
       if (doomOn) opts.push(['doom', (en ? 'MDA Line · strike & shield' : 'Рубеж МЗА · удар и оборона')]);
+      // Кэш-флаг живёт в localStorage и потому ПУСТ на новом домене/браузере:
+      // держава с исследованием не видела пункт, пока не откроет кабинет.
+      // Спрашиваем сервер один раз за сеанс и перерисовываем меню.
+      else doomProbe();
     } catch (e) {}
     choicesEl.innerHTML = opts.map(([k, l]) =>
       `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');
