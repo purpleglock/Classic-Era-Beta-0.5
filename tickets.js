@@ -22,7 +22,47 @@ const TK_CATS = [
   ['other', '📨 Другое'],
 ];
 const TK_CAT_LABEL = Object.fromEntries(TK_CATS);
-const TK = { shots: [], mine: [], openId: null, busy: false };
+const TK = { shots: [], mine: [], openId: null, busy: false, draft: { cat: '', desc: '', vk: '' }, draftRestored: false };
+
+// ── Черновик недописанного тикета (localStorage, на устройство+аккаунт) ──
+function tkDraftKey() { return 'tk_draft_' + ((typeof user !== 'undefined' && user && user.id) || 'anon'); }
+// Считывает текущие значения полей формы (если они на экране) в TK.draft и
+// сохраняет их вместе со скриншотами. Вызывается на каждый ввод.
+function tkSaveDraft() {
+  const catEl = document.getElementById('tk-cat');
+  const descEl = document.getElementById('tk-desc');
+  const vkEl = document.getElementById('tk-vk');
+  if (catEl) TK.draft.cat = catEl.value;
+  if (descEl) TK.draft.desc = descEl.value;
+  if (vkEl) TK.draft.vk = vkEl.value;
+  try {
+    const has = (TK.draft.desc || '').trim() || (TK.draft.vk || '').trim() || TK.shots.length;
+    if (has) {
+      localStorage.setItem(tkDraftKey(), JSON.stringify({
+        cat: TK.draft.cat, desc: TK.draft.desc, vk: TK.draft.vk,
+        shots: TK.shots, at: Date.now(),
+      }));
+    } else {
+      localStorage.removeItem(tkDraftKey());
+    }
+  } catch (e) {}
+}
+// Загружает черновик в TK.draft / TK.shots. Возвращает true, если что-то было.
+function tkLoadDraft() {
+  TK.draft = { cat: '', desc: '', vk: '' }; TK.draftRestored = false;
+  try {
+    const raw = localStorage.getItem(tkDraftKey());
+    if (!raw) return false;
+    const d = JSON.parse(raw) || {};
+    TK.draft = { cat: d.cat || '', desc: d.desc || '', vk: d.vk || '' };
+    TK.shots = Array.isArray(d.shots) ? d.shots : [];
+    const has = (TK.draft.desc || '').trim() || (TK.draft.vk || '').trim() || TK.shots.length;
+    TK.draftRestored = !!has;
+    return TK.draftRestored;
+  } catch (e) { return false; }
+}
+function tkClearDraft() { try { localStorage.removeItem(tkDraftKey()); } catch (e) {} TK.draft = { cat: '', desc: '', vk: '' }; TK.draftRestored = false; }
+function tkDiscardDraft() { tkClearDraft(); TK.shots = []; tkRender(); }
 
 function tkIsStaff() { return !!(typeof user !== 'undefined' && user && ['superadmin', 'editor', 'moderator'].includes(user.role)); }
 // Тикеты доступны только игрокам и администрации (не viewer / не анонимам).
@@ -55,6 +95,7 @@ async function tkOpen() {
   const ov = document.getElementById('tk-ov'); if (!ov) return;
   ov.classList.add('show');
   TK.shots = []; TK.openId = null;
+  tkLoadDraft();   // восстановить недописанный/неотправленный тикет
   ov.innerHTML = `<div class="tk-modal"><div class="tk-loading">Загрузка…</div></div>`;
   await tkLoadMine();
   tkRender();
@@ -73,7 +114,7 @@ async function tkLoadThread(id) {
 // ── Рендер модалки игрока (создание + мои тикеты) ──────────────
 function tkRender() {
   const ov = document.getElementById('tk-ov'); if (!ov || !ov.classList.contains('show')) return;
-  const cats = TK_CATS.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+  const cats = TK_CATS.map(([v, l]) => `<option value="${v}"${TK.draft.cat === v ? ' selected' : ''}>${esc(l)}</option>`).join('');
   const shots = TK.shots.map((u, i) => `<div class="tk-shot"><img src="${esc(u)}" alt="" loading="lazy" onclick="tkViewImg(this.src)"><button title="Убрать" onclick="tkRemoveShot(${i})">✕</button></div>`).join('');
   const mineHtml = TK.mine.length
     ? TK.mine.map(tkMineRow).join('')
@@ -83,14 +124,15 @@ function tkRender() {
     <div class="tk-body">
       <div class="tk-form">
         <div class="tk-form-t">Новый тикет</div>
+        ${TK.draftRestored ? `<div class="tk-draft-note">📝 Восстановлен незавершённый черновик <button type="button" class="tk-draft-clear" onclick="tkDiscardDraft()">очистить</button></div>` : ''}
         <label class="tk-lbl">Что случилось?</label>
-        <select id="tk-cat" class="tk-inp">${cats}</select>
+        <select id="tk-cat" class="tk-inp" onchange="tkSaveDraft()">${cats}</select>
         <label class="tk-lbl">Краткое описание</label>
-        <textarea id="tk-desc" class="tk-inp" rows="3" placeholder="Опишите проблему в двух словах…"></textarea>
+        <textarea id="tk-desc" class="tk-inp" rows="3" placeholder="Опишите проблему в двух словах…" oninput="tkSaveDraft()">${esc(TK.draft.desc || '')}</textarea>
         <label class="tk-lbl">Скриншоты <span class="tk-hint">(по желанию; удалятся после закрытия тикета)</span></label>
         <div class="tk-shots">${shots}<label class="tk-shot-add">＋<input type="file" accept="image/*" multiple style="display:none" onchange="tkPickShot(this)"></label></div>
         <label class="tk-lbl">Ссылка на ваш ВК <span class="tk-hint">(чтобы с вами связались)</span></label>
-        <input id="tk-vk" class="tk-inp" placeholder="https://vk.com/...">
+        <input id="tk-vk" class="tk-inp" placeholder="https://vk.com/..." value="${esc(TK.draft.vk || '')}" oninput="tkSaveDraft()">
         <button class="tk-send" ${TK.busy ? 'disabled' : ''} onclick="tkSubmit()">Отправить тикет</button>
       </div>
       <div class="tk-mine">
@@ -143,11 +185,11 @@ function tkPickShot(input) {
   if (typeof handleImgUpload !== 'function') { toast('Загрузка изображений недоступна', 'err'); return; }
   files.forEach(f => {
     if (TK.shots.length >= 4) { toast('Не более 4 скриншотов', 'err'); return; }
-    handleImgUpload(f, url => { TK.shots.push(url); tkRender(); });
+    handleImgUpload(f, url => { TK.shots.push(url); tkSaveDraft(); tkRender(); });
   });
   input.value = '';
 }
-function tkRemoveShot(i) { TK.shots.splice(i, 1); tkRender(); }
+function tkRemoveShot(i) { TK.shots.splice(i, 1); tkSaveDraft(); tkRender(); }
 
 // Просмотр скриншота во весь экран (лайтбокс поверх всего)
 function tkViewImg(src) {
@@ -181,6 +223,7 @@ async function tkSubmit() {
     await dbPost('tickets', row);
     tkNotifyVK(row);
     TK.shots = [];
+    tkClearDraft();   // тикет ушёл — черновик больше не нужен
     toast('Тикет отправлен — администрация увидит его на сайте', 'ok');
     await tkLoadMine();
   } catch (e) { toast('Ошибка отправки: ' + (e.message || ''), 'err'); }

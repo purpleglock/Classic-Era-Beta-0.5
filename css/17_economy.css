@@ -2163,6 +2163,10 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-pov-mini-n { font-size: 12px; color: var(--t2); }
 .ec-pov-mini-st { font-family: var(--font-mono); font-size: 10px; padding: 1px 7px; border-radius: 999px; border: var(--deco-frame-w, 1px) solid var(--w2); white-space: nowrap; }
 .ec-pov-how { font-size: 12px; color: var(--t3); line-height: 1.5; margin: 4px 0 10px; }
+.ec-hub-build { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; padding: 8px 12px; border-radius: var(--radius-md); background: var(--b2); border-left: var(--deco-accent-w-lg, 3px) solid var(--gd); }
+.ec-hub-build-hd { font-size: 12px; font-weight: 700; color: var(--t1); }
+.ec-hub-build-i { font-family: var(--font-mono); font-size: 11px; padding: 3px 9px; border-radius: 999px; border: var(--deco-frame-w, 1px) solid var(--w2); color: var(--t3); }
+.ec-hub-build-i b { color: var(--gd); }
 .ec-pov-sum { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .ec-pov-sum-i { font-family: var(--font-mono); font-size: 11px; padding: 3px 9px; border-radius: 999px; border: var(--deco-frame-w, 1px) solid var(--w2); color: var(--t3); }
 .ec-pov-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }

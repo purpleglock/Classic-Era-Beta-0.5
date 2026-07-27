@@ -1463,6 +1463,7 @@ function ecTabWelfare() {
       ${all.map(b => ecWelfareSysRow(b, capSet.has(b.system_id))).join('')}
     </div>`;
   return `${ecWfHero()}
+    ${ecHubBuildingBanner()}
     ${ecWfFlow()}
     ${ecWfLevers()}
     <div class="ec-section-title">🏛 Бюджет державы — рычаги <span class="ec-hint">— ползунки двигают благополучие, рост и слоты построек</span></div>
@@ -2766,18 +2767,56 @@ function ecWbHub() {
 }
 // Доступность постройки домика (зеркало гейта/лимитов в economy_build).
 function ecHubTech() { return (((EC.eco || {}).research) || []).includes('pol.welfare_hub'); }
-function ecHubCount() { return (EC.buildings || []).filter(b => b.btype === 'wellhub').length; }
-function ecHubInSystem(colonyId) {
-  const col = (EC.colonies || []).find(c => c.id === colonyId);
-  if (!col) return 0;
-  const ids = new Set((EC.colonies || []).filter(c => c.system_id === col.system_id).map(c => c.id));
-  return (EC.buildings || []).filter(b => b.btype === 'wellhub' && ids.has(b.colony_id)).length;
+// ВАЖНО: сервер (_welfare_hub.sql) в лимите считает И готовые постройки (colony_buildings),
+// И НЕЗАВЕРШЁННЫЕ проекты стройки (colony_projects, kind='build'). Клиент обязан считать
+// так же — иначе центр «на стройке» (1 день) не виден в EC.buildings, карточка выглядит
+// доступной, игрок жмёт «построить» и ловит серверный отказ «уже есть в системе».
+function ecPendingHubs() {
+  return (EC.projects || []).filter(p => p.kind === 'build' && p.btype === 'wellhub');
 }
+function ecHubCount() {
+  return (EC.buildings || []).filter(b => b.btype === 'wellhub').length + ecPendingHubs().length;
+}
+// Возвращает список центров (готовых + строящихся) в системе колонии, с именем планеты.
+function ecHubsInSystem(colonyId) {
+  const col = (EC.colonies || []).find(c => c.id === colonyId);
+  if (!col) return [];
+  const colById = {};
+  (EC.colonies || []).forEach(c => { colById[c.id] = c; });
+  const inSys = cid => colById[cid] && colById[cid].system_id === col.system_id;
+  const nameOf = cid => (colById[cid] && colById[cid].planet_name) || 'колония';
+  const out = [];
+  (EC.buildings || []).forEach(b => { if (b.btype === 'wellhub' && inSys(b.colony_id)) out.push({ planet: nameOf(b.colony_id), pending: false }); });
+  ecPendingHubs().forEach(p => { if (inSys(p.colony_id)) out.push({ planet: nameOf(p.colony_id), pending: true }); });
+  return out;
+}
+function ecHubInSystem(colonyId) { return ecHubsInSystem(colonyId).length; }
 function ecHubBlockReason(colonyId) {
   if (!ecHubTech()) return 'Нужна технология «Центр благополучия»';
-  if (ecHubInSystem(colonyId) >= 1) return 'В этой системе уже есть Центр благополучия (лимит 1 на систему)';
+  const here = ecHubsInSystem(colonyId);
+  if (here.length >= 1) {
+    const h = here[0];
+    const where = `на планете «${h.planet}»${h.pending ? ' (ещё строится)' : ''}`;
+    return `В этой системе уже есть Центр благополучия ${where} — лимит 1 на систему`;
+  }
   if (ecHubCount() >= EC_WB_HUB_STATE_MAX) return `Достигнут лимит центров в державе (${EC_WB_HUB_STATE_MAX})`;
   return '';
+}
+// Баннер «центры в стройке»: постройка центра — проект на 1 сутки, поэтому сразу
+// после клика его нет в списке ГОТОВЫХ построек (частая жалоба «центр исчез»).
+// Показываем строящиеся центры явно, с планетой и ETA, в шапке вкладки.
+function ecHubBuildingBanner() {
+  const pend = ecPendingHubs();
+  if (!pend.length) return '';
+  const colById = {};
+  (EC.colonies || []).forEach(c => { colById[c.id] = c; });
+  const rows = pend.map(p => {
+    const c = colById[p.colony_id];
+    const where = c ? esc(c.planet_name || 'колония') : 'колония';
+    return `<span class="ec-hub-build-i">🏛 «${where}» <b>${esc(ecProjEtaTxt(p))}</b></span>`;
+  }).join('');
+  return `<div class="ec-hub-build" data-tip="Постройка Центра благополучия занимает 1 сутки: в списке готовых построек он появится после завершения. Пока — виден здесь и как «🏗 …⏳» на планете.">
+    <span class="ec-hub-build-hd">🏗 Строятся центры благополучия (${pend.length}):</span>${rows}</div>`;
 }
 // Итоговый индекс: берём серверную разбивку (accrue → budget.wb_*), иначе зеркалим.
 function ecWellbeing() {
