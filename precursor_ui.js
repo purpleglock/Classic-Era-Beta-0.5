@@ -37,7 +37,7 @@ function pcCost(action, tier) {
     : action === 'protect' ? 300000 + 120000 * tier
     : action === 'purge' ? 220000 + 80000 * tier
     : action === 'enslave' ? 260000 + 110000 * tier
-    : action === 'convert' ? 340000 + 130000 * tier : 0;
+    : action === 'convert' ? 340000 + 130000 * tier : 0;   // 'lesson' бесплатен: платит флот
 }
 // Добрая воля дорожает с каждым разом — зеркало серверного _pc_gift_cost.
 function pcGiftCost(action, tier, gifts) {
@@ -61,7 +61,7 @@ function pcNum(v) { return Math.round(Number(v) || 0).toLocaleString('ru-RU'); }
 const PC_ART_DIR = 'assets/precursor';
 const PC_ICO = {
   study: 'НАБ', uplift: 'ВОЗ', protect: 'ПРТ', harvest: 'ВЫК', convert: 'ВЕР',
-  enslave: 'РАБ', purge: 'ЗАЧ', gift: 'ДАР', envoy: 'МИС', miracle: 'ЗНМ',
+  enslave: 'РАБ', purge: 'ЗАЧ', gift: 'ДАР', envoy: 'МИС', miracle: 'ЗНМ', lesson: 'УРК',
   st_wild: 'ДИК', st_uplifted: 'ВОЗ', st_protectorate: 'ПРТ', st_drained: 'ВЫП',
   st_dead: 'МРТ', st_spacefaring: 'ЗВД', world: 'МИР', star: 'ЗВД',
 };
@@ -203,7 +203,7 @@ function _pcList(civs) {
   const parts = ['<div class="sn-col">'];
   parts.push(`<div class="fc-rule">Мораторий Фонда по защите от невмешательства действует с 2986 года. Всё, что вы сделаете на этих страницах, — нарушение. Изучение Фонд терпит; остальное записывает.<br>
     <i>История этих миров идёт сама: раз в неделю каждый делает шаг по своей летописи. Дошедший до звёздного полёта перестаёт быть находкой и становится державой на карте.</i>
-    ${_pcState && _pcState.enlightened ? '<br>Ваш уклад (демократия/эгалитаризм или пацифизм/ксенофилия) закрывает геноцид, рабство, выкачивание и протектораты. Наблюдать, возвышать и проповедовать — можно.' : ''}
+    ${_pcState && _pcState.enlightened ? '<br>Ваш уклад (демократия/эгалитаризм или пацифизм/ксенофилия) закрывает геноцид, рабство, выкачивание, протектораты и карательные удары. Наблюдать, возвышать и проповедовать — можно.' : ''}
     ${_pcState && +_pcState.faith_boost > 1 ? '<br>Обращённые миры разгоняют ваши храмы: ставка ×' + (+_pcState.faith_boost).toFixed(2) + '.' : ''}</div>`);
   if (!civs.length) {
     parts.push(`<div class="hp-vn-col-empty" style="padding:8px">Ни одного дозвёздного мира рядом. Их видно только там, где у державы есть колония в системе.</div></div>`);
@@ -285,8 +285,11 @@ function _pcCard(c) {
     const ban = pcForbidden(id);
     const cd = id === 'study' ? cdStudy : good ? cdGift : cdAct;
     const poor = !ban && cost > gc;
-    const off = ban || poor || cd > 0;
+    // «Урок» — единственное решение, которому мало колонии: нужен флот на месте
+    const noFleet = id === 'lesson' && !c.fleet;
+    const off = ban || poor || cd > 0 || noFleet;
     const why = ban ? 'закрыто укладом державы'
+      : noFleet ? 'в системе нет вашего флота — подведите корабли к их звезде'
       : cd > 0 ? `${good ? 'корабль с дарами вернётся' : id === 'study' ? 'пост занят наблюдением' : 'руки заняты'} — ещё ${pcCdTxt(cd)}`
       : poor ? `не хватает ${pcNum(cost - gc)} ГС из ${pcNum(cost)}` : '';
     return `<div class="pc-act${off ? ' pc-act-off' : ''}${good ? ' pc-act-good' : ''}">
@@ -298,7 +301,7 @@ function _pcCard(c) {
         ${cost ? `<span class="pc-act-cost${poor ? ' pc-act-poor' : ''}">${pcNum(cost)} ГС</span>` : ''}
         <button class="hp-vn-btn${off ? ' hp-vn-back' : ''}" type="button" ${off ? 'disabled' : ''}
           onclick="event.stopPropagation();heroVNTamaAct('${jsq(c.system_id)}',${+c.pid},'${id}')">${
-            ban ? '—' : cd > 0 ? 'ждать' : 'Решить'}</button>
+            ban ? '—' : noFleet ? 'нет флота' : cd > 0 ? 'ждать' : 'Решить'}</button>
       </span>
     </div>`;
   };
@@ -382,6 +385,11 @@ function _pcCard(c) {
           ? 'целая планета адептов «' + _pcState.faith + '»: +25% к ставке ваших храмов (потолок ×2); может не выйти; −25'
           : 'нужна своя религия — без неё проповедовать нечего') + ''));
     parts.push(act('enslave', 'Увести в рабство', 'не убить, а вывезти: невольники вливаются в пул рабочих; −45'));
+    parts.push(act('lesson', 'Урок будет усвоен', ph > 0
+      ? `удар с орбиты, платить не за что: эпоху назад (E${ph} → E${ph - 1}), благополучие −35, население −четверть; ${
+          c.fleet ? 'флот на месте' : 'нужен флот в системе'}; об этом узнает вся галактика; −50`
+      : `откатывать некуда: ниже E0 эпох нет, и урок станет истреблением; ${
+          c.fleet ? 'флот на месте' : 'нужен флот в системе'}; узнает вся галактика; −75`));
     parts.push(act('purge', 'Истребить', 'необратимо, планета освобождается; −60'));
   }
   parts.push(`<div class="sn-sec">Летопись · новое сверху</div>`);
@@ -402,6 +410,7 @@ const PC_CONFIRM = {
   purge: 'Истребить цивилизацию целиком? Это необратимо, и Фонд узнает.',
   enslave: 'Увести часть населения в рабство? Планета останется жить — но уже без них.',
   miracle: 'Устроить им знамение? Отношение подскочит разом, но после такой ночи мир станет спиритуалистическим, и переубеждать его будет уже некому.',
+  lesson: 'Дать урок? Флот сожжёт всё, что они построили: мир отбросит на целую эпоху назад, и подниматься по ней он будет заново. Об ударе узнает вся галактика — сводка уйдёт без адресата. Если откатывать уже некуда, урок станет истреблением.',
   convert: 'Отдать им вашу веру? Если примут — целый мир будет петь ваше имя, и храмы державы станут вдвое звонче.',
 };
 async function heroVNTamaAct(sysId, pid, action) {
@@ -414,6 +423,7 @@ async function heroVNTamaAct(sysId, pid, action) {
     const m = ((e && e.message) || e) + '';
     const nice = m.includes('not enough gc') ? 'Не хватает ГС.'
       : m.includes('too soon') ? 'Слишком рано — до следующего захода ещё меньше суток.'
+      : m.includes('no fleet in system') ? 'В их системе нет вашего флота. Урок дают корабли, а не донесения: подведите флот к звезде.'
       : m.includes('no presence') ? 'Нет колонии в этой системе — до них не дотянуться.'
       : m.includes('another patron') ? 'Этот мир уже под чужим покровительством.'
       : m.includes('belongs to another patron') ? 'Этот мир уже под чужим покровительством.'
@@ -422,7 +432,7 @@ async function heroVNTamaAct(sysId, pid, action) {
       : m.includes('civ is sovereign') ? 'Это уже держава, а не находка: так с ними больше нельзя.'
       : m.includes('already at the threshold') ? 'Выше некуда — они уже на пороге космоса.'
       : m.includes('already a protectorate') ? 'Они и так под протекторатом.'
-      : m.includes('forbidden by creed') ? 'Уклад вашей державы этого не допускает: ни геноцида, ни рабства, ни выкачивания, ни протекторатов.'
+      : m.includes('forbidden by creed') ? 'Уклад вашей державы этого не допускает: ни геноцида, ни рабства, ни выкачивания, ни протекторатов, ни ударов по беззащитным.'
       : m.includes('no faith of your own') ? 'Сначала своя религия — проповедовать пока нечего.'
       : m.includes('already converted') ? 'Этот мир уже нашёл себе небо.'
       : 'Ошибка: ' + m;

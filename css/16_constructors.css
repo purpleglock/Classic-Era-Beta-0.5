@@ -476,8 +476,6 @@
 .cn-cyb .cn-node { transition: filter var(--transition-fast); }
 .cn-cyb .cn-node:hover { filter: drop-shadow(0 0 4px var(--gd)); }
 .cn-cyb .cn-bay:hover polygon { stroke: var(--gd); }
-.cn-arc { transition: opacity var(--transition-fast); pointer-events: none; }
-.cn-cyb .cn-node:hover .cn-arc { opacity: .35; }
 .cn-cyb .cn-flame { animation: cnFlame 1.15s ease-in-out infinite; }
 @keyframes cnFlame { 0%, 100% { opacity: .95; } 45% { opacity: .58; } 70% { opacity: .82; } }
 .cn-cyb .cn-core { animation: cnCore 2.6s ease-in-out infinite; }

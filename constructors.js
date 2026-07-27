@@ -1036,11 +1036,6 @@ function cnWpnVisual(g, item) {
   const shape = g === 'Ракетное' ? 'missile' : g === 'Зенитное' ? 'aa' : 'gun';
   return { color, wt, shape };
 }
-// Сектор обстрела орудия (клин от узла): dir — азимут в градусах, spread — полураствор
-function cnArcPath(x, y, dir, spread, r) {
-  const a0 = (dir - spread) * Math.PI / 180, a1 = (dir + spread) * Math.PI / 180;
-  return `M${x},${y} L${(x + r * Math.cos(a0)).toFixed(1)},${(y + r * Math.sin(a0)).toFixed(1)} A${r},${r} 0 0 1 ${(x + r * Math.cos(a1)).toFixed(1)},${(y + r * Math.sin(a1)).toFixed(1)} Z`;
-}
 function cnTurretSvg(m, vis, dir) {
   const x = m[0], y = m[1], s = vis.wt, c = vis.color, rot = (dir == null ? -90 : dir);
   if (vis.shape === 'missile') {                       // ПУ / VLS: короб с ячейками
@@ -1479,7 +1474,9 @@ function cnDrawShip() {
     const p = (active && slot && slot.pos) ? [slot.pos.x, slot.pos.y] : m;
     if (w) {
       wpnCount++; const item = db.weapons[w.g][w.idx], vis = cnWpnVisual(w.g, item);
-      const dir = p[0] < 155 ? 180 : p[0] > 165 ? 0 : -90;   // сектор обстрела: от борта наружу, с центра — вперёд
+      // разворот арта турели: от борта наружу, с центра — вперёд. Чистая
+      // косметика — на бой положение узла не влияет (секторов обстрела нет).
+      const dir = p[0] < 155 ? 180 : p[0] > 165 ? 0 : -90;
       // Если для орудия загружена картинка — ставим её в узел (круглый «барбет»),
       // иначе рисуем векторную башню. Полотно повёрнуто на 90° → арт контр-вращаем.
       const wImg = cnImgPath(CN.cat, 'weapon', cnGroupSlug(CN.cat, 'weapon', w.g), w.idx);
@@ -1498,9 +1495,9 @@ function cnDrawShip() {
       } else art = `<g style="filter:drop-shadow(0 0 2.5px rgba(0,0,0,0.75))">${cnTurretSvg(p, vis, dir)}</g>`;
       // Прозрачная зона захвата — ПОВЕРХ арта (последним): арт с drop-shadow хиттестится только
       // по непрозрачным пикселям, из-за чего центр турели «проваливался». Круг сверху ловит клик
-      // по всей области, включая центр (у сектора обстрела .cn-arc pointer-events отключён).
+      // по всей области, включая центр.
       const hitR = (10 + 5 * vis.wt).toFixed(1);
-      nodeMk.push(`<g class="cn-node" style="cursor:grab" onpointerdown="cnMountPointerDown(event,${i})"><title>${esc(item.name)} · тащи, чтобы переместить · клик — настроить</title><path class="cn-arc" d="${cnArcPath(p[0], p[1], dir, 34, 20 + 10 * vis.wt)}" fill="${vis.color}" opacity="0"/>${art}<circle cx="${p[0]}" cy="${p[1]}" r="${hitR}" fill="transparent"/></g>`);
+      nodeMk.push(`<g class="cn-node" style="cursor:grab" onpointerdown="cnMountPointerDown(event,${i})"><title>${esc(item.name)} · тащи, чтобы переместить · клик — настроить</title>${art}<circle cx="${p[0]}" cy="${p[1]}" r="${hitR}" fill="transparent"/></g>`);
     }
     else if (active) {
       nodeMk.push(`<g class="cn-node" style="cursor:grab" onpointerdown="cnMountPointerDown(event,${i})"><title>Пустой узел — тащи, чтобы переместить · клик — поставить орудие или удалить</title><circle cx="${p[0]}" cy="${p[1]}" r="4.5" fill="var(--b2)" stroke="var(--t3)" stroke-width="1.2" stroke-dasharray="2 2" opacity="0.9"/></g>`);
@@ -1663,7 +1660,9 @@ function cnMountPointerDown(evt, i) {
 }
 // Крупная тач-строка слота для мобильного списка (открывает тот же пикер, что и узел на схеме)
 // Для узлов орудий добавляем кнопку «📍 Переместить» — тач-режим постановки касанием вместо тяги мелкого узла.
-// ── Батареи залпа: клиент-зеркало снапшота _bt_stats (тир/канал/сектор/группировка) ──
+// ── Огневые группы: клиент-зеркало снапшота _bt_stats (тир/канал/группировка) ──
+// Секторов обстрела нет: где ствол стоит на схеме, на бой не влияет. Группа
+// определяется дальностью, каналом и тиром залпа — либо буквой ручной батареи.
 const CN_BAT_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 const CN_BAT_KIND = { kinetic: 'кинетик', energy: 'лазер', missile: 'ракеты' };
 // скорострельность → тир дробин 1..6 (зеркало _bt_shots_tier)
@@ -1675,29 +1674,10 @@ function cnWpnChannel(name) {
   if (/лазер|импульс|электромагн|ланцет|плазм|бластер/.test(s)) return 'energy';
   return 'kinetic';
 }
-function cnMountSector(pos) {
-  if (!pos) return 'nose';
-  return pos.x < 155 ? 'left' : pos.x > 165 ? 'right' : 'nose';
-}
-// Фактическая позиция узла: ручная (перетащенная) или АВТО-раскладка схемы. Узлы,
-// которые игрок не таскал, не имеют slot.pos — но на схеме стоят по бортам; сектор
-// надо брать из той же авто-раскладки, иначе всё валится в «Нос».
-function cnMountEffPos(i) {
-  const L = CN.shipLayout; const s = L && L.mounts[i];
-  if (s && s.pos) return s.pos;
-  if (!CN.shipGeo || !L) return null;
-  // n как при отрисовке схемы (cnDrawShip): max(16, число узлов) — иначе раскладка
-  // (rows растут под n) не совпадёт с нарисованной, и сектор «съедет».
-  const auto = cnMountPositions(CN.shipGeo, Math.max(16, L.mounts.length));
-  const p = auto[i];
-  return p ? { x: p[0], y: p[1] } : null;
-}
-const CN_SECT_NAME = { nose: 'Нос', left: 'Левый борт', right: 'Правый борт', any: 'Турели' };
 // Разбор монтировок в дробины (по одной на ствол), затем группировка как на сервере.
 function cnBatteries() {
   const def = CN.def; if (!def || !def.cardUI) return { groups: [], mounts: [] };
   const db = def.db, L = CN.shipLayout || { mounts: [] };
-  const hasLayout = true;                        // cardUI всегда со схемой → секторы из pos
   const mounts = [];
   (L.mounts || []).forEach((mt, i) => {
     if (!mt || !mt.w) return;
@@ -1706,19 +1686,18 @@ function cnBatteries() {
     const dmg = +o.dmg || 0; if (dmg <= 0) return;
     mounts.push({
       i, name: o.name,
-      s: hasLayout ? cnMountSector(cnMountEffPos(i)) : 'any',
       rng: Math.max(1, Math.min(40, Math.round(+cp.dalnost || 1))),
       k: cnWpnChannel(o.name),
       tier: cnShotsTier(cp.skorostrelnost),
       dmg, battery: mt.battery || null,
     });
   });
-  // авто: (s,rng,k,tier) раздельно; ручная: (s,k,battery) слитно, тир=взвеш.средний
+  // авто: (rng,k,tier) раздельно; ручная: (k,battery) слитно, тир=взвеш.средний
   const gm = new Map();
   mounts.forEach(m => {
-    const key = m.battery ? `M|${m.s}|${m.k}|${m.battery}` : `A|${m.s}|${m.rng}|${m.k}|${m.tier}`;
+    const key = m.battery ? `M|${m.k}|${m.battery}` : `A|${m.rng}|${m.k}|${m.tier}`;
     let g = gm.get(key);
-    if (!g) { g = { s: m.s, k: m.k, bat: m.battery, rng: m.rng, dmg: 0, wsum: 0, members: [] }; gm.set(key, g); }
+    if (!g) { g = { k: m.k, bat: m.battery, rng: m.rng, dmg: 0, wsum: 0, members: [] }; gm.set(key, g); }
     g.dmg += m.dmg; g.wsum += m.dmg * m.tier; g.members.push(m.i);
     if (m.battery) g.rng = Math.min(g.rng, m.rng); else g.rng = m.rng;
     g.shots = m.battery ? Math.max(1, Math.min(6, Math.round(g.wsum / (g.dmg || 1)))) : m.tier;
@@ -1742,7 +1721,7 @@ function cnRenderBatteries() {
     const heavy = g.shots <= 2;
     return `<div class="cn-bat-row">
       <span class="cn-bat-dot" style="background:var(--${kindCls[g.k] || 't2'})"></span>
-      <span class="cn-bat-main">${CN_SECT_NAME[g.s] || g.s} · ${CN_BAT_KIND[g.k] || g.k}${g.bat ? ` · батарея ${g.bat}` : ''}</span>
+      <span class="cn-bat-main">${g.bat ? `Группа ${esc(g.bat)} · ` : ''}${CN_BAT_KIND[g.k] || g.k}</span>
       <span class="cn-bat-shots" title="${heavy ? 'тяжёлый залп — пробивает щит' : 'скорострельный — щит держит, косит лёгких'}">залп ×${g.shots}</span>
       <span class="cn-bat-dmg">${Math.round(g.dmg)} · до ${g.rng} гекс.</span>
     </div>`;
@@ -1754,7 +1733,7 @@ function cnRenderBatteries() {
       <b>${tag}</b> <span>${esc(m.name)}</span> <i>×${m.tier}</i></button>`;
   }).join('');
   host.innerHTML = `<div class="cn-bat-list">${grows}</div>
-    <div class="cn-bat-hint">Тяжёлые дробины (залп ×1–2) пробивают щит; рой (×5–6) щит держит, но косит лёгкие цели и насыщает ПРО. «Авто» дробит стволы по скорострельности. Ручная батарея (буква) сливает стволы <b>одного типа урона и сектора</b> в общий залп — так разменивают пробитие на объём (влить тяж в рой) или наоборот.</div>
+    <div class="cn-bat-hint">Тяжёлые дробины (залп ×1–2) пробивают щит; рой (×5–6) щит держит, но косит лёгкие цели и насыщает ПРО. «Авто» дробит стволы по скорострельности. Ручная батарея (буква) сливает стволы <b>одного типа урона</b> в общий залп (дальность группы — по слабейшему стволу) — так разменивают пробитие на объём (влить тяж в рой) или наоборот.</div>
     <div class="cn-bat-mounts">${mrows}</div>`;
 }
 function cnSlotRow(kind, i, ico, lbl, val, filled) {
