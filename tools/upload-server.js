@@ -40,11 +40,21 @@ const ALLOWED_DIRS = {
   precursor: 'assets/precursor',    // иконки вкладки «Дозвёздные миры» (<ключ>.webp: решения и статусы)
 };
 // Возвращает {rel, abs} для папки назначения по query ?dir= (или дефолт-портреты).
+// Незнакомый ключ раньше молча падал в портреты: старый (не перезапущенный)
+// сервер складывал туда иконки примитивов, и это выглядело как «арт не грузится».
+// Теперь такой запрос — ошибка: destDir возвращает null, вызывающий отвечает 400.
 function destDir(dirKey) {
+  if (dirKey && !ALLOWED_DIRS[dirKey]) {
+    console.error(`[upload] неизвестная папка ?dir=${dirKey} — сервер знает: ${Object.keys(ALLOWED_DIRS).join(', ')}`);
+    return null;
+  }
   const rel = ALLOWED_DIRS[dirKey] || REL_DIR;
   const abs = path.join(ROOT, ...rel.split('/'));
   fs.mkdirSync(abs, { recursive: true });
   return { rel, abs };
+}
+function badDir(res, dirKey) {
+  return json(res, 400, { ok: false, error: `сервер не знает папку «${dirKey}» — перезапусти «Загрузка артов.bat» (запущена старая версия)` });
 }
 
 const EXT_BY_MIME = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' };
@@ -75,7 +85,8 @@ const server = http.createServer((req, res) => {
 
   // Пинг — админка проверяет, поднят ли сервер.
   if (req.method === 'GET' && url.pathname === '/ping') {
-    return json(res, 200, { ok: true, dir: REL_DIR });
+    // dirs — чтобы сразу было видно, свежая ли версия сервера крутится в окне.
+    return json(res, 200, { ok: true, dir: REL_DIR, dirs: Object.keys(ALLOWED_DIRS) });
   }
 
   // Загрузка: тело = сырые байты картинки, метаданные в query (?ext=webp).
@@ -91,7 +102,10 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       if (aborted) return;
       if (!size) return json(res, 400, { ok: false, error: 'пустое тело' });
-      const { rel: relDir, abs: absDir } = destDir(url.searchParams.get('dir'));
+      const dirKey = url.searchParams.get('dir');
+      const d = destDir(dirKey);
+      if (!d) return badDir(res, dirKey);
+      const { rel: relDir, abs: absDir } = d;
       // ?name= — фиксированное имя (для заливки классов планет, перезаписью);
       //          иначе случайное (портреты — пул, имена не должны конфликтовать).
       const fixed = safeName(url.searchParams.get('name'));
@@ -113,7 +127,10 @@ const server = http.createServer((req, res) => {
   if (req.method === 'DELETE' && url.pathname === '/file') {
     const name = safeName(url.searchParams.get('name'));
     if (!name) return json(res, 400, { ok: false, error: 'плохое имя' });
-    const { rel: relDir, abs: absDir } = destDir(url.searchParams.get('dir'));
+    const dirKey = url.searchParams.get('dir');
+    const d = destDir(dirKey);
+    if (!d) return badDir(res, dirKey);
+    const { rel: relDir, abs: absDir } = d;
     fs.unlink(path.join(absDir, name), (err) => {
       if (err && err.code !== 'ENOENT') { console.error('[delete]', err); return json(res, 500, { ok: false, error: String(err.message || err) }); }
       console.log(`[delete] ${relDir}/${name}`);

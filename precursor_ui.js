@@ -65,9 +65,23 @@ const PC_ICO = {
   st_wild: 'ДИК', st_uplifted: 'ВОЗ', st_protectorate: 'ПРТ', st_drained: 'ВЫП',
   st_dead: 'МРТ', st_spacefaring: 'ЗВД', world: 'МИР', star: 'ЗВД',
 };
+// Тон иконки = цена решения, а не просто «фирменный цвет вкладки». Дар и
+// геноцид одним цветом — враньё интерфейсу: по строке должно быть видно, что
+// именно ты собираешься сделать, ещё до того как прочитана подпись.
+//   ok   — сталь: наблюдение и нейтральные статусы, Фонд не возражает;
+//   good — зелёный: помощь, дары, возвышение;
+//   take — янтарь: они живы, но вы их доите (протекторат, выкачка, вера);
+//   evil — кровь: рабство, карательный урок, истребление, мёртвый мир.
+const PC_TONE = {
+  study: 'ok', world: 'ok', star: 'ok', st_wild: 'ok', st_spacefaring: 'ok',
+  gift: 'good', envoy: 'good', miracle: 'good', uplift: 'good', st_uplifted: 'good',
+  protect: 'take', harvest: 'take', convert: 'take', st_protectorate: 'take', st_drained: 'take',
+  enslave: 'evil', purge: 'evil', lesson: 'evil', st_dead: 'evil',
+};
 function pcIco(key, cls) {
   const code = PC_ICO[key] || '·';
-  return `<span class="pc-ico${cls ? ' ' + cls : ''}" data-code="${esc(code)}">`
+  const tone = PC_TONE[key] || 'ok';
+  return `<span class="pc-ico pc-t-${tone}${cls ? ' ' + cls : ''}" data-code="${esc(code)}">`
        + `<img src="${PC_ART_DIR}/${esc(key)}.webp" alt="" loading="lazy" onerror="this.remove()"></span>`;
 }
 // Даты — ровно те же, что в новостях: звёздная дата (fnStardate, faction_news.js).
@@ -155,7 +169,8 @@ function _pcHead(en) {
   const rep = _pcState ? (+_pcState.rep || 0) : 0;
   const repTxt = rep >= 0 ? 'Фонд: претензий нет' : `Фонд: досье ${rep}`;
   return `<div class="hp-vn-col-head">
-    <span class="hp-vn-col-title">${en ? 'Pre-stellar worlds' : 'Дозвёздные миры'}</span>
+    <span class="hp-vn-col-title">${en ? 'FPNI · Foundation for Protection from Non-Interference'
+                                       : 'FPNI · Фонд по защите от невмешательства'}</span>
     <span class="hp-vnr-clr">${esc(repTxt)}</span>
     <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNTamaReturn()">↩ ${en ? 'back' : 'назад'}</button>
   </div>`;

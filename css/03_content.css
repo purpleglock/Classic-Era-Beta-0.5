@@ -5138,13 +5138,30 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
    Акцент один — «живой» зелёный; красным только шрамы и запреты. */
 /* иконки-арты (assets/precursor/<ключ>.webp); пока файла нет — буквенный код,
    он же подпись под артом в админке. Никаких эмодзи. */
-.pc-ico{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:26px;height:26px;background:rgba(255,255,255,.05);overflow:hidden}
+/* Арт остаётся артом: никакого дуотона и развёрток поверх картинки. Цвет
+   решения живёт СНАРУЖИ — рамка-волосок и мягкое свечение под иконкой. Так дар
+   и геноцид видно по строке ещё до подписи, но нарисованное не перекрашено. */
+.pc-ico{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:26px;height:26px;
+  border-radius:7px;background:#0b1016;overflow:hidden;transition:box-shadow .18s ease}
 .pc-ico::after{content:attr(data-code);font-family:var(--font-mono);font-size:8.5px;letter-spacing:.06em;color:var(--t3,#8296a8)}
-.pc-ico img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.pc-ico-sm{width:18px;height:18px}
+.pc-ico img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  filter:saturate(.85) brightness(.9) contrast(1.05);transition:filter .18s ease}
+/* Залитый арт вытесняет буквенный код: две подписи в одном квадрате не нужны. */
+.pc-ico:has(img)::after{content:none}
+.pc-ico:has(img){box-shadow:0 0 0 1px rgb(var(--pc-t,127 209 138)/.45),
+                            0 4px 14px -4px rgb(var(--pc-t,127 209 138)/.55)}
+.pc-ico:has(img):hover{box-shadow:0 0 0 1px rgb(var(--pc-t,127 209 138)/.75),
+                                  0 5px 18px -4px rgb(var(--pc-t,127 209 138)/.8)}
+.pc-ico:has(img):hover img{filter:none}
+/* тона: сталь / жизнь / нажива / кровь */
+.pc-t-ok  {--pc-t:130 150 168}
+.pc-t-good{--pc-t:127 209 138}
+.pc-t-take{--pc-t:224 168  74}
+.pc-t-evil{--pc-t:255  60 130}
+.pc-ico-sm{width:18px;height:18px;border-radius:5px}
 .pc-ico-sm::after{font-size:7px}
 .pc-ico-md{width:34px;height:34px}
-.pc-ico-lg{width:40px;height:40px}
+.pc-ico-lg{width:40px;height:40px;border-radius:9px}
 .pc-sub{margin:12px 0 4px;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3,#8296a8);opacity:.8}
 .pc-hero{position:relative;margin:0 0 2px;padding:14px 16px 12px;background:linear-gradient(180deg,rgba(127,209,138,.10),rgba(127,209,138,0) 70%),rgba(255,255,255,.03);clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,0 100%)}
 .pc-hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--gd,#7fd18a)}
