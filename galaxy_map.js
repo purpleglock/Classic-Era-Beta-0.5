@@ -1035,12 +1035,24 @@ function gmSysWeight(s) {
   const multiW = cs.length
     ? Math.min(280, 150 + 26 * cs.length + 34 * Math.max(...gmCompLayout(s).map(c => c.u)))
     : 0;
-  return Math.max(s.is_giant ? 165 : 0, multiW);
+  // ПОТОЛОК ПО БЛИЖАЙШЕМУ СОСЕДУ. Мульти-seed — лишь ПРИБЛИЖЕНИЕ взвешенного Вороного,
+  // и оно верно, только пока кольцо целиком лежит по свою сторону от серединного
+  // перпендикуляра к соседу. Кратность давала 176..280 юнитов независимо ни от чего,
+  // а звёзды на карте стоят и в 200-300 друг от друга — seed кольца перелетал соседа
+  // и заводил СВОЮ ячейку уже на чужой стороне: у кратной системы появлялись оторванные
+  // куски территории (и границы) за полкарты от неё, а соседей резало в лапшу.
+  // 0.42·NN гарантирует seed строго ближе середины пролёта → ячейка остаётся ОДНИМ
+  // связным пятном вокруг звезды. Тесно стоящая кратная просто не получает бонуса.
+  const cap = Math.max(0, gmmNN(s) * 0.42);
+  return Math.min(cap, Math.max(s.is_giant ? 165 : 0, multiW));
 }
 
 function gmVoronoiCells() {
   if (!window.d3 || !d3.Delaunay || GM.systems.length < 1) return [];
   try {
+    // пролёт до соседа кэшировался навсегда (sys._nn), а от него теперь зависит потолок
+    // веса; звезду могли подвинуть в редакторе — сбрасываем ПЕРЕД раскладкой seed'ов
+    GM.systems.forEach(s => { s._nn = null; s._nnSys = undefined; });
     const LANE_BIAS = 0.07;
     const sysById = Object.fromEntries(GM.systems.map(s => [s.id, s]));
     const phantoms = gmPhantomSeeds();
