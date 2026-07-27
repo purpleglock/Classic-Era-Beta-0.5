@@ -307,8 +307,10 @@ function _pcCard(c) {
       : noFleet ? 'в системе нет вашего флота — подведите корабли к их звезде'
       : cd > 0 ? `${good ? 'корабль с дарами вернётся' : id === 'study' ? 'пост занят наблюдением' : 'руки заняты'} — ещё ${pcCdTxt(cd)}`
       : poor ? `не хватает ${pcNum(cost - gc)} ГС из ${pcNum(cost)}` : '';
-    return `<div class="pc-act${off ? ' pc-act-off' : ''}${good ? ' pc-act-good' : ''}">
-      ${pcIco(id, 'pc-ico-md')}
+    // Тон и арт живут на всей строке: подложка справа и цвет полосы слева —
+    // это то же решение, что и в иконке, только читается периферийным зрением.
+    return `<div class="pc-act pc-t-${PC_TONE[id] || 'ok'}${off ? ' pc-act-off' : ''}${good ? ' pc-act-good' : ''}">
+      <img class="pc-act-bg" src="${PC_ART_DIR}/${esc(id)}.webp" alt="" loading="lazy" onerror="this.remove()">
       <span class="pc-act-nm">${esc(label)}
         <i>${esc(hint)}</i>
         ${why ? `<u>${esc(why)}</u>` : ''}</span>
@@ -321,7 +323,7 @@ function _pcCard(c) {
     </div>`;
   };
   const parts = ['<div class="sn-col">'];
-  parts.push(`<button class="hp-vn-btn hp-vn-back" type="button" style="align-self:flex-start"
+  parts.push(`<button class="hp-vn-btn hp-vn-back" type="button" style="align-self:flex-start;margin-bottom:10px"
     onclick="event.stopPropagation();heroVNTamaBack()">← к списку</button>`);
   const statusTxt = dead ? 'мертвы' : risen ? 'держава'
     : c.status === 'protectorate' ? 'протекторат' : c.status === 'uplifted' ? 'возвышены'
@@ -394,7 +396,9 @@ function _pcCard(c) {
     if (c.status !== 'protectorate') parts.push(act('protect', 'Протекторат', 'может не выйти — у них бывает мнение; −35'));
     if (c.status !== 'drained') parts.push(act('harvest', 'Выкачивать', 'деньги в обмен на их благополучие; −20'));
     parts.push(c.faith_fid
-      ? `<div class="pc-act pc-act-off">${pcIco('convert', 'pc-ico-md')}<span class="pc-act-nm">Обратить в веру
+      ? `<div class="pc-act pc-t-take pc-act-off">
+          <img class="pc-act-bg" src="${PC_ART_DIR}/convert.webp" alt="" loading="lazy" onerror="this.remove()">
+          <span class="pc-act-nm">Обратить в веру
           <i>${c.faith_fid === (_pcState && _pcState.fid) ? 'этот мир уже поёт ваше имя' : 'мир уже принял чужую веру'}</i></span></div>`
       : act('convert', 'Обратить в веру', (_pcState && _pcState.faith
           ? 'целая планета адептов «' + _pcState.faith + '»: +25% к ставке ваших храмов (потолок ×2); может не выйти; −25'

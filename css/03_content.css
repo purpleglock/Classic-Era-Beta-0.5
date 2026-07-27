@@ -5148,10 +5148,10 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   filter:saturate(.85) brightness(.9) contrast(1.05);transition:filter .18s ease}
 /* Залитый арт вытесняет буквенный код: две подписи в одном квадрате не нужны. */
 .pc-ico:has(img)::after{content:none}
-.pc-ico:has(img){box-shadow:0 0 0 1px rgb(var(--pc-t,127 209 138)/.45),
-                            0 4px 14px -4px rgb(var(--pc-t,127 209 138)/.55)}
-.pc-ico:has(img):hover{box-shadow:0 0 0 1px rgb(var(--pc-t,127 209 138)/.75),
-                                  0 5px 18px -4px rgb(var(--pc-t,127 209 138)/.8)}
+.pc-ico:has(img){box-shadow:inset 0 0 0 1px rgb(var(--pc-t,127 209 138)/.35),
+                            0 3px 10px -5px rgb(var(--pc-t,127 209 138)/.5)}
+.pc-ico:has(img):hover{box-shadow:inset 0 0 0 1px rgb(var(--pc-t,127 209 138)/.7),
+                                  0 4px 14px -5px rgb(var(--pc-t,127 209 138)/.75)}
 .pc-ico:has(img):hover img{filter:none}
 /* тона: сталь / жизнь / нажива / кровь */
 .pc-t-ok  {--pc-t:130 150 168}
@@ -5196,12 +5196,27 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .pc-era-txt b{color:var(--t1,#dfe8f0)}
 .pc-era-txt i{font-style:normal;opacity:.7}
 
-/* решения */
-.pc-act{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:1px 0;background:rgba(255,255,255,.035);border-left:2px solid rgba(127,209,138,.45)}
-.pc-act:hover{background:rgba(255,255,255,.06)}
+/* решения.
+   Арт решения работает дважды: маленькой иконкой слева (что нажимаешь) и
+   растворённой подложкой справа (чем это пахнет). Подложка уходит в ничто по
+   маске — рамки у неё нет, чтобы строка не превращалась в «карточку». */
+.pc-act{position:relative;overflow:hidden;display:flex;align-items:center;gap:12px;padding:11px 12px 11px 76px;margin:1px 0;
+  background:linear-gradient(90deg,rgb(var(--pc-t,127 209 138)/.07),rgba(255,255,255,.02) 46%);
+  border-left:2px solid rgb(var(--pc-t,127 209 138)/.5);transition:background .18s ease}
+/* Арт — крупный водяной знак справа. cover его резал (квадрат в широкой
+   строке => виден только кусок фона), поэтому contain и якорь по правому краю.
+   Подложка арта тёмная и непрозрачная — её съедает mix-blend-mode:screen:
+   чёрное становится невидимым, светится только сам рисунок. */
+.pc-act-bg{position:absolute;left:-4px;top:50%;transform:translateY(-50%);height:210%;width:auto;pointer-events:none;
+  opacity:.22;mix-blend-mode:screen;filter:saturate(.6) brightness(.75);transition:opacity .18s ease;
+  -webkit-mask-image:radial-gradient(circle at 34% 50%,#000 26%,transparent 60%);
+          mask-image:radial-gradient(circle at 34% 50%,#000 26%,transparent 60%)}
+.pc-act:hover{background:linear-gradient(90deg,rgb(var(--pc-t,127 209 138)/.12),rgba(255,255,255,.05) 46%)}
+.pc-act:hover .pc-act-bg{opacity:.36}
 .pc-act-off{border-left-color:rgba(255,255,255,.12);opacity:.55}
-.pc-act-good{border-left-color:rgba(159,199,255,.5)}
-.pc-act-off:hover{background:rgba(255,255,255,.035)}
+.pc-act-off .pc-act-bg,.pc-act-off:hover .pc-act-bg{opacity:.14;filter:saturate(0) brightness(.7)}
+.pc-act-off,.pc-act-off:hover{background:rgba(255,255,255,.025)}
+.pc-act-nm,.pc-act-r,.pc-act>.pc-ico{position:relative;z-index:1}
 .pc-act-nm{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 auto;font-size:13px;font-weight:600;color:var(--t1,#dfe8f0)}
 .pc-act-nm i{font-style:normal;font-weight:400;font-size:11px;line-height:1.5;color:var(--t3,#8296a8)}
 .pc-act-nm u{text-decoration:none;font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;color:#d8c07a}
