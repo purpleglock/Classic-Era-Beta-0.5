@@ -87,7 +87,7 @@ end$$;
 create or replace function public._doom_const(p_key text)
 returns numeric language sql immutable as $$
   select case p_key
-    when 'build_gc'      then 500000   -- ГС за постройку орудия
+    when 'build_gc'      then 700000   -- ГС за постройку орудия
     when 'build_matter'  then 40       -- Программируемой материи за постройку
     when 'shot_grav'     then 20       -- Гравиядра за один залп
     when 'shot_wear'     then 20       -- износ integrity за выстрел

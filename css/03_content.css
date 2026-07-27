@@ -4787,17 +4787,6 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hp-vnd-live{color:#8f7d78}
 .hp-vnd-live.hot{color:#ffd9cf;animation:hpvndPulse 1.3s ease-in-out infinite}
 @keyframes hpvndPulse{50%{opacity:.35}}
-/* Сводка-чипы: моно-телеметрия */
-.hp-vnd-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.hp-vnd-chip{
-  display:inline-flex;align-items:baseline;gap:7px;padding:5px 10px;
-  font-family:var(--font-mono);font-size:11px;color:#d8b3ab;
-  background:hsl(0 30% 7% / .8);border:1px solid rgba(255,74,60,.18);
-}
-.hp-vnd-chip i{font-style:normal;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8f6f68}
-.hp-vnd-chip b{color:#ffe9e4}
-.hp-vnd-chip.warn{border-color:rgba(255,74,60,.55)}
-.hp-vnd-chip.warn b{color:#ff6a5a;animation:hpvndPulse 1.3s ease-in-out infinite}
 /* Срезы-вкладки: гранёные (клип + слой-подложка, НЕ border) */
 .hp-vnd-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 .hp-vnd-tab{
@@ -4856,6 +4845,18 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hp-vnd-warnline{margin-top:10px;font-family:var(--font-mono);font-size:11px;color:#ff6a5a}
 .hp-vnd-hint{font-size:12px;color:#a08880;margin-bottom:10px}
 .hp-vnd-sep{height:1px;background:linear-gradient(90deg,rgba(255,74,60,.35),transparent 70%);margin:18px 0 4px}
+/* Секция Гиперпейсеров внутри VN: текст не тянем на всю ширину, карточки уже */
+.hp-vn-doom .ec-bld-howto,.hp-vn-doom .ec-empty{max-width:760px;line-height:1.6}
+.hp-vn-doom .ec-mza-grid{grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.hp-vn-doom .ec-mza-card{background:hsl(0 28% 6% / .85);border:1px solid rgba(255,74,60,.22);border-left:2px solid #ff4a3c;border-radius:0}
+.hp-vn-doom .ec-mza-foot{color:#8f7d78}
+/* Верфь на VN-экране Длани: та же красная палитра, что у карточек носителей */
+.hp-vn-doom .ec-mza-yard{background:hsl(0 28% 6% / .85);border:1px solid rgba(255,74,60,.22);border-left:2px solid #ff4a3c;border-radius:0}
+.hp-vn-doom .ec-mza-in{background:hsl(0 42% 5% / .92);border-color:rgba(255,74,60,.3);color:#ffe9e4}
+.hp-vn-doom .ec-mza-in:focus{border-color:#ff6a5a}
+.hp-vn-doom .ec-mza-price{background:hsl(0 30% 8% / .8);border-color:rgba(255,74,60,.18);border-radius:0}
+.hp-vn-doom .ec-mza-price b{color:#e8cfc8}
+.hp-vn-doom .ec-mza-yard-hd,.hp-vn-doom .ec-mza-fld>span,.hp-vn-doom .ec-mza-price i{color:#8f7d78}
 /* ── Пульт запуска (вкладка НАВЕДЕНИЕ): три ступени атомпанк-протокола ── */
 .hp-vnd-con-sec{
   margin-bottom:14px;padding:12px 14px 14px;
@@ -4891,25 +4892,34 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .ec-shell-ico img{width:16px;height:16px;object-fit:contain;display:block}
 .ec-shell-ico i{font-style:normal;font-size:9px;letter-spacing:.06em;font-family:var(--font-mono);opacity:.8}
 /* I-бис · паспорта снарядов (склад, фабрики, выбор на пульте) */
-.hp-vnd-shelfrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(222px,1fr));gap:8px}
+.hp-vnd-shelfrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
 .hp-vnd-shell{
-  display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;text-align:left;
+  display:flex;flex-direction:column;align-items:stretch;gap:0;width:100%;padding:0;text-align:left;
   background:hsl(0 40% 7% / .9);border:1px solid rgba(255,74,60,.25);color:#c9a49b;
-  font-family:var(--font-mono);cursor:pointer;
+  font-family:var(--font-mono);cursor:pointer;overflow:hidden;
 }
 .hp-vnd-shell:hover{border-color:rgba(255,74,60,.6)}
 .hp-vnd-shell.on{border-color:#ff4a3c;box-shadow:inset 0 0 0 1px #ff4a3c,0 0 14px rgba(255,74,60,.25)}
 .hp-vnd-shell.off{opacity:.45;cursor:not-allowed}
 .hp-vnd-shell-art{
-  position:relative;flex:0 0 52px;width:52px;height:52px;overflow:hidden;
-  background:hsl(0 30% 10% / .9);border:1px solid rgba(255,74,60,.2);
+  /* Пропорция ленты = пропорция самих артов (≈900×200), чтобы снаряд
+     ложился во всю ширину целиком, без обрезки и без пустых полей. */
+  position:relative;flex:none;width:100%;aspect-ratio:9/2;overflow:hidden;padding:6px 8px;
+  background:radial-gradient(120% 160% at 50% 40%,hsl(0 35% 13% / .95),hsl(0 40% 7% / .95));
+  border-bottom:1px solid rgba(255,74,60,.2);
   display:flex;align-items:center;justify-content:center;
 }
-.hp-vnd-shell-art img{width:100%;height:100%;object-fit:cover;display:block}
+/* Арта ещё нет — не держим пустую простыню, схлопываемся в полоску с индексом */
+.hp-vnd-shell-art.noart{aspect-ratio:auto;height:28px;padding:0}
+/* contain, не cover: снаряд длинный, обрезка съедала половину корпуса */
+.hp-vnd-shell-art img{width:100%;height:100%;object-fit:contain;display:block}
 .hp-vnd-shell-art i{font-style:normal;font-size:13px;line-height:1;letter-spacing:.08em;color:#8f7d78;font-family:var(--font-mono)}
-.hp-vnd-shell-b{display:flex;flex-direction:column;gap:2px;min-width:0}
-.hp-vnd-shell-code{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8f7d78}
-.hp-vnd-shell-nm{font-size:14px;font-weight:700;color:#e8cfc8;letter-spacing:.02em}
+.hp-vnd-shell-b{display:flex;flex-direction:column;gap:3px;min-width:0;padding:7px 10px 8px}
+.hp-vnd-shell-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0}
+.hp-vnd-shell-code{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8f7d78;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hp-vnd-shell-nm{font-size:14px;font-weight:700;color:#e8cfc8;letter-spacing:.02em;white-space:nowrap}
+.hp-vnd-shell-st{flex:0 1 auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hp-vnd-shell.on .hp-vnd-shell-nm{color:#ffe9e4}
 .hp-vnd-shell-st{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8f7d78}
 .hp-vnd-shell.on .hp-vnd-shell-st{color:#ff8d7c}

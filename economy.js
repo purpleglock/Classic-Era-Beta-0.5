@@ -369,7 +369,7 @@ const EC_BUILD = {
   abm:              { name: 'Комплекс ПРО',          cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: 'Прикрывает ВСЮ свою систему. Боезапаса нет: когда по вашей планете идёт залп, открывается «Окно перехвата» — вы сами угадываете профиль подхода снаряда. Слоты дают разведку и авто-отработку' },
   // ОРУДИЕ СУДНОГО ДНЯ — строится отдельным путём (doom_build): ГС + Программируемая
   // материя, требует исследование «Сама неотвратимость». Слоты не открываются.
-  doomgun:          { name: 'Длань Неотвратимости', cost: 500000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Межзвёздная артиллерия: залп из системы в систему превращает планету-цель в мёртвый камень. Стреляет ПОСТРОЕННЫМИ снарядами Длани (Арсенал Судного Дня); Программируемая материя нужна на содержание — без неё деградирует и распадается.' },
+  doomgun:          { name: 'Длань Неотвратимости', cost: 700000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Межзвёздная артиллерия: залп из системы в систему превращает планету-цель в мёртвый камень. Стреляет ПОСТРОЕННЫМИ снарядами Длани (Арсенал Судного Дня); Программируемая материя нужна на содержание — без неё деградирует и распадается.' },
   // АРСЕНАЛ СУДНОГО ДНЯ — строится отдельным RPC shellforge_build (без слотов).
   shellforge:       { name: 'Арсенал Судного Дня', cost: 300000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Собирает снаряды Длани: 1 снаряд за 1 день. Без снарядов орудия судного дня молчат. Слотов нет.' },
   // БАЛЛИСТИЧЕСКИЙ ВОЕНПРОМЗАВОД — RPC ballfab_build, техно pol.ballistics (без слотов).
@@ -438,12 +438,18 @@ function ecShellCard(k, o) {
   o = o || {};
   const m = ecShellMeta(k);
   const cls = `hp-vnd-shell${o.on ? ' on' : ''}${o.off ? ' off' : ''}`;
+  // Арт — во всю ширину карточки (снаряды рисованные, квадратик их резал).
+  // Файла нет — полоска схлопывается в тонкую строку с индексом (класс noart).
   const art = `<span class="hp-vnd-shell-art"><img src="${ecShellArt(k)}" alt="" loading="lazy"
-      onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><i style="display:none">${esc(m.code || '◈')}</i></span>`;
+      onerror="this.style.display='none';this.parentElement.classList.add('noart');this.nextElementSibling.style.display='block'"><i style="display:none">${esc(m.code || '◈')}</i></span>`;
+  // Арты снарядов — вытянутые (≈900×200), поэтому подпись идёт ПОД лентой арта,
+  // а имя и статус стоят в одну строку по краям: карточка остаётся низкой.
   const body = `${art}<span class="hp-vnd-shell-b">
       <span class="hp-vnd-shell-code">${esc(m.code)} · ${esc(m.cls)}</span>
-      <span class="hp-vnd-shell-nm">${esc(m.nm)}</span>
-      <span class="hp-vnd-shell-st">${o.sub || ''}</span>
+      <span class="hp-vnd-shell-row">
+        <span class="hp-vnd-shell-nm">${esc(m.nm)}</span>
+        <span class="hp-vnd-shell-st">${o.sub || ''}</span>
+      </span>
     </span>`;
   const title = esc(o.title != null ? o.title : ecShellInfo(k));
   return o.onclick
@@ -7215,7 +7221,7 @@ function ecMarketBlock(stock) {
       ${ecMkLimitBar(n, m)}
       <div class="ec-mk-tools">
         <span class="ec-mk-npc">${netTxt}
-          <i class="ec-mk-fc" title="прогноз цены к началу следующего цикла — ориентир, сместят сделки игроков и шоки">🔮 след. цикл: <b style="color:${fcl}">${fdir} ~${ecNum(Math.round(fc.price))}</b> ${fpct >= 0 ? '+' : ''}${fpct}%</i></span>
+          <i class="ec-mk-fc" title="прогноз цены к началу следующего цикла — ориентир, сместят сделки игроков и шоки">след. цикл: <b style="color:${fcl}">${fdir} ~${ecNum(Math.round(fc.price))}</b> ${fpct >= 0 ? '+' : ''}${fpct}%</i></span>
         <span class="ec-mk-act">
           <span class="ec-mk-quick">
             <button class="btn btn-gh btn-xs ec-mk-qbtn" onclick="ecRowQAdd('${jsq(n)}','sel',100)" title="+100 к количеству">+100</button>
@@ -7259,7 +7265,7 @@ function ecMarketBlock(stock) {
       <span class="ec-mk-auto-sum-lbl">🔁 <b>Автопродажи</b> (${items.length}):</span>
       <span class="ec-mk-auto-sum-chips">${chips}</span></div>`;
   })();
-  const form = `<div class="cn-fac-hint" style="margin-top:8px">Цена живая: продажа сбивает её, покупка — поднимает; крупная сделка двигает цену прямо по ходу исполнения (площадь под кривой — дробить бесполезно). Запас рынка конечен. Спред 20% (продажа — 80% цены), доктрина на спот не действует. <b>⏱ Лимит на шаг</b> — сколько единиц ресурса можно сбыть/скупить до сброса; он обновляется каждый шаг курса (~3 ч), а не «за сутки». <b>🤖 НПС/цикл</b> — куда боты-арбитражёры толкают запас; <b>🔮 след. цикл</b> — прогноз цены (ориентир). Караваны выгоднее.</div>`;
+  const form = `<div class="cn-fac-hint" style="margin-top:8px">Цена живая: продажа сбивает её, покупка — поднимает; крупная сделка двигает цену прямо по ходу исполнения (площадь под кривой — дробить бесполезно). Запас рынка конечен. Спред 20% (продажа — 80% цены), доктрина на спот не действует. <b>⏱ Лимит на шаг</b> — сколько единиц ресурса можно сбыть/скупить до сброса; он обновляется каждый шаг курса (~3 ч), а не «за сутки». <b>🤖 НПС/цикл</b> — куда боты-арбитражёры толкают запас; <b>след. цикл</b> — прогноз цены (ориентир). Караваны выгоднее.</div>`;
   const filters = `<div class="ec-mk-filters" role="tablist">
       <button class="ec-flt is-on" onclick="ecMkFilter(this,'all')">Все</button>
       <button class="ec-flt" onclick="ecMkFilter(this,'mine')">📦 Только моё</button>
@@ -13120,7 +13126,7 @@ function ecDoomBuildCard(colonyId, gc) {
   const d = EC_BUILD.doomgun; const cost = ecBuildCost(d.cost);
   const matter = ecStockOf('Программируемая материя');
   const afford = gc >= cost && matter >= EC_DOOM_BUILD_MATTER;
-  const why = gc < cost ? 'Не хватает ГС' : matter < EC_DOOM_BUILD_MATTER ? `Нужно ${EC_DOOM_BUILD_MATTER} 🟢 Программируемой материи (есть ${ecNum(matter)})` : '';
+  const why = gc < cost ? 'Не хватает ГС' : matter < EC_DOOM_BUILD_MATTER ? `Нужно ${EC_DOOM_BUILD_MATTER} ед. Программируемой материи (есть ${ecNum(matter)})` : '';
   return `<button class="ec-bp-card ec-bp-mil ec-bp-doom${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecDoomBuildConfirm('${colonyId}')" title="${esc(why)}" style="border-color:rgba(220,40,40,.5)">
       <span class="ec-bp-ic">🜨</span>
       <span class="ec-bp-info">
@@ -13128,7 +13134,7 @@ function ecDoomBuildCard(colonyId, gc) {
         <span class="ec-bp-desc">${esc(d.desc)}</span>
         <span class="ec-bp-howto">${esc(EC_BLD_HOWTO.doomgun)}</span>
       </span>
-      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small><br><small>+${EC_DOOM_BUILD_MATTER} 🟢</small></span>
+      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small><br><small>+${EC_DOOM_BUILD_MATTER} материи</small></span>
     </button>`;
 }
 
@@ -13138,7 +13144,7 @@ function ecShellForgeBuildCard(colonyId, gc) {
   const d = EC_BUILD.shellforge;
   const matter = ecStockOf('Программируемая материя');
   const afford = gc >= EC_SHELL.forgeGc && matter >= EC_SHELL.forgeMatter;
-  const why = gc < EC_SHELL.forgeGc ? 'Не хватает ГС' : matter < EC_SHELL.forgeMatter ? `Нужно ${EC_SHELL.forgeMatter} 🟢 Программируемой материи (есть ${ecNum(matter)})` : '';
+  const why = gc < EC_SHELL.forgeGc ? 'Не хватает ГС' : matter < EC_SHELL.forgeMatter ? `Нужно ${EC_SHELL.forgeMatter} ед. Программируемой материи (есть ${ecNum(matter)})` : '';
   return `<button class="ec-bp-card ec-bp-mil ec-bp-doom${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecShellForgeBuildDo('${colonyId}')" title="${esc(why)}" style="border-color:rgba(220,40,40,.5)">
       <span class="ec-bp-ic">☢</span>
       <span class="ec-bp-info">
@@ -13146,7 +13152,7 @@ function ecShellForgeBuildCard(colonyId, gc) {
         <span class="ec-bp-desc">${esc(d.desc)}</span>
         <span class="ec-bp-howto">${esc(EC_BLD_HOWTO.shellforge)}</span>
       </span>
-      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(EC_SHELL.forgeGc)} <small>ГС</small><br><small>+${EC_SHELL.forgeMatter} 🟢</small></span>
+      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(EC_SHELL.forgeGc)} <small>ГС</small><br><small>+${EC_SHELL.forgeMatter} материи</small></span>
     </button>`;
 }
 async function ecShellForgeBuildDo(colonyId) {
@@ -13234,7 +13240,7 @@ function ecDoomBuildConfirm(colonyId) {
       <div class="ec-bp-cf-rows">
         <div class="ec-bp-cf-row"><span>🪐 Планета</span><b>${esc(colony.planet_name || 'Колония')}</b></div>
         <div class="ec-bp-cf-row"><span>💰 Стоимость</span><b>${ecNum(cost)} ГС</b></div>
-        <div class="ec-bp-cf-row"><span>🟢 Программируемая материя</span><b class="${afterMatter < 0 ? 'ec-warn' : ''}">${EC_DOOM_BUILD_MATTER} (есть ${ecNum(matter)})</b></div>
+        <div class="ec-bp-cf-row"><span>Программируемая материя</span><b class="${afterMatter < 0 ? 'ec-warn' : ''}">${EC_DOOM_BUILD_MATTER} (есть ${ecNum(matter)})</b></div>
         <div class="ec-bp-cf-row"><span>⏳ Срок</span><b>1 игровой день</b></div>
         <div class="ec-bp-cf-row"><span>🏦 Казна после</span><b class="${afterGc < 0 ? 'ec-warn' : ''}">${ecNum(afterGc)} ГС</b></div>
       </div>
@@ -13288,7 +13294,7 @@ function ecDoomgunRow(b) {
         <span style="color:var(--t4)">выстрелов: ${g ? g.total_shots : 0}</span>
       </div>
     </div>
-    <div class="ec-bld-howto">🟢 Программируемая материя на складе: <b>${ecNum(matter)}</b> · 🔮 Гравиядро: <b>${ecNum(grav)}</b>. ${matter <= 0 ? '<span style="color:#ff6a6a">Нет материи — орудие быстро деградирует!</span>' : 'Материя сдерживает деградацию.'}</div>
+    <div class="ec-bld-howto">Программируемая материя на складе: <b>${ecNum(matter)}</b> · Гравиядро: <b>${ecNum(grav)}</b>. ${matter <= 0 ? '<span style="color:#ff6a6a">Нет материи — орудие быстро деградирует!</span>' : 'Материя сдерживает деградацию.'}</div>
     <div class="ec-bld-act" style="justify-content:flex-end">${fireBtn}</div>
   </div>`;
 }
@@ -13572,7 +13578,7 @@ function ecTabDoom() {
   const intro = ecIntro('🜨', 'Длань Неотвратимости — пульт залпа',
     'Орудие судного дня стирает планету в другой системе, превращая её в мёртвый камень. Любая колония на цели — включая столицу противника — будет уничтожена.',
     ['Залп тратит <b>1 ☠ снаряд Длани</b> — снаряды строятся в <b>☢ Арсенале Судного Дня</b> (1/сутки). Время полёта зависит от дистанции: <b>≈3 ч</b> к соседней системе, до <b>24 ч</b> на край карты.',
-      'Каждый выстрел изнашивает орудие; <b>🟢 Программируемая материя</b> на складе сдерживает деградацию между залпами.',
+      'Каждый выстрел изнашивает орудие; <b>Программируемая материя</b> на складе сдерживает деградацию между залпами.',
       'Цель защищена планетарной ПРО? Снаряд может быть перехвачен.']);
   // Нет орудия, но открыто исследование — приглашаем построить.
   if (!guns.length) {
@@ -13604,7 +13610,7 @@ function ecTabDoom() {
         <div style="width:${integ}%;height:100%;background:${integColor};transition:width .3s"></div></div>
       <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:3px">
         <span style="color:${integColor}">Целостность: <b>${integ}%</b></span>
-        <span style="color:var(--t4)">🟢 Материя: <b>${ecNum(matter)}</b> · 🔮 Гравиядро: <b>${ecNum(ecStockOf('Гравиядро'))}</b></span></div></div>
+        <span style="color:var(--t4)">Материя: <b>${ecNum(matter)}</b> · Гравиядро: <b>${ecNum(ecStockOf('Гравиядро'))}</b></span></div></div>
     ${matter <= 0 ? '<div class="ec-bld-howto" style="color:#ff6a6a">Нет программируемой материи — орудие быстро деградирует!</div>' : ''}
   </div>`;
   // Снаряды в полёте.
@@ -13628,7 +13634,10 @@ function ecTabDoom() {
 // ── Гиперпейсер — мобильное орудие судного дня: постройка прямо в этой вкладке ──
 // Строится как корабль в системе своей колонии; дальше живёт на карте
 // (переброска/залп — кликом по носителю на галактической карте).
-function ecMzaSection() {
+// opt.vn = true — компактный вид для VN-экрана «Длани»: без склада снарядов
+// (он уже есть на вкладке «Производство») и без длинной справки.
+function ecMzaSection(opt) {
+  const vn = !!(opt && opt.vn);
   const ships = EC.mzaShips || [];
   const gc = +EC.eco.gc || 0, matter = ecStockOf('Программируемая материя');
   const afford = gc >= EC_MZA_BUILD_GC && matter >= EC_MZA_BUILD_MATTER;
@@ -13638,19 +13647,39 @@ function ecMzaSection() {
     // системы со своей колонией — где можно заложить носитель
     const sysIds = [...new Set((EC.colonies || []).map(c => c.system_id).filter(Boolean))];
     if (!sysIds.length) return `<div class="ec-empty" style="padding:8px">Нет колоний — Гиперпейсер закладывается в системе вашей колонии.</div>`;
-    return `<div class="ec-prod-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0">
-        <select id="ec-mza-sys" class="ec-input" style="min-width:180px">${sysIds.map(sid => `<option value="${esc(sid)}">${esc(ecSysName(sid))}</option>`).join('')}</select>
-        <input type="text" id="ec-mza-name" class="ec-input" style="width:160px" maxlength="40" placeholder="имя (необязательно)">
-        <button class="btn btn-rd btn-sm" ${afford && ecHasHyperTech() ? '' : 'disabled'} title="${afford ? '' : 'Не хватает ГС или Программируемой материи'}" onclick="ecMzaBuild()">☣ Заложить Гиперпейсер · ${ecNum(EC_MZA_BUILD_GC)} ГС + ${EC_MZA_BUILD_MATTER} 🟢</button>
+    // Верфь судного дня, а не форма логина: подписанные поля, цена отдельными
+    // плитками (не хвостом в кнопке) и одна широкая кнопка закладки.
+    const okGc = gc >= EC_MZA_BUILD_GC, okMat = matter >= EC_MZA_BUILD_MATTER;
+    return `<div class="ec-mza-yard">
+        <div class="ec-mza-yard-hd">верфь · закладка носителя</div>
+        <div class="ec-mza-yard-row">
+          <label class="ec-mza-fld"><span>система закладки</span>
+            <select id="ec-mza-sys" class="ec-mza-in">${sysIds.map(sid => `<option value="${esc(sid)}">${esc(ecSysName(sid))}</option>`).join('')}</select>
+          </label>
+          <label class="ec-mza-fld"><span>имя носителя</span>
+            <input type="text" id="ec-mza-name" class="ec-mza-in" maxlength="40" placeholder="дать позывной">
+          </label>
+        </div>
+        <div class="ec-mza-cost">
+          <span class="ec-mza-price${okGc ? '' : ' bad'}"><i>галакредиты</i><b>${ecNum(EC_MZA_BUILD_GC)}</b></span>
+          <span class="ec-mza-price${okMat ? '' : ' bad'}"><i>программируемая материя</i><b>${ecNum(EC_MZA_BUILD_MATTER)}</b></span>
+        </div>
+        <button type="button" class="ec-mza-lay" ${afford && ecHasHyperTech() ? '' : 'disabled'}
+          title="${afford ? '' : 'Не хватает ГС или Программируемой материи'}" onclick="ecMzaBuild()">Заложить носитель</button>
       </div>
-      <div class="ec-bld-howto">Строится <b>сутки</b>, затем появляется на <b>галактической карте</b>. Переброска — по всей карте; залп бьёт на <b>${EC_MZA_RANGE_HOPS} прыжка по гиперпутям</b> (Х0414 «Отей» — на ${EC_MZA_RANGE_HOPS * EC_MZA_HEAVY_RANGE_MUL}); зона подсвечивается на карте при наведении. Несёт <b>снаряды Длани Х67 «Ада»</b> (☢ Арсенал) и <b>баллистику 4 тиров</b> (🏭 военпромзавод). Каждый залп изнашивает корпус (≈4 залпа).</div>`;
+      <div class="ec-bld-howto">${vn
+        ? `Строится сутки, дальше живёт на <b>галактической карте</b>: переброска и залп — кликом по носителю. Дальность <b>${EC_MZA_RANGE_HOPS} прыжка</b>, ≈4 залпа до износа корпуса.`
+        : `Строится <b>сутки</b>, затем появляется на <b>галактической карте</b>. Переброска — по всей карте; залп бьёт на <b>${EC_MZA_RANGE_HOPS} прыжка по гиперпутям</b> (Х0414 «Отей» — на ${EC_MZA_RANGE_HOPS * EC_MZA_HEAVY_RANGE_MUL}); зона подсвечивается на карте при наведении. Несёт <b>снаряды Длани Х67 «Ада»</b> (☢ Арсенал) и <b>баллистику 4 тиров</b> (🏭 военпромзавод). Каждый залп изнашивает корпус (≈4 залпа).`}</div>`;
   })();
   const haveGrav = ecStockOf('Гравиядро');
   const shipRows = ships.length
     ? `<div class="ec-mza-grid">${ships.map(sh => ecMzaCard(sh, haveGrav)).join('')}</div>`
     : '';
-  const shellStrip = `<div class="ec-bld-howto" style="margin:4px 0">Склад снарядов: <b>${ecShellIco('doom')} Длань ${ecNum(ecShellsOf('doom'))}</b> · <b>баллистика ${ecNum(ecBallTotal())}</b> (${EC_BALL_KINDS.map(k => `${ecShellIco(k)}${ecNum(ecShellsOf(k))}`).join(' ')}) — фабрики: ☢ Арсенал и 🏭 военпромзавод (1/сутки).</div>`;
-  return `<div class="ec-section-title" style="margin-top:18px">☣ Гиперпейсер <span class="ec-hint">— мобильное орудие судного дня на корабле: дальность ${EC_MZA_RANGE_HOPS} прыжка</span></div>
+  const shellStrip = vn ? '' : `<div class="ec-bld-howto" style="margin:4px 0">Склад снарядов: <b>${ecShellIco('doom')} Длань ${ecNum(ecShellsOf('doom'))}</b> · <b>баллистика ${ecNum(ecBallTotal())}</b> (${EC_BALL_KINDS.map(k => `${ecShellIco(k)}${ecNum(ecShellsOf(k))}`).join(' ')}) — фабрики: ☢ Арсенал и 🏭 военпромзавод (1/сутки).</div>`;
+  // На VN-экране заголовок даёт секция-обёртка (I/II/III), своего не печатаем —
+  // иначе блок висел вне рамки и выглядел «уехавшим».
+  const head = vn ? '' : `<div class="ec-section-title" style="margin-top:18px">Гиперпейсер <span class="ec-hint">— мобильное орудие судного дня на корабле: дальность ${EC_MZA_RANGE_HOPS} прыжка</span></div>`;
+  return `${head}
     ${shellStrip}
     ${buildForm}
     ${ships.length ? `<div class="ec-sub-title" style="margin-top:8px">Мои гиперпейсеры · ${ships.length} <span class="ec-hint">(управление — на карте)</span></div>${shipRows}` : ''}`;
@@ -13664,13 +13693,14 @@ function ecMzaCard(sh, haveGrav) {
   const gravNeed = EC_MZA_SHOT_GRAV || 12;
   const shotsLeft = Math.floor(integ / wear);              // сколько залпов выдержит корпус
   // статус-бейдж
-  let stIc, stTxt, stCol;
-  if (sh.status === 'building')      { stIc = '🏗'; stTxt = 'строится'; stCol = '#8a93a8'; }
-  else if (sh.status === 'transit')  { stIc = '➤'; stTxt = 'в пути'; stCol = '#6f9bd8'; }
-  else if (sh.in_flight)             { stIc = '☄️'; stTxt = 'залп в полёте'; stCol = '#e6a23c'; }
-  else if (sh.can_fire)              { stIc = '🜨'; stTxt = 'готов к залпу'; stCol = '#e14637'; }
-  else if (integ <= 0)               { stIc = '☠'; stTxt = 'корпус изношен'; stCol = '#b34b4b'; }
-  else                               { stIc = '⚓'; stTxt = 'на стоянке'; stCol = '#7d8aa0'; }
+  // Статус — словом и цветной точкой: смайликов на носителе судного дня нет.
+  let stTxt, stCol;
+  if (sh.status === 'building')      { stTxt = 'строится'; stCol = '#8a93a8'; }
+  else if (sh.status === 'transit')  { stTxt = 'в пути'; stCol = '#6f9bd8'; }
+  else if (sh.in_flight)             { stTxt = 'залп в полёте'; stCol = '#e6a23c'; }
+  else if (sh.can_fire)              { stTxt = 'готов к залпу'; stCol = '#e14637'; }
+  else if (integ <= 0)               { stTxt = 'корпус изношен'; stCol = '#b34b4b'; }
+  else                               { stTxt = 'на стоянке'; stCol = '#7d8aa0'; }
   // цвет шкалы корпуса
   const hullCol = integ >= 60 ? '#3fa66a' : integ >= 30 ? '#d8a13a' : '#d65a4a';
   const where = sh.system_id ? esc(ecSysName(sh.system_id)) : '—';
@@ -13678,22 +13708,25 @@ function ecMzaCard(sh, haveGrav) {
   let etaRow = '';
   if ((sh.status === 'building' || sh.status === 'transit') && sh.arrive_at) {
     const lbl = sh.status === 'building' ? 'готов через' : 'долёт через';
-    etaRow = `<div class="ec-mza-stat"><span class="ec-mza-k">⏱ ${lbl}</span><b>${ecEtaShort(sh.arrive_at)}</b></div>`;
+    etaRow = `<div class="ec-mza-stat"><span class="ec-mza-k">${lbl}</span><b>${ecEtaShort(sh.arrive_at)}</b></div>`;
   }
   // готовность залпа по СНАРЯДАМ (строятся в Арсенале Судного Дня)
   const shellsD = ecShellsOf('doom'), shellsB = ecBallTotal();
-  const gravOk = shellsD + shellsB > 0;
-  const gravRow = `<div class="ec-mza-stat"><span class="ec-mza-k">боекомплект</span><b style="color:${gravOk ? 'var(--gd,#3fa66a)' : 'var(--rd,#d65a4a)'}">☠${ecNum(shellsD)} · 💥${ecNum(shellsB)}</b></div>`;
-  const shotsRow = `<div class="ec-mza-stat"><span class="ec-mza-k">🎯 залпов дано</span><b>${ecNum(+sh.total_shots || 0)}</b></div>`;
+  // Боекомплект раскрыт по типам: Х67 отдельно от баллистики — так понятнее,
+  // чем «☠12 · 💥65» одной строкой.
+  const gravRow = `<div class="ec-mza-stat"><span class="ec-mza-k">Х67 «Ада»</span><b style="color:${shellsD ? 'var(--t1)' : 'var(--rd,#d65a4a)'}">${ecNum(shellsD)}</b></div>
+    <div class="ec-mza-stat"><span class="ec-mza-k">баллистика</span><b style="color:${shellsB ? 'var(--t1)' : 'var(--rd,#d65a4a)'}">${ecNum(shellsB)}</b></div>`;
+  const shotsRow = `<div class="ec-mza-stat"><span class="ec-mza-k">залпов дано</span><b>${ecNum(+sh.total_shots || 0)}</b></div>`;
   const flag = ecFacFlag(EC.fid, 34);
   return `<div class="ec-mza-card">
     <div class="ec-mza-hd">
       ${flag}
       <div class="ec-mza-id">
-        <div class="ec-mza-name">☣ Гиперпейсер${sh.name ? ' «' + esc(sh.name) + '»' : ''}</div>
-        <div class="ec-mza-loc">📍 ${where}</div>
+        <div class="ec-mza-cls">гиперпейсер</div>
+        <div class="ec-mza-name">${sh.name ? '«' + esc(sh.name) + '»' : 'без имени'}</div>
+        <div class="ec-mza-loc">${where}</div>
       </div>
-      <span class="ec-mza-badge" style="color:${stCol};border-color:${stCol}55;background:${stCol}1a">${stIc} ${stTxt}</span>
+      <span class="ec-mza-badge" style="--bc:${stCol}"><i></i>${stTxt}</span>
     </div>
     <div class="ec-mza-hull">
       <div class="ec-mza-hull-top"><span>Корпус</span><b style="color:${hullCol}">${integ}%</b></div>
@@ -13704,7 +13737,7 @@ function ecMzaCard(sh, haveGrav) {
       ${etaRow}${gravRow}${shotsRow}
     </div>
     ${sh.in_flight && sh.salvo ? ecDoomApproachHtml(sh.salvo) : ''}
-    <div class="ec-mza-foot">🗺 Перебросить, дать залп и списать — кликом по носителю на карте</div>
+    <div class="ec-mza-foot">Перебросить, дать залп и списать — кликом по носителю на галактической карте</div>
   </div>`;
 }
 async function ecMzaBuild() {
@@ -13757,14 +13790,6 @@ function ecDoomVNBody() {
       ? '☄ снарядов в полёте: ' + salvos.length
       : (armed ? '● система взведена' : '○ режим ожидания')}</span>
   </div>`;
-  const chip = (k, v, warn) => `<span class="hp-vnd-chip${warn ? ' warn' : ''}"><i>${k}</i><b>${v}</b></span>`;
-  const chips = `<div class="hp-vnd-chips">
-    ${chip('орудия', guns.length)}
-    ${chip('гиперпейсеры', mza.length)}
-    ${chip('☠ снаряды Длани', ecNum(ecShellsOf('doom')), ecShellsOf('doom') < 1)}
-    ${chip('💥 баллистика', ecNum(ecBallTotal()), false)}
-    ${chip('🟢 материя', ecNum(Math.floor(matter)), matter <= 0)}
-  </div>`;
   const forges = ((EC.shells || {}).forges || []);
   const incoming = (EC.abmIncoming || []);
   const tabs = [['arsenal', 'Арсенал', guns.length + mza.length], ['forge', 'Производство', forges.filter(f => f.shell_kind).length], ['aim', 'Наведение', 0], ['salvos', 'В полёте', salvos.length], ['defense', '⛨ Оборона', incoming.length]];
@@ -13773,7 +13798,7 @@ function ecDoomVNBody() {
   const body = st.tab === 'aim' ? ecDoomVNAim() : st.tab === 'salvos' ? ecDoomVNSalvos(salvos)
     : st.tab === 'forge' ? ecDoomVNForge() : st.tab === 'defense' ? ecDoomVNDefense(incoming)
     : ecDoomVNArsenal(guns, matter);
-  return strip + chips + rail + body;
+  return strip + rail + body;
 }
 
 // ── ОБОРОНА: входящие отметки ПРО по моим планетам → вход в «Окно перехвата» ──
@@ -13804,14 +13829,13 @@ function ecDoomVNDefense(incoming) {
     ${rows}
   </div>`;
 }
-// АРСЕНАЛ: доктрина + карточки стационарных орудий + секция Гиперпейсеров.
+// АРСЕНАЛ: карточки стационарных орудий + секция Гиперпейсеров.
 function ecDoomVNArsenal(guns, matter) {
-  const oath = `<div class="hp-vnd-oath">Это не оружие — это приговор, которому нельзя возразить. Планета в перекрестье перестаёт быть миром: остаётся камень, помнящий, что был живым. Залп не отзывается, не перехватывается дипломатией и не прощается историей.</div>`;
   let gunsHtml;
   if (!guns.length) {
     gunsHtml = `<div class="hp-vnd-empty">
       <div class="hp-vnd-empty-t">Стационарное орудие ещё не возведено.</div>
-      <div class="hp-vnd-empty-s">«Длань Неотвратимости» закладывается на одной из колоний — 8000 ГС и ${EC_DOOM_BUILD_MATTER} 🟢 Программируемой материи.</div>
+      <div class="hp-vnd-empty-s">«Длань Неотвратимости» закладывается на одной из колоний — 700 000 ГС и ${EC_DOOM_BUILD_MATTER} ед. Программируемой материи.</div>
       <button class="hp-vnd-aimbtn" type="button" onclick="event.stopPropagation();ecDoomVNGoBuild()">🏗 К колониям — возвести орудие</button>
     </div>`;
   } else {
@@ -13828,7 +13852,20 @@ function ecDoomVNArsenal(guns, matter) {
     }).join('')}</div>
     ${matter <= 0 ? '<div class="hp-vnd-warnline">⚠ Нет программируемой материи — орудия деградируют с каждым днём.</div>' : ''}`;
   }
-  return oath + gunsHtml + `<div class="hp-vnd-sep"></div>` + ecMzaSection();
+  // Единственная строка телеметрии вместо ряда чипов над навигацией:
+  // предупреждаем только о том, что реально мешает стрелять.
+  const noShells = ecShellsOf('doom') + ecBallTotal() <= 0;
+  const warn = noShells ? '<div class="hp-vnd-warnline">⚠ Снарядов нет — орудия молчат. Соберите их на вкладке «Производство».</div>' : '';
+  // Тот же язык секций, что на «Производстве»: рамка + римский номер.
+  return warn +
+    `<div class="hp-vnd-con-sec">
+      <div class="hp-vnd-con-t"><i>I</i> стационарные орудия · «Длань Неотвратимости»</div>
+      ${gunsHtml}
+    </div>
+    <div class="hp-vnd-con-sec">
+      <div class="hp-vnd-con-t"><i>II</i> гиперпейсеры · мобильные носители</div>
+      ${ecMzaSection({ vn: true })}
+    </div>`;
 }
 
 /* ── ☢ ПРОИЗВОДСТВО · вкладка VN-экрана Длани ──────────────────────
@@ -14032,6 +14069,10 @@ async function ecDoomBannerUpload(face, inputEl) {
 function ecDoomVNTgl(k) {
   const st = ecDoomVNAimSt();
   st.tgl[k] = !st.tgl[k];
+  // Наводчица реагирует на КОНКРЕТНЫЙ тумблер, а не на их количество: раньше
+  // реплику выбирал счётчик взведённых, и «пломба снята» вылезала при снятой
+  // пломбе, если были взведены питание и ответственность.
+  st.lastTgl = k; st.lastTglOn = st.tgl[k];
   ecDoomVNStageSync(null);
 }
 // Перерисовать весь разворот новеллы (портрет + реплика + сцена + стрелки).
@@ -14237,14 +14278,25 @@ function ecDoomVNDialog(stepId, car) {
     }[k];
     return { who, mood: 'afraid', lines: [ boom, `Выберите снаряд для «${tgtNm}». И… подумайте ещё раз.`] };
   }
-  // chain — по числу взведённых тумблеров
+  // chain — реплика на последний дёрнутый тумблер (взвод и откат — разные),
+  // и только пока ничего не трогали / всё взведено — общие строки.
   const n = ['pwr', 'seal', 'oath'].filter(k => st.tgl[k]).length;
-  if (n === 0) return { who, mood: 'pleading', lines: [
+  if (n === 3) return { who, mood: 'hollow', lines: [
+    'Цепь замкнута. Все три ключа — Ваши.',
+    'Мне больше нечего Вам сказать, командующий.'] };
+  if (n === 0 && !st.lastTgl) return { who, mood: 'pleading', lines: [
     'Что ж... Подтвердите готовность к пуску, командующий...',
     `Мы... правда это делаем? По «${tgtNm}»?`] };
-  if (n === 1) return { who, mood: 'pleading', lines: ['Питание пошло... Вы уверены, командир?'] };
-  if (n === 2) return { who, mood: 'hollow', lines: ['Пломба снята. Зачем? Их же ещё можно было… есть отставить...'] };
-  return { who, mood: 'hollow', lines: ['…'] };
+  const TGL_SAY = {
+    pwr:  [{ mood: 'pleading', l: 'Питание пошло... Вы уверены, командир?' },
+           { mood: 'steady',   l: 'Накопители сброшены. Спасибо. Правда — спасибо.' }],
+    seal: [{ mood: 'hollow',   l: 'Пломба снята. Зачем? Их же ещё можно было… есть отставить...' },
+           { mood: 'steady',   l: 'Пломбу вернула на место. Ствол снова заперт.' }],
+    oath: [{ mood: 'hollow',   l: 'Ответственность принята. Записано на Ваше имя, командующий.' },
+           { mood: 'uneasy',   l: 'Подпись отозвана. Значит, ещё не решили…' }],
+  };
+  const say = (TGL_SAY[st.lastTgl] || TGL_SAY.pwr)[st.lastTglOn ? 0 : 1];
+  return { who, mood: say.mood, lines: [say.l] };
 }
 // Активная сцена справа под репликой: контрол текущего шага.
 function ecDoomVNScene(stepId, car) {
