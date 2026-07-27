@@ -84,6 +84,7 @@ declare
   q numeric; c numeric; topf numeric:=0; over numeric; vol numeric; bond numeric; unbound numeric; bound numeric; cool numeric;
   category text; quality numeric; hpboost numeric; hppct numeric; cap numeric; rk numeric; re numeric; rm numeric; grade numeric;
   capscale numeric := 1; qn numeric; rscore numeric; pn numeric;
+  aa_budget numeric := 0.95; aa_gain numeric := 1.15; sres numeric; mres numeric;
 begin
   -- сбор рецепта
   for rid, u in select key, (value#>>'{}')::numeric from jsonb_each(mix) loop
@@ -195,9 +196,27 @@ begin
   hpboost := round(hpraw*quality*0.6*capscale);
   cap     := round((-weight*total*0.4 + capadd*total*0.2)*capscale);
   hppct   := greatest(0, least(1.5, pcthp));
-  rk := round(greatest(0, least(0.9, kin))::numeric, 3);
-  re := round(greatest(0, least(0.9, en ))::numeric, 3);
-  rm := round(greatest(0, least(0.9, mis))::numeric, 3);
+  -- ── РАЗМЕН СТОЙКОСТЕЙ (жёсткий) ──────────────────────────────
+  -- Без него сплав силён против всего → нет дыр, нет контр-оружия, нет игры.
+  -- 1) Бюджет: сумма трёх каналов не выше aa_budget → «резист всему» невозможен.
+  -- 2) Разброс: пик усиливается, долины проваливаются В МИНУС (уязвимость).
+  --   Итог: генералист = посредственность без дыр; специалист = стена с одним швом.
+  --   Крутится двумя числами: aa_budget (потолок суммы), aa_gain (глубина шва).
+  sres := kin + en + mis;
+  if sres > aa_budget then
+    kin := kin * aa_budget / sres; en := en * aa_budget / sres; mis := mis * aa_budget / sres;
+  end if;
+  mres := (kin + en + mis) / 3.0;
+  kin := kin + aa_gain * (kin - mres);
+  en  := en  + aa_gain * (en  - mres);
+  mis := mis + aa_gain * (mis - mres);
+
+  -- ⚠ Пол НЕ в ноль: отрицательная стойкость = УЯЗВИМОСТЬ (бой ×(1−resist) → доп.урон).
+  -- Это и есть «лом против брони»: токопроводящая слаба к лазеру, монолит — к энергии.
+  -- Затирание в 0 (было greatest(0,…)) стирало все слабости → броня-стенка без контр-игры.
+  rk := round(greatest(-0.6, least(0.9, kin))::numeric, 3);
+  re := round(greatest(-0.6, least(0.9, en ))::numeric, 3);
+  rm := round(greatest(-0.6, least(0.9, mis))::numeric, 3);
 
   -- категория
   if ((rr->>'ceramic')::numeric + (rr->>'exotic')::numeric*0.5) >= 0.4 then category := 'ceramic';

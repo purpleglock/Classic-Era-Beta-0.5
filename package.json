@@ -7,5 +7,8 @@
   },
   "devDependencies": {
     "terser": "^5.31.0"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
   }
 }

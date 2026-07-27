@@ -194,7 +194,10 @@ declare
   k text; cls jsonb; typeObj jsonb; reactObj jsonb; armorObj jsonb; shieldObj jsonb; engObj jsonb;
   radarObj jsonb; radar_ numeric := 0;
   v_alloy public.faction_armor_alloys;   -- кастомный сплав брони (алхимия), если выбран
-  armor_resist jsonb := jsonb_build_object('kinetic',0,'energy',0,'missile',0);
+  -- база: штатная броня даёт лёгкую равномерную стойкость (+10% ко всем типам),
+  -- чтобы «Броня цели» не читалась как ноль. Кастомный сплав (алхимия) её замещает
+  -- своими типовыми стойкостями (создавая шов/уязвимость для контр-игры).
+  armor_resist jsonb := jsonb_build_object('kinetic',0.1,'energy',0.1,'missile',0.1);
   a_rid text;
   hasType bool; hasReactor bool; hasEnergy bool; hasHangars bool;
   cost numeric := 0; econs numeric := 0; emax numeric := 0; on_ numeric; modon numeric;

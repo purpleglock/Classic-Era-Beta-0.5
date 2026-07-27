@@ -567,3 +567,18 @@
 @media (max-width: 380px) {
   .cn-stats-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Батареи залпа (панель конструктора) ─────────────────────── */
+.cn-bat-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.cn-bat-row { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 8px; padding: 6px 8px; background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w1); border-radius: var(--radius-sm); font-size: 12px; }
+.cn-bat-dot { width: 8px; height: 8px; border-radius: 50%; }
+.cn-bat-main { color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cn-bat-shots { font-family: var(--font-mono); font-size: 11px; color: var(--te); white-space: nowrap; }
+.cn-bat-dmg { font-family: var(--font-mono); font-size: 11px; color: var(--t3); white-space: nowrap; }
+.cn-bat-hint { font-size: 11px; color: var(--t3); line-height: 1.5; margin: 2px 0 8px; }
+.cn-bat-mounts { display: flex; flex-wrap: wrap; gap: 6px; }
+.cn-bat-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--b2); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-pill); color: var(--t2); padding: 4px 10px; font-size: 11.5px; cursor: pointer; transition: border-color var(--transition-fast), color var(--transition-fast); }
+.cn-bat-chip:hover { border-color: var(--te); }
+.cn-bat-chip.on { border-color: var(--te); color: var(--te); }
+.cn-bat-chip b { font-family: var(--font-mono); font-size: 11px; min-width: 30px; text-align: center; }
+.cn-bat-chip i { font-family: var(--font-mono); font-size: 10px; color: var(--t3); font-style: normal; }

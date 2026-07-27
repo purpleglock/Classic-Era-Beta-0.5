@@ -1587,6 +1587,7 @@ function cnDrawShip() {
     });
     listHost.innerHTML = rows.length ? rows.join('') : `<div class="cn-bill-none" style="padding:8px 2px">Нет узлов и отсеков — добавьте кнопками «＋ Узел» / «＋ Отсек» на схеме.</div>`;
   }
+  cnRenderBatteries();
 }
 
 // ── Ручное размещение: добавить узел/отсек, назначить/убрать содержимое, скрыть слой ──
@@ -1662,6 +1663,100 @@ function cnMountPointerDown(evt, i) {
 }
 // Крупная тач-строка слота для мобильного списка (открывает тот же пикер, что и узел на схеме)
 // Для узлов орудий добавляем кнопку «📍 Переместить» — тач-режим постановки касанием вместо тяги мелкого узла.
+// ── Батареи залпа: клиент-зеркало снапшота _bt_stats (тир/канал/сектор/группировка) ──
+const CN_BAT_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+const CN_BAT_KIND = { kinetic: 'кинетик', energy: 'лазер', missile: 'ракеты' };
+// скорострельность → тир дробин 1..6 (зеркало _bt_shots_tier)
+function cnShotsTier(rof) { rof = +rof || 0; return rof <= 1 ? 1 : rof <= 10 ? 2 : rof <= 30 ? 3 : rof <= 100 ? 4 : rof <= 400 ? 5 : 6; }
+// имя орудия → канал урона (зеркало _cn_wpn_kind, ballistic→kinetic)
+function cnWpnChannel(name) {
+  const s = String(name || '').toLowerCase();
+  if (/пусков|ракет|шахт|перехватчик|торпед|бомб/.test(s)) return 'missile';
+  if (/лазер|импульс|электромагн|ланцет|плазм|бластер/.test(s)) return 'energy';
+  return 'kinetic';
+}
+function cnMountSector(pos) {
+  if (!pos) return 'nose';
+  return pos.x < 155 ? 'left' : pos.x > 165 ? 'right' : 'nose';
+}
+// Фактическая позиция узла: ручная (перетащенная) или АВТО-раскладка схемы. Узлы,
+// которые игрок не таскал, не имеют slot.pos — но на схеме стоят по бортам; сектор
+// надо брать из той же авто-раскладки, иначе всё валится в «Нос».
+function cnMountEffPos(i) {
+  const L = CN.shipLayout; const s = L && L.mounts[i];
+  if (s && s.pos) return s.pos;
+  if (!CN.shipGeo || !L) return null;
+  // n как при отрисовке схемы (cnDrawShip): max(16, число узлов) — иначе раскладка
+  // (rows растут под n) не совпадёт с нарисованной, и сектор «съедет».
+  const auto = cnMountPositions(CN.shipGeo, Math.max(16, L.mounts.length));
+  const p = auto[i];
+  return p ? { x: p[0], y: p[1] } : null;
+}
+const CN_SECT_NAME = { nose: 'Нос', left: 'Левый борт', right: 'Правый борт', any: 'Турели' };
+// Разбор монтировок в дробины (по одной на ствол), затем группировка как на сервере.
+function cnBatteries() {
+  const def = CN.def; if (!def || !def.cardUI) return { groups: [], mounts: [] };
+  const db = def.db, L = CN.shipLayout || { mounts: [] };
+  const hasLayout = true;                        // cardUI всегда со схемой → секторы из pos
+  const mounts = [];
+  (L.mounts || []).forEach((mt, i) => {
+    if (!mt || !mt.w) return;
+    const o = (db.weapons[mt.w.g] || [])[mt.w.idx]; if (!o) return;
+    const cp = o.customParameter || {};
+    const dmg = +o.dmg || 0; if (dmg <= 0) return;
+    mounts.push({
+      i, name: o.name,
+      s: hasLayout ? cnMountSector(cnMountEffPos(i)) : 'any',
+      rng: Math.max(1, Math.min(40, Math.round(+cp.dalnost || 1))),
+      k: cnWpnChannel(o.name),
+      tier: cnShotsTier(cp.skorostrelnost),
+      dmg, battery: mt.battery || null,
+    });
+  });
+  // авто: (s,rng,k,tier) раздельно; ручная: (s,k,battery) слитно, тир=взвеш.средний
+  const gm = new Map();
+  mounts.forEach(m => {
+    const key = m.battery ? `M|${m.s}|${m.k}|${m.battery}` : `A|${m.s}|${m.rng}|${m.k}|${m.tier}`;
+    let g = gm.get(key);
+    if (!g) { g = { s: m.s, k: m.k, bat: m.battery, rng: m.rng, dmg: 0, wsum: 0, members: [] }; gm.set(key, g); }
+    g.dmg += m.dmg; g.wsum += m.dmg * m.tier; g.members.push(m.i);
+    if (m.battery) g.rng = Math.min(g.rng, m.rng); else g.rng = m.rng;
+    g.shots = m.battery ? Math.max(1, Math.min(6, Math.round(g.wsum / (g.dmg || 1)))) : m.tier;
+  });
+  return { groups: [...gm.values()], mounts };
+}
+// Клик по чипу монтировки: циклим Авто → A → B … → Авто
+function cnMountBattery(i) {
+  const L = CN.shipLayout; const mt = L && L.mounts[i]; if (!mt) return;
+  const cur = mt.battery, at = CN_BAT_LETTERS.indexOf(cur);
+  mt.battery = at < 0 ? CN_BAT_LETTERS[0] : (at + 1 >= CN_BAT_LETTERS.length ? null : CN_BAT_LETTERS[at + 1]);
+  cnVehCalc();
+}
+function cnRenderBatteries() {
+  const host = cnId('cn-battery'); if (!host) return;
+  const { groups, mounts } = cnBatteries();
+  if (!mounts.length) { host.innerHTML = `<div class="cn-bill-none" style="padding:6px 2px">Поставьте орудия — здесь появятся батареи залпа.</div>`; return; }
+  const kindCls = { kinetic: 't2', energy: 'te', missile: 'err' };
+  // список групп
+  const grows = groups.sort((a, b) => b.dmg - a.dmg).map(g => {
+    const heavy = g.shots <= 2;
+    return `<div class="cn-bat-row">
+      <span class="cn-bat-dot" style="background:var(--${kindCls[g.k] || 't2'})"></span>
+      <span class="cn-bat-main">${CN_SECT_NAME[g.s] || g.s} · ${CN_BAT_KIND[g.k] || g.k}${g.bat ? ` · батарея ${g.bat}` : ''}</span>
+      <span class="cn-bat-shots" title="${heavy ? 'тяжёлый залп — пробивает щит' : 'скорострельный — щит держит, косит лёгких'}">залп ×${g.shots}</span>
+      <span class="cn-bat-dmg">${Math.round(g.dmg)} · до ${g.rng} гекс.</span>
+    </div>`;
+  }).join('');
+  // назначение батарей по стволам
+  const mrows = mounts.map(m => {
+    const tag = m.battery || 'Авто';
+    return `<button type="button" class="cn-bat-chip${m.battery ? ' on' : ''}" onclick="cnMountBattery(${m.i})" title="Связать орудие в ручную батарею (клик — сменить): Авто → A → B …">
+      <b>${tag}</b> <span>${esc(m.name)}</span> <i>×${m.tier}</i></button>`;
+  }).join('');
+  host.innerHTML = `<div class="cn-bat-list">${grows}</div>
+    <div class="cn-bat-hint">Тяжёлые дробины (залп ×1–2) пробивают щит; рой (×5–6) щит держит, но косит лёгкие цели и насыщает ПРО. «Авто» дробит стволы по скорострельности. Ручная батарея (буква) сливает стволы <b>одного типа урона и сектора</b> в общий залп — так разменивают пробитие на объём (влить тяж в рой) или наоборот.</div>
+    <div class="cn-bat-mounts">${mrows}</div>`;
+}
 function cnSlotRow(kind, i, ico, lbl, val, filled) {
   const placing = kind === 'mount' && CN.placing === i;
   const move = kind === 'mount'
@@ -1990,6 +2085,7 @@ async function cnVehRender(cat) {
             <span class="cn-lg"><i class="cn-lg-empty"></i>свободный узел</span>
           </div>
         </div>
+        <div class="cn-panel" id="cn-battery-panel"><h3>⚔ Батареи залпа</h3><div id="cn-battery"></div></div>
         ${def.hasHangars ? `<div class="cn-panel cn-hangars-panel"><h3>Ангарная палуба</h3><div id="cn-hangars"></div></div>` : ''}
         <div class="cn-panel"><h3>Ресурсы и решения</h3><div id="cn-stats" class="cn-stats-grid"></div>${publishBtns}</div>
       </div>`;
@@ -2666,9 +2762,13 @@ function cnVehCollectData() {
   if (def.db.radars && cnId('cn-radar')) d.radar = +cnId('cn-radar').value;
   if (def.cardUI) {
     const L = CN.shipLayout || { mounts: [], bays: [] };
-    d.weapons = L.mounts.filter(m => m.w).map(m => ({ g: m.w.g, idx: m.w.idx, q: 1 }));
+    d.weapons = L.mounts.filter(m => m.w).map(m => ({ g: m.w.g, idx: m.w.idx, q: 1, battery: m.battery || null }));
     d.modules = L.bays.filter(b => b.m).map(b => ({ g: b.m.g, idx: b.m.idx }));
-    d.layout = { mounts: L.mounts.map(m => ({ w: m.w ? { g: m.w.g, idx: m.w.idx } : null, pos: m.pos ? { x: m.pos.x, y: m.pos.y } : null })), bays: L.bays.map(b => b.m ? { g: b.m.g, idx: b.m.idx } : null) };
+    // pos сохраняем ФАКТИЧЕСКИЙ (авто-раскладка, если узел не таскали) — иначе сервер
+    // видит pos=null и относит все орудия к носу; борта в бою пропадают.
+    const autoP = CN.shipGeo ? cnMountPositions(CN.shipGeo, Math.max(16, L.mounts.length)) : [];
+    const effPos = (m, i) => m.pos ? { x: m.pos.x, y: m.pos.y } : (autoP[i] ? { x: autoP[i][0], y: autoP[i][1] } : null);
+    d.layout = { mounts: L.mounts.map((m, i) => ({ w: m.w ? { g: m.w.g, idx: m.w.idx } : null, pos: effPos(m, i), battery: m.battery || null })), bays: L.bays.map(b => b.m ? { g: b.m.g, idx: b.m.idx } : null) };
   } else {
     d.weapons = [...document.querySelectorAll('#cn-weapons .cn-row')].map(r => { const s = JSON.parse(r.querySelector('select').value); return { g: s.g, idx: s.idx, q: +(r.querySelector('input')?.value || 1) }; });
     d.modules = [...document.querySelectorAll('#cn-modules .cn-row')].map(r => { const s = JSON.parse(r.querySelector('select').value); return { g: s.g, idx: s.idx }; });
@@ -2715,14 +2815,14 @@ function cnVehApplyData(d) {
         if (x && ('w' in x || 'pos' in x)) { w = x.w ? { g: x.w.g, idx: x.w.idx } : null; pos = x.pos ? { x: x.pos.x, y: x.pos.y } : null; }  // новый формат {w,pos}
         else if (x) w = { g: x.g, idx: x.idx };                                                                                              // старый формат {g,idx}|null
         if (w && !okW(w)) { w = null; dropped++; }
-        return { w, pos };
+        return { w, pos, battery: (x && x.battery) || null };
       }), bays: (d.layout.bays || []).map(x => {
         let m = x ? { g: x.g, idx: x.idx } : null;
         if (m && !okM(m)) { m = null; dropped++; }
         return { m };
       }) };
     else CN.shipLayout = {
-      mounts: (d.weapons || []).filter(w => okW(w) || !++dropped).flatMap(w => Array.from({ length: w.q || 1 }, () => ({ w: { g: w.g, idx: w.idx } }))),
+      mounts: (d.weapons || []).filter(w => okW(w) || !++dropped).flatMap(w => Array.from({ length: w.q || 1 }, () => ({ w: { g: w.g, idx: w.idx }, battery: w.battery || null }))),
       bays: (d.modules || []).filter(m => okM(m) || !++dropped).map(m => ({ m: { g: m.g, idx: m.idx } }))
     };
   } else {

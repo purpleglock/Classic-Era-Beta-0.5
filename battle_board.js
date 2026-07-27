@@ -516,6 +516,8 @@ function bbPick(uid) { BB.pick = (BB.pick === uid ? null : uid); bbRender(); }
 
 // ── Панель выбранного корабля / резерва в бою ───────────────
 const BB_SECT = { nose: 'Нос', left: 'Левый борт', right: 'Правый борт', any: 'Турели' };
+const BB_KIND = { kinetic: 'кинетик', energy: 'лазер', missile: 'ракеты' };
+function bbKindLabel(k) { return BB_KIND[k] || k; }
 // Тестовый бой против ботов: у врага синтетический fid 'bot' (см. admin_bot_battle)
 function bbAdminBot(s) { return !!s && (s.defender === 'bot' || s.attacker === 'bot'); }
 function bbReinfPanel(s) {
@@ -557,7 +559,7 @@ function bbUnitPanel(s) {
   const pct = v => Math.max(0, Math.min(100, v));
   const need = bbTurnNeed(u.cls);
   const wpn = (u.wpn && u.wpn.length ? u.wpn : [{ s: 'any', rng: u.rng, dmg: u.dmg }])
-    .map(g => `<div class="bb-stat"><span>${BB_SECT[g.s] || g.s}</span><b>${g.dmg} · до ${g.rng} гекс.</b></div>`).join('');
+    .map(g => `<div class="bb-stat"><span>${BB_SECT[g.s] || g.s}${g.k ? ` · ${bbKindLabel(g.k)}` : ''}${g.shots > 1 ? ` · залп ×${g.shots}` : ''}</span><b>${g.dmg} · до ${g.rng} гекс.</b></div>`).join('');
   return `<div class="bb-panel">
       <div class="bb-panel-t">${esc(u.name)}</div>
       <div class="bb-panel-h">${bbClsName(u.cls)}${u.mine && u.acted ? ' · <b>активирован</b>' : ''}${u.flash ? ' · <b style="color:#ff5c8a">позиция раскрыта выстрелом</b>' : ''}</div>
@@ -1026,6 +1028,28 @@ function bbReinforce(uid) {
   BB.sel = null; BB.reach = null;
   return bbAct('battle_reinforce', { p_battle: BB.id, p_unit_id: uid, p_y: null }, 'Подкрепление вышло на позицию');
 }
+// Подрезать расстановку под свежий резерв. Сервер (battle_pool) — источник
+// правды по «сколько кораблей реально есть»; если открытая доска отстала и в
+// BB.place набито больше, чем во флоте осталось, лишние (самые поздние по
+// порядку) снимаем и уведомляем игрока, чтобы «В бой» дальше шёл по факту.
+function bbReconcilePlace() {
+  const pool = Array.isArray(BB.st && BB.st.pool) ? BB.st.pool : [];
+  const cap = {};
+  pool.forEach(p => { cap[p.unit_id] = Math.max(0, Number(p.free) || 0); });
+  const seen = {};
+  let dropped = 0;
+  BB.place = BB.place.filter(p => {
+    // корабль, которого в свежем резерве нет вовсе, — тоже под нож
+    const limit = cap.hasOwnProperty(p.unit_id) ? cap[p.unit_id] : 0;
+    const n = (seen[p.unit_id] = (seen[p.unit_id] || 0) + 1);
+    if (n > limit) { dropped++; return false; }
+    return true;
+  });
+  if (dropped > 0) {
+    if (BB.pick && !cap[BB.pick]) BB.pick = null;
+    toast(`Резерв обновлён: снято лишних кораблей — ${dropped}. Проверьте расстановку.`, 'err');
+  }
+}
 async function bbConfirmDeploy() {
   if (!BB.place.length) { toast('Выведите на доску хотя бы один корабль', 'err'); return; }
   if (!confirm(`Утвердить состав из ${BB.place.length} кораблей? После подтверждения расстановку не изменить.`)) return;
@@ -1036,7 +1060,18 @@ async function bbConfirmDeploy() {
     toast('Состав утверждён', 'ok');
     BB.place = []; BB.pick = null;
     await bbReload();
-  } catch (e) { toast((e && e.message) ? e.message : 'Не вышло', 'err'); }
+  } catch (e) {
+    toast((e && e.message) ? e.message : 'Не вышло', 'err');
+    // Частая причина отказа — устаревший резерв: доска висела открытой, а
+    // состав флота тем временем уменьшился (потери в параллельном бою,
+    // роспуск/редакт флота, второй таб). Сервер пересчитал free по свежему
+    // составу и отбил лишние корабли. Перечитываем состояние и подрезаем
+    // расстановку под реальный резерв, чтобы клиент не остался со старыми
+    // числами и следующая попытка «В бой» шла по актуальным данным.
+    await bbReload().catch(() => {});
+    bbReconcilePlace();
+    bbRender();
+  }
   finally { BB.busy = false; }
 }
 
@@ -1275,6 +1310,76 @@ function bbPaint() {
 
   ctx.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);
   bbPaintScan(ctx, BB.vw, BB.vh);
+  bbPaintSeam(ctx, s);
+}
+
+// ── «Шов» цели: при наведении на вражеский борт показываем стойкости брони
+// по каналам урона и подсвечиваем самый слабый — куда нести правильный лом.
+// Броня видна лишь когда контакт захвачен радаром (сервер даёт u.resist).
+// Если выбран свой корабль — отмечаем каналы, по которым твои орудия бьют.
+const BB_SEAM_ORD = ['kinetic', 'energy', 'missile'];
+function bbSeamOwnKinds(s) {
+  const sel = s && s.units && BB.sel != null ? s.units.find(u => u.id === BB.sel && u.mine) : null;
+  if (!sel || !sel.wpn) return null;
+  const set = new Set();
+  sel.wpn.forEach(g => set.add(g.k || 'kinetic'));
+  return set;
+}
+function bbPaintSeam(ctx, s) {
+  if (!BB.hover || !s || !s.units) return;
+  // захваченный радаром вражеский борт (у него в state есть броня/стойкости)
+  const t = s.units.find(u => u.x === BB.hover.x && u.y === BB.hover.y && !u.mine && u.locked);
+  if (!t) return;
+  const rs = t.resist || {};
+  // каналы показываем всегда (даже когда стойкостей нет — тогда по 0%)
+  const rows = BB_SEAM_ORD.map(k => ({ k, v: +(rs[k] || 0) }));
+  const seam = rows.reduce((a, b) => (b.v < a.v ? b : a));            // самый слабый канал
+  const own = bbSeamOwnKinds(s);
+
+  // обычная броня цели (плоское гашение урона) — показываем всегда, чтобы
+  // окошко не читалось как «брони нет», когда нули лишь у ТИПОВЫХ стойкостей.
+  const armor = Math.max(0, Math.round(+t.armor || 0));
+
+  const { px, py } = bbHexCenter(t.x, t.y);
+  const sx = (px - BB.camX) * BB.zoom, sy = (py - BB.camY) * BB.zoom;
+  const pad = 8, lh = 17, fs = 12;
+  const w = 150, h = pad * 2 + 16 + lh + rows.length * lh;
+  let x = sx + BB.R * BB.zoom * 0.6, y = sy - h / 2;
+  x = Math.max(6, Math.min(BB.vw - w - 6, x));
+  y = Math.max(6, Math.min(BB.vh - h - 6, y));
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(6,10,18,0.94)';
+  ctx.strokeStyle = 'rgba(90,200,230,0.35)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.fill(); ctx.stroke();
+  ctx.textBaseline = 'middle'; ctx.font = `${fs}px monospace`;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = `rgba(${BB_C.foe},0.9)`;
+  ctx.fillText('Броня цели', x + pad, y + pad + 8);
+  // строка обычной брони
+  const ay = y + pad + 16 + lh / 2;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(230,240,250,0.92)';
+  ctx.fillText('броня', x + pad, ay);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = armor > 0 ? 'rgba(230,240,250,0.92)' : 'rgba(150,165,180,0.6)';
+  ctx.fillText(armor.toLocaleString('ru-RU'), x + w - pad, ay);
+  // ниже — типовые стойкости сплава (в % по каналам урона)
+  rows.forEach((r, i) => {
+    const ry = y + pad + 16 + lh + i * lh + lh / 2;
+    const hit = own && own.has(r.k);
+    const isSeam = r.k === seam.k;
+    // канал: подсвечен если это шов; тускло если твои пушки по нему не бьют
+    ctx.fillStyle = isSeam ? '#ffd15c' : (hit ? 'rgba(230,240,250,0.92)' : 'rgba(150,165,180,0.6)');
+    ctx.textAlign = 'left';
+    ctx.fillText((hit ? '▸ ' : '  ') + bbKindLabel(r.k), x + pad, ry);
+    // значение стойкости: <0 = уязвим (зелёный бонус), >0 = держит (красный)
+    ctx.textAlign = 'right';
+    ctx.fillStyle = r.v < 0 ? '#6be27a' : (r.v > 0 ? `rgba(${BB_C.foe},0.85)` : 'rgba(200,210,220,0.7)');
+    const pv = (r.v > 0 ? '+' : '') + Math.round(r.v * 100) + '%';
+    ctx.fillText(pv, x + w - pad, ry);
+  });
+  ctx.restore();
 }
 
 function bbVisibleCells(s) {

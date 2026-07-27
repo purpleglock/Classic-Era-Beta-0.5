@@ -64,7 +64,7 @@ function slimEng(e)  { return pick(e, ['force', 'energy', 'resurs']); }
 function slimArm(a)  { return pick(a, ['name', 'material', 'category', 'hpBoost', 'hpPercentBoost', 'armor', 'resurs']); }
 function slimShd(s)  { return pick(s, ['shield', 'resurs']); }
 function slimRad(r)  { const o = pick(r, ['crewRequired', 'resurs']); const cp = r && r.customParameterradar; if (cp && (cp.dalnost || cp.eccm)) o.customParameterradar = pick(cp, ['dalnost', 'eccm', 'pwrPer', 'pwrCap']); return o; }
-function slimWpn(w)  { const o = pick(w, ['name', 'dmg', 'crewRequired', 'resurs']); const d = w && w.customParameter && +w.customParameter.dalnost; if (d) o.dalnost = d; return o; }
+function slimWpn(w)  { const o = pick(w, ['name', 'dmg', 'crewRequired', 'resurs']); const cp = w && w.customParameter; const d = cp && +cp.dalnost; if (d) o.dalnost = d; const rof = cp && +cp.skorostrelnost; if (rof) o.rof = rof; return o; }
 function slimMod(m)  { return pick(m, ['name', 'cost', 'crewRequired', 'resurs', 'combat']); }
 function mapClassColl(coll, fn) { const out = {}; for (const k in coll) out[k] = coll[k].map(fn); return out; }
 function mapGroupColl(coll, fn) { const out = {}; for (const g in coll) out[g] = coll[g].map(fn); return out; }

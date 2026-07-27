@@ -301,29 +301,52 @@ begin
                 when (m->'pos'->>'x')::numeric < 155 then 'left'
                 when (m->'pos'->>'x')::numeric > 165 then 'right'
                 else 'nose' end as s,
-           1 as q
+           1 as q,
+           -- ручная батарея игрока (буква A..F): связывает орудия в один залп
+           nullif(m->>'battery','') as battery
       from jsonb_array_elements(coalesce(u.data->'layout'->'mounts','[]'::jsonb)) m
      where coalesce(m->'w'->>'g', m->>'g') is not null
     union all
     -- проекты без схемы (старый формат / наземка): орудия-«турели»
     select w->>'g', coalesce((w->>'idx')::int, -1), 'any',
-           greatest(1, coalesce((w->>'q')::int, 1))
+           greatest(1, coalesce((w->>'q')::int, 1)), nullif(w->>'battery','')
       from jsonb_array_elements(coalesce(u.data->'weapons','[]'::jsonb)) w
      where u.data->'layout'->'mounts' is null
   ), shots as (
-    select m.s,
+    select m.s, m.battery,
            greatest(1, least(40, round(coalesce(
              (cab->coalesce(u.category,'ship')->'weapons'->m.g->m.idx->>'dalnost')::numeric, 1))))::int as rng,
            coalesce((cab->coalesce(u.category,'ship')->'weapons'->m.g->m.idx->>'dmg')::numeric, 0) * m.q as dmg,
            -- тип урона для стойкостей брони: ballistic→kinetic
            case public._cn_wpn_kind(cab->coalesce(u.category,'ship')->'weapons'->m.g->m.idx->>'name')
-             when 'missile' then 'missile' when 'energy' then 'energy' else 'kinetic' end as k
+             when 'missile' then 'missile' when 'energy' then 'energy' else 'kinetic' end as k,
+           -- скорострельность → тир дробин 1..6 (характер залпа, _bt_shots_tier)
+           public._bt_shots_tier((cab->coalesce(u.category,'ship')->'weapons'->m.g->m.idx->>'rof')::numeric) as tier
       from mounts m
      where cab->coalesce(u.category,'ship')->'weapons'->m.g->m.idx is not null
+  ),
+  -- АВТО-батарея = (сектор, дальность, канал, ТИР залпа). Тир НЕ усредняем:
+  -- спинальную (тир1, тяж) и автопушки (тир6, рой) держим РАЗНЫМИ группами —
+  -- иначе тяжёлый залп размылся бы в средний и потерял характер.
+  g_auto as (
+    select shots.s, shots.rng, shots.k, shots.tier as shots, sum(shots.dmg) as sum_dmg, null::text as bat
+      from shots where shots.dmg > 0 and shots.battery is null
+     group by shots.s, shots.rng, shots.k, shots.tier
+  ),
+  -- РУЧНАЯ батарея игрока: бандлит помеченные орудия одного сектора+канала в ОДИН
+  -- залп (тир = урон-взвешенный средний, дальность = по слабейшему стволу). Игрок
+  -- сам решает разменять пробитие на объём (влить тяж в рой) или наоборот.
+  g_man as (
+    select shots.s, min(shots.rng) as rng, shots.k,
+           greatest(1, least(6, round(sum(shots.dmg * shots.tier) / nullif(sum(shots.dmg), 0))))::int as shots,
+           sum(shots.dmg) as sum_dmg, shots.battery as bat
+      from shots where shots.dmg > 0 and shots.battery is not null
+     group by shots.s, shots.k, shots.battery
   )
-  select coalesce(jsonb_agg(jsonb_build_object('s', gg.s, 'rng', gg.rng, 'dmg', round(gg.sum_dmg), 'k', gg.k)), '[]'::jsonb)
+  select coalesce(jsonb_agg(jsonb_build_object(
+           's', gg.s, 'rng', gg.rng, 'dmg', round(gg.sum_dmg), 'k', gg.k, 'shots', gg.shots, 'bat', gg.bat)), '[]'::jsonb)
     into wpn
-    from (select shots.s, shots.rng, shots.k, sum(shots.dmg) as sum_dmg from shots where shots.dmg > 0 group by shots.s, shots.rng, shots.k) gg;
+    from (select * from g_auto union all select * from g_man) gg;
 
   select coalesce(max((g->>'rng')::int), 1) into rng from jsonb_array_elements(wpn) g;
   if jsonb_array_length(wpn) = 0 then
@@ -511,10 +534,13 @@ end$$;
 create or replace function public.battle_fire(p_battle uuid, p_unit uuid, p_target uuid)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare me text; b public.battles; u record; t record; dist int;
-        wg jsonb; rel int; relt int; dmg numeric := 0; mult numeric; posmul numeric;
+        wg jsonb; rel int; relt int; mult numeric; posmul numeric := 1; dmgfac numeric := 1;
         absorbed numeric; hull numeric; killed boolean := false;
-        tsh numeric; band_ok boolean := false; arc_ok boolean := false; nsect text;
+        band_ok boolean := false; arc_ok boolean := false; nsect text;
         rk numeric; resisted numeric := 0;
+        rsh numeric; shcap numeric; sh_hard numeric := 0.30; shabs numeric := 0;
+        grp_shots int; per_shot numeric; gdmg numeric; absb numeric;
+        total_dmg numeric := 0; hull_leak numeric := 0; i int;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   perform public._bt_arm(p_battle);           -- взвести размер доски этого боя
@@ -548,6 +574,21 @@ begin
   -- Секторы (rel = направление на цель − курс, 0 = прямо по носу):
   --   нос — передние 180° {5,0,1}; правый борт {1,2,3}; левый борт {3,4,5};
   --   турели (any) — круговые. Прямо в корму (rel 3) достаёт только борт.
+  -- Позицию цели и ландшафт считаем ДО залпа: множители нужны на каждую дробину,
+  -- а порог щита — против всего залпа целиком.
+  -- положение цели: в лоб ×1.0, в борт ×1.25, в корму ×2.0
+  relt := ((public._bt_dirof(t.x, t.y, u.x, u.y) - t.facing) % 6 + 6) % 6;
+  posmul := case when relt = 0 then 1.0 when relt = 3 then 2.0 else 1.25 end;
+  -- ландшафт цели: туманность схлопывает щиты и рассеивает залп, обломки прикрывают
+  rsh := t.shield;
+  if public._bt_terra(b.terrain, t.x, t.y) = 'neb' then rsh := 0; dmgfac := 0.7; end if;
+  if public._bt_terra(b.terrain, t.x, t.y) = 'deb' then dmgfac := 0.85; end if;
+  -- ПОРОГ ЩИТА: одну дробину щит гасит не более чем на shcap. Дробина слабее порога
+  -- поглощается целиком (пока есть щит) — рой мелких щит держит; тяжёлая дробина
+  -- пробивает порог, её избыток течёт в корпус даже при полном щите — мало тяжёлых
+  -- пробивают щит. Порог = доля ёмкости щита (sh_hard).
+  shcap := greatest(1, t.max_shield * sh_hard);
+
   rel := ((public._bt_dirof(u.x, u.y, t.x, t.y) - u.facing) % 6 + 6) % 6;
   for wg in select value from jsonb_array_elements(
       case when u.wpn is null or jsonb_array_length(u.wpn) = 0
@@ -565,15 +606,28 @@ begin
       if mult is not null then
         arc_ok := true;
         -- стойкость брони цели к типу этой орудийной группы (алхимия):
-        -- группа без типа (старый снапшот) считается кинетикой
-        rk := least(0.9, greatest(0, coalesce(
+        -- группа без типа (старый снапшот) считается кинетикой.
+        -- ⚠ пол −0.75 (НЕ 0): отрицательная стойкость = уязвимость → урон растёт
+        -- (×(1−rk) при rk<0 даёт >1) — «лом против брони», ради контр-игры.
+        rk := least(0.9, greatest(-0.75, coalesce(
                 (t.resist->>coalesce(wg->>'k','kinetic'))::numeric, 0)));
         -- ПРО цели: сбивает долю РАКЕТНОГО урона на подлёте (КАЗ/лазерные точки)
         if coalesce(wg->>'k','kinetic') = 'missile' and coalesce(t.pd,0) > 0 then
           rk := 1 - (1 - rk) * (1 - least(0.6, t.pd));
         end if;
-        dmg := dmg + (wg->>'dmg')::numeric * mult * (1 - rk);
-        resisted := resisted + (wg->>'dmg')::numeric * mult * rk;
+        -- эффективный урон группы после сплава, позиции и ландшафта
+        gdmg := (wg->>'dmg')::numeric * mult * (1 - rk) * posmul * dmgfac;
+        resisted := resisted + (wg->>'dmg')::numeric * mult * rk * posmul * dmgfac;
+        -- дробим на залп: тир скорострельности = число равных дробин
+        grp_shots := greatest(1, least(6, coalesce((wg->>'shots')::int, 1)));
+        per_shot := gdmg / grp_shots;
+        for i in 1..grp_shots loop
+          absb := least(rsh, least(per_shot, shcap));  -- щит гасит дробину до порога
+          rsh := rsh - absb;
+          shabs := shabs + absb;
+          total_dmg := total_dmg + per_shot;
+          hull_leak := hull_leak + (per_shot - absb);  -- избыток дробины — в корпус
+        end loop;
       end if;
     end if;
   end loop;
@@ -586,21 +640,11 @@ begin
 
   perform public._bt_use_act(p_battle, p_unit);
 
-  -- положение цели: в лоб ×1.0, в борт ×1.25, в корму ×2.0
-  relt := ((public._bt_dirof(t.x, t.y, u.x, u.y) - t.facing) % 6 + 6) % 6;
-  posmul := case when relt = 0 then 1.0 when relt = 3 then 2.0 else 1.25 end;
-  dmg := dmg * posmul;
-
-  -- ландшафт цели: туманность гасит щиты и рассеивает залп, обломки прикрывают
-  tsh := t.shield;
-  if public._bt_terra(b.terrain, t.x, t.y) = 'neb' then tsh := 0; dmg := dmg * 0.7; end if;
-  if public._bt_terra(b.terrain, t.x, t.y) = 'deb' then dmg := dmg * 0.85; end if;
-
-  absorbed := least(tsh, dmg);
-  hull := greatest(dmg * 0.10, (dmg - absorbed) - t.armor);
-  if dmg - absorbed <= 0 then hull := 0; end if;
+  absorbed := shabs;
+  hull := greatest(total_dmg * 0.10, hull_leak - t.armor);
+  if total_dmg <= 0 then hull := 0; end if;
   update public.battle_units
-     set shield = tsh - absorbed,
+     set shield = rsh,
          hp = greatest(0, t.hp - hull),
          alive = (t.hp - hull) > 0
    where id = p_target;
@@ -904,6 +948,7 @@ begin
             'ftl', u.ftl,
             'locked', true,
             'wpn', case when u.side = sd then coalesce(u.wpn, '[]'::jsonb) else null end,
+            'resist', u.resist,   -- стойкости брони по типам (виден шов при захвате)
             'moved', u.moved, 'fired', u.fired, 'acted', u.acted)
         else
           jsonb_build_object(
