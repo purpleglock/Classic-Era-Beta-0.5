@@ -1599,7 +1599,7 @@ function renderGuidebook() {
         <div class="gb-kv-row"><span class="gb-kv-key">⌘ FPNI</span><span class="gb-kv-val">Досье Фонда по защите от невмешательства: найденные <a class="gb-link" onclick="gbScrollTo('gb-precursors')">дозвёздные цивилизации</a> и решения по ним.</span></div>
         <div class="gb-kv-row"><span class="gb-kv-key">⛓ Синли-бей</span><span class="gb-kv-val">Невольничий рынок (см. <a class="gb-link" onclick="gbScrollTo('gb-raids')">«Пиратство»</a>). <b>Пункт не появляется</b> у просвещённых держав.</span></div>
         <div class="gb-kv-row"><span class="gb-kv-key">🕵 Разведуправление</span><span class="gb-kv-val">Вся тайная война: агентура и рынок рекрутов, планирование операций, досье на другие державы, защищённость систем, плен и журнал дел. <b>Отдельной вкладки «Разведка» в Кабинете больше нет</b> — она целиком здесь.</span></div>
-        <div class="gb-kv-row"><span class="gb-kv-key">🜨 Рубеж МЗА</span><span class="gb-kv-val">Пульт залпа и обороны <a class="gb-link" onclick="gbScrollTo('gb-doom')">«Длани»</a> с наводчиком-персонажем. Пункт открывается только после исследования «Сама неотвратимость».</span></div>
+        <div class="gb-kv-row"><span class="gb-kv-key">🜨 Штаб артиллерии</span><span class="gb-kv-val">Пульт залпа и обороны <a class="gb-link" onclick="gbScrollTo('gb-doom')">«Длани»</a> с наводчиком-персонажем. Пункт открывается только после исследования «Сама неотвратимость».</span></div>
       </div>
 
       <h3 class="gb-h3">🜂 Разлом — ставка, поле и осколки</h3>

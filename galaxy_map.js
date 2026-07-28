@@ -4005,33 +4005,47 @@ function gmmBindCanvas() {
     // Прямой зум к курсору (без анимации — она спамила перерастеризацию и лагала).
     gmmZoomAt(e.clientX - r.left, e.clientY - r.top, GMM.s * (e.deltaY > 0 ? 1 / 1.2 : 1.2), false);
   }, { passive: false });
-  // тултип названия ресурса при наведении курсора (+ табло координат в редакторе)
-  cv.addEventListener('mousemove', (e) => {
+  // Тултип названия ресурса при наведении курсора (+ табло координат в редакторе).
+  // ВАЖНО ПРО ЛАГИ: mousemove сыплется десятками событий на кадр. Раньше КАЖДОЕ
+  // из них дёргало getBoundingClientRect() (принудительный layout), линейно
+  // сканировало resHitMap (тысячи иконок ресурсов) и переписывало innerHTML
+  // тултипа — курсор над картой ронял FPS. Теперь: событие только запоминает
+  // позицию, а вся работа идёт ОДИН раз за кадр (rAF), прямоугольник канваса
+  // кэшируется, и DOM трогаем, лишь когда цель под курсором сменилась.
+  const hoverTick = () => {
+    GMM.hoverRaf = 0;
+    const p = GMM.hoverPt;
+    if (!p || !cv.isConnected) return;
+    const r = GMM.hoverRect || (GMM.hoverRect = cv.getBoundingClientRect());
+    const mx = p.cx - r.left, my = p.cy - r.top;
     if (GM.editSession) {
       const el = document.getElementById('gm-coord');
       if (el) {
-        const r = cv.getBoundingClientRect();
-        const w = gmmScreenToWorld(e.clientX - r.left, e.clientY - r.top);
+        const w = gmmScreenToWorld(mx, my);
         el.textContent = `X: ${Math.round(w.x)} | Y: ${Math.round(w.y)}`;
       }
     }
-    if (!GM.showRes || !GMM.resHitMap || !GMM.resHitMap.length) { gmmHideResTip(); return; }
-    const r = cv.getBoundingClientRect();
-    const mx = e.clientX - r.left, my = e.clientY - r.top;
-    // преобразуем координаты мыши в мировые координаты
     const b = GMM.bmp;
-    if (!b) { gmmHideResTip(); return; }
-    // bitamp рисуется в: (b.wx * GMM.s + GMM.tx, b.wy * GMM.s + GMM.ty) с размером (b.pw * f, b.ph * f)
+    if (!GM.showRes || !GMM.resHitMap || !GMM.resHitMap.length || !b) { gmmHideResTip(); return; }
+    // bitmap рисуется в: (b.wx * GMM.s + GMM.tx, b.wy * GMM.s + GMM.ty) с размером (b.pw * f, b.ph * f)
     // где f = GMM.s / b.scale. Обратное преобразование:
     const wx = (mx - b.wx * GMM.s - GMM.tx) / GMM.s + b.wx;
     const wy = (my - b.wy * GMM.s - GMM.ty) / GMM.s + b.wy;
     // ищем иконку ресурса под мышью
     const hit = GMM.resHitMap.find(rn =>
       wx >= rn.x && wx <= rn.x + rn.w && wy >= rn.y && wy <= rn.y + rn.h);
-    if (hit) gmmShowResTip(hit, e.clientX, e.clientY);
+    if (hit) gmmShowResTip(hit, p.cx, p.cy);
     else gmmHideResTip();
-  });
-  cv.addEventListener('mouseleave', () => gmmHideResTip());
+  };
+  cv.addEventListener('mousemove', (e) => {
+    GMM.hoverPt = { cx: e.clientX, cy: e.clientY };
+    if (!GMM.hoverRaf) GMM.hoverRaf = requestAnimationFrame(hoverTick);
+  }, { passive: true });
+  cv.addEventListener('mouseleave', () => { GMM.hoverPt = null; gmmHideResTip(); });
+  // прокрутка/ресайз двигают канвас — кэш прямоугольника сбрасываем
+  const dropRect = () => { GMM.hoverRect = null; };
+  window.addEventListener('scroll', dropRect, { passive: true });
+  window.addEventListener('resize', dropRect);
 }
 function gmmShowResTip(hit, clientX, clientY) {
   let tip = document.getElementById('gmm-res-tip');
@@ -4040,12 +4054,19 @@ function gmmShowResTip(hit, clientX, clientY) {
     tip.id = 'gmm-res-tip';
     document.body.appendChild(tip);
   }
-  tip.innerHTML = esc(hit.name) + (hit.r ? `<span class="gm-tip-r">${esc(hit.r)}</span>` : '');
-  tip.style.left = (clientX) + 'px';
-  tip.style.top = (clientY - 7) + 'px';
+  // innerHTML переписываем, ТОЛЬКО если сменилась иконка под курсором
+  if (GMM.resTipHit !== hit) {
+    GMM.resTipHit = hit;
+    tip.innerHTML = esc(hit.name) + (hit.r ? `<span class="gm-tip-r">${esc(hit.r)}</span>` : '');
+  }
+  // -50%/-100% — центрирование из CSS (#gmm-res-tip); инлайновый transform его
+  // перебивает, поэтому переносим сюда целиком: позиция через translate не гонит
+  // layout, в отличие от left/top.
+  tip.style.transform = `translate(${clientX}px, ${clientY - 7}px) translate(-50%, -100%)`;
   tip.classList.add('gm-on');
 }
 function gmmHideResTip() {
+  GMM.resTipHit = null;
   const tip = document.getElementById('gmm-res-tip');
   if (tip) tip.classList.remove('gm-on');
 }
@@ -7105,7 +7126,13 @@ function gmmPaintDefense(ctx) {
       ctx.setLineDash([]);
       // сам носитель
       const ang = Math.atan2(SY(pt.y) - SY(back.y), SX(pt.x) - SX(back.x));
-      if (onScreen(hX, hY)) gmmCarrierGlyph(ctx, hX, hY, Math.max(2.6, s * 1.1 + 2), d.col, 0.95, ang);
+      // Размер «в полёте» — тот же порядок, что у стоящих значков (csz = ip*0.2*zf):
+      // раньше он тянулся за зумом без потолка (s*1.1+2) и на глубоком зуме челнок
+      // раздувался в гигантскую «стрелку» во весь экран.
+      if (onScreen(hX, hY)) {
+        const tsz = Math.max(2.6, Math.min(9, 2.2 + s * 0.5)) * zf;
+        gmmCarrierGlyph(ctx, hX, hY, tsz, d.col, 0.95, ang);
+      }
     } catch (e) { if (!GMM._unitErrLogged) { GMM._unitErrLogged = true; console.error('gmm unit draw failed', e); } }
   });
 

@@ -2807,6 +2807,69 @@ function heroVNActsSync() {
   if (cnt) cnt.textContent = n ? String(n) : '';
 }
 
+// ── Меню новеллы = РАЗГОВОР, а не простыня из полутора десятков кнопок.
+// Первый уровень — три реплики-намерения («новости», «поиграем», «дела»),
+// второй — конкретные экраны. Список строится в одном месте: и корневое меню
+// (renderChoices), и подменю (heroVNChoice) читают отсюда, иначе они разъезжаются.
+function heroVNMenuGroups(en) {
+  const work = [
+    ['colony',   (en ? 'Colonization' : 'Колонизация')],
+    ['planets',  (en ? 'Colony management' : 'Управление колониями')],
+    ['research', (en ? 'Research' : 'Исследования')],
+    // Разведка живёт только здесь: вкладка кабинета снесена, весь тайный
+    // блок (агентура / операции / досье / контрразведка) — этот экран.
+    ['intel',    (en ? 'Intelligence Directorate' : 'Разведуправление')],
+    // Кнопка названа именем надзорного органа, а не темы: игрок открывает не
+    // «список дикарей», а досье Фонда, который потом это досье ему и предъявит.
+    ['tama',     (en ? 'FPNI' : 'Фонд невмешательства')],
+  ];
+  // «Штаб артиллерии» скрыт, пока не исследована «Сама неотвратимость»:
+  // живая проверка по EC (если экономика уже загружена) либо кэш-флаг с прошлой
+  // загрузки (ставится/чистится в ecLoad; сам экран перепроверяет на сервере).
+  try {
+    const doomOn = (typeof ecDoomUnlocked === 'function' && typeof EC !== 'undefined' && EC.eco && ecDoomUnlocked())
+      || localStorage.getItem('wk_doom_unlocked') === '1';
+    if (doomOn) work.push(['doom', (en ? 'Artillery HQ' : 'Штаб артиллерии')]);
+  } catch (e) {}
+  // ⛓ Синли-бей — невольничий рынок. Скрыт для «просвещённых» держав (зеркало
+  // серверного гейта; сервер всё равно ответит 403). Показываем, если экономика
+  // ещё не загружена (сервер решит), иначе — по ecIsEnlightened().
+  try {
+    const hideSlave = (typeof ecIsEnlightened === 'function' && typeof EC !== 'undefined' && EC.app && ecIsEnlightened());
+    if (!hideSlave) work.push(['sinli', (en ? 'Sinli-Bay (slave market)' : 'Синли-бей')]);
+  } catch (e) { work.push(['sinli', (en ? 'Sinli-Bay (slave market)' : 'Синли-бей')]); }
+  return [
+    { key: 'g_news', label: (en ? 'Any news?' : 'Что нового?'), items: [
+      ['events', (en ? 'Sector events' : 'События сектора')],
+      ['idx',    (en ? "How's the exchange?" : 'Что там на бирже?')],
+      ['market', (en ? "What's moving the market?" : 'Что там на рынке?')],
+      ['ach',    (en ? "Today's achievements" : 'Достижения за сегодня')],
+      ['rating', (en ? 'Player ratings' : 'Рейтинг игроков')],
+    ] },
+    { key: 'g_play', label: (en ? "Let's play a round" : 'Давай поиграем'), items: [
+      ['geo',   (en ? 'Geological survey' : 'Георазведка')],
+      ['stars', (en ? 'Gaze into the Rift' : 'Всмотреться в Разлом')],
+      ['fight', (en ? 'Fight Club' : 'Бойцовский клуб')],
+      // ⏸ ВРЕМЕННО ОТКЛЮЧЕНЫ (вернём позже) — вместо них «Бойцовский клуб».
+      // Серверные эффекты поэмы/ассамблеи и так неактивны (их SQL не применялся).
+      // ['poem',   (en ? 'Poem of the week' : 'Поэма недели')],
+      // ['assembly', (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
+    ] },
+    { key: 'g_work', label: (en ? 'Down to business' : 'Займёмся делами'), items: work },
+  ];
+}
+// «Назад» с экрана — в ЕГО группу, а не в корень: иначе после каждого экрана
+// игрок заново проходит два уровня разговора. Группа не найдена — корень.
+function heroVNBack(kind) {
+  const k = kind || _heroVNView;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  let to = 'menu';
+  try {
+    const g = heroVNMenuGroups(en).filter(x => x.items.some(it => it[0] === k))[0];
+    if (g) to = g.key;
+  } catch (e) {}
+  heroVNChoice(to);
+}
 function heroVNChoice(kind) {
   if (!_heroVNCtl) return;
   const en = (typeof lang !== 'undefined' && lang === 'en');
@@ -2820,6 +2883,23 @@ function heroVNChoice(kind) {
   if (kind !== 'intel' && typeof heroVNIntelClose === 'function') heroVNIntelClose();
   if (kind === 'intel') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); heroVNIntelOpen(); return; }
   if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); _heroVNCtl.menu(); return; }
+
+  // Группа-намерение («Что нового?» / «Давай поиграем» / «Займёмся делами») —
+  // не экран, а второй уровень разговора: возвращаем idle-новеллу и подменяем
+  // список кнопок, «назад» уводит к трём корневым репликам.
+  if (kind.slice(0, 2) === 'g_') {
+    const grp = heroVNMenuGroups(en).filter(g => g.key === kind)[0];
+    if (!grp) { heroVNChoice('menu'); return; }
+    _heroVNCat = null; heroVNUnpin();
+    heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose();
+    heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();
+    heroVNSinliClose(); heroVNTamaClose();
+    if (typeof _heroVNCtl.idle === 'function') _heroVNCtl.idle();
+    _heroVNCtl.setChoices(grp.items.map(([k, l]) =>
+      `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join(''));
+    _heroVNCtl.showBack(() => heroVNChoice('menu'));
+    return;
+  }
 
   // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
   if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();heroVNColonyOpen(); return; }
@@ -2878,7 +2958,7 @@ function heroVNChoice(kind) {
     }
     // «Назад» живёт в подвале рядом с «пропустить» (а не отдельной строкой над списком).
     _heroVNCtl.setChoices(html);
-    _heroVNCtl.showBack(() => heroVNChoice('menu'));
+    _heroVNCtl.showBack(() => heroVNBack(kind));
     return;
   }
 
@@ -2890,7 +2970,7 @@ function heroVNChoice(kind) {
     // Совет СИНХРОННЫЙ (из кэша) — печатается сразу, без подвисания окна.
     const fallback = (en ? 'Let me pull up the board…' : 'Сейчас подниму сводку по бирже…');
     const phrase = (typeof fnExchangeAdvice === 'function' && fnExchangeAdvice(en)) || fallback;
-    _heroVNCtl.narrate([{ t: phrase, n: spk }], { onComplete: heroVNShowIdx });
+    _heroVNCtl.narrate([{ t: phrase, n: spk }], { onComplete: heroVNShowIdx, back: () => heroVNBack('idx') });
   }
 
   // «Что там на рынке?» — недавние события ленты и КАК они двинули курс.
@@ -2898,7 +2978,7 @@ function heroVNChoice(kind) {
     _heroVNCat = 'market';
     heroVNPin('events');
     _heroVNCtl.setChoices(`<div class="hp-vn-choice-empty">${en ? 'Reading the wire…' : 'Читаю сводки…'}</div>`);
-    _heroVNCtl.showBack(() => heroVNChoice('menu'));
+    _heroVNCtl.showBack(() => heroVNBack('market'));
     (typeof ecRpc === 'function' ? ecRpc('market_events_recent') : Promise.resolve([]))
       .then(list => heroVNMarketRender(Array.isArray(list) ? list : []))
       .catch(() => heroVNMarketRender([]));
@@ -2927,7 +3007,7 @@ function heroVNMarketRender(list) {
   _heroVNMarketEv = (list || []).filter(n => !/достижен/i.test(String(n && n.title || '')));
   if (!_heroVNMarketEv.length) {
     _heroVNCtl.setChoices(`<div class="hp-vn-choice-empty">${en ? 'The market is calm — no notable events.' : 'Рынок спокоен — заметных событий нет.'}</div>`);
-    _heroVNCtl.showBack(() => heroVNChoice('menu'));
+    _heroVNCtl.showBack(() => heroVNBack('market'));
     return;
   }
   const html = _heroVNMarketEv.slice(0, 14).map((n, i) => {
@@ -2937,7 +3017,7 @@ function heroVNMarketRender(list) {
     return `<button class="hp-vn-choice hp-vn-choice-item" onclick="event.stopPropagation();heroVNMarketTell(${i})">${ic} <span class="hp-vn-choice-it-t">${esc(title)}</span><span class="hp-vn-mkchip ${sign}">${arrow}</span></button>`;
   }).join('');
   _heroVNCtl.setChoices(html);
-  _heroVNCtl.showBack(() => heroVNChoice('menu'));
+  _heroVNCtl.showBack(() => heroVNBack('market'));
 }
 // Персонаж комментирует выбранное рыночное событие и его влияние на курс.
 function heroVNMarketTell(i) {
@@ -3055,7 +3135,7 @@ function heroVNColonyMap() {
   heroVNColonyRefresh();
 }
 // «Назад» из карты — вернуться к меню новеллы (оно закроет оверлей).
-function heroVNColonyReturn() { heroVNChoice('menu'); }
+function heroVNColonyReturn() { heroVNBack('colony'); }
 
 // Шапка оверлея (заголовок + «назад») — одна на все состояния.
 function _heroColonyHead(en) {
@@ -3753,7 +3833,17 @@ function _heroColonySysBuild(sysId, en) {
     }
     const cid = 'hpvcp' + i;
     defs += `<clipPath id="${cid}"><circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}"></circle></clipPath>`;
-    const tex = texBase + 'planets/planet_' + look + '.png';
+    // Текстура — ТОЙ ЖЕ лестницей, что на большой карте (см. gmmPaintBody):
+    // своя картинка планеты (p.img) → текстура ПОДКЛАССА (planets/cls_<id>.png)
+    // → текстура КЛАССА (planets/planet_<look>.png). Раньше схема всегда брала
+    // класс — и все миры выглядели одинаковым серым камнем.
+    const texCls = texBase + 'planets/planet_' + look + '.png';
+    const subId = (typeof gmPlanetSubId === 'function') ? gmPlanetSubId(p) : null;
+    const tex = (p.img && String(p.img).trim()) ? texBase + String(p.img).trim()
+      : subId ? texBase + 'planets/cls_' + subId + '.png'
+      : texCls;
+    // нет cls_<id>.png (404) → откат на класс прямо в DOM
+    const texFallback = tex === texCls ? '' : ` onerror="this.onerror=null;this.setAttribute('href','${esc(texCls)}');this.setAttributeNS('http://www.w3.org/1999/xlink','href','${esc(texCls)}')"`;
     // Кольца гигантов (сид: примерно у половины).
     const ringed = isGiant && prnd(p, 'ring') > 0.45;
     const ringSvg = ringed ? `
@@ -3764,7 +3854,7 @@ function _heroColonySysBuild(sysId, en) {
       <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp + 16)}" fill="transparent"></circle>
       <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp * 1.5)}" fill="${ringCol}" opacity=".10" filter="url(#hpvcGlow)"></circle>
       <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}" fill="${LOOKC[look] || LOOKC.rock}"></circle>
-      <image href="${esc(tex)}" xlink:href="${esc(tex)}" x="${nf(px - rp)}" y="${nf(py - rp)}" width="${nf(rp * 2)}" height="${nf(rp * 2)}" clip-path="url(#${cid})" preserveAspectRatio="xMidYMid slice"></image>
+      <image href="${esc(tex)}" xlink:href="${esc(tex)}" x="${nf(px - rp)}" y="${nf(py - rp)}" width="${nf(rp * 2)}" height="${nf(rp * 2)}" clip-path="url(#${cid})" preserveAspectRatio="xMidYMid slice"${texFallback}></image>
       <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}" fill="url(#hpvcShade)"></circle>
       ${dead ? `<circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}" fill="rgba(6,9,14,.62)"></circle>` : ''}
       <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp + 0.8)}" fill="none" stroke="rgba(234,246,255,.28)" stroke-width="1"></circle>
@@ -3898,7 +3988,7 @@ function heroVNPoemClose() {
   el.setAttribute('aria-hidden', 'true');
   if (_heroVNView === 'poem') _heroVNView = null;
 }
-function heroVNPoemReturn() { heroVNChoice('menu'); }
+function heroVNPoemReturn() { heroVNBack('poem'); }
 // Шапка — тот же каркас, что у колонизации (hp-vn-col-head).
 function _heroPoemHead(en) {
   return `<div class="hp-vn-col-head">
@@ -4170,7 +4260,7 @@ function heroVNAssemblyClose() {
   if (g) g.classList.remove('open');
   if (_heroVNView === 'assembly') _heroVNView = null;
 }
-function heroVNAssemblyReturn() { heroVNChoice('menu'); }
+function heroVNAssemblyReturn() { heroVNBack('assembly'); }
 function _heroAsmHead(en) {
   return `<div class="hp-vn-col-head">
     <span class="hp-vn-col-title">🏛 ${en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея'}</span>
@@ -5120,7 +5210,7 @@ function heroVNInit() {
     }
     charTimer = setInterval(tick, 30);
   }
-  // Разовая серверная проверка «Самой неотвратимости» для пункта «Рубеж МЗА».
+  // Разовая серверная проверка «Самой неотвратимости» для пункта «Штаб артиллерии».
   // Нужна ровно потому, что wk_doom_unlocked — это localStorage: он привязан к
   // origin, и на деплое (или в другом браузере) его нет, даже если технология
   // давно исследована. Тихо, без блокировки отрисовки меню.
@@ -5145,50 +5235,19 @@ function heroVNInit() {
     if (!choicesEl) return;
     // Прогреть срезы биржи заранее, пока игрок выбирает — к клику «биржа» данные уже в кэше.
     if (typeof fnWarmExchange === 'function') fnWarmExchange();
-    const opts = [
-      ['events', (en ? 'Sector events' : 'События сектора')],
-      ['idx',    (en ? "How's the exchange?" : 'Что там на бирже?')],
-      ['market', (en ? "What's moving the market?" : 'Что там на рынке?')],
-      ['ach',    (en ? "Today's achievements" : 'Достижения за сегодня')],
-      ['rating', (en ? 'Player ratings' : 'Рейтинг игроков')],
-      ['colony', (en ? 'Colonization' : 'Колонизация')],
-      ['planets', (en ? 'Colony management' : 'Управление колониями')],
-      ['geo',    (en ? 'Geological survey' : 'Георазведка')],
-      ['stars',  (en ? 'Gaze into the Rift' : 'Всмотреться в Разлом')],
-      ['research', (en ? 'Research' : 'Исследования')],
-      // Разведка живёт только здесь: вкладка кабинета снесена, весь тайный
-      // блок (агентура / операции / досье / контрразведка) — этот экран.
-      ['intel',  (en ? 'Intelligence Directorate' : 'Разведуправление')],
-      // ⏸ ВРЕМЕННО ОТКЛЮЧЕНЫ (вернём позже) — вместо них «Бойцовский клуб».
-      // Серверные эффекты поэмы/ассамблеи и так неактивны (их SQL не применялся).
-      // ['poem',   (en ? 'Poem of the week' : 'Поэма недели')],
-      // ['assembly', (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
-      ['fight',  (en ? 'Fight Club' : 'Бойцовский клуб')],
-      // Кнопка названа именем надзорного органа, а не темы: игрок открывает не
-      // «список дикарей», а досье Фонда, который потом это досье ему и предъявит.
-      ['tama',   'FPNI'],
-    ];
-    // ⛓ Синли-бей — невольничий рынок. Скрыт для «просвещённых» держав (зеркало
-    // серверного гейта; сервер всё равно ответит 403). Показываем, если экономика
-    // ещё не загружена (сервер решит), иначе — по ecIsEnlightened().
-    try {
-      const hideSlave = (typeof ecIsEnlightened === 'function' && typeof EC !== 'undefined' && EC.app && ecIsEnlightened());
-      if (!hideSlave) opts.push(['sinli', (en ? 'Sinli-Bay (slave market)' : 'Синли-бей')]);
-    } catch (e) { opts.push(['sinli', (en ? 'Sinli-Bay (slave market)' : 'Синли-бей')]); }
-    // «Длань Неотвратимости» скрыта, пока не исследована «Сама неотвратимость»:
-    // живая проверка по EC (если экономика уже загружена) либо кэш-флаг с прошлой
-    // загрузки (ставится/чистится в ecLoad; сам экран перепроверяет на сервере).
+    // Первый уровень — три реплики-намерения; конкретные экраны живут за ними
+    // (heroVNMenuGroups). Так меню читается как ответ персонажу, а не как пульт.
+    const opts = heroVNMenuGroups(en).map(g => [g.key, g.label]);
+    // Кэш-флаг «Штаба артиллерии» живёт в localStorage и потому ПУСТ на новом
+    // домене/браузере: держава с исследованием не видела пункт, пока не откроет
+    // кабинет. Спрашиваем сервер один раз за сеанс и перерисовываем меню.
     try {
       const doomOn = (typeof ecDoomUnlocked === 'function' && typeof EC !== 'undefined' && EC.eco && ecDoomUnlocked())
         || localStorage.getItem('wk_doom_unlocked') === '1';
-      if (doomOn) opts.push(['doom', (en ? 'MDA Line · strike & shield' : 'Рубеж МЗА · удар и оборона')]);
-      // Кэш-флаг живёт в localStorage и потому ПУСТ на новом домене/браузере:
-      // держава с исследованием не видела пункт, пока не откроет кабинет.
-      // Спрашиваем сервер один раз за сеанс и перерисовываем меню.
-      else doomProbe();
+      if (!doomOn) doomProbe();
     } catch (e) {}
     choicesEl.innerHTML = opts.map(([k, l]) =>
-      `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');
+      `<button class="hp-vn-choice hp-vn-choice-grp" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');
     heroVNActsSync();
   }
   // В режиме рассказа «назад» живёт в подвале рядом с «пропустить» (кнопкой),
@@ -5235,6 +5294,7 @@ function heroVNInit() {
     showBack(fn) { if (typeof fn === 'function') this.back = fn; setBack(true); },  // показать «назад» в подвале
     hideBack() { this.back = null; setBack(false); },
     menu() { stopNarration(); renderChoices(); },                      // к главным категориям
+    idle() { stopNarration(); },                                       // вернуть idle-реплики, список отдадут снаружи
     narrate(ls, opts) {                       // персонаж рассказывает выбранное
       opts = opts || {};
       lines = (ls && ls.length) ? ls : idleLines;
@@ -5271,7 +5331,7 @@ function heroVNGeoClose() {
   el.innerHTML = '';
   if (_heroVNView === 'geo') _heroVNView = null;
 }
-function heroVNGeoReturn() { heroVNChoice('menu'); }
+function heroVNGeoReturn() { heroVNBack('geo'); }
 function _hgHead(en) {
   return `<div class="hp-vn-col-head">
     <span class="hp-vn-col-title"><svg class="hp-vn-stars-tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5l5 4 5-4M7 10.5l5 4 5-4M7 16.5l5 4 5-4"/></svg>${en ? 'Geological survey' : 'Георазведка'}</span>
@@ -5340,7 +5400,7 @@ function heroVNSinliClose() {
   el.innerHTML = '';
   if (_heroVNView === 'sinli') _heroVNView = null;
 }
-function heroVNSinliReturn() { heroVNChoice('menu'); }
+function heroVNSinliReturn() { heroVNBack('sinli'); }
 function _snMoney(v) { return Math.round(Number(v) || 0).toLocaleString('ru-RU'); }
 function _snHead(en) {
   return `<div class="hp-vn-col-head">
@@ -5484,7 +5544,7 @@ function heroVNFightClose() {
   if (_fcPoll) { clearInterval(_fcPoll); _fcPoll = null; }
   if (_heroVNView === 'fight') _heroVNView = null;
 }
-function heroVNFightReturn() { heroVNChoice('menu'); }
+function heroVNFightReturn() { heroVNBack('fight'); }
 function _fcHead(en) {
   return `<div class="hp-vn-col-head">
     <span class="hp-vn-col-title">🥊 ${en ? 'Fight Club' : 'Бойцовский клуб'}</span>
@@ -5681,10 +5741,10 @@ function heroVNDoomClose() {
   el.innerHTML = '';
   if (_heroVNView === 'doom') _heroVNView = null;
 }
-function heroVNDoomReturn() { heroVNChoice('menu'); }
+function heroVNDoomReturn() { heroVNBack('doom'); }
 function _hdHead(en) {
   return `<div class="hp-vn-col-head">
-    <span class="hp-vn-col-title">${en ? 'MDA Line · strike & shield' : 'Рубеж МЗА · удар и оборона'}</span>
+    <span class="hp-vn-col-title">${en ? 'Artillery HQ · strike & shield' : 'Штаб артиллерии · удар и оборона'}</span>
     <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNDoomReturn()">↩ ${en ? 'back' : 'назад'}</button>
   </div>`;
 }
@@ -5755,7 +5815,7 @@ function heroVNIntelClose() {
   el.innerHTML = '';
   if (_heroVNView === 'intel') _heroVNView = null;
 }
-function heroVNIntelReturn() { heroVNChoice('menu'); }
+function heroVNIntelReturn() { heroVNBack('intel'); }
 function _hiHead(en) {
   return `<div class="hp-vn-col-head">
     <span class="hp-vn-col-title">${en ? 'Intelligence Directorate' : 'Разведуправление'}</span>
@@ -5838,7 +5898,7 @@ function heroVNStarsClose() {
   el.innerHTML = '';
   if (_heroVNView === 'stars') _heroVNView = null;
 }
-function heroVNStarsReturn() { heroVNChoice('menu'); }
+function heroVNStarsReturn() { heroVNBack('stars'); }
 function _hsHead(en) {
   return `<div class="hp-vn-col-head">
     <span class="hp-vn-col-title"><svg class="hp-vn-stars-tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3"/></svg>${en ? 'Gaze into the Rift' : 'Всмотреться в Разлом'}</span>
@@ -5907,7 +5967,7 @@ function heroVNResearchClose() {
   el.innerHTML = '';
   if (_heroVNView === 'research') _heroVNView = null;
 }
-function heroVNResearchReturn() { heroVNChoice('menu'); }
+function heroVNResearchReturn() { heroVNBack('research'); }
 function heroVNResearchCat(c) { if (_htState) { _htState.cat = c; _htRenderTech(); } }
 
 async function heroVNResearchOpen() {
@@ -6074,7 +6134,7 @@ function heroVNRatingClose() {
   el.innerHTML = '';
   if (_heroVNView === 'rating') _heroVNView = null;
 }
-function heroVNRatingReturn() { heroVNChoice('menu'); }
+function heroVNRatingReturn() { heroVNBack('rating'); }
 function heroVNRatingTab(t) {
   if (!_hrState) return;
   _hrState.tab = t;
@@ -8915,7 +8975,7 @@ function heroVNPlanetsClose() {
   el.innerHTML = '';
   if (_heroVNView === 'planets') _heroVNView = null;
 }
-function heroVNPlanetsReturn() { heroVNChoice('menu'); }
+function heroVNPlanetsReturn() { heroVNBack('planets'); }
 
 // Класс «вида» планеты (gas/ocean/ice/lava/terran/rock) — тем же правилом,
 // что и текстуры большой карты; фолбэк, если движок карты не загружен.

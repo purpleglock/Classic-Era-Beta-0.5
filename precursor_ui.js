@@ -164,7 +164,7 @@ function heroVNTamaClose() {
   _pcOpenCiv = null;
   if (typeof _heroVNView !== 'undefined' && _heroVNView === 'tama') _heroVNView = null;
 }
-function heroVNTamaReturn() { heroVNChoice('menu'); }
+function heroVNTamaReturn() { heroVNBack('tama'); }
 function _pcHead(en) {
   const rep = _pcState ? (+_pcState.rep || 0) : 0;
   const repTxt = rep >= 0 ? 'Фонд: претензий нет' : `Фонд: досье ${rep}`;
@@ -201,7 +201,8 @@ async function heroVNTamaRefresh() {
   const en = (typeof lang !== 'undefined' && lang === 'en');
   try { _pcState = await ecRpc('precursor_get'); }
   catch (e) {
-    el.innerHTML = _pcHead(en) + _pcMsg('Сеть наблюдения молчит. Применён ли _precursor_decisions.sql?');
+    const why = (e && (e.message || e.hint || e.details)) || String(e || '');
+    el.innerHTML = _pcHead(en) + _pcMsg('Сеть наблюдения молчит: ' + esc(why));
     return;
   }
   if (!el.classList.contains('show')) return;

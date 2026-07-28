@@ -398,7 +398,9 @@
   display:flex;flex-wrap:wrap;align-items:stretch;gap:9px;
   margin-top:18px;padding-top:14px;
   border-top: var(--deco-frame-w, 1px) solid color-mix(in srgb,var(--gd,#3a9bdc) 32%, var(--w1,rgba(255,255,255,.06)));
-  max-height:170px;overflow:auto;scrollbar-width:thin;
+  /* высота списка тянется за окном: на ноутбуке 13" остаётся прежние ~170px,
+     на большом мониторе подменю из 7 пунктов влезает целиком без прокрутки */
+  max-height:clamp(150px,24vh,260px);overflow:auto;scrollbar-width:thin;
 }
 /* короткая яркая засечка в начале разделителя — «здесь начинаются действия» */
 .hp-vn-choices::before{
@@ -413,7 +415,8 @@
 /* вариант ответа — гранёный чип: клип по срезам, «обводка» и фон = слои-подложки */
 .hp-vn-choice{
   position:relative;z-index:0;cursor:pointer;pointer-events:auto;
-  flex:1 1 190px;min-width:min(190px,100%);
+  /* базис резиновый: на узком окне 2 чипа в ряд, на широком — 3-4, без «рваного» ряда */
+  flex:1 1 clamp(150px,22%,210px);min-width:min(150px,100%);
   display:flex;align-items:center;justify-content:center;gap:10px;
   background:transparent;border:none;border-radius:0;
   clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
@@ -429,6 +432,15 @@
 }
 .hp-vn-choice:hover{color:var(--t1,#eaf4ff)}
 .hp-vn-choice:hover::after{background:color-mix(in srgb,var(--gd,#3a9bdc) 14%,hsl(216 24% 8%))}
+/* Реплика-намерение (уровень 1: «Что нового?» / «Давай поиграем» / «Займёмся
+   делами») — тот же гранёный чип, только крупнее и в полную яркость текста:
+   это ответ персонажу, а за ним уже пульт с экранами. Три штуки в один ряд. */
+.hp-vn-choice-grp{
+  flex:1 1 clamp(180px,30%,340px);
+  padding:14px 16px;color:var(--t1,#eaf4ff);
+  font-size:clamp(14px,1.5vw,16px);
+}
+.hp-vn-choice-grp::before{background:color-mix(in srgb,var(--gd,#3a9bdc) 55%,var(--w1,rgba(255,255,255,.06)))}
 /* запись в списке (уровень 2) — герб/иконка + текст в одну строку с обрезкой */
 .hp-vn-choice-item{font-weight:500;font-size:clamp(12px,1.25vw,14px);justify-content:flex-start;text-align:left}
 .hp-vn-choice-item img,.hp-vn-choice-item .fn-fr-flag{width:15px;height:15px;object-fit:contain;flex-shrink:0;border-radius:3px;opacity:0.9}
@@ -442,6 +454,23 @@
   flex:1 1 100%;
   color:var(--t3,#9fb3c4);font-family:'Inter',sans-serif;font-size:13px;
   padding:9px 4px;
+}
+/* ── Адаптация меню под остальные разрешения (мобильная ветка — ниже, в общем
+   медиа-блоке новеллы). Здесь только десктоп/планшет и низкие окна. ── */
+/* Планшет и узкое окно ноутбука: чипы по два в ряд, иначе третий обрезает текст */
+@media (min-width:769px) and (max-width:1180px){
+  .hp-vn-choice{flex:1 1 calc(50% - 5px)}
+  .hp-vn-choice-grp{flex:1 1 calc(50% - 5px)}
+}
+/* Низкое окно (ландшафтный планшет, окно в пол-экрана): список не должен съедать реплику */
+@media (min-width:769px) and (max-height:640px){
+  .hp-vn-choices{max-height:132px;margin-top:12px;padding-top:10px}
+  .hp-vn-choice{padding:9px 12px}
+  .hp-vn-choice-grp{padding:11px 14px}
+}
+/* Большой монитор: подменю из 7 пунктов ложится в два ряда без прокрутки */
+@media (min-width:1600px){
+  .hp-vn-choices{max-height:280px;gap:11px}
 }
 /* обёртка меню действий: на десктопе — сквозная, всё оформление на самом списке;
    приглашение «Что предпримете?» нужно только на телефоне (см. медиа) */
@@ -1126,8 +1155,11 @@
   .hp-vn-col-head{padding:11px 14px;flex-wrap:wrap;gap:8px 14px}
   .hp-vn-col-title{font-size:15px;flex:1 1 100%}
   .hp-vn-col-head .hp-vn-col-x{flex:1 1 auto;padding:11px 14px;font-size:11.5px}
-  .hp-vn-col-body{flex-direction:column;gap:12px;padding:12px;overflow:auto;scrollbar-width:thin}
-  .hp-vn-col-main{flex:0 0 auto;height:46vh;min-height:240px}
+  /* overflow-x:hidden — схема системы шире экрана, и её ширина тянула ВЕСЬ экран
+     вбок (панель уезжала за край). Прокрутка ленты планет живёт ВНУТРИ .col-main. */
+  .hp-vn-col-body{flex-direction:column;gap:12px;padding:12px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
+  .hp-vn-col-main{flex:0 0 auto;height:46vh;min-height:240px;width:100%;max-width:100%;min-width:0}
+  .hp-vn-col-main:has(.hpvnc-sysmap){overscroll-behavior-x:contain}
   .hp-vn-col-side{flex:0 0 auto;flex-direction:column;gap:12px}
   .hp-vn-col-mini{aspect-ratio:16/7}
   .hp-vn-col-info{flex:0 0 auto}
@@ -1318,6 +1350,8 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
      высотой wrap уносит кнопки в СОСЕДНИЕ КОЛОНКИ и список едет вбок вместо вниз */
   .hp-vn-choices{flex-direction:column;flex-wrap:nowrap;gap:8px;max-height:none;overflow:visible}
   .hp-vn-choice{flex:0 0 auto;padding:12px 14px;font-size:15px}
+  /* на телефоне уровень 1 — три крупные реплики: столбец, тапабельная высота */
+  .hp-vn-choice-grp{padding:14px;font-size:16px}
   .hp-vn-choice-item{font-size:14px}
 
   /* Кнопка меню — намеренно УТИЛИТАРНАЯ, а не вторая реплика: рядом уже говорит
