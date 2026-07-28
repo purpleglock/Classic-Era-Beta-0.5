@@ -190,7 +190,6 @@
 .ec-op-n { flex: 1; font-weight: 700; font-size: 12.5px; color: var(--t1); }
 .ec-op-lock, .ec-op-chk { font-size: 12px; flex-shrink: 0; }
 .ec-op-chk { color: var(--te, #3ec0d0); font-weight: 800; }
-.ec-op-desc { font-size: 10.5px; color: var(--t3); line-height: 1.4; }
 .ec-op-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .ec-op-diff { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 9px; letter-spacing: calc(.03em * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t4); }
 .ec-op-tag { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: calc(.02em * var(--deco-ls-mult, 1)); text-transform: uppercase; padding: 1.5px 6px; border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-pill); color: var(--t3); }
@@ -4408,3 +4407,54 @@ canvas.ec-res-thumb-cv { border-radius: 0; background: transparent; box-shadow: 
 .ec-dep-more > summary:hover { color: var(--t1); }
 .ec-dep-calc { margin: 5px 0 2px 14px; padding: 7px 11px; background: var(--b1, rgba(255,255,255,.04)); border-radius: var(--radius-sm); font-size: 12px; line-height: 1.7; }
 .ec-dep-calc .ec-dep-total { margin-top: 4px; padding-top: 5px; border-top: 1px solid var(--w2, rgba(255,255,255,.08)); color: var(--t1); }
+
+/* ══ Разведуправление 2.0: защищённость систем и артефакты ══════════
+   Палитра «умбра» экрана разведки; один акцент на блок — см. ui-design-rules. */
+
+/* Шкала защищённости: узкая полоса + число. Цвет задаётся инлайном по уровню. */
+.ec-prot { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
+.ec-prot-bar { display: inline-block; width: 54px; height: 5px; border-radius: 3px;
+  background: rgba(255, 255, 255, .10); overflow: hidden; }
+.ec-prot-bar i { display: block; height: 100%; border-radius: 3px; transition: width .2s ease; }
+.ec-prot b { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Карточка системы в блоке охраны — шапка стала многострочной. */
+.ec-ci-col-t { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ec-ci-col-t i { flex: 1 1 100%; }
+
+/* Изъян оперативника в карточке: та же форма, что перк, но приглушённая. */
+.ec-agent-flaw { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px;
+  padding: 1px 6px; border-radius: 999px; cursor: help;
+  border: 1px solid rgba(224, 160, 48, .35); color: var(--color-warning, #e0a030);
+  background: rgba(224, 160, 48, .07); }
+
+/* Иконка артефакта в углу карточки может быть картинкой. */
+.ec-agent-art.has-img { display: inline-block; width: 18px; height: 18px; border-radius: 4px;
+  overflow: hidden; vertical-align: middle; }
+.ec-agent-art.has-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Инвентарь артефактов: сетка карточек с артом. */
+.ec-art-grid { display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.ec-art-card { display: flex; flex-direction: column; gap: 7px; padding: 10px;
+  border-radius: 10px; background: var(--b0, #0c1322);
+  border: 1px solid color-mix(in srgb, var(--art-col, #9fb0c8) 40%, transparent); }
+.ec-art-top { display: flex; align-items: center; gap: 9px; }
+.ec-art-pic { flex: 0 0 auto; width: 46px; height: 46px; border-radius: 8px; object-fit: cover;
+  display: block; background: rgba(255, 255, 255, .05);
+  border: 1px solid color-mix(in srgb, var(--art-col, #9fb0c8) 35%, transparent); }
+.ec-art-pic.ph { display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.ec-art-hd { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ec-art-hd b { font-size: 13px; color: var(--art-col, #cfe0f5); line-height: 1.2; }
+.ec-art-rar { font-size: 10px; font-style: normal; color: var(--t4, #6b7c94);
+  text-transform: uppercase; letter-spacing: .06em; }
+.ec-art-desc { font-size: 11.5px; line-height: 1.45; color: var(--t3, #9fb0c8); }
+.ec-art-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.ec-art-tag { font-size: 10px; padding: 1px 6px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .14); color: var(--t3, #9fb0c8); cursor: help; }
+.ec-art-tag.cursed { border-color: rgba(176, 123, 216, .45); color: var(--pu, #b07bd8); }
+.ec-art-tag.once { border-color: rgba(224, 160, 48, .45); color: var(--color-warning, #e0a030); }
+.ec-art-tag.rift { border-color: rgba(63, 216, 200, .40); color: var(--te, #3fd8c8); }
+.ec-art-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  margin-top: auto; padding-top: 4px; }
+.ec-art-foot .ec-mini-sel { flex: 1 1 auto; min-width: 0; }

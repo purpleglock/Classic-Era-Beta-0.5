@@ -64,6 +64,26 @@ end$$;
 revoke all on function public._research_slots(text) from public;
 grant execute on function public._research_slots(text) to authenticated;
 
+-- ── Срок готовности слота = БЛИЖАЙШИЙ суточный тик ──────────────────────
+-- Исследование идёт «один ход», а ход в игре = суточный тик (pg_cron
+-- economy_tick_all, 00:05 UTC). Раньше писали r = старт + 24 ч РЕАЛЬНОГО
+-- времени: тех, поставленный днём, к ночному тику ещё не «созревал»
+-- (24 ч > времени до тика) и уезжал на ВТОРУЮ ночь — отсюда вечная жалоба
+-- «поставил вчера, сегодня не изучились».
+-- Теперь r = следующий тик после старта, но не ближе 2 ч (иначе тех,
+-- поставленный за минуту до тика, изучался бы мгновенно).
+create or replace function public._research_ready_at()
+returns timestamptz language sql stable set search_path=public as $$
+  select case
+    when t < now() + interval '2 hours' then t + interval '1 day'
+    else t
+  end
+  from (select date_trunc('day', now() at time zone 'UTC') at time zone 'UTC'
+               + interval '1 day' + interval '5 minutes' as t) q;
+$$;
+revoke all on function public._research_ready_at() from public;
+grant execute on function public._research_ready_at() to authenticated;
+
 -- ── Шаг исследований на тике: завершить готовые слоты + добрать из очереди ──
 -- Вызывается из economy_accrue. Цена/prereq — из каталога tech_nodes (сервер).
 create or replace function public._research_step(p_fid text)
@@ -134,7 +154,7 @@ begin
 
     -- СТАРТ: добавить слот, списать ОН (из очереди элемент уходит)
     eco.research_slots := eco.research_slots
-      || jsonb_build_object('n', nid, 'r', now() + interval '1 day');
+      || jsonb_build_object('n', nid, 'r', public._research_ready_at());
     eco.science := coalesce(eco.science,0) - cost;
   end loop;
 
@@ -185,13 +205,13 @@ begin
   update public.faction_economy
     set science = science - cost,
         research_slots = coalesce(research_slots,'[]'::jsonb)
-          || jsonb_build_object('n', p_node, 'r', now() + interval '1 day')
+          || jsonb_build_object('n', p_node, 'r', public._research_ready_at())
     where faction_id = app.faction_id;
 
   -- Немедленно заполнить оставшиеся свободные слоты из очереди (без ожидания тика).
   perform public._research_step(app.faction_id);
 
-  return jsonb_build_object('ok', true, 'cost', cost, 'ready_at', now() + interval '1 day');
+  return jsonb_build_object('ok', true, 'cost', cost, 'ready_at', public._research_ready_at());
 end$$;
 revoke all on function public.economy_research(text,numeric) from public;
 grant execute on function public.economy_research(text,numeric) to authenticated;

@@ -38,6 +38,8 @@ const ALLOWED_DIRS = {
   doom:      'assets/doom',         // шапки-арты новеллы наведения Длани (face_<mood>.webp)
   constructors: 'assets/constructors', // арты компонентов конструктора (орудия: ship_weapon_<slug>_<idx>.webp)
   precursor: 'assets/precursor',    // иконки вкладки «Дозвёздные миры» (<ключ>.webp: решения и статусы)
+  intel:     'assets/intel',        // шапки вкладок новеллы «Разведуправление» (<вкладка>.webp)
+  artifacts: 'assets/artifacts',    // арты артефактов агентуры (<ключ>.webp; каталог spy_artifact_kinds)
 };
 // Возвращает {rel, abs} для папки назначения по query ?dir= (или дефолт-портреты).
 // Незнакомый ключ раньше молча падал в портреты: старый (не перезапущенный)

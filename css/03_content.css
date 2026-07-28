@@ -5313,3 +5313,211 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   .fc-bet-sel,.fc-bet-amt{flex:1 1 auto}
   .hp-vna-cta.fc-watch{align-self:stretch;text-align:center}
 }
+
+/* ══════════════════════════════════════════════════════════════
+   НОВЕЛЛА · «Разведуправление» (hp-vn-intel) — тайная служба державы.
+   Каркас наследуется от .hp-vn-colony/.hp-vn-geo (элемент несёт оба класса);
+   здесь — своя палитра «умбра»: холодный бирюзовый канал на глухом графите.
+   Один акцент (#3fd8c8), остальное — тишина.
+   ══════════════════════════════════════════════════════════════ */
+.hp-vn-intel{--vni:#3fd8c8;--vni-t:#dff5f1;--vni-t2:#8aa8a4;--vni-bg:hsl(186 22% 6% / .92)}
+.hp-vn-intel .hp-vn-col-head{background:linear-gradient(180deg,hsl(186 30% 8% / .96),hsl(186 24% 5% / .96))}
+.hp-vn-intel .hp-vn-col-title{color:var(--vni-t)}
+.hp-vni-clr{color:#6fbdb2}
+.hp-vni-body{color:var(--vni-t2)}
+.hp-vni-page{padding-bottom:8px}
+/* Лента-шов канала: пунктир шифрованной несущей + живой статус */
+.hp-vni-strip{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:#6fbdb2;padding:7px 12px;margin-bottom:12px;
+  background:repeating-linear-gradient(90deg,rgba(63,216,200,.10) 0 6px,transparent 6px 16px);
+  border-top:1px solid rgba(63,216,200,.26);border-bottom:1px solid rgba(63,216,200,.26);
+}
+.hp-vni-live{color:#6d817f}
+.hp-vni-live.hot{color:var(--vni-t);animation:hpvniPulse 1.4s ease-in-out infinite}
+@keyframes hpvniPulse{50%{opacity:.35}}
+/* HUD: пять цифр сводки */
+.hp-vni-hud{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:1px;
+  background:rgba(63,216,200,.16);margin-bottom:14px}
+.hp-vni-stat{background:var(--vni-bg);padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.hp-vni-stat-v{font-family:var(--font-mono);font-size:19px;line-height:1;color:var(--vni-t)}
+.hp-vni-stat-v i{font-style:normal;font-size:12px;color:#6d817f}
+.hp-vni-stat-v.c-ok{color:#7bd88f}.hp-vni-stat-v.c-te{color:var(--vni)}
+.hp-vni-stat-v.c-wn{color:#e0a030}.hp-vni-stat-v.c-pu{color:#b07bd8}
+.hp-vni-stat-k{font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#6d817f}
+/* Гранёные вкладки (клип + слой-подложка, НЕ border) */
+.hp-vni-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.hp-vni-tab{
+  position:relative;z-index:0;cursor:pointer;border:none;background:transparent;border-radius:0;
+  font-family:var(--font-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:#7f9d99;padding:8px 16px;
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:color var(--duration-fast);
+}
+.hp-vni-tab::before{content:"";position:absolute;inset:0;z-index:-2;background:rgba(63,216,200,.26)}
+.hp-vni-tab::after{content:"";position:absolute;inset:1px;z-index:-1;background:hsl(186 22% 6% / .94);
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  transition:background var(--duration-fast)}
+.hp-vni-tab:hover{color:var(--vni-t)}
+.hp-vni-tab.on{color:var(--vni-t)}
+.hp-vni-tab.on::before{background:var(--vni)}
+.hp-vni-tab.on::after{background:hsl(186 32% 10% / .95)}
+.hp-vni-tab i{font-style:normal;margin-left:7px;color:var(--vni)}
+/* Шапка (реплика резидента) + рельс шагов вкладки «Операции» пришпилены к
+   верху прокрутки: список дел под ними может быть длинным, а текст и переход
+   между шагами должны читаться без прокрутки вверх-вниз. */
+.hp-vni-headpin{position:sticky;top:0;z-index:6;background:hsl(186 22% 6% / .97)}
+/* Шапка-арт вкладки + вводная резидентуры поверх */
+.hp-vni-banner{position:relative;min-height:clamp(230px,34vh,400px);display:flex;flex-direction:column;
+  justify-content:flex-end;overflow:hidden;margin-bottom:14px;
+  background:radial-gradient(125% 100% at 50% 12%,#12312f,#070a0a 74%)}
+.hp-vni-banner-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 28%;
+  opacity:0;transition:opacity .5s ease}
+.hp-vni-banner-img.ok{opacity:1}
+.hp-vni-banner-scrim{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(7,10,10,.12) 0,rgba(7,10,10,.04) 34%,rgba(7,10,10,.74) 72%,#070a0a 100%)}
+.hp-vni-say{position:relative;z-index:2;padding:16px 18px 18px}
+.hp-vni-say-who{font-family:var(--font-mono);font-size:9px;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--vni);margin-bottom:6px}
+.hp-vni-say-l{margin:0 0 4px;font-size:13px;line-height:1.6;color:#cfe6e2;max-width:720px}
+/* Кнопка загрузки арта (staff) — угол шапки, не мозолит глаза */
+.hp-vni-up{position:absolute;top:8px;right:8px;z-index:3;cursor:pointer;font-size:13px;line-height:1;
+  padding:5px 7px;background:hsl(186 22% 6% / .8);border:1px solid rgba(63,216,200,.3);opacity:.5;
+  transition:opacity var(--duration-fast)}
+.hp-vni-up:hover{opacity:1}
+/* Заголовок раздела внутри вкладки */
+.hp-vni-sect{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:16px 0 8px;
+  font-size:13px;color:var(--vni-t);letter-spacing:.02em}
+.hp-vni-sect span{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;color:#6d817f}
+.hp-vni-sect .hp-vni-btn{margin-left:auto}
+.hp-vni-hint{font-size:11.5px;line-height:1.6;color:#6d817f;margin:8px 0 4px;
+  border-left:2px solid rgba(63,216,200,.35);padding-left:10px}
+.hp-vni-card{background:hsl(186 20% 6% / .82);border:1px solid rgba(63,216,200,.18);
+  border-left:2px solid var(--vni);padding:11px 13px}
+.hp-vni-feed{display:flex;flex-direction:column;gap:6px}
+.hp-vni-empty{font-size:12px;color:#6d817f;padding:14px;text-align:center;
+  background:hsl(186 18% 6% / .6);border:1px dashed rgba(63,216,200,.2)}
+.hp-vni-btn{cursor:pointer;border:1px solid rgba(63,216,200,.4);background:transparent;border-radius:0;
+  font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--vni);padding:7px 13px;transition:background var(--duration-fast),color var(--duration-fast)}
+.hp-vni-btn:hover{background:rgba(63,216,200,.14);color:var(--vni-t)}
+.hp-vni-btn.primary{background:rgba(63,216,200,.16);color:var(--vni-t)}
+.hp-vni-btn i{font-style:normal;opacity:.7}
+/* Реестр целей: строка-досье */
+.hp-vni-dosgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
+.hp-vni-dos{display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer;width:100%;
+  padding:10px 12px;border:1px solid rgba(63,216,200,.18);border-radius:0;
+  background:hsl(186 20% 6% / .82);transition:border-color var(--duration-fast),background var(--duration-fast)}
+.hp-vni-dos:hover{border-color:rgba(63,216,200,.45)}
+.hp-vni-dos.on{border-color:var(--vni);background:hsl(186 28% 9% / .9)}
+.hp-vni-dos-fl{flex:0 0 auto;display:flex;align-items:center}
+.hp-vni-dos-b{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 auto}
+.hp-vni-dos-b b{font-size:13px;color:var(--vni-t);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hp-vni-dos-b i{font-style:normal;font-size:10.5px;color:#6d817f}
+.hp-vni-dos-lv{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--vni)}
+.hp-vni-dos-lv.deep{color:#7bd88f}
+.hp-vni-dos-lv.none{color:#6d817f}
+.hp-vni-dos-ci{font-family:var(--font-mono);font-size:11px;color:#b07bd8;white-space:nowrap}
+/* Охрана систем: по карточке на систему, своя палитра «умбра» (не ec-dip-*/ec-ci-* кабинета) */
+.hp-vni-guard-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px}
+.hp-vni-guard-card{background:hsl(186 20% 6% / .82);border:1px solid rgba(63,216,200,.16);
+  border-left:2px solid var(--vni);padding:11px 13px;display:flex;flex-direction:column;gap:8px}
+.hp-vni-guard-card.weak{border-left-color:#e0a030}
+.hp-vni-guard-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.hp-vni-guard-hd b{font-size:13px;font-weight:600;color:var(--vni-t)}
+.hp-vni-guard-meta{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:#6d817f}
+.hp-vni-guard-chips{display:flex;flex-wrap:wrap;gap:6px;min-height:22px}
+.hp-vni-guard-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#cfe6e2;
+  background:hsl(186 22% 8% / .9);border:1px solid var(--pc,rgba(63,216,200,.35));border-radius:99px;
+  padding:3px 4px 3px 9px}
+.hp-vni-guard-chip b{font-weight:600;color:var(--vni-t)}
+.hp-vni-guard-chip i{font-style:normal;opacity:.7;font-size:10px}
+.hp-vni-guard-x{background:none;border:none;color:#6d817f;cursor:pointer;font-size:11px;
+  padding:0 4px;line-height:1.6}
+.hp-vni-guard-x:hover{color:#e3576b}
+.hp-vni-guard-empty{font-size:11px;color:#4d5c6a}
+.hp-vni-guard-add{margin-top:2px}
+.hp-vni-guard-sel{width:100%;font-family:var(--font-mono);font-size:11px;
+  background:hsl(186 22% 6% / .92);border:1px solid rgba(63,216,200,.32);color:var(--vni-t);
+  padding:6px 8px;border-radius:0}
+.hp-vni-guard-sel:focus{border-color:var(--vni)}
+.hp-vni-hint.warn{color:#e0a030}
+/* Переиспользуемые виджеты кабинета внутри экрана — в тему канала */
+.hp-vn-intel .ec-dip-card,.hp-vn-intel .ec-bld,.hp-vn-intel .ec-agent,.hp-vn-intel .ec-spy-row{
+  background:hsl(186 20% 6% / .82);border-color:rgba(63,216,200,.18)}
+.hp-vn-intel .ec-dip-t,.hp-vn-intel .ec-section-title,.hp-vn-intel .ec-r-name b{color:var(--vni-t)}
+.hp-vn-intel .ec-hint,.hp-vn-intel .cn-fac-hint,.hp-vn-intel .ec-sub-title{color:#6d817f}
+.hp-vn-intel select,.hp-vn-intel input[type=text],.hp-vn-intel input[type=number]{
+  background:hsl(186 22% 6% / .92);border:1px solid rgba(63,216,200,.32);border-radius:0;color:var(--vni-t);
+  padding:7px 9px;font-size:12px;font-family:var(--font-mono);outline:none}
+.hp-vn-intel select:focus,.hp-vn-intel input:focus{border-color:var(--vni)}
+
+/* Разворот операций: корешок-прогресс, сцена шага, подвал-навигация */
+.hp-vni-spine{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.hp-vni-spine-p{cursor:pointer;background:none;border:none;border-radius:0;padding:2px 0;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#4f635f}
+.hp-vni-spine-p.past{color:#7f9d99}
+.hp-vni-spine-p.on{color:var(--vni);text-shadow:0 0 12px rgba(63,216,200,.45)}
+.hp-vni-spine-ln{flex:1 1 18px;height:1px;background:rgba(63,216,200,.22);max-width:60px}
+.hp-vni-scene{min-height:120px}
+.hp-vni-steph{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;color:#8aa8a4;margin-bottom:10px}
+.hp-vni-steph b{color:var(--vni-t)}
+.hp-vni-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:14px 0 4px}
+/* Досье: сетка показателей среза и строки колоний */
+.hp-vni-fresh{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--vni);margin-bottom:10px}
+.hp-vni-fresh.stale{color:#e0a030}
+.hp-vni-kvgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;
+  background:rgba(63,216,200,.14)}
+.hp-vni-kv{background:hsl(186 22% 6% / .92);padding:9px 11px;display:flex;flex-direction:column;gap:2px}
+.hp-vni-kv-k{font-family:var(--font-mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#6d817f}
+.hp-vni-kv-v{font-family:var(--font-mono);font-size:16px;line-height:1.1;color:var(--vni-t)}
+.hp-vni-kv i{font-style:normal;font-size:10px;color:#546864}
+.hp-vni-colrow{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:7px 0;
+  border-bottom:1px solid rgba(63,216,200,.12);font-size:12px;color:#8aa8a4}
+.hp-vni-colrow:last-of-type{border-bottom:none}
+.hp-vni-colrow b{color:var(--vni-t);font-weight:600}
+.hp-vni-colrow i{font-style:normal;color:#546864;font-size:11px}
+.hp-vni-dosbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+/* Карточки операций/агентов, переиспользованные из кабинета — в тему канала */
+.hp-vn-intel .ec-op-group-hd{color:var(--vni-t)}
+.hp-vn-intel .ec-spy-op,.hp-vn-intel .ec-pick-card,.hp-vn-intel .ec-tgt-card{
+  background:hsl(186 20% 6% / .82);border-color:rgba(63,216,200,.18)}
+.hp-vn-intel .ec-spy-op.on,.hp-vn-intel .ec-pick-card.on{border-color:var(--vni)}
+.hp-vn-intel .ec-trade-summary{background:hsl(186 20% 6% / .82);border-color:rgba(63,216,200,.2)}
+
+
+/* Строка фактов по выбранной операции (шаги «операция» и «группа») — сама
+   формулировка дела ушла в реплику резидента (hp-vni-say), тут только цифры. */
+.hp-vni-opdet{margin-top:12px;padding:9px 13px;background:hsl(186 22% 7% / .9);
+  border:1px solid rgba(63,216,200,.22);border-left:2px solid var(--vni)}
+.hp-vni-opdet-m{display:flex;flex-wrap:wrap;gap:6px 14px}
+.hp-vni-opq{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#6d817f;
+  display:inline-flex;align-items:center;gap:5px}
+.hp-vni-opq b{color:#546864;font-weight:400}
+.hp-vni-opq.bad{color:#e0a030}
+/* Компактный список колоний в досье */
+.hp-vni-note{font-size:11.5px;color:#6d817f;margin-bottom:8px}
+.hp-vni-chips{display:flex;flex-wrap:wrap;gap:6px}
+.hp-vni-chip{font-size:11.5px;color:#cfe6e2;padding:4px 9px;background:hsl(186 22% 8% / .9);
+  border:1px solid rgba(63,216,200,.18)}
+
+
+/* Значок-счётчик на вкладке: тревоги — своим цветом, чтобы не читались как люди */
+.hp-vni-tab i.warn{color:#e0a030}
+.hp-vni-tab.on i.warn{color:#ffcf7a}
+/* Очереди тревог: левая метка срочности у каждой ленты */
+.hp-vni-q-hot,.hp-vni-q-warn,.hp-vni-q-cold{border-left:2px solid transparent;padding-left:10px}
+.hp-vni-q-hot{border-left-color:var(--vni)}
+.hp-vni-q-warn{border-left-color:#e0a030}
+.hp-vni-q-cold{border-left-color:rgba(63,216,200,.18)}
+.hp-vn-intel .ec-spy-invest-track{background:rgba(255,255,255,.07)}
+.hp-vn-intel .ec-spy-anon{color:#6d817f}
+
+@media(max-width:620px){
+  .hp-vni-banner{min-height:clamp(170px,26vh,240px)}
+  .hp-vni-tab{padding:7px 11px;font-size:10px;letter-spacing:.1em}
+  .hp-vni-dosgrid{grid-template-columns:1fr}
+}

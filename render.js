@@ -2632,6 +2632,7 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-colony hp-vn-geo hp-vn-fight" id="hp-vn-fight" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-sinli" id="hp-vn-sinli" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-sinli hp-vn-tama" id="hp-vn-tama" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-intel" id="hp-vn-intel" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2814,6 +2815,10 @@ function heroVNChoice(kind) {
   // флаг просмотра, чтобы отложенный onComplete прежней реплики её не «всплыл».
   _heroVNView = kind;
   if (kind !== 'idx' && typeof heroVNHideIdx === 'function') heroVNHideIdx();
+  // «Разведуправление» живёт в собственном оверлее и гасится при уходе на ЛЮБОЙ
+  // другой экран — иначе оно осталось бы поверх сцены (ветки ниже про него не знают).
+  if (kind !== 'intel' && typeof heroVNIntelClose === 'function') heroVNIntelClose();
+  if (kind === 'intel') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); heroVNIntelOpen(); return; }
   if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); _heroVNCtl.menu(); return; }
 
   // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
@@ -5151,6 +5156,9 @@ function heroVNInit() {
       ['geo',    (en ? 'Geological survey' : 'Георазведка')],
       ['stars',  (en ? 'Gaze into the Rift' : 'Всмотреться в Разлом')],
       ['research', (en ? 'Research' : 'Исследования')],
+      // Разведка живёт только здесь: вкладка кабинета снесена, весь тайный
+      // блок (агентура / операции / досье / контрразведка) — этот экран.
+      ['intel',  (en ? 'Intelligence Directorate' : 'Разведуправление')],
       // ⏸ ВРЕМЕННО ОТКЛЮЧЕНЫ (вернём позже) — вместо них «Бойцовский клуб».
       // Серверные эффекты поэмы/ассамблеи и так неактивны (их SQL не применялся).
       // ['poem',   (en ? 'Poem of the week' : 'Поэма недели')],
@@ -5734,6 +5742,97 @@ function heroVNDoomRefresh() {
 // казна и состояние берутся из ответа RPC, перерисовывается только оверлей.
 // Каркас (шапка/подложка/мобилка) наследуется от .hp-vn-geo/.hp-vn-colony.
 // ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// НОВЕЛЛА · «Разведуправление» — тайная служба державы.
+// Заменяет снесённую вкладку «Разведка» в кабинете: там всё жило одной
+// простынёй (агенты, диверсии, тревоги, журнал вперемешку). Здесь — шесть
+// вкладок за одной дверью; тело отдаёт economy.js (ecIntelVNBody), после RPC
+// экран перерисовывает ecReloadPaint → heroVNIntelRefresh. Каркас — .hp-vn-colony.
+// ══════════════════════════════════════════════════════════════
+function heroVNIntelClose() {
+  const el = document.getElementById('hp-vn-intel');
+  if (!el) return;
+  el.classList.remove('show');
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '';
+  if (_heroVNView === 'intel') _heroVNView = null;
+}
+function heroVNIntelReturn() { heroVNChoice('menu'); }
+function _hiHead(en) {
+  return `<div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">${en ? 'Intelligence Directorate' : 'Разведуправление'}</span>
+    <span class="hp-vnr-clr hp-vni-clr">${en ? 'covert operations · clearance «umbra»' : 'тайные операции · допуск «умбра»'}</span>
+    <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNIntelReturn()">↩ ${en ? 'back' : 'назад'}</button>
+  </div>`;
+}
+function _hiMsg(en, ru, enT) { return `<div class="hp-vn-col-body hp-vn-geo-body hp-vni-body"><div class="hp-vn-col-empty">${en ? enT : ru}</div></div>`; }
+async function heroVNIntelOpen() {
+  const el = document.getElementById('hp-vn-intel');
+  if (!el) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  el.classList.add('show');
+  el.setAttribute('aria-hidden', 'false');
+  el.innerHTML = _hiHead(en) + _hiMsg(en, 'Поднимаю защищённый канал…', 'Raising the secure channel…');
+  try {
+    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
+      if (!el.classList.contains('show')) return;
+      el.innerHTML = _hiHead(en) + _hiMsg(en, 'Тайная служба есть только у зарегистрированной державы.', 'Only a registered faction keeps a secret service.');
+      return;
+    }
+    // Агентура и операции приезжают второй фазой загрузки (EC.spyAgency).
+    if (!EC.eco || !EC.spyAgency) { if (typeof ecLoad === 'function') await ecLoad(); }
+    if (!el.classList.contains('show')) return;
+    heroVNIntelRefresh();
+  } catch (e) {
+    if (!el.classList.contains('show')) return;
+    el.innerHTML = _hiHead(en) + _hiMsg(en, 'Резидентура не отвечает — канал сорван.', 'The station is silent — the channel dropped.');
+  }
+}
+// Перерисовать открытый экран свежими данными (зовётся и из ecReloadPaint).
+function heroVNIntelRefresh() {
+  const el = document.getElementById('hp-vn-intel');
+  if (!el || !el.classList.contains('show')) return;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  if (typeof ecIntelVNBody !== 'function' || typeof EC === 'undefined' || !EC.eco) {
+    el.innerHTML = _hiHead(en) + _hiMsg(en, 'Резидентура не отвечает — канал сорван.', 'The station is silent — the channel dropped.');
+    return;
+  }
+  // Экран перерисовывается целиком (innerHTML), поэтому прокрутку запоминаем и
+  // возвращаем: иначе любой клик внутри — раскрыть папку, отметить операцию —
+  // отбрасывал игрока в самое начало длинной страницы.
+  const prev = el.querySelector('.hp-vni-body');
+  const keep = prev ? prev.scrollTop : 0;
+  // Экран рисуется одним большим шаблоном — ошибка в ЛЮБОЙ вкладке раньше
+  // рвала весь рендер молча (кнопка «не нажималась»: state менялся, а экран
+  // замирал на прежнем виде). Теперь падение видно и можно вернуться на «Операции».
+  let bodyHtml;
+  try {
+    bodyHtml = ecIntelVNBody();
+  } catch (e) {
+    console.error('[intel VN]', e);
+    if (typeof ecIntelSt === 'function') ecIntelSt().tab = 'ops';
+    const msg = en ? `Tab render error: ${e && e.message || e}. Returned to Operations.`
+                   : `Сбой отрисовки вкладки: ${e && e.message || e}. Вернул на «Операции».`;
+    bodyHtml = `<div class="hp-vn-col-empty">${esc(msg)}</div>`;
+  }
+  el.innerHTML = _hiHead(en) + `<div class="hp-vn-col-body hp-vn-geo-body hp-vni-body">${bodyHtml}</div>`;
+  const body = el.querySelector('.hp-vni-body');
+  if (body && keep) body.scrollTop = keep;
+  // Только что раскрытую папку досье подводим под глаз (она ниже реестра).
+  try {
+    const st = (typeof ecIntelSt === 'function') ? ecIntelSt() : null;
+    if (st && st.scrollDos) {
+      st.scrollDos = false;
+      const dos = el.querySelector('#ec-intel-dos');
+      if (dos && dos.scrollIntoView) dos.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  } catch (e) {}
+  // Живой расчёт операции (шанс/раскрытие) — досчитывается по уже отрисованному
+  // планировщику; раньше его дёргала отрисовка вкладки кабинета.
+  try { if (typeof ecSpyCalcLive === 'function') ecSpyCalcLive(); } catch (e) {}
+}
+
 function heroVNStarsClose() {
   const el = document.getElementById('hp-vn-stars');
   if (!el) return;

@@ -130,6 +130,8 @@ async function adLoadDetails() {
   AD.routes    = routes  || [];
   AD.faithFids = new Set((faiths || []).map(f => f.faction_id));
   AD.portraits = portraits || [];
+  // Каталог артефактов агентуры — редактируется прямо здесь (вкладка «🎒 Артефакты»).
+  try { AD.artKinds = await dbGet('spy_artifact_kinds', 'select=*&order=sort.asc,key.asc'); } catch (e) { AD.artKinds = []; }
   try { AD.unions = await adRpc('union_admin_list') || []; } catch (e) { AD.unions = []; }
   await adVNLoad();
 }
@@ -242,7 +244,7 @@ function adPaint() {
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
     const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
-    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['shells', 'Снаряды'], ['precursor', 'Дозвёздные'], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['shells', 'Снаряды'], ['precursor', 'Дозвёздные'], ['intelart', '🕵 Разведка'], ['artifacts', '🎒 Артефакты', (AD.artKinds || []).length], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -256,6 +258,8 @@ function adPaint() {
     else if (AD.tab === 'ach')       tabContent = adAchPanel();
     else if (AD.tab === 'shells')    tabContent = adShellArtPanel();
     else if (AD.tab === 'precursor') tabContent = adPrecursorArtPanel();
+    else if (AD.tab === 'intelart')  tabContent = adIntelArtPanel();
+    else if (AD.tab === 'artifacts') tabContent = adArtKindsPanel();
     else if (AD.tab === 'shipart')   tabContent = adShipArtPanel();
     else if (AD.tab === 'weapons')   tabContent = adWeaponImgPanel();
     else if (AD.tab === 'market')    tabContent = adMarketPanel();
@@ -1924,6 +1928,76 @@ async function adPrecursorArtUpload(key, inputEl) {
     adPaint();
   } catch (e) {
     console.error('[admin] precursor art', e);
+    if (st) st.textContent = 'Ошибка';
+    toast('Не удалось сохранить арт: ' + (e.message || e), 'err');
+  }
+}
+
+
+// ── Шапки новеллы «Разведуправление» (assets/intel/<вкладка>.webp) ──
+// Экран разведки (render.js heroVNIntelOpen → economy.js ecIntelVNBody) рисует
+// над каждой вкладкой широкий арт с вводной резидентуры поверх. Файла нет —
+// остаётся тематический градиент, ничего не ломается. Пишем ПРЯМО в папку игры
+// тем же локальным сервером, что и остальные арты («Загрузка артов.bat»).
+const AD_INTEL_DIR = 'assets/intel';
+const AD_INTEL_KEYS = [
+  ['ops',      'ОПР', 'Оперативный отдел — планирование операций'],
+  ['agents',   'КДР', 'Агентура — штат оперативников и снаряжение'],
+  ['targets',  'АНЛ', 'Досье — реестр целей и глубина разведданных'],
+  ['counter',  'КРЗ', 'Контрразведка — защита и тревоги'],
+  ['alerts',   'ТРВ', 'Тревоги — дежурная смена, операции против вас'],
+  ['captives', 'ИЗЛ', 'Плен — изолятор резидентуры'],
+  ['log',      'АРХ', 'Журнал — архив завершённых дел'],
+];
+function adIntelArtPanel() {
+  const bust = AD.intelBust || '';
+  const cards = AD_INTEL_KEYS.map(([k, code, info]) => {
+    const url = `${AD_INTEL_DIR}/${k}.webp${bust ? `?t=${bust}` : ''}`;
+    return `<div style="width:230px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:10px">
+      <div style="position:relative;width:100%;height:110px;border-radius:8px;overflow:hidden;border:1px solid var(--w2,#2a3340);background:#08211f">
+        <img src="${esc(url)}" alt="" onload="this.style.opacity=1" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+             style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font-size:16px;font-family:monospace;letter-spacing:.16em">${esc(code)}</div>
+      </div>
+      <div style="font-size:9px;font-family:monospace;letter-spacing:.12em;color:var(--t4,#6a7a88);margin-top:8px">${esc(code)} · ${esc(k)}.webp</div>
+      <div style="font-size:11px;color:var(--t3,#8aa0b0);margin-top:3px;line-height:1.4;min-height:30px">${esc(info)}</div>
+      <input type="file" accept="image/*" id="ad-intel-file-${esc(k)}" style="display:none" onchange="adIntelArtUpload('${esc(k)}', this)">
+      <button class="btn btn-gh btn-xs" style="width:100%;margin-top:6px" onclick="document.getElementById('ad-intel-file-${esc(k)}').click()">Загрузить</button>
+      <div id="ad-intel-st-${esc(k)}" style="font-size:9px;color:var(--t4,#6a7a88);margin-top:4px;min-height:12px"></div>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">Разведуправление <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· шапки вкладок новеллы (${AD_INTEL_KEYS.length})</span></div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Широкий кадр (примерно 3:1, от 1200 px по ширине) — он растянут на всю ширину экрана и снизу растворяется в интерфейс, поэтому нижнюю треть композиции не занимайте важным: поверх неё ложится текст резидентуры.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 12px;line-height:1.5">Пишется <b>прямо в папку игры</b> (<code>${AD_INTEL_DIR}/</code>). Запусти батник <b>«Загрузка артов.bat»</b> и держи окно открытым. Те же арты можно залить прямо с экрана разведки — кнопкой 🖼 в углу шапки (видна только staff).</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">${cards}</div>
+  </div>`;
+}
+async function adIntelArtUpload(key, inputEl) {
+  const f = inputEl && inputEl.files && inputEl.files[0];
+  const st = document.getElementById(`ad-intel-st-${key}`);
+  if (!f) return;
+  if (st) st.textContent = 'Проверка сервера…';
+  if (!(await adPortServerAlive())) {
+    if (st) st.textContent = 'нет сервера';
+    toast('Запусти «Загрузка артов.bat» (node tools/upload-server.js)', 'err');
+    return;
+  }
+  try {
+    if (st) st.textContent = 'Сохранение…';
+    // Шапка широкая — жмём по длинной стороне 1600, чтобы не таскать мегабайты.
+    const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, 1600, 0.9) : f;
+    const r = await fetch(`${AD_PORT_SERVER}/upload?dir=intel&name=${encodeURIComponent(key + '.webp')}`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.intelBust = Date.now();
+    if (st) st.textContent = 'Готово';
+    toast(`Шапка «${key}» сохранена`, 'ok');
+    adPaint();
+  } catch (e) {
+    console.error('[admin] intel art', e);
     if (st) st.textContent = 'Ошибка';
     toast('Не удалось сохранить арт: ' + (e.message || e), 'err');
   }
@@ -5953,4 +6027,259 @@ function bbImport() {
   } catch (e) {
     toast('Не удалось разобрать JSON: ' + e.message, 'err');
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 🎒 АРТЕФАКТЫ АГЕНТУРЫ — каталог видов (spy_artifact_kinds)
+// ══════════════════════════════════════════════════════════════════════
+// Каталог живёт в БАЗЕ, а не в коде: отсюда заводятся новые предметы, правятся
+// эффекты и грузятся арты. Клиент (economy.js ecArt*) читает его через
+// intel_state() и рисует по нему карточки — дублировать ничего не нужно.
+// Картинка пишется ПРЯМО в папку игры (assets/artifacts/<ключ>.webp) тем же
+// локальным сервером, что и остальные арты («Загрузка артов.bat»).
+const AD_ART_DIR = 'assets/artifacts';
+const AD_ART_RARITY = [['common', 'обычный'], ['rare', 'редкий'], ['legendary', 'из Разлома']];
+// Поля-эффекты: [ключ, подпись, тип, подсказка]. Всё, что тут перечислено,
+// сервер честно учитывает в spy_launch — выдуманных полей в форме нет.
+const AD_ART_FIELDS = [
+  ['succ_any',    '+ успех (любая опер.), %', 'num',  'Прибавка к шансу успеха ЛЮБОЙ операции.'],
+  ['succ_op_val', '+ успех (профильные), %',  'num',  'Прибавка к успеху только тех операций, что перечислены рядом.'],
+  ['succ_ops',    'профильные операции',      'ops',  'Через запятую: steal_gc, steal_res, steal_tech, sabotage, destabilize, mass_demolish, recon_basic, recon_deep, kill_agent, faith_impose.'],
+  ['det',         '− раскрытие, %',           'num',  'Насколько хуже оперативника замечают. Отрицательное значение — наоборот, светится.'],
+  ['xp_mult',     '+ множитель опыта',        'num',  '0.5 = +50% получаемого XP, 2 = втрое быстрее.'],
+  ['pierce',      'пробой защищённости',      'num',  'Вычитается из защищённости цели ДО умножения на вес операции.'],
+  ['turn_cut',    'операция на ход короче',   'bool', 'Срок дела уменьшается на 1 ход (минимум 1).'],
+  ['guaranteed',  'гарантированный успех',    'bool', 'Операция удаётся при любой обороне. Ставьте вместе с «одноразовый».'],
+  ['one_shot',    'одноразовый (сгорает)',    'bool', 'Предмет уничтожается на первой же операции.'],
+  ['cursed',      'проклятый (не снимается)', 'bool', 'Снять с оперативника нельзя — предмет исчезнет только с его смертью.'],
+];
+function adArtRow(k) { return (AD.artKinds || []).find(x => x.key === k) || null; }
+
+function adArtKindsPanel() {
+  const list = AD.artKinds || [];
+  const bust = AD.artBustKinds || '';
+  const card = a => {
+    const img = a.img_url ? `${a.img_url}${bust ? `?t=${bust}` : ''}` : '';
+    const fields = AD_ART_FIELDS.map(([f, lbl, type, hint]) => {
+      const id = `ad-artf-${esc(a.key)}-${f}`;
+      if (type === 'bool') {
+        return `<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3,#8aa0b0)" title="${esc(hint)}">
+          <input type="checkbox" id="${id}" ${a[f] ? 'checked' : ''}>${esc(lbl)}</label>`;
+      }
+      const val = type === 'ops' ? (a.succ_ops || []).join(', ') : (a[f] != null ? a[f] : 0);
+      return `<label style="display:flex;flex-direction:column;gap:2px;font-size:10px;color:var(--t4,#6a7a88)" title="${esc(hint)}">${esc(lbl)}
+        <input type="${type === 'num' ? 'number' : 'text'}" step="0.05" id="${id}" value="${esc(String(val))}"
+          style="background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:5px;color:var(--t1,#e8edf2);padding:4px 6px;font-size:11px"></label>`;
+    }).join('');
+    return `<div style="width:330px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:12px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <div style="position:relative;flex:0 0 72px;width:72px;height:72px;border-radius:8px;overflow:hidden;border:1px solid var(--w2,#2a3340);background:#0d1520">
+          ${img ? `<img src="${esc(img)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">` : ''}
+          <div style="position:absolute;inset:0;display:${img ? 'none' : 'flex'};align-items:center;justify-content:center;font-size:28px">${esc(a.icon || '🎁')}</div>
+        </div>
+        <div style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:5px">
+          <input type="text" id="ad-artf-${esc(a.key)}-label" value="${esc(a.label || '')}" placeholder="Название"
+            style="background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:5px;color:var(--t1,#e8edf2);padding:5px 7px;font-size:13px;font-weight:600">
+          <div style="display:flex;gap:5px">
+            <input type="text" id="ad-artf-${esc(a.key)}-icon" value="${esc(a.icon || '')}" placeholder="🎁" maxlength="4"
+              style="width:48px;text-align:center;background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:5px;color:var(--t1,#e8edf2);padding:5px;font-size:14px">
+            <select id="ad-artf-${esc(a.key)}-rarity" style="flex:1;background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:5px;color:var(--t1,#e8edf2);padding:5px;font-size:11px">
+              ${AD_ART_RARITY.map(([v, t]) => `<option value="${v}"${a.rarity === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
+          </div>
+          <div style="font-size:9px;font-family:monospace;color:var(--t4,#6a7a88);letter-spacing:.08em">${esc(a.key)}</div>
+        </div>
+      </div>
+      <textarea id="ad-artf-${esc(a.key)}-descr" rows="3" placeholder="Что делает предмет — этот текст читает игрок"
+        style="background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:5px;color:var(--t1,#e8edf2);padding:6px 7px;font-size:11px;line-height:1.4;resize:vertical">${esc(a.descr || '')}</textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${fields}</div>
+      <div style="display:flex;gap:6px;align-items:flex-end">
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:10px;color:var(--t4,#6a7a88)" title="Вес в лотерее Разлома. 0 — предмет не выпадает вовсе.">вес дропа
+          <input type="number" id="ad-artf-${esc(a.key)}-drop_weight" value="${a.drop_weight != null ? a.drop_weight : 0}"
+            style="width:64px;background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:5px;color:var(--t1,#e8edf2);padding:4px 6px;font-size:11px"></label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3,#8aa0b0)" title="Выключенный предмет не выпадает и не показывается игрокам.">
+          <input type="checkbox" id="ad-artf-${esc(a.key)}-enabled" ${a.enabled ? 'checked' : ''}>включён</label>
+      </div>
+      <input type="file" accept="image/*" id="ad-art-kind-file-${esc(a.key)}" style="display:none" onchange="adArtKindUpload('${esc(a.key)}', this)">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-gd btn-xs" onclick="adArtKindSave('${esc(a.key)}')">💾 Сохранить</button>
+        <button class="btn btn-gh btn-xs" onclick="document.getElementById('ad-art-kind-file-${esc(a.key)}').click()">🖼 Арт</button>
+        <button class="btn btn-gh btn-xs" style="margin-left:auto;color:#ff7a7a" onclick="adArtKindDelete('${esc(a.key)}')">✕</button>
+      </div>
+      <div id="ad-art-kind-st-${esc(a.key)}" style="font-size:9px;color:var(--t4,#6a7a88);min-height:12px"></div>
+    </div>`;
+  };
+  const add = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:10px 0 14px">
+    <input type="text" id="ad-art-new-key" placeholder="ключ (латиницей, напр. lantern)"
+      style="width:230px;background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:6px;color:var(--t1,#e8edf2);padding:7px 9px;font-size:12px">
+    <input type="text" id="ad-art-new-label" placeholder="Название предмета"
+      style="width:240px;background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:6px;color:var(--t1,#e8edf2);padding:7px 9px;font-size:12px">
+    <button class="btn btn-gd btn-sm" onclick="adArtKindCreate()">＋ Завести предмет</button>
+  </div>`;
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">Артефакты агентуры <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· каталог видов (${list.length})</span></div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px;line-height:1.5">Предметы, которые Разлом отдаёт державе, когда <b>посмотрел в ответ</b> (джекпот «Взгляд в ответ»). Игрок вешает их на конкретного оперативника — до двух штук. Эффекты отсюда сервер считает в реальном расчёте операции, поэтому цифры не декоративные.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 4px;line-height:1.5">Арт пишется <b>прямо в папку игры</b> (<code>${AD_ART_DIR}/&lt;ключ&gt;.webp</code>) — запусти <b>«Загрузка артов.bat»</b> и держи окно открытым. Квадратный кадр, от 512 px. Нет картинки — рисуется эмодзи-иконка.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 4px;line-height:1.5">«Вес дропа» — шанс относительно остальных: у обычного предмета 12–14, у легендарного 4–5. Поставьте 0, чтобы предмет существовал, но не выпадал.</div>
+    ${add}
+    <div style="display:flex;flex-wrap:wrap;gap:12px">${list.map(card).join('') || '<div style="color:var(--t4,#6a7a88);font-size:12px">Каталог пуст — накатите _intel_protection.sql или заведите предмет вручную.</div>'}</div>
+    ${adArtIssuePanel()}
+  </div>`;
+}
+
+// ── Выдача экземпляров державам (spy_admin_art_*) ──────────────────────
+// Каталог выше — это ВИДЫ. Здесь раздаются штуки: без Разлома и лотереи,
+// для тестов и для наградных выдач. Один и тот же вид можно выдать
+// несколько раз, но на одного оперативника два одинаковых не встанут —
+// это режет сервер (spy_artifact_equip) и уникальный индекс.
+function adArtIssuePanel() {
+  const facs = (AD.apps || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const kinds = AD.artKinds || [];
+  const rows = AD.artIssued;
+  const RAR = { common: '#8aa0b0', rare: '#5fb0e6', legendary: '#e0b050' };
+  const tbl = !rows
+    ? '<div style="font-size:11px;color:var(--t4,#6a7a88)">Выберите державу и нажмите «Показать» — увидите её инвентарь.</div>'
+    : (!rows.length
+      ? '<div style="font-size:11px;color:var(--t4,#6a7a88)">Выданного нет.</div>'
+      : `<div style="display:flex;flex-direction:column;gap:4px;max-height:320px;overflow:auto">${rows.map(r => `
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;border:1px solid var(--w2,#2a3340);border-radius:6px;padding:5px 8px;background:var(--b1,#0f141b)">
+          <span style="font-size:15px">${esc(r.icon || '🎁')}</span>
+          <b style="color:${RAR[r.rarity] || '#8aa0b0'}">${esc(r.label || r.kind)}</b>
+          <span style="color:var(--t4,#6a7a88)">${esc(r.faction || r.faction_id)}</span>
+          ${r.agent ? `<i style="color:var(--ok,#7bd88f);font-style:normal">на: ${esc(r.agent)}</i>` : '<i style="color:var(--t4,#6a7a88)">в запасе</i>'}
+          ${r.spent ? '<span style="color:#ff7a7a">сгорел</span>' : ''}
+          <span style="margin-left:auto;font-family:monospace;font-size:9px;color:var(--t4,#6a7a88)">${esc(r.source || '')}</span>
+          <button class="btn btn-gh btn-xs" style="color:#ff7a7a" onclick="adArtRevoke('${esc(r.id)}')">✕</button>
+        </div>`).join('')}</div>`);
+  return `<div style="margin-top:18px;border-top:1px solid var(--w2,#2a3340);padding-top:14px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:14px;font-weight:700;color:var(--gdl,#5fb0e6)">Выдача экземпляров</div>
+    <div style="font-size:11px;color:var(--t3,#8aa0b0);margin:5px 0 10px;line-height:1.5">Предмет попадает в инвентарь державы сразу — как будто выпал из Разлома (в списке помечен как <code>admin</code>). На оперативника по-прежнему встают <b>только два предмета и только разных видов</b>: второй такой же сервер не примет.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <select id="ad-art-issue-fac" style="width:230px;background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:6px;color:var(--t1,#e8edf2);padding:7px 9px;font-size:12px">
+        ${facs.map(f => `<option value="${esc(f.faction_id)}"${AD.artIssuedFid === f.faction_id ? ' selected' : ''}>${esc(f.name || f.faction_id)}</option>`).join('')}</select>
+      <select id="ad-art-issue-kind" style="width:230px;background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:6px;color:var(--t1,#e8edf2);padding:7px 9px;font-size:12px">
+        ${kinds.map(k => `<option value="${esc(k.key)}">${esc(k.icon || '🎁')} ${esc(k.label || k.key)}${k.enabled ? '' : ' (выключен)'}</option>`).join('')}</select>
+      <input type="number" id="ad-art-issue-n" value="1" min="1" max="20" style="width:64px;background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:6px;color:var(--t1,#e8edf2);padding:7px 9px;font-size:12px">
+      <button class="btn btn-gd btn-sm" onclick="adArtIssue()">🎁 Выдать</button>
+      <button class="btn btn-gh btn-sm" onclick="adArtIssuedLoad()">↻ Показать инвентарь</button>
+    </div>
+    ${tbl}
+  </div>`;
+}
+async function adArtIssuedLoad(fid) {
+  const sel = document.getElementById('ad-art-issue-fac');
+  AD.artIssuedFid = fid || (sel && sel.value) || null;
+  if (!AD.artIssuedFid) { toast('Выберите державу', 'err'); return; }
+  try {
+    AD.artIssued = await adRpc('spy_admin_art_list', { p_fid: AD.artIssuedFid }) || [];
+    adPaint();
+  } catch (e) { toast('Не удалось прочитать инвентарь: ' + (e.message || e), 'err'); }
+}
+async function adArtIssue() {
+  const fid = (document.getElementById('ad-art-issue-fac') || {}).value;
+  const kind = (document.getElementById('ad-art-issue-kind') || {}).value;
+  const n = parseInt((document.getElementById('ad-art-issue-n') || {}).value) || 1;
+  if (!fid || !kind) { toast('Нужны держава и предмет', 'err'); return; }
+  try {
+    await adRpc('spy_admin_art_grant', { p_fid: fid, p_kind: kind, p_n: n });
+    toast(`Выдано ×${n}`, 'ok');
+    await adArtIssuedLoad(fid);
+  } catch (e) { toast('Не удалось выдать: ' + (e.message || e), 'err'); }
+}
+async function adArtRevoke(id) {
+  if (!confirm('Отобрать этот экземпляр? Если он висит на оперативнике — просто исчезнет.')) return;
+  try {
+    await adRpc('spy_admin_art_revoke', { p_artifact_id: id });
+    AD.artIssued = (AD.artIssued || []).filter(x => x.id !== id);
+    toast('Отобрано', 'ok');
+    adPaint();
+  } catch (e) { toast('Не удалось отобрать: ' + (e.message || e), 'err'); }
+}
+
+function adArtVal(key, field) { return document.getElementById(`ad-artf-${key}-${field}`); }
+async function adArtKindSave(key) {
+  const st = document.getElementById(`ad-art-kind-st-${key}`);
+  const g = f => adArtVal(key, f);
+  const patch = {
+    label: (g('label').value || '').trim() || key,
+    icon: (g('icon').value || '').trim() || '🎁',
+    rarity: g('rarity').value,
+    descr: g('descr').value || '',
+    drop_weight: parseInt(g('drop_weight').value) || 0,
+    enabled: !!g('enabled').checked,
+  };
+  AD_ART_FIELDS.forEach(([f, , type]) => {
+    const el = g(f); if (!el) return;
+    if (type === 'bool') patch[f] = !!el.checked;
+    else if (type === 'ops') patch[f] = (el.value || '').split(',').map(x => x.trim()).filter(Boolean);
+    else patch[f] = parseFloat(el.value) || 0;
+  });
+  if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = 'Сохранение…'; }
+  try {
+    await dbPatch('spy_artifact_kinds', `key=eq.${encodeURIComponent(key)}`, patch);
+    const row = adArtRow(key); if (row) Object.assign(row, patch);
+    if (st) st.textContent = '✓ сохранено';
+    toast(`Артефакт «${patch.label}» сохранён`, 'ok');
+  } catch (e) {
+    if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 48); }
+    toast('Не удалось сохранить: ' + (e.message || e), 'err');
+  }
+}
+async function adArtKindCreate() {
+  const keyEl = document.getElementById('ad-art-new-key');
+  const lblEl = document.getElementById('ad-art-new-label');
+  const key = (keyEl.value || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (!key) { toast('Ключ обязателен: латиница, цифры и _', 'err'); return; }
+  if (adArtRow(key)) { toast('Предмет с таким ключом уже есть', 'err'); return; }
+  try {
+    await dbPost('spy_artifact_kinds', {
+      key, label: (lblEl.value || '').trim() || key, icon: '🎁', rarity: 'rare',
+      descr: '', drop_weight: 6, enabled: true, sort: 500,
+    });
+    keyEl.value = ''; lblEl.value = '';
+    AD.artKinds = await dbGet('spy_artifact_kinds', 'select=*&order=sort.asc,key.asc');
+    toast('Предмет заведён — заполните эффекты и залейте арт', 'ok');
+    adPaint();
+  } catch (e) { toast('Не удалось завести: ' + (e.message || e), 'err'); }
+}
+async function adArtKindDelete(key) {
+  const row = adArtRow(key);
+  if (!confirm(`Удалить вид артефакта «${(row && row.label) || key}»? Уже выданные экземпляры останутся в инвентарях игроков, но потеряют описание и эффекты.`)) return;
+  try {
+    await dbDel('spy_artifact_kinds', `key=eq.${encodeURIComponent(key)}`);
+    AD.artKinds = (AD.artKinds || []).filter(x => x.key !== key);
+    toast('Вид удалён', 'ok');
+    adPaint();
+  } catch (e) { toast('Не удалось удалить: ' + (e.message || e), 'err'); }
+}
+async function adArtKindUpload(key, inputEl) {
+  const f = inputEl && inputEl.files && inputEl.files[0];
+  const st = document.getElementById(`ad-art-kind-st-${key}`);
+  if (!f) return;
+  if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = 'Проверка сервера…'; }
+  if (!(await adPortServerAlive())) {
+    if (st) { st.style.color = '#ff7a7a'; st.textContent = 'нет сервера'; }
+    toast('Запусти «Загрузка артов.bat» (node tools/upload-server.js)', 'err');
+    if (inputEl) inputEl.value = '';
+    return;
+  }
+  try {
+    if (st) st.textContent = 'Сжатие…';
+    const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, 512, 0.88) : f;
+    if (st) st.textContent = 'Загрузка…';
+    const r = await fetch(`${AD_PORT_SERVER}/upload?dir=artifacts&name=${encodeURIComponent(key + '.webp')}`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    // Путь кладём в БД — клиент рисует картинку по img_url из каталога.
+    await dbPatch('spy_artifact_kinds', `key=eq.${encodeURIComponent(key)}`, { img_url: j.url });
+    const row = adArtRow(key); if (row) row.img_url = j.url;
+    AD.artBustKinds = Date.now();
+    if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = '✓ арт загружен'; }
+    toast(`Арт «${key}» сохранён`, 'ok');
+    adPaint();
+  } catch (e) {
+    if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 48); }
+    toast('Не удалось: ' + (e.message || e), 'err');
+  } finally { if (inputEl) inputEl.value = ''; }
 }
