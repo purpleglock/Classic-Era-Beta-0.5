@@ -8,10 +8,10 @@
 --
 --   ⟁ ПОСТ ДРЕВНИХ СТРАЖЕЙ (guardian_posts)
 --     Даллерианские дроны, поднятые из-под земли и посаженные на орбиту
---     системы. Работают не в бою, как обычные крылья, а НА ПРОЛЁТЕ: любой
---     чужой флот, чья трасса проходит через систему, встречает их — и почти
---     ничего от него не остаётся. Заряд тратится на каждый флот и копится
---     сутки; полный пост держит три.
+--     системы. Работают не в бою, как обычные крылья, а НА ПРОЛЁТЕ: флот
+--     ДЕРЖАВЫ, С КОТОРОЙ ИДЁТ ВОЙНА (public.at_war), чья трасса проходит
+--     через систему, встречает их — и не остаётся ничего, сколько бы
+--     кораблей в нём ни было. Боезапас бесконечен, заряды не тратятся.
 --       2 500 000 ГС + 30 Ихор + 40 Стелларит. Один пост на систему.
 --
 --   ◈ ПОДПРОСТРАНСТВЕННАЯ БАТАРЕЯ (mza_ships.kind='subspace')
@@ -37,10 +37,7 @@ returns numeric language sql immutable as $$
     when 'guard_gc'        then 2500000  -- ГС за пост стражей
     when 'guard_ichor'     then 30       -- ихора за пост
     when 'guard_stell'     then 40       -- Стелларита за пост
-    when 'guard_charges'   then 3        -- зарядов в полном посту
-    when 'guard_recharge_h' then 24      -- часов на восстановление одного заряда
-    when 'guard_wipe_cap'  then 80       -- флот до стольки кораблей выносится целиком
-    when 'guard_kill_frac' then 0.70     -- у больших флотов срезается эта доля
+    when 'guard_charges'   then 3        -- исторический задел поста (боезапас бесконечен, не расходуется)
     when 'bat_gc'          then 4000000  -- ГС за подпространственную батарею
     when 'bat_ichor'       then 50       -- ихора за батарею
     when 'bat_grav'        then 25       -- Гравиядра за батарею
@@ -98,27 +95,8 @@ drop policy if exists "guard_sel" on public.guardian_posts;
 create policy "guard_sel" on public.guardian_posts for select to public using (true);
 revoke insert, update, delete on public.guardian_posts from public, anon, authenticated;
 
--- Заряды копятся сами: по одному в сутки до полного поста.
-create or replace function public._guardian_recharge(p_id uuid)
-returns numeric language plpgsql security definer set search_path=public as $$
-declare g public.guardian_posts; v_h numeric; v_add numeric; v_max numeric;
-begin
-  select * into g from public.guardian_posts where id = p_id for update;
-  if not found then return 0; end if;
-  v_max := public._ichor_const('guard_charges');
-  v_h   := extract(epoch from (now() - g.last_charge)) / 3600.0;
-  v_add := floor(v_h / public._ichor_const('guard_recharge_h'));
-  if v_add >= 1 and g.charges < v_max then
-    update public.guardian_posts
-       set charges = least(v_max, charges + v_add),
-           last_charge = last_charge + (v_add * public._ichor_const('guard_recharge_h') || ' hours')::interval
-     where id = g.id
-     returning charges into v_max;
-    return v_max;
-  end if;
-  return g.charges;
-end$$;
-revoke all on function public._guardian_recharge(uuid) from public, anon, authenticated;
+-- Боезапас бесконечен — заряды больше не тратятся и не копятся.
+drop function if exists public._guardian_recharge(uuid);
 
 create or replace function public.guardian_build(p_system_id text)
 returns jsonb language plpgsql security definer set search_path=public as $$
@@ -146,8 +124,8 @@ begin
   perform public._doom_news(
     '⟁ ПОДНЯТ ПОСТ ДРЕВНИХ СТРАЖЕЙ',
     coalesce(v_nm, 'Неизвестная держава') || ' подняла со дна системы «' || coalesce(v_sys, '???') ||
-    '» то, что лежало там до всех нас. Даллерианские стражи снова на орбите и снова считают чужими всех, ' ||
-    'кто проходит мимо. Прокладывайте трассы в обход.');
+    '» то, что лежало там до всех нас. Даллерианские стражи снова на орбите: любой вражеский флот, ' ||
+    'с чьей державой идёт война, будет уничтожен на пролёте полностью — без счёта и без пощады.');
   return jsonb_build_object('ok', true, 'id', v_id,
     'gc', public._ichor_const('guard_gc'), 'ichor', public._ichor_const('guard_ichor'));
 end$$;
@@ -179,8 +157,9 @@ revoke all on function public.guardian_posts_visible() from public, anon;
 grant execute on function public.guardian_posts_visible() to authenticated;
 
 -- ── УДАР НА ПРОЛЁТЕ ───────────────────────────────────────
--- Стражи не участвуют в бою и не ждут объявления войны: для них чужой —
--- это чужой. Одна трасса — один заряд с поста.
+-- Стражи бьют только по врагу в активной войне (public.at_war) — и бьют
+-- без ограничений: боезапас у них не кончается, каждая встреча — полное
+-- уничтожение чужого флота, сколько бы кораблей в нём ни было.
 create or replace function public._guardian_gauntlet(p_fleet uuid, p_path text[])
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare fl public.fleets; g record; total int; killed int; sum_k int := 0; hit int := 0;
@@ -192,28 +171,18 @@ begin
   for g in select * from public.guardian_posts
             where system_id = any(p_path)
               and faction_id is distinct from fl.faction_id
+              and public.at_war(faction_id, fl.faction_id)
   loop
-    perform public._guardian_recharge(g.id);
-    select * into g from public.guardian_posts where id = g.id for update;
-    if g.charges < 1 then continue; end if;
-
     select coalesce(sum(greatest(0, (c->>'qty')::int)), 0) into total
       from jsonb_array_elements(coalesce(fl.composition, '[]'::jsonb)) c;
     exit when total <= 0;
 
-    if total <= public._ichor_const('guard_wipe_cap') then
-      killed := public._fleet_kill_ships(fl.id, total);
-      wiped  := true;
-    else
-      killed := public._fleet_kill_ships(fl.id,
-                  ceil(total * public._ichor_const('guard_kill_frac'))::int);
-    end if;
+    killed := public._fleet_kill_ships(fl.id, total);
+    wiped  := true;
     sum_k := sum_k + killed; hit := hit + 1;
 
     update public.guardian_posts
-       set charges = charges - 1, kills = kills + killed, strikes = strikes + 1,
-           last_charge = case when charges >= public._ichor_const('guard_charges')
-                              then now() else last_charge end
+       set kills = kills + killed, strikes = strikes + 1
      where id = g.id;
 
     select name into v_sys from public.map_systems where id = g.system_id;
@@ -225,10 +194,8 @@ begin
       '⟁ СТРАЖИ ОТКРЫЛИ ОГОНЬ',
       'Флот державы «' || coalesce(v_vic, '???') || '» вошёл в систему «' || coalesce(v_sys, '???') ||
       '», где стоит пост древних стражей' || coalesce(' («' || v_own || '»)', '') || '. ' ||
-      case when wiped
-        then 'Из системы не вышло ничего: ' || killed || ' кораблей осталось там же, где их встретили.'
-        else 'Уцелевшие ушли: ' || killed || ' кораблей сгорело за несколько минут.' end ||
-      ' Даллерианцев не спрашивают, с кем они воюют.');
+      'Из системы не вышло ничего: ' || killed || ' кораблей осталось там же, где их встретили. ' ||
+      'Стражи бьют без счёта врагам, с которыми держава на войне.');
 
     exit when wiped;
     select * into fl from public.fleets where id = p_fleet;

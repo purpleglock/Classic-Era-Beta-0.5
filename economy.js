@@ -141,13 +141,18 @@ const EC_SPY_ARTS = {
 // оттуда же берутся картинки. EC_SPY_ARTS выше — аварийный фолбэк на случай,
 // если срез _intel_protection.sql ещё не накатан.
 function ecArtKind(k) { return (EC.artKinds || {})[k] || null; }
+// Путь к арту НЕ зависит от записи в базе: админка кладёт файл в папку игры под
+// именем ключа, поэтому картинку ищем по соглашению. img_url из каталога — лишь
+// переопределение (например, арт залит под другим именем). Нет файла — onerror
+// в карточке вернёт эмодзи-иконку.
+function ecArtImg(k, d) { return (d && d.img_url) || (k ? `assets/artifacts/${k}.webp` : null); }
 function ecArt(k) {
   const d = ecArtKind(k);
-  if (d) return { icon: d.icon || '🎁', label: d.label || k, desc: d.descr || '', img: d.img_url || null,
+  if (d) return { icon: d.icon || '🎁', label: d.label || k, desc: d.descr || '', img: ecArtImg(k, d),
                   rarity: d.rarity || 'common', cursed: !!d.cursed, one_shot: !!d.one_shot, lore: d.lore || '' };
   const l = EC_SPY_ARTS[k];
-  return l ? { ...l, img: null, rarity: 'common', cursed: false, one_shot: false, lore: '' }
-           : { icon: '🎁', label: k || '—', desc: '', img: null, rarity: 'common', cursed: false, one_shot: false, lore: '' };
+  return l ? { ...l, img: ecArtImg(k, null), rarity: 'common', cursed: false, one_shot: false, lore: '' }
+           : { icon: '🎁', label: k || '—', desc: '', img: ecArtImg(k, null), rarity: 'common', cursed: false, one_shot: false, lore: '' };
 }
 // Зеркало _spy_artifact_succ / _spy_artifact_det: бонусы читаются из каталога.
 function ecArtSucc(kind, op) {
@@ -533,8 +538,7 @@ const EC_MZA_BUILD_GC = 1200000, EC_MZA_BUILD_MATTER = 60, EC_MZA_SHOT_GRAV = 12
 // (вкладка новеллы «Дозвёздные миры»). Поэтому обе постройки — это не деньги,
 // а срок: держава с любым доходом упрётся в те же недели ожидания.
 const EC_ICHOR = {
-  guardGc: 2500000, guardIchor: 30, guardStell: 40, guardCharges: 3, guardRechargeH: 24,
-  guardWipeCap: 80, guardKillFrac: 0.70,
+  guardGc: 2500000, guardIchor: 30, guardStell: 40,
   batGc: 4000000, batIchor: 50, batGrav: 25, batMatter: 40, batBuildH: 30,
   batVolley: 20, batWear: 3, batBoost: 1.75,
 };
@@ -9878,8 +9882,10 @@ function ecArtItemCard(x, foot) {
     m.one_shot ? '<span class="ec-art-tag once" title="Сгорает при первом же применении">👁 одноразовый</span>' : '',
     x.source === 'rift' ? '<span class="ec-art-tag rift" title="Выпал из Разлома — оттуда посмотрели в ответ">🜂 из Разлома</span>' : '',
   ].filter(Boolean).join('');
+  // Картинки может не быть на диске — тогда onerror подменяет её эмодзи-иконкой
+  // (плейсхолдер лежит рядом скрытым, чтобы не мигать пустым местом).
   const pic = m.img
-    ? `<img class="ec-art-pic" src="${esc(m.img)}" alt="" loading="lazy" onerror="this.remove()">`
+    ? `<img class="ec-art-pic" src="${esc(m.img)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='';"><span class="ec-art-pic ph" style="display:none">${m.icon}</span>`
     : `<span class="ec-art-pic ph">${m.icon}</span>`;
   return `<div class="ec-art-card" style="--art-col:${r.c}">
     <div class="ec-art-top">${pic}
@@ -9982,7 +9988,7 @@ function ecAgentCard(a) {
     const m = ecArt(k);
     const badge = m.cursed ? ' ⛓' : m.one_shot ? ' 👁' : '';
     return m.img
-      ? `<span class="ec-agent-art has-img" title="${esc(m.label)}: ${esc(m.desc)}"><img src="${esc(m.img)}" alt="" loading="lazy" onerror="this.remove()"></span>`
+      ? `<span class="ec-agent-art has-img" title="${esc(m.label)}: ${esc(m.desc)}"><img src="${esc(m.img)}" alt="" loading="lazy" onerror="const s=this.parentNode;s.classList.remove('has-img');s.textContent='${esc(m.icon)}${badge}'"></span>`
       : `<span class="ec-agent-art" title="${esc(m.label)}: ${esc(m.desc)}">${m.icon}${badge}</span>`;
   }).join('');
   // Личный изъян — он идёт прямо в сложность операций, поэтому виден в карточке.
@@ -14651,12 +14657,6 @@ async function ecGuardLoad(force) {
   return EC._guardPosts;
 }
 function ecGuardMine() { return (EC._guardPosts || []).filter(g => g.faction_id === EC.fid); }
-// Заряд копится сутки; показываем не «charges: 2», а сколько накопилось на самом деле.
-function ecGuardCharges(g) {
-  const max = EC_ICHOR.guardCharges;
-  const grown = Math.floor((Date.now() - Date.parse(g.last_charge)) / (EC_ICHOR.guardRechargeH * 3600000));
-  return Math.max(0, Math.min(max, (+g.charges || 0) + (grown > 0 ? grown : 0)));
-}
 function ecIchorSection() {
   const ichor = ecStockOf('Ихор');
   // Ленивая догрузка постов — один раз за заход во вкладку.
@@ -14678,17 +14678,16 @@ function ecIchorInner() {
   // ── ПОСТ ДРЕВНИХ СТРАЖЕЙ: только статус (постройка — в меню построек колонии) ──
   const postRows = mine.length ? `<div class="ec-sub-title" style="margin-top:8px">Мои посты · ${mine.length}</div>` +
     mine.map(g => {
-      const ch = ecGuardCharges(g);
       return `<div class="ec-colonize-row">
         <div class="ec-cz-main"><span class="ec-cz-name">⟁ ${esc(ecSysName(g.system_id))}</span>
-          <span class="ec-cz-sub">зарядов ${ch} из ${EC_ICHOR.guardCharges} · флотов встречено ${+g.strikes || 0} · сожжено кораблей ${ecNum(+g.kills || 0)}</span></div>
+          <span class="ec-cz-sub">боезапас бесконечен · бьёт по врагам в войне · флотов встречено ${+g.strikes || 0} · сожжено кораблей ${ecNum(+g.kills || 0)}</span></div>
         <button class="btn btn-gh btn-sm" onclick="ecGuardScrap('${g.id}')" title="Снос: половина ГС назад, ихор не возвращается">Списать</button>
       </div>`;
     }).join('') : `<div class="ec-bld-howto">⟁ Постов нет. Строятся в меню построек колонии («Что построить» → 🌌 Мега).</div>`;
 
   const foreign = posts.filter(g => g.faction_id !== EC.fid);
   const foreignRow = foreign.length ? `<div class="ec-bld-howto" style="margin-top:6px">⚠ Чужие посты стоят в системах:
-      <b>${foreign.map(g => esc(ecSysName(g.system_id))).join(', ')}</b> — прокладывайте трассы в обход.</div>` : '';
+      <b>${foreign.map(g => esc(ecSysName(g.system_id))).join(', ')}</b> — если с их владельцем война, прокладывайте трассы в обход.</div>` : '';
 
   // ── ПОДПРОСТРАНСТВЕННАЯ БАТАРЕЯ: только статус/пульт залпа (постройка — в меню построек колонии) ──
   const batPanel = bats.length ? `<div class="ec-sub-title" style="margin-top:10px">Залп батареи</div>` +
@@ -14753,7 +14752,7 @@ async function ecGuardBuild() {
   EC.busy = true;
   try {
     await ecRpc('guardian_build', { p_system_id: sel.value });
-    toast('⟁ Стражи подняты — трассы через эту систему стали смертельными', 'ok');
+    toast('⟁ Стражи подняты — трассы через эту систему смертельны для тех, с кем идёт война', 'ok');
     await ecGuardLoad(true); await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
   finally { EC.busy = false; }

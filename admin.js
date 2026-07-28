@@ -6127,7 +6127,9 @@ function adArtKindsPanel() {
   const list = AD.artKinds || [];
   const bust = AD.artBustKinds || '';
   const card = a => {
-    const img = a.img_url ? `${a.img_url}${bust ? `?t=${bust}` : ''}` : '';
+    // Клиент ищет арт по соглашению (assets/artifacts/<ключ>.webp), поэтому и
+    // здесь показываем файл даже без записи img_url — нет файла, сработает onerror.
+    const img = `${a.img_url || `${AD_ART_DIR}/${a.key}.webp`}${bust ? `?t=${bust}` : ''}`;
     const fields = AD_ART_FIELDS.map(([f, lbl, type, hint]) => {
       const id = `ad-artf-${esc(a.key)}-${f}`;
       if (type === 'bool') {
@@ -6339,9 +6341,15 @@ async function adArtKindUpload(key, inputEl) {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
-    // Путь кладём в БД — клиент рисует картинку по img_url из каталога.
-    await dbPatch('spy_artifact_kinds', `key=eq.${encodeURIComponent(key)}`, { img_url: j.url });
-    const row = adArtRow(key); if (row) row.img_url = j.url;
+    // Путь дублируем в БД, но это НЕ обязательно: клиент и так ищет файл по
+    // ключу. Раньше падение PATCH (например, PostgREST не перечитал схему после
+    // наката _intel_protection.sql) выглядело как «арт не загрузился».
+    try {
+      await dbPatch('spy_artifact_kinds', `key=eq.${encodeURIComponent(key)}`, { img_url: j.url });
+      const row = adArtRow(key); if (row) row.img_url = j.url;
+    } catch (e) {
+      toast('Файл записан, но путь не попал в каталог: ' + (e.message || e) + '. Картинка всё равно подхватится по ключу.', 'err');
+    }
     AD.artBustKinds = Date.now();
     if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = '✓ арт загружен'; }
     toast(`Арт «${key}» сохранён`, 'ok');
