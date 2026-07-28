@@ -5275,7 +5275,6 @@ function heroVNGeoReturn() { heroVNChoice('menu'); }
 function _hgHead(en) {
   return `<div class="hp-vn-col-head">
     <span class="hp-vn-col-title"><svg class="hp-vn-stars-tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5l5 4 5-4M7 10.5l5 4 5-4M7 16.5l5 4 5-4"/></svg>${en ? 'Geological survey' : 'Георазведка'}</span>
-    <span class="hp-vnr-clr">${en ? 'imperial geology corps' : 'геологический корпус державы'}</span>
     <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNGeoReturn()">↩ ${en ? 'back' : 'назад'}</button>
   </div>`;
 }
@@ -5686,7 +5685,6 @@ function heroVNDoomReturn() { heroVNChoice('menu'); }
 function _hdHead(en) {
   return `<div class="hp-vn-col-head">
     <span class="hp-vn-col-title">${en ? 'MDA Line · strike & shield' : 'Рубеж МЗА · удар и оборона'}</span>
-    <span class="hp-vnr-clr hp-vnd-clr">${en ? 'strike protocol & planetary intercept · clearance ultima' : 'протокол удара и планетарного перехвата · допуск «ультима»'}</span>
     <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNDoomReturn()">↩ ${en ? 'back' : 'назад'}</button>
   </div>`;
 }
@@ -5761,7 +5759,6 @@ function heroVNIntelReturn() { heroVNChoice('menu'); }
 function _hiHead(en) {
   return `<div class="hp-vn-col-head">
     <span class="hp-vn-col-title">${en ? 'Intelligence Directorate' : 'Разведуправление'}</span>
-    <span class="hp-vnr-clr hp-vni-clr">${en ? 'covert operations · clearance «umbra»' : 'тайные операции · допуск «умбра»'}</span>
     <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNIntelReturn()">↩ ${en ? 'back' : 'назад'}</button>
   </div>`;
 }
@@ -5845,7 +5842,6 @@ function heroVNStarsReturn() { heroVNChoice('menu'); }
 function _hsHead(en) {
   return `<div class="hp-vn-col-head">
     <span class="hp-vn-col-title"><svg class="hp-vn-stars-tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3"/></svg>${en ? 'Gaze into the Rift' : 'Всмотреться в Разлом'}</span>
-    <span class="hp-vnr-clr">${en ? 'psionic choir' : 'псионический хор державы'}</span>
     <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNStarsReturn()">↩ ${en ? 'back' : 'назад'}</button>
   </div>`;
 }
@@ -5943,7 +5939,6 @@ async function heroVNResearchOpen() {
 function _htHead(en) {
   return `<div class="hp-vn-col-head">
     <span class="hp-vn-col-title">${en ? 'Research' : 'Исследования'}</span>
-    <span class="hp-vnr-clr">${en ? 'imperial science division' : 'научный отдел державы'}</span>
     <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNResearchReturn()">↩ ${en ? 'back' : 'назад'}</button>
   </div>`;
 }
@@ -6114,7 +6109,6 @@ async function heroVNRatingOpen() {
 function _heroRatingHead(en) {
   return `<div class="hp-vn-col-head">
     <span class="hp-vn-col-title">${en ? 'Player ratings' : 'Рейтинг игроков'}</span>
-    <span class="hp-vnr-clr">${en ? 'sector analytics bureau' : 'аналитическое бюро сектора'}</span>
     <button class="hp-vn-col-x" type="button" onclick="event.stopPropagation();heroVNRatingReturn()">↩ ${en ? 'back' : 'назад'}</button>
   </div>`;
 }

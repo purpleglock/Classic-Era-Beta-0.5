@@ -5328,7 +5328,7 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hp-vni-page{padding-bottom:8px}
 /* Лента-шов канала: пунктир шифрованной несущей + живой статус */
 .hp-vni-strip{
-  display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+  display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap;
   font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
   color:#6fbdb2;padding:7px 12px;margin-bottom:12px;
   background:repeating-linear-gradient(90deg,rgba(63,216,200,.10) 0 6px,transparent 6px 16px);

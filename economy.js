@@ -10019,7 +10019,7 @@ function ecRecruitCard(r, atCap) {
   const heroStyle = img ? `background-image:url('${esc(img)}')` : '';
   return `<div class="ec-agent-card ec-recruit-card rpg${img ? ' has-img' : ''}" style="--ag-col:${col}">
     <div class="ec-agent-hero" style="${heroStyle}">
-      ${img ? '' : `<div class="ec-agent-hero-ph">${ecPerkIcon(a.perk, 'lg')}</div>`}
+      ${img ? '' : `<div class="ec-agent-hero-ph">${ecPerkIcon(r.perk, 'lg')}</div>`}
       <div class="ec-agent-hero-top">
         <span class="ec-agent-rank ec-rank-rec" title="Новобранец · уровень 1">★ нов.</span>
       </div>
@@ -10255,7 +10255,6 @@ function ecIntelVNBody() {
   const ci = ecSpyCounterCount();   // разные агенты в защите, не строки назначений
 
   const strip = `<div class="hp-vni-strip">
-    <span>канал «умбра» · связь односторонняя</span>
     <span class="hp-vni-live${active.length ? ' hot' : ''}">${active.length
       ? '◐ операций в работе: ' + active.length
       : (free ? '● агентура в строю' : '○ людей нет')}</span>
