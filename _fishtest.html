@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- ВРЕМЕННЫЙ СТЕНД для проверки берега без входа в игру. Удалить. -->
+<meta charset="utf-8">
+<title>стенд: Пойдём к реке</title>
+<style>
+  body{margin:0;background:#0a0f16;color:#dfe7f2;font:13px/1.5 "Segoe UI",system-ui,sans-serif}
+  .hp-vn-col-head{display:flex;gap:12px;align-items:center;padding:8px 14px;background:#0d141d;border-bottom:1px solid #22303f}
+  .hp-vn-col-body{padding:0 14px}
+  .hp-vn-col-empty{padding:20px;text-align:center;color:#8aa0b0}
+</style>
+<div id="hp-vn-fish"></div>
+<script>
+  var lang = 'ru';
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function ecErr(s){ return s; }
+  function heroVNBack(){ console.log('back'); }
+  var _stubSeed = 0, _stubPlants = [{ id: 9, x: 30, mine: false, ready: false, left: 40000, who: 'Тетославия' }];
+  function _stubState(){
+    return { kept:1, cap:12, total:3, night:false, night_left:600, feed:[], site:_fishSite,
+             seed:_stubSeed, seed_price:200000, seed_ichor:10, gc:900000, plants:_stubPlants };
+  }
+  function ecRpc(fn, args){
+    console.log('rpc', fn, JSON.stringify(args));
+    if (fn === 'fishing_cast') return Promise.resolve({ bite:{ id: 1, react: 1.1 }, kept: 1 });
+    if (fn === 'fishing_land') return Promise.resolve({ name:'Плотва', rar:1, kg:1.4, gc:130, counted:true, kept:2 });
+    if (fn === 'fishing_get') return Promise.resolve(_stubState());
+    if (fn === 'fishing_seed_buy') { _stubSeed = 1; return Promise.resolve({ ok:true }); }
+    if (fn === 'fishing_seed_plant') { _stubSeed = 0;
+      _stubPlants.push({ id: 10, x: args.p_x, mine: true, ready: true, left: 0, who: 'Я' });
+      return Promise.resolve({ ok:true }); }
+    if (fn === 'fishing_seed_take') { _stubPlants = _stubPlants.filter(p => p.id !== args.p_id);
+      return Promise.resolve({ ok:true, ichor:10 }); }
+    return Promise.resolve({});
+  }
+</script>
+<script src="fishing.js"></script>
+<script>
+  _fishSite = { sys:'sys_mpvehb4p', pid:7, name:'Храм мироздания', sysname:'Храм мироздания',
+                type:'храмовый мир', maxdepth:48, wet:true, owner_name:null };
+  _fishState = _stubState();
+  fishStyleOnce();
+  fishDescend();
+</script>

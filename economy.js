@@ -527,7 +527,7 @@ const EC_BUILD = {
   // БАЛЛИСТИЧЕСКИЙ ВОЕНПРОМЗАВОД — RPC ballfab_build, техно pol.ballistics (без слотов).
   ballfab:          { name: 'Баллистический военпромзавод', cost: 150000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Конвейер баллистических боеголовок для Гиперпейсера: 4 тира — Х19 «Хазар», Х69 «Фантом», Х05 «Сурей», Х0414 «Отей». 1 снаряд за 1 день. Слотов нет.' },
   // ОЖЕРЕЛЬЕ НЕМЕЗИДЫ — мегасооружение, строится отдельным RPC nemesis_build.
-  nemesis:          { name: 'Ожерелье Немезиды', cost: 6000000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'МЕГАСООРУЖЕНИЕ: кольцо перехватчиков, прикрывающее ВСЮ систему. ГАРАНТИРОВАННО сбивает ЛЮБОЙ залп Длани и Гиперпейсера — без зарядов и осечек. Пока Ожерелье стоит, система неуязвима для ударов из космоса. Стоит очень дорого.' },
+  nemesis:          { name: 'Ожерелье Немезиды', cost: 6000000, ladder: [0, 0, 0, 0, 0, 0], free: 1, inc: {}, cat: 'mil', desc: 'Кольцо орбитальных перехватчиков вокруг всей системы. Сбивает любой залп Длани и Гиперпейсера — гарантированно, без зарядов и осечек. Пока Ожерелье стоит, система неуязвима для ударов из космоса.' },
 };
 // Стоимость орудия в Программируемой материи (зеркало _doom_const('build_matter')).
 const EC_DOOM_BUILD_MATTER = 40, EC_DOOM_SHOT_GRAV = 20;
@@ -538,7 +538,7 @@ const EC_MZA_BUILD_GC = 1200000, EC_MZA_BUILD_MATTER = 60, EC_MZA_SHOT_GRAV = 12
 // (вкладка новеллы «Дозвёздные миры»). Поэтому обе постройки — это не деньги,
 // а срок: держава с любым доходом упрётся в те же недели ожидания.
 const EC_ICHOR = {
-  guardGc: 2500000, guardIchor: 30, guardStell: 40,
+  guardGc: 2500000, guardIchor: 30, guardStell: 40, guardScrapBack: 0.5,
   batGc: 4000000, batIchor: 50, batGrav: 25, batMatter: 40, batBuildH: 30,
   batVolley: 20, batWear: 3, batBoost: 1.75,
 };
@@ -2341,6 +2341,9 @@ async function ecReloadPaint() {
   if (typeof heroVNGeoRefresh === 'function') heroVNGeoRefresh();
   // Оверлей «Всмотреться в Разлом» — на данных EC.stargaze.
   if (typeof heroVNStarsRefresh === 'function') heroVNStarsRefresh();
+  // Оверлей «Пойдём к реке»: игровой цикл не трогаем, обновляем только шапку
+  // (садок/трофей) — иначе перерисовка убила бы идущее вываживание.
+  if (typeof heroVNFishRefresh === 'function') heroVNFishRefresh();
   // Оверлей «Колонизация» в новелле (карта границ / карта системы) — после
   // колонизации/терраформа перерисовываем свежими данными EC.
   if (typeof heroVNColonyRefresh === 'function') heroVNColonyRefresh();
@@ -14020,7 +14023,8 @@ function ecNemesisBuildCard(colonyId, gc) {
   const resLack = {};
   Object.entries(EC_NEMESIS.res).forEach(([n, q]) => { resLack[n] = ecStockOf(n) < q; });
   const afford = !gcLack && !Object.values(resLack).some(Boolean);
-  const needs = Object.entries(EC_NEMESIS.res).map(([n, q]) => ecBpNeedChip(`${q} ${n}`, resLack[n])).join('');
+  const needs = Object.entries(EC_NEMESIS.res)
+    .map(([n, q]) => ecBpNeedChip((resLack[n] ? ecNum(ecStockOf(n)) + '/' : '') + q + ' ' + n, resLack[n])).join('');
   return `<button class="ec-bp-card ec-bp-mega${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecNemesisBuildDo('${colonyId}')" ${afford ? '' : `title="${esc('Не хватает ресурсов на постройку')}"`}>
       <span class="ec-bp-ic">🪐</span>
       <span class="ec-bp-info">
@@ -14060,9 +14064,9 @@ function ecGuardBuildCard(colonyId, gc) {
       <span class="ec-bp-ic">🛡</span>
       <span class="ec-bp-info">
         <span class="ec-bp-row1"><span class="ec-bp-name">Пост древних стражей</span><span class="ec-bp-cat ec-bp-cat-mega">МЕГА</span><span class="ec-bp-cost${gcLack ? ' ec-bp-cant' : ''}">${ecNum(EC_ICHOR.guardGc)} <small>ГС</small></span></span>
-        <span class="ec-bp-desc">Не воюет — стоит на трассе. Любой чужой флот через систему теряет ${Math.round(EC_ICHOR.guardKillFrac * 100)}% состава, флот до ${EC_ICHOR.guardWipeCap} кораблей не выходит вовсе. Не занимает ячейку. Один пост на систему.</span>
+        <span class="ec-bp-desc">Стоит на трассе и бьёт на пролёте: вражеский флот, вошедший в систему, уничтожается целиком — сколько бы кораблей в нём ни было. Бьёт только тех, с кем держава в войне; свои и нейтралы проходят свободно.</span>
         <span class="ec-bp-needs">${needs}</span>
-        <span class="ec-bp-howto">заряд копится ${EC_ICHOR.guardRechargeH} ч, зарядов ${EC_ICHOR.guardCharges}. Ихор не возвращается при сносе.</span>
+        <span class="ec-bp-howto">боезапас бесконечен · один пост на систему · не занимает ячейку · при сносе вернётся ${Math.round(EC_ICHOR.guardScrapBack * 100)}% ГС, ихор — нет</span>
       </span>
     </button>`;
 }
@@ -14095,9 +14099,9 @@ function ecBatteryBuildCard(colonyId, gc) {
       <span class="ec-bp-ic">⚡</span>
       <span class="ec-bp-info">
         <span class="ec-bp-row1"><span class="ec-bp-name">Подпространственная батарея</span><span class="ec-bp-cat ec-bp-cat-mega">МЕГА</span><span class="ec-bp-cost${gcLack ? ' ec-bp-cant' : ''}">${ecNum(EC_ICHOR.batGc)} <small>ГС</small></span></span>
-        <span class="ec-bp-desc">Тот же корпус на даллерианском приводе: втрое быстрее по карте, снаряды летят вдвое быстрее, залп — до ${EC_ICHOR.batVolley} снарядов подряд (×${EC_ICHOR.batBoost} разгон). Не занимает ячейку.</span>
+        <span class="ec-bp-desc">Корпус Гиперпейсера на даллерианском приводе: втрое быстрее переходит по карте, снаряды летят вдвое быстрее и бьют в ×${EC_ICHOR.batBoost} сильнее, а один приказ — залп до ${EC_ICHOR.batVolley} снарядов подряд.</span>
         <span class="ec-bp-needs">${needs}</span>
-        <span class="ec-bp-howto">${noTech ? '🔒 Нужна технология «Гиперпейсер». ' : ''}строится ${EC_ICHOR.batBuildH} ч, износ ${EC_ICHOR.batWear}% за снаряд.</span>
+        <span class="ec-bp-howto">строится ${EC_ICHOR.batBuildH} ч · износ ${EC_ICHOR.batWear}% за снаряд · не занимает ячейку${noTech ? ' · 🔒 нужна технология «Гиперпейсер»' : ''}</span>
       </span>
     </button>`;
 }

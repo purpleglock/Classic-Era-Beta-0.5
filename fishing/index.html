@@ -1,0 +1,24 @@
+<!-- Тихая Вода — рыбалка. Отдельный экран, ни от чего в основной игре не зависит. -->
+<meta charset="utf-8">
+<title>Тихая Вода</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<style>
+  html,body{margin:0;height:100%;background:#05070c;overflow:hidden;
+    font-family:"Segoe UI",system-ui,sans-serif;color:#dfe7f2}
+  #wrap{position:fixed;inset:0;display:grid;place-items:center}
+  canvas{image-rendering:pixelated;display:block;cursor:crosshair}
+  .hud{position:fixed;pointer-events:none;text-shadow:0 1px 3px #000c;font-size:13px}
+  #top{left:14px;top:11px;line-height:1.5}
+  #top b{color:#8fd3ff;font-weight:600}
+  #top .dim{opacity:.5}
+  #log{right:14px;top:11px;width:250px;text-align:right;line-height:1.5;font-size:12px}
+  #log div{animation:fadein .3s}
+  @keyframes fadein{from{opacity:0;transform:translateY(-4px)}}
+  #hint{left:0;right:0;bottom:9px;text-align:center;opacity:.45;font-size:11.5px}
+  .r0{color:#9aa5b4}.r1{color:#7ee0a0}.r2{color:#79b6ff}.r3{color:#c79bff}.r4{color:#ffcf6b}
+</style>
+<div id="wrap"><canvas id="cv"></canvas></div>
+<div class="hud" id="top"></div>
+<div class="hud" id="log"></div>
+<div class="hud" id="hint">A/D — идти · Space — прыжок · ЛКМ зажать/отпустить — заброс · ЛКМ на поклёвке — подсечка · держать ЛКМ — вываживать · Tab — улов</div>
+<script src="game.js?v=1"></script>

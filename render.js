@@ -2632,6 +2632,7 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-colony hp-vn-geo hp-vn-fight" id="hp-vn-fight" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-sinli" id="hp-vn-sinli" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-sinli hp-vn-tama" id="hp-vn-tama" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-fish" id="hp-vn-fish" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-intel" id="hp-vn-intel" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
@@ -2850,6 +2851,7 @@ function heroVNMenuGroups(en) {
       ['geo',   (en ? 'Geological survey' : 'Георазведка')],
       ['stars', (en ? 'Gaze into the Rift' : 'Всмотреться в Разлом')],
       ['fight', (en ? 'Fight Club' : 'Бойцовский клуб')],
+      ['fish',  (en ? 'Down to the river' : 'Пойдём к реке')],
       // ⏸ ВРЕМЕННО ОТКЛЮЧЕНЫ (вернём позже) — вместо них «Бойцовский клуб».
       // Серверные эффекты поэмы/ассамблеи и так неактивны (их SQL не применялся).
       // ['poem',   (en ? 'Poem of the week' : 'Поэма недели')],
@@ -2881,6 +2883,9 @@ function heroVNChoice(kind) {
   // «Разведуправление» живёт в собственном оверлее и гасится при уходе на ЛЮБОЙ
   // другой экран — иначе оно осталось бы поверх сцены (ветки ниже про него не знают).
   if (kind !== 'intel' && typeof heroVNIntelClose === 'function') heroVNIntelClose();
+  // «Пойдём к реке» — свой оверлей с живым канвасом: гасим при уходе на любой
+  // другой экран, иначе игровой цикл продолжал бы крутиться под ним.
+  if (kind !== 'fish' && typeof heroVNFishClose === 'function') heroVNFishClose();
   if (kind === 'intel') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); heroVNIntelOpen(); return; }
   if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); _heroVNCtl.menu(); return; }
 
@@ -2931,6 +2936,11 @@ function heroVNChoice(kind) {
   // «Бойцовский клуб» — дуэли на выданных кораблях + тотализатор поверх сцены.
   if (kind === 'fight') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightOpen(); return; }
   if (kind === 'sinli') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNTamaClose(); heroVNSinliOpen(); return; }
+
+  // «Пойдём к реке» — берег планеты «Храм мироздания» (fishing.js). Не казино:
+  // ставок нет, есть суточный садок; что клюнуло — решает сервер. Место одно
+  // на всю галактику, ходить туда может любая держава.
+  if (kind === 'fish') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); heroVNFishOpen(); return; }
 
   // «Дозвёздные миры» — найденные примитивные цивилизации и решения по ним (precursor_ui.js)
   if (kind === 'tama') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaOpen(); return; }
