@@ -2938,8 +2938,9 @@ function heroVNChoice(kind) {
   if (kind === 'sinli') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNTamaClose(); heroVNSinliOpen(); return; }
 
   // «Пойдём к реке» — берег планеты «Храм мироздания» (fishing.js). Не казино:
-  // ставок нет, есть суточный садок; что клюнуло — решает сервер. Место одно
-  // на всю галактику, ходить туда может любая держава.
+  // ставок нет и садка тоже нет (_fishing_uncapped.sql) — ловят сколько хотят,
+  // а что клюнуло, решает сервер. Место одно на всю галактику, ходить туда
+  // может любая держава.
   if (kind === 'fish') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); heroVNFishOpen(); return; }
 
   // «Дозвёздные миры» — найденные примитивные цивилизации и решения по ним (precursor_ui.js)

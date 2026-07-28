@@ -14,15 +14,21 @@
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function ecErr(s){ return s; }
   function heroVNBack(){ console.log('back'); }
-  var _stubSeed = 0, _stubPlants = [{ id: 9, x: 30, mine: false, ready: false, left: 40000, who: 'Тетославия' }];
+  var _stubSeed = 0, _stubLand = 0, _stubPlants =[{ id: 9, x: 30, mine: false, ready: false, left: 40000, who: 'Тетославия' }];
   function _stubState(){
-    return { kept:1, cap:12, total:3, night:false, night_left:600, feed:[], site:_fishSite,
+    // cap:0 — садка больше нет (_fishing_uncapped.sql), ловят сколько хотят.
+    return { kept:7, cap:0, total:3, night:false, night_left:600, feed:[], site:_fishSite,
              seed:_stubSeed, seed_price:200000, seed_ichor:10, gc:900000, plants:_stubPlants };
   }
   function ecRpc(fn, args){
     console.log('rpc', fn, JSON.stringify(args));
     if (fn === 'fishing_cast') return Promise.resolve({ bite:{ id: 1, react: 1.1 }, kept: 1 });
-    if (fn === 'fishing_land') return Promise.resolve({ name:'Плотва', rar:1, kg:1.4, gc:130, counted:true, kept:2 });
+    // Через раз отдаём кофр с артефактом — проверяем строку улова с предметом.
+    if (fn === 'fishing_land') { _stubLand++;
+      return Promise.resolve(_stubLand % 2
+        ? { name:'Плотва', rar:1, kg:1.4, gc:130, counted:true, kept:7 + _stubLand }
+        : { name:'Кофр оперативника', rar:3, gc:200, counted:true, kept:7 + _stubLand,
+            art:{ id:'x', kind:'masterkey', label:'HB-42', icon:'🗝', rarity:'common' } }); }
     if (fn === 'fishing_get') return Promise.resolve(_stubState());
     if (fn === 'fishing_seed_buy') { _stubSeed = 1; return Promise.resolve({ ok:true }); }
     if (fn === 'fishing_seed_plant') { _stubSeed = 0;

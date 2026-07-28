@@ -872,7 +872,9 @@ function fishStart(canvas, world) {
       const r = await ecRpc('fishing_land', { p_id: id, p_ok: !!ok });
       fishAfterLand(r);
       if (r && !r.lost) {
-        say(fishCatchLine(r), 4.5);
+        // Артефакт держим на экране дольше обычного улова: это не «+40 ГС»,
+        // а предмет, который потом вешают на оперативника.
+        say(fishCatchLine(r), r.art ? 7 : 4.5);
         FishSfx.win(r.rar || 0);
         if ((r.rar || 0) >= 3) S.flash = 1;
       } else if (r) { say('Ушло', 2.5); FishSfx.lose(); }
@@ -1696,9 +1698,10 @@ function fishCatchLine(r) {
   if (Number(r.gc)) bits.push('+' + Math.round(r.gc).toLocaleString('ru-RU') + ' ГС');
   if (r.res && Number(r.res_n)) bits.push('+' + Number(r.res_n) + ' ' + r.res);
   if (r.shard) bits.push('осколок цикла: ' + (FISH_SHARD_NM[r.shard] || r.shard));
-  if (r.art) bits.push('артефакт: ' + ((r.art && r.art.label) || 'реликвия'));
+  // Артефакт — единственная добыча, ради которой стоит перечитать строку:
+  // ставим его последним и с иконкой снаряжения.
+  if (r.art) bits.push('🎒 артефакт: ' + ((r.art && r.art.label) || 'реликвия'));
   const kg = r.kg ? ' · ' + Number(r.kg).toFixed(2) + ' кг' : '';
-  if (!r.counted) return (r.name || 'улов') + kg + ' · садок полон, отпущено';
   return (r.name || 'улов') + kg + (bits.length ? ' · ' + bits.join(' · ') : '');
 }
 // Сколько ещё расти — коротко, без секунд.
@@ -1751,7 +1754,10 @@ function fishAfterLand(r) {
 function fishPaintHud() {
   const el = document.getElementById('fish-hud');
   if (!el || !_fishState) return;
-  const kept = _fishState.kept || 0, cap = _fishState.cap || 12;
+  // Садка больше нет (_fishing_uncapped.sql: cap = 0 — «предела нет»), поэтому
+  // kept — просто улов за сегодня. Ветку с квотой держим на случай, если
+  // сервер снова начнёт отдавать cap > 0.
+  const kept = _fishState.kept || 0, cap = Number(_fishState.cap) || 0;
   const best = _fishState.best;
   const night = fishNightNow();
   const mine = (_fishState.plants || []).filter(p => p.mine)[0];
@@ -1761,7 +1767,9 @@ function fishPaintHud() {
   el.innerHTML = `
     <span class="fish-hud-i">${night ? '🌙 ночь' : '☀ день'}</span>
     <span class="fish-hud-i">у воды: <b>${near + 1}</b>${near ? '' : ' · вы один'}</span>
-    <span class="fish-hud-i">садок: <b class="${kept >= cap ? 'fish-full' : ''}">${kept}/${cap}</b>${kept >= cap ? ' · дальше без наград' : ''}</span>
+    <span class="fish-hud-i">${cap > 0
+      ? `садок: <b class="${kept >= cap ? 'fish-full' : ''}">${kept}/${cap}</b>${kept >= cap ? ' · дальше без наград' : ''}`
+      : `улов сегодня: <b>${kept}</b>`}</span>
     ${_fishState.seed > 0 ? '<span class="fish-hud-i">🌱 семечко в руках</span>' : ''}
     ${mine ? `<span class="fish-hud-i">🌳 ${mine.ready ? '<b>созрело</b>' : fishLeft(mine.left)}</span>` : ''}
     ${best ? `<span class="fish-hud-i">трофей: <b style="color:${FISH_RARC[best.rar || 0]}">${esc(best.name)}</b></span>` : ''}`;
@@ -2034,7 +2042,7 @@ function fishPaintSite() {
   const en = (typeof lang !== 'undefined' && lang === 'en');
   const site = _fishSite;
   const feed = Array.isArray(_fishState.feed) ? _fishState.feed : [];
-  const kept = _fishState.kept || 0, cap = _fishState.cap || 12;
+  const kept = _fishState.kept || 0, cap = Number(_fishState.cap) || 0;   // cap 0 = садка нет
 
   let body;
   if (!site) {
@@ -2052,7 +2060,9 @@ function fishPaintSite() {
         <div class="fish-site-nm">🏞 ${esc(site.name)}</div>
         <div class="fish-site-sub">система «${esc(site.sysname)}»</div>
         <div class="fish-site-kv">
-          <span>садок: <b class="${kept >= cap ? 'fish-full' : ''}">${kept}/${cap}</b></span>
+          <span>${cap > 0
+            ? `садок: <b class="${kept >= cap ? 'fish-full' : ''}">${kept}/${cap}</b>`
+            : `улов сегодня: <b>${kept}</b>`}</span>
           <span>${_fishState.night ? '🌙 ночь' : '☀ день'}</span>
           ${_fishState.seed > 0 ? '<span>в руках: <b>семечко мира</b></span>' : ''}
           ${mine ? `<span>дерево: <b>${mine.ready ? 'созрело' : fishLeft(mine.left)}</b></span>` : ''}
