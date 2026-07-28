@@ -4428,6 +4428,15 @@ canvas.ec-res-thumb-cv { border-radius: 0; background: transparent; box-shadow: 
   border: 1px solid rgba(224, 160, 48, .35); color: var(--color-warning, #e0a030);
   background: rgba(224, 160, 48, .07); }
 
+/* Иконка перка: залитая картинка (assets/perks/<ключ>.webp), иначе эмодзи. */
+.ec-perk-ic { display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto; width: 15px; height: 15px; vertical-align: -3px; }
+.ec-perk-ic img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.ec-perk-ic i { display: none; font-style: normal; font-size: 13px; line-height: 1; }
+.ec-perk-ic.noimg i { display: inline; }
+.ec-perk-ic.lg { width: 56px; height: 56px; }
+.ec-perk-ic.lg i { font-size: 34px; }
+
 /* Иконка артефакта в углу карточки может быть картинкой. */
 .ec-agent-art.has-img { display: inline-block; width: 18px; height: 18px; border-radius: 4px;
   overflow: hidden; vertical-align: middle; }

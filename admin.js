@@ -344,6 +344,63 @@ const AD_PORTRAIT_RACES   = (typeof FR_RACE !== 'undefined' && Array.isArray(FR_
   ? FR_RACE.slice()
   : ['Гуманоиды', 'Млекопитающие', 'Рептилоиды', 'Авианы (Птицеподобные)', 'Инсектоиды', 'Акватики (Водные)', 'Плантоиды (Растениевидные)', 'Литоиды (Каменные)', 'Синтетики / Киборги', 'Энергетические сущности'];
 const AD_PORTRAIT_GENDERS = ['муж.', 'жен.', 'агендер'];
+// ── Иконки перков оперативников ────────────────────────────────────────
+// Перки захардкожены на клиенте (economy.js: EC_SPY_PERKS), поэтому БД тут не
+// нужна: файл кладётся под фиксированным именем assets/perks/<ключ>.webp, а
+// клиент рисует его с откатом на эмодзи, если файла нет.
+const AD_PERK_DIR = 'assets/perks';
+function adPerkIconsSection() {
+  const bust = AD.perkBust || '';
+  const cards = AD_PERKS.map(([key, lbl]) => {
+    const emo = lbl.split(' ')[0];
+    return `<div style="width:118px;display:flex;flex-direction:column;gap:5px;align-items:center;border:1px solid var(--w2,#2a3340);border-radius:9px;background:var(--b1,#0f141b);padding:9px">
+      <div style="position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--w2,#2a3340);background:#0d1520">
+        <img src="${AD_PERK_DIR}/${esc(key)}.webp${bust ? `?t=${bust}` : ''}" alt=""
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+          style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">
+        <div style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:28px">${esc(emo)}</div>
+      </div>
+      <div style="font-size:11px;color:var(--t2,#c8d4de);text-align:center">${esc(lbl.replace(emo, '').trim())}</div>
+      <div style="font-family:monospace;font-size:9px;color:var(--t4,#6a7a88)">${esc(key)}</div>
+      <input type="file" accept="image/*" id="ad-perk-file-${esc(key)}" style="display:none" onchange="adPerkIconUpload('${esc(key)}', this)">
+      <button class="btn btn-gh btn-xs" onclick="document.getElementById('ad-perk-file-${esc(key)}').click()">🖼 Иконка</button>
+      <div id="ad-perk-st-${esc(key)}" style="font-size:9px;color:var(--t4,#6a7a88);min-height:11px;text-align:center"></div>
+    </div>`;
+  }).join('');
+  return `<div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🎯 Иконки перков оперативников</div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px;line-height:1.5">Призрак, Диверсант и прочие рисуются эмодзи, пока нет картинки. Залейте иконку — она встанет в бейдж перка, в подборе команды и заглушкой на карточке без портрета.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 10px;line-height:1.5">Пишется <b>в папку игры</b> (<code>${AD_PERK_DIR}/&lt;ключ&gt;.webp</code>) — запусти <b>«Загрузка артов.bat»</b> и держи окно открытым. Квадрат, прозрачный фон, от 256 px.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px">${cards}</div>`;
+}
+async function adPerkIconUpload(key, inputEl) {
+  const f = inputEl && inputEl.files && inputEl.files[0];
+  const st = document.getElementById(`ad-perk-st-${key}`);
+  if (!f) return;
+  if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = 'Проверка сервера…'; }
+  if (!(await adPortServerAlive())) {
+    if (st) { st.style.color = '#ff7a7a'; st.textContent = 'нет сервера'; }
+    toast('Запусти «Загрузка артов.bat» (node tools/upload-server.js)', 'err');
+    if (inputEl) inputEl.value = '';
+    return;
+  }
+  try {
+    if (st) st.textContent = 'Сжатие…';
+    const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, 256, 0.9) : f;
+    if (st) st.textContent = 'Загрузка…';
+    const r = await fetch(`${AD_PORT_SERVER}/upload?dir=perks&name=${encodeURIComponent(key + '.webp')}`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.perkBust = Date.now();
+    if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = '✓ загружено'; }
+    toast(`Иконка перка «${key}» сохранена`, 'ok');
+    adPaint();
+  } catch (e) {
+    if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 40); }
+    toast('Не удалось: ' + (e.message || e), 'err');
+  } finally { if (inputEl) inputEl.value = ''; }
+}
 function adPortraitsPanel() {
   const list = AD.portraits || [];
   const byRace = {};
@@ -365,6 +422,7 @@ function adPortraitsPanel() {
     </div>`;
   }).join('') || '<div style="color:var(--t4,#6a7a88);font-size:13px;padding:14px 0">Пул пуст — загрузите первые портреты. Игра подбирает их оперативникам случайно по расе.</div>';
   return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    ${adPerkIconsSection()}
     ${adAsmArtSection()}
     ${adStarsPhotosSection()}
     ${adStarsArtsSection()}

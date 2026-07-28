@@ -89,6 +89,16 @@ const EC_SPY_PERKS = {
   handler:     { label: 'Куратор',      icon: '🛡', desc: 'Пассивно усиливает контрразведку и ускоряет расследования.' },
 };
 function ecPerk(p) { return EC_SPY_PERKS[p] || { label: p || '—', icon: '•', desc: '' }; }
+// Иконка перка: если админ залил картинку (assets/perks/<ключ>.webp) — рисуем её,
+// нет файла — падаем обратно на эмодзи (img снимает себя по onerror).
+const EC_PERK_ICON_DIR = 'assets/perks';
+function ecPerkIcon(p, cls) {
+  const m = ecPerk(p);
+  const c = `ec-perk-ic${cls ? ' ' + cls : ''}`;
+  if (!EC_SPY_PERKS[p]) return `<span class="${c} noimg"><i>${m.icon}</i></span>`;
+  const v = (typeof BUILD !== 'undefined') ? `?v=${BUILD}` : '';
+  return `<span class="${c}"><img src="${EC_PERK_ICON_DIR}/${p}.webp${v}" alt="" loading="lazy" onerror="var q=this.parentNode;this.remove();q.classList.add('noimg')"><i>${m.icon}</i></span>`;
+}
 // Перк-бонус успеха с учётом уровня (зеркало SQL _spy_perk_succ)
 function ecPerkSucc(perk, op, level) {
   const lv = Math.max(1, level || 1);
@@ -185,8 +195,8 @@ function ecAgentFlawKey(a) { return (a && a.flaw) || (EC.agentFlaws || {})[a && 
 function ecFlaw(a) { return EC_SPY_FLAWS[ecAgentFlawKey(a)] || EC_SPY_FLAWS.clean; }
 function ecFlawDiff(a, op) { const f = ecFlaw(a); return (!f.ops || f.ops.includes(op)) ? (f.diff || 0) : 0; }
 function ecFlawDet(a) { return ecFlaw(a).det || 0; }
-function ecArtifactEquip(artId, agentId) { ecRpcAct('spy_artifact_equip', { p_artifact_id: artId, p_agent_id: agentId }, 'Артефакт экипирован'); }
-function ecArtifactUnequip(artId) { ecRpcAct('spy_artifact_unequip', { p_artifact_id: artId }, 'Артефакт снят'); }
+function ecArtifactEquip(artId, agentId) { return ecRpcAct('spy_artifact_equip', { p_artifact_id: artId, p_agent_id: agentId }, 'Артефакт экипирован'); }
+function ecArtifactUnequip(artId) { return ecRpcAct('spy_artifact_unequip', { p_artifact_id: artId }, 'Артефакт снят'); }
 // Краткий флавор-атрибуты агента (раса · пол · репликация)
 function ecAgentAttr(a) {
   const parts = [a.race, a.gender, a.replication && a.replication !== 'Оригинал' ? a.replication : null].filter(Boolean);
@@ -9809,7 +9819,7 @@ function ecAgentPortrait(a, size) {
   const pk = ecPerk(a.perk);
   const ring = a.status === 'busy' ? 'var(--te,#5fd0c0)' : a.status === 'training' ? 'var(--color-warning,#e0a030)' : col;
   return `<span class="ec-agent-pic" style="width:${s}px;height:${s}px;border-color:${ring};background:color-mix(in srgb, ${col} 16%, var(--b0,#0c1322))" title="${esc(pk.label)}">
-    <span class="ec-agent-pic-ic">${pk.icon}</span>
+    <span class="ec-agent-pic-ic">${ecPerkIcon(a.perk)}</span>
     <b class="ec-agent-pic-lv" style="background:${col}">${Math.max(1, a.level || 1)}</b></span>`;
 }
 // Детерминированный хэш строки (FNV-1a) — чтобы портрет агента не «прыгал» между рендерами.
@@ -9842,13 +9852,11 @@ function ecAgentPortraitUrl(a) {
   const idx = ecHash(String(a.id || (a.first_name + a.last_name) || '')) % cand.length;
   return cand[idx].url;
 }
-// Карточка предмета в инвентаре: арт (если админ его залил), рамка по редкости,
-// признаки «проклят» / «одноразовый» и экипировка.
-// equipOpts — либо готовая строка <option>, либо функция(kind) → строка:
-// список зависит от предмета, ведь два одинаковых на одного агента не встают.
-function ecArtItemCard(x, agName, equipOpts) {
+// Карточка предмета: арт (если админ его залил), рамка по редкости,
+// признаки «проклят» / «одноразовый». Подвал (действие) приходит снаружи —
+// предметы живут не в отдельном складе, а в снаряжении конкретного человека.
+function ecArtItemCard(x, foot) {
   const m = ecArt(x.kind);
-  const opts = (typeof equipOpts === 'function') ? equipOpts(x.kind) : equipOpts;
   const r = ecArtRarity(m.rarity);
   const tags = [
     m.cursed ? '<span class="ec-art-tag cursed" title="Снять с оперативника нельзя — предмет отпустит только мёртвого">⛓ проклят</span>' : '',
@@ -9858,18 +9866,80 @@ function ecArtItemCard(x, agName, equipOpts) {
   const pic = m.img
     ? `<img class="ec-art-pic" src="${esc(m.img)}" alt="" loading="lazy" onerror="this.remove()">`
     : `<span class="ec-art-pic ph">${m.icon}</span>`;
-  const foot = x.equipped_agent
-    ? `<div class="ec-art-foot"><i style="color:var(--ok,#7bd88f);font-style:normal">на: ${esc(agName(x.equipped_agent))}</i>
-        ${m.cursed
-          ? '<span class="ec-hint" title="Проклятый предмет не снимается">снять нельзя</span>'
-          : `<button class="btn btn-gh btn-xs" onclick="ecArtifactUnequip('${esc(x.id)}')">Снять</button>`}</div>`
-    : `<div class="ec-art-foot"><select class="ec-mini-sel" onchange="if(this.value)ecArtifactEquip('${esc(x.id)}',this.value)"><option value="">— экипировать на —</option>${opts}</select></div>`;
   return `<div class="ec-art-card" style="--art-col:${r.c}">
     <div class="ec-art-top">${pic}
       <div class="ec-art-hd"><b>${esc(m.label)}</b><i class="ec-art-rar">${r.t}</i></div></div>
     <div class="ec-art-desc">${esc(m.desc)}</div>
     ${tags ? `<div class="ec-art-tags">${tags}</div>` : ''}
-    ${foot}
+    ${foot || ''}
+  </div>`;
+}
+
+// ── Снаряжение оперативника ────────────────────────────────────────────
+// Отдельного «склада артефактов» в интерфейсе нет: экипировка открывается
+// с карточки человека — вот его два слота, вот что можно в них положить.
+function ecArtInv() { return (EC.artInventory && EC.artInventory.length) ? EC.artInventory : ((EC.spyAgency && EC.spyAgency.artifacts) || []); }
+function ecAgentById(id) { return ((EC.spyAgency && EC.spyAgency.roster) || []).find(a => a.id === id) || null; }
+function ecAgentGearOpen(agentId) {
+  let host = document.getElementById('ec-gear-host');
+  if (!host) { host = document.createElement('div'); host.id = 'ec-gear-host'; document.body.appendChild(host); }
+  EC._gearAgent = agentId;
+  host.innerHTML = ecAgentGearHtml(agentId);
+}
+function ecAgentGearRender() {
+  const host = document.getElementById('ec-gear-host');
+  if (host && EC._gearAgent) host.innerHTML = ecAgentGearHtml(EC._gearAgent);
+}
+function ecAgentGearClose(ev) {
+  if (ev && ev.target && !ev.target.classList.contains('ec-recruits-modal-back') && ev.target.tagName !== 'BUTTON') return;
+  EC._gearAgent = null;
+  document.getElementById('ec-gear-host')?.remove();
+}
+// Экипировка/снятие прямо из окна человека: после ответа сервера окно
+// перерисовываем, чтобы слоты сразу показывали новое состояние.
+async function ecGearEquip(artId, agentId) { await ecArtifactEquip(artId, agentId); ecAgentGearRender(); }
+async function ecGearUnequip(artId) { await ecArtifactUnequip(artId); ecAgentGearRender(); }
+function ecAgentGearHtml(agentId) {
+  const a = ecAgentById(agentId);
+  if (!a) return '';
+  const inv = ecArtInv();
+  const mine = inv.filter(x => x.equipped_agent === agentId);
+  const own = mine.map(x => x.kind);
+  const free = inv.filter(x => !x.equipped_agent);
+  const full = mine.length >= 2;
+  const wornHtml = mine.length
+    ? `<div class="ec-art-grid">${mine.map(x => {
+        const m = ecArt(x.kind);
+        const foot = `<div class="ec-art-foot">${m.cursed
+          ? '<span class="ec-hint" title="Проклятый предмет отпустит только мёртвого">снять нельзя</span>'
+          : `<button class="btn btn-gh btn-xs" onclick="ecGearUnequip('${esc(x.id)}')">Снять</button>`}</div>`;
+        return ecArtItemCard(x, foot);
+      }).join('')}</div>`
+    : '<div class="hp-vni-empty">Оба слота пусты.</div>';
+  const freeHtml = free.length
+    ? `<div class="ec-art-grid">${free.map(x => {
+        const dup = own.includes(x.kind);
+        const why = dup ? 'Такой предмет у него уже есть — бонусы не складываются'
+                  : full ? 'Оба слота заняты — сначала снимите что-нибудь' : 'Надеть на оперативника';
+        const foot = `<div class="ec-art-foot"><button class="btn btn-gd btn-xs" title="${esc(why)}"${dup || full ? ' disabled' : ''} onclick="ecGearEquip('${esc(x.id)}','${esc(agentId)}')">Надеть</button></div>`;
+        return ecArtItemCard(x, foot);
+      }).join('')}</div>`
+    : '<div class="hp-vni-empty">Свободного снаряжения нет. Предметы отдаёт Разлом — на джекпоте «Взгляд в ответ».</div>';
+  return `<div class="ec-recruits-modal-back" onclick="ecAgentGearClose(event)">
+    <div class="ec-recruits-modal">
+      <div class="ec-recruits-hd">
+        <div><div class="ec-recruits-ttl">🎒 Снаряжение · ${esc(a.first_name)} ${esc(a.last_name)}</div>
+          <div class="ec-recruits-sub">Занято ${mine.length}/2 · бонусы идут в расчёт операций</div></div>
+        <button class="ec-recruits-x" type="button" onclick="ecAgentGearClose(event)">✕</button>
+      </div>
+      <div class="ec-recruits-body">
+        <div class="hp-vni-sect">На оперативнике</div>
+        ${wornHtml}
+        <div class="hp-vni-sect" style="margin-top:14px">На складе <span>${free.length ? free.length + ' шт.' : ''}</span></div>
+        ${freeHtml}
+        <div class="hp-vni-hint">⛓ <b>Проклятое</b> снимается только со смертью оперативника; 👁 <b>одноразовое</b> сгорает на первой же операции.</div>
+      </div>
+    </div>
   </div>`;
 }
 // Полная «оперативная карта» агента в ростере (досье + действия).
@@ -9889,7 +9959,7 @@ function ecAgentCard(a) {
   const trainLeft = a.status === 'training' && a.ready_at
     ? `~${Math.max(1, Math.ceil((new Date(a.ready_at).getTime() - Date.now()) / 86400000))} ход.` : '';
   // перки
-  const perk2 = a.perk2 ? `<span class="ec-agent-perk" title="${esc(ecPerk(a.perk2).desc)}" style="border-color:${ecPerkColor(a.perk2)};color:${ecPerkColor(a.perk2)}">${ecPerk(a.perk2).icon} ${esc(ecPerk(a.perk2).label)}</span>` : '';
+  const perk2 = a.perk2 ? `<span class="ec-agent-perk" title="${esc(ecPerk(a.perk2).desc)}" style="border-color:${ecPerkColor(a.perk2)};color:${ecPerkColor(a.perk2)}">${ecPerkIcon(a.perk2)} ${esc(ecPerk(a.perk2).label)}</span>` : '';
   // атрибуты
   const attr = ecAgentAttr(a);
   // артефакты
@@ -9909,12 +9979,15 @@ function ecAgentCard(a) {
     ? `<button class="btn btn-gh btn-xs" title="Тайное обучение: 2 ход., 120 ГС → +150 XP гарантированно, без риска" onclick="ecSpyTrain('${esc(a.id)}')">🎓 Обучить</button>`
     : '';
   const fireBtn = `<button class="btn btn-gh btn-xs ec-agent-fire" title="${a.status === 'busy' ? 'Агент на операции' : 'Уволить'}" ${a.status === 'busy' ? 'disabled' : ''} onclick="ecSpyFire('${esc(a.id)}')">✕</button>`;
+  // Снаряжение открывается отсюда: склада-витрины нет, есть человек и его слоты.
+  const gearN = (a.arts || []).length;
+  const gearBtn = `<button class="btn btn-gh btn-xs" title="Снаряжение: ${gearN}/2 — открыть и переодеть" onclick="ecAgentGearOpen('${esc(a.id)}')">🎒 ${gearN}/2</button>`;
   // RPG-портрет на задний фон карточки (или иконка-плейсхолдер, если пул пуст)
   const img = ecAgentPortraitUrl(a);
   const heroStyle = img ? `background-image:url('${esc(img)}')` : '';
   return `<div class="ec-agent-card rpg${img ? ' has-img' : ''}" style="--ag-col:${col}">
     <div class="ec-agent-hero" style="${heroStyle}">
-      ${img ? '' : `<div class="ec-agent-hero-ph">${pk.icon}</div>`}
+      ${img ? '' : `<div class="ec-agent-hero-ph">${ecPerkIcon(a.perk, 'lg')}</div>`}
       <div class="ec-agent-hero-top">
         <span class="ec-agent-rank" title="Уровень ${lv}/5"><b>${lv}</b>${ecLevelPips(lv)}</span>
         <span class="ec-agent-status" style="color:${st.c};border-color:color-mix(in srgb,${st.c} 55%,transparent)">${st.ic} ${st.t}${trainLeft ? ` · ${trainLeft}` : ''}</span>
@@ -9928,13 +10001,13 @@ function ecAgentCard(a) {
     </div>
     <div class="ec-agent-body">
       <div class="ec-agent-perks">
-        <span class="ec-agent-perk" title="${esc(pk.desc)}" style="border-color:${col};color:${col}">${pk.icon} ${esc(pk.label)}</span>${perk2}${flawHtml}
+        <span class="ec-agent-perk" title="${esc(pk.desc)}" style="border-color:${col};color:${col}">${ecPerkIcon(a.perk)} ${esc(pk.label)}</span>${perk2}${flawHtml}
       </div>
       <div class="ec-agent-xp" title="${esc(xpLabel)}">
         <div class="ec-agent-xp-bar"><div style="width:${pct}%;background:${next != null ? 'var(--gd,#7bd88f)' : 'var(--pu,#b07bd8)'}"></div></div>
         <span class="ec-agent-xp-t">${next != null ? `ур. ${lv} · ${pct}%` : `ур. 5 · макс.`}</span>
       </div>
-      <div class="ec-agent-acts">${trainBtn}${fireBtn}</div>
+      <div class="ec-agent-acts">${gearBtn}${trainBtn}${fireBtn}</div>
     </div>
   </div>`;
 }
@@ -9946,7 +10019,7 @@ function ecRecruitCard(r, atCap) {
   const heroStyle = img ? `background-image:url('${esc(img)}')` : '';
   return `<div class="ec-agent-card ec-recruit-card rpg${img ? ' has-img' : ''}" style="--ag-col:${col}">
     <div class="ec-agent-hero" style="${heroStyle}">
-      ${img ? '' : `<div class="ec-agent-hero-ph">${pk.icon}</div>`}
+      ${img ? '' : `<div class="ec-agent-hero-ph">${ecPerkIcon(a.perk, 'lg')}</div>`}
       <div class="ec-agent-hero-top">
         <span class="ec-agent-rank ec-rank-rec" title="Новобранец · уровень 1">★ нов.</span>
       </div>
@@ -9957,7 +10030,7 @@ function ecRecruitCard(r, atCap) {
       </div>
     </div>
     <div class="ec-agent-body">
-      <div class="ec-agent-perks"><span class="ec-agent-perk" title="${esc(pk.desc)}" style="border-color:${col};color:${col}">${pk.icon} ${esc(pk.label)}</span></div>
+      <div class="ec-agent-perks"><span class="ec-agent-perk" title="${esc(pk.desc)}" style="border-color:${col};color:${col}">${ecPerkIcon(r.perk)} ${esc(pk.label)}</span></div>
       <button class="btn btn-gd btn-xs ec-recruit-hire" ${atCap ? 'disabled title="Достигнут потолок агентов — стройте Центр Спецслужб"' : ''} onclick="ecSpyHire('${esc(r.id)}')">Нанять · ${ecNum(r.cost)} ГС</button>
     </div>
   </div>`;
@@ -10393,7 +10466,7 @@ function ecIntelStepGoScene() {
   const tgt = ecFacOf(EC.spyTarget); const d = EC_SPY_OPS[EC.spyOp] || {};
   const team = ecSpyRoster().filter(a => (EC.spyPick || []).includes(a.id));
   const roster = team.length
-    ? team.map(a => `<span class="ec-sum-agent" style="color:${ecPerkColor(a.perk)}">${ecPerk(a.perk).icon} ${esc(a.first_name)} ${esc(a.last_name)} <b>★${Math.max(1, a.level || 1)}</b></span>`).join('')
+    ? team.map(a => `<span class="ec-sum-agent" style="color:${ecPerkColor(a.perk)}">${ecPerkIcon(a.perk)} ${esc(a.first_name)} ${esc(a.last_name)} <b>★${Math.max(1, a.level || 1)}</b></span>`).join('')
     : '<span class="hp-vni-empty" style="padding:8px">Группа не назначена.</span>';
   return `<div class="hp-vni-steph">${d.icon || '•'} <b>${esc(d.label || '—')}</b> → <b>${esc((tgt && tgt.name) || '—')}</b></div>
     <div id="ec-spy-colony"></div>
@@ -10554,24 +10627,10 @@ function ecIntelTabAgents(ag) {
     : '<div class="hp-vni-empty">В штате пусто. Откройте рынок рекрутов и наймите людей.</div>';
   const hire = `<button class="hp-vni-btn primary" type="button" title="${atCap ? 'Достигнут потолок — стройте Центр Спецслужб' : 'Нанять новых оперативников'}" onclick="event.stopPropagation();ecRecruitsOpen()">📋 Рынок рекрутов${recCount ? ` · ${recCount}` : ''}${refreshCd ? ` <i>· ${refreshCd}</i>` : ''}</button>`;
 
-  // Снаряжение (артефакты): инвентарь + экипировка, до 2 предметов на агента.
-  // Инвентарь берём из intel_state (там же картинки и признаки предмета);
-  // ag.artifacts — легаси-источник, если срез ещё не накатан.
-  const arts = (EC.artInventory && EC.artInventory.length) ? EC.artInventory : (ag.artifacts || []);
-  const agName = id => { const a = (ag.roster || []).find(x => x.id === id); return a ? `${a.first_name} ${a.last_name}` : '—'; };
-  // Список «на кого надеть» строится ПОД КОНКРЕТНЫЙ ПРЕДМЕТ: агент занят,
-  // если у него уже два слота ИЛИ уже висит такой же предмет (сервер второй
-  // такой же не примет — дублирующиеся бонусы не складываются).
-  const equipOpts = kind => (ag.roster || []).map(a => {
-    const own = a.arts || [];
-    const dup = own.includes(kind);
-    const full = own.length >= 2;
-    const why = dup ? ' — такой уже есть' : (full ? '' : '');
-    return `<option value="${esc(a.id)}"${dup || full ? ' disabled' : ''}>${esc(a.first_name)} ${esc(a.last_name)} ★${Math.max(1, a.level || 1)} (${own.length}/2)${why}</option>`;
-  }).join('');
-  const artsHtml = arts.length
-    ? `<div class="ec-art-grid">${arts.map(x => ecArtItemCard(x, agName, equipOpts)).join('')}</div>`
-    : '<div class="hp-vni-empty">Снаряжения нет. Артефакты отдаёт Разлом — только тем, на кого он посмотрел в ответ (джекпот «Взгляд в ответ»).</div>';
+  // Снаряжения как отдельной витрины здесь нет: предмет надевают на человека,
+  // значит и открывается он с карточки человека (кнопка 🎒). Тут — только счёт
+  // свободного, чтобы было видно, есть ли чем переодеть штат.
+  const freeArts = ecArtInv().filter(x => !x.equipped_agent).length;
 
   return ecIntelBanner('agents', 'КАДРЫ И СНАРЯЖЕНИЕ', [
     'Люди — единственный расходник этой службы. У каждого имя, перк, раса и пол.',
@@ -10579,9 +10638,7 @@ function ecIntelTabAgents(ag) {
     + `<div class="hp-vni-sect">🕵 Штат <span>${ag.hired || 0}/${ag.cap || 0} · потолок задаёт Центр Спецслужб</span>${hire}</div>
        ${rosterHtml}
        <div class="hp-vni-hint">🎓 <b>Обучить</b> — тайная подготовка (2 хода, 120 ГС): +150 XP гарантированно, без риска раскрытия.</div>
-       <div class="hp-vni-sect">🎒 Снаряжение <span>до 2 предметов на оперативника, бонусы идут в расчёт операций</span></div>
-       <div class="hp-vni-card">${artsHtml}</div>
-       <div class="hp-vni-hint">Предметы из Разлома падают только на джекпоте «Взгляд в ответ» — тогда, когда там заметили вас. ⛓ <b>Проклятое</b> снимается только со смертью оперативника; 👁 <b>одноразовое</b> сгорает на первой же операции.</div>`;
+       <div class="hp-vni-hint">🎒 <b>Снаряжение</b> — на карточке оперативника: до 2 предметов на человека. ${freeArts ? `На складе свободно <b>${ecNum(freeArts)}</b> шт.` : 'Свободного снаряжения нет — предметы отдаёт Разлом на джекпоте «Взгляд в ответ».'}</div>`;
 }
 
 // ── ЗАЩИЩЁННОСТЬ: расстановка оперативников по СИСТЕМАМ ──
@@ -12825,11 +12882,11 @@ function ecSpyAgentPickHtml() {
   return ready.map(a => {
     const pk = ecPerk(a.perk); const on = EC.spyPick.includes(a.id);
     const lv = Math.max(1, a.level || 1); const col = ecPerkColor(a.perk);
-    const p2 = a.perk2 ? `<span class="ec-pick-p2" style="color:${ecPerkColor(a.perk2)}" title="${esc(ecPerk(a.perk2).desc)}">${ecPerk(a.perk2).icon}</span>` : '';
+    const p2 = a.perk2 ? `<span class="ec-pick-p2" style="color:${ecPerkColor(a.perk2)}" title="${esc(ecPerk(a.perk2).desc)}">${ecPerkIcon(a.perk2)}</span>` : '';
     const arts = (a.arts || []).map(k => ecArt(k).icon).join('');
     return `<button type="button" class="ec-pick-card${on ? ' on' : ''}" style="--ag-col:${col}" onclick="ecSpyTogglePick('${esc(a.id)}')" title="${esc(pk.desc)}">
       <span class="ec-pick-check">${on ? '✓' : '+'}</span>
-      <span class="ec-pick-ic" style="color:${col}">${pk.icon}</span>
+      <span class="ec-pick-ic" style="color:${col}">${ecPerkIcon(a.perk)}</span>
       <span class="ec-pick-body">
         <span class="ec-pick-name">${esc(a.first_name)} ${esc(a.last_name)} ${ecLevelPips(lv)}</span>
         <span class="ec-pick-perk" style="color:${col}">${esc(pk.label)}${p2}${arts ? ` <span class="ec-pick-arts" title="артефакты">${arts}</span>` : ''}</span>
@@ -12896,7 +12953,7 @@ function ecSpyCalcLive() {
   // состав группы (кто идёт) — мини-чипы с именами
   const team = ecSpyRoster().filter(a => picks.includes(a.id));
   const teamHtml = team.length
-    ? team.map(a => `<span class="ec-sum-agent" style="color:${ecPerkColor(a.perk)}">${ecPerk(a.perk).icon} ${esc(a.first_name)} ${esc(a.last_name)} <b>★${Math.max(1, a.level || 1)}</b></span>`).join('')
+    ? team.map(a => `<span class="ec-sum-agent" style="color:${ecPerkColor(a.perk)}">${ecPerkIcon(a.perk)} ${esc(a.first_name)} ${esc(a.last_name)} <b>★${Math.max(1, a.level || 1)}</b></span>`).join('')
     : '<span class="ec-hint">группа не назначена</span>';
   const gauge = (pct, color) => `<div class="ec-sum-gauge"><div class="ec-sum-gauge-fill" style="width:${dash ? 0 : pct}%;background:${color}"></div></div>`;
   // Разбор сложности: защищённость × вес операции + раса + изъяны = что мы преодолеваем.

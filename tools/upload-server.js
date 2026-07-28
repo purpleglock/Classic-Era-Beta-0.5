@@ -39,6 +39,7 @@ const ALLOWED_DIRS = {
   constructors: 'assets/constructors', // арты компонентов конструктора (орудия: ship_weapon_<slug>_<idx>.webp)
   precursor: 'assets/precursor',    // иконки вкладки «Дозвёздные миры» (<ключ>.webp: решения и статусы)
   intel:     'assets/intel',        // шапки вкладок новеллы «Разведуправление» (<вкладка>.webp)
+  perks:     'assets/perks',        // иконки перков оперативников (<ключ>.webp: ghost, saboteur…)
   artifacts: 'assets/artifacts',    // арты артефактов агентуры (<ключ>.webp; каталог spy_artifact_kinds)
 };
 // Возвращает {rel, abs} для папки назначения по query ?dir= (или дефолт-портреты).

@@ -49,7 +49,7 @@ create or replace function public._budget_row(p_fid text)
 returns public.faction_budget language sql stable as $$
   select coalesce(
     (select b from public.faction_budget b where b.faction_id = p_fid),
-    row(p_fid, 2,2,2,2,2, now(), 2)::public.faction_budget);
+    jsonb_populate_record(null::public.faction_budget, jsonb_build_object('faction_id', p_fid, 'industry', 2, 'military', 2, 'science', 2, 'social', 2, 'infra', 2, 'updated_at', now(), 'industry_eff', 2)));
 $$;
 
 -- ── 1) ДОЛЯ РАБОЧИХ ОТ СНАБЖЕНИЯ (INDUSTRY) ─────────────────
