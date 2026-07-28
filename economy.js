@@ -500,7 +500,10 @@ const EC_BUILD = {
   goodsfab:         { name: 'Фабрика товаров',       cost: 1200, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Из воды и сырья делает товары ровно под спрос населения: слот покрывает до 10 товаров/сут (0.6 воды + 0.4 сырья на товар). Обеспечение населения умножает доход державы' },
   wellhub:          { name: 'Центр благополучия',    cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Поднимает ИНДЕКС благополучия державы. У каждой идеологии свой домик: спиритуалистам — от охвата храмов, корпоратам — от казны (с потолком), пацифистам — щедрый плоский. Лимит: 1 на систему, 5 на державу' },
   warehouse:        { name: 'Склад',                 cost: 800,  ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'civ', desc: 'Поднимает лимит хранения ресурсов (+500 ёмкости за слот)' },
-  science:          { name: 'Научный Институт',     cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { science: 1 }, cat: 'mil', desc: '+1 ОН за слот' },
+  science:          { name: 'Научный Институт',     cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { science: 1 }, cat: 'sci', desc: '+1 ОН за слот' },
+  // ─ ДОМИКИ НАУКИ НЕБОЖИТЕЛЕЙ: доступны только на станции над своим типом мира (ветка «Небожители») ─
+  sci_giant:        { name: 'Гигантская обсерватория', cost: 4000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { science: 3 }, cat: 'sci', desc: '+3 ОН за слот. Только на станции над газовым/ледяным/горячим гигантом' },
+  sci_anomaly:      { name: 'Институт аномалий',     cost: 7000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: { science: 5 }, cat: 'sci', desc: '+5 ОН за слот. Только на станции внутри аномалии' },
   training:         { name: 'Центр Подготовки',     cost: 500,  ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1000 пехоты' },
   intel:            { name: 'Центр Спецслужб',      cost: 3000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 1 агент' },
   military_factory: { name: 'Военный Завод',        cost: 1000, ladder: [0, 500, 500, 1500, 1500, 3000], free: 1, inc: {}, cat: 'mil', desc: '1 слот = 100 ед. техники' },
@@ -525,6 +528,16 @@ const EC_BUILD = {
 const EC_DOOM_BUILD_MATTER = 40, EC_DOOM_SHOT_GRAV = 20;
 // Гиперпейсер — мобильная «Длань» (зеркало _mza_const): цена постройки + расход залпа.
 const EC_MZA_BUILD_GC = 1200000, EC_MZA_BUILD_MATTER = 60, EC_MZA_SHOT_GRAV = 12, EC_MZA_SHOT_WEAR = 25;
+// ── ИХОР: наследие Даллерианцев (зеркало _ichor_const в _ichor_megastructures.sql) ──
+// Ихор не добывается ничем: он течёт только из мира, вошедшего в Завет
+// (вкладка новеллы «Дозвёздные миры»). Поэтому обе постройки — это не деньги,
+// а срок: держава с любым доходом упрётся в те же недели ожидания.
+const EC_ICHOR = {
+  guardGc: 2500000, guardIchor: 30, guardStell: 40, guardCharges: 3, guardRechargeH: 24,
+  guardWipeCap: 80, guardKillFrac: 0.70,
+  batGc: 4000000, batIchor: 50, batGrav: 25, batMatter: 40, batBuildH: 30,
+  batVolley: 20, batWear: 3, batBoost: 1.75,
+};
 // Снаряды судного дня (зеркало _shell_const/_ball_params в _doom_shells.sql):
 // залпы Длани и Гиперпейсера тратят ПОСТРОЕННЫЙ снаряд, а не ресурсы напрямую.
 // 'doom' собирает «☢ Арсенал Судного Дня» (shellforge); тиры баллистики —
@@ -605,7 +618,7 @@ const EC_MZA_RANGE_HOPS = 4, EC_MZA_HEAVY_RANGE_MUL = 2;
 // Ожерелье Немезиды — мегасооружение: системная ПРО (зеркало nemesis_build/_shell_const).
 // Требует технологию pol.nemesis (стоит в ветке судного дня ДО Гиперпейсера).
 const EC_NEMESIS = { gc: 2000000, res: { 'Стелларит': 200, 'Рагенод': 40, 'Гравиядро': 20 }, charges: 6, buildDays: 3, guaranteed: true };
-const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'wellhub', 'trade', 'warehouse', 'science', 'training', 'intel', 'military_factory', 'shipyard', 'airfield', 'starbase', 'flak', 'abm', 'temple'];
+const EC_ORDER = ['factory', 'mining', 'mining_deep', 'mining_exotic', 'goodsfab', 'wellhub', 'trade', 'warehouse', 'science', 'sci_giant', 'sci_anomaly', 'training', 'intel', 'military_factory', 'shipyard', 'airfield', 'starbase', 'flak', 'abm', 'temple'];
 // Рецепт фабрики товаров (зеркало accrue в _budget_wellbeing.sql): на слот/сутки.
 // Товары ДЕМАТЕРИАЛИЗОВАНЫ — не ресурс: выпуск ровно под спрос населения.
 const EC_GOODS = { water: 6, mat: 4, out: 10 };
@@ -647,6 +660,8 @@ const EC_BLD_HOWTO = {
   trade:            'Доход только при активном торговом пути (вкладка «Торговля и потоки» → Караваны).',
   warehouse:        'Каждый слот склада повышает лимит общего хранилища (+500). Без склада лимит мал — лишняя добыча теряется (или ставьте завод в режим «Экспорт»).',
   science:          'Даёт очки науки (ОН) для исследований.',
+  sci_giant:        'Даёт больше ОН, чем обычный институт, но строится только на станции Небожителей над гигантом (ветка «Небожители» → «Орбитальные станции»).',
+  sci_anomaly:      'Самый дорогой и самый сильный источник ОН — но только на станции Небожителей внутри аномалии (ветка «Небожители» → «Аномальные станции»).',
   training:         'Даёт мощность для производства пехоты (заказ — во вкладке «Строительство вооружённых сил»).',
   intel:            'Даёт агентов для разведки (вкладка «Разведка»).',
   military_factory: 'Даёт мощность для производства наземной техники (вкладка «Строительство вооружённых сил»).',
@@ -664,7 +679,7 @@ const EC_BLD_HOWTO = {
 // Иконки зданий (для каталога-выбора при постройке)
 const EC_BLD_ICON = {
   factory: '🏭', mining: '⛏', mining_deep: '⚒', mining_exotic: '💎', goodsfab: '🛍', wellhub: '🏛', trade: '💱',
-  science: '🔬', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', airfield: '✈', warehouse: '📦', temple: '🛐', doomgun: '🜨',
+  science: '🔬', sci_giant: '🔭', sci_anomaly: '👁', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', airfield: '✈', warehouse: '📦', temple: '🛐', doomgun: '🜨',
   starbase: '🛰', flak: '🎯', abm: '🚀', shellforge: '☢', ballfab: '🏭', nemesis: '⛨',
 };
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
@@ -13824,12 +13839,17 @@ function ecBuildPicker(colonyId) {
   const hasFaith = myFaiths.length > 0;                        // храм доступен только исповедующим веру
   // добывающие домики: какие типы залежей копает каждый ярус (визуальные чипы редкости)
   const MINE_RARS = { mining: ['common'], mining_deep: ['uncommon', 'rare'], mining_exotic: ['epic', 'legendary'] };
+  // ДОМИКИ НАУКИ НЕБОЖИТЕЛЕЙ: показываем только на станции подходящего типа мира.
+  const colonyGrp = EC_GRP_NAME[colony.planet_type] || null;
+  const isGiantWorld = ['gasgiant', 'icegiant', 'hotgiant'].includes(colonyGrp);
+  const isAnomalyWorld = colonyGrp === 'anomaly';
   // ДОМИК: без технологии центр благополучия вообще не показываем (не грузим новичков)
-  const cards = EC_ORDER.filter(t => (t !== 'temple' || hasFaith) && (t !== 'wellhub' || ecHubTech())).map(t => {
+  const cards = EC_ORDER.filter(t => (t !== 'temple' || hasFaith) && (t !== 'wellhub' || ecHubTech())
+    && (t !== 'sci_giant' || isGiantWorld) && (t !== 'sci_anomaly' || isAnomalyWorld)).map(t => {
     const d = EC_BUILD[t]; const cost = ecBuildCost(d.cost);
     const block = t === 'wellhub' ? ecHubBlockReason(colonyId) : '';   // ДОМИК: лимит 1/система, 5/держава
     const afford = gc >= cost && !block;
-    const catLabel = d.cat === 'civ' ? 'Гражд.' : d.cat === 'faith' ? 'Вера' : 'Воен.';
+    const catLabel = d.cat === 'civ' ? 'Гражд.' : d.cat === 'sci' ? 'Наука' : d.cat === 'faith' ? 'Вера' : 'Воен.';
     const mineChips = MINE_RARS[t] ? `<span class="ec-bp-mine">⛏ добывает: ${MINE_RARS[t].map(r =>
       `<span class="ec-bp-rar ec-bp-rar-${r}">◈ ${ecRarLabel(r)}</span>`).join('')}</span>` : '';
     // мультивера: для храма сперва выбираем веру (если их несколько); иначе сразу подтверждение
@@ -13837,14 +13857,14 @@ function ecBuildPicker(colonyId) {
     return `<button class="ec-bp-card ec-bp-${d.cat}${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'}${block ? ` title="${esc(block)}"` : ''} onclick="${act}">
       <span class="ec-bp-ic">${EC_BLD_ICON[t] || '⌂'}</span>
       <span class="ec-bp-info">
-        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-${d.cat}">${catLabel}</span></span>
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-${d.cat}">${catLabel}</span><span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small></span></span>
         <span class="ec-bp-desc">${esc(d.desc)}</span>
         ${mineChips}
         <span class="ec-bp-howto">${esc(EC_BLD_HOWTO[t] || '')}</span>
       </span>
-      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small></span>
     </button>`;
-  }).join('') + ecDoomBuildCard(colonyId, gc) + ecShellForgeBuildCard(colonyId, gc) + ecBallFabBuildCard(colonyId, gc) + ecNemesisBuildCard(colonyId, gc);
+  }).join('') + ecDoomBuildCard(colonyId, gc) + ecShellForgeBuildCard(colonyId, gc) + ecBallFabBuildCard(colonyId, gc) + ecNemesisBuildCard(colonyId, gc)
+    + ecGuardBuildCard(colonyId, gc) + ecBatteryBuildCard(colonyId, gc);
   _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
     <div class="ec-bp-modal" role="dialog" aria-modal="true">
       <div class="ec-bp-hd">
@@ -13855,8 +13875,10 @@ function ecBuildPicker(colonyId) {
       <div class="ec-bp-filters" role="tablist">
         <button class="ec-flt is-on" data-cat="all" onclick="ecBpFilter(this,'all')">Все</button>
         <button class="ec-flt" data-cat="civ" onclick="ecBpFilter(this,'civ')">🏭 Гражданские</button>
+        <button class="ec-flt" data-cat="sci" onclick="ecBpFilter(this,'sci')">🔬 Наука</button>
         <button class="ec-flt" data-cat="mil" onclick="ecBpFilter(this,'mil')">🪖 Военные</button>
         <button class="ec-flt" data-cat="faith" onclick="ecBpFilter(this,'faith')">🛐 Вера</button>
+        <button class="ec-flt" data-cat="mega" onclick="ecBpFilter(this,'mega')">🌌 Мега</button>
       </div>
       <div class="ec-bp-grid flt-all">${cards}</div>
       <div class="ec-bp-foot">Постройка занимает 1 ячейку и завершается через 1 игровой день. Затраты возвращаются при отмене.</div>
@@ -13913,14 +13935,15 @@ function ecDoomBuildCard(colonyId, gc) {
   const matter = ecStockOf('Программируемая материя');
   const afford = gc >= cost && matter >= EC_DOOM_BUILD_MATTER;
   const why = gc < cost ? 'Не хватает ГС' : matter < EC_DOOM_BUILD_MATTER ? `Нужно ${EC_DOOM_BUILD_MATTER} ед. Программируемой материи (есть ${ecNum(matter)})` : '';
+  const matterLack = matter < EC_DOOM_BUILD_MATTER;
   return `<button class="ec-bp-card ec-bp-mil ec-bp-doom${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecDoomBuildConfirm('${colonyId}')" title="${esc(why)}" style="border-color:rgba(220,40,40,.5)">
       <span class="ec-bp-ic">🜨</span>
       <span class="ec-bp-info">
-        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mil" style="background:rgba(220,40,40,.25)">СУДНЫЙ ДЕНЬ</span></span>
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mil" style="background:rgba(220,40,40,.25)">СУДНЫЙ ДЕНЬ</span><span class="ec-bp-cost${gc < cost ? ' ec-bp-cant' : ''}">${ecNum(cost)} <small>ГС</small></span></span>
         <span class="ec-bp-desc">${esc(d.desc)}</span>
+        <span class="ec-bp-needs">${ecBpNeedChip(`+${EC_DOOM_BUILD_MATTER} материи`, matterLack)}</span>
         <span class="ec-bp-howto">${esc(EC_BLD_HOWTO.doomgun)}</span>
       </span>
-      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small><br><small>+${EC_DOOM_BUILD_MATTER} материи</small></span>
     </button>`;
 }
 
@@ -13931,14 +13954,15 @@ function ecShellForgeBuildCard(colonyId, gc) {
   const matter = ecStockOf('Программируемая материя');
   const afford = gc >= EC_SHELL.forgeGc && matter >= EC_SHELL.forgeMatter;
   const why = gc < EC_SHELL.forgeGc ? 'Не хватает ГС' : matter < EC_SHELL.forgeMatter ? `Нужно ${EC_SHELL.forgeMatter} ед. Программируемой материи (есть ${ecNum(matter)})` : '';
+  const matterLack = matter < EC_SHELL.forgeMatter;
   return `<button class="ec-bp-card ec-bp-mil ec-bp-doom${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecShellForgeBuildDo('${colonyId}')" title="${esc(why)}" style="border-color:rgba(220,40,40,.5)">
       <span class="ec-bp-ic">☢</span>
       <span class="ec-bp-info">
-        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mil" style="background:rgba(220,40,40,.25)">СУДНЫЙ ДЕНЬ</span></span>
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mil" style="background:rgba(220,40,40,.25)">СУДНЫЙ ДЕНЬ</span><span class="ec-bp-cost${gc < EC_SHELL.forgeGc ? ' ec-bp-cant' : ''}">${ecNum(EC_SHELL.forgeGc)} <small>ГС</small></span></span>
         <span class="ec-bp-desc">${esc(d.desc)}</span>
+        <span class="ec-bp-needs">${ecBpNeedChip(`+${EC_SHELL.forgeMatter} материи`, matterLack)}</span>
         <span class="ec-bp-howto">${esc(EC_BLD_HOWTO.shellforge)}</span>
       </span>
-      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(EC_SHELL.forgeGc)} <small>ГС</small><br><small>+${EC_SHELL.forgeMatter} материи</small></span>
     </button>`;
 }
 async function ecShellForgeBuildDo(colonyId) {
@@ -13960,11 +13984,10 @@ function ecBallFabBuildCard(colonyId, gc) {
   return `<button class="ec-bp-card ec-bp-mil${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecBallFabBuildDo('${colonyId}')" title="${afford ? '' : 'Не хватает ГС'}" style="border-color:rgba(230,164,60,.55)">
       <span class="ec-bp-ic">🏭</span>
       <span class="ec-bp-info">
-        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mil" style="background:rgba(230,164,60,.3)">БАЛЛИСТИКА</span></span>
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mil" style="background:rgba(230,164,60,.3)">БАЛЛИСТИКА</span><span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(EC_SHELL.ballfabGc)} <small>ГС</small></span></span>
         <span class="ec-bp-desc">${esc(d.desc)}</span>
         <span class="ec-bp-howto">${esc(EC_BLD_HOWTO.ballfab)}</span>
       </span>
-      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(EC_SHELL.ballfabGc)} <small>ГС</small></span>
     </button>`;
 }
 async function ecBallFabBuildDo(colonyId) {
@@ -13978,23 +14001,28 @@ async function ecBallFabBuildDo(colonyId) {
   finally { EC.busy = false; }
 }
 
+// Чип требуемого непрофильного ресурса в карточке мегасооружения (ГС всегда в заголовке карточки).
+function ecBpNeedChip(label, lack) {
+  return `<span class="ec-bp-need${lack ? ' lack' : ''}">${esc(label)}</span>`;
+}
+
 // Карточка мегасооружения «Ожерелье Немезиды» (нужна технология pol.nemesis).
 function ecNemesisBuildCard(colonyId, gc) {
   if (!ecHasNemesisTech()) return '';
   const d = EC_BUILD.nemesis;
-  const lack = [];
-  if (gc < EC_NEMESIS.gc) lack.push('ГС');
-  Object.entries(EC_NEMESIS.res).forEach(([n, q]) => { if (ecStockOf(n) < q) lack.push(`${n} ${ecNum(ecStockOf(n))}/${q}`); });
-  const afford = !lack.length;
-  const resTxt = Object.entries(EC_NEMESIS.res).map(([n, q]) => `${q} ${n}`).join(' · ');
-  return `<button class="ec-bp-card ec-bp-mil${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecNemesisBuildDo('${colonyId}')" title="${afford ? '' : esc('Не хватает: ' + lack.join(', '))}" style="border-color:rgba(150,90,255,.55)">
-      <span class="ec-bp-ic">⛨</span>
+  const gcLack = gc < EC_NEMESIS.gc;
+  const resLack = {};
+  Object.entries(EC_NEMESIS.res).forEach(([n, q]) => { resLack[n] = ecStockOf(n) < q; });
+  const afford = !gcLack && !Object.values(resLack).some(Boolean);
+  const needs = Object.entries(EC_NEMESIS.res).map(([n, q]) => ecBpNeedChip(`${q} ${n}`, resLack[n])).join('');
+  return `<button class="ec-bp-card ec-bp-mega${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecNemesisBuildDo('${colonyId}')" ${afford ? '' : `title="${esc('Не хватает ресурсов на постройку')}"`}>
+      <span class="ec-bp-ic">🪐</span>
       <span class="ec-bp-info">
-        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mil" style="background:rgba(150,90,255,.3)">МЕГАСООРУЖЕНИЕ</span></span>
+        <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-mega">МЕГА</span><span class="ec-bp-cost${gcLack ? ' ec-bp-cant' : ''}">${ecNum(EC_NEMESIS.gc)} <small>ГС</small></span></span>
         <span class="ec-bp-desc">${esc(d.desc)}</span>
-        <span class="ec-bp-howto">${esc(resTxt + ' · строится ' + EC_NEMESIS.buildDays + ' дня · одно на систему')}</span>
+        <span class="ec-bp-needs">${needs}</span>
+        <span class="ec-bp-howto">строится ${EC_NEMESIS.buildDays} дня · одно на систему</span>
       </span>
-      <span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(EC_NEMESIS.gc)} <small>ГС</small><br><small>+💜/🧡 ресурсы</small></span>
     </button>`;
 }
 async function ecNemesisBuildDo(colonyId) {
@@ -14006,6 +14034,75 @@ async function ecNemesisBuildDo(colonyId) {
     await ecRpc('nemesis_build', { p_colony_id: colonyId });
     ecBuildClose();
     toast('⛨ Ожерелье Немезиды — сборка начата (' + EC_NEMESIS.buildDays + ' дня)', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+
+// Карточка «⟁ Пост древних стражей» (наследие Даллерианцев — та же система, что и колония).
+// Не занимает ячейку. Валюта — ихор (даёт только мир в Завете), а не наука/ГС.
+function ecGuardBuildCard(colonyId, gc) {
+  const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return '';
+  if (!EC._guardPosts) { ecGuardLoad().then(() => { if (document.getElementById('ec-bp-host')?.innerHTML) ecBuildPicker(colonyId); }); return ''; }
+  if (EC._guardPosts.some(p => p.system_id === colony.system_id)) return ''; // в системе уже есть пост
+  const ichor = ecStockOf('Ихор'), stell = ecStockOf('Стелларит');
+  const gcLack = gc < EC_ICHOR.guardGc, ichorLack = ichor < EC_ICHOR.guardIchor, stellLack = stell < EC_ICHOR.guardStell;
+  const afford = !gcLack && !ichorLack && !stellLack;
+  const needs = ecBpNeedChip((ichorLack ? ichor.toFixed(1) + '/' : '') + EC_ICHOR.guardIchor + ' ихора', ichorLack)
+    + ecBpNeedChip((stellLack ? ecNum(stell) + '/' : '') + EC_ICHOR.guardStell + ' стелларита', stellLack);
+  return `<button class="ec-bp-card ec-bp-mega${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecGuardBuildFrom('${colonyId}')" ${afford ? '' : `title="${esc('Не хватает ресурсов на постройку')}"`}>
+      <span class="ec-bp-ic">🛡</span>
+      <span class="ec-bp-info">
+        <span class="ec-bp-row1"><span class="ec-bp-name">Пост древних стражей</span><span class="ec-bp-cat ec-bp-cat-mega">МЕГА</span><span class="ec-bp-cost${gcLack ? ' ec-bp-cant' : ''}">${ecNum(EC_ICHOR.guardGc)} <small>ГС</small></span></span>
+        <span class="ec-bp-desc">Не воюет — стоит на трассе. Любой чужой флот через систему теряет ${Math.round(EC_ICHOR.guardKillFrac * 100)}% состава, флот до ${EC_ICHOR.guardWipeCap} кораблей не выходит вовсе. Не занимает ячейку. Один пост на систему.</span>
+        <span class="ec-bp-needs">${needs}</span>
+        <span class="ec-bp-howto">заряд копится ${EC_ICHOR.guardRechargeH} ч, зарядов ${EC_ICHOR.guardCharges}. Ихор не возвращается при сносе.</span>
+      </span>
+    </button>`;
+}
+async function ecGuardBuildFrom(colonyId) {
+  if (EC.busy) return;
+  const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return;
+  if (!confirm('Поднять пост древних стражей в системе «' + ecSysName(colony.system_id) + '»? Ихор в него уйдёт безвозвратно: при сносе вернётся только половина ГС.')) return;
+  EC.busy = true;
+  try {
+    await ecRpc('guardian_build', { p_system_id: colony.system_id });
+    ecBuildClose();
+    toast('⟁ Стражи подняты — трассы через эту систему стали смертельными', 'ok');
+    await ecGuardLoad(true); await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+
+// Карточка «◈ Подпространственная батарея» (наследие Даллерианцев).
+// Не занимает ячейку. Требует технологию Гиперпейсера.
+function ecBatteryBuildCard(colonyId, gc) {
+  const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return '';
+  const ichor = ecStockOf('Ихор'), grav = ecStockOf('Гравиядро'), matter = ecStockOf('Программируемая материя');
+  const noTech = !ecHasHyperTech();
+  const gcLack = gc < EC_ICHOR.batGc, ichorLack = ichor < EC_ICHOR.batIchor, gravLack = grav < EC_ICHOR.batGrav, matterLack = matter < EC_ICHOR.batMatter;
+  const afford = !noTech && !gcLack && !ichorLack && !gravLack && !matterLack;
+  const needs = ecBpNeedChip((ichorLack ? ichor.toFixed(1) + '/' : '') + EC_ICHOR.batIchor + ' ихора', ichorLack)
+    + ecBpNeedChip((gravLack ? ecNum(grav) + '/' : '') + EC_ICHOR.batGrav + ' гравиядра', gravLack)
+    + ecBpNeedChip((matterLack ? ecNum(matter) + '/' : '') + EC_ICHOR.batMatter + ' материи', matterLack);
+  return `<button class="ec-bp-card ec-bp-mega${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'} onclick="ecBatteryBuildFrom('${colonyId}')" ${afford ? '' : `title="${esc(noTech ? 'Нужна технология «Гиперпейсер»' : 'Не хватает ресурсов на постройку')}"`}>
+      <span class="ec-bp-ic">⚡</span>
+      <span class="ec-bp-info">
+        <span class="ec-bp-row1"><span class="ec-bp-name">Подпространственная батарея</span><span class="ec-bp-cat ec-bp-cat-mega">МЕГА</span><span class="ec-bp-cost${gcLack ? ' ec-bp-cant' : ''}">${ecNum(EC_ICHOR.batGc)} <small>ГС</small></span></span>
+        <span class="ec-bp-desc">Тот же корпус на даллерианском приводе: втрое быстрее по карте, снаряды летят вдвое быстрее, залп — до ${EC_ICHOR.batVolley} снарядов подряд (×${EC_ICHOR.batBoost} разгон). Не занимает ячейку.</span>
+        <span class="ec-bp-needs">${needs}</span>
+        <span class="ec-bp-howto">${noTech ? '🔒 Нужна технология «Гиперпейсер». ' : ''}строится ${EC_ICHOR.batBuildH} ч, износ ${EC_ICHOR.batWear}% за снаряд.</span>
+      </span>
+    </button>`;
+}
+async function ecBatteryBuildFrom(colonyId) {
+  if (EC.busy) return;
+  const colony = EC.colonies.find(c => c.id === colonyId); if (!colony) return;
+  EC.busy = true;
+  try {
+    await ecRpc('subspace_build', { p_system_id: colony.system_id, p_name: null });
+    ecBuildClose();
+    toast('◈ Батарея заложена · строится ' + EC_ICHOR.batBuildH + ' ч', 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
   finally { EC.busy = false; }
@@ -14372,7 +14469,7 @@ function ecTabDoom() {
       <div style="font-size:15px;margin-bottom:6px">Орудие ещё не возведено.</div>
       <div style="color:var(--t3);margin-bottom:14px">Постройте «Длань Неотвратимости» на одной из колоний — это откроет пульт наведения.</div>
       <button class="btn btn-rd btn-sm" onclick="ecSetTab('colonies')">🏗 Перейти к колониям и возвести орудие</button>
-    </div>` + ecShellArsenalSection() + ecMzaSection();
+    </div>` + ecShellArsenalSection() + ecMzaSection() + ecIchorSection();
   }
   const gun = ecDoomActiveGun();
   (EC._doomTab = EC._doomTab || {}).gunId = gun.id;
@@ -14414,7 +14511,7 @@ function ecTabDoom() {
   </div>`;
   return intro + gunSel + statusCard + salvoHtml +
     `<div class="ec-section-title">Визуальное наведение <span class="ec-hint">— кликните систему-цель на карте, затем выберите планету</span></div>` +
-    consoleHtml + `<div style="margin-top:16px"></div>` + ecShellArsenalSection() + ecMzaSection();
+    consoleHtml + `<div style="margin-top:16px"></div>` + ecShellArsenalSection() + ecMzaSection() + ecIchorSection();
 }
 
 // ── Гиперпейсер — мобильное орудие судного дня: постройка прямо в этой вкладке ──
@@ -14508,7 +14605,7 @@ function ecMzaCard(sh, haveGrav) {
     <div class="ec-mza-hd">
       ${flag}
       <div class="ec-mza-id">
-        <div class="ec-mza-cls">гиперпейсер</div>
+        <div class="ec-mza-cls">${sh.kind === 'subspace' ? 'подпространственная батарея' : 'гиперпейсер'}</div>
         <div class="ec-mza-name">${sh.name ? '«' + esc(sh.name) + '»' : 'без имени'}</div>
         <div class="ec-mza-loc">${where}</div>
       </div>
@@ -14537,6 +14634,166 @@ async function ecMzaBuild() {
     toast('☣ Гиперпейсер заложен · строится сутки · появится на карте', 'ok');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ИХОР · НАСЛЕДИЕ ДАЛЛЕРИАНЦЕВ
+   Два мегасооружения, которые нельзя купить: их валюта — недели Завета
+   с дозвёздным миром (вкладка новеллы «Дозвёздные миры»).
+   Сервер: _ichor_megastructures.sql.
+════════════════════════════════════════════════════════════════ */
+// Посты стражей грузим лениво: они нужны только на этой вкладке.
+async function ecGuardLoad(force) {
+  if (EC._guardPosts && !force) return EC._guardPosts;
+  try { EC._guardPosts = await ecRpc('guardian_posts_visible') || []; }
+  catch (e) { EC._guardPosts = []; }
+  return EC._guardPosts;
+}
+function ecGuardMine() { return (EC._guardPosts || []).filter(g => g.faction_id === EC.fid); }
+// Заряд копится сутки; показываем не «charges: 2», а сколько накопилось на самом деле.
+function ecGuardCharges(g) {
+  const max = EC_ICHOR.guardCharges;
+  const grown = Math.floor((Date.now() - Date.parse(g.last_charge)) / (EC_ICHOR.guardRechargeH * 3600000));
+  return Math.max(0, Math.min(max, (+g.charges || 0) + (grown > 0 ? grown : 0)));
+}
+function ecIchorSection() {
+  const ichor = ecStockOf('Ихор');
+  // Ленивая догрузка постов — один раз за заход во вкладку.
+  if (!EC._guardPosts) ecGuardLoad().then(() => { const el = document.getElementById('ec-ichor-sec'); if (el) el.innerHTML = ecIchorInner(); });
+  return `<div class="ec-section-title" style="margin-top:18px">Наследие Даллерианцев
+      <span class="ec-hint">— строится не за деньги, а за ихор: его даёт только мир в Завете</span></div>
+    <div class="ec-bld-howto">Ихора на складе: <b style="color:${ichor > 0 ? '#c76a86' : 'var(--t4)'}">🩸 ${ichor.toFixed(1)}</b>.
+      Ихор не добывается экстрактором, не покупается на бирже и не отнимается силой. Единственный источник —
+      дозвёздный мир с руинами Даллерианцев, доведённый до лояльности 90 и вошедший в <b>Завет</b>
+      (новелла → «Дозвёздные миры»). Один такой мир отдаёт примерно 1–2 в сутки: на пост стражей уходит
+      около двух недель Завета, на батарею — около месяца.</div>
+    <div id="ec-ichor-sec">${ecIchorInner()}</div>`;
+}
+function ecIchorInner() {
+  const posts = EC._guardPosts || [];
+  const mine = ecGuardMine();
+  const bats = (EC.mzaShips || []).filter(sh => sh.kind === 'subspace');
+
+  // ── ПОСТ ДРЕВНИХ СТРАЖЕЙ: только статус (постройка — в меню построек колонии) ──
+  const postRows = mine.length ? `<div class="ec-sub-title" style="margin-top:8px">Мои посты · ${mine.length}</div>` +
+    mine.map(g => {
+      const ch = ecGuardCharges(g);
+      return `<div class="ec-colonize-row">
+        <div class="ec-cz-main"><span class="ec-cz-name">⟁ ${esc(ecSysName(g.system_id))}</span>
+          <span class="ec-cz-sub">зарядов ${ch} из ${EC_ICHOR.guardCharges} · флотов встречено ${+g.strikes || 0} · сожжено кораблей ${ecNum(+g.kills || 0)}</span></div>
+        <button class="btn btn-gh btn-sm" onclick="ecGuardScrap('${g.id}')" title="Снос: половина ГС назад, ихор не возвращается">Списать</button>
+      </div>`;
+    }).join('') : `<div class="ec-bld-howto">⟁ Постов нет. Строятся в меню построек колонии («Что построить» → 🌌 Мега).</div>`;
+
+  const foreign = posts.filter(g => g.faction_id !== EC.fid);
+  const foreignRow = foreign.length ? `<div class="ec-bld-howto" style="margin-top:6px">⚠ Чужие посты стоят в системах:
+      <b>${foreign.map(g => esc(ecSysName(g.system_id))).join(', ')}</b> — прокладывайте трассы в обход.</div>` : '';
+
+  // ── ПОДПРОСТРАНСТВЕННАЯ БАТАРЕЯ: только статус/пульт залпа (постройка — в меню построек колонии) ──
+  const batPanel = bats.length ? `<div class="ec-sub-title" style="margin-top:10px">Залп батареи</div>` +
+    bats.map(sh => ecBatConsole(sh)).join('')
+    : `<div class="ec-bld-howto" style="margin-top:10px">◈ Батарей нет. Строятся в меню построек колонии («Что построить» → 🌌 Мега).</div>`;
+
+  return postRows + foreignRow + batPanel;
+}
+// Пульт залпа батареи: цель выбирается прямо здесь, без карты — двадцать
+// снарядов не наводят кликом по звезде, их наводят по списку.
+function ecBatConsole(sh) {
+  if (sh.status !== 'idle') {
+    return `<div class="ec-colonize-row"><div class="ec-cz-main">
+      <span class="ec-cz-name">◈ ${sh.name ? '«' + esc(sh.name) + '»' : 'батарея'}</span>
+      <span class="ec-cz-sub">${sh.status === 'building' ? 'строится' : 'в пути'} · ${sh.arrive_at ? ecEtaShort(sh.arrive_at) : ''}</span>
+    </div></div>`;
+  }
+  const st = (EC._batTgt = EC._batTgt || {})[sh.id] || {};
+  const inRange = (EC.allSystems || []).filter(x => x.id === sh.system_id || ecMzaHops(sh.system_id, x.id) != null);
+  const sys = (EC.allSystems || []).find(x => x.id === st.sysId);
+  const planets = sys ? ecDoomTargetablePlanets(sys) : [];
+  const kinds = ['doom'].concat(EC_BALL_KINDS);
+  const kind = st.kind || 'ball_cluster';
+  const have = ecShellsOf(kind);
+  const n = Math.min(EC_ICHOR.batVolley, have);
+  const can = !!(st.sysId && st.pid && n > 0 && +sh.integrity > 0);
+  return `<div class="ec-mza-yard" style="margin-top:8px">
+    <div class="ec-mza-yard-hd">◈ ${sh.name ? '«' + esc(sh.name) + '»' : 'батарея'} · система ${esc(ecSysName(sh.system_id))} · корпус ${Math.round(+sh.integrity)}%</div>
+    <div class="ec-mza-yard-row">
+      <label class="ec-mza-fld"><span>система-цель</span>
+        <select class="ec-mza-in" onchange="ecBatPick('${sh.id}','sys',this.value)">
+          <option value="">— выбрать —</option>
+          ${inRange.map(x => `<option value="${esc(x.id)}"${st.sysId === x.id ? ' selected' : ''}>${esc(x.name || x.id)}</option>`).join('')}
+        </select></label>
+      <label class="ec-mza-fld"><span>планета</span>
+        <select class="ec-mza-in" onchange="ecBatPick('${sh.id}','pid',this.value)">
+          <option value="">— выбрать —</option>
+          ${planets.map(p => `<option value="${p.pid}"${+st.pid === +p.pid ? ' selected' : ''}${p.dead ? ' disabled' : ''}>${esc(p.name || ('#' + p.pid))}${p.dead ? ' (мертва)' : ''}</option>`).join('')}
+        </select></label>
+      <label class="ec-mza-fld"><span>снаряд</span>
+        <select class="ec-mza-in" onchange="ecBatPick('${sh.id}','kind',this.value)">
+          ${kinds.map(k => `<option value="${k}"${kind === k ? ' selected' : ''}>${esc(k)} · на складе ${ecNum(ecShellsOf(k))}</option>`).join('')}
+        </select></label>
+    </div>
+    <button type="button" class="ec-mza-lay" ${can ? '' : 'disabled'} onclick="ecBatVolley('${sh.id}')">
+      ${n > 0 ? `ЗАЛП · ${n} снаряд(ов) подряд` : 'нет снарядов этого типа'}</button>
+  </div>`;
+}
+function ecBatPick(id, what, val) {
+  const st = (EC._batTgt = EC._batTgt || {});
+  st[id] = st[id] || {};
+  if (what === 'sys') { st[id].sysId = val || null; st[id].pid = null; }
+  else if (what === 'pid') st[id].pid = val ? +val : null;
+  else st[id].kind = val;
+  const el = document.getElementById('ec-ichor-sec'); if (el) el.innerHTML = ecIchorInner();
+}
+async function ecGuardBuild() {
+  if (EC.busy) return;
+  const sel = ecId('ec-guard-sys');
+  if (!sel || !sel.value) { toast('Нет системы: пост поднимают там, где есть своя колония', 'err'); return; }
+  if (!confirm('Поднять пост древних стражей? Ихор в него уйдёт безвозвратно: при сносе вернётся только половина ГС.')) return;
+  EC.busy = true;
+  try {
+    await ecRpc('guardian_build', { p_system_id: sel.value });
+    toast('⟁ Стражи подняты — трассы через эту систему стали смертельными', 'ok');
+    await ecGuardLoad(true); await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+async function ecGuardScrap(id) {
+  if (EC.busy || !confirm('Списать пост? Вернётся половина ГС, ихор — нет.')) return;
+  EC.busy = true;
+  try {
+    await ecRpc('guardian_scrap', { p_id: id });
+    toast('Пост списан', 'ok');
+    await ecGuardLoad(true); await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+async function ecBatBuild() {
+  if (EC.busy) return;
+  const sel = ecId('ec-bat-sys');
+  if (!sel || !sel.value) { toast('Выберите систему с колонией', 'err'); return; }
+  const nm = (ecId('ec-bat-name')?.value || '').trim();
+  EC.busy = true;
+  try {
+    await ecRpc('subspace_build', { p_system_id: sel.value, p_name: nm || null });
+    toast('◈ Батарея заложена · строится ' + EC_ICHOR.batBuildH + ' ч', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
+  finally { EC.busy = false; }
+}
+async function ecBatVolley(id) {
+  if (EC.busy) return;
+  const st = (EC._batTgt || {})[id] || {};
+  if (!st.sysId || !st.pid) { toast('Цель не выбрана', 'err'); return; }
+  const kind = st.kind || 'ball_cluster';
+  const n = Math.min(EC_ICHOR.batVolley, ecShellsOf(kind));
+  if (!confirm(`Выпустить ${n} снаряд(ов) подряд? Со склада уйдёт весь этот боекомплект, корпус потеряет ${n * EC_ICHOR.batWear}%.`)) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('subspace_volley', { p_id: id, p_target_system_id: st.sysId, p_target_pid: +st.pid, p_kind: kind, p_count: n });
+    toast(`◈ Залп: ${(r && r.fired) || n} снарядов · подлёт ${(r && r.flight_h) || '?'} ч`, 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); }
   finally { EC.busy = false; }
 }
 

@@ -1121,6 +1121,8 @@
 .ec-bp-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; font-family: var(--font-mono); font-size: 11px; color: var(--t3); border-bottom: var(--deco-frame-w, 1px) solid var(--w1); }
 .ec-bp-meta b { color: var(--t1); font-weight: 600; }
 .ec-bp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px 16px; max-height: 60vh; overflow-y: auto; }
+/* карточки с длинным описанием/доп. требованиями (мегасооружения, орудия Судного дня) — на всю ширину, иначе текст и цена не помещаются в узкую колонку */
+.ec-bp-grid .ec-bp-card.ec-bp-mega, .ec-bp-grid .ec-bp-card.ec-bp-doom { grid-column: 1 / -1; }
 /* переиспользуемые фильтр-чипы (.ec-flt) */
 .ec-flt { font-size: 11px; padding: 4px 10px; border-radius: var(--radius-pill); border: var(--deco-frame-w, 1px) solid var(--w2); background: var(--b1); color: var(--t3); cursor: pointer; white-space: nowrap; transition: all var(--duration-fast); }
 .ec-flt:hover { color: var(--t1); border-color: var(--w3, var(--w2)); }
@@ -1135,8 +1137,10 @@
 .ec-bp-filters .ec-flt:hover { background: var(--w2); }
 .ec-bp-filters .ec-flt.is-on { background: var(--gd); color: #1a1408; }
 .ec-bp-grid.flt-civ   .ec-bp-card:not(.ec-bp-civ)   { display: none; }
+.ec-bp-grid.flt-sci   .ec-bp-card:not(.ec-bp-sci)   { display: none; }
 .ec-bp-grid.flt-mil   .ec-bp-card:not(.ec-bp-mil)   { display: none; }
 .ec-bp-grid.flt-faith .ec-bp-card:not(.ec-bp-faith) { display: none; }
+.ec-bp-grid.flt-mega  .ec-bp-card:not(.ec-bp-mega)  { display: none; }
 /* фильтр рынка по редкости / только моё */
 .ec-mk-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
 .ec-mk-list.flt-mine      .ec-mk-chip:not(.ec-mk-has)              { display: none; }
@@ -1178,6 +1182,7 @@
   transition: background var(--duration-fast);
 }
 .ec-bp-civ { --accent: var(--gd); }
+.ec-bp-sci { --accent: var(--ok); }
 .ec-bp-mil { --accent: var(--te); }
 .ec-bp-card:hover:not(:disabled) { transform: translateY(-1px); filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--accent) 30%, transparent)); }
 .ec-bp-card:hover:not(:disabled)::before { background: linear-gradient(90deg, var(--accent) 0 3px, color-mix(in srgb, var(--accent) 55%, var(--w2)) 3px); }
@@ -1199,8 +1204,10 @@
   clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
 }
 .ec-bp-cat-civ { color: var(--gd); background: color-mix(in srgb, var(--gd) 14%, transparent); }
+.ec-bp-cat-sci { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
 .ec-bp-cat-mil { color: var(--te); background: color-mix(in srgb, var(--te) 14%, transparent); }
 .ec-bp-cat-faith { color: var(--pu, #a98bff); background: color-mix(in srgb, var(--pu, #a98bff) 14%, transparent); }
+.ec-bp-cat-mega { color: #b06aff; background: color-mix(in srgb, #b06aff 14%, transparent); }
 /* ярусы добычи: чипы «какие залежи копает домик» */
 .ec-bp-mine { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 1px; font-family: var(--font-mono); font-size: 9.5px; color: var(--t3); text-transform: uppercase; letter-spacing: calc(.04em * var(--deco-ls-mult, 1)); }
 .ec-bp-rar {
@@ -1214,14 +1221,24 @@
 .ec-bp-rar-epic      { --rc: #c08aff; }
 .ec-bp-rar-legendary { --rc: #ffc24d; }
 .ec-bp-faith { --accent: var(--pu, #a98bff); }
+.ec-bp-mega { --accent: #b06aff; }
 /* мультивера: метка религии у храма в карточке здания */
 .ec-bld-faith { display: inline-block; margin-left: 7px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; vertical-align: middle; white-space: nowrap; }
 .ec-bld-faith-none { color: var(--t3); opacity: .85; }
 .ec-bp-desc { font-size: 11.5px; color: var(--t2); line-height: 1.35; }
 .ec-bp-howto { font-size: 10.5px; color: var(--t3); line-height: 1.35; }
-.ec-bp-cost { flex-shrink: 0; align-self: center; font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--gd); white-space: nowrap; }
+/* цена — всегда в строке заголовка, справа от названия/тега (не отдельной боковой колонкой) */
+.ec-bp-cost { flex-shrink: 0; margin-left: auto; padding-left: 8px; font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--gd); white-space: nowrap; }
 .ec-bp-cost small { font-size: 9px; color: var(--t3); font-weight: 600; }
 .ec-bp-cost.ec-bp-cant { color: var(--err); }
+/* требуемые непрофильные ресурсы (сверх ГС) — чипы под описанием, ГС всегда в заголовке */
+.ec-bp-needs { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 1px; }
+.ec-bp-need {
+  font-family: var(--font-mono); font-weight: 700; font-size: 10.5px; white-space: nowrap;
+  padding: 2px 8px; color: var(--t2); background: color-mix(in srgb, var(--t3) 14%, transparent);
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+}
+.ec-bp-need.lack { color: var(--err); background: color-mix(in srgb, var(--err) 18%, transparent); }
 .ec-bp-foot { padding: 11px 16px; border-top: var(--deco-frame-w, 1px) solid var(--w2); font-size: 11px; color: var(--t3); line-height: 1.45; }
 .ec-bp-cf { max-width: 430px; padding: 24px 22px; text-align: center; }
 .ec-bp-cf-ic {

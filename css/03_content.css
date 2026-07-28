@@ -5207,7 +5207,7 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .pc-ico-md{width:34px;height:34px}
 .pc-ico-lg{width:40px;height:40px;border-radius:9px}
 .pc-sub{margin:12px 0 4px;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3,#8296a8);opacity:.8}
-.pc-hero{position:relative;margin:0 0 2px;padding:14px 16px 12px;background:linear-gradient(180deg,rgba(127,209,138,.10),rgba(127,209,138,0) 70%),rgba(255,255,255,.03);clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,0 100%)}
+.pc-hero{position:relative;margin:0 0 2px;padding:14px 190px 12px 16px;background:linear-gradient(180deg,rgba(127,209,138,.10),rgba(127,209,138,0) 70%),rgba(255,255,255,.03);clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,0 100%)}
 .pc-hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--gd,#7fd18a)}
 .pc-hero-nm{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:19px;font-weight:800;color:var(--t1,#dfe8f0);letter-spacing:.01em;line-height:1.15}
 .pc-hero-sub{margin-top:6px;font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--t3,#8296a8)}
@@ -5281,12 +5281,84 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .pc-chr-txt b{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8296a8);margin-right:7px}
 .pc-chr-txt i{font-style:normal;color:#e0736a;font-size:11px}
 .pc-chr-scar .pc-chr-txt b{color:#e0736a}
+/* ── Голос мира: шапка-арт с репликой над таблицей узов (тот же приём, что у
+   наводчицы Длани, doom-aim-novel) — цифры остаются, но сверху звучит тон.
+   Нет арта → цветной градиент по настроению, картинка проявляется поверх. */
+.pc-vn-banner{position:relative;min-height:clamp(160px,24vh,240px);display:flex;flex-direction:column;justify-content:flex-end;
+  overflow:hidden;margin:0 0 12px;background:radial-gradient(125% 100% at 50% 10%,rgba(127,209,138,.16),#0b0f14 76%)}
+.pc-vn-mood-hostile{background:radial-gradient(125% 100% at 50% 10%,rgba(224,90,74,.24),#0b0f14 76%)}
+.pc-vn-mood-craven{background:radial-gradient(125% 100% at 50% 10%,rgba(216,192,122,.2),#0b0f14 76%)}
+.pc-vn-mood-plea{background:radial-gradient(125% 100% at 50% 10%,rgba(224,150,74,.26),#0b0f14 76%)}
+.pc-vn-mood-warm{background:radial-gradient(125% 100% at 50% 10%,rgba(127,209,138,.22),#0b0f14 76%)}
+.pc-vn-mood-devoted{background:radial-gradient(125% 100% at 50% 10%,rgba(230,193,90,.26),#0b0f14 76%)}
+.pc-vn-mood-covenant{background:radial-gradient(125% 100% at 50% 10%,rgba(159,199,255,.24),#0b0f14 76%)}
+.pc-vn-mood-wary{background:radial-gradient(125% 100% at 50% 10%,rgba(130,150,168,.16),#0b0f14 76%)}
+.pc-vn-mood-legacy{background:radial-gradient(125% 100% at 50% 10%,rgba(120,140,160,.14),#0b0f14 76%)}
+.pc-vn-banner-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 30%;opacity:0;transition:opacity .5s ease}
+.pc-vn-banner-img.ok{opacity:1}
+.pc-vn-banner-scrim{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(11,15,20,.1) 0,rgba(11,15,20,.05) 30%,rgba(11,15,20,.8) 76%,#0b0f14 100%)}
+.pc-vn-say{position:relative;z-index:2;padding:14px 16px 16px}
+.pc-vn-say-who{font-family:var(--font-mono);font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:#9fc7ff;margin-bottom:6px;text-shadow:0 1px 4px #000}
+.pc-vn-mood-hostile .pc-vn-say-who{color:#ff9a8a}
+.pc-vn-mood-plea .pc-vn-say-who{color:#f0c27e}
+.pc-vn-mood-devoted .pc-vn-say-who,.pc-vn-mood-craven .pc-vn-say-who{color:#e6c15a}
+.pc-vn-mood-covenant .pc-vn-say-who{color:#9fc7ff}
+.pc-vn-mood-warm .pc-vn-say-who{color:#9fe0ac}
+.pc-vn-say-l{margin:0 0 5px;font-size:13.5px;line-height:1.6;color:#eef3f7;max-width:620px;text-shadow:0 1px 6px #000,0 0 2px #000}
+.pc-vn-say-l:last-child{margin-bottom:0}
+/* Клеймо «Мразь» на вере — метка обряда. Не украшение: ставится навсегда и
+   видна всем, поэтому кричит цветом крови, а не мягким акцентом вкладки. */
+.pc-stigma{margin-left:8px;padding:2px 8px;font-family:var(--font-mono);font-size:9px;font-weight:700;
+  letter-spacing:.18em;text-transform:uppercase;color:#ff6a8a;background:rgba(255,60,90,.14);
+  box-shadow:inset 0 0 0 1px rgba(255,60,90,.45);cursor:help}
+/* Мир, до которого ещё не дотягивались: чип гасим, чтобы «контакт установлен»
+   и «контакта не было» различались периферийным зрением, а не чтением. */
+.pc-chip-cold{color:var(--t3,#8296a8);background:rgba(255,255,255,.06)}
+/* Кнопка «У вас всё хорошо» — вход в сводку наблюдателя. Живёт в шапке
+   досье справа, на десктопе прижата к правому краю. */
+.pc-ask{position:absolute;right:14px;top:14px;cursor:pointer;
+  font-family:var(--font-mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--gd,#7fd18a);background:rgba(127,209,138,.1);border:1px solid rgba(127,209,138,.35);
+  padding:6px 12px;transition:background .15s,border-color .15s}
+.pc-ask:hover{background:rgba(127,209,138,.2);border-color:var(--gd,#7fd18a)}
+.pc-ask.on{color:var(--t1,#dfe8f0);background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.25)}
+/* Сводка наблюдателя: не таблица, а разбор — тон слева говорит, насколько
+   всё плохо, до того как строка прочитана. */
+.pc-obs{margin:1px 0 0;padding:12px 14px 13px;background:rgba(12,16,22,.92);border-left:2px solid var(--gd,#7fd18a)}
+.pc-obs-who{font-family:var(--font-mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--t3,#8296a8);opacity:.8;margin-bottom:10px}
+.pc-obs-l{display:flex;flex-direction:column;gap:3px;padding:8px 0 8px 11px;border-left:2px solid rgba(255,255,255,.12)}
+.pc-obs-l+.pc-obs-l{margin-top:2px}
+.pc-obs-l b{font-family:var(--font-mono);font-size:9.5px;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--t2,#a9bccd)}
+.pc-obs-l span{font-size:12.5px;line-height:1.65;color:var(--t3,#8296a8)}
+.pc-obs-l span b{font-family:inherit;font-size:inherit;letter-spacing:normal;text-transform:none;color:var(--t1,#dfe8f0)}
+.pc-obs-ok{border-left-color:#7fd18a}    .pc-obs-ok b{color:#7fd18a}
+.pc-obs-warn{border-left-color:#d8c07a}  .pc-obs-warn b{color:#d8c07a}
+.pc-obs-bad{border-left-color:#e0736a}   .pc-obs-bad b{color:#e0736a}
+/* Весы обряда: слева цена, справа выручка. Курс между ними — не подпись, а
+   сама суть сделки, поэтому он в разрыве, а не в тексте абзацем ниже. */
+.pc-deal{display:flex;align-items:stretch;gap:1px;margin:2px 0 6px;background:rgba(255,255,255,.07)}
+.pc-deal-side{flex:1 1 0;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:11px 8px;background:rgba(12,16,22,.92)}
+.pc-deal-n{font-family:var(--font-mono);font-size:20px;font-weight:700;letter-spacing:.02em;color:#e0736a}
+.pc-deal-get .pc-deal-n{color:#c9a7ff}
+.pc-deal-k{font-family:var(--font-mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3,#8296a8)}
+.pc-deal-arrow{flex:0 0 auto;display:flex;align-items:center;padding:0 14px;background:rgba(12,16,22,.92);
+  font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--t3,#8296a8)}
 @media (max-width:520px){
   .pc-grid{grid-template-columns:1fr}
   .pc-chr{flex-direction:column;gap:2px}
   .pc-chr-when{flex:0 0 auto}
   .pc-act{flex-direction:column;align-items:flex-start;gap:8px}
   .pc-act-r{align-self:stretch;justify-content:space-between}
+  .pc-vn-banner{min-height:clamp(130px,20vh,180px) !important}
+  /* Кнопка сводки уходит из угла в поток: в узкой колонке она наезжала на имя */
+  .pc-hero{padding-right:16px}
+  .pc-ask{position:static;display:block;width:100%;margin-top:10px;text-align:center}
+  .pc-deal{flex-direction:column}
+  .pc-deal-arrow{justify-content:center;padding:7px}
 }
 
 .fc-phase{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:2px}

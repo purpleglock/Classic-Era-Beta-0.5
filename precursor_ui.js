@@ -37,7 +37,8 @@ function pcCost(action, tier) {
     : action === 'protect' ? 300000 + 120000 * tier
     : action === 'purge' ? 220000 + 80000 * tier
     : action === 'enslave' ? 260000 + 110000 * tier
-    : action === 'convert' ? 340000 + 130000 * tier : 0;   // 'lesson' бесплатен: платит флот
+    : action === 'convert' ? 340000 + 130000 * tier : 0;
+  // 'lesson' бесплатен: платит флот. 'rite' бесплатен: платит вера.
 }
 // Добрая воля дорожает с каждым разом — зеркало серверного _pc_gift_cost.
 function pcGiftCost(action, tier, gifts) {
@@ -47,10 +48,119 @@ function pcGiftCost(action, tier, gifts) {
   return Math.round(base * (1 + 0.35 * Math.min(6, Math.max(0, gifts || 0))));
 }
 const PC_GOODWILL = ['gift', 'envoy', 'miracle'];
+// Завет — зеркало _pc_covenant_cost. Ритуал на весь мир, а не подарок вождю.
+function pcCovenantCost(tier) { return 1500000 + 250000 * Math.max(0, tier || 0); }
+// Зеркала _pc_cap / _pc_loyalty (_precursor_bonds.sql). Сервер считает то же
+// самое; здесь это нужно, чтобы объяснить игроку, ВО ЧТО он упёрся.
+function pcCap(c) {
+  return Math.max(0, Math.min(100, 40 + 6 * Math.max(0, Math.min(11, +c.phase || 0)))
+    - Math.max(0, +c.grudge || 0) - Math.max(0, (+c.dependency || 0) - 40));
+}
+function pcLoy(c) {
+  if (c.loyalty != null) return +c.loyalty;
+  return Math.min(pcCap(c), Math.round(0.45 * (+c.attitude || 0) + 0.55 * (+c.trust || 0)));
+}
+// Почему потолок именно такой — по пунктам, самым больным вперёд.
+function pcCapWhy(c) {
+  const out = [];
+  const ph = 40 + 6 * Math.max(0, Math.min(11, +c.phase || 0));
+  if (ph < 100) out.push(`эпоха E${+c.phase || 0} держит потолок на ${Math.min(100, ph)}: они ещё не мыслят вас как силу, которой можно быть верным`);
+  if (+c.grudge > 0) out.push(`память обид −${+c.grudge}`);
+  if (+c.dependency > 40) out.push(`зависимость от подачек −${(+c.dependency) - 40}`);
+  return out.join(' · ');
+}
+const PC_NEED_NM = {
+  famine: 'Голод', plague: 'Мор', beast: 'Зверь', drought: 'Засуха', war: 'Война царств',
+  schism: 'Раскол веры', flood: 'Потоп', collapse: 'Крах хозяйства', reactor: 'Реактор',
+};
 // Что закрыто укладом державы (сервер: _pc_forbidden). Список приходит с данными.
 function pcForbidden(action) {
   const list = (_pcState && _pcState.forbidden) || [];
   return list.indexOf(action) >= 0;
+}
+// Есть ли беда СЕЙЧАС (не просроченная) — используется и карточкой, и списком.
+function pcActiveNeed(c) {
+  return c.needs && (!c.needs.until || Date.parse(c.needs.until) > Date.now()) ? c.needs : null;
+}
+// ── ГОЛОС МИРА ───────────────────────────────────────────
+// Досье было таблицей цифр: юзер открывал её и не понимал, во что смотрит и
+// чем управляет. Добавляем то же, что уже есть у наводчицы Длани (см. лор
+// doom-aim-novel) — шапка-арт с репликой ПЕРЕД таблицей. Цифры остаются (они
+// объясняют МЕХАНИКУ), реплика объясняет, ЧТО это значит здесь и сейчас.
+// Настроение решает сервер (числа), мы только читаем их и выбираем тон.
+// Порядок проверок важен: беда и Завет перекрывают обычную арифметику отношения.
+function pcMood(c, need) {
+  if (c.status === 'dead' || c.status === 'spacefaring') return 'legacy';
+  if (need) return 'plea';
+  if (c.status === 'covenant') return 'covenant';
+  const att = +c.attitude || 0, tr = +c.trust || 0, gr = +c.grudge || 0, dep = +c.dependency || 0;
+  if (gr >= 25 || att <= -30) return 'hostile';
+  if (dep >= 55) return 'craven';
+  if (tr >= 55 && att >= 15) return 'devoted';
+  if (tr >= 25 && att >= 10) return 'warm';
+  return 'wary';
+}
+// Детерминированный выбор из банка — стабильно для мира между перерисовками,
+// но разное у разных миров (сид = система+планета+настроение).
+function pcPick(seed, bank) {
+  if (!bank || !bank.length) return bank;
+  const h = (typeof ecHash === 'function') ? ecHash(seed) : 0;
+  return bank[h % bank.length];
+}
+const PC_SPEECH = {
+  hostile: [
+    ['Опять вы.', 'Мы помним, чьих рук это дело — небо для нас теперь не пусто, оно занято вами.'],
+    ['Уходите.', 'Каждый ваш дар нам дороже обходится, чем вы думаете.'],
+    ['Ничего не просим.', 'Просто держитесь подальше от наших костров.'],
+  ],
+  craven: [
+    ['Что вы принесли на этот раз?', 'Без вас мы уже не помним, как это делалось раньше — своими руками.'],
+    ['Ждём с неба.', 'Дайте ещё, и мы забудем, зачем нам свои кузни.'],
+  ],
+  warm: [
+    ['Вы снова здесь.', 'Небо к вам благосклонно, и мы понемногу учимся вам верить.'],
+    ['Костры горят спокойнее с тех пор, как вы рядом.', 'Ещё не свои — но уже не чужие.'],
+  ],
+  devoted: [
+    ['Мы вас ждали.', 'Кем бы вы ни были там, среди звёзд, — здесь вам верят без вопросов.'],
+    ['Наши дети растут, зная ваше имя.', 'Что бы вы ни попросили — мы услышим.'],
+  ],
+  covenant: [
+    ['Мы отказались от собственного неба.', 'Не потому, что вы велели, — потому что здесь лежит то, что важнее наших кораблей.'],
+    ['Святилища открыты.', 'Мы храним чужое наследство и отдаём его вам, пока вы остаётесь теми, кому мы поверили.'],
+  ],
+  wary: [
+    ['Небо было пустым. Теперь в нём вы.', 'Мы ещё не решили, что это значит.'],
+    ['Смотрим на вас издалека.', 'Пока — только смотрим.'],
+  ],
+};
+function pcSpeech(c, need, mood) {
+  if (mood === 'plea') return [String(need.text || '').trim()];
+  if (mood === 'legacy') return c.status === 'dead'
+    ? ['Здесь больше некому говорить.']
+    : ['Мы помним, с чего начинали.', 'Теперь у нас свой голос среди звёзд — и своя история, которую пишем сами.'];
+  return pcPick(c.system_id + '|' + c.pid + '|' + mood, PC_SPEECH[mood] || PC_SPEECH.wary);
+}
+// Шапка-арт (assets/precursor/mood_<ключ>.webp) + реплика поверх — тот же
+// паттерн пропавшей картинки → цветной градиент, что у Длани (нет арта, пока
+// админ не залил — не беда, фон уже несёт настроение).
+function pcBanner(c, need, mood) {
+  // Кто говорит — сам мир, а не выдуманный титул: сочинять «голос трона» по
+  // строке уклада было враньём (у мира E4 нет никакого трона).
+  const who = mood === 'plea' ? 'Перехват с поверхности'
+    : mood === 'legacy' && c.status === 'dead' ? 'Эфир пуст'
+    : mood === 'legacy' ? (c.state_name || c.self_name)
+    : c.self_name;
+  const lines = pcSpeech(c, need, mood).filter(Boolean);
+  return `<div class="pc-vn-banner pc-vn-mood-${esc(mood)}">
+    <img class="pc-vn-banner-img" src="${PC_ART_DIR}/mood_${esc(mood)}.webp" alt="" loading="lazy"
+      onload="this.classList.add('ok')" onerror="this.remove()">
+    <div class="pc-vn-banner-scrim"></div>
+    <div class="pc-vn-say">
+      <div class="pc-vn-say-who">${esc(who)}</div>
+      ${lines.map(l => `<p class="pc-vn-say-l">${esc(l)}</p>`).join('')}
+    </div>
+  </div>`;
 }
 function pcNum(v) { return Math.round(Number(v) || 0).toLocaleString('ru-RU'); }
 // ── ИКОНКИ ───────────────────────────────────────────────
@@ -62,7 +172,8 @@ const PC_ART_DIR = 'assets/precursor';
 const PC_ICO = {
   study: 'НАБ', uplift: 'ВОЗ', protect: 'ПРТ', harvest: 'ВЫК', convert: 'ВЕР',
   enslave: 'РАБ', purge: 'ЗАЧ', gift: 'ДАР', envoy: 'МИС', miracle: 'ЗНМ', lesson: 'УРК',
-  st_wild: 'ДИК', st_uplifted: 'ВОЗ', st_protectorate: 'ПРТ', st_drained: 'ВЫП',
+  answer: 'ПМЩ', covenant: 'ЗВТ', rite: 'ОБР',
+  st_wild: 'ДИК', st_uplifted: 'ВОЗ', st_protectorate: 'ПРТ', st_drained: 'ВЫП', st_covenant: 'ЗВТ',
   st_dead: 'МРТ', st_spacefaring: 'ЗВД', world: 'МИР', star: 'ЗВД',
 };
 // Тон иконки = цена решения, а не просто «фирменный цвет вкладки». Дар и
@@ -75,8 +186,9 @@ const PC_ICO = {
 const PC_TONE = {
   study: 'ok', world: 'ok', star: 'ok', st_wild: 'ok', st_spacefaring: 'ok',
   gift: 'good', envoy: 'good', miracle: 'good', uplift: 'good', st_uplifted: 'good',
+  answer: 'good', covenant: 'good', st_covenant: 'good',
   protect: 'take', harvest: 'take', convert: 'take', st_protectorate: 'take', st_drained: 'take',
-  enslave: 'evil', purge: 'evil', lesson: 'evil', st_dead: 'evil',
+  enslave: 'evil', purge: 'evil', lesson: 'evil', st_dead: 'evil', rite: 'evil',
 };
 function pcIco(key, cls) {
   const code = PC_ICO[key] || '·';
@@ -221,6 +333,9 @@ function _pcList(civs) {
     <i>История этих миров идёт сама: раз в неделю каждый делает шаг по своей летописи. Дошедший до звёздного полёта перестаёт быть находкой и становится державой на карте.</i>
     ${_pcState && _pcState.enlightened ? '<br>Ваш уклад (демократия/эгалитаризм или пацифизм/ксенофилия) закрывает геноцид, рабство, выкачивание, протектораты и карательные удары. Наблюдать, возвышать и проповедовать — можно.' : ''}
     ${_pcState && +_pcState.faith_boost > 1 ? '<br>Обращённые миры разгоняют ваши храмы: ставка ×' + (+_pcState.faith_boost).toFixed(2) + '.' : ''}</div>`);
+  parts.push(`<div class="fc-rule">Лояльность не покупается. Она складывается из мнения о вас и из <b>доверия</b>, и упирается в потолок: эпоха мира, память его обид и его же зависимость от ваших подачек. Дары поднимают мнение и тут же поднимают зависимость — три подряд, и вы построили себе карго-культ с крышей. Настоящий рычаг один: <b>приходить на их беду</b>.<br>
+    Лояльность 90 открывает <b>Завет</b>: мир отказывается от собственного звёздного полёта и остаётся при вас. Если под ним лежат руины Даллерианцев — каждые сутки он отдаёт <b>ихор</b>, которого нет больше нигде.${
+      _pcState && +_pcState.ichor > 0 ? ' Ихора на складе: <b>' + (+_pcState.ichor).toFixed(1) + '</b>.' : ''}</div>`);
   if (!civs.length) {
     parts.push(`<div class="hp-vn-col-empty" style="padding:8px">Ни одного дозвёздного мира рядом. Их видно только там, где у державы есть колония в системе.</div></div>`);
     return parts.join('');
@@ -230,16 +345,19 @@ function _pcList(civs) {
   const risen = civs.filter(c => c.status === 'spacefaring');
   const gone = civs.filter(c => c.status === 'dead');
   const row = c => {
-    const st = c.status === 'spacefaring' ? 'держава' : c.status === 'protectorate' ? 'протекторат'
+    const st = c.status === 'spacefaring' ? 'держава' : c.status === 'covenant' ? 'Завет'
+      : c.status === 'protectorate' ? 'протекторат'
       : c.status === 'uplifted' ? 'возвышены' : c.status === 'drained' ? 'выпиты досуха'
-      : c.status === 'dead' ? 'мертвы' : 'без контакта';
+      : c.status === 'dead' ? 'мертвы'
+      : (c.contacted_by || c.contacted_at || +c.acts > 0) ? 'контакт есть' : 'без контакта';
     const mood = c.status === 'spacefaring' ? '#9fc7ff'
       : c.attitude >= 25 ? '#7fd18a' : c.attitude <= -25 ? '#e0736a' : '#d8c07a';
     const clock = c.status === 'spacefaring' || c.status === 'dead' ? ''
       : ` · шаг ${pcWhen(c.next_step_at, now)}`;
+    const needFlag = pcActiveNeed(c) ? ' · <b style="color:#e0b45f">взывают о помощи</b>' : '';
     return `<div class="sn-row">
       <span class="sn-row-nm" style="color:${mood}">${pcIco(c.status === 'spacefaring' ? 'star' : 'world', 'pc-ico-sm')} ${esc(c.status === 'spacefaring' ? (c.state_name || c.self_name) : c.self_name)}
-        <i>${esc(c.planet_name || '?')} · ${esc(PC_TIER[c.visible_tier] || '?')} · ${esc((c.races || [])[0] || '')} · ${esc(st)}${clock}</i></span>
+        <i>${esc(c.planet_name || '?')} · ${esc(PC_TIER[c.visible_tier] || '?')} · ${esc((c.races || [])[0] || '')} · ${esc(st)}${clock}${needFlag}</i></span>
       <button class="hp-vn-btn" type="button" onclick="event.stopPropagation();heroVNTamaShow('${jsq(c.system_id)}',${+c.pid})">Досье</button>
     </div>`;
   };
@@ -295,16 +413,28 @@ function _pcCard(c) {
   // нажать и получить «слишком рано», — это просто ловушка.
   const cdAct = pcCd(c.last_act_at), cdStudy = pcCd(c.last_study_at), cdGift = pcCd(c.last_gift_at);
   const gifts = +((c.flags || {}).gifts) || 0;
+  const need = pcActiveNeed(c);
+  const mood = pcMood(c, need);
   const act = (id, label, hint) => {
     const good = PC_GOODWILL.indexOf(id) >= 0;
-    const cost = good ? pcGiftCost(id, c.tier, gifts) : pcCost(id, c.tier);
+    const cost = id === 'answer' ? (need ? +need.ask || 0 : 0)
+      : id === 'covenant' ? pcCovenantCost(c.tier)
+      : good ? pcGiftCost(id, c.tier, gifts) : pcCost(id, c.tier);
     const ban = pcForbidden(id);
-    const cd = id === 'study' ? cdStudy : good ? cdGift : cdAct;
+    // Помощь в беде и Завет своих часов не занимают: беда не ждёт кулдауна.
+    const cd = id === 'study' ? cdStudy : (id === 'answer' || id === 'covenant') ? 0 : good ? cdGift : cdAct;
     const poor = !ban && cost > gc;
     // «Урок» — единственное решение, которому мало колонии: нужен флот на месте
     const noFleet = id === 'lesson' && !c.fleet;
-    const off = ban || poor || cd > 0 || noFleet;
+    // Завет: то, что не покупается — сначала лояльность, потом деньги
+    const covBlock = id !== 'covenant' ? '' :
+        (pcLoy(c) < 90 ? `лояльность ${pcLoy(c)} из 90 (потолок ${pcCap(c)})`
+       : (+c.phase || 0) < 8 ? 'слишком рано: Завет заключают не с дикарями, а с народом, который умеет договариваться'
+       : (+c.grudge || 0) > 10 ? `они помнят слишком много: память обид ${+c.grudge} при допустимых 10`
+       : (+c.dependency || 0) > 45 ? `они не партнёры, а просители: зависимость ${+c.dependency} при допустимых 45` : '');
+    const off = ban || poor || cd > 0 || noFleet || !!covBlock;
     const why = ban ? 'закрыто укладом державы'
+      : covBlock ? covBlock
       : noFleet ? 'в системе нет вашего флота — подведите корабли к их звезде'
       : cd > 0 ? `${good ? 'корабль с дарами вернётся' : id === 'study' ? 'пост занят наблюдением' : 'руки заняты'} — ещё ${pcCdTxt(cd)}`
       : poor ? `не хватает ${pcNum(cost - gc)} ГС из ${pcNum(cost)}` : '';
@@ -319,26 +449,38 @@ function _pcCard(c) {
         ${cost ? `<span class="pc-act-cost${poor ? ' pc-act-poor' : ''}">${pcNum(cost)} ГС</span>` : ''}
         <button class="hp-vn-btn${off ? ' hp-vn-back' : ''}" type="button" ${off ? 'disabled' : ''}
           onclick="event.stopPropagation();heroVNTamaAct('${jsq(c.system_id)}',${+c.pid},'${id}')">${
-            ban ? '—' : noFleet ? 'нет флота' : cd > 0 ? 'ждать' : 'Решить'}</button>
+            ban ? '—' : covBlock ? 'рано' : noFleet ? 'нет флота' : cd > 0 ? 'ждать'
+            : id === 'answer' ? 'Помочь' : id === 'covenant' ? 'Заключить' : 'Решить'}</button>
       </span>
     </div>`;
   };
   const parts = ['<div class="sn-col">'];
   parts.push(`<button class="hp-vn-btn hp-vn-back" type="button" style="align-self:flex-start;margin-bottom:10px"
     onclick="event.stopPropagation();heroVNTamaBack()">← к списку</button>`);
+  parts.push(pcBanner(c, need, mood));
+  // «Контакта не было» врало: status остаётся 'wild' и после даров, проповеди
+  // и десятка записей в летописи. Правда о контакте — contacted_by/acts.
+  const touched = !!(c.contacted_by || c.contacted_at || +c.acts > 0);
   const statusTxt = dead ? 'мертвы' : risen ? 'держава'
+    : c.status === 'covenant' ? 'в Завете'
     : c.status === 'protectorate' ? 'протекторат' : c.status === 'uplifted' ? 'возвышены'
-    : c.status === 'drained' ? 'выпиты досуха' : 'контакта не было';
+    : c.status === 'drained' ? 'выпиты досуха'
+    : touched ? 'контакт установлен' : 'контакта не было';
   const stKey = 'st_' + (dead ? 'dead' : risen ? 'spacefaring'
+    : c.status === 'covenant' ? 'covenant'
     : c.status === 'protectorate' ? 'protectorate' : c.status === 'uplifted' ? 'uplifted'
     : c.status === 'drained' ? 'drained' : 'wild');
+  const chipCls = dead ? ' pc-chip-dead' : touched || risen ? '' : ' pc-chip-cold';
   const att = +c.attitude || 0;
   parts.push(`<div class="pc-hero">
     <div class="pc-hero-nm">${pcIco(risen ? 'star' : 'world', 'pc-ico-lg')} ${esc(risen ? (c.state_name || c.self_name) : c.self_name)}
-      <span class="pc-chip${dead ? ' pc-chip-dead' : ''}">${pcIco(stKey, 'pc-ico-sm')} ${esc(statusTxt)}</span></div>
+      <span class="pc-chip${chipCls}">${pcIco(stKey, 'pc-ico-sm')} ${esc(statusTxt)}</span></div>
     <div class="pc-hero-sub">${esc(c.planet_name || '?')} · система ${esc(c.system_name || c.system_id)}${
       c.env ? ' · ' + esc(c.env) : ''}</div>
+    <button class="pc-ask${_pcAsk ? ' on' : ''}" type="button"
+      onclick="event.stopPropagation();heroVNTamaAsk()">${_pcAsk ? '× Свернуть сводку' : '? У вас всё хорошо'}</button>
   </div>`);
+  parts.push(_pcObserver(c));
 
   parts.push(`<div class="pc-grid">
     ${pcFact('Народ', esc((c.races || []).join(' + ')) + (c.synergy ? ` <i>«${esc(c.synergy)}»</i>` : ''),
@@ -356,6 +498,39 @@ function _pcCard(c) {
       'Отношение к пришедшим с неба. От него зависит, согласятся ли они на протекторат и вашу веру.')}
     ${pcFact('Руины', esc(ru.short), ru.hint)}
   </div>`);
+
+  // ── УЗЫ ──────────────────────────────────────────────────
+  // Одна цифра «отношение» врала: её покупали. Здесь видно, из чего она
+  // складывается и во что упирается — и почему деньгами это не чинится.
+  if (!dead && !risen) {
+    const loy = pcLoy(c), cap = pcCap(c), why = pcCapWhy(c);
+    parts.push(`<div class="sn-sec">Узы</div>`);
+    parts.push(`<div class="pc-grid">
+      ${pcFact('Лояльность', `<span class="pc-fact-n">${loy}</span> из ${cap} ${pcMeter(Math.max(0, loy), loy >= 90 ? 'pc-m-ok' : loy >= 40 ? 'pc-m-mid' : 'pc-m-bad')}`,
+        'Итог всего: 0.45 от мнения о вас плюс 0.55 от доверия, срезанные потолком. 90 открывает Завет.')}
+      ${pcFact('Доверие', `<span class="pc-fact-n">${+c.trust || 0}</span> ${pcMeter(+c.trust || 0, 'pc-m-ok')}`,
+        'Связь, а не симпатия. Растёт почти только от закрытых бед; тает от молчания дольше десяти суток и от подачек тому, кто уже сидит на вашей руке.')}
+      ${pcFact('Зависимость', `<span class="pc-fact-n">${+c.dependency || 0}</span> ${pcMeter(+c.dependency || 0, (+c.dependency || 0) > 40 ? 'pc-m-bad' : 'pc-m-mid')}`,
+        'Сколько в их жизни вашего. Выше 40 съедает потолок лояльности, выше 55 глушит их же ремёсла: карго-культ вместо народа. Тает сама на 2 за недельный ход.')}
+      ${pcFact('Память обид', `<span class="pc-fact-n">${+c.grudge || 0}</span> ${pcMeter(+c.grudge || 0, 'pc-m-bad')}`,
+        'Выкачивание, рабство, удар с орбиты. Деньгами не снимается: −1 за каждую закрытую беду, и всё.')}
+      ${pcFact('Бед закрыто', `<span class="pc-fact-n">${+c.needs_done || 0}</span>${
+        +c.needs_missed ? ` <i>· пропущено ${+c.needs_missed}</i>` : ''}`,
+        'Каждая закрытая беда — +10 доверия и −1 к памяти обид. Каждая пропущенная — −5 доверия и +3 к обидам.')}
+      ${pcFact('Потолок', cap >= 100 ? 'снят' : `${cap}`, why || 'Ничто не мешает: потолок держит только эпоха.')}
+    </div>`);
+    if (why) parts.push(`<div class="fc-rule">Выше ${cap} их не поднять, пока: ${esc(why)}.</div>`);
+  }
+
+  // ── БЕДА ─────────────────────────────────────────────────
+  if (need) {
+    const left = Math.max(0, Math.ceil((Date.parse(need.until) - Date.now()) / 3600000));
+    parts.push(`<div class="sn-sec">У них беда · ${esc(PC_NEED_NM[need.kind] || '—')}</div>`);
+    parts.push(`<div class="fc-rule"><b>Осталось ${left} ч.</b> Это единственный быстрый путь к доверию — и единственное, что снимает память обид. Промолчите — они это тоже запишут.</div>`);
+    parts.push(act('answer', 'Ответить на беду', 'прийти тогда, когда нужно, и не просить ничего взамен: +10 доверия, −1 к обидам, +9 благополучия; −3 к досье Фонда'));
+    parts.push(`<button class="hp-vn-btn hp-vn-back" type="button" style="margin-top:2px"
+      onclick="event.stopPropagation();heroVNTamaBack()">Оставить без ответа</button>`);
+  }
   parts.push(`<div class="fc-rule">${esc(ru.hint)}${
     scars.length ? '<br>Шрамы истории: <b>' + esc(scars.join(', ')) + '</b> — следы того, что уже случилось с ними и осталось в характере.' : ''}${
     c.race_scar ? '<br><i>' + esc(c.race_scar) + '</i>' : ''}</div>`);
@@ -390,6 +565,20 @@ function _pcCard(c) {
     parts.push(act('gift', 'Дар с неба', 'зерно, лекарства и металл, каких они не куют: отношение и благополучие вверх; −5 к досье Фонда'));
     parts.push(act('envoy', 'Тихая миссия', 'без чудес: чинить колодцы, оставлять карты, слушать песни; дёшево и понемногу; −2'));
     parts.push(act('miracle', 'Знамение', 'ночь горящего неба: отношение прыгает разом, но мир уходит в спиритуализм; −10'));
+    // Завет — вершина мирного пути и единственный источник ихора в игре.
+    if (c.status !== 'covenant') {
+      parts.push(`<div class="pc-sub">Завет</div>`);
+      parts.push(act('covenant', 'Заключить Завет',
+        (c.ruins === 'Даллерианцы'
+          ? 'под ними лежат Даллерианцы: мир откроет святилища и будет отдавать ихор каждые сутки'
+          : 'руин предтеч под ними нет — ихора здесь не будет, только верность')
+        + '; они откажутся от собственного звёздного полёта и останутся при вас; −10 к досье Фонда'));
+    } else {
+      parts.push(`<div class="pc-sub">Завет заключён${c.covenant_at ? ' · ' + esc(pcStamp(c.covenant_at)) : ''}</div>`);
+      parts.push(`<div class="fc-rule">${c.ruins === 'Даллерианцы'
+        ? `Святилища вскрыты: ихор идёт на ваш склад каждые сутки, всего отдано <b>${(+c.ichor_total || 0).toFixed(1)}</b>. Ставка падает до нуля, если лояльность просядет ниже 85, и Завет рвётся в тот день, когда вы возьмётесь за выкачивание, рабство или орудия.`
+        : 'Руин предтеч под ними нет: Завет держит их дома и даёт верность, но ихора отсюда не будет.'}</div>`);
+    }
     parts.push(`<div class="pc-sub">Вмешательство</div>`);
     parts.push(c.phase < 11
       ? act('uplift', 'Возвысить', 'эпоха вперёд — на шаг ближе к звёздам; они запомнят покровителя; −15 к досье Фонда')
@@ -405,6 +594,9 @@ function _pcCard(c) {
           ? 'целая планета адептов «' + _pcState.faith + '»: +25% к ставке ваших храмов (потолок ×2); может не выйти; −25'
           : 'нужна своя религия — без неё проповедовать нечего') + ''));
     parts.push(act('enslave', 'Увести в рабство', 'не убить, а вывезти: невольники вливаются в пул рабочих; −45'));
+    // Обряд — изнанка проповеди: та же вера, но мир идёт не в паству, а в сырьё.
+    // Второй и последний источник ихора помимо Завета, и единственный разовый.
+    parts.push(_pcRiteBlock(c, act));
     parts.push(act('lesson', 'Урок будет усвоен', ph > 0
       ? `удар с орбиты, платить не за что: эпоху назад (E${ph} → E${ph - 1}), благополучие −35, население −четверть; ${
           c.fleet ? 'флот на месте' : 'нужен флот в системе'}; об этом узнает вся галактика; −50`
@@ -420,6 +612,147 @@ function _pcCard(c) {
   return parts.join('');
 }
 
+// ── НАБЛЮДАТЕЛЬ ──────────────────────────────────────────
+// «Как это всё работает и как я на это влияю?» — на этот вопрос карточка не
+// отвечала: она показывала тринадцать цифр и молчала. Здесь сидит учёный,
+// который эти же цифры читает вслух: что с миром сейчас, что случится дальше
+// и когда, и во что упрётся игрок, если ничего не делать. Новых данных не
+// запрашиваем — весь разбор строится на том, что уже пришло в precursor_get.
+let _pcAsk = false;
+function heroVNTamaAsk() { _pcAsk = !_pcAsk; heroVNTamaRefresh(); }
+
+// Один пункт сводки: тон (ok/warn/bad/note), заголовок, текст.
+function _pcNote(tone, head, txt) {
+  return `<div class="pc-obs-l pc-obs-${tone}"><b>${esc(head)}</b><span>${txt}</span></div>`;
+}
+function pcObserverLines(c) {
+  const out = [];
+  const ph = Math.max(0, Math.min(11, +c.phase || 0));
+  const PH = (window.Precursors && window.Precursors.PHASES) || [];
+  const wb = +c.wellbeing || 0, tr = +c.trust || 0, dep = +c.dependency || 0, gr = +c.grudge || 0;
+  const cap = pcCap(c), loy = pcLoy(c);
+  const need = pcActiveNeed(c);
+  const risen = c.status === 'spacefaring', dead = c.status === 'dead';
+
+  if (dead) {
+    out.push(_pcNote('bad', 'Наблюдать нечего', 'Мир мёртв. Пост снят, летопись закрыта.'));
+    return out;
+  }
+  if (risen) {
+    out.push(_pcNote('note', 'Они нас переросли',
+      'Это уже держава на карте, а не находка. Решения по дозвёздным к ним неприменимы — только внешняя политика.'));
+    return out;
+  }
+
+  // 1. Где они на лестнице и когда следующий шаг
+  const when = pcWhen(c.next_step_at, _pcState && _pcState.now) || 'не назначен';
+  const left = c.steps_left != null ? +c.steps_left : null;
+  out.push(_pcNote('note', 'Сейчас',
+    `Эпоха <b>E${ph} · ${esc(c.phase_name || (PH[ph] && PH[ph].name) || '?')}</b>. Историю они двигают сами: раз в неделю мир делает шаг по своей летописи. Следующий — <b>${esc(when)}</b>.`
+    + (left != null ? ` До звёздного полёта таких шагов ещё <b>${left}</b> — после него они станут державой, и распоряжаться ими будет нельзя.` : '')));
+
+  // 2. Благополучие — главный стопор истории
+  if (wb < 8) out.push(_pcNote('bad', 'История встала',
+    `Благополучие ${wb}. Ниже 8 неделя уходит на выживание, а не на развитие: шаги по летописи не идут. Поднять можно даром с неба или ответом на беду.`));
+  else if (wb < 30) out.push(_pcNote('warn', 'Живут туго',
+    `Благополучие ${wb}. До остановки истории недалеко: ещё один неурожай или выкачивание — и они встанут.`));
+
+  // 3. Беда — единственный быстрый рычаг, о нём говорим первым делом
+  if (need) {
+    const h = Math.max(0, Math.ceil((Date.parse(need.until) - Date.now()) / 3600000));
+    out.push(_pcNote('warn', 'Прямо сейчас у них беда',
+      `${esc(PC_NEED_NM[need.kind] || 'Беда')}, осталось <b>${h} ч</b>. Придёте — <b>+10 доверия и −1 к обидам</b>: другого такого быстрого пути нет, деньгами это не покупается. Промолчите — <b>−5 доверия и +3 к обидам</b>, и они это запомнят.`));
+  } else {
+    out.push(_pcNote('ok', 'Беды сейчас нет',
+      `Беды приходят сами, примерно раз в 5 суток, и висят пять дней. Это ваш главный рычаг: <b>закрытых бед — ${+c.needs_done || 0}</b>${
+        +c.needs_missed ? `, пропущено ${+c.needs_missed}` : ''}. Ждать их стоит: без них доверие почти не растёт.`));
+  }
+
+  // 4. Диагноз уз — что именно держит лояльность
+  if (dep > 55) out.push(_pcNote('bad', 'Вы вырастили карго-культ',
+    `Зависимость ${dep}. Выше 55 у них глохнут собственные ремёсла, и каждый ход они теряют доверие. Дары теперь делают хуже, а не лучше — перестаньте дарить, зависимость сама тает на 2 за недельный ход.`));
+  else if (dep > 40) out.push(_pcNote('warn', 'Слишком много подачек',
+    `Зависимость ${dep}. Всё, что выше 40, срезает потолок лояльности один в один: сейчас −${dep - 40}. Ещё пара даров — и получите карго-культ.`));
+
+  if (gr >= 25) out.push(_pcNote('bad', 'Они помнят',
+    `Память обид ${gr} — столько же снято с потолка. Обиды не закрываются деньгами вообще: только <b>−1 за каждую закрытую беду</b>. Это годы.`));
+  else if (gr > 0) out.push(_pcNote('warn', 'Есть счёт к вам',
+    `Память обид ${gr}, и она срезает потолок. Снимается по единице за закрытую беду.`));
+
+  // 5. Потолок — почему «влил денег и не растёт»
+  const phCap = 40 + 6 * ph;
+  if (loy >= cap && cap < 100) out.push(_pcNote('warn', 'Уперлись в потолок',
+    `Лояльность ${loy} при потолке ${cap} — выше не пойдёт, сколько ни вкладывай. ${
+      phCap < 100 ? `Главное ограничение — эпоха: E${ph} держит потолок на ${Math.min(100, phCap)}, потому что они ещё не мыслят вас как силу, которой можно быть верным. Потолок поднимется сам, когда они шагнут дальше.` : 'Разберитесь с обидами и зависимостью — потолок держат они.'}`));
+  else if (cap < 100) out.push(_pcNote('note', 'Куда можно вырасти',
+    `Лояльность ${loy}, потолок ${cap}. ${esc(pcCapWhy(c) || 'Держит только эпоха.')}`));
+
+  // 6. Завет — конечная точка мирного пути, о ней надо знать заранее
+  if (c.status === 'covenant') {
+    out.push(_pcNote('ok', 'Завет в силе',
+      c.ruins === 'Даллерианцы'
+        ? `Святилища вскрыты, ихор идёт каждые сутки (всего отдано ${(+c.ichor_total || 0).toFixed(1)}). Ставка гаснет, если лояльность просядет ниже 85, и Завет порвётся в тот день, когда вы возьмётесь за выкачивание, рабство или орудия.`
+        : 'Руин предтеч под ними нет: Завет даёт верность и держит их дома, но ихора отсюда не будет.'));
+  } else if (loy >= 90) {
+    out.push(_pcNote('ok', 'Готовы к Завету',
+      `Лояльность ${loy} — порог взят. ${c.ruins === 'Даллерианцы'
+        ? 'И под ними лежат Даллерианцы: этот мир будет отдавать ихор каждые сутки. Таких единицы.'
+        : 'Руин предтеч под ними нет, так что ихора не будет — только верность и отказ от их собственного звёздного полёта.'}`));
+  } else {
+    out.push(_pcNote('note', 'До Завета',
+      `Нужна лояльность 90 (сейчас ${loy}), эпоха от E8 (сейчас E${ph}), обиды не выше 10 (${gr}) и зависимость не выше 45 (${dep}). ${
+        c.ruins === 'Даллерианцы'
+          ? '<b>Под ними Даллерианцы</b> — этот мир стоит того: в Завете он даёт ихор, которого нет больше нигде.'
+          : 'Руин предтеч под ними нет — ихора Завет здесь не даст.'}`));
+  }
+
+  // 7. Чем это кончится, если не вмешиваться
+  if (left != null && left <= 2) out.push(_pcNote('warn', 'Скоро уйдут сами',
+    `Шагов до звёздного полёта: ${left}. Как только они поднимутся, решать за них будет поздно — ни Завета, ни возвышения, ни обряда.`));
+
+  return out;
+}
+function _pcObserver(c) {
+  if (!_pcAsk) return '';
+  return `<div class="pc-obs">
+    <div class="pc-obs-who">Наблюдательный пост · дежурный ксенолог</div>
+    ${pcObserverLines(c).join('')}
+  </div>`;
+}
+
+// ── ОККУЛЬТНЫЙ ОБРЯД ─────────────────────────────────────
+// Счёт жертвы — зеркало серверного _pc_rite_ichor: 500 их жизней = 1 ихор.
+function pcRiteIchor(pop) { return Math.round((Math.max(0, +pop || 0) / 100) * 10) / 10; }
+// Клеймо «Мразь» на вере: сервер отдаёт число обрядов (faith_stigma).
+function pcStigma() { return _pcState ? (+_pcState.faith_stigma || 0) : 0; }
+function pcStigmaChip() {
+  const n = pcStigma();
+  if (!n) return '';
+  return `<span class="pc-stigma" title="Клеймо не снимается ничем. Его видит всякий, кто спросит о вашей вере.">Мразь${
+    n > 1 ? ' ×' + n : ''}</span>`;
+}
+// Отдельный блок, а не строка в общем списке: обряд — это не «ещё одно решение
+// на −60», это разовая сделка, после которой мира нет, а на вере пятно.
+function _pcRiteBlock(c, act) {
+  const faith = _pcState && _pcState.faith;
+  const amt = pcRiteIchor(c.pop);
+  const head = `<div class="pc-sub">Обряд ${pcStigmaChip()}</div>`;
+  if (!faith) {
+    return head + `<div class="fc-rule">Обряд служат вере, а своей веры у державы нет. Пока её нет — жертвовать некому.</div>`;
+  }
+  // Ставка на весы, а не в простыню текста: слева жизни, справа ихор. Так
+  // видно, что обряд — это обмен по курсу, а не «ещё одно решение на −80».
+  return head
+    + `<div class="pc-deal">
+        <div class="pc-deal-side"><span class="pc-deal-n">${pcNum(c.pop)}</span><span class="pc-deal-k">жизней</span></div>
+        <div class="pc-deal-arrow">100 : 1</div>
+        <div class="pc-deal-side pc-deal-get"><span class="pc-deal-n">${amt.toFixed(1)}</span><span class="pc-deal-k">ихора разом</span></div>
+      </div>`
+    + `<div class="fc-rule">Изнанка проповеди: мир идёт не в паству, а в сырьё — планета вычищается целиком и навсегда. Денег обряд не стоит, платит вера «${esc(faith)}»: на ней останется клеймо, видное всей галактике.<br>
+      Иначе ихор идёт только из Завета, по капле в сутки и только там, где под ногами Даллерианцы. Завет отдаёт годами и оставляет мир живым — обряд отдаёт сразу и не оставляет ничего.</div>`
+    + act('rite', 'Оккультный обряд', `мир не восстановится; клеймо на вере навсегда; −80 к досье Фонда`);
+}
+
 function heroVNTamaShow(sysId, pid) { _pcOpenCiv = { s: sysId, p: +pid }; heroVNTamaRefresh(); }
 function heroVNTamaBack() { _pcOpenCiv = null; heroVNTamaRefresh(); }
 
@@ -431,7 +764,9 @@ const PC_CONFIRM = {
   enslave: 'Увести часть населения в рабство? Планета останется жить — но уже без них.',
   miracle: 'Устроить им знамение? Отношение подскочит разом, но после такой ночи мир станет спиритуалистическим, и переубеждать его будет уже некому.',
   lesson: 'Дать урок? Флот сожжёт всё, что они построили: мир отбросит на целую эпоху назад, и подниматься по ней он будет заново. Об ударе узнает вся галактика — сводка уйдёт без адресата. Если откатывать уже некуда, урок станет истреблением.',
+  covenant: 'Заключить Завет? Мир навсегда откажется от собственного звёздного полёта и останется при вас хранителем того, что лежит под его городами. Завет рвётся в тот день, когда вы возьмётесь за выкачивание, рабство или орудия — и второй раз его уже не предложат.',
   convert: 'Отдать им вашу веру? Если примут — целый мир будет петь ваше имя, и храмы державы станут вдвое звонче.',
+  rite: 'Отдать этот мир обряду? Их не победят и не увезут — их израсходуют, всех и за одну ночь, а из-под опустевших городов поднимется ихор. Планета не восстановится никогда. На вашей вере встанет клеймо, которое не снимается ничем и которое увидит вся галактика.',
 };
 async function heroVNTamaAct(sysId, pid, action) {
   const en = (typeof lang !== 'undefined' && lang === 'en');
@@ -453,7 +788,14 @@ async function heroVNTamaAct(sysId, pid, action) {
       : m.includes('already at the threshold') ? 'Выше некуда — они уже на пороге космоса.'
       : m.includes('already a protectorate') ? 'Они и так под протекторатом.'
       : m.includes('forbidden by creed') ? 'Уклад вашей державы этого не допускает: ни геноцида, ни рабства, ни выкачивания, ни протекторатов, ни ударов по беззащитным.'
-      : m.includes('no faith of your own') ? 'Сначала своя религия — проповедовать пока нечего.'
+      : m.includes('no need') ? 'Беды у них сейчас нет — помогать не в чем.'
+      : m.includes('need expired') ? 'Поздно: они пережили это сами.'
+      : m.includes('loyalty too low') ? 'Лояльности мало: Завет заключают с 90, и деньгами это место не закрывается.'
+      : m.includes('too primitive for covenant') ? 'Слишком рано: с этими ещё не о чем договариваться.'
+      : m.includes('they remember too much') ? 'Они помнят слишком много. Сначала годы закрытых бед, потом разговоры о Завете.'
+      : m.includes('they only beg') ? 'Они вам не партнёры, а просители: сначала пусть отвыкнут от подачек.'
+      : m.includes('already covenant') ? 'Завет с ними уже заключён.'
+      : m.includes('no faith of your own') ? 'Сначала своя религия: и проповедь, и обряд служат вере, а её у державы нет.'
       : m.includes('already converted') ? 'Этот мир уже нашёл себе небо.'
       : 'Ошибка: ' + m;
     if (typeof toast === 'function') toast(nice, 'err');

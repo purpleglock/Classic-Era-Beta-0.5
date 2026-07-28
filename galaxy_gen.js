@@ -136,6 +136,11 @@
     { id: 'QUANTUMCRYST', name: 'Гравиядро', icon: '🔮', r: 'legendary', d: 'следы', g: ['exotic'], ids: ['diamond', 'sednoid', 'rogue'], stars: ['D', 'N'] },
     { id: 'DEGENERATE', name: 'Рагенод', icon: '💀', r: 'legendary', d: 'мкг', g: ['anomaly'], ids: ['coreplanet', 'chthonian'], stars: ['D', 'N'] },
     { id: 'NEUTRONMAT', name: 'Программируемая материя', icon: '🟢', r: 'legendary', d: 'пкг', g: ['anomaly'], ids: ['starshard', 'coreplanet'], stars: ['N'] },
+    // Ихор в залежах НЕ ВСТРЕЧАЕТСЯ (пустые g/ids/stars): его не копают, его
+    // отдают. Единственный источник — дозвёздный мир с даллерианскими руинами,
+    // вошедший в Завет (_precursor_bonds.sql). В каталоге он держится ради
+    // редкости и иконки на складе.
+    { id: 'ICHOR', name: 'Ихор', icon: '🩸', r: 'legendary', d: 'капли', g: [], ids: [], stars: [] },
   ];
   function rname(r) { return { common: 'обычный', uncommon: 'редкий', rare: 'ценный', epic: 'эпический', legendary: 'легенд.' }[r] || r; }
   function rollDice(spec, rmult) {
