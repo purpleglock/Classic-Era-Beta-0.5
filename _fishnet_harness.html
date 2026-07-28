@@ -1,0 +1,90 @@
+<!doctype html>
+<!-- СТЕНД сети берега: соседи без входа в игру и без Supabase.
+     Подменяем sb фальшивым каналом (presence + broadcast) и водим двух ботов:
+     один ходит по мосткам и забрасывает, второй гребёт на лодке. Проверяем
+     ровно то, что нельзя проверить в одиночку, — чужие силуэты. Удалить. -->
+<meta charset="utf-8">
+<title>стенд: соседи по берегу</title>
+<style>
+  body{margin:0;background:#0a0f16;color:#dfe7f2;font:13px/1.5 "Segoe UI",system-ui,sans-serif}
+  .hp-vn-col-head{display:flex;gap:12px;align-items:center;padding:8px 14px;background:#0d141d;border-bottom:1px solid #22303f}
+  .hp-vn-col-body{padding:0 14px}
+  .hp-vn-col-empty{padding:20px;text-align:center;color:#8aa0b0}
+</style>
+<div id="hp-vn-fish"></div>
+<script>
+  // Стенд смотрят из headless-браузера, где вкладку не показывают: rAF в такой
+  // вкладке не тикает и канвас остаётся пустым. Подменяем таймером — это только
+  // для стенда, игра живёт на честном rAF.
+  if (location.search.includes('timer')) {
+    window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 16);
+    window.cancelAnimationFrame = id => clearTimeout(id);
+  }
+  var lang = 'ru';
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function ecErr(s){ return s; }
+  function heroVNBack(){ console.log('back'); }
+  var user = { id: 'me' };
+  var EC = { fid: 'fac_me', app: { name: 'Моя держава', color: '#6f8bb5' } };
+  function ecFacOf(){ return null; }
+  function ecRpc(fn){
+    if (fn === 'fishing_cast') return Promise.resolve({ bite:{ id:1, react:1.1 }, kept:1 });
+    if (fn === 'fishing_land') return Promise.resolve({ name:'Плотва', rar:1, kg:1.4, gc:130, counted:true, kept:2 });
+    if (fn === 'fishing_get') return Promise.resolve(_stubState());
+    return Promise.resolve({});
+  }
+  function _stubState(){
+    return { kept:1, cap:12, total:3, night:false, night_left:600, feed:[], site:_fishSite, seed:0, plants:[] };
+  }
+
+  /* ── фальшивый Supabase: канал-петля ────────────────────────── */
+  var NETLOG = { sent: 0, on: {} };
+  var FAKE = {
+    presence: { me: { n:'Моя держава', c:'#6f8bb5', h:'' },
+                bot1: { n:'Тетославия', c:'#c8654a', h:'' },
+                bot2: { n:'Микустан',   c:'#59a06a', h:'' } },
+    handlers: {},
+    presenceState(){ var st = {}; for (var k in this.presence) st[k] = [this.presence[k]]; return st; },
+  };
+  var sb = {
+    channel(){
+      return {
+        on(type, filter, cb){
+          FAKE.handlers[type === 'broadcast' ? 'm' : 'sync'] = cb;
+          return this;
+        },
+        subscribe(cb){ setTimeout(() => cb('SUBSCRIBED'), 30); return this; },
+        track(){ setTimeout(() => FAKE.handlers.sync && FAKE.handlers.sync(), 20); return Promise.resolve(); },
+        presenceState(){ return FAKE.presenceState(); },
+        send(msg){ NETLOG.sent++; return Promise.resolve(); },
+      };
+    },
+    removeChannel(){},
+  };
+</script>
+<script src="fishing.js"></script>
+<script>
+  _fishSite = { sys:'sys_mpvehb4p', pid:7, name:'Храм мироздания', sysname:'Храм мироздания',
+                type:'храмовый мир', maxdepth:48, wet:true, owner_name:null };
+  _fishState = _stubState();
+  fishStyleOnce();
+  fishDescend();
+
+  // Боты шлют пакеты тем же путём, что приедут настоящие соседи: через
+  // обработчик broadcast. Никаких обходных путей — иначе стенд проверял бы
+  // рисование, а не приём.
+  var t0 = performance.now();
+  setInterval(function(){
+    var h = FAKE.handlers.m; if (!h || !_fish) return;
+    var t = (performance.now() - t0) / 1000;
+    var me = _fish.me;
+    // Бот 1 — ходит по берегу рядом и держит заброс в воде.
+    var x1 = me.x - 150 + Math.sin(t * .7) * 34;
+    h({ payload: { k:'bot1', x:x1, y:me.y, d:-1, g:1,
+                   ra:.1, fs:'wait', fx:x1 - 70, fy:(74 * 16) + 2, r:0 } });
+    // Бот 2 — в лодке, гребёт по омуту.
+    var x2 = me.x - 330 + Math.sin(t * .35) * 90;
+    h({ payload: { k:'bot2', x:x2, y:(74 * 16) - 2, d:1, g:0, ra:0, fs:'idle', r:1,
+                   bx:x2, by:(74 * 16) - 1, bt:Math.sin(t * 2) * .05, br:t * 3 } });
+  }, 100);
+</script>

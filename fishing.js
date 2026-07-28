@@ -237,11 +237,194 @@ function fishFlagLoad() {
   _fishFlag.img = img;
 }
 
-// Заглушка мультиплеера: сюда позже приедут соседи по берегу через Realtime.
-// Игровой цикл уже умеет их рисовать — нужен только транспорт.
+/* ══════════════════════════════════════════════════════════════
+   БЕРЕГ ОБЩИЙ: соседи через Realtime
+   ──────────────────────────────────────────────────────────────
+   Место одно на всю галактику, поэтому и канал один: кто зашёл к воде —
+   тот и на берегу, все одновременно, без комнат и очередей.
+
+   Два разных потока, нарочно:
+     • presence — КТО пришёл (имя державы, цвет, герб) и кто ушёл. Состояние,
+       а не событие: подключившийся получает всех уже стоящих у воды сразу,
+       без «поздоровайся первым».
+     • broadcast 'm' — ГДЕ он сейчас. Поток координат 10 раз в секунду, без
+       истории: опоздал пакет — ничего страшного, следующий уже в пути.
+
+   Движение чужих силуэтов сглаживаем интерполяцией (см. tick): по сети
+   приходят редкие точки, а рисуем мы 60 кадров, и без догона сосед дёргался бы.
+   Правды об улове здесь нет и быть не может — она только на сервере.
+   ══════════════════════════════════════════════════════════════ */
+const FISH_NET_HZ = 100;          // как часто шлём себя, мс
+const FISH_NET_IDLE = 1500;       // молчим стоя, но не дольше этого (пакет-«живой»)
+const FISH_NET_DROP = 20000;      // сосед замолчал дольше — убираем силуэт
+
 const FishNet = {
-  peers: new Map(),
-  start() { }, stop() { }, send() { },
+  ch: null, peers: new Map(), key: null, joined: false, timer: 0, last: null, lastT: 0,
+  imgs: new Map(),               // герб по url: одна картинка на всех соседей с ней
+
+  start() {
+    if (this.ch || typeof sb === 'undefined' || !sb) return;
+    this.key = (typeof user !== 'undefined' && user && user.id) || ('guest-' + Math.random().toString(36).slice(2));
+    this._open();
+    this.timer = setInterval(() => this._send(), FISH_NET_HZ);
+  },
+
+  stop() {
+    clearInterval(this.timer); this.timer = 0;
+    clearTimeout(this.retryT); this.retryT = 0;
+    if (this.ch) { try { sb.removeChannel(this.ch); } catch (e) {} }
+    this.ch = null; this.joined = false; this.last = null;
+    this.peers.clear();
+  },
+
+  _open() {
+    const ch = sb.channel('fishing-shore', {
+      config: { broadcast: { self: false }, presence: { key: this.key } },
+    });
+    this.ch = ch;
+    ch.on('broadcast', { event: 'm' }, ({ payload }) => this._move(payload))
+      .on('presence', { event: 'sync' }, () => this._sync())
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          this.joined = true;
+          try { await ch.track(this._card()); } catch (e) {}
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          // Канал после CLOSED сам не оживает (та же грабля, что в чате):
+          // пересобираем, пока игрок на берегу.
+          this.joined = false;
+          if (!this.retryT && this.timer) this.retryT = setTimeout(() => {
+            this.retryT = 0;
+            try { sb.removeChannel(this.ch); } catch (e) {}
+            this.ch = null;
+            if (this.timer) this._open();
+          }, 3000);
+        }
+      });
+  },
+
+  // Визитка для presence: под каким флагом человек пришёл к воде.
+  _card() {
+    const hasEC = (typeof EC === 'object' && EC) ? EC : null;
+    const app = hasEC && EC.app;
+    const fac = (hasEC && typeof ecFacOf === 'function' && EC.fid) ? ecFacOf(EC.fid) : null;
+    return {
+      n: String((app && app.name) || (fac && fac.name) || 'Странник').slice(0, 40),
+      c: _fishFlag.col,
+      h: String((app && (app.herald_url || app.image_url)) || (fac && fac.herald_url) || '').slice(0, 300),
+    };
+  },
+
+  _img(url) {
+    if (!url) return null;
+    let img = this.imgs.get(url);
+    if (img !== undefined) return img;
+    img = new Image();
+    img.crossOrigin = 'anonymous';           // герб из Storage: иначе канвас «пачкается»
+    img.onerror = () => this.imgs.set(url, null);
+    img.src = url;
+    this.imgs.set(url, img);
+    return img;
+  },
+
+  // Кто у воды. Присутствие — источник правды по составу: не пришедшего в
+  // presence соседа рисовать нечем (нет ни имени, ни флага), а ушедшего надо
+  // убрать сразу, не дожидаясь таймаута молчания.
+  _sync() {
+    if (!this.ch) return;
+    let st = {};
+    try { st = this.ch.presenceState() || {}; } catch (e) { return; }
+    const was = this.peers.size;
+    const live = new Set();
+    for (const k of Object.keys(st)) {
+      if (k === this.key) continue;
+      live.add(k);
+      const card = (st[k] && st[k][0]) || {};
+      const p = this._peer(k);
+      p.name = String(card.n || 'Странник').slice(0, 40);
+      p.flagCol = /^#[0-9a-fA-F]{3,8}$/.test(card.c || '') ? card.c : '#6f8bb5';
+      p.flagImg = this._img(card.h);
+    }
+    for (const k of [...this.peers.keys()]) if (!live.has(k)) this.peers.delete(k);
+    if (this.peers.size !== was) this._hud();
+  },
+
+  // Счётчик «у воды» живёт в шапке — она перерисовывается по событиям, а не
+  // каждый кадр, поэтому смену состава подталкиваем руками.
+  _hud() { try { fishPaintHud(); } catch (e) {} },
+
+  // Силуэт соседа. Держим ОДИН объект на человека и правим его поля: рендер
+  // и интерполяция опираются на то, что объект между кадрами не подменяется.
+  _peer(k) {
+    let p = this.peers.get(k);
+    if (!p) {
+      p = {
+        k, name: '', flagCol: '#6f8bb5', flagImg: null,
+        x: 0, y: 0, tx: 0, ty: 0, dir: 1, vx: 0, walk: 0, onGround: true, rodA: 0,
+        boat: { x: 0, y: 0, tx: 0, ty: 0, ride: false, row: 0, tilt: 0 },
+        line: { state: 'idle', bx: 0, by: 0 },
+        at: 0, seen: false,
+      };
+      this.peers.set(k, p);
+    }
+    return p;
+  },
+
+  _move(m) {
+    if (!m || !m.k || m.k === this.key) return;
+    const p = this._peer(m.k);
+    p.tx = Number(m.x) || 0; p.ty = Number(m.y) || 0;
+    p.dir = m.d < 0 ? -1 : 1;
+    p.onGround = m.g !== 0;
+    p.rodA = Number(m.ra) || 0;
+    p.line.state = String(m.fs || 'idle');
+    p.line.bx = Number(m.fx) || 0; p.line.by = Number(m.fy) || 0;
+    p.boat.ride = !!m.r;
+    if (p.boat.ride) {
+      p.boat.tx = Number(m.bx) || 0; p.boat.ty = Number(m.by) || 0;
+      p.boat.tilt = Number(m.bt) || 0; p.boat.row = Number(m.br) || 0;
+    }
+    p.at = Date.now();
+    // Первый пакет — ставим силуэт на место, а не тащим его через всю карту.
+    if (!p.seen) { p.seen = true; p.x = p.tx; p.y = p.ty; p.boat.x = p.boat.tx; p.boat.y = p.boat.ty; }
+  },
+
+  // Догон между пакетами. Скорость (vx) не присылаем, а берём из самого
+  // догона: ею анимация решает, шагает сосед или стоит.
+  tick(dt) {
+    const now = Date.now(), k = Math.min(1, dt * 12);
+    for (const [key, p] of this.peers) {
+      if (p.at && now - p.at > FISH_NET_DROP) { this.peers.delete(key); this._hud(); continue; }
+      const dx = p.tx - p.x;
+      p.x += dx * k; p.y += (p.ty - p.y) * k;
+      p.vx = dt > 0 ? dx * k / dt / FISH_TILE * 2 : 0;
+      if (Math.abs(dx) > .5) p.walk += dt * Math.min(14, Math.abs(dx) * 1.6 + 5);
+      p.boat.x += (p.boat.tx - p.boat.x) * k;
+      p.boat.y += (p.boat.ty - p.boat.y) * k;
+    }
+  },
+
+  // Себя шлём только когда есть что сказать: стоящий у воды не должен
+  // забивать канал шестьюстами пакетами в минуту.
+  _send() {
+    const S = _fish;
+    if (!S || !S.alive || !this.joined || !this.ch) return;
+    const me = S.me, F = S.F, b = S.boat;
+    const m = {
+      k: this.key,
+      x: Math.round(me.x * 2) / 2, y: Math.round(me.y * 2) / 2,
+      d: me.dir, g: me.onGround ? 1 : 0, ra: Math.round(me.rodA * 100) / 100,
+      fs: F.state, fx: Math.round(F.bx), fy: Math.round(F.by),
+      r: b.ride ? 1 : 0,
+    };
+    if (b.ride) {
+      m.bx = Math.round(b.x * 2) / 2; m.by = Math.round(b.y * 2) / 2;
+      m.bt = Math.round(b.tilt * 100) / 100; m.br = Math.round(b.row * 20) / 20;
+    }
+    const sig = JSON.stringify(m), now = Date.now();
+    if (sig === this.last && now - this.lastT < FISH_NET_IDLE) return;
+    this.last = sig; this.lastT = now;
+    try { this.ch.send({ type: 'broadcast', event: 'm', payload: m }); } catch (e) {}
+  },
 };
 
 /* ══════════════════════════════════════════════════════════════
@@ -1126,9 +1309,29 @@ function fishStart(canvas, world) {
     ctx.lineCap = 'butt';
   }
 
+  // Снасть силуэта: у меня — живое состояние заброса, у соседа — присланное.
+  const lineOf = (p, ghost) => (ghost ? (p.line || { state: 'idle' }) : S.F);
+
+  // Имя державы над соседом. Мелко и приглушённо: подпись должна отвечать на
+  // «кто это», не превращая берег в список игроков.
+  function drawPeerName(p) {
+    if (!p.name) return;
+    const x = Math.round(p.x - S.cam.x);
+    const y = Math.round((p.boat && p.boat.ride ? p.boat.y - 22 : p.y - 30) - S.cam.y);
+    if (x < -60 || x > VW + 60 || y < -10 || y > VH + 10) return;
+    ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(6,14,22,.55)';
+    const w = ctx.measureText(p.name).width + 6;
+    ctx.fillRect(x - w / 2, y - 7, w, 10);
+    ctx.fillStyle = p.flagCol || '#9fb4c8';
+    ctx.fillText(p.name, x, y);
+    ctx.textAlign = 'left';
+  }
+
   function drawChar(p, ghost) {
     // В лодке — своя поза: стоячий силуэт с шагающими ногами торчал из борта.
-    if (p === S.me && S.boat.ride) return drawSeated(p, ghost);
+    const boat = ghost ? p.boat : S.boat;
+    if (boat && boat.ride) return drawSeated(p, ghost, boat);
     const x = Math.round(p.x - S.cam.x), y = Math.round(p.y - S.cam.y), d = p.dir;
     // Ходьба: одна фаза на всё тело. Ноги в противофазе, корпус чуть оседает на
     // опорной ноге, плечо ведёт за шагом — этого хватает, чтобы силуэт «жил».
@@ -1208,9 +1411,9 @@ function fishStart(canvas, world) {
   }
 
   // Корпус ниже борта: пишем ДО гребца, чтобы он сидел внутри, а не на крышке.
-  function drawBoatHull() {
-    const b = S.boat;
-    if (!b.ride) return;
+  // Лодка приходит аргументом: своя у меня, своя у каждого соседа.
+  function drawBoatHull(b) {
+    if (!b || !b.ride) return;
     boatSpace(b);
     // Тень на воде под днищем.
     ctx.fillStyle = 'rgba(4,14,26,.30)';
@@ -1231,9 +1434,8 @@ function fishStart(canvas, world) {
   }
 
   // Борт и всё, что перед гребцом: пишем ПОСЛЕ него.
-  function drawBoatFront() {
-    const b = S.boat, d = S.me.dir;
-    if (!b.ride) return;
+  function drawBoatFront(b, d) {
+    if (!b || !b.ride) return;
     boatSpace(b);
     // Ближний борт — полоска поверх ног.
     ctx.fillStyle = '#5c4a38';
@@ -1262,8 +1464,8 @@ function fishStart(canvas, world) {
   // Поза сидящего: ног не видно за бортом, корпус качает на гребке, руки
   // держат весло. Отдельная функция, потому что стоячая анимация (шаг, качание)
   // в лодке смотрится вывихом.
-  function drawSeated(p, ghost) {
-    const b = S.boat, d = p.dir;
+  function drawSeated(p, ghost, b) {
+    const d = p.dir;
     const st = Math.sin(b.row * 2);
     const lean = st * 1.6;                      // корпус ходит взад-вперёд с гребком
     boatSpace(b);
@@ -1304,7 +1506,7 @@ function fishStart(canvas, world) {
     // Хват у сидящего ниже на четыре пикселя: он держит удилище у колен, а не
     // над плечом (ноги в лодке подобраны, «пол» под ним выше).
     const g = rodGeom({ x: p.x, y: p.y + 4, dir: d, rodA: p.rodA });
-    if (S.F.state !== 'idle') drawRod(g, ghost ? .6 : 1);
+    if (lineOf(p, ghost).state !== 'idle') drawRod(g, ghost ? .6 : 1);
     return g.tip;
   }
 
@@ -1346,8 +1548,7 @@ function fishStart(canvas, world) {
     }
   }
 
-  function drawLine(tip) {
-    const F = S.F;
+  function drawLine(tip, F) {
     if (F.state === 'idle' || F.state === 'charge') return;
     const bx = F.bx - S.cam.x, by = F.by - S.cam.y, tx = tip.x - S.cam.x, ty = tip.y - S.cam.y;
     const sag = F.state === 'bite' ? 4 : 10;
@@ -1412,6 +1613,7 @@ function fishStart(canvas, world) {
     const dt = Math.min(.05, (now - prev) / 1000); prev = now; S.time += dt;
     const night = fishNightNow();
     updateBoat(dt); updatePlayer(dt); updateFishing(dt); updateFx(dt);
+    FishNet.tick(dt);                     // догоняем соседей между их пакетами
     const act = nearAction();
     S.hint = act ? (act.txt || '') : '';
     const tgx = S.me.x - VW / 2 + S.me.dir * 26, tgy = S.me.y - VH * .62;
@@ -1435,13 +1637,22 @@ function fishStart(canvas, world) {
     // петлю — берег замирал чёрным экраном, и выйти можно было только Esc.
     try {
       drawSky(night); drawTiles(); drawNpc(); drawPlants(); drawUnderwater(); drawWater(night);
-      drawBoatHull();                       // днище — под гребцом
+      drawBoatHull(S.boat);                 // днище — под гребцом
       for (const p of S.parts) { ctx.globalAlpha = fClamp(p.l, 0, 1); ctx.fillStyle = p.c; ctx.fillRect(p.x - S.cam.x, p.y - S.cam.y, 2, 2); }
       ctx.globalAlpha = 1;
-      for (const p of FishNet.peers.values()) drawChar(p, true);
+      // Каждый сосед — со своей лодкой и своей снастью: борт пишем сразу после
+      // его силуэта, иначе чужая лодка накрыла бы чужого гребца.
+      for (const p of FishNet.peers.values()) {
+        if (!p.seen) continue;
+        drawBoatHull(p.boat);
+        const tip = drawChar(p, true);
+        drawBoatFront(p.boat, p.dir);
+        drawLine(tip, p.line);
+        drawPeerName(p);
+      }
       const myTip = drawChar(S.me, false);
-      drawBoatFront();                      // борт и весло — поверх гребца
-      drawLine(myTip);
+      drawBoatFront(S.boat, S.me.dir);       // борт и весло — поверх гребца
+      drawLine(myTip, S.F);
       drawOverlayUi(night);
     } catch (e) { if (!S.drawErr) { S.drawErr = 1; console.warn('[fishing] draw', e); } }
     S.raf = requestAnimationFrame(frame);
@@ -1544,8 +1755,12 @@ function fishPaintHud() {
   const best = _fishState.best;
   const night = fishNightNow();
   const mine = (_fishState.plants || []).filter(p => p.mine)[0];
+  // Сколько нас у воды прямо сейчас (я + соседи в канале). Считаем от живых
+  // силуэтов, а не от «побывавших сегодня»: берег общий и виден на глаз.
+  const near = FishNet.peers.size;
   el.innerHTML = `
     <span class="fish-hud-i">${night ? '🌙 ночь' : '☀ день'}</span>
+    <span class="fish-hud-i">у воды: <b>${near + 1}</b>${near ? '' : ' · вы один'}</span>
     <span class="fish-hud-i">садок: <b class="${kept >= cap ? 'fish-full' : ''}">${kept}/${cap}</b>${kept >= cap ? ' · дальше без наград' : ''}</span>
     ${_fishState.seed > 0 ? '<span class="fish-hud-i">🌱 семечко в руках</span>' : ''}
     ${mine ? `<span class="fish-hud-i">🌳 ${mine.ready ? '<b>созрело</b>' : fishLeft(mine.left)}</span>` : ''}
@@ -1841,6 +2056,7 @@ function fishPaintSite() {
           <span>${_fishState.night ? '🌙 ночь' : '☀ день'}</span>
           ${_fishState.seed > 0 ? '<span>в руках: <b>семечко мира</b></span>' : ''}
           ${mine ? `<span>дерево: <b>${mine.ready ? 'созрело' : fishLeft(mine.left)}</b></span>` : ''}
+          ${_fishState.pilgrims > 0 ? `<span>сегодня у воды: <b>${_fishState.pilgrims}</b></span>` : ''}
         </div>
         <button class="fish-go" onclick="event.stopPropagation();fishDescend()">Пойти к реке</button>
       </div>
