@@ -5890,6 +5890,7 @@ function ecTabForces() {
         <span class="ec-force-tok">${ic}</span>
         <div class="ec-force-info"><div class="ec-force-name">${esc(s.name)}</div><div class="ec-force-sub">${unit}</div></div>
         <span class="ec-force-qty">×${ecNum(s.qty)}</span>
+        <button class="ec-bld-del" title="Списать из состава (возврат 40% цены проекта)" onclick="event.stopPropagation();ecUnitScrap('${esc(s.name)}','${c}',${s.qty})">✕</button>
       </div>`).join('');
     rosterHtml += `<div class="ec-force-group">
       <div class="ec-force-hd ec-force-hd--${mod}"><span class="ec-force-hd-ic">${ic}</span><span class="ec-force-hd-l">${lbl}</span><span class="ec-force-hd-ct">${ecNum(tot)} ед.</span></div>
@@ -6058,6 +6059,31 @@ async function ecFleetDisband(id) {
   try {
     const r = await ecRpc('fleet_disband', { p_id: id });
     toast('Флот распущен · +' + ecNum((r && r.returned) || 0) + ' кор. в состав', 'ok');
+    await ecReloadPaint();
+  } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
+  finally { EC.busy = false; }
+}
+
+// ── Списать юнит из боевого состава (зеркало _unit_scrap.sql) ──
+// Убирает готовые единицы из unit_production. Работает и для «осиротевших»
+// юнитов, чей проект удалён в конструкторе (списание идёт по имени+категории,
+// а не по unit_id), — иначе такие занимали место в составе навсегда.
+async function ecUnitScrap(name, category, have) {
+  if (EC.busy) return;
+  let qty = have;
+  if (have > 1) {
+    const a = prompt(`Сколько списать? (в составе ${have})`, String(have));
+    if (a === null) return;
+    qty = parseInt(a, 10) || 0;
+    if (qty < 1 || qty > have) { toast('Неверное количество', 'err'); return; }
+  }
+  if (!confirm(`Списать «${name}» ×${qty}? Юниты будут уничтожены безвозвратно, вернётся 40% цены проекта.`)) return;
+  EC.busy = true;
+  try {
+    const r = await ecRpc('unit_scrap', { p_unit_name: name, p_category: category, p_qty: qty });
+    const back = (r && r.refund) || 0;
+    toast('Списано ×' + ecNum((r && r.scrapped) || qty) + (back ? ' · возврат ' + ecNum(back) + ' ГС' : ''), 'ok');
+    document.getElementById('ec-unit-spec-ov')?.classList.remove('show');
     await ecReloadPaint();
   } catch (e) { toast('Ошибка: ' + (typeof ecErr === 'function' ? ecErr(e.message) : e.message), 'err'); await ecReloadPaint(); }
   finally { EC.busy = false; }
@@ -15619,6 +15645,16 @@ function ecShowUnitSpecsFallback(unitName, category, design) {
   const body = (statsHtml || specHtml)
     ? `${statsHtml}${specHtml}`
     : `<div class="ec-empty" style="margin:12px 0">Подробные характеристики недоступны — проект больше не существует в конструкторе.</div>`;
+  // Осиротевший юнит нельзя ни достроить, ни посмотреть — дать списать прямо отсюда.
+  const inStock = (EC.roster || [])
+    .filter(r => r.unit_name === unitName && r.category === category)
+    .reduce((a, r) => a + (r.qty || 0), 0);
+  const scrapHtml = inStock > 0
+    ? `<div class="ec-prod-form" style="margin-top:12px">
+        <button class="btn btn-gh btn-sm" onclick="ecUnitScrap('${esc(unitName)}','${esc(category)}',${inStock})">✕ Списать из состава</button>
+      </div>
+      <div class="ec-cap">В составе ×${ecNum(inStock)}. Списание убирает юниты навсегда и возвращает 40% цены проекта (у удалённых проектов возврата нет).</div>`
+    : '';
   let ov = document.getElementById('ec-unit-spec-ov');
   if (!ov) {
     ov = document.createElement('div'); ov.id = 'ec-unit-spec-ov'; ov.className = 'cn-modal-ov';
@@ -15631,6 +15667,7 @@ function ecShowUnitSpecsFallback(unitName, category, design) {
     <div class="cn-modal-name">${esc(unitName)}</div>
     <div class="cn-card-fac">${category === 'ship' ? '🚀 Корабль' : '⚔ Дивизия'}</div>
     ${body}
+    ${scrapHtml}
   </div>`;
   ov.classList.add('show');
 }

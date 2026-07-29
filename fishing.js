@@ -747,7 +747,7 @@ function fishStart(canvas, world) {
     for (const p of (_fishState && _fishState.plants) || []) {
       if (Math.abs(p.x - tx) > 1) continue;
       if (p.mine && p.ready) return { kind: 'take', id: p.id, txt: 'E — забрать ихор' };
-      return { kind: 'look', txt: p.mine ? (p.ready ? '' : 'растёт: ' + fishLeft(p.left)) : 'дерево: ' + (p.who || 'чужое') };
+      return { kind: 'look', txt: p.mine ? (p.ready ? '' : 'оно растёт... ' + fishLeft(p.left)) : 'дерево: ' + (p.who || 'чужое') };
     }
     if (_fishState && _fishState.seed > 0 && tx >= FISH_MEADOW_X0 && tx <= FISH_MEADOW_X1
         && me.onGround && world.topH[tx] < FISH_WATER_Y)
@@ -1939,13 +1939,13 @@ function fishNpcOpen() {
 
   let line, btn;
   if (st.seed > 0) {
-    line = 'Семечко у тебя. Найди место на поляне и посади — дальше оно само.';
+    line = 'Семечко у тебя... Посади его.';
     btn = '';
   } else if (mine) {
-    line = mine.ready ? 'Твоё уже поднялось. Забирай.' : 'Одно растёт — большего земля не примет. Осталось ' + fishLeft(mine.left) + '.';
+    line = mine.ready ? 'Ах... как быстро прошло время, правда? Будто его и не было...' : 'Терпение... Подожди еще ' + fishLeft(mine.left) + '.';
     btn = '';
   } else {
-    line = 'Есть семечко мира. Сутки в земле — и отдаст ' + ich + ' ихора.';
+    line = 'Говорят, что архонт не смог умереть, и теперь живёт назло всем. Как это семечко... что прорастёт и даст ' + ich + ' ихора. Хочешь купить?';
     btn = `<button type="button" id="fish-buy"${gc < price ? ' disabled' : ''}
              onclick="event.stopPropagation();fishSeedBuy()">Купить — ${price.toLocaleString('ru-RU')} ГС</button>`;
   }

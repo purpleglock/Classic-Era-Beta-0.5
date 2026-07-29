@@ -985,6 +985,8 @@
 .ec-force-name { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; color: var(--t1); line-height: 1.25; overflow-wrap: break-word; word-break: break-word; }
 .ec-force-sub { font-family: var(--font-mono); font-size: 9px; letter-spacing: calc(.05em * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t3); margin-top: 2px; }
 .ec-force-qty { flex-shrink: 0; font-family: var(--font-display); font-weight: 700; font-size: 18px; color: var(--accent); min-width: 36px; text-align: right; }
+/* Списание юнита из состава — крестик поверх карточки (клик не открывает ТТХ) */
+.ec-force-card .ec-bld-del { position: relative; z-index: 1; padding: 6px; margin: -6px -4px -6px 2px; font-size: 13px; }
 .ec-force-empty {
   display: flex; align-items: center; gap: 12px; padding: 22px 18px;
   background: var(--b2); border: var(--deco-frame-w, 1px) dashed var(--w2); border-radius: var(--radius-md);
