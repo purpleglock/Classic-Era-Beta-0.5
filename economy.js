@@ -464,11 +464,12 @@ function ecResMass(name) { return EC_RES_MASS[ecResRarity(name)] || 1; }
 // значениями из _economy_accrue_consolidated.sql (14/9/5/4/2) — тот файл в базу
 // не накатан и накатан не будет, см. память economy-source-of-truth.
 const EC_RES_RATE = { common: 25, uncommon: 12, rare: 6, epic: 3, legendary: 1 };
-// КАП: планетарный потолок добычи ресурса /сут по РАЗМЕРУ месторождения (×баффы, жёсткий предел 70) — зеркало _mine_cap; ×1.75 2026-07-12.
-// ПОТОЛКА ДОБЫЧИ НА ЗАЛЕЖЬ НЕТ: живой тик богатство залежи применяет МНОЖИТЕЛЕМ
-// (ecRichMult 0.6…3.0), а не капом. ecMineCap оставлена только как «сколько даст
-// эта залежь в сутки при средней шахте» — ею пользуется превью геологоразведки.
-function ecMineCap(amt) { return Math.max(1, Math.round(EC_RES_RATE.common * ecRichMult(amt) * ecFactionMods().mine)); }
+// База потолка залежи по её богатству — ЗЕРКАЛО public._mine_cap (14/11/8/6/4/2).
+// Сам потолок = эта база × EC_DEP_CAP_K × доктрина, общий на все шахты колонии
+// (см. ecDepCap). Богатство при этом ещё и множит темп добычи — это ecRichMult,
+// другая таблица, не путать.
+const EC_MINE_CAP = { 'колоссально': 14, 'очень много': 11, 'много': 8, 'умеренно': 6, 'мало': 4, 'следы': 2 };
+function ecMineCap(amt) { const b = EC_MINE_CAP[String(amt || '').trim()]; return Math.max(1, Math.round((b == null ? 6 : b) * ecFactionMods().mine)); }
 const EC_DEST_CUT = 0.5;   // доля получателя каравана — зеркало живой economy_accrue (round(shipped*price*0.5))
 // Шанс нападения на КАЖДУЮ угрозу на пути (зеркало economy_accrue): с конвоем меньше.
 const EC_THREAT_CHANCE = { ancient: { escort: 0.65, bare: 0.80 }, pirates: { escort: 0.40, bare: 0.80 } };
@@ -2730,7 +2731,7 @@ function ecIsConceded(colonyId, resName) {
 function ecStoreFlowEntries() {
   const gross = {};
   (EC.buildings || []).filter(ecIsMiner).forEach(b => {
-    ecMineYields(b).forEach(y => {
+    ecMineYieldsCapped(b).forEach(y => {
       if (ecEffMode(b, y.name) !== 'store' || ecIsConceded(b.colony_id, y.name)) return;
       gross[y.name] = (gross[y.name] || 0) + y.rate;
     });
@@ -3139,10 +3140,20 @@ function ecTierMult(btype, rar) {
 // Множитель слотов — зеркало slot_f: 1 слот → ×1.0, 6 слотов → ×1.5. БОНУС, не делитель.
 function ecSlotMult(slots) { return 1 + 0.10 * (Math.max(1, +slots || 1) - 1); }
 function ecIsMiner(b) { return !!(b && EC_MINE_TIERS[b.btype]); }
-// Авто-добыча: шахта копает ВСЕ залежи планеты (mining_targets заполняет триггер
-// _mining_autofill_targets). Темп по залежи = база(редкость) × богатство × доктрина
-// × ярус × слоты. Потолка на залежь НЕТ. Зеркало цикла добычи в economy_accrue,
-// сверено с живой функцией 2026-07-29. Постройки складываются целиком.
+// ПОТОЛОК НА ЗАЛЕЖЬ (зеркало dep_cap): общий для ВСЕХ шахт колонии на этой залежи,
+// ограничивает стакинг. Пол — темп лучшей одиночной шахты: одна шахта всегда копает
+// свой полный темп, потолок режет только сумму. Зеркало economy_accrue 2026-07-29.
+const EC_DEP_CAP_K = 8;
+// round(база × K × доктрина) — порядок операций как на сервере, без промежуточного
+// округления, иначе клиент разойдётся с начислением на 1-2 единицы.
+function ecDepCap(amt) {
+  const b = EC_MINE_CAP[String(amt || '').trim()];
+  return Math.max(1, Math.round((b == null ? 6 : b) * EC_DEP_CAP_K * ecFactionMods().mine));
+}
+// Авто-добыча ОДНОЙ шахты: копает ВСЕ залежи планеты. Темп по залежи =
+// база(редкость) × богатство × доктрина × ярус × слоты. Зеркало economy_accrue.
+// ⚠ Потолок залежи здесь НЕ применён — он общий на колонию. Для любых СУММ и
+// показа игроку берите ecMineYieldsCapped, а не эту функцию.
 function ecMineYields(b) {
   if (!ecIsMiner(b)) return [];
   const mine = ecFactionMods().mine;
@@ -3157,6 +3168,34 @@ function ecMineYields(b) {
       rate: Math.max(1, Math.round(base * ecTierMult(b.btype, r) * sf)),
     };
   }).filter(y => y.rate > 0);
+}
+// Кэш сырых сумм по (колония, залежь) — чтобы не пересчитывать на каждый вызов.
+// Сбрасывается при перерисовке кабинета (ecPaintCabinet) и после тика.
+let EC_DEP_RAW = null;
+function ecDepRawReset() { EC_DEP_RAW = null; }
+function ecDepRaw() {
+  if (EC_DEP_RAW) return EC_DEP_RAW;
+  EC_DEP_RAW = new Map();
+  (EC.buildings || []).filter(ecIsMiner).forEach(b => ecMineYields(b).forEach(y => {
+    const k = b.colony_id + ' ' + y.name;
+    const cur = EC_DEP_RAW.get(k) || { total: 0, best: 0, amt: y.amt };
+    cur.total += y.rate;
+    if (y.rate > cur.best) cur.best = y.rate;
+    EC_DEP_RAW.set(k, cur);
+  }));
+  return EC_DEP_RAW;
+}
+// Добыча шахты С УЧЁТОМ потолка залежи. Потолок общий на колонию, поэтому доля
+// каждой шахты режется пропорционально — ровно так же, как в economy_accrue.
+function ecMineYieldsCapped(b) {
+  const raw = ecDepRaw();
+  return ecMineYields(b).map(y => {
+    const cur = raw.get(b.colony_id + ' ' + y.name);
+    if (!cur || !cur.total) return y;
+    const capped = Math.max(Math.min(cur.total, ecDepCap(cur.amt)), cur.best);
+    if (capped >= cur.total) return y;
+    return Object.assign({}, y, { rate: Math.max(1, Math.round(y.rate * capped / cur.total)) });
+  });
 }
 // Стоимость экспансии (колонизация/терраформ/обустройство) с учётом доктрины (mods.colonize).
 function ecColonizeCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().colonize)); }
@@ -3190,7 +3229,7 @@ function ecColonyMinePreview(blds, planet) {
   if (!mBlds.length) return '';
   const totals = new Map();
   const rars = new Map();
-  mBlds.forEach(b => ecMineYields(b).forEach(y => {
+  mBlds.forEach(b => ecMineYieldsCapped(b).forEach(y => {
     totals.set(y.name, (totals.get(y.name) || 0) + y.rate);
     rars.set(y.name, y.r);
   }));
@@ -3240,6 +3279,7 @@ function ecIntro(icon, title, text, hints) {
 }
 
 function ecPaintCabinet() {
+  ecDepRawReset();   // ⛏ кэш сырых сумм по залежам — пересобрать на свежих постройках
   const col = ecReadable(EC.app.color);
   const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['policy', '🏛', 'Курс державы'], ['flows', '⛏', 'Ресурсы и торговля'], ['diplomacy', '🤝', 'Дипломатия'], ['war', '⚔', 'Война'], ['faith', '🛐', 'Вера'],['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   // Длань Неотвратимости — отдельная вкладка-пульт, появляется когда орудие доступно
@@ -3504,7 +3544,7 @@ function ecMineTotals() {
     const colony = EC.colonies.find(c => c.id === b.colony_id);
     const colName = (colony && (colony.name || colony.planet_name)) || '—';
     const slots = Math.max(1, +b.slots_open || 1);
-    ecMineYields(b).forEach(y => {
+    ecMineYieldsCapped(b).forEach(y => {
       const cur = totals.get(y.name) || { rate: 0, r: y.r, icon: y.icon, slots: 0, srcs: new Map() };
       cur.rate += y.rate; cur.slots += slots;
       const s = cur.srcs.get(colName) || { rate: 0, slots: 0, amt: y.amt };
@@ -7541,7 +7581,7 @@ function ecFlowRowsData() {
   const rows = {};
   const mk = (n) => rows[n] || (rows[n] = { mine: 0, exp: 0, sto: 0, conc: 0 });
   (EC.buildings || []).filter(ecIsMiner).forEach(b => {
-    ecMineYields(b).forEach(y => {
+    ecMineYieldsCapped(b).forEach(y => {
       const row = mk(y.name);
       row.mine += y.rate;
       if (ecIsConceded(b.colony_id, y.name)) row.conc += y.rate;
@@ -13147,7 +13187,7 @@ function ecBuildingRow(b) {
   if (ecIsMiner(b)) {
     // БЮДЖЕТ v3 + ЯРУСЫ: добыча автоматическая — постройка копает залежи
     // СВОЕГО яруса, темп ×(слоты/3). Маршруты — вкладка «Потоки».
-    const yields = ecMineYields(b);
+    const yields = ecMineYieldsCapped(b);
     if (yields.length) {
       const rows = yields.map(y => `<div class="ec-mine-row active ec-rar-${y.r}">
           <span class="ec-mine-ic ec-rar-${y.r}">${esc(y.icon)}</span>
