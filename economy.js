@@ -459,10 +459,16 @@ const EC_RES_PRICE = { common: 2, uncommon: 10, rare: 50, epic: 200, legendary: 
 // «вес» ресурса задаётся его редкостью, а фактический груз — ещё и объёмом.
 const EC_RES_MASS = { common: 1, uncommon: 2, rare: 4, epic: 8, legendary: 16 };
 function ecResMass(name) { return EC_RES_MASS[ecResRarity(name)] || 1; }
-const EC_RES_RATE = { common: 14, uncommon: 9, rare: 5, epic: 4, legendary: 2 };   // темп ОДНОЙ постройки (до баффов и слотов); ×1.75 2026-07-12
+// Темп ОДНОЙ постройки по залежи, до богатства/доктрины/яруса/слотов.
+// Зеркало CASE в живом economy_accrue (сверено с БД 2026-07-29). НЕ путать со
+// значениями из _economy_accrue_consolidated.sql (14/9/5/4/2) — тот файл в базу
+// не накатан и накатан не будет, см. память economy-source-of-truth.
+const EC_RES_RATE = { common: 25, uncommon: 12, rare: 6, epic: 3, legendary: 1 };
 // КАП: планетарный потолок добычи ресурса /сут по РАЗМЕРУ месторождения (×баффы, жёсткий предел 70) — зеркало _mine_cap; ×1.75 2026-07-12.
-const EC_MINE_CAP = { 'колоссально': 14, 'очень много': 11, 'много': 8, 'умеренно': 6, 'мало': 4, 'следы': 2 };
-function ecMineCap(amt) { const b = EC_MINE_CAP[String(amt || '').trim()]; return Math.min(70, Math.max(1, Math.round((b == null ? 6 : b) * ecFactionMods().mine))); }
+// ПОТОЛКА ДОБЫЧИ НА ЗАЛЕЖЬ НЕТ: живой тик богатство залежи применяет МНОЖИТЕЛЕМ
+// (ecRichMult 0.6…3.0), а не капом. ecMineCap оставлена только как «сколько даст
+// эта залежь в сутки при средней шахте» — ею пользуется превью геологоразведки.
+function ecMineCap(amt) { return Math.max(1, Math.round(EC_RES_RATE.common * ecRichMult(amt) * ecFactionMods().mine)); }
 const EC_DEST_CUT = 0.5;   // доля получателя каравана — зеркало живой economy_accrue (round(shipped*price*0.5))
 // Шанс нападения на КАЖДУЮ угрозу на пути (зеркало economy_accrue): с конвоем меньше.
 const EC_THREAT_CHANCE = { ancient: { escort: 0.65, bare: 0.80 }, pirates: { escort: 0.40, bare: 0.80 } };
@@ -3118,30 +3124,39 @@ function ecResEntries() { const res = (EC.eco && EC.eco.resources) || {}; return
 // Множитель богатства месторождения (amt с карты) — зеркало public._richness_mult.
 const EC_RICHNESS = { 'колоссально': 3.0, 'очень много': 2.5, 'много': 2.0, 'умеренно': 1.5, 'мало': 1.0, 'следы': 0.6 };
 function ecRichMult(amt) { const v = EC_RICHNESS[String(amt || '').trim()]; return v == null ? 1.5 : v; }
-// Добыча за слот/сутки: редкость × богатство месторождения × доктрина — зеркало economy_accrue.
-function ecMineRate(rar, amt) { return Math.min(ecMineCap(amt), Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 14) * ecFactionMods().mine))); }
-// ЯРУСЫ ДОБЫЧИ: каждая добывающая постройка берёт только залежи своего яруса —
-// зеркало public._mine_tier_ok в _budget_wellbeing.sql.
+// Добыча по залежи в сутки: редкость × богатство × доктрина — зеркало economy_accrue.
+function ecMineRate(rar, amt) { return Math.max(1, Math.round((EC_RES_RATE[rar || 'common'] || 25) * ecRichMult(amt) * ecFactionMods().mine)); }
+// ЯРУСЫ ДОБЫЧИ: профильный ярус постройки — зеркало public._mine_tier_ok.
+// ВАЖНО: ярус — это НЕ запрет. Живой тик (2026-07-29) даёт постройке копать любую
+// залежь планеты; профильный ярус идёт полным темпом, чужой — ×0.8. Базовая шахта
+// штрафа не получает вообще (иначе просели бы фракции без глубоких шахт).
 const EC_MINE_TIERS = { mining: ['common'], mining_deep: ['uncommon', 'rare'], mining_exotic: ['epic', 'legendary'] };
+// Множитель яруса — зеркало tier_f из economy_accrue.
+function ecTierMult(btype, rar) {
+  if (btype === 'mining') return 1;
+  return (EC_MINE_TIERS[btype] || []).includes(rar || 'common') ? 1 : 0.8;
+}
+// Множитель слотов — зеркало slot_f: 1 слот → ×1.0, 6 слотов → ×1.5. БОНУС, не делитель.
+function ecSlotMult(slots) { return 1 + 0.10 * (Math.max(1, +slots || 1) - 1); }
 function ecIsMiner(b) { return !!(b && EC_MINE_TIERS[b.btype]); }
-// БЮДЖЕТ v3: авто-добыча — завод копает залежи СВОЕГО ЯРУСА на планете, темп по залежи =
-// база(редкость) × богатство × доктрина × (слоты/3). Слоты = рабочие руки от
-// промышленного бюджета и населения. Зеркало цикла mining в economy_accrue.
+// Авто-добыча: шахта копает ВСЕ залежи планеты (mining_targets заполняет триггер
+// _mining_autofill_targets). Темп по залежи = база(редкость) × богатство × доктрина
+// × ярус × слоты. Потолка на залежь НЕТ. Зеркало цикла добычи в economy_accrue,
+// сверено с живой функцией 2026-07-29. Постройки складываются целиком.
 function ecMineYields(b) {
   if (!ecIsMiner(b)) return [];
-  const tiers = EC_MINE_TIERS[b.btype];
   const mine = ecFactionMods().mine;
-  // Сырой темп постройки по залежи (до планетарного капа) — постройки СКЛАДЫВАЮТСЯ
-  const raw = (bb, ri) => Math.max(1, Math.round((EC_RES_RATE[ri.r || 'common'] || 14) * mine * Math.max(1, +bb.slots_open || 1) / 3));
-  // КАП КАЖДОГО ДОМИКА: потолок = размер месторождения (ecMineCap: макс 20 базово,
-  // ×баффы, жёсткий предел 40). Постройки складываются ЦЕЛИКОМ, каждая копает свой
-  // полный темп независимо — зеркало цикла mining в economy_accrue.
+  const sf = ecSlotMult(b.slots_open);
   // Фолбэк редкости: у старых снимков поле r бывает пустым — добираем из каталога
-  // (ecResRarity), иначе ценная залежь сойдёт за common и достанется заводу.
-  return ecMiningPlanetRes(b).filter(ri => tiers.includes(ri.r || ecResRarity(ri.name))).map(ri => ({
-    name: ri.name, r: ri.r || 'common', amt: ri.amt, icon: ri.icon || '◈',
-    rate: Math.min(raw(b, ri), ecMineCap(ri.amt)),
-  })).filter(y => y.rate > 0);
+  // (ecResRarity), иначе ценная залежь сойдёт за common и ярус посчитается не тот.
+  return ecMiningPlanetRes(b).map(ri => {
+    const r = ri.r || ecResRarity(ri.name) || 'common';
+    const base = (EC_RES_RATE[r] || 25) * ecRichMult(ri.amt) * mine;
+    return {
+      name: ri.name, r, amt: ri.amt, icon: ri.icon || '◈',
+      rate: Math.max(1, Math.round(base * ecTierMult(b.btype, r) * sf)),
+    };
+  }).filter(y => y.rate > 0);
 }
 // Стоимость экспансии (колонизация/терраформ/обустройство) с учётом доктрины (mods.colonize).
 function ecColonizeCost(base) { return Math.max(1, Math.round((base || 0) * ecFactionMods().colonize)); }
