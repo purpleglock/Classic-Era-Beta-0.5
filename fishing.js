@@ -563,11 +563,13 @@ const fishTouch = () => (matchMedia('(pointer:coarse)').matches || 'ontouchstart
    ══════════════════════════════════════════════════════════════ */
 function fishStart(canvas, world) {
   const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = true;
+  ctx.lineJoin = ctx.lineCap = 'round';
+  let PX = 1;                       // множитель буфера: логический пиксель → пиксель экрана
   // Логический кадр — НЕ константа: его форму задаёт экран (см. fit() ниже),
   // поэтому весь рендер читает VW/VH, а FISH_VW/FISH_VH остаются лишь
   // проектным размером «по умолчанию».
-  let VW = canvas.width || FISH_VW, VH = canvas.height || FISH_VH;
+  let VW = Number(canvas.dataset.vw) || FISH_VW, VH = Number(canvas.dataset.vh) || FISH_VH;
 
   const S = {
     ctx, canvas, world, alive: true, time: 0, raf: 0,
@@ -738,7 +740,12 @@ function fishStart(canvas, world) {
   // Ближайшая точка интереса под «E». Возвращает {kind, …} или null.
   function nearAction() {
     const me = S.me, mx = me.x, tx = t2(mx);
-    if (S.boat.ride) return { kind: 'off', txt: 'E — сойти на берег' };
+    if (S.boat.ride) {
+      // Подсказку даём, только когда сход РЕАЛЬНО возможен: doAction требует
+      // берег в трёх тайлах, а надпись висела посреди омута и врала.
+      const bx = t2(S.boat.x), bank = world.bankNear(bx);
+      return (Math.abs(bank - bx) > 3) ? null : { kind: 'off', txt: 'E — сойти на берег' };
+    }
     // Своя лодка спускается на воду там, где стоишь: нужна только вода рядом.
     if (me.onGround && waterNear(tx) !== null) return { kind: 'boat', txt: 'E — спустить лодку' };
     if (Math.abs(FISH_NPC_X * FISH_TILE - mx) < FISH_REACH)
@@ -951,91 +958,29 @@ function fishStart(canvas, world) {
   /* ── рендер ── */
   const B = world.biome;
 
-  /* Статика мира печётся ОДИН раз в отдельный холст, а кадр только вырезает
-     из него нужный кусок. Берег неподвижен, а раньше на каждый кадр уходило
-     полторы тысячи заливок тайлов — на них же не оставалось бюджета ни на
-     какую детализацию. Теперь весь декор бесплатен: он запечён. */
-  const WPX = FISH_W * FISH_TILE, HPX = FISH_H * FISH_TILE;
-  const bakeCv = document.createElement('canvas');
-  bakeCv.width = WPX; bakeCv.height = HPX;
-  const bk = bakeCv.getContext('2d');
-  (function bakeWorld() {
-    const T = FISH_TILE, seed = world.seed;
-    for (let x = 0; x < FISH_W; x++) {
-      const top = world.topH[x];
-      for (let y = top; y < FISH_H; y++) {
-        const t = world.tile(x, y); if (!t || t === FT_PLANK) continue;
-        const px = x * T, py = y * T, c = B.ground[t];
-        bk.fillStyle = ((x * 7 + y * 13) & 3) ? c[0] : c[1];
-        bk.fillRect(px, py, T, T);
-        // Порода темнеет с глубиной — без этого срез читался плоской заливкой.
-        const d = fClamp((y - top) / 24, 0, 1);
-        if (d > .02) { bk.fillStyle = `rgba(4,8,14,${d * .5})`; bk.fillRect(px, py, T, T); }
-        // Крапина: пара пятен на тайл, чтобы поверхность не была картоном.
-        if ((x * 13 + y * 7) % 5 === 0) {
-          bk.fillStyle = 'rgba(0,0,0,.10)';
-          bk.fillRect(px + ((x * 5 + y) % 9), py + ((x + y * 3) % 10), 3, 2);
-        }
-      }
-      // Кромка грунта: светлый рант сверху и мягкая тень под ним.
-      const t0 = world.tile(x, top), px = x * T, py = top * T;
-      if (t0) {
-        if (t0 === FT_GRASS || t0 === FT_SAND) {
-          bk.fillStyle = t0 === FT_GRASS ? B.grass : B.sandTop;
-          bk.fillRect(px, py, T, 3);
-        }
-        bk.fillStyle = 'rgba(255,248,225,.10)'; bk.fillRect(px, py, T, 1);
-        const sh = bk.createLinearGradient(0, py + 3, 0, py + 16);
-        sh.addColorStop(0, 'rgba(0,0,0,.22)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
-        bk.fillStyle = sh; bk.fillRect(px, py + 3, T, 13);
-      }
-    }
-    // Декор берега. Детерминированный: место одно на всю галактику, и камни
-    // на нём у всех лежат одинаково.
-    for (let x = 2; x < FISH_W - 2; x++) {
-      const top = world.topH[x], px = x * FISH_TILE, py = top * FISH_TILE;
-      const r = fHash(x, seed ^ 0x2b1d), r2 = fHash(x, seed ^ 0x77a3);
-      // Тот берег — цветущая поляна: вместо камней и коряг тут трава и цвет.
-      if (x >= FISH_MEADOW_X0 - 4 && x <= FISH_MEADOW_X1 + 4) {
-        const cols = ['#e8d06a', '#e5799a', '#c9a2ef', '#f2f0e4', '#eb8f5a'];
-        for (let i = 0; i < 3; i++) {
-          const h1 = fHash(x * 11 + i * 7, seed ^ 0x33af);
-          if (h1 < 0) continue;
-          const ox = px + 2 + ((i * 5 + ((h1 * 4) | 0)) % 13);
-          const hh = 3 + ((fHash(x * 3 + i, seed ^ 0x1177) + 1) * 3 | 0);
-          bk.fillStyle = '#6d8a53'; bk.fillRect(ox, py - hh, 1, hh);
-          bk.fillStyle = cols[((h1 + 1) * 2.5 | 0) % 5];
-          bk.fillRect(ox - 1, py - hh - 2, 3, 2);
-        }
-        continue;
-      }
-      if (top < FISH_WATER_Y && r > .55) {                       // валун на суше
-        const w = 4 + ((r2 * 7) | 0), h = 3 + ((r * 4) | 0);
-        bk.fillStyle = 'rgba(48,50,54,.85)'; bk.fillRect(px + 3, py - h + 2, w, h);
-        bk.fillStyle = 'rgba(150,155,160,.20)'; bk.fillRect(px + 3, py - h + 2, w, 1);
-      }
-      if (top >= FISH_WATER_Y && top <= FISH_WATER_Y + 5 && r < -.2) {   // тростник на отмели
-        const n = 2 + ((r2 + 1) * 2 | 0);
-        bk.fillStyle = 'rgba(58,74,52,.85)';
-        for (let i = 0; i < n; i++) {
-          const ox = px + 2 + i * 4, hh = 14 + ((fHash(x * 7 + i, seed) + 1) * 12 | 0);
-          bk.fillRect(ox, py - hh, 1, hh);
-          bk.fillRect(ox - 1, py - hh - 2, 3, 2);
-        }
-      }
-    }
-    // Мостки поверх всего: доски, стык и тень на воду.
-    for (let x = 0; x < FISH_W; x++) for (let y = FISH_WATER_Y - 6; y < FISH_WATER_Y + 2; y++) {
-      if (world.tile(x, y) !== FT_PLANK) continue;
-      const px = x * FISH_TILE, py = y * FISH_TILE, c = B.ground[FT_PLANK];
-      bk.fillStyle = (x & 1) ? c[0] : c[1];
-      bk.fillRect(px, py, FISH_TILE, FISH_TILE);
-      bk.fillStyle = 'rgba(255,236,200,.12)'; bk.fillRect(px, py, FISH_TILE, 2);
-      bk.fillStyle = 'rgba(0,0,0,.32)';
-      bk.fillRect(px, py + FISH_TILE - 2, FISH_TILE, 2);
-      bk.fillRect(px + FISH_TILE - 1, py, 1, FISH_TILE);
-    }
-  })();
+  /* Берег рисуется КАЖДЫЙ кадр и вектором, а не печётся тайлами: буфер теперь
+     в нативном разрешении, и запечённый холст пришлось бы растягивать — вся
+     графика поплыла бы. Заливок мало: один силуэт на видимый диапазон. */
+  const seed = world.seed;
+
+  /* Кромка берега сглажена — и ТА ЖЕ кривая работает опорой для ног (см.
+     rampSnap): рисовать ступени тайлов уродливо, а рисовать гладкий склон
+     поверх ступенчатой коллизии — обман, персонаж прыгал по невидимым
+     ступеням. Поэтому склон стал рампой и в графике, и в физике. */
+  const fishTopH = x => world.topH[fClamp(Math.round(x), 0, FISH_W - 1)];
+  const shoreY = x => (fishTopH(x - 1) + fishTopH(x) * 2 + fishTopH(x + 1)) / 4 * FISH_TILE;
+  const shoreAt = px => {                       // высота рампы в произвольной точке
+    const gx = px / FISH_TILE - .5, i = Math.floor(gx), f = gx - i;
+    return fLerp(shoreY(i), shoreY(i + 1), f);
+  };
+
+  function shorePath(x0, x1) {
+    ctx.beginPath();
+    ctx.moveTo(x0 * FISH_TILE - S.cam.x, VH + 40);
+    for (let x = x0; x <= x1; x++) ctx.lineTo(x * FISH_TILE + FISH_TILE / 2 - S.cam.x, shoreY(x) - S.cam.y);
+    ctx.lineTo(x1 * FISH_TILE - S.cam.x, VH + 40);
+    ctx.closePath();
+  }
 
   let stars = [];
   const mkStars = () => { stars = Array.from({ length: 120 }, () => ({ x: Math.random() * VW, y: Math.random() * VH * .7, p: fRnd(0, 9) })); };
@@ -1047,36 +992,87 @@ function fishStart(canvas, world) {
   // этой поправки дальние гряды уезжали в самый верх кадра и съедали небо.
   const horizonY = par => VH * .62 - (S.cam.y - (FISH_WATER_Y * FISH_TILE - VH * .62)) * par * .3;
 
+  /* Небо этого места: газовый гигант с кольцом низко над горизонтом и мелкая
+     луна. Палитра обесцвечена почти до стали — день и ночь различаются
+     светлотой, а не тоном, иначе кадр читался «дачным прудом». */
+  function drawGiant(night) {
+    const gx = VW * .76 - S.cam.x * .04, gy = horizonY(.35) - VH * .46, R = Math.max(24, VH * .125);
+    if (gy + R * 1.9 < 0) return;
+    ctx.save();
+    ctx.globalAlpha = night ? .85 : .40;
+    ctx.strokeStyle = 'rgba(150,166,182,.30)'; ctx.lineWidth = R * .09;
+    ctx.beginPath(); ctx.ellipse(gx, gy, R * 1.85, R * .34, -.22, Math.PI, Math.PI * 2); ctx.stroke();
+    const bg = ctx.createLinearGradient(gx - R, gy - R, gx + R, gy + R);
+    bg.addColorStop(0, '#6d7688'); bg.addColorStop(.45, '#4a5364'); bg.addColorStop(1, '#151a22');
+    ctx.beginPath(); ctx.arc(gx, gy, R, 0, 7); ctx.fillStyle = bg; ctx.fill();
+    ctx.save(); ctx.clip();
+    for (let i = -5; i <= 5; i++) {
+      ctx.fillStyle = (i & 1) ? 'rgba(30,36,46,.40)' : 'rgba(160,172,188,.14)';
+      ctx.beginPath(); ctx.ellipse(gx, gy + i * R * .17 + Math.sin(i * 2.3) * 3, R, R * .06 + Math.abs(Math.sin(i)) * 2.2, 0, 0, 7); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(178,150,140,.28)';
+    ctx.beginPath(); ctx.ellipse(gx - R * .3, gy + R * .22, R * .2, R * .09, .2, 0, 7); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(186,198,212,.38)'; ctx.lineWidth = R * .09;
+    ctx.beginPath(); ctx.ellipse(gx, gy, R * 1.85, R * .34, -.22, 0, Math.PI); ctx.stroke();
+    ctx.strokeStyle = 'rgba(120,134,150,.20)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.ellipse(gx, gy, R * 2.12, R * .40, -.22, 0, Math.PI); ctx.stroke();
+    const mx = gx - R * 2.7 + Math.sin(S.time * .05) * 30, my = gy - R * .8;
+    ctx.fillStyle = '#9aa4b0'; ctx.beginPath(); ctx.arc(mx, my, 6, 0, 7); ctx.fill();
+    ctx.fillStyle = '#2b323c'; ctx.beginPath(); ctx.arc(mx + 2.4, my - .6, 5.2, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
   function drawSky(night) {
     const g = ctx.createLinearGradient(0, 0, 0, VH);
-    if (night) { g.addColorStop(0, '#080d1e'); g.addColorStop(.55, '#111a33'); g.addColorStop(1, '#243b5a'); }
-    else { g.addColorStop(0, '#2b628f'); g.addColorStop(.55, '#7ba7bf'); g.addColorStop(1, '#e2ecdf'); }
+    if (night) { g.addColorStop(0, '#0d1015'); g.addColorStop(.55, '#161a22'); g.addColorStop(1, '#242a34'); }
+    else { g.addColorStop(0, '#4a5661'); g.addColorStop(.55, '#79848e'); g.addColorStop(1, '#b0b7bc'); }
     ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
     if (night) {
-      for (const st of stars) { ctx.fillStyle = '#fff'; ctx.globalAlpha = .25 + Math.abs(Math.sin(st.p + S.time * .8)) * .6; ctx.fillRect(st.x, st.y, 1, 1); }
+      for (const st of stars) {
+        ctx.globalAlpha = .25 + Math.abs(Math.sin(st.p + S.time * .8)) * .6;
+        ctx.fillStyle = '#fff'; ctx.fillRect(st.x, st.y, 1, 1);
+      }
       ctx.globalAlpha = 1;
-      ctx.fillStyle = '#e8eefc'; ctx.beginPath(); ctx.arc(VW * .74, 46, 7, 0, 7); ctx.fill();
-      ctx.globalAlpha = .18; ctx.beginPath(); ctx.arc(VW * .74, 46, 15, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
-    } else {
-      ctx.fillStyle = '#ffe9a8'; ctx.beginPath(); ctx.arc(VW * .26, 42, 9, 0, 7); ctx.fill();
-      ctx.globalAlpha = .18; ctx.beginPath(); ctx.arc(VW * .26, 42, 22, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
     }
-    ctx.fillStyle = night ? 'rgba(200,220,255,.16)' : 'rgba(255,255,255,.5)';
+    drawGiant(night);
+
+    // Светило — тусклое пятно за облаками, без диска и лучей.
+    if (!night) {
+      const sx = VW * .26, sy = 42;
+      const hg = ctx.createRadialGradient(sx, sy, 0, sx, sy, 70);
+      hg.addColorStop(0, 'rgba(228,222,206,.28)'); hg.addColorStop(1, 'rgba(228,222,206,0)');
+      ctx.fillStyle = hg; ctx.fillRect(sx - 80, sy - 80, 160, 160);
+    }
+
+    // Облака — вытянутые полосы с растворёнными краями.
     for (const c of clouds) {
       c.x += c.v;
       const x = ((c.x - S.cam.x * .25) % (FISH_W * FISH_TILE) + FISH_W * FISH_TILE) % (FISH_W * FISH_TILE) - 100;
-      if (x < -120 || x > VW + 60) continue;
-      const w = 46 * c.s, h = 9 * c.s;
-      ctx.beginPath(); ctx.ellipse(x, c.y, w, h, 0, 0, 7); ctx.ellipse(x + w * .4, c.y - h * .6, w * .55, h * .9, 0, 0, 7); ctx.fill();
+      const w = 74 * c.s, h = 5 * c.s;
+      if (x < -w * 2 || x > VW + w) continue;
+      const cg = ctx.createLinearGradient(x - w, 0, x + w, 0);
+      cg.addColorStop(0, 'rgba(0,0,0,0)');
+      cg.addColorStop(.5, night ? 'rgba(150,168,192,.10)' : 'rgba(214,220,226,.16)');
+      cg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = cg;
+      ctx.beginPath(); ctx.ellipse(x, c.y, w, h, 0, 0, 7); ctx.fill();
     }
-    for (let l = 0; l < 2; l++) {
-      const par = l ? .5 : .3, amp = l ? 26 : 18, base = horizonY(par) - (l ? 0 : 16);
-      ctx.fillStyle = night ? (l ? 'rgba(16,26,44,.92)' : 'rgba(26,40,62,.7)')
-        : (l ? 'rgba(30,48,62,.75)' : 'rgba(46,66,84,.55)');
-      if (l) drawTemple(night);        // храм стоит между дальней грядой и ближней
+
+    // Три гряды с дымкой между планами — весь объём кадра держится на них.
+    const fogC = night ? '13,17,23' : '150,157,163';
+    for (let l = 0; l < 3; l++) {
+      const par = .18 + l * .17, amp = 12 + l * 11, base = horizonY(par) - (2 - l) * 10;
+      const dark = night ? [.55, .72, .88] : [.30, .46, .64];
+      if (l === 2) drawTemple(night);          // храм стоит между дальней грядой и ближней
+      ctx.fillStyle = `rgba(22,27,33,${dark[l]})`;
       ctx.beginPath(); ctx.moveTo(0, VH);
-      for (let x = 0; x <= VW; x += 6) ctx.lineTo(x, base - fFbm((x + S.cam.x * par) * .01 + l * 30, 7) * amp);
+      for (let x = 0; x <= VW; x += 4) ctx.lineTo(x, base - fFbm((x + S.cam.x * par) * .006 + l * 37, 7) * amp);
       ctx.lineTo(VW, VH); ctx.fill();
+      const fg = ctx.createLinearGradient(0, base - amp - 10, 0, base + 30);
+      fg.addColorStop(0, `rgba(${fogC},0)`);
+      fg.addColorStop(1, `rgba(${fogC},${.16 - l * .04})`);
+      ctx.fillStyle = fg; ctx.fillRect(0, base - amp - 10, VW, amp + 44);
     }
   }
 
@@ -1108,68 +1104,328 @@ function fishStart(canvas, world) {
     ctx.fillStyle = fill;
   }
 
-  // Кадр берега — вырезка из запечённого холста. Источник округляем до
-  // пикселя: дробный сдвиг размывал бы всю пиксельную графику.
+  /* Берег — сплошной силуэт, а не тайловая кладка: тело, светлая кромка и
+     редкий декор штрихами. Мостки рисуются поверх и остаются рукотворными —
+     единственная прямая линия в кадре. */
   function drawTiles() {
-    const sx = Math.round(S.cam.x), sy = Math.round(S.cam.y);
-    const dx = sx < 0 ? -sx : 0, dy = sy < 0 ? -sy : 0;
-    const w = Math.min(VW - dx, WPX - Math.max(0, sx)), h = Math.min(VH - dy, HPX - Math.max(0, sy));
-    if (w > 0 && h > 0) ctx.drawImage(bakeCv, Math.max(0, sx), Math.max(0, sy), w, h, dx, dy, w, h);
+    const night = fishNightNow();
+    const x0 = Math.max(0, t2(S.cam.x) - 2), x1 = Math.min(FISH_W - 1, t2(S.cam.x + VW) + 2);
+    const surf = FISH_WATER_Y * FISH_TILE - S.cam.y;
+
+    // тело берега
+    const g = ctx.createLinearGradient(0, surf - 120, 0, surf + 160);
+    g.addColorStop(0, night ? '#0a0c10' : '#1b1f25');
+    g.addColorStop(1, night ? '#05070a' : '#0a0d11');
+    shorePath(x0, x1); ctx.fillStyle = g; ctx.fill();
+    shorePath(x0, x1);
+    ctx.strokeStyle = night ? 'rgba(120,140,165,.20)' : 'rgba(196,206,214,.34)';
+    ctx.lineWidth = 1; ctx.stroke();
+
+    /* Декор кромки. Два правила, из-за которых он раньше выглядел браком:
+       ставим только на ПОЛОГИХ участках (на обрыве трава висела в воздухе)
+       и по разрежённой сетке (каждый тайл подряд складывался в бордюр). */
+    for (let x = x0; x <= x1; x++) {
+      const top = world.topH[x], px = x * FISH_TILE - S.cam.x, py = shoreY(x) - S.cam.y;
+      // Площадка должна быть РОВНОЙ на пять тайлов вокруг: при допуске «уклон
+      // до двух» трава всё равно вставала на 45-градусном склоне и висела в
+      // воздухе, потому что силуэт берега сглажен, а topH — ступенчатый.
+      let flat = true;
+      for (let k = -2; k <= 2 && flat; k++) {
+        const a = world.topH[fClamp(x + k, 0, FISH_W - 1)], b2 = world.topH[fClamp(x + k + 1, 0, FISH_W - 1)];
+        if (Math.abs(b2 - a) > 0) flat = false;
+      }
+      if (!flat) continue;
+      const r = fHash(x, seed ^ 0x2b1d), r2 = fHash(x, seed ^ 0x77a3);
+
+      if (x >= FISH_MEADOW_X0 - 4 && x <= FISH_MEADOW_X1 + 4) {
+        if (x % 2) continue;
+        for (let i = 0; i < 2; i++) {
+          const h1 = fHash(x * 11 + i * 7, seed ^ 0x33af);
+          if (h1 < .1) continue;
+          const ox = px + 2 + ((i * 5 + ((h1 * 4) | 0)) % 13), hh = 5 + ((fHash(x * 3 + i, seed ^ 0x1177) + 1) * 5 | 0);
+          const sway = Math.sin(S.time * .8 + x * .3) * 1.4;
+          ctx.strokeStyle = night ? 'rgba(70,86,78,.55)' : 'rgba(58,68,60,.70)';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(ox, py); ctx.quadraticCurveTo(ox + sway, py - hh * .6, ox + sway * 1.8, py - hh); ctx.stroke();
+          ctx.fillStyle = `rgba(196,240,230,${night ? .55 : .30})`;
+          ctx.beginPath(); ctx.arc(ox + sway * 1.8, py - hh, 1, 0, 7); ctx.fill();
+        }
+        continue;
+      }
+
+      // Валун: раз в 7 тайлов, неправильной формы. Полукруг под обводкой и
+      // давал ту самую цепочку арок вдоль всего берега.
+      if (top < FISH_WATER_Y && x % 7 === 0 && r > .1) {
+        const w = 6 + ((r2 + 1) * 7 | 0), h = 3 + ((r + 1) * 3 | 0), bx = px + 8;
+        ctx.fillStyle = night ? 'rgba(12,15,20,.95)' : 'rgba(26,31,37,.94)';
+        ctx.beginPath();
+        ctx.moveTo(bx - w * .5, py + 1);
+        ctx.lineTo(bx - w * .34, py - h * .75);
+        ctx.lineTo(bx + w * .05, py - h);
+        ctx.lineTo(bx + w * .42, py - h * .55);
+        ctx.lineTo(bx + w * .5, py + 1);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = night ? 'rgba(120,140,165,.14)' : 'rgba(186,198,208,.20)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(bx - w * .34, py - h * .75); ctx.lineTo(bx + w * .05, py - h); ctx.stroke();
+      }
+
+      // Осока — пучками, а не по травинке на каждый тайл.
+      if (top < FISH_WATER_Y && x % 3 === 0 && r > -.35 && r < .5) {
+        ctx.strokeStyle = night ? 'rgba(90,105,120,.26)' : 'rgba(60,68,74,.48)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 3; i++) {
+          const ox = px + 3 + i * 4 + ((r2 * 3) | 0);
+          const len = 4 + Math.abs(fHash(x * 5 + i, seed ^ 0x9f)) * 8;
+          const sway = Math.sin(S.time * .7 + x + i * .8) * 1.6;
+          ctx.beginPath(); ctx.moveTo(ox, py);
+          ctx.quadraticCurveTo(ox + sway, py - len * .6, ox + sway * 2.2, py - len); ctx.stroke();
+        }
+      }
+
+      // Тростник — только у самой воды, где отмель.
+      if (top >= FISH_WATER_Y && top <= FISH_WATER_Y + 4 && x % 2 === 0 && r < -.1) {
+        const n = 2 + ((r2 + 1) * 2 | 0);
+        ctx.strokeStyle = night ? 'rgba(30,40,38,.85)' : 'rgba(38,48,44,.80)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < n; i++) {
+          const ox = px + 2 + i * 4, hh = 12 + ((fHash(x * 7 + i, seed) + 1) * 11 | 0);
+          const sway = Math.sin(S.time * .6 + x + i) * 2;
+          ctx.beginPath(); ctx.moveTo(ox, py); ctx.quadraticCurveTo(ox + sway * .5, py - hh * .6, ox + sway, py - hh); ctx.stroke();
+        }
+      }
+    }
+
+    /* Мостки: настил идёт СПЛОШНОЙ доской, а сваи — отдельными брусьями.
+       Потайловая раскладка резала их на кубы с дырами между опорами. */
+    const c = B.ground[FT_PLANK];
+    const deckTop = {};
+    for (let x = x0; x <= x1; x++) for (let y = FISH_WATER_Y - 6; y < FISH_WATER_Y + 2; y++) {
+      if (world.tile(x, y) !== FT_PLANK) continue;
+      if (deckTop[x] === undefined) deckTop[x] = y;    // верхний тайл колонки = настил
+    }
+    const cols = Object.keys(deckTop).map(Number).sort((p1, p2) => p1 - p2);
+    // сваи
+    for (const x of cols) {
+      if (x % 3) continue;
+      // ОДИН брус на опору и ровно до уреза: пара брусьев читалась объёмной
+      // «3D-ножкой», а свая ниже воды делала мост выше, чем он есть.
+      const px = x * FISH_TILE - S.cam.x, py = deckTop[x] * FISH_TILE - S.cam.y;
+      const bot = FISH_WATER_Y * FISH_TILE - S.cam.y;
+      if (bot <= py) continue;
+      ctx.fillStyle = night ? 'rgba(16,13,10,.92)' : 'rgba(30,25,19,.90)';
+      ctx.fillRect(px + 6, py + 5, 3, bot - py - 5);
+    }
+    // настил цельными пролётами
+    let run = [];
+    const flush = () => {
+      if (!run.length) return;
+      const xa = run[0], xb = run[run.length - 1];
+      const px = xa * FISH_TILE - S.cam.x, py = deckTop[xa] * FISH_TILE - S.cam.y;
+      const w = (xb - xa + 1) * FISH_TILE;
+      // Настил тонкий: тело на всю высоту тайла делало мост толстым брусом и
+      // визуально поднимало его над водой.
+      ctx.fillStyle = night ? '#120f0a' : '#1b1710';
+      ctx.fillRect(px, py, w, 9);
+      ctx.fillStyle = night ? '#1d1811' : '#2b241b';
+      ctx.fillRect(px, py, w, 5);
+      ctx.fillStyle = night ? 'rgba(196,206,214,.10)' : 'rgba(226,232,238,.16)';
+      ctx.fillRect(px, py, w, 1);                       // блик по верхней грани
+      ctx.fillStyle = 'rgba(0,0,0,.45)';
+      ctx.fillRect(px, py + 8, w, 1);                   // тень под настилом
+      ctx.strokeStyle = night ? 'rgba(0,0,0,.5)' : 'rgba(0,0,0,.35)';
+      ctx.lineWidth = 1;
+      for (let x = xa; x <= xb; x++) {                  // швы между досками
+        const sx = x * FISH_TILE - S.cam.x;
+        ctx.beginPath(); ctx.moveTo(sx, py); ctx.lineTo(sx, py + 5); ctx.stroke();
+      }
+      run = [];
+    };
+    for (let i = 0; i < cols.length; i++) {
+      const x = cols[i];
+      if (run.length && (x !== run[run.length - 1] + 1 || deckTop[x] !== deckTop[run[0]])) flush();
+      run.push(x);
+    }
+    flush();
   }
 
+  /* ── АТМОСФЕРА ───────────────────────────────────────────────────
+     Кадр держится не на предметах, а на воздухе между ними: дымка слоями
+     с разным параллаксом, пыль в луче, свет гиганта на кромке берега. */
+  const DUST = Array.from({ length: 90 }, () => ({
+    x: Math.random() * FISH_W * FISH_TILE, y: Math.random() * FISH_H * FISH_TILE,
+    v: fRnd(1.5, 6), p: fRnd(0, 9), s: fRnd(.4, 1.3), par: fRnd(.75, 1),
+  }));
+
+  // Дымка: три полосы над водой, ползут с разной скоростью.
+  function drawHaze(night) {
+    const surf = FISH_WATER_Y * FISH_TILE - S.cam.y;
+    const base = night ? '22,28,36' : '168,176,182';
+    for (let l = 0; l < 3; l++) {
+      const par = .12 + l * .16, y = surf - 6 - l * 16;
+      const off = ((S.time * (3 + l * 4) - S.cam.x * par) % 420 + 420) % 420;
+      const a = (night ? .10 : .16) - l * .025;
+      // Растушёвка по ОБЕИМ осям: у лент с резкой верхней и нижней гранью
+      // получались ровные светлые полки — их принимали за ступени рельефа.
+      for (let i = -1; i < Math.ceil(VW / 210) + 1; i++) {
+        const x = i * 210 + off - 210, w = 150 + l * 40, h = 14 + l * 6;
+        if (x + w < 0 || x - w > VW) continue;
+        ctx.save();
+        ctx.translate(x, y); ctx.scale(1, h / w);
+        const g2 = ctx.createRadialGradient(0, 0, 0, 0, 0, w);
+        g2.addColorStop(0, `rgba(${base},${a})`);
+        g2.addColorStop(.55, `rgba(${base},${a * .45})`);
+        g2.addColorStop(1, `rgba(${base},0)`);
+        ctx.fillStyle = g2;
+        ctx.beginPath(); ctx.arc(0, 0, w, 0, 7); ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+  // Пыль/споры в воздухе — медленно всплывают, дают кадру глубину.
+  function drawDust(dt, night) {
+    for (const d of DUST) {
+      d.y -= d.v * dt; d.p += dt;
+      if (d.y < S.cam.y - 20) d.y = S.cam.y + VH + 20;
+      const sx = d.x - S.cam.x * d.par, sy = d.y - S.cam.y;
+      if (sx < -10 || sx > VW + 10 || sy < -10 || sy > VH + 10) continue;
+      ctx.fillStyle = `rgba(178,222,214,${(night ? .45 : .20) * (.35 + Math.abs(Math.sin(d.p)) * .65)})`;
+      ctx.beginPath(); ctx.arc(sx + Math.sin(d.p * .7) * 3, sy, d.s, 0, 7); ctx.fill();
+    }
+  }
+
+  // Виньетка: кадр гасится к краям, взгляд остаётся на воде.
+  let VIGN = null, vignKey = '';
+  function drawVignette() {
+    const key = VW + 'x' + VH;
+    if (key !== vignKey) {
+      vignKey = key;
+      VIGN = ctx.createRadialGradient(VW / 2, VH * .55, VH * .3, VW / 2, VH * .55, VH * 1.0);
+      VIGN.addColorStop(0, 'rgba(0,0,0,0)'); VIGN.addColorStop(1, 'rgba(0,0,0,.34)');
+    }
+    ctx.fillStyle = VIGN; ctx.fillRect(0, 0, VW, VH);
+  }
+
+  /* Вода — тёмное зеркало, а не голубая жидкость: почти чёрное тело, у кромки
+     отражение неба и штрихи ряби, глубже ничего. Сверху лежит туман — на нём
+     и держится настроение места. */
   function drawWater(night) {
     const x0 = Math.max(0, t2(S.cam.x) - 1), x1 = Math.min(FISH_W - 1, t2(S.cam.x + VW) + 1);
-    const pal = night ? B.waterN : B.water;
-    // ОДИН градиент на кадр, в координатах мира: раньше он строился заново на
-    // каждую колонку (полсотни объектов в кадр), и вдобавок врал — отмель
-    // темнела у дна так же, как омут. Теперь темнота = настоящая глубина.
     const surf = FISH_WATER_Y * FISH_TILE - S.cam.y;
-    const wg = ctx.createLinearGradient(0, surf, 0, surf + world.maxDepth / 1.2 * FISH_TILE);
-    wg.addColorStop(0, pal[0]); wg.addColorStop(1, pal[1]);
-    for (let x = x0; x <= x1; x++) {
-      if (world.wTop[x] < 0) continue;
-      const sx = x * FISH_TILE - S.cam.x, wx = x * FISH_TILE;
-      const top = FISH_WATER_Y * FISH_TILE + waveAt(wx, S.time) - S.cam.y, bot = world.wBot[x] * FISH_TILE - S.cam.y;
-      if (bot < 0 || top > VH) continue;
-      ctx.fillStyle = wg; ctx.fillRect(sx, top, FISH_TILE + 1, bot - top);
-      ctx.fillStyle = night ? 'rgba(150,190,230,.32)' : 'rgba(225,248,255,.55)';
-      ctx.fillRect(sx, top, FISH_TILE + 1, 1);
-      ctx.fillStyle = night ? 'rgba(120,160,210,.10)' : 'rgba(180,230,255,.16)';
-      ctx.fillRect(sx, top + 1, FISH_TILE + 1, 2);
+
+    /* Вода — СПЛОШНОЕ поле от волны до низа кадра. Раньше она резалась по
+       колонкам тайлов, а берег рисуется сглаженным силуэтом — на стыке
+       оставались чёрные щели: их и видно как «пропасть» и «невидимую
+       лестницу». Теперь берег кладётся ПОВЕРХ воды и сам задаёт линию уреза. */
+    let hasWater = false;
+    for (let x = x0; x <= x1 && !hasWater; x++) if (world.wTop[x] >= 0) hasWater = true;
+
+    const waterPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(-4, VH + 40);
+      for (let x = x0; x <= x1; x++) {
+        const wx = x * FISH_TILE;
+        ctx.lineTo(wx - S.cam.x, FISH_WATER_Y * FISH_TILE + waveAt(wx, S.time) - S.cam.y);
+      }
+      ctx.lineTo(VW + 4, VH + 40);
+      ctx.closePath();
+    };
+
+    if (hasWater) {
+      // тело воды: шкала градиента ЭКРАННАЯ — по глубине омута мелкие места
+      // проваливались в чёрное на первых сорока пикселях
+      const wg = ctx.createLinearGradient(0, surf, 0, surf + Math.max(190, VH * .95));
+      wg.addColorStop(0, night ? 'rgba(44,54,66,.94)' : 'rgba(108,118,126,.92)');
+      wg.addColorStop(.30, night ? 'rgba(22,28,36,.96)' : 'rgba(54,62,70,.95)');
+      wg.addColorStop(1, night ? 'rgba(4,6,9,1)' : 'rgba(10,13,17,1)');
+      waterPath(); ctx.fillStyle = wg; ctx.fill();
+
+      ctx.save(); waterPath(); ctx.clip();
+      // отражение неба у кромки
+      const rg = ctx.createLinearGradient(0, surf - 2, 0, surf + 28);
+      rg.addColorStop(0, night ? 'rgba(60,72,90,.30)' : 'rgba(176,183,188,.26)');
+      rg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = rg; ctx.fillRect(0, surf - 2, VW, 32);
+      // штрихи ряби: позиции по хешу, иначе выстраиваются в диагональ
+      ctx.strokeStyle = night ? 'rgba(140,158,180,.10)' : 'rgba(206,214,222,.16)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 14; i++) {
+        const y = surf + 3 + i * 3.6 + Math.sin(S.time * .7 + i) * .4;
+        ctx.globalAlpha = (1 - i / 14) * .7;
+        for (let j = 0; j < 3; j++) {
+          const ph = Math.sin(S.time * 1.1 + i * 1.7 + j * 2.3);
+          const w = 16 + Math.abs(ph) * 44;
+          const wxp = (fHash(i * 31 + j * 7, seed ^ 0x51ed) + 1) * .5 * (FISH_W * FISH_TILE) + ph * 20;
+          const xx = wxp - S.cam.x;
+          if (xx > VW || xx + w < 0) continue;
+          ctx.beginPath(); ctx.moveTo(xx, y); ctx.lineTo(xx + w, y); ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1;
+      /* Дорожка светила — стопка мягких пятен без единой прямой грани.
+         И полоски, и конус с чёткими краями читались как ступени лестницы,
+         уходящей под воду. */
+      const lx = night ? VW * .76 : VW * .26;
+      ctx.globalCompositeOperation = 'lighter';
+      const gh = Math.min(VH - surf, 130);
+      for (let i = 0; i < 9 && gh > 8; i++) {
+        const k = i / 8;
+        const yy = surf + 4 + k * gh;
+        const w = (20 - k * 15) + Math.sin(S.time * 1.4 + i) * 2.2;
+        const h = 7 - k * 3;
+        if (w <= 1) continue;
+        const a2 = (night ? .10 : .09) * (1 - k) ;
+        ctx.save();
+        ctx.translate(lx + Math.sin(S.time * .8 + i * .9) * 3.5, yy);
+        ctx.scale(1, h / w);
+        const pg = ctx.createRadialGradient(0, 0, 0, 0, 0, w);
+        pg.addColorStop(0, night ? `rgba(150,180,220,${a2})` : `rgba(236,232,216,${a2})`);
+        pg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = pg;
+        ctx.beginPath(); ctx.arc(0, 0, w, 0, 7); ctx.fill();
+        ctx.restore();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.restore();
+
+      // кромка воды по волне
+      ctx.beginPath();
+      for (let x = x0; x <= x1; x++) {
+        const wx = x * FISH_TILE, y = FISH_WATER_Y * FISH_TILE + waveAt(wx, S.time) - S.cam.y;
+        if (x === x0) ctx.moveTo(wx - S.cam.x, y); else ctx.lineTo(wx - S.cam.x, y);
+      }
+      ctx.strokeStyle = night ? 'rgba(150,170,195,.26)' : 'rgba(224,232,238,.40)';
+      ctx.lineWidth = 1; ctx.stroke();
     }
-    // Дорожка светила по воде — единственный яркий акцент ночного кадра.
-    const lx = (night ? VW * .74 : VW * .26);
-    ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 16; i++) {
-      const yy = surf + 2 + i * 3, w = 26 - i * 1.2 + Math.sin(S.time * 1.7 + i) * 4;
-      if (yy < 0 || yy > VH || w <= 0) continue;
-      ctx.fillStyle = night ? 'rgba(150,180,230,.045)' : 'rgba(255,240,190,.05)';
-      ctx.fillRect(lx - w / 2 + Math.sin(S.time * .9 + i * .7) * 3, yy, w, 2);
-    }
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = night ? 'rgba(90,140,190,.05)' : 'rgba(160,225,255,.07)';
-    for (let x = x0; x <= x1; x++) {
-      if (world.wTop[x] < 0) continue;
-      const sx = x * FISH_TILE - S.cam.x, wx = x * FISH_TILE;
-      const top = FISH_WATER_Y * FISH_TILE + waveAt(wx, S.time) - S.cam.y, bot = world.wBot[x] * FISH_TILE - S.cam.y;
-      for (let y = top + 6; y < bot; y += 9) ctx.fillRect(sx + Math.sin(wx * .04 + y * .06 + S.time * 1.6) * 5, y, FISH_TILE * .7, 1.5);
-    }
-    ctx.globalCompositeOperation = 'source-over';
+
     for (const r of S.ripples) {
-      ctx.strokeStyle = `rgba(220,245,255,${.5 * r.l})`; ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(200,214,226,${.42 * r.l})`; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.ellipse(r.x - S.cam.x, FISH_WATER_Y * FISH_TILE + waveAt(r.x, S.time) - S.cam.y, r.r, r.r * .3, 0, 0, 7); ctx.stroke();
     }
+
+    // туман над водой
+    const mg = ctx.createLinearGradient(0, surf - 44, 0, surf + 6);
+    const mc = night ? '18,22,28' : '164,172,178';
+    mg.addColorStop(0, `rgba(${mc},0)`);
+    mg.addColorStop(1, `rgba(${mc},${night ? .20 : .28})`);
+    ctx.fillStyle = mg; ctx.fillRect(0, surf - 44, VW, 50);
   }
 
   function drawUnderwater() {
+    // Рыбы — тусклые силуэты, а не белые прямоугольники: на тёмной воде
+    // прежние заплатки читались как мусор в кадре.
     for (const f of S.ambient) {
       const sx = f.x - S.cam.x, sy = f.y - S.cam.y;
       if (sx < -20 || sx > VW + 20) continue;
-      ctx.fillStyle = 'rgba(190,215,235,.5)';
       const d = f.vx > 0 ? 1 : -1, w = 5 * f.s;
-      ctx.fillRect(sx - w / 2, sy, w, 2 * f.s);
-      ctx.fillRect(sx - d * w * .8, sy - 1, 2, 3 * f.s);
+      ctx.fillStyle = 'rgba(168,190,206,.30)';
+      ctx.beginPath(); ctx.ellipse(sx, sy, w * .6, 1.1 * f.s, 0, 0, 7); ctx.fill();
+      ctx.beginPath();                                   // хвост
+      ctx.moveTo(sx - d * w * .55, sy);
+      ctx.lineTo(sx - d * w * .95, sy - 1.6 * f.s);
+      ctx.lineTo(sx - d * w * .95, sy + 1.6 * f.s);
+      ctx.closePath(); ctx.fill();
     }
     for (const b of S.bubbles) { ctx.fillStyle = `rgba(210,240,255,${.45 * b.l})`; ctx.beginPath(); ctx.arc(b.x - S.cam.x, b.y - S.cam.y, b.r, 0, 7); ctx.fill(); }
   }
@@ -1318,8 +1574,8 @@ function fishStart(canvas, world) {
   // «кто это», не превращая берег в список игроков.
   function drawPeerName(p) {
     if (!p.name) return;
-    const x = Math.round(p.x - S.cam.x);
-    const y = Math.round((p.boat && p.boat.ride ? p.boat.y - 22 : p.y - 30) - S.cam.y);
+    const x = p.x - S.cam.x;
+    const y = (p.boat && p.boat.ride ? p.boat.y - 22 : p.y - 30) - S.cam.y;
     if (x < -60 || x > VW + 60 || y < -10 || y > VH + 10) return;
     ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(6,14,22,.55)';
@@ -1334,7 +1590,19 @@ function fishStart(canvas, world) {
     // В лодке — своя поза: стоячий силуэт с шагающими ногами торчал из борта.
     const boat = ghost ? p.boat : S.boat;
     if (boat && boat.ride) return drawSeated(p, ghost, boat);
-    const x = Math.round(p.x - S.cam.x), y = Math.round(p.y - S.cam.y), d = p.dir;
+    // БЕЗ округления: камера дробная, и Math.round здесь заставлял фигуру
+    // прыгать туда-сюда на целый пиксель — та самая тряска на месте и в ходьбе.
+    const x = p.x - S.cam.x, d = p.dir;
+    /* Высота фигуры СГЛАЖИВАЕТСЯ во времени. Физика осталась тайловой (шаг на
+       ступень поднимает разом на 16 пикселей), а берег нарисован пологим — без
+       этого сглаживания подъём по склону выглядел дёрганьем. Большой разрыв
+       (прыжок, падение, телепорт) переносим мгновенно, иначе фигура «плывёт». */
+    const tx = t2(p.x);
+    const onRamp = p.onGround && tx >= 0 && tx < FISH_W && world.topH[tx] < FISH_WATER_Y;
+    const target = onRamp ? shoreAt(p.x) : p.y;
+    if (p._dy === undefined || Math.abs(target - p._dy) > 20 || !p.onGround) p._dy = target;
+    else p._dy += (target - p._dy) * .3;
+    const y = p._dy - S.cam.y;
     // Ходьба: одна фаза на всё тело. Ноги в противофазе, корпус чуть оседает на
     // опорной ноге, плечо ведёт за шагом — этого хватает, чтобы силуэт «жил».
     const ph = p.walk || 0, moving = p.onGround && Math.abs(p.vx || 0) > .12;
@@ -1408,7 +1676,7 @@ function fishStart(canvas, world) {
   // Начало координат — ватерлиния по центру, нос — в сторону d.
   function boatSpace(b) {
     ctx.save();
-    ctx.translate(Math.round(b.x - S.cam.x) + .5, Math.round(b.y - S.cam.y) + .5);
+    ctx.translate(b.x - S.cam.x, b.y - S.cam.y);
     ctx.rotate(b.tilt);
   }
 
@@ -1515,7 +1783,7 @@ function fishStart(canvas, world) {
   // Старик на поляне. Сидит, не встаёт, и так тут и будет сидеть.
   function drawNpc() {
     const wx = FISH_NPC_X * FISH_TILE + 8, wy = world.topH[FISH_NPC_X] * FISH_TILE;
-    const x = Math.round(wx - S.cam.x), y = Math.round(wy - S.cam.y);
+    const x = wx - S.cam.x, y = wy - S.cam.y;
     if (x < -30 || x > VW + 30) return;
     const bob = Math.sin(S.time * .9) * .5;
     ctx.fillStyle = '#3e3a52'; ctx.fillRect(x - 5, y - 11 + bob, 10, 11);       // балахон
@@ -1533,7 +1801,7 @@ function fishStart(canvas, world) {
     for (const p of (_fishState && _fishState.plants) || []) {
       const tx = fClamp(p.x, 0, FISH_W - 1);
       const wx = tx * FISH_TILE + 8, wy = world.topH[tx] * FISH_TILE;
-      const x = Math.round(wx - S.cam.x), y = Math.round(wy - S.cam.y);
+      const x = wx - S.cam.x, y = wy - S.cam.y;
       if (x < -40 || x > VW + 40) continue;
       const total = 24 * 3600, k = fClamp(1 - (p.left || 0) / total, 0, 1);
       const h = Math.round(4 + k * 26);
@@ -1582,7 +1850,7 @@ function fishStart(canvas, world) {
       ctx.fillStyle = '#7ee0a0'; ctx.fillRect(x, y, w * fClamp(1 - F.t / F.react, 0, 1), 5);
     }
     if (S.flash > 0) { ctx.fillStyle = `rgba(255,230,170,${S.flash * .35})`; ctx.fillRect(0, 0, VW, VH); }
-    if (night) { ctx.fillStyle = 'rgba(8,14,32,.28)'; ctx.fillRect(0, 0, VW, VH); }
+    if (night) { ctx.fillStyle = 'rgba(6,8,12,.16)'; ctx.fillRect(0, 0, VW, VH); }
     if (S.msgT > 0 && S.msg) {
       ctx.font = '10px monospace'; ctx.textAlign = 'center';
       const w = ctx.measureText(S.msg).width + 18;
@@ -1592,10 +1860,12 @@ function fishStart(canvas, world) {
     }
     // Подсказка «E» — над головой, ровно когда есть что нажать.
     if (S.hint) {
+      // Внизу кадра, а не над головой: там она перекрывала флаг державы и
+      // полоску заброса — ровно то, на что игрок в этот момент и смотрит.
       ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-      const hx = S.me.x - S.cam.x, hy = S.me.y - S.cam.y - 30;
-      const w = ctx.measureText(S.hint).width + 10;
-      ctx.fillStyle = 'rgba(4,10,18,.75)'; ctx.fillRect(hx - w / 2, hy - 9, w, 12);
+      const hx = VW / 2, hy = VH - 12;
+      const w = ctx.measureText(S.hint).width + 12;
+      ctx.fillStyle = 'rgba(4,10,18,.70)'; ctx.fillRect(hx - w / 2, hy - 9, w, 12);
       ctx.fillStyle = '#cfe6fa'; ctx.fillText(S.hint, hx, hy);
       ctx.textAlign = 'left';
     }
@@ -1621,6 +1891,8 @@ function fishStart(canvas, world) {
     const tgx = S.me.x - VW / 2 + S.me.dir * 26, tgy = S.me.y - VH * .62;
     S.cam.x = fClamp(fLerp(S.cam.x, tgx, .09), 0, FISH_W * FISH_TILE - VW);
     S.cam.y = fClamp(fLerp(S.cam.y, tgy, .07), -60, FISH_H * FISH_TILE - VH);
+    // Камеру НЕ округляем: кадр теперь векторный, дробный сдвиг ему не вредит,
+    // а любое округление здесь даёт рывок на целый экранный пиксель.
 
     // Фон воды: громкость — от того, насколько игрок у воды. Считаем редко,
     // раз в четверть секунды: подстройка гейна и так плавная.
@@ -1638,7 +1910,12 @@ function fishStart(canvas, world) {
     // Кадр под try: одна ошибка рисования не должна навсегда останавливать
     // петлю — берег замирал чёрным экраном, и выйти можно было только Esc.
     try {
-      drawSky(night); drawTiles(); drawNpc(); drawPlants(); drawUnderwater(); drawWater(night);
+      // Вода ПЕРЕД берегом: она заливает сплошное поле, а берег кладётся
+      // поверх и сам режет линию уреза — иначе на стыке ступенчатой воды и
+      // сглаженного силуэта оставались чёрные щели.
+      drawSky(night); drawWater(night); drawUnderwater(); drawTiles();
+      drawNpc(); drawPlants();
+      drawHaze(night);
       drawBoatHull(S.boat);                 // днище — под гребцом
       for (const p of S.parts) { ctx.globalAlpha = fClamp(p.l, 0, 1); ctx.fillStyle = p.c; ctx.fillRect(p.x - S.cam.x, p.y - S.cam.y, 2, 2); }
       ctx.globalAlpha = 1;
@@ -1655,6 +1932,8 @@ function fishStart(canvas, world) {
       const myTip = drawChar(S.me, false);
       drawBoatFront(S.boat, S.me.dir);       // борт и весло — поверх гребца
       drawLine(myTip, S.F);
+      drawDust(dt, night);
+      drawVignette();
       drawOverlayUi(night);
     } catch (e) { if (!S.drawErr) { S.drawErr = 1; console.warn('[fishing] draw', e); } }
     S.raf = requestAnimationFrame(frame);
@@ -1664,9 +1943,12 @@ function fishStart(canvas, world) {
   // Экрану задали новый кадр: пересчитываем всё, что считалось от габаритов.
   // Смена canvas.width/height обнуляет состояние контекста — сглаживание
   // приходится гасить заново, иначе пиксели поплывут.
-  S.onResize = (vw, vh) => {
+  S.onResize = (vw, vh, px) => {
     VW = vw; VH = vh;
-    ctx.imageSmoothingEnabled = false;
+    PX = px || PX;
+    ctx.setTransform(PX, 0, 0, PX, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.lineJoin = ctx.lineCap = 'round';
     mkStars();
   };
 
@@ -1796,7 +2078,7 @@ function fishStyleOnce() {
   .fish-hud{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:#9db2c4}
   .fish-hud b{color:#eaf2fb;font-weight:600}
   .fish-hud .fish-full{color:var(--color-warning,#e0a030)}
-  .fish-cv{image-rendering:pixelated;display:block;cursor:crosshair;background:#05070c;touch-action:none}
+  .fish-cv{display:block;cursor:crosshair;background:#05070c;touch-action:none}
   .fish-exit{margin-left:auto;padding:5px 14px;cursor:pointer;font:inherit;font-size:13px;
     background:var(--bg2,#101922);border:1px solid var(--b1,#22303f);color:var(--t1,#dfe7f2)}
   .fish-exit:hover{border-color:var(--acc,#8fd3ff)}
@@ -2139,9 +2421,15 @@ function fishDescend() {
     const k = fClamp(Math.min(Math.round(availH / FISH_VH), Math.floor(availW / 420)), 1, 6);
     const vw = Math.round(fClamp(availW / k, 360, 960));
     const vh = Math.round(Math.min(fClamp(availH / k, 200, 460), vw * .8));
-    if (cv.width !== vw || cv.height !== vh) {
-      cv.width = vw; cv.height = vh;
-      if (_fish) _fish.onResize(vw, vh);
+    // Буфер — в НАТИВНОМ разрешении экрана, а кадр остаётся логическим:
+    // рисуем всё в координатах vw×vh через трансформ, поэтому векторный фон
+    // выходит чётким на любом dpr, а не растянутым квадратами.
+    const dpr = Math.min(3, devicePixelRatio || 1), px = k * dpr;
+    const bw = Math.round(vw * px), bh = Math.round(vh * px);
+    if (cv.width !== bw || cv.height !== bh || cv.dataset.vw !== String(vw)) {
+      cv.width = bw; cv.height = bh;
+      cv.dataset.vw = String(vw); cv.dataset.vh = String(vh);
+      if (_fish) _fish.onResize(vw, vh, px);
     }
     cv.style.width = vw * k + 'px'; cv.style.height = vh * k + 'px';
     cv.dataset.scale = String(k);
