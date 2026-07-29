@@ -6832,13 +6832,16 @@ function ecPickTradeRes(btn) {
 
 // ── Сборщик флота каравана: выбираешь ПРОЕКТЫ кораблей (грузовые → грузоподъёмность, боевые → эскорт) ──
 // Грузоподъёмность корабля для торговли = настоящая грузоподъёмность KV (kv.cap, кг):
-// остаток вместимости шасси после оружия/модулей/брони. Старые дизайны без KV
-// откатываются на прежнюю ангарную грузоподъёмность (summary.cargo).
+// остаток вместимости шасси после оружия/модулей/брони. Значение заморожено при
+// публикации в data.kv_cargo — читаем ИМЕННО его, зеркало серверного _ship_cargo()
+// (summary считает сервер, и поля kv там нет — раньше отсюда падало в ангары и
+// караван требовал грузовой модуль). Старые дизайны без kv_cargo откатываются на
+// прежнюю ангарную грузоподъёмность (summary.cargo).
 function ecCvShipCargo(unitId) {
   const d = (EC.designs || []).find(x => x.id === unitId); if (!d) return 0;
-  const s = d.summary || {};
-  const kv = (s.kv && +s.kv.cap > 0) ? +s.kv.cap : 0;
-  return kv || (+s.cargo || 0);
+  const s = d.summary || {}, dt = d.data || {};
+  const kvc = (dt.kv_cargo === null || dt.kv_cargo === undefined) ? null : +dt.kv_cargo;
+  return Math.max(0, kvc !== null && !isNaN(kvc) ? kvc : (+s.cargo || 0));
 }
 function ecCvFleetGroups() {
   const by = {};
