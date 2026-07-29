@@ -102,6 +102,19 @@ create table if not exists public.fc_bets (
   created_at timestamptz not null default now(),
   primary key (event_id, fid, on_fid)   -- рев.7: можно ставить на ОБЕ стороны
 );
+-- Миграция ключа для баз, где таблица создана ДО рев.7 (create table if not exists
+-- новый PK не накатывает, а fc_bet делает on conflict (event_id, fid, on_fid)).
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.fc_bets'::regclass and conname = 'fc_bets_pkey'
+       and pg_get_constraintdef(oid) = 'PRIMARY KEY (event_id, fid)'
+  ) then
+    alter table public.fc_bets drop constraint fc_bets_pkey;
+    alter table public.fc_bets add primary key (event_id, fid, on_fid);
+  end if;
+end $$;
 
 alter table public.fc_events  enable row level security;
 alter table public.fc_signups enable row level security;
