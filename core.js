@@ -185,6 +185,24 @@ async function apiFetch(path, opts = {}) {
   }
 }
 const dbGet  = (t, q='')    => apiFetch(`${t}?${q}`);
+// PostgREST режет любой ответ на max-rows (у Supabase = 1000) МОЛЧА — без ошибки.
+// Крупная держава (240 колоний, 1100+ построек) получала только первую тысячу
+// строк colony_buildings: свежепостроенные здания «испарялись» из кабинета,
+// а сервер их по-прежнему считал → «no free cells» на вид пустой планете.
+// Тянем страницами через Range, пока страница приходит полной.
+// ВАЖНО: q обязан содержать order=… — без сортировки страницы неустойчивы.
+async function dbGetAll(t, q = '', page = 1000) {
+  const out = [];
+  for (let from = 0; from < page * 50; from += page) {
+    const chunk = await apiFetch(`${t}?${q}`, {
+      headers2: { 'Range-Unit': 'items', 'Range': `${from}-${from + page - 1}` },
+    });
+    if (!Array.isArray(chunk)) return chunk;
+    out.push(...chunk);
+    if (chunk.length < page) break;
+  }
+  return out;
+}
 const dbPost = (t, b)       => apiFetch(t,       { method:'POST',  body: JSON.stringify(b) });
 const dbPatch= (t, q, b)    => apiFetch(`${t}?${q}`, { method:'PATCH', body: JSON.stringify(b) });
 const dbDel  = (t, q)       => apiFetch(`${t}?${q}`, { method:'DELETE' });

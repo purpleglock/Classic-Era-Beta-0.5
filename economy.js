@@ -2048,8 +2048,8 @@ async function _ecLoadCoreImpl() {
   ecResetDeferred();
   const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger, warStatus, battlesList, goodsRecipeRows, resRarityRows, autosellCfg, stepLimit] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
-    dbGet('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
-    dbGet('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
+    dbGetAll('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
+    dbGetAll('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('faction_units', `or=(faction_id.eq.${fid},faction_id.is.null)&order=name.asc`).catch(() => []),
     dbGet('unit_production', `faction_id=eq.${fid}&order=created_at.desc`).catch(() => []),
     // stars/multi — кратность (_multi_stars.sql): stars = компаньоны [{letter,greek,…}],
@@ -2062,7 +2062,7 @@ async function _ecLoadCoreImpl() {
     dbGet('loans', `order=created_at.desc`).catch(() => []),
     // ТОЛЬКО свои операции (приватность); цель видит входящие через RPC (исполнитель скрыт, если не раскрыт)
     dbGet('spy_missions', `actor_fid=eq.${fid}&order=created_at.desc&limit=40`).catch(() => []),
-    dbGet('colony_projects', `faction_id=eq.${fid}&order=ready_at.asc`).catch(() => []),
+    dbGetAll('colony_projects', `faction_id=eq.${fid}&order=ready_at.asc`).catch(() => []),
     ecRpc('spy_incoming').catch(() => []),
     // Отношения: только свои пары (RLS отдаёт где я from или to)
     dbGet('faction_relations', `or=(from_fid.eq.${fid},to_fid.eq.${fid})`).catch(() => []),
@@ -6898,10 +6898,18 @@ function ecCvShipCargo(unitId) {
   const kvc = (dt.kv_cargo === null || dt.kv_cargo === undefined) ? null : +dt.kv_cargo;
   return Math.max(0, kvc !== null && !isNaN(kvc) ? kvc : (+s.cargo || 0));
 }
+// Осиротевший корабль — проект удалён из конструктора, ТТХ читать неоткуда.
+// Груз у него всегда 0 (и на сервере тоже: _ship_cargo join'ится на faction_units),
+// поэтому он падает в эскорт. Помечаем явно, иначе выглядит как баг «считает
+// грузовик эскортом». Новых сирот не будет — удаление проекта с юнитами в
+// составе режет триггер _faction_unit_delete_guard.
+function ecCvShipOrphan(unitId) {
+  return !(EC.designs || []).some(x => x.id === unitId);
+}
 function ecCvFleetGroups() {
   const by = {};
   (EC.roster || []).filter(r => r.category === 'ship').forEach(r => {
-    if (!by[r.unit_id]) by[r.unit_id] = { id: r.unit_id, name: r.unit_name || 'Корабль', qty: 0, cargo: ecCvShipCargo(r.unit_id) };
+    if (!by[r.unit_id]) by[r.unit_id] = { id: r.unit_id, name: r.unit_name || 'Корабль', qty: 0, cargo: ecCvShipCargo(r.unit_id), orphan: ecCvShipOrphan(r.unit_id) };
     by[r.unit_id].qty += r.qty || 0;
   });
   const all = Object.values(by);
@@ -6973,8 +6981,9 @@ function ecCvFleetHtml() {
       </span></div>`;
   };
   const frHtml = freighters.length ? freighters.map(d => row(d, `📦 груз ${ecNum(d.cargo)}`, true)).join('')
-    : '<div class="ec-empty" style="padding:6px">Нет грузовых кораблей — постройте корабль с грузовыми ангарами (Конструктор → Корабль) и заложите его в Военпроме.</div>';
-  const wsHtml = warships.length ? warships.map(d => row(d, '⚔ эскорт', false)).join('')
+    : `<div class="ec-empty" style="padding:6px">Нет грузовых кораблей — постройте корабль с грузовыми ангарами (Конструктор → Корабль) и заложите его в Военпроме.${
+        warships.some(d => d.orphan) ? ' <b>Внимание:</b> у части ваших кораблей удалён проект в конструкторе — их трюм посчитать невозможно, они годятся только в эскорт. Спишите их и постройте заново.' : ''}</div>`;
+  const wsHtml = warships.length ? warships.map(d => row(d, d.orphan ? '⚔ эскорт · проект удалён из конструктора, трюм не читается' : '⚔ эскорт', false)).join('')
     : '<div class="ec-empty" style="padding:6px">Нет боевых кораблей для эскорта.</div>';
 
   // Информационная панель о состоянии флота

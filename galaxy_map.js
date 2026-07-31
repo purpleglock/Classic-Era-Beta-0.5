@@ -236,7 +236,7 @@ async function loadGalaxyData() {
       // иначе переименование/перенос показывались бы как при регистрации.
       const [apps, cols] = await Promise.all([
         dbGet('faction_applications', 'status=eq.approved&select=faction_id,owner_id,herald_url,leader,gov,name,system_id,planet_name,capital_env'),
-        dbGet('colonies', 'select=*').catch(() => []),
+        dbGetAll('colonies', 'select=*&order=id.asc').catch(() => []),
       ]);
       GM.colonies = cols || [];   // реальные колонии (для панели системы)
       // Дозвёздные цивилизации: показываются строкой в составе системы.
@@ -279,7 +279,7 @@ async function loadGalaxyData() {
       if (user) { const mine = (apps || []).find(a => a.owner_id === user.id && a.faction_id); if (mine) GM.myFid = mine.faction_id; }
       if (GM.myFid) {
         try {
-          const blds = await dbGet('colony_buildings', `faction_id=eq.${GM.myFid}&select=colony_id,btype,slots_open`);
+          const blds = await dbGetAll('colony_buildings', `faction_id=eq.${GM.myFid}&select=colony_id,btype,slots_open&order=id.asc`);
           (blds || []).forEach(b => {
             const slots = b.slots_open || 0;
             GM.devByCol[b.colony_id] = (GM.devByCol[b.colony_id] || 0) + slots;

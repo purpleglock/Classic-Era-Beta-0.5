@@ -114,8 +114,8 @@ async function adLoadCore() {
 // Детали — счётчики и содержимое вкладок (без тяжёлого planets jsonb)
 async function adLoadDetails() {
   const [cols, blds, prod, systems, designs, routes, faiths, portraits] = await Promise.all([
-    dbGet('colonies',         'select=*').catch(() => []),
-    dbGet('colony_buildings', 'select=*').catch(() => []),
+    dbGetAll('colonies',      'select=*&order=id.asc').catch(() => []),
+    dbGetAll('colony_buildings','select=*&order=id.asc').catch(() => []),
     dbGet('unit_production',  'select=*').catch(() => []),
     dbGet('map_systems',      'select=id,name,faction').catch(() => []),               // без planets/x,y — экономим ~25 КБ
     dbGet('faction_units',    'select=id,category,name,faction_id&order=name.asc').catch(() => []), // без тяжёлых data/summary

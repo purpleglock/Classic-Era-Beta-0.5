@@ -3360,6 +3360,19 @@ function cnEdit(id) {
 async function cnDelete(id) {
   const u = (CN.catUnits || []).find(x => x.id === id); if (!u) return;
   if (!cnCanManage(u)) { toast('Недостаточно прав', 'err'); return; }
+  // Проект с построенными юнитами удалять нельзя: экземпляры остаются в составе
+  // без ТТХ (караван считает такой корабль эскортом, списание идёт без возврата).
+  // Сервер это же режет триггером _faction_unit_delete_guard — здесь только
+  // ранняя, объяснимая остановка, чтобы не ловить сырую ошибку базы.
+  let inService = 0;
+  try {
+    const rows = await dbGet('unit_production', `unit_id=eq.${id}&select=qty`) || [];
+    inService = rows.reduce((a, r) => a + (+r.qty || 0), 0);
+  } catch (e) {}
+  if (inService > 0) {
+    toast(`Нельзя удалить: ${inService} ед. этого проекта в составе или в очереди. Сначала спишите их (Экономика → Вооружённые силы → карточка юнита → «Списать из состава»).`, 'err');
+    return;
+  }
   if (!confirm('Удалить «' + (u.name || 'юнит') + '» безвозвратно?')) return;
   try {
     await dbDel('faction_units', 'id=eq.' + id);
@@ -3367,5 +3380,10 @@ async function cnDelete(id) {
     cnCloseView();
     toast('Удалено', 'inf');
     cnPaintCatalog();
-  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+  } catch (e) {
+    const m = String(e.message || '');
+    toast(m.includes('design in service')
+      ? 'Нельзя удалить: юниты этого проекта ещё в составе — сначала спишите их.'
+      : 'Ошибка: ' + m, 'err');
+  }
 }

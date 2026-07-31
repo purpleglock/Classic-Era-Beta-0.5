@@ -105,7 +105,7 @@ begin
   -- не срабатывало и исследование уезжало ещё на сутки («поставил вчера — сегодня не
   -- готово»). Допуск закрывает слот на первом же суточном тике после ~18–24 ч.
   for slot in select value from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) loop
-    if (slot->>'r') is not null and (slot->>'r')::timestamptz <= now() + interval '6 hours' then
+    if (slot->>'r') is not null and (slot->>'r')::timestamptz <= now() + interval '10 minutes' then
       done_ids := array_append(done_ids, slot->>'n');
     else
       kept := kept || slot;

@@ -37,10 +37,10 @@ begin
   if not found then return; end if;
 
   -- 1) завершить готовые слоты → research[]
-  -- Допуск 6 ч оставлен как страховка от дрейфа времени тика и для старых
-  -- слотов с r = старт+24 ч, записанных до этой правки.
+  -- Допуск 10 минут: только на дрейф времени суточного тика (00:05 UTC).
+
   for slot in select value from jsonb_array_elements(coalesce(eco.research_slots,'[]'::jsonb)) loop
-    if (slot->>'r') is not null and (slot->>'r')::timestamptz <= now() + interval '6 hours' then
+    if (slot->>'r') is not null and (slot->>'r')::timestamptz <= now() + interval '10 minutes' then
       done_ids := array_append(done_ids, slot->>'n');
     else
       kept := kept || slot;

@@ -849,7 +849,7 @@ async function frLoadCapitals() {
   if (_frCapCache && Date.now() - _frCapCacheTs < 30000) return _frCapCache;
   try {
     const [caps, sys] = await Promise.all([
-      dbGet('colonies', 'select=faction_id,system_id,planet_name,planet_type,is_capital').catch(() => dbGet('colonies', 'select=faction_id,system_id,planet_name,planet_type').catch(() => [])),
+      dbGetAll('colonies', 'select=faction_id,system_id,planet_name,planet_type,is_capital&order=id.asc').catch(() => dbGetAll('colonies', 'select=faction_id,system_id,planet_name,planet_type&order=id.asc').catch(() => [])),
       dbGet('map_systems', 'select=id,name').catch(() => []),
     ]);
     const sysNames = {}; (sys || []).forEach(s => { sysNames[s.id] = s.name; });
