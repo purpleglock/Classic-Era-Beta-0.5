@@ -146,17 +146,10 @@
 #sb .logo, #sb .sb-srch{ border-bottom:none !important; }
 #sb .sb-foot{ border-top:none !important; }
 
-/* Один чистый киберпанк-срез в нижнем углу панели — ОДИН угол,
-   без второго на верху (там панель встречается с шапкой и второй
-   срез создавал плавающий кусок не на своём месте). */
+/* Панель прямоугольная — без выреза на самой себе. */
 #sb{
   border-left:none !important; border-right:none !important;
-  clip-path: polygon(
-    0 0, 100% 0,
-    100% calc(100% - var(--tf-bay)),
-    calc(100% - var(--tf-bay)) 100%,
-    0 100%
-  ) !important;
+  clip-path:none !important;
 }
 #sb::before{ content:none !important; }
 /* Кромки-обводки нет: рисованный контур — не наш приём. Борт читается
