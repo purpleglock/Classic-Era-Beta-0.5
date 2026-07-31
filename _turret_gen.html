@@ -1,0 +1,166 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Генератор орудий</title>
+<style>
+ :root{--b1:#0a1418;--w1:#16323a;--te:#3fe0d0;--t2:#8fb0bd;--gd:#c9a24b}
+ *{box-sizing:border-box}
+ body{margin:0;background:#07141a;color:#cfe4ff;font:12px/1.5 monospace;display:flex;height:100vh}
+ #panel{width:320px;flex:none;overflow:auto;padding:14px;background:#0a1c23;border-right:1px solid var(--w1)}
+ #stage{flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;
+   background:radial-gradient(ellipse at 50% 45%,#123038,#07141a 70%)}
+ #stage svg{max-width:94%;max-height:94vh;filter:drop-shadow(0 14px 30px rgba(0,0,0,.65))}
+ #stats{width:230px;flex:none;overflow:auto;padding:14px;background:#0a1c23;border-left:1px solid var(--w1)}
+ h4{margin:16px 0 6px;color:var(--te);text-transform:uppercase;letter-spacing:1px;font-size:10px}
+ h4:first-child{margin-top:0}
+ label{display:block;margin:7px 0 2px;color:var(--t2);font-size:10px;text-transform:uppercase;letter-spacing:.6px}
+ input[type=range]{width:100%;accent-color:var(--te)}
+ select,input[type=text]{width:100%;background:var(--w1);color:#cfe4ff;border:none;padding:5px 7px;font:12px monospace}
+ input[type=color]{width:100%;height:26px;background:none;border:none;padding:0}
+ .v{float:right;color:var(--gd)}
+ button{width:100%;margin-top:12px;padding:7px;background:var(--te);color:#06202a;border:none;
+   font:700 11px monospace;text-transform:uppercase;letter-spacing:1px;cursor:pointer}
+ .row2{display:flex;gap:8px}.row2>*{flex:1}
+ table{width:100%;border-collapse:collapse}
+ td{padding:3px 0;font-size:11px;border-bottom:1px solid #12262d}
+ td:last-child{text-align:right;color:#e8eef5;font-weight:700}
+ td:first-child{color:var(--t2)}
+ .big td:last-child{color:var(--gd);font-size:13px}
+ .btn-back { position:absolute; top:10px; left:10px; background:var(--w1); color:var(--te); padding:6px 12px; text-decoration:none; font-weight:bold; border-radius:4px; z-index:999; border:1px solid var(--te); font-size:11px; text-transform:uppercase; letter-spacing:1px; }
+ .banner-tests { position:absolute; top:10px; left:50%; transform:translateX(-50%); background:var(--gd); color:#0a1418; padding:4px 12px; font-weight:bold; border-radius:4px; z-index:999; box-shadow:0 2px 10px rgba(0,0,0,0.5); text-transform:uppercase; letter-spacing:1px; font-size:11px; white-space:nowrap; }
+ @media (max-width: 768px) {
+   body { flex-direction: column; height: auto; min-height: 100vh; }
+   #panel { width: 100%; border-right: none; order: 2; padding: 20px 16px; }
+   #stage { width: 100%; height: 55vh; min-height: 380px; flex: none; order: 1; border-bottom: 2px solid var(--w1); position: relative; }
+   #stats { width: 100%; border-left: none; border-top: 2px solid var(--w1); order: 3; padding: 20px 16px 40px; }
+   .banner-tests { top: 56px; padding: 8px 16px; font-size: 12px; width: 90%; white-space: normal; text-align: center; }
+   .btn-back { padding: 10px 16px; font-size: 12px; top: 12px; left: 12px; }
+   
+   /* Touch targets */
+   select, input[type=text] { padding: 10px; font-size: 14px; }
+   button { padding: 12px; font-size: 13px; margin-top: 16px; }
+   input[type=color] { height: 44px; }
+   input[type=range] { margin: 10px 0; }
+   label { font-size: 11px; margin: 12px 0 4px; }
+   h4 { font-size: 12px; margin: 24px 0 10px; }
+   h4:first-child { margin-top: 0; }
+   
+   /* Tables */
+   td { padding: 6px 0; font-size: 12px; }
+   .big td:last-child { font-size: 15px; }
+ }
+</style>
+<a href="index.html#constructors" class="btn-back">&#8592; Назад</a>
+<div class="banner-tests">Внимание: идут тесты</div>
+<div id="panel"></div><div id="stage"></div><div id="stats"></div>
+<script src="constructors_kv.js"></script>
+<script src="turret_gen.js"></script>
+<script>
+const cfg = Object.assign({}, TG.DEFAULTS);
+const SL = [
+  ['caliber','Калибр, мм',6,500,1],
+  ['barrels','Стволов',1,8,1],
+  ['barrelLen','Длина ствола, клб',15,110,1],
+  ['size','Масштаб',0.4,3,0.05],
+  ['yaw','Поворот башни, °',-180,180,1],
+  ['detail','Детализация',0,1,0.05],
+  ['seed','Сид',1,9999,1],
+];
+// Технологии и компоновка сужаются под выбранный класс и число стволов —
+// нельзя предлагать пулемёт на пусковой установке.
+function options(){
+  const R = TG.rulesOf(cfg.klass);
+  const techs = {}; for(const t of R.techs) if(TG.TECHS[t]) techs[t] = TG.TECHS[t].ru;
+  const lay = {};
+  const LMIN = { row:1, stacked:2, quad:4, rotary:3 };
+  for(const l in TG.LAYOUTS)
+    if((cfg.barrels|0) >= (LMIN[l]||1)) lay[l] = TG.LAYOUTS[l];
+  return [
+    ['platform','Платформа', TG.PLATFORMS],
+    ['klass','Класс',       Object.fromEntries(Object.entries(TG.CLASSES).map(([k,v])=>[k,v.ru]))],
+    ['tech','Технология',   techs],
+    ['layout','Компоновка', lay],
+  ];
+}
+const NUM = n => n>=1e9 ? (n/1e9).toFixed(2)+' млрд'
+              : n>=1e6 ? (n/1e6).toFixed(2)+' млн'
+              : n.toLocaleString('ru-RU');
+
+function build(){
+  let h = '<h4>Пресет из каталога</h4><select id="kv"><option value="">— вручную —</option></select>';
+  h += '<h4>Конфигурация</h4>';
+  for(const [k,l,o] of options())
+    h += `<label>${l}</label><select data-k="${k}">`
+       + Object.entries(o).map(([v,n])=>`<option value="${v}"${cfg[k]===v?' selected':''}>${n}</option>`).join('')
+       + '</select>';
+  h += '<h4>Параметры</h4>';
+  const R = TG.rulesOf(cfg.klass);
+  for(let [k,l,mn,mx,st] of SL){
+    if(k==='caliber'){ mn=R.cal[0]; mx=R.cal[1]; }
+    if(k==='barrelLen'){ mn=R.len[0]; mx=R.len[1]; }
+    const lim = (k==='caliber'||k==='barrelLen') ? ` <span style="opacity:.55">${mn}–${mx}</span>` : '';
+    h += `<label>${l}${lim}<span class="v" id="v_${k}">${cfg[k]}</span></label>`
+       + `<input type="range" data-k="${k}" min="${mn}" max="${mx}" step="${st}" value="${cfg[k]}">`;
+  }
+  h += '<h4>Окраска</h4><div class="row2">'
+     + `<div><label>Основной</label><input type="color" data-k="tint" value="${cfg.tint}"></div>`
+     + `<div><label>Акцент</label><input type="color" data-k="accent" value="${cfg.accent}"></div></div>`
+     + '<button id="dl">Скачать SVG</button>';
+  document.getElementById('panel').innerHTML = h;
+
+  const kv = document.getElementById('kv');
+  if(window.KV){
+    // Только башенные орудия: ножи, пистолеты, гранаты и ангарные звенья
+    // генератору турелей не нужны. Группируем по категории каталога.
+    const lib = TG.turretCatalog(KV.weaponLibrary);
+    const byCat = {};
+    for(const n in lib) (byCat[lib[n].category||'Прочее'] ||= []).push(n);
+    for(const cat of Object.keys(byCat).sort()){
+      const g = document.createElement('optgroup'); g.label = cat;
+      for(const n of byCat[cat].sort()){
+        const o = document.createElement('option'); o.value = n; o.textContent = n; g.appendChild(o);
+      }
+      kv.appendChild(g);
+    }
+    kv.onchange = e => { if(!e.target.value) return;
+      Object.assign(cfg, TG.fromKV(e.target.value, KV.weaponLibrary[e.target.value]));
+      build(); draw(); };
+  }
+  document.getElementById('panel').oninput = e => {
+    const k = e.target.dataset.k; if(!k) return;
+    cfg[k] = e.target.type==='range' ? parseFloat(e.target.value) : e.target.value;
+    // Класс и число стволов меняют сам набор допустимых опций
+    if(k==='klass' || k==='barrels'){ Object.assign(cfg, TG.normalize(cfg)); build(); draw(); return; }
+    Object.assign(cfg, TG.normalize(cfg));
+    const b = document.getElementById('v_'+k); if(b) b.textContent = cfg[k];
+    draw();
+  };
+  document.getElementById('dl').onclick = () => {
+    const b = new Blob([TG.render(cfg)], {type:'image/svg+xml'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b); a.download = 'turret.svg'; a.click();
+  };
+}
+function draw(){
+  document.getElementById('stage').innerHTML = TG.render(cfg);
+  const s = TG.stats(cfg);
+  const RES = {blackmetall:'Чёрный металл',coloredmetall:'Цветной металл',
+               rudametall:'Рудный металл',kristall:'Кристаллы',staarvis:'Ставрис'};
+  let h = '<h4>Расчётные ТТХ</h4><table class="big">'
+    + `<tr><td>Урон</td><td>${NUM(s.damage)}</td></tr>`
+    + `<tr><td>Цена</td><td>${NUM(s.price)} ГС</td></tr></table>`
+    + '<table>'
+    + `<tr><td>Урон за ствол</td><td>${NUM(s.salvo)}</td></tr>`
+    + `<tr><td>Масса</td><td>${NUM(s.mass)} кг</td></tr>`
+    + `<tr><td>Энергия</td><td>${NUM(s.energy)}</td></tr>`
+    + `<tr><td>Дальность</td><td>${s.dalnost} гекс.</td></tr>`
+    + `<tr><td>Урона на энергию</td><td>${s.dmgPerEnergy}</td></tr>`
+    + `<tr><td>Темп</td><td>${NUM(s.rof)}</td></tr>`
+    + `<tr><td>Боеприпас</td><td>${({kinetic:'кинетика',energy:'энергия',missile:'ракеты'})[s.kind]}</td></tr>`
+    + '</table><h4>Коэффициенты</h4><table>'
+    + `<tr><td>Технология</td><td>×${s.tC}</td></tr>`
+    + `<tr><td>Тип урона</td><td>+${s.dC}</td></tr>`
+    + `<tr><td>Класс</td><td>×${s.cC}</td></tr>`
+    + '</table><h4>Ресурсы на постройку</h4><table>';
+  for(const k in s.resurs) if(s.resurs[k]>0) h += `<tr><td>${RES[k]}</td><td>${s.resurs[k]}</td></tr>`;
+  document.getElementById('stats').innerHTML = h + '</table>';
+}
+build(); draw();
+</script>

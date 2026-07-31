@@ -80,6 +80,7 @@ const CN_HUB = [
   { slug: 'build-ship', ico: '🚀', name: 'Корабельная верфь', desc: 'Космические корабли: от корветов до дредноутов. Реактор, броня, щиты, ангары, вооружение.', cat: 'ship' },
   { slug: 'build-army', ico: '🪖', name: 'Планетарный арсенал', desc: 'Единый конструктор армии: пехота, БТР, танки, артиллерия, дроны, авиация. Ходовая, броня, орудия — по правилам Кваквантора.', cat: 'army' },
   { slug: 'build-alloy', ico: '⚗', name: 'Материаловедение', desc: 'Своя броня из настоящих ресурсов. Пропорции решают: реакции и пороги рождают HP, стойкости и трейты. Сплавы идут в слот брони всех конструкторов.', cat: 'alloy' },
+  { slug: 'turret-gen', url: '_turret_gen.html', ico: '🔫', name: 'Превью конструктора орудий', desc: 'Генератор внешнего вида и ТТХ корабельных орудий.', cat: 'turret' },
   // Конструктор дивизий убран из хаба: армии теперь формируются из готовых юнитов
   // («Звёздный марш»). Билдер доступен только для правки уже созданных дивизий (cnEdit).
 ];
@@ -92,7 +93,7 @@ async function cnRenderHub() {
   const facLine = fac
     ? `<div class="cn-hub-faction">От имени фракции: <b style="color:${esc(frReadable(fac.faction_color))}">${esc(fac.faction_name || '—')}</b></div>`
     : cnIsStaff() ? `<div class="cn-hub-faction">Режим администрации — фракция выбирается при публикации.</div>` : '';
-  const cards = CN_HUB.map(h => `<div class="cn-hub-card" onclick="go('${h.slug}')">
+  const cards = CN_HUB.map(h => `<div class="cn-hub-card" onclick="${h.url ? `location.href='${h.url}'` : `go('${h.slug}')`}">
       <div class="cn-hub-ico">${h.ico}</div>
       <div class="cn-hub-main">
         <div class="cn-hub-name">${esc(h.name)}</div>
