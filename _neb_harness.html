@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Туманности: стенд</title>
+<style>body{margin:0;background:#05060b}canvas{display:block;width:100vw;height:auto}</style>
+<canvas id="cv" width="1600" height="1062"></canvas>
+<script src="galaxy_map.js"></script>
+<script>
+// Стенд для глазной проверки слоя туманностей БЕЗ игры: подкладываем синтетическую
+// текстуру (клубы шума) вместо assets/map/nebula/neb_*.webp и рисуем поле облаков
+// поверх звёздной пыли в тех же мировых координатах, что и карта.
+function fakeTex(seed) {
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S;
+  const x = c.getContext('2d');
+  for (let i = 0; i < 260; i++) {
+    const h1 = gmEdgeHash(i * 2.3 + seed, i * 5.7 + seed * 3);
+    const h2 = gmEdgeHash(i * 7.1 + seed * 2, i * 1.9 + seed);
+    const h3 = gmEdgeHash(i * 3.3 + seed * 5, i * 9.1 + seed * 7);
+    const r = S * (0.03 + h3 * 0.16);
+    const g = x.createRadialGradient(h1 * S, h2 * S, 0, h1 * S, h2 * S, r);
+    g.addColorStop(0, 'rgba(255,255,255,' + (0.05 + h3 * 0.12).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(h1 * S, h2 * S, r, 0, 6.2832); x.fill();
+  }
+  const im = new Image(); im.src = c.toDataURL('image/png');
+  return im;
+}
+// «галактика»: россыпь систем в центральном облаке — чтобы видеть, обходят ли
+// туманности обжитой космос
+// 9 «держав» кучками с проёмами между ними — иначе не проверить карманы
+GM.systems = [];
+for (let c = 0; c < 9; c++) {
+  const ca = gmEdgeHash(c * 4.1, c * 7.7) * 6.2832;
+  const cr = 0.14 + gmEdgeHash(c * 2.3, c * 9.1) * 0.24;
+  const cx = GM_W * (0.5 + Math.cos(ca) * cr), cy = GM_H * (0.5 + Math.sin(ca) * cr * 0.95);
+  for (let i = 0; i < 26; i++) {
+    const a = gmEdgeHash(c * 11.3 + i * 1.7, c * 3.7 + i * 5.9) * 6.2832;
+    const r = Math.pow(gmEdgeHash(c * 5.1 + i * 2.9, c * 8.3 + i * 1.3), 0.65) * GM_W * 0.085;
+    GM.systems.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r * 0.9 });
+  }
+}
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+GMM.vw = cv.width; GMM.vh = cv.height;
+function draw() {
+  const camS = cv.width / GM_W;
+  GMM.s = camS;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.setTransform(camS, 0, 0, camS, 0, 0);
+  gmmPaintSpace(ctx, camS, 0, 0, GM_W, GM_H);
+  // отметим системы, чтобы видеть соседство облаков и территорий
+  ctx.fillStyle = '#7fd0ff';
+  GM.systems.forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, 14, 0, 6.2832); ctx.fill(); });
+}
+setTimeout(draw, 400);
+</script>

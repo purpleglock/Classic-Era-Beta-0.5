@@ -43,6 +43,7 @@ const GM_ICO = {
   unions: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="7" r="2.6"/><circle cx="12" cy="17" r="2.6"/><path d="M8.7 8.6l6.6 0M8 9.2l2.6 5.6M16 9.2l-2.6 5.6"/></svg>',
   blocked: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M6.3 17.7L17.7 6.3"/></svg>',
   civs: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4L20 18H4z"/><path d="M7.6 13.2h8.8"/></svg>',
+  nebula: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.2 14.6a3.2 3.2 0 011.1-5.4 4.4 4.4 0 018.2-2.1 3.6 3.6 0 014.9 2.2 3.3 3.3 0 01.4 6.4"/><circle cx="9" cy="12.4" r="0.9"/><circle cx="14.6" cy="10.4" r="0.7"/><path d="M6 18.4h12"/></svg>',
   march: '<svg class="gm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-14M12 20l4-14M20 20l-2-7"/><path d="M3 13h18"/></svg>',
 };
 function gmCtlBtns(opts) {
@@ -63,6 +64,7 @@ function gmCtlBtns(opts) {
         </div>
         <div class="gm-ctl-group${GM.ctlCollapsed ? ' gm-collapsed' : ''}" id="gm-ctl-group">
         <div class="gm-ctl-sec">Слои</div>
+        ${row('neb', GM.showNeb, GM_ICO.nebula, 'Туманности', 'gmToggleNebula()')}
         ${row('borders', GM.showBorders, GM_ICO.borders, 'Границы фракций', 'gmToggleBorders()')}
         ${row('sectors', GM.showSectors, GM_ICO.sectors, 'Сектора', 'gmToggleSectors()')}
         ${row('unions', GM.showUnions, GM_ICO.unions, 'Союзы', 'gmToggleUnions()')}
@@ -116,6 +118,7 @@ const GM = {
   showCivs: false,               // слой «Дозвёздные миры»: 🜃 над системами (по умолчанию ВЫКЛ)
   showUnions: false,             // режим отображения союзов (федерации/конфедерации)
   unions: null,                  // ленивая загрузка союзов: [{id,name,color,kind,fids:[]}] (null=не грузили)
+  showNeb: true,                 // фоновый слой туманностей (текстуры assets/map/nebula)
   showBlocked: false,            // режим «закрытые границы» (куда нашим флотам нельзя)
   showOccup: false,              // ВОЙНА: слой «Оккупация» — флаги оккупантов над занятыми системами
   occup: null,                   // [{system_id,occupier,occupier_name,occupier_color,owner,...}] (RPC occupations_all; null=не грузили)
@@ -631,6 +634,13 @@ function gmTouchMove(e) {
 function gmTouchEnd() { GM.touch = null; }
 
 // ── Контролы (границы / зум / фуллскрин) ────────────────────
+// Фоновые туманности: слой запечён в растр-кэш вместе с космофоном, поэтому
+// переключение требует перепечь битмап (не просто пометить кадр грязным).
+function gmToggleNebula() {
+  GM.showNeb = !GM.showNeb;
+  document.getElementById('gm-ctl-neb')?.classList.toggle('gm-active', GM.showNeb);
+  if (GMM.active) gmmRaster();
+}
 function gmToggleBorders() {
   GM.showBorders = !GM.showBorders;
   document.getElementById('gm-ctl-borders')?.classList.toggle('gm-active', GM.showBorders);
@@ -7160,7 +7170,8 @@ function gmmBezPt(g, u) {
 function gmmPaintSpace(ctx, camS, wx0, wy0, wx1, wy1, stars) {
   ctx.fillStyle = '#05060b';
   ctx.fillRect(wx0, wy0, wx1 - wx0, wy1 - wy0);
-  // Цветные туманности отключены (минимализм): ровный тёмный космофон без пятен.
+  // Глубокий фон: облака туманностей (текстуры) — под звёздной пылью.
+  gmmPaintNebula(ctx, camS, wx0, wy0, wx1, wy1);
   if (stars !== false) gmmPaintStarfield(ctx, camS, wx0, wy0, wx1, wy1);
   ctx.strokeStyle = 'rgba(120,160,220,.14)'; ctx.lineWidth = 1.5 / camS;
   ctx.strokeRect(0, 0, GM_W, GM_H);
@@ -8233,6 +8244,377 @@ function gmmPaintUnionLabels(ctx, camS) {
 // Цветовые «температуры» фоновых звёзд — большинство белые, часть голубовато-
 // белые, немного тёплых. Даёт живую россыпь вместо однотонного крапа.
 const GMM_SF_COL = ['255,255,255', '255,255,255', '210,226,255', '188,210,255', '255,232,208', '255,246,224'];
+// ── СЛОЙ ТУМАННОСТЕЙ ─────────────────────────────────────────
+// Пустоту между звёздами затягивают ПРОЦЕДУРНЫЕ облака — без картинок. Растровые
+// текстуры отсюда выпилены сознательно: большие полупрозрачные drawImage'ы (плюс
+// тонирование каждой) заметно роняли карту, а пользы над чёрным фоном давали мало.
+// Теперь всё, что рисуется, — 48 маленьких спрайтов-масок (8 форм × 6 тонов),
+// испечённых один раз; облако = такой спрайт, повёрнутый, вытянутый и приглушённый.
+// Композит 'lighter' складывает их с космофоном. Слой запекается в растр-кэш вместе
+// с фоном — на пан/зум он бесплатен.
+const GM_NEB_N = 20;        // сколько облаков раскидываем по внешней кромке
+// Палитра ХОЛОДНАЯ и приглушённая: тёплые пятна читались как «пожар» под картой.
+const GM_NEB_TINTS = ['54,72,140', '86,64,128', '44,96,116', '62,80,120', '70,58,110', '48,88,132'];
+
+// ФОРМА облака: ком из мягких пятен по кривому кольцу + «выкусы» (destination-out),
+// которые рвут симметрию, — иначе выходит ровный круг, а не туманность. Формы 8
+// штук, seed детерминирован (картинка не «пляшет» между сессиями).
+const GM_NEB_SHAPES = 8;
+function gmmNebMask(seed, W, H) {
+  const cache = GMM._nebMask || (GMM._nebMask = {});
+  const key = seed + '|' + W + 'x' + H;
+  if (cache[key]) return cache[key];
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  const cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.5;
+  const blob = (x, y, r, a, cut) => {
+    const g = c.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(0,0,0,' + a + ')');
+    g.addColorStop(0.45, 'rgba(0,0,0,' + (a * 0.6).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.globalCompositeOperation = cut ? 'destination-out' : 'source-over';
+    c.fillStyle = g;
+    c.beginPath(); c.arc(x, y, r, 0, 6.2832); c.fill();
+  };
+  // тело: пятна вдоль вытянутого кривого кольца — получается клок, а не шар
+  const el = 0.55 + gmEdgeHash(seed * 3.1, seed * 1.7) * 0.5;   // сплюснутость
+  const tilt = gmEdgeHash(seed * 5.9, seed * 2.3) * 6.2832;
+  const N = 9;
+  for (let i = 0; i < N; i++) {
+    const h1 = gmEdgeHash(seed * 7.3 + i * 2.1, seed * 4.1 + i * 3.7);
+    const h2 = gmEdgeHash(seed * 2.7 + i * 5.3, seed * 8.9 + i * 1.3);
+    const ang = tilt + (i / N) * 6.2832 + (h1 - 0.5) * 0.9;
+    const rad = R * (0.10 + h2 * 0.34);
+    blob(cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad * el, R * (0.30 + h1 * 0.26), 0.85, false);
+  }
+  blob(cx, cy, R * 0.5, 0.9, false);
+  // выкусы: 4 дыры по краю — рваная кромка вместо ровной окружности
+  for (let i = 0; i < 4; i++) {
+    const h1 = gmEdgeHash(seed * 11.3 + i * 4.7, seed * 6.1 + i * 2.9);
+    const h2 = gmEdgeHash(seed * 3.3 + i * 9.1, seed * 12.7 + i * 5.1);
+    const ang = h1 * 6.2832;
+    const rad = R * (0.55 + h2 * 0.45);
+    blob(cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad * el, R * (0.22 + h2 * 0.3), 1, true);
+  }
+  // страховка от касания рамки спрайта: гасим самый край
+  const gg = c.createRadialGradient(cx, cy, R * 0.72, cx, cy, R);
+  gg.addColorStop(0, 'rgba(0,0,0,1)'); gg.addColorStop(1, 'rgba(0,0,0,0)');
+  c.globalCompositeOperation = 'destination-in';
+  c.fillStyle = gg; c.fillRect(0, 0, W, H);
+  cache[key] = cv;
+  return cv;
+}
+
+// ВОЛОКНА. Ровная маска даёт мыльную кляксу — туманность живёт клочьями и жилами.
+// Печём один шумовой лист (fBm + «хребты» ridged-noise): светлое = плотный газ,
+// тёмное = провалы. Дальше он режет силуэт облака, и от блина остаётся структура.
+// Лист один на всё, 256², считается разово (~65k точек) — потом только drawImage.
+const GM_NEB_NOISE = 256;
+function gmmNebNoiseTile() {
+  if (GMM._nebNoise) return GMM._nebNoise;
+  const W = GM_NEB_NOISE;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = W;
+  const c = cv.getContext('2d');
+  const img = c.createImageData(W, W);
+  const d = img.data;
+  for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) {
+    const fx = x / 22, fy = y / 22;
+    const base = (gmFbm(fx, fy) + 1) * 0.5;                    // 0..1 клубы
+    const ridge = 1 - Math.abs(gmFbm(fx * 2.1 + 11.3, fy * 2.1 - 7.7));  // жилы
+    let v = base * 0.62 + ridge * ridge * 0.55;
+    v = Math.max(0, Math.min(1, (v - 0.22) * 1.5));
+    const i = (y * W + x) * 4;
+    d[i] = d[i + 1] = d[i + 2] = 255;
+    d[i + 3] = (v * 255) | 0;
+  }
+  c.putImageData(img, 0, 0);
+  GMM._nebNoise = cv;
+  return cv;
+}
+
+// Готовое облако: силуэт → волокна → двухцветная заливка → тлеющее ядро.
+// Спрайтов всего 8×6, пекутся один раз, дальше только двигаются/тянутся.
+const GM_NEB_SPR = 256;
+function gmmNebSprite(ti, shape) {
+  const key = ti + '|' + shape;
+  const cache = GMM._nebSp || (GMM._nebSp = {});
+  let cv = cache[key];
+  if (cv) return cv;
+  const W = GM_NEB_SPR;
+  cv = document.createElement('canvas'); cv.width = W; cv.height = W;
+  const c = cv.getContext('2d');
+  c.drawImage(gmmNebMask(shape, W, W), 0, 0);
+  // волокна: шум режет силуэт (два прохода — крупная рвань + мелкая структура),
+  // разный поворот/масштаб на форму, чтобы облака не были копиями друг друга
+  const nz = gmmNebNoiseTile();
+  c.globalCompositeOperation = 'destination-in';
+  for (let p = 0; p < 2; p++) {
+    const k = p ? 0.75 : 1.7;
+    c.save();
+    c.translate(W / 2, W / 2);
+    c.rotate(shape * 0.9 + p * 2.1);
+    c.globalAlpha = p ? 0.7 : 1;
+    c.drawImage(nz, -W * k / 2, -W * k / 2, W * k, W * k);
+    c.restore();
+  }
+  c.globalAlpha = 1;
+  // цвет: не плашка, а перетекание из глубокого тона в подсвеченный — у облака
+  // появляется «сторона, обращённая к свету»
+  const rgb = GM_NEB_TINTS[ti].split(',').map(Number);
+  const lit = rgb.map((v, i) => Math.min(255, Math.round(v * 1.5 + [22, 26, 34][i])));
+  const g = c.createLinearGradient(W * 0.12, W * 0.1, W * 0.88, W * 0.92);
+  g.addColorStop(0, 'rgb(' + lit.join(',') + ')');
+  g.addColorStop(0.55, 'rgb(' + rgb.join(',') + ')');
+  g.addColorStop(1, 'rgb(' + rgb.map(v => Math.round(v * 0.55)).join(',') + ')');
+  c.globalCompositeOperation = 'source-in';
+  c.fillStyle = g; c.fillRect(0, 0, W, W);
+  // ядро: слабое свечение в глубине клока — только там, где газ уже есть
+  const core = c.createRadialGradient(W * 0.44, W * 0.46, 0, W * 0.44, W * 0.46, W * 0.42);
+  core.addColorStop(0, 'rgba(' + lit.join(',') + ',0.55)');
+  core.addColorStop(1, 'rgba(' + lit.join(',') + ',0)');
+  c.globalCompositeOperation = 'source-atop';
+  c.fillStyle = core; c.fillRect(0, 0, W, W);
+  cache[key] = cv;
+  return cv;
+}
+
+// КАРМАНЫ между державами. Внешняя кромка галактики — не единственная пустота:
+// между секторами зияют проёмы, и они тоже просят дыма. Ищем их честно: сетка по
+// охвату систем → расстояние до ближайшей звезды → локальные максимумы = центры
+// проёмов. Радиус облака = размер самого кармана, поэтому оно не наползает на
+// территории, а именно затягивает щель.
+const GM_NEB_POCKETS = 32;
+const GM_NEB_LINKS = 26;    // потолок звеньев-лент между карманами
+function gmmNebPockets(out, nearest, KEEP) {
+  const sys = GM.systems || [];
+  if (sys.length < 8) return;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < sys.length; i++) {
+    if (sys[i].x < x0) x0 = sys[i].x; if (sys[i].x > x1) x1 = sys[i].x;
+    if (sys[i].y < y0) y0 = sys[i].y; if (sys[i].y > y1) y1 = sys[i].y;
+  }
+  const NX = 46, NY = 32;
+  const sx = (x1 - x0) / (NX - 1), sy = (y1 - y0) / (NY - 1);
+  if (!(sx > 0 && sy > 0)) return;
+  const d = new Float32Array(NX * NY);
+  for (let i = 0; i < NX; i++) for (let j = 0; j < NY; j++) d[i * NY + j] = nearest(x0 + i * sx, y0 + j * sy);
+  const MIN = GM_W * 0.010;                  // мельче — это щель между соседями, не карман
+  const cand = [];
+  for (let i = 1; i < NX - 1; i++) for (let j = 1; j < NY - 1; j++) {
+    const c = d[i * NY + j];
+    if (c < MIN || c >= KEEP) continue;      // крупные пустоты уже закрыты внешним слоем
+    let top = true;
+    for (let a = -1; a <= 1 && top; a++) for (let b = -1; b <= 1; b++) {
+      if ((a || b) && d[(i + a) * NY + (j + b)] > c) { top = false; break; }
+    }
+    if (top) cand.push({ x: x0 + i * sx, y: y0 + j * sy, c });
+  }
+  cand.sort((p, q) => q.c - p.c);
+  const taken = [];
+  for (let n = 0; n < cand.length && taken.length < GM_NEB_POCKETS; n++) {
+    const p = cand[n];
+    let ok = true;
+    for (let m = 0; m < taken.length; m++) {
+      const t = taken[m];
+      if (Math.hypot(t.x - p.x, t.y - p.y) < (t.c + p.c) * 1.1) { ok = false; break; }
+    }
+    if (!ok) continue;
+    p.dir = gmmVoidAxis(p, nearest, MIN);     // куда пустота тянется
+    taken.push(p);
+    const i = taken.length;
+    const dim = Math.min(1, p.c / (GM_W * 0.05)) * (i > 16 ? 0.8 : 1);
+    gmmNebRiver(out, p.x, p.y, p.c, p.dir.ang, p.dir.k, (0.15 + gmmNebH(p.x, p.y, 2) * 0.12) * dim);
+  }
+  // ЛЕНТЫ: соседние карманы — это, как правило, один коридор. Сшиваем их цепочкой
+  // облаков по прямой, чтобы вдоль пустоты тянулась полоса дыма, а не бусы из клякс.
+  // Звенья лимитированы (GM_NEB_LINKS): каждое — большой полупрозрачный спрайт,
+  // и без потолка слой разрастался до сотни отрисовок и ронял запекание растра.
+  let links = 0;
+  for (let m = 0; m < taken.length && links < GM_NEB_LINKS; m++)
+    for (let n = m + 1; n < taken.length && links < GM_NEB_LINKS; n++) {
+    const A = taken[m], B = taken[n];
+    const L = Math.hypot(B.x - A.x, B.y - A.y);
+    if (L > (A.c + B.c) * 3.2) continue;
+    const ang = Math.atan2(B.y - A.y, B.x - A.x);
+    const steps = Math.min(2, Math.max(1, Math.round(L / ((A.c + B.c) * 0.8)) - 1));
+    for (let s = 1; s <= steps; s++) {
+      links++;
+      const u = s / (steps + 1);
+      const x = A.x + (B.x - A.x) * u, y = A.y + (B.y - A.y) * u;
+      const c = nearest(x, y);
+      if (c < MIN * 0.85) continue;           // коридор перекрыт звёздами — рвём ленту
+      const w = Math.min(c, A.c + (B.c - A.c) * u);
+      gmmNebRiver(out, x, y, w, ang, 1.9 + gmmNebH(x, y, 5) * 1.2,
+        (0.11 + gmmNebH(x, y, 7) * 0.10) * Math.min(1, c / (GM_W * 0.05)));
+    }
+  }
+}
+// хэш по мировой точке (детерминированно, без общего счётчика)
+function gmmNebH(x, y, salt) { return gmEdgeHash(x * 0.013 + salt * 1.7, y * 0.017 + salt * 2.9); }
+// Ось пустоты: щупаем 12 направлений — по какому свободный ход длиннее, туда и
+// вытягиваем облако. k — во сколько раз оно длиннее поперечника.
+function gmmVoidAxis(p, nearest, MIN) {
+  let bA = 0, bL = 0;
+  for (let t = 0; t < 12; t++) {
+    const ang = t * Math.PI / 12;
+    const dx = Math.cos(ang), dy = Math.sin(ang);
+    let len = 0;
+    for (const sgn of [1, -1]) {
+      let d = p.c * 0.5;
+      while (d < p.c * 8 && nearest(p.x + dx * d * sgn, p.y + dy * d * sgn) > MIN * 0.8) d += p.c * 0.35;
+      len += d;
+    }
+    if (len > bL) { bL = len; bA = ang; }
+  }
+  return { ang: bA, k: Math.max(1.2, Math.min(4.5, bL / (p.c * 2.0))) };
+}
+// РЕКА между державами: одиночный вытянутый спрайт читается как «леденец», поэтому
+// проём набивается несколькими клоками вдоль оси — со сдвигом поперёк, разным
+// калибром и плотностью. Получается течение с рваными краями, а не полоска.
+// ВАЖНО: никакой неравномерной растяжки. Один вытянутый спрайт = размазанный шум,
+// на карте это читалось как смазанная клякса. Длина набирается ЧИСЛОМ круглых
+// клоков вдоль оси — у каждого свой калибр, поворот, снос поперёк и плотность.
+function gmmNebRiver(out, x, y, r, ang, k, a) {
+  const dx = Math.cos(ang), dy = Math.sin(ang), nx = -dy, ny = dx;
+  const n = Math.max(3, Math.min(7, Math.round(k * 1.9)));
+  const span = r * k * 1.9;                             // на какую длину растянут проём
+  for (let i = 0; i < n; i++) {
+    const h = gmmNebH(x + i * 37, y - i * 53, 6 + i);
+    const h2 = gmmNebH(x - i * 61, y + i * 29, 9 + i);
+    const t = (i - (n - 1) / 2) / Math.max(1, n - 1);   // −0.5…0.5 вдоль оси
+    const off = t * span + (h - 0.5) * r * 0.5;
+    const per = (h2 - 0.5) * r * 0.8;                   // снос поперёк — русло вьётся
+    const edge = 1 - Math.abs(t) * 1.2;                 // концы реки тают
+    gmmNebPush(out, x + dx * off + nx * per, y + dy * off + ny * per,
+      r * (0.6 + h * 0.75), h2 * 6.2832, 1,
+      a * (0.7 + h * 0.6) * Math.max(0.25, edge) / 1.6);
+  }
+}
+// Одно облако ленты/кармана: r — поперечник, k — вытяжка вдоль оси ang.
+function gmmNebPush(out, x, y, r, ang, k, a) {
+  const h3 = gmmNebH(x, y, 1), h4 = gmmNebH(x, y, 3), h5 = gmmNebH(x, y, 4);
+  out.push({
+    x, y,
+    r: r * (0.95 + h3 * 0.45),
+    rot: ang + (h4 - 0.5) * 0.5,              // лёгкий развал, чтобы лента не была линейкой
+    sx: k, flip: h5 > 0.5,
+    tex: (h5 * 997) | 0, tint: (h3 * 991) | 0, shape: 1 + ((h4 * 977) | 0) % GM_NEB_SHAPES,
+    a
+  });
+}
+
+// Раскладка облаков. Место выбираем из 4 кандидатов — берём то, что ДАЛЬШЕ от
+// звёзд: туманность должна заполнять пустоту, а не висеть поверх систем.
+function gmmNebFields() {
+  const sys = GM.systems || [];
+  if (GMM._neb && GMM._nebN === sys.length) return GMM._neb;
+  // Расстояние до ближайшей звезды спрашивается десятки тысяч раз (сетка карманов +
+  // прощупывание осей), поэтому системы разложены по ячейкам: смотрим свою ячейку и
+  // расширяем кольцо, пока не станет ясно, что дальше искать нечего.
+  const CELL = GM_W / 48;
+  const gw = Math.ceil(GM_W / CELL) + 1, gh = Math.ceil(GM_H / CELL) + 1;
+  const grid = new Map();
+  for (let i = 0; i < sys.length; i++) {
+    const gx = Math.max(0, Math.min(gw - 1, (sys[i].x / CELL) | 0));
+    const gy = Math.max(0, Math.min(gh - 1, (sys[i].y / CELL) | 0));
+    const key = gy * gw + gx;
+    const cell = grid.get(key); if (cell) cell.push(sys[i]); else grid.set(key, [sys[i]]);
+  }
+  const nearest = (x, y) => {
+    const cx = Math.max(0, Math.min(gw - 1, (x / CELL) | 0));
+    const cy = Math.max(0, Math.min(gh - 1, (y / CELL) | 0));
+    let best = Infinity;
+    for (let ring = 0; ring < Math.max(gw, gh); ring++) {
+      // кольцо уже дальше найденного минимума — искать нечего
+      if (best < Infinity && (ring - 1) * CELL > Math.sqrt(best)) break;
+      for (let gy = cy - ring; gy <= cy + ring; gy++) {
+        if (gy < 0 || gy >= gh) continue;
+        const edge = (gy === cy - ring || gy === cy + ring);
+        for (let gx = cx - ring; gx <= cx + ring; gx += (edge ? 1 : 2 * ring || 1)) {
+          if (gx < 0 || gx >= gw) continue;
+          const cell = grid.get(gy * gw + gx);
+          if (!cell) continue;
+          for (let i = 0; i < cell.length; i++) {
+            const dx = cell[i].x - x, dy = cell[i].y - y, q = dx * dx + dy * dy;
+            if (q < best) best = q;
+          }
+        }
+      }
+    }
+    return Math.sqrt(best);
+  };
+  // «Мёртвая зона» вокруг обжитого космоса: туманность не имеет права наползать на
+  // территории — карта должна читаться, а не тонуть в дыму. Кандидат берём лучший
+  // из 10 по удалённости от звёзд, и всё, что ближе порога, выбрасываем совсем.
+  const KEEP = GM_W * 0.075;
+  const out = [];
+  for (let i = 0; i < GM_NEB_N; i++) {
+    let best = null;
+    for (let k = 0; k < 10; k++) {
+      const x = gmEdgeHash(i * 3.7 + k * 11.3, i * 1.9 + k * 5.1) * GM_W;
+      const y = gmEdgeHash(i * 7.1 + k * 2.3, i * 13.7 + k * 9.7) * GM_H;
+      const c = nearest(x, y);
+      if (!best || c > best.c) best = { x, y, c };
+    }
+    if (best.c < KEEP) continue;
+    const h3 = gmEdgeHash(i * 5.3 + 0.7, i * 2.9 + 1.3);
+    const h4 = gmEdgeHash(i * 9.1 + 2.1, i * 4.3 + 0.9);
+    const h5 = gmEdgeHash(i * 1.7 + 3.3, i * 6.7 + 2.7);
+    // чем дальше от звёзд, тем плотнее облако; у самой кромки обжитого — почти нет
+    const far = Math.min(1, (best.c - KEEP) / (GM_W * 0.1));
+    out.push({
+      x: best.x, y: best.y,
+      r: (0.07 + h3 * 0.09) * GM_W,          // радиус облака в мировых единицах
+      rot: h4 * 6.2832, flip: h5 > 0.5,
+      tex: (h5 * 997) | 0, tint: (h3 * 991) | 0, shape: 1 + ((h4 * 977) | 0) % GM_NEB_SHAPES,
+      a: (0.10 + h4 * 0.09) * far             // фон обязан оставаться фоном
+    });
+  }
+  gmmNebPockets(out, nearest, KEEP);
+  GMM._neb = out; GMM._nebN = sys.length;
+  return out;
+}
+
+// ЛИСТ ТУМАННОСТЕЙ: весь слой печётся ОДИН раз в битмап на всю галактику (как
+// растр-кэш мира), и дальше каждое запекание фона кладёт его одним drawImage.
+// Раньше десятки больших полупрозрачных спрайтов рисовались на каждый растр — это
+// и роняло карту. Лист низкого разрешения: туман — размытое пятно, детализация ему
+// не нужна, зато памяти ~11 МБ и растяжка бесплатна.
+const GM_NEB_SHEET_W = 2048;
+function gmmNebSheet() {
+  const sys = GM.systems || [];
+  if (GMM._nebSheet && GMM._nebSheetN === sys.length) return GMM._nebSheet;
+  const W = GM_NEB_SHEET_W, H = Math.round(W * GM_H / GM_W);
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  const k = W / GM_W;
+  c.setTransform(k, 0, 0, k, 0, 0);
+  c.globalCompositeOperation = 'lighter';
+  const fields = gmmNebFields();
+  for (let i = 0; i < fields.length; i++) {
+    const b = fields[i];
+    const sp = gmmNebSprite(b.tint % GM_NEB_TINTS.length, b.shape);
+    c.globalAlpha = b.a;
+    c.save();
+    // вытяжка ВДОЛЬ оси пустоты (sx) — облако лентой, а не кляксой
+    c.translate(b.x, b.y); c.rotate(b.rot); c.scale((b.flip ? -1 : 1) * (b.sx || 1), 1);
+    c.drawImage(sp, -b.r, -b.r, b.r * 2, b.r * 2);
+    c.restore();
+  }
+  GMM._nebSheet = cv; GMM._nebSheetN = sys.length;
+  return cv;
+}
+
+function gmmPaintNebula(ctx, camS, wx0, wy0, wx1, wy1) {
+  if (!GM.showNeb) return;
+  const prevOp = ctx.globalCompositeOperation, prevA = ctx.globalAlpha;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 1 - 0.5 * gmmZoomT(camS);  // вблизи систем туманности приглушаем
+  ctx.drawImage(gmmNebSheet(), 0, 0, GM_W, GM_H);
+  ctx.globalAlpha = prevA;
+  ctx.globalCompositeOperation = prevOp;
+}
+
 function gmmPaintStarfield(ctx, camS, wx0, wy0, wx1, wy1) {
   // МНОГООКТАВНАЯ россыпь: базовый слой (120) виден всегда; мелкие октавы проявляются
   // при приближении, чтобы плотность на ЭКРАНЕ держалась на любом зуме. Звёзды —

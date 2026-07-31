@@ -1,0 +1,272 @@
+/* ════════════════════════════════════════════════════════════
+   25_frame — КАРКАС ОБОЛОЧКИ
+   Топбар и боковые границы перестают быть прямоугольником:
+   скошенная «плечом» нижняя кромка шапки и рейки-борта с врезкой.
+   Слой идёт ПОСЛЕ 13_redesign.css, который погасил все скосы
+   (clip-path:none / border-radius) и вернул прямые рамки.
+   Акцент один — тил (--te); золото не трогаем.
+   ════════════════════════════════════════════════════════════ */
+
+:root{
+  /* от правого края: где нижняя кромка шапки поднимается «плечом» */
+  --tf-notch: 104px;
+  /* высота подъёма кромки */
+  --tf-rise: 3px;
+  /* глубина врезки боковых реек */
+  --tf-jog: 6px;
+  /* срез углов оболочки */
+  --tf-cut: 8px;
+  /* глубина «бухты» на границе сайдбар ↔ контент */
+  --tf-bay: 14px;
+}
+
+/* Рейки-борта живут в отбивке: контент отодвинут, чтобы врезка
+   никогда не наезжала на текст и карточки. */
+/* Отбивки в контенте нет: срез — маска по краю панели, а не рейка
+   поверх, и #pg идёт до края. Но внутри сайдбара маска режет по живым
+   строкам — счётчики и стрелки у правого края попадали под «бухту».
+   Поэтому строки меню отодвинуты ровно на её глубину. */
+@media (min-width:769px){
+  #nav{ padding-right: var(--tf-bay) !important; box-sizing:border-box !important; }
+  .sb-srch, .sb-foot{ padding-right: calc(14px + var(--tf-bay)) !important; }
+}
+
+/* ── ШАПКА: срез вместо прямоугольника ─────────────────────── */
+
+/* Внешней обрези у шапки нет — кромка прямая. */
+#top{ border-bottom: none !important; clip-path: none !important; }
+/* декоративный градиент из 04_ui не нужен — кромку рисуем сами */
+#top::after{ display:none !important; }
+
+/* Кромки-линии под шапкой нет — та же логика, что у бортов.
+   Отбивка держится ТЕНЬЮ по нижнему краю: мягкая растяжка внутрь
+   шапки (clip-path режет box-shadow, поэтому слой внутри). */
+#top::before{
+  content:'' !important;
+  position:absolute !important;
+  left:0 !important; right:0 !important; bottom:0 !important; top:auto !important;
+  height:22px !important; opacity:1 !important; pointer-events:none !important;
+  clip-path:none !important;
+  background: linear-gradient(180deg,
+    rgba(0,0,0,0) 0%,
+    rgba(0,0,0,.30) 62%,
+    rgba(0,0,0,.55) 100%) !important;
+}
+
+/* Полотно шапки — то же, что у сайдбара: глухой цвет, зерно, градиент */
+#top{
+  backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E"),
+    linear-gradient(180deg,
+      hsl(200 40% 60% / .06) 0%,
+      rgba(0,0,0,0) 70%),
+    linear-gradient(180deg,
+      hsl(var(--hue-space) var(--sat-space) 9%) 0%,
+      hsl(var(--hue-space) var(--sat-space) 6%) 100%) !important;
+  background-blend-mode: overlay, normal, normal !important;
+  background-size: 140px 140px, auto, auto !important;
+  background-color: hsl(var(--hue-space) var(--sat-space) 7%) !important;
+}
+
+/* ── РАСКЛАДКА ШАПКИ ─────────────────────────────────────────
+   Крошка не должна липнуть к борту сайдменю: слева отбивка вдвое
+   больше правой. Справа — кластер действий одним ритмом: единый
+   рост, один шаг между группами, пара RU/EN без зазора внутри —
+   это один переключатель, а не две кнопки. */
+#top{
+  display:flex !important; align-items:center !important;
+  gap:16px !important; padding:0 18px 0 32px !important;
+}
+#top .top-bc{ flex:1 1 auto !important; min-width:0 !important; }
+
+#top .top-r{
+  display:flex !important; align-items:center !important;
+  gap:8px !important; flex:0 0 auto !important;
+}
+#top .top-lang{
+  display:flex !important; gap:6px !important; margin-right:0 !important;
+  height:auto !important; align-items:center !important; overflow:visible !important;
+}
+#top .top-lang button{ width:40px !important; padding:0 !important; justify-content:center !important; }
+#top .top-lang button, #top .tbtn{ height:30px !important; box-sizing:border-box !important; }
+#top .tbtn{ padding:0 12px !important; }
+#top #auth-btn{ padding-left:6px !important; gap:8px !important; }
+
+/* «Редактировать» → карандаш: иконка вместо подписи, квадратная кнопка */
+#edit-btn{ padding:0 !important; width:30px !important; justify-content:center !important; gap:0 !important; font-size:13px !important; }
+#edit-btn #edit-btn-text{ display:none !important; }
+
+/* Срез шапки открывает дыру: #main прозрачен, и в вырезе светил
+   размытый фон. Красим #main цветом полотна — вырез читается как
+   ступень, с которой начинается контент, а не как прореха. */
+#main{ background: hsl(var(--hue-space) var(--sat-space) 8% / .9) !important; }
+
+/* ── БОКА: маска панелей, а не рейки поверх контента ─────────
+   Панели сами вырезаны по силуэту; обводка — 1px «кольцо»
+   (polygon с evenodd) внутри той же маски, так что рамка идёт
+   ровно по срезам и ничего не перекрывает. Место под срезы
+   заложено отбивкой выше — контент в них не заходит. */
+
+#app{ border-left:none !important; border-right:none !important; }
+
+/* В вырезе сайдбара должен быть КОНТЕНТ, а не полоса фона: #main
+   заезжает под сайдбар на глубину «бухты» (с запасом в 3px, иначе на
+   субпикселях остаётся щель), сайдбар лежит поверх и своей маской
+   открывает эту полосу. Подложка #app — глухой цвет, чтобы в щель
+   не светила фотка фона. */
+@media (min-width:769px){
+  #main{ margin-left: calc(-1 * (var(--tf-bay) + 3px)) !important; }
+  #sb{ position:relative !important; z-index:6 !important; }
+  #app{ background: hsl(var(--hue-space) var(--sat-space) 12%) !important; }
+}
+
+/* Полотно сайдбара: непрозрачное, без просвета фотки-фона.
+   Три слоя в одном свойстве — зерно (SVG-шум), вертикальный градиент
+   глубины и базовый цвет. Акцент один: тил у верхней кромки. */
+#sb{
+  backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E"),
+    linear-gradient(180deg,
+      hsl(200 40% 60% / .07) 0px,
+      hsl(200 30% 50% / .02) 180px,
+      rgba(0,0,0,0) 46%,
+      rgba(0,0,0,.30) 100%),
+    linear-gradient(180deg,
+      hsl(var(--hue-space) var(--sat-space) 9%) 0%,
+      hsl(var(--hue-space) var(--sat-space) 6%) 100%) !important;
+  background-blend-mode: overlay, normal, normal !important;
+  background-size: 140px 140px, auto, auto !important;
+  background-color: hsl(var(--hue-space) var(--sat-space) 7%) !important;
+}
+
+#sb{
+  border-left:none !important; border-right:none !important;
+  clip-path: polygon(
+    0 0, 100% 0,
+    100% 132px, calc(100% - var(--tf-bay)) calc(132px + var(--tf-cut)),
+    calc(100% - var(--tf-bay)) 62%, 100% calc(62% + var(--tf-cut)),
+    100% 100%, 0 100%
+  ) !important;
+}
+#sb::before{ content:none !important; }
+/* Кромки-обводки нет: рисованный контур — не наш приём. Борт читается
+   ПОДЛОЖКОЙ: сайдбар лежит на слое #app, который на тон светлее полотна,
+   и в срезе видно его как кант — тоном, а не линией. */
+#sb::after{ content:none !important; display:none !important; }
+
+#main{
+  position:relative !important;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--tf-cut)) 0, 100% var(--tf-cut),
+    100% calc(100% - var(--tf-cut)), calc(100% - var(--tf-cut)) 100%,
+    0 100%
+  ) !important;
+}
+/* Контур не рисуем. Границу панелей держит ТЕНЬ: мягкая растяжка от
+   борта внутрь контента — силуэт с «бухтой» читается объёмом, а не
+   линией. Тень внутри #main, потому что clip-path режет box-shadow. */
+#main::before{
+  content:''; position:absolute; inset:0; z-index:45; pointer-events:none;
+  background: linear-gradient(90deg,
+    rgba(0,0,0,.55) 0px,
+    rgba(0,0,0,.28) 6px,
+    rgba(0,0,0,0) 26px);
+}
+#main::after{ content:none; }
+
+/* Свёрнутый сайдбар: маска ни при чём, но подгоняем — контент
+   растягивается, срез слева больше не нужен. */
+#app.sb-collapsed:not(.sb-peek) #sb{ clip-path:none !important; }
+
+/* ── КНОПКИ ШАПКИ: возвращаем скосы (13_redesign их снял) ───── */
+
+.tbtn, .top-lang button{
+  border-radius:0 !important;
+  clip-path:none !important;   /* режем подложки, не сам бокс */
+  /* Фон на самом боксе = неотрезанный прямоугольник, вылезающий из-под
+     скошенных подложек (07_premium красил так активный язык).
+     Красим только слоями ::before/::after. */
+  background: transparent !important;
+  box-shadow: none !important;
+}
+/* Активное/нажатое состояние тоже без фона на боксе: правило
+   `.top-lang button.on{background:...}` из 07_premium специфичнее
+   общего сброса выше и рисовало прямоугольник поверх скосов. */
+#top .top-lang button.on, #top .top-lang button:active, #top .top-lang button:focus,
+#top .tbtn.edit-on, #top .tbtn.log-in, #top .tbtn:active, #top .tbtn:focus{
+  background: transparent !important; box-shadow: none !important; outline: none !important;
+}
+/* активный язык — заливка подложкой, а не фоном кнопки */
+.top-lang button.on::before{ background: var(--te) !important; }
+.top-lang button.on::after { background: var(--teb) !important; }
+.tbtn::before, .top-lang button::before{
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px)) !important;
+}
+.tbtn::after, .top-lang button::after{
+  clip-path: polygon(0 0, calc(100% - 8.3px) 0, 100% 8.3px, 100% 100%, 8.3px 100%, 0 calc(100% - 8.3px)) !important;
+}
+
+/* ── МОБИЛЬНЫЕ: узкий кластер кнопок → короткое «плечо» ─────── */
+
+@media (max-width:768px){
+  :root{ --tf-notch: 72px; --tf-rise: 3px; --tf-jog: 6px; }
+  /* сайдбар выезжает фиксированной панелью — маска ему мешает */
+  #sb, #main{ clip-path:none !important; }
+  #sb::after{ display:none !important; }
+  #main::before{ display:none; }
+}
+
+/* печать — никаких срезов */
+@media print{
+  #top, #sb, #main{ clip-path:none !important; }
+  #top::before, #sb::after, #main::before{ display:none !important; }
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   ОБЛОЖКА-НОВЕЛЛА НА ГЛАВНОЙ
+   Фон вплотную к краям контента, вместо чужеродной рамки-скобок —
+   слой-подложка по краю, снизу маска-растворение в полотно.
+   ════════════════════════════════════════════════════════════ */
+
+/* 1. Вплотную к краям: отрицательные поля ровно под отбивку #pg (28px),
+      сверху кадр упирается в шапку — отступа над ним нет. */
+/* над кадром висела отбивка .pgi (24px) — гасим её ровно, без гадания */
+#hp-hero-cover.hp-hero-cover{
+  margin-top:-24px !important;
+  margin-left:-28px !important; margin-right:-28px !important;
+  width:calc(100% + 56px) !important;
+  background:transparent !important;
+  overflow:visible !important;
+}
+@media (max-width:768px){
+  #hp-hero-cover.hp-hero-cover{
+    margin-top:-24px !important;
+    margin-left:-16px !important; margin-right:-16px !important;
+    width:calc(100% + 32px) !important;
+  }
+}
+
+/* 2. Рамка-скобки и синий кант не наши — снимаем.
+      Кромку держит слой-подложка: тонкая тень внутрь по краю кадра,
+      без единой нарисованной линии. */
+.hp-hero-frame, .hpc-corner{ display:none !important; }
+.hp-hero-cover::after{
+  content:'' !important; position:absolute !important; inset:0 !important;
+  z-index:4 !important; pointer-events:none !important;
+  background:
+    linear-gradient(90deg, rgba(0,0,0,.45), rgba(0,0,0,0) 26px),
+    linear-gradient(270deg, rgba(0,0,0,.45), rgba(0,0,0,0) 26px),
+    linear-gradient(180deg, rgba(0,0,0,.40), rgba(0,0,0,0) 22px) !important;
+}
+
+/* 3. Низ кадра растворяется в полотне ОДНОЙ маской — на самом кадре.
+      Маски на отдельных слоях (картинка, градиент, спрайты, кромка)
+      складывались и давали несколько кромок вместо одного перехода. */
+.hp-hero-cover{
+  -webkit-mask-image: linear-gradient(180deg, #000 78%, transparent 100%) !important;
+          mask-image: linear-gradient(180deg, #000 78%, transparent 100%) !important;
+}
