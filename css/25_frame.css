@@ -1,7 +1,8 @@
 /* ════════════════════════════════════════════════════════════
    25_frame — КАРКАС ОБОЛОЧКИ
    Топбар и боковые границы перестают быть прямоугольником:
-   скошенная «плечом» нижняя кромка шапки и рейки-борта с врезкой.
+   скошенная «плечом» нижняя кромка шапки и рейка-борт сайдменю
+   с вырезом-«бухтой» на всю высоту.
    Слой идёт ПОСЛЕ 13_redesign.css, который погасил все скосы
    (clip-path:none / border-radius) и вернул прямые рамки.
    Акцент один — тил (--te); золото не трогаем.
@@ -17,15 +18,13 @@
   /* срез углов оболочки */
   --tf-cut: 8px;
   /* глубина «бухты» на границе сайдбар ↔ контент */
-  --tf-bay: 14px;
+  --tf-bay: 26px;
 }
 
-/* Рейки-борта живут в отбивке: контент отодвинут, чтобы врезка
-   никогда не наезжала на текст и карточки. */
-/* Отбивки в контенте нет: срез — маска по краю панели, а не рейка
-   поверх, и #pg идёт до края. Но внутри сайдбара маска режет по живым
-   строкам — счётчики и стрелки у правого края попадали под «бухту».
-   Поэтому строки меню отодвинуты ровно на её глубину. */
+/* Отбивки в контенте нет: срез — маска по краю панели, и #pg идёт до
+   края. Но внутри сайдбара маска режет по живым строкам — счётчики и
+   стрелки у правого края попадали под «бухту». Поэтому строки меню
+   отодвинуты ровно на её глубину. */
 @media (min-width:769px){
   #nav{ padding-right: var(--tf-bay) !important; box-sizing:border-box !important; }
   .sb-srch, .sb-foot{ padding-right: calc(14px + var(--tf-bay)) !important; }
@@ -102,52 +101,61 @@
    ступень, с которой начинается контент, а не как прореха. */
 #main{ background: hsl(var(--hue-space) var(--sat-space) 8% / .9) !important; }
 
-/* ── БОКА: маска панелей, а не рейки поверх контента ─────────
-   Панели сами вырезаны по силуэту; обводка — 1px «кольцо»
-   (polygon с evenodd) внутри той же маски, так что рамка идёт
-   ровно по срезам и ничего не перекрывает. Место под срезы
-   заложено отбивкой выше — контент в них не заходит. */
+/* ── БОКА: маска панели, а не рейка поверх контента ──────────
+   Сайдбар вырезан по силуэту диагональю на всю высоту (без куска
+   посередине — иначе борт распадается на две детали разного тона). */
 
 #app{ border-left:none !important; border-right:none !important; }
 
-/* В вырезе сайдбара должен быть КОНТЕНТ, а не полоса фона: #main
-   заезжает под сайдбар на глубину «бухты» (с запасом в 3px, иначе на
-   субпикселях остаётся щель), сайдбар лежит поверх и своей маской
-   открывает эту полосу. Подложка #app — глухой цвет, чтобы в щель
-   не светила фотка фона. */
+/* Контент продлён под панель на глубину скоса — отрицательное поле
+   у САЙДБАРА (не у #main): ряд остаётся по ширине окна, прокрутки
+   нет, а в вырезе видно продолжение контента, а не пустоту. */
 @media (min-width:769px){
-  #main{ margin-left: calc(-1 * (var(--tf-bay) + 3px)) !important; }
   #sb{ position:relative !important; z-index:6 !important; }
-  #app{ background: hsl(var(--hue-space) var(--sat-space) 12%) !important; }
+}
+
+/* Подложка под срезом несёт то же полотно и то же зерно, что и
+   сайдбар — вырез читается как продолжение панели, а не чужая вставка. */
+#app{
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E"),
+    linear-gradient(180deg,
+      hsl(var(--hue-space) var(--sat-space) 9%) 0%,
+      hsl(var(--hue-space) var(--sat-space) 7%) 100%) !important;
+  background-blend-mode: overlay, normal !important;
+  background-size: 140px 140px, auto !important;
+  background-color: hsl(var(--hue-space) var(--sat-space) 7%) !important;
 }
 
 /* Полотно сайдбара: непрозрачное, без просвета фотки-фона.
-   Три слоя в одном свойстве — зерно (SVG-шум), вертикальный градиент
-   глубины и базовый цвет. Акцент один: тил у верхней кромки. */
+   Зерно (SVG-шум) + вертикальный градиент глубины + базовый цвет. */
 #sb{
   backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E"),
     linear-gradient(180deg,
-      hsl(200 40% 60% / .07) 0px,
-      hsl(200 30% 50% / .02) 180px,
-      rgba(0,0,0,0) 46%,
-      rgba(0,0,0,.30) 100%),
-    linear-gradient(180deg,
       hsl(var(--hue-space) var(--sat-space) 9%) 0%,
-      hsl(var(--hue-space) var(--sat-space) 6%) 100%) !important;
-  background-blend-mode: overlay, normal, normal !important;
-  background-size: 140px 140px, auto, auto !important;
+      hsl(var(--hue-space) var(--sat-space) 7%) 100%) !important;
+  background-blend-mode: overlay, normal !important;
+  background-size: 140px 140px, auto !important;
   background-color: hsl(var(--hue-space) var(--sat-space) 7%) !important;
 }
 
+/* Панель — одна деталь: разделительные кромки под логотипом, поиском
+   и над подвалом резали её на куски. Полотно сплошное. */
+#sb .logo, #sb .sb-srch{ border-bottom:none !important; }
+#sb .sb-foot{ border-top:none !important; }
+
+/* Один чистый киберпанк-срез в нижнем углу панели — ОДИН угол,
+   без второго на верху (там панель встречается с шапкой и второй
+   срез создавал плавающий кусок не на своём месте). */
 #sb{
   border-left:none !important; border-right:none !important;
   clip-path: polygon(
     0 0, 100% 0,
-    100% 132px, calc(100% - var(--tf-bay)) calc(132px + var(--tf-cut)),
-    calc(100% - var(--tf-bay)) 62%, 100% calc(62% + var(--tf-cut)),
-    100% 100%, 0 100%
+    100% calc(100% - var(--tf-bay)),
+    calc(100% - var(--tf-bay)) 100%,
+    0 100%
   ) !important;
 }
 #sb::before{ content:none !important; }
@@ -156,26 +164,15 @@
    и в срезе видно его как кант — тоном, а не линией. */
 #sb::after{ content:none !important; display:none !important; }
 
-#main{
-  position:relative !important;
-  clip-path: polygon(
-    0 0,
-    calc(100% - var(--tf-cut)) 0, 100% var(--tf-cut),
-    100% calc(100% - var(--tf-cut)), calc(100% - var(--tf-cut)) 100%,
-    0 100%
-  ) !important;
-}
-/* Контур не рисуем. Границу панелей держит ТЕНЬ: мягкая растяжка от
-   борта внутрь контента — силуэт с «бухтой» читается объёмом, а не
-   линией. Тень внутри #main, потому что clip-path режет box-shadow. */
-#main::before{
-  content:''; position:absolute; inset:0; z-index:45; pointer-events:none;
-  background: linear-gradient(90deg,
-    rgba(0,0,0,.55) 0px,
-    rgba(0,0,0,.28) 6px,
-    rgba(0,0,0,0) 26px);
-}
-#main::after{ content:none; }
+/* Тень-разделитель у левого края контента убрана: #main начинается
+   ПОД панелью (см. подлаз выше), и её прямоугольная тень попадала
+   ровно в диагональный вырез — читалась отдельным тёмным клином. */
+#main::before{ content:none !important; display:none !important; }
+
+/* Углы контента прямые — никакого среза, ни клипом, ни слоем-подложкой:
+   любой квадратный кусок фона в углу читается отдельной деталью. */
+#main{ position:relative !important; clip-path:none !important; }
+#main::after{ content:none !important; display:none !important; }
 
 /* Свёрнутый сайдбар: маска ни при чём, но подгоняем — контент
    растягивается, срез слева больше не нужен. */
@@ -234,7 +231,6 @@
 
 /* 1. Вплотную к краям: отрицательные поля ровно под отбивку #pg (28px),
       сверху кадр упирается в шапку — отступа над ним нет. */
-/* над кадром висела отбивка .pgi (24px) — гасим её ровно, без гадания */
 #hp-hero-cover.hp-hero-cover{
   margin-top:-24px !important;
   margin-left:-28px !important; margin-right:-28px !important;
@@ -263,10 +259,13 @@
     linear-gradient(180deg, rgba(0,0,0,.40), rgba(0,0,0,0) 22px) !important;
 }
 
-/* 3. Низ кадра растворяется в полотне ОДНОЙ маской — на самом кадре.
-      Маски на отдельных слоях (картинка, градиент, спрайты, кромка)
-      складывались и давали несколько кромок вместо одного перехода. */
-.hp-hero-cover{
+/* 3. Низ кадра растворяется в полотне. Маска НЕ на .hp-hero-cover:
+      экраны новеллы внутри него — position:fixed, а маскированный предок
+      становится для них containing block, и оверлеи ломались. Поэтому
+      один и тот же переход навешен на конечные слои картинки и спрайтов —
+      геометрия одна, кромка одна. */
+.hp-hero-cover .hp-hero-img,
+.hp-hero-cover .hp-vn-sprites{
   -webkit-mask-image: linear-gradient(180deg, #000 78%, transparent 100%) !important;
           mask-image: linear-gradient(180deg, #000 78%, transparent 100%) !important;
 }
