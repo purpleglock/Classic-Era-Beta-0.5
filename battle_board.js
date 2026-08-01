@@ -42,9 +42,10 @@ const BB = {
   busy: false,
   spr: {},           // кэш спрайтов кораблей
   tex: {},           // кэш текстур корпуса
-  dock: true,        // нижний док с панелями развёрнут?
+  sheet: null,       // открытая шторка: 'log' | 'reinf' | 'unit'
   deployUI: false,   // открыт отдельный экран фазы расстановки?
-  ddock: true,       // ростер расстановки развёрнут?
+  shipDrag: null,    // расстановка: тащим уже стоящий борт {i, cell}
+  trayDrag: null,    // расстановка: тащим борт из ленты {uid, ghost, cell}
   terr: null,        // Map "x:y" → 'ast'|'neb'|'grv'|'deb'
   reach: null,       // Map "x:y" → {steps, path} для выбранного корабля
   ptrs: new Map(),
@@ -335,57 +336,88 @@ async function bbMaybeBotTurn() {
   await bbReload();   // покажем результат и, если снова ход ботов, прогоним ещё
 }
 
-// ── Каркас экрана: доска сверху, ВСЕ панели в нижнем доке ────
+// ── Каркас экрана: КАРТА НА ВЕСЬ ЭКРАН, всё прочее — накладки ────
+// Панели больше не отжимают доску вниз (на телефоне из-за этого доски не было
+// видно вовсе): карточка корабля, подкрепление и журнал живут в шторке,
+// которая открывается кнопкой и закрывается тапом по карте.
 function bbRender() {
   const s = BB.st; if (!s) return;
   const ov = document.getElementById('bb-ov'); if (!ov) return;
   const spec = s.my_side === 'spectator';   // зритель дуэли клуба
-  // Расстановка — ОТДЕЛЬНАЯ ФАЗА со своим экраном (лимиты крупно, ростер
-  // внизу под палец). Зритель дуэли к ней не допущен — ему обычная доска.
+  // Расстановка — ОТДЕЛЬНАЯ ФАЗА со своим экраном.
   if (s.status === 'forming' && !spec) { bbRenderDeploy(s); return; }
   BB.deployUI = false;
+
   const foeName = (spec || s.my_side === 'attacker') ? s.defender_name : s.attacker_name;
   const myName  = (spec || s.my_side === 'attacker') ? s.attacker_name : s.defender_name;
-  const myLeft  = s.my_side === 'attacker' ? s.att_turns_left : s.def_turns_left;
-  const foeLeft = s.my_side === 'attacker' ? s.def_turns_left : s.att_turns_left;
+  const done = s.status === 'done';
+  const mv = s.my_turn;
+  const actsMax = s.acts_max || 6;
+  const sel = (s.units || []).find(u => u.id === BB.sel);
+
+  // ── HUD: чей ход и сколько активаций осталось ──
+  const turnLbl = done ? 'бой окончен'
+    : (spec ? (s.side_to_move === 'attacker' ? esc(s.attacker_name || 'нападающий') : esc(s.defender_name || 'обороняющийся'))
+            : (mv ? 'ваш ход' : 'ход противника'));
+  const hud = `
+    <div class="bbf-hud${mv && !done ? ' bbf-hud-my' : ''}">
+      <span class="bbf-hud-t">${turnLbl}</span>
+      ${!done && mv ? `<span class="bbf-hud-a">${'◆'.repeat(Math.max(0, s.acts_left || 0))}${'◇'.repeat(Math.max(0, actsMax - (s.acts_left || 0)))}</span>` : ''}
+      <span class="bbf-hud-vs">${esc(myName)} · ${esc(foeName)}</span>
+    </div>`;
+
+  // ── Шторка: журнал / подкрепление ──
+  let sheet = '';
+  if (BB.sheet === 'log') {
+    const log = Array.isArray(s.log) ? s.log.slice(-40).reverse() : [];
+    sheet = `<div class="bbf-sheet"><div class="bbf-sheet-h">Журнал
+        <button onclick="bbSheet(null)">✕</button></div>
+      <div class="bbf-sheet-b">${log.length
+        ? log.map(l => `<div class="bb-log-l">${esc(l.m || '')}</div>`).join('')
+        : '<div class="bb-empty">Пока пусто.</div>'}</div></div>`;
+  } else if (BB.sheet === 'reinf') {
+    sheet = `<div class="bbf-sheet"><div class="bbf-sheet-h">Подкрепление
+        <button onclick="bbSheet(null)">✕</button></div>
+      <div class="bbf-sheet-b">${bbReinfPanel(s) || '<div class="bb-empty">Резерв пуст.</div>'}</div></div>`;
+  } else if (BB.sheet === 'unit' && sel) {
+    sheet = `<div class="bbf-sheet"><div class="bbf-sheet-h">${esc(sel.name)}
+        <button onclick="bbSheet(null)">✕</button></div>
+      <div class="bbf-sheet-b">${bbUnitPanel(s)}</div></div>`;
+  }
+
+  // ── Полоска выбранного корабля: коротко и всегда на виду ──
+  const bar = sel ? `<div class="bbf-sel" onclick="bbSheet('unit')">
+      <span class="bbf-sel-n">${esc(sel.name)}</span>
+      <span class="bbf-sel-hp"><i style="width:${Math.max(0, Math.min(100, sel.hp / sel.max_hp * 100))}%"></i></span>
+      <span class="bbf-sel-s">${sel.hp}/${sel.max_hp} · ход ${sel.speed}${sel.moved ? ' (истрачен)' : ''} · до ${sel.rng} гекс</span>
+      <span class="bbf-sel-more">ТТХ ▸</span>
+    </div>` : '';
+
+  const poolLeft = Array.isArray(s.pool) && s.pool.length && mv && !done;
 
   ov.innerHTML = `
-    <div class="bb-wrap">
-      <div class="bb-top">
-        <div class="bb-ttl">
-          <span class="bb-ttl-ic">⚔</span>
-          <span class="bb-ttl-t">${esc(s.system_name || s.system_id)}</span>
-          <span class="bb-ttl-sub">${s.kind === 'duel' ? '🥊 дуэль Бойцовского клуба' : s.kind === 'intercept' ? 'перехват на трассе' : 'встреча флотов'}</span>
-        </div>
-        <div class="bb-vs">
-          <span class="bb-vs-me">${esc(myName)}</span>
-          <span class="bb-vs-x">против</span>
-          <span class="bb-vs-foe">${esc(foeName)}</span>
-        </div>
-        <button class="bb-exit" title="Выйти из боя на сайт" onclick="bbClose()"><span class="bb-exit-a">←</span> На сайт</button>
+    <div class="bbd bbf">
+      <canvas id="bb-cv" class="bb-cv"></canvas>
+      <button class="bbd-back" onclick="bbClose()" title="Выйти на сайт">←</button>
+      ${hud}
+      <div class="bbd-zoom">
+        <button onclick="bbZoomBtn(1.3)">+</button>
+        <button onclick="bbZoomBtn(1/1.3)">−</button>
+        <button title="К своим кораблям" onclick="bbCamHome()">⌂</button>
       </div>
-      <div class="bb-body">
-        <div class="bb-boardw">
-          <div class="bb-cvw">
-            <canvas id="bb-cv" class="bb-cv"></canvas>
-            <div class="bb-zoom">
-              <button class="bb-zbtn" title="Приблизить" onclick="bbZoomBtn(1.3)">+</button>
-              <button class="bb-zbtn" title="Отдалить" onclick="bbZoomBtn(1/1.3)">−</button>
-              <button class="bb-zbtn" title="К своим кораблям" onclick="bbCamHome()">⌂</button>
-            </div>
-          </div>
-          ${bbPhaseBar(s, myLeft, foeLeft)}
-        </div>
-        <aside class="bb-side${BB.dock ? ' bb-side-open' : ''}" id="bb-side">
-          <button class="bb-side-h" onclick="bbDockToggle()" title="${BB.dock ? 'Свернуть панель' : 'Развернуть панель'}">
-            <span class="bb-side-h-ar">${BB.dock ? '▸' : '◂'}</span>
-            <span class="bb-side-h-t">${BB.dock ? 'Свернуть' : 'Панель'}</span>
-          </button>
-          <div class="bb-side-in">
-            ${s.status === 'forming' ? bbDeployPanel(s) : bbUnitPanel(s)}
-            ${bbLogPanel(s)}
-          </div>
-        </aside>
+      ${done ? `<div class="bbf-done ${s.winner === s.my_fid ? 'bbf-won' : (spec ? '' : 'bbf-lost')}">
+          <b>${spec ? 'Победа: ' + esc((s.winner === s.attacker ? s.attacker_name : s.defender_name) || '?')
+                    : (s.winner === s.my_fid ? 'Победа' : 'Поражение')}</b>
+          <button class="bbd-fire" onclick="bbClose()">закрыть</button>
+        </div>` : ''}
+      ${bar}
+      ${sheet}
+      <div class="bbd-cmd">
+        <button class="bbd-ic" onclick="bbSheet('log')" title="Журнал боя">▤</button>
+        ${poolLeft ? `<button class="bbd-ic" onclick="bbSheet('reinf')" title="Подкрепление">⊕</button>` : ''}
+        ${s.can_force ? `<button class="bbd-ic" onclick="bbForce()" title="Прожать просроченный ход">⏱</button>` : ''}
+        ${!done && mv ? `<button class="bbd-fire" onclick="bbEndTurn()">завершить ход</button>`
+                      : `<span class="bbf-wait">${done ? '' : bbDeadline(s)}</span>`}
       </div>
     </div>`;
 
@@ -395,7 +427,8 @@ function bbRender() {
   bbBindCanvas();
   bbPaint();
 }
-function bbDockToggle() { BB.dock = !BB.dock; bbRender(); }
+// Шторка: журнал / подкрепление / ТТХ выбранного борта.
+function bbSheet(k) { BB.sheet = (BB.sheet === k ? null : k); bbRender(); }
 
 // ════════════════════════════════════════════════════════════
 // ФАЗА РАССТАНОВКИ — отдельный экран (в т.ч. телефон)
@@ -405,6 +438,13 @@ function bbDockToggle() { BB.dock = !BB.dock; bbRender(); }
 // Гексы кликом тоже работают: выбран борт → тап по подсвеченной зоне.
 // ════════════════════════════════════════════════════════════
 
+// Русское склонение по числу: 1 борт, 2 борта, 5 бортов.
+function bbPlural(n, one, few, many) {
+  n = Math.abs(Math.round(n)) % 100;
+  if (n > 10 && n < 20) return many;
+  const d = n % 10;
+  return d === 1 ? one : (d >= 2 && d <= 4 ? few : many);
+}
 // Сводка лимитов расстановки: сколько бортов и денег уже потрачено.
 function bbDeployLim(s) {
   const cap = Math.max(0, Number(s.cap) || 0);
@@ -485,123 +525,60 @@ function bbClearPlace() {
   if (!BB.place.length) return;
   BB.place = []; BB.pick = null; bbRender();
 }
-// Развернуть/свернуть ростер (на телефоне док съедает доску — нужен тумблер).
-function bbDeployDock() { BB.ddock = !BB.ddock; bbRender(); }
-
 function bbRenderDeploy(s) {
   const ov = document.getElementById('bb-ov'); if (!ov) return;
   BB.deployUI = true;
-  if (BB.ddock === undefined) BB.ddock = true;
   const mine = s.my_side === 'attacker' ? s.att_ready : s.def_ready;
   const foe  = s.my_side === 'attacker' ? s.def_ready : s.att_ready;
-  const foeName = s.my_side === 'attacker' ? s.defender_name : s.attacker_name;
   const L = bbDeployLim(s);
   const pool = Array.isArray(s.pool) ? s.pool : [];
-  const used = {};
-  BB.place.forEach(p => { used[p.unit_id] = (used[p.unit_id] || 0) + 1; });
+  const cnt = {};
+  BB.place.forEach(p => { cnt[p.unit_id] = (cnt[p.unit_id] || 0) + 1; });
 
-  // ── счётчики лимитов ──
-  const capPct = L.cap > 0 ? Math.min(100, Math.round(100 * L.used / L.cap)) : 0;
-  const budPct = L.budget > 0 ? Math.min(100, Math.round(100 * L.spent / L.budget)) : 0;
-  const meters = `
-    <div class="bbd-m${L.used >= L.cap ? ' bbd-m-full' : ''}">
-      <div class="bbd-m-l">Бортов на доске</div>
-      <div class="bbd-m-v"><b>${L.used}</b><span>/ ${L.cap}</span></div>
-      <div class="bbd-m-bar"><i style="width:${capPct}%"></i></div>
-      <div class="bbd-m-s">${L.slots > 0 ? `свободно мест: ${L.slots}` : 'доска заполнена'}</div>
-    </div>
-    ${L.budget > 0 ? `<div class="bbd-m${L.over ? ' bbd-m-over' : ''}">
-      <div class="bbd-m-l">Бюджет флота</div>
-      <div class="bbd-m-v"><b>${bbNum(L.spent)}</b><span>/ ${bbNum(L.budget)} ГС</span></div>
-      <div class="bbd-m-bar"><i style="width:${budPct}%"></i></div>
-      <div class="bbd-m-s">${L.over ? `перебор на ${bbNum(-L.left)} ГС — снимите борт` : `осталось ${bbNum(L.left)} ГС`}</div>
-    </div>` : ''}
-    <div class="bbd-m bbd-m-foe">
-      <div class="bbd-m-l">Противник</div>
-      <div class="bbd-m-v"><b>${esc(foeName || '—')}</b></div>
-      <div class="bbd-m-s">${foe ? '✓ состав утверждён' : '⏳ ещё расставляет'}</div>
-    </div>`;
-
-  // ── ростер ──
-  const cards = pool.map(p => {
-    const on = BB.pick === p.unit_id;
-    const cnt = used[p.unit_id] || 0;
-    const free = (p.free || 0) - cnt;
+  // Лента бортов — накладка поверх карты. Борт тащится пальцем прямо на гекс;
+  // «+» сажает сам, если возиться неохота.
+  const chips = pool.map(p => {
+    const n = cnt[p.unit_id] || 0;
     const why = bbCanAdd(s, p);
-    const price = Number(p.cost) > 0 ? `<span class="bbd-c-price">${bbNum(p.cost)} ГС</span>` : '';
-    return `<div class="bbd-c${on ? ' bbd-c-on' : ''}${cnt ? ' bbd-c-used' : ''}">
-        <button class="bbd-c-main" onclick="bbPick('${jsq(p.unit_id)}')"
-          title="Выбрать борт и поставить его тапом по своей зоне">
-          <span class="bbd-c-top">
-            <span class="bbd-c-ic">${bbClsIco(p.cls)}</span>
-            <span class="bbd-c-n">${esc(p.unit_name)}</span>
-            ${price}
-          </span>
-          <span class="bbd-c-cls">${bbClsName(p.cls)} · в резерве ${free} из ${p.free || 0}</span>
-          <span class="bbd-c-st">
-            <i>${bbNum(p.hp)}<u>корпус</u></i>
-            <i>${bbNum(p.dmg)}<u>урон</u></i>
-            <i>${p.speed}<u>ход</u></i>
-            <i>${p.rng}<u>дальн.</u></i>
-          </span>
-          <span class="bbd-c-x">${bbPoolDetail(p)}</span>
-        </button>
-        <div class="bbd-c-step">
-          <button class="bbd-st" ${cnt ? '' : 'disabled'} onclick="bbDelOne('${jsq(p.unit_id)}')" title="Снять с доски">−</button>
-          <b class="bbd-st-n">${cnt}</b>
-          <button class="bbd-st bbd-st-p" ${why ? 'disabled' : ''} onclick="bbAddOne('${jsq(p.unit_id)}')"
-            title="${why ? esc(why) : 'Поставить на свободное место своей зоны'}">＋</button>
-        </div>
+    const on = BB.pick === p.unit_id;
+    return `<div class="bbd-s${on ? ' bbd-s-on' : ''}${why ? ' bbd-s-off' : ''}"
+        onpointerdown="bbTrayGrab(event,'${jsq(p.unit_id)}')">
+        <span class="bbd-s-n">${esc(p.unit_name)}</span>
+        <span class="bbd-s-i">${bbNum(p.hp)} корп · ${bbNum(p.dmg)} урон · ${p.rng} гекс${Number(p.cost) > 0 ? ` · ${bbNum(p.cost)}` : ''}</span>
+        ${n ? `<span class="bbd-s-q">${n}</span>` : ''}
+        <button class="bbd-s-a" ${why ? 'disabled' : ''} title="${why ? esc(why) : 'Поставить борт'}"
+          onpointerdown="event.stopPropagation()" onclick="bbAddOne('${jsq(p.unit_id)}')">+</button>
       </div>`;
   }).join('');
 
-  const pickedName = BB.pick ? (pool.find(p => p.unit_id === BB.pick) || {}).unit_name : null;
-  const hint = mine
-    ? '✓ Состав утверждён. Ждём противника — доска обновится сама.'
-    : (pickedName
-        ? `Выбран «${esc(pickedName)}» — тапните по подсвеченному гексу своей зоны. Тап по уже стоящему борту снимает его.`
-        : 'Выберите корабль в ростере снизу (или жмите ＋ — он сядет сам). Тап по стоящему борту снимает его с доски.');
-
   ov.innerHTML = `
     <div class="bbd">
-      <div class="bb-top bbd-top">
-        <div class="bb-ttl">
-          <span class="bb-ttl-ic"></span>
-          <span class="bb-ttl-t">Расстановка флота</span>
-          <span class="bb-ttl-sub">${s.kind === 'duel' ? 'дуэль Бойцовского клуба' : esc(s.system_name || s.system_id)}</span>
-        </div>
-        <button class="bb-exit" onclick="bbClose()"><span class="bb-exit-a">←</span> На сайт</button>
+      <canvas id="bb-cv" class="bb-cv"></canvas>
+
+      <button class="bbd-back" onclick="bbClose()" title="Выйти на сайт">←</button>
+
+      <div class="bbd-hud${L.over ? ' bbd-hud-over' : ''}">
+        <span class="bbd-hud-n"><b>${L.used}</b>/${L.cap}</span>
+        <span class="bbd-hud-l">борта</span>
+        ${L.budget > 0 ? `<span class="bbd-hud-sep"></span>
+        <span class="bbd-hud-n"><b>${bbNum(L.spent)}</b>/${bbNum(L.budget)}</span>
+        <span class="bbd-hud-l">ГС</span>` : ''}
+        <span class="bbd-hud-foe">${foe ? '● враг готов' : '○ враг ставит'}</span>
       </div>
 
-      <div class="bbd-meters">${meters}</div>
-
-      <div class="bbd-stage" id="bbd-stage">
-        <div class="bb-cvw">
-          <canvas id="bb-cv" class="bb-cv"></canvas>
-          <div class="bb-zoom">
-            <button class="bb-zbtn" title="Приблизить" onclick="bbZoomBtn(1.3)">+</button>
-            <button class="bb-zbtn" title="Отдалить" onclick="bbZoomBtn(1/1.3)">−</button>
-            <button class="bb-zbtn" title="К своей зоне" onclick="bbCamDeploy(1)">⌂</button>
-          </div>
-        </div>
-        <div class="bbd-hint${mine ? ' bbd-hint-ok' : ''}">${hint}</div>
+      <div class="bbd-zoom">
+        <button onclick="bbZoomBtn(1.3)">+</button>
+        <button onclick="bbZoomBtn(1/1.3)">−</button>
+        <button title="К своей зоне" onclick="bbCamDeploy(1)">⌂</button>
       </div>
 
-      <div class="bbd-dock${BB.ddock ? ' bbd-dock-open' : ''}">
-        <button class="bbd-dock-h" onclick="bbDeployDock()">
-          <span>Ростер · ${pool.length}</span>
-          <span class="bbd-dock-ar">${BB.ddock ? '▾' : '▴'}</span>
-        </button>
-        <div class="bbd-roster">
-          ${cards || '<div class="bb-empty">Резерв пуст: выводить в бой нечего.</div>'}
-        </div>
-      </div>
+      <div class="bbd-tray" id="bbd-tray">${chips || '<div class="bbd-none">Резерв пуст</div>'}</div>
 
-      <div class="bbd-act">
-        <button class="btn btn-gh btn-sm" ${mine ? 'disabled' : ''} onclick="bbAutoPlace()">⚡ Авто-состав</button>
-        <button class="btn btn-gh btn-sm" ${mine || !BB.place.length ? 'disabled' : ''} onclick="bbClearPlace()">Очистить</button>
-        <button class="btn btn-gd bbd-go" ${mine || !BB.place.length || L.over ? 'disabled' : ''} onclick="bbConfirmDeploy()">
-          ${mine ? 'Ждём противника…' : `В бой · ${L.used} ${L.used === 1 ? 'борт' : (L.used < 5 ? 'борта' : 'бортов')}`}
+      <div class="bbd-cmd">
+        <button class="bbd-ic" ${mine ? 'disabled' : ''} onclick="bbAutoPlace()" title="Расставить автоматически">⚡</button>
+        <button class="bbd-ic" ${mine || !BB.place.length ? 'disabled' : ''} onclick="bbClearPlace()" title="Снять всех">✕</button>
+        <button class="bbd-fire" ${mine || !BB.place.length || L.over ? 'disabled' : ''} onclick="bbConfirmDeploy()">
+          ${mine ? 'ждём врага' : (L.over ? 'перебор' : 'в бой')}
         </button>
       </div>
     </div>`;
@@ -611,6 +588,63 @@ function bbRenderDeploy(s) {
   bbFit();
   bbBindCanvas();
   bbPaint();
+}
+
+// Занят ли гекс (кроме перетаскиваемого борта с индексом skip).
+function bbCellBusy(x, y, skip) {
+  const s = BB.st;
+  if ((s.units || []).some(u => u.x === x && u.y === y)) return true;
+  return BB.place.some((p, i) => i !== skip && p.x === x && p.y === y);
+}
+
+// Тяга борта из ленты прямо на карту: палец ведёт «призрак», отпуск над своей
+// зоной сажает борт в этот гекс. Короткий тап = просто выбрать борт.
+function bbTrayGrab(ev, uid) {
+  const s = BB.st; if (!s || BB.st.status !== 'forming') return;
+  const p = (s.pool || []).find(q => q.unit_id === uid); if (!p) return;
+  ev.preventDefault();
+  const why = bbCanAdd(s, p);
+  const g = document.createElement('div');
+  g.className = 'bbd-ghost';
+  g.textContent = p.unit_name;
+  document.body.appendChild(g);
+  const st = { uid, ghost: g, moved: false, x0: ev.clientX, y0: ev.clientY, why };
+  BB.trayDrag = st;
+  const put = e => {
+    g.style.left = e.clientX + 'px';
+    g.style.top = e.clientY + 'px';
+  };
+  put(ev);
+  const onMove = e => {
+    if (Math.abs(e.clientX - st.x0) + Math.abs(e.clientY - st.y0) > 6) st.moved = true;
+    put(e);
+    if (st.moved && BB.cv) {
+      const c = bbHexAt(e);
+      const ok = c && bbInMyZone(c.x) && !bbCellBusy(c.x, c.y, -1) && !why;
+      BB.dropCell = st.moved ? (c || null) : null;
+      BB.dropOk = !!ok;
+      g.classList.toggle('bbd-ghost-ok', !!ok);
+      bbPaint();
+    }
+  };
+  const onUp = e => {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
+    g.remove();
+    BB.trayDrag = null; BB.dropCell = null; BB.dropOk = false;
+    if (!st.moved) { bbPick(uid); return; }          // тап — просто выбрать
+    if (why) { toast(why, 'err'); bbPaint(); return; }
+    const c = bbHexAt(e);
+    if (!c || !bbInMyZone(c.x)) { toast('Отпускать надо в своей зоне — подсвеченные гексы', 'err'); bbPaint(); return; }
+    if (bbCellBusy(c.x, c.y, -1)) { toast('Гекс занят', 'err'); bbPaint(); return; }
+    BB.place.push({ unit_id: p.unit_id, unit_name: p.unit_name, cls: p.cls, x: c.x, y: c.y });
+    BB.pick = uid;
+    bbRender();
+  };
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
 }
 
 // Камера расстановки: показать СВОЮ зону спавна целиком по высоте доски.
@@ -627,58 +661,6 @@ function bbCamDeploy(force) {
   if (force && BB.ctx) bbPaint();
 }
 
-// Полоса состояния: чей ход, активации, срок явки + тумблер дока.
-function bbPhaseBar(s, myLeft, foeLeft) {
-  const dockBtn = `<button class="btn btn-gh btn-sm" onclick="bbDockToggle()">${BB.dock ? '▸ Скрыть панель' : '☰ Панель'}</button>`;
-  if (s.status === 'done') {
-    // Зритель дуэли: нейтральный вердикт вместо «вашей» победы/поражения.
-    if (s.my_side === 'spectator') {
-      const wn = s.winner === s.attacker ? s.attacker_name : s.defender_name;
-      return `<div class="bb-bar bb-bar-won">
-          <b>⚑ Победа: ${esc(wn || s.winner || '?')}</b>
-          <span class="bb-bar-sub">Дуэль окончена. Кассы клуба считают выплаты.</span>
-          <button class="btn btn-gd btn-sm" onclick="bbClose()">Закрыть</button>
-        </div>`;
-    }
-    const won = s.winner === s.my_fid;
-    return `<div class="bb-bar ${won ? 'bb-bar-won' : 'bb-bar-lost'}">
-        <b>${won ? '⚑ Победа' : '⚑ Поражение'}</b>
-        <span class="bb-bar-sub">Бой окончен. Потери списаны с флотов.</span>
-        <button class="btn btn-gd btn-sm" onclick="bbClose()">Закрыть</button>
-      </div>`;
-  }
-  if (s.status === 'forming') {
-    const mine = s.my_side === 'attacker' ? s.att_ready : s.def_ready;
-    const foe  = s.my_side === 'attacker' ? s.def_ready : s.att_ready;
-    // бюджет драфта дуэли: сумма стоимости выставленного ≤ duel_budget
-    const budget = Number(s.duel_budget) || 0;
-    const spent = bbDuelSpent(s);
-    const over = budget > 0 && spent > budget;
-    const budgetSub = budget > 0
-      ? ` Бюджет: ${bbNum(spent)} / ${bbNum(budget)} ГС${over ? ' — перебор!' : ''}.` : '';
-    return `<div class="bb-bar${over ? ' bb-bar-foe' : ''}">
-        <b>Расстановка</b>
-        <span class="bb-bar-sub">${mine ? 'Ваш состав утверждён.' : 'Вытащите корабли из резерва в свою зону.'} ${foe ? 'Противник готов.' : 'Противник ещё расставляет.'}${budgetSub}</span>
-        ${dockBtn}
-        ${mine ? '' : `<button class="btn btn-gd btn-sm" ${BB.place.length && !over ? '' : 'disabled'} onclick="bbConfirmDeploy()">В бой (${BB.place.length})</button>`}
-      </div>`;
-  }
-  const mv = s.my_turn;
-  const actsMax = s.acts_max || 6;
-  const acts = mv ? `<span class="bb-acts" title="Активаций кораблями в этом ходу">
-      ${'◆'.repeat(Math.max(0, s.acts_left || 0))}${'◇'.repeat(Math.max(0, actsMax - (s.acts_left || 0)))}
-      <i>${s.acts_left || 0}/${actsMax}</i></span>` : '';
-  const turnLbl = s.my_side === 'spectator'
-    ? 'Ходит: ' + (s.side_to_move === 'attacker' ? (s.attacker_name || 'нападающий') : (s.defender_name || 'обороняющийся'))
-    : (mv ? 'Ваш ход' : 'Ход противника');
-  return `<div class="bb-bar ${mv ? 'bb-bar-my' : 'bb-bar-foe'}">
-      <b>${esc(turnLbl)}</b>${acts}
-      <span class="bb-bar-sub">Бой до полного уничтожения одной из сторон. ${bbDeadline(s)}</span>
-      ${dockBtn}
-      ${mv ? `<button class="btn btn-gd btn-sm" onclick="bbEndTurn()">Завершить ход</button>` : ''}
-      ${s.can_force ? `<button class="btn btn-gh btn-sm" onclick="bbForce()">Прожать просроченный ход</button>` : ''}
-    </div>`;
-}
 function bbDeadline(s) {
   if (!s.deadline_at) return '';
   const ms = new Date(s.deadline_at) - new Date();
@@ -714,44 +696,6 @@ function bbPoolDetail(p) {
   return bits.join(' · ');
 }
 
-// ── Панель расстановки ──────────────────────────────────────
-function bbDeployPanel(s) {
-  const pool = Array.isArray(s.pool) ? s.pool : [];
-  const used = {};
-  BB.place.forEach(p => { used[p.unit_id] = (used[p.unit_id] || 0) + 1; });
-  const budget = Number(s.duel_budget) || 0;
-  const rows = pool.map(p => {
-    const free = (p.free || 0) - (used[p.unit_id] || 0);
-    const on = BB.pick === p.unit_id;
-    const price = Number(p.cost) > 0 ? ` · ${bbNum(p.cost)} ГС` : '';
-    return `<button class="bb-pool${on ? ' bb-pool-on' : ''}" ${free <= 0 ? 'disabled' : ''}
-        onclick="bbPick('${jsq(p.unit_id)}')">
-        <span class="bb-pool-cls">${bbClsIco(p.cls)}</span>
-        <span class="bb-pool-n">${esc(p.unit_name)}
-          <i>${bbPoolDetail(p)}${price}</i></span>
-        <span class="bb-pool-q">×${free}</span>
-      </button>`;
-  }).join('');
-  // счётчик бюджета драфта (только у дуэли клуба)
-  let meter = '';
-  if (budget > 0) {
-    const spent = bbDuelSpent(s);
-    const pct = Math.min(100, Math.round(100 * spent / budget));
-    const over = spent > budget;
-    meter = `<div class="bb-budget${over ? ' bb-budget-over' : ''}">
-        <div class="bb-budget-h">Бюджет флота: <b>${bbNum(spent)}</b> / ${bbNum(budget)} ГС${over ? ' — уберите борт' : ''}</div>
-        <div class="bb-budget-bar"><span style="width:${pct}%"></span></div>
-      </div>`;
-  }
-  return `<div class="bb-panel">
-      <div class="bb-panel-t">Резерв на поле боя</div>
-      <div class="bb-panel-h">${budget > 0
-        ? 'Соберите флот из резерва в рамках бюджета: выберите корабль, затем клик по своей зоне (подсвеченные гексы у вашего края).'
-        : 'Выберите корабль, затем клик по своей зоне (подсвеченные гексы у вашего края).'} Максимум ${s.cap} на доске. Клик по уже поставленному — снять.</div>
-      ${meter}
-      ${rows || '<div class="bb-empty">Резерв пуст: в скованных боем флотах кораблей нет.</div>'}
-    </div>`;
-}
 function bbPick(uid) { BB.pick = (BB.pick === uid ? null : uid); bbRender(); }
 
 // ── Панель выбранного корабля / резерва в бою ───────────────
@@ -1040,18 +984,12 @@ function bbHasHeal(u) { return !!(u && u.wpn && u.wpn.some(bbIsHeal)); }
 // ── КАМЕРА ──────────────────────────────────────────────────
 function bbFit() {
   const s = BB.st; if (!s || !BB.cv) return;
-  const wrap = BB.cv.parentElement;
-  const wide = window.innerWidth > 900;
-  BB.vw = Math.max(240, wrap.clientWidth || 320);
-  if (BB.deployUI) {
-    // экран расстановки — колонка фиксированной высоты: доске достаётся
-    // ровно то, что осталось между счётчиками лимитов и ростером
-    const stage = document.getElementById('bbd-stage');
-    BB.vh = Math.max(200, (stage && stage.clientHeight) || 320);
-  } else {
-    BB.vh = Math.max(260, window.innerHeight - (wide ? 160 : 220));
-  }
-  wrap.style.height = BB.vh + 'px';
+  // Оба экрана боя — карта во весь вьюпорт; панели лежат накладками поверх.
+  // Размер берём у РОДИТЕЛЯ канваса: он и есть слой карты, поэтому канвас
+  // всегда точно совпадает с ним, без чёрных полей снизу.
+  const box = BB.cv.parentElement.getBoundingClientRect();
+  BB.vw = Math.max(240, Math.round(box.width) || window.innerWidth);
+  BB.vh = Math.max(260, Math.round(box.height) || window.innerHeight);
   BB.dpr = Math.min(2, window.devicePixelRatio || 1);
   BB.cv.style.width = BB.vw + 'px'; BB.cv.style.height = BB.vh + 'px';
   BB.cv.width = Math.round(BB.vw * BB.dpr); BB.cv.height = Math.round(BB.vh * BB.dpr);
@@ -1113,6 +1051,16 @@ function bbBindCanvas() {
     BB.ptrs.set(ev.pointerId, bbScreenXY(ev));
     if (BB.ptrs.size === 1) {
       const p = bbScreenXY(ev);
+      // РАССТАНОВКА: палец лёг на уже стоящий борт — тащим ЕГО, а не камеру.
+      const c = BB.deployUI ? bbHexAt(ev) : null;
+      const i = c ? BB.place.findIndex(q => q.x === c.x && q.y === c.y) : -1;
+      if (i >= 0) {
+        BB.shipDrag = { i, cell: c, moved: false, sx: p.sx, sy: p.sy };
+        BB.drag = null; BB.pinch = null;
+        bbPaint();
+        ev.preventDefault();
+        return;
+      }
       BB.drag = { sx: p.sx, sy: p.sy, camX: BB.camX, camY: BB.camY, moved: false };
       BB.pinch = null;
       BB.camAnim = null;   // ручной пан отменяет авто-доворот камеры
@@ -1126,6 +1074,13 @@ function bbBindCanvas() {
   cv.onpointermove = ev => {
     const p = bbScreenXY(ev);
     if (BB.ptrs.has(ev.pointerId)) BB.ptrs.set(ev.pointerId, p);
+    // тянем борт по доске — он едет за пальцем, гекс-приёмник подсвечен
+    if (BB.shipDrag) {
+      if (Math.abs(p.sx - BB.shipDrag.sx) + Math.abs(p.sy - BB.shipDrag.sy) > 5) BB.shipDrag.moved = true;
+      BB.shipDrag.cell = bbHexAt(ev);
+      bbPaint();
+      return;
+    }
     if (BB.pinch && BB.ptrs.size >= 2) {
       const [a, b] = [...BB.ptrs.values()];
       const d = Math.hypot(a.sx - b.sx, a.sy - b.sy);
@@ -1154,6 +1109,25 @@ function bbBindCanvas() {
     }
   };
   cv.onpointerup = ev => {
+    // отпустили борт: в свою зону — переставить, мимо зоны — снять с доски
+    if (BB.shipDrag) {
+      const d = BB.shipDrag; BB.shipDrag = null;
+      BB.ptrs.delete(ev.pointerId);
+      const ship = BB.place[d.i];
+      const c = bbHexAt(ev);
+      if (!d.moved) { BB.pick = ship ? ship.unit_id : BB.pick; bbRender(); return; }
+      if (!ship) { bbRender(); return; }
+      if (!c || !bbInMyZone(c.x)) {
+        BB.place.splice(d.i, 1);
+        toast(`«${ship.unit_name}» снят с доски`, 'ok');
+      } else if (bbCellBusy(c.x, c.y, d.i)) {
+        toast('Гекс занят — тащите на свободный', 'err');
+      } else {
+        ship.x = c.x; ship.y = c.y;
+      }
+      bbRender();
+      return;
+    }
     const wasDrag = BB.drag && BB.drag.moved;
     const wasPinch = !!BB.pinch;
     BB.ptrs.delete(ev.pointerId);
@@ -1166,7 +1140,7 @@ function bbBindCanvas() {
       }
     }
   };
-  cv.onpointercancel = ev => { BB.ptrs.delete(ev.pointerId); BB.drag = null; if (BB.ptrs.size < 2) BB.pinch = null; };
+  cv.onpointercancel = ev => { BB.ptrs.delete(ev.pointerId); BB.drag = null; BB.shipDrag = null; if (BB.ptrs.size < 2) BB.pinch = null; };
   cv.onpointerleave = () => { if (!BB.drag) { BB.hover = null; bbPaint(); } };
   cv.onwheel = ev => {
     ev.preventDefault();

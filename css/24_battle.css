@@ -7,7 +7,7 @@
 .bb-ov {
   position: fixed; inset: 0; z-index: 9000;
   background: #04060b;
-  display: none; overflow: auto;
+  display: none; overflow: hidden;
   --bbc: #5adcf0;                     /* циан — свои */
   --bbm: #ff3c82;                     /* маджента — чужие */
   --bb-cut: 12px;
@@ -321,152 +321,210 @@
 }
 
 /* ════════════════════════════════════════════════════════════
-   ФАЗА РАССТАНОВКИ — отдельный экран (battle_board.js, bbRenderDeploy)
-   Колонка на весь вьюпорт: шапка → счётчики лимитов → доска (тянется) →
-   ростер → полоса действий. Ростер и действия липнут к низу — на телефоне
-   всё под большим пальцем, доска не уезжает под клавиатуру браузера.
+   ФАЗА РАССТАНОВКИ (bbRenderDeploy) — КАРТА НА ВЕСЬ ЭКРАН.
+   Никаких панелей: канвас занимает весь вьюпорт, всё остальное —
+   накладки поверх него. Слои по углам, чтобы не перекрывать друг друга:
+   ← слева сверху, счётчик справа сверху, зум справа над лентой,
+   лента бортов и «В БОЙ» — прижаты к низу.
+   pointer-events: none на контейнерах-обёртках, auto на самих кнопках,
+   иначе прозрачные слои съедают тапы по карте.
    ════════════════════════════════════════════════════════════ */
-.bbd {
-  height: 100vh; height: 100dvh;
-  display: flex; flex-direction: column; overflow: hidden;
-}
-.bbd-top { flex: 0 0 auto; }
+.bbd { position: absolute; inset: 0; overflow: hidden; background: #04060b; }
+.bbd .bb-cv { position: absolute; left: 0; top: 0; box-shadow: none; }
 
-/* ── Счётчики лимитов: главное на экране, читается с метра ── */
-.bbd-meters {
-  flex: 0 0 auto; display: flex; gap: 10px; padding: 10px 18px;
-  overflow-x: auto; scrollbar-width: none;
+/* ← выход */
+.bbd-back {
+  position: absolute; left: 8px; top: 8px; z-index: 5;
+  width: 44px; height: 44px; border: 0; cursor: pointer;
+  background: rgba(4,10,16,.82); color: var(--bbc);
+  font-size: 20px; line-height: 1;
 }
-.bbd-meters::-webkit-scrollbar { display: none; }
-.bbd-m {
-  position: relative; z-index: 0; flex: 1 1 0; min-width: 148px;
-  padding: 9px 13px 10px;
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
-}
-.bbd-m::before { content: ""; position: absolute; inset: 0; z-index: -2; background: rgba(90,220,240,.24); }
-.bbd-m::after {
-  content: ""; position: absolute; inset: 1px; z-index: -1; background: rgba(10,18,26,.95);
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
-}
-.bbd-m-l {
-  color: #6f8998; font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
-  font-family: var(--font-mono, monospace);
-}
-.bbd-m-v { display: flex; align-items: baseline; gap: 6px; margin: 3px 0 5px; }
-.bbd-m-v b {
-  color: #eaf6ff; font-size: 25px; font-weight: 800; line-height: 1;
-  font-family: var(--font-display, 'Rajdhani', sans-serif);
-}
-.bbd-m-v span { color: #6f8998; font-size: 12px; font-family: var(--font-mono, monospace); }
-.bbd-m-bar { height: 4px; background: rgba(90,220,240,.12); overflow: hidden; }
-.bbd-m-bar i { display: block; height: 100%; background: var(--bbc); transition: width .18s; }
-.bbd-m-s { color: #6f8998; font-size: 11px; margin-top: 5px; }
-.bbd-m-full::before { background: var(--bbc); }
-.bbd-m-over::before { background: var(--bbm); }
-.bbd-m-over .bbd-m-v b, .bbd-m-over .bbd-m-s { color: #ff7f9f; }
-.bbd-m-over .bbd-m-bar i { background: var(--bbm); }
-.bbd-m-foe { flex: 0 1 190px; }
-.bbd-m-foe .bbd-m-v b { font-size: 15px; color: var(--bbm); letter-spacing: .04em; }
+.bbd-back:hover { background: rgba(20,40,52,.9); }
 
-/* ── Стапель: доска занимает весь остаток высоты ── */
-.bbd-stage { position: relative; flex: 1 1 auto; min-height: 0; padding: 0 18px; }
-.bbd-stage .bb-cvw { height: 100%; }
-.bbd-hint {
-  position: absolute; left: 18px; right: 18px; bottom: 8px; z-index: 3;
-  padding: 8px 12px; background: rgba(6,14,20,.92);
-  color: #9fc2d2; font-size: 12px; line-height: 1.45; pointer-events: none;
-  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
-  border-left: 2px solid var(--bbc);
+/* счётчик лимитов */
+.bbd-hud {
+  position: absolute; right: 8px; top: 8px; z-index: 5;
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  max-width: calc(100% - 68px);
+  padding: 7px 11px; background: rgba(4,10,16,.82);
+  font-family: var(--font-mono, monospace); font-size: 11px; color: #6f8998;
+  pointer-events: none;
 }
-.bbd-hint-ok { color: #7ce8b8; border-left-color: #7ce8b8; }
+.bbd-hud-n { color: #eaf6ff; font-size: 12px; }
+.bbd-hud-n b { color: var(--bbc); font-size: 16px; font-weight: 700; }
+.bbd-hud-l { letter-spacing: .1em; text-transform: uppercase; font-size: 9.5px; }
+.bbd-hud-sep { width: 1px; height: 14px; background: rgba(90,220,240,.25); margin: 0 2px; align-self: center; }
+.bbd-hud-foe { width: 100%; text-align: right; font-size: 10px; letter-spacing: .06em; }
+.bbd-hud-over .bbd-hud-n b { color: var(--bbm); }
 
-/* ── Ростер: карточки-борта под палец ── */
-.bbd-dock { flex: 0 0 auto; background: rgba(6,10,16,.96); border-top: 1px solid var(--bb-line); }
-.bbd-dock-h {
-  display: none; width: 100%; align-items: center; justify-content: space-between;
-  padding: 9px 16px; border: 0; background: transparent; cursor: pointer;
-  color: #8fe6ff; font-family: var(--font-mono, monospace); font-size: 11.5px;
-  letter-spacing: .12em; text-transform: uppercase;
+/* зум — над лентой, у правого края */
+.bbd-zoom {
+  position: absolute; right: 8px; bottom: 172px; z-index: 5;
+  display: flex; flex-direction: column; gap: 6px;
 }
-.bbd-roster {
-  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(236px, 1fr);
-  gap: 10px; padding: 12px 18px; overflow-x: auto; overscroll-behavior-x: contain;
-  scroll-snap-type: x proximity;
+.bbd-zoom button {
+  width: 44px; height: 44px; border: 0; cursor: pointer;
+  background: rgba(4,10,16,.82); color: #8fe6ff;
+  font-size: 17px; line-height: 1; font-family: var(--font-mono, monospace);
 }
-.bbd-c {
-  position: relative; z-index: 0; display: flex; flex-direction: column;
-  scroll-snap-align: start;
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+.bbd-zoom button:hover { background: rgba(20,40,52,.9); }
+
+/* лента бортов: горизонтальный скролл поверх карты */
+.bbd-tray {
+  position: absolute; left: 0; right: 0; bottom: 68px; z-index: 5;
+  display: flex; gap: 8px; padding: 8px 8px 10px;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity;
+  background: linear-gradient(rgba(4,6,11,0), rgba(4,6,11,.88) 32%);
+  scrollbar-width: none;
 }
-.bbd-c::before { content: ""; position: absolute; inset: 0; z-index: -2; background: rgba(90,220,240,.16); transition: background .14s; }
-.bbd-c::after {
-  content: ""; position: absolute; inset: 1px; z-index: -1; background: rgba(13,21,30,.96);
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+.bbd-tray::-webkit-scrollbar { display: none; }
+.bbd-s {
+  position: relative; flex: 0 0 auto; width: 158px; min-height: 62px;
+  padding: 8px 40px 8px 10px; cursor: grab; scroll-snap-align: start;
+  background: rgba(9,20,28,.94); box-shadow: inset 0 0 0 1px rgba(90,220,240,.2);
+  touch-action: none;                  /* тянем борт, а не скроллим ленту */
+  display: flex; flex-direction: column; justify-content: center; gap: 4px;
 }
-.bbd-c-on::before { background: var(--bbc); }
-.bbd-c-used::after { background: rgba(18,34,44,.96); }
-.bbd-c-main {
-  flex: 1; display: flex; flex-direction: column; gap: 5px; text-align: left;
-  border: 0; background: transparent; cursor: pointer; font: inherit;
-  padding: 10px 12px 4px; color: #cfe6f0;
-}
-.bbd-c-top { display: flex; align-items: center; gap: 7px; }
-.bbd-c-ic { color: var(--bbc); font-size: 16px; }
-.bbd-c-n {
-  flex: 1; min-width: 0; font-size: 13.5px; font-weight: 700; color: #eaf6ff;
+.bbd-s-on { box-shadow: inset 0 0 0 2px var(--bbc); background: rgba(16,38,50,.96); }
+.bbd-s-off { opacity: .45; }
+.bbd-s-n {
+  color: #eaf6ff; font-size: 13px; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.bbd-c-price { color: var(--bbc); font-size: 11.5px; font-family: var(--font-mono, monospace); }
-.bbd-c-cls { color: #6f8998; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; font-family: var(--font-mono, monospace); }
-.bbd-c-st { display: flex; gap: 12px; margin-top: 2px; }
-.bbd-c-st i { font-style: normal; color: #eaf6ff; font-size: 13px; font-family: var(--font-mono, monospace); }
-.bbd-c-st u { display: block; color: #61808f; font-size: 9.5px; text-decoration: none; letter-spacing: .08em; text-transform: uppercase; }
-.bbd-c-x {
-  color: #5d7a88; font-size: 10.5px; line-height: 1.4; margin-top: 3px;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+.bbd-s-i {
+  color: #6f8998; font-size: 10px; font-family: var(--font-mono, monospace);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-/* степпер: снять / поставить — крупные цели тапа */
-.bbd-c-step {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 6px 10px 8px;
+/* счётчик поставленных — угловой бейдж */
+.bbd-s-q {
+  position: absolute; left: 0; top: 0; min-width: 18px; height: 18px;
+  background: var(--bbc); color: #04121a; font-size: 11px; font-weight: 700;
+  line-height: 18px; text-align: center; font-family: var(--font-mono, monospace);
 }
-.bbd-st {
-  flex: 1; min-height: 38px; border: 0; cursor: pointer;
-  background: rgba(90,220,240,.12); color: #bfe9f7;
-  font-size: 18px; line-height: 1; font-family: var(--font-mono, monospace);
-  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
-  transition: background .14s, color .14s;
+/* «+» — своя тап-цель во всю высоту карточки справа */
+.bbd-s-a {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 40px;
+  border: 0; cursor: pointer; background: rgba(90,220,240,.12); color: #bfe9f7;
+  font-size: 20px; line-height: 1; font-family: var(--font-mono, monospace);
 }
-.bbd-st:hover:not(:disabled) { background: rgba(90,220,240,.3); color: #eaf6ff; }
-.bbd-st:disabled { opacity: .28; cursor: default; }
-.bbd-st-p { background: rgba(90,220,240,.22); color: #eaf6ff; }
-.bbd-st-n {
-  flex: 0 0 34px; text-align: center; color: #eaf6ff; font-size: 16px;
+.bbd-s-a:hover:not(:disabled) { background: rgba(90,220,240,.3); }
+.bbd-s-a:disabled { opacity: .3; cursor: default; }
+.bbd-none { color: #55707e; font-size: 12px; font-style: italic; padding: 20px 10px; }
+
+/* нижняя командная строка */
+.bbd-cmd {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px calc(8px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) 8px;
+  background: rgba(4,6,11,.94); border-top: 1px solid rgba(90,220,240,.16);
+}
+.bbd-ic {
+  width: 48px; height: 44px; flex: 0 0 auto; border: 0; cursor: pointer;
+  background: rgba(90,220,240,.1); color: #bfe9f7; font-size: 16px; line-height: 1;
+}
+.bbd-ic:hover:not(:disabled) { background: rgba(90,220,240,.26); }
+.bbd-ic:disabled { opacity: .3; cursor: default; }
+.bbd-fire {
+  flex: 1; height: 44px; border: 0; cursor: pointer;
+  background: var(--bbc); color: #04121a;
+  font-size: 14px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+}
+.bbd-fire:hover:not(:disabled) { filter: brightness(1.12); }
+.bbd-fire:disabled { background: rgba(90,220,240,.14); color: #5d7f90; cursor: default; }
+
+/* «призрак» борта под пальцем */
+.bbd-ghost {
+  position: fixed; z-index: 9500; transform: translate(-50%, -140%);
+  padding: 6px 10px; pointer-events: none; white-space: nowrap;
+  background: rgba(9,20,28,.96); box-shadow: inset 0 0 0 1px rgba(90,220,240,.35);
+  color: #cfe6f0; font-size: 12px;
+}
+.bbd-ghost-ok { box-shadow: inset 0 0 0 2px var(--bbc); color: #eaf6ff; }
+
+@media (min-width: 760px) {
+  .bbd-back { width: 48px; height: 48px; left: 14px; top: 14px; }
+  .bbd-hud { right: 14px; top: 14px; padding: 9px 14px; font-size: 12px; }
+  .bbd-hud-n b { font-size: 19px; }
+  .bbd-zoom { right: 14px; bottom: 186px; }
+  .bbd-tray { padding: 10px 14px 12px; gap: 10px; bottom: 72px; }
+  .bbd-s { width: 208px; }
+  .bbd-cmd { padding: 10px 14px; }
+  .bbd-fire { flex: 0 0 300px; margin-left: auto; }
+}
+
+
+/* ── БОЕВОЙ ЭКРАН поверх карты (bbRender): HUD + шторки ── */
+.bbf-hud {
+  position: absolute; right: 8px; top: 8px; z-index: 5;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  max-width: calc(100% - 68px); padding: 7px 11px;
+  background: rgba(4,10,16,.86); pointer-events: none;
   font-family: var(--font-mono, monospace);
 }
-
-/* ── Полоса действий ── */
-.bbd-act {
-  flex: 0 0 auto; display: flex; gap: 10px; align-items: center;
-  padding: 10px 18px calc(10px + env(safe-area-inset-bottom, 0px));
-  background: rgba(4,8,13,.98); border-top: 1px solid var(--bb-line);
+.bbf-hud-t {
+  color: #8fb0c0; font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
 }
-.bbd-go { margin-left: auto; min-height: 42px; padding-left: 26px; padding-right: 26px; }
+.bbf-hud-my .bbf-hud-t { color: var(--bbc); }
+.bbf-hud-a { color: var(--bbc); font-size: 13px; letter-spacing: .16em; }
+.bbf-hud-vs { color: #5d7f90; font-size: 9.5px; letter-spacing: .06em; }
 
-@media (max-width: 900px) {
-  .bbd-meters { padding: 8px 10px; gap: 8px; }
-  .bbd-m { min-width: 132px; padding: 8px 11px 9px; }
-  .bbd-m-v b { font-size: 21px; }
-  .bbd-m-foe { display: none; }          /* готовность врага дублируется в подсказке */
-  .bbd-stage { padding: 0 8px; }
-  .bbd-hint { left: 8px; right: 8px; font-size: 11.5px; }
-  .bbd-roster { padding: 10px; gap: 8px; grid-auto-columns: minmax(214px, 78vw); }
-  .bbd-c-x { display: none; }            /* мелкие ТТХ — только на большом экране */
-  .bbd-dock-h { display: flex; }
-  .bbd-dock:not(.bbd-dock-open) .bbd-roster { display: none; }
-  .bbd-act { padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); }
-  .bbd-act .btn { flex: 1; }
-  .bbd-go { margin-left: 0; flex: 1.4; }
+/* строка выбранного борта — над командной строкой */
+.bbf-sel {
+  position: absolute; left: 8px; right: 8px; bottom: 68px; z-index: 5;
+  display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; align-items: center;
+  padding: 8px 11px; cursor: pointer;
+  background: rgba(9,20,28,.94); box-shadow: inset 0 0 0 1px rgba(90,220,240,.22);
+}
+.bbf-sel-n { color: #eaf6ff; font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bbf-sel-more { color: var(--bbc); font-size: 11px; font-family: var(--font-mono, monospace); }
+.bbf-sel-hp { grid-column: 1 / -1; height: 3px; background: rgba(90,220,240,.14); }
+.bbf-sel-hp i { display: block; height: 100%; background: var(--bbc); }
+.bbf-sel-s { grid-column: 1 / -1; color: #6f8998; font-size: 10.5px; font-family: var(--font-mono, monospace); }
+
+/* шторка: журнал / подкрепление / ТТХ */
+.bbf-sheet {
+  position: absolute; left: 0; right: 0; bottom: 60px; z-index: 7;
+  max-height: 56vh; display: flex; flex-direction: column;
+  background: rgba(6,12,18,.97); border-top: 1px solid rgba(90,220,240,.22);
+}
+.bbf-sheet-h {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; color: #eaf6ff; font-size: 13px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+  border-bottom: 1px solid rgba(90,220,240,.14);
+}
+.bbf-sheet-h button {
+  width: 40px; height: 32px; border: 0; background: transparent; color: #8fb0c0;
+  font-size: 15px; cursor: pointer;
+}
+.bbf-sheet-b { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 10px 12px 14px; }
+.bbf-sheet-b .bb-panel { padding: 0; margin: 0 0 10px; clip-path: none; }
+.bbf-sheet-b .bb-panel::before, .bbf-sheet-b .bb-panel::after { display: none; }
+
+.bbf-wait { flex: 1; color: #6f8998; font-size: 11px; font-family: var(--font-mono, monospace); text-align: right; }
+
+/* исход боя */
+.bbf-done {
+  position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); z-index: 8;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 20px 28px; background: rgba(4,10,16,.94);
+  box-shadow: inset 0 0 0 1px rgba(90,220,240,.3);
+}
+.bbf-done b {
+  color: #eaf6ff; font-size: 22px; letter-spacing: .18em; text-transform: uppercase;
+  font-family: var(--font-display, 'Rajdhani', sans-serif);
+}
+.bbf-won b { color: var(--bbc); }
+.bbf-lost b { color: var(--bbm); }
+.bbf-done .bbd-fire { flex: 0 0 auto; padding: 0 28px; }
+
+@media (min-width: 760px) {
+  .bbf-hud { right: 14px; top: 14px; }
+  .bbf-hud-t { font-size: 13px; }
+  .bbf-sel { left: auto; right: 14px; bottom: 76px; width: 340px; }
+  .bbf-sheet { left: auto; right: 0; top: 0; bottom: 60px; width: 380px; max-height: none; border-left: 1px solid rgba(90,220,240,.22); }
 }
 
 /* ── ☄ Горячие точки (страница + бейдж сайдменю) ─────────────── */
