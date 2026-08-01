@@ -232,8 +232,15 @@
 .cn-schem-wrap { position: relative; }
 .cn-schem-toggles { position: absolute; top: 6px; right: 6px; display: flex; gap: 6px; z-index: 2; }
 .cn-schem-tools { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; z-index: 2; }
-.cn-schem-tools .btn, .cn-schem-toggles .btn { flex: 0 0 auto; background: var(--b2); }
+/* Масштаб схемы: колесо мыши по полотну, тяга фона — панорама (только при зуме) */
+.cn-schem-zoom { position: absolute; top: 6px; left: 6px; display: flex; gap: 4px; z-index: 2; }
+.cn-schem-tools .btn, .cn-schem-toggles .btn, .cn-schem-zoom .btn { flex: 0 0 auto; background: var(--b2); }
+.cn-schem-zoom .btn { min-width: 30px; padding-inline: 6px; font-family: var(--font-mono); }
+.cn-schematic.cn-zoomed { cursor: grab; }
+.cn-schematic.cn-panning { cursor: grabbing; }
 .cn-schem-tools .btn.on, .cn-schem-toggles .btn.on { border-color: var(--gd); color: var(--gd); }
+/* Запечённый SVG корпуса в карточке выбора — та же рамка, что у картинок */
+.cn-imgbox-hull svg { width: 100%; height: 100%; display: block; }
 .cn-assign-head { display: flex; gap: 8px; margin-top: 12px; }
 /* Однострочный подвал схемы: короткая подсказка + легенда, без отдельных блоков */
 .cn-schem-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 7px 2px 0; }

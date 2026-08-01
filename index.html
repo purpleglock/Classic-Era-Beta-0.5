@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260801alloyref1';
+  var BUILD = '20260801hull1';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -465,7 +465,8 @@
 <script src="constructors_kv_adapt.js?v=20260721kvcargo1"></script>
 <script src="armor_alchemy.js?v=20260721alloy3"></script>
 <script src="turret_gen.js?v=20260801turret1"></script>
-<script src="constructors.js?v=20260801turret1"></script>
+<script src="hull_gen.js?v=20260801hull1"></script>
+<script src="constructors.js?v=20260801hull1"></script>
 <script src="armor_forge_ui.js?v=20260721alloy4"></script>
 <script src="turret_forge_ui.js?v=20260801turret1"></script>
 <script src="economy.js?v=20260728fishtemple1"></script>

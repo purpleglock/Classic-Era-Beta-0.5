@@ -464,7 +464,10 @@ if (typeof window !== 'undefined') { window.cnApplyPartOverrides = cnApplyPartOv
 let CN_ALLOYS = null, CN_ALLOYS_FID;
 function cnInvalidateAlloys() { CN_ALLOYS = null; }
 if (typeof window !== 'undefined') window.cnInvalidateAlloys = cnInvalidateAlloys;
-if (typeof window !== 'undefined') window.cnAlloyMult = function (st) { return cnAlloyMult(st || {}); };
+// ⚠️ Обёртка ДОЛЖНА держать ссылку на исходную функцию: объявление cnAlloyMult само
+// живёт в window, и присвоение window.cnAlloyMult затирало его → обёртка звала саму
+// себя (RangeError: Maximum call stack size exceeded, верфь не открывалась вовсе).
+if (typeof window !== 'undefined') { const _cnAlloyMult0 = cnAlloyMult; window.cnAlloyMult = function (st) { return _cnAlloyMult0(st || {}); }; }
 async function cnLoadAlloys(force) {
   const fac = cnMyFactionMeta();
   const fid = (fac && fac.faction_id) || '';
@@ -892,8 +895,12 @@ function cnCompFullHtml(info, action) {
   const bill = cnPartBill(info);
   const billHtml = Object.keys(bill).length
     ? `<div class="cn-info-res"><div class="cn-info-sub">◇ Сырьё ${info.kind === 'class' ? 'корпуса' : 'за единицу'}</div><div class="cn-bill">${cnBillHtml(bill)}</div></div>` : '';
+  // Корпус и специализация показываются ЗАПЕЧЁННЫМ SVG (тот же движок, что и схема),
+  // орудие — своим генератором; остальное — картинкой из assets.
   const imgHtml = info.kind === 'weapon'
     ? cnWeaponImgTag(info.obj, info.imgPath, 'cn-info-img')
+    : info.kind === 'class' ? cnHullImgTag(info.key, null, 'cn-info-img')
+    : info.kind === 'type' ? cnHullImgTag(info.k, info.idx, 'cn-info-img')
     : cnImgTag(info.imgPath, 'cn-info-img');
   return `<div class="cn-info-card${on ? ' on' : ''}${locked ? ' locked' : ''}"${(action && !locked) ? ` onclick="${action}"` : ''}>
     ${imgHtml}
@@ -1074,65 +1081,78 @@ function cnIslandPath(H) {
 // пары [t вдоль оси 0..1, доля полубимса]. Грани прямые (faceted) → механический вид.
 // Ступеньки/денты по борту = крылья, спонсоны, казематы — узнаваемость класса, не «блоб».
 const CN_HULL_PROFILES = {
-  // Корвет — стремительный дротик: длинный игольчатый нос, короткие крылья за миделем,
-  // резкий срез задней кромки крыла, узкая корма.
+  // ── ПРАВИЛА СИЛУЭТА (переписаны 01.08) ──
+  // Что делало корпуса похожими на ДИРИЖАБЛИ и чего тут больше нет:
+  //   ✗ оба конца сходятся на конус  → корма СРЕЗАНА (последняя станция широкая);
+  //   ✗ пузо по центру, плавная кривая → максимум бимса СМЕЩЁН К КОРМЕ;
+  //   ✗ непрерывное скругление       → длинные ПРЯМЫЕ параллельные борта;
+  //   ✗ короткий и толстый           → удлинение 6–9:1, а не 4:1.
+  // Излом плеча задаётся ДВОЙНОЙ точкой (почти совпадающие t) — иначе сглаживание
+  // размажет угол обратно в каплю.
   corvette: [
-    [0.00, 0.00], [0.08, 0.14], [0.26, 0.36], [0.44, 0.58], [0.52, 0.72],
-    [0.58, 1.00], [0.68, 0.96], [0.74, 0.62], [0.88, 0.58], [1.00, 0.46],
+    [0.00, 0.00], [0.04, 0.13], [0.07, 0.14], [0.30, 0.22], [0.33, 0.23],
+    [0.35, 0.62], [0.52, 0.66], [0.55, 0.34], [0.78, 0.36],
+    [0.80, 0.86], [0.94, 0.90], [1.00, 0.74],
   ],
-  // Фрегат — клин с боковыми спонсонами: умеренный нос, резкий вынос спонсонов
-  // к миделю, ступень внутрь и сужающаяся корма.
   frigate: [
-    [0.00, 0.00], [0.07, 0.22], [0.20, 0.46], [0.34, 0.62], [0.42, 0.66],
-    [0.46, 0.92], [0.62, 1.00], [0.70, 0.72], [0.84, 0.68], [0.92, 0.56], [1.00, 0.44],
+    [0.00, 0.00], [0.05, 0.12], [0.08, 0.13], [0.26, 0.26], [0.29, 0.27],
+    [0.31, 0.70], [0.50, 0.74], [0.53, 0.42], [0.74, 0.44],
+    [0.77, 0.94], [0.93, 0.96], [1.00, 0.80],
   ],
-  // Эсминец — длинный клинок: быстрый набор ширины, почти параллельные борта
-  // на большей части длины, скошенный подзор кормы.
   destroyer: [
-    [0.00, 0.00], [0.05, 0.16], [0.14, 0.44], [0.24, 0.78], [0.34, 0.92],
-    [0.42, 0.94], [0.50, 1.00], [0.78, 0.98], [0.84, 0.80], [0.92, 0.76], [1.00, 0.60],
+    [0.00, 0.00], [0.04, 0.10], [0.07, 0.11], [0.22, 0.24], [0.25, 0.25],
+    [0.27, 0.66], [0.55, 0.70], [0.58, 0.40], [0.80, 0.42],
+    [0.83, 0.98], [0.95, 1.00], [1.00, 0.86],
   ],
-  // Крейсер — хищные скулы: ширина набирается прямо у носа, длинный мидель,
-  // талия и лёгкий развал у машинного (гондолы двигателей).
+  // Средний крейсер — НЕ капсула: долотообразный нос прямыми гранями, длинный
+  // параллельный борт со ступенью каземата, широкий срез кормы.
+  // Средний крейсер — НЕ капсула: долотообразный нос прямыми гранями, длинный
+  // параллельный борт со ступенью каземата, широкий срез кормы.
   cruiser: [
-    [0.00, 0.00], [0.05, 0.28], [0.12, 0.58], [0.22, 0.86], [0.30, 1.00],
-    [0.52, 0.98], [0.60, 0.84], [0.72, 0.82], [0.82, 0.86], [0.92, 0.72], [1.00, 0.52],
+    [0.00, 0.00], [0.05, 0.14], [0.09, 0.15], [0.18, 0.40], [0.21, 0.41],
+    [0.24, 0.76], [0.50, 0.78], [0.53, 0.50], [0.74, 0.52],
+    [0.77, 0.98], [0.94, 0.98], [1.00, 0.86],
   ],
-  // Линкор — тяжёлая плита: ТУПОЙ бронированный форштевень (не игла), широченный
-  // мидель во всю длину, ступень-каземат по борту, широкая корма.
+  // Линкор — плита с долотом на носу: ширина набирается прямыми гранями за три
+  // излома, дальше борт идёт параллельно, корма срезана во всю ширину.
+  // Линкор — плита с долотом на носу: ширина набирается прямыми гранями за три
+  // излома, дальше борт идёт параллельно, корма срезана во всю ширину.
   battleship: [
-    [0.00, 0.22], [0.04, 0.40], [0.12, 0.62], [0.22, 0.78], [0.30, 0.84],
-    [0.36, 1.00], [0.64, 1.00], [0.72, 0.86], [0.80, 0.84], [0.90, 0.78], [1.00, 0.68],
+    [0.00, 0.00], [0.05, 0.24], [0.09, 0.26], [0.14, 0.62], [0.17, 0.64],
+    [0.20, 0.92], [0.50, 0.94], [0.53, 0.70], [0.72, 0.72],
+    [0.75, 1.00], [0.95, 1.00], [1.00, 0.92],
   ],
-  // Дредноут — монумент: таранный шпиль-форштевень, расширение ДВУМЯ ступенями
-  // (ярусы надстроек), максимальный бимс ближе к корме, массивный транец.
   dreadnought: [
-    [0.00, 0.00], [0.10, 0.18], [0.16, 0.38], [0.24, 0.42], [0.32, 0.66],
-    [0.40, 0.70], [0.50, 0.92], [0.58, 1.00], [0.76, 1.00], [0.86, 0.90], [0.94, 0.84], [1.00, 0.72],
+    [0.00, 0.10], [0.05, 0.22], [0.09, 0.24], [0.16, 0.44], [0.19, 0.46],
+    [0.21, 0.74], [0.40, 0.78], [0.43, 0.58], [0.60, 0.60],
+    [0.63, 0.96], [0.86, 1.00], [0.90, 0.80], [1.00, 0.90],
   ],
-  // Авианосец — плавучий аэродром: тупой нос, широченная почти прямоугольная
-  // полётная палуба во всю длину, скруглённый транец. (supportCarrier)
+  // Поддерживающий авианосец — не «баллон», а слэб: клиновидный нос прямыми
+  // гранями, палуба прямоугольником со ступенью борта, кормовой срез во всю ширину.
+  // Поддерживающий авианосец — не «баллон», а слэб: клиновидный нос прямыми
+  // гранями, палуба прямоугольником со ступенью борта, кормовой срез во всю ширину.
   carrier: [
-    [0.00, 0.30], [0.06, 0.55], [0.14, 0.80], [0.22, 0.90], [0.30, 0.94],
-    [0.42, 0.96], [0.60, 0.96], [0.72, 0.94], [0.82, 0.92], [0.92, 0.86], [1.00, 0.74],
+    [0.00, 0.00], [0.06, 0.34], [0.10, 0.36], [0.14, 0.86], [0.17, 0.88],
+    [0.46, 0.90], [0.49, 0.72], [0.72, 0.74],
+    [0.75, 0.94], [0.97, 0.96], [1.00, 0.90],
   ],
-  // Штурмовой авианосец — клин с угловой палубой: острее носовая часть, палуба
-  // выносится к борту ступенью, зауженная корма. (multiroleCarrier)
+  // Многоцелевой авианосец — тот же слэб, но острее нос и уже корма: угловая
+  // палуба даёт ступень борта ближе к корме.
+  // Многоцелевой авианосец — тот же слэб, но острее нос и уже корма: угловая
+  // палуба даёт ступень борта ближе к корме.
   assault: [
-    [0.00, 0.10], [0.08, 0.34], [0.18, 0.60], [0.28, 0.78], [0.38, 0.88],
-    [0.50, 0.92], [0.64, 0.94], [0.76, 0.90], [0.86, 0.82], [0.94, 0.72], [1.00, 0.58],
+    [0.00, 0.00], [0.05, 0.22], [0.09, 0.24], [0.13, 0.66], [0.16, 0.68],
+    [0.42, 0.72], [0.68, 0.74], [0.71, 0.52], [0.85, 0.54],
+    [0.88, 0.96], [1.00, 0.86],
   ],
-  // Гиперкрейсер — сверхдлинный дротик: тонкий нос, плавный длинный набор ширины,
-  // почти параллельные борта, разнесённые гондолы двигателей у кормы. (hyperCruiser)
   hypercruiser: [
-    [0.00, 0.00], [0.06, 0.20], [0.16, 0.44], [0.28, 0.66], [0.40, 0.80],
-    [0.50, 0.86], [0.62, 0.88], [0.74, 0.90], [0.84, 0.72], [0.92, 0.66], [1.00, 0.50],
+    [0.00, 0.00], [0.04, 0.08], [0.08, 0.09], [0.34, 0.20], [0.38, 0.21],
+    [0.40, 0.54], [0.64, 0.56], [0.67, 0.30], [0.84, 0.32],
+    [0.87, 0.94], [0.97, 0.96], [1.00, 0.82],
   ],
-  // Станция (ss13) — не корабль, а узловой хаб: симметричная короткая широкая
-  // «шайба» с тупыми оконечностями. (ss13)
   station: [
-    [0.00, 0.40], [0.08, 0.66], [0.18, 0.86], [0.30, 0.96], [0.42, 1.00],
-    [0.58, 1.00], [0.70, 0.96], [0.82, 0.86], [0.92, 0.66], [1.00, 0.44],
+    [0.00, 0.46], [0.04, 0.72], [0.08, 0.74], [0.12, 0.98], [0.18, 1.00],
+    [0.82, 1.00], [0.88, 0.98], [0.92, 0.74], [0.96, 0.72], [1.00, 0.46],
   ],
   // ── АРМЕЙСКИЕ СИЛУЭТЫ (единый форж, вид сверху) ──
   // ВАЖНО: контур сглаживается Catmull-Rom — резкие углы держим ДВОЙНЫМИ точками
@@ -1202,16 +1222,16 @@ function cnGenStations(k, tipY, sternY, beam) {
 }
 // [tipY, sternY, beam(полубимс), rows(рядов узлов)]
 const CN_SHIP_DIM = {
-  corvette:    [70, 300, 34, 5],
-  frigate:     [66, 320, 42, 6],
-  destroyer:   [62, 340, 40, 7],
-  cruiser:     [66, 336, 56, 7],
-  battleship:  [60, 354, 68, 8],
-  dreadnought: [54, 372, 82, 9],
-  carrier:     [58, 366, 78, 9],
-  assault:     [60, 360, 72, 8],
-  hypercruiser:[56, 374, 52, 8],
-  station:     [92, 320, 88, 7],
+  corvette:    [46, 330, 22, 5],
+  frigate:     [42, 344, 27, 6],
+  destroyer:   [38, 352, 26, 7],
+  cruiser:     [40, 350, 32, 7],
+  battleship:  [38, 358, 40, 8],
+  dreadnought: [34, 366, 54, 9],
+  carrier:     [40, 360, 44, 9],
+  assault:     [40, 358, 38, 8],
+  hypercruiser:[34, 368, 30, 8],
+  station:     [86, 320, 84, 7],
   // Армейские классы: короче и с меньшим числом рядов узлов (масштаб не корабельный)
   peh:         [122, 292, 30, 3],
   btr:         [92, 322, 38, 4],
@@ -1308,6 +1328,56 @@ function cnModuleMarker(g, x, y) {
   return `<path d="M${x},${y - 5} L${x + 5},${y} L${x},${y + 5} L${x - 5},${y} Z" fill="none" stroke="${c}" stroke-width="1.2"/>`;
 }
 function cnHullHero() { cnDrawShip(); }
+
+// ── ПАРАМЕТРЫ ОТРИСОВКИ КОРПУСА для hull_gen (HG) ────────────
+// Всё, что видно на корпусе, выводится из ВЫБОРА игрока: тон металла — из рецепта
+// брони, крупность плит и толщина пояса — из её класса, число дюз — из двигателя,
+// семейство надстройки — из класса корпуса. Сид держим стабильным (класс+подкласс),
+// чтобы разбежка плит не «дрожала» при каждом пересчёте.
+function cnHullSeed(k, tIdx) {
+  let s = 7; const str = String(k) + '#' + (tIdx | 0);
+  for (const ch of str) s = (s * 31 + ch.charCodeAt(0)) >>> 0;
+  return s || 7;
+}
+function cnHullOpt(H, k, tIdx, armorObj, engObj, aRt, groundCls) {
+  const mm = String(engObj ? engObj.name : '').match(/(\d+)/);
+  return {
+    uid: 'cn', clip: 'cnBodyClip',
+    hull: CN_KV_HULL[k] || k,
+    aRt: Math.max(0, Math.min(1, aRt || 0)),
+    armorName: armorObj ? armorObj.name : '',
+    seed: cnHullSeed(k, tIdx),
+    detail: 1,
+    nozzles: mm ? Math.min(6, +mm[1]) : 1,
+    ground: !!groundCls,
+  };
+}
+// Запечённый SVG класса/подкласса для карточки выбора корпуса: тот же движок,
+// что и на схеме, — игрок видит РЕАЛЬНЫЙ корпус, а не картинку-заглушку.
+function cnHullPreviewSvg(k, tIdx) {
+  if (typeof HG === 'undefined') return '';
+  const db = CN.def && CN.def.db; if (!db || !db.data[k]) return '';
+  const H0 = CN_SHIP_GEO[CN_KV_HULL[k] || k] || CN_SHIP_GEO.corvette;
+  const H = tIdx != null ? cnTypeGeo(H0, db.data[k], tIdx) : H0;
+  // Броня для превью — базовая (первая стоковая) плюс класс корпуса: карточка
+  // показывает КОРПУС, а не текущую комплектацию проекта.
+  const arm = (db.armors[k] || []).find(a => a && !a._alloy) || null;
+  const maxAr = Math.max(...(db.armors[k] || []).map(a => a.armor)) || 1;
+  return HG.preview(H, {
+    uid: 'c' + cnSlugify(k) + (tIdx != null ? '_' + tIdx : ''),
+    hull: CN_KV_HULL[k] || k,
+    aRt: arm ? Math.min(1, (arm.armor || 0) / maxAr) : 0.4,
+    armorName: arm ? arm.name : '',
+    seed: cnHullSeed(k, tIdx == null ? 0 : tIdx),
+    detail: 1, nozzles: 2,
+    ground: CN.cat === 'army' && cnKvRealCat(k) === 'ground',
+  });
+}
+function cnHullImgTag(k, tIdx, cls) {
+  const svg = cnHullPreviewSvg(k, tIdx);
+  return svg ? `<span class="cn-imgbox cn-imgbox-tg cn-imgbox-hull ${cls || ''}">${svg}</span>`
+             : cnImgTag(cnImgPath(CN.cat, 'class', k), cls);
+}
 
 // ── Геометрия размещения ──
 function cnHullHalf(H, y) {
@@ -1544,9 +1614,8 @@ function cnDrawShip() {
     const maxSh = Math.max(...db.shields[k].map(x => x.shield)) || 1, rt = Math.min(1, shieldObj.shield / maxSh);
     shieldD = 9 + 7 * rt;                 // постоянный стоячий зазор корпус↔барьер
     shieldPad = shieldD * 2 + 6;          // запас на miter у острых носа/кормы
-    // своя текстура щита: ship_shieldtex_<класс>_<номер щита> → общий ship_shieldtex_<класс>
-    const shTex = cnFirstImg([cnImgPath(CN.cat, 'shieldtex', k, sIdx), cnImgPath(CN.cat, 'shieldtex', k), `assets/constructors/${CN.cat}_shieldtex.webp`]);
-    P.push(`<g class="cn-shieldfx">${cnShieldSvg(H, sIdx, rt, shieldD, shTex)}</g>`);
+    // Текстур больше нет — барьер целиком векторный (поле + кромка).
+    P.push(`<g class="cn-shieldfx">${cnShieldSvg(H, sIdx, rt, shieldD, null)}</g>`);
   }
 
   // ДВИГАТЕЛЬ — число дюз и тип (ион/плазма) из выбранного двигателя + живой факел.
@@ -1559,108 +1628,20 @@ function cnDrawShip() {
     P.push(`<g class="cn-flame"><ellipse cx="160" cy="${e[1]}" rx="${Math.min(cnHullHalf(H, e[1] - 6) * 0.8, 30).toFixed(1)}" ry="6" fill="${engGlowCol}" opacity="0.16"/>${cnEngineSvg(H, engObj)}</g>`);
   }
 
-  // КОРПУС: если загружен арт-тело (ship_type_<k>_<t>.webp → ship_class_<k>.webp) —
-  // показываем его как корабль (обрезка по силуэту). Иначе — ЧИСТЫЙ гранёный силуэт
-  // (прямые грани = механический вид), минимум акцентов: пояс, осевая, мостик, реактор.
+  // КОРПУС — ЧИСТАЯ ВЕКТОРНАЯ ГЕОМЕТРИЯ (hull_gen.js). Растровых текстур больше нет:
+  // обшивка, бронепояс, надстройка и машинный отсек рисуются процедурно — тем же
+  // подходом, что в оружейной верфи. Тон металла — от РЕЦЕПТА брони, крупность
+  // плит и толщина пояса — от её класса.
   const maxAr = Math.max(...db.armors[k].map(a => a.armor)) || 1, aRt = (armorObj ? armorObj.armor : 0) / maxAr;
-  const sw = (1.4 + aRt * 2.0).toFixed(1), beltW = +(1 - (0.03 + aRt * 0.07)).toFixed(3);
-  const hullPath = cnPolyPath(cnHullOutlinePts(H.st, 1));
-  const brY = H.nose + (e[1] - H.nose) * 0.24, coreCy = H.nose + (e[1] - H.nose) * 0.56;
-  // Фолбэк на ОБЩИЙ файл без суффикса класса (ship_<kind>.webp): одна текстура на ВСЕ классы,
-  // если под конкретный класс свой файл не залит. Порядок: подкласс → класс → общий.
-  const cnGenImg = kind => `assets/constructors/${CN.cat}_${kind}.webp`;
-  const typeImg = cnImgPath(CN.cat, 'type', k, tIdx), classImg = cnImgPath(CN.cat, 'class', k);
-  const bodyImg = cnFirstImg([typeImg, classImg, cnGenImg('class')]);
-  // ОФОРМЛЕНИЕ КОРПУСА из файлов (все слои опциональны, обрезаются по силуэту):
-  //  · текстура брони ship_armortex_<класс>_<номер брони> → ship_armortex_<класс> — обшивка
-  //    выбранной брони поверх тела (плиты, клёпка, керамика…);
-  //  · декор ship_decor_<класс>_<подкласс> → ship_decor_<класс> — эмблемы, полосы, надписи
-  //    (PNG/WebP с прозрачностью) — рисуется ПОВЕРХ всего корпуса.
-  // Арт кладётся горизонтально (нос вправо) — как и арт-тело.
-  const aIdx = +cnId('cn-armor').value || 0;
-  const armorTex = cnFirstImg([cnImgPath(CN.cat, 'armortex', k, aIdx), cnImgPath(CN.cat, 'armortex', k), cnGenImg('armortex')]);
-  const decorImg = cnFirstImg([cnImgPath(CN.cat, 'decor', k, tIdx), cnImgPath(CN.cat, 'decor', k), cnGenImg('decor')]);
-  // Арт тянется по ПОЛНОМУ силуэту (tipY..корма), а не от H.nose — иначе кончик носа без текстуры
-  const Ln = e[1] - tipY, Bm = H.maxHW * 2, cyMid = (tipY + e[1]) / 2;
-  const cnBodyArt = (img, op, blend, clip) => `<g clip-path="url(#${clip || 'cnBodyClip'})"${op != null ? ` opacity="${op}"` : ''}${blend ? ` style="mix-blend-mode:${blend}"` : ''}>`
-    + `<g transform="translate(160 ${cyMid.toFixed(1)}) rotate(90)">`
-    + `<image href="${esc(img)}" xlink:href="${esc(img)}" x="${(-Ln / 2).toFixed(1)}" y="${(-Bm / 2).toFixed(1)}" width="${Ln.toFixed(1)}" height="${Bm.toFixed(1)}" preserveAspectRatio="xMidYMid slice"/></g></g>`;
+  const hullOpt = cnHullOpt(H, k, tIdx, armorObj, engObj, aRt, groundCls);
+  const hullPath = HG.hullPathOf(H, 1);
   P.push(`<clipPath id="cnBodyClip"><path d="${hullPath}"/></clipPath>`);
-  // ПОЯС БРОНИ: кольцо между силуэтом и внутренним контуром — обшивка лежит ТОЛЬКО по бортам,
-  // палуба (арт-тело) остаётся видна в центре. Дырка через clip-rule=evenodd.
-  const beltInner = cnPolyPath(cnHullOutlinePts(H.st, 0.55));
-  P.push(`<clipPath id="cnBeltClip" clip-rule="evenodd"><path clip-rule="evenodd" d="${hullPath} ${beltInner}"/></clipPath>`);
   // ПАДАЮЩАЯ ТЕНЬ корабля на чертёжное полотно — «отрывает» корпус от фона.
   P.push(`<path d="${hullPath}" fill="#000" opacity="0.38" style="filter:blur(9px)"/>`);
-  // Базовый корпус: НЕЙТРАЛЬНЫЙ графит (без голубого) — цвет дают текстуры, не линии.
-  P.push(`<path d="${hullPath}" fill="color-mix(in srgb, #aeb6bd 8%, var(--b2))" stroke="color-mix(in srgb, #cfd6dd 40%, transparent)" stroke-width="${sw}" stroke-linejoin="round"/>`);
-  // ── ВСПОМОГАТЕЛЬНОЕ ОФОРМЛЕНИЕ (греблинг): переборки, шпангоуты, мостик, реактор.
-  //    Рисуется И на голом силуэте, И ПОВЕРХ арт-тела — чтобы загруженная картинка
-  //    читалась как построенный корабль, а не наклейка. `att` = приглушение над артом.
-  // over=true → корпус закрыт текстурой: НЕ дублируем панельные линии (они уже в текстуре),
-  // рисуем оформление как ГРАВИРОВКУ по обшивке — тёмная резьба + тонкий блик, а не неон
-  // поверх. Реактор/мостик — функциональные метки, приглушённые под фактуру.
-  const cnHullDetail = (over) => {
-    const D = [];
-    // Гравированная линия: тёмная канавка + световой кант (читается на любой текстуре, не спорит).
-    const engrave = (x1, y1, x2, y2, w) => over
-      ? `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#000" stroke-width="${(w + 0.6).toFixed(1)}" opacity="0.28"/>`
-        + `<line x1="${x1}" y1="${(+y1 + 0.6).toFixed(1)}" x2="${x2}" y2="${(+y2 + 0.6).toFixed(1)}" stroke="var(--w2)" stroke-width="${w}" opacity="0.09"/>`
-      : `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--w2)" stroke-width="${w}" opacity="0.3"/>`;
-    // осевая линия
-    D.push(engrave('160', (H.nose + 4).toFixed(1), '160', (e[1] - 6).toFixed(1), 1));
-    if (!over) {                                        // на голом силуэте нужны панели-переборки и рёбра
-      [0.22, 0.44, 0.66, 0.82].forEach(t => {
-        const y = H.nose + (e[1] - H.nose) * t, hw = cnHullHalf(H, y) * beltW;
-        if (hw < 6) return;
-        D.push(`<line x1="${(160 - hw).toFixed(1)}" y1="${y.toFixed(1)}" x2="${(160 + hw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--w2)" stroke-width="0.7" opacity="0.28"/>`);
-      });
-      for (let t = 0.14; t < 0.9; t += 0.09) {
-        const y = H.nose + (e[1] - H.nose) * t, hw = cnHullHalf(H, y) * beltW;
-        if (hw < 10) continue;
-        [-1, 1].forEach(s => D.push(`<line x1="${(160 + s * hw).toFixed(1)}" y1="${y.toFixed(1)}" x2="${(160 + s * (hw - 5)).toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--w2)" stroke-width="0.6" opacity="0.22"/>`));
-      }
-    }
-    // Мостик и реактор НЕ рисуются (убраны в июле 2026 по требованию: лишние пятна на текстуре).
-    return D.join('');
-  };
-  // СВЕТОТЕНЬ по корпусу — «сажает» арт в силуэт: боковой свет→тень (объём цилиндра),
-  // широкое AO по кромке + контактная тень. Никаких цветных линий — только свет.
-  const cnHullEdgeShade = () => {
-    const x0 = (160 - H.maxHW).toFixed(1), x1 = (160 + H.maxHW).toFixed(1);
-    return `<linearGradient id="cnSideLight" gradientUnits="userSpaceOnUse" x1="${x0}" y1="0" x2="${x1}" y2="0">`
-      + `<stop offset="0" stop-color="#fff" stop-opacity="0.09"/><stop offset="0.42" stop-color="#fff" stop-opacity="0"/>`
-      + `<stop offset="0.6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.24"/></linearGradient>`
-      + `<g clip-path="url(#cnBodyClip)">`
-      + `<path d="${hullPath}" fill="url(#cnSideLight)"/>`
-      + `<path d="${hullPath}" fill="none" stroke="#000" stroke-width="16" stroke-linejoin="round" opacity="0.4" style="filter:blur(7px)"/>`
-      + `<path d="${hullPath}" fill="none" stroke="#000" stroke-width="4" stroke-linejoin="round" opacity="0.5" style="filter:blur(1.5px)"/>`
-      + `</g>`;
-  };
-  // Шов пояса брони = ТЕНЬ: плита брони чуть возвышается и роняет мягкую тень на палубу,
-  // сверху едва заметный блик скола — вместо цветной линии.
-  const cnBeltSeam = () => `<g clip-path="url(#cnBodyClip)">`
-    + `<path d="${beltInner}" fill="none" stroke="#000" stroke-width="3" opacity="0.45" stroke-linejoin="round" style="filter:blur(1.5px)"/>`
-    + `<path d="${beltInner}" fill="none" stroke="var(--w2)" stroke-width="0.6" opacity="0.22" stroke-linejoin="round"/></g>`;
-  if (bodyImg) {                                       // АРТ-ТЕЛО, обрезанное по силуэту корпуса
-    P.push(cnBodyArt(bodyImg)
-      + (armorTex ? cnBodyArt(armorTex, 0.92, null, 'cnBeltClip') + cnBeltSeam() : '')  // броня ТОЛЬКО поясом по бортам
-      + cnShipDecal(H, k)                              // декаль (флаг+имя) ПОД светотенью — краска на броне
-      + cnHullEdgeShade()                              // светотень: боковой свет, AO, контактная тень
-      + cnHullDetail(true)                             // оформление ПОВЕРХ арта — тенями, в лад с текстурой
-      // Кант корпуса: тёмный обжим + тонкая приглушённая линия ВМЕСТО жирного неона —
-      // текстура остаётся главной, контур лишь собирает силуэт.
-      + `<path d="${hullPath}" fill="none" stroke="#000" stroke-width="${(+sw + 1.2).toFixed(1)}" stroke-linejoin="round" opacity="0.45"/>`
-      + `<path d="${hullPath}" fill="none" stroke="color-mix(in srgb, #cfd6dd 50%, transparent)" stroke-width="0.9" stroke-linejoin="round" opacity="0.55"/>`);
-  } else {                                             // ЧИСТЫЙ ГРАНЁНЫЙ СИЛУЭТ (фолбэк без арта)
-    P.push(`<path d="${cnPolyPath(cnHullOutlinePts(H.st, beltW))}" fill="var(--b1)" stroke="color-mix(in srgb, #cfd6dd 30%, transparent)" stroke-width="0.7" stroke-linejoin="round"/>`);
-    P.push(`<path d="${cnPolyPath(cnHullOutlinePts(H.st, Math.max(0.2, beltW - 0.2)))}" fill="none" stroke="var(--w2)" stroke-width="0.6" opacity="0.35" stroke-linejoin="round"/>`);
-    if (armorTex) { P.push(cnBodyArt(armorTex, 0.92, null, 'cnBeltClip')); P.push(cnBeltSeam()); }  // броня поясом по бортам
-    P.push(cnShipDecal(H, k));                         // декаль (флаг+имя) и на голом силуэте
-    P.push(cnHullDetail(false));                       // полный греблинг на голом силуэте
-  }
-  // ДЕКОР (эмблемы/полосы/тактические надписи с прозрачным фоном) — поверх всего корпуса
-  if (decorImg) P.push(cnBodyArt(decorImg));
+  P.push(HG.body(H, hullOpt));                           // обшивка + пояс + надстройка + дюзы
+  P.push(cnShipDecal(H, k));                             // декаль (флаг+имя) ПОД светотенью — краска на броне
+  P.push(HG.shade(H, hullOpt));                          // боковой свет, AO, контактная тень
+  P.push(HG.edge(H, hullOpt));                           // кант силуэта
 
   // ── Расчёт посадочных мест ЗАРАНЕЕ: узлы орудий, отсеки — чтобы связать их магистралями ──
   const bayN = L.bays.length;
@@ -1810,13 +1791,23 @@ function cnDrawShip() {
   const tName = cls.types && cls.types[tIdx] ? cls.types[tIdx].name : '';
   const capTx = `ОРУДИЯ ${wpnCount}/${L.mounts.length} · ОТСЕКИ ${modCount}/${L.bays.length}` + (hangars.length ? ` · АНГАРЫ ${hangars.length}` : '');
   const cnCb = (x, y, dx, dy) => `<path d="M${x + dx * 14},${y} L${x},${y} L${x},${y + dy * 14}" fill="none" stroke="var(--te)" stroke-width="1.4" opacity="0.6"/>`;
+  // ЗУМ: сцена остаётся 0 0 VW VH, а показываем её КУСОК через viewBox — толщины линий
+  // и кегль растут вместе с кораблём (это чертёж, а не «увеличенная картинка»).
+  const V = cnViewRect(VW, VH), vb = `${V.x.toFixed(2)} ${V.y.toFixed(2)} ${V.w.toFixed(2)} ${V.h.toFixed(2)}`;
+  // Сетка живёт в координатах СЦЕНЫ (приближаешься — клетка крупнее, как на кальке),
+  // а рамка со штампами приколота к видимой области и кегля не меняет.
+  const frameT = `translate(${V.x.toFixed(2)},${V.y.toFixed(2)}) scale(${(1 / V.z).toFixed(4)})`;
   const deco = `<defs><pattern id="cnGrid" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M30 0H0v30" fill="none" stroke="var(--w1)" stroke-width="0.6"/></pattern></defs>`
-    + `<rect x="0" y="0" width="${VW}" height="${VH}" fill="url(#cnGrid)" opacity="0.35"/>`
+    + `<rect x="${(-VW).toFixed(0)}" y="${(-VH).toFixed(0)}" width="${VW * 3}" height="${VH * 3}" fill="url(#cnGrid)" opacity="0.35"/>`
     + axis
+    + `<g transform="${frameT}">`
     + cnCb(14, 12, 1, 1) + cnCb(VW - 14, 12, -1, 1) + cnCb(14, VH - 12, 1, -1) + cnCb(VW - 14, VH - 12, -1, -1)
     + `<text x="30" y="${VH - 16}" style="font:700 12px var(--font-mono);letter-spacing:2.5px;fill:var(--t4)">${esc(k.toUpperCase())} // ${esc(cls.name.toUpperCase())}${tName ? ' · ' + esc(tName.toUpperCase()) : ''}</text>`
-    + `<text x="${VW - 30}" y="${VH - 16}" text-anchor="end" style="font:600 11px var(--font-mono);letter-spacing:1.5px;fill:var(--te)">${capTx}</text>`;
-  host.innerHTML = `<svg viewBox="0 0 ${VW} ${VH}" class="cn-schem-svg" role="img" aria-label="Схема корабля вид сверху (горизонтально)">${deco}<g id="cn-schem-g" transform="${gT}">${P.join('')}</g><g class="cn-schem-ann">${anns}</g></svg>`;
+    + `<text x="${VW - 30}" y="${VH - 16}" text-anchor="end" style="font:600 11px var(--font-mono);letter-spacing:1.5px;fill:var(--te)">${capTx}</text>`
+    + `</g>`;
+  host.innerHTML = `<svg viewBox="${vb}" class="cn-schem-svg" role="img" aria-label="Схема корабля вид сверху (горизонтально)">${deco}<g id="cn-schem-g" transform="${gT}">${P.join('')}</g><g class="cn-schem-ann">${anns}</g></svg>`;
+  cnViewBind(host);
+  cnViewHud();
   // Перехватываем касание в фазе ПЕРЕХВАТА (до onclick узлов/пустых мест), чтобы в режиме
   // постановки тап переносил выбранный узел, а не добавлял новые. Вешаем один раз на контейнер.
   if (!host._placeBound) { host.addEventListener('click', cnPlaceTapHandler, true); host._placeBound = true; }
@@ -1849,6 +1840,83 @@ function cnRoomAddAt(i) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays
 function cnMountAddAt(i) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; const a = CN.shipLayout.mounts, n0 = a.length; while (a.length <= i) a.push({ w: null }); CN._pendingAdd = { kind: 'mount', n0 }; cnVehCalc(); cnOpenAssignPicker('mount', i); }
 function cnSchemToggle(which) { if (!CN.schemShow) CN.schemShow = { weapons: true, bays: true }; CN.schemShow[which] = !CN.schemShow[which]; const b = cnId(which === 'weapons' ? 'cn-tg-w' : 'cn-tg-b'); if (b) b.classList.toggle('on', CN.schemShow[which]); cnDrawShip(); }
 function cnNodeClick(kind, i) { cnOpenAssignPicker(kind, i); }
+
+// ── ЗУМ И ПАНОРАМА СХЕМЫ ─────────────────────────────────────
+// Сцена всегда 0 0 VW VH; масштаб — это показанный КУСОК сцены (viewBox), поэтому
+// линии, кегль и узлы увеличиваются вместе с кораблём, как на настоящем чертеже.
+// Состояние живёт в CN.view и переживает перерисовку (её дёргает каждый пересчёт).
+const CN_ZOOM_MIN = 1, CN_ZOOM_MAX = 8;
+function cnView() { return CN.view || (CN.view = { z: 1, cx: null, cy: null }); }
+function cnViewReset() { CN.view = { z: 1, cx: null, cy: null }; cnDrawShip(); }
+function cnViewRect(VW, VH) {
+  const v = cnView();
+  CN.viewScene = { VW, VH };
+  const z = Math.max(CN_ZOOM_MIN, Math.min(CN_ZOOM_MAX, +v.z || 1));
+  const w = VW / z, h = VH / z;
+  let cx = v.cx == null ? VW / 2 : v.cx, cy = v.cy == null ? VH / 2 : v.cy;
+  cx = Math.max(w / 2, Math.min(VW - w / 2, cx));       // панорама не выпускает сцену из вида
+  cy = Math.max(h / 2, Math.min(VH - h / 2, cy));
+  v.z = z; v.cx = cx; v.cy = cy;
+  return { x: cx - w / 2, y: cy - h / 2, w, h, z };
+}
+// Экранная точка → координаты СЦЕНЫ (совпадают с viewBox корневого svg).
+function cnScenePoint(svg, e) {
+  const m = svg.getScreenCTM(); if (!m) return null;
+  const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+  return p.matrixTransform(m.inverse());
+}
+// Масштаб от кнопок: тянем к центру видимой области.
+function cnZoomBy(f) {
+  const v = cnView();
+  v.z = Math.max(CN_ZOOM_MIN, Math.min(CN_ZOOM_MAX, +(( +v.z || 1) * f).toFixed(3)));
+  cnDrawShip();
+}
+function cnViewHud() {
+  const b = cnId('cn-zoom-lbl'); if (b) b.textContent = Math.round((cnView().z || 1) * 100) + '%';
+  const w = cnId('cn-schematic'); if (w) w.classList.toggle('cn-zoomed', (cnView().z || 1) > 1.001);
+}
+function cnViewBind(host) {
+  if (host._viewBound) return; host._viewBound = true;
+  // Колесо — масштаб ПОД КУРСОРОМ (точка под мышью остаётся на месте).
+  host.addEventListener('wheel', e => {
+    e.preventDefault();
+    const svg = host.querySelector('svg'); if (!svg) return;
+    const v = cnView(), z0 = +v.z || 1;
+    const z = Math.max(CN_ZOOM_MIN, Math.min(CN_ZOOM_MAX, +(z0 * (e.deltaY < 0 ? 1.18 : 1 / 1.18)).toFixed(3)));
+    if (z === z0) return;
+    const p = cnScenePoint(svg, e);
+    if (p) { v.cx = p.x - (p.x - v.cx) * (z0 / z); v.cy = p.y - (p.y - v.cy) * (z0 / z); }
+    v.z = z;
+    if (host._zoomRAF) return;
+    host._zoomRAF = requestAnimationFrame(() => { host._zoomRAF = 0; cnDrawShip(); });
+  }, { passive: false });
+  // Тяга фона — панорама. Узлы и отсеки не трогаем: у них своя тяга/клик.
+  host.addEventListener('pointerdown', e => {
+    if (e.button) return;
+    if (CN.placing != null) return;
+    if (e.target.closest('.cn-node, .cn-bay')) return;
+    const v = cnView(); if ((+v.z || 1) <= 1.001) return;    // без зума панорамить нечего
+    const svg = host.querySelector('svg'); if (!svg) return;
+    const r = svg.getBoundingClientRect(), S = CN.viewScene || { VW: 960, VH: 470 };
+    const kx = (S.VW / v.z) / (r.width || 1), ky = (S.VH / v.z) / (r.height || 1);
+    const x0 = e.clientX, y0 = e.clientY, c0 = { cx: v.cx, cy: v.cy };
+    host.classList.add('cn-panning');
+    let raf = 0;
+    const mv = ev => {
+      v.cx = c0.cx - (ev.clientX - x0) * kx;
+      v.cy = c0.cy - (ev.clientY - y0) * ky;
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; cnDrawShip(); });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', mv);
+      window.removeEventListener('pointerup', up);
+      host.classList.remove('cn-panning');
+    };
+    window.addEventListener('pointermove', mv);
+    window.addEventListener('pointerup', up);
+  });
+}
 // Перетаскивание узла орудия по схеме. Клик без движения → открыть пикер (поставить/удалить).
 function cnMountToLocal(evt) {                       // экранные координаты → координаты корпуса (учёт viewBox + rotate(90))
   const g = document.getElementById('cn-schem-g'); if (!g) return null;
@@ -2308,6 +2376,11 @@ async function cnVehRender(cat) {
               <button class="btn btn-gh btn-sm" onclick="cnLayoutAdd('mount')" title="Добавить узел орудия">＋ Узел</button>
               <button class="btn btn-gh btn-sm" onclick="cnLayoutAdd('bay')" title="Добавить отсек под модуль">＋ Отсек</button>
               ${def.hasHangars ? `<button class="btn btn-gh btn-sm" onclick="cnVehAddHangar()" title="Добавить ангар">＋ Ангар</button>` : ''}
+            </div>
+            <div class="cn-schem-zoom">
+              <button class="btn btn-gh btn-sm" onclick="cnZoomBy(1/1.35)" title="Отдалить">−</button>
+              <button class="btn btn-gh btn-sm" id="cn-zoom-lbl" onclick="cnViewReset()" title="Сбросить масштаб">100%</button>
+              <button class="btn btn-gh btn-sm" onclick="cnZoomBy(1.35)" title="Приблизить">＋</button>
             </div>
           </div>
           <div id="cn-schem-list" class="cn-schem-list"></div>
