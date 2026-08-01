@@ -149,6 +149,13 @@
       '.tf-app .xb{background:none;border:1px solid var(--line2);color:var(--dim);cursor:pointer;padding:3px 7px;font-size:11px}',
       '.tf-app .xb:hover{border-color:var(--bad);color:var(--bad)}',
 
+      // ── Предупреждение «сборку никто не тянет» (плашка внизу сцены)
+      '.tf-app #tf_warn{position:absolute;left:12px;right:12px;bottom:12px;z-index:30;display:none;',
+        'padding:7px 11px;font-size:11px;line-height:1.45;color:#e8cfc6;',
+        'background:rgba(58,26,26,.94);border:1px solid var(--bad)}',
+      '.tf-app #tf_warn.on{display:block}',
+      '.tf-app #tf_warn b{color:var(--bad);font-weight:600}',
+
       // ── Досье
       '.tf-app #tf_dos{position:absolute;top:0;right:0;bottom:0;width:288px;z-index:35;overflow-y:auto;',
         'background:rgba(21,24,27,.97);border-left:1px solid var(--line2);transform:translateX(100%);transition:transform .18s ease}',
@@ -225,8 +232,11 @@
     ['energy', 'Энергия', NUM],
     ['mass', 'Масса', function (v) { return NUM(v) + ' кг'; }],
     ['gs', 'Цена', function (v) { return NUM(v) + ' ГС'; }],
+    // Разовая трата очков науки при регистрации орудия — такая же, как за
+    // публикацию проекта техники, поэтому стоит рядом с ценой.
+    ['on', 'Наука', function (v) { return v + ' ОН'; }],
   ];
-  var BETTER = { damage: 1, dalnost: 1, rof: 1, energy: -1, mass: -1, gs: -1 };
+  var BETTER = { damage: 1, dalnost: 1, rof: 1, energy: -1, mass: -1, gs: -1, on: -1 };
   var SEGN = 14, capMemo = {};
   function capsOf(klass) {
     if (capMemo[klass]) return capMemo[klass];
@@ -400,6 +410,8 @@
       '<tr><td>Урон за ствол</td><td>' + NUM(s.salvo) + '</td></tr>' +
       '<tr><td>Урона на энергию</td><td>' + s.dmgPerEnergy + '</td></tr>' +
       '<tr><td>Боеприпас</td><td>' + (KIND_RU[s.kind] || s.kind) + '</td></tr>' +
+      '<tr><td>Цена постройки</td><td>' + NUM(s.gs) + ' ГС</td></tr>' +
+      '<tr><td>Разработка (разово)</td><td>' + s.on + ' ОН</td></tr>' +
       '<tr><td>KV-прайс (не тратится)</td><td>' + NUM(s.price) + '</td></tr>' +
       '<tr><td>Технология</td><td>×' + s.tC + '</td></tr><tr><td>Тип урона</td><td>+' + s.dC + '</td></tr>' +
       '<tr><td>Класс</td><td>×' + s.cC + '</td></tr></table>';
@@ -443,12 +455,30 @@
     var s = T().stats(cfg);
     fillBars(s); drawDossier(s); nodeLabels();
     $t('tip').innerHTML = tipHTML(cfg);
+    var carr = T().carriers(cfg), can = carr.some(function (c) { return c.ok; });
     var save = $t('bSave');
     if (save) {
-      var can = T().carrierKeys(cfg).length > 0;
       save.disabled = !can;
       save.textContent = CNT.editId ? '💾 Сохранить' : '✓ Зарегистрировать';
       save.title = can ? '' : 'Сборку не тянет ни один носитель';
+    }
+    // Тултипа на телефоне нет, а собрать орудие, которое некуда поставить, —
+    // самая частая осечка верстака: говорим об этом прямо на сцене и цифрами,
+    // насколько сборка вылезла за самый ёмкий носитель своего класса.
+    var warn = $t('warn');
+    if (warn) {
+      warn.className = can ? '' : 'on';
+      if (!can) {
+        var lim = carr.reduce(function (a, c) {
+          var C = T().CARRIERS[c.key] || {};
+          return { mass: Math.max(a.mass, C.mass || 0), power: Math.max(a.power, C.power || 0) };
+        }, { mass: 0, power: 0 });
+        var over = [];
+        if (s.mass > lim.mass) over.push('масса ' + NUM(s.mass) + ' кг при потолке ' + NUM(lim.mass));
+        if (s.energy > lim.power) over.push('энергия ' + NUM(s.energy) + ' при потолке ' + NUM(lim.power));
+        warn.innerHTML = '<b>Сборку не тянет ни один носитель.</b> ' + (over.join('; ') || 'сборка вне лимитов класса') +
+          '. Убавьте масштаб, калибр, длину ствола или число стволов — иначе орудие некуда поставить.';
+      }
     }
     requestAnimationFrame(placeNodes);
   }
@@ -497,6 +527,7 @@
           '<div id="tf_tip"></div>' +
           '<div id="tf_pop"><div class="ph"><b id="tf_popT"></b><span id="tf_popX">✕</span></div><div class="pb" id="tf_popB"></div></div>' +
           '<div id="tf_dos"></div>' +
+          '<div id="tf_warn"></div>' +
         '</div>' +
         '<div id="tf_bottom"></div>' +
       '</div>' +

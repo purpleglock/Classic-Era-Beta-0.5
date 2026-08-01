@@ -216,6 +216,8 @@
 /* Обёртка картинки + заглушка, если файла ещё нет */
 .cn-imgbox { position: relative; display: block; background: var(--b3); overflow: hidden; }
 .cn-imgbox img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cn-imgbox-tg { display: flex; align-items: center; justify-content: center; }
+.cn-imgbox-tg svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55)); }
 .cn-imgbox-empty { border: var(--deco-frame-w, 1px) dashed var(--w2); background: repeating-linear-gradient(45deg, var(--b3), var(--b3) 7px, var(--b2) 7px, var(--b2) 14px); }
 .cn-imgbox-empty::after { content: '⬡ нет картинки'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; font-family: var(--font-mono); font-size: 9px; color: var(--t4); text-align: center; padding: 4px; line-height: 1.2; }
 .cn-h-img.cn-imgbox-empty::after, .cn-u-img.cn-imgbox-empty::after { content: '⬡'; font-size: 13px; }

@@ -537,42 +537,87 @@ function cnTurretToWeapon(t) {
     tech: st.kvTech || '', damageType: st.kvDmg || '', class: st.kvClass || '',
     customParameter: { kal: String(cal), dalnost: st.dalnost || 0,
                        skorostrelnost: st.rof || 0, metrika: '0' },   // клиент читает отсюда
-    resurs: st.resurs || { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
-    _turret: true, _turretId: t.id, _turretCfg: t.cfg || null,
+    // Сырьё орудия в конструкционные решения корпуса НЕ идёт: у своего орудия
+    // цена плоская (stats.gs, боевая) и прибавляется к стоимости проекта как
+    // есть. Иначе цена в верфи и цена в конструкторе расходились бы — там
+    // resurs ещё домножался на классовый коэффициент корпуса и наценку.
+    resurs: { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+    _turret: true, _turretId: t.id, _turretCfg: t.cfg || null, _gs: Math.round(st.gs || 0),
+    _on: +(st.on || 0),
   };
 }
 
-// ── Арт своего орудия: тот же генератор, что и на верфи ──────
-// Никаких файлов-картинок у своих орудий нет и быть не может: облик задан
-// конфигом сборки. Поэтому и в узле схемы, и в карточках выбора рисуем
-// turret_gen.js вживую. Кадр — tight: иконка маленькая, важен силуэт.
+// ── Арт орудия: тот же генератор, что и на оружейной верфи ───
+// Свои орудия (_turretCfg) и башенные позиции каталога без webp-арта рисуем
+// turret_gen.js вживую — с тем же масштабом по size/классу, что и на верфи
+// (без tight: там кадр общий, изделие реально крупнеет/мельчает).
 // Идентификаторы в defs у генератора фиксированные (m_plate, glow, …), а на
 // странице таких SVG может быть десяток: без уникализации все турели брали бы
 // градиенты ПЕРВОЙ и красились её акцентом. Отсюда суффикс на id и url(#…).
 let CN_TART_N = 0;
-function cnTurretArtSvg(cfg) {
+function cnTurretCfg(item) {
+  if (!item || !window.TG) return null;
+  if (item._turretCfg) {
+    try { return TG.normalize(item._turretCfg); } catch (e) { return null; }
+  }
+  if (TG.isTurret && TG.isTurret(item)) return TG.fromKV(item.name, item);
+  return null;
+}
+// Визуальный «вес» орудия на схеме — 0..1 по ФИЗИЧЕСКОЙ МАССЕ сборки.
+// Раньше вес брался из энергопотребления с потолком 2500 E: всё крупнее
+// эсминечного калибра упиралось в потолок, и супероружие на схеме было
+// такого же размера, что зенитный автомат. Масса разведена по логарифму от
+// 100 кг до 2000 т — весь диапазон верфи, потолок реально достижим только
+// предельным супероружием.
+const CN_TWT_LO = Math.log(100), CN_TWT_HI = Math.log(2e6);
+function cnTurretVisWt(cfg, item) {
+  let m = item && (+item.weight || 0);
+  if (!(m > 0) && cfg && window.TG && TG.stats) {
+    try { m = TG.stats(cfg).mass || 0; } catch (e) { m = 0; }
+  }
+  if (m > 0) {
+    return Math.max(0, Math.min(1, (Math.log(m) - CN_TWT_LO) / (CN_TWT_HI - CN_TWT_LO)));
+  }
+  // Нет массы (орудие каталога без ТТХ верфи) — падаем на энергопотребление.
+  const e = item && (+item.energy || +item.power || 0);
+  if (e > 0) return Math.max(0, Math.min(1, (Math.log(e) - Math.log(20)) / (Math.log(20000) - Math.log(20))));
+  return 0.35;
+}
+function cnWeaponTurretArt(item, imgPath) {
+  if (!item || !window.TG || !TG.render) return null;
+  if (cnWpnImgReady(imgPath) && !item._turretCfg) return null;
+  const cfg = cnTurretCfg(item);
+  if (!cfg) return null;
+  return { cfg, wt: cnTurretVisWt(cfg, item) };
+}
+function cnTurretArtSvg(cfg, opt) {
   if (!cfg || !window.TG || !TG.render) return null;
   let s;
-  try { s = TG.render(cfg, { tight: 1 }); } catch (e) { return null; }
+  try { s = TG.render(cfg, opt); } catch (e) { return null; }
   const u = '_ta' + (++CN_TART_N);
   return s.replace(/id="([\w-]+)"/g, (m, a) => `id="${a}${u}"`)
           .replace(/url\(#([\w-]+)\)/g, (m, a) => `url(#${a}${u})`);
 }
 // Тот же арт, но кусками — для встраивания в схему корабля (нужен viewBox).
-function cnTurretArtParts(cfg) {
-  const s = cnTurretArtSvg(cfg); if (!s) return null;
+function cnTurretArtParts(cfg, opt) {
+  const s = cnTurretArtSvg(cfg, opt); if (!s) return null;
   const vb = (s.match(/viewBox="([^"]+)"/) || [])[1];
   const inner = s.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
   if (!vb || !inner) return null;
   const n = vb.trim().split(/\s+/).map(Number);
   return { inner, half: Math.max(n[2], n[3]) / 2 };
 }
-// Готовый бокс-«картинка» для карточек выбора (замена cnImgTag у своих орудий).
+// Готовый бокс-«картинка» для карточек выбора (замена cnImgTag у орудий без webp).
 function cnTurretImgTag(cfg, cls) {
   const s = cnTurretArtSvg(cfg); if (!s) return null;
   return `<span class="cn-imgbox cn-imgbox-tg ${cls || ''}">`
     + s.replace(/ width="\d+" height="\d+"/, ' width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block"')
     + `</span>`;
+}
+function cnWeaponImgTag(item, imgPath, cls) {
+  const art = cnWeaponTurretArt(item, imgPath);
+  if (art) { const tg = cnTurretImgTag(art.cfg, cls); if (tg) return tg; }
+  return cnImgTag(imgPath, cls);
 }
 // Дописать свои орудия в db.weapons, предварительно убрав вписанные ранее.
 // Порядок — по id (стабильный), чтобы индексы не «плавали» между заходами.
@@ -766,8 +811,11 @@ function cnCompFullHtml(info, action) {
   const bill = cnPartBill(info);
   const billHtml = Object.keys(bill).length
     ? `<div class="cn-info-res"><div class="cn-info-sub">◇ Сырьё ${info.kind === 'class' ? 'корпуса' : 'за единицу'}</div><div class="cn-bill">${cnBillHtml(bill)}</div></div>` : '';
+  const imgHtml = info.kind === 'weapon'
+    ? cnWeaponImgTag(info.obj, info.imgPath, 'cn-info-img')
+    : cnImgTag(info.imgPath, 'cn-info-img');
   return `<div class="cn-info-card${on ? ' on' : ''}${locked ? ' locked' : ''}"${(action && !locked) ? ` onclick="${action}"` : ''}>
-    ${cnImgTag(info.imgPath, 'cn-info-img')}
+    ${imgHtml}
     <div class="cn-info-body">
       <div class="cn-info-nm">${locked ? '🔒 ' : ''}${info.kind === 'reactor' ? `<span class="cn-info-lvl">Ур. ${(info.idx || 0) + 1}</span> ` : ''}${esc(info.obj.name)}${on ? ' <span class="cn-info-cur">установлено</span>' : ''}</div>
       <div class="cn-info-stats">${cnCompStatsRows(info)}</div>
@@ -1594,7 +1642,17 @@ function cnDrawShip() {
       // иначе рисуем векторную башню. Полотно повёрнуто на 90° → арт контр-вращаем.
       const wImg = cnImgPath(CN.cat, 'weapon', cnGroupSlug(CN.cat, 'weapon', w.g), w.idx);
       let art;
-      if (cnWpnImgReady(wImg)) {
+      const tg = cnWeaponTurretArt(item, wImg);
+      if (tg) {
+        const parts = cnTurretArtParts(tg.cfg);
+        if (parts && parts.half > 0) {
+          // Радиус узла на схеме = размер орудия: от 3 (пулемёт) до 15 (предельное
+          // супероружие). Раньше разброс был 4.0…4.9 — размер класса не читался.
+          const sc = (3 + 12 * tg.wt) / parts.half;
+          art = `<g transform="translate(${p[0]} ${p[1]}) rotate(${dir}) scale(${sc.toFixed(3)})" style="filter:drop-shadow(0 0 2.5px rgba(0,0,0,0.75)) brightness(0.9)">${parts.inner}</g>`;
+        }
+      }
+      if (!art && cnWpnImgReady(wImg)) {
         // Арт турели ЦЕЛИКОМ (вид сверху, стволы = +x), в натуральном аспекте — без обрезки
         // по кругу. Центр вращения на узле, стволы направлены по азимуту dir (как у векторной
         // башни). Аспект берём натуральный (кэш CN.imgAR) → meet заполняет бокс без искажений.
@@ -1605,11 +1663,12 @@ function cnDrawShip() {
         art = `<g transform="translate(${p[0]} ${p[1]}) rotate(${dir})" style="filter:drop-shadow(0 0 2.5px rgba(0,0,0,0.75)) brightness(0.9)">`
             + `<image href="${esc(wImg)}" xlink:href="${esc(wImg)}" x="${(-L * 0.40).toFixed(1)}" y="${(-Wd / 2).toFixed(1)}" width="${L.toFixed(1)}" height="${Wd.toFixed(1)}" preserveAspectRatio="xMidYMid meet"/>`
             + `</g>`;
-      } else art = `<g style="filter:drop-shadow(0 0 2.5px rgba(0,0,0,0.75))">${cnTurretSvg(p, vis, dir)}</g>`;
+      }
+      if (!art) art = `<g style="filter:drop-shadow(0 0 2.5px rgba(0,0,0,0.75))">${cnTurretSvg(p, vis, dir)}</g>`;
       // Прозрачная зона захвата — ПОВЕРХ арта (последним): арт с drop-shadow хиттестится только
       // по непрозрачным пикселям, из-за чего центр турели «проваливался». Круг сверху ловит клик
       // по всей области, включая центр.
-      const hitR = (10 + 5 * vis.wt).toFixed(1);
+      const hitR = (tg ? (5 + 11 * tg.wt) : (10 + 5 * vis.wt)).toFixed(1);
       nodeMk.push(`<g class="cn-node" style="cursor:grab" onpointerdown="cnMountPointerDown(event,${i})"><title>${esc(item.name)} · тащи, чтобы переместить · клик — настроить</title>${art}<circle cx="${p[0]}" cy="${p[1]}" r="${hitR}" fill="transparent"/></g>`);
     }
     else if (active) {
@@ -1956,7 +2015,8 @@ function cnPartCardInner(type, g, idx) {
   const db = CN.def.db, E = CN.def.hasEnergy;
   const item = (type === 'weapon' ? db.weapons : db.modules)[g][idx];
   const slug = cnGroupSlug(CN.cat, type, g);
-  const img = cnImgTag(cnImgPath(CN.cat, type, slug, idx), 'cn-comp-img');
+  const wImg = cnImgPath(CN.cat, type, slug, idx);
+  const img = type === 'weapon' ? cnWeaponImgTag(item, wImg, 'cn-comp-img') : cnImgTag(wImg, 'cn-comp-img');
   let chips;
   const itemE = +item.energy || +item.power || 0;
   if (type === 'weapon') { const cp = item.customParameter || {}; chips = cnChip('урон', cnNum(item.dmg)) + (+cp.dalnost > 0 ? cnChip('дальность', cnNum(cp.dalnost) + ' кв') : '') + (itemE ? cnChip('E', cnNum(itemE)) : '') + cnGsChip(item.cost); }
@@ -2728,7 +2788,10 @@ function cnVehCalc() {
     billModules.forEach(({ m }) => { crew += (m.crewRequired || 0); power -= (m.power || 0); cap += (m.capacity || 0); addRes(m, 1); });
     for (const key in res) res[key] = Math.round(res[key]);
     // ГС теперь из сырья (см. cnKvCost), а не из млн-прайсов Кваквантора.
-    cost = cnKvCost(res, k);
+    // Свои орудия (верфь) идут поверх плоской боевой ценой — ровно тем числом,
+    // которое игрок видел на верстаке (зеркало _cn_recompute).
+    cost = cnKvCost(res, k)
+         + billWeapons.reduce((a, { w, q }) => a + (+w._gs || 0) * (q || 1), 0);
     // Радар: базовая дальность + бонус от мощности реактора (активные станции
     // «раскачиваются» энергией: +1 за каждые pwrPer E, кап pwrCap) + помехозащищённость.
     const rcp = (radarObj && radarObj.customParameterradar) || null;

@@ -1672,7 +1672,11 @@ function stats(input){
   const refCal=POWER_REF_CAL[cfg.klass]||130;
   // Длина ствола влияет на дальность только у ствольного оружия: у лазера
   // и плазмы «ствол» — волновод и сопло, разгонного участка там нет.
-  const barrelMatters=(T.kind==='gun'||T.kind==='rail');
+  // ЭХС и электромагнитное — тоже ствольные: их T.kind ('ehs'/'coil') назван по
+  // рисовальщику, а не по физике, и раньше выпадал из проверки — дальность
+  // таких орудий не зависела от длины ствола, вопреки серверному зеркалу
+  // (_tg_stats считает их gun/rail). Правда — сервер.
+  const barrelMatters=(T.kind==='gun'||T.kind==='rail'||T.kind==='ehs'||T.kind==='coil');
   let dalnost=(RANGE_BASE[cfg.klass]||3)*(T.dl||1)
             * Math.pow(kal/refCal, 0.55)
             * (barrelMatters ? Math.pow((+cfg.barrelLen||50)/50, 0.55) : 1)
@@ -1683,14 +1687,23 @@ function stats(input){
   dalnost=Math.max(1, Math.min(40, Math.round(dalnost)));
 
   const kind = t==='missile'?'missile' : (t==='laser'||t==='plasma')?'energy':'kinetic';
-  // ЦЕНА В ИГРЕ ≠ price. price — это KV-прайс (миллионы), он нигде в игре не
-  // тратится: живая стоимость юнита считается из СЫРЬЯ (cnKvCost в
-  // constructors.js). Зеркалим ту же формулу, чтобы превью показывало те же
-  // ГС, что игрок увидит в конструкторе. Классовый множитель корпуса здесь не
-  // применяется — его даёт корабль, на который орудие ставят.
-  const RES_GS={blackmetall:8,rudametall:20,coloredmetall:45,kristall:90,staarvis:150};
-  let gs=0; for(const r in RES_GS) gs+=(resurs[r]||0)*RES_GS[r];
-  gs=Math.round(gs*0.32);   // CN_KV_COST_FACTOR
+  // ЦЕНА В ИГРЕ ≠ price. price — это KV-прайс (миллионы), он нигде не тратится.
+  // ГС орудия — БОЕВАЯ ЦЕНА: раньше она считалась из конструкционного сырья
+  // (mass/900 и т.п.), и супероружие на 800k урона выходило в пару тысяч ГС,
+  // дешевле корпуса, на который его вешают. Теперь платят за мощь: урон —
+  // ведущий множитель, дальность и энергопрожорливость — надбавки.
+  // Показатель 0.86 < 1: удвоение урона дорожает в ~1.8 раза, но не линейно,
+  // иначе мелкие сборки становились бы выгоднее по «урону за ГС» в разы.
+  // Классовый множитель корпуса тут не применяется — цена орудия плоская и
+  // ровно в этом виде идёт в стоимость проекта (см. cnKvCost/_cn_recompute).
+  let gs = 3.2 * Math.pow(damage,0.86)
+         * Math.pow(1+dalnost/12, 0.55)
+         * Math.pow(1+energy/400, 0.18);
+  gs = Math.max(5, Math.round(gs));
+  // ОЧКИ НАУКИ (ОН) — разовая трата при регистрации орудия в верфи, как за
+  // публикацию проекта техники. Шкала подобрана к проектам (12–50 ОН у
+  // кораблей): пулемёт ~2 ОН, предельное супероружие ~40.
+  const on = Math.max(1, Math.min(60, Math.round(0.30*Math.pow(damage,0.42)*10)/10));
   // ВЕДОМОСТЬ В ИГРОВЫХ РЕСУРСАХ. resurs (чёрный металл/ставрис) — внутренняя
   // KV-номенклатура, на склад державы она не ложится. Со склада списывается то,
   // что считает cnUnitBill: у орудия сырьё идёт ОТ УРОНА и типа боеприпаса
@@ -1703,7 +1716,7 @@ function stats(input){
   if(billKind==='missile') addB('Изотопы', damage/150);
   else if(billKind==='energy'){ addB('Редкоземельные руды', damage/180); addB('Гелий-3', damage/400); }
   else addB('Железо', damage/120);
-  return { damage, price, gs, bill, mass, energy, crew:0, dalnost,
+  return { damage, price, gs, on, bill, mass, energy, crew:0, dalnost,
            rof, caliber:kal, barrels:n, kind,
            dmgPerEnergy: Math.round(damage/energy*10)/10,
            salvo:Math.round(one), tC, dC, cC, resurs };
