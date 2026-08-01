@@ -12,6 +12,14 @@
 // ════════════════════════════════════════════════════════════
 (function () {
   "use strict";
+  // Прочность сплава — не абсолют, а МНОЖИТЕЛЬ к лучшей стоковой броне класса
+  // (см. cnAlloyMult в constructors.js): один рецепт честно работает и на пехоте,
+  // и на дредноуте. Показываем именно множитель.
+  function cnaMultTxt(st) {
+    var f = (typeof window !== 'undefined' && window.cnAlloyMult) || null;
+    if (!f || !st) return '—';
+    try { return '×' + f(st).toFixed(2); } catch (e) { return '—'; }
+  }
   var CNA = { mix: {}, alloys: [], busy: false };
   window.CNA = CNA;
 
@@ -231,7 +239,7 @@
       '<div class="cna-head">' +
         '<div style="text-align:center"><div class="cna-grade" style="color:' + gradeColor + '">' + r.grade + '</div><div class="cna-grade-l">ОЦЕНКА</div></div>' +
         '<div style="flex:1;min-width:0">' +
-          '<div class="cna-stat"><span>Прочность корпуса</span><b>' + r.hpBoost + '</b></div>' +
+          '<div class="cna-stat"><span>Прочность корпуса</span><b>' + cnaMultTxt(r) + ' к стоку</b></div>' +
           '<div class="cna-stat"><span>Усиление корпуса</span><b>' + (r.hpPercentBoost > 0 ? '+' + Math.round(r.hpPercentBoost * 100) + '%' : '—') + '</b></div>' +
           '<div class="cna-stat"><span>Вес → грузоподъёмность</span><b>' + (r.capacityBoost >= 0 ? '+' : '') + r.capacityBoost + '</b></div>' +
           '<div class="cna-stat"><span>Тип брони</span><b>' + catRu + '</b></div>' +
@@ -299,7 +307,7 @@
       var st = a.stats || {};
       return '<div class="cna-mine">' +
         '<div><b>' + esc(a.name) + '</b>' +
-          '<div style="font-size:11px;opacity:.6">Корпус ' + (st.hpBoost || 0) +
+          '<div style="font-size:11px;opacity:.6">Корпус ' + cnaMultTxt(st) +
             ' · к' + Math.round((st.resist && st.resist.kinetic || 0) * 100) +
             '/э' + Math.round((st.resist && st.resist.energy || 0) * 100) +
             '/р' + Math.round((st.resist && st.resist.missile || 0) * 100) + '%' +

@@ -35,15 +35,15 @@ window.KV = (function () {
 
         //  brig: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 10, price: 1000000, capacity: 0, shieldBoost: 5, speed: 1, resurs: { blackmetall: 50, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 20 }, mass: 50500, gabarit: 40, xxx: "Бриг" },
       //    satelloid: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 10, price: 5000000, capacity: 100, shieldBoost: 8, speed: 1, resurs: { blackmetall: 100, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 50 }, mass: 60500, gabarit: 20, xxx: "Сателлоид" },
-          corvette: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 20, price: 15000000, capacity: 10, shieldBoost: 1, speed: 1, resurs: { blackmetall: 200, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 30 }, mass: 90000, gabarit: 100, xxx: "Корвет" },
-          destroyer: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 30, price: 30000000, capacity: 0, shieldBoost: 9, speed: 1, resurs: { blackmetall: 300, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 50 }, mass: 109500, gabarit: 150, xxx: "Эсминец" },
+          corvette: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 20, price: 15000000, capacity: 250, shieldBoost: 1, speed: 1, resurs: { blackmetall: 200, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 30 }, mass: 90000, gabarit: 100, xxx: "Корвет" },
+          destroyer: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 30, price: 30000000, capacity: 400, shieldBoost: 9, speed: 1, resurs: { blackmetall: 300, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 50 }, mass: 109500, gabarit: 150, xxx: "Эсминец" },
           supportCarrier: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 25, price: 45000000, capacity: 600, shieldBoost: 15, speed: 1, resurs: { blackmetall: 400, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 100 }, mass: 100000, gabarit: 80, xxx: "Поддерживающий авианосец" },
         //  lightCruiser: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 40, price: 60000000, capacity: 0, shieldBoost: 13, speed: 1, resurs: { blackmetall: 600, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 }, mass: 200000, gabarit: 300, xxx: "Лёгкий крейсер" },
-          mediumCruiser: { hp: 0, size: 3, orugie: 1, modul: 0, crewRequired: 50, price: 75000000, capacity: 0, shieldBoost: 40, speed: 1, resurs: { blackmetall: 800, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 200 }, mass: 250000, gabarit: 400, xxx: "Средний крейсер" },
-          hyperCruiser: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 40, price: 100000000, capacity: 0, shieldBoost: 14, speed: 1, resurs: { blackmetall: 1000, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 800 }, mass: 200000, gabarit: 220, xxx: "Гиперкрейсер" },
+          mediumCruiser: { hp: 0, size: 3, orugie: 1, modul: 0, crewRequired: 50, price: 75000000, capacity: 700, shieldBoost: 40, speed: 1, resurs: { blackmetall: 800, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 200 }, mass: 250000, gabarit: 400, xxx: "Средний крейсер" },
+          hyperCruiser: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 40, price: 100000000, capacity: 600, shieldBoost: 14, speed: 1, resurs: { blackmetall: 1000, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 800 }, mass: 200000, gabarit: 220, xxx: "Гиперкрейсер" },
           multiroleCarrier: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 40, price: 120000000, capacity: 5500, shieldBoost: 19, speed: 1, resurs: { blackmetall: 1200, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 400 }, mass: 230000, gabarit: 350, xxx: "Многоцелевой авианосец" },
-          battleship: { hp: 0, size: 2, orugie: 1, modul: 0, crewRequired: 70, price: 200000000, capacity: 0, shieldBoost: 40, speed: 1, resurs: { blackmetall: 1500, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 1000 }, mass: 400000, gabarit: 500, xxx: "Линкор" },
-          dreadnought: { hp: 0, size: 3, orugie: 1, modul: 0, crewRequired: 100, price: 250000000, capacity: 0, shieldBoost: 40, speed: 1, resurs: { blackmetall: 1800, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 4000 }, mass: 500000, gabarit: 800, xxx: "Дредноут" },
+          battleship: { hp: 0, size: 2, orugie: 1, modul: 0, crewRequired: 70, price: 200000000, capacity: 1200, shieldBoost: 40, speed: 1, resurs: { blackmetall: 1500, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 1000 }, mass: 400000, gabarit: 500, xxx: "Линкор" },
+          dreadnought: { hp: 0, size: 3, orugie: 1, modul: 0, crewRequired: 100, price: 250000000, capacity: 1800, shieldBoost: 40, speed: 1, resurs: { blackmetall: 1800, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 4000 }, mass: 500000, gabarit: 800, xxx: "Дредноут" },
           ss13: { hp: 0, size: 4, orugie: 1, modul: 0, crewRequired: 250, price: 70000000, capacity: 1000, shieldBoost: 40, speed: 1, resurs: { blackmetall: 2000, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 600 }, mass: 450000, gabarit: 400, xxx: "СС-13" }
 
       };
@@ -1104,7 +1104,7 @@ const weaponLibrary = {
             power: 10, // Электроника башни
             capacityPenalty: 10, weight: 7000, damage: 0, tech: "электрохимическое", damageType: "кинетический", class: "турель бтр",
             customParameter: { kal: "25", dalnost: 5, skorostrelnost: 1800, metrika: "20,0/15,0" },
-            resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+            resurs: { blackmetall: 2, coloredmetall: 1, rudametall: 0, kristall: 0, staarvis: 0 },
             description: "АК-30М расшифровывается как «автоматическая короткоствольная», калибра 30 мм, а «М», соответственно, — модификация. Однако в секторе больше распространено название БМАП-БТР — боевой модуль автоматической пушки для бронетранспортёров. Или просто — «Азазан». При калибре 30-мм имеет дальность стрельбы до 5 АсК и скорострельность 300 выстрелов за ход."
         },
 
@@ -1131,7 +1131,7 @@ const weaponLibrary = {
             power: 400, // Рельсотрон жрет много энергии
             capacityPenalty: 50, damage: 0, weight: 3000, tech: "рельсотрон", damageType: "рельсотрон", class: "бронетанковая пушка",
             customParameter: { kal: "100 мм", dalnost: 8, skorostrelnost: 20, metrika: "40,0/30,0" },
-            resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+            resurs: { blackmetall: 2, coloredmetall: 2, rudametall: 6, kristall: 0, staarvis: 0 },
             description: "Мощное 100-мм рельсотронное орудие с высокой дальностью и хорошим уроном. АРКОН-100 расшифровывается как армейское рельсовое компактное орудие наземное."
         },
 
@@ -1140,17 +1140,17 @@ const weaponLibrary = {
             power: 200, // Лазер
             capacityPenalty: 25, damage: 0, weight: 2500, tech: "лазер", damageType: "энергетический", class: "бронетанковая пушка",
             customParameter: { kal: "20 мм", dalnost: 6, skorostrelnost: 20, metrika: "18,0/12,0" },
-            resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+            resurs: { blackmetall: 1, coloredmetall: 1, rudametall: 0, kristall: 2, staarvis: 0 },
             description: "ЛУКС (лазерная ударная когерентная система). Среди военных чаще шутливо именуется «Лучеславом». Типичное лазерное орудие с высоким энергопотреблением."
         },
 
-        "Зенитная ракета «Гало»": {
+        "Шестизарядный ЗРК «Гало»": {
         price: 5000000, visibility: 10, category: "РПУ", crewRequired: 0,
         power: 10,
         capacityPenalty: 15, damage: 0, weight: 500, tech: "кинетическое", damageType: "взрывной", class: "рпу",
         customParameter: { kal: "60 мм", dalnost: 4, skorostrelnost: 6, metrika: "20,0/15,0" },
-        resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
-        description: "Компактная ракета на базе однозарядной пусковой установки. Оснащается радиолокационной головкой самонаведения для поражения воздушных целей."
+        resurs: { blackmetall: 1, coloredmetall: 0.5, rudametall: 0, kristall: 0, staarvis: 0.4 },
+        description: "Шестизарядная зенитная установка с радиолокационной головкой самонаведения. Весь боекомплект уходит одним залпом по воздушным целям."
     },
 
       "Барражирующая ракета «Коготь»": {
@@ -1158,7 +1158,7 @@ const weaponLibrary = {
             power: 15, // Запуск и управление
             capacityPenalty: 70, damage: 0, weight: 700, tech: "кинетическое", damageType: "взрывной", class: "рпу",
             customParameter: { kal: "400 мм", dalnost: 5, skorostrelnost: 3, metrika: "22,0/18,0" },
-            resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+            resurs: { blackmetall: 2, coloredmetall: 3.9, rudametall: 0, kristall: 0, staarvis: 3.2 },
             description: "Два барражирующих боеприпаса «Коготь», интегрируемых в контейнеры на каждом из бортов бронетехники."
         },
 
@@ -1204,7 +1204,7 @@ const weaponLibrary = {
                 power: 100, // Мощное ЭХО
                 capacityPenalty: 100, damage: 0, weight: 7000, tech: "электрохимическое", damageType: "электрохимическая система", class: "танковая пушка",
                 customParameter: { kal: "152 мм", dalnost: 18, skorostrelnost: 30, metrika: "30,0/22,0" },
-                resurs: { blackmetall: 2, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                resurs: { blackmetall: 2, coloredmetall: 1, rudametall: 4, kristall: 0, staarvis: 0 },
                 description: "ЭХО-120М (Модернизированное) является мощным оружием, предназначенным для установки на основные боевые танки колониальных правительств сектора."
             },
 
@@ -1213,7 +1213,7 @@ const weaponLibrary = {
                 power: 600, // Рельса требует много
                 capacityPenalty: 120, damage: 0, weight: 3000, tech: "рельсотрон", damageType: "рельсотрон", class: "танковая пушка",
                 customParameter: { kal: "130 мм", dalnost: 8, skorostrelnost: 5, metrika: "5" },
-                resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                resurs: { blackmetall: 3, coloredmetall: 3, rudametall: 8, kristall: 0, staarvis: 0 },
                 description: "Мощное 130-мм рельсотронное орудие с высокой дальностью и хорошим уроном. Официальное название АРКОН-160 (в описании у тебя 160, хотя в названии 130 - оставил как в оригинале)."
             },
 
@@ -1222,7 +1222,7 @@ const weaponLibrary = {
                 power: 300, // Лазер
                 capacityPenalty: 35, damage: 0, weight: 3500, tech: "лазер", damageType: "энергетический", class: "танковая пушка",
                 customParameter: { kal: "40 мм", dalnost: 6, skorostrelnost: 20, metrika: "18,0/12,0" },
-                resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                resurs: { blackmetall: 2, coloredmetall: 2, rudametall: 0, kristall: 3, staarvis: 0 },
                 description: "Лазерная ударная когерентная система поколения Х - танковая модификация всеми любимого «Лучеслава»."
             },
 
@@ -1291,40 +1291,40 @@ const weaponLibrary = {
             description: "ЭХО-35А использует передовую электрохимическую технологию, которая обеспечивает оптимальное соотношение массы и мощности для авиации."
         },
 
-        "Неуправляемая ракета «Фотоид»": {
+        "Блок НАР Б-8 «Фотоид»": {
             price: 3000000, visibility: 0, category: "Ракеты", crewRequired: 0,
             power: 5, // Питание пилонов
             capacityPenalty: 50, damage: 0, weight: 120, tech: "твердотельное", damageType: "взрывной", class: "ракета",
-            customParameter: { kal: "80 мм", dalnost: 20, skorostrelnost: 0, metrika: "4.5" },
-            resurs: { blackmetall: 10, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 10 },
-            description: "Неуправляемая ракета с улучшенной дальностью и скоростью. Использует твердотельный двигатель для повышения дальности и точности."
+            customParameter: { kal: "80 мм", dalnost: 20, skorostrelnost: 8, metrika: "4.5" },
+            resurs: { blackmetall: 1, coloredmetall: 0.4, rudametall: 0, kristall: 0, staarvis: 0.1 },
+            description: "Блок на восемь неуправляемых ракет с твёрдотельным двигателем. Точности нет, зато вся кассета укладывается в один квадрат."
         },
 
-        "РГЧ «Феникс»": {
+        "Счетверённая пусковая установка РГЧ «Феникс»": {
             price: 15000000,  visibility: 10, category: "Ракеты", crewRequired: 0,
             power: 10, // Авионика
             capacityPenalty: 35, damage: 5, weight: 250, tech: "твердотельное", damageType: "взрывной", class: "ракета",
-            customParameter: { kal: "45 мм", dalnost: 15, skorostrelnost: 0, metrika: "2.5" },
-            resurs: { blackmetall: 10, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 10 },
-            description: "Ракета средней дальности с улучшенной точностью и увеличенной мощностью. Применяется для уничтожения вражеских средств ПВО и командных пунктов."
+            customParameter: { kal: "45 мм", dalnost: 15, skorostrelnost: 4, metrika: "2.5" },
+            resurs: { blackmetall: 1, coloredmetall: 0.3, rudametall: 0, kristall: 0, staarvis: 0.3 },
+            description: "Четыре шахты с ракетами средней дальности и разделяющейся головной частью. Применяется против средств ПВО и командных пунктов."
         },
 
-        "Противорадиолокационная ракета ПРК-1 «Страж»": {
+        "Спаренная ПУ ПРК-1 «Страж»": {
             price: 6500000, visibility: 10, category: "Ракеты", crewRequired: 0,
             power: 25, // Системы РЭБ требуют энергии
             capacityPenalty: 45, damage: 10, weight: 180, tech: "электронное подавление", damageType: "взрывной", class: "ракета",
-            customParameter: { kal: "80 мм", dalnost: 30, skorostrelnost: 0, metrika: "0" },
-            resurs: { blackmetall: 30, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 50 },
-            description: "Противорадиолокационная ракета с высокоэффективной системой нейтрализации вражеских РЛС. Используется для подавления ПВО и засечек."
+            customParameter: { kal: "80 мм", dalnost: 30, skorostrelnost: 2, metrika: "0" },
+            resurs: { blackmetall: 1, coloredmetall: 0.4, rudametall: 0, kristall: 0, staarvis: 0.3 },
+            description: "Спаренная установка противорадиолокационных ракет. Наводится на излучение чужой РЛС и гасит ПВО вместе с засечками."
         },
 
-        "Управляемая ракета УР-4 «Нови-Сад»": {
+        "Пусковая установка УР-4 «Нови-Сад»": {
             price: 14000000, category: "Ракеты", crewRequired: 0,
             power: 20, // Головка самонаведения
             capacityPenalty: 60, damage: 15, weight: 300, tech: "управляемое наведение", damageType: "взрывной", class: "ракета",
-            customParameter: { kal: "90 мм", dalnost: 30, skorostrelnost: 0, metrika: "5.5" },
-            resurs: { blackmetall: 100, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 100 },
-            description: "Управляемая ракета дальнего действия с высокой точностью, предназначенная для поражения движущихся и стационарных целей на больших дистанциях."
+            customParameter: { kal: "90 мм", dalnost: 30, skorostrelnost: 2, metrika: "5.5" },
+            resurs: { blackmetall: 1, coloredmetall: 0.7, rudametall: 0, kristall: 0, staarvis: 1.2 },
+            description: "Двухзарядная пусковая установка управляемых ракет дальнего действия. Бьёт по движущимся и стационарным целям на больших дистанциях."
         },
         // --- ВЕРТОЛЕТЫ ---
             "12,5-мм автоматическая турель ВКТ-125 «Шершень»": {
@@ -1450,54 +1450,54 @@ const weaponLibrary = {
                         "2х15,6-мм спаренный пулемет ЭтА-30 «Грязнокровка»": {
                             price: 8000000, visibility: 10, category: 'ПВО Орудия', crewRequired: 1,
                             power: 100, // Питание башни ПВО
-                            capacityPenalty: 0, damage: 0, weight: 500, tech: "электрохимическое", damageType: "электрохимическая система", class: "турель ПВО",
+                            capacityPenalty: 1, damage: 0, weight: 500, tech: "электрохимическое", damageType: "электрохимическая система", class: "турель ПВО",
                             customParameter: { kal: "15.6 мм", dalnost: 3, skorostrelnost: 10000, metrika: "10000" },
-                            resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                            resurs: { blackmetall: 1, coloredmetall: 7, rudametall: 0, kristall: 0, staarvis: 0 },
                             description: "Эрзац-модификация орудийной системы Серкам МтП-40. От изначальной системы осталась только башенная установка и подача снарядов. Отличная ПВО."
                         },
 
                         "90-мм электрохимическое орудие МтП-40 «Серкам»": {
                             price: 15000000,  visibility: 0, category: "ЭХС Орудия", crewRequired: 5,
                             power: 250, // Мощное ЭХО
-                            capacityPenalty: 0, damage: 0, weight: 5000, tech: "электрохимическое", damageType: "электрохимическая система", class: "легкое корабельное орудие",
+                            capacityPenalty: 10, damage: 0, weight: 5000, tech: "электрохимическое", damageType: "электрохимическая система", class: "легкое корабельное орудие",
                             customParameter: { kal: "90 мм", dalnost: 3, skorostrelnost: 90, metrika: "35" },
-                            resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                            resurs: { blackmetall: 13, coloredmetall: 18, rudametall: 0, kristall: 0, staarvis: 0 },
                             description: "Башенное Универсальное Орудие Серкам МтП-40. Во многих аспектах не уступает аналогам благодаря сбалансированным характеристикам."
                         },
 
                         "2х40-мм спаренное лазерное орудие ИЛВ-60 «Акатименос»": {
                             price: 17000000, visibility: 0, category: "Энерго Орудия", crewRequired: 10,
                             power: 650, // Лазеры жрут энергию
-                            capacityPenalty: 0, damage: 0, weight: 40000, tech: "лазер", damageType: "импульсный лазер", class: "среднее корабельное орудие",
+                            capacityPenalty: 80, damage: 0, weight: 40000, tech: "лазер", damageType: "импульсный лазер", class: "среднее корабельное орудие",
                             customParameter: { kal: "40 мм", dalnost: 6, skorostrelnost: 1, metrika: "1000" },
-                            resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                            resurs: { blackmetall: 100, coloredmetall: 2, rudametall: 0, kristall: 9, staarvis: 0 },
                             description: "Импульсно Лазерное башенное орудие. Высокая популярность в качестве вооружения против энергощитов в эпоху возвышения рельсотронных систем."
                         },
                         // --- КОРАБЕЛЬНОЕ ВООРУЖЕНИЕ (ЭСМИНЦЫ) ---
                             "150-мм электрохимическое орудие «Роджер»": {
                                 price: 13000000, visibility: 0, category: "ЭХС Орудия", crewRequired: 5,
                                 power: 450, // power -> power
-                                capacityPenalty: 0, damage: 0, weight: 10000, tech: "электрохимическое", damageType: "электрохимическая система", class: "среднее корабельное орудие",
+                                capacityPenalty: 20, damage: 0, weight: 10000, tech: "электрохимическое", damageType: "электрохимическая система", class: "среднее корабельное орудие",
                                 customParameter: { kal: "150 мм", dalnost: 3, skorostrelnost: 20, metrika: "5" },
-                                resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                                resurs: { blackmetall: 25, coloredmetall: 43, rudametall: 0, kristall: 0, staarvis: 0 },
                                 description: "Первая специализированная система под космические задачи. Представляет из себя одно 150 мм ЭХС орудие со значительно изменённой системой."
                             },
 
                             "90-мм рельсотрон ПРВ-30 «Басл»": {
                                 price: 20000000, visibility: 0, category: "Рельсотроные Орудия", crewRequired: 5,
                                 power: 600, // Рельсотрон жрет много
-                                capacityPenalty: 0, damage: 0, weight: 7000, tech: "электрохимическое", damageType: "рельсотрон", class: "среднее корабельное орудие",
+                                capacityPenalty: 14, damage: 0, weight: 7000, tech: "электрохимическое", damageType: "рельсотрон", class: "среднее корабельное орудие",
                                 customParameter: { kal: "90 мм", dalnost: 3, skorostrelnost: 50, metrika: "100" },
-                                resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                                resurs: { blackmetall: 18, coloredmetall: 11, rudametall: 42, kristall: 0, staarvis: 0 },
                                 description: "Пропульсионное орудие Басл ПРВ-30 — рельсотронная система первых поколений. Крайне громоздкая, но мощная."
                             },
 
                             "100-мм пучковый лазер ПЛВ-55 «Меглос»": {
                                 price: 17000000, visibility: 0, category: "Энерго Орудия", crewRequired: 10,
                                 power: 800, // Пучковый лазер
-                                capacityPenalty: 0, damage: 0, weight: 40000, tech: "лазер", damageType: "пучковый лазер", class: "среднее корабельное орудие",
+                                capacityPenalty: 80, damage: 0, weight: 40000, tech: "лазер", damageType: "пучковый лазер", class: "среднее корабельное орудие",
                                 customParameter: { kal: "100 мм", dalnost: 6, skorostrelnost: 1, metrika: "1000" },
-                                resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                                resurs: { blackmetall: 100, coloredmetall: 7, rudametall: 0, kristall: 26, staarvis: 0 },
                                 description: "Пучковый лазер с упором на высокую дальность огня. Одно из первых вооружений, созданных в системе Элизиум специально для дальнего боя."
                             },
                             // --- АНГАРЫ И РОИ ДРОНОВ (ДРОНОНОСЦЫ) ---
@@ -1531,27 +1531,27 @@ const weaponLibrary = {
                                     "120-мм рельсотрон ЭКВ-82 «Годдард»": {
                                         price: 14000000, visibility: 0, category: "Рельсотроные Орудия", crewRequired: 10,
                                         power: 500,
-                                        capacityPenalty: 0, damage: 0, weight: 15000, tech: "электрохимическое", damageType: "рельсотрон", class: "среднее корабельное орудие",
+                                        capacityPenalty: 30, damage: 0, weight: 15000, tech: "электрохимическое", damageType: "рельсотрон", class: "среднее корабельное орудие",
                                         customParameter: { kal: "120 мм", dalnost: 3, skorostrelnost: 10, metrika: "20" },
-                                        resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                                        resurs: { blackmetall: 38, coloredmetall: 21, rudametall: 82, kristall: 0, staarvis: 0 },
                                         description: "Классический представитель электромагнитных орудий. Создан как ответ на усиление защитных качеств ЭМП полей."
                                     },
 
                                     "4х350-мм рельсотрон ТБС-100 «Мюллер»": {
                                         price: 30000000, visibility: 0, category: "Рельсотроные Орудия", crewRequired: 15,
                                         power: 850,
-                                        capacityPenalty: 0, damage: 0, weight: 90000, tech: "электрохимическое", damageType: "рельсотрон", class: "тяжелое корабельное орудие",
+                                        capacityPenalty: 180, damage: 0, weight: 90000, tech: "электрохимическое", damageType: "рельсотрон", class: "тяжелое корабельное орудие",
                                         customParameter: { kal: "350 мм", dalnost: 3, skorostrelnost: 8, metrika: "8" },
-                                        resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                                        resurs: { blackmetall: 225, coloredmetall: 149, rudametall: 586, kristall: 0, staarvis: 0 },
                                         description: "Тяжелое башенное орудие класса «поработитель». Спаренная установка из четырёх орудий калибра 350 мм. Самая серьёзная аргументация в споре."
                                     },
 
                                     "Лазерное орудие ВПЛ-65 «Плага»": {
                                         price: 20000000, visibility: 0, category: "Энерго Орудия", crewRequired: 10,
                                         power: 1000, // Очень мощный лазер
-                                        capacityPenalty: 0, damage: 0, weight: 80000, tech: "лазер", damageType: "импульсный лазер", class: "тяжелое корабельное орудие",
+                                        capacityPenalty: 160, damage: 0, weight: 80000, tech: "лазер", damageType: "импульсный лазер", class: "тяжелое корабельное орудие",
                                         customParameter: { kal: "100 мм", dalnost: 6, skorostrelnost: 1, metrika: "1000" },
-                                        resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+                                        resurs: { blackmetall: 200, coloredmetall: 8, rudametall: 0, kristall: 31, staarvis: 0 },
                                         description: "Конец линейки лазеров - самый тяжелый и дальнобойный вариант данного вида вооружения."
                                     },
 
@@ -1560,7 +1560,7 @@ const weaponLibrary = {
                                         power: 100, // Предстартовая подготовка
                                         capacityPenalty: 200, damage: 15, weight: 300, tech: "управляемое наведение", damageType: "ядерное оружие", class: "баллистическая ракета",
                                         customParameter: { kal: "300 мм", dalnost: 30, skorostrelnost: 0, metrika: "5.5" },
-                                        resurs: { blackmetall: 100, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 100 },
+                                        resurs: { blackmetall: 1, coloredmetall: 31, rudametall: 0, kristall: 0, staarvis: 52 },
                                         description: "БМР-03 — баллистическая межконтинентальная ракета с термоядерным зарядом. Оружие судного дня или последнего шанса."
                                     },
                                     // --- АВИАГРУППЫ (МНОГОЦЕЛЕВЫЕ АВИАНОСЦЫ) ---
@@ -1585,18 +1585,18 @@ const weaponLibrary = {
         "2х500-мм спаренный рельсотрон ТБС-2000 «Вольфанг»": {
             price: 80000000, visibility: 0, category: "Рельсотроные Орудия", crewRequired: 15,
             power: 1200,
-            capacityPenalty: 0, damage: 0, weight: 150000, tech: "электрохимическое", damageType: "рельсотрон", class: "супероружие",
+            capacityPenalty: 300, damage: 0, weight: 150000, tech: "электрохимическое", damageType: "рельсотрон", class: "супероружие",
             customParameter: { kal: "500 мм", dalnost: 3, skorostrelnost: 4, metrika: "4" },
-            resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+            resurs: { blackmetall: 375, coloredmetall: 275, rudametall: 1080, kristall: 0, staarvis: 86 },
             description: "Один выстрел - 1 мертвый линкор. Спаренный рельсотрон калибра 500 мм."
         },
 
         "Каскадный суперлазер КСЛ-44 «Астраспис»": {
             price: 50000000, visibility: 0, category: "Энерго Орудия", crewRequired: 20,
             power: 1500,
-            capacityPenalty: 0, damage: 0, weight: 100000, tech: "лазер", damageType: "суперлазер", class: "супероружие",
+            capacityPenalty: 200, damage: 0, weight: 100000, tech: "лазер", damageType: "суперлазер", class: "супероружие",
             customParameter: { kal: "500 мм", dalnost: 6, skorostrelnost: 1, metrika: "1000" },
-            resurs: { blackmetall: 1, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+            resurs: { blackmetall: 250, coloredmetall: 121, rudametall: 0, kristall: 445, staarvis: 76 },
             description: "Лазерное вооружение такой силы, что игнорирует любые защитные свойства материалов."
         },
       };
@@ -1649,7 +1649,7 @@ const weapons = {
         "Лазерное орудие «ЛУКС VI»",
 
         "=== РАКЕТНОЕ (БУМ) ===",
-        "Зенитная ракета «Гало»",
+        "Шестизарядный ЗРК «Гало»",
         "Барражирующая ракета «Коготь»"
     ],
     tanki: [
@@ -1670,7 +1670,7 @@ const weapons = {
         "Лазерное орудие «ЛУКС X»",
 
         "=== РАКЕТНОЕ ВООРУЖЕНИЕ ===",
-        "Зенитная ракета «Гало»",
+        "Шестизарядный ЗРК «Гало»",
         "Барражирующая ракета «Коготь»"
     ],
     arta: [
@@ -1694,11 +1694,11 @@ const weapons = {
         "35-мм электрохимическое орудие «Гарпия» ЭХО-35А",
 
         "=== РАКЕТНОЕ ВООРУЖЕНИЕ ===",
-        "Зенитная ракета «Гало»",
-        "Неуправляемая ракета «Фотоид»",
-        "РГЧ «Феникс»",
-        "Противорадиолокационная ракета ПРК-1 «Страж»",
-        "Управляемая ракета УР-4 «Нови-Сад»"
+        "Шестизарядный ЗРК «Гало»",
+        "Блок НАР Б-8 «Фотоид»",
+        "Счетверённая пусковая установка РГЧ «Феникс»",
+        "Спаренная ПУ ПРК-1 «Страж»",
+        "Пусковая установка УР-4 «Нови-Сад»"
     ],
       vertihui: [
           "Нет выбранного вооружения",
@@ -1709,11 +1709,11 @@ const weapons = {
           "50-мм авиационная электрохимическая пушка «Квиты» ЭХО-50",
 
           "=== РАКЕТНОЕ ВООРУЖЕНИЕ ===",
-          "Зенитная ракета «Гало»",
-          "Неуправляемая ракета «Фотоид»",
-          "РГЧ «Феникс»",
-          "Противорадиолокационная ракета ПРК-1 «Страж»",
-          "Управляемая ракета УР-4 «Нови-Сад»"
+          "Шестизарядный ЗРК «Гало»",
+          "Блок НАР Б-8 «Фотоид»",
+          "Счетверённая пусковая установка РГЧ «Феникс»",
+          "Спаренная ПУ ПРК-1 «Страж»",
+          "Пусковая установка УР-4 «Нови-Сад»"
       ],
       dron: [
           "Нет выбранного вооружения",
@@ -1740,11 +1740,11 @@ const weapons = {
         "35-мм электрохимическое орудие «Гарпия» ЭХО-35А",
 
         "=== РАКЕТЫ ===",
-        "Зенитная ракета «Гало»",
-        "Неуправляемая ракета «Фотоид»",
-        "РГЧ «Феникс»",
-        "Противорадиолокационная ракета ПРК-1 «Страж»",
-        "Управляемая ракета УР-4 «Нови-Сад»"
+        "Шестизарядный ЗРК «Гало»",
+        "Блок НАР Б-8 «Фотоид»",
+        "Счетверённая пусковая установка РГЧ «Феникс»",
+        "Спаренная ПУ ПРК-1 «Страж»",
+        "Пусковая установка УР-4 «Нови-Сад»"
     ],
     dronkos: [
         "Нет выбранного вооружения",
@@ -1774,11 +1774,11 @@ const weapons = {
         "2х40-мм спаренное лазерное орудие ИЛВ-60 «Акатименос»",
 
         "=== ВЗРЫВНОЕ ВООРУЖЕНИЕ ===",
-        "Зенитная ракета «Гало»",
-        "Неуправляемая ракета «Фотоид»",
-        "РГЧ «Феникс»",
-        "Противорадиолокационная ракета ПРК-1 «Страж»",
-        "Управляемая ракета УР-4 «Нови-Сад»"
+        "Шестизарядный ЗРК «Гало»",
+        "Блок НАР Б-8 «Фотоид»",
+        "Счетверённая пусковая установка РГЧ «Феникс»",
+        "Спаренная ПУ ПРК-1 «Страж»",
+        "Пусковая установка УР-4 «Нови-Сад»"
     ],
     destroyer: [
         "Нет выбранного вооружения",
@@ -1794,11 +1794,11 @@ const weapons = {
         "100-мм пучковый лазер ПЛВ-55 «Меглос»",
 
         "=== ВЗРЫВНОЕ ВООРУЖЕНИЕ ===",
-        "Зенитная ракета «Гало»",
-        "Неуправляемая ракета «Фотоид»",
-        "РГЧ «Феникс»",
-        "Противорадиолокационная ракета ПРК-1 «Страж»",
-        "Управляемая ракета УР-4 «Нови-Сад»"
+        "Шестизарядный ЗРК «Гало»",
+        "Блок НАР Б-8 «Фотоид»",
+        "Счетверённая пусковая установка РГЧ «Феникс»",
+        "Спаренная ПУ ПРК-1 «Страж»",
+        "Пусковая установка УР-4 «Нови-Сад»"
     ],
         supportCarrier: [
             "Нет выбранного вооружения",
@@ -1829,11 +1829,11 @@ const weapons = {
                 "Лазерное орудие ВПЛ-65 «Плага»",
 
                 "=== ВЗРЫВНОЕ ВООРУЖЕНИЕ ===",
-                "Зенитная ракета «Гало»",
-                "Неуправляемая ракета «Фотоид»",
-                "РГЧ «Феникс»",
-                "Противорадиолокационная ракета ПРК-1 «Страж»",
-                "Управляемая ракета УР-4 «Нови-Сад»",
+                "Шестизарядный ЗРК «Гало»",
+                "Блок НАР Б-8 «Фотоид»",
+                "Счетверённая пусковая установка РГЧ «Феникс»",
+                "Спаренная ПУ ПРК-1 «Страж»",
+                "Пусковая установка УР-4 «Нови-Сад»",
                 "Баллистическая ракета БМР-03 «Отблеск»"
             ],
 
@@ -1857,11 +1857,11 @@ const weapons = {
                     "90-мм электрохимическое орудие МтП-40 «Серкам»",
 
                     "=== РАКЕТНОЕ ВООРУЖЕНИЕ ===",
-                    "Зенитная ракета «Гало»",
-                    "Неуправляемая ракета «Фотоид»",
-                    "РГЧ «Феникс»",
-                    "Противорадиолокационная ракета ПРК-1 «Страж»",
-                    "Управляемая ракета УР-4 «Нови-Сад»",
+                    "Шестизарядный ЗРК «Гало»",
+                    "Блок НАР Б-8 «Фотоид»",
+                    "Счетверённая пусковая установка РГЧ «Феникс»",
+                    "Спаренная ПУ ПРК-1 «Страж»",
+                    "Пусковая установка УР-4 «Нови-Сад»",
 
                     "=== АВИАГРУППЫ И ДРОНЫ ===",
                     "Рой разведывательныых дронов «Кефир»",
@@ -1889,11 +1889,11 @@ const weapons = {
         "Каскадный суперлазер КСЛ-44 «Астраспис»",
 
         "=== ВЗРЫВНОЕ ВООРУЖЕНИЕ ===",
-        "Зенитная ракета «Гало»",
-        "Неуправляемая ракета «Фотоид»",
-        "РГЧ «Феникс»",
-        "Противорадиолокационная ракета ПРК-1 «Страж»",
-        "Управляемая ракета УР-4 «Нови-Сад»",
+        "Шестизарядный ЗРК «Гало»",
+        "Блок НАР Б-8 «Фотоид»",
+        "Счетверённая пусковая установка РГЧ «Феникс»",
+        "Спаренная ПУ ПРК-1 «Страж»",
+        "Пусковая установка УР-4 «Нови-Сад»",
         "Баллистическая ракета БМР-03 «Отблеск»"
     ],
     dreadnought: [
@@ -1915,11 +1915,11 @@ const weapons = {
         "Каскадный суперлазер КСЛ-44 «Астраспис»",
 
         "=== ВЗРЫВНОЕ ВООРУЖЕНИЕ ===",
-        "Зенитная ракета «Гало»",
-        "Неуправляемая ракета «Фотоид»",
-        "РГЧ «Феникс»",
-        "Противорадиолокационная ракета ПРК-1 «Страж»",
-        "Управляемая ракета УР-4 «Нови-Сад»",
+        "Шестизарядный ЗРК «Гало»",
+        "Блок НАР Б-8 «Фотоид»",
+        "Счетверённая пусковая установка РГЧ «Феникс»",
+        "Спаренная ПУ ПРК-1 «Страж»",
+        "Пусковая установка УР-4 «Нови-Сад»",
         "Баллистическая ракета БМР-03 «Отблеск»"
     ],
     ss13: [
@@ -1941,11 +1941,11 @@ const weapons = {
         "Каскадный суперлазер КСЛ-44 «Астраспис»",
 
         "=== ВЗРЫВНОЕ ВООРУЖЕНИЕ ===",
-        "Зенитная ракета «Гало»",
-        "Неуправляемая ракета «Фотоид»",
-        "РГЧ «Феникс»",
-        "Противорадиолокационная ракета ПРК-1 «Страж»",
-        "Управляемая ракета УР-4 «Нови-Сад»",
+        "Шестизарядный ЗРК «Гало»",
+        "Блок НАР Б-8 «Фотоид»",
+        "Счетверённая пусковая установка РГЧ «Феникс»",
+        "Спаренная ПУ ПРК-1 «Страж»",
+        "Пусковая установка УР-4 «Нови-Сад»",
         "Баллистическая ракета БМР-03 «Отблеск»",
 
         "=== АНГАР И АВИАГРУППЫ ===",
@@ -1988,7 +1988,7 @@ const baseVisionRanges = {
 
 const modules5 = {
   peh: [
-    { name: 'Не выбран', price: 0, crewProvided: 0, crewRequired: 0, modulBoost: 0, capacityPenalty: 150, category: 'Радары', power: 0,dalnostBoost: 0, customParameterradar: { dalnost: 0, diapazon: 'c' }, resurs: { blackmetall: 5, coloredmetall: 3, rudametall: 0, kristall: 0, staarvis: 0 }, description: "..." },
+    { name: 'Не выбран', price: 0, crewProvided: 0, crewRequired: 0, modulBoost: 0, capacityPenalty: 0, category: 'Радары', power: 0,dalnostBoost: 0, customParameterradar: { dalnost: 0, diapazon: 'c' }, resurs: { blackmetall: 5, coloredmetall: 3, rudametall: 0, kristall: 0, staarvis: 0 }, description: "..." },
     { name: 'Портативная радиолокационная станция ЕБ-44 КА', price: 200000, crewProvided: 0, crewRequired: 0, modulBoost: 2, category: 'Радары', power: 0, dalnostBoost: 2, customParameterradar: { dalnost: 6, diapazon: 'c', eccm: 2 }, resurs: { blackmetall: 5, coloredmetall: 3, rudametall: 1, kristall: 0, staarvis: 0 }, description: "Пехотная РЛС: дальность 6, помехозащищённость 2."  },
 
       ],

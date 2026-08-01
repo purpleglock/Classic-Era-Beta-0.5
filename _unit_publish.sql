@@ -64,6 +64,45 @@ begin
   return (select array_agg(distinct e) from unnest(keys) e);
 end$$;
 
+-- ── СИЛА СПЛАВА (зеркало cnAlloyMatK/cnAlloyMult в constructors.js) ──
+-- Множитель к ЭТАЛОНУ класса (лучшая стоковая броня): качество рецепта ×
+-- %HP катализатора × физика материала, с мягким коленом выше 1.3.
+create or replace function public._cn_alloy_mult(a jsonb)
+returns numeric language plpgsql immutable as $$
+declare mat jsonb; at numeric; hr numeric; tc numeric; matk numeric := 1; q numeric; m numeric;
+begin
+  mat := a->'material';
+  if mat is not null and mat <> 'null'::jsonb then
+    at := ((mat->'tensileStrength'->>'min')::numeric + (mat->'tensileStrength'->>'max')::numeric)/2;
+    at := 500 + 3000*(1 - exp(-at/5000));
+    hr := 500 + 2500*(1 - exp(-(mat->>'heatResistance')::numeric/2000));
+    tc := 100 + 1900*(1 - exp(-(mat->>'thermalConductivity')::numeric/1000));
+    matk := (1 + (mat->>'density')::numeric*0.02) * (1 + at/4000) * (1 + hr/4000 + tc/50000) / 2;
+    matk := greatest(0.75, least(1.25, matk));
+  end if;
+  q := greatest(0.1, least(1.6, coalesce((a->>'quality')::numeric, 1)));
+  m := (0.35 + 0.65*q) * (1 + 0.45*coalesce((a->>'hpPercentBoost')::numeric,0)) * matk;
+  if m > 1.3 then m := 1.3 + (m-1.3)*0.5; end if;
+  return greatest(0.25, least(1.8, m));
+end$$;
+grant execute on function public._cn_alloy_mult(jsonb) to authenticated;
+
+-- ── ЭТАЛОН КЛАССА (зеркало cnAlloyRef): лучшая СТОКОВАЯ броня класса ──
+-- Возвращает {hp, resurs} — база HP сплава и сырьё для его ГС-цены.
+create or replace function public._cn_alloy_ref(cls jsonb, armors jsonb)
+returns jsonb language plpgsql immutable as $$
+declare e jsonb; h numeric; best numeric := 0; res jsonb := '{}'::jsonb;
+begin
+  if armors is null then return jsonb_build_object('hp',0,'resurs',res); end if;
+  for e in select * from jsonb_array_elements(armors) loop
+    if coalesce((e->>'_alloy')::boolean,false) then continue; end if;
+    h := public._cn_kv_armor_hp(cls, e);
+    if h > best then best := h; res := coalesce(e->'resurs','{}'::jsonb); end if;
+  end loop;
+  return jsonb_build_object('hp', best, 'resurs', res);
+end$$;
+grant execute on function public._cn_alloy_ref(jsonb,jsonb) to authenticated;
+
 -- ── СИНТЕЗ (KV): прочность от физики брони (зеркало cnKvArmorHp) ──
 create or replace function public._cn_kv_armor_hp(cls jsonb, a jsonb)
 returns numeric language plpgsql immutable as $$
@@ -94,23 +133,22 @@ begin
   elsif cat='ceramic'    then km:=km*1.4; rm:=rm*1.2; bm:=bm*0.8;
   elsif cat='composite'  then bm:=bm*1.1; cm:=cm*1.1; rm:=rm*1.1; km:=km*1.1; sv:=sv*1.1;
   end if;
-  -- СПЛАВ (алхимия): объём брони масштабируется под корпус (mass/gabarit + resurs
-  -- корпуса как прокси размера), рецепт даёт только материал/качество/стойкости.
-  -- Зеркало ветки cnKvArmorHp (constructors.js) — число-в-число.
+  -- СПЛАВ (алхимия): ЭТАЛОН КЛАССА × сила рецепта. База — вклад лучшей стоковой
+  -- брони этого класса (_refHp, проставлен при сборке armorObj), рецепт даёт только
+  -- множитель. Зеркало ветки cnKvArmorHp (constructors.js) — число-в-число.
+  -- Прежний прокси cls.resurs врал по классам (дредноут ×1.7, пехота ×0.3).
   if coalesce((a->>'_alloy')::boolean, false) then
-    declare cr jsonb := cls->'resurs'; loadv numeric := 0; qv numeric; base numeric; hpa numeric;
+    declare cr jsonb := cls->'resurs'; loadv numeric := 0; refhp numeric;
     begin
+      refhp := coalesce((a->>'_refHp')::numeric, 0);
+      if refhp > 0 then return refhp * public._cn_alloy_mult(a); end if;
+      -- Фолбэк (эталон не проставлен): старый прокси корпуса, чтобы не отдать 0.
       if cr is not null then
         loadv := coalesce((cr->>'blackmetall')::numeric,0)*bm + coalesce((cr->>'coloredmetall')::numeric,0)*cm
                + coalesce((cr->>'rudametall')::numeric,0)*rm + coalesce((cr->>'kristall')::numeric,0)*km
                + coalesce((cr->>'staarvis')::numeric,0)*sv;
       end if;
-      base := (s + loadv) * dF * tF * hF;
-      qv := coalesce((a->>'quality')::numeric, 1);
-      hpa := base * (0.4 + 0.6*qv);
-      if (a->>'hpPercentBoost') is not null then hpa := hpa * (1 + (a->>'hpPercentBoost')::numeric); end if;
-      hpa := hpa + coalesce((a->>'hpBoost')::numeric,0) * 0.2;   -- ALLOY_FLOOR_K (пол для мелких корпусов)
-      return hpa;
+      return (s + loadv) * dF * tF * hF * public._cn_alloy_mult(a);
     end;
   end if;
   res := a->'resurs';
@@ -199,6 +237,9 @@ declare
   -- своими типовыми стойкостями (создавая шов/уязвимость для контр-игры).
   armor_resist jsonb := jsonb_build_object('kinetic',0.1,'energy',0.1,'missile',0.1);
   a_rid text;
+  v_aref jsonb;      -- эталон класса для сплава: {hp, resurs} (лучшая стоковая броня)
+  v_amult numeric;   -- сила рецепта сплава относительно эталона
+  v_abill numeric;   -- масштаб ведомости рецепта под класс
   hasType bool; hasReactor bool; hasEnergy bool; hasHangars bool;
   cost numeric := 0; econs numeric := 0; emax numeric := 0; on_ numeric; modon numeric;
   dmg numeric := 0; hp numeric; armor numeric; shield numeric; speed numeric; cargo numeric := 0;
@@ -275,11 +316,13 @@ begin
   if hasReactor then reactObj := db->'reactors'->k->coalesce((p_data->>'reactor')::int,0); if reactObj is null then raise exception 'bad reactor'; end if; end if;
   -- Броня: кастомный сплав (алхимия) по стабильному id ИЛИ индекс каталога.
   -- Сплав пересчитан авторитетно при регистрации (armor_alloy_upsert) — берём его
-  -- material/hpBoost/стойкости, клиентским цифрам не доверяем. resurs=0 (в цену ГС не идёт;
-  -- расход постройки берём из РЕЦЕПТА ниже, в ведомости).
+  -- material/hpBoost/стойкости, клиентским цифрам не доверяем. HP = эталон класса ×
+  -- сила рецепта; resurs = сырьё эталона × та же сила (ГС-цена), а расход постройки —
+  -- САМ РЕЦЕПТ ниже, масштабированный классом (v_abill).
   if nullif(p_data->>'armorAlloyId','') is not null then
     select * into v_alloy from public.faction_armor_alloys where id = (p_data->>'armorAlloyId')::uuid;
     if v_alloy.id is null then raise exception 'bad alloy'; end if;
+    v_aref := public._cn_alloy_ref(cls, db->'armors'->k);
     armorObj := jsonb_build_object(
       'material',       v_alloy.stats->'material',
       'category',       v_alloy.stats->>'category',
@@ -287,10 +330,23 @@ begin
       'hpPercentBoost', coalesce(v_alloy.stats->'hpPercentBoost', to_jsonb(0)),
       'capacityBoost',  coalesce(v_alloy.stats->'capacityBoost', to_jsonb(0)),
       'armor',          coalesce(v_alloy.stats->'hpBoost', to_jsonb(0)),
-      'quality',        coalesce(v_alloy.stats->'quality', to_jsonb(1)),   -- масштаб HP под корпус
-      '_alloy',         true,                                             -- ветка проп. корпусу в _cn_kv_armor_hp
-      'resurs', jsonb_build_object('blackmetall',0,'coloredmetall',0,'rudametall',0,'kristall',0,'staarvis',0)
+      'quality',        coalesce(v_alloy.stats->'quality', to_jsonb(1)),   -- качество рецепта
+      '_alloy',         true,                                             -- ветка «эталон класса» в _cn_kv_armor_hp
+      '_refHp',         v_aref->'hp'                                      -- база: лучшая стоковая броня класса
     );
+    v_amult := public._cn_alloy_mult(armorObj);
+    -- Сплав НЕ бесплатный: конструкц. resurs = сырьё эталонной брони × сила рецепта
+    -- (идёт в ГС-цену), а ведомость постройки = САМ РЕЦЕПТ, масштабированный классом.
+    armorObj := armorObj || jsonb_build_object(
+      'armor', round((v_aref->>'hp')::numeric * v_amult),
+      'resurs', jsonb_build_object(
+        'blackmetall',   round(coalesce((v_aref->'resurs'->>'blackmetall')::numeric,0)   * v_amult),
+        'coloredmetall', round(coalesce((v_aref->'resurs'->>'coloredmetall')::numeric,0) * v_amult),
+        'rudametall',    round(coalesce((v_aref->'resurs'->>'rudametall')::numeric,0)    * v_amult),
+        'kristall',      round(coalesce((v_aref->'resurs'->>'kristall')::numeric,0)      * v_amult),
+        'staarvis',      round(coalesce((v_aref->'resurs'->>'staarvis')::numeric,0)      * v_amult)));
+    -- CN_ALLOY_BILL_REF = 12800 (HP-якорь «полной» ведомости, ≈ царь-цитадель)
+    v_abill := greatest(0.02, least(1, (v_aref->>'hp')::numeric / 12800)) * v_amult;
     armor_resist := coalesce(v_alloy.stats->'resist', armor_resist);
   else
     armorObj := db->'armors'->k->coalesce((p_data->>'armor')::int,0);
@@ -412,7 +468,7 @@ begin
   if v_alloy.id is not null then
     -- Кастомный сплав: постройка потребляет ИМЕННО рецепт (реальные ресурсы).
     for a_rid in select key from jsonb_each(coalesce(v_alloy.recipe,'{}'::jsonb)) loop
-      bill := public._cn_bill_add(bill, public._aa_name(a_rid), (v_alloy.recipe->>a_rid)::numeric);
+      bill := public._cn_bill_add(bill, public._aa_name(a_rid), (v_alloy.recipe->>a_rid)::numeric * coalesce(v_abill,1));
     end loop;
   else
     bill := public._cn_bill_add(bill,'Железо', (armorObj->>'armor')::numeric / (bd->>'armorFe')::numeric);

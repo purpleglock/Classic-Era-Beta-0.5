@@ -79,13 +79,13 @@
   const REACTIONS = [
     // Сталь: Железо+Углерод в балансе (обе доли ≥0.2, близки) → кинетика, гасит вес
     { id:'steel', test:(f)=> f.IRON>=0.2 && f.CARBON>=0.15 && Math.min(f.IRON,f.CARBON*2)>=0.2,
-      eff:(acc,f)=>{ const q=Math.min(f.IRON, f.CARBON*3); acc.tenMul+=0.35*q; acc.kin+=0.32*q; acc.capAdd+=6*q; acc.traits.push('Легированная сталь'); } },
+      eff:(acc,f)=>{ const q=Math.min(f.IRON, f.CARBON*3); acc.tenMul+=0.35*q; acc.hpMul+=0.20*q; acc.kin+=0.32*q; acc.capAdd+=6*q; acc.traits.push('Легированная сталь'); } },
     // Титаналь: Титан+Углерод → лёгкая прочная
     { id:'titanal', test:(f)=> f.TITANIUM>=0.2 && f.CARBON>=0.1,
-      eff:(acc,f)=>{ const q=Math.min(f.TITANIUM, f.CARBON*4); acc.tenMul+=0.30*q; acc.densMul-=0.10*q; acc.kin+=0.20*q; acc.capAdd+=10*q; acc.traits.push('Титаналь'); } },
+      eff:(acc,f)=>{ const q=Math.min(f.TITANIUM, f.CARBON*4); acc.tenMul+=0.30*q; acc.hpMul+=0.15*q; acc.densMul-=0.10*q; acc.kin+=0.20*q; acc.capAdd+=10*q; acc.traits.push('Титаналь'); } },
     // Керметокомпозит: Силикаты/Хтонит + связка → энергозащита
     { id:'cermet', test:(f)=> (f.SILICATE||0)+(f.DIAMONDS||0)>=0.2 && ((f.CARBON||0)+(f.ORGANICS||0))>=0.08,
-      eff:(acc,f)=>{ const q=Math.min((f.SILICATE||0)+(f.DIAMONDS||0), 0.6); acc.heatMul+=0.30*q; acc.en+=0.45*q; acc.traits.push('Керметокомпозит'); } },
+      eff:(acc,f)=>{ const q=Math.min((f.SILICATE||0)+(f.DIAMONDS||0), 0.6); acc.heatMul+=0.30*q; acc.hpMul+=0.15*q; acc.en+=0.45*q; acc.traits.push('Керметокомпозит'); } },
     // Экзоматрица: катализатор (Редкозем/Стелларит/Гравиядро) поверх структурной базы → %HP
     { id:'exomatrix', test:(f,r)=> ((f.RAREEARTH||0)+(f.EXOCRYST||0)+(f.QUANTUMCRYST||0))>=0.08 && r.struct+r.ceramic+r.metal>=0.3,
       eff:(acc,f)=>{ const c=(f.RAREEARTH||0)+(f.EXOCRYST||0)*1.6+(f.QUANTUMCRYST||0)*2.2; acc.pctHp+=clamp(c*1.2,0,1.2); acc.traits.push('Экзоматрица'); } },
@@ -94,13 +94,13 @@
       eff:(acc,f)=>{ acc.en-=0.30*Math.min(f.COPPER,0.6); acc.warns.push('Токопроводящая: уязвима к лазеру'); } },
     // Обеднённый уран / вырожденная материя: экстремальная плотность → кинетика + пробитие, но вес
     { id:'dense_kin', test:(f)=> (f.URANIUM||0)+(f.DEGENERATE||0)>=0.15,
-      eff:(acc,f)=>{ const q=Math.min((f.URANIUM||0)+(f.DEGENERATE||0)*1.5,0.8); acc.kin+=0.50*q; acc.densMul+=0.25*q; acc.capAdd-=14*q; acc.traits.push('Кинетический монолит'); } },
+      eff:(acc,f)=>{ const q=Math.min((f.URANIUM||0)+(f.DEGENERATE||0)*1.5,0.8); acc.kin+=0.50*q; acc.hpMul+=0.25*q; acc.densMul+=0.25*q; acc.capAdd-=14*q; acc.traits.push('Кинетический монолит'); } },
     // Реактивная броня: реактивные (Ионит/Дейтерий/Старвис) + катализатор → защита от ракет, но риск
     { id:'reactive', test:(f,r)=> r.reactive>=0.12 && ((f.RAREEARTH||0)+(f.EXOCRYST||0))>=0.05,
-      eff:(acc,f,r)=>{ const q=Math.min(r.reactive,0.6); acc.mis+=0.60*q; acc.traits.push('Динамическая защита'); if((f.THERMFUEL||0)+(f.DEUTERIUM||0)>=0.2) acc.warns.push('Нестабильный заряд: риск детонации'); } },
+      eff:(acc,f,r)=>{ const q=Math.min(r.reactive,0.6); acc.mis+=0.60*q; acc.hpMul+=0.10*q; acc.traits.push('Динамическая защита'); if((f.THERMFUEL||0)+(f.DEUTERIUM||0)>=0.2) acc.warns.push('Нестабильный заряд: риск детонации'); } },
     // Адаптивная (Прогр. материя): саморемонт + сглаживает все стойкости
     { id:'adaptive', test:(f)=> (f.NEUTRONMAT||0)>=0.05,
-      eff:(acc,f)=>{ const q=Math.min(f.NEUTRONMAT*2,0.5); acc.kin+=0.16*q; acc.en+=0.16*q; acc.mis+=0.16*q; acc.pctHp+=0.4*q; acc.traits.push('Саморемонт'); } },
+      eff:(acc,f)=>{ const q=Math.min(f.NEUTRONMAT*2,0.5); acc.kin+=0.16*q; acc.en+=0.16*q; acc.mis+=0.16*q; acc.hpMul+=0.20*q; acc.pctHp+=0.4*q; acc.traits.push('Саморемонт'); } },
     // Гравиоблегчение: Гравиядро отрицает вес
     { id:'gravlift', test:(f)=> (f.QUANTUMCRYST||0)>=0.03,
       eff:(acc,f)=>{ acc.capAdd+=40*Math.min(f.QUANTUMCRYST*3,1); acc.traits.push('Гравикомпенсация массы'); } },

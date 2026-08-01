@@ -1,4 +1,4 @@
-// © 2025–2026 Setis241 (setisalanstrong@gmail.com). Все права защищены.
+﻿// © 2025–2026 Setis241 (setisalanstrong@gmail.com). Все права защищены.
 // Проприетарное ПО. Использование, копирование, изменение и распространение
 // без письменного разрешения правообладателя запрещены. См. файл LICENSE.
 // ════════════════════════════════════════════════════════════
@@ -313,6 +313,14 @@ const CN_DEFS = {
     excl: () => false,
   },
 };
+// ── Масштаб нагрузки на шасси ────────────────────────────────
+// «Грузоподъёмность» (kv.cap) — единый бюджет шасси: сколько ещё можно навесить,
+// а что осталось свободным, то и увозит караван (_ship_cargo читает kv_cargo).
+// Единица нагрузки НЕ равна килограмму: у кораблей это ~500 кг, у наземки и
+// авиации ~100 кг. Поэтому в карточке компонента физическая МАССА (weight, кг)
+// и НАГРУЗКА на шасси показаны отдельными строками — раньше нагрузку подписывали
+// «Масса, кг», и два разных числа выглядели как одно.
+const CN_LOAD_DIV = { ship: 500, ground: 100, aviation: 100, army: 100 };
 // Класс единого форжа → фактическая категория БД (каталоги/исследования/SQL живут
 // в разрезе ground/aviation, менять их контракт нельзя).
 function cnKvRealCat(k) {
@@ -456,6 +464,7 @@ if (typeof window !== 'undefined') { window.cnApplyPartOverrides = cnApplyPartOv
 let CN_ALLOYS = null, CN_ALLOYS_FID;
 function cnInvalidateAlloys() { CN_ALLOYS = null; }
 if (typeof window !== 'undefined') window.cnInvalidateAlloys = cnInvalidateAlloys;
+if (typeof window !== 'undefined') window.cnAlloyMult = function (st) { return cnAlloyMult(st || {}); };
 async function cnLoadAlloys(force) {
   const fac = cnMyFactionMeta();
   const fid = (fac && fac.faction_id) || '';
@@ -468,31 +477,85 @@ async function cnLoadAlloys(force) {
   } catch (e) { CN_ALLOYS = []; }
   return CN_ALLOYS;
 }
-// Превратить строку сплава в объект брони формата каталога (для db.armors[k])
-function cnAlloyToArmor(a) {
+// ── МОДЕЛЬ СПЛАВА: эталон класса × сила рецепта ──────────────
+// Сплав НЕ несёт абсолютный HP: базой берём вклад ЛУЧШЕЙ СТОКОВОЙ брони этого
+// класса (эталон), а рецепт даёт МНОЖИТЕЛЬ к нему. Так «хороший сплав» всегда
+// осмысленно сравним со стоком на любом корпусе — от пехотинца до дредноута
+// (прежний прокси cls.resurs врал по классам от 0.5× до 3.5×).
+// Множитель — качество рецепта × %HP катализатора × физика материала.
+const CN_ALLOY_BILL_REF = 12800;   // HP-якорь «полной» ведомости рецепта (≈ царь-цитадель дредноута)
+// Имя ресурса рецепта в ведомости постройки — зеркало SQL `_aa_name` (там, где
+// имя элемента алхимии расходится с именем ресурса экономики).
+const CN_ALLOY_RES_NAME = { RAREEARTH: 'Редкоземельные руды', ORGANICS: 'Реликтовое дерево', NEUTRONMAT: 'Программируемая материя' };
+function cnAlloyResName(id, EL) {
+  return CN_ALLOY_RES_NAME[id] || ((EL || {})[id] || {}).name || id;
+}
+function cnAlloyMatK(mat) {      // физика материала → 0.75..1.25 (нормировка на типовые 2.0)
+  if (!mat) return 1;
+  let at = (mat.tensileStrength.min + mat.tensileStrength.max) / 2;
+  at = 500 + 3000 * (1 - Math.exp(-at / 5000));
+  const hr = 500 + 2500 * (1 - Math.exp(-mat.heatResistance / 2000));
+  const tc = 100 + 1900 * (1 - Math.exp(-mat.thermalConductivity / 1000));
+  const p = (1 + mat.density * 0.02) * (1 + at / 4000) * (1 + hr / 4000 + tc / 50000);
+  return Math.max(0.75, Math.min(1.25, p / 2));
+}
+function cnAlloyMult(a) {          // сила рецепта относительно лучшей стоковой брони класса
+  const q = Math.max(0.1, Math.min(1.6, a.quality != null ? a.quality : 1));
+  let m = (0.35 + 0.65 * q) * (1 + 0.45 * (a.hpPercentBoost || 0)) * cnAlloyMatK(a.material);
+  if (m > 1.3) m = 1.3 + (m - 1.3) * 0.5;   // мягкое колено: топ-рецепты не упираются в стену
+  return Math.max(0.25, Math.min(1.8, m));
+}
+// Эталон класса: лучшая стоковая броня (её HP и её конструкц. resurs → цена ГС).
+function cnAlloyRef(db, k) {
+  const cls = (db.data || {})[k];
+  const list = db.armors[k] || [];
+  let hp = 0, resurs = null;
+  list.forEach(a => {
+    if (!a || a._alloy) return;
+    const h = cnKvArmorHp(cls, a);
+    if (h > hp) { hp = h; resurs = a.resurs || null; }
+  });
+  return { hp, resurs };
+}
+// Превратить строку сплава в объект брони формата каталога (для db.armors[k]).
+// ref — эталон КОНКРЕТНОГО класса: один и тот же сплав в разных классах даёт
+// разные HP/цену/ведомость (объект строится под класс).
+function cnAlloyToArmor(a, ref) {
   const st = a.stats || {};
-  return {
+  const o = {
     name: '⚗ ' + (a.name || 'Сплав'),
     cost: 0,
-    armor: Math.round(st.hpBoost || 0),   // для чипов/ведомости
     material: st.material || null,
     category: st.category || 'composite',
     hpBoost: st.hpBoost || 0,
     hpPercentBoost: st.hpPercentBoost || 0,
     capacityBoost: st.capacityBoost || 0,
     resist: st.resist || { kinetic: 0, energy: 0, missile: 0 },
-    resurs: { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
-    quality: (st.quality != null ? st.quality : 1),   // 0.1..1.6 — качество рецепта (масштаб HP под корпус)
-    _alloy: true, _alloyId: a.id,
+    quality: (st.quality != null ? st.quality : 1),   // 0.1..1.6 — качество рецепта
+    _alloy: true, _alloyId: a.id, _recipe: a.recipe || null,
   };
+  const mult = cnAlloyMult(o);
+  o._refHp = (ref && ref.hp) || 0;
+  o.armor = Math.round(o._refHp * mult);              // для чипов/баров
+  // Сплав НЕ бесплатный: конструкц. resurs = сырьё эталонной брони × сила рецепта
+  // (идёт в ГС-цену), а ведомость постройки = САМ РЕЦЕПТ, масштабированный классом.
+  const rr = (ref && ref.resurs) || {};
+  o.resurs = {
+    blackmetall: Math.round((rr.blackmetall || 0) * mult), coloredmetall: Math.round((rr.coloredmetall || 0) * mult),
+    rudametall: Math.round((rr.rudametall || 0) * mult), kristall: Math.round((rr.kristall || 0) * mult),
+    staarvis: Math.round((rr.staarvis || 0) * mult),
+  };
+  o._billScale = Math.max(0.02, Math.min(1, o._refHp / CN_ALLOY_BILL_REF)) * mult;
+  return o;
 }
 // Дописать сплавы в db.armors[k], предварительно убрав ранее вписанные (_alloy).
 function cnMergeAlloys(db) {
   if (!db || !db.armors) return;
-  const list = (CN_ALLOYS || []).map(cnAlloyToArmor);
   for (const k in db.armors) {
     if (!Array.isArray(db.armors[k])) continue;
-    db.armors[k] = db.armors[k].filter(a => !a._alloy).concat(list);
+    db.armors[k] = db.armors[k].filter(a => !a._alloy);
+    const ref = cnAlloyRef(db, k);
+    db.armors[k] = db.armors[k].concat((CN_ALLOYS || []).map(a => cnAlloyToArmor(a, ref)));
   }
 }
 
@@ -519,10 +582,15 @@ async function cnLoadTurrets(force) {
   return CN_TURRETS;
 }
 // Строка орудия → объект формата каталога (те же поля, что читает cnVehCalc).
-function cnTurretToWeapon(t) {
+// div — сколько килограммов массы стоит одна единица нагрузки на шасси
+// (корабли считают по 500 кг за единицу, наземка/авиация — по 100; см.
+// CN_LOAD_DIV). Без этого своё орудие с верфи было невесомым: любую махину
+// с верстака можно было навесить сверх лимита, пока каталожные орудия платили.
+function cnTurretToWeapon(t, div) {
   const st = t.stats || {};
   const cal = st.caliber || 0;
   return {
+    capacityPenalty: Math.round((+st.mass || 0) / (div || 500)),
     name: '⚙ ' + (t.name || 'Орудие'),
     cost: Math.round(st.gs || 0),
     price: st.price || 0,
@@ -621,10 +689,10 @@ function cnWeaponImgTag(item, imgPath, cls) {
 }
 // Дописать свои орудия в db.weapons, предварительно убрав вписанные ранее.
 // Порядок — по id (стабильный), чтобы индексы не «плавали» между заходами.
-function cnMergeTurrets(db) {
+function cnMergeTurrets(db, div) {
   if (!db || !db.weapons) return;
   const list = (CN_TURRETS || []).slice().sort((a, b) => String(a.id) < String(b.id) ? -1 : 1);
-  db.weapons[CN_TURRET_GROUP] = list.map(cnTurretToWeapon);
+  db.weapons[CN_TURRET_GROUP] = list.map(t => cnTurretToWeapon(t, div));
   // карта доступности: орудие видно только тем классам, которые его тянут
   const av = db.weaponsAvail;
   if (!av) return;
@@ -666,17 +734,21 @@ function cnChip(label, val) { return `<span class="cn-chip"><i>${esc(label)}</i>
 // В KV-режиме итоговая цена корабля считается из конструкционных решений (cnKvCost),
 // а не из млн-прайсов отдельных компонентов — поэтому «страшную» покомпонентную
 // цену на карточках выбора не показываем.
-function cnGsChip(cost) { return window.KV_DB ? '' : cnChip('ГС', cnNum(cost)); }
+function cnGsChip(cost, obj) {
+  if (!window.KV_DB) return cnChip('ГС', cnNum(cost));
+  const gs = cnKvPartGs(obj, cnId('cn-class') ? cnId('cn-class').value : '');
+  return gs > 0 ? cnChip('ГС', cnNum(gs)) : '';
+}
 function cnSlotStatChips(slot, obj, def) {
   if (!obj) return '';
   const E = def.hasEnergy;
   switch (slot) {
     case 'class': return cnChip('база ОН', obj.baseON) + cnChip('ОН/модуль', '+' + obj.modON);
-    case 'type': return cnChip('HP', cnNum(obj.hp)) + cnChip('броня', cnNum(obj.armor)) + cnGsChip(obj.cost);
-    case 'reactor': return cnChip('энергия', cnNum(obj.energy) + ' E') + cnGsChip(obj.cost);
-    case 'armor': return cnChip('броня', '+' + cnNum(obj.armor)) + cnGsChip(obj.cost);
-    case 'shield': return cnChip('щит', obj.shield ? cnNum(obj.shield) : 'нет') + ((obj.energy || obj.power) ? cnChip('E', cnNum(obj.energy || obj.power)) : '') + cnGsChip(obj.cost);
-    case 'engine': return (window.KV_DB ? cnChip('тяга', cnNum(obj.force)) : cnChip('скорость', obj.speed + ' у.е.')) + ((obj.energy || obj.power) ? cnChip('E', cnNum(obj.energy || obj.power)) : '') + cnGsChip(obj.cost);
+    case 'type': return cnChip('HP', cnNum(obj.hp)) + cnChip('броня', cnNum(obj.armor)) + cnGsChip(obj.cost, obj);
+    case 'reactor': return cnChip('энергия', cnNum(obj.energy) + ' E') + cnGsChip(obj.cost, obj);
+    case 'armor': return cnChip('броня', '+' + cnNum(obj.armor)) + cnGsChip(obj.cost, obj);
+    case 'shield': return cnChip('щит', obj.shield ? cnNum(obj.shield) : 'нет') + ((obj.energy || obj.power) ? cnChip('E', cnNum(obj.energy || obj.power)) : '') + cnGsChip(obj.cost, obj);
+    case 'engine': return (window.KV_DB ? cnChip('тяга', cnNum(obj.force)) : cnChip('скорость', obj.speed + ' у.е.')) + ((obj.energy || obj.power) ? cnChip('E', cnNum(obj.energy || obj.power)) : '') + cnGsChip(obj.cost, obj);
     case 'radar': { const d = obj.customParameterradar && obj.customParameterradar.dalnost; return cnChip('дальность', d ? cnNum(d) + ' кв' : 'нет') + (obj.power ? cnChip('E', cnNum(obj.power)) : ''); }
   }
   return '';
@@ -718,8 +790,17 @@ function cnCompInfo(kind, key, idx) {
 // Полный список характеристик ИЗ ДАННЫХ (всё, что есть в коде по компоненту)
 function cnCompStatsRows(info) {
   const o = info.obj, E = CN.def.hasEnergy, rows = [], push = (l, v) => rows.push([l, v]);
-  // В KV-режиме покомпонентную цену не показываем — итог считается из решений.
-  const pushPrice = (v) => { if (!window.KV_DB) push('Цена', v); };
+  // Цена компонента. В KV-режиме млн-прайс из каталога (o.cost) не имеет
+  // отношения к делу — итог проекта считает cnKvCost из конструкционного сырья.
+  // Поэтому показываем НАСТОЯЩИЙ вклад компонента в цену: то же сырьё, тот же
+  // курс и тот же классовый множитель, что и в итоге (без плоской наценки —
+  // она берётся с проекта один раз). Раньше строку просто прятали, и карточка
+  // молчала о цене вообще.
+  const pushPrice = (v) => {
+    if (!window.KV_DB) { push('Цена', v); return; }
+    const gs = cnKvPartGs(o, info.kind === 'class' ? info.key : info.k);
+    if (gs > 0) push('Цена', cnNum(gs) + ' ГС');
+  };
   switch (info.kind) {
     case 'class':   push('База ОН', o.baseON); push('ОН за модуль', '+' + o.modON); if (o.types) push('Специализаций', o.types.length); break;
     case 'type':    push('Прочность', cnNum(o.hp) + ' HP'); push('Броня корпуса', '+' + cnNum(o.armor) + ' AR'); pushPrice(cnNum(o.cost) + ' ГС'); break;
@@ -735,7 +816,7 @@ function cnCompStatsRows(info) {
       if (cp.diapazon) push('Диапазон', String(cp.diapazon).toUpperCase());
       if (o.power) push('Потребление', cnNum(o.power) + ' E');
       if (o.crewRequired) push('Экипаж', cnNum(o.crewRequired));
-      if (o.capacityPenalty) push('Масса', cnNum(o.capacityPenalty) + ' кг');
+      if (o.capacityPenalty) push('Нагрузка на шасси', '−' + cnNum(o.capacityPenalty));
       pushPrice(cnNum(o.cost) + ' ГС'); break;
     }
     case 'weapon': {
@@ -749,8 +830,8 @@ function cnCompStatsRows(info) {
       const we = +o.energy || +o.power || 0;
       if (we) push('Потребление', cnNum(we) + ' E');
       if (o.crewRequired) push('Экипаж', cnNum(o.crewRequired));
-      if (+o.capacityPenalty > 0) push('Масса', cnNum(o.capacityPenalty) + ' кг');
-      else if (+o.weight > 0) push('Масса', cnNum(o.weight) + ' кг');
+      if (+o.weight > 0) push('Масса', cnNum(o.weight) + ' кг');
+      if (+o.capacityPenalty > 0) push('Нагрузка на шасси', '−' + cnNum(o.capacityPenalty));
       if (+o.visibility > 0) push('Заметность', '+' + cnNum(o.visibility));
       pushPrice(cnNum(o.cost) + ' ГС'); break;
     }
@@ -2182,7 +2263,7 @@ async function cnVehRender(cat) {
   await cnLoadTurrets();         // свои орудия из оружейной верфи в слот вооружения
   const def = CN_DEFS[cat];
   cnMergeAlloys(def.db);         // дописать сплавы в db.armors[k] всех классов
-  cnMergeTurrets(def.db);        // дописать свои орудия в db.weapons + карту доступности
+  cnMergeTurrets(def.db, CN_LOAD_DIV[cat] || 500);   // дописать свои орудия в db.weapons + карту доступности
   CN.cat = cat; CN.def = def; CN.last = null; CN.editUnit = edit || null;
   CN.shipLayout = { mounts: [], bays: [] }; CN.schemShow = { weapons: true, bays: true };
 
@@ -2553,7 +2634,13 @@ function cnUnitBill(cat, k, parts) {
   const base = (CN_HULL_BILL[cat] || {})[k] || {};
   for (const nm in base) cnBillAdd(bill, nm, base[nm]);
   const p = parts || {};
-  if (p.armorObj) { cnBillAdd(bill, 'Железо', (p.armorObj.armor || 0) / t.armorFe); cnBillAdd(bill, 'Титан', (p.armorObj.armor || 0) / t.armorTi); }
+  if (p.armorObj && p.armorObj._alloy) {
+    // Кастомный сплав: постройка потребляет САМ РЕЦЕПТ в реальных ресурсах,
+    // масштабированный классом и силой сплава (_billScale, см. cnAlloyToArmor).
+    const rec = p.armorObj._recipe || {}, sc = p.armorObj._billScale || 1;
+    const EL = (typeof window !== 'undefined' && window.ARMOR_ALCHEMY && ARMOR_ALCHEMY.ELEMENTS) || {};
+    for (const rid in rec) cnBillAdd(bill, cnAlloyResName(rid, EL), (rec[rid] || 0) * sc);
+  } else if (p.armorObj) { cnBillAdd(bill, 'Железо', (p.armorObj.armor || 0) / t.armorFe); cnBillAdd(bill, 'Титан', (p.armorObj.armor || 0) / t.armorTi); }
   if (p.shieldObj && p.shieldObj.shield) { cnBillAdd(bill, 'Редкоземельные руды', p.shieldObj.shield / t.shRare); cnBillAdd(bill, 'Дейтерий', p.shieldObj.shield / t.shDeu); }
   if (p.engObj) {
     if (t.engFuel) { cnBillAdd(bill, 'Метан', (p.engObj.energy || 0) / t.engFuel); cnBillAdd(bill, 'Дейтерий', (p.engObj.energy || 0) / t.engDeu); }
@@ -2631,22 +2718,18 @@ function cnKvArmorHp(cls, a) {
   else if (a.category === 'lightMetal') { bm *= 0.7; km *= 1.3; cm *= 1.1; }
   else if (a.category === 'ceramic') { km *= 1.4; rm *= 1.2; bm *= 0.8; }
   else if (a.category === 'composite') { bm *= 1.1; cm *= 1.1; rm *= 1.1; km *= 1.1; sv *= 1.1; }
-  // ── СПЛАВ (алхимия): объём брони НЕ фиксирован, а масштабируется под корпус ──
-  // Рецепт задаёт только материал (dF/tF/hF), качество и стойкости; «сколько брони
-  // несёт корпус» берём из САМОГО класса (mass/gabarit + его конструкц. resurs как
-  // прокси размера, взвешенные категорией сплава). Так один сплав корректно работает
-  // и на пехотинце, и на линкоре — считается в контексте каждого конструктора.
+  // ── СПЛАВ (алхимия): эталон класса × сила рецепта (см. cnAlloyToArmor) ──
+  // База — вклад ЛУЧШЕЙ СТОКОВОЙ брони этого класса (_refHp, проставлен при мерже
+  // сплава в db.armors[k]); рецепт даёт только множитель. Прежний прокси cls.resurs
+  // врал по классам (дредноут ×1.7, пехота ×0.3) — от него отказались.
   if (a._alloy) {
+    if (a._refHp > 0) return a._refHp * cnAlloyMult(a);
+    // Фолбэк (эталон не проставлен): старый прокси корпуса, чтобы не отдать 0.
     let load = 0;
     const cr = cls.resurs;
     if (cr) load = (cr.blackmetall || 0) * bm + (cr.coloredmetall || 0) * cm
       + (cr.rudametall || 0) * rm + (cr.kristall || 0) * km + (cr.staarvis || 0) * sv;
-    let base = (s + load) * dF * tF * hF;                 // s = mass/2000 + gabarit*2
-    const q = (a.quality != null ? a.quality : 1);        // 0.1..1.6
-    let hpA = base * (0.4 + 0.6 * q);                     // качество рецепта ×(0.46..1.36)
-    if (a.hpPercentBoost) hpA *= (1 + a.hpPercentBoost);  // %HP катализатора — поверх
-    hpA += (a.hpBoost || 0) * 0.2;                        // качеств. «пол» (ALLOY_FLOOR_K), чтобы мелкие корпуса (пехота/дроны) не обнулялись; для кораблей ничтожен
-    return hpA;
+    return (s + load) * dF * tF * hF * cnAlloyMult(a);
   }
   if (a.resurs) s += (a.resurs.blackmetall || 0) * bm + (a.resurs.coloredmetall || 0) * cm
     + (a.resurs.rudametall || 0) * rm + (a.resurs.kristall || 0) * km + (a.resurs.staarvis || 0) * sv;
@@ -2695,6 +2778,19 @@ function cnKvEconMarkup(k) {
 }
 // Общий понижающий коэффициент цены за конструкционные решения (ещё раз срезано).
 const CN_KV_COST_FACTOR = 0.32;
+// Цена ОДНОГО компонента в ГС — ровно то, на сколько он двигает итог проекта.
+// cnKvCost линейна по сырью, поэтому вклад компонента = его собственное сырьё,
+// прогнанное через тот же курс и классовый множитель. Плоскую наценку
+// (cnKvEconMarkup) сюда не кладём: она берётся с проекта один раз, а не с каждой
+// детали. Своё орудие с верфи идёт мимо сырья — у него плоская боевая цена _gs.
+function cnKvPartGs(o, k) {
+  if (!o) return 0;
+  if (+o._gs > 0) return Math.round(+o._gs);
+  const r = o.resurs; if (!r) return 0;
+  let base = 0;
+  for (const x in CN_KV_RES_GS) base += (+r[x] || 0) * CN_KV_RES_GS[x];
+  return Math.round(base * (CN_KV_CLASS_GS[k] || 1) * CN_KV_COST_FACTOR);
+}
 function cnKvCost(res, k) {
   let base = 0;
   for (const r in CN_KV_RES_GS) base += (res[r] || 0) * CN_KV_RES_GS[r];
@@ -2861,7 +2957,7 @@ function cnVehRenderStats() {
     <div class="cn-stat"><span>Дальность огня</span><b>${s.kv.rng ? cnNum(s.kv.rng) + ' кв' : 'нет'}</b></div>
     <div class="cn-stat"><span>Радар</span><b>${s.kv.radar ? cnNum(s.kv.radar) + ' кв' : 'нет'}</b></div>
     <div class="cn-stat"><span>Остаток энергии</span><b class="${s.kv.power < 0 ? 'cn-warn' : ''}">${cnNum(s.kv.power)} ⚡</b></div>
-    <div class="cn-stat"><span>Грузоподъёмность</span><b class="${s.kv.cap < 0 ? 'cn-warn' : ''}">${cnNum(s.kv.cap)} кг</b></div>` : ''}
+    <div class="cn-stat"><span>Свободная грузоподъёмность</span><b class="${s.kv.cap < 0 ? 'cn-warn' : ''}">${cnNum(s.kv.cap)}</b></div>` : ''}
     ${s.cargo > 0 ? `<div class="cn-stat"><span>Грузоподъёмность</span><b style="color:var(--te)">${cnNum(s.cargo)} ед.</b></div>` : ''}
     <div class="cn-stat"><span>Стоимость</span><b style="color:var(--gd)">${cnNum(s.cost)} ГС</b></div>
     <div class="cn-stat"><span>Разработка</span><b style="color:var(--te)">${s.on} ОН</b></div>`;
@@ -2891,7 +2987,7 @@ function cnRenderHud() {
     + tile('spd', 'Скорость', cnNum(s.speed) + (s.kv ? ' кв' : ''), '', 'Ход по карте боя, квадратов');
   if (s.kv) {
     html += tile('pw', 'Энергия', cnNum(s.kv.power) + ' ⚡', s.kv.power < 0 ? 'warn' : '', 'Остаток энергосети: реактор минус потребители')
-      + tile('cap', 'Груз', cnNum(s.kv.cap) + ' кг', s.kv.cap < 0 ? 'warn' : '', 'Остаток грузоподъёмности шасси/корпуса')
+      + tile('cap', 'Груз', cnNum(s.kv.cap), s.kv.cap < 0 ? 'warn' : '', 'Свободная грузоподъёмность шасси — её и увозит караван')
       + tile('rad', 'Радар', s.kv.radar ? cnNum(s.kv.radar) + ' кв' : '—', '', 'Дальность обзора радара, квадратов');
   }
   html += tile('on', 'Разработка', s.on + ' ОН', 'te', 'Очки науки за публикацию проекта')
@@ -3332,7 +3428,7 @@ async function cnPublish() {
     // Старые проекты теперь МОЖНО редактировать даже «за лимитом» (откат отключён
     // для over-базы) — значит валидность держим на публикации.
     if (CN.last.kv && CN.last.kv.power < 0) { toast(`Энергосеть перегружена: не хватает ${cnNum(-CN.last.kv.power)} ⚡ — мощнее реактор или снимите системы`, 'err'); return; }
-    if (CN.last.kv && CN.last.kv.cap < 0) { toast(`Перегруз по массе: лишние ${cnNum(-CN.last.kv.cap)} кг — снимите компоненты`, 'err'); return; }
+    if (CN.last.kv && CN.last.kv.cap < 0) { toast(`Перегруз: лишние ${cnNum(-CN.last.kv.cap)} ед. нагрузки — снимите компоненты`, 'err'); return; }
     const def = CN.def, k = cnId('cn-class').value, cls = def.db.data[k];
     const typeObj = def.hasType ? cls.types[+cnId('cn-type').value || 0] : null;
     data = cnVehCollectData();

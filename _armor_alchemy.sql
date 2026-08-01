@@ -119,17 +119,17 @@ begin
   -- 1 steel
   if _aa_g(f,'IRON')>=0.2 and _aa_g(f,'CARBON')>=0.15 and least(_aa_g(f,'IRON'), _aa_g(f,'CARBON')*2)>=0.2 then
     q := least(_aa_g(f,'IRON'), _aa_g(f,'CARBON')*3);
-    tenmul := tenmul + 0.35*q; kin := kin + 0.32*q; capadd := capadd + 6*q; traits := traits || 'Легированная сталь'::text;
+    tenmul := tenmul + 0.35*q; hpmul := hpmul + 0.20*q; kin := kin + 0.32*q; capadd := capadd + 6*q; traits := traits || 'Легированная сталь'::text;
   end if;
   -- 2 titanal
   if _aa_g(f,'TITANIUM')>=0.2 and _aa_g(f,'CARBON')>=0.1 then
     q := least(_aa_g(f,'TITANIUM'), _aa_g(f,'CARBON')*4);
-    tenmul := tenmul + 0.30*q; densmul := densmul - 0.10*q; kin := kin + 0.20*q; capadd := capadd + 10*q; traits := traits || 'Титаналь'::text;
+    tenmul := tenmul + 0.30*q; hpmul := hpmul + 0.15*q; densmul := densmul - 0.10*q; kin := kin + 0.20*q; capadd := capadd + 10*q; traits := traits || 'Титаналь'::text;
   end if;
   -- 3 cermet
   if (_aa_g(f,'SILICATE')+_aa_g(f,'DIAMONDS'))>=0.2 and (_aa_g(f,'CARBON')+_aa_g(f,'ORGANICS'))>=0.08 then
     q := least(_aa_g(f,'SILICATE')+_aa_g(f,'DIAMONDS'), 0.6);
-    heatmul := heatmul + 0.30*q; en := en + 0.45*q; traits := traits || 'Керметокомпозит'::text;
+    heatmul := heatmul + 0.30*q; hpmul := hpmul + 0.15*q; en := en + 0.45*q; traits := traits || 'Керметокомпозит'::text;
   end if;
   -- 4 exomatrix
   if (_aa_g(f,'RAREEARTH')+_aa_g(f,'EXOCRYST')+_aa_g(f,'QUANTUMCRYST'))>=0.08
@@ -144,18 +144,18 @@ begin
   -- 6 dense_kin
   if (_aa_g(f,'URANIUM')+_aa_g(f,'DEGENERATE'))>=0.15 then
     q := least(_aa_g(f,'URANIUM')+_aa_g(f,'DEGENERATE')*1.5, 0.8);
-    kin := kin + 0.50*q; densmul := densmul + 0.25*q; capadd := capadd - 14*q; traits := traits || 'Кинетический монолит'::text;
+    kin := kin + 0.50*q; hpmul := hpmul + 0.25*q; densmul := densmul + 0.25*q; capadd := capadd - 14*q; traits := traits || 'Кинетический монолит'::text;
   end if;
   -- 7 reactive
   if (rr->>'reactive')::numeric>=0.12 and (_aa_g(f,'RAREEARTH')+_aa_g(f,'EXOCRYST'))>=0.05 then
     q := least((rr->>'reactive')::numeric, 0.6);
-    mis := mis + 0.60*q; traits := traits || 'Динамическая защита'::text;
+    mis := mis + 0.60*q; hpmul := hpmul + 0.10*q; traits := traits || 'Динамическая защита'::text;
     if (_aa_g(f,'THERMFUEL')+_aa_g(f,'DEUTERIUM'))>=0.2 then warns := warns || 'Нестабильный заряд: риск детонации'::text; end if;
   end if;
   -- 8 adaptive
   if _aa_g(f,'NEUTRONMAT')>=0.05 then
     q := least(_aa_g(f,'NEUTRONMAT')*2, 0.5);
-    kin := kin + 0.16*q; en := en + 0.16*q; mis := mis + 0.16*q; pcthp := pcthp + 0.4*q; traits := traits || 'Саморемонт'::text;
+    kin := kin + 0.16*q; en := en + 0.16*q; mis := mis + 0.16*q; hpmul := hpmul + 0.20*q; pcthp := pcthp + 0.4*q; traits := traits || 'Саморемонт'::text;
   end if;
   -- 9 gravlift
   if _aa_g(f,'QUANTUMCRYST')>=0.03 then
@@ -330,3 +330,11 @@ grant execute on function public.armor_alloy_upsert(uuid,text,jsonb,text,text,te
 grant execute on function public.armor_alloy_delete(uuid) to authenticated;
 grant execute on function public._armor_alchemy_calc(jsonb) to authenticated;
 grant execute on function public._aa_g(jsonb,text) to authenticated;
+
+-- ── §4. Пересчёт уже зарегистрированных сплавов ───────────────
+-- Реакции получили вклад в hpmul (качество рецепта теперь МОЖЕТ превысить 1 —
+-- раньше потолок 1.0 был недостижим и множитель (0.4+0.6q) упирался в 1.0).
+-- Статы хранятся в строке, поэтому старые сплавы пересчитываем из РЕЦЕПТА.
+update public.faction_armor_alloys
+   set stats = public._armor_alchemy_calc(recipe), updated_at = now()
+ where recipe is not null and recipe <> '{}'::jsonb;
