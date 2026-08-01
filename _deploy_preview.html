@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="/css/index.css">
+<style>body{margin:0;background:#04060b}</style></head><body>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function jsq(s){return String(s).replace(/['\]/g,'\$&');}
+function toast(m,k){console.log('toast',k,m);}
+function ecRpc(){return Promise.resolve();}
+function ecReload(){}
+</script>
+<script src="/battle_board.js"></script>
+<script>
+const pool=[];
+const names=['«Лорелея» тендер','«Гарпия» корвет','«Молот» линкор','«Тень» стелс-рейдер','«Аргус» радар','«Веста» носитель'];
+names.forEach((n,i)=>pool.push({unit_id:'u'+i,unit_name:n,cls:['cor','fri','bat','cor','cru','car'][i%6],hp:1200+i*900,dmg:180+i*70,speed:5-(i%3),rng:3+i,cost:12000+i*9000,free:3,shield:i%2?400:0,armor:0,cargo:0,crew:80+i*30,pd:i%3?0.2:0,jam:0,dejam:0,wings:i===5?3:0}));
+BB.id='x';
+BB.st={status:'forming',my_side:'attacker',my_fid:'f1',w:60,h:28,zone:3,cap:8,duel_budget:204000,
+ attacker_name:'Железный Дивизион',defender_name:'Клуб «Ржавый кулак»',system_name:'Арена',system_id:'s1',
+ kind:'duel',att_ready:false,def_ready:false,units:[],pool:pool,log:[]};
+let ov=document.createElement('div');ov.id='bb-ov';ov.className='bb-ov show';document.body.appendChild(ov);
+bbRender();
+</script></body></html>

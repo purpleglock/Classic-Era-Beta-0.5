@@ -1,29 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    {
-      "name": "static",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "5173"],
-      "port": 5173
-    },
-    {
-      "name": "static2",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "5174"],
-      "port": 5174
-    },
-    {
-      "name": "static3",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "5175"],
-      "port": 5175
-    },
-    {
-      "name": "static4",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "5176"],
-      "port": 5176
-    }
+    { "name": "static", "runtimeExecutable": "npx", "runtimeArgs": ["--yes", "http-server", "-p", "8791", "-c-1"], "port": 8791 }
   ]
 }

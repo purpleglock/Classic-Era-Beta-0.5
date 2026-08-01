@@ -43,6 +43,8 @@ const BB = {
   spr: {},           // кэш спрайтов кораблей
   tex: {},           // кэш текстур корпуса
   dock: true,        // нижний док с панелями развёрнут?
+  deployUI: false,   // открыт отдельный экран фазы расстановки?
+  ddock: true,       // ростер расстановки развёрнут?
   terr: null,        // Map "x:y" → 'ast'|'neb'|'grv'|'deb'
   reach: null,       // Map "x:y" → {steps, path} для выбранного корабля
   ptrs: new Map(),
@@ -338,6 +340,10 @@ function bbRender() {
   const s = BB.st; if (!s) return;
   const ov = document.getElementById('bb-ov'); if (!ov) return;
   const spec = s.my_side === 'spectator';   // зритель дуэли клуба
+  // Расстановка — ОТДЕЛЬНАЯ ФАЗА со своим экраном (лимиты крупно, ростер
+  // внизу под палец). Зритель дуэли к ней не допущен — ему обычная доска.
+  if (s.status === 'forming' && !spec) { bbRenderDeploy(s); return; }
+  BB.deployUI = false;
   const foeName = (spec || s.my_side === 'attacker') ? s.defender_name : s.attacker_name;
   const myName  = (spec || s.my_side === 'attacker') ? s.attacker_name : s.defender_name;
   const myLeft  = s.my_side === 'attacker' ? s.att_turns_left : s.def_turns_left;
@@ -390,6 +396,236 @@ function bbRender() {
   bbPaint();
 }
 function bbDockToggle() { BB.dock = !BB.dock; bbRender(); }
+
+// ════════════════════════════════════════════════════════════
+// ФАЗА РАССТАНОВКИ — отдельный экран (в т.ч. телефон)
+// Три яруса: счётчики лимитов сверху (борта / бюджет — крупно, с полосами),
+// доска-«стапель» в середине (камера сама наведена на СВОЮ зону спавна),
+// ростер-док снизу: карточки под палец со степперами ＋/− и авто-посадкой.
+// Гексы кликом тоже работают: выбран борт → тап по подсвеченной зоне.
+// ════════════════════════════════════════════════════════════
+
+// Сводка лимитов расстановки: сколько бортов и денег уже потрачено.
+function bbDeployLim(s) {
+  const cap = Math.max(0, Number(s.cap) || 0);
+  const used = BB.place.length;
+  const budget = Number(s.duel_budget) || 0;
+  const spent = bbDuelSpent(s);
+  return { cap, used, slots: Math.max(0, cap - used), budget, spent,
+           over: budget > 0 && spent > budget, left: budget > 0 ? budget - spent : 0 };
+}
+// Свободные гексы своей зоны в порядке «от своего края, от центра к краям»:
+// авто-посадка выстраивает флот аккуратной стенкой, а не как попало.
+function bbZoneCells(s) {
+  const z = s.zone || 3;
+  const cols = [];
+  for (let i = 0; i < z; i++) cols.push(s.my_side === 'attacker' ? i : s.w - 1 - i);
+  const mid = (s.h - 1) / 2;
+  const rows = [];
+  for (let y = 0; y < s.h; y++) rows.push(y);
+  rows.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid));
+  const busy = new Set([].concat(
+    (s.units || []).map(u => u.x + ':' + u.y),
+    BB.place.map(p => p.x + ':' + p.y)));
+  const out = [];
+  cols.forEach(x => rows.forEach(y => {
+    const k = x + ':' + y;
+    if (busy.has(k)) return;
+    if (bbTerra(x, y) === 'ast') return;      // в камнях борт не ставим
+    out.push({ x, y });
+  }));
+  return out;
+}
+// Можно ли добавить ещё один борт этого проекта: место, резерв, бюджет.
+function bbCanAdd(s, p) {
+  const L = bbDeployLim(s);
+  const used = BB.place.filter(q => q.unit_id === p.unit_id).length;
+  if (used >= (p.free || 0)) return 'В резерве больше таких кораблей нет';
+  if (L.slots <= 0) return `На доску больше ${L.cap} кораблей не вывести`;
+  if (L.budget > 0 && L.spent + (Number(p.cost) || 0) > L.budget)
+    return `Не хватает бюджета: борт стоит ${bbNum(p.cost)} ГС, осталось ${bbNum(L.left)} ГС`;
+  return null;
+}
+// ＋ на карточке: посадить борт на ближайшее свободное место своей зоны.
+function bbAddOne(uid) {
+  const s = BB.st; if (!s) return;
+  const p = (s.pool || []).find(q => q.unit_id === uid); if (!p) return;
+  const why = bbCanAdd(s, p);
+  if (why) { toast(why, 'err'); return; }
+  const cell = bbZoneCells(s)[0];
+  if (!cell) { toast('В зоне разворачивания не осталось свободных гексов', 'err'); return; }
+  BB.place.push({ unit_id: p.unit_id, unit_name: p.unit_name, cls: p.cls, x: cell.x, y: cell.y });
+  BB.pick = uid;
+  bbRender();
+}
+// − на карточке: снять последний выставленный борт этого проекта.
+function bbDelOne(uid) {
+  for (let i = BB.place.length - 1; i >= 0; i--) {
+    if (BB.place[i].unit_id === uid) { BB.place.splice(i, 1); bbRender(); return; }
+  }
+}
+// Авто-состав: набить доску по порядку резерва, пока хватает мест и денег.
+function bbAutoPlace() {
+  const s = BB.st; if (!s) return;
+  const pool = Array.isArray(s.pool) ? s.pool : [];
+  let added = 0, guard = 0;
+  for (;;) {
+    if (guard++ > 400) break;
+    const p = pool.find(q => !bbCanAdd(s, q));
+    if (!p) break;
+    const cell = bbZoneCells(s)[0];
+    if (!cell) break;
+    BB.place.push({ unit_id: p.unit_id, unit_name: p.unit_name, cls: p.cls, x: cell.x, y: cell.y });
+    added++;
+  }
+  if (!added) toast('Добавить больше нечего: упёрлись в резерв, места или бюджет', 'err');
+  bbRender();
+}
+function bbClearPlace() {
+  if (!BB.place.length) return;
+  BB.place = []; BB.pick = null; bbRender();
+}
+// Развернуть/свернуть ростер (на телефоне док съедает доску — нужен тумблер).
+function bbDeployDock() { BB.ddock = !BB.ddock; bbRender(); }
+
+function bbRenderDeploy(s) {
+  const ov = document.getElementById('bb-ov'); if (!ov) return;
+  BB.deployUI = true;
+  if (BB.ddock === undefined) BB.ddock = true;
+  const mine = s.my_side === 'attacker' ? s.att_ready : s.def_ready;
+  const foe  = s.my_side === 'attacker' ? s.def_ready : s.att_ready;
+  const foeName = s.my_side === 'attacker' ? s.defender_name : s.attacker_name;
+  const L = bbDeployLim(s);
+  const pool = Array.isArray(s.pool) ? s.pool : [];
+  const used = {};
+  BB.place.forEach(p => { used[p.unit_id] = (used[p.unit_id] || 0) + 1; });
+
+  // ── счётчики лимитов ──
+  const capPct = L.cap > 0 ? Math.min(100, Math.round(100 * L.used / L.cap)) : 0;
+  const budPct = L.budget > 0 ? Math.min(100, Math.round(100 * L.spent / L.budget)) : 0;
+  const meters = `
+    <div class="bbd-m${L.used >= L.cap ? ' bbd-m-full' : ''}">
+      <div class="bbd-m-l">Бортов на доске</div>
+      <div class="bbd-m-v"><b>${L.used}</b><span>/ ${L.cap}</span></div>
+      <div class="bbd-m-bar"><i style="width:${capPct}%"></i></div>
+      <div class="bbd-m-s">${L.slots > 0 ? `свободно мест: ${L.slots}` : 'доска заполнена'}</div>
+    </div>
+    ${L.budget > 0 ? `<div class="bbd-m${L.over ? ' bbd-m-over' : ''}">
+      <div class="bbd-m-l">Бюджет флота</div>
+      <div class="bbd-m-v"><b>${bbNum(L.spent)}</b><span>/ ${bbNum(L.budget)} ГС</span></div>
+      <div class="bbd-m-bar"><i style="width:${budPct}%"></i></div>
+      <div class="bbd-m-s">${L.over ? `перебор на ${bbNum(-L.left)} ГС — снимите борт` : `осталось ${bbNum(L.left)} ГС`}</div>
+    </div>` : ''}
+    <div class="bbd-m bbd-m-foe">
+      <div class="bbd-m-l">Противник</div>
+      <div class="bbd-m-v"><b>${esc(foeName || '—')}</b></div>
+      <div class="bbd-m-s">${foe ? '✓ состав утверждён' : '⏳ ещё расставляет'}</div>
+    </div>`;
+
+  // ── ростер ──
+  const cards = pool.map(p => {
+    const on = BB.pick === p.unit_id;
+    const cnt = used[p.unit_id] || 0;
+    const free = (p.free || 0) - cnt;
+    const why = bbCanAdd(s, p);
+    const price = Number(p.cost) > 0 ? `<span class="bbd-c-price">${bbNum(p.cost)} ГС</span>` : '';
+    return `<div class="bbd-c${on ? ' bbd-c-on' : ''}${cnt ? ' bbd-c-used' : ''}">
+        <button class="bbd-c-main" onclick="bbPick('${jsq(p.unit_id)}')"
+          title="Выбрать борт и поставить его тапом по своей зоне">
+          <span class="bbd-c-top">
+            <span class="bbd-c-ic">${bbClsIco(p.cls)}</span>
+            <span class="bbd-c-n">${esc(p.unit_name)}</span>
+            ${price}
+          </span>
+          <span class="bbd-c-cls">${bbClsName(p.cls)} · в резерве ${free} из ${p.free || 0}</span>
+          <span class="bbd-c-st">
+            <i>${bbNum(p.hp)}<u>корпус</u></i>
+            <i>${bbNum(p.dmg)}<u>урон</u></i>
+            <i>${p.speed}<u>ход</u></i>
+            <i>${p.rng}<u>дальн.</u></i>
+          </span>
+          <span class="bbd-c-x">${bbPoolDetail(p)}</span>
+        </button>
+        <div class="bbd-c-step">
+          <button class="bbd-st" ${cnt ? '' : 'disabled'} onclick="bbDelOne('${jsq(p.unit_id)}')" title="Снять с доски">−</button>
+          <b class="bbd-st-n">${cnt}</b>
+          <button class="bbd-st bbd-st-p" ${why ? 'disabled' : ''} onclick="bbAddOne('${jsq(p.unit_id)}')"
+            title="${why ? esc(why) : 'Поставить на свободное место своей зоны'}">＋</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  const pickedName = BB.pick ? (pool.find(p => p.unit_id === BB.pick) || {}).unit_name : null;
+  const hint = mine
+    ? '✓ Состав утверждён. Ждём противника — доска обновится сама.'
+    : (pickedName
+        ? `Выбран «${esc(pickedName)}» — тапните по подсвеченному гексу своей зоны. Тап по уже стоящему борту снимает его.`
+        : 'Выберите корабль в ростере снизу (или жмите ＋ — он сядет сам). Тап по стоящему борту снимает его с доски.');
+
+  ov.innerHTML = `
+    <div class="bbd">
+      <div class="bb-top bbd-top">
+        <div class="bb-ttl">
+          <span class="bb-ttl-ic"></span>
+          <span class="bb-ttl-t">Расстановка флота</span>
+          <span class="bb-ttl-sub">${s.kind === 'duel' ? 'дуэль Бойцовского клуба' : esc(s.system_name || s.system_id)}</span>
+        </div>
+        <button class="bb-exit" onclick="bbClose()"><span class="bb-exit-a">←</span> На сайт</button>
+      </div>
+
+      <div class="bbd-meters">${meters}</div>
+
+      <div class="bbd-stage" id="bbd-stage">
+        <div class="bb-cvw">
+          <canvas id="bb-cv" class="bb-cv"></canvas>
+          <div class="bb-zoom">
+            <button class="bb-zbtn" title="Приблизить" onclick="bbZoomBtn(1.3)">+</button>
+            <button class="bb-zbtn" title="Отдалить" onclick="bbZoomBtn(1/1.3)">−</button>
+            <button class="bb-zbtn" title="К своей зоне" onclick="bbCamDeploy(1)">⌂</button>
+          </div>
+        </div>
+        <div class="bbd-hint${mine ? ' bbd-hint-ok' : ''}">${hint}</div>
+      </div>
+
+      <div class="bbd-dock${BB.ddock ? ' bbd-dock-open' : ''}">
+        <button class="bbd-dock-h" onclick="bbDeployDock()">
+          <span>Ростер · ${pool.length}</span>
+          <span class="bbd-dock-ar">${BB.ddock ? '▾' : '▴'}</span>
+        </button>
+        <div class="bbd-roster">
+          ${cards || '<div class="bb-empty">Резерв пуст: выводить в бой нечего.</div>'}
+        </div>
+      </div>
+
+      <div class="bbd-act">
+        <button class="btn btn-gh btn-sm" ${mine ? 'disabled' : ''} onclick="bbAutoPlace()">⚡ Авто-состав</button>
+        <button class="btn btn-gh btn-sm" ${mine || !BB.place.length ? 'disabled' : ''} onclick="bbClearPlace()">Очистить</button>
+        <button class="btn btn-gd bbd-go" ${mine || !BB.place.length || L.over ? 'disabled' : ''} onclick="bbConfirmDeploy()">
+          ${mine ? 'Ждём противника…' : `В бой · ${L.used} ${L.used === 1 ? 'борт' : (L.used < 5 ? 'борта' : 'бортов')}`}
+        </button>
+      </div>
+    </div>`;
+
+  BB.cv = document.getElementById('bb-cv');
+  BB.ctx = BB.cv.getContext('2d');
+  bbFit();
+  bbBindCanvas();
+  bbPaint();
+}
+
+// Камера расстановки: показать СВОЮ зону спавна целиком по высоте доски.
+function bbCamDeploy(force) {
+  const s = BB.st; if (!s || !BB.vw) return;
+  const { W, H } = bbWorldSize();
+  const z = s.zone || 3;
+  const zoneW = (z + 2.5) * BB.R * 1.5;
+  BB.zoom = Math.min(1.5, Math.max(0.28, Math.min(BB.vh / (H + BB.R), BB.vw / zoneW)));
+  const cx = s.my_side === 'attacker' ? zoneW / 2 : W - zoneW / 2;
+  BB.camX = cx - BB.vw / BB.zoom / 2;
+  BB.camY = H / 2 - BB.vh / BB.zoom / 2;
+  bbCamClamp();
+  if (force && BB.ctx) bbPaint();
+}
 
 // Полоса состояния: чей ход, активации, срок явки + тумблер дока.
 function bbPhaseBar(s, myLeft, foeLeft) {
@@ -807,12 +1043,19 @@ function bbFit() {
   const wrap = BB.cv.parentElement;
   const wide = window.innerWidth > 900;
   BB.vw = Math.max(240, wrap.clientWidth || 320);
-  BB.vh = Math.max(260, window.innerHeight - (wide ? 160 : 220));
+  if (BB.deployUI) {
+    // экран расстановки — колонка фиксированной высоты: доске достаётся
+    // ровно то, что осталось между счётчиками лимитов и ростером
+    const stage = document.getElementById('bbd-stage');
+    BB.vh = Math.max(200, (stage && stage.clientHeight) || 320);
+  } else {
+    BB.vh = Math.max(260, window.innerHeight - (wide ? 160 : 220));
+  }
   wrap.style.height = BB.vh + 'px';
   BB.dpr = Math.min(2, window.devicePixelRatio || 1);
   BB.cv.style.width = BB.vw + 'px'; BB.cv.style.height = BB.vh + 'px';
   BB.cv.width = Math.round(BB.vw * BB.dpr); BB.cv.height = Math.round(BB.vh * BB.dpr);
-  if (!BB.camReady) { bbCamHome(); BB.camReady = true; }
+  if (!BB.camReady) { if (BB.deployUI) bbCamDeploy(); else bbCamHome(); BB.camReady = true; }
   bbCamClamp();
 }
 function bbCamHome() {
@@ -940,13 +1183,12 @@ function bbClick(x, y) {
   if (s.status === 'forming') {
     const hit = BB.place.findIndex(p => p.x === x && p.y === y);
     if (hit >= 0) { BB.place.splice(hit, 1); bbRender(); return; }
-    if (!BB.pick) { toast('Сначала выберите корабль в резерве', 'err'); return; }
-    if (!bbInMyZone(x)) { toast('Ставить можно только в свою зону разворачивания', 'err'); return; }
-    if (BB.place.length >= s.cap) { toast(`Больше ${s.cap} кораблей в бой не вывести`, 'err'); return; }
+    if (!BB.pick) { toast('Сначала выберите корабль в ростере', 'err'); return; }
+    if (!bbInMyZone(x)) { toast('Ставить можно только в свою зону разворачивания — подсвеченные гексы у вашего края', 'err'); return; }
     const p = (s.pool || []).find(q => q.unit_id === BB.pick);
     if (!p) return;
-    const used = BB.place.filter(q => q.unit_id === p.unit_id).length;
-    if (used >= p.free) { toast('Таких кораблей в резерве больше нет', 'err'); return; }
+    const why = bbCanAdd(s, p);
+    if (why) { toast(why, 'err'); return; }
     BB.place.push({ unit_id: p.unit_id, unit_name: p.unit_name, cls: p.cls, x, y });
     bbRender();
     return;
@@ -1091,6 +1333,7 @@ async function bbConfirmDeploy() {
     await ecRpc('battle_ready', { p_battle: BB.id });
     toast('Состав утверждён', 'ok');
     BB.place = []; BB.pick = null;
+    BB.camReady = false;         // из зоны спавна камера вернётся к своим бортам
     await bbReload();
   } catch (e) {
     toast((e && e.message) ? e.message : 'Не вышло', 'err');
