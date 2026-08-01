@@ -1,0 +1,64 @@
+<!doctype html><meta charset="utf-8">
+<title>Проверка: своё орудие в слоте вооружения</title>
+<link rel="stylesheet" href="css/style.css">
+<style>body{margin:0;background:#0b0e12;color:#c8c5bc;font:14px/1.4 system-ui}#pg{padding:12px}</style>
+<div id="pg"></div>
+<script src="constructors_kv.js"></script>
+<script src="constructors_kv_adapt.js"></script>
+<script src="armor_alchemy.js"></script>
+<script src="turret_gen.js"></script>
+<script>
+// ── Заглушки игрового окружения ──
+window.setPg = h => document.getElementById('pg').innerHTML = h;
+window.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+window.toast = (m, k) => console.log('[toast:' + k + ']', m);
+window.go = s => console.log('[go]', s);
+window.user = { id: 'u1' };
+window.TEST_TURRET = {
+  id: 'aaaaaaaa-0000-0000-0000-000000000001',
+  name: 'Длань Собора',
+  cfg: { klass:'heavy', tech:'rail', caliber:300, barrelLen:70, barrels:2, layout:'stacked', size:1, platform:'1' },
+  stats: { damage:18315, energy:6310, dalnost:12, mass:60190, gs:404, rof:2, caliber:300,
+           kind:'kinetic', kvTech:'рельсотрон', kvDmg:'рельсотрон', kvClass:'тяжелое корабельное орудие',
+           resurs:{blackmetall:67,coloredmetall:0,rudametall:0,kristall:0,staarvis:10} },
+  carriers: ['mediumCruiser','hyperCruiser','multiroleCarrier','battleship','dreadnought','ss13'],
+};
+window.dbGet = async (tbl) => tbl === 'faction_turrets' ? [window.TEST_TURRET] : [];
+window.ecRpc = async (f, a) => ({ id: 'fake' });
+</script>
+<script src="constructors.js"></script>
+<script>
+// анкета фракции — чтобы пройти гейт конструктора
+CN.myApp = { faction_id:'TEST', faction_name:'Тестовая держава', faction_color:'#c9a24b', status:'approved' };
+CN.myAppLoaded = true;
+window.cnLoadMyFaction = async () => {};
+window.cnCanAccess = () => true;
+window.cnIsStaff = () => true;
+(async () => {
+  await cnRenderShip();
+  const db = CN.def.db;
+  const g = '⚙ Свои орудия';
+  const out = {
+    группаЕсть: !!db.weapons[g],
+    орудий: (db.weapons[g] || []).length,
+    объект: (db.weapons[g] || [])[0],
+    доступноЛинкору: db.weaponsAvail.battleship.has(g + '|0'),
+    доступноКорвету: db.weaponsAvail.corvette.has(g + '|0'),
+  };
+  // ── круговой рейс проекта: поставить орудие → собрать data → загрузить обратно
+  const gi = { g, idx: 0 };
+  CN.shipLayout.mounts = [{ w: gi, pos: null, battery: null }];
+  cnId('cn-class').value = 'battleship'; cnVehClassDeps(); cnVehCalc();
+  CN.shipLayout.mounts = [{ w: gi, pos: null, battery: null }];
+  const data = cnVehCollectData();
+  out.сохранено = data.weapons;
+  // теперь пусть индекс «уедет»: добавим второе орудие ПЕРЕД нашим
+  db.weapons[g].unshift(Object.assign({}, db.weapons[g][0], { name:'⚙ Другое', _turretId:'zzzz' }));
+  db.weaponsAvail.battleship.add(g + '|1');
+  cnVehApplyData(JSON.parse(JSON.stringify(data)));
+  out.послеСдвига = (CN.shipLayout.mounts[0] || {}).w;
+  out.имяПослеЗагрузки = out.послеСдвига ? db.weapons[out.послеСдвига.g][out.послеСдвига.idx].name : null;
+  console.log('РЕЗУЛЬТАТ', JSON.stringify(out));
+  window.__RESULT = out;
+})();
+</script>

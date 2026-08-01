@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8">
+<title>Проверка: оружейная верфь в игре</title>
+<link rel="stylesheet" href="css/style.css">
+<style>body{margin:0;background:#0b0e12;color:#c8c5bc;font:14px/1.4 system-ui}#pg{padding:12px}
+.btn{background:#262b30;color:#c8c5bc;border:1px solid #414850;padding:6px 11px;cursor:pointer}</style>
+<div id="pg"></div>
+<script src="constructors_kv.js"></script>
+<script src="constructors_kv_adapt.js"></script>
+<script src="armor_alchemy.js"></script>
+<script src="turret_gen.js"></script>
+<script>
+// ── Заглушки игрового окружения (страница верфи их только читает) ──
+window.setPg = h => document.getElementById('pg').innerHTML = h;
+window.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+window.toast = (m, k) => console.log('[toast:' + k + ']', m);
+window.go = s => console.log('[go]', s);
+window.cnLoadMyFaction = async () => {};
+window.cnCanAccess = () => true;
+window.cnIsStaff = () => true;
+window.cnMyFactionMeta = () => ({ faction_id: 'TEST', faction_name: 'Тестовая держава', faction_color: '#c9a24b' });
+window.cnGate = () => setPg('gate');
+window.dbGet = async () => [];
+window.ecRpc = async (fn, a) => { console.log('[rpc]', fn, a); return { id: 'fake-id' }; };
+window.CN_ALLOYS = [{ name: 'Пробный сплав', stats: { resist: { kinetic: .34, energy: .12, missile: -.05 } } }];
+window.cnLoadAlloys = async () => window.CN_ALLOYS;
+</script>
+<script src="turret_forge_ui.js"></script>
+<script>cnRenderTurretForge();</script>

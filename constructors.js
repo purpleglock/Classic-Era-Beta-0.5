@@ -80,7 +80,7 @@ const CN_HUB = [
   { slug: 'build-ship', ico: '🚀', name: 'Корабельная верфь', desc: 'Космические корабли: от корветов до дредноутов. Реактор, броня, щиты, ангары, вооружение.', cat: 'ship' },
   { slug: 'build-army', ico: '🪖', name: 'Планетарный арсенал', desc: 'Единый конструктор армии: пехота, БТР, танки, артиллерия, дроны, авиация. Ходовая, броня, орудия — по правилам Кваквантора.', cat: 'army' },
   { slug: 'build-alloy', ico: '⚗', name: 'Материаловедение', desc: 'Своя броня из настоящих ресурсов. Пропорции решают: реакции и пороги рождают HP, стойкости и трейты. Сплавы идут в слот брони всех конструкторов.', cat: 'alloy' },
-  { slug: 'turret-gen', url: '_turret_gen.html', ico: '🔫', name: 'Превью конструктора орудий', desc: 'Генератор внешнего вида и ТТХ корабельных орудий.', cat: 'turret' },
+  { slug: 'build-turret', ico: '⚙', name: 'Оружейная верфь', desc: 'Своё орудие: класс установки, технология, калибр и стволы. Масса и энергия решают, кто его потянет. Готовые орудия идут в слот вооружения всех конструкторов.', cat: 'turret' },
   // Конструктор дивизий убран из хаба: армии теперь формируются из готовых юнитов
   // («Звёздный марш»). Билдер доступен только для правки уже созданных дивизий (cnEdit).
 ];
@@ -494,6 +494,118 @@ function cnMergeAlloys(db) {
     if (!Array.isArray(db.armors[k])) continue;
     db.armors[k] = db.armors[k].filter(a => !a._alloy).concat(list);
   }
+}
+
+// ── СВОИ ОРУДИЯ (оружейная верфь) ───────────────────────────
+// Полный аналог сплавов, только для слота вооружения: строка faction_turrets
+// разворачивается в объект орудия каталога и дописывается в db.weapons
+// отдельной группой. Доступность по классу носителя берётся из turrets.carriers
+// (их посчитал сервер по массе и энергопотреблению сборки).
+// Сервер при публикации резолвит орудие по turretId и пересчитывает ТТХ сам.
+const CN_TURRET_GROUP = '⚙ Свои орудия';
+let CN_TURRETS = null, CN_TURRETS_FID;
+function cnInvalidateTurrets() { CN_TURRETS = null; }
+if (typeof window !== 'undefined') window.cnInvalidateTurrets = cnInvalidateTurrets;
+async function cnLoadTurrets(force) {
+  const fac = cnMyFactionMeta();
+  const fid = (fac && fac.faction_id) || '';
+  if (!force && CN_TURRETS && CN_TURRETS_FID === fid) return CN_TURRETS;
+  CN_TURRETS_FID = fid;
+  try {
+    let q = 'select=id,name,cfg,stats,carriers,faction_id&order=id.asc';
+    if (fid) q = 'faction_id=eq.' + encodeURIComponent(fid) + '&' + q;
+    CN_TURRETS = await dbGet('faction_turrets', q) || [];
+  } catch (e) { CN_TURRETS = []; }
+  return CN_TURRETS;
+}
+// Строка орудия → объект формата каталога (те же поля, что читает cnVehCalc).
+function cnTurretToWeapon(t) {
+  const st = t.stats || {};
+  const cal = st.caliber || 0;
+  return {
+    name: '⚙ ' + (t.name || 'Орудие'),
+    cost: Math.round(st.gs || 0),
+    price: st.price || 0,
+    dmg: Math.round(st.damage || 0),
+    energy: Math.round(st.energy || 0),
+    power: Math.round(st.energy || 0),
+    kind: st.kind || 'kinetic',
+    dalnost: st.dalnost || 0,          // сервер читает плоское поле
+    weight: st.mass || 0,
+    crewRequired: 0,
+    category: CN_TURRET_GROUP,
+    tech: st.kvTech || '', damageType: st.kvDmg || '', class: st.kvClass || '',
+    customParameter: { kal: String(cal), dalnost: st.dalnost || 0,
+                       skorostrelnost: st.rof || 0, metrika: '0' },   // клиент читает отсюда
+    resurs: st.resurs || { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+    _turret: true, _turretId: t.id, _turretCfg: t.cfg || null,
+  };
+}
+
+// ── Арт своего орудия: тот же генератор, что и на верфи ──────
+// Никаких файлов-картинок у своих орудий нет и быть не может: облик задан
+// конфигом сборки. Поэтому и в узле схемы, и в карточках выбора рисуем
+// turret_gen.js вживую. Кадр — tight: иконка маленькая, важен силуэт.
+// Идентификаторы в defs у генератора фиксированные (m_plate, glow, …), а на
+// странице таких SVG может быть десяток: без уникализации все турели брали бы
+// градиенты ПЕРВОЙ и красились её акцентом. Отсюда суффикс на id и url(#…).
+let CN_TART_N = 0;
+function cnTurretArtSvg(cfg) {
+  if (!cfg || !window.TG || !TG.render) return null;
+  let s;
+  try { s = TG.render(cfg, { tight: 1 }); } catch (e) { return null; }
+  const u = '_ta' + (++CN_TART_N);
+  return s.replace(/id="([\w-]+)"/g, (m, a) => `id="${a}${u}"`)
+          .replace(/url\(#([\w-]+)\)/g, (m, a) => `url(#${a}${u})`);
+}
+// Тот же арт, но кусками — для встраивания в схему корабля (нужен viewBox).
+function cnTurretArtParts(cfg) {
+  const s = cnTurretArtSvg(cfg); if (!s) return null;
+  const vb = (s.match(/viewBox="([^"]+)"/) || [])[1];
+  const inner = s.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+  if (!vb || !inner) return null;
+  const n = vb.trim().split(/\s+/).map(Number);
+  return { inner, half: Math.max(n[2], n[3]) / 2 };
+}
+// Готовый бокс-«картинка» для карточек выбора (замена cnImgTag у своих орудий).
+function cnTurretImgTag(cfg, cls) {
+  const s = cnTurretArtSvg(cfg); if (!s) return null;
+  return `<span class="cn-imgbox cn-imgbox-tg ${cls || ''}">`
+    + s.replace(/ width="\d+" height="\d+"/, ' width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block"')
+    + `</span>`;
+}
+// Дописать свои орудия в db.weapons, предварительно убрав вписанные ранее.
+// Порядок — по id (стабильный), чтобы индексы не «плавали» между заходами.
+function cnMergeTurrets(db) {
+  if (!db || !db.weapons) return;
+  const list = (CN_TURRETS || []).slice().sort((a, b) => String(a.id) < String(b.id) ? -1 : 1);
+  db.weapons[CN_TURRET_GROUP] = list.map(cnTurretToWeapon);
+  // карта доступности: орудие видно только тем классам, которые его тянут
+  const av = db.weaponsAvail;
+  if (!av) return;
+  for (const k in av) {
+    if (!av[k]) continue;
+    [...av[k]].forEach(key => { if (key.indexOf(CN_TURRET_GROUP + '|') === 0) av[k].delete(key); });
+    list.forEach((t, i) => { if ((t.carriers || []).includes(k)) av[k].add(CN_TURRET_GROUP + '|' + i); });
+  }
+}
+// Свои орудия исследовать не нужно — их уже «исследовала» сама верфь.
+function cnIsTurretGroup(g) { return g === CN_TURRET_GROUP; }
+// Дизайн несёт стабильный turretId рядом с {g,idx}: индекс мог сместиться,
+// id — нет, и сервер верит только ему (зеркало armorAlloyId).
+function cnWpnTagTurret(def, w) {
+  if (!w) return w;
+  const o = (def.db.weapons[w.g] || [])[w.idx];
+  if (o && o._turretId) w.turretId = o._turretId; else delete w.turretId;
+  return w;
+}
+// Обратный ход при загрузке проекта: по id находим текущий индекс.
+function cnWpnUntagTurret(def, w) {
+  if (!w || !w.turretId) return w;
+  const arr = def.db.weapons[CN_TURRET_GROUP] || [];
+  const i = arr.findIndex(o => String(o._turretId) === String(w.turretId));
+  if (i < 0) return null;   // орудие снято с производства — ссылка битая
+  return Object.assign({}, w, { g: CN_TURRET_GROUP, idx: i });
 }
 
 function cnDesc(cat, kind, key, idx) {
@@ -1957,7 +2069,7 @@ function cnUnitReqTech(unit) {
   const baseCls = (CN_BASE.classes[cat] || []), baseWpn = (CN_BASE.weapons[cat] || []);
   if (d.class && !baseCls.includes(d.class)) keys.add('cls.' + cat + '.' + d.class);
   if (d.class && d.type != null && +d.type >= 1) keys.add('type.' + cat + '.' + d.class);
-  (d.weapons || []).forEach(w => { if (w && w.g && !baseWpn.includes(w.g)) keys.add('wpn.' + cat + '.' + w.g); });
+  (d.weapons || []).forEach(w => { if (w && w.g && !baseWpn.includes(w.g) && !cnIsTurretGroup(w.g)) keys.add('wpn.' + cat + '.' + w.g); });
   (d.modules || []).forEach(m => { if (m && m.g) keys.add('mod.' + cat + '.' + m.g); });
   if (Array.isArray(d.hangars) && d.hangars.length) {
     keys.add('hangar.ship');
@@ -1973,6 +2085,7 @@ function cnClassUnlocked(cat, k) {
   return (CN_BASE.classes[cat] || []).includes(k) || cnUnlocked('cls.' + cat + '.' + k);
 }
 function cnWpnUnlocked(cat, g) {
+  if (cnIsTurretGroup(g)) return true;   // своё орудие уже «исследовано» верфью
   if (cat === 'army') return cnWpnUnlocked('ground', g) || cnWpnUnlocked('aviation', g);
   return (CN_BASE.weapons[cat] || []).includes(g) || cnUnlocked('wpn.' + cat + '.' + g);
 }
@@ -2006,8 +2119,10 @@ async function cnVehRender(cat) {
   await cnLoadResearch();
   await cnLoadPartOverrides();   // админ-имена/описания орудий и модулей
   await cnLoadAlloys();          // кастомные сплавы фракции в слот брони
+  await cnLoadTurrets();         // свои орудия из оружейной верфи в слот вооружения
   const def = CN_DEFS[cat];
   cnMergeAlloys(def.db);         // дописать сплавы в db.armors[k] всех классов
+  cnMergeTurrets(def.db);        // дописать свои орудия в db.weapons + карту доступности
   CN.cat = cat; CN.def = def; CN.last = null; CN.editUnit = edit || null;
   CN.shipLayout = { mounts: [], bays: [] }; CN.schemShow = { weapons: true, bays: true };
 
@@ -2742,15 +2857,15 @@ function cnVehCollectData() {
   if (def.db.radars && cnId('cn-radar')) d.radar = +cnId('cn-radar').value;
   if (def.cardUI) {
     const L = CN.shipLayout || { mounts: [], bays: [] };
-    d.weapons = L.mounts.filter(m => m.w).map(m => ({ g: m.w.g, idx: m.w.idx, q: 1, battery: m.battery || null }));
+    d.weapons = L.mounts.filter(m => m.w).map(m => cnWpnTagTurret(def, { g: m.w.g, idx: m.w.idx, q: 1, battery: m.battery || null }));
     d.modules = L.bays.filter(b => b.m).map(b => ({ g: b.m.g, idx: b.m.idx }));
     // pos сохраняем ФАКТИЧЕСКИЙ (авто-раскладка, если узел не таскали) — иначе сервер
     // видит pos=null и относит все орудия к носу; борта в бою пропадают.
     const autoP = CN.shipGeo ? cnMountPositions(CN.shipGeo, Math.max(16, L.mounts.length)) : [];
     const effPos = (m, i) => m.pos ? { x: m.pos.x, y: m.pos.y } : (autoP[i] ? { x: autoP[i][0], y: autoP[i][1] } : null);
-    d.layout = { mounts: L.mounts.map((m, i) => ({ w: m.w ? { g: m.w.g, idx: m.w.idx } : null, pos: effPos(m, i), battery: m.battery || null })), bays: L.bays.map(b => b.m ? { g: b.m.g, idx: b.m.idx } : null) };
+    d.layout = { mounts: L.mounts.map((m, i) => ({ w: m.w ? cnWpnTagTurret(def, { g: m.w.g, idx: m.w.idx }) : null, pos: effPos(m, i), battery: m.battery || null })), bays: L.bays.map(b => b.m ? { g: b.m.g, idx: b.m.idx } : null) };
   } else {
-    d.weapons = [...document.querySelectorAll('#cn-weapons .cn-row')].map(r => { const s = JSON.parse(r.querySelector('select').value); return { g: s.g, idx: s.idx, q: +(r.querySelector('input')?.value || 1) }; });
+    d.weapons = [...document.querySelectorAll('#cn-weapons .cn-row')].map(r => { const s = JSON.parse(r.querySelector('select').value); return cnWpnTagTurret(def, { g: s.g, idx: s.idx, q: +(r.querySelector('input')?.value || 1) }); });
     d.modules = [...document.querySelectorAll('#cn-modules .cn-row')].map(r => { const s = JSON.parse(r.querySelector('select').value); return { g: s.g, idx: s.idx }; });
   }
   if (def.hasHangars) d.hangars = [...document.querySelectorAll('#cn-hangars .cn-hangar')].map(h => ({ id: +h.querySelector('.cn-h-type').value, units: [...h.querySelectorAll('.cn-u-type')].map(u => +u.value) }));
@@ -2761,6 +2876,18 @@ function cnVehCollectData() {
 }
 function cnVehApplyData(d) {
   const def = CN.def, shipCard = def.cardUI;
+  // Свои орудия лежат в проекте со стабильным turretId: индекс в db.weapons мог
+  // сместиться (добавили/сняли орудие в верфи), id — нет. Переразрешаем ссылки
+  // ДО санации ниже, иначе живое орудие сочтут битой ссылкой и снимут.
+  // Зеркало armorAlloyId, только для слота вооружения.
+  d = Object.assign({}, d);
+  if (Array.isArray(d.weapons)) d.weapons = d.weapons.map(w => cnWpnUntagTurret(def, w)).filter(Boolean);
+  if (d.layout && Array.isArray(d.layout.mounts)) {
+    d.layout = Object.assign({}, d.layout, { mounts: d.layout.mounts.map(x => {
+      if (!x || !x.w || !x.w.turretId) return x;
+      return Object.assign({}, x, { w: cnWpnUntagTurret(def, x.w) });
+    }) });
+  }
   if (cnId('cn-weapons')) cnId('cn-weapons').innerHTML = '';
   if (cnId('cn-modules')) cnId('cn-modules').innerHTML = '';
   if (def.hasHangars && cnId('cn-hangars')) cnId('cn-hangars').innerHTML = '';

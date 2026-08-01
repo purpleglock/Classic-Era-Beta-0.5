@@ -184,6 +184,7 @@ async function go(slug, push=true) {
     'build-ground': 'cnRenderGround', // алиас единого армейского форжа
     'build-aviation': 'cnRenderAviation', 'build-division': 'cnRenderDivision',
     'build-alloy': 'cnRenderAlloyForge', // ⚗ материаловедение (алхимия брони)
+    'build-turret': 'cnRenderTurretForge', // ⚙ оружейная верфь (генератор орудий)
   };
   if (CN_ROUTES[slug]) {
     const fn = window[CN_ROUTES[slug]];

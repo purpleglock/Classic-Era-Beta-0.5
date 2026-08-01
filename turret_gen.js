@@ -32,15 +32,15 @@ const TECHS = {
   // относительно ЭХС того же класса). Лазер на кораблях даёт ровно ×2
   // дальности — это прямо видно в каталоге (3 АсК у ЭХС против 6 у лазера).
   kinetic: { pw:0.7, dl:0.85, ru:'Кинетическое',      glow:'#ffb066', kind:'gun',      kvTech:'кинетическое',         kvDmg:'кинетический' },
-  ehs:     { pw:1.0, dl:1.00, ru:'Электрохимическое', glow:'#8fd8ff', kind:'gun',      kvTech:'электрохимическое',    kvDmg:'электрохимическая система' },
+  ehs:     { pw:1.0, dl:1.00, ru:'Электрохимическое', glow:'#ffc98a', kind:'ehs',      kvTech:'электрохимическое',    kvDmg:'электрохимическая система' },
   rail:    { pw:2.4, dl:1.10, ru:'Рельсотрон',        glow:'#7fe0ff', kind:'rail',     kvTech:'рельсотрон',           kvDmg:'рельсотрон' },
-  em:      { pw:2.6, dl:1.50, ru:'Электромагнитное',  glow:'#a9b6ff', kind:'rail',     kvTech:'электромагнитное',     kvDmg:'электрохимическая система' },
+  em:      { pw:2.6, dl:1.50, ru:'Электромагнитное',  glow:'#a9b6ff', kind:'coil',     kvTech:'электромагнитное',     kvDmg:'электрохимическая система' },
   laser:   { pw:2.0, dl:2.00, ru:'Лазер',             glow:'#66e8ff', kind:'beam',     kvTech:'лазер',                kvDmg:'импульсный лазер' },
   plasma:  { pw:1.6, dl:0.40, ru:'Плазма',            glow:'#ff7be0', kind:'plasma',   kvTech:'плазма',               kvDmg:'термический' },
   missile: { pw:0.5, dl:1.80, ru:'Ракетное / ПУ',     glow:'#ff8a5c', kind:'launcher', kvTech:'управляемое наведение',kvDmg:'взрывной' },
   // ── остальные технологии каталога ──────────────────────────
   explos:  { pw:0.4, dl:1.60, ru:'Взрывчатое (реактивное)', glow:'#ff9a4d', kind:'launcher', kvTech:'взрывчатое',      kvDmg:'взрывной' },
-  nano:    { pw:1.5, dl:1.20, ru:'Нанотехнологии',     glow:'#c9a8ff', kind:'beam',   kvTech:'нанотехнологии',       kvDmg:'кинетический' },
+  nano:    { pw:1.5, dl:1.20, ru:'Нанотехнологии',     glow:'#9dffc7', kind:'nano',   kvTech:'нанотехнологии',       kvDmg:'кинетический' },
   ew:      { pw:1.2, dl:2.40, ru:'Электронное подавл.',glow:'#66d0ff', kind:'array',  kvTech:'электронное подавление',kvDmg:'разведка' },
   grav:    { pw:2.8, dl:1.60, ru:'Гравитационное',     glow:'#b98bff', kind:'exotic', kvTech:'гравитационное',       kvDmg:'гравитационный' },
   anti:    { pw:3.4, dl:1.50, ru:'Антиматериальное',   glow:'#ff5ea8', kind:'exotic', kvTech:'антиматериальное',     kvDmg:'антимат' },
@@ -64,12 +64,12 @@ const CLASSES = {
   // ── остальные классы-установки каталога ────────────────────
   mg:      { ru:'Пулемёт (станок)',    s:0.55, fam:'apc',   kvClass:'пулемет' },
   hw:      { ru:'Тяжёлое вооружение',  s:0.65, fam:'apc',   kvClass:'тяжелое вооружение' },
-  gl:      { ru:'Гранатомёт',          s:0.60, fam:'apc',   kvClass:'гранатомет' },
   howitz:  { ru:'Гаубица',             s:1.60, fam:'arty',  kvClass:'гаубица' },
-  rsu:     { ru:'РСУ (реактивная)',    s:1.50, fam:'arty',  kvClass:'рсу' },
-  rpu:     { ru:'РПУ (пусковая)',      s:1.20, fam:'arty',  kvClass:'рпу' },
-  rocket:  { ru:'Ракета',              s:1.30, fam:'arty',  kvClass:'ракета' },
-  brm:     { ru:'Баллистическая ракета',s:1.90,fam:'arty',  kvClass:'баллистическая ракета' },
+  // Пусковые — своё семейство силуэта: рама-качалка с пакетом, а не
+  // артиллерийский станок с противооткатниками.
+  rsu:     { ru:'РСУ (реактивная)',    s:1.50, fam:'mlrs',  kvClass:'рсу' },
+  rpu:     { ru:'РПУ (пусковая)',      s:1.20, fam:'pu',    kvClass:'рпу' },
+  brm:     { ru:'Баллистическая ракета',s:1.90,fam:'silo',  kvClass:'баллистическая ракета' },
 };
 // minBarrels — компоновка физически бессмысленна ниже этого числа стволов.
 // Спарки из одного ствола не бывает, блока 2×N — тоже.
@@ -82,7 +82,6 @@ const CLASSES = {
 const CLASS_RULES = {
   // мелкие установки
   mg:      { cal:[5,20],    len:[20,70],  techs:['kinetic','ehs'] },
-  gl:      { cal:[20,60],   len:[15,40],  techs:['explos','ehs','kinetic'] },
   hw:      { cal:[20,60],   len:[20,60],  techs:['kinetic','ehs','rail','laser','plasma'] },
   drone:   { cal:[5,30],    len:[20,60],  techs:['kinetic','ehs','rail','laser','plasma'] },
   air:     { cal:[12,75],   len:[30,80],  techs:['kinetic','ehs','rail','laser','plasma','missile'] },
@@ -95,7 +94,6 @@ const CLASS_RULES = {
   // реактивные и ракетные — только пусковые технологии
   rpu:     { cal:[60,300],  len:[15,40],  techs:['missile','explos'] },
   rsu:     { cal:[60,250],  len:[15,35],  techs:['missile','explos'] },
-  rocket:  { cal:[80,400],  len:[15,40],  techs:['missile','explos'] },
   brm:     { cal:[250,500], len:[10,30],  techs:['missile','explos','anti'] },
   // корабельные
   light:   { cal:[40,140],  len:[30,90],  techs:['kinetic','ehs','rail','laser','plasma','ew','missile'] },
@@ -115,6 +113,11 @@ function normalize(input){
   cfg.caliber   = Math.max(R.cal[0], Math.min(R.cal[1], +cfg.caliber||R.cal[0]));
   cfg.barrelLen = Math.max(R.len[0], Math.min(R.len[1], +cfg.barrelLen||R.len[0]));
   cfg.barrels   = Math.max(1, Math.min(8, cfg.barrels|0));
+  // Масштаб — свободный множитель массы (степень 1.4), а масса тянет за собой
+  // урон. Зажимаем теми же границами, что и ползунок верстака, — иначе через
+  // прямой вызов stats() можно было бы «раздуть» орудие мимо всех потолков.
+  // ЗЕРКАЛО: _tg_norm в _turret_forge.sql.
+  cfg.size      = Math.max(0.4, Math.min(3, +cfg.size||1));
   return cfg;
 }
 
@@ -384,6 +387,27 @@ const PLAT = {
 };
 function drawPlatform(cfg,G){ return (PLAT[String(cfg.platform)]||PLAT['1'])(cfg,G); }
 
+// ЕДИНОЕ ДУЛЬНОЕ СВЕЧЕНИЕ. Раньше каждый рисовальщик лепил свой эллипс
+// url(#glow) со смещённым вперёд центром: пятно наполовину лежало НА дульном
+// тормозе (замыливая деталь), у разных технологий было разного размера и
+// формы, а на нескольких стволах пятна складывались в неровную кляксу.
+// Теперь один помощник и одна форма для всех:
+//   1) конус света строго вперёд по оси огня — гаснет к концу (#flare);
+//   2) симметричный ореол РОВНО в точке среза — не «съезжает» со ствола;
+//   3) точка накала в самом канале.
+// x,y — срез ствола; reach — вылет света вперёд; ry — полуширина у среза.
+function muzzleFlare(cfg,G,x,y,reach,ry,op){
+  const o = op==null ? 1 : op;
+  // Никаких конусов: конус света = фонарик, а не раскалённый срез. Только
+  // мягкий ореол, чуть вытянутый вперёд по оси, и точка накала в канале.
+  const cx = x + reach*0.22, rx = Math.max(ry*1.8, reach*0.55);
+  return `<g class="tg-flare" opacity="${n2(o)}" style="pointer-events:none">`
+    + `<ellipse cx="${n2(cx)}" cy="${n2(y)}" rx="${n2(rx)}" ry="${n2(ry*1.45)}" fill="url(#glow)" opacity="0.55"/>`
+    + `<ellipse cx="${n2(x)}" cy="${n2(y)}" rx="${n2(ry*0.95)}" ry="${n2(ry*0.95)}" fill="url(#glow)" opacity="0.6"/>`
+    + `<ellipse cx="${n2(x)}" cy="${n2(y)}" rx="${n2(ry*0.40)}" ry="${n2(ry*0.58)}" fill="url(#core)"/>`
+    + `</g>`;
+}
+
 // ── §6. ВООРУЖЕНИЕ — свой рисовальщик на технологию ──────────
 // gun (кинетика/ЭХС): ступенчатая труба, бандажи, эжектор, дульный тормоз
 function armGun(cfg,y,G,dense){
@@ -407,10 +431,187 @@ function armGun(cfg,y,G,dense){
     s+=plate(rect(px,y-mw*0.42,bw*0.20,mw*0.28),'barrel',{dark:true,sw:1});
     s+=plate(rect(px,y+mw*0.14,bw*0.20,mw*0.28),'barrel',{dark:true,sw:1});}
   s+=`<ellipse cx="${n2(x1+bw*0.05)}" cy="${n2(y)}" rx="${n2(bw*0.14)}" ry="${n2(bw*0.30)}" fill="${INK}"/>`;
-  s+=`<ellipse cx="${n2(x1+bw*0.35)}" cy="${n2(y)}" rx="${n2(bw*2.1)}" ry="${n2(bw*1.15)}" fill="url(#glow)"/>`;
+  s+=muzzleFlare(cfg,G,x1+bw*0.10,y,bw*3.6,bw*0.62);
   return s;
 }
-// rail (рельсотрон/ЭМ): ДВЕ раздельные направляющие с открытым зазором,
+// ПУЛЕМЁТ: башня у него общая с турелью БТР — отличается САМ СТВОЛ, и
+// отличается однозначно: перфорированный кожух охлаждения, лента из короба
+// в приёмник, щелевой пламегаситель вместо дульного тормоза. Ствол тонкий и
+// длинный, без бандажей и эжектора — ничего «пушечного».
+function armMG(cfg,y,G){
+  const bw=G.bw, len=G.len, x0=G.mantletX, x1=x0+len, hz=bw*0.26;
+  const R=bw*0.52;                     // полувысота кожуха
+  let s='';
+  // Ствольная коробка + приёмник ленты
+  s+=solid(chamfer(rect(x0-bw*2.2,y-bw*0.86,bw*2.6,bw*1.72),bw*0.24),'greeble',hz*1.2,{sw:1.7});
+  s+=solid(chamfer(rect(x0-bw*1.9,y+bw*0.70,bw*1.7,bw*1.30),bw*0.20),'plate',hz*0.9,{dark:true});
+  for(let i=0;i<4;i++) s+=line([[x0-bw*1.75+i*bw*0.42,y+bw*0.80],[x0-bw*1.75+i*bw*0.42,y+bw*1.90]],1.1,0.5);
+  // Лента из короба в приёмник
+  s+=`<path d="M ${n2(x0-bw*1.05)} ${n2(y+bw*1.30)} C ${n2(x0-bw*0.75)} ${n2(y+bw*1.05)}, ${n2(x0-bw*0.70)} ${n2(y+bw*0.65)}, ${n2(x0-bw*0.90)} ${n2(y+bw*0.30)}"`
+    +` fill="none" stroke="${INK}" stroke-width="${n2(bw*0.30)}" stroke-linecap="round" opacity="0.9"/>`;
+  // Кожух охлаждения — ровная труба с рядом отверстий
+  const jl=len*0.62;
+  s+=solid(chamfer(rect(x0,y-R*1.30,jl,R*2.60),R*0.34),'barrel',hz,{sw:1.8});
+  const holes=Math.max(4,Math.round(jl/(bw*0.75)));
+  for(let i=0;i<holes;i++)
+    s+=`<circle cx="${n2(x0+jl*((i+0.6)/holes))}" cy="${n2(y)}" r="${n2(R*0.36)}" fill="${INK}" opacity="0.6"/>`;
+  s+=`<path d="${poly([[x0+bw*0.2,y-R*0.95],[x0+jl-bw*0.2,y-R*0.90],[x0+jl-bw*0.2,y-R*0.45],[x0+bw*0.2,y-R*0.50]])}" fill="url(#spec)"/>`;
+  // Тонкий ствол из кожуха
+  s+=solid(rect(x0+jl,y-R*0.62,len-jl,R*1.24),'barrel',hz*0.8,{sw:1.6});
+  // Щелевой пламегаситель
+  s+=solid(chamfer(rect(x1-bw*0.95,y-R*1.05,bw*1.05,R*2.10),R*0.20),'greeble',hz*0.9,{sw:1.5});
+  for(let i=0;i<2;i++) s+=line([[x1-bw*0.75+i*bw*0.40,y-R*0.85],[x1-bw*0.75+i*bw*0.40,y+R*0.85]],1.2,0.65);
+  s+=`<ellipse cx="${n2(x1+bw*0.03)}" cy="${n2(y)}" rx="${n2(bw*0.10)}" ry="${n2(R*0.46)}" fill="${INK}"/>`;
+  s+=muzzleFlare(cfg,G,x1+bw*0.06,y,bw*2.2,R*0.72,0.9);
+  return s;
+}
+// Свободная полувысота под навесное: столько можно отъесть в сторону, не
+// залезая на соседний ствол в банке. Один помощник на всех — раньше каждый
+// рисовальщик лепил свои константы и в плотном ряду детали наезжали.
+function halfRoom(G,want){ return Math.min(want, (G.pitch||Infinity)*0.42); }
+
+// ehs (электротермохимическое): это ПУШКА, а не рельса — единый ствол.
+// Отличие от кинетики: плазменный воспламенитель. Отсюда батарея банок-
+// конденсаторов на казённике, жгут-подвод в камору и теплоотводная рубашка
+// на первой трети ствола. Никаких раздельных направляющих и зазора.
+function armEHS(cfg,y,G){
+  const bw=G.bw, len=G.len, x0=G.mantletX, x1=x0+len, hz=bw*0.30;
+  const H=halfRoom(G,bw*0.80);          // полувысота ствола у казны
+  let s='';
+  // Казённик с блоком запального разряда
+  s+=solid(chamfer(rect(x0-bw*2.2,y-H*1.30,bw*2.7,H*2.60),bw*0.32),'greeble',hz*1.3,{sw:1.6});
+  // Банки-конденсаторы: ставим только на свободную сторону
+  const sides=[]; if(G.finUp!==false) sides.push(-1); if(G.finDn!==false) sides.push(1);
+  for(const sg of sides){
+    const yc=y+sg*(H*1.30+halfRoom(G,bw*0.52));
+    for(let i=0;i<3;i++) s+=tube(x0-bw*1.7+i*bw*0.85, yc, halfRoom(G,bw*0.44),'greeble');
+  }
+  // Жгут запала: от казённика вдоль ствола в камору
+  const p=`M ${n2(x0-bw*1.9)} ${n2(y-H*0.95)} C ${n2(x0-bw*0.4)} ${n2(y-H*1.15)}, `
+        + `${n2(x0+len*0.10)} ${n2(y-H*0.95)}, ${n2(x0+len*0.16)} ${n2(y-H*0.55)}`;
+  s+=`<path d="${p}" fill="none" stroke="${INK}" stroke-width="${n2(bw*0.22)}" stroke-linecap="round" opacity="0.9"/>`
+    +`<path d="${p}" fill="none" stroke="${cfg.accent}" stroke-width="${n2(bw*0.09)}" opacity="0.6"/>`;
+  // Ствол: плавное сужение, без ступеней-бандажей кинетики
+  const pr=[[0,1.00],[0.16,0.86],[0.46,0.70],[0.78,0.60],[1,0.56]];
+  const up=pr.map(([t,w])=>[x0+len*t,y-H*w]), dn=pr.map(([t,w])=>[x0+len*t,y+H*w]).reverse();
+  s+=solid(up.concat(dn),'barrel',hz,{sw:2.0});
+  // Теплоотводная рубашка — кольцевые рёбра на разгонном участке
+  const jl=len*0.34, fins=Math.max(4,Math.round(jl/(bw*0.55)));
+  for(let i=0;i<fins;i++){ const x=x0+bw*0.35+i*(jl/fins);
+    s+=plate(rect(x,y-H*1.02,bw*0.14,H*2.04),'greeble',{sw:1,dark:true}); }
+  s+=`<path d="${poly([[x0+bw*0.3,y-H*0.70],[x1-bw*0.3,y-H*0.44],[x1-bw*0.3,y-H*0.16],[x0+bw*0.3,y-H*0.30]])}" fill="url(#spec)"/>`;
+  // Камора — светящееся окно сразу за рубашкой
+  s+=`<rect x="${n2(x0+jl+bw*0.2)}" y="${n2(y-H*0.16)}" width="${n2(len*0.20)}" height="${n2(H*0.32)}"`
+    +` fill="${INK}" opacity="0.85"/>`;
+  s+=`<rect x="${n2(x0+jl+bw*0.3)}" y="${n2(y-H*0.09)}" width="${n2(len*0.17)}" height="${n2(H*0.18)}"`
+    +` fill="${(TECHS[cfg.tech]||TECHS.ehs).glow}" opacity="0.55"/>`;
+  // Дульный компенсатор. Раньше здесь была голая трапеция-«воронка» — читалась
+  // как детский рисунок раструба. Теперь это агрегат: цилиндрический блок,
+  // два ряда наклонённых назад окон выброса, опорное кольцо на входе и
+  // усиленный венец у самого среза.
+  const mb=bw*1.55, MH=halfRoom(G,H*0.92), mx=x1-mb;
+  s+=solid(chamfer(rect(mx,y-MH,mb,MH*2),bw*0.18),'greeble',hz*1.05,{sw:1.6});
+  for(let i=0;i<2;i++){
+    const px=mx+bw*0.34+i*bw*0.58;
+    for(const sg of [-1,1])
+      s+=`<path d="${poly([[px,y+sg*MH*0.40],[px+bw*0.30,y+sg*MH*0.40],
+                           [px+bw*0.14,y+sg*MH*1.00],[px-bw*0.16,y+sg*MH*1.00]])}"`
+        +` fill="${INK}" opacity="0.88"/>`;
+  }
+  s+=plate(rect(mx-bw*0.05,y-MH*1.12,bw*0.20,MH*2.24),'barrel',{sw:1.2,dark:true});
+  s+=solid(chamfer(rect(x1-bw*0.36,y-MH*1.10,bw*0.36,MH*2.20),bw*0.09),'plate',hz*0.85,{sw:1.5});
+  s+=`<path d="${poly([[mx+bw*0.1,y-MH*0.74],[x1-bw*0.5,y-MH*0.74],[x1-bw*0.5,y-MH*0.42],[mx+bw*0.1,y-MH*0.42]])}" fill="url(#spec)"/>`;
+  s+=`<ellipse cx="${n2(x1)}" cy="${n2(y)}" rx="${n2(bw*0.13)}" ry="${n2(H*0.52)}" fill="${INK}"/>`;
+  s+=muzzleFlare(cfg,G,x1+bw*0.06,y,bw*3.2,H*0.60);
+  return s;
+}
+// coil (электромагнитное): КАТУШЕЧНИК. Одна труба, на неё нанизана стопка
+// тороидальных катушек, между ними — шины питания. Родственно рельсе по
+// физике, но силуэт другой: не два прута с щелью, а «ёлка» из колец.
+function armCoil(cfg,y,G){
+  const bw=G.bw, len=G.len, x0=G.mantletX, x1=x0+len, hz=bw*0.30;
+  const H=halfRoom(G,bw*0.46);          // полувысота самой трубы
+  const CH=halfRoom(G,bw*1.05);         // радиус катушки
+  let s='';
+  s+=solid(chamfer(rect(x0-bw*2.3,y-CH*1.05,bw*2.7,CH*2.10),bw*0.34),'plate',hz*1.4); // инжектор
+  // Труба-направляющая
+  s+=solid(rect(x0,y-H,len,H*2),'barrel',hz,{sw:1.8});
+  s+=`<rect x="${n2(x0+bw*0.2)}" y="${n2(y-H*0.34)}" width="${n2(len-bw*0.6)}" height="${n2(H*0.68)}" fill="${INK}" opacity="0.85"/>`;
+  s+=`<rect x="${n2(x0+len*0.18)}" y="${n2(y-H*0.20)}" width="${n2(len*0.78)}" height="${n2(H*0.40)}"`
+    +` fill="${(TECHS[cfg.tech]||TECHS.em).glow}" opacity="0.6"/>`;
+  // Стопка катушек: к дулу они мельчают — видно, что снаряд разгоняется
+  const N=Math.max(4,Math.round(len/(bw*1.25)));
+  for(let i=0;i<N;i++){
+    const t=i/N, x=x0+bw*0.3+t*len*0.92, k=1-t*0.30, w=bw*0.42;
+    s+=solid(chamfer(rect(x,y-CH*k,w,CH*2*k),bw*0.14),'greeble',hz*0.7,{noShadow:1,sw:1.4});
+    s+=line([[x+w*0.5,y-CH*k*0.55],[x+w*0.5,y+CH*k*0.55]],1.1,0.4);
+  }
+  // Шины питания вдоль обеих сторон стопки
+  for(const sg of [-1,1]){
+    const yc=y+sg*CH*1.12;
+    s+=`<path d="M ${n2(x0-bw*0.4)} ${n2(yc)} L ${n2(x1-bw*0.6)} ${n2(yc*0.72+y*0.28)}" fill="none"`
+      +` stroke="${INK}" stroke-width="${n2(bw*0.18)}" stroke-linecap="round" opacity="0.9"/>`
+      +`<path d="M ${n2(x0-bw*0.4)} ${n2(yc)} L ${n2(x1-bw*0.6)} ${n2(yc*0.72+y*0.28)}" fill="none"`
+      +` stroke="${cfg.accent}" stroke-width="${n2(bw*0.07)}" opacity="0.55"/>`;
+  }
+  s+=`<ellipse cx="${n2(x1)}" cy="${n2(y)}" rx="${n2(bw*0.12)}" ry="${n2(H*0.72)}" fill="${INK}"/>`;
+  s+=muzzleFlare(cfg,G,x1+bw*0.06,y,bw*4.0,H*1.10);
+  return s;
+}
+// nano (нанотехнологии): не ствол и не эмиттер. Это РОЙ. Улей-картридж с
+// сотовыми ячейками, к нему магистрали питательной среды, впереди — веер
+// раскрытых распылителей, из которых сходит облако точек-ботов. Никакой
+// оптики, никаких радиаторов: нанороботам не нужен ни луч, ни канал.
+function armNano(cfg,y,G){
+  const bw=G.bw, len=G.len, x0=G.mantletX, x1=x0+len, hz=bw*0.36;
+  const H=halfRoom(G,bw*0.95);
+  const glow=(TECHS[cfg.tech]||TECHS.nano).glow;
+  const rnd=rng((cfg.seed|0)+((y*7)|0)+11);
+  let s='';
+  // Улей-картридж: шестигранные ячейки в раме
+  s+=solid(chamfer(rect(x0-bw*2.6,y-H*1.25,bw*3.0,H*2.50),bw*0.30),'greeble',hz*1.3,{sw:1.7});
+  const cols=3, rows=3, cw=bw*0.78, chh=H*0.62;
+  for(let c=0;c<cols;c++) for(let r=0;r<rows;r++){
+    const cx=x0-bw*2.25+c*cw*0.92, cy=y-H*0.72+r*chh + (c%2?chh*0.32:0);
+    const hex=[]; for(let i=0;i<6;i++){const a=i/6*Math.PI*2+Math.PI/6;
+      hex.push([cx+Math.cos(a)*cw*0.34, cy+Math.sin(a)*chh*0.42]);}
+    s+=`<path d="${poly(hex)}" fill="url(#d_greeble)" stroke="${INK}" stroke-width="${n2(1*SWK)}" data-slot="greeble"/>`;
+    if(rnd()>0.45) s+=`<path d="${poly(inset(hex,cw*0.10))}" fill="${glow}" opacity="${n2(0.25+rnd()*0.45)}"/>`;
+  }
+  // Магистрали среды к распылителям
+  for(const sg of [-1,1]){
+    const p=`M ${n2(x0-bw*0.9)} ${n2(y+sg*H*0.95)} C ${n2(x0+len*0.30)} ${n2(y+sg*H*1.20)}, `
+          + `${n2(x0+len*0.60)} ${n2(y+sg*H*0.85)}, ${n2(x1-bw*0.8)} ${n2(y+sg*H*0.62)}`;
+    s+=`<path d="${p}" fill="none" stroke="${INK}" stroke-width="${n2(bw*0.20)}" stroke-linecap="round" opacity="0.9"/>`
+      +`<path d="${p}" fill="none" stroke="${glow}" stroke-width="${n2(bw*0.08)}" opacity="0.6"/>`;
+  }
+  // Ферма-«хребет» вместо ствола: узкая балка с сегментами
+  s+=solid(chamfer(rect(x0,y-H*0.34,len*0.82,H*0.68),bw*0.16),'barrel',hz*0.9,{sw:1.8});
+  const segs=Math.max(4,Math.round(len/(bw*1.6)));
+  for(let i=1;i<segs;i++){ const x=x0+len*0.82*(i/segs);
+    s+=line([[x,y-H*0.30],[x,y+H*0.30]],1.1,0.45); }
+  // Веер распылителей на срезе: три раскрытых лепестка
+  for(const k of [-1,0,1]){
+    const yy=y+k*H*0.72, xx=x1-len*0.16;
+    s+=solid([[xx,yy-H*0.20],[x1+bw*0.2,yy-H*0.42*(1+Math.abs(k)*0.4)],
+              [x1+bw*0.2,yy+H*0.42*(1+Math.abs(k)*0.4)],[xx,yy+H*0.20]],'greeble',hz*0.6,
+             {noShadow:1,sw:1.4,dark:true});
+    s+=`<ellipse cx="${n2(x1+bw*0.18)}" cy="${n2(yy)}" rx="${n2(bw*0.12)}" ry="${n2(H*0.34)}" fill="${INK}"/>`;
+  }
+  // Облако ботов: россыпь точек, гуще у среза
+  const dots=Math.round(26+(+cfg.detail||0)*30);
+  let cloud='';
+  for(let i=0;i<dots;i++){
+    const t=rnd(), dx=t*bw*4.2, dy=(rnd()-0.5)*H*2.0*(0.45+t*1.35);
+    cloud+=`<circle cx="${n2(x1+bw*0.3+dx)}" cy="${n2(y+dy)}" r="${n2(bw*(0.05+rnd()*0.07))}"`
+        +` fill="${glow}" opacity="${n2(0.85*(1-t*0.8))}"/>`;
+  }
+  s+=`<g class="tg-flare" style="pointer-events:none">`
+    +`<ellipse cx="${n2(x1+bw*1.6)}" cy="${n2(y)}" rx="${n2(bw*2.4)}" ry="${n2(H*1.5)}" fill="url(#glow)" opacity="0.42"/>`
+    +cloud+`</g>`;
+  return s;
+}
+// rail (рельсотрон): ДВЕ раздельные направляющие с открытым зазором,
 // катушки-перемычки, конденсаторные шины, бронекожух у казны
 function armRail(cfg,y,G){
   const bw=G.bw,len=G.len,x0=G.mantletX,x1=x0+len,hz=bw*0.28;
@@ -439,8 +640,7 @@ function armRail(cfg,y,G){
       +`<path d="M ${n2(x0)} ${n2(yc)} L ${n2(x0+len*0.55)} ${n2(yc)}" fill="none" stroke="${cfg.accent}"`
       +` stroke-width="${n2(bw*0.09)}" opacity="0.55"/>`;
   }
-  s+=`<ellipse cx="${n2(x1+bw*0.4)}" cy="${n2(y)}" rx="${n2(bw*2.4)}" ry="${n2(bw*1.2)}" fill="url(#glow)"/>`;
-  s+=`<ellipse cx="${n2(x1)}" cy="${n2(y)}" rx="${n2(bw*0.7)}" ry="${n2(gap*0.9)}" fill="url(#core)"/>`;
+  s+=muzzleFlare(cfg,G,x1,y,bw*4.6,gap*1.10);
   return s;
 }
 // beam (лазер): гладкий волновод без бандажей + крупные радиаторные пластины + линза
@@ -450,18 +650,26 @@ function armRail(cfg,y,G){
 // и линза. Должен читаться как оптика, а не как ствол.
 function armBeam(cfg,y,G){
   const bw=G.bw, len=G.len, x0=G.mantletX, x1=x0+len, hz=bw*0.40;
-  const H=bw*1.05;                       // полувысота корпуса эмиттера
+  // Полувысота корпуса эмиттера зажата половиной шага между стволами: в
+  // плотном ряду коробки обязаны стоять раздельно, а не слипаться в плиту.
+  const H=Math.min(bw*1.05, (G.pitch||Infinity)*0.40);
+  const sides=[]; if(G.finUp!==false) sides.push(-1); if(G.finDn!==false) sides.push(1);
   let s='';
-  // Резонатор и батарея конденсаторов у казны
-  s+=solid(chamfer(rect(x0-bw*2.6,y-bw*1.55,bw*3.0,bw*3.10),bw*0.40),'greeble',hz*1.5);
-  s+=grille(x0-bw*2.3,y-bw*1.20,bw*1.7,bw*2.40);
-  for(const sg of [-1,1]) s+=tube(x0-bw*1.0, y+sg*bw*2.15, bw*0.62,'greeble');
-  // Косые радиаторные крылья — параллелограммы, не палочки
+  // Резонатор и батарея конденсаторов у казны — по тому же габариту, что и
+  // корпус: иначе казна соседнего ствола перекрывает эту.
+  const HB=Math.min(bw*1.55, (G.pitch||Infinity)*0.46);
+  s+=solid(chamfer(rect(x0-bw*2.6,y-HB,bw*3.0,HB*2),bw*0.40),'greeble',hz*1.5);
+  s+=grille(x0-bw*2.3,y-HB*0.78,bw*1.7,HB*1.55);
+  // Баки-цилиндры вешаются только на свободную сторону банки.
+  for(const sg of sides) s+=tube(x0-bw*1.0, y+sg*(HB+bw*0.62), bw*0.62,'greeble');
+  // Косые радиаторные крылья — параллелограммы, не палочки. Вылет не
+  // превышает свободного места до соседнего ствола.
   const N=Math.max(3,Math.round(2+(+cfg.detail||0)*4));
+  const finOut=Math.min(H*1.35, Math.max(0,(G.pitch||Infinity)/2-H)+H*0.9);
   for(let i=0;i<N;i++){
     const x=x0+bw*0.6+i*(len*0.74/N), w=bw*0.46, sk=bw*0.55;
-    for(const sg of [-1,1])
-      s+=solid([[x,y+sg*H],[x+w,y+sg*H],[x+w+sk,y+sg*H*2.35],[x+sk,y+sg*H*2.35]],
+    for(const sg of sides)
+      s+=solid([[x,y+sg*H],[x+w,y+sg*H],[x+w+sk,y+sg*(H+finOut)],[x+sk,y+sg*(H+finOut)]],
                'greeble',hz*0.45,{noShadow:1,dark:true,sw:1.3});
   }
   // Корпус эмиттера — коробка со скошенным носом
@@ -479,79 +687,174 @@ function armBeam(cfg,y,G){
   s+=`<ellipse cx="${n2(x1+bw*0.16)}" cy="${n2(y)}" rx="${n2(bw*0.36)}" ry="${n2(H*0.78)}"`
     +` fill="url(#m_glass)" stroke="${INK}" stroke-width="${n2(1.6*SWK)}" data-slot="glass"/>`;
   s+=`<ellipse cx="${n2(x1+bw*0.16)}" cy="${n2(y)}" rx="${n2(bw*0.52)}" ry="${n2(H*0.92)}" fill="url(#core)"/>`;
-  s+=`<ellipse cx="${n2(x1+bw*0.9)}" cy="${n2(y)}" rx="${n2(bw*3.0)}" ry="${n2(H*1.3)}" fill="url(#glow)"/>`;
+  s+=muzzleFlare(cfg,G,x1+bw*0.16,y,bw*5.2,H*0.66);
   return s;
 }
 // plasma: короткий толстый ствол, раструб-сопло, инжекторные кольца,
 // баки-торы по бортам казны, светящаяся камера
 function armPlasma(cfg,y,G){
   const bw=G.bw,len=G.len*0.72,x0=G.mantletX,x1=x0+len,hz=bw*0.32;
+  // Раструб — самая широкая часть орудия; именно он и наезжал на соседний
+  // ствол в ряду. Габарит зажат половиной шага банка: у одиночного орудия
+  // раструб прежний, в плотном ряду сопла стоят раздельно.
+  const M=halfRoom(G,bw*1.30);          // полувысота на срезе (раструб)
+  const B=M*0.62;                       // полувысота у казны
+  const sides=[]; if(G.finUp!==false) sides.push(-1); if(G.finDn!==false) sides.push(1);
   let s='';
   // Камера сгорания
-  s+=solid(chamfer(rect(x0-bw*2.0,y-bw*1.20,bw*2.5,bw*2.40),bw*0.44),'greeble',hz*1.5);
-  s+=`<ellipse cx="${n2(x0-bw*0.75)}" cy="${n2(y)}" rx="${n2(bw*0.55)}" ry="${n2(bw*0.80)}" fill="url(#core)"/>`;
-  // Баки
-  for(const sg of [-1,1]) s+=tube(x0-bw*0.4, y+sg*bw*1.95, bw*0.78,'greeble');
+  s+=solid(chamfer(rect(x0-bw*2.0,y-B*1.60,bw*2.5,B*3.20),bw*0.44),'greeble',hz*1.5);
+  s+=`<ellipse cx="${n2(x0-bw*0.75)}" cy="${n2(y)}" rx="${n2(bw*0.55)}" ry="${n2(B*1.05)}" fill="url(#core)"/>`;
+  // Баки — только на свободную сторону банка
+  const tr=halfRoom(G,bw*0.78);
+  for(const sg of sides) s+=tube(x0-bw*0.4, y+sg*(B*1.60+tr*1.05), tr,'greeble');
   // Топливопроводы к дулу
-  for(const sg of [-1,1]){
-    const p=`M ${n2(x0-bw*0.4)} ${n2(y+sg*bw*1.95)} C ${n2(x0+len*0.35)} ${n2(y+sg*bw*1.9)}, ${n2(x0+len*0.55)} ${n2(y+sg*bw*1.2)}, ${n2(x1-bw*0.6)} ${n2(y+sg*bw*0.95)}`;
+  for(const sg of sides){
+    const yt=y+sg*(B*1.60+tr*1.05);
+    const p=`M ${n2(x0-bw*0.4)} ${n2(yt)} C ${n2(x0+len*0.35)} ${n2(yt)}, ${n2(x0+len*0.55)} ${n2(y+sg*B*1.3)}, ${n2(x1-bw*0.6)} ${n2(y+sg*M*0.72)}`;
     s+=`<path d="${p}" fill="none" stroke="${INK}" stroke-width="${n2(bw*0.26)}" stroke-linecap="round" opacity="0.9"/>`
       +`<path d="${p}" fill="none" stroke="${cfg.accent}" stroke-width="${n2(bw*0.11)}" opacity="0.5"/>`;
   }
-  // Ствол-раструб
-  const pr=[[0,0.74],[0.22,0.56],[0.60,0.58],[0.80,0.80],[1,1.22]];
-  const up=pr.map(([t,w])=>[x0+len*t,y-bw*w]), dn=pr.map(([t,w])=>[x0+len*t,y+bw*w]).reverse();
+  // Ствол-раструб: профиль в долях от M, а не в абсолютных bw
+  const pr=[[0,0.60],[0.22,0.46],[0.60,0.48],[0.80,0.66],[1,0.86]];
+  const up=pr.map(([t,w])=>[x0+len*t,y-M*w*1.18]), dn=pr.map(([t,w])=>[x0+len*t,y+M*w*1.18]).reverse();
   s+=solid(up.concat(dn),'barrel',hz,{sw:2.0});
   // Инжекторные кольца
   for(let i=1;i<5;i++){ const t=i/5*0.72,x=x0+len*t;
-    s+=solid(rect(x-bw*0.14,y-bw*0.86,bw*0.28,bw*1.72),'greeble',hz*0.55,{noShadow:1,sw:1.2}); }
+    s+=solid(rect(x-bw*0.14,y-M*0.62,bw*0.28,M*1.24),'greeble',hz*0.55,{noShadow:1,sw:1.2}); }
   // Сопло
-  s+=solid([[x1-bw*0.5,y-bw*1.00],[x1+bw*0.3,y-bw*1.42],[x1+bw*0.3,y+bw*1.42],[x1-bw*0.5,y+bw*1.00]],'greeble',hz*1.1);
-  s+=`<ellipse cx="${n2(x1+bw*0.25)}" cy="${n2(y)}" rx="${n2(bw*0.40)}" ry="${n2(bw*1.10)}" fill="url(#core)"/>`;
-  s+=`<ellipse cx="${n2(x1+bw*0.8)}" cy="${n2(y)}" rx="${n2(bw*2.8)}" ry="${n2(bw*1.9)}" fill="url(#glow)"/>`;
+  s+=solid([[x1-bw*0.5,y-M*0.78],[x1+bw*0.3,y-M],[x1+bw*0.3,y+M],[x1-bw*0.5,y+M*0.78]],'greeble',hz*1.1);
+  s+=muzzleFlare(cfg,G,x1+bw*0.30,y,bw*3.4,M*0.80);
   return s;
 }
-// launcher (ракетное): не ствол — блок ячеек с откинутыми крышками и рамой
-// Ракетное: пакет ТРУБ, а не дырчатая плита. Каждая труба — отдельное
-// тело с фаской, срезом и своей крышкой; видно, что это связка ПУ.
+// ── РАКЕТНОЕ ─────────────────────────────────────────────────
+// Три РАЗНЫХ изделия, а не один пакет труб с разным числом дырок:
+//   pack  (РПУ)  — несколько толстых ТПК на подъёмной раме с направляющими;
+//   mlrs  (РСУ)  — сотовый блок тонких НУРСов в общей обойме;
+//   silo  (МБР)  — одна-две шахты со сдвинутой крышкой и кабель-мачтой.
+// Компоновка выбирается КЛАССОМ установки, а не калибром: РСУ обязана
+// выглядеть как РСЗО даже на крупном калибре.
+// ЗЕРКАЛО: geom() считает bankSpan по этим же числам.
+function packOf(cfg,G){
+  const bw=G.bw, n=Math.max(1,Math.min(8,cfg.barrels|0));
+  const k=cfg.klass;
+  const mode = k==='brm' ? 'silo' : (k==='rsu' ? 'mlrs' : 'pack');
+  if(mode==='silo'){
+    const cells=Math.max(1,Math.min(3,Math.ceil(n/3)));
+    return { mode, cells, cols:1, rows:cells, tr:bw*1.40, tl:G.len*0.66,
+             pitchY:bw*3.20, pitchX:0 };
+  }
+  if(mode==='mlrs'){
+    // Сотовый блок: столбцов по оси огня 2..3, строк — сколько нужно
+    const cells=Math.max(4,Math.min(24,n*3));
+    const cols=n>=5?3:2, rows=Math.ceil(cells/cols);
+    const tr=bw*0.34;
+    return { mode, cells, cols, rows, tr, tl:G.len*0.62,
+             pitchY:tr*2.30, pitchX:tr*2.10 };
+  }
+  const cells=Math.max(1,Math.min(6,n));
+  const tr=bw*0.80;
+  return { mode, cells, cols:1, rows:cells, tr, tl:G.len*0.80, pitchY:tr*2.40, pitchX:0 };
+}
 function armLauncher(cfg,y,G){
   const bw=G.bw, x0=G.mantletX, hz=bw*0.44;
-  // Число труб = число «стволов» сборки: ползунок должен делать ровно то,
-  // что написано на этикетке. Но чем крупнее калибр, тем ближе установка к
-  // МБР: пакет тонких НУРСов вырождается в одиночную шахту с крышкой.
-  const kal=+cfg.caliber||100;
-  const silo = kal>=250;
-  const tubes = silo ? Math.max(1,Math.min(3,Math.ceil((cfg.barrels|0)/3)))
-                     : Math.max(1,Math.min(8,cfg.barrels|0));
-  const tr=bw*(silo?1.35:0.62);           // радиус трубы (шахта много толще)
-  const tl=G.len*(silo?0.72:0.86);        // длина пакета
-  const span=(tubes-1)*tr*2.15;
+  const K=packOf(cfg,G), tr=K.tr, tl=K.tl;
+  const spanY=(K.rows-1)*K.pitchY;
+  const glow=(TECHS[cfg.tech]||TECHS.missile).glow;
   let s='';
-  // Ферма-качалка: две щеки, между ними трубы
-  for(const sg of [-1,1])
-    s+=solid(chamfer(rect(x0-bw*1.7, sg>0? span/2+tr*0.5 : -span/2-tr*1.5, tl*0.55, tr*1.0),bw*0.20),
-             'plate',hz*0.9,{sw:1.7});
-  s+=solid(chamfer(rect(x0-bw*2.0,-span/2-tr*1.4, bw*1.5, span+tr*2.8),bw*0.30),'plate',hz*1.2);
-  // Трубы
-  for(let i=0;i<tubes;i++){
-    const cy=y-span/2+i*tr*2.15;
-    s+=solid([[x0,cy-tr],[x0+tl,cy-tr*0.92],[x0+tl,cy+tr*0.92],[x0,cy+tr]],'barrel',hz,{sw:1.8});
-    // Продольное ребро и бандажи
-    s+=line([[x0+bw*0.3,cy-tr*0.45],[x0+tl-bw*0.3,cy-tr*0.42]],1.2,0.45);
-    for(let k=1;k<4;k++){ const x=x0+tl*(k/4);
-      s+=plate(rect(x-bw*0.09,cy-tr*1.06,bw*0.18,tr*2.12),'greeble',{sw:1.1,dark:true}); }
-    // Дульный срез: тёмный зев + носовой обтекатель ракеты внутри
-    s+=`<ellipse cx="${n2(x0+tl)}" cy="${n2(cy)}" rx="${n2(tr*0.34)}" ry="${n2(tr*0.86)}" fill="${INK}"/>`;
-    s+=`<ellipse cx="${n2(x0+tl-tr*0.18)}" cy="${n2(cy)}" rx="${n2(tr*0.20)}" ry="${n2(tr*0.52)}"`
-      +` fill="url(#m_greeble)" stroke="${INK}" stroke-width="${n2(1*SWK)}" data-slot="greeble"/>`;
-    // Откинутая крышка на шарнире
-    s+=plate([[x0+tl-tr*0.2, cy-tr],[x0+tl+tr*0.9, cy-tr*1.55],
-              [x0+tl+tr*1.05,cy-tr*1.15],[x0+tl-tr*0.05,cy-tr*0.62]],'greeble',{sw:1.3,dark:true});
-    s+=`<ellipse cx="${n2(x0+tl+tr*1.4)}" cy="${n2(cy)}" rx="${n2(tr*1.5)}" ry="${n2(tr*0.9)}" fill="url(#glow)" opacity="0.45"/>`;
+
+  if(K.mode==='mlrs'){
+    // ── РСУ: единая обойма, внутри соты труб. Тут важен БЛОК, а не
+    // отдельные стволы: пакет закрыт общей рамой с торцевыми плитами.
+    const halfY=spanY/2+tr*1.9, depth=tl;
+    s+=solid(chamfer(rect(x0-bw*1.1,y-halfY,depth+bw*1.4,halfY*2),bw*0.34),'plate',hz*1.3,{sw:2.2});
+    // Торцевые плиты обоймы
+    for(const px of [x0-bw*0.5, x0+depth*0.52, x0+depth+bw*0.05])
+      s+=plate(rect(px,y-halfY*0.96,bw*0.34,halfY*1.92),'greeble',{sw:1.3,dark:true});
+    // Соты
+    for(let r=0;r<K.rows;r++) for(let c=0;c<K.cols;c++){
+      if(r*K.cols+c>=K.cells) break;
+      const cy=y-spanY/2+r*K.pitchY + (c%2?K.pitchY*0.5:0);
+      const cx=x0+depth-tr*1.2-c*K.pitchX;
+      s+=`<circle cx="${n2(cx)}" cy="${n2(cy)}" r="${n2(tr*1.05)}" fill="url(#d_greeble)"`
+        +` stroke="${INK}" stroke-width="${n2(1.2*SWK)}" data-slot="greeble"/>`;
+      s+=`<circle cx="${n2(cx)}" cy="${n2(cy)}" r="${n2(tr*0.70)}" fill="${INK}"/>`;
+      s+=`<circle cx="${n2(cx)}" cy="${n2(cy)}" r="${n2(tr*0.34)}" fill="${glow}" opacity="0.45"/>`;
+    }
+    // Направляющие рельсы поверх обоймы
+    for(const sg of [-1,1])
+      s+=plate(rect(x0-bw*0.9, y+sg*halfY*0.82-tr*0.20, depth+bw*1.0, tr*0.40),'greeble',{sw:1.1,dark:true});
+    // Подъёмный гидроцилиндр и блок наведения в корме
+    s+=solid(chamfer(rect(x0-bw*2.6,y-halfY*0.42,bw*1.7,halfY*0.84),bw*0.26),'greeble',hz*0.9);
+    s+=tube(x0-bw*1.75,y,tr*1.1,'greeble');
+    s+=`<g class="tg-flare" style="pointer-events:none"><ellipse cx="${n2(x0+depth+bw*1.0)}" cy="${n2(y)}"`
+      +` rx="${n2(bw*1.5)}" ry="${n2(halfY*0.75)}" fill="url(#glow)" opacity="0.35"/></g>`;
+    return s;
   }
-  // Блок наведения на торце фермы
-  s+=solid(chamfer(rect(x0-bw*1.5,-span/2-tr*2.5,bw*1.6,tr*1.3),bw*0.22),'greeble',hz*0.7);
-  s+=`<ellipse cx="${n2(x0-bw*0.7)}" cy="${n2(-span/2-tr*1.85)}" rx="${n2(tr*0.32)}" ry="${n2(tr*0.42)}"`
+
+  if(K.mode==='silo'){
+    // ── МБР: не «трубы», а ШАХТЫ. Толстое кольцо горловины, сдвинутая
+    // вбок массивная крышка на рельсе, кабель-мачта обслуживания.
+    s+=solid(chamfer(rect(x0-bw*1.4,y-spanY/2-tr*1.5,tl*0.9,spanY+tr*3.0),bw*0.42),'plate',hz*1.5,{sw:2.4});
+    for(let i=0;i<K.cells;i++){
+      const cy=y-spanY/2+i*K.pitchY, cx=x0+tl*0.34;
+      // Горловина
+      s+=`<circle cx="${n2(cx)}" cy="${n2(cy)}" r="${n2(tr*1.18)}" fill="url(#b_greeble)" stroke="${INK}"`
+        +` stroke-width="${n2(2.2*SWK)}" data-slot="greeble"/>`;
+      s+=`<circle cx="${n2(cx)}" cy="${n2(cy)}" r="${n2(tr*0.94)}" fill="${INK}"/>`;
+      // Носовой обтекатель ракеты в шахте
+      s+=`<circle cx="${n2(cx)}" cy="${n2(cy)}" r="${n2(tr*0.62)}" fill="url(#m_greeble)" stroke="${INK}"`
+        +` stroke-width="${n2(1.3*SWK)}" data-slot="greeble"/>`;
+      s+=`<circle cx="${n2(cx)}" cy="${n2(cy)}" r="${n2(tr*0.24)}" fill="${glow}" opacity="0.6"/>`;
+      // Анкерные болты по венцу
+      for(let a=0;a<10;a++){ const an=a/10*Math.PI*2;
+        s+=`<circle cx="${n2(cx+Math.cos(an)*tr*1.06)}" cy="${n2(cy+Math.sin(an)*tr*1.06)}"`
+          +` r="${n2(tr*0.07)}" fill="${INK}" opacity="0.75"/>`; }
+      // Сдвинутая крышка на рельсе
+      s+=plate(rect(cx+tr*1.35,cy-tr*0.16,tl*0.34,tr*0.32),'greeble',{sw:1.1,dark:true});
+      s+=solid(chamfer(rect(cx+tr*1.55,cy-tr*1.15,tr*1.5,tr*2.30),tr*0.30),'plate',hz*1.1,{sw:2.0});
+      s+=line([[cx+tr*1.75,cy-tr*0.85],[cx+tr*2.85,cy-tr*0.85]],1.3,0.5);
+      s+=line([[cx+tr*1.75,cy+tr*0.85],[cx+tr*2.85,cy+tr*0.85]],1.3,0.5);
+    }
+    // Кабель-мачта обслуживания
+    s+=solid(chamfer(rect(x0-bw*2.4,y-tr*0.55,bw*1.6,tr*1.10),bw*0.24),'greeble',hz*0.9);
+    for(let i=0;i<K.cells;i++){
+      const cy=y-spanY/2+i*K.pitchY;
+      const p=`M ${n2(x0-bw*1.0)} ${n2(y)} C ${n2(x0-bw*0.2)} ${n2(y)}, ${n2(x0-bw*0.2)} ${n2(cy)}, ${n2(x0+tl*0.34-tr*1.2)} ${n2(cy)}`;
+      s+=`<path d="${p}" fill="none" stroke="${INK}" stroke-width="${n2(bw*0.24)}" stroke-linecap="round" opacity="0.9"/>`
+        +`<path d="${p}" fill="none" stroke="${cfg.accent}" stroke-width="${n2(bw*0.09)}" opacity="0.55"/>`;
+    }
+    return s;
+  }
+
+  // ── РПУ: ТПК на подъёмной раме. Видны сами контейнеры, направляющие
+  // рельсы под ними и откинутые передние крышки.
+  const halfY=spanY/2+tr*1.6;
+  s+=solid(chamfer(rect(x0-bw*2.0,y-halfY,bw*1.5,halfY*2),bw*0.30),'plate',hz*1.2,{sw:2.0}); // задняя рама
+  for(const sg of [-1,1])
+    s+=solid(chamfer(rect(x0-bw*1.5, y+sg*halfY-tr*0.28, tl*0.72, tr*0.56),bw*0.16),'plate',hz*0.8,{sw:1.6});
+  for(let i=0;i<K.cells;i++){
+    const cy=y-spanY/2+i*K.pitchY;
+    // Рельс-направляющая под контейнером
+    s+=plate(rect(x0-bw*0.6, cy+tr*0.92, tl*0.96, tr*0.26),'greeble',{sw:1.1,dark:true});
+    // Сам ТПК: гранёный, с продольным ребром и стяжными хомутами
+    s+=solid([[x0,cy-tr],[x0+tl*0.92,cy-tr*0.90],[x0+tl,cy-tr*0.62],
+              [x0+tl,cy+tr*0.62],[x0+tl*0.92,cy+tr*0.90],[x0,cy+tr]],'barrel',hz,{sw:1.9});
+    s+=line([[x0+bw*0.3,cy-tr*0.42],[x0+tl-bw*0.4,cy-tr*0.34]],1.2,0.45);
+    for(let k=1;k<4;k++){ const x=x0+tl*(k/4);
+      s+=solid(rect(x-tr*0.13,cy-tr*1.08,tr*0.26,tr*2.16),'greeble',hz*0.45,{noShadow:1,sw:1.2}); }
+    // Зев + обтекатель ракеты
+    s+=`<ellipse cx="${n2(x0+tl)}" cy="${n2(cy)}" rx="${n2(tr*0.30)}" ry="${n2(tr*0.60)}" fill="${INK}"/>`;
+    s+=`<ellipse cx="${n2(x0+tl-tr*0.14)}" cy="${n2(cy)}" rx="${n2(tr*0.18)}" ry="${n2(tr*0.36)}"`
+      +` fill="url(#m_greeble)" stroke="${INK}" stroke-width="${n2(1*SWK)}" data-slot="greeble"/>`;
+    // Откинутая крышка на шарнире — наружу, а не на соседа
+    const sg = cy<=y ? -1 : 1;
+    s+=plate([[x0+tl-tr*0.15, cy+sg*tr*0.95],[x0+tl+tr*0.95, cy+sg*tr*1.45],
+              [x0+tl+tr*1.10, cy+sg*tr*1.05],[x0+tl+tr*0.02, cy+sg*tr*0.55]],'greeble',{sw:1.3,dark:true});
+    s+=muzzleFlare(cfg,G,x0+tl,cy,tr*2.4,tr*0.50,0.5);
+  }
+  // Блок наведения на торце рамы
+  s+=solid(chamfer(rect(x0-bw*1.7,y-halfY-tr*1.5,bw*1.6,tr*1.3),bw*0.22),'greeble',hz*0.7);
+  s+=`<ellipse cx="${n2(x0-bw*0.9)}" cy="${n2(y-halfY-tr*0.85)}" rx="${n2(tr*0.30)}" ry="${n2(tr*0.40)}"`
     +` fill="url(#m_glass)" stroke="${INK}" stroke-width="${n2(1.3*SWK)}" data-slot="glass"/>`;
   return s;
 }
@@ -568,31 +871,71 @@ function armMortar(cfg,y,G){
   for(let i=1;i<4;i++){ const x=x0+len*(i/4);
     s+=plate(rect(x-bw*0.12,y-bw*0.92,bw*0.24,bw*1.84),'barrel',{sw:1.2,dark:true}); }
   s+=`<ellipse cx="${n2(x1-bw*0.1)}" cy="${n2(y)}" rx="${n2(bw*0.30)}" ry="${n2(bw*0.86)}" fill="${INK}"/>`;
-  s+=`<ellipse cx="${n2(x1+bw*0.6)}" cy="${n2(y)}" rx="${n2(bw*2.0)}" ry="${n2(bw*1.5)}" fill="url(#glow)"/>`;
+  s+=muzzleFlare(cfg,G,x1,y,bw*2.6,bw*0.92,0.85);
   return s;
 }
 // array (РЭБ): стволов нет — плоские фазированные решётки на поворотных
 // рамах, волноводы и мачта. Это не пушка, и выглядеть должна иначе.
 function armArray(cfg,y,G){
-  const bw=G.bw, x0=G.mantletX, hz=bw*0.40;
-  const w=G.len*0.30, h=bw*3.6;
+  const bw=G.bw, x0=G.mantletX, hz=bw*0.34;
+  const glow=(TECHS[cfg.tech]||TECHS.ew).glow;
+  // Число ПОЛОТЕН = «стволы»: ползунок наращивает решётку, а не плодит
+  // отдельные пушки (в geom у РЭБ всегда одна «рука»).
+  const faces=Math.max(1,Math.min(6,cfg.barrels|0));
+  const pw=G.len*0.26;                    // толщина полотна по оси огня
+  const ph=bw*2.30;                       // высота одного полотна
+  const step=ph*1.16, span=(faces-1)*step;
+  const rnd=rng((cfg.seed|0)+29);
   let s='';
-  s+=solid(chamfer(rect(x0-bw*1.6,y-h*0.30,bw*2.0,h*0.60),bw*0.26),'plate',hz*1.1); // привод
+  // Поворотная колонна с гидравликой наклона
+  s+=solid(chamfer(rect(x0-bw*2.4,y-span/2-ph*0.62,bw*2.2,span+ph*1.24),bw*0.34),'plate',hz*1.4,{sw:2.0});
+  s+=grille(x0-bw*2.15,y-span/2-ph*0.40,bw*1.7,ph*0.72);
   for(const sg of [-1,1]){
-    const yy=y+sg*h*0.34;
-    s+=solid(chamfer([[x0,yy-h*0.30],[x0+w,yy-h*0.36],[x0+w,yy+h*0.30],[x0,yy+h*0.24]],bw*0.20),
-             'greeble',hz*0.8,{sw:1.8});
-    // Сетка излучателей
-    for(let r=0;r<4;r++) for(let c=0;c<3;c++)
-      s+=`<rect x="${n2(x0+w*0.14+c*w*0.28)}" y="${n2(yy-h*0.20+r*h*0.13)}" width="${n2(w*0.18)}"`
-        +` height="${n2(h*0.08)}" fill="url(#d_glass)" stroke="${INK}" stroke-width="${n2(0.9*SWK)}" data-slot="glass"/>`;
+    const yy=y+sg*(span/2+ph*0.38);
+    s+=solid(chamfer(rect(x0-bw*1.0,yy-bw*0.20,bw*1.9,bw*0.40),bw*0.12),'greeble',hz*0.6,{noShadow:1,sw:1.3});
+    s+=tube(x0-bw*0.9,yy,bw*0.26,'greeble');
   }
-  // Волноводы
-  for(const sg of [-1,1]) s+=line([[x0-bw*0.6,y+sg*bw*0.5],[x0+w*0.5,y+sg*h*0.34]],bw*0.16,0.8);
-  // Мачта с излучателем
-  s+=solid(chamfer(rect(x0+w*0.9,y-bw*0.5,bw*1.1,bw*1.0),bw*0.20),'greeble',hz*0.7);
-  s+=`<ellipse cx="${n2(x0+w*0.9+bw*0.55)}" cy="${n2(y)}" rx="${n2(bw*0.34)}" ry="${n2(bw*0.34)}" fill="url(#core)"/>`;
-  s+=`<ellipse cx="${n2(x0+w*1.4)}" cy="${n2(y)}" rx="${n2(bw*2.6)}" ry="${n2(h*0.5)}" fill="url(#glow)" opacity="0.5"/>`;
+  for(let f=0;f<faces;f++){
+    const yy=y-span/2+f*step;
+    // Рама полотна: скошенная, слегка развёрнута наружу — веер, а не стопка
+    const tilt=(f-(faces-1)/2)*ph*0.10;
+    const frame=[[x0,yy-ph*0.50],[x0+pw,yy-ph*0.50+tilt],
+                 [x0+pw,yy+ph*0.50+tilt],[x0,yy+ph*0.50]];
+    s+=solid(chamfer(frame,bw*0.18),'plate',hz*0.9,{sw:1.9});
+    // Плитки подрешёток: 4×5 с редкими «горячими» ячейками
+    const CC=4, RR=5;
+    for(let c=0;c<CC;c++) for(let r=0;r<RR;r++){
+      const tx=x0+pw*(0.10+c*0.215), ty=yy-ph*0.38+r*ph*0.155+tilt*(0.10+c*0.215);
+      s+=`<rect x="${n2(tx)}" y="${n2(ty)}" width="${n2(pw*0.17)}" height="${n2(ph*0.115)}"`
+        +` rx="${n2(pw*0.03)}" fill="url(#d_glass)" stroke="${INK}" stroke-width="${n2(0.8*SWK)}" data-slot="glass"/>`;
+      if(rnd()>0.62)
+        s+=`<rect x="${n2(tx+pw*0.03)}" y="${n2(ty+ph*0.028)}" width="${n2(pw*0.11)}" height="${n2(ph*0.058)}"`
+          +` fill="${glow}" opacity="${n2(0.3+rnd()*0.5)}"/>`;
+    }
+    // Бортовые экраны подавления боковых лепестков
+    for(const sg of [-1,1])
+      s+=plate([[x0+pw*0.05,yy+sg*ph*0.50],[x0+pw*0.95,yy+sg*ph*0.50+tilt],
+                [x0+pw*1.02,yy+sg*ph*0.62+tilt],[x0+pw*0.02,yy+sg*ph*0.62]],'greeble',{sw:1.2,dark:true});
+    // Волновод от колонны к полотну
+    const p=`M ${n2(x0-bw*1.2)} ${n2(y)} C ${n2(x0-bw*0.3)} ${n2(y)}, ${n2(x0-bw*0.3)} ${n2(yy)}, ${n2(x0+pw*0.12)} ${n2(yy)}`;
+    s+=`<path d="${p}" fill="none" stroke="${INK}" stroke-width="${n2(bw*0.22)}" stroke-linecap="round" opacity="0.85"/>`
+      +`<path d="${p}" fill="none" stroke="${cfg.accent}" stroke-width="${n2(bw*0.08)}" opacity="0.5"/>`;
+    // Фронт излучения — не «дуло», а размытое поле перед полотном
+    s+=`<g class="tg-flare" style="pointer-events:none">`
+      +`<ellipse cx="${n2(x0+pw*1.5)}" cy="${n2(yy+tilt)}" rx="${n2(pw*0.9)}" ry="${n2(ph*0.60)}"`
+      +` fill="url(#glow)" opacity="0.45"/></g>`;
+  }
+  // Штыревые антенны сверху колонны — узнаваемый признак РЭБ
+  for(let i=0;i<3;i++){
+    const ax=x0-bw*2.0+i*bw*0.62, ay=y-span/2-ph*0.62;
+    s+=`<path d="M ${n2(ax)} ${n2(ay)} L ${n2(ax-bw*0.35)} ${n2(ay-bw*(1.5+i*0.45))}" fill="none"`
+      +` stroke="${INK}" stroke-width="${n2(bw*0.11)}" stroke-linecap="round" opacity="0.9"/>`;
+    s+=`<circle cx="${n2(ax-bw*0.35)}" cy="${n2(ay-bw*(1.5+i*0.45))}" r="${n2(bw*0.13)}" fill="${glow}" opacity="0.8"/>`;
+  }
+  // Общее поле помех
+  s+=`<g class="tg-flare" style="pointer-events:none">`
+    +`<ellipse cx="${n2(x0+pw*2.2)}" cy="${n2(y)}" rx="${n2(pw*1.6)}" ry="${n2((span+ph)*0.62)}"`
+    +` fill="url(#glow)" opacity="0.30"/></g>`;
   return s;
 }
 // exotic (гравитационное / антиматериальное): не ствол, а излучающее
@@ -621,6 +964,11 @@ function armExotic(cfg,y,G){
 
 function armOne(cfg,y,G){
   const k=(TECHS[cfg.tech]||TECHS.ehs).kind;
+  // Пулемёт узнаётся по стволу, а не по башне (корпус общий с турелью БТР).
+  if(cfg.klass==='mg' && (k==='gun'||k==='ehs')) return armMG(cfg,y,G);
+  if(k==='ehs')      return armEHS(cfg,y,G);
+  if(k==='coil')     return armCoil(cfg,y,G);
+  if(k==='nano')     return armNano(cfg,y,G);
   if(k==='rail')     return armRail(cfg,y,G);
   if(k==='beam')     return armBeam(cfg,y,G);
   if(k==='plasma')   return armPlasma(cfg,y,G);
@@ -633,10 +981,16 @@ function armOne(cfg,y,G){
 // Рисует «руку» с учётом компоновки: сдвиг вдоль оси, укорочение и
 // нижний ствол спарки (рисуется первым, приглушённым — он ниже ярусом).
 function drawArm(cfg,arm,G){
-  const Gx=Object.assign({},G,{ mantletX:G.mantletX+(arm.dx||0), len:G.len*(arm.lenK||1) });
+  // Крайние стволы в банке имеют свободную сторону — только туда и можно
+  // выпускать радиаторы и прочее навесное, внутрь ряда оно не влезает.
+  const ys=G.bankY||[arm.y];
+  const Gx=Object.assign({},G,{ mantletX:G.mantletX+(arm.dx||0), len:G.len*(arm.lenK||1),
+    finUp: arm.y<=Math.min.apply(null,ys)+1e-6,
+    finDn: arm.y>=Math.max.apply(null,ys)-1e-6 });
   let s='';
   if(arm.twin){
-    const Gt=Object.assign({},Gx,{ mantletX:Gx.mantletX-G.bw*0.55, len:Gx.len*0.94 });
+    const Gt=Object.assign({},Gx,{ mantletX:Gx.mantletX-G.bw*0.55, len:Gx.len*0.94,
+      finUp:false, finDn:false });
     s+=`<g opacity="0.66">${armOne(cfg, arm.y+G.bw*0.80, Gt)}</g>`;
   }
   s+=armOne(cfg, arm.y, Gx);
@@ -758,6 +1112,48 @@ function stripes(cfg,G,x0,x1,yk){
   for(const sg of [-1,1])
     s+=`<path d="M ${n2(BL*x0)} ${n2(sg*BH*yk)} L ${n2(BL*x1)} ${n2(sg*BH*yk)}" fill="none"`
       +` stroke="${cfg.accent}" stroke-width="${n2(bw*0.26)}" opacity="0.8"/>`;
+  return s;
+}
+
+// Станина пусковой установки. wide=true — РСУ: шире, с транспортно-
+// заряжающей рампой в корме; false — РПУ: компактнее, с ящиками ЗИП.
+function launchBase(cfg,G,wide){
+  const {bw,BL,BH}=G, hz=bw*0.48;
+  const w=wide?1.10:0.94;
+  let s='';
+  // Поворотный круг — виден из-под станины
+  s+=`<circle cx="0" cy="0" r="${n2(Math.max(BH*0.42,bw*2.2))}" fill="url(#d_base)" stroke="${INK}"`
+    +` stroke-width="${n2(2*SWK)}" data-slot="base"/>`;
+  // Станина: открытая рама, а не бронекоробка
+  s+=solid(chamfer([[-BL*0.52,-BH*0.30*w],[-BL*0.34,-BH*0.42*w],[BL*0.26,-BH*0.42*w],
+                    [ BL*0.44,-BH*0.24*w],[ BL*0.44, BH*0.24*w],[BL*0.26, BH*0.42*w],
+                    [-BL*0.34, BH*0.42*w],[-BL*0.52, BH*0.30*w]],bw*0.44),'hull',hz*1.1,{sw:2.2});
+  // Продольные лонжероны рамы
+  for(const sg of [-1,1])
+    s+=plate(rect(-BL*0.44,sg*BH*0.28*w-(sg>0?0:bw*0.34),BL*0.84,bw*0.34),'plate',{sw:1.4,dark:true});
+  // Гидроцилиндры подъёма пакета — к цапфам
+  for(const sg of [-1,1]){
+    const yc=sg*(G.bankSpan*0.42+bw*0.70);
+    s+=solid(chamfer(rect(-BL*0.20,yc-bw*0.36,BL*0.58,bw*0.72),bw*0.26),'greeble',hz*0.9,{sw:1.7});
+    s+=`<path d="${poly([[-BL*0.16,yc-bw*0.24],[BL*0.32,yc-bw*0.24],[BL*0.32,yc-bw*0.04],[-BL*0.16,yc-bw*0.04]])}" fill="url(#spec)"/>`;
+    s+=tube(BL*0.34,yc,bw*0.36,'greeble');
+  }
+  // Цапфы — узел качания пакета
+  for(const sg of [-1,1]) s+=tube(G.mantletX-bw*1.9, sg*(G.bankSpan*0.5+bw*0.35), bw*0.52,'greeble');
+  // Корма: у РСУ — рампа ТЗМ с направляющими, у РПУ — ящики ЗИП
+  if(wide){
+    s+=solid(chamfer(rect(-BL*0.90,-BH*0.34,BL*0.34,BH*0.68),bw*0.30),'greeble',hz*0.9,{dark:true});
+    for(let i=0;i<4;i++) s+=line([[-BL*0.86,-BH*0.26+i*BH*0.17],[-BL*0.60,-BH*0.26+i*BH*0.17]],bw*0.14,0.7);
+  } else {
+    for(const sg of [-1,1])
+      s+=solid(chamfer(rect(-BL*0.84, sg>0?BH*0.04:-BH*0.34, BL*0.28, BH*0.30),bw*0.24),'greeble',hz*0.8,{dark:true});
+  }
+  // Блок аппаратуры наведения на станине
+  s+=solid(chamfer(rect(-BL*0.24,-BH*0.14,bw*1.6,bw*1.5),bw*0.24),'greeble',hz*0.8);
+  s+=`<ellipse cx="${n2(-BL*0.24+bw*0.8)}" cy="${n2(-BH*0.14+bw*0.75)}" rx="${n2(bw*0.40)}" ry="${n2(bw*0.34)}"`
+    +` fill="url(#m_glass)" stroke="${INK}" stroke-width="${n2(1.4*SWK)}" data-slot="glass"/>`;
+  s+=powerBus(cfg,G,-BL*0.44,BL*0.24);
+  s+=stripes(cfg,G,-0.30,0.12,0.34*w);
   return s;
 }
 
@@ -996,6 +1392,37 @@ const BODY = {
     return s;
   },
 
+  // ПУСКОВЫЕ (РПУ/РСУ): башни НЕТ. Есть низкая поворотная станина, на ней
+  // качающаяся рама с цапфами и гидроподъёмом, в корме — аппаратура и
+  // перезарядка. Ни маски, ни бронеярусов: пакет открыт.
+  pu(cfg,G){ return launchBase(cfg,G,false); },
+  mlrs(cfg,G){ return launchBase(cfg,G,true); },
+
+  // МБР: не установка, а СТАРТОВЫЙ СТОЛ. Прямоугольная плита с обваловкой,
+  // газоотводные каналы по бортам, шкаф автоматики. Ничего вращающегося.
+  silo(cfg,G){
+    const {bw,BL,BH}=G, hz=bw*0.70;
+    let s=solid(chamfer([
+      [-BL*0.60,-BH*0.44],[-BL*0.44,-BH*0.60],[BL*0.44,-BH*0.60],[BL*0.60,-BH*0.44],
+      [ BL*0.60, BH*0.44],[BL*0.44, BH*0.60],[-BL*0.44,BH*0.60],[-BL*0.60,BH*0.44],
+    ],bw*0.60),'base',hz*1.3,{sw:2.6});
+    // Газоотводные каналы — глубокие тёмные щели вдоль бортов
+    for(const sg of [-1,1]){
+      s+=plate(rect(-BL*0.44,sg*BH*0.40-(sg>0?0:BH*0.14),BL*0.88,BH*0.14),'plate',{dark:true,sw:1.6});
+      s+=grille(-BL*0.38,sg*BH*0.42-(sg>0?0:BH*0.10),BL*0.76,BH*0.10);
+    }
+    // Обваловка: ступенчатый второй ярус
+    s+=solid(chamfer(rect(-BL*0.46,-BH*0.34,BL*0.92,BH*0.68),bw*0.44),'hull',hz*0.9,{dark:true,sw:2.0});
+    s+=bolts([[-BL*0.40,-BH*0.30],[BL*0.36,-BH*0.30]],bw*0.09,bw*1.6);
+    s+=bolts([[-BL*0.40, BH*0.30],[BL*0.36, BH*0.30]],bw*0.09,bw*1.6);
+    // Шкаф автоматики и трансформатор в корме
+    s+=solid(chamfer(rect(-BL*0.86,-BH*0.26,BL*0.28,BH*0.52),bw*0.34),'greeble',hz*0.9,{dark:true});
+    s+=grille(-BL*0.82,-BH*0.18,BL*0.20,BH*0.36);
+    s+=powerBus(cfg,G,-BL*0.56,BL*0.30);
+    s+=stripes(cfg,G,-0.34,0.24,0.24);
+    return s;
+  },
+
   // ДРОН: башни нет — вилка-скоба из двух щёк держит оружие,
   // между ними компактный привод.
   drone(cfg,G){
@@ -1016,7 +1443,7 @@ const BODY = {
 };
 function drawTurret(cfg,G){
   const fam=(CLASSES[cfg.klass]||CLASSES.medium).fam;
-  return (BODY[fam]||BODY.ship)(cfg,G);
+  return (BODY[fam]||BODY.shipM)(cfg,G);
 }
 
 // ── §8. Геометрия ────────────────────────────────────────────
@@ -1031,21 +1458,37 @@ const FAM_BOX = {
   tank:  { lenK:1.06, hK:0.92 },
   apc:   { lenK:0.86, hK:0.88 },
   arty:  { lenK:1.22, hK:1.04 },
+  pu:    { lenK:1.14, hK:0.94 },   // станина пусковой — низкая и длинная
+  mlrs:  { lenK:1.06, hK:1.10 },   // РСУ шире: пакет растёт вширь
+  silo:  { lenK:1.00, hK:1.16 },   // стартовый стол
   drone: { lenK:0.62, hK:0.70 },
 };
+function famOf(cfg){ return (CLASSES[cfg.klass]||CLASSES.medium).fam; }
 function geom(cfg){
   const K=CLASSES[cfg.klass]||CLASSES.medium, F=FAM_BOX[K.fam]||FAM_BOX.ship;
   const S=cfg.size*K.s;
   const bwRaw=(3+cfg.caliber*0.11)*S;
-  let wf=1, visible=cfg.barrels, spacing=1.85;
+  const kind=(TECHS[cfg.tech]||{}).kind;
+  // Лазеру нужен более широкий шаг: у эмиттера коробчатый корпус с
+  // радиаторными крыльями, при шаге ствольного орудия соседи влезают друг
+  // в друга и ряд читается как одна слипшаяся плита.
+  // Шаг между стволами — по самой широкой части ИЗДЕЛИЯ, а не по калибру:
+  // у лазера это коробка эмиттера с крыльями, у плазмы — дульный раструб,
+  // у нано — веер распылителей. При «пушечном» шаге они наезжали друг на
+  // друга и ряд читался как одна слипшаяся деталь.
+  let wf=1, visible=cfg.barrels,
+      spacing=(kind==='beam')?2.95:(kind==='plasma')?2.90:(kind==='nano')?2.70:1.85;
   const lay=effLayout(cfg);
   if(lay==='stacked'){ visible=Math.ceil(cfg.barrels/2); wf=1.42; }
   else if(lay==='quad'){ visible=Math.ceil(cfg.barrels/2); wf=1.42; spacing=1.45; }
   else if(lay==='rotary'){ visible=Math.min(cfg.barrels,3); wf=0.80; spacing=1.15; }
   // Ракетная ПУ — единый пакет труб: число стволов уходит внутрь
   // рисовальщика (это трубы), отдельных «рук» не плодим.
-  if((TECHS[cfg.tech]||{}).kind==='launcher'){ visible=1; wf=1; }
+  if(kind==='launcher'){ visible=1; wf=1; }
+  // РЭБ — не пушка: «стволы» уходят внутрь рисовальщика полотнами решётки.
+  if(kind==='array'){ visible=1; wf=1; }
   const bw=bwRaw*wf;
+  const len=bw*cfg.barrelLen*0.14;
   // arms[] — описание каждой видимой «руки»: где стоит, насколько отодвинута
   // назад по оси ствола и есть ли за ней спаренный собрат (нижний ярус).
   const arms=[];
@@ -1080,17 +1523,26 @@ function geom(cfg){
   // У ПУ «рука» одна, но пакет труб растёт вширь по числу стволов — ширину
   // берём по пакету, иначе корпус и маска не растут вместе с ним, а трубы
   // вылезают за кадр. Формула зеркалит armLauncher.
-  if((TECHS[cfg.tech]||{}).kind==='launcher'){
-    const tubes=Math.max(1,Math.min(8,cfg.barrels|0)), tr=bw*0.62;
-    bankSpan=Math.max(bankSpan, (tubes-1)*tr*2.15 + tr*3.2);
+  if(kind==='launcher'){
+    const K=packOf(cfg,{bw,len});
+    bankSpan=Math.max(bankSpan, (K.rows-1)*K.pitchY + K.tr*(K.mode==='silo'?4.2:3.6));
+  }
+  // РЭБ: ширину задаёт стопка полотен решётки (зеркало armArray).
+  if(kind==='array'){
+    const faces=Math.max(1,Math.min(6,cfg.barrels|0)), ph=bw*2.30;
+    bankSpan=Math.max(bankSpan, (faces-1)*ph*1.16 + ph*1.4);
   }
   const bankY=arms.map(a=>a.y);
-  const len=bw*cfg.barrelLen*0.14;
+  // Шаг между соседними «руками» — по нему рисовальщики зажимают габарит,
+  // чтобы навесное одного ствола не залезало на соседний.
+  const ys=bankY.slice().sort((a,b)=>a-b);
+  let pitch=Infinity;
+  for(let i=1;i<ys.length;i++) pitch=Math.min(pitch, ys[i]-ys[i-1]);
   const BH=(bankSpan*1.60+bw*2.4)*F.hK;
   const BL=Math.max(BH*0.90,bw*5.2+36*S)*F.lenK;
   const mantletX=BL*0.52;
   const R=Math.max(BH*0.64,BL*0.58);
-  return { S,bw,len,arms,bankY,bankSpan,BH,BL,mantletX,R,visible };
+  return { S,bw,len,arms,bankY,bankSpan,BH,BL,mantletX,R,visible,pitch };
 }
 
 // ── §9. ТТХ ──────────────────────────────────────────────────
@@ -1231,31 +1683,73 @@ function stats(input){
   dalnost=Math.max(1, Math.min(40, Math.round(dalnost)));
 
   const kind = t==='missile'?'missile' : (t==='laser'||t==='plasma')?'energy':'kinetic';
-  return { damage, price, mass, energy, crew:0, dalnost,
+  // ЦЕНА В ИГРЕ ≠ price. price — это KV-прайс (миллионы), он нигде в игре не
+  // тратится: живая стоимость юнита считается из СЫРЬЯ (cnKvCost в
+  // constructors.js). Зеркалим ту же формулу, чтобы превью показывало те же
+  // ГС, что игрок увидит в конструкторе. Классовый множитель корпуса здесь не
+  // применяется — его даёт корабль, на который орудие ставят.
+  const RES_GS={blackmetall:8,rudametall:20,coloredmetall:45,kristall:90,staarvis:150};
+  let gs=0; for(const r in RES_GS) gs+=(resurs[r]||0)*RES_GS[r];
+  gs=Math.round(gs*0.32);   // CN_KV_COST_FACTOR
+  // ВЕДОМОСТЬ В ИГРОВЫХ РЕСУРСАХ. resurs (чёрный металл/ставрис) — внутренняя
+  // KV-номенклатура, на склад державы она не ложится. Со склада списывается то,
+  // что считает cnUnitBill: у орудия сырьё идёт ОТ УРОНА и типа боеприпаса
+  // (constructors.js, блок p.weapons). Зеркалим один в один.
+  const bill={}, addB=(n,q)=>{ q=Math.ceil(q); if(q>0) bill[n]=(bill[n]||0)+q; };
+  // cnWpnResKind в игре смотрит на НАЗВАНИЕ: «электромагн» там тоже энергетика,
+  // хотя боеприпас у ЭМ-орудия кинетический — держим ту же развилку.
+  const billKind = t==='missile' ? 'missile'
+                 : (t==='laser'||t==='plasma'||t==='em') ? 'energy' : 'kinetic';
+  if(billKind==='missile') addB('Изотопы', damage/150);
+  else if(billKind==='energy'){ addB('Редкоземельные руды', damage/180); addB('Гелий-3', damage/400); }
+  else addB('Железо', damage/120);
+  return { damage, price, gs, bill, mass, energy, crew:0, dalnost,
            rof, caliber:kal, barrels:n, kind,
            dmgPerEnergy: Math.round(damage/energy*10)/10,
            salvo:Math.round(one), tC, dC, cC, resurs };
 }
 
 // ── §10. Сборка ──────────────────────────────────────────────
-function render(input){
+// opt.tight — кадр вплотную по изделию, без «размерного» отступа. Нужен там,
+// где орудие показывают маленькой иконкой (узел на схеме корабля, карточка
+// выбора): там важна читаемость силуэта, а не сравнение калибров между собой.
+function render(input,opt){
   const cfg=normalize(input);
   // Энергия и темп — расчётные: от них зависит, сколько силовых шин и
   // радиаторных рёбер появится на корпусе.
   const st=stats(cfg); cfg.power=st.energy; cfg.rof=st.rof;
   const G=geom(cfg);
-  SWK=Math.max(0.30,Math.min(1.8,G.bw/13));
+  // ── КАДР И МАСШТАБ ──────────────────────────────────────────
+  // Раньше кадр подгонялся под изделие вплотную, поэтому размер вообще не
+  // читался: и дрон-пушка, и супероружие занимали весь квадрат, а «масштаб»
+  // проявлялся ТОЛЬКО толщиной обводки — отсюда и «жирные контуры».
+  // Теперь наоборот: кадр общий для всей линейки, изделие в нём реально
+  // мельчает и крупнеет, а обводка держит постоянную толщину на экране.
+  const reach=G.mantletX+G.len+G.bw*3;
+  const halfSpan=G.bankSpan*0.5+G.BH*0.6;
+  const fit=Math.max(reach, G.R*1.6, halfSpan)+8;
+  // S — «физический» размер сборки: ползунок × вес класса. Верх диапазона
+  // (3 × 2.2 = 6.6) занимает кадр целиком, всё что меньше — пропорционально
+  // меньше. Степень мягкая, а разбег ограничен: при 0.42 и потолке 3× мелкие
+  // установки уезжали в точку и деталь вообще не читалась — размер должен быть
+  // заметен, но не ценой того, что изделие не видно.
+  const S=cfg.size*((CLASSES[cfg.klass]||CLASSES.medium).s);
+  const zoom=(opt&&opt.tight) ? 1
+    : Math.max(1, Math.min(1.85, Math.pow(6.6/Math.max(0.2,S), 0.26)));
+  const pad=fit*zoom;
+  // Обводка — в ЭКРАННЫХ пикселях, а не в единицах модели. viewBox шириной
+  // 2·pad ложится на 760 px, значит масштаб = 380/pad; делим на него, и линия
+  // выходит одинаково тонкой у любого орудия.
+  SWK=Math.max(0.08, pad/430);
   let art=drawPlatform(cfg,G);
   let turret=drawTurret(cfg,G);
   // Дальние руки рисуем первыми, ближние поверх — иначе перекрытия врут
   for(const arm of G.arms.slice().sort((a,b)=>(a.dx||0)-(b.dx||0)))
     turret+=drawArm(cfg,arm,G);
-  art+=`<g transform="rotate(${n2(cfg.yaw)})">${turret}</g>`;
-  const reach=G.mantletX+G.len+G.bw*3;
-  // Кадр обязан вмещать и вылет стволов, и поперечник банка при любом
-  // повороте башни — иначе широкий пакет ПУ срезается краем.
-  const halfSpan=G.bankSpan*0.5+G.BH*0.6;
-  const pad=Math.max(reach, G.R*1.6, halfSpan)+14;
+  // data-yaw — зацепка для интерактивного превью: поворот башни это чистый
+  // rotate() и на ТТХ не влияет, поэтому крутить можно правкой transform,
+  // без полной перерисовки.
+  art+=`<g data-yaw="1" transform="rotate(${n2(cfg.yaw)})">${turret}</g>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n2(-pad)} ${n2(-pad)} ${n2(pad*2)} ${n2(pad*2)}"`
        + ` width="760" height="760">${buildDefs(cfg)}${art}</svg>`;
 }
@@ -1322,7 +1816,7 @@ function fromKV(name,w){
     :/баллистическ/.test(c)?'brm':/^рпу|^ракета/.test(c)?'rpu'
     :/танковая|турель$/.test(c)?'tankgun':/бтр|бронетанков/.test(c)?'apc'
     :/авиапушк|курсов/.test(c)?'air'
-    :/тяжелое вооружен/.test(c)?'hw':/гранатомет/.test(c)?'gl'
+    :/тяжелое вооружен|гранатомет/.test(c)?'hw'
     :/пулемет/.test(c)?'mg'
     :/дрон/.test(c)?'drone':'medium';
   // Уточнение класса по названию — там, где class каталога заведомо врёт
@@ -1331,18 +1825,84 @@ function fromKV(name,w){
           : /залпового огня|рсзо/.test(nm)           ? 'rsu'
           : (klass==='arty'||klass==='medium')       ? 'rpu' : klass;
   } else if(isMG && !/корабельн|пво/.test(c)) klass='mg';
-  else if(isGL) klass='gl';
+  else if(isGL) klass='hw';   // отдельного класса «гранатомёт» у башен нет
 
   const platform={super:'2',heavy:'1',medium:'1',light:'3',aa:'8',
-                  tankgun:'5',arty:'6',howitz:'6',rsu:'6',rpu:'6',rocket:'6',brm:'6',
-                  apc:'4',mg:'4',hw:'4',gl:'4',air:'7',drone:'7'}[klass]||'1';
+                  tankgun:'5',arty:'6',howitz:'6',rsu:'5',rpu:'5',brm:'6',
+                  apc:'4',mg:'4',hw:'4',air:'7',drone:'7'}[klass]||'1';
   return normalize({ platform, tech, klass, layout, caliber:cal, barrels,
     barrelLen:/лазер|плазм/.test(t)?32:(klass==='arty'||klass==='super'?72:52),
     size:1,
     seed:(name||'').split('').reduce((a,ch)=>(a*31+ch.charCodeAt(0))>>>0,7) });
 }
 
+// ── §12. НА ЧТО ЭТО ВЕШАЕТСЯ ─────────────────────────────────
+// Носители выводятся ИЗ САМОЙ СБОРКИ, а не задаются вручную: класс
+// установки говорит, кто в принципе такое носит, а масса и энергия
+// отсекают тех, кто конкретно ЭТУ сборку не потянет. Разогнал калибр и
+// стволы — тяжёлые машины остались, лёгкие отвалились сами.
+// Ключи носителей — классы KV (те же, что в конструкторах сайта).
+const CARRIERS = {
+  peh:      { ru:'Пехота',            mass:150,    power:150 },
+  dron:     { ru:'Дрон',              mass:120,    power:250 },
+  dronkos:  { ru:'БПЛА (косм.)',      mass:400,    power:600 },
+  btr:      { ru:'БТР / БМП',         mass:2500,   power:900 },
+  tanki:    { ru:'Танк',              mass:9000,   power:2000 },
+  arta:     { ru:'Артиллерия',        mass:25000,  power:2500 },
+  aviacia:  { ru:'Атм. авиация',      mass:2500,   power:1500 },
+  vertihui: { ru:'Вертолёт',          mass:1800,   power:1200 },
+  mla:      { ru:'Звездолёт',         mass:6000,   power:4000 },
+  corvette: { ru:'Корвет',            mass:40000,  power:9000 },
+  destroyer:{ ru:'Эсминец',           mass:90000,  power:20000 },
+  supportCarrier:{ ru:'Авианосец подд.',mass:90000,power:20000 },
+  mediumCruiser:{ ru:'Средний крейсер',mass:200000,power:45000 },
+  hyperCruiser:{ ru:'Гиперкрейсер',   mass:260000, power:70000 },
+  multiroleCarrier:{ru:'Многоцел. авианосец',mass:260000,power:70000},
+  battleship:{ ru:'Линкор',           mass:400000, power:120000 },
+  dreadnought:{ru:'Дредноут',         mass:600000, power:200000 },
+  ss13:     { ru:'СС-13 (станция)',   mass:600000, power:200000 },
+};
+const CARRIER_ORDER = Object.keys(CARRIERS);
+// Кто в принципе носит установку такого класса (без учёта габаритов).
+const CLASS_CARRIERS = {
+  mg:      ['peh','dron','btr','tanki','arta','aviacia','vertihui','dronkos','mla'],
+  gl:      ['peh','btr','tanki','vertihui','dron'],
+  hw:      ['peh','btr','tanki','aviacia','vertihui','dron','dronkos'],
+  drone:   ['dron','dronkos','aviacia','vertihui','mla'],
+  air:     ['aviacia','vertihui','dronkos','mla','dron'],
+  apc:     ['btr','tanki','arta','mla','vertihui'],
+  aa:      ['btr','tanki','arta','mla','corvette','destroyer','supportCarrier','mediumCruiser',
+            'hyperCruiser','multiroleCarrier','battleship','dreadnought','ss13'],
+  tankgun: ['tanki','btr','arta','mla'],
+  arty:    ['arta','tanki'],
+  howitz:  ['arta'],
+  rsu:     ['arta','btr','vertihui'],
+  rpu:     ['arta','btr','tanki','aviacia','vertihui','mla','corvette','destroyer'],
+  rocket:  ['arta','mla','corvette','destroyer','supportCarrier','mediumCruiser'],
+  brm:     ['arta','ss13','battleship','dreadnought'],
+  light:   ['mla','corvette','destroyer','supportCarrier','mediumCruiser','hyperCruiser',
+            'multiroleCarrier','battleship','dreadnought','ss13'],
+  medium:  ['destroyer','supportCarrier','mediumCruiser','hyperCruiser','multiroleCarrier',
+            'battleship','dreadnought','ss13'],
+  heavy:   ['mediumCruiser','hyperCruiser','multiroleCarrier','battleship','dreadnought','ss13'],
+  super:   ['battleship','dreadnought','ss13'],
+};
+// Полный разбор: кто тянет, кто нет и по какой причине.
+function carriers(input){
+  const cfg=normalize(input), st=stats(cfg);
+  const base=CLASS_CARRIERS[cfg.klass]||CLASS_CARRIERS.medium;
+  return CARRIER_ORDER.filter(k=>base.indexOf(k)>=0).map(k=>{
+    const c=CARRIERS[k], why=[];
+    if(st.mass>c.mass) why.push('масса '+Math.round(st.mass)+' кг > '+c.mass);
+    if(st.energy>c.power) why.push('энергия '+st.energy+' > '+c.power);
+    return { key:k, ru:c.ru, ok:!why.length, why:why.join('; ') };
+  });
+}
+// Короткий ответ: список ключей носителей, которые реально тянут сборку.
+function carrierKeys(input){ return carriers(input).filter(c=>c.ok).map(c=>c.key); }
+
 return { render, stats, fromKV, isTurret, turretCatalog,
+         carriers, carrierKeys, CARRIERS, CLASS_CARRIERS,
          normalize, rulesOf, allowedTechs, CLASS_RULES,
          PLATFORMS, TECHS, CLASSES, LAYOUTS, MATS, DEFAULTS };
 })();

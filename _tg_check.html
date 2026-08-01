@@ -1,0 +1,36 @@
+<!doctype html><html><head><meta charset="utf-8"><title>TG check</title>
+<style>body{background:#151a1f;color:#cfd6dd;font:13px system-ui;margin:12px}
+.g{display:flex;flex-wrap:wrap;gap:10px}
+.c{width:230px;background:#1b2128;border:1px solid #2a323b;border-radius:6px;padding:6px}
+.c svg{width:100%;height:auto;display:block}
+.t{font-size:11px;color:#8b98a5;margin-bottom:4px}</style></head><body>
+<div class="g" id="g"></div>
+<script src="turret_gen.js"></script>
+<script>
+const cases=[
+ ['ЭХС 1 ствол',{klass:'medium',tech:'ehs',barrels:1,caliber:150}],
+ ['ЭХС 3 ствола',{klass:'medium',tech:'ehs',barrels:3,caliber:150}],
+ ['Рельса 3',{klass:'medium',tech:'rail',barrels:3,caliber:150}],
+ ['ЭМ (катушки) 3',{klass:'heavy',tech:'em',barrels:3,caliber:250}],
+ ['Плазма 1',{klass:'medium',tech:'plasma',barrels:1,caliber:150}],
+ ['Плазма 4',{klass:'medium',tech:'plasma',barrels:4,caliber:150}],
+ ['Нано 1',{klass:'heavy',tech:'nano',barrels:1,caliber:250}],
+ ['Нано 3',{klass:'heavy',tech:'nano',barrels:3,caliber:250}],
+ ['РЭБ 1',{klass:'medium',tech:'ew',barrels:1,caliber:120}],
+ ['РЭБ 4',{klass:'medium',tech:'ew',barrels:4,caliber:120}],
+ ['Лазер 4',{klass:'medium',tech:'laser',barrels:4,caliber:150}],
+ ['РПУ 3',{klass:'rpu',tech:'missile',barrels:3,caliber:200}],
+ ['РСУ 6',{klass:'rsu',tech:'missile',barrels:6,caliber:120}],
+ ['МБР 2',{klass:'brm',tech:'missile',barrels:2,caliber:400}],
+ ['Дрон size .4',{klass:'drone',tech:'kinetic',barrels:1,caliber:20,size:0.4}],
+ ['Пулемёт',{klass:'mg',tech:'kinetic',barrels:1,caliber:12}],
+ ['Танк size 1',{klass:'tankgun',tech:'ehs',barrels:1,caliber:120,size:1}],
+ ['Супер size 3',{klass:'super',tech:'rail',barrels:2,caliber:500,size:3}],
+];
+const g=document.getElementById('g');
+for(const [t,c] of cases){
+  const d=document.createElement('div'); d.className='c';
+  d.innerHTML='<div class="t">'+t+'</div>'+TG.render(Object.assign({platform:'1',detail:0.6},c));
+  g.appendChild(d);
+}
+</script></body></html>

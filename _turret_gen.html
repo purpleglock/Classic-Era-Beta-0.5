@@ -1,166 +1,536 @@
-<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Генератор орудий</title>
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Верстак орудий</title>
 <style>
- :root{--b1:#0a1418;--w1:#16323a;--te:#3fe0d0;--t2:#8fb0bd;--gd:#c9a24b}
- *{box-sizing:border-box}
- body{margin:0;background:#07141a;color:#cfe4ff;font:12px/1.5 monospace;display:flex;height:100vh}
- #panel{width:320px;flex:none;overflow:auto;padding:14px;background:#0a1c23;border-right:1px solid var(--w1)}
- #stage{flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;
-   background:radial-gradient(ellipse at 50% 45%,#123038,#07141a 70%)}
- #stage svg{max-width:94%;max-height:94vh;filter:drop-shadow(0 14px 30px rgba(0,0,0,.65))}
- #stats{width:230px;flex:none;overflow:auto;padding:14px;background:#0a1c23;border-left:1px solid var(--w1)}
- h4{margin:16px 0 6px;color:var(--te);text-transform:uppercase;letter-spacing:1px;font-size:10px}
- h4:first-child{margin-top:0}
- label{display:block;margin:7px 0 2px;color:var(--t2);font-size:10px;text-transform:uppercase;letter-spacing:.6px}
- input[type=range]{width:100%;accent-color:var(--te)}
- select,input[type=text]{width:100%;background:var(--w1);color:#cfe4ff;border:none;padding:5px 7px;font:12px monospace}
- input[type=color]{width:100%;height:26px;background:none;border:none;padding:0}
- .v{float:right;color:var(--gd)}
- button{width:100%;margin-top:12px;padding:7px;background:var(--te);color:#06202a;border:none;
-   font:700 11px monospace;text-transform:uppercase;letter-spacing:1px;cursor:pointer}
- .row2{display:flex;gap:8px}.row2>*{flex:1}
- table{width:100%;border-collapse:collapse}
- td{padding:3px 0;font-size:11px;border-bottom:1px solid #12262d}
- td:last-child{text-align:right;color:#e8eef5;font-weight:700}
- td:first-child{color:var(--t2)}
- .big td:last-child{color:var(--gd);font-size:13px}
- .btn-back { position:absolute; top:10px; left:10px; background:var(--w1); color:var(--te); padding:6px 12px; text-decoration:none; font-weight:bold; border-radius:4px; z-index:999; border:1px solid var(--te); font-size:11px; text-transform:uppercase; letter-spacing:1px; }
- .banner-tests { position:absolute; top:10px; left:50%; transform:translateX(-50%); background:var(--gd); color:#0a1418; padding:4px 12px; font-weight:bold; border-radius:4px; z-index:999; box-shadow:0 2px 10px rgba(0,0,0,0.5); text-transform:uppercase; letter-spacing:1px; font-size:11px; white-space:nowrap; }
- @media (max-width: 768px) {
-   body { flex-direction: column; height: auto; min-height: 100vh; }
-   #panel { width: 100%; border-right: none; order: 2; padding: 20px 16px; }
-   #stage { width: 100%; height: 55vh; min-height: 380px; flex: none; order: 1; border-bottom: 2px solid var(--w1); position: relative; }
-   #stats { width: 100%; border-left: none; border-top: 2px solid var(--w1); order: 3; padding: 20px 16px 40px; }
-   .banner-tests { top: 56px; padding: 8px 16px; font-size: 12px; width: 90%; white-space: normal; text-align: center; }
-   .btn-back { padding: 10px 16px; font-size: 12px; top: 12px; left: 12px; }
-   
-   /* Touch targets */
-   select, input[type=text] { padding: 10px; font-size: 14px; }
-   button { padding: 12px; font-size: 13px; margin-top: 16px; }
-   input[type=color] { height: 44px; }
-   input[type=range] { margin: 10px 0; }
-   label { font-size: 11px; margin: 12px 0 4px; }
-   h4 { font-size: 12px; margin: 24px 0 10px; }
-   h4:first-child { margin-top: 0; }
-   
-   /* Tables */
-   td { padding: 6px 0; font-size: 12px; }
-   .big td:last-child { font-size: 15px; }
- }
+/* ══ ВЕРСТАК: точки модификации живут НА самом орудии, как в оружейнике ══ */
+:root{
+  --bg:#0f1113; --panel:#191c1f; --panel2:#22262a; --line:#2e3338; --line2:#414850;
+  --txt:#c8c5bc; --dim:#7b7f86; --tan:#b9a06a; --amber:#e8a93f;
+  --good:#86c25c; --bad:#c9553c;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:#0f1113;color:var(--txt);overflow:hidden;
+  font:13px/1.4 "Segoe UI",Roboto,system-ui,sans-serif;-webkit-tap-highlight-color:transparent;
+  display:flex;flex-direction:column;user-select:none}
+button,select,input{font-family:inherit}
+
+/* ── Верхняя планка ─────────────────────────────────────────────────────── */
+#top{flex:none;height:44px;display:flex;align-items:center;gap:10px;padding:0 10px;
+  background:linear-gradient(180deg,#22262a,#15181b);border-bottom:1px solid var(--line2);z-index:40}
+.hbtn{background:#262b30;color:var(--txt);border:1px solid var(--line2);padding:6px 11px;cursor:pointer;
+  font-size:11px;letter-spacing:1.4px;text-transform:uppercase;text-decoration:none;white-space:nowrap;
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+.hbtn:hover{background:#333940;border-color:var(--tan);color:#fff}
+.hbtn.acc{background:var(--tan);color:#15181b;font-weight:700;border-color:var(--amber)}
+.hbtn.acc:hover{background:var(--amber)}
+#name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  font-size:14px;letter-spacing:1.5px;text-transform:uppercase;color:#e3ded1}
+#name small{color:var(--tan);letter-spacing:2px;font-size:10px;margin-left:8px}
+
+/* ── Сцена ──────────────────────────────────────────────────────────────── */
+#stage{flex:1;position:relative;min-height:0;overflow:hidden;cursor:grab;
+  background:radial-gradient(ellipse at 50% 46%,#242a2e 0%,#0d0f11 70%)}
+#stage.drag{cursor:grabbing}
+#grid{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(rgba(185,160,106,.055) 1px,transparent 1px) 0 0/100% 40px,
+             linear-gradient(90deg,rgba(185,160,106,.055) 1px,transparent 1px) 0 0/40px 100%;
+  mask-image:radial-gradient(ellipse at 50% 50%,#000 18%,transparent 76%)}
+#vig{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 160px rgba(0,0,0,.9)}
+#svgbox{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+#svgbox svg{max-width:74%;max-height:76%;filter:drop-shadow(0 20px 40px rgba(0,0,0,.75))}
+#leads{position:absolute;inset:0;pointer-events:none;z-index:5}
+.corner{position:absolute;width:20px;height:20px;border:1px solid rgba(185,160,106,.35);pointer-events:none;z-index:6}
+.corner.tl{top:12px;left:12px;border-right:0;border-bottom:0}
+.corner.tr{top:12px;right:12px;border-left:0;border-bottom:0}
+.corner.bl{bottom:12px;left:12px;border-right:0;border-top:0}
+.corner.br{bottom:12px;right:12px;border-left:0;border-top:0}
+#tip{position:absolute;left:12px;top:12px;z-index:6;pointer-events:none;
+  font:10px/1.7 "Consolas",monospace;color:var(--dim);letter-spacing:1.4px;text-transform:uppercase}
+#tip b{color:var(--tan)}
+
+/* ── Точка модификации на орудии ────────────────────────────────────────── */
+.node{position:absolute;z-index:10;transform:translate(-50%,-50%);cursor:pointer;
+  width:26px;height:26px;display:grid;place-items:center;
+  background:rgba(20,23,26,.9);border:1px solid var(--line2);color:var(--tan);font-size:13px;
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  transition:transform .1s,background .12s,border-color .12s}
+.node:before{content:"";position:absolute;inset:-7px;border:1px solid transparent;
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.node:hover,.node.on{background:var(--tan);color:#15181b;border-color:var(--amber);transform:translate(-50%,-50%) scale(1.12)}
+.node:hover:before,.node.on:before{border-color:rgba(232,169,63,.5)}
+.node .lb{position:absolute;left:34px;top:50%;transform:translateY(-50%);white-space:nowrap;
+  background:rgba(16,19,21,.94);border:1px solid var(--line2);border-left:2px solid var(--tan);
+  padding:4px 9px;pointer-events:none;opacity:0;transition:opacity .12s}
+.node.lft .lb{left:auto;right:34px;border-left:1px solid var(--line2);border-right:2px solid var(--tan)}
+.node:hover .lb{opacity:1}
+.node .lb i{display:block;font-style:normal;font-size:8px;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+.node .lb b{font-size:12px;color:#e3ded1;font-weight:500}
+
+/* ── Нижняя планка ТТХ (сегментные полосы) ──────────────────────────────── */
+#bottom{flex:none;display:flex;align-items:stretch;gap:0;background:linear-gradient(180deg,#1b1f22,#121517);
+  border-top:1px solid var(--line2);z-index:30;overflow-x:auto}
+.st{flex:1;min-width:132px;padding:7px 12px;border-right:1px solid #24282c}
+.st .hd{display:flex;justify-content:space-between;align-items:baseline}
+.st i{font-style:normal;font-size:8.5px;letter-spacing:2px;text-transform:uppercase;color:var(--dim)}
+.st u{text-decoration:none;font:600 13px "Consolas",monospace;color:#e3ded1}
+.st em{font-style:normal;font:600 10px "Consolas",monospace;margin-left:5px;opacity:0}
+.st em.show{opacity:1}.st em.up{color:var(--good)}.st em.dn{color:var(--bad)}
+.seg{display:flex;gap:2px;margin-top:6px;height:7px}
+.seg s{flex:1;background:#22262a;border-top:1px solid #2c3136;text-decoration:none}
+.seg s.f{background:linear-gradient(180deg,#c9ae74,#8d7642)}
+.seg s.up{background:repeating-linear-gradient(45deg,#86c25c 0 3px,#5d8b3f 3px 6px)}
+.seg s.dn{background:repeating-linear-gradient(45deg,#c9553c 0 3px,#8b3826 3px 6px)}
+
+/* ── Всплывающий выбор детали ───────────────────────────────────────────── */
+#pop{position:absolute;z-index:60;width:340px;max-height:min(70vh,520px);display:none;
+  flex-direction:column;background:var(--panel);border:1px solid var(--line2);
+  box-shadow:0 20px 50px rgba(0,0,0,.75)}
+#pop.on{display:flex}
+#pop .ph{display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line2);
+  background:linear-gradient(180deg,#262b30,#1c2024)}
+#pop .ph b{flex:1;font-size:10px;letter-spacing:2.6px;text-transform:uppercase;color:var(--tan)}
+#pop .ph span{cursor:pointer;color:var(--dim);font-size:17px;line-height:1;padding:0 3px}
+#pop .ph span:hover{color:var(--bad)}
+#pop .pb{overflow-y:auto;padding:6px}
+.opt{padding:7px 10px;cursor:pointer;background:#1d2124;border:1px solid #2b3035;margin-bottom:5px;position:relative}
+.opt:hover{background:#2b3238;border-color:var(--tan)}
+.opt.sel{border-color:var(--amber);background:#2a2820}
+.opt.sel:after{content:"✔";position:absolute;top:6px;right:9px;color:var(--amber);font-size:11px}
+.opt .nm{font-size:12.5px;color:#e3ded1;padding-right:20px}
+.opt .dl{display:flex;flex-wrap:wrap;gap:3px 9px;font:10px "Consolas",monospace;color:#5f646a;margin-top:3px}
+.opt .dl s{text-decoration:none}.opt .dl s.up{color:var(--good)}.opt .dl s.dn{color:var(--bad)}
+.sl{padding:7px 10px 9px;border-bottom:1px solid #24282c}
+.sl .h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.sl .h i{font-style:normal;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:var(--dim)}
+.sl .h b{font:600 12px "Consolas",monospace;color:var(--amber)}
+.sl .h b.lim{font-size:9px;color:#5b6067;font-weight:400;margin-left:5px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:16px;background:none;margin:0;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:4px;background:#101314;border:1px solid #2e3338}
+input[type=range]::-moz-range-track{height:4px;background:#101314;border:1px solid #2e3338}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:15px;margin-top:-6px;
+  background:linear-gradient(180deg,#dcc084,#a3854a);border:1px solid #0f1113}
+input[type=range]::-moz-range-thumb{width:11px;height:15px;border-radius:0;
+  background:linear-gradient(180deg,#dcc084,#a3854a);border:1px solid #0f1113}
+input[type=color]{width:100%;height:28px;background:#101314;border:1px solid var(--line2);padding:2px;cursor:pointer}
+select.kv{width:100%;background:#101314;color:var(--txt);border:1px solid var(--line2);padding:6px;font-size:12px}
+.row2{display:flex;gap:8px;padding:8px 10px}.row2>div{flex:1}
+.row2 i{font-style:normal;display:block;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+
+/* ── Досье (выдвижная панель) ───────────────────────────────────────────── */
+#dos{position:absolute;top:0;right:0;bottom:0;width:288px;z-index:35;overflow-y:auto;
+  background:rgba(21,24,27,.97);border-left:1px solid var(--line2);transform:translateX(100%);
+  transition:transform .18s ease}
+#dos.on{transform:none}
+.sec{padding:8px 12px 6px;font-size:9px;letter-spacing:2.4px;text-transform:uppercase;color:var(--tan);
+  background:#1d2124;border-top:1px solid var(--line);border-bottom:1px solid var(--line);position:sticky;top:0}
+#dos table{width:100%;border-collapse:collapse}
+#dos td{padding:4px 12px;font-size:11.5px;border-bottom:1px solid #23272b}
+#dos td:first-child{color:var(--dim)}
+#dos td:last-child{text-align:right;color:#e3ded1;font-family:"Consolas",monospace}
+#dos tr.ok td:first-child{color:#9dbd8b}#dos tr.no td{opacity:.42}
+#dos tr.ok td:last-child,#dos tr.no td:last-child{font-size:10px;color:var(--dim);font-family:inherit}
+
+@media (max-width:900px){
+  #top{height:auto;flex-wrap:wrap;padding:7px}
+  #name{order:5;width:100%;font-size:12px}
+  #svgbox svg{max-width:88%}
+  .st{min-width:112px;padding:6px 9px}
+  #pop{left:0!important;right:0;top:auto!important;bottom:0;width:100%;max-height:72vh;border-bottom:0}
+  #dos{width:100%}
+  .node{width:32px;height:32px}
+}
 </style>
-<a href="index.html#constructors" class="btn-back">&#8592; Назад</a>
-<div class="banner-tests">Внимание: идут тесты</div>
-<div id="panel"></div><div id="stage"></div><div id="stats"></div>
+
+<div id="top">
+  <a href="index.html#constructors" class="hbtn">&#8592; Назад</a>
+  <button class="hbtn" id="bPreset">Пресет</button>
+  <button class="hbtn" id="bPaint">Окраска</button>
+  <div id="name"></div>
+  <button class="hbtn" id="bDos">Досье</button>
+  <button class="hbtn acc" id="bDl">SVG</button>
+</div>
+
+<div id="stage">
+  <div id="grid"></div>
+  <div id="svgbox"></div>
+  <svg id="leads"></svg>
+  <div id="vig"></div>
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  <div id="tip"></div>
+  <div id="pop"><div class="ph"><b id="popT"></b><span id="popX">&#10005;</span></div><div class="pb" id="popB"></div></div>
+  <div id="dos"></div>
+</div>
+
+<div id="bottom"></div>
+
 <script src="constructors_kv.js"></script>
 <script src="turret_gen.js"></script>
 <script>
+'use strict';
 const cfg = Object.assign({}, TG.DEFAULTS);
-const SL = [
-  ['caliber','Калибр, мм',6,500,1],
-  ['barrels','Стволов',1,8,1],
-  ['barrelLen','Длина ствола, клб',15,110,1],
-  ['size','Масштаб',0.4,3,0.05],
-  ['yaw','Поворот башни, °',-180,180,1],
-  ['detail','Детализация',0,1,0.05],
-  ['seed','Сид',1,9999,1],
-];
-// Технологии и компоновка сужаются под выбранный класс и число стволов —
-// нельзя предлагать пулемёт на пусковой установке.
-function options(){
-  const R = TG.rulesOf(cfg.klass);
-  const techs = {}; for(const t of R.techs) if(TG.TECHS[t]) techs[t] = TG.TECHS[t].ru;
-  const lay = {};
-  const LMIN = { row:1, stacked:2, quad:4, rotary:3 };
-  for(const l in TG.LAYOUTS)
-    if((cfg.barrels|0) >= (LMIN[l]||1)) lay[l] = TG.LAYOUTS[l];
-  return [
-    ['platform','Платформа', TG.PLATFORMS],
-    ['klass','Класс',       Object.fromEntries(Object.entries(TG.CLASSES).map(([k,v])=>[k,v.ru]))],
-    ['tech','Технология',   techs],
-    ['layout','Компоновка', lay],
-  ];
-}
+const $ = id => document.getElementById(id);
 const NUM = n => n>=1e9 ? (n/1e9).toFixed(2)+' млрд'
               : n>=1e6 ? (n/1e6).toFixed(2)+' млн'
-              : n.toLocaleString('ru-RU');
+              : Math.round(n).toLocaleString('ru-RU');
 
-function build(){
-  let h = '<h4>Пресет из каталога</h4><select id="kv"><option value="">— вручную —</option></select>';
-  h += '<h4>Конфигурация</h4>';
-  for(const [k,l,o] of options())
-    h += `<label>${l}</label><select data-k="${k}">`
-       + Object.entries(o).map(([v,n])=>`<option value="${v}"${cfg[k]===v?' selected':''}>${n}</option>`).join('')
-       + '</select>';
-  h += '<h4>Параметры</h4>';
-  const R = TG.rulesOf(cfg.klass);
-  for(let [k,l,mn,mx,st] of SL){
-    if(k==='caliber'){ mn=R.cal[0]; mx=R.cal[1]; }
-    if(k==='barrelLen'){ mn=R.len[0]; mx=R.len[1]; }
-    const lim = (k==='caliber'||k==='barrelLen') ? ` <span style="opacity:.55">${mn}–${mx}</span>` : '';
-    h += `<label>${l}${lim}<span class="v" id="v_${k}">${cfg[k]}</span></label>`
-       + `<input type="range" data-k="${k}" min="${mn}" max="${mx}" step="${st}" value="${cfg[k]}">`;
+// ══ УЗЛЫ ═══════════════════════════════════════════════════════════════════
+// Каждый узел висит на реальной детали SVG (data-slot проставлен генератором),
+// а не в списке сбоку: щёлкаешь по стволу — правишь ствол.
+// anchor: [материал детали, какой из элементов, доля по ширине bbox]
+const NODES = [
+  { id:'gun',   ic:'⌖', ru:'Ствол',      anchor:['barrel','last',0.98], side:'r',
+    fields:['tech','caliber','barrelLen'] },
+  { id:'block', ic:'≡', ru:'Блок стволов',anchor:['barrel','first',0.35], side:'r',
+    fields:['layout','barrels'] },
+  { id:'hull',  ic:'⚔', ru:'Башня',      anchor:['hull','first',0.5], side:'l',
+    fields:['klass','size','detail'] },
+  { id:'base',  ic:'⚙', ru:'Платформа',  anchor:['base','first',0.16], side:'l',
+    fields:['platform','yaw','seed'] },
+];
+// Ползунки: границы калибра и длины ствола диктует класс установки.
+const SLIDERS = {
+  caliber:  ['Калибр, мм',        6,500,1],
+  barrels:  ['Стволов',           1,8,1],
+  barrelLen:['Длина ствола, клб', 15,110,1],
+  size:     ['Масштаб',           0.4,3,0.05],
+  yaw:      ['Поворот башни, °',  -180,180,1],
+  detail:   ['Детализация',       0,1,0.05],
+  seed:     ['Сид',               1,9999,1],
+};
+const PICKS = { platform:'Платформа', klass:'Класс установки', tech:'Технология', layout:'Компоновка' };
+
+// Набор допустимых вариантов сужается под класс и число стволов: нельзя дать
+// пулемёту пусковую технологию, а одному стволу — спарку.
+function optionsOf(key){
+  if(key==='platform') return TG.PLATFORMS;
+  if(key==='klass') return Object.fromEntries(Object.entries(TG.CLASSES).map(([k,v])=>[k,v.ru]));
+  if(key==='tech'){
+    const o={}; for(const t of TG.rulesOf(cfg.klass).techs) if(TG.TECHS[t]) o[t]=TG.TECHS[t].ru; return o;
   }
-  h += '<h4>Окраска</h4><div class="row2">'
-     + `<div><label>Основной</label><input type="color" data-k="tint" value="${cfg.tint}"></div>`
-     + `<div><label>Акцент</label><input type="color" data-k="accent" value="${cfg.accent}"></div></div>`
-     + '<button id="dl">Скачать SVG</button>';
-  document.getElementById('panel').innerHTML = h;
+  const LMIN={row:1,stacked:2,quad:4,rotary:3}, o={};
+  for(const l in TG.LAYOUTS) if((cfg.barrels|0)>=(LMIN[l]||1)) o[l]=TG.LAYOUTS[l];
+  return o;
+}
+function limitsOf(key){
+  const R = TG.rulesOf(cfg.klass);
+  if(key==='caliber')   return R.cal;
+  if(key==='barrelLen') return R.len;
+  const s = SLIDERS[key]; return [s[1],s[2]];
+}
 
-  const kv = document.getElementById('kv');
+// ══ ТТХ ════════════════════════════════════════════════════════════════════
+// Потолок полосы — предельная сборка ЭТОГО же класса: шкалы дрона и линкора
+// несопоставимы, общая шкала не сообщала бы ничего.
+const BARS = [
+  ['damage', 'Урон',     NUM],
+  ['dalnost','Дальность',v=>v+' гекс'],
+  ['rof',    'Темп',     NUM],
+  ['energy', 'Энергия',  NUM],
+  ['mass',   'Масса',    v=>NUM(v)+' кг'],
+  ['gs',     'Цена',     v=>NUM(v)+' ГС'],
+];
+const BETTER = {damage:1,dalnost:1,rof:1,energy:-1,mass:-1,gs:-1};
+const SEGN = 14, capMemo = {};
+function capsOf(klass){
+  if(capMemo[klass]) return capMemo[klass];
+  const R = TG.rulesOf(klass), c = {};
+  for(const t of R.techs){
+    const s = TG.stats({klass,tech:t,caliber:R.cal[1],barrelLen:R.len[1],barrels:8,layout:'row'});
+    for(const [k] of BARS) c[k] = Math.max(c[k]||0, s[k]||0);
+  }
+  for(const k in c) c[k] = c[k]||1;
+  return capMemo[klass] = c;
+}
+function buildBars(){
+  $('bottom').innerHTML = BARS.map(([k,l]) =>
+    `<div class="st"><div class="hd"><i>${l}</i><div><u id="u_${k}"></u><em id="d_${k}"></em></div></div>`
+    + `<div class="seg" id="s_${k}">${'<s></s>'.repeat(SEGN)}</div></div>`).join('');
+}
+function fillBars(s, prev){
+  const caps = capsOf(cfg.klass);
+  for(const [k,,fmt] of BARS){
+    $('u_'+k).textContent = fmt(s[k]);
+    const n = Math.max(0, Math.min(SEGN, Math.round((s[k]||0)/caps[k]*SEGN)));
+    const segs = $('s_'+k).children, em = $('d_'+k);
+    // Призрачные сегменты: разница между текущей и наведённой сборкой.
+    let pn = n, cls = '';
+    if(prev){
+      pn = Math.max(0, Math.min(SEGN, Math.round((prev[k]||0)/caps[k]*SEGN)));
+      const diff = (s[k]||0)-(prev[k]||0);
+      cls = diff ? (((diff>0?1:-1)===BETTER[k]) ? 'up' : 'dn') : '';
+      const pct = prev[k] ? Math.round(diff/prev[k]*100) : 0;
+      em.className = diff ? 'show '+cls : '';
+      em.textContent = (diff>0?'+':'')+pct+'%';
+    } else em.className = '';
+    const lo = Math.min(n,pn), hi = Math.max(n,pn);
+    for(let i=0;i<SEGN;i++)
+      segs[i].className = i<lo ? 'f' : (prev && i<hi ? cls : '');
+  }
+}
+// Наведение на вариант в списке: показываем, какой была бы сборка.
+function preview(candidate){
+  if(!candidate){ fillBars(TG.stats(cfg)); return; }
+  fillBars(TG.stats(candidate), TG.stats(cfg));
+}
+
+// ══ ВСПЛЫВАЮЩИЙ ВЫБОР ══════════════════════════════════════════════════════
+let openNode = null;
+const DELTA = [['damage','УР'],['dalnost','ДАЛ'],['rof','ТЕМП'],['energy','ЭН'],['mass','МАС']];
+
+function optHTML(key){
+  const base = TG.stats(cfg);
+  return Object.entries(optionsOf(key)).map(([v,n]) => {
+    const cand = TG.normalize(Object.assign({},cfg,{[key]:v})), s = TG.stats(cand);
+    let d = '';
+    for(const [f,ru] of DELTA){
+      const diff = (s[f]||0)-(base[f]||0);
+      if(!diff){ d += `<span>${ru} —</span>`; continue; }
+      const good = (diff>0?1:-1)===BETTER[f];
+      d += `<s class="${good?'up':'dn'}">${ru} ${diff>0?'+':''}${base[f]?Math.round(diff/base[f]*100):0}%</s>`;
+    }
+    // Смена класса может выбить несовместимую технологию — предупреждаем заранее.
+    if(key==='klass' && cand.tech!==cfg.tech) d += `<s class="dn">тех → ${TG.TECHS[cand.tech].ru}</s>`;
+    return `<div class="opt${cfg[key]===v?' sel':''}" data-key="${key}" data-v="${v}">`
+         + `<div class="nm">${n}</div><div class="dl">${d}</div></div>`;
+  }).join('');
+}
+function sliderHTML(key){
+  const [lo,hi] = limitsOf(key), st = SLIDERS[key][3];
+  const lim = (key==='caliber'||key==='barrelLen') ? `<b class="lim">${lo}–${hi}</b>` : '';
+  return `<div class="sl"><div class="h"><i>${SLIDERS[key][0]}</i><div><b id="v_${key}">${cfg[key]}</b>${lim}</div></div>`
+       + `<input type="range" data-k="${key}" min="${lo}" max="${hi}" step="${st}" value="${cfg[key]}"></div>`;
+}
+function openNodePop(node, el){
+  if(openNode===node.id){ closePop(); return; }
+  openNode = node.id;
+  $('popT').textContent = node.ru;
+  $('popB').innerHTML = node.fields.map(f => PICKS[f]
+      ? `<div class="sec">${PICKS[f]}</div>${optHTML(f)}`
+      : sliderHTML(f)).join('');
+  showPop(el);
+}
+function showPop(el){
+  const p = $('pop'), s = $('stage').getBoundingClientRect();
+  p.classList.add('on');
+  if(el){
+    const r = el.getBoundingClientRect();
+    const w = p.offsetWidth, h = p.offsetHeight;
+    let x = r.right - s.left + 14, y = r.top - s.top - h/2 + r.height/2;
+    if(x + w > s.width - 8) x = r.left - s.left - w - 14;
+    p.style.left = Math.max(8, Math.min(s.width - w - 8, x)) + 'px';
+    p.style.top  = Math.max(8, Math.min(s.height - h - 8, y)) + 'px';
+  }
+  document.querySelectorAll('.node').forEach(n => n.classList.toggle('on', n.dataset.id===openNode));
+}
+function closePop(){
+  openNode = null; $('pop').classList.remove('on'); preview(null);
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('on'));
+}
+$('popX').onclick = closePop;
+document.addEventListener('keydown', e => { if(e.key==='Escape') closePop(); });
+$('popB').onclick = e => {
+  const o = e.target.closest('.opt'); if(!o) return;
+  cfg[o.dataset.key] = o.dataset.v;
+  Object.assign(cfg, TG.normalize(cfg));
+  closePop(); draw();
+};
+$('popB').oninput = e => {
+  const k = e.target.dataset.k; if(!k) return;
+  cfg[k] = e.target.type==='range' ? parseFloat(e.target.value) : e.target.value;
+  Object.assign(cfg, TG.normalize(cfg));
+  const b = $('v_'+k); if(b) b.textContent = cfg[k];
+  // Поворот — только transform, без перерисовки и пересчёта ТТХ.
+  if(k==='yaw'){ spin(cfg.yaw); return; }
+  // Число стволов меняет сам список компоновок — пересобираем открытый список.
+  const keep = openNode; draw();
+  if(k==='barrels' && keep){ const n=document.querySelector('.node[data-id="'+keep+'"]');
+    if(n){ openNode=null; openNodePop(NODES.find(x=>x.id===keep), n); } }
+};
+$('popB').onmouseover = e => {
+  const o = e.target.closest('.opt'); if(!o) return;
+  preview(TG.normalize(Object.assign({},cfg,{[o.dataset.key]:o.dataset.v})));
+};
+$('popB').onmouseout = e => { if(e.target.closest('.opt')) preview(null); };
+
+// ══ РАЗМЕЩЕНИЕ УЗЛОВ НА ДЕТАЛЯХ ════════════════════════════════════════════
+// Координата берётся из bbox реальной детали в SVG: башня повернулась или
+// сменила силуэт — узлы уехали вместе с ней.
+function anchorPoint(a){
+  const svg = document.querySelector('#svgbox svg'); if(!svg) return null;
+  const els = svg.querySelectorAll('[data-slot="'+a[0]+'"]');
+  if(!els.length) return null;
+  const el = a[1]==='last' ? els[els.length-1] : els[0];
+  const r = el.getBoundingClientRect(), s = $('stage').getBoundingClientRect();
+  if(!r.width && !r.height) return null;
+  return { x: r.left - s.left + r.width*a[2], y: r.top - s.top + r.height/2 };
+}
+function placeNodes(){
+  const s = $('stage').getBoundingClientRect();
+  const leads = $('leads'); leads.setAttribute('viewBox',`0 0 ${s.width} ${s.height}`);
+  leads.setAttribute('width',s.width); leads.setAttribute('height',s.height);
+  let lines = '';
+  for(const nd of NODES){
+    const el = document.querySelector('.node[data-id="'+nd.id+'"]'); if(!el) continue;
+    const p = anchorPoint(nd.anchor) || { x:s.width/2, y:s.height/2 };
+    // Узел выносим ЗА габарит рисунка, а не просто в сторону: иначе на
+    // широких силуэтах он ложится поверх той самой детали, что подписывает.
+    const svg = document.querySelector('#svgbox svg');
+    const b = svg ? svg.getBoundingClientRect() : null;
+    const edge = b ? (nd.side==='l' ? b.left - s.left - 26 : b.right - s.left + 26) : p.x;
+    const nx = Math.max(30, Math.min(s.width-30, edge));
+    const ny = Math.max(30, Math.min(s.height-30, p.y + (nd.id==='block'? -64 : nd.id==='base'? 60 : 0)));
+    el.style.left = nx+'px'; el.style.top = ny+'px';
+    el.classList.toggle('lft', nd.side==='l');
+    lines += `<path d="M ${nx} ${ny} L ${p.x} ${p.y}" stroke="rgba(185,160,106,.45)" stroke-width="1" fill="none"/>`
+           + `<circle cx="${p.x}" cy="${p.y}" r="2.5" fill="#e8a93f"/>`;
+  }
+  leads.innerHTML = lines;
+}
+function buildNodes(){
+  const html = NODES.map(n => `<div class="node" data-id="${n.id}"><span>${n.ic}</span>`
+    + `<div class="lb"><i>${n.ru}</i><b id="nb_${n.id}"></b></div></div>`).join('');
+  $('stage').insertAdjacentHTML('beforeend', html);
+  document.querySelectorAll('.node').forEach(el => {
+    const nd = NODES.find(n=>n.id===el.dataset.id);
+    el.onclick = ev => { ev.stopPropagation(); openNodePop(nd, el); };
+    // Наведение подсвечивает саму деталь на орудии.
+    el.onmouseenter = () => hilite(nd.anchor[0], true);
+    el.onmouseleave = () => hilite(nd.anchor[0], false);
+  });
+}
+function hilite(slot, on){
+  const svg = document.querySelector('#svgbox svg'); if(!svg) return;
+  svg.querySelectorAll('[data-slot="'+slot+'"]').forEach(e =>
+    e.style.filter = on ? 'brightness(1.55) saturate(1.2)' : '');
+}
+function nodeLabels(){
+  $('nb_gun').textContent   = TG.TECHS[cfg.tech].ru + ' · ' + cfg.caliber + 'мм';
+  $('nb_block').textContent = (TG.LAYOUTS[cfg.layout]||'') + ' ×' + cfg.barrels;
+  $('nb_hull').textContent  = TG.CLASSES[cfg.klass].ru;
+  $('nb_base').textContent  = TG.PLATFORMS[cfg.platform];
+}
+
+// ══ ДОСЬЕ ══════════════════════════════════════════════════════════════════
+const RES = {blackmetall:'Чёрный металл',coloredmetall:'Цветной металл',
+             rudametall:'Рудный металл',kristall:'Кристаллы',staarvis:'Ставрис'};
+function drawDossier(s){
+  let h = '<div class="sec">Детали</div><table>'
+    + `<tr><td>Урон за ствол</td><td>${NUM(s.salvo)}</td></tr>`
+    + `<tr><td>Урона на энергию</td><td>${s.dmgPerEnergy}</td></tr>`
+    + `<tr><td>Боеприпас</td><td>${({kinetic:'кинетика',energy:'энергия',missile:'ракеты'})[s.kind]}</td></tr>`
+    + `<tr><td>KV-прайс (не тратится)</td><td>${NUM(s.price)}</td></tr>`
+    + `<tr><td>Технология</td><td>×${s.tC}</td></tr><tr><td>Тип урона</td><td>+${s.dC}</td></tr>`
+    + `<tr><td>Класс</td><td>×${s.cC}</td></tr></table>`;
+  // Списывается со склада державы именно это (ведомость игровых ресурсов).
+  h += '<div class="sec">Ресурсы на постройку</div><table>';
+  for(const k in s.bill) h += `<tr><td>${k}</td><td>${s.bill[k]}</td></tr>`;
+  // Носители считаются из самой сборки (класс установки + масса + энергия).
+  h += '</table><div class="sec">Ставится на</div><table>';
+  for(const c of TG.carriers(cfg))
+    h += `<tr class="${c.ok?'ok':'no'}"><td>${c.ok?'✔':'✕'} ${c.ru}</td><td>${c.ok?'':c.why}</td></tr>`;
+  // Внутренняя KV-номенклатура — справочно, на склад не ложится.
+  h += '</table><div class="sec">Конструкц. сырьё (KV, справочно)</div><table>';
+  for(const k in s.resurs) if(s.resurs[k]>0) h += `<tr><td>${RES[k]}</td><td>${s.resurs[k]}</td></tr>`;
+  $('dos').innerHTML = h + '</table>';
+}
+
+// ══ ОТРИСОВКА ══════════════════════════════════════════════════════════════
+function draw(){
+  $('svgbox').innerHTML = TG.render(cfg);
+  const s = TG.stats(cfg);
+  fillBars(s); drawDossier(s); nodeLabels();
+  $('name').innerHTML = TG.CLASSES[cfg.klass].ru + ' · ' + TG.TECHS[cfg.tech].ru
+    + `<small>${cfg.caliber}мм L${cfg.barrelLen} · ×${cfg.barrels}</small>`;
+  $('tip').innerHTML = `ЛКМ по узлу — правка · тяни фон — поворот · колесо — масштаб<br>`
+    + `сид <b>${cfg.seed}</b> · поворот <b>${Math.round(cfg.yaw)}°</b> · масштаб <b>${(+cfg.size).toFixed(2)}</b>`;
+  requestAnimationFrame(placeNodes);
+}
+
+// ── Панели шапки: пресет и окраска — те же всплывашки ─────────────────────
+$('bPreset').onclick = e => {
+  openNode = 'preset';
+  $('popT').textContent = 'Пресет из каталога';
+  let h = '<div style="padding:8px 10px"><select class="kv" id="kv"><option value="">— вручную —</option></select></div>';
+  $('popB').innerHTML = h; showPop(e.target);
+  const kv = $('kv');
   if(window.KV){
-    // Только башенные орудия: ножи, пистолеты, гранаты и ангарные звенья
-    // генератору турелей не нужны. Группируем по категории каталога.
-    const lib = TG.turretCatalog(KV.weaponLibrary);
-    const byCat = {};
+    // Только башенные орудия: ножи, пистолеты и ангарные звенья тут ни к чему.
+    const lib = TG.turretCatalog(KV.weaponLibrary), byCat = {};
     for(const n in lib) (byCat[lib[n].category||'Прочее'] ||= []).push(n);
     for(const cat of Object.keys(byCat).sort()){
       const g = document.createElement('optgroup'); g.label = cat;
       for(const n of byCat[cat].sort()){
-        const o = document.createElement('option'); o.value = n; o.textContent = n; g.appendChild(o);
+        const o = document.createElement('option'); o.value=n; o.textContent=n; g.appendChild(o);
       }
       kv.appendChild(g);
     }
-    kv.onchange = e => { if(!e.target.value) return;
-      Object.assign(cfg, TG.fromKV(e.target.value, KV.weaponLibrary[e.target.value]));
-      build(); draw(); };
+    kv.onchange = ev => { if(!ev.target.value) return;
+      Object.assign(cfg, TG.fromKV(ev.target.value, KV.weaponLibrary[ev.target.value]));
+      closePop(); draw(); };
   }
-  document.getElementById('panel').oninput = e => {
-    const k = e.target.dataset.k; if(!k) return;
-    cfg[k] = e.target.type==='range' ? parseFloat(e.target.value) : e.target.value;
-    // Класс и число стволов меняют сам набор допустимых опций
-    if(k==='klass' || k==='barrels'){ Object.assign(cfg, TG.normalize(cfg)); build(); draw(); return; }
-    Object.assign(cfg, TG.normalize(cfg));
-    const b = document.getElementById('v_'+k); if(b) b.textContent = cfg[k];
-    draw();
-  };
-  document.getElementById('dl').onclick = () => {
-    const b = new Blob([TG.render(cfg)], {type:'image/svg+xml'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(b); a.download = 'turret.svg'; a.click();
-  };
+};
+$('bPaint').onclick = e => {
+  openNode = 'paint';
+  $('popT').textContent = 'Окраска и вид';
+  $('popB').innerHTML = '<div class="row2">'
+    + `<div><i>Основной</i><input type="color" data-k="tint" value="${cfg.tint}"></div>`
+    + `<div><i>Акцент</i><input type="color" data-k="accent" value="${cfg.accent}"></div></div>`
+    + sliderHTML('detail') + sliderHTML('seed') + sliderHTML('size');
+  showPop(e.target);
+};
+$('bDos').onclick = () => $('dos').classList.toggle('on');
+$('bDl').onclick = () => {
+  const b = new Blob([TG.render(cfg)], {type:'image/svg+xml'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b); a.download = 'turret.svg'; a.click();
+};
+
+// ── Сцена: тянем фон — крутим башню, колесо — масштаб ─────────────────────
+// Поворот НЕ трогает ни геометрию, ни ТТХ — это rotate() на группе башни.
+// Поэтому в протяжке правим только transform: перерисовывать SVG и считать
+// статистику на каждый пиксель незачем, от этого и была тяжесть.
+let drag = null, pending = false;
+function spin(deg){
+  const g = document.querySelector('#svgbox svg [data-yaw]');
+  if(g) g.setAttribute('transform', 'rotate(' + (Math.round(deg*100)/100) + ')');
+  if(pending) return;
+  pending = true;
+  requestAnimationFrame(() => {
+    pending = false; placeNodes();
+    $('tip').innerHTML = 'ЛКМ по узлу — правка · тяни фон — поворот · колесо — масштаб<br>'
+      + `сид <b>${cfg.seed}</b> · поворот <b>${Math.round(cfg.yaw)}°</b> · масштаб <b>${(+cfg.size).toFixed(2)}</b>`;
+  });
 }
-function draw(){
-  document.getElementById('stage').innerHTML = TG.render(cfg);
-  const s = TG.stats(cfg);
-  const RES = {blackmetall:'Чёрный металл',coloredmetall:'Цветной металл',
-               rudametall:'Рудный металл',kristall:'Кристаллы',staarvis:'Ставрис'};
-  let h = '<h4>Расчётные ТТХ</h4><table class="big">'
-    + `<tr><td>Урон</td><td>${NUM(s.damage)}</td></tr>`
-    + `<tr><td>Цена</td><td>${NUM(s.price)} ГС</td></tr></table>`
-    + '<table>'
-    + `<tr><td>Урон за ствол</td><td>${NUM(s.salvo)}</td></tr>`
-    + `<tr><td>Масса</td><td>${NUM(s.mass)} кг</td></tr>`
-    + `<tr><td>Энергия</td><td>${NUM(s.energy)}</td></tr>`
-    + `<tr><td>Дальность</td><td>${s.dalnost} гекс.</td></tr>`
-    + `<tr><td>Урона на энергию</td><td>${s.dmgPerEnergy}</td></tr>`
-    + `<tr><td>Темп</td><td>${NUM(s.rof)}</td></tr>`
-    + `<tr><td>Боеприпас</td><td>${({kinetic:'кинетика',energy:'энергия',missile:'ракеты'})[s.kind]}</td></tr>`
-    + '</table><h4>Коэффициенты</h4><table>'
-    + `<tr><td>Технология</td><td>×${s.tC}</td></tr>`
-    + `<tr><td>Тип урона</td><td>+${s.dC}</td></tr>`
-    + `<tr><td>Класс</td><td>×${s.cC}</td></tr>`
-    + '</table><h4>Ресурсы на постройку</h4><table>';
-  for(const k in s.resurs) if(s.resurs[k]>0) h += `<tr><td>${RES[k]}</td><td>${s.resurs[k]}</td></tr>`;
-  document.getElementById('stats').innerHTML = h + '</table>';
-}
-build(); draw();
+$('stage').addEventListener('pointerdown', e => {
+  if(e.target.closest('.node, #pop, #dos')) return;
+  closePop();
+  drag = { x:e.clientX, yaw:+cfg.yaw };
+  $('stage').classList.add('drag'); $('stage').setPointerCapture(e.pointerId);
+});
+$('stage').addEventListener('pointermove', e => {
+  if(!drag) return;
+  const y = drag.yaw + (e.clientX - drag.x) * 0.55;
+  cfg.yaw = ((y + 180) % 360 + 360) % 360 - 180;
+  spin(cfg.yaw);
+});
+const stopDrag = () => {
+  if(!drag) return;
+  drag = null; $('stage').classList.remove('drag');
+  // Ползунок поворота в открытой панели должен догнать реальный угол.
+  const inp = document.querySelector('#popB input[data-k="yaw"]');
+  if(inp){ inp.value = cfg.yaw; const b=$('v_yaw'); if(b) b.textContent = Math.round(cfg.yaw); }
+};
+$('stage').addEventListener('pointerup', stopDrag);
+$('stage').addEventListener('pointercancel', stopDrag);
+// Масштаб меняет саму геометрию — тут перерисовка нужна, но не чаще кадра.
+let zoomRAF = false;
+$('stage').addEventListener('wheel', e => {
+  e.preventDefault();
+  cfg.size = Math.max(0.4, Math.min(3, +(cfg.size - Math.sign(e.deltaY)*0.06).toFixed(2)));
+  if(zoomRAF) return;
+  zoomRAF = true;
+  requestAnimationFrame(() => { zoomRAF = false; draw(); });
+}, {passive:false});
+window.addEventListener('resize', placeNodes);
+
+buildBars(); buildNodes(); draw();
 </script>
