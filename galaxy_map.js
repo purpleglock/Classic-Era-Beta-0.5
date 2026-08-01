@@ -102,7 +102,7 @@ function gmToggleControls() {
 
 const GM = {
   systems: [], lanes: [], factions: [], sectors: [],
-  minefields: [], outposts: [], opShips: [], mzaShips: [], fleets: [], fleetsVis: [], mzaVis: [], armies: [],  // оборона: видимые поля/аванпосты + мои носители аванпостов + мои Гиперпейсер + мои флоты + видимость чужих флотов/вскрытых гиперкрейсеров (через RPC)
+  minefields: [], outposts: [], opShips: [], mzaShips: [], fleets: [], fleetsVis: [], mzaVis: [], armies: [],  // оборона: видимые поля/аванпосты + мои носители аванпостов + мои Факельщик + мои флоты + видимость чужих флотов/вскрытых факельщиков (через RPC)
   scale: 1, tx: 0, ty: 0,
   edit: false, mode: 'select',   // select | link | unlink | add | sector
   editSession: false,            // ПК: редактор зашёл в правку карты → старый SVG-рендер
@@ -198,7 +198,7 @@ async function loadGalaxyData() {
       user ? apiFetch('rpc/mza_ships_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       user ? apiFetch('rpc/fleets_mine', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       // ВИДИМОСТЬ ЧУЖИХ: флоты всех держав (состав скрыт без разведки) + вскрытые
-      // гиперкрейсера. _fleet_intel.sql может быть не накачен → []. Гостям не нужно.
+      // факельщика. _fleet_intel.sql может быть не накачен → []. Гостям не нужно.
       user ? apiFetch('rpc/fleets_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       user ? apiFetch('rpc/mza_visible', { method: 'POST', body: '{}' }).catch(() => []) : Promise.resolve([]),
       // МАРШ: мои армии на колониях (таблицы может не быть — _wellbeing_armies.sql)
@@ -214,10 +214,10 @@ async function loadGalaxyData() {
     GM.droneposts = Array.isArray(drones) ? drones : [];      // оборона: посты дронов (крылья)
     GM.outposts = Array.isArray(outposts) ? outposts : [];  // оборона: развёрнутые аванпосты
     GM.opShips = Array.isArray(opShips) ? opShips : [];    // мои корабли-носители аванпостов (idle/в полёте)
-    GM.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];  // мои Гиперпейсер — мобильные «Длани» (idle/в полёте)
+    GM.mzaShips = Array.isArray(mzaShips) ? mzaShips : [];  // мои факельщики — мобильные «Длани» (idle/в полёте)
     GM.fleets = Array.isArray(fleets) ? fleets : [];      // мои флоты — мобильные соединения (idle/в полёте)
     GM.fleetsVis = Array.isArray(fleetsVis) ? fleetsVis : [];// флоты ВСЕХ держав (видимость; состав скрыт без разведки)
-    GM.mzaVis = Array.isArray(mzaVis) ? mzaVis : [];      // ВСКРЫТЫЕ чужие гиперкрейсера
+    GM.mzaVis = Array.isArray(mzaVis) ? mzaVis : [];      // ВСКРЫТЫЕ чужие факельщики
     GM.armies = Array.isArray(armies) ? armies : [];      // МАРШ: мои армии (гарнизоны/на марше)
     GM.sectors = (secs || []).map(s => ({ ...s, system_ids: s.system_ids || [] }));
     GM.econ = {};   // system_id → { status, prosperity } для режима «бедность»
@@ -1914,9 +1914,9 @@ function gmOpenPanel(sys) {
     const f = GM.myFid ? gmFaction(GM.myFid) : null; const c = f ? gmReadable(f.color) : 'rgba(150,210,255,.9)';
     defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:${c}"></span><span class="gm-col-nm">🚀 Носитель аванпоста${sh.name ? ': ' + esc(sh.name) : ''}</span><span class="gm-col-ty">${sh.can_deploy ? 'можно развернуть' : 'на стоянке'}</span></div>`);
   });
-  // мои Гиперпейсер (мобильные «Длани»), стоящие (idle) в этой системе
+  // мои факельщики (мобильные «Длани»), стоящие (idle) в этой системе
   (GM.mzaShips || []).filter(sh => sh.status === 'idle' && sh.system_id === sys.id).forEach(sh => {
-    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:rgba(225,70,55,.9)"></span><span class="gm-col-nm">☣ Гиперпейсер${sh.name ? ': ' + esc(sh.name) : ''}</span><span class="gm-col-ty">${sh.can_fire ? 'готов к залпу' : (sh.in_flight ? 'снаряд в полёте' : 'корпус ' + Math.round(+sh.integrity || 0) + '%')}</span></div>`);
+    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:rgba(225,70,55,.9)"></span><span class="gm-col-nm">☣ Факельщик${sh.name ? ': ' + esc(sh.name) : ''}</span><span class="gm-col-ty">${sh.can_fire ? 'готов к залпу' : (sh.in_flight ? 'снаряд в полёте' : 'корпус ' + Math.round(+sh.integrity || 0) + '%')}</span></div>`);
   });
   // мои флоты (мобильные соединения), стоящие (idle) в этой системе
   (GM.fleets || []).filter(fl => fl.status === 'idle' && fl.system_id === sys.id).forEach(fl => {
@@ -1980,7 +1980,7 @@ async function gmReloadDefense(reopenSysId) {
       gmDefRpc('outpost_ships_mine').catch(() => GM.opShips || []),
       gmDefRpc('mza_ships_mine').catch(() => GM.mzaShips || []),
       gmDefRpc('fleets_mine').catch(() => GM.fleets || []),
-      // залпы в полёте (doomgun + Гиперпейсер — общая таблица) для анимации снаряда на карте
+      // залпы в полёте (doomgun + факельщик — общая таблица) для анимации снаряда на карте
       dbGet('doom_salvos', 'status=eq.in_flight&select=origin_system_id,target_system_id,target_pid,target_planet,launched_at,ready_at,faction_id').catch(() => GM.salvos || []),
       gmDefRpc('fleets_visible').catch(() => GM.fleetsVis || []),
       gmDefRpc('mza_visible').catch(() => GM.mzaVis || []),
@@ -2156,7 +2156,7 @@ async function gmOutpostCmdScrap() {
   finally { GM._defBusy = false; }
 }
 
-// ── Командная плашка Гиперпейсер (мобильной «Длани») — клик по ней на карте ──
+// ── Командная плашка факельщика (мобильной «Длани») — клик по ней на карте ──
 // Та же плашка #gm-opcmd, но действия: отправить (вся карта) / залп / списать.
 function gmOpenMzaCmd(id) {
   const sh = (GM.mzaShips || []).find(x => x.id === id && x.status === 'idle');
@@ -2169,14 +2169,14 @@ function gmOpenMzaCmd(id) {
   const sysName = (GM.systems.find(s => s.id === sh.system_id) || {}).name || sh.system_id;
   el.innerHTML = `<div class="gm-opcmd-card">
       <button class="gm-close" onclick="gmCloseMzaCmd()">✕</button>
-      <div class="gm-opcmd-title">☣ Гиперпейсер${sh.name ? ' «' + esc(sh.name) + '»' : ''}</div>
+      <div class="gm-opcmd-title">☣ Факельщик${sh.name ? ' «' + esc(sh.name) + '»' : ''}</div>
       <div class="gm-opcmd-sub">в системе ${esc(sysName)} · корпус ${Math.round(+sh.integrity || 0)}%</div>
       <button class="gm-opcmd-btn" onclick="gmMzaCmdSend()">➤ Перебросить — выберите систему</button>
       ${sh.can_fire
       ? `<button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmMzaCmdFire()">🜨 Залп — выберите систему-цель</button>`
       : `<button class="gm-opcmd-btn gm-dis" disabled>🜨 Залп недоступен</button>
            <div class="gm-opcmd-hint">${sh.in_flight ? 'Снаряд уже в полёте' : (+sh.integrity <= 0 ? 'Корпус изношен — спишите носитель' : 'Нет данных')}</div>`}
-      <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmMzaCmdScrap()">✕ Списать Гиперпейсер</button>
+      <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmMzaCmdScrap()">✕ Списать факельщика</button>
     </div>`;
   el.classList.remove('gm-hidden');
 }
@@ -2189,7 +2189,7 @@ function gmMzaCmdSend() {
   GMM.mzaCmd.mode = 'sendTarget';
   const el = document.getElementById('gm-opcmd');
   if (el) el.innerHTML = `<div class="gm-opcmd-card">
-      <div class="gm-opcmd-title">➤ Куда перебросить Гиперпейсер?</div>
+      <div class="gm-opcmd-title">➤ Куда перебросить факельщика?</div>
       <div class="gm-opcmd-hint">Кликните любую систему карты. Долёт зависит от дистанции.</div>
       <button class="gm-opcmd-btn" onclick="gmCloseMzaCmd()">Отмена</button>
     </div>`;
@@ -2198,13 +2198,13 @@ async function gmMzaSendTo(id, destSys) {
   if (GM._defBusy) return; GM._defBusy = true;
   try {
     const r = await gmDefRpc('mza_send', { p_id: id, p_dest_sys: destSys });
-    toast('☣ Гиперпейсер в пути · долёт ~' + ((r && r.fly_h) || '?') + ' ч', 'ok');
+    toast('☣ Факельщик в пути · долёт ~' + ((r && r.fly_h) || '?') + ' ч', 'ok');
     gmCloseMzaCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); gmCloseMzaCmd(); }
   finally { GM._defBusy = false; }
 }
-// Дальность залпа Гиперпейсера: ПРЫЖКИ по гиперпутям (зеркало _mza_hops в
+// Дальность залпа Факельщика: ПРЫЖКИ по гиперпутям (зеркало _mza_hops в
 // _doom_shells.sql). 4 прыжка; тяжёлая баллистика — ×2 (8).
 const GM_MZA_RANGE_HOPS = 4, GM_MZA_HEAVY_MUL = 2;
 // Карта прыжков от системы-носителя: {sysId: hops} в пределах maxHops (BFS).
@@ -2237,7 +2237,7 @@ function gmMzaCmdFire() {
       <button class="gm-opcmd-btn" onclick="gmCloseMzaCmd()">Отмена</button>
     </div>`;
 }
-// ── ЗОНА ПОРАЖЕНИЯ Гиперпейсера (режим fireTarget) — сдержанно ──
+// ── ЗОНА ПОРАЖЕНИЯ Факельщика (режим fireTarget) — сдержанно ──
 // Без спиц и заливок: тонкий пунктирный контур зоны + метки на досягаемых
 // системах. Основная зона (≤4 прыжка) — красные уголки-прицелы на обитаемых,
 // дальняя (только тяжёлая, ≤8) — приглушённые точки-ромбы.
@@ -2402,11 +2402,11 @@ async function gmMzaFireAt(id, sysId, pid, nameEnc) {
 }
 async function gmMzaCmdScrap() {
   if (!GMM.mzaCmd) return; const id = GMM.mzaCmd.id;
-  if (!confirm('Списать Гиперпейсер? Вернётся ~50% стоимости ГС.')) return;
+  if (!confirm('Списать факельщика? Вернётся ~50% стоимости ГС.')) return;
   if (GM._defBusy) return; GM._defBusy = true;
   try {
     const r = await gmDefRpc('mza_scrap', { p_id: id });
-    toast('Гиперпейсер списан · +' + ((r && r.refund) || 0) + ' ГС', 'ok');
+    toast('Факельщик списан · +' + ((r && r.refund) || 0) + ' ГС', 'ok');
     gmCloseMzaCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
@@ -2415,7 +2415,7 @@ async function gmMzaCmdScrap() {
 
 // ════════════════════════════════════════════════════════════
 //  КОМАНДНЫЙ ПУНКТ — единый список ВСЕХ моих мобильных юнитов
-//  (носители аванпостов, Гиперпейсер, флоты). Клик по строке =
+//  (носители аванпостов, факельщики, флоты). Клик по строке =
 //  навести камеру на юнит + открыть его командную плашку. Чтобы
 //  не приходилось выцеливать мелкие значки на карте.
 // ════════════════════════════════════════════════════════════
@@ -2449,7 +2449,7 @@ function gmRosterUnits() {
     ready: sh.status === 'idle' && !!sh.can_deploy, readyLabel: 'к развёртыванию', sysName,
   }));
   (GM.mzaShips || []).forEach(sh => out.push({
-    type: 'mza', id: sh.id, icon: '☣', name: sh.name || 'Гиперпейсер',
+    type: 'mza', id: sh.id, icon: '☣', name: sh.name || 'Факельщик',
     status: sh.status, sysId: sh.system_id, destId: sh.dest_sys, arrive: sh.arrive_at,
     extra: 'корпус ' + Math.round(+sh.integrity || 0) + '%',
     ready: sh.status === 'idle' && !!sh.can_fire, readyLabel: 'залп готов', sysName,
@@ -2472,9 +2472,9 @@ function gmRosterRender() {
   const units = gmRosterUnits();
   let body;
   if (!units.length) {
-    body = `<div class="gm-roster-empty">Нет мобильных юнитов.<br>Носители, флоты и Гиперпейсер строятся в кабинете на Верфи.</div>`;
+    body = `<div class="gm-roster-empty">Нет мобильных юнитов.<br>Носители, флоты и факельщик строятся в кабинете на Верфи.</div>`;
   } else {
-    const TLAB = { outpost: 'Носители аванпостов', mza: 'Гиперпейсер', fleet: 'Флоты', army: 'Армии (Звёздный марш)' };
+    const TLAB = { outpost: 'Носители аванпостов', mza: 'Факельщики', fleet: 'Флоты', army: 'Армии (Звёздный марш)' };
     const order = ['fleet', 'army', 'mza', 'outpost'];
     body = order.filter(t => units.some(u => u.type === t)).map(t => {
       const rows = units.filter(u => u.type === t).map(u => {
@@ -4166,7 +4166,7 @@ function gmmTapAt(lx, ly) {
     else { gmCloseOutpostCmd(); toast('Отправка отменена', ''); }
     return;
   }
-  // 0б) РЕЖИМ ПРИЦЕЛИВАНИЯ Гиперпейсер: отправка / выбор системы-цели для залпа.
+  // 0б) РЕЖИМ ПРИЦЕЛИВАНИЯ факельщика: отправка / выбор системы-цели для залпа.
   if (GMM.mzaCmd && (GMM.mzaCmd.mode === 'sendTarget' || GMM.mzaCmd.mode === 'fireTarget')) {
     const tgt = sysAtScreen();
     if (!tgt) { gmCloseMzaCmd(); toast('Отменено', ''); return; }
@@ -4377,7 +4377,7 @@ function gmmBlit() {
   gmmPaintEditOverlay(ctx);  // редактор: кольца выбранных звёзд (линковка/сектор)
   gmmPaintLaneTraffic(ctx);  // караваны по гиперпутям (как только видны сами пути)
   gmmPaintSalvos(ctx);   // залпы межзвёздной артиллерии в полёте (на любом зуме)
-  gmmPaintMzaRange(ctx); // сетка радиуса залпа Гиперпейсера (режим наведения)
+  gmmPaintMzaRange(ctx); // сетка радиуса залпа Факельщика (режим наведения)
   gmmPaintOrbits(ctx);   // живой оверлей анимированных систем (на глубоком зуме)
   gmmPaintDeepFx(ctx);   // HUD-переход «вход в систему»: рамка/скобки/скан/импульс
   gmmPaintDefense(ctx);  // оборона: аванпосты/носители — ПОВЕРХ орбит, иначе на глубоком
@@ -6477,7 +6477,7 @@ function gmmBuildDefense() {
       return null;
     };
     // единый расклад носителя на карту: idle у звезды / transit по гиперпути.
-    // `extra` навешивает спец-поля (для Гиперпейсер: mza/canFire/integrity).
+    // `extra` навешивает спец-поля (для факельщика: mza/canFire/integrity).
     const pushShip = (sh, extra) => {
       if (sh.status === 'idle' && sh.system_id) {
         const sys = byId[sh.system_id]; if (!sys) return;
@@ -6521,11 +6521,11 @@ function gmmBuildDefense() {
       }
     };
     (GM.opShips || []).forEach(sh => pushShip(sh, { canDeploy: !!sh.can_deploy }));
-    // Гиперпейсер — мобильные «Длани»: красный отблеск + флаг возможности залпа.
+    // Факельщики — мобильные «Длани»: красный отблеск + флаг возможности залпа.
     const mzaCol = [225, 70, 55];
     (GM.mzaShips || []).forEach(sh => pushShip(sh, { mza: true, col: mzaCol, canFire: !!sh.can_fire, integrity: +sh.integrity || 0 }));
     // Флоты — мобильные соединения: значок СЛЕВА от звезды (side='left'), стальной
-    // отблеск, бейдж с числом кораблей. Не путать с носителем (справа) и Гиперпейсер.
+    // отблеск, бейдж с числом кораблей. Не путать с носителем (справа) и факельщик.
     const fleetCol = [120, 200, 235];
     (GM.fleets || []).forEach(fl => pushShip(fl, {
       fleet: true, side: 'left', col: fleetCol, station: !!fl.is_station,
@@ -6556,7 +6556,7 @@ function gmmBuildDefense() {
         facName: fl.faction_name
       });
     });
-    // Вскрытые чужие гиперкрейсера (только idle — позиция точная; transit без пути не рисуем).
+    // Вскрытые чужие факельщики (только idle — позиция точная; transit без пути не рисуем).
     (GM.mzaVis || []).filter(sh => sh.status === 'idle' && sh.system_id).forEach(sh => {
       const ff = gmFaction(sh.faction_id); const col = ff ? gmRgb(ff.color) : mzaCol;
       pushShip(sh, { mza: true, enemy: true, col, fid: sh.faction_id, facName: sh.faction_name, spotReason: sh.reason });
@@ -6973,7 +6973,7 @@ function gmmPaintDefense(ctx) {
   // место в ней; считаем заранее, чтобы знать ширину веера.
   {
     const grp = {};
-    // группируем по СТОРОНЕ (left=флоты, right=носители/Гиперпейсер) и по ВЛАДЕЛЬЦУ
+    // группируем по СТОРОНЕ (left=флоты, right=носители/факельщики) и по ВЛАДЕЛЬЦУ
     // (свои / каждая чужая держава отдельно) — иначе значки на разных боках/разных
     // держав считали бы общий веер и налезали друг на друга.
     D.ships.forEach(d => { if (d.kind === 'idle' && d.sys) { const owner = d.enemy ? ('e' + (d.fid || '')) : 'mine'; const k = d.sys.id + '|' + (d.side || 'right') + '|' + owner + (d.army ? '|a' + (d.colony || '') : ''); (grp[k] = grp[k] || []).push(d); } });
@@ -6994,13 +6994,13 @@ function gmmPaintDefense(ctx) {
         const n = d.stackN || 1, idx = d.stackI || 0;
         // ФЛОТЫ одной державы в одной системе СХЛОПЫВАЕМ в одну стопку: рисует только
         // представитель (stackI===0), остальные пропускаем; число флотов показываем
-        // римской цифрой. Носители/Гиперпейсер по-прежнему раскладываем веером.
+        // римской цифрой. Носители/факельщики по-прежнему раскладываем веером.
         const stacked = !!d.fleet && n > 1;
         if (stacked && idx !== 0) return;
         // веер по горизонтали (значок узкий → небольшой шаг); центрируем группу
         const step = csz * 2.6;
         const fanX = stacked ? 0 : (idx - (n - 1) / 2) * step;
-        // флоты сидят СЛЕВА от звезды (side='left'), носители/Гиперпейсер — справа.
+        // флоты сидят СЛЕВА от звезды (side='left'), носители/факельщики — справа.
         const sgn = d.side === 'left' ? -1 : 1;
         // МАРШ: армии сидят СНИЗУ-слева от звезды — флот (сверху-слева) их не перекрывает
         let cX = tX + sgn * R * 1.05 + fanX, cY = tY + (d.army ? R * 0.95 * sq : -R * 0.7 * sq);
@@ -7057,7 +7057,7 @@ function gmmPaintDefense(ctx) {
           }
           ctx.restore();
         }
-        // Чужой вскрытый гиперкрейсер — тревожный пульс-кольцо «обнаружен»
+        // Чужой вскрытый факельщик — тревожный пульс-кольцо «обнаружен»
         if (d.mza && d.enemy) {
           const pr = ER * (1.4 + 0.25 * (0.5 + 0.5 * Math.sin((t || 0) * 4)));
           ctx.save();
@@ -7065,7 +7065,7 @@ function gmmPaintDefense(ctx) {
           ctx.beginPath(); ctx.arc(cX, cY - ER * 0.2, pr, 0, 6.2832); ctx.stroke();
           ctx.restore();
         }
-        // Гиперпейсер: шкала корпуса НАД флагом (виден износ прямо на карте) — только свой
+        // Факельщик: шкала корпуса НАД флагом (виден износ прямо на карте) — только свой
         if (d.mza && !d.enemy) {
           const bw = ER * 1.7, bh = Math.max(2, csz * 0.3), bx = cX - bw / 2, by = cY - ER * 2.15 - bh;
           const ip2 = Math.max(0, Math.min(100, +d.integrity || 0)) / 100;
@@ -7093,7 +7093,7 @@ function gmmPaintDefense(ctx) {
           const fleetLbl = d.army ? (stacked ? `Армии · ${n}` : '🪖 Армия')
             : d.station ? '🛰 Станция'
             : d.enemy ? 'Чужой флот' + enemyTag : (stacked ? `Флоты · ${n}` : 'Флот');
-          const lbl = d.mza ? (d.enemy ? '☣ Чужой гиперкрейсер · обнаружен' + enemyTag : (d.canFire ? '☣ Гиперпейсер · залп' : '☣ Гиперпейсер'))
+          const lbl = d.mza ? (d.enemy ? '☣ Чужой факельщик · обнаружен' + enemyTag : (d.canFire ? '☣ Факельщик · залп' : '☣ Факельщик'))
             : (d.fleet ? fleetLbl : (d.canDeploy ? '🚀 носитель · развернуть' : '🚀 носитель'));
           ctx.fillText(lbl, cX, cY + ER * (d.fleet ? 2.95 : 1.5));
           ctx.restore();

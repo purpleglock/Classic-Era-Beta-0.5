@@ -404,9 +404,11 @@
   // ══ ДОСЬЕ ══════════════════════════════════════════════════
   var RES = { blackmetall: 'Чёрный металл', coloredmetall: 'Цветной металл',
               rudametall: 'Рудный металл', kristall: 'Кристаллы', staarvis: 'Ставрис' };
-  var KIND_RU = { kinetic: 'кинетика', energy: 'энергия', missile: 'ракеты' };
+  var KIND_RU = { kinetic: 'кинетика', energy: 'энергия', missile: 'ракеты', repair: 'ремонтный рой' };
   function drawDossier(s) {
     var h = '<div class="sec">Детали</div><table>' +
+      (s.kind === 'repair'
+        ? '<tr><td>Ремонт союзнику</td><td>' + NUM(s.heal) + ' HP за залп</td></tr>' : '') +
       '<tr><td>Урон за ствол</td><td>' + NUM(s.salvo) + '</td></tr>' +
       '<tr><td>Урона на энергию</td><td>' + s.dmgPerEnergy + '</td></tr>' +
       '<tr><td>Боеприпас</td><td>' + (KIND_RU[s.kind] || s.kind) + '</td></tr>' +
@@ -426,7 +428,8 @@
     // Связка с материаловедением: стойкость сплава к ТИПУ урона этого орудия —
     // ровно тот процент, на который бой погасит залп.
     var alloys = (typeof CN_ALLOYS !== 'undefined' && CN_ALLOYS) ? CN_ALLOYS : [];
-    if (alloys.length) {
+    // У ремонтного роя типа урона нет — таблица стойкостей сплавов бессмысленна.
+    if (alloys.length && s.kind !== 'repair') {
       h += '</table><div class="sec">Против своих сплавов</div><table>';
       alloys.map(function (a) {
         var r = ((a.stats || {}).resist || {})[s.kind] || 0;
@@ -674,7 +677,9 @@
         list.map(function (t) {
           var st = t.stats || {};
           return '<div class="mine"><div class="mn" data-id="' + t.id + '"><b>⚙ ' + esc(t.name) + '</b>' +
-            '<s>урон ' + NUM(st.damage || 0) + ' · ' + (st.dalnost || 0) + ' гекс · Э ' + NUM(st.energy || 0) +
+            '<s>' + (st.kind === 'repair'
+              ? 'ремонт ' + NUM(st.heal || 0)
+              : 'урон ' + NUM(st.damage || 0)) + ' · ' + (st.dalnost || 0) + ' гекс · Э ' + NUM(st.energy || 0) +
             ' · ' + NUM(st.mass || 0) + ' кг · носителей ' + ((t.carriers || []).length) + '</s></div>' +
             '<button class="xb" data-del="' + t.id + '">✕</button></div>';
         }).join('')

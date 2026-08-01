@@ -6907,7 +6907,7 @@ async function renderItemPage(pg) {
     aviacia:'Авиация',vertihui:'Вертолёт',dron:'Дрон',dronkos:'БПЛА',
     mla:'Звездолёт',corvette:'Корвет',destroyer:'Эсминец',
     supportCarrier:'Авианосец',mediumCruiser:'Ср.крейсер',
-    hyperCruiser:'Гиперкрейсер',multiroleCarrier:'МЦ авианосец',
+    hyperCruiser:'Факельщик',multiroleCarrier:'МЦ авианосец',
     battleship:'Линкор',dreadnought:'Дредноут',ss13:'СС-13',
   };
   const _clsList = (_iv('Доступно для')||'').split(',')
@@ -7595,7 +7595,7 @@ async function renderUnitPage(pg) {
   var CLASS_LBL2={peh:'Пехота',btr:'БТР',tanki:'Танк',arta:'Артиллерия',aviacia:'Авиация',
     vertihui:'Вертолёт',dron:'Дрон',dronkos:'БПЛА',mla:'Звездолёт',corvette:'Корвет',
     destroyer:'Эсминец',supportcarrier:'Авианосец (подд.)',mediumcruiser:'Средний крейсер',
-    hypercruiser:'Гиперкрейсер',multirolecarrier:'Многоцелевой авианосец',
+    hypercruiser:'Факельщик',multirolecarrier:'Многоцелевой авианосец',
     battleship:'Линкор',dreadnought:'Дредноут',ss13:'СС-13'};
   var classLabel2=CLASS_LBL2[hullClass]||hullClass||'Юнит';
   var status2=(extra['Статус']||extra['статус']||'активен').toLowerCase();

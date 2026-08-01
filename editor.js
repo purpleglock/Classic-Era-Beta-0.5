@@ -708,7 +708,7 @@ function ibEditor(b,i){
     // Доступно для классов — чекбоксы
     const _curCls = val('Доступно для') || '';
     const _clsArr = _curCls ? _curCls.split(',').map(s=>s.trim()).filter(Boolean) : [];
-    const _ALL_CLS2 = [['peh','Пехота'],['btr','БТР'],['tanki','Танк'],['arta','Артиллерия'],['aviacia','Авиация'],['vertihui','Вертолёт'],['dron','Дрон'],['dronkos','БПЛА'],['mla','Звездолёт'],['corvette','Корвет'],['destroyer','Эсминец'],['supportCarrier','Авианосец'],['mediumCruiser','Ср.крейсер'],['hyperCruiser','Гиперкрейсер'],['multiroleCarrier','МЦ авианосец'],['battleship','Линкор'],['dreadnought','Дредноут'],['ss13','СС-13']];
+    const _ALL_CLS2 = [['peh','Пехота'],['btr','БТР'],['tanki','Танк'],['arta','Артиллерия'],['aviacia','Авиация'],['vertihui','Вертолёт'],['dron','Дрон'],['dronkos','БПЛА'],['mla','Звездолёт'],['corvette','Корвет'],['destroyer','Эсминец'],['supportCarrier','Авианосец'],['mediumCruiser','Ср.крейсер'],['hyperCruiser','Факельщик'],['multiroleCarrier','МЦ авианосец'],['battleship','Линкор'],['dreadnought','Дредноут'],['ss13','СС-13']];
     const _clsHtml = '<div style="margin-top:10px;border-top:1px solid var(--w2);padding-top:10px">'
       + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:8px;letter-spacing:1.5px;color:var(--t4);margin-bottom:8px">🎯 ДОСТУПНО ДЛЯ КЛАССОВ <span style=\'color:var(--t4)\'>(пусто = для всех)</span></div>'
       + '<div style="display:flex;flex-wrap:wrap;gap:5px">'
@@ -1040,7 +1040,7 @@ function ibEditor(b,i){
     const CLASS_LABELS_ED = {peh:'Пехота',btr:'БТР',tanki:'Танк',arta:'Артиллерия',
       aviacia:'Авиация',vertihui:'Вертолёт',dron:'Дрон',dronkos:'БПЛА',mla:'Звездолёт',
       corvette:'Корвет',destroyer:'Эсминец',supportCarrier:'Авианосец (подд.)',
-      mediumCruiser:'Средний крейсер',hyperCruiser:'Гиперкрейсер',
+      mediumCruiser:'Средний крейсер',hyperCruiser:'Факельщик',
       multiroleCarrier:'Многоцелевой авианосец',battleship:'Линкор',dreadnought:'Дредноут',ss13:'СС-13'};
     const classOpts = Object.entries(CLASS_LABELS_ED).map(([k,v])=>
       `<option value="${k}"${val('Класс')===k?' selected':''}>${v}</option>`).join('');

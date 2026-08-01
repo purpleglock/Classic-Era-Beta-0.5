@@ -592,12 +592,17 @@ async function cnLoadTurrets(force) {
 function cnTurretToWeapon(t, div) {
   const st = t.stats || {};
   const cal = st.caliber || 0;
+  // Ремонтный рой (нанотехнологии): урона не наносит вообще — в атакующую
+  // сводку проекта не идёт (dmg = 0), в бою работает по СОЮЗНИКУ (см.
+  // battle_fire в _nano_repair.sql). Зеркало: _cn_wpn_obj на сервере.
+  const heal = st.kind === 'repair' ? Math.round(+st.heal || 0) : 0;
   return {
     capacityPenalty: Math.round((+st.mass || 0) / (div || 500)),
     name: '⚙ ' + (t.name || 'Орудие'),
     cost: Math.round(st.gs || 0),
     price: st.price || 0,
-    dmg: Math.round(st.damage || 0),
+    dmg: heal ? 0 : Math.round(st.damage || 0),
+    heal,
     energy: Math.round(st.energy || 0),
     power: Math.round(st.energy || 0),
     kind: st.kind || 'kinetic',
@@ -661,16 +666,45 @@ function cnWeaponTurretArt(item, imgPath) {
   if (!cfg) return null;
   return { cfg, wt: cnTurretVisWt(cfg, item) };
 }
+// ⚠️ АРТ ОРУДИЯ ЗАПЕКАЕТСЯ. TG.render() — полноценный генератор (десятки путей,
+// градиенты, тени), а схема перерисовывается на КАЖДЫЙ кадр зума/панорамы и на
+// каждый пересчёт: раньше все турели рисовались заново по десять раз в секунду,
+// отсюда фризы. Одинаковая конфигурация → одна и та же строка из кэша.
+// Суффикс id тоже кэшируется вместе со строкой: два экземпляра одного орудия дают
+// ОДИН набор defs-идентификаторов (дубликаты идентичны — браузер берёт первый),
+// а разные орудия по-прежнему не воруют градиенты друг у друга.
+const CN_TART_CACHE = new Map(), CN_TART_MAX = 96;
 function cnTurretArtSvg(cfg, opt) {
   if (!cfg || !window.TG || !TG.render) return null;
+  let key = null;
+  try { key = JSON.stringify(cfg) + '|' + JSON.stringify(opt || null); } catch (e) { key = null; }
+  if (key != null && CN_TART_CACHE.has(key)) return CN_TART_CACHE.get(key);
   let s;
   try { s = TG.render(cfg, opt); } catch (e) { return null; }
   const u = '_ta' + (++CN_TART_N);
-  return s.replace(/id="([\w-]+)"/g, (m, a) => `id="${a}${u}"`)
-          .replace(/url\(#([\w-]+)\)/g, (m, a) => `url(#${a}${u})`);
+  const out = s.replace(/id="([\w-]+)"/g, (m, a) => `id="${a}${u}"`)
+               .replace(/url\(#([\w-]+)\)/g, (m, a) => `url(#${a}${u})`);
+  if (key != null) {
+    if (CN_TART_CACHE.size >= CN_TART_MAX) CN_TART_CACHE.delete(CN_TART_CACHE.keys().next().value);
+    CN_TART_CACHE.set(key, out);
+  }
+  return out;
 }
 // Тот же арт, но кусками — для встраивания в схему корабля (нужен viewBox).
+// Разбор строки регулярками тоже кэшируем: он идёт на каждый узел орудия.
+const CN_TPARTS_CACHE = new Map();
 function cnTurretArtParts(cfg, opt) {
+  let pk = null;
+  try { pk = JSON.stringify(cfg) + '|' + JSON.stringify(opt || null); } catch (e) { pk = null; }
+  if (pk != null && CN_TPARTS_CACHE.has(pk)) return CN_TPARTS_CACHE.get(pk);
+  const r = cnTurretArtPartsRaw(cfg, opt);
+  if (pk != null) {
+    if (CN_TPARTS_CACHE.size >= CN_TART_MAX) CN_TPARTS_CACHE.delete(CN_TPARTS_CACHE.keys().next().value);
+    CN_TPARTS_CACHE.set(pk, r);
+  }
+  return r;
+}
+function cnTurretArtPartsRaw(cfg, opt) {
   const s = cnTurretArtSvg(cfg, opt); if (!s) return null;
   const vb = (s.match(/viewBox="([^"]+)"/) || [])[1];
   const inner = s.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
@@ -824,7 +858,8 @@ function cnCompStatsRows(info) {
     }
     case 'weapon': {
       const cp = o.customParameter || {};
-      push('Урон', cnNum(o.dmg));
+      if (+o.heal > 0) push('Ремонт союзнику', cnNum(o.heal) + ' HP за залп');
+      else push('Урон', cnNum(o.dmg));
       if (cp.kal && parseFloat(String(cp.kal)) > 0) push('Калибр', String(cp.kal));
       if (+cp.skorostrelnost > 0) push('Скорострельность', cnNum(cp.skorostrelnost) + ' выстр./мин');
       if (+cp.dalnost > 0) push('Дальность', cnNum(cp.dalnost) + ' кв');
@@ -1089,10 +1124,19 @@ const CN_HULL_PROFILES = {
   //   ✗ короткий и толстый           → удлинение 6–9:1, а не 4:1.
   // Излом плеча задаётся ДВОЙНОЙ точкой (почти совпадающие t) — иначе сглаживание
   // размажет угол обратно в каплю.
+  // КОРВЕТ — клин со сложными скосами: остриё-таран, излом скулы, ОБРАТНЫЙ подрез
+  // борта, вторая широкая грань и максимальный бимс у самой кормы. Мелкий класс,
+  // но угловатый и злой — не «капелька с дюзой».
   corvette: [
-    [0.00, 0.00], [0.04, 0.13], [0.07, 0.14], [0.30, 0.22], [0.33, 0.23],
-    [0.35, 0.62], [0.52, 0.66], [0.55, 0.34], [0.78, 0.36],
-    [0.80, 0.86], [0.94, 0.90], [1.00, 0.74],
+    [0.00, 0.00], [0.06, 0.12], [0.09, 0.13],
+    [0.22, 0.34], [0.25, 0.35],
+    [0.30, 0.24], [0.34, 0.25],
+    [0.44, 0.62], [0.47, 0.63],
+    [0.53, 0.46], [0.58, 0.47],
+    [0.66, 0.86], [0.69, 0.88],
+    [0.74, 0.66], [0.79, 0.68],
+    [0.84, 1.00], [0.93, 0.98],
+    [1.00, 0.52],
   ],
   frigate: [
     [0.00, 0.00], [0.05, 0.12], [0.08, 0.13], [0.26, 0.26], [0.29, 0.27],
@@ -1122,10 +1166,14 @@ const CN_HULL_PROFILES = {
     [0.20, 0.92], [0.50, 0.94], [0.53, 0.70], [0.72, 0.72],
     [0.75, 1.00], [0.95, 1.00], [1.00, 0.92],
   ],
+  // ДРЕДНОУТ — гранёный монумент: ломаные скулы, ступень каземата по борту,
+  // максимальный бимс ближе к корме. Изменена только КОРМА — сведена в клин
+  // (раньше профиль к срезу расширялся и давал тупой обрубок). Плавную «каплю»
+  // сюда ставить нельзя: гранёность и есть характер этого класса.
   dreadnought: [
     [0.00, 0.10], [0.05, 0.22], [0.09, 0.24], [0.16, 0.44], [0.19, 0.46],
     [0.21, 0.74], [0.40, 0.78], [0.43, 0.58], [0.60, 0.60],
-    [0.63, 0.96], [0.86, 1.00], [0.90, 0.80], [1.00, 0.90],
+    [0.63, 0.96], [0.78, 1.00], [0.87, 0.84], [0.94, 0.58], [1.00, 0.32],
   ],
   // Поддерживающий авианосец — не «баллон», а слэб: клиновидный нос прямыми
   // гранями, палуба прямоугольником со ступенью борта, кормовой срез во всю ширину.
@@ -1145,10 +1193,31 @@ const CN_HULL_PROFILES = {
     [0.42, 0.72], [0.68, 0.74], [0.71, 0.52], [0.85, 0.54],
     [0.88, 0.96], [1.00, 0.86],
   ],
+  // ФАКЕЛЬЩИК — не крейсер, а лафет: осевой ускоритель с дулом в носу и раздутый
+  // кормовой энергоблок («факел»). Отсюда силуэт-игла: две трети длины корпус почти
+  // не расширяется (там ствол и его хомуты), а вся масса собрана в корме. Ни у кого
+  // больше нет такого перекоса — класс узнаётся по одному контуру.
+  // ФАКЕЛЬЩИК — единственный корпус, СОБРАННЫЙ НЕ ПО ЛИНЕЙКЕ. Остальные классы
+  // читаются как «нос → плечо → корма» с ровным ритмом скосов; здесь ритм НАРОЧНО
+  // сбит: длинный тонкий выносной нос-волновод, потом резкий разлёт в широкую
+  // трапецию энергоблока, глубокая ВЫЕМКА за ней (пустота между блоками — это и
+  // есть «футуристичность»: конструкция, а не обтекаемый корпус), и косой срез
+  // кормы. Шаги скосов разной длины и разной глубины — глаз не находит периода.
   hypercruiser: [
-    [0.00, 0.00], [0.04, 0.08], [0.08, 0.09], [0.34, 0.20], [0.38, 0.21],
-    [0.40, 0.54], [0.64, 0.56], [0.67, 0.30], [0.84, 0.32],
-    [0.87, 0.94], [0.97, 0.96], [1.00, 0.82],
+    // ФАКЕЛЬЩИК. Что чинится этой правкой: силуэт был ОДНИМ треугольником —
+    // две прямые от острия до кормового среза во всю ширину. Такой контур не
+    // читается конструкцией, у него нет ни одного события по длине.
+    // Теперь и нос, и корма собраны из НЕСКОЛЬКИХ прямых граней с жёсткими
+    // фасками между ними (двойная точка = острый угол), а корма кончается не
+    // тупым срезом во всю ширину, а РАЗНЕСЁННЫМИ КОНСОЛЯМИ: максимум бимса
+    // приходится на 0.90, дальше углы срезаны внутрь — транец уже консолей.
+    [0.00, 0.00], [0.05, 0.08], [0.07, 0.09],     // остриё
+    [0.26, 0.21], [0.29, 0.22],                   // фаска скулы №1
+    [0.33, 0.27], [0.52, 0.38], [0.55, 0.39],     // грань до талии (перелом двойной точкой)
+    [0.66, 0.58], [0.69, 0.60],                   // кормовая грань №1 — самая крутая
+    [0.80, 0.72], [0.83, 0.74],                   // грань №2 — положе, отсюда гранёность
+    [0.90, 1.00], [0.93, 0.99],                   // разлёт консолей: максимум бимса ЗДЕСЬ
+    [1.00, 0.72],                                 // транец срезан внутрь — не тупой обрубок
   ],
   station: [
     [0.00, 0.46], [0.04, 0.72], [0.08, 0.74], [0.12, 0.98], [0.18, 1.00],
@@ -1227,10 +1296,10 @@ const CN_SHIP_DIM = {
   destroyer:   [38, 352, 26, 7],
   cruiser:     [40, 350, 32, 7],
   battleship:  [38, 358, 40, 8],
-  dreadnought: [34, 366, 54, 9],
+  dreadnought: [24, 406, 64, 11],   // крупнее ДЛИНОЙ и клиновидностью, не шириной
   carrier:     [40, 360, 44, 9],
   assault:     [40, 358, 38, 8],
-  hypercruiser:[34, 368, 30, 8],
+  hypercruiser:[26, 392, 46, 8],   // длинный и ШИРОКИЙ клин: не корвет-переросток, а лафет
   station:     [86, 320, 84, 7],
   // Армейские классы: короче и с меньшим числом рядов узлов (масштаб не корабельный)
   peh:         [122, 292, 30, 3],
@@ -1517,12 +1586,18 @@ function cnShieldSvg(H, sIdx, rt, d, tex) {
 // Рисуется ДО cnHullEdgeShade и в клипе силуэта → светотень/AO корпуса ложатся
 // ПОВЕРХ декали, как на настоящей окрашенной обшивке; сама краска — с тёмной
 // подрезкой-канавкой (в лад с engrave-гравировкой остального оформления).
-function cnShipDecal(H, k) {
+function cnShipDecal(H, k, hullOpt) {
   // Нет имени — нет декали. Никаких заглушек-плейсхолдеров на борту.
   const name = ((cnId('cn-name') || {}).value || '').trim().toUpperCase();
   if (!name) return '';
   const fac = CN.myApp || {};
   const col = fac.color || '#cfd6dd';
+  // ⚠️ ГДЕ ИМЕННО ЛЕЖИТ КРАСКА (пересчитано 01.08). Раньше середина строки бралась
+  // как 0.775·hw при «толщине пояса» 0.45·hw — цифры от старого корпуса, где пояс
+  // занимал почти пол-борта. У нынешнего hull_gen пояс узкий: от рельса belt
+  // (1 − beltW, beltW = 0.08…0.20 по классу брони) до самого борта. Декаль по
+  // старым числам ложилась НА ПАЛУБУ, под орудийные узлы, и была вдвое крупнее
+  // пояса. Теперь координаты берутся из ТЕХ ЖЕ рельсов, что рисуют броню.
   // ПОСАДКА: ЛЕВЫЙ НИЗ ПОЯСА БРОНИ на экране. Сцена развёрнута на 90° (нос
   // вправо, правый борт x>160 → низ экрана), значит «левый низ» в координатах
   // корпуса = кормовой участок правого борта. Текст ЛОЖИТСЯ НА КРИВУЮ (textPath
@@ -1532,11 +1607,17 @@ function cnShipDecal(H, k) {
   const sternY = H.engine[1] - 4, margin = 3;
   const hwAt = y => cnHullHalf(H, y);
   const gap = 2.5;
+  // Рельсы пояса — ровно те, по которым hull_gen режет броню. У станции пояса нет:
+  // там краска садится на силовое кольцо (rimIn = belt − 0.16 … борт).
+  const R = (typeof HG !== 'undefined' && HG.rails) ? HG.rails(hullOpt || {}) : { belt: 0.86, beltW: 0.14 };
+  const isSt = (hullOpt && hullOpt.hull) === 'station';
+  const vIn = isSt ? R.belt - 0.16 : R.belt, vOut = 1;
+  const vMid = (vIn + vOut) / 2, vTh = vOut - vIn;
   // Опорные точки средней линии пояса: от кормы (с отступом) к носу.
   const pts = [];
   for (let y = sternY - margin; y >= H.nose + 4; y -= 2) {
     const h = hwAt(y);
-    pts.push({ y, x: 160 + h * 0.775, th: h * 0.45 });   // th = толщина кольца брони в этом сечении
+    pts.push({ y, x: 160 + h * vMid, th: h * vTh });      // th = толщина пояса в этом сечении
   }
   if (pts.length < 2) return '';
   const acc = [0];                                       // накопленная длина дуги вдоль средней линии
@@ -1549,13 +1630,16 @@ function cnShipDecal(H, k) {
   // нигде у кормы не влезло, разрешаем зоне уезжать вдоль пояса к носу.
   let fit = null;
   for (const nearStern of [true, false]) {
-    for (let f = 3.1; f >= 1.5 && !fit; f -= 0.15) {
+    // Пояс узкий → и потолок кегля ниже, и нижняя граница мягче: на корвете со
+    // стоковой бронёй кольцо всего ~2 ед., и при старом минимуме 1.5 имя просто
+    // не рисовалось вовсе.
+    for (let f = 2.6; f >= 1.05 && !fit; f -= 0.1) {
       const fw = f + 3, natural = name.length * f * 0.68, need = fw + gap + natural;
       for (let s = 0; s < pts.length; s++) {
         if (nearStern && acc[s] > 14) break;             // кормовой проход: дальше не уходим
-        if (pts[s].th < f * 1.4) continue;               // пояс тоньше строки — скользим к носу
+        if (pts[s].th < f * 1.15) continue;              // пояс тоньше строки — скользим к носу
         let e = s;
-        while (e + 1 < pts.length && pts[e + 1].th >= f * 1.4) e++;
+        while (e + 1 < pts.length && pts[e + 1].th >= f * 1.15) e++;
         const avail = acc[e] - acc[s];
         if (avail >= need * 0.88) { fit = { fs: f, flagW: fw, s, e, textLen: Math.min(natural, avail - fw - gap) }; break; }
         s = e;                                           // участок короток — прыгаем за него
@@ -1639,7 +1723,7 @@ function cnDrawShip() {
   // ПАДАЮЩАЯ ТЕНЬ корабля на чертёжное полотно — «отрывает» корпус от фона.
   P.push(`<path d="${hullPath}" fill="#000" opacity="0.38" style="filter:blur(9px)"/>`);
   P.push(HG.body(H, hullOpt));                           // обшивка + пояс + надстройка + дюзы
-  P.push(cnShipDecal(H, k));                             // декаль (флаг+имя) ПОД светотенью — краска на броне
+  P.push(cnShipDecal(H, k, hullOpt));                           // декаль (флаг+имя) ПОД светотенью — краска на броне
   P.push(HG.shade(H, hullOpt));                          // боковой свет, AO, контактная тень
   P.push(HG.edge(H, hullOpt));                           // кант силуэта
 
@@ -1800,7 +1884,7 @@ function cnDrawShip() {
   const deco = `<defs><pattern id="cnGrid" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M30 0H0v30" fill="none" stroke="var(--w1)" stroke-width="0.6"/></pattern></defs>`
     + `<rect x="${(-VW).toFixed(0)}" y="${(-VH).toFixed(0)}" width="${VW * 3}" height="${VH * 3}" fill="url(#cnGrid)" opacity="0.35"/>`
     + axis
-    + `<g transform="${frameT}">`
+    + `<g id="cn-schem-frame" transform="${frameT}">`
     + cnCb(14, 12, 1, 1) + cnCb(VW - 14, 12, -1, 1) + cnCb(14, VH - 12, 1, -1) + cnCb(VW - 14, VH - 12, -1, -1)
     + `<text x="30" y="${VH - 16}" style="font:700 12px var(--font-mono);letter-spacing:2.5px;fill:var(--t4)">${esc(k.toUpperCase())} // ${esc(cls.name.toUpperCase())}${tName ? ' · ' + esc(tName.toUpperCase()) : ''}</text>`
     + `<text x="${VW - 30}" y="${VH - 16}" text-anchor="end" style="font:600 11px var(--font-mono);letter-spacing:1.5px;fill:var(--te)">${capTx}</text>`
@@ -1847,7 +1931,22 @@ function cnNodeClick(kind, i) { cnOpenAssignPicker(kind, i); }
 // Состояние живёт в CN.view и переживает перерисовку (её дёргает каждый пересчёт).
 const CN_ZOOM_MIN = 1, CN_ZOOM_MAX = 8;
 function cnView() { return CN.view || (CN.view = { z: 1, cx: null, cy: null }); }
-function cnViewReset() { CN.view = { z: 1, cx: null, cy: null }; cnDrawShip(); }
+// ⚠️ ЗУМ НЕ ПЕРЕРИСОВЫВАЕТ СХЕМУ. Раньше каждый щелчок колеса и каждый кадр
+// панорамы гнали полный cnDrawShip(): корпус, все турели и innerHTML-reparse —
+// сотни путей на кадр, отсюда «пиздец лагает». Меняется же ровно две вещи:
+// viewBox корневого svg и контр-масштаб рамки со штампами. Их и правим на месте.
+// Возвращает false, если рисовать ещё нечего — тогда зовём полную отрисовку.
+function cnViewApply() {
+  const host = cnId('cn-schematic'); if (!host) return false;
+  const svg = host.querySelector('svg'), fr = host.querySelector('#cn-schem-frame'), S = CN.viewScene;
+  if (!svg || !fr || !S) return false;
+  const V = cnViewRect(S.VW, S.VH);
+  svg.setAttribute('viewBox', `${V.x.toFixed(2)} ${V.y.toFixed(2)} ${V.w.toFixed(2)} ${V.h.toFixed(2)}`);
+  fr.setAttribute('transform', `translate(${V.x.toFixed(2)},${V.y.toFixed(2)}) scale(${(1 / V.z).toFixed(4)})`);
+  cnViewHud();
+  return true;
+}
+function cnViewReset() { CN.view = { z: 1, cx: null, cy: null }; if (!cnViewApply()) cnDrawShip(); }
 function cnViewRect(VW, VH) {
   const v = cnView();
   CN.viewScene = { VW, VH };
@@ -1869,7 +1968,7 @@ function cnScenePoint(svg, e) {
 function cnZoomBy(f) {
   const v = cnView();
   v.z = Math.max(CN_ZOOM_MIN, Math.min(CN_ZOOM_MAX, +(( +v.z || 1) * f).toFixed(3)));
-  cnDrawShip();
+  if (!cnViewApply()) cnDrawShip();
 }
 function cnViewHud() {
   const b = cnId('cn-zoom-lbl'); if (b) b.textContent = Math.round((cnView().z || 1) * 100) + '%';
@@ -1888,7 +1987,7 @@ function cnViewBind(host) {
     if (p) { v.cx = p.x - (p.x - v.cx) * (z0 / z); v.cy = p.y - (p.y - v.cy) * (z0 / z); }
     v.z = z;
     if (host._zoomRAF) return;
-    host._zoomRAF = requestAnimationFrame(() => { host._zoomRAF = 0; cnDrawShip(); });
+    host._zoomRAF = requestAnimationFrame(() => { host._zoomRAF = 0; if (!cnViewApply()) cnDrawShip(); });
   }, { passive: false });
   // Тяга фона — панорама. Узлы и отсеки не трогаем: у них своя тяга/клик.
   host.addEventListener('pointerdown', e => {
@@ -1906,7 +2005,7 @@ function cnViewBind(host) {
       v.cx = c0.cx - (ev.clientX - x0) * kx;
       v.cy = c0.cy - (ev.clientY - y0) * ky;
       if (raf) return;
-      raf = requestAnimationFrame(() => { raf = 0; cnDrawShip(); });
+      raf = requestAnimationFrame(() => { raf = 0; if (!cnViewApply()) cnDrawShip(); });
     };
     const up = () => {
       window.removeEventListener('pointermove', mv);
@@ -2168,7 +2267,7 @@ function cnPartCardInner(type, g, idx) {
   const img = type === 'weapon' ? cnWeaponImgTag(item, wImg, 'cn-comp-img') : cnImgTag(wImg, 'cn-comp-img');
   let chips;
   const itemE = +item.energy || +item.power || 0;
-  if (type === 'weapon') { const cp = item.customParameter || {}; chips = cnChip('урон', cnNum(item.dmg)) + (+cp.dalnost > 0 ? cnChip('дальность', cnNum(cp.dalnost) + ' кв') : '') + (itemE ? cnChip('E', cnNum(itemE)) : '') + cnGsChip(item.cost); }
+  if (type === 'weapon') { const cp = item.customParameter || {}; chips = (+item.heal > 0 ? cnChip('ремонт', cnNum(item.heal)) : cnChip('урон', cnNum(item.dmg))) + (+cp.dalnost > 0 ? cnChip('дальность', cnNum(cp.dalnost) + ' кв') : '') + (itemE ? cnChip('E', cnNum(itemE)) : '') + cnGsChip(item.cost); }
   else {
     const cb = item.combat || {};
     chips = (itemE ? cnChip('E', cnNum(itemE)) : '')

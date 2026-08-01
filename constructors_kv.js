@@ -40,7 +40,7 @@ window.KV = (function () {
           supportCarrier: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 25, price: 45000000, capacity: 600, shieldBoost: 15, speed: 1, resurs: { blackmetall: 400, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 100 }, mass: 100000, gabarit: 80, xxx: "Поддерживающий авианосец" },
         //  lightCruiser: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 40, price: 60000000, capacity: 0, shieldBoost: 13, speed: 1, resurs: { blackmetall: 600, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 }, mass: 200000, gabarit: 300, xxx: "Лёгкий крейсер" },
           mediumCruiser: { hp: 0, size: 3, orugie: 1, modul: 0, crewRequired: 50, price: 75000000, capacity: 700, shieldBoost: 40, speed: 1, resurs: { blackmetall: 800, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 200 }, mass: 250000, gabarit: 400, xxx: "Средний крейсер" },
-          hyperCruiser: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 40, price: 100000000, capacity: 600, shieldBoost: 14, speed: 1, resurs: { blackmetall: 1000, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 800 }, mass: 200000, gabarit: 220, xxx: "Гиперкрейсер" },
+          hyperCruiser: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 40, price: 100000000, capacity: 600, shieldBoost: 14, speed: 1, resurs: { blackmetall: 1000, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 800 }, mass: 200000, gabarit: 220, xxx: "Факельщик" },
           multiroleCarrier: { hp: 0, size: 1, orugie: 1, modul: 0, crewRequired: 40, price: 120000000, capacity: 5500, shieldBoost: 19, speed: 1, resurs: { blackmetall: 1200, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 400 }, mass: 230000, gabarit: 350, xxx: "Многоцелевой авианосец" },
           battleship: { hp: 0, size: 2, orugie: 1, modul: 0, crewRequired: 70, price: 200000000, capacity: 1200, shieldBoost: 40, speed: 1, resurs: { blackmetall: 1500, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 1000 }, mass: 400000, gabarit: 500, xxx: "Линкор" },
           dreadnought: { hp: 0, size: 3, orugie: 1, modul: 0, crewRequired: 100, price: 250000000, capacity: 1800, shieldBoost: 40, speed: 1, resurs: { blackmetall: 1800, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 4000 }, mass: 500000, gabarit: 800, xxx: "Дредноут" },
@@ -477,7 +477,7 @@ const materialsDatabase = {
             heatResistance: 6000
           },
           resurs: { blackmetall: 500, coloredmetall: 400, rudametall: 400, kristall: 1000 },
-          description: "Так называемая пустотная броня гиперкрейсера, защищающая его от уничожения в подпространстве."
+          description: "Так называемая пустотная броня факельщика, защищающая его от уничожения в подпространстве."
         },
 
         ship_heavy_bulkhead: {
@@ -770,7 +770,7 @@ const modulesLibrary = {
     ew_heinlein: { name: 'Радио Туман «Хайнлайн» СРТ-45', price: 26000000, category: 'Модули радиотумана', visibility: 0, power: 700, capacity: 0, crewRequired: 5, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 20, coloredmetall: 40, rudametall: 0, kristall: 80, staarvis: 0 }, combat: { sensor: 4 }, lor: 'Разведка сквозь радиотуман: +4 к дальности захвата радара носителя.' },
 
     // --- СТАНЦИИ ---
-    st_astartek: { name: 'Цеха астартек', price: 50000000, category: 'Модули станции', visibility: 0, power: 1500, capacity: 0, crewRequired: 300, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 100, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 }, lor: 'Позволяет производить гиперкрейсера.' },
+    st_astartek: { name: 'Цеха астартек', price: 50000000, category: 'Модули станции', visibility: 0, power: 1500, capacity: 0, crewRequired: 300, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 100, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 }, lor: 'Позволяет производить факельщика.' },
     st_kolomor: { name: 'Коломоркорветзавод', price: 30000000, category: 'Модули станции', visibility: 0, power: 1000, capacity: 0, crewRequired: 300, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 50, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 }, lor: 'Для массового производства корветов.' },
     st_docks: { name: 'Доки', price: 500000000, category: 'Модули станции', visibility: 0, power: 4000, capacity: 1000, crewRequired: 60, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 }, lor: 'Приносят 1000 ПП.' },
     st_medbay: { name: 'Медбей', price: 100000000, category: 'Модули станции', visibility: 0, shieldBoost: 0.2, damageBoost: 0.2, hp: 50, power: 5000, capacity: 1000, crewRequired: 60, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 100, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 }, lor: 'Повышает выживаемость станции.' },

@@ -1974,7 +1974,7 @@ function fishStart(canvas, world) {
 /* ── подписи улова ──────────────────────────────────────────── */
 const FISH_RARC = ['#9aa5b4', '#7ee0a0', '#79b6ff', '#c79bff', '#ffcf6b'];
 // Названия классов осколков цикла — зеркало _build_coupons.sql.
-const FISH_SHARD_NM = { corvette: 'корвет', destroyer: 'эсминец', mediumCruiser: 'средний крейсер', hyperCruiser: 'гиперкрейсер' };
+const FISH_SHARD_NM = { corvette: 'корвет', destroyer: 'эсминец', mediumCruiser: 'средний крейсер', hyperCruiser: 'факельщик' };
 function fishCatchLine(r) {
   const bits = [];
   if (Number(r.gc)) bits.push('+' + Math.round(r.gc).toLocaleString('ru-RU') + ' ГС');

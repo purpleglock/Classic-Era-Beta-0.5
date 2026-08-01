@@ -40,7 +40,11 @@ const TECHS = {
   missile: { pw:0.5, dl:1.80, ru:'Ракетное / ПУ',     glow:'#ff8a5c', kind:'launcher', kvTech:'управляемое наведение',kvDmg:'взрывной' },
   // ── остальные технологии каталога ──────────────────────────
   explos:  { pw:0.4, dl:1.60, ru:'Взрывчатое (реактивное)', glow:'#ff9a4d', kind:'launcher', kvTech:'взрывчатое',      kvDmg:'взрывной' },
-  nano:    { pw:1.5, dl:1.20, ru:'Нанотехнологии',     glow:'#9dffc7', kind:'nano',   kvTech:'нанотехнологии',       kvDmg:'кинетический' },
+  // НАНО — единственная РЕМОНТНАЯ технология: рой не грызёт чужую броню, а
+  // латает свою. Стреляет по СОЮЗНОМУ кораблю и возвращает ему корпус
+  // (HEAL_K от «урона» сборки). Носитель — только средний крейсер
+  // (см. TECH_CARRIERS): гиперкрейсеру ремонтный рой не положен.
+  nano:    { pw:1.5, dl:1.20, ru:'Нанотехнологии (ремонт)', glow:'#9dffc7', kind:'nano', kvTech:'нанотехнологии', kvDmg:'ремонт', heal:true },
   ew:      { pw:1.2, dl:2.40, ru:'Электронное подавл.',glow:'#66d0ff', kind:'array',  kvTech:'электронное подавление',kvDmg:'разведка' },
   grav:    { pw:2.8, dl:1.60, ru:'Гравитационное',     glow:'#b98bff', kind:'exotic', kvTech:'гравитационное',       kvDmg:'гравитационный' },
   anti:    { pw:3.4, dl:1.50, ru:'Антиматериальное',   glow:'#ff5ea8', kind:'exotic', kvTech:'антиматериальное',     kvDmg:'антимат' },
@@ -99,8 +103,17 @@ const CLASS_RULES = {
   light:   { cal:[40,140],  len:[30,90],  techs:['kinetic','ehs','rail','laser','plasma','ew','missile'] },
   medium:  { cal:[90,260],  len:[30,90],  techs:['ehs','rail','em','laser','plasma','nano','ew','missile'] },
   heavy:   { cal:[180,420], len:[35,100], techs:['ehs','rail','em','laser','plasma','nano','ew','grav'] },
-  super:   { cal:[300,500], len:[40,110], techs:['ehs','rail','em','laser','nano','anti','grav'] },
+  // ⚠ nano из супероружия убрано: ремонтный рой носит только средний крейсер
+  // (TECH_CARRIERS), а установку класса «супероружие» он не тянет — такая
+  // сборка регистрировалась бы вообще без носителей.
+  super:   { cal:[300,500], len:[40,110], techs:['ehs','rail','em','laser','anti','grav'] },
 };
+// Технология может сузить список носителей поверх класса установки.
+// nano — ремонт: только средний крейсер (не «Факельщик», не линкоры).
+const TECH_CARRIERS = { nano:['mediumCruiser'] };
+// Доля «урона» сборки, уходящая в ремонт союзника. Зеркало TG_HEAL_K в _nano_repair.sql.
+const HEAL_K = 0.5;
+function healOf(damage){ return Math.max(1, Math.round(damage*HEAL_K)); }
 function rulesOf(klass){ return CLASS_RULES[klass] || CLASS_RULES.medium; }
 function allowedTechs(klass){ return rulesOf(klass).techs.slice(); }
 // Приводит конфиг к допустимому: чинит технологию и зажимает габариты.
@@ -1686,7 +1699,9 @@ function stats(input){
   // гексов». Поэтому здесь целое число в тех же границах, а не дробные АсК.
   dalnost=Math.max(1, Math.min(40, Math.round(dalnost)));
 
-  const kind = t==='missile'?'missile' : (t==='laser'||t==='plasma')?'energy':'kinetic';
+  // Канал: nano — не боевой, а РЕМОНТНЫЙ (боёвка не бьёт им врага, а лечит своих).
+  const kind = t==='nano'?'repair' : t==='missile'?'missile' : (t==='laser'||t==='plasma')?'energy':'kinetic';
+  const heal = t==='nano' ? healOf(damage) : 0;
   // ЦЕНА В ИГРЕ ≠ price. price — это KV-прайс (миллионы), он нигде не тратится.
   // ГС орудия — БОЕВАЯ ЦЕНА: раньше она считалась из конструкционного сырья
   // (mass/900 и т.п.), и супероружие на 800k урона выходило в пару тысяч ГС,
@@ -1717,7 +1732,7 @@ function stats(input){
   else if(billKind==='energy'){ addB('Редкоземельные руды', damage/180); addB('Гелий-3', damage/400); }
   else addB('Железо', damage/120);
   return { damage, price, gs, on, bill, mass, energy, crew:0, dalnost,
-           rof, caliber:kal, barrels:n, kind,
+           rof, caliber:kal, barrels:n, kind, heal,
            dmgPerEnergy: Math.round(damage/energy*10)/10,
            salvo:Math.round(one), tC, dC, cC, resurs };
 }
@@ -1887,7 +1902,7 @@ const CARRIERS = {
   destroyer:{ ru:'Эсминец',           mass:90000,  power:20000 },
   supportCarrier:{ ru:'Авианосец подд.',mass:90000,power:20000 },
   mediumCruiser:{ ru:'Средний крейсер',mass:200000,power:45000 },
-  hyperCruiser:{ ru:'Гиперкрейсер',   mass:260000, power:70000 },
+  hyperCruiser:{ ru:'Факельщик',   mass:260000, power:70000 },
   multiroleCarrier:{ru:'Многоцел. авианосец',mass:260000,power:70000},
   battleship:{ ru:'Линкор',           mass:400000, power:120000 },
   dreadnought:{ru:'Дредноут',         mass:600000, power:200000 },
@@ -1921,7 +1936,9 @@ const CLASS_CARRIERS = {
 // Полный разбор: кто тянет, кто нет и по какой причине.
 function carriers(input){
   const cfg=normalize(input), st=stats(cfg);
-  const base=CLASS_CARRIERS[cfg.klass]||CLASS_CARRIERS.medium;
+  let base=CLASS_CARRIERS[cfg.klass]||CLASS_CARRIERS.medium;
+  const tc=TECH_CARRIERS[cfg.tech];
+  if(tc) base=base.filter(k=>tc.indexOf(k)>=0);
   return CARRIER_ORDER.filter(k=>base.indexOf(k)>=0).map(k=>{
     const c=CARRIERS[k], why=[];
     if(st.mass>c.mass) why.push('масса '+Math.round(st.mass)+' кг > '+c.mass);
@@ -1933,7 +1950,7 @@ function carriers(input){
 function carrierKeys(input){ return carriers(input).filter(c=>c.ok).map(c=>c.key); }
 
 return { render, stats, fromKV, isTurret, turretCatalog,
-         carriers, carrierKeys, CARRIERS, CLASS_CARRIERS,
+         carriers, carrierKeys, CARRIERS, CLASS_CARRIERS, TECH_CARRIERS, HEAL_K,
          normalize, rulesOf, allowedTechs, CLASS_RULES,
          PLATFORMS, TECHS, CLASSES, LAYOUTS, MATS, DEFAULTS };
 })();

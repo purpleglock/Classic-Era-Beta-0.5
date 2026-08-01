@@ -34,6 +34,7 @@ const BB = {
   zoom: 1, camX: 0, camY: 0,   // камера
   camReady: false,   // камера один раз центрируется на своей зоне
   sel: null,         // выбранный свой корабль (id)
+  heal: false,       // режим ремонта: следующий клик по СОЮЗНОМУ кораблю = нано-рой
   hover: null,       // {x,y} гекс под курсором
   pick: null,        // фаза расстановки: выбранный проект из резерва
   place: [],         // фаза расстановки: [{unit_id, unit_name, cls, x, y}]
@@ -65,6 +66,8 @@ const BB_C = {
   move:   'rgba(90,220,240,0.18)',
   fire:   'rgba(255,60,130,0.22)',
   fireEdge: 'rgba(255,60,130,0.30)',
+  heal:   '120,255,190',                  // луч ремонтного нано-роя
+  healZone: 'rgba(120,255,190,0.20)',     // подсветка союзников в режиме ремонта
 };
 
 // ── Открыть / закрыть ───────────────────────────────────────
@@ -516,7 +519,9 @@ function bbDeployPanel(s) {
 function bbPick(uid) { BB.pick = (BB.pick === uid ? null : uid); bbRender(); }
 
 // ── Панель выбранного корабля / резерва в бою ───────────────
-const BB_KIND = { kinetic: 'кинетик', energy: 'лазер', missile: 'ракеты' };
+const BB_KIND = { kinetic: 'кинетик', energy: 'лазер', missile: 'ракеты', repair: 'ремонтный рой' };
+// Ремонтная группа (нанотехнологии): бьёт не по врагу, а латает СОЮЗНЫЙ корабль.
+function bbIsHeal(g) { return g && g.k === 'repair'; }
 function bbKindLabel(k) { return BB_KIND[k] || k; }
 // Имя огневой группы: ручная батарея игрока — буквой, авто — по каналу.
 // Тир залпа (shots) идёт отдельной пометкой: 1 = один тяжёлый удар, 6 = рой.
@@ -565,7 +570,7 @@ function bbUnitPanel(s) {
   const pct = v => Math.max(0, Math.min(100, v));
   const wpn = (u.wpn && u.wpn.length ? u.wpn : [{ rng: u.rng, dmg: u.dmg }])
     .slice().sort((a, b) => (b.rng || 0) - (a.rng || 0))
-    .map(g => `<div class="bb-stat"><span>${bbGroupLabel(g)}${g.shots > 1 ? ` · залп ×${g.shots}` : ''}</span><b>${g.dmg} · до ${g.rng} гекс.</b></div>`).join('');
+    .map(g => `<div class="bb-stat"><span>${bbGroupLabel(g)}${g.shots > 1 && !bbIsHeal(g) ? ` · залп ×${g.shots}` : ''}</span><b>${bbIsHeal(g) ? `+${g.dmg} HP союзнику` : g.dmg} · до ${g.rng} гекс.</b></div>`).join('');
   return `<div class="bb-panel">
       <div class="bb-panel-t">${esc(u.name)}</div>
       <div class="bb-panel-h">${bbClsName(u.cls)}${u.mine && u.acted ? ' · <b>активирован</b>' : ''}${u.flash ? ' · <b style="color:#ff5c8a">позиция раскрыта выстрелом</b>' : ''}</div>
@@ -586,6 +591,7 @@ function bbUnitPanel(s) {
       ${u.wings > 0 ? `<div class="bb-stat"><span>Авиакрылья в ангарах</span><b>${u.wings}</b></div>` : ''}
       ${wpn}
       ${u.mine && s.my_turn && u.wings > 0 && !u.acted && s.acts_left > 0 ? `<button class="btn btn-gd btn-sm" style="margin-top:8px;width:100%" onclick="bbLaunch('${jsq(u.id)}')">🛩 Поднять авиакрыло (1 активация)</button>` : ''}
+      ${u.mine && s.my_turn && bbHasHeal(u) && !u.fired ? `<button class="btn btn-sm ${BB.heal ? 'btn-gd' : ''}" style="margin-top:8px;width:100%" onclick="bbHealMode()">🛠 ${BB.heal ? 'Выберите союзника для ремонта (отмена — ещё раз)' : 'Ремонт нано-роем (по союзному кораблю)'}</button>` : ''}
       ${u.mine && s.my_turn ? `<div class="bb-panel-h" style="margin-top:8px">${u.moved && u.fired ? 'Корабль отработал этот ход.' : (!u.acted && !(s.acts_left > 0) ? 'Активации кончились — этот корабль в этом ходу не действует.' : 'Клик по подсвеченному гексу — лететь по маршруту, по цели в зоне поражения — огонь. Кольца на доске = дальности огневых групп: чем ближе подойдёте, тем больше групп отработает по цели.')}</div>` : ''}
     </div>${bbReinfPanel(s)}`;
 }
@@ -607,7 +613,7 @@ const BB_CLS = {
   corvette:   'Корвет', frigate: 'Фрегат', destroyer: 'Эсминец',
   cruiser:    'Крейсер', battleship: 'Линкор', dreadnought: 'Дредноут',
   supportCarrier: 'Носитель поддержки', mediumCruiser: 'Средний крейсер',
-  hyperCruiser: 'Гиперкрейсер', multiroleCarrier: 'Многоцелевой носитель', ss13: 'Станция',
+  hyperCruiser: 'Факельщик', multiroleCarrier: 'Многоцелевой носитель', ss13: 'Станция',
   wing: 'Авиакрыло'
 };
 function bbClsName(c) { return BB_CLS[c] || 'Корабль'; }
@@ -772,12 +778,28 @@ function bbCanHit(sel, tgt) {
   const gs = (sel.wpn && sel.wpn.length) ? sel.wpn : [{ rng: sel.rng, dmg: sel.dmg }];
   let dmg = 0, groups = 0;
   for (const g of gs) {
+    if (bbIsHeal(g)) continue;                 // ремонтный рой врага не бьёт
     if (L >= 1 && L <= g.rng) { dmg += g.dmg; groups++; }
   }
   if (!groups) return { ok: false, why: `дистанция ${L} — дальше, чем бьют огневые группы` };
   if (!bbLosClear(sel, tgt)) return { ok: false, why: 'линию огня перекрывают астероиды' };
   return { ok: true, dmg: Math.round(dmg), groups };
 }
+// Можно ли выбранным отремонтировать союзника (зеркало ветки ремонта в battle_fire).
+function bbCanHeal(sel, tgt) {
+  const gs = (sel.wpn && sel.wpn.length) ? sel.wpn : [];
+  if (!gs.some(bbIsHeal)) return { ok: false, why: 'на этом корабле нет ремонтных нано-роёв' };
+  if (tgt.id === sel.id) return { ok: false, why: 'рой чинит только ДРУГОЙ корабль — себя латать нечем' };
+  if (tgt.hp >= tgt.max_hp) return { ok: false, why: `«${tgt.name}» и так цел` };
+  const L = bbDist(sel, tgt);
+  let heal = 0, groups = 0;
+  for (const g of gs) if (bbIsHeal(g) && L >= 1 && L <= g.rng) { heal += g.dmg; groups++; }
+  if (!groups) return { ok: false, why: `дистанция ${L} — дальше, чем добрасывает ремонтный рой` };
+  if (!bbLosClear(sel, tgt)) return { ok: false, why: 'путь рою перекрывают астероиды' };
+  return { ok: true, heal: Math.round(heal), groups };
+}
+// Есть ли у корабля ремонтные группы (для подсветки союзников как целей).
+function bbHasHeal(u) { return !!(u && u.wpn && u.wpn.some(bbIsHeal)); }
 
 // ── КАМЕРА ──────────────────────────────────────────────────
 function bbFit() {
@@ -935,14 +957,36 @@ function bbClick(x, y) {
   const tgt = (s.units || []).find(u => u.x === x && u.y === y);
   const sel = (s.units || []).find(u => u.id === BB.sel);
 
+  // режим ремонта: клик по СОЮЗНОМУ кораблю (своему или союзника по стороне) —
+  // нано-рой латает ему корпус. Тратит выстрел и активацию, как обычный залп.
+  if (BB.heal && sel && tgt && tgt.side === s.my_side) {
+    if (sel.fired) { toast('Этот корабль уже стрелял в этом ходу', 'err'); return; }
+    if (!sel.acted && !(s.acts_left > 0)) { toast(`Активации кончились: за ход действуют не больше ${s.acts_max || 6} кораблей`, 'err'); return; }
+    const r = bbCanHeal(sel, tgt);
+    if (!r.ok) { toast(r.why, 'err'); return; }
+    const a = bbHexCenter(sel.x, sel.y), b = bbHexCenter(tgt.x, tgt.y);
+    const t0 = performance.now();
+    bbFxAdd({ kind: 'beam', x0: a.px, y0: a.py, x1: b.px, y1: b.py, t0, dur: 520, col: BB_C.heal });
+    bbAnimKick();
+    BB.heal = false;
+    bbFire(sel.id, tgt.id);
+    return;
+  }
+
   // клик по своему кораблю — выбрать
   if (tgt && tgt.mine) {
     BB.sel = (BB.sel === tgt.id ? null : tgt.id);
+    BB.heal = false;
     BB.reach = null;
     bbRender();
     return;
   }
   if (!sel) return;
+  // союзный корабль (та же сторона, чужая фракция) вне режима ремонта — не цель
+  if (tgt && tgt.side === s.my_side) {
+    toast(bbHasHeal(sel) ? 'Это союзник. Нажмите «🛠 Ремонт нано-роем», потом кликните по нему' : 'Это союзник — по своим не стреляем', 'err');
+    return;
+  }
 
   const noActs = !sel.acted && !(s.acts_left > 0);
 
@@ -992,6 +1036,8 @@ function bbMove(id, path) {
 }
 function bbLaunch(id) { return bbAct('battle_launch', { p_battle: BB.id, p_unit: id }, 'Авиакрыло в воздухе — вступит со следующего хода'); }
 function bbFire(id, tid) { return bbAct('battle_fire', { p_battle: BB.id, p_unit: id, p_target: tid }); }
+// Режим ремонта: следующий клик по союзному кораблю уйдёт нано-роем, а не в выбор.
+function bbHealMode() { BB.heal = !BB.heal; bbRender(); }
 function bbEndTurn() {
   if (!confirm('Завершить ход? Неиспользованные активации сгорят. Корабли в астероидах получат −10% корпуса, грав. колодцы подтянут ближние корабли.')) return;
   BB.sel = null; BB.reach = null;
@@ -1556,6 +1602,18 @@ function bbPaintHighlights(ctx, s) {
       ctx.fillStyle = BB_C.fire; ctx.fill();
       bbHexPath(ctx, c.px, c.py, R * 0.9);
       ctx.strokeStyle = BB_C.fireEdge; ctx.lineWidth = Math.max(0.6, 1.4 / BB.zoom);
+      ctx.stroke();
+    });
+  }
+  // режим ремонта: подсвечиваем СОЮЗНИКОВ, до которых добрасывает нано-рой
+  if (BB.heal && !sel.fired && canAct) {
+    (s.units || []).forEach(u => {
+      if (u.side !== s.my_side || !bbCanHeal(sel, u).ok) return;
+      const c = bbHexCenter(u.x, u.y);
+      bbHexPath(ctx, c.px, c.py, R * 0.9);
+      ctx.fillStyle = BB_C.healZone; ctx.fill();
+      bbHexPath(ctx, c.px, c.py, R * 0.9);
+      ctx.strokeStyle = 'rgba(' + BB_C.heal + ',0.55)'; ctx.lineWidth = Math.max(0.6, 1.4 / BB.zoom);
       ctx.stroke();
     });
   }
