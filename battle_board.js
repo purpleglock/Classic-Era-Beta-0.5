@@ -399,11 +399,6 @@ function bbRender() {
       <canvas id="bb-cv" class="bb-cv"></canvas>
       <button class="bbd-back" onclick="bbClose()" title="Выйти на сайт">←</button>
       ${hud}
-      <div class="bbd-zoom">
-        <button onclick="bbZoomBtn(1.3)">+</button>
-        <button onclick="bbZoomBtn(1/1.3)">−</button>
-        <button title="К своим кораблям" onclick="bbCamHome()">⌂</button>
-      </div>
       ${done ? `<div class="bbf-done ${s.winner === s.my_fid ? 'bbf-won' : (spec ? '' : 'bbf-lost')}">
           <b>${spec ? 'Победа: ' + esc((s.winner === s.attacker ? s.attacker_name : s.defender_name) || '?')
                     : (s.winner === s.my_fid ? 'Победа' : 'Поражение')}</b>
@@ -415,6 +410,9 @@ function bbRender() {
         <button class="bbd-ic" onclick="bbSheet('log')" title="Журнал боя">▤</button>
         ${poolLeft ? `<button class="bbd-ic" onclick="bbSheet('reinf')" title="Подкрепление">⊕</button>` : ''}
         ${s.can_force ? `<button class="bbd-ic" onclick="bbForce()" title="Прожать просроченный ход">⏱</button>` : ''}
+        <button class="bbd-ic" onclick="bbZoomBtn(1/1.3)" title="Отдалить">−</button>
+        <button class="bbd-ic" onclick="bbZoomBtn(1.3)" title="Приблизить">+</button>
+        <button class="bbd-ic" onclick="bbCamHome()" title="К своим кораблям">⌂</button>
         ${!done && mv ? `<button class="bbd-fire" onclick="bbEndTurn()">завершить ход</button>`
                       : `<span class="bbf-wait">${done ? '' : bbDeadline(s)}</span>`}
       </div>
@@ -587,17 +585,14 @@ function bbRenderDeploy(s) {
         <span class="bbd-hud-foe">${foe ? '● враг готов' : '○ враг ставит'}</span>
       </div>
 
-      <div class="bbd-zoom">
-        <button onclick="bbZoomBtn(1.3)">+</button>
-        <button onclick="bbZoomBtn(1/1.3)">−</button>
-        <button title="К своей зоне" onclick="bbCamDeploy(1)">⌂</button>
-      </div>
-
       <div class="bbd-tray" id="bbd-tray">${chips || '<div class="bbd-none">Резерв пуст</div>'}</div>
 
       <div class="bbd-cmd">
         <button class="bbd-ic" ${mine ? 'disabled' : ''} onclick="bbAutoPlace()" title="Расставить автоматически">⚡</button>
         <button class="bbd-ic" ${mine || !BB.place.length ? 'disabled' : ''} onclick="bbClearPlace()" title="Снять всех">✕</button>
+        <button class="bbd-ic" onclick="bbZoomBtn(1/1.3)" title="Отдалить">−</button>
+        <button class="bbd-ic" onclick="bbZoomBtn(1.3)" title="Приблизить">+</button>
+        <button class="bbd-ic" onclick="bbCamDeploy(1)" title="К своей зоне">⌂</button>
         <button class="bbd-fire" ${mine || !BB.place.length || L.over ? 'disabled' : ''} onclick="bbConfirmDeploy()">
           ${mine ? 'ждём врага' : (L.over ? 'перебор' : 'в бой')}
         </button>

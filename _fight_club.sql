@@ -424,6 +424,32 @@ begin
 end$$;
 revoke all on function public._fc_start(uuid) from public;
 
+-- ── Уборка синтетических пулов ──────────────────────────────
+-- Пул-флот («Резерв Бойцовского клуба», status='duel') живёт ровно до конца
+-- дуэли. Раньше его гасили только две ветки: подтверждение состава
+-- (battle_ready) и таймаут расстановки в _fc_settle. При ШТАТНОМ финале
+-- (сторона уничтожена) невыставленные пулы оставались висеть навсегда —
+-- накопилось 12 сирот у 4 держав. Функция сносит пул, если у него нет строки
+-- в battle_fleets вообще либо связанный бой уже завершён. Пулы живых боёв
+-- (forming/active) не трогает — вызывать безопасно из любого места.
+create or replace function public._fc_sweep_pools()
+returns int language plpgsql security definer set search_path=public as $$
+declare n int;
+begin
+  with dead as (
+    delete from public.fleets f
+     where f.status = 'duel'
+       and f.name = 'Резерв Бойцовского клуба'
+       and not exists (
+         select 1 from public.battle_fleets bf
+           join public.battles b on b.id = bf.battle_id
+          where bf.fleet_id = f.id and b.status <> 'done')
+    returning 1)
+  select count(*) into n from dead;
+  return n;
+end$$;
+revoke all on function public._fc_sweep_pools() from public;
+
 -- ── Сеттл: банк делится между угадавшими ────────────────────
 create or replace function public._fc_settle(p_event uuid)
 returns void language plpgsql security definer set search_path=public as $$
@@ -442,6 +468,7 @@ begin
         where event_id = p_event and fid = r.fid and on_fid = r.on_fid;
     end loop;
     update public.fc_events set status='done', settled=true, ended_at=now() where id = p_event;
+    perform public._fc_sweep_pools();
     return;
   end if;
 
@@ -483,6 +510,11 @@ begin
   end if;
 
   if b.status <> 'done' or b.winner_fid is null then return; end if;
+
+  -- бой завершён штатно (сторона уничтожена) — гасим оставшиеся пул-флоты
+  -- обеих сторон. Раньше уборка была только в ветке таймаута выше, поэтому
+  -- невыставленные резервы копились у держав навсегда.
+  perform public._fc_sweep_pools();
 
   win  := b.winner_fid;
   lose := case when win = ev.duelist_a then ev.duelist_b else ev.duelist_a end;

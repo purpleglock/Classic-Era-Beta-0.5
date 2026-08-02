@@ -365,17 +365,8 @@
 .bbd-hud-foe { width: 100%; text-align: right; font-size: 10px; letter-spacing: .06em; }
 .bbd-hud-over .bbd-hud-n b { color: var(--bbm); }
 
-/* зум — над лентой, у правого края */
-.bbd-zoom {
-  position: absolute; right: 8px; bottom: 172px; z-index: 5;
-  display: flex; flex-direction: column; gap: 6px;
-}
-.bbd-zoom button {
-  width: 44px; height: 44px; border: 0; cursor: pointer;
-  background: rgba(4,10,16,.82); color: #8fe6ff;
-  font-size: 17px; line-height: 1; font-family: var(--font-mono, monospace);
-}
-.bbd-zoom button:hover { background: rgba(20,40,52,.9); }
+/* Зум переехал в нижнюю командную строку: плавающая колонка кнопок висела
+   поверх доски и загораживала гексы. Над полем теперь ничего не плавает. */
 
 /* лента бортов: горизонтальный скролл поверх карты.
    touch-action: pan-x на самой ленте И на карточках — иначе палец «залипает»
@@ -438,16 +429,17 @@
   background: rgba(4,6,11,.94); border-top: 1px solid rgba(90,220,240,.16);
 }
 .bbd-ic {
-  width: 48px; height: 44px; flex: 0 0 auto; border: 0; cursor: pointer;
+  width: 42px; height: 44px; flex: 0 0 auto; border: 0; cursor: pointer;
   background: rgba(90,220,240,.1); color: #bfe9f7; font-size: 16px; line-height: 1;
 }
 .bbd-ic:hover:not(:disabled) { background: rgba(90,220,240,.26); }
 .bbd-ic:disabled { opacity: .3; cursor: default; }
 .bbd-fire {
-  flex: 1; height: 44px; border: 0; cursor: pointer;
+  flex: 1; min-width: 0; height: 44px; border: 0; cursor: pointer;
   background: var(--bbc); color: #04121a;
-  font-size: 14px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
+  font-size: 14px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
   font-family: var(--font-display, 'Rajdhani', sans-serif);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .bbd-fire:hover:not(:disabled) { filter: brightness(1.12); }
 .bbd-fire:disabled { background: rgba(90,220,240,.14); color: #5d7f90; cursor: default; }
@@ -456,7 +448,6 @@
   .bbd-back { width: 48px; height: 48px; left: 14px; top: 14px; }
   .bbd-hud { right: 14px; top: 14px; padding: 9px 14px; font-size: 12px; }
   .bbd-hud-n b { font-size: 19px; }
-  .bbd-zoom { right: 14px; bottom: 186px; }
   .bbd-tray { padding: 10px 14px 12px; gap: 10px; bottom: 72px; }
   .bbd-s { width: 224px; }
   .bbd-cmd { padding: 10px 14px; }
