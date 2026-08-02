@@ -50,6 +50,9 @@ const BB = {
   ptrs: new Map(),
   drag: null,
   pinch: null,
+  glOn: false,       // доска рисуется трёхмерной сценой (battle_gl.js)
+  glCv: null,        // её канвас: переживает пересборку разметки, см. bbMount
+  glOff: false,      // WebGL не завёлся — больше не пробуем, сидим на 2D
   anim: { move: new Map(), fx: [], raf: 0 },   // движение кораблей + эффекты боя
   prevU: null,       // снимок юнитов прошлого кадра (для диффа перемещений/потерь)
   prevTurn: null,    // чей был ход в прошлом кадре ('me'|'foe'|side) — для баннера передачи хода
@@ -92,6 +95,9 @@ async function bbOpen(battleId, spectate, botFoe) {
 }
 function bbClose() {
   bbStopPoll();
+  if (BB.glOn && typeof bgDispose === 'function') try { bgDispose(); } catch (e) {}
+  BB.glOn = false;
+  if (BB.glCv) { BB.glCv.remove(); BB.glCv = null; }
   const ov = document.getElementById('bb-ov');
   if (ov) ov.classList.remove('show');
   document.body.style.overflow = '';
@@ -298,6 +304,9 @@ function bbShooterCol(sh) {
 // а зум тянется к zoom. Интерполируем именно ЦЕНТР обзора, чтобы точка держалась
 // в кадре на всём протяжении. Не дёргает, если и так почти на месте.
 function bbCamFocus(px, py, zoom, dur) {
+  // В 3D «зум» — это дистанция камеры; охват кадра пересчитываем из того же
+  // множителя, каким доска кадрировала бы залп на плоскости.
+  if (BB.glOn) { bgCamFocus(px, py, BB.vw / Math.max(0.2, zoom || BB.zoom), dur); return; }
   const z0 = BB.zoom;
   const cx0 = BB.camX + BB.vw / z0 / 2, cy0 = BB.camY + BB.vh / z0 / 2;
   const z1 = Math.max(0.2, Math.min(3, zoom || z0));
@@ -418,12 +427,62 @@ function bbRender() {
       </div>
     </div>`;
 
+  bbMount();
+}
+
+// ── Врезка доски в свежую разметку ──────────────────────────
+// bbRender пересобирает ov.innerHTML на каждый чих (шторка, клик, новый
+// снимок), и канвас каждый раз новый. Для 2D это даром, а для WebGL — потеря
+// контекста и переподъём всей сцены. Поэтому 3D-канвас создаётся ОДИН раз и
+// при пересборке ПЕРЕНОСИТСЯ в новый слой карты: перенос узла контекст не рвёт.
+function bbMount() {
   BB.cv = document.getElementById('bb-cv');
+  if (!BB.cv) return;
   BB.ctx = BB.cv.getContext('2d');
+  if (BB.glCv && BB.glOn) {
+    BB.cv.parentElement.insertBefore(BB.glCv, BB.cv.nextSibling);
+    BB.cv.style.display = 'none';
+  }
   bbFit();
   bbBindCanvas();
   bbPaint();
+  if (BB.glOn) bgRefresh();
+  else bbTry3D();
 }
+
+// Попытка поднять 3D. Асинхронная и необязательная: доска уже работает на 2D,
+// а 3D включается, только если библиотека доехала и контекст создался. Любой
+// сбой на этом пути значит ровно одно — игрок остаётся на 2D-доске.
+function bbTry3D() {
+  if (BB.glOff || BB.glOn || BB.glCv) return;
+  if (typeof bgLoadThree !== 'function') return;
+  const host = BB.cv && BB.cv.parentElement;
+  if (!host) return;
+  bgLoadThree().then(ok => {
+    if (!ok) { BB.glOff = true; return; }
+    if (!BB.id || !BB.cv || !BB.cv.parentElement) return;   // доску успели закрыть
+    const cv = document.createElement('canvas');
+    cv.className = 'bb-cv';
+    BB.cv.parentElement.insertBefore(cv, BB.cv.nextSibling);
+    if (!bgAttach(cv)) { cv.remove(); BB.glOff = true; return; }
+    BB.glCv = cv; BB.glOn = true;
+    BB.cv.style.display = 'none';
+    if (BB.deployUI) bgCamDeploy();
+    bgRefresh();
+  });
+}
+
+// Возврат на 2D: контекст потерян или сцена сломалась. Разметку не трогаем —
+// просто снимаем 3D-канвас и показываем обратно тот, что всё это время лежал
+// под ним. Доска продолжает работать, игрок не остаётся без боя.
+function bbFallback2D() {
+  BB.glOn = false; BB.glOff = true;
+  if (typeof bgDispose === 'function') try { bgDispose(); } catch (e) {}
+  if (BB.glCv) { BB.glCv.remove(); BB.glCv = null; }
+  if (BB.cv) { BB.cv.style.display = ''; BB.camReady = false; bbFit(); bbPaint(); }
+  if (typeof toast === 'function') toast('Трёхмерная доска недоступна — вернулись к плоской', 'err');
+}
+
 // Шторка: журнал / подкрепление / ТТХ выбранного борта.
 function bbSheet(k) { BB.sheet = (BB.sheet === k ? null : k); bbRender(); }
 
@@ -599,11 +658,7 @@ function bbRenderDeploy(s) {
       </div>
     </div>`;
 
-  BB.cv = document.getElementById('bb-cv');
-  BB.ctx = BB.cv.getContext('2d');
-  bbFit();
-  bbBindCanvas();
-  bbPaint();
+  bbMount();
 }
 
 // Занят ли гекс (кроме перетаскиваемого борта с индексом skip).
@@ -624,6 +679,7 @@ function bbCamDeploy(force) {
   BB.camX = cx - BB.vw / BB.zoom / 2;
   BB.camY = H / 2 - BB.vh / BB.zoom / 2;
   bbCamClamp();
+  if (BB.glOn) { bgCamDeploy(); return; }
   if (force && BB.ctx) bbPaint();
 }
 
@@ -964,6 +1020,7 @@ function bbFit() {
   BB.cv.width = Math.round(BB.vw * BB.dpr); BB.cv.height = Math.round(BB.vh * BB.dpr);
   if (!BB.camReady) { if (BB.deployUI) bbCamDeploy(); else bbCamHome(); BB.camReady = true; }
   bbCamClamp();
+  if (BB.glOn) bgResize();      // 3D берёт размер у того же слоя карты
 }
 function bbCamHome() {
   const s = BB.st; if (!s) return;
@@ -978,6 +1035,7 @@ function bbCamHome() {
   BB.camX = fx - BB.vw / BB.zoom / 2;
   BB.camY = H / 2 - BB.vh / BB.zoom / 2;
   bbCamClamp();
+  if (BB.glOn) { bgCamHome(); return; }
   if (BB.ctx) bbPaint();
 }
 function bbCamClamp() {
@@ -1000,7 +1058,10 @@ function bbZoomAt(f, sx, sy) {
   bbCamClamp();
   bbPaint();
 }
-function bbZoomBtn(f) { bbZoomAt(f, BB.vw / 2, BB.vh / 2); }
+function bbZoomBtn(f) {
+  if (BB.glOn) { bgZoom(f); return; }          // в 3D «приблизить» — это подъехать
+  bbZoomAt(f, BB.vw / 2, BB.vh / 2);
+}
 
 // ── Ввод: пан/пинч/клик/ховер ───────────────────────────────
 function bbScreenXY(ev) {
@@ -1523,6 +1584,8 @@ function bbPaintFx(ctx) {
 // РЕНДЕР: статичный кадр (поверх — активные твины/эффекты боя)
 // ════════════════════════════════════════════════════════════
 function bbPaint() {
+  // Кадр собирает 3D-сцена — она уже стоит, ей достаточно пометки «перерисовать».
+  if (BB.glOn) { bgPaint(); return; }
   const s = BB.st, ctx = BB.ctx; if (!s || !ctx) return;
 
   ctx.setTransform(BB.dpr, 0, 0, BB.dpr, 0, 0);

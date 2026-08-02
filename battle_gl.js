@@ -620,15 +620,16 @@ function bgTrail(u, m, ang, moving) {
 // dim — борт уже отходил в этом ходу: в 2D он гасился до alpha 0.5, здесь
 // вместо прозрачности гаснет сама сталь. Прозрачный корпус в 3D показал бы
 // собственные внутренности и потерял бы светотень, ради которой всё затевалось.
-function bgHullMat(mine, dim) {
+function bgHullMat(mine, dim, ghost) {
   const cache = BG._hullMat || (BG._hullMat = {});
-  const k = (mine ? 'mine' : 'foe') + (dim ? '-dim' : '');
+  const k = (mine ? 'mine' : 'foe') + (dim ? '-dim' : '') + (ghost ? '-gh' : '');
   if (cache[k]) return cache[k];
   cache[k] = new THREE.MeshStandardMaterial({
     color: mine ? (dim ? 0x445260 : 0x8fa6b8) : (dim ? 0x564850 : 0xa8909a),
     metalness: 0.62, roughness: dim ? 0.62 : 0.44,
     emissive: mine ? BG_C.mine : BG_C.foe,
     emissiveIntensity: dim ? 0.02 : 0.055,     // еле тлеет: намёк на сторону, не заливка
+    transparent: !!ghost, opacity: ghost ? 0.45 : 1, depthWrite: !ghost,
   });
   return cache[k];
 }
@@ -1369,15 +1370,106 @@ function bgCamFocus(px, py, span, dur) {
   bgKick();
 }
 
+// ── ФАЗА РАССТАНОВКИ: призраки выставленных бортов ──────────
+// Драга по гексам тут НЕТ и не будет: он выпилен из 2D-доски осознанно (гексы
+// мелкие, а «тяни пальцем» вдобавок убивал прокрутку ленты бортов). Порядок
+// прежний — ＋/− на карточке и тап по гексу выбранным проектом, всё это живёт в
+// DOM и работает как раньше. От сцены нужно одно: показать, что уже поставлено.
+function bgSyncGhosts() {
+  const s = BB.st;
+  if (!BG.scene) return;
+  if (!BG.g.gh) { BG.g.gh = new THREE.Group(); BG.scene.add(BG.g.gh); }
+  BG.g.gh.clear();                            // геометрия и материалы общие — не чистим
+  if (!s || s.status !== 'forming' || !Array.isArray(BB.place)) return;
+  const face = -bbDirAngle(bbSideFacing(s.my_side));
+  BB.place.forEach(p => {
+    const size = (typeof bbClsSize === 'function' ? bbClsSize(p.cls) : 1);
+    const L = BB.R * (0.75 + size * 1.15) * BG_SHIP_K;
+    const m = bgBuildShip(p.cls, true);
+    (m.userData.hullParts || []).forEach(q => { q.material = bgHullMat(true, false, true); });
+    m.scale.setScalar(L);
+    const c = bbHexCenter(p.x, p.y);
+    m.position.set(c.px, L * 0.12, c.py);
+    m.rotation.y = face;
+    BG.g.gh.add(m);
+  });
+}
+
+// Камера расстановки: своя зона спавна целиком по высоте доски
+function bgCamDeploy() {
+  const s = BB.st; if (!s || !BG.ready) return;
+  const { W, H } = bbWorldSize();
+  const z = s.zone || 3;
+  const zoneW = (z + 2.5) * BB.R * 1.5;
+  const fov = BG.cam.fov * Math.PI / 180;
+  BG.tgt.x = s.my_side === 'attacker' ? zoneW / 2 : W - zoneW / 2;
+  BG.tgt.z = H / 2;
+  BG.dist = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, (H * 0.58) / Math.tan(fov / 2)));
+  BG.pitch = 0.98; BG.yaw = -Math.PI / 2;
+  BG.camAnim = null;
+  bgApplyCam(); BG.dirty = true; bgKick();
+}
+
+// Кнопки зума в HUD: в 3D приблизить = подъехать, а не растянуть картинку
+function bgZoom(f) {
+  if (!BG.ready) return;
+  BG.dist = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, BG.dist / (f || 1)));
+  BG.camAnim = null;
+  bgApplyCam(); BG.dirty = true; bgKick();
+}
+
 // ── Полное обновление сцены под свежий снимок ───────────────
 // Одна точка входа для интеграции: что бы ни поменялось на доске — состав,
-// ландшафт, выбор борта — сцену приводит в соответствие этот вызов.
+// ландшафт, выбор борта, расстановка — сцену приводит в соответствие этот вызов.
 function bgRefresh() {
   if (!BG.ready) return;
   bgSyncTerrain();
   bgSyncUnits();
   bgSyncStatus();
+  bgSyncGhosts();
   bgSyncOverlay();
+}
+
+// ════════════════════════════════════════════════════════════
+// ПОДКЛЮЧЕНИЕ: загрузка three.js и подъём сцены
+// ────────────────────────────────────────────────────────────
+// three.js тянем ЛЕНИВО и только когда игрок реально открыл доску: библиотека
+// весит под 600 КБ, а бои случаются далеко не в каждой сессии — грузить её всем
+// и всегда значит платить трафиком за то, чем не пользуются. Модуль подключаем
+// динамическим import: обычным <script> ESM не берётся, а CSP сайта jsdelivr
+// уже разрешает (script-src ... https://cdn.jsdelivr.net).
+// ════════════════════════════════════════════════════════════
+const BG_THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+function bgLoadThree() {
+  if (bgHasThree()) return Promise.resolve(true);
+  if (!BG._load) {
+    BG._load = import(BG_THREE_URL)
+      .then(T => { window.THREE = T; return true; })
+      .catch(e => { console.warn('[bg] three.js не загрузился, остаёмся на 2D', e); return false; });
+  }
+  return BG._load;
+}
+
+// Поднять сцену на готовом канвасе. Возвращает false — значит WebGL недоступен
+// и звать надо 2D-доску: без этого часть игроков осталась бы без боя вовсе.
+function bgAttach(canvas) {
+  if (!bgHasThree()) return false;
+  try {
+    if (!bgInit(canvas)) return false;
+  } catch (e) {
+    console.warn('[bg] сцена не поднялась', e);
+    return false;
+  }
+  // Потеря контекста (спящая вкладка, сброс драйвера) — не повод показывать
+  // игроку чёрный прямоугольник: гасим 3D и отдаём ход 2D-доске.
+  canvas.addEventListener('webglcontextlost', ev => {
+    ev.preventDefault();
+    console.warn('[bg] потерян контекст WebGL — возврат на 2D');
+    if (typeof bbFallback2D === 'function') bbFallback2D();
+  }, { once: true });
+  bgCamHome();
+  return true;
 }
 
 // ── Шаг анимации: борта на маршруте + лента эффектов ────────

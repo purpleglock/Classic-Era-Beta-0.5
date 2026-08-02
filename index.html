@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260803ressync1';
+  var BUILD = '20260803gl3d1';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -470,7 +470,10 @@
 <script src="armor_forge_ui.js?v=20260721alloy4"></script>
 <script src="turret_forge_ui.js?v=20260801turret1"></script>
 <script src="economy.js?v=20260728fishtemple1"></script>
-<script src="battle_board.js?v=20260801deploy1"></script>
+<script src="battle_board.js?v=20260803gl3d1"></script>
+<!-- Трёхмерная доска боя. Сам three.js тут НЕ подключается: battle_gl.js тянет
+     его динамическим import только когда игрок открыл бой (см. bgLoadThree). -->
+<script src="battle_gl.js?v=20260803gl3d1"></script>
 <script src="admin.js?v=20260731nebula6"></script>
 <script src="fishing.js?v=20260729fishfree1"></script>
 <script src="guide.js?v=20260728intelprot1"></script>
