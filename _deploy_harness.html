@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness: фаза расстановки</title>
+<link rel="stylesheet" href="css/24_battle.css">
+<style>
+  body { margin:0; background:#04060b; font-family: system-ui, sans-serif; }
+  .hn { position:fixed; z-index:9999; top:4px; left:4px; display:flex; gap:4px; flex-wrap:wrap; }
+  .hn button { background:#122; color:#7fd9ea; border:1px solid #2a5566; padding:4px 7px; font-size:11px; cursor:pointer; }
+</style></head><body>
+
+<div class="hn">
+  <button onclick="H.fail=!H.fail;console.log('fail_deploy=',H.fail)">откл/вкл отказ сервера</button>
+  <button onclick="console.log('place=',JSON.stringify(BB.place),'busy=',BB.busy)">дамп</button>
+</div>
+
+<script>
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function jsq(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+window.TOASTS = [];
+function toast(m,k){ TOASTS.push((k||'ok')+': '+m); console.log('[toast:'+(k||'ok')+']', m); }
+function ecReload(){}
+// confirm() блокирует автотест — подтверждаем автоматически
+window.confirm = function(m){ console.log('[confirm]', m); return true; };
+
+const H = { fail:false, ready:false, deployed:null };
+// 12 проектов — заведомо больше, чем влезает в экран телефона по ширине
+const POOL = [
+  {unit_id:'p01', unit_name:'Клинок Зари',    free:6, cls:'corvette',    hp:500,   dmg:340,  speed:4, rng:3, cost:1200},
+  {unit_id:'p02', unit_name:'Верный',         free:3, cls:'frigate',     hp:2500,  dmg:520,  speed:3, rng:4, cost:3400},
+  {unit_id:'p03', unit_name:'Молот Предела',  free:1, cls:'dreadnought', hp:40000, dmg:2400, speed:2, rng:7, cost:26000},
+  {unit_id:'p04', unit_name:'Скорый',         free:4, cls:'corvette',    hp:520,   dmg:300,  speed:5, rng:3, cost:1100},
+  {unit_id:'p05', unit_name:'Стужа',          free:2, cls:'cruiser',     hp:5200,  dmg:900,  speed:3, rng:5, cost:7200},
+  {unit_id:'p06', unit_name:'Тихий Ход',      free:2, cls:'frigate',     hp:2300,  dmg:480,  speed:4, rng:4, cost:3100},
+  {unit_id:'p07', unit_name:'Гарпун',         free:5, cls:'corvette',    hp:460,   dmg:380,  speed:4, rng:3, cost:1250},
+  {unit_id:'p08', unit_name:'Небесный Плуг',  free:1, cls:'battleship',  hp:15000, dmg:1800, speed:2, rng:6, cost:18000},
+  {unit_id:'p09', unit_name:'Ланцет',         free:3, cls:'frigate',     hp:2400,  dmg:500,  speed:3, rng:4, cost:3300},
+  {unit_id:'p10', unit_name:'Свод',           free:2, cls:'cruiser',     hp:5000,  dmg:880,  speed:3, rng:5, cost:7000},
+  {unit_id:'p11', unit_name:'Пепел',          free:4, cls:'corvette',    hp:480,   dmg:320,  speed:5, rng:3, cost:1150},
+  {unit_id:'p12', unit_name:'Последний Довод',free:1, cls:'dreadnought', hp:38000, dmg:2300, speed:2, rng:7, cost:25000},
+];
+function hState(){
+  return {
+    id:'b1', kind:'duel', system_id:'sys_7', system_name:'Гелиос-7',
+    w:26, h:16, zone:3,
+    cap:6,                       // ЛИМИТ БОРТОВ — маленький, чтобы упереться
+    duel_budget:30000,           // и бюджет, чтобы упереться и в него
+    my_side:'attacker', my_fid:'fac_a',
+    attacker:'fac_a', attacker_name:'Эрленд', defender:'fac_b', defender_name:'Кассандрия',
+    status:'forming', att_ready:H.ready, def_ready:false,
+    side_to_move:null, my_turn:false, winner:null, log:[],
+    // после подтверждения сервер отдаёт уже выставленные борта
+    pool:POOL,
+    units:(H.deployed && H.ready ? H.deployed.map((u,i) => {
+      const p = POOL.find(q => q.unit_id === u.unit_id) || {};
+      return { id:'bu'+i, side:'attacker', mine:true, unit_id:u.unit_id, name:u.unit_name,
+               cls:p.cls, x:u.x, y:u.y, hp:p.hp, max_hp:p.hp, shield:0, max_shield:0,
+               armor:0, dmg:p.dmg, speed:p.speed, rng:p.rng, moved:false, fired:false };
+    }) : []),
+  };
+}
+async function ecRpc(fn, body){
+  console.log('[rpc]', fn, JSON.stringify(body).slice(0,200));
+  if (fn === 'battle_state') return hState();
+  if (fn === 'battle_deploy') {
+    if (H.fail) throw new Error('таких кораблей в бою больше нет: «Верный»');
+    H.deployed = body.p_units; return { ok:true, deployed: body.p_units.length };
+  }
+  if (fn === 'battle_ready') { H.ready = true; return { ok:true }; }
+  return { ok:true };
+}
+</script>
+<script src="battle_board.js"></script>
+<script>bbOpen('b1');</script>
+</body></html>

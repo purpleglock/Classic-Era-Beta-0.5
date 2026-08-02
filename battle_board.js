@@ -45,7 +45,6 @@ const BB = {
   sheet: null,       // открытая шторка: 'log' | 'reinf' | 'unit'
   deployUI: false,   // открыт отдельный экран фазы расстановки?
   shipDrag: null,    // расстановка: тащим уже стоящий борт {i, cell}
-  trayDrag: null,    // расстановка: тащим борт из ленты {uid, ghost, cell}
   terr: null,        // Map "x:y" → 'ast'|'neb'|'grv'|'deb'
   reach: null,       // Map "x:y" → {steps, path} для выбранного корабля
   ptrs: new Map(),
@@ -447,8 +446,15 @@ function bbPlural(n, one, few, many) {
 }
 // Сводка лимитов расстановки: сколько бортов и денег уже потрачено.
 function bbDeployLim(s) {
-  const cap = Math.max(0, Number(s.cap) || 0);
-  const used = BB.place.length;
+  // s.cap — лимит бортов на доску от сервера (_bt_cap). Если сервер его не
+  // прислал, НЕ запираем расстановку нулём: иначе экран мёртвый, ни один
+  // корабль не поставить и причина игроку не видна.
+  const cap = Number(s.cap) > 0 ? Math.floor(Number(s.cap)) : 12;
+  // Уже подтверждённые борта тоже занимают места: после «в бой» BB.place
+  // очищается, и без этого слагаемого счётчик врал «0/6, ещё 6 мест», пока
+  // игрок ждёт врага.
+  const fixed = (s.units || []).filter(u => u.mine).length;
+  const used = fixed + BB.place.length;
   const budget = Number(s.duel_budget) || 0;
   const spent = bbDuelSpent(s);
   return { cap, used, slots: Math.max(0, cap - used), budget, spent,
@@ -478,6 +484,8 @@ function bbZoneCells(s) {
 }
 // Можно ли добавить ещё один борт этого проекта: место, резерв, бюджет.
 function bbCanAdd(s, p) {
+  // состав уже утверждён — трогать нечего
+  if (s.my_side === 'attacker' ? s.att_ready : s.def_ready) return 'Состав утверждён — расстановку не изменить';
   const L = bbDeployLim(s);
   const used = BB.place.filter(q => q.unit_id === p.unit_id).length;
   if (used >= (p.free || 0)) return 'В резерве больше таких кораблей нет';
@@ -535,19 +543,27 @@ function bbRenderDeploy(s) {
   const cnt = {};
   BB.place.forEach(p => { cnt[p.unit_id] = (cnt[p.unit_id] || 0) + 1; });
 
-  // Лента бортов — накладка поверх карты. Борт тащится пальцем прямо на гекс;
-  // «+» сажает сам, если возиться неохота.
+  // Лента бортов — накладка поверх карты. Перетаскивания на гекс НЕТ: гексы
+  // мелкие, а «тяни пальцем» вдобавок убивало скролл самой ленты. Работает так:
+  // ＋ сажает борт сам, − снимает, тап по карточке выбирает борт для ручной
+  // посадки тапом по гексу. Лента при этом свободно прокручивается.
   const chips = pool.map(p => {
     const n = cnt[p.unit_id] || 0;
+    const free = Math.max(0, Number(p.free) || 0);
     const why = bbCanAdd(s, p);
     const on = BB.pick === p.unit_id;
     return `<div class="bbd-s${on ? ' bbd-s-on' : ''}${why ? ' bbd-s-off' : ''}"
-        onpointerdown="bbTrayGrab(event,'${jsq(p.unit_id)}')">
+        onclick="bbPick('${jsq(p.unit_id)}')">
         <span class="bbd-s-n">${esc(p.unit_name)}</span>
         <span class="bbd-s-i">${bbNum(p.hp)} корп · ${bbNum(p.dmg)} урон · ${p.rng} гекс${Number(p.cost) > 0 ? ` · ${bbNum(p.cost)}` : ''}</span>
-        ${n ? `<span class="bbd-s-q">${n}</span>` : ''}
-        <button class="bbd-s-a" ${why ? 'disabled' : ''} title="${why ? esc(why) : 'Поставить борт'}"
-          onpointerdown="event.stopPropagation()" onclick="bbAddOne('${jsq(p.unit_id)}')">+</button>
+        <span class="bbd-s-w">${why ? esc(why) : `в резерве ${free - n} из ${free}`}</span>
+        <span class="bbd-s-q">${n}/${free}</span>
+        <span class="bbd-s-btn">
+          <button class="bbd-s-a" ${n ? '' : 'disabled'} title="Снять борт"
+            onclick="event.stopPropagation();bbDelOne('${jsq(p.unit_id)}')">−</button>
+          <button class="bbd-s-a" ${why ? 'disabled' : ''} title="${why ? esc(why) : 'Поставить борт'}"
+            onclick="event.stopPropagation();bbAddOne('${jsq(p.unit_id)}')">+</button>
+        </span>
       </div>`;
   }).join('');
 
@@ -558,11 +574,16 @@ function bbRenderDeploy(s) {
       <button class="bbd-back" onclick="bbClose()" title="Выйти на сайт">←</button>
 
       <div class="bbd-hud${L.over ? ' bbd-hud-over' : ''}">
-        <span class="bbd-hud-n"><b>${L.used}</b>/${L.cap}</span>
-        <span class="bbd-hud-l">борта</span>
-        ${L.budget > 0 ? `<span class="bbd-hud-sep"></span>
-        <span class="bbd-hud-n"><b>${bbNum(L.spent)}</b>/${bbNum(L.budget)}</span>
-        <span class="bbd-hud-l">ГС</span>` : ''}
+        <span class="bbd-hud-r">
+          <span class="bbd-hud-n"><b>${L.used}</b>/${L.cap}</span>
+          <span class="bbd-hud-l">${L.slots > 0
+            ? `бортов · ещё ${L.slots}`
+            : 'бортов · предел'}</span>
+        </span>
+        ${L.budget > 0 ? `<span class="bbd-hud-r">
+          <span class="bbd-hud-n"><b>${bbNum(L.spent)}</b>/${bbNum(L.budget)}</span>
+          <span class="bbd-hud-l">${L.over ? 'ГС · перебор' : `ГС · ост. ${bbNum(L.left)}`}</span>
+        </span>` : ''}
         <span class="bbd-hud-foe">${foe ? '● враг готов' : '○ враг ставит'}</span>
       </div>
 
@@ -597,56 +618,6 @@ function bbCellBusy(x, y, skip) {
   return BB.place.some((p, i) => i !== skip && p.x === x && p.y === y);
 }
 
-// Тяга борта из ленты прямо на карту: палец ведёт «призрак», отпуск над своей
-// зоной сажает борт в этот гекс. Короткий тап = просто выбрать борт.
-function bbTrayGrab(ev, uid) {
-  const s = BB.st; if (!s || BB.st.status !== 'forming') return;
-  const p = (s.pool || []).find(q => q.unit_id === uid); if (!p) return;
-  ev.preventDefault();
-  const why = bbCanAdd(s, p);
-  const g = document.createElement('div');
-  g.className = 'bbd-ghost';
-  g.textContent = p.unit_name;
-  document.body.appendChild(g);
-  const st = { uid, ghost: g, moved: false, x0: ev.clientX, y0: ev.clientY, why };
-  BB.trayDrag = st;
-  const put = e => {
-    g.style.left = e.clientX + 'px';
-    g.style.top = e.clientY + 'px';
-  };
-  put(ev);
-  const onMove = e => {
-    if (Math.abs(e.clientX - st.x0) + Math.abs(e.clientY - st.y0) > 6) st.moved = true;
-    put(e);
-    if (st.moved && BB.cv) {
-      const c = bbHexAt(e);
-      const ok = c && bbInMyZone(c.x) && !bbCellBusy(c.x, c.y, -1) && !why;
-      BB.dropCell = st.moved ? (c || null) : null;
-      BB.dropOk = !!ok;
-      g.classList.toggle('bbd-ghost-ok', !!ok);
-      bbPaint();
-    }
-  };
-  const onUp = e => {
-    document.removeEventListener('pointermove', onMove);
-    document.removeEventListener('pointerup', onUp);
-    document.removeEventListener('pointercancel', onUp);
-    g.remove();
-    BB.trayDrag = null; BB.dropCell = null; BB.dropOk = false;
-    if (!st.moved) { bbPick(uid); return; }          // тап — просто выбрать
-    if (why) { toast(why, 'err'); bbPaint(); return; }
-    const c = bbHexAt(e);
-    if (!c || !bbInMyZone(c.x)) { toast('Отпускать надо в своей зоне — подсвеченные гексы', 'err'); bbPaint(); return; }
-    if (bbCellBusy(c.x, c.y, -1)) { toast('Гекс занят', 'err'); bbPaint(); return; }
-    BB.place.push({ unit_id: p.unit_id, unit_name: p.unit_name, cls: p.cls, x: c.x, y: c.y });
-    BB.pick = uid;
-    bbRender();
-  };
-  document.addEventListener('pointermove', onMove);
-  document.addEventListener('pointerup', onUp);
-  document.addEventListener('pointercancel', onUp);
-}
-
 // Камера расстановки: показать СВОЮ зону спавна целиком по высоте доски.
 function bbCamDeploy(force) {
   const s = BB.st; if (!s || !BB.vw) return;
@@ -676,7 +647,10 @@ function bbNum(v) { v = +v || 0; return v >= 1000 ? Math.round(v).toLocaleString
 function bbDuelSpent(s) {
   const cost = {};
   (Array.isArray(s.pool) ? s.pool : []).forEach(p => { cost[p.unit_id] = Number(p.cost) || 0; });
-  return BB.place.reduce((sum, p) => sum + (cost[p.unit_id] || 0), 0);
+  // Как и по местам: уже утверждённые борта продолжают тратить бюджет.
+  const fixed = (s.units || []).filter(u => u.mine)
+    .reduce((sum, u) => sum + (cost[u.unit_id] || 0), 0);
+  return fixed + BB.place.reduce((sum, p) => sum + (cost[p.unit_id] || 0), 0);
 }
 // Развёрнутые ТТХ корабля из резерва/подкрепления (класс, корпус, урон, ход,
 // дальность + важные детали: щит/броня, грузоподъёмность, экипаж, боевые модули).
@@ -1285,23 +1259,31 @@ function bbReconcilePlace() {
   const cap = {};
   pool.forEach(p => { cap[p.unit_id] = Math.max(0, Number(p.free) || 0); });
   const seen = {};
-  let dropped = 0;
+  const dropped = [];
   BB.place = BB.place.filter(p => {
     // корабль, которого в свежем резерве нет вовсе, — тоже под нож
     const limit = cap.hasOwnProperty(p.unit_id) ? cap[p.unit_id] : 0;
     const n = (seen[p.unit_id] = (seen[p.unit_id] || 0) + 1);
-    if (n > limit) { dropped++; return false; }
+    if (n > limit) { dropped.push(p.unit_name || 'борт'); return false; }
     return true;
   });
-  if (dropped > 0) {
+  if (dropped.length) {
     if (BB.pick && !cap[BB.pick]) BB.pick = null;
-    toast(`Резерв обновлён: снято лишних кораблей — ${dropped}. Проверьте расстановку.`, 'err');
+    // Именно ЭТО раньше выглядело как «корабли уничтожило»: доска молча теряла
+    // борта. Теперь честно называем, кого сняли и почему — сами корабли целы,
+    // они остаются во флоте, снята только их метка на доске.
+    toast(`Во флоте меньше кораблей, чем расставлено. С доски сняты (сами корабли целы): ${dropped.join(', ')}`, 'err');
   }
 }
 async function bbConfirmDeploy() {
+  if (BB.busy) return;                    // защита от второго нажатия
   if (!BB.place.length) { toast('Выведите на доску хотя бы один корабль', 'err'); return; }
+  const L = bbDeployLim(BB.st);
+  if (L.used > L.cap) { toast(`На доску можно вывести не больше ${L.cap} кораблей, у вас ${L.used}`, 'err'); return; }
+  if (L.over) { toast(`Перебор по бюджету: ${bbNum(L.spent)} из ${bbNum(L.budget)} ГС`, 'err'); return; }
   if (!confirm(`Утвердить состав из ${BB.place.length} кораблей? После подтверждения расстановку не изменить.`)) return;
   BB.busy = true;
+  bbRender();                             // кнопка сразу гаснет — экран не «немой»
   try {
     await ecRpc('battle_deploy', { p_battle: BB.id, p_units: BB.place.map(p => ({ unit_id: p.unit_id, unit_name: p.unit_name, x: p.x, y: p.y })) });
     await ecRpc('battle_ready', { p_battle: BB.id });
@@ -1319,9 +1301,13 @@ async function bbConfirmDeploy() {
     // числами и следующая попытка «В бой» шла по актуальным данным.
     await bbReload().catch(() => {});
     bbReconcilePlace();
+  } finally {
+    // Снимаем busy ДО перерисовки и делаем это в finally по любому исходу:
+    // пока BB.busy true, bbClick не принимает ни одного клика — именно так
+    // экран и «зависал», если запрос отваливался не по-человечески.
+    BB.busy = false;
     bbRender();
   }
-  finally { BB.busy = false; }
 }
 
 // ════════════════════════════════════════════════════════════
