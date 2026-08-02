@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!-- Стенд ИНТЕГРАЦИИ: настоящий bbOpen со всей разметкой доски, mock вместо
+     Supabase. Проверяет то, чего не видит _bb3d_harness.html: врезку канваса
+     (bbMount), ленивую загрузку three.js (bbTry3D) и фолбэк на 2D. -->
+<html lang="ru"><head><meta charset="utf-8"><title>BB 3D live</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  html,body{margin:0;height:100%;background:#05070d;color:#cfe6f2;font:13px/1.4 system-ui,sans-serif}
+  #err{position:fixed;left:8px;bottom:8px;z-index:9999;color:#ff6a8a;white-space:pre-wrap;pointer-events:none}
+</style>
+</head><body>
+<div id="err"></div>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function jsq(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function toast(m,k){console.log('[toast]',k||'',m);}
+function ecReload(){}
+var EC = { designs: [] };
+var user = { role: 'player' };
+
+const MOCK = {
+  id:'b1', status:'active', kind:'intercept', system_id:'asu', system_name:'Асу',
+  w:48, h:28, cap:50, zone:4, acts_max:6, acts_left:6, my_side:'attacker', my_fid:'me',
+  attacker:'me', attacker_name:'Микустан', defender:'foe', defender_name:'Тетославия',
+  side_to_move:'attacker', my_turn:true, turn_no:1, log:[{m:'Бой завязался'}], pool:[],
+  units:[
+    {id:'a1',mine:true, side:'attacker',name:'Вальсирующий',cls:'corvette',  x:2, y:4, hp:500,max_hp:500,facing:0,speed:4,rng:6,dmg:40,wpn:[{k:'kinetic',rng:6,dmg:40}]},
+    {id:'a5',mine:true, side:'attacker',name:'Неотвратимый',cls:'battleship',x:2, y:20,hp:520,max_hp:900,facing:0,speed:2,rng:12,dmg:120,wpn:[{k:'kinetic',rng:12,dmg:120}]},
+    {id:'d3',mine:false,side:'defender',name:'Дредноут',   cls:'dreadnought',x:45,y:22,hp:900,max_hp:900,facing:3,speed:1,rng:14,dmg:200},
+    {id:'d4',mine:false,side:'defender',name:'?',          cls:null,        x:30,y:10,contact:true},
+  ],
+  terrain:[{x:20,y:6,t:'ast'},{x:26,y:16,t:'neb'},{x:16,y:20,t:'grv'},{x:12,y:14,t:'deb'}],
+};
+async function ecRpc(fn, body){
+  if (fn==='battle_state') return JSON.parse(JSON.stringify(MOCK));
+  console.log('[rpc]', fn, body);
+  return {};
+}
+window.onerror = e => { document.getElementById('err').textContent += e + '\n'; };
+window.addEventListener('unhandledrejection', e => {
+  document.getElementById('err').textContent += 'promise: ' + (e.reason && e.reason.message || e.reason) + '\n';
+});
+</script>
+<script src="constructors.js"></script>
+<script src="battle_board.js"></script>
+<script src="battle_gl.js"></script>
+<script>bbOpen('b1');</script>
+</body></html>

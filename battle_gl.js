@@ -272,7 +272,12 @@ function bgBindInput() {
     BG.ptrs.set(ev.pointerId, p);
     if (BG.ptrs.size === 2) {
       const [a, b] = [...BG.ptrs.values()];
-      BG.pinch = { d: Math.hypot(a.sx - b.sx, a.sy - b.sy), dist: BG.dist };
+      BG.pinch = {
+        d: Math.hypot(a.sx - b.sx, a.sy - b.sy),
+        mx: (a.sx + b.sx) / 2, my: (a.sy + b.sy) / 2,
+        ang: Math.atan2(b.sy - a.sy, b.sx - a.sx),
+        twist: 0,                               // копим доворот до порога, см. ниже
+      };
       BG.drag = BG.orbit = null;
       return;
     }
@@ -282,9 +287,10 @@ function bgBindInput() {
       BG.drag = null;
     } else {
       const w = bgPickWorld(p.sx, p.sy);
-      BG.drag = w ? { gx: w.px, gy: w.py, tx: BG.tgt.x, tz: BG.tgt.z, moved: false, sx: p.sx, sy: p.sy } : null;
+      BG.drag = w ? { gx: w.px, gy: w.py, moved: false, sx: p.sx, sy: p.sy } : null;
       BG.orbit = null;
     }
+    BG.camAnim = null;            // взялись за камеру — автодоворот не мешает
     ev.preventDefault();
   };
 
@@ -295,9 +301,36 @@ function bgBindInput() {
     if (BG.pinch && BG.ptrs.size >= 2) {
       const [a, b] = [...BG.ptrs.values()];
       const d = Math.hypot(a.sx - b.sx, a.sy - b.sy);
-      if (d > 4 && BG.pinch.d > 4) {
-        BG.dist = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, BG.pinch.dist * BG.pinch.d / d));
-        bgApplyCam(); BG.dirty = true; bgKick();
+      const P = BG.pinch;
+      if (d > 4 && P.d > 4) {
+        const mx = (a.sx + b.sx) / 2, my = (a.sy + b.sy) / 2;
+        // ТОЧКА ПОД ПАЛЬЦАМИ ОСТАЁТСЯ ПОД ПАЛЬЦАМИ. Раньше щипок менял только
+        // дистанцию камеры, а она смотрит в центр экрана — поэтому приближалось
+        // не то, что держат. Берём мировую точку под ПРЕЖНЕЙ серединой щипка,
+        // меняем дистанцию, потом сдвигаем прицел так, чтобы та же точка легла
+        // под НОВОЙ серединой: заодно получается панорама двумя пальцами.
+        const before = bgPickWorld(P.mx, P.my);
+        BG.dist = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, BG.dist * P.d / d));
+        // Доворот щипком: до порога в ~12° крутить нельзя, иначе камера ведёт
+        // при каждом обычном сведении пальцев.
+        const ang = Math.atan2(b.sy - a.sy, b.sx - a.sx);
+        let da = ((ang - P.ang) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+        P.twist += da;
+        if (Math.abs(P.twist) > 0.21) { BG.yaw += da; }
+        P.ang = ang;
+        bgApplyCam();
+        if (before) {
+          const after = bgPickWorld(mx, my);
+          if (after) {
+            BG.tgt.x += before.px - after.px;
+            BG.tgt.z += before.py - after.py;
+            bgClampTarget();
+          }
+        }
+        bgApplyCam();
+        P.d = d; P.mx = mx; P.my = my;
+        BG.camAnim = null;                      // игрок взялся за камеру — доворот отменяем
+        BG.dirty = true; bgKick();
       }
       return;
     }
@@ -310,14 +343,20 @@ function bgBindInput() {
     if (BG.drag) {
       if (Math.abs(p.sx - BG.drag.sx) + Math.abs(p.sy - BG.drag.sy) > 5) BG.drag.moved = true;
       // ТЯНЕМ САМО ПОЛЕ: точка, за которую взялись, обязана остаться под курсором.
-      // Пересчёт идёт через тот же рейкаст, поэтому пан не «уплывает» ни при каком
-      // угле камеры — в отличие от деления экранного сдвига на зум в 2D-версии.
+      // Поправка ИНКРЕМЕНТНАЯ — прицел двигаем на разницу между схваченной точкой
+      // и той, что сейчас под курсором. Считать её от прицела на момент захвата
+      // нельзя: рейкаст-то идёт уже сдвинутой камерой, поправка накладывалась
+      // на саму себя, и камеру трясло. Сдвиг прицела в плоскости сдвигает
+      // мировую точку под курсором ровно на столько же, поэтому шаг — точный.
       const w = bgPickWorld(p.sx, p.sy);
       if (w) {
-        BG.tgt.x = BG.drag.tx + (BG.drag.gx - w.px);
-        BG.tgt.z = BG.drag.tz + (BG.drag.gy - w.py);
-        bgClampTarget();
-        bgApplyCam(); BG.dirty = true; bgKick();
+        const dx = BG.drag.gx - w.px, dz = BG.drag.gy - w.py;
+        const lim = BB.R * 400;                 // луч у самого горизонта даёт выброс
+        if (Math.abs(dx) < lim && Math.abs(dz) < lim) {
+          BG.tgt.x += dx; BG.tgt.z += dz;
+          bgClampTarget();
+          bgApplyCam(); BG.dirty = true; bgKick();
+        }
       }
       return;
     }
@@ -349,10 +388,30 @@ function bgBindInput() {
   cv.oncontextmenu = ev => ev.preventDefault();
   cv.onwheel = ev => {
     ev.preventDefault();
-    BG.dist = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, BG.dist * (ev.deltaY < 0 ? 1 / 1.12 : 1.12)));
-    bgApplyCam(); BG.dirty = true; bgKick();
+    const p = bgLocalXY(ev);
+    bgZoomAnchor(BG.dist * (ev.deltaY < 0 ? 1 / 1.12 : 1.12), p.sx, p.sy);
   };
   window.addEventListener('resize', bgResize);
+}
+
+// Зум С ПРИВЯЗКОЙ К ТОЧКЕ ЭКРАНА: то, что под курсором (или под серединой
+// щипка), там и остаётся. Камера смотрит в свой прицел, поэтому одной сменой
+// дистанции не обойтись — прицел надо доподвинуть на разницу мировых точек.
+function bgZoomAnchor(dist, sx, sy) {
+  const before = bgPickWorld(sx, sy);
+  BG.dist = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, dist));
+  bgApplyCam();
+  if (before) {
+    const after = bgPickWorld(sx, sy);
+    if (after) {
+      BG.tgt.x += before.px - after.px;
+      BG.tgt.z += before.py - after.py;
+      bgClampTarget();
+      bgApplyCam();
+    }
+  }
+  BG.camAnim = null;
+  BG.dirty = true; bgKick();
 }
 
 // Прицел камеры не уходит за пределы арены — иначе поле улетает из кадра и
@@ -709,6 +768,43 @@ function bgTexTrail() {
   });
 }
 
+// ── ТЕКСТ В СЦЕНЕ ───────────────────────────────────────────
+// Надписи — спрайты, а не DOM-накладки: спрайт живёт в глубине, поэтому имя
+// борта честно уезжает за астероид, а всплывающее число урона остаётся на своей
+// высоте, а не липнет к экрану. Плата — текстура на каждую строку, поэтому они
+// кэшируются по самой строке: имена бортов повторяются от кадра к кадру, а
+// числа урона — от залпа к залпу.
+function bgTexText(str) {
+  const cache = BG._txt || (BG._txt = {});
+  if (cache[str]) return cache[str];
+  const F = 48, pad = 12, font = '600 ' + F + 'px system-ui, "Segoe UI", sans-serif';
+  const cv = document.createElement('canvas');
+  const x = cv.getContext('2d');
+  x.font = font;
+  const w = Math.max(8, Math.ceil(x.measureText(str).width)) + pad * 2, h = F + pad * 2;
+  cv.width = w; cv.height = h;
+  x.font = font;                               // смена размера канваса сбрасывает контекст
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.lineJoin = 'round'; x.lineWidth = F * 0.18;
+  x.strokeStyle = 'rgba(0,0,0,0.85)';          // обводка: текст читается на любом фоне
+  x.strokeText(str, w / 2, h / 2);
+  x.fillStyle = '#ffffff';
+  x.fillText(str, w / 2, h / 2);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.userData = { w, h };
+  return (cache[str] = t);
+}
+
+function bgTextSprite(str, col, h, opa) {
+  const t = bgTexText(str);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: t, color: col, transparent: true, opacity: opa == null ? 0.85 : opa,
+    depthWrite: false, depthTest: false }));
+  sp.scale.set(h * t.userData.w / t.userData.h, h, 1);
+  return sp;
+}
+
 // Цвета эффектов приходят из 2D-доски строкой «r,g,b» (BB_C.mine и т.п.).
 // Прогоняем через setStyle, а не через конструктор с числами: тот принимает
 // линейные значения, и бирюза выцвела бы относительно 2D-доски.
@@ -922,6 +1018,14 @@ function bgFxBlast(f) {
   sparks.frustumCulled = false;                 // точки разлетаются за исходный bbox
   objs.push(sparks);
 
+  // всплывающее число урона: сервер отдаёт только новый корпус, поэтому величину
+  // считает дифф снимков в bbDiffAnimate и кладёт её прямо в эффект
+  let num = null;
+  if (f.dmg > 0) {
+    num = bgTextSprite('−' + Math.round(f.dmg), boom ? 0xffc46a : 0xffffff, R * 0.42, 0);
+    objs.push(num);
+  }
+
   let r1 = null, r2 = null, deb = null, dm = null;
   if (boom) {
     r1 = bgSprite(bgTexRing(), 0xfff0c8, 0);
@@ -964,6 +1068,11 @@ function bgFxBlast(f) {
     }
     sg.attributes.position.needsUpdate = true;
     sparks.material.opacity = a;
+    if (num) {
+      // всплывает над точкой попадания: быстро проявился, дальше тает
+      num.position.set(f.px, y + R * (0.55 + t * 1.6), f.py);
+      num.material.opacity = t < 0.15 ? t / 0.15 : Math.max(0, 1 - (t - 0.15) / 0.85);
+    }
     if (boom) {
       const g1 = grow * 2, g2 = R * (0.3 + t * 1.9) * 2;
       r1.scale.set(g1, g1, 1); r1.material.opacity = 0.75 * a;
@@ -1298,6 +1407,17 @@ function bgBar(col, opa) {
   return sp;
 }
 
+// Шеврон курса на кромке гекса: курс читается и тогда, когда корпус отъехал в
+// мелочь. Лежит ПЛАШМЯ в плоскости доски — в 2D он рисовался там же.
+function bgChevGeo() {
+  if (BG._chev) return BG._chev;
+  const p = [];
+  [0, 2.5, -2.5].forEach(a => p.push(Math.cos(a), Math.sin(a), 0));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+  return (BG._chev = g);
+}
+
 function bgSyncStatus() {
   const s = BB.st; if (!s || !BG.scene) return;
   if (!BG.g.st) { BG.g.st = new THREE.Group(); BG.scene.add(BG.g.st); }
@@ -1308,9 +1428,19 @@ function bgSyncStatus() {
     live.add(u.id);
     let st = BG.stat.get(u.id);
     if (!st) {
-      st = { bg: bgBar(0x000000, 0.62), hp: bgBar(0xffffff, 0.95), sh: bgBar(0xffffff, 0.75) };
-      BG.g.st.add(st.bg, st.hp, st.sh);
+      const col = bgCol(u.mine ? BG_C.mine : BG_C.foe);
+      st = { bg: bgBar(0x000000, 0.62), hp: bgBar(0xffffff, 0.95), sh: bgBar(0xffffff, 0.75),
+             chev: new THREE.Mesh(bgChevGeo(), new THREE.MeshBasicMaterial({
+               color: col, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })) };
+      BG.g.st.add(st.bg, st.hp, st.sh, st.chev);
       BG.stat.set(u.id, st);
+    }
+    // имя борта — отдельным спрайтом, пересобираем только когда имя изменилось
+    if (st.nmStr !== u.name) {
+      if (st.nm) { BG.g.st.remove(st.nm); st.nm.material.dispose(); }
+      st.nmStr = u.name;
+      st.nm = u.name ? bgTextSprite(u.name, bgCol(u.mine ? BG_C.mine : BG_C.foe), BB.R * 0.3, 0.8) : null;
+      if (st.nm) BG.g.st.add(st.nm);
     }
     const hpF = (u.max_hp > 0) ? Math.max(0, Math.min(1, u.hp / u.max_hp)) : 1;
     const shF = (u.max_shield > 0) ? Math.max(0, Math.min(1, u.shield / u.max_shield)) : 0;
@@ -1329,20 +1459,25 @@ function bgSyncStatus() {
   });
   BG.stat.forEach((st, id) => {
     if (live.has(id)) return;
-    BG.g.st.remove(st.bg, st.hp, st.sh);
-    [st.bg, st.hp, st.sh].forEach(o => o.material.dispose());
+    [st.bg, st.hp, st.sh, st.chev, st.nm].forEach(o => {
+      if (!o) return;
+      BG.g.st.remove(o); o.material.dispose();
+    });
     BG.stat.delete(id);
   });
   bgPlaceStatus();
 }
 
-// Полоски едут за бортом: позиция берётся у уже посаженного меша
+// Полоски, имя и шеврон едут за бортом: позиция берётся у посаженного меша
 function bgPlaceStatus() {
   if (!BG.stat) return;
   const W = BB.R * 1.15, TH = BB.R * 0.085;
   BG.stat.forEach((st, id) => {
     const m = BG.units.get(id);
-    if (!m) { st.bg.visible = st.hp.visible = st.sh.visible = false; return; }
+    if (!m) {
+      [st.bg, st.hp, st.sh, st.chev, st.nm].forEach(o => { if (o) o.visible = false; });
+      return;
+    }
     const y = m.position.y + m.userData.L * 0.5;
     const x = m.position.x - W / 2, z = m.position.z;
     st.bg.visible = st.hp.visible = true;
@@ -1353,6 +1488,16 @@ function bgPlaceStatus() {
       st.sh.position.set(x, y + TH * 1.25, z);
       st.sh.scale.set(W * st.shF, TH * 0.6, 1);
     }
+    if (st.nm) {
+      st.nm.visible = true;
+      st.nm.position.set(m.position.x, y + TH * 3.4, z);
+    }
+    // шеврон: на кромке гекса по курсу, плашмя
+    const ang = -m.rotation.y;                  // обратно в угол 2D-доски
+    const cx = m.position.x + Math.cos(ang) * BB.R * 0.86;
+    const cz = m.position.z + Math.sin(ang) * BB.R * 0.86;
+    st.chev.visible = true;
+    bgLayFlat(st.chev, cx, 1.6, cz, BB.R * 0.16, BB.R * 0.16, Math.cos(ang), Math.sin(ang));
   });
 }
 

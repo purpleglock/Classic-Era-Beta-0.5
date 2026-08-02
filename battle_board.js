@@ -220,6 +220,7 @@ function bbDiffAnimate(prev, cur) {
     // попадание: корпус просел, но корабль жив
     if (p.hp != null && u.hp != null && u.hp < p.hp - 0.01) {
       shots.push({ x: u.x, y: u.y, mine: u.mine, side: u.side, kind: 'hit',
+                   dmg: p.hp - u.hp,      // величину урона знает только дифф снимков
                    col: u.mine ? BB_C.mine : BB_C.foe, foe: spec || !!u.mine });
       foeAct.push(bbHexCenter(u.x, u.y));
     }
@@ -248,12 +249,12 @@ function bbDiffAnimate(prev, cur) {
         bbFxAdd({ kind: 'flash', px: a.px, py: a.py, t0: start, dur: 240, col });
         bbFxAdd({ kind: 'beam', x0: a.px, y0: a.py, x1: c.px, y1: c.py,
                   t0: start, dur: 380, col, head: true });
-        bbFxAdd({ kind: ev.kind, px: c.px, py: c.py, t0: start + 300, dur, col: ev.col });
+        bbFxAdd({ kind: ev.kind, px: c.px, py: c.py, t0: start + 300, dur, col: ev.col, dmg: ev.dmg });
       } else {
-        bbFxAdd({ kind: ev.kind, px: c.px, py: c.py, t0: start, dur, col: ev.col });
+        bbFxAdd({ kind: ev.kind, px: c.px, py: c.py, t0: start, dur, col: ev.col, dmg: ev.dmg });
       }
     } else {
-      bbFxAdd({ kind: ev.kind, px: c.px, py: c.py, t0: now, dur, col: ev.col });
+      bbFxAdd({ kind: ev.kind, px: c.px, py: c.py, t0: now, dur, col: ev.col, dmg: ev.dmg });
     }
   });
   // Камера магнитится к действиям противника: наводится на них И зумит,
