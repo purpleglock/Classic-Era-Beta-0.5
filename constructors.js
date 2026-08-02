@@ -741,6 +741,42 @@ function cnMergeTurrets(db, div) {
 }
 // Свои орудия исследовать не нужно — их уже «исследовала» сама верфь.
 function cnIsTurretGroup(g) { return g === CN_TURRET_GROUP; }
+// ПОЧЕМУ своего орудия нет в слоте. Носители считает верфь (масса/энергия против
+// лимитов класса), и орудие, переросшее корвет, просто ИСЧЕЗАЛО из списка — со
+// стороны игрока это выглядело как пропажа («сначала работало, потом перестало»).
+// Теперь такие орудия остаются в пикере серой карточкой с цифрами перегруза.
+// null = класс k этой сборке в принципе не положен (платформа не та) либо всё в норме.
+function cnTurretLockWhy(item, k) {
+  if (!item || !item._turret || !k || !window.TG) return null;
+  const lim = TG.CARRIERS && TG.CARRIERS[k];
+  if (!lim) return null;
+  // Кандидат ли класс вообще: TG.carriers() возвращает только те носители,
+  // что положены классу установки, с готовой причиной отказа.
+  const cfg = cnTurretCfg(item);
+  if (cfg && TG.carriers) {
+    let row = null;
+    try { row = (TG.carriers(cfg) || []).find(x => x.key === k); } catch (e) { row = null; }
+    if (!row) return null;
+    if (row.ok) return null;
+    return 'Не тянет: ' + (lim.ru || k) + ' — ' + row.why;
+  }
+  // Нет конфигурации (легаси-строка) — считаем по сохранённым ТТХ.
+  const why = [];
+  const m = +item.weight || 0, e = +item.energy || +item.power || 0;
+  if (m > lim.mass) why.push('масса ' + cnNum(Math.round(m)) + ' кг > ' + cnNum(lim.mass));
+  if (e > lim.power) why.push('энергия ' + cnNum(e) + ' > ' + cnNum(lim.power));
+  return why.length ? 'Не тянет: ' + (lim.ru || k) + ' — ' + why.join('; ') : null;
+}
+// Индексы своих орудий, которые классу k не по силам (для серых карточек пикера).
+function cnTurretLockedIdxs(k) {
+  const arr = (CN.def && CN.def.db.weapons[CN_TURRET_GROUP]) || [];
+  const out = [];
+  arr.forEach((it, i) => {
+    if (cnItemAvail('weapon', k, CN_TURRET_GROUP, i)) return;
+    if (cnTurretLockWhy(it, k)) out.push(i);
+  });
+  return out;
+}
 // Дизайн несёт стабильный turretId рядом с {g,idx}: индекс мог сместиться,
 // id — нет, и сервер верит только ему (зеркало armorAlloyId).
 function cnWpnTagTurret(def, w) {
@@ -944,7 +980,7 @@ function cnCompFullHtml(info, action) {
       <div class="cn-info-stats">${cnCompStatsRows(info)}</div>
       ${billHtml}
       <div class="cn-info-desc">${esc(info.desc || '…')}</div>
-      ${action ? (locked ? `<div class="cn-info-pick cn-info-lk">Требует исследования</div>` : `<div class="cn-info-pick">${on ? '✓ выбрано' : 'Выбрать ▸'}</div>`) : ''}
+      ${action ? (locked ? `<div class="cn-info-pick cn-info-lk">${esc(info.lockMsg || 'Требует исследования')}</div>` : `<div class="cn-info-pick">${on ? '✓ выбрано' : 'Выбрать ▸'}</div>`) : ''}
     </div>
   </div>`;
 }
@@ -2197,6 +2233,31 @@ function cnItemAvail(type, k, group, i) {
 function cnGroupHasAvail(type, k, group, source) {
   return (source[group] || []).some((it, i) => cnItemAvail(type, k, group, i));
 }
+// Показывать ли группу в пикере: есть доступное ЛИБО есть свои орудия, которые
+// класс не тянет (их показываем серыми — иначе группа исчезает молча).
+function cnGroupVisible(type, k, group, source) {
+  if (cnGroupHasAvail(type, k, group, source)) return true;
+  return type === 'weapon' && cnIsTurretGroup(group) && cnTurretLockedIdxs(k).length > 0;
+}
+// Карточки группы: сначала доступные, затем — только для своих орудий —
+// серые «не тянет» с причиной вместо молчаливого исчезновения.
+function cnPickCards(type, k, group, source, actionFn, mark) {
+  const arr = source[group] || [];
+  let html = arr.map((it, i) => i).filter(i => cnItemAvail(type, k, group, i)).map(i => {
+    const info = cnCompInfo(type, group, i);
+    if (mark) mark(info, i);
+    return cnCompFullHtml(info, actionFn(i));
+  }).join('');
+  if (type === 'weapon' && cnIsTurretGroup(group)) {
+    html += cnTurretLockedIdxs(k).map(i => {
+      const info = cnCompInfo(type, group, i);
+      info.locked = true;
+      info.lockMsg = cnTurretLockWhy(arr[i], k);
+      return cnCompFullHtml(info, actionFn(i));
+    }).join('');
+  }
+  return html;
+}
 // Разрешён ли компонент ИМЕННО на классе k: существует в каталоге И доступен этому
 // классу (excl-группа + карта availW/availM). Ловит эксплойт «поставил на одном
 // классе, где доступно, — перетащил дизайн на другой класс, где нельзя».
@@ -2226,7 +2287,7 @@ function cnOpenAssignPicker(kind, slot, keepFilter) {
     if (isW && def.excl(k, group)) continue;
     if (isW && !cnWpnUnlocked(CN.cat, group)) continue;
     if (!isW && !cnModUnlocked(CN.cat, group)) continue;
-    if (!cnGroupHasAvail(isW ? 'weapon' : 'module', k, group, source)) continue;
+    if (!cnGroupVisible(isW ? 'weapon' : 'module', k, group, source)) continue;
     groups.push(group);
   }
   // Активная вкладка: сохранённая (при переключении) → калибр текущего орудия → первая.
@@ -2237,7 +2298,9 @@ function cnOpenAssignPicker(kind, slot, keepFilter) {
     : '';
   let secs = '';
   if (active) {
-    const cards = source[active].map((item, i) => i).filter(i => cnItemAvail(isW ? 'weapon' : 'module', k, active, i)).map(i => { const info = cnCompInfo(isW ? 'weapon' : 'module', active, i); info.on = !!(cur && cur.g === active && cur.idx === i); return cnCompFullHtml(info, `cnAssignSlot('${kind}',${slot},'${esc(active)}',${i})`); }).join('');
+    const cards = cnPickCards(isW ? 'weapon' : 'module', k, active, source,
+      i => `cnAssignSlot('${kind}',${slot},'${esc(active)}',${i})`,
+      (info, i) => { info.on = !!(cur && cur.g === active && cur.idx === i); });
     secs = `<div class="cn-info-grid">${cards}</div>`;
   }
   if (!secs) secs = `<div class="cn-bill-none" style="padding:10px">${isW ? 'Нет доступного оружия этого класса' : 'Модули ещё не исследованы (вкладка «Исследования»)'}</div>`;
@@ -2288,9 +2351,8 @@ function cnOpenPartPicker(type) {
     if (type === 'weapon' && def.excl(k, group)) continue;
     if (type === 'weapon' && !cnWpnUnlocked(CN.cat, group)) continue;
     if (type === 'module' && !cnModUnlocked(CN.cat, group)) continue;
-    if (!cnGroupHasAvail(type, k, group, source)) continue;
-    const cards = source[group].map((item, i) => i).filter(i => cnItemAvail(type, k, group, i)).map(i =>
-      cnCompFullHtml(cnCompInfo(type, group, i), `cnPickPart('${type}','${esc(group)}',${i})`)).join('');
+    if (!cnGroupVisible(type, k, group, source)) continue;
+    const cards = cnPickCards(type, k, group, source, i => `cnPickPart('${type}','${esc(group)}',${i})`);
     secs += `<div class="cn-pick-sec"><div class="cn-pick-h">${esc(group)}</div><div class="cn-info-grid">${cards}</div></div>`;
   }
   if (!secs) { toast(type === 'weapon' ? 'Нет доступного оружия этого класса' : 'Модули ещё не исследованы (вкладка «Исследования»)', 'inf'); return; }

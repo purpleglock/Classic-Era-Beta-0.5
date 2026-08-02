@@ -11582,6 +11582,11 @@ function ecBuildResearch() {
     let wi = 0;
     Object.keys(db.weapons || {}).forEach(g => {
       if (baseW.includes(g)) return;
+      // Своя группа оружейной верфи дописана в КАТАЛОГ (cnMergeTurrets мутирует
+      // KV_DB.weapons) — но узла в tech_nodes у неё нет и быть не должно:
+      // орудие уже оплачено наукой при ковке. Без этого пропуска в дереве висел
+      // узел «⚙ Свои орудия», и клик по нему падал с 'unknown tech node'.
+      if (typeof CN_TURRET_GROUP !== 'undefined' && g === CN_TURRET_GROUP) return;
       const wid = 'wpn.' + cat + '.' + g;
       const startr = EC_TECH_STARTER[wid];
       out.push({ id: wid, cat, catLabel, branch: 'weapon', name: g,

@@ -375,7 +375,9 @@
 .cn-info-desc { font-size: 11.5px; color: var(--t2); line-height: 1.5; white-space: pre-wrap; }
 .cn-info-pick { margin-top: 2px; text-align: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: calc(.05em * var(--deco-ls-mult, 1)); color: var(--gd); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); padding: 7px; background: var(--b2); }
 .cn-info-card:hover .cn-info-pick { border-color: var(--gd); }
-.cn-info-pick.cn-info-lk { color: var(--t4); }
+/* Причина блокировки бывает длинной («Не тянет: Корвет — масса 87 270 кг > 40 000»):
+   плашка переносит строки, а не режет текст. */
+.cn-info-pick.cn-info-lk { color: var(--t4); line-height: 1.45; overflow-wrap: anywhere; }
 
 /* ═══════════════════════════════════════════════════════════════
    КИБЕРПАНК-ОФОРМЛЕНИЕ КОРАБЕЛЬНОЙ ВЕРФИ (.cn-cyb)
