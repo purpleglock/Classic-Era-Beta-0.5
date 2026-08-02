@@ -700,7 +700,7 @@ const EC_HABITAT_COST = 1000, EC_HABITAT_CELLS = 3, EC_HABITAT_TURNS = 1;
 // INDUSTRY (0..4) — «Снабжение». Зеркало _worker_share() в _resource_rework.sql.
 // Смена вступает в силу СО СЛЕДУЮЩЕГО ТИКА (сервер держит лаг industry_eff).
 const EC_WORKER_SHARE = [0.10, 0.20, 0.30, 0.40, 0.50];
-const EC_WORKER_PER_UNIT = 5;       // 5 рабочих на залежи = 1 ед. выхода/тик (× баффы)
+const EC_WORKER_PER_UNIT = 5;       // минимум рабочих, чтобы залежь вообще копалась (иначе «нет рабочих»)
 const EC_PRIORITY_COST = 6000;      // ГС за отметку системы приоритетной
 // Небожители: орбитальные/наземные станции в непригодных мирах — малые колонии (3–5 ячеек).
 const EC_STATION_COST = 300;
@@ -1010,10 +1010,14 @@ function ecUnitWeight(u) { return EC_GROUND_WEIGHT[(u && u.data && u.data.class)
 const EC_INF_CLASSES = ['peh'];
 function ecIsInfDesign(u) { return !!(u && u.data && EC_INF_CLASSES.includes(u.data.class)); }
 function ecSlotsSum(t) { return EC.buildings.filter(b => b.btype === t).reduce((a, b) => a + (b.slots_open || 0), 0); }
-// Лимит ёмкости общего склада ресурсов. Зеркало _resources_phase1.sql:
-// база 1000 + 500 за каждый открытый слот здания «Склад».
+// Лимит ёмкости ОБЩЕГО склада ресурсов (на все ресурсы вместе, не по каждому).
+// Зеркало economy_accrue (_res_sync_fix.sql): (1000 + 500 × слоты «Склада»)
+// × множитель инфраструктуры (_budget_cap_mult) — ползунок «Инфраструктура»
+// действительно расширяет склады, как и обещает гайд.
 const EC_STORE_BASE = 1000, EC_STORE_PER_SLOT = 500;
-function ecStoreCap() { return EC_STORE_BASE + ecSlotsSum('warehouse') * EC_STORE_PER_SLOT; }
+const EC_STORE_CAP_MULT = [0.80, 0.90, 1.00, 1.15, 1.30];   // зеркало _budget_cap_mult
+function ecStoreCapMult() { return EC_STORE_CAP_MULT[ecBudgetLvl('infra')]; }
+function ecStoreCap() { return Math.round((EC_STORE_BASE + ecSlotsSum('warehouse') * EC_STORE_PER_SLOT) * ecStoreCapMult()); }
 // ── Раса/правление «роботов»: раса «Синтетики / Киборги» ИЛИ правление
 //    «Машинный разум (ИИ)». Роботы: пехота на Военном Заводе (×3), 2 слота
 //    исследований, 2 захвата систем за цикл. Зеркало: public._faction_is_robot().
@@ -3712,7 +3716,8 @@ const EC_STAT_METRICS = [
 // Легенда иконок журнала: эмодзи → расшифровка (чипы в журнале сами по себе непонятны).
 const EC_STAT_LEGEND = [
   ['🏭', 'фабрики и торговые хабы'], ['🚚', 'караваны'], ['📈', 'товарная биржа'],
-  ['📤', 'экспорт добычи'], ['📜', 'апкип торговой политики (расход)'], ['⛏', 'добыто на склад'], ['🔬', 'наука'],
+  ['📤', 'экспорт добычи'], ['📜', 'апкип торговой политики (расход)'], ['⛏', 'добыто на склад'],
+  ['🔥', 'сгорело: склад был полон'], ['🔬', 'наука'],
 ];
 function ecStatLabel(r) {
   const dt = r.tick_at ? new Date(r.tick_at) : null;
@@ -3793,7 +3798,8 @@ function ecStatsInner() {
       chip(+r.gc_market, '', `📈 +${ecNum(+r.gc_market)}`, 'Товарная биржа — сбыт свежедобытого потока за ГС (склад не трогает)'),
       chip(+r.gc_export, '', `📤 +${ecNum(+r.gc_export)}`, 'Экспорт добычи караванами'),
       chip(+r.gc_policy, 'neg', `📜 −${ecNum(+r.gc_policy)}`, 'Апкип торговой политики — расход ГС'),
-      chip(+r.mined, 'res', `⛏ ${ecNum(+r.mined)}`, 'Добыто ресурсов на склад за этот ход'),
+      chip(+r.mined, 'res', `⛏ ${ecNum(+r.mined)}`, 'Добыто ресурсов на склад за этот ход (реально положено)'),
+      chip(+r.mined_lost, 'neg', `🔥 ${ecNum(+r.mined_lost)}`, 'Сгорело: на складе не было места. Продайте излишки, постройте «Склад» или переведите заводы в режим 💱 Экспорт'),
       chip(+r.sci, 'sci', `🔬 +${ecNum(+r.sci)}`, 'Очки науки получено'),
     ].filter(Boolean).join('');
     return `<div class="ec-ih-row">
@@ -3836,6 +3842,7 @@ function ecIncomeHistoryPanel() {
       chip(+r.gc_export, '', `📤 +${ecNum(+r.gc_export)}`, 'Экспорт добычи'),
       chip(+r.gc_policy, 'neg', `📜 −${ecNum(+r.gc_policy)}`, 'Апкип торговой политики'),
       chip(+r.mined, 'res', `⛏ ${ecNum(+r.mined)}`, 'Добыто ресурсов на склад'),
+      chip(+r.mined_lost, 'neg', `🔥 ${ecNum(+r.mined_lost)}`, 'Сгорело — не было места на складе'),
       chip(+r.sci, 'sci', `🔬 +${ecNum(+r.sci)}`, 'Наука'),
     ].filter(Boolean).join('');
     return `<div class="ec-ih-row">
@@ -4737,7 +4744,8 @@ function ecTabOverview() {
   const minedKinds = resRows.filter(r => r.rate > 0).length;
   const whSlots = ecSlotsSum('warehouse');
   // Итоговая полоса склада + «когда заполнится»
-  const capBar = `<div class="ec-ovx-stat-wide ec-ov-clk" onclick="ecSetTab('colonies')" data-tip="Ёмкость общего склада: база ${ecNum(EC_STORE_BASE)} + по ${ecNum(EC_STORE_PER_SLOT)} за слот «Склада». Лимит ОБЩИЙ — на все ресурсы вместе.\n${whSlots ? whSlots + ' слот(ов) склада → +' + ecNum(whSlots * EC_STORE_PER_SLOT) : 'Складов нет — стройте «Склад», чтобы поднять лимит'}.\nНет свободного места — добыча на склад НЕ идёт (нет места — нет добычи). Чтобы сбывать сверх лимита, ставьте завод в режим 🚚 Экспорт или 🏪 Рынок.">
+  const capMult = ecStoreCapMult();
+  const capBar = `<div class="ec-ovx-stat-wide ec-ov-clk" onclick="ecSetTab('colonies')" data-tip="Ёмкость общего склада: (база ${ecNum(EC_STORE_BASE)} + по ${ecNum(EC_STORE_PER_SLOT)} за слот «Склада») × ${capMult.toFixed(2)} за «Инфраструктуру». Лимит ОБЩИЙ — на все ресурсы вместе.\n${whSlots ? whSlots + ' слот(ов) склада → +' + ecNum(Math.round(whSlots * EC_STORE_PER_SLOT * capMult)) : 'Складов нет — стройте «Склад», чтобы поднять лимит'}.\nНет свободного места — добыча на склад НЕ идёт (нет места — нет добычи). Чтобы сбывать сверх лимита, ставьте завод в режим 🚚 Экспорт или 🏪 Рынок.">
         <div class="ec-ovx-stat-k">📦 Вместимость склада <span class="ec-res-cap-pct">${storePct}%</span></div>
         <div class="ec-ovx-stat-barline"><b>${ecNum(storeUsed)}</b> / ${ecNum(storeCap)} ${ecOvBar(storeUsed, storeCap, storeUsed >= storeCap ? 'fill-rd' : (storePct >= 85 ? 'fill-amb' : 'fill-gc'))}</div>
       </div>`;
@@ -4747,8 +4755,8 @@ function ecTabOverview() {
   const resSummary = `<div class="ec-res-sum">
     <span class="ec-res-sum-i"><b class="${effMineDay ? 'ok' : 'dim'}">${effMineDay ? '+' + ecNum(effMineDay) : '0'}</b> ед/сут добыча${effMineDay < mineDay && mineDay ? ` <span class="ec-hint" data-tip="Потенциал добычи +${ecNum(mineDay)}/сут, но на склад влезет только ${ecNum(freeCap)} (свободное место). Сверх ёмкости ресурсы сгорают — нет места, нет добычи.">(потенциал +${ecNum(mineDay)})</span>` : ''}</span>
     <span class="ec-res-sum-i"><b>${ecNum(minedKinds)}</b> вид(ов) добывается</span>
-    ${_op.n ? `<span class="ec-res-sum-i" data-tip="Каждый добывающий аванпост вне границ тянет ВСЕ ресурсы своей системы, кроме эпических и легендарных, + ${EC_OUTPOST_MINE_GC} ГС/сут. Кламп по ёмкости склада для каждого ресурса — переполнение сгорает.">🛰 <b>${ecNum(_op.n)}</b> аванпост. добычи · +${ecNum(opMineDay)} ед/сут${_op.gc ? ' + ' + ecNum(_op.gc) + ' ГС' : ''}</span>` : ''}
-    ${mineDay && freeCap > 0 ? `<span class="ec-res-sum-i">склад полон через <b>${ecNum(daysFull)}</b> ход(ов)</span>` : (mineDay && freeCap <= 0 ? '<span class="ec-res-sum-i ec-res-sum-warn">⚠ склад полон — добыча на склад остановлена (нет места — нет добычи)</span>' : '')}
+    ${_op.n ? `<span class="ec-res-sum-i" data-tip="Каждый добывающий аванпост вне границ тянет ВСЕ ресурсы своей системы, кроме эпических и легендарных, + ${EC_OUTPOST_MINE_GC} ГС/сут. Кладут на ОБЩИЙ склад — нет свободного места, добыча сгорает.">🛰 <b>${ecNum(_op.n)}</b> аванпост. добычи · +${ecNum(opMineDay)} ед/сут${_op.gc ? ' + ' + ecNum(_op.gc) + ' ГС' : ''}</span>` : ''}
+    ${mineDay && freeCap > 0 ? `<span class="ec-res-sum-i">склад полон через <b>${ecNum(daysFull)}</b> ход(ов)</span>` : (freeCap <= 0 ? `<span class="ec-res-sum-i ec-res-sum-warn">⚠ склад полон${storeUsed > storeCap ? ` (перебор на ${ecNum(storeUsed - storeCap)})` : ''} — вся добыча на склад СГОРАЕТ. Продайте излишки, постройте «Склад» или переведите заводы в 🚚 Экспорт</span>` : '')}
   </div>`;
   // Карточка ресурса: верх (иконка + полное имя + редкость), числа (добыча/склад/цена),
   // источники (откуда добывается) либо причина «не добывается».
@@ -7838,11 +7846,20 @@ function ecResourcesPanel() {
     ? `Общие баффы добычи: <b>×${mMineAll.toFixed(2)}</b>${srcTxt ? ` — ${srcTxt}` : ''} (действуют на КАЖДУЮ залежь сверх бонуса домика).`
     : 'Общих баффов добычи нет (×1.00): дают доктрина/раса/идеология, полит-техи (ГОЭЛРО) и курс державы.';
 
+  // Склад: цифры берём с сервера (план = зеркало тика), фолбэк — свой расчёт.
+  const pCap = (p.store_cap != null) ? +p.store_cap : ecStoreCap();
+  const pUsed = (p.store_used != null) ? +p.store_used : 0;
+  const pFree = Math.max(0, pCap - pUsed);
+  const storeLine = pFree > 0
+    ? `📦 Склад: <b>${ecNum(pUsed)}</b> / ${ecNum(pCap)} — свободно <b>${ecNum(pFree)}</b>. Добыча ляжет только в свободное место, остальное сгорит.`
+    : `⚠ 📦 <b>Склад переполнен</b> (${ecNum(pUsed)} / ${ecNum(pCap)}) — вся добыча на склад СГОРАЕТ. Продайте излишки (под-вкладка «Рынок»), поставьте заводы в режим 💱 Экспорт или постройте «Склад».`;
+
   const intro = ecIntro('⛏', 'Рабочие и добыча',
-    `Любая залежь копается РАБОЧИМИ — даже БЕЗ добывающего домика (по базовому капу, ×1.0). Домик не обязателен: это БУСТ — каждый его уровень +10% к добыче И к капу. Рабочие — подкласс населения; их доля настраивается ползунком «Снабжение» (Индустрия) в Благополучии/Бюджете. За каждые ${EC_WORKER_PER_UNIT} рабочих на залежи — 1 ед. её выхода в тик на склад, × множитель домика × все баффы.`,
+    `Любая залежь копается РАБОЧИМИ — даже БЕЗ добывающего домика. Выход залежи = <b>её ставка × покрытие рабочими</b>: ставка = база(редкость) × богатство месторождения × общие баффы × домик, покрытие = рабочих на залежи ÷ спроса залежи. Полное покрытие — полная ставка; половина рабочих — половина выхода; меньше ${EC_WORKER_PER_UNIT} рабочих — залежь не копается. Рабочие — подкласс населения, их доля задаётся ползунком «Снабжение» (Индустрия) в Благополучии/Бюджете. Эти же числа начисляет тик — панель и начисление считают по одной формуле.`,
     [`Рабочих всего: <b>${ecNum(+p.workers_total)}</b> из <b>${ecNum(+p.pop)}</b> населения (снабжение ур.${effLvl} → <b>${sharePct}%</b>).`,
      `Суммарный спрос систем: <b>${ecNum(totalDemand)}</b> рабочих · распределено: <b>${ecNum(totalWork)}</b>.`,
      buffLine,
+     storeLine,
      `Приоритетная система (★) наберёт рабочих ПЕРВОЙ в следующем тике — <b>${ecNum(+p.priority_cost || EC_PRIORITY_COST)} ГС</b> за отметку.`,
      'Больше рабочих без смены снабжения: растить население (домики/благополучие) и метить ключевые системы приоритетом.']);
 
@@ -7863,8 +7880,13 @@ function ecResourcesPanel() {
       const hasHouse = (+dp.house_slots || 0) > 0;              // есть ли добывающий домик на колонии
       const mMine = +dp.m_mine || 1;                            // общие баффы (доктрина/вера/техи/курс)
       const bcount = Math.max(1, +dp.bcount || 1);              // сколько добывающих домиков на колонии
-      const base = (dp.base != null) ? +dp.base : Math.floor((+dp.workers || 0) / EC_WORKER_PER_UNIT);
       const countTxt = bcount > 1 ? `${bcount}× ` : '';
+      // Слагаемые формулы приходят с сервера (resource_worker_plan = зеркало тика):
+      // выход = min(потолок залежи, полная ставка × покрытие рабочими).
+      const full = (dp.full_rate != null) ? +dp.full_rate : Math.round(+dp.yield || 0);
+      const covPct = Math.round(((dp.cov != null) ? +dp.cov : (+dp.fill || 0)) * 100);
+      const dCap = (dp.dep_cap != null) ? +dp.dep_cap : 0;
+      const capped = dCap > 0 && Math.round(full * covPct / 100) > dCap;
       const status = cov
         ? `<span class="ec-dep-ok">✓ ⛏ <b>~${ecNum(+dp.yield)}/тик</b></span>`
         : `<span class="ec-dep-no" title="Рабочих меньше ${EC_WORKER_PER_UNIT} — залежь не добывается. Дайте системе приоритет или поднимите снабжение/население.">✗ нет рабочих</span>`;
@@ -7872,10 +7894,12 @@ function ecResourcesPanel() {
       const details = `<details class="ec-dep-more">
         <summary>разбор добычи</summary>
         <div class="ec-dep-calc">
-          <div>👷 <b>Рабочие:</b> ${ecNum(+dp.workers)} на залежи → база <b>${ecNum(base)} ед</b> <span class="ec-dep-dim">(÷${EC_WORKER_PER_UNIT})</span></div>
-          <div>🏗 <b>Домик:</b> ${hasHouse ? `${countTxt}${esc(btName)} ур.${dp.house_slots} → <b class="ec-dep-plus">+${bonus}%</b> к добыче и капу${bcount > 1 ? ` <span class="ec-dep-dim">· ${bcount} домика: больше пропускной способности (спрос ${ecNum(+dp.demand)} раб.)</span>` : ''}` : `<span class="ec-dep-dim">нет — копается по базовому капу (×1.0). Постройте домик для +% и большего капа.</span>`}</div>
+          <div>⛏ <b>Ставка залежи:</b> <b>${ecNum(full)} ед/тик</b> при полном покрытии <span class="ec-dep-dim">(база редкости × богатство «${esc(String(dp.amt || '—'))}» × баффы × домик)</span></div>
+          <div>👷 <b>Покрытие:</b> ${ecNum(+dp.workers)} из ${ecNum(+dp.demand)} рабочих → <b class="${covPct >= 100 ? 'ec-dep-plus' : 'ec-dep-neg'}">${covPct}%</b> ставки</div>
+          <div>🏗 <b>Домик:</b> ${hasHouse ? `${countTxt}${esc(btName)} ур.${dp.house_slots} → <b class="ec-dep-plus">+${bonus}%</b> к ставке и к спросу на рабочих${bcount > 1 ? ` <span class="ec-dep-dim">· ${bcount} домика на колонии</span>` : ''}` : `<span class="ec-dep-dim">нет — залежь всё равно копается (×1.0). Домик поднимает ставку на +10% за уровень.</span>`}</div>
           <div>✨ <b>Общие баффы:</b> <b class="${mMine >= 1 ? 'ec-dep-plus' : 'ec-dep-neg'}">×${mMine.toFixed(2)}</b>${srcTxt ? ` <span class="ec-dep-dim">= 1 ${src.map(x => `${(+x.delta || 0) >= 0 ? '+' : '−'} ${esc(x.label || x.source || '')} ${Math.abs(Math.round((+x.delta || 0) * 100))}%`).join(' ')}</span>` : ' <span class="ec-dep-dim">(баффов нет: их дают доктрина/раса/идеология/полит-техи/курс)</span>'}</div>
-          <div class="ec-dep-total">= ${ecNum(base)} × ${(1 + bonus / 100).toFixed(2)} × ${mMine.toFixed(2)} = ⛏ <b>~${ecNum(+dp.yield)}/тик</b> на склад</div>
+          ${capped ? `<div>🚧 <b>Потолок залежи:</b> ${ecNum(dCap)} ед/тик — больше из одной залежи не выжать.</div>` : ''}
+          <div class="ec-dep-total">= ${ecNum(full)} × ${covPct}% = ⛏ <b>~${ecNum(+dp.yield)}/тик</b> на склад <span class="ec-dep-dim">· столько же начислит тик</span></div>
         </div>
       </details>`;
       return `<div class="ec-res-dep${cov ? '' : ' ec-res-dep-off'}">

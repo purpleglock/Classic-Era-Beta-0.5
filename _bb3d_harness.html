@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<!-- Стенд WebGL-доски (этап 1): мок battle_state, без Supabase. /_bb3d_harness.html
+     ЛКМ — тянуть поле, ПКМ/Shift — осмотреться, колесо — приблизить. -->
+<html lang="ru"><head><meta charset="utf-8"><title>BB 3D harness</title>
+<style>
+  html,body{margin:0;height:100%;background:#02040a;color:#cfe6f2;font:13px/1.4 system-ui,sans-serif}
+  #wrap{position:absolute;inset:0}
+  #gl{display:block;width:100%;height:100%}
+  #hud{position:absolute;left:10px;top:10px;z-index:5;background:rgba(4,10,16,.82);
+       padding:8px 11px;border:1px solid rgba(90,200,230,.3);border-radius:4px;pointer-events:none}
+  #hud b{color:#8cf0ff}
+  #err{position:absolute;left:10px;bottom:10px;color:#ff6a8a;white-space:pre-wrap}
+  #ctl{position:absolute;right:10px;top:10px;z-index:5;display:flex;flex-direction:column;gap:6px}
+  #ctl button{background:rgba(4,10,16,.86);color:#cfe6f2;border:1px solid rgba(90,200,230,.35);
+       border-radius:4px;padding:7px 12px;font:12px system-ui,sans-serif;cursor:pointer;text-align:left}
+  #ctl button:hover{border-color:#8cf0ff;color:#8cf0ff}
+</style>
+</head><body>
+<div id="wrap"><canvas id="gl"></canvas></div>
+<div id="hud">ЛКМ — тянуть поле · ПКМ/Shift — осмотреться · колесо — зум<br>клетка: <b id="cell">—</b></div>
+<div id="ctl">
+  <button onclick="tFoeTurn()">Ход противника (марш + залп по мне)</button>
+  <button onclick="tMyShot()">Мой залп по дредноуту</button>
+  <button onclick="tBoom()">Гибель борта</button>
+  <button onclick="tSalvo()">Массовый залп (4 цели)</button>
+  <button onclick="tReset()">↺ Сброс</button>
+</div>
+<div id="err"></div>
+
+<script>
+// ── минимальные заглушки окружения (как в _bb_harness.html) ──
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function jsq(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function toast(m){console.log('[toast]',m);}
+var EC = { designs: [] };
+const MOCK = {
+  id:'b1', status:'active', kind:'intercept', system_id:'asu', system_name:'Асу',
+  w:48, h:28, cap:50, zone:4, acts_max:6, acts_left:6, my_side:'attacker', my_fid:'me',
+  attacker:'me', attacker_name:'Микустан', defender:'foe', defender_name:'Тетославия',
+  side_to_move:'attacker', my_turn:true, turn_no:1, log:[],
+  units:[
+    {id:'a1',side:'attacker',mine:true, name:'Вальсирующий',cls:'corvette',   x:2, y:4,  hp:500,max_hp:500,facing:0,speed:4,rng:6,dmg:40,wpn:[{k:'kinetic',rng:6,dmg:40}]},
+    {id:'a2',side:'attacker',mine:true, name:'Фрегат',      cls:'frigate',    x:3, y:8,  hp:800,max_hp:800,facing:0,speed:3,rng:8,dmg:60,shield:200,max_shield:400,wpn:[{k:'kinetic',rng:8,dmg:60},{k:'missile',rng:14,dmg:90}]},
+    {id:'a3',side:'attacker',mine:true, name:'Эсминец',     cls:'destroyer',  x:2, y:12, hp:900,max_hp:900,facing:0,speed:3,rng:9,dmg:70,wpn:[{k:'energy',rng:9,dmg:70}]},
+    {id:'a4',side:'attacker',mine:true, name:'Крейсер',     cls:'cruiser',    x:4, y:16, hp:900,max_hp:900,facing:0,speed:2,rng:10,dmg:80,shield:300,max_shield:300,wpn:[{k:'kinetic',rng:10,dmg:80}]},
+    {id:'a5',side:'attacker',mine:true, name:'Линкор',      cls:'battleship', x:2, y:20, hp:520,max_hp:900,facing:0,speed:2,rng:12,dmg:120,wpn:[{k:'kinetic',rng:12,dmg:120},{k:'missile',rng:18,dmg:150}]},
+    {id:'d1',side:'defender',mine:false,name:'Враг-корвет', cls:'corvette',   x:45,y:6,  hp:500,max_hp:500,facing:3,speed:4,rng:6,dmg:40},
+    {id:'d2',side:'defender',mine:false,name:'Враг-линкор', cls:'battleship', x:44,y:14, hp:210,max_hp:900,facing:3,speed:2,rng:12,dmg:120},
+    {id:'d3',side:'defender',mine:false,name:'Дредноут',    cls:'dreadnought',x:45,y:22, hp:900,max_hp:900,facing:3,speed:1,rng:14,dmg:200},
+    {id:'d4',side:'defender',mine:false,name:'?',           cls:null,         x:30,y:10, contact:true},
+  ],
+  terrain:[
+    {x:20,y:6,t:'ast'},{x:21,y:7,t:'ast'},{x:20,y:8,t:'ast'},{x:22,y:6,t:'ast'},
+    {x:26,y:16,t:'neb'},{x:27,y:16,t:'neb'},{x:26,y:17,t:'neb'},
+    {x:16,y:20,t:'grv'},{x:33,y:12,t:'grv'},
+    {x:12,y:14,t:'deb'},{x:13,y:15,t:'deb'},{x:12,y:16,t:'deb'},
+  ],
+};
+async function ecRpc(fn, body){ if(fn==='battle_state') return MOCK; console.log('[rpc]',fn,body); return {}; }
+// клик по клетке: выбираем свой борт — тогда видна вся подсветка хода
+function bbClick(x,y){
+  document.getElementById('cell').textContent = x+', '+y;
+  const t = MOCK.units.find(u => u.x===x && u.y===y && u.mine);
+  if (t) { BB.sel = (BB.sel===t.id ? null : t.id); BB.reach = null; bgSyncOverlay(); bgKick(); }
+}
+window.onerror = e => { document.getElementById('err').textContent += e + '\n'; };
+</script>
+
+<!-- battle_board.js даёт математику гексов (bbHexCenter/bbHexFromWorld/bbClsSize).
+     bbOpen НЕ вызываем — 2D-оверлей стенду не нужен, берём только геометрию. -->
+<script src="constructors.js"></script>
+<script src="battle_board.js"></script>
+
+<script type="module">
+  // three.js грузим как ESM и кладём в window — остальной код проекта
+  // это обычные скрипты без модулей, как supabase-js и d3-delaunay.
+  import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+  window.THREE = THREE;
+  window.dispatchEvent(new Event('three-ready'));
+</script>
+
+<script src="battle_gl.js"></script>
+<script>
+  function boot(){
+    BB.st = MOCK;                       // состояние боя, как его отдаёт сервер
+    BB.R = 34;
+    const cv = document.getElementById('gl');
+    // 2D-камере тоже нужен размер: bbDiffAnimate считает по нему доворот обзора
+    BB.vw = cv.clientWidth || 900; BB.vh = cv.clientHeight || 600;
+    // ландшафт приезжает снимком, как в bbReload
+    BB.terr = new Map();
+    (MOCK.terrain||[]).forEach(e => BB.terr.set(e.x+':'+e.y, e.t));
+    if (!bgInit(cv)) return;
+    bgCamHome();
+    bgRefresh();
+    // показываем клетку под курсором в HUD
+    cv.addEventListener('pointermove', () => {
+      const h = BG.hover;
+      document.getElementById('cell').textContent = h ? (h.x + ', ' + h.y) : '—';
+    });
+  }
+
+  // ── Прогон анимаций ЧЕРЕЗ НАСТОЯЩИЙ ПУТЬ ────────────────────
+  // Ничего не дёргаем напрямую: меняем состояние, как это делает сервер, и
+  // отдаём снимки в bbDiffAnimate — тот сам решает, где твин, где трассер, а
+  // где взрыв. Если эффект не появился в 3D, значит расходится именно то, что
+  // разойдётся и в бою.
+  const START = JSON.parse(JSON.stringify(MOCK.units));
+  function snap() {
+    return MOCK.units.map(u => ({ id:u.id, x:u.x, y:u.y, hp:u.hp, facing:u.facing,
+                                  contact:u.contact, mine:u.mine, side:u.side }));
+  }
+  function apply(fn) {
+    const prev = snap();
+    fn();
+    bgRefresh();                         // состав/ТТХ/подсветка под свежий снимок
+    bbDiffAnimate(prev, MOCK.units);     // а вот анимации строит доска, не мы
+    bgKick();
+  }
+  const U = id => MOCK.units.find(u => u.id === id);
+
+  // Марш вражеского корвета на пять гексов навстречу + попадание по моему борту:
+  // тут проверяются и проезд по маршруту с доворотом носа, и восстановленный
+  // трассер от ближайшего стрелка с задержкой попадания.
+  function tFoeTurn() {
+    apply(() => {
+      const d = U('d1'); if (!d) return;
+      const path = []; let cur = { x:d.x, y:d.y };
+      for (let i = 0; i < 5; i++) { const n = bbStep(cur.x, cur.y, 3); path.push({ x:n.x, y:n.y, f:3 }); cur = n; }
+      BB.moveHint.set('d1', { path, t: Date.now() });
+      d.x = cur.x; d.y = cur.y; d.facing = 3;
+      const me = U('a1'); if (me) me.hp = Math.max(1, me.hp - 180);
+    });
+  }
+
+  // Свой выстрел: вспышка и трассер уходят СРАЗУ по клику, попадание приезжает
+  // ответом сервера — здесь его изображает таймер.
+  function tMyShot() {
+    const a = U('a5'), b = U('d3'); if (!a || !b) return;
+    const p = bbHexCenter(a.x, a.y), q = bbHexCenter(b.x, b.y);
+    const t0 = performance.now();
+    bbFxAdd({ kind:'flash', px:p.px, py:p.py, t0, dur:240, col:BB_C.mine });
+    bbFxAdd({ kind:'beam', x0:p.px, y0:p.py, x1:q.px, y1:q.py, t0, dur:380, col:BB_C.mine, head:true });
+    bbAnimKick(); bgKick();
+    setTimeout(() => apply(() => { b.hp = Math.max(1, b.hp - 260); }), 420);
+  }
+
+  function tBoom() {
+    apply(() => { const i = MOCK.units.findIndex(u => u.id === 'd2'); if (i >= 0) MOCK.units.splice(i, 1); });
+  }
+
+  // Залп по нескольким целям разом — раскладка очереди во времени (150 мс шаг)
+  function tSalvo() {
+    apply(() => {
+      ['a1','a2','a3','a4'].forEach(id => { const u = U(id); if (u) u.hp = Math.max(1, u.hp - 120); });
+    });
+  }
+
+  function tReset() {
+    MOCK.units = JSON.parse(JSON.stringify(START));
+    BB.anim.move.clear(); BB.anim.fx.length = 0; BB.moveHint.clear();
+    BB.sel = null; BB.reach = null;
+    bgRefresh(); bgCamHome();
+  }
+  if (window.THREE) boot(); else window.addEventListener('three-ready', boot);
+</script>
+</body></html>

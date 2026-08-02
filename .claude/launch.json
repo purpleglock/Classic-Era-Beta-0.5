@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "static", "runtimeExecutable": "npx", "runtimeArgs": ["--yes", "http-server", "-p", "8791", "-c-1"], "port": 8791 }
+    { "name": "static", "runtimeExecutable": "npx", "runtimeArgs": ["--yes", "http-server", "-p", "8791", "-c-1"], "port": 8791 },
+    { "name": "static-3d", "runtimeExecutable": "npx", "runtimeArgs": ["--yes", "http-server", "-p", "8792", "-c-1"], "port": 8792 }
   ]
 }
