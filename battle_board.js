@@ -526,10 +526,27 @@ function bbTry3D() {
     cv.className = 'bb-cv';
     BB.cv.parentElement.insertBefore(cv, BB.cv.nextSibling);
     if (!bgAttach(cv)) { cv.remove(); BB.glOff = true; return; }
+    // ПОКАЗЫВАЕМ 3D ТОЛЬКО СОБРАННУЮ. Раньше плоскую доску прятали сразу, до
+    // первой синхронизации: если сцена не собиралась (сбой синхронизатора,
+    // незнакомый класс корабля), игрок получал пустое поле со звёздами вместо
+    // рабочей 2D-доски и «ничего не ставится». Теперь сначала собираем сцену
+    // на скрытом канвасе, сверяем, что борта в ней есть, и лишь потом
+    // переключаемся. Не сошлось — молча остаёмся на 2D.
     BB.glCv = cv; BB.glOn = true;
-    BB.cv.style.display = 'none';
+    cv.style.visibility = 'hidden';
     if (BB.deployUI) bgCamDeploy();
     bgRefresh();
+    const want = ((BB.st && BB.st.units) || []).length;
+    const built = (typeof BG !== 'undefined' && BG.units) ? BG.units.size : 0;
+    const broke = (typeof BG !== 'undefined' && BG._failed && BG._failed.size) ? true : false;
+    if (broke || built < want) {
+      console.warn('[bb] 3D-сцена не собралась (борта ' + built + ' из ' + want + ') — остаёмся на 2D');
+      cv.style.visibility = '';
+      bbFallback2D();
+      return;
+    }
+    cv.style.visibility = '';
+    BB.cv.style.display = 'none';
     bbRender();          // кнопки камеры (вращение) есть только у 3D-доски
   });
 }

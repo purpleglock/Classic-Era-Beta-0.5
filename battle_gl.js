@@ -34,7 +34,10 @@ const BG = {
 };
 
 const BG_PITCH_MIN = 0.28, BG_PITCH_MAX = 1.45;
-const BG_DIST_MIN = 180, BG_DIST_MAX = 3200;
+// Потолок отдаления. Был 3200 — меньше, чем нужно, чтобы охватить большую
+// арену (60×60 это ~3000×3500 мировых единиц): камера упиралась в кламп и
+// показывала окно в треть поля, а игрок видел «пустоту» вместо своего фланга.
+const BG_DIST_MIN = 180, BG_DIST_MAX = 7000;
 
 // Масштаб флота: кинематографический — борта крупнее клетки, сетка уходит в фон.
 // Эффекты растут ТЕМ ЖЕ множителем и намеренно завязаны на него одной константой:
@@ -205,13 +208,22 @@ function bgApplyCam() {
   c.lookAt(BG.tgt.x, 0, BG.tgt.z);
 }
 
+// Дистанция, с которой в кадр влезает прямоугольник w×h. Считаем ОБА габарита:
+// по вертикали через fov, по горизонтали — через fov с поправкой на аспект.
+// Раньше ширину мерили вертикальным углом, и на узком экране (телефон стоймя)
+// поле резалось по бокам, а на широком камера отъезжала лишнего.
+function bgFitDist(w, h, k) {
+  const ty = Math.tan(BG.cam.fov * Math.PI / 360);
+  const tx = ty * (BG.cam.aspect || 1);
+  const m = k || 0.6;
+  return Math.min(BG_DIST_MAX, Math.max(BG_DIST_MIN, Math.max((w * m) / tx, (h * m) / ty)));
+}
+
 function bgCamHome() {
   const s = BB.st; if (!s) return;
   const { W, H } = bbWorldSize();
   BG.tgt.x = W / 2; BG.tgt.z = H / 2;
-  // отодвигаемся так, чтобы поле влезло по ширине с запасом
-  const fov = BG.cam.fov * Math.PI / 180;
-  BG.dist = Math.min(BG_DIST_MAX, Math.max(BG_DIST_MIN, (W * 0.62) / Math.tan(fov / 2)));
+  BG.dist = bgFitDist(W, H, 0.62);              // поле целиком, с запасом по краям
   BG.pitch = 0.92; BG.yaw = -Math.PI / 2;
   bgApplyCam(); BG.dirty = true; bgKick();
 }
@@ -1659,10 +1671,14 @@ function bgCamDeploy() {
   const { W, H } = bbWorldSize();
   const z = s.zone || 3;
   const zoneW = (z + 2.5) * BB.R * 1.5;
-  const fov = BG.cam.fov * Math.PI / 180;
   BG.tgt.x = s.my_side === 'attacker' ? zoneW / 2 : W - zoneW / 2;
   BG.tgt.z = H / 2;
-  BG.dist = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, (H * 0.58) / Math.tan(fov / 2)));
+  // Своя зона по ширине — и НЕ вся высота. На большой арене (60 рядов) полная
+  // высота отгоняет камеру так далеко, что борта становятся точками и экран
+  // читается как пустой. Борта садятся от середины наружу, поэтому показываем
+  // середину: 22 ряда вокруг неё, дальше игрок отъедет сам.
+  const rows = Math.min(H, 22 * BB.R * BB_SQ3);
+  BG.dist = bgFitDist(zoneW * 2, rows, 0.58);
   BG.pitch = 0.98; BG.yaw = -Math.PI / 2;
   BG.camAnim = null;
   bgApplyCam(); BG.dirty = true; bgKick();
