@@ -122,6 +122,9 @@ function fnStripMarkup(s) {
   t = t.replace(/(\*\*|__)([\s\S]*?)\1/g, '$2');
   t = t.replace(/(\*|_)([\s\S]*?)\1/g, '$2');
   t = t.replace(/`([^`]*)`/g, '$1');
+  // НЕЗАКРЫТЫЕ теги (автор оборвал/обрезали по длине) — парные правила выше их не
+  // ловят, и код лез в текст сырьём вместе с URL флага. Подчищаем остатки.
+  t = t.replace(/\[\/?(?:fac|fx|c|bg|center|left|right|lock|spoiler|img|music)(?::[^\]\n]*)?(?:\|[^\]\n]*)?\]?/gi, ' ');
   return t.replace(/\s+/g, ' ').trim();
 }
 

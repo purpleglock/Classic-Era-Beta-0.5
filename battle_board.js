@@ -1119,6 +1119,50 @@ function bbHexLine(a, b) {
 }
 function bbTerra(x, y) { return BB.terr ? (BB.terr.get(x + ':' + y) || null) : null; }
 
+// ── ФОРМА АРЕНЫ ─────────────────────────────────────────────
+// Зеркало серверного _bt_in_arena (_bt_arena_shape.sql). Арена — не
+// прямоугольник: линза, рваная долька, кольцо, песочные часы, полумесяц.
+// Форма НЕ приходит списком клеток (это положило бы ход бота в таймаут) —
+// приходят несколько чисел, а принадлежность считает та же арифметика.
+// shape === null у старых боёв: тогда доска прямоугольная целиком.
+function bbNorm(sh, x, y) {
+  const w = sh.w, h = sh.h;
+  return [w > 1 ? (x / (w - 1)) * 2 - 1 : 0,
+          h > 1 ? ((y + 0.5 * (x & 1)) / (h - 1)) * 2 - 1 : 0];
+}
+function bbInArena(x, y) {
+  const s = BB.st, sh = s && s.shape;
+  if (!s) return false;
+  if (x < 0 || x >= s.w || y < 0 || y >= s.h) return false;
+  if (!sh || !sh.w || !sh.h || sh.k === 'rect') return true;
+  const [u, v] = bbNorm(sh, x, y);
+  if (sh.k === 'hour') {
+    const waist = sh.waist != null ? +sh.waist : 0.6;
+    return Math.abs(v) <= 1 - waist * (1 - u * u);
+  }
+  const r = Math.hypot(u, v), th = Math.atan2(v, u);
+  const amp = +sh.amp || 0, m = sh.m != null ? +sh.m : 3, ph = +sh.ph || 0;
+  if (r > 1 - amp * (1 - Math.cos(m * th + ph)) / 2) return false;
+  if (sh.k === 'ring') return r >= (sh.hole != null ? +sh.hole : 0.32);
+  if (sh.k === 'cres') {
+    const ox = sh.ox != null ? +sh.ox : 0.55, oy = +sh.oy || 0;
+    return Math.hypot(u - ox, v - oy) >= (sh.hr != null ? +sh.hr : 0.6);
+  }
+  return true;
+}
+// Сектор подхода стороны: {x,y,r} — якорь на кромке и радиус.
+// sd — 'att'/'def' либо 'attacker'/'defender'.
+function bbSpawnOf(sd) {
+  const sp = BB.st && BB.st.spawn; if (!sp) return null;
+  return sp[(sd === 'attacker' || sd === 'att') ? 'att' : 'def'] || null;
+}
+function bbMySpawn() { return bbSpawnOf(BB.st && BB.st.my_side); }
+function bbInSpawn(sd, x, y) {
+  const a = bbSpawnOf(sd);
+  if (!a) return null;                        // легаси-бой: секторов нет
+  return bbDist({ x, y }, { x: a.x, y: a.y }) <= (a.r || 0);
+}
+
 function bbHexFromWorld(wx, wy) {
   const s = BB.st, R = BB.R;
   const cx = Math.round((wx - R) / (R * 1.5));
@@ -1150,8 +1194,14 @@ function bbUnitAt(x, y) {
   return (s.units || []).find(u => u.x === x && u.y === y)
       || BB.place.find(p => p.x === x && p.y === y) || null;
 }
-function bbInMyZone(x) {
-  const s = BB.st, z = s.zone || 3;
+// Своя зона разворачивания = сектор подхода своей стороны (внутри арены).
+// Легаси-бои без spawn падают на прежнее правило колонок у края.
+function bbInMyZone(x, y) {
+  const s = BB.st;
+  if (!bbInArena(x, y)) return false;
+  const inSp = bbInSpawn(s.my_side, x, y);
+  if (inSp !== null) return inSp;
+  const z = s.zone || 3;
   return s.my_side === 'attacker' ? x < z : x >= s.w - z;
 }
 
@@ -1187,6 +1237,7 @@ function bbComputeReach(sel) {
       for (let d = 0; d < 6; d++) {
         const p = bbStep(c.x, c.y, d);
         if (p.x < 0 || p.x >= s.w || p.y < 0 || p.y >= s.h) continue;
+        if (!bbInArena(p.x, p.y)) continue;        // в пустоту за кромкой не летают
         if (occ.has(p.x + ':' + p.y)) continue;
         const key = p.x + ':' + p.y;
         if (seen.has(key)) continue;
@@ -1387,7 +1438,7 @@ function bbBindCanvas() {
       const c = bbHexAt(ev);
       if (!d.moved) { BB.pick = ship ? ship.unit_id : BB.pick; bbRender(); return; }
       if (!ship) { bbRender(); return; }
-      if (!c || !bbInMyZone(c.x)) {
+      if (!c || !bbInMyZone(c.x, c.y)) {
         BB.place.splice(d.i, 1);
         toast(`«${ship.unit_name}» снят с доски`, 'ok');
       } else if (bbCellBusy(c.x, c.y, d.i)) {
@@ -1428,7 +1479,7 @@ function bbClick(x, y) {
     const hit = BB.place.findIndex(p => p.x === x && p.y === y);
     if (hit >= 0) { BB.place.splice(hit, 1); bbRender(); return; }
     if (!BB.pick) { toast('Сначала выберите корабль в ростере', 'err'); return; }
-    if (!bbInMyZone(x)) { toast('Ставить можно только в свою зону разворачивания — подсвеченные гексы у вашего края', 'err'); return; }
+    if (!bbInMyZone(x, y)) { toast(bbInArena(x, y) ? "Ставить можно только в свой сектор подхода — подсвеченные гексы" : "Там пустота за кромкой арены", "err"); return; }
     const p = (s.pool || []).find(q => q.unit_id === BB.pick);
     if (!p) return;
     const why = bbCanAdd(s, p);
@@ -1836,7 +1887,6 @@ function bbPaint() {
   ctx.setTransform(BB.dpr * z, 0, 0, BB.dpr * z, -BB.camX * BB.dpr * z, -BB.camY * BB.dpr * z);
   bbPaintHexes(ctx, s);
   bbPaintTerrain(ctx, s);
-  bbPaintEdgeFog(ctx, s);
   bbPaintHighlights(ctx, s);
   bbPaintUnits(ctx, s);
   bbPaintFx(ctx);
@@ -1943,10 +1993,16 @@ function bbPaintHexes(ctx, s) {
   const meAtt = s.my_side === 'attacker';
   const z = s.zone || 3;
   const lw = Math.max(0.6, 1 / BB.zoom);
+  const hasSp = !!(s.spawn);
   for (let x = x0; x <= x1; x++) {
-    const zoneCol = x < z ? 'att' : (x >= s.w - z ? 'def' : null);
-    const zoneRgb = zoneCol ? (zoneCol === 'att' ? (meAtt ? BB_C.mine : BB_C.foe) : (meAtt ? BB_C.foe : BB_C.mine)) : null;
+    // легаси-бой (секторов нет) красит зоны колонками, как раньше
+    const colZone = hasSp ? null : (x < z ? 'att' : (x >= s.w - z ? 'def' : null));
     for (let y = y0; y <= y1; y++) {
+      if (!bbInArena(x, y)) continue;          // за кромкой арены сот нет
+      const zoneCol = hasSp
+        ? (bbInSpawn('att', x, y) ? 'att' : (bbInSpawn('def', x, y) ? 'def' : null))
+        : colZone;
+      const zoneRgb = zoneCol ? (zoneCol === 'att' ? (meAtt ? BB_C.mine : BB_C.foe) : (meAtt ? BB_C.foe : BB_C.mine)) : null;
       const c = bbHexCenter(x, y);
       bbHexPath(ctx, c.px, c.py, R * 0.96);
       ctx.fillStyle = zoneRgb ? `rgba(${zoneRgb},0.06)` : BB_C.hexIn;

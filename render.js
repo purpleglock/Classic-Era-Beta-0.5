@@ -2962,8 +2962,8 @@ function heroVNChoice(kind) {
     } else {
       html = list.slice(0, 12).map(n => {
         const label = (kind === 'ach')
-          ? (String(n.title || '').replace(/^🏆\s*Достижение:\s*/, '').trim() || (en ? 'Achievement' : 'Достижение'))
-          : (String(n.title || '').trim() || (en ? 'Event' : 'Событие'));
+          ? (vnPlain(n.title).replace(/^🏆\s*Достижение:\s*/, '').trim() || (en ? 'Achievement' : 'Достижение'))
+          : (vnPlain(n.title) || (en ? 'Event' : 'Событие'));
         return `<button class="hp-vn-choice hp-vn-choice-item" onclick="event.stopPropagation();heroVNTell('${jsq(n.id)}')">${kind === 'ach' ? '🏆' : '•'} ${flag(n)}<span class="hp-vn-choice-it-t">${esc(label)}</span></button>`;
       }).join('');
     }
@@ -3024,7 +3024,7 @@ function heroVNMarketRender(list) {
   const html = _heroVNMarketEv.slice(0, 14).map((n, i) => {
     const [ic, , sign] = heroVNMarketKind(n.cls, en);
     const arrow = sign === 'dn' ? '▼' : sign === 'fl' ? '→' : '▲';
-    const title = String(n.title || '').replace(/^[^\wА-Яа-я]+\s*/, '').trim() || (en ? 'Event' : 'Событие');
+    const title = vnPlain(n.title).replace(/^[^\wА-Яа-я]+\s*/, '').trim() || (en ? 'Event' : 'Событие');
     return `<button class="hp-vn-choice hp-vn-choice-item" onclick="event.stopPropagation();heroVNMarketTell(${i})">${ic} <span class="hp-vn-choice-it-t">${esc(title)}</span><span class="hp-vn-mkchip ${sign}">${arrow}</span></button>`;
   }).join('');
   _heroVNCtl.setChoices(html);
@@ -3037,11 +3037,18 @@ function heroVNMarketTell(i) {
   const en = (typeof lang !== 'undefined' && lang === 'en');
   const spk = _heroVNCtl.speaker();
   const [, label, , effect] = heroVNMarketKind(n.cls, en);
-  const title = String(n.title || '').trim();
+  const title = vnPlain(n.title);
   const line = (en
     ? `${title}. ${label} — ${effect}.`
     : `${title}. ${label} — ${effect}.`);
   _heroVNCtl.narrate([{ t: line, n: spk }], { back: () => heroVNChoice('market') });
+}
+// Новелла печатает текст ПОСИМВОЛЬНО в textContent — разметка в окне не рендерится
+// и лезет в реплику сырьём ([fx:schizo], [fac:FID|флаг], **жирный**). Поэтому всё,
+// что попадает в реплику или в пункт списка, прогоняем через сниматель разметки.
+function vnPlain(s) {
+  const t = String(s || '');
+  return (typeof fnStripMarkup === 'function') ? fnStripMarkup(t) : t.replace(/\s+/g, ' ').trim();
 }
 // Озвучить конкретную выбранную запись устами персонажа (печать в окне).
 function heroVNTell(id) {
@@ -3053,10 +3060,10 @@ function heroVNTell(id) {
   const mk = t => ({ t, n: spk });
   // Читаем ЛИД, если он задан: в статье под ним идут сухие подробности (досье,
   // цифры), которые в устах героини звучат как выписка из справочника.
-  const body = String(n.excerpt || n.body || '').replace(/\s+/g, ' ').trim();
+  const body = vnPlain(n.excerpt || n.body || '');
   const trim = (s, lim) => s.length > lim ? s.slice(0, lim - 1).trim() + '…' : s;
   // ОДНА реплика: «А, 「фракция」…» → КОРОТКАЯ ПАУЗА (символ ) → текст.
-  const speak = body || String(n.title || '').trim();
+  const speak = body || vnPlain(n.title);
   const tail = speak ? trim(speak, 300) : (en ? 'The wire is silent on it.' : 'Эфир молчит об этом.');
   const lines = [mk(tail)];
   if (typeof heroVNShowBanner === 'function') heroVNShowBanner(n);
