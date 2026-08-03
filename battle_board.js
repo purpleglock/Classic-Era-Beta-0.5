@@ -464,11 +464,19 @@ function bbRender() {
   }
 
   // ── Полоска выбранного корабля: коротко и всегда на виду ──
+  // Ремонт нано-роем — единственное действие, которого НЕ сделать кликом по
+  // доске (по союзнику огня нет, нужен режим). Внутри шторки «ТТХ» его просто
+  // не находили: борт выбран, лечить некому. Поэтому кнопка живёт здесь.
+  const healBtn = (sel && sel.mine && s.my_turn && bbHasHeal(sel) && !sel.fired)
+    ? `<button class="bbd-ic${BB.heal ? ' bbd-ic-on' : ''}" onclick="bbHealMode()"
+         title="${BB.heal ? 'Выберите союзника для ремонта (ещё раз — отмена)' : 'Ремонт нано-роем по союзному кораблю'}">🛠</button>`
+    : '';
   const bar = sel ? `<div class="bbf-sel" onclick="bbSheet('unit')">
       <span class="bbf-sel-n">${bbFacIco(sel)}${esc(sel.name)}</span>
-      <span class="bbf-sel-hp"><i style="width:${Math.max(0, Math.min(100, sel.hp / sel.max_hp * 100))}%"></i></span>
-      <span class="bbf-sel-s">${sel.hp}/${sel.max_hp} · ход ${sel.speed}${sel.moved ? ' (истрачен)' : ''} · до ${sel.rng} гекс</span>
       <span class="bbf-sel-more">ТТХ ▸</span>
+      <span class="bbf-sel-hp"><i style="width:${Math.max(0, Math.min(100, sel.hp / sel.max_hp * 100))}%"></i></span>
+      <span class="bbf-sel-s">${sel.hp}/${sel.max_hp} · ход ${sel.speed}${sel.moved ? ' (истрачен)' : ''} · до ${sel.rng} гекс${
+        bbHasHeal(sel) ? ` · рой +${sel.wpn.filter(bbIsHeal).reduce((a, g) => a + (+g.dmg || 0), 0)} до ${Math.max(...sel.wpn.filter(bbIsHeal).map(g => +g.rng || 0))}` : ''}</span>
     </div>` : '';
 
   const poolLeft = Array.isArray(s.pool) && s.pool.length && mv && !done;
@@ -489,6 +497,7 @@ function bbRender() {
         <button class="bbd-ic" onclick="bbSheet('log')" title="Журнал боя">▤</button>
         ${poolLeft ? `<button class="bbd-ic" onclick="bbSheet('reinf')" title="Подкрепление">⊕</button>` : ''}
         ${s.can_force ? `<button class="bbd-ic" onclick="bbForce()" title="Прожать просроченный ход">⏱</button>` : ''}
+        ${healBtn}
         ${bbOrbitBtns()}
         <button class="bbd-ic" onclick="bbZoomBtn(1/1.3)" title="Отдалить">−</button>
         <button class="bbd-ic" onclick="bbZoomBtn(1.3)" title="Приблизить">+</button>

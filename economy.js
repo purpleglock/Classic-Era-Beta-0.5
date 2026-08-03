@@ -2038,13 +2038,24 @@ async function _ecLoadCoreImpl() {
   // Уния государств (_state_union.sql): если моя держава в активной унии,
   // все общие активы живут на ведущем fid — читаем кабинет от его имени.
   // EC.ownFid — «мой родной» fid (флаг/профиль), EC.fid — игровой (общий).
-  EC.ownFid = EC.app.faction_id; EC.stateUnion = null; EC.suProposals = [];
+  EC.ownFid = EC.app.faction_id; EC.stateUnion = null; EC.suProposals = []; EC.suMembers = [];
   try {
+    const own = encodeURIComponent(EC.ownFid);
     const su = await dbGet('state_unions',
-      `or=(lead_fid.eq.${encodeURIComponent(EC.ownFid)},partner_fid.eq.${encodeURIComponent(EC.ownFid)})&status=in.(pending,active)&order=created_at.desc`);
+      `or=(lead_fid.eq.${own},partner_fid.eq.${own})&status=in.(pending,active)&order=created_at.desc`);
     EC.stateUnion = (su || []).find(u => u.status === 'active') || null;
     EC.suProposals = (su || []).filter(u => u.status === 'pending');
     if (EC.stateUnion) EC.fid = EC.stateUnion.lead_fid;
+    // Уния многочленная: строки делят один lead_fid. Свои строки видят только
+    // ведущего и себя — состав и заявки на вступление добираем по ведущему.
+    if (EC.stateUnion) {
+      const lead = EC.stateUnion.lead_fid;
+      const rows = await dbGet('state_unions',
+        `lead_fid=eq.${encodeURIComponent(lead)}&status=in.(pending,active)&order=created_at.desc`) || [];
+      EC.suMembers = [lead, ...rows.filter(r => r.status === 'active').map(r => r.partner_fid)];
+      const seen = new Set(EC.suProposals.map(p => p.id));
+      for (const r of rows) if (r.status === 'pending' && !seen.has(r.id)) EC.suProposals.push(r);
+    }
   } catch (e) {}
   const fid = encodeURIComponent(EC.fid);
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
@@ -6821,7 +6832,7 @@ function ecStamp(iso) {
 function ecPerkColor(perk) {
   return ({ infiltrator: '#5fb0e6', saboteur: '#e08a4a', ghost: '#b07bd8', analyst: '#5fd0c0', handler: '#7bd88f' })[perk] || '#9fb0c8';
 }
-function ecFacSelect(id) { const opts = ecOtherFactions().map(f => `<option value="${esc(f.faction_id)}">${esc(f.name)}</option>`).join(''); return `<select id="${id}">${opts || '<option value="">— нет фракций —</option>'}</select>`; }
+function ecFacSelect(id, list) { const opts = (list || ecOtherFactions()).map(f => `<option value="${esc(f.faction_id)}">${esc(f.name)}</option>`).join(''); return `<select id="${id}">${opts || '<option value="">— нет фракций —</option>'}</select>`; }
 function ecErr(m) {
   m = m || '';
   // PostgREST отдаёт ошибку JSON-ом ({"code":...,"message":"..."}) — вытащим текст,
@@ -9159,31 +9170,60 @@ function ecBordersAll(close) {
 function ecStateUnionBlock() {
   const own = EC.ownFid || EC.fid;
   const u = EC.stateUnion;
-  if (u) {
-    const partner = u.lead_fid === own ? u.partner_fid : u.lead_fid;
+  const members = EC.suMembers || [];
+  const lead = u ? u.lead_fid : null;
+  const inUnion = !!u;
+  const isLead = inUnion && lead === own;
+  // Кто отвечает на предложение: приглашение — приглашённая держава,
+  // заявка о вступлении (инициатор = сам партнёр) — любой член унии.
+  const isRequest = p => (p.initiator_fid || p.lead_fid) === p.partner_fid;
+  const mine = p => (p.initiator_fid || p.lead_fid) === own;
+  const canAnswer = p => isRequest(p)
+    ? (inUnion ? members.includes(own) && p.lead_fid === lead : p.lead_fid === own)
+    : p.partner_fid === own;
+  const incoming = (EC.suProposals || []).filter(p => !mine(p) && canAnswer(p));
+  const outgoing = (EC.suProposals || []).filter(p => mine(p));
+  const incHtml = incoming.map(p => {
+    const txt = isRequest(p)
+      ? `<b>${esc(ecFacName(p.partner_fid))}</b> просится в унию`
+      : `<b>${esc(ecFacName(p.lead_fid))}</b> предлагает объединить государства`;
+    return `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+      <span class="ec-route-badge new">уния</span> ${txt}</span>
+      <button class="btn btn-gd btn-xs" onclick="ecSuRespond('${p.id}',true)">${isRequest(p) ? 'Принять' : 'Объединиться'}</button>
+      <button class="ec-bld-del" onclick="ecSuRespond('${p.id}',false)">✕</button></div>`;
+  }).join('');
+  const outHtml = outgoing.map(p => {
+    const who = isRequest(p) ? ecFacName(p.lead_fid) : ecFacName(p.partner_fid);
+    const txt = isRequest(p) ? `⏳ Заявка на вступление в унию «${esc(who)}»` : `⏳ Предложение унии для <b>${esc(who)}</b>`;
+    return `<div class="ec-q-row"><span class="ec-r-name">${txt} — ждёт ответа</span>
+      <button class="ec-bld-del" title="Отозвать" onclick="ecSuWithdraw('${p.id}')">✕</button></div>`;
+  }).join('');
+  // Кого ещё можно позвать/у кого проситься — все, кроме уже своих по унии
+  const others = ecOtherFactions().filter(f => !members.includes(f.faction_id));
+  const picker = others.length
+    ? `<div class="ec-prod-form">${ecFacSelect('ec-su-fac', others)}<button class="btn btn-gd btn-sm" onclick="ecSuPropose()">${inUnion ? 'Позвать в унию' : 'Предложить унию'}</button></div>`
+    : '<div class="ec-empty">Нет держав, кому можно предложить унию.</div>';
+
+  if (inUnion) {
+    const flags = members.map(f => ecFacFlag(f, 30)).join('<b style="color:var(--gd)">✕</b>');
+    const names = members.map(f => `<b>${esc(ecFacName(f))}</b>${f === lead ? ' 👑' : ''}`).join(', ');
     return `<div class="ec-dip-card">
-      <div class="ec-dip-t">⚜ Уния заключена</div>
-      <div style="display:flex;align-items:center;gap:10px;margin:8px 0">
-        ${ecFacFlag(u.lead_fid, 34)}<b style="color:var(--gd)">✕</b>${ecFacFlag(u.partner_fid, 34)}
-        <span style="font-size:13px;color:var(--t2)"><b>${esc(ecFacName(u.lead_fid))}</b> и <b>${esc(ecFacName(u.partner_fid))}</b> правят сообща</span>
+      <div class="ec-dip-t">⚜ Уния заключена <span class="ec-hint">${members.length} держав${members.length === 1 ? 'а' : ''}</span></div>
+      <div style="display:flex;align-items:center;gap:8px;margin:8px 0;flex-wrap:wrap">${flags}
+        <span style="font-size:13px;color:var(--t2)">${names} — правят сообща</span>
       </div>
-      <div style="font-size:12.5px;color:var(--t2)">Колонии, казна, ресурсы и вооружённые силы — общие (ведёт «${esc(ecFacName(u.lead_fid))}»). Флаги и профили держав сохранены. Партнёр: «${esc(ecFacName(partner))}».</div>
-      <div style="margin-top:8px"><button class="btn btn-gh btn-sm" onclick="ecSuDissolve()">Расторгнуть унию</button></div>
+      <div style="font-size:12.5px;color:var(--t2)">Колонии, казна, ресурсы и вооружённые силы — общие (ведёт «${esc(ecFacName(lead))}»). Флаги и профили держав сохранены. В унию можно принимать новые державы — их активы вливаются в общий котёл.</div>
+      ${picker}
+      ${incHtml ? `<div class="ec-r-sec">📥 Просятся в унию</div>${incHtml}` : ''}
+      ${outHtml ? `<div class="ec-r-sec">Наши предложения</div>${outHtml}` : ''}
+      ${isLead && members.length > 1 ? `<div class="ec-r-sec">Состав</div>${members.filter(f => f !== lead).map(f => `<div class="ec-q-row"><span class="ec-r-name">${esc(ecFacName(f))}</span><button class="ec-bld-del" title="Исключить из унии" onclick="ecSuExpel('${esc(f)}')">✕</button></div>`).join('')}` : ''}
+      <div style="margin-top:8px"><button class="btn btn-gh btn-sm" onclick="ecSuDissolve()">${isLead ? 'Распустить унию' : 'Выйти из унии'}</button></div>
     </div>`;
   }
-  const incoming = (EC.suProposals || []).filter(p => p.partner_fid === own);
-  const outgoing = (EC.suProposals || []).filter(p => p.lead_fid === own);
-  const incHtml = incoming.map(p => `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
-      <span class="ec-route-badge new">уния</span> <b>${esc(ecFacName(p.lead_fid))}</b> предлагает объединить государства</span>
-      <button class="btn btn-gd btn-xs" onclick="ecSuRespond('${p.id}',true)">Объединиться</button>
-      <button class="ec-bld-del" onclick="ecSuRespond('${p.id}',false)">✕</button></div>`).join('');
-  const outHtml = outgoing.map(p => `<div class="ec-q-row"><span class="ec-r-name">⏳ Предложение унии для <b>${esc(ecFacName(p.partner_fid))}</b> — ждёт ответа</span>
-      <button class="ec-bld-del" title="Отозвать" onclick="ecSuWithdraw('${p.id}')">✕</button></div>`).join('');
-  const others = ecOtherFactions();
   return `<div class="ec-dip-card">
       <div class="ec-dip-t">⚜ Уния государств</div>
-      <div style="font-size:12.5px;color:var(--t2);margin:6px 0">Политическое решение об объединении двух держав: флаги остаются свои, но <b>колонии, бюджет и все вооружённые силы становятся общими</b> — оба игрока управляют государством сообща. Общие активы ведёт держава-инициатор; при расторжении они остаются у неё.</div>
-      ${others.length ? `<div class="ec-prod-form">${ecFacSelect('ec-su-fac')}<button class="btn btn-gd btn-sm" onclick="ecSuPropose()">Предложить унию</button></div>` : '<div class="ec-empty">Нет других держав.</div>'}
+      <div style="font-size:12.5px;color:var(--t2);margin:6px 0">Политическое решение об объединении держав: флаги остаются свои, но <b>колонии, бюджет и все вооружённые силы становятся общими</b> — игроки управляют государством сообща. Держав может быть сколько угодно. Общие активы ведёт держава-инициатор; при выходе они остаются у неё. Если выбранная держава уже состоит в унии — это заявка на вступление, ответит любой её член.</div>
+      ${picker}
       ${incHtml ? `<div class="ec-r-sec">📥 Вам предлагают</div>${incHtml}` : ''}
       ${outHtml ? `<div class="ec-r-sec">Мои предложения</div>${outHtml}` : ''}
     </div>`;
@@ -9191,7 +9231,11 @@ function ecStateUnionBlock() {
 function ecSuPropose() {
   const fid = ecId('ec-su-fac')?.value;
   if (!fid) { toast('Выберите державу', 'err'); return; }
-  if (!confirm(`Предложить унию державе «${ecFacName(fid)}»? Если она согласится, ваши государства объединятся: колонии, казна и войска станут общими под вашим началом.`)) return;
+  const inUnion = !!EC.stateUnion;
+  const msg = inUnion
+    ? `Позвать «${ecFacName(fid)}» в вашу унию? Если держава согласится, её колонии, казна и войска вольются в общее государство.`
+    : `Предложить унию державе «${ecFacName(fid)}»? Если она уже в унии — это будет заявка на вступление, и решать будет она. Иначе ваши государства объединятся под вашим началом: колонии, казна и войска станут общими.`;
+  if (!confirm(msg)) return;
   ecRpcAct('su_propose', { p_target_fid: fid }, 'Предложение унии отправлено');
 }
 function ecSuRespond(id, acc) {
@@ -9200,8 +9244,16 @@ function ecSuRespond(id, acc) {
 }
 function ecSuWithdraw(id) { ecRpcAct('su_withdraw', { p_id: id }, 'Предложение отозвано'); }
 function ecSuDissolve() {
-  if (!confirm('Расторгнуть унию? Каждая держава заберёт своё: внесённые колонии, системы, войска и казна вернутся прежнему владельцу. Нажитое сообща останется там, где было создано.')) return;
-  ecRpcAct('su_dissolve', {}, 'Уния расторгнута');
+  const isLead = EC.stateUnion && EC.stateUnion.lead_fid === (EC.ownFid || EC.fid);
+  const msg = isLead
+    ? 'Распустить унию целиком? Все державы выйдут из объединения; общие активы останутся за ведущей державой.'
+    : 'Выйти из унии? Общие активы останутся за ведущей державой.';
+  if (!confirm(msg)) return;
+  ecRpcAct('su_dissolve', {}, isLead ? 'Уния распущена' : 'Вы вышли из унии');
+}
+function ecSuExpel(fid) {
+  if (!confirm(`Исключить «${ecFacName(fid)}» из унии? Общие активы останутся за ведущей державой.`)) return;
+  ecRpcAct('su_dissolve', { p_fid: fid }, 'Держава исключена из унии');
 }
 
 // Блок союзов: федерация/конфедерация (группа) + вассалитет (парный пакт). Слайс 1.
