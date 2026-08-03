@@ -37,6 +37,7 @@ const BB = {
   heal: false,       // режим ремонта: следующий клик по СОЮЗНОМУ кораблю = нано-рой
   hover: null,       // {x,y} гекс под курсором
   pick: null,        // фаза расстановки: выбранный проект из резерва
+  spec: null,        // фаза расстановки: чьи полные ТТХ открыты шторкой (unit_id)
   place: [],         // фаза расстановки: [{unit_id, unit_name, cls, x, y}]
   poll: null,        // таймер опроса (ход противника)
   busy: false,
@@ -80,7 +81,7 @@ const BB_C = {
 
 // ── Открыть / закрыть ───────────────────────────────────────
 async function bbOpen(battleId, spectate, botFoe) {
-  BB.id = battleId; BB.sel = null; BB.pick = null; BB.place = [];
+  BB.id = battleId; BB.sel = null; BB.pick = null; BB.place = []; BB.spec = null;
   BB.spectate = !!spectate;   // зритель дуэли клуба: полное зрение, без действий
   BB.botFoe = !!botFoe;       // админ-тест против ботов: боты ходят сами, автоматически
   BB.camReady = false; BB.reach = null;
@@ -762,6 +763,8 @@ function bbRenderDeploy(s) {
         <span class="bbd-s-w">${why ? esc(why) : `в резерве ${free - n} из ${free}`}</span>
         <span class="bbd-s-q">${n}/${free}</span>
         <span class="bbd-s-btn">
+          <button class="bbd-s-a bbd-s-spec" title="Полные ТТХ"
+            onclick="event.stopPropagation();bbSpec('${jsq(p.unit_id)}')">ⓘ</button>
           <button class="bbd-s-a" ${n ? '' : 'disabled'} title="Снять борт"
             onclick="event.stopPropagation();bbDelOne('${jsq(p.unit_id)}')">−</button>
           <button class="bbd-s-a" ${why ? 'disabled' : ''} title="${why ? esc(why) : 'Поставить борт'}"
@@ -789,6 +792,8 @@ function bbRenderDeploy(s) {
         </span>` : ''}
         <span class="bbd-hud-foe">${foe ? '● враг готов' : '○ враг ставит'}</span>
       </div>
+
+      ${bbSpecSheet(s)}
 
       <div class="bbd-tray-wrap">
         <button class="bbd-tray-nav bbd-tray-l" onclick="bbTrayScroll(-1)" title="Предыдущие борта">‹</button>
@@ -841,6 +846,57 @@ function bbDeadline(s) {
   if (ms <= 0) return 'Срок хода вышел.';
   const h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000);
   return `Срок хода: ${h ? h + ' ч ' : ''}${m} мин.`;
+}
+
+// ── ПОЛНЫЕ ТТХ БОРТА ИЗ РЕЗЕРВА (шторка расстановки) ────────
+// В карточке ленты помещается три числа, а решать, кого ставить, приходится
+// по всему паспорту: щит, броня, сенсор, скрытность, РЭБ и — главное —
+// раскладка огневых групп (чем бьёт, сколько стволов, на какую дальность).
+// Раньше это было видно только когда корабль уже стоит на доске: на телефоне
+// игрок ставил вслепую. Кнопка «ⓘ» на карточке открывает тот же список
+// строк, что и панель корабля в бою.
+function bbSpec(uid) { BB.spec = (BB.spec === uid ? null : uid); bbRender(); }
+
+function bbSpecSheet(s) {
+  const p = (Array.isArray(s.pool) ? s.pool : []).find(x => x.unit_id === BB.spec);
+  if (!p) return '';
+  const row = (k, v) => `<div class="bb-stat"><span>${k}</span><b>${v}</b></div>`;
+  const out = [];
+  out.push(row('Класс', esc(bbClsName(p.cls))));
+  out.push(row('Корпус', bbNum(p.hp)));
+  if (+p.shield > 0) out.push(row('Щит', bbNum(p.shield)));
+  out.push(row('Броня', bbNum(p.armor)));
+  out.push(row('Ход', `${p.speed} гекс.`));
+  out.push(row('Сенсор / скрытность', `${bbNum(p.sensor)} / ${bbNum(p.stealth)}`));
+  if (+p.pd > 0)    out.push(row('ПРО', `сбивает ${Math.round(p.pd * 100)}% ракет`));
+  if (+p.jam > 0)   out.push(row('РЭБ', `−${p.jam} к сенсорам врага (радиус 5)`));
+  if (+p.dejam > 0) out.push(row('Контр-РЭБ', `снимает до ${p.dejam} помех со своих`));
+  if (+p.eccm > 0)  out.push(row('Помехозащищённость', `−${p.eccm} к вражескому глушению`));
+  if (+p.wings > 0) out.push(row('Авиакрылья в ангарах', bbNum(p.wings)));
+  if (+p.crew > 0)  out.push(row('Экипаж', bbNum(p.crew)));
+  if (+p.cargo > 0) out.push(row('Грузоподъёмность', bbNum(p.cargo)));
+  if (p.interdict)  out.push(row('Интердикция', 'враг не вызывает подкрепления'));
+  if (p.stabil)     out.push(row('Стабилизация', 'интердикция врага не действует'));
+  if (p.ftl)        out.push(row('FTL-гипердвигатель', 'прыжок сквозь интердикцию'));
+  if (+p.cost > 0)  out.push(row('Цена в бюджете дуэли', `${bbNum(p.cost)} ГС`));
+  // Огневые группы. Если сервер их не прислал (старая battle_pool до
+  // _battle_pool_wpn.sql), показываем хотя бы сводный урон — пусто быть не должно.
+  const wpn = Array.isArray(p.wpn) && p.wpn.length ? p.wpn : [{ rng: p.rng, dmg: p.dmg }];
+  const guns = wpn.slice().sort((a, b) => (b.rng || 0) - (a.rng || 0))
+    .map(g => row(`${bbGroupLabel(g)}${g.shots > 1 && !bbIsHeal(g) ? ` · залп ×${g.shots}` : ''}`,
+                  `${bbIsHeal(g) ? `+${g.dmg} HP союзнику` : g.dmg} · до ${g.rng} гекс.`)).join('');
+
+  // Во весь экран, а не полоской над лентой: на телефоне ленте бортов и панели
+  // команд остаётся ~160 px, паспорт корабля в них не влезает и упирается в
+  // собственный скролл. Закрывается ✕ — доска под ней никуда не девается.
+  return `<div class="bbf-sheet bbf-spec"><div class="bbf-sheet-h">
+      <span class="bbf-sheet-n">${esc(p.unit_name)}</span>
+      <button onclick="bbSpec(null)">✕</button></div>
+    <div class="bbf-sheet-b"><div class="bb-panel">
+      ${out.join('')}
+      <div class="bb-panel-t" style="margin-top:10px">Огневые группы</div>
+      ${guns}
+    </div></div></div>`;
 }
 
 // Компактное число для карточек резерва

@@ -456,6 +456,8 @@
   border: 0; cursor: pointer; background: rgba(90,220,240,.12); color: #bfe9f7;
   font-size: 20px; line-height: 1; font-family: var(--font-mono, monospace);
 }
+/* ⓘ — паспорт борта; уже, чем −/+: те под палец, эта нажимается изредка */
+.bbd-s-spec { flex: 0 0 44px; font-size: 15px; color: #8fd8ea; }
 .bbd-s-a:hover:not(:disabled) { background: rgba(90,220,240,.3); }
 .bbd-s-a:disabled { opacity: .3; cursor: default; }
 .bbd-none { color: #55707e; font-size: 12px; font-style: italic; padding: 20px 10px; }
@@ -549,6 +551,9 @@
 .bbf-sheet-b { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 10px 12px 14px; }
 .bbf-sheet-b .bb-panel { padding: 0; margin: 0 0 10px; clip-path: none; }
 .bbf-sheet-b .bb-panel::before, .bbf-sheet-b .bb-panel::after { display: none; }
+
+/* паспорт борта из резерва (расстановка): во весь экран — над лентой места нет */
+.bbf-spec { top: 0; bottom: 0; max-height: none; z-index: 8; }
 
 .bbf-wait { flex: 1; color: #6f8998; font-size: 11px; font-family: var(--font-mono, monospace); text-align: right; }
 
