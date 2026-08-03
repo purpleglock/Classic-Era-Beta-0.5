@@ -228,18 +228,13 @@ function bgCamHome() {
   bgApplyCam(); BG.dirty = true; bgKick();
 }
 
-// ── РЕЖИМ ОБЗОРА (вращение камеры пальцем) ──────────────────
-// На телефоне повернуть камеру было практически нечем: ПКМ и Shift там нет,
-// а доворот щипком ловится через раз (порог в 12°, иначе камеру ведёт при
-// каждом обычном зуме). Кнопка «⟳» в панели боя включает режим обзора —
-// тогда ОДИН палец крутит и наклоняет камеру, а не тянет поле. Тап без
-// протяжки при этом работает как раньше: по гексу можно ткнуть, не выходя
-// из режима.
-function bgOrbitMode(on) {
-  BG.orbitMode = (on == null) ? !BG.orbitMode : !!on;
-  if (BG.cv) BG.cv.style.cursor = BG.orbitMode ? 'move' : '';
-  return BG.orbitMode;
-}
+// ── ВРАЩЕНИЕ КАМЕРЫ ─────────────────────────────────────────
+// РЕЖИМА ОБЗОРА БОЛЬШЕ НЕТ. Он переопределял один палец под вращение, и это
+// дралось со всем остальным: щипок начинался уже подкрученной камерой, а
+// выйти из режима было нечем, кроме той же кнопки, которую в разметке легко
+// потерять. Правило теперь одно и без состояний: ОДИН палец всегда тянет
+// поле, ДВА — зум и доворот, а точный поворот — кнопками-стрелками. На
+// десктопе вращение осталось на ПКМ и Shift+перетаскивание.
 // Шаг поворота кнопкой-стрелкой: четверть оборота с плавным доездом
 function bgOrbitStep(dir) {
   BG.spin = { yaw0: BG.yaw, yaw1: BG.yaw + dir * Math.PI / 4, t0: performance.now(), dur: 320 };
@@ -312,7 +307,7 @@ function bgBindInput() {
       return;
     }
     // ПКМ / Shift / включённый режим обзора — орбита, иначе тянем поле
-    if (ev.button === 2 || ev.shiftKey || BG.orbitMode) {
+    if (ev.button === 2 || ev.shiftKey) {
       BG.orbit = { sx: p.sx, sy: p.sy, yaw: BG.yaw, pitch: BG.pitch, moved: false };
       BG.drag = null;
     } else {
@@ -1858,7 +1853,7 @@ function bgPaint() { BG.dirty = true; bgKick(); }
 function bgDispose() {
   if (BG.raf) cancelAnimationFrame(BG.raf);
   BG.raf = 0; BG.ready = false; BG.camAnim = null;
-  BG.spin = null; BG.orbitMode = false; BG._failed = null;
+  BG.spin = null; BG._failed = null;
   BG.fx.forEach(n => n.kill()); BG.fx.clear();
   BG.trail.forEach(t => t.material.dispose()); BG.trail.clear();
   BG.units.clear();

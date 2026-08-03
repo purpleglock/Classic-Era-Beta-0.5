@@ -54,6 +54,8 @@ const BB = {
   glOn: false,       // доска рисуется трёхмерной сценой (battle_gl.js)
   glCv: null,        // её канвас: переживает пересборку разметки, см. bbMount
   glOff: false,      // WebGL не завёлся — больше не пробуем, сидим на 2D
+  glWait: false,     // 3D ещё собирается: доска под завесой, 2D не показываем
+  glTmo: 0,          // сторож завесы: 3D не доехал за отведённое время → 2D
   anim: { move: new Map(), fx: [], raf: 0 },   // движение кораблей + эффекты боя
   prevU: null,       // снимок юнитов прошлого кадра (для диффа перемещений/потерь)
   prevTurn: null,    // чей был ход в прошлом кадре ('me'|'foe'|side) — для баннера передачи хода
@@ -82,6 +84,11 @@ async function bbOpen(battleId, spectate, botFoe) {
   BB.spectate = !!spectate;   // зритель дуэли клуба: полное зрение, без действий
   BB.botFoe = !!botFoe;       // админ-тест против ботов: боты ходят сами, автоматически
   BB.camReady = false; BB.reach = null;
+  // Библиотеку 3D тянем СРАЗУ, параллельно снимку боя: к моменту, когда доска
+  // появится в разметке, она обычно уже доехала — и завеса снимается почти
+  // мгновенно, а не после отдельного круга загрузки.
+  BB.glWait = !BB.glOff && typeof bgLoadThree === 'function';
+  if (BB.glWait) try { bgLoadThree(); } catch (e) { BB.glWait = false; }
   let ov = document.getElementById('bb-ov');
   if (!ov) {
     ov = document.createElement('div');
@@ -155,7 +162,8 @@ function bbFacIco(u) {
 function bbClose() {
   bbStopPoll();
   if (BB.glOn && typeof bgDispose === 'function') try { bgDispose(); } catch (e) {}
-  BB.glOn = false;
+  BB.glOn = false; BB.glWait = false;
+  if (BB.glTmo) { clearTimeout(BB.glTmo); BB.glTmo = 0; }
   if (BB.glCv) { BB.glCv.remove(); BB.glCv = null; }
   const ov = document.getElementById('bb-ov');
   if (ov) ov.classList.remove('show');
@@ -507,8 +515,41 @@ function bbMount() {
   bbFit();
   bbBindCanvas();
   bbPaint();
-  if (BB.glOn) bgRefresh();
-  else bbTry3D();
+  if (BB.glOn) { bbVeil(false); bgRefresh(); }
+  else { bbVeil(BB.glWait); bbTry3D(); }
+}
+
+// ── Завеса на время сборки 3D ───────────────────────────────
+// Плоская доска — аварийный запас, а не первый кадр. Раньше её показывали
+// сразу: игрок видел пустое поле, ставил вслепую, а через секунду сцена
+// подменялась под руками (и приходилось закрывать-открывать бой). Теперь до
+// готовности 3D канвасы скрыты, а поверх лежит надпись о сборке. 2D при этом
+// живёт под завесой в полную силу — если 3D не сложится, его просто открывают.
+function bbVeil(on) {
+  const host = BB.cv && BB.cv.parentElement; if (!host) return;
+  let el = host.querySelector('.bb-veil');
+  if (on) {
+    if (BB.cv) BB.cv.style.visibility = 'hidden';
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'bb-veil';
+      el.innerHTML = `<span class="bb-veil-t">Собираем поле боя…</span>`;
+      host.appendChild(el);
+    }
+    // Сторож: библиотека может не доехать вовсе (сеть, блокировщик). Держать
+    // игрока перед завесой бесконечно нельзя — открываем плоскую доску.
+    if (!BB.glTmo) BB.glTmo = setTimeout(() => {
+      BB.glTmo = 0;
+      if (!BB.glWait || BB.glOn) return;
+      console.warn('[bb] 3D не собралась за 15 с — открываем плоскую доску');
+      BB.glWait = false; BB.glOff = true;
+      bbVeil(false);
+    }, 15000);
+  } else {
+    if (BB.glTmo) { clearTimeout(BB.glTmo); BB.glTmo = 0; }
+    if (el) el.remove();
+    if (BB.cv) BB.cv.style.visibility = '';
+  }
 }
 
 // Попытка поднять 3D. Асинхронная и необязательная: доска уже работает на 2D,
@@ -520,12 +561,12 @@ function bbTry3D() {
   const host = BB.cv && BB.cv.parentElement;
   if (!host) return;
   bgLoadThree().then(ok => {
-    if (!ok) { BB.glOff = true; return; }
-    if (!BB.id || !BB.cv || !BB.cv.parentElement) return;   // доску успели закрыть
+    if (!ok) { BB.glOff = true; BB.glWait = false; bbVeil(false); return; }
+    if (!BB.id || !BB.cv || !BB.cv.parentElement) { BB.glWait = false; return; }   // доску успели закрыть
     const cv = document.createElement('canvas');
     cv.className = 'bb-cv';
     BB.cv.parentElement.insertBefore(cv, BB.cv.nextSibling);
-    if (!bgAttach(cv)) { cv.remove(); BB.glOff = true; return; }
+    if (!bgAttach(cv)) { cv.remove(); BB.glOff = true; BB.glWait = false; bbVeil(false); return; }
     // ПОКАЗЫВАЕМ 3D ТОЛЬКО СОБРАННУЮ. Раньше плоскую доску прятали сразу, до
     // первой синхронизации: если сцена не собиралась (сбой синхронизатора,
     // незнакомый класс корабля), игрок получал пустое поле со звёздами вместо
@@ -542,11 +583,14 @@ function bbTry3D() {
     if (broke || built < want) {
       console.warn('[bb] 3D-сцена не собралась (борта ' + built + ' из ' + want + ') — остаёмся на 2D');
       cv.style.visibility = '';
+      BB.glWait = false;
       bbFallback2D();
       return;
     }
     cv.style.visibility = '';
     BB.cv.style.display = 'none';
+    BB.glWait = false;
+    bbVeil(false);
     bbRender();          // кнопки камеры (вращение) есть только у 3D-доски
   });
 }
@@ -555,7 +599,8 @@ function bbTry3D() {
 // просто снимаем 3D-канвас и показываем обратно тот, что всё это время лежал
 // под ним. Доска продолжает работать, игрок не остаётся без боя.
 function bbFallback2D() {
-  BB.glOn = false; BB.glOff = true;
+  BB.glOn = false; BB.glOff = true; BB.glWait = false;
+  bbVeil(false);
   if (typeof bgDispose === 'function') try { bgDispose(); } catch (e) {}
   if (BB.glCv) { BB.glCv.remove(); BB.glCv = null; }
   if (BB.cv) { BB.cv.style.display = ''; BB.camReady = false; bbFit(); bbPaint(); }
@@ -1171,23 +1216,14 @@ function bbZoomBtn(f) {
 }
 
 // ── ВРАЩЕНИЕ КАМЕРЫ (3D) ────────────────────────────────────
-// На телефоне поворачивать было нечем: ПКМ и Shift там нет, а доворот щипком
-// двумя пальцами срабатывает через раз. Кнопка «⟳» включает режим обзора —
-// одним пальцем крутим камеру, а не тянем поле; тап по гексу при этом
-// работает как раньше. Пока режим включён, рядом появляются стрелки на
-// четверть оборота: точный поворот вообще без протяжки.
+// Кнопки-стрелки на четверть оборота — И ВСЁ. Режим обзора («палец вращает
+// камеру») выпилен: он был лишним состоянием, из которого игрок не всегда
+// выбирался, и спорил с щипком. Управление теперь без режимов: палец тянет
+// поле, два пальца — зум и доворот, стрелки — точный поворот.
 function bbOrbitBtns() {
-  if (!BB.glOn || typeof bgOrbitMode !== 'function') return '';
-  const on = typeof BG !== 'undefined' && BG.orbitMode;
-  return `${on ? `<button class="bbd-ic" onclick="bbOrbitStep(-1)" title="Повернуть влево">↺</button>
-      <button class="bbd-ic" onclick="bbOrbitStep(1)" title="Повернуть вправо">↻</button>` : ''}
-    <button class="bbd-ic${on ? ' bbd-ic-on' : ''}" onclick="bbOrbit()"
-      title="${on ? 'Обзор включён: палец вращает камеру' : 'Вращать камеру пальцем'}">⟳</button>`;
-}
-function bbOrbit() {
-  if (!BB.glOn || typeof bgOrbitMode !== 'function') return;
-  bgOrbitMode();
-  bbRender();                                  // кнопка перерисуется активной
+  if (!BB.glOn || typeof bgOrbitStep !== 'function') return '';
+  return `<button class="bbd-ic" onclick="bbOrbitStep(-1)" title="Повернуть камеру влево">↺</button>
+    <button class="bbd-ic" onclick="bbOrbitStep(1)" title="Повернуть камеру вправо">↻</button>`;
 }
 function bbOrbitStep(dir) {
   if (BB.glOn && typeof bgOrbitStep === 'function') bgOrbitStep(dir);
