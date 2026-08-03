@@ -13683,6 +13683,15 @@ function ecFmtLeft(ms) {
   if (ms < 86400000) { const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000); return m ? `${h} ч ${m} мин` : `${h} ч`; }
   const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000); return h ? `${d} д ${h} ч` : `${d} д`;
 }
+// Короткий ETA до момента ISO — БЕЗ полосы прогресса: «3 ч 20 мин», «готово».
+// Нужен строкам фабрик снарядов (Арсенал / военпромзавод), карточкам
+// Гиперпейсера и VN-экрану Длани: там места под прогресс-бар нет.
+function ecEtaShort(iso) {
+  if (!iso) return '—';
+  const end = new Date(iso).getTime();
+  if (!isFinite(end)) return '—';
+  return ecFmtLeft(end - Date.now());
+}
 // Прогресс-бар [startMs..endMs] + подпись остатка. readyText — подпись по завершении.
 function ecProgress(startMs, endMs, readyText) {
   const now = Date.now();
