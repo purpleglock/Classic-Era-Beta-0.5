@@ -3054,6 +3054,65 @@ function vnPlain(s) {
   t = t.replace(/\[fx:schizo\]([\s\S]*?)\[\/fx\]/gi, '$1');
   return (typeof fnStripMarkup === 'function') ? fnStripMarkup(t) : t.replace(/\s+/g, ' ').trim();
 }
+// Обрезка ПО ВИДИМЫМ символам с сохранением разметки: bbcode-теги в счёт длины не
+// идут, а открытые к моменту среза — закрываются. Иначе обрубок вроде
+// «[fac:FID|https://…» доезжал до рендера сырьём.
+function vnTrimRich(s, lim) {
+  const src = String(s == null ? '' : s);
+  const re = /\[\/?(?:fac|fx|c|bg|center|left|right|lock|spoiler|img|music)(?::[^\]\n]*)?(?:\|[^\]\n]*)?\]/gi;
+  let out = '', vis = 0, last = 0, m, stack = [], cut = false;
+  const eat = chunk => {
+    for (const ch of chunk) {
+      if (vis >= lim - 1) { cut = true; return; }
+      out += ch; vis++;
+    }
+  };
+  while ((m = re.exec(src))) {
+    eat(src.slice(last, m.index));
+    if (cut) break;
+    const tag = m[0];
+    const name = /^\[\/?([a-z]+)/i.exec(tag)[1].toLowerCase();
+    if (tag[1] === '/') { const j = stack.lastIndexOf(name); if (j >= 0) stack.splice(j, 1); }
+    else if (!/^(?:img|music)$/.test(name)) stack.push(name);
+    out += tag;
+    last = m.index + tag.length;
+  }
+  if (!cut) eat(src.slice(last));
+  if (cut) out = out.replace(/\s+$/, '') + '…';
+  for (let i = stack.length - 1; i >= 0; i--) out += '[/' + stack[i] + ']';
+  return out;
+}
+// Разметка реплики → HTML + «покадровая» выдача для печатной машинки. Окно новеллы
+// печатает посимвольно, поэтому просто вставить готовый HTML нельзя: режем его на
+// токены (тег / сущность / символ) и на каждом шаге дозакрываем открытые теги —
+// так оформление живёт с первого символа, а не всплывает в конце.
+function vnRich(raw, pauseMark) {
+  const src = String(raw == null ? '' : raw);
+  const html = (typeof il === 'function') ? il(src) : (typeof esc === 'function' ? esc(src) : src);
+  const toks = html.match(/<[^>]*>|&[a-zA-Z#0-9]{1,8};|[\s\S]/g) || [];
+  const out = [], visAt = [], closers = [''];
+  const stack = [];
+  let pauseAt = -1;
+  for (const tk of toks) {
+    if (pauseMark && tk === pauseMark) { pauseAt = visAt.length; continue; }
+    out.push(tk);
+    if (tk[0] === '<') {
+      const m = /^<\/?([a-zA-Z0-9]+)/.exec(tk);
+      if (m) {
+        const nm = m[1].toLowerCase();
+        if (tk[1] === '/') { const j = stack.lastIndexOf(nm); if (j >= 0) stack.splice(j, 1); }
+        else if (!/\/>$/.test(tk) && !/^(?:br|img|hr|input|source)$/.test(nm)) stack.push(nm);
+      }
+    } else visAt.push(out.length);
+    closers.push(stack.slice().reverse().map(n => '</' + n + '>').join(''));
+  }
+  const at = pos => {
+    if (pos <= 0) return '';
+    const k = visAt[Math.min(pos, visAt.length) - 1];
+    return out.slice(0, k).join('') + closers[k];
+  };
+  return { html: out.join(''), len: visAt.length, pauseAt, at };
+}
 // Озвучить конкретную выбранную запись устами персонажа (печать в окне).
 function heroVNTell(id) {
   if (!_heroVNCtl || typeof FN === 'undefined' || !FN.byId) return;
@@ -3064,11 +3123,16 @@ function heroVNTell(id) {
   const mk = t => ({ t, n: spk });
   // Читаем ЛИД, если он задан: в статье под ним идут сухие подробности (досье,
   // цифры), которые в устах героини звучат как выписка из справочника.
-  const body = vnPlain(n.excerpt || n.body || '');
-  const trim = (s, lim) => s.length > lim ? s.slice(0, lim - 1).trim() + '…' : s;
+  // Разметку НЕ снимаем: окно печатает HTML (vnRich) — оформление автора живо.
+  // Блочное (картинки, музыка, заголовки) в реплике ни к чему — его убираем.
+  const rich = s => String(s || '')
+    .replace(/\[(?:img|music):[^\]]*\]/gi, ' ')
+    .replace(/^[ \t]*#{1,6}[ \t]+/gm, '')
+    .replace(/\s+/g, ' ').trim();
+  const body = rich(n.excerpt || n.body || '');
   // ОДНА реплика: «А, 「фракция」…» → КОРОТКАЯ ПАУЗА (символ ) → текст.
-  const speak = body || vnPlain(n.title);
-  const tail = speak ? trim(speak, 300) : (en ? 'The wire is silent on it.' : 'Эфир молчит об этом.');
+  const speak = body || rich(n.title);
+  const tail = speak ? vnTrimRich(speak, 300) : (en ? 'The wire is silent on it.' : 'Эфир молчит об этом.');
   const lines = [mk(tail)];
   if (typeof heroVNShowBanner === 'function') heroVNShowBanner(n);
   const cat = _heroVNCat || 'menu';
@@ -5200,35 +5264,36 @@ function heroVNInit() {
   // Спец-символ в тексте = короткая пауза печати («вдох» после «…»), в показе его нет.
   const PAUSE_MARK = String.fromCharCode(1);
   const stripPause = s => String(s == null ? '' : s).split(PAUSE_MARK).join('');
+  // Реплика → HTML-кадры (оформление живёт при печати, см. vnRich).
+  const RICH = i => vnRich(T(i), PAUSE_MARK);
   function finishLine() {                 // реплика допечатана
-    out.textContent = stripPause(T(idx)); typing = false; box.classList.remove('typing');
+    out.innerHTML = RICH(idx).html; typing = false; box.classList.remove('typing');
     setHint(true); scheduleNext();
   }
   function play(i, instant) {
     clearTimers(); idx = i;
     if (loop) _heroVNResume = { sig, idx: i };   // позицию запоминаем только для idle
     applyScene(i);
-    const raw = T(idx);
-    const display = stripPause(raw);
-    const pauseAt = raw.indexOf(PAUSE_MARK);   // позиция паузы в ВИДИМОМ тексте
+    const rich = RICH(idx);
+    const pauseAt = rich.pauseAt;              // позиция паузы в ВИДИМЫХ символах
     // instant — первая реплика после (пере)инициализации: показываем сразу, без
     // перепечатывания, чтобы новелла НЕ «перезапускалась» на каждом ре-рендере.
     if (instant) {
       typing = false; box.classList.remove('typing');
-      out.textContent = display; setHint(true); scheduleNext();
+      out.innerHTML = rich.html; setHint(true); scheduleNext();
       return;
     }
     typing = true; box.classList.add('typing');
-    let pos = 0; out.textContent = ''; setHint(false);
+    let pos = 0; out.innerHTML = ''; setHint(false);
     function tick() {
-      pos++; out.textContent = display.slice(0, pos);
+      pos++; out.innerHTML = rich.at(pos);
       // дошли до места паузы — замираем на ~0.6с, потом печатаем дальше
       if (pauseAt >= 0 && pos === pauseAt) {
         clearInterval(charTimer); charTimer = null;
         holdTimer = setTimeout(() => { holdTimer = null; charTimer = setInterval(tick, 30); }, 600);
         return;
       }
-      if (pos >= display.length) { clearInterval(charTimer); charTimer = null; finishLine(); }
+      if (pos >= rich.len) { clearInterval(charTimer); charTimer = null; finishLine(); }
     }
     charTimer = setInterval(tick, 30);
   }
