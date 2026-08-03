@@ -300,8 +300,6 @@ function bgBindInput() {
       BG.pinch = {
         d: Math.hypot(a.sx - b.sx, a.sy - b.sy),
         mx: (a.sx + b.sx) / 2, my: (a.sy + b.sy) / 2,
-        ang: Math.atan2(b.sy - a.sy, b.sx - a.sx),
-        twist: 0,                               // копим доворот до порога, см. ниже
       };
       BG.drag = BG.orbit = null;
       return;
@@ -336,13 +334,10 @@ function bgBindInput() {
         // под НОВОЙ серединой: заодно получается панорама двумя пальцами.
         const before = bgPickWorld(P.mx, P.my);
         BG.dist = Math.max(BG_DIST_MIN, Math.min(BG_DIST_MAX, BG.dist * P.d / d));
-        // Доворот щипком: до порога в ~12° крутить нельзя, иначе камера ведёт
-        // при каждом обычном сведении пальцев.
-        const ang = Math.atan2(b.sy - a.sy, b.sx - a.sx);
-        let da = ((ang - P.ang) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
-        P.twist += da;
-        if (Math.abs(P.twist) > 0.21) { BG.yaw += da; }
-        P.ang = ang;
+        // ДОВОРОТА ЩИПКОМ НЕТ. Пальцы при сведении всегда чуть проворачиваются,
+        // и камера уезжала вбок при обычном зуме — никакой порог этого не
+        // лечит, только оттягивает. Щипок делает ровно две вещи: приближает и
+        // возит поле. Поворот — кнопками ↺↻ (и ПКМ/Shift на десктопе).
         bgApplyCam();
         if (before) {
           const after = bgPickWorld(mx, my);
