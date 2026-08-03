@@ -281,11 +281,28 @@ revoke all on function public._bt_gen_terrain(uuid) from public;
 -- значит сектора должны быть уже записаны.
 create or replace function public._bt_ensure_field(p_battle uuid)
 returns void language plpgsql security definer set search_path=public as $$
-declare sh jsonb; sp jsonb; t jsonb;
+declare sh jsonb; sp jsonb; t jsonb; legacy boolean;
 begin
   perform public._bt_arm(p_battle);
   select b.shape, b.spawn, b.terrain into sh, sp, t
     from public.battles b where b.id = p_battle;
+
+  -- ⚠ Бой, начатый ДО этой ревизии, форму не получает. У него уже сгенерён
+  -- ландшафт и/или расставлены борта по старым правилам (колонки у края) —
+  -- новая арена вырезала бы землю из-под уже стоящих кораблей. Такие бои
+  -- фиксируем как прямоугольные (spawn остаётся null = колонки).
+  legacy := sh is null and (t is not null
+            or exists(select 1 from public.battle_units bu where bu.battle_id = p_battle));
+  if legacy then
+    update public.battles
+       set shape = jsonb_build_object('k','rect','w',public._bt_w(),'h',public._bt_h())
+     where id = p_battle and shape is null;
+    if t is null then
+      update public.battles set terrain = public._bt_gen_terrain(p_battle)
+       where id = p_battle and terrain is null;
+    end if;
+    return;
+  end if;
 
   if sh is null then
     sh := public._bt_gen_shape(p_battle);

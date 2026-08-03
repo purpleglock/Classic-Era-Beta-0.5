@@ -655,23 +655,35 @@ function bbDeployLim(s) {
 // Свободные гексы своей зоны в порядке «от своего края, от центра к краям»:
 // авто-посадка выстраивает флот аккуратной стенкой, а не как попало.
 function bbZoneCells(s) {
+  const busy = new Set([].concat(
+    (s.units || []).map(u => u.x + ':' + u.y),
+    BB.place.map(p => p.x + ':' + p.y)));
+  const free = (x, y) => !busy.has(x + ':' + y) && bbTerra(x, y) !== 'ast';   // в камнях борт не ставим
+  const a = bbMySpawn();
+
+  if (a) {
+    // сектор подхода: от якоря наружу — флот собирается плотным кулаком
+    const out = [];
+    for (let x = Math.max(0, a.x - a.r); x <= Math.min(s.w - 1, a.x + a.r); x++) {
+      for (let y = Math.max(0, a.y - a.r - 1); y <= Math.min(s.h - 1, a.y + a.r + 1); y++) {
+        if (!bbInMyZone(x, y) || !free(x, y)) continue;
+        out.push({ x, y, d: bbDist({ x, y }, { x: a.x, y: a.y }) });
+      }
+    }
+    out.sort((p, q) => p.d - q.d || p.x - q.x || p.y - q.y);
+    return out.map(p => ({ x: p.x, y: p.y }));
+  }
+
+  // легаси-бой без секторов: прежние колонки у своего края
   const z = s.zone || 3;
   const cols = [];
   for (let i = 0; i < z; i++) cols.push(s.my_side === 'attacker' ? i : s.w - 1 - i);
   const mid = (s.h - 1) / 2;
   const rows = [];
   for (let y = 0; y < s.h; y++) rows.push(y);
-  rows.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid));
-  const busy = new Set([].concat(
-    (s.units || []).map(u => u.x + ':' + u.y),
-    BB.place.map(p => p.x + ':' + p.y)));
+  rows.sort((p, q) => Math.abs(p - mid) - Math.abs(q - mid));
   const out = [];
-  cols.forEach(x => rows.forEach(y => {
-    const k = x + ':' + y;
-    if (busy.has(k)) return;
-    if (bbTerra(x, y) === 'ast') return;      // в камнях борт не ставим
-    out.push({ x, y });
-  }));
+  cols.forEach(x => rows.forEach(y => { if (free(x, y)) out.push({ x, y }); }));
   return out;
 }
 // Можно ли добавить ещё один борт этого проекта: место, резерв, бюджет.
@@ -843,16 +855,27 @@ function bbCellBusy(x, y, skip) {
   return BB.place.some((p, i) => i !== skip && p.x === x && p.y === y);
 }
 
-// Камера расстановки: показать СВОЮ зону спавна целиком по высоте доски.
+// Камера расстановки: показать СВОЙ сектор подхода целиком.
+// Сектор теперь может оказаться где угодно на кромке арены, поэтому камера
+// целится в его якорь, а не в левый/правый торец доски.
 function bbCamDeploy(force) {
   const s = BB.st; if (!s || !BB.vw) return;
   const { W, H } = bbWorldSize();
-  const z = s.zone || 3;
-  const zoneW = (z + 2.5) * BB.R * 1.5;
-  BB.zoom = Math.min(1.5, Math.max(0.28, Math.min(BB.vh / (H + BB.R), BB.vw / zoneW)));
-  const cx = s.my_side === 'attacker' ? zoneW / 2 : W - zoneW / 2;
+  const a = bbMySpawn();
+  let cx, cy, span;
+  if (a) {
+    const c = bbHexCenter(a.x, a.y);
+    span = (a.r + 2.5) * BB.R * 2 * 1.5;         // диаметр сектора с полями
+    cx = c.px; cy = c.py;
+  } else {
+    const z = s.zone || 3;
+    span = (z + 2.5) * BB.R * 1.5;
+    cx = s.my_side === 'attacker' ? span / 2 : W - span / 2;
+    cy = H / 2;
+  }
+  BB.zoom = Math.min(1.5, Math.max(0.28, Math.min(BB.vh / span, BB.vw / span)));
   BB.camX = cx - BB.vw / BB.zoom / 2;
-  BB.camY = H / 2 - BB.vh / BB.zoom / 2;
+  BB.camY = cy - BB.vh / BB.zoom / 2;
   bbCamClamp();
   if (BB.glOn) { bgCamDeploy(); return; }
   if (force && BB.ctx) bbPaint();
@@ -1177,8 +1200,8 @@ function bbHexFromWorld(wx, wy) {
       if (d < bd) { bd = d; best = { x, y }; }
     }
   }
-  if (best && bd <= (R * 0.98) ** 2) return best;
-  return null;
+  if (best && bd <= (R * 0.98) ** 2 && bbInArena(best.x, best.y)) return best;
+  return null;      // мимо арены — пустота, там ни навести, ни кликнуть
 }
 function bbHexPath(ctx, cx, cy, r) {
   ctx.beginPath();
@@ -2101,25 +2124,6 @@ function bbPaintTerrain(ctx, s) {
       }
     }
   });
-}
-
-// ── ТЬМА У КРАЁВ: далёкие пустые гексы гаснут во мрак, доска не ───
-// обрывается голой сеткой. Градиенты в мировых координатах по 4 кромкам.
-function bbPaintEdgeFog(ctx, s) {
-  const { W, H } = bbWorldSize();
-  const R = BB.R, d = R * 4.2;           // глубина затухания ≈ 3 гекса
-  const dark = 'rgba(2,4,9,0.92)', clear = 'rgba(2,4,9,0)';
-  const band = (x, y, w, h, gx0, gy0, gx1, gy1) => {
-    const g = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
-    g.addColorStop(0, dark); g.addColorStop(1, clear);
-    ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
-  };
-  ctx.save();
-  band(-R, -R, d + R, H + 2 * R, -R, 0, d - R, 0);              // левая
-  band(W - d, -R, d + R, H + 2 * R, W + R, 0, W - d, 0);         // правая
-  band(-R, -R, W + 2 * R, d + R, 0, -R, 0, d - R);              // верх
-  band(-R, H - d, W + 2 * R, d + R, 0, H + R, 0, H - d);         // низ
-  ctx.restore();
 }
 
 // ── Подсветка: маршруты BFS + цели по дальности огневых групп ──

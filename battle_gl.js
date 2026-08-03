@@ -130,43 +130,54 @@ function bgBuildField() {
   const s = BB.st; if (!s) return;
   const { W, H } = bbWorldSize();
   const grp = new THREE.Group();
+  const R = BB.R;
 
-  // тёмное «дно» поля: даёт кораблям фон и ловит границу арены
-  const base = new THREE.Mesh(
-    new THREE.PlaneGeometry(W, H),
-    new THREE.MeshBasicMaterial({ color: 0x060a12, transparent: true, opacity: 0.62, depthWrite: false })
-  );
-  base.rotation.x = -Math.PI / 2;
-  base.position.set(W / 2, -1, H / 2);
-  grp.add(base);
-
-  // зоны развёртывания — заливка у торцов, а не решётка
+  // Дно арены — НЕ прямоугольная плита, а набор гексов самой формы боя.
+  // Клетки за кромкой не рисуются вовсе: поле просто кончается, и по нему
+  // читается силуэт арены (линза, долька, кольцо, перешеек, полумесяц).
   const meAtt = s.my_side === 'attacker';
+  const hasSp = !!s.spawn;
   const z = s.zone || 3;
-  const zw = bbHexCenter(z - 1, 0).px + BB.R;
-  const zone = (x0, w, hex) => {
-    const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(w, H),
-      new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.10, depthWrite: false })
-    );
-    m.rotation.x = -Math.PI / 2;
-    m.position.set(x0 + w / 2, 0, H / 2);
-    grp.add(m);
+  const cells = [], zoneCells = { att: [], def: [] };
+  for (let x = 0; x < s.w; x++) {
+    for (let y = 0; y < s.h; y++) {
+      if (!bbInArena(x, y)) continue;
+      cells.push([x, y]);
+      const k = hasSp
+        ? (bbInSpawn('att', x, y) ? 'att' : (bbInSpawn('def', x, y) ? 'def' : null))
+        : (x < z ? 'att' : (x >= s.w - z ? 'def' : null));
+      if (k) zoneCells[k].push([x, y]);
+    }
+  }
+
+  const lay = (list, geo, mat, yy) => {
+    if (!list.length) return;
+    const im = new THREE.InstancedMesh(geo, mat, list.length);
+    const m = new THREE.Matrix4();
+    list.forEach(([x, y], i) => {
+      const p = bbHexCenter(x, y);
+      im.setMatrixAt(i, m.makeTranslation(p.px, yy, p.py));
+    });
+    im.instanceMatrix.needsUpdate = true;
+    im.frustumCulled = false;
+    grp.add(im);
   };
-  zone(0, zw, meAtt ? BG_C.mine : BG_C.foe);
-  zone(W - zw, zw, meAtt ? BG_C.foe : BG_C.mine);
 
-  bgBuildEdgeFog(grp, W, H);
+  // дно: даёт кораблям фон и ловит границу арены
+  lay(cells, bgHexFillGeo(R), new THREE.MeshBasicMaterial({
+    color: 0x060a12, transparent: true, opacity: 0.62, depthWrite: false,
+    side: THREE.DoubleSide }), -1);
 
-  // кромка арены — тонкая рамка по границе поля
-  const edge = new THREE.LineLoop(
-    new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0, 0), new THREE.Vector3(W, 0, 0),
-      new THREE.Vector3(W, 0, H), new THREE.Vector3(0, 0, H),
-    ]),
-    new THREE.LineBasicMaterial({ color: BG_C.grid, transparent: true, opacity: 0.28 })
-  );
-  grp.add(edge);
+  // сектора подхода — заливка там, откуда стороны реально входят в бой
+  ['att', 'def'].forEach(k => {
+    const mine = (k === 'att') === meAtt;
+    lay(zoneCells[k], bgHexFillGeo(R), new THREE.MeshBasicMaterial({
+      color: bgCol(mine ? BG_C.mine : BG_C.foe), transparent: true, opacity: 0.10,
+      depthWrite: false, side: THREE.DoubleSide }), 0);
+  });
+
+  // кромка арены — по фактической границе формы, а не по прямоугольнику
+  bgBuildRim(grp, cells);
 
   BG.scene.add(grp);
   BG.g.field = grp;
@@ -182,6 +193,30 @@ function bgBuildField() {
   const fx = new THREE.Group();
   BG.scene.add(fx);
   BG.g.fx = fx;
+}
+
+// Кромка арены: рёбра тех гексов, у которых сосед — пустота.
+// Даёт живой рваный контур вместо прямоугольной рамки. Направление d смотрит
+// на ребро между вершинами d и d+1 (углы 60°·d) — тот же расклад, что в bbStep.
+function bgBuildRim(grp, cells) {
+  const R = BB.R, pts = [];
+  const V = i => { const a = Math.PI / 3 * (i % 6); return [Math.cos(a) * R, Math.sin(a) * R]; };
+  cells.forEach(([x, y]) => {
+    const c = bbHexCenter(x, y);
+    for (let d = 0; d < 6; d++) {
+      const n = bbStep(x, y, d);
+      if (bbInArena(n.x, n.y)) continue;
+      const a = V(d), b = V(d + 1);
+      pts.push(new THREE.Vector3(c.px + a[0], 0, c.py + a[1]),
+               new THREE.Vector3(c.px + b[0], 0, c.py + b[1]));
+    }
+  });
+  if (!pts.length) return;
+  const rim = new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({ color: BG_C.grid, transparent: true, opacity: 0.34 }));
+  rim.frustumCulled = false;
+  grp.add(rim);
 }
 
 // Контур гекса в плоскости XZ (flat-top, как в 2D-доске)
@@ -1315,24 +1350,6 @@ function bgSyncTerrain() {
   if (dmz) { dmz.count = di; dmz.instanceMatrix.needsUpdate = true; }
 }
 
-// ── Кромка арены: тьма к краям ──────────────────────────────
-// Четыре полосы по границам поля — тот же приём, что bbPaintEdgeFog, только
-// плашмя в плоскости. Доска не «обрывается» голой геометрией.
-function bgBuildEdgeFog(grp, W, H) {
-  const R = BB.R, d = R * 4.2;
-  const mat = () => new THREE.MeshBasicMaterial({
-    map: bgTexFade(), transparent: true, depthWrite: false, side: THREE.DoubleSide });
-  const band = (cx, cz, w, h, dx, dz) => {
-    const m = new THREE.Mesh(BG._quad || (BG._quad = new THREE.PlaneGeometry(1, 1)), mat());
-    bgLayFlat(m, cx, 0.6, cz, w, h, dx, dz);
-    grp.add(m);
-  };
-  band(-R + d / 2, H / 2, d, H + 2 * R, -1, 0);        // левая: тьма снаружи
-  band(W + R - d / 2, H / 2, d, H + 2 * R, 1, 0);      // правая
-  band(W / 2, -R + d / 2, d, W + 2 * R, 0, -1);        // верх
-  band(W / 2, H + R - d / 2, d, W + 2 * R, 0, 1);      // низ
-}
-
 // ════════════════════════════════════════════════════════════
 // ПОДСВЕТКА ХОДА
 // ────────────────────────────────────────────────────────────
@@ -1655,21 +1672,30 @@ function bgSyncGhosts() {
   });
 }
 
-// Камера расстановки: своя зона спавна целиком по высоте доски
+// Камера расстановки: свой СЕКТОР ПОДХОДА целиком.
+// Сектор лежит где-то на кромке арены — камера целится в его якорь и
+// разворачивается от центра арены к нему, чтобы враг был «впереди».
 function bgCamDeploy() {
   const s = BB.st; if (!s || !BG.ready) return;
   const { W, H } = bbWorldSize();
-  const z = s.zone || 3;
-  const zoneW = (z + 2.5) * BB.R * 1.5;
-  BG.tgt.x = s.my_side === 'attacker' ? zoneW / 2 : W - zoneW / 2;
-  BG.tgt.z = H / 2;
-  // Своя зона по ширине — и НЕ вся высота. На большой арене (60 рядов) полная
-  // высота отгоняет камеру так далеко, что борта становятся точками и экран
-  // читается как пустой. Борта садятся от середины наружу, поэтому показываем
-  // середину: 22 ряда вокруг неё, дальше игрок отъедет сам.
-  const rows = Math.min(H, 22 * BB.R * BB_SQ3);
-  BG.dist = bgFitDist(zoneW * 2, rows, 0.58);
-  BG.pitch = 0.98; BG.yaw = -Math.PI / 2;
+  const a = (typeof bbMySpawn === 'function') ? bbMySpawn() : null;
+  let span;
+  if (a) {
+    const c = bbHexCenter(a.x, a.y);
+    BG.tgt.x = c.px; BG.tgt.z = c.py;
+    span = (a.r + 2.5) * BB.R * 2 * 1.5;
+    // смотреть из-за спины своего сектора в сторону центра арены
+    BG.yaw = Math.atan2(c.py - H / 2, c.px - W / 2);
+  } else {
+    const z = s.zone || 3;
+    span = (z + 2.5) * BB.R * 1.5;
+    BG.tgt.x = s.my_side === 'attacker' ? span / 2 : W - span / 2;
+    BG.tgt.z = H / 2;
+    span *= 2;
+    BG.yaw = -Math.PI / 2;
+  }
+  BG.dist = bgFitDist(span, span, 0.58);
+  BG.pitch = 0.98;
   BG.camAnim = null;
   bgApplyCam(); BG.dirty = true; bgKick();
 }
