@@ -1357,12 +1357,12 @@ function ecWelfareDetail(bal, isCap) {
     <b class="ec-cov-${totCls}">×${total.toFixed(2)}</b> дохода <span class="ec-why-scope">(${totWord})</span>.
     Ниже — из чего складывается и что подкрутить.</div>`;
   // причина 1: труд — своя для каждой системы
-  const pop = Math.round(+bal.pop || 0);
+  const pop = Math.round(ecBalPop(bal));
   const jobs = Math.round((bal.labor && +bal.labor.demand) || 0);
   const cl = cov.l == null ? 1 : +cov.l;
   const labTxt = jobs <= 0 ? `Рабочих построек нет — труд не ограничивает.`
-    : cl >= 1 ? `Жителей ${ecNum(pop)}, рабочих мест ${ecNum(jobs)} — рук хватает всем, есть запас.`
-    : `Жителей ${ecNum(pop)}, а рабочих мест ${ecNum(jobs)} — люди закрывают только ${Math.round(cl * 100)}% мест, остальные постройки простаивают.`;
+    : cl >= 1 ? `Жителей ${ecNum(pop)}, постройкам нужно ${ecNum(jobs)} рабочих рук — хватает, есть запас ×${cl.toFixed(2)}.`
+    : `Жителей ${ecNum(pop)}, а постройкам нужно ${ecNum(jobs)} рабочих рук — закрыто только ${Math.round(cl * 100)}%, остальные места простаивают.`;
   const labFix = jobs > 0 && cl < 1
     ? `ждать роста населения (поднимите соцобеспечение/товары в бюджете) или снести часть построек`
     : (pr > 1.05 ? `можно ставить ещё доходные постройки` : '');
@@ -1435,7 +1435,7 @@ function ecRawWhyRow(bal) {
 function ecWelfareSysRow(bal, isCap) {
   const pr = +bal.prosperity || 1;
   const cl = (bal.coverage && bal.coverage.l != null) ? +bal.coverage.l : 1;
-  const pop = Math.round(+bal.pop || 0);
+  const pop = Math.round(ecBalPop(bal));
   const jobs = Math.round((bal.labor && +bal.labor.demand) || 0);
   const popM = bal.pop_mult == null ? 1 : +bal.pop_mult;
   const st = isCap ? 'ok' : (bal.status || 'ok');
@@ -1451,7 +1451,7 @@ function ecWelfareSysRow(bal, isCap) {
       <div class="ec-wf-pr ec-cov-${prCls}" title="Благополучие — множитель дохода всех построек системы">×${pr.toFixed(2)}</div>
       <div class="ec-wf-bar ec-cov-${clCls}" title="Покрытие труда: население ÷ рабочие места"><span class="ec-cov-bar"><i style="width:${Math.min(100, clPct)}%"></i></span><b>${clPct}%</b></div>
       <div class="ec-wf-pop" title="Жители системы (доля заселённости)">👥 ${ecNum(pop)}${popM < 0.995 ? ` <span class="ec-cov-lo">${Math.round(popM * 100)}%</span>` : ''}</div>
-      <div class="ec-wf-jobs" title="Рабочих мест требуют постройки">👷 ${ecNum(jobs)}</div>
+      <div class="ec-wf-jobs" title="Сколько жителей требуют рабочие места построек (${EC_POP_PER_LABOR} на единицу нагрузки)">👷 ${ecNum(jobs)}</div>
       <div class="ec-wf-st ec-sb-${st}">${stTxt}</div>
     </div>
     <div class="ec-wf-detail">${ecWelfareDetail(bal, isCap)}</div>
@@ -1565,7 +1565,7 @@ function ecWfHero() {
   const pop = ecBudgetPop(), cap = ecBudgetPopCap();
   const grB = ecBudgetGrowthBase(), grG = ecBudgetGrowthGoods(), gr = grB + grG;
   const dPop = Math.round(pop * gr);
-  const jobs = Math.floor(pop / EC_POP_PER_SLOT);
+  const lab = ecLaborTotals();
   const grCls = gr < 0 ? 'ec-cov-lo' : (gr < 0.015 ? 'ec-cov-mid' : 'ec-cov-hi');
   const fillPct = cap > 0 ? Math.min(100, Math.round(pop / cap * 100)) : 0;
   return `<div class="ec-wh">
@@ -1586,13 +1586,13 @@ function ecWfHero() {
     <div class="ec-wh-side">
       <div class="ec-wh-side-t">Из чего складывается индекс</div>
       <div class="ec-wh-parts">${rows}</div>
-      <div class="ec-wh-pop" data-tip="Население — корень всего: рабочие руки (${EC_POP_PER_SLOT} жителей = 1 слот постройки), налоговая база и рост. Потолок поднимают новые ячейки колоний.">
+      <div class="ec-wh-pop" data-tip="Население — корень всего: рабочие руки, налоговая база и рост. Слот постройки ОТКРЫВАЕТСЯ от ${EC_POP_PER_SLOT} жителей, а ЗАКРЫВАЕТСЯ рабочими руками — ${EC_POP_PER_LABOR} жителей на единицу нагрузки (шахта 1, фабрика 2, верфь 3 на слот). Потолок поднимают новые ячейки колоний.">
         <div class="ec-wh-pop-top">
           <span>👥 Население <b>${ecNum(pop)}</b> / ${ecNum(cap)} <span class="ec-hint">(${fillPct}% потолка)</span></span>
           <span class="${grCls}">${gr >= 0 ? '📈' : '📉'} ${gr >= 0 ? '+' : ''}${(gr * 100).toFixed(1)}%/сут (${dPop >= 0 ? '+' : ''}${ecNum(dPop)} чел.)</span>
         </div>
         <div class="ec-wh-pop-bar"><i style="width:${fillPct}%"></i></div>
-        <div class="ec-wh-pop-sub">Хватает рук на <b>${ecNum(jobs)}</b> слотов построек · рост = ⚖${(grB * 100).toFixed(1)}% соц. + 🛍${(grG * 100).toFixed(1)}% товары</div>
+        <div class="ec-wh-pop-sub">Постройки требуют <b>${ecNum(lab.demand)}</b> рабочих рук — закрыто <b class="${lab.cov >= 1 ? 'ec-cov-hi' : lab.cov >= 0.8 ? 'ec-cov-mid' : 'ec-cov-lo'}">${Math.round(lab.cov * 100)}%</b> · рост = ⚖${(grB * 100).toFixed(1)}% соц. + 🛍${(grG * 100).toFixed(1)}% товары</div>
       </div>
     </div>
   </div>`;
@@ -2807,7 +2807,22 @@ const EC_BUDGET_W = [0, 1, 2, 4, 7];
 // Ставка единая для всех держав, скидки малых держав нет (зеркало _budget_pop_mult)
 function ecBudgetPopMult(pop) { return 1; }
 // ── Население (зеркало _fac_pop / _pop_growth / _budget_auto_slots) ──
-const EC_POP_PER_SLOT = 3;                 // жителей на один рабочий слот (было 50)
+const EC_POP_PER_SLOT = 3;                 // жителей, чтобы слот ОТКРЫЛСЯ (зеркало _budget_auto_slots)
+// Жителей, чтобы слот РАБОТАЛ: цена одной единицы трудовой нагрузки постройки
+// (шахта 1 · фабрика/наука/учебка/воензавод 2 · верфь 3 · склад 0.5 на слот).
+// Зеркало _labor_pop_per_unit() из _labor_people_fix.sql — менять в двух местах.
+const EC_POP_PER_LABOR = 10;
+// Жители системы для панели труда: новое поле pop_people, со старым 'pop' как фолбэк.
+function ecBalPop(bal) { return +(bal && (bal.pop_people != null ? bal.pop_people : bal.pop)) || 0; }
+// Труд по всей державе: сумма рук и сумма требуемых рук по системам.
+function ecLaborTotals() {
+  let sup = 0, dem = 0;
+  Object.values(EC.spatial || {}).forEach(b => {
+    sup += (b.labor && +b.labor.supply) || 0;
+    dem += (b.labor && +b.labor.demand) || 0;
+  });
+  return { supply: Math.round(sup), demand: Math.round(dem), cov: dem > 0 ? sup / dem : 1 };
+}
 const EC_POP_CAP_CELL = 100;               // потолок жителей на ячейку колонии
 const EC_POP_START_CELL = 50;              // старт/бэкфилл жителей на ячейку
 const EC_POP_GROWTH = [-0.02, 0.005, 0.015, 0.025, 0.035];  // %/сут по уровню соцобеспечения

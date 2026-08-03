@@ -82,6 +82,7 @@ const BB_C = {
 // ── Открыть / закрыть ───────────────────────────────────────
 async function bbOpen(battleId, spectate, botFoe) {
   BB.id = battleId; BB.sel = null; BB.pick = null; BB.place = []; BB.spec = null;
+  BB.traySL = 0;              // позиция ленты бортов живёт в пределах одного боя
   BB.spectate = !!spectate;   // зритель дуэли клуба: полное зрение, без действий
   BB.botFoe = !!botFoe;       // админ-тест против ботов: боты ходят сами, автоматически
   BB.camReady = false; BB.reach = null;
@@ -729,6 +730,7 @@ function bbTrayScroll(dir) {
 // Колесо над лентой листает её, а не проваливается в доску под ней.
 function bbBindTray() {
   const el = document.getElementById('bbd-tray'); if (!el) return;
+  el.onscroll = () => { BB.traySL = el.scrollLeft; };
   el.onwheel = ev => {
     const d = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
     if (!d) return;
@@ -813,6 +815,13 @@ function bbRenderDeploy(s) {
         </button>
       </div>
     </div>`;
+
+  // Лента пересобирается целиком на каждый рендер (а рендер идёт на каждый
+  // тап по карточке), и браузер честно отматывает свежий контейнер в ноль —
+  // выбрал борт в конце списка, а лента прыгнула в начало. Держим позицию
+  // сами и возвращаем её сразу после вставки, до первой отрисовки кадра.
+  const tray = document.getElementById('bbd-tray');
+  if (tray && BB.traySL) tray.scrollLeft = BB.traySL;
 
   bbMount();
   bbBindTray();
