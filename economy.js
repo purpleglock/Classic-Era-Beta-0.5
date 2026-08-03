@@ -6914,18 +6914,33 @@ function ecCvShipCargo(unitId) {
 function ecCvShipOrphan(unitId) {
   return !(EC.designs || []).some(x => x.id === unitId);
 }
+// Вооружён ли корабль. Роль в караване определяет НЕ трюм, а орудия: после того как
+// боевым корпусам дали остаточную грузоподъёмность (kv.cap > 0), деление «есть трюм →
+// транспорт» записало весь боевой флот в грузовики, и эскорт стало некем набирать.
+// Теперь: есть урон → годится в эскорт (и попутно везёт свой остаток трюма).
+// Сирота (проект удалён) — ТТХ читать неоткуда, трюм 0, оставляем его в эскорте.
+function ecCvShipArmed(unitId) {
+  const d = (EC.designs || []).find(x => x.id === unitId);
+  if (!d) return true;                       // сирота: только эскорт
+  return (+(d.summary || {}).dmg || 0) > 0;
+}
 function ecCvFleetGroups() {
   const by = {};
   (EC.roster || []).filter(r => r.category === 'ship').forEach(r => {
-    if (!by[r.unit_id]) by[r.unit_id] = { id: r.unit_id, name: r.unit_name || 'Корабль', qty: 0, cargo: ecCvShipCargo(r.unit_id), orphan: ecCvShipOrphan(r.unit_id) };
+    if (!by[r.unit_id]) by[r.unit_id] = { id: r.unit_id, name: r.unit_name || 'Корабль', qty: 0, cargo: ecCvShipCargo(r.unit_id), orphan: ecCvShipOrphan(r.unit_id), armed: ecCvShipArmed(r.unit_id) };
     by[r.unit_id].qty += r.qty || 0;
   });
   const all = Object.values(by);
-  return { freighters: all.filter(d => d.cargo > 0), warships: all.filter(d => d.cargo <= 0) };
+  return { freighters: all.filter(d => !d.armed && d.cargo > 0), warships: all.filter(d => d.armed || d.cargo <= 0) };
 }
 function ecCvFleetTotals() {
   const f = EC.cvFleet || {}; let cap = 0, escort = 0;
-  Object.keys(f).forEach(id => { const c = ecCvShipCargo(id); if (c > 0) cap += (f[id] || 0) * c; else escort += (f[id] || 0); });
+  Object.keys(f).forEach(id => {
+    const n = f[id] || 0; if (n <= 0) return;
+    const c = ecCvShipCargo(id);
+    if (c > 0) cap += n * c;                 // трюм считаем у всех, кто его имеет
+    if (ecCvShipArmed(id)) escort += n;      // защита — только от вооружённых
+  });
   return { cap, escort };
 }
 // Свободная вместимость флота = вся минус занятая активными/ожидающими исходящими путями.
@@ -6971,15 +6986,15 @@ function ecCvFleetHtml() {
 
   const row = (d, tag, isFr) => {
     const n = f[d.id] || 0;
-    // Грузовые: закрепляются поштучно — доступно = владение − занятое другими путями.
-    // Эскорт: ограничен числом свободных боевых (по-старому).
-    const avail = isFr ? ecCvShipAvail(d.id) : d.qty;
-    const canAdd = isFr ? (n < avail) : (n < d.qty && escort + 1 <= freeWar);
-    const busy = isFr && avail < d.qty;   // часть закреплена другими путями
+    // Любой корабль с трюмом закрепляется поштучно — доступно = владение − занятое
+    // другими путями (боевые с остатком трюма тоже уходят в ships пути).
+    const avail = (isFr || d.cargo > 0) ? ecCvShipAvail(d.id) : d.qty;
+    const canAdd = isFr ? (n < avail) : (n < avail && escort + 1 <= freeWar);
+    const busy = avail < d.qty;   // часть закреплена другими путями
     const availTxt = busy ? `свободно ${ecNum(avail)} из ${ecNum(d.qty)}` : `в наличии ${ecNum(d.qty)}`;
-    const title = isFr
-      ? (n >= avail && avail < d.qty ? 'Остальные корабли этого типа закреплены за другими путями — закройте путь, чтобы освободить' : '')
-      : (!canAdd && n < d.qty ? 'Свободные боевые корабли заняты конвоями/рейдами' : '');
+    const title = (n >= avail && avail < d.qty)
+      ? 'Остальные корабли этого типа закреплены за другими путями — закройте путь, чтобы освободить'
+      : (!isFr && !canAdd && n < avail ? 'Свободные боевые корабли заняты конвоями/рейдами' : '');
     return `<div class="ec-q-row" style="gap:6px">
       <span class="ec-r-name">${esc(d.name)} <i style="color:var(--t4)">${tag} · ${availTxt}</i></span>
       <span class="ec-mine-step">
@@ -6989,9 +7004,13 @@ function ecCvFleetHtml() {
       </span></div>`;
   };
   const frHtml = freighters.length ? freighters.map(d => row(d, `📦 груз ${ecNum(d.cargo)}`, true)).join('')
-    : `<div class="ec-empty" style="padding:6px">Нет грузовых кораблей — постройте корабль с грузовыми ангарами (Конструктор → Корабль) и заложите его в Военпроме.${
+    : `<div class="ec-empty" style="padding:6px">${warships.some(d => d.cargo > 0)
+        ? 'Чистых грузовиков нет — но боевые корабли ниже везут остаток своего трюма.'
+        : 'Нет грузовых кораблей — постройте корабль с грузовыми ангарами (Конструктор → Корабль) и заложите его в Военпроме.'}${
         warships.some(d => d.orphan) ? ' <b>Внимание:</b> у части ваших кораблей удалён проект в конструкторе — их трюм посчитать невозможно, они годятся только в эскорт. Спишите их и постройте заново.' : ''}</div>`;
-  const wsHtml = warships.length ? warships.map(d => row(d, d.orphan ? '⚔ эскорт · проект удалён из конструктора, трюм не читается' : '⚔ эскорт', false)).join('')
+  const wsHtml = warships.length ? warships.map(d => row(d,
+      d.orphan ? '⚔ эскорт · проект удалён из конструктора, трюм не читается'
+        : (d.cargo > 0 ? `⚔ эскорт · 📦 везёт ${ecNum(d.cargo)}` : '⚔ эскорт'), false)).join('')
     : '<div class="ec-empty" style="padding:6px">Нет боевых кораблей для эскорта.</div>';
 
   // Информационная панель о состоянии флота
@@ -7000,7 +7019,8 @@ function ecCvFleetHtml() {
   else if (cargoSel > freeCap) statusLine += ` <i style="color:var(--t3)">(выбранный флот тянет ${ecNum(cargoSel)}, но свободно лишь ${ecNum(freeCap)} — остальное заняли активные пути)</i>`;
 
   // Грузовой флот в трюме (поштучное закрепление за путями)
-  const ownedShipCargo = freighters.reduce((a, d) => a + d.cargo * d.qty, 0);
+  // трюм считаем по ВСЕМУ флоту: боевые с остатком вместимости тоже возят
+  const ownedShipCargo = freighters.concat(warships).reduce((a, d) => a + d.cargo * d.qty, 0);
   const committedMap = ecCvCommittedShips();
   let reservedShipCargo = 0;
   Object.keys(committedMap).forEach(id => { reservedShipCargo += ecCvShipCargo(id) * committedMap[id]; });
