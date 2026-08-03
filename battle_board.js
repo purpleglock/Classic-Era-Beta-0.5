@@ -652,6 +652,28 @@ function bbClearPlace() {
   if (!BB.place.length) return;
   BB.place = []; BB.pick = null; bbRender();
 }
+// ── ЛЕНТА БОРТОВ: ЛИСТАНИЕ ──────────────────────────────────
+// Полоса прокрутки у ленты скрыта (на телефоне она уродует док), и на
+// мыши листать было НЕЧЕМ: колесо крутит по вертикали, а лента едет по
+// горизонтали. Отсюда стрелки ‹ › по краям и колесо, переложенное в
+// горизонтальный скролл. Пальцем лента как листалась, так и листается.
+function bbTrayScroll(dir) {
+  const el = document.getElementById('bbd-tray'); if (!el) return;
+  // шаг = видимая ширина без одной карточки, чтобы край оставался виден
+  const step = Math.max(160, el.clientWidth - 184);
+  el.scrollBy({ left: dir * step, behavior: 'smooth' });
+}
+// Колесо над лентой листает её, а не проваливается в доску под ней.
+function bbBindTray() {
+  const el = document.getElementById('bbd-tray'); if (!el) return;
+  el.onwheel = ev => {
+    const d = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
+    if (!d) return;
+    el.scrollLeft += d;
+    ev.preventDefault(); ev.stopPropagation();
+  };
+}
+
 function bbRenderDeploy(s) {
   const ov = document.getElementById('bb-ov'); if (!ov) return;
   BB.deployUI = true;
@@ -706,7 +728,11 @@ function bbRenderDeploy(s) {
         <span class="bbd-hud-foe">${foe ? '● враг готов' : '○ враг ставит'}</span>
       </div>
 
-      <div class="bbd-tray" id="bbd-tray">${chips || '<div class="bbd-none">Резерв пуст</div>'}</div>
+      <div class="bbd-tray-wrap">
+        <button class="bbd-tray-nav bbd-tray-l" onclick="bbTrayScroll(-1)" title="Предыдущие борта">‹</button>
+        <div class="bbd-tray" id="bbd-tray">${chips || '<div class="bbd-none">Резерв пуст</div>'}</div>
+        <button class="bbd-tray-nav bbd-tray-r" onclick="bbTrayScroll(1)" title="Следующие борта">›</button>
+      </div>
 
       <div class="bbd-cmd">
         <button class="bbd-ic" ${mine ? 'disabled' : ''} onclick="bbAutoPlace()" title="Расставить автоматически">⚡</button>
@@ -722,6 +748,7 @@ function bbRenderDeploy(s) {
     </div>`;
 
   bbMount();
+  bbBindTray();
 }
 
 // Занят ли гекс (кроме перетаскиваемого борта с индексом skip).

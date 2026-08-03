@@ -1681,11 +1681,32 @@ function bgZoom(f) {
 // ландшафт, выбор борта, расстановка — сцену приводит в соответствие этот вызов.
 function bgRefresh() {
   if (!BG.ready) return;
-  bgSyncTerrain();
-  bgSyncUnits();
-  bgSyncStatus();
-  bgSyncGhosts();
-  bgSyncOverlay();
+  // КАЖДЫЙ ШАГ В СВОЕЙ ОБЁРТКЕ. Сорвавшийся синхронизатор не имеет права
+  // оставить доску пустой: раньше одно исключение (например на незнакомом
+  // классе корабля у ботов) выносило разом и борта, и призраки расстановки,
+  // и подсветку — на экране оставалось поле со звёздами и «ничего не ставится».
+  // Теперь падает только свой кусок, а причина едет в консоль и в тост.
+  const steps = [['ландшафт', bgSyncTerrain], ['борта', bgSyncUnits],
+                 ['подписи', bgSyncStatus], ['расстановка', bgSyncGhosts],
+                 ['подсветка', bgSyncOverlay]];
+  for (const [nm, fn] of steps) {
+    try { fn(); } catch (e) { bgSyncFail(nm, e); }
+  }
+  // КАДР ОБЯЗАТЕЛЕН. Синхронизаторы только помечают сцену грязной, а рисует
+  // её цикл — и он спит, пока его не разбудят. Без этого выставленный борт и
+  // приехавшее подкрепление появлялись на доске лишь после того, как игрок
+  // случайно тронет камеру: сцена уже правильная, а кадр старый.
+  BG.dirty = true; bgKick();
+}
+
+// Сбой синхронизации: в консоль полностью, игроку — коротко и один раз на шаг
+// (иначе тост полезет на каждый опрос сервера).
+function bgSyncFail(step, e) {
+  console.error('[bg] сбой синхронизации сцены: ' + step, e);
+  const seen = BG._failed || (BG._failed = new Set());
+  if (seen.has(step)) return;
+  seen.add(step);
+  if (typeof toast === 'function') toast(`3D-доска: сбой «${step}» — ${e && e.message ? e.message : e}`, 'err');
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1821,7 +1842,7 @@ function bgPaint() { BG.dirty = true; bgKick(); }
 function bgDispose() {
   if (BG.raf) cancelAnimationFrame(BG.raf);
   BG.raf = 0; BG.ready = false; BG.camAnim = null;
-  BG.spin = null; BG.orbitMode = false;
+  BG.spin = null; BG.orbitMode = false; BG._failed = null;
   BG.fx.forEach(n => n.kill()); BG.fx.clear();
   BG.trail.forEach(t => t.material.dispose()); BG.trail.clear();
   BG.units.clear();

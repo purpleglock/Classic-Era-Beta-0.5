@@ -4452,19 +4452,50 @@ async function adTestDuelOpen() {
 // автоматически прогоняет их ход (admin_bot_turn) на bbMaybeBotTurn, как только
 // наступает ход стороны-ботов. Кнопка «Ход ботов» — ручной запасной запуск.
 // Каждый бот едет к ближайшему врагу и стреляет. Обычная доска 60×80.
+
+// Ростер ботов по умолчанию — Железный Дивизион (пиратская вольница).
+// Зеркало _bt_bot_roster_default() в базе: меняешь тут — меняй и там.
+const AD_BOT_ROSTER_DEF = 'fac_5bfbfad5f8';
+
+// Список держав, у которых есть СВОИ ship-проекты — ростер для ботов.
+// Значение '*' = весь каталог вперемешку. Общедоступные проекты
+// (faction_id пуст) и ростер клуба в выбор не попадают: они не «лицо» державы.
+function adBotRosterOptions(sel) {
+  const cnt = new Map();
+  for (const d of (AD.designs || [])) {
+    if (d.category !== 'ship' || !d.faction_id || d.faction_id === 'club') continue;
+    cnt.set(d.faction_id, (cnt.get(d.faction_id) || 0) + 1);
+  }
+  const nm = fid => (AD.byFid.get(fid)?.app?.name) || fid;
+  return [...cnt.entries()]
+    .sort((a, b) => nm(a[0]).localeCompare(nm(b[0]), 'ru'))
+    .map(([fid, n]) => `<option value="${esc(fid)}"${fid === sel ? ' selected' : ''}>${esc(nm(fid))} · ${n} пр.</option>`)
+    .join('');
+}
+
 function adBotBattleSection() {
   const t = AD.botBattle;
+  // в селекте держим ростер текущего боя, а без боя — дефолтный (Железный Дивизион);
+  // '*' — явный выбор «весь каталог» (в бою он приходит как bot_fid = null)
+  const cur = t && t.battle_id ? (t.bot_fid || '*') : AD_BOT_ROSTER_DEF;
+  const roster = t && t.battle_id && t.bot_fid
+    ? ` · ростер: <b>${esc(t.bot_fname || t.bot_fid)}</b>`
+    : (t && t.battle_id ? ' · ростер: весь каталог' : '');
   const status = t && t.battle_id
     ? (t.status === 'forming'
-        ? 'Текущий: <b>расстановка</b> — открой доску и выложи свой флот, затем «В бой».'
-        : `Текущий: ${t.status === 'done' ? 'окончен' + (t.winner ? ', победа ' + esc(t.winner) : '') : 'идёт бой'}${t.bot_turn ? ' · <b>сейчас ход ботов</b>' : ' · сейчас твой ход'}`)
+        ? 'Текущий: <b>расстановка</b> — открой доску и выложи свой флот, затем «В бой».' + roster
+        : `Текущий: ${t.status === 'done' ? 'окончен' + (t.winner ? ', победа ' + esc(t.winner) : '') : 'идёт бой'}${t.bot_turn ? ' · <b>сейчас ход ботов</b>' : ' · сейчас твой ход'}${roster}`)
     : 'Бой с ботами ещё не создавался (или статус не загружен).';
   return `<div class="fm-danger-act" style="align-items:flex-start;flex-direction:column;gap:10px">
     <div class="fm-danger-label" style="width:100%">
       <div>🤖 Тестовый бой с ботами</div>
-      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Обычный бой 60×80: <b>ты — нападающий (слева)</b>, боты — оборона (справа), на случайных свежих кораблях. После создания бой встаёт в <b>фазу расстановки</b>: открой доску, <b>сам выложи свой флот из полного каталога</b> и жми «В бой» — только тогда бой начнётся, ход за тобой. Боты уже расставлены. Дальше ходи как обычно — <b>боты ходят сами</b>, как только наступает их ход (каждый едет к ближайшему врагу и стреляет). Кнопка «Ход ботов» — ручной запуск, если доска открыта иначе (через «☄ Горячие точки»). Повторное создание <b>сносит прежнюю доску</b>.</div>
+      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Обычный бой 60×80: <b>ты — нападающий (слева)</b>, боты — оборона (справа), на случайных свежих кораблях. <b>Ростер ботов</b> задаёт, чьи проекты они возьмут: держава — <b>только её собственные корабли</b> (общедоступные и чужие проекты не берутся, даже если держава может их строить); «весь каталог» — все проекты игры вперемешку. По умолчанию стоит <b>Железный Дивизион</b> (пиратская вольница). После создания бой встаёт в <b>фазу расстановки</b>: открой доску, <b>сам выложи свой флот из полного каталога</b> и жми «В бой» — только тогда бой начнётся, ход за тобой. Боты уже расставлены. Дальше ходи как обычно — <b>боты ходят сами</b>, как только наступает их ход (каждый едет к ближайшему врагу и стреляет). Кнопка «Ход ботов» — ручной запуск, если доска открыта иначе (через «☄ Горячие точки»). Повторное создание <b>сносит прежнюю доску</b>.</div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;width:100%">
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1 1 220px">
+        <label class="fm-dim" style="font-size:11px">Ростер ботов</label>
+        <select id="ad-bot-fid" class="ec-input" style="min-width:200px"><option value="*"${cur === '*' ? ' selected' : ''}>— весь каталог —</option>${adBotRosterOptions(cur)}</select>
+      </div>
       <div style="display:flex;flex-direction:column;gap:3px">
         <label class="fm-dim" style="font-size:11px">Кораблей у ботов</label>
         <input id="ad-bot-n" class="ec-input" type="number" min="1" max="80" value="3" style="width:90px">
@@ -4479,12 +4510,14 @@ function adBotBattleSection() {
 async function adBotBattle() {
   if (AD.busy) return;
   const n = Math.max(1, Math.min(80, parseInt(document.getElementById('ad-bot-n')?.value, 10) || 3));
+  const fid = document.getElementById('ad-bot-fid')?.value || AD_BOT_ROSTER_DEF;
   if (AD.botBattle?.battle_id && !confirm('Прежняя доска боя с ботами будет снесена и создана заново. Продолжить?')) return;
   AD.busy = true;
   try {
-    const r = await apiFetch('rpc/admin_bot_battle', { method: 'POST', body: JSON.stringify({ p_n: n }) });
-    AD.botBattle = { battle_id: r?.battle_id, status: 'forming', bot_turn: false };
-    toast(`Бой создан: боты — ${r?.n || n} случайн. кораблей. Открой доску и расставь свой флот.`, 'ok');
+    const r = await apiFetch('rpc/admin_bot_battle', { method: 'POST', body: JSON.stringify({ p_n: n, p_bot_fid: fid }) });
+    AD.botBattle = { battle_id: r?.battle_id, status: 'forming', bot_turn: false,
+                     bot_fid: r?.bot_fid || null, bot_fname: r?.bot_fname || null };
+    toast(`Бой создан: боты — ${r?.n || n} кораблей${r?.bot_fname ? ' державы «' + r.bot_fname + '»' : ' из общего каталога'}. Открой доску и расставь свой флот.`, 'ok');
     adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }

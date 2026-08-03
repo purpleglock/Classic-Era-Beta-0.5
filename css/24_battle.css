@@ -382,14 +382,26 @@
 /* лента бортов: горизонтальный скролл поверх карты.
    touch-action: pan-x на самой ленте И на карточках — иначе палец «залипает»
    на карточке и лента не прокручивается (борта за экраном не выбрать). */
-.bbd-tray {
+/* обёртка ленты: держит стрелки-листалки по краям */
+.bbd-tray-wrap {
   position: absolute; left: 0; right: 0; bottom: 68px; z-index: 5;
-  display: flex; gap: 8px; padding: 8px 8px 10px;
+  background: linear-gradient(rgba(4,6,11,0), rgba(4,6,11,.88) 32%);
+}
+.bbd-tray {
+  display: flex; gap: 8px; padding: 8px 44px 10px;
   overflow-x: auto; overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch; touch-action: pan-x;
-  background: linear-gradient(rgba(4,6,11,0), rgba(4,6,11,.88) 32%);
   scrollbar-width: none;
 }
+/* ‹ › — единственный способ листать мышью: полосу прокрутки лента прячет */
+.bbd-tray-nav {
+  position: absolute; top: 0; bottom: 0; width: 36px; z-index: 1;
+  border: 0; cursor: pointer; padding: 0;
+  background: rgba(4,10,16,.86); color: #bfe9f7; font-size: 22px; line-height: 1;
+}
+.bbd-tray-nav:hover { background: rgba(90,220,240,.26); }
+.bbd-tray-l { left: 0; }
+.bbd-tray-r { right: 0; }
 .bbd-tray::-webkit-scrollbar { display: none; }
 .bbd-s {
   position: relative; flex: 0 0 auto; width: 176px; min-height: 78px;
@@ -462,7 +474,9 @@
   .bbd-back { width: 48px; height: 48px; left: 14px; top: 14px; }
   .bbd-hud { right: 14px; top: 14px; padding: 9px 14px; font-size: 12px; }
   .bbd-hud-n b { font-size: 19px; }
-  .bbd-tray { padding: 10px 14px 12px; gap: 10px; bottom: 72px; }
+  .bbd-tray-wrap { bottom: 72px; }
+  .bbd-tray { padding: 10px 50px 12px; gap: 10px; }
+  .bbd-tray-nav { width: 42px; }
   .bbd-s { width: 224px; }
   .bbd-cmd { padding: 10px 14px; }
   .bbd-fire { flex: 0 0 300px; margin-left: auto; }
