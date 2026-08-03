@@ -45,6 +45,7 @@ const BB = {
   sheet: null,       // открытая шторка: 'log' | 'reinf' | 'unit'
   deployUI: false,   // открыт отдельный экран фазы расстановки?
   shipDrag: null,    // расстановка: тащим уже стоящий борт {i, cell}
+  fac: {},           // fid → {name, color, herald} — гербы держав в бою
   terr: null,        // Map "x:y" → 'ast'|'neb'|'grv'|'deb'
   reach: null,       // Map "x:y" → {steps, path} для выбранного корабля
   ptrs: new Map(),
@@ -90,8 +91,66 @@ async function bbOpen(battleId, spectate, botFoe) {
   ov.innerHTML = `<div class="bb-load">Связь с полем боя…</div>`;
   ov.classList.add('show');
   document.body.style.overflow = 'hidden';
+  const facs = bbLoadFacs();       // справочник гербов — параллельно со снимком боя
   await bbReload();
+  // герб доехал позже снимка — перерисовать доску с ним (DOM + 3D-подписи)
+  facs.then(() => { if (BB.id && BB.st) bbRender(); });
   bbStartPoll();
+}
+
+// ── ГЕРБЫ ДЕРЖАВ ────────────────────────────────────────────
+// В бою на одной стороне бывает не одна держава: дуэли клуба, боты,
+// союзники в общей свалке. Имя борта об этом молчит, поэтому рядом с
+// именем идёт герб владельца — тот же, что на карте: картинка из анкеты
+// (faction_applications.herald_url), а без неё — щиток цветом фракции с
+// инициалами. Справочник грузится ОДИН раз на открытие боя: держав
+// десятки, это дешевле, чем тянуть герб на каждый борт.
+async function bbLoadFacs() {
+  try {
+    const [facs, apps] = await Promise.all([
+      dbGet('map_factions', 'select=id,name,color').catch(() => []),
+      dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,herald_url').catch(() => []),
+    ]);
+    const reg = {};
+    (facs || []).forEach(f => {
+      if (f && f.id) reg[f.id] = { name: f.name || '', color: f.color || '', herald: '' };
+    });
+    (apps || []).forEach(a => {
+      if (!a || !a.faction_id) return;
+      const r = reg[a.faction_id] || (reg[a.faction_id] = { name: '', color: '', herald: '' });
+      r.herald = (a.herald_url || '').trim();      // в анкете бывает пустая строка, а не null
+      if (!r.name) r.name = a.name || '';
+    });
+    BB.fac = reg;
+  } catch (e) { /* герб — украшение: без справочника доска работает как раньше */ }
+}
+
+// Держава борта: fid приходит в battle_state/fc_watch_state вместе с именем
+// державы (fname) — справочник нужен только ради герба и цвета.
+// У «неопознанного контакта» fid нет: чей он — как раз то, что скрыто.
+function bbFacOf(u) {
+  const fid = u && u.fid; if (!fid) return null;
+  const r = (BB.fac || {})[fid] || {};
+  return { fid, name: r.name || u.fname || '', color: r.color || '', herald: r.herald || '' };
+}
+// Цвет фракции идёт с карты полупрозрачным (заливка территории) — на щитке
+// герба он превратился бы в грязь, поэтому альфу выкидываем.
+function bbFacCol(c) {
+  const m = String(c || '').match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  return m ? `rgb(${m[1]},${m[2]},${m[3]})` : '#33506a';
+}
+function bbFacIni(name) {
+  const w = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!w.length) return '?';
+  return (w.length > 1 ? w[0][0] + w[1][0] : w[0].slice(0, 2)).toUpperCase();
+}
+// Значок державы для разметки (карточка борта, полоска выбранного, шторка)
+function bbFacIco(u) {
+  const f = bbFacOf(u); if (!f) return '';
+  const ttl = esc(f.name || 'держава');
+  return f.herald
+    ? `<img class="bb-fac-ico" src="${esc(f.herald)}" alt="" title="${ttl}" loading="lazy">`
+    : `<span class="bb-fac-ico bb-fac-ph" title="${ttl}" style="background:${bbFacCol(f.color)}">${esc(bbFacIni(f.name))}</span>`;
 }
 function bbClose() {
   bbStopPoll();
@@ -389,14 +448,14 @@ function bbRender() {
         <button onclick="bbSheet(null)">✕</button></div>
       <div class="bbf-sheet-b">${bbReinfPanel(s) || '<div class="bb-empty">Резерв пуст.</div>'}</div></div>`;
   } else if (BB.sheet === 'unit' && sel) {
-    sheet = `<div class="bbf-sheet"><div class="bbf-sheet-h">${esc(sel.name)}
+    sheet = `<div class="bbf-sheet"><div class="bbf-sheet-h"><span class="bbf-sheet-n">${bbFacIco(sel)}${esc(sel.name)}</span>
         <button onclick="bbSheet(null)">✕</button></div>
       <div class="bbf-sheet-b">${bbUnitPanel(s)}</div></div>`;
   }
 
   // ── Полоска выбранного корабля: коротко и всегда на виду ──
   const bar = sel ? `<div class="bbf-sel" onclick="bbSheet('unit')">
-      <span class="bbf-sel-n">${esc(sel.name)}</span>
+      <span class="bbf-sel-n">${bbFacIco(sel)}${esc(sel.name)}</span>
       <span class="bbf-sel-hp"><i style="width:${Math.max(0, Math.min(100, sel.hp / sel.max_hp * 100))}%"></i></span>
       <span class="bbf-sel-s">${sel.hp}/${sel.max_hp} · ход ${sel.speed}${sel.moved ? ' (истрачен)' : ''} · до ${sel.rng} гекс</span>
       <span class="bbf-sel-more">ТТХ ▸</span>
@@ -420,6 +479,7 @@ function bbRender() {
         <button class="bbd-ic" onclick="bbSheet('log')" title="Журнал боя">▤</button>
         ${poolLeft ? `<button class="bbd-ic" onclick="bbSheet('reinf')" title="Подкрепление">⊕</button>` : ''}
         ${s.can_force ? `<button class="bbd-ic" onclick="bbForce()" title="Прожать просроченный ход">⏱</button>` : ''}
+        ${bbOrbitBtns()}
         <button class="bbd-ic" onclick="bbZoomBtn(1/1.3)" title="Отдалить">−</button>
         <button class="bbd-ic" onclick="bbZoomBtn(1.3)" title="Приблизить">+</button>
         <button class="bbd-ic" onclick="bbCamHome()" title="К своим кораблям">⌂</button>
@@ -470,6 +530,7 @@ function bbTry3D() {
     BB.cv.style.display = 'none';
     if (BB.deployUI) bgCamDeploy();
     bgRefresh();
+    bbRender();          // кнопки камеры (вращение) есть только у 3D-доски
   });
 }
 
@@ -650,6 +711,7 @@ function bbRenderDeploy(s) {
       <div class="bbd-cmd">
         <button class="bbd-ic" ${mine ? 'disabled' : ''} onclick="bbAutoPlace()" title="Расставить автоматически">⚡</button>
         <button class="bbd-ic" ${mine || !BB.place.length ? 'disabled' : ''} onclick="bbClearPlace()" title="Снять всех">✕</button>
+        ${bbOrbitBtns()}
         <button class="bbd-ic" onclick="bbZoomBtn(1/1.3)" title="Отдалить">−</button>
         <button class="bbd-ic" onclick="bbZoomBtn(1.3)" title="Приблизить">+</button>
         <button class="bbd-ic" onclick="bbCamDeploy(1)" title="К своей зоне">⌂</button>
@@ -778,8 +840,8 @@ function bbUnitPanel(s) {
     .slice().sort((a, b) => (b.rng || 0) - (a.rng || 0))
     .map(g => `<div class="bb-stat"><span>${bbGroupLabel(g)}${g.shots > 1 && !bbIsHeal(g) ? ` · залп ×${g.shots}` : ''}</span><b>${bbIsHeal(g) ? `+${g.dmg} HP союзнику` : g.dmg} · до ${g.rng} гекс.</b></div>`).join('');
   return `<div class="bb-panel">
-      <div class="bb-panel-t">${esc(u.name)}</div>
-      <div class="bb-panel-h">${bbClsName(u.cls)}${u.mine && u.acted ? ' · <b>активирован</b>' : ''}${u.flash ? ' · <b style="color:#ff5c8a">позиция раскрыта выстрелом</b>' : ''}</div>
+      <div class="bb-panel-t">${bbFacIco(u)}${esc(u.name)}</div>
+      <div class="bb-panel-h">${bbFacOf(u) ? esc(bbFacOf(u).name || 'держава') + ' · ' : ''}${bbClsName(u.cls)}${u.mine && u.acted ? ' · <b>активирован</b>' : ''}${u.flash ? ' · <b style="color:#ff5c8a">позиция раскрыта выстрелом</b>' : ''}</div>
       <div class="bb-stat"><span>Корпус</span><b>${u.hp} / ${u.max_hp}</b></div>
       <div class="bb-bar-hp"><i style="width:${pct(u.hp / u.max_hp * 100)}%"></i></div>
       ${u.max_shield > 0 ? `<div class="bb-stat"><span>Щит</span><b>${u.shield} / ${u.max_shield}${bbTerra(u.x, u.y) === 'neb' ? ' (в туманности = 0)' : ''}</b></div>
@@ -1062,6 +1124,29 @@ function bbZoomAt(f, sx, sy) {
 function bbZoomBtn(f) {
   if (BB.glOn) { bgZoom(f); return; }          // в 3D «приблизить» — это подъехать
   bbZoomAt(f, BB.vw / 2, BB.vh / 2);
+}
+
+// ── ВРАЩЕНИЕ КАМЕРЫ (3D) ────────────────────────────────────
+// На телефоне поворачивать было нечем: ПКМ и Shift там нет, а доворот щипком
+// двумя пальцами срабатывает через раз. Кнопка «⟳» включает режим обзора —
+// одним пальцем крутим камеру, а не тянем поле; тап по гексу при этом
+// работает как раньше. Пока режим включён, рядом появляются стрелки на
+// четверть оборота: точный поворот вообще без протяжки.
+function bbOrbitBtns() {
+  if (!BB.glOn || typeof bgOrbitMode !== 'function') return '';
+  const on = typeof BG !== 'undefined' && BG.orbitMode;
+  return `${on ? `<button class="bbd-ic" onclick="bbOrbitStep(-1)" title="Повернуть влево">↺</button>
+      <button class="bbd-ic" onclick="bbOrbitStep(1)" title="Повернуть вправо">↻</button>` : ''}
+    <button class="bbd-ic${on ? ' bbd-ic-on' : ''}" onclick="bbOrbit()"
+      title="${on ? 'Обзор включён: палец вращает камеру' : 'Вращать камеру пальцем'}">⟳</button>`;
+}
+function bbOrbit() {
+  if (!BB.glOn || typeof bgOrbitMode !== 'function') return;
+  bgOrbitMode();
+  bbRender();                                  // кнопка перерисуется активной
+}
+function bbOrbitStep(dir) {
+  if (BB.glOn && typeof bgOrbitStep === 'function') bgOrbitStep(dir);
 }
 
 // ── Ввод: пан/пинч/клик/ховер ───────────────────────────────

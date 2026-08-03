@@ -216,6 +216,24 @@ function bgCamHome() {
   bgApplyCam(); BG.dirty = true; bgKick();
 }
 
+// ── РЕЖИМ ОБЗОРА (вращение камеры пальцем) ──────────────────
+// На телефоне повернуть камеру было практически нечем: ПКМ и Shift там нет,
+// а доворот щипком ловится через раз (порог в 12°, иначе камеру ведёт при
+// каждом обычном зуме). Кнопка «⟳» в панели боя включает режим обзора —
+// тогда ОДИН палец крутит и наклоняет камеру, а не тянет поле. Тап без
+// протяжки при этом работает как раньше: по гексу можно ткнуть, не выходя
+// из режима.
+function bgOrbitMode(on) {
+  BG.orbitMode = (on == null) ? !BG.orbitMode : !!on;
+  if (BG.cv) BG.cv.style.cursor = BG.orbitMode ? 'move' : '';
+  return BG.orbitMode;
+}
+// Шаг поворота кнопкой-стрелкой: четверть оборота с плавным доездом
+function bgOrbitStep(dir) {
+  BG.spin = { yaw0: BG.yaw, yaw1: BG.yaw + dir * Math.PI / 4, t0: performance.now(), dur: 320 };
+  bgKick();
+}
+
 function bgResize() {
   if (!BG.renderer) return;
   const box = BG.cv.parentElement.getBoundingClientRect();
@@ -281,9 +299,9 @@ function bgBindInput() {
       BG.drag = BG.orbit = null;
       return;
     }
-    // ПКМ / Shift — орбита (осмотреться), ЛКМ — тянуть поле под курсором
-    if (ev.button === 2 || ev.shiftKey) {
-      BG.orbit = { sx: p.sx, sy: p.sy, yaw: BG.yaw, pitch: BG.pitch };
+    // ПКМ / Shift / включённый режим обзора — орбита, иначе тянем поле
+    if (ev.button === 2 || ev.shiftKey || BG.orbitMode) {
+      BG.orbit = { sx: p.sx, sy: p.sy, yaw: BG.yaw, pitch: BG.pitch, moved: false };
       BG.drag = null;
     } else {
       const w = bgPickWorld(p.sx, p.sy);
@@ -335,8 +353,11 @@ function bgBindInput() {
       return;
     }
     if (BG.orbit) {
-      BG.yaw = BG.orbit.yaw + (p.sx - BG.orbit.sx) * 0.006;
-      BG.pitch = Math.max(BG_PITCH_MIN, Math.min(BG_PITCH_MAX, BG.orbit.pitch + (p.sy - BG.orbit.sy) * 0.005));
+      const O = BG.orbit;
+      if (Math.abs(p.sx - O.sx) + Math.abs(p.sy - O.sy) > 5) O.moved = true;
+      BG.yaw = O.yaw + (p.sx - O.sx) * 0.006;
+      BG.pitch = Math.max(BG_PITCH_MIN, Math.min(BG_PITCH_MAX, O.pitch + (p.sy - O.sy) * 0.005));
+      BG.spin = null;                             // палец главнее кнопки
       bgApplyCam(); BG.dirty = true; bgKick();
       return;
     }
@@ -374,12 +395,15 @@ function bgBindInput() {
   };
 
   cv.onpointerup = ev => {
-    const wasDrag = BG.drag && BG.drag.moved;
     const p = bgLocalXY(ev);
     BG.ptrs.delete(ev.pointerId);
     if (BG.ptrs.size < 2) BG.pinch = null;
-    const d = BG.drag; BG.drag = null; BG.orbit = null;
-    if (d && !wasDrag) {
+    const d = BG.drag, o = BG.orbit;
+    BG.drag = null; BG.orbit = null;
+    // тап без протяжки = выбор гекса, в том числе в режиме обзора: иначе ради
+    // каждого клика по борту пришлось бы гасить режим кнопкой
+    const tap = (d && !d.moved) || (o && !o.moved);
+    if (tap) {
       const c = bgHexAt(p.sx, p.sy);
       if (c && typeof bbClick === 'function') bbClick(c.x, c.y);
     }
@@ -800,6 +824,92 @@ function bgTextSprite(str, col, h, opa) {
   const t = bgTexText(str);
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({
     map: t, color: col, transparent: true, opacity: opa == null ? 0.85 : opa,
+    depthWrite: false, depthTest: false }));
+  sp.scale.set(h * t.userData.w / t.userData.h, h, 1);
+  return sp;
+}
+
+// ── ПОДПИСЬ БОРТА: ГЕРБ ДЕРЖАВЫ + ИМЯ ───────────────────────
+// Имя борта не говорит, ЧЕЙ он: на стороне бывает не одна держава (дуэли
+// клуба, боты, союзники). Поэтому перед именем идёт герб владельца.
+//
+// Герб ВПЕКАЕТСЯ В ТУ ЖЕ ТЕКСТУРУ, что и имя, а не висит отдельным спрайтом:
+// отдельный спрайт приходилось растить до читаемого размера, и он лез на
+// полоски корпуса и щита. В общей текстуре он ровно в высоту строки — выше
+// подписи ничего не занимает и от имени не отрывается.
+// Цвет стороны запекается в САМ ТЕКСТ (материал остаётся белым) — иначе
+// тонировка спрайта перекрасила бы и герб.
+// Герб приезжает сетью, поэтому канва перерисовывается по onload.
+// crossOrigin ОБЯЗАТЕЛЕН: канвой с «грязной» картинкой WebGL текстуру не
+// зальёт (Storage отдаёт CORS-заголовки, как для берега рыбалки).
+function bgLabelKey(str, fid, col) {
+  const f = (fid && typeof bbFacOf === 'function') ? bbFacOf({ fid }) : null;
+  return col + '|' + (fid || '') + '|' + ((f && f.herald) || '') + '|' + str;
+}
+function bgTexLabel(str, fid, col) {
+  const cache = BG._lbl || (BG._lbl = {});
+  const key = bgLabelKey(str, fid, col);
+  if (cache[key]) return cache[key];
+  const f = (fid && typeof bbFacOf === 'function') ? bbFacOf({ fid }) : null;
+  const F = 48, pad = 12, gap = 10, E = f ? F : 0;   // герб = ровно высота строки
+  const font = '600 ' + F + 'px system-ui, "Segoe UI", sans-serif';
+  const cv = document.createElement('canvas');
+  const m = cv.getContext('2d');
+  m.font = font;
+  const tw = Math.max(8, Math.ceil(m.measureText(str).width));
+  const w = pad * 2 + tw + (E ? E + gap : 0), h = F + pad * 2;
+  cv.width = w; cv.height = h;
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.userData = { w, h };
+  const css = '#' + ('000000' + (col >>> 0).toString(16)).slice(-6);
+  const paint = im => {
+    const x = cv.getContext('2d');
+    x.clearRect(0, 0, w, h);
+    if (E) {
+      const ey = (h - E) / 2;
+      x.fillStyle = 'rgba(4,8,14,0.8)';                  // кайма: щиток читается на любом фоне
+      x.fillRect(pad - 3, ey - 3, E + 6, E + 6);
+      x.fillStyle = (typeof bbFacCol === 'function') ? bbFacCol(f && f.color) : '#33506a';
+      x.fillRect(pad, ey, E, E);
+      if (im) {
+        // cover-fit по короткой стороне: герб не мнётся и не оставляет полей
+        const k = Math.max(E / im.naturalWidth, E / im.naturalHeight);
+        const iw = im.naturalWidth * k, ih = im.naturalHeight * k;
+        x.save();
+        x.beginPath(); x.rect(pad, ey, E, E); x.clip();
+        x.drawImage(im, pad + (E - iw) / 2, ey + (E - ih) / 2, iw, ih);
+        x.restore();
+      } else {
+        x.fillStyle = '#061018';
+        x.font = '700 ' + Math.round(F * 0.44) + 'px system-ui, "Segoe UI", sans-serif';
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText((typeof bbFacIni === 'function') ? bbFacIni(f && f.name) : '?', pad + E / 2, h / 2 + 1);
+      }
+    }
+    x.font = font; x.textAlign = 'left'; x.textBaseline = 'middle';
+    x.lineJoin = 'round'; x.lineWidth = F * 0.18;
+    x.strokeStyle = 'rgba(0,0,0,0.85)';                  // обводка: текст читается на любом фоне
+    const tx = pad + (E ? E + gap : 0);
+    x.strokeText(str, tx, h / 2);
+    x.fillStyle = css;
+    x.fillText(str, tx, h / 2);
+    t.needsUpdate = true;
+  };
+  paint(null);
+  if (f && f.herald) {
+    const im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = () => { try { paint(im); } catch (e) {} bgPaint(); };
+    im.src = f.herald;                                   // не доехал — остаёмся на щитке с инициалами
+  }
+  return (cache[key] = t);
+}
+// Подпись борта целиком. Материал БЕЛЫЙ: цвет стороны уже в тексте.
+function bgLabelSprite(str, fid, col, h, opa) {
+  const t = bgTexLabel(str, fid, col);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: t, transparent: true, opacity: opa == null ? 0.9 : opa,
     depthWrite: false, depthTest: false }));
   sp.scale.set(h * t.userData.w / t.userData.h, h, 1);
   return sp;
@@ -1435,12 +1545,15 @@ function bgSyncStatus() {
       BG.g.st.add(st.bg, st.hp, st.sh, st.chev);
       BG.stat.set(u.id, st);
     }
-    // имя борта — отдельным спрайтом, пересобираем только когда имя изменилось
-    if (st.nmStr !== u.name) {
-      if (st.nm) { BG.g.st.remove(st.nm); st.nm.material.dispose(); }
-      st.nmStr = u.name;
-      st.nm = u.name ? bgTextSprite(u.name, bgCol(u.mine ? BG_C.mine : BG_C.foe), BB.R * 0.3, 0.8) : null;
-      if (st.nm) BG.g.st.add(st.nm);
+    // подпись борта (герб державы + имя) — отдельным спрайтом. Ключ включает
+    // адрес герба: справочник гербов доезжает позже первого снимка боя, и по
+    // его приходу щиток с инициалами сам сменится на картинку.
+    const col = u.mine ? BG_C.mine : BG_C.foe;
+    const nk = u.name ? bgLabelKey(u.name, u.fid, col) : null;
+    if (st.nmKey !== nk) {
+      if (st.nm) { BG.g.st.remove(st.nm); st.nm.material.dispose(); st.nm = null; }
+      st.nmKey = nk;
+      if (nk) { st.nm = bgLabelSprite(u.name, u.fid, col, BB.R * 0.3, 0.85); BG.g.st.add(st.nm); }
     }
     const hpF = (u.max_hp > 0) ? Math.max(0, Math.min(1, u.hp / u.max_hp)) : 1;
     const shF = (u.max_shield > 0) ? Math.max(0, Math.min(1, u.shield / u.max_shield)) : 0;
@@ -1461,7 +1574,7 @@ function bgSyncStatus() {
     if (live.has(id)) return;
     [st.bg, st.hp, st.sh, st.chev, st.nm].forEach(o => {
       if (!o) return;
-      BG.g.st.remove(o); o.material.dispose();
+      BG.g.st.remove(o); o.material.dispose();   // текстуры общие (кэш) — их не трогаем
     });
     BG.stat.delete(id);
   });
@@ -1637,6 +1750,17 @@ function bgAnimStep(now) {
     if (t >= 1) BG.camAnim = null; else live = true;
   }
 
+  // ПОВОРОТ КНОПКОЙ. Отдельно от доворота к действиям: тот ведёт прицел, а
+  // этот — только угол обзора, и они спокойно идут одновременно.
+  const sp = BG.spin;
+  if (sp) {
+    const t = bbEase(Math.min(1, (now - sp.t0) / sp.dur));
+    BG.yaw = bbLerp(sp.yaw0, sp.yaw1, t);
+    bgApplyCam();
+    BG.dirty = true;
+    if (t >= 1) BG.spin = null; else live = true;
+  }
+
   // ПЕРЕМЕЩЕНИЯ. Просроченные твины снимаем сами: 3D не вправе рассчитывать, что
   // цикл 2D-доски крутится (после выпиливания её не будет вовсе). Пересаживаем
   // борта и на том кадре, где твин снят, — иначе корабль замер бы в шаге от цели.
@@ -1697,6 +1821,7 @@ function bgPaint() { BG.dirty = true; bgKick(); }
 function bgDispose() {
   if (BG.raf) cancelAnimationFrame(BG.raf);
   BG.raf = 0; BG.ready = false; BG.camAnim = null;
+  BG.spin = null; BG.orbitMode = false;
   BG.fx.forEach(n => n.kill()); BG.fx.clear();
   BG.trail.forEach(t => t.material.dispose()); BG.trail.clear();
   BG.units.clear();

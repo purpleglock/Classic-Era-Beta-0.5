@@ -228,6 +228,17 @@
   background: var(--bbc); clip-path: polygon(0 0, 100% 0, 100% 100%);
 }
 .bb-panel-h { color: #6f8998; font-size: 12px; line-height: 1.5; margin-bottom: 8px; }
+/* герб державы у имени борта: тот же значок, что над кораблём на доске */
+.bb-fac-ico {
+  flex: 0 0 auto; width: 16px; height: 16px; object-fit: cover; vertical-align: -3px;
+  margin-right: 6px; border-radius: 2px; background: rgba(90,220,240,.10);
+}
+.bb-fac-ph {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono, monospace); font-size: 8px; font-weight: 700;
+  letter-spacing: 0; color: #061018; text-transform: uppercase;
+}
+.bb-panel-t .bb-fac-ico { margin-right: 0; }   /* в карточке отступ даёт gap */
 .bb-empty { color: #55707e; font-size: 12px; font-style: italic; }
 /* счётчик бюджета драфта (дуэль клуба) */
 .bb-budget { margin: 0 0 10px; }
@@ -434,6 +445,9 @@
 }
 .bbd-ic:hover:not(:disabled) { background: rgba(90,220,240,.26); }
 .bbd-ic:disabled { opacity: .3; cursor: default; }
+/* включённый режим обзора: единственная «залипающая» кнопка панели */
+.bbd-ic-on { background: var(--bbc); color: #04121a; }
+.bbd-ic-on:hover:not(:disabled) { background: var(--bbc); filter: brightness(1.12); }
 .bbd-fire {
   flex: 1; min-width: 0; height: 44px; border: 0; cursor: pointer;
   background: var(--bbc); color: #04121a;
@@ -495,6 +509,10 @@
   letter-spacing: .1em; text-transform: uppercase;
   font-family: var(--font-display, 'Rajdhani', sans-serif);
   border-bottom: 1px solid rgba(90,220,240,.14);
+}
+.bbf-sheet-n {
+  display: flex; align-items: center; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .bbf-sheet-h button {
   width: 40px; height: 32px; border: 0; background: transparent; color: #8fb0c0;
