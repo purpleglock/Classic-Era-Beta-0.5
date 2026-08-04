@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Гримёрная · стенд портретов оперативников</title>
+<style>
+  :root{ --b0:#080b10; --b1:#0d1219; --b2:#141b24; --ln:#1e2732; --tx:#c8d2dd; --dim:#6b7684; --ac:#5fd0c0; --wr:#e0a030; --rd:#e0603a; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--b0);color:var(--tx);font:13px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:baseline;gap:14px;padding:14px 20px;border-bottom:1px solid var(--ln);background:var(--b1)}
+  header h1{margin:0;font-size:15px;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+  header .sub{color:var(--dim);font-size:11px;font-family:ui-monospace,Consolas,monospace}
+  nav{margin-left:auto;display:flex;gap:6px}
+  nav button{background:var(--b2);border:1px solid var(--ln);color:var(--dim);padding:6px 14px;border-radius:3px;cursor:pointer;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+  nav button.on{color:var(--ac);border-color:var(--ac)}
+  .wrap{display:grid;grid-template-columns:300px 1fr;gap:0;height:calc(100vh - 53px)}
+  .panel{border-right:1px solid var(--ln);background:var(--b1);overflow-y:auto;padding:16px}
+  .stage{overflow-y:auto;padding:24px;display:flex;flex-direction:column;align-items:center;gap:18px}
+  .grp{margin-bottom:18px}
+  .grp h3{margin:0 0 10px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--ln);padding-bottom:6px}
+  label{display:block;margin-bottom:9px}
+  label span{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:3px}
+  label span b{color:var(--tx);font-family:ui-monospace,Consolas,monospace;font-weight:500}
+  select,input[type=range]{width:100%}
+  select{background:var(--b2);border:1px solid var(--ln);color:var(--tx);padding:6px;border-radius:3px;font-size:12px}
+  input[type=range]{accent-color:var(--ac);height:18px}
+  .btn{background:var(--b2);border:1px solid var(--ln);color:var(--tx);padding:7px 12px;border-radius:3px;cursor:pointer;font-size:11px;width:100%;margin-bottom:6px}
+  .btn:hover{border-color:var(--ac);color:var(--ac)}
+  .card{border:1px solid var(--ln);background:#000;border-radius:2px;overflow:hidden;position:relative}
+  .card .cg-svg{display:block;width:100%;height:auto}
+  .solo{width:420px}
+  .dossier{position:absolute;inset:auto 0 0 0;padding:8px 10px;background:linear-gradient(transparent,rgba(0,0,0,.9));font-family:ui-monospace,Consolas,monospace;font-size:10px;letter-spacing:.06em}
+  .dossier .nm{color:#e8eef4;font-size:12px}
+  .dossier .mt{color:var(--dim)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;width:100%}
+  .grid .card .cg-svg{width:100%}
+  .tag{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.7);border:1px solid var(--ln);padding:2px 6px;font-size:9px;letter-spacing:.08em;font-family:ui-monospace,monospace;color:var(--dim)}
+  .pair{display:flex;gap:16px;align-items:flex-start}
+  .seam{border:1px solid var(--ln);background:var(--b1);padding:12px 14px;border-radius:3px;width:100%;max-width:880px;font-family:ui-monospace,Consolas,monospace;font-size:12px}
+  .seam .bar{height:8px;background:var(--b2);border:1px solid var(--ln);margin:8px 0;position:relative;overflow:hidden}
+  .seam .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--ac),var(--wr) 55%,var(--rd))}
+  .seam .vd{margin-top:6px}
+  .note{color:var(--dim);font-size:11px;line-height:1.7;max-width:880px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Гримёрная</h1>
+  <span class="sub">_char_gen_harness · стенд процедурных портретов · арт не финален</span>
+  <nav>
+    <button id="t-solo" class="on" onclick="tab('solo')">Портрет</button>
+    <button id="t-grid" onclick="tab('grid')">Все расы</button>
+    <button id="t-leg"  onclick="tab('leg')">Легенда</button>
+  </nav>
+</header>
+
+<div class="wrap">
+  <div class="panel" id="ctl"></div>
+  <div class="stage" id="stage"></div>
+</div>
+
+<script src="char_gen.js"></script>
+<script>
+const P = CG.defaults('Гуманоиды','муж.', 20260804);
+P.perk = 'ghost';
+let TAB = 'solo';
+let LEGEND = 'Синтетики / Киборги';
+
+const SLIDERS = [
+  ['Свет (азимут ключа)','light'], ['Тон покрова','hue'], ['Насыщенность','sat'], ['Светлота','lit'],
+  ['Челюсть','jaw'], ['Надбровье','brow'], ['Скулы','cheek'],
+  ['Размер глаз','eyeSize'], ['Расстановка глаз','eyeGap'],
+  ['Ширина носа','noseW'], ['Ширина рта','mouthW'],
+  ['Возраст','age'], ['Надстройка (гребень/волосы)','crest'], ['Асимметрия','asym'],
+];
+
+function ctl(){
+  const R = CG.RACE_LIST.map(r=>`<option ${r===P.race?'selected':''}>${r}</option>`).join('');
+  const G = ['муж.','жен.','агендер'].map(g=>`<option ${g===P.gender?'selected':''}>${g}</option>`).join('');
+  const K = Object.keys(CG.PERKS).map(k=>`<option value="${k}" ${k===P.perk?'selected':''}>${CG.PERKS[k].label}</option>`).join('');
+  const L = CG.RACE_LIST.map(r=>`<option ${r===LEGEND?'selected':''}>${r}</option>`).join('');
+  document.getElementById('ctl').innerHTML = `
+  <div class="grp"><h3>Истинная форма</h3>
+    <label><span>Раса</span><select onchange="setRace(this.value)">${R}</select></label>
+    <label><span>Пол</span><select onchange="P.gender=this.value;reroll(P.seed);">${G}</select></label>
+    <label><span>Перк (виден снаряжением)</span><select onchange="P.perk=this.value;draw()">${K}</select></label>
+    <label><span>Шрамы (след плена) <b>${P.scars}</b></span><input type="range" min="0" max="4" value="${P.scars}" oninput="P.scars=+this.value;draw()"></label>
+  </div>
+  <div class="grp"><h3>Черты</h3>
+    ${SLIDERS.map(([t,k])=>`<label><span>${t} <b>${P[k]}</b></span><input type="range" min="0" max="100" value="${P[k]}" oninput="P['${k}']=+this.value;ctl();draw()"></label>`).join('')}
+  </div>
+  <div class="grp"><h3>Легенда (грим)</h3>
+    <label><span>Выдаёт себя за</span><select onchange="LEGEND=this.value;draw()">${L}</select></label>
+  </div>
+  <div class="grp"><h3>Партия</h3>
+    <button class="btn" onclick="reroll()">↻ Новый оперативник</button>
+    <button class="btn" onclick="copyJson()">⧉ Скопировать JSON облика</button>
+    <div style="color:var(--dim);font-size:10px;font-family:ui-monospace,monospace;margin-top:6px">seed ${P.seed} · ${JSON.stringify(P).length} байт</div>
+  </div>`;
+}
+
+function setRace(r){ P.race=r; reroll(P.seed); }
+function reroll(seed){
+  const s = seed==null ? (Math.random()*1e9|0) : seed;
+  const d = CG.defaults(P.race, P.gender, s);
+  d.perk = P.perk; d.scars = P.scars; d.light = P.light;
+  Object.assign(P, d);
+  ctl(); draw();
+}
+function copyJson(){ navigator.clipboard.writeText(JSON.stringify(P)); }
+function tab(t){ TAB=t; ['solo','grid','leg'].forEach(x=>document.getElementById('t-'+x).classList.toggle('on',x===t)); draw(); }
+
+function card(p, tag, w){
+  return `<div class="card" style="${w?`width:${w}px`:''}">${CG.render(p)}
+    ${tag?`<div class="tag">${tag}</div>`:''}</div>`;
+}
+function dossier(p, title){
+  return `<div class="card solo">${CG.render(p)}
+    <div class="dossier">
+      <div class="nm">${title}</div>
+      <div class="mt">${p.race} · ${p.gender} · ${CG.PERKS[p.perk].label} · seed ${p.seed}</div>
+    </div></div>`;
+}
+
+function draw(){
+  const st = document.getElementById('stage');
+  if (TAB==='solo'){
+    st.innerHTML = dossier(P,'ОБЪЕКТ · ЛИЧНОЕ ДЕЛО')
+      + `<div class="note">Снимок из личного дела: контровой свет, зерно, потеря контраста в тенях.
+         Объём держат только перепады тона — обводок в отрисовке нет ни одной.
+         Крути «Асимметрию»: на нуле лицо мгновенно читается как маска.</div>`;
+    return;
+  }
+  if (TAB==='grid'){
+    st.innerHTML = `<div class="grid">` + CG.RACE_LIST.map(r=>{
+      const d = CG.defaults(r, P.gender, P.seed); d.perk=P.perk; d.light=P.light;
+      return card(d, r.split(' ')[0]);
+    }).join('') + `</div>`
+    + `<div class="note">Один и тот же генератор, десять расовых пресетов: меняются пропорции черепа,
+       тип покрова (кожа/чешуя/хитин/кора/камень/металл/плазма), тип глаза и надстройка.</div>`;
+    return;
+  }
+  // Легенда
+  const worn = CG.wearLegend(P, LEGEND);
+  const seam = CG.seamCost(P.race, LEGEND);
+  const pen  = P.race===LEGEND ? -5 : seam;
+  st.innerHTML = `<div class="pair">
+      ${dossier(P,'ИСТИННАЯ ФОРМА')}
+      ${dossier(worn,'ЛЕГЕНДА · РАБОЧИЙ ОБЛИК')}
+    </div>
+    <div class="seam">
+      <div>ГРИМ: ${P.race} → ${LEGEND}</div>
+      <div class="bar"><i style="width:${Math.min(100, seam/34*100)}%"></i></div>
+      <div>ШОВ ${seam} · расовый модификатор операции <b style="color:${pen<0?'var(--ac)':pen>=32?'var(--rd)':'var(--wr)'}">${pen>0?'+':''}${pen}</b></div>
+      <div class="vd" style="color:var(--dim)">${
+        pen<0 ? 'свой среди своих — внедрение почти без сопротивления'
+        : pen<=8 ? 'разные виды одного субстрата — грим держится'
+        : pen<=18 ? 'органик под органика — шов заметен вблизи'
+        : pen<=28 ? 'неорганика под неорганику — держится на калибровке'
+        : 'органик под машину — грим сыплется на первой же проверке'}</div>
+    </div>
+    <div class="note">Расовый модификатор — зеркало <code>_spy_race_penalty</code> из _spy_race_infiltration.sql.
+      Сейчас он считается по истинной расе и раса — приговор. Предложение: считать по НАДЕТОЙ,
+      а разрыв субстратов оплачивать швом (ростом риска раскрытия). Радужка и разрез глаз под гримом
+      не меняются — потому легенда и палится.</div>`;
+}
+
+ctl(); draw();
+</script>
+</body>
+</html>
