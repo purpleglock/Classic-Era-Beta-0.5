@@ -668,7 +668,7 @@ grant execute on function public.fc_signup() to authenticated;
 -- ── RPC: ставка (эскроу сразу, кап 500 000, дуэлянтам нельзя) ──
 create or replace function public.fc_bet(p_on text, p_amount numeric)
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare me text; ev record; amt numeric; old record; have numeric;
+declare me text; ev record; amt numeric; old record; other record; have numeric;
 begin
   if public.current_user_banned() then raise exception 'forbidden: account banned'; end if;
   me := public._ec_my_fid();
@@ -690,11 +690,18 @@ begin
   amt := floor(coalesce(p_amount, 0));
   if amt <= 0 then raise exception 'ставка должна быть больше нуля'; end if;
 
-  -- рев.7: сторону выбираешь свободно — можно держать ставку на обе.
-  -- Кап действует отдельно на каждую сторону (old = уже поставленное на p_on).
+  -- рев.9: одна сторона на событие (рев.7 разрешала обе — можно было выкупить
+  -- обе кассы и выйти в плюс при любом исходе). Сторону фиксирует первая ставка.
+  select * into other from public.fc_bets
+   where event_id = ev.id and fid = me and on_fid <> p_on limit 1;
+  if other.fid is not null then
+    raise exception 'вы уже поставили на %, на обоих дуэлянтов ставить нельзя',
+      public._war_nm(other.on_fid);
+  end if;
+
   select * into old from public.fc_bets where event_id = ev.id and fid = me and on_fid = p_on;
   if coalesce(old.amount, 0) + amt > public._fc_bet_cap() then
-    raise exception 'кап ставки — % ГС на сторону', public._fc_bet_cap()::bigint;
+    raise exception 'кап ставки — % ГС', public._fc_bet_cap()::bigint;
   end if;
 
   select gc into have from public.faction_economy where faction_id = me for update;

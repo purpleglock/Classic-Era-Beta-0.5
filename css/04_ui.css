@@ -733,7 +733,7 @@ textarea.fi { resize: vertical; min-height: 80px; line-height: 1.6; }
 @keyframes scanner-sweep { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
 
 /* ── FX: GLITCH ── */
-.fx-glitch { position: relative; display: inline-block; color: var(--t1); font-weight: 700; }
+.fx-glitch { position: relative; display: inline-block; max-width: 100%; overflow-wrap: anywhere; color: var(--t1); font-weight: 700; }
 .fx-glitch::before, .fx-glitch::after {
   content: attr(data-text); position: absolute; top: 0; left: 0;
   width: 100%; height: 100%; overflow: hidden; opacity: 0;
@@ -752,8 +752,11 @@ textarea.fi { resize: vertical; min-height: 80px; line-height: 1.6; }
 .al-left   { display: block; text-align: left; }
 
 /* ── FX: SCHIZO («шизотекст»: руны + фонарик) ── */
-.fx-schizo { cursor: crosshair; }
-.fx-schizo .sz-w { white-space: nowrap; }   /* слово-обёртка: буквы не рвутся посередине, перенос только по пробелам */
+.fx-schizo { cursor: crosshair; display: inline; max-width: 100%; overflow-wrap: anywhere; }
+/* слово-обёртка: буквы не рвутся посередине, перенос только по пробелам.
+   Слова длиннее 12 знаков режутся на куски ещё в schizoWrap() — иначе nowrap
+   выносил бы «простыню» без пробелов за край экрана. */
+.fx-schizo .sz-w { white-space: nowrap; display: inline-block; max-width: 100%; vertical-align: baseline; }
 .fx-schizo .sz-c { position: relative; display: inline-block; }
 .fx-schizo .sz-sp { display: inline; }   /* обычный inline-пробел = точка переноса строки (inline-block ломал перенос) */
 .fx-schizo .sz-real { visibility: hidden; transition: text-shadow var(--duration-fast); }   /* занимает место → раскладка стабильна */

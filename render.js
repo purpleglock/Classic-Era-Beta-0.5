@@ -1584,14 +1584,19 @@ function schizoWrap(text) {
   // Каждый символ — отдельный inline-block .sz-c, поэтому браузер разрешает перенос
   // строки МЕЖДУ любыми буквами и рвёт слова посередине. Собираем буквы слова в
   // обёртку .sz-w (white-space:nowrap) — слово переносится целиком, только по пробелам.
+  // Слово длиннее SZ_CHUNK режем на куски: иначе одна длинная «простыня» без
+  // пробелов (ссылка, ᛚᛚᛚ-полотно) вылетает за экран — nowrap не даёт перенести.
+  const SZ_CHUNK = 12;
   let out = '';
-  let word = '';
-  const flush = () => { if (word) { out += `<span class="sz-w">${word}</span>`; word = ''; } };
+  let word = '', wlen = 0;
+  const flush = () => { if (word) { out += `<span class="sz-w">${word}</span>`; word = ''; wlen = 0; } };
   for (const ch of cleanText) {
     if (ch === '\n') { flush(); out += '<br>'; continue; }             // перенос строки внутри блока
     if (ch === ' ' || ch === '\t') { flush(); out += '<span class="sz-sp"> </span>'; continue; }
+    if (wlen >= SZ_CHUNK) flush();                                     // точка переноса внутри длинного слова
     const e = ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '&' ? '&amp;' : esc(ch);
     word += `<span class="sz-c"><span class="sz-real">${e}</span><span class="sz-rune" aria-hidden="true">${schizoRune()}</span></span>`;
+    wlen++;
   }
   flush();
   if (typeof window !== 'undefined') setTimeout(schizoEnsure, 0);
@@ -5723,15 +5728,19 @@ function _fcBody(st, en) {
     if (st.i_duel) {
       parts.push(`<div class="hp-vna-obs">🥊 ${en ? 'You ARE the fight. Duelists cannot bet.' : 'Вы и есть бой. Дуэлянтам ставить нельзя.'}</div>`);
     } else if (st.me) {
-      // рев.7: ставить можно на ОБЕ стороны, кап — отдельно на каждую.
+      // рев.9: ставка только на ОДНУ сторону — её фиксирует первая ставка
+      // (иначе можно выкупить обе кассы и выйти в плюс при любом исходе).
       const cap = st.bet_cap || 500000;
       const mine = Array.isArray(st.my_bets) ? st.my_bets : (st.my_bet ? [st.my_bet] : []);
       const onA = mine.find(b => b.on === st.duelist_a), onB = mine.find(b => b.on === st.duelist_b);
-      const leftA = Math.max(0, cap - (onA ? Number(onA.amount) : 0));
-      const leftB = Math.max(0, cap - (onB ? Number(onB.amount) : 0));
-      const opt = (fid, nm, left) => `<option value="${esc(fid || '')}"${left <= 0 ? ' disabled' : ''}>${esc(nm || '?')}${left <= 0 ? (en ? ' — cap reached' : ' — кап') : ''}</option>`;
+      const locked = onA ? st.duelist_a : (onB ? st.duelist_b : null);
+      const leftOf = (b, fid) => locked && fid !== locked ? 0 : Math.max(0, cap - (b ? Number(b.amount) : 0));
+      const leftA = leftOf(onA, st.duelist_a), leftB = leftOf(onB, st.duelist_b);
+      const opt = (fid, nm, left) => `<option value="${esc(fid || '')}"${left <= 0 ? ' disabled' : ''}>${esc(nm || '?')}${left <= 0
+        ? (locked && fid !== locked ? (en ? ' — other side taken' : ' — ставка на другого') : (en ? ' — cap reached' : ' — кап'))
+        : ''}</option>`;
       parts.push(`<div class="fc-bet">
-        <div class="fc-bet-h">${en ? 'Place a bet' : 'Сделать ставку'} <span class="fc-bet-cap">${en ? 'cap' : 'кап'} ${_fcMoney(cap)} ГС ${en ? 'per side' : 'на сторону'}</span></div>
+        <div class="fc-bet-h">${en ? 'Place a bet' : 'Сделать ставку'} <span class="fc-bet-cap">${en ? 'cap' : 'кап'} ${_fcMoney(cap)} ГС</span> <span class="fc-bet-cap">${en ? 'one side only' : 'только на одного'}</span></div>
         ${mine.map(b => `<div class="fc-bet-my">${en ? 'Your bet' : 'Ваша ставка'}: <b>${_fcMoney(b.amount)} ГС</b> ${en ? 'on' : 'на'} <b>${esc(b.on_name || '')}</b></div>`).join('')}
         ${leftA > 0 || leftB > 0 ? `
         <div class="fc-bet-row">

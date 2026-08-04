@@ -1176,7 +1176,19 @@ async function ecRpc(fn, body) {
       signal: ctrl.signal,
     });
     clearTimeout(tid);
-    if (!r.ok) { const t = await r.text(); throw new Error(t || ('HTTP ' + r.status)); }
+    // Ошибку PostgREST отдаёт ТЕЛОМ-JSON {code,message,details,hint}. Раньше тело
+    // летело в тост как есть — игрок видел «{"CODE":"P0001",…,"MESSAGE":"no such
+    // battle"}» вместо человеческой фразы. Достаём message (+hint, если есть).
+    if (!r.ok) {
+      const t = await r.text();
+      let msg = t;
+      try {
+        const d = JSON.parse(t);
+        msg = d && (d.message || d.error_description || d.error || d.msg) || t;
+        if (d && d.hint) msg += ' — ' + d.hint;
+      } catch (_) { /* не JSON — оставляем текст как пришёл */ }
+      throw new Error(msg || ('HTTP ' + r.status));
+    }
     if (r.status === 204) return null;
     return r.json();
   } catch (e) {

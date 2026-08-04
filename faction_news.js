@@ -1286,22 +1286,26 @@ function fnRenderAiVerdictBlock(n) {
       ).join('')}</ul></div>` : '';
   // Стафф может перенести нейро-вердикт в редактируемый вердикт администрации.
   const adopt = fnIsStaff() ? `<button type="button" class="btn btn-gh btn-xs fn-ai-adopt" onclick="fnAdoptAiVerdict('${esc(n.id)}')">✎ В вердикт администрации</button>` : '';
-  return `<div class="fn-art-verdict fn-art-aiverdict fn-ai-${meta.cls}">
-    <div class="fn-verdict-hd">
+  const uid = 'fn-aiverdict-' + Math.random().toString(36).substr(2, 9);
+  return `<div class="fn-art-verdict fn-art-aiverdict fn-ai-${meta.cls} fn-ai-collapsed" data-aid="${uid}">
+    <div class="fn-verdict-hd" style="cursor:pointer;user-select:none" onclick="fnToggleAiVerdict('${uid}')">
       <span class="fn-verdict-badge fn-ai-badge">🧠 Нейро-оценка хроники</span>
       <span class="fn-ai-tag fn-ai-${meta.cls}">${meta.ic} ${esc(meta.t)}</span>
+      <span class="fn-ai-toggle" style="margin-left:auto;opacity:0.6">▶</span>
     </div>
-    <div class="fn-ai-bars">
-      ${fnAiBar('Соответствие лору', v.lore)}
-      ${fnAiBar('Связность с событиями', v.continuity)}
-      ${fnAiBar('Актуальность', v.relevance)}
-      ${v.feasibility != null ? fnAiBar('Соразмерность средств', v.feasibility) : ''}
+    <div class="fn-ai-body">
+      <div class="fn-ai-bars">
+        ${fnAiBar('Соответствие лору', v.lore)}
+        ${fnAiBar('Связность с событиями', v.continuity)}
+        ${fnAiBar('Актуальность', v.relevance)}
+        ${v.feasibility != null ? fnAiBar('Соразмерность средств', v.feasibility) : ''}
+      </div>
+      ${legalHtml}
+      ${inj}
+      ${rulingHtml}
+      ${effectsHtml}
+      <div class="fn-ai-foot">Автоматическая оценка ИИ${v.model ? ' · ' + esc(String(v.model).split('/').pop().replace(':free','')) : ''} · носит рекомендательный характер ${adopt}</div>
     </div>
-    ${legalHtml}
-    ${inj}
-    ${rulingHtml}
-    ${effectsHtml}
-    <div class="fn-ai-foot">Автоматическая оценка ИИ${v.model ? ' · ' + esc(String(v.model).split('/').pop().replace(':free','')) : ''} · носит рекомендательный характер ${adopt}</div>
   </div>`;
 }
 // Стафф: перенести нейро-вердикт (текст + последствия) в редактор вердикта
@@ -1328,6 +1332,14 @@ function fnAdoptAiVerdict(id) {
       ta.focus();
     }
   }, 300);
+}
+// Переключить видимость содержимого нейро-вердикта (слайдер).
+function fnToggleAiVerdict(uid) {
+  const el = document.querySelector(`[data-aid="${uid}"]`);
+  if (!el) return;
+  el.classList.toggle('fn-ai-collapsed');
+  const toggle = el.querySelector('.fn-ai-toggle');
+  if (toggle) toggle.textContent = el.classList.contains('fn-ai-collapsed') ? '▶' : '▼';
 }
 function fnVerdictPreviewHtml() {
   const text = (document.getElementById('fn-c-verdict')?.value || '').trim();

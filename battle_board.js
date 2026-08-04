@@ -197,6 +197,7 @@ async function bbReload() {
   try {
     next = await ecRpc(BB.spectate ? 'fc_watch_state' : 'battle_state', { p_battle: BB.id });
   } catch (e) {
+    if (bbGone(e)) { bbShowGone(); return; }   // и опрос глушим, иначе тикает в пустоту
     const ov = document.getElementById('bb-ov');
     if (ov) ov.innerHTML = `<div class="bb-load">Бой недоступен: ${esc(e.message || e)}<br><button class="btn btn-gh btn-sm" style="margin-top:12px" onclick="bbClose()">Закрыть</button></div>`;
     return;
@@ -404,10 +405,11 @@ async function bbMaybeBotTurn() {
   try {
     await ecRpc('admin_bot_turn', { p_battle: BB.id });
   } catch (e) {
+    BB.botRunning = false;
+    if (bbGone(e)) { bbShowGone(); return; }
     // «сейчас ход игрока» и т.п. — тихо игнорируем, доска просто останется как есть
     if (e && e.message && !/ход игрока|не бой с ботами/i.test(e.message))
       toast(e.message, 'err');
-    BB.botRunning = false;
     return;
   }
   BB.botRunning = false;
@@ -523,6 +525,7 @@ function bbMount() {
     BB.cv.parentElement.insertBefore(BB.glCv, BB.cv.nextSibling);
     BB.cv.style.display = 'none';
   }
+  bbCmdH();
   bbFit();
   bbBindCanvas();
   bbPaint();
@@ -1306,6 +1309,28 @@ function bbCanHeal(sel, tgt) {
 // Есть ли у корабля ремонтные группы (для подсветки союзников как целей).
 function bbHasHeal(u) { return !!(u && u.wpn && u.wpn.some(bbIsHeal)); }
 
+// ── Высота нижней командной строки → --bbcmd ────────────────
+// Полоска выбранного борта, лента и шторка висели на ЗАХАРДКОЖЕННОМ отступе
+// снизу (68/120 px). Реальная высота .bbd-cmd плавает: на телефоне иконки
+// переносятся на вторую строку, «завершить ход» уезжает своей строкой, снизу
+// добавляется safe-area. Отсюда и провал: панель пряталась под командной
+// строкой. Меряем её и отдаём в CSS-переменную, панели считают отступ от неё.
+function bbCmdH() {
+  const host = document.querySelector('#bb-ov .bbd'); if (!host) return;
+  const cmd = host.querySelector('.bbd-cmd');
+  const h = cmd ? Math.round(cmd.getBoundingClientRect().height) : 0;
+  host.style.setProperty('--bbcmd', (h || 60) + 'px');
+  // Перенос строк меняется при повороте и смене состава кнопок — следим.
+  if (cmd && !BB.cmdRO && window.ResizeObserver) {
+    BB.cmdRO = new ResizeObserver(() => {
+      const c = document.querySelector('#bb-ov .bbd .bbd-cmd');
+      const p = c && c.parentElement;
+      if (c && p) p.style.setProperty('--bbcmd', Math.round(c.getBoundingClientRect().height) + 'px');
+    });
+  }
+  if (BB.cmdRO && cmd) { BB.cmdRO.disconnect(); BB.cmdRO.observe(cmd); }
+}
+
 // ── КАМЕРА ──────────────────────────────────────────────────
 function bbFit() {
   const s = BB.st; if (!s || !BB.cv) return;
@@ -1577,6 +1602,21 @@ function bbClick(x, y) {
 }
 
 // ── Действия ────────────────────────────────────────────────
+// Бой снесли под тобой: новый драфт клуба и новый бот-бой УДАЛЯЮТ предыдущий
+// (_fight_club.sql, _bot_roster_faction.sql). Открытая доска этого не знает и
+// сыпала тостом «no such battle» на каждый клик. Ловим и гасим доску разом.
+function bbGone(e) {
+  const m = (e && e.message) ? String(e.message) : '';
+  return /no such battle|бой не найден/i.test(m);
+}
+function bbShowGone() {
+  bbStopPoll();
+  BB.busy = false;
+  const ov = document.getElementById('bb-ov');
+  if (ov) ov.innerHTML = `<div class="bb-load">Этого боя больше нет — его сменил новый.`
+    + `<br><button class="btn btn-gh btn-sm" style="margin-top:12px" onclick="bbClose()">Закрыть</button></div>`;
+}
+
 async function bbAct(fn, body, okMsg) {
   if (BB.busy) return;
   BB.busy = true;
@@ -1585,6 +1625,7 @@ async function bbAct(fn, body, okMsg) {
     if (okMsg) toast(okMsg, 'ok');
     await bbReload();
   } catch (e) {
+    if (bbGone(e)) { bbShowGone(); return; }
     toast((e && e.message) ? e.message : 'Не вышло', 'err');
   } finally { BB.busy = false; }
 }

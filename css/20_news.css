@@ -1216,3 +1216,63 @@ textarea.fn-c-verdict { min-height: 110px; resize: vertical; font-size: 14px; li
   20%,60% { transform: translateX(-6px); }
   40%,80% { transform: translateX(6px); }
 }
+
+/* ── Нейро-вердикт: коллапсибл слайдер ────────────────────── */
+.fn-art-verdict .fn-verdict-hd {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.fn-ai-toggle {
+  display: inline-block; transition: transform var(--duration-normal) ease;
+  font-size: 12px; flex-shrink: 0;
+}
+.fn-ai-body {
+  overflow: hidden; max-height: 2000px; transition: max-height var(--duration-normal) ease;
+  opacity: 1; transition: opacity var(--duration-normal) ease, max-height var(--duration-normal) ease;
+}
+.fn-art-aiverdict.fn-ai-collapsed .fn-ai-body {
+  max-height: 0; opacity: 0; overflow: hidden;
+}
+
+/* ════════════════════════════════════════════════════════════
+   АДАПТИВ И ПЕРЕНОСЫ ТЕЛА ДЕПЕШИ
+   Длинный текст (в т.ч. fx-эффекты: шизотекст, глитч, джиттер,
+   ссылки без пробелов) вылетал за край экрана и криво переносился.
+   Правило: ничто внутри депеши не шире своего контейнера.
+   ════════════════════════════════════════════════════════════ */
+.fn-art, .fn-art-inner, .fn-art-body, .fn-c-preview { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.fn-art-title,
+.fn-art-body,
+.fn-art-body p, .fn-art-body li, .fn-art-body blockquote,
+.fn-art-body h1, .fn-art-body h2, .fn-art-body h3,
+.fn-c-preview p, .fn-c-preview li, .fn-c-preview blockquote {
+  overflow-wrap: anywhere; word-break: break-word; hyphens: auto;
+}
+/* моноширинные блоки и таблицы прокручиваются сами, а не растягивают депешу */
+.fn-art-body pre, .fn-c-preview pre { max-width: 100%; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+.fn-art-body table, .fn-c-preview table { display: block; max-width: 100%; overflow-x: auto; }
+.fn-art-body iframe, .fn-c-preview iframe { max-width: 100%; }
+/* fx-обёртки внутри статьи не задают ширину больше колонки */
+.fn-art-body .fx-schizo, .fn-art-body .fx-glitch, .fn-art-body .fx-jitter, .fn-art-body .fx-scanner,
+.fn-c-preview .fx-schizo, .fn-c-preview .fx-glitch, .fn-c-preview .fx-jitter, .fn-c-preview .fx-scanner {
+  max-width: 100%; overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .fn-art-ov { padding: 10px 6px; }
+  .fn-art-inner { padding: 16px 14px 8px; }
+  .fn-art-bar { padding: 8px 40px 8px 12px; font-size: 8.5px; letter-spacing: .12em; }
+  .fn-art-title { font-size: clamp(21px, 7.2vw, 30px); margin: 12px 0 10px; }
+  .fn-art-body { font-size: 15px; line-height: 1.72; }
+  .fn-art-body .fn-lead-p { font-size: 16px; line-height: 1.6; padding-left: 12px; }
+  .fn-art-body h1 { font-size: 19px; }
+  .fn-art-body h2 { font-size: 17px; }
+  .fn-art-body h3 { font-size: 15.5px; }
+  .fn-art-body ul { padding-left: 18px; }
+  /* шапка-мета: дата уезжает на вторую строку вместо сжатия имени фракции */
+  .fn-art-meta { flex-wrap: wrap; gap: 4px 10px; }
+  .fn-art-cov, .fn-art-cov img { max-height: 200px; }
+}
+@media (max-width: 380px) {
+  .fn-art-inner { padding: 14px 11px 8px; }
+  .fn-art-body { font-size: 14.5px; }
+}
