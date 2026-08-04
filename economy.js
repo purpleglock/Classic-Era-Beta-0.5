@@ -2061,9 +2061,14 @@ async function _ecLoadCoreImpl() {
   // Безопасные дефолты подсистем фазы 2: клик по их вкладке ДО загрузки не падает на
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
-  const [ecoRows, cols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger, warStatus, battlesList, goodsRecipeRows, resRarityRows, autosellCfg, stepLimit] = await Promise.all([
+  const [ecoRows, cols, allCols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger, warStatus, battlesList, goodsRecipeRows, resRarityRows, autosellCfg, stepLimit] = await Promise.all([
     dbGet('faction_economy', `faction_id=eq.${fid}`),
     dbGetAll('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
+    // ЧУЖАЯ занятость планет: своих колоний мало, но планета в моей системе может
+    // быть занята другой державой (или моей же — по другому тегу). Без этого списка
+    // кабинет рисовал бы «Колонизировать», а сервер отвечал 'planet already
+    // colonized' / 'planet already has a colony/station'.
+    dbGetAll('colonies', `select=faction_id,system_id,planet_pid,planet_name&order=id.asc`).catch(() => []),
     dbGetAll('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
     dbGet('faction_units', `or=(faction_id.eq.${fid},faction_id.is.null)&order=name.asc`).catch(() => []),
     dbGet('unit_production', `faction_id=eq.${fid}&order=created_at.desc`).catch(() => []),
@@ -2111,6 +2116,13 @@ async function _ecLoadCoreImpl() {
   ]);
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
+  // Индекс занятости: 'sysId|pid' и 'sysId|имя' (легаси-колонии без pid) → fid владельца.
+  EC.colTaken = {};
+  (Array.isArray(allCols) ? allCols : []).forEach(c => {
+    if (!c || !c.system_id) return;
+    if (c.planet_pid != null) EC.colTaken[c.system_id + '|' + c.planet_pid] = c.faction_id;
+    if (c.planet_name) EC.colTaken[c.system_id + '|' + c.planet_name] = c.faction_id;
+  });
   EC.buildings = blds || [];
   // Свои системы выводим из общего списка allSys (он уже содержит faction/planets) — без второго запроса к map_systems.
   EC.systems = (allSys || []).filter(s => String(s.faction) === String(EC.fid)).map(s => ({ ...s, planets: s.planets || [] }));
@@ -4542,7 +4554,11 @@ function ecTabOverview() {
   const totalCells = EC.colonies.reduce((a, c) => a + (c.cells || EC_DEFAULT_CELLS), 0);
   const usedCells = EC.buildings.length;
   const researchAll = (typeof ecBuildResearch === 'function') ? ecBuildResearch() : [];
-  const researchDone = Array.isArray(EC.eco.research) ? EC.eco.research.length : 0;
+  // Считаем ТОЛЬКО узлы живого каталога: в eco.research лежат ещё стартеры-
+  // бэкфилл и легаси-id снятых узлов, а знаменатель — длина каталога (без
+  // бесплатной базы и группы оружейной верфи). Иначе выходило «79 из 76».
+  const _researchSet = new Set(Array.isArray(EC.eco.research) ? EC.eco.research : []);
+  const researchDone = researchAll.filter(n => _researchSet.has(n.id)).length;
   const researchTotal = researchAll.length;
   const activeSlot = (Array.isArray(EC.eco.research_slots) ? EC.eco.research_slots : [])[0];
   const activeProj = activeSlot && activeSlot.n;
@@ -5161,6 +5177,24 @@ function ecColonyRowHtml(colony, sys) {
     ${minePreview}
   </div>`;
   return head + (open ? `<div class="ec-pl-detail">${ecColonyManage(colony)}</div>` : '');
+}
+// Кто занял планету (fid) или null. Ключ — pid, имя только для легаси-колоний без pid.
+function ecPlanetTakenBy(sysId, p) {
+  const t = EC.colTaken || {};
+  if (p && p.pid != null && t[sysId + '|' + p.pid]) return t[sysId + '|' + p.pid];
+  if (p && p.name && t[sysId + '|' + p.name]) return t[sysId + '|' + p.name];
+  return null;
+}
+// Строка ЧУЖОЙ (или невидимой мне) колонии — без кнопок, чтобы не бить в сервер зря
+function ecTakenRowHtml(s, p, ownerFid, sysOwned) {
+  const star = ecStarLabel(s, p);
+  const tag = sysOwned ? 'чужая система' : 'занято';
+  return `<div class="ec-pl ec-pl-free ec-pl-taken">
+    <div class="ec-pl-top">
+      <div class="ec-pl-l"><span class="ec-pl-ic">⛔</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(p.name)}${star ? ` <span class="ec-pl-star">${esc(star)}</span>` : ''}</div><div class="ec-pl-sb"><span class="ec-cz-no">${tag}</span> · ${esc(ecFacName(ownerFid))} · ⬚ ${+p.slotsP || EC_DEFAULT_CELLS} ячеек</div></div></div>
+    </div>
+    <div class="ec-pl-res"><span class="ec-pl-lbl">Ресурсы:</span>${ecPlanetResChips(p)}</div>
+  </div>`;
 }
 // Строка незаселённой планеты (опция колонизации)
 function ecFreeRowHtml(s, p, race) {
@@ -5874,7 +5908,10 @@ function ecTabColonies() {
     // что и planets, иначе метки star ссылались бы на чужой набор компаньонов.
     const stars = (src && Array.isArray(src.stars)) ? src.stars : null;
     const multi = src ? src.multi : true;
-    const sysRef = { id, name, stars, multi };
+    // faction системы нужен для гейта расселения: селиться можно в СВОЕЙ или
+    // НИЧЕЙНОЙ системе (зеркало _ec_sys_open, _colonize_owner_gate.sql).
+    const sysFac = src ? src.faction : null;
+    const sysRef = { id, name, stars, multi, faction: sysFac };
     // Тела скрытых/удалённых компаньонов не показываем: на карте их нет, и
     // колония у невидимой звезды выглядела бы взявшейся из ниоткуда.
     const planets = ((live && live.planets) || (own && own.planets) || [])
@@ -5906,7 +5943,15 @@ function ecTabColonies() {
       if (p.pid != null && colPids.has(p.pid)) return false;
       if (colNamesNoPid.has(p.name)) return false;
       return true;
-    }).map(p => ecFreeRowHtml(s, p, race)).join('');
+    }).map(p => {
+      // Планета в моей системе может быть занята ЧУЖОЙ колонией/станцией — кнопку не даём,
+      // иначе сервер ответит 'planet already colonized' (см. EC.colTaken).
+      const owner = ecPlanetTakenBy(s.id, p);
+      if (owner) return ecTakenRowHtml(s, p, owner);
+      // Система под чужим флагом — расселение запрещено сервером (_ec_sys_open)
+      if (s.faction && String(s.faction) !== String(EC.fid)) return ecTakenRowHtml(s, p, s.faction, true);
+      return ecFreeRowHtml(s, p, race);
+    }).join('');
     const body = (colHtml + freeHtml) || `<div class="ec-empty" style="padding:10px 12px">Нет планет.</div>`;
     return `<div class="ec-sysblk">
       <div class="ec-sysblk-hd" onclick="ecToggleSys('${esc(s.id)}')">
@@ -6856,6 +6901,8 @@ function ecErr(m) {
   if (m.includes('not enough GC') || m.includes('not enough gc')) return 'Недостаточно ГС';
   if (m.includes('not enough')) return 'Недостаточно средств';
   if (m.includes('not your system')) return 'Это не ваша система';
+  if (m.includes('system belongs to another faction')) return 'Система под чужим флагом — селиться можно только в своей или ничейной';
+  if (m.includes('already colonized') || m.includes('already has a colony')) return 'Планета уже занята колонией или станцией';
   if (m.includes('bad kind')) return 'Неизвестная мера помощи';
   if (m.includes('no free trade hub')) return 'Нет свободных слотов Торгового хаба';
   if (m.includes('has no economy')) return 'У второй стороны нет экономики (не заходила в кабинет)';

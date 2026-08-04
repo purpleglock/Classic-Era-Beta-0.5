@@ -465,7 +465,7 @@
 /* нижняя командная строка */
 .bbd-cmd {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 8px calc(8px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) 8px;
   background: rgba(4,6,11,.94); border-top: 1px solid rgba(90,220,240,.16);
 }
@@ -496,6 +496,16 @@
   .bbd-s { width: 224px; }
   .bbd-cmd { padding: 10px 14px; }
   .bbd-fire { flex: 0 0 300px; margin-left: auto; }
+}
+
+/* Телефон: иконок в командной строке до семи (⚡ ✕ ↺ ↻ − + ⌂) — вместе с
+   «В БОЙ» они в 360px не влезают и кнопка ужималась в ноль. Разводим на две
+   строки: иконки тянутся по ширине экрана, «В БОЙ» — своей строкой под ними.
+   Лента бортов и полоска выбранного борта поднимаются на высоту двух строк. */
+@media (max-width: 759.98px) {
+  .bbd-ic { width: auto; flex: 1 1 38px; min-width: 34px; max-width: 52px; }
+  .bbd-fire { flex: 1 0 100%; margin-left: 0; }
+  .bbd-tray-wrap, .bbf-sel { bottom: 120px; }
 }
 
 

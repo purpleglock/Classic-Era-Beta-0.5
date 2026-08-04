@@ -632,6 +632,8 @@
 .ec-pl-l { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ec-pl-ic { font-size: 16px; flex-shrink: 0; opacity: .9; }
 .ec-pl-free .ec-pl-ic { opacity: .4; }
+/* Планета занята чужой державой — строка приглушена, кнопок нет */
+.ec-pl-taken { opacity: .55; }
 .ec-pl-txt { min-width: 0; }
 .ec-pl-nm { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* звезда-хозяйка в кратной системе — приписка к имени, не второй акцент */
