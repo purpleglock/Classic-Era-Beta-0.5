@@ -472,6 +472,10 @@ function bbRender() {
     sheet = `<div class="bbf-sheet"><div class="bbf-sheet-h">Подкрепление
         <button onclick="bbSheet(null)">✕</button></div>
       <div class="bbf-sheet-b">${bbReinfPanel(s) || '<div class="bb-empty">Резерв пуст.</div>'}</div></div>`;
+  } else if (BB.sheet === 'kit' && sel) {
+    sheet = `<div class="bbf-sheet"><div class="bbf-sheet-h">Снаряжение · ${esc(sel.name)}
+        <button onclick="bbSheet(null)">✕</button></div>
+      <div class="bbf-sheet-b">${bbKitPanel(s, sel)}</div></div>`;
   } else if (BB.sheet === 'unit' && sel) {
     sheet = `<div class="bbf-sheet"><div class="bbf-sheet-h"><span class="bbf-sheet-n">${bbFacIco(sel)}${esc(sel.name)}</span>
         <button onclick="bbSheet(null)">✕</button></div>
@@ -491,6 +495,15 @@ function bbRender() {
   const healBtn = (sel && sel.mine && s.my_turn && bbHasHeal(sel) && bbCanFire(sel))
     ? `<button class="bbd-ic${BB.heal ? ' bbd-ic-on' : ''}" onclick="bbHealMode()"
          title="${BB.heal ? 'Выберите союзника для ремонта (ещё раз — отмена)' : 'Ремонт нано-роем по союзному кораблю'}">🛠</button>`
+    : '';
+  // Снаряжение: кнопка есть только у борта, где оно вообще стоит. Цифра —
+  // сколько модулей готово прямо сейчас: чтобы не открывать список впустую.
+  const kitReady = (sel && Array.isArray(sel.acts))
+    ? sel.acts.filter(a => bbKitCd(sel, a.k) === 0).length : 0;
+  const kitBtn = (sel && sel.mine && s.status === 'active' && Array.isArray(sel.acts) && sel.acts.length)
+    ? `<button class="bbd-ic${BB.mod ? ' bbd-ic-on' : ''}" onclick="bbSheet('kit')"
+         title="Активное снаряжение: ${kitReady} из ${sel.acts.length} готово">🧰${
+           kitReady ? `<b>${kitReady}</b>` : ''}</button>`
     : '';
   const bar = sel ? `<div class="bbf-sel" onclick="bbSheet('unit')">
       <span class="bbf-sel-n">${bbFacIco(sel)}${esc(sel.name)}</span>
@@ -520,6 +533,7 @@ function bbRender() {
         ${poolLeft ? `<button class="bbd-ic" onclick="bbSheet('reinf')" title="Подкрепление">⊕</button>` : ''}
         ${s.can_force ? `<button class="bbd-ic" onclick="bbForce()" title="Прожать просроченный ход">⏱</button>` : ''}
         ${wheelBtn}
+        ${kitBtn}
         <button class="bbd-ic${BB.fog ? ' bbd-ic-on' : ''}" onclick="bbFogToggle()"
           title="Покрытие радаров: тьма — куда сенсоры не достают, штриховка — сектор под РЭБ. Слева легенда">📡</button>
         ${healBtn}
@@ -644,8 +658,163 @@ function bbFallback2D() {
   if (typeof toast === 'function') toast('Трёхмерная доска недоступна — вернулись к плоской', 'err');
 }
 
-// Шторка: журнал / подкрепление / ТТХ выбранного борта.
+// Шторка: журнал / подкрепление / ТТХ / снаряжение выбранного борта.
 function bbSheet(k) { BB.sheet = (BB.sheet === k ? null : k); bbRender(); }
+
+// ════════════════════════════════════════════════════════════
+// АКТИВНОЕ СНАРЯЖЕНИЕ — зеркало _bt_modules.sql
+// Модулей у большого борта бывает много, поэтому это СПИСОК в шторке, а не
+// сегменты колеса: в кольцо влезает пять штук, дальше оно нечитаемо.
+// ════════════════════════════════════════════════════════════
+var BBK = {
+  siege:     { ico: '\u{1F3F9}', name: 'Осадная платформа',   need: null,   cost: 2.0 },
+  salvo:     { ico: '\u{1F680}', name: 'Ракетный залп',        need: 'foe',  cost: 2.0 },
+  broadside: { ico: '\u{1F4A5}', name: 'Бортовой залп',        need: 'foe',  cost: 2.5 },
+  blink:     { ico: '\u{2728}',  name: 'Прыжок',               need: 'hex',  cost: 0.0 },
+  cloak:     { ico: '\u{1F32B}', name: 'Маскировка',           need: null,   cost: 1.0 },
+  amp:       { ico: '\u{26A1}',  name: 'Усилитель контура',    need: null,   cost: 1.0 },
+  drones:    { ico: '\u{1F41D}', name: 'Ремонтные дроны',      need: 'ally', cost: 1.5 },
+  // ── пакет 2 ──
+  torpedo:   { ico: '\u{1F4A3}', name: 'Торпеда «Голиаф»',     need: 'foe',  cost: 2.5 },
+  storm:     { ico: '\u{1F327}', name: 'Ракеты «Шквал»',       need: 'foe',  cost: 2.0 },
+  ram:       { ico: '\u{1F411}', name: 'Плазменный таран',     need: 'foe',  cost: 2.0 },
+  rupture:   { ico: '\u{1F5E1}', name: 'Разрывной таран',      need: 'foe',  cost: 2.0 },
+  drain:     { ico: '\u{1FAAB}', name: 'Торпеда-иссушитель',   need: 'foe',  cost: 1.5 },
+  wbreak:    { ico: '\u{1F528}', name: 'Ракета «Ломовик»',     need: 'foe',  cost: 1.5 },
+  disrupt:   { ico: '\u{1F6AB}', name: 'Ракета-подавитель',    need: 'foe',  cost: 1.5 },
+  wboost:    { ico: '\u{1F53A}', name: 'Ракета-усилитель',     need: 'ally', cost: 1.0 },
+  pboost:    { ico: '\u{1F4E3}', name: 'Импульс «Хорал»',      need: null,   cost: 1.5 },
+  hell:      { ico: '\u{1F525}', name: 'Адские лазеры',        need: null,   cost: 2.0 },
+  blind:     { ico: '\u{1F4FA}', name: 'Скремблер-импульс',    need: null,   cost: 1.0 },
+  pdup:      { ico: '\u{2602}',  name: 'Противоракетные лазеры', need: null, cost: 1.0 },
+  stasis:    { ico: '\u{1F9CA}', name: 'Стазис-лучи',          need: null,   cost: 1.5 },
+  aboost:    { ico: '\u{1F6E1}', name: 'Импульс брони',        need: null,   cost: 1.5 },
+  tractor:   { ico: '\u{1F9F2}', name: 'Тяговый луч',          need: 'foe',  cost: 1.5 },
+  nuke:      { ico: '\u{2622}',  name: 'Ядерная ракета',       need: 'foe',  cost: 3.0 },
+  tartarus:  { ico: '\u{1F573}', name: 'Ракета «Тартар»',      need: 'foe',  cost: 2.0 },
+  sammo:     { ico: '\u{1F9CA}', name: 'Стазис-боеприпас',     need: null,   cost: 1.0 },
+  hard:      { ico: '\u{1F512}', name: 'Броневой замок',       need: null,   cost: 1.0 },
+  reboot:    { ico: '\u{1F504}', name: 'Перезапуск снаряжения', need: null,  cost: 1.0 },
+  rapid:     { ico: '\u{1F3AF}', name: 'Беглый огонь',         need: null,   cost: 1.0 },
+  energy:    { ico: '\u{1F50B}', name: 'Энергогенератор',      need: null,   cost: 0.0 },
+};
+// Дебаффы, которые могут висеть на борту. Зеркало _bt_deb_ru.
+var BBK_DEB = {
+  stasis:  'вязкое поле — шаг вдвое дороже',
+  disrupt: 'шина заглушена — модули не работают',
+  wbreak:  'наведение сбито — урон вполовину',
+  soft:    'обшивка вспорота — входящий урон выше',
+};
+function bbKitDesc(a) {
+  const d = +a.dmg || 0, r = +a.rng || 0, v = +a.val || 0;
+  switch (a.k) {
+    case 'siege':     return `урон ×${BBW_SIEGE_DMG}, рубеж ×${BBW_SIEGE_RNG} — но с места ни шагу`;
+    case 'salvo':     return `${bbNum(d)} урона по цели до ${r} гекс. · ракеты, ПРО режет`;
+    case 'broadside': return `${bbNum(d)} по цели и половина по соседям, до ${r} гекс.`;
+    case 'blink':     return `прыжок до ${r} гекс. в пустой гекс, секунд не тратит`;
+    case 'cloak':     return `+${v} к скрытности до своего следующего хода`;
+    case 'amp':       return `+${Math.round(v * 100)}% урона всем залпам до конца хода`;
+    case 'drones':    return `+${bbNum(v)} корпуса союзнику до ${r} гекс.`;
+    case 'torpedo':   return `${bbNum(d)} по цели и половина по всем рядом, до ${r} гекс. — задевает своих`;
+    case 'storm':     return `${bbNum(d)} по цели до ${r} гекс. · в упор работает, мёртвой зоны нет`;
+    case 'ram':       return `${bbNum(d)} вплотную, СКВОЗЬ щит`;
+    case 'rupture':   return `${bbNum(d)} вплотную сквозь щит + вспарывает броню на ход`;
+    case 'drain':     return `−${v} c из следующего пула цели, до ${r} гекс.`;
+    case 'wbreak':    return `цель бьёт вполовину слабее весь свой ход, до ${r} гекс.`;
+    case 'disrupt':   return `цель не может жать модули весь свой ход, до ${r} гекс.`;
+    case 'wboost':    return `союзнику +${Math.round(v * 100)}% урона, до ${r} гекс.`;
+    case 'pboost':    return `+${Math.round(v * 100)}% урона себе и своим в радиусе ${r}`;
+    case 'hell':      return `${bbNum(d)} КАЖДОМУ врагу в радиусе ${r}`;
+    case 'blind':     return `−${v} к сенсорам всем врагам в радиусе ${r}`;
+    case 'pdup':      return `+${Math.round(v * 100)}% к перехвату ракет себе и своим в радиусе ${r}`;
+    case 'stasis':    return `врагам в радиусе ${r} следующий ход вдвое дороже`;
+    case 'aboost':    return `−${Math.round(v * 100)}% входящего урона себе и своим в радиусе ${r}`;
+    case 'tractor':   return `подтягивает вражеский борт на ${v} гекс. к себе, до ${r} гекс.`;
+    case 'nuke':      return `${bbNum(d)} по цели и 60% по всем рядом, до ${r} гекс.`;
+    case 'tartarus':  return `стазис + высаженный пул + глухая шина разом, до ${r} гекс.`;
+    case 'sammo':     return 'до конца хода ваши залпы сажают цель в стазис';
+    case 'hard':      return `−${Math.round(v * 100)}% входящего урона до своего следующего хода`;
+    case 'reboot':    return `−${v} ход(а) со ВСЕХ остальных кулдаунов`;
+    case 'rapid':     return 'залп стоит вдвое меньше секунд до конца хода';
+    case 'energy':    return `+${v} c к текущему ходу`;
+    default:          return '';
+  }
+}
+// Что сейчас висит на борту чужими стараниями. Без этой строки игрок не поймёт,
+// почему его залп бьёт вполсилы, а шаг стоит вдвое.
+function bbDebLine(u) {
+  const d = u && u.deb;
+  if (!d) return '';
+  const ks = Object.keys(d).filter(k => +d[k] > 0);
+  if (!ks.length) return '';
+  return `<div class="bb-deb">⚠ ${ks.map(k => esc(BBK_DEB[k] || k)).join(' · ')}</div>`;
+}
+// Сколько ходов ещё ждать (0 — готово).
+function bbKitCd(u, k) { return Math.max(0, +((u.mcd || {})[k]) || 0); }
+
+function bbKitPanel(s, u) {
+  const acts = Array.isArray(u.acts) ? u.acts : [];
+  if (!acts.length) {
+    return '<div class="bb-empty">На этом борту нет активного снаряжения. Оно ставится в конструкторе — модули с кнопкой: осадная платформа, ракетный блок, прыжковый ускоритель, маскировка, усилитель контура, ремонтные дроны.</div>';
+  }
+  const canAct = u.acted || (s.acts_left > 0);
+  const jam = u.deb && +u.deb.disrupt > 0;      // подавитель глушит всю панель
+  return bbDebLine(u) + acts.map(a => {
+    const meta = BBK[a.k] || { ico: '\u{2699}', name: a.k, cost: 1 };
+    const cd = bbKitCd(u, a.k);
+    const cost = meta.cost;
+    // Осада — единственное, что переключается туда-обратно: разложенной
+    // платформе кнопка меняет смысл на «свернуть».
+    const isSiegeOff = a.k === 'siege' && u.stance === 'siege';
+    const busyStance = a.k === 'siege' && !isSiegeOff && u.stance !== 'off';
+    let why = '';
+    if (!s.my_turn) why = 'Сейчас ход противника.';
+    else if (jam) why = 'Шина снаряжения заглушена подавителем — в этом ходу модули не работают.';
+    else if (cd > 0) why = `Перезарядка: ещё ${cd} ход(ов).`;
+    else if (!canAct) why = `Активации кончились: за ход действуют не больше ${s.acts_max || 6} кораблей.`;
+    else if (+u.tp + 1e-9 < cost) why = `Нужно ${cost.toFixed(1)} c, осталось ${(+u.tp).toFixed(1)} c.`;
+    else if (busyStance) why = 'Мощность уже направлена в этом ходу.';
+    const ok = !why;
+    const lbl = isSiegeOff ? 'Свернуть' : (meta.need ? 'Навести' : 'Включить');
+    const arm = BB.mod === a.k;
+    return `<div class="bb-kit${ok ? '' : ' bb-kit-off'}${arm ? ' bb-kit-arm' : ''}">
+        <div class="bb-kit-h"><span class="bb-kit-i">${meta.ico}</span>
+          <b>${esc(meta.name)}</b>
+          <span class="bb-kit-c">${cd > 0 ? `⟳ ${cd}` : (cost > 0 ? `${cost.toFixed(1)} c` : 'без секунд')}</span></div>
+        <div class="bb-kit-d">${esc(bbKitDesc(a))}</div>
+        ${why ? `<div class="bb-kit-w">${esc(why)}</div>` : ''}
+        <button class="btn btn-sm${arm ? ' btn-gd' : ''}" ${ok ? '' : 'disabled'}
+          onclick="bbKitUse('${jsq(a.k)}')">${arm ? 'Отмена — кликните ещё раз' : esc(lbl)}</button>
+      </div>`;
+  }).join('');
+}
+
+// Нажатие модуля. Что можно решить сразу — шлём сразу; чему нужна цель —
+// взводим режим наведения и ждём клика по доске (как у нано-роя).
+function bbKitUse(key) {
+  const s = BB.st, u = (s.units || []).find(x => x.id === BB.sel);
+  if (!u) return;
+  if (BB.mod === key) { BB.mod = null; bbRender(); return; }   // повторный тап = отмена
+  if (key === 'siege') {
+    BB.mod = null;
+    bbAct('battle_stance', { p_battle: BB.id, p_unit: u.id,
+                             p_mode: u.stance === 'siege' ? 'off' : 'siege' });
+    return;
+  }
+  const meta = BBK[key] || {};
+  if (!meta.need) {
+    BB.mod = null;
+    bbAct('battle_module', { p_battle: BB.id, p_unit: u.id, p_key: key });
+    return;
+  }
+  BB.mod = key;                       // ждём клик по доске
+  BB.heal = false;
+  BB.sheet = null;                    // шторка закрывается, иначе доски не видно
+  toast(meta.need === 'hex' ? 'Кликните по пустому гексу — туда уйдёт прыжок'
+      : meta.need === 'ally' ? 'Кликните по союзному борту'
+      : 'Кликните по вражескому борту', 'ok');
+  bbRender();
+}
 
 // ════════════════════════════════════════════════════════════
 // ФАЗА РАССТАНОВКИ — отдельный экран (в т.ч. телефон)
@@ -951,7 +1120,7 @@ function bbSpecSheet(s) {
   const wpn = Array.isArray(p.wpn) && p.wpn.length ? p.wpn : [{ rng: p.rng, dmg: p.dmg }];
   const guns = wpn.slice().sort((a, b) => (b.rng || 0) - (a.rng || 0))
     .map(g => row(`${bbGroupLabel(g)}${g.shots > 1 && !bbIsHeal(g) ? ` · залп ×${g.shots}` : ''}`,
-                  `${bbIsHeal(g) ? `+${g.dmg} HP союзнику` : g.dmg} · до ${g.rng} гекс.`)).join('');
+                  `${bbIsHeal(g) ? `+${g.dmg} HP союзнику` : g.dmg} · до ${g.rng} гекс.${bbGrpBandTxt(g)}`)).join('');
 
   // Во весь экран, а не полоской над лентой: на телефоне ленте бортов и панели
   // команд остаётся ~160 px, паспорт корабля в них не влезает и упирается в
@@ -1009,6 +1178,20 @@ function bbGroupLabel(g) {
   const kind = g.k ? bbKindLabel(g.k) : 'орудия';
   return g.bat ? `Группа ${esc(g.bat)} · ${kind}` : kind.charAt(0).toUpperCase() + kind.slice(1);
 }
+// Модель урона группы по дистанции — словами. Плоский профиль (арта, ракеты)
+// молчит: писать «спада нет» значит засорять паспорт строкой ни о чём.
+function bbGrpBandTxt(g) {
+  if (bbIsHeal(g)) return '';
+  const rng = Math.max(1, +g.rng || 1);
+  const opt = Math.max(1, Math.floor(rng * (g.opt != null ? +g.opt
+              : (BBW_OPT[g.k] != null ? BBW_OPT[g.k] : 1))));
+  const far = g.far != null ? +g.far : (BBW_FAR[g.k] != null ? BBW_FAR[g.k] : 1);
+  const dmin = bbGrpDmin(g);
+  let s = '';
+  if (dmin > 1) s += ` · не бьёт ближе ${dmin}`;
+  if (opt < rng) s += ` · полный урон до ${opt}, к краю ${Math.round(far * 100)}%`;
+  return s;
+}
 // Тестовый бой против ботов: у врага синтетический fid 'bot' (см. admin_bot_battle)
 function bbAdminBot(s) { return !!s && (s.defender === 'bot' || s.attacker === 'bot'); }
 function bbReinfPanel(s) {
@@ -1050,7 +1233,7 @@ function bbUnitPanel(s) {
   const pct = v => Math.max(0, Math.min(100, v));
   const wpn = (u.wpn && u.wpn.length ? u.wpn : [{ rng: u.rng, dmg: u.dmg }])
     .slice().sort((a, b) => (b.rng || 0) - (a.rng || 0))
-    .map(g => `<div class="bb-stat"><span>${bbGroupLabel(g)}${g.shots > 1 && !bbIsHeal(g) ? ` · залп ×${g.shots}` : ''}</span><b>${bbIsHeal(g) ? `+${g.dmg} HP союзнику` : g.dmg} · до ${g.rng} гекс.</b></div>`).join('');
+    .map(g => `<div class="bb-stat"><span>${bbGroupLabel(g)}${g.shots > 1 && !bbIsHeal(g) ? ` · залп ×${g.shots}` : ''}</span><b>${bbIsHeal(g) ? `+${g.dmg} HP союзнику` : g.dmg} · до ${g.rng} гекс.${bbGrpBandTxt(g)}</b></div>`).join('');
   return `<div class="bb-panel">
       <div class="bb-panel-t">${bbFacIco(u)}${esc(u.name)}</div>
       <div class="bb-panel-h">${bbFacOf(u) ? esc(bbFacOf(u).name || 'держава') + ' · ' : ''}${bbClsName(u.cls)}${u.mine && u.acted ? ' · <b>активирован</b>' : ''}${u.flash ? ' · <b style="color:#ff5c8a">позиция раскрыта выстрелом</b>' : ''}</div>
@@ -1064,6 +1247,7 @@ function bbUnitPanel(s) {
       <div class="bb-stat"><span>Мощность</span><b>${u.stance && u.stance !== 'off'
         ? (u.stance === 'eng' ? '⚙ в двигателях — шаг вдвое дешевле'
          : u.stance === 'wpn' ? '⚔ в орудиях — урон ×1.3, перезарядка быстрее'
+         : u.stance === 'siege' ? `\u{1F3F9} осадная платформа — урон ×${BBW_SIEGE_DMG}, рубеж ×${BBW_SIEGE_RNG}, хода нет`
          : '🛡 в щите — поле держит ход противника')
         : 'не распределена (колесо — клавиша У)'}</b></div>
       <div class="bb-stat"><span>Сенсор / скрытность</span><b>${u.sensor} / ${u.stealth}</b></div>
@@ -1414,13 +1598,20 @@ function bbTipPlan(sel, hx, hy) {
     if (!hit.ok) return { ico: '⚔', t: 'Залп невозможен', s: hit.why, bad: true };
     if (tp + 1e-9 < c) return { ico: '⚔', t: `Залп — ${c.toFixed(1)} с`, cost: c,
       s: `осталось ${tp.toFixed(1)} с — не хватает ${(c - tp).toFixed(1)} с`, bad: true };
+    // Спад по дистанции показываем ТОЛЬКО когда он есть: иначе строка шумит.
+    const fade = hit.fade < 0.98 ? ` · с этой дистанции ${Math.round(hit.fade * 100)}% урона` : '';
     return { ico: '⚔', t: `Залп — ${c.toFixed(1)} с`, cost: c,
-      s: `останется ${(tp - c).toFixed(1)} с${sel.stance === 'wpn' ? ` · форсаж ×${BBW_WPN_DMG}` : ''}` };
+      s: `останется ${(tp - c).toFixed(1)} с`
+         + (sel.stance === 'wpn' ? ` · форсаж ×${BBW_WPN_DMG}` : '')
+         + (sel.stance === 'siege' ? ` · осада ×${BBW_SIEGE_DMG}` : '')
+         + fade };
   }
 
   if (!BB.reach) BB.reach = bbComputeReach(sel);
   const r = BB.reach.get(hx + ':' + hy);
   if (!r) {
+    if (sel.stance === 'siege') return { ico: '\u{1F3F9}', t: 'Платформа разложена',
+      s: 'в осадном режиме корабль прикован к месту до конца хода', bad: true };
     if (bbSteps(sel) < 1) return { ico: '➤', t: 'Секунд на манёвр нет', s: `осталось ${tp.toFixed(1)} с`, bad: true };
     return null;                     // просто далеко — молчим, чтобы не мельтешить
   }
@@ -1508,6 +1699,7 @@ function bbTpBar(u, big) {
 function bbStanceChip(u) {
   const m = { eng: ['⚙', 'двигатели', 'шаг ×0.5'],
               wpn: ['⚔', 'орудия', 'урон ×1.3'],
+              siege: ['\u{1F3F9}', 'осадный режим', `урон ×${BBW_SIEGE_DMG}`],
               shd: ['🛡', 'щит', ''] }[u && u.stance];
   if (!m) return '';
   const extra = u.stance === 'shd' ? `${(+u.shield).toFixed(1)}с поля` : m[2];
@@ -1525,6 +1717,33 @@ function bbShieldBar(u) {
 
 // Множители режимов — зеркало _bt_stance.sql (цена режима и бонусы).
 var BBW_ENG = 0.5, BBW_WPN_DMG = 1.3, BBW_WPN_CST = 0.8, BBW_COST = 1.0;
+// ЗЕРКАЛО _bt_weapon_model.sql: осадный режим факельщика.
+// Осада больше НЕ привилегия класса: её даёт модуль «Осадная платформа «Кряж»».
+// Кто может её включить — видно по u.acts, а не по u.cls (см. BBK/bbKitPanel).
+var BBW_SIEGE_DMG = 2.0, BBW_SIEGE_RNG = 1.25;
+
+// ЗЕРКАЛО _bt_weapon_model.sql: модель урона по дистанции. До opt·rng группа
+// бьёт в полную силу, дальше урон линейно падает до far. У ракет — мёртвая
+// зона dmin (вплотную не наводятся), у арты профиль плоский.
+var BBW_OPT = { kinetic: 0.40, energy: 0.60, missile: 1.00 };
+var BBW_FAR = { kinetic: 0.25, energy: 0.60, missile: 1.00 };
+function bbGrpRng(g, sel) {
+  const r = Math.max(1, +g.rng || 1);
+  return sel && sel.stance === 'siege' ? Math.ceil(r * BBW_SIEGE_RNG) : r;
+}
+function bbGrpDmin(g) {
+  const d = +g.dmin;
+  return d > 0 ? d : (g.k === 'missile' ? 2 : 1);
+}
+// Доля урона группы на дистанции L (0 — не достаёт вовсе).
+function bbFalloff(g, L, sel) {
+  const rng = bbGrpRng(g, sel);
+  if (L < bbGrpDmin(g) || L > rng) return 0;
+  const opt = Math.max(1, Math.floor(rng * (g.opt != null ? +g.opt : (BBW_OPT[g.k] != null ? BBW_OPT[g.k] : 1))));
+  const far = g.far != null ? +g.far : (BBW_FAR[g.k] != null ? BBW_FAR[g.k] : 1);
+  if (L <= opt || rng <= opt) return 1;
+  return Math.max(0.05, Math.min(1, 1 - (1 - far) * (L - opt) / (rng - opt)));
+}
 
 // Шагов по карману в остатке хода (зеркало battle_move: tp / step_cost).
 // ЗЕРКАЛО _bt_stance.sql: без этих множителей доска рисовала прежний радиус,
@@ -1553,6 +1772,9 @@ function bbCanFire(sel) { return (+sel.tp + 1e-9) >= bbFireCost(sel); }
 function bbComputeReach(sel) {
   const s = BB.st;
   const base = bbStepCost(sel), tp = +sel.tp || 0;
+  // Разложенная осадная платформа не ходит вовсе — доска не должна предлагать
+  // маршрут, который сервер всё равно отобьёт.
+  if (sel.stance === 'siege') return new Map();
   if (tp + 1e-9 < base) return new Map();
   const occ = new Set((s.units || []).filter(u => u.id !== sel.id).map(u => u.x + ':' + u.y));
   const reach = new Map();
@@ -1589,14 +1811,21 @@ function bbCanHit(sel, tgt) {
   if (tgt.contact || !tgt.locked) return { ok: false, why: 'цель не захвачена: подведите корабль с радаром ближе (визуал — 3 гекса) или выбейте РЭБ врага' };
   const L = bbDist(sel, tgt);
   const gs = (sel.wpn && sel.wpn.length) ? sel.wpn : [{ rng: sel.rng, dmg: sel.dmg }];
-  let dmg = 0, groups = 0;
+  let dmg = 0, groups = 0, full = 0, close = 0;
   for (const g of gs) {
     if (bbIsHeal(g)) continue;                 // ремонтный рой врага не бьёт
-    if (L >= 1 && L <= g.rng) { dmg += g.dmg; groups++; }
+    const f = bbFalloff(g, L, sel);
+    if (f > 0) { dmg += (+g.dmg || 0) * f; full += (+g.dmg || 0); groups++; }
+    else if (L >= 1 && L < bbGrpDmin(g)) close++;
   }
+  if (!groups && close) return { ok: false,
+    why: `дистанция ${L} — ракетам не хватает разгона на захват, отойдите дальше` };
   if (!groups) return { ok: false, why: `дистанция ${L} — дальше, чем бьют огневые группы` };
   if (!bbLosClear(sel, tgt)) return { ok: false, why: 'линию огня перекрывают астероиды' };
-  return { ok: true, dmg: Math.round(dmg), groups };
+  // fade — во сколько раз дистанция съедает залп. Нужен подсказке: «бьёшь, но
+  // вполсилы — подойди ближе» это другое решение, чем «не достаёшь».
+  return { ok: true, dmg: Math.round(dmg), groups,
+           fade: full > 0 ? dmg / full : 1 };
 }
 // Можно ли выбранным отремонтировать союзника (зеркало ветки ремонта в battle_fire).
 function bbCanHeal(sel, tgt) {
@@ -1847,6 +2076,29 @@ function bbClick(x, y) {
   const tgt = (s.units || []).find(u => u.x === x && u.y === y);
   const sel = (s.units || []).find(u => u.id === BB.sel);
 
+  // режим наведения модуля: снаряжению нужна цель или гекс. Разбираем ДО
+  // остальных веток — иначе клик по врагу уйдёт в обычный залп.
+  if (BB.mod && sel) {
+    const key = BB.mod, meta = BBK[key] || {};
+    const done = () => { BB.mod = null; bbRender(); };
+    if (meta.need === 'hex') {
+      if (tgt) { toast('Гекс занят — прыжок только в пустой', 'err'); return; }
+      // Дальность берём из самого модуля, а не из константы: у тира она своя.
+      const act = (sel.acts || []).find(a => a.k === key) || {};
+      const max = +act.rng || 5, L = bbDist(sel, { x, y });
+      if (L < 1 || L > max) { toast(`Прыжок бьёт на ${max} гексов, а до цели ${L}`, 'err'); return; }
+      done();
+      bbAct('battle_module', { p_battle: BB.id, p_unit: sel.id, p_key: key, p_x: x, p_y: y });
+      return;
+    }
+    if (!tgt) { toast('Нужно кликнуть по кораблю', 'err'); return; }
+    if (meta.need === 'ally' && tgt.side !== s.my_side) { toast('Дроны чинят только своих', 'err'); return; }
+    if (meta.need === 'foe' && tgt.side === s.my_side) { toast('Это союзник — по своим не бьём', 'err'); return; }
+    done();
+    bbAct('battle_module', { p_battle: BB.id, p_unit: sel.id, p_key: key, p_target: tgt.id });
+    return;
+  }
+
   // режим ремонта: клик по СОЮЗНОМУ кораблю (своему или союзника по стороне) —
   // нано-рой латает ему корпус. Тратит выстрел и активацию, как обычный залп.
   if (BB.heal && sel && tgt && tgt.side === s.my_side) {
@@ -1867,6 +2119,7 @@ function bbClick(x, y) {
   if (tgt && tgt.mine) {
     BB.sel = (BB.sel === tgt.id ? null : tgt.id);
     BB.heal = false;
+    BB.mod = null;
     BB.reach = null;
     bbRender();
     return;
@@ -2593,8 +2846,16 @@ function bbPaintHighlights(ctx, s) {
 function bbPaintArcs(ctx, sel) {
   const R = BB.R;
   const gs = (sel.wpn && sel.wpn.length) ? sel.wpn : [{ rng: sel.rng, dmg: sel.dmg }];
-  const rings = [...new Set(gs.map(g => Math.max(1, g.rng || 1)))].sort((a, b) => a - b);
+  const rings = [...new Set(gs.map(g => bbGrpRng(g, sel)))].sort((a, b) => a - b);
   if (!rings.length) return;
+  // Рубеж полного урона: за ним залп начинает слабеть. Пунктиром, чтобы не
+  // спутать с границей досягаемости — сплошная линия по-прежнему «дальше никак».
+  const opts = [...new Set(gs.filter(g => !bbIsHeal(g)).map(g => {
+    const rng = bbGrpRng(g, sel);
+    const o = Math.max(1, Math.floor(rng * (g.opt != null ? +g.opt
+                : (BBW_OPT[g.k] != null ? BBW_OPT[g.k] : 1))));
+    return o < rng ? o : 0;                    // плоский профиль рубежа не имеет
+  }).filter(Boolean))];
   const { px: cx, py: cy } = bbHexCenter(sel.x, sel.y);
   ctx.save();
   ctx.lineWidth = Math.max(0.6, 1 / BB.zoom);
@@ -2604,6 +2865,13 @@ function bbPaintArcs(ctx, sel) {
     ctx.arc(cx, cy, rng * R * 1.5, 0, 6.2832);
     if (inner) { ctx.fillStyle = 'rgba(150,240,255,0.05)'; ctx.fill(); }
     ctx.strokeStyle = `rgba(150,240,255,${inner ? 0.32 : 0.16})`;
+    ctx.stroke();
+  });
+  ctx.setLineDash([4 / BB.zoom, 4 / BB.zoom]);
+  ctx.strokeStyle = 'rgba(255,210,140,0.30)';
+  opts.forEach(o => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, o * R * 1.5, 0, 6.2832);
     ctx.stroke();
   });
   ctx.restore();
@@ -2965,6 +3233,7 @@ function bbStanceLbl(u) {
   if (!u || !u.stance || u.stance === 'off') return '';
   return u.stance === 'eng' ? ' · ⚙ форсаж двигателей'
        : u.stance === 'wpn' ? ' · ⚔ форсаж орудий'
+       : u.stance === 'siege' ? ' · \u{1F3F9} осадный режим — с места ни шагу'
        : ` · 🛡 щит ${(+u.shield).toFixed(1)} c`;
 }
 
@@ -2993,7 +3262,8 @@ function bbWheelSegs(u) {
   const after = tp - BBW_COST;
   const set = u.stance && u.stance !== 'off';
   const busy = set ? `Мощность уже направлена в ${
-    u.stance === 'eng' ? 'двигатели' : u.stance === 'wpn' ? 'орудия' : 'щит'
+    u.stance === 'eng' ? 'двигатели' : u.stance === 'wpn' ? 'орудия'
+    : u.stance === 'siege' ? 'осадную платформу' : 'щит'
   } — переиграть можно только следующим ходом.` : null;
 
   const hexNow  = Math.floor((tp + 1e-9) / step);
@@ -3026,7 +3296,25 @@ function bbWheelSegs(u) {
         : `Поле держится ВЕСЬ ХОД ПРОТИВНИКА и опускается только в начале вашего следующего хода — оно для того и нужно, чтобы пережить чужой залп. Гасит ${bbNum(u.mitig)} урона в секунду и снимает ${Math.round(u.reduc * 100)}% с накрытого.`),
       cmp: { now: 0, up: Math.max(0, tp), nowT: 'без поля', upT: Math.max(0, tp).toFixed(1) + ' c поля' },
       hint: 'Манёвр роняет поле: подняли — стоим.' }
-  ].concat(bbWheelKit(u, acts));
+  ].concat(bbKitSeg(u, acts)).concat(bbWheelKit(u, acts));
+}
+
+// Снаряжение в колесо НЕ раскладываем: модулей у большого борта до семи, в
+// кольцо они не влезают. Один сегмент-дверь — он открывает список-шторку.
+function bbKitSeg(u, acts) {
+  if (!Array.isArray(u.acts) || !u.acts.length) return [];
+  const ready = u.acts.filter(a => bbKitCd(u, a.k) === 0).length;
+  return [{
+    key: 'kit', ico: '\u{1F9F0}', name: 'Снаряжение',
+    cost: `${ready} из ${u.acts.length} готово`,
+    ok: acts && ready > 0,
+    act: function () { bbSheet('kit'); },
+    why: !ready ? 'Всё снаряжение на перезарядке — ждём следующего хода.'
+       : !acts ? 'Активации на этот ход кончились.'
+       : `Активные модули борта: ${u.acts.map(a => (BBK[a.k] || {}).name || a.k).join(', ')}. Откроется список — там же написано, что каждый делает и когда перезарядится.`,
+    cmp: { now: u.acts.length, up: ready, nowT: 'всего ' + u.acts.length, upT: 'готово ' + ready },
+    hint: 'Снаряжение тратит активацию борта, но не залп: можно ударить модулем и выстрелить в тот же ход.'
+  }];
 }
 
 // Не всякий борт умеет только «мощность»: у ремонтника есть нано-рой, у

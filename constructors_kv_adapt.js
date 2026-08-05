@@ -114,6 +114,25 @@
         });
       }
     }
+    // ЯКОРЬ ИНДЕКСОВ МОДУЛЕЙ. Раздаём idx по K.modules_order ДО обхода классов:
+    // иначе позиция модуля зависела бы от того, у какого класса он встретился
+    // первым, и дописывание модуля корвету сдвигало бы начинку живых проектов
+    // (см. modules_order в constructors_kv.js). Доступность тут не выдаётся —
+    // только номера; кто что может ставить, по-прежнему решает modules_ids.
+    // Затравка — ТОЛЬКО модулями этой категории: каталоги ship/ground/aviation
+    // строятся отдельно, и посеять в наземку корабельный список значит выдать
+    // её трём десантным модулям чужие номера.
+    if (K.modules_order && K.modules_order.length) {
+      var used = {};
+      keys.forEach(function (k) {
+        (K.modules_ids[k] || []).forEach(function (id) { used[id] = true; });
+      });
+      var seed = [];
+      K.modules_order.forEach(function (id) {
+        if (used[id] && K.modulesLibrary[id]) seed.push(K.modulesLibrary[id]);
+      });
+      unionInto(modules, mIndex, buildClassModules(seed), new Set());
+    }
     keys.forEach(function (k) {
       var sc = K.shipClasses[k];
       if (!sc) return;

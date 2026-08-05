@@ -780,3 +780,37 @@
 .bbtip-bad::before { background: rgba(255, 92, 138, 0.6); }
 .bbtip-bad .bbtip-i { color: #ff5c8a; }
 .bbtip-bad .bbtip-sc i.use { background: #ff5c8a; }
+
+/* ── Панель активного снаряжения (модули с кулдауном) ──────────
+   Список, а не кольцо: у линкора активных модулей до семи, в колесо
+   действий они не влезают. Карточка = что делает + чем платим + почему
+   сейчас нельзя. Скролл даёт .bbf-sheet-b, здесь только карточки. */
+.bb-kit {
+  padding: 8px 10px; margin-bottom: 6px;
+  background: rgba(127, 212, 255, .06);
+  box-shadow: inset 0 0 0 1px rgba(127, 212, 255, .22);
+}
+.bb-kit-h { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+.bb-kit-i { font-size: 15px; line-height: 1; }
+.bb-kit-h b { flex: 1; font-weight: 600; font-size: 13px; }
+.bb-kit-c { font-size: 11px; color: var(--gd, #7fd4ff); white-space: nowrap; }
+.bb-kit-d { font-size: 11px; color: var(--muted, #7d8fa5); margin-bottom: 5px; }
+.bb-kit-w { font-size: 11px; color: #e8a06a; margin-bottom: 5px; }
+.bb-kit button { width: 100%; }
+/* На перезарядке / без секунд — гасим, но НЕ прячем: игрок должен видеть,
+   что модуль есть и когда он вернётся. */
+.bb-kit-off { opacity: .55; box-shadow: inset 0 0 0 1px rgba(127, 212, 255, .1); }
+/* Взведён и ждёт клика по доске */
+.bb-kit-arm { background: rgba(127, 212, 255, .16); box-shadow: inset 0 0 0 1px rgba(127, 212, 255, .6); }
+/* Счётчик готовых модулей на кнопке командной строки */
+.bbd-ic b {
+  font-size: 9px; font-weight: 700; margin-left: 1px;
+  color: var(--gd, #7fd4ff); vertical-align: super;
+}
+
+/* Дебаффы, висящие на борту: почему залп бьёт вполсилы, а шаг вдвое дороже */
+.bb-deb {
+  padding: 6px 9px; margin-bottom: 7px; font-size: 11px; line-height: 1.45;
+  color: #e8a06a; background: rgba(232, 160, 106, .09);
+  box-shadow: inset 0 0 0 1px rgba(232, 160, 106, .3);
+}

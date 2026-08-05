@@ -754,6 +754,52 @@ const modulesLibrary = {
     hangar: { name: 'Ангар', price: 25000000, category: 'Конструкционные модули', visibility: 0, power: 1200, capacity: 600, crewRequired: 20, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 120, coloredmetall: 40, rudametall: 0, kristall: 0, staarvis: 0 }, combat: { hangar: 300 }, lor: 'Палубный ангар: каждые 300 очков ангаров дают одно авиакрыло, которое можно поднять прямо в бою.' },
     tocka: { name: 'Лазерная точечная защита', price: 5000000, category: 'Конструкционные модули', visibility: 10, power: 500, capacity: 0, crewRequired: 5, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 0, coloredmetall: 20, rudametall: 0, kristall: 10, staarvis: 0 }, combat: { pd: 0.25 }, lor: 'Лазерные турели ближнего рубежа: сбивают 25% входящих ракет (ПРО суммируется, потолок 60%).' },
 
+    // --- АКТИВНОЕ СНАРЯЖЕНИЕ (боевые модули с кулдауном) ---
+    // combat.act — ключ активации, combat.cd — перезарядка в ХОДАХ. Такие модули
+    // не дают пассивной прибавки: их нажимают в бою из панели «Снаряжение».
+    // Ставятся как любой другой модуль и жрут энергию/слоты — за возможность
+    // нажать кнопку платят палубой, а не «просто есть у класса».
+    md_siege: { name: 'Осадная платформа «Кряж»', price: 45000000, category: 'Конструкционные модули', visibility: 20, power: 1400, capacity: 0, crewRequired: 15, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 80, coloredmetall: 40, rudametall: 0, kristall: 30, staarvis: 0 }, combat: { act: 'siege', cd: 0 }, lor: 'Раскладные опоры и стабилизаторы отдачи: корабль встаёт намертво и превращается в батарею — урон ×2, рубеж ×1.25. Пока платформа разложена, с места не сдвинуться.' },
+    md_tempest: { name: 'Ракетный блок «Буревестник»', price: 28000000, category: 'Конструкционные модули', visibility: 30, power: 700, capacity: 0, crewRequired: 8, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 60, coloredmetall: 30, rudametall: 0, kristall: 20, staarvis: 0 }, combat: { act: 'salvo', cd: 3, dmg: 4200, rng: 12 }, lor: 'Пакет дальнобойных ракет: один залп по цели помимо основного вооружения. Ракеты — значит их режет вражеская ПРО.' },
+    md_broadside: { name: 'Плазменный бортовой залп «Свара»', price: 40000000, category: 'Конструкционные модули', visibility: 40, power: 1100, capacity: 0, crewRequired: 12, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 90, coloredmetall: 50, rudametall: 0, kristall: 40, staarvis: 0 }, combat: { act: 'broadside', cd: 3, dmg: 3000, rng: 4 }, lor: 'Батарея плазменных стволов в борт: накрывает цель И все соседние с ней гексы. Дистанция короткая — это оружие свалки, а не перестрелки.' },
+    md_blink: { name: 'Прыжковый ускоритель «Мгла»', price: 26000000, category: 'Конструкционные модули', visibility: 0, power: 800, capacity: 0, crewRequired: 4, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 20, coloredmetall: 20, rudametall: 0, kristall: 50, staarvis: 20 }, combat: { act: 'blink', cd: 3, rng: 5 }, lor: 'Микропрыжок: корабль возникает в пустом гексе до 5 клеток от себя, минуя астероиды и чужие борта. Секунды хода на это не тратятся — тратится сам модуль.' },
+    md_cloak: { name: 'Маскировочное поле «Вуаль»', price: 32000000, category: 'Модули радиотумана', visibility: 0, power: 900, capacity: 0, crewRequired: 6, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 20, coloredmetall: 30, rudametall: 0, kristall: 70, staarvis: 10 }, combat: { act: 'cloak', cd: 4, val: 8 }, lor: 'Гасит сигнатуру до начала своего следующего хода: +8 к скрытности. Радар врага теряет захват — а по непойманному контакту не стреляют.' },
+    md_ampl: { name: 'Усилитель контура «Ярость»', price: 30000000, category: 'Конструкционные модули', visibility: 10, power: 1000, capacity: 0, crewRequired: 6, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 40, coloredmetall: 40, rudametall: 0, kristall: 50, staarvis: 0 }, combat: { act: 'amp', cd: 3, val: 0.6 }, lor: 'Разгоняет орудийный контур: +60% урона всем залпам до конца хода. Складывается с форсажем орудий — но и то и другое разом ход не потянет.' },
+    md_repdrones: { name: 'Ремонтные дроны «Пчела»', price: 24000000, category: 'Конструкционные модули', visibility: 0, power: 600, capacity: 0, crewRequired: 5, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 50, coloredmetall: 20, rudametall: 0, kristall: 30, staarvis: 0 }, combat: { act: 'drones', cd: 3, val: 2500, rng: 6 }, lor: 'Рой ремонтных дронов уходит к союзному борту и латает корпус. В отличие от нано-роя не занимает залп — это отдельное снаряжение.' },
+
+    // --- ВТОРОЙ ПАКЕТ АКТИВНОГО СНАРЯЖЕНИЯ (проекция /wiki/Modules) ---
+    // Ударные: торпеды, ракеты, тараны.
+    md_goliath: { name: 'Торпеда «Голиаф»', price: 55000000, category: 'Конструкционные модули', visibility: 40, power: 1300, capacity: 0, crewRequired: 14, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 120, coloredmetall: 50, rudametall: 0, kristall: 40, staarvis: 10 }, combat: { act: 'torpedo', cd: 4, dmg: 9000, rng: 8 }, lor: 'Тяжёлая торпеда с ядерной боевой частью. Накрывает цель и всё, что стоит вплотную к ней, — включая ваши борта, если подошли близко.' },
+    md_storm: { name: 'Ракеты «Шквал»', price: 26000000, category: 'Конструкционные модули', visibility: 30, power: 650, capacity: 0, crewRequired: 7, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 55, coloredmetall: 25, rudametall: 0, kristall: 15, staarvis: 0 }, combat: { act: 'storm', cd: 3, dmg: 5600, rng: 5 }, lor: 'Плотный пакет ракет ближнего боя: бьёт сильнее «Буревестника», но только в упор. Разгон короткий, поэтому мёртвой зоны у него нет.' },
+    md_ram: { name: 'Плазменный таран', price: 34000000, category: 'Конструкционные модули', visibility: 20, power: 1000, capacity: 0, crewRequired: 10, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 100, coloredmetall: 30, rudametall: 0, kristall: 30, staarvis: 0 }, combat: { act: 'ram', cd: 3, dmg: 8000, rng: 1 }, lor: 'Раскаляет нос корабля и швыряет его в борт соседа. Щит на таран не рассчитан — удар проходит сквозь поле прямо в корпус.' },
+    md_rupture: { name: 'Разрывной таран', price: 38000000, category: 'Конструкционные модули', visibility: 20, power: 1100, capacity: 0, crewRequired: 10, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 110, coloredmetall: 40, rudametall: 0, kristall: 40, staarvis: 0 }, combat: { act: 'rupture', cd: 3, dmg: 5000, rng: 1, val: 0.3 }, lor: 'Таран с зарядом, вспарывающим обшивку: бьёт слабее плазменного, зато сдирает с цели стойкость брони — следующий залп по ней проходит на 30% глубже.' },
+
+    // Дебафф-ракеты: бьют не по корпусу, а по возможностям.
+    md_drain: { name: 'Торпеда-иссушитель', price: 29000000, category: 'Конструкционные модули', visibility: 25, power: 800, capacity: 0, crewRequired: 8, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 40, coloredmetall: 40, rudametall: 0, kristall: 60, staarvis: 0 }, combat: { act: 'drain', cd: 4, dmg: 1200, rng: 6, val: 2 }, lor: 'Высаживает энергосеть цели: в следующий ход у неё будет на 2 секунды меньше. Меньше секунд — меньше манёвра и залпов.' },
+    md_wbreak: { name: 'Ракета «Ломовик»', price: 31000000, category: 'Конструкционные модули', visibility: 25, power: 750, capacity: 0, crewRequired: 7, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 45, coloredmetall: 45, rudametall: 0, kristall: 40, staarvis: 0 }, combat: { act: 'wbreak', cd: 4, dmg: 900, rng: 10, val: 0.5 }, lor: 'Выбивает системы наведения: весь следующий ход цель бьёт вполовину слабее. Урона почти не наносит — она не для этого.' },
+    md_disrupt: { name: 'Ракета-подавитель', price: 33000000, category: 'Конструкционные модули', visibility: 25, power: 850, capacity: 0, crewRequired: 7, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 40, coloredmetall: 50, rudametall: 0, kristall: 70, staarvis: 0 }, combat: { act: 'disrupt', cd: 4, dmg: 700, rng: 10 }, lor: 'Глушит шину снаряжения: весь следующий ход цель не может нажать ни один свой модуль. Ни осады, ни прыжка, ни ремонта.' },
+    md_wboost: { name: 'Ракета-усилитель', price: 27000000, category: 'Конструкционные модули', visibility: 10, power: 700, capacity: 0, crewRequired: 6, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 30, coloredmetall: 40, rudametall: 0, kristall: 50, staarvis: 0 }, combat: { act: 'wboost', cd: 3, rng: 10, val: 0.75 }, lor: 'Стреляет по СВОЕМУ: пристыковывается к борту союзника и разгоняет его орудийный контур на 75% до конца хода.' },
+
+    // Импульсы: работают вокруг носителя, цель выбирать не надо.
+    md_pboost: { name: 'Импульс «Хорал»', price: 42000000, category: 'Конструкционные модули', visibility: 15, power: 1200, capacity: 0, crewRequired: 9, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 60, coloredmetall: 60, rudametall: 0, kristall: 70, staarvis: 10 }, combat: { act: 'pboost', cd: 4, rng: 3, val: 0.5 }, lor: 'Волна синхронизации: +50% урона себе и каждому союзнику в радиусе трёх гексов. Строй, стоящий кучно, бьёт как один корабль.' },
+    md_hell: { name: 'Адские лазеры', price: 44000000, category: 'Конструкционные модули', visibility: 35, power: 1400, capacity: 0, crewRequired: 11, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 70, coloredmetall: 70, rudametall: 0, kristall: 60, staarvis: 0 }, combat: { act: 'hell', cd: 4, dmg: 2600, rng: 2 }, lor: 'Кольцо излучателей бьёт во все стороны разом: достаёт КАЖДОГО врага в двух гексах. Оружие того, кого уже обступили.' },
+    md_scramble: { name: 'Скремблер-импульс', price: 28000000, category: 'Модули радиотумана', visibility: 0, power: 900, capacity: 0, crewRequired: 6, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 30, coloredmetall: 40, rudametall: 0, kristall: 80, staarvis: 0 }, combat: { act: 'blind', cd: 3, rng: 3, val: 5 }, lor: 'Забивает экраны всем врагам в трёх гексах: −5 к сенсорам до их хода. Ослепший радар не держит захват — по вам просто не смогут выстрелить.' },
+    md_amlaser: { name: 'Противоракетные лазеры', price: 30000000, category: 'Конструкционные модули', visibility: 10, power: 950, capacity: 0, crewRequired: 8, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 50, coloredmetall: 50, rudametall: 0, kristall: 40, staarvis: 0 }, combat: { act: 'pdup', cd: 3, rng: 2, val: 0.3 }, lor: 'Поднимает противоракетный зонт над собой и соседями: +30% к перехвату ракет до своего следующего хода. Ответ на ракетную свалку.' },
+    md_stasis: { name: 'Стазис-лучи', price: 36000000, category: 'Конструкционные модули', visibility: 15, power: 1050, capacity: 0, crewRequired: 8, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 40, coloredmetall: 50, rudametall: 0, kristall: 90, staarvis: 10 }, combat: { act: 'stasis', cd: 3, rng: 2 }, lor: 'Вязкое поле вокруг корабля: каждому врагу в двух гексах следующий ход обходится вдвое дороже по секундам. Догнать вас станет нечем.' },
+    md_apulse: { name: 'Импульс брони', price: 41000000, category: 'Конструкционные модули', visibility: 10, power: 1250, capacity: 0, crewRequired: 10, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 140, coloredmetall: 40, rudametall: 0, kristall: 40, staarvis: 0 }, combat: { act: 'aboost', cd: 4, rng: 3, val: 0.35 }, lor: 'Волна усиления переборок: −35% входящего урона себе и каждому союзнику в трёх гексах. Чем плотнее строй, тем больше смысла.' },
+
+    // Дальнобойные и особые.
+    md_tractor: { name: 'Тяговый луч', price: 39000000, category: 'Конструкционные модули', visibility: 15, power: 1150, capacity: 0, crewRequired: 9, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 60, coloredmetall: 50, rudametall: 0, kristall: 80, staarvis: 10 }, combat: { act: 'tractor', cd: 3, rng: 6, val: 2 }, lor: 'Захватывает вражеский борт гравитационным зацепом и подтягивает на два гекса к себе. Вырвать факельщика с дистанции — или выдернуть корвет из-за укрытия под свои орудия.' },
+    md_nuke: { name: 'Ядерная ракета', price: 70000000, category: 'Конструкционные модули', visibility: 50, power: 1800, capacity: 0, crewRequired: 18, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 160, coloredmetall: 70, rudametall: 0, kristall: 60, staarvis: 30 }, combat: { act: 'nuke', cd: 5, dmg: 14000, rng: 14 }, lor: 'Стратегический боеприпас: летит через полдоски и выжигает гекс вместе со всем, что стоит рядом. Кулдаун такой, что за бой её пускают дважды — если повезёт.' },
+    md_tartarus: { name: 'Ракета «Тартар»', price: 48000000, category: 'Конструкционные модули', visibility: 30, power: 1300, capacity: 0, crewRequired: 12, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 60, coloredmetall: 70, rudametall: 0, kristall: 110, staarvis: 20 }, combat: { act: 'tartarus', cd: 5, dmg: 1500, rng: 12 }, lor: 'Урона почти нет — и не надо. Цель разом получает вязкое поле, высаженную энергосеть и глухую шину снаряжения: следующий ход она фактически пропускает.' },
+    md_sammo: { name: 'Стазис-боеприпас', price: 33000000, category: 'Конструкционные модули', visibility: 10, power: 900, capacity: 0, crewRequired: 7, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 50, coloredmetall: 40, rudametall: 0, kristall: 70, staarvis: 0 }, combat: { act: 'sammo', cd: 4 }, lor: 'Перезаряжает орудия вязким боеприпасом: до конца хода КАЖДЫЙ ваш залп сажает цель в стазис — её следующий ход обойдётся вдвое дороже по секундам.' },
+
+    // Внутренние: работают на сам носитель.
+    md_lockdown: { name: 'Броневой замок', price: 35000000, category: 'Конструкционные модули', visibility: 0, power: 1100, capacity: 0, crewRequired: 9, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 130, coloredmetall: 30, rudametall: 0, kristall: 20, staarvis: 0 }, combat: { act: 'hard', cd: 3, val: 0.5 }, lor: 'Стягивает переборки и глушит все лишние контуры: весь чужой ход корабль получает вполовину меньше урона. Стоит того, чтобы пережить залп дредноута.' },
+    md_reboot: { name: 'Перезапуск снаряжения', price: 32000000, category: 'Конструкционные модули', visibility: 0, power: 800, capacity: 0, crewRequired: 5, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 30, coloredmetall: 50, rudametall: 0, kristall: 60, staarvis: 0 }, combat: { act: 'reboot', cd: 4, val: 2 }, lor: 'Аварийный перезапуск шины: снимает по 2 хода со ВСЕХ остальных кулдаунов корабля. Второй «Голиаф» за бой берут именно им.' },
+    md_rapid: { name: 'Режим беглого огня', price: 37000000, category: 'Конструкционные модули', visibility: 20, power: 1250, capacity: 0, crewRequired: 10, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 80, coloredmetall: 50, rudametall: 0, kristall: 30, staarvis: 0 }, combat: { act: 'rapid', cd: 4, val: 0.5 }, lor: 'Скидывает предохранители подачи: до конца хода залп стоит вдвое меньше секунд. Тому, кто стреляет раз в ход, даёт выстрелить дважды.' },
+    md_energen: { name: 'Аварийный энергогенератор', price: 25000000, category: 'Конструкционные модули', visibility: 0, power: 400, capacity: 0, crewRequired: 5, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 40, coloredmetall: 30, rudametall: 0, kristall: 40, staarvis: 0 }, combat: { act: 'energy', cd: 4, val: 2 }, lor: 'Разряжает буферные накопители прямо в шину: +2 секунды к текущему ходу. Ровно тот довесок, которого не хватает на последний залп.' },
+
     // --- ИИ ---
       // ai_sofokl: { name: 'Модуль «Софокл» v9.0.3', price: 10000000, category: 'Конструкционные модули', visibility: 0, power: 1800, capacity: 0, crewProvided: 40, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 50, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 }, lor: 'ИИ, способный справляться с широким спектром задач.' },
     //  ai_kassandra: { name: 'Модуль «Кассандра» v13.0.4', price: 5000000, category: 'Конструкционные модули', visibility: 0, power: 100, capacity: 0, crewRequired: 0, customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 10, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 }, lor: 'ИИ потери телеметрии экипажа.' },
@@ -787,6 +833,28 @@ const modulesLibrary = {
 //////////// 2. РАСПРЕДЕЛЕНИЕ ПО КЛАССАМ (Тут только ID ссылок) ////////////
 //*-------------------------------------------------------------------------*//
 
+// ── ПОРЯДОК МОДУЛЕЙ В КАТАЛОГЕ (жёсткий якорь индексов) ──────
+// Проекты ссылаются на модуль парой {g, idx}, где idx — позиция в массиве
+// категории. Раньше порядок складывался САМ, по первому появлению модуля при
+// обходе классов: достаточно было дописать модуль корвету — и всё, что впервые
+// встречалось у эсминца и дальше, съезжало на позицию вперёд. Живые проекты при
+// этом молча меняли начинку.
+// Теперь порядок задан здесь и только здесь. Список — точный слепок живого
+// каталога; НОВЫЕ модули дописывать ТОЛЬКО В КОНЕЦ, существующие не двигать и
+// не удалять. Модуля нет в списке — он встанет после всех, но лучше вписать.
+const modules_order = [
+    'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform',
+    'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform',
+    'st_astartek', 'st_kolomor', 'st_docks', 'st_medbay', 'st_habitat', 'st_trade', 'st_lancer',
+    'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
+    'ew_blackdomain', 'ew_graywave', 'ew_starker', 'ew_altaan',
+    'ftl_ramon', 'living_module', 'docking_port', 'transponder', 'sidis_defense', 'tocka', 'hangar',
+    // ↓ активное снаряжение (05.08) — дописано в конец, индексы выше не тронуты
+    'md_siege', 'md_tempest', 'md_broadside', 'md_blink', 'md_cloak', 'md_ampl', 'md_repdrones',
+    // ↓ второй пакет (05.08) — тоже ТОЛЬКО в конец
+    'md_goliath', 'md_storm', 'md_ram', 'md_rupture', 'md_drain', 'md_wbreak', 'md_disrupt', 'md_wboost', 'md_pboost', 'md_hell', 'md_scramble', 'md_amlaser', 'md_stasis', 'md_lockdown', 'md_reboot', 'md_rapid', 'md_energen', 'md_tractor', 'md_nuke', 'md_tartarus', 'md_apulse', 'md_sammo',
+];
+
 const modules_ids = {
     peh: ['empty'],
     btr: ['empty', 'crew_extra', 'desantnik', 'drone_cargo'],
@@ -800,48 +868,75 @@ const modules_ids = {
     corvette: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'transponder', 'sidis_defense',
         'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov',
-        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
+        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform',
+        // активное снаряжение (кулдаун) — ТОЛЬКО в конец списка: {g,idx} держат индексы
+        'md_blink', 'md_cloak',
+        'md_storm', 'md_ram', 'md_energen', 'md_reboot', 'md_sammo'
     ],
     destroyer: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'transponder', 'sidis_defense', 'tocka',
         'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov',
-        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
+        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform',
+        // активное снаряжение (кулдаун) — ТОЛЬКО в конец списка: {g,idx} держат индексы
+        'md_tempest', 'md_cloak',
+        'md_goliath', 'md_storm', 'md_ram', 'md_rupture', 'md_drain', 'md_wbreak', 'md_disrupt', 'md_scramble', 'md_amlaser', 'md_lockdown', 'md_reboot', 'md_energen', 'md_tractor', 'md_tartarus', 'md_apulse', 'md_sammo'
     ],
     supportCarrier: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'hangar', 'transponder', 'sidis_defense', 'tocka',
         'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov',
-        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
+        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform',
+        // активное снаряжение (кулдаун) — ТОЛЬКО в конец списка: {g,idx} держат индексы
+        'md_ampl', 'md_repdrones',
+        'md_wboost', 'md_pboost', 'md_amlaser', 'md_scramble', 'md_energen', 'md_reboot', 'md_apulse'
     ],
     mediumCruiser: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'transponder', 'sidis_defense', 'tocka',
         'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
-        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
+        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform',
+        // активное снаряжение (кулдаун) — ТОЛЬКО в конец списка: {g,idx} держат индексы
+        'md_tempest', 'md_ampl',
+        'md_goliath', 'md_storm', 'md_drain', 'md_wbreak', 'md_disrupt', 'md_wboost', 'md_pboost', 'md_hell', 'md_amlaser', 'md_stasis', 'md_lockdown', 'md_reboot', 'md_energen', 'md_tractor', 'md_tartarus', 'md_apulse', 'md_sammo'
     ],
     hyperCruiser: [
         'empty','living_module', 'docking_port', 'transponder', 'sidis_defense', 'tocka',
         'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
-        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
+        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform',
+        // активное снаряжение (кулдаун) — ТОЛЬКО в конец списка: {g,idx} держат индексы
+        'md_siege', 'md_ampl',
+        'md_wbreak', 'md_disrupt', 'md_stasis', 'md_lockdown', 'md_rapid', 'md_reboot', 'md_energen', 'md_nuke', 'md_tartarus', 'md_sammo'
     ],
     multiroleCarrier: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'hangar', 'transponder', 'sidis_defense', 'tocka',
         'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
-        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
+        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform',
+        // активное снаряжение (кулдаун) — ТОЛЬКО в конец списка: {g,idx} держат индексы
+        'md_ampl', 'md_repdrones',
+        'md_goliath', 'md_wboost', 'md_pboost', 'md_amlaser', 'md_scramble', 'md_reboot', 'md_energen', 'md_tractor', 'md_apulse'
     ],
     battleship: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'hangar', 'transponder', 'sidis_defense', 'tocka',
         'ew_blackdomain', 'ew_graywave', 'ew_starker', 'ew_altaan', 'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
-        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform'
+        'cargo_support', 'crew_extra', 'desantnik', 'btr_platform', 'tank_platform', 'arta_platform', 'drone_cargo', 'atmo_aviation', 'heli_platform',
+        // активное снаряжение (кулдаун) — ТОЛЬКО в конец списка: {g,idx} держат индексы
+        'md_tempest', 'md_broadside', 'md_ampl',
+        'md_goliath', 'md_ram', 'md_rupture', 'md_disrupt', 'md_pboost', 'md_hell', 'md_amlaser', 'md_stasis', 'md_lockdown', 'md_rapid', 'md_reboot', 'md_energen', 'md_tractor', 'md_nuke', 'md_tartarus', 'md_apulse', 'md_sammo'
     ],
     dreadnought: [
         'empty','ftl_ramon', 'living_module', 'docking_port', 'hangar', 'transponder', 'sidis_defense', 'tocka',
         'ew_blackdomain', 'ew_graywave', 'ew_starker', 'ew_altaan', 'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
-        'cargo_support', 'crew_extra'
+        'cargo_support', 'crew_extra',
+        // активное снаряжение (кулдаун) — ТОЛЬКО в конец списка: {g,idx} держат индексы
+        'md_tempest', 'md_broadside',
+        'md_goliath', 'md_ram', 'md_rupture', 'md_hell', 'md_pboost', 'md_lockdown', 'md_rapid', 'md_reboot', 'md_energen', 'md_tractor', 'md_nuke', 'md_tartarus', 'md_apulse'
     ],
     ss13: [
         'empty','st_astartek', 'st_kolomor', 'st_docks', 'st_medbay', 'st_habitat', 'st_trade', 'st_lancer', 'tocka',
         'living_module', 'hangar', 'transponder', 'sidis_defense',
         'ew_blackdomain', 'ew_graywave', 'ew_starker', 'ew_altaan', 'ew_orwell', 'ew_bradbury', 'ew_arcady', 'ew_boris', 'ew_asimov', 'ew_heinlein',
-        'crew_extra'
+        'crew_extra',
+        // активное снаряжение (кулдаун) — ТОЛЬКО в конец списка: {g,idx} держат индексы
+        'md_broadside',
+        'md_hell', 'md_amlaser', 'md_stasis', 'md_lockdown', 'md_rapid', 'md_reboot', 'md_nuke', 'md_apulse'
     ]
 };
 
@@ -2335,7 +2430,7 @@ const modules6 = {
 };
   return {
     speedBoostConfig, shipClasses, engines, materialsDatabase, armorElements,
-    modulesLibrary, modules_ids, modules, techCoefficients, damageTypeCoefficients,
+    modulesLibrary, modules_ids, modules_order, modules, techCoefficients, damageTypeCoefficients,
     classCoefficients, weaponLibrary, weapons, radarTypes, baseVisionRanges,
     modules5, modules3, modules6
   };
