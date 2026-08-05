@@ -43,6 +43,8 @@ const BB = {
   pick: null,        // фаза расстановки: выбранный проект из резерва
   spec: null,        // фаза расстановки: чьи полные ТТХ открыты шторкой (unit_id)
   place: [],         // фаза расстановки: [{unit_id, unit_name, cls, x, y}]
+  q: '',             // фаза расстановки: строка поиска по резерву
+  traySL: 0,         // и позиция прокрутки ленты бортов
   poll: null,        // таймер опроса (ход противника)
   busy: false,
   spr: {},           // кэш спрайтов кораблей
@@ -179,6 +181,7 @@ function bbClose() {
   BB.terr = null; BB.reach = null; BB.cov = null; BB.prevU = null;
   try { BB.fog = localStorage.getItem('bb_fog') !== '0'; } catch (e) { BB.fog = true; }
   BB.prevTurn = null; BB.camAnim = null; BB.moveHint.clear();
+  BB.q = ''; BB.traySL = 0;          // строка поиска по резерву — своя на каждый бой
   if (BB.anim.raf) cancelAnimationFrame(BB.anim.raf);
   BB.anim = { move: new Map(), fx: [], raf: 0 };
   BB.ptrs.clear(); BB.drag = null; BB.pinch = null;
