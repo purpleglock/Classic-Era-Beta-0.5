@@ -653,3 +653,34 @@
   .hs-grid { grid-template-columns: 1fr; gap: 11px; }
   .hs-card .btn { align-self: stretch; text-align: center; }
 }
+
+/* ── КОЛЕСО ДЕЙСТВИЙ (клавиша «У») ────────────────────────── */
+/* Кольцо режется на сегменты по числу действий, доступных кораблю.       */
+/* Наведение — по УГЛУ от центра, поэтому попасть можно и пальцем.        */
+.bbw-wrap {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(4, 8, 14, 0.72); backdrop-filter: blur(3px);
+  touch-action: none; user-select: none;
+}
+.bbw-card { width: min(92vw, 380px); text-align: center; }
+.bbw-top { font-size: 13px; color: var(--muted, #9fb0c6); margin-bottom: 6px; }
+.bbw-top b { color: var(--gd, #7fd4ff); }
+.bbw-svg { width: 100%; height: auto; display: block; }
+.bbw-seg {
+  fill: rgba(24, 38, 56, 0.92); stroke: rgba(127, 212, 255, 0.28); stroke-width: 1;
+  transition: fill .12s linear;
+}
+.bbw-seg.aim { fill: rgba(127, 212, 255, 0.24); stroke: var(--gd, #7fd4ff); stroke-width: 1.6; }
+.bbw-seg.off { fill: rgba(20, 26, 34, 0.85); stroke: rgba(140, 155, 170, 0.18); }
+.bbw-ico { font-size: 22px; text-anchor: middle; pointer-events: none; }
+.bbw-nm  { font-size: 12px; text-anchor: middle; fill: #dceaf6; pointer-events: none; }
+.bbw-hub { fill: rgba(8, 14, 22, 0.95); stroke: rgba(127, 212, 255, 0.35); }
+.bbw-hub-t { font-size: 17px; text-anchor: middle; fill: #eaf6ff; font-weight: 600; pointer-events: none; }
+.bbw-hub-s { font-size: 13px; text-anchor: middle; fill: var(--gd, #7fd4ff); pointer-events: none; }
+.bbw-why {
+  margin-top: 10px; font-size: 13px; line-height: 1.45; color: #cfe0f0;
+  min-height: 3.2em; padding: 0 6px;
+}
+.bbw-esc { margin-top: 8px; font-size: 11px; color: var(--muted, #7d8fa5); }
+@media (max-width: 520px) { .bbw-why { font-size: 12px; } }

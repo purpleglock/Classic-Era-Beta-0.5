@@ -1,0 +1,44 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Стенд: колесо действий</title>
+<link rel="stylesheet" href="css/01_tokens.css">
+<link rel="stylesheet" href="css/24_battle.css">
+<style>
+  body { background:#070b11; color:#dfe9f4; font:14px/1.5 system-ui,sans-serif; padding:16px; }
+  .row { margin-bottom:10px; }
+  button { padding:6px 12px; margin-right:6px; }
+</style>
+<h3>Стенд колеса действий</h3>
+<div class="row">
+  <button onclick="open_('corvette')">Корвет (10 гекс, залп 2.1 c)</button>
+  <button onclick="open_('dreadnought')">Дредноут (3 гекс, залп 4.2 c)</button>
+  <button onclick="open_('spent')">Корабль без секунд</button>
+</div>
+<div class="row">Нажмите «У» — колесо откроется/закроется. Наводитесь на сегменты.</div>
+<pre id="out"></pre>
+<script>
+// ── стенд-заглушки вместо боевой доски ──
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function bbNum(n){ return Math.round(+n).toLocaleString('ru-RU'); }
+function toast(m,k){ document.getElementById('out').textContent = '['+(k||'')+'] '+m; }
+function bbTerra(){ return null; }
+function bbHasHeal(u){ return !!u._heal; }
+function bbRender(){}
+function bbAct(fn,a){ toast('RPC '+fn+' '+JSON.stringify(a),'ok'); }
+function bbLaunch(id){ toast('взлёт авиакрыла '+id,'ok'); }
+function bbHealMode(){ toast('режим ремонта','ok'); }
+function bbSteps(u){ return Math.floor((+u.tp+1e-9)/(+u.step_cost)); }
+function bbCanFire(u){ return (+u.tp+1e-9) >= (+u.fire_cost||0); }
+
+var SHIPS = {
+  corvette:    { id:'c1', mine:true, name:'Стриж', cls:'corvette', x:1,y:1, speed:10,
+                 tp:6, tp_max:6, step_cost:0.6, fire_cost:2.1, mitig:300, reduc:1.0, wings:0, acted:false },
+  dreadnought: { id:'d1', mine:true, name:'Голиаф', cls:'dreadnought', x:1,y:1, speed:3,
+                 tp:6, tp_max:6, step_cost:2.0, fire_cost:4.2, mitig:1400, reduc:0.65, wings:2, acted:false, _heal:true },
+  spent:       { id:'s1', mine:true, name:'Выдохшийся', cls:'destroyer', x:1,y:1, speed:7,
+                 tp:0.4, tp_max:6, step_cost:0.86, fire_cost:3.0, mitig:500, reduc:0.75, wings:0, acted:true }
+};
+var BB = { id:'test', sel:'c1', st:{ status:'active', my_turn:true, acts_left:6, acts_max:6, units:[] } };
+function open_(k){ const u = SHIPS[k]; BB.st.units=[u]; BB.sel=u.id; bbWheelOpen(u.id); }
+</script>
+<script src="_bbwheel_only.js"></script>

@@ -1410,7 +1410,7 @@ function bgSyncOverlay() {
   });
 
   // гексы хода — досягаемость по скорости
-  if (!sel.moved && canAct) {
+  if (bbSteps(sel) > 0 && canAct) {
     if (!BB.reach) BB.reach = bbComputeReach(sel);
     const cells = [...BB.reach.keys()];
     if (cells.length) {
@@ -1434,7 +1434,7 @@ function bgSyncOverlay() {
   }
 
   // цели по дальности и линии огня
-  if (!sel.fired && canAct) {
+  if (bbCanFire(sel) && canAct) {
     (s.units || []).forEach(u => {
       if (u.mine || u.side === s.my_side) return;
       if (!bbCanHit(sel, u).ok) return;
@@ -1442,7 +1442,7 @@ function bgSyncOverlay() {
     });
   }
   // режим ремонта: союзники под нано-рой
-  if (BB.heal && !sel.fired && canAct) {
+  if (BB.heal && bbCanFire(sel) && canAct) {
     (s.units || []).forEach(u => {
       if (u.side !== s.my_side || !bbCanHeal(sel, u).ok) return;
       bgMarkHex(G, u.x, u.y, bgCol(BB_C.heal), 0.2, 0.55);
@@ -1575,13 +1575,13 @@ function bgSyncStatus() {
       if (nk) { st.nm = bgLabelSprite(u.name, u.fid, col, BB.R * 0.3, 0.85); BG.g.st.add(st.nm); }
     }
     const hpF = (u.max_hp > 0) ? Math.max(0, Math.min(1, u.hp / u.max_hp)) : 1;
-    const shF = (u.max_shield > 0) ? Math.max(0, Math.min(1, u.shield / u.max_shield)) : 0;
+    const shF = (u.tp_max > 0) ? Math.max(0, Math.min(1, (u.shield || 0) / u.tp_max)) : 0;
     st.hpF = hpF; st.shF = shF;
     st.hp.material.color.set(hpF > 0.5 ? bgCol(u.mine ? BG_C.mine : BG_C.foe)
                            : hpF > 0.25 ? new THREE.Color(0xffbe46) : new THREE.Color(0xff4646));
     st.sh.visible = shF > 0;
     // «уже отходил» — гасим борт, как alpha 0.5 в 2D
-    const spent = u.mine && s.my_turn && ((u.moved && u.fired) || (!u.acted && !(s.acts_left > 0)));
+    const spent = u.mine && s.my_turn && ((+u.tp) <= 0.05 || (!u.acted && !(s.acts_left > 0)));
     const m = BG.units.get(u.id);
     if (m && m.userData.spent !== spent) {
       m.userData.spent = spent;
