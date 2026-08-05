@@ -1570,6 +1570,7 @@ function cnDeckOpen() {
     document.addEventListener('keydown', cnDeckKey);
   }
   document.body.classList.add('cn-deck-on');
+  CN.dkVB = null;                                   // открыли палубу — вид «вписать целиком»
   if (!CN._dkPaintBound) {                          // рисование протяжкой: отпустили — кисть встала
     document.addEventListener('mouseup', () => { CN.dkPaint = false; });
     CN._dkPaintBound = true;
@@ -1842,10 +1843,113 @@ function cnDeckDraw() {
     + (map.fams.length > 1 ? `<i class="cn-deck-m bad">разнобой ×${map.dil.toFixed(2)}</i>` : '')
     + `</div>` + ghostBar + `</div>`
     + `<div class="cn-deck-yield">${yieldChips + capWarn || '<i class="cn-deck-m">палуба пуста</i>'}</div>`
-    + `<svg class="cn-deck-svg" onmousedown="CN.dkPaint=!!CN.dkGhost" viewBox="${vert ? `${vy} ${-(vx + vw)} ${vh} ${vw}` : `${vx} ${vy} ${vw} ${vh}`}" preserveAspectRatio="xMidYMid meet">`
+    + `<svg class="cn-deck-svg" onmousedown="CN.dkPaint=!!CN.dkGhost" viewBox="${cnDeckView(vert ? [vy, -(vx + vw), vh, vw] : [vx, vy, vw, vh], k + (vert ? '|v' : '|h')).join(' ')}" preserveAspectRatio="xMidYMid meet">`
     + (vert ? `<g transform="rotate(-90)">${P.join('')}</g>` : P.join(''))
-    + `</svg>`;
+    + `</svg>`
+    + `<div class="cn-deck-nav">`
+    + `<button onclick="cnDeckZoom(1.35)" title="Приблизить">+</button>`
+    + `<button onclick="cnDeckZoom(1/1.35)" title="Отдалить">−</button>`
+    + `<button onclick="cnDeckHome()" title="Вписать целиком">⤢</button></div>`;
   cnDeckFit(host, vert);
+  cnDeckPanBind(host.querySelector('.cn-deck-svg'));
+}
+// ── ЛУПА И ПРОТЯЖКА ЛИСТА ──────────────────────────────────────────────────────
+// На телефоне корабль вписан целиком и клетка получается с ноготь: попасть пальцем
+// невозможно. Лист теперь двигается и масштабируется — щипком и пальцем, колесом и
+// перетаскиванием мышью (когда в руке нет кисти: она занята рисованием).
+// ⚠️ Вид живёт в CN.dkVB и ПЕРЕЖИВАЕТ перерисовку — иначе каждая поставленная
+// клетка сбрасывала бы масштаб к «вписать целиком».
+function cnDeckView(base, key) {
+  if (!CN.dkVB || CN.dkVBKey !== key) { CN.dkVB = base.slice(); CN.dkVBBase = base.slice(); CN.dkVBKey = key; }
+  else CN.dkVBBase = base.slice();
+  return CN.dkVB;
+}
+function cnDeckHome() { if (CN.dkVBBase) { CN.dkVB = CN.dkVBBase.slice(); cnDeckApply(); } }
+function cnDeckApply() {
+  const svg = document.querySelector('.cn-deck-svg');
+  if (svg && CN.dkVB) svg.setAttribute('viewBox', CN.dkVB.join(' '));
+}
+function cnDeckZoomAt(f, cx, cy) {
+  const v = CN.dkVB, b = CN.dkVBBase; if (!v || !b) return;
+  // потолки: дальше 2× от «вписано» отдалять нечего, ближе 1/16 — уже одна клетка
+  const nw = Math.min(b[2] * 2, Math.max(b[2] / 16, v[2] / f));
+  const k2 = v[2] / nw; if (Math.abs(k2 - 1) < 1e-4) return;
+  v[0] = cx - (cx - v[0]) / k2; v[1] = cy - (cy - v[1]) / k2;
+  v[2] = nw; v[3] = v[3] / k2;
+  cnDeckApply();
+}
+function cnDeckZoom(f) {
+  const v = CN.dkVB; if (!v) return;
+  cnDeckZoomAt(f, v[0] + v[2] / 2, v[1] + v[3] / 2);
+}
+// ⚠️ Слушатели вешаем НА КАЖДЫЙ новый <svg> (палуба перерисовывается целиком), но
+// состояние жеста держим в CN — иначе после перерисовки посреди протяжки жест «терял
+// руку». Оконные mousemove/mouseup — один раз за сеанс, по флагу.
+function cnDeckPanBind(svg) {
+  if (!svg || !CN.dkVB) return;
+  const uPt = e => {                                  // экранные px → единицы листа
+    const r = svg.getBoundingClientRect(), v = CN.dkVB;
+    const s = Math.max(v[2] / r.width, v[3] / r.height);   // meet: масштаб по длинной стороне
+    return { s, x: v[0] + v[2] / 2 + (e.clientX - (r.left + r.width / 2)) * s,
+             y: v[1] + v[3] / 2 + (e.clientY - (r.top + r.height / 2)) * s };
+  };
+  const uScale = () => {
+    const r = svg.getBoundingClientRect(), v = CN.dkVB;
+    return Math.max(v[2] / r.width, v[3] / r.height);
+  };
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  const mid = t => ({ clientX: (t[0].clientX + t[1].clientX) / 2, clientY: (t[0].clientY + t[1].clientY) / 2 });
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const p = uPt(e); cnDeckZoomAt(e.deltaY < 0 ? 1.18 : 1 / 1.18, p.x, p.y);
+  }, { passive: false });
+  svg.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) { CN.dkPinch = dist(e.touches); CN.dkDrag = null; return; }
+    CN.dkDrag = { x: e.touches[0].clientX, y: e.touches[0].clientY, moved: 0 };
+  }, { passive: true });
+  svg.addEventListener('touchmove', e => {
+    const v = CN.dkVB; if (!v) return;
+    if (e.touches.length === 2 && CN.dkPinch) {
+      e.preventDefault();
+      const d = dist(e.touches), p = uPt(mid(e.touches));
+      if (CN.dkPinch > 0) cnDeckZoomAt(d / CN.dkPinch, p.x, p.y);
+      CN.dkPinch = d; CN.dkPanned = true; return;
+    }
+    const dg = CN.dkDrag; if (!dg) return;
+    e.preventDefault();
+    const s = uScale(), dx = e.touches[0].clientX - dg.x, dy = e.touches[0].clientY - dg.y;
+    dg.moved += Math.abs(dx) + Math.abs(dy);
+    dg.x = e.touches[0].clientX; dg.y = e.touches[0].clientY;
+    v[0] -= dx * s; v[1] -= dy * s; cnDeckApply();
+    if (dg.moved > 10) CN.dkPanned = true;             // это протяжка, а не тычок по клетке
+  }, { passive: false });
+  const end = () => {
+    CN.dkPinch = 0; CN.dkDrag = null;
+    if (CN.dkPanned) setTimeout(() => { CN.dkPanned = false; }, 350);   // гасим «клик» после жеста
+  };
+  svg.addEventListener('touchend', end); svg.addEventListener('touchcancel', end);
+  // Мышь: тянем лист, пока в руке нет кисти (с кистью ЛКМ рисует).
+  svg.addEventListener('mousedown', e => {
+    if (CN.dkGhost && e.button === 0) return;
+    CN.dkDrag = { x: e.clientX, y: e.clientY, moved: 0, m: 1 }; svg.style.cursor = 'grabbing';
+  });
+  if (!CN._dkPzBound) {
+    CN._dkPzBound = true;
+    window.addEventListener('mousemove', e => {
+      const v = CN.dkVB, dg = CN.dkDrag; if (!dg || !dg.m || !v || !CN.deck) return;
+      const el = document.querySelector('.cn-deck-svg'); if (!el) return;
+      const r = el.getBoundingClientRect(), s = Math.max(v[2] / r.width, v[3] / r.height);
+      v[0] -= (e.clientX - dg.x) * s; v[1] -= (e.clientY - dg.y) * s;
+      dg.moved += Math.abs(e.clientX - dg.x) + Math.abs(e.clientY - dg.y);
+      dg.x = e.clientX; dg.y = e.clientY; cnDeckApply();
+      if (dg.moved > 6) CN.dkPanned = true;
+    });
+    window.addEventListener('mouseup', () => {
+      const dg = CN.dkDrag; if (!dg || !dg.m) return;
+      const el = document.querySelector('.cn-deck-svg'); if (el) el.style.cursor = '';
+      end();
+    });
+  }
 }
 // Лист подрезаем ПО ФАКТУ шапки и подвала: сколько плашек перенеслось — столько и
 // отступ. Иначе либо чертёж лезет под шкалы, либо теряет полэкрана «на всякий».
@@ -2010,7 +2114,7 @@ function cnGhostCells(map, sp, i) {
   return cnCellsOf(map.G, i, sp.w, sp.h);
 }
 function cnDeckHover(i) {
-  if (!CN.dkGhost) return;
+  if (!CN.dkGhost || CN.dkPanned) return;              // тянули лист — это не наведение
   if (CN.dkPaint) { cnDeckPut(i, true); return; }     // протяжка: ведём мышью — кладём
   if (CN.dkHover === i) return;
   CN.dkHover = i; cnDeckDraw();
@@ -2031,6 +2135,7 @@ function cnDeckPut(i, quiet) {
 // в каталоге. Единственное исключение — орудийный узел: в нём надо выбрать орудие,
 // и это клик, а не кисть (ластик по узлу по-прежнему снимает).
 function cnDeckPick(i) {
+  if (CN.dkPanned) return;                             // палец таскал лист — не ставим
   const k = cnId('cn-class').value, map = cnPlateMap(k), at = map.own[i];
   const b = at >= 0 ? CN.shipLayout.bays[at] : null, sk = b ? cnSysOf(b) : null;
   if (CN.dkGhost && CN.dkGhost.erase) { cnDeckPut(i); return; }

@@ -602,7 +602,13 @@
 .cn-deck { position: fixed; inset: 0; z-index: 40; background: #070b10; }
 /* ⚠️ Раскладка листа задаётся ТОЛЬКО здесь: инлайн-стили с полотна убраны, иначе
    мобильные правила (лист между шапкой и шторкой) не имели шанса перебить их. */
-.cn-deck-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* touch-action:none обязателен: иначе браузер забирает щипок и протяжку себе,
+   и лист «не двигается» — жесты просто не доходят до обработчиков. */
+.cn-deck-svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+/* Лупа листа: приблизить / отдалить / вписать целиком */
+.cn-deck-nav { position: absolute; z-index: 4; right: 14px; bottom: 74px; display: flex; flex-direction: column; gap: 6px; }
+.cn-deck-nav button { width: 38px; height: 38px; border-radius: 9px; border: 1px solid #2b3947; background: #0d141ce6; color: #9fb0c2; font-size: 17px; line-height: 1; cursor: pointer; }
+.cn-deck-nav button:hover { border-color: #9fe8ff; color: #9fe8ff; }
 .cn-dk-free { transition: fill-opacity var(--transition-fast), stroke var(--transition-fast); }
 .cn-dk-free:hover { fill-opacity: 0.1; stroke: #9fe8ff; }
 .cn-dk-mod rect { transition: fill-opacity var(--transition-fast); }
@@ -683,6 +689,8 @@
   .cn-deck-y b { font-size: 9px; }
   .cn-deck-y u { font-size: 14px; }
   .cn-deck-y s { font-size: 9px; }
+  .cn-deck-nav { right: 8px; bottom: 64px; }
+  .cn-deck-nav button { width: 34px; height: 34px; }
 }
 /* итог палубы и шкала энергии */
 .cn-deck-yield { position: absolute; z-index: 2; pointer-events: none; left: 20px; right: 20px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
