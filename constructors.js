@@ -1424,8 +1424,9 @@ function cnTurretSvg(m, vis, dir) {
     + `</g>`;
 }
 // Маркер модуля (контурные значки золотым) по группе.
-function cnModuleMarker(g, x, y) {
-  const c = 'var(--gd)';
+function cnModuleMarker(g, x, y, col, sc) {
+  const c = col || 'var(--gd)';
+  if (sc && sc !== 1) return `<g transform="translate(${x},${y}) scale(${sc.toFixed(2)}) translate(${-x},${-y})">${cnModuleMarker(g, x, y, c, 0)}</g>`;
   if (g === 'Радарное оборудование') return `<path d="M${x - 5},${y + 2} A5,5 0 0,1 ${x + 5},${y + 2} Z" fill="none" stroke="${c}" stroke-width="1.3"/>`;
   if (g === 'Радиоэлектронная борьба') return `<line x1="${x}" y1="${y + 4}" x2="${x}" y2="${y - 5}" stroke="${c}" stroke-width="1.3"/><circle cx="${x}" cy="${y - 6}" r="1.7" fill="${c}"/>`;
   if (g === 'Активная защита') return `<path d="M${x},${y - 5} L${x + 4},${y - 2} L${x + 4},${y + 3} L${x},${y + 5} L${x - 4},${y + 3} L${x - 4},${y - 2} Z" fill="none" stroke="${c}" stroke-width="1.2"/>`;
@@ -1534,7 +1535,125 @@ function cnClipAxis(poly, axis, val, keepGE) {
   }
   return out;
 }
-function cnHullRooms(H, count) {
+// ── РАЗРЕЗ МОДУЛЬНОЙ ПАЛУБЫ ────────────────────────────────────────────────────
+// Отдельный крупный вид: решётка ячеек, модуль занимает прямоугольник по габариту.
+// Корпус тут не при чём — это «что где стоит», а не силуэт корабля.
+// ── ПАЛУБА: ОТДЕЛЬНЫЙ ПОЛНОЭКРАННЫЙ РЕЖИМ ──────────────────────────────────────
+// Не панель на сайте и не слой поверх корпуса: жмёшь «Палуба» — весь экран под
+// решётку отсеков. Корпуса тут нет вообще, подписей внутри клеток нет: цвет =
+// семья, значок = что за модуль, полоса = отдача. Слова живут в подсказке.
+const CN_FAM_COL = {
+  jam: '#e0575f', dejam: '#57d8e0', pd: '#e0b457', stealth: '#9aa4b2',
+  sensor: '#57d8e0', hangar: '#e0b457', interdict: '#e0575f', stabil: '#57d8e0',
+  ftl: '#b98cff', hull: '#6b7787',
+};
+function cnDeckOpen() {
+  if (!CN.def || !CN.def.cardUI) return;
+  CN.deck = true;
+  let host = cnId('cn-deck');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'cn-deck'; host.className = 'cn-deck';
+    document.body.appendChild(host);
+    document.addEventListener('keydown', cnDeckKey);
+  }
+  document.body.classList.add('cn-deck-on');
+  cnDeckDraw();
+}
+function cnDeckClose() {
+  CN.deck = false;
+  const host = cnId('cn-deck'); if (host) host.remove();
+  document.removeEventListener('keydown', cnDeckKey);
+  document.body.classList.remove('cn-deck-on');
+  cnVehCalc();
+}
+function cnDeckKey(e) { if (e.key === 'Escape' && CN.deck) { e.preventDefault(); cnDeckClose(); } }
+function cnDeckDraw() {
+  const host = cnId('cn-deck'); if (!host || !CN.deck) return;
+  const k = cnId('cn-class').value;
+  cnBaysFit(k);
+  const map = cnPlateMap(k), G = map.G, C = G.C;
+  // Корабль лежит горизонтально: экранный X = вдоль корпуса, Y = поперёк.
+  const SX = (gx, gy) => G.oy + gy * C, SY = (gx, gy) => G.ox + gx * C;
+  const vx = G.oy - C, vy = G.ox - C, vw = G.h * C + C * 2, vh = G.w * C + C * 2;
+  const P = [];
+  // силуэт корпуса под сеткой — тёмная подложка, по ней видно, где палуба
+  P.push(`<path d="${HG.hullPathOf(G.H, 1)}" transform="matrix(0 1 1 0 0 0)" fill="#111a24" stroke="#2c3a49" stroke-width="2"/>`);
+  // клетки палубы
+  for (let gy = 0; gy < G.h; gy++) for (let gx = 0; gx < G.w; gx++) {
+    const i2 = gy * G.w + gx; if (!G.inside[i2] || map.own[i2] >= 0) continue;
+    P.push(`<rect class="cn-dk-free" x="${SX(gx, gy) + 1.5}" y="${SY(gx, gy) + 1.5}" width="${C - 3}" height="${C - 3}" rx="2"`
+      + ` fill="#7fd4ff" fill-opacity="0.05" stroke="#3d5468" stroke-width="0.9" style="cursor:pointer" onclick="cnDeckPick(${i2})"/>`);
+  }
+  // СВЯЗИ: между соседями одной семьи тянем жилу — синергию видно, а не додумываешь
+  const ctr = m => { const gx = m.at % G.w, gy = (m.at / G.w) | 0; return [SX(gx, gy) + m.h * C / 2, SY(gx, gy) + m.w * C / 2]; };
+  map.mods.forEach(m => {
+    if (m.fam === 'hull' || !m.nb) return;
+    const a = ctr(m), col = CN_FAM_COL[m.fam] || '#e0b457';
+    (m.link || []).forEach(o => {
+      const b = ctr(o); if (o.at < m.at) return;                  // жилу рисуем один раз на пару
+      P.push(`<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${col}" stroke-width="${(C * 0.13).toFixed(1)}" stroke-linecap="round" opacity="0.85"/>`);
+    });
+  });
+  // модули
+  map.mods.forEach(m => {
+    const gx = m.at % G.w, gy = (m.at / G.w) | 0;
+    const x = SX(gx, gy), y = SY(gx, gy), cw = m.h * C, ch = m.w * C;   // h — поперёк, w — вдоль
+    const col = CN_FAM_COL[m.fam] || '#e0b457';
+    const bar = m.fam === 'hull' ? 0 : Math.max(0.05, Math.min(1, m.k / CN_PLATE.hi));
+    const cx = x + cw / 2, cy = y + ch / 2;
+    P.push(`<g class="cn-dk-mod" style="cursor:pointer" onclick="cnDeckPick(${m.at})">`
+      + `<title>${esc(m.mod.name || '')} — ${CN_FAM_RU[m.fam] || m.fam}, ${m.w}×${m.h}, ${cnNum(+m.mod.energy || +m.mod.power || 0)} E`
+      + (m.fam === 'hull' ? '' : `, отдача ${Math.round(m.k * 100)}%, соседей ${m.nb}`) + `</title>`
+      + `<rect x="${x + 1}" y="${y + 1}" width="${cw - 2}" height="${ch - 2}" rx="3" fill="${col}" fill-opacity="0.2" stroke="${col}" stroke-width="1.6"/>`
+      + cnModuleMarker(m.ref.g, cx, cy - (bar ? 2 : 0), col, Math.min(cw, ch) / 15)
+      + (bar ? `<rect x="${x + 4}" y="${y + ch - 6}" width="${((cw - 8) * bar).toFixed(1)}" height="2.4" rx="1.2" fill="${col}"/>` : '')
+      + `</g>`);
+  });
+  const used = map.own.filter(o => o >= 0).length;
+  const eSum = map.mods.reduce((s2, m) => s2 + (+m.mod.energy || +m.mod.power || 0), 0);
+  const eMax = (CN.last && CN.last.eMax) || 0, eAll = (CN.last && CN.last.eCons) || eSum;
+  const eLeft = eMax - eAll, eRt = eMax ? Math.max(0, Math.min(1, eAll / eMax)) : 0;
+  // ИТОГ ПЛАТЫ: сумма боевых эффектов уже С УЧЁТОМ отдачи каждой ячейки —
+  // ровно то, что уедет в бой. Одно число на семью, без простыней.
+  const tot = {}, base = {};
+  const acc = (o, key, v) => { o[key] = (key === 'jam' || key === 'dejam') ? Math.max(o[key] || 0, v) : (o[key] || 0) + v; };
+  map.mods.forEach(m => {
+    const c = m.mod.combat || {}; if (m.fam === 'hull') return;
+    for (const key of ['pd', 'jam', 'dejam', 'stealth', 'sensor', 'hangar']) {
+      if (!+c[key]) continue;
+      acc(tot, key, +c[key] * m.k);            // с учётом расстановки — это уедет в бой
+      acc(base, key, +c[key]);                 // «в одиночку», для сравнения
+    }
+    ['interdict', 'stabil', 'ftl'].forEach(key => { if (+c[key]) { tot[key] = 1; base[key] = 1; } });
+  });
+  const NM = { pd: 'ПРО', jam: 'РЭБ', dejam: 'контр-РЭБ', stealth: 'скрытность', sensor: 'радар', hangar: 'авиакрылья', interdict: 'интердикция', stabil: 'стабилизация', ftl: 'FTL' };
+  const val = (key, v) => key === 'pd' ? Math.round(Math.min(0.6, v) * 100) + '%'
+    : key === 'hangar' ? String(Math.floor(v / 300))
+    : key === 'jam' ? '−' + v.toFixed(1) : '+' + v.toFixed(1);
+  // Чип: КРУПНО итог, мелко — сколько было бы без расстановки и что дала раскладка.
+  const yieldChips = Object.keys(tot).map(key => {
+    const t = tot[key], b = base[key], flag = key === 'interdict' || key === 'stabil' || key === 'ftl';
+    const d = b ? Math.round((t / b - 1) * 100) : 0;
+    const col = CN_FAM_COL[key] || '#e0b457';
+    return `<i class="cn-deck-y" style="--fc:${col}"><b>${esc(NM[key])}</b>`
+      + (flag ? `<u>есть</u>` : `<u>${val(key, t)}</u>`)
+      + (flag || !d ? `<s>без бонуса</s>` : `<s class="${d > 0 ? 'up' : 'dn'}">${val(key, b)} ${d > 0 ? '▲+' : '▼'}${d}%</s>`)
+      + `</i>`;
+  }).join('');
+  const capWarn = tot.pd > 0.6 ? `<i class="cn-deck-y" style="--fc:#e0575f"><b>ПРО</b><u>потолок</u><s>всё сверх 60% сгорает</s></i>` : '';
+  host.innerHTML = `<button class="cn-deck-x" onclick="cnDeckClose()" title="Закрыть (Esc)">✕</button>`
+    + `<div class="cn-deck-bar" style="position:absolute;top:16px;left:20px;z-index:2;pointer-events:none">`
+    + `<i class="cn-deck-m">${used}/${G.n} кл.</i>`
+    + `<i class="cn-deck-m${eLeft < 0 ? ' bad' : ''}">${cnNum(eLeft)} E свободно`
+    + `<b style="--r:${(eRt * 100).toFixed(0)}%"></b></i>`
+    + (map.fams.length > 1 ? `<i class="cn-deck-m bad">разнобой ×${map.dil.toFixed(2)}</i>` : '')
+    + `</div>`
+    + `<div class="cn-deck-yield" style="position:absolute;left:20px;right:20px;bottom:16px;z-index:2;pointer-events:none">${yieldChips + capWarn || '<i class="cn-deck-m">палуба пуста</i>'}</div>`
+    + `<svg class="cn-deck-svg" style="position:absolute;inset:0;width:100%;height:100%" viewBox="${vx} ${vy} ${vw} ${vh}" preserveAspectRatio="xMidYMid meet">${P.join('')}</svg>`;
+}
+// Клик по ячейке палубы: тот же пикер, что и в схеме, но поверх полноэкранного режима.
+function cnDeckPick(i) { cnOpenAssignPicker('bay', i); }function cnHullRooms(H, count) {
   const poly = cnPathPoly(H.path), top = H.nose + 6, bot = H.engine[1] - 4;
   const build = rws => {
     const res = [];
@@ -1759,7 +1878,7 @@ function cnDrawShip() {
   // ПАДАЮЩАЯ ТЕНЬ корабля на чертёжное полотно — «отрывает» корпус от фона.
   P.push(`<path d="${hullPath}" fill="#000" opacity="0.38" style="filter:blur(9px)"/>`);
   P.push(HG.body(H, hullOpt));                           // обшивка + пояс + надстройка + дюзы
-  P.push(cnShipDecal(H, k, hullOpt));                           // декаль (флаг+имя) ПОД светотенью — краска на броне
+  P.push(cnShipDecal(H, k, hullOpt));                    // декаль (флаг+имя) ПОД светотенью
   P.push(HG.shade(H, hullOpt));                          // боковой свет, AO, контактная тень
   P.push(HG.edge(H, hullOpt));                           // кант силуэта
 
@@ -1768,29 +1887,14 @@ function cnDrawShip() {
   const maxMounts = Math.max(16, L.mounts.length);
   const wpnMounts = cnMountPositions(H, maxMounts);
   const mPos = i => { const s2 = L.mounts[i]; return (s2 && s2.pos) ? [s2.pos.x, s2.pos.y] : wpnMounts[i]; };
-  let rooms = [];
-  if (CN.schemShow.bays) {
-    const baseRooms = Math.max(5, Math.round((e[1] - H.nose) / 40));
-    rooms = cnHullRooms(H, Math.max(baseRooms, bayN));
-  }
+  // Модули на корпусе БОЛЬШЕ НЕ РИСУЕМ: их место — разрез палубы (cnDrawPlate),
+  // где видно, кто сколько клеток занимает. Здесь корпус и орудия.
+  cnBaysFit(k);
 
   // ОТСЕКИ/МОДУЛИ: лёгкие кликабельные ячейки. Занятый модуль — заливка + значок;
   // пустой активный — тонкий пунктир; свободное место — почти прозрачно (не спорит с телом).
   // Без коридора/люков/переборок — только то, что несёт смысл (где стоит модуль).
-  let modCount = 0;
-  if (CN.schemShow.bays) {
-    rooms.forEach((rm, i) => {
-      const active = i < bayN, m = active && L.bays[i] && L.bays[i].m; if (m) modCount++;
-      const pts = rm.poly.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-      const fill = m ? 'color-mix(in srgb, var(--gd) 22%, transparent)' : 'transparent';
-      const stroke = m ? 'var(--gd)' : active ? 'var(--t3)' : 'transparent';
-      const title = m ? 'Модуль: ' + esc((((db.modules[m.g] || [])[m.idx]) || {}).name || 'снят с производства') : active ? 'Пустой отсек — нажми: поставить модуль или удалить' : 'Внутреннее пространство — нажми, чтобы сделать отсек';
-      P.push(`<g class="cn-bay" style="cursor:pointer" onclick="${active ? `cnNodeClick('bay',${i})` : `cnRoomAddAt(${i})`}"><title>${title}</title>`
-        + `<polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="${m ? 1.2 : 0.8}" stroke-linejoin="round" stroke-dasharray="${active && !m ? '3 3' : '0'}" opacity="${m ? 0.95 : active ? 0.45 : 0.16}"/>`
-        + `${m ? cnModuleMarker(L.bays[i].m.g, rm.cx, rm.cy) : ''}</g>`);
-    });
-  }
-
+  const plate = cnPlateMap(k), modCount = plate.mods.length, bayCap = plate.w * plate.h;
   // АНГАРЫ — чёрточки-выходы на броне (их может быть много); авиа = метка наружу
   const hangars = [];
   document.querySelectorAll('#cn-hangars .cn-hangar').forEach(hp => { hangars.push({ id: +hp.querySelector('.cn-h-type').value, units: [...hp.querySelectorAll('.cn-u-type')].map(u => +u.value) }); });
@@ -1909,7 +2013,7 @@ function cnDrawShip() {
 
   // Чертёжная подложка: сетка, осевая, уголки; штампы — класс слева, комплектация справа
   const tName = cls.types && cls.types[tIdx] ? cls.types[tIdx].name : '';
-  const capTx = `ОРУДИЯ ${wpnCount}/${L.mounts.length} · ОТСЕКИ ${modCount}/${L.bays.length}` + (hangars.length ? ` · АНГАРЫ ${hangars.length}` : '');
+  const capTx = `ОРУДИЯ ${wpnCount}/${L.mounts.length} · ОТСЕКИ ${modCount}/${bayCap}` + (hangars.length ? ` · АНГАРЫ ${hangars.length}` : '');
   const cnCb = (x, y, dx, dy) => `<path d="M${x + dx * 14},${y} L${x},${y} L${x},${y + dy * 14}" fill="none" stroke="var(--te)" stroke-width="1.4" opacity="0.6"/>`;
   // ЗУМ: сцена остаётся 0 0 VW VH, а показываем её КУСОК через viewBox — толщины линий
   // и кегль растут вместе с кораблём (это чертёж, а не «увеличенная картинка»).
@@ -1942,21 +2046,188 @@ function cnDrawShip() {
       const w = slot && slot.w, item = w ? ((db.weapons[w.g] || [])[w.idx] || null) : null;
       rows.push(cnSlotRow('mount', i, '◎', 'Узел орудия ' + (i + 1), item ? esc(item.name) : 'Пусто — поставить орудие', !!item));
     });
-    if (CN.schemShow.bays) L.bays.forEach((slot, i) => {
-      const m = slot && slot.m, item = m ? ((db.modules[m.g] || [])[m.idx] || null) : null;
-      rows.push(cnSlotRow('bay', i, '▦', 'Отсек ' + (i + 1), item ? esc(item.name) : 'Пусто — поставить модуль', !!item));
-    });
-    listHost.innerHTML = rows.length ? rows.join('') : `<div class="cn-bill-none" style="padding:8px 2px">Нет узлов и отсеков — добавьте кнопками «＋ Узел» / «＋ Отсек» на схеме.</div>`;
+    listHost.innerHTML = rows.length ? rows.join('') : `<div class="cn-bill-none" style="padding:8px 2px">Нет орудийных узлов — добавьте кнопкой «＋ Узел» на схеме.</div>`;
   }
+  if (CN.deck) cnDeckDraw();
   cnRenderBatteries();
 }
 
 // ── Ручное размещение: добавить узел/отсек, назначить/убрать содержимое, скрыть слой ──
-function cnLayoutAdd(kind) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; if (kind === 'mount') CN.shipLayout.mounts.push({ w: null }); else CN.shipLayout.bays.push({ m: null }); cnVehCalc(); }
-function cnRoomAdd() { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; CN.shipLayout.bays.push({ m: null }); cnVehCalc(); cnOpenAssignPicker('bay', CN.shipLayout.bays.length - 1); }
-// Клик по свободному месту создаёт слот ВРЕМЕННО (CN._pendingAdd): если пикер закрыли,
-// ничего не поставив, cnClosePick откатывает добавленные пустышки — узлы не «плодятся сами».
-function cnRoomAddAt(i) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; const a = CN.shipLayout.bays, n0 = a.length; while (a.length <= i) a.push({ m: null }); CN._pendingAdd = { kind: 'bay', n0 }; cnVehCalc(); cnOpenAssignPicker('bay', i); }
+// ПРЕДЕЛ ОТСЕКОВ: cls.modul — сколько модулей несёт класс (корвет 3 … факельщик/станция 10).
+// Оружейные узлы предела не имеют — их держит энергосеть и экипаж.
+function cnModCls(k) { return CN.def && CN.def.db && CN.def.db.data[k || (cnId('cn-class') || {}).value] || null; }
+function cnModSlotCap(k) {
+  const cls = cnModCls(k), n = cls ? +cls.modul : NaN;
+  return Number.isFinite(n) ? n : 16;            // класс вне каталога — плата 4×4 по умолчанию
+}
+// ── СЕТКА ПАЛУБЫ ПО СИЛУЭТУ КОРПУСА ────────────────────────────────────────────
+// Сетка не «плата в центре», а покрывает ВЕСЬ корабль: клетка доступна там, где
+// под ней есть корпус. Отсюда естественный лимит — большой корабль несёт больше
+// модулей, потому что в него физически больше влезает, а не потому что так в таблице.
+const CN_DECK_ROWS = 6;                    // сколько рядов клеток укладываем поперёк корпуса
+function cnDeckGeo(k) {
+  k = k || (cnId('cn-class') || {}).value;
+  if (CN._dg && CN._dg.k === k) return CN._dg;
+  const H0 = CN_SHIP_GEO[CN_KV_HULL[k] || k] || CN_SHIP_GEO.corvette;
+  const poly = cnPathPoly(HG.hullPathOf(H0, 1));
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  poly.forEach(pt => { x1 = Math.min(x1, pt[0]); y1 = Math.min(y1, pt[1]); x2 = Math.max(x2, pt[0]); y2 = Math.max(y2, pt[1]); });
+  const C = Math.max(6, (H0.maxHW * 2) / CN_DECK_ROWS);
+  const w = Math.max(1, Math.ceil((x2 - x1) / C)), h = Math.max(1, Math.ceil((y2 - y1) / C));
+  const ox = x1 - ((w * C) - (x2 - x1)) / 2, oy = y1 - ((h * C) - (y2 - y1)) / 2;
+  const inside = new Array(w * h).fill(false);
+  let n = 0;
+  for (let gy = 0; gy < h; gy++) for (let gx = 0; gx < w; gx++) {
+    // клетка считается палубой, если корпус накрывает её середину и обе трети по длине
+    const cx = ox + gx * C + C / 2;
+    const ok = cnPtInPoly([cx, oy + gy * C + C * 0.5], poly)
+      && cnPtInPoly([cx, oy + gy * C + C * 0.2], poly)
+      && cnPtInPoly([cx, oy + gy * C + C * 0.8], poly);
+    if (ok) { inside[gy * w + gx] = true; n++; }
+  }
+  return (CN._dg = { k, w, h, C, ox, oy, inside, n, poly, H: H0 });
+}
+function cnModGridDims(k) { const g = cnDeckGeo(k); return [g.w, g.h]; }
+// ── МОДУЛЬНАЯ ПЛАТА: эффективность модуля зависит от его СОСЕДЕЙ ────────────────
+// Голое число модулей больше ничего не решает: 20 разнородных коробок дают
+// полудохлый эффект каждая, а четыре однородные, сложенные квадратом, — сверхнорму.
+//   семья    — что модуль вообще делает (ключ combat: jam / pd / stealth / …).
+//              Всё нефункциональное (склад, десант, экипаж) — семья 'hull', она в
+//              расчёт не идёт: грузовой отсек ничего не разбавляет и ничего не усиливает.
+//   смежность— каждый соседний по грани модуль ТОЙ ЖЕ семьи: +22% обоим.
+//   блок     — у модуля два и больше однородных соседей: ещё +15% («контур замкнут»).
+//   разбавление — на борту F разных семей: всё делится на (1 + 0.18·(F−1)).
+// Итог зажат в [0.25, 2.2] — ни бесполезной трухи, ни бесконечного стакинга.
+const CN_PLATE = { adj: 0.22, sq: 1.15, dil: 0.18, lo: 0.25, hi: 2.2 };
+function cnModFam(mod) {
+  const c = mod && mod.combat;
+  if (!c) return 'hull';
+  for (const key of ['jam', 'pd', 'stealth', 'sensor', 'hangar', 'dejam', 'interdict', 'stabil', 'ftl']) {
+    if (+c[key]) return key;
+  }
+  return 'hull';
+}
+const CN_FAM_RU = {
+  jam: 'РЭБ', pd: 'ПРО', stealth: 'Маскировка', sensor: 'Сенсоры', hangar: 'Ангары',
+  dejam: 'Контр-РЭБ', interdict: 'Интердикция', stabil: 'Стабилизация', ftl: 'FTL', hull: 'Корпусное',
+};
+// ГАБАРИТ МОДУЛЯ в клетках [ширина, высота]. Явный `cells` в KV главнее; иначе
+// размер идёт от энергопотребления — чем прожорливее коробка, тем больше места
+// она съедает на палубе. Это и есть «плата за установку»: место + энергия.
+function cnModCells(mod) {
+  const c = mod && mod.cells;
+  if (c && +c[0] > 0 && +c[1] > 0) return [+c[0], +c[1]];
+  const p = +(mod && (mod.energy != null ? mod.energy : mod.power)) || 0;
+  if (p <= 200) return [1, 1];
+  if (p <= 600) return [2, 1];
+  if (p <= 1500) return [2, 2];
+  if (p <= 5000) return [3, 2];
+  return [3, 3];
+}
+// Карта платы: кто где стоит, кто с кем граничит, какая у кого отдача.
+//   own[i]  — индекс якорной ячейки модуля, накрывающего клетку i (или −1)
+//   mods    — [{ at, mod, fam, w, h, k }]  (at = якорная ячейка, k = множитель)
+function cnPlateMap(k) {
+  const db = CN.def.db, L = CN.shipLayout || { bays: [] };
+  const G = cnDeckGeo(k), w = G.w, h = G.h, N = w * h;
+  const own = new Array(N).fill(-1), mods = [], bad = [];
+  // ЕДИНОЕ правило: модуль либо занимает ВСЕ свои клетки (внутри обшивки и
+  // свободные), либо не стоит вовсе и попадает в bad — половинчатых нет.
+  for (let i = 0; i < N; i++) {
+    const b = L.bays[i], mm = b && b.m, mo = mm ? ((db.modules[mm.g] || [])[mm.idx] || null) : null;
+    if (!mo) continue;
+    const [fw, fh] = cnModCells(mo);
+    if (!cnDeckFits(G, own, i, fw, fh, -1)) { bad.push(i); continue; }
+    const rec = { at: i, mod: mo, ref: mm, fam: cnModFam(mo), w: fw, h: fh, k: 1, nb: 0, link: [], cells: [] };
+    const x0 = i % w, y0 = (i / w) | 0;
+    for (let y = y0; y < y0 + fh; y++) for (let x = x0; x < x0 + fw; x++) { const c = y * w + x; own[c] = i; rec.cells.push(c); }
+    mods.push(rec);
+  }
+  const byAt = new Map(mods.map(m => [m.at, m]));
+  const fams = new Set(mods.map(m => m.fam).filter(f => f !== 'hull'));
+  const dil = 1 / (1 + CN_PLATE.dil * Math.max(0, fams.size - 1));
+  mods.forEach(m => {
+    if (m.fam === 'hull') { m.k = 1; return; }
+    const seen = new Set();
+    m.cells.forEach(c => {
+      const x = c % w, y = (c / w) | 0;
+      [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]].forEach(([nx, ny]) => {
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) return;
+        const o = own[ny * w + nx];
+        if (o < 0 || o === m.at) return;
+        const om = byAt.get(o); if (om && om.fam === m.fam) seen.add(o);
+      });
+    });
+    m.nb = seen.size;
+    m.link = [...seen].map(a => byAt.get(a));
+    m.k = Math.max(CN_PLATE.lo, Math.min(CN_PLATE.hi, (1 + CN_PLATE.adj * m.nb) * (m.nb >= 2 ? CN_PLATE.sq : 1) * dil));
+  });
+  return { w, h, own, mods, byAt, dil, fams: [...fams], bad, G };
+}
+// Единственная проверка «влезает ли»: внутри обшивки, в границах, всё свободно.
+function cnDeckFits(G, own, i, fw, fh, ignoreAt) {
+  const x0 = i % G.w, y0 = (i / G.w) | 0;
+  if (x0 + fw > G.w || y0 + fh > G.h) return false;
+  for (let y = y0; y < y0 + fh; y++) for (let x = x0; x < x0 + fw; x++) {
+    const c = y * G.w + x;
+    if (!G.inside[c]) return false;
+    if (own[c] >= 0 && own[c] !== ignoreAt) return false;
+  }
+  return true;
+}
+function cnPlateFits(map, i, fw, fh, ignoreAt) { return cnDeckFits(map.G, map.own, i, fw, fh, ignoreAt); }
+function cnPlateNearest(map, i, fw, fh, ignoreAt) {
+  const w = map.w, x0 = i % w, y0 = (i / w) | 0;
+  let best = -1, bd = Infinity;
+  for (let c = 0; c < w * map.h; c++) {
+    if (!cnDeckFits(map.G, map.own, c, fw, fh, ignoreAt)) continue;
+    const dx = c % w - x0, dy = ((c / w) | 0) - y0, d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = c; }
+  }
+  return best;
+}
+// ПОЧИНКА РАСКЛАДКИ: после удаления модуля, смены класса или брони часть якорей
+// оказывается вне обшивки или внахлёст. Пересобираем: каждый остаётся на месте,
+// если может, иначе съезжает в ближайшую годную ячейку; кому места нет — снимается.
+// РЕДАКТОР НИЧЕГО НЕ ПЕРЕСТАВЛЯЕТ САМ. Раньше он «чинил» раскладку, подыскивая
+// сорванным модулям новое место, — и любое удаление запускало цепную реакцию:
+// один съезжал, выталкивал соседа, тот следующего, и палуба ехала целиком.
+// Теперь правило простое: модуль стоит там, куда его поставил игрок. Если место
+// перестало быть палубой (сменили класс или корпус) — модуль СНИМАЕТСЯ, а не
+// переезжает. Никто никого не двигает, ползти нечему.
+function cnDeckStrip(k) {
+  const db = CN.def.db, G = cnDeckGeo(k), N = G.w * G.h, a = CN.shipLayout.bays;
+  const own = new Array(N).fill(-1);
+  let lost = 0;
+  for (let i = 0; i < N; i++) {
+    const b = a[i]; if (!b || !b.m) continue;
+    const mo = (db.modules[b.m.g] || [])[b.m.idx];
+    const sz = mo ? cnModCells(mo) : null;
+    if (!sz || !cnDeckFits(G, own, i, sz[0], sz[1], -1)) { b.m = null; lost++; continue; }
+    const x0 = i % G.w, y0 = (i / G.w) | 0;
+    for (let y = y0; y < y0 + sz[1]; y++) for (let x = x0; x < x0 + sz[0]; x++) own[y * G.w + x] = i;
+  }
+  if (lost) toast(`Снято с палубы (места больше нет): ${lost}`, 'inf');
+}
+function cnPlural(n, one, few, many) { const a = n % 100, b = n % 10; return a > 10 && a < 20 ? many : b === 1 ? one : b > 1 && b < 5 ? few : many; }
+// Плата — решётка фиксированного размера: ячейки не «добавляют», их занимают.
+// Массив bays держим ровно в w*h, дырки (null-модуль) значимы — от них зависит соседство.
+function cnBaysFit(k) {
+  if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] };
+  const d = cnModGridDims(k), n = d[0] * d[1], a = CN.shipLayout.bays;
+  while (a.length < n) a.push({ m: null });
+  if (a.length > n) a.splice(n);
+  return a;
+}
+function cnLayoutAdd(kind) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; if (kind === 'mount') CN.shipLayout.mounts.push({ w: null }); else cnRoomAdd(); cnVehCalc(); }
+// «＋ Отсек» на плате = занять первую свободную ячейку.
+function cnRoomAdd() {
+  cnBaysFit();
+  const map = cnPlateMap(cnId('cn-class').value), i = map.own.findIndex(o => o < 0);
+  if (i < 0) { toast('Палуба забита — снимите модуль, чтобы освободить место', 'inf'); return; }
+  cnVehCalc(); cnOpenAssignPicker('bay', i);
+}
+function cnRoomAddAt(i) { cnBaysFit(); cnVehCalc(); cnOpenAssignPicker('bay', i); }
 function cnMountAddAt(i) { if (!CN.shipLayout) CN.shipLayout = { mounts: [], bays: [] }; const a = CN.shipLayout.mounts, n0 = a.length; while (a.length <= i) a.push({ w: null }); CN._pendingAdd = { kind: 'mount', n0 }; cnVehCalc(); cnOpenAssignPicker('mount', i); }
 function cnSchemToggle(which) { if (!CN.schemShow) CN.schemShow = { weapons: true, bays: true }; CN.schemShow[which] = !CN.schemShow[which]; const b = cnId(which === 'weapons' ? 'cn-tg-w' : 'cn-tg-b'); if (b) b.classList.toggle('on', CN.schemShow[which]); cnDrawShip(); }
 function cnNodeClick(kind, i) { cnOpenAssignPicker(kind, i); }
@@ -2304,7 +2575,11 @@ function cnOpenAssignPicker(kind, slot, keepFilter) {
     secs = `<div class="cn-info-grid">${cards}</div>`;
   }
   if (!secs) secs = `<div class="cn-bill-none" style="padding:10px">${isW ? 'Нет доступного оружия этого класса' : 'Модули ещё не исследованы (вкладка «Исследования»)'}</div>`;
-  const head = `<div class="cn-assign-head">${cur ? `<button class="btn btn-gh btn-sm" onclick="cnClearSlot('${kind}',${slot})">Оставить пустым</button>` : ''}<button class="btn btn-rd btn-sm" onclick="cnDeleteSlot('${kind}',${slot})">Удалить ${isW ? 'узел' : 'отсек'}</button></div>`;
+  // У палубы кнопки «удалить ячейку» нет: ячейки задаёт корпус, их можно только очистить.
+  const head = `<div class="cn-assign-head">`
+    + (cur ? `<button class="btn btn-rd btn-sm" onclick="cnClearSlot('${kind}',${slot})">${isW ? 'Снять орудие' : 'Очистить ячейку'}</button>` : '')
+    + (isW ? `<button class="btn btn-rd btn-sm" onclick="cnDeleteSlot('mount',${slot})">Удалить узел</button>` : '')
+    + `</div>`;
   let ov = document.getElementById('cn-pick-ov');
   if (!ov) { ov = document.createElement('div'); ov.id = 'cn-pick-ov'; ov.className = 'cn-modal-ov'; ov.onclick = e => { if (e.target === ov) cnClosePick(); }; document.body.appendChild(ov); }
   ov.classList.toggle('cn-cyb', !!(CN.def && CN.def.cardUI));
@@ -2313,11 +2588,28 @@ function cnOpenAssignPicker(kind, slot, keepFilter) {
 }
 // Переключение калибра-фильтра в пикере узла (сохраняем выбор и перерисовываем тот же слот).
 function cnAssignFilter(kind, slot, g) { CN.assignFilter = g; cnOpenAssignPicker(kind, slot, true); }
-function cnAssignSlot(kind, slot, g, i) { const a = kind === 'mount' ? CN.shipLayout.mounts : CN.shipLayout.bays; if (!a[slot]) return; if (kind === 'mount') a[slot].w = { g, idx: i }; else a[slot].m = { g, idx: i }; cnClosePick(); cnVehCalc(); }
+function cnAssignSlot(kind, slot, g, i) {
+  const a = kind === 'mount' ? CN.shipLayout.mounts : CN.shipLayout.bays; if (!a[slot]) return;
+  if (kind === 'mount') { a[slot].w = { g, idx: i }; }
+  else {
+    // Модуль занимает прямоугольник клеток — ставим только если он туда влезает.
+    const k = cnId('cn-class').value, mo = (CN.def.db.modules[g] || [])[i];
+    const [fw, fh] = cnModCells(mo), map = cnPlateMap(k);
+    if (!cnPlateFits(map, slot, fw, fh, slot)) {
+      toast(`«${esc(mo.name || '')}» занимает ${fw}×${fh} клеток — здесь не помещается`, 'inf');
+      return;                                        // молча в другое место НЕ переносим
+    }
+    a[slot].m = { g, idx: i };
+  }
+  cnClosePick(); cnVehCalc();
+}
 function cnClearSlot(kind, slot) { const a = kind === 'mount' ? CN.shipLayout.mounts : CN.shipLayout.bays; if (a[slot]) { if (kind === 'mount') a[slot].w = null; else a[slot].m = null; } cnClosePick(); cnVehCalc(); }
 function cnDeleteSlot(kind, slot) {
-  // Узел/отсек РЕАЛЬНО убирается из массива (раньше лишь очищался и висел пустым навсегда)
-  const a = kind === 'mount' ? CN.shipLayout.mounts : CN.shipLayout.bays;
+  // ЯЧЕЙКИ ПАЛУБЫ НЕ УДАЛЯЮТСЯ. Раньше здесь был splice — он сдвигал все
+  // последующие ячейки на одну, и вся палуба уезжала при удалении модуля.
+  // Место на палубе задано корпусом, а не списком: «убрать» = очистить ячейку.
+  if (kind === 'bay') return cnClearSlot(kind, slot);
+  const a = CN.shipLayout.mounts;                    // орудийные узлы — по-прежнему список
   a.splice(slot, 1);
   cnClosePick(); cnVehCalc();
 }
@@ -2531,11 +2823,11 @@ async function cnVehRender(cat) {
             <div id="cn-schematic" class="cn-schematic"></div>
             <div class="cn-schem-toggles">
               <button class="btn btn-gh btn-sm on" id="cn-tg-w" onclick="cnSchemToggle('weapons')" title="Показать/скрыть орудия">Орудия</button>
-              <button class="btn btn-gh btn-sm on" id="cn-tg-b" onclick="cnSchemToggle('bays')" title="Показать/скрыть отсеки">Отсеки</button>
+              <button class="btn btn-gh btn-sm" id="cn-tg-b" onclick="cnDeckOpen()" title="Модульная палуба во весь экран">Палуба</button>
             </div>
             <div class="cn-schem-tools">
               <button class="btn btn-gh btn-sm" onclick="cnLayoutAdd('mount')" title="Добавить узел орудия">＋ Узел</button>
-              <button class="btn btn-gh btn-sm" onclick="cnLayoutAdd('bay')" title="Добавить отсек под модуль">＋ Отсек</button>
+              <button class="btn btn-gh btn-sm" onclick="cnDeckOpen()" title="Модульная палуба во весь экран">＋ Модуль</button>
               ${def.hasHangars ? `<button class="btn btn-gh btn-sm" onclick="cnVehAddHangar()" title="Добавить ангар">＋ Ангар</button>` : ''}
             </div>
             <div class="cn-schem-zoom">
@@ -2658,7 +2950,8 @@ function cnVehInit() {
   if (def.cardUI) cnSlotSelected('class');
   cnVehClassDeps();
 }
-function cnVehHandleClass() {
+function cnVehHandleClass() { CN._dg = null; if (CN.shipLayout) { cnBaysFit(); cnDeckStrip(cnId('cn-class').value); } return cnVehHandleClass_(); }
+function cnVehHandleClass_() {
   if (cnClassLocked()) return;   // класс при правке зафиксирован
   if (cnId('cn-weapons')) cnId('cn-weapons').innerHTML = '';
   if (cnId('cn-modules')) cnId('cn-modules').innerHTML = '';
@@ -3325,6 +3618,9 @@ function cnVehApplyData(d) {
       mounts: (d.weapons || []).filter(w => okW(w) || !++dropped).flatMap(w => Array.from({ length: w.q || 1 }, () => ({ w: { g: w.g, idx: w.idx }, battery: w.battery || null }))),
       bays: (d.modules || []).filter(m => okM(m) || !++dropped).map(m => ({ m: { g: m.g, idx: m.idx } }))
     };
+    // Старые проекты писались под другую сетку палубы: разово подрезаем то, что
+    // теперь лежит вне обшивки или внахлёст. Дальше раскладку никто не трогает.
+    CN._dg = null; cnBaysFit(lk); cnDeckStrip(lk);
   } else {
     (d.weapons || []).forEach(w => { if (okW(w)) cnVehAddItem('weapon', w); else dropped++; });
     (d.modules || []).forEach(m => { if (okM(m)) cnVehAddItem('module', m); else dropped++; });
@@ -3670,6 +3966,10 @@ async function cnPublish() {
     // выбранному классу (карта availW/availM + excl). Блокируем, а не молча правим.
     const forbidden = cnForbiddenParts(data.class, data);
     if (forbidden.length) { toast(`Классу «${esc(cls.name)}» нельзя ставить: ${forbidden.slice(0, 4).map(esc).join(', ')}${forbidden.length > 4 ? ' и др.' : ''} — снимите эти компоненты`, 'err'); return; }
+    // Предел отсеков класса — тот же заслон: старый проект «за лимитом» правится,
+    // но не публикуется, пока лишние модули не сняты.
+    const gd = cnModGridDims(k), modCap = gd[0] * gd[1], modN = (data.modules || []).length;
+    if (modN > modCap) { toast(`На плате класса «${esc(cls.name)}» ${modCap} ${cnPlural(modCap, 'ячейка', 'ячейки', 'ячеек')}, модулей ${modN} — снимите лишние`, 'err'); return; }
     summary = { ...CN.last, className: cls.name, typeName: typeObj ? typeObj.name : '' };
     card = cnVehCardText();
   }

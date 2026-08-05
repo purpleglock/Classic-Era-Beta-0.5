@@ -591,3 +591,33 @@
 .cn-bat-chip.on { border-color: var(--te); color: var(--te); }
 .cn-bat-chip b { font-family: var(--font-mono); font-size: 11px; min-width: 30px; text-align: center; }
 .cn-bat-chip i { font-family: var(--font-mono); font-size: 10px; color: var(--t3); font-style: normal; }
+
+
+/* ── Модульная палуба: отдельный полноэкранный режим ──────────
+   Ни шапки сайта, ни корпуса, ни подписей — только решётка отсеков
+   во весь экран. Цвет = семья модуля, полоса внизу клетки = отдача. */
+.cn-deck-on { overflow: hidden; }
+.cn-deck { position: fixed; inset: 0; z-index: 40; background: #070b10; }
+.cn-deck-svg { width: 100%; height: 100%; }
+.cn-dk-free { transition: fill-opacity var(--transition-fast), stroke var(--transition-fast); }
+.cn-dk-free:hover { fill-opacity: 0.1; stroke: #9fe8ff; }
+.cn-dk-mod rect { transition: fill-opacity var(--transition-fast); }
+.cn-dk-mod:hover > rect:first-of-type { fill-opacity: 0.32; }
+.cn-deck-x { position: absolute; top: 14px; right: 16px; width: 40px; height: 40px; border-radius: 50%; border: 1px solid #33414f; background: #0d141c; color: #9fb0c2; font-size: 17px; cursor: pointer; }
+.cn-deck-x:hover { border-color: #9fe8ff; color: #9fe8ff; }
+.cn-deck-bar { position: absolute; top: 16px; left: 20px; display: flex; align-items: center; gap: 10px; }
+.cn-deck-bar i { font-style: normal; font-family: var(--font-mono); font-size: 13px; padding: 5px 11px; border-radius: 999px; border: 1px solid #2b3947; background: #0d141c; color: #9fb0c2; }
+.cn-deck-bar i.bad { border-color: #e0575f; color: #e0575f; }
+.cn-deck-bar i.cn-deck-f { border-color: var(--fc); color: var(--fc); }
+@media (max-width: 700px) { .cn-deck { padding: 60px 10px 10px; } }
+/* итог палубы и шкала энергии */
+.cn-deck-yield { position: absolute; left: 20px; right: 20px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.cn-deck-yield i { font-style: normal; font-family: var(--font-mono); font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--fc, #2b3947); color: var(--fc, #9fb0c2); background: #0d141c; }
+.cn-deck-bar i { position: relative; overflow: hidden; }
+.cn-deck-bar i b { position: absolute; left: 0; bottom: 0; height: 3px; width: var(--r, 0%); background: currentColor; opacity: .8; }
+/* чип итога: крупное значение + что дала расстановка */
+.cn-deck-y { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; font-style: normal; padding: 6px 14px; border-radius: 10px; border: 1px solid var(--fc); background: #0d141c; }
+.cn-deck-y b { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: #7e8c9c; font-weight: 600; }
+.cn-deck-y u { text-decoration: none; font-family: var(--font-mono); font-size: 19px; line-height: 1; color: var(--fc); }
+.cn-deck-y s { text-decoration: none; font-family: var(--font-mono); font-size: 10px; color: #63707e; }
+.cn-deck-y s.up { color: #5fd08a; } .cn-deck-y s.dn { color: #e0575f; }

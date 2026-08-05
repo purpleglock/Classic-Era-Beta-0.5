@@ -209,9 +209,13 @@ async function bbReload() {
     return;
   }
   BB.st = next;
-  // ландшафт → быстрый Map для проверок и рендера
+  // ландшафт → быстрый Map для проверок и рендера.
+  // Две формы хранения: объект {"x:y":"ast"} у боёв с зонированием
+  // (_bt_arena_zoning.sql) и массив [{x,y,t}] у боёв до него.
   BB.terr = new Map();
-  (BB.st.terrain || []).forEach(e => BB.terr.set(e.x + ':' + e.y, e.t));
+  const _tr = BB.st.terrain;
+  if (Array.isArray(_tr)) _tr.forEach(e => BB.terr.set(e.x + ':' + e.y, e.t));
+  else if (_tr && typeof _tr === 'object') for (const k in _tr) BB.terr.set(k, _tr[k]);
   BB.reach = null; BB.cov = null;   // состояние сменилось — покрытие пересчитать
   bbRender();
   bbDiffAnimate(prev, BB.st.units || []);   // раньше баннера: дифф решает, магнитить ли к врагу
@@ -1420,9 +1424,14 @@ function bbTipPlan(sel, hx, hy) {
     if (bbSteps(sel) < 1) return { ico: '➤', t: 'Секунд на манёвр нет', s: `осталось ${tp.toFixed(1)} с`, bad: true };
     return null;                     // просто далеко — молчим, чтобы не мельтешить
   }
-  const step = bbStepCost(sel), cost = step * r.steps;
+  // Цена — сумма по клеткам маршрута, а не «шаг × длина»: путь сквозь пояс
+  // дороже такого же по длине в пустоте, и это должно быть видно ДО клика.
+  const cost = r.cost, base = bbStepCost(sel);
+  const rough = cost > base * r.steps * 1.05;   // маршрут идёт по тяжёлым клеткам
   return { ico: '➤', t: `${r.steps} гекс · ${cost.toFixed(1)} с`, cost: cost,
-    s: `останется ${Math.max(0, tp - cost).toFixed(1)} с${sel.stance === 'eng' ? ' · форсаж двигателей' : ''}` };
+    s: `останется ${Math.max(0, tp - cost).toFixed(1)} с`
+       + (rough ? ' · путь по камням' : '')
+       + (sel.stance === 'eng' ? ' · форсаж двигателей' : '') };
 }
 
 
@@ -1520,10 +1529,15 @@ var BBW_ENG = 0.5, BBW_WPN_DMG = 1.3, BBW_WPN_CST = 0.8, BBW_COST = 1.0;
 // Шагов по карману в остатке хода (зеркало battle_move: tp / step_cost).
 // ЗЕРКАЛО _bt_stance.sql: без этих множителей доска рисовала прежний радиус,
 // сервер бонус давал, а на глаз «форсаж ничего не поменял».
+// ЗЕРКАЛО _bt_terra_mult (_bt_terrain_cost.sql): цена платится за ВХОД в
+// гекс, по его ландшафту. Пояс не пролетают — сквозь него продавливаются.
+var BBW_TERRA = { ast: 2.2, deb: 1.5, neb: 1.25 };
+function bbTerraMult(x, y) { return BBW_TERRA[bbTerra(x, y)] || 1; }
+
+// Базовая цена шага — по чистому гексу. Ландшафт домножает её на входе.
 function bbStepCost(sel) {
   let cost = +sel.step_cost || 1;
   if (sel.stance === 'eng') cost *= BBW_ENG;          // форсаж двигателей
-  if (bbTerra(sel.x, sel.y) === 'deb') cost *= 1.5;   // обломки: шаг дороже
   return cost;
 }
 function bbFireCost(sel) {
@@ -1532,28 +1546,36 @@ function bbFireCost(sel) {
 function bbSteps(sel) { return Math.floor((+sel.tp + 1e-9) / bbStepCost(sel)); }
 function bbCanFire(sel) { return (+sel.tp + 1e-9) >= bbFireCost(sel); }
 
+// Досягаемость — ДЕЙКСТРА ПО СЕКУНДАМ, а не волна по шагам: с платным
+// ландшафтом равное число шагов больше не значит равную цену, и обход вокруг
+// гряды часто дешевле, чем напрямик сквозь неё. Зеркало _bt_do_move: тот же
+// бюджет, те же множители — что доска подсветила, то сервер и пропустит.
 function bbComputeReach(sel) {
   const s = BB.st;
-  const maxs = bbSteps(sel);
-  if (maxs < 1) return new Map();
+  const base = bbStepCost(sel), tp = +sel.tp || 0;
+  if (tp + 1e-9 < base) return new Map();
   const occ = new Set((s.units || []).filter(u => u.id !== sel.id).map(u => u.x + ':' + u.y));
   const reach = new Map();
-  const seen = new Set([sel.x + ':' + sel.y]);
-  let q = [{ x: sel.x, y: sel.y, path: [] }];
-  for (let step = 1; step <= maxs && q.length; step++) {
+  const best = new Map([[sel.x + ':' + sel.y, 0]]);
+  // «Ведро» на каждый шаг: путей за ход мало, полноценная очередь с
+  // приоритетом тут только усложнила бы код без выигрыша.
+  let q = [{ x: sel.x, y: sel.y, cost: 0, path: [] }];
+  while (q.length) {
     const nq = [];
     for (const c of q) {
       for (let d = 0; d < 6; d++) {
         const p = bbStep(c.x, c.y, d);
         if (p.x < 0 || p.x >= s.w || p.y < 0 || p.y >= s.h) continue;
         if (!bbInArena(p.x, p.y)) continue;        // в пустоту за кромкой не летают
-        if (occ.has(p.x + ':' + p.y)) continue;
         const key = p.x + ':' + p.y;
-        if (seen.has(key)) continue;
-        seen.add(key);
+        if (occ.has(key)) continue;
+        const cost = c.cost + base * bbTerraMult(p.x, p.y);
+        if (cost > tp + 1e-9) continue;
+        if (best.has(key) && best.get(key) <= cost + 1e-9) continue;
+        best.set(key, cost);
         const path = c.path.concat([{ x: p.x, y: p.y, f: d }]);
-        reach.set(key, { steps: step, path, f: d });
-        nq.push({ x: p.x, y: p.y, path });
+        reach.set(key, { steps: path.length, cost, path, f: d });
+        nq.push({ x: p.x, y: p.y, cost, path });
       }
     }
     q = nq;
@@ -1879,7 +1901,9 @@ function bbClick(x, y) {
     if (noActs) { toast(`Активации кончились: за ход действуют не больше ${s.acts_max || 6} кораблей`, 'err'); return; }
     if (!BB.reach) BB.reach = bbComputeReach(sel);
     const r = BB.reach.get(x + ':' + y);
-    if (!r) { toast(`«${sel.name}» туда не долетит: осталось ${(+sel.tp).toFixed(1)} c = ${bbSteps(sel)} гекс.`, 'err'); return; }
+    // Про «= N гекс» больше не пишем: длина хода зависит от того, ЧЕРЕЗ ЧТО
+    // идти — по чистому полю дальше, сквозь пояс и обломки заметно ближе.
+    if (!r) { toast(`«${sel.name}» туда не долетит: осталось ${(+sel.tp).toFixed(1)} c, а путь дороже`, 'err'); return; }
     bbMove(sel.id, r.path);
   }
 }
