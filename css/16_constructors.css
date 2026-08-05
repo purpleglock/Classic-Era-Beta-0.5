@@ -667,19 +667,22 @@
   .cn-deck.fold .cn-deck-main { right: 0; bottom: 42px; }
   .cn-deck.fold .cn-pal-h { writing-mode: horizontal-tb; margin: 0; }
   .cn-deck.fold .cn-pal-fold { margin-bottom: 0; }
-  /* шапка: одна строка с горизонтальной прокруткой — не растёт в три этажа */
-  .cn-deck-top { top: 8px; left: 10px; right: 52px; gap: 6px; }
-  .cn-deck-bar { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; gap: 6px; }
-  .cn-deck-bar i { flex: 0 0 auto; font-size: 12px; }
-  .cn-deck-g { min-width: 0; padding: 4px 9px 7px; }
-  .cn-deck-bar i.cn-deck-g b { font-size: 14px; }
+  /* ⚠️ НИКАКИХ горизонтальных прокруток: на пальце их не видно и не поймать.
+     Плашки просто ужимаются и переносятся, а лист подрезается ПО ФАКТУ их
+     высоты (cnDeckFit в constructors.js меряет шапку и подвал). */
+  .cn-deck-top { top: 8px; left: 10px; right: 50px; gap: 5px; }
+  .cn-deck-bar { flex-wrap: wrap; gap: 5px; }
+  .cn-deck-bar i { font-size: 11px; padding: 3px 8px; }
+  .cn-deck-g { min-width: 0; padding: 3px 8px 6px; }
+  .cn-deck-g u, .cn-deck-g s { font-size: 9px; letter-spacing: .8px; }
+  .cn-deck-bar i.cn-deck-g b { font-size: 13px; }
   .cn-deck-x { top: 6px; right: 8px; width: 34px; height: 34px; font-size: 15px; }
-  /* лист живёт МЕЖДУ шапкой и чипами итога, а не под ними */
-  .cn-deck-svg { top: 62px; bottom: 46px; height: auto; }
-  .cn-deck-yield { left: 10px; right: 10px; bottom: 6px; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; gap: 6px; }
-  .cn-deck-yield i { flex: 0 0 auto; }
-  .cn-deck-y { padding: 4px 10px; }
-  .cn-deck-y u { font-size: 15px; }
+  .cn-deck-svg { height: auto; }
+  .cn-deck-yield { left: 10px; right: 10px; bottom: 6px; gap: 5px; justify-content: flex-start; }
+  .cn-deck-y { padding: 3px 9px; }
+  .cn-deck-y b { font-size: 9px; }
+  .cn-deck-y u { font-size: 14px; }
+  .cn-deck-y s { font-size: 9px; }
 }
 /* итог палубы и шкала энергии */
 .cn-deck-yield { position: absolute; z-index: 2; pointer-events: none; left: 20px; right: 20px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }

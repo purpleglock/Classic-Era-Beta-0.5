@@ -1845,6 +1845,16 @@ function cnDeckDraw() {
     + `<svg class="cn-deck-svg" onmousedown="CN.dkPaint=!!CN.dkGhost" viewBox="${vert ? `${vy} ${-(vx + vw)} ${vh} ${vw}` : `${vx} ${vy} ${vw} ${vh}`}" preserveAspectRatio="xMidYMid meet">`
     + (vert ? `<g transform="rotate(-90)">${P.join('')}</g>` : P.join(''))
     + `</svg>`;
+  cnDeckFit(host, vert);
+}
+// Лист подрезаем ПО ФАКТУ шапки и подвала: сколько плашек перенеслось — столько и
+// отступ. Иначе либо чертёж лезет под шкалы, либо теряет полэкрана «на всякий».
+function cnDeckFit(host, vert) {
+  const svg = host.querySelector('.cn-deck-svg'); if (!svg) return;
+  if (!vert) { svg.style.top = svg.style.bottom = ''; return; }
+  const top = host.querySelector('.cn-deck-top'), yld = host.querySelector('.cn-deck-yield');
+  svg.style.top = ((top ? top.offsetHeight : 0) + 14) + 'px';
+  svg.style.bottom = ((yld ? yld.offsetHeight : 0) + 10) + 'px';
 }
 // ── РЕЖИМ УСТАНОВКИ: «куда это вообще влезет» видно ДО клика ────────────────────
 // Жалоба была прямая: ставишь второй-третий узел — и не понять, где ещё осталось
