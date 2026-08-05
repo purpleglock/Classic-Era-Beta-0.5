@@ -7881,20 +7881,57 @@ function ecResFilter(q) {
   const nm = ecId('ec-res-nomatch');
   if (nm) nm.style.display = shown ? 'none' : '';
 }
-// Циклировать состояние редкости и отправить всю политику на сервер.
+// Политика добычи целиком: редкости {off,prio} + конкретные ресурсы
+// {res_off,res_prio}. Настройка РЕСУРСА перебивает настройку его редкости —
+// то же правило в SQL (_res_mining_policy.sql).
+function ecPolicy() {
+  const p = EC.rarPolicy || EC.workerPlan?.rarity_policy || {};
+  return { off: [...(p.off || [])], prio: [...(p.prio || [])],
+           res_off: [...(p.res_off || [])], res_prio: [...(p.res_prio || [])] };
+}
+// Отправить политику на сервер. Сервер = авторитет, но чипы кликают пачками:
+// шлём с задержкой (последнее состояние), план НЕ обнуляем — из него берётся
+// справочник ресурсов для чипов, — а перезапрашиваем после ответа.
+function ecPolSend(pol, msg) {
+  EC.rarPolicy = pol;                                    // оптимистично
+  if (EC.workerPlan) EC.workerPlan.rarity_policy = pol;
+  clearTimeout(EC._polT);
+  EC._polT = setTimeout(async () => {
+    try { await ecRpc('resource_rarity_policy_set', { p_policy: EC.rarPolicy }); toast(msg, 'ok'); }
+    catch (e) { toast(ecErr(e.message), 'err'); }
+    await ecLoadWorkerPlan(true);                        // правда с сервера + перерисовка панели
+    ecResPolRepaint();                                   // и чипы в открытом меню
+  }, 420);
+}
+// Циклировать состояние РЕДКОСТИ: обычно → ★ приоритет → ✗ выкл → обычно.
 function ecResRarCycle(r) {
-  const cur = EC.rarPolicy || EC.workerPlan?.rarity_policy || {};
-  const off = new Set(cur.off || []), prio = new Set(cur.prio || []);
-  const st = ecRarState(cur, r);
-  // обычно → приоритет → выкл → обычно
+  const pol = ecPolicy();
+  const off = new Set(pol.off), prio = new Set(pol.prio);
+  const st = ecRarState(pol, r);
   if (st === 'on') { prio.add(r); off.delete(r); }
   else if (st === 'prio') { prio.delete(r); off.add(r); }
   else { off.delete(r); prio.delete(r); }
-  const pol = { off: [...off], prio: [...prio] };
-  EC.rarPolicy = pol;                       // оптимистично — мгновенная перерисовка чипов
-  EC.workerPlan = null;                     // план устарел → перезапросим
-  ecRpcAct('resource_rarity_policy_set', { p_policy: pol },
-    'Политика добычи по редкости обновлена — вступит в силу со следующего тика');
+  pol.off = [...off]; pol.prio = [...prio];
+  ecPolSend(pol, 'Политика по редкости обновлена — со следующего тика');
+}
+// Циклировать состояние КОНКРЕТНОГО ресурса: как редкость → ★ → ✗ → как редкость.
+function ecResNameCycle(n) {
+  const pol = ecPolicy();
+  const off = new Set(pol.res_off), prio = new Set(pol.res_prio);
+  const st = ecResNameState(pol, n);
+  if (st === 'prio') { prio.delete(n); off.add(n); }
+  else if (st === 'off') { off.delete(n); prio.delete(n); }
+  else { prio.add(n); off.delete(n); }
+  pol.res_off = [...off]; pol.res_prio = [...prio];
+  ecPolSend(pol, `«${n}»: ${st === 'prio' ? 'не копать' : st === 'off' ? 'как вся редкость' : 'приоритет'} — со следующего тика`);
+}
+// Сбросить точечные настройки ресурсов (редкости остаются).
+function ecResNameReset() {
+  const pol = ecPolicy();
+  if (!pol.res_off.length && !pol.res_prio.length) { toast('Точечных настроек нет', 'err'); return; }
+  pol.res_off = []; pol.res_prio = [];
+  ecPolSend(pol, 'Точечные настройки ресурсов сброшены');
+  const sid = EC._prioSid; ecResPrioMenu(sid);   // перерисовать меню (пропадёт «↺ сброс»)
 }
 // Круглая планета-СФЕРА по colony_id. planet_<look>.png — это РАЗВЁРТКА текстуры,
 // её нельзя показывать плоским <img> (выйдет «квадрат в кружке»): наматываем на
@@ -8057,13 +8094,23 @@ function ecResourcesPanel() {
   }).join('') : '<div class="ec-hint">Нет систем с залежами. Как только у колонии появятся залежи — рабочие начнут их копать (домик не обязателен, он только бустит).</div>';
 
   const anyCollapsed = systems.some(s => EC.resCollapsed && EC.resCollapsed[String(s.system_id ?? s.name ?? '')]);
+  // Сводка политики: выключенные залежи в план не попадают вовсе — без этой
+  // строки игрок не поймёт, куда делся ресурс.
+  const _pol = ecPolicy();
+  const _offTxt = [..._pol.off.map(r => ecRarLabel(r)), ..._pol.res_off].join(', ');
+  const _prioTxt = [..._pol.prio.map(r => ecRarLabel(r)), ..._pol.res_prio].join(', ');
+  const polNote = (_offTxt || _prioTxt) ? `<div class="ec-res-polnote">
+      ${_prioTxt ? `<span class="ec-res-polnote-p">★ первыми: ${esc(_prioTxt)}</span>` : ''}
+      ${_offTxt ? `<span class="ec-res-polnote-o">✗ не копаются (скрыты из списка): ${esc(_offTxt)}</span>` : ''}
+    </div>` : '';
   const toolbar = systems.length ? `<div class="ec-res-toolbar">
       <span class="ec-res-search">🔎 <input type="text" id="ec-res-search" placeholder="Поиск системы или ресурса…"
         value="${esc(EC.resSearch || '')}" oninput="ecResFilter(this.value)" autocomplete="off"></span>
+      <button class="btn btn-gd btn-xs ec-res-polbtn" onclick="ecResPrioMenu(null)" title="Что копать в первую очередь и что не копать вовсе — по редкости и по конкретным ресурсам">⛏ Приоритет добычи</button>
       <button class="btn btn-gh btn-xs" onclick="ecResCollapseAll(${anyCollapsed ? 'false' : 'true'})">${anyCollapsed ? '▾ Развернуть всё' : '▸ Свернуть всё'}</button>
     </div>` : '';
 
-  return `${intro}${deferred}${toolbar}
+  return `${intro}${deferred}${toolbar}${polNote}
     <div id="ec-res-syslist">${rows}</div>
     <div class="ec-hint" id="ec-res-nomatch" style="display:none;margin:8px 0">Ничего не найдено по запросу.</div>
     <div class="ec-hint" style="margin-top:10px"><button class="btn btn-gh btn-xs" onclick="ecLoadWorkerPlan(true)">↻ Обновить план</button></div>`;
@@ -8078,14 +8125,57 @@ function ecRarState(pol, r) {
   if ((pol.prio || []).includes(r)) return 'prio';
   return 'on';
 }
+// Состояние КОНКРЕТНОГО ресурса: 'prio' / 'off' / null (наследует редкость).
+function ecResNameState(pol, n) {
+  pol = pol || {};
+  if ((pol.res_off || []).includes(n)) return 'off';
+  if ((pol.res_prio || []).includes(n)) return 'prio';
+  return null;
+}
 function ecRarChips() {
-  const pol = EC.rarPolicy || EC.workerPlan?.rarity_policy || {};
+  const pol = ecPolicy();
   return EC_RAR_SEQ.map(r => {
     const st = ecRarState(pol, r);
     const lbl = ecRarLabel(r);
     const mark = st === 'prio' ? '★' : st === 'off' ? '✗' : '•';
     const ttl = st === 'prio' ? 'Приоритет: рабочие идут сюда первыми' : st === 'off' ? 'Отключено: залежи этой редкости НЕ копаются' : 'Обычная добыча';
-    return `<button class="ec-rar-chip ec-rar-${st}" title="${esc(ttl)} — клик, чтобы сменить" onclick="ecResPrioMenuRar('${r}')">${mark} ${esc(lbl)}</button>`;
+    return `<button class="ec-rar-chip ec-rar-${st}" title="${esc(ttl)} — клик, чтобы сменить" onclick="ecResPrioMenuRar('${jsq(r)}')">${mark} ${esc(lbl)}</button>`;
+  }).join('');
+}
+// Справочник ресурсов для чипов: сервер (res_catalog) → фолбэк из залежей плана.
+function ecPolResCatalog() {
+  const p = EC.workerPlan || {};
+  if (Array.isArray(p.res_catalog) && p.res_catalog.length) return p.res_catalog;
+  const seen = {};
+  (p.systems || []).forEach(s => (s.deposits || []).forEach(d => {
+    if (d.res && !seen[d.res]) seen[d.res] = { name: d.res, rarity: d.rarity || ecResRarity(d.res), mine: true };
+  }));
+  return Object.values(seen).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+}
+// Чипы по КОНКРЕТНЫМ ресурсам, сгруппированные по редкости. Показываем свои
+// залежи; «все» — переключателем (EC._polAll), иначе чужие ресурсы шумят.
+function ecResNameChips() {
+  const pol = ecPolicy();
+  const all = !!EC._polAll;
+  const cat = ecPolResCatalog().filter(x => all || x.mine || ecResNameState(pol, x.name));
+  if (!cat.length) return '<div class="ec-hint">Залежей нет — покажите «все ресурсы», чтобы задать политику наперёд.</div>';
+  const byRar = {};
+  cat.forEach(x => (byRar[x.rarity || 'common'] = byRar[x.rarity || 'common'] || []).push(x));
+  return EC_RAR_SEQ.filter(r => byRar[r]).map(r => {
+    const rst = ecRarState(pol, r);
+    const chips = byRar[r].map(x => {
+      const own = ecResNameState(pol, x.name);          // точечная настройка (или null)
+      const eff = own || rst;                            // что реально будет
+      const mark = eff === 'prio' ? '★' : eff === 'off' ? '✗' : '•';
+      const ttl = own === 'prio' ? 'Точечный приоритет — копается первым даже при выключенной редкости'
+        : own === 'off' ? 'Точечный запрет — не копается даже при приоритетной редкости'
+        : `Наследует редкость (${ecRarLabel(r)})`;
+      return `<button class="ec-rar-chip ec-res-chip ec-rar-${eff}${own ? ' is-own' : ''}${x.mine ? '' : ' is-far'}"
+        data-n="${esc(String(x.name).toLowerCase())}" title="${esc(ttl)} — клик: ★ приоритет → ✗ не копать → как редкость"
+        onclick="ecResPrioMenuName('${jsq(x.name)}')">${mark} ${typeof ecResIcon === 'function' ? ecResIcon(x.name) : ''} ${esc(x.name)}${x.mine ? '' : ' <i>нет залежей</i>'}</button>`;
+    }).join('');
+    return `<div class="ec-res-pol-grp"><div class="ec-res-pol-rar">${esc(ecRarLabel(r))}<i>${rst === 'prio' ? '★ приоритет' : rst === 'off' ? '✗ не копать' : 'обычно'}</i></div>
+      <div class="ec-rar-chips">${chips}</div></div>`;
   }).join('');
 }
 // ── Всплывающее меню «Настроить приоритет» (кнопка на системе) ──
@@ -8094,43 +8184,83 @@ function ecCloseResMenu() {
   if (m) m.remove();
   EC._prioSid = null;
 }
+// sid необязателен: без него открывается общедержавная политика (кнопка в
+// шапке вкладки — единственный вход на телефоне, где строка системы узкая).
 function ecResPrioMenu(sid) {
   ecCloseResMenu();
-  const p = EC.workerPlan; if (!p) return;
-  EC._prioSid = sid;
+  if (!EC.workerPlan) { ecLoadWorkerPlan(true); toast('Загружаю план рабочих…'); return; }
+  EC._prioSid = sid || null;
   const ov = document.createElement('div');
   ov.className = 'ec-prio-modal'; ov.id = 'ec-prio-modal';
   ov.onclick = e => { if (e.target === ov) ecCloseResMenu(); };
-  ov.innerHTML = ecResPrioMenuBody(sid);
+  ov.innerHTML = ecResPrioMenuBody(EC._prioSid);
   document.body.appendChild(ov);
 }
 function ecResPrioMenuBody(sid) {
   const p = EC.workerPlan || {};
-  const sys = (p.systems || []).find(s => String(s.system_id ?? s.name ?? '') === sid) || { name: '' };
-  const pr = !!sys.priority;
+  const sys = sid ? (p.systems || []).find(s => String(s.system_id ?? s.name ?? '') === sid) : null;
   const cost = ecNum(+(p.priority_cost) || EC_PRIORITY_COST);
-  const sysBtn = pr
-    ? `<button class="btn btn-gh btn-sm" onclick="ecCloseResMenu();ecResPriority('${jsq(sid)}',false)">★ Снять приоритет системы</button>`
-    : `<button class="btn btn-gd btn-sm" onclick="ecCloseResMenu();ecResPriority('${jsq(sid)}',true)">☆ Сделать приоритетной · ${cost} ГС</button>`;
-  return `<div class="ec-prio-box" onclick="event.stopPropagation()">
-    <div class="ec-prio-hd">Приоритет добычи<button class="ec-prio-x" title="Закрыть" onclick="ecCloseResMenu()">✕</button></div>
-    <div class="ec-prio-sec">
+  const sysSec = !sys ? '' : `<div class="ec-prio-sec">
       <div class="ec-prio-lbl">🪐 Система «${esc(sys.name || 'без имени')}»</div>
-      ${sysBtn}
+      ${sys.priority
+        ? `<button class="btn btn-gh btn-sm" onclick="ecCloseResMenu();ecResPriority('${jsq(sid)}',false)">★ Снять приоритет системы</button>`
+        : `<button class="btn btn-gd btn-sm" onclick="ecCloseResMenu();ecResPriority('${jsq(sid)}',true)">☆ Сделать приоритетной · ${cost} ГС</button>`}
       <div class="ec-hint" style="margin-top:5px">Гарантирует, что эта система наберёт рабочих ПЕРВОЙ со следующего тика.</div>
+    </div>`;
+  const pol = ecPolicy();
+  const nOwn = pol.res_off.length + pol.res_prio.length;
+  return `<div class="ec-prio-box" onclick="event.stopPropagation()">
+    <div class="ec-prio-hd">⛏ Приоритет добычи<button class="ec-prio-x" title="Закрыть" onclick="ecCloseResMenu()">✕</button></div>
+    <div class="ec-prio-scroll">
+    ${sysSec}
+    <div class="ec-prio-sec">
+      <div class="ec-prio-lbl">🪙 По редкости <i>(для всей державы)</i></div>
+      <div class="ec-rar-chips" id="ec-prio-rar">${ecRarChips()}</div>
+      <div class="ec-hint" style="margin-top:5px">Клик: обычно → <b>★ приоритет</b> (копают первыми) → <b>✗ не копать</b>.</div>
     </div>
     <div class="ec-prio-sec">
-      <div class="ec-prio-lbl">⛏ По редкости ресурсов <i>(для всей державы)</i></div>
-      <div class="ec-rar-chips" id="ec-prio-rar">${ecRarChips()}</div>
-      <div class="ec-hint" style="margin-top:5px">Клик по редкости: обычно → <b>★ приоритет</b> (копают первыми) → <b>✗ не копать</b> вовсе.</div>
+      <div class="ec-prio-lbl">⛏ По конкретным ресурсам <i>${nOwn ? `· задано: ${nOwn}` : '· перебивает редкость'}</i></div>
+      <div class="ec-prio-tools">
+        <input type="text" id="ec-prio-search" placeholder="Поиск ресурса…" autocomplete="off"
+          oninput="ecResPolFilter(this.value)">
+        <button class="btn btn-gh btn-xs" onclick="ecResPolAll(${EC._polAll ? 'false' : 'true'})">${EC._polAll ? '⛏ только мои' : '🜚 все ресурсы'}</button>
+        ${nOwn ? '<button class="btn btn-gh btn-xs" onclick="ecResNameReset()">↺ сброс</button>' : ''}
+      </div>
+      <div id="ec-prio-res">${ecResNameChips()}</div>
+      <div class="ec-hint" style="margin-top:6px">Настройка ресурса <b>перебивает</b> его редкость: ★ ресурс копается даже при выключенной редкости, ✗ ресурс не копается даже при приоритетной.</div>
+    </div>
     </div>
   </div>`;
 }
 // Клик по чипу редкости внутри меню: сменить состояние и перерисовать чипы на месте.
 function ecResPrioMenuRar(r) {
   ecResRarCycle(r);                       // оптимистично меняет EC.rarPolicy + шлёт RPC
-  const box = document.getElementById('ec-prio-rar');
-  if (box) box.innerHTML = ecRarChips();
+  ecResPolRepaint();
+}
+// Клик по чипу конкретного ресурса.
+function ecResPrioMenuName(n) {
+  ecResNameCycle(n);
+  ecResPolRepaint();
+}
+// Перерисовать чипы меню на месте (сохраняя поиск), не трогая всю вкладку.
+function ecResPolRepaint() {
+  const rar = document.getElementById('ec-prio-rar');
+  if (rar) rar.innerHTML = ecRarChips();
+  const box = document.getElementById('ec-prio-res');
+  if (box) { box.innerHTML = ecResNameChips(); ecResPolFilter(ecId('ec-prio-search')?.value || ''); }
+}
+// Показать только свои залежи / вообще все ресурсы справочника.
+function ecResPolAll(on) { const sid = EC._prioSid; EC._polAll = !!on; ecResPrioMenu(sid); }
+// Живой фильтр чипов ресурсов по названию (без перерисовки).
+function ecResPolFilter(q) {
+  const needle = (q || '').trim().toLowerCase();
+  document.querySelectorAll('#ec-prio-res .ec-res-chip').forEach(el => {
+    el.style.display = !needle || (el.getAttribute('data-n') || '').includes(needle) ? '' : 'none';
+  });
+  document.querySelectorAll('#ec-prio-res .ec-res-pol-grp').forEach(g => {
+    const any = [...g.querySelectorAll('.ec-res-chip')].some(c => c.style.display !== 'none');
+    g.style.display = any ? '' : 'none';
+  });
 }
 async function ecFlowApply(i) {
   const n = (EC._flowRows || [])[i]; if (!n) return;

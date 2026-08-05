@@ -1239,7 +1239,8 @@ textarea.fn-c-verdict { min-height: 110px; resize: vertical; font-size: 14px; li
    ссылки без пробелов) вылетал за край экрана и криво переносился.
    Правило: ничто внутри депеши не шире своего контейнера.
    ════════════════════════════════════════════════════════════ */
-.fn-art, .fn-art-inner, .fn-art-body, .fn-c-preview { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.fn-art { min-width: 0; box-sizing: border-box; }   /* max-width НЕ трогать — 840px задан выше */
+.fn-art-inner, .fn-art-body, .fn-c-preview { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .fn-art-title,
 .fn-art-body,
 .fn-art-body p, .fn-art-body li, .fn-art-body blockquote,

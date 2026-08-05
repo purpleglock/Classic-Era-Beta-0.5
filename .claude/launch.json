@@ -1,7 +1,37 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "static", "runtimeExecutable": "npx", "runtimeArgs": ["--yes", "http-server", "-p", "8791", "-c-1"], "port": 8791 },
-    { "name": "shots", "runtimeExecutable": "node", "runtimeArgs": ["tools/shot_sink.js"], "port": 8792 }
+    {
+      "name": "static",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--yes",
+        "http-server",
+        "-p",
+        "8791",
+        "-c-1"
+      ],
+      "port": 8791
+    },
+    {
+      "name": "static2",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--yes",
+        "http-server",
+        "-p",
+        "8793",
+        "-c-1"
+      ],
+      "port": 8793
+    },
+    {
+      "name": "shots",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/shot_sink.js"
+      ],
+      "port": 8792
+    }
   ]
 }

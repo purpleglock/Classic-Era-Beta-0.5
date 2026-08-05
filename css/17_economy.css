@@ -3357,10 +3357,23 @@ body.ec-tree-fs-lock { overflow: hidden; }
 .ec-fl-head { font-weight: 600; color: var(--t3); font-size: 12px; }
 
 @media (max-width: 700px) {
-  /* под-вкладки Потоки/Караваны/Рынок/Обмен — равной ширины (как в торговле) */
-  .ec-flowx > .ec-tabs { gap: 4px; }
-  .ec-flowx > .ec-tabs .ec-tab { flex: 1 1 0; justify-content: center; padding: 8px 4px; min-width: 0; }
-  .ec-flowx > .ec-tabs .ec-tab-l { font-size: 11px; }
+  /* Под-вкладки (Ресурсы/Караваны/Рынок/Обмен/Биржа/Концессии): их шесть, в
+     ширину телефона они не влезают. Равной ширины НЕЛЬЗЯ — подписи наезжали на
+     иконки; вместо этого лента со свайпом, каждая вкладка своей ширины. */
+  .ec-flowx > .ec-tabs, .ec-exch-tab > .ec-tabs {
+    flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    gap: 6px; padding-bottom: 10px; scroll-snap-type: x proximity; scrollbar-width: none;
+    position: static; background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  .ec-flowx > .ec-tabs::-webkit-scrollbar,
+  .ec-exch-tab > .ec-tabs::-webkit-scrollbar { display: none; }
+  .ec-flowx > .ec-tabs > .ec-tab,
+  .ec-exch-tab > .ec-tabs > .ec-tab {
+    flex: 0 0 auto; min-width: 0; justify-content: center; padding: 8px 12px;
+    scroll-snap-align: center; overflow: hidden;
+  }
+  .ec-flowx > .ec-tabs > .ec-tab .ec-tab-l,
+  .ec-exch-tab > .ec-tabs > .ec-tab .ec-tab-l { font-size: 12px; }
   .ec-flows-tab .ec-fl-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -4312,7 +4325,9 @@ body.abm-lock { overflow: hidden; }
   .ec-res-syhead { display: none; }
   .ec-res-syrow { flex-wrap: wrap; gap: 6px 10px; }
   .ec-res-syname { flex: 1 1 100%; }
-  .ec-res-sybar { flex: 1 1 100%; }
+  .ec-res-sybar { flex: 1 1 60%; }
+  .ec-res-syact { margin-left: auto; }        /* кнопка приоритета не должна уезжать за край */
+  .ec-res-syact .btn { white-space: nowrap; }
 }
 
 /* ── РАБОЧИЕ: поиск, сворачивание, политика редкости ── */
@@ -4328,18 +4343,49 @@ body.abm-lock { overflow: hidden; }
 .ec-rar-chip:hover { color: var(--t1); }
 .ec-rar-chip.ec-rar-prio { border-color: var(--gd, #3a9bdc); color: var(--gd, #3a9bdc); }
 .ec-rar-chip.ec-rar-off { opacity: .55; text-decoration: line-through; color: var(--color-warning, #e94); border-color: var(--color-warning, #e94); }
+/* точечный чип ресурса: заливкой отмечаем СВОЁ решение (а не наследование редкости) */
+.ec-res-chip.is-own { background: var(--b1, rgba(255,255,255,.10)); font-weight: 600; }
+.ec-res-chip.is-far { opacity: .5; }
+.ec-res-chip.is-far i { font-style: normal; font-size: 10px; color: var(--t4); }
+.ec-res-pol-grp + .ec-res-pol-grp { margin-top: 10px; }
+.ec-res-pol-rar { display: flex; align-items: baseline; gap: 8px; color: var(--t3); font-size: 11px;
+  text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px; }
+.ec-res-pol-rar i { font-style: normal; text-transform: none; letter-spacing: 0; color: var(--t4); font-size: 10.5px; }
+.ec-prio-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; flex-wrap: wrap; }
+.ec-prio-tools input { flex: 1 1 130px; min-width: 0; background: var(--b1, rgba(255,255,255,.05));
+  border: var(--deco-frame-w,1px) solid var(--w2); border-radius: var(--radius-sm); color: var(--t1);
+  font: inherit; font-size: 12px; padding: 5px 9px; }
+.ec-prio-tools input:focus { outline: 0; border-color: var(--gd, #3a9bdc); }
+.ec-prio-tools .btn { width: auto; flex: 0 0 auto; }
+/* сводка политики под панелью вкладки */
+.ec-res-polnote { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 2px 0 6px; font-size: 11px; }
+.ec-res-polnote-p { color: var(--gd, #3a9bdc); }
+.ec-res-polnote-o { color: var(--color-warning, #e94); }
 
 /* Всплывающее меню «Настроить приоритет» */
 .ec-prio-modal { position: fixed; inset: 0; z-index: 9000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); padding: 16px; }
-.ec-prio-box { width: min(420px, 100%); max-height: 90vh; overflow: auto; background: var(--b2, #12161c); border: var(--deco-frame-w,1px) solid var(--w2); border-radius: var(--radius-md, 10px); box-shadow: 0 12px 40px rgba(0,0,0,.5); }
-.ec-prio-hd { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: var(--deco-frame-w,1px) solid var(--w2); color: var(--t1); font-size: 14px; }
+.ec-prio-box { width: min(460px, 100%); max-height: 90vh; display: flex; flex-direction: column; background: var(--b2, #12161c); border: var(--deco-frame-w,1px) solid var(--w2); border-radius: var(--radius-md, 10px); box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+.ec-prio-scroll { overflow: auto; -webkit-overflow-scrolling: touch; }
+.ec-prio-hd { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: var(--deco-frame-w,1px) solid var(--w2); color: var(--t1); font-size: 14px; }
 .ec-prio-x { background: transparent; border: 0; color: var(--t3); font-size: 15px; cursor: pointer; line-height: 1; padding: 2px 4px; }
 .ec-prio-x:hover { color: var(--t1); }
 .ec-prio-sec { padding: 12px 14px; }
 .ec-prio-sec + .ec-prio-sec { border-top: var(--deco-frame-w,1px) solid var(--w2); }
 .ec-prio-lbl { color: var(--t2); font-size: 12px; margin-bottom: 8px; }
 .ec-prio-lbl i { color: var(--t3); font-style: normal; font-size: 11px; }
-.ec-prio-sec .btn { width: 100%; }
+.ec-prio-sec > .btn { width: 100%; }
+
+/* Телефон: меню = шторка снизу на всю ширину, крупные чипы под палец */
+@media (max-width: 560px) {
+  .ec-prio-modal { align-items: flex-end; padding: 0; }
+  .ec-prio-box { width: 100%; max-height: 88vh; border-radius: var(--radius-md, 10px) var(--radius-md, 10px) 0 0;
+    border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .ec-prio-hd { position: sticky; top: 0; z-index: 1; background: var(--b2, #12161c); font-size: 15px; padding: 14px; }
+  .ec-prio-x { font-size: 20px; padding: 4px 8px; }
+  .ec-rar-chip { font-size: 13px; padding: 8px 12px; }
+  .ec-prio-tools input { font-size: 16px; }   /* < 16px = iOS зумит страницу на фокусе */
+  .ec-res-polbtn { flex: 1 1 100%; }
+}
 
 /* ── РАБОЧИЕ: система → месторождения (покрытие) ── */
 .ec-res-sys { margin: 8px 0; border: var(--deco-frame-w,1px) solid var(--w2); border-radius: var(--radius-sm); overflow: hidden; background: var(--b2); }

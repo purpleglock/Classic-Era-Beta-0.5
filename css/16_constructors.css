@@ -355,6 +355,8 @@
 
 /* ── Модалка выбора компонента: сетка полных карточек ── */
 .cn-info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 12px; margin-top: 14px; }
+/* Подходящее — вперёд: то, что не встаёт в этот узел, уезжает в конец списка. */
+.cn-info-grid .cn-info-card.locked { order: 9; }
 .cn-info-card { display: flex; flex-direction: column; background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-md); overflow: hidden; cursor: pointer; transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast); }
 .cn-info-card:hover { border-color: var(--gd); transform: translateY(-2px); box-shadow: 0 10px 24px -16px var(--gd); }
 .cn-info-card.on { border-color: var(--gd); box-shadow: inset 0 0 0 1px var(--gd); }
@@ -603,21 +605,80 @@
 .cn-dk-free:hover { fill-opacity: 0.1; stroke: #9fe8ff; }
 .cn-dk-mod rect { transition: fill-opacity var(--transition-fast); }
 .cn-dk-mod:hover > rect:first-of-type { fill-opacity: 0.32; }
-.cn-deck-x { position: absolute; top: 14px; right: 16px; width: 40px; height: 40px; border-radius: 50%; border: 1px solid #33414f; background: #0d141c; color: #9fb0c2; font-size: 17px; cursor: pointer; }
+/* ⚠️ z-index обязателен: SVG чертежа лежит следом за кнопкой и с inset:0 —
+   без слоя крестик визуально есть, а клик уходит в полотно. */
+.cn-deck-x { position: absolute; z-index: 5; top: 14px; right: 16px; width: 40px; height: 40px; border-radius: 50%; border: 1px solid #33414f; background: #0d141c; color: #9fb0c2; font-size: 17px; cursor: pointer; }
 .cn-deck-x:hover { border-color: #9fe8ff; color: #9fe8ff; }
-.cn-deck-bar { position: absolute; top: 16px; left: 20px; display: flex; align-items: center; gap: 10px; }
+/* Шапка палубы — колонка: строка шкал, под ней строка кисти. Абсолют был у каждой
+   врозь, и панель кисти наезжала на шкалы. */
+.cn-deck-top { position: absolute; top: 16px; left: 20px; right: 76px; z-index: 3; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none; }
+.cn-deck-top > * { pointer-events: auto; }
+.cn-deck-bar { display: flex; align-items: stretch; flex-wrap: wrap; gap: 10px; }
 .cn-deck-bar i { font-style: normal; font-family: var(--font-mono); font-size: 13px; padding: 5px 11px; border-radius: 999px; border: 1px solid #2b3947; background: #0d141c; color: #9fb0c2; }
 .cn-deck-bar i.bad { border-color: #e0575f; color: #e0575f; }
 .cn-deck-bar i.cn-deck-f { border-color: var(--fc); color: var(--fc); }
-@media (max-width: 700px) { .cn-deck { padding: 60px 10px 10px; } }
+/* Строка кисти: те же плашки, что и в шапке (раньше были голым курсивом) */
+.cn-deck-ghost { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.cn-deck-ghost i { font-style: normal; font-family: var(--font-mono); font-size: 12px; padding: 5px 11px; border-radius: 999px; border: 1px solid #2b3947; background: #0d141c; color: #9fb0c2; }
+/* ── Палитра палубы: каталог справа, чертёж слева ──────────
+   Инструмент берут из списка и «рисуют» им по решётке; активная строка
+   светится своим цветом (семья модуля / вид узла). */
+.cn-deck-main { position: absolute; top: 0; left: 0; bottom: 0; right: 300px; }
+.cn-deck-pal { position: absolute; top: 0; right: 0; bottom: 0; width: 300px; display: flex; flex-direction: column; gap: 8px; padding: 14px 12px; background: #0a1017; border-left: 1px solid #1d2833; }
+/* Сложенная палитра: полоса-корешок у края, чертёж забирает освободившееся. */
+.cn-deck.fold .cn-deck-pal { width: 34px; padding: 12px 4px; }
+.cn-deck.fold .cn-deck-main { right: 34px; }
+.cn-deck.fold .cn-pal-ctl, .cn-deck.fold .cn-pal-hint, .cn-deck.fold .cn-pal-list { display: none; }
+.cn-deck.fold .cn-pal-h { writing-mode: vertical-rl; margin: 0 auto; }
+.cn-pal-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; color: #7e8c9c; font-weight: 600; }
+.cn-pal-fold { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px; border: 1px solid #2b3947; background: #0d141c; color: #9fb0c2; font-size: 12px; line-height: 1; cursor: pointer; }
+.cn-pal-fold:hover { border-color: #9fe8ff; color: #9fe8ff; }
+.cn-deck.fold .cn-pal-fold { writing-mode: horizontal-tb; margin-bottom: 8px; }
+.cn-pal-ctl { display: flex; gap: 6px; }
+.cn-pal-q, .cn-pal-s { flex: 1 1 0; min-width: 0; background: #0d141c; border: 1px solid #2b3947; border-radius: 6px; color: #cfe0ee; font-family: var(--font-mono); font-size: 12px; padding: 6px 8px; }
+.cn-pal-q:focus, .cn-pal-s:focus { outline: none; border-color: #9fe8ff; }
+.cn-pal-hint { font-size: 11px; line-height: 1.4; color: #6d7b8b; }
+.cn-pal-list { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.cn-pal-row { display: grid; grid-template-columns: 1fr auto; gap: 1px 8px; text-align: left; padding: 7px 9px; border-radius: 7px; border: 1px solid #1d2833; background: #0d141c; color: #cfe0ee; cursor: pointer; }
+.cn-pal-row:hover { border-color: var(--fc, #9fe8ff); }
+.cn-pal-row.on { border-color: var(--fc, #9fe8ff); background: color-mix(in srgb, var(--fc, #9fe8ff) 14%, #0d141c); }
+.cn-pal-nm { font-size: 13px; }
+.cn-pal-sz { font-family: var(--font-mono); font-size: 11px; color: var(--fc, #9fb0c2); }
+.cn-pal-nt { grid-column: 1 / -1; font-size: 11px; color: #6d7b8b; }
+.cn-pal-sep { padding: 8px 2px 2px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: #58697a; border-top: 1px solid #16202a; }
+.cn-pal-sep:first-child { border-top: 0; padding-top: 2px; }
+.cn-pal-i { margin-left: 6px; color: #6d7b8b; cursor: help; }
+.cn-pal-i:hover { color: #9fe8ff; }
+/* Слоты палубы: гнёзда, а не кнопки — подсветка только когда в руке инструмент */
+.cn-dk-slot path { transition: fill-opacity var(--transition-fast), stroke-opacity var(--transition-fast); }
+.cn-dk-slot:hover path { fill-opacity: .18; stroke-opacity: .9; }
+@media (max-width: 900px) { .cn-deck-pal { width: 190px; } .cn-deck-main { right: 190px; } }
+@media (max-width: 700px) { .cn-deck { padding: 60px 10px 10px; } .cn-deck-pal { width: 160px; padding: 10px 8px; } .cn-deck-main { right: 160px; } }
 /* итог палубы и шкала энергии */
 .cn-deck-yield { position: absolute; left: 20px; right: 20px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .cn-deck-yield i { font-style: normal; font-family: var(--font-mono); font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--fc, #2b3947); color: var(--fc, #9fb0c2); background: #0d141c; }
 .cn-deck-bar i { position: relative; overflow: hidden; }
 .cn-deck-bar i b { position: absolute; left: 0; bottom: 0; height: 3px; width: var(--r, 0%); background: currentColor; opacity: .8; }
+/* шкала бюджета: подпись, КРУПНО остаток, потолок мелким, полоса заполнения снизу */
+.cn-deck-g { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 12px 8px; border-radius: 10px; min-width: 104px; }
+.cn-deck-g u { text-decoration: none; font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: #7e8c9c; }
+/* ⚠️ специфичность обязательна: .cn-deck-bar i b выше по файлу делает из <b> полоску absolute */
+.cn-deck-bar i.cn-deck-g b { position: static; width: auto; height: auto; background: none; opacity: 1; font-size: 17px; line-height: 1.1; color: #e8f0f8; font-weight: 600; }
+.cn-deck-g s { text-decoration: none; font-size: 10px; color: #6d7d8d; }
+.cn-deck-g em { position: absolute; left: 0; bottom: 0; height: 3px; width: var(--r, 0%); background: #5ad18a; opacity: .9; transition: width .18s ease; }
+/* Боевой итог — та же плашка, но без шкалы: только подпись и число в цвет */
+.cn-deck-bar i.cn-deck-st { border-color: var(--fc); min-width: 0; padding-bottom: 6px; }
+.cn-deck-bar i.cn-deck-st b { color: var(--fc); }
+.cn-deck-g.warn { border-color: #e0b457; } .cn-deck-g.warn em { background: #e0b457; }
+.cn-deck-g.bad b { color: #e0575f; } .cn-deck-g.bad em { width: 100%; background: #e0575f; }
 /* чип итога: крупное значение + что дала расстановка */
 .cn-deck-y { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; font-style: normal; padding: 6px 14px; border-radius: 10px; border: 1px solid var(--fc); background: #0d141c; }
 .cn-deck-y b { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: #7e8c9c; font-weight: 600; }
 .cn-deck-y u { text-decoration: none; font-family: var(--font-mono); font-size: 19px; line-height: 1; color: var(--fc); }
 .cn-deck-y s { text-decoration: none; font-family: var(--font-mono); font-size: 10px; color: #63707e; }
 .cn-deck-y s.up { color: #5fd08a; } .cn-deck-y s.dn { color: #e0575f; }
+
+/* Плашка «идёт переработка» — предупреждение над телом конструктора. */
+.cn-wip { margin: 0 0 14px; padding: 9px 13px; border: 1px solid #e0b457; border-left-width: 3px; border-radius: 8px; background: rgba(224, 180, 87, .07); color: #e0b457; font-size: 12px; line-height: 1.45; }
+/* На палубе плавающие кнопки чата и тикетов лезут поверх чертежа — прячем. */
+body.cn-deck-on #ch-fab, body.cn-deck-on #tk-fab { display: none; }

@@ -57,15 +57,19 @@ const CN_KV_SPEEDCOEF = {
 // ветка army) серверу не нужно — клиент считает по window.KV_DB напрямую. Это
 // срезает ~250КБ → ~50КБ, иначе SQL-редактор Supabase давится одним стейтментом.
 // ⚠️ порядок массивов НЕ меняем: клиент шлёт {g,idx}, сервер индексирует так же.
+// ⚠️ power / capacity / capacityPenalty / capacityBoost — НЕ УБИРАТЬ. Без них
+// серверный гейт энергосети и грузоподъёмности (_cn_recompute) считает 0 − 0 = 0
+// и пропускает что угодно: весь баланс держится на этих четырёх полях.
+// Заодно от power зависит номинал контура модуля (_cn_mod_nominal).
 function pick(o, keys) { const r = {}; if (!o) return r; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; }
-function slimCls(c)  { return pick(c, ['name', 'mass', 'gabarit', 'crewRequired', 'modON', 'baseON', 'resurs']); }
-function slimReac(r) { return pick(r, ['force', 'energy', 'resurs']); }
-function slimEng(e)  { return pick(e, ['force', 'energy', 'resurs']); }
-function slimArm(a)  { return pick(a, ['name', 'material', 'category', 'hpBoost', 'hpPercentBoost', 'armor', 'resurs']); }
-function slimShd(s)  { return pick(s, ['shield', 'resurs']); }
-function slimRad(r)  { const o = pick(r, ['crewRequired', 'resurs']); const cp = r && r.customParameterradar; if (cp && (cp.dalnost || cp.eccm)) o.customParameterradar = pick(cp, ['dalnost', 'eccm', 'pwrPer', 'pwrCap']); return o; }
-function slimWpn(w)  { const o = pick(w, ['name', 'dmg', 'crewRequired', 'resurs']); const cp = w && w.customParameter; const d = cp && +cp.dalnost; if (d) o.dalnost = d; const rof = cp && +cp.skorostrelnost; if (rof) o.rof = rof; return o; }
-function slimMod(m)  { return pick(m, ['name', 'cost', 'crewRequired', 'resurs', 'combat']); }
+function slimCls(c)  { return pick(c, ['name', 'mass', 'gabarit', 'crewRequired', 'modON', 'baseON', 'resurs', 'capacity']); }
+function slimReac(r) { return pick(r, ['force', 'energy', 'resurs', 'power']); }
+function slimEng(e)  { return pick(e, ['force', 'energy', 'resurs', 'power', 'capacityBoost']); }
+function slimArm(a)  { return pick(a, ['name', 'material', 'category', 'hpBoost', 'hpPercentBoost', 'armor', 'resurs', 'capacityBoost']); }
+function slimShd(s)  { return pick(s, ['shield', 'resurs', 'power']); }
+function slimRad(r)  { const o = pick(r, ['crewRequired', 'resurs', 'power', 'capacityPenalty']); const cp = r && r.customParameterradar; if (cp && (cp.dalnost || cp.eccm)) o.customParameterradar = pick(cp, ['dalnost', 'eccm', 'pwrPer', 'pwrCap']); return o; }
+function slimWpn(w)  { const o = pick(w, ['name', 'dmg', 'crewRequired', 'resurs', 'power', 'capacityPenalty']); const cp = w && w.customParameter; const d = cp && +cp.dalnost; if (d) o.dalnost = d; const rof = cp && +cp.skorostrelnost; if (rof) o.rof = rof; return o; }
+function slimMod(m)  { return pick(m, ['name', 'cost', 'crewRequired', 'resurs', 'combat', 'power', 'capacity']); }
 function mapClassColl(coll, fn) { const out = {}; for (const k in coll) out[k] = coll[k].map(fn); return out; }
 function mapGroupColl(coll, fn) { const out = {}; for (const g in coll) out[g] = coll[g].map(fn); return out; }
 function catFromKv(cat) {
