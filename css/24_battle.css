@@ -658,7 +658,9 @@
 /* Кольцо режется на сегменты по числу действий, доступных кораблю.       */
 /* Наведение — по УГЛУ от центра, поэтому попасть можно и пальцем.        */
 .bbw-wrap {
-  position: fixed; inset: 0; z-index: 90;
+  /* ВЫШЕ полноэкранной доски: у неё z-index 9000, и на 90 колесо честно
+     открывалось ПОД ней — было видно только после выхода из боя. */
+  position: fixed; inset: 0; z-index: 9500;
   display: flex; align-items: center; justify-content: center;
   background: rgba(4, 8, 14, 0.72); backdrop-filter: blur(3px);
   touch-action: none; user-select: none;
@@ -678,9 +680,103 @@
 .bbw-hub { fill: rgba(8, 14, 22, 0.95); stroke: rgba(127, 212, 255, 0.35); }
 .bbw-hub-t { font-size: 17px; text-anchor: middle; fill: #eaf6ff; font-weight: 600; pointer-events: none; }
 .bbw-hub-s { font-size: 13px; text-anchor: middle; fill: var(--gd, #7fd4ff); pointer-events: none; }
+/* Высота ЖЁСТКАЯ: тексты режимов разной длины, а карточка центрируется —
+   без фиксации кольцо подпрыгивало при каждом наведении на сегмент. */
 .bbw-why {
   margin-top: 10px; font-size: 13px; line-height: 1.45; color: #cfe0f0;
-  min-height: 3.2em; padding: 0 6px;
+  height: 5.8em; overflow: hidden; padding: 0 6px;
+  display: flex; align-items: center; justify-content: center; text-align: center;
 }
+.bbw-cmp-slot { height: 38px; }
 .bbw-esc { margin-top: 8px; font-size: 11px; color: var(--muted, #7d8fa5); }
 @media (max-width: 520px) { .bbw-why { font-size: 12px; } }
+
+/* Колесо действий в командной полоске — акцентная, её должно быть видно сразу */
+.bbd-ic-gd {
+  border-color: rgba(127, 212, 255, 0.55) !important;
+  color: var(--gd, #7fd4ff) !important;
+}
+
+/* ── ШКАЛА ХОДА: секунды делениями, а не текстом ──────────── */
+.bbtp { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
+.bbtp-p-row { display: inline-flex; gap: 2px; }
+.bbtp-p-row i {
+  display: block; width: 12px; height: 9px; border-radius: 1px;
+  background: rgba(120, 140, 160, 0.22); box-shadow: inset 0 0 0 1px rgba(140,170,200,.18);
+}
+.bbtp-p-row i.bbtp-f { background: var(--gd, #7fd4ff); box-shadow: 0 0 6px rgba(127,212,255,.5); }
+.bbtp-p-row i.bbtp-p { background: linear-gradient(90deg, var(--gd, #7fd4ff) 50%, rgba(120,140,160,.22) 50%); }
+.bbtp-p-row i.bbtp-s { background: #dff1ff; box-shadow: 0 0 7px rgba(223,241,255,.75); }
+.bbtp-n { font: 600 12px/1 'JetBrains Mono', monospace; color: var(--gd, #7fd4ff); }
+.bbtp-n b { font-weight: 400; opacity: .65; margin-left: 1px; }
+.bbtp-big { display: flex; flex-wrap: wrap; margin: 2px 0 8px; }
+.bbtp-big .bbtp-p-row i { width: 22px; height: 12px; }
+.bbtp-marks { display: flex; gap: 10px; width: 100%; margin-top: 3px; }
+.bbtp-m { font-size: 10px; color: var(--muted, #7d8fa5); letter-spacing: .3px; }
+
+/* Значок включённого режима */
+.bbst {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px;
+  border-radius: 2px; font-size: 11px; vertical-align: middle;
+  background: rgba(127, 212, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(127,212,255,.35);
+}
+.bbst b { font-weight: 600; color: var(--gd, #7fd4ff); }
+.bbst-shd { background: rgba(223,241,255,.14); box-shadow: inset 0 0 0 1px rgba(223,241,255,.4); }
+
+/* Полоса поднятого щита */
+.bbsh {
+  position: relative; display: block; height: 14px; margin: 2px 0 8px;
+  background: rgba(120,140,160,.18);
+}
+.bbsh i { display: block; height: 100%; background: rgba(223,241,255,.75); }
+.bbsh b {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font: 600 10px/1 'JetBrains Mono', monospace; color: #06101a;
+}
+.bb-hint-s { font-size: 11px; color: var(--muted, #7d8fa5); margin: 0 0 8px; line-height: 1.35; }
+
+/* ── Сравнение «сейчас → с режимом» внутри колеса ─────────── */
+.bbw-cmp { display: flex; flex-direction: column; gap: 5px; margin: 8px auto 0; max-width: 300px; }
+.bbw-cmp-r { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted, #9fb0c6); }
+.bbw-cmp-l { width: 62px; text-align: right; flex: none; }
+.bbw-cmp-b { flex: 1; height: 10px; background: rgba(120,140,160,.18); position: relative; }
+.bbw-cmp-b i { display: block; height: 100%; background: rgba(140,165,190,.55); }
+.bbw-cmp-r.now i { background: rgba(140,165,190,.5); }
+.bbw-cmp-r.up  i { background: var(--gd, #7fd4ff); box-shadow: 0 0 8px rgba(127,212,255,.55); }
+.bbw-cmp-v { width: 62px; flex: none; font: 600 11px/1 'JetBrains Mono', monospace; color: #dceaf6; }
+.bbw-cmp-r.up .bbw-cmp-v { color: var(--gd, #7fd4ff); }
+
+/* ── Ценник у курсора: во сколько обойдётся то, что вот-вот кликнешь ──
+   Обводка — СЛОЕМ-ПОДЛОЖКОЙ (::before цвет + ::after инсет-фон), как во всём
+   бою. box-shadow с clip-path несовместим: срез съедает тень, и рамка рвётся
+   на скошенном углу. */
+.bbtip {
+  position: fixed; z-index: 9400; display: none; align-items: center; gap: 9px;
+  padding: 7px 11px; pointer-events: none;
+  background: transparent; border: 0; border-radius: 0;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+.bbtip::before {
+  content: ""; position: absolute; inset: 0; z-index: -2;
+  background: rgba(127, 212, 255, 0.5);
+}
+.bbtip::after {
+  content: ""; position: absolute; inset: 1px; z-index: -1;
+  background: rgba(8, 14, 22, 0.97);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+.bbtip-i { font-size: 17px; line-height: 1; color: var(--gd, #7fd4ff); }
+.bbtip-x { display: flex; flex-direction: column; gap: 3px; }
+.bbtip-x b { font: 600 12px/1.2 'JetBrains Mono', monospace; color: #eaf6ff; }
+.bbtip-x i { font-style: normal; font-size: 11px; color: var(--muted, #9fb0c6); }
+/* Шкала прямо в ценнике: сколько делений съест действие и сколько останется */
+.bbtip-sc { display: flex; gap: 2px; margin-top: 1px; }
+.bbtip-sc i {
+  display: block; width: 10px; height: 7px; border-radius: 1px;
+  background: rgba(120, 140, 160, 0.22);
+}
+.bbtip-sc i.use { background: #ffbe46; }                        /* уйдёт на действие */
+.bbtip-sc i.left { background: var(--gd, #7fd4ff); }            /* останется */
+.bbtip-bad::before { background: rgba(255, 92, 138, 0.6); }
+.bbtip-bad .bbtip-i { color: #ff5c8a; }
+.bbtip-bad .bbtip-sc i.use { background: #ff5c8a; }

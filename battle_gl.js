@@ -1386,6 +1386,7 @@ function bgSyncOverlay() {
   const G = BG.g.ov;
   bgClearGroup(G);
   BG.dirty = true;
+  bgSyncVeil();                 // покрытие живёт отдельным слоем, вне overlay
   if (s.status === 'forming') { bgSyncDeployZone(G); return; }
 
   const sel = (s.units || []).find(u => u.id === BB.sel);
@@ -1461,6 +1462,236 @@ function bgSyncOverlay() {
 }
 
 // Гекс-метка: заливка + контур (цели огня, союзники под ремонт)
+
+// ════════════════════════════════════════════════════════════
+// ЗАВЕСА СЕНСОРОВ: тьма, радар, РЭБ
+// ────────────────────────────────────────────────────────────
+// Покрытие — это СПРАВКА об обстановке, а не спецэффект: ни анимации, ни
+// свечения. Но и подписывать его отдельной панелью незачем — слой обязан
+// объяснять себя сам, поэтому говорит языком радарного экрана:
+//   • тьма — ровное затемнение там, куда сенсоры не достают (шум только рвёт
+//     кромку, чтобы не читались гексы);
+//   • от КАЖДОГО своего борта — тонкие концентрические шкалы дальности и
+//     створ переднего сектора: сразу видно, чей это радар, куда он смотрит и
+//     где кончается его рука. Без колец тёмное пятно читалось ландшафтом;
+//   • РЭБ — штриховка «сорванного» эфира внутри освещённого.
+// Контр-РЭБ отдельным цветом не рисуем: она просто снимает штриховку помехи.
+// Цена — два draw call'а, оба без обновлений между кадрами.
+// ════════════════════════════════════════════════════════════
+const BG_VEIL_SRC = 12;                  // сколько бортов-сенсоров держит шейдер
+
+function bgVeilShader(mode) {
+  const common = `
+    precision highp float;
+    varying vec2 vW;
+    uniform sampler2D uCov;
+    uniform vec2  uGrid;                 // w, h доски
+    uniform float uR;                    // радиус гекса в мире
+    uniform vec4  uSrc[${BG_VEIL_SRC}];  // x, z, дальность, курс (рад)
+    uniform int   uSrcN;
+
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float vnoise(vec2 p){
+      vec2 i = floor(p), f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+                 mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+    }
+    // мир → клетка → uv карты покрытия (чётность колонок игнорируем:
+    // кромка размытая, полшага строки в ней и не разглядеть)
+    vec2 covUV(vec2 w){
+      float gx = (w.x - uR) / (uR * 1.5);
+      float gy = w.y / (uR * 1.7320508) - 0.5;
+      return (vec2(gx, gy) + 0.5) / uGrid;
+    }
+  `;
+  const vert = `
+    varying vec2 vW;
+    void main(){
+      vec4 wp = modelMatrix * vec4(position, 1.0);
+      vW = wp.xz;
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }
+  `;
+  if (mode === 'dark') return { vert, frag: common + `
+    void main(){
+      vec4 c = texture2D(uCov, covUV(vW));
+      if (c.a < 0.02) discard;
+      // шум только на кромке — ровной линии по клеткам не остаётся,
+      // но и «клубов» внутри нет: тьма должна быть спокойной
+      float n = vnoise(vW / uR * 0.7);
+      float lit = clamp(c.r * 1.1 + (n - 0.5) * 0.30, 0.0, 1.0);
+      // кромка узкая и резкая: граница «вижу / не вижу» должна читаться
+      // как линия, а не как плавный градиент, иначе слой теряется в фоне
+      float dark = smoothstep(0.72, 0.44, lit);
+      if (dark < 0.01) discard;
+      gl_FragColor = vec4(vec3(0.006, 0.011, 0.028), dark * 0.88 * c.a);
+    }
+  ` };
+  return { vert, frag: common + `
+    void main(){
+      vec4 c = texture2D(uCov, covUV(vW));
+      if (c.a < 0.02) discard;
+      float lit = c.r, jam = max(c.g - c.b, 0.0);   // контр-РЭБ гасит помеху
+      vec3 col = vec3(0.0);
+
+      // Границу покрытия НЕ обводим: линия читалась как ещё один контур среди
+      // колец орудий и рамок гексов. Край поля зрения несёт только свет и тьма.
+
+      // ШКАЛЫ ДАЛЬНОСТИ: от каждого своего борта — концентрические кольца и
+      // створ переднего сектора. Это и есть подпись слоя: рисунок радара
+      // ни с ландшафтом, ни с подсветкой хода не спутать.
+      if (lit > 0.35) {
+        float scope = 0.0;
+        for (int i = 0; i < ${BG_VEIL_SRC}; i++) {
+          if (i >= uSrcN) break;
+          vec4 sc = uSrc[i];
+          vec2 d = vW - sc.xy;
+          float r = length(d) / max(sc.z, 1.0);      // 0..1 по дальности сенсора
+          if (r > 1.08) continue;         // с запасом: кольцо предела двустороннее
+          float ang0 = atan(d.y, d.x);
+          // ОДНО кольцо — предел сенсора, и то пунктиром: сплошные концентры
+          // цианом путались с кольцами дальности орудий вокруг того же борта.
+          float dash = step(0.42, fract(ang0 * 3.8));
+          scope += smoothstep(0.070, 0.0, abs(r - 1.0)) * dash;
+          // створ: две риски по кромкам переднего сектора (±60°)
+          float ang = abs(mod(ang0 - sc.w + 3.14159, 6.28318) - 3.14159);
+          scope += smoothstep(0.050, 0.0, abs(ang - 1.0472)) * (1.0 - r * 0.5) * 0.55 * dash;
+        }
+        // тёплый бледно-зелёный: не цвет орудий и не цвет кромки покрытия
+        col += vec3(0.62, 0.95, 0.52) * min(scope, 1.0) * 0.34;
+      }
+
+      // РЭБ: косая штриховка, только в освещённом — «этот сектор врёт»
+      if (jam > 0.02 && lit > 0.3) {
+        float st = fract((vW.x + vW.y) / (uR * 0.9));
+        float hatch = smoothstep(0.5, 0.40, abs(st - 0.5));
+        col += vec3(0.95, 0.30, 0.48) * hatch * jam * 0.45;
+      }
+
+      float a = clamp(max(max(col.r, col.g), col.b), 0.0, 1.0) * c.a;
+      if (a < 0.004) discard;
+      gl_FragColor = vec4(col, a);
+    }
+  ` };
+}
+
+// Карта покрытия в текстуру: R = освещено, G = помеха, B = контр-РЭБ, A = арена
+function bgVeilTex(s, cov) {
+  const w = s.w, h = s.h, buf = new Uint8Array(w * h * 4);
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      const i = (y * w + x) * 4;
+      if (!bbInArena(x, y)) continue;                 // вне арены — прозрачно
+      const k = x + ':' + y;
+      buf[i]     = cov.lit.has(k) ? 255 : 0;
+      buf[i + 1] = cov.jam.has(k) ? 255 : 0;
+      buf[i + 2] = cov.dejam.has(k) ? 255 : 0;
+      buf[i + 3] = 255;
+    }
+  }
+  const t = new THREE.DataTexture(buf, w, h, THREE.RGBAFormat);
+  t.minFilter = t.magFilter = THREE.LinearFilter;     // билинейка и съедает клетки
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  t.needsUpdate = true;
+  return t;
+}
+
+// Источник сенсора: точка, дальность в мире, курс в радианах.
+// Курс отрицательный: гекс-направления идут по часовой, atan в шейдере — против.
+// Шкалы рисуем ТОЛЬКО у выбранного борта: кольца всех своих разом наложились
+// друг на друга в месиво, из которого не читалась ни одна дальность.
+function bgVeilSources(s) {
+  const out = [];
+  const sel = (s.units || []).find(u => u.id === BB.sel && (u.mine || u.side === s.my_side));
+  if (!sel) return out;                            // никто не выбран — только тьма и кромка
+  [sel].forEach(u => {
+    if (out.length >= BG_VEIL_SRC) return;
+    const c = bbHexCenter(u.x, u.y);
+    const rng = (typeof bbRadarR === 'function' ? bbRadarR(u) : 6) * BB.R * 1.5;
+    out.push(new THREE.Vector4(c.px, c.py, rng, -((u.facing || 0) * Math.PI / 3)));
+  });
+  return out;
+}
+
+function bgVeilPad(src) {
+  const pad = [];
+  for (let i = 0; i < BG_VEIL_SRC; i++) pad.push(src[i] || new THREE.Vector4(0, 0, 1, 0));
+  return pad;
+}
+
+function bgSyncVeil() {
+  const s = BB.st;
+  if (!BG.scene || !s) return;
+  const off = !BB.fog || s.status === 'forming';
+  if (off) { if (BG.veil) bgKillVeil(); return; }
+  const cov = bbCoverage(); if (!cov) return;
+
+  // пересобираем только на новый снимок или смену выбранного борта:
+  // шейдер компилировать каждый клик — дорого
+  if (BG.veil && BG.veil.cov === cov && BG.veil.sel === BB.sel
+      && BG.veil.w === s.w && BG.veil.h === s.h) return;
+
+  const tex = bgVeilTex(s, cov);
+  const src = bgVeilSources(s), pad = bgVeilPad(src);
+
+  if (BG.veil && BG.veil.w === s.w && BG.veil.h === s.h) {
+    // размер тот же — меняем только данные, материалы и меши живут дальше
+    if (BG.veil.tex) BG.veil.tex.dispose();          // текстура у обоих квадов общая
+    BG.veil.mats.forEach(m => {
+      m.uniforms.uCov.value = tex;
+      m.uniforms.uSrc.value = pad;
+      m.uniforms.uSrcN.value = src.length;
+    });
+    BG.veil.tex = tex;
+    BG.veil.cov = cov;
+    BG.veil.sel = BB.sel;
+    BG.dirty = true; bgKick();
+    return;
+  }
+
+  bgKillVeil();
+  const { W, H } = bbWorldSize();
+  const grp = new THREE.Group();
+  const mats = [];
+  const mk = (mode, y, blend) => {
+    const sh = bgVeilShader(mode);
+    const m = new THREE.ShaderMaterial({
+      vertexShader: sh.vert, fragmentShader: sh.frag,
+      uniforms: {
+        uCov:  { value: tex },
+        uGrid: { value: new THREE.Vector2(s.w, s.h) },
+        uR:    { value: BB.R },
+        uSrc:  { value: pad },
+        uSrcN: { value: src.length },
+      },
+      transparent: true, depthWrite: false, depthTest: false,
+      side: THREE.DoubleSide, blending: blend,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), m);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(W / 2, y, H / 2);
+    mesh.renderOrder = mode === 'dark' ? 4 : 5;
+    mesh.userData.ownGeo = true;
+    grp.add(mesh);
+    mats.push(m);
+  };
+  mk('dark', BB.R * 0.34, THREE.NormalBlending);      // тьма гасит пол
+  mk('glow', BB.R * 0.42, THREE.AdditiveBlending);    // кромка и штриховка — поверх
+  BG.scene.add(grp);
+  BG.veil = { grp, mats, tex, cov, sel: BB.sel, w: s.w, h: s.h };
+  BG.dirty = true; bgKick();
+}
+
+function bgKillVeil() {
+  const v = BG.veil; if (!v) return;
+  BG.veil = null;
+  if (BG.scene) BG.scene.remove(v.grp);
+  v.grp.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  if (v.tex) v.tex.dispose();
+  BG.dirty = true;
+}
+
 function bgMarkHex(G, x, y, col, fill, edge) {
   const R = BB.R, c = bbHexCenter(x, y);
   const f = new THREE.Mesh(bgHexFillGeo(R * 0.9), new THREE.MeshBasicMaterial({
@@ -1879,6 +2110,7 @@ function bgDispose() {
   BG.trail.forEach(t => t.material.dispose()); BG.trail.clear();
   BG.units.clear();
   if (BG.stat) BG.stat.clear();
+  bgKillVeil();
   bgClearGroup(BG.g.ov); bgClearGroup(BG.g.terr); bgClearGroup(BG.g.st);
   BG._terrRef = null;
   if (BG.renderer) BG.renderer.dispose();
