@@ -1575,7 +1575,7 @@ function cnDeckOpen() {
     CN._dkPaintBound = true;
   }
   if (!CN._dkResizeBound) {                         // поворот телефона меняет ориентацию листа
-    window.addEventListener('resize', () => { if (CN.deck) cnDeckDraw(); });
+    window.addEventListener('resize', () => { if (CN.deck) { cnDeckDraw(); cnDeckPalDraw(); } });
     CN._dkResizeBound = true;
   }
   cnDeckDraw();
@@ -1841,8 +1841,8 @@ function cnDeckDraw() {
     + `<div class="cn-deck-bar">` + gauges
     + (map.fams.length > 1 ? `<i class="cn-deck-m bad">разнобой ×${map.dil.toFixed(2)}</i>` : '')
     + `</div>` + ghostBar + `</div>`
-    + `<div class="cn-deck-yield" style="position:absolute;left:20px;right:20px;bottom:16px;z-index:2;pointer-events:none">${yieldChips + capWarn || '<i class="cn-deck-m">палуба пуста</i>'}</div>`
-    + `<svg class="cn-deck-svg" onmousedown="CN.dkPaint=!!CN.dkGhost" style="position:absolute;inset:0;width:100%;height:100%" viewBox="${vert ? `${vy} ${-(vx + vw)} ${vh} ${vw}` : `${vx} ${vy} ${vw} ${vh}`}" preserveAspectRatio="xMidYMid meet">`
+    + `<div class="cn-deck-yield">${yieldChips + capWarn || '<i class="cn-deck-m">палуба пуста</i>'}</div>`
+    + `<svg class="cn-deck-svg" onmousedown="CN.dkPaint=!!CN.dkGhost" viewBox="${vert ? `${vy} ${-(vx + vw)} ${vh} ${vw}` : `${vx} ${vy} ${vw} ${vh}`}" preserveAspectRatio="xMidYMid meet">`
     + (vert ? `<g transform="rotate(-90)">${P.join('')}</g>` : P.join(''))
     + `</svg>`;
 }
@@ -1942,7 +1942,9 @@ function cnDeckPalDraw() {
   const opts = Object.keys(CN_PAL_SORT).map(s => `<option value="${s}"${(CN.dkSort || 'fam') === s ? ' selected' : ''}>${CN_PAL_SORT[s]}</option>`).join('');
   parts.host.classList.toggle('fold', !!CN.dkFold);
   parts.pal.innerHTML = `<div class="cn-pal-h"><span>Каталог палубы</span>`
-    + `<button class="cn-pal-fold" onclick="cnDeckPalFold()" title="${CN.dkFold ? 'Развернуть каталог' : 'Свернуть каталог'}">${CN.dkFold ? '‹' : '›'}</button></div>`
+    // на телефоне каталог — шторка снизу, значит и стрелка вертикальная
+    + `<button class="cn-pal-fold" onclick="cnDeckPalFold()" title="${CN.dkFold ? 'Развернуть каталог' : 'Свернуть каталог'}">`
+    + ((window.innerWidth || 9999) <= 700 ? (CN.dkFold ? '⌃' : '⌄') : (CN.dkFold ? '‹' : '›')) + `</button></div>`
     + `<div class="cn-pal-ctl">`
     + `<input id="cn-pal-q" class="cn-pal-q" placeholder="поиск…" value="${esc(CN.dkQ || '')}" oninput="cnDeckPalQ(this.value)">`
     + `<select class="cn-pal-s" onchange="cnDeckPalSort(this.value)">${opts}</select>`
