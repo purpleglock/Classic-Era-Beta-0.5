@@ -17,8 +17,10 @@
 -- ЦЕПОЧКА: ПОСЛЕ _bt_modules.sql / _bt_modules2.sql. Идемпотентно.
 -- ════════════════════════════════════════════════════════════
 
+-- ⚠ stable — как у живой версии: без явного слова функция стала бы volatile
+--   (create or replace молча меняет изменчивость на дефолтную).
 create or replace function public.battle_pool(p_battle uuid, p_fid text)
-returns jsonb language plpgsql security definer set search_path=public as $fn$
+returns jsonb language plpgsql stable security definer set search_path=public as $fn$
 declare res jsonb := '[]'::jsonb; r record; used int; st jsonb;
 begin
   -- админский полный каталог (весь опубликованный ship-парк, сорт. по классу) —

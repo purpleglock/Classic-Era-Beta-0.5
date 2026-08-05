@@ -955,30 +955,72 @@ function bbBindTray() {
   };
 }
 
-function bbRenderDeploy(s) {
-  const ov = document.getElementById('bb-ov'); if (!ov) return;
-  BB.deployUI = true;
-  const mine = s.my_side === 'attacker' ? s.att_ready : s.def_ready;
-  const foe  = s.my_side === 'attacker' ? s.def_ready : s.att_ready;
-  const L = bbDeployLim(s);
+// ── Поиск по резерву ────────────────────────────────────────
+// В бою с ботами резерв = ВЕСЬ опубликованный парк (под сотню бортов), и
+// пролистать его лентой нереально. Ищем по имени, классу и снаряжению:
+// «ноксий», «крейсер», «торпеда» — всё это одна и та же строка поиска.
+function bbPoolHay(p) {
+  const acts = Array.isArray(p.acts) ? p.acts : [];
+  return [p.unit_name, bbClsName(p.cls), p.cls,
+          ...acts.map(a => (BBK[a.k] || {}).name || a.k)]
+    .join(' ').toLowerCase();
+}
+function bbPoolList(s) {
   const pool = Array.isArray(s.pool) ? s.pool : [];
+  const q = (BB.q || '').trim().toLowerCase();
+  if (!q) return pool;
+  return pool.filter(p => bbPoolHay(p).includes(q));
+}
+// Ввод в строку поиска. Перерисовываем ТОЛЬКО ленту: полная пересборка
+// разметки убила бы фокус и каретку на первом же символе.
+function bbFind(v) {
+  BB.q = v || '';
+  BB.traySL = 0;
+  const tray = document.getElementById('bbd-tray');
+  if (tray) { tray.innerHTML = bbTrayChips(BB.st); tray.scrollLeft = 0; }
+  const nfo = document.getElementById('bbd-find-n');
+  if (nfo) nfo.textContent = bbFindNote(BB.st);
+  const wrap = document.getElementById('bbd-find');
+  if (wrap) wrap.classList.toggle('bbd-find-on', !!BB.q.trim());
+}
+function bbFindClear() {
+  const inp = document.getElementById('bbd-find-i');
+  if (inp) { inp.value = ''; inp.focus(); }
+  bbFind('');
+}
+function bbFindNote(s) {
+  const all = (Array.isArray(s && s.pool) ? s.pool : []).length;
+  const n = bbPoolList(s || {}).length;
+  return (BB.q || '').trim() ? `${n} из ${all}` : String(all);
+}
+
+// Карточки ленты. Вынесены из bbRenderDeploy отдельно: поиск перерисовывает
+// только их, не трогая строку ввода (иначе фокус слетает на каждом символе).
+// Перетаскивания на гекс НЕТ: гексы мелкие, а «тяни пальцем» вдобавок убивало
+// скролл самой ленты. ＋ сажает борт сам, − снимает, тап по карточке выбирает
+// борт для ручной посадки тапом по гексу.
+function bbTrayChips(s) {
+  if (!s) return '';
   const cnt = {};
   BB.place.forEach(p => { cnt[p.unit_id] = (cnt[p.unit_id] || 0) + 1; });
-
-  // Лента бортов — накладка поверх карты. Перетаскивания на гекс НЕТ: гексы
-  // мелкие, а «тяни пальцем» вдобавок убивало скролл самой ленты. Работает так:
-  // ＋ сажает борт сам, − снимает, тап по карточке выбирает борт для ручной
-  // посадки тапом по гексу. Лента при этом свободно прокручивается.
-  const chips = pool.map(p => {
+  const list = bbPoolList(s);
+  if (!list.length) {
+    return `<div class="bbd-none">${(BB.q || '').trim()
+      ? `По запросу «${esc(BB.q.trim())}» бортов нет` : 'Резерв пуст'}</div>`;
+  }
+  return list.map(p => {
     const n = cnt[p.unit_id] || 0;
     const free = Math.max(0, Number(p.free) || 0);
     const why = bbCanAdd(s, p);
     const on = BB.pick === p.unit_id;
+    const acts = Array.isArray(p.acts) ? p.acts : [];
     return `<div class="bbd-s${on ? ' bbd-s-on' : ''}${why ? ' bbd-s-off' : ''}"
         onclick="bbPick('${jsq(p.unit_id)}')">
         <span class="bbd-s-n">${esc(p.unit_name)}</span>
         <span class="bbd-s-i">${bbNum(p.hp)} корп · ${bbNum(p.dmg)} урон · ${p.rng} гекс${Number(p.cost) > 0 ? ` · ${bbNum(p.cost)}` : ''}</span>
-        <span class="bbd-s-w">${why ? esc(why) : `в резерве ${free - n} из ${free}`}</span>
+        <span class="bbd-s-w">${acts.length
+          ? `🧰 ${acts.map(a => (BBK[a.k] || {}).name || a.k).join(' · ')}`
+          : (why ? esc(why) : `в резерве ${free - n} из ${free}`)}</span>
         <span class="bbd-s-q">${n}/${free}</span>
         <span class="bbd-s-btn">
           <button class="bbd-s-a bbd-s-spec" title="Полные ТТХ"
@@ -990,6 +1032,15 @@ function bbRenderDeploy(s) {
         </span>
       </div>`;
   }).join('');
+}
+
+function bbRenderDeploy(s) {
+  const ov = document.getElementById('bb-ov'); if (!ov) return;
+  BB.deployUI = true;
+  const mine = s.my_side === 'attacker' ? s.att_ready : s.def_ready;
+  const foe  = s.my_side === 'attacker' ? s.def_ready : s.att_ready;
+  const L = bbDeployLim(s);
+  const pool = Array.isArray(s.pool) ? s.pool : [];
 
   ov.innerHTML = `
     <div class="bbd">
@@ -1014,9 +1065,20 @@ function bbRenderDeploy(s) {
       ${bbSpecSheet(s)}
 
       <div class="bbd-tray-wrap">
-        <button class="bbd-tray-nav bbd-tray-l" onclick="bbTrayScroll(-1)" title="Предыдущие борта">‹</button>
-        <div class="bbd-tray" id="bbd-tray">${chips || '<div class="bbd-none">Резерв пуст</div>'}</div>
-        <button class="bbd-tray-nav bbd-tray-r" onclick="bbTrayScroll(1)" title="Следующие борта">›</button>
+        ${pool.length > 6 ? `<div class="bbd-find${(BB.q || '').trim() ? ' bbd-find-on' : ''}" id="bbd-find">
+          <span class="bbd-find-ic">🔍</span>
+          <input id="bbd-find-i" class="bbd-find-i" type="search" inputmode="search"
+            autocomplete="off" autocapitalize="off" spellcheck="false"
+            placeholder="Поиск борта: имя, класс, снаряжение"
+            value="${esc(BB.q || '')}" oninput="bbFind(this.value)">
+          <button class="bbd-find-x" onclick="bbFindClear()" title="Очистить">✕</button>
+          <span class="bbd-find-n" id="bbd-find-n">${bbFindNote(s)}</span>
+        </div>` : ''}
+        <div class="bbd-tray-row">
+          <button class="bbd-tray-nav bbd-tray-l" onclick="bbTrayScroll(-1)" title="Предыдущие борта">‹</button>
+          <div class="bbd-tray" id="bbd-tray">${bbTrayChips(s)}</div>
+          <button class="bbd-tray-nav bbd-tray-r" onclick="bbTrayScroll(1)" title="Следующие борта">›</button>
+        </div>
       </div>
 
       <div class="bbd-cmd">
@@ -1125,6 +1187,13 @@ function bbSpecSheet(s) {
   // Во весь экран, а не полоской над лентой: на телефоне ленте бортов и панели
   // команд остаётся ~160 px, паспорт корабля в них не влезает и упирается в
   // собственный скролл. Закрывается ✕ — доска под ней никуда не девается.
+  // Активное снаряжение — то же, что покажет 🧰 в бою. Без него на экране
+  // расстановки нельзя было отличить корвет с ядерной ракетой от пустого.
+  const acts = Array.isArray(p.acts) ? p.acts : [];
+  const kit = acts.map(a => row(
+    `${(BBK[a.k] || {}).ico || '🧰'} ${(BBK[a.k] || {}).name || a.k}`,
+    `${bbKitDesc(a)} · перезарядка ${+a.cd || 0} ход.`)).join('');
+
   return `<div class="bbf-sheet bbf-spec"><div class="bbf-sheet-h">
       <span class="bbf-sheet-n">${esc(p.unit_name)}</span>
       <button onclick="bbSpec(null)">✕</button></div>
@@ -1132,6 +1201,7 @@ function bbSpecSheet(s) {
       ${out.join('')}
       <div class="bb-panel-t" style="margin-top:10px">Огневые группы</div>
       ${guns}
+      ${kit ? `<div class="bb-panel-t" style="margin-top:10px">Активное снаряжение</div>${kit}` : ''}
     </div></div></div>`;
 }
 
