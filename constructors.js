@@ -1574,6 +1574,10 @@ function cnDeckOpen() {
     document.addEventListener('mouseup', () => { CN.dkPaint = false; });
     CN._dkPaintBound = true;
   }
+  if (!CN._dkResizeBound) {                         // поворот телефона меняет ориентацию листа
+    window.addEventListener('resize', () => { if (CN.deck) cnDeckDraw(); });
+    CN._dkResizeBound = true;
+  }
   cnDeckDraw();
   cnDeckPalDraw();
 }
@@ -1613,6 +1617,11 @@ function cnDeckDraw() {
   // Корабль лежит горизонтально: экранный X = вдоль корпуса (шаг CY), Y = поперёк (шаг CX).
   const SX = (gx, gy) => G.oy + gy * CY, SY = (gx, gy) => G.ox + gx * CX;
   const vx = G.oy - CY, vy = G.ox - CX, vw = G.h * CY + CY * 2, vh = G.w * CX + CX * 2;
+  // ⚠️ ТЕЛЕФОН: лист «лёжа» на узком экране сжимался в ниточку. Всю сцену строим
+  // по-старому (горизонт), а на выходе поворачиваем на −90°: нос уходит ВНИЗ,
+  // корпус вытягивается по длинной стороне экрана. Клики/наведение живут внутри
+  // трансформа, поэтому логика гнёзд не меняется — только значки контурим обратно.
+  const vert = (window.innerWidth || 9999) <= 700;
   const P = [];
   // РЕШЁТКА НА ВЕСЬ ЛИСТ — как миллиметровка под чертежом: сразу видно, что клетка
   // одна и та же, а корабль просто лежит на ней и накрывает столько, сколько накрывает.
@@ -1738,7 +1747,9 @@ function cnDeckDraw() {
       + (m.fam === 'hull' ? '' : `, отдача ${Math.round(m.k * 100)}%, соседей ${m.nb}`
         + (m.bc ? `, усилителей ${m.bc}` : '') + (m.shapeWhy ? ', ' + m.shapeWhy : '')) + `</title>`
       + body
+      + (vert ? `<g transform="rotate(90 ${cx.toFixed(1)} ${cy.toFixed(1)})">` : '')
       + cnModuleMarker(m.ref.g, cx, cy - (bar ? 2 : 0), col, sz / 15)
+      + (vert ? `</g>` : '')
       + (bar ? `<rect x="${(cx - sz / 3).toFixed(1)}" y="${(cy + sz / 3).toFixed(1)}" width="${((sz * 2 / 3) * bar).toFixed(1)}" height="2" rx="1" fill="${col}"/>` : '')
       + `</g>`);
   });
@@ -1831,7 +1842,9 @@ function cnDeckDraw() {
     + (map.fams.length > 1 ? `<i class="cn-deck-m bad">разнобой ×${map.dil.toFixed(2)}</i>` : '')
     + `</div>` + ghostBar + `</div>`
     + `<div class="cn-deck-yield" style="position:absolute;left:20px;right:20px;bottom:16px;z-index:2;pointer-events:none">${yieldChips + capWarn || '<i class="cn-deck-m">палуба пуста</i>'}</div>`
-    + `<svg class="cn-deck-svg" onmousedown="CN.dkPaint=!!CN.dkGhost" style="position:absolute;inset:0;width:100%;height:100%" viewBox="${vx} ${vy} ${vw} ${vh}" preserveAspectRatio="xMidYMid meet">${P.join('')}</svg>`;
+    + `<svg class="cn-deck-svg" onmousedown="CN.dkPaint=!!CN.dkGhost" style="position:absolute;inset:0;width:100%;height:100%" viewBox="${vert ? `${vy} ${-(vx + vw)} ${vh} ${vw}` : `${vx} ${vy} ${vw} ${vh}`}" preserveAspectRatio="xMidYMid meet">`
+    + (vert ? `<g transform="rotate(-90)">${P.join('')}</g>` : P.join(''))
+    + `</svg>`;
 }
 // ── РЕЖИМ УСТАНОВКИ: «куда это вообще влезет» видно ДО клика ────────────────────
 // Жалоба была прямая: ставишь второй-третий узел — и не понять, где ещё осталось
