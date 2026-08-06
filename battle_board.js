@@ -39,6 +39,9 @@ const BB = {
   fog: (function () { try { return localStorage.getItem('bb_fog') !== '0'; } catch (e) { return true; } })(),
   sel: null,         // выбранный свой корабль (id)
   heal: false,       // режим ремонта: следующий клик по СОЮЗНОМУ кораблю = нано-рой
+  mod: null,         // взведён модуль: ждём клик по доске (см. bbPaintAim)
+  modPre: null,      // курсор на карточке снаряжения — показ рубежа без траты
+  aoeOk: null,       // «бью, хотя своих накроет»: метка подтверждённого гекса
   hover: null,       // {x,y} гекс под курсором
   pick: null,        // фаза расстановки: выбранный проект из резерва
   spec: null,        // фаза расстановки: чьи полные ТТХ открыты шторкой (unit_id)
@@ -530,6 +533,7 @@ function bbRender() {
           <button class="bbd-fire" onclick="bbClose()">закрыть</button>
         </div>` : ''}
       ${bar}
+      ${(BB.mod && sel && bbActOf(sel, BB.mod)) ? bbAimStrip(sel) : ''}
       ${sheet}
       <div class="bbd-cmd">
         <button class="bbd-ic" onclick="bbSheet('log')" title="Журнал боя">▤</button>
@@ -780,11 +784,24 @@ function bbKitPanel(s, u) {
     const ok = !why;
     const lbl = isSiegeOff ? 'Свернуть' : (meta.need ? 'Навести' : 'Включить');
     const arm = BB.mod === a.k;
-    return `<div class="bb-kit${ok ? '' : ' bb-kit-off'}${arm ? ' bb-kit-arm' : ''}">
+    // Строка «геометрии»: рубеж, мёртвая зона, пятно накрытия. Это то, что
+    // игрок держит в голове при наведении — пусть будет написано.
+    const aim = BBK_AIM[a.k] || {};
+    const geo = [];
+    if (aim.aura) geo.push(`◎ радиус ${bbModRng(u, a.k)} вокруг себя`);
+    else if (aim.need || meta.need) geo.push(`⌖ рубеж ${bbModRng(u, a.k)} гекс.`);
+    if (aim.fix) geo.push('только вплотную');
+    else if (aim.dmin) geo.push(`ближе ${aim.dmin} не берёт`);
+    if (aim.aoe) geo.push(`пятно ${aim.aoe} · ⚠ задевает своих`);
+    if (aim.los) geo.push('нужна чистая линия огня');
+    return `<div class="bb-kit${ok ? '' : ' bb-kit-off'}${arm ? ' bb-kit-arm' : ''}"
+        style="--kit:rgb(${bbModCol(a.k)})"
+        onmouseenter="bbModPre('${jsq(a.k)}')" onmouseleave="bbModPre(null)">
         <div class="bb-kit-h"><span class="bb-kit-i">${meta.ico}</span>
           <b>${esc(meta.name)}</b>
           <span class="bb-kit-c">${cd > 0 ? `⟳ ${cd}` : (cost > 0 ? `${cost.toFixed(1)} c` : 'без секунд')}</span></div>
         <div class="bb-kit-d">${esc(bbKitDesc(a))}</div>
+        ${geo.length ? `<div class="bb-kit-g">${esc(geo.join(' · '))}</div>` : ''}
         ${why ? `<div class="bb-kit-w">${esc(why)}</div>` : ''}
         <button class="btn btn-sm${arm ? ' btn-gd' : ''}" ${ok ? '' : 'disabled'}
           onclick="bbKitUse('${jsq(a.k)}')">${arm ? 'Отмена — кликните ещё раз' : esc(lbl)}</button>
@@ -804,19 +821,329 @@ function bbKitUse(key) {
                              p_mode: u.stance === 'siege' ? 'off' : 'siege' });
     return;
   }
-  const meta = BBK[key] || {};
-  if (!meta.need) {
-    BB.mod = null;
+  const meta = BBK[key] || {}, aim = BBK_AIM[key] || {};
+  if (!(aim.need || meta.need)) {
+    BB.mod = null; BB.modPre = null;
+    bbModFx(u, key, null, null);      // импульс вокруг себя видно на доске
     bbAct('battle_module', { p_battle: BB.id, p_unit: u.id, p_key: key });
     return;
   }
   BB.mod = key;                       // ждём клик по доске
-  BB.heal = false;
+  BB.heal = false; BB.modPre = null; BB.aoeOk = null;
   BB.sheet = null;                    // шторка закрывается, иначе доски не видно
-  toast(meta.need === 'hex' ? 'Кликните по пустому гексу — туда уйдёт прыжок'
-      : meta.need === 'ally' ? 'Кликните по союзному борту'
-      : 'Кликните по вражескому борту', 'ok');
   bbRender();
+}
+
+// ════════════════════════════════════════════════════════════
+// НАВЕДЕНИЕ МОДУЛЯ — своя графика у каждого снаряжения
+// Кнопка «Навести» раньше просто ждала клика: ни рубежа, ни траектории, ни
+// пятна накрытия — ядерку жали вслепую и сносили собственный борт. Здесь
+// зеркало правил _bt_modules2.sql: мёртвая зона, «только вплотную», линия
+// огня через астероиды, радиус накрытия и КОГО он заденет.
+// ⚠ Правила менялись — сверять с _bt_modules2.sql, а не с описаниями.
+// ════════════════════════════════════════════════════════════
+var BBK_AIM = {
+  // одиночные удары по борту
+  salvo:     { need: 'foe',  los: 1, dmin: 2 },
+  storm:     { need: 'foe',  los: 1 },
+  ram:       { need: 'foe',  los: 1, fix: 1 },
+  rupture:   { need: 'foe',  los: 1, fix: 1 },
+  drain:     { need: 'foe',  los: 1 },
+  wbreak:    { need: 'foe',  los: 1 },
+  disrupt:   { need: 'foe',  los: 1 },
+  tartarus:  { need: 'foe',  los: 1 },
+  // площадь: цель + всё в радиусе 1, СВОИХ тоже
+  broadside: { need: 'foe',  los: 1, aoe: 1, frag: 0.5, ff: 1 },
+  torpedo:   { need: 'foe',  los: 1, aoe: 1, frag: 0.5, ff: 1 },
+  nuke:      { need: 'foe',  los: 1, aoe: 1, frag: 0.6, ff: 1 },
+  // прочее с целью
+  tractor:   { need: 'foe',  dmin: 2, pull: 1 },
+  drones:    { need: 'ally' },
+  wboost:    { need: 'ally' },
+  blink:     { need: 'hex',  dmin: 1 },
+  // импульсы вокруг себя
+  hell:      { aura: 'foe'  },
+  blind:     { aura: 'foe'  },
+  stasis:    { aura: 'foe'  },
+  pboost:    { aura: 'ally' },
+  pdup:      { aura: 'ally' },
+  aboost:    { aura: 'ally' },
+};
+// Цвет наведения: чем модуль делает — тем и красим.
+function bbModCol(key) {
+  const aim = BBK_AIM[key] || {};
+  if (aim.need === 'ally' || aim.aura === 'ally') return '120,255,190';
+  if (key === 'nuke' || key === 'torpedo') return '255,170,60';
+  if (aim.need === 'hex') return '170,190,255';
+  return '255,80,110';
+}
+function bbActOf(u, key) { return (Array.isArray(u.acts) ? u.acts : []).find(a => a.k === key) || null; }
+function bbModRng(u, key) { const a = bbActOf(u, key); return Math.max(1, +(a && a.rng) || 1); }
+
+// Можно ли бить сюда. Возвращает {ok, why, tgt} — тем же текстом, что и сервер.
+function bbModCheck(sel, key, x, y) {
+  const s = BB.st, aim = BBK_AIM[key] || {}, meta = BBK[key] || {};
+  const need = aim.need || meta.need;
+  const rng = bbModRng(sel, key), L = bbDist(sel, { x, y });
+  const tgt = (s.units || []).find(u => u.x === x && u.y === y && u.alive !== false) || null;
+  if (need === 'hex') {
+    if (!bbInArena(x, y)) return { ok: false, why: 'за кромкой арены' };
+    if (tgt) return { ok: false, why: 'гекс занят — прыжок только в пустой' };
+    if (L < 1) return { ok: false, why: 'вы и так здесь' };
+    if (L > rng) return { ok: false, why: `прыжок бьёт на ${rng} гекс., а до цели ${L}` };
+    return { ok: true, tgt: null };
+  }
+  if (!tgt) return { ok: false, why: 'нужен корабль' };
+  if (need === 'ally' && tgt.side !== s.my_side) return { ok: false, why: 'это чужой борт' };
+  if (need === 'foe'  && tgt.side === s.my_side) return { ok: false, why: 'это союзник — по своим не бьём' };
+  if (aim.fix && L !== aim.fix) return { ok: false, why: `таран бьёт только вплотную: до цели ${L} гекс.` };
+  if (aim.dmin && L < aim.dmin) {
+    return { ok: false, why: key === 'salvo' ? `дистанция ${L} — ракетам не хватает разгона на захват`
+                                             : `цель и так вплотную — тянуть некуда` };
+  }
+  if (L > rng) return { ok: false, why: `дистанция ${L} — достаёт до ${rng} гекс.` };
+  if (aim.los && !bbLosClear(sel, tgt)) return { ok: false, why: 'линия огня перекрыта астероидами' };
+  if (key === 'drones' && +tgt.hp >= +tgt.max_hp) return { ok: false, why: 'борт и так цел' };
+  return { ok: true, tgt };
+}
+
+// Кого накроет пятно вокруг цели (радиус aoe): [свои, чужие].
+function bbModSplash(sel, key, x, y) {
+  const s = BB.st, aim = BBK_AIM[key] || {}, r = aim.aoe || 0;
+  const foe = [], own = [];
+  (s.units || []).forEach(u => {
+    if (u.id === sel.id || u.alive === false) return;
+    if (bbDist(u, { x, y }) > r) return;
+    (u.side === s.my_side ? own : foe).push(u);
+  });
+  return { own, foe };
+}
+// Кого зацепит импульс вокруг себя.
+function bbModAura(sel, key) {
+  const s = BB.st, aim = BBK_AIM[key] || {}, r = bbModRng(sel, key);
+  return (s.units || []).filter(u => u.alive !== false && bbDist(u, sel) <= r
+    && (aim.aura === 'ally' ? u.side === s.my_side : u.side !== s.my_side));
+}
+
+// ── Слой наведения на доске ─────────────────────────────────
+// key взводится кнопкой (BB.mod) либо просто наведением мыши на карточку
+// снаряжения (BB.modPre) — второе показывает рубеж, ничего не расходуя.
+function bbPaintAim(ctx, sel, key, live) {
+  const aim = BBK_AIM[key] || {}, meta = BBK[key] || {};
+  const need = aim.need || meta.need;
+  const R = BB.R, iz = 1 / BB.zoom, col = bbModCol(key);
+  const rng = bbModRng(sel, key);
+  const c0 = bbHexCenter(sel.x, sel.y);
+  ctx.save();
+
+  // рубеж модуля — сплошное кольцо; мёртвая зона внутри — заштрихованный круг
+  ctx.setLineDash([]);
+  ctx.lineWidth = Math.max(0.8, 1.6 * iz);
+  ctx.strokeStyle = `rgba(${col},${live ? 0.55 : 0.3})`;
+  ctx.beginPath(); ctx.arc(c0.px, c0.py, rng * R * 1.5, 0, 6.2832); ctx.stroke();
+  const dead = aim.fix ? aim.fix : (aim.dmin ? aim.dmin - 1 : 0);
+  if (dead > 0) {
+    ctx.beginPath(); ctx.arc(c0.px, c0.py, dead * R * 1.5, 0, 6.2832);
+    ctx.fillStyle = 'rgba(255,60,60,0.10)'; ctx.fill();
+    ctx.setLineDash([3 * iz, 3 * iz]);
+    ctx.strokeStyle = 'rgba(255,90,90,0.45)'; ctx.lineWidth = Math.max(0.6, iz); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // импульс вокруг себя: пятно накрытия + кого задело
+  if (aim.aura) {
+    const cells = new Set();
+    bbDiskInto(cells, sel.x, sel.y, rng);
+    cells.forEach(k => {
+      const [x, y] = k.split(':').map(Number), c = bbHexCenter(x, y);
+      bbHexPath(ctx, c.px, c.py, R * 0.86);
+      ctx.fillStyle = `rgba(${col},0.10)`; ctx.fill();
+    });
+    bbModAura(sel, key).forEach(u => {
+      const c = bbHexCenter(u.x, u.y);
+      bbHexPath(ctx, c.px, c.py, R * 0.9);
+      ctx.fillStyle = `rgba(${col},0.26)`; ctx.fill();
+      bbHexPath(ctx, c.px, c.py, R * 0.9);
+      ctx.strokeStyle = `rgba(${col},0.7)`; ctx.lineWidth = Math.max(0.6, 1.4 * iz); ctx.stroke();
+    });
+    ctx.restore();
+    return;
+  }
+
+  // допустимые цели: борта (или пустые гексы для прыжка)
+  if (live) {
+    if (need === 'hex') {
+      const cells = new Set();
+      bbDiskInto(cells, sel.x, sel.y, rng);
+      cells.forEach(k => {
+        const [x, y] = k.split(':').map(Number);
+        if (!bbModCheck(sel, key, x, y).ok) return;
+        const c = bbHexCenter(x, y);
+        bbHexPath(ctx, c.px, c.py, R * 0.82);
+        ctx.fillStyle = `rgba(${col},0.14)`; ctx.fill();
+      });
+    } else {
+      (BB.st.units || []).forEach(u => {
+        if (u.alive === false) return;
+        if (!bbModCheck(sel, key, u.x, u.y).ok) return;
+        const c = bbHexCenter(u.x, u.y);
+        bbHexPath(ctx, c.px, c.py, R * 0.9);
+        ctx.fillStyle = `rgba(${col},0.22)`; ctx.fill();
+        bbHexPath(ctx, c.px, c.py, R * 0.9);
+        ctx.strokeStyle = `rgba(${col},0.65)`; ctx.lineWidth = Math.max(0.6, 1.4 * iz); ctx.stroke();
+      });
+    }
+  }
+
+  // траектория до наведённого гекса + пятно накрытия
+  // Траекторию тянем только к осмысленной клетке: под курсором борт (для
+  // модулей с целью) или гекс прыжка. Иначе линия ползала за мышью по пустоте
+  // и перечёркивала доску.
+  const h = live && BB.hover
+    && (need === 'hex' || (BB.st.units || []).some(u => u.x === BB.hover.x && u.y === BB.hover.y))
+    ? BB.hover : null;
+  if (h) {
+    const chk = bbModCheck(sel, key, h.x, h.y);
+    const c1 = bbHexCenter(h.x, h.y);
+    const bad = !chk.ok;
+    const line = bad ? '255,70,70' : col;
+    ctx.setLineDash(need === 'hex' ? [7 * iz, 5 * iz] : []);
+    ctx.lineWidth = Math.max(1, 2.2 * iz);
+    ctx.strokeStyle = `rgba(${line},${bad ? 0.5 : 0.85})`;
+    ctx.beginPath();
+    if (aim.pull) { ctx.moveTo(c1.px, c1.py); ctx.lineTo(c0.px, c0.py); }
+    else { ctx.moveTo(c0.px, c0.py); ctx.lineTo(c1.px, c1.py); }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // остриё: куда прилетит (или куда утянет)
+    const ax = aim.pull ? c0.px : c1.px, ay = aim.pull ? c0.py : c1.py;
+    const bx = aim.pull ? c1.px : c0.px, by = aim.pull ? c1.py : c0.py;
+    const ang = Math.atan2(ay - by, ax - bx), hl = R * 0.42;
+    ctx.fillStyle = `rgba(${line},${bad ? 0.5 : 0.9})`;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - Math.cos(ang - 0.42) * hl, ay - Math.sin(ang - 0.42) * hl);
+    ctx.lineTo(ax - Math.cos(ang + 0.42) * hl, ay - Math.sin(ang + 0.42) * hl);
+    ctx.closePath(); ctx.fill();
+    // пятно накрытия — вот его-то и не хватало ядерке
+    if (aim.aoe && !bad) {
+      const cells = new Set();
+      bbDiskInto(cells, h.x, h.y, aim.aoe);
+      cells.forEach(k => {
+        const [x, y] = k.split(':').map(Number), c = bbHexCenter(x, y);
+        bbHexPath(ctx, c.px, c.py, R * 0.9);
+        ctx.fillStyle = (x === h.x && y === h.y) ? `rgba(${col},0.34)` : `rgba(${col},0.18)`;
+        ctx.fill();
+      });
+      ctx.lineWidth = Math.max(0.8, 1.6 * iz);
+      ctx.setLineDash([5 * iz, 4 * iz]);
+      ctx.strokeStyle = `rgba(${col},0.8)`;
+      ctx.beginPath(); ctx.arc(c1.px, c1.py, (aim.aoe + 0.5) * R * 1.5, 0, 6.2832); ctx.stroke();
+      ctx.setLineDash([]);
+      // свои под ударом — обводим тревожным контуром, без слов понятно
+      bbModSplash(sel, key, h.x, h.y).own.forEach(u => {
+        const c = bbHexCenter(u.x, u.y);
+        bbHexPath(ctx, c.px, c.py, R * 0.92);
+        ctx.strokeStyle = 'rgba(255,80,80,0.95)'; ctx.lineWidth = Math.max(1, 2.2 * iz); ctx.stroke();
+      });
+    }
+    // крестик на запрещённой цели
+    if (bad) {
+      const d = R * 0.4;
+      ctx.strokeStyle = 'rgba(255,70,70,0.9)'; ctx.lineWidth = Math.max(1, 2 * iz);
+      ctx.beginPath();
+      ctx.moveTo(c1.px - d, c1.py - d); ctx.lineTo(c1.px + d, c1.py + d);
+      ctx.moveTo(c1.px + d, c1.py - d); ctx.lineTo(c1.px - d, c1.py + d);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+// Наведение мыши на карточку снаряжения = показать рубеж/пятно, не тратя ход.
+function bbModPre(key) {
+  if (BB.mod) return;
+  if (BB.modPre === (key || null)) return;
+  BB.modPre = key || null;
+  // 3D-доске мало «перерисуй»: слой наведения — это геометрия, её пересобирают
+  if (BB.glOn && typeof bgSyncOverlay === 'function') bgSyncOverlay();
+  bbPaint();
+}
+
+// Ценник под курсором в режиме наведения: что будет, если кликнуть сюда.
+function bbModTip(sel, key, x, y) {
+  const meta = BBK[key] || {}, aim = BBK_AIM[key] || {};
+  const a = bbActOf(sel, key) || {}, chk = bbModCheck(sel, key, x, y);
+  const cost = +meta.cost || 0;
+  // над пустотой ценник молчит: «нужен корабль» на каждом гексе — это мельтешение
+  if ((aim.need || meta.need) !== 'hex'
+      && !(BB.st.units || []).some(u => u.x === x && u.y === y)) return null;
+  // t/s уходят в bbTipMove, а он экранирует сам — здесь esc не нужен
+  if (!chk.ok) return { ico: meta.ico || '⚙', t: meta.name || key, s: chk.why, bad: true };
+  const bits = [];
+  if (+a.dmg) bits.push(`${bbNum(+a.dmg)} урона`);
+  if (aim.aoe) {
+    const sp = bbModSplash(sel, key, x, y);
+    bits.push(`+${Math.round((aim.frag || 0.5) * 100)}% по ${sp.foe.length + sp.own.length} рядом`);
+    if (sp.own.length) bits.push(`⚠ своих под ударом: ${sp.own.length}`);
+  }
+  bits.push(cost > 0 ? `${cost.toFixed(1)} c` : 'без секунд');
+  return { ico: meta.ico || '⚙', t: meta.name || key, cost, s: bits.join(' · '),
+           bad: !!(aim.aoe && bbModSplash(sel, key, x, y).own.length) };
+}
+
+// Полоска-подсказка поверх доски, пока модуль взведён.
+function bbAimStrip(sel) {
+  const key = BB.mod, meta = BBK[key] || {}, aim = BBK_AIM[key] || {};
+  const need = aim.need || meta.need;
+  const a = bbActOf(sel, key) || {};
+  // Коротко: полоска висит поверх доски, и длинный текст закрывает бой.
+  const bits = [need === 'hex' ? 'по пустому гексу'
+              : need === 'ally' ? 'по своему' : 'по врагу',
+                `до ${bbModRng(sel, key)} гекс.`];
+  if (aim.fix) bits.push('вплотную');
+  else if (aim.dmin) bits.push(`не ближе ${aim.dmin}`);
+  if (aim.aoe) bits.push(`⚠ накрытие ${aim.aoe} — задевает своих`);
+  if (aim.los) bits.push('нужна линия огня');
+  return `<div class="bbf-aim" style="--aim:rgb(${bbModCol(key)})">
+      <span class="bbf-aim-i">${meta.ico || '⚙'}</span>
+      <span class="bbf-aim-x"><b>${esc(meta.name || key)}</b>
+        <i>${esc(bits.join(' · '))}</i></span>
+      <button onclick="bbKitUse('${jsq(key)}')">отмена</button>
+    </div>`;
+}
+
+// Своя вспышка на каждый модуль: без неё «нажал — и ничего не видно».
+function bbModFx(sel, key, x, y) {
+  const aim = BBK_AIM[key] || {}, col = bbModCol(key);
+  const a = bbHexCenter(sel.x, sel.y), t0 = performance.now();
+  if (aim.aura) {
+    bbFxAdd({ kind: 'flash', px: a.px, py: a.py, t0, dur: 620, col });
+    bbModAura(sel, key).forEach((u, i) => {
+      const c = bbHexCenter(u.x, u.y);
+      bbFxAdd({ kind: 'hit', px: c.px, py: c.py, t0: t0 + 90 + i * 40, dur: 520, col, spark: [] });
+    });
+    bbAnimKick();
+    return;
+  }
+  if (x == null) { bbFxAdd({ kind: 'flash', px: a.px, py: a.py, t0, dur: 560, col }); bbAnimKick(); return; }
+  const b = bbHexCenter(x, y);
+  bbFxAdd({ kind: 'beam', x0: a.px, y0: a.py, x1: b.px, y1: b.py, t0, dur: 560, col, head: true });
+  if (aim.aoe) {
+    bbFxAdd({ kind: 'boom', px: b.px, py: b.py, t0: t0 + 420, dur: 760, col, spark: [], debris: [] });
+    const cells = new Set();
+    bbDiskInto(cells, x, y, aim.aoe);
+    let i = 0;
+    cells.forEach(k => {
+      const [cx, cy] = k.split(':').map(Number);
+      if (cx === x && cy === y) return;
+      const c = bbHexCenter(cx, cy);
+      bbFxAdd({ kind: 'hit', px: c.px, py: c.py, t0: t0 + 480 + (i++ % 6) * 30, dur: 520, col, spark: [] });
+    });
+  } else if (!aim.pull) {
+    bbFxAdd({ kind: 'hit', px: b.px, py: b.py, t0: t0 + 420, dur: 520, col, spark: [] });
+  }
+  bbAnimKick();
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1663,6 +1990,8 @@ function bbTipPlan(sel, hx, hy) {
   const s = BB.st;
   if (!sel || !sel.mine || !s || s.status !== 'active' || !s.my_turn) return null;
   const tp = +sel.tp || 0;
+  // модуль взведён — ценник говорит про модуль, а не про залп и манёвр
+  if (BB.mod && bbActOf(sel, BB.mod)) return bbModTip(sel, BB.mod, hx, hy);
   const foe = (s.units || []).find(u => u.x === hx && u.y === hy && !u.mine && u.side !== s.my_side);
 
   if (foe) {
@@ -2152,23 +2481,34 @@ function bbClick(x, y) {
   // режим наведения модуля: снаряжению нужна цель или гекс. Разбираем ДО
   // остальных веток — иначе клик по врагу уйдёт в обычный залп.
   if (BB.mod && sel) {
-    const key = BB.mod, meta = BBK[key] || {};
-    const done = () => { BB.mod = null; bbRender(); };
-    if (meta.need === 'hex') {
-      if (tgt) { toast('Гекс занят — прыжок только в пустой', 'err'); return; }
-      // Дальность берём из самого модуля, а не из константы: у тира она своя.
-      const act = (sel.acts || []).find(a => a.k === key) || {};
-      const max = +act.rng || 5, L = bbDist(sel, { x, y });
-      if (L < 1 || L > max) { toast(`Прыжок бьёт на ${max} гексов, а до цели ${L}`, 'err'); return; }
-      done();
-      bbAct('battle_module', { p_battle: BB.id, p_unit: sel.id, p_key: key, p_x: x, p_y: y });
-      return;
+    const key = BB.mod, meta = BBK[key] || {}, aim = BBK_AIM[key] || {};
+    const need = aim.need || meta.need;
+    // Все ограничения — в bbModCheck (зеркало сервера): и мёртвая зона, и
+    // «только вплотную», и линия огня. Отказ приходит ДО запроса.
+    const chk = bbModCheck(sel, key, x, y);
+    if (!chk.ok) { toast(chk.why, 'err'); return; }
+    // Площадное — в два тапа. На мыши второй тап нужен только когда под
+    // накрытие лезут свои; на телефоне — всегда: там нет курсора, и пятно
+    // поражения игрок впервые видит именно после первого тапа.
+    if (aim.aoe) {
+      const own = bbModSplash(sel, key, x, y).own;
+      const mark = key + ':' + x + ':' + y;
+      const touch = !(window.matchMedia && matchMedia('(hover: hover)').matches);
+      if ((own.length || touch) && BB.aoeOk !== mark) {
+        BB.aoeOk = mark;
+        BB.hover = { x, y };            // ← вот теперь пятно и траектория нарисованы
+        bbRender();
+        toast(own.length
+          ? `⚠ Под накрытие попадут свои борта: ${own.length}. Ещё раз — бьём`
+          : 'Пятно поражения на доске. Ещё раз по той же клетке — бьём', own.length ? 'err' : 'ok');
+        return;
+      }
     }
-    if (!tgt) { toast('Нужно кликнуть по кораблю', 'err'); return; }
-    if (meta.need === 'ally' && tgt.side !== s.my_side) { toast('Дроны чинят только своих', 'err'); return; }
-    if (meta.need === 'foe' && tgt.side === s.my_side) { toast('Это союзник — по своим не бьём', 'err'); return; }
-    done();
-    bbAct('battle_module', { p_battle: BB.id, p_unit: sel.id, p_key: key, p_target: tgt.id });
+    BB.aoeOk = null; BB.mod = null; BB.modPre = null; bbRender();
+    bbModFx(sel, key, x, y);
+    bbAct('battle_module', need === 'hex'
+      ? { p_battle: BB.id, p_unit: sel.id, p_key: key, p_x: x, p_y: y }
+      : { p_battle: BB.id, p_unit: sel.id, p_key: key, p_target: chk.tgt.id });
     return;
   }
 
@@ -2866,8 +3206,14 @@ function bbPaintHighlights(ctx, s) {
   const R = BB.R;
   const canAct = sel.acted || s.acts_left > 0;
 
+  // взведён модуль — доска работает на наведение, а не на манёвр: обычные
+  // подсветки убираем, иначе поверх пятна накрытия каша из гексов хода.
+  if (BB.mod && bbActOf(sel, BB.mod)) { bbPaintAim(ctx, sel, BB.mod, true); return; }
+
   // кольца дальностей выбранного корабля — видно, с какой дистанции что бьёт
   bbPaintArcs(ctx, sel);
+  // курсор на карточке снаряжения — показываем его рубеж, ничего не тратя
+  if (BB.modPre && bbActOf(sel, BB.modPre)) bbPaintAim(ctx, sel, BB.modPre, false);
 
   // гексы хода — досягаемость по скорости
   if (bbSteps(sel) > 0 && canAct) {

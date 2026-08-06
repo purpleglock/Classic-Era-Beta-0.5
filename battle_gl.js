@@ -1395,6 +1395,12 @@ function bgSyncOverlay() {
   const canAct = sel.acted || s.acts_left > 0;
   const mine = bgCol(BG_C.mine);
 
+  // Наведение модуля забирает доску себе: рубеж, цели, траектория, накрытие.
+  // Зеркало bbPaintAim — на трёхмерной доске это ЕДИНСТВЕННЫЙ слой наведения,
+  // 2D-канвас под сценой не рисуется вовсе.
+  if (BB.mod && bbActOf(sel, BB.mod)) { bgAimLayer(G, sel, BB.mod, true); return; }
+  if (BB.modPre && bbActOf(sel, BB.modPre)) bgAimLayer(G, sel, BB.modPre, false);
+
   // кольца дальностей огневых групп — пересёк кольцо, включилась ещё одна
   const gs = (sel.wpn && sel.wpn.length) ? sel.wpn : [{ rng: sel.rng }];
   const rings = [...new Set(gs.map(g => Math.max(1, g.rng || 1)))].sort((a, b) => a - b);
@@ -1704,6 +1710,106 @@ function bgMarkHex(G, x, y, col, fill, edge) {
     new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: edge }));
   ln.userData.ownGeo = true;
   G.add(ln);
+}
+
+// ── Слой наведения модуля (зеркало bbPaintAim) ──────────────
+// Кольцо на высоте: рубеж, мёртвая зона, пятно накрытия.
+function bgAimRing(G, cx, cy, rad, col, op, dash, yy) {
+  const pts = [];
+  for (let k = 0; k <= 84; k++) {
+    const a = k / 84 * 6.2832;
+    pts.push(new THREE.Vector3(cx + Math.cos(a) * rad, yy || 1.6, cy + Math.sin(a) * rad));
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = dash
+    ? new THREE.LineDashedMaterial({ color: col, dashSize: BB.R * 0.2, gapSize: BB.R * 0.16, transparent: true, opacity: op })
+    : new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: op });
+  const ln = new THREE.Line(geo, mat);
+  if (dash) ln.computeLineDistances();
+  ln.userData.ownGeo = true;
+  G.add(ln);
+}
+function bgAimFill(G, cells, col, op) {
+  const arr = [...cells];
+  if (!arr.length) return;
+  const im = new THREE.InstancedMesh(bgHexFillGeo(BB.R * 0.86),
+    new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op,
+      depthWrite: false, side: THREE.DoubleSide }), arr.length);
+  const m = new THREE.Matrix4();
+  arr.forEach((k, i) => {
+    const [x, y] = k.split(':').map(Number), c = bbHexCenter(x, y);
+    im.setMatrixAt(i, m.makeTranslation(c.px, 1.05, c.py));
+  });
+  im.instanceMatrix.needsUpdate = true;
+  G.add(im);
+}
+function bgAimLayer(G, sel, key, live) {
+  const aim = (typeof BBK_AIM !== 'undefined' && BBK_AIM[key]) || {};
+  const meta = (typeof BBK !== 'undefined' && BBK[key]) || {};
+  const need = aim.need || meta.need;
+  const R = BB.R, col = bgCol(bbModCol(key));
+  const rng = bbModRng(sel, key), c0 = bbHexCenter(sel.x, sel.y);
+
+  bgAimRing(G, c0.px, c0.py, rng * R * 1.5, col, live ? 0.6 : 0.32);
+  const dead = aim.fix ? aim.fix : (aim.dmin ? aim.dmin - 1 : 0);
+  if (dead > 0) bgAimRing(G, c0.px, c0.py, dead * R * 1.5, bgCol('255,90,90'), 0.5, true);
+
+  if (aim.aura) {
+    const cells = new Set(); bbDiskInto(cells, sel.x, sel.y, rng);
+    bgAimFill(G, cells, col, 0.12);
+    bbModAura(sel, key).forEach(u => bgMarkHex(G, u.x, u.y, col, 0.26, 0.7));
+    return;
+  }
+
+  if (live) {
+    if (need === 'hex') {
+      const cells = new Set(); bbDiskInto(cells, sel.x, sel.y, rng);
+      const ok = [...cells].filter(k => {
+        const [x, y] = k.split(':').map(Number);
+        return bbModCheck(sel, key, x, y).ok;
+      });
+      bgAimFill(G, ok, col, 0.16);
+    } else {
+      (BB.st.units || []).forEach(u => {
+        if (u.alive === false) return;
+        if (!bbModCheck(sel, key, u.x, u.y).ok) return;
+        bgMarkHex(G, u.x, u.y, col, 0.22, 0.65);
+      });
+    }
+  }
+
+  // как в bbPaintAim: линия тянется к борту (или к гексу прыжка), не в пустоту
+  const h = live && BB.hover
+    && (need === 'hex' || (BB.st.units || []).some(u => u.x === BB.hover.x && u.y === BB.hover.y))
+    ? BB.hover : null;
+  if (!h) return;
+  const chk = bbModCheck(sel, key, h.x, h.y), c1 = bbHexCenter(h.x, h.y);
+  const lcol = chk.ok ? col : bgCol('255,70,70');
+  // траектория: у тягового луча она тянет к себе, поэтому и рисуем от цели
+  const a = aim.pull ? c1 : c0, b = aim.pull ? c0 : c1;
+  const ln = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(a.px, 3, a.py), new THREE.Vector3(b.px, 3, b.py)]),
+    need === 'hex'
+      ? new THREE.LineDashedMaterial({ color: lcol, dashSize: R * 0.22, gapSize: R * 0.16, transparent: true, opacity: 0.9 })
+      : new THREE.LineBasicMaterial({ color: lcol, transparent: true, opacity: 0.9 }));
+  if (need === 'hex') ln.computeLineDistances();
+  ln.userData.ownGeo = true;
+  G.add(ln);
+  // точка попадания — светящаяся метка там, куда прилетит
+  const dot = bgSprite(bgTexGlow(), lcol, chk.ok ? 0.95 : 0.6);
+  dot.position.set(b.px, 3.4, b.py);
+  dot.scale.set(R * 0.5, R * 0.5, 1);
+  G.add(dot);
+
+  if (chk.ok && aim.aoe) {
+    const cells = new Set(); bbDiskInto(cells, h.x, h.y, aim.aoe);
+    bgAimFill(G, cells, col, 0.2);
+    bgAimRing(G, c1.px, c1.py, (aim.aoe + 0.5) * R * 1.5, col, 0.85, true, 2.4);
+    // свои под накрытием — тревожный контур, до клика
+    bbModSplash(sel, key, h.x, h.y).own.forEach(u =>
+      bgMarkHex(G, u.x, u.y, bgCol('255,80,80'), 0.1, 0.95));
+  }
 }
 
 // Превью манёвра: пунктир по маршруту, точки шагов, кольцо назначения

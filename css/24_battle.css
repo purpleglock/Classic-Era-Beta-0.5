@@ -555,6 +555,38 @@
 .bbf-hud-a { color: var(--bbc); font-size: 13px; letter-spacing: .16em; }
 .bbf-hud-vs { color: #5d7f90; font-size: 9.5px; letter-spacing: .06em; }
 
+/* Полоска наведения модуля: висит, пока снаряжение взведено. Держит правила
+   этого модуля перед глазами (рубеж, мёртвая зона, накрытие) и даёт отмену —
+   раньше об этом говорил один тост, который успевал пропасть. */
+.bbf-aim {
+  position: absolute; top: 46px; z-index: 6;
+  left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: min(520px, calc(100% - 16px));
+  display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+  background: rgba(9,20,28,.94); box-shadow: inset 0 0 0 1px var(--aim, #7fd4ff);
+}
+.bbf-aim-i { font-size: 15px; line-height: 1; }
+.bbf-aim-x { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.bbf-aim-x b { color: var(--aim, #eaf6ff); font-size: 12px; }
+.bbf-aim-x i {
+  color: #8fb0c0; font-size: 10px; font-style: normal;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bbf-aim button {
+  flex: none; border: 0; padding: 4px 8px; cursor: pointer; font: inherit; font-size: 10.5px;
+  color: #cfe6f2; background: rgba(255,255,255,.08);
+}
+/* Телефон: полоска садится ПОД строку хода во всю ширину, правила переносятся
+   в две строки — иначе они уезжают в многоточие и подсказка бесполезна. */
+@media (max-width: 640px) {
+  .bbf-aim {
+    left: 6px; right: 6px; transform: none; width: auto; max-width: none;
+    top: 42px; padding: 6px 8px;
+  }
+  .bbf-aim-x i { white-space: normal; }
+  .bbf-aim button { padding: 7px 10px; }        /* под палец */
+}
+
 /* строка выбранного борта — над командной строкой */
 .bbf-sel {
   position: absolute; left: 8px; right: 8px; bottom: calc(var(--bbcmd, 68px) + 8px); z-index: 5;
@@ -828,7 +860,14 @@
 .bb-kit-c { font-size: 11px; color: var(--gd, #7fd4ff); white-space: nowrap; }
 .bb-kit-d { font-size: 11px; color: var(--muted, #7d8fa5); margin-bottom: 5px; }
 .bb-kit-w { font-size: 11px; color: #e8a06a; margin-bottom: 5px; }
+/* Геометрия модуля: рубеж / мёртвая зона / пятно накрытия — то же, что
+   рисуется на доске при наведении. Цвет карточки = цвет наведения. */
+.bb-kit-g {
+  font-size: 10px; letter-spacing: .02em; margin-bottom: 5px;
+  color: var(--kit, #7fd4ff); opacity: .85;
+}
 .bb-kit button { width: 100%; }
+.bb-kit:hover { box-shadow: inset 0 0 0 1px var(--kit, rgba(127, 212, 255, .5)); }
 /* На перезарядке / без секунд — гасим, но НЕ прячем: игрок должен видеть,
    что модуль есть и когда он вернётся. */
 .bb-kit-off { opacity: .55; box-shadow: inset 0 0 0 1px rgba(127, 212, 255, .1); }
