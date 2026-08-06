@@ -1,4 +1,4 @@
-// © 2025–2026 Setis241 (setisalanstrong@gmail.com). Все права защищены.
+// © 2025–2026. Все права защищены.
 // Проприетарное ПО. Использование, копирование, изменение и распространение
 // без письменного разрешения правообладателя запрещены. См. файл LICENSE.
 // ════════════════════════════════════════════════════════════
@@ -1287,8 +1287,9 @@ function ecPovPoorSystems() {
     .sort((a, b) => (+a.prosperity || 1) - (+b.prosperity || 1));
 }
 
-// ГС/сут, теряемые из-за просперити<1 в бедных системах (фабрики+хабы режутся
-// множителем просперити в economy_accrue). «Цена бедности» для обзора/казны.
+// ГС/сут, теряемые из-за просперити<1 в бедных системах. С 06.08 просперити
+// множит доход домиков и НА СЕРВЕРЕ (`_gc_income_truth.sql`), так что это
+// настоящий недобор денег, а не оценка.
 function ecPovertyDrag() {
   const gcMul = (typeof ecGcMul === 'function') ? ecGcMul() : 1;
   let lost = 0;
@@ -1331,7 +1332,7 @@ function ecPovertyPanel() {
       <div class="ec-ovx-stat"><div class="ec-ovx-stat-v ec-pov-v-ok">${s.relief || 0}</div><div class="ec-ovx-stat-k">🤝 Под помощью</div></div>
     </div>
     <div class="ec-ovx-stat-grid" style="margin-top:8px">
-      <div class="ec-ovx-stat ec-ovx-stat-wide" data-tip="Сколько ГС/сут недополучает казна из-за просперити<1 в бедных системах (фабрики и торговые хабы режутся множителем просперити). Это и есть «цена бедности» — поднимите благополучие, чтобы вернуть доход.">
+      <div class="ec-ovx-stat ec-ovx-stat-wide" data-tip="Сколько ГС/сут недополучает казна из-за просперити<1 в бедных системах (фабрики, хабы и храмы режутся множителем просперити прямо в начислении). Поднимите благополучие, чтобы вернуть доход.">
         <div class="ec-ovx-stat-k">💸 Потери дохода от бедности</div>
         <div class="ec-ovx-stat-barline"><b style="color:${drag ? 'var(--err,#e05050)' : 'var(--t4)'}">${drag ? '−' + ecNum(drag) : '0'}</b> ГС/сут${reliefActive ? ` · 🤝 активных мер помощи: <b>${reliefActive}</b>` : ''}</div>
       </div>
@@ -2412,7 +2413,9 @@ function ecBuildingProsp(b) { const bal = ecBuildingSysBal(b); return bal ? (+ba
 function ecBuildingIncome(b) {
   const d = EC_BUILD[b.btype]; if (!d) return { gc: 0, science: 0 };
   let gc = (d.inc.gc || 0) * b.slots_open;
-  // ГС-домики × просперити (благополучие) системы постройки
+  // ПРОСПЕРИТИ (06.08, `_gc_income_truth.sql`): благополучие системы теперь
+  // множит доход домиков и НА СЕРВЕРЕ — раньше жило только здесь и завышало
+  // показанные числа. Храм считает ecTempleIncome (там своя ставка ВОЛНЫ).
   if (b.btype === 'factory' || b.btype === 'trade' || b.btype === 'temple') gc *= ecBuildingProsp(b);
   return { gc, science: (d.inc.science || 0) * b.slots_open };
 }
@@ -2422,22 +2425,25 @@ function ecBuildingIncomeBreak(b) {
   if (b.btype !== 'factory' && b.btype !== 'trade' && b.btype !== 'temple') return '';
   const d = EC_BUILD[b.btype]; if (!d || !(d.inc.gc > 0)) return '';
   const base = (d.inc.gc || 0) * b.slots_open;
-  const pr = ecBuildingProsp(b);
+  const pr = ecBuildingProsp(b);      // благополучие системы — теперь и в начислении
   const gw = ecGoodsInfo().welfare;   // обеспечение товарами (множитель дохода державы)
-  const noData = !ecBuildingSysBal(b);   // срез не накатан / нет данных системы
+  const soc = ecBudgetGcMult();       // соцобеспечение
+  const noData = !ecBuildingSysBal(b);   // срез не загружен / нет данных системы
   const pct = v => (v >= 1 ? '+' : '−') + Math.round(Math.abs(v - 1) * 100) + '%';
   const cls = v => v > 1.005 ? 'ec-bk-hi' : (v < 0.995 ? 'ec-bk-lo' : 'ec-bk-mid');
-  // строка-формула
   const parts = [`<span class="ec-bk-base" title="База: ${b.slots_open} слот(ов) × ${d.inc.gc} ГС">${ecNum(base)} база</span>`,
     `<span class="${cls(pr)}" title="Благополучие системы (×${pr.toFixed(2)}): растёт от рабочих рук, падает при перегрузе застройкой">⚖ ${pct(pr)}</span>`];
+  if (Math.abs(soc - 1) >= 0.005) parts.push(
+    `<span class="${cls(soc)}" title="Соцобеспечение (×${soc.toFixed(2)}): уровень ползунка «Соцобеспечение» во вкладке «Благополучие» множит весь денежный доход.">⚖ ${pct(soc)}</span>`);
   if (Math.abs(gw - 1) >= 0.005) parts.push(
     `<span class="${cls(gw)}" title="Обеспечение товарами (×${gw.toFixed(2)}): хватает товаров населению → доход растёт, дефицит → проседает. Стройте Фабрику товаров.">🛍 ${pct(gw)}</span>`);
-  const total = base * pr * gw;
+  const total = base * pr * soc * gw;
   // короткий вывод словами: почему так
   let note = '';
   if (noData) note = 'Данные системы не загружены — показана база.';
   else if (gw < 0.995) note = `Нехватка товаров населению — доход проседает. Стройте Фабрику товаров.`;
-  else if (pr < 0.995) note = `Перегруз застройкой давит благополучие.`;
+  else if (pr < 0.995) note = `Перегруз застройкой давит благополучие системы.`;
+  else if (soc < 0.995) note = `Соцобеспечение ниже нормы — весь денежный доход просажен.`;
   else if (pr > 1.005) note = `Запас рабочих рук поднимает доход.`;
   return `<div class="ec-bld-break">
     <div class="ec-bk-line">${parts.join('<span class="ec-bk-x">×</span>')}<span class="ec-bk-x">=</span><span class="ec-bk-tot">${ecNum(Math.round(total))}/сут</span></div>
@@ -2486,8 +2492,13 @@ function ecGoodsInfo() {
     const made = Math.min(demand, EC_GOODS.out * slots * ratio);
     const cov = demand <= 0 ? 1 : Math.min(1, made / demand);
     const gBonus = Math.min(EC_GOODS_QMAX, Math.max(0, rec.qAvg - 1)) * rec.diversity;
-    const welfare = Math.round(Math.min(EC_GOODS_WCAP + gBonus, Math.max(0.90, 0.90 + 0.20 * cov + cov * gBonus)) * 1000) / 1000;
-    return { slots, water: 0, mat: 0, waterNeed: 0, matNeed: 0, ratio, made, pop, demand, cov, welfare, recipe: rec, gBonus, cap: EC_GOODS_WCAP + gBonus, lacksText: lacks.join(' и ') };
+    // ⚠ СВЕРКА 06.08: живой economy_accrue считает благополучие СТРОГО как
+    // least(1.10, greatest(0.90, 0.90 + 0.20*cov)) — никакого бонуса за качество
+    // рецепта в тике нет. Раньше клиент прибавлял gBonus и обещал множитель выше
+    // потолка сервера. Показываем серверную величину; gBonus отдаём отдельным
+    // полем, чтобы UI рецепта мог объяснить, что бонус пока не начисляется.
+    const welfare = Math.round(Math.min(1.10, Math.max(0.90, 0.90 + 0.20 * cov)) * 1000) / 1000;
+    return { slots, water: 0, mat: 0, waterNeed: 0, matNeed: 0, ratio, made, pop, demand, cov, welfare, recipe: rec, gBonus, cap: 1.10, lacksText: lacks.join(' и ') };
   }
   // ЛЕГАСИ: вода (Лёд/Жидкая вода) 0.6 + сырьё (Железо/Силикаты) 0.4 на товар.
   const water = EC_GOODS_WATER.reduce((a, n) => a + ecGoodsStock(n), 0);
@@ -2643,7 +2654,10 @@ function ecIncomePreview() {
   const m = ecFactionMods();
   const dz = ecDebuffPct();
   const gw = ecGoodsInfo().welfare;   // обеспечение товарами (зеркало economy_accrue)
-  const gcMul = m.gc * (1 - dz) * gw * ecWellbeing().wb;   // доктрина × дестабилизация × обеспечение × ИНДЕКС БЛАГОПОЛУЧИЯ (v5)
+  // СВЕРКА 06.08: было `× ecWellbeing().wb` — клиентский индекс с идентичностью,
+  // домиком и штрафами за флот/гарнизон. Сервер применяет ТОЛЬКО _budget_gc_mult
+  // (массив по соцобеспечению); wb_ident/wb_hub/штрафы в тик не входят вовсе.
+  const gcMul = ecBldGcMul();   // доктрина × дестабилизация × соцобеспечение × обеспечение товарами
   return {
     gc: Math.round(gc * gcMul),
     science: Math.max(0, science + m.sci_flat),
@@ -2698,9 +2712,9 @@ function ecCaravanIncome() {
       riskRaw += gcRoute * (1 - pSafe);
     }
     outRaw += gcRoute;
-    routeGc[r.id] = Math.round(gcRoute * (m.gc || 1));   // × доктрина — как в «Обзоре»
+    routeGc[r.id] = Math.round(gcRoute * ecGcMul());   // × m_gc — как в «Обзоре» и в тике
   });
-  const gcM = m.gc || 1;
+  const gcM = ecGcMul();   // СВЕРКА 06.08: было `m.gc` — терялись дестабилизация и соцобеспечение
   const outGc = Math.round(outRaw * gcM);           // реально отгружаемое (поток × цена × дипломатия × доктрина)
   const contract = Math.round(contractRaw * gcM);   // «бумажный» максимум по контрактам
   const risk = Math.round(riskRaw * gcM);           // ожидаемые потери от пиратов
@@ -2721,34 +2735,63 @@ function ecCaravanIncome() {
 }
 // Множитель доктрины к ГС-потокам (доктрина × срез дестабилизации) — единый рычаг,
 // зеркало m_gc в economy_accrue. Используют market/export/preview, чтобы не расходились.
-function ecGcMul() { return (ecFactionMods().gc || 1) * (1 - ecDebuffPct()); }
+// СВЕРКА 06.08: серверный m_gc = доктрина × (1−дебафф) × _budget_gc_mult(social).
+// Соцобеспечение здесь РАНЬШЕ НЕ УЧИТЫВАЛОСЬ — караваны/биржа/экспорт в клиенте
+// считались без него, а сервер его применяет ко всем ГС-потокам.
+function ecGcMul() { return (ecFactionMods().gc || 1) * (1 - ecDebuffPct()) * ecBudgetGcMult(); }
+// Множитель дохода ПОСТРОЕК: сверх m_gc сервер домножает inc_gc на обеспечение
+// товарами (goods_welfare 0.90…1.10). На потоки (караваны/биржа/экспорт) — НЕ домножает.
+function ecBldGcMul() { return ecGcMul() * ecGoodsInfo().welfare; }
 // Ценность ресурса (анкер по имени, фолбэк по редкости) — клиентское зеркало _res_value.
 function ecResVal(name) { return (typeof resPrice === 'function') ? resPrice(name) : ecResPrice(ecResRarity(name)); }
 // Доход ХРАМОВ за сутки до доктрины: slots×150, лишь пока исповедуешь веру храма
 // (мультивера: faith_id ∈ мои; null=старый храм при любой вере). Зеркало economy_accrue v5
 // (_faith_multi.sql, ветка temple) — БЕЗ гейта по вере доход храма не идёт.
+// Доход ХРАМОВ за сутки до общих множителей. Зеркало ветки 'temple' в
+// economy_accrue (`_gc_income_truth.sql`, 06.08):
+//   слоты × доля паствы × ставка ВОЛНЫ × просперити системы,
+// гейт по исповедуемой вере (faith_id ∈ мои; null = старый храм при любой вере).
+// Ставка ВОЛНЫ живая — приходит с сервера в faith_status.temple_income (150…480),
+// плоских 150 больше нет.
+function ecTempleRate() { return +((EC.faith || {}).temple_income) || 150; }
+// Доля слотов, которые реально платят: min(1, население / зона вещания).
+// Зеркало `_faith_paid_frac` — храмы сверх охвата населения денег не приносят.
+function ecTemplePaidFrac() {
+  const slots = ecSlotsSum('temple');
+  if (slots <= 0) return 0;
+  const mon = Math.min(5, ((EC.faith && EC.faith.wave && +EC.faith.wave.monuments_n) || 0));
+  const reach = slots * 120 * (1 + 0.10 * mon);
+  const pop = Math.max(1, ecBudgetPop());
+  return reach > 0 ? Math.min(1, pop / reach) : 0;
+}
 function ecTempleIncome() {
   const faiths = (EC.faith && EC.faith.faiths) || [];
   const has = faiths.length > 0;
+  const rate = ecTempleRate(), frac = ecTemplePaidFrac();
   let gc = 0;
   (EC.buildings || []).forEach(b => {
     if (b.btype !== 'temple') return;
     const ok = b.faith_id ? faiths.some(f => f && f.id === b.faith_id) : has;
-    if (ok) gc += (b.slots_open || 0) * 150;
+    if (ok) gc += (b.slots_open || 0) * frac * rate * ecBuildingProsp(b);
   });
   return gc;
 }
 // Десятина основателю за сутки до доктрины: tithe_pct (≈20%) дохода храмов адептов
 // (кроме самого основателя). Зеркало _faith_multi.sql ВЕРА-2; данные из faith_status (EC.faith).
+// Десятина основателю: 20% дохода храмов адептов моих вер (надбавка — у адепта
+// НЕ вычитается). Зеркало ветки десятины в economy_accrue. Ставку адепта клиенту
+// не видно, поэтому берём свою — это оценка, сервер считает по ставке адепта.
 function ecTitheIncome() {
   const fs = EC.faith || {};
   if (fs.role !== 'founder') return 0;
   const slots = (fs.adepts || []).filter(a => a.role !== 'founder').reduce((s, a) => s + (+a.flock || 0), 0);
-  return slots * (+fs.temple_income || 150) * (+fs.tithe_pct || 0.20);
+  return slots * ecTempleRate() * (+fs.tithe_pct || 0.20);
 }
 // Доход моих тайных сект за сутки до доктрины: каждая активная секта = храм (+150 ГС).
 // Зеркало _faith_multi.sql ВЕРА-4. Счётчик из faith_status (если не отдаётся — 0).
-function ecSectIncome() { return (+((EC.faith || {}).active_sects) || 0) * 150; }
+// Тайные секты = скрытые храмы за рубежом, по моей ставке ВОЛНЫ (просперити нет —
+// чужая земля). Зеркало ветки сект в economy_accrue.
+function ecSectIncome() { return (+((EC.faith || {}).active_sects) || 0) * ecTempleRate(); }
 // Доля выручки по редкости при продаже на Товарной бирже — зеркало economy_accrue (market_gc).
 const EC_MARKET_FRAC = { legendary: 0.75, epic: 0.70, rare: 0.65, uncommon: 0.55, common: 0.50 };
 // ── Потоки ресурсов (вкладка «Потоки», зеркало _res_flows.sql) ──
@@ -2764,10 +2807,61 @@ function ecEffMode(b, resName) {
 function ecIsConceded(colonyId, resName) {
   return (EC.concessions || []).some(c => c.colony_id === colonyId && c.res_name === resName && c.from_fid === EC.fid);
 }
-// Дневной поток добычи в режиме СКЛАД (mine_mode=store) — то, что «Товарная биржа»
-// может сбыть. Зеркало res_add в economy_accrue. Биржа НЕ трогает накопленный склад
-// (иначе колонизация новой залежи разом сливала бы стратегический запас).
+// ══ ДОБЫЧА: числа берём У СЕРВЕРА, а не пересчитываем ═══════════════
+// resource_worker_plan() считает выход залежи ТЕМ ЖЕ выражением, что и тик
+// (ставка редкости × богатство × доктрина × домик, срез потолком залежи,
+// × покрытие рабочими). Клиентские зеркала EC_RES_RATE/EC_MINE_CAP описывают
+// формулу из консолидированного файла, которого в базе НЕТ, — считать по ним
+// значит снова разойтись с начислением. Поэтому потоки строим из плана.
+// Возвращает [{colony_id, res, rarity, rate}] или null, если план ещё не загружен.
+function ecPlanDeposits() {
+  const p = EC.workerPlan;
+  if (!p || !Array.isArray(p.systems)) return null;
+  const out = [];
+  p.systems.forEach(s => (s.deposits || []).forEach(dp => {
+    const rate = +dp.yield || 0;
+    if (rate > 0 && dp.res) out.push({ colony_id: dp.colony_id, res: dp.res, rarity: dp.rarity, rate });
+  }));
+  return out;
+}
+// Доля добычи колонии, уходящая на ЭКСПОРТ = доля слотов добывающих построек
+// в режиме «экспорт». Зеркало exp_share в economy_accrue. ⚠ Тик смотрит ТОЛЬКО
+// mine_mode постройки: настройки вкладки «Потоки» на это деление не влияют.
+function ecColonyExportShare(colonyId) {
+  let tot = 0, exp = 0;
+  (EC.buildings || []).forEach(b => {
+    if (b.colony_id !== colonyId || !ecIsMiner(b)) return;
+    const s = Math.max(1, +b.slots_open || 1);
+    tot += s;
+    if ((b.mine_mode || 'store') === 'export') exp += s;
+  });
+  return tot > 0 ? exp / tot : 0;
+}
+// Поток добычи за сутки по ресурсам, разложенный на склад/экспорт — как в тике.
+function ecMineFlows() {
+  const deps = ecPlanDeposits();
+  const store = {}, exp = {};
+  if (!deps) return null;
+  deps.forEach(d => {
+    if (ecIsConceded(d.colony_id, d.res)) return;   // залежь отдана в концессию
+    const share = ecColonyExportShare(d.colony_id);
+    const toExp = Math.round(d.rate * share);
+    const toStore = Math.max(0, d.rate - toExp);
+    if (toExp > 0) exp[d.res] = (exp[d.res] || 0) + toExp;
+    if (toStore > 0) store[d.res] = (store[d.res] || 0) + toStore;
+  });
+  return { store, exp };
+}
+// Дневной поток добычи в режиме СКЛАД — то, что «Товарная биржа» сбывает вместе
+// со складом. Зеркало res_add в economy_accrue.
 function ecStoreFlowEntries() {
+  const fl = ecMineFlows();
+  if (fl) return Object.entries(fl.store).filter(([, v]) => v > 0);
+  // план ещё не пришёл — тянем его и пока считаем по старому зеркалу
+  if (!EC.workerPlanLoading && !EC.workerPlanErr && typeof ecLoadWorkerPlan === 'function') ecLoadWorkerPlan();
+  return ecStoreFlowEntriesLegacy();
+}
+function ecStoreFlowEntriesLegacy() {
   const gross = {};
   (EC.buildings || []).filter(ecIsMiner).forEach(b => {
     ecMineYieldsCapped(b).forEach(y => {
@@ -2785,37 +2879,67 @@ function ecMarketCalc() {
   const left = {};
   const flowAll = ecStoreFlowEntries();
   if (cap <= 0) return { gc: 0, left: Object.fromEntries(flowAll) };
+  // ⚠ СВЕРКА 06.08: раньше биржа считалась ТОЛЬКО по свежему потоку и с учётом
+  // лимитов вкладки «Потоки» (market_limit / market_from_store). Живой
+  // economy_accrue устроен иначе: avail = НАКОПЛЕННЫЙ СКЛАД + добыча тика,
+  // порядок — строго по убыванию ценности, а про res_flows ветка биржи не знает
+  // вообще. Считаем как сервер, иначе «Казна» и начисление не сходятся.
+  const store = (EC.eco && EC.eco.resources) || {};
+  const avail = {};
+  Object.entries(store).forEach(([n, v]) => { if (+v > 0) avail[n] = +v; });
+  flowAll.forEach(([n, q]) => { avail[n] = (avail[n] || 0) + q; });
   let gc = 0;
-  const flow = flowAll.map(([n, q]) => [n, q, ecResRarity(n)]).sort((a, b) => ecResVal(b[0]) - ecResVal(a[0]));
-  for (const [n, q, rar] of flow) {
-    const f = ecFlowCfg(n);
-    const lim = (f && f.market_limit != null) ? +f.market_limit : null;   // ПОТОКИ: лимит биржи /сут
-    let sell = Math.min(q, Math.max(0, cap));
-    if (lim != null) sell = Math.min(sell, lim);
+  const rows = Object.entries(avail).map(([n, q]) => [n, q, ecResRarity(n)])
+    .sort((a, b) => ecResVal(b[0]) - ecResVal(a[0]));
+  for (const [n, q, rar] of rows) {
+    const sell = Math.min(q, Math.max(0, cap));
     if (sell > 0) { gc += sell * ecResVal(n) * (EC_MARKET_FRAC[rar] || 0.5); cap -= sell; }
     left[n] = q - sell;
   }
-  // ПОТОКИ: явный добор со склада (market_from_store ед./сут), в пределах остатка лимита биржи
-  const store = (EC.eco && EC.eco.resources) || {};
-  Object.values(EC.resFlows || {}).forEach(f => {
-    if (cap <= 0 || !f || !(+f.market_from_store > 0)) return;
-    const sell = Math.min(+f.market_from_store, +store[f.res_name] || 0, cap);
-    if (sell <= 0) return;
-    gc += sell * ecResVal(f.res_name) * (EC_MARKET_FRAC[ecResRarity(f.res_name)] || 0.5);
-    cap -= sell;
-  });
   return { gc: Math.round(gc * ecGcMul()), left };
 }
 function ecMarketIncome() { return ecMarketCalc().gc; }
 // Доход ЭКСПОРТА за сутки: свободный экспортный поток (export-заводы − занятое караванами)
 // × ценность × 0.6. ×доктрина. Зеркало economy_accrue (export_gc).
 function ecExportIncome() {
-  // РЕВОРК РЕСУРСОВ (_resource_rework.sql): канал «экспорт» ВЫРЕЗАН — добыча идёт
-  // рабочими целиком на склад, сбыт только через караваны/рынок/биржу. Прежняя
-  // реализация звала ecExtractEntries(), которая после складского реворка караванов
-  // стала возвращать ВЕСЬ склад (груз для караванов), а не поток export-заводов за тик —
-  // из-за чего «Экспорт добычи» рисовал весь запас ×0.6 (фантомные сотни тысяч ГС/сут).
-  return 0;
+  // СВЕРКА 06.08: жёсткий `return 0` был неверен — канал «экспорт» в живом
+  // economy_accrue ЖИВ: доля слотов добывающих построек в режиме 'export' идёт
+  // в mine_flow, караваны разбирают из него по контрактам, а ОСТАТОК продаётся
+  // как export_gc = остаток × _res_value × 0.6 × m_gc. В income_history он
+  // ненулевой, а «Казна» показывала прочерк.
+  // Считаем ровно этот остаток: экспортный поток минус то, что увезли караваны.
+  const left = ecExportFlowLeft();
+  let gc = 0;
+  Object.entries(left).forEach(([n, q]) => { if (q > 0) gc += q * ecResVal(n) * 0.6; });
+  return Math.round(gc * ecGcMul());
+}
+// Экспортный поток добычи за сутки по ресурсам (mine_mode/поток = 'export'),
+// уже за вычетом объёмов, разобранных активными караванами. Зеркало mine_flow
+// после цикла trade_routes в economy_accrue.
+function ecExportFlowLeft() {
+  const fl = ecMineFlows();
+  const flow = {};
+  if (fl) Object.assign(flow, fl.exp);
+  else (EC.buildings || []).filter(ecIsMiner).forEach(b => {
+    ecMineYieldsCapped(b).forEach(y => {
+      if ((b.mine_mode || 'store') !== 'export' || ecIsConceded(b.colony_id, y.name)) return;
+      flow[y.name] = (flow[y.name] || 0) + y.rate;
+    });
+  });
+  // караваны вычерпывают поток по контрактам (тот же порядок, что в тике)
+  const now = Date.now();
+  (EC.routes || []).filter(r => r.status === 'active' && r.a_fid === EC.fid).forEach(r => {
+    if (r.transit_until && new Date(r.transit_until).getTime() > now) return;
+    const items = (Array.isArray(r.cargo) && r.cargo.length)
+      ? r.cargo.map(ci => ({ res: ci.res, vol: +ci.vol || 0 }))
+      : [{ res: r.resource, vol: +r.volume || 0 }];
+    items.forEach(it => {
+      if (!it.res) return;
+      const take = Math.min(it.vol, flow[it.res] || 0);
+      if (take > 0) flow[it.res] -= take;
+    });
+  });
+  return flow;
 }
 // Расход на торговую политику за сутки (NPC-конвой) — зеркало policy_cost (НЕ ×доктрина).
 function ecPolicyCostDay() {
@@ -3130,20 +3254,23 @@ function ecGcIncome() {
   });
   factory = Math.round(factory * gcMul);
   trade   = Math.round(trade * gcMul);
+  // ВЕРА (06.08): храмы получают те же множители, что и прочие домики
+  // (× m_gc × обеспечение товарами); десятина и секты — только × m_gc.
   const temple = Math.round(ecTempleIncome() * gcMul);
-  const tithe  = Math.round(ecTitheIncome()  * gcMul);
-  const sects  = Math.round(ecSectIncome()   * gcMul);
+  const tithe  = Math.round(ecTitheIncome()  * ecGcMul());
+  const sects  = Math.round(ecSectIncome()   * ecGcMul());
   const cv = ecCaravanIncome();
   const market = ecMarketIncome();
   const exportGc = ecExportIncome();
   const policy = ecPolicyCostDay();
   const ex = ecExchangeIncome();
   const op = ecOutpostMineTotals();   // добывающие аванпосты: +ГС/сут (ленивый settle, вне основного тика)
-  // НАЧИСЛЯЕТ ТИК (зеркало economy_accrue → income_history): постройки + караваны + биржа + экспорт − политика.
+  // НАЧИСЛЯЕТ ТИК (зеркало economy_accrue → income_history): постройки + ВЕРА
+  // + караваны + биржа + экспорт − политика − бюджет.
   const budget = ecBudgetUpkeep();   // апкип бюджета державы (зеркало _budget_upkeep)
-  const net = factory + trade + cv.net + market + exportGc - policy - budget;
-  // НЕ входит в основной тик (вера/биржевые потоки/аванпосты — отдельный/ленивый settle, в income_history их нет).
-  const netExtra = temple + tithe + sects + ex.net + op.gc;
+  const net = factory + trade + temple + tithe + sects + cv.net + market + exportGc - policy - budget;
+  // НЕ входит в основной тик (биржевые потоки/аванпосты — отдельный/ленивый settle).
+  const netExtra = ex.net + op.gc;
   return { factory, trade, temple, tithe, sects, caravan: cv, market, export: exportGc, policy, budget, exchange: ex, outpost: op, net, netExtra };
 }
 // Регулярные ГС-потоки с БИРЖИ за ход — чтобы «Чистый доход» учитывал ВСЁ, а не
@@ -3242,6 +3369,22 @@ function ecDepRaw() {
 // Добыча шахты С УЧЁТОМ потолка залежи. Потолок общий на колонию, поэтому доля
 // каждой шахты режется пропорционально — ровно так же, как в economy_accrue.
 function ecMineYieldsCapped(b) {
+  // ПРИОРИТЕТ — план сервера (то же выражение, что в тике). Залежь общая на
+  // колонию, поэтому на карточке каждой шахты колонии показываем выход залежи:
+  // именно столько она и даёт, сколько бы шахт рядом ни стояло.
+  const deps = ecPlanDeposits();
+  if (deps) {
+    const mine = deps.filter(d => d.colony_id === b.colony_id);
+    if (mine.length) {
+      const byName = {};
+      (ecMineYields(b) || []).forEach(y => { byName[y.name] = y; });
+      return mine.map(d => Object.assign({}, byName[d.res] || {}, {
+        name: d.res, r: d.rarity, rate: d.rate,
+        icon: (byName[d.res] && byName[d.res].icon) || '◈',
+        amt: (byName[d.res] && byName[d.res].amt) || 0,
+      }));
+    }
+  }
   const raw = ecDepRaw();
   return ecMineYields(b).map(y => {
     const cur = raw.get(b.colony_id + ' ' + y.name);
@@ -4617,10 +4760,11 @@ function ecTabOverview() {
   if (g.export) moneyInc.push({ ic: '📤', name: 'Экспорт добычи', sub: 'поток export-заводов', gc: g.export, tab: 'trade' });
   if (g.policy) moneyInc.push({ ic: '📜', name: 'Торговая политика', sub: 'апкип NPC-конвоя', gc: -g.policy, tab: 'trade' });
   if (g.budget) moneyInc.push({ ic: '🏛', name: 'Бюджет державы', sub: 'финансирование отраслей × население', gc: -g.budget, tab: 'welfare' });
+  // ВЕРА (06.08): начисляется тиком наравне с фабриками — в основном блоке.
+  if (g.temple) moneyInc.push({ ic: '🛐', name: 'Храмы веры', sub: `${ecNum(tmplSlots)} слот. × ${ecNum(Math.round(ecTempleRate()))}${ecTemplePaidFrac() < 0.995 ? ` · платит ${Math.round(ecTemplePaidFrac() * 100)}% слотов (паства не резиновая)` : ''}`, gc: g.temple, tab: 'faith' });
+  if (g.tithe)  moneyInc.push({ ic: '🤝', name: 'Десятина с адептов', sub: 'доля дохода храмов ваших адептов', gc: g.tithe, tab: 'faith' });
+  if (g.sects)  moneyInc.push({ ic: '🕯', name: 'Тайные секты', sub: 'covert-храмы за рубежом', gc: g.sects, tab: 'faith' });
   // ── НЕ входит в тик (информативно, не суммируется в «Чистый доход») ──
-  if (g.temple) extraInc.push({ ic: '🛐', name: 'Храмы веры', sub: `${ecNum(tmplSlots)} слот. × 150`, gc: g.temple, tab: 'faith' });
-  if (g.tithe)  extraInc.push({ ic: '🤝', name: 'Десятина с адептов', sub: 'доля дохода чужих храмов', gc: g.tithe, tab: 'faith' });
-  if (g.sects)  extraInc.push({ ic: '🕯', name: 'Тайные секты', sub: 'covert-храмы за рубежом', gc: g.sects, tab: 'faith' });
   // Биржа: регулярные потоки (облигации/дивиденды/синергия) — отдельный settle вне основного тика.
   const _ex = g.exchange;
   if (_ex.bonds)   extraInc.push({ ic: '🏦', name: 'Облигации · купоны', sub: _ex.bondOut ? `${ecNum(_ex.bondIn)} держателю − ${ecNum(_ex.bondOut)} выплаты эмитента` : 'купон по моим вложениям', gc: _ex.bonds, tab: 'exchange' });
@@ -4713,13 +4857,13 @@ function ecTabOverview() {
   const detRows = [];
   if (facSlots) detRows.push(fxRow('🏭', 'Гражданские фабрики', `${ecNum(facSlots)} слот × 200${gcMulPct ? ` × ${gcMul.toFixed(2)} (доктрина ${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''}`, g.factory));
   if (trSlots) detRows.push(fxRow('💱', 'Торговые хабы', `${ecNum(trSlots)} слот × 100${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''}`, g.trade));
-  if (g.temple) detRows.push(fxRow('🛐', 'Храмы веры', `${ecNum(tmplSlots)} слот × 150${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''} (пока исповедуешь веру храма)`, g.temple));
-  if (g.tithe)  detRows.push(fxRow('🤝', 'Десятина с адептов', `доля дохода храмов адептов вашей веры${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''}`, g.tithe));
-  if (g.sects)  detRows.push(fxRow('🕯', 'Тайные секты', `активные covert-храмы × 150${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''}`, g.sects));
+  if (g.temple) detRows.push(fxRow('🛐', 'Храмы веры', `${ecNum(tmplSlots)} слот × ${ecNum(Math.round(ecTempleRate()))} (ставка растёт от охвата, памятников и сети адептов) × доля паствы ${ecTemplePaidFrac().toFixed(2)} × благополучие системы${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''} — пока исповедуешь веру храма`, g.temple));
+  if (g.tithe)  detRows.push(fxRow('🤝', 'Десятина с адептов', `20% дохода храмов ваших адептов — надбавка, у адепта не вычитается (оценка: сервер считает по ЕГО ставке)`, g.tithe));
+  if (g.sects)  detRows.push(fxRow('🕯', 'Тайные секты', `активные covert-храмы × ${ecNum(Math.round(ecTempleRate()))}${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''}`, g.sects));
   if (_out.length) detRows.push(fxRow('🚚', 'Караваны · продажа', `${_out.length} путь(ей): мин(объём, поток export-добычи) × цена × дипломатия (±20%)${gcMulPct ? ` × доктрина` : ''}`, _outGc));
   if (_cv.risk) detRows.push(fxRow('🏴', 'Пиратские угрозы', `рейсы под угрозой срываются с шансом 40–80% (конвой снижает риск)`, -_cv.risk));
   if (_in.length) detRows.push(fxRow('📦', 'Доля с поставок', `${_in.length} путь(ей): ${Math.round(EC_DEST_CUT * 100)}% × дипломатия партнёра · верхняя оценка (ограничена его добычей)`, _inGc));
-  if (g.export) detRows.push(fxRow('📤', 'Экспорт добычи', `свободный поток export-заводов × ценность × 0.6`, g.export));
+  if (g.export) detRows.push(fxRow('📤', 'Экспорт добычи', `остаток export-потока после караванов × ценность × 0.6${gcMulPct ? ` × ${gcMul.toFixed(2)}` : ''}`, g.export));
   if (g.policy) detRows.push(fxRow('📜', 'Торговая политика', `апкип NPC-конвоя (защита караванов)`, -g.policy));
   if (g.budget) detRows.push(fxRow('🏛', 'Бюджет державы', `${ecNum(ecBudgetPop())} нас. × ставки отраслей (вкладка «Благополучие»)`, -g.budget));
   if (_ex.bonds)   detRows.push(fxRow('🏦', 'Облигации · купоны', `купоны по вложениям ${ecNum(_ex.bondIn)} − выплаты как эмитент ${ecNum(_ex.bondOut)}`, _ex.bonds));
@@ -4734,10 +4878,9 @@ function ecTabOverview() {
       ${_cv.short ? `<div class="ec-bdg-dt-warn">🚚 Караваны недогружены: контракты обещают ≈ +${ecNum(_cv.contract)} ГС/сут, но export-поток добычи покрывает лишь +${ecNum(_outGc)} — не хватает ${ecNum(_cv.short)} ед. сырья/сут. Переведите добывающие заводы в режим «экспорт», расширьте добычу нужных ресурсов или урежьте объёмы маршрутов.</div>` : ''}
       ${_cv.transitN ? `<div class="ec-bdg-dt-warn">🚀 ${_cv.transitN} караван(ов) ещё в пути — их доход начнётся после прибытия и в сумму выше не входит.</div>` : ''}
       ${_resOutTotal ? `<div class="ec-bdg-dt-warn">📤 Вывоз ресурсов караванами: −${ecNum(_resOutTotal)} ед/сут (${_resOutTxt}) — это расход сырья, не денег.</div>` : ''}
-      ${_povDrag ? `<div class="ec-bdg-dt-warn">💸 Бедность съедает ≈ −${ecNum(_povDrag)} ГС/сут: фабрики и хабы в небогатых системах режутся просперити (уже учтено в строках «Фабрики»/«Хабы»). Поднимайте благополучие во вкладке «Благополучие».</div>` : ''}
       ${inc.debuff ? `<div class="ec-bdg-dt-warn">🔥 Дестабилизация режет денежный доход на ${Math.round(inc.debuff * 100)}% — уже учтено в суммах.</div>` : ''}
-      <div class="ec-ovx-hint">Доход начисляется в конце каждого хода (тика). Доктрина даёт ×${gcMul.toFixed(2)} к ГС-потокам${gcMulPct ? ` (${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''} (к доходу биржи не применяется). Содержания армии/зданий нет — постройка тратит ГС разово.</div>
-      <div class="ec-ovx-hint">📊 «Чистый доход» = ровно те статьи, что начисляет тик сервера (зеркало income_history): фабрики+хабы, караваны, Товарная биржа (оценка по складу), экспорт добычи, − торговая политика. Вера (храмы/десятина/секты), биржевые купоны/дивиденды/синергия и аванпосты считаются ОТДЕЛЬНО от основного тика и показаны в блоке «Вне начисления тика» — в «Чистый доход» они не входят. Спекуляции (маржа/фьючерсы/опционы) переменны и в «/сут» не входят. 🏆 Награды за достижения — разовые, показаны отдельной строкой. 🏛 Законы Межзвёздной Ассамблеи и 🖋 итоги «Поэмы недели» — разовые выплаты/поборы по всей галактике: они падают в казну напрямую; их история — в блоке «🌌 Галактические эффекты» этой панели.</div>
+      <div class="ec-ovx-hint">Доход начисляется в конце каждого хода (тика). Общий множитель ГС-потоков ×${gcMul.toFixed(2)}${gcMulPct ? ` (${gcMulPct > 0 ? '+' : ''}${gcMulPct}%)` : ''} = доктрина × дестабилизация × соцобеспечение × обеспечение товарами (к доходу биржи не применяется). Доход фабрик, хабов и храмов дополнительно множится на благополучие своей системы. Содержания армии/зданий нет — постройка тратит ГС разово.</div>
+      <div class="ec-ovx-hint">📊 «Чистый доход» = ровно те статьи, что начисляет тик сервера (зеркало income_history): фабрики+хабы, караваны, Товарная биржа (склад + добыча тика по убыванию ценности), экспорт добычи, − торговая политика, − бюджет державы. вера (храмы по ставке «волны», десятина основателю, тайные секты). Биржевые купоны/дивиденды/синергия и аванпосты считаются ОТДЕЛЬНО от основного тика и показаны в блоке «Вне начисления тика» — в «Чистый доход» они не входят. Спекуляции (маржа/фьючерсы/опционы) переменны и в «/сут» не входят. 🏆 Награды за достижения — разовые, показаны отдельной строкой. 🏛 Законы Межзвёздной Ассамблеи и 🖋 итоги «Поэмы недели» — разовые выплаты/поборы по всей галактике: они падают в казну напрямую; их история — в блоке «🌌 Галактические эффекты» этой панели.</div>
     </div>`;
   const budget = `<div class="ec-ovx-panel ec-bdg-panel">
     <div class="ec-ovx-panel-t">💰 Казна <span class="ec-ovx-panel-sub">доходы и расходы за сутки</span></div>
@@ -5166,8 +5309,8 @@ function ecColonyRowHtml(colony, sys) {
   const open = EC.openColony === colony.id;
   const blds = EC.buildings.filter(b => b.colony_id === colony.id);
   const used = blds.length, cap = colony.cells || EC_DEFAULT_CELLS;
-  // ГС-доход построек × доктрина (+дебафф) — как в шапке/Казне; наука — плоский поток.
-  const incGc = Math.round(blds.reduce((a, b) => a + (ecBuildingIncome(b).gc || 0), 0) * ecGcMul());
+  // ГС-доход построек × множитель построек (доктрина/дебафф/соц/товары) — как в шапке/Казне.
+  const incGc = Math.round(blds.reduce((a, b) => a + (ecBuildingIncome(b).gc || 0), 0) * ecBldGcMul());
   const incSci = blds.reduce((a, b) => a + (ecBuildingIncome(b).science || 0), 0);
   const incTxt = [incGc ? `+${ecNum(incGc)} ГС` : '', incSci ? `+${ecNum(incSci)} ОН` : ''].filter(Boolean).join(' ');
   // ресурсы: ИСТИНА — снимок самой колонии (его использует сервер для добычи).

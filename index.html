@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  © 2025–2026 Setis241 (setisalanstrong@gmail.com). Все права защищены.
+  © 2025–2026. Все права защищены.
   Проприетарное ПО. Использование, копирование, изменение и распространение
   без письменного разрешения правообладателя запрещены. См. файл LICENSE.
 -->
@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260806poolfind';
+  var BUILD = '20260807hullgate';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -60,7 +60,7 @@
      никогда не грузился — у кого Inter стоял локально (часто старый, без курсива),
      браузер синтезировал «косой» faux-italic в цитатах, у остальных шёл Exo 2. -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:ital,wght@0,200;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400&family=Orbitron:wght@400;500;700;900&family=Audiowide&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/index.css?v=20260805deckzoom">
+<link rel="stylesheet" href="css/index.css?v=20260806censor3">
 </head>
 <body>
 <!-- Экран загрузки после входа по почте. Рисуется ДО первого кадра приложения
@@ -163,7 +163,7 @@
           <a href="#" onclick="openLegal('privacy');return false">Политика конфиденциальности</a>
           <a href="#" onclick="openLegal('terms');return false">Пользовательское соглашение</a>
         </div>
-        <div class="footer-copy">Проект ведёт purpleglock · Код © 2025–2026 Setis241. Все права защищены.</div>
+        <div class="footer-copy">Проект ведёт purpleglock · Код © 2025–2026. Все права защищены.</div>
       </div>
     </div>
   </footer>
@@ -222,7 +222,8 @@
       </div>
       <div class="cmp-pages-list" id="contrib-mo-pages"></div>
     </div>
-  </div>
+  <div class="cens-layer"><i></i><i></i><i></i></div>
+</div>
 </div>
 <div class="ov" id="mo-profile">
   <div class="mo mo-sm"><div class="mo-corner"></div>

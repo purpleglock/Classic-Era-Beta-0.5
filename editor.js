@@ -1,4 +1,4 @@
-// © 2025–2026 Setis241 (setisalanstrong@gmail.com). Все права защищены.
+// © 2025–2026. Все права защищены.
 // Проприетарное ПО. Использование, копирование, изменение и распространение
 // без письменного разрешения правообладателя запрещены. См. файл LICENSE.
 // ════════════════════════════════════════════════════════════
@@ -1982,6 +1982,8 @@ async function openContribModal(key, displayName, avUrl, hue, cnt) {
   }
 
   const mo = document.getElementById('mo-contrib'); if (!mo) return;
+  // личная анимация «зацензурено» — только на своём профиле
+  mo.querySelector('.mo-contrib-panel')?.classList.toggle('cmp-censored', !!isMe);
   document.getElementById('contrib-mo-av').innerHTML = avHtml; document.getElementById('contrib-mo-av').style.cssText = `background:hsl(${hue},35%,18%);border:2px solid hsl(${hue},45%,30%)`;
   document.getElementById('contrib-mo-name').textContent = displayName;
 

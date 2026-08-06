@@ -15,7 +15,7 @@ const DIST = path.join(ROOT, 'dist');
 const COPY_DIRS  = ['css', 'assets', 'legal'];
 const COPY_FILES = ['index.html', 'LICENSE'];
 
-const BANNER = '/*! (c) Setis241. Proprietary. All rights reserved. Unauthorized copying prohibited. */';
+const BANNER = '/*! (c) 2025-2026. Proprietary. All rights reserved. Unauthorized copying prohibited. */';
 
 const TERSER_OPTS = {
   compress: { passes: 2 },

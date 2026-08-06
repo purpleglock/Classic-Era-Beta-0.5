@@ -1,4 +1,4 @@
--- © 2025–2026 Setis241 (setisalanstrong@gmail.com). Все права защищены.
+-- © 2025–2026. Все права защищены.
 -- ФИКС: «cannot pass more than 100 arguments to a function».
 -- Паспорт борта в battle_state дорос до 51 ключа = 102 аргумента, а у
 -- jsonb_build_object предел ровно 100. Бой переставал открываться совсем.

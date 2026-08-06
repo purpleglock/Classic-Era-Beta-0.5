@@ -554,3 +554,104 @@
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* ============================================================
+   ЛИЧНАЯ ЦЕНЗУРА — своя карточка автора и своя панель профиля
+   .contrib-censored / .cmp-censored
+   Правила: рамка и углы карточки НЕ трогаются — цензура живёт
+   внутри них. Никакого цвета, никаких надписей, никакого
+   рассекречивания. Только графит, редактурные бруски и тихое
+   дыхание сетки.
+   ============================================================ */
+
+.contrib-censored, .cmp-censored { position: relative; isolation: isolate; }
+
+/* содержимое уходит в нечитаемое размытие */
+.contrib-censored > *:not(.cens-layer) {
+  filter: blur(8px) grayscale(.35) contrast(.75);
+}
+.cmp-censored > *:not(.cens-layer):not(.cmp-close) {
+  filter: blur(10px) grayscale(.35) contrast(.75);
+}
+.contrib-censored .contrib-name,
+.contrib-censored .contrib-cnt,
+.contrib-censored .contrib-rank-num,
+.cmp-censored .contrib-mo-name,
+.cmp-censored .contrib-mo-email,
+.cmp-censored .cmp-label,
+.cmp-censored .cmp-stat-val,
+.cmp-censored .cmp-stat-key,
+.cmp-censored .cmp-pages-list,
+.cmp-censored .cmp-right-title,
+.cmp-censored .cmp-edit-btn { color: transparent !important; text-shadow: none !important; }
+
+/* --- слой цензуры: строго ВНУТРИ рамки, углы карточки целы --- */
+.cens-layer { display: none; }
+.contrib-censored > .cens-layer,
+.cmp-censored > .cens-layer {
+  display: block;
+  position: absolute;
+  inset: 7px;
+  z-index: 60;
+  pointer-events: none;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.05), 0 0 14px rgba(0,0,0,.55);
+}
+.cmp-censored > .cens-layer { inset: 12px; }
+.cens-layer > i { position: absolute; inset: 0; display: block; }
+
+/* 1. графитовая мозаика — медленно дышит, без цвета */
+.cens-layer > i:nth-child(1) {
+  background:
+    repeating-linear-gradient(90deg, #0a0e13 0 7px, #161d26 7px 14px),
+    repeating-linear-gradient(0deg,  rgba(9,12,17,.55) 0 7px, rgba(31,40,51,.55) 7px 14px);
+  background-size: 14px 14px, 14px 14px;
+  animation: censGrid 4.8s steps(3, end) infinite;
+}
+@keyframes censGrid {
+  0%   { background-position: 0 0, 0 0; }
+  33%  { background-position: 4px 0, 0 4px; }
+  66%  { background-position: 0 7px, 7px 0; }
+  100% { background-position: 0 0, 0 0; }
+}
+
+/* 2. бруски редактуры — как замазанные строки документа */
+.cens-layer > i:nth-child(2) {
+  background:
+    linear-gradient(#04060a, #04060a),
+    linear-gradient(#04060a, #04060a),
+    linear-gradient(#04060a, #04060a),
+    linear-gradient(#04060a, #04060a),
+    linear-gradient(#04060a, #04060a);
+  background-repeat: no-repeat;
+  background-size: 74% 10%, 52% 7%, 90% 12%, 43% 7%, 63% 9%;
+  background-position: 5% 13%, 24% 33%, 3% 53%, 40% 69%, 11% 85%;
+  animation: censBars 11s steps(1, end) infinite;
+}
+@keyframes censBars {
+  0%,32%   { background-position: 5% 13%, 24% 33%, 3% 53%, 40% 69%, 11% 85%; }
+  34%,64%  { background-position: 9% 13%, 18% 34%, 3% 52%, 33% 69%, 16% 85%; }
+  66%,98%  { background-position: 4% 14%, 27% 33%, 6% 53%, 44% 68%, 8% 85%; }
+  100%     { background-position: 5% 13%, 24% 33%, 3% 53%, 40% 69%, 11% 85%; }
+}
+
+/* 3. тихая развёртка: строчки + медленная волна света, цвета нет */
+.cens-layer > i:nth-child(3) {
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, transparent 0%, rgba(255,255,255,.07) 48%, transparent 100%);
+  background-size: 100% 3px, 100% 55%;
+  background-repeat: repeat, no-repeat;
+  animation: censWave 7s linear infinite;
+}
+@keyframes censWave {
+  0%   { background-position: 0 0, 0 -70%; }
+  100% { background-position: 0 0, 0 170%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cens-layer > i { animation: none !important; }
+}
+
+/* кнопка закрытия панели остаётся резкой и кликабельной */
+.cmp-censored .cmp-close { z-index: 70; pointer-events: auto; }

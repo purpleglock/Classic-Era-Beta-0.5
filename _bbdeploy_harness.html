@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!-- Гарнесс ЭКРАНА РАССТАНОВКИ: мок battle_state в статусе forming с большим
+     резервом (как в бою с ботами — весь парк) и активным снаряжением.
+     Проверяет поиск по резерву и вёрстку ленты. Открыть /_bbdeploy_harness.html -->
+<html lang="ru"><head><meta charset="utf-8"><title>BB deploy harness</title>
+<link rel="stylesheet" href="css/index.css">
+<style>body{background:#04060b;margin:0}</style>
+</head><body>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function jsq(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function toast(m){console.log('[toast]',m);}
+var EC = { designs: [] };
+
+// резерв: 24 борта, часть — с активными модулями (как гладиаторы клуба)
+const NAMES = [
+  ['Гладиатор «Мурмиллон»','mediumCruiser',[{k:'hard',cd:3,val:0.5},{k:'aboost',cd:4,rng:3,val:0.35}]],
+  ['Гладиатор «Ноксий»','corvette',[{k:'nuke',cd:5,dmg:14000,rng:14},{k:'reboot',cd:4,val:2}]],
+  ['Гладиатор «Крупеллярий»','mediumCruiser',[{k:'siege',cd:0}]],
+  ['Гладиатор «Гопломах»','destroyer',[{k:'torpedo',cd:4,dmg:9000,rng:8},{k:'storm',cd:3,dmg:5600,rng:5}]],
+  ['Гладиатор «Эсседарий»','destroyer',[{k:'tractor',cd:3,rng:6,val:2},{k:'stasis',cd:3,rng:2},{k:'blink',cd:3,rng:5}]],
+  ['Гладиатор «Ланиста»','mediumCruiser',[{k:'pboost',cd:4,rng:3,val:0.5},{k:'drones',cd:3,rng:6,val:2500}]],
+  ['Гладиатор «Велит»','corvette',[]],
+  ['Носитель «Лорелея»','supportCarrier',[{k:'drones',cd:3,rng:6,val:2500}]],
+];
+const pool = [];
+for (let i = 0; i < 24; i++) {
+  const [nm, cls, acts] = NAMES[i % NAMES.length];
+  pool.push({ unit_id:'u'+i, unit_name: i < NAMES.length ? nm : nm + ' ' + (1 + (i / NAMES.length | 0)),
+    cls, free:99, cost: 13885 + i * 9000, hp: 1575 + i * 400, dmg: 200 + i * 130,
+    speed: 3 + (i % 8), rng: 3 + (i % 5) * 6, shield: i % 3 ? 100 : 0, armor: 10,
+    sensor: 2, stealth: i % 4 ? 0 : 3, crew: 40, cargo: 0, pd: i % 5 ? 0 : 0.35,
+    jam: 0, dejam: 0, eccm: 0, wings: 0, acts,
+    wpn: [{ k:'missile', dmg: 200 + i * 130, rng: 3 + (i % 5) * 6, shots: 2, opt: 1, far: 1, dmin: 2 }] });
+}
+
+const MOCK = {
+  id:'b1', status:'forming', kind:'meeting', system_id:'asu', system_name:'Асу',
+  w:48, h:28, cap:50, zone:4, acts_max:6, acts_left:6, my_side:'attacker', my_fid:'me',
+  attacker:'me', attacker_name:'Микустан', defender:'bot', defender_name:'Боты',
+  side_to_move:'attacker', my_turn:false, turn_no:0,
+  att_turns_left:6, def_turns_left:6, att_ready:false, def_ready:true,
+  deadline_at:null, can_force:false, winner:null, duel_budget:0,
+  log:[{m:'🤖 Тестовый бой с ботами.'}],
+  shape:{k:'rect',w:48,h:28},
+  spawn:{att:{x:4,y:14,r:5},def:{x:43,y:14,r:5}},
+  terrain:{'20:10':'ast','21:11':'ast','24:14':'neb'},
+  pool, units:[],
+};
+async function ecRpc(fn, body){ if(fn==='battle_state') return MOCK; console.log('[rpc]',fn,body); return {}; }
+</script>
+<script src="constructors.js"></script>
+<script src="battle_board.js"></script>
+<script>bbOpen('b1');</script>
+</body></html>
