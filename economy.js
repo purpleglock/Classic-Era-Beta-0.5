@@ -2492,13 +2492,11 @@ function ecGoodsInfo() {
     const made = Math.min(demand, EC_GOODS.out * slots * ratio);
     const cov = demand <= 0 ? 1 : Math.min(1, made / demand);
     const gBonus = Math.min(EC_GOODS_QMAX, Math.max(0, rec.qAvg - 1)) * rec.diversity;
-    // ⚠ СВЕРКА 06.08: живой economy_accrue считает благополучие СТРОГО как
-    // least(1.10, greatest(0.90, 0.90 + 0.20*cov)) — никакого бонуса за качество
-    // рецепта в тике нет. Раньше клиент прибавлял gBonus и обещал множитель выше
-    // потолка сервера. Показываем серверную величину; gBonus отдаём отдельным
-    // полем, чтобы UI рецепта мог объяснить, что бонус пока не начисляется.
-    const welfare = Math.round(Math.min(1.10, Math.max(0.90, 0.90 + 0.20 * cov)) * 1000) / 1000;
-    return { slots, water: 0, mat: 0, waterNeed: 0, matNeed: 0, ratio, made, pop, demand, cov, welfare, recipe: rec, gBonus, cap: 1.10, lacksText: lacks.join(' и ') };
+    // СВЕРКА 07.08: живой economy_accrue теперь ест рецепт и прибавляет бонус
+    // качества сверх 1.10 (потолок 1.25) — зеркалим формулу тика один-в-один.
+    const welfare = Math.round(Math.min(EC_GOODS_WCAP + gBonus,
+      Math.max(0.90, 0.90 + 0.20 * cov + cov * gBonus)) * 1000) / 1000;
+    return { slots, water: 0, mat: 0, waterNeed: 0, matNeed: 0, ratio, made, pop, demand, cov, welfare, recipe: rec, gBonus, cap: EC_GOODS_WCAP + gBonus, lacksText: lacks.join(' и ') };
   }
   // ЛЕГАСИ: вода (Лёд/Жидкая вода) 0.6 + сырьё (Железо/Силикаты) 0.4 на товар.
   const water = EC_GOODS_WATER.reduce((a, n) => a + ecGoodsStock(n), 0);
