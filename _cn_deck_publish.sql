@@ -40,6 +40,8 @@ declare
   v_amult numeric;   -- сила рецепта сплава относительно эталона
   v_abill numeric;   -- масштаб ведомости рецепта под класс
   hasType bool; hasReactor bool; hasEnergy bool; hasHangars bool;
+  -- wgs — плоская цена своих орудий (оружейная верфь), поверх цены из сырья
+  wgs numeric := 0;
   cost numeric := 0; econs numeric := 0; emax numeric := 0; on_ numeric; modon numeric;
   dmg numeric := 0; hp numeric; armor numeric; shield numeric; speed numeric; cargo numeric := 0;
   rng numeric := 0;   -- дальность огня в «квадратах» = max dalnost орудий (KV customParameter)
@@ -214,9 +216,11 @@ begin
   -- оружие
   for w in select * from jsonb_array_elements(coalesce(p_data->'weapons','[]'::jsonb)) loop
     q := greatest(0, coalesce((w->>'q')::int,1));
-    wob := db->'weapons'->(w->>'g')->coalesce((w->>'idx')::int,-1);
-    if wob is null then raise exception 'bad weapon'; end if;
+    -- ⚠ орудия оружейной верфи ({turretId}) в каталоге Кваквантора не лежат —
+    -- резолв только через _cn_wpn_obj, иначе свой ствол = 'bad weapon'
+    wob := public._cn_wpn_obj(db, k, w);
     kvres := public._cn_res_add(kvres, wob, q); on_ := on_ + q * modon;
+    wgs := wgs + coalesce((wob->>'_gs')::numeric, 0) * q;
     wdmg := (wob->>'dmg')::numeric; dmg := dmg + wdmg * q;
     rng := greatest(rng, coalesce((wob->>'dalnost')::numeric, 0));
     if hasEnergy then econs := econs + coalesce((wob->>'energy')::numeric,0) * q; end if;
@@ -306,7 +310,7 @@ begin
     radar_eccm := coalesce((radarObj->'customParameterradar'->>'eccm')::int,0);
   end if;
   for w in select * from jsonb_array_elements(coalesce(p_data->'weapons','[]'::jsonb)) loop
-    wob := db->'weapons'->(w->>'g')->coalesce((w->>'idx')::int,-1);
+    wob := public._cn_wpn_obj(db, k, w);
     if wob is not null then crew := crew + coalesce((wob->>'crewRequired')::numeric,0) * greatest(0,coalesce((w->>'q')::int,1)); end if;
   end loop;
   for m in select * from jsonb_array_elements(mlist) loop
@@ -387,7 +391,7 @@ begin
   end if;
 
   -- Итоговая цена ГС из конструкционных решений (зеркало cnKvCost).
-  cost := public._cn_kv_cost(kvres, k) + coalesce((pload->>'gs')::numeric,0);
+  cost := public._cn_kv_cost(kvres, k) + coalesce((pload->>'gs')::numeric,0) + wgs;
 
   return jsonb_build_object(
     'cost', cost, 'on', round(on_,1), 'hp', hp, 'armor', armor, 'shield', shield,

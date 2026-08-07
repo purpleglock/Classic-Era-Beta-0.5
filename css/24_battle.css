@@ -605,6 +605,26 @@
 .bbf-sel-hp i { display: block; height: 100%; background: var(--bbc); }
 .bbf-sel-s { grid-column: 1 / -1; color: #6f8998; font-size: 10.5px; font-family: var(--font-mono, monospace); }
 
+/* Телефон: полоска борта съедала четверть экрана — четыре строки над доской.
+   Режем до двух: имя + шкала хода, тонкая полоска корпуса между ними.
+   Цифры «hp/max · до N гекс» уходят в шторку ТТХ — она в одном тапе, а на
+   доске важнее видеть сам бой. */
+@media (max-width: 640px) {
+  .bbf-sel {
+    left: 6px; right: 6px; bottom: calc(var(--bbcmd, 68px) + 6px);
+    gap: 2px 8px; padding: 5px 8px;
+  }
+  .bbf-sel-n { font-size: 12px; }
+  .bbf-sel-more { font-size: 9.5px; }
+  .bbf-sel-s { display: none; }
+  .bbf-sel-hp { height: 2px; }
+  .bbf-sel .bbtp { gap: 4px; }
+  .bbf-sel .bbtp-p-row { gap: 1.5px; }
+  .bbf-sel .bbtp-p-row i { width: 8px; height: 7px; }
+  .bbf-sel .bbtp-n { font-size: 10.5px; }
+  .bbf-sel .bbst { font-size: 10px; padding: 1px 5px; }
+}
+
 /* шторка: журнал / подкрепление / ТТХ */
 .bbf-sheet {
   position: absolute; left: 0; right: 0; bottom: var(--bbcmd, 60px); z-index: 7;
