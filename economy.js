@@ -2130,11 +2130,15 @@ async function _ecLoadCoreImpl() {
   EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, tnp: 0, last_tick: null };
   EC.colonies = cols || [];
   // Индекс занятости: 'sysId|pid' и 'sysId|имя' (легаси-колонии без pid) → fid владельца.
+  // ⚠️ Имя — ОТДЕЛЬНЫЙ индекс, а не тот же словарь: в системе бывают ДВА тела с
+  // одинаковым именем («Ледяной гигант» ×2). Общий ключ по имени вешал ярлык
+  // «занято» на второе, свободное тело — своей же колонией с соседнего pid.
   EC.colTaken = {};
+  EC.colTakenName = {};
   (Array.isArray(allCols) ? allCols : []).forEach(c => {
     if (!c || !c.system_id) return;
     if (c.planet_pid != null) EC.colTaken[c.system_id + '|' + c.planet_pid] = c.faction_id;
-    if (c.planet_name) EC.colTaken[c.system_id + '|' + c.planet_name] = c.faction_id;
+    if (c.planet_name) EC.colTakenName[c.system_id + '|' + c.planet_name] = c.faction_id;
   });
   EC.buildings = blds || [];
   // Свои системы выводим из общего списка allSys (он уже содержит faction/planets) — без второго запроса к map_systems.
@@ -5333,15 +5337,20 @@ function ecColonyRowHtml(colony, sys) {
 }
 // Кто занял планету (fid) или null. Ключ — pid, имя только для легаси-колоний без pid.
 function ecPlanetTakenBy(sysId, p) {
-  const t = EC.colTaken || {};
-  if (p && p.pid != null && t[sysId + '|' + p.pid]) return t[sysId + '|' + p.pid];
-  if (p && p.name && t[sysId + '|' + p.name]) return t[sysId + '|' + p.name];
+  const t = EC.colTaken || {}, tn = EC.colTakenName || {};
+  if (p && p.pid != null) return t[sysId + '|' + p.pid] || null;
+  // Имя — фолбэк ТОЛЬКО для тел без pid (легаси-карта): иначе тёзка чужого/своего
+  // мира отмечалась бы занятой.
+  if (p && p.name && tn[sysId + '|' + p.name]) return tn[sysId + '|' + p.name];
   return null;
 }
 // Строка ЧУЖОЙ (или невидимой мне) колонии — без кнопок, чтобы не бить в сервер зря
 function ecTakenRowHtml(s, p, ownerFid, sysOwned) {
   const star = ecStarLabel(s, p);
-  const tag = sysOwned ? 'чужая система' : 'занято';
+  // Владелец может оказаться СВОЕЙ же державой (колония вне списка EC.colonies:
+  // уния, другой тег фракции) — не выдавать её за чужую.
+  const mine = String(ownerFid) === String(EC.fid);
+  const tag = mine ? 'ваша колония' : (sysOwned ? 'чужая система' : 'занято');
   return `<div class="ec-pl ec-pl-free ec-pl-taken">
     <div class="ec-pl-top">
       <div class="ec-pl-l"><span class="ec-pl-ic">⛔</span><div class="ec-pl-txt"><div class="ec-pl-nm">${esc(p.name)}${star ? ` <span class="ec-pl-star">${esc(star)}</span>` : ''}</div><div class="ec-pl-sb"><span class="ec-cz-no">${tag}</span> · ${esc(ecFacName(ownerFid))} · ⬚ ${+p.slotsP || EC_DEFAULT_CELLS} ячеек</div></div></div>
