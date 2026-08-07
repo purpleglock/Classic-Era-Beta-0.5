@@ -700,7 +700,7 @@ var BBK = {
   nuke:      { ico: '\u{2622}',  name: 'Ядерная ракета',       need: 'foe',  cost: 3.0 },
   tartarus:  { ico: '\u{1F573}', name: 'Ракета «Тартар»',      need: 'foe',  cost: 2.0 },
   sammo:     { ico: '\u{1F9CA}', name: 'Стазис-боеприпас',     need: null,   cost: 1.0 },
-  hard:      { ico: '\u{1F512}', name: 'Броневой замок',       need: null,   cost: 1.0 },
+  hard:      { ico: '\u{1F6E1}', name: 'Протокол «Эгида»',     need: null,   cost: 1.0 },
   reboot:    { ico: '\u{1F504}', name: 'Перезапуск снаряжения', need: null,  cost: 1.0 },
   rapid:     { ico: '\u{1F3AF}', name: 'Беглый огонь',         need: null,   cost: 1.0 },
   energy:    { ico: '\u{1F50B}', name: 'Энергогенератор',      need: null,   cost: 0.0 },
@@ -722,10 +722,10 @@ function bbKitDesc(a) {
     case 'cloak':     return `+${v} к скрытности до своего следующего хода`;
     case 'amp':       return `+${Math.round(v * 100)}% урона всем залпам до конца хода`;
     case 'drones':    return `+${bbNum(v)} корпуса союзнику до ${r} гекс.`;
-    case 'torpedo':   return `${bbNum(d)} по цели и половина по всем рядом, до ${r} гекс. — задевает своих`;
+    case 'torpedo':   return `${bbNum(d)} по цели и 65% по всем рядом, до ${r} гекс. по дуге — задевает своих`;
     case 'storm':     return `${bbNum(d)} по цели до ${r} гекс. · в упор работает, мёртвой зоны нет`;
-    case 'ram':       return `${bbNum(d)} вплотную, СКВОЗЬ щит`;
-    case 'rupture':   return `${bbNum(d)} вплотную сквозь щит + вспарывает броню на ход`;
+    case 'ram':       return `${bbNum(d)} вплотную, СКВОЗЬ щит и броню · астероиды не мешают`;
+    case 'rupture':   return `${bbNum(d)} вплотную сквозь щит и броню + вспарывает обшивку на ход`;
     case 'drain':     return `−${v} c из следующего пула цели, до ${r} гекс.`;
     case 'wbreak':    return `цель бьёт вполовину слабее весь свой ход, до ${r} гекс.`;
     case 'disrupt':   return `цель не может жать модули весь свой ход, до ${r} гекс.`;
@@ -737,10 +737,10 @@ function bbKitDesc(a) {
     case 'stasis':    return `врагам в радиусе ${r} следующий ход вдвое дороже`;
     case 'aboost':    return `−${Math.round(v * 100)}% входящего урона себе и своим в радиусе ${r}`;
     case 'tractor':   return `подтягивает вражеский борт на ${v} гекс. к себе, до ${r} гекс.`;
-    case 'nuke':      return `${bbNum(d)} по цели и 60% по всем рядом, до ${r} гекс.`;
+    case 'nuke':      return `${bbNum(d)} в эпицентре, 75% и 45% на кольцах, радиус 2 · до ${r} гекс. по дуге, мимо ПРО`;
     case 'tartarus':  return `стазис + высаженный пул + глухая шина разом, до ${r} гекс.`;
     case 'sammo':     return 'до конца хода ваши залпы сажают цель в стазис';
-    case 'hard':      return `−${Math.round(v * 100)}% входящего урона до своего следующего хода`;
+    case 'hard':      return `удары по своим в радиусе ${r || 2} идут в вас, входящий −${Math.round(v * 100)}% · глушится подавителем`;
     case 'reboot':    return `−${v} ход(а) со ВСЕХ остальных кулдаунов`;
     case 'rapid':     return 'залп стоит вдвое меньше секунд до конца хода';
     case 'energy':    return `+${v} c к текущему ходу`;
@@ -846,16 +846,18 @@ var BBK_AIM = {
   // одиночные удары по борту
   salvo:     { need: 'foe',  los: 1, dmin: 2 },
   storm:     { need: 'foe',  los: 1 },
-  ram:       { need: 'foe',  los: 1, fix: 1 },
-  rupture:   { need: 'foe',  los: 1, fix: 1 },
+  // тараны бьют вплотную — линии огня у них нет вовсе, астероид не помеха
+  ram:       { need: 'foe',  fix: 1 },
+  rupture:   { need: 'foe',  fix: 1 },
   drain:     { need: 'foe',  los: 1 },
   wbreak:    { need: 'foe',  los: 1 },
   disrupt:   { need: 'foe',  los: 1 },
   tartarus:  { need: 'foe',  los: 1 },
-  // площадь: цель + всё в радиусе 1, СВОИХ тоже
+  // площадь: цель + всё вокруг, СВОИХ тоже. Ракеты (торпеда, ядерка) идут по
+  // дуге — los им не нужен; плазменный залп «Свара» бьёт прямой наводкой.
   broadside: { need: 'foe',  los: 1, aoe: 1, frag: 0.5, ff: 1 },
-  torpedo:   { need: 'foe',  los: 1, aoe: 1, frag: 0.5, ff: 1 },
-  nuke:      { need: 'foe',  los: 1, aoe: 1, frag: 0.6, ff: 1 },
+  torpedo:   { need: 'foe',  aoe: 1, frag: 0.65, ff: 1 },
+  nuke:      { need: 'foe',  aoe: 2, frag: 0.75, frag2: 0.45, ff: 1 },
   // прочее с целью
   tractor:   { need: 'foe',  dmin: 2, pull: 1 },
   drones:    { need: 'ally' },
@@ -1084,7 +1086,11 @@ function bbModTip(sel, key, x, y) {
   if (+a.dmg) bits.push(`${bbNum(+a.dmg)} урона`);
   if (aim.aoe) {
     const sp = bbModSplash(sel, key, x, y);
-    bits.push(`+${Math.round((aim.frag || 0.5) * 100)}% по ${sp.foe.length + sp.own.length} рядом`);
+    // у ядерки два кольца с разной долей — показываем оба, иначе игрок
+    // недооценивает второе и ставит свой борт «на безопасные» два гекса
+    bits.push(aim.frag2
+      ? `${Math.round(aim.frag * 100)}%/${Math.round(aim.frag2 * 100)}% по ${sp.foe.length + sp.own.length} рядом`
+      : `+${Math.round((aim.frag || 0.5) * 100)}% по ${sp.foe.length + sp.own.length} рядом`);
     if (sp.own.length) bits.push(`⚠ своих под ударом: ${sp.own.length}`);
   }
   bits.push(cost > 0 ? `${cost.toFixed(1)} c` : 'без секунд');
