@@ -273,7 +273,8 @@
       "Bash(node tools/db_q.js \"select id,name,cfg from faction_reactors order by id desc limit 8\")",
       "Bash(node tools/db_q.js \"select name,\\(stats->>'power'\\)::int p,\\(stats->>'mass'\\)::int m,\\(stats->>'capacityPenalty'\\)::int cap,\\(stats->>'price'\\)::bigint price,stats->'resurs' res from faction_reactors\")",
       "Bash(sed -i \"s/var BUILD = '20260808rgprice';/var BUILD = '20260808rgcards';/\" index.html)",
-      "Bash(sed -i \"s/constructors.js?v=20260808rganim/constructors.js?v=20260808rgcards/;s/reactor_forge_ui.js?v=20260808rganim/reactor_forge_ui.js?v=20260808rgcards/\" index.html)"
+      "Bash(sed -i \"s/constructors.js?v=20260808rganim/constructors.js?v=20260808rgcards/;s/reactor_forge_ui.js?v=20260808rganim/reactor_forge_ui.js?v=20260808rgcards/\" index.html)",
+      "Bash(node --check battle_gl.js)"
     ]
   }
 }

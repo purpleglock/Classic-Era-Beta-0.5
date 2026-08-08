@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260808rgcards3';
+  var BUILD = '20260808hull3d2';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -476,7 +476,7 @@
 <script src="battle_board.js?v=20260805timepool"></script>
 <!-- Трёхмерная доска боя. Сам three.js тут НЕ подключается: battle_gl.js тянет
      его динамическим import только когда игрок открыл бой (см. bgLoadThree). -->
-<script src="battle_gl.js?v=20260805timepool"></script>
+<script src="battle_gl.js?v=20260808hull3d2"></script>
 <script src="admin.js?v=20260731nebula6"></script>
 <script src="fishing.js?v=20260729fishfree1"></script>
 <script src="guide.js?v=20260728intelprot1"></script>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<!-- Витрина боевых эффектов: доска-мок + все почерки оружия и модулей подряд.
+     Открыть /_btfx_harness.html — залпы идут по кругу, каждый подписан. -->
+<html lang="ru"><head><meta charset="utf-8"><title>BB FX harness</title>
+<link rel="stylesheet" href="css/index.css">
+<style>
+  body{background:#04060b;margin:0}
+  #fxlab{position:fixed;left:8px;top:8px;z-index:99;font:12px/1.5 monospace;color:#9fe;
+         background:rgba(4,8,16,.8);border:1px solid rgba(90,220,240,.3);padding:8px 10px;max-width:240px}
+  #fxlab b{color:#fff;font-size:14px}
+  #fxlab div{opacity:.7}
+</style>
+</head><body>
+<div id="fxlab"><b id="fxname">—</b><div id="fxdesc"></div></div>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function jsq(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function toast(m){console.log('[toast]',m);}
+var EC = { designs: [] };
+// Ландшафт арены: пояс камня по краям, туманность в центре и поле обломков —
+// чтобы эффекты было видно НА КАРТЕ, а не на пустом чёрном фоне.
+const TERR = (() => {
+  const t = {};
+  const put = (x, y, k) => { t[x + ':' + y] = k; };
+  for (let y = 0; y < 12; y++) {
+    if (y % 3) { put(0, y, 'ast'); put(1, (y + 1) % 12, 'ast'); put(19, y, 'ast'); }
+  }
+  [[7,2],[8,2],[7,3],[9,1],[6,3],[8,9],[9,9],[7,10],[10,10]].forEach(([x,y]) => put(x,y,'neb'));
+  [[12,3],[13,4],[11,8],[13,9],[15,7],[5,8],[4,3]].forEach(([x,y]) => put(x,y,'deb'));
+  [[16,2],[3,10]].forEach(([x,y]) => put(x,y,'grv'));
+  return t;
+})();
+const MOCK = {
+  id:'b1', status:'active', kind:'intercept', system_id:'asu', system_name:'Асу',
+  terrain: TERR,
+  w:20, h:12, cap:50, zone:4, acts_max:6, acts_left:6, my_side:'attacker', my_fid:'me',
+  attacker:'me', attacker_name:'Микустан', defender:'foe', defender_name:'Тетославия',
+  side_to_move:'attacker', my_turn:true, turn_no:1,
+  att_turns_left:6, def_turns_left:6, att_ready:true, def_ready:true,
+  deadline_at:null, can_force:false, winner:null, log:[{m:'Витрина эффектов.'}], pool:[],
+  units:[
+    {id:'a1',side:'attacker',mine:true,name:'Стрелок',cls:'battleship',x:4,y:6,hp:900,max_hp:900,
+     shield:50,max_shield:50,armor:10,dmg:1400,speed:2,rng:9,tp:12,fire_cost:2,
+     moved:false,fired:false,acted:false,
+     wpn:[{k:'kinetic',bat:'A',dmg:420,rng:6,shots:3},{k:'energy',bat:'B',dmg:600,rng:9,shots:1},
+          {k:'missile',bat:'C',dmg:900,rng:12,shots:2},{k:'repair',dmg:120,rng:4,shots:1}],
+     acts:[{k:'nuke',dmg:2200,rng:12},{k:'torpedo',dmg:1500,rng:9},{k:'storm',dmg:700,rng:8},
+           {k:'broadside',dmg:900,rng:5},{k:'ram',dmg:1200,rng:1},{k:'tractor',rng:6,val:2},
+           {k:'drain',rng:7,val:3},{k:'disrupt',rng:7},{k:'blink',rng:5},
+           {k:'hell',dmg:400,rng:4},{k:'stasis',rng:4},{k:'aboost',rng:4,val:0.3}]},
+    {id:'a2',side:'attacker',mine:true,name:'Ведомый',cls:'frigate',x:3,y:8,hp:520,max_hp:800,
+     shield:0,max_shield:60,armor:8,dmg:700,speed:3,rng:5,tp:9,fire_cost:1.5,
+     moved:false,fired:false,acted:false,wpn:[{k:'kinetic',dmg:300,rng:5,shots:2}]},
+    {id:'d1',side:'defender',mine:false,name:'Мишень',cls:'dreadnought',x:14,y:6,hp:900,max_hp:900,
+     shield:50,max_shield:50,armor:10,dmg:1400,speed:1,rng:9,tp:12,fire_cost:2,
+     moved:false,fired:false,acted:false,wpn:[{k:'energy',dmg:800,rng:9,shots:1}]},
+    {id:'d2',side:'defender',mine:false,name:'Конвой',cls:'cruiser',x:15,y:8,hp:640,max_hp:900,
+     shield:30,max_shield:80,armor:9,dmg:900,speed:2,rng:7,tp:10,fire_cost:2,
+     moved:false,fired:false,acted:false,wpn:[{k:'missile',dmg:500,rng:8,shots:2}]},
+    {id:'d3',side:'defender',mine:false,name:'Эскорт',cls:'corvette',x:13,y:4,hp:300,max_hp:500,
+     shield:0,max_shield:0,armor:6,dmg:400,speed:4,rng:4,tp:8,fire_cost:1,
+     moved:false,fired:false,acted:false,wpn:[{k:'kinetic',dmg:220,rng:4,shots:4}]},
+  ],
+};
+async function ecRpc(fn, body){ if(fn==='battle_state') return MOCK; console.log('[rpc]',fn,body); return {}; }
+</script>
+<script src="constructors.js"></script>
+<script src="battle_board.js"></script>
+<script>
+bbOpen('b1');
+// Прогон: снаряд летит от «Стрелка» к «Мишени», потом рвётся положенным ударом.
+const SHOW = [
+  ['Кинетика · очередь болванок', () => ['w', bbFxWProf('kinetic', 3), '90,220,240']],
+  ['Лазер · луч с накачкой',      () => ['w', bbFxWProf('energy', 1),  '90,220,240']],
+  ['Ракеты · дуга и дым',         () => ['w', bbFxWProf('missile', 2), '255,150,60']],
+  ['Нано-рой · ремонт',           () => ['w', bbFxWProf('repair', 1),  '120,255,190']],
+  ['Модуль: бортовой залп',       () => ['m', 'broadside']],
+  ['Модуль: ракеты «Шквал»',      () => ['m', 'storm']],
+  ['Модуль: торпеда «Голиаф»',    () => ['m', 'torpedo']],
+  ['Модуль: ядерная ракета',      () => ['m', 'nuke']],
+  ['Модуль: плазменный таран',    () => ['m', 'ram']],
+  ['Модуль: тяговый луч',         () => ['m', 'tractor']],
+  ['Модуль: торпеда-иссушитель',  () => ['m', 'drain']],
+  ['Модуль: ракета-подавитель',   () => ['m', 'disrupt']],
+  ['Модуль: прыжок',              () => ['m', 'blink']],
+  ['Импульс: адские лазеры',      () => ['m', 'hell']],
+  ['Импульс: стазис-лучи',        () => ['m', 'stasis']],
+  ['Импульс: импульс брони',      () => ['m', 'aboost']],
+];
+let i = 0;
+function step() {
+  const [name, mk] = SHOW[i % SHOW.length]; i++;
+  document.getElementById('fxname').textContent = name;
+  const sel = BB.st.units[0], tgt = BB.st.units[1];
+  const spec = mk();
+  if (spec[0] === 'w') {
+    const prof = spec[1], col = spec[2];
+    const a = bbHexCenter(sel.x, sel.y), b = bbHexCenter(tgt.x, tgt.y);
+    const at = bbFxVolley(a, b, prof, performance.now(), col);
+    bbFxImpact(b.px, b.py, at, prof.impact, col, prof);
+    document.getElementById('fxdesc').textContent =
+      `${prof.shot} ×${prof.n} · полёт ${prof.fly} мс · удар ${prof.impact}`;
+    bbAnimKick();
+  } else {
+    const key = spec[1], prof = bbFxMProf(key);
+    document.getElementById('fxdesc').textContent =
+      `${prof.aura ? 'аура ' + prof.ring : prof.shot + ' ×' + (prof.n || 1)} · удар ${prof.impact || '—'}`;
+    bbModFx(sel, key, prof.aura || prof.self ? null : tgt.x, prof.aura || prof.self ? null : tgt.y);
+  }
+}
+setTimeout(() => { setInterval(step, 2600); step(); }, 600);
+</script>
+</body></html>

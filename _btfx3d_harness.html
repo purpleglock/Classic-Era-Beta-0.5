@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<!-- Витрина боевых эффектов на ТРЁХМЕРНОЙ доске: /_btfx3d_harness.html
+     Кнопки слева — по одному почерку оружия и модуля на настоящей арене. -->
+<html lang="ru"><head><meta charset="utf-8"><title>BB FX 3D</title>
+<style>
+  html,body{margin:0;height:100%;background:#02040a;color:#cfe6f2;font:13px/1.4 system-ui,sans-serif}
+  #wrap{position:absolute;inset:0}
+  #gl{display:block;width:100%;height:100%}
+  #ctl{position:absolute;left:10px;top:10px;z-index:5;display:flex;flex-direction:column;gap:4px;
+       max-height:94vh;overflow:auto}
+  #ctl button{background:rgba(4,10,16,.86);color:#cfe6f2;border:1px solid rgba(90,200,230,.35);
+       border-radius:4px;padding:5px 10px;font:12px system-ui,sans-serif;cursor:pointer;text-align:left}
+  #ctl button:hover{border-color:#8cf0ff;color:#8cf0ff}
+  #err{position:absolute;left:10px;bottom:10px;color:#ff6a8a;white-space:pre-wrap}
+</style>
+</head><body>
+<div id="wrap"><canvas id="gl"></canvas></div>
+<div id="ctl"></div>
+<div id="err"></div>
+
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function jsq(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function toast(m){console.log('[toast]',m);}
+var EC = { designs: [] };
+const MOCK = {
+  id:'b1', status:'active', kind:'intercept', system_id:'asu', system_name:'Асу',
+  w:26, h:16, cap:50, zone:4, acts_max:6, acts_left:6, my_side:'attacker', my_fid:'me',
+  attacker:'me', attacker_name:'Микустан', defender:'foe', defender_name:'Тетославия',
+  side_to_move:'attacker', my_turn:true, turn_no:1, log:[],
+  units:[
+    {id:'a1',side:'attacker',mine:true,name:'Стрелок',cls:'battleship',x:6,y:8,facing:0,
+     hp:900,max_hp:900,shield:200,max_shield:200,armor:10,speed:2,rng:12,dmg:120,tp:12,fire_cost:2,
+     wpn:[{k:'kinetic',bat:'A',dmg:420,rng:8,shots:3},{k:'energy',bat:'B',dmg:600,rng:12,shots:1},
+          {k:'missile',bat:'C',dmg:900,rng:14,shots:2},{k:'repair',dmg:120,rng:5,shots:1}],
+     acts:[{k:'nuke',dmg:2200,rng:14},{k:'torpedo',dmg:1500,rng:10},{k:'storm',dmg:700,rng:9},
+           {k:'broadside',dmg:900,rng:6},{k:'ram',dmg:1200,rng:1},{k:'tractor',rng:7,val:2},
+           {k:'drain',rng:8,val:3},{k:'disrupt',rng:8},{k:'blink',rng:5},
+           {k:'hell',dmg:400,rng:4},{k:'stasis',rng:4},{k:'aboost',rng:4,val:0.3},{k:'blind',rng:4,val:2}]},
+    {id:'a2',side:'attacker',mine:true,name:'Ведомый',cls:'frigate',x:5,y:11,facing:0,
+     hp:520,max_hp:800,shield:0,max_shield:120,armor:8,speed:3,rng:8,dmg:60,
+     wpn:[{k:'kinetic',dmg:300,rng:8,shots:2}]},
+    {id:'d1',side:'defender',mine:false,name:'Мишень',cls:'dreadnought',x:16,y:8,facing:3,
+     hp:900,max_hp:900,shield:120,max_shield:200,armor:12,speed:1,rng:14,dmg:200,
+     wpn:[{k:'energy',dmg:800,rng:12,shots:1}]},
+    {id:'d2',side:'defender',mine:false,name:'Конвой',cls:'cruiser',x:18,y:10,facing:3,
+     hp:640,max_hp:900,shield:60,max_shield:150,armor:9,speed:2,rng:10,dmg:90,
+     wpn:[{k:'missile',dmg:500,rng:10,shots:2}]},
+    {id:'d3',side:'defender',mine:false,name:'Эскорт',cls:'corvette',x:15,y:5,facing:3,
+     hp:300,max_hp:500,shield:0,max_shield:0,armor:6,speed:4,rng:6,dmg:40,
+     wpn:[{k:'kinetic',dmg:220,rng:6,shots:4}]},
+  ],
+  terrain:[
+    {x:10,y:3,t:'ast'},{x:11,y:4,t:'ast'},{x:10,y:5,t:'ast'},{x:12,y:3,t:'ast'},{x:9,y:4,t:'ast'},
+    {x:12,y:12,t:'neb'},{x:13,y:12,t:'neb'},{x:12,y:13,t:'neb'},{x:11,y:13,t:'neb'},
+    {x:20,y:5,t:'grv'},{x:4,y:14,t:'grv'},
+    {x:8,y:12,t:'deb'},{x:9,y:13,t:'deb'},{x:17,y:14,t:'deb'},{x:19,y:2,t:'deb'},
+  ],
+};
+async function ecRpc(fn, body){ if(fn==='battle_state') return MOCK; console.log('[rpc]',fn,body); return {}; }
+function bbClick(){}
+window.onerror = e => { document.getElementById('err').textContent += e + '\n'; };
+</script>
+
+<script src="constructors.js"></script>
+<script src="battle_board.js"></script>
+<script type="module">
+  import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+  window.THREE = THREE;
+  window.dispatchEvent(new Event('three-ready'));
+</script>
+<script src="battle_gl.js"></script>
+<script>
+function boot(){
+  BB.st = MOCK; BB.R = 34;
+  const cv = document.getElementById('gl');
+  BB.vw = cv.clientWidth || 1200; BB.vh = cv.clientHeight || 700;
+  BB.terr = new Map();
+  (MOCK.terrain||[]).forEach(e => BB.terr.set(e.x+':'+e.y, e.t));
+  if (!bgInit(cv)) return;
+  bgCamHome(); bgRefresh();
+}
+// Все почерки: оружие бьёт по «Мишени», модули — по ней же или вокруг себя.
+const SHOW = [
+  ['Кинетика · очередь',      'w', 'kinetic'],
+  ['Лазер · луч',             'w', 'energy'],
+  ['Ракеты · дуга и дым',     'w', 'missile'],
+  ['Нано-рой · ремонт',       'w', 'repair'],
+  ['Бортовой залп',           'm', 'broadside'],
+  ['Ракеты «Шквал»',          'm', 'storm'],
+  ['Торпеда «Голиаф»',        'm', 'torpedo'],
+  ['Ядерная ракета',          'm', 'nuke'],
+  ['Плазменный таран',        'm', 'ram'],
+  ['Тяговый луч',             'm', 'tractor'],
+  ['Торпеда-иссушитель',      'm', 'drain'],
+  ['Ракета-подавитель',       'm', 'disrupt'],
+  ['Прыжок',                  'm', 'blink'],
+  ['Импульс: адские лазеры',  'm', 'hell'],
+  ['Импульс: стазис',         'm', 'stasis'],
+  ['Импульс: брони',          'm', 'aboost'],
+];
+function fire(kind, key) {
+  BB.anim.fx.length = 0;
+  const sel = MOCK.units.find(u=>u.id==='a1'), tgt = MOCK.units.find(u=>u.id==='d1');
+  const t0 = performance.now();
+  if (kind === 'w') {
+    const g = sel.wpn.find(w=>w.k===key), prof = bbFxWProf(key, g.shots);
+    const a = bbHexCenter(sel.x, sel.y), b = bbHexCenter(tgt.x, tgt.y);
+    const col = key==='repair'?'120,255,190':(key==='missile'?'255,150,60':'90,220,240');
+    const at = bbFxVolley(a, b, prof, t0, col);
+    bbFxImpact(b.px, b.py, at, prof.impact, key==='missile'?'255,150,60':col, prof);
+  } else {
+    const prof = bbFxMProf(key), aura = prof.aura || prof.self;
+    bbModFx(sel, key, aura?null:tgt.x, aura?null:tgt.y);
+  }
+  bgKick();
+}
+const ctl = document.getElementById('ctl');
+SHOW.forEach(([name, kind, key]) => {
+  const b = document.createElement('button');
+  b.textContent = name;
+  b.onclick = () => fire(kind, key);
+  ctl.appendChild(b);
+});
+if (window.THREE) boot(); else window.addEventListener('three-ready', boot);
+</script>
+</body></html>

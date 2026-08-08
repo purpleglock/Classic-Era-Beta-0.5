@@ -504,22 +504,72 @@ function bgSyncHover() {
 // Сечение — суперэллипс, а не круг: круглый лофт даёт колбасу, а корпус должен
 // быть приплюснутым и с намёком на грани. Высота берётся долей от полуширины,
 // иначе борт раздувается в трубу.
-const BG_RING = 14;          // вершин в сечении
-// Сечение АСИММЕТРИЧНО по вертикали: палуба выпуклая, днище почти плоское.
-// Симметричный лофт давал «батон» — по нему не понять ни где верх, ни куда нос.
-const BG_DECK = 1.05;        // полувысота над осью (доля полуширины)
-const BG_KEEL = 0.50;        // полувысота под осью
-const BG_SE = 2.6;           // степень суперэллипса: 2 — эллипс, больше — гранёнее
+// СЕЧЕНИЕ КОРПУСА — НЕ КРУГ И НЕ СУПЕРЭЛЛИПС. Любая гладкая замкнутая кривая,
+// протянутая по длине, даёт трубу: у неё нет ни палубы, ни скулы, ни днища, и
+// корабль выглядит цилиндром, чем бы его ни красили. Поэтому сечение задано
+// ЯВНЫМ ОБВОДОМ настоящего корпуса: плоская палуба сверху, завал борта внутрь,
+// острая скула на миделе и почти плоское днище. Ребро скулы ловит свет
+// отдельной полосой — именно оно и читается как «корабль», а не «болванка».
+//
+// Полуобвод (z ≥ 0) сверху вниз, в долях полуширины; y — в долях ПОЛУВЫСОТЫ.
+const BG_HALF = [
+  [0.00,  1.00],   // диаметральная плоскость, палуба
+  [0.58,  0.96],   // палуба плоская почти до борта
+  [0.86,  0.62],   // завал борта внутрь
+  [1.00,  0.10],   // скула — самая широкая точка
+  [0.88, -0.42],   // подзор
+  [0.46, -0.72],   // переход в днище
+  [0.00, -0.78],   // киль
+];
+const BG_RING = (BG_HALF.length - 1) * 2;    // вершин в сечении: обвод + зеркало
+const BG_DECK = 0.62;        // полувысота корпуса (доля полуширины)
+const BG_KEEL = 0.50;        // ↑ оставлено: на него смотрит старый код посадки
+// Сколько раз обшивка укладывается вдоль корпуса и вокруг сечения. Считается
+// в долях длины, поэтому у линкора плит физически больше, чем у корвета, а
+// сама плита остаётся одного размера — по ней и читается масштаб борта.
+const BG_PLATE_U = 14;
+const BG_PLATE_V = 6;
 
-function bgSection(k, hw) {
-  const a = (k / BG_RING) * Math.PI * 2;
-  const ca = Math.cos(a), sa = Math.sin(a);
-  const p = 2 / BG_SE;
-  const hh = hw * (sa >= 0 ? BG_DECK : BG_KEEL);
-  return {
-    z: Math.sign(ca) * Math.pow(Math.abs(ca), p) * hw,
-    y: Math.sign(sa) * Math.pow(Math.abs(sa), p) * hh,
-  };
+// Обход сечения: сначала правый борт сверху вниз, потом левый снизу вверх.
+// Порядок важен — по нему сшиваются полосы и по нему же ложится развёртка.
+function bgSection(k, hw, hh) {
+  const n = BG_HALF.length;
+  const p = (k < n) ? BG_HALF[k] : BG_HALF[BG_RING - k];
+  const s = (k < n) ? 1 : -1;
+  return { z: p[0] * hw * s, y: p[1] * (hh == null ? hw * BG_DECK : hh) };
+}
+
+// Тело с РАЗНЫМ сечением на концах: низ шире верха, корма шире носа. Всё
+// навесное железо строится им, а не BoxGeometry — коробка с одинаковыми
+// торцами и есть тот самый «квадратик», который видно за версту. Скос всего
+// в четверть уже превращает её в надстройку.
+// dl/dh — доли: во сколько верхняя грань уже и короче нижней; sx — сдвиг
+// верхней грани вдоль корпуса (наклон башни к носу).
+function bgTaper(l, h, w, kw, kl, sx) {
+  kw = kw == null ? 0.72 : kw; kl = kl == null ? 0.86 : kl; sx = sx || 0;
+  const hl = l / 2, hw = w / 2, hh = h / 2;
+  const tl = hl * kl, tw = hw * kw;
+  const V = [
+    [-hl, -hh,  hw], [ hl, -hh,  hw], [ hl, -hh, -hw], [-hl, -hh, -hw],   // низ
+    [sx - tl, hh,  tw], [sx + tl, hh,  tw], [sx + tl, hh, -tw], [sx - tl, hh, -tw], // верх
+  ];
+  const F = [
+    [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7],   // борта
+    [4, 5, 6, 7], [3, 2, 1, 0],                               // крыша и днище
+  ];
+  const pos = [], uv = [], idx = [];
+  F.forEach(f => {
+    const b = pos.length / 3;
+    f.forEach(vi => pos.push(V[vi][0], V[vi][1], V[vi][2]));
+    uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+    idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
 }
 
 // Геометрия корпуса ЕДИНИЧНОЙ длины, нос смотрит в +X, центр в начале координат.
@@ -542,32 +592,47 @@ function bgHullGeo(cls) {
     rows.push({ u, hw: hw / L });
   }
 
-  const pos = [], idx = [];
+  // Кольцо замыкаем ДУБЛЁМ первой вершины (BG_RING+1 штук на сечение), а не
+  // модулем по индексу: иначе на шве обшивки v скакала бы с конца атласа в
+  // начало и последний ряд плит размазывало бы поперёк всего борта.
+  const RN = BG_RING + 1;
+  // плит вдоль борта — по РЕАЛЬНОЙ длине силуэта, а не по нормированной единице
+  const pu = Math.max(3, Math.round(BG_PLATE_U * L / 300));
+  // ВЫСОТА КОРПУСА НЕ РАВНА ШИРИНЕ. Если вести её от местной полуширины, к носу
+  // борт схлопывается в иглу, а к корме в лепёшку — оттого и «сосиска». Высоту
+  // ведём своим профилем от МАКСИМАЛЬНОЙ ширины: в носу корпус узкий в плане,
+  // но остаётся высоким, то есть форштевень получается КЛИНОМ, как на корабле.
+  const hwMax = Math.max(...rows.map(r => r.hw), 1e-4);
+  const depth = u => bgDepthProfile(hwMax, u);
+  const pos = [], uv = [], idx = [];
   rows.forEach(rw => {
     const hw = Math.max(rw.hw, 1e-4);
+    const hh = depth(rw.u);
     const x = 0.5 - rw.u;                       // нос (u=0) → +X, корма (u=1) → −X
-    for (let k = 0; k < BG_RING; k++) {
-      const e = bgSection(k, hw);
+    for (let k = 0; k < RN; k++) {
+      const e = bgSection(k % BG_RING, hw, hh);
       pos.push(x, e.y, e.z);
+      uv.push(rw.u * pu, (k / BG_RING) * BG_PLATE_V);
     }
   });
   // сшиваем соседние кольца в полосы четырёхугольников
   for (let r = 0; r < rows.length - 1; r++) {
-    const a = r * BG_RING, b = (r + 1) * BG_RING;
+    const a = r * RN, b = (r + 1) * RN;
     for (let k = 0; k < BG_RING; k++) {
-      const k2 = (k + 1) % BG_RING;
-      idx.push(a + k, b + k, a + k2);
-      idx.push(a + k2, b + k, b + k2);
+      idx.push(a + k, b + k, a + k + 1);
+      idx.push(a + k + 1, b + k, b + k + 1);
     }
   }
   // крышка кормы (нос сходится в точку сам — там полуширина 0)
-  const last = (rows.length - 1) * BG_RING;
+  const last = (rows.length - 1) * RN;
   const cap = pos.length / 3;
   pos.push(0.5 - rows[rows.length - 1].u, 0, 0);
-  for (let k = 0; k < BG_RING; k++) idx.push(last + k, cap, last + (k + 1) % BG_RING);
+  uv.push(rows[rows.length - 1].u * pu, BG_PLATE_V * 0.5);
+  for (let k = 0; k < BG_RING; k++) idx.push(last + k, cap, last + k + 1);
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx);
   geo.computeVertexNormals();                   // светотень: ради неё всё и делалось
   cache[cls] = geo;
@@ -584,6 +649,125 @@ function bgHullBeam(cls) {
   return Math.max(...st.map(p => p[1])) / L;
 }
 
+// ПЛАН НАДСТРОЙКИ ПО КЛАССУ. Именованные профили — там, где класс узнаваем:
+// у носителя плоская полётная палуба и островок сбоку-сверху, у линкора
+// многоярусная башня с мачтой, у корвета один низкий колпак. Остальные классы
+// (в том числе те, что появятся позже) разбираются запасным вариантом: имя
+// класса свёрнуто в число и выбирает один из трёх типовых профилей — два
+// разных класса не окажутся близнецами просто потому, что их забыли описать.
+//
+// tiers: ярусы снизу вверх, все размеры — ДОЛИ предыдущего яруса, поэтому
+// профиль не зависит ни от ширины корпуса, ни от масштаба борта на доске.
+const BG_DECK_PLANS = {
+  corvette:  { x:-0.14, w:0.70, h:0.75, len:0.14, bridgeTier:0, bridge:'slit',
+               tiers:[{w:1,h:1,l:1,dx:0}] },
+  frigate:   { x:-0.13, w:0.80, h:1.00, len:0.17, bridgeTier:0, bridge:'slit',
+               tiers:[{w:1,h:1,l:1,dx:0},{w:0.6,h:0.5,l:0.5,dx:0.15}] },
+  destroyer: { x:-0.15, w:0.85, h:1.15, len:0.20, bridgeTier:1, bridge:'wrap', mast:0.7,
+               tiers:[{w:1,h:0.6,l:1,dx:0},{w:0.7,h:0.7,l:0.6,dx:0.18}] },
+  cruiser:   { x:-0.12, w:0.95, h:1.35, len:0.22, bridgeTier:1, bridge:'wrap', mast:0.9, pods:1,
+               tiers:[{w:1,h:0.55,l:1,dx:0},{w:0.72,h:0.8,l:0.62,dx:0.16},{w:0.6,h:0.5,l:0.6,dx:0.1}] },
+  battleship:{ x:-0.10, w:1.05, h:1.55, len:0.26, bridgeTier:2, bridge:'cupola', mast:1.1, pods:1,
+               tiers:[{w:1,h:0.5,l:1,dx:0},{w:0.8,h:0.7,l:0.7,dx:0.12},{w:0.62,h:0.8,l:0.5,dx:0.1}] },
+  carrier:   { x:-0.30, w:0.45, h:1.30, len:0.16, bridgeTier:1, bridge:'tower', mast:0.8,
+               tiers:[{w:1,h:0.9,l:1,dx:0},{w:0.7,h:0.9,l:0.7,dx:0.1}], side:1 },
+  station:   { x: 0.00, w:1.10, h:1.70, len:0.30, bridgeTier:1, bridge:'ring', mast:1.3, pods:1,
+               tiers:[{w:1,h:0.7,l:1,dx:0},{w:0.7,h:1.0,l:0.7,dx:0}] },
+};
+const BG_DECK_FALLBACK = [
+  { x:-0.16, w:0.85, h:1.20, len:0.19, bridgeTier:0, bridge:'wrap',
+    tiers:[{w:1,h:0.8,l:1,dx:0},{w:0.65,h:0.6,l:0.55,dx:0.14}] },
+  { x:-0.12, w:0.75, h:1.40, len:0.16, bridgeTier:1, bridge:'cupola', mast:0.8,
+    tiers:[{w:1,h:0.6,l:1,dx:0},{w:0.8,h:0.9,l:0.7,dx:0.2}] },
+  { x:-0.20, w:1.00, h:1.00, len:0.24, bridgeTier:0, bridge:'slit', pods:1,
+    tiers:[{w:1,h:1,l:1,dx:0}] },
+];
+
+function bgDeckPlan(cls) {
+  const hull = (typeof BB_HULL !== 'undefined' && BB_HULL[cls]) || cls;
+  const p = BG_DECK_PLANS[cls] || BG_DECK_PLANS[hull];
+  if (p) return p;
+  let s = 0;
+  for (let i = 0; i < String(cls).length; i++) s = (s * 31 + String(cls).charCodeAt(i)) >>> 0;
+  return BG_DECK_FALLBACK[s % BG_DECK_FALLBACK.length];
+}
+
+// Мостик. Форма — часть портрета класса: щель, опоясывающая галерея, носовой
+// колпак, светящаяся башня-остров, кольцо командного поста. Всегда смотрит
+// ВПЕРЁД (кроме кольца), поэтому продолжает работать указателем курса.
+function bgBridge(grp, plan, glow, bx, by, bz, bh, bl, bw) {
+  const add = (geo, x, y, z, rz) => {
+    const m = new THREE.Mesh(geo, glow);
+    m.position.set(x, y, bz + z); if (rz) m.rotation.z = rz;
+    grp.add(m); return m;
+  };
+  const fx = bx + bl * 0.5;                     // передняя грань яруса
+  switch (plan.bridge) {
+    case 'slit':                                 // одна щель во всю грань
+      add(new THREE.BoxGeometry(bl * 0.14, bh * 0.26, bw * 0.82), fx, by + bh * 0.14, 0);
+      break;
+    case 'wrap':                                 // галерея: перед + скулы
+      add(new THREE.BoxGeometry(bl * 0.14, bh * 0.22, bw * 0.9), fx, by + bh * 0.18, 0);
+      [-1, 1].forEach(o => add(new THREE.BoxGeometry(bl * 0.7, bh * 0.16, bw * 0.1),
+        bx + bl * 0.1, by + bh * 0.18, o * bw * 0.5));
+      break;
+    case 'cupola':                               // носовой колпак-полусфера
+      add(new THREE.SphereGeometry(bh * 0.3, 10, 8), fx, by + bh * 0.22, 0);
+      add(new THREE.BoxGeometry(bl * 0.12, bh * 0.14, bw * 0.6), fx, by - bh * 0.1, 0);
+      break;
+    case 'tower':                                // остров носителя: вертикальные окна
+      [-1, 0, 1].forEach(o => add(new THREE.BoxGeometry(bl * 0.12, bh * 0.55, bw * 0.16),
+        fx, by, o * bw * 0.3));
+      break;
+    case 'ring':                                 // командный пост станции — по кругу
+      add(new THREE.CylinderGeometry(bw * 0.62, bw * 0.62, bh * 0.16, 12), bx, by + bh * 0.2, 0);
+      break;
+  }
+}
+
+// UV коробок надстройки: у BoxGeometry развёртка 0..1 на грань, и лист брони
+// натягивался бы на весь борт рубки одной плитой. Размножаем.
+function bgUvTile(geo, n) {
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * n, uv.getY(i) * n);
+  uv.needsUpdate = true;
+}
+
+// Профиль ВЫСОТЫ корпуса по длине. Вынесен отдельно, потому что по нему живёт
+// не только лофт, но и всё, что садится на корму и палубу: разъедься они —
+// моторный отсек снова полезет углами наружу.
+function bgDepthProfile(hwMax, u) {
+  const t = Math.min(1, Math.max(0, 0.18 + u * 0.74));
+  return hwMax * BG_DECK * (0.52 + 0.48 * Math.sin(Math.PI * t));
+}
+
+// Полуширина корпуса В ЗАДАННОЙ ТОЧКЕ (x в тех же долях длины, что и меши:
+// +0.5 нос, −0.5 корма). Всё навесное железо сажается по НЕЙ, а не по
+// максимальной ширине борта: иначе кольцо на сужении торчит хомутом, а
+// моторный отсек у острой кормы выглядит приваренным чемоданом.
+function bgHullHW(cls, x) {
+  const H = (typeof bbGeo === 'function') ? bbGeo(cls) : null;
+  const st = (H && H.st && H.st.length > 1) ? H.st : [[0, 0], [40, 16], [170, 40], [250, 30], [300, 20]];
+  const tip = st[0][0], stern = st[st.length - 1][0], L = (stern - tip) || 1;
+  const u = Math.min(1, Math.max(0, 0.5 - x));         // x → доля длины от носа
+  const y = tip + u * L;
+  for (let i = 1; i < st.length; i++) {
+    if (y <= st[i][0]) {
+      const t = (y - st[i - 1][0]) / ((st[i][0] - st[i - 1][0]) || 1);
+      return (st[i - 1][1] + (st[i][1] - st[i - 1][1]) * t) / L;
+    }
+  }
+  return st[st.length - 1][1] / L;
+}
+
+function bgHullDepth(cls, x) {
+  const H = (typeof bbGeo === 'function') ? bbGeo(cls) : null;
+  const st = (H && H.st && H.st.length > 1) ? H.st : [[0, 0], [40, 16], [170, 40], [250, 30], [300, 20]];
+  const L = (st[st.length - 1][0] - st[0][0]) || 1;
+  const hwMax = Math.max(...st.map(p => p[1])) / L;
+  return bgDepthProfile(hwMax, Math.min(1, Math.max(0, 0.5 - x)));
+}
+
 // СИЛУЭТ НАПРАВЛЕНИЯ. Голый лофт симметричен вдоль оси, и куда смотрит борт —
 // не понять. Достраиваем два признака, которые читаются мгновенно и с любого
 // ракурса: надстройка смещена К КОРМЕ (значит перед — там, где её нет) и
@@ -595,32 +779,118 @@ function bgBuildShip(cls, mine) {
   const hull = new THREE.Mesh(bgHullGeo(cls), bgHullMat(mine));
   grp.add(hull);
 
-  // надстройка: рубка на палубе, ближе к корме
-  const bw = beam * 0.85, bh = beam * 1.25, bl = 0.20;
-  const br = new THREE.Mesh(new THREE.BoxGeometry(bl, bh, bw), bgHullMat(mine));
-  grp.userData.hullParts = [hull, br];          // им меняют материал, когда борт отходил
-  br.position.set(-0.16, beam * BG_DECK * 0.75 + bh * 0.32, 0);
-  grp.add(br);
-  // мостик — узкая светящаяся полоса на рубке, смотрит вперёд
-  const gl = new THREE.Mesh(
-    new THREE.BoxGeometry(bl * 0.16, bh * 0.26, bw * 0.82),
-    bgGlowMat(mine ? 0x9fe8ff : 0xffc0d4, 0.9)
-  );
-  gl.position.set(-0.16 + bl * 0.5, br.position.y + bh * 0.10, 0);
-  grp.add(gl);
+  // НАДСТРОЙКА СВОЯ У КАЖДОГО КЛАССА. Раньше на всех сидела одна коробка с
+  // одинаковой полоской мостика, и корвет от линкора отличался только длиной.
+  // Профиль берём детерминированно из имени класса (см. bgDeckPlan), поэтому
+  // борт всегда собирается одинаково, но соседний класс выглядит другим.
+  const plan = bgDeckPlan(cls);
+  const parts = [hull];
+  const hw = x => bgHullHW(cls, x);              // полуширина борта в точке
+  const depthAt = x => bgHullDepth(cls, x);      // полувысота борта там же
+  const deckAt = x => depthAt(x) * 0.92;         // палуба чуть ниже верхней кромки
+  const deckY = deckAt(plan.x);
+  const glow = bgGlowMat(mine ? 0x9fe8ff : 0xffc0d4, 0.9);
+
+  // ярусы рубки: снизу широкий, кверху сужаются и сдвигаются к носу.
+  // Ширина основания — от МЕСТНОЙ ширины палубы, поэтому рубка вписана в борт,
+  // а не сидит на нём чемоданом.
+  // side — надстройка съезжает к правому борту (островок носителя), центр палубы
+  // при этом остаётся свободным, и класс читается сразу
+  const zOff = plan.side ? hw(plan.x) * 0.5 : 0;
+  let topY = deckY, topX = plan.x, topW = hw(plan.x) * 1.55 * plan.w, topL = plan.len;
+  plan.tiers.forEach((t, i) => {
+    const bw = topW * t.w, bh = hw(topX) * plan.h * t.h, bl = topL * t.l;
+    const bx = topX + t.dx * topL, by = topY + bh * 0.5;
+    // ярус со скосом и завалом к носу: у настоящей рубки нет вертикальных стен
+    const box = new THREE.Mesh(bgTaper(bl, bh, bw, 0.66, 0.8, bl * 0.06), bgHullMat(mine));
+    box.position.set(bx, by, zOff);
+    bgUvTile(box.geometry, 3);
+    grp.add(box); parts.push(box);
+    // мостик ставим на ЯРУС ПЛАНА, а не всегда на первый: у одних он в основании
+    // башни, у других — на самой макушке
+    if (i === plan.bridgeTier) bgBridge(grp, plan, glow, bx, by, zOff, bh, bl, bw);
+    topY += bh; topX = bx; topW = bw; topL = bl;
+  });
+
+  // мачта/сенсорная штанга поверх башни — есть не у всех
+  if (plan.mast) {
+    const mh = hw(topX) * plan.h * plan.mast;
+    const ms = new THREE.Mesh(bgTaper(hw(topX) * 0.16, mh, hw(topX) * 0.16, 0.5, 0.5, 0), bgHullMat(mine));
+    ms.position.set(topX, topY + mh * 0.5, zOff);
+    grp.add(ms); parts.push(ms);
+    const dish = new THREE.Mesh(new THREE.SphereGeometry(hw(topX) * 0.13, 8, 6), bgGlowMat(mine ? 0x8fd8ff : 0xff9fbe, 0.7));
+    dish.scale.set(1, 0.45, 1);
+    dish.position.set(topX, topY + mh, zOff);
+    grp.add(dish);
+  }
+
+  // спонсоны: наросты по бортам у корпусов, которые в 2D читаются «толстыми»
+  if (plan.pods) {
+    const px = plan.x + plan.len * 0.4;
+    const pl = plan.len * 1.6, ph = hw(px) * 0.7, pw = hw(px) * 0.5;
+    [-1, 1].forEach(o => {
+      const p = new THREE.Mesh(bgTaper(pl, ph, pw, 0.55, 0.55, pl * 0.08), bgHullMat(mine));
+      p.position.set(px, 0, o * hw(px) * 0.8);
+      bgUvTile(p.geometry, 3);
+      grp.add(p); parts.push(p);
+    });
+  }
+
+  // НАВЕСНОЕ ЖЕЛЕЗО. Голый лофт сам по себе читается «батоном» с любого
+  // ракурса: сплошная гладкая поверхность без единого ребра, за которое
+  // цепляется глаз. Три накладки ломают её и дают масштаб.
+  // 1) моторный отсек — корма перестаёт быть просто срезом трубы
+  // КОРМА. Отсек был ШИРЕ корпуса (2.1 полуширины против 2.0) и вылезал за
+  // обвод углами — отсюда «уродская жопа». Держим его строго внутри борта и
+  // ведём размеры от ширины НА СВОЁМ шпангоуте, а не от миделя.
+  const ew = hw(-0.42), eh = depthAt(-0.42);
+  const eb = new THREE.Mesh(bgTaper(0.17, eh * 1.5, ew * 1.62, 0.82, 0.72, -0.012), bgHullMat(mine));
+  eb.position.set(-0.41, -eh * 0.12, 0);
+  bgUvTile(eb.geometry, 2);
+  grp.add(eb); parts.push(eb);
+  // 2) хребет: узкий гребень по палубе от рубки к носу — линия, вдоль которой
+  //    видно и длину борта, и его курс
+  const sx = plan.x + 0.26;
+  const sp = new THREE.Mesh(bgTaper(0.4, hw(sx) * 0.34, hw(sx) * 0.5, 0.5, 0.62, 0.03), bgHullMat(mine));
+  sp.position.set(sx, deckAt(sx) * 0.7, 0);
+  bgUvTile(sp.geometry, 3);
+  grp.add(sp); parts.push(sp);
+  // 3) пояса-шпангоуты: два кольца поперёк корпуса. Дёшево (по 12 граней) и
+  //    именно они превращают гладкую оболочку в сваренный из секций корпус
+  [0.16, -0.14].forEach(px => {
+    const r = hw(px);
+    // накладка повторяет ОБВОД сечения (тот же bgSection), поэтому лежит на
+    // шкуре поясом, а не надета бубликом, как было с цилиндром
+    const pts = [];
+    for (let k = 0; k < BG_RING; k++) { const e = bgSection(k, r * 1.04, r * BG_DECK * 1.06); pts.push(new THREE.Vector2(e.z, e.y)); }
+    const sh = new THREE.Shape(pts);
+    const rb = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.022, bevelEnabled: false }), bgHullMat(mine));
+    rb.rotation.y = Math.PI / 2;
+    rb.position.set(px + 0.011, 0, 0);
+    grp.add(rb); parts.push(rb);
+  });
+  // ходовые огни по скулам: в темноте арены борт получает контур
+  [-1, 1].forEach(o => {
+    const lp = new THREE.Mesh(new THREE.BoxGeometry(0.3, hw(0.05) * 0.06, hw(0.05) * 0.06),
+      bgGlowMat(mine ? 0x6fd8ff : 0xff8fb0, 0.6));
+    lp.position.set(0.05, hw(0.05) * 0.2, o * hw(0.05) * 0.86);
+    grp.add(lp);
+  });
+
+  grp.userData.hullParts = parts;               // им меняют материал, когда борт отходил
 
   // дюзы: раскалённые сопла в срезе кормы — самый сильный указатель «зад тут».
   // Держим их списком: на ходу факел вытягивается, и это единственное, что
   // отличает идущий борт от стоящего, когда след ушёл за корму из кадра.
-  const nz = beam * 0.42, jets = [];
+  const nz = hw(-0.48) * 0.85, jets = [];
   [-1, 0, 1].forEach(o => {
     if (o !== 0 && beam < 0.06) return;         // у мелочи одно сопло
     const e = new THREE.Mesh(
-      new THREE.CylinderGeometry(nz * 0.55, nz * 0.72, 0.055, 10),
+      new THREE.CylinderGeometry(nz * 0.42, nz * 0.9, 0.07, 8),
       bgGlowMat(0xffb469, 1.5)
     );
     e.rotation.z = Math.PI / 2;                 // ось сопла вдоль корпуса
-    e.position.set(-0.5 + 0.02, -beam * 0.06, o * nz * 1.15);
+    e.position.set(-0.5 + 0.02, -nz * 0.12, o * nz * 1.15);
     grp.add(e);
     jets.push(e);
   });
@@ -740,11 +1010,53 @@ function bgTrail(u, m, ang, moving) {
 // dim — борт уже отходил в этом ходу: в 2D он гасился до alpha 0.5, здесь
 // вместо прозрачности гаснет сама сталь. Прозрачный корпус в 3D показал бы
 // собственные внутренности и потерял бы светотень, ради которой всё затевалось.
+// Обшивка. Печём на канвасе бесшовный лист брони: расшивка панелей, чуть
+// разный тон соседних плит, потёртости по швам. Лист СЕРЫЙ — цвет и сторону
+// по-прежнему задаёт материал, поэтому одна текстура обслуживает оба флота.
+// Она же идёт в bumpMap: расшивка ловит бортовой свет и корпус перестаёт быть
+// гладкой болванкой, ради чего всё и делалось.
+function bgTexPlate() {
+  return bgTex('plate', 256, 256, (x, w) => {
+    const rnd = (() => { let s = 0x2f6a5b; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); })();
+    x.fillStyle = '#c9c9c9'; x.fillRect(0, 0, w, w);
+    // плиты: сетка 4×4 с лёгким разбросом тона — «сварено из листов»
+    const N = 4, c = w / N;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const v = 178 + Math.round(rnd() * 60);
+      x.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')';
+      x.fillRect(i * c + 1, j * c + 1, c - 2, c - 2);
+    }
+    // расшивка: тёмный шов + светлая фаска сразу под ним
+    x.lineWidth = 3; x.strokeStyle = 'rgba(22,26,32,0.95)';
+    for (let i = 0; i <= N; i++) {
+      x.beginPath(); x.moveTo(i * c, 0); x.lineTo(i * c, w); x.stroke();
+      x.beginPath(); x.moveTo(0, i * c); x.lineTo(w, i * c); x.stroke();
+    }
+    x.lineWidth = 1; x.strokeStyle = 'rgba(215,220,228,0.35)';
+    for (let i = 0; i <= N; i++) {
+      x.beginPath(); x.moveTo(i * c + 1.5, 0); x.lineTo(i * c + 1.5, w); x.stroke();
+      x.beginPath(); x.moveTo(0, i * c + 1.5); x.lineTo(w, i * c + 1.5); x.stroke();
+    }
+    // лючки и потёртости; всё внутри плиты, чтобы шов тайла остался чистым
+    for (let n = 0; n < 26; n++) {
+      const px = rnd() * w, py = rnd() * w, s = 2 + rnd() * 7;
+      x.fillStyle = rnd() < 0.5 ? 'rgba(60,64,70,0.45)' : 'rgba(205,210,218,0.25)';
+      x.fillRect(px, py, s, s * (0.4 + rnd()));
+    }
+  });
+}
+
 function bgHullMat(mine, dim, ghost) {
   const cache = BG._hullMat || (BG._hullMat = {});
   const k = (mine ? 'mine' : 'foe') + (dim ? '-dim' : '') + (ghost ? '-gh' : '');
   if (cache[k]) return cache[k];
+  const tex = bgTexPlate().clone();
+  tex.needsUpdate = true;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;                            // иначе к корме плиты слипаются в кашу
+  tex.colorSpace = THREE.SRGBColorSpace;
   cache[k] = new THREE.MeshStandardMaterial({
+    map: tex, bumpMap: tex, bumpScale: dim ? 0.2 : 0.45,
     color: mine ? (dim ? 0x445260 : 0x8fa6b8) : (dim ? 0x564850 : 0xa8909a),
     metalness: 0.62, roughness: dim ? 0.62 : 0.44,
     emissive: mine ? BG_C.mine : BG_C.foe,
@@ -1083,11 +1395,131 @@ function bgFxNode(objs, step) {
   };
 }
 
+// Словарь почерков живёт в battle_board.js (BBFX_W/BBFX_M) — сюда приходят уже
+// готовые эффекты. Наша задача: не свести их обратно к одной линии. Луч —
+// лучом, болванка и ракета — летящим телом, импульс — расходящимся кольцом.
 function bgFxBuild(f) {
-  if (f.kind === 'beam') return bgFxBeam(f);
+  if (f.kind === 'beam' || f.kind === 'lance' || f.kind === 'tether') return bgFxBeam(f);
+  if (f.kind === 'slug' || f.kind === 'rocket' || f.kind === 'nanite' || f.kind === 'lunge')
+    return bgFxShot(f);
+  if (f.kind === 'wave' || f.kind === 'warp') return bgFxWave(f);
   if (f.kind === 'flash') return bgFxFlash(f);
   if (f.kind === 'hit' || f.kind === 'boom') return bgFxBlast(f);
+  if (f.kind === 'nova') return bgFxNova(f);
+  if (f.kind === 'spark' || f.kind === 'bloom' || f.kind === 'emp'
+      || f.kind === 'frost' || f.kind === 'mend' || f.kind === 'drainx')
+    return bgFxBlast(Object.assign({}, f, { kind: 'hit' }));
   return null;
+}
+
+// Летящее тело: голова со свечением и короткий хвост, оба идут по ТОЙ ЖЕ
+// траектории, что и в 2D (bbFxPt) — дуга ракеты в обеих досках одинакова.
+function bgFxShot(f) {
+  const y = bgFxY(), R = BB.R * BG_FX_K, c = bgCol(f.col), big = f.big || 1;
+  const tail = bgRibbon(bgTexBeam(), c, 0);
+  const core = bgRibbon(bgTexBeam(), 0xffffff, 0);   // добела раскалённая нить внутри следа
+  const halo = bgSprite(bgTexGlow(), c, 0);
+  const head = bgSprite(bgTexGlow(), 0xffffff, 0);
+  const objs = [tail, core, halo, head];
+  const rocket = f.kind === 'rocket';
+  const slow = rocket || f.kind === 'nanite';
+  // хвост меряем в мире, а не в долях пути: иначе на длинной дистанции
+  // снаряд растягивается в мазок через полдоски
+  const L = Math.hypot(f.x1 - f.x0, f.y1 - f.y0) || 1;
+  const back = Math.min(slow ? 0.10 : 0.18, R * 0.9 / L);
+  // ракете — факел и дымный след: по ним она читается ракетой, а не трассером
+  let flame = null, smoke = null, sg = null, puff = null;
+  if (rocket) {
+    flame = bgSprite(bgTexGlow(), 0xffb45a, 0);
+    objs.push(flame);
+    puff = f.puff || [];
+    sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(puff.length * 3), 3));
+    smoke = new THREE.Points(sg, new THREE.PointsMaterial({
+      map: bgTexGlow(), color: 0xa9adbd, size: R * 0.8 * big, sizeAttenuation: true,
+      transparent: true, opacity: 0.45, depthWrite: false,
+    }));
+    smoke.userData.ownGeo = true; smoke.frustumCulled = false;
+    objs.push(smoke);
+  }
+  return bgFxNode(objs, t => {
+    const k = f.kind === 'lunge' ? bbEase(Math.min(1, t * 1.15)) : Math.min(1, t);
+    const p = bbFxPt(f, k), q = bbFxPt(f, Math.max(0, k - back));
+    const a = t > 0.85 ? (1 - t) / 0.15 : 1;
+    bgAimRibbon(tail, q.x, y, q.y, p.x, y, p.y, R * 0.22 * big);
+    bgAimRibbon(core, q.x, y, q.y, p.x, y, p.y, R * 0.06 * big);
+    tail.material.opacity = 0.75 * a;
+    core.material.opacity = 0.95 * a;
+    const s = R * (slow ? 0.6 : 0.5) * big;
+    halo.position.set(p.x, y, p.y); head.position.set(p.x, y, p.y);
+    halo.scale.set(s, s, 1); halo.material.opacity = 0.75 * a;
+    head.scale.set(s * 0.38, s * 0.38, 1); head.material.opacity = 0.95 * a;
+    if (rocket) {
+      const dx = p.x - q.x, dz = p.y - q.y, dl = Math.hypot(dx, dz) || 1;
+      const fs = R * (0.55 + 0.18 * Math.sin(t * 40 + (f.seed || 0))) * big;
+      flame.position.set(p.x - dx / dl * fs * 0.5, y, p.y - dz / dl * fs * 0.5);
+      flame.scale.set(fs, fs, 1); flame.material.opacity = 0.8 * a;
+      const arr = sg.attributes.position.array;
+      let n = 0;
+      puff.forEach((s2, i) => {
+        if (s2.at > k) return;
+        const cpt = bbFxPt(f, s2.at);
+        arr[i * 3] = cpt.x; arr[i * 3 + 1] = y; arr[i * 3 + 2] = cpt.y;
+        n++;
+      });
+      // ещё не рождённые клубы прячем в точку старта, а не размазываем по сцене
+      puff.forEach((s2, i) => { if (s2.at > k) { arr[i * 3] = f.x0; arr[i * 3 + 1] = y - 1e4; arr[i * 3 + 2] = f.y0; } });
+      sg.attributes.position.needsUpdate = true;
+      smoke.material.opacity = 0.32 * a;
+    }
+  });
+}
+
+// Ядерный удар. Обычный взрыв, растянутый вширь, читается бледным блином:
+// свет спрайта размазывается по площади. Поэтому у ядерки сверху ещё две
+// вещи — слепящая вспышка первых кадров и плотное белое ядро, которое живёт
+// дольше огня. Так удар видно даже с общего плана.
+function bgFxNova(f) {
+  const y = bgFxY(), R = BB.R * BG_FX_K;
+  const big = f.big || 1;
+  // огненный шар держим в разумных размерах — размах даёт не он, а кольца
+  const base = bgFxBlast(Object.assign({}, f, { kind: 'boom', big: big * 1.15 }));
+  const flash = bgSprite(bgTexGlow(), 0xffffff, 0);
+  const kern = bgSprite(bgTexGlow(), 0xfff3d0, 0);
+  const ring = bgSprite(bgTexRing(), 0xffffff, 0);
+  [flash, kern, ring].forEach(o => o.position.set(f.px, y, f.py));
+  const extra = bgFxNode([flash, kern, ring], t => {
+    const a = 1 - t;
+    // Спрайт «на всю доску» гаснет в серую муть: свет размазывается по площади.
+    // Поэтому вспышка держится компактной и яркой, а размах даёт кольцо.
+    const fl = Math.max(0, 1 - t / 0.14);
+    const s1 = R * 2.2 * big * (0.5 + t * 2);
+    flash.scale.set(s1, s1, 1); flash.material.opacity = fl;
+    const s2 = R * big * (0.7 + t * 1.2);
+    kern.scale.set(s2, s2, 1); kern.material.opacity = 0.95 * a * a;
+    const s3 = R * (1 + bbEase(t) * 9) * 2;
+    ring.scale.set(s3, s3, 1); ring.material.opacity = 0.6 * a * a;
+  });
+  return { step(t) { base.step(t); extra.step(t); },
+           kill() { base.kill(); extra.kill(); } };
+}
+
+// Импульс вокруг борта и прокол прыжка: кольцо, расходящееся по плоскости боя.
+function bgFxWave(f) {
+  const y = bgFxY(), R = BB.R * BG_FX_K, c = bgCol(f.col);
+  const ring = bgSprite(bgTexRing(), c, 0);
+  const in2 = bgSprite(bgTexRing(), 0xffffff, 0);
+  const warp = f.kind === 'warp';
+  const cx = warp ? f.x1 : f.px, cy = warp ? f.y1 : f.py;
+  ring.position.set(cx, y, cy); in2.position.set(f.px, y, f.py);
+  const rad = R * 1.75 * Math.max(1, f.rad || 1);
+  return bgFxNode([ring, in2], t => {
+    const a = 1 - t, g = rad * bbEase(t) * 2;
+    ring.scale.set(g, g, 1); ring.material.opacity = 0.7 * a;
+    // у прыжка второе кольцо СХЛОПЫВАЕТСЯ в точке ухода — направление читается
+    const g2 = warp ? R * 1.8 * (1 - t) : g * 0.78;
+    in2.scale.set(g2, g2, 1); in2.material.opacity = 0.4 * a;
+  });
 }
 
 // Трассер: широкое свечение + белое ядро, у кинетики — летящая болванка с
@@ -1203,7 +1635,8 @@ function bgFxBlast(f) {
 
   return bgFxNode(objs, t => {
     const a = 1 - t;
-    const grow = boom ? R * (0.5 + t * 1.35) : R * (0.28 + t * 0.6);
+    // big приходит из профиля: у ядерки и торпеды шар кратно шире обычного
+    const grow = (boom ? R * (0.5 + t * 1.35) : R * (0.28 + t * 0.6)) * (f.big || 1);
     ball.scale.set(grow * 2.2, grow * 2.2, 1); ball.material.opacity = 0.55 * a;
     core.scale.set(grow * 0.85, grow * 0.85, 1); core.material.opacity = (boom ? 0.8 : 0.62) * a;
     const sp = sg.attributes.position.array;
