@@ -269,7 +269,11 @@
       "Bash(node tools/db_q.js \"select \\(select string_agg\\(l,E'\\\\n'\\) from unnest\\(string_to_array\\(pg_get_functiondef\\(p.oid\\),E'\\\\n'\\)\\) with ordinality t\\(l,i\\) where i between \\(select min\\(i\\) from unnest\\(string_to_array\\(pg_get_functiondef\\(p.oid\\),E'\\\\n'\\)\\) with ordinality u\\(l2,i\\) where l2 like '%ЭНЕРГОСЕТЬ%'\\) and \\(select min\\(i\\)+40 from unnest\\(string_to_array\\(pg_get_functiondef\\(p.oid\\),E'\\\\n'\\)\\) with ordinality u\\(l2,i\\) where l2 like '%ЭНЕРГОСЕТЬ%'\\)\\) s from pg_proc p where p.proname='_cn_recompute'\")",
       "Bash(node -e \"global.window={};eval\\(require\\('fs'\\).readFileSync\\('reactor_gen.js','utf8'\\)\\);var R=window.RG;['corvette','dreadnought','tanki'].forEach\\(k=>{var s=R.stats\\({klass:k}\\);console.log\\(k,s.mass+'кг',s.capacityPenalty+'/'+s.capCls\\);}\\);\")",
       "Bash(node tools/db_run.js _reactor_forge_units.sql)",
-      "Bash(node tools/db_run.js _reactor_forge.sql _rg_restat.sql)"
+      "Bash(node tools/db_run.js _reactor_forge.sql _rg_restat.sql)",
+      "Bash(node tools/db_q.js \"select id,name,cfg from faction_reactors order by id desc limit 8\")",
+      "Bash(node tools/db_q.js \"select name,\\(stats->>'power'\\)::int p,\\(stats->>'mass'\\)::int m,\\(stats->>'capacityPenalty'\\)::int cap,\\(stats->>'price'\\)::bigint price,stats->'resurs' res from faction_reactors\")",
+      "Bash(sed -i \"s/var BUILD = '20260808rgprice';/var BUILD = '20260808rgcards';/\" index.html)",
+      "Bash(sed -i \"s/constructors.js?v=20260808rganim/constructors.js?v=20260808rgcards/;s/reactor_forge_ui.js?v=20260808rganim/reactor_forge_ui.js?v=20260808rgcards/\" index.html)"
     ]
   }
 }

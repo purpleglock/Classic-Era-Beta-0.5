@@ -354,32 +354,91 @@
 .cn-comp-pick:hover .cn-comp-change { border-color: var(--gd); background: color-mix(in srgb, var(--gd) 12%, var(--b2)); }
 
 /* ── Модалка выбора компонента: сетка полных карточек ── */
-.cn-info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 12px; margin-top: 14px; }
+.cn-info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: 14px; margin-top: 14px; }
 /* Подходящее — вперёд: то, что не встаёт в этот узел, уезжает в конец списка. */
 .cn-info-grid .cn-info-card.locked { order: 9; }
-.cn-info-card { display: flex; flex-direction: column; background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-md); overflow: hidden; cursor: pointer; transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast); }
-.cn-info-card:hover { border-color: var(--gd); transform: translateY(-2px); box-shadow: 0 10px 24px -16px var(--gd); }
-.cn-info-card.on { border-color: var(--gd); box-shadow: inset 0 0 0 1px var(--gd); }
-.cn-info-card.locked { opacity: .55; cursor: not-allowed; filter: grayscale(.5); }
-.cn-info-card.locked:hover { transform: none; border-color: var(--w2); box-shadow: none; }
-.cn-info-img { width: 100%; aspect-ratio: 16 / 9; flex: 0 0 auto; }
-.cn-info-body { display: flex; flex-direction: column; gap: 9px; padding: 12px; }
-.cn-info-nm { font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--t1); line-height: 1.25; }
+
+/* Карточка компонента = «деталь на выдаче»: срезанный угол, каркас-подложка,
+   арт с бликом и ярлыком, снизу — приёмная планка. Рамка сделана СЛОЕМ
+   (::before каркас + ::after заливка), а не border: clip-path режет border.
+   Акцент ровно один — --gd; всё остальное держится геометрией. */
+.cn-info-card {
+  --cnc: 15px;                                   /* размер среза угла */
+  --cne: var(--w2);                              /* цвет каркаса */
+  position: relative; z-index: 1; display: flex; flex-direction: column;
+  padding: 1px; background: transparent; border: 0; border-radius: 0;
+  cursor: pointer;
+  transition: transform var(--transition-fast), filter var(--transition-fast);
+}
+.cn-info-card::before, .cn-info-card::after {
+  content: ''; position: absolute; pointer-events: none;
+  clip-path: polygon(0 0, calc(100% - var(--cnc)) 0, 100% var(--cnc), 100% 100%, var(--cnc) 100%, 0 calc(100% - var(--cnc)));
+  transition: background var(--transition-fast);
+}
+.cn-info-card::before { inset: 0; z-index: -2; background: var(--cne); }
+.cn-info-card::after { inset: 1px; z-index: -1; background: linear-gradient(165deg, var(--b2), var(--b1) 55%); }
+.cn-info-card:hover { --cne: var(--gd); transform: translateY(-3px); filter: drop-shadow(0 12px 20px color-mix(in srgb, var(--gd) 22%, transparent)); }
+/* Выбранное: каркас акцентом + светящаяся полоса по верху арта. */
+.cn-info-card.on { --cne: var(--gd); }
+.cn-info-card.locked { opacity: .6; cursor: not-allowed; filter: grayscale(.65); }
+.cn-info-card.locked:hover { --cne: var(--w2); transform: none; filter: grayscale(.65); }
+
+/* ── Арт: срез повторяет карточку, поверх — сетка-скан, ярлык и метки ── */
+.cn-info-art {
+  position: relative; flex: 0 0 auto; overflow: hidden;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+}
+.cn-info-art::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(180deg, transparent 55%, color-mix(in srgb, var(--b1) 85%, transparent)),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px);
+}
+.cn-info-img { width: 100%; aspect-ratio: 16 / 9; }
+.cn-info-tag, .cn-info-flag {
+  position: absolute; top: 7px; z-index: 2;
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+  letter-spacing: calc(.08em * var(--deco-ls-mult, 1)); text-transform: uppercase;
+  padding: 3px 7px; line-height: 1; white-space: nowrap;
+}
+.cn-info-tag { left: 0; color: var(--b1); background: var(--t3); clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%); padding-right: 10px; }
+.cn-info-card.on .cn-info-tag, .cn-info-card:hover .cn-info-tag { background: var(--gd); }
+.cn-info-flag { right: 7px; color: var(--gd); border: 1px solid color-mix(in srgb, var(--gd) 55%, transparent); background: color-mix(in srgb, var(--b1) 82%, transparent); }
+.cn-info-lock { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+
+.cn-info-body { display: flex; flex-direction: column; gap: 9px; padding: 11px 12px 12px; }
+.cn-info-nm { position: relative; font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--t1); line-height: 1.25; padding-left: 9px; }
+.cn-info-nm::before { content: ''; position: absolute; left: 0; top: 2px; bottom: 2px; width: 2px; background: var(--cne); }
+/* Оставлены для старой разметки (чип слота) — новая карточка их не печатает. */
 .cn-info-cur { font-family: var(--font-mono); font-size: 9px; color: var(--gd); text-transform: uppercase; letter-spacing: calc(.05em * var(--deco-ls-mult, 1)); }
 .cn-info-lvl { display: inline-block; vertical-align: middle; font-family: var(--font-mono); font-size: 9px; font-weight: 700; color: var(--pu, #8a7cff); background: color-mix(in srgb, var(--pu, #8a7cff) 16%, transparent); border: var(--deco-frame-w, 1px) solid color-mix(in srgb, var(--pu, #8a7cff) 36%, transparent); border-radius: var(--radius-pill, 999px); padding: 1px 6px; letter-spacing: calc(.04em * var(--deco-ls-mult, 1)); }
 .cn-info-stats { display: flex; flex-direction: column; }
-.cn-info-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 4px 0; border-bottom: var(--deco-frame-w, 1px) solid var(--w1); }
+/* Строка ТТХ: подпись слева, цифра справа моноширинным с ровными разрядами —
+   колонка чисел читается сверху вниз, а не «прыгает». */
+.cn-info-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 12px; padding: 4px 0; border-bottom: var(--deco-frame-w, 1px) solid var(--w1); }
 .cn-info-row:last-child { border-bottom: 0; }
 .cn-info-row span { color: var(--t3); }
-.cn-info-row b { color: var(--t1); font-family: var(--font-display); font-weight: 600; }
+.cn-info-row b { color: var(--t1); font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
 .cn-info-res { display: flex; flex-direction: column; gap: 5px; }
 .cn-info-sub { font-family: var(--font-mono); font-size: 9px; letter-spacing: calc(.06em * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t3); }
 .cn-info-desc { font-size: 11.5px; color: var(--t2); line-height: 1.5; white-space: pre-wrap; }
-.cn-info-pick { margin-top: 2px; text-align: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: calc(.05em * var(--deco-ls-mult, 1)); color: var(--gd); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); padding: 7px; background: var(--b2); }
-.cn-info-card:hover .cn-info-pick { border-color: var(--gd); }
+/* Приёмная планка: на ховере заливается акцентом — жест «взять деталь». */
+.cn-info-pick {
+  margin-top: 2px; text-align: center; font-family: var(--font-mono); font-size: 11px;
+  font-weight: 700; letter-spacing: calc(.08em * var(--deco-ls-mult, 1)); text-transform: uppercase;
+  color: var(--gd); border: 0; border-radius: 0; padding: 8px 7px; background: var(--b2);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.cn-info-card:hover .cn-info-pick { background: var(--gd); color: var(--b1); }
+.cn-info-card.on .cn-info-pick { background: color-mix(in srgb, var(--gd) 18%, var(--b2)); }
 /* Причина блокировки бывает длинной («Не тянет: Корвет — масса 87 270 кг > 40 000»):
    плашка переносит строки, а не режет текст. */
-.cn-info-pick.cn-info-lk { color: var(--t4); line-height: 1.45; overflow-wrap: anywhere; }
+.cn-info-pick.cn-info-lk { color: var(--t4); line-height: 1.45; overflow-wrap: anywhere; letter-spacing: 0; text-transform: none; font-weight: 400; }
+.cn-info-card:hover .cn-info-pick.cn-info-lk { background: var(--b2); color: var(--t4); }
+/* Реакторная схема из верфи: тёмный «стенд» под установкой, а не обрезка по краю. */
+.cn-imgbox-rg { background: radial-gradient(ellipse at 50% 55%, color-mix(in srgb, var(--te) 7%, var(--b3)), var(--b1) 75%); }
+.cn-imgbox-rg svg { width: 100%; height: 100%; object-fit: contain; }
 
 /* ═══════════════════════════════════════════════════════════════
    КИБЕРПАНК-ОФОРМЛЕНИЕ КОРАБЕЛЬНОЙ ВЕРФИ (.cn-cyb)

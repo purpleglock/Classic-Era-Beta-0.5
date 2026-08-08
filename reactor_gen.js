@@ -159,7 +159,11 @@ const CONF = {
 // refForce — максимум каталожной «силы реактора» этого класса (в формуле
 //            скорости KV): без потолка свой реактор разгонял бы дредноут
 //            впятеро против заводского;
-// massCap  — сколько килограммов класс готов отдать под энергетику.
+// massCap  — сколько килограммов класс готов отдать под энергетику;
+// refPrice — цена ТОГО ЖЕ каталожного реактора-эталона (KV.engines), от неё
+//            считается цена своей установки: единой «цены за ⚡» в каталоге
+//            нет (у дрона 3 млн за 400 ⚡, у станции 70 млн за 160 000);
+// refCM/refSV — его же закладка цветмета и старвиса, нижняя планка сырья.
 //
 // ПОЧЕМУ ЭТАЛОН, А НЕ АБСОЛЮТНАЯ ФИЗИКА. Каталожные шкалы энергии по классам
 // не сводятся к одной формуле: батарея дрона даёт 400 ⚡ при полусотне
@@ -169,24 +173,24 @@ const CONF = {
 // эталону выбранного класса — ровно как оружейная верфь считает энергию от
 // «типового орудия класса» (_tg_stats, powerBase/powerRef).
 const CARRIERS = {
-  peh:              { ru: 'Пехота',              hull: 100,    refPower: 160,    refForce: 100, massCap: 60, cap: 10, div: 100 },
-  dron:             { ru: 'Дрон',                hull: 20,     refPower: 400,    refForce: 120, massCap: 20, cap: 6, div: 100 },
-  dronkos:          { ru: 'БПЛА (косм.)',        hull: 50,     refPower: 400,    refForce: 120, massCap: 30, cap: 6, div: 100 },
-  btr:              { ru: 'БТР / БМП',           hull: 13600,  refPower: 800,    refForce: 300, massCap: 1800, cap: 70, div: 100 },
-  tanki:            { ru: 'Танк',                hull: 46500,  refPower: 3600,   refForce: 260, massCap: 6000, cap: 130, div: 100 },
-  arta:             { ru: 'Артиллерия',          hull: 5000,   refPower: 3600,   refForce: 29,  massCap: 1400, cap: 160, div: 100 },
-  aviacia:          { ru: 'Атм. авиация',        hull: 20000,  refPower: 4800,   refForce: 250, massCap: 3300, cap: 80, div: 100 },
-  vertihui:         { ru: 'Вертолёт',            hull: 8000,   refPower: 5200,   refForce: 110, massCap: 2100, cap: 100, div: 100 },
-  mla:              { ru: 'Звездолёт',           hull: 20000,  refPower: 3600,   refForce: 80,  massCap: 4000, cap: 80, div: 100 },
-  corvette:         { ru: 'Корвет',              hull: 90000,  refPower: 5200,   refForce: 140, massCap: 32000, cap: 250, div: 500 },
-  destroyer:        { ru: 'Эсминец',             hull: 109500, refPower: 10000,  refForce: 180, massCap: 48000, cap: 400, div: 500 },
-  supportCarrier:   { ru: 'Авианосец подд.',     hull: 100000, refPower: 5600,   refForce: 80,  massCap: 40000, cap: 600, div: 500 },
-  mediumCruiser:    { ru: 'Средний крейсер',     hull: 250000, refPower: 22000,  refForce: 250, massCap: 105000, cap: 700, div: 500 },
-  hyperCruiser:     { ru: 'Факельщик',           hull: 200000, refPower: 30000,  refForce: 250, massCap: 90000, cap: 600, div: 500 },
-  multiroleCarrier: { ru: 'Многоцел. авианосец', hull: 230000, refPower: 40000,  refForce: 100, massCap: 105000, cap: 5500, div: 500 },
-  battleship:       { ru: 'Линкор',              hull: 400000, refPower: 52000,  refForce: 100, massCap: 180000, cap: 1200, div: 500 },
-  dreadnought:      { ru: 'Дредноут',            hull: 500000, refPower: 82000,  refForce: 25,  massCap: 250000, cap: 1800, div: 500 },
-  ss13:             { ru: 'СС-13 (станция)',     hull: 450000, refPower: 160000, refForce: 60,  massCap: 240000, cap: 1000, div: 500 },
+  peh:              { ru: 'Пехота',              hull: 100,    refPower: 160,    refForce: 100, massCap: 60, cap: 10, div: 100, refPrice: 3000000, refCM: 10, refSV: 0 },
+  dron:             { ru: 'Дрон',                hull: 20,     refPower: 400,    refForce: 120, massCap: 20, cap: 6, div: 100, refPrice: 3000000, refCM: 50, refSV: 0 },
+  dronkos:          { ru: 'БПЛА (косм.)',        hull: 50,     refPower: 400,    refForce: 120, massCap: 30, cap: 6, div: 100, refPrice: 3000000, refCM: 50, refSV: 0 },
+  btr:              { ru: 'БТР / БМП',           hull: 13600,  refPower: 800,    refForce: 300, massCap: 1800, cap: 70, div: 100, refPrice: 4000000, refCM: 10, refSV: 0 },
+  tanki:            { ru: 'Танк',                hull: 46500,  refPower: 3600,   refForce: 260, massCap: 6000, cap: 130, div: 100, refPrice: 10000000, refCM: 300, refSV: 0 },
+  arta:             { ru: 'Артиллерия',          hull: 5000,   refPower: 3600,   refForce: 29,  massCap: 1400, cap: 160, div: 100, refPrice: 4500000, refCM: 50, refSV: 0 },
+  aviacia:          { ru: 'Атм. авиация',        hull: 20000,  refPower: 4800,   refForce: 250, massCap: 3300, cap: 80, div: 100, refPrice: 10000000, refCM: 400, refSV: 0 },
+  vertihui:         { ru: 'Вертолёт',            hull: 8000,   refPower: 5200,   refForce: 110, massCap: 2100, cap: 100, div: 100, refPrice: 10000000, refCM: 50, refSV: 0 },
+  mla:              { ru: 'Звездолёт',           hull: 20000,  refPower: 3600,   refForce: 80,  massCap: 4000, cap: 80, div: 100, refPrice: 3000000, refCM: 50, refSV: 0 },
+  corvette:         { ru: 'Корвет',              hull: 90000,  refPower: 5200,   refForce: 140, massCap: 32000, cap: 250, div: 500, refPrice: 20000000, refCM: 50, refSV: 10 },
+  destroyer:        { ru: 'Эсминец',             hull: 109500, refPower: 10000,  refForce: 180, massCap: 48000, cap: 400, div: 500, refPrice: 25000000, refCM: 100, refSV: 100 },
+  supportCarrier:   { ru: 'Авианосец подд.',     hull: 100000, refPower: 5600,   refForce: 80,  massCap: 40000, cap: 600, div: 500, refPrice: 12000000, refCM: 50, refSV: 0 },
+  mediumCruiser:    { ru: 'Средний крейсер',     hull: 250000, refPower: 22000,  refForce: 250, massCap: 105000, cap: 700, div: 500, refPrice: 40000000, refCM: 200, refSV: 250 },
+  hyperCruiser:     { ru: 'Факельщик',           hull: 200000, refPower: 30000,  refForce: 250, massCap: 90000, cap: 600, div: 500, refPrice: 40000000, refCM: 300, refSV: 100 },
+  multiroleCarrier: { ru: 'Многоцел. авианосец', hull: 230000, refPower: 40000,  refForce: 100, massCap: 105000, cap: 5500, div: 500, refPrice: 70000000, refCM: 100, refSV: 100 },
+  battleship:       { ru: 'Линкор',              hull: 400000, refPower: 52000,  refForce: 100, massCap: 180000, cap: 1200, div: 500, refPrice: 80000000, refCM: 400, refSV: 0 },
+  dreadnought:      { ru: 'Дредноут',            hull: 500000, refPower: 82000,  refForce: 25,  massCap: 250000, cap: 1800, div: 500, refPrice: 150000000, refCM: 600, refSV: 400 },
+  ss13:             { ru: 'СС-13 (станция)',     hull: 450000, refPower: 160000, refForce: 60,  massCap: 240000, cap: 1000, div: 500, refPrice: 70000000, refCM: 500, refSV: 300 },
 };
 const CARRIER_ORDER = ['peh', 'dron', 'dronkos', 'btr', 'tanki', 'arta', 'aviacia', 'vertihui',
   'mla', 'corvette', 'destroyer', 'supportCarrier', 'mediumCruiser', 'hyperCruiser',
@@ -225,6 +229,26 @@ const PW_EXP    = 0.72;
 const MASS_EXP  = 0.85;
 const MASS_REST = 0.55;
 const STAB_MIN  = 15;
+// ХРАПОВИК МАССЫ. Компактность — законная награда за высшую школу, но не
+// бесплатная: 242 000 ⚡ не влезают в сорок тонн, как бы удачно ни сошёлся
+// индекс железа. Ниже этой планки масса не падает НИКОГДА:
+//   massFloor = massCap × MASS_REST × MASS_FLOOR_K × powRatio.
+// На эталоне (powRatio 1) планка вдвое ниже эталонной массы — то есть на
+// заводской мощности компактная схема по-прежнему выигрывает до 2× веса;
+// на потолке ×3 планка съедает 82% массового лимита класса, и «махина»
+// наконец грузит шасси как махина.
+const MASS_FLOOR_K = 0.50;
+// ЦЕНА И СЫРЬЁ — от ЭТАЛОНА КЛАССА, а не от абсолютной мощности. Единой
+// «цены за ⚡» в каталоге нет (дрон: 3 млн за 400 ⚡, станция: 70 млн за
+// 160 000), поэтому старая степенная формула 9200 × power^0.62 давала
+// дредноуту втрое мощнее заводского вдвое дешевле заводского. Внутри же
+// одного класса каталог почти линеен по мощности (дредноут: ×3.73 мощности
+// = ×3.33 цены), отсюда показатель 0.95.
+const PRICE_EXP = 0.95;
+// Сырьё растёт МЕДЛЕННЕЕ цены (0.70 против 0.95): за перебор мощности игрок
+// платит казной, а не выгребает склад — редкие материалы упираются в добычу,
+// и ×3 к старвису на один борт кладёт верфь державы, а не балансирует её.
+const RES_EXP   = 0.70;
 
 // Эталонная сборка: от неё считаются ОТНОСИТЕЛЬНЫЕ индексы мощности и массы.
 // Числа E_REF/M_REF — её же индексы, посчитанные раз и навсегда (см. selftest
@@ -322,6 +346,17 @@ function index(cfg) {
 }
 var REF_IX = index(normalize(REF_CFG));
 
+// «Дороговизна схемы» — во сколько раз этот набор школа/топливо/съём дороже
+// в производстве, чем ЭТАЛОННЫЙ набор. Нормируется на PRICE_QUAL_REF, так что
+// сама по себе величина смысла не имеет — важно только отношение.
+function priceQual(S, F, C) {
+  return Math.pow(1 + F.q, 0.5) * Math.pow(1 + C.eff * 2, 0.6) * Math.pow(S.capK, 0.60);
+}
+var PRICE_QUAL_REF = (function () {
+  var r = normalize(REF_CFG);
+  return priceQual(SCHOOLS[r.school], FUELS[r.fuel], CONV[r.conv]);
+})();
+
 function stats(input) {
   var cfg = normalize(input);
   var S = SCHOOLS[cfg.school], F = FUELS[cfg.fuel], C = CONV[cfg.conv],
@@ -333,7 +368,21 @@ function stats(input) {
   var eR = ix.E / REF_IX.E, mR = ix.M / REF_IX.M;
 
   var power = Math.max(1, Math.round(CAR.refPower * Math.pow(eR, PW_EXP)));
+  // Во сколько раз сборка перекрывает лучший заводской реактор класса. От
+  // этого числа теперь считаются и планка массы, и цена, и закладка сырья:
+  // выработка — единственное, что игрок выкручивает осознанно, и платить
+  // он должен именно за неё.
+  var pRatio = power / Math.max(1, CAR.refPower);
   var mass  = Math.max(1, Math.round(CAR.massCap * MASS_REST * Math.pow(mR, MASS_EXP)));
+  // ЖЕЛЕЗО, КОТОРОЕ ИГРОК РЕАЛЬНО ОБТОЧИЛ — до храповика. Именно оно (а не
+  // итоговая масса) заказывает конструкционное сырьё и теплоноситель: храповик
+  // ниже — про то, сколько места установка занимает на шасси, а не про то,
+  // сколько меди ушло в контур. Считать закладку от него значило впятеро
+  // задрать ведомость просто потому, что реактор мощный.
+  var massIx = mass;
+  // Храповик: индекс железа может уехать вниз сколь угодно далеко, масса — нет.
+  var massFloor = Math.round(CAR.massCap * MASS_REST * MASS_FLOOR_K * pRatio);
+  if (massFloor > mass) mass = massFloor;
   mass = mass >= 100 ? Math.round(mass / 5) * 5 : mass;
 
   // ТЕПЛОНАПРЯЖЁННОСТЬ — сколько тока снимается с единицы железа ОТНОСИТЕЛЬНО
@@ -393,18 +442,28 @@ function stats(input) {
                                + (cfg.conv === 'seebeck' || cfg.conv === 'tpv' ? 6 : 0));
 
   // КОНСТРУКЦИОННОЕ СЫРЬЁ (KV-номенклатура) — уходит в цену ГС проекта.
+  // Массовая часть осталась (радиаторы и защита правда стоят металла), но
+  // снизу её подпирает каталожная закладка эталона, вытянутая по мощности:
+  // компактная схема экономит железо, а не редкие материалы.
+  var resFloor = Math.pow(pRatio, RES_EXP);
   var resurs = {
-    blackmetall:   Math.max(1, Math.round(mass / 700)),
-    coloredmetall: Math.max(1, Math.round(mass / 1500 * (1 + cfg.rad))),
-    rudametall:    cfg.shield > 0 ? Math.max(1, Math.round(mass * cfg.shield / 2600)) : 0,
+    blackmetall:   Math.max(1, Math.round(massIx / 700)),
+    coloredmetall: Math.max(1, Math.round(Math.max(massIx / 1500 * (1 + cfg.rad),
+                                                   (CAR.refCM || 0) * resFloor))),
+    rudametall:    cfg.shield > 0 ? Math.max(1, Math.round(massIx * cfg.shield / 2600)) : 0,
     kristall:      (cfg.conv === 'direct' || cfg.conv === 'tpv' || cfg.conv === 'mhd')
-                     ? Math.max(1, Math.round(mass / 2000)) : 0,
-    staarvis:      (S.pw >= 1.35) ? Math.max(1, Math.round(mass / 3200)) : 0,
+                     ? Math.max(1, Math.round(massIx / 2000)) : 0,
+    staarvis:      (S.pw >= 1.35) ? Math.max(1, Math.round(Math.max(massIx / 3200,
+                                                   (CAR.refSV || 0) * resFloor))) : 0,
   };
 
-  // KV-прайс (в игре не тратится, показываем справочно — как у орудий).
-  var price = Math.round(9200 * Math.pow(power, 0.62) * Math.pow(1 + F.q, 0.5)
-                       * Math.pow(1 + C.eff * 2, 0.6) / 1000) * 1000;
+  // KV-ПРАЙС. Якорь — цена каталожного эталона этого же класса, множитель —
+  // превышение по мощности и «дороговизна схемы» (богатое топливо, высокий
+  // КПД, экзотическая школа) ОТНОСИТЕЛЬНО эталонной сборки. Эталон стоит
+  // ровно столько же, сколько заводской реактор, который он копирует.
+  var price = Math.max(100000, Math.round(
+      (CAR.refPrice || 20000000) * Math.pow(pRatio, PRICE_EXP)
+      * priceQual(S, F, C) / PRICE_QUAL_REF / 100000) * 100000);
 
   // ЗАКЛАДКА ТОПЛИВА — РАЗОВАЯ, при постройке борта. Бедное топливо кладут
   // тоннами, богатое — граммами; обогащение всегда стоит сырья сверху.
@@ -415,11 +474,11 @@ function stats(input) {
   var coolRes = { water: 'Жидкая вода', salt: 'Ионит', metal: 'Медь',
                   lithium: 'Редкоземельные руды', gas: 'Гелий-3', field: 'Стелларит' }[cfg.cool];
   if (coolRes) {
-    var q = Math.ceil(mass * L.mass / 4000 * (1 + cfg.rad * 0.5));
+    var q = Math.ceil(massIx * L.mass / 4000 * (1 + cfg.rad * 0.5));
     if (q > 0) bill[coolRes] = (bill[coolRes] || 0) + q;
   }
   if (cfg.shield > 0) {
-    var qs = Math.ceil(mass * cfg.shield / 5000);
+    var qs = Math.ceil(massIx * cfg.shield / 5000);
     if (qs > 0) bill['Титан'] = (bill['Титан'] || 0) + qs;
   }
 
@@ -996,6 +1055,7 @@ return {
   CARRIERS: CARRIERS, CARRIER_ORDER: CARRIER_ORDER, SCHOOL_CARRIERS: SCHOOL_CARRIERS,
   LIMITS: LIMITS, DEFAULTS: DEFAULTS,
   CAP_RATIO: CAP_RATIO, PW_EXP: PW_EXP, MASS_EXP: MASS_EXP, MASS_REST: MASS_REST,
+  MASS_FLOOR_K: MASS_FLOOR_K, PRICE_EXP: PRICE_EXP, RES_EXP: RES_EXP,
   STAB_MIN: STAB_MIN, REF_CFG: REF_CFG, REF_IX: REF_IX, index: index, fit: fit,
   allowedSchools: allowedSchools, powerCap: powerCap,
   sliderRange: sliderRange, tame: tame,

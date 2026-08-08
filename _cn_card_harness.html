@@ -1,0 +1,48 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<title>карточки конструктора</title>
+<link rel="stylesheet" href="css/index.css">
+<script src="reactor_gen.js"></script>
+<style>body{background:var(--b0,#0a0e12);padding:24px;font-family:sans-serif}</style>
+</head><body>
+<div class="cn-modal-ov show cn-cyb" style="position:static;display:block;background:none">
+<div class="cn-modal cn-pick-modal">
+<div class="cn-modal-name">Выбор реактора</div>
+<div class="cn-info-grid" id="g"></div>
+</div></div>
+<script>
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+let N=0;
+function art(cfg){let s=RG.render(RG.tame(Object.assign({},RG.DEFAULTS,cfg)));const ns='_'+(++N);s=s.replace(/rg_[a-zA-Z0-9_]+/g,m=>m+ns);
+ return '<span class="cn-imgbox cn-imgbox-tg cn-imgbox-rg cn-info-img">'+s+'</span>';}
+function kv(nm,e,tier,klass){const at=(a,i)=>a[Math.min(a.length-1,i)];
+ const school=at(RG.allowedSchools(klass),tier);
+ const cool=at(RG.allowedCool(school).filter(c=>c!=='passive'||school==='ritag'),tier+1);
+ let h=0;for(const ch of nm)h=(h*31+ch.charCodeAt(0))|0;
+ return art0(RG.normalize({klass,school,fuel:at(RG.allowedFuels(school),tier),conv:at(RG.allowedConv(school),tier),
+  conf:at(RG.allowedConf(school),tier),cool,cores:Math.min(6,1+tier),enrich:1.5+tier*0.6,temp:0.8+tier*0.2,
+  rad:0.6+tier*0.4,shield:0.8+tier*0.3,damp:0.2,detail:Math.min(1,0.45+tier*0.15),
+  size:Math.max(0.15,Math.min(3,0.62+tier*0.34+Math.max(-0.15,Math.min(0.35,Math.log10(Math.max(1,e)/4000)*0.22)))),
+  seed:Math.abs(h)%9999}));}
+function art0(cfg){let s=RG.render(cfg);const ns='_'+(++N);s=s.replace(/rg_[a-zA-Z0-9_]+/g,m=>m+ns);
+ return '<span class="cn-imgbox cn-imgbox-tg cn-imgbox-rg cn-info-img">'+s+'</span>';}
+function rows(a){return a.map(([l,v])=>`<div class="cn-info-row"><span>${l}</span><b>${v}</b></div>`).join('');}
+function card(o){
+ return `<div class="cn-info-card${o.on?' on':''}${o.locked?' locked':''}">
+  <div class="cn-info-art">${o.img}${o.tag?`<span class="cn-info-tag">${o.tag}</span>`:''}${o.on?'<span class="cn-info-flag">установлено</span>':''}${o.locked?'<span class="cn-info-lock">🔒</span>':''}</div>
+  <div class="cn-info-body">
+    <div class="cn-info-nm">${esc(o.nm)}</div>
+    <div class="cn-info-stats">${rows(o.rows)}</div>
+    <div class="cn-info-res"><div class="cn-info-sub">◇ Сырьё за единицу</div><div class="cn-bill"><span class="cn-bill-i">Гравиядро ×68</span> <span class="cn-bill-i">Медь ×25</span></div></div>
+    <div class="cn-info-desc">${o.desc||'…'}</div>
+    <div class="cn-info-pick${o.locked?' cn-info-lk':''}">${o.locked?'Требует исследования: Термоядерный синтез II':(o.on?'✓ выбрано':'Выбрать ▸')}</div>
+  </div></div>`;
+}
+const R=[['Выработка энергии','242 398 E'],['Масса установки','203 230 кг'],['Нагрузка на шасси','−406 из 1 800'],['Сила установки','67'],['Секунд в ходу боя','4.68 с'],['Цена','252 673 ГС']];
+document.getElementById('g').innerHTML=[
+ card({nm:'⚛ Гниллозубый 2',tag:'КВГ',img:art({school:'kvg',fuel:'grav',klass:'dreadnought'}),rows:[['Схема','КВГ'],['КПД','78%'],['Запас устойчивости','16%'],...R],on:true,desc:'Своя установка с реакторной верфи.'}),
+ card({nm:'⚛ Женева-Прайм',tag:'ТЯР',img:art({school:'tyar',fuel:'he3',klass:'battleship',tint:'#3a4a52',accent:'#7fe3c0'}),rows:[['Схема','ТЯР'],['КПД','54%'],['Запас устойчивости','41%'],...R]}),
+ card({nm:'КГГРн22-К «Моздок»',tag:'Ур. 1',img:kv('КГГРн22-К «Моздок»',3800,0,'corvette'),rows:R}),
+ card({nm:'АР22 МЗ-К «Саркосома»',tag:'Ур. 2',img:kv('АР22 МЗ-К «Саркосома»',4200,1,'corvette'),rows:R}),
+ card({nm:'РнА55-К «Аквитания»',tag:'Ур. 3',img:kv('РнА55-К «Аквитания»',5200,2,'corvette'),rows:R,locked:true}),
+].join('');
+</script></body></html>

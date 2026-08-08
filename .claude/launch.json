@@ -32,6 +32,18 @@
         "tools/shot_sink.js"
       ],
       "port": 8792
+    },
+    {
+      "name": "cardharness",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--yes",
+        "http-server",
+        "-p",
+        "8797",
+        "-c-1"
+      ],
+      "port": 8797
     }
   ]
 }

@@ -613,7 +613,6 @@
           '<button class="hbtn" id="rf_bMine">Мои реакторы</button>' +
           '<input id="rf_nm" maxlength="48" placeholder="Название установки" value="' + esc(CNR.editName || '') + '">' +
           '<button class="hbtn" id="rf_bDos">Досье</button>' +
-          '<button class="hbtn" id="rf_bDl">SVG</button>' +
           '<button class="hbtn acc" id="rf_bSave">✓ Зарегистрировать</button>' +
         '</div>' +
         '<div id="rf_stage">' +
@@ -716,13 +715,8 @@
     };
     $r('bMine').onclick = function (e) { openMinePop(e.target); };
     $r('bDos').onclick = function () { $r('dos').classList.toggle('on'); };
-    $r('bDl').onclick = function () {
-      var b = new Blob([R().render(CNR.cfg)], { type: 'image/svg+xml' });
-      var a = document.createElement('a');
-      a.href = URL.createObjectURL(b);
-      a.download = ((($r('nm') || {}).value || 'reactor').trim() || 'reactor') + '.svg';
-      a.click();
-    };
+    // Кнопки выгрузки SVG в шапке больше нет: схема установки живёт в
+    // карточке выбора реактора в конструкторе, скачивать файл незачем.
     $r('bSave').onclick = register;
 
     stage.addEventListener('pointerdown', function (e) {

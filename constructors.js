@@ -666,6 +666,10 @@ function cnReactorToObj(r) {
     resurs: st.resurs || { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
     _fuelBill: st.bill || {}, _reactor: true, _reactorId: r.id, _reactorCfg: r.cfg || null,
     _stab: st.stab || 0, _eff: st.eff || 0, _schoolAb: st.schoolAb || '',
+    // Боевые следствия установки (считает _reactor_battle_link.sql): множитель
+    // пула времени хода от устойчивости и срез скрытности от тепловой
+    // сигнатуры. В карточке без них игрок не видел ПОЛОВИНЫ того, что берёт.
+    _tpk: st.tpk || 1, _stealthCut: st.stealthCut || 0, _capCls: st.capCls || 0,
   };
 }
 // Дописать свои реакторы в db.reactors[k], предварительно убрав вписанные ранее.
@@ -781,6 +785,74 @@ function cnTurretImgTag(cfg, cls) {
   return `<span class="cn-imgbox cn-imgbox-tg ${cls || ''}">`
     + s.replace(/ width="\d+" height="\d+"/, ' width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block"')
     + `</span>`;
+}
+// ── Арт своей реакторной установки для карточки выбора ──
+// Тот же движок, что и в редакторе верфи (RG.render по сохранённому cfg).
+// Кэш по id: сетка карточек перерисовывается на каждый чих, а рендер SVG
+// не бесплатный.
+const CN_RG_CACHE = {};
+let CN_RG_N = 0;
+// Класс конструктора → носитель реакторной верфи. Ключи кораблей и наземки
+// частью совпадают (corvette, destroyer, tanki…), остальное сводим руками:
+// от носителя зависит, какие ШКОЛЫ вообще доступны, а значит и вид установки.
+const CN_RG_CARRIER = { frigate: 'corvette', cruiser: 'mediumCruiser', carrier: 'multiroleCarrier', station: 'ss13' };
+function cnRgCarrier(k) {
+  if (!k) return 'corvette';
+  if (RG.CARRIERS[k]) return k;
+  return CN_RG_CARRIER[k] || 'corvette';
+}
+// Каталожный реактор своего cfg не имеет — собираем его ПО УРОВНЮ, а не по
+// одному имени. Раньше все уровни шли через RG.fromKV, а он от жалкой разницы
+// в 3800→5200 E выдавал ту же школу и ту же компоновку: три карточки корвета
+// выглядели одним и тем же ящиком. Теперь уровень двигает школу, топливо,
+// съём, теплоотвод и число контуров — Ур.3 видно от Ур.1 без чтения цифр.
+function cnRgCatalogCfg(o, idx, k) {
+  const klass = cnRgCarrier(k), tier = Math.max(0, +idx || 0);
+  const at = (arr, i) => arr[Math.min(arr.length - 1, i)];
+  const school = at(RG.allowedSchools(klass), tier);
+  const cool = at(RG.allowedCool(school).filter(c => c !== 'passive' || school === 'ritag'), tier + 1);
+  let h = 0; for (const ch of String(o.name || '')) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  let cfg = RG.normalize({
+    klass, school,
+    fuel: at(RG.allowedFuels(school), tier),
+    conv: at(RG.allowedConv(school), tier),
+    conf: at(RG.allowedConf(school), tier),
+    cool,
+    cores: Math.min(6, 1 + tier), enrich: 1.5 + tier * 0.6, temp: 0.8 + tier * 0.2,
+    rad: 0.6 + tier * 0.4, shield: 0.8 + tier * 0.3, damp: 0.2,
+    detail: Math.min(1, 0.45 + tier * 0.15),
+    // Габарит НЕ подгоняем под каталожную выработку (как это делает RG.fromKV
+    // для пресета): слабая школа на Ур.1 раздувалась до потолка, лишь бы выдать
+    // свои 3 800 E, и первый уровень выходил крупнее третьего. На карточке
+    // важно другое — чтобы ступень читалась: габарит растёт с уровнем, а лёгкий
+    // довесок от выработки разводит соседей внутри уровня.
+    size: Math.max(0.15, Math.min(3, 0.62 + tier * 0.34
+      + Math.max(-0.15, Math.min(0.35, Math.log10(Math.max(1, +o.energy || 1) / 4000) * 0.22)))),
+    seed: Math.abs(h) % 9999,
+  });
+  return cfg;
+}
+function cnReactorImgTag(o, cls, idx, k) {
+  if (!o || !window.RG) return null;
+  const key = String(o._reactorId || (k || '') + '|' + (idx || 0) + '|' + (o.name || ''));
+  let svg = CN_RG_CACHE[key];
+  if (svg === undefined) {
+    try {
+      let cfg = o._reactorCfg;
+      if (typeof cfg === 'string') cfg = JSON.parse(cfg);
+      if (!cfg) cfg = cnRgCatalogCfg(o, idx, k);
+      svg = RG.render(cfg);
+      // Идентификаторы градиентов/фильтров у всех установок одинаковые
+      // (rg_hull, rg_core…), а цвета — разные: два SVG на одной странице, и
+      // вторая карточка красится первой. Пространство имён снимает склейку —
+      // заодно разводит и классы внутреннего <style> (он документный).
+      const ns = '_' + (++CN_RG_N);
+      svg = svg.replace(/rg_[a-zA-Z0-9_]+/g, m => m + ns);
+    } catch (e) { svg = null; }
+    CN_RG_CACHE[key] = svg;
+  }
+  if (!svg) return null;
+  return `<span class="cn-imgbox cn-imgbox-tg cn-imgbox-rg ${cls || ''}">${svg}</span>`;
 }
 function cnWeaponImgTag(item, imgPath, cls) {
   const art = cnWeaponTurretArt(item, imgPath);
@@ -951,6 +1023,23 @@ function cnCompStatsRows(info) {
       } else push('Уровень', 'Ур. ' + ((info.idx || 0) + 1));
       push('Выработка энергии', cnNum(o.energy) + ' E');
       if (o.weight) push('Масса установки', cnNum(o.weight) + ' кг');
+      // Реактор — не только «сколько E». Он грузит шасси, двигает борт,
+      // светится в ИК и задаёт длину хода в бою. Раньше карточка молчала обо
+      // всём этом, и выбор шёл по одной цифре выработки.
+      if (+o.capacityPenalty > 0) push('Нагрузка на шасси', '−' + cnNum(o.capacityPenalty)
+        + (o._capCls ? ' из ' + cnNum(o._capCls) : ''));
+      if (+o.capacityBoost) push('Полезный объём', (o.capacityBoost > 0 ? '+' : '') + cnNum(o.capacityBoost));
+      if (+o.force > 0) push('Сила установки', cnNum(o.force) + ' (в скорость борта)');
+      if (o._reactor) {
+        const tp = (6 * (o._tpk || 1));
+        push('Секунд в ходу боя', tp.toFixed(2) + ' с'
+          + (o._tpk === 1 ? '' : ' (' + (o._tpk > 1 ? '+' : '−') + Math.abs(Math.round((o._tpk - 1) * 100)) + '%)'));
+        if (+o._stealthCut > 0) push('Скрытность борта', '−' + cnNum(o._stealthCut) + ' (греется)');
+      }
+      if (+o.visibility > 0) push('Тепловая сигнатура', '+' + cnNum(o.visibility));
+      // Строки про modul/dviglo/radar/svaz тут НЕТ намеренно: потолок отсеков
+      // конструктор берёт из КЛАССА (cnModCls), реакторные поля он игнорирует.
+      // Показать их — соврать игроку про то, чего установка не даёт.
       pushPrice(cnNum(o.cost) + ' ГС'); break;
     case 'armor':   push('Броня', '+' + cnNum(o.armor) + ' AR'); pushPrice(cnNum(o.cost) + ' ГС'); break;
     case 'shield':  push('Щит', o.shield ? cnNum(o.shield) + ' ед.' : 'нет'); { const e = +o.energy || +o.power || 0; if (e) push('Потребление', cnNum(e) + ' E'); } pushPrice(cnNum(o.cost) + ' ГС'); break;
@@ -1064,15 +1153,25 @@ function cnCompFullHtml(info, action) {
     ? `<div class="cn-info-res"><div class="cn-info-sub">◇ Сырьё ${info.kind === 'class' ? 'корпуса' : 'за единицу'}</div><div class="cn-bill">${cnBillHtml(bill)}</div></div>` : '';
   // Корпус и специализация показываются ЗАПЕЧЁННЫМ SVG (тот же движок, что и схема),
   // орудие — своим генератором; остальное — картинкой из assets.
+  // Своя реакторная установка рисуется СВОЕЙ схемой из верфи — так же, как
+  // корпус и орудие рисуются своими генераторами. Файла webp у неё нет и не
+  // будет, а «нет картинки» на самой дорогой детали борта — стыд.
   const imgHtml = info.kind === 'weapon'
     ? cnWeaponImgTag(info.obj, info.imgPath, 'cn-info-img')
     : info.kind === 'class' ? cnHullImgTag(info.key, null, 'cn-info-img')
     : info.kind === 'type' ? cnHullImgTag(info.k, info.idx, 'cn-info-img')
-    : cnImgTag(info.imgPath, 'cn-info-img');
+    : (info.kind === 'reactor' ? cnReactorImgTag(info.obj, 'cn-info-img', info.idx, info.k) : null)
+      || cnImgTag(info.imgPath, 'cn-info-img');
+  // Ярлык слева сверху на арте: уровень каталожной детали или школа своей
+  // установки. Одна метка, по которой карточки читаются пачкой.
+  const tag = info.kind === 'reactor'
+    ? (info.obj._reactor ? esc(info.obj._schoolAb || 'своя') : 'Ур. ' + ((info.idx || 0) + 1))
+    : (info.kind === 'armor' || info.kind === 'shield' || info.kind === 'engine' || info.kind === 'radar')
+      ? 'Ур. ' + ((info.idx || 0) + 1) : '';
   return `<div class="cn-info-card${on ? ' on' : ''}${locked ? ' locked' : ''}"${(action && !locked) ? ` onclick="${action}"` : ''}>
-    ${imgHtml}
+    <div class="cn-info-art">${imgHtml}${tag ? `<span class="cn-info-tag">${tag}</span>` : ''}${on ? '<span class="cn-info-flag">установлено</span>' : ''}${locked ? '<span class="cn-info-lock">🔒</span>' : ''}</div>
     <div class="cn-info-body">
-      <div class="cn-info-nm">${locked ? '🔒 ' : ''}${info.kind === 'reactor' && !info.obj._reactor ? `<span class="cn-info-lvl">Ур. ${(info.idx || 0) + 1}</span> ` : ''}${esc(info.obj.name)}${on ? ' <span class="cn-info-cur">установлено</span>' : ''}</div>
+      <div class="cn-info-nm">${esc(info.obj.name)}</div>
       <div class="cn-info-stats">${cnCompStatsRows(info)}</div>
       ${billHtml}
       <div class="cn-info-desc">${esc(info.desc || '…')}</div>
