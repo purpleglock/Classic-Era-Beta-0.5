@@ -264,7 +264,12 @@
       "Bash(sed -i \"s/20260719yatg1/20260719yatg2/g\" index.html css/index.css)",
       "Bash(node -e \"require\\('fs'\\).readFileSync\\('auth.js','utf8'\\);new Function\\(require\\('fs'\\).readFileSync\\('auth.js','utf8'\\)\\)\")",
       "Bash(node tools/db_run.js _pancolonial_fleet.sql)",
-      "Bash(node tools/db_dump_fn.js spatial_status)"
+      "Bash(node tools/db_dump_fn.js spatial_status)",
+      "Bash(node tools/db_q.js \"select p.proname, \\(select string_agg\\(l,E'\\\\n'\\) from unnest\\(string_to_array\\(pg_get_functiondef\\(p.oid\\),E'\\\\n'\\)\\) l where l like '%wob%' or l like '%power%'\\) s from pg_proc p where p.proname in \\('_cn_recompute','_cn_wpn_obj'\\)\")",
+      "Bash(node tools/db_q.js \"select \\(select string_agg\\(l,E'\\\\n'\\) from unnest\\(string_to_array\\(pg_get_functiondef\\(p.oid\\),E'\\\\n'\\)\\) with ordinality t\\(l,i\\) where i between \\(select min\\(i\\) from unnest\\(string_to_array\\(pg_get_functiondef\\(p.oid\\),E'\\\\n'\\)\\) with ordinality u\\(l2,i\\) where l2 like '%ЭНЕРГОСЕТЬ%'\\) and \\(select min\\(i\\)+40 from unnest\\(string_to_array\\(pg_get_functiondef\\(p.oid\\),E'\\\\n'\\)\\) with ordinality u\\(l2,i\\) where l2 like '%ЭНЕРГОСЕТЬ%'\\)\\) s from pg_proc p where p.proname='_cn_recompute'\")",
+      "Bash(node -e \"global.window={};eval\\(require\\('fs'\\).readFileSync\\('reactor_gen.js','utf8'\\)\\);var R=window.RG;['corvette','dreadnought','tanki'].forEach\\(k=>{var s=R.stats\\({klass:k}\\);console.log\\(k,s.mass+'кг',s.capacityPenalty+'/'+s.capCls\\);}\\);\")",
+      "Bash(node tools/db_run.js _reactor_forge_units.sql)",
+      "Bash(node tools/db_run.js _reactor_forge.sql _rg_restat.sql)"
     ]
   }
 }

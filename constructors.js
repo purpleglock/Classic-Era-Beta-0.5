@@ -80,6 +80,7 @@ const CN_HUB = [
   { slug: 'build-ship', ico: '🚀', name: 'Корабельная верфь', desc: 'Космические корабли: от корветов до дредноутов. Реактор, броня, щиты, ангары, вооружение.', cat: 'ship' },
   { slug: 'build-army', ico: '🪖', name: 'Планетарный арсенал', desc: 'Единый конструктор армии: пехота, БТР, танки, артиллерия, дроны, авиация. Ходовая, броня, орудия — по правилам Кваквантора.', cat: 'army' },
   { slug: 'build-alloy', ico: '⚗', name: 'Материаловедение', desc: 'Своя броня из настоящих ресурсов. Пропорции решают: реакции и пороги рождают HP, стойкости и трейты. Сплавы идут в слот брони всех конструкторов.', cat: 'alloy' },
+  { slug: 'build-reactor', ico: '⚛', name: 'Реакторная верфь', desc: 'Своя энергоустановка: школа (РИТЭГ, ЯЭУ, ТЯР, МГД, АМУ, КВГ), топливо со склада державы, теплоноситель, КПД преобразования и удержание зоны. Готовые реакторы идут в слот реактора того класса, под который спроектированы.', cat: 'reactor' },
   { slug: 'build-turret', ico: '⚙', name: 'Оружейная верфь', desc: 'Своё орудие: класс установки, технология, калибр и стволы. Масса и энергия решают, кто его потянет. Готовые орудия идут в слот вооружения всех конструкторов.', cat: 'turret' },
   // Конструктор дивизий убран из хаба: армии теперь формируются из готовых юнитов
   // («Звёздный марш»). Билдер доступен только для правки уже созданных дивизий (cnEdit).
@@ -623,6 +624,68 @@ function cnTurretToWeapon(t, div) {
   };
 }
 
+// ── СВОИ РЕАКТОРЫ (реакторная верфь) ────────────────────────
+// Тот же приём, что со сплавами и орудиями: строка faction_reactors
+// разворачивается в объект реактора формата каталога и ДОПИСЫВАЕТСЯ в
+// db.reactors[k] того класса, под который установка спроектирована
+// (reactors — список ПО КЛАССАМ, поэтому отдельной группы, как у оружия,
+// тут нет — просто хвост списка). Сервер при публикации резолвит установку
+// по data.reactorId и пересчитывает ТТХ сам (_cn_reac_obj).
+let CN_REACTORS = null, CN_REACTORS_FID;
+function cnInvalidateReactors() { CN_REACTORS = null; }
+if (typeof window !== 'undefined') window.cnInvalidateReactors = cnInvalidateReactors;
+async function cnLoadReactors(force) {
+  const fac = cnMyFactionMeta();
+  const fid = (fac && fac.faction_id) || '';
+  if (!force && CN_REACTORS && CN_REACTORS_FID === fid) return CN_REACTORS;
+  CN_REACTORS_FID = fid;
+  try {
+    let q = 'select=id,name,cfg,stats,carriers,faction_id&order=id.asc';
+    if (fid) q = 'faction_id=eq.' + encodeURIComponent(fid) + '&' + q;
+    CN_REACTORS = await dbGet('faction_reactors', q) || [];
+  } catch (e) { CN_REACTORS = []; }
+  return CN_REACTORS;
+}
+// Строка реактора → объект формата каталога. Зеркало _cn_reac_obj на сервере.
+// _fuelBill — своя топливная ведомость: у каталожных реакторов её нет (изотопы
+// и гелий там считаются от энергии через CN_BILL_DIV.reIso/reHe), а у своих
+// топливо выбрано игроком, и списывать надо именно его.
+function cnReactorToObj(r) {
+  const st = r.stats || {};
+  return {
+    name: '⚛ ' + (r.name || 'Реактор'),
+    cost: Math.round(st.price || 0), price: st.price || 0,
+    energy: Math.round(st.power || 0), power: Math.round(st.power || 0),
+    force: Math.round(st.force || 1), weight: Math.round(st.mass || 0),
+    modul: st.modul || 1, dviglo: st.dviglo || 1, radar: st.radar || 1, svaz: st.svaz || 1,
+    capacityBoost: st.capacityBoost || 0, crewRequired: 0,
+    // Своя установка ГРУЗИТ шасси — ровно как своё орудие с оружейной верфи
+    // (каталожные реакторы не платят ничем, у них этого поля нет).
+    capacityPenalty: st.capacityPenalty || 0,
+    visibility: st.sig || 0,
+    resurs: st.resurs || { blackmetall: 0, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 0 },
+    _fuelBill: st.bill || {}, _reactor: true, _reactorId: r.id, _reactorCfg: r.cfg || null,
+    _stab: st.stab || 0, _eff: st.eff || 0, _schoolAb: st.schoolAb || '',
+  };
+}
+// Дописать свои реакторы в db.reactors[k], предварительно убрав вписанные ранее.
+// Порядок — по id (стабильный), чтобы индексы не «плавали» между заходами;
+// сам проект всё равно держит стабильный reactorId, но список не должен
+// прыгать под курсором при каждом заходе в конструктор.
+function cnMergeReactors(db) {
+  if (!db || !db.reactors) return;
+  const list = (CN_REACTORS || []).slice().sort((a, b) => String(a.id) < String(b.id) ? -1 : 1);
+  for (const k in db.reactors) {
+    if (!Array.isArray(db.reactors[k])) continue;
+    db.reactors[k] = db.reactors[k].filter(r => !r._reactor);
+    list.forEach(r => {
+      // Установка видна только «своему» классу: её выработка посчитана от
+      // эталона именно этого борта, в чужом она бессмысленна.
+      if ((r.carriers || []).includes(k)) db.reactors[k].push(cnReactorToObj(r));
+    });
+  }
+}
+
 // ── Арт орудия: тот же генератор, что и на оружейной верфи ───
 // Свои орудия (_turretCfg) и башенные позиции каталога без webp-арта рисуем
 // turret_gen.js вживую — с тем же масштабом по size/классу, что и на верфи
@@ -881,7 +944,14 @@ function cnCompStatsRows(info) {
   switch (info.kind) {
     case 'class':   push('База ОН', o.baseON); push('ОН за модуль', '+' + o.modON); if (o.types) push('Специализаций', o.types.length); break;
     case 'type':    push('Прочность', cnNum(o.hp) + ' HP'); push('Броня корпуса', '+' + cnNum(o.armor) + ' AR'); pushPrice(cnNum(o.cost) + ' ГС'); break;
-    case 'reactor': push('Уровень', 'Ур. ' + ((info.idx || 0) + 1)); push('Выработка энергии', cnNum(o.energy) + ' E'); pushPrice(cnNum(o.cost) + ' ГС'); break;
+    case 'reactor':
+      if (o._reactor) {
+        push('Схема', o._schoolAb); push('КПД', o._eff + '%');
+        push('Запас устойчивости', o._stab + '%');
+      } else push('Уровень', 'Ур. ' + ((info.idx || 0) + 1));
+      push('Выработка энергии', cnNum(o.energy) + ' E');
+      if (o.weight) push('Масса установки', cnNum(o.weight) + ' кг');
+      pushPrice(cnNum(o.cost) + ' ГС'); break;
     case 'armor':   push('Броня', '+' + cnNum(o.armor) + ' AR'); pushPrice(cnNum(o.cost) + ' ГС'); break;
     case 'shield':  push('Щит', o.shield ? cnNum(o.shield) + ' ед.' : 'нет'); { const e = +o.energy || +o.power || 0; if (e) push('Потребление', cnNum(e) + ' E'); } pushPrice(cnNum(o.cost) + ' ГС'); break;
     case 'engine':  if (window.KV_DB) push('Тяга', cnNum(o.force)); else push('Скорость', o.speed + ' у.е.'); { const e = +o.energy || +o.power || 0; if (e) push('Потребление', cnNum(e) + ' E'); } pushPrice(cnNum(o.cost) + ' ГС'); break;
@@ -1002,7 +1072,7 @@ function cnCompFullHtml(info, action) {
   return `<div class="cn-info-card${on ? ' on' : ''}${locked ? ' locked' : ''}"${(action && !locked) ? ` onclick="${action}"` : ''}>
     ${imgHtml}
     <div class="cn-info-body">
-      <div class="cn-info-nm">${locked ? '🔒 ' : ''}${info.kind === 'reactor' ? `<span class="cn-info-lvl">Ур. ${(info.idx || 0) + 1}</span> ` : ''}${esc(info.obj.name)}${on ? ' <span class="cn-info-cur">установлено</span>' : ''}</div>
+      <div class="cn-info-nm">${locked ? '🔒 ' : ''}${info.kind === 'reactor' && !info.obj._reactor ? `<span class="cn-info-lvl">Ур. ${(info.idx || 0) + 1}</span> ` : ''}${esc(info.obj.name)}${on ? ' <span class="cn-info-cur">установлено</span>' : ''}</div>
       <div class="cn-info-stats">${cnCompStatsRows(info)}</div>
       ${billHtml}
       <div class="cn-info-desc">${esc(info.desc || '…')}</div>
@@ -1030,7 +1100,7 @@ function cnSlotSelected(slot) {
   const locked = slot === 'class' && cnClassLocked();
   wrap.innerHTML = `<button class="cn-slot-chip${locked ? ' cn-slot-locked' : ''}" ${locked ? `title="Класс нельзя менять при правке — создайте новый проект" onclick="toast('Класс менять нельзя: создайте новый проект','inf')"` : `onclick="cnOpenSlotPicker('${slot}')"`}>
     <span class="cn-slot-lbl">${locked ? '🔒 ' : ''}${CN_SLOT_SHORT[slot] || slot}</span>
-    <span class="cn-slot-val">${slot === 'reactor' ? 'Ур.' + ((+sel.value || 0) + 1) + ' · ' : ''}${esc(info.obj.name)}</span>
+    <span class="cn-slot-val">${slot === 'reactor' && !info.obj._reactor ? 'Ур.' + ((+sel.value || 0) + 1) + ' · ' : ''}${esc(info.obj.name)}</span>
   </button>`;
 }
 // Модалка выбора компонента слота (полные карточки; гейт по исследованиям)
@@ -3748,7 +3818,9 @@ function cnModUnlocked(cat, g) {
 }
 function cnCompOptions(cat, type, list, labelFn) {
   const open = cnCompUnlocked(cat, type);
-  return list.map((it, i) => { const locked = i >= 1 && !open; return `<option value="${i}"${locked ? ' disabled' : ''}>${locked ? '🔒 ' : ''}${esc(labelFn(it, i))}</option>`; }).join('');
+  // Своё изделие с верфи исследовать не нужно — верфь уже взяла за него ОН
+  // при регистрации (тот же довод, что и по своим орудиям).
+  return list.map((it, i) => { const locked = i >= 1 && !open && !(it && (it._reactor || it._alloy)); return `<option value="${i}"${locked ? ' disabled' : ''}>${locked ? '🔒 ' : ''}${esc(labelFn(it, i))}</option>`; }).join('');
 }
 
 // ════════════════════════════════════════════════════════════
@@ -3769,9 +3841,11 @@ async function cnVehRender(cat) {
   await cnLoadPartOverrides();   // админ-имена/описания орудий и модулей
   await cnLoadAlloys();          // кастомные сплавы фракции в слот брони
   await cnLoadTurrets();         // свои орудия из оружейной верфи в слот вооружения
+  await cnLoadReactors();        // свои энергоустановки из реакторной верфи в слот реактора
   const def = CN_DEFS[cat];
   cnMergeAlloys(def.db);         // дописать сплавы в db.armors[k] всех классов
   cnMergeTurrets(def.db, CN_LOAD_DIV[cat] || 500);   // дописать свои орудия в db.weapons + карту доступности
+  cnMergeReactors(def.db);       // дописать свои реакторы в db.reactors[k] их класса
   CN.cat = cat; CN.def = def; CN.last = null; CN.editUnit = edit || null;
   CN.shipLayout = { mounts: [], bays: [] }; CN.schemShow = { weapons: true, bays: true };
 
@@ -3958,7 +4032,10 @@ function cnVehHandleClass_() {
 function cnVehClassDeps() {
   const def = CN.def, k = cnId('cn-class').value, cat = CN.cat;
   if (def.hasType) { const typeOpen = cnUnlocked('type.' + cat + '.' + k); cnId('cn-type').innerHTML = def.db.data[k].types.map((t, i) => { const locked = i >= 1 && !typeOpen; return `<option value="${i}"${locked ? ' disabled' : ''}>${locked ? '🔒 ' : ''}${esc(t.name)}</option>`; }).join(''); }
-  if (def.hasReactor) cnId('cn-reactor').innerHTML = cnCompOptions(cat, 'reactor', def.db.reactors[k], (r, i) => `Ур.${i + 1} · ${r.name} (${r.energy} E)`);
+  if (def.hasReactor) cnId('cn-reactor').innerHTML = cnCompOptions(cat, 'reactor', def.db.reactors[k],
+    (r, i) => r._reactor
+      ? `${r.name} · ${r._schoolAb} · ${r.energy} E · КПД ${r._eff}%`
+      : `Ур.${i + 1} · ${r.name} (${r.energy} E)`);
   cnId('cn-armor').innerHTML = cnCompOptions(cat, 'armor', def.db.armors[k], a => `${a.name} (+${cnNum(a.armor)} AR)`);
   cnId('cn-shield').innerHTML = cnCompOptions(cat, 'shield', def.db.shields[k], s => s.name);
   cnId('cn-engine').innerHTML = cnCompOptions(cat, 'engine', def.db.engines[k], e => window.KV_DB ? `${e.name} (тяга ${cnNum(e.force)})` : `${e.name} (${e.speed} у.е.)`);
@@ -4166,7 +4243,11 @@ function cnUnitBill(cat, k, parts) {
     if (t.engFuel) { cnBillAdd(bill, 'Метан', (p.engObj.energy || 0) / t.engFuel); cnBillAdd(bill, 'Дейтерий', (p.engObj.energy || 0) / t.engDeu); }
     else cnBillAdd(bill, 'Железо', 1);   // наземная ходовая часть
   }
-  if (p.reactObj && t.reIso) { cnBillAdd(bill, 'Изотопы', (p.reactObj.energy || 0) / t.reIso); cnBillAdd(bill, 'Гелий-3', (p.reactObj.energy || 0) / t.reHe); }
+  if (p.reactObj && p.reactObj._fuelBill) {
+    // Своя установка: топливо и теплоноситель выбраны игроком, и верфь уже
+    // посчитала закладку — берём её как есть, а не каталожные изотопы.
+    for (const nm in p.reactObj._fuelBill) cnBillAdd(bill, nm, p.reactObj._fuelBill[nm] || 0);
+  } else if (p.reactObj && t.reIso) { cnBillAdd(bill, 'Изотопы', (p.reactObj.energy || 0) / t.reIso); cnBillAdd(bill, 'Гелий-3', (p.reactObj.energy || 0) / t.reHe); }
   (p.weapons || []).forEach(({ w, q }) => {
     if (!w || !q) return;
     const kind = cnWpnResKind(w.name);
@@ -4413,6 +4494,8 @@ function cnVehCalc() {
     cap -= DL.mass;                                  // масса палубы — в единицах нагрузки
     power -= DL.energy;                              // узлы и усилители едят мощность реактора
     cap += (engObj && engObj.capacityBoost) || 0;
+    cap -= (reactObj && reactObj.capacityPenalty) || 0;   // своя энергоустановка: масса в единицах шасси
+    cap += (reactObj && reactObj.capacityBoost) || 0;    // компактная схема, наоборот, дарит объём
     if (radarObj) { crew += radarObj.crewRequired || 0; power -= radarObj.power || 0; cap -= radarObj.capacityPenalty || 0; }
     billWeapons.forEach(({ w, q }) => { q = q || 1; crew += (w.crewRequired || 0) * q; power -= (w.power || 0) * q; cap -= (w.capacityPenalty || 0) * q; addRes(w, q); });
     billModules.forEach(({ m }) => { crew += (m.crewRequired || 0); power -= (m.power || 0); cap += (m.capacity || 0); addRes(m, 1); });
@@ -4436,6 +4519,7 @@ function cnVehCalc() {
     // Потолки бюджетов — чтобы палуба могла нарисовать ШКАЛУ, а не голое «осталось».
     // Максимум = всё, что даёт шасси и бустеры; израсходовано = максимум − остаток.
     const capMax = (cls.capacity || 0) + ((armorObj && armorObj.capacityBoost) || 0) + ((engObj && engObj.capacityBoost) || 0)
+      + Math.max(0, (reactObj && reactObj.capacityBoost) || 0)
       + billModules.reduce((a, { m }) => a + Math.max(0, +m.capacity || 0), 0);
     const powerMax = (reactObj && reactObj.power) || 0;
     kv = { res, crew, power: Math.round(power), cap: Math.round(cap), capMax: Math.round(capMax), powerMax: Math.round(powerMax), radar: radarRange, eccm: radarEccm, rng: fireRange, speedUnit: 'квадрат' };
@@ -4546,7 +4630,14 @@ function cnVehCollectData() {
   const def = CN.def;
   const d = { class: cnId('cn-class').value };
   if (def.hasType) d.type = +cnId('cn-type').value;
-  if (def.hasReactor) d.reactor = +cnId('cn-reactor').value;
+  if (def.hasReactor) {
+    d.reactor = +cnId('cn-reactor').value;
+    // Своя установка несёт стабильный reactorId рядом с индексом: индекс мог
+    // сместиться (зарегистрировали ещё один реактор), id — нет. Сервер при
+    // публикации считает ТТХ по нему, а не по номеру в списке.
+    const _rObj = (def.db.reactors[d.class] || [])[d.reactor];
+    if (_rObj && _rObj._reactorId) d.reactorId = _rObj._reactorId; else delete d.reactorId;
+  }
   d.armor = +cnId('cn-armor').value;
   // Кастомный сплав: помимо индекса несём стабильный id — сервер пересчитает по рецепту.
   const _aObj = (def.db.armors[d.class] || [])[d.armor];
@@ -4594,6 +4685,12 @@ function cnVehApplyData(d) {
   cnVehClassDeps();
   if (def.hasType && d.type != null) cnId('cn-type').value = d.type;
   if (def.hasReactor && d.reactor != null) cnId('cn-reactor').value = d.reactor;
+  // Свой реактор ищем по стабильному id (индекс в db.reactors мог сместиться).
+  if (def.hasReactor && d.reactorId) {
+    const rarr = def.db.reactors[d.class] || [];
+    const ri = rarr.findIndex(r => String(r._reactorId) === String(d.reactorId));
+    if (ri >= 0) cnId('cn-reactor').value = ri;
+  }
   if (d.armor != null) cnId('cn-armor').value = d.armor;
   // Сплав ищем по стабильному id (индекс в db.armors мог сместиться со временем).
   if (d.armorAlloyId) {

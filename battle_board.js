@@ -68,6 +68,7 @@ const BB = {
   glTmo: 0,          // сторож завесы: 3D не доехал за отведённое время → 2D
   anim: { move: new Map(), fx: [], raf: 0 },   // движение кораблей + эффекты боя
   prevU: null,       // снимок юнитов прошлого кадра (для диффа перемещений/потерь)
+  moveSeen: null,    // Set id: кто маневрировал хоть раз за бой (курс уже настоящий)
   prevTurn: null,    // чей был ход в прошлом кадре ('me'|'foe'|side) — для баннера передачи хода
   camAnim: null,     // плавный доворот камеры к действиям противника {x0,y0,x1,y1,t0,dur}
   moveHint: new Map(), // id → реальный маршрут своего хода [{x,y,f}] (для анимации по гексам)
@@ -91,6 +92,7 @@ const BB_C = {
 // ── Открыть / закрыть ───────────────────────────────────────
 async function bbOpen(battleId, spectate, botFoe) {
   BB.id = battleId; BB.sel = null; BB.pick = null; BB.place = []; BB.spec = null;
+  BB.moveSeen = new Set();    // id бортов, которые хоть раз маневрировали за бой
   BB.traySL = 0;              // позиция ленты бортов живёт в пределах одного боя
   BB.spectate = !!spectate;   // зритель дуэли клуба: полное зрение, без действий
   BB.botFoe = !!botFoe;       // админ-тест против ботов: боты ходят сами, автоматически
@@ -182,6 +184,7 @@ function bbClose() {
   document.body.style.overflow = '';
   BB.id = null; BB.st = null; BB.cv = null; BB.ctx = null;
   BB.terr = null; BB.reach = null; BB.cov = null; BB.prevU = null;
+  BB.moveSeen = new Set();
   try { BB.fog = localStorage.getItem('bb_fog') !== '0'; } catch (e) { BB.fog = true; }
   BB.prevTurn = null; BB.camAnim = null; BB.moveHint.clear();
   BB.q = ''; BB.traySL = 0;          // строка поиска по резерву — своя на каждый бой
@@ -227,9 +230,25 @@ async function bbReload() {
   bbDiffAnimate(prev, BB.st.units || []);   // раньше баннера: дифф решает, магнитить ли к врагу
   bbTurnHandover();                         // баннер «Ход противника»/«Ваш ход» + возврат к своим
   // снимок для следующего диффа
+  bbMarkMoved(prev, BB.st.units || []);
   BB.prevU = (BB.st.units || []).map(u => ({ id: u.id, x: u.x, y: u.y, hp: u.hp, facing: u.facing, contact: u.contact, mine: u.mine, side: u.side }));
   bbMaybeBotTurn();
 }
+
+// Кто уже маневрировал ЗА ВЕСЬ БОЙ. Серверный флаг `moved` живёт один ход и
+// обнуляется на смене хода (и на финише боя) — по нему нельзя решать, доверять
+// ли курсу: иначе корабли раз за разом «доворачивают» обратно к стартовому
+// курсу стороны. Копим факт манёвра сами: флаг за ход ИЛИ сдвиг координат.
+function bbMarkMoved(prev, units) {
+  if (!BB.moveSeen) BB.moveSeen = new Set();
+  const pm = new Map((prev || []).map(p => [p.id, p]));
+  units.forEach(u => {
+    if (u.id == null) return;
+    const p = pm.get(u.id);
+    if (u.moved || (p && (p.x !== u.x || p.y !== u.y))) BB.moveSeen.add(u.id);
+  });
+}
+function bbEverMoved(u) { return !!u.moved || !!(BB.moveSeen && BB.moveSeen.has(u.id)); }
 
 // Ключ «чей сейчас ход» для сравнения кадров. Для участника — свой/чужой,
 // для зрителя дуэли — конкретная сторона.
@@ -3349,8 +3368,8 @@ function bbPaintUnits(ctx, s) {
     // Курс по стороне форсируем для ВСЕХ бортов, которые ещё НЕ маневрировали
     // (вся расстановка + свежевыведенные в бой корабли): флоты смотрят навстречу,
     // даже если сервер проставил facing в другую сторону. Как только корабль
-    // реально сходил (u.moved) — доверяем настоящему курсу с сервера.
-    const uu = (forming || !u.moved) ? Object.assign({}, u, { facing: bbSideFacing(u.side) }) : u;
+    // реально сходил (bbEverMoved) — доверяем настоящему курсу с сервера.
+    const uu = (forming || !bbEverMoved(u)) ? Object.assign({}, u, { facing: bbSideFacing(u.side) }) : u;
     bbShip(ctx, uu, spent ? 0.5 : 1);
   });
 }

@@ -185,6 +185,7 @@ async function go(slug, push=true) {
     'build-aviation': 'cnRenderAviation', 'build-division': 'cnRenderDivision',
     'build-alloy': 'cnRenderAlloyForge', // ⚗ материаловедение (алхимия брони)
     'build-turret': 'cnRenderTurretForge', // ⚙ оружейная верфь (генератор орудий)
+    'build-reactor': 'cnRenderReactorForge', // ⚛ реакторная верфь (генератор энергоустановок)
   };
   if (CN_ROUTES[slug]) {
     const fn = window[CN_ROUTES[slug]];

@@ -691,7 +691,7 @@ function bgPlaceUnits() {
     const m = BG.units.get(u.id); if (!m) return;
     // Курс по стороне для всех, кто ещё НЕ маневрировал: флоты смотрят
     // навстречу, даже если сервер проставил facing иначе (зеркало bbPaintUnits).
-    const uu = (!u.contact && (forming || !u.moved))
+    const uu = (!u.contact && (forming || !bbEverMoved(u)))
       ? Object.assign({}, u, { facing: bbSideFacing(u.side) }) : u;
     const c = bbUnitCenter(uu);
     m.position.set(c.px, m.userData.y, c.py);
