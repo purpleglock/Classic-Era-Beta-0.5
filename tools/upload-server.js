@@ -39,6 +39,7 @@ const ALLOWED_DIRS = {
   constructors: 'assets/constructors', // арты компонентов конструктора (орудия: ship_weapon_<slug>_<idx>.webp)
   precursor: 'assets/precursor',    // иконки вкладки «Дозвёздные миры» (<ключ>.webp: решения и статусы)
   intel:     'assets/intel',        // шапки вкладок новеллы «Разведуправление» (<вкладка>.webp)
+  vnmenu:    'assets/vn/menu',      // фоны экранов новеллы (<ключ>.webp: fight, sinli, rating…)
   perks:     'assets/perks',        // иконки перков оперативников (<ключ>.webp: ghost, saboteur…)
   artifacts: 'assets/artifacts',    // арты артефактов агентуры (<ключ>.webp; каталог spy_artifact_kinds)
 };

@@ -278,7 +278,11 @@
       "Bash(node tools/db_q.js ' *)",
       "Bash(node tools/db_q.js \"select table_name, column_name from information_schema.columns where table_schema='public' and column_name in \\('attacker_fid','defender_fid','winner_fid'\\) order by 1\")",
       "Bash(node tools/db_q.js \"select id,attacker_fid,defender_fid,status,kind,turn_no,ended_at,side_to_move,att_ready,def_ready,deadline_at from battles where kind='duel' order by created_at desc limit 5\")",
-      "Bash(node tools/db_q.js \"select * from fc_events order by 1 desc limit 5\")"
+      "Bash(node tools/db_q.js \"select * from fc_events order by 1 desc limit 5\")",
+      "Bash(grep -n \"return\\\\|</div>\\\\`\")",
+      "PowerShell(node tools/db_run.js _rg_school_tech.sql)",
+      "Bash(node --check reactor_gen.js)",
+      "Bash(node --check reactor_forge_ui.js)"
     ]
   }
 }

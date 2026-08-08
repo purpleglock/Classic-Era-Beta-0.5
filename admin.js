@@ -1329,7 +1329,80 @@ function adVNPanel() {
         </div>
       </div>
     </div>
+  </div>` + adVNMenuArtPanel();
+}
+// ── Фоны экранов новеллы (assets/vn/menu/<ключ>.webp) ──
+// Каждый экран новеллы (клуб, разлом, рейтинг…) умеет показывать свой арт-фон:
+// CSS-переменная --vn-art на #hp-vn-<ключ> тянет файл, слой растворяется книзу
+// маской. Файла нет — остаётся родной градиент экрана, ничего не ломается.
+// Те же файлы можно кинуть батником tools/vn_menus.bat.
+const AD_VNMENU_DIR = 'assets/vn/menu';
+const AD_VNMENU_KEYS = [
+  ['fight',    '🥊', 'Бойцовский клуб — арена и трибуны'],
+  ['sinli',    '⛓',  'Синли-бей — невольничий рынок'],
+  ['tama',     '🜛',  'Тама'],
+  ['fish',     '🎣', 'Рыбалка'],
+  ['intel',    '🕵', 'Разведуправление — общий фон экрана'],
+  ['geo',      '🜃',  'Георазведка'],
+  ['stars',    '✦',  'Stargaze'],
+  ['doom',     '☄',  'Длань Неотвратимости'],
+  ['poem',     '✒',  'Галактическая поэма'],
+  ['assembly', '🏛', 'Межзвёздная Ассамблея'],
+  ['rating',   '🏅', 'Рейтинг держав'],
+  ['research', '⚗',  'Исследования'],
+  ['planets',  '🪐', 'Планеты'],
+];
+function adVNMenuArtPanel() {
+  const bust = AD.vnMenuBust || '';
+  const cards = AD_VNMENU_KEYS.map(([k, ico, info]) => {
+    const url = `${AD_VNMENU_DIR}/${k}.webp${bust ? `?t=${bust}` : ''}`;
+    return `<div style="width:230px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:10px">
+      <div style="position:relative;width:100%;height:110px;border-radius:8px;overflow:hidden;border:1px solid var(--w2,#2a3340);background:#0b0d13">
+        <img src="${esc(url)}" alt="" onload="this.style.opacity=1" onerror="this.style.display='none'"
+             style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--t4,#6a7a88);font-size:26px">${ico}</div>
+      </div>
+      <div style="font-size:9px;font-family:monospace;letter-spacing:.12em;color:var(--t4,#6a7a88);margin-top:8px">${esc(k)}.webp</div>
+      <div style="font-size:11px;color:var(--t3,#8aa0b0);margin-top:3px;line-height:1.4;min-height:30px">${esc(info)}</div>
+      <input type="file" accept="image/*" id="ad-vnmenu-file-${esc(k)}" style="display:none" onchange="adVNMenuArtUpload('${esc(k)}', this)">
+      <button class="btn btn-gh btn-xs" style="width:100%;margin-top:6px" onclick="document.getElementById('ad-vnmenu-file-${esc(k)}').click()">Загрузить</button>
+      <div id="ad-vnmenu-st-${esc(k)}" style="font-size:9px;color:var(--t4,#6a7a88);margin-top:4px;min-height:12px"></div>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:24px;border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b2,#141a22);padding:16px 18px">
+    <div style="font-family:var(--font-display,sans-serif);font-size:16px;font-weight:700;color:var(--gdl,#5fb0e6)">🖼 Фоны экранов новеллы <span style="font-size:11px;font-weight:400;color:var(--t4,#6a7a88)">· ${AD_VNMENU_KEYS.length}</span></div>
+    <div style="font-size:12px;color:var(--t3,#8aa0b0);margin:6px 0 4px">Широкий кадр (16:9, от 1600 px). Картинка растворяется книзу — верх уходит под шапку экрана, низ под текст, важное держи в центре. Файла нет — экран рисует родной градиент.</div>
+    <div style="font-size:11px;color:var(--t4,#6a7a88);margin:0 0 12px;line-height:1.5">📁 Пишется <b>прямо в папку игры</b> <code>${AD_VNMENU_DIR}/</code>. Запусти батник <b>«Загрузка артов.bat»</b> и держи окно открытым. Альтернатива без админки — перетащить файлы на <code>tools/vn_menus.bat</code>.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">${cards}</div>
   </div>`;
+}
+async function adVNMenuArtUpload(key, inputEl) {
+  const f = inputEl && inputEl.files && inputEl.files[0];
+  const st = document.getElementById(`ad-vnmenu-st-${key}`);
+  if (!f) return;
+  if (st) st.textContent = 'Проверка сервера…';
+  if (!(await adPortServerAlive())) {
+    if (st) st.textContent = 'нет сервера';
+    toast('Запусти «Загрузка артов.bat» (node tools/upload-server.js)', 'err');
+    return;
+  }
+  try {
+    if (st) st.textContent = 'Сохранение…';
+    const cf = (typeof compressImageFile === 'function') ? await compressImageFile(f, 1600, 0.9) : f;
+    const r = await fetch(`${AD_PORT_SERVER}/upload?dir=vnmenu&name=${encodeURIComponent(key + '.webp')}`, {
+      method: 'POST', headers: { 'Content-Type': cf.type || 'image/webp' }, body: cf
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || ('сервер: HTTP ' + r.status));
+    AD.vnMenuBust = Date.now();
+    if (st) st.textContent = 'Готово';
+    toast(`Фон «${key}» сохранён`, 'ok');
+    adPaint();
+  } catch (e) {
+    console.error('[admin] vn menu art', e);
+    if (st) st.textContent = 'Ошибка';
+    toast('Не удалось сохранить арт: ' + (e.message || e), 'err');
+  }
 }
 // ── Живой предпросмотр сцены в редакторе новеллы ──
 // AD.vnPrev = {did, li} — какая реплика на «сцене»; переживает adPaint. Сцена

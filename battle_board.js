@@ -1642,7 +1642,7 @@ function bbRenderDeploy(s) {
         <button class="bbd-ic" onclick="bbZoomBtn(1/1.3)" title="Отдалить">−</button>
         <button class="bbd-ic" onclick="bbZoomBtn(1.3)" title="Приблизить">+</button>
         <button class="bbd-ic" onclick="bbCamDeploy(1)" title="К своей зоне">⌂</button>
-        <button class="bbd-fire" ${mine || !BB.place.length || L.over ? 'disabled' : ''} onclick="bbConfirmDeploy()">
+        <button class="bbd-fire" ${mine || !L.used || L.over ? 'disabled' : ''} onclick="bbConfirmDeploy()">
           ${mine ? 'ждём врага' : (L.over ? 'перебор' : 'в бой')}
         </button>
       </div>
@@ -2889,15 +2889,20 @@ function bbReconcilePlace() {
 }
 async function bbConfirmDeploy() {
   if (BB.busy) return;                    // защита от второго нажатия
-  if (!BB.place.length) { toast('Выведите на доску хотя бы один корабль', 'err'); return; }
   const L = bbDeployLim(BB.st);
+  // Борта могли уже уехать на сервер: battle_deploy прошёл, а battle_ready —
+  // нет (сеть, перезаход, закрытая вкладка). Тогда BB.place пуст, но флот на
+  // доске стоит, и раньше кнопка «в бой» запиралась насмерть — клуб вечно
+  // писал «собирает флот». Досыл готовности без повторной расстановки.
+  const only = !BB.place.length;
+  if (only && !L.used) { toast('Выведите на доску хотя бы один корабль', 'err'); return; }
   if (L.used > L.cap) { toast(`На доску можно вывести не больше ${L.cap} кораблей, у вас ${L.used}`, 'err'); return; }
   if (L.over) { toast(`Перебор по бюджету: ${bbNum(L.spent)} из ${bbNum(L.budget)} ГС`, 'err'); return; }
-  if (!confirm(`Утвердить состав из ${BB.place.length} кораблей? После подтверждения расстановку не изменить.`)) return;
+  if (!confirm(`Утвердить состав из ${L.used} кораблей? После подтверждения расстановку не изменить.`)) return;
   BB.busy = true;
   bbRender();                             // кнопка сразу гаснет — экран не «немой»
   try {
-    await ecRpc('battle_deploy', { p_battle: BB.id, p_units: BB.place.map(p => ({ unit_id: p.unit_id, unit_name: p.unit_name, x: p.x, y: p.y })) });
+    if (!only) await ecRpc('battle_deploy', { p_battle: BB.id, p_units: BB.place.map(p => ({ unit_id: p.unit_id, unit_name: p.unit_name, x: p.x, y: p.y })) });
     await ecRpc('battle_ready', { p_battle: BB.id });
     toast('Состав утверждён', 'ok');
     BB.place = []; BB.pick = null;

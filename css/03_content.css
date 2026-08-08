@@ -5696,27 +5696,64 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 
 /* ══════════════════════════════════════════════════════════════════
    АРТ-ПОДЛОЖКА ЭКРАНОВ НОВЕЛЛЫ (assets/vn/menu/<экран>.webp)
-   Один слой ::before под содержимым: картинка растворяется книзу маской,
-   поэтому текст читается без затемняющих плашек. Файла нет — слой пуст,
-   остаётся родной градиент экрана, ничего не ломается.
-   Картинки заливает tools/vn_menus.bat (перетащить файлы на батник).
+   Арт должен ЧИТАТЬСЯ КАК ФОН, а не как вставленная картинка: кадр прижат
+   вправо и уходит под плотную завесу слева — интерфейс живёт в тёмной части,
+   арт дышит в свободной. Поэтому слоёв два и оба в одном ::before:
+   завеса (боковой градиент + виньетка сверху/снизу) поверх кадра.
+   Файла нет — слой пуст, остаётся родной градиент экрана.
+   Картинки заливает админка («Новелла» → фоны) или tools/vn_menus.bat.
    ══════════════════════════════════════════════════════════════════ */
 .hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-research{
-  --vn-art:none;--vn-art-op:.5;--vn-art-pos:50% 38%;
+  --vn-art:none;--vn-art-op:.85;--vn-art-pos:75% 30%;
+  --vn-art-veil:9 11 16;                 /* цвет завесы (rgb-триплет фона экрана) */
 }
 .hp-vn-colony::before,.hp-vn-poem::before,.hp-vn-assembly::before,
 .hp-vn-rating::before,.hp-vn-research::before{
   content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
-  background:var(--vn-art) var(--vn-art-pos)/cover no-repeat;
+  background:
+    /* завеса: слева глухо, справа арт открыт */
+    linear-gradient(90deg,
+      rgb(var(--vn-art-veil)/.97) 0%,
+      rgb(var(--vn-art-veil)/.93) 34%,
+      rgb(var(--vn-art-veil)/.62) 58%,
+      rgb(var(--vn-art-veil)/.3)  82%,
+      rgb(var(--vn-art-veil)/.18) 100%),
+    /* виньетка: шапка и низ экрана всегда глухие */
+    linear-gradient(180deg,
+      rgb(var(--vn-art-veil)/.92) 0%,
+      rgb(var(--vn-art-veil)/.25) 16%,
+      rgb(var(--vn-art-veil)/.25) 58%,
+      rgb(var(--vn-art-veil)/.88) 100%),
+    var(--vn-art) var(--vn-art-pos)/cover no-repeat;
   opacity:var(--vn-art-op);
-  -webkit-mask-image:linear-gradient(180deg,#000 0%,rgba(0,0,0,.75) 42%,transparent 82%);
-  mask-image:linear-gradient(180deg,#000 0%,rgba(0,0,0,.75) 42%,transparent 82%);
+  filter:saturate(.82);
+}
+/* Узкий экран: боковой завесы не хватит — кадр уходит наверх, а низ глухой,
+   интерфейс ложится под него как под обычную обложку. */
+@media(max-width:900px){
+  .hp-vn-colony::before,.hp-vn-poem::before,.hp-vn-assembly::before,
+  .hp-vn-rating::before,.hp-vn-research::before{
+    background:
+      linear-gradient(180deg,
+        rgb(var(--vn-art-veil)/.85) 0%,
+        rgb(var(--vn-art-veil)/.42) 14%,
+        rgb(var(--vn-art-veil)/.92) 46%,
+        rgb(var(--vn-art-veil)) 66%),
+      var(--vn-art) 50% 18%/cover no-repeat;
+  }
 }
 /* Содержимое экрана — над артом. Все эти панели — flex-колонки, а flex-элемент
    слушает z-index и без position: не трогаем позиционирование детей (иначе
    поехали бы абсолютные слои карты колонии). */
 .hp-vn-colony>*,.hp-vn-poem>*,.hp-vn-assembly>*,
 .hp-vn-rating>*,.hp-vn-research>*{z-index:1}
+/* На широком экране колонна арены прижимается ВЛЕВО — в глухую часть завесы,
+   иначе текст ложится ровно на лицо и фон перестаёт быть фоном. Ниже 900 px
+   завеса горизонтальная, и колонна возвращается в центр. */
+@media(min-width:901px){
+  .hp-vn-fc-body{padding-left:clamp(24px,7vw,110px)}
+  .fc-col{margin-inline:0 auto}
+}
 /* Имя файла = ключ экрана. Одинарный кадр, широкий (от 1600 px), верх кадра
    уходит под шапку — не ставь туда важное. */
 #hp-vn-fight{--vn-art:url("../assets/vn/menu/fight.webp")}

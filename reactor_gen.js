@@ -100,6 +100,15 @@ const SCHOOLS = {
   },
 };
 
+// Школа = ИССЛЕДОВАНИЕ. Ключ узла дерева на каждую школу; зеркала —
+// EC_REACTOR_SCHOOLS в economy.js и tech_nodes в _rg_school_tech.sql.
+// Генератор гейт НЕ применяет (он считает физику для любой школы) — замки
+// ставит верстак (reactor_forge_ui) и, по-настоящему, сервер в reactor_upsert.
+const SCHOOL_TECH = {
+  ritag: 'rg.school.ritag', yaeu: 'rg.school.yaeu', mgd: 'rg.school.mgd',
+  tyar:  'rg.school.tyar',  amu:  'rg.school.amu',  kvg: 'rg.school.kvg',
+};
+
 // ТОПЛИВО. res — ИМЯ ресурса на складе державы (см. galaxy_gen RESOURCES),
 // q — удельная энергия, dens — сколько единиц уходит в закладку,
 // stab — вклад в устойчивость, ru — как называем в интерфейсе верфи.
@@ -1051,7 +1060,7 @@ return {
   carriers: carriers, carrierKeys: carrierKeys, fromKV: fromKV, catalog: catalog,
   allowedFuels: allowedFuels, allowedConv: allowedConv, allowedConf: allowedConf,
   allowedCool: allowedCool,
-  SCHOOLS: SCHOOLS, FUELS: FUELS, CONV: CONV, COOL: COOL, CONF: CONF,
+  SCHOOLS: SCHOOLS, SCHOOL_TECH: SCHOOL_TECH, FUELS: FUELS, CONV: CONV, COOL: COOL, CONF: CONF,
   CARRIERS: CARRIERS, CARRIER_ORDER: CARRIER_ORDER, SCHOOL_CARRIERS: SCHOOL_CARRIERS,
   LIMITS: LIMITS, DEFAULTS: DEFAULTS,
   CAP_RATIO: CAP_RATIO, PW_EXP: PW_EXP, MASS_EXP: MASS_EXP, MASS_REST: MASS_REST,

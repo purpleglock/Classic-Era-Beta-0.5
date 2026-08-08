@@ -244,12 +244,37 @@
   var PICKS = { school: 'Школа реактора', fuel: 'Топливо', conv: 'Схема преобразования',
                 cool: 'Теплоноситель', conf: 'Удержание зоны', klass: 'Класс-носитель' };
 
+  // ══ ГЕЙТ ШКОЛ ══════════════════════════════════════════════
+  // Школа = исследование (ветка «⚛ Реакторные школы»). Здесь только замок в
+  // интерфейсе: правда — на сервере (reactor_upsert, _rg_school_tech.sql),
+  // клиентскому выбору по-прежнему не доверяем.
+  function schoolOpen(k) {
+    var t = (R().SCHOOL_TECH || {})[k];
+    if (!t) return true;
+    return (typeof cnUnlocked === 'function') ? cnUnlocked(t) : true;
+  }
+  // Изученные школы, которые вдобавок встают на этот класс. Пусто не бывает:
+  // РИТЭГ — корень ветки и выдан бэкфиллом, но на всякий случай откатываемся
+  // к физически допустимым, чтобы верстак не остался вообще без школы.
+  function openSchools(klass) {
+    var L = R().allowedSchools(klass).filter(schoolOpen);
+    return L.length ? L : R().allowedSchools(klass);
+  }
+  // Загнать сборку в изученное: класс/пресет мог принести запертую школу.
+  function gate(cfg) {
+    if (!schoolOpen(cfg.school)) cfg.school = openSchools(cfg.klass)[0];
+    Object.assign(cfg, R().tame(cfg));
+    return cfg;
+  }
+
   // Набор допустимых вариантов сужается школой и классом.
   function optionsOf(key) {
     var cfg = CNR.cfg, o = {}, i, L;
     if (key === 'klass') {
       R().CARRIER_ORDER.forEach(function (k) {
-        if (R().allowedSchools(k).length) o[k] = R().CARRIERS[k].ru;
+        // Класс показываем, только если под него есть ИЗУЧЕННАЯ школа — иначе
+        // выбор вёл бы в тупик: собрать можно, зарегистрировать нельзя.
+        if (R().allowedSchools(k).some(schoolOpen)) o[k] = R().CARRIERS[k].ru;
       });
       return o;
     }
@@ -343,6 +368,15 @@
   function optHTML(key) {
     var base = R().stats(CNR.cfg), opts = optionsOf(key), out = '';
     for (var v in opts) {
+      // Запертая школа остаётся в списке — видно, куда ведёт ветка науки, — но
+      // не кликается и не считает дельты (сборки на ней всё равно не будет).
+      if (key === 'school' && !schoolOpen(v)) {
+        out += '<div class="opt lock" data-key="school" data-v="' + esc(v) + '">' +
+          '<div class="nm">🔒 ' + esc(opts[v]) + '</div>' +
+          '<div class="lore">' + esc(loreOf('school', v)) + '</div>' +
+          '<div class="dl"><s class="dn">НУЖНО ИССЛЕДОВАНИЕ · ветка «⚛ Реакторные школы»</s></div></div>';
+        continue;
+      }
       var patch = {}; patch[key] = v;
       var cand = R().normalize(Object.assign({}, CNR.cfg, patch)), s = R().stats(cand), d = '';
       DELTA.forEach(function (f) {
@@ -601,7 +635,22 @@
     if (!cnCanAccess()) { cnGate(); return; }
     if (!R()) { setPg('<div class="sempty">reactor_gen.js не загружен</div>'); return; }
     injectStyle();
+    // Школы верфи — исследования: без загрузки research у фракции все замки
+    // выглядели бы открытыми (cnUnlocked на пустом наборе врёт в минус, но
+    // сервер всё равно откажет — лучше показать честную картину сразу).
+    await cnLoadResearch();
     if (!CNR.cfg) CNR.cfg = R().tame(Object.assign({}, R().DEFAULTS));
+    gate(CNR.cfg);
+    // Ни одной школы — ковать физически нечего: вместо мёртвого верстака
+    // отправляем в дерево наук.
+    if (!R().allowedSchools(CNR.cfg.klass).some(schoolOpen) && !Object.keys(R().SCHOOLS).some(schoolOpen)) {
+      setPg('<div class="cn-gate"><div class="cn-gate-ico">⚛</div>' +
+        '<h2>Реакторная верфь закрыта</h2>' +
+        '<p class="cn-gate-sub">Ни одна школа реакторов не изучена. Ветка «⚛ Реакторные школы» во вкладке «Исследования» начинается с РИТЭГа за 6 ОН — он встаёт на любой борт.</p>' +
+        '<button class="btn btn-gd" onclick="go(\'economy\')">К исследованиям</button> ' +
+        '<button class="btn btn-gh" onclick="go(\'constructors\')">← Конструкторы</button></div>');
+      return;
+    }
     await loadMine();
 
     setPg(
@@ -650,10 +699,15 @@
 
     popB.onclick = function (e) {
       var o = e.target.closest('.opt'); if (!o) return;
+      if (o.classList.contains('lock')) {
+        toast('Школа не изучена — ветка «⚛ Реакторные школы» во вкладке «Исследования»');
+        return;
+      }
       CNR.cfg[o.dataset.key] = o.dataset.v;
       // Смена класса/школы/топлива двигает не значения, а ГРАНИЦЫ: загоняем
       // сборку внутрь допустимого сразу, а не ругаемся на неё потом.
-      Object.assign(CNR.cfg, R().tame(CNR.cfg));
+      // gate() заодно возвращает в изученное, если новый класс не берёт текущую школу.
+      gate(CNR.cfg);
       closePop(); draw();
     };
     popB.oninput = function (e) {
@@ -697,7 +751,15 @@
           var got = R().fromKV(ev.target.value, lib[ev.target.value]);
           // Класс — выбор игрока, пресет его не переопределяет.
           got.klass = CNR.cfg.klass;
+          // Каталожный реактор мог разобраться в неизученную школу (ТЯР, АМУ) —
+          // gate() сажает его на ближайшую доступную, вместо отказа при сохранении.
+          var wanted = got.school;
           Object.assign(CNR.cfg, R().tame(got));
+          gate(CNR.cfg);
+          if (CNR.cfg.school !== wanted) {
+            toast('Школа ' + R().SCHOOLS[wanted].ab + ' не изучена — пресет пересобран на ' +
+                  R().SCHOOLS[CNR.cfg.school].ab, 'err');
+          }
           var nmEl = $r('nm');
           if (nmEl && !nmEl.value.trim()) nmEl.value = ev.target.value.slice(0, 48);
           closePop(); draw();
@@ -777,7 +839,7 @@
 
   function newDraft() {
     CNR.editId = null; CNR.editName = '';
-    CNR.cfg = R().tame(Object.assign({}, R().DEFAULTS));
+    CNR.cfg = gate(R().tame(Object.assign({}, R().DEFAULTS)));
     var nm = $r('nm'); if (nm) nm.value = '';
     closePop(); draw();
   }
@@ -797,6 +859,11 @@
     if (!name) { toast('Дайте установке название', 'err'); if (nm) nm.focus(); return; }
     var f = R().fit(CNR.cfg);
     if (!f.ok) { toast(f.why, 'err'); return; }
+    // Зеркало серверной проверки (_rg_school_ok): отказ понятнее до RPC.
+    if (!schoolOpen(CNR.cfg.school)) {
+      toast('Школа ' + R().SCHOOLS[CNR.cfg.school].ab + ' не изучена — ветка «⚛ Реакторные школы»', 'err');
+      return;
+    }
     CNR.editName = name;
     var fac = cnMyFactionMeta();
     // Поворот — режим осмотра, а не свойство изделия: в базу не едет.
