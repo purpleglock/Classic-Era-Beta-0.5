@@ -307,7 +307,31 @@
       "Bash(sed -n '/^\\\\/\\\\/ Базовый размер поста ВК/,/^}$/p' editor.js)",
       "Bash(rm -f _devlog_harness.html)",
       "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('editor.js','utf8'\\)\\);console.log\\('editor.js syntax OK'\\)\")",
-      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('editor.js','utf8'\\)\\);console.log\\('OK'\\)\")"
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('editor.js','utf8'\\)\\);console.log\\('OK'\\)\")",
+      "Bash(node tools/db_q.js \"select id, name, \\(summary->>'cls'\\) cls, \\(summary->>'hp'\\) hp, \\(summary->>'speed'\\) sp, \\(summary->>'dmg'\\) dmg, \\(summary->>'rng'\\) rng, jsonb_array_length\\(coalesce\\(summary->'acts','[]'::jsonb\\)\\) nacts, coalesce\\(summary->'acts','[]'\\) acts from faction_units where category='ship' and faction_id='fac_5bfbfad5f8' order by name\")",
+      "Bash(node tools/db_q.js \"select g, idx, m->>'name' nm, m->'combat' cmb, m->>'ves' ves, m->>'cena' cena, m->>'energy' en from \\(select k1.key g, \\(e.ord-1\\) idx, e.val m from jsonb_each\\(public._cn_catalog\\(\\)->'ship'->'modules'\\) k1, lateral jsonb_array_elements\\(k1.value\\) with ordinality e\\(val,ord\\)\\) s where m->'combat' ? 'act' order by g, idx\")",
+      "Bash(node tools/db_q.js \"select g, idx, m->>'name' nm, m->'combat'->>'act' act, m->'combat'->>'rng' rng, m->'combat'->>'dmg' dmg, m->'combat'->>'val' val, m->'combat'->>'cd' cd, m->>'ves' ves from \\(select k1.key g, \\(e.ord-1\\) idx, e.val m from jsonb_each\\(public._cn_catalog\\(\\)->'ship'->'modules'\\) k1, lateral jsonb_array_elements\\(k1.value\\) with ordinality e\\(val,ord\\)\\) s where m->'combat' ? 'act' order by g, idx\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{JSON.parse\\(d\\).forEach\\(r=>console.log\\([r.g,r.idx,r.nm,r.act,'rng='+r.rng,'dmg='+r.dmg,'val='+r.val,'cd='+r.cd,'ves='+r.ves].join\\(' | '\\)\\)\\)}\\)\")",
+      "Bash(node tools/db_q.js \"select string_agg\\(column_name||' '||data_type, ', ' order by ordinal_position\\) from information_schema.columns where table_name='battle_units'\")",
+      "Bash(node tools/db_q.js \"select string_agg\\(column_name, ', ' order by ordinal_position\\) from information_schema.columns where table_name='battles'\")",
+      "Bash(node tools/db_dump_fn.js _bt_step _bt_terra _bt_dist _bt_dirof _bt_los_clear _bt_eng_mult _bt_wpn_dmin)",
+      "Bash(node tools/db_run.js _bot_ai_brain.sql)",
+      "Bash(node tools/db_q.js \"select p.oid::regprocedure::text sig from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in \\('_bt_do_module','battle_module'\\)\")",
+      "Bash(node tools/db_q.js \"select id, status, side_to_move, bw, bh, attacker_fid, defender_fid, \\(select count\\(*\\) from battle_units u where u.battle_id=b.id and u.alive\\) n from battles b where status='active' order by created_at desc limit 5\")",
+      "Bash(node tools/db_q.js \"select clock_timestamp\\(\\) t0, public._bt_flow_build\\('5f2b357a-9de7-4cbf-bc27-9cdad76f1222','defender'\\) cells, clock_timestamp\\(\\) t1\")",
+      "Bash(node tools/db_q.js \"select clock_timestamp\\(\\) t0, public._bt_cells_build\\('5f2b357a-9de7-4cbf-bc27-9cdad76f1222'\\) cells, clock_timestamp\\(\\) t1, public._bt_flow_build\\('5f2b357a-9de7-4cbf-bc27-9cdad76f1222','defender'\\) flow, clock_timestamp\\(\\) t2\")",
+      "Bash(node tools/db_q.js \"delete from bt_bot_cell; select 1\")",
+      "Bash(node tools/db_q.js \"select clock_timestamp\\(\\) t0, public._bt_cells_build\\('5f2b357a-9de7-4cbf-bc27-9cdad76f1222'\\) cells, clock_timestamp\\(\\) t1, public._bt_flow_build\\('5f2b357a-9de7-4cbf-bc27-9cdad76f1222','defender'\\) flow, clock_timestamp\\(\\) t2, public._bt_flow_build\\('5f2b357a-9de7-4cbf-bc27-9cdad76f1222','defender'\\) flow2, clock_timestamp\\(\\) t3\")",
+      "Bash(node tools/db_q.js \"select clock_timestamp\\(\\) t0, public._bt_bot_turn\\('53a6f432-61a9-4afe-83cf-19debac27026'\\) turn, clock_timestamp\\(\\) t1\")",
+      "Bash(node tools/db_q.js 'select side, count\\(*\\) n from battle_units where battle_id='\\\\''__TRACKED_VAR__'\\\\'' group by side')",
+      "Bash(node tools/db_q.js 'select clock_timestamp\\(\\) t0, public._bt_bot_turn\\('\\\\''__TRACKED_VAR__'\\\\''\\) turn, clock_timestamp\\(\\) t1')",
+      "Bash(node tools/db_q.js 'select jsonb_array_elements\\(log\\)->>'\\\\''m'\\\\'' m from battles where id='\\\\''__TRACKED_VAR__'\\\\''')",
+      "Bash(node tools/db_q.js 'select count\\(*\\) n, sum\\(jsonb_array_length\\(acts\\)\\) mods, min\\(x\\) minx, max\\(x\\) maxx from battle_units where battle_id='\\\\''__TRACKED_VAR__'\\\\'' and side='\\\\''defender'\\\\''')",
+      "Bash(node tools/db_q.js 'select count\\(*\\) n, min\\(x\\) minx, max\\(x\\) maxx, min\\(y\\), max\\(y\\) from battle_units where battle_id='\\\\''__TRACKED_VAR__'\\\\'' and side='\\\\''attacker'\\\\''')",
+      "Bash(node tools/db_q.js 'select clock_timestamp\\(\\) t0, public._bt_bot_turn\\('\\\\''__TRACKED_VAR__'\\\\''\\) z, clock_timestamp\\(\\) t1')",
+      "Bash(node tools/db_q.js \"select jsonb_array_elements\\(log\\)->>'m' m from battles where id='7c4f1ccf-dea9-4aa2-8402-96e61724f8ea'\")",
+      "Bash(node tools/db_q.js 'update battles set log='\\\\''[]'\\\\''::jsonb where id='\\\\''__TRACKED_VAR__'\\\\''; select 1 z')",
+      "Bash(node tools/db_q.js 'update battles set side_to_move='\\\\''defender'\\\\'', acts_left=public._bt_acts\\(\\), status='\\\\''active'\\\\'' where id='\\\\''__TRACKED_VAR__'\\\\''; select public._bt_tp_refresh\\('\\\\''__TRACKED_VAR__'\\\\'','\\\\''defender'\\\\''\\) z')"
     ]
   }
 }
