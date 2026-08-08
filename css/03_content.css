@@ -5374,21 +5374,87 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .fc-signups b{font-family:var(--font-display);font-weight:800;font-size:34px;line-height:1;color:#eef4fa}
 .fc-signups span{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.06em;color:var(--t3,#8296a8)}
 .fc-ok{font-family:var(--font-mono);font-size:11.5px;line-height:1.6;color:#5fe0a0}
+/* ── Карточка бойца: флаг державы + её цвет по кромке ──────────────
+   Один акцент на карточку — герб и цвет фракции (--fc-c); розовый арены
+   остаётся только на разделителе VS и кассе. Флага нет — квадрат с
+   инициалом в цвете державы, ничего не разъезжается. */
 .fc-duel{display:flex;align-items:stretch;gap:10px}
+/* Обводка — СЛОЙ-подложка (::before цвет + ::after инсет-фон), не border:
+   border со срезанными углами рвётся по срезу. Левая грань державы живёт
+   в том же слое градиентом, поэтому тоже срезана честно. */
 .fc-duel-card{
-  flex:1 1 0;display:flex;flex-direction:column;gap:5px;padding:12px 14px;
-  background:hsl(220 30% 9% / .55);border:1px solid rgba(255,60,130,.3);
+  position:relative;z-index:0;flex:1 1 0;display:flex;align-items:center;gap:11px;padding:12px 14px;
+  border:none;background:transparent;
+  --fc-cut:10px;
+  clip-path:polygon(0 0,calc(100% - var(--fc-cut)) 0,100% var(--fc-cut),100% 100%,var(--fc-cut) 100%,0 calc(100% - var(--fc-cut)));
 }
-.fc-duel-name{font-weight:700;font-size:13.5px;color:var(--t1,#eef4fa)}
-.fc-duel-ship{font-size:12px;color:var(--t2,#c6d4e2)}
+.fc-duel-card::before{
+  content:"";position:absolute;inset:0;z-index:-2;
+  background:linear-gradient(90deg,var(--fc-c,#ff3c82) 0 3px,color-mix(in srgb,var(--fc-c,#ff3c82) 40%,transparent) 3px);
+}
+.fc-duel-card::after{
+  content:"";position:absolute;inset:1px 1px 1px 3px;z-index:-1;
+  background:linear-gradient(100deg,color-mix(in srgb,var(--fc-c,#ff3c82) 13%,hsl(220 30% 9% / .92)),hsl(220 30% 8% / .92));
+  clip-path:polygon(0 0,calc(100% - var(--fc-cut)) 0,100% var(--fc-cut),100% 100%,var(--fc-cut) 100%,0 calc(100% - var(--fc-cut)));
+}
+/* Готовность/победа перекрашивают ТОЛЬКО обводку слоя: левая грань остаётся
+   цветом державы, иначе карточка теряет опознавательный знак. Внешнее свечение
+   не годится — его срежет clip-path. */
+.fc-duel-card.ready::before{background:linear-gradient(90deg,var(--fc-c,#ff3c82) 0 3px,rgba(95,224,160,.5) 3px)}
+.fc-duel-card.win::before{background:linear-gradient(90deg,var(--fc-c,#ff3c82) 0 3px,rgba(224,180,95,.75) 3px)}
+.fc-duel-card.win::after{background:linear-gradient(100deg,rgba(224,180,95,.14),hsl(220 30% 8% / .92))}
+.fc-duel-side{
+  position:absolute;top:6px;right:9px;font-family:var(--font-mono);font-size:9px;
+  letter-spacing:.16em;color:var(--t3,#8296a8);opacity:.7;
+}
+.fc-duel-flag{
+  position:relative;flex:0 0 auto;width:44px;height:44px;overflow:hidden;
+  background:color-mix(in srgb,var(--fc-c,#ff3c82) 55%,#0b1017);
+  clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,7px 100%,0 calc(100% - 7px));
+}
+.fc-duel-flag img{width:100%;height:100%;object-fit:cover;display:block}
+.fc-duel-flag.noimg{display:flex;align-items:center;justify-content:center}
+.fc-duel-flag.noimg img{display:none}
+.fc-duel-flag.noimg::after{content:attr(data-i);font-family:var(--font-display);font-weight:800;font-size:19px;color:#0b1017;line-height:1}
+.fc-duel-info{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 auto}
+.fc-duel-name{font-weight:700;font-size:13.5px;color:var(--t1,#eef4fa);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fc-duel-crown{font-size:12px}
+.fc-duel-ship{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.04em;color:var(--t3,#8296a8)}
+.fc-duel-ship.ok{color:#5fe0a0}
 .fc-duel-cls{font-family:var(--font-mono);font-size:10px;color:var(--t3,#8296a8);letter-spacing:.06em}
 .fc-duel-pool{font-family:var(--font-mono);font-size:10.5px;color:#e0b45f}
+.fc-duel-bar{height:3px;background:rgba(255,255,255,.08)}
+.fc-duel-bar i{display:block;height:100%;background:var(--fc-c,#e0b45f);transition:width .3s ease}
 .fc-duel-vs{align-self:center;font-family:var(--font-mono);font-weight:700;font-size:14px;color:#ff3c82;letter-spacing:.1em}
-.hp-vna-cta.fc-watch{background:#ff3c82;color:#14060c}
-/* Общий хром новеллы режется клипом (срезанные углы) — в клубе гасим клип и
-   даём прямые грани: кнопки и «назад» становятся честными прямоугольниками,
-   маркер заголовка — квадрат, акцентный «шов» шапки — прямой отрезок. */
-.hp-vn-fight .hp-vna-cta,
+/* ── Кнопки клуба = боевые клавиши: гранёная грань, «шов» по низу,
+   отдача при нажатии. Общий хром новеллы даёт мягкий клип — клубу нужен
+   свой, более резкий, и подсветка под цвет арены. ── */
+.hp-vn-fight .hp-vna-cta{
+  position:relative;z-index:0;align-self:flex-start;padding:12px 22px;font-size:11.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:#ffe3ee;border:none;background:transparent;
+  --fc-cut:11px;
+  clip-path:polygon(0 0,calc(100% - var(--fc-cut)) 0,100% var(--fc-cut),100% 100%,var(--fc-cut) 100%,0 calc(100% - var(--fc-cut)));
+  transition:color var(--duration-fast),transform var(--duration-fast);
+}
+/* кромка и заливка — двумя слоями, чтобы срез был чистым по всей грани */
+.hp-vn-fight .hp-vna-cta::before{content:"";position:absolute;inset:0;z-index:-2;background:rgba(255,60,130,.6)}
+.hp-vn-fight .hp-vna-cta::after{
+  content:"";position:absolute;inset:1px;z-index:-1;
+  background:linear-gradient(180deg,rgba(255,60,130,.24),rgba(255,60,130,.1)),#12070d;
+  clip-path:polygon(0 0,calc(100% - var(--fc-cut)) 0,100% var(--fc-cut),100% 100%,var(--fc-cut) 100%,0 calc(100% - var(--fc-cut)));
+  transition:background var(--duration-fast);
+}
+.hp-vn-fight .hp-vna-cta:hover:not(:disabled){color:#14060c;filter:none}
+.hp-vn-fight .hp-vna-cta:hover:not(:disabled)::after{background:#ff3c82}
+.hp-vn-fight .hp-vna-cta:active:not(:disabled){transform:translateY(1px)}
+.hp-vn-fight .hp-vna-cta:disabled{background:transparent;color:var(--t3,#8296a8)}
+.hp-vn-fight .hp-vna-cta:disabled::before{background:var(--w2,rgba(255,255,255,.12))}
+.hp-vn-fight .hp-vna-cta:disabled::after{background:rgba(255,255,255,.06)}
+.hp-vn-fight .hp-vna-cta.fc-watch{background:transparent;color:#14060c}
+.hp-vn-fight .hp-vna-cta.fc-watch::before{background:#ff3c82}
+.hp-vn-fight .hp-vna-cta.fc-watch::after{background:#ff3c82}
+.hp-vn-fight .hp-vna-cta.fc-watch:hover::after{background:#ff7fae}
+/* «Назад» и хром шапки остаются прямыми — гранёность живёт на кнопках действия. */
 .hp-vn-fight .hp-vn-col-x,
 .hp-vn-fight .hp-vn-col-x::after,
 .hp-vn-fight .hp-vn-col-title::before,
@@ -5627,3 +5693,42 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   .hp-vni-tab{padding:7px 11px;font-size:10px;letter-spacing:.1em}
   .hp-vni-dosgrid{grid-template-columns:1fr}
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   АРТ-ПОДЛОЖКА ЭКРАНОВ НОВЕЛЛЫ (assets/vn/menu/<экран>.webp)
+   Один слой ::before под содержимым: картинка растворяется книзу маской,
+   поэтому текст читается без затемняющих плашек. Файла нет — слой пуст,
+   остаётся родной градиент экрана, ничего не ломается.
+   Картинки заливает tools/vn_menus.bat (перетащить файлы на батник).
+   ══════════════════════════════════════════════════════════════════ */
+.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-research{
+  --vn-art:none;--vn-art-op:.5;--vn-art-pos:50% 38%;
+}
+.hp-vn-colony::before,.hp-vn-poem::before,.hp-vn-assembly::before,
+.hp-vn-rating::before,.hp-vn-research::before{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:var(--vn-art) var(--vn-art-pos)/cover no-repeat;
+  opacity:var(--vn-art-op);
+  -webkit-mask-image:linear-gradient(180deg,#000 0%,rgba(0,0,0,.75) 42%,transparent 82%);
+  mask-image:linear-gradient(180deg,#000 0%,rgba(0,0,0,.75) 42%,transparent 82%);
+}
+/* Содержимое экрана — над артом. Все эти панели — flex-колонки, а flex-элемент
+   слушает z-index и без position: не трогаем позиционирование детей (иначе
+   поехали бы абсолютные слои карты колонии). */
+.hp-vn-colony>*,.hp-vn-poem>*,.hp-vn-assembly>*,
+.hp-vn-rating>*,.hp-vn-research>*{z-index:1}
+/* Имя файла = ключ экрана. Одинарный кадр, широкий (от 1600 px), верх кадра
+   уходит под шапку — не ставь туда важное. */
+#hp-vn-fight{--vn-art:url("../assets/vn/menu/fight.webp")}
+#hp-vn-sinli{--vn-art:url("../assets/vn/menu/sinli.webp")}
+#hp-vn-tama{--vn-art:url("../assets/vn/menu/tama.webp")}
+#hp-vn-fish{--vn-art:url("../assets/vn/menu/fish.webp")}
+#hp-vn-intel{--vn-art:url("../assets/vn/menu/intel.webp")}
+#hp-vn-geo{--vn-art:url("../assets/vn/menu/geo.webp")}
+#hp-vn-stars{--vn-art:url("../assets/vn/menu/stars.webp")}
+#hp-vn-doom{--vn-art:url("../assets/vn/menu/doom.webp")}
+#hp-vn-poem{--vn-art:url("../assets/vn/menu/poem.webp")}
+#hp-vn-assembly{--vn-art:url("../assets/vn/menu/assembly.webp")}
+#hp-vn-rating{--vn-art:url("../assets/vn/menu/rating.webp")}
+#hp-vn-research{--vn-art:url("../assets/vn/menu/research.webp")}
+#hp-vn-planets{--vn-art:url("../assets/vn/menu/planets.webp")}

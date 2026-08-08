@@ -5629,6 +5629,19 @@ async function heroVNSinliSell(originFid, have) {
 // ══════════════════════════════════════════════════════════════
 let _fcPoll = null;
 let _fcState = null;
+// Гербы дуэлянтов: fc_state отдаёт только fid+имя, флаги живут в
+// faction_applications. Тянем один раз за сессию — арена перерисовывается
+// каждые 30 с, и дёргать справочник на каждый тик незачем.
+let _fcFacs = null;
+async function _fcFacsLoad() {
+  if (_fcFacs) return _fcFacs;
+  try {
+    const rows = await dbGet('faction_applications', 'status=eq.approved&select=faction_id,name,color,herald_url') || [];
+    _fcFacs = new Map(rows.map(r => [r.faction_id, r]));
+  } catch (e) { _fcFacs = new Map(); }
+  return _fcFacs;
+}
+function _fcFac(fid) { try { return (_fcFacs && _fcFacs.get(fid)) || null; } catch (e) { return null; } }
 function heroVNFightClose() {
   const el = document.getElementById('hp-vn-fight');
   if (!el) return;
@@ -5672,7 +5685,7 @@ async function heroVNFightRefresh() {
   if (!el || !el.classList.contains('show')) return;
   const en = (typeof lang !== 'undefined' && lang === 'en');
   let st;
-  try { st = await ecRpc('fc_state'); }
+  try { [st] = await Promise.all([ecRpc('fc_state'), _fcFacsLoad()]); }
   catch (e) {
     el.innerHTML = _fcHead(en) + _fcMsg(en, 'Двери клуба заперты. Срез _fight_club.sql применён?', 'The club is sealed. Apply _fight_club.sql?');
     return;
@@ -5782,19 +5795,36 @@ function _fcBody(st, en) {
 // резерва, поэтому единого «выданного корабля» больше нет.
 function _fcDuelCards(st, en, mode) {
   const tot = (Number(st.pool_a) || 0) + (Number(st.pool_b) || 0);
-  const card = (name, ready, pool) => `<div class="fc-duel-card">
-    <div class="fc-duel-name">${esc(name || '?')}</div>
-    ${mode === 'form'
-      ? `<div class="fc-duel-ship">${ready
-          ? (en ? '✔ fleet ready' : '✔ флот готов')
-          : (en ? '… drafting fleet' : '… собирает флот')}</div>`
-      : ''}
-    ${mode === true ? `<div class="fc-duel-pool">${en ? 'pool' : 'пул'}: <b>${_fcMoney(pool)} ГС</b>${tot > 0 ? ' · ' + Math.round(100 * (Number(pool) || 0) / tot) + '%' : ''}</div>` : ''}
-  </div>`;
+  // Карточка бойца: флаг державы, её цвет по срезанной кромке, статус флота
+  // и — во время боя — доля кассы полосой (видно, за кого стоит трибуна).
+  const card = (fid, name, ready, pool, side) => {
+    const f = _fcFac(fid);
+    const nm = name || (f && f.name) || '?';
+    const col = (f && f.color) || '#ff3c82';
+    const pct = tot > 0 ? Math.round(100 * (Number(pool) || 0) / tot) : 0;
+    const flag = (f && f.herald_url)
+      ? `<img src="${esc(f.herald_url)}" alt="" loading="lazy" onerror="this.closest('.fc-duel-flag').classList.add('noimg')">`
+      : '';
+    const win = st.winner && fid && st.winner === fid;
+    return `<div class="fc-duel-card${win ? ' win' : ''}${mode === 'form' && ready ? ' ready' : ''}" style="--fc-c:${esc(col)}">
+      <div class="fc-duel-side">${side}</div>
+      <div class="fc-duel-flag${flag ? '' : ' noimg'}" data-i="${esc((nm[0] || '?').toUpperCase())}">${flag}</div>
+      <div class="fc-duel-info">
+        <div class="fc-duel-name">${esc(nm)}${win ? ` <span class="fc-duel-crown">🏆</span>` : ''}</div>
+        ${mode === 'form'
+          ? `<div class="fc-duel-ship${ready ? ' ok' : ''}">${ready
+              ? (en ? '✔ fleet ready' : '✔ флот готов')
+              : (en ? '… drafting fleet' : '… собирает флот')}</div>`
+          : ''}
+        ${mode === true ? `<div class="fc-duel-pool">${en ? 'pool' : 'пул'}: <b>${_fcMoney(pool)} ГС</b>${tot > 0 ? ' · ' + pct + '%' : ''}</div>
+          <div class="fc-duel-bar"><i style="width:${tot > 0 ? pct : 0}%"></i></div>` : ''}
+      </div>
+    </div>`;
+  };
   return `<div class="fc-duel">
-    ${card(st.duelist_a_name, st.att_ready, st.pool_a)}
+    ${card(st.duelist_a, st.duelist_a_name, st.att_ready, st.pool_a, 'A')}
     <div class="fc-duel-vs">VS</div>
-    ${card(st.duelist_b_name, st.def_ready, st.pool_b)}
+    ${card(st.duelist_b, st.duelist_b_name, st.def_ready, st.pool_b, 'B')}
   </div>`;
 }
 async function fcSignup() {

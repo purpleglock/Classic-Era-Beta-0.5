@@ -274,7 +274,11 @@
       "Bash(node tools/db_q.js \"select name,\\(stats->>'power'\\)::int p,\\(stats->>'mass'\\)::int m,\\(stats->>'capacityPenalty'\\)::int cap,\\(stats->>'price'\\)::bigint price,stats->'resurs' res from faction_reactors\")",
       "Bash(sed -i \"s/var BUILD = '20260808rgprice';/var BUILD = '20260808rgcards';/\" index.html)",
       "Bash(sed -i \"s/constructors.js?v=20260808rganim/constructors.js?v=20260808rgcards/;s/reactor_forge_ui.js?v=20260808rganim/reactor_forge_ui.js?v=20260808rgcards/\" index.html)",
-      "Bash(node --check battle_gl.js)"
+      "Bash(node --check battle_gl.js)",
+      "Bash(node tools/db_q.js ' *)",
+      "Bash(node tools/db_q.js \"select table_name, column_name from information_schema.columns where table_schema='public' and column_name in \\('attacker_fid','defender_fid','winner_fid'\\) order by 1\")",
+      "Bash(node tools/db_q.js \"select id,attacker_fid,defender_fid,status,kind,turn_no,ended_at,side_to_move,att_ready,def_ready,deadline_at from battles where kind='duel' order by created_at desc limit 5\")",
+      "Bash(node tools/db_q.js \"select * from fc_events order by 1 desc limit 5\")"
     ]
   }
 }
