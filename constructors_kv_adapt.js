@@ -24,7 +24,8 @@
     ground:   ['peh', 'btr', 'tanki', 'arta'],
     aviation: ['dron', 'aviacia', 'vertihui', 'dronkos', 'mla'],
     ship:     ['corvette', 'destroyer', 'supportCarrier', 'mediumCruiser',
-               'hyperCruiser', 'multiroleCarrier', 'battleship', 'dreadnought', 'ss13'],
+               'hyperCruiser', 'multiroleCarrier', 'battleship', 'dreadnought', 'ss13',
+               'colossus'],
   };
 
   function num(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }

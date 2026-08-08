@@ -292,6 +292,51 @@
 .bb-pool-n i { display: block; color: #6a8592; font-size: 10.5px; font-style: normal; margin-top: 2px; }
 .bb-pool-q { color: #8fb0c0; font-size: 12px; font-family: var(--font-mono, monospace); }
 
+/* Карточка подкрепления — гранёная кнопка-паспорт корабля.
+   Обводка слоем (::before/::after), а не border: срез угла рвёт border.
+   Один акцент (--bbc) — иконка класса и рамка; всё остальное молчит. */
+.bb-rc {
+  position: relative; z-index: 0; width: 100%; box-sizing: border-box;
+  display: block; border: 0; border-radius: 0; background: transparent;
+  padding: 9px 11px 10px; margin-bottom: 7px; cursor: pointer;
+  font: inherit; color: #cfe6f0; text-align: left;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  transition: color .14s;
+}
+.bb-rc::before { content: ""; position: absolute; inset: 0; z-index: -2; background: rgba(90,220,240,.16); transition: background .14s; }
+.bb-rc::after {
+  content: ""; position: absolute; inset: 1px; z-index: -1; background: rgba(16,26,36,.92);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  transition: background .14s;
+}
+.bb-rc:hover:not(:disabled)::before { background: rgba(90,220,240,.5); }
+.bb-rc:hover:not(:disabled)::after { background: rgba(24,40,52,.94); }
+.bb-rc:disabled { opacity: .35; cursor: default; }
+.bb-rc-h { display: flex; align-items: center; gap: 9px; }
+.bb-rc-ico { color: var(--bbc); font-size: 16px; line-height: 1; }
+.bb-rc-n { flex: 1; min-width: 0; font-size: 13px; color: #eaf6ff; }
+.bb-rc-n i {
+  display: block; margin-top: 2px; font-style: normal; font-size: 10px;
+  color: #6a8592; letter-spacing: .06em; text-transform: uppercase;
+}
+.bb-rc-q { color: #8fb0c0; font-size: 12px; font-family: var(--font-mono, monospace); }
+.bb-rc-g {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 8px;
+  margin-top: 9px; padding-top: 8px; border-top: 1px solid rgba(90,220,240,.14);
+}
+.bb-rc-g span { display: block; color: #6f8998; font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; }
+.bb-rc-g b {
+  display: block; margin-top: 1px; color: #eaf6ff; font-weight: 500;
+  font-family: var(--font-mono, monospace); font-size: 13px;
+}
+.bb-rc-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.bb-rc-tags span {
+  padding: 2px 6px; font-size: 10.5px; color: #8fb0c0;
+  background: rgba(90,220,240,.09);
+  clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 4px 100%, 0 calc(100% - 4px));
+}
+.bb-rc-note { margin-top: 7px; font-size: 11px; color: #7cf; }
+
 /* Характеристики выбранного корабля */
 .bb-stat { display: flex; justify-content: space-between; font-size: 12.5px; padding: 3px 0; }
 .bb-stat span { color: #6f8998; }
@@ -344,6 +389,7 @@
   .bb-bar .btn { width: 100%; }         /* кнопки хода — во всю ширину, под палец */
   .bb-bar-sub { min-width: 100%; order: 2; }
   .bb-pool { padding: 10px; }           /* цель для тапа повыше */
+  .bb-rc-g { grid-template-columns: repeat(2, 1fr); }
   .bb-log-sc { max-height: 180px; }
 }
 

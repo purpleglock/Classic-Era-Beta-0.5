@@ -1771,22 +1771,28 @@ function bbDuelSpent(s) {
     .reduce((sum, u) => sum + (cost[u.unit_id] || 0), 0);
   return fixed + BB.place.reduce((sum, p) => sum + (cost[p.unit_id] || 0), 0);
 }
-// Развёрнутые ТТХ корабля из резерва/подкрепления (класс, корпус, урон, ход,
-// дальность + важные детали: щит/броня, грузоподъёмность, экипаж, боевые модули).
-function bbPoolDetail(p) {
-  const bits = [bbClsName(p.cls), `${bbNum(p.hp)} HP`, `${bbNum(p.dmg)} урон`, `ход ${p.speed}`, `бьёт до ${p.rng}`];
-  if (+p.shield > 0) bits.push(`щит ${bbNum(p.shield)}`);
-  if (+p.armor > 0) bits.push(`броня ${bbNum(p.armor)}`);
-  if (+p.cargo > 0) bits.push(`грузоподъёмность ${bbNum(p.cargo)}`);
-  if (+p.crew > 0) bits.push(`экипаж ${bbNum(p.crew)}`);
-  if (+p.pd > 0) bits.push(`ПРО ${Math.round(p.pd * 100)}%`);
-  if (+p.jam > 0) bits.push(`РЭБ −${p.jam}`);
-  if (+p.dejam > 0) bits.push(`контр-РЭБ ${p.dejam}`);
-  if (+p.wings > 0) bits.push(`авиакрыльев ${p.wings}`);
-  if (p.interdict) bits.push('⛔ интердикция');
-  if (p.stabil) bits.push('⚓ стабилизатор');
-  if (p.ftl) bits.push('⇢ FTL-прыжок');
-  return bits.join(' · ');
+// ТТХ корабля из резерва/подкрепления. Не сплошная строка через точку, а
+// карточка: шапка (класс/имя/остаток) + сетка ключевых чисел + метки
+// особенностей. Второстепенное (экипаж, груз, ПРО, РЭБ, модули) уходит в метки,
+// чтобы сетка держала ровно те четыре-шесть цифр, по которым выбирают борт.
+function bbPoolCells(p) {
+  const c = [['Корпус', bbNum(p.hp)], ['Урон', bbNum(p.dmg)], ['Ход', p.speed], ['Рубеж', p.rng]];
+  if (+p.shield > 0) c.push(['Щит', bbNum(p.shield)]);
+  if (+p.armor > 0)  c.push(['Броня', bbNum(p.armor)]);
+  return c.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+}
+function bbPoolTags(p) {
+  const t = [];
+  if (+p.pd > 0)    t.push(`ПРО ${Math.round(p.pd * 100)}%`);
+  if (+p.jam > 0)   t.push(`РЭБ −${p.jam}`);
+  if (+p.dejam > 0) t.push(`контр-РЭБ ${p.dejam}`);
+  if (+p.wings > 0) t.push(`🛩 ${p.wings}`);
+  if (+p.crew > 0)  t.push(`экипаж ${bbNum(p.crew)}`);
+  if (+p.cargo > 0) t.push(`груз ${bbNum(p.cargo)}`);
+  if (p.interdict)  t.push('⛔ интердикция');
+  if (p.stabil)     t.push('⚓ стабилизатор');
+  if (p.ftl)        t.push('⇢ FTL-прыжок');
+  return t.length ? `<div class="bb-rc-tags">${t.map(x => `<span>${x}</span>`).join('')}</div>` : '';
 }
 
 function bbPick(uid) { BB.pick = (BB.pick === uid ? null : uid); bbRender(); }
@@ -1831,10 +1837,15 @@ function bbReinfPanel(s) {
       <div class="bb-panel-h">${help}${s.interdicted ? ' <b style="color:#ff5c8a">FTL-заградитель врага блокирует подкрепления — уничтожьте его носителя, выведите «Альтаан» или вызывайте корабли с собственным FTL-гипердвигателем (⇢).</b>' : ''}</div>
       ${pool.map(p => {
         const canJump = fresh && (!s.interdicted || p.ftl);
-        return `<button class="bb-pool" ${canJump ? '' : 'disabled'} onclick="bbReinforce('${jsq(p.unit_id)}')">
-          <span class="bb-pool-cls">${bbClsIco(p.cls)}</span>
-          <span class="bb-pool-n">${esc(p.unit_name)}${s.interdicted && p.ftl ? ' <b style="color:#7cf">⇢ прыжок сквозь заграждение</b>' : ''}<i>${bbPoolDetail(p)}</i></span>
-          <span class="bb-pool-q">×${p.free}</span>
+        return `<button class="bb-rc" ${canJump ? '' : 'disabled'} onclick="bbReinforce('${jsq(p.unit_id)}')">
+          <div class="bb-rc-h">
+            <span class="bb-rc-ico">${bbClsIco(p.cls)}</span>
+            <span class="bb-rc-n">${esc(p.unit_name)}<i>${bbClsName(p.cls)}</i></span>
+            <span class="bb-rc-q">×${p.free}</span>
+          </div>
+          <div class="bb-rc-g">${bbPoolCells(p)}</div>
+          ${bbPoolTags(p)}
+          ${s.interdicted && p.ftl ? '<div class="bb-rc-note">⇢ прыжок сквозь заграждение</div>' : ''}
         </button>`;
       }).join('')}
     </div>`;

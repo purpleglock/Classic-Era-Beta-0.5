@@ -2428,6 +2428,24 @@ const modules6 = {
     { name: 'Плазменный экран «Горуда» ГПЗ-98', price: 50000000, power: 300, protectiveField: 1000, visibility: 0, crewRequired: 5, category: 'Модули щитов', customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 250, coloredmetall: 0, rudametall: 0, kristall: 150, staarvis: 0 } },
     { name: 'Плазменный экран «Фэнхуа» ГПЗ-140', price: 75000000, power: 4500, protectiveField: 20000, visibility: 0, crewRequired: 15, category: 'Модули щитов', customParameterradar: { dalnost: 0 }, resurs: { blackmetall: 1000, coloredmetall: 0, rudametall: 0, kristall: 600, staarvis: 100 } }  ],
 };
+  // ── ИМПЕРСКИЙ КОЛОСС: класс со СВОБОДНЫМ КОРПУСОМ ────────────────────────────
+  // У всех прочих классов корпус — константа: силуэт, а с ним и число палубных
+  // клеток, предопределены таблицей. Колосс — творческий режим: длину, полубимс и
+  // профиль борта задаёт сам игрок в верфи (см. CN_COL в constructors.js), а числа
+  // ниже — ЭТАЛОН «корпуса по умолчанию». Реальные масса/экипаж/сырьё/потолок
+  // отсеков пересчитываются от площади получившейся палубы (cnColApply) и от неё же
+  // считаются на сервере (_cn_colossus_cls) — таблице тут верить нельзя.
+  // Комплектующие (реакторы, броня, щиты, двигатели, радары, оружие, модули) —
+  // дредноутные: колосс не даёт нового железа, он даёт МЕСТО под него.
+  shipClasses.colossus = {
+    hp: 0, size: 4, orugie: 1, modul: 170, crewRequired: 140, price: 600000000,
+    capacity: 2600, shieldBoost: 45, speed: 1,
+    resurs: { blackmetall: 2600, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 6000 },
+    mass: 760000, gabarit: 1100, xxx: 'Имперский колосс', custom: 'hull',
+  };
+  [engines, armorElements, modules, modules3, modules5, modules6, weapons, modules_ids]
+    .forEach(function (tbl) { if (tbl && tbl.dreadnought && !tbl.colossus) tbl.colossus = tbl.dreadnought; });
+
   return {
     speedBoostConfig, shipClasses, engines, materialsDatabase, armorElements,
     modulesLibrary, modules_ids, modules_order, modules, techCoefficients, damageTypeCoefficients,
