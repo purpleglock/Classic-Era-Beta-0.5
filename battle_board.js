@@ -443,18 +443,29 @@ function bbCamFocus(px, py, zoom, dur) {
 function bbIsStaff() {
   return !!(typeof user !== 'undefined' && user && ['superadmin', 'editor'].includes(user.role));
 }
+// Сторона, которой сейчас ходить, — это боты? (арена Бойцовского клуба:
+// fid 'bot' на одной из сторон дуэли). Тогда ход легиона может запустить
+// ЛЮБОЙ, кто смотрит доску, — и боец, и трибуна: у ботов нет своей сессии.
+const BB_BOT_FID = 'bot';
+function bbClubBotTurn(s) {
+  if (!s || s.status !== 'active' || s.kind !== 'duel') return false;
+  return (s.side_to_move === 'attacker' ? s.attacker : s.defender) === BB_BOT_FID;
+}
 async function bbMaybeBotTurn() {
   const s = BB.st;
-  if (BB.botRunning || !s || BB.spectate) return;
-  // Пробуем прогнать за ботов, если: это помеченный бот-бой ЛИБО ты — стафф
-  // (тогда сервер сам решит — «это не бой с ботами» просто проглотим).
-  if (!BB.botFoe && !bbIsStaff()) return;
-  if (s.status !== 'active') return;
+  if (BB.botRunning || !s || s.status !== 'active') return;
+  const club = bbClubBotTurn(s);
+  if (!club) {
+    if (BB.spectate) return;
+    // Пробуем прогнать за ботов, если: это помеченный бот-бой ЛИБО ты — стафф
+    // (тогда сервер сам решит — «это не бой с ботами» просто проглотим).
+    if (!BB.botFoe && !bbIsStaff()) return;
+  }
   // не мой ход = ход стороны-ботов (я — участник, боты — противник)
   if (s.my_turn) return;
   BB.botRunning = true;
   try {
-    await ecRpc('admin_bot_turn', { p_battle: BB.id });
+    await ecRpc(club ? 'fc_bot_turn' : 'admin_bot_turn', { p_battle: BB.id });
   } catch (e) {
     BB.botRunning = false;
     if (bbGone(e)) { bbShowGone(); return; }

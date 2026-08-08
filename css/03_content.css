@@ -5379,6 +5379,10 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
    остаётся только на разделителе VS и кассе. Флага нет — квадрат с
    инициалом в цвете державы, ничего не разъезжается. */
 .fc-duel{display:flex;align-items:stretch;gap:10px}
+/* Сторона игроков — жребий из одной-трёх держав: карточки колонкой в одной
+   половине, чтобы «VS» осталось по центру, а строка не разъезжалась. */
+.fc-duel-team{flex:1 1 0;display:flex;flex-direction:column;gap:6px;min-width:0}
+.fc-duel-team .fc-duel-card{flex:1 1 auto}
 /* Обводка — СЛОЙ-подложка (::before цвет + ::after инсет-фон), не border:
    border со срезанными углами рвётся по срезу. Левая грань державы живёт
    в том же слое градиентом, поэтому тоже срезана честно. */

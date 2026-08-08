@@ -5697,9 +5697,10 @@ async function heroVNFightRefresh() {
 function _fcBody(st, en) {
   const parts = [];
   // ── правило клуба одной строкой ──
+  const edge = Math.round(((Number(st.bot_edge) || 1.25) - 1) * 100);
   parts.push(`<div class="fc-rule">${en
-    ? 'Two random duelists. Each gets a reserve of fresh warships and an equal budget — you draft and deploy your own fleet, then fight. Real tactical battle — everyone watches, everyone bets.'
-    : 'Двое случайных дуэлянтов. Каждому — резерв свежих кораблей и равный бюджет: сами собираете флот и расставляете его на доске. Настоящий тактический бой — все смотрят, все ставят.'}${st.prize
+    ? `The lot pulls one to ${st.party_max || 3} houses into the pit — against the pirate fleet of ${esc(st.duelist_b_name || 'the void raiders')}. You draft gladiators from the club roster within the budget; the bots get ${edge}% more. Real tactical battle — everyone watches, everyone bets.`
+    : `Жребий вытягивает на арену от одной до ${st.party_max || 3} держав — против пиратской вольницы${st.duelist_b_name ? ' «' + esc(st.duelist_b_name) + '»' : ''}. Вы драфтите гладиаторов клуба в рамках бюджета, у ботов его на ${edge}% больше: лёгкой прогулки не будет. Настоящий тактический бой — все смотрят, все ставят.`}${st.prize
     ? ` ${en ? 'Winner takes the club purse — ' : 'Победитель забирает приз клуба — '}<b>${_fcMoney(st.prize)} ГС</b>.` : ''}</div>`);
 
   if (st.status === 'signup') {
@@ -5707,7 +5708,7 @@ function _fcBody(st, en) {
     parts.push(`<div class="fc-phase"><span class="fc-phase-tag">${en ? 'RECRUITING' : 'НАБОР ЗАЯВОК'}</span>
       ${left ? `<span class="fc-phase-t">${en ? 'closes in ' : 'окно закроется через '}${left}</span>`
              : `<span class="fc-phase-t">${en ? 'matching soon…' : 'жеребьёвка вот-вот…'}</span>`}</div>`);
-    parts.push(`<div class="fc-signups"><b>${st.signups | 0}</b><span>${en ? 'applications in the hat' : 'заявок в шляпе жребия'}${(st.signups | 0) < 2 ? (en ? ' · need at least 2' : ' · нужно минимум две') : ''}</span></div>`);
+    parts.push(`<div class="fc-signups"><b>${st.signups | 0}</b><span>${en ? 'applications in the hat' : 'заявок в шляпе жребия'}${(st.signups | 0) < 1 ? (en ? ' · at least one is needed' : ' · нужна хотя бы одна') : (en ? ' · the lot may pull several at once' : ' · жребий может вытянуть сразу нескольких')}</span></div>`);
     parts.push(st.me_signed
       ? `<div class="fc-ok">✔ ${en ? 'Your application is in. The lottery decides the rest.' : 'Ваша заявка принята. Дальше решает жребий.'}</div>`
       : (st.me
@@ -5720,16 +5721,16 @@ function _fcBody(st, en) {
     const dl = _fcLeft(st.battle_deadline);
     parts.push(`<div class="fc-phase"><span class="fc-phase-tag">${en ? 'FLEET DRAFT' : 'РАССТАНОВКА ФЛОТОВ'}</span>
       ${dl ? `<span class="fc-phase-t">${en ? 'deploy within ' : 'расставить в течение '}${dl}</span>` : ''}</div>`);
-    if (st.budget) parts.push(`<div class="fc-ok">💠 ${en ? 'Draft budget per side' : 'Бюджет флота на сторону'}: <b>${_fcMoney(st.budget)} ГС</b>. ${en ? 'Pick ships from your reserve and place them.' : 'Соберите флот из выданного резерва и расставьте.'}</div>`);
+    if (st.budget) parts.push(`<div class="fc-ok">💠 ${en ? 'Draft budget per house' : 'Бюджет флота на державу'}: <b>${_fcMoney(st.budget)} ГС</b>.${(st.party_n | 0) > 1 ? ` ${en ? 'The side budget is split between the houses the lot pulled.' : 'Бюджет стороны поделён между выпавшими державами — деритесь заодно.'}` : ''} ${en ? 'Pick gladiators from your reserve and place them.' : 'Соберите флот из выданного резерва и расставьте.'}</div>`);
     parts.push(_fcDuelCards(st, en, 'form'));
     if (st.i_side) {
-      // дуэлянт: открыть доску участником и расставить
-      const iReady = st.i_side === 'a' ? st.att_ready : st.def_ready;
+      // боец: открыть доску участником и расставить
+      const iReady = st.i_ready !== undefined ? !!st.i_ready : !!st.att_ready;
       parts.push(iReady
-        ? `<div class="fc-ok">✔ ${en ? 'Your fleet is set. Waiting for the opponent.' : 'Ваш флот утверждён. Ждём соперника.'}</div>`
+        ? `<div class="fc-ok">✔ ${en ? 'Your fleet is set.' : 'Ваш флот утверждён.'} ${(st.party_n | 0) > 1 ? (en ? 'Waiting for the rest of the party.' : 'Ждём остальных из группы.') : (en ? 'The bots are already in the pit.' : 'Вольница уже на арене.')}</div>`
         : `<button class="hp-vna-cta" onclick="event.stopPropagation();fcDeploy()">⚔ ${en ? 'Deploy your fleet' : 'Расставить флот'}</button>`);
     } else {
-      parts.push(`<div class="hp-vna-obs">👁 ${en ? 'Duelists are drafting their fleets. Betting opens when the battle starts.' : 'Дуэлянты собирают флоты. Ставки откроются с началом боя.'}</div>`);
+      parts.push(`<div class="hp-vna-obs">👁 ${en ? 'The fighters are drafting their fleets. Betting opens when the battle starts.' : 'Бойцы собирают флоты. Ставки откроются с началом боя.'}</div>`);
     }
   }
 
@@ -5805,7 +5806,10 @@ function _fcDuelCards(st, en, mode) {
     const flag = (f && f.herald_url)
       ? `<img src="${esc(f.herald_url)}" alt="" loading="lazy" onerror="this.closest('.fc-duel-flag').classList.add('noimg')">`
       : '';
-    const win = st.winner && fid && st.winner === fid;
+    // Победителем сервер пишет ЛИДЕРА стороны — венок ставим всей группе жребия
+    const inParty = Array.isArray(st.party) && st.party.some(p => p.fid === fid);
+    const win = !!(st.winner && fid && (st.winner === fid
+                || (inParty && st.winner === st.duelist_a)));
     return `<div class="fc-duel-card${win ? ' win' : ''}${mode === 'form' && ready ? ' ready' : ''}" style="--fc-c:${esc(col)}">
       <div class="fc-duel-side">${side}</div>
       <div class="fc-duel-flag${flag ? '' : ' noimg'}" data-i="${esc((nm[0] || '?').toUpperCase())}">${flag}</div>
@@ -5816,15 +5820,22 @@ function _fcDuelCards(st, en, mode) {
               ? (en ? '✔ fleet ready' : '✔ флот готов')
               : (en ? '… drafting fleet' : '… собирает флот')}</div>`
           : ''}
-        ${mode === true ? `<div class="fc-duel-pool">${en ? 'pool' : 'пул'}: <b>${_fcMoney(pool)} ГС</b>${tot > 0 ? ' · ' + pct + '%' : ''}</div>
+        ${mode === true && pool !== null ? `<div class="fc-duel-pool">${en ? 'pool' : 'пул'}: <b>${_fcMoney(pool)} ГС</b>${tot > 0 ? ' · ' + pct + '%' : ''}</div>
           <div class="fc-duel-bar"><i style="width:${tot > 0 ? pct : 0}%"></i></div>` : ''}
       </div>
     </div>`;
   };
+  // Сторона игроков — жребий из одной-трёх держав: карточка на каждую,
+  // касса общая, поэтому полосу пула рисуем только у первой.
+  const party = Array.isArray(st.party) ? st.party : [];
+  const aSide = party.length
+    ? party.map((p, i) => card(p.fid, p.name, p.ready, i === 0 ? st.pool_a : null,
+                               'A' + (party.length > 1 ? String(i + 1) : ''))).join('')
+    : card(st.duelist_a, st.duelist_a_name, st.att_ready, st.pool_a, 'A');
   return `<div class="fc-duel">
-    ${card(st.duelist_a, st.duelist_a_name, st.att_ready, st.pool_a, 'A')}
+    <div class="fc-duel-team">${aSide}</div>
     <div class="fc-duel-vs">VS</div>
-    ${card(st.duelist_b, st.duelist_b_name, st.def_ready, st.pool_b, 'B')}
+    ${card(st.duelist_b, st.duelist_b_name, st.def_ready, st.pool_b, st.vs_bot ? '🏴‍☠️' : 'B')}
   </div>`;
 }
 async function fcSignup() {
