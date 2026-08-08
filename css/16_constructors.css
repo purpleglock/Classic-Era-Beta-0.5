@@ -779,3 +779,42 @@
 .cn-wip { margin: 0 0 14px; padding: 9px 13px; border: 1px solid #e0b457; border-left-width: 3px; border-radius: 8px; background: rgba(224, 180, 87, .07); color: #e0b457; font-size: 12px; line-height: 1.45; }
 /* На палубе плавающие кнопки чата и тикетов лезут поверх чертежа — прячем. */
 body.cn-deck-on #ch-fab, body.cn-deck-on #tk-fab { display: none; }
+
+/* ── ВЕРФЬ КОРПУСА (Имперский колосс) ─────────────────────────
+   Полноэкранный редактор силуэта: слева чертёж с точками-станциями,
+   справа ползунки, пресеты и цена решения. Лежит ПОВЕРХ палубы
+   (z-index выше .cn-deck), потому что открывается и из неё тоже. */
+.cn-hull { position: fixed; inset: 0; z-index: 44; background: #070b10; }
+.cn-hull-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.cn-hull-wrap > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #1d2833; font: 600 12px/1 var(--font-mono); letter-spacing: 2.2px; color: #e0b457; }
+.cn-hull-x { width: 36px; height: 36px; border-radius: 50%; border: 1px solid #33414f; background: #0d141c; color: #9fb0c2; font-size: 16px; cursor: pointer; }
+.cn-hull-x:hover { border-color: #9fe8ff; color: #9fe8ff; }
+.cn-hull-body { flex: 1; display: flex; min-height: 0; }
+.cn-hull-canvas { flex: 1; min-width: 0; position: relative; }
+.cn-hull-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: ew-resize; }
+.cn-hull-dot circle:first-of-type { transition: r var(--transition-fast), stroke var(--transition-fast); }
+.cn-hull-dot:hover circle:first-of-type { r: 6; stroke: #9fe8ff; }
+.cn-hull-side { width: 320px; display: flex; flex-direction: column; gap: 10px; padding: 14px 13px; overflow: auto; background: #0a1017; border-left: 1px solid #1d2833; }
+.cn-hull-hint { font-size: 11.5px; line-height: 1.5; color: #7e8c9c; }
+.cn-hull-sld { display: grid; grid-template-columns: 74px 1fr 44px; align-items: center; gap: 8px; }
+.cn-hull-sld u { text-decoration: none; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: #7e8c9c; }
+.cn-hull-sld b { font: 600 12px var(--font-mono); color: #9fe8ff; text-align: right; }
+.cn-hull-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cn-hull-presets button { padding: 7px 8px; border-radius: 7px; border: 1px solid #2b3947; background: #0d141c; color: #9fb0c2; font-size: 11.5px; cursor: pointer; text-align: left; }
+.cn-hull-presets button:hover { border-color: #e0b457; color: #e0b457; }
+.cn-hull-read { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.cn-hull-read i { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-style: normal; padding: 5px 9px; border-radius: 7px; border: 1px solid #1d2833; background: #0d141c; }
+.cn-hull-read i.wide { flex-direction: column; align-items: flex-start; gap: 3px; }
+.cn-hull-read u { text-decoration: none; font-size: 10.5px; letter-spacing: 1.1px; text-transform: uppercase; color: #7e8c9c; }
+.cn-hull-read b { font: 600 12.5px var(--font-mono); color: #cfe0f0; }
+.cn-hull-read i.bad { border-color: #e0575f; }
+.cn-hull-read i.bad b, .cn-hull-read i.bad u { color: #e0575f; }
+.cn-hull-done { margin-top: auto; padding: 10px; border-radius: 8px; border: 1px solid #e0b457; background: rgba(224, 180, 87, .1); color: #e0b457; font-size: 13px; cursor: pointer; }
+.cn-hull-done:hover { background: rgba(224, 180, 87, .18); }
+/* Кнопка творческого корпуса на палубе — под крестиком закрытия. */
+.cn-deck-hull { top: 62px; border-color: #e0b457; color: #e0b457; }
+@media (max-width: 860px) {
+  .cn-hull-body { flex-direction: column; }
+  .cn-hull-side { width: auto; max-height: 52%; border-left: none; border-top: 1px solid #1d2833; }
+  .cn-hull-canvas { min-height: 42%; }
+}

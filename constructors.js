@@ -1553,6 +1553,286 @@ for (const stK in CN_SHIP_ST) {
   const d = CN_SHIP_ST[stK], stLast = d.st[d.st.length - 1];
   CN_SHIP_GEO[stK] = Object.assign({ path: cnStPath(d.st), engine: [160, stLast[0]], maxHW: Math.max(...d.st.map(p => p[1])) }, d);
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// ИМПЕРСКИЙ КОЛОСС · ТВОРЧЕСКИЙ РЕЖИМ КОРПУСА
+// ══════════════════════════════════════════════════════════════════════════════
+// У прочих классов корпус — строка в CN_SHIP_DIM: силуэт задан, а с ним задано и
+// всё остальное, потому что палубные клетки нарезаются ИЗ силуэта (cnDeckGeo).
+// Колосс переворачивает зависимость: игрок задаёт длину, полубимс и профиль борта,
+// из них рождается силуэт, из силуэта — клетки, а из числа клеток — масса, экипаж,
+// сырьё, грузоподъёмность и потолок отсеков. Свобода формы оплачивается по площади.
+//
+// ⚠️ ПРОФИЛЬ — ЛОМАНАЯ, И ЭТО НЕ ЛЕНЬ. Корпус рисуется outlinePts БЕЗ сглаживания
+// (hull_gen §2), то есть нарисованный контур в точности равен многоугольнику, по
+// которому режется решётка. Значит «на схеме шире, чем в клетках» невозможно, а
+// серверу достаточно линейной интерполяции полуширины — тащить сплайн в SQL не надо
+// (см. _colossus_hull.sql, зеркало cnColSt/cnColCells).
+// ⚠️ ЧИСЛА ЗДЕСЬ ЖИВУТ В ДВУХ МЕСТАХ — тут и в SQL. Правишь одно, правь второе,
+// иначе на верфи будет один корабль, а в базе другой (сверка tools/check_colossus.js).
+const CN_COL = {
+  len:  { min: 300, max: 780, step: 10, def: 460 },   // длина корпуса в единицах чертежа
+  beam: { min: 20,  max: 112, step: 2,  def: 68 },    // ПОЛУбимс (половина ширины)
+  fmin: 0.06, fmax: 1, fstep: 0.02,                   // узел профиля: доля полубимса
+  N: 9,                                               // узлов профиля нос→корма
+  mid: 215,                                           // корпус центрируем по чертежу
+  cap: 1000,                                          // ПОТОЛОК клеток палубы (дредноут 655)
+  refCells: 655,                                      // эталон масштабирования = дредноут
+  imperial: 1.25,                                     // надбавка мегапроекта к сырью и цене
+};
+// Эталон, от которого пляшут производные ТТХ (зеркало _cn_colossus_cls в SQL).
+const CN_COL_REF = {
+  mass: 500000, crew: 100, capacity: 1800, gabarit: 800, price: 250000000, modul: 112,
+  resurs: { blackmetall: 1800, coloredmetall: 0, rudametall: 0, kristall: 0, staarvis: 4000 },
+};
+// Пресеты: сначала «как у существующих классов» (чтобы было с чего начать), потом
+// формы, которых в линейке нет вовсе — ради них весь режим и делался.
+const CN_COL_PRESETS = [
+  { id: 'dread',   name: 'Дредноут (эталон)',  len: 382, beam: 64,  prof: [0.10, 0.34, 0.56, 0.74, 0.88, 1.00, 0.96, 0.80, 0.60] },
+  { id: 'batt',    name: 'Линкор',             len: 320, beam: 40,  prof: [0.14, 0.42, 0.68, 0.88, 1.00, 0.98, 0.90, 0.76, 0.58] },
+  { id: 'torch',   name: 'Факельщик',          len: 366, beam: 46,  prof: [0.06, 0.20, 0.40, 0.60, 0.78, 0.92, 1.00, 0.86, 0.52] },
+  { id: 'carrier', name: 'Авианосец',          len: 320, beam: 44,  prof: [0.18, 0.52, 0.82, 0.96, 1.00, 1.00, 0.98, 0.88, 0.66] },
+  { id: 'station', name: 'Станция',            len: 234, beam: 84,  prof: [0.44, 0.78, 0.96, 1.00, 1.00, 1.00, 0.96, 0.78, 0.44] },
+  // ── формы, которых в линейке нет ──
+  { id: 'axe',     name: 'Секира',             len: 520, beam: 96,  prof: [0.08, 0.12, 0.18, 0.26, 0.42, 1.00, 0.94, 0.34, 0.20] },
+  { id: 'spindle', name: 'Веретено',           len: 640, beam: 54,  prof: [0.06, 0.30, 0.60, 0.86, 1.00, 0.86, 0.60, 0.30, 0.10] },
+  { id: 'hammer',  name: 'Молот Императора',   len: 600, beam: 104, prof: [0.14, 0.14, 0.16, 0.18, 0.20, 0.24, 0.62, 1.00, 0.98] },
+  { id: 'cathed',  name: 'Собор',              len: 560, beam: 88,  prof: [0.10, 0.34, 0.34, 0.62, 0.62, 0.86, 0.86, 1.00, 1.00] },
+  { id: 'ray',     name: 'Скат',               len: 360, beam: 112, prof: [0.06, 0.14, 0.28, 0.48, 0.72, 1.00, 0.92, 0.60, 0.24] },
+  { id: 'needle',  name: 'Игла',               len: 780, beam: 34,  prof: [0.06, 0.24, 0.44, 0.66, 0.86, 1.00, 0.92, 0.70, 0.34] },
+  { id: 'anvil',   name: 'Наковальня',         len: 420, beam: 104, prof: [0.30, 0.62, 0.86, 1.00, 1.00, 1.00, 0.88, 0.70, 0.52] },
+];
+// Подписи сырья корпуса (в ведомости те же материалы зовутся Железо/Медь/…)
+const CN_RES_RU = { blackmetall: 'Железо', coloredmetall: 'Медь', rudametall: 'Титан', kristall: 'Редкоземельные', staarvis: 'Стелларит' };
+const cnColQ = (v, q, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v / q) * q));
+function cnColDefault() { const p = CN_COL_PRESETS[0]; return { len: p.len, beam: p.beam, prof: p.prof.slice() }; }
+// Квантование и потолки: то же самое делает сервер, поэтому «подкрутить на 0.001»
+// или прислать длину 5000 прямой записью в базу не выйдет — не пройдёт сверку.
+function cnColSane(h) {
+  h = h && typeof h === 'object' ? h : {};
+  const out = {
+    len:  cnColQ(+h.len  || CN_COL.len.def,  CN_COL.len.step,  CN_COL.len.min,  CN_COL.len.max),
+    beam: cnColQ(+h.beam || CN_COL.beam.def, CN_COL.beam.step, CN_COL.beam.min, CN_COL.beam.max),
+    prof: [],
+  };
+  const src = Array.isArray(h.prof) ? h.prof : cnColDefault().prof;
+  for (let i = 0; i < CN_COL.N; i++) {
+    const v = +src[i];
+    out.prof.push(+cnColQ(isFinite(v) ? v : CN_COL.fmin, CN_COL.fstep, CN_COL.fmin, CN_COL.fmax).toFixed(2));
+  }
+  return out;
+}
+// Станции корпуса из параметров. Округление до целого — ЧАСТЬ КОНТРАКТА: сервер
+// повторяет ровно это, иначе клетка на границе может уйти в разные стороны.
+function cnColSt(h) {
+  const tipY = Math.round(CN_COL.mid - h.len / 2), sternY = Math.round(CN_COL.mid + h.len / 2);
+  const st = [];
+  for (let i = 0; i < CN_COL.N; i++) {
+    const t = i / (CN_COL.N - 1);
+    st.push([Math.round(tipY + (sternY - tipY) * t), Math.round(h.beam * h.prof[i])]);
+  }
+  return st;
+}
+function cnColGeo(h) {
+  const st = cnColSt(h), tipY = st[0][0], sternY = st[st.length - 1][0];
+  const rows = Math.max(4, Math.min(16, Math.round(h.len / 44)));
+  return Object.assign(
+    { st, nose: tipY + 8, y0: tipY + 34, y1: sternY - 12, rows },
+    { path: cnStPath(st), engine: [160, sternY], maxHW: Math.max(...st.map(p => p[1])) });
+}
+// Текущий корпус проекта. Живёт в CN.hull, попадает в data.hull при публикации.
+function cnColHull() { return (CN.hull = cnColSane(CN.hull || cnColDefault())); }
+// Сколько клеток даст такой корпус. Считаем через ту же нарезку, что и палуба, —
+// второй «примерной» формулы быть не должно, разъедется.
+function cnColCells(h) {
+  const save = CN_SHIP_GEO.colossus, sd = CN._dg;
+  CN_SHIP_GEO.colossus = cnColGeo(h); CN._dg = null;
+  const n = cnDeckGeo('colossus').n;
+  CN_SHIP_GEO.colossus = save; CN._dg = sd;
+  return n;
+}
+// Потолок площади держим ПОЛУБИМСОМ: длину игрок задал осознанно, а «шире» —
+// то, что упирается в предел первым. Ползунок сам останавливается (как в реакторной
+// верфи), вместо того чтобы выдавать ошибку уже после сборки.
+function cnColFit(h) {
+  h = cnColSane(h);
+  let guard = 0;
+  while (cnColCells(h) > CN_COL.cap && h.beam > CN_COL.beam.min && guard++ < 60) h.beam -= CN_COL.beam.step;
+  while (cnColCells(h) > CN_COL.cap && h.len > CN_COL.len.min && guard++ < 120) h.len -= CN_COL.len.step;
+  return h;
+}
+// ТТХ корпуса от площади палубы (зеркало _cn_colossus_cls). Сверхлинейные показатели
+// — намеренно: вдвое больший корпус не должен стоить вдвое, иначе размер бесплатен.
+function cnColStats(cells) {
+  const r = Math.max(0.05, cells / CN_COL.refCells), R = CN_COL_REF, im = CN_COL.imperial;
+  const res = {};
+  for (const kk in R.resurs) res[kk] = Math.round(R.resurs[kk] * Math.pow(r, 1.2) * im);
+  return {
+    cells, r,
+    mass: Math.round(R.mass * Math.pow(r, 1.15)),
+    crewRequired: Math.max(20, Math.round(R.crew * Math.pow(r, 0.95))),
+    capacity: Math.round(R.capacity * r),
+    gabarit: Math.round(R.gabarit * r),
+    price: Math.round(R.price * Math.pow(r, 1.2) * im),
+    modul: Math.max(4, Math.round(R.modul * r)),
+    resurs: res,
+  };
+}
+// Применить корпус: пересобрать геометрию, переписать производные ТТХ класса в
+// каталоге и сбросить кэши решётки. Всё, что ниже по течению (цена, ведомость,
+// схема, палуба), читает db.data.colossus как обычно и ничего не знает про режим.
+function cnColApply(h, opt) {
+  const hull = CN.hull = cnColFit(h || cnColHull());
+  CN_SHIP_GEO.colossus = cnColGeo(hull);
+  CN._dg = null; CN._gcaps = null;
+  const S = cnColStats(cnColCells(hull));
+  ['ship', 'army'].forEach(cat => {
+    const d = window.KV_DB && KV_DB[cat] && KV_DB[cat].data && KV_DB[cat].data.colossus;
+    if (!d) return;
+    d.mass = S.mass; d.crewRequired = S.crewRequired; d.capacity = S.capacity;
+    d.gabarit = S.gabarit; d.price = S.price; d.cost = S.price; d.modul = S.modul;
+    d.resurs = Object.assign({}, d.resurs, S.resurs);
+    d.grid = null;
+  });
+  CN.colStats = S;
+  if (opt && opt.quiet) return S;
+  // клетки могли исчезнуть под уже поставленным железом — снимаем лишнее
+  if (CN.shipLayout) { cnBaysFit('colossus'); cnDeckStrip('colossus'); }
+  if (CN.deck) { cnDeckDraw(); cnDeckPalDraw(); }
+  cnVehCalc();
+  return S;
+}
+function cnColIs(k) { return (k || (cnId('cn-class') || {}).value) === 'colossus'; }
+// ── ВЕРФЬ КОРПУСА: полноэкранный редактор силуэта ─────────────────────────────
+// Ползунки задают длину и полубимс, а профиль борта тянут мышью прямо по силуэту:
+// каждая станция — точка, которую можно отвести от оси. Справа сразу видно, во что
+// это обходится: клетки, отсеки, масса, экипаж, ГС.
+function cnColOpen() {
+  if (!cnColIs()) { toast('Творческий корпус есть только у «Имперского колосса»', 'inf'); return; }
+  cnColHull();
+  let host = cnId('cn-hull');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'cn-hull'; host.className = 'cn-hull';
+    document.body.appendChild(host);
+    document.addEventListener('keydown', cnColKey);
+  }
+  document.body.classList.add('cn-deck-on');
+  CN.hullUI = true;
+  cnColPanel();
+}
+function cnColClose() {
+  CN.hullUI = false;
+  const host = cnId('cn-hull'); if (host) host.remove();
+  document.removeEventListener('keydown', cnColKey);
+  if (!CN.deck) document.body.classList.remove('cn-deck-on');
+  cnColApply(CN.hull);
+}
+function cnColKey(e) { if (e.key === 'Escape' && CN.hullUI) { e.preventDefault(); cnColClose(); } }
+// Силуэт с точками-станциями. Рисуем в координатах чертежа и вписываем viewBox по
+// фактическому габариту — корпус любой длины виден целиком.
+function cnColSilSvg() {
+  const h = cnColHull(), G = cnColGeo(h), st = G.st;
+  const y0 = st[0][0], y1 = st[st.length - 1][0], hw = Math.max(8, G.maxHW);
+  const padY = 26, padX = 34;
+  const vb = [160 - hw - padX, y0 - padY, (hw + padX) * 2, (y1 - y0) + padY * 2];
+  const dots = st.map((p, i) =>
+    `<g class="cn-hull-dot"><line x1="160" y1="${p[0]}" x2="${160 + p[1]}" y2="${p[0]}" stroke="#2c3a49" stroke-width="0.7" stroke-dasharray="2 3"/>`
+    + `<circle cx="${160 + p[1]}" cy="${p[0]}" r="4.6" fill="#0d141c" stroke="#e0b457" stroke-width="1.6"/>`
+    + `<circle cx="${160 - p[1]}" cy="${p[0]}" r="3" fill="#e0b45733" stroke="#e0b45766" stroke-width="1"/>`
+    + `<text x="${160 + p[1] + 11}" y="${p[0] + 4}" style="font:600 8px var(--font-mono);fill:#7e8c9c">${(h.prof[i] * 100) | 0}</text></g>`).join('');
+  return `<svg id="cn-hull-svg" viewBox="${vb.map(v => v.toFixed(1)).join(' ')}" preserveAspectRatio="xMidYMid meet"`
+    + ` onpointerdown="cnColDrag(event,1)" onpointermove="cnColDrag(event,0)" onpointerup="cnColDrag(event,-1)" onpointercancel="cnColDrag(event,-1)">`
+    + `<line x1="160" y1="${y0 - 14}" x2="160" y2="${y1 + 14}" stroke="#2c3a49" stroke-width="0.8" stroke-dasharray="3 7"/>`
+    + `<path d="${G.path}" fill="#0f1a24" stroke="#9fe8ff" stroke-width="1.6" stroke-linejoin="miter"/>`
+    + dots + `</svg>`;
+}
+// Перетаскивание станции: фаза 1 — взяли, 0 — ведём, −1 — отпустили.
+function cnColDrag(e, phase) {
+  const svg = cnId('cn-hull-svg'); if (!svg) return;
+  if (phase < 0) { CN._colDrag = null; try { svg.releasePointerCapture(e.pointerId); } catch (_) {} cnColApply(CN.hull); cnColPanel(); return; }
+  if (phase === 0 && CN._colDrag == null) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const m = svg.getScreenCTM(); if (!m) return;
+  const p = pt.matrixTransform(m.inverse());
+  const h = cnColHull(), st = cnColSt(h);
+  if (phase === 1) {                                  // берём ближайшую по длине станцию
+    let best = 0, bd = Infinity;
+    st.forEach((s, i) => { const d = Math.abs(s[0] - p.y); if (d < bd) { bd = d; best = i; } });
+    CN._colDrag = best;
+    try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+  const i = CN._colDrag; if (i == null) return;
+  e.preventDefault();
+  h.prof[i] = +cnColQ(Math.abs(p.x - 160) / Math.max(1, h.beam), CN_COL.fstep, CN_COL.fmin, CN_COL.fmax).toFixed(2);
+  cnColApply(h, { quiet: true });
+  cnColPaint();
+}
+// Лёгкая перерисовка на каждый кадр перетаскивания: только силуэт и цифры.
+function cnColPaint() {
+  const c = cnId('cn-hull-canvas'), r = cnId('cn-hull-read');
+  if (c) c.innerHTML = cnColSilSvg();
+  if (r) r.innerHTML = cnColReadHtml();
+}
+function cnColReadHtml() {
+  const h = cnColHull(), S = CN.colStats || cnColStats(cnColCells(h));
+  const room = S.cells >= CN_COL.cap;
+  const row = (lab, v, cls) => `<i class="${cls || ''}"><u>${esc(lab)}</u><b>${v}</b></i>`;
+  const res = Object.keys(S.resurs).filter(kk => S.resurs[kk] > 0)
+    .map(kk => `${esc(CN_RES_RU[kk] || kk)} ${cnNum(S.resurs[kk])}`).join(' · ');
+  return row('клетки палубы', `${S.cells} / ${CN_COL.cap}`, room ? 'bad' : '')
+    + row('отсеков', S.modul)
+    + row('масса', cnNum(S.mass) + ' кг')
+    + row('экипаж', cnNum(S.crewRequired))
+    + row('трюм', cnNum(S.capacity))
+    + row('корпус, ГС', cnNum(S.price))
+    + `<i class="wide"><u>сырьё корпуса</u><b>${res || '—'}</b></i>`
+    + (room ? `<i class="bad wide"><u>предел империи</u><b>шире нельзя: палуба упёрлась в ${CN_COL.cap} клеток</b></i>` : '');
+}
+function cnColPanel() {
+  const host = cnId('cn-hull'); if (!host) return;
+  const h = cnColHull();
+  const sld = (id, lab, cfg, val, suf) =>
+    `<label class="cn-hull-sld"><u>${esc(lab)}</u>`
+    + `<input type="range" min="${cfg.min}" max="${cfg.max}" step="${cfg.step}" value="${val}"`
+    + ` oninput="cnColSet('${id}',this.value)"><b>${val}${suf || ''}</b></label>`;
+  host.innerHTML = `<div class="cn-hull-wrap">`
+    + `<header><span>ВЕРФЬ КОРПУСА · ИМПЕРСКИЙ КОЛОСС</span>`
+    + `<button class="cn-hull-x" onclick="cnColClose()" title="Готово (Esc)">✕</button></header>`
+    + `<div class="cn-hull-body">`
+    + `<div id="cn-hull-canvas" class="cn-hull-canvas">${cnColSilSvg()}</div>`
+    + `<aside class="cn-hull-side">`
+    + `<div class="cn-hull-hint">Тяните точки борта — профиль корпуса ваш. Клетки палубы режутся из получившегося силуэта, и по ним же считается всё остальное.</div>`
+    + sld('len', 'длина', CN_COL.len, h.len)
+    + sld('beam', 'полубимс', CN_COL.beam, h.beam)
+    + `<div class="cn-hull-presets">${CN_COL_PRESETS.map(p =>
+        `<button onclick="cnColPreset('${p.id}')">${esc(p.name)}</button>`).join('')}</div>`
+    + `<div id="cn-hull-read" class="cn-hull-read">${cnColReadHtml()}</div>`
+    + `<button class="cn-hull-done" onclick="cnColClose()">Готово</button>`
+    + `</aside></div></div>`;
+}
+function cnColSet(field, v) {
+  const h = cnColHull();
+  h[field] = +v;
+  cnColApply(h, { quiet: true });
+  // ползунок мог упереться в потолок — возвращаем в него фактическое значение
+  const inp = document.querySelector(`#cn-hull input[oninput*="'${field}'"]`);
+  if (inp && +inp.value !== CN.hull[field]) inp.value = CN.hull[field];
+  cnColPaint();
+  const b = inp && inp.parentNode.querySelector('b'); if (b) b.textContent = CN.hull[field];
+}
+// Кнопка «✎ Корпус» есть только у класса со свободным корпусом.
+function cnColBtnSync() {
+  const b = cnId('cn-tg-h'); if (b) b.style.display = cnColIs() ? '' : 'none';
+}
+function cnColPreset(id) {
+  const p = CN_COL_PRESETS.find(x => x.id === id); if (!p) return;
+  cnColApply({ len: p.len, beam: p.beam, prof: p.prof.slice() }, { quiet: true });
+  cnColPanel();
+}
+// Корпус по умолчанию должен существовать ДО первого открытия верфи: по ключу
+// 'colossus' в CN_SHIP_GEO лезут и схема, и палуба, и боевой рендер.
+CN_SHIP_DIM.colossus = [CN_COL.mid - CN_COL.len.def / 2, CN_COL.mid + CN_COL.len.def / 2, CN_COL.beam.def, 8];
+CN_SHIP_GEO.colossus = cnColGeo(cnColSane(cnColDefault()));
 // Профиль полуширины корпуса (нос→корма) — запасной, если у геометрии нет станций
 const CN_HULL_PROF = [[0, 0.30], [0.25, 0.86], [0.55, 1], [0.8, 0.9], [1, 0.62]];
 function cnProf(t) { const p = CN_HULL_PROF; for (let i = 1; i < p.length; i++) { if (t <= p[i][0]) { const a = p[i - 1], b = p[i]; return a[1] + (b[1] - a[1]) * ((t - a[0]) / (b[0] - a[0] || 1)); } } return p[p.length - 1][1]; }
@@ -2021,6 +2301,7 @@ function cnDeckDraw() {
   }).join('');
   const capWarn = tot.pd > 0.6 ? `<i class="cn-deck-y" style="--fc:#e0575f"><b>ПРО</b><u>потолок</u><s>всё сверх 60% сгорает</s></i>` : '';
   host.innerHTML = `<button class="cn-deck-x" onclick="cnDeckClose()" title="Закрыть (Esc)">✕</button>`
+    + (cnColIs(k) ? `<button class="cn-deck-x cn-deck-hull" onclick="cnColOpen()" title="Творческий корпус">✎</button>` : '')
     + `<div class="cn-deck-top">`
     + `<div class="cn-deck-bar">` + gauges
     + (map.fams.length > 1 ? `<i class="cn-deck-m bad">разнобой ×${map.dil.toFixed(2)}</i>` : '')
@@ -3984,6 +4265,7 @@ async function cnVehRender(cat) {
             <div class="cn-schem-toggles">
               <button class="btn btn-gh btn-sm on" id="cn-tg-w" onclick="cnSchemToggle('weapons')" title="Показать/скрыть орудия">Орудия</button>
               <button class="btn btn-gh btn-sm" id="cn-tg-b" onclick="cnDeckOpen()" title="Модульная палуба во весь экран">Палуба</button>
+              <button class="btn btn-gh btn-sm cn-tg-hull" id="cn-tg-h" onclick="cnColOpen()" title="Творческий корпус: длина, полубимс, профиль борта" style="display:none">✎ Корпус</button>
             </div>
             <div class="cn-schem-tools">
               <button class="btn btn-gh btn-sm" onclick="cnLayoutAdd('mount')" title="Добавить узел орудия">＋ Узел</button>
@@ -4113,6 +4395,10 @@ function cnVehInit() {
 }
 function cnVehHandleClass() {
   CN._dg = null; CN._gcaps = null;
+  // Колосс: корпус проекта — не константа класса, поэтому при переходе на него
+  // сначала пересобираем геометрию и производные ТТХ, и только потом всё остальное.
+  if (cnColIs()) cnColApply(CN.hull, { quiet: true });
+  cnColBtnSync();
   if (CN.shipLayout) { cnBaysFit(); cnDeckStrip(cnId('cn-class').value); }
   if (CN.deck) { cnDeckGhostOff(); cnDeckPalDraw(); }   // у другого класса другой каталог
   return cnVehHandleClass_();
@@ -4140,6 +4426,7 @@ function cnVehClassDeps() {
   cnId('cn-engine').innerHTML = cnCompOptions(cat, 'engine', def.db.engines[k], e => window.KV_DB ? `${e.name} (тяга ${cnNum(e.force)})` : `${e.name} (${e.speed} у.е.)`);
   if (def.db.radars && cnId('cn-radar')) cnId('cn-radar').innerHTML = cnCompOptions(cat, 'radar', def.db.radars[k] || [], r => { const d = r.customParameterradar && r.customParameterradar.dalnost; return r.name + (d ? ` (обзор ${cnNum(d)})` : ''); });
   if (def.cardUI) { ['type', 'reactor', 'armor', 'shield', 'engine', 'radar'].forEach(cnSlotSelected); cnHullHero(); }
+  cnColBtnSync();
   cnVehCalc();
 }
 
@@ -4728,6 +5015,9 @@ function cnRenderHud() {
 function cnVehCollectData() {
   const def = CN.def;
   const d = { class: cnId('cn-class').value };
+  // Творческий корпус — часть проекта, а не класса: сервер по этим же трём числам
+  // печёт маску палубы и производные ТТХ (_cn_colossus_cls / _cn_hull_mask).
+  if (cnColIs(d.class)) d.hull = cnColSane(CN.hull || cnColDefault());
   if (def.hasType) d.type = +cnId('cn-type').value;
   if (def.hasReactor) {
     d.reactor = +cnId('cn-reactor').value;
@@ -4781,6 +5071,9 @@ function cnVehApplyData(d) {
   if (cnId('cn-modules')) cnId('cn-modules').innerHTML = '';
   if (def.hasHangars && cnId('cn-hangars')) cnId('cn-hangars').innerHTML = '';
   if (d.class && def.db.data[d.class]) cnId('cn-class').value = d.class;
+  // Корпус восстанавливаем ДО cnVehClassDeps: от него зависят решётка и ТТХ класса,
+  // а значит и всё, что дальше пересчитывается по каталогу.
+  if (cnColIs(d.class)) cnColApply(d.hull || cnColDefault(), { quiet: true });
   cnVehClassDeps();
   if (def.hasType && d.type != null) cnId('cn-type').value = d.type;
   if (def.hasReactor && d.reactor != null) cnId('cn-reactor').value = d.reactor;

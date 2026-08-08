@@ -1570,6 +1570,7 @@ function bbTrayChips(s) {
     const acts = Array.isArray(p.acts) ? p.acts : [];
     return `<div class="bbd-s${on ? ' bbd-s-on' : ''}${why ? ' bbd-s-off' : ''}"
         onclick="bbPick('${jsq(p.unit_id)}')">
+        <span class="bbd-s-sil">${bbHullSvg(p.cls)}</span>
         <span class="bbd-s-n">${esc(p.unit_name)}</span>
         <span class="bbd-s-i">${bbNum(p.hp)} корп · ${bbNum(p.dmg)} урон · ${p.rng} гекс${Number(p.cost) > 0 ? ` · ${bbNum(p.cost)}` : ''}</span>
         <span class="bbd-s-w">${acts.length
@@ -1838,6 +1839,7 @@ function bbReinfPanel(s) {
       ${pool.map(p => {
         const canJump = fresh && (!s.interdicted || p.ftl);
         return `<button class="bb-rc" ${canJump ? '' : 'disabled'} onclick="bbReinforce('${jsq(p.unit_id)}')">
+          <div class="bb-rc-sil">${bbHullSvg(p.cls)}</div>
           <div class="bb-rc-h">
             <span class="bb-rc-ico">${bbClsIco(p.cls)}</span>
             <span class="bb-rc-n">${esc(p.unit_name)}<i>${bbClsName(p.cls)}</i></span>
@@ -1923,6 +1925,25 @@ const BB_CLS = {
   wing: 'Авиакрыло'
 };
 function bbClsName(c) { return BB_CLS[c] || 'Корабль'; }
+// Силуэт корпуса для карточек резерва — тот же контур, по которому режется палуба
+// и рисуется корабль на доске (CN_SHIP_GEO из конструктора). Схема нарисована
+// носом ВВЕРХ, карточка просит носом ВЛЕВО — меняем оси матрицей (x,y)→(y,x).
+// Если конструктор на странице не поднялся, молча отдаём пустую строку: карточка
+// живёт и без картинки, а падать из-за украшения нельзя.
+function bbHullSvg(cls) {
+  if (typeof CN_SHIP_GEO === 'undefined') return '';
+  const key = (typeof CN_KV_HULL !== 'undefined' && CN_KV_HULL[cls]) || cls;
+  const G = CN_SHIP_GEO[key] || CN_SHIP_GEO[cls];
+  if (!G || !G.path || !Array.isArray(G.st) || !G.st.length) return '';
+  const hw = Math.max(8, +G.maxHW || 30), pad = 5;
+  const y0 = G.st[0][0], y1 = G.st[G.st.length - 1][0];
+  const vb = [y0 - pad, 160 - hw - pad, (y1 - y0) + pad * 2, hw * 2 + pad * 2];
+  return `<svg class="bb-sil" viewBox="${vb.map(v => v.toFixed(1)).join(' ')}"
+      preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+      <path d="${G.path}" transform="matrix(0 1 1 0 0 0)" fill="rgba(90,220,240,.10)"
+        stroke="var(--bbc)" stroke-width="1.2" stroke-linejoin="miter" vector-effect="non-scaling-stroke"/>
+    </svg>`;
+}
 function bbClsIco(c) {
   const n = { corvette: '▸', frigate: '▶', destroyer: '◆', cruiser: '⬢', battleship: '⬣', dreadnought: '⬟',
               supportCarrier: '⬨', mediumCruiser: '⬢', hyperCruiser: '⬡', multiroleCarrier: '⬨', ss13: '✦', wing: '𐊾' };
