@@ -3031,6 +3031,14 @@ function applyBackgroundImage(url) {
 // DEVLOG IMAGE GENERATOR
 // ══════════════════════════════════════════════════════════════
 
+// Нумерация дневников: продолжаем с 67, дальше сами
+const DEVLOG_FIRST_NUMBER = 67;
+function nextDevlogNumber() {
+  let last = 0;
+  try { last = parseInt(localStorage.getItem('wk_devlog_last') || '0', 10) || 0; } catch (e) {}
+  return Math.max(DEVLOG_FIRST_NUMBER, last + 1);
+}
+
 async function renderDevlogTab(b) {
   b.innerHTML = `
     <div style="font-family:'Rajdhani',sans-serif;font-size:9px;letter-spacing:2px;color:var(--te);margin-bottom:12px">◈ ГЕНЕРАТОР ДЕВЛОГ-ИЗОБРАЖЕНИЙ</div>
@@ -3042,14 +3050,14 @@ async function renderDevlogTab(b) {
     
     <div class="fg" style="margin-bottom:10px">
       <label class="fl">Номер дневника</label>
-      <input class="fi" id="devlog-number" type="number" value="1" placeholder="1">
+      <input class="fi" id="devlog-number" type="number" value="${nextDevlogNumber()}" placeholder="67">
     </div>
-    
+
     <div class="fg" style="margin-bottom:10px">
-      <label class="fl">Автор</label>
-      <input class="fi" id="devlog-author" value="${esc(getDisplayName())}" placeholder="Имя автора">
+      <label class="fl">Тема выпуска <span style="opacity:.5">(необязательно)</span></label>
+      <input class="fi" id="devlog-sub" placeholder="Например: реакторная верфь и новая боёвка">
     </div>
-    
+
     <div class="fg" style="margin-bottom:10px">
       <label class="fl">Фоновое изображение</label>
       <input class="fi" id="devlog-bg" type="url" placeholder="https://..." oninput="updateDevlogBgPreview(this.value)">
@@ -3059,13 +3067,92 @@ async function renderDevlogTab(b) {
       <img id="devlog-bg-preview-img" style="max-width:100%;max-height:200px;border:1px solid var(--w2);border-radius:4px">
     </div>
     
+    <div id="devlog-drop" tabindex="0"
+         style="margin-bottom:12px;padding:14px;border:1px dashed var(--w2);border-radius:4px;text-align:center;font-size:11px;color:var(--te);cursor:pointer;outline:none">
+      📋 Вставить из буфера — <b>Ctrl+V</b> или клик сюда<br>
+      <span style="opacity:.6">можно и перетащить файл</span>
+    </div>
+
     <input type="file" id="devlog-bg-file" accept="image/*" style="display:none" onchange="uploadDevlogBg(this)">
     <button class="btn btn-gh btn-fw" style="margin-bottom:12px" onclick="document.getElementById('devlog-bg-file').click()">📁 Загрузить изображение</button>
-    
+
     <button class="btn btn-gd btn-fw" style="margin-bottom:16px" onclick="generateDevlogPreview()">🎨 Создать превью</button>
     
     <div id="devlog-preview" style="margin-top:16px;text-align:center"></div>
   `;
+  bindDevlogPaste();
+}
+
+// Вставка фона из буфера: Ctrl+V, клик по зоне, drag&drop
+function bindDevlogPaste() {
+  const zone = document.getElementById('devlog-drop');
+  if (!zone) return;
+
+  // Ctrl+V ловим на документе, пока вкладка «Девлог» жива
+  if (!window._devlogPasteBound) {
+    window._devlogPasteBound = true;
+    document.addEventListener('paste', e => {
+      if (!document.getElementById('devlog-drop')) return;   // вкладка закрыта
+      const items = e.clipboardData?.items || [];
+      for (const it of items) {
+        if (it.type && it.type.startsWith('image/')) {
+          const f = it.getAsFile();
+          if (f) { e.preventDefault(); devlogUseImageFile(f); }
+          return;
+        }
+      }
+      const txt = e.clipboardData?.getData('text')?.trim();
+      if (txt && /^https?:\/\//i.test(txt)) {
+        const inp = document.getElementById('devlog-bg');
+        if (inp) { inp.value = txt; updateDevlogBgPreview(txt); toast('Ссылка вставлена', 'ok'); }
+      }
+    });
+  }
+
+  zone.onclick = async () => {
+    if (!navigator.clipboard?.read) { toast('Браузер не даёт читать буфер — нажми Ctrl+V', 'err'); return; }
+    try {
+      const items = await navigator.clipboard.read();
+      for (const it of items) {
+        const type = it.types.find(t => t.startsWith('image/'));
+        if (type) {
+          const blob = await it.getType(type);
+          devlogUseImageFile(new File([blob], 'paste.png', { type }));
+          return;
+        }
+      }
+      toast('В буфере нет изображения', 'err');
+    } catch (e) {
+      toast('Нет доступа к буферу — нажми Ctrl+V', 'err');
+    }
+  };
+
+  zone.ondragover = e => { e.preventDefault(); zone.style.borderColor = 'var(--gd)'; };
+  zone.ondragleave = () => { zone.style.borderColor = 'var(--w2)'; };
+  zone.ondrop = e => {
+    e.preventDefault();
+    zone.style.borderColor = 'var(--w2)';
+    const f = e.dataTransfer?.files?.[0];
+    if (f && f.type.startsWith('image/')) devlogUseImageFile(f);
+    else toast('Это не изображение', 'err');
+  };
+}
+
+// Общий путь загрузки фона (файл / буфер / drag&drop)
+async function devlogUseImageFile(file) {
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) { toast('Файл слишком большой (макс. 10 МБ)', 'err'); return; }
+  toast('Загрузка...', 'ok');
+  try {
+    file = await compressImageFile(file);
+    const url = await ceUploadImage(file, await getTokenFresh());
+    const inp = document.getElementById('devlog-bg');
+    if (inp) inp.value = url;
+    updateDevlogBgPreview(url);
+    toast('Изображение загружено', 'ok');
+  } catch (e) {
+    toast('Ошибка: ' + e.message, 'err');
+  }
 }
 
 function updateDevlogBgPreview(url) {
@@ -3083,35 +3170,24 @@ function updateDevlogBgPreview(url) {
 
 async function uploadDevlogBg(input) {
   if (!input.files?.[0]) return;
-  let file = input.files[0];
-  if (file.size > 10 * 1024 * 1024) { toast('Файл слишком большой (макс. 10 МБ)', 'err'); return; }
-  
-  toast('Загрузка...', 'ok');
-  
-  try {
-    file = await compressImageFile(file);
-    const url = await ceUploadImage(file, await getTokenFresh());
-    document.getElementById('devlog-bg').value = url;
-    updateDevlogBgPreview(url);
-    toast('Изображение загружено', 'ok');
-  } catch (e) {
-    toast('Ошибка: ' + e.message, 'err');
-  }
+  await devlogUseImageFile(input.files[0]);
+  input.value = '';
 }
 
 async function generateDevlogPreview() {
   const project = document.getElementById('devlog-project')?.value?.trim() || 'КЛАССИЧЕСКАЯ ЭРА';
-  const number = document.getElementById('devlog-number')?.value?.trim() || '1';
-  const author = document.getElementById('devlog-author')?.value?.trim() || getDisplayName();
+  const number = document.getElementById('devlog-number')?.value?.trim() || String(DEVLOG_FIRST_NUMBER);
   const bgUrl = document.getElementById('devlog-bg')?.value?.trim() || '';
-  
+  const sub = document.getElementById('devlog-sub')?.value?.trim() || '';
+
   const previewEl = document.getElementById('devlog-preview');
   if (!previewEl) return;
   
   previewEl.innerHTML = '<div class="sload"><div class="quote-loader">Генерация изображения...</div></div>';
   
   try {
-    const blob = await generateDevlogImage(project, number, author, bgUrl);
+    const blob = await generateDevlogImage(project, number, bgUrl, { sub });
+    try { localStorage.setItem('wk_devlog_last', String(parseInt(number, 10) || DEVLOG_FIRST_NUMBER)); } catch (e) {}
     const url = URL.createObjectURL(blob);
     
     previewEl.innerHTML = `
@@ -3129,136 +3205,172 @@ async function generateDevlogPreview() {
   }
 }
 
-async function generateDevlogImage(project, number, author, bgUrl) {
-  const W = 1200, H = 630;
+// Базовый размер поста ВК: 1280×720 (16:9). ВК режет бока в ленте —
+// весь контент держим внутри безопасной зоны SAFE_X.
+const DEVLOG_W = 1280, DEVLOG_H = 720;
+const DEVLOG_SAFE_X = 104, DEVLOG_SAFE_Y = 58;
+
+async function generateDevlogImage(project, number, bgUrl, opts) {
+  opts = opts || {};
+  const W = DEVLOG_W, H = DEVLOG_H;
+  const SX = DEVLOG_SAFE_X, SY = DEVLOG_SAFE_Y;
+  const GOLD = '#e8b948';
+  const x0 = SX + 36;
   const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
+  canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
-  
-  // 1. Background
+
+  try { await document.fonts?.ready; } catch (e) {}
+
+  // ── 1. Фон
   if (bgUrl && bgUrl.trim()) {
     try {
       const img = await _loadImagePromise(bgUrl);
-      // Fill entire canvas with image
       const scale = Math.max(W / img.width, H / img.height);
-      const sw = img.width * scale;
-      const sh = img.height * scale;
-      const sx = (W - sw) / 2;
-      const sy = (H - sh) / 2;
-      ctx.drawImage(img, sx, sy, sw, sh);
-    } catch (e) {
-      console.error('Failed to load background:', e);
-      _drawDarkBg(ctx, W, H);
-    }
+      const sw = img.width * scale, sh = img.height * scale;
+      ctx.drawImage(img, (W - sw) / 2, (H - sh) / 2, sw, sh);
+    } catch (e) { _drawDarkBg(ctx, W, H); }
   } else {
     _drawDarkBg(ctx, W, H);
   }
-  
-  // 2. Diagonal lines pattern (на весь холст)
+
+  // ── 2. Затемнение: левая колонка, низ, виньетка
+  const gL = ctx.createLinearGradient(0, 0, W * 0.68, 0);
+  gL.addColorStop(0, 'rgba(5,6,11,0.95)');
+  gL.addColorStop(0.45, 'rgba(5,6,11,0.80)');
+  gL.addColorStop(1, 'rgba(5,6,11,0)');
+  ctx.fillStyle = gL; ctx.fillRect(0, 0, W, H);
+
+  const gB = ctx.createLinearGradient(0, H - 240, 0, H);
+  gB.addColorStop(0, 'rgba(5,6,11,0)');
+  gB.addColorStop(1, 'rgba(5,6,11,0.80)');
+  ctx.fillStyle = gB; ctx.fillRect(0, H - 240, W, 240);
+
+  const gV = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.95);
+  gV.addColorStop(0, 'rgba(0,0,0,0)');
+  gV.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = gV; ctx.fillRect(0, 0, W, H);
+
+  // ── 3. Штриховка только в левой колонке
   ctx.save();
-  ctx.strokeStyle = 'rgba(232, 185, 72, 0.06)';
-  ctx.lineWidth = 1.5;
-  const lineSpacing = 25;
-  for (let i = -H; i < W + H; i += lineSpacing) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i - H, H);
-    ctx.stroke();
+  ctx.beginPath(); ctx.rect(0, 0, W * 0.55, H); ctx.clip();
+  ctx.strokeStyle = 'rgba(232,185,72,0.05)';
+  ctx.lineWidth = 1;
+  for (let i = -H; i < W; i += 22) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i - H, H); ctx.stroke();
   }
   ctx.restore();
-  
-  // 3. Left panel gradient (dark overlay for text)
-  const panelW = W * 0.45;
-  const gradLeft = ctx.createLinearGradient(0, 0, panelW, 0);
-  gradLeft.addColorStop(0, 'rgba(4,5,10,0.95)');
-  gradLeft.addColorStop(0.7, 'rgba(4,5,10,0.85)');
-  gradLeft.addColorStop(1, 'rgba(4,5,10,0)');
-  ctx.fillStyle = gradLeft;
-  ctx.fillRect(0, 0, panelW, H);
-  
-  // 3. Decorative border
-  const pad = 30;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+
+  // ── 4. Рамка по безопасной зоне + золотые уголки
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
   ctx.lineWidth = 1;
-  ctx.strokeRect(pad, pad, W - pad * 2, H - pad * 2);
-  
-  // Gold corners
-  const cornerL = 40;
-  const goldColor = '#e8b948';
-  ctx.strokeStyle = goldColor;
-  ctx.lineWidth = 3;
-  [[pad, pad, 1, 1], [W - pad, pad, -1, 1], [pad, H - pad, 1, -1], [W - pad, H - pad, -1, -1]].forEach(([x, y, dx, dy]) => {
-    ctx.beginPath();
-    ctx.moveTo(x + dx * cornerL, y);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x, y + dy * cornerL);
-    ctx.stroke();
-  });
-  
-  // Shadow helper
-  const setPremiumText = () => {
-    ctx.shadowColor = 'rgba(0,0,0,0.95)';
-    ctx.shadowBlur = 18;
-    ctx.shadowOffsetY = 4;
-    ctx.shadowOffsetX = 2;
-  };
-  const clearShadow = () => {
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.shadowOffsetX = 0;
-  };
-  
-  // Simple clean text with strong shadow
-  const drawCleanText = (text, x, y, fontSize, fontFamily, colorScheme = 'gold') => {
-    ctx.font = `bold ${fontSize}px ${fontFamily}`;
+  ctx.strokeRect(SX + 0.5, SY + 0.5, W - SX * 2, H - SY * 2);
+
+  ctx.strokeStyle = GOLD; ctx.lineWidth = 2;
+  const cl = 46;
+  [[SX, SY, 1, 1], [W - SX, SY, -1, 1], [SX, H - SY, 1, -1], [W - SX, H - SY, -1, -1]]
+    .forEach(([x, y, dx, dy]) => {
+      ctx.beginPath();
+      ctx.moveTo(x + dx * cl, y); ctx.lineTo(x, y); ctx.lineTo(x, y + dy * cl);
+      ctx.stroke();
+    });
+
+  // Разрядка (letter-spacing) вручную — работает везде
+  const tracked = (text, x, y, size, family, weight, color, tr, alpha) => {
+    ctx.save();
+    ctx.font = `${weight} ${size}px ${family}`;
     ctx.textAlign = 'left';
-    
-    const colors = {
-      gold: { main: '#e8b948', shadow: 'rgba(0,0,0,0.9)' },
-      white: { main: '#ffffff', shadow: 'rgba(0,0,0,0.9)' }
-    };
-    const color = colors[colorScheme] || colors.gold;
-    
-    // Strong shadow for readability
-    ctx.shadowColor = color.shadow;
-    ctx.shadowBlur = fontSize * 0.2;
-    ctx.shadowOffsetY = fontSize * 0.08;
-    ctx.shadowOffsetX = fontSize * 0.05;
-    
-    // Draw text
-    ctx.fillStyle = color.main;
-    ctx.fillText(text, x, y);
-    
-    // Reset shadow
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.shadowOffsetX = 0;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = alpha == null ? 1 : alpha;
+    ctx.shadowColor = 'rgba(0,0,0,0.85)';
+    ctx.shadowBlur = Math.max(6, size * 0.25);
+    ctx.shadowOffsetY = 2;
+    let cx = x;
+    for (const ch of text) { ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width + tr; }
+    ctx.restore();
+    return cx - x - tr;
   };
-  
-  // 4. Project name (top left)
-  ctx.textBaseline = 'top';
-  drawCleanText(project.toUpperCase(), pad + 40, pad + 50, 56, '"Rajdhani", "Arial Black", sans-serif', 'gold');
-  
-  // 5. "DEV DIARY" label
-  drawCleanText('DEV DIARY', pad + 40, pad + 120, 28, '"Rajdhani", "Arial", sans-serif', 'white');
-  
-  // 6. Number (large, centered vertically)
-  ctx.textBaseline = 'middle';
-  drawCleanText('#' + number, pad + 40, H / 2 + 10, 220, '"Arial Black", Arial, sans-serif', 'white');
-  
-  // 7. Russian label (below number)
-  ctx.textBaseline = 'top';
-  drawCleanText('ДНЕВНИК РАЗРАБОТЧИКА №' + number, pad + 40, H / 2 + 130, 22, '"Arial", sans-serif', 'gold');
-  
-  // 8. Author (bottom left)
-  ctx.textBaseline = 'bottom';
-  drawCleanText('◈  ' + author.toUpperCase(), pad + 40, H - pad - 35, 20, '"Arial", sans-serif', 'white');
-  
-  clearShadow();
-  
+  const widthOf = (text, size, family, weight, tr) => {
+    ctx.save();
+    ctx.font = `${weight} ${size}px ${family}`;
+    let w = 0; for (const ch of text) w += ctx.measureText(ch).width + tr;
+    ctx.restore();
+    return Math.max(0, w - tr);
+  };
+
+  const FT = '"Rajdhani","Arial Narrow",Arial,sans-serif';
+  const FN = '"Arial Black",Impact,Arial,sans-serif';
+
+  // ── 5. Шапка: эмблема + название проекта
+  ctx.textBaseline = 'alphabetic';
+  let headX = x0;
+  const EM = 58;
+  const emY = SY + 44;
+  try {
+    const logo = await _loadImagePromise('assets/wiki-emblem.png');
+    const ar = logo.width / logo.height || 1;
+    const ew = EM * ar, eh = EM;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 14;
+    ctx.drawImage(logo, headX, emY, ew, eh);
+    ctx.restore();
+    headX += ew + 20;
+  } catch (e) {}
+
+  tracked(project.toUpperCase(), headX, emY + 40, 29, FT, '700', '#ffffff', 5);
+
+  // Линейка под шапкой
+  const ruleY = emY + EM + 30;
+  ctx.save();
+  ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.globalAlpha = 0.9;
+  ctx.beginPath(); ctx.moveTo(x0, ruleY); ctx.lineTo(x0 + 84, ruleY); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1; ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.moveTo(x0 + 96, ruleY); ctx.lineTo(W * 0.52, ruleY); ctx.stroke();
+  ctx.restore();
+
+  // ── 6. Номер выпуска
+  const kickY = ruleY + 74;
+  tracked('ДНЕВНИК РАЗРАБОТЧИКА', x0, kickY, 19, FT, '700', GOLD, 8);
+
+  const numY = kickY + 142;
+  const hashW = widthOf('№', 58, FN, '900', 0);
+  tracked('№', x0, numY - 74, 58, FN, '900', GOLD, 0, 0.9);
+  tracked(String(number), x0 + hashW + 12, numY, 148, FN, '900', '#ffffff', -2);
+
+  // ── 7. Тема выпуска: золотая черта + до 2 строк
+  const sub = (opts.sub || '').trim();
+  if (sub) {
+    const size = 32, lh = 42, maxW = W * 0.48 - (x0 - SX);
+    const words = sub.toUpperCase().split(/\s+/);
+    const lines = []; let line = '';
+    for (const w of words) {
+      const t = line ? line + ' ' + w : w;
+      if (widthOf(t, size, FT, '700', 2) > maxW && line) {
+        lines.push(line); line = w;
+        if (lines.length === 2) break;
+      } else line = t;
+    }
+    if (line && lines.length < 2) lines.push(line);
+
+    const topY = numY + 44;
+    ctx.save();
+    ctx.fillStyle = GOLD; ctx.globalAlpha = 0.9;
+    ctx.fillRect(x0, topY - 26, 3, lines.length * lh - 4);
+    ctx.restore();
+    lines.forEach((l, i) => tracked(l, x0 + 20, topY + i * lh, size, FT, '700', '#ffffff', 2, 0.95));
+  }
+
+  // ── 8. Дата
+  const dateStr = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+    .replace(' г.', '').toUpperCase();
+  const dateY = H - SY - 32;
+  ctx.save();
+  ctx.fillStyle = GOLD;
+  ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 8;
+  ctx.fillRect(x0, dateY - 9, 9, 9);
+  ctx.restore();
+  tracked(dateStr, x0 + 22, dateY, 17, FT, '600', '#ffffff', 4, 0.9);
+
   return new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', 0.95));
 }
 

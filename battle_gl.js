@@ -1074,6 +1074,28 @@ function bgSternJets(grp, cls, hullMask, beam) {
   const hw = bgHullHW(cls, -0.48, hullMask);         // и её полуширина
   const nz = Math.max(0.006, Math.min(d * 0.62, hw * 0.34, 0.05));
   const jets = [];
+  // ⚠️ У КОЛОССА КОРМЫ КАК ЛИНИИ НЕТ. Три сопла вокруг оси — это допущение
+  // лофта, где корпус всегда цельный и центр кормы заведомо в металле. Игрок
+  // рисует вилки, клешни и кольца: у такого борта на оси в корме ПУСТОТА, и
+  // дюзы висели в ней сами по себе. Для маски берём реальные кормовые срезы
+  // (клетки, за которыми нет клетки) и ставим по соплу в середину каждого.
+  if (hullMask && hullMask.mask) {
+    const m = bgColossusJetSpots(hullMask);
+    if (m && m.length) {
+      m.forEach(s => {
+        const r = Math.max(0.006, Math.min(nz, s.r));
+        const e = new THREE.Mesh(
+          new THREE.CylinderGeometry(r * 0.42, r * 0.9, Math.min(0.06, r * 1.8), 8),
+          bgGlowMat(0xffb469, 1.5)
+        );
+        e.rotation.z = Math.PI / 2;
+        e.position.set(s.x + 0.02, -r * 0.12, s.z);
+        grp.add(e);
+        jets.push(e);
+      });
+      return jets;
+    }
+  }
   [-1, 0, 1].forEach(o => {
     if (o !== 0 && beam < 0.06) return;         // у мелочи одно сопло
     const e = new THREE.Mesh(
@@ -1086,6 +1108,49 @@ function bgSternJets(grp, cls, hullMask, beam) {
     jets.push(e);
   });
   return jets;
+}
+
+// ── КОРМОВЫЕ СРЕЗЫ НАРИСОВАННОГО КОРПУСА ─────────────────────────────────────
+// Ищем клетки, у которых сзади (в сторону кормы) пусто, и склеиваем их в
+// поперечные ПОЛОСЫ: одна полоса — один срез, значит одна дюза по её середине.
+// Дальше отбираем самые кормовые и самые широкие полосы: у вилки это законцовки
+// обеих лап, у цельного борта — тот же центр кормы, что и раньше. Полос берём не
+// больше шести — иначе изрезанный обвод превращается в оранжевую гребёнку.
+function bgColossusJetSpots(hull) {
+  if (typeof cnColSane !== 'function' || typeof cnColUnpack !== 'function'
+      || typeof cnColOrigin !== 'function' || typeof cnColGeo !== 'function'
+      || typeof CN_DECK_CELL === 'undefined') return null;
+  let HL, G, org;
+  try { HL = cnColSane(hull); G = cnColGeo(HL); org = cnColOrigin(HL); } catch (e) { return null; }
+  if (!G || !G.st || !G.st.length) return null;
+  const W = HL.w, H = HL.h, bits = cnColUnpack(HL.mask, W * H);
+  const st = G.st, tip = st[0][0], L = ((st[st.length - 1][0] - tip) || 1);
+  const C = CN_DECK_CELL, ox = org[0], oy = org[1];
+  const PX = x => (x - 160) / L, PY = y => 0.5 - (y - tip) / L;
+  const runs = [];
+  for (let y = 0; y < H; y++) {
+    let x = 0;
+    while (x < W) {
+      // клетка кормового среза: занята, а за ней (y+1) — пусто или край
+      const open = i => (i >= W || !bits[y * W + i] || (y + 1 < H && bits[(y + 1) * W + i]));
+      if (open(x)) { x++; continue; }
+      let x2 = x;
+      while (x2 + 1 < W && !open(x2 + 1)) x2++;
+      runs.push({ y, x0: x, x1: x2, n: x2 - x + 1 });
+      x = x2 + 1;
+    }
+  }
+  if (!runs.length) return null;
+  // кормовее и шире — важнее; полоса в одну клетку сопла не заслуживает, если
+  // рядом есть настоящие срезы
+  runs.sort((a, b) => (b.y - a.y) || (b.n - a.n));
+  const keep = runs.filter(r => r.n > 1).slice(0, 6);
+  const pick = keep.length ? keep : runs.slice(0, 3);
+  return pick.map(r => ({
+    x: PY(oy + (r.y + 1) * C),
+    z: PX(ox + (r.x0 + r.n / 2) * C),
+    r: Math.max(0.006, Math.min(0.05, r.n * C / L * 0.42)),
+  }));
 }
 
 // Самосветящийся материал: свет от него не зависит от освещения сцены, поэтому

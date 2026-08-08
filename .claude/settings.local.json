@@ -303,7 +303,11 @@
       "Bash(python \"C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\e25169eb-3c15-47a3-8aba-1eced7c7c356\\\\scratchpad\\\\patch2.py\")",
       "Bash(python \"C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\e25169eb-3c15-47a3-8aba-1eced7c7c356\\\\scratchpad\\\\patch3.py\")",
       "Bash(python \"C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\e25169eb-3c15-47a3-8aba-1eced7c7c356\\\\scratchpad\\\\patch5.py\")",
-      "Bash(sed -n '/function bgColossusGeo/,/^}/p' battle_gl.js)"
+      "Bash(sed -n '/function bgColossusGeo/,/^}/p' battle_gl.js)",
+      "Bash(sed -n '/^\\\\/\\\\/ Базовый размер поста ВК/,/^}$/p' editor.js)",
+      "Bash(rm -f _devlog_harness.html)",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('editor.js','utf8'\\)\\);console.log\\('editor.js syntax OK'\\)\")",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('editor.js','utf8'\\)\\);console.log\\('OK'\\)\")"
     ]
   }
 }
