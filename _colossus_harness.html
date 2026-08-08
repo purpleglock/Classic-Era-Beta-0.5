@@ -1,0 +1,53 @@
+<!doctype html><meta charset="utf-8">
+<title>Проверка: верфь корпуса «Имперского колосса»</title>
+<link rel="stylesheet" href="css/index.css">
+<style>body{margin:0;background:#0b0e12;color:#c8c5bc;font:14px/1.4 system-ui}
+#bar{padding:10px 14px;display:flex;gap:10px;align-items:center;border-bottom:1px solid #1d2833}
+#bar button{background:#262b30;color:#c8c5bc;border:1px solid #414850;padding:6px 11px;cursor:pointer}
+#out{padding:10px 14px;font:12px/1.6 ui-monospace,monospace;color:#8fa3b8;white-space:pre-wrap}</style>
+<div id="bar">
+  <button onclick="cnColOpen()">Открыть верфь корпуса</button>
+  <button onclick="dump()">Что получилось</button>
+  <span id="who"></span>
+</div>
+<select id="cn-class" style="display:none"><option value="colossus" selected>Имперский колосс</option></select>
+<div id="out"></div>
+<script src="hull_gen.js"></script>
+<script src="constructors_kv.js"></script>
+<script src="constructors_kv_adapt.js"></script>
+<script>
+// Заглушки игрового окружения: рисовалке корпуса нужны только esc/toast/cnNum и CN.
+window.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+window.toast = (m, k) => console.log('[toast:' + (k||'') + ']', m);
+window.setPg = h => {};
+window.go = () => {};
+window.dbGet = async () => [];
+window.ecRpc = async () => ({});
+</script>
+<script src="constructors.js"></script>
+<script>
+// Класс на харнессе всегда колосс: настоящий <select id="cn-class"> висит скрытым
+// в разметке (cnId в constructors.js — не глобал, подменить его снаружи нельзя).
+CN.def = { db: KV_DB.ship, cardUI: true };
+CN.cat = 'ship';
+CN.shipLayout = { mounts: [], bays: [] };
+window.cnVehCalc = () => {};
+window.cnDeckDraw = () => {};
+window.cnDeckPalDraw = () => {};
+function dump() {
+  const h = cnColHull(), G = cnDeckGeo('colossus'), S = cnColStats(G.n);
+  const b = {}; G.band.forEach(x => { if (x) b[x] = (b[x] || 0) + 1; });
+  let skin = 0, outer = 0; G.skin.forEach(v => v && skin++); G.outer.forEach(v => v && outer++);
+  document.getElementById('out').textContent =
+    `корпус ${h.w}×${h.h} · клеток ${G.n} · колец обвода ${cnColRings(h).length}\n`
+    + `отсеки: нос ${b.bow||0} · мидель ${b.mid||0} · корма ${b.stern||0}\n`
+    + `борт ${skin} · внешний пояс ${outer}\n`
+    + `масса ${S.mass} · экипаж ${S.crewRequired} · трюм ${S.capacity} · ГС ${S.price} · отсеков ${S.modul}\n`
+    + `маска: ${h.mask.slice(0, 120)}${h.mask.length > 120 ? '…' : ''}`;
+  // Силуэт, как его нарисует схема корабля (обвод + вырезы одним контуром)
+  const geo = cnColGeo(h);
+  document.getElementById('out').insertAdjacentHTML('beforeend',
+    `<div><svg width="320" height="420" viewBox="0 0 320 430"><path d="${geo.pathRaw}" fill="#16303f" stroke="#9fe8ff" stroke-width="1.5"/></svg></div>`);
+}
+document.getElementById('who').textContent = 'клеток в стартовом корпусе: ' + cnColCount(cnColHull());
+</script>

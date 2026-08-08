@@ -528,7 +528,18 @@ const BG_KEEL = 0.50;        // ↑ оставлено: на него смотр
 // в долях длины, поэтому у линкора плит физически больше, чем у корвета, а
 // сама плита остаётся одного размера — по ней и читается масштаб борта.
 const BG_PLATE_U = 14;
+// ⚠️ ПОТОЛОК ВЕРТИКАЛИ. Всё навесное железо (мостик, ярусы, мачта, спонсоны,
+// дюзы, турели) меряется ЛОКАЛЬНОЙ ПОЛУШИРИНОЙ борта — на нормальном вытянутом
+// корпусе это верно: ширина и высота там одного порядка. Но корпус бывает
+// ШИРОКИМ (станция, а особенно колосс, которому форму рисует игрок): там
+// полуширина сравнима с ДЛИНОЙ, и та же формула давала мостик выше корабля и
+// дюзу размером с сам борт. Высоту берём как min(полуширина, этот потолок) —
+// доля от ДЛИНЫ, то есть от единственного размера, который у всех корпусов
+// общий. Ширину не трогаем: она и должна быть шириной борта.
 const BG_PLATE_V = 6;
+// Потолок вертикали: ни один ярус надстройки, мачта или сопло не считаются от
+// величины крупнее этой доли ДЛИНЫ корпуса.
+const BG_VCAP = 0.085;
 
 // Обход сечения: сначала правый борт сверху вниз, потом левый снизу вверх.
 // Порядок важен — по нему сшиваются полосы и по нему же ложится развёртка.
@@ -574,12 +585,26 @@ function bgTaper(l, h, w, kw, kl, sx) {
 
 // Геометрия корпуса ЕДИНИЧНОЙ длины, нос смотрит в +X, центр в начале координат.
 // Кэшируется по классу: борта одного класса делят одну геометрию на видеокарте.
-function bgHullGeo(cls) {
+// ⚠️ hull — МАСКА КОРПУСА «ИМПЕРСКОГО КОЛОССА». У этого класса силуэта не
+// существует: корпус рисует игрок, и у каждого проекта он свой (bbGeo знает про
+// это и умеет строить геометрию из маски, но ТОЛЬКО если маску ему передать).
+// Раньше сюда приходил один ключ класса — и все колоссы на трёхмерной доске
+// выходили чужим корпусом из фолбэка, хотя на плоской доске рисовались верно.
+// По той же причине кэш ключуется маской, а не именем класса.
+function bgHullGeo(cls, hull) {
   const cache = BG._hull || (BG._hull = {});
-  if (cache[cls]) return cache[cls];
+  const ck = bgHullKey(cls, hull);
+  if (cache[ck]) return cache[ck];
+  // ⚠️ КОЛОСС ЛОФТОМ НЕ СТРОИТСЯ. Обычный корпус — это ПРОФИЛЬ: одна полуширина
+  // на шпангоут, и по нему честно натягивается оболочка. У колосса корпус —
+  // МАСКА КЛЕТОК, которую игрок рисует сам: крылья, вилки, отростки. Свернуть её
+  // в «полуширину на станцию» значит выкинуть всю форму и получить картофелину
+  // (ровно это и выходило: нарисовал крест — в бою вышел батон). Поэтому его
+  // корпус ВЫДАВЛИВАЕТСЯ ИЗ РЕАЛЬНОГО ОБВОДА — что нарисовано, то и летит.
+  if (hull && hull.mask) { const g = bgColossusGeo(hull); if (g) { cache[ck] = g; return g; } }
 
   // bbGeo уже знает соответствие KV-класс → силуэт и запасной вариант
-  const H = (typeof bbGeo === 'function') ? bbGeo(cls) : null;
+  const H = (typeof bbGeo === 'function') ? bbGeo(cls, hull) : null;
   const st = (H && H.st && H.st.length > 1) ? H.st : [[0, 0], [40, 16], [170, 40], [250, 30], [300, 20]];
   const tip = st[0][0], stern = st[st.length - 1][0];
   const L = (stern - tip) || 1;
@@ -603,7 +628,7 @@ function bgHullGeo(cls) {
   // ведём своим профилем от МАКСИМАЛЬНОЙ ширины: в носу корпус узкий в плане,
   // но остаётся высоким, то есть форштевень получается КЛИНОМ, как на корабле.
   const hwMax = Math.max(...rows.map(r => r.hw), 1e-4);
-  const depth = u => bgDepthProfile(hwMax, u);
+  const depth = u => bgDepthProfile(Math.min(hwMax, BG_VCAP), u);
   const pos = [], uv = [], idx = [];
   rows.forEach(rw => {
     const hw = Math.max(rw.hw, 1e-4);
@@ -635,14 +660,139 @@ function bgHullGeo(cls) {
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx);
   geo.computeVertexNormals();                   // светотень: ради неё всё и делалось
-  cache[cls] = geo;
+  cache[ck] = geo;
   return geo;
+}
+// ── КОРПУС «ИМПЕРСКОГО КОЛОССА»: ОБЪЁМ ИЗ МАСКИ ──────────────────────────────
+// Первая версия выдавливала обвод на постоянную толщину — и получался КИРПИЧ:
+// плоская крышка, отвесные борта, одинаковая высота и у могучего ядра, и у
+// тонкой консоли. Плита, а не корабль.
+//
+// Толщину задаёт РАССТОЯНИЕ ДО КРОМКИ. У настоящего корпуса нет постоянной
+// высоты: он вспухает там, где широк, и утоньшается к обводу и к вылетам. Считаем
+// по маске волновой обход от пустоты (сколько клеток до ближайшего края) и
+// поднимаем поверхность по этому расстоянию. Тогда любой рисунок — хоть крест,
+// хоть краб — сам получает киль по хребту и тонкие законцовки, а узкие консоли
+// становятся рёбрами, а не брусками. Это работает на ЛЮБОЙ маске, включая те,
+// которых ещё не нарисовали: никаких зашитых профилей.
+//
+// Высоты берутся В УЗЛАХ решётки (а не в клетках) и усредняются по четырём
+// соседям — поверхность выходит слитной, без лестницы из ступенек на палубе.
+// Обвод при этом остаётся ступенчатым: он и должен, это чертёж игрока.
+// Днище — зеркало палубы, но мельче: сверху надстройка, снизу киль.
+function bgColossusGeo(hull) {
+  if (typeof cnColGeo !== 'function' || typeof cnColSane !== 'function'
+      || typeof cnColUnpack !== 'function' || typeof cnColOrigin !== 'function'
+      || typeof CN_DECK_CELL === 'undefined') return null;
+  const HL = cnColSane(hull);
+  let G, org;
+  try { G = cnColGeo(HL); org = cnColOrigin(HL); } catch (e) { return null; }
+  if (!G || !G.st || !G.st.length) return null;
+  const W = HL.w, Hh = HL.h, N = W * Hh;
+  const bits = cnColUnpack(HL.mask, N);
+  const st = G.st, tip = st[0][0], stern = st[st.length - 1][0], L = (stern - tip) || 1;
+  const C = CN_DECK_CELL, ox = org[0], oy = org[1];
+  const hwMax = Math.max(...st.map(p => p[1])) / L;
+  const th = Math.max(0.028, Math.min(0.095, hwMax * 0.5));   // полувысота ядра
+
+  // 1) ВОЛНА ОТ КРОМКИ: d[i] — сколько клеток от i до ближайшей пустоты.
+  const d = new Int32Array(N).fill(-1);
+  const q = [];
+  for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x; if (!bits[i]) continue;
+    const edge = (x === 0 || y === 0 || x === W - 1 || y === Hh - 1)
+      || !bits[i - 1] || !bits[i + 1] || !bits[i - W] || !bits[i + W];
+    if (edge) { d[i] = 1; q.push(i); }
+  }
+  for (let h2 = 0; h2 < q.length; h2++) {
+    const i = q[h2], x = i % W, y = (i / W) | 0;
+    const nb = [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, y > 0 ? i - W : -1, y < Hh - 1 ? i + W : -1];
+    for (const j of nb) { if (j < 0 || !bits[j] || d[j] >= 0) continue; d[j] = d[i] + 1; q.push(j); }
+  }
+  let dMax = 1; for (let i = 0; i < N; i++) if (d[i] > dMax) dMax = d[i];
+
+  // 2) ПРОФИЛЬ. ⚠️ ПАДЕНИЕ ДОЛЖНО БЫТЬ МЕДЛЕННЫМ. Первая версия брала опорное
+  // расстояние в 3-7 клеток: всё, что чуть глубже кромки, взлетало на полную
+  // высоту, и палуба покрывалась пирамидами и гребнями — горный хребет, а не
+  // корабль. Опора теперь — РЕАЛЬНАЯ глубина корпуса (максимум по всей маске),
+  // поэтому высота меняется плавно через весь борт: полная только у самого ядра.
+  // И нижняя граница высокая (0.45): корпус утоньшается к обводу, но не сходит
+  // в лезвие — иначе тонкие консоли выглядят рваной бумагой.
+  const dRef = Math.max(2, dMax);
+  const prof = dv => {
+    const t = Math.max(0, Math.min(1, dv / dRef));
+    return 0.45 + 0.55 * t * t * (3 - 2 * t);           // сглаженная ступень
+  };
+
+  // 3) ВЫСОТА В УЗЛЕ: минимум по четырём смежным клеткам (пустая = кромка = 0),
+  // поэтому у обвода поверхность садится на кромку и борт получает завал.
+  const VW = W + 1;
+  const hv = new Float32Array(VW * (Hh + 1));
+  const dc = (x, y) => (x < 0 || y < 0 || x >= W || y >= Hh || !bits[y * W + x]) ? 0 : d[y * W + x];
+  for (let y = 0; y <= Hh; y++) for (let x = 0; x <= W; x++) {
+    const dv = Math.min(dc(x - 1, y - 1), dc(x, y - 1), dc(x - 1, y), dc(x, y));
+    hv[y * VW + x] = th * prof(dv);
+  }
+
+  // 4) СШИВКА. Палуба и днище — по узлам; борта — вертикальной юбкой по тем
+  // рёбрам, где клетка граничит с пустотой.
+  // ⚠️ НАМОТКУ НЕ УГАДЫВАЕМ. Оси модели зеркальны сетке (+gy идёт в −X), и
+  // выписанный руками порядок вершин у половины граней оказывался наизнанку:
+  // такие грани отсекались, и корпус зиял дырами. Порядок теперь ВЫВОДИТСЯ:
+  // считаем нормаль треугольника и разворачиваем его, если она смотрит не туда,
+  // куда должна (палуба вверх, днище вниз, юбка наружу).
+  const pos = [], uv = [], idx = [];
+  const PX = x => (x - 160) / L;                        // поперёк корпуса → Z
+  const PY = y => 0.5 - (y - tip) / L;                  // вдоль корпуса → X
+  const KEEL = 0.62;                                    // днище мельче палубы
+  const put = (gx, gy, up) => {
+    const cx = ox + gx * C, cy = oy + gy * C;
+    const t = hv[gy * VW + gx];
+    pos.push(PY(cy), up ? t : -t * KEEL, PX(cx));
+    uv.push(gx * (BG_PLATE_U / 12), gy * (BG_PLATE_U / 12));
+    return pos.length / 3 - 1;
+  };
+  const P = (i, k) => pos[i * 3 + k];
+  const tri = (a, b, c2, nx, ny, nz) => {
+    const ux = P(b, 0) - P(a, 0), uy = P(b, 1) - P(a, 1), uz = P(b, 2) - P(a, 2);
+    const vx = P(c2, 0) - P(a, 0), vy = P(c2, 1) - P(a, 1), vz = P(c2, 2) - P(a, 2);
+    const dot = (uy * vz - uz * vy) * nx + (uz * vx - ux * vz) * ny + (ux * vy - uy * vx) * nz;
+    if (dot < 0) idx.push(a, c2, b); else idx.push(a, b, c2);
+  };
+  const quad = (a, b, c2, e, nx, ny, nz) => { tri(a, b, c2, nx, ny, nz); tri(a, c2, e, nx, ny, nz); };
+  for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
+    if (!bits[y * W + x]) continue;
+    const a = put(x, y, 1), b = put(x + 1, y, 1), c2 = put(x + 1, y + 1, 1), e = put(x, y + 1, 1);
+    quad(a, b, c2, e, 0, 1, 0);                          // палуба
+    const a2 = put(x, y, 0), b2 = put(x + 1, y, 0), c3 = put(x + 1, y + 1, 0), e2 = put(x, y + 1, 0);
+    quad(a2, b2, c3, e2, 0, -1, 0);                      // днище
+    // юбка борта: наружу — в сторону пустой клетки
+    const wall = (x1, y1, x2, y2, dgx, dgy) => {
+      const t1 = put(x1, y1, 1), t2 = put(x2, y2, 1), b1 = put(x1, y1, 0), bb = put(x2, y2, 0);
+      quad(t1, t2, bb, b1, -dgy, 0, dgx);                // (dgx,dgy) сетки → (−dgy, ·, dgx) модели
+    };
+    if (y === 0 || !bits[(y - 1) * W + x]) wall(x, y, x + 1, y, 0, -1);
+    if (y === Hh - 1 || !bits[(y + 1) * W + x]) wall(x, y + 1, x + 1, y + 1, 0, 1);
+    if (x === 0 || !bits[y * W + x - 1]) wall(x, y, x, y + 1, -1, 0);
+    if (x === W - 1 || !bits[y * W + x + 1]) wall(x + 1, y, x + 1, y + 1, 1, 0);
+  }
+  if (!idx.length) return null;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+// Ключ корпуса: класс, а у колосса — ещё и сама маска (у каждого проекта своя).
+function bgHullKey(cls, hull) {
+  return cls + (hull && hull.mask ? '|' + hull.w + 'x' + hull.h + ':' + hull.mask : '');
 }
 
 // Максимальная полуширина корпуса (в долях длины) — по ней сажаются надстройка
 // и дюзы, чтобы они были пропорциональны классу, а не прибиты константой.
-function bgHullBeam(cls) {
-  const H = (typeof bbGeo === 'function') ? bbGeo(cls) : null;
+function bgHullBeam(cls, hull) {
+  const H = (typeof bbGeo === 'function') ? bbGeo(cls, hull) : null;
   const st = (H && H.st && H.st.length > 1) ? H.st : [[0, 0], [300, 20]];
   const tip = st[0][0], stern = st[st.length - 1][0];
   const L = (stern - tip) || 1;
@@ -673,6 +823,11 @@ const BG_DECK_PLANS = {
                tiers:[{w:1,h:0.9,l:1,dx:0},{w:0.7,h:0.9,l:0.7,dx:0.1}], side:1 },
   station:   { x: 0.00, w:1.10, h:1.70, len:0.30, bridgeTier:1, bridge:'ring', mast:1.3, pods:1,
                tiers:[{w:1,h:0.7,l:1,dx:0},{w:0.7,h:1.0,l:0.7,dx:0}] },
+  // Колосс — плита, а не корабль с высоким мостиком: башня в полкорпуса на нём
+  // выглядела шляпой. Низкая рубка, никакой мачты и спонсонов: форму задаёт
+  // корпус, который игрок нарисовал сам, — надстройка не должна с ней спорить.
+  colossus:  { x:-0.16, w:0.55, h:0.55, len:0.13, bridgeTier:0, bridge:'slit',
+               tiers:[{w:1,h:1,l:1,dx:0}] },
 };
 const BG_DECK_FALLBACK = [
   { x:-0.16, w:0.85, h:1.20, len:0.19, bridgeTier:0, bridge:'wrap',
@@ -745,8 +900,8 @@ function bgDepthProfile(hwMax, u) {
 // +0.5 нос, −0.5 корма). Всё навесное железо сажается по НЕЙ, а не по
 // максимальной ширине борта: иначе кольцо на сужении торчит хомутом, а
 // моторный отсек у острой кормы выглядит приваренным чемоданом.
-function bgHullHW(cls, x) {
-  const H = (typeof bbGeo === 'function') ? bbGeo(cls) : null;
+function bgHullHW(cls, x, hull) {
+  const H = (typeof bbGeo === 'function') ? bbGeo(cls, hull) : null;
   const st = (H && H.st && H.st.length > 1) ? H.st : [[0, 0], [40, 16], [170, 40], [250, 30], [300, 20]];
   const tip = st[0][0], stern = st[st.length - 1][0], L = (stern - tip) || 1;
   const u = Math.min(1, Math.max(0, 0.5 - x));         // x → доля длины от носа
@@ -760,11 +915,14 @@ function bgHullHW(cls, x) {
   return st[st.length - 1][1] / L;
 }
 
-function bgHullDepth(cls, x) {
-  const H = (typeof bbGeo === 'function') ? bbGeo(cls) : null;
+function bgHullDepth(cls, x, hull) {
+  const H = (typeof bbGeo === 'function') ? bbGeo(cls, hull) : null;
   const st = (H && H.st && H.st.length > 1) ? H.st : [[0, 0], [40, 16], [170, 40], [250, 30], [300, 20]];
   const L = (st[st.length - 1][0] - st[0][0]) || 1;
-  const hwMax = Math.max(...st.map(p => p[1])) / L;
+  // Колосс — плита по нарисованному обводу: его «полувысота» задана толщиной
+  // плиты (bgColossusGeo), а не профилем лофта, иначе навеска висит над корпусом.
+  if (hull && hull.mask) return Math.max(0.015, Math.min(0.055, (Math.max(...st.map(p => p[1])) / L) * 0.275));
+  const hwMax = Math.min(Math.max(...st.map(p => p[1])) / L, BG_VCAP);
   return bgDepthProfile(hwMax, Math.min(1, Math.max(0, 0.5 - x)));
 }
 
@@ -772,12 +930,25 @@ function bgHullDepth(cls, x) {
 // не понять. Достраиваем два признака, которые читаются мгновенно и с любого
 // ракурса: надстройка смещена К КОРМЕ (значит перед — там, где её нет) и
 // светящиеся дюзы в самом хвосте.
-function bgBuildShip(cls, mine) {
+function bgBuildShip(cls, mine, hullMask) {
   const grp = new THREE.Group();
-  const beam = bgHullBeam(cls);
+  const beam = bgHullBeam(cls, hullMask);
 
-  const hull = new THREE.Mesh(bgHullGeo(cls), bgHullMat(mine));
+  const hull = new THREE.Mesh(bgHullGeo(cls, hullMask), bgHullMat(mine));
   grp.add(hull);
+
+  // ⚠️ КОРПУС, НАРИСОВАННЫЙ ИГРОКОМ, ДОСТРАИВАТЬ НЕЧЕМ. Всё, что ниже, — это
+  // ПОРТРЕТ КЛАССА: типовая надстройка, мачта, хребет, шпангоуты, моторный
+  // отсек. Они существуют, чтобы отличить корвет от линкора там, где форму
+  // задаёт таблица. У колосса форму задаёт САМ ИГРОК — и любая такая достройка
+  // это чужая башня, воткнутая сквозь его чертёж (а чем сложнее рисунок, тем
+  // безобразнее она садится; рисунков будет много и они будут сложнее). Здесь
+  // только корпус и дюзы: что нарисовал, то и летит. Начинку вешает палуба.
+  if (hullMask && hullMask.mask) {
+    grp.userData.hullParts = [hull];
+    grp.userData.nz = bgSternJets(grp, cls, hullMask, beam);
+    return grp;
+  }
 
   // НАДСТРОЙКА СВОЯ У КАЖДОГО КЛАССА. Раньше на всех сидела одна коробка с
   // одинаковой полоской мостика, и корвет от линкора отличался только длиной.
@@ -785,8 +956,11 @@ function bgBuildShip(cls, mine) {
   // борт всегда собирается одинаково, но соседний класс выглядит другим.
   const plan = bgDeckPlan(cls);
   const parts = [hull];
-  const hw = x => bgHullHW(cls, x);              // полуширина борта в точке
-  const depthAt = x => bgHullDepth(cls, x);      // полувысота борта там же
+  const hw = x => bgHullHW(cls, x, hullMask);    // полуширина борта в точке
+  const depthAt = x => bgHullDepth(cls, x, hullMask);   // полувысота борта там же
+  // ВЕРТИКАЛЬНАЯ МЕРА: полуширина, но не выше потолка (см. BG_VCAP). Всё, что
+  // растёт вверх, считается от неё — иначе широкий корпус получает башню до неба.
+  const vu = x => Math.min(hw(x), BG_VCAP);
   const deckAt = x => depthAt(x) * 0.92;         // палуба чуть ниже верхней кромки
   const deckY = deckAt(plan.x);
   const glow = bgGlowMat(mine ? 0x9fe8ff : 0xffc0d4, 0.9);
@@ -799,7 +973,7 @@ function bgBuildShip(cls, mine) {
   const zOff = plan.side ? hw(plan.x) * 0.5 : 0;
   let topY = deckY, topX = plan.x, topW = hw(plan.x) * 1.55 * plan.w, topL = plan.len;
   plan.tiers.forEach((t, i) => {
-    const bw = topW * t.w, bh = hw(topX) * plan.h * t.h, bl = topL * t.l;
+    const bw = topW * t.w, bh = vu(topX) * plan.h * t.h, bl = topL * t.l;
     const bx = topX + t.dx * topL, by = topY + bh * 0.5;
     // ярус со скосом и завалом к носу: у настоящей рубки нет вертикальных стен
     const box = new THREE.Mesh(bgTaper(bl, bh, bw, 0.66, 0.8, bl * 0.06), bgHullMat(mine));
@@ -814,11 +988,13 @@ function bgBuildShip(cls, mine) {
 
   // мачта/сенсорная штанга поверх башни — есть не у всех
   if (plan.mast) {
-    const mh = hw(topX) * plan.h * plan.mast;
-    const ms = new THREE.Mesh(bgTaper(hw(topX) * 0.16, mh, hw(topX) * 0.16, 0.5, 0.5, 0), bgHullMat(mine));
+    // Мачта меряется от ПАЛУБЫ, а не от накопленной высоты башни: иначе каждый
+    // ярус подкидывал её выше, и на многоярусных классах вырастал шпиль.
+    const mh = Math.min(vu(topX) * plan.h * plan.mast, deckY * 2.2);
+    const ms = new THREE.Mesh(bgTaper(vu(topX) * 0.16, mh, vu(topX) * 0.16, 0.5, 0.5, 0), bgHullMat(mine));
     ms.position.set(topX, topY + mh * 0.5, zOff);
     grp.add(ms); parts.push(ms);
-    const dish = new THREE.Mesh(new THREE.SphereGeometry(hw(topX) * 0.13, 8, 6), bgGlowMat(mine ? 0x8fd8ff : 0xff9fbe, 0.7));
+    const dish = new THREE.Mesh(new THREE.SphereGeometry(vu(topX) * 0.13, 8, 6), bgGlowMat(mine ? 0x8fd8ff : 0xff9fbe, 0.7));
     dish.scale.set(1, 0.45, 1);
     dish.position.set(topX, topY + mh, zOff);
     grp.add(dish);
@@ -827,7 +1003,7 @@ function bgBuildShip(cls, mine) {
   // спонсоны: наросты по бортам у корпусов, которые в 2D читаются «толстыми»
   if (plan.pods) {
     const px = plan.x + plan.len * 0.4;
-    const pl = plan.len * 1.6, ph = hw(px) * 0.7, pw = hw(px) * 0.5;
+    const pl = plan.len * 1.6, ph = vu(px) * 0.7, pw = Math.min(hw(px), BG_VCAP * 2) * 0.5;
     [-1, 1].forEach(o => {
       const p = new THREE.Mesh(bgTaper(pl, ph, pw, 0.55, 0.55, pl * 0.08), bgHullMat(mine));
       p.position.set(px, 0, o * hw(px) * 0.8);
@@ -851,7 +1027,7 @@ function bgBuildShip(cls, mine) {
   // 2) хребет: узкий гребень по палубе от рубки к носу — линия, вдоль которой
   //    видно и длину борта, и его курс
   const sx = plan.x + 0.26;
-  const sp = new THREE.Mesh(bgTaper(0.4, hw(sx) * 0.34, hw(sx) * 0.5, 0.5, 0.62, 0.03), bgHullMat(mine));
+  const sp = new THREE.Mesh(bgTaper(0.4, vu(sx) * 0.34, Math.min(hw(sx), BG_VCAP * 2) * 0.5, 0.5, 0.62, 0.03), bgHullMat(mine));
   sp.position.set(sx, deckAt(sx) * 0.7, 0);
   bgUvTile(sp.geometry, 3);
   grp.add(sp); parts.push(sp);
@@ -871,9 +1047,9 @@ function bgBuildShip(cls, mine) {
   });
   // ходовые огни по скулам: в темноте арены борт получает контур
   [-1, 1].forEach(o => {
-    const lp = new THREE.Mesh(new THREE.BoxGeometry(0.3, hw(0.05) * 0.06, hw(0.05) * 0.06),
+    const lp = new THREE.Mesh(new THREE.BoxGeometry(0.3, vu(0.05) * 0.06, vu(0.05) * 0.06),
       bgGlowMat(mine ? 0x6fd8ff : 0xff8fb0, 0.6));
-    lp.position.set(0.05, hw(0.05) * 0.2, o * hw(0.05) * 0.86);
+    lp.position.set(0.05, vu(0.05) * 0.2, o * hw(0.05) * 0.86);
     grp.add(lp);
   });
 
@@ -882,21 +1058,34 @@ function bgBuildShip(cls, mine) {
   // дюзы: раскалённые сопла в срезе кормы — самый сильный указатель «зад тут».
   // Держим их списком: на ходу факел вытягивается, и это единственное, что
   // отличает идущий борт от стоящего, когда след ушёл за корму из кадра.
-  const nz = hw(-0.48) * 0.85, jets = [];
+  // Дюзы — по ВЫСОТЕ кормы, а не по её ширине: на широком корпусе сопло по
+  // полуширине вырастало в оранжевое пятно во весь борт.
+  grp.userData.nz = bgSternJets(grp, cls, hullMask, beam);
+  return grp;
+}
+
+// ⚠️ РАЗМЕР СОПЛА — ПО ВЫСОТЕ КОРМЫ, А НЕ ПО ЕЁ ШИРИНЕ. Раньше он шёл от
+// полуширины: на вытянутом корвете это выглядело верно, а на широком борте
+// (носитель, станция, колосс) полуширина сопоставима с ДЛИНОЙ корабля — и три
+// сопла превращались в оранжевые блины во весь борт. Дюза не может быть толще
+// самой кормы: от её высоты и считаем, с жёстким потолком в долях длины.
+function bgSternJets(grp, cls, hullMask, beam) {
+  const d = bgHullDepth(cls, -0.48, hullMask);       // полувысота кормы
+  const hw = bgHullHW(cls, -0.48, hullMask);         // и её полуширина
+  const nz = Math.max(0.006, Math.min(d * 0.62, hw * 0.34, 0.05));
+  const jets = [];
   [-1, 0, 1].forEach(o => {
     if (o !== 0 && beam < 0.06) return;         // у мелочи одно сопло
     const e = new THREE.Mesh(
-      new THREE.CylinderGeometry(nz * 0.42, nz * 0.9, 0.07, 8),
+      new THREE.CylinderGeometry(nz * 0.42, nz * 0.9, Math.min(0.06, nz * 1.8), 8),
       bgGlowMat(0xffb469, 1.5)
     );
     e.rotation.z = Math.PI / 2;                 // ось сопла вдоль корпуса
-    e.position.set(-0.5 + 0.02, -nz * 0.12, o * nz * 1.15);
+    e.position.set(-0.5 + 0.02, -nz * 0.12, o * nz * 1.25);
     grp.add(e);
     jets.push(e);
   });
-  grp.userData.nz = jets;
-
-  return grp;
+  return jets;
 }
 
 // Самосветящийся материал: свет от него не зависит от освещения сцены, поэтому
@@ -921,7 +1110,10 @@ function bgSyncUnits() {
   const live = new Set();
   (s.units || []).forEach(u => {
     live.add(u.id);
-    const key = (u.contact ? '?' : u.cls) + '|' + (u.mine ? 1 : 0);
+    // Маска корпуса колосса живёт в дизайне, а не в юните — достаём тем же
+    // путём, что и 2D (bbDesignOf), иначе 3D покажет чужой борт.
+    const uh = u.contact ? null : bgUnitHull(u);
+    const key = (u.contact ? '?' : bgHullKey(u.cls, uh)) + '|' + (u.mine ? 1 : 0);
     let m = BG.units.get(u.id);
     if (m && m.userData.key !== key) { bgDropUnit(u.id); m = null; }   // сменился класс/сторона/захват
     if (!m) {
@@ -929,7 +1121,7 @@ function bgSyncUnits() {
       // сервер не отдал класс, и рисовать «какой-нибудь» корабль нельзя
       const L = u.contact ? BB.R * 0.8
         : BB.R * (0.75 + (typeof bbClsSize === 'function' ? bbClsSize(u.cls) : 1) * 1.15) * BG_SHIP_K;
-      m = u.contact ? bgBuildContact() : bgBuildShip(u.cls, u.mine);
+      m = u.contact ? bgBuildContact() : bgBuildShip(u.cls, u.mine, uh);
       m.scale.setScalar(L);
       m.userData.key = key; m.userData.uid = u.id;
       m.userData.L = L;
@@ -941,6 +1133,13 @@ function bgSyncUnits() {
   BG.units.forEach((m, id) => { if (!live.has(id)) bgDropUnit(id); });
   bgPlaceUnits();
   BG.dirty = true; bgKick();
+}
+
+// Свой корпус колосса по юниту: у остальных классов силуэт задан классом.
+function bgUnitHull(u) {
+  if (!u || u.cls !== 'colossus' || typeof bbDesignOf !== 'function') return null;
+  const d = bbDesignOf(u.name, u.cls);
+  return (d && d.data && d.data.hull) ? d.data.hull : null;
 }
 
 function bgDropUnit(id) {
@@ -2432,7 +2631,7 @@ function bgSyncGhosts() {
   BB.place.forEach(p => {
     const size = (typeof bbClsSize === 'function' ? bbClsSize(p.cls) : 1);
     const L = BB.R * (0.75 + size * 1.15) * BG_SHIP_K;
-    const m = bgBuildShip(p.cls, true);
+    const m = bgBuildShip(p.cls, true, bgUnitHull(p));
     (m.userData.hullParts || []).forEach(q => { q.material = bgHullMat(true, false, true); });
     m.scale.setScalar(L);
     const c = bbHexCenter(p.x, p.y);

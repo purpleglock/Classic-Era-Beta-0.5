@@ -42,8 +42,22 @@ function halfAt(H, y) {
   for (let i = 1; i < s.length; i++) if (y <= s[i][0]) { const a = s[i - 1], b = s[i]; return a[1] + (b[1] - a[1]) * ((y - a[0]) / ((b[0] - a[0]) || 1)); }
   return s[s.length - 1][1];
 }
-function hullPoly(H, wf) { return outlinePts(H.st, wf == null ? 1 : wf); }
-function hullPathOf(H, wf) { return polyPath(hullPoly(H, wf)); }
+// ⚠️ H.poly — ЯВНЫЙ ОБВОД, он главнее станций. Станции описывают корпус строкой
+// «полуширина в сечении» и умеют только выпуклый по x силуэт; у корпуса, который
+// игрок нарисовал сам (Имперский колосс), бывают вырезы, консоли и несимметричные
+// крылья. Их описывает только сам контур, поэтому силуэт берём из него, а станции
+// остаются для декора (обшивка, пояс), который всё равно режется по clip-path.
+function hullPoly(H, wf) {
+  if (H && H.poly && H.poly.length > 2 && (wf == null || wf === 1)) return H.poly.map(p => p.slice());
+  return outlinePts(H.st, wf == null ? 1 : wf);
+}
+// H.pathRaw — готовый контур со ВСЕМИ кольцами (у нарисованного корпуса бывают
+// внутренние вырезы: ангарная шахта, док, окно под пусковые). Одним списком точек
+// дырку не передать, поэтому если контур есть — отдаём как есть.
+function hullPathOf(H, wf) {
+  if (H && H.pathRaw && (wf == null || wf === 1)) return H.pathRaw;
+  return polyPath(hullPoly(H, wf));
+}
 const spanOf = H => { const ys = H.st.map(p => p[0]); return [Math.min(...ys), Math.max(...ys)]; };
 const yAt = (H, t) => { const [a, b] = spanOf(H); return a + (b - a) * t; };
 

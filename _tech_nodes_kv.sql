@@ -21,6 +21,7 @@ insert into public.tech_nodes (node_id, base_cost, prereq) values
 ('cls.ship.battleship',160,'["cls.ship.multiroleCarrier"]'),
 ('cls.ship.dreadnought',320,'["cls.ship.battleship"]'),
 ('cls.ship.ss13',640,'["cls.ship.dreadnought"]'),
+('cls.ship.colossus',1280,'["cls.ship.ss13"]'),
 ('wpn.ship.ЭНЕРГЕТИЧЕСКОЕ ВООРУЖЕНИЕ',12,'["cls.ship.destroyer"]'),
 ('wpn.ship.ВЗРЫВНОЕ ВООРУЖЕНИЕ',20,'["cls.ship.mediumCruiser"]'),
 ('wpn.ship.АНГАРЫ И АВИАГРУППЫ',28,'["cls.ship.supportCarrier"]'),
@@ -30,10 +31,10 @@ insert into public.tech_nodes (node_id, base_cost, prereq) values
 ('comp.ship.shield',16,'["cls.ship.mediumCruiser"]'),
 ('comp.ship.engine',10,'["cls.ship.destroyer"]'),
 ('comp.ship.radar',12,'["cls.ship.destroyer"]'),
-('mod.ship.Конструкционные модули',8,'[]'),
-('mod.ship.Модули радиотумана',13,'["mod.ship.Конструкционные модули"]'),
-('mod.ship.Десант',18,'["mod.ship.Модули радиотумана"]'),
-('mod.ship.Модули станции',23,'["mod.ship.Десант"]'),
+('mod.ship.Десант',8,'[]'),
+('mod.ship.Модули станции',13,'["mod.ship.Десант"]'),
+('mod.ship.Модули радиотумана',18,'["mod.ship.Модули станции"]'),
+('mod.ship.Конструкционные модули',23,'["mod.ship.Модули радиотумана"]'),
 ('cls.ground.btr',5,'[]'),
 ('cls.ground.tanki',10,'["cls.ground.btr"]'),
 ('cls.ground.arta',20,'["cls.ground.tanki"]'),
@@ -53,8 +54,7 @@ insert into public.tech_nodes (node_id, base_cost, prereq) values
 ('comp.ground.shield',16,'["cls.ground.tanki"]'),
 ('comp.ground.engine',10,'["cls.ground.btr"]'),
 ('comp.ground.radar',12,'["cls.ground.btr"]'),
-('mod.ground.Конструкционные модули',8,'[]'),
-('mod.ground.Десант',13,'["mod.ground.Конструкционные модули"]'),
+('mod.ground.Десант',8,'[]'),
 ('cls.aviation.aviacia',5,'[]'),
 ('cls.aviation.vertihui',10,'["cls.aviation.aviacia"]'),
 ('cls.aviation.dronkos',20,'["cls.aviation.vertihui"]'),
@@ -68,8 +68,7 @@ insert into public.tech_nodes (node_id, base_cost, prereq) values
 ('comp.aviation.shield',16,'["cls.aviation.dronkos"]'),
 ('comp.aviation.engine',10,'["cls.aviation.aviacia"]'),
 ('comp.aviation.radar',12,'["cls.aviation.aviacia"]'),
-('mod.aviation.Десант',8,'[]'),
-('mod.aviation.Конструкционные модули',13,'["mod.aviation.Десант"]')
+('mod.aviation.Десант',8,'[]')
 on conflict (node_id) do update
   set base_cost = excluded.base_cost, prereq = excluded.prereq;
 
@@ -77,7 +76,7 @@ on conflict (node_id) do update
 delete from public.tech_nodes
  where (node_id like 'cls.%' or node_id like 'wpn.%' or node_id like 'comp.%'
      or node_id like 'mod.%' or node_id like 'type.%' or node_id like 'hangar.%')
-   and node_id not in ('cls.ship.destroyer','cls.ship.supportCarrier','cls.ship.mediumCruiser','cls.ship.hyperCruiser','cls.ship.multiroleCarrier','cls.ship.battleship','cls.ship.dreadnought','cls.ship.ss13','wpn.ship.ЭНЕРГЕТИЧЕСКОЕ ВООРУЖЕНИЕ','wpn.ship.ВЗРЫВНОЕ ВООРУЖЕНИЕ','wpn.ship.АНГАРЫ И АВИАГРУППЫ','wpn.ship.АВИАГРУППЫ И ДРОНЫ','comp.ship.reactor','comp.ship.armor','comp.ship.shield','comp.ship.engine','comp.ship.radar','mod.ship.Конструкционные модули','mod.ship.Модули радиотумана','mod.ship.Десант','mod.ship.Модули станции','cls.ground.btr','cls.ground.tanki','cls.ground.arta','wpn.ground.ШТУРМОВОЕ ОРУЖИЕ','wpn.ground.ПУЛЕМЕТЫ','wpn.ground.ГРАНАТЫ И МИНЫ','wpn.ground.ТЯЖЕЛОЕ ВООРУЖЕНИЕ','wpn.ground.КИНЕТИКА','wpn.ground.ЭНЕРГЕТИКА','wpn.ground.РАКЕТНОЕ (БУМ)','wpn.ground.ПУЛЕМЕТЫ И ТУРЕЛИ','wpn.ground.ОСНОВНОЙ КАЛИБР','wpn.ground.СТВОЛЬНАЯ АРТИЛЛЕРИЯ','wpn.ground.РЕАКТИВНЫЕ СИСТЕМЫ','comp.ground.reactor','comp.ground.armor','comp.ground.shield','comp.ground.engine','comp.ground.radar','mod.ground.Конструкционные модули','mod.ground.Десант','cls.aviation.aviacia','cls.aviation.vertihui','cls.aviation.dronkos','cls.aviation.mla','wpn.aviation.АВИАПУШКИ','wpn.aviation.РАКЕТНОЕ ВООРУЖЕНИЕ','wpn.aviation.ПУШКИ И ТУРЕЛИ','wpn.aviation.КОСМИЧЕСКОЕ ВООРУЖЕНИЕ','comp.aviation.reactor','comp.aviation.armor','comp.aviation.shield','comp.aviation.engine','comp.aviation.radar','mod.aviation.Десант','mod.aviation.Конструкционные модули');
+   and node_id not in ('cls.ship.destroyer','cls.ship.supportCarrier','cls.ship.mediumCruiser','cls.ship.hyperCruiser','cls.ship.multiroleCarrier','cls.ship.battleship','cls.ship.dreadnought','cls.ship.ss13','cls.ship.colossus','wpn.ship.ЭНЕРГЕТИЧЕСКОЕ ВООРУЖЕНИЕ','wpn.ship.ВЗРЫВНОЕ ВООРУЖЕНИЕ','wpn.ship.АНГАРЫ И АВИАГРУППЫ','wpn.ship.АВИАГРУППЫ И ДРОНЫ','comp.ship.reactor','comp.ship.armor','comp.ship.shield','comp.ship.engine','comp.ship.radar','mod.ship.Десант','mod.ship.Модули станции','mod.ship.Модули радиотумана','mod.ship.Конструкционные модули','cls.ground.btr','cls.ground.tanki','cls.ground.arta','wpn.ground.ШТУРМОВОЕ ОРУЖИЕ','wpn.ground.ПУЛЕМЕТЫ','wpn.ground.ГРАНАТЫ И МИНЫ','wpn.ground.ТЯЖЕЛОЕ ВООРУЖЕНИЕ','wpn.ground.КИНЕТИКА','wpn.ground.ЭНЕРГЕТИКА','wpn.ground.РАКЕТНОЕ (БУМ)','wpn.ground.ПУЛЕМЕТЫ И ТУРЕЛИ','wpn.ground.ОСНОВНОЙ КАЛИБР','wpn.ground.СТВОЛЬНАЯ АРТИЛЛЕРИЯ','wpn.ground.РЕАКТИВНЫЕ СИСТЕМЫ','comp.ground.reactor','comp.ground.armor','comp.ground.shield','comp.ground.engine','comp.ground.radar','mod.ground.Десант','cls.aviation.aviacia','cls.aviation.vertihui','cls.aviation.dronkos','cls.aviation.mla','wpn.aviation.АВИАПУШКИ','wpn.aviation.РАКЕТНОЕ ВООРУЖЕНИЕ','wpn.aviation.ПУШКИ И ТУРЕЛИ','wpn.aviation.КОСМИЧЕСКОЕ ВООРУЖЕНИЕ','comp.aviation.reactor','comp.aviation.armor','comp.aviation.shield','comp.aviation.engine','comp.aviation.radar','mod.aviation.Десант');
 
 -- ── 2) Миграция исследований фракций: легаси → KV ──
 with mig(old_id, new_id) as (values
@@ -167,5 +166,5 @@ do $$ begin
 end $$;
 
 -- Проверка:
--- select count(*) from public.tech_nodes where node_id like 'cls.%';  -- 15
--- select count(*) from public.tech_nodes;  -- KV-узлов: 57 (+ pol.*)
+-- select count(*) from public.tech_nodes where node_id like 'cls.%';  -- 16
+-- select count(*) from public.tech_nodes;  -- KV-узлов: 56 (+ pol.*)

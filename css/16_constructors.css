@@ -228,6 +228,18 @@
 .cn-schem-panel { padding: 0; overflow: hidden; }
 .cn-schematic { position: relative; display: flex; justify-content: center; padding: 0; }
 .cn-schem-svg { width: 100%; height: auto; display: block; margin: 0 auto; }
+/* ВИТРИНА: трёхмерная модель поверх чертежа — та же, что выйдет в бой.
+   Чертёж НЕ удаляем, а гасим видимостью: он держит высоту панели (канвас без
+   собственных размеров схлопнулся бы в ноль) и мгновенно возвращается, если
+   WebGL отвалился. Тумблеры/зум/кнопки лежат выше по z-index и остаются живыми. */
+.cn-stage3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; z-index: 1; }
+.cn-stage3d:active { cursor: grabbing; }
+.cn-schem-wrap.cn-has3d .cn-schem-svg { visibility: hidden; }
+.cn-stage3d-cap { position: absolute; left: 30px; right: 30px; bottom: 12px; z-index: 2; display: flex; justify-content: space-between; gap: 12px; pointer-events: none; }
+.cn-stage3d-cap span:first-child { font: 700 12px var(--font-mono); letter-spacing: 2.5px; color: var(--t4); }
+.cn-stage3d-cap span:last-child { font: 600 11px var(--font-mono); letter-spacing: 1.5px; color: var(--te); text-align: right; }
+.cn-schem-wrap:not(.cn-has3d) .cn-stage3d-cap { display: none; }
+.cn-schem-wrap.cn-has3d { background: radial-gradient(ellipse at 50% 45%, color-mix(in srgb, var(--te) 5%, transparent), transparent 72%); }
 .cn-schem-over { position: absolute; left: 14px; bottom: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--err); }
 .cn-schem-wrap { position: relative; }
 .cn-schem-toggles { position: absolute; top: 6px; right: 6px; display: flex; gap: 6px; z-index: 2; }
@@ -794,11 +806,21 @@ body.cn-deck-on #ch-fab, body.cn-deck-on #tk-fab { display: none; }
 .cn-hull-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: ew-resize; }
 .cn-hull-dot circle:first-of-type { transition: r var(--transition-fast), stroke var(--transition-fast); }
 .cn-hull-dot:hover circle:first-of-type { r: 6; stroke: #9fe8ff; }
+/* Лупа полотна: те же кнопки, что у палубы. ⚠️ Без этого блока разметка есть, а
+   вида нет — «+ − ⤢» висят голым текстом в углу и в них не попасть пальцем. */
+.cn-hull-nav { position: absolute; z-index: 4; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+.cn-hull-nav button { width: 36px; height: 36px; border-radius: 9px; border: 1px solid #2b3947; background: #0d141ce6; color: #9fb0c2; font-size: 17px; line-height: 1; cursor: pointer; }
+.cn-hull-nav button:hover { border-color: #9fe8ff; color: #9fe8ff; }
 .cn-hull-side { width: 320px; display: flex; flex-direction: column; gap: 10px; padding: 14px 13px; overflow: auto; background: #0a1017; border-left: 1px solid #1d2833; }
 .cn-hull-hint { font-size: 11.5px; line-height: 1.5; color: #7e8c9c; }
-.cn-hull-sld { display: grid; grid-template-columns: 74px 1fr 44px; align-items: center; gap: 8px; }
-.cn-hull-sld u { text-decoration: none; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: #7e8c9c; }
-.cn-hull-sld b { font: 600 12px var(--font-mono); color: #9fe8ff; text-align: right; }
+.cn-hull-canvas svg { cursor: crosshair; }
+.cn-hull-canvas svg.pan { cursor: grab; }
+.cn-hull-canvas svg.pan:active { cursor: grabbing; }
+/* Инструменты кисти: режим, зеркало, размер. */
+.cn-hull-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.cn-hull-tools button { flex: 1 1 auto; padding: 7px 9px; border-radius: 7px; border: 1px solid #2b3947; background: #0d141c; color: #9fb0c2; font-size: 11.5px; cursor: pointer; }
+.cn-hull-tools button:hover { border-color: #9fe8ff; color: #9fe8ff; }
+.cn-hull-tools button.on { border-color: #e0b457; color: #e0b457; background: rgba(224, 180, 87, .1); }
 .cn-hull-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .cn-hull-presets button { padding: 7px 8px; border-radius: 7px; border: 1px solid #2b3947; background: #0d141c; color: #9fb0c2; font-size: 11.5px; cursor: pointer; text-align: left; }
 .cn-hull-presets button:hover { border-color: #e0b457; color: #e0b457; }
@@ -809,6 +831,11 @@ body.cn-deck-on #ch-fab, body.cn-deck-on #tk-fab { display: none; }
 .cn-hull-read b { font: 600 12.5px var(--font-mono); color: #cfe0f0; }
 .cn-hull-read i.bad { border-color: #e0575f; }
 .cn-hull-read i.bad b, .cn-hull-read i.bad u { color: #e0575f; }
+/* Корешок свёрнутой панели: полоса у края, полотно забирает освободившееся. */
+.cn-hull-fold { align-self: stretch; padding: 8px; border-radius: 7px; border: 1px solid #2b3947; background: #0d141c; color: #7e8c9c; font-size: 11px; letter-spacing: 1.4px; cursor: pointer; }
+.cn-hull-fold:hover { border-color: #9fe8ff; color: #9fe8ff; }
+.cn-hull.fold .cn-hull-side { width: 38px; padding: 12px 5px; }
+.cn-hull.fold .cn-hull-fold { writing-mode: vertical-rl; height: 100%; padding: 10px 6px; }
 .cn-hull-done { margin-top: auto; padding: 10px; border-radius: 8px; border: 1px solid #e0b457; background: rgba(224, 180, 87, .1); color: #e0b457; font-size: 13px; cursor: pointer; }
 .cn-hull-done:hover { background: rgba(224, 180, 87, .18); }
 /* Кнопка творческого корпуса на палубе — под крестиком закрытия. */
@@ -816,5 +843,9 @@ body.cn-deck-on #ch-fab, body.cn-deck-on #tk-fab { display: none; }
 @media (max-width: 860px) {
   .cn-hull-body { flex-direction: column; }
   .cn-hull-side { width: auto; max-height: 52%; border-left: none; border-top: 1px solid #1d2833; }
+  .cn-hull-nav { right: 8px; bottom: 8px; flex-direction: row; }
+  /* Свёрнутая панель на телефоне — полоска снизу, а не корешок сбоку. */
+  .cn-hull.fold .cn-hull-side { width: auto; max-height: 52px; padding: 8px 10px; }
+  .cn-hull.fold .cn-hull-fold { writing-mode: horizontal-tb; height: auto; }
   .cn-hull-canvas { min-height: 42%; }
 }

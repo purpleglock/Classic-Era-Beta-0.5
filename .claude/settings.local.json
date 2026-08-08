@@ -282,7 +282,28 @@
       "Bash(grep -n \"return\\\\|</div>\\\\`\")",
       "PowerShell(node tools/db_run.js _rg_school_tech.sql)",
       "Bash(node --check reactor_gen.js)",
-      "Bash(node --check reactor_forge_ui.js)"
+      "Bash(node --check reactor_forge_ui.js)",
+      "Bash(node tools/db_run.js _colossus_hull.sql)",
+      "Bash(node tools/gen_colossus_patch.js)",
+      "Bash(node -e \"require\\('fs'\\).readFileSync\\('constructors.js'\\);\")",
+      "Bash(rm -f .col_old.js .col_new.js)",
+      "Bash(node --check tools/check_colossus.js)",
+      "Bash(node tools/check_colossus.js)",
+      "Bash(node tools/db_run.js _colossus_patch.sql)",
+      "Bash(cp /tmp/pub.js ./.pub_tmp.js)",
+      "Bash(node .pub_tmp.js)",
+      "Bash(rm -f .pub_tmp.js)",
+      "Bash(node tools/db_run.js _unit_catalog.sql)",
+      "Bash(node tools/db_dump_fn.js _cn_kv_cost)",
+      "Bash(node tools/db_run.js _colossus_gs.sql)",
+      "Bash(grep -n \"// Корпус по умолчанию должен существовать\" constructors.js)",
+      "Bash(node tools/db_run.js _tech_nodes_kv.sql)",
+      "Bash(rm -f .colossus_gallery.svg)",
+      "Bash(node --check ship_preview.js)",
+      "Bash(python \"C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\e25169eb-3c15-47a3-8aba-1eced7c7c356\\\\scratchpad\\\\patch2.py\")",
+      "Bash(python \"C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\e25169eb-3c15-47a3-8aba-1eced7c7c356\\\\scratchpad\\\\patch3.py\")",
+      "Bash(python \"C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\e25169eb-3c15-47a3-8aba-1eced7c7c356\\\\scratchpad\\\\patch5.py\")",
+      "Bash(sed -n '/function bgColossusGeo/,/^}/p' battle_gl.js)"
     ]
   }
 }

@@ -1570,7 +1570,7 @@ function bbTrayChips(s) {
     const acts = Array.isArray(p.acts) ? p.acts : [];
     return `<div class="bbd-s${on ? ' bbd-s-on' : ''}${why ? ' bbd-s-off' : ''}"
         onclick="bbPick('${jsq(p.unit_id)}')">
-        <span class="bbd-s-sil">${bbHullSvg(p.cls)}</span>
+        <span class="bbd-s-sil">${bbHullSvg(p.cls, p.unit_name || p.name)}</span>
         <span class="bbd-s-n">${esc(p.unit_name)}</span>
         <span class="bbd-s-i">${bbNum(p.hp)} корп · ${bbNum(p.dmg)} урон · ${p.rng} гекс${Number(p.cost) > 0 ? ` · ${bbNum(p.cost)}` : ''}</span>
         <span class="bbd-s-w">${acts.length
@@ -1839,7 +1839,7 @@ function bbReinfPanel(s) {
       ${pool.map(p => {
         const canJump = fresh && (!s.interdicted || p.ftl);
         return `<button class="bb-rc" ${canJump ? '' : 'disabled'} onclick="bbReinforce('${jsq(p.unit_id)}')">
-          <div class="bb-rc-sil">${bbHullSvg(p.cls)}</div>
+          <div class="bb-rc-sil">${bbHullSvg(p.cls, p.unit_name || p.name)}</div>
           <div class="bb-rc-h">
             <span class="bb-rc-ico">${bbClsIco(p.cls)}</span>
             <span class="bb-rc-n">${esc(p.unit_name)}<i>${bbClsName(p.cls)}</i></span>
@@ -1930,10 +1930,13 @@ function bbClsName(c) { return BB_CLS[c] || 'Корабль'; }
 // носом ВВЕРХ, карточка просит носом ВЛЕВО — меняем оси матрицей (x,y)→(y,x).
 // Если конструктор на странице не поднялся, молча отдаём пустую строку: карточка
 // живёт и без картинки, а падать из-за украшения нельзя.
-function bbHullSvg(cls) {
+// name — имя дизайна: по нему достаём свой корпус колосса (у класса силуэта нет).
+function bbHullSvg(cls, name) {
   if (typeof CN_SHIP_GEO === 'undefined') return '';
   const key = (typeof CN_KV_HULL !== 'undefined' && CN_KV_HULL[cls]) || cls;
-  const G = CN_SHIP_GEO[key] || CN_SHIP_GEO[cls];
+  const dsn = name ? bbDesignOf(name, cls) : null;
+  const G = (cls === 'colossus' && dsn && dsn.data && bbColGeo(dsn.data.hull))
+    || CN_SHIP_GEO[key] || CN_SHIP_GEO[cls];
   if (!G || !G.path || !Array.isArray(G.st) || !G.st.length) return '';
   const hw = Math.max(8, +G.maxHW || 30), pad = 5;
   const y0 = G.st[0][0], y1 = G.st[G.st.length - 1][0];
@@ -4074,7 +4077,19 @@ const BB_HULL = {
   mediumCruiser: 'cruiser', hyperCruiser: 'hypercruiser', ss13: 'station',
   wing: 'mla',
 };
-function bbGeo(cls) {
+// ⚠️ У «Имперского колосса» силуэта КЛАССА не существует: корпус рисует игрок, и у
+// каждого проекта он свой (data.hull). Поэтому геометрию строим из маски дизайна и
+// кэшируем по ней же — иначе на доске все колоссы выглядели бы одинаково (а точнее,
+// как последний открытый в верфи корпус).
+const BB_COL_GEO = {};
+function bbColGeo(hull) {
+  if (!hull || typeof cnColGeo !== 'function') return null;
+  const key = hull.w + 'x' + hull.h + ':' + hull.mask;
+  if (!BB_COL_GEO[key]) { try { BB_COL_GEO[key] = cnColGeo(cnColSane(hull)); } catch (e) { return null; } }
+  return BB_COL_GEO[key];
+}
+function bbGeo(cls, hull) {
+  if (cls === 'colossus') { const g = bbColGeo(hull); if (g) return g; }
   if (typeof CN_SHIP_GEO !== 'undefined') {
     const hull = BB_HULL[cls] || cls;
     if (CN_SHIP_GEO[hull]) return CN_SHIP_GEO[hull];
@@ -4103,10 +4118,12 @@ function bbDesignOf(name, cls) {
   return ds.find(d => d && d.category === 'ship' && d.name === name && (clsOf(d) === cls || !cls))
       || ds.find(d => d && d.category === 'ship' && d.name === name) || null;
 }
-function bbShipKey(cls, tIdx, side) { return cls + '.' + (tIdx == null ? '-' : tIdx) + '.' + side; }
+function bbShipKey(cls, tIdx, side, hull) {
+  return cls + '.' + (tIdx == null ? '-' : tIdx) + '.' + side + (hull ? '.' + hull.w + 'x' + hull.h + hull.mask : '');
+}
 
-function bbSprite(cls, tIdx, side) {
-  const key = bbShipKey(cls, tIdx, side);
+function bbSprite(cls, tIdx, side, hull) {
+  const key = bbShipKey(cls, tIdx, side, hull);
   const col = side === 'mine' ? BB_C.mine : BB_C.foe;
   const G = 'assets/constructors/';
   const gen = kind => G + 'ship_' + kind + '.webp';
@@ -4117,7 +4134,7 @@ function bbSprite(cls, tIdx, side) {
   const ready = body !== null && armor !== null && decor !== null;
   if (ready && BB.spr[key]) return BB.spr[key];
 
-  const H = bbGeo(cls);
+  const H = bbGeo(cls, hull);
   const tip = Math.min(...H.st.map(p => p[0]));
   const stern = H.engine ? H.engine[1] : Math.max(...H.st.map(p => p[0]));
   const L = stern - tip, halfB = H.maxHW || Math.max(...H.st.map(p => p[1]));
@@ -4204,7 +4221,8 @@ function bbShip(ctx, u, alpha) {
   const col = u.mine ? BB_C.mine : BB_C.foe;
   const dsn = bbDesignOf(u.name, u.cls);
   const tIdx = dsn && dsn.data && dsn.data.type != null ? dsn.data.type : null;
-  const spr = bbSprite(u.cls, tIdx, u.mine ? 'mine' : 'foe');
+  const hull = dsn && dsn.data && dsn.data.hull ? dsn.data.hull : null;   // свой корпус колосса
+  const spr = bbSprite(u.cls, tIdx, u.mine ? 'mine' : 'foe', hull);
   const g = spr._geo;
   const len = C * (0.42 + bbClsSize(u.cls) * 0.72);   // разброс шире: мелочь ≈1 гекс, дредноут ≈2
   const sc = len / g.hullW, dw = g.SW * sc, dh = g.SH * sc;

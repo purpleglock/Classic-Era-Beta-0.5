@@ -24,6 +24,8 @@ run('hull_gen.js');
 run('constructors.js');
 
 // Классы, у которых на палубе вообще что-то стоит (зеркало _cn_mod_slots).
+// ⚠️ 'colossus' СЮДА НЕ ДОБАВЛЯТЬ: его корпус рисует игрок, маска у каждого проекта
+// своя и печётся на сервере из data.hull (_cn_hull_mask, файл _colossus_hull.sql).
 const CLASSES = [
   'corvette', 'destroyer', 'supportCarrier', 'mediumCruiser', 'hyperCruiser',
   'multiroleCarrier', 'battleship', 'dreadnought', 'ss13',

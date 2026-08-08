@@ -3,59 +3,9 @@
   "configurations": [
     {
       "name": "static",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": [
-        "--yes",
-        "http-server",
-        "-p",
-        "8791",
-        "-c-1"
-      ],
-      "port": 8791
-    },
-    {
-      "name": "static2",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": [
-        "--yes",
-        "http-server",
-        "-p",
-        "8793",
-        "-c-1"
-      ],
-      "port": 8793
-    },
-    {
-      "name": "fxharness",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": [
-        "--yes",
-        "http-server",
-        "-p",
-        "8801",
-        "-c-1"
-      ],
-      "port": 8801
-    },
-    {
-      "name": "shots",
-      "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "tools/shot_sink.js"
-      ],
-      "port": 8792
-    },
-    {
-      "name": "cardharness",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": [
-        "--yes",
-        "http-server",
-        "-p",
-        "8797",
-        "-c-1"
-      ],
-      "port": 8797
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8123"],
+      "port": 8123
     }
   ]
 }
