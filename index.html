@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260809fcarena';
+  var BUILD = '20260809perks2';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -60,7 +60,7 @@
      никогда не грузился — у кого Inter стоял локально (часто старый, без курсива),
      браузер синтезировал «косой» faux-italic в цитатах, у остальных шёл Exo 2. -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:ital,wght@0,200;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400&family=Orbitron:wght@400;500;700;900&family=Audiowide&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/index.css?v=20260809fcarena">
+<link rel="stylesheet" href="css/index.css?v=20260809perks2">
 </head>
 <body>
 <!-- Экран загрузки после входа по почте. Рисуется ДО первого кадра приложения
@@ -449,7 +449,7 @@
 <script src="armor_system.js?v=20260607a"></script>
 	<script src="weapon_system.js?v=20260607a"></script>
 <script src="faction_system.js?v=20260703privacy"></script>
-<script src="render.js?v=20260809fcarena"></script>
+<script src="render.js?v=20260809fcarena4"></script>
 <script src="editor.js?v=20260714budgetgate1"></script>
 <script src="character.js?v=20260703privacy"></script>
 <script src="battlemap.js?v=20260607a"></script>
@@ -462,18 +462,20 @@
 <script src="faction_reg.js?v=20260713faithwave1"></script>
 <script src="locations.js?v=20260624a"></script>
 <script src="faction_news.js?v=20260724cycleshards1"></script>
+<!-- Каталог боевых перков: читают constructors.js, economy.js и battle_board.js -->
+<script src="perks.js?v=20260809perks2"></script>
 <script src="constructors_kv.js?v=20260808colossus2"></script>
 <script src="constructors_kv_adapt.js?v=20260808colossus2"></script>
 <script src="armor_alchemy.js?v=20260721alloy3"></script>
 <script src="turret_gen.js?v=20260801turret1"></script>
 <script src="reactor_gen.js?v=20260808rgtech"></script>
 <script src="hull_gen.js?v=20260808colossus2"></script>
-<script src="constructors.js?v=20260808battleview6"></script>
+<script src="constructors.js?v=20260809perks2"></script>
 <script src="armor_forge_ui.js?v=20260721alloy4"></script>
 <script src="turret_forge_ui.js?v=20260801turret1"></script>
 <script src="reactor_forge_ui.js?v=20260808rgtech"></script>
-<script src="economy.js?v=20260808rgtech"></script>
-<script src="battle_board.js?v=20260809fcarena"></script>
+<script src="economy.js?v=20260809perks2"></script>
+<script src="battle_board.js?v=20260809perks2"></script>
 <!-- Трёхмерная доска боя. Сам three.js тут НЕ подключается: battle_gl.js тянет
      его динамическим import только когда игрок открыл бой (см. bgLoadThree). -->
 <script src="battle_gl.js?v=20260808battleview6"></script>
@@ -481,7 +483,7 @@
      что игрок разложил на палубе. Грузится после battle_gl.js — берёт его
      геометрию корпуса; three.js так же лениво (bgLoadThree). -->
 <script src="ship_preview.js?v=20260808battleview6"></script>
-<script src="admin.js?v=20260731nebula6"></script>
+<script src="admin.js?v=20260809fcarena4"></script>
 <script src="fishing.js?v=20260729fishfree1"></script>
 <script src="guide.js?v=20260728intelprot1"></script>
 <script src="tickets.js?v=20260607a"></script>

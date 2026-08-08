@@ -621,6 +621,25 @@ begin
 end$$;
 revoke all on function public._fc_ensure() from public;
 
+-- Свой недоигранный бой: круг клуба мог закрыться (или уже идти новый),
+-- а доска остаться живой. Отдаём участнику ссылку на неё отдельно от круга.
+create or replace function public._fc_my_open_duel(p_me text, p_skip uuid)
+returns uuid language sql stable security definer set search_path=public as $$
+  select b.id
+    from public.battles b
+   where b.kind = 'duel'
+     and b.status in ('forming','active')
+     and (p_skip is null or b.id <> p_skip)
+     and p_me is not null
+     and (b.attacker_fid = p_me or b.defender_fid = p_me
+          or exists(select 1 from public.battle_allies a
+                     where a.battle_id = b.id and a.fid = p_me))
+   order by b.created_at            -- сначала самый старый: кнопка зовёт ДОИГРАТЬ
+   limit 1;
+$$;
+revoke all on function public._fc_my_open_duel(text,uuid) from public;
+grant execute on function public._fc_my_open_duel(text,uuid) to authenticated;
+
 -- ── §9. Табло клуба ─────────────────────────────────────────
 create or replace function public.fc_state()
 returns jsonb language plpgsql volatile security definer set search_path=public as $$
@@ -654,6 +673,9 @@ begin
     'party', party,
     'party_n', jsonb_array_length(party),
     'vs_bot', (ev.duelist_b = public._bt_bot_fid()),
+    -- имя стороны ботов НЕЗАВИСИМО от круга: в наборе заявок duelist_b ещё
+    -- пуст, и _war_nm(null) отдавал бы на табло «Одна из держав»
+    'bot_name', public._war_nm(public._bt_bot_fid()),
     'bot_edge', public._fc_bot_edge(),
     'party_max', public._fc_party_max(),
     'battle_id', ev.battle_id,
@@ -681,6 +703,8 @@ begin
                          'amount', b.amount, 'won', b.won)
       from public.fc_bets b where b.event_id = ev.id and b.fid = me order by b.created_at limit 1),
     'i_duel', im,
+    -- недоигранный бой участника ВНЕ текущего круга (доигрывается отдельно)
+    'my_open_duel', public._fc_my_open_duel(me, ev.battle_id),
     'winner', ev.winner_fid, 'winner_name', public._war_nm(ev.winner_fid),
     'history', (select coalesce(jsonb_agg(jsonb_build_object(
         'a', public._war_nm(h.duelist_a), 'b', public._war_nm(h.duelist_b),

@@ -5698,10 +5698,25 @@ function _fcBody(st, en) {
   const parts = [];
   // ── правило клуба одной строкой ──
   const edge = Math.round(((Number(st.bot_edge) || 1.25) - 1) * 100);
+  // Имя стороны ботов берём из bot_name, а НЕ из duelist_b_name: пока идёт
+  // набор заявок, дуэлянт B ещё не назначен и сервер отдаёт «Одна из держав».
+  const foe = st.bot_name || (st.vs_bot ? st.duelist_b_name : '') || 'Пустотные рейдеры';
+  const pmax = st.party_max || 3;
+  const pmaxRu = ['одной', 'двух', 'трёх', 'четырёх', 'пяти'][pmax - 1] || pmax;
   parts.push(`<div class="fc-rule">${en
-    ? `The lot pulls one to ${st.party_max || 3} houses into the pit — against the pirate fleet of ${esc(st.duelist_b_name || 'the void raiders')}. You draft gladiators from the club roster within the budget; the bots get ${edge}% more. Real tactical battle — everyone watches, everyone bets.`
-    : `Жребий вытягивает на арену от одной до ${st.party_max || 3} держав — против пиратской вольницы${st.duelist_b_name ? ' «' + esc(st.duelist_b_name) + '»' : ''}. Вы драфтите гладиаторов клуба в рамках бюджета, у ботов его на ${edge}% больше: лёгкой прогулки не будет. Настоящий тактический бой — все смотрят, все ставят.`}${st.prize
-    ? ` ${en ? 'Winner takes the club purse — ' : 'Победитель забирает приз клуба — '}<b>${_fcMoney(st.prize)} ГС</b>.` : ''}</div>`);
+    ? `One to ${pmax} factions are drawn into the pit at random, and the pirates of ${esc(foe)} meet them there. You field a team of gladiators on a fixed budget — but the bots get ${edge}% more of it, so don't expect a stroll. A real tactical battle, with an audience and bets.`
+    : `Случайным образом на арену выходят от одной до ${pmaxRu} фракций, которым противостоят пираты «${esc(foe)}». Вы набираете команду гладиаторов на выделенный бюджет, но у ботов он на ${edge}% больше — лёгкой прогулки не ждите! Это настоящий тактический бой со зрителями и ставками.`}${st.prize
+    ? ` ${en ? 'The winner takes the club purse: ' : 'Победитель забирает приз клуба: '}<b>${_fcMoney(st.prize)} ГС</b>.` : ''}</div>`);
+
+  // ── свой недоигранный бой ВНЕ текущего круга ──
+  // Круг может уже закрыться (или идти новый), а доска — остаться живой:
+  // такой бой доигрывается отдельно, без кассы и ставок.
+  if (st.my_open_duel) {
+    parts.push(`<div class="fc-ok">⚔ ${en
+      ? 'You have an unfinished fight from an earlier round — it is played out separately, no purse and no bets.'
+      : 'За вами остался недоигранный бой прошлого круга — он доигрывается отдельно, без кассы и ставок.'}</div>`);
+    parts.push(`<button class="hp-vna-cta" onclick="event.stopPropagation();fcResume()">🥊 ${en ? 'Finish the old fight' : 'Доиграть прошлый бой'}</button>`);
+  }
 
   if (st.status === 'signup') {
     const left = _fcLeft(st.signup_until);
@@ -5857,6 +5872,11 @@ function fcWatch() {
   if (!_fcState || !_fcState.battle_id) return;
   const spectate = !_fcState.i_duel;
   if (typeof bbOpen === 'function') bbOpen(_fcState.battle_id, spectate);
+}
+// Доиграть свой бой прошлого круга: доска участником, как обычный бой.
+function fcResume() {
+  if (!_fcState || !_fcState.my_open_duel) return;
+  if (typeof bbOpen === 'function') bbOpen(_fcState.my_open_duel, false);
 }
 // Дуэлянт: открыть доску участником для драфта/расстановки флота (фаза forming).
 function fcDeploy() {

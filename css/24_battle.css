@@ -958,3 +958,20 @@
   color: #e8a06a; background: rgba(232, 160, 106, .09);
   box-shadow: inset 0 0 0 1px rgba(232, 160, 106, .3);
 }
+
+/* ── ЧИПЫ ЭФФЕКТОВ: что висит на борту прямо сейчас. Зелёное — в плюс
+      (свои баффы и карточки экипажа), оранжевое — в минус (чужая работа). */
+.bb-fx { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; }
+.bb-fx-c {
+  padding: 3px 7px; border-radius: 4px; font-size: 10.5px; line-height: 1.3;
+  color: #e8a06a; background: rgba(232, 160, 106, .1);
+  box-shadow: inset 0 0 0 1px rgba(232, 160, 106, .32);
+}
+.bb-fx-c.good {
+  color: #7fd4ff; background: rgba(127, 212, 255, .1);
+  box-shadow: inset 0 0 0 1px rgba(127, 212, 255, .32);
+}
+.bb-fx-c.perk {
+  color: #e0b457; background: rgba(224, 180, 87, .1);
+  box-shadow: inset 0 0 0 1px rgba(224, 180, 87, .34);
+}

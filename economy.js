@@ -11880,6 +11880,7 @@ const EC_RES_CATS = [
   ['ground', 'Наземные войска', '⚙'],
   ['aviation', 'Авиация', '✈'],
   ['reactor', 'Реакторные школы', '⚛'],
+  ['perk', 'Доктрина боя', '🎴'],
   ['politics', 'Политика', '🏛'],
 ];
 // ── РЕАКТОРНЫЕ ШКОЛЫ: гейт «Реакторной верфи» ──────────────────
@@ -12105,6 +12106,18 @@ function ecBuildResearch() {
   EC_REACTOR_SCHOOLS.forEach(n => out.push({
     id: n.id, cat: 'reactor', catLabel: 'Реакторные школы', branch: n.branch,
     name: n.name, desc: n.desc, cost: n.cost, prereq: n.prereq || [],
+  }));
+  // ── Доктрина боя: карточки экипажа (каталог — perks.js) ──
+  // Своя категория, а НЕ ветка Политики: политика — это пассивные бонусы
+  // державе, а тут право поставить карточку конкретному кораблю. Ветка
+  // внутри категории = происхождение державы, которое её открывает.
+  if (typeof PERKS !== 'undefined') PERKS.forEach(p => out.push({
+    id: p.id, cat: 'perk', catLabel: 'Доктрина боя', branch: p.gate || 'core',
+    name: p.name, cost: p.cost, prereq: (p.prereq || []).slice(), special: 'perk',
+    desc: (p.kind === 'pas' ? 'Пассивная. ' : 'Активная. ') + p.trig + ' → ' + p.eff
+        + '\n\n' + p.desc
+        + '\n\nЭто КАРТОЧКА ЭКИПАЖА: узел лишь открывает право поставить её кораблю в конструкторе, слот там РОВНО ОДИН.'
+        + (p.cls ? ' Класс: ' + (Array.isArray(p.cls) ? p.cls : [p.cls]).join(', ') + '.' : ''),
   }));
   // ── Политика: ручное дерево бонусов ──
   EC_POLITICS.forEach(n => out.push({
@@ -12332,6 +12345,7 @@ function ecTabResearch() {
     ground:   ['class', 'type', 'weapon', 'reactor', 'engine', 'armor', 'shield', 'hangar', 'module'],
     aviation: ['class', 'type', 'weapon', 'reactor', 'engine', 'armor', 'shield', 'hangar', 'module'],
     politics: ['econ', 'prod', 'expand', 'welfare', 'mind', 'celestial'],
+    perk:     ['core', 'faith', 'ai', 'hive'],
   };
 
   // ── СТАБИЛЬНАЯ РАСКЛАДКА ХОЛСТА ──────────────────────────────────────────
@@ -12552,7 +12566,7 @@ function ecTabResearch() {
 // Размер слота узла-самоцвета на холсте (десктоп). Компактный: иконка + имя.
 const EC_TREE_W = 150, EC_TREE_H = 104;
 // Дефолтные emoji-значки по ветке/роду — пока узлу не задана картинка/иконка.
-const EC_BRANCH_ICON = { class: '🚀', type: '🛰', weapon: '🎯', armor: '🛡', shield: '🔰', engine: '🚀', reactor: '⚛', hangar: '🛬', module: '📡', econ: '💰', prod: '🏭', expand: '🧭', celestial: '🌌', mind: '🧠', welfare: '☀' };
+const EC_BRANCH_ICON = { class: '🚀', type: '🛰', weapon: '🎯', armor: '🛡', shield: '🔰', engine: '🚀', reactor: '⚛', hangar: '🛬', module: '📡', econ: '💰', prod: '🏭', expand: '🧭', celestial: '🌌', mind: '🧠', welfare: '☀', core: '🎴', faith: '🕊', ai: '🕹', hive: '🎶' };
 const EC_CAT_ICON = { ship: '🚀', ground: '⚙', aviation: '✈', politics: '🏛' };
 
 // Связи дерева — прямые «созвездные» линии центр→центр (PoE), загораются по
@@ -12921,7 +12935,7 @@ async function ecTreeToggleCore(id) {
 // Откреплён ли корневой узел от ядра «НАУКА» (staff-флаг в раскладке).
 function ecTreeNoCore(id) { const L = EC.techLayout && EC.techLayout[id]; return !!(L && L.nocore); }
 function ecBranchTag(branch) {
-  return { class: 'КЛАСС', type: 'КОРПУС', weapon: 'ОРУЖИЕ', armor: 'БРОНЯ', shield: 'ЩИТЫ', engine: 'ДВИГАТЕЛЬ', reactor: 'РЕАКТОР', hangar: 'АНГАР', module: 'СИСТЕМА', econ: 'ЭКОНОМИКА', prod: 'ПРОИЗВОДСТВО', expand: 'ЭКСПАНСИЯ', celestial: 'НЕБОЖИТЕЛИ', mind: 'РАЗУМ', doom: 'НЕОТВРАТИМОСТЬ', welfare: 'БЛАГОПОЛУЧИЕ' }[branch] || branch;
+  return { class: 'КЛАСС', type: 'КОРПУС', weapon: 'ОРУЖИЕ', armor: 'БРОНЯ', shield: 'ЩИТЫ', engine: 'ДВИГАТЕЛЬ', reactor: 'РЕАКТОР', hangar: 'АНГАР', module: 'СИСТЕМА', econ: 'ЭКОНОМИКА', prod: 'ПРОИЗВОДСТВО', expand: 'ЭКСПАНСИЯ', celestial: 'НЕБОЖИТЕЛИ', mind: 'РАЗУМ', doom: 'НЕОТВРАТИМОСТЬ', welfare: 'БЛАГОПОЛУЧИЕ', core: 'ОБЩИЕ ШКОЛЫ', faith: 'ДЕРЖАВА ВЕРЫ', ai: 'МАШИННЫЙ РАЗУМ', hive: 'КОЛЛЕКТИВНЫЙ РАЗУМ' }[branch] || branch;
 }
 // Чипы бонуса политического узла (для карточки дерева).
 function ecBonusChips(b, special, station, slots) {
@@ -12935,6 +12949,7 @@ function ecBonusChips(b, special, station, slots) {
   if (special === 'rslot') out.push(`<span class="ec-bchip special">🔬 +${slots || 1} слот${(slots || 1) > 1 ? 'а' : ''} исследований</span>`);
   if (special === 'station' && station) out.push(`<span class="ec-bchip special">${station.icon || '★'} ${station.cells} ячеек</span>`);
   if (special === 'artillery') out.push('<span class="ec-bchip special" style="background:rgba(220,40,40,.18);border-color:rgba(220,40,40,.5);color:#ff8a8a">🜨 Орудие судного дня</span>');
+  if (special === 'perk') out.push('<span class="ec-bchip special">🎴 Карточка экипажа — ставится в конструкторе</span>');
   return out.length ? `<div class="ec-tnode-bonus">${out.join('')}</div>` : '';
 }
 async function ecResearch(nodeId) {

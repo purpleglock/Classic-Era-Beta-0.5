@@ -747,6 +747,9 @@ var BBK = {
   reboot:    { ico: '\u{1F504}', name: 'Перезапуск снаряжения', need: null,  cost: 1.0 },
   rapid:     { ico: '\u{1F3AF}', name: 'Беглый огонь',         need: null,   cost: 1.0 },
   energy:    { ico: '\u{1F50B}', name: 'Энергогенератор',      need: null,   cost: 0.0 },
+  // Кнопка не от модуля, а от КАРТОЧКИ ЭКИПАЖА «Перехват контура»: сервер
+  // дописывает её в acts борта (см. _bt_units_acts_fill в _bt_perks2.sql).
+  hijack:    { ico: '\u{1F579}', name: 'Перехват контура',     need: 'foe',  cost: 3.0 },
 };
 // Дебаффы, которые могут висеть на борту. Зеркало _bt_deb_ru.
 var BBK_DEB = {
@@ -754,6 +757,11 @@ var BBK_DEB = {
   disrupt: 'шина заглушена — модули не работают',
   wbreak:  'наведение сбито — урон вполовину',
   soft:    'обшивка вспорота — входящий урон выше',
+};
+// Ключи deb, которые на самом деле в ПЛЮС носителю (перки вешают их туда же,
+// где живут чужие дебаффы — механика одна: счётчик ходов на борту).
+var BBK_BUFF = {
+  fury: 'ярость — урон орудий +30%',
 };
 function bbKitDesc(a) {
   const d = +a.dmg || 0, r = +a.rng || 0, v = +a.val || 0;
@@ -787,17 +795,59 @@ function bbKitDesc(a) {
     case 'reboot':    return `−${v} ход(а) со ВСЕХ остальных кулдаунов`;
     case 'rapid':     return 'залп стоит вдвое меньше секунд до конца хода';
     case 'energy':    return `+${v} c к текущему ходу`;
+    case 'hijack':    return `чужой борт до ${r} гекс. воюет за вас 2 хода, потом уходит домой`;
     default:          return '';
   }
 }
 // Что сейчас висит на борту чужими стараниями. Без этой строки игрок не поймёт,
 // почему его залп бьёт вполсилы, а шаг стоит вдвое.
-function bbDebLine(u) {
-  const d = u && u.deb;
-  if (!d) return '';
-  const ks = Object.keys(d).filter(k => +d[k] > 0);
-  if (!ks.length) return '';
-  return `<div class="bb-deb">⚠ ${ks.map(k => esc(BBK_DEB[k] || k)).join(' · ')}</div>`;
+function bbDebLine(u) { return bbFxChips(u); }
+
+// ── ЧТО ВИСИТ НА БОРТЕ ПРЯМО СЕЙЧАС ─────────────────────────────
+// Одной строкой было не разобрать, где чужая работа, а где своя: игрок видел
+// «⚠ ярость» и считал, что его дебаффнули. Теперь три сорта чипов:
+//   perk  — карточка экипажа (постоянная, не снимается);
+//   good  — плюс: свои баффы и «ярость» от «Жажды крови»;
+//   (без) — минус: то, что навесил противник.
+// Счётчик в чипе = сколько СВОИХ ходов эффект ещё продержится (deb хранит
+// значение на единицу больше — оно тикает в начале хода носителя).
+function bbFxChips(u) {
+  if (!u) return '';
+  const out = [];
+  const deb = u.deb || {};
+  const turns = k => Math.max(0, (+deb[k] || 0) - 1);
+  const chip = (cls, tx) => out.push(`<span class="bb-fx-c${cls ? ' ' + cls : ''}">${esc(tx)}</span>`);
+
+  // Карточки экипажа: постоянный паспорт борта, а не временный эффект.
+  if (Array.isArray(u.perks) && typeof PERK_BY_ID !== 'undefined') {
+    u.perks.forEach(id => {
+      const p = PERK_BY_ID[id];
+      if (p) chip('perk', `${p.ico} ${p.name}`);
+    });
+  }
+  // Плюсы
+  Object.keys(BBK_BUFF).forEach(k => {
+    if (+deb[k] > 0) chip('good', `${BBK_BUFF[k]}${turns(k) ? ` · ${turns(k)} х.` : ''}`);
+  });
+  if (+u.amp > 0)   chip('good', `контур разогнан +${Math.round(u.amp * 100)}% урона`);
+  if (+u.hard > 0)  chip('good', `«Эгида» — входящий −${Math.round(u.hard * 100)}%`);
+  if (+u.guard > 0) chip('good', `прикрывает своих в радиусе ${u.guard}`);
+  if (+u.pdb > 0)   chip('good', `ПРО усилено +${Math.round(u.pdb * 100)}%`);
+  if (u.rapid)      chip('good', 'беглый огонь — залп вдвое дешевле');
+  if (u.sammo)      chip('good', 'стазис-боеприпас заряжен');
+  if (+u.cloak > 0) chip('good', `маскировка +${u.cloak} к скрытности`);
+  // Накопители перков видны только на своей стороне (pk приходит только для неё)
+  const pk = u.pk || {};
+  if (+pk.ride > 0) chip('good', `разгон «Бимрайдера» +${Math.min(5, +pk.ride) * 5}% к следующему залпу`);
+  if (+pk.bank > 0) chip('good', `+${(+pk.bank).toFixed(1)} c к следующему ходу`);
+  if (pk.hj) chip('perk', 'под вашим контуром — скоро вернётся к своим');
+  if (+u.blind > 0) chip('', `ослеплён — −${u.blind} к сенсорам`);
+  // Минусы (всё, что не помечено как бафф)
+  Object.keys(deb).forEach(k => {
+    if (BBK_BUFF[k] || !(+deb[k] > 0)) return;
+    chip('', `${BBK_DEB[k] || k}${turns(k) ? ` · ${turns(k)} х.` : ''}`);
+  });
+  return out.length ? `<div class="bb-fx">${out.join('')}</div>` : '';
 }
 // Сколько ходов ещё ждать (0 — готово).
 function bbKitCd(u, k) { return Math.max(0, +((u.mcd || {})[k]) || 0); }
@@ -1885,6 +1935,7 @@ function bbUnitPanel(s) {
   return `<div class="bb-panel">
       <div class="bb-panel-t">${bbFacIco(u)}${esc(u.name)}</div>
       <div class="bb-panel-h">${bbFacOf(u) ? esc(bbFacOf(u).name || 'держава') + ' · ' : ''}${bbClsName(u.cls)}${u.mine && u.acted ? ' · <b>активирован</b>' : ''}${u.flash ? ' · <b style="color:#ff5c8a">позиция раскрыта выстрелом</b>' : ''}</div>
+      ${bbFxChips(u)}
       <div class="bb-stat"><span>Корпус</span><b>${u.hp} / ${u.max_hp}</b></div>
       <div class="bb-bar-hp"><i style="width:${pct(u.hp / u.max_hp * 100)}%"></i></div>
       <div class="bb-stat"><span>Ход</span><b></b></div>

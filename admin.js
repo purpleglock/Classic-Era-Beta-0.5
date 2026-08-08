@@ -4467,6 +4467,9 @@ function adTestDuelSection() {
     .sort((a, b) => (a[1].app.name || '').localeCompare(b[1].app.name || '', 'ru'))
     .map(([fid, e]) => `<option value="${esc(fid)}">${esc(e.app.name)}</option>`)
     .join('');
+  // Соперник по умолчанию — арена рев.10: пиратская вольница (fid 'bot').
+  // Реальная фракция стороной Б тоже работает — это прежняя дуэль PvP.
+  const foeOpts = `<option value="bot">🏴‍☠️ Пираты-боты (арена клуба)</option>` + foes;
   const t = AD.testDuel;
   const status = t && t.battle_id
     ? `Текущий: ${esc(t.attacker || '?')} vs ${esc(t.defender || '?')} · ${t.status === 'done' ? 'окончен' + (t.winner ? ', победа ' + esc(t.winner) : '') : 'идёт бой'}`
@@ -4474,13 +4477,13 @@ function adTestDuelSection() {
   return `<div class="fm-danger-act" style="align-items:flex-start;flex-direction:column;gap:10px">
     <div class="fm-danger-label" style="width:100%">
       <div>🥊 Тестовая дуэль клуба</div>
-      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Отдельный от сессии клуба бой на выданных случайных свежих кораблях: без заявок, ставок и кассы. Выбранная фракция — сторона А. Повторный запуск <b>сносит прежнюю доску</b> и создаёт новую.<br>
+      <div class="fm-dim" style="font-size:11px;margin-top:3px;font-weight:400;line-height:1.4">Отдельный от сессии клуба бой: без заявок, ставок и кассы. Выбранная фракция — сторона А, ей выдаётся резерв гладиаторов клуба под бюджет. Соперник по умолчанию — <b>пираты-боты</b> (арена: у них бюджет на 25% больше, ходят сами); можно выбрать и живую фракцию — тогда это прежняя дуэль PvP. Повторный запуск <b>сносит прежнюю доску</b> и создаёт новую.<br>
       <b>Как подключиться:</b> обе фракции-стороны видят бой в «☄ Горячие точки» (сайдменю) и заходят оттуда с полным управлением — ходы по очереди, начинает сторона А. «Открыть доску» здесь: если ваша фракция — участник, откроется режим боя; иначе — режим зрителя (всё видно, ходить нельзя).</div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;width:100%">
       <div style="display:flex;flex-direction:column;gap:3px;flex:1 1 200px">
         <label class="fm-dim" style="font-size:11px">Соперник (сторона Б)</label>
-        <select id="ad-duel-foe" class="ec-input" style="min-width:180px"><option value="">— выберите соперника —</option>${foes}</select>
+        <select id="ad-duel-foe" class="ec-input" style="min-width:180px">${foeOpts}<option value="">— выберите соперника —</option></select>
       </div>
       <button class="btn btn-gd" onclick="adTestDuel()">Создать / перезапустить</button>
       <button class="btn btn-gh" onclick="adTestDuelOpen()">Открыть доску</button>
@@ -4498,8 +4501,11 @@ async function adTestDuel() {
     const r = await apiFetch('rpc/admin_test_duel', { method: 'POST', body: JSON.stringify({ p_a: AD.sel, p_b: foe }) });
     AD.testDuel = { battle_id: r?.battle_id, status: 'active',
       attacker_fid: r?.attacker_fid, defender_fid: r?.defender_fid,
-      attacker: AD.byFid.get(AD.sel)?.app?.name, defender: AD.byFid.get(foe)?.app?.name };
-    toast(`Дуэль создана: ${r?.cnt_a} × «${r?.ship_a_name}» против ${r?.cnt_b} × «${r?.ship_b_name}». Дуэлянты заходят через «☄ Горячие точки».`, 'ok');
+      attacker: AD.byFid.get(AD.sel)?.app?.name,
+      defender: foe === 'bot' ? 'Пустотные рейдеры' : AD.byFid.get(foe)?.app?.name };
+    toast(r?.bots
+      ? `Арена развёрнута: резерв гладиаторов против ${r.bots} пиратских бортов. Заходите через «Открыть доску» или «☄ Горячие точки».`
+      : 'Дуэль создана. Дуэлянты заходят через «☄ Горячие точки».', 'ok');
     adPaint();
   } catch (ex) { toast('Ошибка: ' + ex.message, 'err'); }
   finally { AD.busy = false; }

@@ -4801,6 +4801,7 @@ async function cnVehRender(cat) {
             ${slotSel('armor', 'cnVehCalc()')}
             ${slotSel('shield', 'cnVehCalc()')}
             ${def.db.radars ? slotSel('radar', 'cnVehCalc()') : ''}
+            <div class="cn-cards cn-slot" id="cn-perk-cards"></div>
           </div>
           <div id="cn-hud" class="cn-hud"></div>
           <div class="cn-schem-wrap">
@@ -4844,6 +4845,7 @@ async function cnVehRender(cat) {
             <div class="cn-field"><label>${esc(def.classLabel)}</label><select id="cn-class" onchange="cnVehHandleClass()"></select></div>
             ${typeField}
           </div>
+          <div class="cn-field"><label>Карточка экипажа</label><div class="cn-cards cn-slot" id="cn-perk-cards"></div></div>
         </div>
         <div class="cn-panel">
           <h3>Энергоузел и защита</h3>
@@ -4890,6 +4892,9 @@ async function cnVehRender(cat) {
 
   if (edit && cnId('cn-faction')) cnId('cn-faction').value = edit.faction_id || '';
   CN.snap = null; CN.snapOver = false; CN._applying = false;
+  // Новый проект начинает с чистым слотом: иначе карточка «прилипает» от
+  // прошлого открытого проекта (CN живёт между заходами в конструктор).
+  CN.perks = (edit && edit.data && Array.isArray(edit.data.perks)) ? edit.data.perks.slice() : [];
   cnVehInit();
   // База правки может быть уже «за лимитом» (старый проект на новом балансе) —
   // запоминаем это в snapOver, иначе жёсткий лимит откатывал бы каждое действие.
@@ -4958,6 +4963,7 @@ function cnVehHandleClass_() {
 }
 function cnVehClassDeps() {
   const def = CN.def, k = cnId('cn-class').value, cat = CN.cat;
+  cnPerkSync(k);
   if (def.hasType) { const typeOpen = cnUnlocked('type.' + cat + '.' + k); cnId('cn-type').innerHTML = def.db.data[k].types.map((t, i) => { const locked = i >= 1 && !typeOpen; return `<option value="${i}"${locked ? ' disabled' : ''}>${locked ? '🔒 ' : ''}${esc(t.name)}</option>`; }).join(''); }
   if (def.hasReactor) cnId('cn-reactor').innerHTML = cnCompOptions(cat, 'reactor', def.db.reactors[k],
     (r, i) => r._reactor
@@ -5597,7 +5603,105 @@ function cnVehCollectData() {
   // Настоящая грузоподъёмность KV (остаток вместимости шасси) — фиксируем в data,
   // чтобы сервер (_ship_cargo) считал грузоподъёмность каравана по ней, не доверяя summary.
   d.kv_cargo = (CN.last && CN.last.kv) ? Math.max(0, Math.round(CN.last.kv.cap || 0)) : 0;
+  // Карточка экипажа: массив на будущее (вдруг слотов станет больше), но сейчас
+  // в нём максимум один id. Сервер всё равно обрежет по _perk_slots().
+  d.perks = (CN.perks || []).slice(0, (typeof PERK_SLOTS !== 'undefined' ? PERK_SLOTS : 1));
   return d;
+}
+
+// ════════════════════════════════════════════════════════════
+// КАРТОЧКИ ЭКИПАЖА (перки). Каталог — perks.js, гейт — исследование
+// с тем же id + происхождение державы; сервер зеркалит в _bt_perks*.sql.
+//
+// UI НАМЕРЕННО ТОТ ЖЕ, ЧТО У РЕАКТОРА И БРОНИ: чип в ряду слотов →
+// модалка с полноразмерными карточками (.cn-info-card). Отдельная
+// панель-простыня внизу экрана была чужеродной и её никто не находил.
+// ════════════════════════════════════════════════════════════
+function cnPerkClassOk(pk, cls) {
+  return typeof perkClassOk === 'function' ? perkClassOk(pk, cls) : true;
+}
+function cnPerkGateOk(pk) {
+  return typeof perkGateOk === 'function' ? perkGateOk(pk, CN.myApp) : true;
+}
+// Почему карточку нельзя поставить. Пустая строка = можно.
+// Слот один, поэтому «слот занят» не причина: выбор просто заменяет карточку.
+function cnPerkWhy(pk, cls) {
+  const g = (typeof PERK_GATES !== 'undefined' && pk.gate) ? PERK_GATES[pk.gate] : null;
+  if (!cnUnlocked(pk.id)) return 'Не изучено: узел «' + pk.name + '» в ветке «Доктрина боя»';
+  if (!cnPerkGateOk(pk)) return 'Только ' + (g ? g.name.toLowerCase() + ' — нужна ' + g.need : 'особое происхождение державы');
+  if (!cnPerkClassOk(pk, cls)) return 'Только класс: ' + (Array.isArray(pk.cls) ? pk.cls : [pk.cls]).join(', ');
+  return '';
+}
+// Смена класса или державы могла выбить карточку (Бимрайдер — только эсминец).
+function cnPerkSync(cls) {
+  if (typeof PERKS === 'undefined') return;
+  if (!Array.isArray(CN.perks)) CN.perks = [];
+  CN.perks = CN.perks.filter(id => PERK_BY_ID[id] && !cnPerkWhy(PERK_BY_ID[id], cls));
+  cnPerkRender();
+}
+// ── Чип в ряду слотов (рядом с реактором, бронёй, щитом) ──
+function cnPerkRender() {
+  const wrap = cnId('cn-perk-cards'); if (!wrap || typeof PERKS === 'undefined') return;
+  const sel = (CN.perks && CN.perks.length) ? PERK_BY_ID[CN.perks[0]] : null;
+  wrap.innerHTML = `<button type="button" class="cn-slot-chip" onclick="cnPerkPicker()"
+      title="${esc(sel ? sel.name + ' — ' + sel.eff : 'Школа, по которой обучен расчёт. Слот один.')}">
+    <span class="cn-slot-lbl">Экипаж</span>
+    <span class="cn-slot-val">${sel ? sel.ico + ' ' + esc(sel.name) : '— не выбрана'}</span>
+  </button>`;
+}
+// ── Полноразмерная карточка для модалки ──
+function cnPerkCardHtml(pk, on, why, cls) {
+  const g = (typeof PERK_GATES !== 'undefined' && pk.gate) ? PERK_GATES[pk.gate] : null;
+  const nums = s => (typeof perkNums === 'function' ? perkNums(esc(s)) : esc(s));
+  const act = why ? '' : ` onclick="cnPerkPick('${jsq(pk.id)}')"`;
+  return `<div class="cn-info-card cn-perk-card${on ? ' on' : ''}${why ? ' locked' : ''}"${act}>
+    <div class="cn-info-art">
+      <div class="cn-info-img cn-perk-art${pk.gate ? ' g-' + pk.gate : ''}"><span>${pk.ico}</span></div>
+      <span class="cn-info-tag">${pk.kind === 'pas' ? 'пассивный' : 'активный'}</span>
+      ${on ? '<span class="cn-info-flag">установлено</span>' : ''}
+      ${why ? '<span class="cn-info-lock">🔒</span>' : ''}
+      ${g ? `<span class="cn-perk-badge">${esc(g.name)}</span>` : ''}
+    </div>
+    <div class="cn-info-body">
+      <div class="cn-info-nm">${esc(pk.name)}</div>
+      <div class="cn-info-stats">
+        <div class="cn-info-row"><span>Когда</span><b class="cn-perk-trig">${esc(pk.trig)}</b></div>
+        <div class="cn-info-row"><span>Что даёт</span><b class="cn-perk-eff">${nums(pk.eff)}</b></div>
+      </div>
+      <div class="cn-info-desc">${esc(pk.desc)}</div>
+      <div class="cn-info-pick${why ? ' cn-info-lk' : ''}">${why ? esc(why) : (on ? 'установлено' : 'поставить')}</div>
+    </div>
+  </div>`;
+}
+function cnPerkPicker() {
+  if (typeof PERKS === 'undefined') return;
+  const cls = cnId('cn-class') ? cnId('cn-class').value : null;
+  const chosen = CN.perks || [];
+  // Первая карточка — «пусто»: снять школу надо так же просто, как выбрать.
+  const empty = `<div class="cn-info-card cn-perk-card${chosen.length ? '' : ' on'}" onclick="cnPerkPick('')">
+    <div class="cn-info-art">
+      <div class="cn-info-img cn-perk-art"><span>🚫</span></div>
+      <span class="cn-info-tag">пусто</span>
+      ${chosen.length ? '' : '<span class="cn-info-flag">установлено</span>'}
+    </div>
+    <div class="cn-info-body">
+      <div class="cn-info-nm">Без карточки</div>
+      <div class="cn-info-desc">Экипаж без школы. Никаких бонусов и никаких оговорок.</div>
+      <div class="cn-info-pick">${chosen.length ? 'снять школу' : 'установлено'}</div>
+    </div>
+  </div>`;
+  const cards = PERKS.map(pk => cnPerkCardHtml(pk, chosen.includes(pk.id), cnPerkWhy(pk, cls), cls)).join('');
+  cnInfoModal('Карточка экипажа · слот один', empty + cards);
+}
+function cnPerkPick(id) {
+  if (!id) { CN.perks = []; cnPerkRender(); cnCloseInfo(); cnVehCalc(); return; }
+  const pk = (typeof PERK_BY_ID !== 'undefined') ? PERK_BY_ID[id] : null; if (!pk) return;
+  const why = cnPerkWhy(pk, cnId('cn-class') ? cnId('cn-class').value : null);
+  if (why) { toast(why, 'err'); return; }
+  CN.perks = [id]; cnPerkRender(); cnCloseInfo(); cnVehCalc();
+}
+if (typeof window !== 'undefined') {
+  window.cnPerkPicker = cnPerkPicker; window.cnPerkPick = cnPerkPick; window.cnPerkRender = cnPerkRender;
 }
 function cnVehApplyData(d) {
   const def = CN.def, shipCard = def.cardUI;
@@ -5616,6 +5720,7 @@ function cnVehApplyData(d) {
   if (cnId('cn-weapons')) cnId('cn-weapons').innerHTML = '';
   if (cnId('cn-modules')) cnId('cn-modules').innerHTML = '';
   if (def.hasHangars && cnId('cn-hangars')) cnId('cn-hangars').innerHTML = '';
+  CN.perks = Array.isArray(d.perks) ? d.perks.slice() : [];
   if (d.class && def.db.data[d.class]) cnId('cn-class').value = d.class;
   // Корпус восстанавливаем ДО cnVehClassDeps: от него зависят решётка и ТТХ класса,
   // а значит и всё, что дальше пересчитывается по каталогу.

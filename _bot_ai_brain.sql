@@ -569,7 +569,7 @@ begin
     continue when u.tp + 1e-9 < a_cost;
     a_rng := coalesce((a->>'rng')::int, 1);
     a_dmg := coalesce((a->>'dmg')::numeric, 0);
-    select e.id, e.x, e.y,
+    select e.id, e.x, e.y, e.hp, e.shield,
            (select count(*) from public.battle_units z
              where z.battle_id = p_battle and z.alive and z.side <> u.side
                and public._bt_dist(z.x, z.y, e.x, e.y) <= case when k='nuke' then 2 else 1 end) as ne

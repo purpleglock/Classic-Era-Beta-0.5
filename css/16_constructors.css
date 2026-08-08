@@ -849,3 +849,35 @@ body.cn-deck-on #ch-fab, body.cn-deck-on #tk-fab { display: none; }
   .cn-hull.fold .cn-hull-fold { writing-mode: horizontal-tb; height: auto; }
   .cn-hull-canvas { min-height: 42%; }
 }
+
+/* ══ КАРТОЧКИ ЭКИПАЖА (перки) ═══════════════════════════════════
+   Своей вёрстки у перка нет: карточка — та же .cn-info-card, что у
+   реактора и брони, чип — тот же .cn-slot-chip. Здесь только «арт»:
+   картинки у школы экипажа нет и не будет, вместо неё — знак. */
+.cn-perk-art {
+  position: relative; display: grid; place-items: center;
+  background:
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--gd) 20%, transparent), transparent 62%),
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--w1) 60%, transparent) 0 2px, transparent 2px 9px),
+    linear-gradient(165deg, var(--b2), var(--b1));
+}
+.cn-perk-art span { font-size: 44px; line-height: 1; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .55)); }
+/* Происхождение красит знак: вера — тёплый, ИИ — холодный, улей — лиловый. */
+.cn-perk-art.g-faith { background-image: radial-gradient(circle at 50% 42%, rgba(224, 180, 87, .26), transparent 62%), repeating-linear-gradient(135deg, rgba(224, 180, 87, .10) 0 2px, transparent 2px 9px), linear-gradient(165deg, var(--b2), var(--b1)); }
+.cn-perk-art.g-ai    { background-image: radial-gradient(circle at 50% 42%, rgba(127, 212, 255, .26), transparent 62%), repeating-linear-gradient(135deg, rgba(127, 212, 255, .10) 0 2px, transparent 2px 9px), linear-gradient(165deg, var(--b2), var(--b1)); }
+.cn-perk-art.g-hive  { background-image: radial-gradient(circle at 50% 42%, rgba(201, 162, 255, .26), transparent 62%), repeating-linear-gradient(135deg, rgba(201, 162, 255, .10) 0 2px, transparent 2px 9px), linear-gradient(165deg, var(--b2), var(--b1)); }
+/* Метка происхождения — по нижней кромке арта, чтобы не спорить с ярлыком типа */
+.cn-perk-badge {
+  position: absolute; left: 0; bottom: 7px; z-index: 2;
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700; line-height: 1;
+  letter-spacing: calc(.08em * var(--deco-ls-mult, 1)); text-transform: uppercase;
+  padding: 3px 9px 3px 7px; color: var(--b1); background: var(--pu, #8a7cff);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+}
+/* Строки «Когда / Что даёт» длиннее числовых ТТХ — им нужен перенос */
+.cn-info-row b.cn-perk-trig, .cn-info-row b.cn-perk-eff {
+  font-family: inherit; font-weight: 500; text-align: right; line-height: 1.4;
+  max-width: 65%; white-space: normal; font-variant-numeric: normal;
+}
+.cn-info-row b.cn-perk-trig { color: var(--t2); font-size: 11px; }
+.cn-info-row b.cn-perk-eff b { color: var(--gd); font-weight: 700; }

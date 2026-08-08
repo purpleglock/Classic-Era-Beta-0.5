@@ -13,7 +13,7 @@
 @import './13_redesign.css?v=20260703brand5';
 @import './14_map.css?v=20260709secborder1';
 @import './15_faction.css?v=20260708capsphere2';
-@import './16_constructors.css?v=20260808colossus2';
+@import './16_constructors.css?v=20260809perks2';
 @import './17_economy.css?v=20260728intelfix1';
 @import './18_admin.css?v=20260703brand5';
 @import './19_guide.css?v=20260703brand5';
@@ -21,5 +21,5 @@
 @import './21_perf.css?v=20260703brand5';
 @import './22_tickets.css?v=20260707maplegend1';
 @import './23_chat.css?v=20260712chat4';
-@import './24_battle.css?v=20260801deploy1';
+@import './24_battle.css?v=20260809perks2';
 @import './25_frame.css?v=20260802topflat1';
