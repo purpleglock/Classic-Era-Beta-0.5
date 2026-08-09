@@ -1,0 +1,198 @@
+/* ══════════════════════════════════════════════════════════════
+   НОВЕЛЛА НА ТЕЛЕФОНЕ — общая мобильная адаптация экранов-оверлеев.
+
+   Экраны новеллы (колонизация, политика, хозяйство, вестник, разлом,
+   георазведка и прочие .hp-vn-colony) верстались под ширину монитора и
+   жили ВНУТРИ обложки главной. На телефоне обложка раскладывается в
+   стопку «баннер + диалог» и теряет высоту — оверлей внутри неё
+   схлопывался, а тела разделов (сетки по 3 колонки, таблицы, ленты
+   вкладок) уезжали за край. Здесь экран новеллы становится тем, чем он
+   и был задуман на телефоне: ОТДЕЛЬНЫМ полноэкранным видом.
+
+   Файл подключается ПОСЛЕДНИМ и намеренно правит чужие правила — это
+   мобильный слой поверх десктопной вёрстки, а не набор новых блоков.
+   Ничего, кроме @media, тут быть не должно.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Телефоны и любые тач-устройства до 1024px (ландшафт, складные, планшеты) —
+   тот же порог, что уже принят для стековой раскладки новеллы. */
+@media (max-width:768px), (pointer:coarse) and (max-width:1024px){
+
+  /* ── 1. Экран = весь экран ─────────────────────────────────
+     Оверлей вырывается из обложки: fixed по вьюпорту, dvh (чтобы адресная
+     строка браузера не отрезала низ), безопасные зоны под «чёлку» и
+     жест-бар. Скролл внутри экрана не пробивается на страницу. */
+  .hp-vn-colony.show{
+    position:fixed;inset:0;z-index:120;
+    width:100%;height:100vh;height:100dvh;max-height:none;
+    margin:0;border-radius:0;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background:linear-gradient(180deg,hsl(216 26% 6% / .985),hsl(216 30% 4% / .99));
+    overscroll-behavior:contain;
+  }
+  /* Пока экран новеллы открыт, страница под ним не должна ездить. */
+  body:has(.hp-vn-colony.show){overflow:hidden}
+
+  /* ── 2. Шапка: прилипает, крупная кнопка «назад» ──────────── */
+  .hp-vn-colony.show .hp-vn-col-head{
+    position:sticky;top:0;z-index:6;flex:0 0 auto;flex-wrap:nowrap;
+    gap:8px;padding:9px 12px;
+    background:hsl(216 28% 6% / .96);backdrop-filter:blur(4px);
+  }
+  /* Заголовок и «назад» — одной строкой: перенос съедал ещё 46px высоты. */
+  .hp-vn-colony.show .hp-vn-col-title{
+    font-size:13.5px;letter-spacing:.08em;min-width:0;flex:1 1 auto;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .hp-vn-colony.show .hp-vn-col-title span,
+  .hp-vn-colony.show .hp-vn-col-title b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hp-vn-colony.show .hp-vn-col-x{
+    flex:0 0 auto;min-height:38px;display:flex;align-items:center;padding:8px 12px;font-size:10.5px;
+  }
+
+  /* ── 3. Рельса разделов: свёрнутое меню, а не скрытая лента ──
+     Горизонтальная лента на телефоне врала: видно один-два пункта, и что
+     её можно крутить — не понятно. Рельса сворачивается в СТРОКУ с текущим
+     разделом и счётчиком «1 / 7»; по тапу раскрывается сеткой, где видны
+     ВСЕ разделы сразу. Ничего не прячется за жестом. */
+  .pol-shell{flex-direction:column;min-height:0}
+  .pol-railw{
+    position:sticky;top:0;z-index:5;flex:0 0 auto;
+    display:block;background:hsl(216 26% 7% / .97);
+    border-bottom:1px solid var(--cyb-line,rgba(58,155,220,.32));
+  }
+  /* Строка «где я сейчас» — она же кнопка раскрытия */
+  .pol-rail-cur{
+    display:flex;align-items:center;gap:9px;width:100%;min-height:46px;
+    padding:8px 12px;cursor:pointer;text-align:left;
+    background:linear-gradient(90deg,var(--pol-dim,rgba(216,178,90,.22)),transparent 78%);
+    border:none;color:var(--t1,#eaf4ff);
+  }
+  .pol-rail-cur .pol-rail-tx{flex:1;min-width:0}
+  .pol-rail-cur .pol-rail-tx b{font-size:14px;color:#fff}
+  .pol-rail-cur .pol-rail-tx i{
+    display:block;font-size:10.5px;color:var(--t4);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .pol-rail-cur .pol-rail-ic{filter:none}
+  .pol-rail-n{
+    flex:0 0 auto;font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;
+    color:var(--pol,#d8b25a);border:1px solid var(--pol-dim,rgba(216,178,90,.22));padding:3px 7px;
+  }
+  .pol-rail-chev{flex:0 0 auto;font-size:12px;color:var(--pol,#d8b25a);transition:transform .18s ease}
+  .pol-railw.open .pol-rail-chev{transform:rotate(180deg)}
+
+  /* Сам список: свёрнут по умолчанию, раскрыт — сеткой в две колонки */
+  .pol-railw .pol-rail{display:none}
+  .pol-railw.open .pol-rail{
+    display:grid;grid-template-columns:1fr 1fr;gap:5px;
+    padding:4px 10px 10px;overflow:visible;
+    border-right:none;border-bottom:none;background:transparent;
+  }
+  .pol-rail-b{min-height:42px;padding:8px 10px;gap:7px}
+  .pol-rail-b .pol-rail-tx{min-width:0}
+  .pol-rail-b .pol-rail-tx b{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+  .pol-rail-b .pol-rail-tx i{display:none}
+
+  /* ── 4. Сцена-пролог: текст важнее картинки ────────────────
+     Заставка на 375px съедала треть первого экрана — на телефоне
+     она уходит, остаётся заголовок, правило мира и шаги. */
+  .pol-stage{padding:12px 12px calc(34px + env(safe-area-inset-bottom));min-width:0}
+  .pol-scene{flex-direction:column;align-items:flex-start;gap:9px;padding:12px}
+  .pol-scene-art{display:none}
+  .pol-scene-hd{gap:7px}
+  .pol-scene-hd h2{font-size:15px;letter-spacing:.06em}
+  .pol-scene-role{font-size:11px}
+  .pol-lore{font-size:13.5px;line-height:1.62;max-width:none}
+  .pol-steps{gap:5px 6px}
+  .pol-steps li{font-size:11px}
+  .pol-content{margin-top:14px}
+  /* Кнопка «свернуть» пролог — тап-мишень, а не строчка в 10px */
+  .pol-fold{min-height:34px;padding:6px 8px}
+
+  /* Главы раздела — такая же лента, как рельса */
+  .pol-chaps{
+    flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
+    scroll-snap-type:x proximity;margin:0 -12px 14px;padding:0 12px 8px;
+  }
+  .pol-chaps::-webkit-scrollbar{display:none}
+  .pol-chap{flex:0 0 auto;scroll-snap-align:start;min-height:36px;padding:8px 13px;white-space:nowrap}
+
+  /* ── 5. Тела разделов: одна колонка ────────────────────────
+     Сетки экономики свёрстаны фиксированными колонками (repeat(3,1fr),
+     1fr 1fr, minmax(≥200px)) — на 375px они либо рвут экран вбок, либо
+     жмут содержимое в нитку. Внутри экрана новеллы все они складываются
+     в одну колонку. Список — из самих правил 17_economy.css. */
+  .hp-vn-colony.show :is(
+    .ec-stat-groups,.ec-trade,.ec-agent-grid,.ec-tgt-grid,.ec-stats,.ec-ovx-stat-grid,
+    .ec-colonies,.ec-bld-grid,.ec-meter-row,.ec-fc-grid,.ec-bp-grid,.ec-case-meters,
+    .ec-case-methods,.ec-div-grid,.ec-dip-grid,.ec-bt-cols,.ec-rs-grid,.ec-treasury,
+    .ec-ov-grid,.ec-ovx-vaults,.ec-ovx-res-list,.ec-res-cards,.ec-res-card-nums,
+    .ec-pov-cards,.ec-cov-row,.ec-wh,.ec-wl-grid,.ec-ovx-grid,.ec-ach-grid,.ec-mech-grid,
+    .ec-dem-row,.ec-mza-grid,.ec-stars-grid,.ec-war-sides,.ec-pol-grid,.ec-art-grid,
+    .abm-cards,.abm-cards-sm,.pol-stats,.pol-seats
+  ){grid-template-columns:minmax(0,1fr)}
+  /* Ячейки, которые в широкой сетке занимали два столбца */
+  .hp-vn-colony.show :is(.ec-ovx-half,.ec-gb-buy){grid-column:1 / -1}
+
+  /* Всё, что мерилось «влезет в широкий кабинет», больше не растягивает экран */
+  .hp-vn-colony.show .pol-content > *{max-width:100%}
+  .hp-vn-colony.show :is(img,svg,canvas,video){max-width:100%}
+
+  /* Таблицы (роспись дохода, стаканы биржи, ведомости) скроллятся внутри
+     себя, а не тащат вбок весь экран. */
+  .hp-vn-colony.show table{display:block;width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .hp-vn-colony.show table td,
+  .hp-vn-colony.show table th{white-space:nowrap}
+
+  /* Ряды «текст слева — кнопки справа» на 375px не делятся: складываем. */
+  .hp-vn-colony.show :is(.fn-mine-row,.fn-mod-row,.fn-tab-hd){
+    flex-wrap:wrap;align-items:flex-start;gap:8px;
+  }
+  .hp-vn-colony.show :is(.fn-mine-main,.fn-mod-main){flex:1 1 100%;min-width:0}
+  .hp-vn-colony.show :is(.fn-mine-acts,.fn-mod-acts){flex:1 1 100%;flex-wrap:wrap;gap:6px}
+  .hp-vn-colony.show .fn-tab-hd > .btn{flex:1 1 100%}
+  .hp-vn-colony.show :is(.fn-mine-title,.fn-mod-title){white-space:normal;overflow:visible;line-height:1.35}
+
+  /* Ленты вкладок, оставшиеся внутри перенесённых кусков кабинета */
+  .hp-vn-colony.show .ec-tabs{
+    flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  }
+  .hp-vn-colony.show .ec-tabs::-webkit-scrollbar{display:none}
+  .hp-vn-colony.show .ec-tab{flex:0 0 auto;white-space:nowrap}
+
+  /* ── 6. Тап-мишени и ввод ──────────────────────────────────
+     Палец — не курсор: кнопка ниже 38px промахивается, а поле со шрифтом
+     меньше 16px заставляет iOS зумить страницу при фокусе. */
+  .hp-vn-colony.show :is(.btn,button:not(.pol-rail-b):not(.pol-chap):not(.hp-vn-col-x)){
+    min-height:38px;
+  }
+  .hp-vn-colony.show :is(.btn-xs,.btn-sm){min-height:34px;padding-left:10px;padding-right:10px}
+  .hp-vn-colony.show :is(input,select,textarea){
+    font-size:16px;min-height:40px;max-width:100%;box-sizing:border-box;
+  }
+  .hp-vn-colony.show textarea{min-height:120px}
+  /* Ползунки (бюджет, доли, реакторы) — толще, иначе в них не попасть */
+  .hp-vn-colony.show input[type=range]{height:34px}
+  /* Ряд кнопок действий: во всю ширину, по одной мысли на строку */
+  .hp-vn-colony.show :is(.ec-acts,.ec-row-acts,.ec-card-acts){flex-wrap:wrap;gap:6px}
+  .hp-vn-colony.show :is(.ec-acts,.ec-row-acts,.ec-card-acts) > .btn{flex:1 1 100%}
+
+  /* ── 7. Модалки поверх экрана новеллы ──────────────────────
+     Оверлей теперь fixed с z-index:120 — диалоги должны быть выше него,
+     иначе игрок нажимает кнопку и «ничего не происходит». */
+  :is(.bp-modal-ov,.fn-priv-pop,.modal-ov).show{z-index:200}
+  .bp-modal{
+    width:100%;max-width:100%;max-height:calc(100dvh - 24px);
+    margin:12px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  }
+}
+
+/* Совсем узкие экраны: пролог сжимается до заголовка и правила. */
+@media (max-width:430px){
+  .pol-rail-tx b{font-size:12.5px}
+  .pol-scene-hd h2{font-size:14px}
+  .pol-scene-role{display:none}
+  .pol-steps{display:none}
+  .hp-vn-colony.show .hp-vn-col-title{font-size:12.5px}
+}

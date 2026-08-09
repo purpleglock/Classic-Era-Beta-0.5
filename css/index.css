@@ -24,5 +24,6 @@
 @import './24_battle.css?v=20260809perks2';
 @import './25_frame.css?v=20260802topflat1';
 @import './26_members.css?v=20260809service';
-@import './27_politics.css?v=20260809politics';
-@import './28_estate.css?v=20260809vnonly';
+@import './27_politics.css?v=20260809vnmob';
+@import './28_estate.css?v=20260809vnmob';
+@import './29_vn_mobile.css?v=20260809vnmob';

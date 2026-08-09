@@ -30,6 +30,16 @@
         "8131"
       ],
       "port": 8131
+    },
+    {
+      "name": "vn-mobile",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8142"
+      ],
+      "port": 8142
     }
   ]
 }

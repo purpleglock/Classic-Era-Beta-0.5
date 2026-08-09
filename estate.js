@@ -174,21 +174,49 @@ const EST_SCR = {
   },
 
   press: {
-    el: 'hp-vn-press', view: 'press', title: 'Вестник державы', def: 'write',
+    el: 'hp-vn-press', view: 'press', title: 'Вестник державы', def: 'mine',
+    // Разговоры тут разные: своя редакция, чужие упоминания, редакторская почта.
+    // Валить их одной простынёй — то же, чем был кабинет до переезда, поэтому
+    // каждая секция получила свою дверь на рельсе. Тело всех четырёх рисует
+    // faction_news.js, но по ключу секции: fnRenderNewsTab(mount, key).
     sec: {
-      write: {
-        nm: 'Новости', role: 'что о вас прочтут соседи', scene: 'scroll',
+      mine: {
+        nm: 'Редакция', role: 'что о вас прочтут соседи', scene: 'scroll',
         lore: 'Держава говорит с галактикой не действиями, а <b>текстом</b>: написанное здесь уходит '
             + 'на модерацию и выходит в «Вестнике фракций» на главной — его читают все. Это единственный '
             + 'способ объяснить свою войну, объявить о находке или соврать так, чтобы поверили.',
         steps: ['Написать от лица державы', 'Пройти модерацию', 'Выйти в вестник'],
-        body: () => (typeof ecTabNews === 'function' ? ecTabNews() : ''),
+        body: () => estNewsMount(),
+      },
+      notif: {
+        nm: 'Оповещения', role: 'где о вас говорят', scene: 'ping',
+        lore: 'Сюда падает всё, где названа ваша держава: <b>упоминания</b> в чужих новостях, сводки '
+            + 'хроники сектора о ваших боях и войнах, объявления о капитуляциях. Это не ваша лента — '
+            + 'это то, что о вас читают остальные, и по ней видно, каким вас в галактике знают.',
+        steps: ['Смотреть, кто вас назвал', 'Открыть повод', 'Ответить своей новостью'],
+        body: () => estNewsMount(),
+      },
+      admin: {
+        nm: 'Админ-публикация', role: 'ивенты и квесты от лица НПС', scene: 'quill',
+        lore: 'Служебная дверь: публикация от лица НПС или любой фракции игрока, <b>минуя модерацию</b>. '
+            + 'Автор выбирается прямо в композиторе.',
+        steps: ['Выбрать автора', 'Написать', 'Выходит сразу'],
+        body: () => estNewsMount(),
+      },
+      mod: {
+        nm: 'Модерация', role: 'очередь на проверку', scene: 'scales',
+        lore: 'Новости игроков ждут вердикта: читать, править, одобрять или отклонять с причиной. '
+            + 'Одобренная сразу уходит в «Вестник фракций» на главной.',
+        steps: ['Прочитать', 'Вердикт', 'Одобрить или отклонить'],
+        body: () => estNewsMount(),
       },
     },
+    // Служебные секции — только редакции сайта.
+    hide: k => (k === 'admin' || k === 'mod') && !(typeof fnIsStaff === 'function' && fnIsStaff()),
     // Тело новостей — асинхронное: каркас уже в DOM, содержимое доливает faction_news.js.
     after: () => {
       const mount = document.getElementById('ec-news-mount');
-      if (mount && typeof fnRenderNewsTab === 'function') fnRenderNewsTab(mount);
+      if (mount && typeof fnRenderNewsTab === 'function') fnRenderNewsTab(mount, estTab('press'));
     },
   },
 
@@ -218,6 +246,9 @@ const EST_SCR = {
   },
 };
 
+// Каркас вестника: тело всех его секций доливает faction_news.js в этот узел.
+function estNewsMount() { return `<div id="ec-news-mount"><div class="ec-empty">Загрузка…</div></div>`; }
+
 // ── Свои глифы и сцены поверх политики ─────────────────────────
 // polGlyph/polScene — общая графика экранов новеллы. Хозяйству нужны свои
 // сюжеты (кирка, обоз, лоток, башня, кузня), поэтому расширяем словари, а не
@@ -237,6 +268,8 @@ const EST_GL = {
   ledger:  '<path d="M5 3h14v18H5z"/><path d="M5 8h14"/><path d="M9 3v18"/><path d="M12 12h4M12 16h4"/>',
   map:     '<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/>',
   medal:   '<circle cx="12" cy="15" r="6"/><path d="M12 12.5l1 2 2 .3-1.5 1.4.4 2-1.9-1-1.9 1 .4-2L9 14.8l2-.3z"/><path d="M8 3l2 6M16 3l-2 6"/>',
+  ping:    '<circle cx="12" cy="12" r="2.5"/><path d="M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 7.5a6.4 6.4 0 0 1 0 9"/><path d="M4.5 4.5a10.6 10.6 0 0 0 0 15M19.5 4.5a10.6 10.6 0 0 1 0 15"/>',
+  quill:   '<path d="M4 20c6-1 9-4 12-10l3-6-6 3C7 10 5 14 4 20z"/><path d="M4 20l7-7"/>',
 };
 const EST_SV = {
   pick: `<g class="pol-sv-tilt"><path d="M40 104 L104 44"/><path d="M34 40 Q90 4 146 40"/><path d="M90 20 L90 44"/></g>
@@ -275,6 +308,13 @@ const EST_SV = {
     <path d="M90 58 L96 70 L109 72 L99 81 L102 94 L90 88 L78 94 L81 81 L71 72 L84 70 Z"/>
     <path d="M64 12 L76 46 M116 12 L104 46"/>
     <g class="pol-sv-halo"><circle cx="90" cy="76" r="44" class="pol-sv-ring"/></g>`,
+  ping: `<circle cx="90" cy="62" r="9"/>
+    <path d="M62 34 A40 40 0 0 0 62 90 M118 34 A40 40 0 0 1 118 90"/>
+    <g class="pol-sv-ping"><circle cx="90" cy="62" r="46" class="pol-sv-ring"/></g>
+    <g class="pol-sv-ping pol-sv-ping2"><circle cx="90" cy="62" r="46" class="pol-sv-ring"/></g>`,
+  quill: `<g class="pol-sv-tilt"><path d="M38 112 C74 100 100 76 122 36 L136 12 L104 28 C64 50 46 78 38 112 Z"/>
+      <path d="M38 112 L84 66"/></g>
+    <circle class="pol-sv-pulse" cx="46" cy="112" r="5"/>`,
 };
 if (typeof polGlyph === 'function') {
   const _polGlyphRaw = polGlyph;

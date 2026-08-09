@@ -1726,15 +1726,19 @@ function fnShowPrivatePopup(n) {
 function fnClosePrivatePopup() { document.getElementById('fn-priv-pop')?.classList.remove('show'); }
 
 // ── Кабинет: вкладка «Новости» ──────────────────────────────
-async function fnRenderNewsTab(b) {
+// only — ключ ОДНОЙ секции ('admin' | 'notif' | 'mine' | 'mod'). Экран новеллы
+// «Вестник державы» даёт каждой секции свою дверь на рельсе и просит ровно её;
+// без параметра (админка) рисуется вся простыня, как раньше.
+async function fnRenderNewsTab(b, only) {
   b.innerHTML = `<div class="sload" style="min-height:60px"><div class="quote-loader">Загрузка...</div></div>`;
   const staff = fnIsStaff();
   const fac = await fnGetMyFaction();
+  const want = k => !only || only === k;
 
   let html = '';
 
   // Секция админ-публикации (стафф): ивенты/квесты от лица НПС или любой фракции игрока.
-  if (staff) {
+  if (staff && want('admin')) {
     html += `<div class="fn-tab-sec">
       <div class="fn-tab-hd">
         <span>📡 Админ-публикация <span style="color:var(--t4);font-weight:400;font-size:12px">— от лица НПС или фракции игрока</span></span>
@@ -1746,7 +1750,7 @@ async function fnRenderNewsTab(b) {
 
   // Секция ОПОВЕЩЕНИЙ: всё, где упомянута фракция (пинги + системные сводки/хроники
   // + чужие новости по имени). Тело подгружается асинхронно (fnLoadMentions).
-  if (fac && fac.faction_id) {
+  if (fac && fac.faction_id && want('notif')) {
     html += `<div class="fn-tab-sec">
       <div class="fn-tab-hd"><span>🔔 Оповещения <span style="color:var(--t4);font-weight:400;font-size:12px">— упоминания вашей фракции</span></span></div>
       <div class="fn-notif-list" id="fn-notif-list"><div class="sload" style="min-height:50px"><div class="pulse-loader"></div></div></div>
@@ -1754,7 +1758,7 @@ async function fnRenderNewsTab(b) {
   }
 
   // Секция автора (владельца одобренной фракции)
-  if (fac && fac.faction_id) {
+  if (fac && fac.faction_id && want('mine')) {
     let mine = [];
     try {
       mine = await dbGet('faction_news', `faction_id=eq.${encodeURIComponent(fac.faction_id)}&order=created_at.desc`) || [];
@@ -1790,7 +1794,7 @@ async function fnRenderNewsTab(b) {
       <div class="fn-mine-list">${rows}</div>
       <div class="fn-tab-note">Новость уходит на проверку администрации. После одобрения она появится на главной в «Вестнике фракций».</div>
     </div>`;
-  } else if (!staff) {
+  } else if (!staff && want('mine')) {
     html += `<div class="fn-tab-sec"><div style="color:var(--t3);font-size:13px;padding:8px 0">
       Писать новости могут владельцы одобренной фракции.
       <button class="btn btn-gd btn-fw" style="margin-top:10px" onclick="closeAp();go('faction-new')">⬡ Зарегистрировать фракцию</button>
@@ -1798,7 +1802,7 @@ async function fnRenderNewsTab(b) {
   }
 
   // Секция модерации (стафф)
-  if (staff) {
+  if (staff && want('mod')) {
     let pend = [];
     try { pend = await dbGet('faction_news', 'status=eq.pending&order=created_at.asc') || []; } catch (e) {}
     const modRows = pend.length ? pend.map(n => `<div class="fn-mod-row" id="fn-mod-${esc(n.id)}">
@@ -1822,7 +1826,7 @@ async function fnRenderNewsTab(b) {
   }
 
   b.innerHTML = html || `<div style="color:var(--t3);font-size:13px;padding:8px 0">Нет доступа к новостям.</div>`;
-  if (fac && fac.faction_id) fnLoadMentions();
+  if (fac && fac.faction_id && want('notif')) fnLoadMentions();
 }
 
 // ── Лента «Оповещения»: всё, где упомянута фракция (RPC news_mentions) ──

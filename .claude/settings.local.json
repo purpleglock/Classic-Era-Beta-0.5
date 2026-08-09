@@ -449,7 +449,8 @@
       "Bash(node tools/db_run.js _ec_init_member.sql)",
       "Bash(node tools/db_run.js _ec_tick_member.sql)",
       "Bash(node --check estate.js)",
-      "Bash(sed -i \"s/var BUILD = '20260809estback';/var BUILD = '20260809press';/\" index.html)"
+      "Bash(sed -i \"s/var BUILD = '20260809estback';/var BUILD = '20260809press';/\" index.html)",
+      "Bash(node -e \"1\")"
     ]
   }
 }

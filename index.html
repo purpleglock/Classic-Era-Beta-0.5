@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260809press';
+  var BUILD = '20260809vnmob';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -461,7 +461,7 @@
 <script src="galaxy_map.js?v=20260731nebula6"></script>
 <script src="faction_reg.js?v=20260809members2"></script>
 <script src="locations.js?v=20260624a"></script>
-<script src="faction_news.js?v=20260724cycleshards1"></script>
+<script src="faction_news.js?v=20260809vnmob"></script>
 <!-- Каталог боевых перков: читают constructors.js, economy.js и battle_board.js -->
 <script src="perks.js?v=20260809perks2"></script>
 <script src="constructors_kv.js?v=20260808colossus2"></script>
@@ -481,7 +481,7 @@
 <script src="politics.js?v=20260809vnonly"></script>
 <!-- Экраны новеллы «Добыча»/«Торговля»/«Биржа»/«Армия»/«Статистика»:
      остаток кабинета на каркасе politics.js, тела — те же ecTab*. -->
-<script src="estate.js?v=20260809vnonly"></script>
+<script src="estate.js?v=20260809vnmob"></script>
 <script src="battle_board.js?v=20260809perks2"></script>
 <!-- Трёхмерная доска боя. Сам three.js тут НЕ подключается: battle_gl.js тянет
      его динамическим import только когда игрок открыл бой (см. bgLoadThree). -->

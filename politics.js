@@ -313,12 +313,36 @@ function polChapName(t) {
 }
 
 // ── Рельса разделов ────────────────────────────────────────────
+// На мониторе рельса — колонка слева, все разделы видны сразу. На телефоне
+// места на колонку нет, а горизонтальная лента врёт: игрок видит один-два
+// пункта и не догадывается, что её можно крутить. Поэтому там рельса
+// сворачивается в ОДНУ строку с текущим разделом и счётчиком «1 / 7» — по
+// тапу она раскрывается сеткой, где видны все разделы разом. Разметку даём
+// одну на оба случая, разводит их CSS (29_vn_mobile.css).
 function polRail(map, cur, fn) {
-  return `<nav class="pol-rail">${Object.entries(map).map(([k, d]) =>
+  const ent = Object.entries(map);
+  const i = Math.max(0, ent.findIndex(([k]) => k === cur));
+  const d0 = (ent[i] || ent[0] || [null, { nm: '', role: '', scene: '' }])[1];
+  return `<div class="pol-railw">
+    <button class="pol-rail-cur" type="button" aria-expanded="false"
+            onclick="event.stopPropagation();polRailToggle(this)">
+      <span class="pol-rail-ic">${polGlyph(d0.scene)}</span>
+      <span class="pol-rail-tx"><b>${esc(d0.nm)}</b><i>${esc(d0.role)}</i></span>
+      <span class="pol-rail-n">${i + 1} / ${ent.length}</span>
+      <span class="pol-rail-chev" aria-hidden="true">▾</span>
+    </button>
+    <nav class="pol-rail">${ent.map(([k, d]) =>
     `<button class="pol-rail-b${k === cur ? ' on' : ''}" type="button" onclick="event.stopPropagation();${fn}('${k}')">
        <span class="pol-rail-ic">${polGlyph(d.scene)}</span>
        <span class="pol-rail-tx"><b>${esc(d.nm)}</b><i>${esc(d.role)}</i></span>
-     </button>`).join('')}</nav>`;
+     </button>`).join('')}</nav>
+  </div>`;
+}
+// Раскрыть/свернуть список разделов (только телефон — на мониторе кнопки нет).
+function polRailToggle(btn) {
+  const w = btn.closest('.pol-railw'); if (!w) return;
+  const on = w.classList.toggle('open');
+  btn.setAttribute('aria-expanded', on ? 'true' : 'false');
 }
 
 // ── Общий каркас экрана ────────────────────────────────────────
