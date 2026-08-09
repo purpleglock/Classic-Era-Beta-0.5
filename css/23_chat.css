@@ -207,3 +207,13 @@ body.route-map #ch-fab { display: none !important; }
   .ch-send { padding: 0 16px; }
   .ch-av-img, .ch-av-ini { width: 26px; height: 26px; }
 }
+
+/* ── Новелла: убрать плавающие кнопки чата и поддержки ─────────────
+   Кнопки живут в <body> с position:fixed и лежат поверх ВСЕГО, включая
+   полноэкранные экраны новеллы — перекрывали выбор и управление. Прячем обе
+   ТОЛЬКО пока открыт экран (.hp-vn-*.show или класс vn-screen); на главной с
+   репликой новеллы кнопки остаются на месте — там они ничему не мешают. */
+html.vn-screen #ch-fab,
+html.vn-screen #tk-fab,
+html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-research,.hp-vn-fight).show) #ch-fab,
+html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-research,.hp-vn-fight).show) #tk-fab { display: none !important; }

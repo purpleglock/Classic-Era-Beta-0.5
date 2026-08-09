@@ -8101,7 +8101,7 @@ function ecMarketBlock(stock) {
       <button class="ec-flt" onclick="ecMkFilter(this,'epic')">Эпич.</button>
       <button class="ec-flt" onclick="ecMkFilter(this,'legendary')">Легенд.</button>
     </div>`;
-  return `<div class="ec-dip-card"><div class="ec-dip-t">🏪 Галактический рынок <span class="ec-hint">— единые цены на всю галактику; выберите ресурс, чтобы торговать</span></div>${filters}<div class="ec-mk-list flt-all">${chips}</div>${detail}${autoSummary}${form}</div>`;
+  return `<div class="ec-dip-card ec-mk-card"><div class="ec-dip-t">🏪 Галактический рынок <span class="ec-hint">— единые цены на всю галактику; выберите ресурс, чтобы торговать</span></div>${filters}<div class="ec-mk-list flt-all">${chips}</div>${detail}${autoSummary}${form}</div>`;
 }
 // Выбор ресурса в пикере рынка (панель сделки перерисовывается под него).
 function ecMkSelect(n) { EC.mkSel = n; ecPaintCabinet(); }
@@ -14038,7 +14038,7 @@ function ecBuildingRow(b) {
   const incTxt = inc.gc ? `+${ecNum(inc.gc)} ГС / сутки` : inc.science ? `+${ecNum(inc.science)} ОН / сутки` : d.desc;
   const dots = Array.from({ length: EC_MAX_SLOTS }, (_, i) => `<span class="ec-slot ${i < b.slots_open ? 'on' : ''}"></span>`).join('');
   // Слоты открывает бюджет (профильный ползунок × население), вручную не покупаются.
-  const openBtn = `<span class="ec-slot-auto" data-tip="Слоты выставляет финансирование отрасли во вкладке «Благополучие» (и хватает ли населения на рабочие места)" onclick="ecSetTab('welfare')">🏛 авто</span>`;
+  const openBtn = `<span class="ec-slot-auto" data-tip="Слоты выставляет финансирование отрасли во вкладке «Благополучие» (и хватает ли населения на рабочие места)" onclick="ecSetTab('welfare')">${ecIco('vault')} авто</span>`;
   const slotCount = `<span class="ec-slot-count">${b.slots_open}/${EC_MAX_SLOTS}</span>`;
   let mineHtml = '';
   if (ecIsMiner(b)) {
@@ -14047,29 +14047,35 @@ function ecBuildingRow(b) {
     const yields = ecMineYieldsCapped(b);
     if (yields.length) {
       const rows = yields.map(y => `<div class="ec-mine-row active ec-rar-${y.r}">
-          <span class="ec-mine-ic ec-rar-${y.r}">${esc(y.icon)}</span>
+          <span class="ec-mine-ic ec-rar-${y.r}">${ecResIcon(y.name)}</span>
           <span class="ec-mine-nm">${esc(y.name)}</span>
           <span class="ec-mine-rt">+${y.rate}/сут</span>
         </div>`).join('');
       const mul = (Math.max(1, +b.slots_open || 1) / 3);
-      mineHtml = `<div class="ec-bld-mine-hd">⛏ Добывается автоматически <span class="ec-mine-slots-used" data-tip="Слоты — рабочие руки: темп добычи ×(слоты/3). Слоты выставляет промышленный бюджет и население.">${b.slots_open} слот. · темп ×${mul.toFixed(2)}</span></div><div class="ec-mine-list">${rows}</div>`;
+      mineHtml = `<div class="ec-bld-mine-hd">${ecIco('mining')} Добывается автоматически <span class="ec-mine-slots-used" data-tip="Слоты — рабочие руки: темп добычи ×(слоты/3). Слоты выставляет промышленный бюджет и население.">${b.slots_open} слот. · темп ×${mul.toFixed(2)}</span></div><div class="ec-mine-list">${rows}</div>`;
     } else {
-      mineHtml = `<div class="ec-bld-mine-empty">◌ на планете нет залежей ${b.btype === 'mining' ? 'обычных' : b.btype === 'mining_deep' ? 'необычных/редких' : 'эпических/легендарных'} ресурсов — постройке нечего добывать</div>`;
+      mineHtml = `<div class="ec-bld-mine-empty">${ecIco('rar')} на планете нет залежей ${b.btype === 'mining' ? 'обычных' : b.btype === 'mining_deep' ? 'необычных/редких' : 'эпических/легендарных'} ресурсов — постройке нечего добывать</div>`;
     }
-    mineHtml += `<div class="ec-bld-mine-hd" style="margin-top:8px;color:var(--t3)">Куда идёт добыча (склад/экспорт) — во вкладке <a href="#" onclick="ecSetTab('flows');return false" style="color:var(--gd)">🔀 Потоки</a></div>`;
+    mineHtml += `<div class="ec-bld-mine-hd" style="margin-top:8px;color:var(--t3)">Куда идёт добыча (склад/экспорт) — во вкладке <a href="#" onclick="ecSetTab('flows');return false" style="color:var(--gd)">${ecIco('trade')} Потоки</a></div>`;
   }
   // мультивера: у храма пишем, чьей он религии
   let faithBadge = '';
   if (b.btype === 'temple') {
     const fa = b.faith_id ? (EC.faithById && EC.faithById[b.faith_id]) : null;
     faithBadge = fa
-      ? `<span class="ec-bld-faith" style="color:${esc(fa.color || '#c9a227')}" title="Храм религии «${esc(fa.name)}»">🛐 «${esc(fa.name)}»</span>`
-      : `<span class="ec-bld-faith ec-bld-faith-none" title="Религия храма не указана">🛐 без религии</span>`;
+      ? `<span class="ec-bld-faith" style="color:${esc(fa.color || '#c9a227')}" title="Храм религии «${esc(fa.name)}»">${ecIco('temple')} «${esc(fa.name)}»</span>`
+      : `<span class="ec-bld-faith ec-bld-faith-none" title="Религия храма не указана">${ecIco('temple')} без религии</span>`;
   }
+  // СНОС: раньше был безымянный крестик в углу — люди его не находили и путали
+  // с «закрыть». Теперь это подписанная кнопка в строке действий, внизу, рядом
+  // со слотами, и она сразу говорит, сколько вернётся денег.
+  const invested = ecBuildingInvested(b) + (ecPendingSlot(b.id) ? ecProjectRefund(ecPendingSlot(b.id)).gc : 0);
+  const back = Math.floor(invested / 2);
+  const delBtn = `<button class="ec-bld-del" onclick="ecDemolish('${b.id}')"
+    data-tip="Постройка исчезнет, ячейка освободится. Возврат — половина вложенного.">${ecIco('close')} Снести${back ? ` <i>+${ecNum(back)} ГС</i>` : ''}</button>`;
   return `<div class="ec-bld">
     <div class="ec-bld-top">
       <span class="ec-bld-name">${esc(d.name)}${faithBadge}</span>
-      <button class="ec-bld-del" title="Снести" onclick="ecDemolish('${b.id}')">✕</button>
     </div>
     <div class="ec-slots" title="${b.slots_open} / ${EC_MAX_SLOTS} слотов открыто">${dots}</div>
     <div class="ec-bld-inc">${esc(incTxt)}</div>
@@ -14085,7 +14091,7 @@ function ecBuildingRow(b) {
     ${mineHtml}
     ${b.btype === 'goodsfab' ? ecGoodsHtml(b) : ''}
     ${b.btype === 'abm' ? ecAbmAmmoHtml(b) : ''}
-    <div class="ec-bld-act">${slotCount}${ecSlotWhy(b)}${openBtn}</div>
+    <div class="ec-bld-act">${slotCount}${ecSlotWhy(b)}${openBtn}${delBtn}</div>
   </div>`;
 }
 

@@ -4067,6 +4067,11 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 }
 .hvp-chip i{font-style:normal;color:var(--gdl,#5fb0e6)}
 .hvp-res{font-size:11px}
+/* залежи в карточке — арт ресурса (img.res-ic) ровным рядком */
+.hvp-chip-res{gap:3px}
+.hvp-chip-res img.res-ic{width:14px;height:14px;vertical-align:0}
+.hvp-chip-res i{font-style:normal;color:var(--t3,#8296a8)}
+.hvp-res-row img.res-ic{width:15px;height:15px;vertical-align:0}
 .hvp-card-last::before{background:var(--gold,#c9a227)}
 
 /* ── Экран 1: разбивка по системам + поиск ── */

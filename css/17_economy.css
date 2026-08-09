@@ -488,8 +488,24 @@
 .ec-bld { background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w1); border-radius: var(--radius-md); padding: 10px 11px; display: flex; flex-direction: column; gap: 8px; }
 .ec-bld-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
 .ec-bld-name { font-family: var(--font-display); font-weight: 600; font-size: 13px; color: var(--t1); line-height: 1.25; }
-.ec-bld-del { background: none; border: 0; color: var(--t4); cursor: pointer; font-size: 12px; padding: 0 2px; flex-shrink: 0; line-height: 1; }
-.ec-bld-del:hover { color: var(--err); }
+/* Снос: подписанная кнопка в строке действий (раньше — безымянный крестик
+   в углу карточки, его не находили и путали с «закрыть»). */
+.ec-bld-del {
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; cursor: pointer;
+  margin-left: auto; padding: 4px 9px; line-height: 1;
+  font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+  letter-spacing: calc(.05em * var(--deco-ls-mult, 1));
+  color: var(--t3); background: color-mix(in srgb, var(--err) 10%, transparent);
+  border: 0; border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+  transition: color var(--duration-fast), background var(--duration-fast);
+}
+.ec-bld-del i { font-style: normal; color: var(--ok); }
+.ec-bld-del:hover { color: #fff; background: color-mix(in srgb, var(--err) 55%, transparent); }
+.ec-bld-del:hover i { color: #fff; }
+.ec-bld-del .ec-i { width: 11px; height: 11px; opacity: 1; }
+/* строка маршрутов торговли переиспользует класс — там кнопка остаётся значком */
+.ec-route-row .ec-bld-del { margin-left: 0; padding: 0 2px; background: none; font-size: 12px; }
 .ec-slots { display: flex; gap: 4px; }
 .ec-slot { width: 100%; max-width: 22px; height: 8px; border-radius: 2px; background: var(--b4); border: var(--deco-frame-w, 1px) solid var(--w2); }
 .ec-slot.on { background: var(--gd); border-color: var(--gd); }
@@ -591,6 +607,7 @@
 .ec-mine-row.ec-rar-rare      { border-left-color: var(--te); }
 .ec-mine-row.ec-rar-epic      { border-left-color: var(--pu); }
 .ec-mine-row.ec-rar-legendary { border-left-color: var(--gd); }
+.ec-mine-ic .ec-i { width: 10px; height: 10px; fill: currentColor; opacity: 1; vertical-align: 0; }
 .ec-mine-ic { font-size: 13px; flex-shrink: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1.5px solid transparent; flex-shrink: 0; }
 .ec-mine-ic.ec-rar-common    { border-color: color-mix(in srgb, var(--t4) 55%, transparent); background: color-mix(in srgb, var(--t4) 10%, transparent); }
 .ec-mine-ic.ec-rar-uncommon  { border-color: color-mix(in srgb, var(--ok) 55%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
@@ -864,8 +881,14 @@
 .ec-meter--full .ec-meter-note { color: var(--rd, #e5484d); }
 .ec-rbadge { display: inline-block; font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; color: var(--te); background: color-mix(in srgb, var(--te) 14%, transparent); border: var(--deco-frame-w, 1px) solid color-mix(in srgb, var(--te) 45%, transparent); border-radius: var(--radius-pill); padding: 1px 7px; margin-left: 4px; vertical-align: middle; }
 .ec-queue, .ec-roster { display: flex; flex-direction: column; gap: 6px; }
-.ec-q-row, .ec-r-row { display: flex; align-items: center; gap: 10px; background: var(--b2); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); padding: 8px 12px; }
-.ec-q-row .ec-r-name, .ec-r-name { flex: 1; min-width: 0; color: var(--t1); font-size: 13px; }
+/* Строки-списки: перенос по умолчанию. Без него длинный хвост (.ec-hint, цифры,
+   кнопки) не даёт ужаться имени — блок имени схлопывается в ноль, а его текст
+   вылезает поверх хвоста (наложение). Перенос включается только когда не влезло. */
+.ec-q-row, .ec-r-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; background: var(--b2); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); padding: 8px 12px; }
+.ec-q-row .ec-r-name, .ec-r-name { flex: 1 1 180px; min-width: 0; color: var(--t1); font-size: 13px; overflow-wrap: anywhere; }
+/* Хвост строки тоже обязан ужиматься и переноситься, а не распирать строку. */
+.ec-q-row > *, .ec-r-row > * { min-width: 0; }
+.ec-q-row > .ec-hint, .ec-r-row > .ec-hint { overflow-wrap: anywhere; }
 /* Развёрнутый аванпост-добыча: режим-кнопка справа, селектор ресурса — отдельной строкой снизу. */
 .ec-q-row.ec-op-row { flex-wrap: wrap; }
 .ec-op-respick { flex-basis: 100%; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t2); margin-top: 2px; }
@@ -1169,13 +1192,16 @@
 .ec-bp-modal {
   width: 100%; max-width: 640px; margin: auto 0; overflow: hidden;
   position: relative; z-index: 1; background: transparent; border: none; border-radius: 0;
-  filter: drop-shadow(0 24px 40px rgba(0,0,0,.6));
+  /* без filter: drop-shadow — он загонял ВСЮ модалку (25 карточек с clip-path)
+     в один фильтр-слой, и любой ховер/скролл перерисовывал её целиком. Тень
+     теперь на подложке-::before обычным box-shadow — рисуется один раз. */
   animation: ecBpRise .16s var(--ease-out, ease-out);
 }
 /* киберпанк: рама и заливка модалки — подложками со срезанными углами */
 .ec-bp-modal::before {
   content: ''; position: absolute; inset: 0; z-index: -2; background: var(--w3, var(--w2));
   clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+  box-shadow: 0 24px 40px rgba(0,0,0,.6);
 }
 .ec-bp-modal::after {
   content: ''; position: absolute; inset: 1px; z-index: -1;
@@ -1230,9 +1256,31 @@
 .ec-mk-list.flt-rare      .ec-mk-chip:not([data-rar="rare"])      { display: none; }
 .ec-mk-list.flt-epic      .ec-mk-chip:not([data-rar="epic"])      { display: none; }
 .ec-mk-list.flt-legendary .ec-mk-chip:not([data-rar="legendary"]) { display: none; }
-/* пикер рынка: сетка чипов + панель сделки выбранного ресурса */
-.ec-mk-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+/* пикер рынка: РОВНАЯ сетка одинаковых строк вместо рваного flex-wrap
+   (при разной длине названий чипы складывались лесенкой и читались как месиво) */
+.ec-mk-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 4px; margin-bottom: 10px; }
+/* чип = строка таблицы: иконка · имя · котировка (моно, по правому краю) */
+.ec-mk-list .ec-mk-chip {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 10px; border-radius: var(--radius-sm, 4px); text-align: left;
+}
+.ec-mk-list .ec-mk-chip .ec-trade-res-ic { justify-self: center; }
+.ec-mk-list .ec-mk-chip .ec-trade-res-n {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 500; font-size: 12.5px;
+}
+.ec-mk-list .ec-mk-chip .ec-trade-res-meta { white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; }
 .ec-mk-chip.ec-mk-has:not(.on) { background: linear-gradient(90deg, rgba(120,180,120,0.08), var(--b1)); }
+/* заголовок карточки рынка: подсказка отдельной строкой, а не в разрыв названия */
+.ec-mk-card .ec-dip-t { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.ec-mk-card .ec-dip-t .ec-hint { font-size: 11px; }
+@media (max-width: 700px) {
+  .ec-mk-list { grid-template-columns: 1fr; }
+  .ec-mk-card .ec-dip-t .ec-hint { flex: 1 0 100%; }
+  /* фильтры редкости: две ровные строки чипов, без «ступенек» */
+  .ec-mk-filters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .ec-mk-filters .ec-flt { padding: 6px 4px; text-align: center; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
+}
 .ec-mk-detail { background: var(--b1); padding: 10px 12px; }
 .ec-mk-detail .ec-mk-row { border: 0; padding: 0; }
 /* фильтр карточек ресурсов склада */
@@ -4611,3 +4659,20 @@ canvas.ec-res-thumb-cv { border-radius: 0; background: transparent; box-shadow: 
 .ec-art-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px;
   margin-top: auto; padding-top: 4px; }
 .ec-art-foot .ec-mini-sel { flex: 1 1 auto; min-width: 0; }
+
+/* ── Свёрнутая подсказка: чип «? подсказка» + окно (см. hintFold в core.js) ── */
+.ec-cap.hint-folded, .ec-bld-howto.hint-folded, .hint-folded { font-family: inherit; }
+.hint-chip { display: inline-flex; align-items: center; gap: 6px; background: transparent; color: var(--t3); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-pill); padding: 2px 10px 2px 3px; font-family: var(--font-body); font-size: 11px; line-height: 1.6; cursor: pointer; }
+.hint-chip:hover { color: var(--te); border-color: color-mix(in srgb, var(--te) 45%, transparent); }
+.hint-chip .hint-q { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: color-mix(in srgb, var(--te) 16%, transparent); color: var(--te); font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
+#hint-pop { position: fixed; inset: 0; z-index: 9500; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.62); }
+#hint-pop.on { display: flex; }
+.hint-pop-box { width: min(560px, 100%); max-height: 80vh; display: flex; flex-direction: column; background: var(--b1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); }
+.hint-pop-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: var(--deco-frame-w, 1px) solid var(--w2); }
+.hint-pop-t { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--te); }
+.hint-pop-x { background: none; border: 0; color: var(--t3); font-size: 15px; cursor: pointer; padding: 0 4px; }
+.hint-pop-x:hover { color: var(--t1); }
+.hint-pop-body { overflow: auto; padding: 12px; font-size: 13px; line-height: 1.55; color: var(--t2); overflow-wrap: anywhere; }
+.hint-pop-body b { color: var(--t1); }
+.hint-pop-gb { margin-top: 12px; padding-top: 10px; border-top: var(--deco-frame-w, 1px) solid var(--w2); }
+.ec-empty.hint-folded .hint-chip { margin-left: 4px; vertical-align: middle; }

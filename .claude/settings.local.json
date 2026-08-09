@@ -455,7 +455,9 @@
       "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('render.js','utf8'\\)\\);console.log\\('render ok'\\)\")",
       "Bash(git stash *)",
       "Bash(node -e \"const c=require\\('fs'\\).readFileSync\\('css/03_content.css','utf8'\\);let d=0;for\\(const ch of c\\){if\\(ch==='{'\\)d++;if\\(ch==='}'\\)d--;}console.log\\('baseline',d\\)\")",
-      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('economy.js','utf8'\\)\\);console.log\\('ok'\\)\")"
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('economy.js','utf8'\\)\\);console.log\\('ok'\\)\")",
+      "Bash(awk 'NR>=1 && NR<=900{if\\(/@media/\\)m=NR; if\\(/^}/ && m\\)  ; }  ' css/17_economy.css)",
+      "Bash(node tools/db_run.js sql/_brandbook_surface_ramp.sql)"
     ]
   }
 }

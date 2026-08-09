@@ -1008,3 +1008,71 @@ function mapZoomUpdate(viewportId) {
     if (svg) svg.style.transform = `translate3d(${state.panX}px, ${state.panY}px, 0) scale(${state.scale})`;
   });
 }
+
+/* ── Свёрнутые подсказки ───────────────────────────────────────────────────
+   Длинные пояснительные абзацы (.ec-cap, .ec-bld-howto и всё с .hint-src)
+   больше не занимают пол-экрана: текст прячется под чип «? подсказка»,
+   по клику открывается окно. Работает глобально — перехватываем уже
+   отрисованный DOM, чтобы не править сотни мест разметки. */
+const HINT_MIN_LEN = 90;                 // короткие подписи оставляем как есть
+function hintPopEl() {
+  let el = document.getElementById('hint-pop');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'hint-pop';
+  el.innerHTML = '<div class="hint-pop-box" role="dialog" aria-modal="true">'
+    + '<div class="hint-pop-head"><span class="hint-pop-t">Справка</span>'
+    + '<button type="button" class="hint-pop-x" aria-label="Закрыть">✕</button></div>'
+    + '<div class="hint-pop-body"></div></div>';
+  el.addEventListener('click', e => { if (e.target === el || e.target.closest('.hint-pop-x')) hintHide(); });
+  document.body.appendChild(el);
+  return el;
+}
+function hintShow(html, title, gb) {
+  const el = hintPopEl();
+  el.querySelector('.hint-pop-t').textContent = title || 'Справка';
+  // gb — якорь раздела гайдбука (id="gb-…"): подсказка ведёт к полным правилам
+  const link = gb ? `<div class="hint-pop-gb"><button type="button" class="btn btn-gh btn-sm"
+    onclick="hintHide();go('guide');setTimeout(()=>gbScrollTo('${gb}'),400)">📖 Раздел в гайдбуке</button></div>` : '';
+  el.querySelector('.hint-pop-body').innerHTML = html + link;
+  el.classList.add('on');
+}
+function hintHide() { document.getElementById('hint-pop')?.classList.remove('on'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hintHide(); });
+
+function hintFold(root) {
+  const scope = root && root.querySelectorAll ? root : document;
+  scope.querySelectorAll('.ec-cap, .ec-bld-howto, .pol-note, .creg-step-desc, .ec-empty, .hint-src').forEach(el => {
+    if (el.dataset.hintDone) return;
+    el.dataset.hintDone = '1';
+    // интерактив и живые индикаторы прячем нельзя — это уже не подсказка
+    if (el.querySelector('button, a, input, select, .ec-prog-track, .ec-cap-prog')) return;
+    const txt = (el.textContent || '').trim();
+    if (txt.length < HINT_MIN_LEN) return;
+    const html = el.innerHTML;
+    const title = el.dataset.hintTitle || 'Справка';
+    el.classList.add('hint-folded');
+    // пустое состояние без текста — это дыра в экране: первую фразу оставляем,
+    // под чип уходит только хвост объяснения
+    const lead = el.classList.contains('ec-empty') ? (txt.match(/^[^.!?]{0,140}[.!?]/) || [''])[0] : '';
+    el.textContent = lead ? lead + ' ' : '';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'hint-chip';
+    btn.innerHTML = '<span class="hint-q">?</span>' + (el.dataset.hintLabel || 'подсказка');
+    btn.title = txt.slice(0, 120) + (txt.length > 120 ? '…' : '');
+    btn.addEventListener('click', () => hintShow(html, title, el.dataset.hintGb));
+    el.appendChild(btn);
+  });
+}
+// перерисовки идут постоянно (innerHTML целыми панелями) — ловим их наблюдателем
+let _hintRaf = 0;
+function hintWatch() {
+  hintFold(document);
+  new MutationObserver(() => {
+    if (_hintRaf) return;
+    _hintRaf = requestAnimationFrame(() => { _hintRaf = 0; hintFold(document); });
+  }).observe(document.body, { childList: true, subtree: true });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hintWatch);
+else hintWatch();

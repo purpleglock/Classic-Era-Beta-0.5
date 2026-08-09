@@ -430,6 +430,14 @@ function frDrawSphere(cv, url, animate, sprite) {
   const ldx = -0.52, ldy = -0.56; // направление света: верхний левый угол
   function render(now) {
     if (!cv.isConnected) { cv._frRAF = 0; return; } // ушли со шага — гасим цикл
+    // Вращение планеты — панорама текстуры, ей хватает 30 к/с; а под открытой
+    // модалкой или в фоновой вкладке рисовать вообще незачем (кадр не видно,
+    // а каждый кадр — десяток градиентов и два drawImage на весь холст).
+    if (animate) {
+      if (document.hidden || document.querySelector('.ec-bp-ov')) { cv._frRAF = requestAnimationFrame(render); return; }
+      if (now - (cv._frLast || 0) < 33) { cv._frRAF = requestAnimationFrame(render); return; }
+      cv._frLast = now;
+    }
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const cssW = cv.clientWidth || (cv.parentElement ? cv.parentElement.clientWidth : 0) || 120;
     const cssH = cv.clientHeight || cssW;

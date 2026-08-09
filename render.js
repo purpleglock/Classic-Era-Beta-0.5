@@ -2769,31 +2769,43 @@ function _vnScreenSync() {
 // и клипов), стили инлайном (не зависят от кэша CSS, порядка файлов и
 // медиазапросов), z-index предельный, угол — правый верхний, как у штатной.
 const _VN_FAB_ID = 'vn-back-fab';
-// Видна ли собственная кнопка экрана? Три проверки, все — замер, не догадка:
-//   1) элемент вообще есть и не выключен стилями (display/visibility/opacity);
-//   2) у него ненулевой размер и он ЦЕЛИКОМ в пределах вьюпорта — именно это
-//      ловит iOS-случай, где шапка уехала выше нуля (r.top отрицательный);
-//   3) hit-test: в её центре палец попадёт в неё же, а не в перекрывшую панель.
-// Третью проверку делаем только когда своей кнопки на экране нет: иначе она
-// сама встанет над родной и hit-test будет вечно врать «перекрыта».
-function _vnOwnBackVisible(scr, hitTest) {
-  const own = scr && scr.querySelector('.hp-vn-col-x,.hvp-back');
-  if (!own) return false;
-  const cs = getComputedStyle(own);
+// Видна ли собственная кнопка экрана? Только ДВА замера, оба устойчивые:
+//   1) элемент есть и не выключен стилями (display/visibility/opacity);
+//   2) ненулевой размер и прямоугольник ЦЕЛИКОМ в пределах вьюпорта — именно
+//      это ловит iOS-случай, где шапка уехала выше нуля (r.top отрицательный).
+// Проверки на перекрытие (elementFromPoint) тут БЫЛА и снята: поверх экрана
+// живут модалки, кнопка «назад» под ними считалась невидимой, страховочная
+// всплывала — а на следующем тике снималась. Кнопка мигала раз в секунду.
+// Перекрытая модалкой шапка — не наш случай: модалку игрок закрывает крестиком.
+// Кнопок выхода на экране бывает НЕСКОЛЬКО (шапка + свои «уйти»/«к списку»
+// внутри панелей). Смотрели только первую — а она могла оказаться в
+// прокрученной части, и страховочная всплывала дублем рядом с видимой
+// шапкой. Достаточно, чтобы ХОТЬ ОДНА была на экране.
+function _vnOwnBackVisible(scr) {
+  if (!scr) return false;
+  const list = scr.querySelectorAll('.hp-vn-col-x,.hvp-back');
+  for (const own of list) if (_vnElOnScreen(own)) return true;
+  return false;
+}
+function _vnElOnScreen(el) {
+  const cs = getComputedStyle(el);
   if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0) return false;
-  const r = own.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
   if (r.width < 8 || r.height < 8) return false;
   const vh = window.innerHeight || document.documentElement.clientHeight;
   const vw = window.innerWidth || document.documentElement.clientWidth;
-  if (!(r.top >= 0 && r.left >= 0 && r.bottom <= vh + 1 && r.right <= vw + 1)) return false;
-  if (!hitTest) return true;
-  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-  return !!top && (top === own || own.contains(top) || top.contains(own));
+  return r.top >= 0 && r.left >= 0 && r.bottom <= vh + 1 && r.right <= vw + 1;
 }
 function _vnBackFabSync(open) {
-  const scr = open ? _heroVNScreenOpen() : null;
+  // Экранов в состоянии .show может висеть несколько (один поверх другого):
+  // видимая кнопка выхода на ЛЮБОМ из них снимает вопрос.
+  const all = open ? document.querySelectorAll(
+    '.hp-vn-colony.show,.hp-vn-poem.show,.hp-vn-assembly.show,.hp-vn-rating.show,.hp-vn-research.show,.hp-vn-fight.show'
+  ) : [];
   let fab = document.getElementById(_VN_FAB_ID);
-  const need = !!scr && !_vnOwnBackVisible(scr, !fab);
+  let ownVisible = false;
+  for (const s of all) if (_vnOwnBackVisible(s)) { ownVisible = true; break; }
+  const need = !!all.length && !ownVisible;
   if (!need) { if (fab) fab.remove(); return; }
   if (fab && fab.isConnected && fab.parentNode === document.body) return;
   if (fab) fab.remove();
@@ -9564,8 +9576,12 @@ function _hvpListHtml(en) {
     const pend = (EC.projects || []).filter(p => p.kind === 'build' && p.colony_id === c.id).length;
     const used = blds.length + pend;
     const look = _hvpLook(c);
-    const nres = (c.resources || []).length;
-    const res = nres ? `${hvpIco('res')}${nres}` : '';
+    // залежи — настоящим артом ресурса (assets/icons/res/<id>.png через ecResIcon)
+    const rl = (c.resources || []);
+    const res = rl.length
+      ? rl.slice(0, 4).map(r => (typeof ecResIcon === 'function') ? ecResIcon(r.name) : hvpIco('res')).join('')
+        + (rl.length > 4 ? `<i>+${rl.length - 4}</i>` : '')
+      : '';
     const hay = [c.planet_name, c.planet_type, sysName(c.system_id)].filter(Boolean).join(' ').toLowerCase();
     return `<button class="hvp-card" type="button" data-cid="${esc(c.id)}" data-s="${esc(hay)}" onclick="event.stopPropagation();heroVNPlanetsShow('${jsq(c.id)}')">
       <span class="hvp-card-orb hvp-look-${look}">
@@ -9647,7 +9663,8 @@ function _hvpScene(en, c) {
   } else {
     manage = `<div class="hvp-manage hvp-manage-hint">${en ? 'Select a building on the surface to manage it, or press «+» to build.' : 'Выберите здание на поверхности, чтобы управлять им, или нажмите «+», чтобы построить новое.'}</div>`;
   }
-  const res = (c.resources || []).map(r => `<span class="hvp-res-row">${hvpIco('res')}${esc(r.name || '')}</span>`).join('')
+  const rIco = n => (typeof ecResIcon === 'function') ? ecResIcon(n) : hvpIco('res');
+  const res = (c.resources || []).map(r => `<span class="hvp-res-row">${rIco(r.name)}${esc(r.name || '')}</span>`).join('')
     || `<span class="hvp-res-none">${en ? 'no deposits' : 'месторождений нет'}</span>`;
 
   return `<div class="hp-vn-col-body hvp-body hvp-body-scene">
