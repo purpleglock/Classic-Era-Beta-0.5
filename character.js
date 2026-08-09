@@ -221,7 +221,7 @@ function _rH1(){return`
       <input class="creg-input creg-input-lg" id="reg-name" value="${esc(_regData.name)}" placeholder="Введите имя..." oninput="_regData.name=this.value">
     </div>
     <div class="creg-field">
-      <label class="creg-label">Фото персонажа</label>
+      <label class="creg-label">Фото персонажа *</label>
       <div style="display:flex;gap:8px">
         <input class="creg-input" id="reg-img" value="${esc(_regData.image_url)}" placeholder="https://..." style="flex:1" oninput="_regData.image_url=this.value;_regPreviewImg()">
         <label class="creg-upload-btn" style="cursor:pointer">📁<input type="file" accept="image/*" style="display:none" onchange="regImgUpload(this)"></label>
@@ -409,7 +409,12 @@ function regStat(stat, delta) {
   if (delta>0&&_regData.statsLeft<=0) return;
   _regData.stats[stat]=next; _regData.statsLeft-=delta; _regRender();
 }
-function regNext() { if (_regStep===1&&!_regData.name.trim()){toast('Введите имя персонажа','err');return;} _regStep=Math.min(_REG_STEPS.length,_regStep+1); _regRender(); }
+// Портрет обязателен: анкета без лица не читается ни на странице, ни в совете.
+function regNext() {
+  if (_regStep===1&&!_regData.name.trim()){toast('Введите имя персонажа','err');return;}
+  if (_regStep===1&&!(_regData.image_url||'').trim()){toast('Загрузите фото персонажа — без портрета анкету не принимают','err');return;}
+  _regStep=Math.min(_REG_STEPS.length,_regStep+1); _regRender();
+}
 function regBack() { _regStep=Math.max(1,_regStep-1); _regRender(); }
 function _regPreviewImg() { _regData.image_url=document.getElementById('reg-img')?.value||''; if(_regStep===1)_regRender(); }
 async function regImgUpload(input) { const f=input?.files?.[0]; if(!f)return; await handleImgUpload(f,url=>{_regData.image_url=url;if(_regStep===1)_regRender();}); }

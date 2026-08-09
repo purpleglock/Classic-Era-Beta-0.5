@@ -362,6 +362,17 @@ async function fmKick(id) {
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
 
+// Лицо персонажа. В таблице characters картинки нет — она лежит на его
+// вики-странице, а весь список страниц клиент уже держит в памяти.
+function fmFace(slug, name, cls) {
+  const img = slug && typeof pages !== 'undefined'
+    ? (pages.find(p => p.slug === slug) || {}).image_url : null;
+  const ini = esc(String(name || '?').trim().slice(0, 1).toUpperCase());
+  return img
+    ? `<span class="fm-face${cls ? ' ' + cls : ''}"><img src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()"></span>`
+    : `<span class="fm-face fm-face--ph${cls ? ' ' + cls : ''}">${ini}</span>`;
+}
+
 // ── Совет державы: должность → характеристика → цифра ───────
 // Значение поста считает сервер (_fm_council), клиент только показывает.
 function fmModStr(key, val, dict) {

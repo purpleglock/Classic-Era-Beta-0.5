@@ -415,7 +415,7 @@ function polThroneBlock() {
   const ch = off && off.character;
   if (ch) {
     return `<div class="pol-throne on">
-      <div class="pol-throne-ic">${polGlyph("crown")}</div>
+      <div class="pol-throne-ic">${fmFace(ch.slug, ch.name, 'fm-face--lg')}</div>
       <div class="pol-throne-tx">
         <b>Глава государства — <a href="#${esc(ch.slug)}" onclick="go('${esc(ch.slug)}');return false">${esc(ch.name)}</a></b>
         <span>Вакантные посты совета он закрывает вполсилы. Раздайте должности ко двору — посты начнут давать
@@ -474,19 +474,29 @@ function polOfficeCard() {
   const pct = ch.lvl >= 20 ? 100 : Math.max(0, Math.min(100, Math.round((ch.xp - prev) / Math.max(1, ch.next_xp - prev) * 100)));
   const title = o.is_head ? 'Глава государства'
     : ((FM.me && FM.me.membership && FM.me.membership.role_title) || 'на службе');
+  // Характеристика — не абстрактное число: подписываем, какой пост её читает.
   const stats = Object.keys(FM_STAT_RU).map(k => {
     const v = (ch.stats || {})[k] || 10, mod = Math.floor((v - 10) / 2);
     const can = ch.points > 0 && v < 20;
     const w = Math.max(4, Math.min(100, Math.round((v / 20) * 100)));
-    return `<div class="pol-stat${v >= 12 ? ' live' : ''}" title="${esc(FM_STAT_RU[k][1])}">
-      <span class="pol-stat-k">${esc(FM_STAT_RU[k][0])}</span>
+    const posts = FM_STAT_RU[k][1];
+    return `<div class="pol-stat${v >= 12 ? ' live' : ''}">
+      <div class="pol-stat-top">
+        <span class="pol-stat-k">${esc(FM_STAT_RU[k][0])}</span>
+        <span class="pol-stat-v">${v}<em>${mod >= 0 ? '+' : ''}${mod}</em></span>
+        <button class="pol-stat-add" ${can ? '' : 'disabled'}
+          title="${can ? 'Вложить очко' : 'Свободных очков нет'}"
+          onclick="event.stopPropagation();chSpend('${k}')">+</button>
+      </div>
       <span class="pol-stat-bar"><i style="width:${w}%"></i></span>
-      <span class="pol-stat-v">${v}<em>${mod >= 0 ? '+' : ''}${mod}</em></span>
-      <button class="pol-stat-add" ${can ? '' : 'disabled'} onclick="event.stopPropagation();chSpend('${k}')">+</button>
+      <span class="pol-stat-for">${posts === '—'
+        ? 'ни один пост не читает'
+        : (v >= 12 ? 'работает на посту: ' : 'нужно 12 для поста: ') + esc(posts)}</span>
     </div>`;
   }).join('');
   return `<section class="pol-card pol-office">
     <div class="pol-office-hd">
+      ${fmFace(ch.slug, ch.name, 'fm-face--lg')}
       <span class="pol-ring" style="--p:${pct}"><b>${ch.lvl}</b><i>ур.</i></span>
       <span class="pol-office-id">
         <a href="#${esc(ch.slug)}" onclick="go('${esc(ch.slug)}');return false">${esc(ch.name)}</a>
@@ -513,18 +523,29 @@ function polCouncilTable() {
     const vacant = !!p.head;             // пост держит правитель — вполсилы
     const statNm = esc((FM_STAT_RU[p.stat] || [p.stat])[0]);
     const weak = p.stat_val < 12;
+    // Чью характеристику читает пост — видно в лицо, иначе цифра ничья.
+    const who = p.char_name || '—';
     return `<div class="pol-seat${vacant ? ' vacant' : ''}${weak ? ' weak' : ''}">
       <div class="pol-seat-hd">
         <b>${esc(p.title)}</b>
-        <span class="pol-seat-who">${(p.char_slug && !vacant)
-          ? `<a href="#${esc(p.char_slug)}" onclick="go('${esc(p.char_slug)}');return false">${esc(p.char_name || '—')}</a>`
-          : '<i>вакансия</i>'}</span>
+        ${vacant ? '<span class="pol-seat-who"><i>вакансия</i></span>' : ''}
       </div>
+      ${vacant
+        // Правителя не тиражируем восемь раз — про него сказано над столом.
+        ? `<div class="pol-seat-man pol-seat-man--vac"><i>держит правитель · вполсилы</i></div>`
+        : `<div class="pol-seat-man">
+            ${fmFace(p.char_slug, who)}
+            <span class="pol-seat-man-tx">
+              ${p.char_slug
+                ? `<a href="#${esc(p.char_slug)}" onclick="go('${esc(p.char_slug)}');return false">${esc(who)}</a>`
+                : `<b class="pol-mute">некому занять</b>`}
+              <i>назначен ко двору</i>
+            </span>
+          </div>`}
       <div class="pol-seat-meta">
-        <span class="pol-tag">${statNm} ${p.stat_val}</span>
+        <span class="pol-tag${weak ? ' warn' : ' good'}">${statNm} ${p.stat_val}</span>
         <span class="pol-tag">ур. ${p.lvl}</span>
         ${p.coverage < 1 ? `<span class="pol-tag warn">зона ${Math.round(p.coverage * 100)}%</span>` : ''}
-        ${vacant ? `<span class="pol-tag warn">держит правитель · вполсилы</span>` : ''}
       </div>
       <div class="pol-seat-gain">${gain || '<span class="pol-mute">характеристика ниже 12 — вклада нет</span>'}</div>
     </div>`;
@@ -533,6 +554,19 @@ function polCouncilTable() {
     <h3 class="pol-h">Совет державы${total ? `<span class="pol-h-sum">${total}</span>` : ''}</h3>
     <div class="pol-note">Пост читает одну характеристику того, кто его занимает. Территориальные посты считаются
       по охвату зоны ответственности. Адмирал и Маршал в бухгалтерию не идут — их вклад врезается в паспорт борта.</div>
+    ${(() => {
+      // Все вакансии закрывает правитель — говорим это один раз, а не на каждой карточке.
+      const vac = posts.filter(p => p.head);
+      const head = vac[0];
+      if (!head) return '';
+      return `<div class="pol-regent">
+        ${fmFace(head.char_slug, head.char_name)}
+        <span class="pol-regent-tx">
+          <b>${esc(head.char_name || '—')}</b> закрывает вакансии совета — ${vac.length} из ${posts.length}
+          <i>Пост, который держит правитель, даёт половину вклада. Назначьте людей ко двору — вклад станет полным.</i>
+        </span>
+      </div>`;
+    })()}
     ${posts.length ? `<div class="pol-seats">${seats}</div>`
       : '<div class="pol-empty">Совета нет: ни у вас, ни у служащих нет действующего персонажа.</div>'}
   </section>`;
