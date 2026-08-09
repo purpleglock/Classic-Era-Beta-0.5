@@ -31,6 +31,9 @@
      на время экрана замирает в нуле (html.vn-screen ниже). */
   .hp-vn-colony.show{
     position:fixed;inset:0;z-index:120;
+    /* десктоп открывает экран ОКНОМ (центровка через transform + тень-затемнение,
+       03_content.css) — на телефоне окно снова разворачивается во весь вьюпорт */
+    transform:none;box-shadow:none;
     width:100%;height:100vh;height:100dvh;max-height:100%;
     margin:0;border-radius:0;
     padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);

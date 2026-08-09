@@ -288,7 +288,9 @@
 .hp-vn-box{
   position:absolute;z-index:6;left:clamp(12px,3.5vw,40px);right:clamp(12px,3.5vw,40px);
   bottom:clamp(12px,3vh,24px);
-  padding:24px 24px 14px;cursor:pointer;
+  /* окно ниже: воздух внутри срезан почти вдвое — спрайт и обложка
+     должны оставаться видимыми, а не жить за диалогом */
+  padding:15px 20px 10px;cursor:pointer;
   overflow:visible;
   background:transparent;border:none;border-radius:0;
   /* без анимации появления — окно сразу на месте (не дёргается при перерендере) */
@@ -327,8 +329,8 @@
 .hp-vn-name::after{content:none}
 .hp-vn-text{
   font-family:'Inter','Rajdhani',sans-serif;
-  font-size:clamp(15px,1.75vw,18px);line-height:1.6;
-  color:var(--t1,#eaf4ff);min-height:2.4em;letter-spacing: calc(.005em * var(--deco-ls-mult, 1));
+  font-size:clamp(14px,1.55vw,16.5px);line-height:1.5;
+  color:var(--t1,#eaf4ff);min-height:1.5em;letter-spacing: calc(.005em * var(--deco-ls-mult, 1));
   text-shadow:0 1px 3px rgba(0,0,0,.7);
   white-space:pre-wrap;
 }
@@ -395,12 +397,12 @@
   position:relative;
   /* flex-wrap вместо грида: basis 190px + grow — каждый ряд заполняется целиком,
      кнопки внутри ряда равной ширины и высоты, нет рваного последнего ряда */
-  display:flex;flex-wrap:wrap;align-items:stretch;gap:9px;
-  margin-top:18px;padding-top:14px;
+  display:flex;flex-wrap:wrap;align-items:stretch;gap:7px;
+  margin-top:11px;padding-top:9px;
   border-top: var(--deco-frame-w, 1px) solid color-mix(in srgb,var(--gd,#3a9bdc) 32%, var(--w1,rgba(255,255,255,.06)));
   /* высота списка тянется за окном: на ноутбуке 13" остаётся прежние ~170px,
      на большом мониторе подменю из 7 пунктов влезает целиком без прокрутки */
-  max-height:clamp(150px,24vh,260px);overflow:auto;scrollbar-width:thin;
+  max-height:clamp(112px,18vh,196px);overflow:auto;scrollbar-width:thin;
 }
 /* короткая яркая засечка в начале разделителя — «здесь начинаются действия» */
 .hp-vn-choices::before{
@@ -420,8 +422,8 @@
   display:flex;align-items:center;justify-content:center;gap:10px;
   background:transparent;border:none;border-radius:0;
   clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
-  color:var(--t2,#b8c4cf);padding:11px 14px;text-align:center;
-  font-family: var(--font-display);font-size:clamp(13px,1.35vw,15px);font-weight:600;
+  color:var(--t2,#b8c4cf);padding:8px 12px;text-align:center;
+  font-family: var(--font-display);font-size:clamp(12.5px,1.25vw,14px);font-weight:600;
   letter-spacing: calc(.01em * var(--deco-ls-mult, 1));transition:color var(--duration-fast);
 }
 .hp-vn-choice::before{content:'';position:absolute;inset:0;z-index:-2;background:color-mix(in srgb,var(--gd,#3a9bdc) 30%,var(--w1,rgba(255,255,255,.06)))}
@@ -437,8 +439,8 @@
    это ответ персонажу, а за ним уже пульт с экранами. Три штуки в один ряд. */
 .hp-vn-choice-grp{
   flex:1 1 clamp(180px,30%,340px);
-  padding:14px 16px;color:var(--t1,#eaf4ff);
-  font-size:clamp(14px,1.5vw,16px);
+  padding:10px 14px;color:var(--t1,#eaf4ff);
+  font-size:clamp(13px,1.35vw,15px);
 }
 .hp-vn-choice-grp::before{background:color-mix(in srgb,var(--gd,#3a9bdc) 55%,var(--w1,rgba(255,255,255,.06)))}
 /* запись в списке (уровень 2) — герб/иконка + текст в одну строку с обрезкой */
@@ -464,13 +466,13 @@
 }
 /* Низкое окно (ландшафтный планшет, окно в пол-экрана): список не должен съедать реплику */
 @media (min-width:769px) and (max-height:640px){
-  .hp-vn-choices{max-height:132px;margin-top:12px;padding-top:10px}
-  .hp-vn-choice{padding:9px 12px}
-  .hp-vn-choice-grp{padding:11px 14px}
+  .hp-vn-choices{max-height:106px;margin-top:9px;padding-top:8px}
+  .hp-vn-choice{padding:7px 11px}
+  .hp-vn-choice-grp{padding:9px 13px}
 }
 /* Большой монитор: подменю из 7 пунктов ложится в два ряда без прокрутки */
 @media (min-width:1600px){
-  .hp-vn-choices{max-height:280px;gap:11px}
+  .hp-vn-choices{max-height:210px;gap:8px}
 }
 /* обёртка меню действий: на десктопе — сквозная, всё оформление на самом списке;
    приглашение «Что предпримете?» нужно только на телефоне (см. медиа) */
@@ -1181,6 +1183,28 @@
    собой: ни сайдбара поверх, ни прокрутки главной колесом. */
 :is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-research).show{
   position:fixed;inset:0;z-index:1600;border-radius:0;
+}
+/* ── ОКНО, А НЕ ВЕСЬ ЭКРАН (от планшета и шире) ────────────────────
+   Экран новеллы распахивался во весь вьюпорт: на 27" строки таблиц
+   растягивались через полтора метра стекла, а сама «сцена» переставала
+   читаться как окно поверх обложки. Теперь это центрированное окно с
+   потолком по ширине и высоте — на ноутбуке оно почти во весь экран,
+   на большом мониторе остаётся рамка воздуха.
+   Затемнение всего, что снаружи, — растянутой тенью (box-shadow с
+   огромным spread): отдельный слой-подложка тут не нужен, а ::before
+   уже занят арт-фоном. */
+@media (min-width:769px){
+  :is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-research).show{
+    inset:auto;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:min(1500px,94vw);height:min(940px,92vh);
+    box-shadow:0 0 0 100vmax rgba(4,6,10,.72), 0 28px 80px rgba(0,0,0,.6);
+  }
+}
+/* Крупный монитор: окно перестаёт расти вместе со стеклом. */
+@media (min-width:1700px){
+  :is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-research).show{
+    width:min(1500px,88vw);height:min(940px,86vh);
+  }
 }
 /* #pg — свой stacking context (z-index:2), поэтому z-index оверлея внутри него
    НЕ поднимает экран над сайдбаром (#sb z-index:60): сравниваются #pg и #sb, а

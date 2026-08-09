@@ -483,7 +483,10 @@
       "Bash(node tools/db_run.js _annex_chain_fix.sql)",
       "Bash(node tools/db_q.js \"select faction, union_origin, count\\(*\\) from map_systems where faction in \\('fac_26f25b449f','fac_085638a65d','fac_997c5c8b70','fac_edc69c8203'\\) group by 1,2\")",
       "Bash(node tools/db_q.js \"select s.faction sysowner, c.faction_id colowner, count\\(*\\) from colonies c join map_systems s on s.id=c.system_id where s.faction in \\('fac_26f25b449f','fac_085638a65d','fac_997c5c8b70','fac_edc69c8203'\\) group by 1,2 order by 1\")",
-      "Bash(node tools/db_q.js \"select faction_id,count\\(*\\) from faction_intel_guard where faction_id in \\('fac_26f25b449f','fac_997c5c8b70','fac_edc69c8203'\\) group by 1\")"
+      "Bash(node tools/db_q.js \"select faction_id,count\\(*\\) from faction_intel_guard where faction_id in \\('fac_26f25b449f','fac_997c5c8b70','fac_edc69c8203'\\) group by 1\")",
+      "Bash(sort -t: -k2 -rn)",
+      "Bash(node -e \"for\\(const f of ['css/03_content.css','css/29_vn_mobile.css']\\){const s=require\\('fs'\\).readFileSync\\(f,'utf8'\\);let d=0;for\\(const c of s\\){if\\(c=='{'\\)d++;if\\(c=='}'\\)d--;}console.log\\(f,d\\)}\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{let d=0;for\\(const c of s\\){if\\(c=='{'\\)d++;if\\(c=='}'\\)d--}console.log\\('HEAD',d\\)}\\)\")"
     ]
   }
 }
