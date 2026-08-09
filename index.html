@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260809mkgrid';
+  var BUILD = '20260809colonycity';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -449,7 +449,9 @@
 <script src="armor_system.js?v=20260607a"></script>
 	<script src="weapon_system.js?v=20260607a"></script>
 <script src="faction_system.js?v=20260703privacy"></script>
-<script src="render.js?v=20260809backfab5"></script>
+<!-- Процедурная панорама колонии: фон новеллы и экрана колонии (render.js _hvpCityBg). -->
+<script src="city_gen.js?v=20260809colonycity"></script>
+<script src="render.js?v=20260809colonycity"></script>
 <script src="editor.js?v=20260714budgetgate1"></script>
 <script src="character.js?v=20260809vnonly"></script>
 <script src="battlemap.js?v=20260607a"></script>
@@ -475,7 +477,7 @@
 <script src="turret_forge_ui.js?v=20260801turret1"></script>
 <script src="reactor_forge_ui.js?v=20260808rgtech"></script>
 <script src="faction_members.js?v=20260809vnonly"></script>
-<script src="economy.js?v=20260809mkgrid"></script>
+<script src="economy.js?v=20260809colonycity"></script>
 <!-- Экраны новеллы «Внутренняя»/«Внешняя политика»: рамка и прологи свои,
      тела разделов отдают economy.js (ecTab*) и faction_members.js (двор). -->
 <script src="politics.js?v=20260809vnonly"></script>

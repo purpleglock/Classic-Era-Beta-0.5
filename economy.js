@@ -1214,6 +1214,9 @@ async function ecLoadApp() {
     } catch (e) {}
   }
   EC.myAppUid = user.id;
+  // Фон новеллы — панорама столицы (render.js). Строится он до загрузки колоний,
+  // поэтому здесь его подменяем: раньше этого момента столицы просто нет.
+  try { if (typeof vnCityRepaint === 'function') vnCityRepaint(); } catch (e) {}
   return EC.app;
 }
 function ecCanAccess() { return !!(user && (ecIsStaff() || (EC.myAppUid === user.id && EC.app && EC.app.faction_id))); }
@@ -7107,10 +7110,14 @@ function ecOutpostPanelHtml() {
   const intel = EC.outpostIntel || [];
   const intelRows = intel.map(r => {
     const fl = r.fleet || {}, fo = r.forces || {};
+    // Срез — не хвост мелким текстом у правого края, а подписанные графы под именем.
+    const cell = (k, v) => `<span class="ec-op-int-cell"><span class="ec-op-int-k">${k}</span><span class="ec-op-int-v">${v}</span></span>`;
     const det = r.income
-      ? `доход: ${esc(r.income)} · флот: ${esc(fl.ships || '?')} кор., ${esc(fl.ground || '?')} назем. · армия: ${esc(fo.army || '—')}`
-      : 'данные собираются…';
-    return `<div class="ec-q-row"><span class="ec-r-name">🛰 ${esc(r.target_name || r.target_fid)}</span><span class="ec-hint">${det}</span></div>`;
+      ? cell('доход', esc(r.income))
+        + cell('флот', `${esc(fl.ships || '?')} кор. · ${esc(fl.ground || '?')} назем.`)
+        + cell('армия', esc(fo.army || '—'))
+      : `<span class="ec-hint">данные собираются…</span>`;
+    return `<div class="ec-q-row ec-op-int"><span class="ec-r-name">🛰 ${esc(r.target_name || r.target_fid)}</span><span class="ec-op-int-det">${det}</span></div>`;
   }).join('');
   // Носитель аванпоста — обычный корабль: строится на Корабельной Верфи. Доступные
   // системы постройки — те, где стоит своя Верфь (как и весь остальной флот).

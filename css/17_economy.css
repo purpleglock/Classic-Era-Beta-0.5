@@ -880,17 +880,41 @@
 .ec-meter-note { font-size: 10.5px; color: var(--t3); margin-top: 6px; }
 .ec-meter--full .ec-meter-note { color: var(--rd, #e5484d); }
 .ec-rbadge { display: inline-block; font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; color: var(--te); background: color-mix(in srgb, var(--te) 14%, transparent); border: var(--deco-frame-w, 1px) solid color-mix(in srgb, var(--te) 45%, transparent); border-radius: var(--radius-pill); padding: 1px 7px; margin-left: 4px; vertical-align: middle; }
-.ec-queue, .ec-roster { display: flex; flex-direction: column; gap: 6px; }
+.ec-queue, .ec-roster { display: flex; flex-direction: column; gap: 0; }
 /* Строки-списки: перенос по умолчанию. Без него длинный хвост (.ec-hint, цифры,
    кнопки) не даёт ужаться имени — блок имени схлопывается в ноль, а его текст
    вылезает поверх хвоста (наложение). Перенос включается только когда не влезло. */
-.ec-q-row, .ec-r-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; background: var(--b2); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); padding: 8px 12px; }
+/* Не плашка, а СТРОКА ВЕДОМОСТИ: заливка и рамка сняты (стопка синих боксов
+   рябила), разделяет волосяная линия снизу. Мера строки ограничена — на широком
+   мониторе имя и хвост больше не разъезжаются на два метра по краям. */
+.ec-q-row, .ec-r-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px;
+  background: transparent; border: 0; border-bottom: 1px solid var(--w1);
+  border-radius: 0; padding: 7px 2px;
+  max-width: var(--ec-row-measure, 900px);
+}
+.ec-q-row:hover, .ec-r-row:hover { background: color-mix(in srgb, var(--b2) 55%, transparent); }
+/* Последняя строка списка не рисует «висящую» линию под собой. */
+.ec-queue > .ec-q-row:last-child, .ec-roster > .ec-r-row:last-child,
+.ec-q-row:last-child, .ec-r-row:last-child { border-bottom-color: transparent; }
 .ec-q-row .ec-r-name, .ec-r-name { flex: 1 1 180px; min-width: 0; color: var(--t1); font-size: 13px; overflow-wrap: anywhere; }
+/* Заголовки списков живут в той же мере, что и строки — колонка читается единой. */
+.ec-sub-title { max-width: var(--ec-row-measure, 900px); }
 /* Хвост строки тоже обязан ужиматься и переноситься, а не распирать строку. */
 .ec-q-row > *, .ec-r-row > * { min-width: 0; }
 .ec-q-row > .ec-hint, .ec-r-row > .ec-hint { overflow-wrap: anywhere; }
 /* Развёрнутый аванпост-добыча: режим-кнопка справа, селектор ресурса — отдельной строкой снизу. */
 .ec-q-row.ec-op-row { flex-wrap: wrap; }
+/* Разведсводка: имя державы слева, срез — подписанными графами, а не хвостом. */
+.ec-op-int .ec-r-name { flex: 0 1 220px; }
+.ec-op-int-det { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 4px 18px; justify-content: flex-end; }
+.ec-op-int-cell { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.ec-op-int-k { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: calc(.08em * var(--deco-ls-mult, 1)); text-transform: uppercase; color: var(--t3); }
+.ec-op-int-v { font-size: 12px; color: var(--t2); overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .ec-op-int .ec-r-name { flex: 1 1 100%; }
+  .ec-op-int-det { justify-content: flex-start; gap: 2px 14px; }
+}
 .ec-op-respick { flex-basis: 100%; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t2); margin-top: 2px; }
 .ec-op-respick .ec-op-res { flex: 1; min-width: 0; max-width: 260px; background: var(--b1); color: var(--t1); border: var(--deco-frame-w, 1px) solid var(--w2); border-radius: var(--radius-sm); padding: 3px 6px; font-size: 12px; }
 .ec-q-t { font-size: 11px; color: var(--te); font-family: var(--font-mono); }

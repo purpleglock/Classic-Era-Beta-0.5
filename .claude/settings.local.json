@@ -457,7 +457,13 @@
       "Bash(node -e \"const c=require\\('fs'\\).readFileSync\\('css/03_content.css','utf8'\\);let d=0;for\\(const ch of c\\){if\\(ch==='{'\\)d++;if\\(ch==='}'\\)d--;}console.log\\('baseline',d\\)\")",
       "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('economy.js','utf8'\\)\\);console.log\\('ok'\\)\")",
       "Bash(awk 'NR>=1 && NR<=900{if\\(/@media/\\)m=NR; if\\(/^}/ && m\\)  ; }  ' css/17_economy.css)",
-      "Bash(node tools/db_run.js sql/_brandbook_surface_ramp.sql)"
+      "Bash(node tools/db_run.js sql/_brandbook_surface_ramp.sql)",
+      "Bash(ls \"/c/Program Files/Google/Chrome/Application/chrome.exe\" \"/c/Program Files \\(x86\\)/Microsoft/Edge/Application/msedge.exe\" 2>/dev/null)",
+      "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless=new --disable-gpu --hide-scrollbars --window-size=1600,640 --screenshot=shot_city.png --default-background-color=00000000 \"file:///C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/ea0f57e7-dd1e-4af3-9b74-2f64a6b23596/scratchpad/city_v3.svg\")",
+      "Bash(grep -n \"^function \\\\|^const \\\\|^  function \\\\|=> *{$\" city_gen.js)",
+      "Bash(sed -i 's|'\\\\''./city_gen.js'\\\\''|'\\\\''C:/Users/Андрей/Desktop/Classic-Era-Beta-0.5/city_gen.js'\\\\''|' __TRACKED_VAR__/t.js)",
+      "Bash(node __TRACKED_VAR__/t.js)",
+      "Bash(node --check city_gen.js)"
     ]
   }
 }

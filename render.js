@@ -2602,9 +2602,13 @@ function buildHeroVN(coverUrl, user) {
   if (!items.length) return null;
 
   const url = (coverUrl || '').trim();
-  const bgLayer = url
+  // Фон новеллы — панорама СТОЛИЦЫ: справа оставлена полоса под спрайт девочки
+  // (charZone), иначе фасады лезут ей за спину и силуэт пропадает. Пока EC не
+  // загрузился, столицы нет — тогда обычная обложка, а vnCityRepaint() подменит
+  // слой, как только колонии приедут.
+  const bgLayer = _vnCityLayer() || (url
     ? `<img class="hp-hero-img" src="${esc(url)}" alt="" loading="eager">`
-    : `<div class="hp-hero-noimg"></div>`;
+    : `<div class="hp-hero-noimg"></div>`);
   // Спрайт-слой: контейнер с несколькими спрайтами (для поддержки 1-4 персонажей одновременно).
   const first = items[0];
   let spriteHtml = '';
@@ -5360,6 +5364,7 @@ let _heroVNStop = null;
 let _heroVNResume = null;   // { sig, idx } — позволяет продолжить idle-новеллу после перерисовки, а не начинать заново
 let _heroVNCtl = null;      // контроллер активной новеллы: narrate / reset / speaker (для выбора в окне)
 function heroVNInit() {
+  try { vnCityBoot(); } catch (e) {}                       // фон новеллы = панорама столицы
   if (_heroVNStop) { try { _heroVNStop(); } catch (e) {} _heroVNStop = null; }
   const box  = document.getElementById('hp-vn-box');
   const out  = document.getElementById('hp-vn-text');
@@ -9440,7 +9445,100 @@ function _hvpDrawBelt(cv, url) {
 }
 // Фон планеты: персональный арт по pid (bg_p<pid>.webp) поверх классового (bg_<look>.webp).
 // onerror каскадом откатывает personal → класс → чистый градиент (CSS-класс look).
+// ── Процедурная панорама колонии (city_gen.js) ───────────────
+// Фон экрана колонии и новеллы рисуется ИЗ ДАННЫХ, а не тянется картинкой:
+// сколько народу — столько домов, что построил игрок — то и стоит на горизонте.
+// Ручной арт остаётся фолбэком: если city_gen.js не загрузился, всё как было.
+const HVP_CITY_KIND = {                                   // btype → постройка сцены
+  doomgun: 'arty', nemesis: 'station', starbase: 'station',      // это — на орбите
+  abm: 'abm', flak: 'shield', shipyard: 'shipyard',
+  airfield: 'spaceport', trade: 'spaceport',
+  military_factory: 'factory', ballfab: 'factory', shellforge: 'factory',
+  factory: 'factory', goodsfab: 'factory', warehouse: 'factory',
+  training: 'factory', intel: 'factory',
+  mining: 'mine', mining_deep: 'mine', mining_exotic: 'mine',
+  science: 'reactor', sci_giant: 'reactor', sci_anomaly: 'reactor',
+  temple: 'temple', wellhub: 'palace'
+};
+const HVP_CITY_ATMO = { terran: 'terra', ocean: 'ocean', ice: 'ice', lava: 'arid', gas: 'toxic', rock: 'void' };
+// Сид от pid планеты: один и тот же мир обязан выглядеть одинаково при каждом
+// заходе (та же логика, что у [[planet-pid-identity]]).
+function _hvpCitySeed(c) {
+  const s = String((c && (c.planet_pid || c.id)) || 'x');
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function _hvpCityOpts(c, extra) {
+  const blds = (typeof EC !== 'undefined' && EC.buildings || []).filter(b => b.colony_id === c.id);
+  const kinds = [];
+  blds.forEach(b => { const k = HVP_CITY_KIND[b.btype]; if (k && kinds.indexOf(k) < 0) kinds.push(k); });
+  if (c.is_capital && kinds.indexOf('palace') < 0) kinds.unshift('palace');
+  // Население берём по системе (EC.spatial — единственный источник, где оно есть);
+  // если пусто — оцениваем по числу построек, чтобы пустая колония не выглядела
+  // мегаполисом.
+  const sp = (typeof EC !== 'undefined' && EC.spatial && EC.spatial[c.system_id]) || null;
+  const pop = sp && +sp.pop ? +sp.pop : Math.max(0.5, blds.length * 6);
+  const app = (typeof EC !== 'undefined' && EC.app) || null;
+  return Object.assign({
+    seed: _hvpCitySeed(c),
+    atmo: HVP_CITY_ATMO[_hvpLook(c)] || 'crimson',
+    pop: pop,
+    built: kinds.slice(0, 6),
+    flag: app && (app.color || app.herald_url)
+      ? { a: app.color || '#c1121a', b: '#f2f2f0', href: app.herald_url || app.image_url || '' } : null,
+    star: { dist: 0.55 }
+  }, extra || {});
+}
+function _hvpCityBg(c, cls, w, h, extra) {
+  if (typeof CG === 'undefined' || !CG || typeof CG.scene !== 'function') return '';
+  let svg = '';
+  try { svg = CG.scene(_hvpCityOpts(c, Object.assign({ w: w || 1600, h: h || 620 }, extra || {}))); } catch (e) { return ''; }
+  return `<div class="${cls} hvp-city" aria-hidden="true">${svg}</div>`;
+}
+
+// Столица державы для фона новеллы: помеченная колония, иначе самая застроенная.
+function _vnCapital() {
+  const cols = (typeof EC !== 'undefined' && EC.colonies) || [];
+  if (!cols.length) return null;
+  return cols.find(c => c.is_capital) || cols.slice().sort((a, b) =>
+    ((EC.buildings || []).filter(x => x.colony_id === b.id).length)
+    - ((EC.buildings || []).filter(x => x.colony_id === a.id).length))[0] || null;
+}
+function _vnCityLayer() {
+  const c = _vnCapital();
+  if (!c) return '';
+  return _hvpCityBg(c, 'hp-hero-img', 1600, 590, { charZone: [0.6, 0.9] })
+    .replace('<div class="hp-hero-img', '<div id="hp-hero-city" class="hp-hero-img');
+}
+// ⚠️ Главная НЕ вызывает ecLoadApp сама: без этого колоний в памяти нет никогда,
+// панорама не строится и на экране остаётся старая обложка. Поэтому подтягиваем
+// данные сами — один раз за загрузку страницы, в фоне, молча.
+let _vnCityBooted = false;
+function vnCityBoot() {
+  if (_vnCityBooted) return;
+  if (typeof CG === 'undefined' || !CG) return;            // генератор не подключён
+  _vnCityBooted = true;
+  if (_vnCapital()) { vnCityRepaint(); return; }           // данные уже есть
+  if (typeof ecLoadApp !== 'function') return;
+  Promise.resolve().then(ecLoadApp).then(() => vnCityRepaint()).catch(() => {});
+}
+// Перерисовка фона новеллы после того, как приехали колонии (ecLoadApp).
+function vnCityRepaint() {
+  const cover = document.getElementById('hp-hero-cover');
+  if (!cover || !cover.classList.contains('hp-vn')) return;
+  const html = _vnCityLayer();
+  if (!html) return;
+  const old = cover.querySelector('#hp-hero-city, .hp-hero-img, .hp-hero-noimg');
+  if (!old) return;
+  const box = document.createElement('div');
+  box.innerHTML = html;
+  old.replaceWith(box.firstChild);
+}
+
 function _hvpBgImg(c, cls) {
+  const gen = _hvpCityBg(c, cls);
+  if (gen) return gen;                                    // панорама вместо картинки
   const look = _hvpLook(c);
   const byClass = HVP_ART + 'bg_' + look + '.webp';
   const personal = (c.planet_pid != null && c.planet_pid !== '') ? HVP_ART + 'bg_p' + c.planet_pid + '.webp' : '';

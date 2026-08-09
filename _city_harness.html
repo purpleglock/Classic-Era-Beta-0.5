@@ -1,0 +1,54 @@
+<!doctype html><meta charset="utf-8">
+<title>Проверка: сцена колонии</title>
+<style>
+body{margin:0;background:#0b0e12;color:#c8c5bc;font:14px/1.4 system-ui}
+#bar{padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #1d2833}
+#bar button,#bar input,#bar select{background:#262b30;color:#c8c5bc;border:1px solid #414850;padding:6px 11px}
+#bar button{cursor:pointer}
+#bar input[type=color]{padding:2px;width:44px}
+#bar input[type=range]{padding:0;width:130px}
+#city svg,#one svg{display:block;width:100%;height:auto}
+#one{display:flex;gap:12px;padding:12px 14px;flex-wrap:wrap}
+#one svg{width:auto;height:230px}
+.hint{padding:6px 14px;color:#7e8894;font-size:12px}
+</style>
+<div id="bar">
+  <label>сид <input id="seed" size="8" value="1234"></label>
+  <label>небо <select id="atmo"></select></label>
+  <label>население <input id="pop" type="range" min="0" max="3.7" step="0.05" value="2"> <b id="popv"></b> тыс.</label>
+  <label>звезда <input id="dist" type="range" min="0" max="1" step="0.02" value="0.55"></label>
+  <label><input type="checkbox" id="charz"> место под персонажа</label>
+  <label><input type="checkbox" id="lab"> подписи</label>
+  <label>флаг <input id="fa" type="color" value="#c1121a"><input id="fb" type="color" value="#f2f2f0"></label>
+  <button onclick="draw()">Перерисовать</button>
+  <button onclick="seed.value=(Math.random()*1e9|0);draw()">Другая колония</button>
+  <button onclick="save()">Скачать SVG</button>
+</div>
+<div class="hint">Один сид → одна и та же колония. Ниже — постройки игрока поштучно, в общем масштабе кадра (человек ≈ 0.6% высоты).</div>
+<div id="city"></div>
+<div id="one"></div>
+<script src="city_gen.js"></script>
+<script>
+const BUILT=['abm','shipyard','reactor','palace'];
+atmo.innerHTML=Object.keys(CG.ATMO).map(k=>'<option>'+k+'</option>').join('');
+function draw(){
+  const p=Math.round(Math.pow(10,+pop.value));popv.textContent=p;
+  const o={seed:parseInt(seed.value,10)||1,w:1600,h:640,atmo:atmo.value,pop:p,
+    built:BUILT,labels:lab.checked,
+    star:{dist:+dist.value},
+    flag:{a:fa.value,b:fb.value,emblem:'✶'},
+    charZone:charz.checked?[0.58,0.86]:null};
+  city.innerHTML=CG.scene(o);
+  // Каждая постройка отдельно — проверяем силуэт и что фигурки у подножия на месте.
+  one.innerHTML=Object.keys(CG.KINDS).map((k,i)=>'<figure style="margin:0;text-align:center;color:#7e8894;font-size:11px">'
+    +CG.scene({seed:o.seed+i*31,w:420,h:560,atmo:atmo.value,pop:12,built:[k],layers:2,
+      flag:{a:fa.value,b:fb.value}})
+    +'<figcaption>'+CG.KINDS[k]+'</figcaption></figure>').join('');
+}
+function save(){
+  const b=new Blob([city.innerHTML],{type:'image/svg+xml'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='colony_'+seed.value+'.svg';a.click();
+}
+[seed,atmo,pop,dist,charz,lab,fa,fb].forEach(e=>e.addEventListener('input',draw));
+draw();
+</script>

@@ -42,6 +42,16 @@
       "port": 8142
     },
     {
+      "name": "city-gen",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8151"
+      ],
+      "port": 8151
+    },
+    {
       "name": "ios-back",
       "runtimeExecutable": "python",
       "runtimeArgs": [
