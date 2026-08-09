@@ -239,6 +239,8 @@ function polPrologue(key, def) {
 function polFold(key) {
   POL.seen[key] = !POL.seen[key];
   polRefresh(); dipRefresh();
+  // Прологи одни на все экраны новеллы — сворачивать их умеет и хозяйство.
+  if (typeof estRefreshOpen === 'function') estRefreshOpen();
 }
 
 // ── Главы раздела ──────────────────────────────────────────────

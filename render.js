@@ -2643,6 +2643,12 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-colony hp-vn-geo hp-vn-intel" id="hp-vn-intel" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-pol" id="hp-vn-pol" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-dip" id="hp-vn-dip" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-mine" id="hp-vn-mine" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-trade" id="hp-vn-trade" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-exch" id="hp-vn-exch" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-army" id="hp-vn-army" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-stat" id="hp-vn-stat" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-press" id="hp-vn-press" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2830,6 +2836,15 @@ function heroVNMenuGroups(en) {
     ['dipl',     (en ? 'Foreign policy' : 'Внешняя политика')],
     ['colony',   (en ? 'Colonization' : 'Колонизация')],
     ['planets',  (en ? 'Colony management' : 'Управление колониями')],
+    // Остаток кабинета (estate.js): добыча и биржа — свои двери, потому что это
+    // два самых длинных разговора; армия и её стройка — одна дверь, потому что
+    // это один разговор, разорванный вкладками надвое.
+    ['mine',     (en ? 'Resource extraction' : 'Добыча ресурсов')],
+    ['trade',    (en ? 'Trade' : 'Торговля')],
+    ['exch',     (en ? 'Exchange' : 'Биржа')],
+    ['army',     (en ? 'Armed forces' : 'Вооружённые силы')],
+    ['stat',     (en ? 'Statistics' : 'Статистика державы')],
+    ['press',    (en ? 'Realm herald' : 'Вестник державы')],
     ['research', (en ? 'Research' : 'Исследования')],
     // Разведка живёт только здесь: вкладка кабинета снесена, весь тайный
     // блок (агентура / операции / досье / контрразведка) — этот экран.
@@ -2886,6 +2901,20 @@ function heroVNBack(kind) {
   } catch (e) {}
   heroVNChoice(to);
 }
+// Переход на ЛЮБОЙ экран новеллы откуда угодно (двери кабинета, ссылки внутри
+// разделов). Новелла на главной поднимается асинхронно, поэтому ждём контроллер,
+// а не стреляем в пустоту фиксированным setTimeout (polGoto/estGoto — частные
+// случаи этого же; они старше и оставлены как есть).
+function heroVNGoto(kind) {
+  if (typeof go === 'function' && typeof curSlug !== 'undefined' && curSlug !== 'home') go('home', false);
+  let tries = 0;
+  const tick = () => {
+    if (_heroVNCtl && document.getElementById('hp-vn-box')) { try { heroVNChoice(kind); } catch (e) {} return; }
+    if (++tries > 40) { if (typeof toast === 'function') toast('Экран доступен на главной, в меню новеллы', 'inf'); return; }
+    setTimeout(tick, 80);
+  };
+  setTimeout(tick, 60);
+}
 function heroVNChoice(kind) {
   if (!_heroVNCtl) return;
   const en = (typeof lang !== 'undefined' && lang === 'en');
@@ -2903,8 +2932,24 @@ function heroVNChoice(kind) {
   // Экраны политики живут в собственных оверлеях — гасим их при уходе куда угодно.
   if (kind !== 'ipol' && typeof polClose === 'function') polClose();
   if (kind !== 'dipl' && typeof dipClose === 'function') dipClose();
+  // То же для экранов хозяйства (добыча/торговля/биржа/армия/статистика): один
+  // вызов вместо пяти веток — гасит всё, кроме того, куда идём.
+  if (typeof estCloseAll === 'function') estCloseAll(kind);
   if (kind === 'ipol') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); polOpen(); return; }
   if (kind === 'dipl') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); dipOpen(); return; }
+  // Хозяйство: экраны на одном каркасе (estate.js) — одна ветка на всех. Список
+  // берём из САМОГО реестра, а не перечислением: иначе новый экран (так было с
+  // «Вестником державы») есть в меню, но сюда не доходит и просто не открывается.
+  const _estScr = (typeof EST_SCR === 'object' && EST_SCR)
+    ? Object.keys(EST_SCR).filter(k => EST_SCR[k].view === kind)[0] : null;
+  if (_estScr) {
+    _heroVNCat = null;
+    heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose();
+    heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();
+    heroVNSinliClose(); heroVNTamaClose();
+    estOpen(_estScr);
+    return;
+  }
   if (kind === 'intel') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); heroVNIntelOpen(); return; }
   if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); _heroVNCtl.menu(); return; }
 

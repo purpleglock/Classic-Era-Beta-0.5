@@ -1,0 +1,55 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<title>harness: боевой состав</title>
+<link rel="stylesheet" href="css/index.css">
+<style>body{background:var(--b1,#0b1018);padding:24px;}#out{max-width:1180px;margin:0 auto}</style>
+</head><body><div id="out"></div>
+<script>
+// Заглушки окружения экономики — харнесс проверяет ТОЛЬКО вёрстку состава.
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function ecNum(n){return new Intl.NumberFormat('ru').format(Math.round(+n||0));}
+function ecIntro(ic,t,x,h){return `<div class="ec-intro"><div class="ec-intro-hd"><span class="ec-intro-ic">${ic}</span><b>${esc(t)}</b></div><div class="ec-intro-tx">${x}</div></div>`;}
+function ecPaintCabinet(){document.getElementById('out').innerHTML=ecTabForces();}
+function ecArmyPanelHtml(){return '<div class="ec-empty" style="padding:8px">— панель армий —</div>';}
+function ecFleetSectionHtml(){return '';}
+function ecShowUnitSpecs(){}
+function ecUnitScrap(){}
+function bbHullSvg(cls){
+  const w={corvette:[1,6,23,6],dreadnought:[0,6,24,6]}[cls]||[1,6,23,6];
+  return `<svg class="bb-sil" viewBox="0 0 24 12"><path d="M1 6 L8 1.5 L23 6 L8 10.5 Z" fill="rgba(90,220,240,.10)" stroke="var(--bbc)" stroke-width="1.1" vector-effect="non-scaling-stroke"/></svg>`;
+}
+const D=(id,name,cat,cls,on,cost)=>({id,name,category:cat,data:{class:cls},summary:{on,cost}});
+const EC={
+  designs:[
+    D('u1','Грави-транспорт','ground','btr',2,450),
+    D('u2','Штурмовой шагоход «Крупеллярий»','ground','tanki',6,1500),
+    D('u3','Пехотное звено «Секира»','ground','peh',1,120),
+    D('u4','Перехватчик «Осока»','aviation','dron',1,60),
+    D('u5','Пан-колониальный фрахтовщик «Лорелея»','ship','corvette',2,10000),
+    D('u6','1','ship','destroyer',6,50000),
+    D('u7','2','ship','battleship',10,900000),
+    D('u8','Вальсирующий','ship','dreadnought',12,4000000),
+    D('u9','Орбитальная крепость «Кром»','ship','ss13',8,2500000),
+  ],
+  roster:[
+    {unit_id:'u1',unit_name:'Грави-транспорт',category:'ground',qty:13},
+    {unit_id:'u2',unit_name:'Штурмовой шагоход «Крупеллярий»',category:'ground',qty:4},
+    {unit_id:'u3',unit_name:'Пехотное звено «Секира»',category:'ground',qty:120},
+    {unit_id:'u4',unit_name:'Перехватчик «Осока»',category:'aviation',qty:22},
+    {unit_id:'u5',unit_name:'Пан-колониальный фрахтовщик «Лорелея»',category:'ship',qty:62},
+    {unit_id:'u6',unit_name:'1',category:'ship',qty:1},
+    {unit_id:'u7',unit_name:'2',category:'ship',qty:1},
+    {unit_id:'u8',unit_name:'Вальсирующий',category:'ship',qty:1},
+    {unit_id:'u9',unit_name:'Орбитальная крепость «Кром»',category:'ship',qty:3},
+    {unit_id:'uX',unit_name:'Трофейный катер',category:'ship',qty:2},
+  ],
+  queue:[{qty:5}],
+};
+fetch('economy.js').then(r=>r.text()).then(src=>{
+  const a=src.indexOf('// ── Иконографика состава');
+  const mark='${formHtml}</div>`;';
+  const b=src.indexOf(mark,a);
+  const code=src.slice(a,src.indexOf('}',b+mark.length)+1);
+  (0,eval)(code.replace(/^const (EC_FB|EC_FB_CLS|EC_ICO)/mg,'var $1'));
+  document.getElementById('out').innerHTML=ecTabForces();
+});
+</script></body></html>

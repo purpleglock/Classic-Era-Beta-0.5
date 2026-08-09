@@ -10,7 +10,7 @@
 //             auth.js (user), faction_reg.js (frReadable)
 // ════════════════════════════════════════════════════════════
 
-const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], projects: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], dossiers: [], alerts: [], passive: {}, tab: 'overview', _busy: false, openColony: null, openSys: null, spyTarget: null, spyOp: 'recon_basic', spyAgents: 1 };
+const EC = { app: null, myAppUid: null, fid: null, eco: null, colonies: [], buildings: [], systems: [], designs: [], roster: [], queue: [], projects: [], allSystems: [], lanes: [], factions: [], routes: [], loans: [], missions: [], dossiers: [], alerts: [], passive: {}, tab: 'colonies', _busy: false, openColony: null, openSys: null, spyTarget: null, spyOp: 'recon_basic', spyAgents: 1 };
 // ── Индикатор ожидания сервера ───────────────────────────────
 // EC.busy выставляется true в начале почти каждого серверного действия
 // (постройка/улучшение/производство/исследование…) и false в конце.
@@ -2443,6 +2443,8 @@ async function ecReloadPaint() {
   // ⚖🕊 Экраны политики — на тех же данных EC (+ состав державы из FM).
   if (typeof polRefresh === 'function') polRefresh();
   if (typeof dipRefresh === 'function') dipRefresh();
+  // ⛏🚛📊⚔🧮 Экраны хозяйства — тела те же ecTab*, данные те же EC.
+  if (typeof estRefreshOpen === 'function') estRefreshOpen();
 }
 
 // ── Превью дохода (зеркало RPC) ─────────────────────────────
@@ -3522,35 +3524,12 @@ function ecIntro(icon, title, text, hints) {
 function ecPaintCabinet() {
   ecDepRawReset();   // ⛏ кэш сырых сумм по залежам — пересобрать на свежих постройках
   const col = ecReadable(EC.app.color);
-  // Кабинет — хозяйство: стройка, войска, наука, ресурсы, сводки. ВЛАСТЬ уехала
-  // в новеллу (politics.js): двор, благополучие, курс, вера, война — «Внутренняя
-  // политика», дипломатия и аванпосты — «Внешняя». Диспетчер ниже эти EC.tab
-  // по-прежнему понимает: старые ссылки внутри кабинета не ломаются.
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['flows', '⛏', 'Ресурсы и торговля'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
-  // Длань Неотвратимости — отдельная вкладка-пульт, появляется когда орудие доступно
-  // (исследование открыто или орудие уже стоит).
-  if (ecDoomUnlocked()) tabs.splice(6, 0, ['doom', '🜨', 'Длань Неотвратимости']);
-  // Дверь во власть: одна кнопка из кабинета в новеллу, чтобы игрок не искал,
-  // куда делся «Двор». Заявки ко двору показываем счётчиком прямо на ней.
-  const _inbox = (typeof FM === 'object' && FM.me && FM.me.is_owner && !EC.actAs) ? (+FM.me.inbox || 0) : 0;
-  const polDoor = `<button class="ec-tab ec-tab-pol" onclick="polGoto('ipol')" title="Двор, благополучие, курс державы, вера и война переехали в новеллу"><span class="ec-tab-ic">⚖</span><span class="ec-tab-l">Политика${_inbox ? ` · ${_inbox}` : ''}</span></button>`;
-  const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('') + polDoor;
-  const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
-    : EC.tab === 'milbuild' ? ecTabMilBuild()
-    : EC.tab === 'outposts' ? ecTabOutposts()
-    : EC.tab === 'research' ? ecTabResearch() : EC.tab === 'territory' ? ecTabTerritory()
-    : EC.tab === 'welfare' ? ecTabWelfare()
-    : EC.tab === 'policy' ? ecTabPolicy()
-    : EC.tab === 'trade' ? ecTabFlows()   // легаси-ссылки: «Торговля» слита в «Потоки»
-    : EC.tab === 'flows' ? ecTabFlows()
-    : EC.tab === 'exchange' ? ecTabExchange()
-    : EC.tab === 'war' ? ecTabWar()
-    : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'faith' ? ecTabFaith()
-    : EC.tab === 'raids' ? ecTabFlows()   // легаси-ссылки на удалённую вкладку «Рейды» → в «Ресурсы и торговля» (там торговая политика)
-    : EC.tab === 'doom' ? ecTabDoom()
-    : EC.tab === 'court' ? ecTabCourt()
-    : EC.tab === 'achievements' ? ecTabAchievements()
-    : EC.tab === 'news' ? ecTabNews() : ecTabColonies();
+  // ВКЛАДОК БОЛЬШЕ НЕТ. Кабинет был свалкой из полутора десятков ведомостей;
+  // весь его смысл уехал в новеллу: власть — politics.js, хозяйство — estate.js,
+  // колонии/колонизация/наука/Длань — свои экраны новеллы. Здесь остался
+  // ПРЕДБАННИК: герб, казна и двери. Дублировать тела в двух местах нельзя —
+  // игрок перестаёт понимать, где правда.
+  const body = ecCabinetDoors();
   const img = (EC.app && (EC.app.herald_url || EC.app.image_url)) || '';
   const coverBg = img
     ? `<img class="ec-cover-img" src="${esc(img)}" alt=""><div class="ec-cover-fade"></div>`
@@ -3584,36 +3563,51 @@ function ecPaintCabinet() {
         ${ecTreasuryHtml()}
       </div>
     </div>
-    <div class="ec-tabs">${tabsHtml}</div>
     <div class="ec-tabbody">${body}</div>
   </div>`);
-  // На телефоне лента вкладок скроллится — подвинем активную вкладку в центр обзора
-  try {
-    const tabsEl = document.querySelector('.ec-tabs'), onTab = tabsEl && tabsEl.querySelector('.ec-tab.on');
-    if (tabsEl && onTab && tabsEl.scrollWidth > tabsEl.clientWidth) {
-      tabsEl.scrollLeft = onTab.offsetLeft - tabsEl.clientWidth / 2 + onTab.clientWidth / 2;
-    }
-  } catch (e) {}
-  if (EC.tab === 'trade') { try { ecCvSync(); } catch (e) {} } // флот каравана → объём/эскорт + живой расчёт
-  if (EC.tab === 'research') {
-    ecResearchDrain();  // немедленно заполнить свободные слоты из очереди
-    ecTreeBind();       // пан/зум холста + drag-редактор раскладки (staff)
-  }
-  // Новости: контейнер уже в DOM — дозаполняем асинхронно (как в faction_news.js)
-  if (EC.tab === 'news') {
-    const mount = document.getElementById('ec-news-mount');
-    if (mount && typeof fnRenderNewsTab === 'function') { fnRenderNewsTab(mount); }
-  }
-  // Панель «Ресурсы»: наматываем текстуры планет на диски-сферы
-  if (EC.tab === 'flows' && (EC.flowSub || 'resources') === 'resources') {
-    try { ecDrawPlanetSpheres(); } catch (e) {}
-  }
 }
+
+// ── Предбанник: одни двери, ни одной ведомости ─────────────────
+// Плитка = разговор. Порядок — по тому, как в державе живут: сперва земля и
+// люди, потом деньги, потом сила, потом слово. Экраны живут в новелле на
+// главной, сюда игрок заходит за казной и дверью, а не за таблицами.
+function ecCabinetDoors() {
+  const _inbox = (typeof FM === 'object' && FM.me && FM.me.is_owner && !EC.actAs) ? (+FM.me.inbox || 0) : 0;
+  const D = [
+    ['⚖', 'Внутренняя политика', 'двор, благополучие, курс державы, вера', `polGoto('ipol')`, _inbox],
+    ['🕊', 'Внешняя политика', 'границы, война, союзы, кредиты, аванпосты', `polGoto('dipl')`, 0],
+    ['🌍', 'Колонизация', 'захват систем и заселение планет', `heroVNGoto('colony')`, 0],
+    ['🏗', 'Управление колониями', 'застройка планет, ячейки и слоты', `heroVNGoto('planets')`, 0],
+    ['⛏', 'Добыча ресурсов', 'залежи, рабочие, концессии', `estGoto('mine')`, 0],
+    ['🚛', 'Торговля', 'караваны, рынок, обмен', `estGoto('trade')`, 0],
+    ['📊', 'Биржа', 'организации, заказы, деривативы', `estGoto('exch')`, 0],
+    ['⚔', 'Вооружённые силы', 'состав войск и военпром', `estGoto('army')`, 0],
+    ['🔬', 'Исследования', 'древо технологий и очередь', `heroVNGoto('research')`, 0],
+    ['🕵', 'Разведуправление', 'агентура, операции, досье', `heroVNGoto('intel')`, 0],
+    ['🧮', 'Статистика державы', 'роспись дохода и достижения', `estGoto('stat')`, 0],
+    ['📰', 'Вестник державы', 'новости от лица государства', `estGoto('press')`, 0],
+  ];
+  if (ecDoomUnlocked()) D.splice(8, 0, ['🜨', 'Длань Неотвратимости', 'протокол последнего довода', `heroVNGoto('doom')`, 0]);
+  const cards = D.map(([ic, nm, sub, fn, n]) => `<button class="ec-door" type="button" onclick="${fn}">
+      <span class="ec-door-ic">${ic}</span>
+      <span class="ec-door-tx"><b>${esc(nm)}</b><i>${esc(sub)}</i></span>
+      ${n ? `<span class="ec-door-n">${n}</span>` : '<span class="ec-door-arr">↗</span>'}
+    </button>`).join('');
+  return `<div class="ec-door-note">Управление державой живёт в разговоре на главной — здесь только казна и двери.
+      Любая плитка открывает свой экран новеллы.</div>
+    <div class="ec-doors">${cards}</div>`;
+}
+// ВКЛАДОК НЕТ — есть экраны новеллы. ecSetTab остался единственной точкой,
+// куда стреляют сотни старых ссылок в текстах («постройте во вкладке Колонии»),
+// поэтому он не рисует вкладку, а ОТКРЫВАЕТ нужный экран и его раздел.
 function ecSetTab(t) {
-  // Разведка уехала из кабинета в новеллу («Разведуправление»): старые ссылки
-  // (обзор, война, караваны) открывают экран новеллы, а не пустую вкладку.
+  // Разведка — свой оверлей новеллы.
   if (t === 'intel') { ecIntelOpen(); return; }
-  // Власть уехала в новеллу: ссылки вида «поправьте благополучие» ведут туда,
+  // Экраны новеллы, у которых нет разделов-рельсы: открываем напрямую.
+  const VN_MOVED = { colonies: 'planets', planets: 'planets', territory: 'colony', colony: 'colony',
+                     research: 'research', doom: 'doom' };
+  if (VN_MOVED[t]) { if (typeof heroVNGoto === 'function') heroVNGoto(VN_MOVED[t]); return; }
+  // Власть: ссылки вида «поправьте благополучие» ведут в политику,
   // а не в мёртвую вкладку кабинета. Раздел выбираем сразу нужный.
   const POL_MOVED = { court: 'court', welfare: 'welfare', policy: 'policy', faith: 'faith', war: 'war' };
   const DIP_MOVED = { diplomacy: 'relations', outposts: 'outposts' };
@@ -3622,12 +3616,31 @@ function ecSetTab(t) {
     if (typeof polGoto === 'function') polGoto(POL_MOVED[t] ? 'ipol' : 'dipl');
     return;
   }
-  // «Торговля»/«Биржа» слиты во вкладку «Ресурсы и торговля»: старые ссылки ведут на под-вкладки
-  if (t === 'trade') { t = 'flows'; if (!EC.flowSub || EC.flowSub === 'flows') EC.flowSub = 'caravans'; }
-  else if (t === 'exchange') { t = 'flows'; EC.flowSub = 'exchange'; }
-  else if (t === 'flows' && !EC.flowSub) { EC.flowSub = 'resources'; }
-  EC.tab = t; ecPaintCabinet();
-  if (t === 'flows' && EC.flowSub === 'resources') ecLoadWorkerPlan();
+  // Хозяйство уехало в новеллу (estate.js). Старые ссылки — «продайте на Рынке»,
+  // «постройте во вкладке Территория», «Обзор» — открывают ЭКРАН и сразу нужный
+  // его раздел, а не мёртвую вкладку кабинета.
+  const EST_MOVED = {
+    flows: ['mine', 'deposits'], resources: ['mine', 'deposits'], raids: ['mine', 'conc'],
+    trade: ['trade', 'caravans'], market: ['trade', 'market'], barter: ['trade', 'barter'],
+    exchange: ['exch', 'corps'],
+    forces: ['army', 'roster'], milbuild: ['army', 'build'],
+    overview: ['stat', 'overview'], achievements: ['stat', 'ach'], news: ['press', 'write'],
+  };
+  if (EST_MOVED[t]) {
+    const [scr, sec] = EST_MOVED[t];
+    // Под-вкладка «Ресурсы и торговля» помнилась в EC.flowSub — уважаем её:
+    // ссылка «ecSetTab('flows')» после работы с караванами вернёт к караванам.
+    if (t === 'flows' && EC.flowSub) {
+      const F = { resources: ['mine', 'deposits'], flows: ['mine', 'conc'], caravans: ['trade', 'caravans'],
+                  market: ['trade', 'market'], barter: ['trade', 'barter'], exchange: ['exch', 'corps'] }[EC.flowSub];
+      if (F) { if (typeof EST === 'object') EST.tab[F[0]] = F[1]; if (typeof estGoto === 'function') estGoto(EST_SCR[F[0]].view); return; }
+    }
+    if (typeof EST === 'object') EST.tab[scr] = sec;
+    if (typeof estGoto === 'function') { estGoto(EST_SCR[scr].view); return; }
+  }
+  // Не узнали ключ — просто показываем предбанник кабинета.
+  EC.tab = t;
+  if (typeof curSlug !== 'undefined' && curSlug === 'economy') ecPaintCabinet(); else go('economy');
 }
 
 // ── Состояние «Обзора»-статистики: раскрытые секции, активный график, окно истории ──
@@ -6239,44 +6252,193 @@ function ecDivBuildCard(div) {
   </div>`;
 }
 
+// ══════════════════════════════════════════════════════════════
+// БОЕВОЙ СОСТАВ · реестр вооружённых сил
+// ══════════════════════════════════════════════════════════════
+// Состав читается как военная ведомость, а не как свалка карточек: три РОДА
+// ВОЙСК (наземка · авиация · флот), внутри каждого — КЛАССЫ корпусов по
+// возрастанию тоннажа, и только внутри класса лежат сами проекты. Иконка
+// карточки — настоящий СИЛУЭТ корпуса (bbHullSvg: тот же контур, по которому
+// корабль режется на палубу и рисуется на доске боя), а не эмодзи.
+
+// ── Иконографика состава: только SVG, никаких эмодзи ──
+// Один словарь путей + одна обёртка: контур в 24×24, обводка currentColor,
+// поэтому иконка сама берёт цвет рода войск и не спорит с темой.
+const EC_ICO = {
+  shield:  '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M12 8v7"/>',
+  plane:   '<path d="M12 2.5l1.4 7.2 8.1 3.1v1.9l-8.1-1.6-.7 5.7 2.3 1.7v1.5L12 21l-3 1v-1.5l2.3-1.7-.7-5.7-8.1 1.6v-1.9l8.1-3.1z"/>',
+  ship:    '<path d="M12 2.2c2.9 2.9 4.4 6.4 4.4 10.1L12 21.8l-4.4-9.5C7.6 8.6 9.1 5.1 12 2.2z"/><path d="M7.7 12.4L4.3 15.3l.9 3.8 2.9-2M16.3 12.4l3.4 2.9-.9 3.8-2.9-2"/><circle cx="12" cy="9.4" r="1.9"/>',
+  factory: '<path d="M3 21V10.5l5 3v-3l5 3v-3l5 3V21z"/><path d="M2.5 21h19"/><path d="M8 17h1.5M13 17h1.5"/>',
+  swords:  '<path d="M3.5 4.5h3l11 11-3 3-11-11z"/><path d="M20.5 4.5h-3l-5.5 5.5"/><path d="M13.5 17l3 3M7.5 17l-3 3"/>',
+  anchor:  '<path d="M12 7.5V21"/><circle cx="12" cy="5" r="2.2"/><path d="M4.8 13a7.2 7.2 0 0014.4 0"/><path d="M3.6 13h2.6M17.8 13h2.6"/>',
+  station: '<circle cx="12" cy="12" r="3.6"/><path d="M2.5 12h5.9M15.6 12h5.9"/><path d="M4.6 9v6M19.4 9v6"/>',
+  medal:   '<circle cx="12" cy="15" r="5.6"/><path d="M12 12.6l1 2 2.1.3-1.5 1.4.4 2.1-2-1-2 1 .4-2.1-1.5-1.4 2.1-.3z"/><path d="M8.2 3.2l2 6M15.8 3.2l-2 6"/>',
+  flag:    '<path d="M5.5 21.5V3"/><path d="M5.5 3.8h11l-2.2 3.4 2.2 3.4h-11z"/>',
+  map:     '<path d="M3 6.2l6-2.7 6 2.7 6-2.7v14.3l-6 2.7-6-2.7-6 2.7z"/><path d="M9 3.5v14.3M15 6.2v14.3"/>',
+};
+function ecIco(k, cls) {
+  return `<svg class="ec-ico${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${EC_ICO[k] || EC_ICO.shield}</svg>`;
+}
+
+// Роды войск: ключ категории → подпись, роль, акцент, единица счёта.
+// Это же — ВКЛАДКИ состава: наземка, авиация и флот больше не свалены в одну
+// простыню, у каждой свой лист ведомости и своя панель формирования.
+const EC_FB = [
+  { k: 'ground',   mod: 'army',  ic: 'shield',  nm: 'Наземные силы', role: 'гарнизоны и ударные армии', unit: 'юнит',    many: 'юнитов' },
+  { k: 'aviation', mod: 'air',   ic: 'plane',   nm: 'Авиация',       role: 'крылья при армиях',          unit: 'машина',  many: 'машин' },
+  { k: 'ship',     mod: 'fleet', ic: 'ship',    nm: 'Флот',          role: 'эскадры и станции',          unit: 'корабль', many: 'кораблей' },
+];
+// Активный лист состава; переключение — ecForceTab.
+function ecForceTab(k) {
+  EC.forceTab = k;
+  if (typeof ecPaintCabinet === 'function') ecPaintCabinet();
+}
+// Классы корпусов по родам войск: порядок = порядок разделов (от мелочи к громадам).
+// Ключи покрывают и KV-каталог (peh/btr/corvette/…), и старые билдеры (light/medium/…).
+const EC_FB_CLS = {
+  ground: [
+    ['peh', 'Пехота'], ['light', 'Лёгкая техника'], ['btr', 'БТР и БМП'], ['medium', 'Средние танки'],
+    ['tanki', 'Танки'], ['heavy', 'Тяжёлые танки'], ['arta', 'Артиллерия'], ['artillery', 'Артиллерия и САУ'],
+    ['walker', 'Шагоходы'],
+  ],
+  aviation: [
+    ['dron', 'Дроны'], ['dronkos', 'Космодроны'], ['mla', 'МЛА'], ['light', 'Лёгкая авиация'],
+    ['vertihui', 'Винтокрылые'], ['medium', 'Средняя авиация'], ['aviacia', 'Авиация'],
+    ['heavy', 'Тяжёлая авиация'], ['cargo', 'Шаттлы и транспорт'],
+  ],
+  ship: [
+    ['corvette', 'Корветы'], ['frigate', 'Фрегаты'], ['supportCarrier', 'Носители поддержки'],
+    ['destroyer', 'Эсминцы'], ['hyperCruiser', 'Факельщики'], ['cruiser', 'Крейсера'],
+    ['mediumCruiser', 'Средние крейсера'], ['multiroleCarrier', 'Многоцелевые носители'],
+    ['battleship', 'Линкоры'], ['dreadnought', 'Дредноуты'], ['colossus', 'Колоссы'], ['ss13', 'Станции'],
+  ],
+};
+// Класс корпуса проекта: сперва по unit_id (надёжно), потом по имени+категории —
+// имена в составе могут дублироваться между родами войск.
+function ecRosterCls(unitId, name, category) {
+  const ds = EC.designs || [];
+  const d = (unitId && ds.find(x => x && x.id === unitId))
+    || ds.find(x => x && x.name === name && x.category === category)
+    || ds.find(x => x && x.name === name);
+  return (d && d.data && d.data.class) || '';
+}
+function ecRosterDesign(unitId, name, category) {
+  const ds = EC.designs || [];
+  return (unitId && ds.find(x => x && x.id === unitId))
+    || ds.find(x => x && x.name === name && x.category === category) || null;
+}
+// Силуэт корпуса для карточки. Рисует battle_board.js (общий контур с доской боя);
+// если он ещё не поднялся или класс без профиля — отдаём аккуратный ромб-заглушку.
+function ecForceSil(cls, name) {
+  let svg = '';
+  try { if (typeof bbHullSvg === 'function' && cls) svg = bbHullSvg(cls, name) || ''; } catch (e) { svg = ''; }
+  return svg || `<svg class="bb-sil" viewBox="0 0 24 12" aria-hidden="true">
+    <path d="M1 6 L7 2 L23 6 L7 10 Z" fill="rgba(90,220,240,.08)" stroke="var(--bbc)" stroke-width="1.1"
+      vector-effect="non-scaling-stroke"/></svg>`;
+}
+
 // ── Вкладка 1: «Вооружённые силы государства» — текущий состав (ростер) ──
 function ecTabForces() {
+  // 1) Свести ростер в проекты: ключ = категория + проект (unit_id, если он есть).
   const stock = {};
-  EC.roster.forEach(r => { const k = (r.category || '') + '|' + (r.unit_name || ''); if (!stock[k]) stock[k] = { name: r.unit_name, category: r.category, qty: 0 }; stock[k].qty += r.qty || 0; });
-  const all = Object.values(stock);
-  let rosterHtml = '';
-  [['ground', '🛡', 'Наземная техника', 'army', 'Юнит'], ['aviation', '✈', 'Авиация', 'army', 'Юнит'], ['ship', '🚀', 'Флот', 'fleet', 'Корабль']].forEach(([c, ic, lbl, mod, unit]) => {
-    const arr = all.filter(s => s.category === c).sort((a, b) => (b.qty || 0) - (a.qty || 0));
-    if (!arr.length) return;
-    const tot = arr.reduce((a, s) => a + (s.qty || 0), 0);
-    const cards = arr.map(s => `<div class="ec-force-card ec-force-card--${mod}" style="cursor:pointer" onclick="ecShowUnitSpecs('${esc(s.name)}', '${c}')">
-        <span class="ec-force-tok">${ic}</span>
-        <div class="ec-force-info"><div class="ec-force-name">${esc(s.name)}</div><div class="ec-force-sub">${unit}</div></div>
-        <span class="ec-force-qty">×${ecNum(s.qty)}</span>
-        <button class="ec-bld-del" title="Списать из состава (возврат 40% цены проекта)" onclick="event.stopPropagation();ecUnitScrap('${esc(s.name)}','${c}',${s.qty})">✕</button>
-      </div>`).join('');
-    rosterHtml += `<div class="ec-force-group">
-      <div class="ec-force-hd ec-force-hd--${mod}"><span class="ec-force-hd-ic">${ic}</span><span class="ec-force-hd-l">${lbl}</span><span class="ec-force-hd-ct">${ecNum(tot)} ед.</span></div>
-      <div class="ec-force-grid">${cards}</div>
-    </div>`;
+  (EC.roster || []).forEach(r => {
+    const k = (r.category || '') + '|' + (r.unit_id || r.unit_name || '');
+    if (!stock[k]) stock[k] = { id: r.unit_id || '', name: r.unit_name || 'проект', category: r.category, qty: 0 };
+    stock[k].qty += r.qty || 0;
   });
-  if (!rosterHtml) rosterHtml = `<div class="ec-force-empty"><span class="ec-force-empty-ic">🎖</span><div>Вооружённых сил пока нет.<br><span class="ec-force-empty-sub">Сформируйте их во вкладке «🏭 Строительство вооружённых сил».</span></div></div>`;
+  const all = Object.values(stock).filter(s => s.qty > 0);
 
-  const totUnits = EC.roster.filter(r => r.category === 'ground' || r.category === 'aviation').reduce((a, r) => a + (r.qty || 0), 0);
-  const totShip = EC.roster.filter(r => r.category === 'ship').reduce((a, r) => a + (r.qty || 0), 0);
-  const inQueue = EC.queue.reduce((a, q) => a + (q.qty || 0), 0);
+  // 2) Активная вкладка: род войск. Пустые листы не прячем (иначе состав
+  //    «прыгает» после списания последнего юнита), но открываем первый непустой.
+  const cnt = c => all.filter(s => s.category === c).reduce((a, s) => a + s.qty, 0);
+  const totals = { ground: cnt('ground'), aviation: cnt('aviation'), ship: cnt('ship') };
+  let tab = EC.forceTab;
+  if (!EC_FB.some(b => b.k === tab)) tab = (EC_FB.find(b => totals[b.k] > 0) || EC_FB[0]).k;
+  const cur = EC_FB.find(b => b.k === tab);
 
-  return `<div class="ec-cyb-forces">${ecIntro('⚔', 'Вооружённые силы государства', 'Текущий состав ваших вооружённых сил — юниты наземки/авиации и построенный флот.', ['Войска производятся во вкладке «🏭 Строительство вооружённых сил».', 'Готовые заказы пополняют этот состав в конце игрового хода.'])}<div class="ec-section-title">Сводка</div>
+  const tabsHtml = `<div class="ec-fb-tabs" role="tablist">${EC_FB.map(b => `
+    <button class="ec-fb-tab ec-fb-tab--${b.mod}${b.k === tab ? ' on' : ''}" role="tab"
+      aria-selected="${b.k === tab}" onclick="ecForceTab('${b.k}')">
+      ${ecIco(b.ic, 'ec-fb-tab-ic')}
+      <span class="ec-fb-tab-l">${esc(b.nm)}</span>
+      <span class="ec-fb-tab-n">${ecNum(totals[b.k])}</span>
+    </button>`).join('')}</div>`;
+
+  // 3) Разложить активный род войск по классам корпусов.
+  const rosterHtml = [cur].map(b => {
+    const arr = all.filter(s => s.category === b.k);
+    if (!arr.length) return '';
+    const tot = arr.reduce((a, s) => a + s.qty, 0);
+    const order = EC_FB_CLS[b.k] || [];
+    const bag = {};
+    arr.forEach(s => {
+      const cls = ecRosterCls(s.id, s.name, s.category);
+      const key = order.some(([c]) => c === cls) ? cls : '_';
+      (bag[key] = bag[key] || []).push(Object.assign({ cls }, s));
+    });
+    const keys = order.map(([c]) => c).filter(c => bag[c]);
+    if (bag._) keys.push('_');
+
+    const groups = keys.map(key => {
+      const lbl = key === '_' ? 'Вне классификации' : (order.find(([c]) => c === key) || [])[1] || key;
+      const list = bag[key].sort((a, x) => x.qty - a.qty);
+      const sum = list.reduce((a, s) => a + s.qty, 0);
+      const cards = list.map(s => {
+        const d = ecRosterDesign(s.id, s.name, s.category), sm = (d && d.summary) || {};
+        const meta = [];
+        if (sm.on != null) meta.push('ОН ' + esc(String(sm.on)));
+        if (sm.cost != null) meta.push(ecNum(sm.cost) + ' ГС');
+        const nm = esc(s.name), cat = esc(s.category);
+        return `<article class="ec-fc" tabindex="0" title="${nm} — характеристики проекта"
+            onclick="ecShowUnitSpecs('${nm}', '${cat}')"
+            onkeydown="if(event.key==='Enter')ecShowUnitSpecs('${nm}','${cat}')">
+          <span class="ec-fc-sil">${ecForceSil(s.cls, s.name)}</span>
+          <span class="ec-fc-txt">
+            <span class="ec-fc-nm">${nm}</span>
+            <span class="ec-fc-meta">${meta.length ? meta.join(' · ') : b.unit}</span>
+          </span>
+          <span class="ec-fc-qty"><b>${ecNum(s.qty)}</b><i>шт</i></span>
+          <button class="ec-fc-x" title="Списать из состава (возврат 40% цены проекта)"
+            onclick="event.stopPropagation();ecUnitScrap('${nm}','${cat}',${s.qty})">✕</button>
+        </article>`;
+      }).join('');
+      return `<div class="ec-fc-grp">
+        <div class="ec-fc-grp-hd"><span class="ec-fc-grp-nm">${esc(lbl)}</span><span class="ec-fc-grp-ln"></span><span class="ec-fc-grp-ct">${ecNum(sum)}</span></div>
+        <div class="ec-fc-grid">${cards}</div>
+      </div>`;
+    }).join('');
+
+    return `<section class="ec-fb ec-fb--${b.mod}">
+      <header class="ec-fb-hd">
+        <span class="ec-fb-ic">${ecIco(b.ic)}</span>
+        <span class="ec-fb-t"><b>${esc(b.nm)}</b><i>${esc(b.role)}</i></span>
+        <span class="ec-fb-ct">${ecNum(tot)} <em>${esc(tot === 1 ? b.unit : b.many)}</em></span>
+      </header>
+      ${groups}
+    </section>`;
+  }).join('')
+  || `<div class="ec-force-empty ec-fb--${cur.mod}"><span class="ec-force-empty-ic">${ecIco('medal')}</span><div>${esc(cur.nm)} — пусто.<br><span class="ec-force-empty-sub">Закажите в разделе «Военпром» — он на рельсе слева.</span></div></div>`;
+
+  const inQueue = (EC.queue || []).reduce((a, q) => a + (q.qty || 0), 0);
+  // Панель формирования идёт ЗА своим родом войск: армия собирается из наземки и
+  // авиации, флот — из кораблей. На чужой вкладке она была бы шумом.
+  const formHtml = cur.k === 'ship'
+    ? ecFleetSectionHtml()
+    : `<div class="ec-section-title">${ecIco('swords')} Сформировать армию <span class="ec-hint">— из готовых юнитов состава (наземка/авиация); переброска — режим карты «Звёздный марш»</span></div>
+       ${ecArmyPanelHtml()}`;
+
+  return `<div class="ec-cyb-forces">${ecIntro(ecIco('swords'), 'Вооружённые силы государства', 'Текущий состав ваших вооружённых сил — юниты наземки/авиации и построенный флот.', ['Войска производятся в разделе «Военпром» этого же экрана.', 'Готовые заказы пополняют этот состав в конце игрового хода.'])}<div class="ec-section-title">Сводка</div>
     <div class="ec-ov-grid ec-force-stats">
-      <div class="ec-ov-card"><div class="ec-ov-v" style="color:var(--gd)">${ecNum(totUnits)}</div><div class="ec-ov-k">🪖 Юнитов</div></div>
-      <div class="ec-ov-card"><div class="ec-ov-v" style="color:var(--te)">${ecNum(totShip)}</div><div class="ec-ov-k">🚀 Кораблей</div></div>
-      ${inQueue ? `<div class="ec-ov-card ec-ov-clk" onclick="ecSetTab('milbuild')"><div class="ec-ov-v" style="color:var(--color-warning, #e0a030)">${ecNum(inQueue)}</div><div class="ec-ov-k">🏭 В очереди</div></div>` : ''}
+      <div class="ec-ov-card ec-fb--army"><div class="ec-ov-v" style="color:var(--gd)">${ecNum(totals.ground)}</div><div class="ec-ov-k">${ecIco('shield')} Наземка</div></div>
+      <div class="ec-ov-card ec-fb--air"><div class="ec-ov-v" style="color:#8ab4f8">${ecNum(totals.aviation)}</div><div class="ec-ov-k">${ecIco('plane')} Авиация</div></div>
+      <div class="ec-ov-card ec-fb--fleet"><div class="ec-ov-v" style="color:var(--te)">${ecNum(totals.ship)}</div><div class="ec-ov-k">${ecIco('ship')} Флот</div></div>
+      ${inQueue ? `<div class="ec-ov-card ec-ov-clk" onclick="ecSetTab('milbuild')"><div class="ec-ov-v" style="color:var(--color-warning, #e0a030)">${ecNum(inQueue)}</div><div class="ec-ov-k">${ecIco('factory')} В очереди</div></div>` : ''}
     </div>
     <div class="ec-section-title">Боевой состав</div>
+    ${tabsHtml}
     ${rosterHtml}
-    <div class="ec-section-title">⚔ Сформировать армию <span class="ec-hint">— из готовых юнитов состава (наземка/авиация); переброска — режим карты «Звёздный марш»</span></div>
-    ${ecArmyPanelHtml()}
-    ${ecFleetSectionHtml()}</div>`;
+    ${formHtml}</div>`;
 }
 
 // ── «Сформировать флот» (зеркало _army_fleet.sql) ──
@@ -6305,20 +6467,20 @@ function ecFleetSectionHtml() {
 
   // Блок размещения станций отдельной иконкой на карте
   const stationBlock = (stations.length && colSysIds.length) ? `
-    <div class="ec-section-title" style="margin-top:14px">🛰 Разместить станцию <span class="ec-hint">— неподвижной иконкой в системе колонии; не транспортируется</span></div>
+    <div class="ec-section-title" style="margin-top:14px">${ecIco('station')} Разместить станцию <span class="ec-hint">— неподвижной иконкой в системе колонии; не транспортируется</span></div>
     ${stations.map(s => `<div class="ec-q-row">
-        <span class="ec-r-name">🛰 ${esc(s.name)} <span class="ec-hint">готово ×${ecNum(s.qty)}</span></span>
+        <span class="ec-r-name">${ecIco('station')} ${esc(s.name)} <span class="ec-hint">готово ×${ecNum(s.qty)}</span></span>
         <select class="ec-station-sys ec-prod-qty" data-uid="${esc(s.unit_id)}" style="width:auto">${colSysIds.map(sid => `<option value="${esc(sid)}">${esc(ecSysName(sid))}</option>`).join('')}</select>
         <button class="btn btn-gd btn-sm" onclick="ecStationDeploy('${esc(s.unit_id)}')">Выставить</button>
       </div>`).join('')}
-    <div class="ec-cap">Станция встаёт в системе значком 🛰 и держит рубеж при нападении, но <b>не двигается</b> ни по карте, ни на поле боя. Снять — распустить на карте (вернётся в состав).</div>` : '';
+    <div class="ec-cap">Станция встаёт в системе своим значком и держит рубеж при нападении, но <b>не двигается</b> ни по карте, ни на поле боя. Снять — распустить на карте (вернётся в состав).</div>` : '';
 
   const pick = ships.length
     ? ships.map(s => `<div class="ec-q-row">
-        <span class="ec-r-name">🚀 ${esc(s.name)} <span class="ec-hint">в составе ×${ecNum(s.qty)}</span></span>
+        <span class="ec-r-name">${ecIco('ship')} ${esc(s.name)} <span class="ec-hint">в составе ×${ecNum(s.qty)}</span></span>
         <input type="number" class="ec-fleet-q ec-prod-qty" data-uid="${esc(s.unit_id)}" min="0" max="${s.qty}" value="0" style="width:70px">
       </div>`).join('')
-    : `<div class="ec-empty" style="padding:8px;line-height:1.45">Свободных кораблей нет. Постройте флот во вкладке «🏭 Строительство вооружённых сил» — или распустите существующий флот, чтобы вернуть корабли в состав.</div>`;
+    : `<div class="ec-empty" style="padding:8px;line-height:1.45">Свободных кораблей нет. Постройте флот во вкладке «Строительство вооружённых сил» — или распустите существующий флот, чтобы вернуть корабли в состав.</div>`;
 
   const canForm = ships.length && colSysIds.length;
   const formBlock = !colSysIds.length
@@ -6327,9 +6489,9 @@ function ecFleetSectionHtml() {
       ${ships.length ? `<div class="ec-prod-form" style="flex-wrap:wrap;gap:6px;margin-top:8px">
         <select id="ec-fleet-sys">${colSysIds.map(sid => `<option value="${esc(sid)}">${esc(ecSysName(sid))}</option>`).join('')}</select>
         <input type="text" id="ec-fleet-name" class="ec-prod-qty" style="width:160px" maxlength="40" placeholder="имя флота (необязательно)">
-        <button class="btn btn-gd btn-sm" ${canForm ? '' : 'disabled'} onclick="ecFleetForm()">⚓ Сформировать флот</button>
+        <button class="btn btn-gd btn-sm" ${canForm ? '' : 'disabled'} onclick="ecFleetForm()">Сформировать флот</button>
       </div>
-      <div class="ec-cap">Укажите, сколько кораблей каждого типа забрать, выберите систему с колонией и сформируйте флот. Он появится на <b>галактической карте</b> значком ⚓ <b>слева от звезды</b> — оттуда перебрасывайте его по гиперпутям, возвращайте на базу или распускайте. Роспуск возвращает корабли в состав.</div>` : ''}`;
+      <div class="ec-cap">Укажите, сколько кораблей каждого типа забрать, выберите систему с колонией и сформируйте флот. Он появится на <b>галактической карте</b> значком якоря <b>слева от звезды</b> — оттуда перебрасывайте его по гиперпутям, возвращайте на базу или распускайте. Роспуск возвращает корабли в состав.</div>` : ''}`;
 
   const fleetRows = fleets.map(fl => {
     if (EC.fleetEdit === fl.id) return ecFleetEditorHtml(fl);
@@ -6345,10 +6507,10 @@ function ecFleetSectionHtml() {
       right = `${editBtn}<button class="ec-bld-del" title="Распустить флот — корабли вернутся в состав" onclick="ecFleetDisband('${fl.id}')">✕</button>`;
     }
     const where = fl.status === 'transit' ? `→ ${esc(ecSysName(fl.dest_sys))}` : `в системе ${esc(ecSysName(fl.system_id))}`;
-    return `<div class="ec-q-row"><span class="ec-r-name">⚓ Флот${fl.name ? ' «' + esc(fl.name) + '»' : ''} <span class="ec-hint">${comp || '—'} · ${where}${fuelHint ? ' · ⛽ ' + fuelHint + '/прыжок' : ''}</span></span>${right}</div>`;
+    return `<div class="ec-q-row"><span class="ec-r-name">${ecIco('anchor')} Флот${fl.name ? ' «' + esc(fl.name) + '»' : ''} <span class="ec-hint">${comp || '—'} · ${where}${fuelHint ? ' · топливо ' + fuelHint + '/прыжок' : ''}</span></span>${right}</div>`;
   }).join('');
 
-  return `<div class="ec-section-title">⚓ Сформировать флот <span class="ec-hint">— из кораблей состава; управление на карте</span></div>
+  return `<div class="ec-section-title">${ecIco('anchor')} Сформировать флот <span class="ec-hint">— из кораблей состава; управление на карте</span></div>
     ${formBlock}
     ${stationBlock}
     ${fleets.length ? `<div class="ec-sub-title" style="margin-top:10px">Мои флоты · ${fleets.length}</div>${fleetRows}` : ''}`;
@@ -6753,8 +6915,8 @@ function ecArmyPanelHtml() {
       : `гарнизон: ${esc(a.planet_name || ecColonyName(a.colony_id))}`;
     const comp = (a.composition || []).map(c => `${esc(c.unit_name || 'юнит')} ×${ecNum(c.qty || 0)}`).join(', ');
     return `<div class="ec-q-row">
-      <span class="ec-r-name">🪖 ${esc(a.name || 'Армия')} <span class="ec-hint">· ${ecNum(a.units || 0)} юнит. · ${where}</span><br><span class="ec-hint">${comp}</span></span>
-      ${a.status === 'idle' ? `<button class="btn btn-gh btn-sm" onclick="go('map')" title="Переброска — на карте, режим «Звёздный марш»">🗺 На карту</button>
+      <span class="ec-r-name">${ecIco('flag')} ${esc(a.name || 'Армия')} <span class="ec-hint">· ${ecNum(a.units || 0)} юнит. · ${where}</span><br><span class="ec-hint">${comp}</span></span>
+      ${a.status === 'idle' ? `<button class="btn btn-gh btn-sm" onclick="go('map')" title="Переброска — на карте, режим «Звёздный марш»">${ecIco('map')} На карту</button>
       <button class="ec-bld-del" title="Распустить — юниты вернутся в состав" onclick="ecArmyDisband('${a.id}')">✕</button>` : ''}
     </div>`;
   }).join('');
@@ -6766,16 +6928,16 @@ function ecArmyPanelHtml() {
   }).filter(Boolean).join('');
   const roster = ecArmyRoster();
   const formUi = !((EC.colonies || []).length) ? '' : !roster.length
-    ? `<div class="ec-empty" style="padding:8px">Нет готовых юнитов наземки/авиации — закажите их во вкладке «🏭 Строительство вооружённых сил».</div>`
+    ? `<div class="ec-empty" style="padding:8px">Нет готовых юнитов наземки/авиации — закажите их во вкладке «Строительство вооружённых сил».</div>`
     : `<div class="ec-prod-form" style="flex-wrap:wrap">
         <select id="ec-army-colony">${(EC.colonies || []).map(c => `<option value="${esc(c.id)}">${esc(c.planet_name || 'колония')}</option>`).join('')}</select>
         <input type="text" id="ec-army-name" placeholder="Имя армии (например «1-я ударная»)" style="min-width:180px">
       </div>
       <div class="ec-queue">${roster.map((r, i) => `<div class="ec-q-row"><span class="ec-r-name">${esc(r.unit_name)} <span class="ec-hint">· в составе ${ecNum(r.qty)}</span></span>
         <input type="number" class="ec-prod-qty ec-army-take" data-uid="${esc(r.unit_id)}" min="0" max="${r.qty}" value="0"></div>`).join('')}</div>
-      <button class="btn btn-gd btn-sm" style="margin-top:6px" onclick="ecArmyForm()">⚔ Сформировать армию</button>`;
+      <button class="btn btn-gd btn-sm" style="margin-top:6px" onclick="ecArmyForm()">Сформировать армию</button>`;
   return `${armies.length ? rows : `<div class="ec-empty" style="padding:8px">Армий нет — сформируйте из готовых юнитов ниже.</div>`}
-    ${overRows ? `<div class="ec-bud-pop" style="margin:6px 0">🪖 Гарнизоны: ${overRows}</div>` : ''}
+    ${overRows ? `<div class="ec-bud-pop" style="margin:6px 0">${ecIco('flag')} Гарнизоны: ${overRows}</div>` : ''}
     <div class="ec-hint" style="margin:8px 0 4px">Новая армия — выберите колонию формирования и состав:</div>
     ${formUi}`;
 }
@@ -7933,12 +8095,13 @@ function ecFlowRowsData() {
   Object.keys(EC.resFlows || {}).forEach(n => mk(n));
   return rows;
 }
-function ecTabFlows() {
-  // РЕВОРК РЕСУРСОВ (24.07): таблица «Потоки» (режим экспорт/склад, лимиты биржи,
-  // добор со склада) вырезана — теперь ВСЁ идёт на склад, а сбыт настраивается на
-  // под-вкладках Рынок/Караваны/Биржа. Эта под-вкладка оставлена под КОНЦЕССИИ.
-
-  // ── Концессии (право добычи) ──
+// ── Концессии (право добычи) ─────────────────────────────────
+// РЕВОРК РЕСУРСОВ (24.07): таблица «Потоки» (режим экспорт/склад, лимиты биржи,
+// добор со склада) вырезана — теперь ВСЁ идёт на склад, а сбыт настраивается на
+// под-вкладках Рынок/Караваны/Биржа. Осталась одна тема — КОНЦЕССИИ.
+// Блок вынут из ecTabFlows отдельной функцией: экран новеллы «⛏ Добыча ресурсов»
+// (estate.js) ставит его главой рельсы, а не тянет вкладку целиком.
+function ecConcessionsBlock() {
   const myDeps = [];
   (EC.colonies || []).forEach(c => (Array.isArray(c.resources) ? c.resources : []).forEach(r => {
     if (r && r.name && !ecIsConceded(c.id, r.name)) myDeps.push({ cid: c.id, res: r.name, label: `${c.planet_name || 'колония'} · ${r.name}` });
@@ -8030,7 +8193,11 @@ function ecTabFlows() {
      'Сбыт запаса — на под-вкладках 🏪 Рынок (ручная продажа), 🚛 Караваны и 📊 Биржа.',
      'Без построенного домика концессия ничего не даёт; домик занимает ячейку вашей колонии.'])}
     ${concHtml}`;
+  return flowsBody;
+}
 
+function ecTabFlows() {
+  const flowsBody = ecConcessionsBlock();
   // ── Под-вкладки: Потоки + вся торговля (караваны/рынок/обмен) в одном месте ──
   const sub = EC.flowSub || 'resources';
   const subTabs = [['resources', '⛏', 'Ресурсы'], ['caravans', '🚛', 'Караваны'], ['market', '🏪', 'Рынок'], ['barter', '🤝', 'Обмен'], ['exchange', '📊', 'Биржа'], ['flows', '⚖', 'Концессии']];

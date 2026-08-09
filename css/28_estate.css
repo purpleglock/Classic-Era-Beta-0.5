@@ -1,0 +1,56 @@
+/* ══════════════════════════════════════════════════════════════
+   ХОЗЯЙСТВО — экраны новеллы «Добыча», «Торговля», «Биржа»,
+   «Вооружённые силы», «Статистика державы».
+   Каркас, рельса и пролог берём у 27_politics.css целиком: экраны
+   одного дома должны быть одного покроя. Здесь — только цвет
+   разговора, чтобы игрок узнавал экран по краю глаза, и правки
+   под тела вкладок, которые раньше жили в широком кабинете.
+   ══════════════════════════════════════════════════════════════ */
+.hp-vn-mine  { --pol:#d2865a; --pol-dim:rgba(210,134,90,.22); }   /* руда, ржавчина */
+.hp-vn-trade { --pol:#7fb2e8; --pol-dim:rgba(127,178,232,.22); }  /* дорога, даль */
+.hp-vn-exch  { --pol:#5fc98a; --pol-dim:rgba(95,201,138,.22); }   /* биржевая зелень */
+.hp-vn-army  { --pol:#c86a7a; --pol-dim:rgba(200,106,122,.22); }  /* сталь и кровь */
+.hp-vn-stat  { --pol:#9a8fe0; --pol-dim:rgba(154,143,224,.22); }  /* чернила ведомости */
+.hp-vn-press { --pol:#d8cfb4; --pol-dim:rgba(216,207,180,.20); }  /* газетная бумага */
+
+/* ── Предбанник кабинета: одни двери ──
+   Вкладок в кабинете больше нет. Страница /economy = герб, казна и сетка
+   плиток; каждая открывает свой экран новеллы. */
+.ec-door-note{
+  margin:14px 2px 12px;color:var(--t3);font-size:13px;line-height:1.55;max-width:78ch;
+}
+.ec-doors{
+  display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(276px,1fr));
+}
+.ec-door{
+  display:flex;align-items:center;gap:12px;text-align:left;cursor:pointer;width:100%;
+  padding:14px 15px;color:var(--t2);background:rgba(255,255,255,.022);
+  border:1px solid var(--w3);border-left:2px solid var(--gd);
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));
+  transition:background .16s ease,color .16s ease,transform .16s ease;
+}
+.ec-door:hover{background:rgba(255,255,255,.06);color:var(--t1);transform:translateX(2px)}
+.ec-door-ic{font-size:20px;line-height:1;flex:0 0 auto;filter:grayscale(.4)}
+.ec-door:hover .ec-door-ic{filter:none}
+.ec-door-tx{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.ec-door-tx b{font-family:var(--font-display);font-size:14px;letter-spacing:.02em}
+.ec-door-tx i{font-style:normal;font-size:11px;color:var(--t4);line-height:1.35}
+.ec-door-arr{font-size:11px;opacity:.4}
+.ec-door-n{
+  font-size:11px;font-weight:700;color:#111;background:var(--gd);
+  border-radius:999px;padding:2px 8px;
+}
+@media (max-width:520px){ .ec-doors{grid-template-columns:1fr} }
+
+/* Тела вкладок верстались под ширину кабинета: внутри сцены новеллы
+   им нужен потолок ширины, иначе сетки карточек растягиваются в нитку. */
+.hp-vn-est .pol-content > * { max-width:100%; }
+.hp-vn-est .ec-tabs { flex-wrap:wrap; }
+
+/* Под-навигация вкладок внутри тела не нужна: её роль играет рельса.
+   Прячем только ту, что осталась внутри перенесённых кусков. */
+.hp-vn-est .ec-flowx > .ec-tabs:first-child { display:none; }
+
+/* Широкие таблицы (роспись дохода, биржевые стаканы) на телефоне
+   должны скроллиться внутри себя, а не растягивать экран. */
+.hp-vn-est .pol-content table { display:block; max-width:100%; overflow-x:auto; }

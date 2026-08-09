@@ -445,7 +445,11 @@
       "Bash(cp /tmp/q.js tools/q.js)",
       "Bash(node tools/q.js /tmp/pg.sql)",
       "Bash(sed -i \"s|path.join\\(__dirname||'.','.env'\\)|path.join\\(__dirname,'..','.env'\\)|\" tools/q.js)",
-      "Bash(node tools/db_run.js _char_rls.sql)"
+      "Bash(node tools/db_run.js _char_rls.sql)",
+      "Bash(node tools/db_run.js _ec_init_member.sql)",
+      "Bash(node tools/db_run.js _ec_tick_member.sql)",
+      "Bash(node --check estate.js)",
+      "Bash(sed -i \"s/var BUILD = '20260809estback';/var BUILD = '20260809press';/\" index.html)"
     ]
   }
 }
