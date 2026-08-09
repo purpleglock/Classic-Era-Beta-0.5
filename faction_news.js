@@ -76,17 +76,35 @@ function fnRefresh() {
   }
 }
 
-// Одобренная анкета текущего пользователя (с кэшем). null — фракции нет.
+// Держава, от лица которой игрок пишет (с кэшем). null — писать не от кого.
+// Не только СВОЯ анкета: служащий чужой державы с правом 'news' (_faction_members.sql)
+// своей анкеты не имеет вовсе, а раньше упирался в «зарегистрируйте фракцию».
+// FN.myPerms — эффективные права (у владельца — все).
 async function fnGetMyFaction(force) {
   if (!user) return null;
   if (FN.myFac !== undefined && !force) return FN.myFac;
+  FN.myFac = null; FN.myPerms = null;
   try {
     const rows = await dbGet('faction_applications',
       `owner_id=eq.${user.id}&status=eq.approved&order=updated_at.desc&limit=1&select=faction_id,name,color,herald_url,race,ideology,gov,regime`);
-    FN.myFac = (rows && rows[0]) ? rows[0] : null;
-  } catch (e) { FN.myFac = null; }
+    if (rows && rows[0]) { FN.myFac = rows[0]; FN.myPerms = null; return FN.myFac; }   // владелец — права полные
+  } catch (e) {}
+  // Служба в чужой державе: fm_me() отдаёт членство и эффективные права.
+  try {
+    const me = (typeof fmLoadMe === 'function') ? await fmLoadMe(true)
+             : await apiFetch('rpc/fm_me', { method: 'POST', body: '{}' });
+    const mem = me && me.membership;
+    if (mem && mem.faction_id) {
+      const perms = me.perms || [];
+      const rows = await dbGet('faction_applications',
+        `faction_id=eq.${encodeURIComponent(mem.faction_id)}&status=eq.approved&limit=1&select=faction_id,name,color,herald_url,race,ideology,gov,regime`);
+      if (rows && rows[0]) { FN.myFac = rows[0]; FN.myPerms = perms; }
+    }
+  } catch (e) {}
   return FN.myFac;
 }
+// Право писать от лица державы: владелец (perms=null) или служащий с флагом 'news'.
+function fnCanWrite() { return !!FN.myFac && (FN.myPerms === null || (FN.myPerms || []).includes('news')); }
 
 // Снять редакторскую разметку (BBCode-теги/FX/markdown), чтобы в текстовом превью
 // карточки не светились коды вроде [fx:schizo], [img:URL], **жирный**, ## и т.п.
@@ -1757,8 +1775,8 @@ async function fnRenderNewsTab(b, only) {
     </div>`;
   }
 
-  // Секция автора (владельца одобренной фракции)
-  if (fac && fac.faction_id && want('mine')) {
+  // Секция автора: владелец державы ИЛИ служащий с правом 'news'
+  if (fac && fac.faction_id && fnCanWrite() && want('mine')) {
     let mine = [];
     try {
       mine = await dbGet('faction_news', `faction_id=eq.${encodeURIComponent(fac.faction_id)}&order=created_at.desc`) || [];
@@ -1795,10 +1813,16 @@ async function fnRenderNewsTab(b, only) {
       <div class="fn-tab-note">Новость уходит на проверку администрации. После одобрения она появится на главной в «Вестнике фракций».</div>
     </div>`;
   } else if (!staff && want('mine')) {
-    html += `<div class="fn-tab-sec"><div style="color:var(--t3);font-size:13px;padding:8px 0">
-      Писать новости могут владельцы одобренной фракции.
-      <button class="btn btn-gd btn-fw" style="margin-top:10px" onclick="closeAp();go('faction-new')">⬡ Зарегистрировать фракцию</button>
-    </div></div>`;
+    // Служащий чужой державы фракцию не регистрирует — ему нужен флаг «news» от владельца.
+    html += fac && fac.faction_id
+      ? `<div class="fn-tab-sec"><div style="color:var(--t3);font-size:13px;padding:8px 0">
+          Вы на службе державы «${esc(fac.name || '')}», но право писать депеши (<b>news</b>) вам не выдано.
+          Попросите владельца отметить его во «Дворе».
+        </div></div>`
+      : `<div class="fn-tab-sec"><div style="color:var(--t3);font-size:13px;padding:8px 0">
+          Писать новости могут владельцы одобренной фракции.
+          <button class="btn btn-gd btn-fw" style="margin-top:10px" onclick="closeAp();go('faction-new')">⬡ Зарегистрировать фракцию</button>
+        </div></div>`;
   }
 
   // Секция модерации (стафф)
@@ -2413,7 +2437,8 @@ async function fnSubmit() {
     if (!author) return;   // тост уже показан
   } else {
     const fac = await fnGetMyFaction();
-    if (!fac || !fac.faction_id) { toast('Новости пишут только владельцы одобренной фракции', 'err'); return; }
+    if (!fac || !fac.faction_id) { toast('Новости пишут от лица державы — своей или той, где вы на службе', 'err'); return; }
+    if (!fnCanWrite()) { toast('Право «news» вам не выдано — попросите владельца державы', 'err'); return; }
     author = { faction_id: fac.faction_id, faction_name: fac.name || null, faction_color: fac.color || null, owner_id: user.id, kind: 'news' };
   }
   const now = new Date().toISOString();

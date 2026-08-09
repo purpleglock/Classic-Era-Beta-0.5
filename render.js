@@ -2745,6 +2745,7 @@ let _vnScrollSave = 0;
 function _vnScreenSync() {
   const open = !!_heroVNScreenOpen();
   const html = document.documentElement;
+  _vnBackFabSync(open);
   if (open === html.classList.contains('vn-screen')) return;
   const cw = document.getElementById('cw');
   if (open) {
@@ -2758,8 +2759,58 @@ function _vnScreenSync() {
     if (cw) requestAnimationFrame(() => { cw.scrollTop = _vnScrollSave; });
   }
 }
+
+// ── ВЫХОД ИЗ ЭКРАНА: отдельная кнопка, ни от чего не зависящая ──
+// Кнопка «назад» в шапке экрана оказалась ненадёжной: шапка живёт внутри
+// оверлея, оверлей — внутри прокручиваемого #cw, и на iOS Safari её просто
+// не видно (fixed там считается от скроллера, а не от вьюпорта). Поэтому
+// выход дублируется ОТДЕЛЬНОЙ кнопкой: она висит прямо в <body> (вне всех
+// скроллеров и клипов), стили заданы инлайном (не зависят от кэша CSS,
+// порядка файлов и медиазапросов), z-index — предельный. Пока открыт хоть
+// один экран новеллы, эта кнопка есть на любом устройстве и в любом браузере.
+const _VN_FAB_ID = 'vn-back-fab';
+function _vnBackFabSync(open) {
+  let fab = document.getElementById(_VN_FAB_ID);
+  if (!open) { if (fab) fab.remove(); return; }
+  if (fab && fab.isConnected && fab.parentNode === document.body) return;
+  if (fab) fab.remove();
+  fab = document.createElement('button');
+  fab.id = _VN_FAB_ID;
+  fab.type = 'button';
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  fab.textContent = en ? '↩ BACK' : '↩ НАЗАД';
+  fab.setAttribute('aria-label', en ? 'Back' : 'Назад');
+  fab.style.cssText = [
+    'position:fixed',
+    'left:calc(12px + env(safe-area-inset-left,0px))',
+    'bottom:calc(12px + env(safe-area-inset-bottom,0px))',
+    'z-index:2147483000',
+    'min-height:44px;padding:11px 18px',
+    'display:flex;align-items:center;gap:6px',
+    'font:700 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace',
+    'letter-spacing:.12em;text-transform:uppercase',
+    'color:#eaf6ff;background:#0d1520;border:1px solid #3a9bdc',
+    'border-radius:0;box-shadow:0 6px 22px rgba(0,0,0,.55)',
+    'cursor:pointer;-webkit-appearance:none;appearance:none',
+    'touch-action:manipulation;-webkit-tap-highlight-color:transparent'
+  ].join(';') + ';';
+  fab.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); _vnBackFabGo(); });
+  document.body.appendChild(fab);
+}
+// Куда именно «назад» — знает сам экран: у него своя кнопка со своим
+// обработчиком (к списку планет, в меню кабинета, в пролог раздела).
+// Жмём её; если экран своей кнопки не завёл — уходим в меню новеллы.
+function _vnBackFabGo() {
+  const scr = _heroVNScreenOpen();
+  const own = scr && scr.querySelector('.hp-vn-col-x,.hp-vn-back');
+  if (own) { try { own.click(); return; } catch (e) {} }
+  try { heroVNChoice('menu'); } catch (e) {}
+}
+
 // Экранов много и открывают их из десятка мест — вместо правки всех вызовов
 // слушаем сам DOM: класс .show переключается на оверлеях внутри #cw.
+// Плюс редкий тик-страховка: если наблюдатель почему-то не сработал
+// (пересозданный контейнер, чужой скрипт), кнопка всё равно появится.
 (function _vnScreenWatch() {
   const start = () => {
     const cw = document.getElementById('cw');
@@ -2770,6 +2821,7 @@ function _vnScreenSync() {
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
+  setInterval(() => { try { _vnScreenSync(); } catch (e) {} }, 1000);
 })();
 
 window.addEventListener('popstate', () => {
