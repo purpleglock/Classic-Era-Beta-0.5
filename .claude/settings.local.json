@@ -441,7 +441,11 @@
       "Bash(node tools/db_q.js \"select slug,title,section from pages where page_type='character'\")",
       "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('render.js','utf8'\\)\\);new Function\\(require\\('fs'\\).readFileSync\\('politics.js','utf8'\\)\\);new Function\\(require\\('fs'\\).readFileSync\\('character.js','utf8'\\)\\);console.log\\('syntax ok'\\)\")",
       "Bash(node -e \"['render.js','politics.js','character.js','faction_members.js'].forEach\\(f=>new Function\\(require\\('fs'\\).readFileSync\\(f,'utf8'\\)\\)\\);console.log\\('syntax ok'\\)\")",
-      "Bash(node tools/db_q.js \"select p.slug, p.section, p.image_url is not null as has_img from pages p where p.page_type='character'\")"
+      "Bash(node tools/db_q.js \"select p.slug, p.section, p.image_url is not null as has_img from pages p where p.page_type='character'\")",
+      "Bash(cp /tmp/q.js tools/q.js)",
+      "Bash(node tools/q.js /tmp/pg.sql)",
+      "Bash(sed -i \"s|path.join\\(__dirname||'.','.env'\\)|path.join\\(__dirname,'..','.env'\\)|\" tools/q.js)",
+      "Bash(node tools/db_run.js _char_rls.sql)"
     ]
   }
 }
