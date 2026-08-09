@@ -2760,18 +2760,41 @@ function _vnScreenSync() {
   }
 }
 
-// ── ВЫХОД ИЗ ЭКРАНА: отдельная кнопка, ни от чего не зависящая ──
-// Кнопка «назад» в шапке экрана оказалась ненадёжной: шапка живёт внутри
-// оверлея, оверлей — внутри прокручиваемого #cw, и на iOS Safari её просто
-// не видно (fixed там считается от скроллера, а не от вьюпорта). Поэтому
-// выход дублируется ОТДЕЛЬНОЙ кнопкой: она висит прямо в <body> (вне всех
-// скроллеров и клипов), стили заданы инлайном (не зависят от кэша CSS,
-// порядка файлов и медиазапросов), z-index — предельный. Пока открыт хоть
-// один экран новеллы, эта кнопка есть на любом устройстве и в любом браузере.
+// ── ВЫХОД ИЗ ЭКРАНА: страховочная кнопка, ни от чего не зависящая ──
+// Штатная кнопка «назад» живёт в шапке экрана, шапка — внутри оверлея, а
+// оверлей — внутри прокручиваемого #cw. На iOS Safari этого хватило, чтобы
+// её не стало видно совсем. Поэтому раз в тик МЕРЯЕМ штатную кнопку: если
+// она на экране — ничего не добавляем (никаких дублей на мониторе). Если её
+// нет или она за краем — поднимаем свою: прямо в <body> (вне всех скроллеров
+// и клипов), стили инлайном (не зависят от кэша CSS, порядка файлов и
+// медиазапросов), z-index предельный, угол — правый верхний, как у штатной.
 const _VN_FAB_ID = 'vn-back-fab';
+// Видна ли собственная кнопка экрана? Три проверки, все — замер, не догадка:
+//   1) элемент вообще есть и не выключен стилями (display/visibility/opacity);
+//   2) у него ненулевой размер и он ЦЕЛИКОМ в пределах вьюпорта — именно это
+//      ловит iOS-случай, где шапка уехала выше нуля (r.top отрицательный);
+//   3) hit-test: в её центре палец попадёт в неё же, а не в перекрывшую панель.
+// Третью проверку делаем только когда своей кнопки на экране нет: иначе она
+// сама встанет над родной и hit-test будет вечно врать «перекрыта».
+function _vnOwnBackVisible(scr, hitTest) {
+  const own = scr && scr.querySelector('.hp-vn-col-x,.hvp-back');
+  if (!own) return false;
+  const cs = getComputedStyle(own);
+  if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0) return false;
+  const r = own.getBoundingClientRect();
+  if (r.width < 8 || r.height < 8) return false;
+  const vh = window.innerHeight || document.documentElement.clientHeight;
+  const vw = window.innerWidth || document.documentElement.clientWidth;
+  if (!(r.top >= 0 && r.left >= 0 && r.bottom <= vh + 1 && r.right <= vw + 1)) return false;
+  if (!hitTest) return true;
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return !!top && (top === own || own.contains(top) || top.contains(own));
+}
 function _vnBackFabSync(open) {
+  const scr = open ? _heroVNScreenOpen() : null;
   let fab = document.getElementById(_VN_FAB_ID);
-  if (!open) { if (fab) fab.remove(); return; }
+  const need = !!scr && !_vnOwnBackVisible(scr, !fab);
+  if (!need) { if (fab) fab.remove(); return; }
   if (fab && fab.isConnected && fab.parentNode === document.body) return;
   if (fab) fab.remove();
   fab = document.createElement('button');
@@ -2782,12 +2805,12 @@ function _vnBackFabSync(open) {
   fab.setAttribute('aria-label', en ? 'Back' : 'Назад');
   fab.style.cssText = [
     'position:fixed',
-    'left:calc(12px + env(safe-area-inset-left,0px))',
-    'bottom:calc(12px + env(safe-area-inset-bottom,0px))',
+    'right:calc(10px + env(safe-area-inset-right,0px))',
+    'top:calc(10px + env(safe-area-inset-top,0px))',
     'z-index:2147483000',
-    'min-height:44px;padding:11px 18px',
+    'min-height:40px;padding:10px 16px',
     'display:flex;align-items:center;gap:6px',
-    'font:700 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace',
+    'font:700 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace',
     'letter-spacing:.12em;text-transform:uppercase',
     'color:#eaf6ff;background:#0d1520;border:1px solid #3a9bdc',
     'border-radius:0;box-shadow:0 6px 22px rgba(0,0,0,.55)',
@@ -2802,7 +2825,7 @@ function _vnBackFabSync(open) {
 // Жмём её; если экран своей кнопки не завёл — уходим в меню новеллы.
 function _vnBackFabGo() {
   const scr = _heroVNScreenOpen();
-  const own = scr && scr.querySelector('.hp-vn-col-x,.hp-vn-back');
+  const own = scr && scr.querySelector('.hp-vn-col-x,.hvp-back');
   if (own) { try { own.click(); return; } catch (e) {} }
   try { heroVNChoice('menu'); } catch (e) {}
 }
