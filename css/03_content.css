@@ -4126,6 +4126,62 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
    object-fit к <svg> внутри <div> не применяется. */
 .hvp-city{position:absolute;inset:0;overflow:hidden;pointer-events:none}
 .hvp-city>svg,.hp-hero-cover .hp-hero-img.hvp-city>svg{width:100%;height:100%;display:block}
+
+/* ── ЗАГРУЗКА ФОНА ──────────────────────────────────────────
+   Пока не известно, что рисовать (столица? пепелище? обложка?), в кадре стоит
+   нейтральная плита с бегущей полосой. Показывать сначала одну картинку, а через
+   секунду менять её на другую — то самое мигание, ради которого это и сделано. */
+.hp-hero-wait{position:absolute;inset:0;
+  background:linear-gradient(160deg,#10141b 0%,#0a0d12 55%,#070a0e 100%)}
+.hp-hero-wait::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(100deg,transparent 30%,rgba(120,190,220,.09) 50%,transparent 70%);
+  background-size:220% 100%;animation:vnw-sweep 1.5s linear infinite}
+@keyframes vnw-sweep{from{background-position:120% 0}to{background-position:-120% 0}}
+/* Готовый фон проявляется одним движением, а не возникает рывком. */
+#hp-hero-city{opacity:0;transition:opacity .45s ease}
+#hp-hero-city.is-in,#hp-hero-city.hp-hero-wait{opacity:1}
+@media (prefers-reduced-motion:reduce){
+  .hp-hero-wait::after{animation:none}
+  #hp-hero-city{transition:none;opacity:1}}
+
+/* ── ПЕПЕЛИЩЕ: глитч потерянного сигнала (render.js _vnCityLayer, класс vnq) ──
+   Разрыв канала сделан КОПИЕЙ кадра со сдвигом, а не css-фильтром: filter мылит
+   штриховую графику и от города остаётся каша. Слои: .vnq-slice — красный канал,
+   которому clip-path раз в цикл выбивает горизонтальные полосы; .vnq-scan —
+   строчная развёртка с уплывающей вниз фазой; .vnq-cap — подпись. */
+.vnq{position:absolute;inset:0;overflow:hidden;isolation:isolate}
+.vnq-slice{position:absolute;inset:0;display:block;pointer-events:none;
+  mix-blend-mode:screen;opacity:.55;
+  filter:url(#none) sepia(1) saturate(6) hue-rotate(-38deg);
+  animation:vnq-slice 5.2s steps(1,end) infinite}
+.vnq-slice>svg{width:100%;height:100%;display:block}
+.vnq-scan{position:absolute;inset:-20% 0;display:block;pointer-events:none;opacity:.3;
+  background:repeating-linear-gradient(180deg,rgba(0,0,0,.55) 0 1px,transparent 1px 3px);
+  animation:vnq-scan 7s linear infinite}
+.vnq-cap{position:absolute;left:14px;top:12px;z-index:2;
+  font:600 11px/1 var(--font-mono,ui-monospace,monospace);letter-spacing:.18em;
+  color:#ff5a4d;text-shadow:0 0 8px rgba(255,42,32,.55);
+  padding:5px 9px;border:1px solid rgba(255,90,77,.45);background:rgba(10,6,6,.55);
+  animation:vnq-cap 3.4s steps(1,end) infinite}
+/* Кадр целиком дёргает редко и коротко — постоянная тряска читается как поломка
+   вёрстки, а не как драма. */
+.vnq>svg{animation:vnq-jolt 5.2s steps(1,end) infinite}
+@keyframes vnq-jolt{
+  0%,86%{transform:none}
+  87%{transform:translate3d(-7px,0,0)} 89%{transform:translate3d(5px,-2px,0)}
+  91%{transform:translate3d(-3px,1px,0)} 93%,100%{transform:none}}
+@keyframes vnq-slice{
+  0%,84%{clip-path:inset(100% 0 0 0);transform:none}
+  86%{clip-path:inset(18% 0 64% 0);transform:translate3d(-14px,0,0)}
+  88%{clip-path:inset(52% 0 34% 0);transform:translate3d(11px,0,0)}
+  90%{clip-path:inset(7% 0 84% 0);transform:translate3d(-6px,0,0)}
+  92%{clip-path:inset(70% 0 12% 0);transform:translate3d(16px,0,0)}
+  94%,100%{clip-path:inset(100% 0 0 0);transform:none}}
+@keyframes vnq-scan{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,24px,0)}}
+@keyframes vnq-cap{0%,7%{opacity:.25}8%,40%{opacity:1}41%,44%{opacity:.35}45%,100%{opacity:.9}}
+@media (prefers-reduced-motion:reduce){
+  .vnq>svg,.vnq-slice,.vnq-scan,.vnq-cap{animation:none}
+  .vnq-slice{opacity:.25;clip-path:inset(100% 0 0 0)}}
 .hvp-scene-grad{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(5,8,13,.82) 92%)}
 /* герой сцены: вращающаяся планета-сфера + имя; арт-фон (когда зальют) ляжет позади */
 .hvp-scene-hero{

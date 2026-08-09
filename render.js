@@ -2602,13 +2602,22 @@ function buildHeroVN(coverUrl, user) {
   if (!items.length) return null;
 
   const url = (coverUrl || '').trim();
-  // Фон новеллы — панорама СТОЛИЦЫ: справа оставлена полоса под спрайт девочки
-  // (charZone), иначе фасады лезут ей за спину и силуэт пропадает. Пока EC не
-  // загрузился, столицы нет — тогда обычная обложка, а vnCityRepaint() подменит
-  // слой, как только колонии приедут.
-  const bgLayer = _vnCityLayer() || (url
+  // ⚠️ Обложка главной — РИСОВАННЫЙ АРТ, и по умолчанию его никто не трогает:
+  // процедурная панорама тяжелее (тысячи узлов) и лезла на место готовой картинки
+  // без спроса. Панорама столицы включается явно — vnCityOn(1) (флаг в
+  // localStorage), выключается vnCityOn(0). Экрана колонии это не касается: там
+  // фон и так пустой, панорама — единственное, что его наполняет.
+  // ⚠️ ФОН НЕ ПОДМЕНЯЕТСЯ НА ГЛАЗАХ. Раньше сначала показывалась обложка, а секунду
+  // спустя её сменяла панорама — мигание на каждом заходе. Теперь: пока неизвестно,
+  // что рисовать, стоит НЕЙТРАЛЬНАЯ заглушка-загрузка, и только готовый правильный
+  // фон проявляется в неё (vnCityReveal). Не доехало за отведённое время — тем же
+  // одним движением проявляется обложка.
+  const wantCity = _vnCityEnabled() && typeof CG !== 'undefined' && CG;
+  const cover = url
     ? `<img class="hp-hero-img" src="${esc(url)}" alt="" loading="eager">`
-    : `<div class="hp-hero-noimg"></div>`);
+    : `<div class="hp-hero-noimg"></div>`;
+  const bgLayer = !wantCity ? cover
+    : (_vnCityLayer() || `<div class="hp-hero-img hp-hero-wait" id="hp-hero-city" aria-hidden="true"></div>`);
   // Спрайт-слой: контейнер с несколькими спрайтами (для поддержки 1-4 персонажей одновременно).
   const first = items[0];
   let spriteHtml = '';
@@ -9470,7 +9479,9 @@ function _hvpCitySeed(c) {
   return h >>> 0;
 }
 function _hvpCityOpts(c, extra) {
-  const blds = (typeof EC !== 'undefined' && EC.buildings || []).filter(b => b.colony_id === c.id);
+  // У псевдоколонии державы (§_vnFactionStub) своих построек нет — берём ВСЕ её.
+  const blds = c._stub ? ((typeof EC !== 'undefined' && EC.buildings) || [])
+    : ((typeof EC !== 'undefined' && EC.buildings) || []).filter(b => b.colony_id === c.id);
   const kinds = [];
   blds.forEach(b => { const k = HVP_CITY_KIND[b.btype]; if (k && kinds.indexOf(k) < 0) kinds.push(k); });
   if (c.is_capital && kinds.indexOf('palace') < 0) kinds.unshift('palace');
@@ -9478,7 +9489,8 @@ function _hvpCityOpts(c, extra) {
   // если пусто — оцениваем по числу построек, чтобы пустая колония не выглядела
   // мегаполисом.
   const sp = (typeof EC !== 'undefined' && EC.spatial && EC.spatial[c.system_id]) || null;
-  const pop = sp && +sp.pop ? +sp.pop : Math.max(0.5, blds.length * 6);
+  const pop = c._stub && c._pop ? c._pop
+    : (sp && +sp.pop ? +sp.pop : Math.max(0.5, blds.length * 6));
   const app = (typeof EC !== 'undefined' && EC.app) || null;
   return Object.assign({
     seed: _hvpCitySeed(c),
@@ -9487,7 +9499,8 @@ function _hvpCityOpts(c, extra) {
     built: kinds.slice(0, 6),
     flag: app && (app.color || app.herald_url)
       ? { a: app.color || '#c1121a', b: '#f2f2f0', href: app.herald_url || app.image_url || '' } : null,
-    star: { dist: 0.55 }
+    star: { dist: 0.55 },
+    light: true                                             // фон под интерфейсом — лёгкий кадр
   }, extra || {});
 }
 function _hvpCityBg(c, cls, w, h, extra) {
@@ -9505,35 +9518,104 @@ function _vnCapital() {
     ((EC.buildings || []).filter(x => x.colony_id === b.id).length)
     - ((EC.buildings || []).filter(x => x.colony_id === a.id).length))[0] || null;
 }
+// ⚠️ Колонии может не быть ВООБЩЕ: столицу снесли войной, игрок только вступил в
+// державу, планеты ещё не заселены. Раньше в этом случае слой молча не строился и
+// на главной вечно висела старая обложка. Теперь при отсутствии колонии кадр
+// собирается по самой ДЕРЖАВЕ: сид от её id, население — сумма по системам,
+// постройки — все, что у неё есть. Пусто — значит будет пустой город, но будет.
 function _vnCityLayer() {
-  const c = _vnCapital();
-  if (!c) return '';
-  return _hvpCityBg(c, 'hp-hero-img', 1600, 590, { charZone: [0.6, 0.9] })
-    .replace('<div class="hp-hero-img', '<div id="hp-hero-city" class="hp-hero-img');
+  const c = _vnCapital() || _vnFactionStub();
+  if (!c) { _vnCityWhy = 'нет ни колонии, ни державы (EC.app)'; return ''; }
+  // Столицы нет — значит её потеряли. Кадр показывает не пустоту, а ПЕПЕЛИЩЕ:
+  // срезанные взрывом башни, столбы дыма, сорванный флаг (city_gen ruin) — и
+  // поверх глитч, будто сигнал с планеты рвётся.
+  const dead = !!c._stub;
+  const html = _hvpCityBg(c, 'hp-hero-img', 1600, 590, { charZone: [0.6, 0.9], ruin: dead ? 1 : 0 });
+  if (!html) { _vnCityWhy = 'city_gen.js не подключён или упал'; return ''; }
+  _vnCityWhy = 'ок: ' + (dead ? 'пепелище (столицы нет)' : 'по столице ' + (c.planet_name || c.id));
+  let out = html.replace('<div class="hp-hero-img', '<div id="hp-hero-city" class="hp-hero-img');
+  if (!dead) return out;
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  // Второй экземпляр той же картинки — «съехавший» канал: без копии RGB-разрыв
+  // пришлось бы делать фильтром, а он мылит штрих и убивает всю графику.
+  const svg = out.slice(out.indexOf('<svg'), out.lastIndexOf('</div>'));
+  return out.replace('</div>',
+      `<span class="vnq-slice" aria-hidden="true">${svg}</span>`
+    + `<span class="vnq-scan" aria-hidden="true"></span>`
+    + `<span class="vnq-cap">${en ? 'SIGNAL LOST · CAPITAL DESTROYED' : 'СИГНАЛ ПОТЕРЯН · СТОЛИЦА УНИЧТОЖЕНА'}</span></div>`)
+    .replace('class="hp-hero-img hvp-city"', 'class="hp-hero-img hvp-city vnq"');
+}
+let _vnCityWhy = 'ещё не строился';
+// Псевдоколония державы — когда своей планеты нет.
+function _vnFactionStub() {
+  const app = (typeof EC !== 'undefined' && EC.app) || null;
+  if (!app) return null;
+  let pop = 0;
+  Object.values((typeof EC !== 'undefined' && EC.spatial) || {}).forEach(b => { pop += +b.pop || 0; });
+  return {
+    _stub: true, id: 'fac:' + (app.faction_id || app.id || 'x'),
+    planet_pid: 'fac:' + (app.faction_id || app.id || 'x'),
+    planet_type: app.home_type || 'земные', system_id: null,
+    is_capital: true, _pop: pop
+  };
 }
 // ⚠️ Главная НЕ вызывает ecLoadApp сама: без этого колоний в памяти нет никогда,
 // панорама не строится и на экране остаётся старая обложка. Поэтому подтягиваем
 // данные сами — один раз за загрузку страницы, в фоне, молча.
 let _vnCityBooted = false;
+// Панорама на главной включена, пока её не выключили явно: vnCityOn(0) / vnCityOn(1).
+function _vnCityEnabled() {
+  try { return localStorage.getItem('wk_vn_city') !== '0'; } catch (e) { return true; }
+}
+function vnCityOn(v) {
+  try { localStorage.setItem('wk_vn_city', v ? '1' : '0'); } catch (e) {}
+  _vnCityBooted = false;
+  if (v) vnCityBoot(); else location.reload();
+  return !!v;
+}
 function vnCityBoot() {
   if (_vnCityBooted) return;
+  if (!_vnCityEnabled()) return;                           // обложку не трогаем
   if (typeof CG === 'undefined' || !CG) return;            // генератор не подключён
   _vnCityBooted = true;
-  if (_vnCapital()) { vnCityRepaint(); return; }           // данные уже есть
-  if (typeof ecLoadApp !== 'function') return;
-  Promise.resolve().then(ecLoadApp).then(() => vnCityRepaint()).catch(() => {});
+  let settled = false;
+  const done = () => {
+    if (settled) return; settled = true;
+    if (!vnCityRepaint()) _vnCityFallback();               // не собралось — обложка
+    try { console.log('[vn-city]', _vnCityWhy, '| колоний:',
+      ((typeof EC !== 'undefined' && EC.colonies) || []).length,
+      '| держава:', !!(typeof EC !== 'undefined' && EC.app)); } catch (e) {}
+  };
+  // Заглушка не может висеть вечно: если данные не приехали за 8 с (сеть легла,
+  // сервер молчит), показываем обложку и на этом всё.
+  setTimeout(() => { if (!settled) { settled = true; _vnCityWhy = 'таймаут загрузки данных'; _vnCityFallback(); console.log('[vn-city] таймаут — показал обложку'); } }, 8000);
+  if (_vnCapital() || _vnFactionStub()) { done(); return; } // данные уже есть
+  if (typeof ecLoadApp !== 'function') { _vnCityWhy = 'ecLoadApp недоступен'; done(); return; }
+  Promise.resolve().then(ecLoadApp).then(done)
+    .catch(e => { _vnCityWhy = 'ecLoadApp упал: ' + (e && e.message || e); done(); });
 }
 // Перерисовка фона новеллы после того, как приехали колонии (ecLoadApp).
-function vnCityRepaint() {
+function vnCityRepaint() { return _vnCityShow(_vnCityLayer()); }
+// Единственное место, где фон появляется на экране: готовый кусок разметки встаёт
+// вместо заглушки и проявляется. Двух подмен подряд не бывает — либо панорама,
+// либо (по таймауту) обложка.
+function _vnCityShow(html) {
   const cover = document.getElementById('hp-hero-cover');
-  if (!cover || !cover.classList.contains('hp-vn')) return;
-  const html = _vnCityLayer();
-  if (!html) return;
+  if (!cover || !cover.classList.contains('hp-vn') || !html) return false;
   const old = cover.querySelector('#hp-hero-city, .hp-hero-img, .hp-hero-noimg');
-  if (!old) return;
+  if (!old) return false;
   const box = document.createElement('div');
   box.innerHTML = html;
-  old.replaceWith(box.firstChild);
+  const el = box.firstChild;
+  old.replaceWith(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('is-in')));
+  return true;
+}
+// Обложка как запасной вариант: показывается ТОЛЬКО если панорама не собралась.
+function _vnCityFallback() {
+  const u = (typeof _heroCoverUrl !== 'undefined' && _heroCoverUrl) ? String(_heroCoverUrl).trim() : '';
+  _vnCityShow(u ? `<img class="hp-hero-img" id="hp-hero-city" src="${esc(u)}" alt="">`
+                : `<div class="hp-hero-noimg" id="hp-hero-city"></div>`);
 }
 
 function _hvpBgImg(c, cls) {

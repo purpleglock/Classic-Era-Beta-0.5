@@ -264,24 +264,37 @@ function cityBody(R, cfg) {
   const W = cfg.W, H = cfg.H, horizon = cfg.horizon, layers = cfg.layers, sky = cfg.sky;
   const D = cfg.dens || popProfile(null);                   // профиль застройки (§9)
   const zone = cfg.charZone;                                // полоса под персонажа
+  const ruin = Math.max(0, Math.min(1, cfg.ruin || 0));     // 0 — целый город, 1 — пепелище
   let body = '', nearest = [];
   for (let L = layers - 1; L >= 0; L--) {                   // от дальнего к ближнему
     const depth = layers === 1 ? 0 : L / (layers - 1);
     const P = palette(sky, depth);
+    if (cfg.light) P.fine = false;                          // без мелких мотивов и консолей
     const scale = 1 - depth * 0.3;
     const put = [];
     let x = -30 - R() * 40, guard = 0;
     while (x < W + 20 && guard++ < 220) {
       const t = R();
-      const w = (t < 0.18 ? rnd(R, 55, 110) : t < 0.72 ? rnd(R, 24, 52) : rnd(R, 11, 24)) * scale;
+      // ОБЛЕГЧЁННЫЙ РЕЖИМ (light): дома шире, мелочь на фасадах отключена. Полный
+      // кадр — это тысячи узлов на слой; как фон под интерфейсом он грузит
+      // отрисовку впустую, деталь там всё равно не разглядеть.
+      const w = (t < 0.18 ? rnd(R, 55, 110) : t < 0.72 ? rnd(R, 24, 52) : rnd(R, 11, 24)) * scale * (cfg.light ? 1.7 : 1);
       const tall = R() < D.tallP;
       let h = H * (tall ? rnd(R, D.hi * 0.55, D.hi) : rnd(R, D.lo, D.lo + (D.hi - D.lo) * 0.55)) * scale;
+      // РАЗРУШЕННЫЙ ГОРОД (§14): башню срезает взрывом на случайной высоте и
+      // кренит на основание. Отдельный «обломочный» силуэт рисовать не нужно —
+      // обрубок тех же правил читается страшнее, чем нарочито битая геометрия.
+      let tilt = 0;
+      if (ruin && R() < 0.62 * ruin) { h *= rnd(R, 0.3, 0.78); tilt = rnd(R, -4, 4) * ruin; }
       // Полоса, отведённая персонажу новеллы: застройка там приседает, чтобы
       // силуэт девочки читался на небе, а не тонул в фасадах.
       if (zone && depth < 0.34 && x + w > zone[0] * W && x < zone[1] * W) h = Math.min(h, H * 0.2);
       const b = drawBuilding(R, { w: w, h: h, pal: P, lit: R() < 0.5 });
       const bx = x, by = horizon - h;
-      body += `<g transform="translate(${n1(bx)},${n1(by)})">${b.svg}</g>`;
+      // Крен считается ВОКРУГ ОСНОВАНИЯ (0, h), иначе башня отрывается от земли.
+      const tr = tilt ? ` rotate(${n1(tilt)},${n1(w / 2)},${n1(h)})` : '';
+      body += `<g transform="translate(${n1(bx)},${n1(by)})${tr}">${b.svg}</g>`;
+      if (ruin && tilt && R() < 0.5) body += plume(R, bx + w * 0.5, by, H * rnd(R, 0.2, 0.6), w * rnd(R, 0.5, 1.3), P.ink);
       put.push({ bx: bx, by: by, h: h, w: w, b: b, roofY: by + b.roofY, depth: depth });
       // Разрежённость от населения: у деревни между домами пустая земля.
       x += w * rnd(R, 0.78, 1.06) + (R() < 0.2 ? rnd(R, 4, 20) : 0)
@@ -342,6 +355,33 @@ function building(opt) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">`
     + (opt.bg === false ? '' : `<rect width="${W}" height="${H}" fill="${sky}"/>`)
     + `<g transform="translate(${n1(W * 0.22)},${n1(H * 0.1)})">${b.svg}</g></svg>`;
+}
+
+// ── §8б. Дым пожара ──────────────────────────────────────────
+// Столб дыма тем же языком, что и всё остальное: не размытие, а ШТРИХ — пучок
+// расходящихся кверху дуг. Прозрачность одна на весь столб, чтобы не плодить
+// полутонов, которых в этой графике нет.
+function plume(R, x, y, h, w, col) {
+  let d = '';
+  const n = ri(R, 4, 7), dr = rnd(R, -0.4, 0.4);            // общий снос ветром
+  for (let k = 0; k < n; k++) {
+    const off = (k / (n - 1) - 0.5) * w;
+    const tipX = x + off * 3.2 + h * dr, tipY = y - h;
+    d += `M${n1(x + off * 0.4)},${n1(y)}Q${n1(x + off * 1.6 + h * dr * 0.3)},${n1(y - h * 0.55)} ${n1(tipX)},${n1(tipY)}`;
+  }
+  return `<path d="${d}" stroke="${col}" stroke-width="${n1(Math.max(0.8, w * 0.14))}" fill="none" opacity="0.5"/>`;
+}
+
+// Гряда обломков вдоль горизонта: ломаная из мелких клиньев.
+function rubble(R, W, gy, unit, col) {
+  const u = Math.max(1.2, unit);
+  let d = '';
+  for (let x = -10; x < W + 10;) {
+    const w = u * rnd(R, 2, 9), h = u * rnd(R, 0.6, 3.2);
+    d += `M${n1(x)},${n1(gy)}L${n1(x + w * 0.35)},${n1(gy - h)}L${n1(x + w)},${n1(gy)}Z`;
+    x += w * rnd(R, 0.7, 1.4);
+  }
+  return `<path d="${d}" fill="${col}"/>`;
 }
 
 // ── §9. Население → плотность застройки ──────────────────────
@@ -704,10 +744,14 @@ function scene(opt) {
   const R = rng(seed);
   const id = 'sc' + (seed >>> 0).toString(36);
   const A = ATMO[opt.atmo] || ATMO.crimson;
-  const sky = opt.sky || A.bot, sky2 = opt.sky2 || (opt.sky ? mix(opt.sky, '#000000', 0.42) : A.top);
+  // Пепелище: небо затянуто гарью — и низ, и зенит уходят в чёрное. Цвет светила
+  // при этом НЕ трогаем: тусклый диск сквозь дым и есть вся драма.
+  const ruin = Math.max(0, Math.min(1, opt.ruin || 0));
+  const sky = mix(opt.sky || A.bot, '#1a1512', 0.45 * ruin);
+  const sky2 = mix(opt.sky2 || (opt.sky ? mix(opt.sky, '#000000', 0.42) : A.top), '#000000', 0.5 * ruin);
   const horizon = opt.horizon == null ? H * 0.995 : opt.horizon;
   const D = popProfile(opt.pop == null ? 60 : opt.pop);
-  const layers = opt.layers || D.layers;
+  const layers = Math.min(opt.layers || D.layers, opt.light ? 2 : 4);
   const P0 = palette(sky, 0);                               // палитра ближнего плана
   const f = opt.flag && (opt.flag.a || opt.flag.href) ? {
     a: opt.flag.a || '#c1121a', b: opt.flag.b || '#f2f2f0',
@@ -721,7 +765,7 @@ function scene(opt) {
     companion: opt.star && opt.star.companion
   });
 
-  const cb = cityBody(R, { W: W, H: H, sky: sky, layers: layers, horizon: horizon, dens: D, charZone: opt.charZone || null });
+  const cb = cityBody(R, { W: W, H: H, sky: sky, layers: layers, horizon: horizon, dens: D, ruin: ruin, light: !!opt.light, charZone: opt.charZone || null });
 
   // Постройки игрока идут ПОВЕРХ города и раздвигаются по ширине. Полоса персонажа
   // для них запретна: колосс на переднем плане перекроет спрайт целиком.
@@ -770,7 +814,12 @@ function scene(opt) {
   // Флаги на городе: одно полотнище по фасаду самой высокой ближней башни и
   // пара вымпелов на кровлях пониже.
   let fl = '';
-  if (f && cb.near.length) {
+  // На пепелище полотнища нет — только голое древко: сорванный флаг говорит о
+  // случившемся точнее, чем целый стяг над руинами.
+  if (f && ruin > 0.5 && cb.near.length) {
+    const p = cb.near.slice().sort((a, b) => a.roofY - b.roofY)[0];
+    if (p) fl += bar(p.bx + p.w * 0.5, p.roofY, -Math.PI / 2, Math.max(10, p.h * 0.14), 1.2, P0.ink);
+  } else if (f && cb.near.length) {
     const sorted = cb.near.filter(p => p.bx > W * 0.02 && p.bx < W * 0.94).sort((a, b) => a.roofY - b.roofY);
     const host = sorted[0];
     if (host) {
@@ -780,8 +829,13 @@ function scene(opt) {
     sorted.slice(1, 4).forEach(p => { if (R() < 0.6) fl += pennant(p.bx + p.w * 0.5, p.roofY, Math.max(8, p.h * 0.1), f, P0.ink); });
   }
 
-  const ground = opt.ground === false ? '' :
-    R2(0, horizon - 1, W, H - horizon + 1, P0.ink) + tinyFolk(R, 0, W, H - 1, P0.ink, Math.round(6 + 30 * D.folk), unit);
+  // Земля. На пепелище вместо толпы — гряда обломков: людей на улице нет.
+  let ground = '';
+  if (opt.ground !== false) {
+    ground = R2(0, horizon - 1, W, H - horizon + 1, P0.ink);
+    ground += ruin > 0.5 ? rubble(R, W, horizon, unit, P0.ink)
+      : tinyFolk(R, 0, W, H - 1, P0.ink, Math.round(6 + 30 * D.folk), unit);
+  }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" preserveAspectRatio="xMidYMax slice">`
     + `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">`
