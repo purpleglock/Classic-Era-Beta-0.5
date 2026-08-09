@@ -6,7 +6,7 @@
 @import './05_panels.css?v=20260705regcyb';
 @import './06_system.css?v=20260703brand5';
 @import './07_comments.css?v=20260703brand5';
-@import './08_character.css?v=20260703brand5';
+@import './08_character.css?v=20260809service';
 @import './07_premium.css?v=20260715vnnofade2';
 @import './10_patch.css?v=20260806censor3';
 @import './12_preview.css?v=20260703brand5';
@@ -23,4 +23,5 @@
 @import './23_chat.css?v=20260712chat4';
 @import './24_battle.css?v=20260809perks2';
 @import './25_frame.css?v=20260802topflat1';
-@import './26_members.css?v=20260809members2';
+@import './26_members.css?v=20260809service';
+@import './27_politics.css?v=20260809politics';

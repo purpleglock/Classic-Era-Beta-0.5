@@ -478,5 +478,5 @@ grant execute on function public.fm_open_factions() to authenticated;
 create or replace function public.su_propose(p_target_fid text)
 returns jsonb language plpgsql security definer set search_path=public as $$
 begin
-  raise exception 'Уния государств упразднена. Играть вдвоём одной державой теперь можно через состав державы: игрок подаёт заявку, владелец принимает и выдаёт права.';
+  raise exception 'Старая уния упразднена. Объединить две ГОТОВЫЕ державы в одно государство — annex_propose (вкладка «Союзы» → «Объединение держав»); принять игрока БЕЗ державы к себе на службу — состав державы.';
 end$$;

@@ -2641,6 +2641,8 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-colony hp-vn-geo hp-vn-sinli hp-vn-tama" id="hp-vn-tama" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-fish" id="hp-vn-fish" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-intel" id="hp-vn-intel" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-pol" id="hp-vn-pol" aria-hidden="true"></div>
+    <div class="hp-vn-colony hp-vn-geo hp-vn-dip" id="hp-vn-dip" aria-hidden="true"></div>
     <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
       <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
       <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
@@ -2821,6 +2823,11 @@ function heroVNActsSync() {
 // (renderChoices), и подменю (heroVNChoice) читают отсюда, иначе они разъезжаются.
 function heroVNMenuGroups(en) {
   const work = [
+    // Власть выведена из кабинета в новеллу: двор, благополучие, курс, вера и
+    // война — один разговор у трона; дипломатия и аванпосты — другой, у стола
+    // послов. В кабинете этих вкладок больше нет (см. ecPaintCabinet).
+    ['ipol',     (en ? 'Domestic policy' : 'Внутренняя политика')],
+    ['dipl',     (en ? 'Foreign policy' : 'Внешняя политика')],
     ['colony',   (en ? 'Colonization' : 'Колонизация')],
     ['planets',  (en ? 'Colony management' : 'Управление колониями')],
     ['research', (en ? 'Research' : 'Исследования')],
@@ -2893,6 +2900,11 @@ function heroVNChoice(kind) {
   // «Пойдём к реке» — свой оверлей с живым канвасом: гасим при уходе на любой
   // другой экран, иначе игровой цикл продолжал бы крутиться под ним.
   if (kind !== 'fish' && typeof heroVNFishClose === 'function') heroVNFishClose();
+  // Экраны политики живут в собственных оверлеях — гасим их при уходе куда угодно.
+  if (kind !== 'ipol' && typeof polClose === 'function') polClose();
+  if (kind !== 'dipl' && typeof dipClose === 'function') dipClose();
+  if (kind === 'ipol') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); polOpen(); return; }
+  if (kind === 'dipl') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); dipOpen(); return; }
   if (kind === 'intel') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); heroVNIntelOpen(); return; }
   if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); _heroVNCtl.menu(); return; }
 

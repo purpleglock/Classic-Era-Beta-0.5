@@ -75,7 +75,11 @@ const REG_STAT_MAX    = 16;
 const CHAR_REFERENCE_YEAR = 2014;
 const CHAR_REF_DAYS = Math.floor((Date.now() - new Date(`${CHAR_REFERENCE_YEAR}-01-01`)) / (1000*60*60*24));
 
+// Уровень зарабатывается делом: опыт капает на сервере в _fm_gate за каждое
+// действие от имени державы (_char_office.sql). Календарь остался только
+// фолбэком для записей, которым опыт ещё не начислен.
 function _charLvl(ch) {
+  if (ch && ch.xp != null) return Math.min(20, Math.max(1, 1 + Math.floor(Math.sqrt(ch.xp / 20))));
   const start = new Date(ch.play_start || Date.now());
   const isFinished = ch.status === 'dead' || ch.status === 'retired';
   const end = (isFinished && ch.play_end) ? new Date(ch.play_end) : new Date();
@@ -115,24 +119,63 @@ async function saveCharFull(slug, patch) {
 // ═══════════════════════════════════════════════════════════════
 let _regStep = 0;
 let _regData = {};
+// Опции запуска мастера: {faction, lockFaction, title, onDone(char)}.
+// Служба в державе поднимает тот же мастер, но с приклеенной фракцией.
+let _regOpts = {};
 
-function openCharRegister() {
-  if (!user) { showAuth('login'); return; }
-  const myChar = pages.find(p=>p.page_type==='character'&&(p.author_id===user.id||p.created_by===user.email));
-  if (myChar) { toast('У вас уже есть персонаж','inf'); go(myChar.slug); closeAp?.(); return; }
-  _regStep = 1;
-  const _initCls = CLASS_DEFS['soldier'];
-  _regData = { name:'',class:'soldier',faction:'',bio:'',image_url:'',exclude_from_collage:false,abilities:[],
-    stats:{..._initCls.base_stats}, statsLeft:REG_STAT_POINTS };
-  const scr = document.getElementById('char-reg-screen');
-  if (scr) {
-    scr.style.display = 'block';
-    _regRender();
-    setTimeout(()=>document.getElementById('reg-name')?.focus(),100);
-  }
+// Экран мастера живёт отдельным оверлеем и создаётся при первом открытии:
+// в разметке страницы его нет, а лепить его в index.html незачем.
+function _cregScreen() {
+  let scr = document.getElementById('char-reg-screen');
+  if (scr) return scr;
+  scr = document.createElement('div');
+  scr.id = 'char-reg-screen';
+  scr.innerHTML = `<div class="creg-shell">
+    <aside class="creg-side">
+      <div class="creg-side-hd" id="creg-title">СОЗДАНИЕ ПЕРСОНАЖА</div>
+      <div id="creg-steps"></div>
+    </aside>
+    <div class="creg-main">
+      <div class="creg-body" id="creg-content"></div>
+      <div class="creg-actions" id="creg-actions"></div>
+    </div>
+  </div>`;
+  document.body.appendChild(scr);
+  return scr;
 }
 
-const _REG_STEPS = ['ЛИЧНОСТЬ','КЛАСС','НАВЫКИ','ФРАКЦИЯ','СПОСОБНОСТИ','ФИНАЛ'];
+function closeCharRegister() {
+  const scr = document.getElementById('char-reg-screen');
+  if (scr) scr.style.display = 'none';
+  const cb = _regOpts.onCancel; _regOpts = {};
+  if (typeof cb === 'function') cb();
+}
+
+// Персонаж текущего игрока (страница-досье), если он уже заведён.
+function myCharPage() {
+  if (!user) return null;
+  return pages.find(p=>p.page_type==='character'&&(p.author_id===user.id||p.created_by===user.email)) || null;
+}
+
+function openCharRegister(opts) {
+  if (!user) { showAuth('login'); return; }
+  _regOpts = opts || {};
+  const myChar = myCharPage();
+  if (myChar && !_regOpts.allowExisting) { toast('У вас уже есть персонаж','inf'); go(myChar.slug); closeAp?.(); return; }
+  _regStep = 1;
+  const _initCls = CLASS_DEFS['soldier'];
+  _regData = { name:'',class:'soldier',faction:_regOpts.faction||'',bio:'',image_url:'',exclude_from_collage:false,abilities:[],
+    stats:{..._initCls.base_stats}, statsLeft:REG_STAT_POINTS };
+  const scr = _cregScreen();
+  scr.style.display = 'block';
+  const t = document.getElementById('creg-title');
+  if (t) t.textContent = _regOpts.title || 'СОЗДАНИЕ ПЕРСОНАЖА';
+  _regRender();
+  setTimeout(()=>document.getElementById('reg-name')?.focus(),100);
+}
+
+// Способности из мастера убраны: их выдаёт игра, а не анкета при рождении.
+const _REG_STEPS = ['ЛИЧНОСТЬ','КЛАСС','НАВЫКИ','ФРАКЦИЯ','ФИНАЛ'];
 
 function _regRender() {
   const scr = document.getElementById('char-reg-screen'); if (!scr) return;
@@ -141,7 +184,9 @@ function _regRender() {
   const actionsEl = document.getElementById('creg-actions');
   if (!stepsEl || !contentEl || !actionsEl) return;
 
-  stepsEl.innerHTML = _REG_STEPS.map((s,i) => `
+  // Служба: четвёртый шаг — не «фракция на выбор», а держава, которой служим.
+  const steps = _REG_STEPS.map((s,i) => (_regOpts.lockFaction && i === 3) ? 'ДЕРЖАВА' : s);
+  stepsEl.innerHTML = steps.map((s,i) => `
     <div class="creg-step ${i+1<_regStep?'done':i+1===_regStep?'active':''}" ${i+1<_regStep?`onclick="_regStep=${i+1};_regRender()"`:''}>
       <div class="creg-step-num">${i+1<_regStep?'✓':i+1}</div>
       <div class="creg-step-info">
@@ -150,12 +195,12 @@ function _regRender() {
       </div>
     </div>`).join('');
 
-  const fn=[null,_rH1,_rH2,_rH3,_rH4,_rH5,_rH6];
+  const fn=[null,_rH1,_rH2,_rH3,_rH4,_rH6];
   contentEl.innerHTML = fn[_regStep]?.() || '';
 
   actionsEl.innerHTML = `
     <div class="creg-act-left">
-      <button class="creg-btn-back" onclick="${_regStep>1?'regBack()':'document.getElementById(\'char-reg-screen\').style.display=\'none\''}">${_regStep>1?'← НАЗАД':'ОТМЕНА'}</button>
+      <button class="creg-btn-back" onclick="${_regStep>1?'regBack()':'closeCharRegister()'}">${_regStep>1?'← НАЗАД':'ОТМЕНА'}</button>
     </div>
     <div class="creg-act-progress">${_regStep} / ${_REG_STEPS.length}</div>
     <div class="creg-act-right">
@@ -260,6 +305,30 @@ function _rH3(){
 function _rH4(){
   const fSecs=sections.filter(s=>s.name_ru?.toLowerCase().includes('фракц')||s.name_en?.toLowerCase().includes('fract')||s.slug?.includes('frak')||s.slug?.includes('frac'));
   const fPgs=pages.filter(p=>fSecs.some(s=>s.slug===p.section)&&p.status==='published');
+  // Служба: держава выбрана ещё до мастера, менять её здесь нельзя.
+  if (_regOpts.lockFaction) return`
+  <div class="creg-step-header">
+    <div class="creg-step-eyebrow">ШАГ 4</div>
+    <div class="creg-step-title">ДЕРЖАВА</div>
+    <div class="creg-step-desc">Служить можно только одной державе — эта уже выбрана. Сменить её получится, лишь выйдя из состава.</div>
+  </div>
+  <div class="creg-oath">
+    <div class="creg-oath-herald">${_regOpts.factionFlag
+      ? `<img src="${esc(_regOpts.factionFlag)}" alt="" onerror="this.remove()">`
+      : esc((_regData.faction||'?').slice(0,2).toUpperCase())}</div>
+    <div class="creg-oath-main">
+      <div class="creg-oath-k">Держава службы</div>
+      <div class="creg-oath-v">${esc(_regData.faction||'—')}</div>
+    </div>
+  </div>
+  <div class="creg-rules">
+    <div class="creg-rules-head">◈ Что это значит</div>
+    <div style="font-size:12.5px;color:var(--t3);line-height:1.6">
+      • Прошение уходит владельцу державы — принять вас или отказать решает он.<br>
+      • Приняв, он выдаёт должность и права: что именно вам позволено делать от имени державы.<br>
+      • Своей державы у вас при этом не будет; захотите основать — сначала выйдете из состава.
+    </div>
+  </div>`;
   return`
   <div class="creg-step-header">
     <div class="creg-step-eyebrow">ШАГ 4</div>
@@ -280,37 +349,6 @@ function _rH4(){
   ${_regData.faction?`<div class="creg-selected-badge"><span>◉</span>Выбрано: ${esc(_regData.faction)}</div>`:''}
   `;}
 
-function _rH5(){
-  const abPgs=getAbilityPages(); const maxAb=2;
-  return`
-  <div class="creg-step-header">
-    <div class="creg-step-eyebrow">ШАГ 5</div>
-    <div class="creg-step-title">СПОСОБНОСТИ</div>
-  </div>
-  <div class="creg-ab-counter">
-    <div class="creg-ab-slots">
-      ${Array.from({length:maxAb}).map((_,i)=>{
-        const ab=_regData.abilities[i];
-        return ab
-          ?`<div class="creg-ab-slot filled"><div class="creg-ab-slot-name">${esc(ab.name)}</div></div>`
-          :`<div class="creg-ab-slot"><div class="creg-ab-slot-empty">СЛОТ ${i+1}</div></div>`;
-      }).join('')}
-    </div>
-  </div>
-  ${!abPgs.length
-    ?`<div style="color:rgba(255,255,255,.25);font-family:'JetBrains Mono',monospace;font-size:11px">Нет опубликованных способностей (page_type=ability).</div>`
-    :`<div class="creg-ab-grid">${abPgs.map(p=>{
-        const sel=_regData.abilities.some(a=>a.source_slug===p.slug);
-        const disabled=!sel&&_regData.abilities.length>=maxAb;
-        const ic=(typeof getAbilityIconUrl==='function')?getAbilityIconUrl(pT(p))||'':'';
-        const slug_=esc(p.slug), name_=esc(pT(p));
-        return`<div class="creg-ab-card ${sel?'sel':''} ${disabled?'disabled':''}" ${disabled?'':'onclick="regToggleAb(this.dataset.slug,this.dataset.name)"'} data-slug="${slug_}" data-name="${name_}">
-          ${ic?`<img src="${esc(ic)}" class="creg-ab-icon-img">`:`<div class="creg-ab-icon-ph">◈</div>`}
-          <div class="creg-ab-card-info"><div class="creg-ab-card-name">${name_}</div></div>
-          <div class="creg-ab-check">${sel?'✓':'○'}</div>
-        </div>`;}).join('')}</div>`}
-  `;}
-
 function _rH6(){
   const cls=CLASS_DEFS[_regData.class]||CLASS_DEFS.soldier;
   const bonus=cls.stat_bonus||{};
@@ -318,7 +356,7 @@ function _rH6(){
   const fs=Object.fromEntries(Object.entries(_regData.stats).map(([k,v])=>[k,v+(bonus[k]||0)]));
   return`
   <div class="creg-step-header">
-    <div class="creg-step-eyebrow">ШАГ 6</div>
+    <div class="creg-step-eyebrow">ШАГ 5</div>
     <div class="creg-step-title">ФИНАЛЬНЫЙ ПРОФИЛЬ</div>
   </div>
   <div class="creg-summary">
@@ -339,20 +377,37 @@ function _rH6(){
   </div>
   <div class="creg-field" style="margin-top:20px">
     <label class="creg-label">Биография</label>
-    <textarea class="creg-input creg-textarea" id="reg-bio" placeholder="Краткое описание персонажа (поддерживает Markdown)..." oninput="_regData.bio=this.value" rows="6">${esc(_regData.bio)}</textarea>
-    <div style="font-size:10px;color:var(--t4);margin-top:4px">Поддерживает форматирование: **жирный**, *курсив*, \`код\`, [ссылка](url), ## заголовок</div>
+    <div class="creg-md-bar">
+      <button type="button" class="creg-md-btn" title="Жирный" onclick="regBioWrap('**','**','жирный')"><b>Ж</b></button>
+      <button type="button" class="creg-md-btn" title="Курсив" onclick="regBioWrap('*','*','курсив')"><i>К</i></button>
+      <button type="button" class="creg-md-btn" title="Код" onclick="regBioWrap('\`','\`','код')">&lt;/&gt;</button>
+      <button type="button" class="creg-md-btn" title="Заголовок" onclick="regBioWrap('## ','','Заголовок')">H</button>
+      <button type="button" class="creg-md-btn" title="Ссылка" onclick="regBioLink()">🔗</button>
+    </div>
+    <textarea class="creg-input creg-textarea" id="reg-bio" placeholder="Краткое описание персонажа..." oninput="_regData.bio=this.value" rows="6">${esc(_regData.bio)}</textarea>
   </div>`;}
+
+// Кнопки разметки для биографии: оборачивают выделение, а без него —
+// вставляют заготовку и подсвечивают её, чтобы сразу перебить текстом.
+function regBioWrap(pre, post, ph) {
+  const ta=document.getElementById('reg-bio'); if(!ta)return;
+  const s=ta.selectionStart, e=ta.selectionEnd, v=ta.value;
+  const body=v.slice(s,e)||ph;
+  ta.value=v.slice(0,s)+pre+body+post+v.slice(e);
+  _regData.bio=ta.value;
+  ta.focus(); ta.setSelectionRange(s+pre.length, s+pre.length+body.length);
+}
+function regBioLink() {
+  const ta=document.getElementById('reg-bio'); if(!ta)return;
+  const url=prompt('Адрес ссылки:','https://'); if(!url)return;
+  regBioWrap('[', '](' + url + ')', 'ссылка');
+}
 
 function regStat(stat, delta) {
   const cur=_regData.stats[stat]||REG_STAT_BASE, next=cur+delta;
   if (next<REG_STAT_BASE||next>REG_STAT_MAX) return;
   if (delta>0&&_regData.statsLeft<=0) return;
   _regData.stats[stat]=next; _regData.statsLeft-=delta; _regRender();
-}
-function regToggleAb(slug, title) {
-  const maxAb=2, idx=_regData.abilities.findIndex(a=>a.source_slug===slug);
-  if (idx>=0) { _regData.abilities.splice(idx,1); } else { if (_regData.abilities.length>=maxAb){toast(`Максимум ${maxAb} способности`,'err');return;} _regData.abilities.push({name:title,type:'passive',desc:'',source_slug:slug}); }
-  _regRender();
 }
 function regNext() { if (_regStep===1&&!_regData.name.trim()){toast('Введите имя персонажа','err');return;} _regStep=Math.min(_REG_STEPS.length,_regStep+1); _regRender(); }
 function regBack() { _regStep=Math.max(1,_regStep-1); _regRender(); }
@@ -383,7 +438,13 @@ async function regSubmit() {
     const token=await getTokenFresh();
     const r=await fetch(`${SB_URL}/rest/v1/characters`,{method:'POST',headers:{'apikey':SB_ANON,'Authorization':'Bearer '+token,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({slug,name,class:_regData.class,faction:_regData.faction||'',status:'active',play_start:now.slice(0,10),play_end:null,owner_id:user.id,stats:finalStats,abilities:_regData.abilities,gear:[],extra,updated_at:now})});
     if(!r.ok&&r.status!==204)throw new Error('HTTP '+r.status);
-    document.getElementById('char-reg-screen').style.display='none'; await loadPgs(); buildNav(); go(slug,false); toast(`✓ Персонаж создан! Начислено ${creditsFmt(sc)} ЭК`,'ok');
+    const scr=document.getElementById('char-reg-screen'); if(scr)scr.style.display='none';
+    await loadPgs(); buildNav();
+    toast(`✓ Персонаж создан! Начислено ${creditsFmt(sc)} ЭК`,'ok');
+    // Мастер могли поднять ради службы: тогда переходом распоряжается вызвавший.
+    const done=_regOpts.onDone; _regOpts={};
+    if (typeof done==='function') await done({slug,name,class:_regData.class,class_label:cls.label,bio});
+    else go(slug,false);
   } catch(e){toast('Ошибка: '+e.message,'err');if(btn)btn.disabled=false;}
 }
 

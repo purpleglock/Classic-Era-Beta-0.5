@@ -634,6 +634,69 @@
 
 /* ─── §11 Registration wizard ────────────────────────────────── */
 
+/* Оверлей мастера: гранёная панель во весь экран — колонка шагов слева,
+   лист анкеты справа. Прокручивается ТОЛЬКО анкета: шаги и панель действий
+   держат свои места, иначе кнопка «Далее» уезжает в конец длинной страницы.
+   Обводка — слой-подложка (::before/::after), border со срезом рвётся. */
+#char-reg-screen {
+  display: none; position: fixed; inset: 0; z-index: 4000;
+  padding: clamp(0px, 2.5vh, 26px) clamp(0px, 2.5vw, 26px);
+  background: radial-gradient(120% 90% at 50% 0%, hsl(216 30% 9% / .97), hsl(216 32% 4% / .99));
+  backdrop-filter: saturate(1.1) blur(6px);
+  --creg-cut: 16px;
+  --creg-line: color-mix(in srgb, var(--gd, #3a9bdc) 28%, transparent);
+}
+.creg-shell {
+  position: relative; z-index: 0;
+  display: grid; grid-template-columns: 230px minmax(0, 1fr);
+  height: 100%; max-width: 1180px; margin: 0 auto; overflow: hidden;
+  clip-path: polygon(0 0, calc(100% - var(--creg-cut)) 0, 100% var(--creg-cut), 100% 100%, var(--creg-cut) 100%, 0 calc(100% - var(--creg-cut)));
+}
+.creg-shell::before { content: ""; position: absolute; inset: 0; z-index: -2; background: var(--creg-line); }
+.creg-shell::after {
+  content: ""; position: absolute; inset: 1px; z-index: -1; background: hsl(216 26% 6% / .97);
+  clip-path: polygon(0 0, calc(100% - var(--creg-cut)) 0, 100% var(--creg-cut), 100% 100%, var(--creg-cut) 100%, 0 calc(100% - var(--creg-cut)));
+}
+.creg-side {
+  border-right: var(--deco-frame-w, 1px) solid var(--creg-line);
+  padding: 26px 8px; overflow-y: auto;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gd, #3a9bdc) 7%, transparent), transparent 55%);
+}
+.creg-side-hd {
+  position: relative; font-family: var(--font-display); font-size: 9px; font-weight: 700;
+  letter-spacing: calc(3px * var(--deco-ls-mult, 1)); color: var(--t2);
+  text-transform: uppercase; padding: 0 12px 18px;
+}
+/* Скошенный «шов» под заголовком — тот же приём, что у панелей новеллы. */
+.creg-side-hd::after {
+  content: ""; position: absolute; left: 12px; bottom: 9px; width: 54px; height: 2px;
+  background: var(--gd, #3a9bdc); clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+}
+.creg-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.creg-body { flex: 1; padding: 30px clamp(16px, 3vw, 34px); min-width: 0; overflow-y: auto; }
+.creg-actions {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px clamp(16px, 3vw, 34px); flex-shrink: 0;
+  border-top: var(--deco-frame-w, 1px) solid var(--creg-line);
+  background: hsl(216 28% 8% / .96);
+}
+@media (max-width: 760px) {
+  #char-reg-screen { padding: 0; --creg-cut: 0px; }
+  .creg-shell { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .creg-side {
+    border-right: none; padding: 12px 4px 6px; overflow: visible;
+    border-bottom: var(--deco-frame-w, 1px) solid var(--creg-line);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
+  }
+  .creg-side-hd { width: 100%; padding: 0 8px 10px; }
+  .creg-side > div:last-child { display: flex; flex-wrap: wrap; gap: 2px; }
+  .creg-side .creg-step { padding: 5px 8px; }
+  .creg-side .creg-step-info { display: none; }
+  .creg-side .creg-step.active .creg-step-info { display: block; }
+  .creg-body { padding: 18px 14px; }
+  .creg-actions { padding: 12px 14px; }
+}
+
 .creg-step {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 12px; cursor: default; opacity: .35; transition: opacity var(--duration-normal);
@@ -744,13 +807,96 @@
 .creg-ab-card:hover { border-color: rgba(28,100,148,.4); }
 .creg-ab-card.sel { border-color: rgba(28,100,148,.8); background: rgba(28,100,148,.1); }
 
-.creg-summary { display: flex; flex-direction: column; gap: 10px; }
+/* Финальный профиль: слева досье (портрет + имя), справа — ведомость.
+   Классы .creg-sum-* раньше не имели стилей вовсе — сводка слипалась в кашу. */
+.creg-summary { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (min-width: 620px) { .creg-summary { grid-template-columns: minmax(0, 1fr) minmax(240px, .9fr); align-items: start; } }
+.creg-sum-left {
+  --cut: 12px; position: relative; z-index: 0;
+  display: flex; align-items: center; gap: 14px; padding: 16px;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.creg-sum-left::before { content: ""; position: absolute; inset: 0; z-index: -2; background: rgba(255,255,255,.09); }
+.creg-sum-left::after {
+  content: ""; position: absolute; inset: 1px; z-index: -1; background: hsl(216 24% 9% / .96);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.creg-sum-avatar, .creg-sum-avatar-ph {
+  flex: 0 0 66px; width: 66px; height: 66px; object-fit: cover; object-position: center 20%;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+}
+.creg-sum-avatar-ph {
+  display: flex; align-items: center; justify-content: center; background: rgba(28,100,148,.12);
+  font-family: var(--font-display); font-size: 21px; font-weight: 900; color: rgba(28,100,148,.85);
+}
+.creg-sum-id { min-width: 0; }
+.creg-sum-name {
+  font-family: var(--font-display); font-size: 20px; font-weight: 900;
+  letter-spacing: calc(2px * var(--deco-ls-mult, 1)); text-transform: uppercase; color: #fff;
+}
+.creg-sum-role { font-family: var(--font-mono); font-size: 11px; color: var(--t3); margin-top: 5px; }
+.creg-sum-stats { display: flex; flex-direction: column; }
+.creg-sum-stat {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 7px 12px; border-bottom: var(--deco-frame-w, 1px) solid rgba(255,255,255,.05);
+  background: rgba(255,255,255,.015);
+}
+.creg-sum-stat:last-child { border-bottom: none; }
+.creg-sum-stat-k {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: calc(1.5px * var(--deco-ls-mult, 1));
+  text-transform: uppercase; color: var(--t4);
+}
+.creg-sum-stat-v { font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--t1); }
+.creg-sum-stat-v.gold  { color: var(--gdl, #d2aa50); }
+.creg-sum-stat-v.green { color: #4ec96a; }
+.creg-textarea { min-height: 120px; resize: vertical; line-height: 1.55; font-family: inherit; }
 .creg-summ-row { display: flex; gap: 12px; padding: 10px 14px; background: var(--b3); border: var(--deco-frame-w, 1px) solid rgba(255,255,255,.06); }
 .creg-summ-k { font-family: var(--font-mono); font-size: 9px; color: rgba(28,100,148,.5); letter-spacing: calc(1px * var(--deco-ls-mult, 1)); text-transform: uppercase; min-width: 100px; flex-shrink: 0; }
 .creg-summ-v { font-size: 13px; color: var(--t1); flex: 1; }
 
 .creg-rules { background: rgba(0,0,0,.3); border: var(--deco-frame-w, 1px) solid rgba(255,255,255,.07); padding: 14px 16px; }
 .creg-rules-head { font-family: var(--font-display); font-size: 8px; font-weight: 700; letter-spacing: calc(3px * var(--deco-ls-mult, 1)); color: rgba(28,100,148,.6); text-transform: uppercase; margin-bottom: 10px; }
+
+/* Присяга: держава, которой поступаешь на службу (шаг заперт). */
+.creg-oath {
+  --cut: 12px; position: relative; z-index: 0;
+  display: flex; align-items: center; gap: 14px; padding: 16px 18px; margin-bottom: 18px;
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.creg-oath::before { content: ""; position: absolute; inset: 0; z-index: -2; background: color-mix(in srgb, var(--gd, #3a9bdc) 45%, transparent); }
+.creg-oath::after {
+  content: ""; position: absolute; inset: 1px; z-index: -1; background: hsl(216 26% 10% / .96);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.creg-oath-herald {
+  flex: 0 0 52px; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 18px; font-weight: 900;
+  letter-spacing: calc(1px * var(--deco-ls-mult, 1)); color: var(--t2);
+  background: rgba(255,255,255,.04);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  overflow: hidden;
+}
+/* Герб державы вместо инициалов — картинка заполняет плашку целиком. */
+.creg-oath-herald img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Панель разметки над биографией: кнопки вместо шпаргалки синтаксиса. */
+.creg-md-bar { display: flex; gap: 4px; margin-bottom: 6px; }
+.creg-md-btn {
+  min-width: 30px; height: 26px; padding: 0 7px; cursor: pointer;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+  color: var(--t3); font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1;
+  transition: border-color .15s, color .15s;
+}
+.creg-md-btn:hover { border-color: rgba(28,100,148,.6); color: var(--t1); }
+.creg-oath-main { min-width: 0; }
+.creg-oath-k {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: calc(2px * var(--deco-ls-mult, 1));
+  text-transform: uppercase; color: rgba(28,100,148,.7); margin-bottom: 4px;
+}
+.creg-oath-v {
+  font-family: var(--font-display); font-size: 19px; font-weight: 900;
+  letter-spacing: calc(2px * var(--deco-ls-mult, 1)); text-transform: uppercase; color: #fff;
+}
 
 .creg-selected-badge {
   display: flex; align-items: center; gap: 8px;

@@ -879,6 +879,15 @@ const EC_DOCTRINE_SLOTS = {
   ideology: { 'Технократия (Культ науки)': 1 },
 };
 function ecBuildName(bt) { return (typeof EC_BUILD !== 'undefined' && EC_BUILD[bt]) ? EC_BUILD[bt].name : bt; }
+// Вклад совета державы. Ключи те же, что у доктрины; значения приходят
+// готовыми из ch_office/fm_council — своей арифметики тут нет и быть не должно.
+function ecCouncilMods() {
+  const m = (typeof EC !== 'undefined' && EC.council && EC.council.mods) || null;
+  if (!m) return {};
+  const out = {};
+  for (const k of [...EC_MOD_PCT, ...EC_MOD_FLAT]) if (m[k]) out[k] = +m[k] || 0;
+  return out;
+}
 // Считает итоговые модификаторы доктрины для анкеты app (по умолчанию — текущая фракция).
 function ecFactionMods(app) {
   app = app || (typeof EC !== 'undefined' && EC.app) || {};
@@ -896,6 +905,9 @@ function ecFactionMods(app) {
     // wb/fleet сюда не идут: они живут в индексе благополучия и штрафе перегруза.
     const pm = ecEconPolicyMods();
     add(Object.fromEntries(Object.entries(pm).filter(([k]) => k !== 'wb' && k !== 'fleet')));
+    // СОВЕТ ДЕРЖАВЫ — персонажи на должностях (зеркало _fm_council_mods).
+    // Считает сервер, клиент только складывает готовые дельты (EC.council).
+    add(ecCouncilMods());
   }
   const clamp = (v, lo) => Math.max(lo, 1 + v);
   return {
@@ -1920,6 +1932,8 @@ async function ecBootOnce() {
         toast(`🏴‍☠ Караваны атакованы пиратами — потеряно${lost} торгового дохода`, 'err');
       }
     }
+    // Совет державы: нужен всем экранам, где показан доход, а не только «Двору».
+    if (typeof fmLoadOffice === 'function') fmLoadOffice(true).catch(() => {});
     return tick;
   })();
   _ecBoot.finally(() => setTimeout(() => { _ecBoot = null; }, 2000));
@@ -2426,6 +2440,9 @@ async function ecReloadPaint() {
   if (typeof heroVNSinliRefresh === 'function') heroVNSinliRefresh();
   // 🕵 Оверлей «Разведуправление» — на данных EC.spyAgency/EC.missions/EC.alerts.
   if (typeof heroVNIntelRefresh === 'function') heroVNIntelRefresh();
+  // ⚖🕊 Экраны политики — на тех же данных EC (+ состав державы из FM).
+  if (typeof polRefresh === 'function') polRefresh();
+  if (typeof dipRefresh === 'function') dipRefresh();
 }
 
 // ── Превью дохода (зеркало RPC) ─────────────────────────────
@@ -3492,6 +3509,9 @@ function ecTreasuryHtml() {
 // Вводный блок-объяснялка вверху вкладки: что это, как работает, что делать.
 // text — короткая суть (HTML допустим), hints — список ключевых правил/цифр.
 function ecIntro(icon, title, text, hints) {
+  // Экраны политики (politics.js) рисуют собственный сценический пролог — там
+  // объясняют ПРАВИЛО МИРА, а не интерфейс. Второй вводный блок был бы шумом.
+  if (typeof POL === 'object' && POL.chrome) return '';
   const list = (hints && hints.length)
     ? `<ul class="ec-intro-hints">${hints.map(h => `<li>${h}</li>`).join('')}</ul>` : '';
   return `<div class="ec-intro">
@@ -3502,18 +3522,19 @@ function ecIntro(icon, title, text, hints) {
 function ecPaintCabinet() {
   ecDepRawReset();   // ⛏ кэш сырых сумм по залежам — пересобрать на свежих постройках
   const col = ecReadable(EC.app.color);
-  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['outposts', '🛰', 'Аванпосты'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['welfare', '⚖', 'Благополучие'], ['policy', '🏛', 'Курс державы'], ['flows', '⛏', 'Ресурсы и торговля'], ['diplomacy', '🤝', 'Дипломатия'], ['war', '⚔', 'Война'], ['faith', '🛐', 'Вера'],['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
+  // Кабинет — хозяйство: стройка, войска, наука, ресурсы, сводки. ВЛАСТЬ уехала
+  // в новеллу (politics.js): двор, благополучие, курс, вера, война — «Внутренняя
+  // политика», дипломатия и аванпосты — «Внешняя». Диспетчер ниже эти EC.tab
+  // по-прежнему понимает: старые ссылки внутри кабинета не ломаются.
+  const tabs = [['overview', '◈', 'Обзор'], ['colonies', '🏗', 'Колонии'], ['forces', '⚔', 'Вооружённые силы'], ['milbuild', '🏭', 'Военпром'], ['research', '🔬', 'Исследования'], ['territory', '🌐', 'Территория'], ['flows', '⛏', 'Ресурсы и торговля'], ['achievements', '🏆', 'Достижения'], ['news', '📰', 'Новости']];
   // Длань Неотвратимости — отдельная вкладка-пульт, появляется когда орудие доступно
   // (исследование открыто или орудие уже стоит).
-  if (ecDoomUnlocked()) tabs.splice(14, 0, ['doom', '🜨', 'Длань Неотвратимости']);   // перед «Разведкой»
-  // 👥 Двор — состав державы и права. Только владельцу анкеты: служащий
-  // раздавать права не может (fm_list/fm_set на сервере требуют владельца).
-  // Место — сразу за «Обзором»: это управление людьми, а не подсистема.
-  if (typeof FM === 'object' && FM.me && FM.me.is_owner && !EC.actAs) {
-    const inbox = +FM.me.inbox || 0;
-    tabs.splice(1, 0, ['court', '👥', 'Двор' + (inbox ? ` · ${inbox}` : '')]);
-  }
-  const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
+  if (ecDoomUnlocked()) tabs.splice(6, 0, ['doom', '🜨', 'Длань Неотвратимости']);
+  // Дверь во власть: одна кнопка из кабинета в новеллу, чтобы игрок не искал,
+  // куда делся «Двор». Заявки ко двору показываем счётчиком прямо на ней.
+  const _inbox = (typeof FM === 'object' && FM.me && FM.me.is_owner && !EC.actAs) ? (+FM.me.inbox || 0) : 0;
+  const polDoor = `<button class="ec-tab ec-tab-pol" onclick="polGoto('ipol')" title="Двор, благополучие, курс державы, вера и война переехали в новеллу"><span class="ec-tab-ic">⚖</span><span class="ec-tab-l">Политика${_inbox ? ` · ${_inbox}` : ''}</span></button>`;
+  const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('') + polDoor;
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
     : EC.tab === 'milbuild' ? ecTabMilBuild()
     : EC.tab === 'outposts' ? ecTabOutposts()
@@ -3592,6 +3613,15 @@ function ecSetTab(t) {
   // Разведка уехала из кабинета в новеллу («Разведуправление»): старые ссылки
   // (обзор, война, караваны) открывают экран новеллы, а не пустую вкладку.
   if (t === 'intel') { ecIntelOpen(); return; }
+  // Власть уехала в новеллу: ссылки вида «поправьте благополучие» ведут туда,
+  // а не в мёртвую вкладку кабинета. Раздел выбираем сразу нужный.
+  const POL_MOVED = { court: 'court', welfare: 'welfare', policy: 'policy', faith: 'faith', war: 'war' };
+  const DIP_MOVED = { diplomacy: 'relations', outposts: 'outposts' };
+  if (POL_MOVED[t] || DIP_MOVED[t]) {
+    if (typeof POL === 'object') { if (POL_MOVED[t]) POL.tab = POL_MOVED[t]; else POL.dtab = DIP_MOVED[t]; }
+    if (typeof polGoto === 'function') polGoto(POL_MOVED[t] ? 'ipol' : 'dipl');
+    return;
+  }
   // «Торговля»/«Биржа» слиты во вкладку «Ресурсы и торговля»: старые ссылки ведут на под-вкладки
   if (t === 'trade') { t = 'flows'; if (!EC.flowSub || EC.flowSub === 'flows') EC.flowSub = 'caravans'; }
   else if (t === 'exchange') { t = 'flows'; EC.flowSub = 'exchange'; }
@@ -9448,26 +9478,30 @@ async function ecTechOfferCancel(id) {
   catch (e) { toast('Ошибка: ' + ecErr(e.message), 'err'); }
 }
 
-// ── Вкладка «Дипломатия»: отношения · кредиты ──
-function ecTabDiplomacy() {
+// ── Блок «Кредиты»: заём под слово, спор решает МГА ──
+// Вынесен из вкладки: экран внешней политики показывает его отдельным разделом.
+function ecLoansBlock() {
   const others = ecOtherFactions(), noOthers = !others.length;
   const asLender = EC.loans.filter(l => l.lender_fid === EC.fid && ['active', 'disputed'].includes(l.status));
   const asBorrower = EC.loans.filter(l => l.borrower_fid === EC.fid && ['active', 'disputed'].includes(l.status));
 
   const lenderHtml = asLender.map(l => `<div class="ec-q-row"><span class="ec-r-name">${esc(l.borrower_name || ecFacName(l.borrower_fid))} должен ${ecNum(l.amount)} ГС${l.status === 'disputed' ? ' · <b style="color:var(--color-warning)">СПОР</b>' : ''}</span>${l.status === 'active' ? `<button class="btn btn-gh btn-xs" onclick="ecLoanDispute('${l.id}')">Спор</button>` : '<span class="ec-q-t">в МГА</span>'}</div>`).join('');
   const borrowerHtml = asBorrower.map(l => `<div class="ec-q-row"><span class="ec-r-name">Долг ${esc(l.lender_name || ecFacName(l.lender_fid))}: ${ecNum(l.amount)} ГС${l.status === 'disputed' ? ' · <b style="color:var(--color-warning)">СПОР</b>' : ''}</span><button class="btn btn-gd btn-xs" onclick="ecLoanRepay('${l.id}')">Погасить</button></div>`).join('');
-  const loanBlock = `<div class="ec-dip-card">
+  return `<div class="ec-dip-card">
       <div class="ec-dip-t">Кредиты</div>
       ${noOthers ? '<div class="ec-empty">Нет других фракций.</div>' : `<div class="ec-prod-form">${ecFacSelect('ec-loan-fac')}<input type="number" id="ec-loan-amt" min="1" placeholder="сумма ГС" class="ec-prod-qty"><button class="btn btn-gd btn-sm" onclick="ecLoanIssue()">Выдать заём</button></div>
       <input id="ec-loan-note" placeholder="условия (необязательно)" class="ec-loan-note" style="margin-top:6px">`}
       ${asLender.length ? `<div class="ec-r-sec">Я кредитор</div>${lenderHtml}` : ''}
       ${asBorrower.length ? `<div class="ec-r-sec">Я заёмщик</div>${borrowerHtml}` : ''}
     </div>`;
+}
 
-  return `${ecIntro('🤝', 'Дипломатия', 'Союзы, отношения и кредиты. Федерация/конфедерация дают защиту и общий флот; вассал платит сюзерену дань. Торговля и обмен — на вкладке «Торговля и потоки».', ['<b>Федерация/конфедерация</b> — союз нескольких держав: защита караванов и от разведки, общий флот.', '<b>Вассалитет</b> — вассал платит сюзерену дань с дохода (как у Paradox).', '<b>Границы</b> — закрываются для выбранных фракций: их флоты не войдут в ваши системы.', 'Можно выдавать займы; споры по долгам решает МГА.'])}<div class="ec-section-title">Границы <span class="ec-hint">— пограничный контроль</span></div>
+// Прежняя простыня «Дипломатии» одной вкладкой. Экран внешней политики зовёт
+// блоки поимённо (dipSectionBody в politics.js); эта сборка осталась запасным
+// входом для кабинета. Уния отсюда убрана — её заменил состав державы («Двор»).
+function ecTabDiplomacy() {
+  return `<div class="ec-section-title">Границы <span class="ec-hint">— пограничный контроль</span></div>
     <div class="ec-dip-grid">${ecBordersBlock()}</div>
-    <div class="ec-section-title">Уния <span class="ec-hint">— два игрока правят одной державой</span></div>
-    <div class="ec-dip-grid">${ecStateUnionBlock()}</div>
     <div class="ec-section-title">Союзы <span class="ec-hint">— федерация · конфедерация · вассалитет</span></div>
     ${ecAllianceBlock()}
     <div class="ec-section-title">Отношения <span class="ec-hint">— дипломатический респект</span></div>
@@ -9475,7 +9509,7 @@ function ecTabDiplomacy() {
     <div class="ec-section-title">Духовный патронат <span class="ec-hint">— кому вверена держава</span></div>
     <div class="ec-dip-grid">${ecPatronBlock()}</div>
     <div class="ec-section-title">Кредиты</div>
-    <div class="ec-dip-grid">${loanBlock}</div>`;
+    <div class="ec-dip-grid">${ecLoansBlock()}</div>`;
 }
 
 // Блок «Границы»: пофракционное закрытие границ (зеркало _borders_closed.sql).
@@ -9711,7 +9745,73 @@ function ecAllianceBlock() {
   return `<div class="ec-dip-grid">
       <div class="ec-dip-card">${unionHtml}${invHtml ? `<div class="ec-r-sec">📥 Приглашения вам</div>${invHtml}` : ''}</div>
       ${vassalBlock}
+      ${ecAnnexBlock(myVassals, asVassal)}
     </div>`;
+}
+
+// ── Объединение держав (уния): два игрока — одно государство ──
+// Активы младшей переливаются в старшую, наука объединяется множествами,
+// а её игрок садится при дворе соправителем с правами на всю державу —
+// то есть продолжает играть, только общим государством (зеркало annex_*).
+// Доминион здесь не обязателен: предложить можно любой державе.
+function ecAnnexBlock(myVassals, asVassal) {
+  const d = EC.diplo || {};
+  const offers = d.annex || [];
+  const incoming = offers.filter(o => o.minor === EC.fid);
+  const outgoing = offers.filter(o => o.lead === EC.fid);
+  const amVassal = (asVassal || []).some(v => v.status === 'active');
+
+  const inHtml = incoming.map(o => `<div class="ec-q-row ec-route-row"><span class="ec-r-name">
+      <span class="ec-route-badge new">объединение</span> <b>${esc(o.lead_name)}</b> предлагает объединить державы — <b style="color:var(--err)">необратимо</b>
+    </span><button class="btn btn-gd btn-xs" onclick="ecAnnexRespond('${o.id}',true,'${jsq(o.lead_name || '')}')">Объединиться</button><button class="ec-bld-del" title="Отклонить" onclick="ecAnnexRespond('${o.id}',false)">✕</button></div>`).join('');
+  const outHtml = outgoing.map(o => `<div class="ec-q-row"><span class="ec-r-name">⏳ Объединение с <b>${esc(o.minor_name)}</b> — ждёт согласия</span><button class="ec-bld-del" title="Отозвать" onclick="ecAnnexWithdraw('${o.id}')">✕</button></div>`).join('');
+
+  // Действующие унии. Реестр происхождения (restorable) ведётся только у
+  // объединений, заключённых после реформы: у старых расторжение вернёт
+  // территорию и всё, что на ней стоит, но не разберёт общую казну.
+  const active = d.annex_active || [];
+  const actHtml = active.map(o => {
+    const old = !Number(o.restorable);
+    return `<div class="ec-q-row"><span class="ec-r-name">⚜ В составе: <b>${esc(o.minor_name || o.minor)}</b>${old
+      ? ` <span class="ec-hint" title="Уния заключена до реформы: кто какую строку принёс, не записывалось">— уния старого образца</span>`
+      : ` <span class="ec-hint">— вернётся ${ecNum(o.restorable)} записей</span>`}</span><button class="ec-bld-del" title="Расторгнуть унию" onclick="ecAnnexDissolve('${o.id}','${jsq(o.minor_name || '')}',${old})">✕</button></div>`;
+  }).join('');
+
+  let form;
+  if (incoming.length) form = '';
+  else if (amVassal) form = `<div class="ec-empty" style="padding:6px">Вы сами вассал — сперва разорвите вассалитет.</div>`;
+  else form = `<div class="ec-prod-form" style="flex-wrap:wrap">${ecFacSelect('ec-annex-fac')}<button class="btn btn-gd btn-sm" onclick="ecAnnexPropose()">Предложить объединение</button></div>`;
+
+  return `<div class="ec-dip-card"><div class="ec-dip-t">⚜ Объединение держав <span class="ec-hint">два игрока — одно государство</span></div>
+      <div style="font-size:12.5px;color:var(--t2);margin:2px 0 8px">Колонии, казна, войска и наука становятся общими: технологии складываются, ничьи исследования не пропадают. Флаг младшей остаётся над её прежними системами. Её правитель <b>продолжает играть</b> — он садится при дворе <b>соправителем</b> с правами на всю державу, а урезать их можно потом, во «Дворе». Уния расторжима: младшая забирает то, с чем входила, а нажитое сообща остаётся старшей.</div>
+      ${form}
+      ${actHtml ? `<div class="ec-r-sec">Действующие унии</div>${actHtml}` : ''}
+      ${outHtml ? `<div class="ec-r-sec">Мои предложения</div>${outHtml}` : ''}
+      ${inHtml ? `<div class="ec-r-sec">📥 Вам предложено</div>${inHtml}` : ''}
+    </div>`;
+}
+function ecAnnexPropose() {
+  const fid = ecId('ec-annex-fac')?.value;
+  if (!fid) { toast('Выберите державу', 'err'); return; }
+  ecRpcAct('annex_propose', { p_target_fid: fid }, 'Предложение об объединении отправлено');
+}
+function ecAnnexWithdraw(id) { ecRpcAct('annex_withdraw', { p_id: id }, 'Предложение отозвано'); }
+function ecAnnexRespond(id, acc, leadName) {
+  if (acc && !confirm('Объединить державы' + (leadName ? ` с «${leadName}»` : '')
+      + '?\n\nВаши колонии, казна и войска станут общими под её флагом, а вы останетесь в игре '
+      + 'соправителем этого государства с правами на всё.\n\nУнию можно расторгнуть: вы заберёте то, '
+      + 'с чем входили, но нажитое сообща останется старшей державе.')) return;
+  ecRpcAct('annex_respond', { p_id: id, p_accept: !!acc }, acc ? 'Державы объединены' : 'Предложение отклонено');
+}
+function ecAnnexDissolve(id, minorName, old) {
+  const warn = old
+    ? '\n\nВНИМАНИЕ: эта уния заключена до реформы, и кто какую строку принёс — не записывалось. '
+      + 'Вернутся системы по флагу и всё недвижимое на них (колонии, постройки, оборона), '
+      + 'но общая казна и ресурсы останутся как есть — разобрать их нечем.'
+    : '\n\nВернётся то, с чем младшая входила в унию, плюс всё, что стоит на её землях. '
+      + 'Нажитое сообща после объединения остаётся старшей державе. Технологии остаются у обеих.';
+  if (!confirm('Расторгнуть унию' + (minorName ? ` с «${minorName}»` : '') + '?' + warn)) return;
+  ecRpcAct('annex_dissolve', { p_id: id }, 'Уния расторгнута');
 }
 function ecUnionCreate() {
   const name = ecId('ec-union-name')?.value?.trim();

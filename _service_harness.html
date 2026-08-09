@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>Стенд: служба + мастер персонажа</title>
+<script>document.write('<link rel="stylesheet" href="css/index.css?b='+Date.now()+'">')</script>
+<style>body{background:#06070f;margin:0}</style>
+<div style="padding:12px;display:flex;gap:8px">
+  <button class="btn btn-gd btn-sm" onclick="showModal()">Выбор державы</button>
+  <button class="btn btn-gd btn-sm" onclick="openCharRegister({faction:'Тетославия',lockFaction:true,title:'ПОСТУПЛЕНИЕ НА СЛУЖБУ'})">Мастер персонажа</button>
+</div>
+<script>
+// ── заглушки окружения ──────────────────────────────────────
+const user = { id: 'u1', email: 'a@b.c' };
+let pages = [], sections = [];
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function pT(p){return p.title_ru||p.title||p.slug;}
+function isVisiblePage(){return true;}
+function toast(m){console.log('toast:',m);}
+function go(){} function showAuth(){} function closeAp(){}
+function slugify(s){return String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-');}
+async function loadPgs(){} function buildNav(){}
+async function dbPost(){} async function getTokenFresh(){return '';}
+async function handleImgUpload(){}
+const SB_URL='', SB_ANON='';
+</script>
+<script src="character.js"></script>
+<script>
+const FACS = [
+  { faction_id:'tet', name:'Тетославия', gov:'Технократия', race:'Люди', members:4, herald_url:'' },
+  { faction_id:'syn', name:'Синли-Бэй',  gov:'Олигархия',   race:'Синли', members:1, herald_url:'' },
+  { faction_id:'hiv', name:'Улей Ксаар', gov:'Улей',        race:'Ксаар', members:0, herald_url:'' },
+];
+function showModal(){
+  const cards = FACS.map(f=>`<button type="button" class="fm-fac">
+      <span class="fm-fac-herald">${f.herald_url?`<img src="${f.herald_url}">`:esc(f.name.slice(0,2).toUpperCase())}</span>
+      <span class="fm-fac-main"><b>${esc(f.name)}</b><i>${esc(f.gov)} · ${esc(f.race)}</i></span>
+      <span class="fm-fac-n">👥 ${f.members}</span>
+    </button>`).join('');
+  const m = document.getElementById('fm-modal');
+  m.innerHTML = `<div class="fr-modal fm-svc">
+    <h2 class="fm-svc-hd">Поступить на службу</h2>
+    <p class="fm-svc-sub">Служить можно <b>только одной державе</b>. Выберите её — и заведите персонажа: именно он подаст прошение, а владелец решит, принять ли его и какие права выдать.</p>
+    <div class="fm-fac-list">${cards}</div>
+    <div class="fr-actions"><button class="btn btn-gh btn-sm" onclick="document.getElementById('fm-modal').classList.remove('show')">Закрыть</button></div>
+  </div>`;
+  m.classList.add('show');
+}
+const _v = new URL(location).searchParams.get('v');
+addEventListener('DOMContentLoaded', () => {
+  if (_v === 'modal') showModal();
+  if (_v && _v.startsWith('reg')) {
+    openCharRegister({faction:'Тетославия',lockFaction:true,title:'ПОСТУПЛЕНИЕ НА СЛУЖБУ'});
+    const s = +_v.slice(3);
+    if (s) { _regData.name='Кайра Вэлл'; _regStep=s; _regRender(); }
+  }
+});
+</script>
+<div id="fm-modal" class="fr-modal-ov"></div>

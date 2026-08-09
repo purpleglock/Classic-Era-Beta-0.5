@@ -16,7 +16,33 @@ const FM = {
   list: null,        // состав моей державы (для владельца)
   assets: null,      // системы/флоты/армии для закрепления
   draft: {},         // правки прав по id участника, до «Сохранить»
+  office: null,      // ответ ch_office(): мой персонаж как должностное лицо
+  council: null,     // совет державы: посты и их вклад в модификаторы
 };
+
+// Характеристики: ключ → [название, за что отвечает на посту]
+const FM_STAT_RU = {
+  str: ['Сила',       'Маршал'], dex: ['Ловкость', 'Адмирал'],
+  con: ['Стойкость',  '—'],      int: ['Интеллект','Промышленник, Учёный совет'],
+  wis: ['Мудрость',   'Наместник, Глава разведки'], cha: ['Харизма', 'Казначей, Дипломат'],
+};
+// Ключи модификаторов державы: [подпись, куда растёт польза, единица, множитель].
+// good:-1 — выгода в минусе (это цена), good:+1 — выгода в плюсе.
+// ⚠ Подписывать по ЖИВОМУ эффекту ключа, а не по его имени:
+//   claim_* — это колонизация СИСТЕМЫ (economy_claim_system), не «притязания»;
+//   agents_flat — уже не «агенты в сутки» (счётчик вытеснен ростером spy_agents),
+//   а _spy_power = agents_flat × 5: п.п. к успеху операций и к защите от чужих.
+const FM_MOD_RU = {
+  gc:         ['Доход',                    1, '%'], mine:     ['Добыча',      1, '%'],
+  build:      ['Цена стройки',            -1, '%'], research: ['Цена науки', -1, '%'],
+  colonize:   ['Цена колонии',            -1, '%'],
+  claim_cost: ['Цена колонизации системы',-1, '%'],
+  claim_cd:   ['Откат колонизации системы',-1,'%'],
+  sci_flat:   ['Наука',                    1, ' ОН/сут'],
+  agents_flat:['Разведка: успех операций', 1, ' п.п.', 5],
+};
+// Боевой вклад штаба: врезается в паспорт борта (_char_office_war.sql).
+const FM_WAR_RU = { tp: ['Секунды хода', 1, '%'], armor: ['Броня', 1, '%'] };
 
 // Права: код → [иконка, название, пояснение]
 const FM_PERMS = [
@@ -52,6 +78,11 @@ const FM_ROLES = [
   ['scientist',    'Учёный совет'],
   ['coruler',      'Соправитель'],
 ];
+// Классы персонажей (для подписи в карточке состава; истина — CLASS_DEFS).
+const FM_CLASS_RU = {
+  soldier: 'Солдат', commander: 'Командир', pilot: 'Пилот', engineer: 'Инженер',
+  agent: 'Агент', diplomat: 'Дипломат', hacker: 'Хакер',
+};
 const FM_ROLE_PERMS = {
   observer: [], coruler: FM_PERMS.map(p => p[0]),
   governor: ['build','colonize','produce','corp','trade','defense'],
@@ -118,6 +149,7 @@ function fmServiceBlock(hasOwnApp) {
       <div class="fr-mine-hd">
         <span class="fr-status-badge" style="color:var(--ok);border-color:var(--ok)">НА СЛУЖБЕ</span>
         <span class="fr-mine-name">${esc(m.faction_name || m.faction_id)} — ${esc(m.role_title)}</span></div>
+      ${m.char_slug ? `<div class="fm-scope-line">Служит: <a href="#${esc(m.char_slug)}" onclick="go('${esc(m.char_slug)}');return false">персонаж</a></div>` : ''}
       <div class="fm-perm-line">${perms.length ? perms.map(t => `<span class="fm-chip">${esc(t)}</span>`).join('') : '<span class="fm-chip fm-chip-off">прав пока нет</span>'}</div>
       <div class="fm-scope-line">Зона ответственности: ${esc(scope)}</div>
       <div class="fr-actions">
@@ -128,12 +160,11 @@ function fmServiceBlock(hasOwnApp) {
   if (pend.length) {
     return `<div class="fr-mine">
       <div class="fr-mine-hd">
-        <span class="fr-status-badge" style="color:var(--color-warning);border-color:var(--color-warning)">${pend.length > 1 ? 'ЗАЯВКИ ПОДАНЫ' : 'ЗАЯВКА ПОДАНА'}</span>
+        <span class="fr-status-badge" style="color:var(--color-warning);border-color:var(--color-warning)">ЗАЯВКА ПОДАНА</span>
         <span class="fr-mine-name">${pend.map(p => esc(p.faction_name || p.faction_id)).join(', ')}</span></div>
-      <div class="fm-scope-line">Ждём решения владельца державы. Пока решения нет, можно проситься и в другие.</div>
+      <div class="fm-scope-line">Ждём решения владельца державы. Служить можно только одной державе: чтобы проситься в другую, сначала отзовите эту заявку.</div>
       <div class="fr-actions">
-        ${pend.map(p => `<button class="btn btn-gh btn-sm" onclick="fmWithdraw('${p.id}')">Отозвать — ${esc(p.faction_name || p.faction_id)}</button>`).join('')}
-        <button class="btn btn-gh btn-sm" onclick="fmOpenApply()">⚑ Ещё держава</button>
+        ${pend.map(p => `<button class="btn btn-gh btn-sm" onclick="fmWithdraw('${p.id}')">Отозвать заявку — ${esc(p.faction_name || p.faction_id)}</button>`).join('')}
       </div>
     </div>`;
   }
@@ -146,29 +177,56 @@ function fmServiceBlock(hasOwnApp) {
 }
 
 async function fmOpenApply() {
+  await fmLoadMe();
+  if (FM.me && FM.me.membership) { toast('Вы уже служите державе — сначала выйдите из состава', 'err'); return; }
+  if (FM.me && (FM.me.pending || []).length) { toast('Заявка уже подана. Служить можно только одной державе.', 'err'); return; }
   const modal = fmModal();
   modal.innerHTML = `<div class="fr-modal"><div class="sload"><div class="pulse-loader"></div></div></div>`;
   modal.classList.add('show');
   let facs = [];
   try { facs = await fmRpc('fm_open_factions') || []; } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
-  const cards = facs.map(f => `<button type="button" class="fm-fac" onclick="fmApply('${esc(f.faction_id)}','${esc((f.name || '').replace(/'/g, "\\'"))}')">
-      <span class="fm-fac-herald">${f.herald_url ? `<img src="${esc(f.herald_url)}">` : '◈'}</span>
-      <span class="fm-fac-main"><b>${esc(f.name)}</b><i>${esc(f.gov || '')}${f.race ? ' · ' + esc(f.race) : ''}</i></span>
+  const cards = facs.map(f => `<button type="button" class="fm-fac" onclick="fmApply('${esc(f.faction_id)}','${esc((f.name || '').replace(/'/g, "\\'"))}','${esc((f.herald_url || '').replace(/'/g, "\\'"))}')">
+      <span class="fm-fac-herald">${f.herald_url ? `<img src="${esc(f.herald_url)}">` : esc((f.name || '?').slice(0, 2).toUpperCase())}</span>
+      <span class="fm-fac-main"><b>${esc(f.name)}</b><i>${esc(f.gov || '—')}${f.race ? ' · ' + esc(f.race) : ''}</i></span>
       <span class="fm-fac-n">👥 ${+f.members || 0}</span>
     </button>`).join('') || '<div class="fr-empty">Пока нет одобренных держав.</div>';
-  modal.innerHTML = `<div class="fr-modal">
-    <h2 style="margin:0 0 4px">Поступить на службу</h2>
-    <p style="color:var(--t3);font-size:13px;margin:0 0 14px">Выберите державу. Владелец решит, принять ли вас и какие права выдать.</p>
+  modal.innerHTML = `<div class="fr-modal fm-svc">
+    <h2 class="fm-svc-hd">Поступить на службу</h2>
+    <p class="fm-svc-sub">Служить можно <b>только одной державе</b>. Выберите её — и заведите персонажа: именно он подаст прошение, а владелец решит, принять ли его и какие права выдать.</p>
     <div class="fm-fac-list">${cards}</div>
     <div class="fr-actions"><button class="btn btn-gh btn-sm" onclick="fmCloseModal()">Закрыть</button></div>
   </div>`;
 }
 
-async function fmApply(fid, name) {
-  const note = prompt(`Заявка в державу «${name}». Пара слов о себе (увидит владелец):`, '');
-  if (note === null) return;
+// Заявка = досье персонажа. Своего персонажа ещё нет — поднимаем обычный
+// мастер регистрации с приклеенной державой; есть — служит он же.
+async function fmApply(fid, name, herald) {
+  if (FM.me && FM.me.pending && FM.me.pending.length) {
+    toast('Заявка уже подана. Служить можно только одной державе — сначала отзовите её.', 'err');
+    return;
+  }
+  const mine = typeof myCharPage === 'function' ? myCharPage() : null;
+  if (mine) {
+    if (!confirm(`Подать заявку в державу «${name}» от лица персонажа «${mine.title_ru || mine.title}»?`)) return;
+    return fmSendApply(fid, mine.slug, `${mine.title_ru || mine.title} — на службу державе «${name}».`);
+  }
+  fmCloseModal();
+  toast('Сначала создайте персонажа: он и поступит на службу', 'inf');
+  openCharRegister({
+    faction: name,
+    factionFlag: herald || '',
+    lockFaction: true,
+    title: 'ПОСТУПЛЕНИЕ НА СЛУЖБУ',
+    onDone: async (ch) => {
+      await fmSendApply(fid, ch.slug, `${ch.name} · ${ch.class_label}. ${ch.bio || ''}`.trim());
+      go('factions');
+    },
+  });
+}
+
+async function fmSendApply(fid, charSlug, note) {
   try {
-    await fmRpc('fm_apply', { p_fid: fid, p_note: note });
+    await fmRpc('fm_apply', { p_fid: fid, p_note: (note || '').slice(0, 1000), p_char: charSlug || null });
     toast('Заявка отправлена', 'ok');
     fmCloseModal(); fmReset(); await fmLoadMe(true);
     if (typeof renderFactionsPage === 'function') renderFactionsPage();
@@ -214,6 +272,17 @@ async function fmLoadCourt(force) {
     const [list, assets] = await Promise.all([fmRpc('fm_list'), fmRpc('fm_assets')]);
     FM.list = list || []; FM.assets = assets || { systems: [], fleets: [], armies: [] };
   } catch (e) { FM.list = []; FM.assets = { systems: [], fleets: [], armies: [] }; }
+  await fmLoadOffice(force);
+}
+
+// ── Совет державы и моя должность ───────────────────────────
+// ch_office отдаёт разом и персонажа (уровень/очки), и совет державы.
+async function fmLoadOffice(force) {
+  if (FM.office && !force) return FM.office;
+  try { FM.office = await fmRpc('ch_office') || {}; } catch (e) { FM.office = {}; }
+  FM.council = (FM.office && FM.office.council) || { posts: [], mods: {} };
+  if (typeof EC !== 'undefined') EC.council = FM.council;   // зеркало для расчёта дохода
+  return FM.office;
 }
 
 // Рабочая копия правки для участника (создаётся при первом касании).
@@ -293,12 +362,100 @@ async function fmKick(id) {
   } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
 }
 
+// ── Совет державы: должность → характеристика → цифра ───────
+// Значение поста считает сервер (_fm_council), клиент только показывает.
+function fmModStr(key, val, dict) {
+  const d = (dict || FM_MOD_RU)[key]; if (!d || !val) return '';
+  const flat = key.endsWith('_flat');
+  const v    = val * (d[3] || 1);
+  const num  = flat ? Math.round(v * 10) / 10 : Math.round(v * 1000) / 10;
+  if (!num) return '';
+  const good = (num > 0 ? 1 : -1) === d[1];
+  return `<span class="fm-mod ${good ? 'up' : 'down'}">${num > 0 ? '+' : ''}${num}${d[2]} ${d[0]}</span>`;
+}
+
+function fmCouncilHtml() {
+  const c = FM.council; if (!c) return '';
+  const posts = c.posts || [], mods = c.mods || {}, war = c.war || {};
+  const total = Object.keys(FM_MOD_RU).map(k => fmModStr(k, mods[k])).filter(Boolean).join('')
+              + Object.keys(FM_WAR_RU).map(k => fmModStr(k, war[k], FM_WAR_RU)).filter(Boolean).join('');
+  const rows = posts.map(p => {
+    const gain = Object.keys(FM_MOD_RU).map(k => fmModStr(k, (p.mods || {})[k])).filter(Boolean).join('')
+              + Object.keys(FM_WAR_RU).map(k => fmModStr(k, (p.war || {})[k], FM_WAR_RU)).filter(Boolean).join('')
+              || '<span class="fm-mod flat">ничего не даёт: характеристика ниже 12</span>';
+    const cov = p.coverage < 1 ? `<span class="fm-chip fm-chip-off">зона ${Math.round(p.coverage * 100)}%</span>` : '';
+    return `<div class="fm-post${p.head ? ' head' : ''}">
+      <div class="fm-post-hd">
+        <span class="fm-post-title">${esc(p.title)}</span>
+        <span class="fm-post-who">${p.char_slug
+          ? `<a href="#${esc(p.char_slug)}" onclick="go('${esc(p.char_slug)}');return false">${esc(p.char_name || '—')}</a>`
+          : '—'}</span>
+        ${p.head ? '<span class="fm-chip fm-chip-off">вакансия · глава вполсилы</span>' : ''}
+        <span class="fm-sp"></span>
+        <span class="fm-chip">ур. ${p.lvl}</span>
+        <span class="fm-chip">${esc((FM_STAT_RU[p.stat] || [p.stat])[0])} ${p.stat_val}</span>${cov}
+      </div>
+      <div class="fm-post-gain">${gain}</div></div>`;
+  }).join('');
+  return `<div class="fm-council">
+    <h3 class="fm-h">Совет державы</h3>
+    <div class="fm-intro">Должность в составе — это место в совете. Профильная характеристика того, кто её занимает, идёт слагаемым в экономику державы: доход, добычу, цену стройки и науки. Территориальные посты считаются по охвату зоны ответственности — не закрепили систем, не будет и вклада. Адмирал и Маршал в бухгалтерию не лезут: их характеристики врезаются в паспорт борта — секунды хода и броня. Вакансии закрывает сам правитель, но вполсилы.</div>
+    ${posts.length ? rows : '<div class="fr-empty">Совета нет: ни у вас, ни у служащих нет действующего персонажа.</div>'}
+    ${total ? `<div class="fm-council-total"><b>Итог совета:</b> ${total}</div>` : ''}
+  </div>`;
+}
+
+// ── Моя должность: уровень, опыт, вложение очков ────────────
+function fmOfficeHtml() {
+  const o = FM.office; if (!o || o.anon) return '';
+  const ch = o.character;
+  if (!ch) return `<div class="fm-office"><h3 class="fm-h">Моя должность</h3>
+    <div class="fm-intro">У вас нет действующего персонажа — в совете вы никого не представляете и опыт не капает. Заведите персонажа, и его характеристики начнут работать на державу.</div></div>`;
+  const prev = 20 * Math.pow(ch.lvl - 1, 2), pct = ch.lvl >= 20 ? 100
+    : Math.max(0, Math.min(100, Math.round((ch.xp - prev) / Math.max(1, ch.next_xp - prev) * 100)));
+  const stats = Object.keys(FM_STAT_RU).map(k => {
+    const v = (ch.stats || {})[k] || 10, mod = Math.floor((v - 10) / 2);
+    const can = ch.points > 0 && v < 20;
+    return `<div class="fm-stat">
+      <span class="fm-stat-k" title="${esc(FM_STAT_RU[k][1])}">${esc(FM_STAT_RU[k][0])}</span>
+      <span class="fm-stat-v">${v}</span>
+      <span class="fm-stat-m">${mod >= 0 ? '+' : ''}${mod}</span>
+      <button class="fm-stat-add" ${can ? '' : 'disabled'} onclick="chSpend('${k}')">+</button></div>`;
+  }).join('');
+  return `<div class="fm-office">
+    <h3 class="fm-h">Моя должность</h3>
+    <div class="fm-office-hd">
+      <a href="#${esc(ch.slug)}" onclick="go('${esc(ch.slug)}');return false">${esc(ch.name)}</a>
+      <span class="fm-badge ok">${o.is_head ? 'Глава государства' : esc((FM.me && FM.me.membership && FM.me.membership.role_title) || 'на службе')}</span>
+      <span class="fm-sp"></span><span class="fm-chip">уровень ${ch.lvl}</span>
+    </div>
+    <div class="fm-xp"><div class="fm-xp-fill" style="width:${pct}%"></div></div>
+    <div class="fm-scope-line">${ch.lvl >= 20 ? 'Потолок уровня' : `${ch.xp} / ${ch.next_xp} опыта`} · сегодня заработано ${ch.today_xp} из 150 · опыт даёт работа от имени державы, а не время в игре</div>
+    <div class="fm-stats">${stats}</div>
+    <div class="fm-scope-line">${ch.points > 0
+      ? `Свободных очков: <b>${ch.points}</b> — вложите в характеристику, и совет сразу станет считать по-новому.`
+      : 'Свободных очков нет: следующее придёт с уровнем.'}</div>
+  </div>`;
+}
+
+async function chSpend(stat) {
+  try {
+    FM.office = await fmRpc('ch_spend', { p_stat: stat });
+    FM.council = FM.office.council || FM.council;
+    if (typeof EC !== 'undefined') EC.council = FM.council;
+    toast('Очко вложено', 'ok'); fmRenderCourt();
+  } catch (e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
 // ── Разметка вкладки ────────────────────────────────────────
 function fmCourtHtml() {
   if (!FM.list) return `<div class="sload"><div class="pulse-loader"></div></div>`;
   const pend = FM.list.filter(m => m.status === 'pending');
   const act  = FM.list.filter(m => m.status === 'active');
+  const head = fmOfficeHtml() + fmCouncilHtml();
+  if (!FM.me || !FM.me.is_owner) return `<div class="fm-court">${head}</div>`;
   return `<div class="fm-court">
+    ${head}
     <div class="fm-intro">Игроки без своей державы могут проситься к вам на службу. Принятый действует от имени державы ровно в тех пределах, которые вы ему очертите: роль задаёт набор прав, а зона ответственности — на какие системы, флоты и армии эти права распространяются.</div>
     ${pend.length ? `<h3 class="fm-h">Заявки <span>${pend.length}</span></h3>${pend.map(m => fmCardHtml(m, true)).join('')}` : ''}
     <h3 class="fm-h">Состав <span>${act.length}</span></h3>
@@ -339,7 +496,10 @@ function fmCardHtml(m, isPending) {
   return `<div class="fm-card${isPending ? ' pend' : ''}">
     <div class="fm-card-hd">
       <span class="fm-ava">${m.avatar_url ? `<img src="${esc(m.avatar_url)}">` : '◈'}</span>
-      <span class="fm-card-name">${esc(m.name || 'Игрок')}</span>
+      <span class="fm-card-name">${m.char_slug
+        ? `<a href="#${esc(m.char_slug)}" onclick="go('${esc(m.char_slug)}');return false">${esc(m.char_name || m.name || 'Игрок')}</a>`
+        : esc(m.name || 'Игрок')}</span>
+      ${m.char_class ? `<span class="fm-badge">${esc(FM_CLASS_RU[m.char_class] || m.char_class)}</span>` : ''}
       ${isPending ? '<span class="fm-badge">заявка</span>' : `<span class="fm-badge ok">${esc(m.role_title)}</span>`}
       <span class="fm-sp"></span>${roleSel}
     </div>

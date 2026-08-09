@@ -7,18 +7,41 @@
 .fm-perm-line{margin:6px 0 4px}
 .fm-scope-line{font-size:12.5px;color:var(--t3);margin:2px 0 8px}
 
-/* ── Выбор державы для заявки ── */
-.fm-fac-list{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow-y:auto;margin-bottom:14px}
-.fm-fac{display:flex;align-items:center;gap:10px;width:100%;padding:9px 11px;text-align:left;cursor:pointer;
-  background:rgba(255,255,255,.02);border:1px solid var(--w3);border-radius:var(--radius-sm);color:var(--t1)}
-.fm-fac:hover{border-color:var(--te);background:rgba(255,255,255,.05)}
-.fm-fac-herald{flex:0 0 30px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;
-  border:1px solid var(--w3);border-radius:var(--radius-sm);overflow:hidden;color:var(--t3)}
+/* ── Выбор державы для заявки ────────────────────────────────
+   Форма-язык общий с киберпанк-панелями: срез углов клипом, «обводка» —
+   слой-подложка (::before цвет + ::after инсет-фон), border не годится.
+   Один акцент (--gd): рамка выбранной карточки и счётчик служащих. */
+.fm-svc{--cut:12px}
+.fm-svc-hd{font-family:var(--font-display);font-size:15px;font-weight:900;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--t1);margin:0 0 6px}
+.fm-svc-sub{font-size:12.5px;color:var(--t3);line-height:1.5;margin:0 0 16px;max-width:62ch}
+.fm-svc-sub b{color:var(--t2);font-weight:600}
+.fm-fac-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;
+  max-height:56vh;overflow-y:auto;margin-bottom:16px;padding:2px}
+.fm-fac{position:relative;z-index:0;display:flex;align-items:center;gap:11px;width:100%;
+  padding:12px 13px;text-align:left;cursor:pointer;color:var(--t1);
+  background:transparent;border:none;border-radius:0;font-family:inherit;
+  transition:transform var(--duration-fast, .12s);
+  clip-path:polygon(0 0,calc(100% - var(--cut)) 0,100% var(--cut),100% 100%,var(--cut) 100%,0 calc(100% - var(--cut)))}
+.fm-fac::before{content:"";position:absolute;inset:0;z-index:-2;background:var(--w3)}
+.fm-fac::after{content:"";position:absolute;inset:1px;z-index:-1;background:hsl(216 24% 9% / .96);
+  clip-path:polygon(0 0,calc(100% - var(--cut)) 0,100% var(--cut),100% 100%,var(--cut) 100%,0 calc(100% - var(--cut)))}
+.fm-fac:hover{transform:translateY(-1px)}
+.fm-fac:hover::before{background:color-mix(in srgb,var(--gd,#3a9bdc) 55%,transparent)}
+.fm-fac:hover::after{background:hsl(216 26% 11% / .96)}
+.fm-fac-herald{flex:0 0 40px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;color:var(--t3);font-size:17px;background:rgba(255,255,255,.03);
+  clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,7px 100%,0 calc(100% - 7px))}
 .fm-fac-herald img{width:100%;height:100%;object-fit:cover}
-.fm-fac-main{display:flex;flex-direction:column;min-width:0;flex:1}
-.fm-fac-main b{font-size:14px;font-weight:600}
-.fm-fac-main i{font-style:normal;font-size:12px;color:var(--t3)}
-.fm-fac-n{font-size:12px;color:var(--t3);white-space:nowrap}
+.fm-fac-main{display:flex;flex-direction:column;min-width:0;flex:1;gap:3px}
+.fm-fac-main b{font-family:var(--font-display);font-size:12px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fm-fac-main i{font-family:var(--font-mono);font-style:normal;font-size:10px;letter-spacing:.04em;
+  color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Счётчик служащих — в нижний правый угол: верхний срезан клипом. */
+.fm-fac-n{font-family:var(--font-mono);font-size:10px;letter-spacing:.04em;
+  color:color-mix(in srgb,var(--gd,#3a9bdc) 80%,transparent);
+  white-space:nowrap;align-self:flex-end}
 
 /* ── Двор: карточки участников ── */
 .fm-intro{font-size:13px;color:var(--t3);line-height:1.55;margin-bottom:16px;max-width:760px}
@@ -65,3 +88,34 @@
   .fm-card-hd{gap:7px}
   .fm-sel{width:100%;margin-top:4px}
 }
+
+/* ── Совет державы и моя должность (_char_office.sql) ───────── */
+.fm-council,.fm-office{margin-bottom:18px}
+.fm-council-total{margin-top:10px;padding-top:9px;border-top:1px solid var(--w3);
+  font-size:13px;color:var(--t2);display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.fm-post{padding:9px 12px;margin-bottom:6px;border:1px solid var(--w3);border-radius:var(--radius-sm);
+  background:rgba(0,0,0,.14)}
+.fm-post.head{border-style:dashed;opacity:.72}
+.fm-post-hd{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:5px}
+.fm-post-title{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--t3);font-weight:600}
+.fm-post-who{font-size:14px;color:var(--t1)}
+.fm-post-gain{display:flex;flex-wrap:wrap;gap:6px}
+.fm-mod{font-size:12px;font-family:'JetBrains Mono',monospace;padding:2px 7px;
+  border:1px solid var(--w3);border-radius:var(--radius-sm);color:var(--t3)}
+.fm-mod.up{color:var(--ok);border-color:rgba(90,200,140,.35)}
+.fm-mod.down{color:var(--color-warning);border-color:rgba(230,160,70,.35)}
+.fm-mod.flat{font-style:italic;border-color:transparent}
+
+.fm-office-hd{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px;font-size:15px}
+.fm-xp{height:4px;background:rgba(0,0,0,.35);border-radius:2px;overflow:hidden;margin-bottom:6px}
+.fm-xp-fill{height:100%;background:var(--te);transition:width .3s}
+.fm-stats{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.fm-stat{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;
+  border:1px solid var(--w3);border-radius:var(--radius-sm);background:rgba(0,0,0,.14)}
+.fm-stat-k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--t3)}
+.fm-stat-v{font-size:15px;color:var(--t1);font-family:'JetBrains Mono',monospace}
+.fm-stat-m{font-size:11.5px;color:var(--t3);font-family:'JetBrains Mono',monospace}
+.fm-stat-add{width:20px;height:20px;line-height:1;padding:0;cursor:pointer;font-family:inherit;
+  color:var(--te);background:transparent;border:1px solid var(--w3);border-radius:var(--radius-sm)}
+.fm-stat-add:disabled{opacity:.25;cursor:default}
+.fm-stat-add:not(:disabled):hover{border-color:var(--te);background:rgba(80,150,255,.1)}
