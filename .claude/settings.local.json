@@ -451,7 +451,11 @@
       "Bash(node --check estate.js)",
       "Bash(sed -i \"s/var BUILD = '20260809estback';/var BUILD = '20260809press';/\" index.html)",
       "Bash(node -e \"1\")",
-      "PowerShell(node tools/db_run.js _fn_member_write.sql)"
+      "PowerShell(node tools/db_run.js _fn_member_write.sql)",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('render.js','utf8'\\)\\);console.log\\('render ok'\\)\")",
+      "Bash(git stash *)",
+      "Bash(node -e \"const c=require\\('fs'\\).readFileSync\\('css/03_content.css','utf8'\\);let d=0;for\\(const ch of c\\){if\\(ch==='{'\\)d++;if\\(ch==='}'\\)d--;}console.log\\('baseline',d\\)\")",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('economy.js','utf8'\\)\\);console.log\\('ok'\\)\")"
     ]
   }
 }

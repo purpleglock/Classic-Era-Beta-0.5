@@ -1185,7 +1185,18 @@
 .ec-bp-hd { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: var(--deco-frame-w, 1px) solid var(--w2); }
 .ec-bp-hd-t { display: flex; align-items: center; gap: 9px; font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--t1); letter-spacing: calc(1px * var(--deco-ls-mult, 1)); text-transform: uppercase; }
 .ec-bp-hd-t::before { content: '//'; color: var(--te); font-weight: 700; }
-.ec-bp-hd-ic { font-size: 18px; }
+/* ── инлайн-иконки экономики (SVG в currentColor вместо эмодзи) ── */
+.ec-i { width: 14px; height: 14px; flex: 0 0 auto; vertical-align: -2px; opacity: .85; }
+.ec-bp-hd-ic { display: inline-flex; color: var(--gd); }
+.ec-bp-hd-ic .ec-i { width: 18px; height: 18px; opacity: 1; }
+.ec-bp-meta span { display: inline-flex; align-items: center; gap: 6px; }
+.ec-bp-filters .ec-flt { display: inline-flex; align-items: center; gap: 6px; }
+.ec-bp-ic .ec-i { width: 21px; height: 21px; opacity: 1; color: color-mix(in srgb, var(--accent) 78%, #eaf6ff); }
+.ec-bp-cf-ic .ec-i { width: 30px; height: 30px; opacity: 1; color: color-mix(in srgb, var(--accent) 78%, #eaf6ff); }
+.ec-bp-cf-row span { display: inline-flex; align-items: center; gap: 7px; }
+.ec-bp-rar { display: inline-flex; align-items: center; gap: 4px; }
+.ec-bp-rar .ec-i { width: 9px; height: 9px; fill: currentColor; opacity: 1; }
+.ec-bp-x .ec-i { width: 15px; height: 15px; opacity: 1; }
 .ec-bp-x { background: none; border: 0; color: var(--t3); font-size: 17px; cursor: pointer; padding: 3px 7px; border-radius: var(--radius-sm); line-height: 1; transition: color var(--duration-fast), background var(--duration-fast); }
 .ec-bp-x:hover { color: var(--t1); background: var(--b4); }
 .ec-bp-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; font-family: var(--font-mono); font-size: 11px; color: var(--t3); border-bottom: var(--deco-frame-w, 1px) solid var(--w1); }

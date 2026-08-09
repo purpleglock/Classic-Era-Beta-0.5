@@ -510,7 +510,7 @@
 .hp-vn-colony{
   position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;
   background:linear-gradient(180deg, hsl(216 26% 6% / .93), hsl(216 30% 4% / .96));
-  backdrop-filter:saturate(1.1) blur(6px);
+  /* без backdrop-filter: см. выше — полноэкранное размытие ест кадры */
   /* без анимации появления — экран открывается сразу, в границах обложки */
   display:none;
   border-radius:inherit;overflow:hidden;
@@ -743,7 +743,8 @@
 .hp-vn-poem{
   position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;
   background:linear-gradient(180deg, hsl(216 26% 6% / .93), hsl(216 30% 4% / .96));
-  backdrop-filter:saturate(1.1) blur(6px);
+  /* без backdrop-filter: подложка и так глухая (.93–.96), а размытие
+     на весь экран — полноэкранный GPU-проход КАЖДЫЙ кадр (просадка FPS) */
   display:none;
   border-radius:inherit;overflow:hidden;
   --cyb-cut:14px;
@@ -887,7 +888,8 @@
 .hp-vn-rating{
   position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;
   background:linear-gradient(180deg, hsl(216 26% 6% / .93), hsl(216 30% 4% / .96));
-  backdrop-filter:saturate(1.1) blur(6px);
+  /* без backdrop-filter: подложка и так глухая (.93–.96), а размытие
+     на весь экран — полноэкранный GPU-проход КАЖДЫЙ кадр (просадка FPS) */
   display:none;
   border-radius:inherit;overflow:hidden;
   --cyb-cut:14px;
@@ -1040,7 +1042,8 @@
 .hp-vn-research{
   position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;
   background:linear-gradient(180deg, hsl(196 30% 6% / .93), hsl(210 32% 4% / .96));
-  backdrop-filter:saturate(1.1) blur(6px);
+  /* без backdrop-filter: подложка и так глухая (.93–.96), а размытие
+     на весь экран — полноэкранный GPU-проход КАЖДЫЙ кадр (просадка FPS) */
   display:none;
   border-radius:inherit;overflow:hidden;
   --vnt-sci:#54d0c8;
@@ -4001,6 +4004,8 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
    Фолбэк-градиенты классов планет работают, пока арт bg_<look>.webp не залит. */
 .hvp-headr{display:flex;align-items:center;gap:8px}
 .hvp-body{overflow:auto;scrollbar-width:thin}
+/* список — колонка секций-систем (базовый .hp-vn-col-body — ряд, для сцены) */
+.hvp-body:not(.hvp-body-scene){display:block;gap:0}
 .hvp-look-gas{--hvp-g1:#3a2f52;--hvp-g2:#141024}
 .hvp-look-ocean{--hvp-g1:#12405e;--hvp-g2:#081726}
 .hvp-look-ice{--hvp-g1:#2e4a5e;--hvp-g2:#0d1a24}
@@ -4042,7 +4047,7 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hvp-orb{width:96px;height:96px;margin:0}
 .hvp-card:hover .fr-env-cv{filter:drop-shadow(0 0 14px color-mix(in srgb,var(--gd,#3a9bdc) 45%,transparent))}
 .hvp-cap{
-  position:absolute;top:8px;left:0;padding:3px 10px 3px 8px;
+  position:absolute;top:8px;left:0;display:flex;align-items:center;gap:5px;padding:3px 10px 3px 8px;
   font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;color:#0c1018;
   background:var(--gold,#c9a227);clip-path:polygon(0 0,100% 0,calc(100% - 7px) 100%,0 100%);
 }
@@ -4053,13 +4058,55 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 }
 .hvp-card-ty{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3,#8296a8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hvp-card-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:3px}
+.hvp-cap .hvp-i{width:11px;height:11px;fill:currentColor;opacity:1}
 .hvp-chip{
+  display:inline-flex;align-items:center;gap:5px;
   font-family:var(--font-mono);font-size:10px;color:var(--t2,#b8c4cf);
-  padding:2px 7px;background:rgba(46,155,224,.08);
+  padding:3px 7px;background:rgba(46,155,224,.08);
   clip-path:polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px);
 }
 .hvp-chip i{font-style:normal;color:var(--gdl,#5fb0e6)}
 .hvp-res{font-size:11px}
+.hvp-card-last::before{background:var(--gold,#c9a227)}
+
+/* ── Экран 1: разбивка по системам + поиск ── */
+.hvp-hide{display:none !important}
+/* инлайн-иконки экрана (SVG, currentColor) — вместо эмодзи */
+.hvp-i{width:13px;height:13px;flex:0 0 auto;vertical-align:-2px;opacity:.85}
+.hvp-tools{
+  position:sticky;top:0;z-index:3;display:flex;gap:8px;align-items:center;
+  padding:2px 0 10px;background:linear-gradient(180deg,hsl(216 26% 7%) 72%,transparent);
+}
+.hvp-qw{
+  flex:1;min-width:0;max-width:340px;display:flex;align-items:center;gap:7px;padding:0 10px;
+  border:1px solid var(--cyb-line);background:hsl(216 22% 8% / .92);color:var(--t3,#8296a8);
+}
+.hvp-qw:focus-within{border-color:color-mix(in srgb,var(--gd,#3a9bdc) 62%,transparent);color:var(--gdl,#5fb0e6)}
+.hvp-q{
+  flex:1;min-width:0;padding:7px 0;border:none;background:transparent;
+  color:#eaf6ff;font-family:var(--font-mono);font-size:11px;border-radius:0;outline:none;
+}
+.hvp-q::-webkit-search-cancel-button{filter:grayscale(1) opacity(.6)}
+.hvp-tool-b{
+  padding:7px 10px;border:1px solid var(--cyb-line);background:transparent;color:var(--t2,#b8c4cf);
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;
+}
+.hvp-tool-b:hover{color:#eaf6ff;border-color:color-mix(in srgb,var(--gd,#3a9bdc) 62%,transparent)}
+.hvp-sys{display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+.hvp-sys-h{
+  position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;width:100%;
+  padding:6px 2px;border:none;border-bottom:1px solid var(--cyb-line);
+  background:hsl(216 26% 7% / .96);color:#eaf6ff;cursor:pointer;text-align:left;
+}
+.hvp-sys-ar{width:14px;height:14px;color:var(--t3,#8296a8);transition:transform var(--duration-fast) ease}
+.hvp-sys-nm{display:flex;align-items:center;gap:7px;font-family:var(--font-display);font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.05em}
+.hvp-sys-cap{color:var(--gold,#c9a227);fill:var(--gold,#c9a227);opacity:1}
+.hvp-sys-n{display:flex;align-items:center;gap:5px;margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--t3,#8296a8)}
+.hvp-tools ~ .hvp-sys .hvp-sys-h{top:42px}   /* под панелью поиска */
+.hvp-sys.off .hvp-sys-ar{transform:rotate(-90deg)}
+.hvp-sys.off .hvp-grid{display:none}
+.hvp-sys.off.hvp-open-q .hvp-grid{display:grid}
+.hvp-sys.off.hvp-open-q .hvp-sys-ar{transform:none}
 
 /* ── Экран 2: сцена планеты ── */
 .hvp-body-scene{gap:14px}
@@ -4083,6 +4130,12 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   text-transform:uppercase;letter-spacing:.06em;text-shadow:0 1px 6px rgba(0,0,0,.8);
   display:flex;flex-direction:column;gap:3px;
 }
+.hvp-scene-nm{display:flex;align-items:center;gap:8px}
+.hvp-scene-nm .hvp-i{width:15px;height:15px}
+.hvp-info-row span{display:flex;align-items:center;gap:7px}
+.hvp-tile-sl{display:inline-flex;align-items:center;gap:3px}
+.hvp-tile-sl .hvp-i{width:9px;height:9px;fill:currentColor}
+.hvp-tile-ic .hvp-i,.hvp-tile-ic .ec-i,.hvp-tile-ic .ec-ico{width:22px;height:22px;opacity:1;color:var(--gdl,#5fb0e6)}
 .hvp-scene-cap i{font-style:normal;font-family:var(--font-mono);font-weight:400;font-size:10px;letter-spacing:.1em;color:var(--t2,#b8c4cf)}
 /* «участки» застройки поверх нижней кромки сцены */
 .hvp-tiles{
@@ -4154,7 +4207,8 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hp-vn-assembly{
   position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;
   background:linear-gradient(180deg, hsl(216 26% 6% / .93), hsl(216 30% 4% / .96));
-  backdrop-filter:saturate(1.1) blur(6px);
+  /* без backdrop-filter: подложка и так глухая (.93–.96), а размытие
+     на весь экран — полноэкранный GPU-проход КАЖДЫЙ кадр (просадка FPS) */
   display:none;
   border-radius:inherit;overflow:hidden;
   --vna-gal:#b06adb;

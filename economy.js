@@ -693,6 +693,50 @@ const EC_BLD_ICON = {
   science: '🔬', sci_giant: '🔭', sci_anomaly: '👁', training: '🪖', intel: '🕵', military_factory: '🛠', shipyard: '🚀', airfield: '✈', warehouse: '📦', temple: '🛐', doomgun: '🜨',
   starbase: '🛰', flak: '🎯', abm: '🚀', shellforge: '☢', ballfab: '🏭', nemesis: '⛨',
 };
+// ── ИКОНКИ: инлайновый SVG вместо эмодзи ──
+// Эмодзи рисуются шрифтом ОС: свой цвет, свой вес, свой размер на каждой
+// платформе — на гранёном каркасе интерфейса это выглядит мусором и не
+// красится темой. Здесь один штриховой набор в currentColor: 16×16, stroke 1.3.
+// Ключи зданий совпадают с EC_BLD_ICON (тот остаётся для мест, где нужен текст).
+// Отдаётся общей обёрткой ecIco() (см. набор родов войск EC_ICO ниже).
+const EC_ICO16 = {
+  // здания
+  factory:          '<path d="M2 13.5h12"/><path d="M2.5 13.5V7l3.5 2.2V7l3.5 2.2V4h4v9.5"/>',
+  mining:           '<path d="M2.5 13.5l7-7"/><path d="M4 5.6c3-2.5 6.6-2.3 9.2.5"/><path d="M8.6 4.3l3.3 3.3"/>',
+  mining_deep:      '<path d="M2.5 13.5l6-6"/><path d="M7 3.5h6v3"/><path d="M8.5 7.5l5-5"/>',
+  mining_exotic:    '<path d="M3.5 3h9l2.5 3.6L8 13.8 2 6.6z"/><path d="M2 6.6h12"/>',
+  goodsfab:         '<path d="M3.5 5.5h9l1 8.5h-11z"/><path d="M6 5.5V4a2 2 0 014 0v1.5"/>',
+  wellhub:          '<path d="M2 5.5L8 2l6 3.5"/><path d="M3.5 6.8v5.7M6.5 6.8v5.7M9.5 6.8v5.7M12.5 6.8v5.7"/><path d="M2 13.5h12"/>',
+  trade:            '<path d="M3 5.5h9l-2.6-2.6"/><path d="M13 10.5H4l2.6 2.6"/>',
+  science:          '<path d="M6.4 2v4.3L3 12.3a1.4 1.4 0 001.2 2h7.6a1.4 1.4 0 001.2-2L9.6 6.3V2"/><path d="M5.4 2h5.2"/>',
+  sci_giant:        '<circle cx="8" cy="8" r="4"/><path d="M2.4 10.6c3.2 1.7 8.2 1.4 11.2-1.1"/>',
+  sci_anomaly:      '<path d="M1.6 8S4.2 4 8 4s6.4 4 6.4 4-2.6 4-6.4 4S1.6 8 1.6 8z"/><circle cx="8" cy="8" r="1.6"/>',
+  training:         '<path d="M2.6 10.4a5.4 5.4 0 0110.8 0"/><path d="M2 10.4h12v2.4H2z"/>',
+  intel:            '<path d="M2.4 6.4h11.2"/><circle cx="5.3" cy="9.3" r="2.4"/><circle cx="10.7" cy="9.3" r="2.4"/>',
+  military_factory: '<circle cx="8" cy="8" r="2.4"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.7 3.7l1.4 1.4M10.9 10.9l1.4 1.4M12.3 3.7l-1.4 1.4M5.1 10.9l-1.4 1.4"/>',
+  shipyard:         '<path d="M8 1.8c2.2 2 3.3 4.6 3.3 7.4L8 12.4 4.7 9.2C4.7 6.4 5.8 3.8 8 1.8z"/><circle cx="8" cy="6.6" r="1.2"/><path d="M4.9 12.4L3.2 14.2M11.1 12.4l1.7 1.8"/>',
+  airfield:         '<path d="M8 1.8l1.2 5.2 4.8 2.4v1.4l-4.9-1.2-.6 2.6 1.7 1.2v1L8 13.7l-2.2.7v-1l1.7-1.2-.6-2.6L2 10.8V9.4l4.8-2.4z"/>',
+  warehouse:        '<path d="M2 5.6L8 2.5l6 3.1v7.9H2z"/><path d="M6 13.5V9.4h4v4.1"/>',
+  temple:           '<path d="M8 1.8v3.2M6.6 3.4h2.8"/><path d="M4 13.5V8a4 4 0 018 0v5.5"/><path d="M2.8 13.5h10.4"/>',
+  doomgun:          '<circle cx="8" cy="8" r="5.6"/><path d="M8 2.4v11.2M2.4 8h11.2"/>',
+  starbase:         '<circle cx="8" cy="8" r="2.6"/><path d="M2 4.6l3.7 2.1M14 4.6l-3.7 2.1M8 13.4v-2.9"/>',
+  flak:             '<circle cx="8" cy="8" r="5.2"/><circle cx="8" cy="8" r="1.5"/><path d="M8 .9v2.3M8 12.8v2.3M.9 8h2.3M12.8 8h2.3"/>',
+  abm:              '<path d="M8 2l2.4 4.6v5.2H5.6V6.6z"/><path d="M5.6 9.4L3.6 12.2h2M10.4 9.4l2 2.8h-2"/>',
+  shellforge:       '<path d="M8 2c2 1.9 3 4 3 6.5V13H5V8.5C5 6 6 3.9 8 2z"/><path d="M5 13h6"/>',
+  ballfab:          '<path d="M2 13.5h12"/><path d="M3 13.5V8.2l4-2v7.3"/><path d="M7 13.5V6l6-3.2v10.7"/>',
+  nemesis:          '<path d="M8 2l5 2v4.2c0 3-2.1 5.2-5 6-2.9-.8-5-3-5-6V4z"/>',
+  // интерфейс
+  cells:            '<path d="M2.5 2.5h11v11h-11z"/><path d="M8 2.5v11M2.5 8h11"/>',
+  gc:               '<circle cx="8" cy="8" r="5.5"/><path d="M8 4.6v6.8M6.2 6.4h3.6M6.2 9.6h3.6"/>',
+  planet:           '<circle cx="8" cy="7.2" r="4.2"/><path d="M2.2 10.6c3.4 1.9 8.6 1.6 11.6-1"/>',
+  build:            '<path d="M2 14h12"/><path d="M4 14V6l4-2.5V14"/><path d="M8 14V7l4 2v5"/>',
+  mega:             '<circle cx="8" cy="8" r="2"/><ellipse cx="8" cy="8" rx="6.6" ry="2.6"/><ellipse cx="8" cy="8" rx="6.6" ry="2.6" transform="rotate(62 8 8)"/>',
+  rar:              '<path d="M8 2.4l5.6 5.6L8 13.6 2.4 8z"/>',
+  close:            '<path d="M3.6 3.6l8.8 8.8M12.4 3.6l-8.8 8.8"/>',
+  house:            '<path d="M2.4 7.6L8 3l5.6 4.6V13.5H2.4z"/>',
+  time:             '<circle cx="8" cy="8" r="5.6"/><path d="M8 4.4V8l2.5 2.5"/>',
+  vault:            '<path d="M2.2 6.4L8 3l5.8 3.4"/><path d="M3.4 6.6v6.9M12.6 6.6v6.9M6.5 6.6v6.9M9.5 6.6v6.9"/><path d="M2.2 13.5h11.6"/>'
+};
 const EC_COLONIZE_COST = 400, EC_MAX_SLOTS = 6, EC_DEFAULT_CELLS = 6;
 // Обустройство среды обитания на своей колонии (+ячейки, 1 ход)
 const EC_HABITAT_COST = 1000, EC_HABITAT_CELLS = 3, EC_HABITAT_TURNS = 1;
@@ -6276,9 +6320,15 @@ const EC_ICO = {
   flag:    '<path d="M5.5 21.5V3"/><path d="M5.5 3.8h11l-2.2 3.4 2.2 3.4h-11z"/>',
   map:     '<path d="M3 6.2l6-2.7 6 2.7 6-2.7v14.3l-6 2.7-6-2.7-6 2.7z"/><path d="M9 3.5v14.3M15 6.2v14.3"/>',
 };
+// Общая обёртка: ключи хозяйства (EC_ICO16, сетка 16) и рода войск (EC_ICO, сетка 24)
+// живут в одном вызове — на месте вызова не надо помнить, из какого набора иконка.
 function ecIco(k, cls) {
+  if (EC_ICO16[k] && !EC_ICO[k]) {   // ключ-тёзка (factory) остаётся за набором родов войск
+    return `<svg class="ec-i${cls ? ' ' + cls : ''}" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+      stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${EC_ICO16[k]}</svg>`;
+  }
   return `<svg class="ec-ico${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${EC_ICO[k] || EC_ICO.shield}</svg>`;
+    stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${EC_ICO[k] || EC_ICO16.house}</svg>`;
 }
 
 // Роды войск: ключ категории → подпись, роль, акцент, единица счёта.
@@ -14759,12 +14809,12 @@ function ecBuildPicker(colonyId) {
     const block = t === 'wellhub' ? ecHubBlockReason(colonyId) : '';   // ДОМИК: лимит 1/система, 5/держава
     const afford = gc >= cost && !block;
     const catLabel = d.cat === 'civ' ? 'Гражд.' : d.cat === 'sci' ? 'Наука' : d.cat === 'faith' ? 'Вера' : 'Воен.';
-    const mineChips = MINE_RARS[t] ? `<span class="ec-bp-mine">⛏ добывает: ${MINE_RARS[t].map(r =>
-      `<span class="ec-bp-rar ec-bp-rar-${r}">◈ ${ecRarLabel(r)}</span>`).join('')}</span>` : '';
+    const mineChips = MINE_RARS[t] ? `<span class="ec-bp-mine">${ecIco('mining')} добывает: ${MINE_RARS[t].map(r =>
+      `<span class="ec-bp-rar ec-bp-rar-${r}">${ecIco('rar')}${ecRarLabel(r)}</span>`).join('')}</span>` : '';
     // мультивера: для храма сперва выбираем веру (если их несколько); иначе сразу подтверждение
     const act = t === 'temple' ? `ecBuildTempleFaith('${colonyId}')` : `ecBuildConfirm('${colonyId}','${t}')`;
     return `<button class="ec-bp-card ec-bp-${d.cat}${afford ? '' : ' ec-bp-noaf'}" ${afford ? '' : 'disabled'}${block ? ` title="${esc(block)}"` : ''} onclick="${act}">
-      <span class="ec-bp-ic">${EC_BLD_ICON[t] || '⌂'}</span>
+      <span class="ec-bp-ic">${ecIco(t)}</span>
       <span class="ec-bp-info">
         <span class="ec-bp-row1"><span class="ec-bp-name">${esc(d.name)}</span><span class="ec-bp-cat ec-bp-cat-${d.cat}">${catLabel}</span><span class="ec-bp-cost${afford ? '' : ' ec-bp-cant'}">${ecNum(cost)} <small>ГС</small></span></span>
         <span class="ec-bp-desc">${esc(d.desc)}</span>
@@ -14777,17 +14827,17 @@ function ecBuildPicker(colonyId) {
   _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
     <div class="ec-bp-modal" role="dialog" aria-modal="true">
       <div class="ec-bp-hd">
-        <div class="ec-bp-hd-t"><span class="ec-bp-hd-ic">🏗</span><span>Что построить</span></div>
-        <button class="ec-bp-x" title="Закрыть" onclick="ecBuildClose()">✕</button>
+        <div class="ec-bp-hd-t"><span class="ec-bp-hd-ic">${ecIco('build')}</span><span>Что построить</span></div>
+        <button class="ec-bp-x" title="Закрыть" onclick="ecBuildClose()">${ecIco('close')}</button>
       </div>
-      <div class="ec-bp-meta"><span>🪐 ${esc(colony.planet_name || 'Колония')}</span><span>⬚ свободно ячеек: <b>${free}</b></span><span>💰 казна: <b>${ecNum(gc)}</b> ГС</span></div>
+      <div class="ec-bp-meta"><span>${ecIco('planet')} ${esc(colony.planet_name || 'Колония')}</span><span>${ecIco('cells')} свободно ячеек: <b>${free}</b></span><span>${ecIco('gc')} казна: <b>${ecNum(gc)}</b> ГС</span></div>
       <div class="ec-bp-filters" role="tablist">
         <button class="ec-flt is-on" data-cat="all" onclick="ecBpFilter(this,'all')">Все</button>
-        <button class="ec-flt" data-cat="civ" onclick="ecBpFilter(this,'civ')">🏭 Гражданские</button>
-        <button class="ec-flt" data-cat="sci" onclick="ecBpFilter(this,'sci')">🔬 Наука</button>
-        <button class="ec-flt" data-cat="mil" onclick="ecBpFilter(this,'mil')">🪖 Военные</button>
-        <button class="ec-flt" data-cat="faith" onclick="ecBpFilter(this,'faith')">🛐 Вера</button>
-        <button class="ec-flt" data-cat="mega" onclick="ecBpFilter(this,'mega')">🌌 Мега</button>
+        <button class="ec-flt" data-cat="civ" onclick="ecBpFilter(this,'civ')">${ecIco('factory')} Гражданские</button>
+        <button class="ec-flt" data-cat="sci" onclick="ecBpFilter(this,'sci')">${ecIco('science')} Наука</button>
+        <button class="ec-flt" data-cat="mil" onclick="ecBpFilter(this,'mil')">${ecIco('training')} Военные</button>
+        <button class="ec-flt" data-cat="faith" onclick="ecBpFilter(this,'faith')">${ecIco('temple')} Вера</button>
+        <button class="ec-flt" data-cat="mega" onclick="ecBpFilter(this,'mega')">${ecIco('mega')} Мега</button>
       </div>
       <div class="ec-bp-grid flt-all">${cards}</div>
       <div class="ec-bp-foot">Постройка занимает 1 ячейку и завершается через 1 игровой день. Затраты возвращаются при отмене.</div>
@@ -15026,16 +15076,16 @@ function ecDoomBuildConfirm(colonyId) {
   const ok = afterGc >= 0 && afterMatter >= 0;
   _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
     <div class="ec-bp-modal ec-bp-cf" role="dialog" aria-modal="true">
-      <div class="ec-bp-cf-ic ec-bp-mil" style="background:rgba(220,40,40,.2)">🜨</div>
+      <div class="ec-bp-cf-ic ec-bp-mil" style="background:rgba(220,40,40,.2)">${ecIco('doomgun')}</div>
       <div class="ec-bp-cf-title">Возвести «${esc(d.name)}»?</div>
       <div class="ec-bp-cf-desc">${esc(d.desc)}</div>
       <div class="ec-bp-cf-howto">⚠ Орудие необратимо меняет правила: им можно стереть планету любой державы. Содержите его Программируемой материей, иначе оно деградирует и распадётся.</div>
       <div class="ec-bp-cf-rows">
-        <div class="ec-bp-cf-row"><span>🪐 Планета</span><b>${esc(colony.planet_name || 'Колония')}</b></div>
-        <div class="ec-bp-cf-row"><span>💰 Стоимость</span><b>${ecNum(cost)} ГС</b></div>
+        <div class="ec-bp-cf-row"><span>${ecIco('planet')} Планета</span><b>${esc(colony.planet_name || 'Колония')}</b></div>
+        <div class="ec-bp-cf-row"><span>${ecIco('gc')} Стоимость</span><b>${ecNum(cost)} ГС</b></div>
         <div class="ec-bp-cf-row"><span>Программируемая материя</span><b class="${afterMatter < 0 ? 'ec-warn' : ''}">${EC_DOOM_BUILD_MATTER} (есть ${ecNum(matter)})</b></div>
-        <div class="ec-bp-cf-row"><span>⏳ Срок</span><b>1 игровой день</b></div>
-        <div class="ec-bp-cf-row"><span>🏦 Казна после</span><b class="${afterGc < 0 ? 'ec-warn' : ''}">${ecNum(afterGc)} ГС</b></div>
+        <div class="ec-bp-cf-row"><span>${ecIco('time')} Срок</span><b>1 игровой день</b></div>
+        <div class="ec-bp-cf-row"><span>${ecIco('vault')} Казна после</span><b class="${afterGc < 0 ? 'ec-warn' : ''}">${ecNum(afterGc)} ГС</b></div>
       </div>
       <div class="ec-bp-cf-act">
         <button class="btn btn-gh btn-sm" onclick="ecBuildPicker('${colonyId}')">← Назад</button>
@@ -16389,16 +16439,16 @@ function ecBuildConfirm(colonyId, btype, faithId) {
   const fArg = faithId ? `,'${faithId}'` : '';
   _ecBuildHost().innerHTML = `<div class="ec-bp-ov" onclick="if(event.target===this)ecBuildClose()">
     <div class="ec-bp-modal ec-bp-cf" role="dialog" aria-modal="true">
-      <div class="ec-bp-cf-ic ec-bp-${d.cat}">${EC_BLD_ICON[btype] || '⌂'}</div>
+      <div class="ec-bp-cf-ic ec-bp-${d.cat}">${ecIco(btype)}</div>
       <div class="ec-bp-cf-title">Построить «${esc(d.name)}»?</div>
       <div class="ec-bp-cf-desc">${esc(d.desc)}</div>
       <div class="ec-bp-cf-howto">${esc(EC_BLD_HOWTO[btype] || '')}</div>
       <div class="ec-bp-cf-rows">
-        <div class="ec-bp-cf-row"><span>🪐 Планета</span><b>${esc(colony.planet_name || 'Колония')}</b></div>
+        <div class="ec-bp-cf-row"><span>${ecIco('planet')} Планета</span><b>${esc(colony.planet_name || 'Колония')}</b></div>
         ${faithRow}
-        <div class="ec-bp-cf-row"><span>💰 Стоимость</span><b>${ecNum(cost)} ГС</b></div>
-        <div class="ec-bp-cf-row"><span>⏳ Срок</span><b>1 игровой день</b></div>
-        <div class="ec-bp-cf-row"><span>🏦 Казна после</span><b class="${after < 0 ? 'ec-warn' : ''}">${ecNum(after)} ГС</b></div>
+        <div class="ec-bp-cf-row"><span>${ecIco('gc')} Стоимость</span><b>${ecNum(cost)} ГС</b></div>
+        <div class="ec-bp-cf-row"><span>${ecIco('time')} Срок</span><b>1 игровой день</b></div>
+        <div class="ec-bp-cf-row"><span>${ecIco('vault')} Казна после</span><b class="${after < 0 ? 'ec-warn' : ''}">${ecNum(after)} ГС</b></div>
       </div>
       <div class="ec-bp-cf-act">
         <button class="btn btn-gh btn-sm" onclick="${btype === 'temple' ? `ecBuildTempleFaith('${colonyId}')` : `ecBuildPicker('${colonyId}')`}">← Назад</button>

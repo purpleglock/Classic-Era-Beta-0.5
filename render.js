@@ -9306,7 +9306,30 @@ if (typeof document !== 'undefined') {
 // Пока арта нет — мягкий фолбэк: градиент класса планеты и иконки зданий.
 // ══════════════════════════════════════════════════════════════
 const HVP_ART = 'assets/vn/colony/';
-let _hvp = { mode: 'list', colonyId: null, bldId: null };
+// Иконки экрана — инлайновый SVG (currentColor, 1px-штрих), без эмодзи:
+// эмодзи рисуются шрифтом ОС, у каждого свой цвет и вес — на гранёном
+// киберпанк-каркасе это выглядит мусором. Размер задаётся CSS-классом .hvp-i.
+const HVP_ICO = {
+  cells:  '<path d="M2.5 2.5h11v11h-11z"/><path d="M8 2.5v11M2.5 8h11"/>',
+  bld:    '<path d="M2 14h12"/><path d="M4 14V6l4-2.5V14"/><path d="M8 14V7l4 2v5"/>',
+  star:   '<path d="M8 2l1.7 3.9 4.3.4-3.2 2.8 1 4.1L8 11.1 4.2 13.2l1-4.1L2 6.3l4.3-.4z"/>',
+  slot:   '<path d="M8 2.5l5.5 5.5L8 13.5 2.5 8z"/>',
+  gc:     '<circle cx="8" cy="8" r="5.5"/><path d="M8 4.6v6.8M6.2 6.4h3.6M6.2 9.6h3.6"/>',
+  time:   '<circle cx="8" cy="8" r="5.5"/><path d="M8 4.6V8l2.4 2.4"/>',
+  plus:   '<path d="M8 3.5v9M3.5 8h9"/>',
+  res:    '<path d="M8 2.2l5 3v5.6l-5 3-5-3V5.2z"/>',
+  chev:   '<path d="M4 6l4 4 4-4"/>',
+  search: '<circle cx="7.2" cy="7.2" r="4.2"/><path d="M10.4 10.4L13.5 13.5"/>'
+};
+function hvpIco(name, cls) {
+  const d = HVP_ICO[name] || '';
+  return `<svg class="hvp-i${cls ? ' ' + cls : ''}" viewBox="0 0 16 16" aria-hidden="true" focusable="false"
+    fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+}
+// q — строка поиска, scroll — прокрутка списка (чтобы «к списку» возвращал
+// НА ТО ЖЕ МЕСТО, а не в начало), back — планета, с которой вернулись (подсветить),
+// closed — свёрнутые системы (список разбит по системам).
+let _hvp = { mode: 'list', colonyId: null, bldId: null, q: '', scroll: 0, back: null, closed: {} };
 
 function heroVNPlanetsClose() {
   const el = document.getElementById('hp-vn-planets');
@@ -9337,10 +9360,71 @@ function _hvpTex(look) {
   const base = (typeof GM_BASE !== 'undefined') ? GM_BASE : 'assets/map/';
   return base + 'planets/planet_' + look + '.png';
 }
-// Отрисовать все планеты-сферы оверлея (карточки статичны, герой сцены вращается).
+// Что это за тело: 'belt' — пояс (рой камней), 'rock' — малое тело (спрайт-камень,
+// не сфера: у астероида нет ни терминатора, ни атмосферы), иначе планета-сфера.
+function _hvpKind(c) {
+  const s = ((c.planet_type || '') + ' ' + (c.planet_name || '')).toLowerCase();
+  if (/пояс|belt|койпер|kuiper|облак/.test(s)) return 'belt';
+  const grp = (typeof EC_GRP_NAME !== 'undefined' && EC_GRP_NAME[c.planet_type])
+    || (typeof EC_PLANET_NAME !== 'undefined' && EC_PLANET_NAME[c.planet_name]) || '';
+  if (grp === 'micro' || /астероид|карликов/.test(s)) return 'rock';
+  return 'planet';
+}
+// <canvas> тела для карточки/сцены: планета — сфера, малое тело — спрайт-камень,
+// пояс — рой (data-belt). Классы холста те же, что в регистрации (размер/свечение).
+function _hvpBodyCv(c, look, hero) {
+  const kind = _hvpKind(c);
+  const cls = hero ? 'fr-cap-hero-cv' : 'fr-env-cv';
+  const tex = kind === 'planet' ? _hvpTex(look) : _hvpRockTex();
+  const flag = kind === 'belt' ? ` data-belt="1" data-seed="${esc(String(c.planet_pid || c.id || ''))}"`
+    : kind === 'rock' ? ' data-sprite="1"' : (hero ? ' data-anim="1"' : '');
+  return `<canvas class="${cls}" data-tex="${esc(tex)}"${flag}></canvas>`;
+}
+function _hvpRockTex() {
+  const base = (typeof GM_BASE !== 'undefined') ? GM_BASE : 'assets/map/';
+  return base + 'planets/asteroid.png';
+}
+// Отрисовать все тела оверлея: сферы (frDrawSphere), камни (тот же вызов в режиме
+// спрайта) и пояса (рой камней вдоль дуги — своя отрисовка ниже).
 function _hvpDrawSpheres(el) {
   if (typeof frDrawSphere !== 'function') return;
-  el.querySelectorAll('canvas[data-tex]').forEach(cv => frDrawSphere(cv, cv.dataset.tex, cv.dataset.anim === '1', false));
+  el.querySelectorAll('canvas[data-tex]').forEach(cv => {
+    if (cv.dataset.belt === '1') { _hvpDrawBelt(cv, cv.dataset.tex); return; }
+    frDrawSphere(cv, cv.dataset.tex, cv.dataset.anim === '1', cv.dataset.sprite === '1');
+  });
+}
+// Пояс: не тело, а рой — семь камешков вдоль пологой дуги, размер и наклон
+// от стабильного зерна (одна и та же планета выглядит одинаково между рендерами).
+function _hvpDrawBelt(cv, url) {
+  const ctx = cv.getContext('2d'); if (!ctx) return;
+  const im = (typeof frTex === 'function') ? frTex(url) : null; if (!im) return;
+  const draw = () => {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cssW = cv.clientWidth || (cv.parentElement ? cv.parentElement.clientWidth : 0) || 120;
+    const cssH = cv.clientHeight || cssW;
+    const pw = Math.round(cssW * dpr), ph = Math.round(cssH * dpr);
+    if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+    const W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    if (!(im.complete && im.naturalWidth > 0)) return;
+    let seed = 0; const key = cv.dataset.seed || '';
+    for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) >>> 0;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const N = 7, R = Math.min(W, H) * 0.42;
+    for (let i = 0; i < N; i++) {
+      const u = (i + 0.5) / N;                       // положение вдоль дуги
+      const x = W / 2 + (u - 0.5) * R * 2.1;
+      const y = H / 2 + Math.sin(u * Math.PI) * R * 0.28 - R * 0.12 + (rnd() - 0.5) * R * 0.22;
+      const s = R * (0.16 + rnd() * 0.2);
+      ctx.save();
+      ctx.globalAlpha = 0.55 + rnd() * 0.45;
+      ctx.translate(x, y); ctx.rotate(rnd() * 6.2832);
+      ctx.drawImage(im, -s, -s, s * 2, s * 2);
+      ctx.restore();
+    }
+  };
+  if (!(im.complete && im.naturalWidth > 0)) im.addEventListener('load', draw, { once: true });
+  draw();
 }
 // Фон планеты: персональный арт по pid (bg_p<pid>.webp) поверх классового (bg_<look>.webp).
 // onerror каскадом откатывает personal → класс → чистый градиент (CSS-класс look).
@@ -9372,7 +9456,7 @@ async function heroVNPlanetsOpen() {
     }
     if (!EC.colonies || !EC.colonies.length || !EC.buildings) { if (typeof ecLoad === 'function') await ecLoad(); }
     if (!el.classList.contains('show')) return;
-    _hvp = { mode: 'list', colonyId: null, bldId: null };
+    _hvp.mode = 'list'; _hvp.colonyId = null; _hvp.bldId = null; _hvp.back = null; _hvp.scroll = 0;
     _hvpRender();
   } catch (e) {
     if (!el.classList.contains('show')) return;
@@ -9402,14 +9486,65 @@ function _hvpRender() {
   if (_hvp.mode === 'planet') {
     const c = (EC.colonies || []).find(x => x.id === _hvp.colonyId);
     if (c) { el.innerHTML = _hvpHead(en, c) + _hvpScene(en, c); _hvpDrawSpheres(el); return; }
-    _hvp = { mode: 'list', colonyId: null, bldId: null };   // колонию потеряли — назад к списку
+    _hvp.mode = 'list'; _hvp.colonyId = null; _hvp.bldId = null;   // колонию потеряли — назад к списку
   }
   el.innerHTML = _hvpHead(en) + _hvpListHtml(en);
   _hvpDrawSpheres(el);
+  _hvpRestore(el);
 }
-function heroVNPlanetsRefresh() { try { _hvpRender(); } catch (e) {} }
-function heroVNPlanetsList() { _hvp = { mode: 'list', colonyId: null, bldId: null }; _hvpRender(); }
-function heroVNPlanetsShow(colonyId) { _hvp = { mode: 'planet', colonyId: colonyId, bldId: null }; _hvpRender(); }
+function heroVNPlanetsRefresh() { try { _hvpSaveScroll(); _hvpRender(); } catch (e) {} }
+function heroVNPlanetsList() { _hvp.back = _hvp.colonyId; _hvp.mode = 'list'; _hvp.colonyId = null; _hvp.bldId = null; _hvpRender(); }
+function heroVNPlanetsShow(colonyId) { _hvpSaveScroll(); _hvp.mode = 'planet'; _hvp.colonyId = colonyId; _hvp.bldId = null; _hvpRender(); }
+
+// ── Память списка: прокрутка, фильтр, свёрнутые системы ──
+function _hvpSaveScroll() {
+  if (_hvp.mode !== 'list') return;
+  const b = document.querySelector('#hp-vn-planets .hvp-body');
+  if (b) _hvp.scroll = b.scrollTop;
+}
+// После перерисовки списка: вернуть фильтр, прокрутку и подсветить планету,
+// с которой только что вернулись (если она за краем — доскроллить к ней).
+function _hvpRestore(el) {
+  if (_hvp.mode !== 'list') return;
+  const body = el.querySelector('.hvp-body');
+  if (!body) return;
+  if (_hvp.q) _hvpApplyFilter(el);
+  body.scrollTop = _hvp.scroll || 0;
+  const id = _hvp.back; _hvp.back = null;
+  if (!id) return;
+  const card = Array.from(el.querySelectorAll('.hvp-card')).find(x => x.dataset.cid === String(id));
+  if (!card) return;
+  card.classList.add('hvp-card-last');
+  const cr = card.getBoundingClientRect(), br = body.getBoundingClientRect();
+  if (cr.top < br.top + 8 || cr.bottom > br.bottom - 8) card.scrollIntoView({ block: 'center' });
+}
+// Живой фильтр без перерисовки (иначе поле теряет фокус на каждой букве).
+function _hvpApplyFilter(root) {
+  const el = root || document.getElementById('hp-vn-planets');
+  if (!el) return;
+  const q = (_hvp.q || '').trim().toLowerCase();
+  el.querySelectorAll('.hvp-sys').forEach(g => {
+    let vis = 0;
+    g.querySelectorAll('.hvp-card').forEach(c => {
+      const hit = !q || (c.dataset.s || '').indexOf(q) >= 0;
+      c.classList.toggle('hvp-hide', !hit);
+      if (hit) vis++;
+    });
+    g.classList.toggle('hvp-hide', vis === 0);
+    g.classList.toggle('hvp-open-q', !!q);   // при поиске группы раскрыты принудительно
+  });
+}
+function heroVNPlanetsFilter(v) { _hvp.q = v || ''; _hvpApplyFilter(); }
+function heroVNPlanetsGroup(btn) {
+  const g = btn && btn.closest('.hvp-sys'); if (!g) return;
+  const off = !g.classList.contains('off');
+  g.classList.toggle('off', off);
+  _hvp.closed[g.dataset.sys] = off;
+}
+function heroVNPlanetsAll(open) {
+  const el = document.getElementById('hp-vn-planets'); if (!el) return;
+  el.querySelectorAll('.hvp-sys').forEach(g => { g.classList.toggle('off', !open); _hvp.closed[g.dataset.sys] = !open; });
+}
 function heroVNPlanetsBld(bldId) { if (_hvp.mode !== 'planet') return; _hvp.bldId = (_hvp.bldId === bldId ? null : bldId); _hvpRender(); }
 function heroVNPlanetsBuild(colonyId) { if (typeof ecBuildPicker === 'function') ecBuildPicker(colonyId); }
 
@@ -9423,30 +9558,65 @@ function _hvpListHtml(en) {
   const bldOf = id => (EC.buildings || []).filter(b => b.colony_id === id);
   cols.sort((a, b) => (b.is_capital ? 1 : 0) - (a.is_capital ? 1 : 0) || bldOf(b.id).length - bldOf(a.id).length);
   const sysName = id => { const s = ((EC.allSystems || []).find(x => x.id === id)) || ((EC.systems || []).find(x => x.id === id)); return (s && s.name) || ''; };
-  const cards = cols.map(c => {
+  const card = c => {
     const blds = bldOf(c.id);
     const cells = c.cells || (typeof EC_DEFAULT_CELLS !== 'undefined' ? EC_DEFAULT_CELLS : 6);
     const pend = (EC.projects || []).filter(p => p.kind === 'build' && p.colony_id === c.id).length;
     const used = blds.length + pend;
     const look = _hvpLook(c);
-    const res = (c.resources || []).slice(0, 4).map(r => `<span class="hvp-res" title="${esc(r.name || '')}">${esc(r.icon || '◈')}</span>`).join('');
-    return `<button class="hvp-card" type="button" onclick="event.stopPropagation();heroVNPlanetsShow('${jsq(c.id)}')">
+    const nres = (c.resources || []).length;
+    const res = nres ? `${hvpIco('res')}${nres}` : '';
+    const hay = [c.planet_name, c.planet_type, sysName(c.system_id)].filter(Boolean).join(' ').toLowerCase();
+    return `<button class="hvp-card" type="button" data-cid="${esc(c.id)}" data-s="${esc(hay)}" onclick="event.stopPropagation();heroVNPlanetsShow('${jsq(c.id)}')">
       <span class="hvp-card-orb hvp-look-${look}">
-        <span class="fr-env-img hvp-orb"><canvas class="fr-env-cv" data-tex="${esc(_hvpTex(look))}"></canvas></span>
-        ${c.is_capital ? `<span class="hvp-cap">★ ${en ? 'CAPITAL' : 'СТОЛИЦА'}</span>` : ''}
+        <span class="fr-env-img hvp-orb">${_hvpBodyCv(c, look, false)}</span>
+        ${c.is_capital ? `<span class="hvp-cap">${hvpIco('star')}${en ? 'CAPITAL' : 'СТОЛИЦА'}</span>` : ''}
       </span>
       <span class="hvp-card-body">
         <span class="hvp-card-nm">${esc(c.planet_name || (en ? 'Colony' : 'Колония'))}</span>
         <span class="hvp-card-ty">${esc(c.planet_type || '')}${sysName(c.system_id) ? ' · ' + esc(sysName(c.system_id)) : ''}</span>
         <span class="hvp-card-meta">
-          <span class="hvp-chip" title="${en ? 'building cells' : 'ячейки застройки'}">⬚ ${used}/${cells}</span>
-          <span class="hvp-chip" title="${en ? 'buildings' : 'постройки'}">🏗 ${blds.length}${pend ? ' <i>+' + pend + '⏳</i>' : ''}</span>
+          <span class="hvp-chip" title="${en ? 'building cells' : 'ячейки застройки'}">${hvpIco('cells')}${used}/${cells}</span>
+          <span class="hvp-chip" title="${en ? 'buildings' : 'постройки'}">${hvpIco('bld')}${blds.length}${pend ? ` <i>+${pend}</i>` : ''}</span>
           ${res ? `<span class="hvp-chip hvp-chip-res">${res}</span>` : ''}
         </span>
       </span>
     </button>`;
+  };
+
+  // ── разбивка по системам: свои системы вперёд, внутри — тот же порядок ──
+  const groups = new Map();
+  cols.forEach(c => {
+    const key = c.system_id == null ? '—' : String(c.system_id);
+    if (!groups.has(key)) groups.set(key, { key, name: sysName(c.system_id) || (en ? 'Unknown system' : 'Без системы'), cap: false, list: [] });
+    const g = groups.get(key);
+    g.list.push(c);
+    if (c.is_capital) g.cap = true;
+  });
+  const arr = Array.from(groups.values())
+    .sort((a, b) => (b.cap ? 1 : 0) - (a.cap ? 1 : 0) || b.list.length - a.list.length || a.name.localeCompare(b.name));
+  const plural = n => en ? (n + (n === 1 ? ' world' : ' worlds'))
+    : (n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'планета' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'планеты' : 'планет')));
+  const secs = arr.map(g => {
+    const blds = g.list.reduce((s, c) => s + bldOf(c.id).length, 0);
+    const off = _hvp.closed[g.key] ? ' off' : '';
+    return `<section class="hvp-sys${off}" data-sys="${esc(g.key)}">
+      <button class="hvp-sys-h" type="button" onclick="event.stopPropagation();heroVNPlanetsGroup(this)">
+        ${hvpIco('chev', 'hvp-sys-ar')}
+        <span class="hvp-sys-nm">${g.cap ? hvpIco('star', 'hvp-sys-cap') : ''}${esc(g.name)}</span>
+        <span class="hvp-sys-n">${plural(g.list.length)} · ${hvpIco('bld')}${blds}</span>
+      </button>
+      <div class="hvp-grid">${g.list.map(card).join('')}</div>
+    </section>`;
   }).join('');
-  return `<div class="hp-vn-col-body hvp-body"><div class="hvp-grid">${cards}</div></div>`;
+
+  const tools = `<div class="hvp-tools">
+    <label class="hvp-qw">${hvpIco('search')}<input class="hvp-q" type="search" value="${esc(_hvp.q || '')}" placeholder="${en ? 'search planet or system…' : 'поиск планеты или системы…'}"
+      oninput="heroVNPlanetsFilter(this.value)" onclick="event.stopPropagation()"></label>
+    <button class="hvp-tool-b" type="button" onclick="event.stopPropagation();heroVNPlanetsAll(1)">${en ? 'expand' : 'развернуть'}</button>
+    <button class="hvp-tool-b" type="button" onclick="event.stopPropagation();heroVNPlanetsAll(0)">${en ? 'collapse' : 'свернуть'}</button>
+  </div>`;
+  return `<div class="hp-vn-col-body hvp-body">${arr.length > 1 ? tools : ''}${secs}</div>`;
 }
 
 // ── Экран 2: сцена планеты — фон-арт + здания на «участках» + управление ──
@@ -9462,12 +9632,12 @@ function _hvpScene(en, c) {
   // участки: здания (спрайт-арт с фолбэком на иконку) → стройки → пустые «+»
   const tiles = blds.map(b => `<button class="hvp-tile${_hvp.bldId === b.id ? ' on' : ''}" type="button" title="${esc(NAME(b.btype))}" onclick="event.stopPropagation();heroVNPlanetsBld('${jsq(b.id)}')">
       <img class="hvp-tile-art" src="${HVP_ART}bld_${esc(b.btype)}.webp" alt="" draggable="false" onerror="this.style.display='none'">
-      <span class="hvp-tile-ic">${ICON[b.btype] || '⌂'}</span>
+      <span class="hvp-tile-ic">${typeof ecIco === 'function' ? ecIco(b.btype) : (ICON[b.btype] || '')}</span>
       <span class="hvp-tile-nm">${esc(NAME(b.btype))}</span>
-      <span class="hvp-tile-sl">${b.slots_open || 0}◈</span>
+      <span class="hvp-tile-sl">${b.slots_open || 0}${hvpIco('slot')}</span>
     </button>`).join('')
-    + pends.map(p => `<span class="hvp-tile hvp-tile-pend" title="${esc(p.label || '')}"><span class="hvp-tile-ic">⏳</span><span class="hvp-tile-nm">${en ? 'building…' : 'строится…'}</span></span>`).join('')
-    + Array.from({ length: Math.max(0, free) }, () => `<button class="hvp-tile hvp-tile-free" type="button" title="${en ? 'Build' : 'Построить'}" onclick="event.stopPropagation();heroVNPlanetsBuild('${jsq(c.id)}')"><span class="hvp-tile-ic">+</span><span class="hvp-tile-nm">${en ? 'build' : 'построить'}</span></button>`).join('');
+    + pends.map(p => `<span class="hvp-tile hvp-tile-pend" title="${esc(p.label || '')}"><span class="hvp-tile-ic">${hvpIco('time')}</span><span class="hvp-tile-nm">${en ? 'building…' : 'строится…'}</span></span>`).join('')
+    + Array.from({ length: Math.max(0, free) }, () => `<button class="hvp-tile hvp-tile-free" type="button" title="${en ? 'Build' : 'Построить'}" onclick="event.stopPropagation();heroVNPlanetsBuild('${jsq(c.id)}')"><span class="hvp-tile-ic">${hvpIco('plus')}</span><span class="hvp-tile-nm">${en ? 'build' : 'построить'}</span></button>`).join('');
 
   // панель управления выбранным зданием — РАБОЧАЯ строка кабинета (слоты/добыча/снос)
   let manage = '';
@@ -9477,7 +9647,7 @@ function _hvpScene(en, c) {
   } else {
     manage = `<div class="hvp-manage hvp-manage-hint">${en ? 'Select a building on the surface to manage it, or press «+» to build.' : 'Выберите здание на поверхности, чтобы управлять им, или нажмите «+», чтобы построить новое.'}</div>`;
   }
-  const res = (c.resources || []).map(r => `<span class="hvp-res-row"><span class="hvp-res">${esc(r.icon || '◈')}</span>${esc(r.name || '')}</span>`).join('')
+  const res = (c.resources || []).map(r => `<span class="hvp-res-row">${hvpIco('res')}${esc(r.name || '')}</span>`).join('')
     || `<span class="hvp-res-none">${en ? 'no deposits' : 'месторождений нет'}</span>`;
 
   return `<div class="hp-vn-col-body hvp-body hvp-body-scene">
@@ -9485,15 +9655,15 @@ function _hvpScene(en, c) {
       ${_hvpBgImg(c, 'hvp-scene-art')}
       <div class="hvp-scene-grad"></div>
       <div class="hvp-scene-hero">
-        <span class="fr-cap-hero-orbit hvp-hero-orbit"><canvas class="fr-cap-hero-cv" data-tex="${esc(_hvpTex(look))}" data-anim="1"></canvas></span>
-        <span class="hvp-scene-cap">${c.is_capital ? '★ ' : ''}${esc(c.planet_name || '')} <i>${esc(c.planet_type || '')}</i></span>
+        <span class="fr-cap-hero-orbit hvp-hero-orbit">${_hvpBodyCv(c, look, true)}</span>
+        <span class="hvp-scene-cap"><span class="hvp-scene-nm">${c.is_capital ? hvpIco('star', 'hvp-sys-cap') : ''}${esc(c.planet_name || '')}</span><i>${esc(c.planet_type || '')}</i></span>
       </div>
       <div class="hvp-tiles">${tiles}</div>
     </div>
     <div class="hvp-side">
       <div class="hp-vn-col-info hvp-info">
-        <div class="hvp-info-row"><span>⬚ ${en ? 'Cells' : 'Ячейки'}</span><b>${blds.length + pends.length}/${cells}</b></div>
-        <div class="hvp-info-row"><span>💰 ${en ? 'Treasury' : 'Казна'}</span><b>${typeof ecNum === 'function' ? ecNum((EC.eco && EC.eco.gc) || 0) : ((EC.eco && EC.eco.gc) || 0)} ГС</b></div>
+        <div class="hvp-info-row"><span>${hvpIco('cells')}${en ? 'Cells' : 'Ячейки'}</span><b>${blds.length + pends.length}/${cells}</b></div>
+        <div class="hvp-info-row"><span>${hvpIco('gc')}${en ? 'Treasury' : 'Казна'}</span><b>${typeof ecNum === 'function' ? ecNum((EC.eco && EC.eco.gc) || 0) : ((EC.eco && EC.eco.gc) || 0)} ГС</b></div>
         <div class="hvp-info-res">${res}</div>
       </div>
       ${manage}
