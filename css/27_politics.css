@@ -126,6 +126,9 @@
 @keyframes pol-ping{0%{opacity:.7;transform:scale(.45)}100%{opacity:0;transform:scale(1.5)}}
 
 /* ── Престол ── */
+/* Двор читается строкой текста: на широком мониторе шкалы и подписи нельзя
+   растягивать на всю ширину — иначе полосы уезжают за горизонт. */
+#fm-court-host{max-width:1180px}
 .pol-throne{
   display:flex;align-items:center;gap:14px;margin-bottom:18px;padding:14px 16px;
   background:linear-gradient(100deg,rgba(216,178,90,.13),transparent 70%);

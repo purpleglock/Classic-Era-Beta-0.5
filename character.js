@@ -431,7 +431,10 @@ async function regSubmit() {
   // Character goes under that page as parent_slug, inheriting its section
   const parentSlug = CLASS_SECTION_SLUGS[_regData.class]; // e.g. 'soldiers'
   const parentPage = pages.find(p => p.slug === parentSlug);
-  const charSection = parentPage?.section || null;
+  // Страниц-классов в вики может и не быть — тогда анкета садится прямо в
+  // раздел «Персонажи» (_char_section.sql). Без этого section оставался NULL
+  // и персонаж уезжал в «Разное».
+  const charSection = parentPage?.section || 'characters';
   const charParent  = parentPage?.slug    || null;
   try {
     await dbPost('pages',{slug,title:name,title_ru:name,content:'[]',page_type:'character',status:'published',image_url:_regData.image_url||null,exclude_from_collage:_regData.exclude_from_collage||false,section:charSection,parent_slug:charParent,author_id:user.id,created_at:now,updated_at:now});

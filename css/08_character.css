@@ -342,6 +342,22 @@
   overflow-wrap: break-word; word-break: break-word;
 }
 
+/* Личное дело: минимум, который есть у любой анкеты — даже без биографии */
+.ch-file {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1px; background: rgba(28,100,148,.12);
+  border: var(--deco-frame-w, 1px) solid rgba(28,100,148,.12);
+}
+.ch-file-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 11px 14px; background: var(--b2);
+}
+.ch-file-row span {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: rgba(255,255,255,.32);
+}
+.ch-file-row b { font-size: 13px; font-weight: 600; color: rgba(255,255,255,.82); }
+
 .ch-empty {
   font-family: var(--font-mono); font-size: 10px;
   color: rgba(255,255,255,.18); letter-spacing: calc(3px * var(--deco-ls-mult, 1)); text-transform: uppercase;

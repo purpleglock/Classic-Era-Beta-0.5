@@ -434,7 +434,12 @@
       "Bash(node tools/db_query.js \"select id, lead_fid, partner_fid, status, sealed_at from public.state_unions order by created_at\")",
       "Bash(node tools/db_query.js \"select faction_id, name, status, owner_id from public.faction_applications where faction_id in \\('fac_085638a65d','fac_997c5c8b70','fac_edc69c8203'\\) order by faction_id; select count\\(*\\) filter \\(where union_origin is not null\\) uo, count\\(*\\) total from public.map_systems; select faction_id, gc from public.faction_economy where faction_id in \\('fac_085638a65d','fac_997c5c8b70','fac_edc69c8203'\\)\")",
       "Bash(node tools/db_query.js \"select a.id, a.lead_fid, a.minor_fid, a.status, a.minor_snapshot is null nosnap from public.state_annexations a order by a.created_at; select f.faction_id, f.name, f.status from public.faction_applications f where f.faction_id in \\('fac_085638a65d','fac_997c5c8b70','fac_edc69c8203'\\); select m.faction_id, m.user_id, m.role, m.status, m.scope_all from public.faction_members m where m.status='active'; select status, count\\(*\\) from public.state_unions group by 1\")",
-      "Bash(node tools/db_query.js \"select public.diplo_status\\(\\) is not null ok\")"
+      "Bash(node tools/db_query.js \"select public.diplo_status\\(\\) is not null ok\")",
+      "Bash(node tools/db_q.js \"select slug,name,class,faction,stats,extra->>'bio' as bio, extra->>'subtitle' as sub, xp from characters order by updated_at desc limit 5\")",
+      "Bash(node tools/db_q.js \"select slug,title,page_type,section,parent_slug,status from pages where page_type='character'\")",
+      "Bash(node tools/db_run.js _char_section.sql)",
+      "Bash(node tools/db_q.js \"select slug,title,section from pages where page_type='character'\")",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('render.js','utf8'\\)\\);new Function\\(require\\('fs'\\).readFileSync\\('politics.js','utf8'\\)\\);new Function\\(require\\('fs'\\).readFileSync\\('character.js','utf8'\\)\\);console.log\\('syntax ok'\\)\")"
     ]
   }
 }

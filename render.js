@@ -8039,6 +8039,7 @@ async function renderCharacterPage(pg) {
     return;
   }
 
+  const canEditChar = canAdmin || !!(user && ch.owner_id === user.id);
   const extra     = ch.extra     || {};
   const stats     = ch.stats     || {};
   const abilities = ch.abilities || [];
@@ -8451,10 +8452,18 @@ async function renderCharacterPage(pg) {
 
     <!-- PANEL: ДОСЬЕ -->
     <div class="ch-panel on" id="ch-dosye">
+      <div class="ch-section-label">ЛИЧНОЕ ДЕЛО</div>
+      <div class="ch-file">
+        <div class="ch-file-row"><span>Класс</span><b>${esc(clsLabel)}</b></div>
+        ${ch.faction ? `<div class="ch-file-row"><span>Держава</span><b>${esc(ch.faction)}</b></div>` : ''}
+        <div class="ch-file-row"><span>Статус</span><b style="color:${st.color}">${st.label}</b></div>
+        <div class="ch-file-row"><span>В игре с</span><b>${esc(ch.play_start || '—')}</b></div>
+        <div class="ch-file-row"><span>Уровень</span><b>${lvl}</b></div>
+      </div>
       ${extra.bio
-        ? `<div class="ch-section-label">БИОГРАФИЯ</div>
+        ? `<div class="ch-section-label" style="margin-top:24px">БИОГРАФИЯ</div>
            <div class="ch-bio prose">${renderMd(extra.bio)}</div>`
-        : `<div class="ch-empty">БД ПУСТА // ДАННЫЕ УДАЛЕНЫ</div>`}
+        : `<div class="ch-empty">Биография не написана${canEditChar ? ' — откройте правку страницы и расскажите о персонаже.' : '.'}</div>`}
     </div>
 
     <!-- PANEL: ХАРАКТЕРИСТИКИ -->

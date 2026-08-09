@@ -516,7 +516,7 @@ function polCouncilTable() {
     return `<div class="pol-seat${vacant ? ' vacant' : ''}${weak ? ' weak' : ''}">
       <div class="pol-seat-hd">
         <b>${esc(p.title)}</b>
-        <span class="pol-seat-who">${p.char_slug
+        <span class="pol-seat-who">${(p.char_slug && !vacant)
           ? `<a href="#${esc(p.char_slug)}" onclick="go('${esc(p.char_slug)}');return false">${esc(p.char_name || '—')}</a>`
           : '<i>вакансия</i>'}</span>
       </div>
@@ -524,7 +524,7 @@ function polCouncilTable() {
         <span class="pol-tag">${statNm} ${p.stat_val}</span>
         <span class="pol-tag">ур. ${p.lvl}</span>
         ${p.coverage < 1 ? `<span class="pol-tag warn">зона ${Math.round(p.coverage * 100)}%</span>` : ''}
-        ${vacant ? '<span class="pol-tag warn">правитель · вполсилы</span>' : ''}
+        ${vacant ? `<span class="pol-tag warn">держит правитель · вполсилы</span>` : ''}
       </div>
       <div class="pol-seat-gain">${gain || '<span class="pol-mute">характеристика ниже 12 — вклада нет</span>'}</div>
     </div>`;
