@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8"><title>gb-help harness</title>
+<link rel="stylesheet" href="css/index.css">
+<body style="padding:24px;background:#0b0d12">
+<div class="gb-wrap"><main class="gb-main"><section id="gb-diplo" class="gb-section"><h2 class="gb-h2">Дипломатия</h2></section>
+<section id="gb-exchange" class="gb-section"><h2 class="gb-h2">Биржа</h2></section></main></div>
+<div class="pol-scene" style="margin-top:20px"><div class="pol-scene-tx"><div class="pol-scene-hd">
+<h2>Союзы</h2><span id="hb"></span></div></div></div>
+<script>function go(){}</script>
+<script src="guide.js"></script>
+<script>
+  gbInjectTopics();
+  document.getElementById('hb').innerHTML = gbHelpBtn('alliance');
+  gbHelpOpen('margin');
+</script>

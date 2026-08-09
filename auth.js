@@ -197,6 +197,7 @@ async function init() {
       const prevUid = user && user.id;
       await loadUserRole(session.user); loadProfile(); updAuthUI();
       logAccess();   // журнал доступа (антимультиакк), троттлится внутри
+      try { _authSettle(); } catch(e) {}   // новелла перечитает державу под новым входом
       const sameUser = prevUid && user && prevUid === user.id;
       if (sameUser) {
         // Тот же пользователь: тихо обновляем данные в фоне, но НЕ перерисовываем
@@ -280,12 +281,26 @@ async function logAccess() {
   } catch (e) { console.warn('[access-log] ошибка:', e && e.message); }
 }
 
+// ⚠️ ГЛАВНАЯ РИСУЕТСЯ ДО ЭТОГО МОМЕНТА (кадр из кеша, init → route()). Значит всё,
+// что зависит от `user`, на первом кадре видит НУЛЬ — и обязано уметь перезапуститься,
+// когда сессия доехала. Флаг ниже — «авторизация отработала, ответ окончательный»;
+// без него новелла кэшировала «державы нет» навсегда и висела на «поднимаю ведомости…»
+// до ручного F5.
+window.authSettled = false;
+function _authSettle() {
+  window.authSettled = true;
+  // Данные державы для новеллы: тянем заново (force) — первый заход был впустую.
+  try { if (typeof vnEnsureData === 'function') vnEnsureData(1); } catch (e) {}
+  try { if (typeof vnResBarRepaint === 'function') vnResBarRepaint(); } catch (e) {}
+  try { if (typeof vnCityRetry === 'function') vnCityRetry(); } catch (e) {}
+}
 async function restoreSession() {
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (session?.user) { await loadUserRole(session.user); loadProfile(); logAccess(); }
   } catch(e) {
   } finally {
+    try { _authSettle(); } catch(e) {}
     // Страховка: снять экран загрузки в любом исходе. Если сессии не оказалось
     // (вход не удержался) — держать оверлей нельзя, человек останется на нём
     // навсегда. Успешный путь снимает его раньше, внутри loadUserRole.

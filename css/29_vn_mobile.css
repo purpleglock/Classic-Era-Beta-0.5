@@ -112,19 +112,16 @@
 
   /* ── 4. Сцена-пролог: текст важнее картинки ────────────────
      Заставка на 375px съедала треть первого экрана — на телефоне
-     она уходит, остаётся заголовок, правило мира и шаги. */
+     она уходит, остаётся заголовок и кнопка справки. */
   .pol-stage{padding:12px 12px calc(34px + env(safe-area-inset-bottom));min-width:0}
   .pol-scene{flex-direction:column;align-items:flex-start;gap:9px;padding:12px}
   .pol-scene-art{display:none}
   .pol-scene-hd{gap:7px}
   .pol-scene-hd h2{font-size:15px;letter-spacing:.06em}
-  .pol-scene-role{font-size:11px}
-  .pol-lore{font-size:13.5px;line-height:1.62;max-width:none}
-  .pol-steps{gap:5px 6px}
-  .pol-steps li{font-size:11px}
   .pol-content{margin-top:14px}
-  /* Кнопка «свернуть» пролог — тап-мишень, а не строчка в 10px */
+  /* Кнопки заставки — тап-мишени, а не строчки в 10px */
   .pol-fold{min-height:34px;padding:6px 8px}
+  .pol-help{width:26px;height:26px;font-size:13px}
 
   /* Главы раздела — такая же лента, как рельса */
   .pol-chaps{
@@ -204,11 +201,9 @@
   }
 }
 
-/* Совсем узкие экраны: пролог сжимается до заголовка и правила. */
+/* Совсем узкие экраны: заставка сжимается до заголовка. */
 @media (max-width:430px){
   .pol-rail-tx b{font-size:12.5px}
   .pol-scene-hd h2{font-size:14px}
-  .pol-scene-role{display:none}
-  .pol-steps{display:none}
   .hp-vn-colony.show .hp-vn-col-title{font-size:12.5px}
 }

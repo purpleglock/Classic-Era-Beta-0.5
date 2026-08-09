@@ -486,7 +486,12 @@
       "Bash(node tools/db_q.js \"select faction_id,count\\(*\\) from faction_intel_guard where faction_id in \\('fac_26f25b449f','fac_997c5c8b70','fac_edc69c8203'\\) group by 1\")",
       "Bash(sort -t: -k2 -rn)",
       "Bash(node -e \"for\\(const f of ['css/03_content.css','css/29_vn_mobile.css']\\){const s=require\\('fs'\\).readFileSync\\(f,'utf8'\\);let d=0;for\\(const c of s\\){if\\(c=='{'\\)d++;if\\(c=='}'\\)d--;}console.log\\(f,d\\)}\")",
-      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{let d=0;for\\(const c of s\\){if\\(c=='{'\\)d++;if\\(c=='}'\\)d--}console.log\\('HEAD',d\\)}\\)\")"
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{let d=0;for\\(const c of s\\){if\\(c=='{'\\)d++;if\\(c=='}'\\)d--}console.log\\('HEAD',d\\)}\\)\")",
+      "Bash(sed -i \"s/--wall:clamp\\(84px,10.5vw,156px\\);   \\\\/\\\\* ширина пилона = ширина «стены» \\\\*\\\\///\" css/03_content.css)",
+      "Bash(sed -i \"s/20260809vnroom/20260809vnroom2/g\" index.html)",
+      "Bash(sed -i \"s/position:absolute;left:1.2%;top:10%;width:min\\(12.5%,150px\\);/position:absolute;left:1.2%;top:18%;width:min\\(12.5%,150px\\);/\" css/03_content.css)",
+      "Bash(sed -i \"s/20260809vnroom2/20260809cabinet/g\" index.html)",
+      "Bash(node -c \"0\")"
     ]
   }
 }

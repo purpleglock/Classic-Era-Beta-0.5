@@ -2640,6 +2640,7 @@ function buildHeroVN(coverUrl, user) {
     ${bgLayer}
     <div class="hp-hero-grad"></div>
     <div class="vnres" id="vnres" aria-hidden="true"></div>
+    <div class="vnport" id="vnport" aria-hidden="true"></div>
     ${spriteLayer}
     <div class="hp-hero-frame"></div>
     <span class="hpc-corner hpc-tl"></span><span class="hpc-corner hpc-tr"></span>
@@ -9588,6 +9589,14 @@ function vnCityOn(v) {
   if (v) vnCityBoot(); else location.reload();
   return !!v;
 }
+// Сессия доехала после того, как панорама уже сдалась на «державы нет» — собираем
+// кадр заново. Зовёт auth.js (_authSettle) сразу после restoreSession/входа.
+function vnCityRetry() {
+  if (typeof user === 'undefined' || !user) return;
+  if (_vnCapital()) return;                                // кадр уже настоящий
+  _vnCityBooted = false;
+  try { vnCityBoot(); } catch (e) {}
+}
 function vnCityBoot() {
   if (_vnCityBooted) return;
   if (!_vnCityEnabled()) return;                           // обложку не трогаем
@@ -9622,12 +9631,37 @@ function vnCityBoot() {
 // Это ЛЁГКАЯ выборка (4 запроса), не полный ecLoad с биржей/верой/обороной: экраны
 // новеллы догрузят остальное сами через polEnsureData → ecLoad.
 let _vnDataP = null;
+// ⚠️ АВТОРИЗАЦИЯ ДОЕЗЖАЕТ ПОЗЖЕ ПЕРВОГО КАДРА. Главная рисуется из кеша ещё до
+// restoreSession(), поэтому на первом заходе `user` — null, ecLoadApp честно
+// возвращает «державы нет», и раньше этот пустой ответ оседал в _vnDataP НАВСЕГДА:
+// строка ресурсов вечно висела на «поднимаю ведомости…», а панорама показывала
+// «нет ни колонии, ни державы» — до ручного F5. Теперь ждём, пока авторизация
+// скажет своё окончательное слово (window.authSettled ставит auth.js), и пустой
+// результат НЕ кэшируем — следующий вызов попробует снова.
+function _vnAuthReady(ms) {
+  if (typeof user !== 'undefined' && user) return Promise.resolve();
+  if (window.authSettled) return Promise.resolve();
+  const t0 = Date.now(), lim = ms || 15000;
+  return new Promise(res => {
+    const tick = () => {
+      if ((typeof user !== 'undefined' && user) || window.authSettled || Date.now() - t0 > lim) return res();
+      setTimeout(tick, 150);
+    };
+    setTimeout(tick, 150);
+  });
+}
 function vnEnsureData(force) {
   if (_vnDataP && !force) return _vnDataP;
-  _vnDataP = (async () => {
+  const p = _vnDataP = (async () => {
+    await _vnAuthReady();
     if (typeof ecLoadApp === 'function') await ecLoadApp();
     const app = (typeof EC !== 'undefined' && EC.app) || null;
-    if (!app || !app.faction_id) return null;
+    if (!app || !app.faction_id) {
+      // Гость и «державы нет» — законный ответ, его кэшируем. А вот «сессия ещё не
+      // приехала» (user так и не появился) — это гонка, её кэшировать нельзя.
+      if (_vnDataP === p && !(typeof user !== 'undefined' && user)) _vnDataP = null;
+      return null;
+    }
     if (!EC.fid) EC.fid = app.faction_id;
     if (!EC.ownFid) EC.ownFid = app.faction_id;
     const fid = encodeURIComponent(EC.fid);
@@ -9735,6 +9769,155 @@ function vnResBarRepaint() {
   el.innerHTML = html;
   el.classList.toggle('show', !!html);
   el.setAttribute('aria-hidden', html ? 'false' : 'true');
+  try { vnPortRepaint(); } catch (e) {}
+  return !!html;
+}
+// ── ИЛЛЮМИНАТОР ДЕРЖАВЫ ────────────────────────────────────────────────
+// Круглый смотровой люк в углу сцены: за стеклом — герб державы, в нём же
+// портрет главы. Всё, что нужно, уже приехало с vnEnsureData (герб и цвет
+// в EC.app); лицо главы догружается один раз отдельно (ch_office → страница
+// персонажа) и кэшируется — без него иллюминатор просто показывает герб.
+let _vnPortLeader = null;      // {name,title,img} | null (нет персонажа)
+let _vnPortLeaderP = null;     // обещание загрузки — тянем ровно один раз
+function _vnPortLeaderLoad() {
+  if (_vnPortLeaderP) return _vnPortLeaderP;
+  _vnPortLeaderP = (async () => {
+    if (typeof fmRpc !== 'function' || typeof user === 'undefined' || !user) return null;
+    const o = await fmRpc('ch_office').catch(() => null);
+    if (!o || o.anon) return null;
+    const en = (typeof lang !== 'undefined' && lang === 'en');
+    // Глава державы важнее моего служебного персонажа: иллюминатор — портрет
+    // ПРАВИТЕЛЯ, а не того, кто смотрит. Если главы нет — своё лицо и свой пост.
+    const posts = (o.council && Array.isArray(o.council.posts)) ? o.council.posts : [];
+    const head = posts.find(p => p && p.head);
+    const mine = posts.find(p => p && !p.head && o.character && p.char_slug === o.character.slug);
+    let slug, name, title;
+    if (head) {
+      slug = head.char_slug; name = head.char_name;
+      title = en ? 'Head of state' : 'Глава державы';
+    } else if (o.character) {
+      slug = o.character.slug; name = o.character.name;
+      title = mine ? mine.title : (o.is_head ? (en ? 'Head of state' : 'Глава державы')
+                                             : (en ? 'In service' : 'На службе'));
+    } else return null;
+    let img = '';
+    try {
+      const r = await dbGet('pages', `slug=eq.${encodeURIComponent(slug)}&select=image_url&limit=1`);
+      img = (r && r[0] && r[0].image_url) || '';
+    } catch (e) {}
+    return { name: name || '', title: title || '', img, slug };
+  })().then(v => { _vnPortLeader = v; try { vnPortRepaint(); } catch (e) {} return v; })
+     .catch(() => null);
+  return _vnPortLeaderP;
+}
+function vnPortHtml() {
+  if (typeof EC === 'undefined' || !EC.app) return '';
+  const a = EC.app;
+  const col = (typeof ecReadable === 'function' ? ecReadable(a.color) : (a.color || '#3a9bdc'));
+  const flag = (a.herald_url || a.image_url || '');
+  const L = _vnPortLeader;
+  // Комната: стены-пилоны по бокам и балка сверху превращают панораму столицы
+  // в ВИД ИЗ ОКНА. На левом пилоне — знамя державы, под ним портрет главы.
+  // Архитектура кабинета — ОДНИМ SVG в перспективе (потолок, боковые стены, пол,
+  // переплёт панорамного окна). Растягивается по кадру: пропорции сцены заданы
+  // жёстко (1200/520), так что искажение минимально, зато стены всегда упираются
+  // в края. Текст и картинки в SVG не кладём — их бы растянуло: знамя, портрет и
+  // табличка идут отдельным HTML-слоем поверх левой стены.
+  const room = `<svg class="vnport-svg" viewBox="0 0 1200 520" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="vnpCeil" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#070b11"/><stop offset="1" stop-color="#18222f"/>
+      </linearGradient>
+      <linearGradient id="vnpWl" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#05080d"/><stop offset=".72" stop-color="#16202c"/>
+        <stop offset="1" stop-color="#233040"/>
+      </linearGradient>
+      <linearGradient id="vnpWr" x1="1" y1="0" x2="0" y2="0">
+        <stop offset="0" stop-color="#05080d"/><stop offset=".72" stop-color="#16202c"/>
+        <stop offset="1" stop-color="#233040"/>
+      </linearGradient>
+      <linearGradient id="vnpFloor" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#1b2634"/><stop offset="1" stop-color="#070a10"/>
+      </linearGradient>
+      <linearGradient id="vnpLamp" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${esc(col)}" stop-opacity=".55"/>
+        <stop offset="1" stop-color="${esc(col)}" stop-opacity="0"/>
+      </linearGradient>
+      <linearGradient id="vnpSpill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#bfe2ff" stop-opacity=".16"/>
+        <stop offset="1" stop-color="#bfe2ff" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <!-- потолок с утопленными световыми панелями -->
+    <polygon points="0,0 1200,0 1000,100 200,100" fill="url(#vnpCeil)"/>
+    <polygon points="286,16 914,16 878,44 322,44" fill="#cfe9ff" opacity=".085"/>
+    <polygon points="322,58 878,58 848,82 352,82" fill="#cfe9ff" opacity=".055"/>
+    <polygon points="0,0 1200,0 1000,100 200,100" fill="url(#vnpLamp)" opacity=".5"/>
+    <!-- боковые стены с панельной расшивкой -->
+    <polygon points="0,0 200,100 200,470 0,520" fill="url(#vnpWl)"/>
+    <polygon points="1200,0 1000,100 1000,470 1200,520" fill="url(#vnpWr)"/>
+    <g stroke="#ffffff" stroke-opacity=".05" stroke-width="2" fill="none">
+      <path d="M0,132 L200,168"/><path d="M0,300 L200,318"/>
+      <path d="M1200,132 L1000,168"/><path d="M1200,300 L1000,318"/>
+      <path d="M96,52 L96,496"/><path d="M1104,52 L1104,496"/>
+    </g>
+    <!-- свет из окна ложится на стены -->
+    <polygon points="200,100 200,470 96,496 96,52" fill="url(#vnpSpill)"/>
+    <polygon points="1000,100 1000,470 1104,496 1104,52" fill="url(#vnpSpill)"/>
+    <!-- пол и его отблеск -->
+    <polygon points="0,520 200,470 1000,470 1200,520" fill="url(#vnpFloor)"/>
+    <polygon points="248,470 952,470 1080,520 120,520" fill="#bfe2ff" opacity=".05"/>
+    <!-- переплёт панорамного окна: коробка, фрамуга, две стойки -->
+    <g fill="#0a0f16">
+      <rect x="200" y="100" width="800" height="12"/>
+      <rect x="200" y="458" width="800" height="14"/>
+      <rect x="200" y="100" width="13" height="372"/>
+      <rect x="987" y="100" width="13" height="372"/>
+      <rect x="200" y="182" width="800" height="8"/>
+      <rect x="463" y="112" width="8" height="346"/>
+      <rect x="729" y="112" width="8" height="346"/>
+    </g>
+    <g fill="#8fa6bd" opacity=".22">
+      <rect x="213" y="112" width="2" height="346"/><rect x="471" y="112" width="2" height="346"/>
+      <rect x="737" y="112" width="2" height="346"/><rect x="985" y="112" width="2" height="346"/>
+      <rect x="213" y="190" width="774" height="2"/>
+    </g>
+    <!-- бра на стенах -->
+    <g fill="${esc(col)}" opacity=".5">
+      <polygon points="112,200 132,206 132,222 112,214"/>
+      <polygon points="1088,200 1068,206 1068,222 1088,214"/>
+    </g>
+  </svg>`;
+  return `<div class="vnport-in" style="--fac:${col}">
+      ${room}
+      <div class="vnport-console">
+        <div class="vnport-banner">
+          <span class="vnport-rod"></span>
+          <span class="vnport-cloth${flag ? '' : ' vnport-nocloth'}"
+            ${flag ? `style="background-image:url(&quot;${esc(flag)}&quot;)"` : ''}></span>
+        </div>
+        ${L && L.name ? `<div class="vnport-lead">
+          <div class="vnport-leadin">
+            ${L.img ? `<img class="vnport-face" src="${esc(L.img)}" alt="" loading="lazy">`
+                    : `<span class="vnport-noface">${esc((L.name || '?').slice(0, 2)).toUpperCase()}</span>`}
+          </div>
+          <div class="vnport-plate">
+            <span class="vnport-led">${esc(L.name)}</span>
+            <span class="vnport-tit">${esc(L.title || '')}</span>
+          </div>
+        </div>` : ''}
+        <div class="vnport-fac">${esc(a.name || '')}</div>
+      </div>
+    </div>`;
+}
+function vnPortRepaint() {
+  const el = document.getElementById('vnport');
+  if (!el) return false;
+  const html = vnPortHtml();
+  el.innerHTML = html;
+  el.classList.toggle('show', !!html);
+  el.setAttribute('aria-hidden', html ? 'false' : 'true');
+  if (html && !_vnPortLeaderP) _vnPortLeaderLoad();
   return !!html;
 }
 // Перерисовка фона новеллы после того, как приехали колонии (ecLoadApp).
