@@ -45,12 +45,20 @@ const ri = (R, a, b) => a + Math.floor(R() * (b - a + 1));
 
 // ── §2. Палитра ──────────────────────────────────────────────
 // Всего два цвета на плане. Дальний план — заливка чернилами целиком.
-function palette(sky, depth) {
+// day (0..1) — сколько света на планете (§13a). Освещённая грань дома не бывает
+// белее того, что даёт светило: у красного карлика на далёкой орбите «бумага»
+// уходит в сумеречную синь, а тень почти сливается с ней.
+function palette(sky, depth, day) {
+  const d = day == null ? 1 : Math.max(0, Math.min(1, day));
+  const face = mix(mix('#0b0f14', sky, 0.14), '#f2f2f0', 0.18 + 0.82 * d);
   return {
-    paper: depth > 0.62 ? mix('#111417', sky, 0.16) : '#f2f2f0',  // лицо
-    ink: depth > 0.62 ? mix('#111417', sky, 0.16) : '#0e1013',    // деталь и тень
+    paper: depth > 0.62 ? mix('#111417', sky, 0.16) : face,       // лицо
+    ink: depth > 0.62 ? mix('#111417', sky, 0.16)
+                      : mix('#0e1013', face, (1 - d) * 0.3),      // деталь и тень
     solid: depth > 0.62,                                          // дальний = глухой силуэт
-    fine: depth < 0.34                                            // мелочь только у ближнего
+    fine: depth < 0.34,                                           // мелочь только у ближнего
+    day: d,
+    glow: '#ffd9a0'                                               // окна, зажжённые в сумерках
   };
 }
 
@@ -182,6 +190,19 @@ function cables(x1, y1, x2, y2, R, col) {
   return `<path d="${d}" stroke="${col}" stroke-width="0.7" fill="none"/>`;
 }
 
+// Зажжённые окна: редкая россыпь тёплых точек по фасаду. Плотность и яркость —
+// от нехватки дневного света (P.day), поэтому в полдень землеподобного мира их
+// нет вовсе, а у ледяного мира на 6 а.е. фасад светится.
+function litWindows(R, b, P) {
+  const k = Math.max(0, Math.min(1, (0.62 - P.day) / 0.62));
+  const cw = Math.max(1.1, b.w / ri(R, 4, 8)), ch = Math.max(1.1, cw * 0.9);
+  let d = '', g = 0;
+  for (let yy = b.yTop + ch; yy < b.yTop + b.hPx - ch && g < 260; yy += ch * 2.1)
+    for (let xx = b.x + cw; xx < b.x + b.w - cw && g < 260; xx += cw * 2.1)
+      if (R() < 0.16 + 0.5 * k) { d += `M${n1(xx)},${n1(yy)}h${n1(cw)}v${n1(ch)}h${n1(-cw)}Z`; g++; }
+  return d ? `<path d="${d}" fill="${P.glow}" fill-opacity="${n1(0.25 + 0.65 * k)}"/>` : '';
+}
+
 // ── §7. Один дом ─────────────────────────────────────────────
 function drawBuilding(R, o) {
   const P = o.pal, w = o.w, h = o.h;
@@ -220,6 +241,10 @@ function drawBuilding(R, o) {
     if (inner.w > 2 && inner.hPx > 4) {
       const names = P.fine ? ['checker', 'slots', 'bands', 'boxes', 'field', 'hatch'] : ['slots', 'bands', 'field'];
       s += motif(R, inner, P, names[Math.floor(R() * names.length)], false);
+      // Мало света снаружи — свет изнутри: чем темнее мир, тем больше зажжённых
+      // окон. Это единственное, что оживляет фасад на далёкой орбите, где
+      // штриховка и тень почти неразличимы.
+      if (P.day < 0.62) s += litWindows(R, inner, P);
     }
     // Вынос-консоль: небольшой блок за габарит. На референсе такие «полки» повсюду.
     // Вынос — ОБЪЁМ, а не планка: высота не меньше его вылета, иначе получается
@@ -268,7 +293,7 @@ function cityBody(R, cfg) {
   let body = '', nearest = [];
   for (let L = layers - 1; L >= 0; L--) {                   // от дальнего к ближнему
     const depth = layers === 1 ? 0 : L / (layers - 1);
-    const P = palette(sky, depth);
+    const P = palette(sky, depth, cfg.day);
     if (cfg.light) P.fine = false;                          // без мелких мотивов и консолей
     const scale = 1 - depth * 0.3;
     const put = [];
@@ -289,7 +314,12 @@ function cityBody(R, cfg) {
       // Полоса, отведённая персонажу новеллы: застройка там приседает, чтобы
       // силуэт девочки читался на небе, а не тонул в фасадах.
       if (zone && depth < 0.34 && x + w > zone[0] * W && x < zone[1] * W) h = Math.min(h, H * 0.2);
-      const b = drawBuilding(R, { w: w, h: h, pal: P, lit: R() < 0.5 });
+      // ⚠️ Теневая грань смотрит ПРОЧЬ ОТ СВЕТИЛА (cfg.lit), а не куда выпал бросок:
+      // раньше половина города стояла в тень к солнцу, и небо со звездой жило само
+      // по себе. Малая доля исключений оставлена нарочно — дома развёрнуты
+      // по-разному, и глухая одинаковость фасадов читается как обои.
+      const litSide = cfg.lit == null ? R() < 0.5 : (R() < 0.12 ? !cfg.lit : cfg.lit);
+      const b = drawBuilding(R, { w: w, h: h, pal: P, lit: litSide });
       const bx = x, by = horizon - h;
       // Крен считается ВОКРУГ ОСНОВАНИЯ (0, h), иначе башня отрывается от земли.
       const tr = tilt ? ` rotate(${n1(tilt)},${n1(w / 2)},${n1(h)})` : '';
@@ -670,6 +700,32 @@ function pennantRow(x0, x1, gy, ph, f, ink, n) {
   for (let k = 0; k < n; k++) s += pennant(x0 + (x1 - x0) * (k + 0.5) / n, gy, ph * (k % 2 ? 0.82 : 1), f, ink);
   return s;
 }
+// ⚠️ Флаг крепится к ВЕРХНЕМУ БЛОКУ, а не к середине фундамента: у сужающихся
+// башен верхний блок узкий и смещён вбок, и древко на середине фасада повисало
+// рядом с кровлей в пустом небе. Та же грабля, что была у мачты-венца (§7).
+function topSpan(p) {
+  const t = p.b.blocks[p.b.blocks.length - 1];
+  return { x: p.bx + t.x, w: t.w, hPx: t.y1 - t.y0 };
+}
+// Сосед, нарисованный ПОЗЖЕ и не ниже, закрывает кровлю своим силуэтом: флаг на
+// такой кровле висит уже над чужой стеной, оторванный от своего дома.
+function roofFree(list, p) {
+  const i = list.indexOf(p), s = topSpan(p);
+  for (let k = i + 1; k < list.length; k++) {
+    const q = list[k];
+    if (q.bx > s.x + s.w) break;
+    if (q.bx + q.w > s.x && q.roofY <= p.roofY + 2) return false;
+  }
+  return true;
+}
+// Дома, на которые вообще можно вешать: кровля целиком в кадре, не перекрыта и
+// достаточно широкая, чтобы полотнище село на стену, а не свесилось мимо неё.
+function flagHosts(list, W) {
+  return list.filter(p => {
+    const s = topSpan(p);
+    return s.w > 4 && s.x > W * 0.02 && s.x + s.w < W * 0.98 && roofFree(list, p);
+  }).sort((a, b) => a.roofY - b.roofY);
+}
 
 // ── §13. Небо: звезда, атмосфера, сцена ──────────────────────
 // Пресеты неба планеты. Верх — зенит, низ — горизонт; haze = плотность атмосферы
@@ -685,19 +741,67 @@ const ATMO = {
   void:    { top: '#04060b', bot: '#141c2c', haze: 0.0, light: '#ffffff' }
 };
 
+// ── §13a. Светимость: сколько на самом деле светит это солнце ──
+// Диск в небе рисовался «на глаз» (dist 0..1) и врал: у красного карлика он был
+// такой же, как у голубого гиганта, а на 9 а.е. в кадре стоял полдень. Теперь
+// кадр считается по ФИЗИКЕ системы: класс звезды даёт светимость и радиус,
+// орбита — расстояние, из них выходит и размер диска, и уровень освещённости.
+// L и R — в солнечных единицах (главная последовательность, грубо);
+// вырожденные (D — белый карлик, N — пульсар) светят почти ничем.
+const STAR_L = { O: 3e4, B: 1.2e3, A: 22, F: 3.2, G: 1, K: 0.32, M: 0.03, D: 0.0025, N: 5e-5 };
+const STAR_R = { O: 8, B: 4.2, A: 1.9, F: 1.3, G: 1, K: 0.78, M: 0.4, D: 0.013, N: 1e-5 };
+const STAR_C = { O: '#bcd2ff', B: '#d6e2ff', A: '#eef2ff', F: '#fff8e0', G: '#ffefb8',
+                 K: '#ffcf8a', M: '#ff9a70', D: '#e6e6ff', N: '#c8fff0' };
+// Пояса системы — запасной путь, когда орбита в а.е. неизвестна: зона уже учитывает
+// класс звезды, поэтому даёт освещённость сама по себе (в земных единицах).
+const ZONE_INSOL = { 'пекло': 9, 'внутр': 2.4, 'обитаемая': 1, 'холод': 0.11, 'пустота': 0.015 };
+function zoneInsol(z) {
+  const s = String(z || '').toLowerCase();
+  for (const k in ZONE_INSOL) if (s.indexOf(k) === 0) return ZONE_INSOL[k];
+  return null;
+}
+// Возвращает {insol, r, day, color} либо null, если данных системы нет.
+function starPhys(o, W) {
+  if (!o) return null;
+  const cls = String(o.cls || '').toUpperCase();
+  const L = STAR_L[cls], Rs = STAR_R[cls];
+  const dAu = +o.distAu;
+  let insol = null, ang = null;
+  if (L && dAu > 0) { insol = L / (dAu * dAu); ang = Rs / dAu; }
+  else if (L || o.zone) {
+    insol = zoneInsol(o.zone);
+    if (insol == null) return null;
+    // Орбиту восстанавливаем из освещённости — она и задаёт угловой размер диска:
+    // у карлика обитаемая зона вплотную, и солнце там ВДВОЕ крупнее нашего.
+    ang = (Rs || 1) / Math.sqrt((L || 1) / insol);
+  } else return null;
+  // Кадр ≈ 60° по ширине. Солнце с Земли — 0.53°, то есть радиус диска = W*0.0044.
+  // Всё остальное — честная пропорция к этому якорю.
+  const r = Math.max(1.2, Math.min(W * 0.2, W * 0.0044 * ang));
+  // Освещённость в цвет переводим логарифмически (как глаз): земная норма ≈ 0.8,
+  // вчетверо меньше света — 0.62, сотая доля — глухие сумерки.
+  const day = Math.max(0.03, Math.min(1, 0.8 + 0.3 * Math.log(insol) / Math.LN10));
+  return { insol: insol, r: r, day: day, color: STAR_C[cls] || null };
+}
+
 // Звезда системы. dist 0 — светило-гигант в полнеба, 1 — далёкая искра: так одним
-// числом читается, у какого солнца стоит колония.
+// числом читается, у какого солнца стоит колония. Если пришли настоящие данные
+// системы (§13a), диаметр берётся из них, а dist не используется вовсе.
 // ⚠️ Никаких лучей-звёздочек. Светило — ЧИСТЫЙ ДИСК и мягкое гало, и всё: лучевая
 // корона из прямых линий читалась как детская снежинка и спорила со штриховкой.
 // Отдалённость = только диаметр диска. «Живость» даёт дымка, которая идёт ПОВЕРХ
 // диска полосами (§airLayers рисуется после) — так же, как на референсе.
 function star(R, id, W, H, o) {
   const c = o.color, dist = Math.max(0, Math.min(1, o.dist == null ? 0.55 : o.dist));
-  const r = 6 + (1 - dist) * (1 - dist) * 58;
+  const r = o.r != null ? o.r : 6 + (1 - dist) * (1 - dist) * 58;
   const x = W * (o.x == null ? 0.74 : o.x), y = H * (o.y == null ? 0.24 : o.y);
-  let s = `<circle cx="${n1(x)}" cy="${n1(y)}" r="${n1(r * (3.2 + (1 - dist) * 2.4))}" fill="url(#${id}g)"/>`;
+  // Гало живёт не диском, а КОЛИЧЕСТВОМ СВЕТА: далёкая искра не может залить
+  // полнеба ореолом, поэтому радиус ореола растёт от освещённости (o.day).
+  const day = o.day == null ? 1 : o.day;
+  const halo = Math.max(r * 1.6, r * (2.2 + 3.4 * day) + (W * 0.012) * day);
+  let s = `<circle cx="${n1(x)}" cy="${n1(y)}" r="${n1(halo)}" fill="url(#${id}g)"/>`;
   s += `<circle cx="${n1(x)}" cy="${n1(y)}" r="${n1(r)}" fill="${c}"/>`;
-  if (o.companion) s += `<circle cx="${n1(x + r * 2.6)}" cy="${n1(y + r * 1.1)}" r="${n1(Math.max(2, r * 0.34))}" fill="${mix(c, '#ffffff', 0.25)}"/>`;
+  if (o.companion) s += `<circle cx="${n1(x + Math.max(r * 2.6, W * 0.03))}" cy="${n1(y + Math.max(r * 1.1, H * 0.02))}" r="${n1(Math.max(1.2, r * 0.34))}" fill="${mix(c, '#ffffff', 0.25)}"/>`;
   return { svg: s, x: x, y: y, r: r, color: c };
 }
 
@@ -741,14 +845,21 @@ function orbital(R, kind, W, H, o) {
 
 // Слои атмосферы: гало у горизонта + пластами лежащая дымка. При haze = 0 вместо
 // них — звёздное поле: воздуха нет, светило висит в чёрном.
-function airLayers(R, W, H, horizon, A, sky) {
+// day — уровень света (§13a): чем его меньше, тем слабее дымка (её нечем
+// подсветить) и тем увереннее сквозь воздух проступают звёзды.
+function airLayers(R, W, H, horizon, A, sky, day) {
   let s = '';
-  if (A.haze <= 0.01) {
+  const dl = day == null ? 1 : day;
+  const starField = op => {
     let d = '';
     for (let k = 0; k < 140; k++) { const x = R() * W, y = R() * horizon * 0.95, rr = R() < 0.12 ? 1.5 : 0.7; d += `M${n1(x)},${n1(y)}h${n1(rr)}v${n1(rr)}h${n1(-rr)}Z`; }
-    return `<path d="${d}" fill="#ffffff" fill-opacity="0.8"/>`;
-  }
-  const hz = A.haze;
+    return `<path d="${d}" fill="#ffffff" fill-opacity="${n1(op)}"/>`;
+  };
+  if (A.haze <= 0.01) return starField(0.8);
+  // Дымка гаснет вместе со светом: на сумеречном мире она не белая пелена, а
+  // еле различимый налёт у горизонта.
+  const hz = A.haze * (0.3 + 0.7 * dl);
+  if (dl < 0.45) s += starField((0.45 - dl) / 0.45 * 0.7 * (1 - A.haze * 0.5));
   s += `<rect x="0" y="${n1(horizon - H * 0.34 * hz)}" width="${W}" height="${n1(H * 0.34 * hz)}" fill="${mix(sky, '#ffffff', 0.22 * hz)}" opacity="0.55"/>`;
   for (let k = 0; k < 4; k++) {                             // пласты дымки
     const y = horizon - H * rnd(R, 0.06, 0.5) * hz, th = H * rnd(R, 0.006, 0.022);
@@ -759,7 +870,11 @@ function airLayers(R, W, H, horizon, A, sky) {
 
 // ── СЦЕНА ────────────────────────────────────────────────────
 // opt: {seed, w, h, atmo|sky, pop (тыс.), built:['abm',...], flag:{a,b,emblem,href},
-//       star:{dist,x,y,color,companion}, charZone:[0..1,0..1], ground:true, labels:false}
+//       star:{cls:'G', distAu:1.0, zone:'Обитаемая', dist,x,y,color,companion},
+//       charZone:[0..1,0..1], ground:true, labels:false}
+// ⚠️ star.cls + star.distAu (или star.zone) — НАСТОЯЩИЕ данные системы: по ним
+// считается и диск, и освещённость всего кадра (§13a). Старое star.dist (0..1)
+// остаётся только фолбэком, когда системы не знаем.
 function scene(opt) {
   opt = opt || {};
   const W = opt.w || 1600, H = opt.h || 700;
@@ -770,25 +885,34 @@ function scene(opt) {
   // Пепелище: небо затянуто гарью — и низ, и зенит уходят в чёрное. Цвет светила
   // при этом НЕ трогаем: тусклый диск сквозь дым и есть вся драма.
   const ruin = Math.max(0, Math.min(1, opt.ruin || 0));
-  const sky = mix(opt.sky || A.bot, '#1a1512', 0.45 * ruin);
-  const sky2 = mix(opt.sky2 || (opt.sky ? mix(opt.sky, '#000000', 0.42) : A.top), '#000000', 0.5 * ruin);
+  // ФОТОМЕТРИЯ КАДРА (§13a). day = 1 — земной полдень, 0.03 — вечные сумерки на
+  // краю системы. Небо, палитра фасадов, дымка и гало звезды подчинены ей все.
+  const ph = starPhys(opt.star, W);
+  const day = ph ? ph.day : 1;
+  const dark = 1 - day;
+  const skyLit = c => mix(c, '#05070c', 0.8 * dark);        // «выключаем свет» в небе
+  const sky = skyLit(mix(opt.sky || A.bot, '#1a1512', 0.45 * ruin));
+  const sky2 = skyLit(mix(opt.sky2 || (opt.sky ? mix(opt.sky, '#000000', 0.42) : A.top), '#000000', 0.5 * ruin));
   const horizon = opt.horizon == null ? H * 0.995 : opt.horizon;
   const D = popProfile(opt.pop == null ? 60 : opt.pop);
   const layers = Math.min(opt.layers || D.layers, opt.light ? 2 : 4);
-  const P0 = palette(sky, 0);                               // палитра ближнего плана
+  const P0 = palette(sky, 0, day);                          // палитра ближнего плана
   const f = opt.flag && (opt.flag.a || opt.flag.href) ? {
     a: opt.flag.a || '#c1121a', b: opt.flag.b || '#f2f2f0',
     emblem: opt.flag.emblem || '', href: opt.flag.href || ''
   } : null;
 
   const st = star(R, id, W, H, {
-    color: opt.star && opt.star.color || A.light,
+    color: opt.star && opt.star.color || (ph && ph.color) || A.light,
     dist: opt.star ? opt.star.dist : 0.55,
+    r: ph ? ph.r : null, day: day,
     x: opt.star && opt.star.x, y: opt.star && opt.star.y,
     companion: opt.star && opt.star.companion
   });
 
-  const cb = cityBody(R, { W: W, H: H, sky: sky, layers: layers, horizon: horizon, dens: D, ruin: ruin, light: !!opt.light, charZone: opt.charZone || null });
+  // Свет падает ОТ ДИСКА: солнце справа — тень слева (§8).
+  const cb = cityBody(R, { W: W, H: H, sky: sky, layers: layers, horizon: horizon, dens: D, ruin: ruin,
+    light: !!opt.light, charZone: opt.charZone || null, day: day, lit: st.x > W * 0.5 });
 
   // Постройки игрока идут ПОВЕРХ города и раздвигаются по ширине. Полоса персонажа
   // для них запретна: колосс на переднем плане перекроет спрайт целиком.
@@ -839,17 +963,22 @@ function scene(opt) {
   let fl = '';
   // На пепелище полотнища нет — только голое древко: сорванный флаг говорит о
   // случившемся точнее, чем целый стяг над руинами.
-  if (f && ruin > 0.5 && cb.near.length) {
-    const p = cb.near.slice().sort((a, b) => a.roofY - b.roofY)[0];
-    if (p) fl += bar(p.bx + p.w * 0.5, p.roofY, -Math.PI / 2, Math.max(10, p.h * 0.14), 1.2, P0.ink);
-  } else if (f && cb.near.length) {
-    const sorted = cb.near.filter(p => p.bx > W * 0.02 && p.bx < W * 0.94).sort((a, b) => a.roofY - b.roofY);
-    const host = sorted[0];
-    if (host) {
-      const bw = Math.min(host.w * 0.3, H * 0.045);
-      fl += wallBanner(host.bx + host.w * 0.5 - bw / 2, host.roofY + host.h * 0.1, bw, bw * 3.4, f, P0.ink);
-    }
-    sorted.slice(1, 4).forEach(p => { if (R() < 0.6) fl += pennant(p.bx + p.w * 0.5, p.roofY, Math.max(8, p.h * 0.1), f, P0.ink); });
+  const hosts = f ? flagHosts(cb.near, W) : [];
+  if (f && ruin > 0.5 && hosts.length) {
+    const p = hosts[0], s = topSpan(p);
+    fl += bar(s.x + s.w * 0.5, p.roofY, -Math.PI / 2, Math.max(10, p.h * 0.14), 1.2, P0.ink);
+  } else if (f && hosts.length) {
+    const host = hosts[0], hs = topSpan(host);
+    // Полотнище не длиннее стены, к которой прижато: свесившись за низ верхнего
+    // блока, лента снова висит в воздухе — теперь уже под кровлей.
+    const bw = Math.min(hs.w * 0.34, H * 0.045);
+    const bh = Math.min(bw * 3.4, hs.hPx * 0.8);
+    if (bh > bw * 1.2) fl += wallBanner(hs.x + hs.w * 0.5 - bw / 2, host.roofY + hs.hPx * 0.1, bw, bh, f, P0.ink);
+    hosts.slice(1, 4).forEach(p => {
+      if (R() >= 0.6) return;
+      const s = topSpan(p);
+      fl += pennant(s.x + s.w * 0.5, p.roofY, Math.max(8, p.h * 0.1), f, P0.ink);
+    });
   }
 
   // Земля. На пепелище вместо толпы — гряда обломков: людей на улице нет.
