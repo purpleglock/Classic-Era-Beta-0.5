@@ -5105,6 +5105,10 @@ function buildHeroMenu(coverUrl, user) {
     items.push(`<button class="hp-menu-btn" onclick="showAuth('register')"><span class="hp-menu-ic">＋</span>${en ? 'Create account' : 'Создать аккаунт'}</button>`);
   } else {
     items.push(`<button class="hp-menu-btn hp-menu-primary" onclick="go('faction-new')"><span class="hp-menu-ic">⬡</span>${en ? 'Register a faction' : 'Зарегистрировать фракцию'}</button>`);
+    // Второй путь в игру: не вести своё государство, а служить чужому
+    // (_faction_members.sql). Равноправная развилка, поэтому здесь же, а не
+    // спрятана в глубине страницы фракций.
+    items.push(`<button class="hp-menu-btn" onclick="fmOpenApply()"><span class="hp-menu-ic">⚑</span>${en ? 'Enter service of a state' : 'Поступить на службу'}</button>`);
     items.push(`<button class="hp-menu-btn" onclick="go('factions')"><span class="hp-menu-ic">◇</span>${en ? 'Browse factions' : 'К фракциям'}</button>`);
   }
   const tagline = en ? 'A living galaxy of factions, fleets and intrigue' : 'Живая галактика фракций, флотов и интриг';

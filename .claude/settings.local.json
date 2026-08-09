@@ -385,7 +385,9 @@
       "Bash(node tools/db_dump_fn.js _bt_do_module)",
       "Bash(node tools/db_dump_fn.js _bt_hit)",
       "Bash(node tools/db_dump_fn.js _bt_do_end_turn)",
-      "Bash(node tools/db_q.js \"select string_agg\\(p.proname||'\\('||pg_get_function_identity_arguments\\(p.oid\\)||'\\)',' | ' order by p.proname\\) x from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and \\(p.proname like 'spy!_%' escape '!' or p.proname like 'economy!_claim%' escape '!' or p.proname in \\('shellforge_build','ballfab_build','rename_colony','colony_rename_paid','news_react','loan_verdict','station_deploy','intel_guard_set','economy_research','economy_research_queue','research_drain_queue','tech_offer_propose','faith_found','mza_build','doom_build'\\)\\) and has_function_privilege\\('authenticated',p.oid,'execute'\\)\")"
+      "Bash(node tools/db_q.js \"select string_agg\\(p.proname||'\\('||pg_get_function_identity_arguments\\(p.oid\\)||'\\)',' | ' order by p.proname\\) x from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and \\(p.proname like 'spy!_%' escape '!' or p.proname like 'economy!_claim%' escape '!' or p.proname in \\('shellforge_build','ballfab_build','rename_colony','colony_rename_paid','news_react','loan_verdict','station_deploy','intel_guard_set','economy_research','economy_research_queue','research_drain_queue','tech_offer_propose','faith_found','mza_build','doom_build'\\)\\) and has_function_privilege\\('authenticated',p.oid,'execute'\\)\")",
+      "Bash(node tools/db_run.js _faction_members.sql)",
+      "Bash(node --check faction_members.js)"
     ]
   }
 }

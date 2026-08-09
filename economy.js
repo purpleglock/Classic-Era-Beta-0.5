@@ -1143,13 +1143,14 @@ async function ecLoadApp() {
     const rows = await dbGet('faction_applications', `owner_id=eq.${user.id}&status=eq.approved&order=updated_at.desc&limit=1`);
     EC.app = (rows && rows[0]) ? rows[0] : null;
   } catch (e) { EC.app = null; }
-  // Своей державы нет — возможно, игрок служит чужой (_faction_members.sql):
-  // сервер уже резолвит его в fid державы, кабинет открываем от её анкеты.
+  // Состав державы (_faction_members.sql). Тянем ВСЕГДА, а не только когда
+  // своей анкеты нет: владельцу этот же ответ включает вкладку «Двор» и счётчик
+  // заявок — без него она просто не появлялась, пока не откроешь «Фракции».
   EC.member = null;
-  if (!EC.app && typeof fmLoadMe === 'function') {
+  if (typeof fmLoadMe === 'function') {
     try {
       const me = await fmLoadMe(true);
-      if (me && me.membership) {
+      if (!EC.app && me && me.membership) {
         const rows = await dbGet('faction_applications',
           `faction_id=eq.${encodeURIComponent(me.membership.faction_id)}&status=eq.approved&limit=1`);
         if (rows && rows[0]) { EC.app = rows[0]; EC.member = me.membership; }
@@ -3507,7 +3508,11 @@ function ecPaintCabinet() {
   if (ecDoomUnlocked()) tabs.splice(14, 0, ['doom', '🜨', 'Длань Неотвратимости']);   // перед «Разведкой»
   // 👥 Двор — состав державы и права. Только владельцу анкеты: служащий
   // раздавать права не может (fm_list/fm_set на сервере требуют владельца).
-  if (typeof FM === 'object' && FM.me && FM.me.is_owner && !EC.actAs) tabs.push(['court', '👥', 'Двор']);
+  // Место — сразу за «Обзором»: это управление людьми, а не подсистема.
+  if (typeof FM === 'object' && FM.me && FM.me.is_owner && !EC.actAs) {
+    const inbox = +FM.me.inbox || 0;
+    tabs.splice(1, 0, ['court', '👥', 'Двор' + (inbox ? ` · ${inbox}` : '')]);
+  }
   const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
     : EC.tab === 'milbuild' ? ecTabMilBuild()

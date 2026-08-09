@@ -278,6 +278,10 @@ begin
   return jsonb_build_object(
     'own_fid', own,
     'is_owner', own is not null,
+    -- сколько заявок ждёт МОЕГО решения (бейдж на вкладке «Двор»)
+    'inbox', case when own is null then 0 else
+      (select count(*) from public.faction_members r
+         where r.faction_id = own and r.status = 'pending') end,
     'membership', case when m.id is null then null else jsonb_build_object(
         'id', m.id, 'faction_id', m.faction_id, 'role', m.role,
         'role_title', public._fm_role_title(m.role),

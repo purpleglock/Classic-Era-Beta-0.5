@@ -128,10 +128,13 @@ function fmServiceBlock(hasOwnApp) {
   if (pend.length) {
     return `<div class="fr-mine">
       <div class="fr-mine-hd">
-        <span class="fr-status-badge" style="color:var(--color-warning);border-color:var(--color-warning)">ЗАЯВКА ПОДАНА</span>
-        <span class="fr-mine-name">${esc(pend[0].faction_name || pend[0].faction_id)}</span></div>
-      <div class="fm-scope-line">Ждём решения владельца державы.</div>
-      <div class="fr-actions"><button class="btn btn-gh btn-sm" onclick="fmWithdraw('${pend[0].id}')">Отозвать заявку</button></div>
+        <span class="fr-status-badge" style="color:var(--color-warning);border-color:var(--color-warning)">${pend.length > 1 ? 'ЗАЯВКИ ПОДАНЫ' : 'ЗАЯВКА ПОДАНА'}</span>
+        <span class="fr-mine-name">${pend.map(p => esc(p.faction_name || p.faction_id)).join(', ')}</span></div>
+      <div class="fm-scope-line">Ждём решения владельца державы. Пока решения нет, можно проситься и в другие.</div>
+      <div class="fr-actions">
+        ${pend.map(p => `<button class="btn btn-gh btn-sm" onclick="fmWithdraw('${p.id}')">Отозвать — ${esc(p.faction_name || p.faction_id)}</button>`).join('')}
+        <button class="btn btn-gh btn-sm" onclick="fmOpenApply()">⚑ Ещё держава</button>
+      </div>
     </div>`;
   }
   if (hasOwnApp || FM.me.is_owner) return '';
