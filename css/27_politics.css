@@ -18,6 +18,9 @@
 .pol-shell{
   display:flex;gap:0;padding:0;overflow:hidden;flex:1;min-height:0;
 }
+/* Свёрнутая строка меню — только для телефона (см. 29_vn_mobile.css) */
+.pol-rail-cur{display:none}
+.pol-railw{display:contents}
 .pol-rail{
   flex:0 0 clamp(178px,19vw,244px);display:flex;flex-direction:column;gap:2px;
   padding:14px 10px;overflow-y:auto;scrollbar-width:thin;
