@@ -4137,12 +4137,14 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   background:linear-gradient(100deg,transparent 30%,rgba(120,190,220,.09) 50%,transparent 70%);
   background-size:220% 100%;animation:vnw-sweep 1.5s linear infinite}
 @keyframes vnw-sweep{from{background-position:120% 0}to{background-position:-120% 0}}
-/* Готовый фон проявляется одним движением, а не возникает рывком. */
-#hp-hero-city{opacity:0;transition:opacity .45s ease}
-#hp-hero-city.is-in,#hp-hero-city.hp-hero-wait{opacity:1}
-@media (prefers-reduced-motion:reduce){
-  .hp-hero-wait::after{animation:none}
-  #hp-hero-city{transition:none;opacity:1}}
+/* ⚠️ ВИДИМОСТЬ ФОНА НЕ ЗАВИСИТ ОТ АНИМАЦИИ. Пробовали и transition с opacity:0, и
+   @keyframes с fill-mode:both — во вкладке, которую браузер не отрисовывает
+   (открыли ссылку в фоне, свернули окно), кадры не идут: переход не стартует,
+   анимация стоит на первом кадре — и фон залипает невидимым навсегда. Поэтому
+   готовая панорама просто СТАНОВИТСЯ на место заглушки. Мигания это не создаёт:
+   до неё в кадре была нейтральная плита, а не другая картинка.
+   Класс .is-in оставлен как признак «фон уже подставлен» для скриптов. */
+@media (prefers-reduced-motion:reduce){.hp-hero-wait::after{animation:none}}
 
 /* ── ПЕПЕЛИЩЕ: глитч потерянного сигнала (render.js _vnCityLayer, класс vnq) ──
    Разрыв канала сделан КОПИЕЙ кадра со сдвигом, а не css-фильтром: filter мылит

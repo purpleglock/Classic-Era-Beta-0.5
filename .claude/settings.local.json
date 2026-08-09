@@ -463,7 +463,9 @@
       "Bash(grep -n \"^function \\\\|^const \\\\|^  function \\\\|=> *{$\" city_gen.js)",
       "Bash(sed -i 's|'\\\\''./city_gen.js'\\\\''|'\\\\''C:/Users/Андрей/Desktop/Classic-Era-Beta-0.5/city_gen.js'\\\\''|' __TRACKED_VAR__/t.js)",
       "Bash(node __TRACKED_VAR__/t.js)",
-      "Bash(node --check city_gen.js)"
+      "Bash(node --check city_gen.js)",
+      "Bash(node -e \"global.window={};require\\('./city_gen.js'\\);const s=window.CG.scene\\({seed:7,w:900,h:1240,built:['abm','shipyard','shield','palace'],pop:800,atmo:'crimson',flag:{a:'#c1121a',b:'#f2f2f0'}}\\);console.log\\(s.length\\);require\\('fs'\\).writeFileSync\\(process.env.TMP+'/cg_test.svg',s\\)\")",
+      "Bash(rm -f cg_probe.html)"
     ]
   }
 }

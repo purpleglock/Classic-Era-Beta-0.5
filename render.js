@@ -9608,7 +9608,9 @@ function _vnCityShow(html) {
   box.innerHTML = html;
   const el = box.firstChild;
   old.replaceWith(el);
-  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('is-in')));
+  // Признак «фон подставлен». Ничего не прячет и не анимирует — см. комментарий
+  // в 03_content.css: любое проявление через css замораживается в фоновой вкладке.
+  el.classList.add('is-in');
   return true;
 }
 // Обложка как запасной вариант: показывается ТОЛЬКО если панорама не собралась.
