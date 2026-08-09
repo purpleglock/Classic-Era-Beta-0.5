@@ -885,6 +885,9 @@ async function renderFactionsPage() {
   } catch (e) {}
   try { unions = (user ? await frRpc('union_list') : null) || []; } catch (e) { unions = []; }
   if (user) mine = await frLoadMine();
+  // Состав держав (_faction_members.sql): свой статус — владелец / на службе /
+  // заявка подана — чтобы показать блок «Служба в чужой державе».
+  if (user && typeof fmLoadMe === 'function') { try { await fmLoadMe(true); } catch (e) {} }
 
   const canCreate = !mine || mine.status === 'rejected' || mine.status === 'draft';
   let mineHtml = '';
@@ -931,6 +934,7 @@ async function renderFactionsPage() {
       ${user && canCreate && !mine ? `<button class="btn btn-gd" onclick="go('faction-new')">+ Создать государство</button>` : ''}
     </div>
     ${mineHtml}
+    ${typeof fmServiceBlock === 'function' ? fmServiceBlock(!!mine) : ''}
     <div class="fr-grid">${cards}</div>
     ${unionsBlock}
   </div>`);

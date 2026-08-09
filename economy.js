@@ -1143,6 +1143,19 @@ async function ecLoadApp() {
     const rows = await dbGet('faction_applications', `owner_id=eq.${user.id}&status=eq.approved&order=updated_at.desc&limit=1`);
     EC.app = (rows && rows[0]) ? rows[0] : null;
   } catch (e) { EC.app = null; }
+  // Своей державы нет — возможно, игрок служит чужой (_faction_members.sql):
+  // сервер уже резолвит его в fid державы, кабинет открываем от её анкеты.
+  EC.member = null;
+  if (!EC.app && typeof fmLoadMe === 'function') {
+    try {
+      const me = await fmLoadMe(true);
+      if (me && me.membership) {
+        const rows = await dbGet('faction_applications',
+          `faction_id=eq.${encodeURIComponent(me.membership.faction_id)}&status=eq.approved&limit=1`);
+        if (rows && rows[0]) { EC.app = rows[0]; EC.member = me.membership; }
+      }
+    } catch (e) {}
+  }
   EC.myAppUid = user.id;
   return EC.app;
 }
@@ -1910,6 +1923,14 @@ async function ecBootOnce() {
   })();
   _ecBoot.finally(() => setTimeout(() => { _ecBoot = null; }, 2000));
   return _ecBoot;
+}
+
+// ── Вкладка «👥 Двор» — состав державы и права ────────────────
+// Разметку и всю логику держит faction_members.js; здесь только хост,
+// в который она дорисовывается после загрузки состава.
+function ecTabCourt() {
+  if (typeof fmLoadCourt === 'function') fmLoadCourt().then(() => fmRenderCourt());
+  return `<div id="fm-court-host"><div class="sload"><div class="pulse-loader"></div></div></div>`;
 }
 
 // ── Вход в кабинет чужой фракции (администрация) ─────────────
@@ -3484,6 +3505,9 @@ function ecPaintCabinet() {
   // Длань Неотвратимости — отдельная вкладка-пульт, появляется когда орудие доступно
   // (исследование открыто или орудие уже стоит).
   if (ecDoomUnlocked()) tabs.splice(14, 0, ['doom', '🜨', 'Длань Неотвратимости']);   // перед «Разведкой»
+  // 👥 Двор — состав державы и права. Только владельцу анкеты: служащий
+  // раздавать права не может (fm_list/fm_set на сервере требуют владельца).
+  if (typeof FM === 'object' && FM.me && FM.me.is_owner && !EC.actAs) tabs.push(['court', '👥', 'Двор']);
   const tabsHtml = tabs.map(([id, ic, l]) => `<button class="ec-tab${EC.tab === id ? ' on' : ''}" onclick="ecSetTab('${id}')"><span class="ec-tab-ic">${ic}</span><span class="ec-tab-l">${l}</span></button>`).join('');
   const body = EC.tab === 'overview' ? ecTabOverview() : EC.tab === 'forces' ? ecTabForces()
     : EC.tab === 'milbuild' ? ecTabMilBuild()
@@ -3498,12 +3522,20 @@ function ecPaintCabinet() {
     : EC.tab === 'diplomacy' ? ecTabDiplomacy() : EC.tab === 'faith' ? ecTabFaith()
     : EC.tab === 'raids' ? ecTabFlows()   // легаси-ссылки на удалённую вкладку «Рейды» → в «Ресурсы и торговля» (там торговая политика)
     : EC.tab === 'doom' ? ecTabDoom()
+    : EC.tab === 'court' ? ecTabCourt()
     : EC.tab === 'achievements' ? ecTabAchievements()
     : EC.tab === 'news' ? ecTabNews() : ecTabColonies();
   const img = (EC.app && (EC.app.herald_url || EC.app.image_url)) || '';
   const coverBg = img
     ? `<img class="ec-cover-img" src="${esc(img)}" alt=""><div class="ec-cover-fade"></div>`
     : `<div class="ec-cover-bg" style="background:linear-gradient(135deg, ${col}33, var(--b1) 70%)"></div>`;
+  // Служащий: напоминаем, чьим именем он действует и что ему дозволено.
+  const memberBanner = (EC.member && !EC.actAs)
+    ? `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;margin-bottom:12px;border:1px solid var(--w3);border-radius:8px;background:rgba(255,255,255,.02);color:var(--t2);font-size:13px">
+        <span>⚑ Вы на службе державы <b>${esc(EC.app.name || '')}</b> — ${esc(EC.member.role_title || '')}. Действия вне выданных прав сервер отклонит.</span>
+        <span style="margin-left:auto;color:var(--t3)">${((typeof FM === 'object' && FM.me && FM.me.perms) || []).map(c => { const p = (typeof FM_PERMS !== 'undefined' ? FM_PERMS : []).find(x => x[0] === c); return p ? p[1] : ''; }).join(' ')}</span>
+      </div>`
+    : '';
   const adminBanner = EC.actAs
     ? `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;margin-bottom:12px;border:1px solid var(--gd,#3a7fbf);border-radius:8px;background:color-mix(in srgb,var(--gd,#3a7fbf) 14%,transparent);color:var(--gdl,#5fb0e6);font-size:13px">
         <span>🔑 Режим администрации — вы в кабинете фракции <b>${esc(EC.actAs.name || EC.app.name || '')}</b>. Игрок не снят; изменения через серверные действия могут не примениться к этой фракции.</span>
@@ -3511,7 +3543,7 @@ function ecPaintCabinet() {
       </div>`
     : '';
   setPg(`<div class="ec-wrap">
-    ${adminBanner}
+    ${memberBanner}${adminBanner}
     <div class="ec-cover" style="--fac:${col}">
       ${coverBg}
       <div class="ec-cover-scan"></div>

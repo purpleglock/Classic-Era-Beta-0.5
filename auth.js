@@ -213,6 +213,7 @@ async function init() {
       await loadUserRole(session.user); updAuthUI();
     } else if (event === 'SIGNED_OUT') {
       user = null; userProfile = { display_name:'', avatar_url:'' }; _pgCache.clear(); _myFactionApproved = false;
+      try { if (typeof fmReset === 'function') fmReset(); } catch(e) {}
       try { localStorage.removeItem('wk_fac_approved'); } catch(e) {}
       if (editMode) exitEdit(false);
       closeAp(); updAuthUI();
@@ -463,6 +464,18 @@ async function loadUserRole(authUser) {
       _myFactionApproved = Array.isArray(fr) && fr.length > 0;
       try { localStorage.setItem('wk_fac_approved', _myFactionApproved ? '1' : '0'); } catch(e) {}
       if (_myFactionApproved) { try { buildNav(); if (curSlug === 'home' || !curSlug) renderHome(); } catch(e) {} }
+    } catch(e) {}
+    // Служащий чужой державы (_faction_members.sql) своей анкеты не имеет, но
+    // это полноценный игрок: локации, кабинет, игровое меню на главной.
+    try {
+      if (!_myFactionApproved && typeof fmLoadMe === 'function') {
+        const me = await fmLoadMe(true);
+        if (me && me.membership) {
+          _myFactionApproved = true;
+          try { localStorage.setItem('wk_fac_approved', '1'); } catch(e) {}
+          try { buildNav(); if (curSlug === 'home' || !curSlug) renderHome(); } catch(e) {}
+        }
+      }
     } catch(e) {}
 
     // Метаданные профиля — вторично, с таймаутом 4 с (не должны вешать роль/меню)

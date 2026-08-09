@@ -1,0 +1,67 @@
+/* СОСТАВ ДЕРЖАВЫ И ПРАВА — вкладка «Двор» и служба в чужой державе.
+   Минимализм: один акцент (--te) на включённом праве, всё прочее — рамки. */
+
+.fm-chip{display:inline-block;padding:2px 8px;margin:2px 4px 2px 0;font-size:12px;color:var(--t2);
+  border:1px solid var(--w3);border-radius:var(--radius-sm);background:rgba(255,255,255,.02)}
+.fm-chip-off{color:var(--t3);font-style:italic}
+.fm-perm-line{margin:6px 0 4px}
+.fm-scope-line{font-size:12.5px;color:var(--t3);margin:2px 0 8px}
+
+/* ── Выбор державы для заявки ── */
+.fm-fac-list{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow-y:auto;margin-bottom:14px}
+.fm-fac{display:flex;align-items:center;gap:10px;width:100%;padding:9px 11px;text-align:left;cursor:pointer;
+  background:rgba(255,255,255,.02);border:1px solid var(--w3);border-radius:var(--radius-sm);color:var(--t1)}
+.fm-fac:hover{border-color:var(--te);background:rgba(255,255,255,.05)}
+.fm-fac-herald{flex:0 0 30px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--w3);border-radius:var(--radius-sm);overflow:hidden;color:var(--t3)}
+.fm-fac-herald img{width:100%;height:100%;object-fit:cover}
+.fm-fac-main{display:flex;flex-direction:column;min-width:0;flex:1}
+.fm-fac-main b{font-size:14px;font-weight:600}
+.fm-fac-main i{font-style:normal;font-size:12px;color:var(--t3)}
+.fm-fac-n{font-size:12px;color:var(--t3);white-space:nowrap}
+
+/* ── Двор: карточки участников ── */
+.fm-intro{font-size:13px;color:var(--t3);line-height:1.55;margin-bottom:16px;max-width:760px}
+.fm-h{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);margin:20px 0 10px;font-weight:600}
+.fm-h span{color:var(--te);margin-left:6px}
+.fm-card{border:1px solid var(--w3);border-radius:var(--radius-md);padding:13px 15px;margin-bottom:12px;
+  background:rgba(255,255,255,.015)}
+.fm-card.pend{border-color:var(--color-warning)}
+.fm-card-hd{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:8px}
+.fm-ava{flex:0 0 28px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;overflow:hidden;
+  border:1px solid var(--w3);border-radius:50%;color:var(--t3);font-size:13px}
+.fm-ava img{width:100%;height:100%;object-fit:cover}
+.fm-card-name{font-size:15px;font-weight:600}
+.fm-badge{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-warning);
+  border:1px solid currentColor;border-radius:var(--radius-sm);padding:1px 6px}
+.fm-badge.ok{color:var(--t3)}
+.fm-sp{flex:1}
+.fm-sel{background:rgba(0,0,0,.3);color:var(--t1);border:1px solid var(--w3);border-radius:var(--radius-sm);
+  padding:4px 8px;font-size:13px;font-family:inherit}
+.fm-note{font-size:13px;color:var(--t2);font-style:italic;margin:0 0 10px;padding-left:10px;border-left:2px solid var(--w3)}
+
+.fm-perms{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.fm-p{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;font-size:12.5px;cursor:pointer;
+  color:var(--t3);background:transparent;border:1px solid var(--w3);border-radius:var(--radius-sm);font-family:inherit}
+.fm-p:hover{color:var(--t1);border-color:var(--t3)}
+.fm-p.on{color:var(--te);border-color:var(--te);background:rgba(80,150,255,.08)}
+.fm-p.on.role{background:rgba(80,150,255,.16)}
+.fm-p span{font-size:13px}
+
+.fm-scope{border-top:1px solid var(--w3);padding-top:10px;margin-bottom:10px}
+.fm-all{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--t2);cursor:pointer;margin-bottom:8px}
+.fm-scope-box{margin-bottom:8px}
+.fm-scope-box b{display:block;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--t3);margin-bottom:4px;font-weight:600}
+.fm-scope-items{display:flex;flex-wrap:wrap;gap:5px}
+.fm-s{padding:3px 8px;font-size:12px;cursor:pointer;color:var(--t3);background:transparent;
+  border:1px solid var(--w3);border-radius:var(--radius-sm);font-family:inherit}
+.fm-s:hover{color:var(--t1)}
+.fm-s.on{color:var(--te);border-color:var(--te)}
+.fm-scope-note{font-size:11.5px;color:var(--t3);margin-top:6px;font-style:italic}
+.fm-card-act{display:flex;gap:8px;flex-wrap:wrap}
+
+@media (max-width:640px){
+  .fm-card{padding:11px 12px}
+  .fm-card-hd{gap:7px}
+  .fm-sel{width:100%;margin-top:4px}
+}
