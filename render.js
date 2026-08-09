@@ -2735,6 +2735,43 @@ function _heroVNHistDrop() {
 function _heroVNScreenOpen() {
   return document.querySelector('.hp-vn-colony.show,.hp-vn-poem.show,.hp-vn-assembly.show,.hp-vn-rating.show,.hp-vn-research.show,.hp-vn-fight.show');
 }
+// Экран новеллы на телефоне разворачивается во весь экран через position:fixed.
+// iOS Safari отсчитывает fixed не от вьюпорта, а от прокручиваемого предка (#cw),
+// поэтому уехавшая прокрутка контента утаскивала шапку экрана — вместе с кнопкой
+// «↩ назад» — выше видимой области: на айфонах кнопки просто не было. Пока хоть
+// один экран открыт, вешаем на <html> класс vn-screen (CSS замораживает #cw) и
+// держим его прокрутку в нуле; при закрытии возвращаем игрока туда, где он был.
+let _vnScrollSave = 0;
+function _vnScreenSync() {
+  const open = !!_heroVNScreenOpen();
+  const html = document.documentElement;
+  if (open === html.classList.contains('vn-screen')) return;
+  const cw = document.getElementById('cw');
+  if (open) {
+    _vnScrollSave = cw ? cw.scrollTop : 0;
+    html.classList.add('vn-screen');
+    if (cw) cw.scrollTop = 0;
+  } else {
+    html.classList.remove('vn-screen');
+    // Вернуть прокрутку можно только после того, как #cw снова стал скроллящимся:
+    // на замороженном контейнере присвоение scrollTop молча пропадает.
+    if (cw) requestAnimationFrame(() => { cw.scrollTop = _vnScrollSave; });
+  }
+}
+// Экранов много и открывают их из десятка мест — вместо правки всех вызовов
+// слушаем сам DOM: класс .show переключается на оверлеях внутри #cw.
+(function _vnScreenWatch() {
+  const start = () => {
+    const cw = document.getElementById('cw');
+    if (!cw) { setTimeout(start, 400); return; }
+    new MutationObserver(_vnScreenSync)
+      .observe(cw, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    _vnScreenSync();
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+
 window.addEventListener('popstate', () => {
   const armed = _heroVNHist || _heroVNIsOurs();
   _heroVNHist = false;

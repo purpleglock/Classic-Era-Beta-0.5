@@ -40,6 +40,16 @@
         "8142"
       ],
       "port": 8142
+    },
+    {
+      "name": "ios-back",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8147"
+      ],
+      "port": 8147
     }
   ]
 }
