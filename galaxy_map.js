@@ -1950,7 +1950,7 @@ function gmOpenPanel(sys) {
     <h2 class="gm-panel-title">${esc(sys.name)}</h2>
     ${facBlock}
     ${(typeof ecCanAccess === 'function' && ecCanAccess() && typeof EC !== 'undefined' && EC.app && EC.app.faction_id === sys.faction)
-      ? `<button class="btn btn-gh btn-sm" style="margin:6px 0 2px" onclick="gmClosePanel();go('economy')">🛰 Открыть кабинет</button>` : ''}
+      ? `<button class="btn btn-gh btn-sm" style="margin:6px 0 2px" onclick="gmClosePanel();heroVNGoto('g_work')">🛰 К делам державы</button>` : ''}
     <p class="gm-panel-desc">${esc(sys.description || '')}</p>
     ${colsBlock}
     ${defBlock}

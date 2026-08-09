@@ -443,6 +443,9 @@ if (typeof ecPaintCabinet === 'function') {
   window.ecPaintCabinet = function () {
     if (typeof curSlug !== 'undefined' && curSlug !== 'economy') {
       estRefreshOpen();
+      // Казна в строке ресурсов новеллы обязана дрогнуть на том же действии, что
+      // и ведомость: иначе игрок платит, а сверху висит старая цифра.
+      if (typeof vnResBarRepaint === 'function') { try { vnResBarRepaint(); } catch (e) {} }
       if (typeof polRefresh === 'function') polRefresh();
       if (typeof dipRefresh === 'function') dipRefresh();
       return;

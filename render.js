@@ -1679,7 +1679,9 @@ function buildNav(filt='') {
   // Кабинет игрока — высоко: игрокам с одобренной анкетой и стаффу
   if (typeof ecNavEnsure==='function') ecNavEnsure();
   if (typeof ecCanAccess==='function' && ecCanAccess()) {
-    h+=`<a class="n-home${curSlug==='economy'?' on':''}" id="ntl-eco" href="#economy" onclick="return navGo(event,'economy')"><span class="n-home-icon">🛰</span>${L('Кабинет игрока','Cabinet')}</a>`;
+    // Кабинета больше нет — есть держава, и живёт она в разговоре на главной.
+    // Пункт ведёт ровно туда, куда раньше вели его двери: меню → «Займёмся делами».
+    h+=`<a class="n-home" id="ntl-eco" href="#home" onclick="event.preventDefault();heroVNGoto('g_work');return false"><span class="n-home-icon">🛰</span>${L('Держава','My realm')}</a>`;
     // ☄ Горячие точки — вход в активные бои (доска боя). Бейдж = число боёв,
     // его до-рисовывает hsNavBadge() после загрузки кабинета/страницы.
     const hsN = (typeof EC!=='undefined' && Array.isArray(EC.battles)) ? EC.battles.length : 0;
@@ -2398,7 +2400,9 @@ function sbFlip(bid, arg, absolute) {
 function buildHeroCta(user) {
   const isPlayer = typeof ecCanAccess === 'function' && ecCanAccess();
   if (isPlayer) {
-    return `<button class="hp-hero-cta" onclick="go('economy')"><span class="hp-cta-ic">🛰</span>${lang === 'en' ? 'Open cabinet' : 'Открыть кабинет'}</button>`;
+    // Ведомства и так за одну кнопку в меню разговора — дублировать их здесь
+    // незачем. Единственное, чего со сцены не достать, — карта галактики.
+    return `<button class="hp-hero-cta" onclick="event.stopPropagation();go('map')"><span class="hp-cta-ic">🜨</span>${lang === 'en' ? 'Galaxy map' : 'Перейти на карту'}</button>`;
   }
   const action = user ? "go('faction-new')" : (typeof showAuth === 'function' ? "showAuth('login')" : "go('faction-new')");
   return `<button class="hp-hero-cta" onclick="${action}"><span class="hp-cta-ic">⬡</span>${lang === 'en' ? 'Register a faction' : 'Зарегистрировать фракцию'}</button>`;
@@ -2635,6 +2639,7 @@ function buildHeroVN(coverUrl, user) {
   return `<div class="hp-hero-cover hp-vn" id="hp-hero-cover">
     ${bgLayer}
     <div class="hp-hero-grad"></div>
+    <div class="vnres" id="vnres" aria-hidden="true"></div>
     ${spriteLayer}
     <div class="hp-hero-frame"></div>
     <span class="hpc-corner hpc-tl"></span><span class="hpc-corner hpc-tr"></span>
@@ -3634,13 +3639,18 @@ function _heroColonyBuild(en) {
     const a = s.is_giant ? R * 0.02 : R * 0.012;
     const c = STARC[s.star_type] || STARC.yellow;
     const ln = a * 2.6, wd = a * 0.045;
+    // Блум — СТОПКОЙ полупрозрачных кругов, а не feGaussianBlur: на десятках
+    // звёзд каждый фильтр = отдельный офскрин-растр, и любой перерисовки кадра
+    // (ховер, пульс цели) хватало, чтобы пересчитать их все — карта колом.
     starsHtml += `<g transform="translate(${nf(s.x)},${nf(s.y)})" style="pointer-events:none">
-      <circle r="${nf(a * 2.3)}" fill="${c}" opacity=".1" filter="url(#hpvncGlow)"></circle>
-      <g filter="url(#hpvncEdgeGlow)" opacity=".35">
+      <circle r="${nf(a * 2.6)}" fill="${c}" opacity=".05"></circle>
+      <circle r="${nf(a * 1.7)}" fill="${c}" opacity=".08"></circle>
+      <circle r="${nf(a * 1.15)}" fill="${c}" opacity=".13"></circle>
+      <g opacity=".3">
         <polygon points="${spike(ln, wd)}" fill="${c}"></polygon>
         <polygon points="${spike(ln, wd)}" transform="rotate(90)" fill="${c}"></polygon>
       </g>
-      <circle r="${nf(a * 0.95)}" fill="${c}" opacity=".4" filter="url(#hpvncEdgeGlow)"></circle>
+      <circle r="${nf(a * 0.95)}" fill="${c}" opacity=".38"></circle>
       <circle r="${nf(a * 0.42)}" fill="${c}"></circle>
       <circle r="${nf(a * 0.19)}" fill="#fff"></circle>
     </g>`;
@@ -3667,7 +3677,8 @@ function _heroColonyBuild(en) {
       ${region}
       <circle r="${nf(hitR)}" fill="transparent"></circle>
       <g class="hpvnc-mag">
-        <circle r="${nf(r * (isCap ? 3.2 : 2.2))}" fill="${myColor}" opacity="${isCap ? '.32' : '.18'}" filter="url(#hpvncGlow)"></circle>
+        <circle r="${nf(r * (isCap ? 3.9 : 2.7))}" fill="${myColor}" opacity="${isCap ? '.10' : '.06'}"></circle>
+        <circle r="${nf(r * (isCap ? 3.2 : 2.2))}" fill="${myColor}" opacity="${isCap ? '.22' : '.13'}"></circle>
         ${isCap ? `<rect x="${nf(-r * 1.55)}" y="${nf(-r * 1.55)}" width="${nf(r * 3.1)}" height="${nf(r * 3.1)}" transform="rotate(45)" fill="none" stroke="#fff" stroke-width="${nf(R * 0.0022)}" opacity=".7"></rect>
         <text y="${nf(-r * 2.3)}" fill="#fff" font-size="${nf(R * 0.026)}" text-anchor="middle" style="pointer-events:none">★</text>` : ''}
       </g>
@@ -3766,7 +3777,7 @@ function _heroColonyBuild(en) {
       if (!isFinite(x0) || x1 <= x0 || y1 <= y0) return;
       const cid = 'hpvncTerr' + (gi++);
       clipDefs += `<clipPath id="${cid}">${g.cells.map(pts => `<path d="${dOf(pts, true)}"></path>`).join('')}</clipPath>`;
-      flagLayer += `<g style="pointer-events:none" clip-path="url(#${cid})" opacity="${isMine ? '.22' : '.12'}" filter="url(#hpvncMute)"><image href="${esc(herald)}" xlink:href="${esc(herald)}" x="${nf(x0)}" y="${nf(y0)}" width="${nf(x1 - x0)}" height="${nf(y1 - y0)}" preserveAspectRatio="xMidYMid slice"></image></g>`;
+      flagLayer += `<g style="pointer-events:none" clip-path="url(#${cid})" opacity="${isMine ? '.22' : '.12'}"><image href="${esc(herald)}" xlink:href="${esc(herald)}" x="${nf(x0)}" y="${nf(y0)}" width="${nf(x1 - x0)}" height="${nf(y1 - y0)}" preserveAspectRatio="xMidYMid slice"></image></g>`;
     });
     crestClip = clipDefs; crest = flagLayer;
   }
@@ -3782,10 +3793,10 @@ function _heroColonyBuild(en) {
 
   const defs = `<defs>
     ${crestClip}
-    <filter id="hpvncGlow" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="${nf(R * 0.012)}"></feGaussianBlur></filter>
-    <filter id="hpvncEdgeGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="${nf(R * 0.0035)}"></feGaussianBlur></filter>
-    <filter id="hpvncMute"><feColorMatrix type="saturate" values="0.5"></feColorMatrix></filter>
-    <filter id="hpvncDrop" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="${nf(R * 0.003)}" stdDeviation="${nf(R * 0.005)}" flood-color="#000" flood-opacity="0.55"></feDropShadow></filter>
+    <!-- SVG-фильтров здесь БОЛЬШЕ НЕТ: блюр/насыщенность считались офскрином на
+         полноэкранных слоях и на каждой звезде, и пульс цели колонизации гнал
+         этот пересчёт каждый кадр. Свечение собрано стопкой полупрозрачных
+         кругов, приглушение чужих территорий — просто opacity. -->
     <marker id="hpvncArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${EXP}"></path></marker>
     <radialGradient id="hpvncVig" cx="50%" cy="44%" r="72%">
       <stop offset="0%" stop-color="#000" stop-opacity="0"></stop>
@@ -3798,11 +3809,11 @@ function _heroColonyBuild(en) {
   const mainSvg = `<svg class="hpvnc-map" viewBox="${nf(minX)} ${nf(minY)} ${nf(w)} ${nf(h)}" preserveAspectRatio="xMidYMid slice" style="--cell-w:${cellW};--lane-w:${laneW}" xmlns:xlink="http://www.w3.org/1999/xlink">
     ${defs}
     <g opacity=".85">${bgStars}</g>
-    <g class="vor-layer" opacity=".52" filter="url(#hpvncMute)">${fillOther}</g>
+    <g class="vor-layer" opacity=".46">${fillOther}</g>
     <g class="vor-layer">${fillMine}</g>
     <g>${crest}</g>
     <g style="pointer-events:none">${dimOther}</g>
-    <g filter="url(#hpvncEdgeGlow)" opacity=".8">${glowB}</g>
+    <g opacity=".7">${glowB}</g>
     <g opacity=".95">${lineB}</g>
     <g class="lane-layer" opacity=".8">${laneHtml}</g>
     <g>${starsHtml}</g>
@@ -4110,7 +4121,8 @@ function _heroColonySysBuild(sysId, en) {
       discs += `<g class="hpvnc-pl" onclick="event.stopPropagation();heroVNColonySysFocus(${i})">
         <title>${esc(p.name)} · ${esc(p.type || '')}</title>
         <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp + 14)}" fill="transparent"></circle>
-        <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp * 1.9)}" fill="#c060ff" opacity=".14" filter="url(#hpvcGlow)"></circle>
+        <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp * 2.3)}" fill="#c060ff" opacity=".06"></circle>
+        <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp * 1.6)}" fill="#c060ff" opacity=".11"></circle>
         <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}" fill="#05070c"></circle>
         <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp * 0.9)}" fill="none" stroke="#c060ff" stroke-width="1.6" opacity=".7"></circle>
         <ellipse cx="${nf(px)}" cy="${nf(py)}" rx="${nf(rp * 1.55)}" ry="${nf(rp * 0.42)}" fill="none" stroke="#c060ff" stroke-width="1" opacity=".45" transform="rotate(-18 ${nf(px)} ${nf(py)})"></ellipse>
@@ -4139,7 +4151,8 @@ function _heroColonySysBuild(sysId, en) {
     discs += `<g class="hpvnc-pl" onclick="event.stopPropagation();heroVNColonySysFocus(${i})">
       <title>${esc(p.name)} · ${esc(p.type || '')}</title>
       <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp + 16)}" fill="transparent"></circle>
-      <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp * 1.5)}" fill="${ringCol}" opacity=".10" filter="url(#hpvcGlow)"></circle>
+      <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp * 1.8)}" fill="${ringCol}" opacity=".05"></circle>
+      <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp * 1.35)}" fill="${ringCol}" opacity=".09"></circle>
       <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}" fill="${LOOKC[look] || LOOKC.rock}"></circle>
       <image href="${esc(tex)}" xlink:href="${esc(tex)}" x="${nf(px - rp)}" y="${nf(py - rp)}" width="${nf(rp * 2)}" height="${nf(rp * 2)}" clip-path="url(#${cid})" preserveAspectRatio="xMidYMid slice"${texFallback}></image>
       <circle cx="${nf(px)}" cy="${nf(py)}" r="${nf(rp)}" fill="url(#hpvcShade)"></circle>
@@ -4191,7 +4204,6 @@ function _heroColonySysBuild(sysId, en) {
     <defs>
       ${defs}
       ${starDefs}
-      <filter id="hpvcGlow" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="8"></feGaussianBlur></filter>
       <radialGradient id="hpvcShade" cx="32%" cy="30%" r="85%">
         <stop offset="0%" stop-color="#fff" stop-opacity=".14"></stop>
         <stop offset="42%" stop-color="#000" stop-opacity="0"></stop>
@@ -5374,6 +5386,9 @@ let _heroVNResume = null;   // { sig, idx } — позволяет продол�
 let _heroVNCtl = null;      // контроллер активной новеллы: narrate / reset / speaker (для выбора в окне)
 function heroVNInit() {
   try { vnCityBoot(); } catch (e) {}                       // фон новеллы = панорама столицы
+  // Данные державы тянем ДАЖЕ если панорама выключена: от них живут тик дохода и
+  // верхняя строка ресурсов (vnCityBoot её не зовёт, когда фон отключён).
+  try { if (typeof vnEnsureData === 'function') { vnEnsureData(); vnResBarRepaint(); } } catch (e) {}
   if (_heroVNStop) { try { _heroVNStop(); } catch (e) {} _heroVNStop = null; }
   const box  = document.getElementById('hp-vn-box');
   const out  = document.getElementById('hp-vn-text');
@@ -9589,10 +9604,138 @@ function vnCityBoot() {
   // Заглушка не может висеть вечно: если данные не приехали за 8 с (сеть легла,
   // сервер молчит), показываем обложку и на этом всё.
   setTimeout(() => { if (!settled) { settled = true; _vnCityWhy = 'таймаут загрузки данных'; _vnCityFallback(); console.log('[vn-city] таймаут — показал обложку'); } }, 8000);
-  if (_vnCapital() || _vnFactionStub()) { done(); return; } // данные уже есть
-  if (typeof ecLoadApp !== 'function') { _vnCityWhy = 'ecLoadApp недоступен'; done(); return; }
-  Promise.resolve().then(ecLoadApp).then(done)
-    .catch(e => { _vnCityWhy = 'ecLoadApp упал: ' + (e && e.message || e); done(); });
+  // ⚠️ РАНЬШЕ ЗДЕСЬ БЫЛА ПРОВЕРКА `_vnCapital() || _vnFactionStub()` — и она ВСЕГДА
+  // проходила по второму условию: заглушка державы строится из одной EC.app, а
+  // колоний в памяти нет, пока не откроешь кабинет (их грузит только ecLoad).
+  // Итог: на главной вечно горело «СИГНАЛ ПОТЕРЯН · СТОЛИЦА УНИЧТОЖЕНА» у живой
+  // державы. Теперь ждём vnEnsureData — она подтягивает колонии и постройки сама.
+  if (_vnCapital()) { done(); return; }                    // столица уже в памяти
+  if (typeof vnEnsureData !== 'function') { _vnCityWhy = 'vnEnsureData недоступна'; done(); return; }
+  vnEnsureData().then(done)
+    .catch(e => { _vnCityWhy = 'загрузка данных упала: ' + (e && e.message || e); done(); });
+}
+// ── Данные державы для новеллы (без кабинета) ────────────────
+// Новелла — теперь ЕДИНСТВЕННЫЙ вход в игру: кабинет закрывается. Значит всё, что
+// он делал молча на заходе, обязано делаться здесь:
+//   1) economy_init + economy_tick (ecBootOnce) — иначе доход не начисляется вовсе;
+//   2) колонии и постройки — иначе фон рисует пепелище, а панель ресурсов пуста.
+// Это ЛЁГКАЯ выборка (4 запроса), не полный ecLoad с биржей/верой/обороной: экраны
+// новеллы догрузят остальное сами через polEnsureData → ecLoad.
+let _vnDataP = null;
+function vnEnsureData(force) {
+  if (_vnDataP && !force) return _vnDataP;
+  _vnDataP = (async () => {
+    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    const app = (typeof EC !== 'undefined' && EC.app) || null;
+    if (!app || !app.faction_id) return null;
+    if (!EC.fid) EC.fid = app.faction_id;
+    if (!EC.ownFid) EC.ownFid = app.faction_id;
+    const fid = encodeURIComponent(EC.fid);
+    // ⚠️ ТИК НЕ БЛОКИРУЕТ КАДР. `economy_tick` — самая долгая ручка в игре (за ней
+    // тянется market_tick и вся цепочка расчётов, на холодной базе это десятки
+    // секунд). Ждать её, чтобы нарисовать город и казну, — значит держать игрока
+    // перед тёмным экраном ради цифры, которая всё равно приедет следом. Пускаем
+    // параллельно и перерисовываем панель, когда доход начислится.
+    if (typeof ecBootOnce === 'function' && !EC.actAs) {
+      Promise.resolve().then(ecBootOnce).then(async () => {
+        // Тик изменил казну — перечитываем её и обновляем строку ресурсов.
+        try {
+          const rows = await dbGet('faction_economy', `faction_id=eq.${fid}`);
+          if (rows && rows[0]) EC.eco = Object.assign(EC.eco || {}, rows[0]);
+        } catch (e) {}
+        try { vnResBarRepaint(); } catch (e) {}
+      }).catch(() => {});
+    }
+    // Кадр строится по трём таблицам — и только по ним. spatial_status (RPC,
+    // считается на лету) уточняет лишь численность населения в панораме, поэтому
+    // он ВНЕ ожидания: приедет — перерисуем город, не приедет — город будет по
+    // числу построек, как и раньше.
+    if (typeof ecRpc === 'function' && !EC.spatial) {
+      ecRpc('spatial_status').then(sp => {
+        if (EC.spatial) return;
+        EC.spatial = {};
+        (Array.isArray(sp) ? sp : []).forEach(s => { if (s && s.system_id != null) EC.spatial[s.system_id] = s; });
+        try { vnCityRepaint(); } catch (e) {}
+      }).catch(() => {});
+    }
+    const [ecoRows, cols, blds] = await Promise.all([
+      (typeof dbGet === 'function' ? dbGet('faction_economy', `faction_id=eq.${fid}`) : Promise.resolve([])).catch(() => []),
+      (typeof dbGetAll === 'function' ? dbGetAll('colonies', `faction_id=eq.${fid}&order=created_at.asc`) : Promise.resolve([])).catch(() => []),
+      (typeof dbGetAll === 'function' ? dbGetAll('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`) : Promise.resolve([])).catch(() => []),
+    ]);
+    // Полный ecLoad мог отработать параллельно — его данные точнее, не затираем.
+    if (!EC.eco) EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, resources: {} };
+    if (!Array.isArray(EC.colonies) || !EC.colonies.length) EC.colonies = cols || [];
+    if (!Array.isArray(EC.buildings) || !EC.buildings.length) EC.buildings = blds || [];
+    try { vnResBarRepaint(); } catch (e) {}
+    return EC.app;
+  })();
+  return _vnDataP;
+}
+// ── Панель ресурсов новеллы (строка сверху, как в стратегиях) ──
+// Казна, наука и склад — ОДНОЙ строкой поверх сцены: игрок видит, чем богата
+// держава, не заходя ни в какое ведомство. Под числом — суточный приход, если
+// его удалось посчитать (нужны постройки и модификаторы; в лёгкой выборке они
+// уже есть, но считалка живёт в economy.js и может быть не готова — тогда просто
+// не показываем строку прихода, а не роняем панель).
+function vnResBarHtml() {
+  if (typeof EC === 'undefined') return '';
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  // ⏳ ПОКА ДАННЫХ НЕТ — НЕ ПУСТОТА, А СКЕЛЕТ. Иначе главная выглядит так, будто
+  // всё уже загрузилось и державы просто нет: игрок сидит перед тёмным кадром и
+  // не понимает, идёт загрузка или всё сломалось. Держава ещё неизвестна (гость
+  // не отличим от неподгруженного игрока) — строку не рисуем вовсе.
+  if (!EC.app) return (typeof user !== 'undefined' && user && !EC.myAppUid) ? _vnResSkel(en) : '';
+  if (!EC.eco) return _vnResSkel(en);
+  const num = (v) => (typeof ecNum === 'function') ? ecNum(v) : Math.round(+v || 0);
+  let incGc = null, incSci = null;
+  try {
+    if (typeof ecGcIncome === 'function' && typeof ecIncomePreview === 'function' && Array.isArray(EC.buildings)) {
+      incGc = ecGcIncome().net;
+      incSci = ecIncomePreview().science;
+    }
+  } catch (e) { incGc = incSci = null; }
+  const sub = (v) => (v == null || !v) ? '' :
+    `<span class="vnres-d ${v > 0 ? 'up' : 'dn'}">${v > 0 ? '+' : ''}${num(v)}</span>`;
+  const cell = (cls, ic, val, d, title) =>
+    `<div class="vnres-c ${cls}" title="${esc(title)}"><span class="vnres-i">${ic}</span>`
+    + `<span class="vnres-v">${val}</span>${d}</div>`;
+  const res = (typeof ecResEntries === 'function' ? ecResEntries() : []).slice(0, 6);
+  const resIco = (n) => (typeof resIconHtml === 'function') ? resIconHtml(n) : '◈';
+  const resHtml = res.map(([n, v]) =>
+    `<div class="vnres-c vnres-r" title="${esc(n)}"><span class="vnres-i">${resIco(n)}</span><span class="vnres-v">${num(v)}</span></div>`
+  ).join('');
+  const flag = (EC.app.herald_url || EC.app.image_url || '');
+  return `<div class="vnres-in" style="--fac:${(typeof ecReadable === 'function' ? ecReadable(EC.app.color) : (EC.app.color || '#c1121a'))}">
+      <div class="vnres-fac" title="${esc(EC.app.name || '')}">
+        ${flag ? `<img src="${esc(flag)}" alt="">` : '<span class="vnres-i">⬡</span>'}
+        <span class="vnres-fn">${esc(EC.app.name || '')}</span>
+      </div>
+      <div class="vnres-sep"></div>
+      ${cell('vnres-gc', '⛃', num(EC.eco.gc), sub(incGc), en ? 'Treasury, GC / day' : 'Казна, ГС · и суточный доход')}
+      ${cell('vnres-sci', '🔬', num(EC.eco.science), sub(incSci), en ? 'Science / day' : 'Очки науки · и суточный приход')}
+      ${resHtml ? `<div class="vnres-sep"></div>${resHtml}` : ''}
+    </div>`;
+}
+// Скелет строки: те же плашки, но пульсирующие — «связь с канцелярией идёт».
+function _vnResSkel(en) {
+  return `<div class="vnres-in vnres-skel">
+      <span class="vnres-sk vnres-sk-f"></span>
+      <div class="vnres-sep"></div>
+      <span class="vnres-sk"></span><span class="vnres-sk"></span>
+      <div class="vnres-sep"></div>
+      <span class="vnres-sk vnres-sk-s"></span><span class="vnres-sk vnres-sk-s"></span><span class="vnres-sk vnres-sk-s"></span>
+      <span class="vnres-wait">${en ? 'reading the ledgers…' : 'поднимаю ведомости…'}</span>
+    </div>`;
+}
+function vnResBarRepaint() {
+  const el = document.getElementById('vnres');
+  if (!el) return false;
+  const html = vnResBarHtml();
+  el.innerHTML = html;
+  el.classList.toggle('show', !!html);
+  el.setAttribute('aria-hidden', html ? 'false' : 'true');
+  return !!html;
 }
 // Перерисовка фона новеллы после того, как приехали колонии (ecLoadApp).
 function vnCityRepaint() { return _vnCityShow(_vnCityLayer()); }

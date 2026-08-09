@@ -2041,6 +2041,21 @@ async function _ecAuthDiag() {
 
 // ── Точка входа (#economy) ──────────────────────────────────
 async function ecRenderDashboard() {
+  // ── КАБИНЕТ ЗАКРЫТ ──────────────────────────────────────────
+  // Предбанник был последним, что от него осталось: одни двери, все — в новеллу.
+  // Две двери в одну комнату сбивают с толку, поэтому #economy больше не страница,
+  // а перенаправление: главная → меню новеллы → «Займёмся делами». Всё, что кабинет
+  // делал молча на заходе (economy_init + economy_tick, колонии, постройки), теперь
+  // делает vnEnsureData в render.js — см. [[vn-standalone-tick-resbar]].
+  // ИСКЛЮЧЕНИЕ — режим администрации (EC.actAs): админ входит в кабинет ЧУЖОЙ
+  // державы, новеллы у неё нет, и отнимать инструмент нельзя.
+  if (!EC.actAs) {
+    // Адрес меняем НАСТОЯЩИМ переходом (push=true): иначе в строке остаётся
+    // #economy, и обновление страницы каждый раз снова упирается в редирект.
+    if (typeof go === 'function') await go('home');
+    if (typeof heroVNGoto === 'function') heroVNGoto('g_work');
+    return;
+  }
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
   await ecLoadApp();
   if (!ecCanAccess()) { ecGate(); return; }
@@ -3685,9 +3700,9 @@ function ecSetTab(t) {
     if (typeof EST === 'object') EST.tab[scr] = sec;
     if (typeof estGoto === 'function') { estGoto(EST_SCR[scr].view); return; }
   }
-  // Не узнали ключ — просто показываем предбанник кабинета.
+  // Не узнали ключ — открываем список ведомств в новелле (кабинета больше нет).
   EC.tab = t;
-  if (typeof curSlug !== 'undefined' && curSlug === 'economy') ecPaintCabinet(); else go('economy');
+  if (typeof heroVNGoto === 'function') heroVNGoto('g_work');
 }
 
 // ── Состояние «Обзора»-статистики: раскрытые секции, активный график, окно истории ──
