@@ -491,7 +491,8 @@
       "Bash(sed -i \"s/20260809vnroom/20260809vnroom2/g\" index.html)",
       "Bash(sed -i \"s/position:absolute;left:1.2%;top:10%;width:min\\(12.5%,150px\\);/position:absolute;left:1.2%;top:18%;width:min\\(12.5%,150px\\);/\" css/03_content.css)",
       "Bash(sed -i \"s/20260809vnroom2/20260809cabinet/g\" index.html)",
-      "Bash(node -c \"0\")"
+      "Bash(node -c \"0\")",
+      "Bash(python -c \"import io;print\\(len\\(io.open\\('MEMORY.md',encoding='utf-8'\\).read\\(\\).encode\\('utf-8'\\)\\)\\)\")"
     ]
   }
 }

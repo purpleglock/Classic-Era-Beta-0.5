@@ -1,0 +1,43 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<title>стенд: кабинет</title>
+<link rel="stylesheet" href="css/01_base.css">
+<link rel="stylesheet" href="css/03_content.css">
+<style>
+  body{margin:0;background:#05070b}
+  #stage{position:relative;width:100vw;height:100vh;overflow:hidden}
+  #stage .hp-hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  #stage .hp-hero-img svg{width:100%;height:100%;display:block}
+  /* заглушка окна диалога — чтобы видеть, что и где им закрывается */
+  #fakebox{position:absolute;left:2%;right:2%;bottom:2%;height:32%;
+    background:rgba(8,16,22,.86);border:1px solid rgba(120,200,220,.35);z-index:6}
+</style></head><body>
+<div id="stage" class="hp-hero-cover hp-vn">
+  <div id="bg"></div>
+  <div class="vnport show" id="vnport"></div>
+  <div id="fakebox"></div>
+</div>
+<script>
+// Стенд не поднимает всё приложение: заглушки глобалей, дальше — НАСТОЯЩИЙ код
+// кабинета и панорамы (_vnroom_probe.js собирается из render.js скриптом extract.js).
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ecReadable = c => c || '#3a9bdc';
+let lang = 'ru', user = { id: 'u' };
+const EC = {
+  app: { name: 'МИКУСТАН', color: '#2fd4c4', faction_id: 'f1', herald_url: '' },
+  colonies: [{ id: 'c1', is_capital: true, planet_name: 'Микуса', planet_type: 'земные', system_id: 's1' }],
+  buildings: [{ colony_id: 'c1', btype: 'palace' }, { colony_id: 'c1', btype: 'factory' },
+              { colony_id: 'c1', btype: 'temple' }, { colony_id: 'c1', btype: 'lab' }],
+  spatial: { s1: { pop: 420 } }
+};
+// портрет главы: в бою его тянет ch_office, здесь — сразу готовая заглушка
+var _vnPortLeader = { name: 'МИКУ ХАЦУНЭ', title: 'Глава державы', img: '', slug: 'miku' };
+</script>
+<script src="city_gen.js"></script>
+<script src="_vnroom_probe.js?v=3"></script>
+<script>
+document.getElementById('bg').innerHTML = window._probe.city();
+document.getElementById('vnport').innerHTML = window._probe.room();
+console.log('панорама:', document.querySelector('#bg svg') ? 'есть' : 'НЕТ',
+            '| комната:', document.querySelector('.vnport-svg') ? 'есть' : 'НЕТ');
+</script></body></html>

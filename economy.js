@@ -2135,13 +2135,44 @@ async function ecLoad() {
   try { return await _ecLoadInFlight; }
   finally { _ecLoadInFlight = null; }
 }
+// ── «ДАННЫЕ УЖЕ В ПАМЯТИ?» — ОДИН ЧЕСТНЫЙ ОТВЕТ НА ВСЮ ИГРУ ────
+// ⚠️ РАНЬШЕ КАЖДЫЙ ЭКРАН УГАДЫВАЛ ЭТО ПО ПОЛЯМ: `if (!EC.eco) await ecLoad()`.
+// Пока кабинет был единственной дверью, угадывание работало. С новеллой оно
+// сломалось: `vnEnsureData` (render.js) кладёт в EC.eco/EC.colonies/EC.buildings
+// ЛЁГКУЮ выборку ради строки ресурсов над сценой — и все проверки начинают врать
+// «данные есть». Экран открывается на полупустом EC: дипломатия показывает «Нет
+// других фракций» (EC.factions вообще не загружены), списки пустые — и лечится
+// только F5, потому что после перезагрузки страницы экран успевает открыться
+// РАНЬШЕ лёгкой выборки и честно грузит всё сам.
+// Теперь факт загрузки — ФЛАГ, который ставит только сам загрузчик, и помнит он
+// не «что-то есть», а ДЛЯ КАКОЙ ДЕРЖАВЫ загружено (смена державы в режиме
+// администрации EC.actAs обязана перегрузить всё).
+function _ecLoadKey() { return (EC.app && EC.app.faction_id) || null; }
+function ecCoreFresh() { return !!(EC.coreLoaded && _ecLoadKey() && EC._loadedFor === _ecLoadKey()); }
+function ecRestFresh() { return !!(EC.restLoaded && _ecLoadKey() && EC._restFor === _ecLoadKey()); }
+// Единая дверь для ЛЮБОГО экрана (кабинет, ведомства новеллы, оверлеи): ждём
+// ЯДРО (казна, колонии, силы, реестр держав), подсистемы вкладок — фоном, чтобы
+// не держать игрока перед «Поднимаю ведомости…». onRest() зовётся, когда фаза 2
+// приехала: экран до-рисовывает себя, если игрок всё ещё на нём.
+async function ecEnsureData(onRest) {
+  if (!EC.app || !EC.app.faction_id) return false;
+  if (!ecCoreFresh()) await _ecLoadCore();
+  if (!ecRestFresh()) {
+    _ecLoadRest().then(() => { try { if (typeof onRest === 'function') onRest(); } catch (e) {} }).catch(() => {});
+  }
+  return true;
+}
 // ── ФАЗА 1 (ядро) ── Данные для обложки, казны и стартовых вкладок (Обзор/Колонии/
 // Силы/Территория). Грузится ПЕРЕД первой отрисовкой — кабинет появляется сразу, не
 // дожидаясь биржи/веры/обороны/артиллерии. Тяжёлые подсистемы вкладок — в _ecLoadRest.
 async function _ecLoadCore() {
   if (_ecCoreInFlight) return _ecCoreInFlight;
   _ecCoreInFlight = _ecLoadCoreImpl();
-  try { return await _ecCoreInFlight; }
+  try {
+    const r = await _ecCoreInFlight;
+    EC.coreLoaded = true; EC._loadedFor = _ecLoadKey();   // флаг ставим ТОЛЬКО после успеха
+    return r;
+  }
   finally { _ecCoreInFlight = null; }
 }
 async function _ecLoadCoreImpl() {
@@ -2347,7 +2378,11 @@ async function _ecLoadCoreImpl() {
 async function _ecLoadRest() {
   if (_ecRestInFlight) return _ecRestInFlight;
   _ecRestInFlight = _ecLoadRestImpl();
-  try { return await _ecRestInFlight; }
+  try {
+    const r = await _ecRestInFlight;
+    EC.restLoaded = true; EC._restFor = _ecLoadKey();     // флаг ставим ТОЛЬКО после успеха
+    return r;
+  }
   finally { _ecRestInFlight = null; }
 }
 async function _ecLoadRestImpl() {

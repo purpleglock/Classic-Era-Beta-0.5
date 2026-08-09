@@ -52,6 +52,16 @@
       "port": 8151
     },
     {
+      "name": "vn-room",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8155"
+      ],
+      "port": 8155
+    },
+    {
       "name": "ios-back",
       "runtimeExecutable": "python",
       "runtimeArgs": [

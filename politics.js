@@ -331,39 +331,44 @@ function polMsg(title, backFn, text) {
 // Лечим так же, как это давно делает кабинет: ждём ТОЛЬКО ядро (_ecLoadCore —
 // казна, колонии, постройки, силы), а тяжёлые подсистемы вкладок догружаем фоном
 // и перерисовываем открытый экран по готовности.
+//
+// ⚠️ И ВТОРАЯ ГРАБЛЯ, ИЗ-ЗА КОТОРОЙ РАЗДЕЛЫ ОТКРЫВАЛИСЬ ПУСТЫМИ ДО F5: условием
+// загрузки было `if (!EC.eco)`. Но EC.eco к этому моменту уже лежит — его кладёт
+// лёгкая выборка `vnEnsureData` ради строки ресурсов над сценой. Значит ядро НЕ
+// грузилось вовсе: EC.factions пуст → «Нет других фракций» в границах и союзах,
+// и фоновая догрузка (polLoadRest) тоже не запускалась. Теперь спрашиваем
+// загрузчик напрямую — ecEnsureData знает, что и для какой державы загружено.
 async function polEnsureData(el, title, backFn) {
-  if (typeof ecLoadApp === 'function') await ecLoadApp();
+  // Сначала дожидаемся авторизации (vnAppReady), иначе клик по двери через
+  // секунду после загрузки страницы получал «державы нет» на пустой сессии.
+  if (typeof vnAppReady === 'function') await vnAppReady();
+  else if (typeof ecLoadApp === 'function') await ecLoadApp();
   if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
     if (el.classList.contains('show')) {
       el.innerHTML = polMsg(title, backFn, 'Политика начинается с державы. Зарегистрируйте её — и здесь появится ваш двор.');
     }
     return false;
   }
-  if (!EC.eco) {
-    if (typeof _ecLoadCore === 'function') {
-      await _ecLoadCore();
-      polLoadRest();
-    } else if (typeof ecLoad === 'function') {
-      await ecLoad();
-    }
-  }
+  if (typeof ecEnsureData === 'function') await ecEnsureData(polPaintOpen);
+  else if (!EC.eco && typeof ecLoad === 'function') await ecLoad();   // старый клиент без ecEnsureData
   return el.classList.contains('show');
 }
-// Подсистемы вкладок (биржа, вера, оборона, артиллерия) — фоном, один раз на
-// заход. По готовности до-рисовываем ТОТ экран, который игрок сейчас смотрит.
-let _polRestP = null;
+// До-рисовать ТОТ экран, который игрок сейчас смотрит (зовётся, когда фоновая
+// фаза 2 — биржа, вера, оборона, артиллерия — доехала).
+function polPaintOpen() {
+  try {
+    if (typeof EST === 'object' && EST && EST.open && typeof estRefresh === 'function') estRefresh(EST.open);
+    const p = document.getElementById('hp-vn-pol');
+    if (p && p.classList.contains('show')) polRefresh();
+    const d = document.getElementById('hp-vn-dip');
+    if (d && d.classList.contains('show')) dipRefresh();
+  } catch (e) {}
+}
+// Совместимость: подсистемы вкладок фоном (старые вызовы). Дедуп и флаги живут
+// в ecEnsureData — здесь только тонкая обёртка.
 function polLoadRest() {
-  if (_polRestP || typeof _ecLoadRest !== 'function') return _polRestP;
-  _polRestP = _ecLoadRest().then(() => {
-    try {
-      if (typeof EST === 'object' && EST && EST.open && typeof estRefresh === 'function') estRefresh(EST.open);
-      const p = document.getElementById('hp-vn-pol');
-      if (p && p.classList.contains('show')) polRefresh();
-      const d = document.getElementById('hp-vn-dip');
-      if (d && d.classList.contains('show')) dipRefresh();
-    } catch (e) {}
-  }).catch(() => {});
-  return _polRestP;
+  if (typeof ecEnsureData !== 'function') return Promise.resolve();
+  return ecEnsureData(polPaintOpen);
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -3450,14 +3450,21 @@ async function heroVNColonyOpen() {
   try {
     // Данные кабинета (карта всех держав, гербы, экономика, пул захватов) — те же, что
     // во вкладке «Территория». Уже загружены в сессии → переиспользуем без перезапроса.
-    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    // Ждём авторизацию, потом анкету: клик по двери через секунду после загрузки
+    // страницы иначе получал «державы нет» на пустой сессии (см. vnAppReady).
+    if (typeof vnAppReady === 'function') await vnAppReady();
+    else if (typeof ecLoadApp === 'function') await ecLoadApp();
     // Нужна СВОЯ одобренная держава (не просто стафф-доступ) — иначе колонизировать нечем.
     if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
       if (!el.classList.contains('show')) return;
       el.innerHTML = _heroColonyHead(en) + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Register a faction to chart its borders and colonize systems.' : 'Зарегистрируйте державу — и здесь появятся её границы и колонизация систем.'}</div></div>`;
       return;
     }
-    if (typeof EC === 'undefined' || !EC.allSystems || !EC.allSystems.length) { if (typeof ecLoad === 'function') await ecLoad(); }
+    // ⚠️ НЕ УГАДЫВАЕМ ЗАГРУЗКУ ПО ПОЛЯМ (см. ecEnsureData в economy.js): лёгкая
+    // выборка строки ресурсов уже положила часть EC, и старые проверки вида
+    // `if (!EC.eco)` открывали экран на полупустых данных — до ручного F5.
+    if (typeof ecEnsureData === 'function') await ecEnsureData(heroVNColonyRefresh);
+    else if (!EC.allSystems || !EC.allSystems.length) { if (typeof ecLoad === 'function') await ecLoad(); }
     // Геометрию территорий превью берёт из движка большой карты (GM). Подгружаем её,
     // если игрок ещё не открывал карту в этой сессии — иначе заливок/границ не будет.
     if (typeof loadGalaxyData === 'function' && (typeof GM === 'undefined' || !GM.loaded || !(GM.systems && GM.systems.length))) {
@@ -5666,14 +5673,18 @@ async function heroVNGeoOpen() {
   el.setAttribute('aria-hidden', 'false');
   el.innerHTML = _hgHead(en) + _hgSpin(en ? 'Deploying the geology corps…' : 'Развёртываю геологический корпус…');
   try {
-    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    // Ждём авторизацию, потом анкету: клик по двери через секунду после загрузки
+    // страницы иначе получал «державы нет» на пустой сессии (см. vnAppReady).
+    if (typeof vnAppReady === 'function') await vnAppReady();
+    else if (typeof ecLoadApp === 'function') await ecLoadApp();
     if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
       if (!el.classList.contains('show')) return;
       el.innerHTML = _hgHead(en) + _hgMsg(en, 'Зарегистрируйте державу — и геологи начнут искать залежи на её территории.', 'Register a faction to survey its territory.');
       return;
     }
     // Данные георазведки едут с ядром экономики (EC.eco/EC.colonies/EC.geosurvey).
-    if (!EC.eco || !Array.isArray(EC.colonies) || !EC.geosurvey) { if (typeof ecLoad === 'function') await ecLoad(); }
+    if (typeof ecEnsureData === 'function') await ecEnsureData(heroVNGeoRefresh);
+    else if (!EC.eco || !EC.geosurvey) { if (typeof ecLoad === 'function') await ecLoad(); }
     if (!el.classList.contains('show')) return;
     heroVNGeoRefresh();
   } catch (e) {
@@ -5727,7 +5738,10 @@ async function heroVNSinliOpen() {
   el.setAttribute('aria-hidden', 'false');
   el.innerHTML = _snHead(en) + _snMsg(en, 'Открываю торговые ряды Синли-бей…', 'Opening the rows of Sinli-Bay…');
   try {
-    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    // Ждём авторизацию, потом анкету: клик по двери через секунду после загрузки
+    // страницы иначе получал «державы нет» на пустой сессии (см. vnAppReady).
+    if (typeof vnAppReady === 'function') await vnAppReady();
+    else if (typeof ecLoadApp === 'function') await ecLoadApp();
     if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
       if (!el.classList.contains('show')) return;
       el.innerHTML = _snHead(en) + _snMsg(en, 'Зарегистрируйте державу, чтобы вести дела на Синли-бей.', 'Register a faction to trade at Sinli-Bay.');
@@ -6131,13 +6145,21 @@ async function heroVNDoomOpen() {
   el.setAttribute('aria-hidden', 'false');
   el.innerHTML = _hdHead(en) + _hdMsg(en, 'Сверяю коды допуска…', 'Verifying clearance codes…');
   try {
-    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    // Ждём авторизацию, потом анкету: клик по двери через секунду после загрузки
+    // страницы иначе получал «державы нет» на пустой сессии (см. vnAppReady).
+    if (typeof vnAppReady === 'function') await vnAppReady();
+    else if (typeof ecLoadApp === 'function') await ecLoadApp();
     if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
       if (!el.classList.contains('show')) return;
       el.innerHTML = _hdHead(en) + _hdMsg(en, 'Доступ к протоколу имеет только зарегистрированная держава.', 'Only a registered faction holds this clearance.');
       return;
     }
-    if (!EC.eco || !EC.doom) { if (typeof ecLoad === 'function') await ecLoad(); }
+    // Орудия «Длани» живут во ВТОРОЙ фазе (EC.doom) — её ждём целиком, иначе экран
+    // покажет пустой арсенал у державы, у которой он есть.
+    if (typeof ecEnsureData === 'function') {
+      await ecEnsureData();
+      if (typeof ecRestFresh === 'function' && !ecRestFresh() && typeof _ecLoadRest === 'function') await _ecLoadRest();
+    } else if (!EC.eco || !EC.doom) { if (typeof ecLoad === 'function') await ecLoad(); }
     if (!el.classList.contains('show')) return;
     // Гейт по исследованию: без «Самой неотвратимости» экран засекречен,
     // даже если пункт меню всплыл по устаревшему кэш-флагу.
@@ -6205,14 +6227,19 @@ async function heroVNIntelOpen() {
   el.setAttribute('aria-hidden', 'false');
   el.innerHTML = _hiHead(en) + _hiMsg(en, 'Поднимаю защищённый канал…', 'Raising the secure channel…');
   try {
-    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    // Ждём авторизацию, потом анкету: клик по двери через секунду после загрузки
+    // страницы иначе получал «державы нет» на пустой сессии (см. vnAppReady).
+    if (typeof vnAppReady === 'function') await vnAppReady();
+    else if (typeof ecLoadApp === 'function') await ecLoadApp();
     if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
       if (!el.classList.contains('show')) return;
       el.innerHTML = _hiHead(en) + _hiMsg(en, 'Тайная служба есть только у зарегистрированной державы.', 'Only a registered faction keeps a secret service.');
       return;
     }
-    // Агентура и операции приезжают второй фазой загрузки (EC.spyAgency).
-    if (!EC.eco || !EC.spyAgency) { if (typeof ecLoad === 'function') await ecLoad(); }
+    // Агентура и операции едут с ядром (EC.spyAgency), пассивная разведка и
+    // портреты — второй фазой: её ждём фоном и до-рисовываем экран по готовности.
+    if (typeof ecEnsureData === 'function') await ecEnsureData(heroVNIntelRefresh);
+    else if (!EC.eco || !EC.spyAgency) { if (typeof ecLoad === 'function') await ecLoad(); }
     if (!el.classList.contains('show')) return;
     heroVNIntelRefresh();
   } catch (e) {
@@ -6298,13 +6325,17 @@ async function heroVNStarsOpen() {
   try {
     if (typeof ecStarsPhotosLoad === 'function') ecStarsPhotosLoad();   // фотоархив «Удачного кадра» — параллельно
     if (typeof ecStarsArtsScan === 'function') ecStarsArtsScan();       // арты призов из assets/rift/ — тоже параллельно
-    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    // Ждём авторизацию, потом анкету: клик по двери через секунду после загрузки
+    // страницы иначе получал «державы нет» на пустой сессии (см. vnAppReady).
+    if (typeof vnAppReady === 'function') await vnAppReady();
+    else if (typeof ecLoadApp === 'function') await ecLoadApp();
     if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
       if (!el.classList.contains('show')) return;
       el.innerHTML = _hsHead(en) + _hsMsg(en, 'Зарегистрируйте державу — и хор откроет для неё Разлом.', 'Register a faction to open the Rift.');
       return;
     }
-    if (!EC.eco || !EC.stargaze) { if (typeof ecLoad === 'function') await ecLoad(); }
+    if (typeof ecEnsureData === 'function') await ecEnsureData(heroVNStarsRefresh);
+    else if (!EC.eco || !EC.stargaze) { if (typeof ecLoad === 'function') await ecLoad(); }
     if (!el.classList.contains('show')) return;
     heroVNStarsRefresh();
   } catch (e) {
@@ -6353,13 +6384,20 @@ async function heroVNResearchOpen() {
   el.innerHTML = _htHead(en) +
     `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Booting the science console…' : 'Запускаю научный пульт…'}</div></div>`;
   try {
-    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    // Ждём авторизацию, потом анкету: клик по двери через секунду после загрузки
+    // страницы иначе получал «державы нет» на пустой сессии (см. vnAppReady).
+    if (typeof vnAppReady === 'function') await vnAppReady();
+    else if (typeof ecLoadApp === 'function') await ecLoadApp();
     if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
       if (!el.classList.contains('show')) return;
       el.innerHTML = _htHead(en) + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Register a faction to open its research console.' : 'Зарегистрируйте державу — и здесь откроется её научный пульт.'}</div></div>`;
       return;
     }
-    if (!EC.eco || !Array.isArray(EC.eco.research)) { if (typeof ecLoad === 'function') await ecLoad(); }
+    // Дерево науки: изученное — в ядре (EC.eco.research), раскладка и связи узлов —
+    // во второй фазе (EC.techLayout/EC.techPrereq), поэтому её ждём фоном и
+    // перерисовываем пульт по готовности.
+    if (typeof ecEnsureData === 'function') await ecEnsureData(_htRenderTech);
+    else if (!EC.eco || !Array.isArray(EC.eco.research)) { if (typeof ecLoad === 'function') await ecLoad(); }
     if (!el.classList.contains('show')) return;
     _htState = { cat: (_htState && _htState.cat) || 'ship' };
     _htRenderTech();
@@ -9546,7 +9584,15 @@ function _vnCityLayer() {
   // срезанные взрывом башни, столбы дыма, сорванный флаг (city_gen ruin) — и
   // поверх глитч, будто сигнал с планеты рвётся.
   const dead = !!c._stub;
-  const html = _hvpCityBg(c, 'hp-hero-img', 1600, 590, { charZone: [0.6, 0.9], ruin: dead ? 1 : 0 });
+  // ⚠️ ГОРИЗОНТ ЗАДАЁМ ЯВНО, ИНАЧЕ В ОКНЕ ОДНО НЕБО. По умолчанию сцена ставит
+  // землю на 99.5% высоты (city_gen scene): весь город оказывается прижат к самому
+  // низу кадра — а низ закрыт окном диалога, и сквозь остекление кабинета видна
+  // только плоская заливка неба (та самая «коричневая коробка»). Стекло начинается
+  // на ~19% кадра и обрывается коробкой примерно на 2/3 — значит линия земли
+  // должна лечь ровно туда: тогда силуэт столицы занимает нижнюю половину
+  // видимого стекла, а улица с прохожими уходит за окно диалога.
+  const html = _hvpCityBg(c, 'hp-hero-img', 1600, 590,
+    { charZone: [0.6, 0.9], ruin: dead ? 1 : 0, horizon: Math.round(590 * 0.66) });
   if (!html) { _vnCityWhy = 'city_gen.js не подключён или упал'; return ''; }
   _vnCityWhy = 'ок: ' + (dead ? 'пепелище (столицы нет)' : 'по столице ' + (c.planet_name || c.id));
   let out = html.replace('<div class="hp-hero-img', '<div id="hp-hero-city" class="hp-hero-img');
@@ -9649,6 +9695,16 @@ function _vnAuthReady(ms) {
     };
     setTimeout(tick, 150);
   });
+}
+// Та же гонка бьёт и по ДВЕРЯМ новеллы: игрок жмёт «Внешняя политика» через
+// секунду после загрузки, `user` ещё null — и экран честно пишет «Зарегистрируйте
+// державу», хотя держава есть. Сообщение висит до повторного захода, отсюда и
+// «надо обновить страницу». Все экраны спрашивают ЭТУ дверь: дождаться
+// авторизации → подтянуть анкету → ответить, есть ли держава.
+async function vnAppReady() {
+  await _vnAuthReady();
+  if (typeof ecLoadApp === 'function') { try { await ecLoadApp(); } catch (e) {} }
+  return !!(typeof EC !== 'undefined' && EC.app && EC.app.faction_id);
 }
 function vnEnsureData(force) {
   if (_vnDataP && !force) return _vnDataP;
@@ -9823,67 +9879,116 @@ function vnPortHtml() {
   // жёстко (1200/520), так что искажение минимально, зато стены всегда упираются
   // в края. Текст и картинки в SVG не кладём — их бы растянуло: знамя, портрет и
   // табличка идут отдельным HTML-слоем поверх левой стены.
+  // ⚠️ ПРОШЛАЯ ВЕРСИЯ ЧИТАЛАСЬ КАК ТРИ КОРИЧНЕВЫХ КОРОБКИ В ТЕМНОТЕ, и вот почему:
+  // (1) окно было плоским переплётом из rect'ов БЕЗ стекла и БЕЗ откосов — панорама
+  //     упиралась прямо в чёрные палки, стеклу не за что было зацепиться глазом;
+  // (2) стены заливались почти чёрным (#05080d…#233040) — знамя и портрет висели
+  //     не НА стене, а в пустоте, потому что стены на экране просто не было видно.
+  // Теперь: стены светлее и с освещённым пилястром ровно под убранством, окно —
+  // с коробом-откосом, мелким шагом стоек и слоем стекла (тонировка + косые блики),
+  // на правой стене — рабочий экран. Материал появился, «пустота» исчезла.
   const room = `<svg class="vnport-svg" viewBox="0 0 1200 520" preserveAspectRatio="none" aria-hidden="true" focusable="false">
     <defs>
       <linearGradient id="vnpCeil" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#070b11"/><stop offset="1" stop-color="#18222f"/>
+        <stop offset="0" stop-color="#0b111a"/><stop offset="1" stop-color="#22303f"/>
       </linearGradient>
       <linearGradient id="vnpWl" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="#05080d"/><stop offset=".72" stop-color="#16202c"/>
-        <stop offset="1" stop-color="#233040"/>
+        <stop offset="0" stop-color="#0c131c"/><stop offset=".72" stop-color="#22303f"/>
+        <stop offset="1" stop-color="#324458"/>
       </linearGradient>
       <linearGradient id="vnpWr" x1="1" y1="0" x2="0" y2="0">
-        <stop offset="0" stop-color="#05080d"/><stop offset=".72" stop-color="#16202c"/>
-        <stop offset="1" stop-color="#233040"/>
+        <stop offset="0" stop-color="#0c131c"/><stop offset=".72" stop-color="#22303f"/>
+        <stop offset="1" stop-color="#324458"/>
+      </linearGradient>
+      <linearGradient id="vnpPil" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#1a2532"/><stop offset=".55" stop-color="#2b3b4e"/>
+        <stop offset="1" stop-color="#1c2734"/>
       </linearGradient>
       <linearGradient id="vnpFloor" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#1b2634"/><stop offset="1" stop-color="#070a10"/>
+        <stop offset="0" stop-color="#22303f"/><stop offset="1" stop-color="#080c12"/>
       </linearGradient>
       <linearGradient id="vnpLamp" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="${esc(col)}" stop-opacity=".55"/>
         <stop offset="1" stop-color="${esc(col)}" stop-opacity="0"/>
       </linearGradient>
       <linearGradient id="vnpSpill" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#bfe2ff" stop-opacity=".16"/>
+        <stop offset="0" stop-color="#bfe2ff" stop-opacity=".2"/>
         <stop offset="1" stop-color="#bfe2ff" stop-opacity="0"/>
       </linearGradient>
+      <!-- стекло: холодная тонировка сверху вниз, чтобы вид «ушёл за плоскость» -->
+      <linearGradient id="vnpGlass" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#8fc4ff" stop-opacity=".16"/>
+        <stop offset=".55" stop-color="#7fb6f0" stop-opacity=".05"/>
+        <stop offset="1" stop-color="#0a1420" stop-opacity=".14"/>
+      </linearGradient>
+      <clipPath id="vnpPane"><rect x="236" y="128" width="728" height="314"/></clipPath>
     </defs>
-    <!-- потолок с утопленными световыми панелями -->
+    <!-- ── СТЕКЛО. Идёт ПЕРВЫМ: панорама живёт отдельным слоем ПОД этим svg, и всё,
+         что здесь рисуется в проёме, ложится на неё как отражение в остеклении. -->
+    <g clip-path="url(#vnpPane)">
+      <rect x="236" y="128" width="728" height="314" fill="url(#vnpGlass)"/>
+      <g fill="#dbeeff" opacity=".07">
+        <polygon points="236,442 470,128 604,128 320,442"/>
+        <polygon points="660,442 838,128 884,128 706,442"/>
+      </g>
+      <rect x="236" y="128" width="728" height="2" fill="#eaf6ff" opacity=".22"/>
+    </g>
+    <!-- потолок с утопленными световыми панелями и световым карнизом -->
     <polygon points="0,0 1200,0 1000,100 200,100" fill="url(#vnpCeil)"/>
-    <polygon points="286,16 914,16 878,44 322,44" fill="#cfe9ff" opacity=".085"/>
-    <polygon points="322,58 878,58 848,82 352,82" fill="#cfe9ff" opacity=".055"/>
+    <polygon points="286,16 914,16 878,44 322,44" fill="#cfe9ff" opacity=".1"/>
+    <polygon points="322,58 878,58 848,82 352,82" fill="#cfe9ff" opacity=".065"/>
     <polygon points="0,0 1200,0 1000,100 200,100" fill="url(#vnpLamp)" opacity=".5"/>
+    <polygon points="200,94 1000,94 1000,100 200,100" fill="${esc(col)}" opacity=".38"/>
     <!-- боковые стены с панельной расшивкой -->
     <polygon points="0,0 200,100 200,470 0,520" fill="url(#vnpWl)"/>
     <polygon points="1200,0 1000,100 1000,470 1200,520" fill="url(#vnpWr)"/>
-    <g stroke="#ffffff" stroke-opacity=".05" stroke-width="2" fill="none">
+    <!-- ПИЛЯСТР ЛЕВОЙ СТЕНЫ: освещённая плоскость ровно там, где HTML-слой вешает
+         знамя и портрет. Без неё убранство читалось как наклейка на пустоте. -->
+    <polygon points="4,8 182,94 182,474 4,516" fill="url(#vnpPil)"/>
+    <polygon points="4,8 182,94 182,102 4,17" fill="${esc(col)}" opacity=".3"/>
+    <polygon points="4,507 182,466 182,474 4,516" fill="#000000" opacity=".45"/>
+    <g stroke="#ffffff" stroke-opacity=".06" stroke-width="2" fill="none">
       <path d="M0,132 L200,168"/><path d="M0,300 L200,318"/>
       <path d="M1200,132 L1000,168"/><path d="M1200,300 L1000,318"/>
-      <path d="M96,52 L96,496"/><path d="M1104,52 L1104,496"/>
+      <path d="M1104,52 L1104,496"/>
+    </g>
+    <!-- рабочий экран на правой стене: кабинет обязан чем-то работать -->
+    <polygon points="1022,150 1160,84 1160,300 1022,352" fill="#060a10" opacity=".9"/>
+    <polygon points="1030,157 1152,99 1152,292 1030,344" fill="${esc(col)}" opacity=".16"/>
+    <g fill="${esc(col)}" opacity=".5">
+      <polygon points="1040,300 1058,293 1058,332 1040,338"/>
+      <polygon points="1066,282 1084,274 1084,323 1066,330"/>
+      <polygon points="1092,258 1110,250 1110,313 1092,321"/>
+      <polygon points="1118,236 1136,227 1136,304 1118,312"/>
     </g>
     <!-- свет из окна ложится на стены -->
     <polygon points="200,100 200,470 96,496 96,52" fill="url(#vnpSpill)"/>
     <polygon points="1000,100 1000,470 1104,496 1104,52" fill="url(#vnpSpill)"/>
     <!-- пол и его отблеск -->
     <polygon points="0,520 200,470 1000,470 1200,520" fill="url(#vnpFloor)"/>
-    <polygon points="248,470 952,470 1080,520 120,520" fill="#bfe2ff" opacity=".05"/>
-    <!-- переплёт панорамного окна: коробка, фрамуга, две стойки -->
+    <polygon points="248,470 952,470 1080,520 120,520" fill="#bfe2ff" opacity=".06"/>
+    <!-- ── ОКНО. Простенок вокруг проёма + откос (у остекления есть толщина) + мелкий
+         шаг стоек. Раньше проём был во всю дальнюю стену и делился на три плиты —
+         из-за этого кадр и выглядел как три коробки, а не как окно. -->
+    <path d="M200,100 H1000 V470 H200 Z M236,128 H964 V442 H236 Z" fill="#101823" fill-rule="evenodd"/>
+    <g fill="#7f97b0" opacity=".28">
+      <rect x="236" y="128" width="728" height="3"/><rect x="236" y="439" width="728" height="3"/>
+      <rect x="236" y="128" width="3" height="314"/><rect x="961" y="128" width="3" height="314"/>
+    </g>
     <g fill="#0a0f16">
-      <rect x="200" y="100" width="800" height="12"/>
-      <rect x="200" y="458" width="800" height="14"/>
-      <rect x="200" y="100" width="13" height="372"/>
-      <rect x="987" y="100" width="13" height="372"/>
-      <rect x="200" y="182" width="800" height="8"/>
-      <rect x="463" y="112" width="8" height="346"/>
-      <rect x="729" y="112" width="8" height="346"/>
+      <rect x="236" y="209" width="728" height="7"/>
+      <rect x="378" y="128" width="6" height="314"/><rect x="524" y="128" width="6" height="314"/>
+      <rect x="670" y="128" width="6" height="314"/><rect x="816" y="128" width="6" height="314"/>
     </g>
-    <g fill="#8fa6bd" opacity=".22">
-      <rect x="213" y="112" width="2" height="346"/><rect x="471" y="112" width="2" height="346"/>
-      <rect x="737" y="112" width="2" height="346"/><rect x="985" y="112" width="2" height="346"/>
-      <rect x="213" y="190" width="774" height="2"/>
+    <g fill="#a9c0d8" opacity=".2">
+      <rect x="378" y="128" width="1.5" height="314"/><rect x="524" y="128" width="1.5" height="314"/>
+      <rect x="670" y="128" width="1.5" height="314"/><rect x="816" y="128" width="1.5" height="314"/>
+      <rect x="236" y="209" width="728" height="1.5"/>
     </g>
-    <!-- бра на стенах -->
-    <g fill="${esc(col)}" opacity=".5">
+    <!-- отбойник под окном и бра на стенах -->
+    <rect x="200" y="452" width="800" height="18" fill="#0d141d"/>
+    <rect x="200" y="452" width="800" height="2" fill="${esc(col)}" opacity=".3"/>
+    <g fill="${esc(col)}" opacity=".55">
       <polygon points="112,200 132,206 132,222 112,214"/>
       <polygon points="1088,200 1068,206 1068,222 1088,214"/>
     </g>
@@ -9940,8 +10045,14 @@ function _vnCityShow(html) {
   return true;
 }
 // Обложка как запасной вариант: показывается ТОЛЬКО если панорама не собралась.
+// ⚠️ НО НЕ ЗА СТЕКЛОМ КАБИНЕТА. Обложка — вертикальный рисованный арт, а фон
+// растягивается по широкому кадру через object-fit:cover: в проём окна попадает
+// увеличенный кусок сплошной заливки, и окно выглядит забитым фанерой. Пока
+// комната есть на экране (она рисуется при известной державе), запасной вид —
+// нейтральная тёмная глубина: это читается как ночь за остеклением, а не как брак.
 function _vnCityFallback() {
-  const u = (typeof _heroCoverUrl !== 'undefined' && _heroCoverUrl) ? String(_heroCoverUrl).trim() : '';
+  const room = !!(typeof EC !== 'undefined' && EC.app);
+  const u = (!room && typeof _heroCoverUrl !== 'undefined' && _heroCoverUrl) ? String(_heroCoverUrl).trim() : '';
   _vnCityShow(u ? `<img class="hp-hero-img" id="hp-hero-city" src="${esc(u)}" alt="">`
                 : `<div class="hp-hero-noimg" id="hp-hero-city"></div>`);
 }
@@ -9968,13 +10079,17 @@ async function heroVNPlanetsOpen() {
   el.innerHTML = _hvpHead(en) +
     `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Contacting the colonies…' : 'Связываюсь с колониями…'}</div></div>`;
   try {
-    if (typeof ecLoadApp === 'function') await ecLoadApp();
+    // Ждём авторизацию, потом анкету: клик по двери через секунду после загрузки
+    // страницы иначе получал «державы нет» на пустой сессии (см. vnAppReady).
+    if (typeof vnAppReady === 'function') await vnAppReady();
+    else if (typeof ecLoadApp === 'function') await ecLoadApp();
     if (typeof EC === 'undefined' || !EC.app || !EC.app.faction_id) {
       if (!el.classList.contains('show')) return;
       el.innerHTML = _hvpHead(en) + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Register a faction — and its colonies will report here.' : 'Зарегистрируйте державу — и здесь появятся доклады её колоний.'}</div></div>`;
       return;
     }
-    if (!EC.colonies || !EC.colonies.length || !EC.buildings) { if (typeof ecLoad === 'function') await ecLoad(); }
+    if (typeof ecEnsureData === 'function') await ecEnsureData(heroVNPlanetsRefresh);
+    else if (!EC.colonies || !EC.colonies.length || !EC.buildings) { if (typeof ecLoad === 'function') await ecLoad(); }
     if (!el.classList.contains('show')) return;
     _hvp.mode = 'list'; _hvp.colonyId = null; _hvp.bldId = null; _hvp.back = null; _hvp.scroll = 0;
     _hvpRender();

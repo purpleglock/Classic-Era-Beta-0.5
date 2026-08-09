@@ -5988,14 +5988,54 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   opacity:0;transition:opacity var(--duration-slow) ease;
 }
 .vnport.show{opacity:1}
-.vnport-in{position:absolute;inset:0}
+/* container-type нужен ради единиц cqw: перспектива должна считаться от ШИРИНЫ
+   КАДРА, а не от окна браузера, иначе на узком кадре стена «ломается» */
+.vnport-in{position:absolute;inset:0;container-type:inline-size}
 .vnport-svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 /* убранство левой стены: знамя, портрет, табличка — HTML, а не SVG:
    SVG растягивается вместе с кадром и покорёжил бы шрифт и лица */
+/* ⚠ НИЗ ОГРАНИЧЕН ЖЁСТКО. Раньше был только top — столбик рос по содержимому и
+   портрет с табличкой уезжал под окно диалога (снизу торчала обрезанная подпись).
+   Теперь колонка зажата между top и bottom, а лишнее просто не показывается.
+   Ширина согласована с пилястром на левой стене (svg vnPortHtml, x 4…182 из 1200
+   ≈ 0.3…15.2% кадра): убранство обязано лежать НА освещённой плоскости. */
 .vnport-console{
-  position:absolute;left:1.2%;top:18%;width:min(12.5%,150px);
-  display:flex;flex-direction:column;align-items:center;gap:clamp(6px,1.4vh,14px);
+  /* ширина ИСХОДНАЯ, до поворота: перспектива съедает её примерно вдвое, поэтому
+     21% на экране дают ~11.7% — ровно ширину освещённого пилястра. Потолка в px нет
+     намеренно: комната целиком масштабируется от кадра, и убранство обязано вместе
+     с ней, иначе на большом экране знамя съёживается в марку. */
+  position:absolute;left:1.2%;top:15%;bottom:35%;width:21%;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  gap:clamp(5px,1.1vh,11px);overflow:hidden;
+  /* ⚠ ЗНАМЯ И ПОРТРЕТ ЛЕЖАТ НА СТЕНЕ, А НЕ НА ЭКРАНЕ. Стены комнаты нарисованы в
+     перспективе (трапеции, сходящиеся к точке схода), а убранство было обычным
+     прямоугольным html — и читалось как наклейка поверх трёхмерной коробки.
+     Теперь колонку разворачивает та же перспектива: ось поворота проходит по
+     БЛИЖНЕЙ (левой) кромке стены, а по высоте — через точку схода комнаты
+     (середина дальней стены ≈ 55% кадра; внутри полосы 15…65% это её 80%).
+     Поэтому дальний край уезжает вглубь и сходится ровно туда же, куда сходятся
+     сами стены. 56cqw — глубина перспективы: НЕ на глаз. Стена от ближней кромки
+     до дальнего края пилястра укорачивается ровно в 0.79 раза (её трапеция задана
+     в svg), столько же обязана давать и формула перспективы P/(P+W·sin45°) при
+     ширине колонки W=21% — отсюда P≈2.64·W≈56% ширины кадра. При 34cqw убранство
+     уезжало вглубь быстрее стены (0.65) и «отклеивалось» от неё. */
+  transform-origin:0% 80%;
+  transform:perspective(56vw) rotateY(45deg);
+  transform:perspective(56cqw) rotateY(45deg);
 }
+/* дальний край темнее ближнего — свет из окна до него уже не достаёт */
+.vnport-console::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,rgba(190,225,255,.07),rgba(0,0,0,.42));
+}
+/* ⚠ ВСЁ УБРАНСТВО ОБЯЗАНО СЖИМАТЬСЯ. Высота знамени и портрета выведена из
+   ширины (aspect-ratio), и на невысоком кадре столбик выходил длиннее отведённой
+   полосы: знамя занимало её целиком, а портрет с табличкой просто срезало.
+   min-height:0 снимает запрет на сжатие внутри колонки-флекса — дальше знамя и
+   портрет ужимаются сами, а cover/object-fit аккуратно подрезают картинку.
+   Табличка и подпись не жмутся: текст должен остаться читаемым. */
+.vnport-banner,.vnport-lead,.vnport-cloth,.vnport-leadin{min-height:0}
+.vnport-plate,.vnport-fac,.vnport-rod{flex:0 0 auto}
 /* ЗНАМЯ: карниз, полотнище с ласточкиным хвостом и продольные складки */
 .vnport-banner{position:relative;display:flex;flex-direction:column;align-items:center;width:82%}
 .vnport-rod{
@@ -6039,8 +6079,11 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   width:100%;height:100%;object-fit:cover;object-position:center 16%;
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--fac,#3a9bdc) 45%,transparent);
 }
+/* ⚠ ШРИФТЫ КРУПНЕЕ, ЧЕМ КАЖЕТСЯ НУЖНЫМ: колонка развёрнута в плоскость стены на
+   45°, и по горизонтали буквы ужимаются примерно на треть. Набирая «как на глаз
+   ровно», получаешь на экране нечитаемую мелочь. */
 .vnport-noface{
-  font-family:var(--font-display);font-size:clamp(16px,1.8vw,24px);font-weight:700;
+  font-family:var(--font-display);font-size:clamp(20px,2.2vw,30px);font-weight:700;
   color:color-mix(in srgb,var(--fac,#3a9bdc) 62%,#eaf4ff);letter-spacing:.06em;
 }
 .vnport-plate{
@@ -6051,21 +6094,21 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   clip-path:polygon(0 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,6px 100%,0 calc(100% - 6px));
 }
 .vnport-led{
-  font-size:clamp(9.5px,.72vw,12px);font-weight:600;color:var(--t1,#eaf4ff);line-height:1.2;
+  font-size:clamp(11px,.92vw,15px);font-weight:600;color:var(--t1,#eaf4ff);line-height:1.2;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
-.vnport-tit{font-size:clamp(8px,.58vw,9.5px);letter-spacing:.05em;color:var(--t3);line-height:1.2}
+.vnport-tit{font-size:clamp(9.5px,.74vw,12px);letter-spacing:.05em;color:var(--t3);line-height:1.2}
 /* имя державы — гравировкой по стене под убранством */
 .vnport-fac{
   max-width:100%;text-align:center;
-  font-family:var(--font-display);font-size:clamp(8.5px,.68vw,11px);font-weight:700;
+  font-family:var(--font-display);font-size:clamp(10px,.86vw,14px);font-weight:700;
   letter-spacing:calc(.18em * var(--deco-ls-mult,1));text-transform:uppercase;
   color:color-mix(in srgb,var(--fac,#3a9bdc) 62%,#c9dcf0);
   text-shadow:0 1px 2px rgba(0,0,0,.8);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 @media(max-width:900px){
-  .vnport-console{width:min(16%,120px);left:1%}
+  .vnport-console{width:24%;left:1%;top:14%;bottom:32%}
 }
 @media(max-width:700px){
   /* телефон: кадр сплюснут, комната выродилась бы в две тёмные полосы */
