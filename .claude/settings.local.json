@@ -492,7 +492,16 @@
       "Bash(sed -i \"s/position:absolute;left:1.2%;top:10%;width:min\\(12.5%,150px\\);/position:absolute;left:1.2%;top:18%;width:min\\(12.5%,150px\\);/\" css/03_content.css)",
       "Bash(sed -i \"s/20260809vnroom2/20260809cabinet/g\" index.html)",
       "Bash(node -c \"0\")",
-      "Bash(python -c \"import io;print\\(len\\(io.open\\('MEMORY.md',encoding='utf-8'\\).read\\(\\).encode\\('utf-8'\\)\\)\\)\")"
+      "Bash(python -c \"import io;print\\(len\\(io.open\\('MEMORY.md',encoding='utf-8'\\).read\\(\\).encode\\('utf-8'\\)\\)\\)\")",
+      "Bash(node --check cabinet.js)",
+      "PowerShell($s='C:\\\\Users\\\\A4F7~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users--------Desktop-Classic-Era-Beta-0-5\\\\e5ab491a-12ee-4746-8ac5-2bcaacfcf601\\\\scratchpad\\\\cab_append.css'; $d='C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\css\\\\30_cabinet.css'; $t=Get-Content $s -Raw -Encoding utf8; Add-Content -Path $d -Value $t -Encoding utf8 -NoNewline; \\(Get-Content $d | Measure-Object -Line\\).Lines)",
+      "Bash(grep -n \"^\\\\.hp-vn-\\\\\\(intel\\\\|doom\\\\|research\\\\|tama\\\\|sinli\\\\|geo\\\\|stars\\\\|fight\\\\|fish\\\\|planets\\\\|est\\\\|pol\\\\|dip\\\\\\)[ ,{]\" -A 6 css/03_content.css)",
+      "Bash(sed -i \"s|30_cabinet.css?v=20260810cabskin2|30_cabinet.css?v=20260811cabflat|\" css/index.css)",
+      "Bash(sed -i \"s|css/index.css?v=20260810cabskin2|css/index.css?v=20260811cabflat|\" index.html)",
+      "Bash(sed -i \"s|var BUILD = '20260810cabskin2';|var BUILD = '20260811cabflat';|\" index.html)",
+      "PowerShell(Select-String -Path \"C:\\\\Users\\\\Андрей\\\\Desktop\\\\Classic-Era-Beta-0.5\\\\economy.js\" -Pattern \"ec-stats|ecTreasury|ec-resbar|ec-cover\" | Select-Object -First 30 | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line.Trim\\(\\).Substring\\(0, [Math]::Min\\(150, $_.Line.Trim\\(\\).Length\\)\\)\\)\" })",
+      "Bash(node --check mobile_nav.js)",
+      "Bash(cd \"C:/Users/Андрей/Desktop/Classic-Era-Beta-0.5\" && grep -rhoE \"^\\\\.[a-z0-9-]+\\\\s*\\\\{[^}]*display:\\\\s*grid\" css/17_economy.css css/27_politics.css css/28_estate.css css/26_members.css css/20_news.css | grep -oE \"^\\\\.[a-z0-9-]+\" | sort -u > /tmp/grids.txt; wc -l < /tmp/grids.txt; cat /tmp/grids.txt | tr '\\\\n' ' ')"
     ]
   }
 }

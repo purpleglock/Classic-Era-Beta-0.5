@@ -2041,21 +2041,11 @@ async function _ecAuthDiag() {
 
 // ── Точка входа (#economy) ──────────────────────────────────
 async function ecRenderDashboard() {
-  // ── КАБИНЕТ ЗАКРЫТ ──────────────────────────────────────────
-  // Предбанник был последним, что от него осталось: одни двери, все — в новеллу.
-  // Две двери в одну комнату сбивают с толку, поэтому #economy больше не страница,
-  // а перенаправление: главная → меню новеллы → «Займёмся делами». Всё, что кабинет
-  // делал молча на заходе (economy_init + economy_tick, колонии, постройки), теперь
-  // делает vnEnsureData в render.js — см. [[vn-standalone-tick-resbar]].
-  // ИСКЛЮЧЕНИЕ — режим администрации (EC.actAs): админ входит в кабинет ЧУЖОЙ
-  // державы, новеллы у неё нет, и отнимать инструмент нельзя.
-  if (!EC.actAs) {
-    // Адрес меняем НАСТОЯЩИМ переходом (push=true): иначе в строке остаётся
-    // #economy, и обновление страницы каждый раз снова упирается в редирект.
-    if (typeof go === 'function') await go('home');
-    if (typeof heroVNGoto === 'function') heroVNGoto('g_work');
-    return;
-  }
+  // ── КАБИНЕТ ОТКРЫТ СНОВА ────────────────────────────────────
+  // Здесь стоял редирект на главную: работа жила в новелле, и #economy лишь
+  // перебрасывал в её меню. Это оказалось ошибкой — см. шапку cabinet.js:
+  // ведомства грузились порознь и отваливались, а единственной дверью в работу
+  // стал разговор. Кабинет вернулся и снова является страницей.
   setPg(`<div class="sload"><div class="pulse-loader"></div></div>`);
   await ecLoadApp();
   if (!ecCanAccess()) { ecGate(); return; }
@@ -2175,8 +2165,37 @@ async function _ecLoadCore() {
   }
   finally { _ecCoreInFlight = null; }
 }
+// ── ОДИН СБОЙ НЕ ДОЛЖЕН УБИВАТЬ ВЕСЬ ЗАХОД ─────────────────────
+// ⚠️ ГРАБЛЯ, ИЗ-ЗА КОТОРОЙ ЭКРАНЫ «ИНОГДА ОТВАЛИВАЛИСЬ ДО F5»: ядро — один общий
+// Promise.all на ~40 запросов, и почти все обёрнуты в .catch(() => []), а
+// НЕОБХОДИМЫЕ — нет. Значит любая единичная осечка (моргнувшая сеть, 28-секундный
+// таймаут на холодном старте Supabase, гонка обновления токена) роняла ВЕСЬ
+// Promise.all → _ecLoadCore бросал → EC.coreLoaded оставался false → экран ловил
+// исключение и писал «связь с канцелярией потеряна» БЕЗ кнопки повтора. Игроку
+// оставался только F5 — ровно то, что видно во внутренней/внешней политике и в
+// войсках. Лечим двумя вещами: необходимые запросы получают повтор, а экраны —
+// живую кнопку «↻ Повторить» (polMsg → polErr).
+async function _ecRetry(fn, tries = 3) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try { return await fn(); }
+    catch (e) {
+      last = e;
+      // Истёкшую сессию повтором не вылечишь — она чинится только релогином.
+      if (e && e.authExpired) throw e;
+      if (i < tries - 1) await new Promise(r => setTimeout(r, 600 * (i + 1)));
+    }
+  }
+  throw last;
+}
+
 async function _ecLoadCoreImpl() {
   EC.fid = EC.app.faction_id;
+  // ⚠️ Личные выборки ходят по user.id. На быстром заходе (клик по двери через
+  // секунду после загрузки страницы) user мог быть ещё null — и это падало
+  // TypeError'ом ДО Promise.all, то есть роняло ядро целиком, ещё до всех
+  // .catch(). Берём id мягко: нет пользователя — просто нет личных строк.
+  const _uid = (typeof user !== 'undefined' && user && user.id) || '';
   // Уния государств (_state_union.sql): если моя держава в активной унии,
   // все общие активы живут на ведущем fid — читаем кабинет от его имени.
   // EC.ownFid — «мой родной» fid (флаг/профиль), EC.fid — игровой (общий).
@@ -2204,22 +2223,28 @@ async function _ecLoadCoreImpl() {
   // undefined, а показывает пустое состояние — до прихода данных и до-рисовки кабинета.
   ecResetDeferred();
   const [ecoRows, cols, allCols, blds, designs, prod, allSys, lanes, facs, routes, loans, missions, projects, alerts, relations, barters, techOffers, myRaids, raidStatus, tradeCargo, incomeHistory, spatial, sectors, market, marketCfg, diploStatus, spyAgency, defMines, resFlows, concessions, concSlots, concInfo, budgetRows, geoState, starsState, gledger, warStatus, battlesList, goodsRecipeRows, resRarityRows, autosellCfg, stepLimit] = await Promise.all([
-    dbGet('faction_economy', `faction_id=eq.${fid}`),
-    dbGetAll('colonies', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
+    // Казна — ЕДИНСТВЕННОЕ, без чего кабинет бессмысленен: её тянем с повтором,
+    // и только её осечка имеет право провалить заход целиком.
+    _ecRetry(() => dbGet('faction_economy', `faction_id=eq.${fid}`)),
+    _ecRetry(() => dbGetAll('colonies', `faction_id=eq.${fid}&order=created_at.asc`)).catch(() => []),
     // ЧУЖАЯ занятость планет: своих колоний мало, но планета в моей системе может
     // быть занята другой державой (или моей же — по другому тегу). Без этого списка
     // кабинет рисовал бы «Колонизировать», а сервер отвечал 'planet already
     // colonized' / 'planet already has a colony/station'.
     dbGetAll('colonies', `select=faction_id,system_id,planet_pid,planet_name&order=id.asc`).catch(() => []),
-    dbGetAll('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`).catch(() => []),
-    dbGet('faction_units', `or=(faction_id.eq.${fid},faction_id.is.null)&order=name.asc`).catch(() => []),
-    dbGet('unit_production', `faction_id=eq.${fid}&order=created_at.desc`).catch(() => []),
+    // Постройки, чертежи и производство: их молчаливое «пусто» игрок читает как
+    // «войска пропали» / «здания испарились» — тоже с повтором.
+    _ecRetry(() => dbGetAll('colony_buildings', `faction_id=eq.${fid}&order=created_at.asc`)).catch(() => []),
+    _ecRetry(() => dbGet('faction_units', `or=(faction_id.eq.${fid},faction_id.is.null)&order=name.asc`)).catch(() => []),
+    _ecRetry(() => dbGet('unit_production', `faction_id=eq.${fid}&order=created_at.desc`)).catch(() => []),
     // stars/multi — кратность (_multi_stars.sql): stars = компаньоны [{letter,greek,…}],
     // multi=false прячет их. Без этих полей экономика предлагала бы к колонизации
     // тела компаньонов, скрытых на карте, и не могла бы подписать звезду-хозяйку.
-    dbGet('map_systems', `select=id,name,faction,x,y,planets,star_type,is_giant,stars,multi`).catch(() => []),
+    _ecRetry(() => dbGet('map_systems', `select=id,name,faction,x,y,planets,star_type,is_giant,stars,multi`)).catch(() => []),
     ecCached('lanes', () => dbGet('map_hyperlanes', `select=a_id,b_id`)),   // топология гиперпутей не меняется по ходу игры — кэш на сессию
-    dbGet('faction_applications', `status=eq.approved&select=faction_id,name,herald_url,color,gov,ideology,leader,race&order=name.asc`).catch(() => []),
+    // Реестр держав: без него дипломатия честно показывает «Нет других фракций»,
+    // хотя они есть — самый заметный симптом полупустого захода.
+    _ecRetry(() => dbGet('faction_applications', `status=eq.approved&select=faction_id,name,herald_url,color,gov,ideology,leader,race&order=name.asc`)).catch(() => []),
     dbGet('trade_routes', `order=created_at.desc`).catch(() => []),
     dbGet('loans', `order=created_at.desc`).catch(() => []),
     // ТОЛЬКО свои операции (приватность); цель видит входящие через RPC (исполнитель скрыт, если не раскрыт)
@@ -2233,7 +2258,7 @@ async function _ecLoadCoreImpl() {
     dbGet('raid_missions', `actor_fid=eq.${fid}&order=created_at.desc&limit=40`).catch(() => []),
     ecRpc('raid_status').catch(() => null),
     ecRpc('trade_capacity').catch(() => null),   // грузоподъёмность торгового флота
-    dbGet('income_history', `owner_id=eq.${user.id}&order=tick_at.desc&limit=30`).catch(() => []),  // доход по времени (графики статистики)
+    (_uid ? dbGet('income_history', `owner_id=eq.${_uid}&order=tick_at.desc&limit=30`).catch(() => []) : []),  // доход по времени (графики статистики)
     ecRpc('spatial_status').catch(() => []),   // пространственная экономика: NET-баланс систем (просперити Обзора)
     dbGet('map_sectors', `select=id,name,system_ids,econ_event,econ_mod,econ_until`).catch(() => []),   // сектора + эконом-события
     dbGet('market_resources', `select=name,base_price,price,stock,equilibrium,npc_supply,npc_demand`).catch(() => []),  // галактический рынок
@@ -2248,7 +2273,7 @@ async function _ecLoadCoreImpl() {
     dbGet('faction_budget', `faction_id=eq.${fid}`).catch(() => []),   // бюджет державы (ползунки финансирования)
     ecRpc('geosurvey_get').catch(() => null),  // ⛏ георазведка: текущая находка + цена следующей крутки (казино)
     ecRpc('stargaze_get').catch(() => null),   // 🜂 «Всмотреться в Разлом»: активный транс (казино)
-    dbGet('galactic_ledger', `owner_id=eq.${user.id}&order=created_at.desc&limit=24`).catch(() => []),  // 🌌 разовые эффекты Ассамблеи/Поэмы (леджер, «Казна» обзора)
+    (_uid ? dbGet('galactic_ledger', `owner_id=eq.${_uid}&order=created_at.desc&limit=24`).catch(() => []) : []),  // 🌌 разовые эффекты Ассамблеи/Поэмы (леджер, «Казна» обзора)
     ecRpc('war_status').catch(() => null),   // ⚔ войны: активные конфликты, ноты, история (_war_declare.sql)
     ecRpc('battles_mine').catch(() => null),   // ⚔ завязавшиеся бои: перехваты и встречи флотов (_war_intercept.sql)
     dbGet('faction_goods_recipe', `faction_id=eq.${fid}`).catch(() => []),   // 🛍 настраиваемый рецепт фабрики потребления (_consumption_factory.sql)
@@ -3618,7 +3643,15 @@ function ecIntro(icon, title, text, hints) {
     <div class="ec-intro-tx">${text}</div>${list}</div>`;
 }
 
+// ⚠️ ТЕЛО КАБИНЕТА ЖИВЁТ В cabinet.js. Здесь остался только вход: сотни мест в
+// экономике зовут ecPaintCabinet() после действия, и переучивать их незачем.
+// Ниже — ЛЕГАСИ-предбанник (герб + казна + плитки-двери): он остаётся на случай,
+// если cabinet.js не подгрузился, чтобы кабинет не оказался пустой страницей.
 function ecPaintCabinet() {
+  if (typeof cabPaint === 'function') { cabPaint(); return; }
+  return _ecPaintCabinetLegacy();
+}
+function _ecPaintCabinetLegacy() {
   ecDepRawReset();   // ⛏ кэш сырых сумм по залежам — пересобрать на свежих постройках
   const col = ecReadable(EC.app.color);
   // ВКЛАДОК БОЛЬШЕ НЕТ. Кабинет был свалкой из полутора десятков ведомостей;
@@ -3694,16 +3727,17 @@ function ecCabinetDoors() {
       Любая плитка открывает свой экран новеллы.</div>
     <div class="ec-doors">${cards}</div>`;
 }
-// ВКЛАДОК НЕТ — есть экраны новеллы. ecSetTab остался единственной точкой,
+// ВКЛАДОК НЕТ — есть ведомства кабинета. ecSetTab остался единственной точкой,
 // куда стреляют сотни старых ссылок в текстах («постройте во вкладке Колонии»),
-// поэтому он не рисует вкладку, а ОТКРЫВАЕТ нужный экран и его раздел.
+// поэтому он не рисует вкладку, а ОТКРЫВАЕТ нужное ведомство и его раздел.
 function ecSetTab(t) {
-  // Разведка — свой оверлей новеллы.
-  if (t === 'intel') { ecIntelOpen(); return; }
-  // Экраны новеллы, у которых нет разделов-рельсы: открываем напрямую.
-  const VN_MOVED = { colonies: 'planets', planets: 'planets', territory: 'colony', colony: 'colony',
-                     research: 'research', doom: 'doom' };
-  if (VN_MOVED[t]) { if (typeof heroVNGoto === 'function') heroVNGoto(VN_MOVED[t]); return; }
+  // ⚠️ ЗДЕСЬ ЗВАЛСЯ `ecIntelOpen()` — функции с таким именем в проекте НЕТ
+  // (разведку открывает heroVNIntelOpen). Любая ссылка «см. Разведуправление»
+  // молча падала с ReferenceError. Теперь маршрут один на все ведомства.
+  const DEPT = { intel: 'intel',
+                 colonies: 'planets', planets: 'planets', territory: 'colony', colony: 'colony',
+                 research: 'research', doom: 'doom' };
+  if (DEPT[t]) { if (typeof cabGoto === 'function') cabGoto(DEPT[t]); return; }
   // Власть: ссылки вида «поправьте благополучие» ведут в политику,
   // а не в мёртвую вкладку кабинета. Раздел выбираем сразу нужный.
   const POL_MOVED = { court: 'court', welfare: 'welfare', policy: 'policy', faith: 'faith', war: 'war' };

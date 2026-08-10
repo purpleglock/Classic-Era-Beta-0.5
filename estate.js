@@ -289,6 +289,8 @@ function estReturn(key) { if (typeof heroVNBack === 'function') heroVNBack(estSc
 function estGoto(view) {
   const scr = Object.keys(EST_SCR).filter(k => EST_SCR[k].view === view)[0];
   if (!scr) return;
+  // Работа вернулась в кабинет — см. шапку cabinet.js.
+  if (typeof cabGoto === 'function') { cabGoto(view); return; }
   if (typeof go === 'function' && typeof curSlug !== 'undefined' && curSlug !== 'home') go('home', false);
   let tries = 0;
   const tick = () => {
@@ -314,7 +316,10 @@ async function estOpen(key) {
     estRefresh(key);
   } catch (e) {
     console.error('[estate]', e);
-    if (el.classList.contains('show')) el.innerHTML = polMsg(s.title, back, 'Ведомости не поднялись — связь с канцелярией потеряна.');
+    if (el.classList.contains('show')) {
+      el.innerHTML = polErr(s.title, back, 'Ведомости не поднялись — связь с канцелярией потеряна.',
+        `estOpen('${key}')`, (e && e.message) || '');
+    }
   }
 }
 
@@ -353,14 +358,25 @@ function estRefreshOpen() { if (EST.open) estRefresh(EST.open); }
 // setPg() — замену ВСЕЙ страницы. С экрана новеллы это выбрасывало игрока в
 // кабинет посреди разговора. Перехватываем: вне страницы кабинета перерисовываем
 // открытый экран новеллы, а страницу не трогаем.
+// ⚠️ И ТО ЖЕ САМОЕ ВНУТРИ КАБИНЕТА. Ведомства теперь открываются окнами прямо
+// над кабинетом (cabinet.js), а ecPaintCabinet → cabPaint делает setPg — замену
+// ВСЕЙ страницы. Значит любое действие (купил, построил, продал) выбрасывало бы
+// игрока из открытого ведомства обратно в приёмную. Поэтому решает не «на какой
+// мы странице», а «открыто ли сейчас ведомство»: открыто — перерисовываем ЕГО,
+// страницу не трогаем.
+function _ecScreenOpen() {
+  if (typeof EST === 'object' && EST && EST.open) return true;
+  const p = document.getElementById('hp-vn-pol');
+  if (p && p.classList.contains('show')) return true;
+  const d = document.getElementById('hp-vn-dip');
+  if (d && d.classList.contains('show')) return true;
+  return false;
+}
 if (typeof ecPaintCabinet === 'function') {
   const _ecPaintCabinetRaw = ecPaintCabinet;
   window.ecPaintCabinet = function () {
-    if (typeof curSlug !== 'undefined' && curSlug !== 'economy') {
+    if (_ecScreenOpen() || (typeof curSlug !== 'undefined' && curSlug !== 'economy')) {
       estRefreshOpen();
-      // Казна в строке ресурсов новеллы обязана дрогнуть на том же действии, что
-      // и ведомость: иначе игрок платит, а сверху висит старая цифра.
-      if (typeof vnResBarRepaint === 'function') { try { vnResBarRepaint(); } catch (e) {} }
       if (typeof polRefresh === 'function') polRefresh();
       if (typeof dipRefresh === 'function') dipRefresh();
       return;

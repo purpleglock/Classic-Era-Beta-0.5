@@ -1,0 +1,808 @@
+/* © 2025–2026. Все права защищены.
+   ══════════════════════════════════════════════════════════════════
+   КАБИНЕТ ДЕРЖАВЫ (#economy) — приёмная.
+
+   Кабинет вернулся как рабочая комната (см. шапку cabinet.js). Оформление —
+   то же, что у экранов новеллы: рисованные глифы вместо эмодзи, срезанный
+   угол вместо border, максимум два акцента (голубой --gd интерфейса + цвет
+   державы --fac). Обложка и казна переиспользуют готовые .ec-cover/.ec-stats
+   из 17_economy.css — здесь только приёмная и её двери.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ⚠️ ПОЛОТНО ПЛОТНОЕ. `.ec-wrap` пришёл из старого кабинета-витрины: поля 22px
+   и 60px снизу, между блоками по 18-22px воздуха. На рабочей странице это
+   значит, что половина экрана — пустота, а до дверей надо прокручивать.
+   Кабинет — рабочий стол: воздух ровно чтобы блоки не слипались. */
+/* Сверху НОЛЬ: обложка — первое, что видно после хлебных крошек, и зазор между
+   ними ничего не разделяет. Боковые поля тоже не нужны: #pg уже держит 28px. */
+/* --cab-pad — ЕДИНОЕ ПОЛЕ КАБИНЕТА. Одно число на весь экран: им дышат
+   обложка изнутри, рельса ведомств, сцена. Снаружи полотна полей нет вовсе. */
+.cab-wrap{--cab-cut:12px;--cab-pad:clamp(14px,1.5vw,26px);padding:0;max-width:none}
+
+/* ⚠️ КАБИНЕТ ИДЁТ ВО ВСЮ ШИРИНУ ОКНА. Полей было ТРИ слоя, и каждый ставил
+   свои: `.ec-wrap` (22px, витрина), `#pg` (28px, оболочка — с !important из
+   07_premium.css) и потолок ширины 1120/1400px. На широком мониторе кабинет
+   от этого стоял узкой колонкой с мёртвыми полями по бокам, а ведомость
+   внутри жалась. Здесь поля обнуляются — только на странице кабинета
+   (`#cab-stage` живёт лишь в ней), остальной сайт своей рамки не теряет. */
+html:has(#cab-stage) #pg{padding:0!important}
+
+/* ⚠️ ВОЗДУХ ЖИВЁТ ВНУТРИ БЛОКОВ, А НЕ ВОКРУГ НИХ. Полотно идёт от края до
+   края и от шапки до низа окна; поле в --cab-pad получает КАЖДЫЙ блок изнутри,
+   поэтому текст не липнет к борту сайдменю, но мёртвых полос по краям нет. */
+.cab-banner{margin-inline:var(--cab-pad)}
+.cab-desk,.cab-body{padding-inline:var(--cab-pad)}
+/* Поле ведомства ставится ОДИН раз — на корне экрана (см. «ОДНА ПОВЕРХНОСТЬ»
+   ниже). Здесь оно стояло вторым слоем и складывалось с ним вдвое. */
+#cab-stage .pol-shell{padding-inline:0}
+/* ⚠️ НИЗ ПОЛОТНА. Правило `.cab-wrap > .cab-body:last-child` не срабатывало
+   НИКОГДА: последним ребёнком всегда идёт `.cab-stage` (контейнеры ведомств
+   лежат в разметке постоянно, открыты они или нет), поэтому двери приёмной
+   упирались в подвал без единого пикселя воздуха. Поле низа теперь безусловное
+   и у полотна, и у сцены. */
+.cab-stage.on{padding-bottom:40px}
+.cab-body{padding-bottom:40px}
+
+/* Баннеры служащего/администрации — одна форма на оба. */
+.cab-banner{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:10px 16px;margin-bottom:12px;
+  border:1px solid var(--w3);border-radius:var(--radius-sm,8px);
+  background:rgba(255,255,255,.02);color:var(--t2);font-size:13px;
+}
+.cab-banner-tail{margin-left:auto;color:var(--t3)}
+.cab-banner-adm{
+  border-color:var(--gd,#3a7fbf);color:var(--gdl,#5fb0e6);
+  background:color-mix(in srgb,var(--gd,#3a7fbf) 14%,transparent);
+}
+
+/* ── Шапка: КАЗНА, А НЕ ПОСТЕР ─────────────────────────────────────
+   ⚠️ Обложка `.ec-cover` приехала из старого кабинета, где была витриной
+   державы: min-height 210px, заголовок до 38px, воздух со всех сторон. В
+   рабочей комнате она съедала пол-экрана — до меню ведомств приходилось
+   прокручивать. Ужимаем: герб остаётся фоном, но полоса становится строкой
+   с цифрами, а не постером. */
+.cab-cover{min-height:0;margin-bottom:0}
+.cab-cover .ec-cover-inner{padding:12px var(--cab-pad)}
+.cab-cover .ec-cover-title{font-size:clamp(18px,2.2vw,26px);padding-bottom:3px;border-bottom-width:2px}
+.cab-cover .ec-cover-row{margin-top:0}
+.cab-cover .ec-stats{margin:10px 0 6px}
+.cab-cover .ec-cover-hud{display:none}
+/* Казна = строка показаний: карточки и чипы ресурсов тоже ужимаем, иначе
+   «плоская» обложка всё равно набирает высоту постера своим содержимым. */
+.cab-cover .ec-stat{padding:8px 12px;gap:9px;border-radius:0}
+.cab-cover .ec-stat-ic{font-size:19px}
+.cab-cover .ec-stat-v{font-size:17px}
+.cab-cover .ec-resbar{padding:8px 12px;border-radius:0}
+.cab-cover .ec-resbar-hd{margin-bottom:7px}
+.cab-cover .ec-rchip{padding:4px 8px;border-radius:0}
+.cab-cover .ec-rchip-ic,.cab-cover .ec-rchip-ic img,.cab-cover .ec-rchip-ic .res-ic{width:17px;height:17px}
+.cab-cover .ec-rchip b{font-size:13px}
+
+/* ── Стол: чем кабинет встречает ─────────────────────────────────
+   Порядок колонок = порядок чтения: новости, статистика, упоминания.
+   Статистика узкая — она кнопка, а не список. */
+.cab-desk{
+  display:grid;gap:10px 16px;margin-top:12px;align-items:start;
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+}
+.cab-card{min-width:0}
+
+.cab-nw{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  padding:5px 8px;border:none;background:transparent;color:var(--t2);
+  font:inherit;font-size:12.5px;cursor:pointer;
+  border-bottom:1px solid var(--w3);
+}
+.cab-nw:last-child{border-bottom:none}
+.cab-nw:hover{background:rgba(255,255,255,.03);color:#eaf6ff}
+.cab-nw-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cab-nw-d{flex:0 0 auto;font-family:var(--font-mono);font-size:10.5px;color:var(--t4)}
+.cab-nw-dot{flex:0 0 auto;width:5px;height:5px;border-radius:50%;background:var(--gd,#3a9bdc);opacity:.7}
+.cab-nw .fn-fr-flag{flex:0 0 auto;width:18px;height:18px;object-fit:cover}
+.cab-nw-empty{padding:9px;font-size:12px;color:var(--t4)}
+
+/* ── Приёмная: ведомства колонками по укладу державы ──────────── */
+.cab-body{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+
+.cab-grp-hd{
+  margin:0 0 7px;font-size:11px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--t4);
+  display:flex;align-items:center;gap:12px;
+}
+/* Тонкая линия вправо от заголовка — граница раздела без рамки-коробки. */
+.cab-grp-hd::after{
+  content:"";flex:1;height:1px;
+  background:linear-gradient(90deg,var(--w3),transparent);
+}
+
+.cab-doors{
+  display:grid;gap:8px;
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+}
+
+/* Дверь ведомства. Срез угла — клипом, не border: с clip-path border не
+   существует (та же форма-язык, что у панелей экранов новеллы). */
+.cab-door{
+  position:relative;z-index:0;
+  display:flex;align-items:center;gap:13px;
+  padding:13px 15px;width:100%;text-align:left;
+  border:none;background:transparent;color:var(--t1);
+  font:inherit;cursor:pointer;
+  clip-path:polygon(0 0,calc(100% - var(--cab-cut)) 0,100% var(--cab-cut),
+                    100% 100%,var(--cab-cut) 100%,0 calc(100% - var(--cab-cut)));
+  transition:transform .12s ease;
+}
+/* Подложка-«обводка» + инсет-фон: два слоя вместо рамки. */
+.cab-door::before{
+  content:"";position:absolute;inset:0;z-index:-2;
+  background:color-mix(in srgb,var(--gd,#3a9bdc) 26%,transparent);
+}
+.cab-door::after{
+  content:"";position:absolute;inset:1px;z-index:-1;
+  background:linear-gradient(160deg,hsl(216 26% 9% / .92),hsl(216 30% 6% / .96));
+  clip-path:inherit;
+}
+.cab-door:hover{transform:translateY(-1px)}
+.cab-door:hover::before{background:var(--fac,var(--gd,#3a9bdc))}
+.cab-door:focus-visible{outline:2px solid var(--gd,#3a9bdc);outline-offset:2px}
+
+.cab-door-ic{display:flex;flex:0 0 auto;color:var(--gd,#3a9bdc)}
+.cab-door-ic .pol-gl{width:26px;height:26px}
+.cab-door:hover .cab-door-ic{color:var(--fac,var(--gd,#3a9bdc))}
+
+.cab-door-tx{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.cab-door-tx b{font-size:13.5px;font-weight:600;line-height:1.25}
+.cab-door-tx i{
+  font-style:normal;font-size:11px;color:var(--t4);line-height:1.35;
+  /* Подпись в одну строку: двери должны стоять ровной сеткой, а не
+     прыгать по высоте из-за разной длины пояснения. */
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+.cab-door-arr{flex:0 0 auto;color:var(--t4);font-size:12px;opacity:.5}
+.cab-door:hover .cab-door-arr{opacity:1;color:var(--gdl,#5fb0e6)}
+
+/* Счётчик непрочитанного (заявки ко двору). */
+.cab-door-n{
+  flex:0 0 auto;min-width:20px;height:20px;padding:0 6px;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:10px;background:var(--gd,#3a7fbf);color:#fff;
+  font-size:11px;font-weight:700;
+}
+
+/* ── Меню ведомств: кабинет ЛИСТАЕТСЯ ──────────────────────────────
+   Из казны в военпром — одним кликом, без возврата в приёмную.
+   ⚠️ Меню НЕ прокручивается вбок. Первая версия была горизонтальной лентой со
+   своим скроллбаром: половина ведомств пряталась за краем, под меню висела
+   полоска ползунка, и «где военпром» приходилось искать колесом. Ведомств
+   полтора десятка — они просто ПЕРЕНОСЯТСЯ на вторую строку, все на виду.
+   Меню липнет к верху окна: пролистав длинное ведомство вниз, игрок остаётся
+   в одном клике от соседнего. */
+/* ⚠️ Ведомства ВЫРОВНЕНЫ ПО КРАЮ ОБЛОЖКИ. Раньше у вкладки было своё поле
+   12px слева, и первый пункт («Приёмная») стоял с отступом от всего остального
+   на странице — рваный левый край. Поля у вкладок нет вовсе, воздух между ними
+   даёт gap. */
+.cab-rail{
+  position:sticky;top:0;z-index:6;
+  display:flex;flex-wrap:wrap;gap:2px 22px;
+  margin-top:0;padding:0 var(--cab-pad);
+  background:var(--b1,#080b10);
+  border-bottom:1px solid var(--w3);
+}
+
+.cab-rail-t{
+  position:relative;flex:0 0 auto;
+  display:flex;align-items:center;gap:7px;
+  padding:8px 0;border:none;background:transparent;color:var(--t3);
+  font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap;
+  transition:color .12s ease;
+}
+.cab-rail-t:hover{color:var(--t1)}
+/* Активная вкладка помечена подчёркиванием цветом державы — акцент один, без
+   заливки и рамки (та же форма-язык, что у дверей). */
+.cab-rail-t.on{color:#eaf6ff}
+.cab-rail-t.on::after{
+  content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;
+  background:var(--fac,var(--gd,#3a9bdc));
+}
+.cab-rail-ic{display:flex;color:var(--gd,#3a9bdc)}
+.cab-rail-ic .pol-gl{width:16px;height:16px}
+.cab-rail-t.on .cab-rail-ic{color:var(--fac,var(--gd,#3a9bdc))}
+.cab-rail-t .cab-door-n{min-width:17px;height:17px;font-size:10px}
+
+/* ── Хост ведомства: ТЕЛО ВСТРОЕНО В ПОЛОТНО ───────────────────────
+   ⚠️ Здесь главная правка возврата кабинета, и её пришлось делать ДВАЖДЫ.
+   Экраны политики/хозяйства/колонизации родом из новеллы: 03_content.css при
+   `.show` делает их `position:fixed`-окном по центру вьюпорта, гасит прокрутку
+   #cw и кладёт поверх сайта затемняющий слой на #pg::before.
+   Первый заход просто распластал окно в поток, сохранив ему фиксированную
+   высоту, — и вышло хуже модалки: КОРОБКА В КОРОБКЕ. Страница прокручивалась
+   своим ползунком, ведомость внутри — своим, колесо работало то на одну, то на
+   другую в зависимости от того, где мышь. Теперь высоты нет вовсе: ведомство
+   тянется по содержимому, скроллбар в кабинете ОДИН — страничный. */
+.cab-stage{position:relative;height:0;overflow:visible}
+.cab-stage.on{height:auto;margin-top:14px}
+
+#cab-stage > .show{
+  position:relative;inset:auto;top:auto;left:auto;transform:none;
+  width:auto;height:auto;z-index:0;box-shadow:none;border-radius:0;
+  overflow:visible;background:transparent;
+}
+/* Побочные эффекты «окна» — прочь: страница остаётся страницей. */
+html:has(#cab-stage) #pg::before{content:none}
+html:has(#cab-stage) #pg{z-index:2}
+html:has(#cab-stage) #cw{overflow:auto}
+
+/* Внутренности ведомства: снимаем ВСЕ вложенные прокрутки. Каркас у экранов
+   один (шапка + `.hp-vn-col-body`, внутри рельса разделов и `flex:1;
+   min-height:0; overflow:auto` — рассчитан на окно фиксированной высоты). */
+#cab-stage .hp-vn-col-body,
+#cab-stage .pol-shell{overflow:visible;min-height:0;align-items:flex-start}
+#cab-stage .pol-stage,
+#cab-stage .hp-vn-col-scroll{overflow:visible;flex:1 1 auto;min-height:0}
+#cab-stage .pol-stage{padding-bottom:24px}
+/* Рельса разделов ведомства («Двор · Благополучие · …») прижата к верху своей
+   колонки и едет со страницей. Липкой её НЕ делаем: меню кабинета уже липнет
+   сверху, а его высота плавает (одна строка или две), и «липкое под липким»
+   пришлось бы подпирать магическим числом отступа. */
+#cab-stage .pol-rail{overflow:visible;align-self:flex-start}
+
+/* ── ЧТО СНИМАЕМ ВНУТРИ ВЕДОМСТВА (И ЧЕГО НЕ ТРОГАЕМ) ──────────────
+   ⚠️ ОТСТУПЫ ВНУТРИ ЭКРАНА — НЕ НАШЕ ДЕЛО. Здесь стояли переопределения
+   padding для `.hp-vn-col-body`, `.pol-stage` и `.pol-content`, и это было
+   неверно: у каждого экрана свои поля, выверенные под его содержимое, а
+   кабинет правил их вслепую снаружи. Убрано. Кабинет снимает ровно две вещи,
+   и обе — не отступы, а ДУБЛИ, появившиеся оттого, что экран раньше был
+   отдельным окном и обязан был представиться сам:
+     • шапка «НАЗВАНИЕ + НАЗАД» — повторяет активный пункт меню, а «назад» —
+       пункт «⌂ Приёмная», который стоит первым в том же меню;
+     • крупный рисунок заставки раздела — на странице с меню он лишний экран
+       пустоты перед первой цифрой (сам заголовок раздела остаётся).
+   В новелле и то и другое остаётся как было. */
+/* ⚠️ ШАПКУ ЭКРАНА ЦЕЛИКОМ ПРЯТАТЬ НЕЛЬЗЯ — ИЗ КОЛОНИИ НЕ ВЫЙТИ. Здесь стояло
+   `.hp-vn-col-head{display:none}`: шапка «НАЗВАНИЕ + НАЗАД» действительно дублирует
+   активный пункт меню. Но в «Управлении колониями» в той же шапке живёт ВТОРАЯ
+   кнопка — «↩ к списку» (`_hvpHead` в render.js), и с открытой планеты она была
+   единственной дорогой обратно. Спрятав шапку, кабинет запирал игрока в колонии.
+   Поэтому убирается не шапка, а ровно то, что дублирует меню: имя экрана и общая
+   кнопка «назад». Всё остальное в шапке остаётся рабочим. */
+#cab-stage .hp-vn-col-head{
+  padding-inline:0;background:none;border-bottom:none;position:static;
+}
+#cab-stage .hp-vn-col-head::after{display:none}
+#cab-stage .hp-vn-col-title{display:none}
+#cab-stage .hp-vn-col-head:not(:has(.hvp-back)){display:none}
+#cab-stage .hp-vn-col-x:not(.hvp-back){display:none}
+#cab-stage .pol-scene-art{display:none}
+
+/* ⚠️ ИСКЛЮЧЕНИЕ — ЭКРАН С ХОЛСТОМ, И ОН ОДИН.
+   Здесь стоял список из одиннадцати экранов, которым «нужна высота как карте»:
+   колонии, наука, разведка, Длань, Фонд, Синли-бей и прочие получали
+   `height:min(80vh,880px); overflow:hidden`. Список был написан на глаз и
+   оказался неверным: `.hp-vn-col-main` (SVG на `height:100%`, единственное, что
+   от высоты родителя вообще зависит) есть ТОЛЬКО у колонизации — см. render.js,
+   два места на весь проект. Всем остальным фиксированная высота не помогала, а
+   РЕЗАЛА: их собственный скроллер (`.hvp-body` у колоний) кабинет глушит
+   правилом `overflow:visible` выше, и содержимое просто исчезало за нижней
+   кромкой коробки — «окно проваливалось под страницу». Ведомство — документ:
+   тянется по содержимому, скроллбар на странице ОДИН.
+   Фон здесь тоже не ставится: у ведомства нет своей поверхности, оно лежит на
+   полотне кабинета (см. «ОДНА ПОВЕРХНОСТЬ» ниже). */
+/* ⚠️ ОТБИРАЕМ ПО ID, А НЕ ПО КЛАССУ. Класс `.hp-vn-colony` носят ВСЕ экраны без
+   исключения — см. `vnScreenHosts` в render.js: разведка, Длань, Фонд, Синли-бей
+   и остальные объявлены как `class="hp-vn-colony hp-vn-geo hp-vn-intel"`. Любая
+   попытка вычесть их списком `:not(...)` обречена: стоит забыть одного — и он
+   получает коробку фиксированной высоты с `overflow:hidden`, то есть его нижняя
+   половина вместе с кнопками уезжает под страницу. Ровно это и случилось с
+   разведкой, Штабом артиллерии и Фондом. Холст ровно один, и у него есть
+   собственный id — по нему и отбираем. */
+#cab-stage > #hp-vn-colony.show{height:min(80vh,880px);overflow:hidden}
+#cab-stage > #hp-vn-colony.show .hp-vn-col-body{overflow:hidden;min-height:0;align-items:stretch}
+#cab-stage > #hp-vn-colony.show .hp-vn-col-scroll{overflow:auto}
+
+/* ══════════════════════════════════════════════════════════════════
+   ЕДИНЫЙ ПОКРОЙ КАБИНЕТА
+   ⚠️ Тела ведомств собраны из кусков разных лет: приёмная (cab-*), каркас
+   новеллы (pol-*), старая витрина кабинета (ec-*). Каждый слой принёс свой
+   ритм отступов и свою форму вкладок — на одном экране одновременно жили
+   круглые чипы `.ec-tab`, коробочки `.ec-fb-tab`, срезанные `.pol-chap` и
+   подчёркивание `.cab-rail-t`. Плюс двойная шапка: рельса слева уже говорит,
+   где мы, а `.pol-scene` повторял то же имя постером на весь экран.
+
+   Здесь кабинет приводится к ОДНОМУ языку. Правило простое:
+     • вкладка = текст с подчёркиванием акцентом (форма `.cab-rail-t`);
+     • ритм = 12px между блоками, 10-12px внутри карточек;
+     • заголовок раздела = строка, а не плашка.
+   Всё scoped на `#cab-stage`: в новелле экраны остаются как были. */
+
+/* ── Шапка раздела: строка вместо постера ─────────────────────────
+   Заставка дублирует активный пункт рельсы. Оставляем имя, глиф, «?» и
+   «свернуть» — но плоской строкой, без градиента, клипа и мигающей полосы. */
+#cab-stage .pol-scene{
+  padding:0 0 8px;margin-bottom:12px;gap:10px;
+  background:none;clip-path:none;
+  border-bottom:1px solid var(--w2);
+}
+#cab-stage .pol-scene::before{display:none}
+#cab-stage .pol-scene-hd h2{font-size:14px;letter-spacing:.14em;color:var(--t1)}
+#cab-stage .pol-scene-ic .pol-gl{width:16px;height:16px}
+
+/* ── Ритм полотна ───────────────────────────────────────────────
+   ⚠️ Боковые поля у сцены были НУЛЕВЫЕ, и это читалось как брак: текст,
+   таблицы и карточки начинались вплотную к разделительной линии меню и к
+   борту окна — «внутренний контент без отступов». Поле у сцены теперь есть
+   всегда и равно общему полю кабинета. Поле СНАРУЖИ полотна даёт `.pol-shell`
+   (padding-inline выше), зазор между меню и текстом — `gap` шелла: так поле не
+   складывается вдвое у борта окна и не пропадает у разделителя. */
+#cab-stage .pol-shell{gap:var(--cab-pad)}
+#cab-stage .pol-stage{padding:0 0 20px}
+#cab-stage .pol-content{margin-top:12px}
+#cab-stage .ec-section-title{margin:16px 0 9px;font-size:13px}
+#cab-stage .ec-ov-sect{margin-bottom:12px}
+#cab-stage .ec-resbar{margin-bottom:12px}
+
+/* ── ОДНА ВКЛАДКА НА ВСЕХ ──────────────────────────────────────
+   Чип, коробка и срезанный угол сведены к подчёркиванию: никакой заливки,
+   никакой рамки, акцент ровно один — цвет разговора (--pol). */
+#cab-stage :is(.ec-tabs,.ec-fb-tabs,.pol-chaps){
+  display:flex;flex-wrap:wrap;gap:0 20px;
+  margin:0 0 12px;padding:0;
+  border-bottom:1px solid var(--w2);
+}
+#cab-stage :is(.ec-tab,.ec-fb-tab,.pol-chap){
+  position:relative;flex:0 0 auto;
+  display:inline-flex;align-items:center;gap:7px;
+  padding:7px 0;margin:0;
+  background:none;border:none;border-radius:0;clip-path:none;
+  color:var(--t3);font-family:var(--font-display);font-size:12.5px;
+  font-weight:600;letter-spacing:.02em;text-transform:none;
+  cursor:pointer;white-space:nowrap;transition:color .12s ease;
+}
+#cab-stage :is(.ec-tab,.ec-fb-tab,.pol-chap):hover{color:var(--t1);background:none}
+#cab-stage :is(.ec-tab,.ec-fb-tab,.pol-chap).on{color:#eaf6ff;background:none}
+#cab-stage :is(.ec-tab,.ec-fb-tab,.pol-chap).on::after{
+  content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;
+  background:var(--pol,var(--gd,#3a9bdc));
+}
+/* …кроме глав, уехавших в рельсу подпунктами: там вкладка — не горизонталь,
+   а строка меню, и правило выше её бы распластало обратно в ленту. */
+#cab-stage .pol-chaps.pol-chaps-sub{
+  display:flex;flex-direction:column;gap:1px;
+  margin:1px 0 5px 18px;padding:0 0 0 10px;
+  border-bottom:none;border-left:1px solid var(--w2);
+}
+#cab-stage .pol-chaps-sub .pol-chap{
+  width:100%;padding:7px 10px;white-space:normal;text-align:left;
+}
+#cab-stage .pol-chaps-sub .pol-chap.on::after{
+  left:-11px;right:auto;bottom:auto;top:6px;width:2px;height:calc(100% - 12px);
+}
+
+/* ── ОДНО МЕНЮ НА ЭКРАН ────────────────────────────────────────
+   Полосы вкладок, которые каждый экран рисовал по-своему (разведка, Длань,
+   исследования, рода войск, экономика), переставляет в левую колонку
+   `cabRailify` (cabinet.js). Здесь — их вид: та же форма, что у рельсы
+   разделов, чтобы меню на экране читалось ОДНИМ, а не тремя разными.
+   ⚠️ Правила ниже перебивают собственные стили полос (рамки, чипы, красные
+   коробки), поэтому и `border:none`, и `clip-path:none` пишутся явно. */
+#cab-stage .cab-split{display:flex;align-items:flex-start;gap:0}
+#cab-stage .cab-split-rail{
+  flex:0 0 clamp(168px,17vw,230px);
+  display:flex;flex-direction:column;
+  padding:0 12px 0 0;margin-right:14px;
+  border-right:1px solid var(--w2);
+}
+#cab-stage .cab-split-col{flex:1;min-width:0}
+
+#cab-stage .cab-vrail{
+  display:flex;flex-direction:column;align-items:stretch;gap:1px;flex-wrap:nowrap;
+  margin:0;padding:0;overflow:visible;
+  background:none;border:none;box-shadow:none;
+}
+#cab-stage .cab-vrail>*{
+  position:relative;flex:0 0 auto;width:100%;
+  display:flex;align-items:center;gap:8px;justify-content:flex-start;text-align:left;
+  margin:0;padding:8px 10px;
+  background:none;border:none;border-radius:0;clip-path:none;box-shadow:none;
+  color:var(--t3);font-family:var(--font-display);font-size:12.5px;font-weight:600;
+  letter-spacing:.02em;text-transform:none;white-space:normal;cursor:pointer;
+  transition:color .12s ease,background .12s ease;
+}
+#cab-stage .cab-vrail>*:hover{color:var(--t1);background:rgba(255,255,255,.04)}
+#cab-stage .cab-vrail>*.on{color:#eaf6ff;background:rgba(255,255,255,.06)}
+#cab-stage .cab-vrail>*.on::after{
+  content:"";position:absolute;left:0;top:6px;right:auto;bottom:auto;
+  width:2px;height:calc(100% - 12px);background:var(--pol,var(--gd,#3a9bdc));
+}
+/* Хвостики-счётчики («14», «6») строкой меню прижимаются к правому краю. */
+#cab-stage .cab-vrail>* :is(i,.ec-fb-tab-n){margin-left:auto;font-style:normal;opacity:.75}
+
+/* Третий уровень: полоса уехала В рельсу разделов, под активную главу. */
+#cab-stage .cab-vrail-deep{
+  margin:1px 0 5px 30px;padding:0 0 0 10px;
+  border-left:1px solid var(--w2);
+}
+#cab-stage .cab-vrail-deep>*{padding:6px 10px;font-size:12px;font-weight:500}
+#cab-stage .cab-vrail-deep>*.on::after{left:-11px}
+
+/* ── Плашки, улетевшие к правому краю ────────────────────────────
+   ⚠️ `margin-left:auto` рисовался под узкое окно новеллы. В кабинете полотно
+   вдвое шире, и «ур. 1» уезжал за горизонт: между текстом и плашкой полстроки
+   пустоты, глазу нечего связывать. Строка текста получает потолок по
+   читаемости, плашка встаёт СРАЗУ за ней. */
+#cab-stage .pol-throne-tx,
+#cab-stage .pol-office-id{max-width:92ch}
+#cab-stage :is(.pol-throne-lvl,.pol-office-xp,.pol-fold){margin-left:18px}
+#cab-stage .pol-scene .pol-fold{margin-left:auto}
+/* Счётчик у вкладки — цифра, а не бейдж в рамке. */
+#cab-stage .ec-fb-tab-n{
+  padding:0;border:none;background:none;
+  color:var(--t4);font-size:10.5px;
+}
+#cab-stage .ec-fb-tab.on .ec-fb-tab-n{color:var(--pol,var(--gd,#3a9bdc))}
+#cab-stage .ec-fb-tab-ic{width:14px;height:14px;color:currentColor;opacity:.75}
+#cab-stage .ec-fb-tab.on .ec-fb-tab-ic{color:var(--pol,var(--gd,#3a9bdc));opacity:1}
+
+/* ── Плитки сводки: цифра, а не постамент ────────────────────────
+   ⚠️ `.ec-ov-card` рисовалась для витрины: 16px полей и цифра в 26px на
+   карточку в 150px — три числа занимали высоту экрана. В ведомости это
+   строка показаний, читается сеткой, а не размером. */
+#cab-stage .ec-ov-grid{grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:8px}
+#cab-stage .ec-ov-card{padding:9px 10px;border-radius:0}
+#cab-stage .ec-ov-v{font-size:19px}
+#cab-stage .ec-stat{padding:9px 12px;border-radius:0}
+#cab-stage .ec-stat-ic{font-size:19px}
+#cab-stage .ec-stat-v{font-size:16px}
+
+/* ── Шапка рода войск: та же тонкая строка, что у остальных ─────── */
+#cab-stage .ec-fb{margin-top:14px}
+#cab-stage .ec-fb-hd{padding:7px 11px;margin-bottom:9px}
+
+/* ── Полотно вокруг ведомства ──────────────────────────────────── */
+.cab-stage.on{margin-top:10px}
+/* Рельса ведомств липнет ПРЯМО к обложке: зазор между ними ничего не отделял,
+   а на липкой рельсе ещё и мигал полосой полотна при прокрутке. */
+.cab-rail{margin-top:0}
+.cab-desk{margin-top:10px}
+
+@media (max-width:640px){
+  #cab-stage .pol-rail{padding:0 0 8px}
+  #cab-stage .pol-stage{padding:0 0 18px}
+}
+
+@media (max-width:640px){
+  .cab-doors{grid-template-columns:1fr}
+  .cab-body{gap:18px;margin-top:14px}
+  .cab-door{padding:12px 13px}
+  .cab-rail{margin-top:0}
+  .cab-rail-t{padding:8px 10px;font-size:12px}
+  /* Телефон: меню в две-три строки съело бы экран — липким остаётся только
+     заголовок, а рельса разделов внутри ведомства и так свёрнута в строку. */
+  .cab-rail{position:static}
+  #cab-stage .pol-rail{position:static}
+  /* ⚠️ ЗДЕСЬ СТОЯЛА ФИКСИРОВАННАЯ ВЫСОТА `min(88vh,760px)` НА ПОЛТОРА ДЕСЯТКА
+     ЭКРАНОВ — И ОНА РЕЗАЛА ИХ ПОПОЛАМ. Внутренние прокрутки в кабинете сняты
+     (`overflow:visible` выше), поэтому коробка в 760px просто обрывала ведомость:
+     нижняя половина вываливалась на подвал, а страничный скролл о ней не знал.
+     Ведомство — документ: тянется по содержимому. Исключение по-прежнему одно —
+     холст колонизации, ему высота задана отдельно по id (см. выше). */
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ОДНА ПОВЕРХНОСТЬ
+   ⚠️ Кабинет выглядел склейкой трёх сайтов, и это не преувеличение: у шапки
+   державы своя заливка, у меню ведомств — `var(--b1)` (а страница под ним
+   `var(--b0)`, то есть ДРУГОЙ тон), у рельсы разделов — золотой градиент с
+   голубой границей из новеллы, у панелей внутри — `hsl(216 22% 8%/.88)` поверх
+   всего этого. Четыре фона на одном экране, хотя это ОДНА комната.
+
+   Правило: поверхность у кабинета одна — полотно страницы. Ничто внутри своего
+   фона не заводит; отделяют не заливки, а волосяные линии `--w2`. Панели, чей
+   смысл в том, чтобы быть приподнятыми (карточки, плитки), получают ОДИН и тот
+   же еле заметный подъём `--cab-lift`, а не каждая свой.
+   Всё scoped на кабинет: в новелле экраны остаются как были. */
+.cab-wrap{--cab-lift:rgba(255,255,255,.028);--cab-line:var(--w2)}
+
+/* Меню ведомств липнет к верху — ему нужна НЕПРОЗРАЧНАЯ подложка, иначе строки
+   ведомости просвечивают под ним при прокрутке. Тон — ровно тон страницы. */
+.cab-rail{background:var(--b0)}
+
+/* Гранёные панели новеллы (`.hp-vn-col-main/-info/-mini/-dossier/-claimstat`)
+   красятся через переменные — переопределяем их разом, а не по одной. */
+#cab-stage{--cyb-line:var(--cab-line,var(--w2));--cyb-bg:var(--cab-lift,rgba(255,255,255,.028))}
+/* Сам экран ведомства фона не имеет вовсе: он лежит на полотне кабинета.
+   ⚠️ И ОДНО ПОЛЕ НА ВСЕ ВЕДОМСТВА. Отступы внутри экранов кабинет раньше не
+   трогал принципиально («у каждого экрана свои, выверенные под содержимое») —
+   на деле выверены они были под ОКНО новеллы со своей рамкой, а в кабинете
+   половина ведомств оказалась вовсе без полей: текст и таблицы начинались от
+   кромки окна. Поле теперь одно и общее — `--cab-pad`, то же, которым дышат
+   обложка, приёмная и меню. Свои поля вложенных тел при этом обнуляются, иначе
+   складываются вдвое. */
+/* ⚠️ `!important` — потому что фон ставит КАЖДЫЙ экран сам. `.hp-vn-colony`
+   (то есть все до единого), `.hp-vn-doom`, `.hp-vn-research`, `.hp-vn-fight` и
+   прочие объявляют собственный тёмный градиент: он рисовался под окно новеллы,
+   висевшее поверх сайта. В потоке страницы это ЧЁРНЫЕ КОРОБКИ поверх и без того
+   тёмного полотна — те самые «двойные фоны». Фона у ведомства нет. */
+/* Ни один экран ведомства — что открытый, что скрытый — своей заливки не несёт. */
+#cab-stage > *{background:none!important}
+/* ⚠️ ЧЁРНЫЙ ГРАДИЕНТ ЖИЛ НЕ В ФОНЕ, А В ::before — ПОЭТОМУ СТРОКА ВЫШЕ ЕГО НЕ
+   БРАЛА. Арт-подложка экранов новеллы (03_content.css, «АРТ-ПОДЛОЖКА ЭКРАНОВ»)
+   рисуется отдельным слоем `inset:0`: кадр `--vn-art`, а поверх него завеса —
+   боковой градиент (слева глухо .97, справа открыто .18) и виньетка сверху и
+   снизу. У ведомств вроде внутренней политики своего кадра нет (`--vn-art:none`),
+   так что от слоя остаётся ровно завеса: чёрный градиент во всю сцену, темнее у
+   левого борта и к низу. В новелле это фон экрана, в кабинете — плёнка поверх
+   полотна. Убираем весь слой: у ведомства поверхность одна — страница. */
+#cab-stage > *::before{content:none!important}
+#cab-stage > .show{padding-inline:var(--cab-pad)}
+/* Колонка меню — тоже без подложки: это список строк на полотне, а не панель. */
+#cab-stage .pol-rail,
+#cab-stage .cab-split-rail,
+#cab-stage .hp-vnt-rail,
+#cab-stage .cab-vrail,
+#cab-stage .pol-shell,
+#cab-stage .pol-stage,
+#cab-stage .hp-vn-col-body{background:none!important}
+/* Крупные декоративные баннеры-заставки: в новелле это обложка экрана, в
+   кабинете — чёрный прямоугольник в полэкрана перед первой строкой работы
+   (арт часто вовсе не загружен). Их место — новелла. */
+#cab-stage :is(.hp-vni-banner,.hp-vnd-banner,.pc-vn-banner,.hp-vn-bgflag){display:none!important}
+/* Внутренние «панели» экранов тоже несли свою заливку — сводим к одному подъёму. */
+#cab-stage :is(.hp-vnr-panel,.hp-vnt-wrap,.hp-vni-panel,.hp-vnd-panel){background:none}
+
+/* ⚠️ ЧЁРНЫЕ КОРОБКИ ГАСЯТСЯ У ИСТОЧНИКА — В ТОКЕНАХ.
+   Заливку `var(--b1)`/`var(--b2)` (это «фон» и «поверхность» темы, почти чёрные)
+   ставят себе десятки блоков из разных слоёв: `.ec-ov-card`, `.ec-fold-btn`,
+   ведомости экономики, панели estate, карточки политики. Перечислять их по одному
+   бессмысленно — список никогда не будет полным, а каждый забытый превращается в
+   чёрный прямоугольник поверх и без того тёмного полотна. Поэтому сами токены
+   внутри кабинета делаются прозрачными: любой блок, который красился «фоном
+   темы», просто ложится на полотно. Тем, кому подъём нужен по смыслу (карточки,
+   плитки), он выдаётся явно ниже — один и тот же на всех. */
+#cab-stage{--b1:transparent;--b2:transparent;--b3:rgba(255,255,255,.05)}
+#cab-stage .hp-vn-col-body{padding-inline:0}
+/* У экрана с холстом (колонизация) поле остаётся на теле: там оно держит
+   зазор между картой и досье, а не край страницы. */
+#cab-stage > .hp-vn-colony.show:not(.hp-vn-planets){padding-inline:0}
+#cab-stage > .hp-vn-colony.show:not(.hp-vn-planets) .hp-vn-col-body{padding-inline:var(--cab-pad)}
+/* Рельса разделов: золотой градиент новеллы и голубая кромка — прочь. */
+#cab-stage .pol-rail{background:none}
+/* Карточки разделов: один подъём на все. */
+#cab-stage :is(.pol-card,.ec-ov-card,.ec-stat,.ec-resbar){background:var(--cab-lift)}
+
+/* ══════════════════════════════════════════════════════════════════
+   МЕНЮ ПО ОДНОМУ ОБРАЗЦУ
+   ⚠️ Образец задан не на бумаге, а в живом экране: меню «Состава» в
+   Вооружённых силах (полоса `.ec-fb-tabs`, переставленная `cabRailify` в
+   колонку). Оно читается: пункты строками, активный помечен полосой-акцентом
+   на кромке, обращённой к тексту, счётчик прижат к правому краю, подпункты —
+   отступом и волосяной линией. Остальные меню кабинета жили каждое своей
+   жизнью: `.pol-rail-b` — срезанный угол и заливка `--pol-dim` на активном,
+   `.pol-chap` — то же, но плиткой в ленте.
+
+   Здесь все три сводятся в ОДИН набор правил. Форма-язык прежняя: заливки нет,
+   рамки нет, акцент ровно один — цвет разговора (--pol). */
+/* ⚠️ БЕЗ `:is()` — ТРИ СЕЛЕКТОРА ЯВНО. Первая версия собирала их в один
+   `:is(.cab-vrail>*,.pol-rail-b,.pol-chaps-sub .pol-chap)` — короче, но меню
+   осталось в своих коробках: комбинатор внутри `:is()` здесь не отработал.
+   Списком селекторов через запятую — работает всегда и читается так же. */
+#cab-stage .cab-vrail>*,
+#cab-stage .pol-rail-b,
+#cab-stage .hp-vnt-cat,
+#cab-stage .pol-chaps-sub .pol-chap{
+  position:relative;flex:0 0 auto;width:100%;
+  display:flex;align-items:center;gap:9px;justify-content:flex-start;text-align:left;
+  margin:0;padding:8px 12px;
+  background:none;border:none;border-radius:0;clip-path:none;box-shadow:none;
+  color:var(--t3);font-family:var(--font-display);font-size:12.5px;font-weight:600;
+  letter-spacing:.02em;text-transform:none;white-space:normal;cursor:pointer;
+  transition:color .12s ease,background .12s ease;
+}
+#cab-stage .cab-vrail>*:hover,
+#cab-stage .pol-rail-b:hover,
+#cab-stage .hp-vnt-cat:hover,
+#cab-stage .pol-chaps-sub .pol-chap:hover{
+  color:var(--t1);background:rgba(255,255,255,.04);
+}
+/* ⚠️ У АКТИВНОГО ПУНКТА ЗАЛИВКИ НЕТ. Плашка под выбранной строкой читалась как
+   ещё одна тёмная коробка в меню — а меню и так стояло на подложке. Отмечает
+   выбор ровно одно: полоса-акцент на кромке и яркость текста. */
+#cab-stage .cab-vrail>*.on,
+#cab-stage .pol-rail-b.on,
+#cab-stage .hp-vnt-cat.on,
+#cab-stage .pol-chaps-sub .pol-chap.on{
+  color:#eaf6ff;background:none;
+}
+/* Гранёные кнопки рисуют «рамку» двумя слоями-псевдоэлементами, а не border:
+   у меню их быть не должно, иначе пункт остаётся коробкой. */
+#cab-stage .hp-vnt-cat::before,
+#cab-stage .cab-vrail>*::before{display:none}
+/* Полоса-акцент на кромке, обращённой к тексту. */
+#cab-stage .cab-vrail>*.on::after,
+#cab-stage .pol-rail-b.on::after,
+#cab-stage .hp-vnt-cat.on::after,
+#cab-stage .pol-chaps-sub .pol-chap.on::after{
+  content:"";position:absolute;left:0;top:6px;right:auto;bottom:auto;
+  width:2px;height:calc(100% - 12px);background:var(--pol,var(--gd,#3a9bdc));
+}
+/* Иконка/глиф пункта — того же роста, что у образца, без «подпрыгивания». */
+#cab-stage .pol-rail-ic{font-size:15px;filter:none;transform:none}
+#cab-stage .pol-rail-b.on .pol-rail-ic{transform:none;color:var(--pol,var(--gd,#3a9bdc))}
+#cab-stage .pol-rail-ic .pol-gl{width:15px;height:15px}
+/* Пункт — одна строка: пояснение мельче и приглушено, как счётчик у образца. */
+#cab-stage .pol-rail-tx{gap:0}
+#cab-stage .pol-rail-tx b{font-size:12.5px;font-weight:600;letter-spacing:.02em}
+#cab-stage .pol-rail-tx i{font-size:10px;color:var(--t4)}
+/* Подпункты: отступ + волосяная линия — единственное их отличие от пунктов. */
+#cab-stage .pol-chaps.pol-chaps-sub{
+  margin:1px 0 5px 18px;padding:0 0 0 10px;
+  border-bottom:none;border-left:1px solid var(--cab-line,var(--w2));
+}
+#cab-stage .pol-chaps-sub .pol-chap{padding:7px 10px;font-weight:500;font-size:12px}
+#cab-stage .pol-chaps-sub .pol-chap.on::after{left:-11px}
+
+/* ══════════════════════════════════════════════════════════════════
+   МЕНЮ ДЕРЖАВЫ — СПРАВА
+   ⚠️ Сайдменю стояло НАПРОТИВ сайдменю: слева борт сайта (разделы вики,
+   локации, конструкторы), сразу за ним — рельса разделов ведомства. Две
+   колонки навигации подряд, между ними ниточка, и только потом текст: игрок
+   упирался взглядом в двойной частокол и искал, где кончается сайт и начинается
+   держава. Рельса ведомства уезжает к правому краю — навигация сайта и
+   навигация державы встают по разным бортам, работа лежит между ними.
+   Только на широком экране: на телефоне рельса свёрнута в строку (29_vn_mobile). */
+/* ⚠️ РАЗДЕЛИТЕЛЬНОЙ ЛИНИИ У МЕНЮ НЕТ ВОВСЕ. Сперва борт меню отделялся
+   волосяной линией — и она честно рисовалась во всю высоту колонки, то есть
+   ПРОДОЛЖАЛАСЬ В ПУСТОТУ: пунктов пять, а черта тянулась до низа самого длинного
+   ведомости и заканчивалась в никуда, показывая пальцем на пустое место.
+   Отделяет расстояние (`gap` шелла) и подсветка активного пункта — линия для
+   этого не нужна. */
+@media (min-width:769px){
+  #cab-stage .pol-shell{flex-direction:row-reverse}
+  #cab-stage .pol-rail{border-right:none;border-left:none;padding:0}
+  /* Экраны без своей рельсы (разведка, Длань, исследования): колонку из полосы
+     вкладок строит `cabRailify` — её разворачиваем тем же бортом. */
+  /* ⚠️ ИССЛЕДОВАНИЯ ПЕРЕСТАВЛЯЮТСЯ ЗДЕСЬ, А НЕ В `cabRailify`. Их меню категорий —
+     не полоса вкладок, а СОБСТВЕННАЯ вертикальная рельса `.hp-vnt-rail` внутри
+     `.hp-vnt-wrap`, поэтому в CAB_STRIPS его нет и переставлять нечего: оно так и
+     стояло слева, единственное на весь кабинет, да ещё своими коробками с
+     полосками прогресса. Разворачиваем контейнер — и рельса встаёт справа, как у
+     всех; вид ей задан общим набором правил меню выше. */
+  #cab-stage .hp-vnt-wrap{flex-direction:row-reverse;gap:var(--cab-pad)}
+  #cab-stage .hp-vnt-rail{flex:0 0 clamp(178px,19vw,244px)}
+  #cab-stage .cab-split{flex-direction:row-reverse;gap:var(--cab-pad)}
+  #cab-stage .cab-split-rail{
+    border-right:none;border-left:none;
+    padding:0;margin-right:0;margin-left:0;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   САЙДБАР САЙТА В КАБИНЕТЕ — КОЛОНКА ИКОНОК
+   Пока игрок в кабинете, борт сайта ему не рабочий инструмент, а фон — но
+   занимает полную ширину меню, стоя НАПРОТИВ меню державы. Здесь он ужимается
+   до колонки глифов: разделы на месте, подписи и поиск сняты, разворот —
+   прежним шевроном (toggleSb в auth.js на #economy переключает этот режим).
+
+   ⚠️ КОЛОНКА ГОВОРИТ ЯЗЫКОМ САЙТА, А НЕ СВОИМ. Первая версия перекрашивала
+   КАЖДЫЙ глиф в `--te` (голубой) и обводила выбранный пункт золотой плашкой с
+   полями 3px/8px — то есть заводила в борте вторую палитру и вторую форму
+   выделения. Рядом с развёрнутым бортом это читалось как чужой виджет,
+   вклеенный в сайт: там пункты приглушённо-серые, выбранный — золотой с
+   полосой слева, и никаких плавающих коробок.
+   Правило простое: ужимается ТОЛЬКО ширина. Цвета, выделение активного и ритм
+   строк — ровно те же, что у развёрнутого борта (07_premium.css).
+
+   ⚠️ ЗДЕСЬ ВЕЗДЕ `!important`, И ЭТО НЕ ЛЕНЬ. Весь борт навигации переписан в
+   07_premium.css с `!important` на каждой строке — `.n-home{font-size:8px
+   !important; padding:8px 16px!important}`, `.nl-name`, `.nl-ico` и остальные.
+   Первая версия этих правил была написана обычной специфичностью и молча
+   проиграла: колонка ужалась до 64px, а подписи остались и полезли из неё
+   наружу. Пока premium держит `!important`, перебить его можно только тем же. */
+@media (min-width:769px){
+  #app.cab-mode{--sb:64px}
+
+  /* Шапка борта: остаётся ОДНА эмблема по центру. Здесь стояла подмена имени
+     на «CE» через `.logo-name::after` — и она была невидимой: у `.logo-name`
+     стоит `-webkit-text-fill-color:transparent` (имя красится градиентом через
+     background-clip), псевдоэлемент это наследует, а `color` тем самым цветом
+     перебить нельзя. То есть место под надпись занималось, а надписи не было. */
+  #app.cab-mode #sb .logo{justify-content:center!important}
+  #app.cab-mode #sb .logo-main{padding:0!important;gap:0!important;justify-content:center!important}
+  #app.cab-mode #sb .logo-words{display:none!important}
+  #app.cab-mode #sb .sb-srch,
+  #app.cab-mode #sb .sb-foot,
+  #app.cab-mode #sb #related-articles-block{display:none!important}
+
+  /* Вглубь (страницы вики, подпункты разделов) в свёрнутом борте не ходят:
+     без подписи это столбик одинаковых точек. Верхний уровень — весь на виду. */
+  #app.cab-mode #sb .np,
+  #app.cab-mode #sb .ng,
+  #app.cab-mode #sb .n-sub,
+  #app.cab-mode #sb .nl-body,
+  #app.cab-mode #sb .ns-body,
+  #app.cab-mode #sb .n-group-body{display:none!important}
+  /* ⚠️ ТЕКСТ, КОТОРЫЙ ОСТАВАЛСЯ ВИДЕН. Прятались только подписи ПУНКТОВ, а
+     заголовок «РАЗНОЕ» (`.nl-static`, ставит buildNav перед страницами без
+     раздела) и счётчики поиска — нет: в 64-пиксельной колонке они торчали
+     обрубками слов поперёк глифов. Гасим весь текст борта разом. */
+  #app.cab-mode #sb .nl-static,
+  #app.cab-mode #sb .nav-search-count,
+  #app.cab-mode #sb .nav-no-results,
+  #app.cab-mode #sb .n-group-t,
+  #app.cab-mode #sb .n-group-arr,
+  #app.cab-mode #sb .nl-name,
+  #app.cab-mode #sb .nl-cnt,
+  #app.cab-mode #sb .nl-arr,
+  /* Полупрозрачная картинка-подложка раздела: она вылезает за правый борт на
+     30px («right:-30px») и в узкой колонке лежит прямо на глифе. */
+  #app.cab-mode #sb .nl-big-icon{display:none!important}
+
+  /* ⚠️ ПОДПИСЬ УБИРАЕТСЯ ОТСТУПОМ, А НЕ `font-size:0`. Подпись пункта — голый
+     текстовый узел внутри <a> (render.js), отдельным правилом его не скрыть, и
+     первым заходом строке ставился `font-size:0`. Не сработало: браузер держит
+     МИНИМАЛЬНЫЙ размер шрифта (у нас 8px) и молча поднимает ноль до него —
+     подписи остались и полезли из 64-пиксельной колонки наружу. Работает другое:
+     текст уезжает за левый край и обрезается, а глиф вынимается из потока
+     (`position:absolute`), поэтому отступ на него не действует. Строка при этом
+     остаётся ВИДИМОЙ — подсветка активного пункта и наведение живы.
+     Название пункта не пропадает совсем: cabSbTitles (cabinet.js) переносит его
+     в tooltip, иначе колонка глифов — ребус. */
+  #app.cab-mode #sb .n-home,
+  #app.cab-mode #sb .n-group-hdr,
+  #app.cab-mode #sb .nl-hdr{
+    position:relative!important;display:block!important;
+    height:38px!important;padding:0!important;margin:0!important;
+    text-indent:-999px!important;overflow:hidden!important;white-space:nowrap!important;
+    letter-spacing:0!important;color:transparent!important;
+    /* Строка занимает ВСЮ ширину колонки — как в развёрнутом борте. Поля 8px по
+       бокам делали из каждого пункта отдельную плашку, и колонка рассыпалась на
+       столбик коробок. Полоса-акцент слева — та же, что у развёрнутого. */
+    background:transparent!important;border-top:none!important;
+    border-left:var(--deco-accent-w,2px) solid transparent!important;
+  }
+  #app.cab-mode #sb .n-home:hover,
+  #app.cab-mode #sb .n-group-hdr:hover,
+  #app.cab-mode #sb .nl-hdr:hover{background:rgba(255,255,255,.03)!important}
+  #app.cab-mode #sb .n-home.on,
+  #app.cab-mode #sb .n-group-hdr.on,
+  #app.cab-mode #sb .nl-hdr.on{
+    background:hsl(38 50% 20% / .1)!important;
+    border-left-color:hsl(38 65% 52%)!important;
+  }
+
+  /* Глиф — из потока и по центру строки: так он не уезжает вместе с текстом и
+     сам служит мишенью клика на всю ширину пункта. Цвет ему нужен СВОЙ (строка
+     красит текст в `transparent`, а глиф наследует именно её цвет), поэтому
+     повторяем ровно ту тройку, которой борт живёт: приглушённый — светлее на
+     наведении — золотой на активном. */
+  #app.cab-mode #sb .n-home-icon,
+  #app.cab-mode #sb .nl-ico{
+    position:absolute!important;inset:0!important;
+    display:flex!important;align-items:center!important;justify-content:center!important;
+    text-indent:0!important;font-size:16px!important;
+    width:auto!important;height:auto!important;
+    opacity:1!important;color:hsl(220 14% 46%)!important;
+  }
+  #app.cab-mode #sb :is(.n-home,.n-group-hdr,.nl-hdr):hover :is(.n-home-icon,.nl-ico){
+    color:hsl(220 16% 68%)!important;
+  }
+  #app.cab-mode #sb .n-home.on .n-home-icon,
+  #app.cab-mode #sb .n-group-hdr.on .n-home-icon,
+  #app.cab-mode #sb .nl-hdr.on .nl-ico{color:hsl(38 72% 62%)!important}
+  #app.cab-mode #sb .nl-ico img{width:18px!important;height:18px!important;opacity:.75!important}
+  #app.cab-mode #sb .nl-hdr.on .nl-ico img{opacity:1!important}
+  /* Счётчик горячих точек — единственное, что обязано остаться читаемым. */
+  #app.cab-mode #sb .hs-badge{
+    position:absolute!important;top:3px;right:5px;
+    font-size:9px!important;line-height:1;padding:1px 3px;
+  }
+  /* Разделители между группами пунктов оставляем: в колонке без подписей это
+     единственное, что показывает, где кончается сайт и начинается вики. */
+  #app.cab-mode #sb .nav-divider{margin:5px 10px!important}
+  /* Шеврон разворота: в узкой колонке ему не место в углу шапки — уводим вниз,
+     под меню, где он не спорит с эмблемой. */
+  #app.cab-mode #sb-collapse{
+    top:auto!important;bottom:12px;right:auto;left:50%;transform:translateX(-50%);
+  }
+}

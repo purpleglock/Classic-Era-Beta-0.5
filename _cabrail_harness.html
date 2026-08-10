@@ -1,0 +1,96 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Стенд: борт сайта в кабинете (колонка глифов)</title>
+<!-- ВРЕМЕННЫЙ СТЕНД. Показывает борт сайта рядом: развёрнутый (как на всех
+     страницах) и ужатый до глифов (#app.cab-mode, страница #economy).
+     Разметка скопирована из index.html и buildNav (render.js) один в один. -->
+<link rel="stylesheet" href="css/index.css">
+<style>
+  body{margin:0;background:var(--b0,#0a0d13);font-family:Inter,sans-serif}
+  .pair{display:flex;gap:0;height:100vh}
+  .pane{position:relative;height:100vh;overflow:hidden;border-right:1px solid #222}
+  .pane>#app{height:100vh}
+  #app{display:block}
+  #sb{position:relative!important;margin:0!important;height:100vh;display:flex;flex-direction:column}
+  #nav{overflow:auto;flex:1}
+  .cap{position:absolute;bottom:6px;left:8px;z-index:9;font:10px monospace;color:#6a7a8a}
+</style>
+<div class="pair">
+  <div class="pane"><div id="app" class="cab-mode">
+    <nav id="sb">
+      <button id="sb-collapse" onclick="void 0" title="Свернуть меню">‹</button>
+      <div class="logo">
+        <div class="logo-top"><div class="lc"></div><div class="lc"></div></div>
+        <a class="logo-main" href="#" title="Классическая эра">
+          <span class="logo-mark"><img src="assets/wiki-emblem.png" alt="" draggable="false"></span>
+          <span class="logo-words">
+            <span class="logo-name">Классическая эра</span>
+            <span class="logo-sub">живая галактика</span>
+          </span>
+        </a>
+      </div>
+      <div class="sb-srch"><input id="srch" type="text" placeholder="Поиск..."></div>
+      <div id="nav"></div>
+      <div id="related-articles-block"></div>
+      <div class="sb-foot"><span class="sb-cnt">128 статей</span></div>
+    </nav>
+  </div><div class="cap">cab-mode (кабинет)</div></div>
+
+  <div class="pane"><div id="app">
+    <nav id="sb">
+      <button id="sb-collapse" onclick="void 0" title="Свернуть меню">‹</button>
+      <div class="logo">
+        <div class="logo-top"><div class="lc"></div><div class="lc"></div></div>
+        <a class="logo-main" href="#" title="Классическая эра">
+          <span class="logo-mark"><img src="assets/wiki-emblem.png" alt="" draggable="false"></span>
+          <span class="logo-words">
+            <span class="logo-name">Классическая эра</span>
+            <span class="logo-sub">живая галактика</span>
+          </span>
+        </a>
+      </div>
+      <div class="sb-srch"><input type="text" placeholder="Поиск..."></div>
+      <div id="nav2"></div>
+      <div class="sb-foot"><span class="sb-cnt">128 статей</span></div>
+    </nav>
+  </div><div class="cap">обычный борт (для сравнения)</div></div>
+</div>
+
+<script>
+// Разметка ровно как её строит buildNav (render.js): пункты сайта, группа
+// «Правила проекта», разделы вики с картинками-иконками и «РАЗНОЕ» в хвосте.
+var NAV = `
+<a class="n-home" href="#"><span class="n-home-icon">⌂</span>Главная</a>
+<a class="n-home" href="#"><span class="n-home-icon">📖</span>Игровой гайдбук</a>
+<div class="n-group" id="nav-rules">
+  <div class="n-group-hdr"><span class="n-home-icon">⚖</span><span class="n-group-t">Правила проекта</span><span class="n-group-arr">▸</span></div>
+  <div class="n-group-body">
+    <a class="n-sub" href="#"><span class="n-home-icon">◈</span>Общие правила</a>
+  </div>
+</div>
+<a class="n-home on" href="#"><span class="n-home-icon">🛰</span>Кабинет игрока</a>
+<a class="n-home" href="#"><span class="n-home-icon">☄</span>Горячие точки<span class="hs-badge">2</span></a>
+<a class="n-home" href="#"><span class="n-home-icon">🜨</span>Карта галактики</a>
+<a class="n-home" href="#"><span class="n-home-icon">⬡</span>Фракции</a>
+<a class="n-home" href="#"><span class="n-home-icon">⛬</span>Игровые локации</a>
+<a class="n-home" href="#"><span class="n-home-icon">⚒</span>Конструкторы</a>
+<a class="n-home" href="#"><span class="n-home-icon">🛠</span>Управление</a>
+<div class="nav-divider"></div>
+<div class="ns"><div class="nl-hdr"><span class="nl-ico" style="font-size:9px;color:var(--t4)">◈</span><span class="nl-name">Вселенная</span><span class="nl-cnt">14</span><span class="nl-arr">▶</span></div><div class="nl-body"><a class="np" href="#">Страница</a></div></div>
+<div class="ns"><div class="nl-hdr"><span class="nl-ico" style="font-size:9px;color:var(--t4)">◈</span><span class="nl-name">Расы</span><span class="nl-cnt">9</span><span class="nl-arr">▶</span></div><div class="nl-body"><a class="np" href="#">Страница</a></div></div>
+<div class="ns"><div class="nl-hdr"><span class="nl-ico" style="font-size:9px;color:var(--t4)">◈</span><span class="nl-name">Технологии</span><span class="nl-cnt">6</span><span class="nl-arr">▶</span></div><div class="nl-body"><a class="np" href="#">Страница</a></div></div>
+<div class="nav-divider" style="margin-top:8px"></div>
+<div class="nl-static">Разное</div>
+<a class="np" href="#">Отдельная статья</a>
+<a class="np" href="#">Ещё одна</a>
+`;
+document.getElementById('nav').innerHTML = NAV;
+document.getElementById('nav2').innerHTML = NAV;
+// Подписи в tooltip — то же, что делает cabSbTitles() в cabinet.js.
+document.querySelectorAll('.cab-mode #sb .n-home,.cab-mode #sb .n-group-hdr,.cab-mode #sb .nl-hdr').forEach(function(el){
+  if (el.title) return;
+  var nm = el.querySelector('.nl-name,.n-group-t');
+  var t = ((nm ? nm.textContent : el.textContent) || '').replace(/\s+/g,' ').trim();
+  if (t) el.title = t;
+});
+</script>

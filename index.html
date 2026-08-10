@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260810vnload';
+  var BUILD = '20260811mnav3';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -60,7 +60,7 @@
      никогда не грузился — у кого Inter стоял локально (часто старый, без курсива),
      браузер синтезировал «косой» faux-italic в цитатах, у остальных шёл Exo 2. -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:ital,wght@0,200;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400&family=Orbitron:wght@400;500;700;900&family=Audiowide&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/index.css?v=20260810room3d">
+<link rel="stylesheet" href="css/index.css?v=20260811mnav3">
 </head>
 <body>
 <!-- Экран загрузки после входа по почте. Рисуется ДО первого кадра приложения
@@ -451,7 +451,7 @@
 <script src="faction_system.js?v=20260703privacy"></script>
 <!-- Процедурная панорама колонии: фон новеллы и экрана колонии (render.js _hvpCityBg). -->
 <script src="city_gen.js?v=20260809closecab"></script>
-<script src="render.js?v=20260810vnload"></script>
+<script src="render.js?v=20260811mnav3"></script>
 <script src="editor.js?v=20260809closecab"></script>
 <script src="character.js?v=20260809vnonly"></script>
 <script src="battlemap.js?v=20260607a"></script>
@@ -477,13 +477,21 @@
 <script src="turret_forge_ui.js?v=20260801turret1"></script>
 <script src="reactor_forge_ui.js?v=20260808rgtech"></script>
 <script src="faction_members.js?v=20260809closecab"></script>
-<script src="economy.js?v=20260810vnload"></script>
-<!-- Экраны новеллы «Внутренняя»/«Внешняя политика»: рамка и прологи свои,
+<script src="economy.js?v=20260810subrail2"></script>
+<!-- Ведомства «Внутренняя»/«Внешняя политика»: рамка и прологи свои,
      тела разделов отдают economy.js (ecTab*) и faction_members.js (двор). -->
-<script src="politics.js?v=20260810vnload"></script>
-<!-- Экраны новеллы «Добыча»/«Торговля»/«Биржа»/«Армия»/«Статистика»:
-     остаток кабинета на каркасе politics.js, тела — те же ecTab*. -->
-<script src="estate.js?v=20260810vnload"></script>
+<script src="politics.js?v=20260810subrail2"></script>
+<!-- Ведомства «Добыча»/«Торговля»/«Биржа»/«Армия»/«Статистика»/«Вестник»:
+     тот же каркас, что у политики, тела — те же ecTab*. -->
+<script src="estate.js?v=20260810subrail2"></script>
+<!-- КАБИНЕТ ДЕРЖАВЫ (#economy) — рабочая комната и единственная дверь в работу.
+     Грузится ПОСЛЕ politics/estate: приёмная зовёт их открывашки (polOpen,
+     estOpen) и хостит контейнеры экранов у себя (vnScreenHosts из render.js). -->
+<script src="cabinet.js?v=20260811mnav3"></script>
+<!-- НАВИГАЦИЯ КАБИНЕТА НА ТЕЛЕФОНЕ: нижняя панель + листы выбора. Грузится
+     ПОСЛЕ cabinet.js — читает CAB_DEPT/CAB_GRP и зовёт cabOpen/cabBack.
+     На мониторе не поднимается вовсе (см. шапку mobile_nav.js). -->
+<script src="mobile_nav.js?v=20260811mnav3"></script>
 <script src="battle_board.js?v=20260809perks2"></script>
 <!-- Трёхмерная доска боя. Сам three.js тут НЕ подключается: battle_gl.js тянет
      его динамическим import только когда игрок открыл бой (см. bgLoadThree). -->

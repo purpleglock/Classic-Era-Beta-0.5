@@ -291,7 +291,6 @@ function _authSettle() {
   window.authSettled = true;
   // Данные державы для новеллы: тянем заново (force) — первый заход был впустую.
   try { if (typeof vnEnsureData === 'function') vnEnsureData(1); } catch (e) {}
-  try { if (typeof vnResBarRepaint === 'function') vnResBarRepaint(); } catch (e) {}
   try { if (typeof vnCityRetry === 'function') vnCityRetry(); } catch (e) {}
 }
 async function restoreSession() {
@@ -521,9 +520,27 @@ function _sbNotifyResize() {
   setTimeout(() => { try { window.dispatchEvent(new Event('resize')); } catch {} }, 320);
 }
 
+/* ─── Борт сайта в кабинете державы: колонка иконок ───
+   ⚠️ ЗАЧЕМ ОТДЕЛЬНЫЙ РЕЖИМ, А НЕ ПРОСТО `sb-collapsed`. На #economy у державы
+   своё меню разделов, и оно стояло НАПРОТИВ борта сайта: две колонки навигации
+   подряд. Совсем прятать борт нельзя — из кабинета ходят на карту, в гайдбук, к
+   фракциям. Поэтому третье состояние: борт остаётся на месте, но ужимается до
+   иконок (оформление — `#app.cab-mode` в 30_cabinet.css), а меню державы уезжает
+   к правому борту. Развернуть обратно — тем же шевроном, выбор запоминается. */
+var _cabRailPref = (function(){ try { return localStorage.getItem('wk_cab_rail') !== '0'; } catch { return true; } })();
+
 // Ручное сворачивание/разворачивание (кнопка-шеврон или плавающая «☰»)
 function toggleSb() {
   const app = document.getElementById('app');
+  // В кабинете шеврон переключает не «спрятать/показать», а «иконки/подписи»:
+  // спрятать борт целиком по-прежнему можно с любой другой страницы.
+  if (app.classList.contains('cab-route') && !app.classList.contains('sb-collapsed')) {
+    _cabRailPref = !app.classList.contains('cab-mode');
+    app.classList.toggle('cab-mode', _cabRailPref);
+    try { localStorage.setItem('wk_cab_rail', _cabRailPref ? '1' : '0'); } catch {}
+    _sbNotifyResize();
+    return;
+  }
   const collapsed = !app.classList.contains('sb-collapsed');
   app.classList.remove('sb-peek');
   app.classList.toggle('sb-collapsed', collapsed);
@@ -535,9 +552,13 @@ function toggleSb() {
 // Синхронизация состояния меню при переходе между страницами.
 // На карте галактики прячем меню автоматически; на остальных — возвращаем к выбору игрока.
 function _sbSyncForRoute(slug) {
-  if (window.innerWidth <= 768) return; // на мобильных работает выдвижной drawer
   const app = document.getElementById('app');
   if (!app) return;
+  // Метку страницы ставим ВСЕГДА, даже на телефоне: по ней toggleSb понимает,
+  // что шеврон сейчас переключает режим кабинета, а не прячет борт.
+  app.classList.toggle('cab-route', slug === 'economy');
+  app.classList.toggle('cab-mode', slug === 'economy' && _cabRailPref && window.innerWidth > 768);
+  if (window.innerWidth <= 768) return; // на мобильных работает выдвижной drawer
   const before = app.classList.contains('sb-collapsed');
   app.classList.remove('sb-peek');
   if (slug === 'map') app.classList.add('sb-collapsed');

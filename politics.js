@@ -70,6 +70,9 @@ const POL_DSEC = {
 // Новелла на главной инициализируется асинхронно, поэтому ждём её контроллер,
 // а не стреляем в пустоту через фиксированный setTimeout.
 function polGoto(kind) {
+  // Работа вернулась в кабинет: ссылки внутри разделов ведут туда, а не на
+  // главную в меню новеллы (см. шапку cabinet.js).
+  if (typeof cabGoto === 'function') { cabGoto(kind); return; }
   if (typeof go === 'function' && typeof curSlug !== 'undefined' && curSlug !== 'home') go('home', false);
   let tries = 0;
   const tick = () => {
@@ -244,6 +247,12 @@ function polChapterize(host, key) {
 
   const bar = document.createElement('div');
   bar.className = 'pol-chaps';
+  // ⚠️ ГЛАВЫ — ПОДПУНКТЫ РЕЛЬСЫ, А НЕ ВТОРАЯ ГОРИЗОНТАЛЬ. Раньше над телом
+  // раздела ложилась своя лента вкладок («Престол · Совет · Канцелярия») — и
+  // экран получал ДВА разных меню разной формы: колонка слева и полоса сверху,
+  // а над ними ещё рельса ведомств кабинета. Три навигации трёх дизайнов на
+  // одном экране. Теперь главы вкладываются В ту же колонку, под свой раздел:
+  // одно меню, одна форма, вся глубина видна сразу.
   bar.innerHTML = real.map((c, i) =>
     `<button type="button" class="pol-chap${i === idx ? ' on' : ''}" data-i="${i}">${esc(polChapName(c.t))}</button>`).join('');
 
@@ -257,7 +266,18 @@ function polChapterize(host, key) {
     wrap.appendChild(box);
   });
   content.innerHTML = '';
-  content.appendChild(bar);
+  // Куда лечь ленте глав. На мониторе — в рельсу, подпунктами под активным
+  // разделом. На телефоне рельса свёрнута в одну строку и раскрывается тапом:
+  // спрятать туда главы значит спрятать пол-экрана за жест, о котором никто не
+  // догадается, — там лента остаётся над телом, как была.
+  const narrow = window.matchMedia && window.matchMedia('(max-width:768px)').matches;
+  const railOn = narrow ? null : host.querySelector('.pol-railw .pol-rail .pol-rail-b.on');
+  if (railOn) {
+    bar.classList.add('pol-chaps-sub');
+    railOn.after(bar);
+  } else {
+    content.appendChild(bar);
+  }
   content.appendChild(wrap);
 
   bar.addEventListener('click', e => {
@@ -318,6 +338,24 @@ function polHead(title, backFn) {
 }
 function polMsg(title, backFn, text) {
   return polHead(title, backFn) + `<div class="hp-vn-col-body pol-body"><div class="hp-vn-col-empty">${esc(text)}</div></div>`;
+}
+// ⚠️ ТУПИК БЕЗ ВЫХОДА: сорванный заход писал «связь с канцелярией потеряна» и на
+// этом всё — единственным лечением оставался F5. Теперь у любого срыва есть
+// кнопка повтора прямо на экране: сбрасываем флаги загрузки (иначе повтор
+// упрётся в тот же полупустой EC) и заходим заново.
+// retryJs — готовый вызов открывашки экрана («polOpen()», «estOpen('army')»).
+function polErr(title, backFn, text, retryJs, detail) {
+  const d = detail ? `<div class="hp-vn-col-empty" style="font-size:11px;opacity:.55;max-width:420px">${esc(detail)}</div>` : '';
+  return polHead(title, backFn) + `<div class="hp-vn-col-body pol-body">
+    <div class="hp-vn-col-empty">${esc(text)}</div>${d}
+    <div class="hp-vn-col-empty"><button class="btn btn-gd btn-sm" type="button"
+      onclick="event.stopPropagation();polResetLoad();${retryJs}">↻ Повторить</button></div>
+  </div>`;
+}
+// Повтор обязан начинаться с чистого листа: без сброса флагов ecEnsureData
+// ответит «уже загружено» и экран откроется на том же полупустом EC.
+function polResetLoad() {
+  try { EC.coreLoaded = false; EC.restLoaded = false; EC._loadedFor = null; EC._restFor = null; } catch (e) {}
 }
 
 // Данные кабинета нужны всем разделам, кроме «Двора». Один общий загрузчик.
@@ -395,7 +433,11 @@ async function polOpen() {
     if (!el.classList.contains('show')) return;
     polRefresh();
   } catch (e) {
-    if (el.classList.contains('show')) el.innerHTML = polMsg('Внутренняя политика', 'polReturn', 'Двор молчит — связь с канцелярией потеряна.');
+    console.error('[politics]', e);
+    if (el.classList.contains('show')) {
+      el.innerHTML = polErr('Внутренняя политика', 'polReturn', 'Двор молчит — связь с канцелярией потеряна.',
+        'polOpen()', (e && e.message) || '');
+    }
   }
 }
 
@@ -659,7 +701,11 @@ async function dipOpen() {
     if (!el.classList.contains('show')) return;
     dipRefresh();
   } catch (e) {
-    if (el.classList.contains('show')) el.innerHTML = polMsg('Внешняя политика', 'dipReturn', 'Посольский канал сорван.');
+    console.error('[politics]', e);
+    if (el.classList.contains('show')) {
+      el.innerHTML = polErr('Внешняя политика', 'dipReturn', 'Посольский канал сорван.',
+        'dipOpen()', (e && e.message) || '');
+    }
   }
 }
 

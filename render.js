@@ -1681,7 +1681,7 @@ function buildNav(filt='') {
   if (typeof ecCanAccess==='function' && ecCanAccess()) {
     // Кабинета больше нет — есть держава, и живёт она в разговоре на главной.
     // Пункт ведёт ровно туда, куда раньше вели его двери: меню → «Займёмся делами».
-    h+=`<a class="n-home" id="ntl-eco" href="#home" onclick="event.preventDefault();heroVNGoto('g_work');return false"><span class="n-home-icon">🛰</span>${L('Держава','My realm')}</a>`;
+    h+=`<a class="n-home" id="ntl-eco" href="#economy" onclick="event.preventDefault();go('economy');return false"><span class="n-home-icon">🛰</span>${L('Кабинет игрока','My cabinet')}</a>`;
     // ☄ Горячие точки — вход в активные бои (доска боя). Бейдж = число боёв,
     // его до-рисовывает hsNavBadge() после загрузки кабинета/страницы.
     const hsN = (typeof EC!=='undefined' && Array.isArray(EC.battles)) ? EC.battles.length : 0;
@@ -2639,13 +2639,46 @@ function buildHeroVN(coverUrl, user) {
   return `<div class="hp-hero-cover hp-vn" id="hp-hero-cover">
     ${bgLayer}
     <div class="hp-hero-grad"></div>
-    <div class="vnres" id="vnres" aria-hidden="true"></div>
-    <div class="vnport" id="vnport" aria-hidden="true"></div>
     ${spriteLayer}
     <div class="hp-hero-frame"></div>
     <span class="hpc-corner hpc-tl"></span><span class="hpc-corner hpc-tr"></span>
     <span class="hpc-corner hpc-bl"></span><span class="hpc-corner hpc-br"></span>
-    <div class="hp-vn-idx" id="hp-vn-idx" aria-hidden="true"><div class="hp-vn-idx-cap">📈 ${lang === 'en' ? 'EXCHANGE · LIVE INDEX' : 'БИРЖА · ИНДЕКС В ЭФИРЕ'}</div><div id="hp-vn-myticker"></div><div id="hp-vn-ticker"></div></div>
+    <!-- ⚠️ ЭКРАНОВ ЗДЕСЬ БОЛЬШЕ НЕТ. Контейнеры ведомств и забав (vnScreenHosts)
+         висели на обложке, и главная была вторым кабинетом: сцену перекрывали
+         строка казны, люк с портретом и полтора десятка окон. Всё это живёт в
+         кабинете (#economy, cabinet.js). Новелла — приветствие: персонаж, фон,
+         реплики и одна дверь дальше (кнопка «на карту» ниже). -->
+    <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
+      <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
+      <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
+      <div class="hp-vn-text" id="hp-vn-text"></div>
+      <div class="hp-vn-banner" id="hp-vn-banner" aria-hidden="true"></div>
+      <!-- ⚠️ МЕНЮ НОВЕЛЛЫ СНЯТО. «Открыть меню» разворачивало три реплики-намерения,
+           за которыми стояли экраны — то есть разговор был пультом управления
+           державой. Работа и забавы переехали в кабинет (cabinet.js), и лишний
+           уровень выбора здесь только мешал: приветствие ни о чём не спрашивает. -->
+      <div class="hp-vn-foot">
+        <div class="hp-vn-ctrl">
+          <button class="hp-vn-btn hp-vn-back" id="hp-vn-back" type="button" hidden onclick="event.stopPropagation();heroVNDoBack()">↩ ${lang === 'en' ? 'back' : 'назад'}</button>
+          <button class="hp-vn-btn hp-vn-next" id="hp-vn-next" type="button">${lang === 'en' ? '⏩ skip' : '⏩ пропустить'}</button>
+        </div>
+        ${buildHeroCta(user)}
+      </div>
+    </div>
+    ${uploadBtn}
+  </div>`;
+}
+// ── Контейнеры экранов: ОДИН список на новеллу и на кабинет ────
+// Раньше эти пустышки жили прямо в разметке обложки новеллы, и поэтому все
+// экраны (политика, хозяйство, колонизация, наука, разведка, Длань) физически
+// существовали ТОЛЬКО на главной. Отсюда и вся возня с heroVNGoto/polGoto/
+// estGoto: чтобы что-то открыть, приходилось сперва уехать на главную. Кабинету
+// нужны те же самые узлы под теми же id — все рисовальщики ищут их по
+// getElementById, — поэтому список стал общим, а не скопированным.
+// ⚠️ Узлы позиционируются `position:absolute;inset:0` — хост ОБЯЗАН быть
+// позиционированным блоком (у новеллы это .hp-hero-cover, у кабинета — .cab-stage).
+function vnScreenHosts() {
+  return `
     <div class="hp-vn-colony" id="hp-vn-colony" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-planets" id="hp-vn-planets" aria-hidden="true"></div>
     <div class="hp-vn-poem" id="hp-vn-poem" aria-hidden="true"></div>
@@ -2667,32 +2700,9 @@ function buildHeroVN(coverUrl, user) {
     <div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-exch" id="hp-vn-exch" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-army" id="hp-vn-army" aria-hidden="true"></div>
     <div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-stat" id="hp-vn-stat" aria-hidden="true"></div>
-    <div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-press" id="hp-vn-press" aria-hidden="true"></div>
-    <div class="hp-vn-box" id="hp-vn-box" data-lines="${linesAttr}" data-speaker="${esc(first.n || '')}" role="button" tabindex="0">
-      <div class="hp-vn-bgflag" id="hp-vn-bgflag" aria-hidden="true"></div>
-      <div class="hp-vn-name" id="hp-vn-name"${first.n ? '' : ' style="display:none"'}>${esc(first.n || '')}</div>
-      <div class="hp-vn-text" id="hp-vn-text"></div>
-      <div class="hp-vn-banner" id="hp-vn-banner" aria-hidden="true"></div>
-      <div class="hp-vn-acts" id="hp-vn-acts">
-        <button class="hp-vn-actbtn" id="hp-vn-actbtn" type="button" aria-expanded="false" aria-controls="hp-vn-choices"
-          onclick="event.stopPropagation();heroVNActsToggle()">
-          <span class="hp-vn-actbtn-t" id="hp-vn-actbtn-t">${lang === 'en' ? 'Open menu' : 'Открыть меню'}</span>
-          <span class="hp-vn-actbtn-n" id="hp-vn-actbtn-n"></span>
-          <span class="hp-vn-actbtn-arr">▾</span>
-        </button>
-        <div class="hp-vn-choices" id="hp-vn-choices"></div>
-      </div>
-      <div class="hp-vn-foot">
-        <div class="hp-vn-ctrl">
-          <button class="hp-vn-btn hp-vn-back" id="hp-vn-back" type="button" hidden onclick="event.stopPropagation();heroVNDoBack()">↩ ${lang === 'en' ? 'back' : 'назад'}</button>
-          <button class="hp-vn-btn hp-vn-next" id="hp-vn-next" type="button">${lang === 'en' ? '⏩ skip' : '⏩ пропустить'}</button>
-        </div>
-        ${buildHeroCta(user)}
-      </div>
-    </div>
-    ${uploadBtn}
-  </div>`;
+    <div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-press" id="hp-vn-press" aria-hidden="true"></div>`;
 }
+
 // Это событие за сегодня или вчера? (по календарной дате published_at/created_at)
 function _heroIsToday(n) {
   const d = new Date(n.published_at || n.created_at || 0);
@@ -2762,7 +2772,14 @@ function _heroVNScreenOpen() {
 // держим его прокрутку в нуле; при закрытии возвращаем игрока туда, где он был.
 let _vnScrollSave = 0;
 function _vnScreenSync() {
-  const open = !!_heroVNScreenOpen();
+  // ⚠️ В КАБИНЕТЕ ЭКРАН — НЕ ОКНО, И ЗАМОРАЖИВАТЬ СТРАНИЦУ НЕЛЬЗЯ. Заморозка
+  // писалась под новеллу, где экран разворачивается поверх всего: там #cw обязан
+  // стоять, иначе на iOS уезжает шапка с «назад». В кабинете ведомство лежит В
+  // ПОТОКЕ страницы (#cab-stage), и `html.vn-screen` глушил единственную
+  // прокрутку — на телефоне открытое ведомство просто не листалось дальше
+  // первого экрана. В CSS это лечилось `html:has(#cab-stage) #cw{overflow:auto}`,
+  // но `:has()` нет в Safari до 15.4 — то есть ровно там, где и ломалось.
+  const open = !!_heroVNScreenOpen() && !document.getElementById('cab-stage');
   const html = document.documentElement;
   _vnBackFabSync(open);
   if (open === html.classList.contains('vn-screen')) return;
@@ -2779,86 +2796,16 @@ function _vnScreenSync() {
   }
 }
 
-// ── ВЫХОД ИЗ ЭКРАНА: страховочная кнопка, ни от чего не зависящая ──
-// Штатная кнопка «назад» живёт в шапке экрана, шапка — внутри оверлея, а
-// оверлей — внутри прокручиваемого #cw. На iOS Safari этого хватило, чтобы
-// её не стало видно совсем. Поэтому раз в тик МЕРЯЕМ штатную кнопку: если
-// она на экране — ничего не добавляем (никаких дублей на мониторе). Если её
-// нет или она за краем — поднимаем свою: прямо в <body> (вне всех скроллеров
-// и клипов), стили инлайном (не зависят от кэша CSS, порядка файлов и
-// медиазапросов), z-index предельный, угол — правый верхний, как у штатной.
+// ── ВЫХОД ИЗ ЭКРАНА ──────────────────────────────────────────────
+// ⚠️ ПЛАВАЮЩЕЙ «НАЗАД» БОЛЬШЕ НЕТ. Она заводилась страховкой под iOS Safari,
+// где шапка экрана уезжала за край. На мониторе же она садилась поверх всего
+// прямым углом в правом верхнем углу — вне любого оформления, поверх шапки
+// сайта, дублируя штатную «назад» экрана. Осталась только уборка: если кнопка
+// висит с прошлой сессии в DOM — снимаем.
 const _VN_FAB_ID = 'vn-back-fab';
-// Видна ли собственная кнопка экрана? Только ДВА замера, оба устойчивые:
-//   1) элемент есть и не выключен стилями (display/visibility/opacity);
-//   2) ненулевой размер и прямоугольник ЦЕЛИКОМ в пределах вьюпорта — именно
-//      это ловит iOS-случай, где шапка уехала выше нуля (r.top отрицательный).
-// Проверки на перекрытие (elementFromPoint) тут БЫЛА и снята: поверх экрана
-// живут модалки, кнопка «назад» под ними считалась невидимой, страховочная
-// всплывала — а на следующем тике снималась. Кнопка мигала раз в секунду.
-// Перекрытая модалкой шапка — не наш случай: модалку игрок закрывает крестиком.
-// Кнопок выхода на экране бывает НЕСКОЛЬКО (шапка + свои «уйти»/«к списку»
-// внутри панелей). Смотрели только первую — а она могла оказаться в
-// прокрученной части, и страховочная всплывала дублем рядом с видимой
-// шапкой. Достаточно, чтобы ХОТЬ ОДНА была на экране.
-function _vnOwnBackVisible(scr) {
-  if (!scr) return false;
-  const list = scr.querySelectorAll('.hp-vn-col-x,.hvp-back');
-  for (const own of list) if (_vnElOnScreen(own)) return true;
-  return false;
-}
-function _vnElOnScreen(el) {
-  const cs = getComputedStyle(el);
-  if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0) return false;
-  const r = el.getBoundingClientRect();
-  if (r.width < 8 || r.height < 8) return false;
-  const vh = window.innerHeight || document.documentElement.clientHeight;
-  const vw = window.innerWidth || document.documentElement.clientWidth;
-  return r.top >= 0 && r.left >= 0 && r.bottom <= vh + 1 && r.right <= vw + 1;
-}
-function _vnBackFabSync(open) {
-  // Экранов в состоянии .show может висеть несколько (один поверх другого):
-  // видимая кнопка выхода на ЛЮБОМ из них снимает вопрос.
-  const all = open ? document.querySelectorAll(
-    '.hp-vn-colony.show,.hp-vn-poem.show,.hp-vn-assembly.show,.hp-vn-rating.show,.hp-vn-research.show,.hp-vn-fight.show'
-  ) : [];
-  let fab = document.getElementById(_VN_FAB_ID);
-  let ownVisible = false;
-  for (const s of all) if (_vnOwnBackVisible(s)) { ownVisible = true; break; }
-  const need = !!all.length && !ownVisible;
-  if (!need) { if (fab) fab.remove(); return; }
-  if (fab && fab.isConnected && fab.parentNode === document.body) return;
+function _vnBackFabSync() {
+  const fab = document.getElementById(_VN_FAB_ID);
   if (fab) fab.remove();
-  fab = document.createElement('button');
-  fab.id = _VN_FAB_ID;
-  fab.type = 'button';
-  const en = (typeof lang !== 'undefined' && lang === 'en');
-  fab.textContent = en ? '↩ BACK' : '↩ НАЗАД';
-  fab.setAttribute('aria-label', en ? 'Back' : 'Назад');
-  fab.style.cssText = [
-    'position:fixed',
-    'right:calc(10px + env(safe-area-inset-right,0px))',
-    'top:calc(10px + env(safe-area-inset-top,0px))',
-    'z-index:2147483000',
-    'min-height:40px;padding:10px 16px',
-    'display:flex;align-items:center;gap:6px',
-    'font:700 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace',
-    'letter-spacing:.12em;text-transform:uppercase',
-    'color:#eaf6ff;background:#0d1520;border:1px solid #3a9bdc',
-    'border-radius:0;box-shadow:0 6px 22px rgba(0,0,0,.55)',
-    'cursor:pointer;-webkit-appearance:none;appearance:none',
-    'touch-action:manipulation;-webkit-tap-highlight-color:transparent'
-  ].join(';') + ';';
-  fab.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); _vnBackFabGo(); });
-  document.body.appendChild(fab);
-}
-// Куда именно «назад» — знает сам экран: у него своя кнопка со своим
-// обработчиком (к списку планет, в меню кабинета, в пролог раздела).
-// Жмём её; если экран своей кнопки не завёл — уходим в меню новеллы.
-function _vnBackFabGo() {
-  const scr = _heroVNScreenOpen();
-  const own = scr && scr.querySelector('.hp-vn-col-x,.hvp-back');
-  if (own) { try { own.click(); return; } catch (e) {} }
-  try { heroVNChoice('menu'); } catch (e) {}
 }
 
 // Экранов много и открывают их из десятка мест — вместо правки всех вызовов
@@ -2966,89 +2913,25 @@ function heroVNActsSync() {
   if (cnt) cnt.textContent = n ? String(n) : '';
 }
 
-// ── Меню новеллы = РАЗГОВОР, а не простыня из полутора десятков кнопок.
-// Первый уровень — три реплики-намерения («новости», «поиграем», «дела»),
-// второй — конкретные экраны. Список строится в одном месте: и корневое меню
-// (renderChoices), и подменю (heroVNChoice) читают отсюда, иначе они разъезжаются.
-function heroVNMenuGroups(en) {
-  const work = [
-    // Власть выведена из кабинета в новеллу: двор, благополучие, курс, вера и
-    // война — один разговор у трона; дипломатия и аванпосты — другой, у стола
-    // послов. В кабинете этих вкладок больше нет (см. ecPaintCabinet).
-    ['ipol',     (en ? 'Domestic policy' : 'Внутренняя политика')],
-    ['dipl',     (en ? 'Foreign policy' : 'Внешняя политика')],
-    ['colony',   (en ? 'Colonization' : 'Колонизация')],
-    ['planets',  (en ? 'Colony management' : 'Управление колониями')],
-    // Остаток кабинета (estate.js): добыча и биржа — свои двери, потому что это
-    // два самых длинных разговора; армия и её стройка — одна дверь, потому что
-    // это один разговор, разорванный вкладками надвое.
-    ['mine',     (en ? 'Resource extraction' : 'Добыча ресурсов')],
-    ['trade',    (en ? 'Trade' : 'Торговля')],
-    ['exch',     (en ? 'Exchange' : 'Биржа')],
-    ['army',     (en ? 'Armed forces' : 'Вооружённые силы')],
-    ['stat',     (en ? 'Statistics' : 'Статистика державы')],
-    ['press',    (en ? 'Realm herald' : 'Вестник державы')],
-    ['research', (en ? 'Research' : 'Исследования')],
-    // Разведка живёт только здесь: вкладка кабинета снесена, весь тайный
-    // блок (агентура / операции / досье / контрразведка) — этот экран.
-    ['intel',    (en ? 'Intelligence Directorate' : 'Разведуправление')],
-    // Кнопка названа именем надзорного органа, а не темы: игрок открывает не
-    // «список дикарей», а досье Фонда, который потом это досье ему и предъявит.
-    ['tama',     (en ? 'FPNI' : 'Фонд невмешательства')],
-  ];
-  // «Штаб артиллерии» скрыт, пока не исследована «Сама неотвратимость»:
-  // живая проверка по EC (если экономика уже загружена) либо кэш-флаг с прошлой
-  // загрузки (ставится/чистится в ecLoad; сам экран перепроверяет на сервере).
-  try {
-    const doomOn = (typeof ecDoomUnlocked === 'function' && typeof EC !== 'undefined' && EC.eco && ecDoomUnlocked())
-      || localStorage.getItem('wk_doom_unlocked') === '1';
-    if (doomOn) work.push(['doom', (en ? 'Artillery HQ' : 'Штаб артиллерии')]);
-  } catch (e) {}
-  // ⛓ Синли-бей — невольничий рынок. Скрыт для «просвещённых» держав (зеркало
-  // серверного гейта; сервер всё равно ответит 403). Показываем, если экономика
-  // ещё не загружена (сервер решит), иначе — по ecIsEnlightened().
-  try {
-    const hideSlave = (typeof ecIsEnlightened === 'function' && typeof EC !== 'undefined' && EC.app && ecIsEnlightened());
-    if (!hideSlave) work.push(['sinli', (en ? 'Sinli-Bay (slave market)' : 'Синли-бей')]);
-  } catch (e) { work.push(['sinli', (en ? 'Sinli-Bay (slave market)' : 'Синли-бей')]); }
-  return [
-    { key: 'g_news', label: (en ? 'Any news?' : 'Что нового?'), items: [
-      ['events', (en ? 'Sector events' : 'События сектора')],
-      ['idx',    (en ? "How's the exchange?" : 'Что там на бирже?')],
-      ['market', (en ? "What's moving the market?" : 'Что там на рынке?')],
-      ['ach',    (en ? "Today's achievements" : 'Достижения за сегодня')],
-      ['rating', (en ? 'Player ratings' : 'Рейтинг игроков')],
-    ] },
-    { key: 'g_play', label: (en ? "Let's play a round" : 'Давай поиграем'), items: [
-      ['geo',   (en ? 'Geological survey' : 'Георазведка')],
-      ['stars', (en ? 'Gaze into the Rift' : 'Всмотреться в Разлом')],
-      ['fight', (en ? 'Fight Club' : 'Бойцовский клуб')],
-      ['fish',  (en ? 'Down to the river' : 'Пойдём к реке')],
-      // ⏸ ВРЕМЕННО ОТКЛЮЧЕНЫ (вернём позже) — вместо них «Бойцовский клуб».
-      // Серверные эффекты поэмы/ассамблеи и так неактивны (их SQL не применялся).
-      // ['poem',   (en ? 'Poem of the week' : 'Поэма недели')],
-      // ['assembly', (en ? 'Interstellar Assembly' : 'Межзвёздная Ассамблея')],
-    ] },
-    { key: 'g_work', label: (en ? 'Down to business' : 'Займёмся делами'), items: work },
-  ];
-}
-// «Назад» с экрана — в ЕГО группу, а не в корень: иначе после каждого экрана
-// игрок заново проходит два уровня разговора. Группа не найдена — корень.
+// ⚠️ МЕНЮ НОВЕЛЛЫ (heroVNMenuGroups) БОЛЬШЕ НЕТ. Оно было двухуровневым
+// разговором: «что нового / поиграем / займёмся делами» → полтора десятка
+// экранов. Все они теперь двери кабинета (CAB_DEPT в cabinet.js), а новости и
+// достижения — стол кабинета (cabDeskHtml). Разговор на главной ни о чём не
+// спрашивает: это приветствие, а не пульт.
+
+// «Назад» с экрана — в кабинет, потому что открыть экран можно только оттуда.
 function heroVNBack(kind) {
-  const k = kind || _heroVNView;
-  const en = (typeof lang !== 'undefined' && lang === 'en');
-  let to = 'menu';
-  try {
-    const g = heroVNMenuGroups(en).filter(x => x.items.some(it => it[0] === k))[0];
-    if (g) to = g.key;
-  } catch (e) {}
-  heroVNChoice(to);
+  if (typeof curSlug !== 'undefined' && curSlug === 'economy' && typeof cabBack === 'function') { cabBack(); return; }
+  heroVNChoice('menu');
 }
 // Переход на ЛЮБОЙ экран новеллы откуда угодно (двери кабинета, ссылки внутри
 // разделов). Новелла на главной поднимается асинхронно, поэтому ждём контроллер,
 // а не стреляем в пустоту фиксированным setTimeout (polGoto/estGoto — частные
 // случаи этого же; они старше и оставлены как есть).
 function heroVNGoto(kind) {
+  // Рабочие экраны переехали в кабинет (cabinet.js): если это ведомство —
+  // ведём туда. Развлечения и новости остаются в новелле на главной.
+  if (typeof CAB_DEPT === 'object' && CAB_DEPT[kind] && typeof cabGoto === 'function') { cabGoto(kind); return; }
   if (typeof go === 'function' && typeof curSlug !== 'undefined' && curSlug !== 'home') go('home', false);
   let tries = 0;
   const tick = () => {
@@ -3096,22 +2979,9 @@ function heroVNChoice(kind) {
   if (kind === 'intel') { _heroVNCat = null; heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); heroVNIntelOpen(); return; }
   if (kind === 'menu') { _heroVNCat = null; heroVNUnpin(); heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose(); heroVNTamaClose(); _heroVNCtl.menu(); return; }
 
-  // Группа-намерение («Что нового?» / «Давай поиграем» / «Займёмся делами») —
-  // не экран, а второй уровень разговора: возвращаем idle-новеллу и подменяем
-  // список кнопок, «назад» уводит к трём корневым репликам.
-  if (kind.slice(0, 2) === 'g_') {
-    const grp = heroVNMenuGroups(en).filter(g => g.key === kind)[0];
-    if (!grp) { heroVNChoice('menu'); return; }
-    _heroVNCat = null; heroVNUnpin();
-    heroVNColonyClose(); heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose();
-    heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose();
-    heroVNSinliClose(); heroVNTamaClose();
-    if (typeof _heroVNCtl.idle === 'function') _heroVNCtl.idle();
-    _heroVNCtl.setChoices(grp.items.map(([k, l]) =>
-      `<button class="hp-vn-choice" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join(''));
-    _heroVNCtl.showBack(() => heroVNChoice('menu'));
-    return;
-  }
+  // Групп-намерений («g_news» / «g_play» / «g_work») больше нет — меню новеллы
+  // снято, экраны открывает кабинет. Старая ссылка на группу = возврат к idle.
+  if (kind.slice(0, 2) === 'g_') { heroVNChoice('menu'); return; }
 
   // «Колонизация» — карта границ державы поверх сцены (аналог колонизации в интерфейсе новеллы).
   if (kind === 'colony') { _heroVNCat = null; heroVNPlanetsClose(); heroVNPoemClose(); heroVNAssemblyClose(); heroVNRatingClose(); heroVNResearchClose(); heroVNGeoClose(); heroVNStarsClose(); heroVNDoomClose(); heroVNFightClose(); heroVNSinliClose();heroVNColonyOpen(); return; }
@@ -5394,9 +5264,6 @@ let _heroVNResume = null;   // { sig, idx } — позволяет продол�
 let _heroVNCtl = null;      // контроллер активной новеллы: narrate / reset / speaker (для выбора в окне)
 function heroVNInit() {
   try { vnCityBoot(); } catch (e) {}                       // фон новеллы = панорама столицы
-  // Данные державы тянем ДАЖЕ если панорама выключена: от них живут тик дохода и
-  // верхняя строка ресурсов (vnCityBoot её не зовёт, когда фон отключён).
-  try { if (typeof vnEnsureData === 'function') { vnEnsureData(); vnResBarRepaint(); } } catch (e) {}
   if (_heroVNStop) { try { _heroVNStop(); } catch (e) {} _heroVNStop = null; }
   const box  = document.getElementById('hp-vn-box');
   const out  = document.getElementById('hp-vn-text');
@@ -5526,44 +5393,12 @@ function heroVNInit() {
     }
     charTimer = setInterval(tick, 30);
   }
-  // Разовая серверная проверка «Самой неотвратимости» для пункта «Штаб артиллерии».
-  // Нужна ровно потому, что wk_doom_unlocked — это localStorage: он привязан к
-  // origin, и на деплое (или в другом браузере) его нет, даже если технология
-  // давно исследована. Тихо, без блокировки отрисовки меню.
-  let doomProbed = false;
-  async function doomProbe() {
-    if (doomProbed) return;
-    doomProbed = true;
-    try {
-      if (typeof EC !== 'undefined' && EC.eco) return;   // экономика уже загружена — ответ был выше
-      if (typeof ecLoadApp === 'function') await ecLoadApp();
-      const fid = (typeof EC !== 'undefined' && EC.app && EC.app.faction_id) || null;
-      if (!fid || typeof apiFetch !== 'function') return;
-      const rows = await apiFetch('faction_economy?select=research&faction_id=eq.' + encodeURIComponent(fid));
-      const res = (rows && rows[0] && rows[0].research) || [];
-      if (!Array.isArray(res) || !res.includes('pol.inevitability')) return;
-      try { localStorage.setItem('wk_doom_unlocked', '1'); } catch (e) {}
-      if (choicesEl && choicesEl.children.length) renderChoices();   // меню ещё на экране — дорисовать пункт
-    } catch (e) {}
-  }
+  // Меню новеллы снято (см. buildHeroVN): выбирать здесь больше нечего, все
+  // экраны открывает кабинет. Функция осталась точкой «вернуться к приветствию»,
+  // потому что её зовут narrate/reset — там, где раньше показывали меню.
   function renderChoices() {
     setBack(false);
-    if (!choicesEl) return;
-    // Прогреть срезы биржи заранее, пока игрок выбирает — к клику «биржа» данные уже в кэше.
-    if (typeof fnWarmExchange === 'function') fnWarmExchange();
-    // Первый уровень — три реплики-намерения; конкретные экраны живут за ними
-    // (heroVNMenuGroups). Так меню читается как ответ персонажу, а не как пульт.
-    const opts = heroVNMenuGroups(en).map(g => [g.key, g.label]);
-    // Кэш-флаг «Штаба артиллерии» живёт в localStorage и потому ПУСТ на новом
-    // домене/браузере: держава с исследованием не видела пункт, пока не откроет
-    // кабинет. Спрашиваем сервер один раз за сеанс и перерисовываем меню.
-    try {
-      const doomOn = (typeof ecDoomUnlocked === 'function' && typeof EC !== 'undefined' && EC.eco && ecDoomUnlocked())
-        || localStorage.getItem('wk_doom_unlocked') === '1';
-      if (!doomOn) doomProbe();
-    } catch (e) {}
-    choicesEl.innerHTML = opts.map(([k, l]) =>
-      `<button class="hp-vn-choice hp-vn-choice-grp" onclick="event.stopPropagation();heroVNChoice('${k}')">${esc(l)}</button>`).join('');
+    if (choicesEl) choicesEl.innerHTML = '';
     heroVNActsSync();
   }
   // В режиме рассказа «назад» живёт в подвале рядом с «пропустить» (кнопкой),
@@ -9669,13 +9504,16 @@ function vnCityBoot() {
   vnEnsureData().then(done)
     .catch(e => { _vnCityWhy = 'загрузка данных упала: ' + (e && e.message || e); done(); });
 }
-// ── Данные державы для новеллы (без кабинета) ────────────────
-// Новелла — теперь ЕДИНСТВЕННЫЙ вход в игру: кабинет закрывается. Значит всё, что
-// он делал молча на заходе, обязано делаться здесь:
-//   1) economy_init + economy_tick (ecBootOnce) — иначе доход не начисляется вовсе;
-//   2) колонии и постройки — иначе фон рисует пепелище, а панель ресурсов пуста.
-// Это ЛЁГКАЯ выборка (4 запроса), не полный ecLoad с биржей/верой/обороной: экраны
-// новеллы догрузят остальное сами через polEnsureData → ecLoad.
+// ── Данные державы для фона новеллы ──────────────────────────
+// Новелла — приветствие, и данные ей нужны ровно для одного: нарисовать панораму
+// столицы за спиной персонажа (колонии и постройки). Это ЛЁГКАЯ выборка, не полный
+// ecLoad с биржей/верой/обороной.
+// ⚠️ ТИКА ЗДЕСЬ НЕТ И БЫТЬ НЕ ДОЛЖНО. Пока работа жила в новелле, кабинет был
+// закрыт и начислять доход было больше негде — отсюда ecBootOnce на главной. Теперь
+// работа вернулась в кабинет: economy_init + economy_tick делает ecLoad на входе в
+// #economy (economy.js), ОДИН раз и в одном месте. Держать тик ещё и на главной —
+// значит гонять самую долгую ручку игры на каждом заходе на сайт, в том числе
+// гостям-соседям, которые просто читают вики.
 let _vnDataP = null;
 // ⚠️ АВТОРИЗАЦИЯ ДОЕЗЖАЕТ ПОЗЖЕ ПЕРВОГО КАДРА. Главная рисуется из кеша ещё до
 // restoreSession(), поэтому на первом заходе `user` — null, ecLoadApp честно
@@ -9721,21 +9559,6 @@ function vnEnsureData(force) {
     if (!EC.fid) EC.fid = app.faction_id;
     if (!EC.ownFid) EC.ownFid = app.faction_id;
     const fid = encodeURIComponent(EC.fid);
-    // ⚠️ ТИК НЕ БЛОКИРУЕТ КАДР. `economy_tick` — самая долгая ручка в игре (за ней
-    // тянется market_tick и вся цепочка расчётов, на холодной базе это десятки
-    // секунд). Ждать её, чтобы нарисовать город и казну, — значит держать игрока
-    // перед тёмным экраном ради цифры, которая всё равно приедет следом. Пускаем
-    // параллельно и перерисовываем панель, когда доход начислится.
-    if (typeof ecBootOnce === 'function' && !EC.actAs) {
-      Promise.resolve().then(ecBootOnce).then(async () => {
-        // Тик изменил казну — перечитываем её и обновляем строку ресурсов.
-        try {
-          const rows = await dbGet('faction_economy', `faction_id=eq.${fid}`);
-          if (rows && rows[0]) EC.eco = Object.assign(EC.eco || {}, rows[0]);
-        } catch (e) {}
-        try { vnResBarRepaint(); } catch (e) {}
-      }).catch(() => {});
-    }
     // Кадр строится по трём таблицам — и только по ним. spatial_status (RPC,
     // считается на лету) уточняет лишь численность населения в панораме, поэтому
     // он ВНЕ ожидания: приедет — перерисуем город, не приедет — город будет по
@@ -9757,274 +9580,15 @@ function vnEnsureData(force) {
     if (!EC.eco) EC.eco = (ecoRows && ecoRows[0]) || { gc: 0, science: 0, resources: {} };
     if (!Array.isArray(EC.colonies) || !EC.colonies.length) EC.colonies = cols || [];
     if (!Array.isArray(EC.buildings) || !EC.buildings.length) EC.buildings = blds || [];
-    try { vnResBarRepaint(); } catch (e) {}
     return EC.app;
   })();
   return _vnDataP;
 }
-// ── Панель ресурсов новеллы (строка сверху, как в стратегиях) ──
-// Казна, наука и склад — ОДНОЙ строкой поверх сцены: игрок видит, чем богата
-// держава, не заходя ни в какое ведомство. Под числом — суточный приход, если
-// его удалось посчитать (нужны постройки и модификаторы; в лёгкой выборке они
-// уже есть, но считалка живёт в economy.js и может быть не готова — тогда просто
-// не показываем строку прихода, а не роняем панель).
-function vnResBarHtml() {
-  if (typeof EC === 'undefined') return '';
-  const en = (typeof lang !== 'undefined' && lang === 'en');
-  // ⏳ ПОКА ДАННЫХ НЕТ — НЕ ПУСТОТА, А СКЕЛЕТ. Иначе главная выглядит так, будто
-  // всё уже загрузилось и державы просто нет: игрок сидит перед тёмным кадром и
-  // не понимает, идёт загрузка или всё сломалось. Держава ещё неизвестна (гость
-  // не отличим от неподгруженного игрока) — строку не рисуем вовсе.
-  if (!EC.app) return (typeof user !== 'undefined' && user && !EC.myAppUid) ? _vnResSkel(en) : '';
-  if (!EC.eco) return _vnResSkel(en);
-  const num = (v) => (typeof ecNum === 'function') ? ecNum(v) : Math.round(+v || 0);
-  let incGc = null, incSci = null;
-  try {
-    if (typeof ecGcIncome === 'function' && typeof ecIncomePreview === 'function' && Array.isArray(EC.buildings)) {
-      incGc = ecGcIncome().net;
-      incSci = ecIncomePreview().science;
-    }
-  } catch (e) { incGc = incSci = null; }
-  const sub = (v) => (v == null || !v) ? '' :
-    `<span class="vnres-d ${v > 0 ? 'up' : 'dn'}">${v > 0 ? '+' : ''}${num(v)}</span>`;
-  const cell = (cls, ic, val, d, title) =>
-    `<div class="vnres-c ${cls}" title="${esc(title)}"><span class="vnres-i">${ic}</span>`
-    + `<span class="vnres-v">${val}</span>${d}</div>`;
-  const res = (typeof ecResEntries === 'function' ? ecResEntries() : []).slice(0, 6);
-  const resIco = (n) => (typeof resIconHtml === 'function') ? resIconHtml(n) : '◈';
-  const resHtml = res.map(([n, v]) =>
-    `<div class="vnres-c vnres-r" title="${esc(n)}"><span class="vnres-i">${resIco(n)}</span><span class="vnres-v">${num(v)}</span></div>`
-  ).join('');
-  const flag = (EC.app.herald_url || EC.app.image_url || '');
-  return `<div class="vnres-in" style="--fac:${(typeof ecReadable === 'function' ? ecReadable(EC.app.color) : (EC.app.color || '#c1121a'))}">
-      <div class="vnres-fac" title="${esc(EC.app.name || '')}">
-        ${flag ? `<img src="${esc(flag)}" alt="">` : '<span class="vnres-i">⬡</span>'}
-        <span class="vnres-fn">${esc(EC.app.name || '')}</span>
-      </div>
-      <div class="vnres-sep"></div>
-      ${cell('vnres-gc', '⛃', num(EC.eco.gc), sub(incGc), en ? 'Treasury, GC / day' : 'Казна, ГС · и суточный доход')}
-      ${cell('vnres-sci', '🔬', num(EC.eco.science), sub(incSci), en ? 'Science / day' : 'Очки науки · и суточный приход')}
-      ${resHtml ? `<div class="vnres-sep"></div>${resHtml}` : ''}
-    </div>`;
-}
-// Скелет строки: те же плашки, но пульсирующие — «связь с канцелярией идёт».
-function _vnResSkel(en) {
-  return `<div class="vnres-in vnres-skel">
-      <span class="vnres-sk vnres-sk-f"></span>
-      <div class="vnres-sep"></div>
-      <span class="vnres-sk"></span><span class="vnres-sk"></span>
-      <div class="vnres-sep"></div>
-      <span class="vnres-sk vnres-sk-s"></span><span class="vnres-sk vnres-sk-s"></span><span class="vnres-sk vnres-sk-s"></span>
-      <span class="vnres-wait">${en ? 'reading the ledgers…' : 'поднимаю ведомости…'}</span>
-    </div>`;
-}
-function vnResBarRepaint() {
-  const el = document.getElementById('vnres');
-  if (!el) return false;
-  const html = vnResBarHtml();
-  el.innerHTML = html;
-  el.classList.toggle('show', !!html);
-  el.setAttribute('aria-hidden', html ? 'false' : 'true');
-  try { vnPortRepaint(); } catch (e) {}
-  return !!html;
-}
-// ── ИЛЛЮМИНАТОР ДЕРЖАВЫ ────────────────────────────────────────────────
-// Круглый смотровой люк в углу сцены: за стеклом — герб державы, в нём же
-// портрет главы. Всё, что нужно, уже приехало с vnEnsureData (герб и цвет
-// в EC.app); лицо главы догружается один раз отдельно (ch_office → страница
-// персонажа) и кэшируется — без него иллюминатор просто показывает герб.
-let _vnPortLeader = null;      // {name,title,img} | null (нет персонажа)
-let _vnPortLeaderP = null;     // обещание загрузки — тянем ровно один раз
-function _vnPortLeaderLoad() {
-  if (_vnPortLeaderP) return _vnPortLeaderP;
-  _vnPortLeaderP = (async () => {
-    if (typeof fmRpc !== 'function' || typeof user === 'undefined' || !user) return null;
-    const o = await fmRpc('ch_office').catch(() => null);
-    if (!o || o.anon) return null;
-    const en = (typeof lang !== 'undefined' && lang === 'en');
-    // Глава державы важнее моего служебного персонажа: иллюминатор — портрет
-    // ПРАВИТЕЛЯ, а не того, кто смотрит. Если главы нет — своё лицо и свой пост.
-    const posts = (o.council && Array.isArray(o.council.posts)) ? o.council.posts : [];
-    const head = posts.find(p => p && p.head);
-    const mine = posts.find(p => p && !p.head && o.character && p.char_slug === o.character.slug);
-    let slug, name, title;
-    if (head) {
-      slug = head.char_slug; name = head.char_name;
-      title = en ? 'Head of state' : 'Глава державы';
-    } else if (o.character) {
-      slug = o.character.slug; name = o.character.name;
-      title = mine ? mine.title : (o.is_head ? (en ? 'Head of state' : 'Глава державы')
-                                             : (en ? 'In service' : 'На службе'));
-    } else return null;
-    let img = '';
-    try {
-      const r = await dbGet('pages', `slug=eq.${encodeURIComponent(slug)}&select=image_url&limit=1`);
-      img = (r && r[0] && r[0].image_url) || '';
-    } catch (e) {}
-    return { name: name || '', title: title || '', img, slug };
-  })().then(v => { _vnPortLeader = v; try { vnPortRepaint(); } catch (e) {} return v; })
-     .catch(() => null);
-  return _vnPortLeaderP;
-}
-function vnPortHtml() {
-  if (typeof EC === 'undefined' || !EC.app) return '';
-  const a = EC.app;
-  const col = (typeof ecReadable === 'function' ? ecReadable(a.color) : (a.color || '#3a9bdc'));
-  const flag = (a.herald_url || a.image_url || '');
-  const L = _vnPortLeader;
-  // Комната: стены-пилоны по бокам и балка сверху превращают панораму столицы
-  // в ВИД ИЗ ОКНА. На левом пилоне — знамя державы, под ним портрет главы.
-  // Архитектура кабинета — ОДНИМ SVG в перспективе (потолок, боковые стены, пол,
-  // переплёт панорамного окна). Растягивается по кадру: пропорции сцены заданы
-  // жёстко (1200/520), так что искажение минимально, зато стены всегда упираются
-  // в края. Текст и картинки в SVG не кладём — их бы растянуло: знамя, портрет и
-  // табличка идут отдельным HTML-слоем поверх левой стены.
-  // ⚠️ ПРОШЛАЯ ВЕРСИЯ ЧИТАЛАСЬ КАК ТРИ КОРИЧНЕВЫХ КОРОБКИ В ТЕМНОТЕ, и вот почему:
-  // (1) окно было плоским переплётом из rect'ов БЕЗ стекла и БЕЗ откосов — панорама
-  //     упиралась прямо в чёрные палки, стеклу не за что было зацепиться глазом;
-  // (2) стены заливались почти чёрным (#05080d…#233040) — знамя и портрет висели
-  //     не НА стене, а в пустоте, потому что стены на экране просто не было видно.
-  // Теперь: стены светлее и с освещённым пилястром ровно под убранством, окно —
-  // с коробом-откосом, мелким шагом стоек и слоем стекла (тонировка + косые блики),
-  // на правой стене — рабочий экран. Материал появился, «пустота» исчезла.
-  const room = `<svg class="vnport-svg" viewBox="0 0 1200 520" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-    <defs>
-      <linearGradient id="vnpCeil" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#0b111a"/><stop offset="1" stop-color="#22303f"/>
-      </linearGradient>
-      <linearGradient id="vnpWl" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="#0c131c"/><stop offset=".72" stop-color="#22303f"/>
-        <stop offset="1" stop-color="#324458"/>
-      </linearGradient>
-      <linearGradient id="vnpWr" x1="1" y1="0" x2="0" y2="0">
-        <stop offset="0" stop-color="#0c131c"/><stop offset=".72" stop-color="#22303f"/>
-        <stop offset="1" stop-color="#324458"/>
-      </linearGradient>
-      <linearGradient id="vnpPil" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="#1a2532"/><stop offset=".55" stop-color="#2b3b4e"/>
-        <stop offset="1" stop-color="#1c2734"/>
-      </linearGradient>
-      <linearGradient id="vnpFloor" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#22303f"/><stop offset="1" stop-color="#080c12"/>
-      </linearGradient>
-      <linearGradient id="vnpLamp" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="${esc(col)}" stop-opacity=".55"/>
-        <stop offset="1" stop-color="${esc(col)}" stop-opacity="0"/>
-      </linearGradient>
-      <linearGradient id="vnpSpill" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#bfe2ff" stop-opacity=".2"/>
-        <stop offset="1" stop-color="#bfe2ff" stop-opacity="0"/>
-      </linearGradient>
-      <!-- стекло: холодная тонировка сверху вниз, чтобы вид «ушёл за плоскость» -->
-      <linearGradient id="vnpGlass" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#8fc4ff" stop-opacity=".16"/>
-        <stop offset=".55" stop-color="#7fb6f0" stop-opacity=".05"/>
-        <stop offset="1" stop-color="#0a1420" stop-opacity=".14"/>
-      </linearGradient>
-      <clipPath id="vnpPane"><rect x="236" y="128" width="728" height="314"/></clipPath>
-    </defs>
-    <!-- ── СТЕКЛО. Идёт ПЕРВЫМ: панорама живёт отдельным слоем ПОД этим svg, и всё,
-         что здесь рисуется в проёме, ложится на неё как отражение в остеклении. -->
-    <g clip-path="url(#vnpPane)">
-      <rect x="236" y="128" width="728" height="314" fill="url(#vnpGlass)"/>
-      <g fill="#dbeeff" opacity=".07">
-        <polygon points="236,442 470,128 604,128 320,442"/>
-        <polygon points="660,442 838,128 884,128 706,442"/>
-      </g>
-      <rect x="236" y="128" width="728" height="2" fill="#eaf6ff" opacity=".22"/>
-    </g>
-    <!-- потолок с утопленными световыми панелями и световым карнизом -->
-    <polygon points="0,0 1200,0 1000,100 200,100" fill="url(#vnpCeil)"/>
-    <polygon points="286,16 914,16 878,44 322,44" fill="#cfe9ff" opacity=".1"/>
-    <polygon points="322,58 878,58 848,82 352,82" fill="#cfe9ff" opacity=".065"/>
-    <polygon points="0,0 1200,0 1000,100 200,100" fill="url(#vnpLamp)" opacity=".5"/>
-    <polygon points="200,94 1000,94 1000,100 200,100" fill="${esc(col)}" opacity=".38"/>
-    <!-- боковые стены с панельной расшивкой -->
-    <polygon points="0,0 200,100 200,470 0,520" fill="url(#vnpWl)"/>
-    <polygon points="1200,0 1000,100 1000,470 1200,520" fill="url(#vnpWr)"/>
-    <!-- ПИЛЯСТР ЛЕВОЙ СТЕНЫ: освещённая плоскость ровно там, где HTML-слой вешает
-         знамя и портрет. Без неё убранство читалось как наклейка на пустоте. -->
-    <polygon points="4,8 182,94 182,474 4,516" fill="url(#vnpPil)"/>
-    <polygon points="4,8 182,94 182,102 4,17" fill="${esc(col)}" opacity=".3"/>
-    <polygon points="4,507 182,466 182,474 4,516" fill="#000000" opacity=".45"/>
-    <g stroke="#ffffff" stroke-opacity=".06" stroke-width="2" fill="none">
-      <path d="M0,132 L200,168"/><path d="M0,300 L200,318"/>
-      <path d="M1200,132 L1000,168"/><path d="M1200,300 L1000,318"/>
-      <path d="M1104,52 L1104,496"/>
-    </g>
-    <!-- рабочий экран на правой стене: кабинет обязан чем-то работать -->
-    <polygon points="1022,150 1160,84 1160,300 1022,352" fill="#060a10" opacity=".9"/>
-    <polygon points="1030,157 1152,99 1152,292 1030,344" fill="${esc(col)}" opacity=".16"/>
-    <g fill="${esc(col)}" opacity=".5">
-      <polygon points="1040,300 1058,293 1058,332 1040,338"/>
-      <polygon points="1066,282 1084,274 1084,323 1066,330"/>
-      <polygon points="1092,258 1110,250 1110,313 1092,321"/>
-      <polygon points="1118,236 1136,227 1136,304 1118,312"/>
-    </g>
-    <!-- свет из окна ложится на стены -->
-    <polygon points="200,100 200,470 96,496 96,52" fill="url(#vnpSpill)"/>
-    <polygon points="1000,100 1000,470 1104,496 1104,52" fill="url(#vnpSpill)"/>
-    <!-- пол и его отблеск -->
-    <polygon points="0,520 200,470 1000,470 1200,520" fill="url(#vnpFloor)"/>
-    <polygon points="248,470 952,470 1080,520 120,520" fill="#bfe2ff" opacity=".06"/>
-    <!-- ── ОКНО. Простенок вокруг проёма + откос (у остекления есть толщина) + мелкий
-         шаг стоек. Раньше проём был во всю дальнюю стену и делился на три плиты —
-         из-за этого кадр и выглядел как три коробки, а не как окно. -->
-    <path d="M200,100 H1000 V470 H200 Z M236,128 H964 V442 H236 Z" fill="#101823" fill-rule="evenodd"/>
-    <g fill="#7f97b0" opacity=".28">
-      <rect x="236" y="128" width="728" height="3"/><rect x="236" y="439" width="728" height="3"/>
-      <rect x="236" y="128" width="3" height="314"/><rect x="961" y="128" width="3" height="314"/>
-    </g>
-    <g fill="#0a0f16">
-      <rect x="236" y="209" width="728" height="7"/>
-      <rect x="378" y="128" width="6" height="314"/><rect x="524" y="128" width="6" height="314"/>
-      <rect x="670" y="128" width="6" height="314"/><rect x="816" y="128" width="6" height="314"/>
-    </g>
-    <g fill="#a9c0d8" opacity=".2">
-      <rect x="378" y="128" width="1.5" height="314"/><rect x="524" y="128" width="1.5" height="314"/>
-      <rect x="670" y="128" width="1.5" height="314"/><rect x="816" y="128" width="1.5" height="314"/>
-      <rect x="236" y="209" width="728" height="1.5"/>
-    </g>
-    <!-- отбойник под окном и бра на стенах -->
-    <rect x="200" y="452" width="800" height="18" fill="#0d141d"/>
-    <rect x="200" y="452" width="800" height="2" fill="${esc(col)}" opacity=".3"/>
-    <g fill="${esc(col)}" opacity=".55">
-      <polygon points="112,200 132,206 132,222 112,214"/>
-      <polygon points="1088,200 1068,206 1068,222 1088,214"/>
-    </g>
-  </svg>`;
-  return `<div class="vnport-in" style="--fac:${col}">
-      ${room}
-      <div class="vnport-console">
-        <div class="vnport-banner">
-          <span class="vnport-rod"></span>
-          <span class="vnport-cloth${flag ? '' : ' vnport-nocloth'}"
-            ${flag ? `style="background-image:url(&quot;${esc(flag)}&quot;)"` : ''}></span>
-        </div>
-        ${L && L.name ? `<div class="vnport-lead">
-          <div class="vnport-leadin">
-            ${L.img ? `<img class="vnport-face" src="${esc(L.img)}" alt="" loading="lazy">`
-                    : `<span class="vnport-noface">${esc((L.name || '?').slice(0, 2)).toUpperCase()}</span>`}
-          </div>
-          <div class="vnport-plate">
-            <span class="vnport-led">${esc(L.name)}</span>
-            <span class="vnport-tit">${esc(L.title || '')}</span>
-          </div>
-        </div>` : ''}
-        <div class="vnport-fac">${esc(a.name || '')}</div>
-      </div>
-    </div>`;
-}
-function vnPortRepaint() {
-  const el = document.getElementById('vnport');
-  if (!el) return false;
-  const html = vnPortHtml();
-  el.innerHTML = html;
-  el.classList.toggle('show', !!html);
-  el.setAttribute('aria-hidden', html ? 'false' : 'true');
-  if (html && !_vnPortLeaderP) _vnPortLeaderLoad();
-  return !!html;
-}
+// ⚠️ ЗДЕСЬ БЫЛИ СТРОКА РЕСУРСОВ (#vnres) И ИЛЛЮМИНАТОР ДЕРЖАВЫ (#vnport) —
+// казна/склад поверх сцены и круглый люк с гербом и портретом главы. Вместе они
+// были ПСЕВДОКАБИНЕТОМ на главной: работы в них нет, а рисованный фон новеллы они
+// закрывали почти целиком (люк — половиной кадра). Казна и портрет живут там, где
+// с ними работают, — в кабинете (#economy). Новелла снова просто приветствие.
 // Перерисовка фона новеллы после того, как приехали колонии (ecLoadApp).
 function vnCityRepaint() { return _vnCityShow(_vnCityLayer()); }
 // Единственное место, где фон появляется на экране: готовый кусок разметки встаёт
@@ -10044,15 +9608,13 @@ function _vnCityShow(html) {
   el.classList.add('is-in');
   return true;
 }
-// Обложка как запасной вариант: показывается ТОЛЬКО если панорама не собралась.
-// ⚠️ НО НЕ ЗА СТЕКЛОМ КАБИНЕТА. Обложка — вертикальный рисованный арт, а фон
-// растягивается по широкому кадру через object-fit:cover: в проём окна попадает
-// увеличенный кусок сплошной заливки, и окно выглядит забитым фанерой. Пока
-// комната есть на экране (она рисуется при известной державе), запасной вид —
-// нейтральная тёмная глубина: это читается как ночь за остеклением, а не как брак.
+// Обложка как запасной вариант: показывается, если панорама не собралась.
+// ⚠️ РАНЬШЕ ЗДЕСЬ БЫЛА ОГОВОРКА ПРО «СТЕКЛО КАБИНЕТА»: пока сцену закрывал
+// иллюминатор (#vnport), обложка попадала в проём куском заливки, и вместо неё
+// показывали тёмную глубину. Иллюминатора нет — рисованный арт снова законный
+// фон новеллы, и прятать его не от чего.
 function _vnCityFallback() {
-  const room = !!(typeof EC !== 'undefined' && EC.app);
-  const u = (!room && typeof _heroCoverUrl !== 'undefined' && _heroCoverUrl) ? String(_heroCoverUrl).trim() : '';
+  const u = (typeof _heroCoverUrl !== 'undefined' && _heroCoverUrl) ? String(_heroCoverUrl).trim() : '';
   _vnCityShow(u ? `<img class="hp-hero-img" id="hp-hero-city" src="${esc(u)}" alt="">`
                 : `<div class="hp-hero-noimg" id="hp-hero-city"></div>`);
 }
