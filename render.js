@@ -3273,10 +3273,17 @@ function heroVNHideIdx() {
 // ══════════════════════════════════════════════════════════════
 // Текущий экран оверлея: 'map' — границы державы, 'sys' — карта конкретной системы.
 let _heroColonyView = { mode: 'map', sysId: null };
+// ТЕЛЕФОН = ДРУГОЙ ЭКРАН, а не та же карта поменьше. Зум/панорама по SVG на
+// мобильном железе неизбежно мигают (перерастрируется слой в сотни путей), а
+// пальцем попасть в звезду размером с точку нельзя. Поэтому на узком экране
+// вместо карты границ — СПИСОК систем с кнопками (см. _heroColonyPhoneBuild):
+// ничего не надо тащить и масштабировать, всё нажимается с первого раза.
+function _hpvncPhone() {
+  try { return window.matchMedia('(max-width:768px)').matches; } catch (e) { return false; }
+}
 function _heroColonyRender(en) {
-  return (_heroColonyView.mode === 'sys' && _heroColonyView.sysId)
-    ? _heroColonySysBuild(_heroColonyView.sysId, en)
-    : _heroColonyBuild(en);
+  if (_heroColonyView.mode === 'sys' && _heroColonyView.sysId) return _heroColonySysBuild(_heroColonyView.sysId, en);
+  return _hpvncPhone() ? _heroColonyPhoneBuild(en) : _heroColonyBuild(en);
 }
 function heroVNColonyClose() {
   const el = document.getElementById('hp-vn-colony');
@@ -3428,6 +3435,11 @@ function _hpvncClamp(svg, v) {
 function _hpvncApply(svg, v) {
   const c = _hpvncClamp(svg, v); if (!c) return;
   const b = _hpvncBase(svg);
+  // Запекать ТОТ ЖЕ кадр незачем: перерастрировка слоя видна как моргание, а
+  // жест часто заканчивается ровно там, где начался (клик, упор в границу).
+  const now = _hpvncNow(svg);
+  if (now && !svg.style.transform && Math.abs(now.w - c.w) < 0.5
+      && Math.abs(now.x - c.x) < 0.5 && Math.abs(now.y - c.y) < 0.5) return;
   svg.style.transform = '';
   svg.setAttribute('viewBox', `${c.x.toFixed(1)} ${c.y.toFixed(1)} ${c.w.toFixed(1)} ${c.h.toFixed(1)}`);
   svg.dataset.z = (b.w / c.w).toFixed(2);
@@ -3546,7 +3558,8 @@ function _hpvncBindZoom() {
 
   document.addEventListener('pointerdown', e => {
     const svg = mapOf(e); if (!svg) return;
-    svgA = svg; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    svgA = svg; delete svg.dataset.drag;   // новый жест — старая метка «это была панорама» недействительна
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
     if (pts.size === 1) moved = 0;
   });
@@ -3581,7 +3594,11 @@ function _hpvncBindZoom() {
     if (pts.size === 0) {
       // Панорама/пинч НЕ должны срабатывать как клик по системе (открылась бы
       // карта системы или ушёл бы запрос колонизации). Гасим следующий клик.
-      if (moved >= 6) svgA.dataset.drag = '1';
+      // Метка живёт ровно до конца текущего события: браузер шлёт click сразу
+      // за pointerup. Без срока годности она оставалась на SVG навсегда (после
+      // панорамы, за которой браузер click не прислал) и съедала СЛЕДУЮЩИЙ
+      // честный тап — отсюда «надо кликнуть дважды».
+      if (moved >= 6) svgA.dataset.drag = String(Date.now());
       _hpvncSettle(svgA);            // жест кончился — вернуть резкий вектор и подписи
       svgA = null;
     }
@@ -3591,8 +3608,109 @@ function _hpvncBindZoom() {
 
   document.addEventListener('click', e => {
     const svg = mapOf(e); if (!svg) return;
-    if (svg.dataset.drag === '1') { delete svg.dataset.drag; e.stopPropagation(); e.preventDefault(); }
+    const t = +svg.dataset.drag || 0;
+    delete svg.dataset.drag;
+    if (t && Date.now() - t < 400) { e.stopPropagation(); e.preventDefault(); }
   }, true);
+}
+
+// ══════════════════════════════════════════════════════════════
+// КОЛОНИЗАЦИЯ · ТЕЛЕФОН. Отдельный экран, а не сжатая карта: обычный документ,
+// который листается страницей. Ни зума, ни панорамы, ни SVG-слоёв — значит
+// нечему мигать и лагать, а цель нажатия у каждой системы во всю ширину.
+// Порядок продуман под задачу игрока: сперва «куда расширяться» (пул захватов и
+// смежные ничейные), потом «где селиться» (свои системы, впереди — те, где ещё
+// есть свободные планеты). Карта границ остаётся на ПК, где она и уместна.
+// ══════════════════════════════════════════════════════════════
+function _heroColonyPhoneBuild(en) {
+  const head = _heroColonyHead(en);
+  const money = typeof ecNum === 'function' ? ecNum : (x => x);
+  const myFid = (typeof EC !== 'undefined' && EC.fid) || null;
+  const all = (typeof EC !== 'undefined' && EC.allSystems) || [];
+  const byId = new Map(all.map(s => [s.id, s]));
+  const mineIds = (typeof ecMySysIds === 'function') ? ecMySysIds()
+    : new Set(all.filter(s => s.faction === myFid).map(s => s.id));
+  if (!myFid || !mineIds.size) {
+    return head + `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Your realm holds no systems on the map yet.' : 'У вашей державы пока нет систем на карте.'}</div></div>`;
+  }
+  const cols = (typeof EC !== 'undefined' && EC.colonies) || [];
+  const colsBySys = new Map();
+  cols.forEach(c => { const a = colsBySys.get(c.system_id) || []; a.push(c); colsBySys.set(c.system_id, a); });
+  const capSys = (cols.find(c => c.is_capital) || {}).system_id || null;
+
+  // ── Пул захватов ──
+  const left = (typeof ecClaimsLeft === 'function') ? ecClaimsLeft() : 0;
+  const max = (typeof ecClaimMax === 'function') ? ecClaimMax() : 1;
+  const cost = (typeof ecClaimCost === 'function') ? ecClaimCost() : 0;
+  const cdDays = (typeof ecClaimCdDays === 'function') ? ecClaimCdDays() : 1;
+  const cdMs = (typeof ecClaimCooldownMs === 'function') ? ecClaimCooldownMs() : 0;
+  const gc = (typeof EC !== 'undefined' && EC.eco && EC.eco.gc) || 0;
+  const claimIds = (typeof ecClaimableIds === 'function') ? ecClaimableIds() : [];
+  const canClaim = left > 0 && gc >= cost;
+  const pool = `<div class="hpvnc-ph-pool ${left > 0 ? 'ok' : 'cd'}">
+    <span class="hpvnc-ph-pool-l">${left > 0
+      ? `${en ? 'Claims left' : 'Захватов осталось'} <b>${left}/${max}</b>`
+      : `${en ? 'Cooldown' : 'Перезарядка'} <b>~${Math.max(1, Math.ceil(cdMs / 86400000))} ${en ? 'd.' : 'дн.'}</b>`}</span>
+    <span class="hpvnc-ph-pool-r">${money(cost)} ГС · ${en ? 'treasury' : 'казна'} ${money(gc)} ГС</span>
+  </div>`;
+
+  // ── Свои системы: сперва те, где ещё есть куда селиться ──
+  const freeOf = s => {
+    const list = (s.planets || []).filter(p => p && p.name);
+    if (!list.length) return 0;
+    const mySys = colsBySys.get(s.id) || [];
+    const pids = new Set(mySys.map(c => c.planet_pid).filter(v => v != null));
+    const names = new Set(mySys.filter(c => c.planet_pid == null).map(c => c.planet_name));
+    return list.filter(p => !(p.pid != null && pids.has(p.pid)) && !names.has(p.name)).length;
+  };
+  const mine = [...mineIds].map(id => byId.get(id)).filter(Boolean);
+  const rank = s => (s.id === capSys ? 0 : (freeOf(s) ? 1 : 2));
+  mine.sort((a, b) => rank(a) - rank(b) || String(a.name || '').localeCompare(String(b.name || '')));
+  const mineRows = mine.map(s => {
+    const nCol = (colsBySys.get(s.id) || []).length;
+    const nFree = freeOf(s);
+    const tags = [
+      s.id === capSys ? `<em class="hpvnc-ph-tag cap">★ ${en ? 'capital' : 'столица'}</em>` : '',
+      nCol ? `<em class="hpvnc-ph-tag">🏙 ${nCol}</em>` : '',
+      nFree ? `<em class="hpvnc-ph-tag free">${en ? 'free worlds' : 'свободных миров'}: ${nFree}</em>`
+            : `<em class="hpvnc-ph-tag dim">${en ? 'fully settled' : 'заселена полностью'}</em>`,
+    ].filter(Boolean).join('');
+    return `<button class="hpvnc-ph-row" type="button" data-q="${esc(String(s.name || '').toLowerCase())}"
+      onclick="event.stopPropagation();heroVNColonySys('${jsq(s.id)}')">
+      <span class="hpvnc-ph-nm">${esc(s.name || '—')}</span>
+      <span class="hpvnc-ph-tags">${tags}</span>
+      <span class="hpvnc-ph-go">›</span>
+    </button>`;
+  }).join('');
+
+  // ── Смежные ничейные: колонизация в один тап ──
+  const claimRows = claimIds.length ? claimIds.map(id => {
+    const s = byId.get(id); if (!s) return '';
+    const n = (s.planets || []).filter(p => p && p.name).length;
+    return `<div class="hpvnc-ph-row claim" data-q="${esc(String(s.name || '').toLowerCase())}">
+      <span class="hpvnc-ph-nm">★ ${esc(s.name || '—')}</span>
+      <span class="hpvnc-ph-tags"><em class="hpvnc-ph-tag">${en ? 'bodies' : 'тел'}: ${n || '—'}</em></span>
+      <button class="hpvnc-ph-claim" type="button" ${canClaim ? '' : 'disabled'}
+        onclick="event.stopPropagation();heroVNColonyClaim('${jsq(id)}')">${en ? 'Colonize' : 'Колонизировать'} · ${money(cost)} ГС</button>
+    </div>`;
+  }).join('') : `<div class="hpvnc-ph-empty">${en ? 'No neutral systems border your realm. Expand along hyperlanes.' : 'Нет смежных ничейных систем — расширяться пока некуда.'}</div>`;
+
+  return head + `<div class="hp-vn-col-body hpvnc-ph">
+    ${pool}
+    ${mine.length > 6 ? `<input class="hpvnc-ph-find" type="search" inputmode="search" placeholder="${en ? 'Find a system…' : 'Найти систему…'}" oninput="heroVNColonyFilter(this.value)">` : ''}
+    <div class="hpvnc-ph-cap">${en ? 'Expansion' : 'Экспансия'} · ${claimIds.length}</div>
+    <div class="hpvnc-ph-list">${claimRows}</div>
+    <div class="hpvnc-ph-cap">${en ? 'My systems' : 'Мои системы'} · ${mine.length}</div>
+    <div class="hpvnc-ph-list">${mineRows}</div>
+  </div>`;
+}
+// Фильтр списка по названию — работает по уже готовому DOM, без перерисовки.
+function heroVNColonyFilter(q) {
+  const host = document.getElementById('hp-vn-colony'); if (!host) return;
+  const s = String(q || '').trim().toLowerCase();
+  host.querySelectorAll('.hpvnc-ph-row').forEach(r => {
+    r.style.display = (!s || (r.dataset.q || '').includes(s)) ? '' : 'none';
+  });
 }
 
 // Сборка оверлея из данных кабинета (EC): территории ВСЕХ держав с заливками/границами/
@@ -4382,14 +4500,13 @@ function _heroColonySysBuild(sysId, en) {
   }).join('') : `<div class="hp-vn-col-empty" style="height:auto;padding:12px 0">${en ? 'No planets charted in this system.' : 'В этой системе не значится планет.'}</div>`;
 
   const body = `<div class="hp-vn-col-body">
-    <div class="hp-vn-col-main">${scene}
-      <!-- Выход из схемы системы ВНУТРИ её рамки. В шапке экрана «↩ к карте» есть,
-           но на телефоне ведомство прокручивается страницей, и шапка уезжает
-           наверх — игрок оставался в системе без видимого выхода. Эта кнопка
-           лежит там же, где он смотрит, и от прокрутки не зависит (CSS прячет её
-           на мониторе, где шапка всегда на месте). -->
-      <div class="hpvnc-back"><button type="button" onclick="event.stopPropagation();heroVNColonyMap()">↩ ${en ? 'to the map' : 'к карте'}</button></div>
-    </div>
+    <!-- Выход из схемы системы ПЕРВОЙ строкой экрана, в потоке документа. Раньше
+         кнопка висела position:fixed поверх карты и проваливалась под нижнюю
+         панель и прочий интерфейс — из системы было не выйти. Обычная строка
+         ничего не перекрывает и никуда не проваливается; на мониторе её прячет
+         CSS, там выход живёт в шапке. -->
+    <div class="hpvnc-back"><button type="button" onclick="event.stopPropagation();heroVNColonyMap()">↩ ${en ? 'to the map' : 'к карте'}</button></div>
+    <div class="hp-vn-col-main">${scene}</div>
     <aside class="hp-vn-col-side">
       <div class="hp-vn-col-info">
         <span class="hp-vn-col-info-cap">${en ? 'Planets' : 'Планеты'} · ${planets.length}</span>

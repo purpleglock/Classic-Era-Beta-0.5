@@ -611,13 +611,64 @@
    _heroColonySysBuild): на мониторе выход живёт в шапке экрана и никуда не
    уезжает, вторая кнопка там была бы мусором. */
 .hpvnc-back{display:none}
+/* На телефоне выход — ПЕРВАЯ строка экрана, обычным блоком в потоке. Плавающая
+   кнопка (position:fixed) тут была ошибкой: она проваливалась под нижнюю панель
+   и прочий интерфейс, и игрок застревал в карте системы. */
+@media (max-width:768px){
+  .hp-vn-col-body > .hpvnc-back{display:block;flex:0 0 auto;order:-1}
+  .hpvnc-back button{width:100%}
+}
 .hpvnc-back button{
-  padding:9px 13px;cursor:pointer;font:600 11.5px/1 var(--font-mono,monospace);
+  padding:12px 13px;cursor:pointer;font:600 12px/1 var(--font-mono,monospace);
   letter-spacing:.06em;color:#dCEAFb;background:rgba(6,10,16,.86);
   border:1px solid rgba(160,200,255,.24);border-radius:3px;
-  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
 }
 .hpvnc-back button:active{background:rgba(20,34,52,.92)}
+
+/* ── КОЛОНИЗАЦИЯ · ТЕЛЕФОННЫЙ СПИСОК (см. render.js _heroColonyPhoneBuild) ──
+   Вместо карты с зумом — строки во всю ширину: цель нажатия крупная, страница
+   листается обычной прокруткой, перерисовывать при жестах нечего. */
+.hp-vn-col-body.hpvnc-ph{flex-direction:column;gap:10px;align-items:stretch;overflow-y:auto}
+.hpvnc-ph-pool{
+  display:flex;flex-wrap:wrap;gap:2px 10px;justify-content:space-between;align-items:baseline;
+  padding:10px 12px;border-left:3px solid var(--gd,#3a9bdc);background:hsl(216 22% 9% / .92);
+  font:500 12px/1.5 var(--font-mono,monospace);color:#c6d8ea;
+}
+.hpvnc-ph-pool.cd{border-left-color:#c9793f;color:#e2b98f}
+.hpvnc-ph-pool b{color:#eaf6ff}
+.hpvnc-ph-pool-r{font-size:11px;opacity:.8}
+.hpvnc-ph-find{
+  width:100%;padding:11px 12px;font:500 13px/1 var(--font-mono,monospace);
+  color:#eaf6ff;background:hsl(216 24% 7% / .9);border:1px solid rgba(160,200,255,.2);border-radius:3px;
+}
+.hpvnc-ph-cap{
+  font:700 10.5px/1 var(--font-mono,monospace);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--gdl,#5fb0e6);padding:6px 2px 0;
+}
+.hpvnc-ph-list{display:flex;flex-direction:column;gap:6px}
+.hpvnc-ph-row{
+  display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 10px;width:100%;text-align:left;
+  padding:11px 12px;cursor:pointer;color:#eaf6ff;background:hsl(216 22% 9% / .9);
+  border:1px solid rgba(160,200,255,.14);border-radius:3px;
+}
+.hpvnc-ph-row:active{background:hsl(216 26% 13% / .95)}
+.hpvnc-ph-row.claim{grid-template-columns:1fr;cursor:default}
+.hpvnc-ph-nm{font:700 14px/1.25 var(--font-display,inherit);color:#eaf6ff}
+.hpvnc-ph-tags{grid-column:1;display:flex;flex-wrap:wrap;gap:4px 8px}
+.hpvnc-ph-tag{
+  font:500 10.5px/1.4 var(--font-mono,monospace);font-style:normal;color:#8fa3ba;
+}
+.hpvnc-ph-tag.free{color:#5fe0a0}
+.hpvnc-ph-tag.cap{color:#ffd75e}
+.hpvnc-ph-tag.dim{opacity:.6}
+.hpvnc-ph-go{grid-row:1 / span 2;font-size:22px;color:var(--gdl,#5fb0e6);opacity:.7;padding-left:4px}
+.hpvnc-ph-claim{
+  margin-top:8px;width:100%;padding:12px;cursor:pointer;
+  font:700 11.5px/1 var(--font-mono,monospace);letter-spacing:.1em;text-transform:uppercase;
+  color:#06110c;background:#5fe0a0;border:none;border-radius:3px;
+}
+.hpvnc-ph-claim[disabled]{background:transparent;color:#6a7c8e;border:1px solid rgba(160,200,255,.18);cursor:default}
+.hpvnc-ph-empty{padding:12px;font:500 12px/1.5 var(--font-mono,monospace);color:#8fa3ba}
 .hpvnc-zoom button{
   width:38px;height:38px;display:grid;place-items:center;cursor:pointer;
   font:600 17px/1 var(--font-mono,monospace);color:#dCEAFb;
