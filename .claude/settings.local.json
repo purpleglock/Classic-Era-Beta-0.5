@@ -581,7 +581,19 @@
       "Bash(node tools/db_q.js \"select policyname, cmd, qual from pg_policies where tablename='faction_applications' and cmd='SELECT'\")",
       "Bash(node tools/db_run.js _annexed_heraldry.sql)",
       "Bash(node tools/db_q.js \"select faction_id,name,herald_url is not null hh from public.map_annexed_meta\\(\\)\")",
-      "Bash(node -e \"['galaxy_map.js','render.js'].forEach\\(f=>{new \\(require\\('vm'\\).Script\\)\\(require\\('fs'\\).readFileSync\\(f,'utf8'\\),{filename:f}\\)}\\);console.log\\('ok'\\)\")"
+      "Bash(node -e \"['galaxy_map.js','render.js'].forEach\\(f=>{new \\(require\\('vm'\\).Script\\)\\(require\\('fs'\\).readFileSync\\(f,'utf8'\\),{filename:f}\\)}\\);console.log\\('ok'\\)\")",
+      "Bash(node tools/db_q.js \"select p.proname, pg_get_function_identity_arguments\\(p.oid\\) a from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in \\('_fc_place_bots','_bt_bot_role','_bt_stats','_bt_acts_of','_fc_act_price','_bt_spawn_free','_bt_bot_target','_bt_bot_route','_fc_kick_off','_bt_cap','_bt_acts','_bt_bot_fid','_bt_bot_roster_default','_bt_bot_repair','_bt_bot_reach','_bt_fire_cost'\\) order by 1\")",
+      "Bash(node tools/db_q.js \"select md5\\(pg_get_functiondef\\(p.oid\\)\\) h, p.proname, length\\(pg_get_functiondef\\(p.oid\\)\\) len from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in \\('_bt_bot_target','_fc_place_bots','_fc_kick_off','_bt_bot_act','_bt_bot_turn'\\)\")",
+      "Bash(node tools/db_q.js \"select column_name from information_schema.columns where table_name='battles' order by 1\")",
+      "Bash(node tools/db_q.js \"select pg_get_functiondef\\(p.oid\\) d from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='_fc_kick_off'\")",
+      "Bash(node tools/db_q.js \"select public._bt_cap\\(\\) cap, public._bt_acts\\(\\) acts, public._fc_price_k\\(\\) k, public._bt_bot_roster_default\\(\\) rf\")",
+      "Bash(node tools/db_q.js \"select fu.name, public._fc_pw\\(fu.id\\) pw, public._fc_arena_price\\(fu.id\\) price, \\(public._bt_stats\\(fu.id\\)->>'rng'\\) rng, \\(public._bt_stats\\(fu.id\\)->>'speed'\\) spd, \\(public._bt_stats\\(fu.id\\)->>'cls'\\) cls, jsonb_array_length\\(public._bt_acts_of\\(fu.id\\)\\) na from public.faction_units fu where fu.category='ship' and fu.faction_id=public._bt_bot_roster_default\\(\\) order by price\")",
+      "Bash(node tools/db_q.js \"select fu.name, \\(select max\\(\\(g->>'rng'\\)::int\\) from jsonb_array_elements\\(public._bt_stats\\(fu.id\\)->'wpn'\\) g where coalesce\\(g->>'k','kinetic'\\)<>'repair' and coalesce\\(\\(g->>'dmg'\\)::numeric,0\\)>0\\) reach, \\(select string_agg\\(a->>'k',','\\) from jsonb_array_elements\\(public._bt_acts_of\\(fu.id\\)\\) a\\) acts from public.faction_units fu where fu.category='ship' and fu.faction_id=public._bt_bot_roster_default\\(\\) and not exists\\(select 1 from bt_bot_exclude x where x.unit_id=fu.id\\) order by 1\")",
+      "Bash(node tools/db_run.js _bot_doctrine.sql)",
+      "Bash(node tools/db_q.js \"select fu.name, public._bt_bot_role_kit\\(fu.id\\) role, public._fc_arena_price\\(fu.id\\) price from faction_units fu where fu.category='ship' and fu.faction_id=public._bt_bot_roster_default\\(\\) and not exists\\(select 1 from bt_bot_exclude x where x.unit_id=fu.id\\) order by 2,3\")",
+      "Bash(node tools/db_q.js \"select column_name,is_nullable,column_default from information_schema.columns where table_name='battle_units' and is_nullable='NO'\")",
+      "Bash(node tools/db_q.js \"select jsonb_typeof\\(log\\) t, jsonb_pretty\\(log\\) from battles where log is not null limit 1\")",
+      "Bash(node tools/db_q.js \"select pg_get_functiondef\\(p.oid\\) d from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='_fc_settle'\")"
     ]
   }
 }
