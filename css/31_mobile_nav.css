@@ -331,4 +331,12 @@
   html.mnav-on #cab-stage > #hp-vn-colony.show .hp-vn-col-head {
     position: sticky; top: 0; z-index: 6;
   }
+  /* И страховка на случай, если прокрутка уедет мимо шапки (её `sticky` живёт в
+     #cw, а ведомство ещё и само может оказаться в контейнере с обрезкой):
+     собственная кнопка выхода из СХЕМЫ СИСТЕМЫ — фиксированная, над нижней
+     панелью, ровно как #tk-fab. Показывается только когда открыта схема. */
+  html.mnav-on #cab-stage .hp-vn-col-main:has(svg.hpvnc-sysmap) .hpvnc-back {
+    display: block; position: fixed; z-index: 60;
+    left: 12px; bottom: calc(74px + env(safe-area-inset-bottom));
+  }
 }

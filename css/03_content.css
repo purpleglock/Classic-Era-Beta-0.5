@@ -607,6 +607,17 @@
 /* Кнопки масштаба — угол карты; на телефоне это единственный способ приблизиться
    без пинча (и подсказка, что карта вообще масштабируется). */
 .hpvnc-zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:6px;z-index:3}
+/* Выход из схемы системы внутри её рамки — только на телефоне (см. render.js
+   _heroColonySysBuild): на мониторе выход живёт в шапке экрана и никуда не
+   уезжает, вторая кнопка там была бы мусором. */
+.hpvnc-back{display:none}
+.hpvnc-back button{
+  padding:9px 13px;cursor:pointer;font:600 11.5px/1 var(--font-mono,monospace);
+  letter-spacing:.06em;color:#dCEAFb;background:rgba(6,10,16,.86);
+  border:1px solid rgba(160,200,255,.24);border-radius:3px;
+  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
+}
+.hpvnc-back button:active{background:rgba(20,34,52,.92)}
 .hpvnc-zoom button{
   width:38px;height:38px;display:grid;place-items:center;cursor:pointer;
   font:600 17px/1 var(--font-mono,monospace);color:#dCEAFb;
@@ -619,8 +630,13 @@
    прокручиваем по горизонтали, сохраняя размер планет и подписей. */
 .hp-vn-col-main:has(.hpvnc-sysmap){overflow-x:auto;overflow-y:auto;scrollbar-width:thin;display:flex;align-items:center}
 /* Схему рисуем 1:1 в её собственных пикселях: растяжка по высоте контейнера
-   раздувала планеты и подписи вдвое. Узко — прокрутка, широко — центр. */
-.hp-vn-col-main .hpvnc-sysmap{width:auto;height:auto;max-width:none;margin:auto;flex:0 0 auto}
+   раздувала планеты и подписи вдвое. Узко — прокрутка, широко — центр.
+   ⚠️ СПЕЦИФИЧНОСТЬ: без `svg` в селекторе это правило (0,2,0) проигрывало
+   идущему ВЫШЕ `.hp-vn-col-main svg{width:100%;height:100%}` (0,2,1) — порядок
+   тут не помогает. Схема на телефоне сжималась до ширины экрана (700→373 px):
+   планеты в пыль, подписи нечитаемы, а из-за пропорций 3:1 сверху и снизу
+   оставалась пустая рамка на пол-экрана. */
+.hp-vn-col-main svg.hpvnc-sysmap{width:auto;height:auto;max-width:none;margin:auto;flex:0 0 auto}
 .hp-vn-col-side{flex:0 0 clamp(190px,27%,290px);display:flex;flex-direction:column;gap:12px;min-height:0}
 /* Досье моего государства — герб + название + правление + столица (шапка панели) */
 .hp-vn-col-dossier{
@@ -1205,6 +1221,9 @@
   /* 52vh: карта границ на телефоне — главное содержимое экрана, на 46vh кадр
      сплющивался в полосу и подписи держав лезли друг на друга. */
   .hp-vn-col-main{flex:0 0 auto;height:52vh;min-height:280px;width:100%;max-width:100%;min-width:0}
+  /* Схема системы 1:1 — коробка по СОДЕРЖИМОМУ, иначе 52vh давали пустую рамку
+     вокруг узкой полосы планет (её высота всего 330 px). */
+  .hp-vn-col-main:has(svg.hpvnc-sysmap){height:auto;min-height:0}
   .hpvnc-zoom button{width:42px;height:42px}
   .hp-vn-col-main:has(.hpvnc-sysmap){overscroll-behavior-x:contain}
   .hp-vn-col-side{flex:0 0 auto;flex-direction:column;gap:12px}

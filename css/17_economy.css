@@ -1210,7 +1210,10 @@
    «Состав»: срез угла — подложками (::before рамка + ::after фон), border
    нельзя — его обрежет clip-path. Акцентов два: --gd наземные цеха, --te
    верфь; --accent наследуется внутрь шапки и кромки. */
-.ec-cyb-build .ec-mb-shops { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; margin-bottom: 4px; }
+/* На экране открыт ОДИН цех (лист выбирается полосой .ec-fb-tabs), поэтому
+   колонка одна и ограничена по ширине: растянутая на весь монитор форма
+   заказа читалась бы как таблица, а не как бланк. */
+.ec-cyb-build .ec-mb-shops { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 4px; max-width: 720px; }
 .ec-cyb-build .ec-mb-shop { --accent: var(--gd); position: relative; z-index: 1; display: flex; flex-direction: column; min-width: 0; padding: 0 0 12px; }
 .ec-cyb-build .ec-mb-fleet { --accent: var(--te); }
 .ec-cyb-build .ec-mb-shop::before {

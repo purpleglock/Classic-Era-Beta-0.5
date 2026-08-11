@@ -560,7 +560,12 @@
       "Bash(node tools/db_q.js \"select faction_id,owner_id,status,name from faction_applications where faction_id='fac_085638a65d'\")",
       "Bash(node tools/db_q.js \"select count\\(*\\) from map_systems\")",
       "Bash(node tools/db_q.js \"select s.id,s.name,s.faction,s.x,s.y from map_systems s where s.faction='fac_085638a65d' or s.id in \\(select case when h.a_id=m.id then h.b_id else h.a_id end from map_hyperlanes h join map_systems m on \\(m.id=h.a_id or m.id=h.b_id\\) where m.faction='fac_085638a65d'\\)\")",
-      "Bash(node -c render.js)"
+      "Bash(node -c render.js)",
+      "Bash(curl -s \"https://classic-era.top/render.js?v=20260811claimhit\" -o /tmp/prod_render.js)",
+      "Read(//tmp/**)",
+      "Bash(curl -s \"https://classic-era.top/css/index.css?v=20260811claimhit\")",
+      "Bash(curl -s \"https://classic-era.top/css/03_content.css?v=20260811mobfix\")",
+      "Bash(curl -s https://classic-era.top/css/index.css)"
     ]
   }
 }

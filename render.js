@@ -4382,7 +4382,14 @@ function _heroColonySysBuild(sysId, en) {
   }).join('') : `<div class="hp-vn-col-empty" style="height:auto;padding:12px 0">${en ? 'No planets charted in this system.' : 'В этой системе не значится планет.'}</div>`;
 
   const body = `<div class="hp-vn-col-body">
-    <div class="hp-vn-col-main">${scene}</div>
+    <div class="hp-vn-col-main">${scene}
+      <!-- Выход из схемы системы ВНУТРИ её рамки. В шапке экрана «↩ к карте» есть,
+           но на телефоне ведомство прокручивается страницей, и шапка уезжает
+           наверх — игрок оставался в системе без видимого выхода. Эта кнопка
+           лежит там же, где он смотрит, и от прокрутки не зависит (CSS прячет её
+           на мониторе, где шапка всегда на месте). -->
+      <div class="hpvnc-back"><button type="button" onclick="event.stopPropagation();heroVNColonyMap()">↩ ${en ? 'to the map' : 'к карте'}</button></div>
+    </div>
     <aside class="hp-vn-col-side">
       <div class="hp-vn-col-info">
         <span class="hp-vn-col-info-cap">${en ? 'Planets' : 'Планеты'} · ${planets.length}</span>

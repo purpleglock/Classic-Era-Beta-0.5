@@ -6918,6 +6918,21 @@ function ecShipCoupBtnHtml() {
   return ecCoupBtnHtml(cls, 'ecProduceShip(true)');
 }
 
+// Листы «Военпрома» = рода войск. Раньше все четыре цеха стояли на экране
+// одновременно (четыре селекта, четыре ведомости сырья, четыре шкалы цеха) —
+// заказать один юнит значило проскроллить всё производство державы. Теперь
+// экран зеркалит «Состав»: полоса вкладок сверху, открыт ОДИН цех.
+const EC_MB = [
+  { k: 'inf',      mod: 'army',  ic: 'shield',  nm: 'Пехота',           where: 'Центр Подготовки' },
+  { k: 'ground',   mod: 'army',  ic: 'factory', nm: 'Наземная техника', where: 'Военный Завод' },
+  { k: 'aviation', mod: 'air',   ic: 'plane',   nm: 'Авиация',          where: 'Аэрокосмический Завод' },
+  { k: 'ship',     mod: 'fleet', ic: 'ship',    nm: 'Флот',             where: 'Корабельная Верфь · поштучно' },
+];
+function ecMilTab(k) {
+  EC.milTab = k;
+  if (typeof ecPaintCabinet === 'function') ecPaintCabinet();
+}
+
 function ecTabMilBuild() {
   const caps = ecCaps(), use = ecPendingUse();
   const sh = ecShards(), uni = ecUniShards();
@@ -6994,6 +7009,33 @@ function ecTabMilBuild() {
       <div class="ec-mb-body">${body}</div>
     </section>`;
 
+  // Активный цех: запомненный лист, иначе первый, где есть что заказать.
+  const listOf = { inf: infUnits, ground: groundUnits, aviation: aviaUnits, ship: ships };
+  const readyOf = {
+    inf: caps.hasTraining, ground: caps.hasMil,
+    aviation: caps.hasAirfield, ship: caps.hasShipyard,
+  };
+  let mtab = EC.milTab;
+  if (!EC_MB.some(b => b.k === mtab)) {
+    mtab = (EC_MB.find(b => readyOf[b.k] && listOf[b.k].length) || EC_MB.find(b => readyOf[b.k]) || EC_MB[0]).k;
+  }
+  const curMb = EC_MB.find(b => b.k === mtab);
+
+  const mbTabsHtml = `<div class="ec-fb-tabs" role="tablist">${EC_MB.map(b => `
+    <button class="ec-fb-tab ec-fb-tab--${b.mod}${b.k === mtab ? ' on' : ''}" role="tab"
+      aria-selected="${b.k === mtab}" onclick="ecMilTab('${b.k}')"
+      title="${readyOf[b.k] ? `Проектов: ${ecNum(listOf[b.k].length)}` : 'Нет постройки — цех недоступен'}">
+      ${ecIco(b.ic, 'ec-fb-tab-ic')}
+      <span class="ec-fb-tab-l">${esc(b.nm)}</span>
+      <span class="ec-fb-tab-n">${readyOf[b.k] ? ecNum(listOf[b.k].length) : '—'}</span>
+    </button>`).join('')}</div>`;
+
+  const curShopHtml = curMb.k === 'ship'
+    ? shop('fleet', curMb.ic, curMb.nm, curMb.where, shipForm)
+    : shop(curMb.k === 'ground' ? 'tech' : curMb.mod === 'air' ? 'air' : 'inf', curMb.ic, curMb.nm,
+        curMb.k === 'inf' && caps.robot ? 'робо-сборка на Военном Заводе (×3)' : curMb.where,
+        unitForm(listOf[curMb.k], curMb.k));
+
   const shardsHtml = totalShards > 0 ? `<div class="ec-mb-shards">
       <div class="ec-mb-shards-hd">◈ Осколки цикла: <b>${ecNum(totalShards)}</b></div>
       <div class="ec-mb-shards-tx">Постройка за осколок бесплатна и мгновенна — без ГС, сырья, очереди и лимитов цехов. 1 осколок = 1 юнит; на класс сначала тратятся его осколки, затем универсальные. Флот — по классам корабля: осколок корвета не построит дредноут.</div>
@@ -7001,12 +7043,8 @@ function ecTabMilBuild() {
     </div>` : '';
 
   return `<div class="ec-cyb-forces ec-cyb-build">${ecIntro(ecIco('factory'), 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, заказ — здесь. Дивизии больше не строятся: постройте юниты и <b>сформируйте из них армию</b> — она встанет гарнизоном на колонии и перебрасывается в режиме карты «Звёздный марш».', [infLine, 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».', 'Гарнизон сверх порога (20 юнитов или население/10) давит на благополучие колонии.'])}${shardsHtml}
-    <div class="ec-mb-shops">
-      ${shop('inf', 'shield', 'Пехота', caps.robot ? 'робо-сборка на Военном Заводе (×3)' : 'Центр Подготовки', unitForm(infUnits, 'inf'))}
-      ${shop('tech', 'factory', 'Наземная техника', 'Военный Завод', unitForm(groundUnits, 'ground'))}
-      ${shop('air', 'plane', 'Авиация', 'Аэрокосмический Завод', unitForm(aviaUnits, 'aviation'))}
-      ${shop('fleet', 'ship', 'Флот', 'Корабельная Верфь · поштучно', shipForm)}
-    </div>
+    ${mbTabsHtml}
+    <div class="ec-mb-shops">${curShopHtml}</div>
     ${ecRepairPanelHtml(caps)}
     <div class="ec-section-title">В очереди <span class="ec-hint">— доставка в конце хода (сутки)</span></div>
     <div class="ec-queue">${queueHtml}</div></div>`;

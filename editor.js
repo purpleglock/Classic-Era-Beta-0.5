@@ -2185,12 +2185,26 @@ async function handleImgUpload(file, onUrl) {
   const ALLOWED=['image/jpeg','image/png','image/gif','image/webp']; if (!ALLOWED.includes(file.type)) { toast('Только JPEG / PNG / GIF / WebP','err'); return; }
   if (file.size>4*1024*1024) { toast('Файл слишком большой (макс. 4 МБ)','err'); return; }
   toast('Загрузка...','inf');
+  // Материализуем байты ДО всего остального. Файл, выбранный из облачного провайдера
+  // (Google Фото, iCloud, «Недавние»), — это ссылка без данных: чтение рвётся уже
+  // внутри fetch, и наружу это выглядит как невнятное «Failed to fetch».
+  try {
+    const buf = await file.arrayBuffer();
+    file = new File([buf], file.name || 'image', { type: file.type });
+  } catch (e) {
+    toast('Не удалось прочитать файл. Сохрани картинку в галерею/на устройство и выбери её оттуда.','err');
+    return;
+  }
   file = await compressImageFile(file);
   try {
     const token = await getTokenFresh();
     const url = await ceUploadImage(file, token);
     onUrl(url); toast('Загружено ✓','ok'); return;
-  } catch(e) { toast(`Загрузка: ${e.message}. Используй URL напрямую.`,'err'); }
+  } catch(e) {
+    // Байты уже в памяти, так что сюда доходит только настоящий сбой сети/хранилища.
+    const net = /failed to fetch|networkerror|load failed/i.test(e.message || '');
+    toast(net ? 'Хранилище не отвечает — проверь связь и попробуй ещё раз.' : `Загрузка: ${e.message}`,'err');
+  }
   if (file.size>512*1024){toast('Слишком большой для base64. Настрой Storage bucket.','err');return;}
   const reader=new FileReader(); reader.onload=()=>onUrl(reader.result); reader.onerror=()=>toast('Не удалось прочитать файл','err'); reader.readAsDataURL(file);
 }

@@ -1,7 +1,7 @@
 /* РќРћР’РђРЇ Р­Р Рђ вЂ” WIKI UI В· Main Entry Point */
 @import './01_tokens.css?v=20260703brand5';
 @import './02_shell.css?v=20260811footmob';
-@import './03_content.css?v=20260811mobfix';
+@import './03_content.css?v=20260811colzoom';
 @import './04_ui.css?v=20260719mailreg4';
 @import './05_panels.css?v=20260705regcyb';
 @import './06_system.css?v=20260703brand5';
@@ -28,4 +28,4 @@
 @import './28_estate.css?v=20260809vnmob';
 @import './29_vn_mobile.css?v=20260811mobfix';
 @import './30_cabinet.css?v=20260811sbrail';
-@import './31_mobile_nav.css?v=20260811fabup';
+@import './31_mobile_nav.css?v=20260811colzoom';

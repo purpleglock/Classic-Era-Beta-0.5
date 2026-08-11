@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru" class="mnav-on">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>colony head sticky harness</title>
+<link rel="stylesheet" href="css/index.css">
+</head>
+<body>
+<!-- Разметка кабинета в миниатюре: прокрутка живёт в #cw, ведомство — в .cab-stage,
+     экран колонизации внутри. Проверяем ОДНО: не уезжает ли шапка с кнопкой
+     «↩ к карте» при страничной прокрутке на телефоне. -->
+<div id="app"><div id="main"><div id="cw"><div id="pg">
+  <div class="cab-stage on" id="cab-stage">
+    <div class="hp-vn-colony show" id="hp-vn-colony" aria-hidden="false">
+      <div class="hp-vn-col-head">
+        <span class="hp-vn-col-title">Синли-Бей</span>
+        <span class="hp-vnr-clr">карта системы</span>
+        <span class="hvp-headr">
+          <button class="hp-vn-col-x" id="back-map" type="button">↩ к карте</button>
+          <button class="hp-vn-col-x" type="button">↩ назад</button>
+        </span>
+      </div>
+      <div class="hp-vn-col-body">
+        <div class="hp-vn-col-main"><svg class="hpvnc-map hpvnc-sysmap" width="700" height="330" viewBox="0 0 700 330"><circle cx="90" cy="165" r="30" fill="#2ad"></circle></svg>
+          <div class="hpvnc-back"><button type="button" id="back-in-frame">↩ к карте</button></div>
+        </div>
+        <aside class="hp-vn-col-side">
+          <div class="hp-vn-col-info"><span class="hp-vn-col-info-cap">Планеты · 5</span>
+            <div class="hp-vn-col-scroll" id="filler"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div></div></div></div>
+<script>
+// Наполняем досье, чтобы экран заведомо был выше телефона и страница прокручивалась.
+const f = document.getElementById('filler');
+for (let i = 0; i < 40; i++) { const d = document.createElement('div'); d.className = 'hp-vn-col-stat'; d.innerHTML = '<b>' + i + '</b><span>планета</span>'; f.appendChild(d); }
+</script>
+</body>
+</html>
