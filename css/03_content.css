@@ -669,6 +669,35 @@
 }
 .hpvnc-ph-claim[disabled]{background:transparent;color:#6a7c8e;border:1px solid rgba(160,200,255,.18);cursor:default}
 .hpvnc-ph-empty{padding:12px;font:500 12px/1.5 var(--font-mono,monospace);color:#8fa3ba}
+/* Локальная схема «звезда и её пути»: карта, которую можно обойти пальцем.
+   Статичный SVG на 9 узлов — ни жестов, ни перерисовки, ни зума. */
+.hpvnc-ph-radar{
+  padding:8px 10px 10px;background:hsl(216 22% 8% / .92);
+  border:1px solid rgba(160,200,255,.14);border-radius:3px;
+}
+.hpvnc-ph-radar svg{width:100%;height:auto;display:block;touch-action:auto}
+.hpvnc-ph-node{cursor:pointer}
+.hpvnc-ph-node:active circle:nth-of-type(2){r:16}
+.hpvnc-ph-radar-bar{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px;
+  font:500 10.5px/1 var(--font-mono,monospace);color:#8fa3ba;
+}
+.hpvnc-ph-radar-bar button{
+  padding:8px 11px;cursor:pointer;font:600 10.5px/1 var(--font-mono,monospace);letter-spacing:.08em;
+  color:#ffd75e;background:transparent;border:1px solid rgba(255,215,94,.3);border-radius:3px;
+}
+.hpvnc-ph-act{
+  width:100%;margin-top:8px;padding:13px;cursor:pointer;
+  font:700 11.5px/1 var(--font-mono,monospace);letter-spacing:.1em;text-transform:uppercase;
+  color:#eaf6ff;background:transparent;border:1px solid color-mix(in srgb,var(--gd,#3a9bdc) 55%,transparent);border-radius:3px;
+}
+.hpvnc-ph-act.claim{color:#06110c;background:#5fe0a0;border-color:transparent}
+.hpvnc-ph-act[disabled]{color:#6a7c8e;border-color:rgba(160,200,255,.16);background:transparent;cursor:default}
+.hpvnc-ph-hint{margin-top:7px;font:500 10.5px/1.45 var(--font-mono,monospace);color:#7c8ea3}
+.hpvnc-ph-where{
+  padding:3px 7px;cursor:pointer;font:500 10px/1.3 var(--font-mono,monospace);
+  color:var(--gdl,#5fb0e6);background:transparent;border:1px solid rgba(95,176,230,.3);border-radius:3px;
+}
 .hpvnc-zoom button{
   width:38px;height:38px;display:grid;place-items:center;cursor:pointer;
   font:600 17px/1 var(--font-mono,monospace);color:#dCEAFb;

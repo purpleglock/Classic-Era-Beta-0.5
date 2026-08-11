@@ -565,7 +565,15 @@
       "Read(//tmp/**)",
       "Bash(curl -s \"https://classic-era.top/css/index.css?v=20260811claimhit\")",
       "Bash(curl -s \"https://classic-era.top/css/03_content.css?v=20260811mobfix\")",
-      "Bash(curl -s https://classic-era.top/css/index.css)"
+      "Bash(curl -s https://classic-era.top/css/index.css)",
+      "Bash(node tools/db_q.js \"select faction_id,name from faction_applications where status='approved' and \\(name ilike '%тверженн%' or name ilike '%вету%'\\)\")",
+      "Bash(node tools/db_q.js \"select u.lead_fid, fl.name lead_name, u.partner_fid, fp.name partner_name, u.status, u.sealed_at from state_unions u left join faction_applications fl on fl.faction_id=u.lead_fid and fl.status='approved' left join faction_applications fp on fp.faction_id=u.partner_fid and fp.status='approved' order by u.created_at desc nulls last limit 20\")",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('render.js','utf8'\\)\\);console.log\\('render.js ok'\\)\")",
+      "Bash(sed -i \"s/var BUILD = '20260812colphone';/var BUILD = '20260812colradar';/\" index.html)",
+      "Bash(node tools/db_q.js \"select faction_id,name from faction_applications where status='approved'\")",
+      "Bash(node tools/db_q.js \"select * from unions limit 20\")",
+      "Bash(node tools/db_q.js \"select * from diplo_unions order by created_at desc limit 10\")",
+      "Bash(node tools/db_q.js \"select table_name,column_name from information_schema.columns where table_schema='public' and table_name in \\('diplo_unions','diplo_union_members','annex_origin','state_annexations'\\)\")"
     ]
   }
 }

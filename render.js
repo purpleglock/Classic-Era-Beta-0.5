@@ -3329,6 +3329,7 @@ async function heroVNColonyOpen() {
   // кнопке «Заселить миры»: там уже сказано, КАКУЮ систему открывать.
   const want = _heroColonyWant; _heroColonyWant = null;
   _heroColonyView = want ? { mode: 'sys', sysId: want } : { mode: 'map', sysId: null };
+  _hpvncPhFocus = want || null;   // телефонная схема открывается на столице (или на заказанной системе)
   el.classList.add('show');
   el.setAttribute('aria-hidden', 'false');
   el.innerHTML = _heroColonyHead(en) +
@@ -3622,6 +3623,10 @@ function _hpvncBindZoom() {
 // смежные ничейные), потом «где селиться» (свои системы, впереди — те, где ещё
 // есть свободные планеты). Карта границ остаётся на ПК, где она и уместна.
 // ══════════════════════════════════════════════════════════════
+// Система в центре телефонной схемы. Живёт между перерисовками экрана.
+let _hpvncPhFocus = null;
+// Шаг по гиперпути: сосед становится центром схемы.
+function heroVNColonyPhGo(id) { _hpvncPhFocus = id; heroVNColonyRefresh(); }
 function _heroColonyPhoneBuild(en) {
   const head = _heroColonyHead(en);
   const money = typeof ecNum === 'function' ? ecNum : (x => x);
@@ -3646,12 +3651,76 @@ function _heroColonyPhoneBuild(en) {
   const cdMs = (typeof ecClaimCooldownMs === 'function') ? ecClaimCooldownMs() : 0;
   const gc = (typeof EC !== 'undefined' && EC.eco && EC.eco.gc) || 0;
   const claimIds = (typeof ecClaimableIds === 'function') ? ecClaimableIds() : [];
+  const claimSet = new Set(claimIds);
   const canClaim = left > 0 && gc >= cost;
   const pool = `<div class="hpvnc-ph-pool ${left > 0 ? 'ok' : 'cd'}">
     <span class="hpvnc-ph-pool-l">${left > 0
       ? `${en ? 'Claims left' : 'Захватов осталось'} <b>${left}/${max}</b>`
       : `${en ? 'Cooldown' : 'Перезарядка'} <b>~${Math.max(1, Math.ceil(cdMs / 86400000))} ${en ? 'd.' : 'дн.'}</b>`}</span>
     <span class="hpvnc-ph-pool-r">${money(cost)} ГС · ${en ? 'treasury' : 'казна'} ${money(gc)} ГС</span>
+  </div>`;
+
+  // ── КАРТА ДЛЯ ПАЛЬЦА: «звезда и её пути» ─────────────────────────────────
+  // Ориентир на телефоне даёт не общий план (мелко, не попасть), а ЛОКАЛЬНАЯ
+  // схема: в центре текущая система, вокруг — все её соседи по гиперпутям.
+  // Тап по соседу переносит центр туда — так карта обходится шагами, без зума
+  // и панорамы. Узлы крупные, число их ограничено степенью вершины, поэтому
+  // схема читается одинаково и у мелкой державы, и у империи в полгалактики.
+  const adj = new Map();
+  const lanes = (typeof EC !== 'undefined' && EC.lanes && EC.lanes.length) ? EC.lanes
+    : ((typeof GM !== 'undefined' && GM.lanes) || []).map(l => ({ a_id: l.a_id != null ? l.a_id : l.a, b_id: l.b_id != null ? l.b_id : l.b }));
+  lanes.forEach(l => {
+    const a = l.a_id, b = l.b_id; if (a == null || b == null) return;
+    if (!adj.has(a)) adj.set(a, new Set()); if (!adj.has(b)) adj.set(b, new Set());
+    adj.get(a).add(b); adj.get(b).add(a);
+  });
+  const focusId = (_hpvncPhFocus && byId.has(_hpvncPhFocus)) ? _hpvncPhFocus
+    : (capSys && byId.has(capSys) ? capSys : [...mineIds][0]);
+  const fSys = byId.get(focusId) || {};
+  const kindOf = id => mineIds.has(id) ? 'mine' : (claimSet.has(id) ? 'free' : ((byId.get(id) || {}).faction ? 'foe' : 'void'));
+  const KC = { mine: (typeof EC !== 'undefined' && EC.app && EC.app.color) || '#5fb0e6', free: '#5fe0a0', foe: '#e0705f', void: '#7c8ea3' };
+  const cut = (t, n) => { t = String(t || '—'); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+  // Соседи: сперва свои, потом доступные к захвату, потом остальные — у кого
+  // путей много, тот всё равно видит главное в первых секторах круга.
+  const nb = [...(adj.get(focusId) || [])].filter(id => byId.has(id))
+    .sort((a, b) => ({ mine: 0, free: 1, void: 2, foe: 3 })[kindOf(a)] - ({ mine: 0, free: 1, void: 2, foe: 3 })[kindOf(b)]
+      || String((byId.get(a) || {}).name).localeCompare(String((byId.get(b) || {}).name)));
+  const shown = nb.slice(0, 8);
+  const CX = 170, CY = 162, RR = 118;
+  let nodes = '', links = '';
+  shown.forEach((id, i) => {
+    const s = byId.get(id), k = kindOf(id), c = KC[k];
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(shown.length, 1);
+    const x = CX + RR * Math.cos(a), y = CY + RR * Math.sin(a);
+    links += `<line x1="${CX}" y1="${CY}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${c}" stroke-width="1.6" opacity=".45"></line>`;
+    nodes += `<g class="hpvnc-ph-node ${k}" onclick="event.stopPropagation();heroVNColonyPhGo('${jsq(id)}')">
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="30" fill="transparent"></circle>
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="13" fill="${c}" opacity=".9"></circle>
+      <text x="${x.toFixed(1)}" y="${(y + 30).toFixed(1)}" text-anchor="middle" fill="#dCEAFb" font-size="11"
+        font-family="var(--font-mono)" style="paint-order:stroke;stroke:#05080d;stroke-width:3">${esc(cut(s.name, 11))}</text>
+    </g>`;
+  });
+  const fk = kindOf(focusId), fc = KC[fk];
+  const centre = `<g><circle cx="${CX}" cy="${CY}" r="26" fill="none" stroke="${fc}" stroke-width="2"></circle>
+    <circle cx="${CX}" cy="${CY}" r="17" fill="${fc}"></circle>
+    <text x="${CX}" y="${CY + 48}" text-anchor="middle" fill="#eaf6ff" font-size="13" font-family="var(--font-mono)"
+      style="paint-order:stroke;stroke:#05080d;stroke-width:4">${esc(cut(fSys.name, 16))}</text></g>`;
+  const act = fk === 'mine'
+    ? `<button class="hpvnc-ph-act" type="button" onclick="event.stopPropagation();heroVNColonySys('${jsq(focusId)}')">${en ? 'Open system' : 'Открыть систему'} ›</button>`
+    : fk === 'free'
+      ? `<button class="hpvnc-ph-act claim" type="button" ${canClaim ? '' : 'disabled'} onclick="event.stopPropagation();heroVNColonyClaim('${jsq(focusId)}')">${en ? 'Colonize' : 'Колонизировать'} · ${money(cost)} ГС</button>`
+      : `<button class="hpvnc-ph-act" type="button" disabled>${fk === 'foe' ? (en ? 'Foreign realm' : 'Чужая держава') : (en ? 'Out of reach' : 'Не граничит с вами')}</button>`;
+  const radar = `<div class="hpvnc-ph-radar">
+    <svg viewBox="0 0 340 330" preserveAspectRatio="xMidYMid meet">
+      <circle cx="${CX}" cy="${CY}" r="${RR}" fill="none" stroke="rgba(160,200,255,.12)" stroke-dasharray="4,6"></circle>
+      ${links}${centre}${nodes}
+    </svg>
+    <div class="hpvnc-ph-radar-bar">
+      <span class="hpvnc-ph-radar-n">${en ? 'lanes' : 'путей'}: ${nb.length}${nb.length > shown.length ? ` (${en ? 'showing' : 'на схеме'} ${shown.length})` : ''}</span>
+      ${capSys && focusId !== capSys ? `<button type="button" onclick="event.stopPropagation();heroVNColonyPhGo('${jsq(capSys)}')">★ ${en ? 'to capital' : 'к столице'}</button>` : ''}
+    </div>
+    ${act}
+    <div class="hpvnc-ph-hint">${en ? 'Tap a neighbour to step there along the hyperlane.' : 'Тап по соседу — шаг к ней по гиперпути. Так карта обходится без зума.'}</div>
   </div>`;
 
   // ── Свои системы: сперва те, где ещё есть куда селиться ──
@@ -3689,7 +3758,8 @@ function _heroColonyPhoneBuild(en) {
     const n = (s.planets || []).filter(p => p && p.name).length;
     return `<div class="hpvnc-ph-row claim" data-q="${esc(String(s.name || '').toLowerCase())}">
       <span class="hpvnc-ph-nm">★ ${esc(s.name || '—')}</span>
-      <span class="hpvnc-ph-tags"><em class="hpvnc-ph-tag">${en ? 'bodies' : 'тел'}: ${n || '—'}</em></span>
+      <span class="hpvnc-ph-tags"><em class="hpvnc-ph-tag">${en ? 'bodies' : 'тел'}: ${n || '—'}</em>
+        <button class="hpvnc-ph-where" type="button" onclick="event.stopPropagation();heroVNColonyPhGo('${jsq(id)}')">${en ? 'show on chart' : 'показать на схеме'}</button></span>
       <button class="hpvnc-ph-claim" type="button" ${canClaim ? '' : 'disabled'}
         onclick="event.stopPropagation();heroVNColonyClaim('${jsq(id)}')">${en ? 'Colonize' : 'Колонизировать'} · ${money(cost)} ГС</button>
     </div>`;
@@ -3697,6 +3767,7 @@ function _heroColonyPhoneBuild(en) {
 
   return head + `<div class="hp-vn-col-body hpvnc-ph">
     ${pool}
+    ${radar}
     ${mine.length > 6 ? `<input class="hpvnc-ph-find" type="search" inputmode="search" placeholder="${en ? 'Find a system…' : 'Найти систему…'}" oninput="heroVNColonyFilter(this.value)">` : ''}
     <div class="hpvnc-ph-cap">${en ? 'Expansion' : 'Экспансия'} · ${claimIds.length}</div>
     <div class="hpvnc-ph-list">${claimRows}</div>
