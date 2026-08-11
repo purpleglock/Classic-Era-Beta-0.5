@@ -3290,7 +3290,15 @@ function heroVNColonyClose() {
   if (!el) return;
   el.classList.remove('show');
   el.setAttribute('aria-hidden', 'true');
+  _hpvncUnmountMap();
   if (_heroVNView === 'colony') _heroVNView = null;
+}
+// Встроенная карта галактики (телефон) уходит вместе с экраном: иначе GMM
+// остаётся «активным» с мёртвым канвасом и ловит перерисовки чужих данных.
+function _hpvncUnmountMap() {
+  if (typeof GMM === 'undefined' || !GMM.active) return;
+  if (GMM.cv && GMM.cv.isConnected && !GMM.cv.closest('#hp-vn-colony')) return;   // это карта раздела «Карта» — не трогаем
+  GMM.active = false; GMM.pick = null; GMM.cv = null; GMM.ctx = null; GMM.bmp = null;
 }
 // Перерисовать открытый оверлей свежими данными (зовётся из ecReloadPaint после
 // колонизации/терраформа — экран сам обновляется, как георазведка/колонии).
@@ -3303,6 +3311,7 @@ function heroVNColonyRefresh() {
 // Открыть карту системы (клик-«лупа» по своей системе на карте границ).
 function heroVNColonySys(sysId) {
   _heroColonyView = { mode: 'sys', sysId };
+  _hpvncUnmountMap();          // карта галактики уезжает, вместо неё будет схема системы
   heroVNColonyRefresh();
 }
 // Вернуться из карты системы к границам державы.
@@ -3623,10 +3632,64 @@ function _hpvncBindZoom() {
 // смежные ничейные), потом «где селиться» (свои системы, впереди — те, где ещё
 // есть свободные планеты). Карта границ остаётся на ПК, где она и уместна.
 // ══════════════════════════════════════════════════════════════
-// Система в центре телефонной схемы. Живёт между перерисовками экрана.
+// Выбранная на карте система. Живёт между перерисовками экрана.
 let _hpvncPhFocus = null;
-// Шаг по гиперпути: сосед становится центром схемы.
-function heroVNColonyPhGo(id) { _hpvncPhFocus = id; heroVNColonyRefresh(); }
+// Плашка «что выбрано» + кнопка действия. Отдельной функцией, потому что при
+// выборе звезды перерисовывается ТОЛЬКО она: полная перерисовка экрана снесла бы
+// канвас карты и сбросила камеру — игрок терял бы место, куда только что доехал.
+function _hpvncPhSel(en) {
+  const id = _hpvncPhFocus;
+  const all = (typeof EC !== 'undefined' && EC.allSystems) || [];
+  const s = all.find(x => x.id === id) || {};
+  const mineIds = (typeof ecMySysIds === 'function') ? ecMySysIds() : new Set();
+  const claimSet = new Set((typeof ecClaimableIds === 'function') ? ecClaimableIds() : []);
+  const money = typeof ecNum === 'function' ? ecNum : (x => x);
+  const cost = (typeof ecClaimCost === 'function') ? ecClaimCost() : 0;
+  const left = (typeof ecClaimsLeft === 'function') ? ecClaimsLeft() : 0;
+  const gc = (typeof EC !== 'undefined' && EC.eco && EC.eco.gc) || 0;
+  const canClaim = left > 0 && gc >= cost;
+  const capSys = (((typeof EC !== 'undefined' && EC.colonies) || []).find(c => c.is_capital) || {}).system_id || null;
+  const k = mineIds.has(id) ? 'mine' : (claimSet.has(id) ? 'free' : (s.faction ? 'foe' : 'void'));
+  const KT = {
+    mine: en ? 'your system' : 'ваша система',
+    free: en ? 'free to colonize' : 'ничейная, доступна',
+    foe: en ? 'foreign realm' : 'чужая держава',
+    void: en ? 'not adjacent to your realm' : 'не граничит с вашей территорией',
+  };
+  const act = k === 'mine'
+    ? `<button class="hpvnc-ph-act" type="button" onclick="event.stopPropagation();heroVNColonySys('${jsq(id)}')">${en ? 'Open system' : 'Открыть систему'} ›</button>`
+    : k === 'free'
+      ? `<button class="hpvnc-ph-act claim" type="button" ${canClaim ? '' : 'disabled'} onclick="event.stopPropagation();heroVNColonyClaim('${jsq(id)}')">${en ? 'Colonize' : 'Колонизировать'} · ${money(cost)} ГС</button>`
+      : `<button class="hpvnc-ph-act" type="button" disabled>${KT[k]}</button>`;
+  return `<div class="hpvnc-ph-sel ${k}">
+      <b>${esc(s.name || '—')}</b><span>${KT[k]}</span>
+      ${capSys && id !== capSys ? `<button type="button" onclick="event.stopPropagation();heroVNColonyPhGo('${jsq(capSys)}',1)">★ ${en ? 'capital' : 'столица'}</button>` : ''}
+    </div>${act}`;
+}
+// Система выбрана: тапом по карте (тогда камера уже там) или кнопкой из списка
+// (move=1 — довезти камеру до неё).
+function heroVNColonyPhGo(id, move) {
+  _hpvncPhFocus = id;
+  const wrap = document.querySelector('#hp-vn-colony .hpvnc-ph-selwrap');
+  if (!wrap) { heroVNColonyRefresh(); return; }
+  const en = (typeof lang !== 'undefined' && lang === 'en');
+  wrap.innerHTML = _hpvncPhSel(en);
+  if (move && typeof gmmCenterSystem === 'function' && typeof GMM !== 'undefined' && GMM.active) {
+    try { gmmCenterSystem(id); } catch (e) {}
+    try { wrap.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+  }
+}
+// Поднять НАСТОЯЩУЮ карту галактики внутри экрана колонизации, в режиме выбора.
+function _hpvncMountMap() {
+  const host = document.getElementById('hpvnc-gmm');
+  if (!host || typeof gmmRender !== 'function' || typeof GM === 'undefined' || !GM.loaded) return;
+  try {
+    gmmRender(host);
+    // Тап по звезде отдаётся сюда вместо «паспорта системы» (см. gmmTapAt).
+    GMM.pick = sys => { if (sys && sys.id) heroVNColonyPhGo(sys.id); };
+    if (_hpvncPhFocus && typeof gmmCenterSystem === 'function') gmmCenterSystem(_hpvncPhFocus);
+  } catch (e) {}
+}
 function _heroColonyPhoneBuild(en) {
   const head = _heroColonyHead(en);
   const money = typeof ecNum === 'function' ? ecNum : (x => x);
@@ -3660,68 +3723,22 @@ function _heroColonyPhoneBuild(en) {
     <span class="hpvnc-ph-pool-r">${money(cost)} ГС · ${en ? 'treasury' : 'казна'} ${money(gc)} ГС</span>
   </div>`;
 
-  // ── КАРТА ДЛЯ ПАЛЬЦА: «звезда и её пути» ─────────────────────────────────
-  // Ориентир на телефоне даёт не общий план (мелко, не попасть), а ЛОКАЛЬНАЯ
-  // схема: в центре текущая система, вокруг — все её соседи по гиперпутям.
-  // Тап по соседу переносит центр туда — так карта обходится шагами, без зума
-  // и панорамы. Узлы крупные, число их ограничено степенью вершины, поэтому
-  // схема читается одинаково и у мелкой державы, и у империи в полгалактики.
-  const adj = new Map();
-  const lanes = (typeof EC !== 'undefined' && EC.lanes && EC.lanes.length) ? EC.lanes
-    : ((typeof GM !== 'undefined' && GM.lanes) || []).map(l => ({ a_id: l.a_id != null ? l.a_id : l.a, b_id: l.b_id != null ? l.b_id : l.b }));
-  lanes.forEach(l => {
-    const a = l.a_id, b = l.b_id; if (a == null || b == null) return;
-    if (!adj.has(a)) adj.set(a, new Set()); if (!adj.has(b)) adj.set(b, new Set());
-    adj.get(a).add(b); adj.get(b).add(a);
-  });
-  const focusId = (_hpvncPhFocus && byId.has(_hpvncPhFocus)) ? _hpvncPhFocus
-    : (capSys && byId.has(capSys) ? capSys : [...mineIds][0]);
-  const fSys = byId.get(focusId) || {};
-  const kindOf = id => mineIds.has(id) ? 'mine' : (claimSet.has(id) ? 'free' : ((byId.get(id) || {}).faction ? 'foe' : 'void'));
-  const KC = { mine: (typeof EC !== 'undefined' && EC.app && EC.app.color) || '#5fb0e6', free: '#5fe0a0', foe: '#e0705f', void: '#7c8ea3' };
-  const cut = (t, n) => { t = String(t || '—'); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
-  // Соседи: сперва свои, потом доступные к захвату, потом остальные — у кого
-  // путей много, тот всё равно видит главное в первых секторах круга.
-  const nb = [...(adj.get(focusId) || [])].filter(id => byId.has(id))
-    .sort((a, b) => ({ mine: 0, free: 1, void: 2, foe: 3 })[kindOf(a)] - ({ mine: 0, free: 1, void: 2, foe: 3 })[kindOf(b)]
-      || String((byId.get(a) || {}).name).localeCompare(String((byId.get(b) || {}).name)));
-  const shown = nb.slice(0, 8);
-  const CX = 170, CY = 162, RR = 118;
-  let nodes = '', links = '';
-  shown.forEach((id, i) => {
-    const s = byId.get(id), k = kindOf(id), c = KC[k];
-    const a = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(shown.length, 1);
-    const x = CX + RR * Math.cos(a), y = CY + RR * Math.sin(a);
-    links += `<line x1="${CX}" y1="${CY}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${c}" stroke-width="1.6" opacity=".45"></line>`;
-    nodes += `<g class="hpvnc-ph-node ${k}" onclick="event.stopPropagation();heroVNColonyPhGo('${jsq(id)}')">
-      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="30" fill="transparent"></circle>
-      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="13" fill="${c}" opacity=".9"></circle>
-      <text x="${x.toFixed(1)}" y="${(y + 30).toFixed(1)}" text-anchor="middle" fill="#dCEAFb" font-size="11"
-        font-family="var(--font-mono)" style="paint-order:stroke;stroke:#05080d;stroke-width:3">${esc(cut(s.name, 11))}</text>
-    </g>`;
-  });
-  const fk = kindOf(focusId), fc = KC[fk];
-  const centre = `<g><circle cx="${CX}" cy="${CY}" r="26" fill="none" stroke="${fc}" stroke-width="2"></circle>
-    <circle cx="${CX}" cy="${CY}" r="17" fill="${fc}"></circle>
-    <text x="${CX}" y="${CY + 48}" text-anchor="middle" fill="#eaf6ff" font-size="13" font-family="var(--font-mono)"
-      style="paint-order:stroke;stroke:#05080d;stroke-width:4">${esc(cut(fSys.name, 16))}</text></g>`;
-  const act = fk === 'mine'
-    ? `<button class="hpvnc-ph-act" type="button" onclick="event.stopPropagation();heroVNColonySys('${jsq(focusId)}')">${en ? 'Open system' : 'Открыть систему'} ›</button>`
-    : fk === 'free'
-      ? `<button class="hpvnc-ph-act claim" type="button" ${canClaim ? '' : 'disabled'} onclick="event.stopPropagation();heroVNColonyClaim('${jsq(focusId)}')">${en ? 'Colonize' : 'Колонизировать'} · ${money(cost)} ГС</button>`
-      : `<button class="hpvnc-ph-act" type="button" disabled>${fk === 'foe' ? (en ? 'Foreign realm' : 'Чужая держава') : (en ? 'Out of reach' : 'Не граничит с вами')}</button>`;
+  // ── ОРИЕНТИР = НАСТОЯЩАЯ КАРТА ГАЛАКТИКИ ─────────────────────────────────
+  // Своих схем тут быть не должно: игрок уже умеет ходить по карте из раздела
+  // «Карта», и вторая, ни на что не похожая навигация — только помеха. Поэтому
+  // сюда встраивается ТОТ ЖЕ canvas-рендер (galaxy_map.js, GMM): те же жесты,
+  // сектора, границы держав, гиперпути — и работает быстро, потому что рисует
+  // канвас, а не сотни SVG-путей. Отличие одно: карта поднята в РЕЖИМЕ ВЫБОРА
+  // (GMM.pick, см. gmmTapAt) — тап по звезде не открывает паспорт системы, а
+  // отдаёт её сюда, в плашку действия под картой.
+  if (!_hpvncPhFocus || !byId.has(_hpvncPhFocus)) _hpvncPhFocus = (capSys && byId.has(capSys)) ? capSys : [...mineIds][0];
   const radar = `<div class="hpvnc-ph-radar">
-    <svg viewBox="0 0 340 330" preserveAspectRatio="xMidYMid meet">
-      <circle cx="${CX}" cy="${CY}" r="${RR}" fill="none" stroke="rgba(160,200,255,.12)" stroke-dasharray="4,6"></circle>
-      ${links}${centre}${nodes}
-    </svg>
-    <div class="hpvnc-ph-radar-bar">
-      <span class="hpvnc-ph-radar-n">${en ? 'lanes' : 'путей'}: ${nb.length}${nb.length > shown.length ? ` (${en ? 'showing' : 'на схеме'} ${shown.length})` : ''}</span>
-      ${capSys && focusId !== capSys ? `<button type="button" onclick="event.stopPropagation();heroVNColonyPhGo('${jsq(capSys)}')">★ ${en ? 'to capital' : 'к столице'}</button>` : ''}
-    </div>
-    ${act}
-    <div class="hpvnc-ph-hint">${en ? 'Tap a neighbour to step there along the hyperlane.' : 'Тап по соседу — шаг к ней по гиперпути. Так карта обходится без зума.'}</div>
+    <div class="hpvnc-ph-gmm" id="hpvnc-gmm"></div>
+    <div class="hpvnc-ph-selwrap">${_hpvncPhSel(en)}</div>
+    <div class="hpvnc-ph-hint">${en ? 'Tap a star on the map to select it. Drag to pan, pinch to zoom — same as the galaxy map.' : 'Тап по звезде на карте — выбрать её. Тащить — панорама, щипок — зум: карта та же, что в разделе «Карта».'}</div>
   </div>`;
+  // Канвас поднимаем ПОСЛЕ вставки разметки (ему нужен размер контейнера).
+  requestAnimationFrame(_hpvncMountMap);
 
   // ── Свои системы: сперва те, где ещё есть куда селиться ──
   const freeOf = s => {
@@ -3759,7 +3776,7 @@ function _heroColonyPhoneBuild(en) {
     return `<div class="hpvnc-ph-row claim" data-q="${esc(String(s.name || '').toLowerCase())}">
       <span class="hpvnc-ph-nm">★ ${esc(s.name || '—')}</span>
       <span class="hpvnc-ph-tags"><em class="hpvnc-ph-tag">${en ? 'bodies' : 'тел'}: ${n || '—'}</em>
-        <button class="hpvnc-ph-where" type="button" onclick="event.stopPropagation();heroVNColonyPhGo('${jsq(id)}')">${en ? 'show on chart' : 'показать на схеме'}</button></span>
+        <button class="hpvnc-ph-where" type="button" onclick="event.stopPropagation();heroVNColonyPhGo('${jsq(id)}',1)">${en ? 'show on map' : 'показать на карте'}</button></span>
       <button class="hpvnc-ph-claim" type="button" ${canClaim ? '' : 'disabled'}
         onclick="event.stopPropagation();heroVNColonyClaim('${jsq(id)}')">${en ? 'Colonize' : 'Колонизировать'} · ${money(cost)} ГС</button>
     </div>`;
@@ -3879,9 +3896,11 @@ function _heroColonyBuild(en) {
       const d = dOf(f.pts, true);
       if (f.isRift) { fillOther += `<path class="vor-cell vor-rift" d="${d}" stroke="none"></path>`; return; }
       const isMine = mineIds.has(f.sys.id);
-      if (isMine && !myColor && f.fac) myColor = f.fac.color;
+      // краска — по исходному владельцу (в унии партнёр держит свой цвет)
+      const cfac = f.flagFac || f.fac;
+      if (isMine && !myColor && cfac) myColor = cfac.color;
       if (f.sys) cellD.set(f.sys.id, d);
-      const fill = f.fac ? f.fac.color : 'rgba(120,140,170,0.05)';
+      const fill = cfac ? cfac.color : 'rgba(120,140,170,0.05)';
       const p = `<path class="vor-cell${f.fac ? ' vor-claimed' : ' vor-neutral'}" d="${d}" fill="${fill}" stroke="none"></path>`;
       if (isMine) fillMine += p;
       else {
@@ -4081,7 +4100,9 @@ function _heroColonyBuild(en) {
     const groups = new Map();   // fid -> { cells:[pts], pts:[p] }
     geo.fills.forEach(f => {
       if (!f.sys || f.isRift || !f.fac || !f.pts) return;
-      const fid = f.sys.faction; if (!fid || fid === 'rift' || !ptsIn(f.pts)) return;
+      // герб — по ГЕРАЛЬДИКЕ: территория партнёра по унии держит свой герб
+      const fid = f.sys.union_origin || f.sys.faction;
+      if (!fid || fid === 'rift' || !ptsIn(f.pts)) return;
       let g = groups.get(fid);
       if (!g) { g = { cells: [], pts: [] }; groups.set(fid, g); }
       g.cells.push(f.pts);

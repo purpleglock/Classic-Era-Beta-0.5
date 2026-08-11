@@ -1383,7 +1383,9 @@ function gmDrawSvg() {
     if (f.isFog) return `<path class="vor-fog" d="${d}" fill="rgba(4,6,12,${f.fogA != null ? f.fogA : 0.55})" stroke="none"></path>`;  // туман войны (пустота)
     if (f.isRift) return `<path class="vor-cell vor-rift" d="${d}" stroke="none"></path>`;  // заливка/анимация — в CSS
     // Режим «бедность»: ячейку красим по просперити системы (а не цветом фракции).
-    const fill = GM.showEcon ? gmEconFill(f.sys) : (f.fac ? f.fac.color : 'rgba(120,140,170,0.05)');
+    // Цвет = ИСХОДНЫЙ владелец (flagFac): в унии/объединении партнёр держит СВОЮ
+    // краску, а не краску ведущей державы. Границы по-прежнему схлопнуты по fac.
+    const fill = GM.showEcon ? gmEconFill(f.sys) : ((f.flagFac || f.fac) ? (f.flagFac || f.fac).color : 'rgba(120,140,170,0.05)');
     const cls = 'vor-cell' + (f.fac ? ' vor-claimed' : ' vor-neutral');
     return `<path class="${cls}" d="${d}" fill="${fill}" stroke="none"></path>`;
   }).join('');
@@ -1819,7 +1821,9 @@ function gmOpenPanel(sys) {
     panel.classList.remove('gm-hidden');
     return;
   }
-  const fac = gmFaction(sys.faction);
+  // владелец для показа = исходная держава (при унии/объединении активы числятся
+  // за ведущим, но система остаётся территорией партнёра)
+  const fac = gmFaction(sys.union_origin || sys.faction) || gmFaction(sys.faction);
   const sysCols = (GM.colonies || []).filter(c => c.system_id === sys.id);
   // Убираем из «Состава системы» ТОЛЬКО фантом столицы: легаси-запись (без kind →
   // рисуется как «Контроль: ничейная»), дублирующую столичную планету. Сама столица
@@ -3695,6 +3699,7 @@ function gmmRender(host) {
   GMM.ctx = GMM.cv.getContext('2d');
   GMM.bmp = null; GMM.ptrs.clear(); GMM.gesture = null;
   GMM.vel = null; GMM.anim = null; GMM.selId = null; GMM.lastTap = 0; GMM.opCmd = null; GMM.mzaCmd = null; GMM.fleetCmd = null;
+  GMM.pick = null;   // режим выбора системы ставит ХОЗЯИН экрана сразу после gmmRender
   gmmLoadImgs();
   gmmBuildWorld();
   gmmBindCanvas();
@@ -4159,6 +4164,24 @@ function gmmTapAt(lx, ly) {
   const sysAtScreen = () => gmmSysAtScreen(lx, ly);
   // ── РЕДАКТОР КАРТЫ: включённые инструменты перехватывают клик ──
   if (GM.editSession && GM.edit) { gmmEditTap(lx, ly); return; }
+  // 0а) РЕЖИМ ВЫБОРА СИСТЕМЫ. Карту встраивают чужие экраны (колонизация в
+  // новелле на телефоне — render.js _heroColonyPhoneBuild): там нужен не
+  // «паспорт системы», а выбор цели. Тап отдаём хозяину экрана, панель карты
+  // не трогаем; жесты, слои и зум остаются штатные — навигация та же самая.
+  if (GMM.pick) {
+    const tgt = gmmSysAtScreen(lx, ly);
+    if (tgt) {
+      GMM.selId = tgt.id; GMM.dirty = true; gmmKick(); gmmEnsureVisible(tgt);
+      GMM.lastTap = 0;
+      try { GMM.pick(tgt); } catch (e) {}
+      return;
+    }
+    // Мимо звезды: в обзоре одиночный тап приближает к точке — иначе с телефона
+    // до звёзд не добраться иначе как пинчем.
+    if (dbl || gmmOverview()) { gmmZoomAt(lx, ly, GMM.s > 3.4 ? gmmMinS() : GMM.s * 2.2, true); GMM.lastTap = 0; }
+    else { GMM.lastTap = now; GMM.ltx = lx; GMM.lty = ly; }
+    return;
+  }
   // 0) РЕЖИМ ПРИЦЕЛИВАНИЯ носителя: клик по системе = отправить туда, по пустоте = отмена.
   if (GMM.opCmd && GMM.opCmd.mode === 'target') {
     const tgt = sysAtScreen();
@@ -5199,7 +5222,7 @@ function gmmPaintOrbits(ctx) {
     //    владельца (нейтральная — холодный синий). Свет держится по диску и мягко
     //    гаснет к краю — система читается как очерченный, но не «обведённый» домен. ──
     const glow = gmStarGlow(sys.star_type);
-    const owner = sys.faction ? gmFaction(sys.faction) : null;
+    const owner = sys.faction ? (gmFaction(sys.union_origin || sys.faction) || gmFaction(sys.faction)) : null;
     const terr = owner ? gmRgb(gmReadable(owner.color)) : [120, 150, 205];
     if (isFocus) GMM.focusFx = { cx, cy, rMax, color: terr };   // для HUD-перехода входа в систему
     ctx.save();
@@ -6093,7 +6116,9 @@ function gmmBuildWorld() {
   const facMaskD = new Map();   // fid → площадь территории (слой-маска ограждения)
   geo.fills.forEach(f => {
     const isNeutral = !f.isRift && !f.fac;
-    const color = f.isRift ? 'rgba(14,2,24,.8)' : (f.fac ? f.fac.color : 'rgba(120,140,170,0.04)');
+    // краска ячейки — по ГЕРАЛЬДИКЕ (исходный владелец при унии), см. gmBuildGeo
+    const cfac = f.flagFac || f.fac;
+    const color = f.isRift ? 'rgba(14,2,24,.8)' : (cfac ? cfac.color : 'rgba(120,140,170,0.04)');
     const d = dOf(f.pts, true);
     fillD.set(color, (fillD.get(color) || '') + d);
     if (isNeutral) {
@@ -8827,7 +8852,8 @@ function gmmPaintStars(ctx, camS) {
     // Всё остальное (ничейные/неколонизированные, включая гигантов) — нейтральный
     // серо-стальной, а не «радуга» по типу звезды. Размер/вес рамки по-прежнему
     // отражают класс звезды (variant), но цвет больше не кричит без владельца.
-    const facOwn = s.faction && s.faction !== 'rift' ? gmFaction(s.faction) : null;
+    const facOwn = s.faction && s.faction !== 'rift'
+      ? (gmFaction(s.union_origin || s.faction) || gmFaction(s.faction)) : null;
     const col = s.faction === 'rift' ? '#c58bff'
       : facOwn ? gmReadable(facOwn.color)
         : '#8ba0b8';

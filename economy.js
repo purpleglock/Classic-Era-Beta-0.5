@@ -2240,7 +2240,7 @@ async function _ecLoadCoreImpl() {
     // stars/multi — кратность (_multi_stars.sql): stars = компаньоны [{letter,greek,…}],
     // multi=false прячет их. Без этих полей экономика предлагала бы к колонизации
     // тела компаньонов, скрытых на карте, и не могла бы подписать звезду-хозяйку.
-    _ecRetry(() => dbGet('map_systems', `select=id,name,faction,x,y,planets,star_type,is_giant,stars,multi`)).catch(() => []),
+    _ecRetry(() => dbGet('map_systems', `select=id,name,faction,union_origin,x,y,planets,star_type,is_giant,stars,multi`)).catch(() => []),
     ecCached('lanes', () => dbGet('map_hyperlanes', `select=a_id,b_id`)),   // топология гиперпутей не меняется по ходу игры — кэш на сессию
     // Реестр держав: без него дипломатия честно показывает «Нет других фракций»,
     // хотя они есть — самый заметный симптом полупустого захода.
@@ -2542,7 +2542,13 @@ async function ecReloadPaint() {
   await ecLoad();
   // Кабинет перерисовываем ТОЛЬКО когда игрок в нём: ecPaintCabinet() делает
   // setPg() (замена всей страницы), и вызов с главной «перекидывал» в кабинет.
-  if (typeof curSlug !== 'undefined' && curSlug === 'economy') ecPaintCabinet();
+  // …и ТОЛЬКО когда поверх кабинета не открыт экран новеллы. Экраны новеллы
+  // (колонизация, колонии, георазведка…) живут ВНУТРИ #cab-stage: ecPaintCabinet()
+  // заменяет всю страницу и сносит их вместе с содержимым — игрока после
+  // «Колонизировать» выбрасывало в кабинет, и экран приходилось открывать заново.
+  // Свежие данные экраны получают сами — своими *Refresh ниже.
+  const _vnOver = document.querySelector('#cab-stage [id^="hp-vn-"].show');
+  if (typeof curSlug !== 'undefined' && curSlug === 'economy' && !_vnOver) ecPaintCabinet();
   // Оверлей «Управление колониями» в новелле живёт на тех же данных EC —
   // после любого действия перерисовываем и его (если открыт).
   if (typeof heroVNPlanetsRefresh === 'function') heroVNPlanetsRefresh();

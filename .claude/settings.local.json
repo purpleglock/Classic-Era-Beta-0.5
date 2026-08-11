@@ -573,7 +573,8 @@
       "Bash(node tools/db_q.js \"select faction_id,name from faction_applications where status='approved'\")",
       "Bash(node tools/db_q.js \"select * from unions limit 20\")",
       "Bash(node tools/db_q.js \"select * from diplo_unions order by created_at desc limit 10\")",
-      "Bash(node tools/db_q.js \"select table_name,column_name from information_schema.columns where table_schema='public' and table_name in \\('diplo_unions','diplo_union_members','annex_origin','state_annexations'\\)\")"
+      "Bash(node tools/db_q.js \"select table_name,column_name from information_schema.columns where table_schema='public' and table_name in \\('diplo_unions','diplo_union_members','annex_origin','state_annexations'\\)\")",
+      "Bash(node -e \"['galaxy_map.js','render.js','economy.js'].forEach\\(f=>{new \\(require\\('vm'\\).Script\\)\\(require\\('fs'\\).readFileSync\\(f,'utf8'\\),{filename:f}\\);console.log\\('ok',f\\)}\\)\")"
     ]
   }
 }
