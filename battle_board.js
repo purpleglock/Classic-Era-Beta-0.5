@@ -105,13 +105,19 @@ function bbFriend(u) {
 function bbAlly(u) { return !!u && !u.mine && bbFriend(u); }     // свой, но чужой державы
 // Тон борта: мой — бирюза, союзный — та же зелень, что у ремонтного роя
 // (третий цвет в палитре уже есть, новых не заводим), чужой — малина.
-function bbTone(u) { return u && u.mine ? 'mine' : (bbFriend(u) ? 'ally' : 'foe'); }
+function bbTone(u) {
+  if (!u) return 'foe';
+  // трибуна дуэли делит доску на два лагеря, а не на три: там «свой» — это
+  // нападающий, и красить его в союзную зелень незачем
+  if (BB.st && BB.st.my_side === 'spectator') return u.side === 'attacker' ? 'mine' : 'foe';
+  return u.mine ? 'mine' : (bbFriend(u) ? 'ally' : 'foe');
+}
 function bbToneCol(u) { return BB_C[bbTone(u)]; }
 
 // Держав на моей стороне больше одной? (battle_state.mates — состав стороны
 // с готовностью каждого). От этого зависит и опрос доски, и кнопка хода.
-function bbMates() { return (BB.st && Array.isArray(BB.st.mates)) ? BB.st.mates : []; }
-function bbHasMates() { return bbMates().length > 1; }
+function bbMates(s) { s = s || BB.st; return (s && Array.isArray(s.mates)) ? s.mates : []; }
+function bbHasMates(s) { return bbMates(s).length > 1; }
 
 // ── Открыть / закрыть ───────────────────────────────────────
 async function bbOpen(battleId, spectate, botFoe) {
@@ -545,7 +551,7 @@ function bbRender() {
     <div class="bbf-hud${(mv || waiting) && !done ? ' bbf-hud-my' : ''}">
       <span class="bbf-hud-t">${turnLbl}</span>
       ${bbMatesChips(s)}
-      ${!done && mv ? `<span class="bbf-hud-a">${'◆'.repeat(Math.max(0, s.acts_left || 0))}${'◇'.repeat(Math.max(0, actsMax - (s.acts_left || 0)))}</span>` : ''}
+      ${!done && (mv || waiting) ? `<span class="bbf-hud-a">${'◆'.repeat(Math.max(0, s.acts_left || 0))}${'◇'.repeat(Math.max(0, actsMax - (s.acts_left || 0)))}</span>` : ''}
       <span class="bbf-hud-vs">${esc(myName)} · ${esc(foeName)}</span>
     </div>`;
 
@@ -2985,7 +2991,7 @@ function bbHealMode() { BB.heal = !BB.heal; bbRender(); }
 function bbEndTurnBtn(s, done) {
   if (done) return `<span class="bbf-wait"></span>`;
   if (!s.side_turn) return `<span class="bbf-wait">${bbDeadline(s)}</span>`;
-  const mates = bbMates();
+  const mates = bbMates(s);
   if (mates.length <= 1) return `<button class="bbd-fire" onclick="bbEndTurn()">завершить ход</button>`;
   const ready = mates.filter(m => m.ready).length;
   const wait = mates.filter(m => !m.ready).map(m => m.name || m.fid).join(', ');
@@ -2998,7 +3004,7 @@ function bbEndTurnBtn(s, done) {
 // Состав своей стороны в шапке: чей ход ещё не закрыт — видно сразу, без
 // гадания «почему доска стоит».
 function bbMatesChips(s) {
-  const mates = bbMates();
+  const mates = bbMates(s);
   if (mates.length <= 1 || s.status !== 'active' || !s.side_turn) return '';
   return `<span class="bbf-hud-mates">${mates.map(m =>
     `<i class="${m.ready ? 'on' : ''}${m.me ? ' me' : ''}" title="${esc(m.name || m.fid)}${

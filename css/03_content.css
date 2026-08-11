@@ -596,8 +596,14 @@
 .hp-vn-col-main svg{width:100%;height:100%;display:block}
 /* Карта границ живёт на своём зуме/панораме (viewBox, см. _hpvncBindZoom):
    жест забираем себе, иначе телефон прокручивает страницу вместо карты. */
-.hp-vn-col-main .hpvnc-map:not(.hpvnc-sysmap){touch-action:none;cursor:grab}
+.hp-vn-col-main .hpvnc-map:not(.hpvnc-sysmap){touch-action:none;cursor:grab;transform-origin:50% 50%}
 .hp-vn-col-main .hpvnc-map:not(.hpvnc-sysmap):active{cursor:grabbing}
+/* ЖИВОЙ ЖЕСТ: карта едет CSS-трансформом по УЖЕ отрисованному слою — этим
+   занимается композитор, геометрия не пересчитывается. Без этого каждый шаг
+   переписывал viewBox, и весь SVG (заливки, гербы в clip-path, сотни путей)
+   растрировался заново — отсюда мигание и рывки. Резкий вектор возвращает
+   _hpvncSettle через 140 мс после последнего движения. */
+.hp-vn-col-main .hpvnc-map.hpvnc-live{will-change:transform}
 /* Кнопки масштаба — угол карты; на телефоне это единственный способ приблизиться
    без пинча (и подсказка, что карта вообще масштабируется). */
 .hpvnc-zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:6px;z-index:3}

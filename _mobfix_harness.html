@@ -153,11 +153,72 @@
   </div>
 </div>
 
+<!-- ══ 4. ВОЕНПРОМ ══ -->
+<div class="hp-vn-colony hp-vn-geo hp-vn-est mfh-scr" id="scr-mil">
+  <div class="hp-vn-col-head">
+    <div class="hp-vn-col-title">Вооружённые силы</div>
+    <button class="hp-vn-col-x">↩ назад</button>
+  </div>
+  <div class="hp-vn-col-body pol-shell">
+    <div class="pol-railw"><div class="pol-rail">
+      <button class="pol-rail-b"><span class="pol-rail-ic">🛡</span><span class="pol-rail-tx"><b>Состав</b><i>кто под ружьём</i></span></button>
+      <button class="pol-rail-b on"><span class="pol-rail-ic">🏭</span><span class="pol-rail-tx"><b>Военпром</b><i>что заложено в цехах</i></span></button>
+    </div></div>
+    <div class="pol-stage pol-body"><div class="pol-content">
+      <div class="ec-cyb-forces ec-cyb-build">
+        <div class="ec-intro"><div class="ec-intro-hd">🏭 Строительство вооружённых сил</div><div class="ec-intro-tx">Производство войск. Шаблоны проектируются в Конструкторах, заказ — здесь.</div></div>
+        <div class="ec-mb-shards">
+          <div class="ec-mb-shards-hd">◈ Осколки цикла: <b>7</b></div>
+          <div class="ec-mb-shards-tx">Постройка за осколок бесплатна и мгновенна — без ГС, сырья, очереди и лимитов цехов.</div>
+          <div class="ec-mb-shards-row"><span>Универсальные <b>3</b></span><span>Авиация <b>1</b></span><span>Техника <b>2</b></span><span>Пехота <b>1</b></span></div>
+        </div>
+        <div class="ec-mb-shops">
+          <section class="ec-mb-shop ec-mb-inf">
+            <div class="ec-mb-hd"><span class="ec-mb-ic"><svg class="ec-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M12 8v7"/></svg></span><span class="ec-mb-nm">Пехота</span><span class="ec-mb-where">Центр Подготовки</span></div>
+            <div class="ec-mb-body">
+              <div class="ec-prod-form">
+                <select><option>Штурмовой взвод «Гарпия» — 1 200 ГС</option></select>
+                <input type="number" value="1" min="1" class="ec-prod-qty">
+                <button class="btn btn-gd btn-sm">＋ Заказать</button>
+              </div>
+              <div class="ec-ship-bill"><div class="ec-cap">Смета: 1 200 ГС · сталь 40 · композит 12</div></div>
+              <div class="ec-meter-row"><div class="ec-meter"><div class="ec-cap">🪖 Центр Подготовки за ход — 2 / 6 ед. пехоты</div></div></div>
+            </div>
+          </section>
+          <section class="ec-mb-shop ec-mb-tech">
+            <div class="ec-mb-hd"><span class="ec-mb-ic"><svg class="ec-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55"><path d="M3 21V10.5l5 3v-3l5 3v-3l5 3V21z"/><path d="M2.5 21h19"/></svg></span><span class="ec-mb-nm">Наземная техника</span><span class="ec-mb-where">Военный Завод</span></div>
+            <div class="ec-mb-body"><div class="ec-empty">Нет проектов. Спроектируйте в Конструкторе. <button class="btn btn-gh btn-sm" style="margin-left:8px">⚒ Конструктор</button></div></div>
+          </section>
+          <section class="ec-mb-shop ec-mb-air">
+            <div class="ec-mb-hd"><span class="ec-mb-ic"><svg class="ec-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55"><path d="M12 2.5l1.4 7.2 8.1 3.1v1.9l-8.1-1.6-.7 5.7 2.3 1.7v1.5L12 21l-3 1v-1.5l2.3-1.7-.7-5.7-8.1 1.6v-1.9l8.1-3.1z"/></svg></span><span class="ec-mb-nm">Авиация</span><span class="ec-mb-where">Аэрокосмический Завод</span></div>
+            <div class="ec-mb-body"><div class="ec-empty">Нужен Аэрокосмический Завод — постройте его во вкладке «Колонии».</div></div>
+          </section>
+          <section class="ec-mb-shop ec-mb-fleet">
+            <div class="ec-mb-hd"><span class="ec-mb-ic"><svg class="ec-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55"><path d="M12 2.2c2.9 2.9 4.4 6.4 4.4 10.1L12 21.8l-4.4-9.5C7.6 8.6 9.1 5.1 12 2.2z"/><circle cx="12" cy="9.4" r="1.9"/></svg></span><span class="ec-mb-nm">Флот</span><span class="ec-mb-where">Корабельная Верфь · поштучно</span></div>
+            <div class="ec-mb-body">
+              <div class="ec-prod-form">
+                <select><option>Тяжёлый крейсер «Лорелея» — 48 000 ГС</option></select>
+                <input type="number" value="1" min="1" class="ec-prod-qty">
+                <button class="btn btn-gd btn-sm">＋ Заложить</button>
+              </div>
+              <div class="ec-ship-bill"><div class="ec-cap">Смета: 48 000 ГС · титан 320 · гравиядро 4</div></div>
+              <div class="ec-meter-row"><div class="ec-meter"><div class="ec-cap">🏗 Верфь за ход — 1 / 3 кораблей</div></div><div class="ec-meter"><div class="ec-cap">🛰 Вместимость флота — 12 / 20 мест</div></div></div>
+            </div>
+          </section>
+        </div>
+        <div class="ec-section-title">В очереди <span class="ec-hint">— доставка в конце хода (сутки)</span></div>
+        <div class="ec-queue"><div class="ec-q-row"><span class="ec-r-name">Штурмовой взвод «Гарпия» ×2</span><button class="ec-bld-del">✕</button></div></div>
+      </div>
+    </div></div>
+  </div>
+</div>
+
 </div>
 <div class="mfh-sw">
   <button onclick="sw('scr-mine')">Добыча</button>
   <button onclick="sw('scr-col')">Колония</button>
   <button onclick="sw('scr-news')">Оповещения</button>
+  <button onclick="sw('scr-mil')">Военпром</button>
 </div>
 <script>
 function sw(id){document.querySelectorAll('.mfh-scr').forEach(e=>{const on=e.id===id;e.classList.toggle('on',on);e.classList.toggle('show',on);});}

@@ -556,7 +556,11 @@
       "Bash(node tools/db_q.js \"select column_name,data_type from information_schema.columns where table_name='battle_allies' order by ordinal_position\")",
       "Bash(node tools/db_dump_fn.js battle_end_turn__raw battle_force_turn__raw fc_bot_turn)",
       "Bash(node tools/db_dump_fn.js battle_reinforce__raw)",
-      "Bash(awk -F: '$1>3900')"
+      "Bash(awk -F: '$1>3900')",
+      "Bash(node tools/db_q.js \"select faction_id,owner_id,status,name from faction_applications where faction_id='fac_085638a65d'\")",
+      "Bash(node tools/db_q.js \"select count\\(*\\) from map_systems\")",
+      "Bash(node tools/db_q.js \"select s.id,s.name,s.faction,s.x,s.y from map_systems s where s.faction='fac_085638a65d' or s.id in \\(select case when h.a_id=m.id then h.b_id else h.a_id end from map_hyperlanes h join map_systems m on \\(m.id=h.a_id or m.id=h.b_id\\) where m.faction='fac_085638a65d'\\)\")",
+      "Bash(node -c render.js)"
     ]
   }
 }

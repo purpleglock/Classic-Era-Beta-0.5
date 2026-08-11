@@ -3363,6 +3363,11 @@ async function heroVNColonyOpen() {
 async function heroVNColonyClaim(systemId) {
   if (typeof EC === 'undefined' || EC.busy) return;
   const en = (typeof lang !== 'undefined' && lang === 'en');
+  // Система УЖЕ МОЯ — это не захват, а заселение: открываем её карту. Иначе
+  // промах пальцем по соседней цели давал «колонизация на перезарядке» на
+  // системе, которая давно куплена (жалоба «не могу освоить вчерашние системы»).
+  const _own = ((EC.allSystems || []).find(s => s && s.id === systemId) || {}).faction;
+  if (_own && EC.fid && String(_own) === String(EC.fid)) { heroVNColonySys(systemId); return; }
   if (typeof ecClaimsLeft === 'function' && ecClaimsLeft() <= 0) { toast(en ? 'Colonization on cooldown' : 'Колонизация системы на перезарядке', 'err'); return; }
   const cost = (typeof ecClaimCost === 'function') ? ecClaimCost() : 0;
   const money = typeof ecNum === 'function' ? ecNum : (x => x);
@@ -3405,23 +3410,104 @@ function _hpvncNow(svg) {
   const a = String(svg.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
   return (a.length === 4 && a.every(isFinite)) ? { x: a[0], y: a[1], w: a[2], h: a[3] } : null;
 }
-// Применить кадр с зажимом: не мельче полного кадра, не крупнее _hpvncMinVis,
-// и всегда внутри границ полного кадра (уехать в пустоту нельзя).
-function _hpvncApply(svg, v) {
-  const b = _hpvncBase(svg); if (!b) return;
+// Зажим кадра: не мельче полного, не крупнее _hpvncMinVis, всегда внутри
+// границ полного кадра (уехать в пустоту нельзя).
+function _hpvncClamp(svg, v) {
+  const b = _hpvncBase(svg); if (!b) return null;
   const k = Math.min(1, Math.max(_hpvncMinVis, v.w / b.w));
   const w = b.w * k, h = b.h * k;
-  const x = Math.min(b.x + b.w - w, Math.max(b.x, v.x + (v.w - w) / 2));
-  const y = Math.min(b.y + b.h - h, Math.max(b.y, v.y + (v.h - h) / 2));
-  svg.setAttribute('viewBox', `${x.toFixed(1)} ${y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
-  svg.dataset.z = (b.w / w).toFixed(2);
+  return {
+    x: Math.min(b.x + b.w - w, Math.max(b.x, v.x + (v.w - w) / 2)),
+    y: Math.min(b.y + b.h - h, Math.max(b.y, v.y + (v.h - h) / 2)),
+    w, h,
+  };
+}
+// «ЗАПЕЧЬ» кадр в viewBox: вектор снова резкий, подписи пересчитаны под кадр.
+// Дорогая операция (перерастрируется весь слой), поэтому её зовём ОДИН раз по
+// окончании жеста, а не на каждое движение пальца.
+function _hpvncApply(svg, v) {
+  const c = _hpvncClamp(svg, v); if (!c) return;
+  const b = _hpvncBase(svg);
+  svg.style.transform = '';
+  svg.setAttribute('viewBox', `${c.x.toFixed(1)} ${c.y.toFixed(1)} ${c.w.toFixed(1)} ${c.h.toFixed(1)}`);
+  svg.dataset.z = (b.w / c.w).toFixed(2);
+  _hpvncRelabel(svg);
+}
+// ЖИВОЙ шаг жеста: тот же кадр, но показанный CSS-трансформом поверх уже
+// отрисованного (и закэшированного композитором) слоя — ни одного пересчёта
+// геометрии, отсюда 60 к/с вместо мигания на каждом кадре. Настоящий viewBox
+// подменяется потом, в _hpvncSettle.
+function _hpvncPreview(svg, v) {
+  const c = _hpvncClamp(svg, v); if (!c) return;
+  const base = svg._hpvncVB || (svg._hpvncVB = _hpvncNow(svg));   // кадр на момент запекания
+  const r = svg.getBoundingClientRect(); if (!r.width) return;
+  const upp = _hpvncUPP(base, r);
+  const k = base.w / c.w;
+  const tx = -k * ((c.x + c.w / 2) - (base.x + base.w / 2)) / upp;
+  const ty = -k * ((c.y + c.h / 2) - (base.y + base.h / 2)) / upp;
+  svg._hpvncWant = c;
+  svg.style.transform = `translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px) scale(${k.toFixed(4)})`;
+  svg.dataset.z = k.toFixed(2);
+}
+// Текущий кадр с учётом незапечённого превью — от него считаются следующие шаги.
+function _hpvncView(svg) { return svg._hpvncWant || _hpvncNow(svg); }
+// Жест закончился (или пауза после колеса) — запекаем и чистим состояние.
+function _hpvncSettle(svg) {
+  clearTimeout(svg._hpvncT);
+  svg._hpvncT = setTimeout(() => {
+    const want = svg._hpvncWant; svg._hpvncWant = null; svg._hpvncVB = null;
+    svg.classList.remove('hpvnc-live');
+    if (want) _hpvncApply(svg, want);
+  }, 140);
+}
+// ── Раскладка подписей ПОД ТЕКУЩИЙ КАДР ──────────────────────────────────────
+// Метки лежат в DOM в локальных пикселях (см. .hpvnc-lb в сборке). Здесь им
+// назначается масштаб (чтобы шрифт остался ~12 px при любом зуме) и место:
+// четыре слота вокруг звезды, приоритет «цель колонизации → столица → моя →
+// чужая», пересечения отсеиваются. Вне кадра метки скрыты — на плотной карте
+// это и даёт читаемость, а зум открывает остальные названия.
+function _hpvncRelabel(svg) {
+  const b = _hpvncBase(svg), v = _hpvncNow(svg); if (!b || !v) return;
+  const pxu = (+svg.dataset.pxu || 1) * (v.w / b.w);       // мировых единиц на CSS-пиксель
+  const lbs = [...svg.querySelectorAll('.hpvnc-lb')];
+  const placed = [];
+  const gap = 2 * pxu;
+  const hit = (x0, y0, x1, y1) => placed.some(r => x0 < r[2] + gap && x1 > r[0] - gap && y0 < r[3] + gap && y1 > r[1] - gap);
+  const vis = (x, y) => x >= v.x && x <= v.x + v.w && y >= v.y && y <= v.y + v.h;
+  // Ядра звёзд заняты заранее: подпись не должна садиться на диск.
+  lbs.forEach(g => placed.push([+g.dataset.ax - 4 * pxu, +g.dataset.ay - 4 * pxu, +g.dataset.ax + 4 * pxu, +g.dataset.ay + 4 * pxu]));
+  lbs.sort((a, b2) => (+a.dataset.p) - (+b2.dataset.p)).forEach(g => {
+    const ax = +g.dataset.ax, ay = +g.dataset.ay;
+    if (!vis(ax, ay)) { g.style.display = 'none'; return; }
+    const hw = +g.dataset.hw * pxu, hh = +g.dataset.hh * pxu;
+    const off = +g.dataset.off * pxu, up = g.dataset.up === '1';
+    const slots = up
+      ? [[ax, ay - off * 1.5], [ax, ay + off], [ax + hw + off, ay], [ax - hw - off, ay]]
+      : [[ax, ay + off], [ax, ay - off], [ax + hw + off * 0.6, ay], [ax - hw - off * 0.6, ay]];
+    let lx = null, ly = null;
+    for (const p of slots) if (!hit(p[0] - hw, p[1] - hh, p[0] + hw, p[1] + hh)) { lx = p[0]; ly = p[1]; break; }
+    // Цели колонизации и столицу показываем ВСЕГДА: их единицы, и именно за ними
+    // игрок сюда пришёл — иначе у плотной державы от карты остаётся одна подпись.
+    if (lx === null) {
+      if (g.dataset.m !== '1') { g.style.display = 'none'; return; }
+      lx = slots[0][0]; ly = slots[0][1];
+    }
+    placed.push([lx - hw, ly - hh, lx + hw, ly + hh]);
+    g.style.display = '';
+    g.setAttribute('transform', `translate(${lx.toFixed(1)},${ly.toFixed(1)}) scale(${pxu.toFixed(4)})`);
+  });
+}
+// Разложить подписи на всех картах колонизации в DOM (после перерисовки экрана).
+function _hpvncRelabelAll() {
+  document.querySelectorAll('#hp-vn-colony .hpvnc-map:not(.hpvnc-sysmap)').forEach(svg => { try { _hpvncRelabel(svg); } catch (e) {} });
 }
 // Мировых единиц на экранный пиксель. preserveAspectRatio="slice" вписывает кадр
 // по МЕНЬШЕЙ стороне (лишнее срезается), поэтому масштаб = min по осям.
 function _hpvncUPP(v, r) { return Math.min(v.w / r.width, v.h / r.height); }
 // Зум вокруг точки (клиентские координаты): точка под пальцем остаётся на месте.
-function _hpvncZoomAt(svg, factor, cx, cy) {
-  const v = _hpvncNow(svg); if (!v) return;
+// live=true — живой шаг жеста (трансформ), иначе сразу запекаем.
+function _hpvncZoomAt(svg, factor, cx, cy, live) {
+  const v = _hpvncView(svg); if (!v) return;
   const r = svg.getBoundingClientRect(); if (!r.width || !r.height) return;
   const upp = _hpvncUPP(v, r);
   const ox = v.x + v.w / 2, oy = v.y + v.h / 2;                 // центр кадра сейчас
@@ -3430,7 +3516,9 @@ function _hpvncZoomAt(svg, factor, cx, cy) {
   const nw = v.w / factor, nh = v.h / factor;
   // Масштаб растёт в factor раз ⇒ чтобы (wx,wy) остался в той же точке экрана,
   // центр кадра приближается к нему в те же factor раз.
-  _hpvncApply(svg, { x: wx - (wx - ox) / factor - nw / 2, y: wy - (wy - oy) / factor - nh / 2, w: nw, h: nh });
+  const want = { x: wx - (wx - ox) / factor - nw / 2, y: wy - (wy - oy) / factor - nh / 2, w: nw, h: nh };
+  if (live) { svg.classList.add('hpvnc-live'); _hpvncPreview(svg, want); _hpvncSettle(svg); }
+  else _hpvncApply(svg, want);
 }
 // Кнопки масштаба: dir +1 ближе, −1 дальше, 0 — вернуть полный кадр державы.
 function heroVNColonyZoom(dir) {
@@ -3453,7 +3541,7 @@ function _hpvncBindZoom() {
   document.addEventListener('wheel', e => {
     const svg = mapOf(e); if (!svg) return;
     e.preventDefault();
-    _hpvncZoomAt(svg, e.deltaY < 0 ? 1.18 : 1 / 1.18, e.clientX, e.clientY);
+    _hpvncZoomAt(svg, e.deltaY < 0 ? 1.18 : 1 / 1.18, e.clientX, e.clientY, true);
   }, { passive: false });
 
   document.addEventListener('pointerdown', e => {
@@ -3471,17 +3559,18 @@ function _hpvncBindZoom() {
     if (pts.size >= 2) {
       const [a, b] = [...pts.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (pinch > 0 && d > 0) _hpvncZoomAt(svgA, d / pinch, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      if (pinch > 0 && d > 0) _hpvncZoomAt(svgA, d / pinch, (a.x + b.x) / 2, (a.y + b.y) / 2, true);
       pinch = d; moved = 99;
       e.preventDefault();
       return;
     }
     moved += Math.hypot(dx, dy);
     if (moved < 6) return;                       // микродрожь пальца — это всё ещё тап
-    const v = _hpvncNow(svgA); if (!v) return;
+    const v = _hpvncView(svgA); if (!v) return;
     const r = svgA.getBoundingClientRect(); if (!r.width) return;
     const upp = _hpvncUPP(v, r);
-    _hpvncApply(svgA, { x: v.x - dx * upp, y: v.y - dy * upp, w: v.w, h: v.h });
+    svgA.classList.add('hpvnc-live');
+    _hpvncPreview(svgA, { x: v.x - dx * upp, y: v.y - dy * upp, w: v.w, h: v.h });
     e.preventDefault();
   }, { passive: false });
 
@@ -3493,6 +3582,7 @@ function _hpvncBindZoom() {
       // Панорама/пинч НЕ должны срабатывать как клик по системе (открылась бы
       // карта системы или ушёл бы запрос колонизации). Гасим следующий клик.
       if (moved >= 6) svgA.dataset.drag = '1';
+      _hpvncSettle(svgA);            // жест кончился — вернуть резкий вектор и подписи
       svgA = null;
     }
   };
@@ -3679,12 +3769,26 @@ function _heroColonyBuild(en) {
   //    поэтому его координаты разворачиваем обратно из локальных в мировые.
   //    Анимируем ТОЛЬКО opacity: масштабирование группы с filter:blur заставляло
   //    браузер пересчитывать гауссиану каждый кадр — отсюда лаги. ──
+  // ⚠️ ХИТ-ЗОНЫ УЗЛОВ НЕ ДОЛЖНЫ НАЛЕЗАТЬ ДРУГ НА ДРУГА. «Палец» у нас не меньше
+  // ~44 px, а в кадре большой державы это сотни мировых единиц — прозрачный круг
+  // соседней ЦЕЛИ КОЛОНИЗАЦИИ накрывал МОЮ звезду и (рисуясь поверх) забирал тап
+  // себе: игрок жал по своей системе, а получал «колонизация на перезарядке».
+  // Режем радиус каждого узла до доли расстояния до ближайшего соседа.
+  const hitPts = [];
+  mine.forEach(s => { if (inFrame(s.x, s.y)) hitPts.push([s.x, s.y]); });
+  claimIds.forEach(id => { const t = byId.get(id); if (t && inFrame(t.x, t.y)) hitPts.push([t.x, t.y]); });
+  const hitCap = (x, y) => {
+    let d = Infinity;
+    hitPts.forEach(p => { const q = Math.hypot(p[0] - x, p[1] - y); if (q > 1e-6 && q < d) d = q; });
+    return isFinite(d) ? d * 0.45 : Infinity;
+  };
+
   let myNodes = '';
   mine.forEach(s => {
     if (!inFrame(s.x, s.y)) return;
     const isCap = capSet.has(s.id);
     const r = atLeast(isCap ? R * 0.02 : R * 0.013, isCap ? 6 : 4);
-    const hitR = Math.max(r * 3.2, R * 0.04, px(22));   // палец: цель не меньше ~44px
+    const hitR = Math.min(Math.max(r * 3.2, R * 0.04, px(22)), hitCap(s.x, s.y));   // палец: цель не меньше ~44px, но не залезает на соседа
     const cd = cellD.get(s.id);
     const region = cd ? `<path class="hpvnc-cell" d="${cd}" transform="translate(${nf(-s.x)},${nf(-s.y)})"
       fill="${myColor}" stroke="#eaf6ff" stroke-width="${nf(R * 0.0026)}" stroke-linejoin="round" style="pointer-events:none"></path>` : '';
@@ -3718,7 +3822,7 @@ function _heroColonyBuild(en) {
     const tr = atLeast(R * 0.016, 8);
     const dia = r => `0,${nf(-r)} ${nf(r)},0 0,${nf(r)} ${nf(-r)},0`;
     tNodes += `<g transform="translate(${nf(t.x)},${nf(t.y)})" style="cursor:pointer" onclick="event.stopPropagation();heroVNColonyClaim('${jsq(id)}')">
-      <circle r="${nf(Math.max(R * 0.032, px(24)))}" fill="transparent"></circle>
+      <circle r="${nf(Math.min(Math.max(R * 0.032, px(24)), hitCap(t.x, t.y)))}" fill="transparent"></circle>
       ${canClaim ? `<polygon points="${dia(tr)}" fill="none" stroke="${EXP}" stroke-width="${nf(R * 0.0022)}" opacity=".6"><animateTransform attributeName="transform" type="scale" values="1;1.9" dur="1.8s" repeatCount="indefinite"></animateTransform><animate attributeName="opacity" values=".6;0" dur="1.8s" repeatCount="indefinite"></animate></polygon>` : ''}
       <polygon points="${dia(tr)}" fill="rgba(8,14,22,.78)" stroke="${EXP}" stroke-width="${nf(R * 0.004)}" stroke-dasharray="${nf(R * 0.009)},${nf(R * 0.007)}" opacity="${canClaim ? '1' : '.5'}"><title>${esc(t.name)} — ${canClaim ? (en ? 'colonize' : 'колонизировать') : (en ? 'on cooldown' : 'на перезарядке')}</title></polygon>
       <circle r="${nf(R * 0.0045)}" fill="${EXP}" opacity="${canClaim ? '1' : '.55'}"></circle>
@@ -3744,46 +3848,37 @@ function _heroColonyBuild(en) {
   });
   lblCand.sort((a, b) => a.prio - b.prio);
 
-  const fs = px(12);                    // ~12 CSS-px в любом кадре и на любом экране
-  const gap = px(2);                    // зазор между плашками, чтобы не «слипались»
-  const placed = [];                    // занятые прямоугольники [x0,y0,x1,y1]
-  const free = (x0, y0, x1, y1) => !placed.some(r => x0 < r[2] + gap && x1 > r[0] - gap && y0 < r[3] + gap && y1 > r[1] - gap);
-  const take = (x0, y0, x1, y1) => { placed.push([x0, y0, x1, y1]); };
-  // Звезда занимает место сама — резервируем ядра, чтобы подпись не села на диск.
-  sysList.forEach(s => {
-    if (!inFrame(s.x, s.y) || s.faction === 'rift') return;
-    const a = atLeast(s.is_giant ? R * 0.02 : R * 0.012, s.is_giant ? 5 : 3.2);
-    take(s.x - a, s.y - a, s.x + a, s.y + a);
-  });
-
+  // Каждая метка — группа в ЛОКАЛЬНЫХ ПИКСЕЛЯХ (центр в 0,0), а её место на
+  // карте и масштаб ставит _hpvncRelabel уже по факту текущего кадра. Так
+  // подпись держит 12 px и при зуме, а при приближении появляются те названия,
+  // которым в общем кадре места не было (жалоба «названий у систем нет»).
   let labels = '';
   lblCand.forEach(c => {
     const s = c.s, nm = String(s.name || '');
     const claim = c.kind === 'claim', plate = c.kind === 'cap' || c.kind === 'mine';
     const txt = claim ? nm.slice(0, 16) : nm;
-    const ofs = plate ? fs : fs * 0.88;
-    const hw = txt.length * ofs * 0.31 + ofs * 0.5, hh = ofs * (plate ? 0.78 : 0.66);
-    // Цель колонизации подписываем НАД ромбом, остальные — под звездой.
-    const ly = claim ? s.y - Math.max(R * 0.03, px(17))
-      : s.y + atLeast(s.is_giant ? R * 0.05 : R * 0.032, s.is_giant ? 14 : 10);
-    if (!free(s.x - hw, ly - hh, s.x + hw, ly + hh)) return;
-    take(s.x - hw, ly - hh, s.x + hw, ly + hh);
-    if (claim) {
-      labels += `<text x="${nf(s.x)}" y="${nf(ly + ofs * 0.34)}" fill="${EXP}" font-size="${nf(ofs)}" text-anchor="middle" font-family="var(--font-mono)" opacity=".95" style="pointer-events:none;paint-order:stroke;stroke:#05080d;stroke-width:${nf(px(2.6))};stroke-linejoin:round">${esc(txt)}</text>`;
-      return;
-    }
-    if (!plate) {
-      labels += `<text x="${nf(s.x)}" y="${nf(ly + ofs * 0.34)}" fill="#c6d4e4" font-size="${nf(ofs)}" text-anchor="middle" font-family="var(--font-mono)" letter-spacing=".5" opacity=".8" style="pointer-events:none;paint-order:stroke;stroke:#05080d;stroke-width:${nf(px(2.6))};stroke-linejoin:round">${esc(txt)}</text>`;
-      return;
-    }
-    // Гранёная плашка (срез верхнего левого и нижнего правого угла) + цветной тик слева
-    const ct = hh * 0.75;
-    const tick = mineIds.has(s.id) ? myColor : 'rgba(150,175,205,.55)';
-    labels += `<g style="pointer-events:none">
-      <polygon points="${nf(s.x - hw + ct)},${nf(ly - hh)} ${nf(s.x + hw)},${nf(ly - hh)} ${nf(s.x + hw)},${nf(ly + hh - ct)} ${nf(s.x + hw - ct)},${nf(ly + hh)} ${nf(s.x - hw)},${nf(ly + hh)} ${nf(s.x - hw)},${nf(ly - hh + ct)}" fill="rgba(6,10,16,.82)" stroke="rgba(255,255,255,.13)" stroke-width="${nf(px(1))}"></polygon>
-      <rect x="${nf(s.x - hw)}" y="${nf(ly - hh + ct)}" width="${nf(px(2))}" height="${nf(hh * 2 - ct)}" fill="${tick}"></rect>
-      <text x="${nf(s.x)}" y="${nf(ly + ofs * 0.34)}" fill="#e6f0fb" font-size="${nf(ofs)}" text-anchor="middle" font-family="var(--font-display)" font-weight="700">${esc(nm)}</text>
-    </g>`;
+    const fs = plate ? 12 : 10.6;                       // CSS-пиксели
+    const hw = txt.length * fs * 0.31 + fs * 0.5, hh = fs * (plate ? 0.78 : 0.66);
+    const inner = claim
+      ? `<text y="${(fs * 0.34).toFixed(1)}" fill="${EXP}" font-size="${fs}" text-anchor="middle" font-family="var(--font-mono)" opacity=".95" style="paint-order:stroke;stroke:#05080d;stroke-width:2.6;stroke-linejoin:round">${esc(txt)}</text>`
+      : !plate
+        ? `<text y="${(fs * 0.34).toFixed(1)}" fill="#c6d4e4" font-size="${fs}" text-anchor="middle" font-family="var(--font-mono)" letter-spacing=".5" opacity=".8" style="paint-order:stroke;stroke:#05080d;stroke-width:2.6;stroke-linejoin:round">${esc(txt)}</text>`
+        // Гранёная плашка (срез верхнего левого и нижнего правого угла) + цветной тик слева
+        : (() => {
+            const ct = hh * 0.75, tick = mineIds.has(s.id) ? myColor : 'rgba(150,175,205,.55)';
+            const p = n => n.toFixed(1);
+            return `<polygon points="${p(-hw + ct)},${p(-hh)} ${p(hw)},${p(-hh)} ${p(hw)},${p(hh - ct)} ${p(hw - ct)},${p(hh)} ${p(-hw)},${p(hh)} ${p(-hw)},${p(-hh + ct)}" fill="rgba(6,10,16,.82)" stroke="rgba(255,255,255,.13)" stroke-width="1"></polygon>
+      <rect x="${p(-hw)}" y="${p(-hh + ct)}" width="2" height="${p(hh * 2 - ct)}" fill="${tick}"></rect>
+      <text y="${p(fs * 0.34)}" fill="#e6f0fb" font-size="${fs}" text-anchor="middle" font-family="var(--font-display)" font-weight="700">${esc(txt)}</text>`;
+          })();
+    // Стартовый transform — чтобы ПЕРВЫЙ кадр (до _hpvncRelabel в rAF) выглядел
+    // нормально: без него метки на мгновение рисуются в мировом масштабе 1:1,
+    // то есть микроскопическими.
+    const y0 = s.y + (s.is_giant ? 15 : 11) * PXU * (claim ? -1.5 : 1);
+    labels += `<g class="hpvnc-lb" transform="translate(${nf(s.x)},${nf(y0)}) scale(${PXU.toFixed(4)})"
+      data-ax="${nf(s.x)}" data-ay="${nf(s.y)}" data-p="${c.prio}"
+      data-m="${(claim || c.kind === 'cap') ? 1 : 0}" data-hw="${hw.toFixed(1)}" data-hh="${hh.toFixed(1)}"
+      data-off="${s.is_giant ? 15 : 11}" data-up="${claim ? 1 : 0}" style="pointer-events:none">${inner}</g>`;
   });
 
   // ── Флаги держав — КАЖДАЯ фракция «прокрашена» своим гербом по её ячейкам
@@ -3845,7 +3940,7 @@ function _heroColonyBuild(en) {
   const vignette = `<rect x="${nf(minX)}" y="${nf(minY)}" width="${nf(w)}" height="${nf(h)}" fill="url(#hpvncVig)" style="pointer-events:none"></rect>`;
   const cellW = nf(atLeast(R * 0.0016, 0.6)), laneW = nf(atLeast(R * 0.003, 1));
   const vb = `${nf(minX)} ${nf(minY)} ${nf(w)} ${nf(h)}`;
-  const mainSvg = `<svg class="hpvnc-map" viewBox="${vb}" data-vb="${vb}" preserveAspectRatio="xMidYMid slice" style="--cell-w:${cellW};--lane-w:${laneW}" xmlns:xlink="http://www.w3.org/1999/xlink">
+  const mainSvg = `<svg class="hpvnc-map" viewBox="${vb}" data-vb="${vb}" data-pxu="${PXU.toFixed(4)}" preserveAspectRatio="xMidYMid slice" style="--cell-w:${cellW};--lane-w:${laneW}" xmlns:xlink="http://www.w3.org/1999/xlink">
     ${defs}
     <g opacity=".85">${bgStars}</g>
     <g class="vor-layer" opacity=".46">${fillOther}</g>
@@ -3856,9 +3951,9 @@ function _heroColonyBuild(en) {
     <g opacity=".95">${lineB}</g>
     <g class="lane-layer" opacity=".8">${laneHtml}</g>
     <g>${starsHtml}</g>
-    <g>${myNodes}</g>
-    <g>${arrows}</g>
+    <g style="pointer-events:none">${arrows}</g>
     <g>${tNodes}</g>
+    <g>${myNodes}</g>
     ${vignette}
     <g>${labels}</g>
   </svg>`;
@@ -3941,6 +4036,9 @@ function _heroColonyBuild(en) {
       </div>
     </aside>
   </div>`;
+  // Подписи раскладывает _hpvncRelabel — по живому DOM (нужны реальные размеры
+  // окна карты). Первый возможный момент — кадр после innerHTML вызывающего.
+  requestAnimationFrame(_hpvncRelabelAll);
   return head + body;
 }
 

@@ -324,4 +324,11 @@
   html.mnav-on #cab-stage > #hp-vn-colony.show .hp-vn-col-scroll {
     overflow: visible; max-height: none;
   }
+  /* Раз ведомство стало документом со СТРАНИЧНОЙ прокруткой, шапка экрана
+     уезжала вверх вместе с ней — а в ней единственный выход «↩ к карте» из
+     карты системы: игрок в неё заходил и оказывался в ловушке (мотай экран
+     планет обратно наверх). Липнет к верху — выход всегда под рукой. */
+  html.mnav-on #cab-stage > #hp-vn-colony.show .hp-vn-col-head {
+    position: sticky; top: 0; z-index: 6;
+  }
 }

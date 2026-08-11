@@ -6981,17 +6981,35 @@ function ecTabMilBuild() {
     : `<div class="ec-empty" style="padding:8px">Очередь пуста.</div>`;
 
   const infLine = 'Объём производства зависит от слотов военных зданий: пехота → <b>Центр Подготовки</b>, техника → <b>Военный завод</b>, авиация → <b>Аэрокосмический завод</b>, корабли → <b>Корабельная верфь</b>.';
-  return `${ecIntro('🏭', 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, заказ — здесь. Дивизии больше не строятся: постройте юниты и <b>сформируйте из них армию</b> — она встанет гарнизоном на колонии и перебрасывается в режиме карты «Звёздный марш».', [infLine, 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».', 'Гарнизон сверх порога (20 юнитов или население/10) давит на благополучие колонии.'])}${totalShards > 0 ? `<div class="ec-cap" style="margin-bottom:10px">◈ <b>Осколки цикла: ${ecNum(totalShards)}</b> — постройка за осколок бесплатна и мгновенна (без ГС, сырья, очереди и лимитов цехов). 1 осколок = 1 юнит; на класс сначала тратятся его осколки, затем универсальные. Флот — по классам корабля: осколок корвета не построит дредноут.<div class="ec-hint" style="margin-top:4px">Универсальные: <b>${ecNum(uni)}</b>${shipShardBreak ? ' · ' + shipShardBreak : (shipShardTotal ? '' : '')} · ✈ Авиация: <b>${ecNum(sh.aviation || 0)}</b> · 🛠 Техника: <b>${ecNum(sh.ground || 0)}</b> · 🪖 Пехота: <b>${ecNum(sh.inf || 0)}</b></div></div>` : ''}<div class="ec-section-title">Пехота <span class="ec-hint">— ${caps.robot ? 'робо-сборка на Военном Заводе (×3)' : 'набор идёт в Центре Подготовки'}</span></div>
-    ${unitForm(infUnits, 'inf')}
-    <div class="ec-section-title">Наземная техника <span class="ec-hint">— юниты строятся на Военном Заводе</span></div>
-    ${unitForm(groundUnits, 'ground')}
-    <div class="ec-section-title">Авиация <span class="ec-hint">— юниты строятся на Аэрокосмическом Заводе</span></div>
-    ${unitForm(aviaUnits, 'aviation')}
-    <div class="ec-section-title">Флот <span class="ec-hint">— корабли строятся на Верфи поштучно</span></div>
-    ${shipForm}
+
+  // ── ОФОРМЛЕНИЕ ЦЕХОВ ────────────────────────────────────────
+  // Раньше «Военпром» был голым списком: четыре подчёркнутых заголовка, под
+  // каждым сырой <select> с кнопкой. Соседний экран «Состав» давно живёт в
+  // киберпанк-каркасе (.ec-cyb-forces), и разница читалась как недоделка.
+  // Каждый род войск теперь — ЦЕХ: карточка со срезанным углом, шапкой
+  // (иконка · имя · где строится) и телом-формой. Акцентов по-прежнему два:
+  // --gd на наземные цеха, --te на верфь (см. ui-design-rules).
+  const shop = (mod, ic, nm, where, body) => `<section class="ec-mb-shop ec-mb-${mod}">
+      <div class="ec-mb-hd"><span class="ec-mb-ic">${ecIco(ic)}</span><span class="ec-mb-nm">${nm}</span><span class="ec-mb-where">${where}</span></div>
+      <div class="ec-mb-body">${body}</div>
+    </section>`;
+
+  const shardsHtml = totalShards > 0 ? `<div class="ec-mb-shards">
+      <div class="ec-mb-shards-hd">◈ Осколки цикла: <b>${ecNum(totalShards)}</b></div>
+      <div class="ec-mb-shards-tx">Постройка за осколок бесплатна и мгновенна — без ГС, сырья, очереди и лимитов цехов. 1 осколок = 1 юнит; на класс сначала тратятся его осколки, затем универсальные. Флот — по классам корабля: осколок корвета не построит дредноут.</div>
+      <div class="ec-mb-shards-row"><span>Универсальные <b>${ecNum(uni)}</b></span>${shipShardBreak ? shipShardBreak.split(' · ').map(x => `<span>${x}</span>`).join('') : ''}<span>Авиация <b>${ecNum(sh.aviation || 0)}</b></span><span>Техника <b>${ecNum(sh.ground || 0)}</b></span><span>Пехота <b>${ecNum(sh.inf || 0)}</b></span></div>
+    </div>` : '';
+
+  return `<div class="ec-cyb-forces ec-cyb-build">${ecIntro(ecIco('factory'), 'Строительство вооружённых сил', 'Производство войск. Сами шаблоны проектируются в <b>Конструкторах</b>, заказ — здесь. Дивизии больше не строятся: постройте юниты и <b>сформируйте из них армию</b> — она встанет гарнизоном на колонии и перебрасывается в режиме карты «Звёздный марш».', [infLine, 'Заказы выполняются к следующему игровому дню и попадают в «⚔ Вооружённые силы государства».', 'Гарнизон сверх порога (20 юнитов или население/10) давит на благополучие колонии.'])}${shardsHtml}
+    <div class="ec-mb-shops">
+      ${shop('inf', 'shield', 'Пехота', caps.robot ? 'робо-сборка на Военном Заводе (×3)' : 'Центр Подготовки', unitForm(infUnits, 'inf'))}
+      ${shop('tech', 'factory', 'Наземная техника', 'Военный Завод', unitForm(groundUnits, 'ground'))}
+      ${shop('air', 'plane', 'Авиация', 'Аэрокосмический Завод', unitForm(aviaUnits, 'aviation'))}
+      ${shop('fleet', 'ship', 'Флот', 'Корабельная Верфь · поштучно', shipForm)}
+    </div>
     ${ecRepairPanelHtml(caps)}
     <div class="ec-section-title">В очереди <span class="ec-hint">— доставка в конце хода (сутки)</span></div>
-    <div class="ec-queue">${queueHtml}</div>`;
+    <div class="ec-queue">${queueHtml}</div></div>`;
 }
 
 // МАРШ: заказ юнита наземки/авиации (зеркало ecProduceShip)
@@ -7355,6 +7373,12 @@ function ecTabTerritory() {
 }
 async function ecClaimSystem(systemId) {
   if (EC.busy) return;
+  // Уже наша система = заселение, а не захват: ведём в «Колонии», а не в отказ.
+  const owned = ((EC.allSystems || []).find(s => s && s.id === systemId) || {}).faction;
+  if (owned && EC.fid && String(owned) === String(EC.fid)) {
+    if (typeof heroVNColonySys === 'function') { heroVNColonySys(systemId); return; }
+    toast('Система уже ваша — заселяйте её планеты в «Колониях»', 'inf'); return;
+  }
   if (ecClaimsLeft() <= 0) { toast('Колонизация системы на перезарядке', 'err'); return; }
   const claimCost = ecClaimCost();
   if ((EC.eco.gc || 0) < claimCost) { toast(`Недостаточно ГС: нужно ${ecNum(claimCost)}`, 'err'); return; }
