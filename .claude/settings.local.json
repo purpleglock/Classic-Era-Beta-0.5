@@ -551,7 +551,12 @@
       "Bash(node tools/db_dump_fn.js battle_state)",
       "Bash(node tools/db_q.js \"select p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosrc like '%_bt_require_turn%' order by 1\")",
       "Bash(sed -i \"s|mobile_nav.js?v=[^\\\\\"]*|mobile_nav.js?v=20260811chaps|\" index.html)",
-      "Bash(sed -i \"s|var BUILD = '[^']*'|var BUILD = '20260811chaps'|\" index.html)"
+      "Bash(sed -i \"s|var BUILD = '[^']*'|var BUILD = '20260811chaps'|\" index.html)",
+      "Bash(node tools/db_q.js \"select p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosrc like '%side_to_move =%' order by 1\")",
+      "Bash(node tools/db_q.js \"select column_name,data_type from information_schema.columns where table_name='battle_allies' order by ordinal_position\")",
+      "Bash(node tools/db_dump_fn.js battle_end_turn__raw battle_force_turn__raw fc_bot_turn)",
+      "Bash(node tools/db_dump_fn.js battle_reinforce__raw)",
+      "Bash(awk -F: '$1>3900')"
     ]
   }
 }
