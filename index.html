@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260811playpad';
+  var BUILD = '20260811chaps';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -60,7 +60,7 @@
      никогда не грузился — у кого Inter стоял локально (часто старый, без курсива),
      браузер синтезировал «косой» faux-italic в цитатах, у остальных шёл Exo 2. -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:ital,wght@0,200;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400&family=Orbitron:wght@400;500;700;900&family=Audiowide&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/index.css?v=20260811colvoid">
+<link rel="stylesheet" href="css/index.css?v=20260811fabup">
 </head>
 <body>
 <!-- Экран загрузки после входа по почте. Рисуется ДО первого кадра приложения
@@ -488,10 +488,13 @@
      Грузится ПОСЛЕ politics/estate: приёмная зовёт их открывашки (polOpen,
      estOpen) и хостит контейнеры экранов у себя (vnScreenHosts из render.js). -->
 <script src="cabinet.js?v=20260811colvoid"></script>
-<!-- РЕЖИМ КАБИНЕТА НА ТЕЛЕФОНЕ: метка `html.mnav-on`, на которой держится
-     мобильная вёрстка ведомств (31_mobile_nav.css). Навигация та же, что на
-     мониторе, — ленты вкладок в потоке (см. шапку mobile_nav.js). -->
-<script src="mobile_nav.js?v=20260811tabs"></script>
+<!-- НАВИГАЦИЯ КАБИНЕТА НА ТЕЛЕФОНЕ: нижняя панель #mnav + листы ведомств и
+     разделов (mobile_nav.js, 31_mobile_nav.css); та же метка `html.mnav-on`
+     держит мобильную вёрстку тел ведомств.
+     ⚠️ ПАНЕЛЬ ОДНАЖДЫ СНИМАЛИ в пользу «тех же лент вкладок, что на мониторе»
+     — и на телефоне навигация кабинета попросту пропала с глаз: игрок видел
+     только борт сайта. Возвращена; ленты вкладок остаются раскладкой монитора. -->
+<script src="mobile_nav.js?v=20260811chaps"></script>
 <script src="battle_board.js?v=20260809perks2"></script>
 <!-- Трёхмерная доска боя. Сам three.js тут НЕ подключается: battle_gl.js тянет
      его динамическим import только когда игрок открыл бой (см. bgLoadThree). -->

@@ -540,7 +540,18 @@
       "Bash(node tools/db_q.js \"select count\\(*\\) triggers from pg_trigger where tgname='trg_own_follow_fid' and not tgisinternal\")",
       "Bash(node tools/db_q.js \"select tablename,qual::text from pg_policies where schemaname='public' and tablename in \\('unit_production','fleets','faction_achievements'\\) and cmd in \\('SELECT','ALL'\\) order by 1\")",
       "Bash(node tools/db_q.js \"select count\\(*\\) c, count\\(distinct owner_id\\) o from unit_production where faction_id='fac_085638a65d'\")",
-      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('render.js','utf8'\\)\\);console.log\\('ok'\\)\")"
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('render.js','utf8'\\)\\);console.log\\('ok'\\)\")",
+      "Bash(node tools/db_dump_fn.js battle_end_turn _bt_do_end_turn)",
+      "Bash(sed -i \"s|31_mobile_nav.css?v=[^']*|31_mobile_nav.css?v=20260811mnavback|\" css/index.css)",
+      "Bash(sed -i \"s|mobile_nav.js?v=[^\\\\\"]*|mobile_nav.js?v=20260811mnavback|\" index.html)",
+      "Bash(sed -i \"s|var BUILD = '20260811sbrail'|var BUILD = '20260811mnavback'|; s|css/index.css?v=[^\\\\\"]*|css/index.css?v=20260811mnavback|\" index.html)",
+      "Bash(node tools/db_dump_fn.js _bt_side _bt_require_turn _bt_tp_refresh)",
+      "Bash(sed -i \"s|31_mobile_nav.css?v=[^']*|31_mobile_nav.css?v=20260811fabup|\" css/index.css)",
+      "Bash(sed -i \"s|var BUILD = '[^']*'|var BUILD = '20260811fabup'|; s|css/index.css?v=[^\\\\\"]*|css/index.css?v=20260811fabup|\" index.html)",
+      "Bash(node tools/db_dump_fn.js battle_state)",
+      "Bash(node tools/db_q.js \"select p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prosrc like '%_bt_require_turn%' order by 1\")",
+      "Bash(sed -i \"s|mobile_nav.js?v=[^\\\\\"]*|mobile_nav.js?v=20260811chaps|\" index.html)",
+      "Bash(sed -i \"s|var BUILD = '[^']*'|var BUILD = '20260811chaps'|\" index.html)"
     ]
   }
 }
