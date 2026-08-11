@@ -1,172 +1,80 @@
 /* © 2025–2026. Все права защищены.
    ══════════════════════════════════════════════════════════════════
-   НАВИГАЦИЯ КАБИНЕТА НА ТЕЛЕФОНЕ — нижняя панель и листы выбора.
+   КАБИНЕТ НА ТЕЛЕФОНЕ — ТЕ ЖЕ ВКЛАДКИ, ЧТО НА МОНИТОРЕ.
 
-   Устройство и причины — в шапке mobile_nav.js. Здесь только вид, и правило
-   оформления то же, что во всём кабинете: поверхность ОДНА (полотно страницы),
-   заливок нет, отделяют волосяные линии, акцент ровно один — цвет державы
-   (--fac) с голубым интерфейсным про запас.
+   ⚠️ ЗДЕСЬ ЖИЛА НИЖНЯЯ ПАНЕЛЬ С ЛИСТАМИ — и это была вторая, ни на что не
+   похожая навигация: на мониторе разделы стоят вкладками В ПОТОКЕ страницы, а
+   на телефоне те же разделы поднимались вертикальным списком поверх работы.
+   Одно место игры выглядело двумя разными в зависимости от ширины окна.
+   Устройство навигации теперь ОДНО: ведомства — лента вкладок, разделы
+   ведомства — лента под ней, главы — третья. На мониторе они стоят строкой и
+   колонкой, на телефоне те же ленты едут вбок пальцем. Ничего не всплывает.
+
+   Правило оформления прежнее: поверхность ОДНА (полотно страницы), заливок нет,
+   отделяют волосяные линии, акцент ровно один — цвет державы.
 
    Файл подключается ПОСЛЕДНИМ: он намеренно перебивает мобильные правила
-   новеллы (29_vn_mobile.css) и кабинета (30_cabinet.css) — но только когда
-   панель поднята, то есть при классе `html.mnav-on`. Снял класс (монитор,
-   любая страница кроме кабинета, сбой скрипта) — и всё старое меню на месте.
+   новеллы (29_vn_mobile.css) и кабинета (30_cabinet.css) — но только при классе
+   `html.mnav-on` (телефон + страница кабинета, ставит mobile_nav.js). Снял
+   класс — в новелле экраны остаются ровно такими, как были.
    ══════════════════════════════════════════════════════════════════ */
 
-#mnav, #mnav-sheet { display: none; }
-
 /* Порог — ровно тот же, что у `_cabWide()` в cabinet.js и у `MNAV_MQ`: до 768px
-   навигацию ведёт панель, выше — рельсы монитора. Разъедутся эти три числа —
-   и на одном экране окажутся обе навигации сразу. */
+   полосы вкладок остаются лентами на месте, выше — `cabRailify` переставляет их
+   в колонку монитора. Разъедутся эти три числа — раскладка окажется между. */
 @media (max-width:768px) {
 
-/* ── 1. СТАРЫЕ МЕНЮ УХОДЯТ ─────────────────────────────────────
-   ⚠️ Прячем ПО МЕТКЕ, а не списком классов. Метку `data-mnav` ставит
-   mnavMark() ровно той полосе, которую лист отразил у себя (полос с классом
-   `.ec-tabs` на экране бывает несколько — местные «потоки» и «фильтры» внутри
-   тела остаются на месте, их лист не знает). Что не отражено — не спрятано. */
-  html.mnav-on [data-mnav] { display: none !important; }
+/* ── 1. ЛЕНТЫ ВКЛАДОК ──────────────────────────────────────────
+   Один приём на все уровни: строка в НИТКУ, едет вбок, полосы прокрутки не
+   показывает, поля тянутся до кромок экрана (`--cab-pad` наружу), чтобы было
+   видно — лента продолжается. Мишень 40px, активный помечен подчёркиванием
+   цветом державы, как вкладка на мониторе. */
+  html.mnav-on .cab-rail,
+  html.mnav-on #cab-stage .pol-railw .pol-rail,
+  html.mnav-on #cab-stage :is(.hp-vni-tabs, .hp-vnd-tabs, .hp-vnr-tabs, .ec-fb-tabs, .ec-tabs, .hp-vnt-rail) {
+    display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
+    align-items: stretch; gap: 0 4px;
+    overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity;
+    margin: 0 calc(-1 * var(--cab-pad)) 10px; padding: 0 var(--cab-pad);
+    border: none; background: none;
+    max-height: none; height: auto; width: auto; flex: 0 0 auto; min-width: 0;
+  }
+  html.mnav-on .cab-rail::-webkit-scrollbar,
+  html.mnav-on #cab-stage .pol-railw .pol-rail::-webkit-scrollbar,
+  html.mnav-on #cab-stage :is(.hp-vni-tabs, .hp-vnd-tabs, .hp-vnr-tabs, .ec-fb-tabs, .ec-tabs, .hp-vnt-rail)::-webkit-scrollbar {
+    display: none;
+  }
+  html.mnav-on .cab-rail > *,
+  html.mnav-on #cab-stage .pol-railw .pol-rail > *,
+  html.mnav-on #cab-stage :is(.hp-vni-tabs, .hp-vnd-tabs, .hp-vnr-tabs, .ec-fb-tabs, .ec-tabs, .hp-vnt-rail) > * {
+    flex: 0 0 auto; scroll-snap-align: start;
+    min-height: 40px; white-space: nowrap; width: auto; max-width: none;
+  }
 
-/* Рельса ведомств: полтора десятка названий в 5-6 строк — вся её работа теперь
-   у нижней панели и листа. */
-  html.mnav-on .cab-rail { display: none !important; }
+/* ⚠️ РЕЛЬСА РАЗДЕЛОВ БОЛЬШЕ НЕ СКЛАДЫВАЕТСЯ. 29_vn_mobile.css сворачивает её в
+   строку «Двор 1 / 7», которая по тапу раскрывается сеткой на пол-экрана — то
+   самое вертикальное меню, от которого уходим. Строка-переключатель снимается,
+   лента разделов стоит открытой всегда. Правило действует ТОЛЬКО в кабинете:
+   в новелле рельса сворачивается, как и раньше. */
+  html.mnav-on #cab-stage .pol-rail-cur { display: none !important; }
+  html.mnav-on #cab-stage .pol-railw {
+    position: static; background: none; border-bottom: 1px solid var(--w2);
+    margin-bottom: 10px;
+  }
+  /* Пояснения и счётчики в нитку не влезают — в ленте остаётся имя и глиф. */
+  html.mnav-on #cab-stage .pol-rail-b .pol-rail-tx i,
+  html.mnav-on #cab-stage .hp-vnt-cat-bar { display: none; }
+  html.mnav-on #cab-stage .pol-rail-b { padding: 8px 10px; gap: 7px; }
+  html.mnav-on #cab-stage .pol-rail-b .pol-rail-tx b { font-size: 12.5px; }
 
-/* ⚠️ И ☰ ИЗ ШАПКИ ТОЖЕ. Пока панель поднята, борт сайта открывается её первой
-   кнопкой «Меню» — гамбургер в топбаре стал вторым таким же в двух сантиметрах
-   от первого. Одна дверь на одно место: в кабинете верхняя убирается, на всех
-   остальных страницах (панели там нет) она на месте и работает как раньше. */
-  html.mnav-on .mob-btn { display: none !important; }
+/* Рельса ведомств: полтора десятка названий переносились на 5-6 строк и съедали
+   пол-экрана прежде, чем игрок доходил до первой цифры. Теперь это лента. */
+  html.mnav-on .cab-rail { position: static; }
+  html.mnav-on .cab-rail-t { padding: 9px 10px; font-size: 12px; }
 
-/* ── 2. НИЖНЯЯ ПАНЕЛЬ ──────────────────────────────────────────
-   Четыре мишени во всю ширину, подписи двух правых — они же хлебные крошки
-   («Внутренняя политика · Двор»). Живёт в <body>: fixed внутри #cw на iOS
-   считается от прокрутки, а не от экрана. */
-  html.mnav-on #mnav {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-    display: grid; grid-template-columns: repeat(4, 1fr);
-    background: var(--b1, #0b0f16);
-    border-top: 1px solid var(--w2);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  .mnav-b {
-    position: relative;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 4px; min-height: 54px; padding: 8px 4px;
-    background: none; border: none; color: var(--t3);
-    font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
-    min-width: 0;
-  }
-  .mnav-ic { display: flex; }
-  .mnav-gl {
-    width: 21px; height: 21px; display: block;
-    fill: none; stroke: currentColor; stroke-width: 1.6;
-    stroke-linecap: round; stroke-linejoin: round;
-  }
-  .mnav-t {
-    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-family: var(--font-display); font-size: 9.5px; font-weight: 600;
-    letter-spacing: .04em;
-  }
-  /* Активная кнопка помечена полосой по верхней кромке — тем же приёмом, что
-     активная вкладка на мониторе. Ни заливки, ни рамки. */
-  .mnav-b.on { color: #eaf6ff; }
-  .mnav-b.on::after {
-    content: ""; position: absolute; top: 0; left: 14%; right: 14%; height: 2px;
-    background: var(--mnav-fac, var(--gd, #3a9bdc));
-  }
-  .mnav-b.on .mnav-gl { color: var(--mnav-fac, var(--gd, #3a9bdc)); }
-  .mnav-b.off { opacity: .3; pointer-events: none; }
-  .mnav-b:active { background: rgba(255,255,255,.05); }
-
-/* Панель перекрывает низ страницы — возвращаем эту высоту содержимому. */
-  html.mnav-on #cw { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
-/* Тосты садились ровно на панель (bottom:14px) — поднимаем над ней. */
-  html.mnav-on #toasts { bottom: calc(66px + env(safe-area-inset-bottom)); }
-
-/* ── 3. ЛИСТ ───────────────────────────────────────────────────
-   Поднимается снизу, занимает столько, сколько нужно списку, но не больше
-   86% экрана; список внутри скроллится сам и не пробивается на страницу. */
-  html.mnav-on #mnav-sheet[hidden] { display: none; }
-  html.mnav-on #mnav-sheet { position: fixed; inset: 0; z-index: 65; display: block; }
-  .mn-ov { position: absolute; inset: 0; background: rgba(0, 0, 8, .74); }
-  .mn-panel {
-    position: absolute; left: 0; right: 0; bottom: 0;
-    display: flex; flex-direction: column;
-    max-height: 86vh; max-height: 86dvh;
-    background: var(--b0, #080b10);
-    border-top: 1px solid var(--w2);
-    padding-bottom: env(safe-area-inset-bottom);
-    animation: mn-up .16s ease-out;
-  }
-  @keyframes mn-up { from { transform: translateY(14px); opacity: .6; } to { transform: none; opacity: 1; } }
-  @media (prefers-reduced-motion: reduce) { .mn-panel { animation: none; } }
-
-  .mn-hd {
-    flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
-    padding: 12px 16px; border-bottom: 1px solid var(--w2);
-  }
-  .mn-hd h2 {
-    margin: 0; font-family: var(--font-display); font-size: 11px; font-weight: 600;
-    letter-spacing: .16em; text-transform: uppercase; color: var(--t3);
-  }
-  .mn-x {
-    margin-left: auto; width: 40px; height: 40px; margin-right: -8px;
-    display: flex; align-items: center; justify-content: center;
-    background: none; border: none; color: var(--t3); cursor: pointer;
-  }
-  .mn-x .mnav-gl { width: 17px; height: 17px; }
-  .mn-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-
-  .mn-grp { padding: 0; }
-  .mn-grp + .mn-grp { margin-top: 10px; }
-  .mn-grp-hd {
-    margin: 0; padding: 12px 16px 6px;
-    font-size: 10px; font-weight: 600; letter-spacing: .16em;
-    text-transform: uppercase; color: var(--t4);
-    display: flex; align-items: center; gap: 10px;
-  }
-  .mn-grp-hd::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--w2), transparent); }
-  .mn-grp-foot { margin-top: 14px; border-top: 1px solid var(--w2); }
-
-/* Строка листа: 52px мишень, глиф · имя (+пояснение) · счётчик.
-   Активная помечена полосой на кромке, обращённой к тексту, — та же форма, что
-   у пункта меню в кабинете. */
-  .mn-row {
-    position: relative; display: flex; align-items: center; gap: 13px;
-    width: 100%; min-height: 52px; padding: 10px 16px; text-align: left;
-    background: none; border: none; border-bottom: 1px solid var(--w2);
-    color: var(--t2); font: inherit; cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .mn-row:last-child { border-bottom: none; }
-  .mn-row:active { background: rgba(255,255,255,.05); }
-  .mn-row.on { color: #eaf6ff; }
-  .mn-row.on::before {
-    content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 2px;
-    background: var(--mnav-fac, var(--gd, #3a9bdc));
-  }
-  .mn-row-ic {
-    flex: 0 0 auto; width: 22px; display: flex; align-items: center; justify-content: center;
-    color: var(--gd, #3a9bdc);
-  }
-  .mn-row.on .mn-row-ic { color: var(--mnav-fac, var(--gd, #3a9bdc)); }
-  .mn-row-ic svg, .mn-row-ic img { width: 20px; height: 20px; display: block; }
-  .mn-row-ic img { object-fit: contain; }
-  .mn-row-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  .mn-row-tx b { font-size: 13.5px; font-weight: 600; line-height: 1.25; }
-  .mn-row-tx i {
-    font-style: normal; font-size: 11px; line-height: 1.3; color: var(--t4);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .mn-row-n {
-    flex: 0 0 auto; font-family: var(--font-mono); font-size: 10.5px; color: var(--t4);
-  }
-  .mn-row.on .mn-row-n { color: var(--mnav-fac, var(--gd, #3a9bdc)); }
-  .mn-empty { padding: 26px 16px; font-size: 12.5px; color: var(--t4); text-align: center; }
-
-/* ── 4. ЧТО ОСВОБОДИЛОСЬ ПОД ПАНЕЛЬЮ ───────────────────────────
-   Меню ушло вниз — экран ведомства получает всю ширину и высоту. Заодно
-   правятся мелочи, из-за которых пальцем было не попасть. */
+/* ── 2. ЧТО ПРАВИТСЯ ЗАОДНО ────────────────────────────────────
+   Мелочи, из-за которых на телефоне было не попасть пальцем. */
 
   /* Двери приёмной: одна колонка была и раньше, но строкой в 13px с полем в
      12px. Дверь — главная мишень телефона, ей и размер. */
@@ -191,8 +99,8 @@
     font-size: 13px;
   }
 
-  /* Шапка раздела: имя ведомства теперь и так стоит в панели — заставке
-     остаётся строка с глифом и «?», без лишнего воздуха. */
+  /* Шапка раздела: имя ведомства и так стоит в ленте вкладок над ней —
+     заставке остаётся строка с глифом и «?», без лишнего воздуха. */
   html.mnav-on #cab-stage .pol-scene { padding: 0 0 8px; margin-bottom: 10px; }
   html.mnav-on #cab-stage .pol-scene-hd h2 { font-size: 13px; }
 
@@ -214,7 +122,7 @@
   html.mnav-on .cab-nw { padding: 10px 8px; font-size: 13px; }
   html.mnav-on .cab-nw-d { font-size: 10.5px; }
 
-/* ── 5. ВЕДОМСТВА, ВЫПАВШИЕ ИЗ МОБИЛЬНОГО СЛОЯ ─────────────────
+/* ── 3. ВЕДОМСТВА, ВЫПАВШИЕ ИЗ МОБИЛЬНОГО СЛОЯ ─────────────────
    ⚠️ 29_vn_mobile.css — весь мобильный ремонт тел разделов (сетки в одну
    колонку, таблицы со своей прокруткой, поля ввода в 16px, картинки по
    ширине) — написан на селектор `.hp-vn-colony.show`. В новелле это верно:
@@ -252,30 +160,26 @@
      на одно, то на другое. Ведомство — документ. */
   html.mnav-on #cab-stage .hp-vnt-grid { max-height: none; overflow: visible; }
 
-/* ── 6. СТОЛ ПРИЁМНОЙ ──────────────────────────────────────────
+/* ── 4. СТОЛ ПРИЁМНОЙ ──────────────────────────────────────────
    `minmax(320px,1fr)` рисовался под монитор: две колонки рядом. На телефоне
    колонка всё равно одна, но 320px — это ПОЛ, а не потолок: на 320-360px
    экранах (SE, старые Android) сетка становилась шире полотна и тащила
    страницу вбок. Явная одна колонка ширины не требует. */
   html.mnav-on .cab-desk { grid-template-columns: minmax(0, 1fr); gap: 14px; }
 
-/* ── 7. СЛЕД ОТ МОНИТОРА ───────────────────────────────────────
+/* ── 5. СЛЕД ОТ МОНИТОРА ───────────────────────────────────────
    ⚠️ `cabRailify` (cabinet.js) на широком экране УЖЕ переставил полосу
    вкладок в колонку `.cab-split-rail` — и обратно не разбирает. Стоит
    повернуть телефон, сложить окно или просто сузить браузер с открытым
    кабинетом, и на телефоне остаётся десктопная раскладка: слева колонка в
-   168px, справа сжатое тело. Хуже того, саму полосу лист прячет как
-   отражённую (`[data-mnav]`) — колонка остаётся ПУСТОЙ и молча съедает
-   половину ширины. На телефоне навигацию ведёт панель: раскладка
-   разбирается обратно в поток. */
+   168px, справа сжатое тело. Коробка колонки на телефоне убирается из
+   раскладки целиком (`display:contents`) — полоса внутри становится обычной
+   лентой вкладок над телом, как и все остальные (см. § 1). */
   html.mnav-on #cab-stage .cab-split { display: block; }
-  html.mnav-on #cab-stage .cab-split-rail {
-    display: none;
-    /* Полоса внутри жива и кликается из листа — прячется коробка, не она. */
-  }
+  html.mnav-on #cab-stage .cab-split-rail { display: contents; }
   html.mnav-on #cab-stage .cab-split-col { display: block; }
 
-/* ── 8. ЗАЗОР 641-768px: НАВИГАЦИЯ ТЕЛЕФОННАЯ, ТЕЛО ДЕСКТОПНОЕ ──
+/* ── 6. ЗАЗОР 641-768px: НАВИГАЦИЯ ТЕЛЕФОННАЯ, ТЕЛО ДЕСКТОПНОЕ ──
    ⚠️ ЭТО НЕ ОДИН ЭКРАН, А ВЕСЬ КАБИНЕТ. Каркасы ведомств сворачиваются в
    колонку на СВОЁМ пороге — 640px (03_content.css: колонизация, колонии,
    поэма, ассамблея; 640 же у «Исследований»). Панель кабинета поднимается на
@@ -294,6 +198,26 @@
   html.mnav-on #cab-stage .hp-vn-col-body { flex-direction: column; gap: 12px; }
   html.mnav-on #cab-stage .hp-vn-col-main { flex: 0 0 auto; height: 46vh; min-height: 240px; width: 100%; max-width: 100%; min-width: 0; }
   html.mnav-on #cab-stage .hp-vn-col-side { flex: 0 0 auto; flex-direction: column; gap: 12px; }
+  /* ⚠️ И САМ ХОЛСТ НА ТЕЛЕФОНЕ ПЕРЕСТАЁТ БЫТЬ КОРОБКОЙ.
+     30_cabinet.css оставил колонизации единственное на весь кабинет исключение:
+     `#cab-stage > #hp-vn-colony.show{height:min(80vh,880px);overflow:hidden}`
+     плюс `.hp-vn-col-body{overflow:hidden}`. На мониторе это окно с картой во
+     всю высоту, и досье рядом с ней помещается. На телефоне раскладка иная:
+     карта уже НЕ рядом, а СВЕРХУ (46vh), под ней колонкой досье, обзор,
+     перечень систем — вместе это вдвое выше коробки. Коробка высоты не отдаёт,
+     `overflow:hidden` полосы прокрутки не даёт, а мобильное `overflow-y:auto`
+     из 03_content.css слабее по весу (id+id+class). Итог: под картой видно
+     сантиметр досье, остальное срезано, и пальцем до него не добраться.
+     На телефоне ведомство — документ, как и все остальные: высота по
+     содержимому, скроллбар страничный ОДИН. Своя высота остаётся только у
+     карты — она холст, а не текст. */
+  html.mnav-on #cab-stage > #hp-vn-colony.show { height: auto; overflow: visible; }
+  html.mnav-on #cab-stage > #hp-vn-colony.show .hp-vn-col-body {
+    overflow: visible; min-height: 0; align-items: stretch;
+  }
+  html.mnav-on #cab-stage > #hp-vn-colony.show .hp-vn-col-scroll {
+    overflow: visible; max-height: none;
+  }
   /* Управление колониями: сцена планеты и её досье. */
   html.mnav-on #cab-stage .hvp-body-scene { flex-direction: column; }
   html.mnav-on #cab-stage .hvp-scene { flex: 0 0 auto; min-height: 300px; }

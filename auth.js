@@ -289,9 +289,10 @@ async function logAccess() {
 window.authSettled = false;
 function _authSettle() {
   window.authSettled = true;
-  // Данные державы для новеллы: тянем заново (force) — первый заход был впустую.
-  try { if (typeof vnEnsureData === 'function') vnEnsureData(1); } catch (e) {}
-  try { if (typeof vnCityRetry === 'function') vnCityRetry(); } catch (e) {}
+  // Анкета державы: первый заход (до restoreSession) отвечал «державы нет», и на
+  // этом ответе главная рисовала гостевые кнопки. Спрашиваем заново, уже с сессией.
+  // Панорамы и панелей на главной нет — колонии и постройки тянуть незачем.
+  try { if (typeof ecLoadApp === 'function') ecLoadApp(); } catch (e) {}
 }
 async function restoreSession() {
   try {

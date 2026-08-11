@@ -879,7 +879,21 @@ a.n-home, a.n-sub, a.np, a.ng-t { text-decoration:none; }
   line-height: 1;
 }
 
-@media (max-width: 500px) {
-  .footer-partners { flex-direction: column; }
-  .footer-section { flex-direction: column; align-items: flex-start; }
+@media (max-width: 600px) {
+  #site-footer { padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .footer-inner { gap: 14px; }
+  .footer-section { flex-direction: column; align-items: stretch; gap: 6px; }
+  .footer-partners { flex-direction: column; align-items: stretch; gap: 6px; width: 100%; }
+  .partner-card { width: 100%; }
+  .partner-info { flex: 1 1 auto; min-width: 0; }
+  .partner-name, .partner-vk { white-space: normal; overflow-wrap: anywhere; }
+  .footer-legal-links { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .footer-legal-links a { font-size: 12px; padding: 2px 0; }
+  .footer-copy {
+    margin-left: 0;
+    white-space: normal;
+    line-height: 1.5;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
 }

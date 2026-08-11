@@ -213,6 +213,22 @@ const CAB_DEPT = {
               need: () => { try { return !(typeof ecIsEnlightened === 'function' && EC.app && ecIsEnlightened()); }
                             catch (e) { return true; } },
               open: () => heroVNSinliOpen(), close: () => heroVNSinliClose() },
+
+  // ⚠️ ЗАБАВЫ ТОЖЕ ЗДЕСЬ. Это остаток меню новеллы («Давай поиграем» и «Рейтинг
+  // игроков»): экраны те же самые, но открывать их из приветствия было неоткуда —
+  // меню сняли вместе с псевдокабинетом на главной. Отдельная группа, а не
+  // подмешаны к ведомствам: державой они не управляют, и путать их с работой не
+  // надо. Новости и достижения двери не получили — они на столе приёмной.
+  fight:    { nm: 'Бойцовский клуб', sh: 'Клуб', sub: 'дуэли на выданных кораблях и ставки', ic: 'dice', grp: 'play',
+              open: () => heroVNFightOpen(), close: () => heroVNFightClose() },
+  geo:      { nm: 'Георазведка', sh: 'Георазведка', sub: 'поиск залежей на своих планетах', ic: 'ping', grp: 'play',
+              open: () => heroVNGeoOpen(), close: () => heroVNGeoClose() },
+  stars:    { nm: 'Всмотреться в Разлом', sh: 'Разлом', sub: 'псионический хор и его дары', ic: 'chalice', grp: 'play',
+              open: () => heroVNStarsOpen(), close: () => heroVNStarsClose() },
+  fish:     { nm: 'Пойдём к реке', sh: 'Рыбалка', sub: 'берег Храма мироздания', ic: 'hour', grp: 'play',
+              open: () => heroVNFishOpen(), close: () => heroVNFishClose() },
+  rating:   { nm: 'Рейтинг игроков', sh: 'Рейтинг', sub: 'кто чего стоит в секторе', ic: 'medal', grp: 'play',
+              open: () => heroVNRatingOpen(), close: () => heroVNRatingClose() },
 };
 
 const CAB_GRP = [
@@ -220,6 +236,7 @@ const CAB_GRP = [
   ['wealth', 'Достаток'],
   ['might',  'Сила'],
   ['word',   'Слово'],
+  ['play',   'Досуг'],
 ];
 
 // Показывать ли ведомство (гейты по исследованиям/доктрине).
@@ -332,11 +349,27 @@ function _cabNewsRow(n) {
   </button>`;
 }
 
+// Сегодняшние достижения. Это бывший пункт новеллы «Достижения за сегодня»:
+// та же выборка (события с меткой достижения за календарные сутки), только
+// теперь она лежит на столе, а не за двумя уровнями разговора на главной.
+function _cabAch(feed) {
+  if (typeof fnIsAch !== 'function') return [];
+  const today = n => {
+    const d = new Date(n.published_at || n.created_at || 0);
+    if (isNaN(d)) return false;
+    const t = new Date();
+    return d.getDate() === t.getDate() && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
+  };
+  return feed.filter(n => fnIsAch(n) && today(n));
+}
+
 function cabDeskHtml() {
   cabNewsBoot();
   const feed = _cabFeed();
   const mine = _cabMentions(feed).slice(0, 5);
-  const news = feed.slice(0, 6);
+  const ach = _cabAch(feed).slice(0, 5);
+  // Достижения — часть ленты, и в общей сводке они бы её забили в удачный день.
+  const news = feed.filter(n => !(typeof fnIsAch === 'function' && fnIsAch(n))).slice(0, 6);
   const empty = t => `<div class="cab-nw-empty">${esc(t)}</div>`;
   // ⚠️ СТАТИСТИКИ ЗДЕСЬ НЕТ, И ЭТО НАРОЧНО. Сперва она была строчкой-ссылкой в
   // углу заголовка (терялась), потом плиткой-кнопкой третьей колонкой — и та
@@ -352,7 +385,27 @@ function cabDeskHtml() {
       <h2 class="cab-grp-hd">О вас пишут</h2>
       ${mine.length ? mine.map(_cabNewsRow).join('') : empty('Пока о державе не писали. Слово за вами — «Вестник державы».')}
     </section>
+    <section class="cab-card">
+      <h2 class="cab-grp-hd">Достижения за сегодня</h2>
+      ${ach.length ? ach.map(_cabNewsRow).join('') : empty('Сегодня в секторе никто не отличился.')}
+    </section>
   </div>`;
+}
+
+// ЗАБАВЫ НА СТОЛЕ. Из меню сняты (см. railItems) и дверей отдельной группой тоже
+// не получили: державой они не управляют, и полноразмерная плитка равняла их с
+// ведомствами. Тонкая полоса под столом — «между делом», одной строкой.
+function cabPlayHtml() {
+  const glyph = k => (typeof polGlyph === 'function' ? polGlyph(k) : '');
+  const items = Object.entries(cabDepts()).filter(([, d]) => d.grp === 'play');
+  if (!items.length) return '';
+  return `<nav class="cab-play" aria-label="Досуг">
+    <span class="cab-play-hd">Досуг</span>
+    ${items.map(([k, d]) => `
+      <button class="cab-play-t" type="button" onclick="cabOpen('${k}')" title="${esc(d.sub)}">
+        <span class="cab-play-ic">${glyph(d.ic)}</span>${esc(d.nm)}
+      </button>`).join('')}
+  </nav>`;
 }
 
 // ── Отрисовка приёмной ─────────────────────────────────────────
@@ -390,7 +443,10 @@ function cabPaint() {
 
   // Рельса ведомств — то самое «листать кабинет»: из казны в военпром одним
   // кликом, без возврата в приёмную. Порядок — как в приёмной (по укладу).
-  const railItems = CAB_GRP.flatMap(([g]) => Object.entries(depts).filter(([, d]) => d.grp === g));
+  // ⚠️ ЗАБАВ В МЕНЮ НЕТ. Рельса — навигация ПО РАБОТЕ: из казны в военпром. Клуб,
+  // Георазведка, Разлом и рыбалка занимали в ней целую строку и всё время были
+  // на глазах, будто это ведомства. Их место — полоса на столе приёмной.
+  const railItems = CAB_GRP.flatMap(([g]) => g === 'play' ? [] : Object.entries(depts).filter(([, d]) => d.grp === g));
   const rail = `<nav class="cab-rail" aria-label="Ведомства">
     <button class="cab-rail-t${CAB.dept ? '' : ' on'}" type="button" onclick="cabBack()">⌂ Приёмная</button>
     ${railItems.map(([k, d]) => `
@@ -400,6 +456,7 @@ function cabPaint() {
   </nav>`;
 
   const groups = CAB_GRP.map(([g, label]) => {
+    if (g === 'play') return '';   // забавы лежат полосой на столе (cabPlayHtml)
     const items = Object.entries(depts).filter(([, d]) => d.grp === g);
     if (!items.length) return '';
     return `<section class="cab-grp">
@@ -435,7 +492,7 @@ function cabPaint() {
          дверями, которые и есть навигация приёмной. Меню нужно там, где дверей
          не видно: когда ведомство открыто и надо перейти в соседнее. -->
     ${CAB.dept ? rail : ''}
-    ${CAB.dept ? '' : cabDeskHtml() + `<div class="cab-body">${groups}</div>`}
+    ${CAB.dept ? '' : cabDeskHtml() + cabPlayHtml() + `<div class="cab-body">${groups}</div>`}
     <!-- Контейнеры ведомств: те же узлы и те же id, что у новеллы (vnScreenHosts
          в render.js). В кабинете они лежат В ПОТОКЕ страницы, а не окном поверх
          неё, — распластывает их #cab-stage в 30_cabinet.css. -->

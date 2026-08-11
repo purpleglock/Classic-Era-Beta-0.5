@@ -2400,9 +2400,16 @@ function sbFlip(bid, arg, absolute) {
 function buildHeroCta(user) {
   const isPlayer = typeof ecCanAccess === 'function' && ecCanAccess();
   if (isPlayer) {
-    // Ведомства и так за одну кнопку в меню разговора — дублировать их здесь
-    // незачем. Единственное, чего со сцены не достать, — карта галактики.
-    return `<button class="hp-hero-cta" onclick="event.stopPropagation();go('map')"><span class="hp-cta-ic">🜨</span>${lang === 'en' ? 'Galaxy map' : 'Перейти на карту'}</button>`;
+    // Со сцены-приветствия ведут ровно две двери, и обе — наружу: в работу
+    // (кабинет державы) и на карту. Меню новеллы, через которое раньше шли в
+    // ведомства, снято, поэтому дверь в кабинет обязана быть здесь — иначе с
+    // главной в работу можно попасть только через борт сайта.
+    // Акцент ОДИН: кабинет — то, ради чего заходят; карта рядом вторым, гранёным
+    // чипом, чтобы две заливки не спорили (см. правила оформления).
+    return `<div class="hp-hero-ctas">
+      <button class="hp-hero-cta" onclick="event.stopPropagation();go('economy')"><span class="hp-cta-ic">🛰</span>${lang === 'en' ? 'My cabinet' : 'В кабинет'}</button>
+      <button class="hp-hero-cta hp-hero-cta2" onclick="event.stopPropagation();go('map')"><span class="hp-cta-ic">🜨</span>${lang === 'en' ? 'Galaxy map' : 'На карту'}</button>
+    </div>`;
   }
   const action = user ? "go('faction-new')" : (typeof showAuth === 'function' ? "showAuth('login')" : "go('faction-new')");
   return `<button class="hp-hero-cta" onclick="${action}"><span class="hp-cta-ic">⬡</span>${lang === 'en' ? 'Register a faction' : 'Зарегистрировать фракцию'}</button>`;
@@ -2605,23 +2612,22 @@ function buildHeroVN(coverUrl, user) {
   }).filter(Boolean);
   if (!items.length) return null;
 
-  const url = (coverUrl || '').trim();
-  // ⚠️ Обложка главной — РИСОВАННЫЙ АРТ, и по умолчанию его никто не трогает:
-  // процедурная панорама тяжелее (тысячи узлов) и лезла на место готовой картинки
-  // без спроса. Панорама столицы включается явно — vnCityOn(1) (флаг в
-  // localStorage), выключается vnCityOn(0). Экрана колонии это не касается: там
-  // фон и так пустой, панорама — единственное, что его наполняет.
-  // ⚠️ ФОН НЕ ПОДМЕНЯЕТСЯ НА ГЛАЗАХ. Раньше сначала показывалась обложка, а секунду
-  // спустя её сменяла панорама — мигание на каждом заходе. Теперь: пока неизвестно,
-  // что рисовать, стоит НЕЙТРАЛЬНАЯ заглушка-загрузка, и только готовый правильный
-  // фон проявляется в неё (vnCityReveal). Не доехало за отведённое время — тем же
-  // одним движением проявляется обложка.
-  const wantCity = _vnCityEnabled() && typeof CG !== 'undefined' && CG;
-  const cover = url
-    ? `<img class="hp-hero-img" src="${esc(url)}" alt="" loading="eager">`
+  // ⚠️ ФОН СЦЕНЫ — ОБЫЧНОЕ ПОЛОТНО САЙТА, И БОЛЬШЕ НИЧЕГО. Здесь была панорама
+  // столицы (city_gen: небо по времени суток + силуэты по постройкам державы) с
+  // обложкой в запасе. Панорама — тысячи узлов SVG на каждом заходе ради вида,
+  // который к разговору отношения не имеет, а вместе с ней возвращалась и вся
+  // возня с подменой кадра (заглушка → панорама → обложка по таймауту). Сцена
+  // приветствия обходится персонажем и окном реплик. Панорама жива и работает,
+  // но только там, где она по делу, — на экране колонии (_hvpCityBg).
+  // ⚠️ ФОН СЦЕНЫ — ВСЕГДА КАРТИНКА-ОБЛОЖКА (_heroCoverUrl, админская загрузка).
+  // Панорама столицы (city_gen) сюда больше не лезет: у новичка и у потерявшего
+  // столицу она рисовала пепелище с «СИГНАЛ ПОТЕРЯН», хотя приветствие ни о чём
+  // таком не говорит. Обложки нет — тёмная заливка, но НИКОГДА не assets/bg.jpg
+  // (это фон всего сайта, а не арт сцены).
+  const _bgUrl = (typeof _heroCoverUrl !== 'undefined' && _heroCoverUrl) ? String(_heroCoverUrl).trim() : '';
+  const bgLayer = _bgUrl
+    ? `<img class="hp-hero-img" src="${esc(_bgUrl)}" alt="" loading="eager">`
     : `<div class="hp-hero-noimg"></div>`;
-  const bgLayer = !wantCity ? cover
-    : (_vnCityLayer() || `<div class="hp-hero-img hp-hero-wait" id="hp-hero-city" aria-hidden="true"></div>`);
   // Спрайт-слой: контейнер с несколькими спрайтами (для поддержки 1-4 персонажей одновременно).
   const first = items[0];
   let spriteHtml = '';
@@ -3312,7 +3318,10 @@ async function heroVNColonyOpen() {
   const el = document.getElementById('hp-vn-colony');
   if (!el) return;
   const en = (typeof lang !== 'undefined' && lang === 'en');
-  _heroColonyView = { mode: 'map', sysId: null };   // всегда стартуем с карты границ
+  // Обычно стартуем с карты границ; исключение — приход из перечня колоний по
+  // кнопке «Заселить миры»: там уже сказано, КАКУЮ систему открывать.
+  const want = _heroColonyWant; _heroColonyWant = null;
+  _heroColonyView = want ? { mode: 'sys', sysId: want } : { mode: 'map', sysId: null };
   el.classList.add('show');
   el.setAttribute('aria-hidden', 'false');
   el.innerHTML = _heroColonyHead(en) +
@@ -3341,7 +3350,7 @@ async function heroVNColonyOpen() {
       try { await loadGalaxyData(); } catch (e) {}
     }
     if (!el.classList.contains('show')) return;   // игрок успел закрыть — не подменяем чужой экран
-    el.innerHTML = _heroColonyBuild(en);
+    el.innerHTML = _heroColonyRender(en);         // карта границ ИЛИ сразу карта заказанной системы
   } catch (e) {
     if (!el.classList.contains('show')) return;
     el.innerHTML = _heroColonyHead(en) +
@@ -5263,7 +5272,10 @@ let _heroVNStop = null;
 let _heroVNResume = null;   // { sig, idx } — позволяет продолжить idle-новеллу после перерисовки, а не начинать заново
 let _heroVNCtl = null;      // контроллер активной новеллы: narrate / reset / speaker (для выбора в окне)
 function heroVNInit() {
-  try { vnCityBoot(); } catch (e) {}                       // фон новеллы = панорама столицы
+  // Панорамы столицы на главной больше нет (см. buildHeroVN) — грузить колонии и
+  // постройки ради фона незачем. Анкету державы всё же спрашиваем: от неё зависят
+  // кнопки под сценой (кабинет/карта против «зарегистрировать фракцию»).
+  try { if (typeof ecLoadApp === 'function') ecLoadApp(); } catch (e) {}
   if (_heroVNStop) { try { _heroVNStop(); } catch (e) {} _heroVNStop = null; }
   const box  = document.getElementById('hp-vn-box');
   const out  = document.getElementById('hp-vn-text');
@@ -9479,6 +9491,12 @@ function vnCityRetry() {
   try { vnCityBoot(); } catch (e) {}
 }
 function vnCityBoot() {
+  // ⚠️ ПАНОРАМА СТОЛИЦЫ НА ГЛАВНОЙ ОТКЛЮЧЕНА НАСОВСЕМ. Фон сцены приветствия —
+  // всегда картинка-обложка (см. buildHeroVN). Генератор города подменял её
+  // силуэтами столицы, а у новичка и у потерявшего планету — пепелищем с
+  // «СИГНАЛ ПОТЕРЯН». Код ниже жив ради _hvpCityBg на экране колонии.
+  return;
+  /* eslint-disable no-unreachable */
   if (_vnCityBooted) return;
   if (!_vnCityEnabled()) return;                           // обложку не трогаем
   if (typeof CG === 'undefined' || !CG) return;            // генератор не подключён
@@ -9590,7 +9608,8 @@ function vnEnsureData(force) {
 // закрывали почти целиком (люк — половиной кадра). Казна и портрет живут там, где
 // с ними работают, — в кабинете (#economy). Новелла снова просто приветствие.
 // Перерисовка фона новеллы после того, как приехали колонии (ecLoadApp).
-function vnCityRepaint() { return _vnCityShow(_vnCityLayer()); }
+// Панорама на главной снята — перерисовывать нечего (зовут economy.js и heroVNInit).
+function vnCityRepaint() { return false; }
 // Единственное место, где фон появляется на экране: готовый кусок разметки встаёт
 // вместо заглушки и проявляется. Двух подмен подряд не бывает — либо панорама,
 // либо (по таймауту) обложка.
@@ -9722,12 +9741,16 @@ function _hvpApplyFilter(root) {
   const q = (_hvp.q || '').trim().toLowerCase();
   el.querySelectorAll('.hvp-sys').forEach(g => {
     let vis = 0;
-    g.querySelectorAll('.hvp-card').forEach(c => {
+    const cards = g.querySelectorAll('.hvp-card');
+    cards.forEach(c => {
       const hit = !q || (c.dataset.s || '').indexOf(q) >= 0;
       c.classList.toggle('hvp-hide', !hit);
       if (hit) vis++;
     });
-    g.classList.toggle('hvp-hide', vis === 0);
+    // Пустая (незаселённая) система карточек не имеет — её ищем по имени самой
+    // группы, иначе правило «нет видимых карточек → прячем» стёрло бы её всегда.
+    const keep = cards.length ? vis > 0 : (!q || (g.dataset.s || '').indexOf(q) >= 0);
+    g.classList.toggle('hvp-hide', !keep);
     g.classList.toggle('hvp-open-q', !!q);   // при поиске группы раскрыты принудительно
   });
 }
@@ -9748,7 +9771,15 @@ function heroVNPlanetsBuild(colonyId) { if (typeof ecBuildPicker === 'function')
 // ── Экран 1: перечень всех планет державы (карточки) ──
 function _hvpListHtml(en) {
   const cols = (EC.colonies || []).slice();
-  if (!cols.length) {
+  // ⚠️ ЗАХВАЧЕННАЯ СИСТЕМА БЕЗ КОЛОНИЙ ТОЖЕ СТОИТ В СПИСКЕ. Раньше перечень
+  // строился ТОЛЬКО из colonies, и купленная за 3000 ГС система (RPC
+  // economy_claim_system помечает map_systems.faction — колоний не создаёт)
+  // не появлялась здесь вообще: игрок платил и не видел покупки нигде, кроме
+  // карты. Такая система теперь = пустая группа с прямой дверью в заселение.
+  const colSys = new Set(cols.map(c => String(c.system_id)));
+  const voidSys = ((EC.allSystems || []).filter(s => s && s.faction && EC.fid && s.faction === EC.fid && !colSys.has(String(s.id))))
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  if (!cols.length && !voidSys.length) {
     return `<div class="hp-vn-col-body"><div class="hp-vn-col-empty">${en ? 'Your realm holds no colonies yet. Colonize a suitable world first.' : 'У вашей державы пока нет колоний. Сначала колонизируйте пригодный мир в разделе «Колонизация».'}</div></div>`;
   }
   // столица — первой, дальше по числу построек
@@ -9811,13 +9842,43 @@ function _hvpListHtml(en) {
     </section>`;
   }).join('');
 
+  // Пустые системы — в хвосте списка: это не колонии, а место под них. Группа
+  // складывается тем же заголовком, но вместо сетки карточек — одна строка с
+  // дверью в «Колонизацию», сразу на карту ЭТОЙ системы.
+  const voidSecs = voidSys.map(s => {
+    const nm = s.name || s.id;
+    const pn = Array.isArray(s.planets) ? s.planets.length : 0;
+    return `<section class="hvp-sys hvp-sys-void" data-sys="${esc(s.id)}" data-s="${esc(String(nm).toLowerCase())}">
+      <div class="hvp-sys-h hvp-sys-h-void">
+        <span class="hvp-sys-nm">${esc(nm)}</span>
+        <span class="hvp-sys-n">${en ? 'not settled' : 'не заселена'}${pn ? ` · ${plural(pn)}` : ''}</span>
+      </div>
+      <div class="hvp-void">
+        <span class="hvp-void-t">${en ? 'The system is yours, but not a single world here is settled yet.' : 'Система за вами, но ни один мир здесь ещё не заселён.'}</span>
+        <button class="hvp-void-b" type="button" onclick="event.stopPropagation();heroVNPlanetsSettle('${jsq(s.id)}')">${en ? 'Settle worlds' : 'Заселить миры'}</button>
+      </div>
+    </section>`;
+  }).join('');
+
   const tools = `<div class="hvp-tools">
     <label class="hvp-qw">${hvpIco('search')}<input class="hvp-q" type="search" value="${esc(_hvp.q || '')}" placeholder="${en ? 'search planet or system…' : 'поиск планеты или системы…'}"
       oninput="heroVNPlanetsFilter(this.value)" onclick="event.stopPropagation()"></label>
     <button class="hvp-tool-b" type="button" onclick="event.stopPropagation();heroVNPlanetsAll(1)">${en ? 'expand' : 'развернуть'}</button>
     <button class="hvp-tool-b" type="button" onclick="event.stopPropagation();heroVNPlanetsAll(0)">${en ? 'collapse' : 'свернуть'}</button>
   </div>`;
-  return `<div class="hp-vn-col-body hvp-body">${arr.length > 1 ? tools : ''}${secs}</div>`;
+  return `<div class="hp-vn-col-body hvp-body">${(arr.length + voidSys.length) > 1 ? tools : ''}${secs}${voidSecs}</div>`;
+}
+
+// Из перечня колоний — прямо в заселение конкретной системы: «Колонизация»
+// откроется не картой границ, а картой ЭТОЙ системы, где у планет есть кнопки.
+// Желание помним в _heroColonyWant: heroVNColonyOpen сбрасывает вид на карту
+// границ в самом начале, до всех загрузок.
+let _heroColonyWant = null;
+function heroVNPlanetsSettle(sysId) {
+  _heroColonyWant = sysId || null;
+  try { if (typeof cabGoto === 'function') { cabGoto('colony'); return; } } catch (e) {}
+  try { if (typeof heroVNPlanetsClose === 'function') heroVNPlanetsClose(); } catch (e) {}
+  if (typeof heroVNColonyOpen === 'function') heroVNColonyOpen();
 }
 
 // ── Экран 2: сцена планеты — фон-арт + здания на «участках» + управление ──

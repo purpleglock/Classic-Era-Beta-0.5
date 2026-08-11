@@ -31,7 +31,10 @@ html:has(#cab-stage) #pg{padding:0!important}
    края и от шапки до низа окна; поле в --cab-pad получает КАЖДЫЙ блок изнутри,
    поэтому текст не липнет к борту сайдменю, но мёртвых полос по краям нет. */
 .cab-banner{margin-inline:var(--cab-pad)}
-.cab-desk,.cab-body{padding-inline:var(--cab-pad)}
+/* Поля страницы обнулены выше, поэтому КАЖДЫЙ пласт полотна ставит их сам.
+   Полоса забав это правило пропустила и одна лежала вплотную к краю окна —
+   на фоне стола и дверей выглядела съехавшей вёрсткой. */
+.cab-desk,.cab-body,.cab-play{padding-inline:var(--cab-pad)}
 /* Поле ведомства ставится ОДИН раз — на корне экрана (см. «ОДНА ПОВЕРХНОСТЬ»
    ниже). Здесь оно стояло вторым слоем и складывалось с ним вдвое. */
 #cab-stage .pol-shell{padding-inline:0}
@@ -101,6 +104,25 @@ html:has(#cab-stage) #pg{padding:0!important}
 .cab-nw-dot{flex:0 0 auto;width:5px;height:5px;border-radius:50%;background:var(--gd,#3a9bdc);opacity:.7}
 .cab-nw .fn-fr-flag{flex:0 0 auto;width:18px;height:18px;object-fit:cover}
 .cab-nw-empty{padding:9px;font-size:12px;color:var(--t4)}
+
+/* ── Досуг: полоса на столе, а не строка в меню ───────────────────
+   Забавы не ведомства: одна тонкая строка под столом, без рамок-коробок. */
+.cab-play{
+  display:flex;flex-wrap:wrap;align-items:center;gap:2px 4px;
+  margin-top:12px;padding-top:9px;border-top:1px solid var(--w3);
+}
+.cab-play-hd{
+  margin-right:8px;font-size:11px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--t4);
+}
+.cab-play-t{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:5px 9px;border:none;background:transparent;color:var(--t3);
+  font:inherit;font-size:12.5px;cursor:pointer;border-radius:2px;
+}
+.cab-play-t:hover{background:rgba(255,255,255,.04);color:#eaf6ff}
+.cab-play-ic{display:inline-flex;width:16px;height:16px;opacity:.75}
+.cab-play-ic svg{width:100%;height:100%}
 
 /* ── Приёмная: ведомства колонками по укладу державы ──────────── */
 .cab-body{display:flex;flex-direction:column;gap:14px;margin-top:14px}
@@ -805,4 +827,62 @@ html:has(#cab-stage) #cw{overflow:auto}
   #app.cab-mode #sb-collapse{
     top:auto!important;bottom:12px;right:auto;left:50%;transform:translateX(-50%);
   }
+
+  /* ── КОЛОНКА ВЫРОВНЕНА: ОДНА КЛЕТКА, ОДНА ОСЬ ──────────────────
+     ⚠️ Колонка выглядела рассыпанной, и причин было четыре — все родом из
+     правил, писанных под ШИРОКИЙ борт и здесь просто не снятых.
+
+     1. ГЛИФЫ СТОЯЛИ НЕ ПО ЦЕНТРУ. 25_frame.css отодвигает строки меню от
+        правого края на глубину «бухты» (`#nav{padding-right:26px}`) — в борте
+        220px это незаметная поправка под срез маски, а в колонке 64px это
+        сорок процентов ширины: весь столбик уезжал влево на 13px, тогда как
+        эмблема сверху и шеврон снизу стояли по центру. Оси было ДВЕ.
+     2. АКТИВНЫЙ ПУНКТ — ПЛАВАЮЩАЯ СКРУГЛЁННАЯ КОРОБКА. 13_redesign.css даёт
+        строкам `border-radius:var(--radius-md)`; поля мы сняли, а скругление
+        осталось — подсветка читалась вклеенной плашкой поверх колонки, а не
+        строкой борта (тот же разнобой, от которого уходили выше).
+     3. РИТМ ПЛЯСАЛ. Высоту 38px получили только `.n-home`/`.nl-hdr`; у
+        `.nl-hdr` при этом жила `margin-top:2px` из premium, у разделителей —
+        свои 5px, и шаг между иконками гулял от 38 до 45px.
+     4. ГЛИФЫ РАЗНОГО КАЛИБРА. Текстовые эмодзи шли 16px, картинки разделов —
+        18px да ещё с `brightness(.7)` из 02_shell поверх нашей прозрачности:
+        соседние иконки выглядели разного веса и яркости.
+
+     Правило колонки: клетка 40×64, глиф в её центре, ось одна — центр борта. */
+  #app.cab-mode #nav{
+    padding:6px 0 52px!important;      /* бухту снимаем; внизу — место шеврону */
+    scrollbar-width:none;
+  }
+  #app.cab-mode #nav::-webkit-scrollbar{width:0}
+  #app.cab-mode #sb .n-home,
+  #app.cab-mode #sb .n-group-hdr,
+  #app.cab-mode #sb .nl-hdr{
+    height:40px!important;width:100%!important;border-radius:0!important;
+    box-shadow:none!important;
+  }
+  /* Обводка фокуса — по клетке, а не скруглённым островком поверх неё. */
+  #app.cab-mode #sb :is(.n-home,.n-group-hdr,.nl-hdr):focus-visible{
+    outline:1px solid hsl(38 65% 52%);outline-offset:-3px;border-radius:0!important;
+  }
+  /* Разделитель — волосяная линия с тем же воздухом сверху и снизу. */
+  #app.cab-mode #sb .nav-divider{margin:6px 14px!important;height:1px!important}
+  /* Один калибр глифа и одна яркость: картинка раздела не должна выглядеть
+     тяжелее соседнего эмодзи. */
+  #app.cab-mode #sb .n-home-icon,
+  #app.cab-mode #sb .nl-ico{
+    font-size:15px!important;line-height:1!important;
+    /* Глиф растянут по КЛЕТКЕ, а клетка начинается после полосы-акцента слева
+       (2px): её ширину столбик и уезжал вправо — на пиксель мимо оси эмблемы и
+       шеврона, которые стоят по центру борта. Возвращаем на общую ось. */
+    margin-left:calc(-1 * var(--deco-accent-w,2px))!important;
+  }
+  #app.cab-mode #sb .nl-ico img{
+    width:17px!important;height:17px!important;
+    filter:none!important;opacity:.7!important;
+  }
+  #app.cab-mode #sb .nl-hdr:hover .nl-ico img{opacity:.9!important}
+  #app.cab-mode #sb .nl-hdr.on .nl-ico img{opacity:1!important}
+  /* Шапка: эмблема ровно на той же оси, что и глифы под ней. */
+  #app.cab-mode #sb .logo{height:52px!important;padding:0!important}
+  #app.cab-mode #sb .logo-mark{width:24px!important;height:24px!important}
 }

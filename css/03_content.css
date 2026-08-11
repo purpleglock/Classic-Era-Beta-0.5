@@ -388,6 +388,25 @@
   filter:drop-shadow(0 0 14px var(--gds)) drop-shadow(0 6px 14px rgba(0,0,0,.45));
 }
 .hp-vn-foot .hp-hero-cta:hover{filter:drop-shadow(0 0 22px var(--gdd)) drop-shadow(0 8px 16px rgba(0,0,0,.5))}
+/* Две двери со сцены — кабинет и карта. Акцент один: вторая кнопка той же формы,
+   но без заливки, иначе в подвале спорят два ярких пятна. */
+.hp-hero-ctas{display:flex;align-items:center;gap:10px;flex-wrap:wrap;pointer-events:auto}
+.hp-vn-foot .hp-hero-ctas .hp-hero-cta{margin:0}
+/* Специфичность нарочно выше базовой `.hp-hero-cta`: та живёт в 19_guide.css,
+   который подключён ПОЗЖЕ, и при равном весе побеждала бы заливкой. */
+.hp-hero-ctas .hp-hero-cta.hp-hero-cta2{
+  color:var(--t1,#eaf4ff);
+  background:hsl(216 20% 9% / .82);
+  border-color:var(--w2,rgba(255,255,255,.14));
+  box-shadow:none;
+}
+.hp-vn-foot .hp-hero-cta2{filter:drop-shadow(0 6px 14px rgba(0,0,0,.45))}
+.hp-hero-ctas .hp-hero-cta.hp-hero-cta2:hover{
+  background:hsl(216 20% 14% / .92);
+  border-color:var(--gdl);
+  box-shadow:none;
+}
+.hp-vn-foot .hp-hero-cta2:hover{filter:drop-shadow(0 8px 16px rgba(0,0,0,.5))}
 
 /* ── Выбор в диалоговом окне новеллы — на десктопе ГОРИЗОНТАЛЬНАЯ сетка гранёных
    чипов (вертикальный список удобен только на телефоне — там и остаётся, см. медиа).
@@ -3998,6 +4017,14 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
     width: 100% !important;
     text-align: center !important;
     box-sizing: border-box !important;
+    justify-content: center !important;
+  }
+  /* Пара «кабинет + карта»: на телефоне столбиком во всю ширину подвала */
+  .hp-hero-ctas {
+    width: 100% !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
   }
 
   /* Сетка выборов: жестко 1 колонка, не вылезает за края */
@@ -4141,6 +4168,24 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 .hvp-tools ~ .hvp-sys .hvp-sys-h{top:42px}   /* под панелью поиска */
 .hvp-sys.off .hvp-sys-ar{transform:rotate(-90deg)}
 .hvp-sys.off .hvp-grid{display:none}
+/* ── Захваченная, но незаселённая система ──
+   Место под колонии, а не колония: приглушённый заголовок без стрелки-складня
+   (складывать нечего) и одна строка с дверью в заселение. Акцент ровно один —
+   кнопка; см. правила оформления. */
+.hvp-sys-h-void{cursor:default;color:var(--t2,#b8c4cf)}
+.hvp-sys-void .hvp-sys-nm{color:var(--t2,#b8c4cf)}
+.hvp-void{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;
+  background:hsl(216 22% 8% / .55);border:1px solid var(--cyb-line);
+}
+.hvp-void-t{flex:1;min-width:180px;font-size:12px;color:var(--t3,#8296a8)}
+.hvp-void-b{
+  padding:8px 14px;border:1px solid color-mix(in srgb,var(--gd,#3a9bdc) 62%,transparent);
+  background:color-mix(in srgb,var(--gd,#3a9bdc) 14%,transparent);color:#eaf6ff;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;
+}
+.hvp-void-b:hover{background:color-mix(in srgb,var(--gd,#3a9bdc) 26%,transparent)}
+.hvp-sys.off .hvp-void{display:none}
 .hvp-sys.off.hvp-open-q .hvp-grid{display:grid}
 .hvp-sys.off.hvp-open-q .hvp-sys-ar{transform:none}
 
@@ -5927,204 +5972,7 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
 #hp-vn-research{--vn-art:url("../assets/vn/menu/research.webp")}
 #hp-vn-planets{--vn-art:url("../assets/vn/menu/planets.webp")}
 
-/* ── НОВЕЛЛА · строка ресурсов державы (верх сцены) ──────────────────
-   Кабинет закрывается, и казна обязана быть видна прямо со сцены. Строка
-   держится ПОВЕРХ фона, но ПОД экранами ведомств (z-index 4 против их 8+),
-   чтобы не лезть в открытую ведомость. Ширина по содержимому: пустая держава
-   не рисует полосу во весь экран. */
-.vnres{
-  position:absolute;z-index:4;top:0;left:0;right:0;
-  display:flex;justify-content:center;pointer-events:none;
-  padding:clamp(6px,1.4vh,12px) clamp(10px,3vw,28px);
-  opacity:0;transition:opacity .25s ease;
-}
-.vnres.show{opacity:1}
-.vnres-in{
-  display:flex;align-items:center;gap:clamp(6px,1.2vw,14px);flex-wrap:wrap;
-  max-width:100%;padding:6px 14px;
-  background:linear-gradient(180deg,rgba(8,11,17,.82),rgba(8,11,17,.62));
-  border:1px solid color-mix(in srgb,var(--fac,#c1121a) 34%,rgba(255,255,255,.12));
-  border-top:none;
-  /* срезанные углы — слоем формы, а не border (см. [[ui-design-rules]]) */
-  clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0 calc(100% - 10px));
-  box-shadow:0 6px 22px rgba(0,0,0,.45);
-  backdrop-filter:blur(3px);
-}
-.vnres-fac{display:flex;align-items:center;gap:7px;max-width:34vw;min-width:0}
-.vnres-fac img{width:20px;height:20px;object-fit:cover;border-radius:3px;flex:0 0 auto}
-.vnres-fn{
-  font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.vnres-sep{width:1px;align-self:stretch;background:rgba(255,255,255,.14);margin:2px 2px}
-.vnres-c{display:flex;align-items:baseline;gap:5px;white-space:nowrap}
-.vnres-i{font-size:13px;line-height:1;opacity:.9;align-self:center}
-.vnres-i .res-ic{width:15px;height:15px}
-.vnres-v{font-size:14px;font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums}
-.vnres-gc .vnres-v{color:var(--gd)}
-.vnres-sci .vnres-v{color:var(--pu)}
-.vnres-r .vnres-v{font-size:13px;font-weight:500;color:var(--t2)}
-.vnres-d{font-size:10.5px;font-variant-numeric:tabular-nums}
-.vnres-d.up{color:var(--gd)}
-.vnres-d.dn{color:var(--rd,#d9534f)}
-@media(max-width:700px){
-  /* телефон: строка узкая, ресурсы прокручиваются вбок, а не переносятся вниз */
-  .vnres{padding:4px 6px}
-  .vnres-in{gap:8px;padding:5px 9px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;pointer-events:auto}
-  .vnres-in::-webkit-scrollbar{display:none}
-  .vnres-fn{display:none}
-  .vnres-v{font-size:12.5px}
-}
-/* ── КАБИНЕТ ПРАВИТЕЛЯ ─────────────────────────────────────────────────
-   Сцена новеллы — не «картинка с плашками», а помещение: потолок со световыми
-   панелями, стены в перспективе, пол с отблеском и панорамное окно с переплётом,
-   за которым живёт панорама столицы. Саму архитектуру рисует SVG (vnPortHtml),
-   здесь — только слой и убранство левой стены: знамя державы и портрет главы.
-   ⚠ ОКНО НЕ ЗАКРЫВАТЬ: стены узкие и держатся у самых кромок кадра, иначе город
-   пропадает — на этом уже обожглись сплошными пилонами.
-   Слой над фоном (z-index 2), под спрайтом (3) и окном диалога (6). */
-.vnport{
-  position:absolute;inset:0;z-index:2;pointer-events:none;
-  opacity:0;transition:opacity var(--duration-slow) ease;
-}
-.vnport.show{opacity:1}
-/* container-type нужен ради единиц cqw: перспектива должна считаться от ШИРИНЫ
-   КАДРА, а не от окна браузера, иначе на узком кадре стена «ломается» */
-.vnport-in{position:absolute;inset:0;container-type:inline-size}
-.vnport-svg{position:absolute;inset:0;width:100%;height:100%;display:block}
-/* убранство левой стены: знамя, портрет, табличка — HTML, а не SVG:
-   SVG растягивается вместе с кадром и покорёжил бы шрифт и лица */
-/* ⚠ НИЗ ОГРАНИЧЕН ЖЁСТКО. Раньше был только top — столбик рос по содержимому и
-   портрет с табличкой уезжал под окно диалога (снизу торчала обрезанная подпись).
-   Теперь колонка зажата между top и bottom, а лишнее просто не показывается.
-   Ширина согласована с пилястром на левой стене (svg vnPortHtml, x 4…182 из 1200
-   ≈ 0.3…15.2% кадра): убранство обязано лежать НА освещённой плоскости. */
-.vnport-console{
-  /* ширина ИСХОДНАЯ, до поворота: перспектива съедает её примерно вдвое, поэтому
-     21% на экране дают ~11.7% — ровно ширину освещённого пилястра. Потолка в px нет
-     намеренно: комната целиком масштабируется от кадра, и убранство обязано вместе
-     с ней, иначе на большом экране знамя съёживается в марку. */
-  position:absolute;left:1.2%;top:15%;bottom:35%;width:21%;
-  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
-  gap:clamp(5px,1.1vh,11px);overflow:hidden;
-  /* ⚠ ЗНАМЯ И ПОРТРЕТ ЛЕЖАТ НА СТЕНЕ, А НЕ НА ЭКРАНЕ. Стены комнаты нарисованы в
-     перспективе (трапеции, сходящиеся к точке схода), а убранство было обычным
-     прямоугольным html — и читалось как наклейка поверх трёхмерной коробки.
-     Теперь колонку разворачивает та же перспектива: ось поворота проходит по
-     БЛИЖНЕЙ (левой) кромке стены, а по высоте — через точку схода комнаты
-     (середина дальней стены ≈ 55% кадра; внутри полосы 15…65% это её 80%).
-     Поэтому дальний край уезжает вглубь и сходится ровно туда же, куда сходятся
-     сами стены. 56cqw — глубина перспективы: НЕ на глаз. Стена от ближней кромки
-     до дальнего края пилястра укорачивается ровно в 0.79 раза (её трапеция задана
-     в svg), столько же обязана давать и формула перспективы P/(P+W·sin45°) при
-     ширине колонки W=21% — отсюда P≈2.64·W≈56% ширины кадра. При 34cqw убранство
-     уезжало вглубь быстрее стены (0.65) и «отклеивалось» от неё. */
-  transform-origin:0% 80%;
-  transform:perspective(56vw) rotateY(45deg);
-  transform:perspective(56cqw) rotateY(45deg);
-}
-/* дальний край темнее ближнего — свет из окна до него уже не достаёт */
-.vnport-console::after{
-  content:'';position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(90deg,rgba(190,225,255,.07),rgba(0,0,0,.42));
-}
-/* ⚠ ВСЁ УБРАНСТВО ОБЯЗАНО СЖИМАТЬСЯ. Высота знамени и портрета выведена из
-   ширины (aspect-ratio), и на невысоком кадре столбик выходил длиннее отведённой
-   полосы: знамя занимало её целиком, а портрет с табличкой просто срезало.
-   min-height:0 снимает запрет на сжатие внутри колонки-флекса — дальше знамя и
-   портрет ужимаются сами, а cover/object-fit аккуратно подрезают картинку.
-   Табличка и подпись не жмутся: текст должен остаться читаемым. */
-.vnport-banner,.vnport-lead,.vnport-cloth,.vnport-leadin{min-height:0}
-.vnport-plate,.vnport-fac,.vnport-rod{flex:0 0 auto}
-/* ЗНАМЯ: карниз, полотнище с ласточкиным хвостом и продольные складки */
-.vnport-banner{position:relative;display:flex;flex-direction:column;align-items:center;width:82%}
-.vnport-rod{
-  display:block;width:116%;height:4px;
-  background:linear-gradient(90deg,#2b3542,#a8b8cc 42%,#6d7c8e 62%,#2b3542);
-  box-shadow:0 3px 6px -2px rgba(0,0,0,.8);
-}
-.vnport-cloth{
-  position:relative;display:block;width:100%;aspect-ratio:2/3;
-  background-size:cover;background-position:center;
-  clip-path:polygon(0 0,100% 0,100% 100%,50% 88%,0 100%);
-  filter:saturate(1.06) brightness(.9) drop-shadow(0 10px 16px rgba(0,0,0,.65));
-}
-/* складки ткани: чередование тени и подсвета — полотно перестаёт быть наклейкой */
-.vnport-cloth::after{
-  content:'';position:absolute;inset:0;
-  background:
-    linear-gradient(90deg,
-      rgba(0,0,0,.42) 0 6%, rgba(255,255,255,.07) 16%, rgba(0,0,0,.34) 30%,
-      rgba(255,255,255,.06) 46%, rgba(0,0,0,.32) 62%, rgba(255,255,255,.05) 78%,
-      rgba(0,0,0,.45) 100%),
-    linear-gradient(180deg, rgba(0,0,0,.35) 0 4%, transparent 22%);
-}
-.vnport-nocloth{
-  background:linear-gradient(165deg,color-mix(in srgb,var(--fac,#3a9bdc) 62%,#0a0d12),#080b11);
-}
-/* ПОРТРЕТ ГЛАВЫ: рама с фаской, под ней музейная табличка */
-.vnport-lead{width:100%;display:flex;flex-direction:column;align-items:center}
-.vnport-leadin{
-  position:relative;width:100%;aspect-ratio:4/5;overflow:hidden;
-  background:#06090e;display:flex;align-items:center;justify-content:center;
-  padding:3px;
-  /* рама: тёмный металл + внутренняя фаска цветом державы */
-  background-image:linear-gradient(160deg,#2a3442,#0d131b 55%,#212b38);
-  box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,.10),
-    0 10px 18px -10px rgba(0,0,0,.85);
-  clip-path:polygon(0 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%);
-}
-.vnport-face{
-  width:100%;height:100%;object-fit:cover;object-position:center 16%;
-  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--fac,#3a9bdc) 45%,transparent);
-}
-/* ⚠ ШРИФТЫ КРУПНЕЕ, ЧЕМ КАЖЕТСЯ НУЖНЫМ: колонка развёрнута в плоскость стены на
-   45°, и по горизонтали буквы ужимаются примерно на треть. Набирая «как на глаз
-   ровно», получаешь на экране нечитаемую мелочь. */
-.vnport-noface{
-  font-family:var(--font-display);font-size:clamp(20px,2.2vw,30px);font-weight:700;
-  color:color-mix(in srgb,var(--fac,#3a9bdc) 62%,#eaf4ff);letter-spacing:.06em;
-}
-.vnport-plate{
-  width:94%;margin-top:-1px;padding:4px 6px;text-align:center;
-  display:flex;flex-direction:column;gap:1px;
-  background:linear-gradient(180deg,#151d27,#0a0e14);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 6px 12px -8px rgba(0,0,0,.9);
-  clip-path:polygon(0 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,6px 100%,0 calc(100% - 6px));
-}
-.vnport-led{
-  font-size:clamp(11px,.92vw,15px);font-weight:600;color:var(--t1,#eaf4ff);line-height:1.2;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-}
-.vnport-tit{font-size:clamp(9.5px,.74vw,12px);letter-spacing:.05em;color:var(--t3);line-height:1.2}
-/* имя державы — гравировкой по стене под убранством */
-.vnport-fac{
-  max-width:100%;text-align:center;
-  font-family:var(--font-display);font-size:clamp(10px,.86vw,14px);font-weight:700;
-  letter-spacing:calc(.18em * var(--deco-ls-mult,1));text-transform:uppercase;
-  color:color-mix(in srgb,var(--fac,#3a9bdc) 62%,#c9dcf0);
-  text-shadow:0 1px 2px rgba(0,0,0,.8);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-}
-@media(max-width:900px){
-  .vnport-console{width:24%;left:1%;top:14%;bottom:32%}
-}
-@media(max-width:700px){
-  /* телефон: кадр сплюснут, комната выродилась бы в две тёмные полосы */
-  .vnport{display:none}
-}
-/* Скелет строки ресурсов: держава грузится — плашки пульсируют, вместо цифр
-   подпись. Пульс через opacity (не background-position): фоновая вкладка
-   анимацию замораживает, но замерший скелет всё равно читается как «грузится». */
-.vnres-skel{border-color:rgba(255,255,255,.10)}
-.vnres-sk{display:block;height:13px;width:44px;border-radius:3px;
-  background:rgba(255,255,255,.13);animation:vnres-pulse 1.25s ease-in-out infinite}
-.vnres-sk-f{width:76px}
-.vnres-sk-s{width:30px;height:11px}
-.vnres-sk:nth-child(4){animation-delay:.12s}
-.vnres-sk:nth-child(7){animation-delay:.24s}
-@keyframes vnres-pulse{0%,100%{opacity:.35}50%{opacity:.85}}
-@media (prefers-reduced-motion:reduce){.vnres-sk{animation:none;opacity:.5}}
-.vnres-wait{font-size:10.5px;letter-spacing:.05em;color:var(--t4);white-space:nowrap}
-@media(max-width:700px){.vnres-wait{display:none}}
+/* ── НОВЕЛЛА · строка ресурсов (#vnres) и иллюминатор державы (#vnport) — СНЯТЫ.
+   Казна поверх сцены и круглый люк с гербом/портретом главы делали из главной
+   второй кабинет и закрывали рисованный фон. Работа и казна живут в кабинете
+   (#economy, 30_cabinet.css); новелла — приветствие. Разметку убрал buildHeroVN. */
