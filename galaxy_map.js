@@ -262,6 +262,15 @@ async function loadGalaxyData() {
       GM.capitals = {};   // system_id -> faction_id (актуальная столица)
       GM.capPlanet = {};  // system_id -> имя столичной планеты (актуальное)
       (apps || []).forEach(a => { if (a.faction_id) GM.facMeta[a.faction_id] = a; });
+      // Присоединённые державы (status='annexed'): их анкеты в approved уже нет, но
+      // территория на карте держит ИХ геральдику (map_systems.union_origin). Без этих
+      // метаданных над их землями пропадал герб. RLS такие анкеты не отдаёт, поэтому
+      // показные поля берём узкой RPC (_annexed_heraldry.sql), а не выборкой таблицы —
+      // и НЕ в общий apps, чтобы не спутать с анкетой игрока (GM.myFid ниже).
+      try {
+        const ann = await apiFetch('rpc/map_annexed_meta', { method: 'POST', body: '{}' });
+        (ann || []).forEach(a => { if (a.faction_id && !GM.facMeta[a.faction_id]) GM.facMeta[a.faction_id] = a; });
+      } catch (e) { /* старая база без RPC — карта работает, флаг возьмётся у ведущего */ }
       // Предзагрузка гербов фракций СРАЗУ (параллельно с остальной загрузкой карты):
       // иначе картинки флагов начинали качаться только при первом рендере и «всплывали»
       // позже. Теперь к первому показу карты они обычно уже готовы; опоздавшие до-пекут
@@ -6155,7 +6164,9 @@ function gmmBuildWorld() {
       // ключ = ГЕРАЛЬДИКА (исходный владелец при унии), а не ведущий: у партнёра
       // над его территорией накладывается ЕГО флаг, а не флаг ведущего.
       let e = facD.get(f.flagFac.id);
-      if (!e) { e = { d: '', color: f.flagFac.color, x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 }; facD.set(f.flagFac.id, e); }
+      // own = ФАКТИЧЕСКИЙ владелец: если у партнёра герба нет, слой берёт герб
+      // ведущего — иначе территория осталась бы вовсе без флага.
+      if (!e) { e = { d: '', color: f.flagFac.color, own: f.fac && f.fac.id, x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 }; facD.set(f.flagFac.id, e); }
       e.d += d;
       for (const p of f.pts) {
         if (p[0] < e.x0) e.x0 = p[0]; if (p[0] > e.x1) e.x1 = p[0];
@@ -6220,7 +6231,7 @@ function gmmBuildWorld() {
   GMM.paths = {
     fills: [...fillD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
     facFills: [...facD].map(([fid, e]) => ({
-      fid, color: e.color, p2d: new Path2D(e.d),
+      fid, ownFid: e.own || fid, color: e.color, p2d: new Path2D(e.d),
       bx: e.x0, by: e.y0, bw: Math.max(1, e.x1 - e.x0), bh: Math.max(1, e.y1 - e.y0),
     })),
     econFills: [...econD].map(([color, d]) => ({ color, p2d: new Path2D(d) })),
@@ -7243,7 +7254,9 @@ function gmmFlagImg(fid) {
 // в битмап, и в живой слой (без шва на краю битмапа). Разрешение крупное (longest
 // 1024) — иначе герб «мылился»/пикселился при растяжении на всю территорию.
 function gmmFlagLayer(f) {
-  const im = gmmFlagImg(f.fid); if (!im) return null;
+  // герб геральдики; нет анкеты/герба у партнёра по унии → берём герб ведущего
+  const key = (GM.facMeta && GM.facMeta[f.fid] && GM.facMeta[f.fid].herald_url) ? f.fid : (f.ownFid || f.fid);
+  const im = gmmFlagImg(key); if (!im) return null;
   const cache = GMM._flagLayerC || (GMM._flagLayerC = {});
   // Разрешение слоя — под ТЕКУЩИЙ экранный размер территории, а не всегда 1024
   // (даунскейл огромной канвы каждый кадр — самое дорогое место на обзоре, где

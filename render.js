@@ -3283,7 +3283,10 @@ function _hpvncPhone() {
 }
 function _heroColonyRender(en) {
   if (_heroColonyView.mode === 'sys' && _heroColonyView.sysId) return _heroColonySysBuild(_heroColonyView.sysId, en);
-  return _hpvncPhone() ? _heroColonyPhoneBuild(en) : _heroColonyBuild(en);
+  // Один экран на все ширины: карта галактики + столбец списков. На ПК столбец
+  // встаёт справа, на телефоне — под картой (класс `wide`, см. .hpvnc-ph).
+  // Прежняя SVG-карта границ (_heroColonyBuild) больше не зовётся ниоткуда.
+  return _heroColonyMapBuild(en);
 }
 function heroVNColonyClose() {
   const el = document.getElementById('hp-vn-colony');
@@ -3690,7 +3693,7 @@ function _hpvncMountMap() {
     if (_hpvncPhFocus && typeof gmmCenterSystem === 'function') gmmCenterSystem(_hpvncPhFocus);
   } catch (e) {}
 }
-function _heroColonyPhoneBuild(en) {
+function _heroColonyMapBuild(en) {
   const head = _heroColonyHead(en);
   const money = typeof ecNum === 'function' ? ecNum : (x => x);
   const myFid = (typeof EC !== 'undefined' && EC.fid) || null;
@@ -3735,7 +3738,9 @@ function _heroColonyPhoneBuild(en) {
   const radar = `<div class="hpvnc-ph-radar">
     <div class="hpvnc-ph-gmm" id="hpvnc-gmm"></div>
     <div class="hpvnc-ph-selwrap">${_hpvncPhSel(en)}</div>
-    <div class="hpvnc-ph-hint">${en ? 'Tap a star on the map to select it. Drag to pan, pinch to zoom — same as the galaxy map.' : 'Тап по звезде на карте — выбрать её. Тащить — панорама, щипок — зум: карта та же, что в разделе «Карта».'}</div>
+    <div class="hpvnc-ph-hint">${_hpvncPhone()
+      ? (en ? 'Tap a star on the map to select it. Drag to pan, pinch to zoom — same as the galaxy map.' : 'Тап по звезде на карте — выбрать её. Тащить — панорама, щипок — зум: карта та же, что в разделе «Карта».')
+      : (en ? 'Click a star on the map to select it. Drag to pan, wheel to zoom — same as the galaxy map.' : 'Клик по звезде на карте — выбрать её. Тащить — панорама, колесо — зум: карта та же, что в разделе «Карта».')}</div>
   </div>`;
   // Канвас поднимаем ПОСЛЕ вставки разметки (ему нужен размер контейнера).
   requestAnimationFrame(_hpvncMountMap);
@@ -3782,14 +3787,32 @@ function _heroColonyPhoneBuild(en) {
     </div>`;
   }).join('') : `<div class="hpvnc-ph-empty">${en ? 'No neutral systems border your realm. Expand along hyperlanes.' : 'Нет смежных ничейных систем — расширяться пока некуда.'}</div>`;
 
-  return head + `<div class="hp-vn-col-body hpvnc-ph">
+  // ── Досье державы: на ПК столбец справа высокий, шапка ему к месту ──
+  const wide = !_hpvncPhone();
+  const dHerald = (typeof EC !== 'undefined' && EC.app && (EC.app.herald_url || EC.app.image_url)) || '';
+  const dName = (typeof EC !== 'undefined' && EC.app && EC.app.name) || (en ? 'My realm' : 'Моя держава');
+  const dSub = [(EC.app && EC.app.gov) || '', (EC.app && EC.app.leader) || ''].filter(Boolean).join(' · ');
+  const dCap = (capSys && byId.get(capSys) && byId.get(capSys).name) || '—';
+  const dossier = wide ? `<div class="hp-vn-col-dossier">
+    <div class="hp-vn-col-crest" style="--fc:${(EC.app && EC.app.color) || 'var(--gd,#3a9bdc)'}">${dHerald ? `<img src="${esc(dHerald)}" alt="" onerror="this.parentElement.textContent='⬡'">` : '⬡'}</div>
+    <div class="hp-vn-col-idnt">
+      <span class="hp-vn-col-fname">${esc(dName)}</span>
+      ${dSub ? `<span class="hp-vn-col-fsub">${esc(dSub)}</span>` : ''}
+      <span class="hp-vn-col-fcap">★ ${en ? 'Capital' : 'Столица'}: <b>${esc(dCap)}</b></span>
+    </div>
+  </div>` : '';
+
+  return head + `<div class="hp-vn-col-body hpvnc-ph${wide ? ' wide' : ''}">
+    <div class="hpvnc-ph-mapcol">${radar}</div>
+    <aside class="hpvnc-ph-side">
+    ${dossier}
     ${pool}
-    ${radar}
     ${mine.length > 6 ? `<input class="hpvnc-ph-find" type="search" inputmode="search" placeholder="${en ? 'Find a system…' : 'Найти систему…'}" oninput="heroVNColonyFilter(this.value)">` : ''}
     <div class="hpvnc-ph-cap">${en ? 'Expansion' : 'Экспансия'} · ${claimIds.length}</div>
     <div class="hpvnc-ph-list">${claimRows}</div>
     <div class="hpvnc-ph-cap">${en ? 'My systems' : 'Мои системы'} · ${mine.length}</div>
     <div class="hpvnc-ph-list">${mineRows}</div>
+    </aside>
   </div>`;
 }
 // Фильтр списка по названию — работает по уже готовому DOM, без перерисовки.
@@ -3801,8 +3824,12 @@ function heroVNColonyFilter(q) {
   });
 }
 
-// Сборка оверлея из данных кабинета (EC): территории ВСЕХ держав с заливками/границами/
-// гербами, стрелки экспансии, пул захватов и рабочие кнопки колонизации.
+// ⚠️ ЛЕГАСИ, НЕ ЗОВЁТСЯ. Прежняя карта границ: собственный SVG (Вороного-ячейки,
+// гербы, стрелки) со своим зумом и панорамой. Заменена настоящей картой галактики
+// (_heroColonyMapBuild → gmmRender) — и на телефоне, и на ПК: две разные навигации
+// по космосу игрока путали, а SVG-слой мигал и лагал на каждом жесте. Оставлено
+// временно как справка по разметке; вместе с ним не зовутся и _hpvnc*-помощники
+// зума/подписей выше. Удалить, когда новая карта отстоится.
 function _heroColonyBuild(en) {
   _hpvncBindZoom();
   const head = _heroColonyHead(en);
@@ -4100,19 +4127,23 @@ function _heroColonyBuild(en) {
     const groups = new Map();   // fid -> { cells:[pts], pts:[p] }
     geo.fills.forEach(f => {
       if (!f.sys || f.isRift || !f.fac || !f.pts) return;
-      // герб — по ГЕРАЛЬДИКЕ: территория партнёра по унии держит свой герб
-      const fid = f.sys.union_origin || f.sys.faction;
+      // герб — по ГЕРАЛЬДИКЕ: территория партнёра по унии держит свой герб.
+      // ownFid (ведущий) держим рядом: по нему решается «моя территория» и берётся
+      // запасной герб, если у партнёра анкеты в GM.facMeta ещё нет.
+      const ownFid = f.sys.faction;
+      const fid = f.sys.union_origin || ownFid;
       if (!fid || fid === 'rift' || !ptsIn(f.pts)) return;
       let g = groups.get(fid);
-      if (!g) { g = { cells: [], pts: [] }; groups.set(fid, g); }
+      if (!g) { g = { cells: [], pts: [], own: ownFid }; groups.set(fid, g); }
       g.cells.push(f.pts);
       f.pts.forEach(p => g.pts.push(p));
     });
     let clipDefs = '', flagLayer = '';
     let gi = 0;
     groups.forEach((g, fid) => {
-      const isMine = fid === myFid;
-      const meta = facMeta[fid] || (isMine ? (typeof EC !== 'undefined' ? EC.app : null) : null);
+      const isMine = fid === myFid || g.own === myFid;
+      const meta = facMeta[fid] || facMeta[g.own]
+        || (isMine ? (typeof EC !== 'undefined' ? EC.app : null) : null);
       const herald = (meta && (meta.herald_url || meta.image_url)) || '';
       if (!herald) return;
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;

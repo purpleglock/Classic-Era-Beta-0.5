@@ -574,7 +574,14 @@
       "Bash(node tools/db_q.js \"select * from unions limit 20\")",
       "Bash(node tools/db_q.js \"select * from diplo_unions order by created_at desc limit 10\")",
       "Bash(node tools/db_q.js \"select table_name,column_name from information_schema.columns where table_schema='public' and table_name in \\('diplo_unions','diplo_union_members','annex_origin','state_annexations'\\)\")",
-      "Bash(node -e \"['galaxy_map.js','render.js','economy.js'].forEach\\(f=>{new \\(require\\('vm'\\).Script\\)\\(require\\('fs'\\).readFileSync\\(f,'utf8'\\),{filename:f}\\);console.log\\('ok',f\\)}\\)\")"
+      "Bash(node -e \"['galaxy_map.js','render.js','economy.js'].forEach\\(f=>{new \\(require\\('vm'\\).Script\\)\\(require\\('fs'\\).readFileSync\\(f,'utf8'\\),{filename:f}\\);console.log\\('ok',f\\)}\\)\")",
+      "Bash(git check-ignore *)",
+      "Bash(node tools/db_q.js \"select faction_id,name,status,herald_url is not null hh from faction_applications where faction_id in \\('fac_997c5c8b70','fac_edc69c8203'\\)\")",
+      "Bash(node -e \"new \\(require\\('vm'\\).Script\\)\\(require\\('fs'\\).readFileSync\\('galaxy_map.js','utf8'\\)\\);console.log\\('ok'\\)\")",
+      "Bash(node tools/db_q.js \"select policyname, cmd, qual from pg_policies where tablename='faction_applications' and cmd='SELECT'\")",
+      "Bash(node tools/db_run.js _annexed_heraldry.sql)",
+      "Bash(node tools/db_q.js \"select faction_id,name,herald_url is not null hh from public.map_annexed_meta\\(\\)\")",
+      "Bash(node -e \"['galaxy_map.js','render.js'].forEach\\(f=>{new \\(require\\('vm'\\).Script\\)\\(require\\('fs'\\).readFileSync\\(f,'utf8'\\),{filename:f}\\)}\\);console.log\\('ok'\\)\")"
     ]
   }
 }

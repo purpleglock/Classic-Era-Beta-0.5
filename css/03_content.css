@@ -629,6 +629,13 @@
    Вместо карты с зумом — строки во всю ширину: цель нажатия крупная, страница
    листается обычной прокруткой, перерисовывать при жестах нечего. */
 .hp-vn-col-body.hpvnc-ph{flex-direction:column;gap:10px;align-items:stretch;overflow-y:auto}
+.hpvnc-ph-side{display:flex;flex-direction:column;gap:10px;min-width:0}
+/* ПК: карта слева во всю высоту, списки — столбцом справа со своей прокруткой. */
+.hp-vn-col-body.hpvnc-ph.wide{flex-direction:row;gap:14px;overflow:hidden}
+.hp-vn-col-body.hpvnc-ph.wide .hpvnc-ph-mapcol{flex:1 1 auto;min-width:0;display:flex}
+.hp-vn-col-body.hpvnc-ph.wide .hpvnc-ph-radar{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+.hp-vn-col-body.hpvnc-ph.wide .hpvnc-ph-gmm{flex:1 1 auto;height:auto;min-height:0}
+.hp-vn-col-body.hpvnc-ph.wide .hpvnc-ph-side{flex:0 0 clamp(300px,30%,400px);overflow-y:auto;scrollbar-width:thin;padding-right:4px}
 .hpvnc-ph-pool{
   display:flex;flex-wrap:wrap;gap:2px 10px;justify-content:space-between;align-items:baseline;
   padding:10px 12px;border-left:3px solid var(--gd,#3a9bdc);background:hsl(216 22% 9% / .92);
