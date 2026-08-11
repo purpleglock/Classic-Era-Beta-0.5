@@ -590,10 +590,25 @@
 .hp-vn-col-x:hover::after{background:color-mix(in srgb,var(--gd,#3a9bdc) 22%,hsl(216 24% 7%))}
 .hp-vn-col-body{flex:1;min-height:0;display:flex;gap:14px;padding:14px clamp(14px,2.6vw,26px)}
 .hp-vn-col-main{
-  flex:1 1 auto;min-width:0;overflow:hidden;
+  flex:1 1 auto;min-width:0;overflow:hidden;position:relative;
   --cyb-bg:radial-gradient(circle at 50% 40%, rgba(20,32,48,.55), rgba(6,9,14,.85));
 }
 .hp-vn-col-main svg{width:100%;height:100%;display:block}
+/* Карта границ живёт на своём зуме/панораме (viewBox, см. _hpvncBindZoom):
+   жест забираем себе, иначе телефон прокручивает страницу вместо карты. */
+.hp-vn-col-main .hpvnc-map:not(.hpvnc-sysmap){touch-action:none;cursor:grab}
+.hp-vn-col-main .hpvnc-map:not(.hpvnc-sysmap):active{cursor:grabbing}
+/* Кнопки масштаба — угол карты; на телефоне это единственный способ приблизиться
+   без пинча (и подсказка, что карта вообще масштабируется). */
+.hpvnc-zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:6px;z-index:3}
+.hpvnc-zoom button{
+  width:38px;height:38px;display:grid;place-items:center;cursor:pointer;
+  font:600 17px/1 var(--font-mono,monospace);color:#dCEAFb;
+  background:rgba(6,10,16,.82);border:1px solid rgba(160,200,255,.22);border-radius:3px;
+  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
+}
+.hpvnc-zoom button:hover{color:#fff;border-color:color-mix(in srgb,var(--gd,#3a9bdc) 60%,transparent)}
+.hpvnc-zoom button:active{background:rgba(20,34,52,.9)}
 /* Схема системы шире холста при многих планетах — не сжимаем в кашу, а
    прокручиваем по горизонтали, сохраняя размер планет и подписей. */
 .hp-vn-col-main:has(.hpvnc-sysmap){overflow-x:auto;overflow-y:auto;scrollbar-width:thin;display:flex;align-items:center}
@@ -1181,7 +1196,10 @@
   /* overflow-x:hidden — схема системы шире экрана, и её ширина тянула ВЕСЬ экран
      вбок (панель уезжала за край). Прокрутка ленты планет живёт ВНУТРИ .col-main. */
   .hp-vn-col-body{flex-direction:column;gap:12px;padding:12px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
-  .hp-vn-col-main{flex:0 0 auto;height:46vh;min-height:240px;width:100%;max-width:100%;min-width:0}
+  /* 52vh: карта границ на телефоне — главное содержимое экрана, на 46vh кадр
+     сплющивался в полосу и подписи держав лезли друг на друга. */
+  .hp-vn-col-main{flex:0 0 auto;height:52vh;min-height:280px;width:100%;max-width:100%;min-width:0}
+  .hpvnc-zoom button{width:42px;height:42px}
   .hp-vn-col-main:has(.hpvnc-sysmap){overscroll-behavior-x:contain}
   .hp-vn-col-side{flex:0 0 auto;flex-direction:column;gap:12px}
   .hp-vn-col-mini{aspect-ratio:16/7}
@@ -4340,8 +4358,19 @@ html:has(:is(.hp-vn-colony,.hp-vn-poem,.hp-vn-assembly,.hp-vn-rating,.hp-vn-rese
   .hvp-card-orb{height:104px}
   .hvp-card-orb .hvp-cv{width:76px;height:76px}
   .hvp-body-scene{flex-direction:column}
-  .hvp-scene{flex:0 0 auto;min-height:300px}
-  .hvp-tiles{grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}
+  /* Сцена не тянется под число участков: на телефоне колония в 10-12 ячеек
+     разгоняла её на 590px из 812, и панель управления (.hvp-side) уезжала
+     ПОД экран — игрок жал здание и «ничего не происходило». Портрет мира —
+     плоская полоса сверху, участки под ней компактной сеткой. */
+  .hvp-scene{flex:0 0 auto;min-height:0}
+  .hvp-scene-hero{flex:0 0 auto;min-height:0;gap:12px;padding:10px 12px}
+  .hvp-hero-orbit{width:clamp(76px,26vw,112px);height:clamp(76px,26vw,112px);margin:8px 0 8px 4px}
+  .hvp-tiles{grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;padding:8px}
+  .hvp-tile{min-height:74px}
+  .hvp-tile-art,.hvp-tile-ic{height:34px}
+  .hvp-tile-ic{line-height:34px}
+  /* 84px и многоточие оставляли от «Планетарной обороны» одно слово */
+  .hvp-tile-nm{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.2}
   .hvp-side{flex:0 0 auto;overflow:visible}
 }
 /* ══ Новелла: «Межзвёздная Ассамблея» — игра скрытых ролей (SH-лайк).

@@ -607,6 +607,18 @@
 .bbf-hud-my .bbf-hud-t { color: var(--bbc); }
 .bbf-hud-a { color: var(--bbc); font-size: 13px; letter-spacing: .16em; }
 .bbf-hud-vs { color: #5d7f90; font-size: 9.5px; letter-spacing: .06em; }
+/* Состав своей стороны, когда держав на ней несколько: инициалы каждой,
+   погасшая — ещё ходит, зажжённая — ход закончила. Своя обведена. */
+.bbf-hud-mates { display: flex; gap: 3px; }
+.bbf-hud-mates i {
+  width: 17px; height: 17px; display: grid; place-items: center; font-style: normal;
+  font-size: 9px; letter-spacing: 0; color: #5d7f90;
+  background: rgba(120,255,190,.08); border: 1px solid transparent;
+}
+.bbf-hud-mates i.on { color: #04121a; background: rgb(120,255,190); }
+.bbf-hud-mates i.me { border-color: var(--bbc); }
+/* готовность объявлена: кнопка гаснет до контура — ход ещё не ушёл */
+.bbd-fire-wait { background: rgba(120,255,190,.16); color: #78ffbe; }
 
 /* Полоска наведения модуля: висит, пока снаряжение взведено. Держит правила
    этого модуля перед глазами (рубеж, мёртвая зона, накрытие) и даёт отмену —

@@ -167,6 +167,20 @@
   .hp-vn-colony.show .fn-tab-hd > .btn{flex:1 1 100%}
   .hp-vn-colony.show :is(.fn-mine-title,.fn-mod-title){white-space:normal;overflow:visible;line-height:1.35}
 
+  /* «Оповещения» вестника — та же беда, что была у «Редакции»: заголовок
+     свёрстан одной строкой с многоточием (white-space:nowrap), и на 375px от
+     депеши оставалось «Тетославия объявила о закрыт…». Читать нечего, а
+     строка при этом занимает всю высоту. Разворачиваем в несколько строк и
+     сажаем иконку/стрелку по верхнему краю, чтобы они не плавали посередине. */
+  .hp-vn-colony.show :is(.fn-notif-row,.fn-notif-subrow){align-items:flex-start}
+  .hp-vn-colony.show :is(.fn-notif-title,.fn-notif-subtitle){
+    white-space:normal;overflow:visible;text-overflow:clip;line-height:1.35;
+  }
+  .hp-vn-colony.show .fn-notif-meta{line-height:1.45}
+  .hp-vn-colony.show :is(.fn-notif-ic,.fn-notif-subic,.fn-notif-arr){margin-top:1px}
+  /* отступ ветки достижений съедал и без того узкую строку */
+  .hp-vn-colony.show .fn-notif-sub{margin-left:8px;padding-left:10px}
+
   /* Ленты вкладок, оставшиеся внутри перенесённых кусков кабинета */
   .hp-vn-colony.show .ec-tabs{
     flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;

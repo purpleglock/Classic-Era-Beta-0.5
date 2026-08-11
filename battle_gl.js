@@ -48,9 +48,13 @@ const BG_FX_K = BG_SHIP_K;
 // ── ЦВЕТА (зеркало BB_C, чтобы 2D и 3D не разъезжались) ─────
 const BG_C = {
   mine: 0x5adcf0,
+  ally: 0x78ffbe,     // союзник по стороне (зеркало BB_C.ally)
   foe:  0xff3c82,
   grid: 0x5ac8e6,
 };
+// Тон борта берём у 2D-доски, чтобы сцены не разъезжались: 'mine'|'ally'|'foe'.
+function bgTone(u) { return (typeof bbTone === 'function') ? bbTone(u) : (u && u.mine ? 'mine' : 'foe'); }
+function bgToneC(u) { return BG_C[bgTone(u)] || BG_C.foe; }
 
 function bgHasThree() { return typeof THREE !== 'undefined'; }
 
@@ -930,11 +934,11 @@ function bgHullDepth(cls, x, hull) {
 // не понять. Достраиваем два признака, которые читаются мгновенно и с любого
 // ракурса: надстройка смещена К КОРМЕ (значит перед — там, где её нет) и
 // светящиеся дюзы в самом хвосте.
-function bgBuildShip(cls, mine, hullMask) {
+function bgBuildShip(cls, tone, hullMask) {
   const grp = new THREE.Group();
   const beam = bgHullBeam(cls, hullMask);
 
-  const hull = new THREE.Mesh(bgHullGeo(cls, hullMask), bgHullMat(mine));
+  const hull = new THREE.Mesh(bgHullGeo(cls, hullMask), bgHullMat(tone));
   grp.add(hull);
 
   // ⚠️ КОРПУС, НАРИСОВАННЫЙ ИГРОКОМ, ДОСТРАИВАТЬ НЕЧЕМ. Всё, что ниже, — это
@@ -976,7 +980,7 @@ function bgBuildShip(cls, mine, hullMask) {
     const bw = topW * t.w, bh = vu(topX) * plan.h * t.h, bl = topL * t.l;
     const bx = topX + t.dx * topL, by = topY + bh * 0.5;
     // ярус со скосом и завалом к носу: у настоящей рубки нет вертикальных стен
-    const box = new THREE.Mesh(bgTaper(bl, bh, bw, 0.66, 0.8, bl * 0.06), bgHullMat(mine));
+    const box = new THREE.Mesh(bgTaper(bl, bh, bw, 0.66, 0.8, bl * 0.06), bgHullMat(tone));
     box.position.set(bx, by, zOff);
     bgUvTile(box.geometry, 3);
     grp.add(box); parts.push(box);
@@ -991,7 +995,7 @@ function bgBuildShip(cls, mine, hullMask) {
     // Мачта меряется от ПАЛУБЫ, а не от накопленной высоты башни: иначе каждый
     // ярус подкидывал её выше, и на многоярусных классах вырастал шпиль.
     const mh = Math.min(vu(topX) * plan.h * plan.mast, deckY * 2.2);
-    const ms = new THREE.Mesh(bgTaper(vu(topX) * 0.16, mh, vu(topX) * 0.16, 0.5, 0.5, 0), bgHullMat(mine));
+    const ms = new THREE.Mesh(bgTaper(vu(topX) * 0.16, mh, vu(topX) * 0.16, 0.5, 0.5, 0), bgHullMat(tone));
     ms.position.set(topX, topY + mh * 0.5, zOff);
     grp.add(ms); parts.push(ms);
     const dish = new THREE.Mesh(new THREE.SphereGeometry(vu(topX) * 0.13, 8, 6), bgGlowMat(mine ? 0x8fd8ff : 0xff9fbe, 0.7));
@@ -1005,7 +1009,7 @@ function bgBuildShip(cls, mine, hullMask) {
     const px = plan.x + plan.len * 0.4;
     const pl = plan.len * 1.6, ph = vu(px) * 0.7, pw = Math.min(hw(px), BG_VCAP * 2) * 0.5;
     [-1, 1].forEach(o => {
-      const p = new THREE.Mesh(bgTaper(pl, ph, pw, 0.55, 0.55, pl * 0.08), bgHullMat(mine));
+      const p = new THREE.Mesh(bgTaper(pl, ph, pw, 0.55, 0.55, pl * 0.08), bgHullMat(tone));
       p.position.set(px, 0, o * hw(px) * 0.8);
       bgUvTile(p.geometry, 3);
       grp.add(p); parts.push(p);
@@ -1020,14 +1024,14 @@ function bgBuildShip(cls, mine, hullMask) {
   // обвод углами — отсюда «уродская жопа». Держим его строго внутри борта и
   // ведём размеры от ширины НА СВОЁМ шпангоуте, а не от миделя.
   const ew = hw(-0.42), eh = depthAt(-0.42);
-  const eb = new THREE.Mesh(bgTaper(0.17, eh * 1.5, ew * 1.62, 0.82, 0.72, -0.012), bgHullMat(mine));
+  const eb = new THREE.Mesh(bgTaper(0.17, eh * 1.5, ew * 1.62, 0.82, 0.72, -0.012), bgHullMat(tone));
   eb.position.set(-0.41, -eh * 0.12, 0);
   bgUvTile(eb.geometry, 2);
   grp.add(eb); parts.push(eb);
   // 2) хребет: узкий гребень по палубе от рубки к носу — линия, вдоль которой
   //    видно и длину борта, и его курс
   const sx = plan.x + 0.26;
-  const sp = new THREE.Mesh(bgTaper(0.4, vu(sx) * 0.34, Math.min(hw(sx), BG_VCAP * 2) * 0.5, 0.5, 0.62, 0.03), bgHullMat(mine));
+  const sp = new THREE.Mesh(bgTaper(0.4, vu(sx) * 0.34, Math.min(hw(sx), BG_VCAP * 2) * 0.5, 0.5, 0.62, 0.03), bgHullMat(tone));
   sp.position.set(sx, deckAt(sx) * 0.7, 0);
   bgUvTile(sp.geometry, 3);
   grp.add(sp); parts.push(sp);
@@ -1040,7 +1044,7 @@ function bgBuildShip(cls, mine, hullMask) {
     const pts = [];
     for (let k = 0; k < BG_RING; k++) { const e = bgSection(k, r * 1.04, r * BG_DECK * 1.06); pts.push(new THREE.Vector2(e.z, e.y)); }
     const sh = new THREE.Shape(pts);
-    const rb = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.022, bevelEnabled: false }), bgHullMat(mine));
+    const rb = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.022, bevelEnabled: false }), bgHullMat(tone));
     rb.rotation.y = Math.PI / 2;
     rb.position.set(px + 0.011, 0, 0);
     grp.add(rb); parts.push(rb);
@@ -1178,7 +1182,7 @@ function bgSyncUnits() {
     // Маска корпуса колосса живёт в дизайне, а не в юните — достаём тем же
     // путём, что и 2D (bbDesignOf), иначе 3D покажет чужой борт.
     const uh = u.contact ? null : bgUnitHull(u);
-    const key = (u.contact ? '?' : bgHullKey(u.cls, uh)) + '|' + (u.mine ? 1 : 0);
+    const key = (u.contact ? '?' : bgHullKey(u.cls, uh)) + '|' + bgTone(u);
     let m = BG.units.get(u.id);
     if (m && m.userData.key !== key) { bgDropUnit(u.id); m = null; }   // сменился класс/сторона/захват
     if (!m) {
@@ -1186,7 +1190,7 @@ function bgSyncUnits() {
       // сервер не отдал класс, и рисовать «какой-нибудь» корабль нельзя
       const L = u.contact ? BB.R * 0.8
         : BB.R * (0.75 + (typeof bbClsSize === 'function' ? bbClsSize(u.cls) : 1) * 1.15) * BG_SHIP_K;
-      m = u.contact ? bgBuildContact() : bgBuildShip(u.cls, u.mine, uh);
+      m = u.contact ? bgBuildContact() : bgBuildShip(u.cls, bgTone(u), uh);
       m.scale.setScalar(L);
       m.userData.key = key; m.userData.uid = u.id;
       m.userData.L = L;
@@ -1258,7 +1262,7 @@ function bgTrail(u, m, ang, moving) {
   let tr = BG.trail.get(u.id);
   if (!moving) { if (tr) tr.visible = false; return; }
   if (!tr) {
-    tr = bgRibbon(bgTexTrail(), u.mine ? BG_C.mine : BG_C.foe, 0.55);
+    tr = bgRibbon(bgTexTrail(), bgToneC(u), 0.55);
     BG.g.fx.add(tr);
     BG.trail.set(u.id, tr);
   }
@@ -1310,10 +1314,14 @@ function bgTexPlate() {
   });
 }
 
-function bgHullMat(mine, dim, ghost) {
+// tone: 'mine' | 'ally' | 'foe' (историю с булевым `mine` тоже понимаем)
+function bgHullMat(tone, dim, ghost) {
+  if (typeof tone !== 'string') tone = tone ? 'mine' : 'foe';
   const cache = BG._hullMat || (BG._hullMat = {});
-  const k = (mine ? 'mine' : 'foe') + (dim ? '-dim' : '') + (ghost ? '-gh' : '');
+  const k = tone + (dim ? '-dim' : '') + (ghost ? '-gh' : '');
   if (cache[k]) return cache[k];
+  const body = { mine: [0x445260, 0x8fa6b8], ally: [0x44604f, 0x8fb8a4], foe: [0x564850, 0xa8909a] }[tone]
+             || [0x564850, 0xa8909a];
   const tex = bgTexPlate().clone();
   tex.needsUpdate = true;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -1321,9 +1329,9 @@ function bgHullMat(mine, dim, ghost) {
   tex.colorSpace = THREE.SRGBColorSpace;
   cache[k] = new THREE.MeshStandardMaterial({
     map: tex, bumpMap: tex, bumpScale: dim ? 0.2 : 0.45,
-    color: mine ? (dim ? 0x445260 : 0x8fa6b8) : (dim ? 0x564850 : 0xa8909a),
+    color: dim ? body[0] : body[1],
     metalness: 0.62, roughness: dim ? 0.62 : 0.44,
-    emissive: mine ? BG_C.mine : BG_C.foe,
+    emissive: BG_C[tone] || BG_C.foe,
     emissiveIntensity: dim ? 0.02 : 0.055,     // еле тлеет: намёк на сторону, не заливка
     transparent: !!ghost, opacity: ghost ? 0.45 : 1, depthWrite: !ghost,
   });
@@ -2591,7 +2599,7 @@ function bgSyncStatus() {
     live.add(u.id);
     let st = BG.stat.get(u.id);
     if (!st) {
-      const col = bgCol(u.mine ? BG_C.mine : BG_C.foe);
+      const col = bgCol(bgToneC(u));
       st = { bg: bgBar(0x000000, 0.62), hp: bgBar(0xffffff, 0.95), sh: bgBar(0xffffff, 0.75),
              chev: new THREE.Mesh(bgChevGeo(), new THREE.MeshBasicMaterial({
                color: col, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })) };
@@ -2601,7 +2609,7 @@ function bgSyncStatus() {
     // подпись борта (герб державы + имя) — отдельным спрайтом. Ключ включает
     // адрес герба: справочник гербов доезжает позже первого снимка боя, и по
     // его приходу щиток с инициалами сам сменится на картинку.
-    const col = u.mine ? BG_C.mine : BG_C.foe;
+    const col = bgToneC(u);
     const nk = u.name ? bgLabelKey(u.name, u.fid, col) : null;
     if (st.nmKey !== nk) {
       if (st.nm) { BG.g.st.remove(st.nm); st.nm.material.dispose(); st.nm = null; }
@@ -2611,7 +2619,7 @@ function bgSyncStatus() {
     const hpF = (u.max_hp > 0) ? Math.max(0, Math.min(1, u.hp / u.max_hp)) : 1;
     const shF = (u.tp_max > 0) ? Math.max(0, Math.min(1, (u.shield || 0) / u.tp_max)) : 0;
     st.hpF = hpF; st.shF = shF;
-    st.hp.material.color.set(hpF > 0.5 ? bgCol(u.mine ? BG_C.mine : BG_C.foe)
+    st.hp.material.color.set(hpF > 0.5 ? bgCol(bgToneC(u))
                            : hpF > 0.25 ? new THREE.Color(0xffbe46) : new THREE.Color(0xff4646));
     st.sh.visible = shF > 0;
     // «уже отходил» — гасим борт, как alpha 0.5 в 2D
@@ -2619,7 +2627,7 @@ function bgSyncStatus() {
     const m = BG.units.get(u.id);
     if (m && m.userData.spent !== spent) {
       m.userData.spent = spent;
-      (m.userData.hullParts || []).forEach(p => { p.material = bgHullMat(u.mine, spent); });
+      (m.userData.hullParts || []).forEach(p => { p.material = bgHullMat(bgTone(u), spent); });
       (m.userData.nz || []).forEach(e => { e.material = bgGlowMat(spent ? 0x6e4a28 : 0xffb469, 1.5); });
     }
   });
@@ -2696,7 +2704,7 @@ function bgSyncGhosts() {
   BB.place.forEach(p => {
     const size = (typeof bbClsSize === 'function' ? bbClsSize(p.cls) : 1);
     const L = BB.R * (0.75 + size * 1.15) * BG_SHIP_K;
-    const m = bgBuildShip(p.cls, true, bgUnitHull(p));
+    const m = bgBuildShip(p.cls, 'mine', bgUnitHull(p));
     (m.userData.hullParts || []).forEach(q => { q.material = bgHullMat(true, false, true); });
     m.scale.setScalar(L);
     const c = bbHexCenter(p.x, p.y);

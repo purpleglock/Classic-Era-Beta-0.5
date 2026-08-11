@@ -299,7 +299,7 @@
    остаётся окном со своей вёрсткой и своим порогом. */
   /* Колонизация — единственный экран с холстом: карта сверху, досье под ней. */
   html.mnav-on #cab-stage .hp-vn-col-body { flex-direction: column; gap: 12px; }
-  html.mnav-on #cab-stage .hp-vn-col-main { flex: 0 0 auto; height: 46vh; min-height: 240px; width: 100%; max-width: 100%; min-width: 0; }
+  html.mnav-on #cab-stage .hp-vn-col-main { flex: 0 0 auto; height: 52vh; min-height: 280px; width: 100%; max-width: 100%; min-width: 0; }
   html.mnav-on #cab-stage .hp-vn-col-side { flex: 0 0 auto; flex-direction: column; gap: 12px; }
   /* Управление колониями: сцена планеты и её досье. */
   html.mnav-on #cab-stage .hvp-body-scene { flex-direction: column; }

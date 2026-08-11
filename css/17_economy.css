@@ -4623,6 +4623,21 @@ canvas.ec-res-thumb-cv { border-radius: 0; background: transparent; box-shadow: 
 .ec-dep-more > summary:hover { color: var(--t1); }
 .ec-dep-calc { margin: 5px 0 2px 14px; padding: 7px 11px; background: var(--b1, rgba(255,255,255,.04)); border-radius: var(--radius-sm); font-size: 12px; line-height: 1.7; }
 .ec-dep-calc .ec-dep-total { margin-top: 4px; padding-top: 5px; border-top: 1px solid var(--w2, rgba(255,255,255,.08)); color: var(--t1); }
+/* ТЕЛЕФОН. Реворк «залежь в две строки» (выше) сделал .ec-res-dep блоком, а
+   внутреннюю .ec-res-dep-main — НЕПЕРЕНОСИМЫМ рядом, и заодно перебил ранний
+   мобильный блок (.ec-res-dname{flex:1 1 100%} → flex:1 1 auto). На 375px имя
+   ресурса сжималось до 14px и вставало вертикальной ниткой рядом с nowrap-
+   счётчиками — это и есть «всё съехало». Мобильные правила обязаны идти ПОСЛЕ
+   десктопных переопределений, иначе они снова проиграют по порядку. */
+@media (max-width: 720px) {
+  .ec-res-dep-main { flex-wrap: wrap; gap: 4px 10px; }
+  .ec-res-dname { flex: 1 1 100%; }
+  .ec-res-dwork { flex: 0 0 auto; }
+  .ec-res-dbar { flex: 1 1 55%; min-width: 90px; }
+  .ec-res-dstat { margin-left: auto; }
+  .ec-dep-house-tag { margin-left: 0; }
+  .ec-dep-calc { margin-left: 0; padding: 7px 9px; font-size: 11.5px; line-height: 1.6; }
+}
 
 /* ══ Разведуправление 2.0: защищённость систем и артефакты ══════════
    Палитра «умбра» экрана разведки; один акцент на блок — см. ui-design-rules. */

@@ -1,0 +1,165 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Мобилка: добыча · колония · оповещения</title>
+<link rel="stylesheet" href="css/index.css">
+<style>body{margin:0;background:#05070b}
+.hp-hero-cover.hp-vn{position:relative;min-height:60vh}
+.mfh-sw{position:fixed;left:0;right:0;bottom:0;z-index:999;display:flex;gap:6px;padding:6px;background:#0b1017}
+.mfh-sw button{flex:1;font:12px monospace;padding:8px;background:#16202c;color:#cfe;border:1px solid #2a3a4a}
+.mfh-scr{display:none}.mfh-scr.on{display:flex}
+</style>
+</head><body>
+<div class="hp-hero-cover hp-vn" id="cover">
+
+<!-- ══ 1. ДОБЫЧА РЕСУРСОВ · Залежи ══ -->
+<div class="hp-vn-colony hp-vn-geo hp-vn-est mfh-scr on show" id="scr-mine">
+  <div class="hp-vn-col-head">
+    <div class="hp-vn-col-title">Добыча ресурсов</div>
+    <button class="hp-vn-col-x">↩ назад</button>
+  </div>
+  <div class="hp-vn-col-body pol-shell">
+    <div class="pol-railw"><div class="pol-rail">
+      <button class="pol-rail-b on"><span class="pol-rail-ic">⛏</span><span class="pol-rail-tx"><b>Залежи</b><i>кто и что копает</i></span></button>
+      <button class="pol-rail-b"><span class="pol-rail-ic">🤝</span><span class="pol-rail-tx"><b>Концессии</b><i>чужие руки на вашей земле</i></span></button>
+    </div></div>
+    <div class="pol-stage pol-body"><div class="pol-content">
+      <div class="ec-res-toolbar">
+        <span class="ec-res-search">🔎 <input type="text" placeholder="Поиск системы или ресурса…"></span>
+        <button class="btn btn-gd btn-xs ec-res-polbtn">⛏ Приоритет добычи</button>
+        <button class="btn btn-gh btn-xs">▸ Свернуть всё</button>
+      </div>
+      <div id="ec-res-syslist">
+        <div class="ec-res-sys ec-res-prio">
+          <div class="ec-q-row ec-res-syrow">
+            <button class="ec-res-caret">▾</button>
+            <span class="ec-res-syname">★ <b>Тау Кита Прайм</b></span>
+            <span class="ec-res-sywork">👷 12 400 / 18 900</span>
+            <span class="ec-res-sybar"><span class="ec-res-bar"><span class="ec-res-bar-in" style="width:66%;background:#69f"></span></span><i>66%</i></span>
+            <span class="ec-res-syact"><button class="btn btn-gh btn-xs">★ Приоритет ⚙</button></span>
+          </div>
+          <div class="ec-res-deps">
+            <div class="ec-res-col">
+              <div class="ec-res-colhd">
+                <span class="ec-res-thumb ec-res-thumb-none" data-look="terran"></span>
+                <span class="ec-res-colnm"><b>Кита Прайм II</b><i class="ec-res-coltype">земного типа</i></span>
+                <span class="ec-res-colwk">8 200 / 12 000 раб.</span>
+                <span class="ec-res-colbar"><span class="ec-res-bar"><span class="ec-res-bar-in" style="width:68%;background:#69f"></span></span></span>
+              </div>
+              <div class="ec-res-coltree">
+                <div class="ec-res-dep">
+                  <div class="ec-res-dep-main">
+                    <span class="ec-res-dname">⛏ <b>Программируемая материя</b> <i class="ec-dep-rar">легендарный · обильное</i> <span class="ec-dep-house-tag">🏗 2× ур.3 +30%</span></span>
+                    <span class="ec-res-dwork">👷 4 200 / 6 000</span>
+                    <span class="ec-res-dbar"><span class="ec-res-bar"><span class="ec-res-bar-in" style="width:70%;background:#69f"></span></span><i>70%</i></span>
+                    <span class="ec-res-dstat"><span class="ec-dep-ok">✓ ⛏ <b>~186/тик</b></span></span>
+                  </div>
+                  <details class="ec-dep-more"><summary>разбор добычи</summary>
+                    <div class="ec-dep-calc">
+                      <div>⛏ <b>Ставка залежи:</b> <b>266 ед/тик</b> при полном покрытии <span class="ec-dep-dim">(база редкости × богатство «обильное» × баффы × домик)</span></div>
+                      <div>👷 <b>Покрытие:</b> 4 200 из 6 000 рабочих → <b class="ec-dep-neg">70%</b> ставки</div>
+                      <div class="ec-dep-total">= 266 × 70% = ⛏ <b>~186/тик</b> на склад</div>
+                    </div>
+                  </details>
+                </div>
+                <div class="ec-res-dep ec-res-dep-off">
+                  <div class="ec-res-dep-main">
+                    <span class="ec-res-dname">⛏ <b>Кремний</b> <i class="ec-dep-rar">обычный · среднее</i> <span class="ec-dep-house-tag">🏗 без домика</span></span>
+                    <span class="ec-res-dwork">👷 0 / 900</span>
+                    <span class="ec-res-dbar"><span class="ec-res-bar"><span class="ec-res-bar-in" style="width:0%;background:#e94"></span></span><i>0%</i></span>
+                    <span class="ec-res-dstat"><span class="ec-dep-no">✗ нет рабочих</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<!-- ══ 2. УПРАВЛЕНИЕ КОЛОНИЯМИ · сцена планеты ══ -->
+<div class="hp-vn-colony hp-vn-planets mfh-scr" id="scr-col">
+  <div class="hp-vn-col-head">
+    <span class="hp-vn-col-title">Кита Прайм II</span>
+    <span class="hvp-headr"><button class="hp-vn-col-x hvp-back">↩ к списку</button><button class="hp-vn-col-x">↩ назад</button></span>
+  </div>
+  <div class="hp-vn-col-body hvp-body hvp-body-scene">
+    <div class="hvp-scene hvp-look-terran">
+      <div class="hvp-scene-grad"></div>
+      <div class="hvp-scene-hero">
+        <span class="fr-cap-hero-orbit hvp-hero-orbit"></span>
+        <span class="hvp-scene-cap"><span class="hvp-scene-nm">Кита Прайм II</span><i>земного типа</i></span>
+      </div>
+      <div class="hvp-tiles">
+        <button class="hvp-tile"><span class="hvp-tile-ic">🏭</span><span class="hvp-tile-nm">Добывающий завод</span><span class="hvp-tile-sl">3</span></button>
+        <button class="hvp-tile on"><span class="hvp-tile-ic">🔬</span><span class="hvp-tile-nm">Научный центр</span><span class="hvp-tile-sl">2</span></button>
+        <button class="hvp-tile"><span class="hvp-tile-ic">🛡</span><span class="hvp-tile-nm">Планетарная оборона</span><span class="hvp-tile-sl">1</span></button>
+        <span class="hvp-tile hvp-tile-pend"><span class="hvp-tile-ic">⏳</span><span class="hvp-tile-nm">строится…</span></span>
+        <button class="hvp-tile hvp-tile-free"><span class="hvp-tile-ic">＋</span><span class="hvp-tile-nm">построить</span></button>
+        <button class="hvp-tile hvp-tile-free"><span class="hvp-tile-ic">＋</span><span class="hvp-tile-nm">построить</span></button>
+      </div>
+    </div>
+    <div class="hvp-side">
+      <div class="hp-vn-col-info hvp-info">
+        <div class="hvp-info-row"><span>Ячейки</span><b>4/6</b></div>
+        <div class="hvp-info-row"><span>Казна</span><b>128 400 ГС</b></div>
+        <div class="hvp-info-res"><span class="hvp-res-row">Программируемая материя</span><span class="hvp-res-row">Кремний</span></div>
+      </div>
+      <div class="hvp-manage hvp-manage-hint">Выберите здание на поверхности, чтобы управлять им, или нажмите «+», чтобы построить новое.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 3. ВЕСТНИК · Оповещения ══ -->
+<div class="hp-vn-colony hp-vn-geo hp-vn-est hp-vn-press mfh-scr" id="scr-news">
+  <div class="hp-vn-col-head">
+    <div class="hp-vn-col-title">Вестник державы</div>
+    <button class="hp-vn-col-x">↩ назад</button>
+  </div>
+  <div class="hp-vn-col-body pol-shell">
+    <div class="pol-railw"><div class="pol-rail">
+      <button class="pol-rail-b on"><span class="pol-rail-ic">🔔</span><span class="pol-rail-tx"><b>Оповещения</b><i>где о вас говорят</i></span></button>
+    </div></div>
+    <div class="pol-stage pol-body"><div class="pol-content">
+      <div class="fn-tab-sec">
+        <div class="fn-tab-hd"><span>🔔 Оповещения <span style="color:var(--t4);font-weight:400;font-size:12px">— упоминания вашей фракции</span></span></div>
+        <div class="fn-notif-list">
+          <div class="fn-notif-row">
+            <span class="fn-notif-ic">📰</span>
+            <div class="fn-notif-main">
+              <div class="fn-notif-title">Тетославия объявила о закрытии границ с Микустаном</div>
+              <div class="fn-notif-meta"><span class="fn-notif-kind">УПОМИНАНИЕ</span> · Тетославия · 2426.07.24</div>
+            </div>
+            <span class="fn-notif-arr">▸</span>
+          </div>
+          <div class="fn-notif-group open">
+            <div class="fn-notif-row fn-notif-summary">
+              <span class="fn-notif-ic">🏆</span>
+              <div class="fn-notif-main">
+                <div class="fn-notif-title">3 достижения: Микустан</div>
+                <div class="fn-notif-meta"><span class="fn-notif-kind">СВОДКА</span> · Микустан · 2426.07.24</div>
+              </div>
+              <span class="fn-notif-arr fn-notif-chev">▾</span>
+            </div>
+            <div class="fn-notif-sub">
+              <div class="fn-notif-subrow"><span class="fn-notif-subic">🏆</span><span class="fn-notif-subtitle">Первый межзвёздный караван доставлен в срок</span><span class="fn-notif-arr">▸</span></div>
+              <div class="fn-notif-subrow"><span class="fn-notif-subic">🏆</span><span class="fn-notif-subtitle">Колонизация десятого мира</span><span class="fn-notif-arr">▸</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+</div>
+<div class="mfh-sw">
+  <button onclick="sw('scr-mine')">Добыча</button>
+  <button onclick="sw('scr-col')">Колония</button>
+  <button onclick="sw('scr-news')">Оповещения</button>
+</div>
+<script>
+function sw(id){document.querySelectorAll('.mfh-scr').forEach(e=>{const on=e.id===id;e.classList.toggle('on',on);e.classList.toggle('show',on);});}
+</script>
+</body></html>

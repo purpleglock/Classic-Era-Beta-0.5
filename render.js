@@ -3387,9 +3387,128 @@ async function heroVNColonyClaim(systemId) {
   } finally { EC.busy = false; }
 }
 
+// ── ЗУМ И ПАНОРАМА карты колонизации ─────────────────────────────────────────
+// Кадр карты подогнан под ВСЮ державу целиком: чем она больше, тем мельче в нём
+// всё. Подписи мы держим в пикселях (см. px() в _heroColonyBuild), но у большой
+// державы их всё равно физически не влезает больше десятка — остальное игрок
+// достаёт зумом. Двигаем viewBox самого SVG (не CSS-transform): линии и текст
+// остаются векторно резкими, а px-размеры подписей растут вместе с масштабом.
+// Слушатели ставим ОДИН раз на документ: оверлей перерисовывается через
+// innerHTML (heroVNColonyRefresh), и любые обработчики на самом SVG умирали бы.
+let _hpvncZoomBound = false;
+const _hpvncMinVis = 0.14;   // максимальное приближение: 1/7 от полного кадра
+function _hpvncBase(svg) {
+  const a = String(svg.getAttribute('data-vb') || '').trim().split(/\s+/).map(Number);
+  return (a.length === 4 && a.every(isFinite)) ? { x: a[0], y: a[1], w: a[2], h: a[3] } : null;
+}
+function _hpvncNow(svg) {
+  const a = String(svg.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
+  return (a.length === 4 && a.every(isFinite)) ? { x: a[0], y: a[1], w: a[2], h: a[3] } : null;
+}
+// Применить кадр с зажимом: не мельче полного кадра, не крупнее _hpvncMinVis,
+// и всегда внутри границ полного кадра (уехать в пустоту нельзя).
+function _hpvncApply(svg, v) {
+  const b = _hpvncBase(svg); if (!b) return;
+  const k = Math.min(1, Math.max(_hpvncMinVis, v.w / b.w));
+  const w = b.w * k, h = b.h * k;
+  const x = Math.min(b.x + b.w - w, Math.max(b.x, v.x + (v.w - w) / 2));
+  const y = Math.min(b.y + b.h - h, Math.max(b.y, v.y + (v.h - h) / 2));
+  svg.setAttribute('viewBox', `${x.toFixed(1)} ${y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
+  svg.dataset.z = (b.w / w).toFixed(2);
+}
+// Мировых единиц на экранный пиксель. preserveAspectRatio="slice" вписывает кадр
+// по МЕНЬШЕЙ стороне (лишнее срезается), поэтому масштаб = min по осям.
+function _hpvncUPP(v, r) { return Math.min(v.w / r.width, v.h / r.height); }
+// Зум вокруг точки (клиентские координаты): точка под пальцем остаётся на месте.
+function _hpvncZoomAt(svg, factor, cx, cy) {
+  const v = _hpvncNow(svg); if (!v) return;
+  const r = svg.getBoundingClientRect(); if (!r.width || !r.height) return;
+  const upp = _hpvncUPP(v, r);
+  const ox = v.x + v.w / 2, oy = v.y + v.h / 2;                 // центр кадра сейчас
+  const wx = ox + (cx - (r.left + r.width / 2)) * upp;          // мир под пальцем
+  const wy = oy + (cy - (r.top + r.height / 2)) * upp;
+  const nw = v.w / factor, nh = v.h / factor;
+  // Масштаб растёт в factor раз ⇒ чтобы (wx,wy) остался в той же точке экрана,
+  // центр кадра приближается к нему в те же factor раз.
+  _hpvncApply(svg, { x: wx - (wx - ox) / factor - nw / 2, y: wy - (wy - oy) / factor - nh / 2, w: nw, h: nh });
+}
+// Кнопки масштаба: dir +1 ближе, −1 дальше, 0 — вернуть полный кадр державы.
+function heroVNColonyZoom(dir) {
+  const svg = document.querySelector('#hp-vn-colony .hpvnc-map:not(.hpvnc-sysmap)');
+  if (!svg) return;
+  if (!dir) { const b = _hpvncBase(svg); if (b) _hpvncApply(svg, b); return; }
+  const r = svg.getBoundingClientRect();
+  _hpvncZoomAt(svg, dir > 0 ? 1.5 : 1 / 1.5, r.left + r.width / 2, r.top + r.height / 2);
+}
+function _hpvncBindZoom() {
+  if (_hpvncZoomBound) return; _hpvncZoomBound = true;
+  const mapOf = e => {
+    const t = e.target;
+    const svg = t && t.closest ? t.closest('.hpvnc-map') : null;
+    return (svg && !svg.classList.contains('hpvnc-sysmap')) ? svg : null;
+  };
+  const pts = new Map();   // pointerId → {x,y}; два указателя = пинч
+  let svgA = null, moved = 0, pinch = 0;
+
+  document.addEventListener('wheel', e => {
+    const svg = mapOf(e); if (!svg) return;
+    e.preventDefault();
+    _hpvncZoomAt(svg, e.deltaY < 0 ? 1.18 : 1 / 1.18, e.clientX, e.clientY);
+  }, { passive: false });
+
+  document.addEventListener('pointerdown', e => {
+    const svg = mapOf(e); if (!svg) return;
+    svgA = svg; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
+    if (pts.size === 1) moved = 0;
+  });
+
+  document.addEventListener('pointermove', e => {
+    if (!svgA || !pts.has(e.pointerId)) return;
+    const prev = pts.get(e.pointerId);
+    const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size >= 2) {
+      const [a, b] = [...pts.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch > 0 && d > 0) _hpvncZoomAt(svgA, d / pinch, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      pinch = d; moved = 99;
+      e.preventDefault();
+      return;
+    }
+    moved += Math.hypot(dx, dy);
+    if (moved < 6) return;                       // микродрожь пальца — это всё ещё тап
+    const v = _hpvncNow(svgA); if (!v) return;
+    const r = svgA.getBoundingClientRect(); if (!r.width) return;
+    const upp = _hpvncUPP(v, r);
+    _hpvncApply(svgA, { x: v.x - dx * upp, y: v.y - dy * upp, w: v.w, h: v.h });
+    e.preventDefault();
+  }, { passive: false });
+
+  const up = e => {
+    if (!svgA) return;
+    pts.delete(e.pointerId);
+    if (pts.size < 2) pinch = 0;
+    if (pts.size === 0) {
+      // Панорама/пинч НЕ должны срабатывать как клик по системе (открылась бы
+      // карта системы или ушёл бы запрос колонизации). Гасим следующий клик.
+      if (moved >= 6) svgA.dataset.drag = '1';
+      svgA = null;
+    }
+  };
+  document.addEventListener('pointerup', up);
+  document.addEventListener('pointercancel', up);
+
+  document.addEventListener('click', e => {
+    const svg = mapOf(e); if (!svg) return;
+    if (svg.dataset.drag === '1') { delete svg.dataset.drag; e.stopPropagation(); e.preventDefault(); }
+  }, true);
+}
+
 // Сборка оверлея из данных кабинета (EC): территории ВСЕХ держав с заливками/границами/
 // гербами, стрелки экспансии, пул захватов и рабочие кнопки колонизации.
 function _heroColonyBuild(en) {
+  _hpvncBindZoom();
   const head = _heroColonyHead(en);
   const nf = n => (+n).toFixed(1);
   const EXP = '#5fe0a0';   // цвет экспансии — стрелки и цели колонизации
@@ -3439,7 +3558,7 @@ function _heroColonyBuild(en) {
   minX -= pad; minY -= pad; w += pad * 2; h += pad * 2;
   // Пропорции реального окна карты (оверлей уже в DOM) → рамка того же аспекта,
   // slice ничего не режет, государство всегда видно целиком.
-  let aspect = 1.5;
+  let aspect = 1.5, mwPx = 900, mhPx = 600;
   try {
     const host = document.getElementById('hp-vn-colony');
     if (host && host.clientWidth && host.clientHeight) {
@@ -3448,13 +3567,23 @@ function _heroColonyBuild(en) {
       const side = narrow ? 0 : Math.min(290, Math.max(190, W * 0.27)) + 14;
       const padX = 2 * Math.min(26, Math.max(14, W * 0.026));
       const mw = Math.max(1, W - side - padX);
-      const mh = Math.max(1, narrow ? Math.max(240, H * 0.46) : H - 48 - 28);
+      const mh = Math.max(1, narrow ? Math.max(280, H * 0.52) : H - 48 - 28);
+      mwPx = mw; mhPx = mh;
       aspect = Math.min(2.6, Math.max(0.7, mw / mh));
     }
   } catch (e) {}
   if (w / h < aspect) { const nw = h * aspect; minX -= (nw - w) / 2; w = nw; }
   else { const nh = w / aspect; minY -= (nh - h) / 2; h = nh; }
   const R = Math.max(w, h);
+  // ── МАСШТАБ: сколько мировых единиц в одном ЭКРАННОМ пикселе ──────────────
+  // Всё, что игрок должен ПРОЧИТАТЬ (подписи, ядра звёзд, ромбы целей, толщина
+  // нитей), меряем в пикселях и переводим сюда, а не через долю R. Раньше
+  // размеры были долей кадра: у державы в 3 системы кадр узкий и `R*0.019` давал
+  // ~14px, у державы в 40 систем тот же множитель — 3px, то есть карта тем
+  // нечитаемее, чем крупнее государство (и на телефоне вдвое хуже: mwPx ~350).
+  const PXU = w / Math.max(1, mwPx);
+  const px = n => n * PXU;              // px → мировые единицы
+  const atLeast = (worldN, minPx) => Math.max(worldN, px(minPx));
   const mIn = R * 0.14;   // поле включения ячеек/спрайтов, частично заходящих в кадр
   const inFrame = (x, y) => x >= minX - mIn && x <= minX + w + mIn && y >= minY - mIn && y <= minY + h + mIn;
   const ptsIn = pts => pts && pts.some(p => inFrame(p[0], p[1]));
@@ -3523,7 +3652,7 @@ function _heroColonyBuild(en) {
   let starsHtml = '';
   sysList.forEach(s => {
     if (!inFrame(s.x, s.y) || s.faction === 'rift') return;
-    const a = s.is_giant ? R * 0.02 : R * 0.012;
+    const a = atLeast(s.is_giant ? R * 0.02 : R * 0.012, s.is_giant ? 5 : 3.2);
     const c = STARC[s.star_type] || STARC.yellow;
     const ln = a * 2.6, wd = a * 0.045;
     // Блум — СТОПКОЙ полупрозрачных кругов, а не feGaussianBlur: на десятках
@@ -3554,8 +3683,8 @@ function _heroColonyBuild(en) {
   mine.forEach(s => {
     if (!inFrame(s.x, s.y)) return;
     const isCap = capSet.has(s.id);
-    const r = isCap ? R * 0.02 : R * 0.013;
-    const hitR = Math.max(r * 3.2, R * 0.04);
+    const r = atLeast(isCap ? R * 0.02 : R * 0.013, isCap ? 6 : 4);
+    const hitR = Math.max(r * 3.2, R * 0.04, px(22));   // палец: цель не меньше ~44px
     const cd = cellD.get(s.id);
     const region = cd ? `<path class="hpvnc-cell" d="${cd}" transform="translate(${nf(-s.x)},${nf(-s.y)})"
       fill="${myColor}" stroke="#eaf6ff" stroke-width="${nf(R * 0.0026)}" stroke-linejoin="round" style="pointer-events:none"></path>` : '';
@@ -3574,64 +3703,86 @@ function _heroColonyBuild(en) {
   });
 
   // ── Стрелки экспансии + пульсирующие кликабельные цели колонизации ──
+  // Подписи (и целей, и систем) собираем в ОДИН список кандидатов: рисуем их
+  // потом единым проходом с отсевом пересечений, иначе цели и названия систем
+  // накладываются друг на друга — каждый слой «не знает» о чужих плашках.
+  const lblCand = [];
   const canClaim = (typeof ecClaimsLeft === 'function' ? ecClaimsLeft() : 0) > 0;
-  let arrows = '', tNodes = '', tLabels = '';
+  let arrows = '', tNodes = '';
   claimIds.forEach(id => {
     const t = byId.get(id); if (!t || !inFrame(t.x, t.y)) return;
     let from = mine[0], best = Infinity;
     mine.forEach(s => { const d = Math.hypot(t.x - s.x, t.y - s.y); if (d < best) { best = d; from = s; } });
     const dx = t.x - from.x, dy = t.y - from.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
     arrows += `<line x1="${nf(from.x + ux * R * 0.02)}" y1="${nf(from.y + uy * R * 0.02)}" x2="${nf(t.x - ux * R * 0.035)}" y2="${nf(t.y - uy * R * 0.035)}" stroke="${EXP}" stroke-width="${nf(R * 0.0045)}" marker-end="url(#hpvncArrow)" opacity=".9"></line>`;
-    const tr = R * 0.016;
+    const tr = atLeast(R * 0.016, 8);
     const dia = r => `0,${nf(-r)} ${nf(r)},0 0,${nf(r)} ${nf(-r)},0`;
     tNodes += `<g transform="translate(${nf(t.x)},${nf(t.y)})" style="cursor:pointer" onclick="event.stopPropagation();heroVNColonyClaim('${jsq(id)}')">
-      <circle r="${nf(R * 0.032)}" fill="transparent"></circle>
+      <circle r="${nf(Math.max(R * 0.032, px(24)))}" fill="transparent"></circle>
       ${canClaim ? `<polygon points="${dia(tr)}" fill="none" stroke="${EXP}" stroke-width="${nf(R * 0.0022)}" opacity=".6"><animateTransform attributeName="transform" type="scale" values="1;1.9" dur="1.8s" repeatCount="indefinite"></animateTransform><animate attributeName="opacity" values=".6;0" dur="1.8s" repeatCount="indefinite"></animate></polygon>` : ''}
       <polygon points="${dia(tr)}" fill="rgba(8,14,22,.78)" stroke="${EXP}" stroke-width="${nf(R * 0.004)}" stroke-dasharray="${nf(R * 0.009)},${nf(R * 0.007)}" opacity="${canClaim ? '1' : '.5'}"><title>${esc(t.name)} — ${canClaim ? (en ? 'colonize' : 'колонизировать') : (en ? 'on cooldown' : 'на перезарядке')}</title></polygon>
       <circle r="${nf(R * 0.0045)}" fill="${EXP}" opacity="${canClaim ? '1' : '.55'}"></circle>
     </g>`;
-    tLabels += `<text x="${nf(t.x)}" y="${nf(t.y - R * 0.03)}" fill="${EXP}" font-size="${nf(R * 0.02)}" text-anchor="middle" font-family="var(--font-mono)" opacity=".95" style="pointer-events:none">${esc(String(t.name || '').slice(0, 16))}</text>`;
+    lblCand.push({ s: t, kind: 'claim', prio: 0, up: true });
   });
 
   // ── Метки систем: мои и столицы — на гранёной плашке; остальные звёзды
   //    в кадре — лёгкий текст с тёмной обводкой (чтобы всё было читаемо). ──
-  //    АДАПТИВНОСТЬ: чем больше систем в кадре (большая держава), тем мельче
-  //    шрифт и тем строже прячем второстепенные метки — иначе плашки с
-  //    названиями наползают друг на друга и превращаются в кашу. ──
-  let inFrameCount = 0, mineInFrameCount = 0;
-  sysList.forEach(s => {
-    if (inFrame(s.x, s.y) && s.faction !== 'rift' && !claimSet.has(s.id)) {
-      inFrameCount++; if (mineIds.has(s.id)) mineInFrameCount++;
-    }
-  });
-  // Шрифт сжимается ∝ 1/√(число моих систем): суммарная «краска» подписей
-  // держится примерно постоянной, метки не растут в кучу.
-  const lblK = Math.max(0.42, Math.min(1, Math.sqrt(13 / Math.max(1, mineInFrameCount))));
-  const showNeutral = inFrameCount <= 34;     // на крупной карте чужие звёзды не подписываем
-  const dense = mineInFrameCount > 26;        // много своих → плашка только у столиц, прочее — лёгкий текст
-  let labels = '';
-  const fs = R * 0.019 * lblK;
+  //    ЧИТАЕМОСТЬ У БОЛЬШИХ ДЕРЖАВ: шрифт задан в ПИКСЕЛЯХ (px() выше), поэтому
+  //    он одинаков и у державы в 3 системы, и у державы в 50 — карта просто
+  //    вмещает меньше подписей. Сколько именно вместится, решает не «догадка по
+  //    числу систем» (прежние lblK/dense/showNeutral: они всё равно давали кашу,
+  //    потому что не смотрели, где метки реально лежат), а ОТСЕВ ПЕРЕСЕЧЕНИЙ:
+  //    кандидаты идут по приоритету (цели колонизации → столицы → мои → чужие),
+  //    и метка рисуется, только если её прямоугольник ещё свободен. Остальные
+  //    названия игрок достаёт зумом — свободного места становится больше.
   sysList.forEach(s => {
     if (!inFrame(s.x, s.y) || claimSet.has(s.id) || s.faction === 'rift') return;
-    const nm = String(s.name || ''); if (!nm) return;
+    if (!String(s.name || '')) return;
     const isMine = mineIds.has(s.id), isCap = capSet.has(s.id);
-    const plate = isCap || (isMine && !dense);
-    const ly = s.y + (s.is_giant ? R * 0.05 : R * 0.032);
-    if (!plate) {
-      if (!isMine && !isCap && !showNeutral) return;   // чужие метки на плотной карте прячем
-      const ofs = fs * 0.8;
-      const tint = isMine ? '#dfeafc' : '#c6d4e4';
-      labels += `<text x="${nf(s.x)}" y="${nf(ly + ofs * 0.34)}" fill="${tint}" font-size="${nf(ofs)}" text-anchor="middle" font-family="var(--font-mono)" letter-spacing=".5" opacity="${isMine ? '.92' : '.8'}" style="pointer-events:none;paint-order:stroke;stroke:#05080d;stroke-width:${nf(R * 0.0045)};stroke-linejoin:round">${esc(nm)}</text>`;
+    lblCand.push({ s, kind: isCap ? 'cap' : isMine ? 'mine' : 'other', prio: isCap ? 1 : isMine ? 2 : 3 });
+  });
+  lblCand.sort((a, b) => a.prio - b.prio);
+
+  const fs = px(12);                    // ~12 CSS-px в любом кадре и на любом экране
+  const gap = px(2);                    // зазор между плашками, чтобы не «слипались»
+  const placed = [];                    // занятые прямоугольники [x0,y0,x1,y1]
+  const free = (x0, y0, x1, y1) => !placed.some(r => x0 < r[2] + gap && x1 > r[0] - gap && y0 < r[3] + gap && y1 > r[1] - gap);
+  const take = (x0, y0, x1, y1) => { placed.push([x0, y0, x1, y1]); };
+  // Звезда занимает место сама — резервируем ядра, чтобы подпись не села на диск.
+  sysList.forEach(s => {
+    if (!inFrame(s.x, s.y) || s.faction === 'rift') return;
+    const a = atLeast(s.is_giant ? R * 0.02 : R * 0.012, s.is_giant ? 5 : 3.2);
+    take(s.x - a, s.y - a, s.x + a, s.y + a);
+  });
+
+  let labels = '';
+  lblCand.forEach(c => {
+    const s = c.s, nm = String(s.name || '');
+    const claim = c.kind === 'claim', plate = c.kind === 'cap' || c.kind === 'mine';
+    const txt = claim ? nm.slice(0, 16) : nm;
+    const ofs = plate ? fs : fs * 0.88;
+    const hw = txt.length * ofs * 0.31 + ofs * 0.5, hh = ofs * (plate ? 0.78 : 0.66);
+    // Цель колонизации подписываем НАД ромбом, остальные — под звездой.
+    const ly = claim ? s.y - Math.max(R * 0.03, px(17))
+      : s.y + atLeast(s.is_giant ? R * 0.05 : R * 0.032, s.is_giant ? 14 : 10);
+    if (!free(s.x - hw, ly - hh, s.x + hw, ly + hh)) return;
+    take(s.x - hw, ly - hh, s.x + hw, ly + hh);
+    if (claim) {
+      labels += `<text x="${nf(s.x)}" y="${nf(ly + ofs * 0.34)}" fill="${EXP}" font-size="${nf(ofs)}" text-anchor="middle" font-family="var(--font-mono)" opacity=".95" style="pointer-events:none;paint-order:stroke;stroke:#05080d;stroke-width:${nf(px(2.6))};stroke-linejoin:round">${esc(txt)}</text>`;
       return;
     }
-    const hw = nm.length * fs * 0.3 + fs * 0.5, hh = fs * 0.75;
+    if (!plate) {
+      labels += `<text x="${nf(s.x)}" y="${nf(ly + ofs * 0.34)}" fill="#c6d4e4" font-size="${nf(ofs)}" text-anchor="middle" font-family="var(--font-mono)" letter-spacing=".5" opacity=".8" style="pointer-events:none;paint-order:stroke;stroke:#05080d;stroke-width:${nf(px(2.6))};stroke-linejoin:round">${esc(txt)}</text>`;
+      return;
+    }
     // Гранёная плашка (срез верхнего левого и нижнего правого угла) + цветной тик слева
     const ct = hh * 0.75;
     const tick = mineIds.has(s.id) ? myColor : 'rgba(150,175,205,.55)';
     labels += `<g style="pointer-events:none">
-      <polygon points="${nf(s.x - hw + ct)},${nf(ly - hh)} ${nf(s.x + hw)},${nf(ly - hh)} ${nf(s.x + hw)},${nf(ly + hh - ct)} ${nf(s.x + hw - ct)},${nf(ly + hh)} ${nf(s.x - hw)},${nf(ly + hh)} ${nf(s.x - hw)},${nf(ly - hh + ct)}" fill="rgba(6,10,16,.82)" stroke="rgba(255,255,255,.13)" stroke-width="${nf(R * 0.0015)}"></polygon>
-      <rect x="${nf(s.x - hw)}" y="${nf(ly - hh + ct)}" width="${nf(Math.max(R * 0.0032, 0.6))}" height="${nf(hh * 2 - ct)}" fill="${tick}"></rect>
-      <text x="${nf(s.x)}" y="${nf(ly + fs * 0.34)}" fill="#e6f0fb" font-size="${nf(fs)}" text-anchor="middle" font-family="var(--font-display)" font-weight="700">${esc(nm)}</text>
+      <polygon points="${nf(s.x - hw + ct)},${nf(ly - hh)} ${nf(s.x + hw)},${nf(ly - hh)} ${nf(s.x + hw)},${nf(ly + hh - ct)} ${nf(s.x + hw - ct)},${nf(ly + hh)} ${nf(s.x - hw)},${nf(ly + hh)} ${nf(s.x - hw)},${nf(ly - hh + ct)}" fill="rgba(6,10,16,.82)" stroke="rgba(255,255,255,.13)" stroke-width="${nf(px(1))}"></polygon>
+      <rect x="${nf(s.x - hw)}" y="${nf(ly - hh + ct)}" width="${nf(px(2))}" height="${nf(hh * 2 - ct)}" fill="${tick}"></rect>
+      <text x="${nf(s.x)}" y="${nf(ly + ofs * 0.34)}" fill="#e6f0fb" font-size="${nf(ofs)}" text-anchor="middle" font-family="var(--font-display)" font-weight="700">${esc(nm)}</text>
     </g>`;
   });
 
@@ -3692,8 +3843,9 @@ function _heroColonyBuild(en) {
     </radialGradient>
   </defs>`;
   const vignette = `<rect x="${nf(minX)}" y="${nf(minY)}" width="${nf(w)}" height="${nf(h)}" fill="url(#hpvncVig)" style="pointer-events:none"></rect>`;
-  const cellW = nf(Math.max(R * 0.0016, 0.3)), laneW = nf(Math.max(R * 0.003, 0.5));
-  const mainSvg = `<svg class="hpvnc-map" viewBox="${nf(minX)} ${nf(minY)} ${nf(w)} ${nf(h)}" preserveAspectRatio="xMidYMid slice" style="--cell-w:${cellW};--lane-w:${laneW}" xmlns:xlink="http://www.w3.org/1999/xlink">
+  const cellW = nf(atLeast(R * 0.0016, 0.6)), laneW = nf(atLeast(R * 0.003, 1));
+  const vb = `${nf(minX)} ${nf(minY)} ${nf(w)} ${nf(h)}`;
+  const mainSvg = `<svg class="hpvnc-map" viewBox="${vb}" data-vb="${vb}" preserveAspectRatio="xMidYMid slice" style="--cell-w:${cellW};--lane-w:${laneW}" xmlns:xlink="http://www.w3.org/1999/xlink">
     ${defs}
     <g opacity=".85">${bgStars}</g>
     <g class="vor-layer" opacity=".46">${fillOther}</g>
@@ -3709,7 +3861,6 @@ function _heroColonyBuild(en) {
     <g>${tNodes}</g>
     ${vignette}
     <g>${labels}</g>
-    <g>${tLabels}</g>
   </svg>`;
 
   // ── Мини-обзор всей карты + рамка текущего кадра ──
@@ -3768,7 +3919,13 @@ function _heroColonyBuild(en) {
   </div>`;
 
   const body = `<div class="hp-vn-col-body">
-    <div class="hp-vn-col-main">${mainSvg}</div>
+    <div class="hp-vn-col-main">${mainSvg}
+      <div class="hpvnc-zoom">
+        <button type="button" onclick="event.stopPropagation();heroVNColonyZoom(1)" title="${en ? 'Zoom in' : 'Приблизить'}">+</button>
+        <button type="button" onclick="event.stopPropagation();heroVNColonyZoom(-1)" title="${en ? 'Zoom out' : 'Отдалить'}">−</button>
+        <button type="button" onclick="event.stopPropagation();heroVNColonyZoom(0)" title="${en ? 'Whole realm' : 'Вся держава'}">⤢</button>
+      </div>
+    </div>
     <aside class="hp-vn-col-side">
       ${dossier}
       <div class="hp-vn-col-mini"><span class="hp-vn-col-mini-cap">${en ? 'Sector overview' : 'Обзор сектора'}</span>${miniSvg}</div>
@@ -3777,7 +3934,7 @@ function _heroColonyBuild(en) {
         <div class="hp-vn-col-scroll">
           <div class="hp-vn-col-stat"><b>${claimIds.length}</b><span>${en ? 'systems to colonize' : 'систем для колонизации'}</span></div>
           <div class="hp-vn-col-stat"><b>${mine.length}</b><span>${en ? 'systems held' : 'систем под контролем'}</span></div>
-          <div class="hpvnc-hint">🔍 ${en ? 'Click your system on the map — its chart opens with planets to colonize.' : 'Клик по своей системе на карте — откроется карта системы с планетами.'}</div>
+          <div class="hpvnc-hint">🔍 ${en ? 'Click your system on the map — its chart opens with planets to colonize. Pinch or scroll to zoom, drag to pan.' : 'Клик по своей системе на карте — откроется карта системы с планетами. Пинч или колесо — зум, перетаскивание — панорама.'}</div>
           <div class="hp-vn-col-claimstat ${left > 0 ? 'ok' : 'cd'}">${statusHtml}</div>
           <div class="hp-vn-col-crows">${rows}</div>
         </div>
@@ -9765,7 +9922,17 @@ function heroVNPlanetsAll(open) {
   const el = document.getElementById('hp-vn-planets'); if (!el) return;
   el.querySelectorAll('.hvp-sys').forEach(g => { g.classList.toggle('off', !open); _hvp.closed[g.dataset.sys] = !open; });
 }
-function heroVNPlanetsBld(bldId) { if (_hvp.mode !== 'planet') return; _hvp.bldId = (_hvp.bldId === bldId ? null : bldId); _hvpRender(); }
+function heroVNPlanetsBld(bldId) {
+  if (_hvp.mode !== 'planet') return;
+  _hvp.bldId = (_hvp.bldId === bldId ? null : bldId);
+  _hvpRender();
+  // Телефон: панель управления стоит ПОД сценой, и с длинным списком участков
+  // она за нижним краем — тап по зданию выглядел как «ничего не произошло».
+  if (_hvp.bldId && window.matchMedia && matchMedia('(max-width:640px)').matches) {
+    const m = document.querySelector('#hp-vn-planets .hvp-manage');
+    if (m) requestAnimationFrame(() => m.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  }
+}
 function heroVNPlanetsBuild(colonyId) { if (typeof ecBuildPicker === 'function') ecBuildPicker(colonyId); }
 
 // ── Экран 1: перечень всех планет державы (карточки) ──

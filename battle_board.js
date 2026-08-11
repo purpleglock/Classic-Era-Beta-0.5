@@ -81,6 +81,7 @@ const BB_C = {
   hex:    'rgba(90,200,230,0.14)',
   hexIn:  'rgba(90,200,230,0.03)',
   mine:   '90,220,240',
+  ally:   '120,255,190',                  // союзник по стороне: свой, но не под моей рукой
   foe:    '255,60,130',
   move:   'rgba(90,220,240,0.18)',
   fire:   'rgba(255,60,130,0.22)',
@@ -88,6 +89,29 @@ const BB_C = {
   heal:   '120,255,190',                  // луч ремонтного нано-роя
   healZone: 'rgba(120,255,190,0.20)',     // подсветка союзников в режиме ремонта
 };
+
+// ── СВОЙ, СОЮЗНИК, ЧУЖОЙ ────────────────────────────────────
+// «Под моей рукой» (u.mine) и «свой» — РАЗНЫЕ вещи. На арене клуба на одну
+// сторону садится до трёх держав: их борта приходят с mine=false, и доска,
+// считавшая врагом всё немоё, красила союзника малиновым и тянула к нему
+// камеру как к чужому залпу. Правда о лагере — только в u.side.
+function bbFriend(u) {
+  const s = BB.st;
+  if (!u || !s) return false;
+  if (u.mine) return true;
+  if (s.my_side === 'spectator') return u.side === 'attacker';   // трибуна: «свои» = нападающий
+  return !!u.side && u.side === s.my_side;
+}
+function bbAlly(u) { return !!u && !u.mine && bbFriend(u); }     // свой, но чужой державы
+// Тон борта: мой — бирюза, союзный — та же зелень, что у ремонтного роя
+// (третий цвет в палитре уже есть, новых не заводим), чужой — малина.
+function bbTone(u) { return u && u.mine ? 'mine' : (bbFriend(u) ? 'ally' : 'foe'); }
+function bbToneCol(u) { return BB_C[bbTone(u)]; }
+
+// Держав на моей стороне больше одной? (battle_state.mates — состав стороны
+// с готовностью каждого). От этого зависит и опрос доски, и кнопка хода.
+function bbMates() { return (BB.st && Array.isArray(BB.st.mates)) ? BB.st.mates : []; }
+function bbHasMates() { return bbMates().length > 1; }
 
 // ── Открыть / закрыть ───────────────────────────────────────
 async function bbOpen(battleId, spectate, botFoe) {
@@ -200,7 +224,10 @@ function bbStartPoll() {
   BB.poll = setInterval(() => {
     if (!BB.id || !BB.st) return;
     if (BB.st.status === 'done') { bbStopPoll(); return; }
-    if (BB.st.my_turn) return;
+    // Свой ход опрашивать незачем — доска и так свежая ПОСЛЕ каждого действия.
+    // Но если сторона не одна держава, на своём же ходу ходит и союзник: без
+    // опроса его манёвры не видны до собственного клика.
+    if (BB.st.my_turn && !bbHasMates()) return;
     bbReload();
   }, 15000);
 }
@@ -219,6 +246,13 @@ async function bbReload() {
     return;
   }
   BB.st = next;
+  // Ход СТОРОНЫ и моё право ходить — разные вещи. На арене на одной стороне
+  // бывает до трёх держав: объявив готовность (i_ready), я жду союзников —
+  // мои борта до конца хода стороны замерли, и сервер их не пустит. Гасим
+  // my_turn: все гейты действий на доске уже завязаны на него, а «чей ход»
+  // спрашиваем у side_turn.
+  BB.st.side_turn = !!BB.st.my_turn;
+  if (BB.st.i_ready) BB.st.my_turn = false;
   // ландшафт → быстрый Map для проверок и рендера.
   // Две формы хранения: объект {"x:y":"ast"} у боёв с зонированием
   // (_bt_arena_zoning.sql) и массив [{x,y,t}] у боёв до него.
@@ -256,7 +290,8 @@ function bbEverMoved(u) { return !!u.moved || !!(BB.moveSeen && BB.moveSeen.has(
 function bbTurnKey(s) {
   if (!s || s.status !== 'active') return null;
   if (s.my_side === 'spectator') return 'side:' + (s.side_to_move || '');
-  return s.my_turn ? 'me' : 'foe';
+  // именно side_turn: собственная готовность — не передача хода противнику
+  return s.side_turn ? 'me' : 'foe';
 }
 // Баннер передачи хода: короткая вспышка поверх доски при переходе хода
 // от одной стороны к другой. Так виден сам факт «ход перешёл», а не только
@@ -321,25 +356,29 @@ function bbDiffAnimate(prev, cur) {
     if ((p.x !== u.x || p.y !== u.y) && !u.contact && !p.contact) {
       const mv = bbBuildMove(p, u);
       if (mv) BB.anim.move.set(u.id, mv);
-      if (!u.mine) { const c = bbHexCenter(u.x, u.y); foeAct.push(c); }
+      // Манёвр СОЮЗНИКА — не повод угонять кадр: он такой же «свой», как мои
+      // борта, и раньше камера скакала к нему на каждом его шаге.
+      if (!bbFriend(u)) { const c = bbHexCenter(u.x, u.y); foeAct.push(c); }
     }
     // попадание: корпус просел, но корабль жив
     if (p.hp != null && u.hp != null && u.hp < p.hp - 0.01) {
+      const fr = bbFriend(u);
       shots.push({ x: u.x, y: u.y, mine: u.mine, side: u.side, kind: 'hit',
                    dmg: p.hp - u.hp,      // величину урона знает только дифф снимков
-                   col: u.mine ? BB_C.mine : BB_C.foe, foe: spec || !!u.mine });
+                   col: bbToneCol(u), foe: spec || fr });
       // Камеру тянем ТОЛЬКО к чужой работе. Попадание по врагу — это наш
       // собственный выстрел: игрок уже смотрит куда надо, и увозить кадр
       // к цели (а при нескольких залпах — в середину между ними) незачем.
-      if (spec || u.mine) foeAct.push(bbHexCenter(u.x, u.y));
+      if (spec || fr) foeAct.push(bbHexCenter(u.x, u.y));
     }
   });
   // потери: были в прошлом кадре, пропали — взрыв на прежнем месте
   prev.forEach(p => {
     if (seen.has(p.id) || p.contact) return;
+    const fr = bbFriend(p);
     shots.push({ x: p.x, y: p.y, mine: p.mine, side: p.side, kind: 'boom',
-                 col: '255,150,60', foe: spec || !!p.mine });
-    if (spec || p.mine) foeAct.push(bbHexCenter(p.x, p.y));   // свой добитый враг камеру не двигает
+                 col: '255,150,60', foe: spec || fr });
+    if (spec || fr) foeAct.push(bbHexCenter(p.x, p.y));   // свой добитый враг камеру не двигает
   });
   // Раскладываем урон во времени. Залпы ПО НАМ (или всё, если зритель) — это
   // ход противника: показываем чередой, с трассером и дульной вспышкой у
@@ -413,13 +452,10 @@ function bbNearestShooter(ev, cur) {
   }
   return best;
 }
-// Цвет трассера/вспышки по стороне стрелка: мои — бирюза, чужие — малина;
-// для зрителя — по лагерю (нападающий/обороняющийся).
+// Цвет трассера/вспышки по стороне стрелка: мои — бирюза, союзные — зелень,
+// чужие — малина; для зрителя — по лагерю (нападающий/обороняющийся).
 function bbShooterCol(sh) {
-  if (sh.mine) return BB_C.mine;
-  if (BB.st && BB.st.my_side === 'spectator')
-    return sh.side === 'attacker' ? BB_C.mine : BB_C.foe;
-  return BB_C.foe;
+  return bbToneCol(sh);
 }
 
 // Плавный доворот+зум камеры: мировая точка (px,py) уезжает в центр вьюпорта,
@@ -461,8 +497,10 @@ async function bbMaybeBotTurn() {
     // (тогда сервер сам решит — «это не бой с ботами» просто проглотим).
     if (!BB.botFoe && !bbIsStaff()) return;
   }
-  // не мой ход = ход стороны-ботов (я — участник, боты — противник)
-  if (s.my_turn) return;
+  // не ход моей стороны = ход стороны-ботов (я — участник, боты — противник).
+  // Спрашиваем side_turn, а не my_turn: объявивший готовность всё ещё стоит
+  // на своём ходу и гонять за ботов ему рано.
+  if (s.side_turn) return;
   BB.botRunning = true;
   try {
     await ecRpc(club ? 'fc_bot_turn' : 'admin_bot_turn', { p_battle: BB.id });
@@ -496,14 +534,17 @@ function bbRender() {
   const mv = s.my_turn;
   const actsMax = s.acts_max || 6;
   const sel = (s.units || []).find(u => u.id === BB.sel);
+  // Ход стороны идёт, а я уже объявил готовность: доска смотрит, союзники доигрывают
+  const waiting = !done && s.side_turn && !!s.i_ready;
 
   // ── HUD: чей ход и сколько активаций осталось ──
   const turnLbl = done ? 'бой окончен'
     : (spec ? (s.side_to_move === 'attacker' ? esc(s.attacker_name || 'нападающий') : esc(s.defender_name || 'обороняющийся'))
-            : (mv ? 'ваш ход' : 'ход противника'));
+            : (waiting ? 'ход союзников' : (mv ? 'ваш ход' : 'ход противника')));
   const hud = `
-    <div class="bbf-hud${mv && !done ? ' bbf-hud-my' : ''}">
+    <div class="bbf-hud${(mv || waiting) && !done ? ' bbf-hud-my' : ''}">
       <span class="bbf-hud-t">${turnLbl}</span>
+      ${bbMatesChips(s)}
       ${!done && mv ? `<span class="bbf-hud-a">${'◆'.repeat(Math.max(0, s.acts_left || 0))}${'◇'.repeat(Math.max(0, actsMax - (s.acts_left || 0)))}</span>` : ''}
       <span class="bbf-hud-vs">${esc(myName)} · ${esc(foeName)}</span>
     </div>`;
@@ -591,8 +632,7 @@ function bbRender() {
         <button class="bbd-ic" onclick="bbZoomBtn(1/1.3)" title="Отдалить">−</button>
         <button class="bbd-ic" onclick="bbZoomBtn(1.3)" title="Приблизить">+</button>
         <button class="bbd-ic" onclick="bbCamHome()" title="К своим кораблям">⌂</button>
-        ${!done && mv ? `<button class="bbd-fire" onclick="bbEndTurn()">завершить ход</button>`
-                      : `<span class="bbf-wait">${done ? '' : bbDeadline(s)}</span>`}
+        ${bbEndTurnBtn(s, done)}
       </div>
     </div>`;
 
@@ -2937,10 +2977,45 @@ function bbLaunch(id) { return bbAct('battle_launch', { p_battle: BB.id, p_unit:
 function bbFire(id, tid) { return bbAct('battle_fire', { p_battle: BB.id, p_unit: id, p_target: tid }); }
 // Режим ремонта: следующий клик по союзному кораблю уйдёт нано-роем, а не в выбор.
 function bbHealMode() { BB.heal = !BB.heal; bbRender(); }
+// ── КОНЕЦ ХОДА НА ОБЩЕЙ СТОРОНЕ ─────────────────────────────
+// Когда на стороне одна держава, кнопка работает как раньше. Когда их
+// несколько (арена клуба сажает до трёх), «завершить ход» — это ГОТОВНОСТЬ:
+// ход стороны переворачивается, только когда отходили все. Иначе первый
+// нажавший обрывал союзникам манёвр на полуслове.
+function bbEndTurnBtn(s, done) {
+  if (done) return `<span class="bbf-wait"></span>`;
+  if (!s.side_turn) return `<span class="bbf-wait">${bbDeadline(s)}</span>`;
+  const mates = bbMates();
+  if (mates.length <= 1) return `<button class="bbd-fire" onclick="bbEndTurn()">завершить ход</button>`;
+  const ready = mates.filter(m => m.ready).length;
+  const wait = mates.filter(m => !m.ready).map(m => m.name || m.fid).join(', ');
+  return s.i_ready
+    ? `<button class="bbd-fire bbd-fire-wait" onclick="bbEndTurn()"
+         title="Ещё ходят: ${esc(wait)}. Нажмите, чтобы вернуться в ход">готов ${ready}/${mates.length} ✓</button>`
+    : `<button class="bbd-fire" onclick="bbEndTurn()"
+         title="Ход стороны кончится, когда отходят все">завершить ход ${ready}/${mates.length}</button>`;
+}
+// Состав своей стороны в шапке: чей ход ещё не закрыт — видно сразу, без
+// гадания «почему доска стоит».
+function bbMatesChips(s) {
+  const mates = bbMates();
+  if (mates.length <= 1 || s.status !== 'active' || !s.side_turn) return '';
+  return `<span class="bbf-hud-mates">${mates.map(m =>
+    `<i class="${m.ready ? 'on' : ''}${m.me ? ' me' : ''}" title="${esc(m.name || m.fid)}${
+      m.ready ? ' — ход закончен' : ' — ещё ходит'}">${esc(bbFacIni(m.name || m.fid))}</i>`).join('')}</span>`;
+}
 function bbEndTurn() {
-  if (!confirm('Завершить ход? Неиспользованные активации сгорят. Корабли в астероидах получат −10% корпуса, грав. колодцы подтянут ближние корабли.')) return;
+  const s = BB.st || {};
+  if (s.i_ready) {   // передумал: снимаем готовность, доигрываем
+    return bbAct('battle_end_turn', { p_battle: BB.id }, 'Готовность снята — ход продолжается');
+  }
+  const solo = bbMates().length <= 1;
+  if (!confirm(solo
+      ? 'Завершить ход? Неиспользованные активации сгорят. Корабли в астероидах получат −10% корпуса, грав. колодцы подтянут ближние корабли.'
+      : 'Завершить ход своей державой? Ваши борта до конца хода стороны замрут. Ход перейдёт противнику, когда отходят все союзники.')) return;
   BB.sel = null; BB.reach = null;
-  return bbAct('battle_end_turn', { p_battle: BB.id }, 'Ход передан противнику');
+  return bbAct('battle_end_turn', { p_battle: BB.id },
+               solo ? 'Ход передан противнику' : 'Ход закончен — ждём союзников');
 }
 function bbForce() {
   if (!confirm('Прожать просроченный ход противника? Его ход сгорит, корабли не будут действовать.')) return;
@@ -3709,7 +3784,7 @@ function bbSeamOwnKinds(s) {
 function bbPaintSeam(ctx, s) {
   if (!BB.hover || !s || !s.units) return;
   // захваченный радаром вражеский борт (у него в state есть броня/стойкости)
-  const t = s.units.find(u => u.x === BB.hover.x && u.y === BB.hover.y && !u.mine && u.locked);
+  const t = s.units.find(u => u.x === BB.hover.x && u.y === BB.hover.y && !bbFriend(u) && u.locked);
   if (!t) return;
   const rs = t.resist || {};
   // каналы показываем всегда (даже когда стойкостей нет — тогда по 0%)
@@ -4186,7 +4261,7 @@ function bbShipKey(cls, tIdx, side, hull) {
 
 function bbSprite(cls, tIdx, side, hull) {
   const key = bbShipKey(cls, tIdx, side, hull);
-  const col = side === 'mine' ? BB_C.mine : BB_C.foe;
+  const col = BB_C[side] || BB_C.foe;   // side: 'mine' | 'ally' | 'foe'
   const G = 'assets/constructors/';
   const gen = kind => G + 'ship_' + kind + '.webp';
   const cp = (kind, a, b) => G + 'ship_' + kind + '_' + a + (b != null ? '_' + b : '') + '.webp';
@@ -4280,11 +4355,12 @@ function bbShip(ctx, u, alpha) {
   const cx = uc.px, cy = uc.py, ang = uc.ang;
   const moving = u.id != null && BB.anim.move.has(u.id);
   const C = BB.R * 1.72;
-  const col = u.mine ? BB_C.mine : BB_C.foe;
+  const tone = bbTone(u);
+  const col = BB_C[tone];
   const dsn = bbDesignOf(u.name, u.cls);
   const tIdx = dsn && dsn.data && dsn.data.type != null ? dsn.data.type : null;
   const hull = dsn && dsn.data && dsn.data.hull ? dsn.data.hull : null;   // свой корпус колосса
-  const spr = bbSprite(u.cls, tIdx, u.mine ? 'mine' : 'foe', hull);
+  const spr = bbSprite(u.cls, tIdx, tone, hull);
   const g = spr._geo;
   const len = C * (0.42 + bbClsSize(u.cls) * 0.72);   // разброс шире: мелочь ≈1 гекс, дредноут ≈2
   const sc = len / g.hullW, dw = g.SW * sc, dh = g.SH * sc;

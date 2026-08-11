@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>colonize zoom harness — БОЛЬШАЯ держава</title>
+<link rel="stylesheet" href="css/index.css">
+<style>
+  body { background:#05080d; margin:0; }
+  /* Телефонная колонка: воспроизводим узкий экран без DevTools. */
+  #wrap { width:390px; height:780px; margin:0 auto; position:relative; outline:1px solid #234; }
+  #wrap.wide { width:1200px; height:800px; }
+  .hp-vn-colony { position:absolute; inset:0; display:block !important; }
+  #bar { color:#9ab; font:12px monospace; padding:6px; text-align:center }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button onclick="document.getElementById('wrap').classList.toggle('wide');redraw()">phone / desktop</button>
+  <button onclick="N=14;redraw()">14 систем</button>
+  <button onclick="N=45;redraw()">45 систем</button>
+  <span id="st"></span>
+</div>
+<div id="wrap"><div class="hp-vn-colony show" id="hp-vn-colony"></div></div>
+<script>
+function toast(m){ document.getElementById('st').textContent = ' ' + m; }
+var lang = 'ru';
+</script>
+<script src="render.js"></script>
+<script>
+if (typeof esc === 'undefined') window.esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+if (typeof jsq === 'undefined') window.jsq = s => String(s).replace(/'/g, "\\'");
+
+let N = 45;               // сколько систем у МОЕЙ державы — главный параметр проверки
+const NAMES = ['Келум','Вирго','Тарн','Гронд','Мороз','Синли','Лира','Третир','Зоцид','Сомну','Кресс','Ирвон','Ольта','Прома','Глифт','Вайрон','Найри','Веллихор','Нумо','Ретус','Инос','Энигма','Йолента','Септим','Цзаони','Милфония','Витанус','Лумея','Старлеб','Альтаир','Аркадия','Веридис','Астерия','Нова','Цетус','Гейра','Муия','Тиаз','Авалон','Сириус','Бискиты','Айлария','Итарис','Виталд','Аллокатор'];
+let SYS, FACS, mineIds, claim;
+
+function gen() {
+  // Решётка со сдвигом — похоже на реальную галактику: своя держава ядром,
+  // соседи по краям, ничейные системы на рубеже (цели колонизации).
+  SYS = []; let i = 0;
+  const cols = Math.ceil(Math.sqrt(N * 1.6));
+  for (let r = 0; r * cols < N + 18; r++) for (let c = 0; c < cols; c++) {
+    const id = 's' + (i);
+    const x = 200 + c * 170 + (r % 2) * 85 + ((i * 37) % 40);
+    const y = 200 + r * 150 + ((i * 53) % 40);
+    SYS.push({ id, name: NAMES[i % NAMES.length] + (i >= NAMES.length ? '-' + i : ''), x, y,
+      faction: i < N ? 'me' : (i < N + 10 ? 'f2' : null),
+      star_type: ['yellow','red','blue','white','green'][i % 5], is_giant: i % 11 === 0 });
+    i++;
+  }
+  mineIds = new Set(SYS.filter(s => s.faction === 'me').map(s => s.id));
+  claim = SYS.filter(s => !s.faction).slice(0, 3).map(s => s.id);
+  FACS = { me: { color: '#9a4fd0' }, f2: { color: '#3a8f6a' } };
+}
+
+const hex = (cx, cy, r, j) => Array.from({ length: 6 }, (_, k) => {
+  const a = Math.PI / 3 * k + (j || 0);
+  return [cx + Math.cos(a) * r * 0.95, cy + Math.sin(a) * r * 0.95];
+});
+
+function stubs() {
+  window.EC = { fid:'me', busy:false,
+    app:{ faction_id:'me', color:'#9a4fd0', name:'Соридонский союз систем', gov:'Технократия', leader:'Neverslo IX' },
+    eco:{ gc: 120000 }, allSystems: SYS, lanes: [], colonies:[{ id:'c1', system_id:'s0', is_capital:true }], buildings:[] };
+  window.ecMySysIds = () => mineIds;
+  window.ecClaimableIds = () => claim;
+  window.ecClaimsLeft = () => 1; window.ecClaimMax = () => 2;
+  window.ecClaimCost = () => 3000; window.ecClaimCdDays = () => 4; window.ecClaimCooldownMs = () => 0;
+  window.ecNum = n => (+n).toLocaleString('ru-RU');
+  window.gmFaction = fid => FACS[fid] || null;
+  window.GM = { loaded:true, systems: SYS, lanes: [], capitals:{ s0:true },
+    facMeta:{ me:{ color:'#9a4fd0' }, f2:{ color:'#3a8f6a' } } };
+  window.gmBuildGeo = () => ({
+    fills: SYS.map(s => ({ sys:s, fac: FACS[s.faction] || null, pts: hex(s.x, s.y, 95) })),
+    edges: SYS.filter(s => s.faction === 'me').map(s => ({ kind:'fac', color:'#9a4fd0', pts: hex(s.x, s.y, 95).slice(0,3) })),
+    lanes: SYS.slice(1).map((s, k) => ({ ax: SYS[k].x, ay: SYS[k].y, bx: s.x, by: s.y, cx:(SYS[k].x+s.x)/2, cy:(SYS[k].y+s.y)/2 })),
+  });
+}
+function redraw() { gen(); stubs(); document.getElementById('hp-vn-colony').innerHTML = _heroColonyBuild(false); }
+redraw();
+</script>
+</body>
+</html>
