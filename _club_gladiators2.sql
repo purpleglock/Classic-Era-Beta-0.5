@@ -4,6 +4,9 @@
 -- ────────────────────────────────────────────────────────────
 -- ЦЕПОЧКА: ПОСЛЕ _club_gladiators.sql, _bt_modules.sql, _bt_modules2.sql,
 --          _bt_weapon_model.sql, _bt_siege_hold.sql. Идемпотентно.
+-- ⚠ 12.08 ростер переведён на имперскую номенклатуру, четверым выданы карточки
+--   экипажа (_npc_roster_rework.sql). Имена и перки в §1 приведены к нынешней
+--   базе, чтобы перекат файла не откатывал переезд.
 -- ⚠ ПРИМЕНЁН 06.08. Перекатывать ТОЛЬКО вместе с _club_gladiators3.sql следом:
 --   §1 пересоздаёт борта с НОВЫМИ id (живая дуэль в forming ссылается на старые)
 --   и сбрасывает ценник арены, который ставит файл 3.
@@ -45,12 +48,17 @@ declare
   v_sum   jsonb;
 begin
   delete from public.faction_units where faction_id = v_fid and name = any(array[
-    'Гладиатор «Мурмиллон»', 'Гладиатор «Димахер»', 'Гладиатор «Секутор»',
-    'Гладиатор «Ретиарий»', 'Гладиатор «Провокатор»', 'Гладиатор «Андабат»',
-    'Гладиатор «Эквит»', 'Гладиатор «Велит»',
-    'Гладиатор «Ланиста»', 'Гладиатор «Гопломах»', 'Гладиатор «Крупеллярий»',
-    'Гладиатор «Эсседарий»', 'Гладиатор «Сагиттарий»', 'Гладиатор «Скиссор»',
-    'Гладиатор «Ноксий»', 'Гладиатор «Рудиарий»']);
+    'Имперский преторий «Мурмиллон»', 'Имперский легат «Димахер»', 'Имперский дестроер «Секутор»',
+    'Имперский ланцет «Ретиарий»', 'Имперский ликтор «Провокатор»', 'Имперский умбратор «Андабат»',
+    'Имперский сателлоид «Эквит»', 'Имперский скиммер «Велит»',
+    'Имперский магистрат «Ланиста»', 'Имперский торпедоносец «Гопломах»', 'Имперский монитор «Крупеллярий»',
+    'Имперский интерцептор «Эсседарий»', 'Имперский вигил «Сагиттарий»', 'Имперский абордажник «Скиссор»',
+    'Имперский брандер «Ноксий»', 'Имперский триарий «Рудиарий»']);
+  -- ⚠ 12.08 ростер переехал на имперскую номенклатуру (_npc_roster_rework.sql).
+  --   Сносим и борта под ДОПЕРЕЕЗДНЫМИ именами: иначе перекат этого файла на
+  --   базе, где переименование ещё не прошло, заведёт вторые шестнадцать.
+  delete from public.faction_units
+   where faction_id = v_fid and category = 'ship' and name like 'Гладиатор «%';
 
   -- ── Мурмиллон: стена арены. Замок + импульс брони = переживает залп ──
   v_data := jsonb_build_object(
@@ -59,10 +67,11 @@ begin
     'modules', jsonb_build_array(
       jsonb_build_object('g',v_K,'idx',4),     -- КАЗ, ПРО 0.35
       jsonb_build_object('g',v_K,'idx',25),    -- броневой замок
-      jsonb_build_object('g',v_K,'idx',32)));  -- импульс брони
+      jsonb_build_object('g',v_K,'idx',32)),    -- импульс брони
+    'perks', jsonb_build_array('perk.altaan'));  -- стена: держит удар
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Мурмиллон»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский преторий «Мурмиллон»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Стена арены: корпус, щит и активная защита против ракет. Теперь ещё и кнопки: «броневой замок» вдвое режет входящий урон на чужой ход, «импульс брони» накрывает тем же −35% всех своих в трёх гексах. Ставится впереди и держит — догнать он всё равно никого не догонит.');
 
   -- ── Димахер: два клинка. Ярость + беглый огонь = два залпа с бустом ──
@@ -74,7 +83,7 @@ begin
       jsonb_build_object('g',v_K,'idx',27)));  -- беглый огонь: залп вдвое дешевле
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Димахер»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский легат «Димахер»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Лазеры «Плага» на 6 гексов — вдвое дальше пушек. Круг решается одним ходом: «беглый огонь» делает залп вдвое дешевле по секундам, «Ярость» добавляет +60% урона обоим. Платит корпусом и отсутствием ПРО: размен в его пользу, пока по нему не попали.');
 
   -- ── Секутор: догоняющий. Прыжок в упор + плазменный таран ──
@@ -86,7 +95,7 @@ begin
       jsonb_build_object('g',v_K,'idx',15)));  -- плазменный таран сквозь щит
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Секутор»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский дестроер «Секутор»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Ответ на кайт. «Мгла» переносит его на пять гексов не тратя секунд — прямо в лицо стрелку, а плазменный таран проходит СКВОЗЬ щит в корпус. Прыжок, таран, залп рельсотронами — и дальнобойного борта больше нет. Промахнулся прыжком — стоит один посреди чужой эскадры.');
 
   -- ── Ретиарий: сеть. Тяга подтаскивает, «Буревестник» добивает ──
@@ -98,7 +107,7 @@ begin
       jsonb_build_object('g',v_K,'idx',8)));   -- «Буревестник»: залп на 12
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Ретиарий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский ланцет «Ретиарий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Сеть на 30 гексов и свой радар, чтобы наводиться без чужой помощи. Тяговый луч выдёргивает цель из-за укрытия на два гекса к себе, «Буревестник» кладёт сверху отдельный ракетный залп. Всё летящее — ракеты, поэтому чужая ПРО срезает его; догнали — умер.');
 
   -- ── Провокатор: РЭБ. Слепит радары и глушит чужие кнопки ──
@@ -111,7 +120,7 @@ begin
       jsonb_build_object('g',v_K,'idx',19)));  -- подавитель: цель не жмёт модули
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Провокатор»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский ликтор «Провокатор»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Не убивает — отключает. Постоянное глушение обрубает чужое наведение, скремблер сажает сенсоры всем врагам в трёх гексах, а ракета-подавитель на ход лишает выбранный борт ВСЕХ его модулей: ни осады, ни прыжка, ни ремонта. Против эскадры на кнопках стоит дороже любого урона.');
 
   -- ── Андабат: слепой боец. Вуаль поверх постоянной скрытности ──
@@ -123,7 +132,7 @@ begin
       jsonb_build_object('g',v_R,'idx',10)));  -- «Вуаль»: +8 скрытности на ход
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Андабат»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский умбратор «Андабат»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Стреляет раньше, чем его опознают: ракеты на 30 гексов из-под маскировки. «Вуаль» добавляет +8 к скрытности до своего следующего хода — по непойманному контакту просто не стреляют. Контрится «Эквитом»: сенсор вскрывает поле, а корпуса у «Андабата» на один залп.');
 
   -- ── Эквит: дозор. Видит всех и разгоняет чужой залп ──
@@ -132,10 +141,11 @@ begin
     'weapons', jsonb_build_array(jsonb_build_object('g','КИНЕТИЧЕСКОЕ ВООРУЖЕНИЕ','idx',0,'q',2)),
     'modules', jsonb_build_array(
       jsonb_build_object('g',v_R,'idx',5),     -- сенсор 4
-      jsonb_build_object('g',v_K,'idx',20)));  -- ракета-усилитель: +75% союзнику
+      jsonb_build_object('g',v_K,'idx',20)),   -- ракета-усилитель: +75% союзнику
+    'perks', jsonb_build_array('perk.shine'));  -- дозор: работает на других
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Эквит»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский сателлоид «Эквит»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Глаза отряда за двадцать тысяч: вскрывает маскировку «Андабата» и держит наведение под глушением. Сам почти не бьёт — зато ракетой-усилителем разгоняет орудийный контур союзника на 75% с десяти гексов. Дешёвый корвет, который стреляет чужими пушками.');
 
   -- ── Велит: рой. Намеренно БЕЗ модулей — цена всему голова ──
@@ -145,7 +155,7 @@ begin
     'modules', '[]'::jsonb);
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Велит»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский скиммер «Велит»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Самый дешёвый боец арены и единственный без единой кнопки: три «Феникса» на 15 гексов, и всё. Берут его числом — на бюджет эскадры их влезает столько, сколько влезет на доску. Залп ракетный, поэтому одна активная защита обесценивает половину стаи.');
 
   -- ── Ланиста: командный борт. Хорал + импульс брони + дроны ──
@@ -158,7 +168,7 @@ begin
       jsonb_build_object('g',v_K,'idx',12)));  -- ремонтные дроны: 2500 корпуса союзнику
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Ланиста»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский магистрат «Ланиста»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Хозяин школы: сам дерётся вполсилы, а строй вокруг него бьёт как один корабль. «Хорал» даёт +50% урона всем своим в трёх гексах, импульс брони — −35% входящего им же, ремонтные дроны латают подбитого. Всё это работает только в плотном строю: разбежались — «Ланиста» бесполезен.');
 
   -- ── Гопломах: торпедоносец. «Голиаф» и «Шквал» ──
@@ -170,7 +180,7 @@ begin
       jsonb_build_object('g',v_K,'idx',14)));  -- «Шквал»: 5600 в упор на 5
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Гопломах»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский торпедоносец «Гопломах»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Копьё арены. Торпеда «Голиаф» выжигает гекс и всё вплотную к нему — включая ваши борта, если подошли близко; «Шквал» добивает в упор. Между пусками — четыре хода перезарядки и посредственные пушки: «Гопломах» опасен ровно дважды за бой, и оба раза надо угадать момент.');
 
   -- ── Крупеллярий: осадная батарея (арта, см. _krupellarius_arty.sql) ──
@@ -181,10 +191,11 @@ begin
     'weapons', jsonb_build_array(jsonb_build_object('g','ВЗРЫВНОЕ ВООРУЖЕНИЕ','idx',5,'q',2)),
     'modules', jsonb_build_array(
       jsonb_build_object('g',v_K,'idx',7),     -- осадная платформа «Кряж»
-      jsonb_build_object('g',v_K,'idx',4)));   -- КАЗ, чтобы пережить кайт
+      jsonb_build_object('g',v_K,'idx',4)),    -- КАЗ, чтобы пережить кайт
+    'perks', jsonb_build_array('perk.slow'));   -- арта: стоит и бьёт
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Крупеллярий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский монитор «Крупеллярий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Латник, который врос в грунт. Пусковые «Нови-Сад» бьют на тридцать гексов, а разложенный «Кряж» удваивает урон и отодвигает рубеж ещё на четверть — он расстреливает арену с края доски, не сходя с места. Цена честная: скорость три, щит тонкий, свёртывание платформы стоит двух ходов. Активная защита прикрывает от ракет, пока он перезаряжает свои.');
 
   -- ── Эсседарий: контролёр. Тяга, стазис, прыжок ──
@@ -197,7 +208,7 @@ begin
       jsonb_build_object('g',v_K,'idx',10)));  -- «Мгла»
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Эсседарий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский интерцептор «Эсседарий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Колесничий: прыгает в чужой строй, включает стазис — и каждому врагу в двух гексах следующий ход обходится вдвое дороже по секундам. Тяговый луч довешивает: выдёргивает одного к себе и оставляет без хода. Урон средний, смысл не в нём — он забирает у врага сам ход.');
 
   -- ── Сагиттарий: дебаффер с дистанции ──
@@ -209,7 +220,7 @@ begin
       jsonb_build_object('g',v_K,'idx',31)));  -- «Тартар»: стазис+иссушение+глушение шины
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Сагиттарий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский вигил «Сагиттарий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Лучник, который почти не наносит урона. «Ломовик» на десяти гексах вполовину срезает залп цели, «Тартар» на двенадцати вешает разом стазис, высаженную энергосеть и глухую шину — выбранный борт следующий ход фактически пропускает. Корвет: заметили — сбили.');
 
   -- ── Скиссор: свалка. Адские лазеры + разрывной таран ──
@@ -219,10 +230,11 @@ begin
     'modules', jsonb_build_array(
       jsonb_build_object('g',v_K,'idx',22),    -- адские лазеры: по всем врагам в 2
       jsonb_build_object('g',v_K,'idx',16),    -- разрывной таран: −30% стойкости
-      jsonb_build_object('g',v_K,'idx',28)));  -- энергогенератор: +2 секунды к ходу
+      jsonb_build_object('g',v_K,'idx',28)),   -- энергогенератор: +2 секунды к ходу
+    'perks', jsonb_build_array('perk.bloodlust')); -- свалка: живёт с добивания
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Скиссор»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский абордажник «Скиссор»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Оружие того, кого обступили: кольцо адских лазеров бьёт КАЖДОГО врага в двух гексах разом. Разрывной таран сдирает с цели стойкость брони — следующий залп по ней проходит на треть глубже, аварийный генератор докидывает две секунды на всё это. Один против роя стоит дороже, чем один против одного.');
 
   -- ── Ноксий: смертник с ядерной ракетой ──
@@ -234,7 +246,7 @@ begin
       jsonb_build_object('g',v_K,'idx',26)));  -- перезапуск: −2 хода со всех кулдаунов
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Ноксий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский брандер «Ноксий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Приговорённый. Ядерная ракета летит через полдоски и выжигает гекс со всем, что рядом; кулдаун пять ходов, но «перезапуск снаряжения» снимает с него два — второй пуск реален. Всё остальное у него корветское: одна попавшая по нему очередь, и пусковая не понадобится.');
 
   -- ── Рудиарий: ветеран. Стазис-боеприпас + беглый огонь + ПР-зонт ──
@@ -247,7 +259,7 @@ begin
       jsonb_build_object('g',v_K,'idx',23)));  -- ПР-лазеры: +30% перехвата себе и соседям
   v_sum := public._cn_recompute('ship', v_data);
   insert into public.faction_units (category,name,faction_id,faction_name,faction_color,owner_id,summary,data,card_text)
-  values ('ship','Гладиатор «Рудиарий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
+  values ('ship','Имперский триарий «Рудиарий»', v_fid, v_fname, v_fcol, null, v_sum, v_data,
     'Отпущенный на волю и вернувшийся сам. Заряжает стазис-боеприпас — и КАЖДЫЙ его залп сажает цель в вязкое поле; «беглый огонь» делает этих залпов два за ход. Противоракетные лазеры поднимают зонт над ним и соседями: в ракетной свалке рядом с ним стоять безопаснее всего.');
 end $$;
 

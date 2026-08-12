@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<title>Реестр флотов НПС — Классическая Эра</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   Оформление взято из проекта: css/01_tokens.css (графит 216°,
+   акцент электрик-блю 206°) и форма-язык из css/03_content.css —
+   срезанные углы клипом, «обводка» = слой-подложка (::before цвет
+   + ::after инсет-фон), НЕ border. Эффекты дозированы: один
+   интерфейсный акцент, цвет державы — только как метка секции.
+   Шрифты проекта (Rajdhani / Inter / JetBrains Mono) приходят с
+   Google Fonts; здесь они недоступны, поэтому стек падает на
+   системные — начертания и разрядка сохранены.
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --hue-space:216; --sat-space:14%;
+  --s0:hsl(216 14% 8%); --s1:hsl(216 14% 11%); --s2:hsl(216 14% 14%);
+  --s3:hsl(216 14% 17%); --s4:hsl(216 14% 21%);
+  --w1:rgba(255,255,255,.06); --w2:rgba(255,255,255,.10); --w3:rgba(255,255,255,.18);
+  --t1:hsl(216 10% 95%); --t2:hsl(216 10% 75%); --t3:hsl(216 15% 55%); --t4:hsl(216 20% 35%);
+  --gd:hsl(206 72% 55%); --gdl:hsl(206 72% 65%); --gdd:hsl(206 72% 45%);
+  --cy:hsl(192 80% 55%);
+  --rose:hsl(350 80% 60%);
+  --font-display:'Rajdhani','Exo 2',system-ui,sans-serif;
+  --font-body:'Inter','Exo 2',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono','Cascadia Mono',ui-monospace,monospace;
+  --cut:12px;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, hsl(216 20% 18% / .5) 0%, transparent 70%),
+    var(--s1);
+  color:var(--t1); font-family:var(--font-body); font-size:15px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px 80px}
+@media (max-width:640px){ .wrap{padding:0 12px 56px} }
+
+/* ── гранёная панель: клип + подложка-обводка + инсет-фон ─────── */
+.pan{
+  position:relative; z-index:0; background:transparent; border:none;
+  clip-path:polygon(0 0,calc(100% - var(--cut)) 0,100% var(--cut),100% 100%,var(--cut) 100%,0 calc(100% - var(--cut)));
+}
+.pan::before{content:"";position:absolute;inset:0;z-index:-2;
+  background:var(--pan-bd,color-mix(in srgb,var(--gd) 30%,transparent))}
+.pan::after{content:"";position:absolute;inset:1px;z-index:-1;
+  background:var(--pan-bg,hsl(216 22% 8% / .92));
+  clip-path:polygon(0 0,calc(100% - var(--cut)) 0,100% var(--cut),100% 100%,var(--cut) 100%,0 calc(100% - var(--cut)))}
+
+/* ── топбар ───────────────────────────────────────────────────── */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  padding:13px 18px;margin-top:22px;
+}
+.brand{display:flex;align-items:center;gap:10px;
+  font-family:var(--font-display);font-weight:700;text-transform:uppercase;
+  font-size:14px;letter-spacing:.18em;color:var(--t1)}
+.brand::before{content:"";width:11px;height:11px;background:var(--gd);
+  clip-path:polygon(0 0,100% 0,100% 100%)}
+.brand em{font-style:normal;color:var(--t3);letter-spacing:.14em}
+.stamp{font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--t3);text-align:right}
+.stamp b{color:var(--gdl);font-weight:400}
+
+/* ── заголовок сводки ─────────────────────────────────────────── */
+.hero{padding:40px 4px 4px}
+.eyebrow{font-family:var(--font-mono);font-size:10px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--gdl);margin:0 0 14px}
+h1{
+  font-family:var(--font-display);font-weight:700;text-transform:uppercase;
+  font-size:clamp(26px,4.6vw,44px);line-height:1.1;letter-spacing:.04em;
+  margin:0;color:var(--t1);text-wrap:balance;
+}
+h1 span{color:var(--gd)}
+.lede{max-width:70ch;color:var(--t2);margin:18px 0 0;font-size:15.5px}
+
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:26px 0 0}
+@media (max-width:700px){ .tiles{grid-template-columns:repeat(2,1fr)} }
+.tile{--cut:10px;padding:15px 16px}
+.tile b{display:block;font-family:var(--font-display);font-weight:700;font-size:32px;
+  line-height:1;color:var(--gdl);font-variant-numeric:tabular-nums}
+.tile span{display:block;margin-top:7px;font-family:var(--font-mono);font-size:9.5px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--t3);line-height:1.5}
+
+/* ── секция ───────────────────────────────────────────────────── */
+section{margin-top:44px}
+.sec-head{
+  position:relative;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:12px 18px;
+  border-bottom:1px solid color-mix(in srgb,var(--mark) 26%,transparent);
+  background:linear-gradient(90deg,color-mix(in srgb,var(--mark) 12%,transparent),transparent 68%);
+}
+.sec-head::after{content:"";position:absolute;left:0;bottom:-1px;width:140px;height:2px;
+  background:var(--mark);clip-path:polygon(0 0,100% 0,calc(100% - 8px) 100%,0 100%)}
+.sec-head h2{
+  display:flex;align-items:center;gap:10px;margin:0;
+  font-family:var(--font-display);font-weight:700;text-transform:uppercase;
+  font-size:clamp(15px,2vw,19px);letter-spacing:.14em;color:var(--t1);
+}
+.sec-head h2::before{content:"";width:11px;height:11px;background:var(--mark);
+  clip-path:polygon(0 0,100% 0,100% 100%)}
+.sec-head .who{font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--mark)}
+.sec-head .cnt{margin-left:auto;font-family:var(--font-mono);font-size:10px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--t3)}
+.snote{margin:0;padding:16px 18px 4px;color:var(--t2);max-width:78ch;font-size:14.5px}
+
+/* ── строка корабля ───────────────────────────────────────────── */
+.ships{display:flex;flex-direction:column;padding:8px 10px 12px}
+.ship{
+  display:grid;grid-template-columns:184px minmax(0,1fr) 214px;gap:0 20px;
+  align-items:center;padding:14px 8px;
+  border-top:1px solid var(--w1);
+}
+.ship:first-child{border-top:none}
+.silo svg{display:block;width:184px;height:52px;color:var(--t3);
+  transition:color var(--duration-fast,150ms) ease}
+.ship:hover .silo svg{color:var(--mark)}
+.nm{margin:0;font-family:var(--font-display);font-weight:700;text-transform:uppercase;
+  font-size:19px;letter-spacing:.08em;color:var(--t1)}
+.cls{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--mark);margin:0 0 5px}
+.txt{margin:7px 0 0;color:var(--t2);font-size:13.5px;line-height:1.55;max-width:60ch}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{
+  position:relative;z-index:0;display:inline-block;padding:5px 10px;
+  font-family:var(--font-mono);font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--t3);line-height:1;
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+}
+.chip::before{content:"";position:absolute;inset:0;z-index:-2;background:var(--chip-bd,var(--w2))}
+.chip::after{content:"";position:absolute;inset:1px;z-index:-1;background:hsl(216 20% 9%);
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+.chip.perk{--chip-bd:color-mix(in srgb,var(--gd) 55%,transparent);color:var(--gdl)}
+.chip.fresh{--chip-bd:color-mix(in srgb,var(--mark) 55%,transparent);color:var(--mark)}
+
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:5px 16px;margin:0;
+  font-family:var(--font-mono);font-size:11.5px;font-variant-numeric:tabular-nums}
+.stats div{display:flex;justify-content:space-between;gap:8px;
+  border-bottom:1px solid var(--w1);padding-bottom:3px}
+.stats dt{color:var(--t4);letter-spacing:.08em;text-transform:uppercase;font-size:9.5px}
+.stats dd{margin:0;color:var(--t1)}
+@media (max-width:880px){
+  .ship{grid-template-columns:132px minmax(0,1fr)}
+  .silo svg{width:132px;height:37px}
+  .stats{grid-column:1/-1;margin-top:12px;grid-template-columns:repeat(4,1fr)}
+}
+@media (max-width:560px){
+  .ship{grid-template-columns:1fr}
+  .silo{margin-bottom:8px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+}
+
+/* ── таблица арены ────────────────────────────────────────────── */
+.scroll{overflow-x:auto;padding:10px}
+table{border-collapse:collapse;width:100%;min-width:600px}
+th{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--t3);text-align:left;padding:9px 14px;background:hsl(216 16% 11%)}
+td{padding:11px 14px;border-top:1px solid var(--w1);vertical-align:middle;font-size:13.5px;color:var(--t2)}
+td.was{font-family:var(--font-mono);font-size:11px;color:var(--t4);text-decoration:line-through}
+td.now{font-family:var(--font-display);font-weight:700;text-transform:uppercase;
+  letter-spacing:.08em;font-size:15px;color:var(--t1);white-space:nowrap}
+td.now i{display:block;font-style:normal;font-family:var(--font-mono);font-weight:400;
+  font-size:9.5px;letter-spacing:.16em;color:var(--mark);margin-bottom:3px}
+td.pk{white-space:nowrap}
+tbody tr:hover td{background:hsl(216 16% 12% / .6)}
+
+/* ── врезка ───────────────────────────────────────────────────── */
+.fix{margin-top:44px;padding:24px 26px 26px;--pan-bd:color-mix(in srgb,var(--gd) 45%,transparent)}
+.fix h2{display:flex;align-items:center;gap:10px;margin:0 0 14px;
+  font-family:var(--font-display);font-weight:700;text-transform:uppercase;
+  font-size:18px;letter-spacing:.14em;color:var(--t1)}
+.fix h2::before{content:"";width:11px;height:11px;background:var(--gd);
+  clip-path:polygon(0 0,100% 0,100% 100%)}
+.fix .cap{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--gdl);margin:0 0 10px}
+.fix p{margin:0 0 12px;color:var(--t2);max-width:78ch;font-size:14.5px}
+.fix p:last-child{margin-bottom:0}
+.fix code{font-family:var(--font-mono);font-size:12.5px;color:var(--gdl)}
+.fix b{color:var(--t1);font-weight:600}
+
+footer{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  margin-top:34px;padding:0 4px;
+  font-family:var(--font-mono);font-size:9.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--t4)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+
+  <div class="pan topbar">
+    <div class="brand">Классическая Эра <em>· Реестр флотов</em></div>
+    <div class="stamp">Накат <b>_npc_roster_rework.sql</b><br>12.08.2026 · применён</div>
+  </div>
+
+  <div class="hero">
+    <p class="eyebrow">Ростеры НПС · накат 12.08.2026</p>
+    <h1>Вольница, арена и общий каталог —<br><span>заново под модули и перки</span></h1>
+    <p class="lede">
+Три ростера собраны до ввода активных модулей и карточек экипажа. У пиратов
+      были служебные имена и снаряжение, дописанное кусками; у арены перки стирались
+      при выходе на доску; у восьми общедоступных проектов список модулей был пуст.
+      Накат 12.08.2026 переписывает все три.
+    </p>
+
+    <div class="tiles">
+      <div class="pan tile"><b>38</b><span>проектов пересобрано</span></div>
+      <div class="pan tile"><b>14</b><span>бортов вольницы</span></div>
+      <div class="pan tile"><b>8</b><span>карточек экипажа</span></div>
+      <div class="pan tile"><b>16</b><span>переименований на арене</span></div>
+    </div>
+  </div>
+
+  <section class="pan" style="--mark:hsl(216 12% 62%)">
+    <div class="sec-head">
+      <h2>Вольница Эмпрогенны</h2>
+      <span class="who">Железный Дивизион</span>
+      <span class="cnt">14 бортов · 2 новых</span>
+    </div>
+    <p class="snote">
+Двенадцать корпусов переписаны целиком: класс, вооружение, набор модулей, имя.
+      ну и добавлены два новых борта. 
+    </p>
+    <div class="ships" id="fleet"></div>
+  </section>
+
+  <section class="pan" style="--mark:#ff3c82">
+    <div class="sec-head">
+      <h2>Имперское наследие</h2>
+      <span class="who">Бойцовский клуб</span>
+      <span class="cnt">16 бортов · 4 карточки</span>
+    </div>
+    <p class="snote">
+Роли и снаряжение не тронуты: этот ростер уже собирался под модули. Изменены
+      имена, вместо «Гладиатор» имперский класс корабля, прозвище бойца осталось
+      в кавычках. Перк выдан четверым.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Было</th><th>Стало</th><th>Роль на доске</th><th>Карточка</th></tr></thead>
+        <tbody id="arena"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="pan" style="--mark:hsl(192 80% 55%)">
+    <div class="sec-head">
+      <h2>Общий каталог</h2>
+      <span class="who">Пан-колониальные</span>
+      <span class="cnt">8 проектов</span>
+    </div>
+    <p class="snote">
+Каждому выдан набор модулей под его роль.
+    </p>
+    <div class="ships" id="open"></div>
+  </section>
+
+  <div class="pan fix">
+    <p class="cap">Побочная находка</p>
+    <h2>Перки у НПС не работали вообще</h2>
+    <p>
+<code>_bt_perks_of</code> требует, чтобы держава изучила одноимённый узел древа
+      и подходила по происхождению. У арены, ботов и вольницы нет ни экономики, ни
+      исследований, ни анкеты — поэтому любая карточка, записанная такому проекту,
+      стиралась при постановке борта на доску, без ошибки и без записи в лог.
+    </p>
+    <p>
+Добавлена функция <code>_perk_npc(fid)</code> — явный список НПС-держав
+      (<code>club</code>, <code>bot</code>, вольница). Для них проверка исследования и
+      происхождения пропускается. <b>Для живых держав правило не изменилось:</b>
+      узел древа должен быть изучен, происхождение — подходить.
+    </p>
+    <p>
+Два файла-предка приведены к текущей базе: <code>_club_gladiators2.sql</code>
+      создавал ростер под старыми именами, <code>_bot_roster_kit.sql</code> клонировал
+      пиратские варианты по именам доноров, которых больше нет. Повторный накат любого
+      из них дал бы дубли. Оба проверены прогоном в транзакции с откатом.
+    </p>
+  </div>
+
+  <footer>
+    <span>Классическая Эра · бета 0.5</span>
+    <span>12.08.2026</span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  /* Корпуса рисуются ТЕМ ЖЕ генератором, что и схема в верфи:
+     профиль класса из CN_HULL_PROFILES (constructors.js) → станции
+     cnGenStations → гранёный обвод cnHullOutlinePts. Вид сверху,
+     нос вправо; масштаб общий для всех классов, поэтому крейсер
+     на карточке действительно крупнее корвета. */
+  var PROF = {
+    corvette:[[0.00,0.00],[0.06,0.12],[0.09,0.13],[0.22,0.34],[0.25,0.35],
+      [0.30,0.24],[0.34,0.25],[0.44,0.62],[0.47,0.63],[0.53,0.46],[0.58,0.47],
+      [0.66,0.86],[0.69,0.88],[0.74,0.66],[0.79,0.68],[0.84,1.00],[0.93,0.98],[1.00,0.52]],
+    destroyer:[[0.00,0.00],[0.04,0.10],[0.07,0.11],[0.22,0.24],[0.25,0.25],
+      [0.27,0.66],[0.55,0.70],[0.58,0.40],[0.80,0.42],[0.83,0.98],[0.95,1.00],[1.00,0.86]],
+    cruiser:[[0.00,0.00],[0.05,0.14],[0.09,0.15],[0.18,0.40],[0.21,0.41],
+      [0.24,0.76],[0.50,0.78],[0.53,0.50],[0.74,0.52],[0.77,0.98],[0.94,0.98],[1.00,0.86]],
+    carrier:[[0.00,0.00],[0.06,0.34],[0.10,0.36],[0.14,0.86],[0.17,0.88],
+      [0.46,0.90],[0.49,0.72],[0.72,0.74],[0.75,0.94],[0.97,0.96],[1.00,0.90]]
+  };
+  /* KV-класс → корпус (CN_KV_HULL) и габариты (CN_SHIP_DIM: tip, stern, полубимс) */
+  var HULL = {corvette:'corvette', destroyer:'destroyer',
+              mediumCruiser:'cruiser', supportCarrier:'carrier'};
+  var DIM  = {corvette:[46,330,22], destroyer:[38,352,26],
+              cruiser:[40,350,32],  carrier:[40,360,44]};
+
+  function hullPath(kv){
+    var hk = HULL[kv] || 'destroyer', d = DIM[hk], prof = PROF[hk];
+    var tip = d[0], stern = d[1], beam = d[2];
+    /* станции [y вдоль оси, полуширина] — как cnGenStations */
+    var st = prof.map(function(p){
+      return [Math.round(tip + (stern - tip) * p[0]), Math.round(beam * p[1])];
+    });
+    /* обвод: правый борт вперёд, левый назад — как cnHullOutlinePts */
+    function side(w){
+      var R = st.map(function(p){ return [160 + p[1]*w, p[0]]; });
+      var L = st.slice().reverse().map(function(p){ return [160 - p[1]*w, p[0]]; });
+      return R.concat(L);
+    }
+    /* разворот на вид «нос вправо» + общий масштаб сцены */
+    function lay(poly){
+      return 'M' + poly.map(function(p){
+        return (392 - (p[1] - tip)).toFixed(1) + ',' + (55 + (p[0] - 160)).toFixed(1);
+      }).join('L') + 'Z';
+    }
+    return {hull:lay(side(1)), belt:lay(side(0.55))};
+  }
+
+  function silo(kv){
+    var g = hullPath(kv);
+    return '<div class="silo"><svg viewBox="0 0 400 110" preserveAspectRatio="xMidYMid meet" ' +
+      'aria-hidden="true" fill="none" stroke="currentColor" stroke-linejoin="miter">' +
+      '<path d="' + g.hull + '" stroke-width="1.4" vector-effect="non-scaling-stroke"/>' +
+      '<path d="' + g.belt + '" stroke-width="1" vector-effect="non-scaling-stroke" opacity=".4"/>' +
+      '</svg></div>';
+  }
+
+  var CLS = {corvette:'Корвет',destroyer:'Эсминец',
+             mediumCruiser:'Средний крейсер',supportCarrier:'Носитель'};
+
+  function num(n){ return n.toLocaleString('ru-RU'); }
+
+  function row(s){
+    var ch = s.mods.map(function(m){ return '<span class="chip">'+m+'</span>'; });
+    if (s.perk)  ch.unshift('<span class="chip perk">'+s.perk+'</span>');
+    if (s.fresh) ch.unshift('<span class="chip fresh">новый борт</span>');
+    return '<article class="ship">'+silo(s.cls)+
+      '<div><p class="cls">'+(CLS[s.cls]||'')+' · '+s.kind+'</p>'+
+      '<h3 class="nm">'+s.name+'</h3><p class="txt">'+s.text+'</p>'+
+      '<div class="chips">'+ch.join('')+'</div></div>'+
+      '<dl class="stats">'+
+        '<div><dt>ГС</dt><dd>'+num(s.cost)+'</dd></div>'+
+        '<div><dt>корпус</dt><dd>'+num(s.hp)+'</dd></div>'+
+        '<div><dt>залп</dt><dd>'+num(s.dmg)+'</dd></div>'+
+        '<div><dt>ход/рубеж</dt><dd>'+s.spd+'/'+s.rng+'</dd></div>'+
+      '</dl></article>';
+  }
+
+  var FLEET = [
+    {name:'«Король Кримзон»',kind:'монитор',cls:'mediumCruiser',
+     cost:189140,hp:7165,dmg:3108,spd:3,rng:30,perk:'Жажда крови',
+     mods:['осадная платформа','ядерная ракета','импульс «Хорал»'],
+     text:'Осадная платформа: урон ×2, рубеж ×1.25, свёртывание — два хода. Ядерная ракета: 14 000 по площади с 14 гексов, кулдаун 5 ходов. Скорость 3, щит тонкий.'},
+    {name:'«Адмирабилис»',kind:'флагман',cls:'mediumCruiser',
+     cost:172612,hp:7165,dmg:3120,spd:5,rng:6,perk:'Отчаяние',
+     mods:['импульс «Хорал»','импульс брони','ремонтные дроны'],
+     text:'«Хорал»: +50% урона себе и союзным в 3 гексах. Импульс брони: −35% входящего им же. Дроны: 2 500 корпуса одному борту. Своя энергетика бьёт на 6 гексов.'},
+    {name:'«Изерлон»',kind:'крепость',cls:'mediumCruiser',fresh:true,
+     cost:145163,hp:7165,dmg:4594,spd:2,rng:3,
+     mods:['осадная платформа','активная защита','«Эгида»'],
+     text:'Скорость 2, рубеж кинетики 3 гекса. Осадная платформа удваивает урон на месте, активная защита срезает ракеты, «Эгида» переводит на него залпы по соседям.'},
+    {name:'«Бутчер»',kind:'бронеход',cls:'mediumCruiser',
+     cost:144264,hp:7165,dmg:4594,spd:4,rng:3,perk:'Альтаанская стойкость',
+     mods:['«Эгида»','импульс брони','плазменный таран'],
+     text:'Корпус 7 165, броня 3. Плазменный таран бьёт сквозь щит в корпус, импульс брони даёт −35% входящего всем своим в 3 гексах. Работает только вплотную.'},
+    {name:'«Роковой Феникс»',kind:'носитель',cls:'supportCarrier',
+     cost:98022,hp:3029,dmg:2266,spd:4,rng:30,
+     mods:['ремонтные дроны','«Буревестник»','ПР-лазеры'],
+     text:'Авиагруппа и ангар, рубеж 30. Дроны чинят 2 500 корпуса, противоракетные лазеры дают +30% перехвата себе и соседям. Скорость 4, броня 2.'},
+    {name:'«Лас Ночес»',kind:'матка',cls:'supportCarrier',fresh:true,
+     cost:97519,hp:3029,dmg:6130,spd:2,rng:30,
+     mods:['ремонтные дроны','ракеты «Шквал»','ПР-лазеры'],
+     text:'Залп 6 130 — самый большой в вольнице. Скорость 2: на позицию выходит к третьему-четвёртому кругу. Чинит соседей и держит над ними противоракетный зонт.'},
+    {name:'«Ларпитель»',kind:'тендер',cls:'supportCarrier',
+     cost:90102,hp:3029,dmg:1176,spd:4,rng:30,
+     mods:['ремонтные дроны','ракета-усилитель','перезапуск снаряжения'],
+     text:'Залп 1 176. Дроны чинят 2 500 корпуса, ракета-усилитель даёт союзнику +75% урона на 10 гексов, перезапуск снимает по 2 хода со всех кулдаунов рядом.'},
+    {name:'«Жирнобровый»',kind:'рейдер',cls:'destroyer',
+     cost:61497,hp:2765,dmg:2372,spd:10,rng:3,perk:'Бимрайдер',
+     mods:['усилитель «Ярость»','прыжок «Мгла»','беглый огонь'],
+     text:'«Мгла» переносит на 5 гексов и не тратит секунд, беглый огонь делает залп вдвое дешевле, «Ярость» добавляет +60% урона. Корпус 2 765 — на два-три чужих залпа.'},
+    {name:'«Сквилер»',kind:'глушилка',cls:'destroyer',
+     cost:52465,hp:1822,dmg:808,spd:8,rng:3,
+     mods:['скремблер-импульс','ракета-подавитель','поле «Вуаль»'],
+     text:'Скремблер: −5 сенсоров всем врагам в 3 гексах. Подавитель: выбранный борт на ход не жмёт свои модули. «Вуаль»: +8 скрытности себе. Урон 808.'},
+    {name:'«Идофронт»',kind:'ловчий',cls:'destroyer',
+     cost:49738,hp:1822,dmg:374,spd:8,rng:30,
+     mods:['тяговый луч','ракета «Ломовик»','торпеда-иссушитель'],
+     text:'Тяга подтягивает цель на 2 гекса, «Ломовик» режет ей урон вдвое на 10 гексах, иссушитель сажает энергосеть. Свой залп 374.'},
+    {name:'«Кирхайс»',kind:'корсар',cls:'corvette',
+     cost:39735,hp:2505,dmg:2372,spd:10,rng:3,perk:'Терпение',
+     mods:['стазис-боеприпас','ПР-лазеры','усилитель «Ярость»'],
+     text:'Корвет с залпом 2 372 и корпусом 2 505. Стазис-боеприпас сажает цель в стазис каждым залпом, «Ярость» даёт +60% урона, ПР-лазеры — +30% перехвата соседям.'},
+    {name:'«Ишвар»',kind:'шершень',cls:'corvette',
+     cost:37825,hp:1575,dmg:158,spd:10,rng:15,
+     mods:['стазис-лучи','тяговый луч','ракета «Тартар»'],
+     text:'Урон 158. Стазис-лучи: всем врагам в 2 гексах ход вдвое дороже по секундам. «Тартар» на 12 гексов вешает стазис, иссушение и глушение шины разом.'},
+    {name:'«Лилит»',kind:'брандер',cls:'corvette',
+     cost:26776,hp:1575,dmg:489,spd:10,rng:3,
+     mods:['разрывной таран','прыжок «Мгла»','энергогенератор'],
+     text:'Прыжок на 5 гексов и разрывной таран: −30% стойкости брони у цели. Энергогенератор добавляет 2 секунды к ходу. Корпус 1 575.'},
+    {name:'«Джаставей»',kind:'катер',cls:'corvette',
+     cost:24617,hp:1575,dmg:316,spd:10,rng:15,
+     mods:['ракеты «Шквал»','прыжок «Мгла»','беглый огонь'],
+     text:'Самый дешёвый борт вольницы — 24 617 ГС. Четыре пусковые на 15 гексов, «Шквал» добавляет 5 600 в упор. Залп ракетный, чужая ПРО его срезает.'}
+  ];
+
+  var OPEN = [
+    {name:'Артиллерийский эсминец',kind:'огневая поддержка',cls:'destroyer',
+     cost:27987,hp:1822,dmg:2372,spd:8,rng:3,
+     mods:['осадная платформа','«Буревестник»'],
+     text:'Осадная платформа: урон ×2, рубеж ×1.25. «Буревестник» даёт отдельный ракетный залп на 12 гексов. Корпус 1 822.'},
+    {name:'Бронированный крейсер',kind:'линия',cls:'mediumCruiser',
+     cost:121107,hp:7165,dmg:1880,spd:4,rng:3,
+     mods:['«Эгида»','активная защита'],
+     text:'Корпус 7 165 — больше всех в общем каталоге. «Эгида» переводит на него залпы по соседям, активная защита срезает часть ракетного урона.'},
+    {name:'Корабль РЭБ',kind:'подавление',cls:'destroyer',
+     cost:38080,hp:1822,dmg:404,spd:6,rng:3,
+     mods:['радиотуман','скремблер-импульс','ракета-подавитель'],
+     text:'Постоянное глушение. Скремблер: −5 сенсоров всем врагам в 3 гексах. Подавитель: цель на ход не жмёт свои модули. Урон 404.'},
+    {name:'Радар-разведчик',kind:'наведение',cls:'destroyer',
+     cost:30785,hp:1822,dmg:163,spd:6,rng:3,
+     mods:['сенсорный контур','ракета-усилитель'],
+     text:'Сенсор вскрывает маскировку и держит наведение под глушением. Ракета-усилитель даёт союзнику +75% урона на 10 гексов. Свой залп 163.'},
+    {name:'Ракетный корвет',kind:'рой',cls:'corvette',
+     cost:15224,hp:1575,dmg:374,spd:7,rng:15,
+     mods:['«Буревестник»'],
+     text:'15 224 ГС, рубеж 15. Одна кнопка — ракетный залп на 12 гексов сверх штатного. Всё летящее ракетное, чужая активная защита его режет.'},
+    {name:'Ремонтный крейсер',kind:'обеспечение',cls:'mediumCruiser',
+     cost:56490,hp:3103,dmg:0,spd:4,rng:0,
+     mods:['ремонтные дроны','перезапуск снаряжения'],
+     text:'Урон 0. Дроны возвращают 2 500 корпуса одному борту, перезапуск снимает по 2 хода со всех кулдаунов рядом.'},
+    {name:'Стелс-разведчик',kind:'дозор',cls:'corvette',
+     cost:22515,hp:1575,dmg:163,spd:9,rng:3,
+     mods:['ренегатский транспондер','поле «Вуаль»'],
+     text:'Транспондер даёт стелс 3 постоянно, «Вуаль» добавляет +8 скрытности до своего следующего хода. Скорость 9, корпус 1 575.'},
+    {name:'Фрахтовщик «Лорелея»',kind:'ремонтный тендер',cls:'corvette',
+     cost:16000,hp:1575,dmg:0,spd:4,rng:0,
+     mods:['ремонтные дроны'],
+     text:'Урона нет. Одна кнопка — ремонтные дроны на 2 500 корпуса. Сводка ТТХ не пересчитана: именное орудие верфи не проходит текущий валидатор класса.'}
+  ];
+
+  var ARENA = [
+    ['Мурмиллон','Имперский преторий','стена строя: «Эгида» и импульс брони','Альтаанская стойкость'],
+    ['Димахер','Имперский легат','два залпа за ход на энергетике',''],
+    ['Секутор','Имперский дестроер','прыжок в упор и плазменный таран',''],
+    ['Ретиарий','Имперский ланцет','тяга и ракетный залп с тридцати',''],
+    ['Провокатор','Имперский ликтор','глушение, скремблер, подавитель',''],
+    ['Андабат','Имперский умбратор','стрельба из-под маскировки',''],
+    ['Эквит','Имперский сателлоид','сенсор и ракета-усилитель','Сияй другим'],
+    ['Велит','Имперский скиммер','рой без единой кнопки — цена всему голова',''],
+    ['Ланиста','Имперский магистрат','командный: «Хорал», броня, дроны',''],
+    ['Гопломах','Имперский торпедоносец','«Голиаф» по площади и «Шквал» в упор',''],
+    ['Крупеллярий','Имперский монитор','осадная батарея на тридцать гексов','Медленно и верно'],
+    ['Эсседарий','Имперский интерцептор','прыжок в строй, стазис, тяга',''],
+    ['Сагиттарий','Имперский вигил','дебаффер: «Ломовик» и «Тартар»',''],
+    ['Скиссор','Имперский абордажник','адские лазеры по всем вокруг','Жажда крови'],
+    ['Ноксий','Имперский брандер','ядерная ракета и перезапуск',''],
+    ['Рудиарий','Имперский триарий','стазис-боеприпас и беглый огонь','']
+  ];
+
+  document.getElementById('fleet').innerHTML = FLEET.map(row).join('');
+  document.getElementById('open').innerHTML  = OPEN.map(row).join('');
+  document.getElementById('arena').innerHTML = ARENA.map(function(r){
+    return '<tr><td class="was">Гладиатор «'+r[0]+'»</td>'+
+      '<td class="now"><i>'+r[1]+'</i>«'+r[0]+'»</td>'+
+      '<td>'+r[2]+'</td>'+
+      '<td class="pk">'+(r[3]?'<span class="chip perk">'+r[3]+'</span>':'<span style="color:var(--t4)">—</span>')+'</td></tr>';
+  }).join('');
+})();
+</script>
+
+</body>
+</html>

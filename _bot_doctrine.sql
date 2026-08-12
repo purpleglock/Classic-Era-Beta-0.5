@@ -175,7 +175,7 @@ create or replace function public._fc_place_bots(p_battle uuid, p_budget numeric
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare bot text := public._bt_bot_fid(); rf text := public._bt_bot_roster_default();
         sp jsonb; fc int; k numeric; spent numeric := 0; placed int := 0;
-        guard int := 0; cap int := least(public._bt_cap(), 18); xy int[]; sb jsonb;
+        guard int := 0; cap int := least(public._bt_cap(), 12); xy int[]; sb jsonb;
         doc jsonb; cand jsonb; roles text[]; rl text; lim numeric;
         by_role jsonb := '{}'::jsonb; dupcap int := 3;
         pick_id uuid; pick_price numeric; pick_role text; rest numeric;

@@ -86,6 +86,15 @@ $fn$;
 do $kit$
 declare r record; kit jsonb;
 begin
+  -- ⚠ 12.08 ростер вольницы переписан и переименован (_npc_roster_rework.sql):
+  --   «Сороки» и «Костолома» больше нет, а §4 ниже клонирует доноров по именам
+  --   и на новой базе завела бы вторых «Свечку» и «Штопор». Перекат этого файла
+  --   после наката рева — пустая операция.
+  if exists(select 1 from public.faction_units
+             where faction_id = 'fac_5bfbfad5f8' and name like '%Жирнобровый%') then
+    raise notice 'ростер вольницы уже переписан (_npc_roster_rework.sql) — §3 и §4 пропущены';
+    return;
+  end if;
   for r in select id, name from public.faction_units
             where category = 'ship' and faction_id = 'fac_5bfbfad5f8' loop
     kit := case
@@ -158,6 +167,11 @@ revoke all on function public._bt_bot_variant(text,text,jsonb,numeric,numeric,nu
 
 do $var$
 begin
+  if exists(select 1 from public.faction_units
+             where faction_id = 'fac_5bfbfad5f8' and name like '%Жирнобровый%') then
+    raise notice 'варианты вольницы заменены ростером _npc_roster_rework.sql — §4 пропущен';
+    return;
+  end if;
   -- Брандер: дешёвый, быстрый, идёт на размен тараном.
   perform public._bt_bot_variant('%Шакал%', 'Пиратский брандер «Свечка»',
     public._bt_mod_kit('15','10','28'), 0.80, 0.70, 0.50, 1.30);

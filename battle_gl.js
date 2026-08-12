@@ -936,6 +936,10 @@ function bgHullDepth(cls, x, hull) {
 // светящиеся дюзы в самом хвосте.
 function bgBuildShip(cls, tone, hullMask) {
   const grp = new THREE.Group();
+  // Огни/иллюминаторы красятся «свой–чужой». Раньше сюда приходил булев `mine`,
+  // потом параметр стал тоном ('mine'|'ally'|'foe'), а навеска ниже так и осталась
+  // на старом имени — отсюда `mine is not defined` и обвал шага «расстановка».
+  const mine = (typeof tone === 'string') ? (tone !== 'foe') : !!tone;
   const beam = bgHullBeam(cls, hullMask);
 
   const hull = new THREE.Mesh(bgHullGeo(cls, hullMask), bgHullMat(tone));

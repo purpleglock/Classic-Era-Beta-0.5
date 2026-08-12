@@ -3073,6 +3073,15 @@ async function renderDevlogTab(b) {
     </div>
 
     <div class="fg" style="margin-bottom:10px">
+      <label class="fl">Макет кадра</label>
+      <select class="fi" id="devlog-style">
+        <option value="shard">Клин — диагональный срез, номер во всю высоту</option>
+        <option value="band">Полоса — кино-каше, титр по низу</option>
+        <option value="stamp">Печать — центр, номер призраком за текстом</option>
+      </select>
+    </div>
+
+    <div class="fg" style="margin-bottom:10px">
       <label class="fl">Фоновое изображение</label>
       <input class="fi" id="devlog-bg" type="url" placeholder="https://..." oninput="updateDevlogBgPreview(this.value)">
     </div>
@@ -3193,6 +3202,7 @@ async function generateDevlogPreview() {
   const number = document.getElementById('devlog-number')?.value?.trim() || String(DEVLOG_FIRST_NUMBER);
   const bgUrl = document.getElementById('devlog-bg')?.value?.trim() || '';
   const sub = document.getElementById('devlog-sub')?.value?.trim() || '';
+  const style = document.getElementById('devlog-style')?.value || 'shard';
 
   const previewEl = document.getElementById('devlog-preview');
   if (!previewEl) return;
@@ -3200,7 +3210,7 @@ async function generateDevlogPreview() {
   previewEl.innerHTML = '<div class="sload"><div class="quote-loader">Генерация изображения...</div></div>';
   
   try {
-    const blob = await generateDevlogImage(project, number, bgUrl, { sub });
+    const blob = await generateDevlogImage(project, number, bgUrl, { sub, style });
     try { localStorage.setItem('wk_devlog_last', String(parseInt(number, 10) || DEVLOG_FIRST_NUMBER)); } catch (e) {}
     const url = URL.createObjectURL(blob);
     
@@ -3224,168 +3234,406 @@ async function generateDevlogPreview() {
 const DEVLOG_W = 1280, DEVLOG_H = 720;
 const DEVLOG_SAFE_X = 104, DEVLOG_SAFE_Y = 58;
 
+const DEVLOG_GOLD = '#e8b948';
+const DEVLOG_INK = '#05060b';
+const DEVLOG_FT = '"Rajdhani","Arial Narrow",Arial,sans-serif';
+const DEVLOG_FN = '"Arial Black",Impact,Arial,sans-serif';
+
+// ── Типографские примитивы (общие для всех макетов) ──────────────
+// Разрядка вручную: ctx.letterSpacing есть не везде.
+function _dlKit(ctx) {
+  const widthOf = (text, size, family, weight, tr) => {
+    ctx.save();
+    ctx.font = `${weight} ${size}px ${family}`;
+    let w = 0; for (const ch of text) w += ctx.measureText(ch).width + (tr || 0);
+    ctx.restore();
+    return Math.max(0, w - (tr || 0));
+  };
+  const tracked = (text, x, y, o) => {
+    o = o || {};
+    const tr = o.tr || 0;
+    ctx.save();
+    ctx.font = `${o.weight || '700'} ${o.size}px ${o.family || DEVLOG_FT}`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.globalAlpha = o.alpha == null ? 1 : o.alpha;
+    if (o.shadow !== false) {
+      ctx.shadowColor = 'rgba(0,0,0,0.85)';
+      ctx.shadowBlur = o.shadow || Math.max(6, o.size * 0.22);
+      ctx.shadowOffsetY = 2;
+    }
+    let cx = x;
+    if (o.align === 'center') cx = x - widthOf(text, o.size, o.family || DEVLOG_FT, o.weight || '700', tr) / 2;
+    else if (o.align === 'right') cx = x - widthOf(text, o.size, o.family || DEVLOG_FT, o.weight || '700', tr);
+    const startX = cx;
+    for (const ch of text) {
+      if (o.color) { ctx.fillStyle = o.color; ctx.fillText(ch, cx, y); }
+      if (o.stroke) { ctx.strokeStyle = o.stroke; ctx.lineWidth = o.strokeW || 2; ctx.strokeText(ch, cx, y); }
+      cx += ctx.measureText(ch).width + tr;
+    }
+    ctx.restore();
+    return { x: startX, w: cx - startX - tr };
+  };
+  // Перенос по словам с автоподбором кегля под maxLines
+  const wrap = (text, o) => {
+    let size = o.size;
+    for (let guard = 0; guard < 14; guard++) {
+      const words = text.split(/\s+/).filter(Boolean);
+      const lines = []; let line = '';
+      for (const w of words) {
+        const t = line ? line + ' ' + w : w;
+        if (widthOf(t, size, o.family || DEVLOG_FT, o.weight || '700', o.tr || 0) > o.maxW && line) { lines.push(line); line = w; }
+        else line = t;
+      }
+      if (line) lines.push(line);
+      if (lines.length <= o.maxLines || size <= (o.min || 18)) return { lines: lines.slice(0, o.maxLines), size };
+      size -= 2;
+    }
+    return { lines: [text], size };
+  };
+  return { widthOf, tracked, wrap };
+}
+
+// Плёночное зерно + скан-линии: снимает «пластиковость» канваса
+function _dlGrain(ctx, W, H, alpha) {
+  const t = document.createElement('canvas');
+  t.width = t.height = 128;
+  const tc = t.getContext('2d');
+  const im = tc.createImageData(128, 128);
+  for (let i = 0; i < im.data.length; i += 4) {
+    const v = 110 + Math.random() * 145;
+    im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255;
+  }
+  tc.putImageData(im, 0, 0);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.globalCompositeOperation = 'overlay';
+  const p = ctx.createPattern(t, 'repeat');
+  ctx.fillStyle = p; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = 0.045; ctx.fillStyle = '#000';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.restore();
+}
+
+// Фон: cover-вписывание + кино-грейд (лёгкая десатурация и контраст)
+async function _dlBackdrop(ctx, W, H, bgUrl) {
+  if (bgUrl && bgUrl.trim()) {
+    try {
+      const img = await _loadImagePromise(bgUrl);
+      const scale = Math.max(W / img.width, H / img.height);
+      const sw = img.width * scale, sh = img.height * scale;
+      ctx.save();
+      try { ctx.filter = 'saturate(0.82) contrast(1.10) brightness(0.94)'; } catch (e) {}
+      ctx.drawImage(img, (W - sw) / 2, (H - sh) / 2, sw, sh);
+      ctx.restore();
+      // холодная тень / тёплый свет — разводим по диагонали
+      ctx.save();
+      ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = 0.5;
+      const g = ctx.createLinearGradient(0, H, W, 0);
+      g.addColorStop(0, '#0d2340'); g.addColorStop(1, '#4a3a12');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+      return true;
+    } catch (e) { /* падаем на процедурный фон */ }
+  }
+  _drawDarkBg(ctx, W, H);
+  // звёздное поле, чтобы «пустой» кадр не выглядел заглушкой
+  ctx.save();
+  for (let i = 0; i < 240; i++) {
+    const x = Math.random() * W, y = Math.random() * H, r = Math.random() * 1.4 + 0.2;
+    ctx.globalAlpha = 0.15 + Math.random() * 0.55;
+    ctx.fillStyle = Math.random() > 0.85 ? DEVLOG_GOLD : '#cfe0ff';
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+  const halo = ctx.createRadialGradient(W * 0.72, H * 0.30, 0, W * 0.72, H * 0.30, H * 0.75);
+  halo.addColorStop(0, 'rgba(232,185,72,0.20)');
+  halo.addColorStop(0.45, 'rgba(60,90,160,0.12)');
+  halo.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = halo; ctx.fillRect(0, 0, W, H);
+  return false;
+}
+
+function _dlVignette(ctx, W, H, power) {
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.34, W / 2, H / 2, H * 0.98);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, `rgba(0,0,0,${power == null ? 0.58 : power})`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+function _dlDateStr() {
+  return new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+    .replace(' г.', '').toUpperCase();
+}
+
+async function _dlEmblem() {
+  try { return await _loadImagePromise('assets/wiki-emblem.png'); } catch (e) { return null; }
+}
+
 async function generateDevlogImage(project, number, bgUrl, opts) {
   opts = opts || {};
   const W = DEVLOG_W, H = DEVLOG_H;
-  const SX = DEVLOG_SAFE_X, SY = DEVLOG_SAFE_Y;
-  const GOLD = '#e8b948';
-  const x0 = SX + 36;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
 
   try { await document.fonts?.ready; } catch (e) {}
 
-  // ── 1. Фон
-  if (bgUrl && bgUrl.trim()) {
-    try {
-      const img = await _loadImagePromise(bgUrl);
-      const scale = Math.max(W / img.width, H / img.height);
-      const sw = img.width * scale, sh = img.height * scale;
-      ctx.drawImage(img, (W - sw) / 2, (H - sh) / 2, sw, sh);
-    } catch (e) { _drawDarkBg(ctx, W, H); }
-  } else {
-    _drawDarkBg(ctx, W, H);
-  }
-
-  // ── 2. Затемнение: левая колонка, низ, виньетка
-  const gL = ctx.createLinearGradient(0, 0, W * 0.68, 0);
-  gL.addColorStop(0, 'rgba(5,6,11,0.95)');
-  gL.addColorStop(0.45, 'rgba(5,6,11,0.80)');
-  gL.addColorStop(1, 'rgba(5,6,11,0)');
-  ctx.fillStyle = gL; ctx.fillRect(0, 0, W, H);
-
-  const gB = ctx.createLinearGradient(0, H - 240, 0, H);
-  gB.addColorStop(0, 'rgba(5,6,11,0)');
-  gB.addColorStop(1, 'rgba(5,6,11,0.80)');
-  ctx.fillStyle = gB; ctx.fillRect(0, H - 240, W, 240);
-
-  const gV = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.95);
-  gV.addColorStop(0, 'rgba(0,0,0,0)');
-  gV.addColorStop(1, 'rgba(0,0,0,0.55)');
-  ctx.fillStyle = gV; ctx.fillRect(0, 0, W, H);
-
-  // ── 3. Штриховка только в левой колонке
-  ctx.save();
-  ctx.beginPath(); ctx.rect(0, 0, W * 0.55, H); ctx.clip();
-  ctx.strokeStyle = 'rgba(232,185,72,0.05)';
-  ctx.lineWidth = 1;
-  for (let i = -H; i < W; i += 22) {
-    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i - H, H); ctx.stroke();
-  }
-  ctx.restore();
-
-  // ── 4. Рамка по безопасной зоне + золотые уголки
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(SX + 0.5, SY + 0.5, W - SX * 2, H - SY * 2);
-
-  ctx.strokeStyle = GOLD; ctx.lineWidth = 2;
-  const cl = 46;
-  [[SX, SY, 1, 1], [W - SX, SY, -1, 1], [SX, H - SY, 1, -1], [W - SX, H - SY, -1, -1]]
-    .forEach(([x, y, dx, dy]) => {
-      ctx.beginPath();
-      ctx.moveTo(x + dx * cl, y); ctx.lineTo(x, y); ctx.lineTo(x, y + dy * cl);
-      ctx.stroke();
-    });
-
-  // Разрядка (letter-spacing) вручную — работает везде
-  const tracked = (text, x, y, size, family, weight, color, tr, alpha) => {
-    ctx.save();
-    ctx.font = `${weight} ${size}px ${family}`;
-    ctx.textAlign = 'left';
-    ctx.fillStyle = color;
-    ctx.globalAlpha = alpha == null ? 1 : alpha;
-    ctx.shadowColor = 'rgba(0,0,0,0.85)';
-    ctx.shadowBlur = Math.max(6, size * 0.25);
-    ctx.shadowOffsetY = 2;
-    let cx = x;
-    for (const ch of text) { ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width + tr; }
-    ctx.restore();
-    return cx - x - tr;
-  };
-  const widthOf = (text, size, family, weight, tr) => {
-    ctx.save();
-    ctx.font = `${weight} ${size}px ${family}`;
-    let w = 0; for (const ch of text) w += ctx.measureText(ch).width + tr;
-    ctx.restore();
-    return Math.max(0, w - tr);
+  const st = {
+    W, H,
+    SX: DEVLOG_SAFE_X, SY: DEVLOG_SAFE_Y,
+    project: (project || '').toUpperCase(),
+    number: String(number),
+    sub: (opts.sub || '').trim().toUpperCase(),
+    date: _dlDateStr(),
+    logo: await _dlEmblem(),
+    kit: _dlKit(ctx)
   };
 
-  const FT = '"Rajdhani","Arial Narrow",Arial,sans-serif';
-  const FN = '"Arial Black",Impact,Arial,sans-serif';
-
-  // ── 5. Шапка: эмблема + название проекта
-  ctx.textBaseline = 'alphabetic';
-  let headX = x0;
-  const EM = 58;
-  const emY = SY + 44;
-  try {
-    const logo = await _loadImagePromise('assets/wiki-emblem.png');
-    const ar = logo.width / logo.height || 1;
-    const ew = EM * ar, eh = EM;
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 14;
-    ctx.drawImage(logo, headX, emY, ew, eh);
-    ctx.restore();
-    headX += ew + 20;
-  } catch (e) {}
-
-  tracked(project.toUpperCase(), headX, emY + 40, 29, FT, '700', '#ffffff', 5);
-
-  // Линейка под шапкой
-  const ruleY = emY + EM + 30;
-  ctx.save();
-  ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.globalAlpha = 0.9;
-  ctx.beginPath(); ctx.moveTo(x0, ruleY); ctx.lineTo(x0 + 84, ruleY); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1; ctx.globalAlpha = 1;
-  ctx.beginPath(); ctx.moveTo(x0 + 96, ruleY); ctx.lineTo(W * 0.52, ruleY); ctx.stroke();
-  ctx.restore();
-
-  // ── 6. Номер выпуска
-  const kickY = ruleY + 74;
-  tracked('ДНЕВНИК РАЗРАБОТЧИКА', x0, kickY, 19, FT, '700', GOLD, 8);
-
-  const numY = kickY + 142;
-  const hashW = widthOf('№', 58, FN, '900', 0);
-  tracked('№', x0, numY - 74, 58, FN, '900', GOLD, 0, 0.9);
-  tracked(String(number), x0 + hashW + 12, numY, 148, FN, '900', '#ffffff', -2);
-
-  // ── 7. Тема выпуска: золотая черта + до 2 строк
-  const sub = (opts.sub || '').trim();
-  if (sub) {
-    const size = 32, lh = 42, maxW = W * 0.48 - (x0 - SX);
-    const words = sub.toUpperCase().split(/\s+/);
-    const lines = []; let line = '';
-    for (const w of words) {
-      const t = line ? line + ' ' + w : w;
-      if (widthOf(t, size, FT, '700', 2) > maxW && line) {
-        lines.push(line); line = w;
-        if (lines.length === 2) break;
-      } else line = t;
-    }
-    if (line && lines.length < 2) lines.push(line);
-
-    const topY = numY + 44;
-    ctx.save();
-    ctx.fillStyle = GOLD; ctx.globalAlpha = 0.9;
-    ctx.fillRect(x0, topY - 26, 3, lines.length * lh - 4);
-    ctx.restore();
-    lines.forEach((l, i) => tracked(l, x0 + 20, topY + i * lh, size, FT, '700', '#ffffff', 2, 0.95));
-  }
-
-  // ── 8. Дата
-  const dateStr = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
-    .replace(' г.', '').toUpperCase();
-  const dateY = H - SY - 32;
-  ctx.save();
-  ctx.fillStyle = GOLD;
-  ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 8;
-  ctx.fillRect(x0, dateY - 9, 9, 9);
-  ctx.restore();
-  tracked(dateStr, x0 + 22, dateY, 17, FT, '600', '#ffffff', 4, 0.9);
+  const painter = { shard: _dlPaintShard, band: _dlPaintBand, stamp: _dlPaintStamp }[opts.style] || _dlPaintShard;
+  st.hasBg = await _dlBackdrop(ctx, W, H, bgUrl);
+  painter(ctx, st);
+  _dlGrain(ctx, W, H, 0.055);
 
   return new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', 0.95));
+}
+
+// ── Макет 1: КЛИН ────────────────────────────────────────────────
+// Тёмный диагональный срез слева, номер во всю высоту колонки.
+function _dlPaintShard(ctx, st) {
+  const { W, H, SX, SY, kit } = st;
+  const { tracked, widthOf, wrap } = kit;
+  const topX = W * 0.575, botX = W * 0.440;   // диагональ среза
+  const x0 = SX + 30;
+
+  _dlVignette(ctx, W, H, 0.5);
+
+  // сам клин
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.lineTo(topX, 0); ctx.lineTo(botX, H); ctx.lineTo(0, H); ctx.closePath();
+  ctx.clip();
+  const g = ctx.createLinearGradient(0, 0, topX, H);
+  g.addColorStop(0, 'rgba(5,6,11,0.97)');
+  g.addColorStop(0.72, 'rgba(5,6,11,0.90)');
+  g.addColorStop(1, 'rgba(5,6,11,0.62)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // техническая штриховка внутри клина
+  ctx.strokeStyle = 'rgba(232,185,72,0.055)'; ctx.lineWidth = 1;
+  for (let i = -H; i < W; i += 26) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i - H, H); ctx.stroke(); }
+  ctx.restore();
+
+  // кромка клина: золото + световой отбив
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(topX, 0); ctx.lineTo(botX, H);
+  ctx.strokeStyle = DEVLOG_GOLD; ctx.lineWidth = 2.5;
+  ctx.shadowColor = 'rgba(232,185,72,0.55)'; ctx.shadowBlur = 18;
+  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(topX + 12, 0); ctx.lineTo(botX + 12, H);
+  ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(232,185,72,0.22)'; ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
+  // шапка: эмблема + проект
+  let hx = x0;
+  const EM = 54, emY = SY + 26;
+  if (st.logo) {
+    const ar = st.logo.width / st.logo.height || 1;
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 14;
+    ctx.drawImage(st.logo, hx, emY, EM * ar, EM); ctx.restore();
+    hx += EM * ar + 18;
+  }
+  tracked(st.project, hx, emY + 37, { size: 26, weight: '700', color: '#fff', tr: 5 });
+
+  // кикер
+  const kickY = H * 0.335;
+  ctx.save();
+  ctx.fillStyle = DEVLOG_GOLD; ctx.fillRect(x0, kickY - 9, 46, 3);
+  ctx.restore();
+  tracked('ДНЕВНИК РАЗРАБОТЧИКА', x0 + 62, kickY, { size: 20, weight: '700', color: DEVLOG_GOLD, tr: 9 });
+
+  // номер: «№» надстрочно, следом гигантская цифра
+  const numSize = 210, numY = kickY + numSize * 0.88;
+  const hashW = widthOf('№', 46, DEVLOG_FN, '900', 0);
+  tracked('№', x0, numY - numSize * 0.55, { size: 46, family: DEVLOG_FN, weight: '900', color: DEVLOG_GOLD, alpha: 0.95 });
+  tracked(st.number, x0 + hashW + 10, numY, {
+    size: numSize, family: DEVLOG_FN, weight: '900', tr: -6,
+    color: 'rgba(255,255,255,0.97)', shadow: 34
+  });
+
+  // тема выпуска
+  if (st.sub) {
+    const maxW = botX - x0 - 54;
+    const { lines, size } = wrap(st.sub, { size: 32, maxW, maxLines: 3, tr: 2, min: 17 });
+    const lh = size * 1.28;
+    const topY = numY + 62;
+    ctx.save();
+    ctx.fillStyle = DEVLOG_GOLD; ctx.globalAlpha = 0.9;
+    ctx.fillRect(x0, topY - size + 4, 3, lines.length * lh - (lh - size) + 2);
+    ctx.restore();
+    lines.forEach((l, i) => tracked(l, x0 + 20, topY + i * lh, { size, weight: '700', color: '#fff', tr: 2, alpha: 0.96 }));
+  }
+
+  // дата в самом низу колонки
+  const dy = H - SY + 6;
+  ctx.save(); ctx.fillStyle = DEVLOG_GOLD; ctx.fillRect(x0, dy - 9, 9, 9); ctx.restore();
+  tracked(st.date, x0 + 22, dy, { size: 17, weight: '600', color: '#fff', tr: 4, alpha: 0.85 });
+}
+
+// ── Макет 2: ПОЛОСА ──────────────────────────────────────────────
+// Кино-каше сверху и снизу, титр по нижней полосе.
+function _dlPaintBand(ctx, st) {
+  const { W, H, SX, kit } = st;
+  const { tracked, widthOf, wrap } = kit;
+  const BAR = 86;                       // высота каше
+  const x0 = SX + 30, x1 = W - SX - 30;
+
+  _dlVignette(ctx, W, H, 0.62);
+
+  // растушёвка кадра в полосы
+  const gT = ctx.createLinearGradient(0, BAR, 0, BAR + 120);
+  gT.addColorStop(0, 'rgba(5,6,11,0.92)'); gT.addColorStop(1, 'rgba(5,6,11,0)');
+  ctx.fillStyle = gT; ctx.fillRect(0, BAR, W, 120);
+  const gB = ctx.createLinearGradient(0, H - BAR - 300, 0, H - BAR);
+  gB.addColorStop(0, 'rgba(5,6,11,0)'); gB.addColorStop(1, 'rgba(5,6,11,0.93)');
+  ctx.fillStyle = gB; ctx.fillRect(0, H - BAR - 300, W, 300);
+
+  // сами полосы
+  ctx.fillStyle = DEVLOG_INK;
+  ctx.fillRect(0, 0, W, BAR); ctx.fillRect(0, H - BAR, W, BAR);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(232,185,72,0.55)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, BAR + 0.5); ctx.lineTo(W, BAR + 0.5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, H - BAR - 0.5); ctx.lineTo(W, H - BAR - 0.5); ctx.stroke();
+  ctx.restore();
+
+  // верх: эмблема + проект слева, дата справа
+  let hx = x0;
+  const EM = 44, emY = (BAR - EM) / 2;
+  if (st.logo) {
+    const ar = st.logo.width / st.logo.height || 1;
+    ctx.drawImage(st.logo, hx, emY, EM * ar, EM);
+    hx += EM * ar + 16;
+  }
+  tracked(st.project, hx, BAR / 2 + 9, { size: 24, weight: '700', color: '#fff', tr: 5, shadow: false });
+  tracked(st.date, x1, BAR / 2 + 7, { size: 15, weight: '600', color: DEVLOG_GOLD, tr: 4, align: 'right', shadow: false, alpha: 0.9 });
+
+  // низ: крупный титр над полосой
+  const baseY = H - BAR - 34;
+  const numSize = 128;
+  const numW = widthOf(st.number, numSize, DEVLOG_FN, '900', -4);
+  tracked(st.number, x0, baseY, { size: numSize, family: DEVLOG_FN, weight: '900', tr: -4, color: '#fff', shadow: 26 });
+  tracked('№', x0 - 2, baseY - numSize * 0.72, { size: 34, family: DEVLOG_FN, weight: '900', color: DEVLOG_GOLD });
+
+  // вертикальный разделитель и текст справа от номера
+  const tx = x0 + numW + 34;
+  ctx.save();
+  ctx.fillStyle = 'rgba(232,185,72,0.75)';
+  ctx.fillRect(tx - 18, baseY - numSize * 0.74, 2, numSize * 0.78);
+  ctx.restore();
+  tracked('ДНЕВНИК РАЗРАБОТЧИКА', tx, baseY - numSize * 0.52, { size: 21, weight: '700', color: DEVLOG_GOLD, tr: 9 });
+  if (st.sub) {
+    const { lines, size } = wrap(st.sub, { size: 33, maxW: x1 - tx, maxLines: 2, tr: 2, min: 22 });
+    const lh = size * 1.24;
+    lines.forEach((l, i) => tracked(l, tx, baseY - numSize * 0.52 + 44 + i * lh, { size, weight: '700', color: '#fff', tr: 2, alpha: 0.96 }));
+  }
+
+  // техническая мелочь на нижней полосе
+  ctx.save();
+  ctx.globalAlpha = 0.5; ctx.fillStyle = DEVLOG_GOLD;
+  for (let i = 0; i < 5; i++) ctx.fillRect(x1 - i * 14, H - BAR / 2 - 5, 5, 10);
+  ctx.restore();
+  tracked('CLASSIC ERA · DEV DIARY', x0, H - BAR / 2 + 6, { size: 15, weight: '600', color: '#fff', tr: 6, alpha: 0.55, shadow: false });
+}
+
+// ── Макет 3: ПЕЧАТЬ ──────────────────────────────────────────────
+// Центральная плашка-«клеймо»: фон дышит по краям, темнеет только под текстом.
+function _dlPaintStamp(ctx, st) {
+  const { W, H, kit } = st;
+  const { tracked, wrap } = kit;
+  const cx = W / 2;
+
+  _dlVignette(ctx, W, H, st.hasBg ? 0.5 : 0.6);
+
+  // размер плашки считаем от содержимого
+  const sub = st.sub;
+  let subFit = null;
+  if (sub) subFit = wrap(sub, { size: 27, maxW: 470, maxLines: 2, tr: 3, min: 19 });
+  const PW = 560;
+  const PH = 396 + (subFit ? subFit.lines.length * subFit.size * 1.3 : 0);
+  const px = cx - PW / 2, py = (H - PH) / 2;
+
+  // сама плашка: к краям чуть прозрачнее, чтобы не выглядела наклейкой
+  ctx.save();
+  const pg = ctx.createLinearGradient(0, py, 0, py + PH);
+  pg.addColorStop(0, 'rgba(5,6,11,0.86)');
+  pg.addColorStop(0.5, 'rgba(5,6,11,0.90)');
+  pg.addColorStop(1, 'rgba(5,6,11,0.86)');
+  ctx.fillStyle = pg;
+  ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = 40;
+  ctx.fillRect(px, py, PW, PH);
+  ctx.restore();
+
+  // номер-призрак живёт внутри плашки
+  ctx.save();
+  ctx.beginPath(); ctx.rect(px, py, PW, PH); ctx.clip();
+  tracked(st.number, cx, py + PH * 0.78, {
+    size: 340, family: DEVLOG_FN, weight: '900', tr: -12, align: 'center',
+    color: 'rgba(255,255,255,0.05)', stroke: 'rgba(232,185,72,0.18)', strokeW: 2, shadow: false
+  });
+  ctx.restore();
+
+  // обвязка плашки + уголки
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
+  ctx.strokeRect(px + 0.5, py + 0.5, PW - 1, PH - 1);
+  ctx.strokeStyle = 'rgba(232,185,72,0.28)';
+  ctx.strokeRect(px + 8.5, py + 8.5, PW - 17, PH - 17);
+  ctx.strokeStyle = DEVLOG_GOLD; ctx.lineWidth = 2.5;
+  const cl = 36;
+  [[px, py, 1, 1], [px + PW, py, -1, 1], [px, py + PH, 1, -1], [px + PW, py + PH, -1, -1]]
+    .forEach(([x, y, dx, dy]) => {
+      ctx.beginPath();
+      ctx.moveTo(x + dx * cl, y); ctx.lineTo(x, y); ctx.lineTo(x, y + dy * cl); ctx.stroke();
+    });
+  ctx.restore();
+
+  let y = py + 40;
+  if (st.logo) {
+    const EM = 62, ar = st.logo.width / st.logo.height || 1;
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 18;
+    ctx.drawImage(st.logo, cx - EM * ar / 2, y, EM * ar, EM); ctx.restore();
+    y += EM + 40;
+  } else y += 36;
+
+  tracked(st.project, cx, y, { size: 27, weight: '700', color: '#fff', tr: 9, align: 'center' });
+  y += 30;
+
+  // черта с ромбом
+  ctx.save();
+  ctx.strokeStyle = 'rgba(232,185,72,0.8)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(cx - 130, y); ctx.lineTo(cx - 15, y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 15, y); ctx.lineTo(cx + 130, y); ctx.stroke();
+  ctx.fillStyle = DEVLOG_GOLD;
+  ctx.beginPath(); ctx.moveTo(cx, y - 7); ctx.lineTo(cx + 7, y); ctx.lineTo(cx, y + 7); ctx.lineTo(cx - 7, y); ctx.fill();
+  ctx.restore();
+  y += 48;
+
+  tracked('ДНЕВНИК РАЗРАБОТЧИКА', cx, y, { size: 19, weight: '700', color: DEVLOG_GOLD, tr: 10, align: 'center' });
+  y += 88;
+
+  tracked('№' + st.number, cx, y, { size: 82, family: DEVLOG_FN, weight: '900', tr: -2, color: '#fff', align: 'center', shadow: 26 });
+  y += 46;
+
+  if (subFit) {
+    const lh = subFit.size * 1.3;
+    subFit.lines.forEach((l, i) => tracked(l, cx, y + i * lh, { size: subFit.size, weight: '700', color: '#fff', tr: 3, align: 'center', alpha: 0.95 }));
+    y += subFit.lines.length * lh;
+  }
+
+  tracked(st.date, cx, py + PH - 24, { size: 16, weight: '600', color: DEVLOG_GOLD, tr: 6, align: 'center', alpha: 0.9 });
 }
 
 function _loadImagePromise(url) {
