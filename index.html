@@ -13,7 +13,7 @@
      Однократно на сборку (двойная защита: localStorage + параметр _b). -->
 <script>
 (function(){
-  var BUILD = '20260813gdpeers';
+  var BUILD = '20260813gdtapfix';
   try {
     var u = new URL(location.href);
     if (u.searchParams.get('_b') === BUILD) { try { localStorage.setItem('wk_build', BUILD); } catch(e){} return; }
@@ -507,7 +507,7 @@
 <!-- «Пойдём к течению»: звёздная отмель на карте галактики (изометрия),
      играешь за корабль. Пришла на смену берегу из fishing.js — тот файл
      удалён, RPC рыбалки (fishing_cast/land) остались под тралом. -->
-<script src="garden.js?v=20260813gdpeers"></script>
+<script src="garden.js?v=20260813gdtapfix"></script>
 <script src="guide.js?v=20260809gbhelp"></script>
 <script src="tickets.js?v=20260607a"></script>
 <script src="chat.js?v=20260727ghost2"></script>

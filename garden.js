@@ -2384,7 +2384,12 @@ function gardenStart(cv, world, spawn) {
     const nn = world.nearNode(P.tx, P.ty);
     if (!nn || (nn.d > nn.n.R * 1.8 && !world.solo)) return;
     const n = nn.n;
-    const S = 150, x0 = 14, y0 = vh - S - 14, cx = x0 + S / 2, cy = y0 + S / 2;
+    // ⚠️ НА ТЕЛЕФОНЕ СХЕМА УЕЗЖАЕТ НАВЕРХ. Внизу слева стоит стик (см.
+    // gardenTouchUI): панель ложилась ровно на него, и половина руля была под
+    // картинкой — палец попадал в схему, а не в управление.
+    const tch = _gdTouch();
+    const S = tch ? 116 : 150, x0 = 14, y0 = tch ? 14 : vh - S - 14,
+          cx = x0 + S / 2, cy = y0 + S / 2;
     const rMax = Math.max(n.R, 1), k = (S / 2 - 12) / rMax;    // мир → панель
 
     ctx.fillStyle = 'rgba(6,10,16,.78)'; ctx.fillRect(x0, y0, S, S);
@@ -2433,7 +2438,8 @@ function gardenStart(cv, world, spawn) {
 
     ctx.fillStyle = 'rgba(180,205,228,.75)';
     ctx.font = '9.5px ui-monospace,SFMono-Regular,Menlo,monospace';
-    ctx.fillText((n.name || '').slice(0, 20).toUpperCase(), x0 + 6, y0 - 5);
+    // Подпись под коробкой, когда та стоит вверху: над ней места уже нет.
+    ctx.fillText((n.name || '').slice(0, 20).toUpperCase(), x0 + 6, tch ? y0 + S + 13 : y0 - 5);
   }
 
   // ══════════════════════════════════════════════════════════
@@ -3264,7 +3270,14 @@ async function gardenGripEnd(ok) {
   const h = _gdHook; if (!h || h.done) return;
   h.done = true;
   cancelAnimationFrame(h.raf);
+  // ⚠️ ПЕРЕХВАТЧИК ТАПА СНИМАЕТСЯ ТОЖЕ. Снимали только клавиатуру, а h.tap
+  // висел на window в ФАЗЕ ПЕРЕХВАТА и глушил preventDefault/stopPropagation
+  // КАЖДЫЙ pointerdown на странице — до конца сеанса. После первой же ловли
+  // (и реплики о ней) управление умирало насмерть: до стика и до холста тычок
+  // просто не доходил. На мыши это читалось «клик перестал работать», на
+  // телефоне — «управление заглохло».
   removeEventListener('keydown', h.key, true);
+  removeEventListener('pointerdown', h.tap, true);
   _gdHook = null;
   const el = document.getElementById('gd-grip'); if (el) el.remove();
   gardenPadOff(false);
