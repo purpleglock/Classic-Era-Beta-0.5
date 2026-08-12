@@ -666,7 +666,24 @@
       "Bash(node --check garden.js)",
       "Bash(grep -n \"^\\\\s*\\\\\\(function\\\\|var GD\\\\|GD\\\\.\\\\w* =\\\\|//\\\\s*=\\\\|/\\\\*\\\\\\)\" garden.js)",
       "Bash(node \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/986b2dc6-fb73-4dea-b08d-be9481ee6dc4/scratchpad/up.js\")",
-      "Bash(taskkill //F //FI \"WINDOWTITLE eq node*\")"
+      "Bash(taskkill //F //FI \"WINDOWTITLE eq node*\")",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 10284)",
+      "Bash(taskkill //F //PID 7780)",
+      "Bash(taskkill //F //PID 720)",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('garden.js','utf8'\\)\\)\")",
+      "Bash(python \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/a5e12c7a-c844-47bd-92c0-c6282ec634e0/scratchpad/ship.py\")",
+      "Bash(python \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/a5e12c7a-c844-47bd-92c0-c6282ec634e0/scratchpad/ast.py\")",
+      "Bash(python \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/a5e12c7a-c844-47bd-92c0-c6282ec634e0/scratchpad/nohyper.py\")",
+      "Bash(python \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/a5e12c7a-c844-47bd-92c0-c6282ec634e0/scratchpad/clean.py\")",
+      "Bash(python \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/a5e12c7a-c844-47bd-92c0-c6282ec634e0/scratchpad/mouse.py\")",
+      "Bash(grep -n \"^\\\\s*\\\\\\(function\\\\|const\\\\|let\\\\|var\\\\\\)\\\\s\\\\+[A-Za-z_$]*\\\\s*[=\\(]\" garden.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8123/_gd_probe.html)",
+      "Bash(node tools/db_run.js _garden_sprouts.sql)",
+      "Bash(node tools/db_q.js \"select public._g_seeds\\(public._g_temple_sys\\(\\)\\) s, public._g_rock_roll\\(public._g_temple_sys\\(\\)\\) r\")",
+      "Bash(node tools/db_run.js _garden_multi.sql)",
+      "Bash(sed -n '/const fs = document.createElement/,/document.body.appendChild\\(fs\\)/p' garden.js)",
+      "Bash(node tools/db_run.js _garden_presence.sql)"
     ]
   }
 }

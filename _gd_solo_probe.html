@@ -1,4 +1,4 @@
-<!doctype html><meta charset="utf-8"><title>garden probe</title>
+<!doctype html><meta charset="utf-8"><title>garden solo probe</title>
 <style>body{margin:0;background:#0b1119}</style>
 <div id="hp-vn-fish"></div>
 <script>
@@ -13,7 +13,7 @@ async function ecLoadApp(){}
 function ecPlanetGroup(p){return p.grp||'rock';}
 const GRPS=['rock','gasgiant','belt','micro','icegiant','anomaly','rock','rock'];
 const SYS=[],SECS=[];let id=0;
-for(let s=0;s<4;s++){const ids=[];for(let i=0;i<5;i++){
+for(let s=0;s<1;s++){const ids=[];for(let i=0;i<1;i++){
   const cnt=1+((i*3+s)%8);const pl=[];
   for(let b=0;b<cnt;b++)pl.push({name:'Тело '+(b+1),grp:GRPS[(b+i)%GRPS.length],slotsP:2+((b+s)%9),resources:['Железо','Титан']});
   const o={id:'s'+(id++),name:'Система '+id,x:120+s*230+(i%2)*100,y:120+Math.floor(i/2)*100,is_giant:i===0,planets:pl};

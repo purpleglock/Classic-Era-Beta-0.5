@@ -225,7 +225,7 @@ const CAB_DEPT = {
               open: () => heroVNGeoOpen(), close: () => heroVNGeoClose() },
   stars:    { nm: 'Всмотреться в Разлом', sh: 'Разлом', sub: 'псионический хор и его дары', ic: 'chalice', grp: 'play',
               open: () => heroVNStarsOpen(), close: () => heroVNStarsClose() },
-  fish:     { nm: 'Уйти в пустоту', sh: 'Пустота', sub: 'материки секторов и туманность меж ними', ic: 'hour', grp: 'play',
+  fish:     { nm: 'Уйти в пустоту', sh: 'Пустота', sub: '...', ic: 'hour', grp: 'play',
               open: () => heroVNFishOpen(), close: () => heroVNFishClose() },
   rating:   { nm: 'Рейтинг игроков', sh: 'Рейтинг', sub: 'кто чего стоит в секторе', ic: 'medal', grp: 'play',
               open: () => heroVNRatingOpen(), close: () => heroVNRatingClose() },
