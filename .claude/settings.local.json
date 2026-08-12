@@ -661,7 +661,12 @@
       "Bash(node tools/db_q.js \"select public._bt_do_end_turn\\('83d20f26-ac5c-4871-b9a7-87247ec04eed'::uuid,'empire'\\) r\")",
       "Bash(node tools/db_q.js \"select \\(jsonb_array_elements\\(log\\)->>'m'\\) m from battles where id='83d20f26-ac5c-4871-b9a7-87247ec04eed'\")",
       "Bash(node tools/db_q.js \"select pg_get_functiondef\\(p.oid\\) d from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='_war_nm'\")",
-      "Bash(wmic process *)"
+      "Bash(wmic process *)",
+      "Bash(node tools/db_run.js _garden.sql)",
+      "Bash(node --check garden.js)",
+      "Bash(grep -n \"^\\\\s*\\\\\\(function\\\\|var GD\\\\|GD\\\\.\\\\w* =\\\\|//\\\\s*=\\\\|/\\\\*\\\\\\)\" garden.js)",
+      "Bash(node \"C:/Users/A4F7~1/AppData/Local/Temp/claude/C--Users--------Desktop-Classic-Era-Beta-0-5/986b2dc6-fb73-4dea-b08d-be9481ee6dc4/scratchpad/up.js\")",
+      "Bash(taskkill //F //FI \"WINDOWTITLE eq node*\")"
     ]
   }
 }

@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><title>garden probe</title>
+<style>body{margin:0;background:#0b1119}</style>
+<div id="hp-vn-fish"></div>
+<script>
+// Вкладка проверяется в скрытом окне — rAF там не тикает. Подменяем таймером.
+window.requestAnimationFrame=cb=>setTimeout(()=>cb(performance.now()),16);
+const EC={app:{faction_id:'f1',color:'#7ecfff'},fid:'f1'};
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const toast=(m,k)=>console.log('toast',k||'',m);
+async function ecLoadApp(){}
+const SYS=[],SECS=[];let id=0;
+for(let s=0;s<4;s++){const ids=[];for(let i=0;i<5;i++){const o={id:'s'+(id++),name:'Система '+id,x:120+s*230+(i%2)*100,y:120+Math.floor(i/2)*100,is_giant:i===0,planets:[{resources:['Железо','Титан']},{resources:['Ихор']}]};SYS.push(o);ids.push(o.id);}SECS.push({id:'sec'+s,name:'Сектор '+s,system_ids:ids});}
+async function dbGet(t){return t==='map_systems'?SYS:SECS;}
+const STATE={fid:'f1',temple:'s0',plots:[
+  {id:1,sys:'s0',cell:0,land:'own',fid:'f1',mine:true,plant:null},
+  {id:2,sys:'s0',cell:1,land:'own',fid:'f1',mine:true,plant:{id:9,kind:'res',res:'Железо',water:70,feed:40,weeds:20,care:.72,ripe:false,left:5000}},
+  {id:3,sys:'s0',cell:2,land:'own',fid:'f1',mine:true,plant:{id:10,kind:'ichor',res:null,water:10,feed:80,weeds:75,care:.31,ripe:true,left:0}}],
+  lands:[{sys:'s0',name:'Храм мироздания',land:'temple',cells:14,seeds:['Железо','Титан','Ихор']},
+         {sys:'s6',name:'Родина',land:'own',cells:12,seeds:['Титан']}],
+  seed_ichor:1,const:{till_gc:2500,feed_gc:400,seed_gc:200000,ichor_cap:10,plot_cap:24}};
+async function ecRpc(fn){return fn==='garden_get'?STATE:{ok:true};}
+function heroVNBack(){}
+</script>
+<script src="/garden.js"></script>
+<script>window.addEventListener('load',()=>{ _gdState=STATE; gardenStyleOnce(); gardenDescend(); });</script>
