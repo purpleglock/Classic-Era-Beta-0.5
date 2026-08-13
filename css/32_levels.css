@@ -2,12 +2,15 @@
    Бейдж у имени, полоса опыта, оси досье. Один акцент — цвет ступени
    (ml-t0..ml-t5), остальное строгое: см. memory ui-design-rules. */
 
-.ml-t0{--ml-c:#7d8894;--ml-cd:rgba(125,136,148,.14)}
-.ml-t1{--ml-c:#6f9ac4;--ml-cd:rgba(111,154,196,.14)}
-.ml-t2{--ml-c:#59b39a;--ml-cd:rgba(89,179,154,.14)}
-.ml-t3{--ml-c:#c2953f;--ml-cd:rgba(194,149,63,.14)}
-.ml-t4{--ml-c:#c5713f;--ml-cd:rgba(197,113,63,.14)}
-.ml-t5{--ml-c:#b45fc0;--ml-cd:rgba(180,95,192,.16)}
+/* Ступень уровня = вся палитра карточки: цвет акцента, фон, рамка.
+   Раньше цвет брался из хеша почты и сетка читалась радугой, в которой
+   12-й уровень выглядел так же, как 3-й. */
+.ml-t0{--ml-c:#7d8894;--ml-cd:rgba(125,136,148,.14);--ml-b1:#161a1f;--ml-b2:#111419;--ml-br:rgba(125,136,148,.26)}
+.ml-t1{--ml-c:#6f9ac4;--ml-cd:rgba(111,154,196,.14);--ml-b1:#131b24;--ml-b2:#0e141c;--ml-br:rgba(111,154,196,.32)}
+.ml-t2{--ml-c:#59b39a;--ml-cd:rgba(89,179,154,.14);--ml-b1:#12201d;--ml-b2:#0d1817;--ml-br:rgba(89,179,154,.34)}
+.ml-t3{--ml-c:#c2953f;--ml-cd:rgba(194,149,63,.14);--ml-b1:#201a10;--ml-b2:#16120c;--ml-br:rgba(194,149,63,.40)}
+.ml-t4{--ml-c:#c5713f;--ml-cd:rgba(197,113,63,.14);--ml-b1:#21160f;--ml-b2:#17100b;--ml-br:rgba(197,113,63,.44)}
+.ml-t5{--ml-c:#b45fc0;--ml-cd:rgba(180,95,192,.16);--ml-b1:#1d1224;--ml-b2:#140c1a;--ml-br:rgba(180,95,192,.48)}
 
 /* ── Бейдж уровня (везде, где мелькает имя) ── */
 .ml-badge{
@@ -63,6 +66,68 @@
 
 .ml-seen{font-family: var(--font-mono);font-size:8px;color:var(--t4);letter-spacing:.5px;margin-top:8px;text-align:center}
 
+/* ══════════════════════════════════════════════════════════
+   КАРТОЧКА УЧАСТНИКА — облик по ступени уровня
+   Ступени различаются не яркостью одного и того же, а отделкой:
+   0-1 голый графит → 2 сплошное кольцо → 3 золотой скос и свечение
+   → 4 двойная рамка → 5 бегущий отсвет по кромке.
+   ══════════════════════════════════════════════════════════ */
+.contrib-card[class*="ml-t"]{
+  background:linear-gradient(160deg,var(--ml-b1) 0%,var(--ml-b2) 100%);
+  border-color:var(--ml-br);
+}
+.contrib-card[class*="ml-t"] .contrib-av{
+  background:linear-gradient(135deg,var(--ml-b1) 0%,var(--ml-b2) 100%);
+  border-color:var(--ml-br);
+}
+.contrib-card[class*="ml-t"] .contrib-av-ring{color:var(--ml-c)}
+.contrib-card[class*="ml-t"]::after{background:linear-gradient(90deg,transparent,var(--ml-c),transparent)}
+.contrib-card[class*="ml-t"] .contrib-stat-fill{background:var(--ml-c)}
+.contrib-card[class*="ml-t"]:hover{border-color:var(--ml-c)}
+
+/* Ступень 2+: кольцо аватара становится сплошным — первый видимый порог */
+.contrib-card.ml-t2 .contrib-av-ring,
+.contrib-card.ml-t3 .contrib-av-ring,
+.contrib-card.ml-t4 .contrib-av-ring,
+.contrib-card.ml-t5 .contrib-av-ring{border-style:solid;opacity:.4}
+
+/* Ступень 3+: скос угла и полоса опыта в цвет ступени, мягкое свечение */
+.contrib-card.ml-t3,
+.contrib-card.ml-t4,
+.contrib-card.ml-t5{box-shadow:0 0 16px -4px var(--ml-cd)}
+.contrib-card.ml-t3::before,
+.contrib-card.ml-t4::before,
+.contrib-card.ml-t5::before{background:var(--ml-c);opacity:.75}
+.contrib-card.ml-t3 .contrib-stat-fill,
+.contrib-card.ml-t4 .contrib-stat-fill,
+.contrib-card.ml-t5 .contrib-stat-fill{box-shadow:0 0 8px -1px var(--ml-c)}
+
+/* Ступень 4+: двойная рамка внутри поля */
+.contrib-card.ml-t4 .contrib-card-top,
+.contrib-card.ml-t5 .contrib-card-top{
+  position:relative;
+}
+.contrib-card.ml-t4 .contrib-card-top::after,
+.contrib-card.ml-t5 .contrib-card-top::after{
+  content:'';position:absolute;inset:6px 8px -2px;
+  border:1px solid var(--ml-br);opacity:.5;pointer-events:none;
+}
+
+/* Ступень 5: отсвет бежит по верхней кромке */
+.contrib-card.ml-t5::after{
+  background:linear-gradient(90deg,transparent,var(--ml-c),transparent);
+  opacity:.8;animation:ml-sheen 3.4s ease-in-out infinite;
+}
+@keyframes ml-sheen{0%,100%{opacity:.25}50%{opacity:.9}}
+@media (prefers-reduced-motion: reduce){
+  .contrib-card.ml-t5::after{animation:none;opacity:.7}
+}
+
+/* Шифр не должен протекать: уровень и титул гасим вместе с именем */
+.contrib-censored .contrib-title,
+.contrib-censored .contrib-xp,
+.contrib-censored .contrib-lvl-ring{color:transparent !important;text-shadow:none !important}
+
 /* ── Карточка участника на главной ── */
 .contrib-lvl-ring{
   position:absolute;bottom:-5px;left:-5px;
@@ -89,10 +154,54 @@
 }
 
 /* Телефон: досье в одну колонку, цифры покрупнее */
+/* ══════════════════════════════════════════════════════════
+   ТЕЛЕФОН
+   Правило дома: поздний десктопный блок бьёт ранний @media, поэтому
+   мобильные правила лежат в КОНЦЕ файла, а файл — последним в index.css.
+   ══════════════════════════════════════════════════════════ */
 @media(max-width:640px){
-  .ml-head-num{font-size:26px}
+  /* Бейдж у имени: 8px с трекингом на телефоне не читался */
+  .ml-badge{min-width:19px;height:18px;font-size:10px;padding:0 5px;margin:0 4px}
+  .ml-badge.ml-sm{min-width:17px;height:16px;font-size:9px;padding:0 4px;margin:0 3px}
+
+  /* Сетка карточек: две в ряд с внятными полями */
+  .contrib-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .hp-contribs{margin-top:36px;padding-top:22px}
+  .contrib-card-top{padding:16px 10px 12px;gap:10px}
+  .contrib-card-bottom{padding:6px 12px 14px;gap:6px}
+  .contrib-av{width:58px;height:58px;font-size:17px}
+  .contrib-av-ring{inset:-6px}
+  /* Ранг дублирует порядок карточек и на узком экране лез на кольцо уровня */
+  .contrib-rank-num{display:none}
+  .contrib-lvl-ring{min-width:24px;height:24px;font-size:11px;bottom:-4px;left:-4px}
+  .contrib-name{font-size:11px;letter-spacing:.8px}
+  .contrib-title{font-size:8.5px;letter-spacing:.9px;margin-top:5px}
+  .contrib-xp{font-size:10px;letter-spacing:.9px}
+  .contrib-stat-bar{height:3px}
+
+  /* Досье: уровень — главный элемент экрана, поэтому крупнее, а не мельче */
+  .ml-head{gap:12px;padding:11px 12px;margin-bottom:12px}
+  .ml-head-num{font-size:30px}
+  .ml-head-cap{font-size:8px;letter-spacing:1.5px}
+  .ml-head-title{font-size:12px;letter-spacing:1px;margin-bottom:7px}
+  .ml-bar-txt{font-size:9px}
+  .ml-axes{gap:8px;margin-bottom:12px}
+  .ml-axis-name{font-size:9px;letter-spacing:1px}
+  .ml-axis-val{font-size:12px}
   .ml-facts{grid-template-columns:repeat(2,1fr)}
+  .ml-fact{padding:8px}
+  .ml-fact-k{font-size:8px;letter-spacing:.8px}
+  .ml-fact-v{font-size:14px}
+  .ml-seen{font-size:9px;text-align:left;margin:-6px 0 10px}
   /* На телефоне прокручивается вся правая колонка — своя прокрутка и потолок
      у блока уровня здесь только мешали бы (скролл внутри скролла). */
-  #contrib-mo-lvl:not(:empty){max-height:none;overflow:visible;padding:14px 16px 4px}
+  #contrib-mo-lvl:not(:empty){max-height:none;overflow:visible;padding:14px 14px 4px}
+}
+
+/* Совсем узкие экраны: карточка в один столбец, чтобы имя и титул не рвались */
+@media(max-width:360px){
+  .contrib-grid{grid-template-columns:1fr}
+  .contrib-av{width:64px;height:64px}
+  .contrib-name{font-size:12px}
+  .ml-facts{grid-template-columns:1fr 1fr}
 }

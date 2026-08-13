@@ -80,6 +80,16 @@
         "8161"
       ],
       "port": 8161
+    },
+    {
+      "name": "promo",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8172"
+      ],
+      "port": 8172
     }
   ]
 }

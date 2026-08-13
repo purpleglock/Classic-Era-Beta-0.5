@@ -1988,7 +1988,10 @@ async function openContribModal(key, displayName, avUrl, hue, cnt) {
 
   const mo = document.getElementById('mo-contrib'); if (!mo) return;
   // личная анимация «зацензурено» — только на своём профиле
-  mo.querySelector('.mo-contrib-panel')?.classList.toggle('cmp-censored', !!isMe);
+  // Шифр — у одного участника и для всех зрителей (тот же CENSORED_MEMBER_ID,
+  // что на карточке главной), а не «у того, кто смотрит».
+  mo.querySelector('.mo-contrib-panel')?.classList.toggle('cmp-censored',
+    typeof CENSORED_MEMBER_ID !== 'undefined' && key === CENSORED_MEMBER_ID);
   document.getElementById('contrib-mo-av').innerHTML = avHtml; document.getElementById('contrib-mo-av').style.cssText = `background:hsl(${hue},35%,18%);border:2px solid hsl(${hue},45%,30%)`;
   document.getElementById('contrib-mo-name').textContent = displayName;
 

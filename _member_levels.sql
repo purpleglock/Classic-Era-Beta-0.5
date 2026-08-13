@@ -41,21 +41,21 @@ grant  select on public.member_levels to anon, authenticated;
 create or replace function public.ml_title(p_level int)
 returns text language sql immutable as $$
   select case
-    when p_level >= 20 then 'Вечный'
-    when p_level >= 18 then 'Столп Эры'
+    when p_level >= 20 then 'Даллерианец'
+    when p_level >= 18 then 'Эрленд'
     when p_level >= 16 then 'Архонт'
-    when p_level >= 14 then 'Сенатор'
-    when p_level >= 12 then 'Претор'
-    when p_level >= 10 then 'Легат'
-    when p_level >=  9 then 'Архивариус'
-    when p_level >=  8 then 'Магистр'
-    when p_level >=  7 then 'Навигатор'
-    when p_level >=  6 then 'Картограф'
-    when p_level >=  5 then 'Летописец'
+    when p_level >= 14 then 'Наркомаг'
+    when p_level >= 12 then 'Претор Эмпрогенны'
+    when p_level >= 10 then 'Новоэровец'
+    when p_level >=  9 then 'Победоносец'
+    when p_level >=  8 then 'Агент Синли-Бей'
+    when p_level >=  7 then 'Азарданец'
+    when p_level >=  6 then 'Сквернолюд'
+    when p_level >=  5 then 'Астрогатор'
     when p_level >=  4 then 'Хронист'
-    when p_level >=  3 then 'Странник'
-    when p_level >=  2 then 'Послушник'
-    else 'Пришелец'
+    when p_level >=  3 then 'Пустотный рейдер'
+    when p_level >=  2 then 'Стоик'
+    else 'Софонт'
   end;
 $$;
 

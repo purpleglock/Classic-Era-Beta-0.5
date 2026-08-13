@@ -245,7 +245,7 @@ function adPaint() {
     const stats = `<div style="margin-top:24px"><div style="font-family:var(--font-display,sans-serif);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin-bottom:8px">Сводка по всем фракциям</div>${adStatsTable()}</div>`;
     // ── Верхние вкладки консоли ────────────────────────────────────
     const rmPool = (AD.rm && AD.rm.tasks) ? AD.rm.tasks.filter(t => t.status === 'pool').length : null;
-    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['shells', 'Снаряды'], ['precursor', 'Дозвёздные'], ['intelart', '🕵 Разведка'], ['artifacts', '🎒 Артефакты', (AD.artKinds || []).length], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
+    const TABS = [['factions', '🛠 Фракции'], ['roadmap', '🗺 Дорожная карта', rmPool], ['unions', '🤝 Союзы', (AD.unions || []).length], ['portraits', '🎭 Арты', (AD.portraits || []).length], ['vn', '💬 Новелла', ((AD.vn && AD.vn.dialogues) || []).length], ['planets', '🪐 Планеты'], ['guide', '📖 Обложки'], ['ach', '🏆 Ачивки'], ['promo', '🎁 Промокоды'], ['shells', 'Снаряды'], ['precursor', 'Дозвёздные'], ['intelart', '🕵 Разведка'], ['artifacts', '🎒 Артефакты', (AD.artKinds || []).length], ['shipart', '🚀 Корабли'], ['weapons', '🔫 Орудия и модули'], ['market', '🏪 Рынок NPC'], ['mktsim', '📈 Биржа (тест)'], ['brand', '🎨 Брендбук'], ['multiacc', '🕵 Мультиакк', Array.isArray(AD.multiacc) ? AD.multiacc.filter(r => (r.ip_shared || 0) >= 2 || (r.fp_shared || 0) >= 2).length : null]];
     const tabBar = `<div class="fm-ctabs" style="display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 4px;border-bottom:1px solid var(--w2,#2a3340);padding-bottom:2px">
       ${TABS.map(([id, lbl, n]) => `<button class="btn ${AD.tab === id ? 'btn-gd' : 'btn-gh'} btn-sm" onclick="adSetTab('${id}')" style="border-bottom-left-radius:0;border-bottom-right-radius:0">${lbl}${n != null ? ` <span style="opacity:.65;font-size:11px">${n}</span>` : ''}</button>`).join('')}
     </div>`;
@@ -257,6 +257,7 @@ function adPaint() {
     else if (AD.tab === 'planets')   tabContent = adPlanetTexPanel();
     else if (AD.tab === 'guide')     tabContent = adGuideCoversPanel();
     else if (AD.tab === 'ach')       tabContent = adAchPanel();
+    else if (AD.tab === 'promo')     tabContent = adPromoPanel();
     else if (AD.tab === 'shells')    tabContent = adShellArtPanel();
     else if (AD.tab === 'precursor') tabContent = adPrecursorArtPanel();
     else if (AD.tab === 'intelart')  tabContent = adIntelArtPanel();
@@ -6476,4 +6477,320 @@ async function adArtKindUpload(key, inputEl) {
     if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 48); }
     toast('Не удалось: ' + (e.message || e), 'err');
   } finally { if (inputEl) inputEl.value = ''; }
+}
+
+// ════════════════════════════════════════════════════════════════
+// 🎁 ПРОМОКОДЫ И «ПУТЬ СТАНОВЛЕНИЯ» (_promo_path.sql)
+//
+// Всё, что видит новичок — суммы, тексты вех, условия, сроки кодов —
+// правится здесь. В js/sql НЕТ зашитых наград: клиент рисует то, что
+// отдали admin_promo_list / path_check.
+//
+// Награда собирается из простых полей, а не из сырого JSON: ГС/ОН/ТНП/
+// осколки — числа, ресурсы и классовые осколки — строка «Имя: число»
+// через запятую, технологии — id через запятую.
+// ════════════════════════════════════════════════════════════════
+
+// Условия вех: закрытый список (произвольный SQL из админки — дыра).
+// Ключ должен совпадать с тем, что считает path_check в _promo_path.sql.
+const AD_PATH_KEYS = [
+  ['b_mining',      'построек: шахты'],
+  ['b_factory',     'построек: фабрики'],
+  ['b_science',     'построек: научные'],
+  ['b_shipyard',    'построек: верфи'],
+  ['buildings',     'построек всего'],
+  ['colonies',      'колоний'],
+  ['systems',       'систем с колониями'],
+  ['research',      'изучено технологий'],
+  ['routes',        'активных торговых маршрутов'],
+  ['units_designed','дизайнов в конструкторе'],
+  ['units_built',   'построено юнитов'],
+  ['fleets',        'флотов'],
+  ['battles',       'сражений'],
+  ['agents',        'агентов'],
+  ['gc',            'ГС в казне'],
+  ['science',       'очков науки'],
+];
+
+const AD_INP = 'background:var(--b0,#0c1322);border:1px solid var(--w2,#2a3340);border-radius:5px;color:var(--t1,#e8edf2);padding:5px 7px;font-size:12px;box-sizing:border-box;width:100%';
+const AD_LBL = 'display:flex;flex-direction:column;gap:2px;font-size:10px;color:var(--t4,#6a7a88)';
+
+// «Железо: 100, Кремний: 40» ⇄ {Железо:100, Кремний:40}
+function adKvToText(o) {
+  if (!o || typeof o !== 'object') return '';
+  return Object.entries(o).map(([k, v]) => k + ': ' + v).join(', ');
+}
+function adTextToKv(s) {
+  const out = {};
+  (s || '').split(',').forEach(part => {
+    const i = part.lastIndexOf(':');
+    if (i < 0) return;
+    const k = part.slice(0, i).trim(), v = parseFloat(part.slice(i + 1));
+    if (k && !isNaN(v) && v !== 0) out[k] = v;
+  });
+  return out;
+}
+
+// Поля награды (общие для кода и для вехи). pfx — префикс id элементов.
+function adRewardFields(pfx, r) {
+  r = r || {};
+  const num = (f, lbl, hint) => `<label style="${AD_LBL}" title="${esc(hint || '')}">${esc(lbl)}
+    <input type="number" id="${pfx}-r-${f}" value="${r[f] != null ? esc(String(r[f])) : ''}" placeholder="0" style="${AD_INP}"></label>`;
+  return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+      ${num('gc', 'ГС', 'В казну державы')}
+      ${num('science', 'ОН', 'Очки науки')}
+      ${num('tnp', 'ТНП', 'Товары народного потребления')}
+      ${num('coupons', '◈ осколки', 'Универсальные осколки цикла: 1 осколок = 1 бесплатный мгновенный юнит любого класса')}
+    </div>
+    <label style="${AD_LBL}" title="Через запятую: «Железо: 100, Кремний: 40». Кладётся на склад державы.">ресурсы
+      <input type="text" id="${pfx}-r-res" value="${esc(adKvToText(r.res))}" placeholder="Железо: 100, Кремний: 40" style="${AD_INP}"></label>
+    <label style="${AD_LBL}" title="Классовые осколки: годятся только на свой класс. Ключи — как в конструкторе: corvette, destroyer, mediumCruiser, dreadnought, aviation, ground, inf.">◈ осколки по классам
+      <input type="text" id="${pfx}-r-shards" value="${esc(adKvToText(r.shards))}" placeholder="corvette: 3, ground: 2" style="${AD_INP}"></label>
+    <label style="${AD_LBL}" title="id узлов древа через запятую — выдаются как уже изученные.">технологии
+      <input type="text" id="${pfx}-r-research" value="${esc((r.research || []).join(', '))}" placeholder="eng.basic, mil.armor1" style="${AD_INP}"></label>`;
+}
+
+function adRewardRead(pfx) {
+  const g = f => document.getElementById(`${pfx}-r-${f}`);
+  const n = f => { const el = g(f); const v = el ? parseFloat(el.value) : NaN; return isNaN(v) ? 0 : v; };
+  const out = {};
+  ['gc', 'science', 'tnp', 'coupons'].forEach(f => { const v = n(f); if (v) out[f] = v; });
+  const res = adTextToKv((g('res') || {}).value); if (Object.keys(res).length) out.res = res;
+  const sh  = adTextToKv((g('shards') || {}).value); if (Object.keys(sh).length) out.shards = sh;
+  const tech = ((g('research') || {}).value || '').split(',').map(x => x.trim()).filter(Boolean);
+  if (tech.length) out.research = tech;
+  return out;
+}
+
+// ── Загрузка каталога (лениво, один раз на вход во вкладку) ──
+async function adPromoLoad() {
+  try {
+    AD.promo = await adRpc('admin_promo_list') || { codes: [], path: [], recent: [], settings: {} };
+  } catch (e) {
+    AD.promo = { __err: e.message || String(e), codes: [], path: [], recent: [], settings: {} };
+  }
+  if (AD.tab === 'promo') adPaint();
+}
+
+function adPromoPanel() {
+  if (AD.promo == null) { AD.promo = { __loading: true, codes: [], path: [], recent: [], settings: {} }; adPromoLoad(); }
+  const P = AD.promo;
+  if (P.__loading) return `<div class="sload" style="min-height:120px"><div class="pulse-loader"></div></div>`;
+  if (P.__err) return `<div style="color:#ff7a7a;padding:14px;border:1px solid #ff7a7a;border-radius:8px">
+    Не удалось загрузить: ${esc(P.__err)}<br><span style="color:var(--t4,#6a7a88);font-size:11px">Если функции нет — накатить <code>_promo_path.sql</code>.</span></div>`;
+
+  const H = t => `<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3,#8aa0b0);margin:22px 0 10px">${t}</div>`;
+  const card = inner => `<div style="border:1px solid var(--w2,#2a3340);border-radius:10px;background:var(--b1,#0f141b);padding:12px;display:flex;flex-direction:column;gap:8px">${inner}</div>`;
+
+  // ── Настройка возраста ──
+  const maxAge = (P.settings && P.settings.max_age_days != null) ? P.settings.max_age_days : 30;
+  const settings = card(`<div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+      <label style="${AD_LBL};max-width:220px" title="Держава старше этого возраста видит путь только справочно и наград за вехи НЕ получает. 0 — путь открыт всем (осторожно: ветераны разом заберут все награды).">путь становления — державам младше, сут.
+        <input type="number" id="ad-promo-maxage" value="${esc(String(maxAge))}" style="${AD_INP}"></label>
+      <button class="btn btn-gh btn-sm" onclick="adPromoSettingsSave()">Сохранить</button>
+      <span style="font-size:11px;color:var(--t4,#6a7a88);flex:1 1 220px">Промокоды этим порогом не ограничены — у каждого кода свой срок и свой лимит возраста.</span>
+    </div>`);
+
+  // ── Промокоды ──
+  const codeCard = c => {
+    const p = `ad-pc-${c.code}`;
+    const dt = v => v ? String(v).slice(0, 16) : '';
+    return card(`<div style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:.12em;color:var(--am,#d8a13a)">${esc(c.code)}</span>
+        <span style="flex:1"></span>
+        <span style="font-family:monospace;font-size:11px;color:var(--t4,#6a7a88)">активаций: ${c.uses || 0}${c.max_uses ? ' / ' + c.max_uses : ' / ∞'}</span>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3,#8aa0b0)">
+          <input type="checkbox" id="${p}-active" ${c.active ? 'checked' : ''}>включён</label>
+      </div>
+      <input type="text" id="${p}-title" value="${esc(c.title || '')}" placeholder="Название для игрока — «Стартовый набор»" style="${AD_INP}">
+      <input type="text" id="${p}-note"  value="${esc(c.note || '')}"  placeholder="Заметка для себя — откуда код, кому раздан" style="${AD_INP}">
+      ${adRewardFields(p, c.reward)}
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px">
+        <label style="${AD_LBL}" title="Сколько всего активаций у кода. 0 — без лимита.">лимит активаций (0 = ∞)
+          <input type="number" id="${p}-max_uses" value="${esc(String(c.max_uses || 0))}" style="${AD_INP}"></label>
+        <label style="${AD_LBL}" title="Сколько раз одна держава может ввести этот код.">раз на державу
+          <input type="number" id="${p}-per_faction" value="${esc(String(c.per_faction || 1))}" style="${AD_INP}"></label>
+        <label style="${AD_LBL}" title="Пусто — действует сразу.">действует с
+          <input type="datetime-local" id="${p}-starts_at" value="${esc(dt(c.starts_at))}" style="${AD_INP}"></label>
+        <label style="${AD_LBL}" title="Пусто — бессрочно.">действует до
+          <input type="datetime-local" id="${p}-ends_at" value="${esc(dt(c.ends_at))}" style="${AD_INP}"></label>
+      </div>
+      <label style="${AD_LBL}" title="Пусто — код для всех. Иначе ввести его сможет только держава младше N суток — так стартовый набор не утечёт ветеранам.">только державам младше, сут. (пусто = всем)
+        <input type="number" id="${p}-max_age_days" value="${c.max_age_days != null ? esc(String(c.max_age_days)) : ''}" placeholder="—" style="${AD_INP}"></label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-gh btn-sm" onclick="adPromoSave('${esc(c.code)}')">Сохранить</button>
+        <button class="btn btn-gh btn-sm" onclick="adPromoDelete('${esc(c.code)}')" style="color:#ff7a7a">Удалить</button>
+        <span id="${p}-st" style="font-size:11px;color:var(--t4,#6a7a88)"></span>
+      </div>`);
+  };
+  const codes = (P.codes || []).map(codeCard).join('');
+  const newCode = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <input type="text" id="ad-promo-new" placeholder="НОВЫЙ_КОД" maxlength="32"
+        style="${AD_INP};width:220px;font-family:monospace;text-transform:uppercase;letter-spacing:.1em">
+      <button class="btn btn-gh btn-sm" onclick="adPromoCreate()">+ Создать код</button>
+      <span style="font-size:11px;color:var(--t4,#6a7a88)">3–32 символа: латиница, цифры, дефис, подчёркивание</span>
+    </div>`;
+
+  // ── Вехи пути ──
+  const stepCard = s => {
+    const p = `ad-ps-${s.id}`;
+    return card(`<div style="display:flex;align-items:center;gap:8px">
+        <input type="text" id="${p}-icon" value="${esc(s.icon || '')}" maxlength="4" style="${AD_INP};width:46px;text-align:center;font-size:15px">
+        <input type="text" id="${p}-title" value="${esc(s.title || '')}" placeholder="Название вехи" style="${AD_INP};flex:1;font-weight:600">
+        <label style="${AD_LBL};width:70px" title="Порядок в списке — меньше значит выше.">порядок
+          <input type="number" id="${p}-ord" value="${esc(String(s.ord || 100))}" style="${AD_INP}"></label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3,#8aa0b0)">
+          <input type="checkbox" id="${p}-active" ${s.active ? 'checked' : ''}>вкл</label>
+      </div>
+      <textarea id="${p}-hint" rows="2" placeholder="Что именно нажать — этот текст читает новичок"
+        style="${AD_INP};line-height:1.4;resize:vertical">${esc(s.hint || '')}</textarea>
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:6px">
+        <label style="${AD_LBL}" title="Что считаем. Список закрыт — значения приходят из path_check.">условие
+          <select id="${p}-check_key" style="${AD_INP}">
+            ${AD_PATH_KEYS.map(([k, l]) => `<option value="${k}"${s.check_key === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}
+          </select></label>
+        <label style="${AD_LBL}" title="Веха закрывается, когда значение достигло порога.">порог
+          <input type="number" step="any" id="${p}-threshold" value="${esc(String(s.threshold || 1))}" style="${AD_INP}"></label>
+      </div>
+      ${adRewardFields(p, s.reward)}
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-gh btn-sm" onclick="adPathSave('${esc(s.id)}')">Сохранить</button>
+        <button class="btn btn-gh btn-sm" onclick="adPathDelete('${esc(s.id)}')" style="color:#ff7a7a">Удалить</button>
+        <span style="font-family:monospace;font-size:10px;color:var(--t4,#6a7a88)">${esc(s.id)}</span>
+        <span id="${p}-st" style="font-size:11px;color:var(--t4,#6a7a88)"></span>
+      </div>`);
+  };
+  const steps = (P.path || []).map(stepCard).join('');
+  const newStep = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <input type="text" id="ad-path-new" placeholder="id_вехи" maxlength="40" style="${AD_INP};width:220px;font-family:monospace">
+      <button class="btn btn-gh btn-sm" onclick="adPathCreate()">+ Добавить веху</button>
+      <span style="font-size:11px;color:var(--t4,#6a7a88)">Удаление вехи стирает и отметки о её прохождении у всех держав.</span>
+    </div>`;
+
+  // ── Последние активации ──
+  const recent = (P.recent || []).length
+    ? `<div style="display:flex;flex-direction:column;gap:1px">${(P.recent || []).map(r => `
+        <div style="display:flex;gap:10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--w1,#1e2630);font-size:11px;font-family:monospace;color:var(--t3,#8aa0b0)">
+          <span style="color:var(--am,#d8a13a);min-width:120px">${esc(r.code)}</span>
+          <span style="min-width:130px">${esc(r.faction_id || '')}</span>
+          <span style="flex:1">${esc(JSON.stringify(r.granted || {}))}</span>
+          <span style="color:var(--t4,#6a7a88)">${esc(String(r.created_at || '').slice(0, 16).replace('T', ' '))}</span>
+        </div>`).join('')}</div>`
+    : `<div class="fm-empty">Активаций ещё не было</div>`;
+
+  return `<div style="display:flex;flex-direction:column">
+    ${settings}
+    ${H('🎟 Промокоды')}${newCode}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px">${codes || '<div class="fm-empty">Кодов пока нет</div>'}</div>
+    ${H('🧭 Путь становления')}${newStep}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px">${steps || '<div class="fm-empty">Вех пока нет</div>'}</div>
+    ${H('📜 Последние активации кодов')}${recent}
+  </div>`;
+}
+
+// ── Действия ────────────────────────────────────────────────────
+function adPromoV(pfx, f) { return document.getElementById(`${pfx}-${f}`); }
+
+async function adPromoSettingsSave() {
+  const el = document.getElementById('ad-promo-maxage');
+  const v = el ? parseInt(el.value) : 30;
+  try {
+    await adRpc('admin_promo_settings_save', { p: { max_age_days: isNaN(v) ? 30 : v } });
+    toast('Настройки пути сохранены', 'ok');
+    AD.promo = null; adPaint();
+  } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
+}
+
+async function adPromoCreate() {
+  const el = document.getElementById('ad-promo-new');
+  const code = ((el && el.value) || '').trim().toUpperCase();
+  if (!code) { toast('Введите код', 'err'); return; }
+  try {
+    await adRpc('admin_promo_save', { p: { code, title: 'Новый код', active: false, reward: {} } });
+    toast(`Код ${code} создан (пока выключен — заполните награду и включите)`, 'ok');
+    AD.promo = null; adPaint();
+  } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
+}
+
+async function adPromoSave(code) {
+  const p = `ad-pc-${code}`;
+  const st = adPromoV(p, 'st');
+  const val = f => { const el = adPromoV(p, f); return el ? el.value : ''; };
+  const numOrNull = f => { const v = val(f).trim(); return v === '' ? null : (parseInt(v) || 0); };
+  const body = {
+    code,
+    title: val('title'), note: val('note'),
+    reward: adRewardRead(p),
+    max_uses: parseInt(val('max_uses')) || 0,
+    per_faction: parseInt(val('per_faction')) || 1,
+    starts_at: val('starts_at') || null,
+    ends_at: val('ends_at') || null,
+    max_age_days: numOrNull('max_age_days'),
+    active: !!(adPromoV(p, 'active') || {}).checked,
+  };
+  if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = 'Сохранение…'; }
+  try {
+    await adRpc('admin_promo_save', { p: body });
+    if (st) st.textContent = '✓ сохранено';
+    toast(`Код ${code} сохранён`, 'ok');
+    AD.promo = null; adPaint();
+  } catch (e) {
+    if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 60); }
+    toast('Не удалось: ' + (e.message || e), 'err');
+  }
+}
+
+async function adPromoDelete(code) {
+  if (!confirm(`Удалить код ${code}? История его активаций тоже пропадёт.`)) return;
+  try {
+    await adRpc('admin_promo_delete', { p_code: code });
+    toast(`Код ${code} удалён`, 'ok');
+    AD.promo = null; adPaint();
+  } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
+}
+
+async function adPathCreate() {
+  const el = document.getElementById('ad-path-new');
+  const id = ((el && el.value) || '').trim();
+  if (!id) { toast('Введите id вехи', 'err'); return; }
+  try {
+    await adRpc('admin_path_save', { p: { id, title: 'Новая веха', ord: 900, active: false, reward: {} } });
+    toast(`Веха ${id} создана (пока выключена)`, 'ok');
+    AD.promo = null; adPaint();
+  } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
+}
+
+async function adPathSave(id) {
+  const p = `ad-ps-${id}`;
+  const st = adPromoV(p, 'st');
+  const val = f => { const el = adPromoV(p, f); return el ? el.value : ''; };
+  const body = {
+    id,
+    ord: parseInt(val('ord')) || 100,
+    icon: val('icon') || '•',
+    title: val('title'), hint: val('hint'),
+    check_key: val('check_key') || 'gc',
+    threshold: parseFloat(val('threshold')) || 1,
+    reward: adRewardRead(p),
+    active: !!(adPromoV(p, 'active') || {}).checked,
+  };
+  if (st) { st.style.color = 'var(--te,#3ec0d0)'; st.textContent = 'Сохранение…'; }
+  try {
+    await adRpc('admin_path_save', { p: body });
+    if (st) st.textContent = '✓ сохранено';
+    toast(`Веха «${body.title}» сохранена`, 'ok');
+    AD.promo = null; adPaint();
+  } catch (e) {
+    if (st) { st.style.color = '#ff7a7a'; st.textContent = (e.message || String(e)).slice(0, 60); }
+    toast('Не удалось: ' + (e.message || e), 'err');
+  }
+}
+
+async function adPathDelete(id) {
+  if (!confirm(`Удалить веху ${id}? Отметки о прохождении у всех держав тоже пропадут.`)) return;
+  try {
+    await adRpc('admin_path_delete', { p_id: id });
+    toast(`Веха ${id} удалена`, 'ok');
+    AD.promo = null; adPaint();
+  } catch (e) { toast('Не удалось: ' + (e.message || e), 'err'); }
 }

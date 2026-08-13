@@ -9,6 +9,11 @@
 // перестроить (вход/выход, смена роли/фракции, новый конфиг новеллы, обложка, язык).
 // Случайный выбор реплики и подстановка имени в ключ НЕ входят — иначе обложка
 // дёргалась бы при каждом повторном рендере главной.
+// Участник, чья карточка на главной идёт под шифром (анимация «зацензурено»,
+// css/10_patch.css). Один на весь сайт и виден ТАКИМ ВСЕМ — это оформление
+// конкретного профиля, а не «спрячь того, кто смотрит».
+const CENSORED_MEMBER_ID = '272a2209-f2c1-4f13-ab95-136b4e039a8d'; // Setis241
+
 function _homeCoverKey() {
   const u = (typeof user !== 'undefined' && user) ? user : null;
   const vnTs = (typeof _heroVN !== 'undefined' && _heroVN && _heroVN._ts) || 0;
@@ -88,28 +93,21 @@ async function renderHome() {
     const mlr = _mlKey(key);
     const barPct = mlr ? Math.round(mlProgress(mlr) * 100) : Math.min(100, cnt);
     const rankNumHtml = rank <= 9 ? `<div class="contrib-rank-num">${rank}</div>` : '';
-    // Ступень «богатства» карточки. Уровень пополам: иначе на 12-м уровне фон
-    // уходил в кислотную заливку и свечение на 30px — против правил оформления
-    // (один-два акцента, остальное строго).
-    const tier = mlr ? Math.min(Math.floor(mlr.level / 2), 10) : Math.min(Math.floor(cnt / 5), 20);
     const mlt = mlr ? mlTier(mlr.level) : 0;
     const lvlHtml = mlr ? `<div class="contrib-lvl-ring ml-t${mlt}">${mlr.level}</div>` : '';
     const titleHtml = mlr ? `<div class="contrib-title ml-t${mlt}">${esc(mlr.title)}</div>` : '';
     const footHtml = mlr
       ? `<div class="contrib-xp ml-t${mlt}"><b>${mlr.xp}</b>&nbsp;XP</div>`
       : `<div class="contrib-cnt">${cnt}&nbsp;СТР</div>`;
-    const tierHue = (hue + tier * 12) % 360;
-    const tierSat = Math.min(22 + tier * 2.5, 60);
-    const tierLight = Math.min(12 + tier * 0.8, 24);
-    const tierBorderSat = Math.min(30 + tier * 3, 70);
-    const tierBorderLight = Math.min(20 + tier * 2, 45);
-    const tierGlow = tier >= 4 ? `box-shadow: 0 0 ${tier * 2.5}px hsla(${tierHue}, ${tierSat + 20}%, 50%, ${Math.min(tier * 0.035, 0.4)}), inset 0 0 ${tier * 3}px hsla(${tierHue}, ${tierSat}%, 30%, ${Math.min(tier * 0.02, 0.15)});` : '';
-    const barHue = (tierHue + 10) % 360;
-    const barSat = Math.min(40 + tier * 3, 80);
-    const barLight = Math.min(45 + tier * 1.5, 65);
-    // своя карточка получает личную анимацию «зацензурено» (css/10_patch.css)
-    const censClass = (typeof user !== 'undefined' && user && (key === user.id || key === user.email)) ? ' contrib-censored' : '';
-    return `<div class="contrib-card${rankClass}${censClass}" onclick="openContribModal('${jsq(key)}','${jsq(displayName)}','${jsq(safeAvatar(avUrl))}',${hue},${cnt})" title="Посмотреть профиль" style="background:linear-gradient(145deg, hsl(${tierHue},${tierSat}%,${tierLight}%) 0%, hsl(${tierHue},${tierSat - 4}%,${tierLight - 3}%) 100%); border-color:hsl(${tierHue},${tierBorderSat}%,${tierBorderLight}%); ${tierGlow}"><div class="contrib-scan"></div><div class="contrib-card-top"><div class="contrib-av-wrap"><div class="contrib-av" style="background:linear-gradient(135deg, hsl(${tierHue},${tierSat + 5}%,${tierLight + 4}%) 0%, hsl(${tierHue},${tierSat}%,${tierLight}%) 100%);border-color:hsl(${tierHue},${tierBorderSat + 10}%,${tierBorderLight + 8}%)">${avHtml}</div><div class="contrib-av-ring" style="color:hsl(${tierHue},${tierSat + 25}%,${50 + tier * 1.5}%)"></div>${rankNumHtml}${lvlHtml}</div><div class="contrib-card-info"><div class="contrib-name">${esc(displayName)}</div>${titleHtml}</div></div><div class="contrib-card-bottom"><div class="contrib-stat-bar"><div class="contrib-stat-fill" style="width:${barPct}%; background:linear-gradient(90deg, hsl(${barHue},${barSat}%,${barLight}%) 0%, hsl(${barHue},${barSat + 10}%,${barLight + 8}%) 100%); box-shadow: 0 0 ${tier * 1.5}px hsla(${barHue}, ${barSat}%, ${barLight}%, ${Math.min(tier * 0.05, 0.6)});"></div></div>${footHtml}</div>${censClass ? '<div class="cens-layer"><i></i><i></i><i></i></div>' : ''}</div>`;
+    // Анимация «зацензурено» закреплена за ОДНИМ участником и видна ВСЕМ.
+    // Раньше она вешалась на карточку зрителя (key === user.id) — то есть каждый
+    // видел зашифрованным себя, а не того, кого прячем.
+    const censClass = (key === CENSORED_MEMBER_ID) ? ' contrib-censored' : '';
+    // Облик карточки задаёт СТУПЕНЬ УРОВНЯ (ml-t0…ml-t5), а не хеш почты:
+    // раньше цвет брался из адреса и сетка читалась радугой, где 12-й уровень
+    // ничем не отличался от 3-го. Теперь у ступени свой фон, рамка, свечение
+    // и отделка (css/32_levels.css) — сетка читается лестницей.
+    return `<div class="contrib-card ml-t${mlt} ml-lv${mlr ? Math.min(mlr.level, 30) : 0}${rankClass}${censClass}" onclick="openContribModal('${jsq(key)}','${jsq(displayName)}','${jsq(safeAvatar(avUrl))}',${hue},${cnt})" title="${mlr ? esc(mlr.title + ' · ' + mlr.level + ' уровень') : 'Посмотреть профиль'}"><div class="contrib-scan"></div><div class="contrib-card-top"><div class="contrib-av-wrap"><div class="contrib-av">${avHtml}</div><div class="contrib-av-ring"></div>${rankNumHtml}${lvlHtml}</div><div class="contrib-card-info"><div class="contrib-name">${esc(displayName)}</div>${titleHtml}</div></div><div class="contrib-card-bottom"><div class="contrib-stat-bar"><div class="contrib-stat-fill" style="width:${barPct}%"></div></div>${footHtml}</div>${censClass ? '<div class="cens-layer"><i></i><i></i><i></i></div>' : ''}</div>`;
   }).join('')}</div></section>` : '';
 
   // ── Единая обложка главной (одно изображение) ──
