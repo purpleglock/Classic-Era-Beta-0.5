@@ -1919,8 +1919,24 @@ function gmOpenPanel(sys) {
     const f = gmFaction(o.faction_id); const c = f ? gmReadable(f.color) : 'rgba(150,200,245,.9)';
     const nm = (f && f.name) || o.faction_name || (GM.facMeta && GM.facMeta[o.faction_id] && GM.facMeta[o.faction_id].name) || 'Неизвестно';
     const rm = o.mine ? `<button class="btn btn-gh btn-sm" style="padding:1px 7px;font-size:11px" onclick="gmOutpostDismantleMap('${o.id}','${sys.id}')" title="Разобрать (возврат ~50%)">разобрать</button>` : `<span class="gm-col-ty">${esc(nm)}</span>`;
-    const md = o.mode === 'mining' ? ' ⛏' : (o.mode === 'recon' ? ' 🛰' : '');
-    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:${c}"></span><span class="gm-col-nm">🛰 Аванпост${md}${o.mine ? ' · ваш' : ''}${o.name ? ': ' + esc(o.name) : ''}</span>${rm}</div>`);
+    const md = o.mode === 'mining' ? ' ⛏' : (o.mode === 'depot' ? ' ⛽' : (o.mode === 'recon' ? ' 🛰' : ''));
+    // Смена режима на месте: outpost_set_mode есть на сервере с _outpost_depot.sql,
+    // но органа управления не было — держава без верфи не могла поднять заставу
+    // и её флот не заправлялся нигде, хотя аванпосты у неё стояли.
+    const modeSel = o.mine ? `<select class="gm-col-mode" title="Режим аванпоста" onchange="gmOutpostMode('${o.id}','${sys.id}',this.value,'${esc(o.mode || '')}')">
+        <option value="recon"${o.mode === 'recon' ? ' selected' : ''}>🛰 разведка</option>
+        <option value="mining"${o.mode === 'mining' ? ' selected' : ''}>⛏ добыча</option>
+        <option value="depot"${o.mode === 'depot' ? ' selected' : ''}>⛽ застава</option>
+      </select>` : '';
+    defRows.push(`<div class="gm-col-row"><span class="gm-col-dot" style="background:${c}"></span><span class="gm-col-nm">🛰 Аванпост${md}${o.mine ? ' · ваш' : ''}${o.name ? ': ' + esc(o.name) : ''}</span>${modeSel}${rm}</div>`);
+    if (o.mine && o.crew != null) defRows.push(gmOutpostCrewRow(o, sys.id));
+  });
+  // ЛЕГИОН: вскрытые сигнатуры, идущие в ЭТУ систему или стоящие в ней.
+  // ghost сюда не попадает намеренно — у него нет известной системы, только
+  // сектор, и рисовать его на конкретной звезде значило бы врать о том,
+  // чего разведка не знает.
+  (GM.legion || []).filter(t => t && t.sys === sys.id).forEach(t => {
+    defRows.push(gmLegionRow(t));
   });
   // мои корабли-носители, стоящие (idle) в этой системе
   (GM.opShips || []).filter(sh => sh.status === 'idle' && sh.system_id === sys.id).forEach(sh => {
@@ -1986,7 +2002,7 @@ function gmDefRpc(fn, body) {
 async function gmReloadDefense(reopenSysId) {
   if (!user) return;
   try {
-    const [mines, drones, outposts, ships, mzas, fleets, salvos, fleetsVis, mzaVis, armies] = await Promise.all([
+    const [mines, drones, outposts, ships, mzas, fleets, salvos, fleetsVis, mzaVis, armies, legion] = await Promise.all([
       gmDefRpc('minefields_visible').catch(() => GM.minefields || []),
       gmDefRpc('droneposts_visible').catch(() => GM.droneposts || []),
       gmDefRpc('outposts_visible').catch(() => GM.outposts || []),
@@ -1998,6 +2014,10 @@ async function gmReloadDefense(reopenSysId) {
       gmDefRpc('fleets_visible').catch(() => GM.fleetsVis || []),
       gmDefRpc('mza_visible').catch(() => GM.mzaVis || []),
       gmDefRpc('armies_mine').catch(() => GM.armies || []),   // МАРШ
+      // ЛЕГИОН: сигнатуры, просеянные через МОИ сенсоры (_legion_contacts.sql).
+      // Ступень (ghost/signature/resolved) считает сервер по моей сети застав —
+      // клиент только рисует то, что ему выдали, и не знает большего.
+      gmDefRpc('legion_contacts_visible').catch(() => GM.legion || []),
     ]);
     GM.minefields = Array.isArray(mines) ? mines : [];
     GM.droneposts = Array.isArray(drones) ? drones : [];
@@ -2008,6 +2028,7 @@ async function gmReloadDefense(reopenSysId) {
     GM.fleetsVis = Array.isArray(fleetsVis) ? fleetsVis : [];
     GM.mzaVis = Array.isArray(mzaVis) ? mzaVis : [];
     GM.armies = Array.isArray(armies) ? armies : (GM.armies || []);   // МАРШ
+    GM.legion = Array.isArray(legion) ? legion : (GM.legion || []);   // ЛЕГИОН: сигнатуры
     GM.salvos = Array.isArray(salvos) ? salvos : (GM.salvos || []);
     if (GMM.active) { gmmBuildDefense(); gmmBuildSalvos(); GMM.dirty = true; gmmKick(); }
     if (GM._rosterOn) gmRosterRender();   // живой список юнитов
@@ -2043,6 +2064,55 @@ const gmDronePostScrap = sysId => gmHazardAct('dronepost_scrap', sysId, null, '�
   'Свернуть пост дронов? Вернётся ~50% за каждое крыло.');
 
 // Носитель аванпоста строится на Верфи в кабинете (ecOutpostBuildShip), не с карты.
+// ── ЭКИПАЖ АВАНПОСТА: строка со шкалой укомплектованности и наймом ──
+// Недоукомплектованный аванпост работает вполсилы (добыча × k), а разведка и
+// застава при k < 0.5 не работают вовсе. Пустой — сворачивается через 5 суток.
+function gmOutpostCrewRow(o, sysId) {
+  const crew = Math.max(0, +o.crew || 0), need = Math.max(1, +o.need || 1);
+  const pct = Math.round(crew / need * 100);
+  const thin = crew < need * 0.5 ? ' gm-crew-thin' : '';
+  const warn = crew === 0 ? ' · брошен, свернётся'
+    : (crew < need * 0.5
+        ? (o.mode === 'mining' ? ' · работает вполсилы' : ' · НЕ работает')
+        : '');
+  const hire = crew < need
+    ? `<button class="btn btn-gh btn-sm" style="padding:1px 7px;font-size:11px" onclick="gmOutpostStaff('${o.id}','${jsq(sysId)}',${need - crew})" title="Нанять до полного штата">нанять</button>`
+    : '';
+  return `<div class="gm-col-row"><span class="gm-col-dot" style="background:transparent"></span>` +
+    `<span class="gm-col-nm">👷 Экипаж ${crew}/${need}${warn}` +
+    `<span class="gm-crew"><i class="${thin}" style="width:${pct}%"></i></span></span>` +
+    `<span class="gm-col-ty">${+o.wage_day || 0} ГС/сут</span>${hire}</div>`;
+}
+async function gmOutpostStaff(id, sysId, delta) {
+  if (GM._defBusy) return; GM._defBusy = true;
+  try {
+    const r = await gmDefRpc('outpost_staff', { p_id: id, p_delta: delta });
+    toast(`Экипаж ${(r && r.crew) || 0}/${(r && r.need) || 0}` +
+      (r && +r.cost > 0 ? ` · −${Math.round(+r.cost)} ГС` : ''), 'ok');
+    await gmReloadDefense(sysId);
+  } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
+  finally { GM._defBusy = false; }
+}
+
+// Смена режима аванпоста. Штат у режимов разный, и сервер подрезает экипаж под
+// новый штат (crew = least(crew, need)) — лишних людей не вернуть, поэтому
+// спрашиваем подтверждение. Добытое до смены зачисляется на сервере.
+async function gmOutpostMode(id, sysId, mode, prev) {
+  if (mode === prev) return;
+  const nm = { recon: 'разведка', mining: 'добыча', depot: 'застава' }[mode] || mode;
+  if (!confirm(`Перевести аванпост в режим «${nm}»?\n\nЭкипаж будет подрезан под штат нового режима, добытое зачислится.`)) {
+    gmReloadDefense(sysId); return;   // вернуть выпадашку к прежнему значению
+  }
+  if (GM._defBusy) return; GM._defBusy = true;
+  try {
+    const r = await gmDefRpc('outpost_set_mode', { p_id: id, p_mode: mode });
+    toast(`Аванпост: ${nm} · экипаж ${(r && r.crew) || 0}/${(r && r.need) || 0}` +
+      (mode === 'depot' ? ' · здесь можно заправлять флот' : ''), 'ok');
+    await gmReloadDefense(sysId);
+  } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); await gmReloadDefense(sysId); }
+  finally { GM._defBusy = false; }
+}
+
 async function gmOutpostDismantleMap(id, sysId) {
   if (!confirm('Разобрать аванпост? Вернётся около половины стоимости.')) return;
   if (GM._defBusy) return; GM._defBusy = true;
@@ -2052,6 +2122,73 @@ async function gmOutpostDismantleMap(id, sysId) {
     await gmReloadDefense(sysId);
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
   finally { GM._defBusy = false; }
+}
+
+// ════════ ЛЕГИОН: СИГНАТУРЫ ════════
+// Три ступени осведомлённости приходят с сервера уже просеянными через мою сеть
+// (_legion_contacts.sql). Клиент НИЧЕГО не дорисовывает сверх выданного: если
+// у отметки нет системы — значит, её и не знают, и показывать надо сектор.
+const GM_LEGION_KIND = { strike: 'удар по колонии', blind: 'налёт на аванпост', probe: 'разбой на трассе' };
+function gmLegionEta(iso) {
+  if (!iso) return '';
+  const h = (new Date(iso) - Date.now()) / 36e5;
+  if (h <= 0) return 'на месте';
+  if (h < 1) return 'меньше часа';
+  return '~' + Math.round(h) + ' ч';
+}
+function gmLegionRow(t) {
+  const dot = '<span class="gm-col-dot" style="background:rgba(196,74,42,.9)"></span>';
+  if (t.grade === 'resolved') {
+    return `<div class="gm-col-row gm-legion-row"><span class="gm-col-dot" style="background:rgba(226,86,48,1)"></span>` +
+      `<span class="gm-col-nm">☠ Легион: ${esc(GM_LEGION_KIND[t.kind] || 'налёт')}` +
+      `${t.mine ? ' · <b>по вам</b>' : ''}</span>` +
+      `<span class="gm-col-ty">${+t.ships || 1} кор. · ${gmLegionEta(t.eta)}</span></div>`;
+  }
+  // signature: система и время есть, замысел и состав — нет
+  return `<div class="gm-col-row gm-legion-row">${dot}` +
+    `<span class="gm-col-nm">☠ Неопознанная сигнатура</span>` +
+    `<span class="gm-col-ty">${esc(t.band || '')} · ${gmLegionEta(t.eta)}</span></div>`;
+}
+// Сводка «Угрозы» для командного пункта. ghost-ы живут ТОЛЬКО здесь и одной
+// свёрнутой строкой: у них нет точки на карте (известен лишь неспокойный
+// сектор), и разворачивать их в список целей значило бы придумывать данные.
+function gmLegionSummary() {
+  const list = (GM.legion || []);
+  if (!list.length) return '';
+  const ghosts = list.filter(t => t.grade === 'ghost');
+  const known = list.filter(t => t.grade !== 'ghost')
+    .sort((a, b) => new Date(a.eta || 0) - new Date(b.eta || 0));
+
+  const rows = known.map(t => {
+    const sysName = (GM.systems.find(s => s.id === t.sys) || {}).name || t.sys || '?';
+    const name = t.grade === 'resolved'
+      ? `${GM_LEGION_KIND[t.kind] || 'налёт'}${t.mine ? ' · по вам' : ''}`
+      : 'Неопознанная сигнатура';
+    const tag = t.grade === 'resolved'
+      ? `<span class="gm-r-tag gm-r-threat">${+t.ships || 1} кор.</span>`
+      : `<span class="gm-r-tag">${esc(t.band || '?')}</span>`;
+    return `<button class="gm-r-row" onclick="gmLegionGo('${esc(t.sys || '')}')">
+        <span class="gm-r-ico">☠</span>
+        <span class="gm-r-main"><span class="gm-r-name">${esc(name)}</span>
+          <span class="gm-r-where">${esc(sysName)} · ${gmLegionEta(t.eta)}</span></span>
+        <span class="gm-r-tags">${tag}</span>
+      </button>`;
+  }).join('');
+
+  const secs = [...new Set(ghosts.map(t => t.sector).filter(Boolean))];
+  const ghostRow = secs.length
+    ? `<div class="gm-r-row gm-r-ghost"><span class="gm-r-ico">☠</span>
+        <span class="gm-r-main"><span class="gm-r-name">Неспокойно</span>
+          <span class="gm-r-where">${secs.map(esc).join(', ')} · направление неизвестно</span></span></div>`
+    : '';
+  const hint = known.length ? '' :
+    `<div class="gm-r-hint">Точнее не видно. Замысел и состав вскрывает только разведывательный аванпост с ПОЛНЫМ экипажем рядом.</div>`;
+  return `<div class="gm-r-group"><div class="gm-r-head">☠ Угрозы</div>${rows}${ghostRow}${hint}</div>`;
+}
+// Клик по угрозе: навести камеру на систему, если она известна.
+function gmLegionGo(sysId) {
+  if (!sysId) { toast('Направление неизвестно: сигнатура вскрыта только до сектора', 'info'); return; }
+  gmmCenterSystem(sysId);
 }
 
 // ── Командная плашка носителя (клик по нему на карте) ──
@@ -2071,7 +2208,9 @@ function gmOpenOutpostCmd(id) {
       ${sh.can_deploy
       ? `<button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('recon')">🛰 Развернуть: разведка</button>
            <button class="gm-opcmd-btn" onclick="gmOutpostCmdDeployMining()">⛏ Развернуть: добыча</button>
-           <div class="gm-opcmd-hint">Разведка — срез по соседним державам. Добыча — ОДИН выбранный ресурс системы + стоянка флота.</div>`
+           <button class="gm-opcmd-btn" onclick="gmOutpostCmdDeploy('depot')">⛽ Развернуть: застава</button>
+           <div class="gm-opcmd-hint">Разведка — срез по соседним державам. Добыча — ОДИН выбранный ресурс системы. Застава — ЗАПРАВКА флота вне своих границ и стоянка: без сети застав вглубь карты не уйти.</div>
+           <div class="gm-opcmd-hint">Любому аванпосту нужен ЭКИПАЖ: половина штата даётся сразу, дальше — наём и жалование. Пустой аванпост сворачивается.</div>`
       : `<button class="gm-opcmd-btn gm-dis" disabled>⚑ Развернуть в аванпост</button>
            <div class="gm-opcmd-hint">Развернуть нельзя: нужна нейтральная система, не впритык к чужой границе</div>`}
       <button class="gm-opcmd-btn gm-opcmd-danger" onclick="gmOutpostCmdScrap()">✕ Списать носитель</button>
@@ -2146,11 +2285,14 @@ function gmOutpostCmdDeployMining() {
 }
 async function gmOutpostCmdDeploy(mode, res) {
   if (!GMM.opCmd) return; const id = GMM.opCmd.id;
-  const md = mode === 'mining' ? 'mining' : 'recon';
+  const md = (mode === 'mining' || mode === 'depot') ? mode : 'recon';
   if (GM._defBusy) return; GM._defBusy = true;
   try {
-    await gmDefRpc('outpost_ship_deploy', { p_id: id, p_mode: md, p_res: (md === 'mining' && res) ? res : null });
-    toast(md === 'mining' ? ('⛏ Добывающий аванпост развёрнут' + (res ? ' · ' + res : '')) : '🛰 Разведаванпост развёрнут', 'ok');
+    const r = await gmDefRpc('outpost_ship_deploy', { p_id: id, p_mode: md, p_res: (md === 'mining' && res) ? res : null });
+    const crew = (r && r.crew != null) ? ` · экипаж ${r.crew}/${r.need}` : '';
+    toast((md === 'mining' ? ('⛏ Добывающий аванпост развёрнут' + (res ? ' · ' + res : ''))
+        : md === 'depot' ? '⛽ Застава развёрнута'
+        : '🛰 Разведаванпост развёрнут') + crew, 'ok');
     gmCloseOutpostCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
@@ -2508,8 +2650,10 @@ function gmRosterRender() {
       return `<div class="gm-r-group"><div class="gm-r-head">${TLAB[t]}</div>${rows}</div>`;
     }).join('');
   }
+  // Угрозы ставим ПЕРЕД своими юнитами: если Легион уже на подходе, это важнее
+  // списка того, что стоит на приколе.
   el.innerHTML = `<div class="gm-r-bar"><span class="gm-r-title">📡 Командный пункт</span>
-      <button class="gm-close" onclick="gmRosterToggle()">✕</button></div>${body}`;
+      <button class="gm-close" onclick="gmRosterToggle()">✕</button></div>${gmLegionSummary()}${body}`;
   el.classList.remove('gm-hidden');
 }
 // Клик по строке: навести камеру на юнит и открыть его плашку (если стоит).
@@ -2567,6 +2711,10 @@ function gmFleetJumps(from, to) {
   return avg ? Math.max(1, Math.ceil(Math.hypot(sb.x - sa.x, sb.y - sa.y) / avg)) : 1;
 }
 // Карта {ресурс: количество} на N прыжков для состава.
+// ПОСЛЕ ВВЕДЕНИЯ БАКА (_fleet_tank.sql) перелёт тратит ПЛЕЧИ из бака, а не
+// ресурсы со склада, поэтому в карточке и в подтверждении рейса эта оценка
+// больше не показывается. Осталась для форматирования цены ЗАПРАВКИ, которую
+// считает сервер (fleet_refuel возвращает cost).
 function gmFleetFuelCost(comp, jumps) {
   const out = {}; const j = Math.max(1, jumps || 1);
   (comp || []).forEach(c => {
@@ -2578,6 +2726,46 @@ function gmFleetFuelCost(comp, jumps) {
 }
 function gmFleetFuelFmt(map) {
   return Object.keys(map || {}).filter(k => map[k] > 0).map(k => `${k} ${Math.round(map[k])}`).join(', ');
+}
+// ── ЗАПАС ХОДА (бак в ПЛЕЧАХ, _fleet_tank.sql) ──
+// Одна шкала вместо карты из четырёх руд: игрок видит, сколько прыжков ещё
+// может пройти флот и можно ли заправиться там, где он стоит.
+// Ряд делений: плечо — счётная величина, поэтому «3 из 8» показываем ТРЕМЯ
+// залитыми сегментами из восьми, а не процентом в полоске. spend — сколько
+// уйдёт на планируемый рейс (оранжевым), чтобы остаток был виден сразу.
+function gmPipsHtml(cur, cap, spend) {
+  const c = Math.max(0, Math.min(cap, cur | 0)), sp = Math.max(0, Math.min(c, spend | 0));
+  const cls = c <= 0 ? ' dry' : (c <= cap * 0.34 ? ' low' : '');
+  let out = '';
+  for (let i = 0; i < cap; i++) out += `<i class="${i < c - sp ? 'on' : (i < c ? 'spend' : '')}"></i>`;
+  return `<span class="gm-pips${sp ? '' : cls}">${out}</span>`;
+}
+function gmFleetTankHtml(fl) {
+  if (!fl || fl.fuel == null || fl.fuel_cap == null) return '';
+  const cap = Math.max(0, +fl.fuel_cap || 0), cur = Math.max(0, +fl.fuel || 0);
+  if (!cap) return '';
+  const warn = cur <= 0 ? ' gm-gauge-warn' : '';
+  const line = `<div class="gm-gauge${warn}">⛽ Ход <b>${cur}/${cap}</b>${gmPipsHtml(cur, cap, 0)}</div>`;
+  const btn = fl.can_refuel
+    ? `<button class="gm-opcmd-btn" onclick="gmFleetRefuel('${fl.id}')">⛽ Заправить бак</button>`
+    : '';
+  return line + btn;
+}
+async function gmFleetRefuel(id) {
+  if (GM._defBusy) return; GM._defBusy = true;
+  try {
+    const r = await gmDefRpc('fleet_refuel', { p_id: id, p_hops: null });
+    const cost = gmFleetFuelFmt((r && r.cost) || {});
+    if (r && +r.filled > 0) {
+      toast(`Заправлено +${r.filled} ${gmPlural(+r.filled, 'плечо', 'плеча', 'плеч')} · бак ${r.fuel}/${r.fuel_cap}` +
+        (cost ? ' · ⛽ ' + cost : ''), 'ok');
+    } else {
+      toast('Бак уже полон', 'ok');
+    }
+    gmCloseFleetCmd();
+    await gmReloadDefense();
+  } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
+  finally { GM._defBusy = false; }
 }
 // Римская запись числа (для бейджа «сколько флотов в стопке»). 1..39 хватает с запасом.
 function gmRoman(n) {
@@ -2631,13 +2819,12 @@ function gmOpenFleetCmd(id) {
     el.classList.remove('gm-hidden');
     return;
   }
-  const fuel = gmFleetFuelFmt(gmFleetFuelCost(fl.composition, 1));
   el.innerHTML = `<div class="gm-opcmd-card">
       <button class="gm-close" onclick="gmCloseFleetCmd()">✕</button>
       <div class="gm-opcmd-title">Флот${fl.name ? ' «' + esc(fl.name) + '»' : ''}</div>
       <div class="gm-opcmd-sub">в системе ${esc(sysName)} · ${+fl.ships || 0} кор.</div>
       ${comp ? `<div class="gm-opcmd-hint">${comp}</div>` : ''}
-      ${fuel ? `<div class="gm-opcmd-hint">⛽ ${esc(fuel)} / прыжок</div>` : ''}
+      ${gmFleetTankHtml(fl)}
       <button class="gm-opcmd-btn" onclick="gmFleetCmdSend()">➤ Перебросить — выберите систему</button>
       ${fl.can_recall ? `<button class="gm-opcmd-btn" onclick="gmFleetCmdRecall()">↩ Вернуть на базу</button>` : ''}
       <div id="gm-fleet-raid"></div>
@@ -2713,36 +2900,67 @@ async function gmFleetRaidGo(id, routeId) {
   } finally { GM._defBusy = false; }
 }
 function gmCloseFleetCmd() {
-  GMM.fleetCmd = null; GMM.dirty = true; gmmKick();
+  GMM.fleetCmd = null; GMM.fleetReach = null; GMM.fleetPreview = null;
+  GMM.dirty = true; gmmKick();
   document.getElementById('gm-opcmd')?.classList.add('gm-hidden');
 }
-function gmFleetCmdSend() {
+async function gmFleetCmdSend() {
   if (!GMM.fleetCmd) return;
+  const id = GMM.fleetCmd.id;
   GMM.fleetCmd.mode = 'target';
   const el = document.getElementById('gm-opcmd');
   if (el) el.innerHTML = `<div class="gm-opcmd-card">
       <div class="gm-opcmd-title">➤ Куда перебросить флот?</div>
-      <div class="gm-opcmd-hint">Кликните любую систему карты. Долёт зависит от дистанции.</div>
+      <div class="gm-opcmd-hint">Кликните любую систему карты. Подсвечены достижимые: <b class="gm-reach-go">запас хода</b> и <b class="gm-reach-back">хватит с возвратом</b>.</div>
       <button class="gm-opcmd-btn" onclick="gmCloseFleetCmd()">Отмена</button>
     </div>`;
+  // два кольца радиуса — считает сервер (fleet_reach), волнами по трассам
+  try {
+    const r = await gmDefRpc('fleet_reach', { p_id: id });
+    if (!GMM.fleetCmd || GMM.fleetCmd.id !== id || GMM.fleetCmd.mode !== 'target') return;
+    GMM.fleetReach = {
+      go: new Set(Array.isArray(r && r.go) ? r.go : []),
+      back: new Set(Array.isArray(r && r.round) ? r.round : [])
+    };
+    GMM.dirty = true; gmmKick();
+  } catch (e) { GMM.fleetReach = null; }
 }
-// Выбрана система-цель → показываем стоимость (прыжки + топливо) и просим подтвердить.
-function gmFleetConfirmSend(id, destSys) {
+// Выбрана система-цель → спрашиваем СЕРВЕР о маршруте (fleet_route_preview:
+// Дейкстра по гиперпутям, часы и число плеч) и просим подтвердить. Клиентская
+// оценка прыжков осталась только заглушкой на время ответа: врать о цене
+// рейса, который сервер посчитает иначе, нельзя.
+async function gmFleetConfirmSend(id, destSys) {
   const fl = (GM.fleets || []).find(x => x.id === id);
   if (!fl) { gmCloseFleetCmd(); return; }
   GMM.fleetCmd = { id, mode: 'confirm' };
+  GMM.fleetReach = null;
   const sysName = (GM.systems.find(s => s.id === destSys) || {}).name || destSys;
-  const jumps = gmFleetJumps(fl.system_id, destSys);
-  const fuel = gmFleetFuelFmt(gmFleetFuelCost(fl.composition, jumps));
   const el = document.getElementById('gm-opcmd');
-  if (el) el.innerHTML = `<div class="gm-opcmd-card">
-      <button class="gm-close" onclick="gmCloseFleetCmd()">✕</button>
+  const card = inner => { if (el) el.innerHTML = `<div class="gm-opcmd-card">${inner}</div>`; };
+  card(`<button class="gm-close" onclick="gmCloseFleetCmd()">✕</button>
       <div class="gm-opcmd-title">➤ Перебросить в ${esc(sysName)}?</div>
-      <div class="gm-opcmd-sub">${jumps} ${gmPlural(jumps, 'прыжок', 'прыжка', 'прыжков')}</div>
-      <div class="gm-opcmd-hint">⛽ Топливо: ${fuel ? esc(fuel) : '—'}</div>
-      <button class="gm-opcmd-btn" onclick="gmFleetSendTo('${id}','${destSys}')">✓ Перебросить</button>
-      <button class="gm-opcmd-btn" onclick="gmCloseFleetCmd()">Отмена</button>
-    </div>`;
+      <div class="gm-opcmd-hint">Прокладываю маршрут…</div>`);
+
+  let pv = null;
+  try { pv = await gmDefRpc('fleet_route_preview', { p_id: id, p_dest_sys: destSys }); } catch (e) { pv = null; }
+  if (!GMM.fleetCmd || GMM.fleetCmd.id !== id || GMM.fleetCmd.mode !== 'confirm') return;   // окно уже сменилось
+
+  const jumps = pv ? (+pv.jumps || 0) : gmFleetJumps(fl.system_id, destSys);
+  const flyH = pv ? (+pv.fly_h || 0) : null;
+  const tank = (fl.fuel != null) ? +fl.fuel : null;
+  const enough = (tank == null) || tank >= jumps;
+  const lanes = pv ? pv.lanes !== false : true;
+  // маршрут на карте показываем сразу, ещё до подтверждения
+  GMM.fleetPreview = (pv && Array.isArray(pv.route) && pv.route.length >= 2) ? pv.route : null;
+  GMM.dirty = true; gmmKick();
+
+  card(`<button class="gm-close" onclick="gmCloseFleetCmd()">✕</button>
+      <div class="gm-opcmd-title">➤ Перебросить в ${esc(sysName)}?</div>
+      <div class="gm-opcmd-sub">${jumps} ${gmPlural(jumps, 'плечо', 'плеча', 'плеч')}${flyH ? ' · ~' + flyH + ' ч' : ''}${!lanes ? ' · вне трасс' : ''}</div>
+      ${tank != null ? `<div class="gm-gauge${enough ? '' : ' gm-gauge-warn'}">⛽ Ход <b>${enough ? Math.max(0, tank - jumps) + '/' + (+fl.fuel_cap || 0) : 'не хватает ' + (jumps - tank)}</b>${gmPipsHtml(tank, +fl.fuel_cap || 0, jumps)}</div>` : ''}
+      ${enough ? '' : `<div class="gm-opcmd-hint">Заправка — на своей верфи или у заставы.</div>`}
+      ${enough ? `<button class="gm-opcmd-btn" onclick="gmFleetSendTo('${id}','${destSys}')">✓ Перебросить</button>` : ''}
+      <button class="gm-opcmd-btn" onclick="gmCloseFleetCmd()">Отмена</button>`);
 }
 function gmPlural(n, one, few, many) {
   const m10 = n % 10, m100 = n % 100;
@@ -2754,8 +2972,8 @@ async function gmFleetSendTo(id, destSys) {
   if (GM._defBusy) return; GM._defBusy = true;
   try {
     const r = await gmDefRpc('fleet_send', { p_id: id, p_dest_sys: destSys });
-    const fuel = gmFleetFuelFmt((r && r.fuel) || {});
-    toast('Флот в пути · долёт ~' + ((r && r.fly_h) || '?') + ' ч' + (fuel ? ' · ⛽ ' + fuel : ''), 'ok');
+    const left = (r && r.fuel != null) ? ` · ⛽ осталось ${r.fuel}/${r.fuel_cap}` : '';
+    toast('Флот в пути · долёт ~' + ((r && r.fly_h) || '?') + ' ч' + left, 'ok');
     gmCloseFleetCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); gmCloseFleetCmd(); }
@@ -2766,8 +2984,8 @@ async function gmFleetCmdRecall() {
   if (GM._defBusy) return; GM._defBusy = true;
   try {
     const r = await gmDefRpc('fleet_recall', { p_id: id });
-    const fuel = gmFleetFuelFmt((r && r.fuel) || {});
-    toast('Флот возвращается на базу · долёт ~' + ((r && r.fly_h) || '?') + ' ч' + (fuel ? ' · ⛽ ' + fuel : ''), 'ok');
+    const left = (r && r.fuel != null) ? ` · ⛽ осталось ${r.fuel}/${r.fuel_cap}` : '';
+    toast('Флот возвращается на базу · долёт ~' + ((r && r.fly_h) || '?') + ' ч' + left, 'ok');
     gmCloseFleetCmd();
     await gmReloadDefense();
   } catch (e) { toast('Ошибка: ' + (e.message || e), 'err'); }
@@ -6536,7 +6754,11 @@ function gmmBuildDefense() {
         // (чужие — нет: extra.enemy). Обхода нет → путь по чистой топологии
         // (флоты летают ТОЛЬКО по трассам); прямая дуга — лишь если трасс
         // между from и dest нет вовсе (дыра в данных).
-        const path = (GMM.laneGeo && (bfs(sh.from_sys, sh.dest_sys, !(extra && extra.enemy))
+        // МАРШРУТ С СЕРВЕРА (fleets_visible.route, Дейкстра по гиперпутям) —
+        // правда о пути; клиентский BFS оставлен фолбэком для чужих флотов и
+        // старых рейсов, у которых маршрута ещё нет.
+        const srvRoute = Array.isArray(sh.route) && sh.route.length >= 2 ? sh.route : null;
+        const path = srvRoute || (GMM.laneGeo && (bfs(sh.from_sys, sh.dest_sys, !(extra && extra.enemy))
           || bfs(sh.from_sys, sh.dest_sys, false))) || null;
         let segs = null, total = 0, g = null;
         if (path && path.length >= 2) {
@@ -6565,7 +6787,8 @@ function gmmBuildDefense() {
     const fleetCol = [120, 200, 235];
     (GM.fleets || []).forEach(fl => pushShip(fl, {
       fleet: true, side: 'left', col: fleetCol, station: !!fl.is_station,
-      ships: +fl.ships || 0, canRecall: !!fl.can_recall
+      ships: +fl.ships || 0, canRecall: !!fl.can_recall,
+      dry: (fl.fuel != null && +fl.fuel <= 0)     // пустой бак — значок помечаем
     }));
     // МАРШ: армии — гарнизоны на колониях (idle у звезды колонии, transit по трассам).
     // Оливковый цвет; рисуются/кликабельны только в режиме «Звёздный марш».
@@ -7000,6 +7223,49 @@ function gmmPaintDefense(ctx) {
       gmmCivGlyph(ctx, tX + R * 0.75, tY + R * 0.62 * sq, Math.max(2.2, ip * 0.17) * zf,
         list.some(c => c.status === 'spacefaring'), list.length);
     });
+  }
+
+  // ── РАДИУС ДЕЙСТВИЯ ФЛОТА: два кольца (fleet_reach) ──────────
+  // Пока игрок выбирает, куда перебросить флот, карта сама показывает предел
+  // бака: докуда он вообще дотянет и докуда дотянет С ВОЗВРАТОМ. Это заменяет
+  // арифметику в уме — решение видно глазами.
+  if (GMM.fleetReach) {
+    const goSet = GMM.fleetReach.go, backSet = GMM.fleetReach.back;
+    ctx.save();
+    GM.systems.forEach(sys => {
+      const inGo = goSet && goSet.has(sys.id), inBack = backSet && backSet.has(sys.id);
+      if (!inGo && !inBack) return;
+      const tX = SX(sys.x), tY = SY(sys.y);
+      if (!onScreen(tX, tY)) return;
+      const ip = gmmIconPx(sys, s);
+      const R = ip * 0.62 + 6;
+      ctx.beginPath();
+      ctx.arc(tX, tY, R * 1.25, 0, Math.PI * 2);
+      // «с возвратом» — плотнее и ярче, «только туда» — тонкий пунктир
+      if (inBack) { ctx.strokeStyle = 'rgba(120,200,235,0.55)'; ctx.setLineDash([]); ctx.lineWidth = Math.max(1, 1.6 * zf); }
+      else { ctx.strokeStyle = 'rgba(120,200,235,0.24)'; ctx.setLineDash([3 * zf, 3 * zf]); ctx.lineWidth = Math.max(1, 1.1 * zf); }
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // ── ПРЕДПРОСМОТР МАРШРУТА: ломаная по узлам до подтверждения рейса ──
+  if (GMM.fleetPreview && GMM.laneGeo && GMM.fleetPreview.length >= 2) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(150,220,255,0.8)';
+    ctx.lineWidth = Math.max(1.2, 2.0 * zf);
+    ctx.setLineDash([6 * zf, 4 * zf]);
+    for (let i = 0; i < GMM.fleetPreview.length - 1; i++) {
+      const gg = GMM.laneGeo.get(GMM.fleetPreview[i] + '|' + GMM.fleetPreview[i + 1]);
+      if (!gg) continue;
+      ctx.beginPath();
+      ctx.moveTo(SX(gg.ax), SY(gg.ay));
+      ctx.quadraticCurveTo(SX(gg.cx), SY(gg.cy), SX(gg.bx), SY(gg.by));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   // ── Корабли-носители: idle у звезды + летящие по гиперпути ──

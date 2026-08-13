@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Пробник: карточка флота на телефоне</title>
+<link rel="stylesheet" href="css/index.css">
+<style>
+  /* Только каркас пробника. Карточку не трогаем — смотрим ровно то, что даёт 14_map.css. */
+  body{margin:0;background:#07090d}
+  .probe-row{display:flex;gap:18px;padding:14px;flex-wrap:wrap;align-items:flex-start}
+  .probe-cell{flex:0 0 auto}
+  .probe-cap{font:600 12px/1.4 system-ui;color:#8aa;padding:4px 0}
+  /* Имитация вьюпорта карты на телефоне 375×667 */
+  .probe-vp{position:relative;width:375px;height:667px;overflow:hidden;
+    border:1px solid #223;background:radial-gradient(circle at 40% 35%,#101826,#05070b)}
+  .probe-vp.tall{height:812px}
+  /* 14_map.css задаёт #gm-wrap{height:calc(100dvh …)} — в пробнике это перебило бы
+     размер ячейки, и замер поехал бы. Прибиваем контейнер ровно к экрану телефона. */
+  .probe-vp #gm-wrap{height:100%!important;width:100%!important}
+</style>
+</head><body>
+
+<div class="probe-row" id="root"></div>
+
+<script>
+// Разметка 1:1 с galaxy_map.js (gmOpenFleetCmd / gmFleetCmdSend / gmFleetConfirmSend).
+function pips(cur, cap, spend){
+  const c=Math.max(0,Math.min(cap,cur|0)), sp=Math.max(0,Math.min(c,spend|0));
+  const cls = c<=0?' dry':(c<=cap*0.34?' low':'');
+  let out=''; for(let i=0;i<cap;i++) out+=`<i class="${i<c-sp?'on':(i<c?'spend':'')}"></i>`;
+  return `<span class="gm-pips${sp?'':cls}">${out}</span>`;
+}
+
+// A. Меню флота — худший реальный случай: дредноутный бак 16, состав из 4 позиций,
+//    два каравана на пути и две чужие колонии в системе.
+const cardMenu = `
+  <button class="gm-close">✕</button>
+  <div class="gm-opcmd-title">Флот «Северный кулак»</div>
+  <div class="gm-opcmd-sub">в системе Тау Волопаса · 14 кор.</div>
+  <div class="gm-opcmd-hint">Дредноут «Молот Зари» ×2, Крейсер «Хиона» ×4, Эсминец «Ирбис» ×6, Корвет «Оса» ×2</div>
+  <div class="gm-gauge">⛽ Ход <b>11/16</b>${pips(11,16,0)}</div>
+  <button class="gm-opcmd-btn">⛽ Заправить бак</button>
+  <button class="gm-opcmd-btn">➤ Перебросить — выберите систему</button>
+  <button class="gm-opcmd-btn">↩ Вернуть на базу</button>
+  <div>
+    <div class="gm-opcmd-hint" style="margin-top:4px">🏴 Караваны на пути — грабить (риск: заметят):</div>
+    <button class="gm-opcmd-btn gm-opcmd-danger">🏴 Грабить: Республика Синли · Дейтерий ×420 · 🛡3</button>
+    <button class="gm-opcmd-btn gm-opcmd-danger">🏴 Грабить: Ковенант Ветвей · Старвис ×180 · 🛡1</button>
+    <div class="gm-opcmd-hint" style="margin-top:6px">⛓ Колонии в системе — угнать население в рабство (риск: заметят):</div>
+    <button class="gm-opcmd-btn gm-opcmd-danger">⛓ Налёт на колонию: Кассандра-IV · Республика Синли</button>
+    <button class="gm-opcmd-btn gm-opcmd-danger">⛓ Налёт на колонию: Приют · Ковенант Ветвей</button>
+  </div>
+  <button class="gm-opcmd-btn gm-opcmd-danger">✕ Распустить флот</button>`;
+
+// B. Режим выбора цели (кольца на карте).
+const cardTarget = `
+  <div class="gm-opcmd-title">➤ Куда перебросить флот?</div>
+  <div class="gm-opcmd-hint">Кликните любую систему карты. Подсвечены достижимые: <b class="gm-reach-go">запас хода</b> и <b class="gm-reach-back">хватит с возвратом</b>.</div>
+  <button class="gm-opcmd-btn">Отмена</button>`;
+
+// C. Подтверждение рейса — топлива НЕ хватает (оранжевый spend + красный warn).
+const cardConfirm = `
+  <button class="gm-close">✕</button>
+  <div class="gm-opcmd-title">➤ Перебросить в Эпсилон Печи?</div>
+  <div class="gm-opcmd-sub">13 плеч · ~29 ч</div>
+  <div class="gm-gauge gm-gauge-warn">⛽ Ход <b>не хватает 2</b>${pips(11,16,13)}</div>
+  <div class="gm-opcmd-hint">Заправка — на своей верфи или у заставы.</div>
+  <button class="gm-opcmd-btn">Отмена</button>`;
+
+// D. Подтверждение, топлива хватает.
+const cardOk = `
+  <button class="gm-close">✕</button>
+  <div class="gm-opcmd-title">➤ Перебросить в Кор Каройи?</div>
+  <div class="gm-opcmd-sub">4 плеча · ~9 ч</div>
+  <div class="gm-gauge">⛽ Ход <b>7/16</b>${pips(11,16,4)}</div>
+  <button class="gm-opcmd-btn">✓ Перебросить</button>
+  <button class="gm-opcmd-btn">Отмена</button>`;
+
+const cells = [
+  ['Меню флота · 375×667', cardMenu, false],
+  ['Меню флота · 375×812', cardMenu, true],
+  ['Выбор цели', cardTarget, false],
+  ['Не хватает хода', cardConfirm, false],
+  ['Хватает хода', cardOk, false],
+];
+
+document.getElementById('root').innerHTML = cells.map(([cap, inner, tall]) => `
+  <div class="probe-cell">
+    <div class="probe-cap">${cap}</div>
+    <div class="probe-vp${tall?' tall':''}">
+      <div id="gm-wrap" class="gm-mobile" style="position:absolute;inset:0">
+        <div id="gm-viewport"></div>
+        <div id="gm-controls" style="position:absolute">
+          <div class="gm-panel-head"><span class="gm-panel-ttl">Слои</span></div>
+          <div class="gm-ctl-group gm-collapsed"><div class="gm-ctl-row">▾</div></div>
+        </div>
+        <div id="gm-opcmd"><div class="gm-opcmd-card">${inner}</div></div>
+      </div>
+    </div>
+  </div>`).join('');
+</script>
+</body></html>

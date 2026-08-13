@@ -512,6 +512,19 @@ body.route-map #gm-wrap{height:100%;min-height:0}
 .gm-opcmd-btn.gm-opcmd-danger:hover{border-color:var(--err);color:var(--err)}
 .gm-opcmd-sel{background:hsl(216 22% 13% / .9);border:1px solid var(--w2);border-radius:var(--radius-md);color:var(--t1);padding:8px 10px;font-size:13px}
 
+/* ── ЗАПАС ХОДА: плечо — величина СЧЁТНАЯ, поэтому деления, а не проценты ──
+   Один ряд: подпись слева, сегменты справа. Никаких абзацев подсказок. */
+.gm-gauge{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--t3)}
+.gm-gauge b{color:var(--t1);font-weight:600}
+.gm-pips{display:flex;gap:2px;flex:1;min-width:0}
+.gm-pips>i{flex:1;height:6px;border-radius:1px;background:hsl(216 22% 22% / .9)}
+.gm-pips>i.on{background:hsl(199 62% 62%)}
+.gm-pips>i.spend{background:hsl(30 75% 55%)}          /* уйдёт на этот рейс */
+.gm-pips.dry>i.on,.gm-pips.low>i.on{background:var(--err)}
+.gm-gauge.gm-gauge-warn b{color:var(--err)}
+.gm-reach-go{color:hsl(199 40% 58%);font-weight:600}
+.gm-reach-back{color:hsl(199 72% 72%);font-weight:600}
+
 /* ════════ КОМАНДНЫЙ ПУНКТ (список всех моих мобильных юнитов, слева) ════════ */
 #gm-roster,#gm-civlist{position:absolute;top:12px;left:12px;width:284px;max-width:calc(100% - 24px);
   max-height:calc(100% - 24px);overflow-y:auto;z-index:31;
@@ -545,6 +558,13 @@ body.route-map #gm-wrap{height:100%;min-height:0}
   border-radius:var(--radius-md);padding:1px 6px;white-space:nowrap}
 .gm-r-tag.gm-r-rdy{color:#7be08a;border-color:hsl(135 50% 40% / .6)}
 .gm-r-tag.gm-r-fly{color:#7cc4ff;border-color:hsl(210 60% 50% / .6)}
+/* ── ЛЕГИОН: угрозы в командном пункте и сигнатуры в панели системы ──
+   Один акцент на всю тему — ржавый красный. Вскрытая угроза звучит в полный
+   голос, неопознанная приглушена: разница ступеней должна читаться без чтения. */
+.gm-r-tag.gm-r-threat{color:#ff9270;border-color:hsl(14 70% 50% / .6)}
+.gm-r-ghost{opacity:.6;cursor:default}
+.gm-r-hint{font-size:10.5px;color:var(--t3);line-height:1.45;padding:6px 10px 8px}
+.gm-legion-row .gm-col-nm{color:#ffb59b}
 .gm-ctl.gm-ctl-roster.gm-active{border-color:var(--gdl);color:var(--gdl)}
 
 /* ════════ РЕДАКТОР СЕКТОРА (панель справа, живёт пока режим «Сектора») ════════ */
@@ -606,6 +626,10 @@ body.route-map #gm-wrap{height:100%;min-height:0}
 .gm-col-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .gm-col-nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gm-col-ty{font-size:11px;color:var(--t3);flex-shrink:0}
+/* режим своего аванпоста прямо в строке: разведка / добыча / застава */
+.gm-col-mode{flex-shrink:0;background:hsl(216 22% 13% / .9);border:1px solid var(--w2);
+  border-radius:var(--radius-sm,4px);color:var(--t2);font-size:11px;padding:1px 4px;cursor:pointer}
+.gm-col-mode:hover{border-color:var(--gdl);color:var(--t1)}
 .gm-empty{font-size:12px;color:var(--t3);font-style:italic}
 /* заграждения системы: мины + посты дронов (кнопки постройки в панели системы) */
 .gm-haz-acts{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
@@ -813,6 +837,24 @@ textarea.gm-fi{resize:vertical}
   width:42px;height:4px;border-radius:2px;background:rgba(255,255,255,.22);
 }
 #gm-wrap.gm-mobile #gm-panel .gm-close{top:12px;right:14px;font-size:22px;padding:4px}
+/* командная плашка (аванпост/флот/МЗА) — тот же нижний лист, что и панель системы.
+   Карточка флота выросла (бак, кольца, грабёж караванов и колоний): на экране
+   667 px она вылезала за верх карты на ~96 px, унося заголовок и шкалу хода под
+   шапку, а доскроллить было нечем — своих правил на телефоне у #gm-opcmd не было.
+   Лист во всю ширину заодно даёт делениям бака нормальную длину: 16 плеч
+   дредноута в узкой карточке сжимались до 4 px на деление. */
+#gm-wrap.gm-mobile #gm-opcmd{
+  left:0;right:0;bottom:0;transform:none;max-width:none;
+  max-height:calc(100% - 24px);overflow-y:auto;overscroll-behavior:contain;
+}
+#gm-wrap.gm-mobile .gm-opcmd-card{
+  min-width:0;border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+  border-left:none;border-right:none;border-bottom:none;
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px));
+}
+/* пальцевые строки: 35 px по высоте мало для тапа по краю списка целей */
+#gm-wrap.gm-mobile .gm-opcmd-btn{padding:11px 12px}
+#gm-wrap.gm-mobile .gm-opcmd-card .gm-close{top:10px;right:12px;font-size:22px;padding:4px}
 
 /* ════════ РАЗЛОМ МАТЕРИИ (другая вселенная) ════════ */
 /* Территория разлома — тёмная пустота с медленным «дыханием» */

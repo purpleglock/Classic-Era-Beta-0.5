@@ -4459,9 +4459,22 @@ async function renderHotspots() {
       <button class="btn btn-gh btn-sm" style="margin-top:10px" onclick="renderHotspots()">↺ Повторить</button></div></div>`);
     return;
   }
-  hsNavBadge(battles.length);
+  // ☠ УГРОЗЫ: сигнатуры Легиона (_legion_contacts.sql). Живут здесь же, а не
+  // отдельной страницей: «Горячие точки» — это и есть сводка того, что горит у
+  // державы, и подходящий налёт относится к ней ровно так же, как идущий бой.
+  // Список не обязателен — если RPC ещё не накачен, страница работает как раньше.
+  let threats = [];
+  try { threats = await ecRpc('legion_contacts_visible', {}); } catch (e) { threats = []; }
+  if (!Array.isArray(threats)) threats = [];
+  if (typeof curSlug !== 'undefined' && curSlug !== 'hotspots') return;
+  const threatsHtml = hsThreatsBlock(threats);
+
+  // В бейдж идут бои плюс ВСКРЫТЫЕ угрозы: ghost — это фон, дёргать им цифру
+  // в меню значит приучить игрока её игнорировать.
+  hsNavBadge(battles.length + threats.filter(t => t && t.grade !== 'ghost').length);
+
   if (!battles.length) {
-    setPg(head + `<div class="hs-empty"><div class="hs-empty-ic">🕊</div>Сейчас ваши флоты не скованы боем.<br>
+    setPg(head + threatsHtml + `<div class="hs-empty"><div class="hs-empty-ic">🕊</div>Сейчас ваши флоты не скованы боем.<br>
       <span class="hs-hint">Бой завязывается при встрече с врагом или перехвате на трассе — тогда точка появится здесь.</span></div></div>`);
     return;
   }
@@ -4479,8 +4492,52 @@ async function renderHotspots() {
         <button class="btn btn-gd" onclick="bbOpen('${jsq(b.id)}')">${forming ? 'Расставить флот' : 'К доске боя'}</button>
       </div>`;
   }).join('');
-  setPg(head + `<div class="hs-grid">${rows}</div>
+  setPg(head + threatsHtml + `<div class="hs-grid">${rows}</div>
     <div class="hs-hint" style="margin-top:14px">Скованный боем флот никуда не уйдёт, пока сражение не окончено. Система под боем не оккупируется — сначала надо победить.</div></div>`);
+}
+
+// ── ☠ УГРОЗЫ: блок сигнатур Легиона на странице «Горячие точки» ──
+// Ступень осведомлённости приходит с сервера, просеянная через сеть застав
+// державы. Клиент НИЧЕГО не достраивает: у ghost нет системы — значит, её и не
+// показываем, а честно пишем, что направление неизвестно.
+const HS_LEGION_KIND = { strike: 'Удар по колонии', blind: 'Налёт на аванпост', probe: 'Разбой на трассе' };
+function hsEta(iso) {
+  if (!iso) return '';
+  const h = (new Date(iso) - Date.now()) / 36e5;
+  if (h <= 0) return 'на месте';
+  if (h < 1) return 'меньше часа';
+  if (h < 48) return '~' + Math.round(h) + ' ч';
+  return '~' + Math.round(h / 24) + ' сут';
+}
+function hsThreatsBlock(list) {
+  if (!list || !list.length) return '';
+  const known = list.filter(t => t.grade !== 'ghost')
+    .sort((a, b) => new Date(a.eta || 0) - new Date(b.eta || 0));
+  const secs = [...new Set(list.filter(t => t.grade === 'ghost').map(t => t.sector).filter(Boolean))];
+
+  const cards = known.map(t => {
+    const res = t.grade === 'resolved';
+    return `<div class="hs-card hs-card-threat${t.mine ? ' hs-card-hot' : ''}">
+        <div class="hs-card-top">
+          <span class="hs-kind">☠ ${res ? esc(HS_LEGION_KIND[t.kind] || 'налёт') : 'Неопознанная сигнатура'}</span>
+          <span class="hs-st${t.mine ? ' hs-st-hot' : ''}">${hsEta(t.eta)}</span>
+        </div>
+        <div class="hs-card-t">${esc(t.sys || 'направление неизвестно')}</div>
+        <div class="hs-card-foe">Железный Легион${t.mine ? ' · <b>цель — вы</b>' : ''}</div>
+        <div class="hs-card-fl">${res
+          ? 'Оценка сил: ' + (+t.ships || 1) + ' кор.'
+          : 'Сила: ' + esc(t.band || '?') + ' · замысел не вскрыт'}</div>
+      </div>`;
+  }).join('');
+
+  const ghost = secs.length
+    ? `<div class="hs-hint" style="margin-top:10px">☠ Неспокойно в секторах: <b>${secs.map(esc).join(', ')}</b>. Направление и замысел не вскрыты.</div>`
+    : '';
+  const hint = known.length ? '' :
+    `<div class="hs-hint" style="margin-top:10px">Чтобы видеть, куда и зачем идут, нужен разведывательный аванпост с <b>полным экипажем</b> рядом с трассой. Без сети застав удар приходит без предупреждения.</div>`;
+
+  return `<div class="hs-sec-ttl">☠ Угрозы</div>
+    ${cards ? `<div class="hs-grid">${cards}</div>` : ''}${ghost}${hint}`;
 }
 
 // Бейдж на сайдменю «Горячие точки» — число активных боёв.

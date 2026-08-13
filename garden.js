@@ -1838,6 +1838,21 @@ function gardenStart(cv, world, spawn) {
   // он дрейфует, к нему надо подойти бортом, и он уходит из поля, когда пойман.
   // Само событие клёва по-прежнему решает сервер (fishing_cast).
   const AST = [];
+  // ⚠️ ПОЯС БЫЛ ОДНОРОДНОЙ КРОШКОЙ. Все камни давали одно и то же, значит
+  // лететь к дальней кромке было незачем: ловишь у самых грядок и не тратишь
+  // топливо. Теперь глубина пояса ЧТО-ТО ЗНАЧИТ — чем дальше от светила, тем
+  // выше шанс на породу иного сорта, и это ВИДНО ГЛАЗОМ, а не в отчёте после
+  // ловли: рудная жила светится янтарём, кристаллическое ядро — холодным
+  // сиреневым с ореолом и искрами. Тьер уходит на сервер (garden_cast) и там
+  // решает награду; клиент его не «выигрывает», а лишь показывает, за чем лететь.
+  const astTier = (orb, sd) => {
+    const u = gClamp((orb / GD_RP - GD_BELT.lo) / (GD_BELT.hi - GD_BELT.lo), 0, 1);
+    const roll = gHash(sd, 17, 331);
+    const p2 = Math.max(0, u - .5) * .5;          // ядро: только дальняя половина
+    const p1 = .06 + u * .34;                     // жила: есть везде, дальше — чаще
+    return roll < p2 ? 2 : roll < p2 + p1 ? 1 : 0;
+  };
+  const GD_AST_NM = ['камень', 'РУДНАЯ ЖИЛА', 'КРИСТАЛЛИЧЕСКОЕ ЯДРО'];
   (function seedAsteroids() {
     const n = world.nodes[0];
     if (!n) return;
@@ -1850,14 +1865,19 @@ function gardenStart(cv, world, spawn) {
       // ловишь щебень. Пояс вынесен НАРУЖУ, на средние орбиты: за уловом надо
       // ОТОЙТИ от сада, и это правильно — это две разные работы.
       const rr = GD_RP * (GD_BELT.lo + (GD_BELT.hi - GD_BELT.lo) * gHash(i * 29, 11, 303));
+      const sd0 = gSeedOf('ast' + i) % 911;
+      const tier = astTier(rr, sd0);
       AST.push({
         tx: n.tx + Math.cos(a) * rr, ty: n.ty + Math.sin(a) * rr,
+        tier,
         // ⚠️ ЭТО КАМЕНЬ, А НЕ АСТЕРОИД. Прежние 2.2–6.4 единицы = до 14% радиуса
         // планеты: обломок выходил вдвое крупнее корабля и с целый отсек
         // теплицы. Такое не черпают сетью. Камень мельче корабля — тогда видно,
         // что его подбирают, а не таранят.
-        r: .35 + gHash(i * 7, 3, 305) * .85,             // радиус в единицах
-        sd: gSeedOf('ast' + i) % 911,
+        // Редкий камень крупнее рядового: он и должен читаться находкой ещё до
+        // того, как игрок разобрал цвет.
+        r: (.35 + gHash(i * 7, 3, 305) * .85) * (1 + tier * .16),
+        sd: sd0,
         // Дрейф по кольцу вокруг светила плюс своё вращение: поле должно жить,
         // а не висеть декорацией.
         ang: a, orb: rr, sp: (.006 + gHash(i * 5, 9, 307) * .01) * (i % 2 ? 1 : -1),
@@ -1879,8 +1899,13 @@ function gardenStart(cv, world, spawn) {
         A.gone -= dt;                                    // возвращается новым
         if (A.gone > 0) continue;
         A.gone = 0;
-        A.orb = GD_RP * (GD_BELT.lo + (GD_BELT.hi - GD_BELT.lo) * gHash(A.sd, i, 313));
+        A.orb = GD_RP * (GD_BELT.lo + (GD_BELT.hi - GD_BELT.lo) * Math.random());
         A.ang += 1.7;
+        // Камень вернулся на ДРУГУЮ высоту — значит и сорт у него теперь свой.
+        // Иначе пояс за сеанс «запоминался» и редкие висели на тех же местах.
+        const t0 = A.tier;
+        A.tier = astTier(A.orb, (A.sd + Math.floor(Math.random() * 907)) % 911);
+        if (A.tier !== t0) A.r = A.r / (1 + t0 * .16) * (1 + A.tier * .16);
       }
       A.ang += A.sp * dt;
       A.rot += A.spin * dt;
@@ -1907,15 +1932,31 @@ function gardenStart(cv, world, spawn) {
       const c = gIso(A.tx, A.ty);
       const R = A.r * U;
       if (c.x + R < vx0s || c.x - R > vx1s || c.y + R < vy0s || c.y - R > vy1s) continue;
+      const T = A.tier | 0;
+      // ── ОРЕОЛ РЕДКОГО. Рисуется ДО тела и в мировых координатах без поворота:
+      // свечение не должно вращаться вместе с камнем, иначе выдаёт многоугольник.
+      if (T) {
+        const pu = .78 + .22 * Math.sin(t * (T === 2 ? 2.6 : 1.7) + A.sd);
+        const HR = R * (T === 2 ? 3.4 : 2.4);
+        const gh = ctx.createRadialGradient(c.x, c.y - GD_LIFT, R * .5, c.x, c.y - GD_LIFT, HR);
+        gh.addColorStop(0, T === 2 ? `rgba(168,146,214,${.34 * pu})` : `rgba(201,162,74,${.26 * pu})`);
+        gh.addColorStop(.55, T === 2 ? `rgba(120,102,190,${.12 * pu})` : `rgba(150,112,52,${.09 * pu})`);
+        gh.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = gh;
+        ctx.beginPath(); ctx.ellipse(c.x, c.y - GD_LIFT, HR, HR * .78, 0, 0, 7); ctx.fill();
+      }
       ctx.save();
       ctx.translate(c.x, c.y - GD_LIFT);
       ctx.rotate(A.rot);
       // Обломок рисуется многоугольником по seed: два камня не близнецы.
+      // У кристаллического ядра граней меньше и разброс жёстче — силуэт
+      // получается колотый, а не окатанный: сорт виден даже в чёрном силуэте.
       ctx.beginPath();
-      const V = 9;
+      const V = T === 2 ? 6 : 9;
       for (let j = 0; j < V; j++) {
         const a = j / V * Math.PI * 2;
-        const rr = R * (.72 + gHash(A.sd, j, 317) * .5);
+        const rr = R * (T === 2 ? (.6 + gHash(A.sd, j, 317) * .85)
+                                : (.72 + gHash(A.sd, j, 317) * .5));
         const x = Math.cos(a) * rr, y = Math.sin(a) * rr * .78;
         j ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
       }
@@ -1929,12 +1970,43 @@ function gardenStart(cv, world, spawn) {
       ctx.save(); ctx.clip();
       const g = ctx.createLinearGradient(Math.cos(sa) * R, Math.sin(sa) * R * .78,
                                          -Math.cos(sa) * R, -Math.sin(sa) * R * .78);
-      g.addColorStop(0, 'rgba(190,176,158,.85)');
-      g.addColorStop(.22, 'rgba(96,88,78,.35)');
+      g.addColorStop(0, T === 2 ? 'rgba(196,182,232,.9)' : T === 1 ? 'rgba(214,178,120,.88)'
+                                : 'rgba(190,176,158,.85)');
+      g.addColorStop(.22, T === 2 ? 'rgba(92,80,140,.4)' : T === 1 ? 'rgba(112,88,54,.38)'
+                                  : 'rgba(96,88,78,.35)');
       g.addColorStop(.5, 'rgba(20,20,24,0)');
       ctx.fillStyle = g;
       ctx.fillRect(-R * 1.2, -R * 1.2, R * 2.4, R * 2.4);
+      // ЖИЛЫ. Тёмная сторона редкого камня не чёрная: по ней идут светящиеся
+      // прожилки — на них и держится ощущение «внутри что-то есть».
+      if (T) {
+        const pu = .7 + .3 * Math.sin(t * (T === 2 ? 2.6 : 1.7) + A.sd);
+        ctx.lineWidth = R * (T === 2 ? .13 : .09);
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = T === 2 ? `rgba(198,172,255,${.85 * pu})` : `rgba(240,192,110,${.7 * pu})`;
+        const vn = T === 2 ? 3 : 2;
+        for (let j = 0; j < vn; j++) {
+          const a1 = gHash(A.sd, j * 3 + 1, 319) * 6.28;
+          const a2 = a1 + 2 + gHash(A.sd, j * 3 + 2, 321) * 2;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a1) * R * .72, Math.sin(a1) * R * .56);
+          ctx.quadraticCurveTo(0, 0, Math.cos(a2) * R * .72, Math.sin(a2) * R * .56);
+          ctx.stroke();
+        }
+      }
       ctx.restore();
+      // Искры вокруг ядра: крошка, которую оно за собой тащит. Только у тьера 2,
+      // иначе пояс превращается в новогоднюю гирлянду.
+      if (T === 2) {
+        ctx.fillStyle = 'rgba(214,196,255,.8)';
+        for (let j = 0; j < 4; j++) {
+          const a = t * (.5 + j * .17) + gHash(A.sd, j, 323) * 6.28;
+          const rr = R * (1.5 + gHash(A.sd, j + 4, 325) * .9);
+          ctx.beginPath();
+          ctx.ellipse(Math.cos(a) * rr, Math.sin(a) * rr * .78, R * .07, R * .07, 0, 0, 7);
+          ctx.fill();
+        }
+      }
       ctx.restore();
     }
     // ⚠️ ЦЕЛЬ ДЛЯ СЕТИ ПОКАЗЫВАЕМ ЯВНО. Ловят мышью, значит игрок должен
@@ -1944,13 +2016,21 @@ function gardenStart(cv, world, spawn) {
     if (tgt) {
       const c = gIso(tgt.tx, tgt.ty);
       const R = tgt.r * U + 10 / cam.z;
-      ctx.strokeStyle = 'rgba(143,211,255,.7)'; ctx.lineWidth = 1.2 / cam.z;
+      const T = tgt.tier | 0;
+      const col = T === 2 ? '168,146,214' : T === 1 ? '201,162,74' : '143,211,255';
+      ctx.strokeStyle = `rgba(${col},.75)`; ctx.lineWidth = (T ? 1.6 : 1.2) / cam.z;
       ctx.setLineDash([4 / cam.z, 4 / cam.z]);
       ctx.beginPath(); ctx.ellipse(c.x, c.y - GD_LIFT, R, R * .78, 0, 0, 7); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(205,230,250,.9)';
       ctx.font = `${Math.round(10 / cam.z)}px ui-monospace,SFMono-Regular,Menlo,monospace`;
       ctx.textAlign = 'center';
+      // Над редким пишем ЧТО это: игрок должен понимать, за чем именно летел
+      // на дальнюю кромку, ещё до броска сети.
+      if (T) {
+        ctx.fillStyle = `rgba(${col},.95)`;
+        ctx.fillText(GD_AST_NM[T], c.x, c.y - GD_LIFT - R - 20 / cam.z);
+      }
+      ctx.fillStyle = 'rgba(205,230,250,.9)';
       ctx.fillText('ЛКМ — СЕТЬ', c.x, c.y - GD_LIFT - R - 8 / cam.z);
       ctx.textAlign = 'left';
     }
@@ -2711,9 +2791,15 @@ function gardenNear(world, P) {
 // ============================================================
 // ДЕЙСТВИЕ ПО «E»
 // ============================================================
+let _gdActLast = 0;
 function gardenAct() {
   const n = _gd && _gd.near;
   if (!n) return;
+  // Тычок на телефоне легко раздваивается (pointerdown + синтетический click):
+  // второй заход открывал бы окно поверх окна.
+  const nowMs = performance.now();
+  if (nowMs - _gdActLast < 300) return;
+  _gdActLast = nowMs;
   // Отметка взмаха: по ней лодка отыгрывает движение сачком (см. drawShip).
   _gd.actAt = performance.now() / 1000;
   if (n.kind === 'hyper') { _gd.P.hyper = true; _gd.P.tx = n.tx + .5; _gd.P.ty = n.ty + .5; return; }
@@ -2768,6 +2854,13 @@ const GD_SAY = {
   spore: ['Спора мира.', 'Такое находят раз в жизни. Надеюсь, не в последний...',
     'Да ну нафиг...', 'Руки трясутся. Ладно...',
     'Храм, если ты слушаешь... спасибо.'],
+  // Дальняя кромка пояса: за жилой и ядром надо лететь, и добыча это отмечает.
+  vein: ['Жила. Не зря отходил.', 'Тяжёлый. Значит, полный.',
+    'Вот за такими и летают на кромку.', 'Янтарь внутри. Красиво даже.',
+    'Одна такая - неделя работы.'],
+  core: ['Ядро... Живое ядро!', 'Оно светится. Оно правда светится.',
+    'Такое в трюм несут на руках.', 'Я даже дышать перестал...',
+    'Стоило уходить так далеко.'],
   ore: ['Тоже хлеб.', 'Приемлемо...', 'Сгодится.',
     'Камень как камень. Взвесим.', 'Не росток, но ничего...'],
   dust: ['Пыль.', 'Ох...', 'Всё тот же щебень.', 'Ни зерна.',
@@ -2958,6 +3051,13 @@ async function gardenEdgeGo() {
 }
 
 let _gdPanel = null;
+// ⚠️ ПАЛЕЦ БЬЁТ ДВАЖДЫ. На телефоне «E» — это pointerdown по кнопке, панель
+// разворачивается ПОД пальцем, и следом браузер шлёт синтетический click в ту
+// точку, где палец оторвался: попадает он уже по свежей кнопке окна — чаще
+// всего по «Убрать посев», потому что она внизу, ровно там же, где «E».
+// Поэтому окно глухо к тычкам первые GD_PANEL_DEAF мс после открытия.
+const GD_PANEL_DEAF = 450;
+let _gdPanelAt = 0;
 // Редкость ростка словом: числа с сервера (0..4) в панели ничего не значат.
 const GD_RAR = ['обычный', 'редкий', 'ценный', 'эпический', 'легендарный'];
 
@@ -2971,6 +3071,7 @@ function gardenPadOff(v) {
 
 function gardenPanelClose() {
   _gdPanel = null;
+  _gdPanelAt = 0; _gdClearArm = 0;
   gardenPadOff(false);
   const el = document.getElementById('gd-panel');
   if (el) el.remove();
@@ -2979,6 +3080,7 @@ function gardenPanelClose() {
 
 function gardenPanel(n) {
   _gdPanel = { sys: n.sys, cell: n.cell };
+  _gdPanelAt = performance.now();
   gardenPadOff(true);
   gardenPanelRefresh(true);
 }
@@ -2990,6 +3092,16 @@ function gardenPanelRefresh(create) {
     if (!create) return;
     el = document.createElement('div');
     el.id = 'gd-panel'; el.className = 'gd-panel';
+    // Глухота первых мгновений: и «призрачный» click от того же тычка, что
+    // открыл окно, и торопливый второй тап гасятся в фазе перехвата — до
+    // onclick кнопок. Без этого «E» = «Убрать посев» на телефоне.
+    _gdPanelAt = _gdPanelAt || performance.now();
+    const deaf = e => {
+      if (performance.now() - _gdPanelAt < GD_PANEL_DEAF) {
+        e.preventDefault(); e.stopPropagation();
+      }
+    };
+    ['pointerdown', 'pointerup', 'click'].forEach(k => el.addEventListener(k, deaf, true));
     // Клик мимо окна закрывает: панель теперь во весь экран, и «мимо» есть.
     el.onpointerdown = e => { if (e.target === el) { e.stopPropagation(); gardenPanelClose(); } };
     (document.getElementById('gd-fs') || document.body).appendChild(el);
@@ -3058,7 +3170,8 @@ function gardenPanelRefresh(create) {
       </div>
       <div class="gd-foot">
         ${p.ripe ? `<button class="gd-b gd-prim" onclick="event.stopPropagation();gardenHarvest()">Славный урожауй...</button>` : ''}
-        <button class="gd-b gd-ghost" onclick="event.stopPropagation();gardenClear()">Убрать посев</button>
+        <button class="gd-b gd-ghost${_gdClearArm ? ' gd-arm' : ''}"
+          onclick="event.stopPropagation();gardenClear()">${_gdClearArm ? 'Точно убрать?' : 'Убрать посев'}</button>
       </div>
     </div>`;
   }
@@ -3131,8 +3244,19 @@ async function gardenHarvest() {
     gardenPanelClose();
   }
 }
+// ⚠️ СНОС ПОСЕВА — ЕДИНСТВЕННОЕ НЕОБРАТИМОЕ ДЕЙСТВИЕ В ОКНЕ, и оно стоит
+// суток роста. Одного тычка ему мало: первый только взводит кнопку, и та сама
+// разряжается через пять секунд, если игрок передумал или промахнулся.
+let _gdClearArm = 0;
 async function gardenClear() {
   const p = _gdCurPlant(); if (!p) return;
+  if (!_gdClearArm) {
+    _gdClearArm = 1;
+    gardenPanelRefresh();
+    setTimeout(() => { if (_gdClearArm) { _gdClearArm = 0; gardenPanelRefresh(); } }, 5000);
+    return;
+  }
+  _gdClearArm = 0;
   const r = await gardenDo('garden_clear', { p_plant: p.id }, 'Посев свёрнут.');
   if (r) { gardenSay('clear'); gardenPanelClose(); }
 }
@@ -3160,7 +3284,12 @@ async function gardenRockOpen(rock) {
   if (_gdHook) return;
   let b;
   try {
-    b = await ecRpc('garden_cast', { p_sys: (_gdState && _gdState.temple) || null });
+    b = await ecRpc('garden_cast', {
+      p_sys: (_gdState && _gdState.temple) || null,
+      // Сорт камня — клиентский, но безобидный: сервер сам режет его до 0..2 и
+      // сам решает награду. Подделка даёт максимум «жилу», а не спору из воздуха.
+      p_tier: rock ? (rock.tier | 0) : 0,
+    });
   } catch (e) {
     gardenToast((e && e.message) || 'сеть сорвалась', 'err');
     return;
@@ -3291,10 +3420,15 @@ async function gardenGripEnd(ok) {
     if (!r || r.lost) { gardenToast('Камень ушёл в пустоту.', ''); gardenSay('lost'); }
     else if (r.kind === 'sprout') {
       gardenToast(`Ростки: ${_gdResName(r.res)} ×${r.qty}`, 'ok');
-      gardenSay(score >= .75 && h.miss === 0 ? 'sproutFine' : 'sprout');
+      gardenSay((r.tier | 0) >= 2 ? 'core'
+              : (r.tier | 0) === 1 ? 'vein'
+              : score >= .75 && h.miss === 0 ? 'sproutFine' : 'sprout');
     }
     else if (r.kind === 'spore') { gardenToast('Спора мира в трюме.', 'ok'); gardenSay('spore', 4.2); }
-    else if (r.gc > 0) { gardenToast(`${r.name}: +${Math.round(r.gc)} ГС`, 'ok'); gardenSay('ore'); }
+    else if (r.gc > 0) {
+      gardenToast(`${r.name}: +${Math.round(r.gc)} ГС`, 'ok');
+      gardenSay((r.tier | 0) >= 1 ? 'vein' : 'ore');
+    }
     else { gardenToast(r.name || 'Пустая порода.', ''); gardenSay('dust'); }
   } catch (e) { gardenToast((e && e.message) || 'сорвалось', 'err'); }
   await gardenReload();
@@ -3409,6 +3543,7 @@ function gardenStyleOnce() {
 .gd-b.gd-prim:hover{background:rgba(143,211,255,.2)}
 .gd-b.gd-ghost{background:none;border-color:#1a242f;color:#7d8fa3}
 .gd-b.gd-ghost:hover{border-color:#c9603f;color:#e8bfb0;background:rgba(201,96,63,.08)}
+.gd-b.gd-arm{border-color:#c9603f;color:#f0c9bb;background:rgba(201,96,63,.16)}
 .gd-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
 .gd-row .gd-b{margin:0;text-align:center;padding:11px 8px}
 .gd-row .gd-b em{display:block;font-style:normal;font:10px ui-monospace,monospace;color:#5d7085;margin-top:4px;letter-spacing:.1em}

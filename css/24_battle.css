@@ -767,6 +767,18 @@
   clip-path: polygon(0 0, calc(100% - var(--hs-cut)) 0, 100% var(--hs-cut), 100% 100%, var(--hs-cut) 100%, 0 calc(100% - var(--hs-cut)));
 }
 .hs-card-hot { --hs-a: rgba(255,60,130,0.45); }
+/* ── ☠ УГРОЗЫ: сигнатуры Легиона в общей сводке ──
+   Своя кромка ржавого красного, чтобы налёт не путался с идущим боем; когда
+   цель — ты, работает общий .hs-card-hot и карточка звучит в полный голос. */
+.hs-card-threat { --hs-a: rgba(196,74,42,0.42); }
+/* ⚠ .hs-card-threat идёт ПОЗЖЕ .hs-card-hot при равной специфичности и без этой
+   строки затирала бы её: угроза «цель — вы» переставала отличаться от чужой.
+   Комбинацию задаём явно — она обязана звучать громче всех остальных. */
+.hs-card-threat.hs-card-hot { --hs-a: rgba(255,90,60,0.55); }
+.hs-sec-ttl {
+  font-family: var(--font-display); font-size: 13px; letter-spacing: .1em;
+  text-transform: uppercase; color: #ff9270; margin: 4px 0 10px;
+}
 .hs-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .hs-kind {
   font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;

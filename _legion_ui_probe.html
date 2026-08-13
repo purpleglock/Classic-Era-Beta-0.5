@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Пробник: угрозы Легиона</title>
+<link rel="stylesheet" href="css/index.css">
+<style>
+  body{margin:0;background:#07090d;font-family:system-ui}
+  .cap{color:#8aa;font:600 12px/2.4 system-ui;padding:0 16px}
+  .page{padding:0 16px 24px;max-width:960px}
+  .cell{position:relative;width:300px;height:460px;border:1px solid #223;background:#0a0e14;margin:0 16px}
+  .cell #gm-roster{position:absolute;top:8px;left:8px;width:284px;max-height:calc(100% - 16px);overflow-y:auto}
+</style></head><body>
+<div id="root"></div>
+<script>
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const h = n => new Date(Date.now()+n*36e5).toISOString();
+
+/* ── 1:1 с battle_board.js (hsThreatsBlock) ── */
+const HS_LEGION_KIND = { strike:'Удар по колонии', blind:'Налёт на аванпост', probe:'Разбой на трассе' };
+function hsEta(iso){ if(!iso) return ''; const x=(new Date(iso)-Date.now())/36e5;
+  if(x<=0) return 'на месте'; if(x<1) return 'меньше часа';
+  if(x<48) return '~'+Math.round(x)+' ч'; return '~'+Math.round(x/24)+' сут'; }
+function hsThreatsBlock(list){
+  if(!list||!list.length) return '';
+  const known=list.filter(t=>t.grade!=='ghost').sort((a,b)=>new Date(a.eta||0)-new Date(b.eta||0));
+  const secs=[...new Set(list.filter(t=>t.grade==='ghost').map(t=>t.sector).filter(Boolean))];
+  const cards=known.map(t=>{const res=t.grade==='resolved';
+    return `<div class="hs-card hs-card-threat${t.mine?' hs-card-hot':''}">
+      <div class="hs-card-top">
+        <span class="hs-kind">☠ ${res?esc(HS_LEGION_KIND[t.kind]||'налёт'):'Неопознанная сигнатура'}</span>
+        <span class="hs-st${t.mine?' hs-st-hot':''}">${hsEta(t.eta)}</span></div>
+      <div class="hs-card-t">${esc(t.sys||'направление неизвестно')}</div>
+      <div class="hs-card-foe">Железный Легион${t.mine?' · <b>цель — вы</b>':''}</div>
+      <div class="hs-card-fl">${res?'Оценка сил: '+(+t.ships||1)+' кор.'
+        :'Сила: '+esc(t.band||'?')+' · замысел не вскрыт'}</div></div>`;}).join('');
+  const ghost=secs.length?`<div class="hs-hint" style="margin-top:10px">☠ Неспокойно в секторах: <b>${secs.map(esc).join(', ')}</b>. Направление и замысел не вскрыты.</div>`:'';
+  const hint=known.length?'':`<div class="hs-hint" style="margin-top:10px">Чтобы видеть, куда и зачем идут, нужен разведывательный аванпост с <b>полным экипажем</b> рядом с трассой. Без сети застав удар приходит без предупреждения.</div>`;
+  return `<div class="hs-sec-ttl">☠ Угрозы</div>${cards?`<div class="hs-grid">${cards}</div>`:''}${ghost}${hint}`;
+}
+const battleCard = `<div class="hs-card hs-card-hot">
+  <div class="hs-card-top"><span class="hs-kind">⚔ встреча флотов</span><span class="hs-st hs-st-hot">идёт бой</span></div>
+  <div class="hs-card-t">Кор Каройи</div>
+  <div class="hs-card-foe">против <b>Республика Синли</b> · вы — обороняющиеся</div>
+  <div class="hs-card-fl">Скованы боем: Северный кулак</div>
+  <button class="btn btn-gd">К доске боя</button></div>`;
+
+const HEAD = `<div class="cn-wrap"><div class="cn-head"><div class="cn-eyebrow">◈ СВОДКА</div><h1>Горячие точки</h1></div>`;
+const CASES = [
+  ['Слепой игрок: только ghost, боёв нет', [
+      {grade:'ghost',sector:'Шер-Маан'},{grade:'ghost',sector:'Лимбо'}], false],
+  ['Есть сеть: вскрытые + сигнатура + бой', [
+      {grade:'resolved',kind:'strike',mine:true,sys:'Тау Волопаса',eta:h(9),ships:6},
+      {grade:'signature',band:'заметная',sys:'Кассандра',eta:h(21)},
+      {grade:'resolved',kind:'blind',mine:false,sys:'Приют',eta:h(3),ships:3},
+      {grade:'ghost',sector:'Альтакс'}], true],
+];
+document.getElementById('root').innerHTML = CASES.map(([cap,list,withBattle])=>`
+  <div class="cap">${cap}</div>
+  <div class="page">${HEAD}${hsThreatsBlock(list)}
+    ${withBattle?`<div class="hs-grid" style="margin-top:14px">${battleCard}</div>`
+      :`<div class="hs-empty"><div class="hs-empty-ic">🕊</div>Сейчас ваши флоты не скованы боем.</div>`}
+  </div></div>`).join('');
+</script></body></html>
